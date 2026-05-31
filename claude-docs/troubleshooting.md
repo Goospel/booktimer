@@ -10,6 +10,7 @@
 - [T-003. `git show > 파일` 리다이렉트가 한글/UTF-8 파일을 깨뜨림](#t-003-git-show--파일-리다이렉트가-한글utf-8-파일을-깨뜨림)
 - [T-004. gradlew stderr가 `$EAP=Stop` 훅을 죽임](#t-004-gradlew-stderr가-eapstop-훅을-죽임)
 - [T-005. PR 머지 후 feat 브랜치에서 pull → 군더더기 merge 커밋](#t-005-pr-머지-후-feat-브랜치에서-pull--군더더기-merge-커밋)
+- [T-006. Spring Boot 4: `@DataJpaTest` import 경로 변경](#t-006-spring-boot-4-datajpatest-import-경로-변경)
 
 ---
 
@@ -86,9 +87,37 @@
 
 ---
 
+## T-006. Spring Boot 4: `@DataJpaTest` import 경로 변경
+
+**증상**: `@DataJpaTest` 슬라이스 테스트가 컴파일조차 안 됨.
+```
+error: package org.springframework.boot.test.autoconfigure.orm.jpa does not exist
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+@DataJpaTest  symbol: class DataJpaTest
+```
+의존성(`spring-boot-starter-data-jpa-test`)은 `build.gradle`에 분명히 있는데도 "package does not exist".
+
+**원인**: Spring Boot 4에서 autoconfigure/테스트-슬라이스가 **모듈별 패키지로 이동**했다. `@DataJpaTest`는 더 이상 umbrella 패키지에 없고 data-jpa 모듈 패키지로 옮겨졌다. import 경로가 옛날 그대로라 못 찾는 것(의존성 문제가 아니라 import 경로 문제). N-003(starter 네이밍 변경)과 같은 뿌리.
+
+- ❌ 옛: `org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest`
+- ✅ 신: `org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest`
+
+**해결 / 예방**:
+- import만 신 경로로 교체하면 끝.
+- 클래스가 어느 패키지/jar에 있는지 **추측 말고 jar에서 직접 확인**:
+  ```bash
+  for j in $(find ~/.gradle/caches/modules-2 -name 'spring-boot*.jar'); do \
+    unzip -l "$j" 2>/dev/null | grep -q 'DataJpaTest.class' && { echo "$j"; unzip -l "$j" | grep DataJpaTest; }; done
+  ```
+  → `spring-boot-data-jpa-test-4.0.6.jar` 안 `org/springframework/boot/data/jpa/test/autoconfigure/DataJpaTest.class` 확인.
+- 다른 슬라이스(`@WebMvcTest` 등)도 Boot 4에선 모듈별 패키지일 수 있으니 같은 방법으로 확인.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
 |---|---|
 | 2026-05-31 | 초안 + T-001~T-004 |
 | 2026-05-31 | T-005 (머지 후 정리 순서) |
+| 2026-05-31 | T-006 (Boot 4 @DataJpaTest import 경로) |
