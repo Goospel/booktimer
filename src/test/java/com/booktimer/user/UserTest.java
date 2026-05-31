@@ -1,0 +1,81 @@
+package com.booktimer.user;
+
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * User 도메인 엔티티 테스트 (DB 무관 — 객체 생성/검증만).
+ *
+ * <p>설계(domain-design.md): User(1) ↔ ReadingTimer(1), User(1) ↔ ReadingSession(N).
+ * 이 증분은 User 자체의 팩토리·불변식만 다룬다. ReadingTimer 연관은 다음 증분.
+ *
+ * <p>필드: email / passwordHash(이미 해시된 값 저장) / nickname /
+ * timezone(IANA, 예: "Asia/Seoul") / role(enum). 비밀번호 평문 해싱은 서비스 책임이라
+ * 엔티티는 이미 해시된 문자열만 받는다.
+ */
+class UserTest {
+
+    private static final String EMAIL = "reader@booktimer.com";
+    private static final String HASH = "$2a$10$abcdefghijklmnopqrstuv"; // BCrypt 형태(예시)
+    private static final String NICK = "책벌레";
+    private static final String TZ = "Asia/Seoul";
+
+    @Test
+    @DisplayName("유효한 값으로 생성하면 각 필드가 그대로 보관된다")
+    void of_validArgs_keepsFields() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        assertThat(user.getEmail()).isEqualTo(EMAIL);
+        assertThat(user.getPasswordHash()).isEqualTo(HASH);
+        assertThat(user.getNickname()).isEqualTo(NICK);
+        assertThat(user.getTimezone()).isEqualTo(TZ);
+        assertThat(user.getRole()).isEqualTo(Role.USER);
+    }
+
+    @Test
+    @DisplayName("이메일이 비어있으면 예외")
+    void of_blankEmail_throws() {
+        assertThatThrownBy(() -> User.of("  ", HASH, NICK, TZ, Role.USER))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> User.of(null, HASH, NICK, TZ, Role.USER))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("이메일 형식이 아니면 예외")
+    void of_malformedEmail_throws() {
+        assertThatThrownBy(() -> User.of("not-an-email", HASH, NICK, TZ, Role.USER))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("비밀번호 해시가 비어있으면 예외")
+    void of_blankPasswordHash_throws() {
+        assertThatThrownBy(() -> User.of(EMAIL, "  ", NICK, TZ, Role.USER))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("닉네임이 비어있으면 예외")
+    void of_blankNickname_throws() {
+        assertThatThrownBy(() -> User.of(EMAIL, HASH, " ", TZ, Role.USER))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("타임존이 유효한 IANA ID가 아니면 예외")
+    void of_invalidTimezone_throws() {
+        assertThatThrownBy(() -> User.of(EMAIL, HASH, NICK, "Mars/Phobos", Role.USER))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("role이 null이면 예외")
+    void of_nullRole_throws() {
+        assertThatThrownBy(() -> User.of(EMAIL, HASH, NICK, TZ, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+}
