@@ -3,7 +3,7 @@
 > 이 파일은 글로벌 `~/.claude/CLAUDE.md` 와 **합쳐서** 적용된다.
 > 글로벌은 사용자 메타 시스템(PKM 등), 이 파일은 BookTimer 고유 규칙.
 
-프로젝트 개요·도메인 규칙은 [README.md](README.md), 학습 노트는 [claude-docs/learning-notes.md](claude-docs/learning-notes.md) 참고.
+프로젝트 개요·도메인 규칙은 [README.md](README.md), 학습 노트는 [claude-docs/learning-notes.md](claude-docs/learning-notes.md), 트러블슈팅은 [claude-docs/troubleshooting.md](claude-docs/troubleshooting.md) 참고.
 
 ---
 
@@ -61,6 +61,30 @@
 - 커밋 명령에 `SKIP_TESTS` 토큰을 포함하면 게이트를 우회한다.
   - 정당한 경우에만: TDD red 단계의 **실패 테스트만 먼저 커밋**, 긴급 핫픽스 등.
   - 사용자가 명시적으로 허용한 경우에만 Claude 가 부착한다.
+
+---
+
+## 🧯 트러블슈팅 활용 — `claude-docs/troubleshooting.md`
+
+작업 중 만난 함정과 해결법은 [claude-docs/troubleshooting.md](claude-docs/troubleshooting.md) 에 `T-###` 로 누적한다. **같은 실수 두 번 반복 방지**가 목적.
+
+### 작업 시작 / 디버깅 전 — 먼저 참고
+
+- 빌드·git·PowerShell·테스트 등에서 막히면, **추측하기 전에 먼저** `troubleshooting.md` 와 `learning-notes.md` 를 확인한다.
+- 이미 기록된 트랩이면 그 해법을 그대로 적용한다 (두 번 헤매지 않기).
+
+### 디버깅 후 — 자동 sweep (learning-notes 파이프라인과 동일)
+
+1분 이상 헤맨 문제를 해결했으면 **두 종류의 후보를 점검**한다:
+
+| 종류 | 위치 | 성격 |
+|---|---|---|
+| **Trap (해결법)** — "이렇게 하지 마라" | `troubleshooting.md` (`T-###`) | 재발 방지 절차 |
+| **개념 (이해)** — "왜 이렇게 동작하는가" | `learning-notes.md` (`N-###`) | 면접 설명 가능 수준 |
+
+- 해결 직후, 답변 끝에 **"🧯 troubleshooting 추가 후보 — `<한 줄 요약>`. 박을까?"** (또는 learning-notes 후보)를 짧게 제안한다.
+- 사용자가 OK 하면 즉시 해당 파일에 `T-###` / `N-###` 로 추가한다.
+- PR 머지 직전에도 sweep 을 함께 수행한다 (Git 워크플로 4번).
 
 ---
 
