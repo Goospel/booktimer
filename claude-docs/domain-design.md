@@ -21,7 +21,7 @@
 |---|---|---|
 | id | `Long` (PK) | auto |
 | email | `String`, unique, not null | 로그인 ID |
-| password | `String`, not null | BCrypt 해시 |
+| passwordHash | `String`, not null | 이미 해시된 비밀번호(BCrypt). 평문 저장 금지 |
 | nickname | `String` | 표시명 (추후 SNS) |
 | timezone | `String` (IANA, 예 `Asia/Seoul`) | Lazy 누적의 "오늘" 기준 |
 | role | `enum Role { USER, ADMIN }` | 권한 |
