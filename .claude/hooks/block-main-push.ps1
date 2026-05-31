@@ -53,7 +53,10 @@ if ($cmd -match 'push\s+(-{1,2}[^\s]+\s+)*\S+\s+\S+') {
     exit 0
 }
 
-# 3) bare 'git push' / 'git push origin' → 현재 브랜치로 push. 현재 브랜치 확인.
+# 3) bare 'git push' / 'git push origin' → 현재 브랜치(또는 그 upstream)로 push.
+#    (a) 현재 브랜치가 main/master 거나
+#    (b) 현재 브랜치의 upstream(merge ref)이 main/master 면 차단.
+#    (b)는 upstream 이 잘못 main 을 가리키도록 설정된 경우(push.default 무관)까지 방어.
 $cwd = [string]$data.cwd
 if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
 try {
@@ -62,6 +65,15 @@ try {
     $branch = ''
 }
 if ($branch -eq 'main' -or $branch -eq 'master') {
+    [Console]::Error.WriteLine($blockMsg)
+    exit 2
+}
+try {
+    $mergeRef = (& git -C $cwd config "branch.$branch.merge").Trim()
+} catch {
+    $mergeRef = ''
+}
+if ($mergeRef -match '(^|/)(main|master)$') {
     [Console]::Error.WriteLine($blockMsg)
     exit 2
 }
