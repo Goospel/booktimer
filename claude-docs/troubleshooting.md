@@ -9,6 +9,7 @@
 - [T-002. 실수 머지된 PR — main force-push로 이력 되돌리기](#t-002-실수-머지된-pr--main-force-push로-이력-되돌리기)
 - [T-003. `git show > 파일` 리다이렉트가 한글/UTF-8 파일을 깨뜨림](#t-003-git-show--파일-리다이렉트가-한글utf-8-파일을-깨뜨림)
 - [T-004. gradlew stderr가 `$EAP=Stop` 훅을 죽임](#t-004-gradlew-stderr가-eapstop-훅을-죽임)
+- [T-005. PR 머지 후 feat 브랜치에서 pull → 군더더기 merge 커밋](#t-005-pr-머지-후-feat-브랜치에서-pull--군더더기-merge-커밋)
 
 ---
 
@@ -70,8 +71,24 @@
 
 ---
 
+## T-005. PR 머지 후 feat 브랜치에서 pull → 군더더기 merge 커밋
+
+**증상**: PR(squash) 머지 직후, 아직 feat 브랜치에 체크아웃된 상태로 `git pull origin main`을 했더니 원치 않는 merge 커밋이 생기고 이력이 지저분해졌다.
+
+**원인**: squash 머지는 main에 **새 단일 커밋**을 만든다. feat 브랜치의 원래 커밋들과는 별개 히스토리라, feat 브랜치에서 `pull`하면 두 갈래가 합쳐지며 merge 커밋이 끼어든다.
+
+**해결 / 예방** — 머지 후 정리는 **순서**를 지킨다:
+1. `git checkout main` (먼저 main으로 전환)
+2. `git pull origin main` (또는 `git fetch && git reset --hard origin/main`)
+3. `git branch -d <feat>` 로 머지된 브랜치 삭제
+- 이미 꼬였다면: `git checkout main` 후 `git reset --hard origin/main`로 원격에 맞춤(로컬 군더더기 커밋 폐기).
+- 핵심: **feat 브랜치에서 절대 pull 하지 않는다.** pull은 항상 main에서.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
 |---|---|
 | 2026-05-31 | 초안 + T-001~T-004 |
+| 2026-05-31 | T-005 (머지 후 정리 순서) |
