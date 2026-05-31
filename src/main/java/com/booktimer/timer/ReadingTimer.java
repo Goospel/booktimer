@@ -1,10 +1,14 @@
 package com.booktimer.timer;
 
+import com.booktimer.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToOne;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -16,7 +20,8 @@ import java.time.temporal.ChronoUnit;
  * 핵심 규칙의 상태를 보관한다. 갱신은 배치가 아니라 접속 시 {@link #accrueUntil(LocalDate)}
  * 로 경과 일수만큼 소급 계산(Lazy)한다.
  *
- * <p>TODO: User 와의 @OneToOne 관계는 User 엔티티 작업 증분에서 연결한다.
+ * <p>User 와는 1:1 — 이 엔티티가 FK(user_id)를 소유한다. 신규 사용자용 타이머는
+ * {@link #startFor(User, long, long, LocalDate)} 로 생성한다.
  */
 @Entity
 public class ReadingTimer {
@@ -40,6 +45,11 @@ public class ReadingTimer {
     /** 마지막 누적 계산 기준일(사용자 타임존). */
     @Column(nullable = false)
     private LocalDate lastAccrualDate;
+
+    /** 소유 사용자 (1:1). FK(user_id)는 이 테이블이 소유한다. */
+    @OneToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", unique = true)
+    private User user;
 
     protected ReadingTimer() {
         // JPA
@@ -71,6 +81,25 @@ public class ReadingTimer {
     public static ReadingTimer of(long dailyIncrementSeconds, long capSeconds,
                                   long remainingSeconds, LocalDate lastAccrualDate) {
         return new ReadingTimer(dailyIncrementSeconds, capSeconds, remainingSeconds, lastAccrualDate);
+    }
+
+    /**
+     * 신규 사용자를 위한 타이머를 생성한다. 잔여는 0에서 시작하고 기준일은 {@code startDate}.
+     *
+     * @param user                  소유 사용자(필수)
+     * @param dailyIncrementSeconds 하루 증가값(초)
+     * @param capSeconds            누적 상한(초)
+     * @param startDate             누적 시작 기준일(사용자 타임존)
+     * @throws IllegalArgumentException user 가 null 이거나 설정값이 음수인 경우
+     */
+    public static ReadingTimer startFor(User user, long dailyIncrementSeconds,
+                                        long capSeconds, LocalDate startDate) {
+        if (user == null) {
+            throw new IllegalArgumentException("user must not be null");
+        }
+        ReadingTimer timer = new ReadingTimer(dailyIncrementSeconds, capSeconds, 0L, startDate);
+        timer.user = user;
+        return timer;
     }
 
     /**
@@ -110,5 +139,9 @@ public class ReadingTimer {
 
     public LocalDate getLastAccrualDate() {
         return lastAccrualDate;
+    }
+
+    public User getUser() {
+        return user;
     }
 }
