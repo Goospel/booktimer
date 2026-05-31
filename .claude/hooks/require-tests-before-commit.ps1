@@ -44,9 +44,16 @@ if ($javaChanged.Count -eq 0) { exit 0 }
 $gradlew = Join-Path $cwd 'gradlew.bat'
 if (-not (Test-Path $gradlew)) { exit 0 }
 
-# 테스트 실행 (출력은 버리고 종료코드만 사용)
-& $gradlew -p $cwd test --console=plain *> $null
+# 테스트 실행 — 종료코드만 사용.
+# 주의(PowerShell 5.1): gradlew 는 JDK 경고 등을 stderr 로 내보내는데,
+# $ErrorActionPreference='Stop' 상태에서 native stderr 는 terminating error 로
+# 승격되어(NativeCommandError) 테스트가 통과해도 스크립트가 죽는다.
+# → cmd.exe /c 로 격리 실행하고 $LASTEXITCODE(=gradlew 실제 종료코드)만 본다.
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+cmd.exe /c "`"$gradlew`" -p `"$cwd`" test --console=plain >nul 2>nul"
 $testExit = $LASTEXITCODE
+$ErrorActionPreference = $prevEAP
 
 if ($testExit -ne 0) {
     $msg = @"
