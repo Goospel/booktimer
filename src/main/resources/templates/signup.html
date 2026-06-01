@@ -2,35 +2,45 @@
 <html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>회원가입 — BookTimer</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
 </head>
 <body>
-<h1>회원가입</h1>
+<div class="container">
+    <header class="brand">
+        <span class="emoji">📚</span>
+        <h1>BookTimer</h1>
+    </header>
+    <p class="greeting">회원가입</p>
 
-<form th:action="@{/signup}" th:object="${signupForm}" method="post">
-    <div>
-        <label for="email">이메일</label>
-        <input type="email" id="email" th:field="*{email}">
-        <span th:if="${#fields.hasErrors('email')}" th:errors="*{email}">이메일 오류</span>
-    </div>
-    <div>
-        <label for="password">비밀번호</label>
-        <input type="password" id="password" th:field="*{password}">
-        <span th:if="${#fields.hasErrors('password')}" th:errors="*{password}">비밀번호 오류</span>
-    </div>
-    <div>
-        <label for="nickname">닉네임</label>
-        <input type="text" id="nickname" th:field="*{nickname}">
-        <span th:if="${#fields.hasErrors('nickname')}" th:errors="*{nickname}">닉네임 오류</span>
-    </div>
-    <div>
-        <label for="timezone">타임존</label>
-        <input type="text" id="timezone" th:field="*{timezone}">
-        <span th:if="${#fields.hasErrors('timezone')}" th:errors="*{timezone}">타임존 오류</span>
-    </div>
-    <button type="submit">가입</button>
-</form>
+    <section class="card">
+        <form th:action="@{/signup}" th:object="${signupForm}" method="post">
+            <div class="field">
+                <label for="email">이메일</label>
+                <input type="email" id="email" th:field="*{email}">
+                <span class="field-error" th:if="${#fields.hasErrors('email')}" th:errors="*{email}">이메일 오류</span>
+            </div>
+            <div class="field">
+                <label for="password">비밀번호</label>
+                <input type="password" id="password" th:field="*{password}">
+                <span class="field-error" th:if="${#fields.hasErrors('password')}" th:errors="*{password}">비밀번호 오류</span>
+            </div>
+            <div class="field">
+                <label for="nickname">닉네임</label>
+                <input type="text" id="nickname" th:field="*{nickname}">
+                <span class="field-error" th:if="${#fields.hasErrors('nickname')}" th:errors="*{nickname}">닉네임 오류</span>
+            </div>
+            <div class="field">
+                <label for="timezone">타임존</label>
+                <input type="text" id="timezone" th:field="*{timezone}" placeholder="Asia/Seoul">
+                <span class="field-error" th:if="${#fields.hasErrors('timezone')}" th:errors="*{timezone}">타임존 오류</span>
+            </div>
+            <button type="submit" class="btn-primary">가입</button>
+        </form>
+    </section>
 
-<p><a th:href="@{/login}">이미 계정이 있나요? 로그인</a></p>
+    <p class="link-row"><a th:href="@{/login}">이미 계정이 있나요? 로그인</a></p>
+</div>
 </body>
 </html>
