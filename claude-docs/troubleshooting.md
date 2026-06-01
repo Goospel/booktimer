@@ -15,6 +15,7 @@
 - [T-008. `redirectedUrlPattern("**/login")`이 상대경로 리다이렉트에 매칭 실패](#t-008-redirectedurlpatternlogin이-상대경로-리다이렉트에-매칭-실패)
 - [T-009. Fargate 콜드스타트가 헬스체크 grace를 못 넘겨 ECS 태스크 무한 재시작](#t-009-fargate-콜드스타트가-헬스체크-grace를-못-넘겨-ecs-태스크-무한-재시작)
 - [T-010. ECS 안정화 대기 중 수동 update-service 끼워넣어 워크플로 배포가 경쟁·실패](#t-010-ecs-안정화-대기-중-수동-update-service-끼워넣어-워크플로-배포가-경쟁실패)
+- [T-011. Fargate 태스크가 SSM 시크릿 pull 실패 — 퍼블릭 IP라도 서브넷에 IGW 라우트 없으면 인터넷 도달 불가](#t-011-fargate-태스크가-ssm-시크릿-pull-실패--퍼블릭-ip라도-서브넷에-igw-라우트-없으면-인터넷-도달-불가)
 
 ---
 
@@ -193,6 +194,40 @@ AssertionError: Redirected URL '/login' does not match the expected URL pattern 
 
 ---
 
+## T-011. Fargate 태스크가 SSM 시크릿 pull 실패 — 퍼블릭 IP라도 서브넷에 IGW 라우트 없으면 인터넷 도달 불가
+
+**증상**: 새 배포가 안정화 안 되고 12분+ stuck. 서비스 이벤트에 새 태스크 시작 실패가 반복:
+```
+ResourceInitializationError: unable to pull secrets or registry auth:
+unable to retrieve secrets from ssm: The task cannot pull secrets from AWS
+Systems Manager. There is a connection issue between the task and AWS Systems
+Manager Parameter Store. Check your task network configuration. ...
+operation error SSM: GetParameters, https response error StatusCode: 0,
+RequestID: , canceled, context deadline exceeded
+```
+한편 **옛 태스크는 계속 running**이라 사이트는 멀쩡(롤링 배포 안전장치) → "문제 없어 보임"의 착시. 그리고 **재시도하다 어쩌다 성공해 green이 되기도** 함(비결정적).
+
+**원인**: 태스크가 SSM Parameter Store 엔드포인트에 **네트워크로 도달하지 못함**(`context deadline exceeded` = 타임아웃, 권한 아님 — AWS가 직접 "network configuration 확인"이라 안내). 서비스는 `assignPublicIp=ENABLED`였지만 — **퍼블릭 IP는 서브넷 라우트테이블에 `0.0.0.0/0 → IGW`가 있을 때만 인터넷에 나간다.** 서비스에 물린 서브넷 2개 중:
+- `subnet-071…`: 명시적 RTB 연결 없음 → VPC **main RTB**(IGW 라우트 보유) 사용 → **정상**
+- `subnet-018…`: 별도 RTB에 **`local` 경로만**, IGW 없음 → 인터넷 차단 → **여기 뜨는 태스크는 SSM 도달 실패**
+
+→ 네트워크 설정은 서비스 레벨로 동일한데, **태스크 배치가 두 서브넷 사이 비결정적**이라 좋은 서브넷(071)에 걸리면 성공·나쁜 서브넷(018)에 걸리면 실패. "전엔 됐는데 지금 안 됨 / 됐다 안 됐다"의 정체.
+
+> 진단 포인트: ① 서비스 이벤트의 `ResourceInitializationError ... ssm ... context deadline exceeded` (권한이면 AccessDenied가 뜸 — 메시지로 권한 vs 네트워크 구분) ② `describe-services` 의 `networkConfiguration.awsvpcConfiguration` 으로 서브넷/SG/assignPublicIp 확인 ③ **각 서브넷의 라우트테이블을 비교** — `0.0.0.0/0 → igw-…` 유무가 갈림. SG egress(443/all)도 함께 확인.
+
+**해결 / 예방**:
+- 나쁜 서브넷의 RTB에 IGW 라우트 추가(2-AZ 유지):
+  ```bash
+  aws ec2 create-route --route-table-id <rtb-018> \
+    --destination-cidr-block 0.0.0.0/0 --gateway-id <igw-…>
+  ```
+  `"Return": true` 후 `describe-route-tables`로 `0.0.0.0/0 → igw` 추가 확인. 즉시 발효.
+- 대안: 서비스를 좋은 서브넷만 쓰게 `update-service --network-configuration`(단일 AZ가 됨), 또는 SSM·ECR·CloudWatch용 **VPC 엔드포인트**(퍼블릭 IP 없이 사설로 도달 — 더 안전하지만 설정 추가).
+- 셋업 시 예방: **서비스에 물리는 서브넷이 전부 인터넷 egress(IGW 또는 NAT)를 갖는지** 확인. 퍼블릭/프라이빗 서브넷 혼재가 비결정적 실패의 흔한 원인.
+- 개념: [learning-notes.md N-018](learning-notes.md#n-018-퍼블릭-ip--인터넷-접근--서브넷-라우트테이블이-진짜-관문).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -205,3 +240,4 @@ AssertionError: Redirected URL '/login' does not match the expected URL pattern 
 | 2026-06-01 | T-006 보강 (@AutoConfigureMockMvc도 Boot 4 패키지 이동 — 추가 사례 표) |
 | 2026-06-01 | T-009 (Fargate 콜드스타트 ~100s가 헬스체크 grace 120s 못 넘겨 태스크 무한 재시작 → grace 300) |
 | 2026-06-01 | T-010 (ECS 안정화 대기 중 수동 update-service 경쟁 → 워크플로 run 실패, 서비스는 정상) |
+| 2026-06-01 | T-011 (Fargate SSM 시크릿 pull 실패 — 퍼블릭 IP라도 서브넷 RTB에 IGW 없으면 도달 불가, 서브넷 비대칭 비결정적 실패) |
