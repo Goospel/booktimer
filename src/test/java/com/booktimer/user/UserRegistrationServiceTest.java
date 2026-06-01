@@ -77,7 +77,9 @@ class UserRegistrationServiceTest {
         verify(timerRepository).save(timerCaptor.capture());
         ReadingTimer timer = timerCaptor.getValue();
         assertThat(timer.getUser()).isSameAs(result);
-        assertThat(timer.getRemainingSeconds()).isZero();
+        // 가입 당일치 증가값으로 시드된다(0이 아님) — README 1일차 = 1증가값
+        assertThat(timer.getRemainingSeconds())
+                .isEqualTo(UserRegistrationService.DEFAULT_DAILY_INCREMENT_SECONDS);
         assertThat(timer.getLastAccrualDate()).isEqualTo(DAY0);
         assertThat(timer.getDailyIncrementSeconds())
                 .isEqualTo(UserRegistrationService.DEFAULT_DAILY_INCREMENT_SECONDS);

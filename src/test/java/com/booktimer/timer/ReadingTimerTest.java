@@ -77,17 +77,28 @@ class ReadingTimerTest {
     }
 
     @Test
-    @DisplayName("startFor: 유저와 연결되고 잔여 0, 기준일=시작일, 설정값 반영")
+    @DisplayName("startFor: 유저와 연결되고 잔여=첫날 증가값, 기준일=시작일, 설정값 반영")
     void startFor_linksUserAndInitializes() {
         User user = sampleUser();
 
         ReadingTimer timer = ReadingTimer.startFor(user, HOUR, 5 * HOUR, DAY0);
 
         assertThat(timer.getUser()).isSameAs(user);
-        assertThat(timer.getRemainingSeconds()).isZero();
+        // 가입 당일(1일차)부터 이미 1증가값을 갚아야 한다(README 1일차 = 1시간). 0이 아니다.
+        assertThat(timer.getRemainingSeconds()).isEqualTo(HOUR);
         assertThat(timer.getLastAccrualDate()).isEqualTo(DAY0);
         assertThat(timer.getDailyIncrementSeconds()).isEqualTo(HOUR);
         assertThat(timer.getCapSeconds()).isEqualTo(5 * HOUR);
+    }
+
+    @Test
+    @DisplayName("startFor: 첫날 증가값이 cap보다 크면 cap으로 클램프된다")
+    void startFor_seedsClampedToCap() {
+        User user = sampleUser();
+
+        ReadingTimer timer = ReadingTimer.startFor(user, 3 * HOUR, 2 * HOUR, DAY0);
+
+        assertThat(timer.getRemainingSeconds()).isEqualTo(2 * HOUR); // increment(3h) > cap(2h) → cap
     }
 
     @Test

@@ -63,7 +63,9 @@ class ReadingFlowIntegrationTest {
         assertThat(user.getPasswordHash()).isNotEqualTo("rawpw1234").startsWith("$2");
         Optional<ReadingTimer> timer = timerRepository.findByUser(user);
         assertThat(timer).isPresent();
-        assertThat(timer.get().getRemainingSeconds()).isZero();
+        // 가입 당일치 증가값으로 시드(0이 아님) — README 1일차 = 1증가값
+        assertThat(timer.get().getRemainingSeconds())
+                .isEqualTo(UserRegistrationService.DEFAULT_DAILY_INCREMENT_SECONDS);
         assertThat(timer.get().getDailyIncrementSeconds())
                 .isEqualTo(UserRegistrationService.DEFAULT_DAILY_INCREMENT_SECONDS);
         assertThat(timer.get().getCapSeconds())
@@ -76,11 +78,11 @@ class ReadingFlowIntegrationTest {
         User user = registrationService.register(
                 "reader@booktimer.com", "rawpw1234", "책벌레", "Asia/Seoul", Role.USER, DAY0);
 
-        // 사전조건: 누적 부채 2시간 만들기 (도메인 메서드에 명시적 날짜 — 시간 의존 없음)
+        // 사전조건: 누적 부채 3시간 만들기 (가입 당일 1h 시드 + 2일치 2h, cap 5h 이하)
         ReadingTimer timer = timerRepository.findByUser(user).orElseThrow();
-        timer.accrueUntil(DAY0.plusDays(2)); // +2h (increment 1h), cap 5h 이하
+        timer.accrueUntil(DAY0.plusDays(2)); // 1h(시드) + 2h = 3h
         timerRepository.save(timer);
-        assertThat(timer.getRemainingSeconds()).isEqualTo(2 * HOUR);
+        assertThat(timer.getRemainingSeconds()).isEqualTo(3 * HOUR);
 
         // start → stop (30분 측정)
         sessionService.start(user, T0);
@@ -90,9 +92,9 @@ class ReadingFlowIntegrationTest {
         assertThat(stopped.isActive()).isFalse();
         assertThat(stopped.getDurationSeconds()).isEqualTo(1800L);
         assertThat(sessionRepository.findByUserAndEndedAtIsNull(user)).isEmpty();
-        // 타이머 잔여가 측정량만큼 줄었다 (2h - 30m = 1h30m)
+        // 타이머 잔여가 측정량만큼 줄었다 (3h - 30m = 2h30m)
         assertThat(timerRepository.findByUser(user).orElseThrow().getRemainingSeconds())
-                .isEqualTo(2 * HOUR - 1800L);
+                .isEqualTo(3 * HOUR - 1800L);
     }
 
     @Test
