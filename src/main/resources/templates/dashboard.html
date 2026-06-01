@@ -8,6 +8,8 @@
 <h1>BookTimer</h1>
 <p><span th:text="${nickname}">닉네임</span>님, 환영합니다.</p>
 
+<p th:if="${error}" th:text="${error}" style="color:red">에러 메시지</p>
+
 <section>
     <h2>남은 독서 시간</h2>
     <p><span th:text="${remainingSeconds}">0</span>초</p>
@@ -17,9 +19,15 @@
     <h2>측정 상태</h2>
     <div th:if="${hasActiveSession}">
         <p>측정 진행 중 (시작: <span th:text="${activeStartedAt}">-</span>)</p>
+        <form th:action="@{/sessions/stop}" method="post">
+            <button type="submit">측정 종료</button>
+        </form>
     </div>
     <div th:unless="${hasActiveSession}">
         <p>진행 중인 측정이 없습니다.</p>
+        <form th:action="@{/sessions/start}" method="post">
+            <button type="submit">측정 시작</button>
+        </form>
     </div>
 </section>
 
