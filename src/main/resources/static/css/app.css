@@ -1,0 +1,182 @@
+/* BookTimer — 공통 스타일 (1-A 다리: 빈약한 날것 HTML 개선) */
+
+:root {
+    --bg: #f4f5f7;
+    --card-bg: #ffffff;
+    --text: #1f2330;
+    --muted: #6b7280;
+    --accent: #4f46e5;
+    --accent-hover: #4338ca;
+    --danger: #dc2626;
+    --danger-hover: #b91c1c;
+    --border: #e5e7eb;
+    --ok: #059669;
+    --radius: 14px;
+    --shadow: 0 1px 3px rgba(0, 0, 0, .08), 0 6px 20px rgba(0, 0, 0, .05);
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    line-height: 1.5;
+    display: flex;
+    justify-content: center;
+    padding: 32px 16px;
+}
+
+.container {
+    width: 100%;
+    max-width: 460px;
+}
+
+.brand {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 0 0 4px;
+}
+
+.brand h1 {
+    font-size: 1.6rem;
+    margin: 0;
+    letter-spacing: -.02em;
+}
+
+.brand .emoji { font-size: 1.4rem; }
+
+.greeting {
+    color: var(--muted);
+    margin: 0 0 20px;
+}
+
+.card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 24px;
+    margin-bottom: 16px;
+}
+
+.card h2 {
+    font-size: .8rem;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--muted);
+    margin: 0 0 12px;
+}
+
+/* 큰 타이머 숫자 */
+.timer-display {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+    font-size: 3rem;
+    font-weight: 700;
+    letter-spacing: .02em;
+    color: var(--accent);
+    margin: 0;
+}
+
+.timer-display.met { color: var(--ok); }
+
+.timer-sub {
+    color: var(--muted);
+    margin: 8px 0 0;
+    font-size: .95rem;
+}
+
+.timer-sub .mono {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.goal-badge {
+    display: inline-block;
+    margin-top: 10px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: #ecfdf5;
+    color: var(--ok);
+    font-size: .85rem;
+    font-weight: 600;
+}
+
+.status-line { margin: 0 0 14px; color: var(--muted); }
+.status-line .mono { color: var(--text); font-weight: 600; }
+
+/* 버튼 */
+button, .btn {
+    font: inherit;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    padding: 12px 18px;
+    cursor: pointer;
+    width: 100%;
+    transition: background .15s ease;
+}
+
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-hover); }
+
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover { background: var(--danger-hover); }
+
+.btn-ghost {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+}
+.btn-ghost:hover { background: var(--bg); }
+
+/* 폼 (회원가입 등) */
+.field { margin-bottom: 16px; }
+.field label {
+    display: block;
+    font-size: .85rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+.field input {
+    width: 100%;
+    font: inherit;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #fff;
+}
+.field input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, .15);
+}
+.field-error {
+    display: block;
+    margin-top: 6px;
+    color: var(--danger);
+    font-size: .85rem;
+}
+
+/* 플래시 / 알림 */
+.alert {
+    padding: 12px 14px;
+    border-radius: 10px;
+    margin-bottom: 16px;
+    font-size: .95rem;
+}
+.alert-error {
+    background: #fef2f2;
+    color: var(--danger);
+    border: 1px solid #fecaca;
+}
+
+.link-row { text-align: center; margin-top: 8px; }
+.link-row a { color: var(--accent); text-decoration: none; }
+.link-row a:hover { text-decoration: underline; }
