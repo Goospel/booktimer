@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>로그인 — BookTimer</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <span class="emoji">📚</span>
+        <h1>BookTimer</h1>
+    </header>
+    <p class="greeting">로그인</p>
+
+    <div th:if="${param.registered}" class="alert alert-ok">회원가입이 완료됐어요. 로그인해 주세요.</div>
+    <div th:if="${param.logout}" class="alert alert-ok">로그아웃되었습니다.</div>
+    <div th:if="${param.error}" class="alert alert-error">이메일 또는 비밀번호가 올바르지 않습니다.</div>
+
+    <section class="card">
+        <form th:action="@{/login}" method="post">
+            <div class="field">
+                <label for="username">이메일</label>
+                <input type="email" id="username" name="username" autofocus>
+            </div>
+            <div class="field">
+                <label for="password">비밀번호</label>
+                <input type="password" id="password" name="password">
+            </div>
+            <button type="submit" class="btn-primary">로그인</button>
+        </form>
+    </section>
+
+    <p class="link-row"><a th:href="@{/signup}">계정이 없나요? 회원가입</a></p>
+</div>
+</body>
+</html>
