@@ -13,6 +13,8 @@
 - [T-006. Spring Boot 4: `@DataJpaTest` import 경로 변경](#t-006-spring-boot-4-datajpatest-import-경로-변경)
 - [T-007. `@DataJpaTest` 슬라이스에서 auditing이 안 돌아 createdAt이 null](#t-007-datajpatest-슬라이스에서-auditing이-안-돌아-createdat이-null)
 - [T-008. `redirectedUrlPattern("**/login")`이 상대경로 리다이렉트에 매칭 실패](#t-008-redirectedurlpatternlogin이-상대경로-리다이렉트에-매칭-실패)
+- [T-009. Fargate 콜드스타트가 헬스체크 grace를 못 넘겨 ECS 태스크 무한 재시작](#t-009-fargate-콜드스타트가-헬스체크-grace를-못-넘겨-ecs-태스크-무한-재시작)
+- [T-010. ECS 안정화 대기 중 수동 update-service 끼워넣어 워크플로 배포가 경쟁·실패](#t-010-ecs-안정화-대기-중-수동-update-service-끼워넣어-워크플로-배포가-경쟁실패)
 
 ---
 
@@ -163,6 +165,34 @@ AssertionError: Redirected URL '/login' does not match the expected URL pattern 
 
 ---
 
+## T-009. Fargate 콜드스타트가 헬스체크 grace를 못 넘겨 ECS 태스크 무한 재시작
+
+**증상**: ECS Fargate 첫 배포에서 서비스가 안정화되지 않고 태스크가 계속 떴다 죽었다 반복. 서비스 이벤트에 `(port 8080) is unhealthy ... (reason Health checks failed)` → `has begun draining` → `has stopped 1 running tasks` 루프. 워크플로의 "서비스 안정화 대기"도 끝나지 않음.
+
+**원인**: 앱 로그를 보면 **컨테이너는 정상 기동**(RDS 연결 성공, `Started ... in 99.6 seconds`). 문제는 **콜드스타트가 ~100초**(Fargate 0.25 vCPU=256은 CPU가 적어 Spring Boot 부팅이 느림)인데, ECS 서비스의 **헬스체크 유예(`health-check-grace-period-seconds`)를 120초**로 줬다는 것. 앱이 준비되자마자 유예가 끝나, ALB 타깃그룹이 "healthy 2회 연속(≈60초)"을 채우기 전에 ECS가 태스크를 비정상으로 보고 종료 → 새 태스크 → 또 반복.
+
+> 진단 포인트: `stoppedReason`이 아니라 **서비스 이벤트의 "unhealthy ... Health checks failed"** + **앱 로그가 정상 기동을 보이는데도 죽는 것**이 "타이밍 문제(grace)"의 신호. (이때 본 `CannotPullContainerError ...not found`는 이미지 push 전 옛 태스크의 사유라 무관 — 사유의 시점을 구분할 것.)
+
+**해결 / 예방**:
+- 유예를 콜드스타트보다 넉넉히: `aws ecs update-service --health-check-grace-period-seconds 300 --force-new-deployment ...`. (update-service는 grace를 명시 안 한 배포에선 기존값을 유지하므로 한 번 늘리면 이후 배포에도 적용됨.)
+- 근본: **콜드스타트 단축** — 태스크 CPU를 0.5 vCPU(512)로 올리면 부팅이 크게 빨라진다. (느린 시작 = 작은 CPU 신호.)
+- ALB 타깃 헬스체크는 컨테이너가 아니라 **HTTP 응답**으로 판정 — 경로(`/actuator/health`)가 인증 없이 200을 주는지, 포트(8080)가 맞는지도 함께 확인.
+
+---
+
+## T-010. ECS 안정화 대기 중 수동 update-service 끼워넣어 워크플로 배포가 경쟁·실패
+
+**증상**: GitHub Actions의 ECS 배포 잡(`amazon-ecs-deploy-task-definition`, `wait-for-service-stability: true`)이 도는 중에, 디버깅하려고 CloudShell에서 `aws ecs update-service`를 별도로 실행. 이후 워크플로 배포 잡이 25분 만에 **실패**(run이 red)했는데, 정작 **서비스 자체는 정상 안정화**됨(앱 접속 잘 됨).
+
+**원인**: 두 번의 배포가 **경쟁**했다. 워크플로가 만든 배포(PRIMARY)가 안정화되길 기다리는 동안, 수동 `update-service`가 **새 배포로 교체**해버려 워크플로가 추적하던 배포가 무효화됨. 워크플로의 안정화 대기는 자기 배포가 stable 되는 걸 끝내 못 보고 타임아웃/실패 처리. → **run 색만 red, 실제 서비스는 멀쩡**.
+
+**해결 / 예방**:
+- **워크플로의 배포 대기 중에는 같은 서비스에 수동 `update-service`를 하지 않는다.** 한 서비스의 배포는 한 주체(파이프라인)만 건드린다.
+- 디버깅이 필요하면 **워크플로 run을 먼저 취소**(`gh run cancel`)하고 수동 작업을 하거나, 반대로 수동 개입을 멈추고 워크플로 하나만 끝까지 둔다.
+- 배포 성공 판정은 **워크플로 색이 아니라 서비스 상태/실접속**으로 확인(둘이 갈릴 수 있음 — 이 케이스가 그 예). 깨끗한 green 기록이 필요하면 개입 없이 재트리거.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -173,3 +203,5 @@ AssertionError: Redirected URL '/login' does not match the expected URL pattern 
 | 2026-06-01 | T-007 (@DataJpaTest 슬라이스 auditing 미로드 — createdAt null) |
 | 2026-06-01 | T-008 (redirectedUrlPattern("**/login")이 상대경로 리다이렉트 매칭 실패 → redirectedUrl) |
 | 2026-06-01 | T-006 보강 (@AutoConfigureMockMvc도 Boot 4 패키지 이동 — 추가 사례 표) |
+| 2026-06-01 | T-009 (Fargate 콜드스타트 ~100s가 헬스체크 grace 120s 못 넘겨 태스크 무한 재시작 → grace 300) |
+| 2026-06-01 | T-010 (ECS 안정화 대기 중 수동 update-service 경쟁 → 워크플로 run 실패, 서비스는 정상) |

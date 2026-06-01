@@ -19,6 +19,7 @@
 - [N-013. Spring Boot 컨테이너화 — 멀티스테이지 Dockerfile + 운영 설정 외부화](#n-013-spring-boot-컨테이너화--멀티스테이지-dockerfile--운영-설정-외부화)
 - [N-014. AWS CLI는 로컬에서 실행되지만 클라우드에 작용 — 콘솔/CLI/CloudShell, bash vs PowerShell](#n-014-aws-cli는-로컬에서-실행되지만-클라우드에-작용--콘솔clicloudshell-bash-vs-powershell)
 - [N-015. GitHub Actions → AWS 키 없이 배포 — OIDC 페더레이션 + ECS 롤링 배포](#n-015-github-actions--aws-키-없이-배포--oidc-페더레이션--ecs-롤링-배포)
+- [N-016. ECS 헬스체크와 콜드스타트 — ALB 타깃 헬스 vs 컨테이너, grace period](#n-016-ecs-헬스체크와-콜드스타트--alb-타깃-헬스-vs-컨테이너-grace-period)
 
 ---
 
@@ -649,6 +650,48 @@ build & push 이미지(ECR, :sha 태그)
 
 ---
 
+## N-016. ECS 헬스체크와 콜드스타트 — ALB 타깃 헬스 vs 컨테이너, grace period
+
+**한 줄 요약**: ECS 서비스가 "안정화"되려면 새 태스크가 **헬스체크를 통과**해야 한다. ALB 뒤에 둔 서비스는 ALB **타깃그룹 헬스체크**(HTTP 경로 응답)로 건강을 판정하는데, 앱 **콜드스타트가 느리면** ECS의 **헬스체크 유예(grace period)** 안에 통과를 못 해 태스크가 비정상으로 종료·재시작을 반복한다. 즉 "앱은 정상인데 배포가 안 끝나는" 상황의 핵심은 **시작 속도 vs 유예/헬스체크 타이밍**이다.
+
+### 자세한 설명
+
+**헬스체크가 두 층위로 있다**
+- **컨테이너 헬스체크**(태스크 정의 `healthCheck`): 컨테이너 안에서 명령 실행(예: `curl localhost`). 안 넣으면 생략 가능.
+- **ALB 타깃그룹 헬스체크**: ALB가 타깃(태스크 IP:포트)으로 **HTTP 요청**(예: `/actuator/health`)을 보내 200이면 healthy. ALB 뒤 서비스는 보통 이게 "건강"의 기준이고, ECS는 이 결과로 태스크를 살리고 죽인다.
+  - 통과 조건: `healthy-threshold`(예: 2)회 **연속** 성공. 간격 30초면 ≈60초 필요.
+  - 경로가 **인증 없이 200**을 줘야 한다(Spring Security가 막으면 401 → 영원히 unhealthy). 그래서 `/actuator/health`를 `permitAll`로 열었다.
+
+**grace period(헬스체크 유예)의 역할**
+- 새 태스크가 막 떴을 때 앱은 아직 부팅 중이라 헬스체크가 당연히 실패한다. ECS가 이걸로 바로 죽이면 영원히 못 뜬다.
+- `health-check-grace-period-seconds`는 "태스크 시작 후 이 시간 동안은 ELB 헬스 실패로 죽이지 마라"는 유예다.
+- **함정**: 유예 < (콜드스타트 + 헬스 2회 통과 시간) 이면, 앱이 준비되기도 전에/직후에 유예가 끝나 ECS가 태스크를 죽인다 → 무한 재시작(T-009). 이 프로젝트는 Fargate 0.25 vCPU에서 콜드스타트 ~100초인데 유예 120초라 빠듯해 실패 → **300초로** 늘려 해결.
+
+**롤링 배포와의 관계**
+- ECS 롤링: 새 태스크를 띄워 **healthy** 된 뒤 옛 태스크를 드레이닝·종료(minimumHealthyPercent 100 / maximumPercent 200이면 잠깐 2개 공존). 새 태스크가 grace 안에 healthy 못 되면 "배포가 안정화 안 됨" → 파이프라인의 안정화 대기가 실패.
+- 그래서 **배포 성공 = 새 태스크가 헬스 통과**. 느린 시작은 배포 신뢰성에 직접 영향.
+
+### 일반화 포인트 (면접 답변용)
+
+- **"앱이 떴다"와 "오케스트레이터가 건강하다고 본다"는 다르다.** 후자는 헬스체크(경로·포트·인증·임계치)와 유예 타이밍의 함수. 배포가 멈추면 로그(앱 정상?)와 서비스 이벤트(헬스 실패?)를 같이 봐야 원인이 갈린다.
+- **유예는 콜드스타트에 맞춰 잡는다.** 시작이 느린 런타임(JVM/Spring)은 grace를 넉넉히. 근본 해결은 시작 단축(CPU↑, 지연 초기화, AOT/네이티브 이미지).
+- **헬스 엔드포인트는 인증 예외**로 둬야 외부 LB가 찌를 수 있다 — 보안 정책의 화이트리스트에 포함.
+- 작은 vCPU(Fargate 0.25)는 비용은 싸지만 **콜드스타트·워밍업이 느려** 배포·오토스케일 반응성이 떨어진다(비용 vs 반응성 트레이드오프).
+
+### 코드 위치
+
+- `deploy/task-definition.json` — 컨테이너 포트 8080, 로그, (컨테이너 헬스체크는 생략하고 ALB에 위임)
+- ALB 타깃그룹 헬스체크 경로 `/actuator/health`, 서비스 `health-check-grace-period-seconds`(120→300)
+- `src/main/java/com/booktimer/config/SecurityConfig.java` — `/actuator/health` 공개
+- 관련: `troubleshooting.md` T-009(grace 부족), T-010(배포 경쟁)
+
+### 관련 노트
+
+- [N-015. GitHub Actions → AWS 키 없이 배포](#n-015-github-actions--aws-키-없이-배포--oidc-페더레이션--ecs-롤링-배포) — 이 헬스체크를 기다리는 그 롤링 배포
+- [N-013. Spring Boot 컨테이너화](#n-013-spring-boot-컨테이너화--멀티스테이지-dockerfile--운영-설정-외부화) — health 엔드포인트 공개·운영 프로필
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -665,3 +708,4 @@ build & push 이미지(ECR, :sha 태그)
 | 2026-06-01 | N-013 (Spring Boot 컨테이너화 — 멀티스테이지 Dockerfile, plain jar 비활성, prod 설정 외부화, health 공개) |
 | 2026-06-01 | N-014 (AWS CLI 로컬 실행·클라우드 작용, 콘솔/CLI/CloudShell, bash vs PowerShell 셸 함정) |
 | 2026-06-01 | N-015 (GitHub Actions→AWS 키리스 배포 — OIDC 페더레이션 + ECS 롤링 배포, PassRole) |
+| 2026-06-01 | N-016 (ECS 헬스체크와 콜드스타트 — ALB 타깃 헬스 vs 컨테이너, grace period 함정) |
