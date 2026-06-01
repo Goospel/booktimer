@@ -176,6 +176,11 @@ button, .btn {
     color: var(--danger);
     border: 1px solid #fecaca;
 }
+.alert-ok {
+    background: #ecfdf5;
+    color: var(--ok);
+    border: 1px solid #a7f3d0;
+}
 
 .link-row { text-align: center; margin-top: 8px; }
 .link-row a { color: var(--accent); text-decoration: none; }

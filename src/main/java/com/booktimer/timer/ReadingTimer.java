@@ -123,6 +123,30 @@ public class ReadingTimer extends BaseTimeEntity {
     }
 
     /**
+     * 사용자가 설정 페이지에서 하루 증가값/누적 상한(cap)을 변경한다.
+     *
+     * <p>cap을 현재 잔여보다 낮게 바꾸면 불변식({@code remainingSeconds <= capSeconds})을 지키기
+     * 위해 잔여를 새 cap으로 즉시 클램프한다 — accrue가 항상 cap 이하로 유지하는 것과 같은 규칙.
+     *
+     * @param dailyIncrementSeconds 새 하루 증가값(초, 0 이상)
+     * @param capSeconds            새 누적 상한(초, 0 이상)
+     * @throws IllegalArgumentException 값이 음수인 경우
+     */
+    public void updateSettings(long dailyIncrementSeconds, long capSeconds) {
+        if (dailyIncrementSeconds < 0) {
+            throw new IllegalArgumentException("dailyIncrementSeconds must be >= 0");
+        }
+        if (capSeconds < 0) {
+            throw new IllegalArgumentException("capSeconds must be >= 0");
+        }
+        this.dailyIncrementSeconds = dailyIncrementSeconds;
+        this.capSeconds = capSeconds;
+        if (this.remainingSeconds > capSeconds) {
+            this.remainingSeconds = capSeconds;
+        }
+    }
+
+    /**
      * 세션 측정량만큼 누적 잔여(부채)를 갚는다. 잔여는 0 밑으로 내려가지 않는다(floor).
      *
      * @param seconds 갚을 시간(초, 0 이상)

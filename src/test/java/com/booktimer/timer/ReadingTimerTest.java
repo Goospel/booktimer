@@ -151,4 +151,47 @@ class ReadingTimerTest {
         assertThatThrownBy(() -> timer.deduct(-1L))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    // --- updateSettings: 설정 페이지에서 증가값/cap 변경 ---
+
+    @Test
+    @DisplayName("updateSettings: 증가값과 cap을 바꾼다 (잔여가 새 cap 이하면 잔여 유지)")
+    void updateSettings_changesIncrementAndCap() {
+        ReadingTimer timer = timerWith(2 * HOUR, DAY0); // remaining 2h, cap 5h
+
+        timer.updateSettings(2 * HOUR, 10 * HOUR);
+
+        assertThat(timer.getDailyIncrementSeconds()).isEqualTo(2 * HOUR);
+        assertThat(timer.getCapSeconds()).isEqualTo(10 * HOUR);
+        assertThat(timer.getRemainingSeconds()).isEqualTo(2 * HOUR); // cap 이하라 유지
+    }
+
+    @Test
+    @DisplayName("updateSettings: cap을 현재 잔여보다 낮추면 잔여를 새 cap으로 클램프한다")
+    void updateSettings_capBelowRemaining_clampsRemaining() {
+        ReadingTimer timer = timerWith(4 * HOUR, DAY0); // remaining 4h
+
+        timer.updateSettings(HOUR, 3 * HOUR); // cap 3h < 4h
+
+        assertThat(timer.getCapSeconds()).isEqualTo(3 * HOUR);
+        assertThat(timer.getRemainingSeconds()).isEqualTo(3 * HOUR); // 클램프됨
+    }
+
+    @Test
+    @DisplayName("updateSettings: 증가값이 음수면 예외")
+    void updateSettings_negativeIncrement_throws() {
+        ReadingTimer timer = timerWith(HOUR, DAY0);
+
+        assertThatThrownBy(() -> timer.updateSettings(-1L, 5 * HOUR))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("updateSettings: cap이 음수면 예외")
+    void updateSettings_negativeCap_throws() {
+        ReadingTimer timer = timerWith(HOUR, DAY0);
+
+        assertThatThrownBy(() -> timer.updateSettings(HOUR, -1L))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

@@ -107,6 +107,30 @@ public class User extends BaseTimeEntity {
         return new User(email, passwordHash, nickname, timezone, role);
     }
 
+    /**
+     * 사용자가 변경 가능한 프로필 속성(닉네임, 타임존)을 갱신한다.
+     * 식별/인증 속성(email, passwordHash, role)은 여기서 바꾸지 않는다.
+     *
+     * @param nickname 새 표시 닉네임(공백 불가)
+     * @param timezone 새 IANA 타임존 ID(예: "Asia/Seoul")
+     * @throws IllegalArgumentException 닉네임이 공백이거나 타임존이 유효한 IANA ID가 아닌 경우
+     */
+    public void updateProfile(String nickname, String timezone) {
+        if (nickname == null || nickname.isBlank()) {
+            throw new IllegalArgumentException("nickname must not be blank");
+        }
+        if (timezone == null || timezone.isBlank()) {
+            throw new IllegalArgumentException("timezone must not be blank");
+        }
+        try {
+            ZoneId.of(timezone);
+        } catch (DateTimeException e) {
+            throw new IllegalArgumentException("timezone is not a valid IANA zone id: " + timezone, e);
+        }
+        this.nickname = nickname;
+        this.timezone = timezone;
+    }
+
     public Long getId() {
         return id;
     }
