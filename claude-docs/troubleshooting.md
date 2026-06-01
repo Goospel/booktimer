@@ -114,6 +114,13 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
   → `spring-boot-data-jpa-test-4.0.6.jar` 안 `org/springframework/boot/data/jpa/test/autoconfigure/DataJpaTest.class` 확인.
 - 다른 슬라이스(`@WebMvcTest` 등)도 Boot 4에선 모듈별 패키지일 수 있으니 같은 방법으로 확인.
 
+**확인된 추가 사례** (같은 뿌리 — 마주칠 때마다 누적):
+
+| 애너테이션 | ❌ 옛 (3.x) | ✅ 신 (4.x) | jar |
+|---|---|---|---|
+| `@DataJpaTest` | `...boot.test.autoconfigure.orm.jpa` | `...boot.data.jpa.test.autoconfigure` | `spring-boot-data-jpa-test` |
+| `@AutoConfigureMockMvc` | `...boot.test.autoconfigure.web.servlet` | `...boot.webmvc.test.autoconfigure` | `spring-boot-webmvc-test` |
+
 ---
 
 ## T-007. `@DataJpaTest` 슬라이스에서 auditing이 안 돌아 createdAt이 null
@@ -165,3 +172,4 @@ AssertionError: Redirected URL '/login' does not match the expected URL pattern 
 | 2026-05-31 | T-006 (Boot 4 @DataJpaTest import 경로) |
 | 2026-06-01 | T-007 (@DataJpaTest 슬라이스 auditing 미로드 — createdAt null) |
 | 2026-06-01 | T-008 (redirectedUrlPattern("**/login")이 상대경로 리다이렉트 매칭 실패 → redirectedUrl) |
+| 2026-06-01 | T-006 보강 (@AutoConfigureMockMvc도 Boot 4 패키지 이동 — 추가 사례 표) |
