@@ -16,6 +16,7 @@
 - [N-010. 테스트 가능한 시간 — Clock 주입 + 절대 시점 vs 유저 타임존 "오늘"](#n-010-테스트-가능한-시간--clock-주입--절대-시점-vs-유저-타임존-오늘)
 - [N-011. Spring Security 폼 로그인 — UserDetailsService + PasswordEncoder 두 빈이 인증을 켠다](#n-011-spring-security-폼-로그인--userdetailsservice--passwordencoder-두-빈이-인증을-켠다)
 - [N-012. 인증 주체 ≠ 도메인 엔티티 — principal로 도메인 User를 다시 잇고, 접속을 Lazy 누적 트리거로](#n-012-인증-주체--도메인-엔티티--principal로-도메인-user를-다시-잇고-접속을-lazy-누적-트리거로)
+- [N-013. Spring Boot 컨테이너화 — 멀티스테이지 Dockerfile + 운영 설정 외부화](#n-013-spring-boot-컨테이너화--멀티스테이지-dockerfile--운영-설정-외부화)
 
 ---
 
@@ -492,6 +493,74 @@ public String dashboard(Principal principal, Model model) {
 
 ---
 
+## N-013. Spring Boot 컨테이너화 — 멀티스테이지 Dockerfile + 운영 설정 외부화
+
+**한 줄 요약**: Spring Boot 앱을 도커 이미지로 만들 때, **빌드용 JDK 스테이지와 실행용 JRE 스테이지를 분리**(멀티스테이지)하면 최종 이미지에 무거운 빌드 도구가 안 들어가 가볍고 안전하다. 그리고 DB 접속 같은 운영 설정·시크릿은 이미지에 굽지 않고 **환경변수 + `application-prod.properties` 프로필**로 외부에서 주입한다 — 같은 이미지를 어느 환경에든 띄운다.
+
+### 자세한 설명
+
+**1. 멀티스테이지 빌드 — 왜 두 단계인가**
+
+```dockerfile
+FROM eclipse-temurin:21-jdk AS build     # 빌드: 소스 → 부트 jar (gradle, JDK 필요)
+...
+RUN ./gradlew bootJar -x test --no-daemon
+
+FROM eclipse-temurin:21-jre              # 런타임: jar 실행만 (JRE면 충분)
+COPY --from=build /app/build/libs/*.jar app.jar
+ENTRYPOINT ["java","-jar","/app/app.jar"]
+```
+
+- 한 단계로 JDK 이미지에 다 담으면, 최종 이미지에 **컴파일러·gradle·소스·캐시**까지 들어가 무겁고 공격 표면이 넓다.
+- 멀티스테이지는 빌드 결과물(jar)만 런타임 스테이지로 `COPY --from`. 최종 이미지엔 **JRE + jar**만 → 작고 깔끔.
+- 레이어 캐시: 빌드 스크립트/래퍼를 소스보다 먼저 COPY하면, 소스만 바뀔 때 의존성 다운로드 레이어가 캐시된다(빌드 가속).
+- 테스트는 이미지 빌드에서 `-x test`로 빼고 **CI 게이트가 따로** 돌린다 — 이미지 빌드는 산출물 생성에 집중, 검증은 파이프라인 책임(역할 분리).
+
+**2. plain jar vs 부트(executable) jar**
+
+- Spring Boot는 빌드 시 jar를 **둘** 만든다: 실행 가능한 부트 jar(의존성 포함, `java -jar`로 바로 실행)와 일반 `*-plain.jar`(클래스만, 라이브러리로 쓸 때).
+- Dockerfile이 `build/libs/*.jar`를 단일 복사하면 둘 다 잡혀 **모호**해진다. `build.gradle`에서 `tasks.named('jar') { enabled = false }`로 plain jar를 끄면 부트 jar만 남아 깔끔하다.
+
+**3. 운영 설정·시크릿 외부화**
+
+- DB URL/비번을 코드/이미지에 박으면 시크릿이 새고, 환경마다 이미지를 다시 빌드해야 한다.
+- `application-prod.properties`에 **placeholder**만 두고 값은 컨테이너 환경변수로 주입:
+  ```properties
+  spring.datasource.url=${SPRING_DATASOURCE_URL}
+  spring.datasource.username=${SPRING_DATASOURCE_USERNAME}
+  spring.datasource.password=${SPRING_DATASOURCE_PASSWORD}
+  spring.jpa.hibernate.ddl-auto=update
+  spring.docker.compose.enabled=false   # 개발 전용 기능 — 운영 컨테이너엔 docker 소켓 없음
+  ```
+- 프로필 활성화는 `SPRING_PROFILES_ACTIVE=prod`(Dockerfile `ENV` 또는 실행 시). 같은 이미지를 dev/prod에 그대로 띄우고 **환경변수만 다르게** → "한 번 빌드, 어디서나 실행".
+- Spring의 relaxed binding 덕에 `SPRING_DATASOURCE_URL` 환경변수는 `spring.datasource.url`로 자동 매핑되지만, prod 프로필에 명시해 두면 "이 환경이 무엇을 요구하는가"가 문서화되고 누락 시 기동이 fail-fast로 막힌다.
+
+**4. 헬스체크 엔드포인트**
+
+- 로드밸런서/배포 파이프라인이 "떴는지" 확인할 경로가 필요 → Spring Actuator `/actuator/health`(기본 노출). 단, 보안이 전 경로를 잠그면 헬스체크가 401로 실패하므로 **그 경로만 공개**(`permitAll`)해야 한다.
+
+### 일반화 포인트 (면접 답변용)
+
+- **이미지는 불변(immutable) 산출물, 설정은 주입**: "한 번 빌드한 이미지를 환경변수만 바꿔 모든 환경에 띄운다"가 12-factor의 config 원칙. 시크릿을 이미지에 굽지 않는 이유(유출·재빌드).
+- **멀티스테이지 = 빌드 의존성과 런타임 의존성의 분리**: 최종 이미지 크기·공격 표면 최소화. 컴파일러는 빌드에만 필요하지 실행엔 불필요.
+- **빌드와 검증의 책임 분리**: 이미지 빌드에서 테스트를 빼고 CI 게이트가 검증 — N-009(계층별 테스트)·N-004(정책을 어느 층에서 강제)와 같은 "관심사를 알맞은 곳에" 사상.
+- 로컬에서 임시 DB 컨테이너 + 앱 이미지로 **스모크 테스트**(health UP, 스키마 생성 확인)하면 클라우드 가기 전에 설정 오류를 싸게 잡는다.
+
+### 코드 위치
+
+- `Dockerfile` — 멀티스테이지(JDK 빌드 → JRE 런타임)
+- `.dockerignore` — 빌드 컨텍스트 경량화
+- `src/main/resources/application-prod.properties` — env-var datasource + prod 설정
+- `build.gradle` — `tasks.named('jar') { enabled = false }` (plain jar 비활성)
+- `src/main/java/com/booktimer/config/SecurityConfig.java` — `/actuator/health` 공개
+
+### 관련 노트
+
+- [N-009. 계층별 테스트 전략](#n-009-계층별-테스트-전략--도메인-단위--슬라이스--서비스-mock-테스트-피라미드) — 검증을 알맞은 층에 두는 사상(이미지 빌드 vs CI 게이트)
+- [N-010. 테스트 가능한 시간 — Clock 주입](#n-010-테스트-가능한-시간--clock-주입--절대-시점-vs-유저-타임존-오늘) — "부수효과/환경 의존을 주입으로 빼낸다"의 설정 버전
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -505,3 +574,4 @@ public String dashboard(Principal principal, Model model) {
 | 2026-06-01 | N-010 (테스트 가능한 시간 — Clock 주입, 절대 시점 vs 유저 TZ 오늘) |
 | 2026-06-01 | N-011 (Spring Security 폼 로그인 — UserDetailsService + PasswordEncoder 자동 조립, CSRF 판단) |
 | 2026-06-01 | N-012 (인증 주체 ≠ 도메인 엔티티 — principal→findByEmail 재조회, 접속을 Lazy 누적 트리거로) |
+| 2026-06-01 | N-013 (Spring Boot 컨테이너화 — 멀티스테이지 Dockerfile, plain jar 비활성, prod 설정 외부화, health 공개) |
