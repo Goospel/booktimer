@@ -1,0 +1,88 @@
+package com.booktimer.web;
+
+import com.booktimer.session.ReadingSessionService;
+import com.booktimer.user.Role;
+import com.booktimer.user.User;
+import com.booktimer.user.UserRegistrationService;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.ZoneId;
+
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
+
+/**
+ * 대시보드(홈) 컨트롤러 통합 테스트 (MockMvc + 실제 빈·H2).
+ *
+ * <p>로그인 주체(username=email)를 도메인 User로 매핑하고, 접속 시 누적(accrueToToday)을
+ * 적용한 뒤 잔여 시간·진행 중 세션을 화면에 싣는지 검증한다.
+ */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Transactional
+class DashboardControllerTest {
+
+    private static final String SEOUL = "Asia/Seoul";
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private UserRegistrationService registrationService;
+
+    @Autowired
+    private ReadingSessionService sessionService;
+
+    @Autowired
+    private Clock clock;
+
+    private LocalDate today() {
+        return LocalDate.ofInstant(clock.instant(), ZoneId.of(SEOUL));
+    }
+
+    @Test
+    @DisplayName("GET /: 로그인 사용자에게 대시보드를 그리고 잔여 시간을 싣는다")
+    void dashboard_rendersForLoggedInUser() throws Exception {
+        registrationService.register("dash@booktimer.com", "rawpw1234", "책벌레", SEOUL, Role.USER, today());
+
+        mockMvc.perform(get("/").with(user("dash@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(view().name("dashboard"))
+                .andExpect(model().attribute("nickname", "책벌레"))
+                .andExpect(model().attribute("remainingSeconds", 0L))
+                .andExpect(model().attribute("hasActiveSession", false));
+    }
+
+    @Test
+    @DisplayName("GET /: 접속 시 경과 일수만큼 누적이 적용된다 (2일 → 2시간)")
+    void dashboard_appliesAccrualOnAccess() throws Exception {
+        // 2일 전부터 시작 → 접속 시 2일치(1h*2=7200s) 누적
+        registrationService.register("acc@booktimer.com", "rawpw1234", "독서가", SEOUL, Role.USER, today().minusDays(2));
+
+        mockMvc.perform(get("/").with(user("acc@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("remainingSeconds", 7200L));
+    }
+
+    @Test
+    @DisplayName("GET /: 진행 중 세션이 있으면 hasActiveSession=true")
+    void dashboard_showsActiveSession() throws Exception {
+        User user = registrationService.register("act@booktimer.com", "rawpw1234", "진행중", SEOUL, Role.USER, today());
+        sessionService.start(user, clock.instant());
+
+        mockMvc.perform(get("/").with(user("act@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("hasActiveSession", true));
+    }
+}
