@@ -56,9 +56,11 @@ class ReadingFlowIntegrationTest {
     @DisplayName("가입하면 User와 ReadingTimer가 함께 영속화된다 (기본 설정)")
     void register_persistsUserAndTimer() {
         User user = registrationService.register(
-                "newbie@booktimer.com", "$2a$10$hashedpw", "책벌레", "Asia/Seoul", Role.USER, DAY0);
+                "newbie@booktimer.com", "rawpw1234", "책벌레", "Asia/Seoul", Role.USER, DAY0);
 
         assertThat(userRepository.findByEmail("newbie@booktimer.com")).isPresent();
+        // 평문은 저장되지 않고 BCrypt 해시로 보관된다
+        assertThat(user.getPasswordHash()).isNotEqualTo("rawpw1234").startsWith("$2");
         Optional<ReadingTimer> timer = timerRepository.findByUser(user);
         assertThat(timer).isPresent();
         assertThat(timer.get().getRemainingSeconds()).isZero();
@@ -72,7 +74,7 @@ class ReadingFlowIntegrationTest {
     @DisplayName("세션 stop 시 측정량이 영속화된 타이머 잔여에서 차감된다")
     void startThenStop_deductsFromPersistedTimer() {
         User user = registrationService.register(
-                "reader@booktimer.com", "$2a$10$hashedpw", "책벌레", "Asia/Seoul", Role.USER, DAY0);
+                "reader@booktimer.com", "rawpw1234", "책벌레", "Asia/Seoul", Role.USER, DAY0);
 
         // 사전조건: 누적 부채 2시간 만들기 (도메인 메서드에 명시적 날짜 — 시간 의존 없음)
         ReadingTimer timer = timerRepository.findByUser(user).orElseThrow();
@@ -97,7 +99,7 @@ class ReadingFlowIntegrationTest {
     @DisplayName("이미 진행 중 세션이 있으면 start는 거부된다 (영속 상태 기반)")
     void start_whenActiveExists_rejected() {
         User user = registrationService.register(
-                "busy@booktimer.com", "$2a$10$hashedpw", "책벌레", "Asia/Seoul", Role.USER, DAY0);
+                "busy@booktimer.com", "rawpw1234", "책벌레", "Asia/Seoul", Role.USER, DAY0);
         sessionService.start(user, T0);
 
         assertThatThrownBy(() -> sessionService.start(user, T0.plusSeconds(10)))

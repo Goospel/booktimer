@@ -10,6 +10,7 @@ import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDate;
 
@@ -23,9 +24,10 @@ import static org.mockito.Mockito.when;
 /**
  * UserRegistrationService 단위 테스트 (Mockito — DB/컨텍스트 무관).
  *
- * <p>신규 가입 시 User 저장과 ReadingTimer 부트스트랩이 한 트랜잭션에서 함께 일어나는지,
- * 타이머가 올바른 기본값·시작일·소유자로 만들어지는지를 격리 검증한다.
- * (비밀번호 해싱/"오늘" 계산은 상위 계층 책임 — 여기선 해시된 비번과 startDate를 받는다.)
+ * <p>신규 가입 시 <b>평문 비밀번호를 PasswordEncoder로 해싱</b>해 저장하고, User 저장과
+ * ReadingTimer 부트스트랩이 한 트랜잭션에서 함께 일어나는지, 타이머가 올바른
+ * 기본값·시작일·소유자로 만들어지는지를 격리 검증한다.
+ * ("오늘"(유저 타임존) 계산은 여전히 상위 계층 책임 — startDate로 받는다.)
  */
 @ExtendWith(MockitoExtension.class)
 class UserRegistrationServiceTest {
@@ -38,21 +40,39 @@ class UserRegistrationServiceTest {
     @Mock
     private ReadingTimerRepository timerRepository;
 
+    @Mock
+    private PasswordEncoder passwordEncoder;
+
     @InjectMocks
     private UserRegistrationService service;
 
     @Test
-    @DisplayName("register: User를 저장하고 기본 설정으로 ReadingTimer를 부트스트랩한다")
-    void register_savesUserAndBootstrapsTimer() {
+    @DisplayName("register: 평문 비밀번호를 해싱해 저장한다 (평문은 저장되지 않는다)")
+    void register_hashesRawPassword() {
         when(userRepository.save(any(User.class))).thenAnswer(returnsFirstArg());
+        when(passwordEncoder.encode("rawpw1234")).thenReturn("$2a$10$ENCODED");
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+
+        User result = service.register("a@booktimer.com", "rawpw1234", "책벌레", "Asia/Seoul", Role.USER, DAY0);
+
+        verify(passwordEncoder).encode("rawpw1234");
+        verify(userRepository).save(userCaptor.capture());
+        User saved = userCaptor.getValue();
+        assertThat(saved.getPasswordHash()).isEqualTo("$2a$10$ENCODED");
+        assertThat(saved.getPasswordHash()).isNotEqualTo("rawpw1234");
+        assertThat(result.getEmail()).isEqualTo("a@booktimer.com");
+    }
+
+    @Test
+    @DisplayName("register: 기본 설정으로 ReadingTimer를 부트스트랩한다")
+    void register_bootstrapsTimer() {
+        when(userRepository.save(any(User.class))).thenAnswer(returnsFirstArg());
+        when(passwordEncoder.encode(any())).thenReturn("$2a$10$ENCODED");
         ArgumentCaptor<ReadingTimer> timerCaptor = ArgumentCaptor.forClass(ReadingTimer.class);
 
-        User result = service.register("a@booktimer.com", "$2a$10$hashedpw", "책벌레", "Asia/Seoul", Role.USER, DAY0);
+        User result = service.register("a@booktimer.com", "rawpw1234", "책벌레", "Asia/Seoul", Role.USER, DAY0);
 
-        assertThat(result.getEmail()).isEqualTo("a@booktimer.com");
-        verify(userRepository).save(any(User.class));
         verify(timerRepository).save(timerCaptor.capture());
-
         ReadingTimer timer = timerCaptor.getValue();
         assertThat(timer.getUser()).isSameAs(result);
         assertThat(timer.getRemainingSeconds()).isZero();
@@ -67,8 +87,9 @@ class UserRegistrationServiceTest {
     @DisplayName("register: 타이머는 User 저장 뒤에 저장된다 (FK 충족 순서)")
     void register_savesUserBeforeTimer() {
         when(userRepository.save(any(User.class))).thenAnswer(returnsFirstArg());
+        when(passwordEncoder.encode(any())).thenReturn("$2a$10$ENCODED");
 
-        service.register("b@booktimer.com", "$2a$10$hashedpw", "책벌레", "Asia/Seoul", Role.USER, DAY0);
+        service.register("b@booktimer.com", "rawpw1234", "책벌레", "Asia/Seoul", Role.USER, DAY0);
 
         InOrder inOrder = inOrder(userRepository, timerRepository);
         inOrder.verify(userRepository).save(any(User.class));
