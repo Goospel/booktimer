@@ -122,6 +122,22 @@ public class ReadingTimer extends BaseTimeEntity {
         this.lastAccrualDate = today;
     }
 
+    /**
+     * 세션 측정량만큼 누적 잔여(부채)를 갚는다. 잔여는 0 밑으로 내려가지 않는다(floor).
+     *
+     * @param seconds 갚을 시간(초, 0 이상)
+     * @return 실제로 차감된 양(초). 잔여보다 크게 요청하면 있던 잔여만큼만 반환된다.
+     * @throws IllegalArgumentException seconds 가 음수인 경우
+     */
+    public long deduct(long seconds) {
+        if (seconds < 0) {
+            throw new IllegalArgumentException("seconds must be >= 0");
+        }
+        long applied = Math.min(seconds, remainingSeconds);
+        this.remainingSeconds -= applied;
+        return applied;
+    }
+
     public Long getId() {
         return id;
     }
