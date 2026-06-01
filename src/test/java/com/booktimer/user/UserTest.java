@@ -78,4 +78,38 @@ class UserTest {
         assertThatThrownBy(() -> User.of(EMAIL, HASH, NICK, TZ, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    // --- updateProfile: 설정 페이지에서 닉네임/타임존 변경 ---
+
+    @Test
+    @DisplayName("updateProfile: 닉네임과 타임존을 바꾸고 나머지 식별/인증 필드는 유지한다")
+    void updateProfile_changesNicknameAndTimezone() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        user.updateProfile("새책벌레", "America/New_York");
+
+        assertThat(user.getNickname()).isEqualTo("새책벌레");
+        assertThat(user.getTimezone()).isEqualTo("America/New_York");
+        assertThat(user.getEmail()).isEqualTo(EMAIL);
+        assertThat(user.getPasswordHash()).isEqualTo(HASH);
+        assertThat(user.getRole()).isEqualTo(Role.USER);
+    }
+
+    @Test
+    @DisplayName("updateProfile: 닉네임이 비어있으면 예외")
+    void updateProfile_blankNickname_throws() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        assertThatThrownBy(() -> user.updateProfile("  ", TZ))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("updateProfile: 타임존이 유효한 IANA ID가 아니면 예외")
+    void updateProfile_invalidTimezone_throws() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        assertThatThrownBy(() -> user.updateProfile(NICK, "Mars/Phobos"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

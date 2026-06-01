@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>설정 — BookTimer</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <span class="emoji">📚</span>
+        <h1>BookTimer</h1>
+    </header>
+    <p class="greeting">설정</p>
+
+    <div th:if="${message}" class="alert alert-ok" th:text="${message}">저장됨</div>
+
+    <section class="card">
+        <form th:action="@{/settings}" th:object="${settingsForm}" method="post">
+            <div class="field">
+                <label for="nickname">닉네임</label>
+                <input type="text" id="nickname" th:field="*{nickname}">
+                <span class="field-error" th:if="${#fields.hasErrors('nickname')}" th:errors="*{nickname}">닉네임 오류</span>
+            </div>
+            <div class="field">
+                <label for="timezone">타임존</label>
+                <input type="text" id="timezone" th:field="*{timezone}" placeholder="Asia/Seoul">
+                <span class="field-error" th:if="${#fields.hasErrors('timezone')}" th:errors="*{timezone}">타임존 오류</span>
+            </div>
+            <div class="field">
+                <label for="incrementMinutes">하루 증가값 (분)</label>
+                <input type="number" id="incrementMinutes" min="0" th:field="*{incrementMinutes}">
+                <span class="field-error" th:if="${#fields.hasErrors('incrementMinutes')}" th:errors="*{incrementMinutes}">증가값 오류</span>
+            </div>
+            <div class="field">
+                <label for="capMinutes">누적 상한 cap (분)</label>
+                <input type="number" id="capMinutes" min="0" th:field="*{capMinutes}">
+                <span class="field-error" th:if="${#fields.hasErrors('capMinutes')}" th:errors="*{capMinutes}">cap 오류</span>
+            </div>
+            <button type="submit" class="btn-primary">저장</button>
+        </form>
+    </section>
+
+    <p class="link-row"><a th:href="@{/}">← 대시보드로</a></p>
+</div>
+</body>
+</html>
