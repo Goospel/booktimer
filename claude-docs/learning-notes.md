@@ -15,6 +15,7 @@
 - [N-009. 계층별 테스트 전략 — 도메인 단위 / 슬라이스 / 서비스 mock (테스트 피라미드)](#n-009-계층별-테스트-전략--도메인-단위--슬라이스--서비스-mock-테스트-피라미드)
 - [N-010. 테스트 가능한 시간 — Clock 주입 + 절대 시점 vs 유저 타임존 "오늘"](#n-010-테스트-가능한-시간--clock-주입--절대-시점-vs-유저-타임존-오늘)
 - [N-011. Spring Security 폼 로그인 — UserDetailsService + PasswordEncoder 두 빈이 인증을 켠다](#n-011-spring-security-폼-로그인--userdetailsservice--passwordencoder-두-빈이-인증을-켠다)
+- [N-012. 인증 주체 ≠ 도메인 엔티티 — principal로 도메인 User를 다시 잇고, 접속을 Lazy 누적 트리거로](#n-012-인증-주체--도메인-엔티티--principal로-도메인-user를-다시-잇고-접속을-lazy-누적-트리거로)
 
 ---
 
@@ -448,6 +449,49 @@ http
 
 ---
 
+## N-012. 인증 주체 ≠ 도메인 엔티티 — principal로 도메인 User를 다시 잇고, 접속을 Lazy 누적 트리거로
+
+**한 줄 요약**: Spring Security가 들고 다니는 인증 주체(`UserDetails`/principal)는 우리 도메인 `User` 엔티티가 아니다. 둘은 별개 객체이고, 보통 **식별자(여기선 이메일)만 공유**한다. 그래서 컨트롤러에선 `principal.getName()`(=식별자)으로 도메인 `User`를 다시 조회해 잇는다. 그리고 "접속할 때 누적을 따라잡는"(N-001) Lazy 트리거를 **로그인 후 착지 화면(대시보드) 로드**에 두면, 배치 없이 자연스럽게 갱신된다.
+
+### 자세한 설명
+
+로그인하면 Security는 `SecurityContext`에 인증 주체(principal)를 담아 둔다. 이 principal은 `BookTimerUserDetailsService`가 만든 `UserDetails`(username=email, 비번 해시, 권한)이지 — JPA로 관리되는 우리 `User` 엔티티가 **아니다**.
+
+- 왜 분리하나: 인증 주체는 "이 요청이 누구인가"만 알면 된다(가볍게, 세션에 직렬화). 도메인 `User`(연관, 영속성 컨텍스트, 지연로딩)를 통째로 세션에 박으면 무겁고 stale 위험이 있다. 그래서 **식별자만** 들고 다니고, 도메인이 필요한 시점에 DB에서 다시 읽는다.
+- 잇는 법: 컨트롤러 메서드에 `java.security.Principal`을 주입받으면 `principal.getName()`이 username(=email)이다. 이걸로 `userRepository.findByEmail(email)` → 도메인 `User` 복원.
+  - 대안: `@AuthenticationPrincipal UserDetails userDetails` 로 주입받아 `getUsername()`. principal 커스텀 타입을 만들면 도메인 일부를 principal에 얹을 수도 있지만, 식별자→재조회가 가장 단순·안전한 기본형.
+
+```java
+@GetMapping("/")
+public String dashboard(Principal principal, Model model) {
+    User user = userRepository.findByEmail(principal.getName())  // 인증 식별자 → 도메인 엔티티
+            .orElseThrow(() -> new IllegalStateException("authenticated user not found"));
+    ReadingTimer timer = timerService.accrueToToday(user);       // 접속 = Lazy 누적 트리거
+    ...
+}
+```
+
+**접속을 누적 트리거로**: N-001에서 "자정 배치 대신 접속 시 경과 일수만큼 따라잡는다"는 Lazy 누적을 설계했다. 그 트리거를 **어디에 둘지**가 이 증분에서 정해졌다 — 로그인 후 사용자가 처음 보는 화면(대시보드 `GET /`). 사용자가 들어올 때만, 그 사용자 것만 한 번 계산하면 되니 비용·타임존이 자연스럽다.
+
+### 일반화 포인트 (면접 답변용)
+
+- **인증 모델과 도메인 모델은 다른 관심사다.** principal은 "신원 토큰", 도메인 엔티티는 "비즈니스 상태". 식별자로 연결하고, 도메인은 필요할 때 영속성 계층에서 읽는다(세션에 엔티티를 통째로 담지 않는다 — 무게·stale·직렬화 문제).
+- **읽기 시점 계산(Lazy)은 "읽는 진입점"에 트리거를 건다.** 파생 상태(누적 잔여)를 조회 시 계산하기로 했다면, 그 트리거는 사용자가 그 값을 보는 길목(대시보드 로드)에 두는 게 자연스럽다 — write-time 배치와의 트레이드오프(N-001)의 실제 배치 위치.
+- principal→도메인 재조회가 매 요청 1번의 쿼리를 더하지만, 그게 stale/무게 문제보다 싸다. 정말 핫하면 캐시/커스텀 principal로 최적화(조기 최적화 금지).
+
+### 코드 위치
+
+- `src/main/java/com/booktimer/web/DashboardController.java` — `principal.getName()` → `findByEmail` → `accrueToToday`
+- `src/main/java/com/booktimer/security/BookTimerUserDetailsService.java` — principal(username=email)을 만드는 쪽
+- `src/test/java/com/booktimer/web/DashboardControllerTest.java` — `.with(user(email))`로 인증 주체 흉내 + 누적 검증
+
+### 관련 노트
+
+- [N-001. 누적 카운터 일일 리셋 — Lazy 계산](#n-001-누적-카운터-일일-리셋--배치-스케줄러-vs-lazy-계산) — 이 트리거가 적용하는 그 누적
+- [N-011. Spring Security 폼 로그인](#n-011-spring-security-폼-로그인--userdetailsservice--passwordencoder-두-빈이-인증을-켠다) — principal(UserDetails)을 만드는 인증 설정
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -460,3 +504,4 @@ http
 | 2026-06-01 | N-009 (계층별 테스트 전략 — 도메인 단위/슬라이스/서비스 mock, 테스트 피라미드) |
 | 2026-06-01 | N-010 (테스트 가능한 시간 — Clock 주입, 절대 시점 vs 유저 TZ 오늘) |
 | 2026-06-01 | N-011 (Spring Security 폼 로그인 — UserDetailsService + PasswordEncoder 자동 조립, CSRF 판단) |
+| 2026-06-01 | N-012 (인증 주체 ≠ 도메인 엔티티 — principal→findByEmail 재조회, 접속을 Lazy 누적 트리거로) |
