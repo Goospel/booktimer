@@ -1,0 +1,75 @@
+package com.booktimer.web;
+
+import com.booktimer.user.UserRepository;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
+
+/**
+ * 회원가입 화면/처리 컨트롤러 통합 테스트 (MockMvc + 실제 빈·H2).
+ *
+ * <p>비로그인 상태에서 가입 화면이 공개되는지, 폼 제출이 검증을 거쳐 사용자를 영속화하고
+ * 로그인으로 리다이렉트하는지, 입력 오류 시 화면을 다시 그리는지(영속화 없음) 검증한다.
+ */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Transactional
+class SignupControllerTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Test
+    @DisplayName("GET /signup: 비로그인도 가입 화면을 볼 수 있고 폼 모델이 실린다")
+    void getSignup_isPublic() throws Exception {
+        mockMvc.perform(get("/signup"))
+                .andExpect(status().isOk())
+                .andExpect(view().name("signup"))
+                .andExpect(model().attributeExists("signupForm"));
+    }
+
+    @Test
+    @DisplayName("POST /signup: 유효 입력이면 사용자를 만들고 로그인으로 리다이렉트한다")
+    void postSignup_valid_persistsAndRedirects() throws Exception {
+        mockMvc.perform(post("/signup").with(csrf())
+                        .param("email", "newuser@booktimer.com")
+                        .param("password", "rawpw1234")
+                        .param("nickname", "책벌레")
+                        .param("timezone", "Asia/Seoul"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login?registered"));
+
+        assertThat(userRepository.findByEmail("newuser@booktimer.com")).isPresent();
+    }
+
+    @Test
+    @DisplayName("POST /signup: 이메일이 비면 화면을 다시 그리고 사용자를 만들지 않는다")
+    void postSignup_invalid_rerendersWithoutPersisting() throws Exception {
+        mockMvc.perform(post("/signup").with(csrf())
+                        .param("email", "")
+                        .param("password", "rawpw1234")
+                        .param("nickname", "책벌레")
+                        .param("timezone", "Asia/Seoul"))
+                .andExpect(status().isOk())
+                .andExpect(view().name("signup"))
+                .andExpect(model().attributeHasFieldErrors("signupForm", "email"));
+
+        assertThat(userRepository.count()).isZero();
+    }
+}
