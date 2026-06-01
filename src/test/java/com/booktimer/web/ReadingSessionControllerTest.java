@@ -18,9 +18,11 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -110,5 +112,48 @@ class ReadingSessionControllerTest {
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/"))
                 .andExpect(flash().attributeExists("error"));
+    }
+
+    // --- htmx(무리로드) 경로: HX-Request 헤더가 있으면 redirect 대신 200 + 라이브 프래그먼트 ---
+
+    @Test
+    @DisplayName("POST /sessions/start (htmx): 리다이렉트 대신 200 + 대시보드 라이브 프래그먼트를 반환한다")
+    void start_htmx_returnsFragment() throws Exception {
+        User user = register("hxstart@booktimer.com");
+
+        mockMvc.perform(post("/sessions/start").header("HX-Request", "true")
+                        .with(user("hxstart@booktimer.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("dashboard-live")));
+
+        assertThat(sessionRepository.findByUserAndEndedAtIsNull(user)).isPresent();
+    }
+
+    @Test
+    @DisplayName("POST /sessions/stop (htmx): 200 + 프래그먼트를 반환하고 진행 세션을 종료한다")
+    void stop_htmx_returnsFragment() throws Exception {
+        User user = register("hxstop@booktimer.com");
+        sessionService.start(user, clock.instant());
+
+        mockMvc.perform(post("/sessions/stop").header("HX-Request", "true")
+                        .with(user("hxstop@booktimer.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("dashboard-live")));
+
+        assertThat(sessionRepository.findByUserAndEndedAtIsNull(user)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("POST /sessions/start (htmx): 이미 진행 중이면 200 프래그먼트에 에러 메시지를 담는다 (리다이렉트·플래시 아님)")
+    void start_htmx_whenActiveExists_returnsFragmentWithError() throws Exception {
+        User user = register("hxdup@booktimer.com");
+        sessionService.start(user, clock.instant());
+
+        mockMvc.perform(post("/sessions/start").header("HX-Request", "true")
+                        .with(user("hxdup@booktimer.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("이미 진행 중")));
+
+        assertThat(sessionRepository.findByUser(user)).hasSize(1);
     }
 }
