@@ -12,6 +12,7 @@
 - [N-006. PowerShell 5.1 — native stderr 가 `$EAP=Stop` 과 만나 스크립트를 죽이는 함정](#n-006-powershell-51--native-stderr-가-eapstop-과-만나-스크립트를-죽이는-함정)
 - [N-007. Spring Boot 4 autoconfigure / 테스트 슬라이스 모듈화 — 패키지 이동](#n-007-spring-boot-4-autoconfigure--테스트-슬라이스-모듈화--패키지-이동)
 - [N-008. JPA Auditing — 누가 시각을 채우나, 그리고 슬라이스 테스트의 함정](#n-008-jpa-auditing--누가-시각을-채우나-그리고-슬라이스-테스트의-함정)
+- [N-009. 계층별 테스트 전략 — 도메인 단위 / 슬라이스 / 서비스 mock (테스트 피라미드)](#n-009-계층별-테스트-전략--도메인-단위--슬라이스--서비스-mock-테스트-피라미드)
 
 ---
 
@@ -307,6 +308,52 @@ class AuditingTest { ... }
 
 ---
 
+## N-009. 계층별 테스트 전략 — 도메인 단위 / 슬라이스 / 서비스 mock (테스트 피라미드)
+
+**한 줄 요약**: 같은 동작을 모든 계층에서 또 검증하지 않는다. 계층마다 "그 계층만의 책임"을 가장 싼 방법으로 테스트한다 — 도메인 규칙은 순수 단위 테스트, 영속성은 슬라이스(`@DataJpaTest`), 서비스의 **조립(orchestration)**은 레포지토리를 mock한 단위 테스트. 이게 테스트 피라미드(아래로 갈수록 많고 빠르고, 위로 갈수록 적고 느리다).
+
+### 자세한 설명
+
+`ReadingSessionService.stop()`은 "진행 중 세션을 찾아 → 종료하고 → 측정량을 타이머에서 차감하고 → 둘 다 저장"하는 **조립**이다. 이걸 어떻게 테스트할지 두 갈래가 있었다:
+
+- **통합 테스트** (`@SpringBootTest`/`@DataJpaTest` + 실제 빈): 진짜 H2·트랜잭션으로 저장·조회·롤백까지 실증. 느리고 무겁다.
+- **Mockito 단위 테스트**: 레포지토리를 mock으로 주입하고, 서비스가 **올바른 협력을 했는지**만 본다(중복이면 거부, `end` 후 `deduct` 호출, 양쪽 `save`). Spring 컨텍스트 없이 ms 단위로 끝난다.
+
+여기선 **단위(mock)** 를 골랐다. 이유는 "각 책임이 이미 다른 곳에서 검증되기 때문":
+
+| 검증 대상 | 책임 위치 | 테스트 종류 |
+|---|---|---|
+| 누적 차감이 0 밑으로 안 감(floor) | `ReadingTimer.deduct` | 도메인 단위 (경계값) |
+| 종료 시각/길이 계산, 중복 종료 거부 | `ReadingSession.end` | 도메인 단위 |
+| `findByUserAndEndedAtIsNull` 가 진행 중만 반환 | Repository | 슬라이스 `@DataJpaTest` |
+| **이 조각들을 올바른 순서로 엮음** | `ReadingSessionService` | **서비스 mock 단위** |
+
+서비스 테스트에서 실제 DB를 또 띄우면, 이미 슬라이스가 본 영속성을 중복 검증하면서 느려질 뿐이다. 서비스의 고유 책임은 "조립"이라 그것만 본다.
+
+핵심 도구:
+- `@ExtendWith(MockitoExtension.class)` + `@Mock` 레포지토리 + `@InjectMocks` 서비스 — 생성자 주입이면 Mockito가 mock을 꽂아준다.
+- `when(repo.save(any())).thenAnswer(returnsFirstArg())` — 저장이 인자를 그대로 돌려주게 해, 저장 후 반환값을 검증.
+- `verify(repo).save(x)` / `verify(repo, never()).save(any())` — "협력했는가"를 직접 단언(상태가 아니라 상호작용 검증).
+
+### 일반화 포인트 (면접 답변용)
+
+- **"무엇을 테스트하느냐"는 "무엇이 그 계층의 책임이냐"로 결정된다.** 도메인은 규칙, 레포지토리는 쿼리 매핑, 서비스는 조립. 책임이 다르면 테스트 종류도 다르다.
+- **중복 커버리지는 비용이다.** 같은 동작을 단위·슬라이스·통합에서 3번 보면 느려지고 깨질 곳만 늘어난다. 피라미드는 "한 번만, 가장 싼 층에서".
+- **상태 검증 vs 상호작용 검증**: 도메인은 결과 상태(`remaining == 0`)를, 조립은 상호작용(`deduct가 호출됐나`)을 본다. mock은 후자에 적합.
+- 단, 통합 테스트를 아예 안 하는 게 아니다 — 와이어링·트랜잭션·실제 SQL은 슬라이스/소수의 통합이 책임진다. mock 단위는 그 위에 얹는 빠른 층.
+
+### 코드 위치
+
+- `src/main/java/com/booktimer/session/ReadingSessionService.java` — 조립 대상
+- `src/test/java/com/booktimer/session/ReadingSessionServiceTest.java` — Mockito 단위 (`@InjectMocks`, `returnsFirstArg`, `verify`)
+- 대비: `ReadingTimerTest`(도메인 단위), `ReadingSessionRepositoryTest`(슬라이스)
+
+### 관련 노트
+
+- [N-008. JPA Auditing — 슬라이스 테스트의 함정](#n-008-jpa-auditing--누가-시각을-채우나-그리고-슬라이스-테스트의-함정) — 슬라이스가 "무엇만 로드하는지" 감각
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -316,3 +363,4 @@ class AuditingTest { ... }
 | 2026-05-31 | N-004 (Claude Code 훅 워크플로 강제), N-006 (PowerShell 5.1 native stderr 함정) |
 | 2026-05-31 | N-007 (Boot 4 autoconfigure/test-slice 모듈화 — 패키지 이동) |
 | 2026-06-01 | N-008 (JPA Auditing — 리스너/스위치 분리, @DataJpaTest 슬라이스 함정) |
+| 2026-06-01 | N-009 (계층별 테스트 전략 — 도메인 단위/슬라이스/서비스 mock, 테스트 피라미드) |
