@@ -1,0 +1,17 @@
+# 빌드 산출물/로컬 캐시 — 이미지 빌드 컨텍스트에서 제외
+build/
+.gradle/
+.git/
+.github/
+.idea/
+*.iml
+
+# 문서/설정 잔재
+claude-docs/
+.claude/
+HELP.md
+README.md
+.commit-msg-tmp
+
+# 테스트 리소스(이미지 빌드 시 -x test라 불필요하지만 컨텍스트 경량화)
+**/*.log
