@@ -60,19 +60,20 @@ class DashboardControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(view().name("dashboard"))
                 .andExpect(model().attribute("nickname", "책벌레"))
-                .andExpect(model().attribute("remainingSeconds", 0L))
+                // 가입 당일 1증가값 시드(1h) — 같은 날 접속이라 추가 누적 없음
+                .andExpect(model().attribute("remainingSeconds", 3600L))
                 .andExpect(model().attribute("hasActiveSession", false));
     }
 
     @Test
-    @DisplayName("GET /: 접속 시 경과 일수만큼 누적이 적용된다 (2일 → 2시간)")
+    @DisplayName("GET /: 접속 시 경과 일수만큼 누적이 적용된다 (시작일 1h 시드 + 2일치 2h = 3h)")
     void dashboard_appliesAccrualOnAccess() throws Exception {
-        // 2일 전부터 시작 → 접속 시 2일치(1h*2=7200s) 누적
+        // 2일 전 시작 → 시드 1h + 접속 시 2일치(1h*2) 누적 = 3h(10800s)
         registrationService.register("acc@booktimer.com", "rawpw1234", "독서가", SEOUL, Role.USER, today().minusDays(2));
 
         mockMvc.perform(get("/").with(user("acc@booktimer.com")))
                 .andExpect(status().isOk())
-                .andExpect(model().attribute("remainingSeconds", 7200L));
+                .andExpect(model().attribute("remainingSeconds", 10800L));
     }
 
     @Test

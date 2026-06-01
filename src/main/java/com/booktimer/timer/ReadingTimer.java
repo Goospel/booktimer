@@ -85,7 +85,10 @@ public class ReadingTimer extends BaseTimeEntity {
     }
 
     /**
-     * 신규 사용자를 위한 타이머를 생성한다. 잔여는 0에서 시작하고 기준일은 {@code startDate}.
+     * 신규 사용자를 위한 타이머를 생성한다. 기준일은 {@code startDate}이고,
+     * <b>가입 당일(1일차)부터 이미 1증가값을 갚아야 하므로</b> 잔여를 증가값으로 시드한다
+     * (cap 이하로 클램프). README 동작 예시의 "1일차 = 1시간"이 이 시드에서 나온다 —
+     * 0에서 시작해 하루 지나야 늘어나면 첫날치 증가값이 누락된다.
      *
      * @param user                  소유 사용자(필수)
      * @param dailyIncrementSeconds 하루 증가값(초)
@@ -98,7 +101,8 @@ public class ReadingTimer extends BaseTimeEntity {
         if (user == null) {
             throw new IllegalArgumentException("user must not be null");
         }
-        ReadingTimer timer = new ReadingTimer(dailyIncrementSeconds, capSeconds, 0L, startDate);
+        long seededRemaining = Math.min(dailyIncrementSeconds, capSeconds); // 첫날치 증가값, cap 이하
+        ReadingTimer timer = new ReadingTimer(dailyIncrementSeconds, capSeconds, seededRemaining, startDate);
         timer.user = user;
         return timer;
     }
