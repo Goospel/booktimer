@@ -18,6 +18,7 @@
 - [N-012. 인증 주체 ≠ 도메인 엔티티 — principal로 도메인 User를 다시 잇고, 접속을 Lazy 누적 트리거로](#n-012-인증-주체--도메인-엔티티--principal로-도메인-user를-다시-잇고-접속을-lazy-누적-트리거로)
 - [N-013. Spring Boot 컨테이너화 — 멀티스테이지 Dockerfile + 운영 설정 외부화](#n-013-spring-boot-컨테이너화--멀티스테이지-dockerfile--운영-설정-외부화)
 - [N-014. AWS CLI는 로컬에서 실행되지만 클라우드에 작용 — 콘솔/CLI/CloudShell, bash vs PowerShell](#n-014-aws-cli는-로컬에서-실행되지만-클라우드에-작용--콘솔clicloudshell-bash-vs-powershell)
+- [N-015. GitHub Actions → AWS 키 없이 배포 — OIDC 페더레이션 + ECS 롤링 배포](#n-015-github-actions--aws-키-없이-배포--oidc-페더레이션--ecs-롤링-배포)
 
 ---
 
@@ -599,6 +600,55 @@ ENTRYPOINT ["java","-jar","/app/app.jar"]
 
 ---
 
+## N-015. GitHub Actions → AWS 키 없이 배포 — OIDC 페더레이션 + ECS 롤링 배포
+
+**한 줄 요약**: CI(GitHub Actions)가 AWS에 배포하려면 AWS 권한이 필요한데, **액세스 키를 GitHub Secrets에 저장하는 대신 OIDC 페더레이션**을 쓰면 워크플로가 실행될 때마다 **단기 토큰으로 IAM 역할을 assume**한다 — 장기 자격증명을 어디에도 저장하지 않는다. 그 역할로 ECR에 이미지를 올리고, ECS는 **새 태스크 정의 리비전 등록 → 서비스 업데이트**로 무중단에 가깝게 롤링 배포한다.
+
+### 자세한 설명
+
+**1. 왜 OIDC인가 (키 저장의 문제)**
+- 전통 방식: IAM 사용자 액세스 키(AKIA...) + 시크릿을 GitHub Secrets에 저장 → 워크플로가 그걸로 인증. 문제: **장기 자격증명이 유출되면 무기한 악용**, 주기적 로테이션 부담.
+- OIDC 방식: GitHub의 OIDC 공급자를 AWS IAM에 **신뢰 등록**(`token.actions.githubusercontent.com`). 워크플로 실행 시 GitHub가 발급한 **단기 OIDC 토큰**을 AWS에 제시하면, AWS가 검증 후 **임시 자격증명(수십 분 유효)** 을 내준다. → GitHub에 저장하는 건 (비밀이 아닌) **역할 ARN뿐**.
+- 신뢰정책으로 **누가 assume할 수 있는지** 좁힌다: `sub`가 `repo:Goospel/booktimer:*`인 토큰만 허용 → 다른 레포·다른 계정은 이 역할을 못 쓴다.
+- 워크플로 쪽 요건: `permissions: id-token: write`(OIDC 토큰 발급) + `aws-actions/configure-aws-credentials`에 `role-to-assume`.
+
+**2. 최소권한 배포 역할**
+- 이 역할에 준 권한: ECR push, ECS(`RegisterTaskDefinition`/`UpdateService`/`Describe*`), 그리고 `iam:PassRole`(태스크 실행역할을 ECS에 넘기는 권한, 리소스를 그 역할로 한정).
+- `PassRole`이 핵심 함정: 배포 역할이 "태스크가 쓸 실행역할"을 ECS에 넘기려면 명시적 `PassRole` 허용이 필요하다(권한 상승 방지 장치).
+
+**3. ECS 롤링 배포 흐름**
+```
+build & push 이미지(ECR, :sha 태그)
+  → 태스크 정의(JSON)에 새 이미지 주입
+  → register-task-definition (새 리비전 생성)
+  → update-service (서비스가 새 리비전으로 태스크 교체 — 헬스 통과 후 옛 태스크 종료)
+  → 안정화 대기
+```
+- 태스크 정의를 **리포에 두고(IaC)** placeholder만 치환하는 방식을 택했다. `aws ecs describe-task-definition` 산출물을 그대로 다시 등록하려 하면 `taskDefinitionArn`/`revision`/`status` 같은 **읽기전용 필드**가 섞여 `register`가 거부한다 — 버전관리된 깨끗한 정의를 소스로 쓰면 이 함정을 피하고 "배포 = 코드"가 된다.
+- ALB 타깃그룹의 헬스체크(`/actuator/health`)가 새 태스크를 healthy로 판정해야 트래픽이 옮겨간다 → 무중단에 가깝다.
+
+### 일반화 포인트 (면접 답변용)
+
+- **단기 자격증명 > 장기 키**: "비밀을 저장하지 않는다"가 가장 안전하다. OIDC 워크로드 아이덴티티 페더레이션은 CI/CD의 표준 — GitHub↔AWS뿐 아니라 GCP/Azure, 쿠버네티스 서비스어카운트도 같은 사상.
+- **신뢰 경계를 조건으로 좁힌다**: 역할을 만들 때 "누가(어느 레포/브랜치) assume 가능한가"를 `sub` 조건으로 제한 — 자격증명이 아니라 **신원(identity)** 기반 접근제어.
+- **배포는 선언적 교체**: 명령형으로 "기존 컨테이너 죽이고 새로 띄워"가 아니라, 원하는 상태(새 태스크 정의)를 등록하면 오케스트레이터가 헬스 기반으로 교체. 실패 시 롤백도 리비전 되돌리기로 단순.
+- **`PassRole`**: 한 역할이 다른 역할을 서비스에 넘길 때 명시 허용이 필요한 권한 상승 방지 장치 — AWS IAM 설계 단골 질문.
+- N-014의 "인증과 실행 위치 분리"가 여기서 구체화: 명령은 CI 러너에서 돌지만, 권한은 OIDC로 주입된 임시 역할에서 온다.
+
+### 코드 위치
+
+- `.github/workflows/deploy.yml` — OIDC 자격증명 + ECR push + ECS 롤링 배포
+- `deploy/task-definition.json` — IaC 태스크 정의(placeholder)
+- `claude-docs/deploy-aws.md` 6-2 — OIDC 공급자 + 배포역할 신뢰/권한 정책
+
+### 관련 노트
+
+- [N-014. AWS CLI 로컬 실행·클라우드 작용](#n-014-aws-cli는-로컬에서-실행되지만-클라우드에-작용--콘솔clicloudshell-bash-vs-powershell) — 인증과 실행 위치 분리의 연장
+- [N-013. Spring Boot 컨테이너화](#n-013-spring-boot-컨테이너화--멀티스테이지-dockerfile--운영-설정-외부화) — 배포되는 이미지
+- [N-004. 훅으로 워크플로 강제](#n-004-claude-code-훅으로-워크플로-강제--가이드soft-vs-훅hard) — "정책을 어느 층에서 강제하나"의 CI 버전
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -614,3 +664,4 @@ ENTRYPOINT ["java","-jar","/app/app.jar"]
 | 2026-06-01 | N-012 (인증 주체 ≠ 도메인 엔티티 — principal→findByEmail 재조회, 접속을 Lazy 누적 트리거로) |
 | 2026-06-01 | N-013 (Spring Boot 컨테이너화 — 멀티스테이지 Dockerfile, plain jar 비활성, prod 설정 외부화, health 공개) |
 | 2026-06-01 | N-014 (AWS CLI 로컬 실행·클라우드 작용, 콘솔/CLI/CloudShell, bash vs PowerShell 셸 함정) |
+| 2026-06-01 | N-015 (GitHub Actions→AWS 키리스 배포 — OIDC 페더레이션 + ECS 롤링 배포, PassRole) |
