@@ -96,4 +96,59 @@ class ReadingTimerTest {
         assertThatThrownBy(() -> ReadingTimer.startFor(null, HOUR, 5 * HOUR, DAY0))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    // --- 차감(deduct) 증분: 세션 측정량을 누적 잔여에서 갚는다 ---
+
+    @Test
+    @DisplayName("deduct: 잔여보다 적게 갚으면 그만큼 줄고, 차감된 양을 반환")
+    void deduct_lessThanRemaining() {
+        ReadingTimer timer = timerWith(2 * HOUR, DAY0);
+
+        long applied = timer.deduct(1800L); // 30분
+
+        assertThat(applied).isEqualTo(1800L);
+        assertThat(timer.getRemainingSeconds()).isEqualTo(2 * HOUR - 1800L);
+    }
+
+    @Test
+    @DisplayName("deduct: 잔여보다 많이 갚아도 0 밑으로 안 가고, 실제 차감분만 반환(floor)")
+    void deduct_moreThanRemaining_floorsToZero() {
+        ReadingTimer timer = timerWith(1800L, DAY0);
+
+        long applied = timer.deduct(3 * HOUR); // 잔여(30분)보다 큼
+
+        assertThat(applied).isEqualTo(1800L); // 있던 만큼만 갚아짐
+        assertThat(timer.getRemainingSeconds()).isZero();
+    }
+
+    @Test
+    @DisplayName("deduct: 잔여와 정확히 같으면 0이 된다")
+    void deduct_exactlyRemaining() {
+        ReadingTimer timer = timerWith(HOUR, DAY0);
+
+        long applied = timer.deduct(HOUR);
+
+        assertThat(applied).isEqualTo(HOUR);
+        assertThat(timer.getRemainingSeconds()).isZero();
+    }
+
+    @Test
+    @DisplayName("deduct: 0초는 변화 없음")
+    void deduct_zero_noChange() {
+        ReadingTimer timer = timerWith(HOUR, DAY0);
+
+        long applied = timer.deduct(0L);
+
+        assertThat(applied).isZero();
+        assertThat(timer.getRemainingSeconds()).isEqualTo(HOUR);
+    }
+
+    @Test
+    @DisplayName("deduct: 음수는 예외")
+    void deduct_negative_throws() {
+        ReadingTimer timer = timerWith(HOUR, DAY0);
+
+        assertThatThrownBy(() -> timer.deduct(-1L))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }
