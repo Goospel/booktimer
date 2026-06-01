@@ -20,6 +20,7 @@
 - [N-014. AWS CLI는 로컬에서 실행되지만 클라우드에 작용 — 콘솔/CLI/CloudShell, bash vs PowerShell](#n-014-aws-cli는-로컬에서-실행되지만-클라우드에-작용--콘솔clicloudshell-bash-vs-powershell)
 - [N-015. GitHub Actions → AWS 키 없이 배포 — OIDC 페더레이션 + ECS 롤링 배포](#n-015-github-actions--aws-키-없이-배포--oidc-페더레이션--ecs-롤링-배포)
 - [N-016. ECS 헬스체크와 콜드스타트 — ALB 타깃 헬스 vs 컨테이너, grace period](#n-016-ecs-헬스체크와-콜드스타트--alb-타깃-헬스-vs-컨테이너-grace-period)
+- [N-017. SSR(Thymeleaf)→SPA 전환 시점 — "백엔드 몇 %"가 아니라 API 계약 안정성 + 인터랙션 요구](#n-017-ssrthymeleafspa-전환-시점--백엔드-몇-가-아니라-api-계약-안정성--인터랙션-요구)
 
 ---
 
@@ -692,6 +693,50 @@ build & push 이미지(ECR, :sha 태그)
 
 ---
 
+## N-017. SSR(Thymeleaf)→SPA 전환 시점 — "백엔드 몇 %"가 아니라 API 계약 안정성 + 인터랙션 요구
+
+**한 줄 요약**: 서버 렌더링(Thymeleaf)에서 프론트 프레임워크(React/Vue 등 SPA)로 옮기는 판단 기준은 "백엔드가 몇 % 완성됐나"가 아니다. 전환의 진짜 비용은 백엔드를 **HTML 렌더링 → JSON API 제공**으로 바꾸는 것(컨트롤러 반환형·인증 방식 재설계)이므로, ① **API 계약(엔드포인트)이 안정**돼 두 번 안 만들 시점이고, ② **서버 렌더로는 못 받치는 인터랙션 요구**(실시간 갱신 등)가 생긴 시점이 신호다.
+
+### 자세한 설명
+
+배포된 BookTimer를 직접 써 보니 Thymeleaf UI가 빈약해 "프론트 프레임워크가 필요하다"는 욕구가 생겼다. 그런데 "언제 옮기나"의 기준이 "백엔드 X% 완성"이라는 직관은 틀렸다.
+
+**1. 전환의 진짜 비용 = 백엔드를 API-first로 바꾸는 것**
+- SPA로 가면 백엔드가 더 이상 HTML을 그리지 않고 데이터(JSON)만 준다.
+  - `return "dashboard"`(뷰 이름) → `return ResponseEntity<DashboardDto>`(JSON)
+  - 인증: **세션 쿠키 + CSRF 토큰**(폼 로그인) → SPA용 전략 재설계(세션 유지 or JWT, CORS 허용). N-011의 "CSRF는 인증 매체로 결정"이 여기서 다시 걸린다.
+- 이건 한 번에 크게 바뀌는 비용이라, **자주 안 바뀔 만큼 도메인/엔드포인트가 굳은 뒤** 옮겨야 프론트를 두 번 안 만든다 → 기준 ①.
+
+**2. 서버 렌더의 한계가 신호 ②**
+- BookTimer 타이머는 본질적으로 실시간 인터랙티브다: 화면에서 초가 째깍 올라가야 하고, start/stop이 지금은 `POST → redirect → 전체 리로드`다. 순수 Thymeleaf로는 어색.
+- "이 인터랙션을 서버 렌더로는 못 받친다"가 분명해지면 그게 프레임워크가 **실질 가치**를 주는 지점.
+
+**3. 전면 전환은 무거우니 "다리(bridge)"를 먼저**
+- 당장의 빈약한 UI 통증은 아키텍처를 안 건드리는 가벼운 수단으로 먼저 해소 가능:
+  - **htmx / Alpine.js + CSS** — 째깍 타이머, 리로드 없는 부분 갱신. 백엔드는 여전히 Thymeleaf.
+- 풀 SPA 전환(REST API + 인증 재설계)은 **인터랙션이 무거운 기능 직전**에. BookTimer라면 책 단위 기록/SNS 들어가기 직전 — 그걸 Thymeleaf로 만들었다 React로 다시 만들면 두 번 일이므로.
+
+### 일반화 포인트 (면접 답변용)
+
+- **아키텍처 전환의 타이밍은 "완성도 %"가 아니라 "계약 안정성 + 비용이 정당화되는 요구"로 잡는다.** 비싼 마이그레이션은 되돌리기 어려운 부분(여기선 API 계약·인증 모델)이 굳은 뒤 한 번에.
+- **SSR vs SPA는 "어디서 HTML을 만드나"의 선택**: SSR은 초기 로딩·SEO·단순함, SPA는 풍부한 인터랙션·부분 갱신. 둘 사이엔 htmx/Alpine 같은 중간 지대가 있어 전면 전환 없이 통증만 덜 수 있다(점진적 마이그레이션).
+- **전환 비용의 핵심은 보통 "경계의 재계약"**: 뷰 템플릿 교체가 아니라 백엔드↔프론트 사이 계약(HTML→JSON)과 인증 매체(쿠키 세션→토큰)가 바뀌는 것. 그래서 도메인이 흔들릴 때 옮기면 계약을 반복해서 다시 쓴다.
+- **조기 최적화 회피와 같은 결**: 필요(인터랙션 요구)가 분명해지기 전에 SPA로 가면, 안 굳은 API를 프론트가 따라다니며 재작업한다.
+
+### 코드 위치
+
+- (현재) `src/main/resources/templates/*.html` — Thymeleaf SSR 뷰
+- (현재) `src/main/java/com/booktimer/web/*Controller.java` — 뷰 이름 반환(HTML 렌더). 전환 시 JSON 반환형으로 바뀔 후보
+- `src/main/java/com/booktimer/config/SecurityConfig.java` — 세션+CSRF 폼 로그인(전환 시 인증 전략 재설계 지점)
+- 관련: `README.md` 4번 로드맵(프론트엔드 프레임워크 교체 항목)
+
+### 관련 노트
+
+- [N-011. Spring Security 폼 로그인](#n-011-spring-security-폼-로그인--userdetailsservice--passwordencoder-두-빈이-인증을-켠다) — CSRF/세션 vs 토큰: SPA 전환 시 재설계되는 인증 매체
+- [N-001. 누적 카운터 일일 리셋 — Lazy 계산](#n-001-누적-카운터-일일-리셋--배치-스케줄러-vs-lazy-계산) — "비용이 정당화될 때까지 미룬다"는 같은 결의 판단(write-time vs read-time)
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -709,3 +754,4 @@ build & push 이미지(ECR, :sha 태그)
 | 2026-06-01 | N-014 (AWS CLI 로컬 실행·클라우드 작용, 콘솔/CLI/CloudShell, bash vs PowerShell 셸 함정) |
 | 2026-06-01 | N-015 (GitHub Actions→AWS 키리스 배포 — OIDC 페더레이션 + ECS 롤링 배포, PassRole) |
 | 2026-06-01 | N-016 (ECS 헬스체크와 콜드스타트 — ALB 타깃 헬스 vs 컨테이너, grace period 함정) |
+| 2026-06-01 | N-017 (SSR→SPA 전환 시점 — 백엔드 %가 아니라 API 계약 안정성 + 인터랙션 요구, htmx/Alpine 다리) |
