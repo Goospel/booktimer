@@ -13,6 +13,7 @@
 - [N-007. Spring Boot 4 autoconfigure / 테스트 슬라이스 모듈화 — 패키지 이동](#n-007-spring-boot-4-autoconfigure--테스트-슬라이스-모듈화--패키지-이동)
 - [N-008. JPA Auditing — 누가 시각을 채우나, 그리고 슬라이스 테스트의 함정](#n-008-jpa-auditing--누가-시각을-채우나-그리고-슬라이스-테스트의-함정)
 - [N-009. 계층별 테스트 전략 — 도메인 단위 / 슬라이스 / 서비스 mock (테스트 피라미드)](#n-009-계층별-테스트-전략--도메인-단위--슬라이스--서비스-mock-테스트-피라미드)
+- [N-010. 테스트 가능한 시간 — Clock 주입 + 절대 시점 vs 유저 타임존 "오늘"](#n-010-테스트-가능한-시간--clock-주입--절대-시점-vs-유저-타임존-오늘)
 
 ---
 
@@ -354,6 +355,52 @@ class AuditingTest { ... }
 
 ---
 
+## N-010. 테스트 가능한 시간 — Clock 주입 + 절대 시점 vs 유저 타임존 "오늘"
+
+**한 줄 요약**: `LocalDate.now()` 처럼 "지금"을 코드 안에서 직접 읽으면 테스트가 실행 시점·서버 타임존에 휘둘려 비결정적이 된다. "지금"을 `java.time.Clock` 으로 **주입**하면 테스트에서 `Clock.fixed(...)` 로 고정해 자정 경계까지 결정적으로 검증할 수 있다. 그리고 "절대 시점(instant)"과 "민간 날짜(오늘)"은 다른 개념 — 오늘은 누구의 타임존이냐에 따라 달라진다.
+
+### 자세한 설명
+
+누적 타이머는 "유저 타임존 기준 오늘"까지 따라잡아야 한다(N-001 Lazy 계산). 두 가지가 문제였다:
+
+1. **"지금"을 어떻게 테스트하나** — 서비스가 `LocalDate.now()` 를 직접 부르면, 테스트는 "오늘"이 실제 오늘이라 매일 다른 결과가 나오고 자정 경계 같은 케이스를 짤 수 없다. 해결: `Clock` 을 빈으로 주입.
+   - 운영: `@Bean Clock clock() { return Clock.systemUTC(); }`
+   - 테스트: 빈 대신 `Clock.fixed(Instant.parse("2026-06-01T16:00:00Z"), ZoneOffset.UTC)` 를 직접 생성자에 주입 → "지금"이 그 순간으로 고정.
+
+2. **절대 시점 ≠ 오늘** — `clock.instant()` 는 타임존과 무관한 한 점(UTC 기준 절대 시각)이다. 하지만 "오늘 며칠이냐"는 **보는 사람의 타임존**에 따라 다르다. 같은 순간이라도 서울(+9)에선 이미 다음 날일 수 있다.
+   - `LocalDate today = LocalDate.ofInstant(clock.instant(), ZoneId.of(user.getTimezone()));`
+   - 예: `2026-06-01T16:00Z` 라는 절대 시점 → 서울에선 `2026-06-02`, UTC에선 `2026-06-01`. 유저는 서울에 사니 "오늘"은 06-02.
+
+이 둘을 합치면 자정 경계 테스트가 **TZ 버그를 잡는 함정**이 된다: 위 순간에 서울 유저의 타이머를 누적시키면 06-02까지 1일치가 쌓여야 한다. 만약 코드가 실수로 서버(UTC) 기준으로 오늘을 계산했다면 06-01이라 누적이 0 → 테스트가 빨갛게 실패해서 버그를 드러낸다.
+
+```java
+// 운영: 절대 시점은 시스템 시계가, '오늘'은 유저 TZ가 결정
+LocalDate today = LocalDate.ofInstant(clock.instant(), ZoneId.of(user.getTimezone()));
+
+// 테스트: Clock.fixed 로 '지금'을 고정 → 자정 경계도 재현 가능
+var service = new ReadingTimerService(timerRepo, Clock.fixed(instant, ZoneOffset.UTC));
+```
+
+### 일반화 포인트 (면접 답변용)
+
+- **부수효과(현재 시각 읽기)를 의존성으로 바꾼다.** `now()` 직접 호출은 숨은 전역 입력 → 주입하면 테스트가 통제권을 갖는다. 난수(`Random`)·UUID도 같은 처방.
+- **시간엔 두 종류가 있다**: 타임라인의 한 점(`Instant`, TZ 무관, "언제 일어났나")과 달력/벽시계 값(`LocalDate`/`LocalDateTime`, TZ 의존, "사람이 부르는 날짜/시각"). 변환에는 항상 **누구의 타임존**이 필요하다.
+- 저장은 절대 시점(`Instant`, auditing의 createdAt도 — N-008)으로, 도메인 경계(일일 리셋)는 유저 TZ로 — 역할을 분리한다.
+- 테스트에서 자정·월말·DST 경계는 `Clock.fixed` 로 콕 집어 재현할 수 있어야 한다. "현재 시각에 의존하는 테스트"는 플래키의 단골.
+
+### 코드 위치
+
+- `src/main/java/com/booktimer/timer/ReadingTimerService.java` — `ofInstant(clock.instant(), 유저TZ)`
+- `src/main/java/com/booktimer/config/TimeConfig.java` — `@Bean Clock`
+- `src/test/java/com/booktimer/timer/ReadingTimerServiceTest.java` — `Clock.fixed` 자정 경계 테스트
+
+### 관련 노트
+
+- [N-001. 누적 카운터 일일 리셋 — Lazy 계산](#n-001-누적-카운터-일일-리셋--배치-스케줄러-vs-lazy-계산) — "오늘"까지 따라잡는 그 누적
+- [N-009. 계층별 테스트 전략](#n-009-계층별-테스트-전략--도메인-단위--슬라이스--서비스-mock-테스트-피라미드) — 이 서비스도 mock + 고정 Clock 단위 테스트
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -364,3 +411,4 @@ class AuditingTest { ... }
 | 2026-05-31 | N-007 (Boot 4 autoconfigure/test-slice 모듈화 — 패키지 이동) |
 | 2026-06-01 | N-008 (JPA Auditing — 리스너/스위치 분리, @DataJpaTest 슬라이스 함정) |
 | 2026-06-01 | N-009 (계층별 테스트 전략 — 도메인 단위/슬라이스/서비스 mock, 테스트 피라미드) |
+| 2026-06-01 | N-010 (테스트 가능한 시간 — Clock 주입, 절대 시점 vs 유저 TZ 오늘) |
