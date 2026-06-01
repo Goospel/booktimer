@@ -16,6 +16,8 @@
 - [T-009. Fargate 콜드스타트가 헬스체크 grace를 못 넘겨 ECS 태스크 무한 재시작](#t-009-fargate-콜드스타트가-헬스체크-grace를-못-넘겨-ecs-태스크-무한-재시작)
 - [T-010. ECS 안정화 대기 중 수동 update-service 끼워넣어 워크플로 배포가 경쟁·실패](#t-010-ecs-안정화-대기-중-수동-update-service-끼워넣어-워크플로-배포가-경쟁실패)
 - [T-011. Fargate 태스크가 SSM 시크릿 pull 실패 — 퍼블릭 IP라도 서브넷에 IGW 라우트 없으면 인터넷 도달 불가](#t-011-fargate-태스크가-ssm-시크릿-pull-실패--퍼블릭-ip라도-서브넷에-igw-라우트-없으면-인터넷-도달-불가)
+- [T-012. 가입 시 중복 이메일이 처리 안 된 DataIntegrityViolationException → 500 whitelabel (prod만)](#t-012-가입-시-중복-이메일이-처리-안-된-dataintegrityviolationexception--500-whitelabel-prod만)
+- [T-013. `aws logs --max-items 1`이 페이지네이션 토큰 None을 변수에 섞어 "stream does not exist"](#t-013-aws-logs---max-items-1이-페이지네이션-토큰-none을-변수에-섞어-stream-does-not-exist)
 
 ---
 
@@ -228,6 +230,43 @@ RequestID: , canceled, context deadline exceeded
 
 ---
 
+## T-012. 가입 시 중복 이메일이 처리 안 된 DataIntegrityViolationException → 500 whitelabel (prod만)
+
+**증상**: 배포된 앱에서 회원가입(POST `/signup`) 시 **Whitelabel Error Page, 500 Internal Server Error**. 로컬 테스트(H2)는 전부 통과하는데 prod(MySQL)만 터진다. ("아까는 404, 지금은 500"처럼 증상이 오락가락 — 같은 이메일로 재시도할 때만 500.)
+
+**원인**: `User`에 이메일 유니크 제약(`uk_users_email`)은 있는데, `UserRegistrationService.register`가 **저장 전 중복 확인 없이** 바로 `save` → 이미 가입된 이메일이면 MySQL이 제약 위반 → `DataIntegrityViolationException`이 컨트롤러에서 처리되지 않고 그대로 500으로 새어 나감.
+- **왜 테스트는 통과하나**: 통합 테스트가 `@Transactional`이라 매 테스트가 롤백돼 **DB에 중복이 남지 않는다**. prod는 영속되니 한 번 가입한 이메일로 재시도하면 충돌. → "H2 테스트 그린인데 prod만 터지는" 전형(상태 누적 차이).
+
+> 진단: whitelabel은 스택을 가리므로 **CloudWatch 로그**에서 실제 예외를 본다. 로그 그룹 `/ecs/booktimer`의 최신 스트림 → 스택트레이스가 `UserRegistrationService.register(...:54)` → `SimpleJpaRepository.save` → `com.mysql.cj.jdbc.ClientPreparedStatement.executeUpdate`(users INSERT 실패)를 가리킴. NOT NULL이 폼 검증으로 다 차 있으면, 실패할 제약은 unique 하나뿐 → 중복 이메일 확정.
+
+**해결 / 예방**:
+- 등록 서비스에서 **저장 전 `existsByEmail` 사전 확인** → 있으면 도메인 예외(`EmailAlreadyExistsException`). 컨트롤러가 잡아 **이메일 필드 에러**로 변환(폼 재렌더, 500 아님).
+- **레이스 대비 이중 방어**: 동시 가입(둘 다 사전확인 통과 후 insert)은 컨트롤러에서 `DataIntegrityViolationException`도 함께 catch해 같은 친절한 에러로. (사전확인=흔한 경로, DB제약=마지막 방어선 — 둘 다 필요. [learning-notes.md N-019](learning-notes.md#n-019-db-유니크-제약은-무결성의-마지막-방어선이지-사용자-검증의-첫-방어선이-아니다))
+- **테스트 함정 인지**: `@Transactional` 통합 테스트는 유니크 충돌 같은 "상태 누적" 버그를 못 잡는다. 중복 케이스는 한 테스트 안에서 **사전 데이터를 저장한 뒤** 같은 키로 시도해 재현(롤백돼도 그 트랜잭션 안에선 보임).
+
+---
+
+## T-013. `aws logs --max-items 1`이 페이지네이션 토큰 None을 변수에 섞어 "stream does not exist"
+
+**증상**: CloudWatch 로그 스트림 이름을 변수에 담아 쓰는데 실패.
+```bash
+STREAM=$(aws logs describe-log-streams ... --max-items 1 --query 'logStreams[0].logStreamName' --output text)
+echo "stream: $STREAM"
+# stream: ecs/booktimer/b55b290e...
+# None                       ← 두 번째 줄
+aws logs get-log-events --log-stream-name "$STREAM" ...
+# ResourceNotFoundException: The specified log stream does not exist.
+```
+
+**원인**: AWS CLI의 **`--max-items`는 클라이언트측 페이지네이션** 옵션이라, 결과가 더 있으면 **다음 토큰을 `None`(또는 실제 토큰)으로 출력 끝에 한 줄 더 붙인다**. `--output text`에선 이게 스트림명 다음 줄에 `None`으로 찍혀 `$STREAM`이 `"<스트림명>\nNone"`으로 오염 → 존재하지 않는 스트림명이 됨.
+
+**해결 / 예방**:
+- 단건만 필요하면 `--max-items`를 **쓰지 말고** 쿼리에서 `[0]`으로 집는다: `--query 'logStreams[0].logStreamName'`. (정렬 `--order-by LastEventTime --descending`로 최신 1건.)
+- 굳이 개수를 제한해야 하면 결과 토큰 줄을 분리 처리하거나 `--no-paginate` + 쿼리로 자른다.
+- 일반화: `--max-items`가 붙은 AWS CLI 출력은 **마지막 줄이 페이지네이션 토큰일 수 있다** — 스칼라로 캡처할 때 주의.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -241,3 +280,5 @@ RequestID: , canceled, context deadline exceeded
 | 2026-06-01 | T-009 (Fargate 콜드스타트 ~100s가 헬스체크 grace 120s 못 넘겨 태스크 무한 재시작 → grace 300) |
 | 2026-06-01 | T-010 (ECS 안정화 대기 중 수동 update-service 경쟁 → 워크플로 run 실패, 서비스는 정상) |
 | 2026-06-01 | T-011 (Fargate SSM 시크릿 pull 실패 — 퍼블릭 IP라도 서브넷 RTB에 IGW 없으면 도달 불가, 서브넷 비대칭 비결정적 실패) |
+| 2026-06-01 | T-012 (가입 중복 이메일 → 처리 안 된 DataIntegrityViolationException 500, H2 롤백이라 테스트 미검출, CloudWatch 진단) |
+| 2026-06-01 | T-013 (aws logs --max-items 1이 None 페이지네이션 토큰을 변수에 섞어 stream not found) |
