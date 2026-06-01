@@ -45,3 +45,9 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 }
+
+// Spring Boot는 실행가능 부트 jar 외에 일반(plain) jar도 만든다.
+// Dockerfile이 build/libs/*.jar 를 단일 복사하므로, 모호함을 없애기 위해 plain jar 비활성.
+tasks.named('jar') {
+	enabled = false
+}

@@ -80,6 +80,13 @@ class SecurityConfigTest {
     }
 
     @Test
+    @DisplayName("헬스체크(/actuator/health)는 인증 없이 공개된다 (배포 헬스체크용)")
+    void actuatorHealth_isPublic() throws Exception {
+        mvc().perform(get("/actuator/health"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     @DisplayName("PasswordEncoder 빈은 BCrypt 해시를 만들고 매칭한다")
     void passwordEncoder_isBcrypt_andMatches() {
         String hash = passwordEncoder.encode("rawpw1234");
