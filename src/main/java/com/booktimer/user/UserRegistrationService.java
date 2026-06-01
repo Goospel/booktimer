@@ -50,6 +50,10 @@ public class UserRegistrationService {
      */
     public User register(String email, String rawPassword, String nickname,
                          String timezone, Role role, LocalDate startDate) {
+        if (userRepository.existsByEmail(email)) {
+            // DB 유니크 제약(uk_users_email) 위반이 500으로 새기 전에 미리 막아 친절한 에러로.
+            throw new EmailAlreadyExistsException(email);
+        }
         String passwordHash = passwordEncoder.encode(rawPassword);
         User user = userRepository.save(User.of(email, passwordHash, nickname, timezone, role));
         timerRepository.save(ReadingTimer.startFor(

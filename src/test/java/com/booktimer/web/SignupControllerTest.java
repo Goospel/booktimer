@@ -1,5 +1,7 @@
 package com.booktimer.web;
 
+import com.booktimer.user.Role;
+import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -71,5 +73,22 @@ class SignupControllerTest {
                 .andExpect(model().attributeHasFieldErrors("signupForm", "email"));
 
         assertThat(userRepository.count()).isZero();
+    }
+
+    @Test
+    @DisplayName("POST /signup: 이미 가입된 이메일이면 화면을 다시 그리고 이메일 필드 에러를 단다 (500 아님, 중복 생성 없음)")
+    void postSignup_duplicateEmail_rerendersWithFieldError() throws Exception {
+        userRepository.save(User.of("dup@booktimer.com", "$2a$10$alreadyhasheddummy", "기존", "Asia/Seoul", Role.USER));
+
+        mockMvc.perform(post("/signup").with(csrf())
+                        .param("email", "dup@booktimer.com")
+                        .param("password", "rawpw1234")
+                        .param("nickname", "새사람")
+                        .param("timezone", "Asia/Seoul"))
+                .andExpect(status().isOk())
+                .andExpect(view().name("signup"))
+                .andExpect(model().attributeHasFieldErrors("signupForm", "email"));
+
+        assertThat(userRepository.count()).isEqualTo(1);  // 기존 1명만, 중복 생성 없음
     }
 }

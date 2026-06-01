@@ -15,9 +15,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.AdditionalAnswers.returnsFirstArg;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -94,5 +96,19 @@ class UserRegistrationServiceTest {
         InOrder inOrder = inOrder(userRepository, timerRepository);
         inOrder.verify(userRepository).save(any(User.class));
         inOrder.verify(timerRepository).save(any(ReadingTimer.class));
+    }
+
+    @Test
+    @DisplayName("register: 이미 가입된 이메일이면 EmailAlreadyExistsException을 던지고 아무것도 저장·해싱하지 않는다")
+    void register_whenEmailExists_throwsAndDoesNotPersist() {
+        when(userRepository.existsByEmail("dup@booktimer.com")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.register(
+                "dup@booktimer.com", "rawpw1234", "책벌레", "Asia/Seoul", Role.USER, DAY0))
+                .isInstanceOf(EmailAlreadyExistsException.class);
+
+        verify(userRepository, never()).save(any());
+        verify(timerRepository, never()).save(any());
+        verify(passwordEncoder, never()).encode(any());
     }
 }

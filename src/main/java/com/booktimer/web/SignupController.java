@@ -1,8 +1,10 @@
 package com.booktimer.web;
 
+import com.booktimer.user.EmailAlreadyExistsException;
 import com.booktimer.user.Role;
 import com.booktimer.user.UserRegistrationService;
 import jakarta.validation.Valid;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -61,9 +63,15 @@ public class SignupController {
         }
 
         LocalDate today = LocalDate.ofInstant(clock.instant(), zone);
-        registrationService.register(
-                form.getEmail(), form.getPassword(), form.getNickname(),
-                form.getTimezone(), Role.USER, today);
+        try {
+            registrationService.register(
+                    form.getEmail(), form.getPassword(), form.getNickname(),
+                    form.getTimezone(), Role.USER, today);
+        } catch (EmailAlreadyExistsException | DataIntegrityViolationException e) {
+            // 사전 확인 + (동시 가입 레이스 대비) DB 제약 위반도 같은 친절한 에러로 — 500 방지
+            bindingResult.rejectValue("email", "email.duplicate", "이미 가입된 이메일입니다");
+            return "signup";
+        }
 
         return "redirect:/login?registered";
     }
