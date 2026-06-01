@@ -1,5 +1,6 @@
 package com.booktimer.user;
 
+import com.booktimer.common.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -28,7 +29,7 @@ import java.util.regex.Pattern;
 @Table(name = "users", uniqueConstraints = {
         @UniqueConstraint(name = "uk_users_email", columnNames = "email")
 })
-public class User {
+public class User extends BaseTimeEntity {
 
     /** 간단한 이메일 형식 검증(공백 없는 local@domain.tld). 정밀 검증은 서비스/검증 계층 몫. */
     private static final Pattern EMAIL_PATTERN =

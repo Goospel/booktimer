@@ -1,5 +1,6 @@
 package com.booktimer.timer;
 
+import com.booktimer.common.BaseTimeEntity;
 import com.booktimer.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -24,7 +25,7 @@ import java.time.temporal.ChronoUnit;
  * {@link #startFor(User, long, long, LocalDate)} 로 생성한다.
  */
 @Entity
-public class ReadingTimer {
+public class ReadingTimer extends BaseTimeEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
