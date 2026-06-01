@@ -17,6 +17,7 @@
 - [N-011. Spring Security 폼 로그인 — UserDetailsService + PasswordEncoder 두 빈이 인증을 켠다](#n-011-spring-security-폼-로그인--userdetailsservice--passwordencoder-두-빈이-인증을-켠다)
 - [N-012. 인증 주체 ≠ 도메인 엔티티 — principal로 도메인 User를 다시 잇고, 접속을 Lazy 누적 트리거로](#n-012-인증-주체--도메인-엔티티--principal로-도메인-user를-다시-잇고-접속을-lazy-누적-트리거로)
 - [N-013. Spring Boot 컨테이너화 — 멀티스테이지 Dockerfile + 운영 설정 외부화](#n-013-spring-boot-컨테이너화--멀티스테이지-dockerfile--운영-설정-외부화)
+- [N-014. AWS CLI는 로컬에서 실행되지만 클라우드에 작용 — 콘솔/CLI/CloudShell, bash vs PowerShell](#n-014-aws-cli는-로컬에서-실행되지만-클라우드에-작용--콘솔clicloudshell-bash-vs-powershell)
 
 ---
 
@@ -561,6 +562,43 @@ ENTRYPOINT ["java","-jar","/app/app.jar"]
 
 ---
 
+## N-014. AWS CLI는 로컬에서 실행되지만 클라우드에 작용 — 콘솔/CLI/CloudShell, bash vs PowerShell
+
+**한 줄 요약**: AWS를 다루는 길은 세 가지다 — 웹 **콘솔**(클릭), **AWS CLI**(`aws ...` 명령), **CloudShell**(브라우저 안 터미널). CLI 명령은 "AWS 전용 터미널"에서 도는 게 아니라 **내 로컬 셸에서 실행되고, 효과만 클라우드에 미친다**(설정한 자격증명으로 AWS API 호출). 그리고 가이드의 `aws` 명령은 보통 bash 문법이라 Windows PowerShell에 그대로 붙이면 깨진다.
+
+### 자세한 설명
+
+처음 배포 가이드를 보면 `aws ecs ...` 같은 명령이 줄줄이 있는데, "이걸 어디에 치는 거지?"가 헷갈린다. 정리:
+
+- **AWS를 조작하는 3가지 인터페이스**
+  - **콘솔(Console)**: 웹 UI에서 클릭으로. 처음 감 잡기 좋지만 재현·자동화가 어렵다.
+  - **AWS CLI**: `aws <서비스> <동작>` 명령. 같은 일을 코드로 — 재현·스크립트·문서화에 유리.
+  - **CloudShell**: 콘솔 안에 떠 있는 브라우저 터미널. **AWS CLI가 미리 깔려 있고 로그인 자격증명도 자동 연결**. 로컬 설치 없이 CLI를 바로 쓴다.
+- **CLI 명령은 어디서 도나**: 내 로컬 터미널(또는 CloudShell)에서 프로세스로 실행된다. 다만 `aws ...`는 로컬에서 계산하는 게 아니라, `aws configure`(또는 SSO/역할)로 설정한 **자격증명으로 AWS API를 HTTP 호출**해 클라우드의 리소스를 만들고 조회한다. → **"명령은 로컬에서, 효과는 클라우드에서."**
+- **명령 종류를 구분**: 한 가이드 안에도 `aws ...`(AWS CLI), `docker ...`(Docker CLI, 로컬 이미지 작업), `export`/`sed`/`cat <<EOF`/`$(...)`(셸 문법, 순수 로컬 보조)가 섞인다. 전부 같은 터미널에서 치지만 작용 대상이 다르다.
+- **셸 함정 (bash vs PowerShell)**: 대부분의 AWS 예제는 **bash** 문법이다.
+  - `export VAR=...`(bash) ↔ `$env:VAR=...`(PowerShell)
+  - `$(cmd)` 명령치환은 둘 다 되지만, `sed`·히어독(`cat <<'EOF'`)은 PowerShell에 없다.
+  - 그래서 Windows에선 **AWS CloudShell이나 Git Bash/WSL**에서 돌리는 게 마찰이 적다. PowerShell 고집 시 문법을 일일이 번역해야 한다(T-026의 한글 깨짐처럼, "셸이 다르면 문법도 다르다"의 또 다른 사례).
+
+### 일반화 포인트 (면접 답변용)
+
+- **CLI는 "API의 얇은 래퍼"다.** 콘솔 클릭이든 CLI든 SDK든 결국 같은 AWS API를 호출한다 — 인터페이스만 다를 뿐. 그래서 CLI로 한 일은 IaC(Terraform/CloudFormation)로 옮기기도 자연스럽다.
+- **인증과 실행 위치는 별개**: 명령이 도는 곳(로컬/CloudShell/CI 러너)과, 그 명령이 무슨 권한으로 클라우드를 만지는가(자격증명·IAM 역할)는 분리해서 생각해야 한다. CI에서는 이 자격증명을 OIDC로 주입한다(다음 노트 주제와 연결).
+- **"내 터미널 = 내 OS의 셸"**: 같은 명령도 bash/PowerShell/cmd에서 문법이 다르다. 가이드의 셸 전제를 먼저 확인하는 습관.
+
+### 코드 위치
+
+- `claude-docs/deploy-aws.md` — "어디서 실행하나" 섹션(CloudShell 추천 + 셸 주의)
+- 관련: 글로벌 환경이 Windows PowerShell 5.1이라 bash 가이드 실행 시 이 구분이 특히 중요
+
+### 관련 노트
+
+- [N-013. Spring Boot 컨테이너화](#n-013-spring-boot-컨테이너화--멀티스테이지-dockerfile--운영-설정-외부화) — 이 배포의 산출물(이미지)
+- [N-002. Gradle toolchain](#n-002-gradle-toolchain--foojay-resolver--로컬에-없는-jdk-자동-확보) — "실행 환경과 대상 환경 분리" 사고의 또 다른 예
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -575,3 +613,4 @@ ENTRYPOINT ["java","-jar","/app/app.jar"]
 | 2026-06-01 | N-011 (Spring Security 폼 로그인 — UserDetailsService + PasswordEncoder 자동 조립, CSRF 판단) |
 | 2026-06-01 | N-012 (인증 주체 ≠ 도메인 엔티티 — principal→findByEmail 재조회, 접속을 Lazy 누적 트리거로) |
 | 2026-06-01 | N-013 (Spring Boot 컨테이너화 — 멀티스테이지 Dockerfile, plain jar 비활성, prod 설정 외부화, health 공개) |
+| 2026-06-01 | N-014 (AWS CLI 로컬 실행·클라우드 작용, 콘솔/CLI/CloudShell, bash vs PowerShell 셸 함정) |

@@ -23,6 +23,27 @@ GitHub Actions ──(OIDC)──▶ ECR(이미지) ──▶ ECS Fargate(태스
 
 ---
 
+## 어디서 실행하나 — 명령의 정체와 셸
+
+이 가이드의 명령은 **내 터미널(셸)에서 실행**한다. "AWS 전용 터미널" 같은 건 없고, 명령 종류가 섞여 있다:
+
+| 명령 | 정체 | 작용 |
+|---|---|---|
+| `aws ec2 ...`, `aws rds ...`, `aws ecs ...` | **AWS CLI** | 로컬에서 실행 → 인터넷으로 **AWS 계정에 리소스 생성/조회** |
+| `docker build/push/login` | **Docker CLI** | 로컬에서 이미지 빌드 → ECR push |
+| `export`, `sed`, `cat <<JSON`, `$(...)` | **셸 문법** | 순수 로컬 — 변수/임시 파일 만드는 보조 |
+
+즉 AWS CLI는 **로컬에서 돌지만 효과는 클라우드**다. `aws configure`로 넣은 자격증명으로 AWS API를 호출한다.
+
+> ⚠️ **셸 주의 (Windows)**: 아래 명령은 **bash 문법**(`export`/`sed`/히어독/`$(...)`)이다. **PowerShell에 그대로 붙이면 깨진다.** 다음 중 하나에서 실행:
+>
+> 1. **AWS CloudShell (추천)** — AWS 콘솔 우측 상단 터미널 아이콘. 브라우저 안 bash 셸로 **AWS CLI 설치·자격증명이 자동**. 로컬 셋업 0, 이 명령들을 그대로 붙여넣으면 된다.
+> 2. **Git Bash / WSL** — 로컬 bash. AWS CLI 설치 + `aws configure` 후 실행.
+>
+> PowerShell만 쓰겠다면 `export`→`$env:`, 히어독→파일, `sed` 부재 등을 직접 바꿔야 해 번거롭다.
+
+---
+
 ## 0. 사전 준비
 
 ```bash
