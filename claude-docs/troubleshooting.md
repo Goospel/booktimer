@@ -12,6 +12,7 @@
 - [T-005. PR 머지 후 feat 브랜치에서 pull → 군더더기 merge 커밋](#t-005-pr-머지-후-feat-브랜치에서-pull--군더더기-merge-커밋)
 - [T-006. Spring Boot 4: `@DataJpaTest` import 경로 변경](#t-006-spring-boot-4-datajpatest-import-경로-변경)
 - [T-007. `@DataJpaTest` 슬라이스에서 auditing이 안 돌아 createdAt이 null](#t-007-datajpatest-슬라이스에서-auditing이-안-돌아-createdat이-null)
+- [T-008. `redirectedUrlPattern("**/login")`이 상대경로 리다이렉트에 매칭 실패](#t-008-redirectedurlpatternlogin이-상대경로-리다이렉트에-매칭-실패)
 
 ---
 
@@ -133,6 +134,28 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 
 ---
 
+## T-008. `redirectedUrlPattern("**/login")`이 상대경로 리다이렉트에 매칭 실패
+
+**증상**: Spring Security formLogin 설정 후, 미인증 요청이 로그인으로 리다이렉트되는지 MockMvc로 검증.
+```java
+mvc.perform(get("/"))
+   .andExpect(status().is3xxRedirection())
+   .andExpect(redirectedUrlPattern("**/login"));  // 실패
+```
+상태는 302로 정상인데 단언만 실패:
+```
+AssertionError: Redirected URL '/login' does not match the expected URL pattern '**/login'
+```
+
+**원인**: Spring Security의 기본 로그인 진입점(`LoginUrlAuthenticationEntryPoint`)은 **상대경로** `/login`으로 리다이렉트한다(`http://...` 절대 URL이 아님). `redirectedUrlPattern`은 Ant 경로 패턴 매칭이라 `**/login`이 `/login` 한 조각짜리 경로엔 안 맞는다(`**`가 앞 세그먼트를 요구). 동작은 옳고 **단언 표현만 틀린** 케이스 — 프로덕션 문제로 오인하기 쉽다.
+
+**해결 / 예방**:
+- 상대경로 리다이렉트는 패턴 대신 **정확 매칭**을 쓴다: `redirectedUrl("/login")`.
+- 실패하면 프로덕션부터 의심하지 말고 **실제 리다이렉트 URL을 먼저 확인**한다(테스트 리포트의 AssertionError 메시지에 `Redirected URL '...'`로 찍힌다). 동작이 옳은데 단언이 틀린 경우가 많다.
+- 절대 URL(`http://host/...`)이나 다단 경로에만 `redirectedUrlPattern`을 쓴다.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -141,3 +164,4 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 | 2026-05-31 | T-005 (머지 후 정리 순서) |
 | 2026-05-31 | T-006 (Boot 4 @DataJpaTest import 경로) |
 | 2026-06-01 | T-007 (@DataJpaTest 슬라이스 auditing 미로드 — createdAt null) |
+| 2026-06-01 | T-008 (redirectedUrlPattern("**/login")이 상대경로 리다이렉트 매칭 실패 → redirectedUrl) |

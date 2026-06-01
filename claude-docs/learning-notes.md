@@ -14,6 +14,7 @@
 - [N-008. JPA Auditing — 누가 시각을 채우나, 그리고 슬라이스 테스트의 함정](#n-008-jpa-auditing--누가-시각을-채우나-그리고-슬라이스-테스트의-함정)
 - [N-009. 계층별 테스트 전략 — 도메인 단위 / 슬라이스 / 서비스 mock (테스트 피라미드)](#n-009-계층별-테스트-전략--도메인-단위--슬라이스--서비스-mock-테스트-피라미드)
 - [N-010. 테스트 가능한 시간 — Clock 주입 + 절대 시점 vs 유저 타임존 "오늘"](#n-010-테스트-가능한-시간--clock-주입--절대-시점-vs-유저-타임존-오늘)
+- [N-011. Spring Security 폼 로그인 — UserDetailsService + PasswordEncoder 두 빈이 인증을 켠다](#n-011-spring-security-폼-로그인--userdetailsservice--passwordencoder-두-빈이-인증을-켠다)
 
 ---
 
@@ -401,6 +402,52 @@ var service = new ReadingTimerService(timerRepo, Clock.fixed(instant, ZoneOffset
 
 ---
 
+## N-011. Spring Security 폼 로그인 — UserDetailsService + PasswordEncoder 두 빈이 인증을 켠다
+
+**한 줄 요약**: Spring Boot는 보안 의존성만 있으면 기본 보안(폼 로그인 화면 + 임시 비번 단일 계정)을 자동으로 켠다. 하지만 "DB에 저장된 우리 사용자로 로그인"하려면 두 빈만 등록하면 된다 — 사용자를 조회하는 `UserDetailsService`와 비번을 검증하는 `PasswordEncoder`. 이 둘이 있으면 Spring이 `DaoAuthenticationProvider`를 자동 구성해 폼 로그인 인증을 처리한다.
+
+### 자세한 설명
+
+기본 Spring Boot 보안은 이미 많은 걸 준다: 모든 경로 차단(default-deny), `/login` 로그인 페이지 자동 생성, 미인증 요청을 `/login`으로 리다이렉트. **하지만** 인증되는 계정은 콘솔에 임시 비번이 찍히는 in-memory `user` 하나뿐이다. 우리 DB의 `User`로 로그인하려면 두 조각을 끼워야 한다.
+
+1. **`UserDetailsService`** — "이 식별자(이메일)의 사용자가 누구인가"를 답한다. `loadUserByUsername(email)` 이 DB에서 `User`를 찾아 Security가 쓰는 `UserDetails`(username/password-hash/권한)로 변환. 없으면 `UsernameNotFoundException`.
+   - 도메인 `Role`(USER/ADMIN)은 여기서 `ROLE_` 접두를 붙여 권한으로 매핑(`ROLE_USER`). 엔티티는 순수 값만 보관하고 접두는 보안 경계에서.
+2. **`PasswordEncoder`** — 비번 검증 방식. `BCryptPasswordEncoder` 빈을 등록하면 로그인 시 입력 평문을 같은 방식으로 해싱해 저장된 해시와 비교.
+
+이 **두 빈이 컨텍스트에 있으면** Spring Security가 `DaoAuthenticationProvider`(UserDetailsService로 조회 → PasswordEncoder로 검증)를 자동 조립한다. 별도 와이어링 코드가 거의 없다 — 빈 등록이 곧 설정.
+
+`SecurityFilterChain` 빈으로 정책을 명시한다:
+```java
+http
+  .authorizeHttpRequests(a -> a
+      .requestMatchers("/login", "/error", "/css/**").permitAll()  // 공개
+      .anyRequest().authenticated())                                // 나머지 인증 필요
+  .formLogin(form -> form.permitAll())                              // 폼 로그인(세션)
+  .logout(logout -> logout.permitAll());
+// CSRF는 기본 활성 유지
+```
+
+**CSRF — 켜야 하나 꺼야 하나**: 세션 기반 폼 로그인에선 **켜둔다**(기본값). 브라우저가 세션 쿠키를 자동 전송하므로 CSRF 공격에 노출 → 토큰 보호 필요. 반대로 stateless 토큰(JWT) API는 쿠키를 안 쓰고 매 요청 토큰을 직접 실으므로 보통 끈다. "쿠키로 인증을 자동 전송하느냐"가 판단 기준.
+
+### 일반화 포인트 (면접 답변용)
+
+- **인증의 두 책임 분리**: "누구인가"(조회, `UserDetailsService`) vs "비번이 맞나"(검증, `PasswordEncoder`). Spring은 이 둘을 `AuthenticationProvider`로 합쳐 처리하며, 빈만 등록하면 자동 조립한다(설정보다 관례).
+- **프레임워크 기본값을 알고 덮어쓴다**: 기본 보안이 이미 주는 것(default-deny, /login)과 안 주는 것(DB 인증, PasswordEncoder 빈)을 구분해야 "무엇을 추가해야 하는지"가 명확. 테스트의 Red도 "기본이 안 주는 것"(PasswordEncoder 빈 부재 → 컨텍스트 로딩 실패)을 노려야 의미 있다.
+- **비번은 평문 저장·비교 절대 금지** — 단방향 해시(BCrypt, salt 내장)로 저장하고, 검증은 "입력을 같은 방식으로 해싱해 비교". 엔티티는 `passwordHash`만 받고 평문은 받지 않게 설계(해싱은 서비스/보안 책임).
+- **CSRF 여부는 인증 매체로 결정**: 쿠키/세션 자동 전송 → CSRF ON, 요청마다 명시 토큰(Authorization 헤더) → OFF.
+
+### 코드 위치
+
+- `src/main/java/com/booktimer/security/BookTimerUserDetailsService.java` — 이메일→UserDetails, Role→ROLE_ 매핑
+- `src/main/java/com/booktimer/config/SecurityConfig.java` — `PasswordEncoder`(BCrypt) + `SecurityFilterChain`
+- `src/test/java/com/booktimer/security/SecurityConfigTest.java` — DB 사용자 폼 로그인 인증 통합 검증
+
+### 관련 노트
+
+- [N-004. Claude Code 훅으로 워크플로 강제](#n-004-claude-code-훅으로-워크플로-강제--가이드soft-vs-훅hard) — 정책을 어느 층에서 강제하나(보안 정책도 같은 사고)
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -412,3 +459,4 @@ var service = new ReadingTimerService(timerRepo, Clock.fixed(instant, ZoneOffset
 | 2026-06-01 | N-008 (JPA Auditing — 리스너/스위치 분리, @DataJpaTest 슬라이스 함정) |
 | 2026-06-01 | N-009 (계층별 테스트 전략 — 도메인 단위/슬라이스/서비스 mock, 테스트 피라미드) |
 | 2026-06-01 | N-010 (테스트 가능한 시간 — Clock 주입, 절대 시점 vs 유저 TZ 오늘) |
+| 2026-06-01 | N-011 (Spring Security 폼 로그인 — UserDetailsService + PasswordEncoder 자동 조립, CSRF 판단) |
