@@ -38,4 +38,13 @@ class GlobalExceptionHandlerTest {
                 .andExpect(view().name("error"))
                 .andExpect(model().attributeExists("status"));
     }
+
+    @Test
+    @DisplayName("존재하지 않는 리소스(favicon 등)는 500이 아니라 404로 응답한다 (핸들러가 삼키지 않음)")
+    void missingResource_returns404NotSwallowedAs500() throws Exception {
+        // 핸들러 매핑·정적 리소스 어디에도 없는 경로 → NoResourceFoundException(404).
+        // @ExceptionHandler(Exception.class)가 이걸 잡아 500으로 만들면 안 된다.
+        mockMvc.perform(get("/this-path-does-not-exist.xyz").with(user("ghost@booktimer.com")))
+                .andExpect(status().isNotFound());
+    }
 }
