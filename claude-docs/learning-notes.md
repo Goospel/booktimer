@@ -28,6 +28,7 @@
 - [N-022. 프록시 뒤의 앱은 X-Forwarded-*를 신뢰해야 한다 — forward-headers와 명시 빈](#n-022-프록시-뒤의-앱은-x-forwarded를-신뢰해야-한다--forward-headers와-명시-빈)
 - [N-023. ddl-auto=update의 한계 — 스키마 드리프트와 마이그레이션(Flyway)](#n-023-ddl-autoupdate의-한계--스키마-드리프트와-마이그레이션flyway)
 - [N-024. Spring Boot 4의 autoconfig 모듈 분리 + 기존 DB에 Flyway 도입(baseline)](#n-024-spring-boot-4의-autoconfig-모듈-분리--기존-db에-flyway-도입baseline)
+- [N-025. 로그인 지연의 범인은 보통 DB가 아니라 BCrypt × 작은 vCPU](#n-025-로그인-지연의-범인은-보통-db가-아니라-bcrypt--작은-vcpu)
 
 ---
 
@@ -1049,6 +1050,42 @@ TLS termination(N-021) 구조에서 앱이 받는 요청은 평문 http다. 그�
 
 ---
 
+## N-025. 로그인 지연의 범인은 보통 DB가 아니라 BCrypt × 작은 vCPU
+
+**한 줄 요약**: "로그인이 느리다"의 원인은 대개 DB가 아니다. 로그인은 **인덱스 단건 조회(빠름) + BCrypt 비밀번호 검증(의도적으로 느린 CPU 집약 연산)**으로 이뤄지는데, vCPU가 작으면(예: Fargate 0.25 vCPU) BCrypt가 수백 ms~1s로 늘어난다. 해법은 **해시 강도를 낮추는 게 아니라(=보안 약화) CPU를 늘리는 것**.
+
+### 자세한 설명
+
+로그인 POST가 하는 일:
+1. `findByEmail` — email 유니크 인덱스 **단건 조회** → 수 ms. DB가 작아도 빠르다.
+2. **BCrypt 검증** — `passwordEncoder.matches(raw, hash)`. BCrypt는 **work factor(strength)** 만큼 키 스트레칭을 반복하는 **CPU 집약** 연산이다(강도 10 = 2^10 라운드). **느린 게 정상이자 목적** — 무차별 대입을 비싸게 만든다.
+
+**왜 운영에서 더 느린가**: BCrypt 시간은 거의 전적으로 CPU 속도에 비례한다. 노트북(풀 코어)에선 ~50ms여도, **Fargate 0.25 vCPU(코어의 1/4, 버스트 스로틀)** 에선 수백 ms~1s까지 늘 수 있다. 거기에 **JVM JIT 워밍업**(작은 vCPU에선 더 느림)이 더해져 배포·유휴 직후 첫 로그인이 특히 굼뜨다.
+
+**진단법 — DB를 의심하기 전에 분리 측정**:
+- 정적/경량 경로(헬스, 로그인 *페이지* GET)와 로그인 *POST* 의 지연을 비교한다. 전자가 빠른데(예: 60~150ms) 로그인만 느리면 → 차이는 그 경로에만 있는 **BCrypt(+CPU)** 다. (실제로 BookTimer에서 이렇게 좁혔다.)
+- CloudWatch에서 로그인 순간 **CPU 사용률이 100% 근처로 튀는지** 확인.
+- "매번 느림" → CPU/BCrypt / "배포 직후만" → JVM 워밍업.
+
+### 일반화 포인트 (면접 답변용)
+
+- **"느리다 = DB 문제"는 성급한 결론.** 요청이 하는 일을 단계로 쪼개 **어디에 시간이 쓰이는지 분리 측정**하는 게 먼저다. 인증은 의외로 CPU(해싱) 바운드다.
+- **BCrypt/Argon2 같은 패스워드 해시는 "느린 게 기능"** — 그래서 튜닝 손잡이는 둘이다: 보안을 위해 **강도는 유지/상향**, 지연이 문제면 **CPU를 키운다**. 강도를 낮춰 속도를 버는 건 보안을 파는 것.
+- **작은 컨테이너(0.25 vCPU)의 함정**: CPU 집약 작업(해싱, JIT, 직렬화)이 불균형하게 느려진다. 비용 절감과 지연 사이의 트레이드오프를 의식적으로.
+
+### 코드 위치
+
+- `src/main/java/com/booktimer/config/SecurityConfig.java` — `BCryptPasswordEncoder()`(기본 강도 10)
+- `deploy/task-definition.json` — `cpu: 256`(0.25 vCPU) ← 지연의 실제 원인, 상향 후보(plan.md)
+- 관련: plan.md "Fargate CPU 상향" 항목
+
+### 관련 노트
+
+- [N-016. ECS 헬스체크와 콜드스타트](#) — 같은 "작은 태스크/워밍업" 결
+- [N-011. Spring Security 폼 로그인](#) — 로그인 인증 흐름(UserDetailsService + PasswordEncoder)
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1074,3 +1111,4 @@ TLS termination(N-021) 구조에서 앱이 받는 요청은 평문 http다. 그�
 | 2026-06-02 | N-022 (프록시 뒤 앱은 X-Forwarded-* 신뢰 — forward-headers, Boot 4에선 ForwardedHeaderFilter 명시 빈, RANDOM_PORT로만 검증) |
 | 2026-06-02 | N-023 (ddl-auto=update 한계 — 기존 컬럼 제약 변경 안 함→스키마 드리프트, 근본은 Flyway 마이그레이션+기존 DB baseline) |
 | 2026-06-02 | N-024 (Boot 4 autoconfig 모듈 분리 — flyway-core만으론 빈 미생성→spring-boot-flyway / 기존 DB에 Flyway 도입은 baseline-on-migrate, V1=현재 스키마) |
+| 2026-06-02 | N-025 (로그인 지연 ≠ DB — 인덱스 단건 조회+BCrypt(CPU 집약), 작은 vCPU에서 증폭 / 해법은 강도↓ 아니라 CPU↑, 분리 측정으로 진단) |
