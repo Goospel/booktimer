@@ -18,6 +18,8 @@
 - [T-011. Fargate 태스크가 SSM 시크릿 pull 실패 — 퍼블릭 IP라도 서브넷에 IGW 라우트 없으면 인터넷 도달 불가](#t-011-fargate-태스크가-ssm-시크릿-pull-실패--퍼블릭-ip라도-서브넷에-igw-라우트-없으면-인터넷-도달-불가)
 - [T-012. 가입 시 중복 이메일이 처리 안 된 DataIntegrityViolationException → 500 whitelabel (prod만)](#t-012-가입-시-중복-이메일이-처리-안-된-dataintegrityviolationexception--500-whitelabel-prod만)
 - [T-013. `aws logs --max-items 1`이 페이지네이션 토큰 None을 변수에 섞어 "stream does not exist"](#t-013-aws-logs---max-items-1이-페이지네이션-토큰-none을-변수에-섞어-stream-does-not-exist)
+- [T-014. `forward-headers-strategy=framework`가 Boot 4에서 무동작 → OAuth redirect_uri가 http](#t-014-forward-headers-strategyframework가-boot-4에서-무동작--oauth-redirect_uri가-http)
+- [T-015. ddl-auto=update가 기존 컬럼 NOT NULL을 못 풀어 prod 500 / 사설 RDS 수동 ALTER도 막힘](#t-015-ddl-autoupdate가-기존-컬럼-not-null을-못-풀어-prod-500--사설-rds-수동-alter도-막힘)
 
 ---
 
@@ -267,6 +269,33 @@ aws logs get-log-events --log-stream-name "$STREAM" ...
 
 ---
 
+## T-014. `forward-headers-strategy=framework`가 Boot 4에서 무동작 → OAuth redirect_uri가 http
+
+**증상**: ALB(HTTPS 종료) 뒤 배포 후, 구글 로그인 인가요청의 `redirect_uri`가 `http://...`로 만들어져 구글과 mismatch(https만 등록). 프로퍼티 `server.forward-headers-strategy=framework`를 줬는데도 효과 없음.
+
+**원인**: 이 프로퍼티는 `ForwardedHeaderFilter`를 `FilterRegistrationBean`으로 등록하는 자동구성(`ServletWebServerConfiguration`)에 의존한다. Boot 4의 모듈 분리(`spring-boot-web-server` 등) 환경에서 그 조건부 빈이 컨텍스트에 활성화되지 않아 **필터가 안 걸렸다** → X-Forwarded-Proto/Host 무시 → 앱이 자기 주소를 http/localhost로 인식 → redirect_uri도 http.
+
+**해결 / 예방**:
+- `ForwardedHeaderFilter`를 **명시 @Bean**(`FilterRegistrationBean`, `Ordered.HIGHEST_PRECEDENCE`)으로 직접 등록(`WebConfig`). 프로퍼티 대신 코드 등록이면 버전·모듈 구성에 무관하게 확실.
+- **MockMvc(`@AutoConfigureMockMvc`)는 이 `FilterRegistrationBean`을 필터 체인에 적용하지 않는다** → 동작 검증은 `@SpringBootTest(webEnvironment=RANDOM_PORT)` 실서버 + 실제 HTTP 호출로(헤더 보내 redirect_uri가 https인지 확인).
+- 일반화: "맞는 프로퍼티인데 효과가 없다"면 그 프로퍼티가 의존하는 자동구성이 실제로 켜졌는지 의심하고, 핵심 빈은 명시 등록으로 못 박는다.
+
+---
+
+## T-015. ddl-auto=update가 기존 컬럼 NOT NULL을 못 풀어 prod 500 / 사설 RDS 수동 ALTER도 막힘
+
+**증상**: 소셜(OAuth) 신규 사용자 INSERT가 prod에서 `Column 'password_hash' cannot be null` → 500. 엔티티는 `passwordHash`를 nullable로 바꿨는데도.
+
+**원인**: Hibernate `ddl-auto=update`는 **새 컬럼/테이블만 추가**하고 **기존 컬럼의 제약(NOT NULL→NULL, 타입 등)은 변경하지 않는다**. 새 `auth_provider`는 추가됐지만 기존 `password_hash`의 NOT NULL은 그대로 → 엔티티(nullable)와 DB(NOT NULL) 불일치.
+
+**해결 / 예방**:
+- 즉효 SQL: `ALTER TABLE users MODIFY password_hash VARCHAR(255) NULL`. 단 사설 RDS라 접속 경로가 함정(아래).
+- **사설 RDS 접속 함정**: `PubliclyAccessible:false` + 3306을 ECS 태스크 SG만 허용 + 서브넷이 IGW만(NAT 없음). → **CloudShell VPC 환경은 퍼블릭 IP를 못 받아 인터넷 불가 → `mysql` 클라이언트 설치조차 안 됨** → 수동 접속이 막힌다.
+- **우회(채택)**: 앱이 이미 ALTER 권한 보유(같은 배포에서 컬럼 자동 추가가 증거) → **prod 전용 `ApplicationRunner`로 기동 시 1회 멱등 ALTER**(`information_schema`로 nullable 확인 후). 사설 DB 직접 접속 불필요.
+- **근본**: Flyway 마이그레이션 도입(기존 DB는 baseline). `ddl-auto=update`를 운영 스키마 변경 수단으로 신뢰하지 말 것(개념: learning-notes N-023).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -282,3 +311,5 @@ aws logs get-log-events --log-stream-name "$STREAM" ...
 | 2026-06-01 | T-011 (Fargate SSM 시크릿 pull 실패 — 퍼블릭 IP라도 서브넷 RTB에 IGW 없으면 도달 불가, 서브넷 비대칭 비결정적 실패) |
 | 2026-06-01 | T-012 (가입 중복 이메일 → 처리 안 된 DataIntegrityViolationException 500, H2 롤백이라 테스트 미검출, CloudWatch 진단) |
 | 2026-06-01 | T-013 (aws logs --max-items 1이 None 페이지네이션 토큰을 변수에 섞어 stream not found) |
+| 2026-06-02 | T-014 (forward-headers-strategy=framework가 Boot 4 모듈 분리에서 무동작 → ForwardedHeaderFilter 명시 빈 등록, RANDOM_PORT로 검증) |
+| 2026-06-02 | T-015 (ddl-auto=update가 기존 NOT NULL 못 풀어 소셜 INSERT 500 / 사설 RDS NAT 없어 CloudShell 접속 막힘 → prod ApplicationRunner 멱등 ALTER, 근본 Flyway) |
