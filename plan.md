@@ -38,6 +38,11 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 ### OAuth 소셜 로그인
 - [x] **구글(Google OIDC)** — 완료·배포 (2026-06-02). find-or-create 프로비저닝, principal=email 통일,
       소셜 계정 UX 분기(비번 카드 숨김). Google 동의 화면은 Testing(테스트 사용자만) → 추후 게시(Publish)
+- [ ] **동의 화면 게시(Production 전환)** — 테스트 사용자 100명 제한 해제, 누구나 Google 로그인 가능.
+      스코프가 non-sensitive(`openid`/`email`/`profile`)라 **Google 검증 절차 없이 즉시 게시**, 코드 변경 0.
+      체크리스트: ① 개인정보처리방침 URL 준비(이메일 수집 → 동의 화면이 요구할 수 있음) → ② 동의 화면 브랜딩
+      확인(앱 이름·지원 이메일·로고가 사용자에게 노출) → ③ Console에서 Publish app.
+      ※ 보안 전제는 이미 충족(하드닝 #1 email_verified·#2 brute-force 완료, 사이트·LOCAL 가입은 이미 공개).
 - [ ] 카카오/네이버 등 추가 provider (선택)
 
 ### SNS 기능 — README §2.4
