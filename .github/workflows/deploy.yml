@@ -4,7 +4,14 @@ name: Deploy to ECS Fargate
 on:
   push:
     branches: [main]
-  workflow_dispatch: {}   # 수동 트리거도 허용
+    # 문서/로컬 개발 도구만 바뀐 push는 배포할 게 없으므로 건너뛴다(~5분 절약).
+    # paths-ignore는 "바뀐 파일이 전부 아래 패턴에 해당할 때만" 워크플로를 건너뛴다 —
+    # 코드(src·Dockerfile·build.gradle·deploy/ 등)가 하나라도 끼면 정상 배포된다(안전 기본값).
+    paths-ignore:
+      - '**.md'           # README·CLAUDE·claude-docs 등 모든 마크다운
+      - 'claude-docs/**'  # 문서 디렉터리(비-md 자료 포함)
+      - '.claude/**'      # 로컬 훅·설정(배포 산출물과 무관)
+  workflow_dispatch: {}   # 수동 트리거도 허용 (paths-ignore 영향 없음)
 
 env:
   CONTAINER_NAME: booktimer
