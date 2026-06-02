@@ -15,4 +15,7 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
 
     /** 진행 중(endedAt == null) 세션. 서비스의 중복 start 방지에 쓰인다. */
     Optional<ReadingSession> findByUserAndEndedAtIsNull(User user);
+
+    /** 회원 탈퇴 시 해당 유저의 모든 측정 기록을 제거한다. */
+    void deleteByUser(User user);
 }

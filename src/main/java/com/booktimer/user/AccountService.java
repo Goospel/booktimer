@@ -1,0 +1,75 @@
+package com.booktimer.user;
+
+import com.booktimer.session.ReadingSessionRepository;
+import com.booktimer.timer.ReadingTimerRepository;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * 계정 보안 유스케이스 — 비밀번호 변경, 회원 탈퇴.
+ *
+ * <p>둘 다 <b>현재 비밀번호 재확인</b>을 전제로 한다(세션이 살아있어도 민감한 작업은 다시 묻는다).
+ * 비밀번호 검증은 {@link PasswordEncoder#matches}, 새 비밀번호 해싱은 {@code encode}로 위임하고,
+ * 도메인 교체는 {@link User#changePassword}가 책임진다(엔티티는 평문을 받지 않는다).
+ *
+ * <p>탈퇴는 연관 cascade가 없으므로 FK 순서대로 <b>세션 → 타이머 → 유저</b> 순으로 지운다.
+ */
+@Service
+@Transactional
+public class AccountService {
+
+    private final UserRepository userRepository;
+    private final ReadingTimerRepository timerRepository;
+    private final ReadingSessionRepository sessionRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    public AccountService(UserRepository userRepository,
+                          ReadingTimerRepository timerRepository,
+                          ReadingSessionRepository sessionRepository,
+                          PasswordEncoder passwordEncoder) {
+        this.userRepository = userRepository;
+        this.timerRepository = timerRepository;
+        this.sessionRepository = sessionRepository;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    /**
+     * 현재 비밀번호를 확인한 뒤 새 비밀번호로 교체한다.
+     *
+     * @throws InvalidPasswordException 현재 비밀번호가 일치하지 않는 경우
+     * @throws IllegalStateException    사용자가 없는 경우
+     */
+    public void changePassword(String email, String currentRawPassword, String newRawPassword) {
+        User user = load(email);
+        verifyPassword(user, currentRawPassword);
+        user.changePassword(passwordEncoder.encode(newRawPassword));
+        userRepository.save(user);
+    }
+
+    /**
+     * 비밀번호를 확인한 뒤 계정과 연관 데이터(세션·타이머)를 모두 삭제한다.
+     *
+     * @throws InvalidPasswordException 비밀번호가 일치하지 않는 경우
+     * @throws IllegalStateException    사용자가 없는 경우
+     */
+    public void deleteAccount(String email, String rawPassword) {
+        User user = load(email);
+        verifyPassword(user, rawPassword);
+        // FK 순서: 세션(N) → 타이머(1:1) → 유저
+        sessionRepository.deleteByUser(user);
+        timerRepository.deleteByUser(user);
+        userRepository.delete(user);
+    }
+
+    private User load(String email) {
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalStateException("user not found: " + email));
+    }
+
+    private void verifyPassword(User user, String rawPassword) {
+        if (rawPassword == null || !passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
+            throw new InvalidPasswordException();
+        }
+    }
+}

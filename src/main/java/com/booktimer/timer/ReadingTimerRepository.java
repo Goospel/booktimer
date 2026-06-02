@@ -11,4 +11,7 @@ import java.util.Optional;
 public interface ReadingTimerRepository extends JpaRepository<ReadingTimer, Long> {
 
     Optional<ReadingTimer> findByUser(User user);
+
+    /** 회원 탈퇴 시 해당 유저의 타이머를 제거한다. */
+    void deleteByUser(User user);
 }

@@ -112,4 +112,29 @@ class UserTest {
         assertThatThrownBy(() -> user.updateProfile(NICK, "Mars/Phobos"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    // --- changePassword: 비밀번호 변경 (이미 해시된 새 값으로 교체) ---
+
+    @Test
+    @DisplayName("changePassword: 비밀번호 해시를 새 값으로 바꾸고 다른 필드는 유지한다")
+    void changePassword_replacesHash() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        user.changePassword("$2a$10$NEWHASHvalue000000000");
+
+        assertThat(user.getPasswordHash()).isEqualTo("$2a$10$NEWHASHvalue000000000");
+        assertThat(user.getEmail()).isEqualTo(EMAIL);
+        assertThat(user.getNickname()).isEqualTo(NICK);
+    }
+
+    @Test
+    @DisplayName("changePassword: 새 해시가 비어있으면 예외 (평문 금지 불변식 유지)")
+    void changePassword_blankHash_throws() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        assertThatThrownBy(() -> user.changePassword("  "))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> user.changePassword(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }
