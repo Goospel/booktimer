@@ -1,5 +1,7 @@
 package com.booktimer.web;
 
+import com.booktimer.book.Book;
+import com.booktimer.book.BookRepository;
 import com.booktimer.session.ReadingSessionService;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -8,6 +10,7 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.security.Principal;
@@ -37,26 +40,32 @@ public class ReadingSessionController {
     private final UserRepository userRepository;
     private final ReadingSessionService sessionService;
     private final DashboardModel dashboardModel;
+    private final BookRepository bookRepository;
     private final Clock clock;
 
     public ReadingSessionController(UserRepository userRepository,
                                     ReadingSessionService sessionService,
                                     DashboardModel dashboardModel,
+                                    BookRepository bookRepository,
                                     Clock clock) {
         this.userRepository = userRepository;
         this.sessionService = sessionService;
         this.dashboardModel = dashboardModel;
+        this.bookRepository = bookRepository;
         this.clock = clock;
     }
 
     @PostMapping("/start")
     public String start(Principal principal,
+                        @RequestParam(value = "bookId", required = false) Long bookId,
                         @RequestHeader(value = "HX-Request", required = false, defaultValue = "false") boolean htmx,
                         Model model, RedirectAttributes redirectAttributes) {
         User user = currentUser(principal);
+        // bookId가 있으면 내 책일 때만 연결(소유권 검사) — 아니면 책 미지정으로 시작.
+        Book book = (bookId == null) ? null : bookRepository.findByIdAndUser(bookId, user).orElse(null);
         String error = null;
         try {
-            sessionService.start(user, clock.instant());
+            sessionService.start(user, clock.instant(), book);
         } catch (IllegalStateException e) {
             error = "이미 진행 중인 측정이 있습니다.";
         }

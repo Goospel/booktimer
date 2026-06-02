@@ -4,6 +4,7 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookSearchResult;
 import com.booktimer.book.BookService;
 import com.booktimer.book.BookStatus;
+import com.booktimer.session.BookReadingStatsService;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
 import org.springframework.stereotype.Controller;
@@ -29,10 +30,13 @@ public class BookController {
 
     private final UserRepository userRepository;
     private final BookService bookService;
+    private final BookReadingStatsService statsService;
 
-    public BookController(UserRepository userRepository, BookService bookService) {
+    public BookController(UserRepository userRepository, BookService bookService,
+                          BookReadingStatsService statsService) {
         this.userRepository = userRepository;
         this.bookService = bookService;
+        this.statsService = statsService;
     }
 
     @GetMapping("/books")
@@ -42,6 +46,7 @@ public class BookController {
 
         model.addAttribute("nickname", user.getNickname());
         model.addAttribute("books", bookService.myBooks(user));
+        model.addAttribute("bookTimes", statsService.totalSecondsByBook(user)); // 책 id → 누적 초
         model.addAttribute("statuses", BookStatus.values());
         model.addAttribute("searchEnabled", bookService.searchEnabled());
         model.addAttribute("q", q);

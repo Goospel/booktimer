@@ -77,6 +77,9 @@
                     <span class="book-title" th:text="${b.title}">제목</span>
                     <span class="book-author" th:if="${b.author}" th:text="${b.author}">저자</span>
                     <span class="book-status-badge" th:text="${b.status.label}">상태</span>
+                    <span class="book-time mono" th:with="secs=${bookTimes.get(b.id)}"
+                          th:if="${secs != null and secs > 0}"
+                          th:text="'⏱ ' + ${secs / 3600 + '시간 ' + (secs % 3600) / 60 + '분'}">⏱ 0시간 0분</span>
                 </div>
                 <div class="book-actions">
                     <form method="post" th:action="@{/books/{id}/status(id=${b.id})}">
