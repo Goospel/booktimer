@@ -34,6 +34,7 @@
 - [N-028. catch-all 예외 핸들러는 프레임워크의 상태보유 예외(404 등)까지 삼킨다 — 상태코드 보존](#n-028-catch-all-예외-핸들러는-프레임워크의-상태보유-예외404-등까지-삼킨다--상태코드-보존)
 - [N-029. 인메모리 세션은 인스턴스가 죽으면 사라진다 — 세션 외부화와 무상태 앱 서버](#n-029-인메모리-세션은-인스턴스가-죽으면-사라진다--세션-외부화와-무상태-앱-서버)
 - [N-030. 무중단 롤링 배포 — min/max healthy percent로 "헬스 통과 후 교체", circuit breaker 자동 롤백](#n-030-무중단-롤링-배포--minmax-healthy-percent로-헬스-통과-후-교체-circuit-breaker-자동-롤백)
+- [N-031. SameSite=Lax로 CSRF 사전 차단 — 그리고 세션 쿠키 속성은 프로퍼티가 아니라 명시 CookieSerializer 빈으로](#n-031-samesitelax로-csrf-사전-차단--그리고-세션-쿠키-속성은-프로퍼티가-아니라-명시-cookieserializer-빈으로)
 
 ---
 
@@ -1334,6 +1335,62 @@ ECS 롤링 배포는 **새 태스크가 ALB 헬스체크를 통과한 뒤에야*
 
 ---
 
+## N-031. SameSite=Lax로 CSRF 사전 차단 — 그리고 세션 쿠키 속성은 프로퍼티가 아니라 명시 CookieSerializer 빈으로
+
+### 한 줄 요약
+
+세션 쿠키에 `SameSite=Lax`를 두면 브라우저가 교차 사이트 요청에 쿠키를 자동 첨부하지 않아 CSRF의
+1차 차단이 된다. 단, 세션 외부화(Spring Session) 후엔 쿠키를 `DefaultCookieSerializer`가 쓰므로
+`server.servlet.session.cookie.*` 프로퍼티가 무동작 → **명시 `CookieSerializer` 빈**으로 설정해야 한다.
+
+### 자세한 설명
+
+**SameSite가 막는 것.** CSRF(Cross-Site Request Forgery)는 공격자 사이트가 사용자의 인증 쿠키를
+얹어 우리 서버에 요청을 위조하는 공격이다. `SameSite` 쿠키 속성은 브라우저가 **다른 사이트에서 출발한
+요청엔 쿠키를 안 붙이게** 한다:
+
+- `Strict` — 교차 사이트면 무조건 안 붙임. 가장 강하지만, 외부 링크로 들어오거나 **OAuth 리다이렉트
+  콜백**(구글 → 우리 콜백 URL)에서도 쿠키가 안 실려 로그인 흐름이 깨질 수 있다.
+- `Lax` — 일반 교차 사이트 요청(이미지·폼 POST·iframe 등)엔 안 붙이되, **최상위 GET 내비게이션**
+  (주소창 이동/링크 클릭)엔 붙임. OAuth 콜백이 최상위 GET이라 호환된다. → **우리 선택.**
+- `None` — 항상 붙임(+`Secure` 필수). 교차 사이트 임베드가 필요한 서드파티 쿠키용.
+
+**CSRF 토큰과의 관계 — 중복이 아니라 다층 방어.** 우리는 이미 Spring Security CSRF 토큰을 쓴다.
+SameSite=Lax는 그 위에 얹는 **사전 차단막**이다. 토큰 검증까지 가기 전에 브라우저 레벨에서 교차 사이트
+쿠키 자체를 막으니, 토큰 누락/우회 시도의 표면이 줄어든다. "쿠키 기반 인증"의 기본 하드닝 3종은
+`SameSite` + `HttpOnly`(JS 접근 차단=XSS 세션 탈취 방어) + `Secure`(HTTPS 전송 한정).
+
+**함정 — 세션 외부화 후 프로퍼티가 무동작.** Spring Boot에선 보통 `server.servlet.session.cookie.same-site`
+같은 프로퍼티로 끝난다. 그런데 세션을 외부화(Spring Session JDBC, [[N-029]])하면 세션 쿠키(`SESSION`)는
+서블릿 컨테이너가 아니라 **Spring Session의 `DefaultCookieSerializer`** 가 쓴다. 이 조합(Boot 4)에선
+그 프로퍼티가 직렬화기에 연결되지 않아 **조용히 무동작** — `Set-Cookie`엔 `Path=/`만 붙는다.
+이는 `server.forward-headers-strategy` 프로퍼티가 무동작이라 `ForwardedHeaderFilter`를 명시 빈으로
+등록해야 했던 [[N-022]]와 **같은 부류**의 함정이다("표준 프로퍼티인데 안 먹음 → 명시 빈으로").
+
+**해결 — 명시 빈.** `CookieSerializer` 빈을 직접 등록하면 Boot 기본 직렬화기 자동구성이 물러나고
+(`@ConditionalOnMissingBean`) Spring Session이 이 빈을 쓴다. `Secure`는 HTTPS에서만 의미가 있고
+로컬(http)에선 켜면 쿠키가 아예 안 실려 로그인이 안 되므로, prod 프로퍼티 값으로 분기한다.
+
+**파생 교훈 — 잠재 갭.** 프로퍼티가 무동작이라는 건, 세션 외부화 직후엔 prod에서 의도했던
+`Secure`/`HttpOnly`도 SESSION 쿠키엔 안 붙고 있었다는 뜻이다(겉으론 문제 없어 보였음). 명시 빈이
+SameSite·HttpOnly·Secure 셋을 한 번에 바로잡는다. **일반 교훈**: 보안 속성은 "설정했다"가 아니라
+**실제 산출물(여기선 `Set-Cookie` 헤더)을 직접 확인**해야 한다.
+
+### 코드 위치
+
+- `src/main/java/com/booktimer/config/WebConfig.java` — `cookieSerializer` 빈(SameSite=Lax/HttpOnly/Secure)
+- `src/main/resources/application.properties` — 무동작 프로퍼티 대신 빈을 가리키는 주석
+- `src/test/java/com/booktimer/security/SessionCookieSameSiteTest.java` — Set-Cookie 헤더로 속성 검증
+- 함정 정리: `troubleshooting.md` T-021
+
+### 관련 노트
+
+- [N-022. 프록시 뒤 앱은 X-Forwarded-* 신뢰 — Boot 4에선 명시 빈](#) — 같은 "프로퍼티 무동작 → 명시 빈" 함정
+- [N-029. 인메모리 세션 → 세션 외부화](#) — 쿠키 주체가 컨테이너→Spring Session으로 바뀐 원인
+- [N-026. Spring Security가 막아주지 않는 것(brute-force)](#) — "기본기 위에 직접 더하는 하드닝" 같은 맥락
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1365,3 +1422,4 @@ ECS 롤링 배포는 **새 태스크가 ALB 헬스체크를 통과한 뒤에야*
 | 2026-06-02 | N-028 (catch-all @ExceptionHandler(Exception)이 프레임워크의 상태보유 예외(404 등)까지 삼켜 500으로 둔갑 → 좁은 타입 핸들러로 상태코드 보존, 로그 레벨 분리) |
 | 2026-06-02 | N-029 (인메모리 HttpSession은 인스턴스 교체 시 소멸→재로그인 / 세션 외부화(JDBC·Redis)로 무상태 앱 서버, 무중단·수평확장의 전제, 세션 vs 토큰, 재로그인≠데이터손실) |
 | 2026-06-02 | N-030 (무중단 롤링 배포 — min=100/max=200으로 "헬스 통과 후 교체"(start-then-stop), circuit breaker 자동 롤백, deregistration delay는 속도일 뿐 다운타임 원인 아님, 세션 외부화가 전제, 적용은 인프라 설정) |
+| 2026-06-02 | N-031 (SameSite=Lax로 CSRF 사전 차단(Lax는 OAuth 콜백 호환, Strict는 깸) / 세션 외부화 후 세션 쿠키는 DefaultCookieSerializer가 써서 server.servlet.session.cookie.* 무동작→명시 CookieSerializer 빈, N-022 자매 함정, 보안 속성은 Set-Cookie 직접 확인) |
