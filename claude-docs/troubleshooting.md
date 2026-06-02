@@ -25,6 +25,7 @@
 - [T-018. Spring Security 7(Boot 4)에서 `AntPathRequestMatcher` 제거됨](#t-018-spring-security-7boot-4에서-antpathrequestmatcher-제거됨)
 - [T-019. Boot 4에서 `NoResourceFoundException`이 `ResponseStatusException` 비-상속 → 핸들러가 안 잡힘](#t-019-boot-4에서-noresourcefoundexception이-responsestatusexception-비-상속--핸들러가-안-잡힘)
 - [T-020. Boot 4에서 raw `spring-session-jdbc`만으론 세션 외부화가 조용히 무동작 → 스타터 필요](#t-020-boot-4에서-raw-spring-session-jdbc만으론-세션-외부화가-조용히-무동작--스타터-필요)
+- [T-021. Spring Session 쿠키엔 `server.servlet.session.cookie.*`가 무동작 → 명시 CookieSerializer 빈](#t-021-spring-session-쿠키엔-serverservletsessioncookie가-무동작--명시-cookieserializer-빈)
 
 ---
 
@@ -394,6 +395,30 @@ grep -ioE "spring-boot[a-z0-9-]*session[a-z0-9-]*" "$bom" | sort -u
 
 ---
 
+## T-021. Spring Session 쿠키엔 `server.servlet.session.cookie.*`가 무동작 → 명시 CookieSerializer 빈
+
+**증상**: 세션 쿠키에 `SameSite=Lax`(또는 Secure/HttpOnly)를 주려고 `server.servlet.session.cookie.same-site=lax`를 설정했는데 **에러 없이** 안 먹는다. 응답 `Set-Cookie`를 보면 `SESSION=...; Path=/`뿐 — 지정한 속성이 하나도 안 붙음.
+
+**원인**: 세션 외부화(Spring Session JDBC, T-020) 이후 세션 쿠키(`SESSION`)는 서블릿 컨테이너가 아니라 **Spring Session의 `DefaultCookieSerializer`** 가 쓴다. `server.servlet.session.cookie.*` 프로퍼티는 (이 Boot 4 조합에서) 그 직렬화기에 연결되지 않아 무동작이다. `server.forward-headers-strategy`가 무동작이라 `ForwardedHeaderFilter`를 명시 빈으로 등록해야 했던 것(N-022)과 **같은 부류의 함정** — "표준 프로퍼티인데 조용히 안 먹음".
+
+**진단(추측 금지)**: 단언/로그로 응답 `Set-Cookie` 헤더를 직접 본다. MockMvc면:
+```java
+result.getResponse().getHeaders("Set-Cookie");  // [SESSION=...; Path=/] ← 속성 없음이 곧 증거
+```
+"프로퍼티 추가 전후로 쿠키가 그대로"면 프로퍼티가 그 쿠키에 안 닿는다는 뜻.
+
+**해결**: 명시 `CookieSerializer` 빈을 등록한다(`WebConfig#cookieSerializer`).
+```java
+DefaultCookieSerializer s = new DefaultCookieSerializer();
+s.setSameSite("Lax");
+s.setUseHttpOnlyCookie(true);
+s.setUseSecureCookie(secure);   // Secure는 prod(HTTPS)만 — 로컬 http면 쿠키 안 실려 로그인 불가
+```
+- 빈 타입이 `CookieSerializer`라 Boot의 기본 직렬화기 자동구성이 물러나고(`@ConditionalOnMissingBean`) Spring Session이 이 빈을 쓴다.
+- **주의**: 이 함정 때문에 prod의 `secure`/`http-only` 프로퍼티도 SESSION 쿠키엔 안 먹고 있었을 수 있다(세션 외부화 직후 잠재 갭) — 명시 빈이 셋을 한 번에 잡는다. 개념 N-031.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -416,3 +441,4 @@ grep -ioE "spring-boot[a-z0-9-]*session[a-z0-9-]*" "$bom" | sort -u
 | 2026-06-02 | T-018 (Spring Security 7(Boot 4)에서 AntPathRequestMatcher 제거 → PathPatternRequestMatcher 또는 요청 직접 판정) |
 | 2026-06-02 | T-020 (Boot 4 raw spring-session-jdbc만으론 세션 외부화 조용히 무동작 — autoconfig 모듈 분리 → spring-boot-starter-session-jdbc, "다른 세션 테스트 안 깨짐"이 단서) |
 | 2026-06-02 | T-019 (Boot 4에서 NoResourceFoundException이 ResponseStatusException 비-상속(ServletException+ErrorResponse)→ @ExceptionHandler가 안 잡혀 404가 500으로, jar로 상속 확인) |
+| 2026-06-02 | T-021 (세션 외부화 후 SESSION 쿠키는 DefaultCookieSerializer가 써서 server.servlet.session.cookie.* 프로퍼티 무동작 → 명시 CookieSerializer 빈, Set-Cookie 직접 확인으로 진단, N-022 자매 함정) |
