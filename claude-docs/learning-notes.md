@@ -30,6 +30,7 @@
 - [N-024. Spring Boot 4의 autoconfig 모듈 분리 + 기존 DB에 Flyway 도입(baseline)](#n-024-spring-boot-4의-autoconfig-모듈-분리--기존-db에-flyway-도입baseline)
 - [N-025. 로그인 지연의 범인은 보통 DB가 아니라 BCrypt × 작은 vCPU](#n-025-로그인-지연의-범인은-보통-db가-아니라-bcrypt--작은-vcpu)
 - [N-026. OAuth find-or-create의 함정(email_verified) + Spring Security가 막아주지 않는 것(brute-force)](#n-026-oauth-find-or-create의-함정email_verified--spring-security가-막아주지-않는-것brute-force)
+- [N-027. OAuth 동의 화면은 provider가 제공 / 개인정보처리방침은 앱 제작자 책임 — 게시(Production)와 검증](#n-027-oauth-동의-화면은-provider가-제공--개인정보처리방침은-앱-제작자-책임--게시production와-검증)
 
 ---
 
@@ -1137,6 +1138,46 @@ Spring Security는 **CSRF**(기본 ON), **세션 고정 보호**(로그인 시 �
 
 ---
 
+## N-027. OAuth 동의 화면은 provider가 제공 / 개인정보처리방침은 앱 제작자 책임 — 게시(Production)와 검증
+
+**한 줄 요약**: OAuth 로그인의 **동의 화면(consent screen)** UI는 provider(Google)가 자동으로 띄운다 — 내가 만들 일이 없다. 반면 **개인정보처리방침(Privacy Policy)** 문서는 그 화면에 *링크로 노출될 뿐*, 내용은 앱 제작자가 쓰고 호스팅해야 한다. 둘은 다른 것이다. 그리고 요청 스코프가 **non-sensitive**(`openid`/`email`/`profile`)면 Google **검증(verification) 절차 없이 즉시 게시(Publish)** 할 수 있고, 코드 변경도 없다.
+
+### 자세한 설명
+
+"게시 전에 동의 절차를 구성해야 한다"는 말을 "내가 동의 화면을 만들어야 한다"로 오해하기 쉽다. 실제로 섞여 있는 건 **세 가지 다른 책임**이다.
+
+| 항목 | 누가 담당 | 설명 |
+|---|---|---|
+| **동의 화면(consent screen) UI** | provider(Google) | "이 앱이 당신의 이메일·프로필에 접근하려 합니다 → 허용/거부" 그 화면 자체. 내가 만들 필요 없음 — provider가 자동 렌더 |
+| **개인정보처리방침 문서** | **앱 제작자** | 동의 화면에 **링크로** 걸리는 법적 문서. provider는 링크를 보여줄 뿐, 내용은 내가 작성·호스팅 |
+| **브랜딩(앱 이름·지원 이메일·로고)** | 앱 제작자 | 동의 화면에 노출되는 표시 정보. provider 콘솔에서 설정 |
+
+**왜 provider가 내 정책 문서를 요구하나**: 앱이 사용자 데이터(이메일)를 받기 때문이다. provider 정책상 "사용자 데이터를 받는 앱은 그 데이터를 어떻게 다루는지 사용자에게 고지"해야 하고, 그 고지 수단이 개인정보처리방침 링크다. provider가 대신 써주지 않는다.
+
+**게시(Testing → Production)와 검증(verification)은 별개**:
+- **Testing**: provider가 지정한 테스트 사용자(Google은 최대 100명)만 로그인 가능. 개발/초기엔 이 상태.
+- **Production(게시)**: 누구나 로그인 가능.
+- **검증(verification)**: provider의 수동 심사. **민감(sensitive)·제한(restricted) 스코프**(Gmail 읽기, 드라이브 등)를 요청할 때만 필요하고, 며칠~몇 주 걸린다.
+- 핵심: **non-sensitive 스코프(`openid`/`email`/`profile`)만 쓰면 검증 없이 즉시 게시**할 수 있다. 개인정보처리방침 URL도 이 경우 하드 차단 조건이 아닌 **선택/권장 필드**인 경우가 많다(있으면 깔끔). 게시는 콘솔에서 "Publish app" 클릭 한 번, **코드 변경 0**.
+
+### 일반화 포인트 (면접 답변용)
+
+- **"동의 흐름(메커니즘)"과 "동의에 필요한 콘텐츠(정책 문서)"를 구분하라.** provider가 제공하는 건 *흐름·UI*이고, 앱 제작자가 채우는 건 *신원 정보·법적 문서·요청 스코프*다. "OAuth 붙였으니 동의는 알아서 되겠지"와 "정책 문서까지 내가 준비"를 헷갈리면 안 된다.
+- **요청 스코프의 민감도가 게시 비용을 결정한다.** non-sensitive면 검증 없이 즉시 게시(저비용), sensitive/restricted면 provider 수동 심사(고비용·지연). → 처음부터 "정말 필요한 최소 스코프만" 요청하는 게 최소권한 원칙이자 운영 비용 절감.
+- **게시 ≠ 검증.** 사용자 수 제한 해제(게시)와 provider 심사(검증)는 다른 트리거다 — 스코프가 가벼우면 게시만 하면 된다.
+
+### 코드 위치
+
+- (코드 변경 없음) — Google Cloud Console의 OAuth 동의 화면 설정 / Publish app
+- `plan.md` "OAuth 소셜 로그인 → 동의 화면 게시(Production 전환)" 체크리스트
+
+### 관련 노트
+
+- [N-026. OAuth find-or-create의 함정 + brute-force](#) — 게시의 보안 전제(email_verified·brute-force)는 이미 충족
+- [N-012. 인증 주체 ≠ 도메인 엔티티](#) — principal=email 통일, OAuth/폼 공통
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1164,3 +1205,4 @@ Spring Security는 **CSRF**(기본 ON), **세션 고정 보호**(로그인 시 �
 | 2026-06-02 | N-024 (Boot 4 autoconfig 모듈 분리 — flyway-core만으론 빈 미생성→spring-boot-flyway / 기존 DB에 Flyway 도입은 baseline-on-migrate, V1=현재 스키마) |
 | 2026-06-02 | N-025 (로그인 지연 ≠ DB — 인덱스 단건 조회+BCrypt(CPU 집약), 작은 vCPU에서 증폭 / 해법은 강도↓ 아니라 CPU↑, 분리 측정으로 진단) |
 | 2026-06-02 | N-026 (OAuth find-or-create는 email_verified일 때만 안전(자동 연결 탈취 방어) / Spring Security는 brute-force 미방어 — 직접 IP 잠금, 이벤트+필터) |
+| 2026-06-02 | N-027 (OAuth 동의 화면 UI는 provider 제공 / 개인정보처리방침은 앱 제작자 책임 — non-sensitive 스코프는 검증 없이 즉시 게시, 게시 ≠ 검증) |
