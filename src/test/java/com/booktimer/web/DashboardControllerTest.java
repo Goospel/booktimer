@@ -86,4 +86,26 @@ class DashboardControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(model().attribute("hasActiveSession", true));
     }
+
+    @Test
+    @DisplayName("GET /: 누적 잔여가 cap에 도달하면 atCap=true (상한 경고 배지)")
+    void dashboard_atCapWhenRemainingHitsCap() throws Exception {
+        // 10일 전 시작 → 시드 1h + 10일치 누적이 cap(기본 5h=18000s)으로 클램프 → 잔여 == cap
+        registrationService.register("cap@booktimer.com", "rawpw1234", "상한", SEOUL, Role.USER, today().minusDays(10));
+
+        mockMvc.perform(get("/").with(user("cap@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("remainingSeconds", 18000L))
+                .andExpect(model().attribute("atCap", true));
+    }
+
+    @Test
+    @DisplayName("GET /: 잔여가 cap 미만이면 atCap=false")
+    void dashboard_notAtCapWhenBelowCap() throws Exception {
+        registrationService.register("below@booktimer.com", "rawpw1234", "여유", SEOUL, Role.USER, today());
+
+        mockMvc.perform(get("/").with(user("below@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("atCap", false));
+    }
 }

@@ -108,6 +108,18 @@ body {
     font-weight: 600;
 }
 
+/* 누적 상한 도달 경고 (호박색) */
+.cap-badge {
+    margin: 12px 0 0;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: #fffbeb;
+    color: #b45309;
+    border: 1px solid #fcd34d;
+    font-size: .9rem;
+    font-weight: 600;
+}
+
 .status-line { margin: 0 0 14px; color: var(--muted); }
 .status-line .mono { color: var(--text); font-weight: 600; }
 

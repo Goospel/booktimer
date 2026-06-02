@@ -36,6 +36,7 @@ public class DashboardModel {
 
         model.addAttribute("nickname", user.getNickname());
         model.addAttribute("remainingSeconds", timer.getRemainingSeconds());
+        model.addAttribute("atCap", timer.isAtCap());
         model.addAttribute("hasActiveSession", activeSession.isPresent());
         model.addAttribute("activeStartedAt", activeSession.map(ReadingSession::getStartedAt).orElse(null));
     }

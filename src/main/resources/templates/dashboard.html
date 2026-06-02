@@ -37,6 +37,11 @@
                 이번 측정 경과 <span class="mono" x-text="fmt(elapsed)">00:00:00</span>
             </p>
             <span class="goal-badge" x-show="goalMet" x-cloak>오늘 목표 달성! 🎉</span>
+
+            <!-- 누적 상한 도달: 서버가 판단(atCap), 더는 쌓이지 않음을 안내 -->
+            <p class="cap-badge" th:if="${atCap}">
+                ⚠️ 누적 상한에 도달했어요. 더는 쌓이지 않지만, 지금 읽어 따라잡아 보세요.
+            </p>
         </section>
 
         <!-- 측정 상태 + start/stop. hx-post로 무리로드, JS 없으면 일반 form POST(redirect)로 폴백 -->

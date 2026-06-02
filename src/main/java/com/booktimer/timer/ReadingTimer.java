@@ -166,6 +166,16 @@ public class ReadingTimer extends BaseTimeEntity {
         return applied;
     }
 
+    /**
+     * 누적 잔여(부채)가 상한(cap)에 도달했는지. 도달하면 더는 쌓이지 않고 클램프되므로,
+     * 대시보드에서 "상한 도달" 경고 배지를 띄우는 판단에 쓴다.
+     *
+     * <p>cap이 0인 퇴화 설정에서는 잔여도 항상 0이라 "도달"로 보지 않는다(false) — 의미 없는 경고 방지.
+     */
+    public boolean isAtCap() {
+        return capSeconds > 0 && remainingSeconds >= capSeconds;
+    }
+
     public Long getId() {
         return id;
     }
