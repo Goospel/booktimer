@@ -1,5 +1,6 @@
 package com.booktimer.timer;
 
+import com.booktimer.config.JpaConfig;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -7,6 +8,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDate;
@@ -22,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * ReadingTimer가 FK(user_id)를 소유하므로 User를 먼저 저장해야 FK가 충족된다.
  */
 @DataJpaTest
+@Import(JpaConfig.class) // BaseTimeEntity auditing(created_at/updated_at) 활성화 — 없으면 INSERT 시 NOT NULL 위반
 class ReadingTimerRepositoryTest {
 
     private static final long HOUR = 3600L;
