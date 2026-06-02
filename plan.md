@@ -64,6 +64,14 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
   - [x] **`PasswordHashNullableSchemaFix` 제거** (V1이 nullable 보장)
   - [x] (부수) @DataJpaTest 슬라이스 3종이 `@Import(JpaConfig.class)` 누락으로 순서 의존이던 것 수정(T-017)
 
+### 회원 인증/계정 보안 하드닝 (우선순위: 높음)
+> 2026-06-02 보안 점검 결과. 기본기(BCrypt·CSRF·세션고정보호·재인증·IDOR 없음·XSS 없음)는 양호.
+> 아래는 보강 항목. **상세 위협 분석은 공개 노출 부담이 있어 private 노트에 별도 기록**(이 repo 공개).
+- [ ] **OAuth 이메일 검증 강제** — 소셜 로그인 시 `email_verified` 클레임 확인 후에만 프로비저닝/로그인 (방어 한 겹 추가)
+- [ ] **로그인 무차별 대입 방어** — 실패 횟수 기반 지연/잠금 또는 앞단(ALB/WAF) 레이트리밋 (현재 없음)
+- [ ] **세션 쿠키 `SameSite=Lax` 명시** (현재 Secure/HttpOnly만 prod 설정)
+- [ ] (검토) 소셜 계정 탈퇴 시 재확인 단계, 가입 시 계정 열거 완화
+
 ### 전역 예외 핸들러가 404를 500으로 삼킴 (우선순위: 중)
 - `GlobalExceptionHandler(@ExceptionHandler(Exception.class))`가 `NoResourceFoundException`(예: `/favicon.ico`)까지
   잡아 **500**으로 응답·로그 도배. 404로 통과시켜야 함.
@@ -81,3 +89,4 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 |---|---|
 | 2026-06-02 | plan.md 신설 — HTTPS(ALB TLS termination) 항목 + 기존 로드맵 정리 |
 | 2026-06-02 | HTTPS·OAuth(구글) 완료 반영 + 기술부채(Flyway 도입/404 핸들러/Actions Node20) 추가 |
+| 2026-06-02 | Flyway 도입 완료 처리 + 회원 인증/계정 보안 하드닝 항목 추가(상세는 private 노트) |
