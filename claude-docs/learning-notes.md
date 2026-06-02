@@ -25,6 +25,8 @@
 - [N-019. DB 유니크 제약은 무결성의 마지막 방어선이지, 사용자 검증의 첫 방어선이 아니다](#n-019-db-유니크-제약은-무결성의-마지막-방어선이지-사용자-검증의-첫-방어선이-아니다)
 - [N-020. CI 트리거 필터 — `paths-ignore`는 "전부 매칭될 때만" 스킵하는 안전 기본값](#n-020-ci-트리거-필터--paths-ignore는-전부-매칭될-때만-스킵하는-안전-기본값)
 - [N-021. HTTPS는 앱이 아니라 앞단에서 끝낸다 — TLS termination (ALB/ACM)](#n-021-https는-앱이-아니라-앞단에서-끝낸다--tls-termination-albacm)
+- [N-022. 프록시 뒤의 앱은 X-Forwarded-*를 신뢰해야 한다 — forward-headers와 명시 빈](#n-022-프록시-뒤의-앱은-x-forwarded를-신뢰해야-한다--forward-headers와-명시-빈)
+- [N-023. ddl-auto=update의 한계 — 스키마 드리프트와 마이그레이션(Flyway)](#n-023-ddl-autoupdate의-한계--스키마-드리프트와-마이그레이션flyway)
 
 ---
 
@@ -934,6 +936,81 @@ HTTPS(=HTTP over TLS)는 이 구간을 **암호화 + 무결성 + 서버 신원�
 
 ---
 
+## N-022. 프록시 뒤의 앱은 X-Forwarded-*를 신뢰해야 한다 — forward-headers와 명시 빈
+
+**한 줄 요약**: ALB가 TLS를 종료하고 평문 HTTP로 앱에 넘기면, 앱은 자기가 http로 불렸다고 착각한다. 프록시가 붙여주는 `X-Forwarded-Proto/Host/Port`를 신뢰(ForwardedHeaderFilter)해야 앱이 "나는 https로 호출됐다"를 올바로 인식해 **리다이렉트 URL·OAuth `redirect_uri`를 https로** 만든다. N-021(인프라가 TLS를 끝낸다)의 짝 — 앱 측 대응.
+
+### 자세한 설명
+
+TLS termination(N-021) 구조에서 앱이 받는 요청은 평문 http다. 그대로면 `request.getScheme()`이 `http`, 호스트는 내부 주소가 된다. 그러면:
+- 스프링이 만드는 리다이렉트(Location)·절대 URL이 `http://내부주소`가 됨
+- 특히 OAuth2 인가요청의 `redirect_uri`가 `http://...`로 생성 → 구글은 https만 허용하므로 `redirect_uri_mismatch`로 로그인 자체가 깨짐
+
+프록시는 원래 정보를 헤더로 알려준다: `X-Forwarded-Proto: https`, `X-Forwarded-Host`, `X-Forwarded-Port`. `ForwardedHeaderFilter`가 이 헤더로 요청을 감싸면 `getScheme()`/`getRequestURL()`이 https·원래 호스트를 반환한다.
+
+**Boot에서 켜는 두 방법, 그리고 함정**:
+- 프로퍼티 `server.forward-headers-strategy=framework` — 보통 이걸로 ForwardedHeaderFilter가 등록된다. **하지만 Boot 4의 모듈 분리 환경에서 그 자동구성 빈이 활성화 안 돼 무동작인 사례**가 있었다(T-014).
+- **명시 빈 등록**(`FilterRegistrationBean<ForwardedHeaderFilter>`, `HIGHEST_PRECEDENCE`) — 버전·구성에 무관하게 확실. 보안 필터보다 먼저 실행돼 요청 스킴을 먼저 바로잡아야 한다.
+
+**신뢰 경계**: forwarded 헤더는 클라이언트가 위조할 수 있다. 그래서 "프록시 뒤(사설 네트워크)에만 노출되고, 그 프록시가 헤더를 덮어쓴다"는 전제에서만 신뢰해야 안전하다. 우리 앱은 ALB를 통해서만 도달 가능하므로 전제 충족.
+
+### 일반화 포인트 (면접 답변용)
+
+- **TLS termination을 쓰면 앱은 프록시 뒤에 있다는 사실을 알아야 한다.** 클라이언트의 진짜 스킴/호스트/IP는 `X-Forwarded-*`(또는 `Forwarded`)로 오고, 앱은 이를 신뢰하도록 설정해야 리다이렉트·쿠키 Secure 판단·OAuth redirect_uri·로깅이 맞는다.
+- **"프로퍼티가 맞는데 효과가 없다"** 면 그 프로퍼티가 의존하는 자동구성이 실제로 켜졌는지 의심하라. 핵심 동작은 명시 빈으로 못 박으면 환경 의존성이 사라진다.
+- **이런 동작은 MockMvc로 안 잡힌다** — 서블릿 컨테이너 필터(FilterRegistrationBean)는 실서버에서만 적용된다. `webEnvironment=RANDOM_PORT` + 실제 HTTP로 검증.
+
+### 코드 위치
+
+- `src/main/java/com/booktimer/config/WebConfig.java` — ForwardedHeaderFilter 명시 빈
+- `src/test/java/com/booktimer/config/ForwardedHeadersHttpsTest.java` — RANDOM_PORT 종단 검증
+- 관련: troubleshooting T-014(프로퍼티 무동작 함정)
+
+### 관련 노트
+
+- [N-021. HTTPS는 앞단에서 TLS termination](#n-021-https는-앱이-아니라-앞단에서-끝낸다--tls-termination-albacm) — 이 노트의 인프라 측 짝
+- [N-012. 인증 주체 ≠ 도메인 엔티티](#n-012-인증-주체--도메인-엔티티--principal로-도메인-user를-다시-잇고-접속을-lazy-누적-트리거로) — 같은 OAuth 로그인 흐름
+
+---
+
+## N-023. ddl-auto=update의 한계 — 스키마 드리프트와 마이그레이션(Flyway)
+
+**한 줄 요약**: Hibernate `ddl-auto=update`는 **새 컬럼·테이블만 추가**하고 **기존 컬럼의 제약 변경(NOT NULL 완화, 타입·길이 변경, 컬럼/제약 삭제)은 하지 않는다**. 그래서 엔티티를 바꿔도 운영 DB가 안 따라오는 **스키마 드리프트**가 생긴다. 근본 해법은 버전 관리되는 **마이그레이션 도구(Flyway/Liquibase)**다.
+
+### 자세한 설명
+
+`passwordHash`를 소셜 계정 지원을 위해 nullable로 바꿨는데, 운영 INSERT가 `Column 'password_hash' cannot be null`로 500이 났다(T-015). 원인은 `ddl-auto=update`가 새 컬럼(`auth_provider`)은 추가하면서도 기존 `password_hash`의 NOT NULL은 **건드리지 않았기** 때문 — 엔티티(nullable)와 DB(NOT NULL)가 어긋난 채 배포된 것.
+
+**`update`가 하는 일 / 안 하는 일**:
+- 한다: 없는 테이블 생성, 없는 컬럼 추가, (일부) 인덱스/FK 추가
+- 안 한다: 기존 컬럼의 nullable·타입·길이 변경, 컬럼/테이블 삭제, 제약 제거 — **파괴적이거나 데이터 영향이 있는 변경은 일절 안 함**(안전을 위해)
+- 게다가 적용 순서·결과가 방언·버전에 따라 달라 **운영에서 신뢰 불가**
+
+**마이그레이션 도구(Flyway)가 근본책인 이유**:
+- 스키마 변경을 `V2__make_password_nullable.sql`처럼 **명시 SQL 스크립트**로 작성 → 코드처럼 리뷰·커밋
+- 각 스크립트는 **정확히 한 번, 순서대로** 적용되고 `flyway_schema_history`에 기록 → 환경 간 동일·재현 가능, 드리프트 없음
+- 단, **자동이 아니다**: ALTER는 본인이 작성. 그리고 **이미 ddl-auto로 만들어진 기존 DB에 도입하려면 baseline**이 필요하다(현재 스키마를 v1로 표시 → 그 이후 버전만 적용). 도입 시 `ddl-auto`는 `validate`(또는 none)로 내려 자동 변경을 끈다.
+
+### 일반화 포인트 (면접 답변용)
+
+- **`ddl-auto=update`는 개발 편의 기능이지 운영 마이그레이션 도구가 아니다.** prod 스키마는 명시적·버전관리·재현가능해야 한다 → Flyway/Liquibase.
+- **엔티티 변경 ≠ 스키마 변경.** ORM이 모든 변경을 반영해주지 않는다(특히 기존 컬럼 제약). 변경의 "종류"를 알고, 파괴적/제약 변경은 마이그레이션으로 명시.
+- **기존 DB에 마이그레이션 도구를 들일 땐 baseline이 핵심** — 안 그러면 도구가 처음부터 다시 만들려다 충돌한다.
+- **이런 불일치는 H2 테스트로 안 잡힌다**(테스트는 매번 새 스키마 생성). 운영은 누적된 기존 스키마라 드리프트가 prod에서만 터진다 → 스테이징/마이그레이션으로 방어.
+
+### 코드 위치
+
+- `src/main/java/com/booktimer/config/PasswordHashNullableSchemaFix.java` — 임시 보정(prod 기동 시 멱등 ALTER), Flyway 도입 시 제거 예정
+- `src/main/resources/application-prod.properties` — `ddl-auto=update`(→ 추후 `validate` + Flyway)
+- 관련: troubleshooting T-015(이 사건), plan.md(Flyway 도입 항목)
+
+### 관련 노트
+
+- [N-019. DB 유니크 제약은 무결성의 마지막 방어선](#n-019-db-유니크-제약은-무결성의-마지막-방어선이지-사용자-검증의-첫-방어선이-아니다) — 같은 "스키마/제약은 신중히" 결
+- [N-008. JPA Auditing](#n-008-jpa-auditing--누가-시각을-채우나-그리고-슬라이스-테스트의-함정) — 같은 JPA/스키마 영역
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -956,3 +1033,5 @@ HTTPS(=HTTP over TLS)는 이 구간을 **암호화 + 무결성 + 서버 신원�
 | 2026-06-01 | N-019 (DB 유니크 제약은 무결성의 마지막 방어선 — 앱 사전확인(UX)+DB 제약(무결성)+레이스 catch 3중, validation vs constraint) |
 | 2026-06-02 | N-020 (CI 트리거 필터 — paths-ignore는 "전부 매칭될 때만" 스킵, 거부 목록=안전 기본값(기본 실행), paths vs paths-ignore) |
 | 2026-06-02 | N-021 (HTTPS는 앞단에서 TLS termination — ALB/ACM, 공개 구간만 암호화, 내부 HTTP 허용, X-Forwarded-Proto + forward-headers) |
+| 2026-06-02 | N-022 (프록시 뒤 앱은 X-Forwarded-* 신뢰 — forward-headers, Boot 4에선 ForwardedHeaderFilter 명시 빈, RANDOM_PORT로만 검증) |
+| 2026-06-02 | N-023 (ddl-auto=update 한계 — 기존 컬럼 제약 변경 안 함→스키마 드리프트, 근본은 Flyway 마이그레이션+기존 DB baseline) |
