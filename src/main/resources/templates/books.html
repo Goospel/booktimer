@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>내 책장 — BookTimer</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <span class="emoji">📚</span>
+        <h1>BookTimer</h1>
+    </header>
+    <p class="greeting"><span th:text="${nickname}">닉네임</span>님의 책장</p>
+
+    <div th:if="${message}" class="alert" th:text="${message}">완료 메시지</div>
+    <div th:if="${error}" class="alert alert-error" th:text="${error}">에러 메시지</div>
+
+    <!-- 책 검색 (알라딘) -->
+    <section class="card">
+        <h2>책 검색</h2>
+        <form th:if="${searchEnabled}" method="get" th:action="@{/books}" class="book-search-form">
+            <input type="text" name="q" th:value="${q}" placeholder="제목·저자로 검색" required>
+            <button type="submit" class="btn-primary">검색</button>
+        </form>
+        <p th:unless="${searchEnabled}" class="status-line muted">
+            도서 검색이 아직 설정되지 않았습니다. 아래 "직접 추가"로 등록하세요.
+        </p>
+
+        <ul class="book-list" th:if="${results != null and !results.isEmpty()}">
+            <li class="book-row" th:each="r : ${results}">
+                <img class="book-cover" th:if="${r.coverUrl()}" th:src="${r.coverUrl()}" alt="" referrerpolicy="no-referrer">
+                <div class="book-meta">
+                    <span class="book-title" th:text="${r.title()}">제목</span>
+                    <span class="book-author" th:if="${r.author()}" th:text="${r.author()}">저자</span>
+                    <span class="book-pub" th:if="${r.publisher()}" th:text="${r.publisher()}">출판사</span>
+                </div>
+                <form method="post" th:action="@{/books/add}" class="book-add-form">
+                    <input type="hidden" name="title" th:value="${r.title()}">
+                    <input type="hidden" name="author" th:value="${r.author()}">
+                    <input type="hidden" name="isbn13" th:value="${r.isbn13()}">
+                    <input type="hidden" name="coverUrl" th:value="${r.coverUrl()}">
+                    <input type="hidden" name="publisher" th:value="${r.publisher()}">
+                    <input type="hidden" name="purchaseLink" th:value="${r.purchaseLink()}">
+                    <select name="status">
+                        <option th:each="s : ${statuses}" th:value="${s}" th:text="${s.label}">상태</option>
+                    </select>
+                    <button type="submit" class="btn-primary">추가</button>
+                </form>
+            </li>
+        </ul>
+        <p th:if="${q != null and (results == null or results.isEmpty())}" class="status-line muted">검색 결과가 없습니다.</p>
+    </section>
+
+    <!-- 직접 추가(폴백) -->
+    <section class="card">
+        <h2>직접 추가</h2>
+        <form method="post" th:action="@{/books/add}" class="book-manual-form">
+            <input type="text" name="title" placeholder="제목" required>
+            <input type="text" name="author" placeholder="저자 (선택)">
+            <select name="status">
+                <option th:each="s : ${statuses}" th:value="${s}" th:text="${s.label}">상태</option>
+            </select>
+            <button type="submit" class="btn-primary">추가</button>
+        </form>
+    </section>
+
+    <!-- 내 책장 -->
+    <section class="card">
+        <h2>내 책장</h2>
+        <p th:if="${books.isEmpty()}" class="status-line">아직 등록한 책이 없습니다. 위에서 검색해 추가해 보세요.</p>
+        <ul class="book-list" th:unless="${books.isEmpty()}">
+            <li class="book-row" th:each="b : ${books}">
+                <img class="book-cover" th:if="${b.coverUrl}" th:src="${b.coverUrl}" alt="" referrerpolicy="no-referrer">
+                <div class="book-meta">
+                    <span class="book-title" th:text="${b.title}">제목</span>
+                    <span class="book-author" th:if="${b.author}" th:text="${b.author}">저자</span>
+                    <span class="book-status-badge" th:text="${b.status.label}">상태</span>
+                </div>
+                <div class="book-actions">
+                    <form method="post" th:action="@{/books/{id}/status(id=${b.id})}">
+                        <select name="status" onchange="this.form.submit()">
+                            <option th:each="s : ${statuses}" th:value="${s}" th:text="${s.label}"
+                                    th:selected="${s == b.status}">상태</option>
+                        </select>
+                    </form>
+                    <a th:if="${b.purchaseLink}" th:href="${b.purchaseLink}" target="_blank"
+                       rel="noopener nofollow" class="btn-ghost">구매</a>
+                    <form method="post" th:action="@{/books/{id}/delete(id=${b.id})}"
+                          onsubmit="return confirm('이 책을 삭제할까요?');">
+                        <button type="submit" class="btn-danger">삭제</button>
+                    </form>
+                </div>
+            </li>
+        </ul>
+    </section>
+
+    <p class="affiliate-note">
+        ※ "구매" 링크는 제휴(알라딘) 링크로, 구매 시 일부 수수료를 받을 수 있습니다.
+    </p>
+
+    <p class="link-row">
+        <a th:href="@{/}">← 대시보드</a>
+        <a th:href="@{/history}">📖 독서 기록</a>
+    </p>
+</div>
+</body>
+</html>
