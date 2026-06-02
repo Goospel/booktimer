@@ -23,6 +23,7 @@
 - [T-016. flyway-core만 추가하면 Flyway 빈이 안 생긴다 (Boot 4 autoconfig 모듈 분리)](#t-016-flyway-core만-추가하면-flyway-빈이-안-생긴다-boot-4-autoconfig-모듈-분리)
 - [T-017. 공유 인메모리 H2가 순서 의존 테스트 버그를 가린다 — 클래스패스 변경이 폭로](#t-017-공유-인메모리-h2가-순서-의존-테스트-버그를-가린다--클래스패스-변경이-폭로)
 - [T-018. Spring Security 7(Boot 4)에서 `AntPathRequestMatcher` 제거됨](#t-018-spring-security-7boot-4에서-antpathrequestmatcher-제거됨)
+- [T-019. Boot 4에서 `NoResourceFoundException`이 `ResponseStatusException` 비-상속 → 핸들러가 안 잡힘](#t-019-boot-4에서-noresourcefoundexception이-responsestatusexception-비-상속--핸들러가-안-잡힘)
 
 ---
 
@@ -342,6 +343,35 @@ aws logs get-log-events --log-stream-name "$STREAM" ...
 
 ---
 
+## T-019. Boot 4에서 `NoResourceFoundException`이 `ResponseStatusException` 비-상속 → 핸들러가 안 잡힘
+
+**증상**: `@ControllerAdvice`에 `@ExceptionHandler(ResponseStatusException.class)`로 404를 보존하려 했는데 안 먹힘 — 없는 리소스(`/favicon.ico`, 오타 경로) 요청이 여전히 catch-all `@ExceptionHandler(Exception.class)`에 잡혀 **500**으로 응답. 컴파일은 통과해서 더 헷갈림(런타임에 조용히 빗나감).
+
+**원인**: 스프링 6.x에선 `NoResourceFoundException extends ResponseStatusException`이었으나, **Spring 7(Boot 4)에선 `extends jakarta.servlet.ServletException implements org.springframework.web.ErrorResponse`** 로 바뀌었다. 더 이상 `ResponseStatusException`의 하위가 아니라서 `@ExceptionHandler(ResponseStatusException.class)`가 매칭하지 못하고, 그 아래 `Exception.class` 핸들러로 떨어진다.
+
+**진단(추측 금지)**: 상속 관계를 추정하지 말고 jar에서 직접 확인.
+```bash
+jar=$(find ~/.gradle/caches -name 'spring-webmvc-*.jar' | head -1)
+unzip -o -q "$jar" 'org/springframework/web/servlet/resource/NoResourceFoundException.class' -d /tmp/x
+javap -p /tmp/x/org/.../NoResourceFoundException.class | head -2
+# → ... extends jakarta.servlet.ServletException implements org.springframework.web.ErrorResponse
+```
+
+**해결**:
+- 상태코드를 들고 오는 두 타입을 **둘 다** 잡고, 공통 인터페이스 `ErrorResponse.getStatusCode()`로 코드를 읽어 보존:
+  ```java
+  @ExceptionHandler({ResponseStatusException.class, NoResourceFoundException.class})
+  public String handleStatusException(Exception ex, Model model, HttpServletResponse response) {
+      int status = ((ErrorResponse) ex).getStatusCode().value();  // 둘 다 ErrorResponse 구현
+      response.setStatus(status);
+      ...
+  }
+  ```
+- 더 구체적인 타입이라 catch-all `Exception` 핸들러보다 우선 적용된다.
+- 일반 규칙: **catch-all `@ExceptionHandler(Exception.class)`는 프레임워크가 던지는 상태보유 예외(404 등)까지 삼킨다** — 상태 예외를 더 좁은 타입으로 먼저 잡아 코드를 보존할 것. 그리고 "예전엔 이 클래스의 부모였다"는 기억은 메이저 버전업에서 깨질 수 있으니 **실제 상속을 jar로 확인**(같은 결: T-006/T-014/T-016/T-018 "Boot 4 호환성" 묶음). 개념은 N-028.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -362,3 +392,4 @@ aws logs get-log-events --log-stream-name "$STREAM" ...
 | 2026-06-02 | T-016 (flyway-core만으론 Flyway 빈 미생성 — Boot 4 autoconfig 모듈 분리 → spring-boot-flyway 추가) |
 | 2026-06-02 | T-017 (공유 인메모리 H2 DB_CLOSE_DELAY=-1가 순서 의존 버그(@Import(JpaConfig) 누락)를 가림 — Flyway 추가가 순서 바꿔 폭로, 단독 실행으로 진단) |
 | 2026-06-02 | T-018 (Spring Security 7(Boot 4)에서 AntPathRequestMatcher 제거 → PathPatternRequestMatcher 또는 요청 직접 판정) |
+| 2026-06-02 | T-019 (Boot 4에서 NoResourceFoundException이 ResponseStatusException 비-상속(ServletException+ErrorResponse)→ @ExceptionHandler가 안 잡혀 404가 500으로, jar로 상속 확인) |

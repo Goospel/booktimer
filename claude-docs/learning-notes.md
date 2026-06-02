@@ -31,6 +31,7 @@
 - [N-025. 로그인 지연의 범인은 보통 DB가 아니라 BCrypt × 작은 vCPU](#n-025-로그인-지연의-범인은-보통-db가-아니라-bcrypt--작은-vcpu)
 - [N-026. OAuth find-or-create의 함정(email_verified) + Spring Security가 막아주지 않는 것(brute-force)](#n-026-oauth-find-or-create의-함정email_verified--spring-security가-막아주지-않는-것brute-force)
 - [N-027. OAuth 동의 화면은 provider가 제공 / 개인정보처리방침은 앱 제작자 책임 — 게시(Production)와 검증](#n-027-oauth-동의-화면은-provider가-제공--개인정보처리방침은-앱-제작자-책임--게시production와-검증)
+- [N-028. catch-all 예외 핸들러는 프레임워크의 상태보유 예외(404 등)까지 삼킨다 — 상태코드 보존](#n-028-catch-all-예외-핸들러는-프레임워크의-상태보유-예외404-등까지-삼킨다--상태코드-보존)
 
 ---
 
@@ -1178,6 +1179,61 @@ Spring Security는 **CSRF**(기본 ON), **세션 고정 보호**(로그인 시 �
 
 ---
 
+## N-028. catch-all 예외 핸들러는 프레임워크의 상태보유 예외(404 등)까지 삼킨다 — 상태코드 보존
+
+**한 줄 요약**: `@ExceptionHandler(Exception.class)`로 "처리 안 된 예외는 다 500 + 친절한 에러 페이지"를 만들면, **프레임워크가 정상적으로 던지는 상태보유 예외**(없는 리소스 404 등)까지 함께 삼켜 500으로 둔갑시키고 에러 로그를 도배한다. 자기 상태코드를 들고 오는 예외는 **더 좁은 타입의 핸들러로 먼저 잡아 그 코드를 보존**해야 한다.
+
+### 자세한 설명
+
+전역 예외 핸들러의 의도는 "내가 미처 처리 못 한 *예기치 못한* 예외(예: NPE, `IllegalStateException`)를 흉한 whitelabel 대신 친절한 화면 + 500으로 바꾸자"였다. 그런데 `@ExceptionHandler(Exception.class)`는 글자 그대로 **모든 예외**를 잡는다 — 여기엔 프레임워크가 **정상 흐름으로** 던지는 것도 포함된다:
+
+- 없는 정적 리소스/매핑 안 된 경로 → `NoResourceFoundException`(원래 **404**)
+- 코드가 명시적으로 던진 `ResponseStatusException`(원하는 상태코드 내장)
+- 검증 실패(`HandlerMethodValidationException` 등, 보통 **400**)
+
+이것들이 catch-all에 잡히면 전부 **500**으로 바뀐다. 증상:
+- 브라우저가 매 페이지마다 자동 요청하는 `/favicon.ico`가 없으면 → **요청마다 500 + `log.error` 스택트레이스** → 운영 로그가 노이즈로 도배. 진짜 500을 찾기 어려워진다.
+- 클라이언트는 "없는 페이지"인데 서버 장애(500)로 오인하게 된다.
+
+**해결 — 상태보유 예외를 더 좁은 타입으로 먼저 잡는다**:
+```java
+// 자기 상태코드를 들고 오는 예외 → 그 코드 보존 (Exception 핸들러보다 우선)
+@ExceptionHandler({ResponseStatusException.class, NoResourceFoundException.class})
+public String handleStatusException(Exception ex, Model model, HttpServletResponse response) {
+    int status = ((ErrorResponse) ex).getStatusCode().value();  // 둘 다 ErrorResponse 구현
+    response.setStatus(status);
+    log.debug(...);            // 서버 결함 아님 → error 아닌 debug
+    return "error";
+}
+
+@ExceptionHandler(Exception.class)   // 진짜 예기치 못한 것만 500
+@ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+public String handleUnexpected(Exception ex, Model model) { log.error(...); ... }
+```
+- `@ExceptionHandler`는 **가장 구체적인 타입이 우선** 적용된다 → 404 예외는 위 핸들러가, 나머지는 catch-all이.
+- 로그 레벨도 분리: 상태보유(클라이언트 상황)는 `debug`, 진짜 예기치 못한 것만 `error`.
+- 함정: Boot 4(Spring 7)에서 `NoResourceFoundException`이 `ResponseStatusException` 하위가 아니게 바뀜 → 두 타입을 따로 잡고 공통 인터페이스 `ErrorResponse.getStatusCode()`로 코드를 읽어야 한다(T-019).
+
+### 일반화 포인트 (면접 답변용)
+
+- **"모든 예외를 잡는다"는 너무 넓다.** catch-all은 *내 코드의 버그*뿐 아니라 *프레임워크의 정상 신호(404/400)*까지 잡는다 → 의미 있는 상태코드를 500으로 뭉갠다. 예외 처리는 "예기치 못한 것"과 "이미 의미가 정해진 것"을 구분해야 한다.
+- **예외에 담긴 상태코드는 정보다 — 보존하라.** HTTP 의미(404=없음, 400=잘못된 요청, 500=서버 잘못)는 클라이언트·모니터링·검색엔진이 다르게 해석한다. 다 500으로 만들면 그 정보가 사라진다.
+- **로그 레벨 = 심각도.** 클라이언트가 없는 URL을 친 건 `error`가 아니다(서버는 멀쩡). 잘못된 레벨은 알림 피로와 진짜 사고 은폐를 부른다.
+- **핸들러 우선순위는 타입 구체성으로 정해진다** — 넓은 핸들러 옆에 좁은 핸들러를 두어 "예외(특수 케이스)의 예외"를 표현한다.
+
+### 코드 위치
+
+- `src/main/java/com/booktimer/web/GlobalExceptionHandler.java` — 상태보유 핸들러 + catch-all 분리
+- `src/test/java/com/booktimer/web/GlobalExceptionHandlerTest.java` — 없는 리소스가 404(500 아님)임을 검증
+- 관련: `troubleshooting.md` T-019 (Boot 4 상속 변경 함정)
+
+### 관련 노트
+
+- [N-011. Spring Security 폼 로그인](#) — 보안 예외는 필터 단계(`ExceptionTranslationFilter`)에서 처리돼 이 핸들러로 안 옴(영역 분리)
+- [N-019. DB 유니크 제약 — 방어선의 위치](#) — "어느 계층/타입이 무엇을 책임지나"의 같은 사고
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1206,3 +1262,4 @@ Spring Security는 **CSRF**(기본 ON), **세션 고정 보호**(로그인 시 �
 | 2026-06-02 | N-025 (로그인 지연 ≠ DB — 인덱스 단건 조회+BCrypt(CPU 집약), 작은 vCPU에서 증폭 / 해법은 강도↓ 아니라 CPU↑, 분리 측정으로 진단) |
 | 2026-06-02 | N-026 (OAuth find-or-create는 email_verified일 때만 안전(자동 연결 탈취 방어) / Spring Security는 brute-force 미방어 — 직접 IP 잠금, 이벤트+필터) |
 | 2026-06-02 | N-027 (OAuth 동의 화면 UI는 provider 제공 / 개인정보처리방침은 앱 제작자 책임 — non-sensitive 스코프는 검증 없이 즉시 게시, 게시 ≠ 검증) |
+| 2026-06-02 | N-028 (catch-all @ExceptionHandler(Exception)이 프레임워크의 상태보유 예외(404 등)까지 삼켜 500으로 둔갑 → 좁은 타입 핸들러로 상태코드 보존, 로그 레벨 분리) |
