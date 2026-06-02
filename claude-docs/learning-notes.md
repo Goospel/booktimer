@@ -27,6 +27,7 @@
 - [N-021. HTTPS는 앱이 아니라 앞단에서 끝낸다 — TLS termination (ALB/ACM)](#n-021-https는-앱이-아니라-앞단에서-끝낸다--tls-termination-albacm)
 - [N-022. 프록시 뒤의 앱은 X-Forwarded-*를 신뢰해야 한다 — forward-headers와 명시 빈](#n-022-프록시-뒤의-앱은-x-forwarded를-신뢰해야-한다--forward-headers와-명시-빈)
 - [N-023. ddl-auto=update의 한계 — 스키마 드리프트와 마이그레이션(Flyway)](#n-023-ddl-autoupdate의-한계--스키마-드리프트와-마이그레이션flyway)
+- [N-024. Spring Boot 4의 autoconfig 모듈 분리 + 기존 DB에 Flyway 도입(baseline)](#n-024-spring-boot-4의-autoconfig-모듈-분리--기존-db에-flyway-도입baseline)
 
 ---
 
@@ -1011,6 +1012,43 @@ TLS termination(N-021) 구조에서 앱이 받는 요청은 평문 http다. 그�
 
 ---
 
+## N-024. Spring Boot 4의 autoconfig 모듈 분리 + 기존 DB에 Flyway 도입(baseline)
+
+**한 줄 요약**: ① Spring Boot 4는 거대한 `spring-boot-autoconfigure`를 **기술별 모듈**(`spring-boot-jdbc`/`-jpa`/`-flyway`…)로 쪼갰다 — 라이브러리(`flyway-core`)만 추가하면 **클래스는 있지만 자동설정 빈이 안 생긴다**. 해당 `spring-boot-<tech>` 모듈(보통 스타터가 끌어옴)이 있어야 한다. ② **이미 운영 중인 DB에 Flyway를 도입**할 땐 `baseline-on-migrate=true`로 "현재 스키마=V1 적용됨"을 표시하고, V1은 신규 환경에서만 실제로 실행되게 한다.
+
+### 자세한 설명
+
+**(1) Boot 4 autoconfig 모듈화** — Boot 3까진 `spring-boot-autoconfigure` 한 덩어리가 모든 통합의 자동설정을 담았다. Boot 4는 이를 기술별로 분리했다. 그래서 `flyway-core`만 의존에 넣으면 `org.flywaydb.*` 클래스는 컴파일·런타임에 있지만 `FlywayAutoConfiguration`이 클래스패스에 없어 **`Flyway` 빈이 생성되지 않는다**(`NoSuchBeanDefinitionException`). 해결은 autoconfig 모듈 `org.springframework.boot:spring-boot-flyway` 추가(이게 `flyway-core`를 전이로 끌어온다). 같은 결의 함정을 webmvc·jdbc·jpa·test 슬라이스에서 이미 봤다(N-007/T-006) — **"라이브러리를 넣었다 ≠ 자동설정이 켜졌다"** 가 Boot 4의 일반 교훈.
+
+**(2) 기존 DB에 Flyway 도입(baseline)** — `ddl-auto=update`로 굴러온 운영 DB엔 `flyway_schema_history`가 없다. 그냥 Flyway를 켜면 비어있지 않은 스키마에 V1(create table…)을 실행하려다 충돌한다. 그래서:
+- `baseline-on-migrate=true` + `baseline-version=1`: 첫 기동 때 **비어있지 않은 스키마를 발견하면** history 테이블을 만들고 "V1까지 적용됨"으로 **마킹만** 한다(V1 실행 X). 이후 `V2+`만 적용.
+- **신규/빈 환경**(테스트 H2, 새 배포)에선 baseline이 트리거되지 않아 **V1부터 실제로 실행** → 스키마 생성.
+- 즉 **V1 = "현재 운영 스키마의 스냅샷"**. 그래서 V1 작성 기준을 추측하지 말고 Hibernate가 생성하는 DDL을 export해 맞췄다.
+- 이식성: enum 컬럼은 네이티브 `enum(...)` 대신 `varchar`로(@Enumerated(STRING) 의미 유지, MySQL·H2 공통 실행). 시각은 `datetime(6)`.
+
+**ddl-auto는 validate가 아니라 none으로** 내렸다: 기존 운영 스키마와 엔티티 매핑의 미세한 타입 차이로 `validate`가 기동을 막을 위험이 있어서. 드리프트 검증은 별도 테스트(`FlywayMigrationTest`)가 격리 H2에 V1을 적용한 뒤 `ddl-auto=validate`로 따로 한다.
+
+### 일반화 포인트 (면접 답변용)
+
+- **Boot 4에선 "스타터"를 쓰는 이유가 더 분명해졌다** — 스타터가 라이브러리 + 자동설정 모듈을 함께 끌어온다. 라이브러리만 직접 박으면 빈이 안 뜰 수 있다.
+- **Flyway는 마법이 아니다 — 기존 DB엔 baseline이 출입증.** V1은 "지금 스키마"를 그대로 그린 것이어야 신규 환경과 기존 환경이 같은 그림을 공유한다.
+- **cutover 위험 관리**: 첫 전환에서 `validate`는 기동 실패 위험이 있으니 `none` + 별도 검증 테스트로 안전하게.
+
+### 코드 위치
+
+- `build.gradle` — `spring-boot-flyway`(autoconfig) + `flyway-mysql`
+- `src/main/resources/db/migration/V1__init_schema.sql` — baseline 스키마
+- `src/main/resources/application.properties` — `baseline-on-migrate`/`baseline-version`
+- `src/test/java/com/booktimer/migration/FlywayMigrationTest.java` — 격리 H2에서 V1 적용 + validate 검증
+- 관련: T-016(빈 미생성), N-023(왜 Flyway인가)
+
+### 관련 노트
+
+- [N-023. ddl-auto=update의 한계](#n-023-ddl-autoupdate의-한계--스키마-드리프트와-마이그레이션flyway) — 이 도입의 동기
+- [N-007 / T-006](#) — 같은 Boot 4 "패키지/모듈 이동" 결의 함정
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1035,3 +1073,4 @@ TLS termination(N-021) 구조에서 앱이 받는 요청은 평문 http다. 그�
 | 2026-06-02 | N-021 (HTTPS는 앞단에서 TLS termination — ALB/ACM, 공개 구간만 암호화, 내부 HTTP 허용, X-Forwarded-Proto + forward-headers) |
 | 2026-06-02 | N-022 (프록시 뒤 앱은 X-Forwarded-* 신뢰 — forward-headers, Boot 4에선 ForwardedHeaderFilter 명시 빈, RANDOM_PORT로만 검증) |
 | 2026-06-02 | N-023 (ddl-auto=update 한계 — 기존 컬럼 제약 변경 안 함→스키마 드리프트, 근본은 Flyway 마이그레이션+기존 DB baseline) |
+| 2026-06-02 | N-024 (Boot 4 autoconfig 모듈 분리 — flyway-core만으론 빈 미생성→spring-boot-flyway / 기존 DB에 Flyway 도입은 baseline-on-migrate, V1=현재 스키마) |

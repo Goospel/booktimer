@@ -20,6 +20,8 @@
 - [T-013. `aws logs --max-items 1`이 페이지네이션 토큰 None을 변수에 섞어 "stream does not exist"](#t-013-aws-logs---max-items-1이-페이지네이션-토큰-none을-변수에-섞어-stream-does-not-exist)
 - [T-014. `forward-headers-strategy=framework`가 Boot 4에서 무동작 → OAuth redirect_uri가 http](#t-014-forward-headers-strategyframework가-boot-4에서-무동작--oauth-redirect_uri가-http)
 - [T-015. ddl-auto=update가 기존 컬럼 NOT NULL을 못 풀어 prod 500 / 사설 RDS 수동 ALTER도 막힘](#t-015-ddl-autoupdate가-기존-컬럼-not-null을-못-풀어-prod-500--사설-rds-수동-alter도-막힘)
+- [T-016. flyway-core만 추가하면 Flyway 빈이 안 생긴다 (Boot 4 autoconfig 모듈 분리)](#t-016-flyway-core만-추가하면-flyway-빈이-안-생긴다-boot-4-autoconfig-모듈-분리)
+- [T-017. 공유 인메모리 H2가 순서 의존 테스트 버그를 가린다 — 클래스패스 변경이 폭로](#t-017-공유-인메모리-h2가-순서-의존-테스트-버그를-가린다--클래스패스-변경이-폭로)
 
 ---
 
@@ -296,6 +298,36 @@ aws logs get-log-events --log-stream-name "$STREAM" ...
 
 ---
 
+## T-016. flyway-core만 추가하면 Flyway 빈이 안 생긴다 (Boot 4 autoconfig 모듈 분리)
+
+**증상**: `implementation 'org.flywaydb:flyway-core'` 추가 후 컴파일·런은 되는데, `@Autowired Flyway`가 `NoSuchBeanDefinitionException: No qualifying bean of type 'org.flywaydb.core.Flyway'`로 실패. 마이그레이션도 안 돈다.
+
+**원인**: Spring Boot 4는 `spring-boot-autoconfigure` 단일 모듈을 **기술별 모듈**로 분리했다(`spring-boot-jdbc`/`-jpa`/`-flyway`…). `flyway-core`는 **라이브러리**일 뿐이라 `FlywayAutoConfiguration`(= autoconfig 모듈)이 클래스패스에 없으면 빈이 안 만들어진다.
+
+**해결**:
+- `implementation 'org.springframework.boot:spring-boot-flyway'` 추가(이게 `flyway-core`를 전이로 끌어옴). MySQL 운영이면 `org.flywaydb:flyway-mysql`도 함께.
+- 일반 규칙: **Boot 4에선 "라이브러리 추가 ≠ 자동설정 켜짐"** — 가능하면 스타터/`spring-boot-<tech>` 모듈로 추가. (같은 결: T-006 패키지 이동, N-024.)
+
+**진단 팁**: `./gradlew dependencies`로 `spring-boot-<tech>` autoconfig 모듈이 클래스패스에 있는지 확인.
+
+---
+
+## T-017. 공유 인메모리 H2가 순서 의존 테스트 버그를 가린다 — 클래스패스 변경이 폭로
+
+**증상**: Flyway 의존성 추가(기능과 무관) 후 갑자기 `@DataJpaTest` 슬라이스 3종이 `NULL not allowed for column "CREATED_AT"` / 유니크 위반으로 실패. 전체 스위트에선 멀쩡했는데 **단독 실행하면 실패**.
+
+**원인**: 두 겹.
+- (근본) 슬라이스가 `@Import(JpaConfig.class)`(=`@EnableJpaAuditing`)를 빠뜨려 INSERT 시 `created_at`이 안 채워짐(NOT NULL 위반) — **T-007과 동일한 함정**. 원래부터 버그였다.
+- (가림막) 테스트 DB가 `jdbc:h2:mem:booktimer;DB_CLOSE_DELAY=-1` — **모든 컨텍스트가 공유하는, JVM 살아있는 동안 유지되는 인메모리 DB**. auditing이 켜진 다른 컨텍스트(@SpringBootTest)가 먼저 돌며 스키마·데이터를 만들어두면 슬라이스가 그 위에 얹혀 우연히 통과했다. **실행 순서에 의존**한 green이었다.
+- Flyway를 클래스패스에 올리자 `@DataJpaTest`의 데이터소스 처리/실행 순서가 바뀌며 가림막이 걷혀 진짜 버그가 드러난 것.
+
+**해결 / 예방**:
+- 슬라이스 3종(`UserRepositoryTest`/`ReadingTimerRepositoryTest`/`ReadingSessionRepositoryTest`)에 `@Import(JpaConfig.class)` 추가 → 단독·전체 모두 green.
+- **교훈**: "전체 스위트 green"은 격리를 보장하지 않는다. **의심되면 테스트를 단독 실행**해 순서 의존을 잡아라. 공유 인메모리 DB(`DB_CLOSE_DELAY=-1`)는 편하지만 이런 의존을 숨긴다.
+- 관련: T-007(슬라이스 auditing 미로드 원형), N-008(JPA Auditing), N-024(이번 클래스패스 변경의 맥락).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -313,3 +345,5 @@ aws logs get-log-events --log-stream-name "$STREAM" ...
 | 2026-06-01 | T-013 (aws logs --max-items 1이 None 페이지네이션 토큰을 변수에 섞어 stream not found) |
 | 2026-06-02 | T-014 (forward-headers-strategy=framework가 Boot 4 모듈 분리에서 무동작 → ForwardedHeaderFilter 명시 빈 등록, RANDOM_PORT로 검증) |
 | 2026-06-02 | T-015 (ddl-auto=update가 기존 NOT NULL 못 풀어 소셜 INSERT 500 / 사설 RDS NAT 없어 CloudShell 접속 막힘 → prod ApplicationRunner 멱등 ALTER, 근본 Flyway) |
+| 2026-06-02 | T-016 (flyway-core만으론 Flyway 빈 미생성 — Boot 4 autoconfig 모듈 분리 → spring-boot-flyway 추가) |
+| 2026-06-02 | T-017 (공유 인메모리 H2 DB_CLOSE_DELAY=-1가 순서 의존 버그(@Import(JpaConfig) 누락)를 가림 — Flyway 추가가 순서 바꿔 폭로, 단독 실행으로 진단) |
