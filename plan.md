@@ -72,6 +72,15 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 - [ ] **세션 쿠키 `SameSite=Lax` 명시** (현재 Secure/HttpOnly만 prod 설정)
 - [ ] (검토) 소셜 계정 탈퇴 시 재확인 단계, 가입 시 계정 열거 완화
 
+### Fargate CPU 상향 — 로그인(BCrypt) 지연 (우선순위: 중)
+- **증상**: 로그인이 체감상 느림.
+- **원인**: DB 아님(`findByEmail`은 유니크 인덱스 단건 조회 — 수 ms). 범인은 **BCrypt 비밀번호 검증**(의도적 CPU 집약) ×
+  **태스크 `cpu:256`=0.25 vCPU**(Fargate 최소). 1/4 코어 스로틀이라 BCrypt가 수백 ms~1s까지 늘어남. JVM JIT 워밍업도 가중.
+  실측: health·/login GET는 60~150ms 정상 → 차이는 로그인 POST의 BCrypt뿐.
+- **할 일**: `deploy/task-definition.json`의 `cpu`를 **512(0.5)~1024(1 vCPU)**로 상향(메모리도 비례). BCrypt 강도(10)는
+  **낮추지 말 것**(보안). DB는 손대지 않음. ※ Fargate는 vCPU·메모리 비례 과금 — 비용 소폭 증가.
+- 개념: learning-notes(로그인 지연 ≠ DB, BCrypt×작은 vCPU / CPU 집약 해시는 의도된 느림 — 해법은 강도↓가 아니라 CPU↑).
+
 ### 전역 예외 핸들러가 404를 500으로 삼킴 (우선순위: 중)
 - `GlobalExceptionHandler(@ExceptionHandler(Exception.class))`가 `NoResourceFoundException`(예: `/favicon.ico`)까지
   잡아 **500**으로 응답·로그 도배. 404로 통과시켜야 함.
@@ -90,3 +99,4 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 | 2026-06-02 | plan.md 신설 — HTTPS(ALB TLS termination) 항목 + 기존 로드맵 정리 |
 | 2026-06-02 | HTTPS·OAuth(구글) 완료 반영 + 기술부채(Flyway 도입/404 핸들러/Actions Node20) 추가 |
 | 2026-06-02 | Flyway 도입 완료 처리 + 회원 인증/계정 보안 하드닝 항목 추가(상세는 private 노트) |
+| 2026-06-02 | Fargate CPU 상향(로그인 BCrypt 지연) 항목 추가 |
