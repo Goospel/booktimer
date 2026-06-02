@@ -1,6 +1,8 @@
 package com.booktimer.web;
 
+import com.booktimer.session.ContributionGraph;
 import com.booktimer.session.DailyReadingRecord;
+import com.booktimer.session.ReadingContributionService;
 import com.booktimer.session.ReadingHistoryService;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -23,10 +25,14 @@ public class HistoryController {
 
     private final UserRepository userRepository;
     private final ReadingHistoryService historyService;
+    private final ReadingContributionService contributionService;
 
-    public HistoryController(UserRepository userRepository, ReadingHistoryService historyService) {
+    public HistoryController(UserRepository userRepository,
+                             ReadingHistoryService historyService,
+                             ReadingContributionService contributionService) {
         this.userRepository = userRepository;
         this.historyService = historyService;
+        this.contributionService = contributionService;
     }
 
     @GetMapping("/history")
@@ -35,8 +41,10 @@ public class HistoryController {
                 .orElseThrow(() -> new IllegalStateException("authenticated user not found: " + principal.getName()));
 
         List<DailyReadingRecord> records = historyService.dailyHistory(user);
+        ContributionGraph graph = contributionService.contributionGraph(user);
         model.addAttribute("nickname", user.getNickname());
         model.addAttribute("records", records);
+        model.addAttribute("graph", graph);
         return "history";
     }
 }
