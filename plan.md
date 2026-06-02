@@ -50,16 +50,19 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 
 ## 🧹 기술 부채 / 후속 정리
 
-### Flyway 마이그레이션 도입 (우선순위: 높음)
+### Flyway 마이그레이션 도입 (완료 ✅ 2026-06-02)
 - **왜**: `ddl-auto=update`는 기존 컬럼 제약(NOT NULL 등)을 못 바꿔 스키마 드리프트 발생 — 실제로 소셜 계정
   `password_hash` nullable 변경이 prod에 미반영돼 500 사고(T-015, N-023).
-- **지금**: `PasswordHashNullableSchemaFix`(prod 기동 시 멱등 ALTER)로 임시 봉합.
-- **할 일**:
-  - [ ] `flyway-core` + `flyway-mysql` 의존 추가
-  - [ ] 기존 운영 DB **baseline** (`baseline-on-migrate`, 현재 스키마를 v1로)
-  - [ ] `V2__make_password_hash_nullable.sql` 등 변경을 마이그레이션으로 이관
-  - [ ] `ddl-auto`를 `validate`(또는 none)로 전환
-  - [ ] **`PasswordHashNullableSchemaFix` 제거**
+- **한 일**:
+  - [x] `spring-boot-flyway`(autoconfig 모듈) + `flyway-mysql` 의존 추가 — Boot 4는 Flyway autoconfig가
+        별도 모듈(`flyway-core`만으론 빈 미생성, T-016/N-024)
+  - [x] `V1__init_schema.sql` baseline 작성 — enum→varchar로 MySQL·H2 공통 실행, 시각 datetime(6)
+  - [x] 기존 운영 DB **baseline** (`baseline-on-migrate=true`, `baseline-version=1` → 기존 DB는 V1 적용
+        표시만 하고 실행 X, 신규 환경만 V1 실행)
+  - [x] `ddl-auto`를 prod·test 모두 `none`으로 전환 (validate 대신 none — 크로스-다이얼렉트 validate
+        취약성 + 운영 기동 실패 위험 회피. 드리프트는 `FlywayMigrationTest`가 격리 H2에서 validate로 검증)
+  - [x] **`PasswordHashNullableSchemaFix` 제거** (V1이 nullable 보장)
+  - [x] (부수) @DataJpaTest 슬라이스 3종이 `@Import(JpaConfig.class)` 누락으로 순서 의존이던 것 수정(T-017)
 
 ### 전역 예외 핸들러가 404를 500으로 삼킴 (우선순위: 중)
 - `GlobalExceptionHandler(@ExceptionHandler(Exception.class))`가 `NoResourceFoundException`(예: `/favicon.ico`)까지
