@@ -55,7 +55,7 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
   Redis(인메모리, TTL 네이티브)가 유리. JDBC→Redis는 의존성·설정 교체로 비교적 단순. 지금은 비용(예산 $50)
   고려해 JDBC 유지, 전환은 트래픽 신호가 오면.
 
-### 무중단 배포 — ECS 롤링 deploymentConfiguration (적용 워크플로 완료 ✅ 2026-06-02)
+### 무중단 배포 — ECS 롤링 deploymentConfiguration (적용·검증 완료 ✅ 2026-06-02)
 
 - **증상**: 배포 시 홈페이지가 잠깐 먹통(503), 버튼 동작 반영 안 됨. 원인: 단일 태스크(`desiredCount=1`)가
   **죽고→새로 뜨는 공백** 동안 ALB에 healthy 타깃이 없음. (재로그인 문제는 위 세션 외부화로 **별도 해결**됨.)
@@ -66,7 +66,8 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
   - `deploymentCircuitBreaker{enable=true, rollback=true}` → 새 태스크 안정화 실패 시 **자동 롤백**.
   - 한 번 적용하면 영속(매 배포는 task def만 교체, deploymentConfiguration은 안 건드림 → 드리프트 없음).
   - **코드 변경 없음**(앱), OIDC 역할의 기존 `ecs:UpdateService` 권한으로 충분.
-- **검증**: 적용 후 한 번 배포하며 `/actuator/health`를 짧은 주기로 폴링해 200 끊김이 없는지 확인.
+- **검증 완료 ✅**: 워크플로로 설정 적용 후 실배포를 돌리며 `https://booktimer.click/actuator/health`를
+  1초 주기로 폴링 — 배포 도중·종료까지 **끊김 없이 200**(503 없음). 재로그인도 없음(#73과 결합).
 - **선택적 후속(미적용)**: 타깃그룹 `deregistration_delay`(기본 300s→60s)·헬스체크 간격(30s→15s) 단축은
   교체 *속도* 최적화일 뿐 다운타임 원인은 아님. `elasticloadbalancing:Modify*` 권한이 필요해
   현재 OIDC 역할로는 불가 — 적용 시 deploy-aws.md의 해당 절(IAM 권한 추가 + CloudShell 1회) 참고.
@@ -160,3 +161,4 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 | 2026-06-02 | GitHub Actions Node 24 갱신 완료(checkout@v6/setup-java@v5/configure-aws-credentials@v6) |
 | 2026-06-02 | 세션 외부화(Spring Session JDBC) 완료 — 재로그인 해결(N-029/T-020), 무중단 배포(ECS 롤링) 백로그 추가, 향후 Redis 전환 명시 |
 | 2026-06-02 | 무중단 배포 — ECS deploymentConfiguration(min=100/max=200 + circuit breaker rollback) 멱등 적용 워크플로 신설(N-030) |
+| 2026-06-02 | 무중단 배포 검증 완료 — 워크플로 적용 후 실배포 중 /actuator/health 폴링이 끊김 없이 200(503 없음) |
