@@ -26,6 +26,7 @@
 - [T-019. Boot 4에서 `NoResourceFoundException`이 `ResponseStatusException` 비-상속 → 핸들러가 안 잡힘](#t-019-boot-4에서-noresourcefoundexception이-responsestatusexception-비-상속--핸들러가-안-잡힘)
 - [T-020. Boot 4에서 raw `spring-session-jdbc`만으론 세션 외부화가 조용히 무동작 → 스타터 필요](#t-020-boot-4에서-raw-spring-session-jdbc만으론-세션-외부화가-조용히-무동작--스타터-필요)
 - [T-021. Spring Session 쿠키엔 `server.servlet.session.cookie.*`가 무동작 → 명시 CookieSerializer 빈](#t-021-spring-session-쿠키엔-serverservletsessioncookie가-무동작--명시-cookieserializer-빈)
+- [T-022. SSR(웹MVC) 앱엔 `ObjectMapper` 빈이 없어 주입 실패 → 자체 생성](#t-022-ssr웹mvc-앱엔-objectmapper-빈이-없어-주입-실패--자체-생성)
 
 ---
 
@@ -419,6 +420,27 @@ s.setUseSecureCookie(secure);   // Secure는 prod(HTTPS)만 — 로컬 http면 �
 
 ---
 
+## T-022. SSR(웹MVC) 앱엔 `ObjectMapper` 빈이 없어 주입 실패 → 자체 생성
+
+**증상**: 외부 API 응답 파싱용으로 컴포넌트 생성자에 `ObjectMapper`를 주입했더니, **모든 @SpringBootTest가 컨텍스트 로드 실패**한다:
+```
+Error creating bean 'aladinBookSearchClient' ... Unsatisfied dependency through constructor parameter 1:
+No qualifying bean of type 'com.fasterxml.jackson.databind.ObjectMapper' available
+```
+한 빈의 의존 하나 때문에 컨텍스트 전체가 못 떠 무관한 테스트까지 죄다 빨개진다(대량 실패 = 컨텍스트 로드 실패 신호).
+
+**원인**: `ObjectMapper` 빈은 **`JacksonAutoConfiguration`** 이 등록하는데, 그건 보통 REST/JSON 경로(`spring-boot-starter-web`의 JSON 메시지 컨버터)와 함께 활성화된다. 이 프로젝트는 **Thymeleaf SSR**이라 JSON 직렬화 경로가 없어 그 autoconfig가 `ObjectMapper` 빈을 만들지 않는다(jackson-databind 라이브러리는 클래스패스에 있어 `new ObjectMapper()`는 되지만 **빈은 없음**). N-024/T-016/T-020과 같은 "라이브러리는 있는데 빈이 없다" 부류.
+
+**진단(추측 금지)**: 대량 컨텍스트 로드 실패면 단위 테스트(컨텍스트 불필요)는 통과하는지 본다 — 통과하면 빈 와이어링 문제다. 결과 XML의 `Caused by ... No qualifying bean of type 'X'`가 범인.
+
+**해결**: 외부 빈에 의존하지 말고 **컴포넌트가 자체 인스턴스를 생성**한다(ObjectMapper는 스레드 안전·재사용 가능).
+```java
+private final ObjectMapper objectMapper = new ObjectMapper();  // 주입 대신 자체 보유
+```
+대안으로 `@Bean ObjectMapper objectMapper(){ return new ObjectMapper(); }`를 한 곳에 정의해도 된다. SSR 앱에서 JSON은 국소적이므로 자체 생성이 의존을 줄여 더 단순하다. 일반 교훈: **Boot에서 "당연히 있겠지" 싶은 빈도 SSR/모듈 구성에선 없을 수 있다 — 주입 전에 그 빈이 실제로 등록되는지 확인.**
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -442,3 +464,4 @@ s.setUseSecureCookie(secure);   // Secure는 prod(HTTPS)만 — 로컬 http면 �
 | 2026-06-02 | T-020 (Boot 4 raw spring-session-jdbc만으론 세션 외부화 조용히 무동작 — autoconfig 모듈 분리 → spring-boot-starter-session-jdbc, "다른 세션 테스트 안 깨짐"이 단서) |
 | 2026-06-02 | T-019 (Boot 4에서 NoResourceFoundException이 ResponseStatusException 비-상속(ServletException+ErrorResponse)→ @ExceptionHandler가 안 잡혀 404가 500으로, jar로 상속 확인) |
 | 2026-06-02 | T-021 (세션 외부화 후 SESSION 쿠키는 DefaultCookieSerializer가 써서 server.servlet.session.cookie.* 프로퍼티 무동작 → 명시 CookieSerializer 빈, Set-Cookie 직접 확인으로 진단, N-022 자매 함정) |
+| 2026-06-03 | T-022 (Thymeleaf SSR 앱엔 ObjectMapper 빈이 없어 주입 시 컨텍스트 전체 로드 실패 → 자체 new ObjectMapper(), 대량 실패=컨텍스트 로드 실패 신호, N-024/T-020 부류) |

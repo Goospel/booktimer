@@ -1,5 +1,9 @@
 package com.booktimer.web;
 
+import com.booktimer.book.Book;
+import com.booktimer.book.BookRepository;
+import com.booktimer.book.BookStatus;
+import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.session.ReadingSessionService;
 import com.booktimer.user.Role;
@@ -52,6 +56,9 @@ class ReadingSessionControllerTest {
 
     @Autowired
     private ReadingSessionRepository sessionRepository;
+
+    @Autowired
+    private BookRepository bookRepository;
 
     @Autowired
     private Clock clock;
@@ -112,6 +119,38 @@ class ReadingSessionControllerTest {
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/"))
                 .andExpect(flash().attributeExists("error"));
+    }
+
+    @Test
+    @DisplayName("POST /sessions/start: bookId를 주면 그 책이 세션에 연결된다")
+    void start_withBookId_attachesBook() throws Exception {
+        User user = register("withbook@booktimer.com");
+        Book book = bookRepository.save(
+                Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING));
+
+        mockMvc.perform(post("/sessions/start").param("bookId", String.valueOf(book.getId()))
+                        .with(user("withbook@booktimer.com")).with(csrf()))
+                .andExpect(redirectedUrl("/"));
+
+        ReadingSession active = sessionRepository.findByUserAndEndedAtIsNull(user).orElseThrow();
+        assertThat(active.getBook()).isNotNull();
+        assertThat(active.getBook().getId()).isEqualTo(book.getId());
+    }
+
+    @Test
+    @DisplayName("POST /sessions/start: 남의 책 bookId면 연결 없이 시작한다(IDOR 방지)")
+    void start_withOtherUsersBookId_startsWithoutBook() throws Exception {
+        User owner = register("bookowner@booktimer.com");
+        User attacker = register("bookattacker@booktimer.com");
+        Book othersBook = bookRepository.save(
+                Book.register(owner, "남의 책", null, null, null, null, null, BookStatus.READING));
+
+        mockMvc.perform(post("/sessions/start").param("bookId", String.valueOf(othersBook.getId()))
+                        .with(user("bookattacker@booktimer.com")).with(csrf()))
+                .andExpect(redirectedUrl("/"));
+
+        ReadingSession active = sessionRepository.findByUserAndEndedAtIsNull(attacker).orElseThrow();
+        assertThat(active.getBook()).isNull();
     }
 
     // --- htmx(무리로드) 경로: HX-Request 헤더가 있으면 redirect 대신 200 + 라이브 프래그먼트 ---

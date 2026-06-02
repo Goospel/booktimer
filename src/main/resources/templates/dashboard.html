@@ -51,6 +51,9 @@
                 <p class="status-line">측정 진행 중 · 시작
                     <span class="mono" th:text="${activeStartedAt}">-</span>
                 </p>
+                <p class="status-line" th:if="${activeBookTitle}">📖 읽는 중:
+                    <span th:text="${activeBookTitle}">책 제목</span>
+                </p>
                 <form th:action="@{/sessions/stop}" method="post"
                       hx-post="/sessions/stop" hx-target="#dashboard-live" hx-swap="outerHTML">
                     <button type="submit" class="btn-danger">측정 종료</button>
@@ -60,8 +63,17 @@
                 <p class="status-line">진행 중인 측정이 없습니다.</p>
                 <form th:action="@{/sessions/start}" method="post"
                       hx-post="/sessions/start" hx-target="#dashboard-live" hx-swap="outerHTML">
+                    <label class="book-pick" th:if="${books != null and !books.isEmpty()}">읽을 책
+                        <select name="bookId">
+                            <option value="">선택 안 함</option>
+                            <option th:each="b : ${books}" th:value="${b.id}" th:text="${b.title}">책</option>
+                        </select>
+                    </label>
                     <button type="submit" class="btn-primary">측정 시작</button>
                 </form>
+                <p class="status-line muted" th:if="${books == null or books.isEmpty()}">
+                    <a th:href="@{/books}">책장에 책을 추가</a>하면 측정할 책을 고를 수 있어요.
+                </p>
             </div>
         </section>
     </div>

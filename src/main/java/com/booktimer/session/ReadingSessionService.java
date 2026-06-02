@@ -1,5 +1,6 @@
 package com.booktimer.session;
 
+import com.booktimer.book.Book;
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.User;
@@ -37,10 +38,19 @@ public class ReadingSessionService {
      * @throws IllegalStateException 이미 진행 중인 세션이 있는 경우
      */
     public ReadingSession start(User user, Instant now) {
+        return start(user, now, null);
+    }
+
+    /**
+     * 특정 책을 대상으로 새 측정 세션을 시작한다(book이 null이면 미지정).
+     *
+     * @throws IllegalStateException 이미 진행 중인 세션이 있는 경우
+     */
+    public ReadingSession start(User user, Instant now, Book book) {
         sessionRepository.findByUserAndEndedAtIsNull(user).ifPresent(s -> {
             throw new IllegalStateException("an active session already exists");
         });
-        return sessionRepository.save(ReadingSession.start(user, now));
+        return sessionRepository.save(ReadingSession.start(user, now, book));
     }
 
     /**

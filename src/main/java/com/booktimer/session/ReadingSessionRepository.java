@@ -2,6 +2,8 @@ package com.booktimer.session;
 
 import com.booktimer.user.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -15,6 +17,10 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
 
     /** 진행 중(endedAt == null) 세션. 서비스의 중복 start 방지에 쓰인다. */
     Optional<ReadingSession> findByUserAndEndedAtIsNull(User user);
+
+    /** 진행 중 세션을 책과 함께 즉시 로딩 — 트랜잭션 밖(뷰)에서 책 제목 접근 시 lazy 예외 방지. */
+    @Query("select s from ReadingSession s left join fetch s.book where s.user = :user and s.endedAt is null")
+    Optional<ReadingSession> findActiveWithBook(@Param("user") User user);
 
     /** 회원 탈퇴 시 해당 유저의 모든 측정 기록을 제거한다. */
     void deleteByUser(User user);

@@ -1,5 +1,7 @@
 package com.booktimer.web;
 
+import com.booktimer.book.Book;
+import com.booktimer.book.BookRepository;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.timer.ReadingTimer;
@@ -22,22 +24,31 @@ public class DashboardModel {
 
     private final ReadingTimerService timerService;
     private final ReadingSessionRepository sessionRepository;
+    private final BookRepository bookRepository;
 
     public DashboardModel(ReadingTimerService timerService,
-                          ReadingSessionRepository sessionRepository) {
+                          ReadingSessionRepository sessionRepository,
+                          BookRepository bookRepository) {
         this.timerService = timerService;
         this.sessionRepository = sessionRepository;
+        this.bookRepository = bookRepository;
     }
 
-    /** 라이브 영역 렌더에 필요한 속성(nickname, remainingSeconds, hasActiveSession, activeStartedAt)을 채운다. */
+    /**
+     * 라이브 영역 렌더 속성을 채운다 — 타이머 상태(nickname, remainingSeconds, atCap), 측정 상태
+     * (hasActiveSession, activeStartedAt), 측정 중인 책(activeBookTitle), 시작 시 고를 책 목록(books).
+     */
     public void populate(Model model, User user) {
         ReadingTimer timer = timerService.accrueToToday(user);
-        Optional<ReadingSession> activeSession = sessionRepository.findByUserAndEndedAtIsNull(user);
+        Optional<ReadingSession> activeSession = sessionRepository.findActiveWithBook(user);
 
         model.addAttribute("nickname", user.getNickname());
         model.addAttribute("remainingSeconds", timer.getRemainingSeconds());
         model.addAttribute("atCap", timer.isAtCap());
         model.addAttribute("hasActiveSession", activeSession.isPresent());
         model.addAttribute("activeStartedAt", activeSession.map(ReadingSession::getStartedAt).orElse(null));
+        model.addAttribute("activeBookTitle", activeSession.map(ReadingSession::getBook)
+                .map(Book::getTitle).orElse(null));
+        model.addAttribute("books", bookRepository.findByUserOrderByCreatedAtDesc(user));
     }
 }

@@ -88,7 +88,11 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
   → `AladinBookSearchClient`, TTBKey=env) → "책장에 추가", 상태(읽고싶음/읽는중/완독)·삭제, 소유권 검사.
   키 없으면 수동 입력 폴백. 구매링크에 제휴 태그 토대(제휴 고지 푸터 포함). Flyway V3.
   ⏳ 외부: **알라딘 TTBKey 발급**(env `BOOKTIMER_ALADIN_TTB_KEY`) 후 검색 라이브 활성화.
-- **2단계 (다음)**: 세션↔책 연결 → 책별 누적 시간, 타이머 시작 시 책 선택, 책별 구매링크 노출.
+- **2단계 완료 ✅ 2026-06-03**: `ReadingSession`에 nullable `book` 연결(Flyway V4) + 타이머 시작 시 책 선택
+  (대시보드 드롭다운, "선택 안 함" 포함, 소유권 검사) + 책별 누적 시간 집계(`BookReadingStatsService`,
+  완료·책지정 세션 합) → `/books`에 책별 시간 표시. 측정 중 책은 대시보드에 노출.
+  ⚠️ 디버깅: SSR 앱엔 ObjectMapper 빈 없음(T-022)은 1단계에서 발생, 해결됨.
+- **3단계 (아이디어)**: 책 시작 시 상태 자동 전환(읽고싶음→읽는중), 책 상세 페이지(책별 잔디/세션 목록), 제휴 클릭 추적.
 - SNS 확장의 핵심 컨텐츠 토대
 
 ### OAuth 소셜 로그인
@@ -181,3 +185,4 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 | 2026-06-02 | 세션 쿠키 SameSite=Lax 완료(명시 CookieSerializer 빈) + prod Secure/HttpOnly 잠재 갭 동시 수정(T-021/N-031). 404→500 stale 항목 #72 완료로 정리 |
 | 2026-06-02 | 독서 잔디(컨트리뷰션 그래프) 완료 — /history에 1년치 히트맵(ContributionGraphBuilder 순수 빌더 + 서비스 + Thymeleaf/CSS), TDD |
 | 2026-06-02 | 책 단위 기록 1단계 완료 — /books 등록·목록(알라딘 검색 포트/어댑터 + 수동 폴백, 상태·삭제·소유권), Flyway V3, 제휴 토대. TDD |
+| 2026-06-03 | 책 단위 기록 2단계 완료 — 세션↔책 연결(Flyway V4)·타이머 시작 시 책 선택·책별 누적 시간 집계/표시. T-022 기록. TDD |
