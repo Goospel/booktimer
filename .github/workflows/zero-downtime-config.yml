@@ -1,0 +1,54 @@
+name: Ensure zero-downtime deploy config
+
+# 무중단 배포를 위한 ECS 서비스 설정을 멱등하게 적용한다.
+# - minimumHealthyPercent=100 / maximumPercent=200
+#     → 새 태스크가 ALB 헬스체크를 통과해야 옛 태스크를 종료. 교체 중 항상 healthy 태스크 1개 이상.
+# - deploymentCircuitBreaker{enable=true, rollback=true}
+#     → 새 태스크가 안정화에 실패하면 자동으로 직전 안정 리비전으로 롤백(나쁜 배포에도 무중단).
+#
+# 한 번 적용하면 설정이 서비스에 영속된다(매 배포 시 amazon-ecs-deploy-task-definition은
+# task definition만 갈아끼우고 deploymentConfiguration은 건드리지 않으므로 드리프트 없음).
+# 따라서 평소 배포 파이프라인(deploy.yml)과 분리된 수동 트리거(workflow_dispatch)로 둔다.
+#
+# 참고: TG deregistration_delay / 헬스체크 간격 튜닝은 elasticloadbalancing 권한이 필요해
+# 이 역할(githubActionsDeployRole)로는 불가하다 — claude-docs/deploy-aws.md의 선택적 후속 참고.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write     # OIDC 토큰 발급(역할 assume)
+      contents: read
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Show current deployment configuration (before)
+        run: |
+          aws ecs describe-services \
+            --cluster "${{ secrets.ECS_CLUSTER }}" \
+            --services "${{ secrets.ECS_SERVICE }}" \
+            --query 'services[0].{desired:desiredCount,running:runningCount,deploymentConfiguration:deploymentConfiguration,healthCheckGracePeriodSeconds:healthCheckGracePeriodSeconds}' \
+            --output json
+
+      - name: Apply zero-downtime deployment configuration
+        run: |
+          aws ecs update-service \
+            --cluster "${{ secrets.ECS_CLUSTER }}" \
+            --service "${{ secrets.ECS_SERVICE }}" \
+            --deployment-configuration "maximumPercent=200,minimumHealthyPercent=100,deploymentCircuitBreaker={enable=true,rollback=true}" \
+            --query 'service.deploymentConfiguration' \
+            --output json
+
+      - name: Show resulting deployment configuration (after)
+        run: |
+          aws ecs describe-services \
+            --cluster "${{ secrets.ECS_CLUSTER }}" \
+            --services "${{ secrets.ECS_SERVICE }}" \
+            --query 'services[0].deploymentConfiguration' \
+            --output json

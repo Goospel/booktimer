@@ -55,14 +55,21 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
   Redis(인메모리, TTL 네이티브)가 유리. JDBC→Redis는 의존성·설정 교체로 비교적 단순. 지금은 비용(예산 $50)
   고려해 JDBC 유지, 전환은 트래픽 신호가 오면.
 
-### (백로그) 무중단 배포 — ECS 롤링 (우선순위: 중)
+### 무중단 배포 — ECS 롤링 deploymentConfiguration (적용 워크플로 완료 ✅ 2026-06-02)
 
 - **증상**: 배포 시 홈페이지가 잠깐 먹통(503), 버튼 동작 반영 안 됨. 원인: 단일 태스크(`desiredCount=1`)가
   **죽고→새로 뜨는 공백** 동안 ALB에 healthy 타깃이 없음. (재로그인 문제는 위 세션 외부화로 **별도 해결**됨.)
-- **할 일**: ECS 서비스 배포 설정으로 **새 태스크 healthy 후 옛 태스크 드레인** —
-  `minimumHealthyPercent=100` + `maximumPercent=200`(desiredCount=1이어도 일시적으로 2개 띄움) 또는
-  `desiredCount≥2`. + 타깃그룹 **deregistration delay**(연결 드레이닝) 단축 확인. **코드 변경 없음**(ECS/ALB 설정).
-- 세션 외부화가 끝나 태스크 다중화의 전제는 충족됨 → 안전하게 적용 가능.
+- **한 일**: ECS 서비스 `deploymentConfiguration`을 멱등 적용하는 워크플로 신설
+  (`.github/workflows/zero-downtime-config.yml`, `workflow_dispatch`):
+  - `minimumHealthyPercent=100` + `maximumPercent=200` → desiredCount=1이어도 새 태스크를 **추가로** 띄워
+    ALB 헬스 통과 후에야 옛 태스크 드레인 → 교체 중 항상 healthy 태스크 ≥1.
+  - `deploymentCircuitBreaker{enable=true, rollback=true}` → 새 태스크 안정화 실패 시 **자동 롤백**.
+  - 한 번 적용하면 영속(매 배포는 task def만 교체, deploymentConfiguration은 안 건드림 → 드리프트 없음).
+  - **코드 변경 없음**(앱), OIDC 역할의 기존 `ecs:UpdateService` 권한으로 충분.
+- **검증**: 적용 후 한 번 배포하며 `/actuator/health`를 짧은 주기로 폴링해 200 끊김이 없는지 확인.
+- **선택적 후속(미적용)**: 타깃그룹 `deregistration_delay`(기본 300s→60s)·헬스체크 간격(30s→15s) 단축은
+  교체 *속도* 최적화일 뿐 다운타임 원인은 아님. `elasticloadbalancing:Modify*` 권한이 필요해
+  현재 OIDC 역할로는 불가 — 적용 시 deploy-aws.md의 해당 절(IAM 권한 추가 + CloudShell 1회) 참고.
 
 ---
 
@@ -152,3 +159,4 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 | 2026-06-02 | 보안 하드닝 #1 OAuth email_verified·#2 brute-force 완료 처리(N-026) |
 | 2026-06-02 | GitHub Actions Node 24 갱신 완료(checkout@v6/setup-java@v5/configure-aws-credentials@v6) |
 | 2026-06-02 | 세션 외부화(Spring Session JDBC) 완료 — 재로그인 해결(N-029/T-020), 무중단 배포(ECS 롤링) 백로그 추가, 향후 Redis 전환 명시 |
+| 2026-06-02 | 무중단 배포 — ECS deploymentConfiguration(min=100/max=200 + circuit breaker rollback) 멱등 적용 워크플로 신설(N-030) |

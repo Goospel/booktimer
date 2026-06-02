@@ -33,6 +33,7 @@
 - [N-027. OAuth 동의 화면은 provider가 제공 / 개인정보처리방침은 앱 제작자 책임 — 게시(Production)와 검증](#n-027-oauth-동의-화면은-provider가-제공--개인정보처리방침은-앱-제작자-책임--게시production와-검증)
 - [N-028. catch-all 예외 핸들러는 프레임워크의 상태보유 예외(404 등)까지 삼킨다 — 상태코드 보존](#n-028-catch-all-예외-핸들러는-프레임워크의-상태보유-예외404-등까지-삼킨다--상태코드-보존)
 - [N-029. 인메모리 세션은 인스턴스가 죽으면 사라진다 — 세션 외부화와 무상태 앱 서버](#n-029-인메모리-세션은-인스턴스가-죽으면-사라진다--세션-외부화와-무상태-앱-서버)
+- [N-030. 무중단 롤링 배포 — min/max healthy percent로 "헬스 통과 후 교체", circuit breaker 자동 롤백](#n-030-무중단-롤링-배포--minmax-healthy-percent로-헬스-통과-후-교체-circuit-breaker-자동-롤백)
 
 ---
 
@@ -1275,6 +1276,64 @@ public String handleUnexpected(Exception ex, Model model) { log.error(...); ... 
 
 ---
 
+## N-030. 무중단 롤링 배포 — min/max healthy percent로 "헬스 통과 후 교체", circuit breaker 자동 롤백
+
+### 한 줄 요약
+
+ECS 롤링 배포는 **새 태스크가 ALB 헬스체크를 통과한 뒤에야** 옛 태스크를 내리도록
+`minimumHealthyPercent=100`/`maximumPercent=200`을 주면 단일 태스크여도 무중단이 된다.
+`deploymentCircuitBreaker{rollback}`은 새 태스크가 안정화에 실패하면 자동으로 직전 리비전으로 되돌린다.
+
+### 자세한 설명
+
+**왜 배포 때 잠깐 먹통이었나.** 배포 = 컨테이너(태스크) 교체. 만약 "옛 태스크를 먼저 죽이고
+→ 새 태스크를 띄운다"면, 그 사이 ALB 타깃그룹에 healthy 타깃이 0개가 되는 **공백**이 생긴다
+(503). 단일 태스크(`desiredCount=1`)일수록 이 공백이 그대로 노출된다.
+
+**두 비율이 교체 순서를 결정한다.** ECS 롤링 배포는 desiredCount 대비 두 한도로 동작한다:
+
+- `minimumHealthyPercent` — 배포 중 **유지해야 할 최소 healthy 비율**. 100%면 옛 태스크를
+  "새 태스크가 healthy 되기 전엔" 못 내린다 → 공백 0.
+- `maximumPercent` — 일시적으로 띄울 수 있는 **최대 비율**. 200%면 desiredCount=1이어도
+  잠깐 2개(옛+새)까지 허용 → 새 태스크를 *추가로* 띄울 여유가 생긴다.
+
+즉 `min=100 / max=200` 조합이 "**먼저 띄우고(scale up) → 새 태스크 헬스 통과 → 옛 태스크 드레인 후 종료**"
+순서를 강제한다(= start-then-stop). 둘 중 하나라도 빠지면(`max=100`이면 추가로 못 띄우고,
+`min=0`이면 먼저 죽여도 되고) stop-then-start 공백이 생길 수 있다.
+
+**"헬스 통과"의 의미.** 새 태스크가 RUNNING이라고 트래픽을 받는 게 아니다. ALB 타깃그룹
+헬스체크(`/actuator/health`)를 연속 통과(healthy threshold)해야 타깃이 healthy로 등록되고,
+그때 ECS가 옛 태스크 드레인을 시작한다. 그래서 grace period(앱 부팅 유예)와 헬스체크 간격이
+*교체 속도*를 좌우한다(N-016과 연결).
+
+**deregistration delay(연결 드레이닝)는 다운타임 원인이 아니다.** 옛 태스크를 내릴 때 진행 중
+요청을 마저 처리하라고 기다리는 시간(기본 300s). 길면 배포가 *느릴* 뿐, 그동안 새 태스크가
+이미 트래픽을 받으므로 가용성엔 영향 없다. 흔한 오해 — 단축은 속도 최적화이지 무중단 자체와 무관.
+
+**circuit breaker — 나쁜 배포 방어.** 새 태스크가 계속 헬스체크에 실패하면(잘못된 이미지/설정),
+`rollback=true`면 ECS가 자동으로 직전 안정 리비전으로 되돌린다. min=100과 합쳐지면 "옛 태스크는
+살아있고 새 태스크만 실패 → 자동 롤백" → 실패한 배포도 무중단.
+
+**전제: 세션 외부화(N-029).** 교체 중 2개 태스크가 동시에 트래픽을 받으므로 세션이 인메모리면
+요청이 튄다. 무중단 배포는 무상태 앱 서버를 전제로 한다 — 그래서 세션 외부화를 먼저 했다.
+
+**적용은 코드가 아니라 인프라 설정.** 앱 코드 0줄. `aws ecs update-service --deployment-configuration ...`
+한 번이면 서비스에 영속된다(평소 배포는 task definition만 교체, 이 설정은 안 건드림 → 드리프트 없음).
+
+### 코드 위치
+
+- `.github/workflows/zero-downtime-config.yml` — deploymentConfiguration을 멱등 적용(workflow_dispatch)
+- `claude-docs/deploy-aws.md` §12-1 — update-service 명령 + 선택적 TG 드레이닝/헬스체크 단축(권한 주의)
+- 관련: `plan.md`(무중단 배포 항목)
+
+### 관련 노트
+
+- [N-029. 인메모리 세션 → 세션 외부화](#) — 무중단 배포의 전제(교체 중 다중 태스크가 세션 공유)
+- [N-016. ECS 헬스체크와 콜드스타트 — grace period](#) — "헬스 통과 후 교체"에서 헬스의 정의
+- [N-015. OIDC + ECS 롤링 배포](#) — 같은 롤링 파이프라인, 여기에 배포 설정을 더한 것
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1305,3 +1364,4 @@ public String handleUnexpected(Exception ex, Model model) { log.error(...); ... 
 | 2026-06-02 | N-027 (OAuth 동의 화면 UI는 provider 제공 / 개인정보처리방침은 앱 제작자 책임 — non-sensitive 스코프는 검증 없이 즉시 게시, 게시 ≠ 검증) |
 | 2026-06-02 | N-028 (catch-all @ExceptionHandler(Exception)이 프레임워크의 상태보유 예외(404 등)까지 삼켜 500으로 둔갑 → 좁은 타입 핸들러로 상태코드 보존, 로그 레벨 분리) |
 | 2026-06-02 | N-029 (인메모리 HttpSession은 인스턴스 교체 시 소멸→재로그인 / 세션 외부화(JDBC·Redis)로 무상태 앱 서버, 무중단·수평확장의 전제, 세션 vs 토큰, 재로그인≠데이터손실) |
+| 2026-06-02 | N-030 (무중단 롤링 배포 — min=100/max=200으로 "헬스 통과 후 교체"(start-then-stop), circuit breaker 자동 롤백, deregistration delay는 속도일 뿐 다운타임 원인 아님, 세션 외부화가 전제, 적용은 인프라 설정) |
