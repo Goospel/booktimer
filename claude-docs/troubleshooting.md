@@ -24,6 +24,7 @@
 - [T-017. 공유 인메모리 H2가 순서 의존 테스트 버그를 가린다 — 클래스패스 변경이 폭로](#t-017-공유-인메모리-h2가-순서-의존-테스트-버그를-가린다--클래스패스-변경이-폭로)
 - [T-018. Spring Security 7(Boot 4)에서 `AntPathRequestMatcher` 제거됨](#t-018-spring-security-7boot-4에서-antpathrequestmatcher-제거됨)
 - [T-019. Boot 4에서 `NoResourceFoundException`이 `ResponseStatusException` 비-상속 → 핸들러가 안 잡힘](#t-019-boot-4에서-noresourcefoundexception이-responsestatusexception-비-상속--핸들러가-안-잡힘)
+- [T-020. Boot 4에서 raw `spring-session-jdbc`만으론 세션 외부화가 조용히 무동작 → 스타터 필요](#t-020-boot-4에서-raw-spring-session-jdbc만으론-세션-외부화가-조용히-무동작--스타터-필요)
 
 ---
 
@@ -372,6 +373,27 @@ javap -p /tmp/x/org/.../NoResourceFoundException.class | head -2
 
 ---
 
+## T-020. Boot 4에서 raw `spring-session-jdbc`만으론 세션 외부화가 조용히 무동작 → 스타터 필요
+
+**증상**: 세션 외부화하려고 `implementation 'org.springframework.session:spring-session-jdbc'`를 추가했는데, **에러 없이** 세션이 여전히 JVM 메모리에 저장된다. `SPRING_SESSION` 테이블에 행이 안 생기고(직접 조회하면 "table not found"), 다른 세션 사용 테스트는 멀쩡히 통과(=세션 저장소가 안 바뀜). **컴파일·기동 다 성공**해서 "되는 줄" 착각하기 쉽다.
+
+**원인**: Boot 4는 autoconfigure를 기술별 모듈로 쪼갰다(같은 뿌리: T-016 Flyway). **raw 라이브러리 `spring-session-jdbc`엔 Boot autoconfig가 없다** → `JdbcIndexedSessionRepository`·스키마 초기화 빈이 안 생기고, Spring Session은 비활성인 채 기본 인메모리 `HttpSession`이 계속 쓰인다. 빈이 "없는" 것뿐이라 **예외도 안 난다**(조용한 무동작).
+
+**진단(추측 금지)**: BOM에서 실제 모듈/스타터 이름을 확인.
+```bash
+bom=$(find ~/.gradle/caches -path "*spring-boot-dependencies/4.0*" -name "*.pom" | head -1)
+grep -ioE "spring-boot[a-z0-9-]*session[a-z0-9-]*" "$bom" | sort -u
+# → spring-boot-session, spring-boot-session-jdbc, spring-boot-starter-session-jdbc, ...
+```
+또 "다른 세션 테스트가 안 깨진다"가 단서 — 진짜로 JDBC였다면 테이블 없이 세션 저장 시 INSERT 실패가 났을 것. 안 깨졌다는 건 **여전히 인메모리**라는 뜻.
+
+**해결**:
+- raw 라이브러리 대신 **스타터**를 쓴다 — `org.springframework.boot:spring-boot-starter-session-jdbc`(라이브러리 + `spring-boot-session-jdbc` autoconfig 동봉). 테스트엔 `spring-boot-starter-session-jdbc-test`.
+- 스키마는 운영=Flyway(V2), 테스트 H2=`initialize-schema=embedded` 기본 자동. Flyway가 만드는 곳은 `initialize-schema=never`로 두어 CREATE 충돌 방지(FlywayMigrationTest 포함).
+- 일반 규칙: **Boot 4에서 "라이브러리만 추가했는데 기능이 조용히 안 켜진다"면 autoconfig 모듈/스타터 분리를 의심**(T-016과 동일). raw 라이브러리 좌표가 아니라 `spring-boot-starter-*`를 쓴다. 개념 N-029.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -392,4 +414,5 @@ javap -p /tmp/x/org/.../NoResourceFoundException.class | head -2
 | 2026-06-02 | T-016 (flyway-core만으론 Flyway 빈 미생성 — Boot 4 autoconfig 모듈 분리 → spring-boot-flyway 추가) |
 | 2026-06-02 | T-017 (공유 인메모리 H2 DB_CLOSE_DELAY=-1가 순서 의존 버그(@Import(JpaConfig) 누락)를 가림 — Flyway 추가가 순서 바꿔 폭로, 단독 실행으로 진단) |
 | 2026-06-02 | T-018 (Spring Security 7(Boot 4)에서 AntPathRequestMatcher 제거 → PathPatternRequestMatcher 또는 요청 직접 판정) |
+| 2026-06-02 | T-020 (Boot 4 raw spring-session-jdbc만으론 세션 외부화 조용히 무동작 — autoconfig 모듈 분리 → spring-boot-starter-session-jdbc, "다른 세션 테스트 안 깨짐"이 단서) |
 | 2026-06-02 | T-019 (Boot 4에서 NoResourceFoundException이 ResponseStatusException 비-상속(ServletException+ErrorResponse)→ @ExceptionHandler가 안 잡혀 404가 500으로, jar로 상속 확인) |

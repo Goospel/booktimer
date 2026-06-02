@@ -32,6 +32,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         // V1 스키마가 엔티티 매핑과 어긋나면(드리프트) 컨텍스트 로딩이 실패하도록 한다.
         "spring.flyway.enabled=true",
         "spring.jpa.hibernate.ddl-auto=validate",
+        // Flyway(V2)가 세션 테이블을 만드므로 Spring Session 자동 초기화는 꺼서 CREATE 충돌을 막는다.
+        "spring.session.jdbc.initialize-schema=never",
         "spring.datasource.url=jdbc:h2:mem:flyway_migration_test;MODE=MySQL;DB_CLOSE_DELAY=-1"
 })
 class FlywayMigrationTest {

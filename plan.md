@@ -37,6 +37,33 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 - Budgets는 비용 데이터 하루 ~3회 갱신 → 알림은 실시간 아님(몇 시간~하루).
 - 임계치 기준은 **% (예산 대비)** — 콘솔 한글 라벨 "경우를 기준으로 설정됨"이 곧 % 기준(헷갈림 주의).
 
+### 세션 외부화 — Spring Session JDBC (완료 ✅ 2026-06-02)
+
+**왜**: 배포(태스크 교체) 때마다 **재로그인** 발생. 원인은 세션이 **JVM 메모리**(기본 `HttpSession`)에
+저장돼 태스크가 죽으면 통째로 사라지기 때문. 게다가 태스크를 2개 이상으로 늘리면(무중단·스케일아웃)
+요청이 분산돼 *평소에도* 세션이 오락가락 → 세션 외부화는 무중단/스케일의 **전제**다.
+
+**한 일**: 세션을 RDS(MySQL)에 저장 — `spring-boot-starter-session-jdbc`(Boot 4는 autoconfig가 별도
+모듈이라 raw `spring-session-jdbc`만으론 빈 미생성, N-024 패턴) + Flyway **V2**로 `SPRING_SESSION`·
+`SPRING_SESSION_ATTRIBUTES` 생성. 운영은 `spring.session.jdbc.initialize-schema=none(never)`로 Flyway가
+스키마 단일 소스, 테스트 H2는 embedded 자동 초기화. 개념 **N-029**, 함정 **T-020**.
+
+- **새 인프라·추가 비용 0** (기존 RDS 재사용). 이 규모엔 성능 충분.
+- ⚠️ **이 배포 직후 1회는 전원 재로그인** — 세션 쿠키 이름이 `JSESSIONID`→`SESSION`으로 바뀌고 기존
+  인메모리 세션은 어차피 소멸. 이후부터는 배포에도 로그인 유지.
+- **(향후) Spring Session + Redis(ElastiCache)로 전환** — 트래픽/세션 쓰기가 늘면 DB 부하·지연 측면에서
+  Redis(인메모리, TTL 네이티브)가 유리. JDBC→Redis는 의존성·설정 교체로 비교적 단순. 지금은 비용(예산 $50)
+  고려해 JDBC 유지, 전환은 트래픽 신호가 오면.
+
+### (백로그) 무중단 배포 — ECS 롤링 (우선순위: 중)
+
+- **증상**: 배포 시 홈페이지가 잠깐 먹통(503), 버튼 동작 반영 안 됨. 원인: 단일 태스크(`desiredCount=1`)가
+  **죽고→새로 뜨는 공백** 동안 ALB에 healthy 타깃이 없음. (재로그인 문제는 위 세션 외부화로 **별도 해결**됨.)
+- **할 일**: ECS 서비스 배포 설정으로 **새 태스크 healthy 후 옛 태스크 드레인** —
+  `minimumHealthyPercent=100` + `maximumPercent=200`(desiredCount=1이어도 일시적으로 2개 띄움) 또는
+  `desiredCount≥2`. + 타깃그룹 **deregistration delay**(연결 드레이닝) 단축 확인. **코드 변경 없음**(ECS/ALB 설정).
+- 세션 외부화가 끝나 태스크 다중화의 전제는 충족됨 → 안전하게 적용 가능.
+
 ---
 
 ## 📖 기능 로드맵
@@ -124,3 +151,4 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 | 2026-06-02 | Fargate CPU 상향(로그인 BCrypt 지연) 항목 추가 |
 | 2026-06-02 | 보안 하드닝 #1 OAuth email_verified·#2 brute-force 완료 처리(N-026) |
 | 2026-06-02 | GitHub Actions Node 24 갱신 완료(checkout@v6/setup-java@v5/configure-aws-credentials@v6) |
+| 2026-06-02 | 세션 외부화(Spring Session JDBC) 완료 — 재로그인 해결(N-029/T-020), 무중단 배포(ECS 롤링) 백로그 추가, 향후 Redis 전환 명시 |
