@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>독서 기록 — BookTimer</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <span class="emoji">📚</span>
+        <h1>BookTimer</h1>
+    </header>
+    <p class="greeting"><span th:text="${nickname}">닉네임</span>님의 독서 기록</p>
+
+    <!-- 기록 없음 -->
+    <section class="card" th:if="${records.isEmpty()}">
+        <p class="status-line">아직 독서 기록이 없습니다. 측정을 시작해 보세요.</p>
+    </section>
+
+    <!-- 일자별 기록 (최신순) -->
+    <section class="card" th:unless="${records.isEmpty()}">
+        <h2>일자별 독서 시간</h2>
+        <ul class="record-list">
+            <li class="record-row" th:each="r : ${records}">
+                <span class="record-date" th:text="${#temporals.format(r.date(), 'yyyy-MM-dd (E)')}">2026-06-01</span>
+                <span class="record-time mono"
+                      th:text="${(r.totalSeconds() / 3600) + '시간 ' + ((r.totalSeconds() % 3600) / 60) + '분'}">0시간 0분</span>
+                <span class="record-count" th:text="${r.sessionCount() + '회'}">0회</span>
+            </li>
+        </ul>
+    </section>
+
+    <p class="link-row"><a th:href="@{/}">← 대시보드로</a></p>
+</div>
+</body>
+</html>
