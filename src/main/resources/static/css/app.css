@@ -335,3 +335,58 @@ button, .btn {
     color: var(--muted);
 }
 .grass-legend i { display: inline-block; }
+
+/* === 내 책장 (Book) === */
+.muted { color: var(--muted); }
+
+.book-search-form, .book-manual-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.book-search-form input[type=text],
+.book-manual-form input[type=text] {
+    flex: 1 1 160px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: .95rem;
+}
+.book-search-form select, .book-manual-form select,
+.book-add-form select, .book-actions select {
+    padding: 7px 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+}
+
+.book-list { list-style: none; padding: 0; margin: 8px 0 0; }
+.book-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+}
+.book-row:last-child { border-bottom: none; }
+.book-cover {
+    width: 44px;
+    height: 64px;
+    object-fit: cover;
+    border-radius: 4px;
+    flex-shrink: 0;
+    background: var(--border);
+}
+.book-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.book-title { font-weight: 600; color: var(--text); }
+.book-author, .book-pub { font-size: .85rem; color: var(--muted); }
+.book-status-badge {
+    align-self: flex-start;
+    margin-top: 2px;
+    font-size: .75rem;
+    color: var(--accent);
+    background: #eef2ff;
+    padding: 1px 8px;
+    border-radius: 999px;
+}
+.book-add-form, .book-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.book-actions .btn-ghost, .book-actions .btn-danger { padding: 6px 10px; font-size: .85rem; }
+.book-actions a.btn-ghost { text-decoration: none; display: inline-flex; align-items: center; }
+
+.affiliate-note { font-size: .8rem; color: var(--muted); text-align: center; margin: 16px 0 4px; }
