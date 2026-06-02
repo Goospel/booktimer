@@ -339,6 +339,50 @@ curl -s http://$ALB_DNS/actuator/health      # {"status":"UP"} 기대
 
 ---
 
+## 12-1. 무중단 배포 설정 (deploymentConfiguration)
+
+`create-service`에서 `--deployment-configuration`을 생략하면 새 태스크가 healthy 되기 전에
+옛 태스크가 사라지는 공백(503)이 생길 수 있고, **circuit breaker(실패 시 자동 롤백)도 꺼져 있다**.
+아래 설정을 적용하면 desiredCount=1이어도 무중단으로 롤링된다.
+
+```bash
+aws ecs update-service \
+  --cluster $APP-cluster --service $APP-service \
+  --deployment-configuration "maximumPercent=200,minimumHealthyPercent=100,deploymentCircuitBreaker={enable=true,rollback=true}" \
+  --region $AWS_REGION
+```
+
+- `min=100/max=200` → 새 태스크를 **추가로** 띄워 ALB 헬스 통과 후에야 옛 태스크 드레인 → 항상 healthy ≥1.
+- `circuitBreaker{enable,rollback}` → 새 태스크 안정화 실패 시 직전 안정 리비전으로 **자동 롤백**.
+- 한 번 적용하면 영속된다(평소 배포는 task definition만 교체, 이 설정은 안 건드림 → 드리프트 없음).
+
+> CI로 멱등 적용: `.github/workflows/zero-downtime-config.yml`(workflow_dispatch)이 위 명령을 수행한다.
+> OIDC 역할의 기존 `ecs:UpdateService` 권한으로 충분 — 추가 IAM 불필요.
+
+### (선택) 타깃그룹 드레이닝·헬스체크 단축 — 교체 *속도* 최적화
+
+다운타임 원인은 아니지만 배포 체감 속도를 줄인다. **`elasticloadbalancing` 권한이 필요**하므로
+GitHub OIDC 역할(`githubActionsDeployRole`)엔 없다 — 적용하려면 먼저 권한을 추가하거나 CloudShell에서 1회 수행.
+
+```bash
+TG_ARN=$(aws ecs describe-services --cluster $APP-cluster --services $APP-service \
+  --query 'services[0].loadBalancers[0].targetGroupArn' --output text --region $AWS_REGION)
+
+# 연결 드레이닝 300s → 60s
+aws elbv2 modify-target-group-attributes --target-group-arn $TG_ARN \
+  --attributes Key=deregistration_delay.timeout_seconds,Value=60 --region $AWS_REGION
+
+# 헬스체크 간격 30s → 15s (새 태스크가 더 빨리 트래픽 수신)
+aws elbv2 modify-target-group --target-group-arn $TG_ARN \
+  --health-check-interval-seconds 15 --healthy-threshold-count 2 --region $AWS_REGION
+```
+
+CI 역할로 위를 자동화하려면 `githubActionsDeployRole` 정책에 추가:
+`elasticloadbalancing:DescribeTargetGroups`, `elasticloadbalancing:ModifyTargetGroup`,
+`elasticloadbalancing:ModifyTargetGroupAttributes` (Resource는 해당 TG ARN 권장).
+
+---
+
 ## Phase 2에서 쓸 GitHub Secrets (미리 메모)
 
 CI/CD 워크플로(다음 단계)에서 저장소 Settings → Secrets에 등록할 값:
