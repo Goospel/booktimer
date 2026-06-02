@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -14,6 +15,7 @@ import java.time.ZoneOffset;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -52,7 +54,7 @@ class OAuthUserProvisioningServiceTest {
         User existing = User.ofOAuth("g@booktimer.com", "구글러", "Asia/Seoul", Role.USER, AuthProvider.GOOGLE);
         when(userRepository.findByEmail("g@booktimer.com")).thenReturn(Optional.of(existing));
 
-        User result = service.provision("g@booktimer.com", "구글러");
+        User result = service.provision("g@booktimer.com", "구글러", true);
 
         assertThat(result).isSameAs(existing);
         verify(registrationService, never()).registerOAuth(any(), any(), any(), any(), any());
@@ -67,7 +69,7 @@ class OAuthUserProvisioningServiceTest {
                 eq("Asia/Seoul"), eq(AuthProvider.GOOGLE), eq(LocalDate.of(2026, 6, 2))))
                 .thenReturn(created);
 
-        User result = service.provision("new@booktimer.com", "새사람");
+        User result = service.provision("new@booktimer.com", "새사람", true);
 
         assertThat(result).isSameAs(created);
         verify(registrationService).registerOAuth("new@booktimer.com", "새사람",
@@ -82,10 +84,31 @@ class OAuthUserProvisioningServiceTest {
                 .thenAnswer(inv -> User.ofOAuth(inv.getArgument(0), inv.getArgument(1),
                         inv.getArgument(2), Role.USER, inv.getArgument(3)));
 
-        User result = service.provision("noname@booktimer.com", "  ");
+        User result = service.provision("noname@booktimer.com", "  ", true);
 
         assertThat(result.getNickname()).isEqualTo("noname");
         verify(registrationService).registerOAuth(eq("noname@booktimer.com"), eq("noname"),
                 eq("Asia/Seoul"), eq(AuthProvider.GOOGLE), any());
+    }
+
+    @Test
+    @DisplayName("provision: 이메일 미검증(email_verified=false)이면 거부하고 아무 사용자도 만들지/조회하지 않는다")
+    void provision_unverifiedEmail_rejected() {
+        assertThatThrownBy(() -> service.provision("attacker@booktimer.com", "공격자", false))
+                .isInstanceOf(OAuth2AuthenticationException.class);
+
+        // 자동 계정 연결(find-or-create) 자체에 도달하지 않아야 한다 — 조회/생성 모두 없음.
+        verify(userRepository, never()).findByEmail(any());
+        verify(registrationService, never()).registerOAuth(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("provision: email_verified 클레임이 없으면(null) 검증 안 된 것으로 보고 거부한다")
+    void provision_nullVerified_rejected() {
+        assertThatThrownBy(() -> service.provision("attacker@booktimer.com", "공격자", null))
+                .isInstanceOf(OAuth2AuthenticationException.class);
+
+        verify(userRepository, never()).findByEmail(any());
+        verify(registrationService, never()).registerOAuth(any(), any(), any(), any(), any());
     }
 }

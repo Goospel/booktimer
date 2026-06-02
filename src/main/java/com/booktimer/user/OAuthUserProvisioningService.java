@@ -1,5 +1,6 @@
 package com.booktimer.user;
 
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,12 +40,22 @@ public class OAuthUserProvisioningService {
     /**
      * 이메일로 사용자를 찾고, 없으면 GOOGLE 소셜 사용자로 새로 만든다.
      *
-     * @param email       provider가 보증한 이메일(식별자)
-     * @param displayName provider가 준 표시 이름(비면 이메일 local part를 닉네임으로)
+     * <p><b>보안 전제 — 검증된 이메일만 신뢰</b>: find-or-create는 이메일을 신원으로 삼아 자동 계정
+     * 연결을 한다. 따라서 provider가 그 이메일 소유를 보증({@code email_verified == true})했을 때만
+     * 허용한다. 미검증 이메일을 주장하는 소셜 계정으로 동일 이메일의 기존 계정을 탈취하는 벡터를 막는다.
+     * 클레임이 없으면(null) 검증 안 된 것으로 간주해 거부한다. (보안 점검 N-026)
+     *
+     * @param email         provider가 보증한 이메일(식별자)
+     * @param displayName   provider가 준 표시 이름(비면 이메일 local part를 닉네임으로)
+     * @param emailVerified provider의 {@code email_verified} 클레임(true가 아니면 거부)
      * @return 기존 또는 새로 만든 사용자
+     * @throws OAuth2AuthenticationException 이메일이 검증되지 않았을 때(자동 연결/생성 전에 차단)
      */
     @Transactional
-    public User provision(String email, String displayName) {
+    public User provision(String email, String displayName, Boolean emailVerified) {
+        if (emailVerified == null || !emailVerified) {
+            throw new OAuth2AuthenticationException("email_not_verified");
+        }
         return userRepository.findByEmail(email).orElseGet(() -> {
             String nickname = (displayName == null || displayName.isBlank())
                     ? emailLocalPart(email)

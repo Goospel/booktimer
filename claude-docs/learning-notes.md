@@ -29,6 +29,7 @@
 - [N-023. ddl-auto=update의 한계 — 스키마 드리프트와 마이그레이션(Flyway)](#n-023-ddl-autoupdate의-한계--스키마-드리프트와-마이그레이션flyway)
 - [N-024. Spring Boot 4의 autoconfig 모듈 분리 + 기존 DB에 Flyway 도입(baseline)](#n-024-spring-boot-4의-autoconfig-모듈-분리--기존-db에-flyway-도입baseline)
 - [N-025. 로그인 지연의 범인은 보통 DB가 아니라 BCrypt × 작은 vCPU](#n-025-로그인-지연의-범인은-보통-db가-아니라-bcrypt--작은-vcpu)
+- [N-026. OAuth find-or-create의 함정(email_verified) + Spring Security가 막아주지 않는 것(brute-force)](#n-026-oauth-find-or-create의-함정email_verified--spring-security가-막아주지-않는-것brute-force)
 
 ---
 
@@ -1086,6 +1087,56 @@ TLS termination(N-021) 구조에서 앱이 받는 요청은 평문 http다. 그�
 
 ---
 
+## N-026. OAuth find-or-create의 함정(email_verified) + Spring Security가 막아주지 않는 것(brute-force)
+
+**한 줄 요약**: 소셜 로그인의 "이메일로 사용자 찾거나 만들기(find-or-create)"는 **검증된 이메일(`email_verified=true`)일 때만** 안전하다 — 안 그러면 자동 계정 연결이 탈취 벡터가 된다. 그리고 Spring Security는 CSRF·세션고정은 기본으로 막아주지만 **무차별 대입(brute-force) 방어는 직접** 해야 한다.
+
+### 자세한 설명
+
+**(1) OAuth find-or-create와 `email_verified`**
+
+소셜 로그인이 성공하면 provider가 준 이메일로 우리 사용자를 찾고, 없으면 만든다(`OAuthUserProvisioningService.provision`). 즉 **이메일을 신원(identity)으로** 쓴다. 여기엔 숨은 전제가 있다 — "그 이메일을 로그인한 사람이 실제로 소유한다".
+
+provider가 이메일 소유를 보증하지 않으면(=`email_verified`가 아니면) 이 전제가 깨진다:
+- 같은 이메일의 **기존 LOCAL(이메일/비번) 계정**이 있으면, 비번 없이 그 계정에 자동 로그인된다(자동 연결).
+- 공격자가 **피해자 이메일을 미검증 상태로 주장**하는 소셜 계정을 만들 수 있으면 → 피해자 계정 탈취.
+
+구글은 항상 이메일을 검증하므로 *구글 한정* 현재 위험은 낮다. 그러나 (a) provider 추가(카카오/네이버 — 검증 정책 상이), (b) 엣지케이스를 대비한 **방어 한 겹**으로 `email_verified == true`가 아니면 프로비저닝 전에 거부해야 한다. 클레임이 **없으면(null) "검증 안 됨"으로 간주**(fail-safe)한다.
+
+> 설계 포인트: 게이트를 네트워크에 묶인 어댑터(`OidcUserService`)가 아니라 **순수 서비스(`provision`)**에 두면 단위 테스트로 "미검증→거부 / 검증→통과"를 결정적으로 검증할 수 있다(N-009 계층 분리와 같은 결).
+
+**(2) Spring Security가 막아주는 것 ≠ 전부**
+
+Spring Security는 **CSRF**(기본 ON), **세션 고정 보호**(로그인 시 세션 ID 교체)를 기본 제공한다. 하지만 **로그인 무차별 대입(brute-force) 방어는 기본 제공하지 않는다** — `POST /login`을 무한히 때려도 막는 게 없다. 직접 만들어야 한다:
+
+- **실패 집계**: 인증 성공/실패는 Spring Security가 **이벤트**(`AbstractAuthenticationFailureEvent` / `AuthenticationSuccessEvent`)로 발행한다(발행 보장하려면 `AuthenticationEventPublisher` 빈 등록). 이벤트의 `Authentication.getDetails()`가 `WebAuthenticationDetails` → 거기서 **클라이언트 IP**를 꺼낸다.
+- **차단**: 잠긴 키의 요청을 **인증 매니저에 닿기 전에 단락**하는 필터(`OncePerRequestFilter`)를 `UsernamePasswordAuthenticationFilter` 앞에 끼운다.
+- **키 선택 — 이메일이 아니라 IP**: 이메일을 키로 하면 공격자가 피해자 이메일로 일부러 실패시켜 **그 계정을 잠그는 DoS**가 가능하다. IP 기준이면 공격 출처만 막힌다(분산 출처엔 약 → 앞단 WAF 레이트리밋과 함께 쓰는 다층 방어).
+
+### 일반화 포인트 (면접 답변용)
+
+- **"이메일은 식별자가 될 수 있지만, 검증된 이메일일 때만."** OAuth find-or-create에서 `email_verified`를 안 보면 자동 계정 연결이 탈취 벡터가 된다. 클레임 부재는 fail-safe로 "미검증" 처리.
+- **"프레임워크가 막아주는 것과 아닌 것을 구분하라."** CSRF·세션고정은 Spring Security 기본 ON, 그러나 brute-force·레이트리밋·계정 잠금은 **직접** 해야 한다. "보안 프레임워크를 썼으니 안전"은 착각.
+- **잠금 키 설계의 트레이드오프**: 이메일 키(피해자 잠금 DoS) vs IP 키(분산 공격에 약). 정답은 다층(앱 IP 잠금 + 앞단 WAF).
+- **테스트 가능한 보안**: 보안 규칙도 순수 코어로 분리하면(시간은 `Clock` 주입) 경계값(임계치 직전/도달/만료/성공 리셋)을 결정적으로 테스트할 수 있다.
+
+### 코드 위치
+
+- `src/main/java/com/booktimer/user/OAuthUserProvisioningService.java` — `provision(...)`에 `email_verified` 게이트
+- `src/main/java/com/booktimer/security/BookTimerOidcUserService.java` — `oidcUser.getEmailVerified()` 전달
+- `src/main/java/com/booktimer/security/LoginAttemptService.java` — IP별 실패 집계 + 잠금(코어, `Clock` 주입)
+- `src/main/java/com/booktimer/security/LoginAttemptEventListener.java` — 인증 이벤트 → 집계
+- `src/main/java/com/booktimer/security/LoginAttemptFilter.java` — 잠긴 IP 단락
+- `src/main/java/com/booktimer/config/SecurityConfig.java` — 필터 배선 + `AuthenticationEventPublisher` 빈
+
+### 관련 노트
+
+- [N-011. Spring Security 폼 로그인](#) — 인증 흐름의 토대(이 위에 방어를 얹음)
+- [N-012. 인증 주체 ≠ 도메인 엔티티](#) — principal(email) 통일 규약 — OAuth/폼 공통
+- [N-009. 계층별 테스트 전략](#) — 순수 코어 분리로 보안 규칙도 단위 테스트
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1112,3 +1163,4 @@ TLS termination(N-021) 구조에서 앱이 받는 요청은 평문 http다. 그�
 | 2026-06-02 | N-023 (ddl-auto=update 한계 — 기존 컬럼 제약 변경 안 함→스키마 드리프트, 근본은 Flyway 마이그레이션+기존 DB baseline) |
 | 2026-06-02 | N-024 (Boot 4 autoconfig 모듈 분리 — flyway-core만으론 빈 미생성→spring-boot-flyway / 기존 DB에 Flyway 도입은 baseline-on-migrate, V1=현재 스키마) |
 | 2026-06-02 | N-025 (로그인 지연 ≠ DB — 인덱스 단건 조회+BCrypt(CPU 집약), 작은 vCPU에서 증폭 / 해법은 강도↓ 아니라 CPU↑, 분리 측정으로 진단) |
+| 2026-06-02 | N-026 (OAuth find-or-create는 email_verified일 때만 안전(자동 연결 탈취 방어) / Spring Security는 brute-force 미방어 — 직접 IP 잠금, 이벤트+필터) |

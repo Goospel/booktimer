@@ -22,6 +22,7 @@
 - [T-015. ddl-auto=update가 기존 컬럼 NOT NULL을 못 풀어 prod 500 / 사설 RDS 수동 ALTER도 막힘](#t-015-ddl-autoupdate가-기존-컬럼-not-null을-못-풀어-prod-500--사설-rds-수동-alter도-막힘)
 - [T-016. flyway-core만 추가하면 Flyway 빈이 안 생긴다 (Boot 4 autoconfig 모듈 분리)](#t-016-flyway-core만-추가하면-flyway-빈이-안-생긴다-boot-4-autoconfig-모듈-분리)
 - [T-017. 공유 인메모리 H2가 순서 의존 테스트 버그를 가린다 — 클래스패스 변경이 폭로](#t-017-공유-인메모리-h2가-순서-의존-테스트-버그를-가린다--클래스패스-변경이-폭로)
+- [T-018. Spring Security 7(Boot 4)에서 `AntPathRequestMatcher` 제거됨](#t-018-spring-security-7boot-4에서-antpathrequestmatcher-제거됨)
 
 ---
 
@@ -328,6 +329,19 @@ aws logs get-log-events --log-stream-name "$STREAM" ...
 
 ---
 
+## T-018. Spring Security 7(Boot 4)에서 `AntPathRequestMatcher` 제거됨
+
+**증상**: 커스텀 필터에서 `new AntPathRequestMatcher("/login", "POST")`로 경로를 판정하려 하니 컴파일 실패 — `cannot find symbol: class AntPathRequestMatcher (package org.springframework.security.web.util.matcher)`.
+
+**원인**: `AntPathRequestMatcher`는 Spring Security 6.x에서 deprecated → **7.x(Boot 4 동반)에서 제거**됐다. 대체는 `PathPatternRequestMatcher`(빌더: `PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/login")`).
+
+**해결**:
+- 버전 의존을 피하려면 매처 클래스 없이 **요청에서 직접 판정**: 메서드(`request.getMethod()`) + 컨텍스트 경로 제외 경로(`request.getRequestURI().substring(request.getContextPath().length())`) 비교. 단순 단일 경로 매칭엔 이쪽이 안정적.
+- 매처가 필요하면 `PathPatternRequestMatcher`로 마이그레이션.
+- 일반 규칙: **Boot 4 = Security 7** — 6.x 기준 블로그/예제의 `AntPathRequestMatcher`·`authorizeRequests`·`antMatchers` 등은 그대로 안 먹는다. (같은 결: T-006 패키지 이동, T-014 forward-headers, T-016 autoconfig 모듈 — "Boot 4 호환성" 묶음.)
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -347,3 +361,4 @@ aws logs get-log-events --log-stream-name "$STREAM" ...
 | 2026-06-02 | T-015 (ddl-auto=update가 기존 NOT NULL 못 풀어 소셜 INSERT 500 / 사설 RDS NAT 없어 CloudShell 접속 막힘 → prod ApplicationRunner 멱등 ALTER, 근본 Flyway) |
 | 2026-06-02 | T-016 (flyway-core만으론 Flyway 빈 미생성 — Boot 4 autoconfig 모듈 분리 → spring-boot-flyway 추가) |
 | 2026-06-02 | T-017 (공유 인메모리 H2 DB_CLOSE_DELAY=-1가 순서 의존 버그(@Import(JpaConfig) 누락)를 가림 — Flyway 추가가 순서 바꿔 폭로, 단독 실행으로 진단) |
+| 2026-06-02 | T-018 (Spring Security 7(Boot 4)에서 AntPathRequestMatcher 제거 → PathPatternRequestMatcher 또는 요청 직접 판정) |
