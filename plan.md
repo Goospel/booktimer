@@ -94,9 +94,13 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
   잡아 **500**으로 응답·로그 도배. 404로 통과시켜야 함.
 - **할 일**: `NoResourceFoundException`/`ResponseStatusException`은 핸들러에서 제외하거나 상태코드 보존. favicon 추가도 고려.
 
-### GitHub Actions Node 20 deprecation (우선순위: 낮음)
-- 배포 워크플로의 `actions/checkout@v4`, `setup-java@v4`, `configure-aws-credentials@v4`가 Node 20 — 2026-06-16부터
-  Node 24 강제. 최신 액션 버전으로 갱신.
+### GitHub Actions Node 20 deprecation (완료 ✅ 2026-06-02)
+- **왜**: 2026-06-16부터 GitHub Actions가 Node 24를 강제 — Node 20 런타임 액션은 경고/중단.
+- **한 일**: 배포 워크플로의 node20 액션을 node24 최신 major로 갱신 —
+  `actions/checkout@v4→@v6`, `actions/setup-java@v4→@v5`, `aws-actions/configure-aws-credentials@v4→@v6`
+  (v5는 아직 node20이라 v6 필요). `amazon-ecr-login@v2`·`amazon-ecs-render-task-definition@v1`·
+  `amazon-ecs-deploy-task-definition@v2`는 이미 node24라 유지. breaking change는 우리 사용 패턴(bare 사용,
+  boolean 입력 없음, hosted runner)에 무해함을 릴리스 노트로 확인. 검증은 머지 후 실제 배포(run).
 
 ---
 
@@ -109,3 +113,4 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 | 2026-06-02 | Flyway 도입 완료 처리 + 회원 인증/계정 보안 하드닝 항목 추가(상세는 private 노트) |
 | 2026-06-02 | Fargate CPU 상향(로그인 BCrypt 지연) 항목 추가 |
 | 2026-06-02 | 보안 하드닝 #1 OAuth email_verified·#2 brute-force 완료 처리(N-026) |
+| 2026-06-02 | GitHub Actions Node 24 갱신 완료(checkout@v6/setup-java@v5/configure-aws-credentials@v6) |
