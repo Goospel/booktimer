@@ -2,6 +2,7 @@ package com.booktimer.web;
 
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
+import com.booktimer.user.AuthProvider;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
@@ -21,6 +22,7 @@ import java.time.ZoneId;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -68,6 +70,10 @@ class SettingsControllerTest {
         return registrationService.register(email, "rawpw1234", "독서가", SEOUL, Role.USER, today());
     }
 
+    private User registerSocial(String email) {
+        return registrationService.registerOAuth(email, "구글러", SEOUL, AuthProvider.GOOGLE, today());
+    }
+
     @Test
     @DisplayName("GET /settings: 현재 닉네임/타임존과 분 단위 증가값·cap을 폼에 채워 보여준다")
     void getSettings_showsCurrentValues() throws Exception {
@@ -91,6 +97,28 @@ class SettingsControllerTest {
         mockMvc.perform(get("/settings").with(user("tzopts@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(model().attribute("timezones", hasItem("America/New_York")));
+    }
+
+    @Test
+    @DisplayName("GET /settings: LOCAL 계정은 localAccount=true, 비밀번호 변경 카드를 보여준다")
+    void getSettings_localAccount_showsPasswordCard() throws Exception {
+        register("local@booktimer.com");
+
+        mockMvc.perform(get("/settings").with(user("local@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("localAccount", true))
+                .andExpect(content().string(containsString("비밀번호 변경")));
+    }
+
+    @Test
+    @DisplayName("GET /settings: 소셜 계정은 localAccount=false, 비밀번호 변경 카드를 숨긴다")
+    void getSettings_socialAccount_hidesPasswordCard() throws Exception {
+        registerSocial("social@booktimer.com");
+
+        mockMvc.perform(get("/settings").with(user("social@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("localAccount", false))
+                .andExpect(content().string(not(containsString("비밀번호 변경"))));
     }
 
     @Test

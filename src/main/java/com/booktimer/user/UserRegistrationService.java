@@ -60,4 +60,20 @@ public class UserRegistrationService {
                 user, DEFAULT_DAILY_INCREMENT_SECONDS, DEFAULT_CAP_SECONDS, startDate));
         return user;
     }
+
+    /**
+     * 소셜 로그인(OAuth)으로 들어온 사용자를 비밀번호 없이 등록하고, 기본 설정의 타이머를 함께 만든다.
+     * provider가 신원을 보증하므로 평문 비밀번호·해싱이 없다는 점만 {@link #register}와 다르다.
+     *
+     * @param provider  소셜 provider(GOOGLE 등 — LOCAL 불가)
+     * @param startDate 누적 시작 기준일(유저 타임존 기준 오늘)
+     * @return 저장된 User
+     */
+    public User registerOAuth(String email, String nickname, String timezone,
+                              AuthProvider provider, LocalDate startDate) {
+        User user = userRepository.save(User.ofOAuth(email, nickname, timezone, Role.USER, provider));
+        timerRepository.save(ReadingTimer.startFor(
+                user, DEFAULT_DAILY_INCREMENT_SECONDS, DEFAULT_CAP_SECONDS, startDate));
+        return user;
+    }
 }

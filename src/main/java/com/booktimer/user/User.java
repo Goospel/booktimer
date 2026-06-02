@@ -42,8 +42,11 @@ public class User extends BaseTimeEntity {
     @Column(nullable = false)
     private String email;
 
-    /** BCrypt 등으로 이미 해시된 비밀번호. 평문 저장 금지. */
-    @Column(nullable = false)
+    /**
+     * BCrypt 등으로 이미 해시된 비밀번호. 평문 저장 금지.
+     * <b>LOCAL 계정만 보유</b> — 소셜(OAuth) 계정은 비밀번호가 없어 {@code null}이다.
+     */
+    @Column(nullable = true)
     private String passwordHash;
 
     @Column(nullable = false)
@@ -57,19 +60,29 @@ public class User extends BaseTimeEntity {
     @Column(nullable = false)
     private Role role;
 
+    /** 인증 출처(LOCAL/소셜). 기존 행은 LOCAL로 채워지도록 컬럼 기본값을 둔다. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, columnDefinition = "varchar(20) default 'LOCAL'")
+    private AuthProvider authProvider;
+
     protected User() {
         // JPA
     }
 
-    private User(String email, String passwordHash, String nickname, String timezone, Role role) {
+    private User(String email, String passwordHash, String nickname, String timezone,
+                 Role role, AuthProvider authProvider) {
         if (email == null || email.isBlank()) {
             throw new IllegalArgumentException("email must not be blank");
         }
         if (!EMAIL_PATTERN.matcher(email).matches()) {
             throw new IllegalArgumentException("email is malformed: " + email);
         }
-        if (passwordHash == null || passwordHash.isBlank()) {
-            throw new IllegalArgumentException("passwordHash must not be blank");
+        if (authProvider == null) {
+            throw new IllegalArgumentException("authProvider must not be null");
+        }
+        // LOCAL 계정은 비밀번호 해시를 반드시 가진다. 소셜 계정은 비밀번호가 없다(null 허용).
+        if (authProvider == AuthProvider.LOCAL && (passwordHash == null || passwordHash.isBlank())) {
+            throw new IllegalArgumentException("passwordHash must not be blank for LOCAL account");
         }
         if (nickname == null || nickname.isBlank()) {
             throw new IllegalArgumentException("nickname must not be blank");
@@ -90,10 +103,11 @@ public class User extends BaseTimeEntity {
         this.nickname = nickname;
         this.timezone = timezone;
         this.role = role;
+        this.authProvider = authProvider;
     }
 
     /**
-     * 사용자를 생성한다.
+     * 이메일/비밀번호로 직접 가입한 LOCAL 사용자를 생성한다.
      *
      * @param email        이메일(형식 검증)
      * @param passwordHash 이미 해시된 비밀번호(평문 금지)
@@ -104,7 +118,21 @@ public class User extends BaseTimeEntity {
      */
     public static User of(String email, String passwordHash, String nickname,
                           String timezone, Role role) {
-        return new User(email, passwordHash, nickname, timezone, role);
+        return new User(email, passwordHash, nickname, timezone, role, AuthProvider.LOCAL);
+    }
+
+    /**
+     * 소셜 로그인(OAuth)으로 만들어진 비밀번호 없는 사용자를 생성한다. 신원은 provider가 보증한다.
+     *
+     * @param provider 소셜 provider(LOCAL은 불가 — 비밀번호 없는 LOCAL은 모순)
+     * @throws IllegalArgumentException provider가 null/LOCAL이거나 공통 필드 검증 실패 시
+     */
+    public static User ofOAuth(String email, String nickname, String timezone,
+                               Role role, AuthProvider provider) {
+        if (provider == AuthProvider.LOCAL) {
+            throw new IllegalArgumentException("OAuth account provider must not be LOCAL");
+        }
+        return new User(email, null, nickname, timezone, role, provider);
     }
 
     /**
@@ -139,10 +167,18 @@ public class User extends BaseTimeEntity {
      * @throws IllegalArgumentException 해시가 비어있는 경우
      */
     public void changePassword(String newPasswordHash) {
+        if (!isLocalAccount()) {
+            throw new IllegalStateException("social account has no password to change: " + authProvider);
+        }
         if (newPasswordHash == null || newPasswordHash.isBlank()) {
             throw new IllegalArgumentException("passwordHash must not be blank");
         }
         this.passwordHash = newPasswordHash;
+    }
+
+    /** 이메일/비밀번호로 가입한 LOCAL 계정인가(=비밀번호를 가진 계정). */
+    public boolean isLocalAccount() {
+        return authProvider == AuthProvider.LOCAL;
     }
 
     public Long getId() {
@@ -167,5 +203,9 @@ public class User extends BaseTimeEntity {
 
     public Role getRole() {
         return role;
+    }
+
+    public AuthProvider getAuthProvider() {
+        return authProvider;
     }
 }

@@ -60,4 +60,12 @@ class LoginControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("로그아웃")));
     }
+
+    @Test
+    @DisplayName("GET /login: 구글 소셜 로그인 버튼(인가요청 링크)을 포함한다")
+    void getLogin_includesGoogleOAuthButton() throws Exception {
+        mockMvc.perform(get("/login"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("/oauth2/authorization/google")));
+    }
 }

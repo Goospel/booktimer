@@ -148,6 +148,50 @@ button, .btn {
 }
 .btn-ghost:hover { background: var(--bg); }
 
+/* 소셜 로그인 */
+.oauth-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 18px 0;
+    color: var(--muted);
+    font-size: .85rem;
+}
+.oauth-divider::before,
+.oauth-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+}
+
+.btn-oauth {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    text-decoration: none;
+    box-sizing: border-box;
+}
+.btn-oauth-google {
+    background: #fff;
+    color: #1f2328;
+    border: 1px solid var(--border);
+}
+.btn-oauth-google:hover { background: var(--bg); }
+.oauth-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #4285f4;
+    color: #fff;
+    font-weight: 700;
+    font-size: .85rem;
+}
+
 /* 폼 (회원가입 등) */
 .field { margin-bottom: 16px; }
 .field label {

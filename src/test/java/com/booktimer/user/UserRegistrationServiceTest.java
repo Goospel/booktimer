@@ -113,4 +113,45 @@ class UserRegistrationServiceTest {
         verify(timerRepository, never()).save(any());
         verify(passwordEncoder, never()).encode(any());
     }
+
+    // --- registerOAuth: 소셜 가입 (비밀번호 없음) ---
+
+    @Test
+    @DisplayName("registerOAuth: 비밀번호 없는 provider 사용자를 만들고 타이머를 부트스트랩한다 (해싱 호출 없음)")
+    void registerOAuth_createsPasswordlessUserAndTimer() {
+        when(userRepository.save(any(User.class))).thenAnswer(returnsFirstArg());
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        ArgumentCaptor<ReadingTimer> timerCaptor = ArgumentCaptor.forClass(ReadingTimer.class);
+
+        User result = service.registerOAuth(
+                "g@booktimer.com", "구글러", "Asia/Seoul", AuthProvider.GOOGLE, DAY0);
+
+        verify(userRepository).save(userCaptor.capture());
+        User saved = userCaptor.getValue();
+        assertThat(saved.getEmail()).isEqualTo("g@booktimer.com");
+        assertThat(saved.getPasswordHash()).isNull();
+        assertThat(saved.getAuthProvider()).isEqualTo(AuthProvider.GOOGLE);
+
+        verify(timerRepository).save(timerCaptor.capture());
+        ReadingTimer timer = timerCaptor.getValue();
+        assertThat(timer.getUser()).isSameAs(result);
+        assertThat(timer.getRemainingSeconds())
+                .isEqualTo(UserRegistrationService.DEFAULT_DAILY_INCREMENT_SECONDS);
+        assertThat(timer.getLastAccrualDate()).isEqualTo(DAY0);
+
+        // 소셜 가입은 평문 비밀번호가 없으므로 해싱하지 않는다
+        verify(passwordEncoder, never()).encode(any());
+    }
+
+    @Test
+    @DisplayName("registerOAuth: User 저장 뒤 타이머 저장 (FK 충족 순서)")
+    void registerOAuth_savesUserBeforeTimer() {
+        when(userRepository.save(any(User.class))).thenAnswer(returnsFirstArg());
+
+        service.registerOAuth("g2@booktimer.com", "구글러", "Asia/Seoul", AuthProvider.GOOGLE, DAY0);
+
+        InOrder inOrder = inOrder(userRepository, timerRepository);
+        inOrder.verify(userRepository).save(any(User.class));
+        inOrder.verify(timerRepository).save(any(ReadingTimer.class));
+    }
 }
