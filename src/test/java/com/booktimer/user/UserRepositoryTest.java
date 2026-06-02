@@ -3,7 +3,9 @@ package com.booktimer.user;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.booktimer.config.JpaConfig;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.Optional;
@@ -18,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 운영은 MySQL이지만 슬라이스 테스트는 H2로 도커 없이 독립 실행.
  */
 @DataJpaTest
+@Import(JpaConfig.class) // BaseTimeEntity auditing(created_at/updated_at) 활성화 — 없으면 INSERT 시 NOT NULL 위반
 class UserRepositoryTest {
 
     @Autowired
