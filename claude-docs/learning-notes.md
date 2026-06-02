@@ -32,6 +32,7 @@
 - [N-026. OAuth find-or-create의 함정(email_verified) + Spring Security가 막아주지 않는 것(brute-force)](#n-026-oauth-find-or-create의-함정email_verified--spring-security가-막아주지-않는-것brute-force)
 - [N-027. OAuth 동의 화면은 provider가 제공 / 개인정보처리방침은 앱 제작자 책임 — 게시(Production)와 검증](#n-027-oauth-동의-화면은-provider가-제공--개인정보처리방침은-앱-제작자-책임--게시production와-검증)
 - [N-028. catch-all 예외 핸들러는 프레임워크의 상태보유 예외(404 등)까지 삼킨다 — 상태코드 보존](#n-028-catch-all-예외-핸들러는-프레임워크의-상태보유-예외404-등까지-삼킨다--상태코드-보존)
+- [N-029. 인메모리 세션은 인스턴스가 죽으면 사라진다 — 세션 외부화와 무상태 앱 서버](#n-029-인메모리-세션은-인스턴스가-죽으면-사라진다--세션-외부화와-무상태-앱-서버)
 
 ---
 
@@ -1234,6 +1235,46 @@ public String handleUnexpected(Exception ex, Model model) { log.error(...); ... 
 
 ---
 
+## N-029. 인메모리 세션은 인스턴스가 죽으면 사라진다 — 세션 외부화와 무상태 앱 서버
+
+**한 줄 요약**: 기본 `HttpSession`은 **그 앱 인스턴스(JVM)의 메모리**에 저장된다. 그래서 컨테이너/태스크가 교체되면(배포·스케일·크래시) 세션이 통째로 사라져 사용자는 **다시 로그인**해야 하고, 인스턴스가 2개 이상이면 요청이 분산돼 *평소에도* 세션이 오락가락한다. 해법은 세션을 **공유 외부 저장소**(DB·Redis)로 빼서 앱 서버를 *무상태(stateless)*로 만드는 것 — 이것이 무중단 배포·수평 확장의 전제다.
+
+### 자세한 설명
+
+배포할 때마다 재로그인이 발생했다. 범인은 세션 저장 위치다.
+
+- **기본 동작**: 폼 로그인하면 Spring Security는 인증 정보(`SecurityContext`)를 `HttpSession`에 담고, 브라우저엔 세션 ID 쿠키(`JSESSIONID`)만 준다. 이 세션 객체는 **그 앱 인스턴스의 힙 메모리**에 있다.
+- **무엇이 깨지나**:
+  - **배포(태스크 교체)**: ECS가 옛 태스크를 죽이고 새 태스크를 띄우면 → 옛 태스크 메모리의 세션 전부 소멸 → 쿠키는 남아 있어도 새 태스크엔 그 세션이 없음 → 재로그인.
+  - **수평 확장(인스턴스 N개)**: 로드밸런서가 요청을 여러 태스크로 분산하는데, 내 세션은 그중 한 태스크에만 있음 → 다른 태스크로 라우팅되면 로그인 안 된 것처럼 보임. (sticky session으로 한 태스크에 고정할 수 있으나, 그 태스크가 죽으면 똑같이 소멸.)
+- **해법 — 세션 외부화**: 세션을 앱 메모리가 아니라 **모든 인스턴스가 공유하는 저장소**에 둔다. 그러면 어느 태스크가 받아도 같은 세션을 읽고, 태스크가 죽어도 저장소에 남는다. 앱 서버는 세션 상태를 안 들고 있는 *무상태*가 되어 자유롭게 교체·증설 가능.
+  - 이 프로젝트: **Spring Session JDBC** — 세션을 기존 RDS(MySQL)에 저장(`SPRING_SESSION` 테이블). 새 인프라·비용 0. `HttpSession` API는 그대로 두고 저장 백엔드만 갈아끼움(필터가 가로채 저장소로 위임) — 애플리케이션 코드 변경 없음.
+  - **JDBC vs Redis**: Redis(ElastiCache)는 인메모리라 빠르고 TTL 만료가 네이티브 → 세션 쓰기가 많을 때 유리. 대신 별도 인스턴스·비용. 트래픽 작을 땐 기존 DB 재사용(JDBC)이 비용·운영 면에서 합리적. 둘 다 "외부 공유 저장소"라는 본질은 같고 교체도 의존성·설정 수준.
+- **부수 효과**: CSRF 토큰도 세션에 저장되므로(기본 `HttpSessionCsrfTokenRepository`) 세션 외부화로 함께 영속화된다. 단, 도입 배포 1회는 쿠키 이름이 바뀌고(`JSESSIONID`→`SESSION`) 기존 인메모리 세션이 소멸해 전원 재로그인 — 이후부턴 유지.
+
+### 일반화 포인트 (면접 답변용)
+
+- **"상태를 어디에 두느냐"가 확장성을 가른다.** 앱 인스턴스 메모리에 사용자 상태(세션)를 두면 그 인스턴스에 묶인다(stateful) → 교체·증설에 약함. 상태를 외부 저장소로 빼면 앱은 무상태가 되어 *마음대로 죽이고 늘릴 수 있다* — 클라우드 네이티브(12-factor의 "Processes are stateless")의 핵심.
+- **세션 기반 vs 토큰 기반**: 서버 세션을 외부화하는 대신, 상태를 클라이언트로 미는 JWT 같은 토큰 방식도 있다. 토큰은 서버 저장소가 필요 없지만(무상태) 즉시 무효화·정교한 만료가 어렵다. 세션 외부화는 서버가 제어권을 유지하면서 무상태 앱 서버를 얻는 절충. (인증 매체에 따른 CSRF 판단은 N-011.)
+- **재로그인 ≠ 데이터 손실**: 도메인 데이터(타이머 등)는 DB에 있어 안 사라진다. 사라지는 건 *세션*뿐 — 증상을 정확히 분리해야 올바른 해법(세션 저장소)에 도달한다. "배포 때 먹통"(가용성, 무중단 배포)과 "재로그인"(세션 위치)은 **다른 문제**다.
+- **무중단 배포의 전제**: 태스크를 겹쳐 띄우려면(롤링) 세션이 공유돼야 한다 — 안 그러면 무중단으로 띄워도 새 태스크로 간 사용자는 로그아웃. 그래서 세션 외부화가 먼저다.
+
+### 코드 위치
+
+- `build.gradle` — `spring-boot-starter-session-jdbc`(Boot 4 autoconfig 모듈 동봉, T-020) + `-test`
+- `src/main/resources/db/migration/V2__spring_session.sql` — 세션 테이블(운영 스키마 단일 소스)
+- `src/main/resources/application-prod.properties` — `spring.session.jdbc.initialize-schema=never`(Flyway가 소유)
+- `src/test/java/com/booktimer/security/SessionJdbcPersistenceTest.java` — 로그인 세션이 JDBC에 영속화되는지 검증
+- 관련: `troubleshooting.md` T-020(스타터 필요), `plan.md`(무중단 배포·향후 Redis 전환)
+
+### 관련 노트
+
+- [N-011. Spring Security 폼 로그인 — 세션 기반 인증, CSRF 판단](#)
+- [N-012. 인증 주체 ≠ 도메인 엔티티](#) — 세션엔 식별자만, 도메인은 DB에서 재조회(세션을 가볍게)
+- [N-024. Boot 4 autoconfig 모듈 분리(Flyway)](#) — 스타터를 써야 빈이 생기는 같은 패턴(세션도 동일)
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1263,3 +1304,4 @@ public String handleUnexpected(Exception ex, Model model) { log.error(...); ... 
 | 2026-06-02 | N-026 (OAuth find-or-create는 email_verified일 때만 안전(자동 연결 탈취 방어) / Spring Security는 brute-force 미방어 — 직접 IP 잠금, 이벤트+필터) |
 | 2026-06-02 | N-027 (OAuth 동의 화면 UI는 provider 제공 / 개인정보처리방침은 앱 제작자 책임 — non-sensitive 스코프는 검증 없이 즉시 게시, 게시 ≠ 검증) |
 | 2026-06-02 | N-028 (catch-all @ExceptionHandler(Exception)이 프레임워크의 상태보유 예외(404 등)까지 삼켜 500으로 둔갑 → 좁은 타입 핸들러로 상태코드 보존, 로그 레벨 분리) |
+| 2026-06-02 | N-029 (인메모리 HttpSession은 인스턴스 교체 시 소멸→재로그인 / 세션 외부화(JDBC·Redis)로 무상태 앱 서버, 무중단·수평확장의 전제, 세션 vs 토큰, 재로그인≠데이터손실) |

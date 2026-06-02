@@ -24,6 +24,11 @@ dependencies {
 	implementation 'org.flywaydb:flyway-mysql'
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+	// 세션 외부화 — 세션을 JVM 메모리가 아닌 공유 DB(RDS)에 저장해 태스크 교체에도 로그인 유지.
+	// Boot 4는 autoconfig가 별도 모듈이라 raw 라이브러리(spring-session-jdbc)만으론 빈이 안 생긴다 —
+	// starter가 라이브러리 + spring-boot-session-jdbc(autoconfig)를 함께 가져온다(N-024와 같은 패턴).
+	// (스키마는 Flyway V2가 운영에 생성, 테스트 H2는 initialize-schema=embedded 기본값으로 자동 생성)
+	implementation 'org.springframework.boot:spring-boot-starter-session-jdbc'
 	implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
@@ -37,6 +42,7 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-actuator-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-session-jdbc-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-thymeleaf-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
