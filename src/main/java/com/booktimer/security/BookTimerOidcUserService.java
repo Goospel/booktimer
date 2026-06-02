@@ -45,7 +45,8 @@ public class BookTimerOidcUserService extends OidcUserService {
             throw new OAuth2AuthenticationException("OIDC provider did not return an email");
         }
 
-        User user = provisioningService.provision(email, oidcUser.getFullName());
+        // 검증된 이메일만 신뢰 — provision이 email_verified!=true면 거부(자동 계정 연결 탈취 방어).
+        User user = provisioningService.provision(email, oidcUser.getFullName(), oidcUser.getEmailVerified());
 
         List<GrantedAuthority> authorities =
                 List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));

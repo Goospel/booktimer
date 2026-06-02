@@ -1,12 +1,18 @@
 package com.booktimer.config;
 
 import com.booktimer.security.BookTimerOidcUserService;
+import com.booktimer.security.LoginAttemptFilter;
+import com.booktimer.security.LoginAttemptService;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationEventPublisher;
+import org.springframework.security.authentication.DefaultAuthenticationEventPublisher;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
  * 웹 보안 설정 — 폼 로그인 + 세션 기반 인증.
@@ -27,9 +33,19 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
+    /**
+     * 인증 성공/실패 이벤트 발행을 명시 보장한다. {@link com.booktimer.security.LoginAttemptEventListener}가
+     * 이 이벤트로 IP별 실패를 집계하므로(무차별 대입 방어), 발행 빈을 직접 등록해 결정적으로 만든다.
+     */
+    @Bean
+    public AuthenticationEventPublisher authenticationEventPublisher(ApplicationEventPublisher publisher) {
+        return new DefaultAuthenticationEventPublisher(publisher);
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
-                                                   BookTimerOidcUserService oidcUserService) throws Exception {
+                                                   BookTimerOidcUserService oidcUserService,
+                                                   LoginAttemptService loginAttemptService) throws Exception {
         http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/signup", "/login", "/error", "/actuator/health", "/css/**", "/js/**", "/favicon.ico").permitAll()
@@ -41,6 +57,9 @@ public class SecurityConfig {
                 .oauth2Login(oauth -> oauth
                         .loginPage("/login")
                         .userInfoEndpoint(userInfo -> userInfo.oidcUserService(oidcUserService)))
+                // 무차별 대입 방어: 잠긴 IP의 로그인 시도를 인증 필터에 닿기 전에 단락한다.
+                .addFilterBefore(new LoginAttemptFilter(loginAttemptService),
+                        UsernamePasswordAuthenticationFilter.class)
                 .logout(logout -> logout.permitAll());
         // CSRF는 기본 활성 유지 — 세션 기반 로그인이라 토큰 보호가 필요하다(REST 토큰 방식 아님).
         return http.build();
