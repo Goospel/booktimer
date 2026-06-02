@@ -12,6 +12,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -44,6 +45,14 @@ class SignupControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(view().name("signup"))
                 .andExpect(model().attributeExists("signupForm"));
+    }
+
+    @Test
+    @DisplayName("GET /signup: 타임존 선택지(드롭다운) 목록을 모델에 싣는다")
+    void getSignup_includesTimezoneOptions() throws Exception {
+        mockMvc.perform(get("/signup"))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("timezones", hasItem("Asia/Seoul")));
     }
 
     @Test

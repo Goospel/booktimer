@@ -42,6 +42,12 @@ public class SettingsController {
         this.settingsService = settingsService;
     }
 
+    /** 타임존 드롭다운 후보 — GET 폼과 POST 검증 실패 재렌더 모두에 자동으로 실린다. */
+    @ModelAttribute("timezones")
+    public java.util.List<String> timezones() {
+        return TimeZoneOptions.all();
+    }
+
     @GetMapping("/settings")
     public String settingsForm(Principal principal, Model model) {
         if (!model.containsAttribute("settingsForm")) {

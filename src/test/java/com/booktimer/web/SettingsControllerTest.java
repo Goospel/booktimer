@@ -20,6 +20,7 @@ import java.time.ZoneId;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -80,6 +81,16 @@ class SettingsControllerTest {
                 .andExpect(content().string(containsString("Asia/Seoul")))
                 .andExpect(content().string(containsString("60")))   // 증가값 분
                 .andExpect(content().string(containsString("300"))); // cap 분
+    }
+
+    @Test
+    @DisplayName("GET /settings: 타임존 선택지(드롭다운) 목록을 모델에 싣는다")
+    void getSettings_includesTimezoneOptions() throws Exception {
+        register("tzopts@booktimer.com");
+
+        mockMvc.perform(get("/settings").with(user("tzopts@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("timezones", hasItem("America/New_York")));
     }
 
     @Test

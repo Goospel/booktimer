@@ -144,7 +144,8 @@ button, .btn {
     font-weight: 600;
     margin-bottom: 6px;
 }
-.field input {
+.field input,
+.field select {
     width: 100%;
     font: inherit;
     padding: 10px 12px;
@@ -152,7 +153,9 @@ button, .btn {
     border-radius: 10px;
     background: #fff;
 }
-.field input:focus {
+.field select { appearance: auto; cursor: pointer; }
+.field input:focus,
+.field select:focus {
     outline: none;
     border-color: var(--accent);
     box-shadow: 0 0 0 3px rgba(79, 70, 229, .15);

@@ -33,7 +33,9 @@
             </div>
             <div class="field">
                 <label for="timezone">타임존</label>
-                <input type="text" id="timezone" th:field="*{timezone}" placeholder="Asia/Seoul">
+                <select id="timezone" th:field="*{timezone}">
+                    <option th:each="tz : ${timezones}" th:value="${tz}" th:text="${tz}">Asia/Seoul</option>
+                </select>
                 <span class="field-error" th:if="${#fields.hasErrors('timezone')}" th:errors="*{timezone}">타임존 오류</span>
             </div>
             <button type="submit" class="btn-primary">가입</button>
