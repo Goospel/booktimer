@@ -24,6 +24,7 @@
 - [N-018. 퍼블릭 IP ≠ 인터넷 접근 — 서브넷 라우트테이블이 진짜 관문](#n-018-퍼블릭-ip--인터넷-접근--서브넷-라우트테이블이-진짜-관문)
 - [N-019. DB 유니크 제약은 무결성의 마지막 방어선이지, 사용자 검증의 첫 방어선이 아니다](#n-019-db-유니크-제약은-무결성의-마지막-방어선이지-사용자-검증의-첫-방어선이-아니다)
 - [N-020. CI 트리거 필터 — `paths-ignore`는 "전부 매칭될 때만" 스킵하는 안전 기본값](#n-020-ci-트리거-필터--paths-ignore는-전부-매칭될-때만-스킵하는-안전-기본값)
+- [N-021. HTTPS는 앱이 아니라 앞단에서 끝낸다 — TLS termination (ALB/ACM)](#n-021-https는-앱이-아니라-앞단에서-끝낸다--tls-termination-albacm)
 
 ---
 
@@ -882,6 +883,57 @@ on:
 
 ---
 
+## N-021. HTTPS는 앱이 아니라 앞단에서 끝낸다 — TLS termination (ALB/ACM)
+
+**한 줄 요약**: 공개 서비스의 HTTPS는 보통 애플리케이션 코드가 아니라 **앞단(로드밸런서/CDN)에서 TLS를 해제(termination)**한다. 사용자↔로드밸런서 구간만 HTTPS면 외부 위협(도청·변조·세션 탈취)은 막히고, 로드밸런서↔앱(VPC 사설망) 구간은 HTTP여도 실무상 허용된다. 그래서 "Spring을 HTTPS로 바꾼다"가 아니라 "ALB에 인증서(ACM) 붙이고 앱은 거의 그대로 둔다"가 정석이다.
+
+### 자세한 설명
+
+HTTP는 평문이라 전송 구간의 누구든(같은 와이파이의 공격자, 중간 라우터, ISP) 내용을 보고 바꿀 수 있다. 인증·계정 기능이 있는 서비스에서 구체적 피해:
+- **로그인 비밀번호**(`POST /login`의 password) 평문 노출
+- **세션 쿠키**(`JSESSIONID`) 탈취 → 그 계정으로 로그인됨(session hijacking)
+- **비밀번호 변경·회원 탈퇴** 같은 민감 요청을 가로채거나 변조
+
+HTTPS(=HTTP over TLS)는 이 구간을 **암호화 + 무결성 + 서버 신원확인(인증서)**으로 막는다.
+
+**왜 앱에 직접 TLS를 박지 않나 — TLS termination의 위치**
+
+```
+사용자  ──HTTPS(443)──▶  ALB / CloudFront  ──HTTP(80)──▶  ECS(Spring 앱)
+        (공개 구간, 암호화)   ↑ 여기서 TLS 해제          (VPC 내부 사설망)
+                            ACM 인증서 부착
+```
+
+- **공개 구간(사용자↔LB)**만 HTTPS면 외부 위협은 전부 막힘 — 위협 모델상 위험한 곳은 인터넷 구간이다.
+- **내부 구간(LB↔앱)**은 AWS VPC 사설망이라 HTTP여도 실무상 허용(원하면 여기도 mTLS 가능하나 보통 생략).
+- 인증서 발급·갱신·TLS 핸드셰이크 같은 무겁고 까다로운 일을 **ALB + ACM이 대신** 처리 → 앱은 keystore·인증서 갱신을 신경 쓸 필요가 없다. Spring에 직접 `server.ssl.*` + keystore를 박는 것보다 운영이 압도적으로 단순.
+
+**앱이 그래도 알아야 하는 것 — proxy 뒤에 있다는 사실**
+- LB가 TLS를 풀고 HTTP로 전달하면, 앱은 자기가 `http://`로 불렸다고 착각해 리다이렉트 URL·쿠키 Secure 판단을 틀리게 한다.
+- LB는 원래 스킴을 `X-Forwarded-Proto` 헤더로 알려준다. Spring에서 `server.forward-headers-strategy=framework`(또는 `native`)로 이 헤더를 신뢰하게 하면 앱이 "나는 https로 호출됐다"를 올바로 인식한다.
+- 세션 쿠키에 `Secure` 플래그(HTTPS로만 전송), 이후 HSTS 헤더(브라우저에 "다음부터 무조건 HTTPS")까지가 마무리.
+
+### 일반화 포인트 (면접 답변용)
+
+- **TLS termination은 "어디서 암호화를 푸느냐"의 설계 결정**이다. 보통 엣지(LB/CDN/리버스프록시)에서 풀고 내부는 평문 — 위협이 집중된 공개 구간만 보호하면 비용 대비 효과가 크고, 인증서 관리가 한 곳에 모인다.
+- **앱은 종종 프록시 뒤에 있다.** 그러면 클라이언트의 진짜 IP·스킴·호스트는 `X-Forwarded-*` 헤더로 전달되고, 앱은 이를 신뢰하도록 설정해야 리다이렉트·쿠키·로깅이 맞는다(단, 신뢰 경계 안에서만 신뢰 — 외부에서 위조 가능하므로 프록시가 덮어써야 함).
+- **로컬 개발은 HTTP로 충분**하다 — 위험한 전송 구간(인터넷)이 없으니 인증서·HTTPS 셋업의 마찰을 질 이유가 없다. 보안 조치는 위협이 있는 곳에 건다.
+- **관리형 인증서(ACM 등)는 갱신 자동화**가 핵심 가치 — 수동 인증서는 만료로 사이트가 죽는 사고가 흔하다.
+
+### 코드 위치 / 적용 위치
+
+- (예정) `.github`·인프라 레벨 — ALB HTTPS(443) 리스너 + ACM 인증서, HTTP(80)→HTTPS 리다이렉트 규칙
+- (예정) `src/main/resources/application.properties` (prod) — `server.forward-headers-strategy=framework`, 세션 쿠키 `Secure`
+- 작업 항목으로 `plan.md`의 "보안 / 인프라"에 기록됨
+
+### 관련 노트
+
+- [N-015. GitHub Actions → AWS 키 없이 배포](#n-015-github-actions--aws-키-없이-배포--oidc-페더레이션--ecs-롤링-배포) — 같은 ECS/ALB 인프라 위
+- [N-016. ECS 헬스체크와 콜드스타트](#n-016-ecs-헬스체크와-콜드스타트--alb-타깃-헬스-vs-컨테이너-grace-period) — 그 ALB가 트래픽을 라우팅하는 동일 계층
+- [N-011. Spring Security 폼 로그인](#n-011-spring-security-폼-로그인--userdetailsservice--passwordencoder-두-빈이-인증을-켠다) — HTTPS가 보호하려는 그 인증 자격증명
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -903,3 +955,4 @@ on:
 | 2026-06-01 | N-018 (퍼블릭 IP ≠ 인터넷 접근 — 서브넷 라우트테이블이 진짜 관문, Fargate egress, 비대칭=비결정적 실패) |
 | 2026-06-01 | N-019 (DB 유니크 제약은 무결성의 마지막 방어선 — 앱 사전확인(UX)+DB 제약(무결성)+레이스 catch 3중, validation vs constraint) |
 | 2026-06-02 | N-020 (CI 트리거 필터 — paths-ignore는 "전부 매칭될 때만" 스킵, 거부 목록=안전 기본값(기본 실행), paths vs paths-ignore) |
+| 2026-06-02 | N-021 (HTTPS는 앞단에서 TLS termination — ALB/ACM, 공개 구간만 암호화, 내부 HTTP 허용, X-Forwarded-Proto + forward-headers) |
