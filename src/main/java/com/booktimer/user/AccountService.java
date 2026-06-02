@@ -56,7 +56,25 @@ public class AccountService {
     public void deleteAccount(String email, String rawPassword) {
         User user = load(email);
         verifyPassword(user, rawPassword);
-        // FK 순서: 세션(N) → 타이머(1:1) → 유저
+        purge(user);
+    }
+
+    /**
+     * 소셜(비밀번호 없는) 계정을 삭제한다. 비밀번호가 없으므로 재확인 대신 provider 인증 세션을 전제로 한다.
+     * LOCAL 계정에는 쓸 수 없다 — LOCAL은 반드시 비밀번호 확인 경로({@link #deleteAccount})를 거쳐야 한다.
+     *
+     * @throws IllegalStateException 사용자가 없거나, 대상이 LOCAL 계정인 경우
+     */
+    public void deleteSocialAccount(String email) {
+        User user = load(email);
+        if (user.isLocalAccount()) {
+            throw new IllegalStateException("local account must be deleted with password verification: " + email);
+        }
+        purge(user);
+    }
+
+    /** 연관 데이터까지 FK 순서로 제거: 세션(N) → 타이머(1:1) → 유저. */
+    private void purge(User user) {
         sessionRepository.deleteByUser(user);
         timerRepository.deleteByUser(user);
         userRepository.delete(user);

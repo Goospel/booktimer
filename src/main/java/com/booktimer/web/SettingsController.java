@@ -62,8 +62,8 @@ public class SettingsController {
 
     @GetMapping("/settings")
     public String settingsForm(Principal principal, Model model) {
+        User user = currentUser(principal);
         if (!model.containsAttribute("settingsForm")) {
-            User user = currentUser(principal);
             ReadingTimer timer = timerRepository.findByUser(user)
                     .orElseThrow(() -> new IllegalStateException("no timer for user: " + principal.getName()));
 
@@ -74,6 +74,8 @@ public class SettingsController {
             form.setCapMinutes((int) (timer.getCapSeconds() / SECONDS_PER_MINUTE));
             model.addAttribute("settingsForm", form);
         }
+        // 소셜 계정은 비밀번호가 없다 → 비밀번호 변경 카드를 숨기고 탈퇴 폼도 비번 없이 띄운다.
+        model.addAttribute("localAccount", user.isLocalAccount());
         return "settings";
     }
 
@@ -137,14 +139,21 @@ public class SettingsController {
      * 로그인 화면({@code /login?deleted})으로 보낸다. 실패(비밀번호 불일치)는 플래시 에러로.
      */
     @PostMapping("/settings/delete")
-    public String deleteAccount(@RequestParam String password, Principal principal,
+    public String deleteAccount(@RequestParam(required = false) String password, Principal principal,
                                 HttpServletRequest request, HttpServletResponse response,
                                 RedirectAttributes redirectAttributes) {
-        try {
-            accountService.deleteAccount(principal.getName(), password);
-        } catch (InvalidPasswordException e) {
-            redirectAttributes.addFlashAttribute("error", "비밀번호가 올바르지 않습니다.");
-            return "redirect:/settings";
+        User user = currentUser(principal);
+        if (user.isLocalAccount()) {
+            // LOCAL 계정: 비밀번호 재확인 필수.
+            try {
+                accountService.deleteAccount(principal.getName(), password);
+            } catch (InvalidPasswordException e) {
+                redirectAttributes.addFlashAttribute("error", "비밀번호가 올바르지 않습니다.");
+                return "redirect:/settings";
+            }
+        } else {
+            // 소셜 계정: 비밀번호가 없으므로 provider 인증 세션을 전제로 곧장 삭제.
+            accountService.deleteSocialAccount(principal.getName());
         }
         // 계정이 사라졌으니 현재 인증 세션을 무효화하고 컨텍스트를 비운다.
         new SecurityContextLogoutHandler().logout(request, response,

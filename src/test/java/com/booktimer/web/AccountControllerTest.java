@@ -19,8 +19,10 @@ import java.time.ZoneId;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -55,6 +57,11 @@ class AccountControllerTest {
 
     private void register(String email) {
         registrationService.register(email, "oldpw1234", "독서가", SEOUL, Role.USER, today());
+    }
+
+    private void registerOAuth(String email) {
+        registrationService.registerOAuth(email, "구글러", SEOUL,
+                com.booktimer.user.AuthProvider.GOOGLE, today());
     }
 
     // --- 비밀번호 변경 ---
@@ -134,5 +141,39 @@ class AccountControllerTest {
                 .andExpect(flash().attributeExists("error"));
 
         assertThat(userRepository.findByEmail("delbad@booktimer.com")).isPresent();
+    }
+
+    // --- 소셜(OAuth) 계정: 비밀번호 없음 ---
+
+    @Test
+    @DisplayName("GET /settings: 소셜 계정이면 localAccount=false (비밀번호 변경 카드 숨김 신호)")
+    void settings_oauthUser_localAccountFalse() throws Exception {
+        registerOAuth("oauth@booktimer.com");
+
+        mockMvc.perform(get("/settings").with(user("oauth@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("localAccount", false));
+    }
+
+    @Test
+    @DisplayName("GET /settings: LOCAL 계정이면 localAccount=true")
+    void settings_localUser_localAccountTrue() throws Exception {
+        register("localview@booktimer.com");
+
+        mockMvc.perform(get("/settings").with(user("localview@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("localAccount", true));
+    }
+
+    @Test
+    @DisplayName("POST /settings/delete: 소셜 계정은 비밀번호 없이 탈퇴하고 로그인(?deleted)으로 보낸다")
+    void deleteAccount_oauthUser_noPassword_removesAccount() throws Exception {
+        registerOAuth("oauthdel@booktimer.com");
+
+        mockMvc.perform(post("/settings/delete").with(user("oauthdel@booktimer.com")).with(csrf()))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login?deleted"));
+
+        assertThat(userRepository.findByEmail("oauthdel@booktimer.com")).isEmpty();
     }
 }
