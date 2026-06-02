@@ -1,16 +1,20 @@
 # BookTimer 📚⏱️
 
-> 매일 일정 시간 책을 읽도록 독려하고 기록하는 **독서 타이머** 웹/앱 애플리케이션
+> 매일 일정 시간 책을 읽도록 독려하고 기록하는 **독서 타이머** 웹 애플리케이션
+>
+> 🌐 **Live**: https://booktimer.click
 
 ---
 
 ## 1. 프로젝트 개요
 
-BookTimer는 사용자가 하루에 의무적으로 일정 시간 책을 읽도록 **독려**하고 그 기록을 **누적**하는 것을 목표로 하는 서비스다.
+BookTimer는 사용자가 하루에 일정 시간 책을 읽도록 **독려**하고 그 기록을 **누적**하는 서비스다.
 
-단순한 스톱워치가 아니라, **읽지 않은 시간이 다음 날로 누적되는** 독특한 타이머 메커니즘을 통해 "오늘 안 읽으면 내일 더 읽어야 한다"는 부담을 만들어 꾸준한 독서 습관을 유도한다.
+단순한 스톱워치가 아니라, **읽지 않은 시간이 다음 날로 누적되는** 타이머 메커니즘을 통해 "오늘 안 읽으면 내일 더 읽어야 한다"는 부담을 만들어 꾸준한 독서 습관을 유도한다.
 
-**웹을 우선**으로 제대로 구현하고, 이후 앱(모바일)으로 확장한다.
+**웹을 우선**으로 구현했고, 이후 앱(모바일)으로 확장할 계획이다.
+
+**현재 상태**: MVP(누적 타이머 + 인증 + 설정 + 일자별 기록 + 계정 보안) 구현·배포 완료. HTTPS 적용 및 Google 소셜 로그인 운영 중.
 
 ---
 
@@ -39,12 +43,18 @@ BookTimer는 사용자가 하루에 의무적으로 일정 시간 책을 읽도�
 - 누적 / 잔여 시간 추적
 - **MVP에서는 "시간"만 기록** (어떤 책인지는 묻지 않음)
 
-### 2.3 (추후 예정) 책 단위 기록
+### 2.3 인증
+
+- **이메일 + 비밀번호** 자체 인증
+- **Google 소셜 로그인**(OIDC) — find-or-create 프로비저닝, 소셜 계정은 비밀번호 카드 숨김 등 UX 분기
+- 계정 보안: 비밀번호 변경 / 회원 탈퇴
+
+### 2.4 (추후 예정) 책 단위 기록
 
 - 장기적으로 **읽는 책(제목 등)을 등록**하고 책별 누적 시간을 추적
 - SNS 확대 시 "어떤 책을 몇 시간 읽었는지"가 핵심 컨텐츠가 됨
 
-### 2.4 (추후 예정) SNS 기능
+### 2.5 (추후 예정) SNS 기능
 
 - 사용자 간 독서 기록 / 책별 독서 시간 공유
 - 향후 로드맵으로 별도 설계 예정
@@ -55,22 +65,24 @@ BookTimer는 사용자가 하루에 의무적으로 일정 시간 책을 읽도�
 
 | 영역 | 기술 | 비고 |
 |---|---|---|
-| **프론트엔드** | Thymeleaf | 웹 우선. 초기에는 Spring 제공 Thymeleaf로 구현, 추후 프론트 프레임워크로 교체 예정 |
-| **백엔드** | Spring Boot 4.0.6 (Java 21) | 메인 개발 프레임워크. 빌드 툴 Gradle (Groovy DSL) |
-| **인증** | Spring Security (자체 인증) | 이메일+비밀번호 자체 인증. **추후 OAuth 소셜 로그인 추가** |
-| **DB** | MySQL + JPA | JPA(Hibernate)를 통한 영속성 관리 |
-| **클라우드** | AWS | Docker 컨테이너로 배포 |
+| **프론트엔드** | Thymeleaf (SSR) | 웹 우선. 추후 SPA 프레임워크 교체 검토 |
+| **백엔드** | Spring Boot 4.0.6 (Java 21) | 빌드 툴 Gradle (Groovy DSL) |
+| **인증** | Spring Security | 이메일+비밀번호 자체 인증 + Google OAuth2/OIDC |
+| **DB** | MySQL + JPA(Hibernate) | 운영 MySQL, 테스트는 H2 인메모리 |
+| **클라우드** | AWS (ECS Fargate, ALB, RDS, ACM, Route 53) | Docker 컨테이너 배포, ALB TLS termination |
 | **CI/CD** | GitHub Actions | 빌드 / 테스트 / 배포 자동화 |
 
 ---
 
 ## 4. 로드맵
 
-- [ ] **MVP** — 누적 증가 타이머(사용자 설정 증가값 + cap) + 일자별 독서 시간 기록
+- [x] **MVP** — 누적 증가 타이머(사용자 설정 증가값 + cap) + 일자별 독서 시간 기록
   - Thymeleaf + Spring Boot + MySQL
   - Spring Security 자체 인증 (이메일+비밀번호)
-- [ ] AWS + Docker 배포 파이프라인 (GitHub Actions)
-- [ ] OAuth 소셜 로그인 추가
+- [x] AWS + Docker 배포 파이프라인 (GitHub Actions)
+- [x] HTTPS 적용 (도메인 + ALB TLS termination)
+- [x] OAuth 소셜 로그인 (Google)
+- [ ] 카카오/네이버 등 추가 provider (선택)
 - [ ] 책 단위 기록 (책 등록 + 책별 누적 시간)
 - [ ] 프론트엔드 프레임워크 교체 (React / Vue 등 검토)
 - [ ] 앱(모바일) 확장
@@ -78,26 +90,28 @@ BookTimer는 사용자가 하루에 의무적으로 일정 시간 책을 읽도�
 
 ---
 
-## 5. 아키텍처 (예정)
+## 5. 아키텍처
 
 ```
-[ 사용자 (Web 우선 → App) ]
-          │
-          ▼
-[ Thymeleaf 뷰 ] ── (추후 SPA 프론트로 교체)
-          │
-          ▼
-[ Spring Boot 백엔드 ] ── Spring Security (자체 인증 → OAuth)
-          │
-          ▼
+[ 사용자 브라우저 ]
+        │  HTTPS
+        ▼
+[ AWS ALB ]  ── TLS termination (ACM 인증서), HTTP→HTTPS 리다이렉트
+        │  HTTP (내부)
+        ▼
+[ ECS Fargate : Spring Boot ]
+        │   ├─ Thymeleaf 뷰 (SSR)
+        │   └─ Spring Security (이메일/비밀번호 + Google OIDC)
+        ▼
 [ JPA / Hibernate ]
-          │
-          ▼
-[ MySQL ]
+        ▼
+[ RDS (MySQL) ]
 
-배포: Docker 이미지 → AWS
-CI/CD: GitHub Actions
+도메인/DNS: Route 53 (booktimer.click)
+CI/CD: GitHub Actions → Docker 이미지 → ECS 배포
 ```
+
+> 인프라 상세(보안 그룹, IAM, 파라미터 등)는 `deploy/` 및 내부 문서 참고.
 
 ---
 
@@ -132,8 +146,30 @@ if 경과일수 > 0:
 
 ---
 
-## 8. 결정 보류 / 추후 확정 필요
+## 8. 빌드 / 실행
+
+```bash
+./gradlew build          # 빌드 (Windows: gradlew.bat)
+./gradlew test           # 테스트 (H2 인메모리 — Docker 불필요)
+./gradlew bootRun        # 로컬 실행 (MySQL은 compose.yaml로 자동 기동, Docker 필요)
+```
+
+- toolchain: Java 21 (로컬에 없어도 foojay-resolver 가 자동 다운로드)
+- 테스트는 H2 인메모리로 독립 실행되며, 운영은 MySQL을 사용한다.
+
+---
+
+## 9. 결정 보류 / 추후 확정 필요
 
 - cap 정확한 값 (예시는 5시간) 및 cap 도달 시 UX 표시(경고/안내)
 - 사용자 타임존 저장 / 변경 정책 (가입 시 자동 감지 vs 수동 설정)
 - 책 단위 기록 시 외부 도서 API(알라딘 / 국립중앙도서관 등) 연동 여부
+
+---
+
+## 10. 관련 문서
+
+- [DEVLOG.md](DEVLOG.md) — 개발 일지 (기능 추가 흐름 / 만난 문제 / 해결)
+- [plan.md](plan.md) — 추후 할 일 / 로드맵 / 기술 부채
+- [claude-docs/learning-notes.md](claude-docs/learning-notes.md) — 작업 중 배운 개념 정리
+- [claude-docs/troubleshooting.md](claude-docs/troubleshooting.md) — 함정·해결 기록
