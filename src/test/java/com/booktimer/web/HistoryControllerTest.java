@@ -1,5 +1,6 @@
 package com.booktimer.web;
 
+import com.booktimer.session.ContributionGraph;
 import com.booktimer.session.DailyReadingRecord;
 import com.booktimer.session.ReadingSessionService;
 import com.booktimer.user.Role;
@@ -19,6 +20,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
@@ -65,11 +67,19 @@ class HistoryControllerTest {
         sessionService.start(user, start);
         sessionService.stop(user, start.plusSeconds(1800));
 
-        mockMvc.perform(get("/history").with(user("hist@booktimer.com")))
+        var result = mockMvc.perform(get("/history").with(user("hist@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("history"))
                 .andExpect(model().attribute("nickname", "기록가"))
-                .andExpect(model().attributeExists("records"));
+                .andExpect(model().attributeExists("records"))
+                .andExpect(model().attributeExists("graph"))
+                .andReturn();
+
+        // 독서 잔디에 그 30분 세션이 반영돼야 한다(종단 와이어링: 세션→집계→그리드)
+        ContributionGraph graph = (ContributionGraph) result.getModelAndView().getModel().get("graph");
+        assertThat(graph.activeDays()).isEqualTo(1);
+        assertThat(graph.totalSeconds()).isEqualTo(1800L);
+        assertThat(graph.weeks()).hasSize(53);
     }
 
     @Test
