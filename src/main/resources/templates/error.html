@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>오류 — BookTimer</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <span class="emoji">📚</span>
+        <h1>BookTimer</h1>
+    </header>
+
+    <section class="card">
+        <h2>문제가 발생했어요</h2>
+        <p class="timer-display" th:text="${status} ?: '오류'">500</p>
+        <p class="status-line" th:text="${message} ?: '요청을 처리하지 못했습니다.'">
+            요청을 처리하지 못했습니다.
+        </p>
+    </section>
+
+    <p class="link-row"><a th:href="@{/}">← 대시보드로</a></p>
+</div>
+</body>
+</html>

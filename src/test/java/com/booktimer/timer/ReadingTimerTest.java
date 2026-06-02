@@ -163,6 +163,32 @@ class ReadingTimerTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    // --- isAtCap: 누적 잔여가 상한에 도달했는가 (대시보드 경고 배지용) ---
+
+    @Test
+    @DisplayName("isAtCap: 잔여가 cap과 같으면 true")
+    void isAtCap_equalToCap_true() {
+        ReadingTimer timer = timerWith(5 * HOUR, DAY0); // remaining == cap(5h)
+
+        assertThat(timer.isAtCap()).isTrue();
+    }
+
+    @Test
+    @DisplayName("isAtCap: 잔여가 cap보다 작으면 false")
+    void isAtCap_belowCap_false() {
+        ReadingTimer timer = timerWith(4 * HOUR, DAY0); // remaining 4h < cap 5h
+
+        assertThat(timer.isAtCap()).isFalse();
+    }
+
+    @Test
+    @DisplayName("isAtCap: cap이 0인 퇴화 설정이면 false (항상 도달로 표시하지 않음)")
+    void isAtCap_zeroCap_false() {
+        ReadingTimer timer = ReadingTimer.of(0L, 0L, 0L, DAY0); // cap 0, remaining 0
+
+        assertThat(timer.isAtCap()).isFalse();
+    }
+
     // --- updateSettings: 설정 페이지에서 증가값/cap 변경 ---
 
     @Test
