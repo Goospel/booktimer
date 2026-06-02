@@ -131,6 +131,20 @@ public class User extends BaseTimeEntity {
         this.timezone = timezone;
     }
 
+    /**
+     * 비밀번호를 <b>이미 해시된</b> 새 값으로 교체한다. 평문은 받지 않는다 — 현재 비밀번호 확인과
+     * 평문 해싱은 서비스({@code AccountService})의 책임이고, 엔티티는 해시 문자열만 보관한다.
+     *
+     * @param newPasswordHash 새 비밀번호의 해시(공백 불가)
+     * @throws IllegalArgumentException 해시가 비어있는 경우
+     */
+    public void changePassword(String newPasswordHash) {
+        if (newPasswordHash == null || newPasswordHash.isBlank()) {
+            throw new IllegalArgumentException("passwordHash must not be blank");
+        }
+        this.passwordHash = newPasswordHash;
+    }
+
     public Long getId() {
         return id;
     }

@@ -2,16 +2,23 @@ package com.booktimer.web;
 
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
+import com.booktimer.user.AccountService;
+import com.booktimer.user.InvalidPasswordException;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
 import com.booktimer.user.UserSettingsService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.security.Principal;
@@ -30,16 +37,21 @@ public class SettingsController {
 
     private static final int SECONDS_PER_MINUTE = 60;
 
+    private static final int MIN_PASSWORD_LENGTH = 8;
+
     private final UserRepository userRepository;
     private final ReadingTimerRepository timerRepository;
     private final UserSettingsService settingsService;
+    private final AccountService accountService;
 
     public SettingsController(UserRepository userRepository,
                               ReadingTimerRepository timerRepository,
-                              UserSettingsService settingsService) {
+                              UserSettingsService settingsService,
+                              AccountService accountService) {
         this.userRepository = userRepository;
         this.timerRepository = timerRepository;
         this.settingsService = settingsService;
+        this.accountService = accountService;
     }
 
     /** 타임존 드롭다운 후보 — GET 폼과 POST 검증 실패 재렌더 모두에 자동으로 실린다. */
@@ -91,6 +103,53 @@ public class SettingsController {
 
         redirectAttributes.addFlashAttribute("message", "설정을 저장했습니다.");
         return "redirect:/settings";
+    }
+
+    /**
+     * 비밀번호 변경. 같은 설정 페이지에 여러 폼이 공존하므로 검증 실패는 필드 에러 대신
+     * 플래시 메시지 + 리다이렉트(PRG)로 처리한다. 현재 비밀번호 확인은 {@link AccountService}가 담당.
+     */
+    @PostMapping("/settings/password")
+    public String changePassword(@RequestParam String currentPassword,
+                                 @RequestParam String newPassword,
+                                 @RequestParam String confirmPassword,
+                                 Principal principal, RedirectAttributes redirectAttributes) {
+        if (newPassword == null || newPassword.length() < MIN_PASSWORD_LENGTH) {
+            redirectAttributes.addFlashAttribute("error", "새 비밀번호는 " + MIN_PASSWORD_LENGTH + "자 이상이어야 합니다.");
+            return "redirect:/settings";
+        }
+        if (!newPassword.equals(confirmPassword)) {
+            redirectAttributes.addFlashAttribute("error", "새 비밀번호 확인이 일치하지 않습니다.");
+            return "redirect:/settings";
+        }
+        try {
+            accountService.changePassword(principal.getName(), currentPassword, newPassword);
+        } catch (InvalidPasswordException e) {
+            redirectAttributes.addFlashAttribute("error", "현재 비밀번호가 올바르지 않습니다.");
+            return "redirect:/settings";
+        }
+        redirectAttributes.addFlashAttribute("message", "비밀번호를 변경했습니다.");
+        return "redirect:/settings";
+    }
+
+    /**
+     * 회원 탈퇴. 비밀번호를 다시 확인한 뒤 계정·연관 데이터를 삭제하고, 현재 세션을 무효화한 다음
+     * 로그인 화면({@code /login?deleted})으로 보낸다. 실패(비밀번호 불일치)는 플래시 에러로.
+     */
+    @PostMapping("/settings/delete")
+    public String deleteAccount(@RequestParam String password, Principal principal,
+                                HttpServletRequest request, HttpServletResponse response,
+                                RedirectAttributes redirectAttributes) {
+        try {
+            accountService.deleteAccount(principal.getName(), password);
+        } catch (InvalidPasswordException e) {
+            redirectAttributes.addFlashAttribute("error", "비밀번호가 올바르지 않습니다.");
+            return "redirect:/settings";
+        }
+        // 계정이 사라졌으니 현재 인증 세션을 무효화하고 컨텍스트를 비운다.
+        new SecurityContextLogoutHandler().logout(request, response,
+                SecurityContextHolder.getContext().getAuthentication());
+        return "redirect:/login?deleted";
     }
 
     private User currentUser(Principal principal) {

@@ -16,6 +16,7 @@
 
     <div th:if="${param.registered}" class="alert alert-ok">회원가입이 완료됐어요. 로그인해 주세요.</div>
     <div th:if="${param.logout}" class="alert alert-ok">로그아웃되었습니다.</div>
+    <div th:if="${param.deleted}" class="alert alert-ok">계정이 삭제되었습니다. 그동안 이용해 주셔서 감사합니다.</div>
     <div th:if="${param.error}" class="alert alert-error">이메일 또는 비밀번호가 올바르지 않습니다.</div>
 
     <section class="card">

@@ -197,6 +197,10 @@ button, .btn {
     border: 1px solid #a7f3d0;
 }
 
+/* 회원 탈퇴 등 위험 작업 구역 */
+.danger-zone { border-color: #fecaca; }
+.danger-zone h2 { color: var(--danger); }
+
 .link-row { text-align: center; margin-top: 8px; display: flex; gap: 18px; justify-content: center; }
 .link-row a { color: var(--accent); text-decoration: none; }
 .link-row a:hover { text-decoration: underline; }
