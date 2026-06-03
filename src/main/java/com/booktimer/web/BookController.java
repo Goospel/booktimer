@@ -4,6 +4,8 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookSearchResult;
 import com.booktimer.book.BookService;
 import com.booktimer.book.BookStatus;
+import com.booktimer.session.BookContributionService;
+import com.booktimer.session.BookReadingDetail;
 import com.booktimer.session.BookReadingStatsService;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -31,12 +33,15 @@ public class BookController {
     private final UserRepository userRepository;
     private final BookService bookService;
     private final BookReadingStatsService statsService;
+    private final BookContributionService contributionService;
 
     public BookController(UserRepository userRepository, BookService bookService,
-                          BookReadingStatsService statsService) {
+                          BookReadingStatsService statsService,
+                          BookContributionService contributionService) {
         this.userRepository = userRepository;
         this.bookService = bookService;
         this.statsService = statsService;
+        this.contributionService = contributionService;
     }
 
     @GetMapping("/books")
@@ -55,6 +60,30 @@ public class BookController {
             model.addAttribute("searchPage", bookService.search(q, page));
         }
         return "books";
+    }
+
+    /**
+     * 책 상세 — 그 책의 독서 잔디 + 일자별 기록 + 누적 시간. 내 책일 때만(IDOR 방지),
+     * 아니면 존재 여부 노출 없이 책장으로 돌려보낸다(PRG).
+     */
+    @GetMapping("/books/{id}")
+    public String detail(@PathVariable Long id, Principal principal, Model model,
+                         RedirectAttributes redirectAttributes) {
+        User user = currentUser(principal);
+        return bookService.findMyBook(user, id)
+                .map(book -> {
+                    BookReadingDetail detail = contributionService.detail(user, book);
+                    model.addAttribute("nickname", user.getNickname());
+                    model.addAttribute("book", book);
+                    model.addAttribute("graph", detail.graph());
+                    model.addAttribute("history", detail.dailyHistory());
+                    model.addAttribute("totalSeconds", detail.totalSeconds());
+                    return "book-detail";
+                })
+                .orElseGet(() -> {
+                    redirectAttributes.addFlashAttribute("error", "책을 찾을 수 없습니다.");
+                    return "redirect:/books";
+                });
     }
 
     @PostMapping("/books/add")

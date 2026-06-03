@@ -375,6 +375,13 @@ button, .btn {
 }
 .book-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .book-title { font-weight: 600; color: var(--text); }
+a.book-title { text-decoration: none; }
+a.book-title:hover { text-decoration: underline; }
+/* 책 상세 헤더 — 표지 + 메타 가로 배치 */
+.book-detail-head { display: flex; gap: 16px; align-items: flex-start; }
+.book-detail-head .book-cover { width: 84px; height: 120px; }
+.book-detail-head .book-meta { gap: 6px; }
+.book-sub { font-size: .9rem; color: var(--muted); margin: 0; }
 .book-author, .book-pub { font-size: .85rem; color: var(--muted); }
 .book-status-badge {
     align-self: flex-start;
