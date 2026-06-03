@@ -159,8 +159,9 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
       소셜 계정 UX 분기(비번 카드 숨김). Google 동의 화면은 Testing(테스트 사용자만) → 추후 게시(Publish)
 - [ ] **동의 화면 게시(Production 전환)** — 테스트 사용자 100명 제한 해제, 누구나 Google 로그인 가능.
       스코프가 non-sensitive(`openid`/`email`/`profile`)라 **Google 검증 절차 없이 즉시 게시**, 코드 변경 0.
-      체크리스트: ① 개인정보처리방침 URL 준비(이메일 수집 → 동의 화면이 요구할 수 있음) → ② 동의 화면 브랜딩
-      확인(앱 이름·지원 이메일·로고가 사용자에게 노출) → ③ Console에서 Publish app.
+      체크리스트: [x] ① 개인정보처리방침 페이지 (`GET /privacy`, 공개·permitAll, 로그인/가입에서 링크) →
+      [ ] ② 동의 화면 브랜딩 확인(앱 이름·지원 이메일·로고가 사용자에게 노출) + 처리방침 URL `https://booktimer.click/privacy` 등록 →
+      [ ] ③ Console에서 Publish app. ②③은 코드 밖 Google Console 수동 작업.
       ※ 보안 전제는 이미 충족(하드닝 #1 email_verified·#2 brute-force 완료, 사이트·LOCAL 가입은 이미 공개).
 - [ ] 카카오/네이버 등 추가 provider (선택)
 
@@ -247,3 +248,4 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 | 2026-06-03 | 책 단위 기록 2단계 완료 — 세션↔책 연결(Flyway V4)·타이머 시작 시 책 선택·책별 누적 시간 집계/표시. T-022 기록. TDD |
 | 2026-06-03 | 알라딘 TTBKey SSM 주입(검색·제휴 라이브) + 도서 검색 페이징(이전/다음, totalResults 기반). TDD |
 | 2026-06-03 | (계획) 독서 잔디 색 농도를 하루 목표(증가값) 기준 비율 4단계로 — 설계만 기록, 구현은 별도 PR(워크트리 분리) |
+| 2026-06-03 | 개인정보처리방침 페이지(`GET /privacy`, 공개) 추가 — OAuth 동의 화면 게시 체크리스트 ① 완료(②③은 Console 수동). TDD |

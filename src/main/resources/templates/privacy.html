@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>개인정보처리방침 — BookTimer</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <span class="emoji">📚</span>
+        <h1>BookTimer</h1>
+    </header>
+    <p class="greeting">개인정보처리방침</p>
+
+    <section class="card legal">
+        <p>BookTimer(이하 "서비스")는 이용자의 개인정보를 중요하게 생각하며, 아래와 같이 수집·이용·보관합니다.</p>
+
+        <h2>1. 수집하는 개인정보 항목</h2>
+        <ul>
+            <li><strong>이메일</strong> — 계정 식별자(로그인 ID)</li>
+            <li><strong>닉네임</strong> — 화면에 표시되는 이름</li>
+            <li><strong>타임존</strong> — 하루 독서 기록의 날짜 경계(자정) 계산용</li>
+            <li><strong>비밀번호</strong> — 이메일로 직접 가입한 경우에만, 해시(BCrypt)된 형태로만 저장하며 평문은 저장하지 않습니다.</li>
+            <li><strong>독서 기록</strong> — 측정한 독서 시간, 등록한 책 정보, 일자별 기록</li>
+        </ul>
+        <p>구글(Google) 소셜 로그인으로 가입·로그인하는 경우, 구글이 제공하는 <strong>이메일과 이름</strong>만 전달받아
+            계정을 만듭니다. 이때 비밀번호는 저장하지 않으며, 구글의 다른 정보(프로필 사진·연락처 등)는 수집하지 않습니다.</p>
+
+        <h2>2. 개인정보의 이용 목적</h2>
+        <ul>
+            <li>회원 식별 및 로그인 등 계정 기능 제공</li>
+            <li>독서 시간 누적·기록·통계(잔디 등) 등 핵심 서비스 제공</li>
+        </ul>
+
+        <h2>3. 보관 및 파기</h2>
+        <p>개인정보는 회원 탈퇴 시까지 보관하며, 탈퇴하면 해당 계정의 개인정보와 독서 기록을 지체 없이 파기합니다.</p>
+
+        <h2>4. 제3자 제공</h2>
+        <p>이용자의 개인정보를 제3자에게 제공하지 않습니다. 다만 책 "구매" 링크는 알라딘 제휴 링크로 연결되며,
+            링크를 누르면 알라딘 사이트로 이동합니다(이때 서비스가 개인정보를 함께 전달하지는 않습니다).</p>
+
+        <h2>5. 쿠키</h2>
+        <p>로그인 상태 유지를 위해 세션 쿠키를 사용합니다. 쿠키는 로그아웃 또는 만료 시 제거됩니다.</p>
+
+        <h2>6. 문의처</h2>
+        <p>개인정보 관련 문의: <a href="mailto:kimsadol369785@gmail.com">kimsadol369785@gmail.com</a></p>
+
+        <p class="legal-date">시행일: 2026-06-03</p>
+    </section>
+
+    <p class="link-row"><a th:href="@{/login}">로그인으로 돌아가기</a></p>
+</div>
+</body>
+</html>
