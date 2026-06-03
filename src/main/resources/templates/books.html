@@ -28,8 +28,8 @@
             도서 검색이 아직 설정되지 않았습니다. 아래 "직접 추가"로 등록하세요.
         </p>
 
-        <ul class="book-list" th:if="${results != null and !results.isEmpty()}">
-            <li class="book-row" th:each="r : ${results}">
+        <ul class="book-list" th:if="${searchPage != null and !searchPage.isEmpty()}">
+            <li class="book-row" th:each="r : ${searchPage.results()}">
                 <img class="book-cover" th:if="${r.coverUrl()}" th:src="${r.coverUrl()}" alt="" referrerpolicy="no-referrer">
                 <div class="book-meta">
                     <span class="book-title" th:text="${r.title()}">제목</span>
@@ -50,7 +50,18 @@
                 </form>
             </li>
         </ul>
-        <p th:if="${q != null and (results == null or results.isEmpty())}" class="status-line muted">검색 결과가 없습니다.</p>
+
+        <!-- 페이징: 결과가 2페이지 이상일 때 -->
+        <nav class="pager" th:if="${searchPage != null and searchPage.totalPages() > 1}">
+            <a th:if="${searchPage.hasPrev()}" class="btn-ghost"
+               th:href="@{/books(q=${q},page=${searchPage.prevPage()})}">← 이전</a>
+            <span class="pager-info"
+                  th:text="${searchPage.page()} + ' / ' + ${searchPage.totalPages()} + ' 페이지'">1 / 3 페이지</span>
+            <a th:if="${searchPage.hasNext()}" class="btn-ghost"
+               th:href="@{/books(q=${q},page=${searchPage.nextPage()})}">다음 →</a>
+        </nav>
+
+        <p th:if="${q != null and (searchPage == null or searchPage.isEmpty())}" class="status-line muted">검색 결과가 없습니다.</p>
     </section>
 
     <!-- 직접 추가(폴백) -->

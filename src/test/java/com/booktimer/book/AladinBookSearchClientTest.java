@@ -71,4 +71,13 @@ class AladinBookSearchClientTest {
         assertThat(AladinBookSearchClient.parse("not json", objectMapper)).isEmpty();
         assertThat(AladinBookSearchClient.parse("{\"errorCode\":8}", objectMapper)).isEmpty();
     }
+
+    @Test
+    @DisplayName("totalResults를 읽어 전체 결과 수를 얻는다(없으면 0)")
+    void parseTotalResults_reads() {
+        assertThat(AladinBookSearchClient.parseTotalResults(
+                "{\"totalResults\": 137, \"item\": []}", objectMapper)).isEqualTo(137);
+        assertThat(AladinBookSearchClient.parseTotalResults("{\"item\": []}", objectMapper)).isZero();
+        assertThat(AladinBookSearchClient.parseTotalResults("not json", objectMapper)).isZero();
+    }
 }

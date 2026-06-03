@@ -46,16 +46,17 @@ public class AladinBookSearchClient implements BookSearchClient {
     }
 
     @Override
-    public List<BookSearchResult> search(String query) {
+    public BookSearchPage search(String query, int page) {
+        int safePage = Math.max(1, page);
         if (!isEnabled() || query == null || query.isBlank()) {
-            return List.of();
+            return BookSearchPage.empty(safePage, PAGE_SIZE);
         }
         String url = UriComponentsBuilder.fromUriString(ENDPOINT)
                 .queryParam("ttbkey", ttbKey)
                 .queryParam("Query", query.strip())
                 .queryParam("QueryType", "Keyword")
-                .queryParam("MaxResults", 10)
-                .queryParam("start", 1)
+                .queryParam("MaxResults", PAGE_SIZE)
+                .queryParam("start", safePage)   // 알라딘 start = 시작 페이지(1-based)
                 .queryParam("SearchTarget", "Book")
                 .queryParam("Cover", "MidBig")
                 .queryParam("output", "js")
@@ -64,11 +65,13 @@ public class AladinBookSearchClient implements BookSearchClient {
                 .toUriString();
         try {
             String body = restClient.get().uri(url).retrieve().body(String.class);
-            return parse(body, objectMapper);
+            List<BookSearchResult> items = parse(body, objectMapper);
+            int total = parseTotalResults(body, objectMapper);
+            return new BookSearchPage(items, safePage, PAGE_SIZE, total);
         } catch (Exception e) {
             // 외부 API 장애가 페이지 전체를 깨지 않도록 빈 결과로 격리(로그만 남김).
-            log.warn("알라딘 도서 검색 실패 — query='{}': {}", query, e.toString());
-            return List.of();
+            log.warn("알라딘 도서 검색 실패 — query='{}' page={}: {}", query, safePage, e.toString());
+            return BookSearchPage.empty(safePage, PAGE_SIZE);
         }
     }
 
@@ -98,6 +101,18 @@ public class AladinBookSearchClient implements BookSearchClient {
             log.warn("알라딘 응답 파싱 실패: {}", e.toString());
         }
         return results;
+    }
+
+    /** 알라딘 응답의 전체 결과 수(totalResults). 없거나 파싱 실패 시 0. */
+    static int parseTotalResults(String json, ObjectMapper objectMapper) {
+        if (json == null || json.isBlank()) {
+            return 0;
+        }
+        try {
+            return objectMapper.readTree(json).path("totalResults").asInt(0);
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     private static String text(JsonNode node, String field) {

@@ -41,6 +41,7 @@ public class BookController {
 
     @GetMapping("/books")
     public String books(@RequestParam(value = "q", required = false) String q,
+                        @RequestParam(value = "page", required = false, defaultValue = "1") int page,
                         Principal principal, Model model) {
         User user = currentUser(principal);
 
@@ -51,7 +52,7 @@ public class BookController {
         model.addAttribute("searchEnabled", bookService.searchEnabled());
         model.addAttribute("q", q);
         if (q != null && !q.isBlank()) {
-            model.addAttribute("results", bookService.search(q));
+            model.addAttribute("searchPage", bookService.search(q, page));
         }
         return "books";
     }
