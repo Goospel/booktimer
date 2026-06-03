@@ -2,6 +2,7 @@ package com.booktimer.session;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -53,6 +54,10 @@ public final class ContributionGraphBuilder {
             }
             weeks.add(week);
         }
+
+        // 최근이 왼쪽으로 오도록 열 순서를 뒤집는다 — 좁은 화면에서 스크롤 없이 최근 날짜가 바로 보이게.
+        // (월 라벨은 뒤집힌 순서 위에서 다시 계산해 열과 정렬을 맞춘다.)
+        Collections.reverse(weeks);
 
         return new ContributionGraph(weeks, monthLabels(weeks), total, activeDays);
     }

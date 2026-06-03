@@ -1,5 +1,6 @@
 package com.booktimer.web;
 
+import com.booktimer.session.ReadingContributionService;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
 import org.springframework.stereotype.Controller;
@@ -15,16 +16,23 @@ import java.security.Principal;
  * {@link User}를 찾아, 접속 시점에 누적을 따라잡고(Lazy accrual, N-001) 현재 잔여 시간과
  * 진행 중 세션을 화면에 싣는다. 라이브 영역 모델은 {@link DashboardModel}에 위임해
  * htmx 무리로드 경로({@link ReadingSessionController})와 동일한 상태를 보장한다.
+ *
+ * <p>독서 잔디(컨트리뷰션 그래프)도 함께 싣는다 — {@code /history}와 같은 모델({@link ReadingContributionService})을
+ * 쓰되, 잔디는 라이브 영역 밖이라 htmx 무리로드 시 다시 그릴 필요가 없어 전체 페이지 렌더에서만 채운다.
  */
 @Controller
 public class DashboardController {
 
     private final UserRepository userRepository;
     private final DashboardModel dashboardModel;
+    private final ReadingContributionService contributionService;
 
-    public DashboardController(UserRepository userRepository, DashboardModel dashboardModel) {
+    public DashboardController(UserRepository userRepository,
+                               DashboardModel dashboardModel,
+                               ReadingContributionService contributionService) {
         this.userRepository = userRepository;
         this.dashboardModel = dashboardModel;
+        this.contributionService = contributionService;
     }
 
     @GetMapping("/")
@@ -33,6 +41,7 @@ public class DashboardController {
                 .orElseThrow(() -> new IllegalStateException("authenticated user not found: " + principal.getName()));
 
         dashboardModel.populate(model, user);
+        model.addAttribute("graph", contributionService.contributionGraph(user));
         return "dashboard";
     }
 }
