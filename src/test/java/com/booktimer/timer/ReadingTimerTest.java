@@ -231,4 +231,63 @@ class ReadingTimerTest {
         assertThatThrownBy(() -> timer.updateSettings(HOUR, -1L))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    // --- applyInitialSetup: 온보딩에서 초기값(잔여)+증가값+cap을 직접 정한다 ---
+
+    @Test
+    @DisplayName("applyInitialSetup: 초기 잔여·증가값·cap을 설정하고 기준일을 today로 리셋한다")
+    void applyInitialSetup_setsInitialRemainingIncrementCapAndResetsDate() {
+        ReadingTimer timer = timerWith(HOUR, DAY0); // 가입 시 시드값(1h)
+
+        timer.applyInitialSetup(2 * HOUR, 90 * 60L, 10 * HOUR, DAY0.plusDays(1));
+
+        assertThat(timer.getRemainingSeconds()).isEqualTo(2 * HOUR); // 사용자가 정한 초기값
+        assertThat(timer.getDailyIncrementSeconds()).isEqualTo(90 * 60L);
+        assertThat(timer.getCapSeconds()).isEqualTo(10 * HOUR);
+        // 온보딩 시점부터 누적이 시작되도록 기준일을 today로 전진
+        assertThat(timer.getLastAccrualDate()).isEqualTo(DAY0.plusDays(1));
+    }
+
+    @Test
+    @DisplayName("applyInitialSetup: 초기값이 cap보다 크면 cap으로 클램프된다 (불변식 remaining<=cap)")
+    void applyInitialSetup_clampsInitialToCap() {
+        ReadingTimer timer = timerWith(HOUR, DAY0);
+
+        timer.applyInitialSetup(8 * HOUR, HOUR, 3 * HOUR, DAY0); // 초기값 8h > cap 3h
+
+        assertThat(timer.getRemainingSeconds()).isEqualTo(3 * HOUR);
+        assertThat(timer.getCapSeconds()).isEqualTo(3 * HOUR);
+    }
+
+    @Test
+    @DisplayName("applyInitialSetup: 초기값 0도 허용된다 (시작 잔여 없음)")
+    void applyInitialSetup_zeroInitialAllowed() {
+        ReadingTimer timer = timerWith(HOUR, DAY0);
+
+        timer.applyInitialSetup(0L, HOUR, 5 * HOUR, DAY0);
+
+        assertThat(timer.getRemainingSeconds()).isZero();
+    }
+
+    @Test
+    @DisplayName("applyInitialSetup: 음수 값(초기값/증가값/cap)이면 예외")
+    void applyInitialSetup_negative_throws() {
+        ReadingTimer timer = timerWith(HOUR, DAY0);
+
+        assertThatThrownBy(() -> timer.applyInitialSetup(-1L, HOUR, 5 * HOUR, DAY0))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> timer.applyInitialSetup(HOUR, -1L, 5 * HOUR, DAY0))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> timer.applyInitialSetup(HOUR, HOUR, -1L, DAY0))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("applyInitialSetup: today가 null이면 예외")
+    void applyInitialSetup_nullToday_throws() {
+        ReadingTimer timer = timerWith(HOUR, DAY0);
+
+        assertThatThrownBy(() -> timer.applyInitialSetup(HOUR, HOUR, 5 * HOUR, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }
