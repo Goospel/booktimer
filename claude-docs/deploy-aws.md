@@ -383,6 +383,36 @@ CI 역할로 위를 자동화하려면 `githubActionsDeployRole` 정책에 추�
 
 ---
 
+## 12-2. 알라딘 도서 검색(TTBKey) 연동
+
+책장의 검색·제휴 구매링크는 알라딘 OpenAPI를 쓴다. 앱은 `BOOKTIMER_ALADIN_TTB_KEY` 환경변수를
+읽어(`@Value("${booktimer.aladin.ttb-key:not-configured}")`), 없으면 검색을 끄고 수동 입력으로 폴백한다.
+
+### ① TTBKey 발급 (외부, 1회)
+1. <https://www.aladin.co.kr/ttb/wblog_manage.aspx> (알라딘 → 마이페이지 → 외부 서비스/OpenAPI)에서 OpenAPI 사용 신청.
+2. 발급된 **TTBKey** 복사. (제휴 수익은 이 키가 실린 구매 링크 클릭/구매로 적립 — 제휴 약관 확인.)
+
+### ② SSM에 키 저장 (배포보다 먼저!)
+ECS `secrets`는 태스크 시작 시 SSM에서 **필수로** 당겨오므로, 파라미터가 없으면 새 태스크가
+기동 실패한다(T-011). 따라서 **반드시 먼저** 만든다. CloudShell에서:
+```bash
+aws ssm put-parameter --name /booktimer/ALADIN_TTB_KEY \
+  --value "ttb본인키여기" --type SecureString --region $AWS_REGION
+```
+> 기본 KMS(aws/ssm) 암호화면 실행역할의 기존 `ssm:GetParameters`(/booktimer/*)로 복호화된다(추가 권한 불필요).
+
+### ③ task-definition에 시크릿 참조 + 배포
+`deploy/task-definition.json`의 `secrets`에 이미 추가돼 있다:
+```json
+{ "name": "BOOKTIMER_ALADIN_TTB_KEY", "valueFrom": ".../parameter/booktimer/ALADIN_TTB_KEY" }
+```
+②가 끝난 뒤 main에 배포가 돌면 새 태스크가 키를 주입받아 **검색이 라이브로 활성화**된다.
+확인: `/books`에서 검색창이 보이고(수동 입력 폴백이 아니라), 검색 결과가 나오면 성공.
+
+> 로컬에서 테스트하려면 `BOOKTIMER_ALADIN_TTB_KEY=ttb...`를 환경변수로 주고 `bootRun`.
+
+---
+
 ## Phase 2에서 쓸 GitHub Secrets (미리 메모)
 
 CI/CD 워크플로(다음 단계)에서 저장소 Settings → Secrets에 등록할 값:
