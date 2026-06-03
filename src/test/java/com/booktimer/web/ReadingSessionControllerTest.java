@@ -138,6 +138,21 @@ class ReadingSessionControllerTest {
     }
 
     @Test
+    @DisplayName("POST /sessions/start: 읽고싶음 책으로 시작하면 그 책이 읽는중으로 자동 전환된다")
+    void start_withWantToReadBook_autoTransitionsToReading() throws Exception {
+        User user = register("autoread@booktimer.com");
+        Book book = bookRepository.save(
+                Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.WANT_TO_READ));
+
+        mockMvc.perform(post("/sessions/start").param("bookId", String.valueOf(book.getId()))
+                        .with(user("autoread@booktimer.com")).with(csrf()))
+                .andExpect(redirectedUrl("/"));
+
+        Book reloaded = bookRepository.findById(book.getId()).orElseThrow();
+        assertThat(reloaded.getStatus()).isEqualTo(BookStatus.READING);
+    }
+
+    @Test
     @DisplayName("POST /sessions/start: 남의 책 bookId면 연결 없이 시작한다(IDOR 방지)")
     void start_withOtherUsersBookId_startsWithoutBook() throws Exception {
         User owner = register("bookowner@booktimer.com");
