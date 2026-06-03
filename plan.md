@@ -95,9 +95,13 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 - 순수 빌더 `ContributionGraphBuilder`(스프링 무관)로 그리드 계산 → 경계값 단위테스트. 렌더는 Thymeleaf+CSS grid.
 - (후속 아이디어) 연속일(streak) 표시, 대시보드에도 노출, 색 단계 사용자 데이터 분포 기반 조정.
 
-### 독서 잔디 — 색 농도를 "하루 목표(증가값)" 기준으로 (계획 ⏳ 2026-06-03)
+### 독서 잔디 — 색 농도를 "하루 목표(증가값)" 기준으로 (완료 ✅ 2026-06-03)
 
-> **설계만 기록(코드 미구현)** — 결정 사항을 못 박아두고 구현은 별도 PR에서 TDD로.
+> **구현 완료** — `ContributionGraphBuilder.build/levelFor`에 `goalSeconds` 인자 추가, 하드코딩 임계
+> (`LEVEL_THRESHOLDS_SECONDS`) 제거. 레벨을 목표 대비 비율로 교차곱(정수) 비교. `ReadingContributionService`·
+> `BookContributionService`가 유저 `ReadingTimer.dailyIncrementSeconds`를 조회해 빌더에 전달(없으면 1시간 폴백).
+> 범례 "적음/많음" → "목표 미달/목표 달성"으로 보강. TDD: 빌더 경계(0%·25%·50%·100%·초과·목표0 퇴화·목표 추종)
+> + 서비스 목표 배선. 아래는 설계 근거 기록(참고용).
 
 **문제**: 현재 잔디 레벨(0~4)은 `ContributionGraphBuilder`에 **하드코딩된 고정 임계**
 (`LEVEL_THRESHOLDS_SECONDS = {15분, 30분, 60분}`)로만 정해진다. 유저별 **하루 목표**인
@@ -265,3 +269,4 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 | 2026-06-03 | 개인정보처리방침 페이지(`GET /privacy`, 공개) 추가 — OAuth 동의 화면 게시 체크리스트 ① 완료(②③은 Console 수동). TDD |
 | 2026-06-03 | Safe Browsing "위험한 사이트" 오탐(`.click` 신규 도메인+로그인/OAuth) — T-027/N-036 기록 + 도메인 TLD 이전(.com/.app) 백로그 추가 |
 | 2026-06-03 | OAuth 동의 화면 게시 완료(②③ 체크) — 프로덕션 전환, 100명 제한 해제(non-sensitive라 한도 미적용). Safe Browsing 오탐은 Search Console 인증 후 자연 해소(T-027 보강) |
+| 2026-06-03 | 독서 잔디 색 농도를 하루 목표(증가값) 기준 비율 4단계로 — 완료(빌더 goalSeconds 인자·교차곱, 서비스 타이머 조회, 범례 "목표 대비"). TDD |

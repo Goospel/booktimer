@@ -2,6 +2,7 @@ package com.booktimer.session;
 
 import com.booktimer.book.Book;
 import com.booktimer.book.BookStatus;
+import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import org.junit.jupiter.api.DisplayName;
@@ -11,8 +12,10 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -42,8 +45,10 @@ class BookContributionServiceTest {
     @DisplayName("이 책의 완료 세션을 일자별로 묶어 잔디·기록·누적 시간을 만든다(진행 중은 제외)")
     void detail_aggregatesThisBooksCompletedSessions() {
         ReadingSessionRepository repo = mock(ReadingSessionRepository.class);
+        ReadingTimerRepository timers = mock(ReadingTimerRepository.class);
+        when(timers.findByUser(any())).thenReturn(Optional.empty());
         Clock fixed = Clock.fixed(NOW, ZoneOffset.UTC);
-        BookContributionService service = new BookContributionService(repo, fixed);
+        BookContributionService service = new BookContributionService(repo, timers, fixed);
 
         User user = seoulUser();
         Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
@@ -67,7 +72,9 @@ class BookContributionServiceTest {
     @DisplayName("이 책 기록이 없으면 빈 기록 + 빈 잔디(총합 0)")
     void detail_emptyWhenNoSessions() {
         ReadingSessionRepository repo = mock(ReadingSessionRepository.class);
-        BookContributionService service = new BookContributionService(repo, Clock.fixed(NOW, ZoneOffset.UTC));
+        ReadingTimerRepository timers = mock(ReadingTimerRepository.class);
+        when(timers.findByUser(any())).thenReturn(Optional.empty());
+        BookContributionService service = new BookContributionService(repo, timers, Clock.fixed(NOW, ZoneOffset.UTC));
         User user = seoulUser();
         Book book = Book.register(user, "안 읽은 책", null, null, null, null, null, BookStatus.WANT_TO_READ);
         when(repo.findByUserAndBook(user, book)).thenReturn(List.of());

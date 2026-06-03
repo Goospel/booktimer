@@ -60,14 +60,15 @@
                                  : #temporals.format(day.date(), 'yyyy-MM-dd') + ' · ' + (day.totalSeconds() / 60) + '분'}"></div>
                     </th:block>
                 </div>
+                <!-- 색 농도 = 그날 독서 시간 ÷ 하루 목표 달성 비율 -->
                 <div class="grass-legend" aria-hidden="true">
-                    <span>적음</span>
+                    <span>목표 미달</span>
                     <i class="grass-cell level-0"></i>
                     <i class="grass-cell level-1"></i>
                     <i class="grass-cell level-2"></i>
                     <i class="grass-cell level-3"></i>
                     <i class="grass-cell level-4"></i>
-                    <span>많음</span>
+                    <span>목표 달성</span>
                 </div>
             </div>
         </div>
