@@ -403,6 +403,20 @@ a.book-title:hover { text-decoration: underline; }
 .book-pick select { padding: 7px 8px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
 .book-time { font-size: .8rem; color: var(--ok); font-weight: 600; }
 
+/* 개인정보처리방침 등 고지 문서 — 읽기용 본문(카드 기본 h2의 작은 라벨 스타일을 본문 제목으로 되돌림) */
+.legal { text-align: left; line-height: 1.6; }
+.legal h2 {
+    font-size: .95rem;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--text, inherit);
+    margin: 20px 0 8px;
+}
+.legal h2:first-of-type { margin-top: 8px; }
+.legal ul { margin: 0 0 8px; padding-left: 20px; }
+.legal li { margin-bottom: 4px; }
+.legal-date { font-size: .8rem; color: var(--muted); margin-top: 20px; }
+
 /* 검색 결과 페이징 */
 .pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 12px 0 4px; }
 .pager .btn-ghost { padding: 6px 12px; font-size: .9rem; text-decoration: none; }

@@ -48,7 +48,7 @@ public class SecurityConfig {
                                                    LoginAttemptService loginAttemptService) throws Exception {
         http
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/signup", "/login", "/error", "/actuator/health", "/css/**", "/js/**", "/favicon.ico").permitAll()
+                        .requestMatchers("/signup", "/login", "/privacy", "/error", "/actuator/health", "/css/**", "/js/**", "/favicon.ico").permitAll()
                         // OAuth2 인가요청·콜백 엔드포인트는 미인증 상태에서 접근 가능해야 한다.
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                         .anyRequest().authenticated())
