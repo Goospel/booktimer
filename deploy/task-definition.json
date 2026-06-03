@@ -21,7 +21,8 @@
         { "name": "SPRING_DATASOURCE_USERNAME", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/SPRING_DATASOURCE_USERNAME" },
         { "name": "SPRING_DATASOURCE_PASSWORD", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/SPRING_DATASOURCE_PASSWORD" },
         { "name": "GOOGLE_CLIENT_ID", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/GOOGLE_CLIENT_ID" },
-        { "name": "GOOGLE_CLIENT_SECRET", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/GOOGLE_CLIENT_SECRET" }
+        { "name": "GOOGLE_CLIENT_SECRET", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/GOOGLE_CLIENT_SECRET" },
+        { "name": "BOOKTIMER_ALADIN_TTB_KEY", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/ALADIN_TTB_KEY" }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
