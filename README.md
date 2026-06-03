@@ -57,7 +57,7 @@ BookTimer는 사용자가 하루에 일정 시간 책을 읽도록 **독려**하
 ### 2.5 (추후 예정) SNS 기능
 
 - 사용자 간 독서 기록 / 책별 독서 시간 공유
-- 향후 로드맵으로 별도 설계 예정
+- 설계 문서: [claude-docs/sns-design.md](claude-docs/sns-design.md) (공개범위·관계·IDOR·스키마·단계별 로드맵)
 
 ---
 
