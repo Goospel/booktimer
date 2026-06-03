@@ -27,6 +27,7 @@
 - [T-020. Boot 4에서 raw `spring-session-jdbc`만으론 세션 외부화가 조용히 무동작 → 스타터 필요](#t-020-boot-4에서-raw-spring-session-jdbc만으론-세션-외부화가-조용히-무동작--스타터-필요)
 - [T-021. Spring Session 쿠키엔 `server.servlet.session.cookie.*`가 무동작 → 명시 CookieSerializer 빈](#t-021-spring-session-쿠키엔-serverservletsessioncookie가-무동작--명시-cookieserializer-빈)
 - [T-022. SSR(웹MVC) 앱엔 `ObjectMapper` 빈이 없어 주입 실패 → 자체 생성](#t-022-ssr웹mvc-앱엔-objectmapper-빈이-없어-주입-실패--자체-생성)
+- [T-023. 직접 추가한 책 삭제가 500 — reading_session FK 미정리로 부모 삭제 실패, 좁은 catch가 못 잡음](#t-023-직접-추가한-책-삭제가-500--reading_session-fk-미정리로-부모-삭제-실패-좁은-catch가-못-잡음)
 
 ---
 
@@ -441,6 +442,20 @@ private final ObjectMapper objectMapper = new ObjectMapper();  // 주입 대신 
 
 ---
 
+## T-023. 직접 추가한 책 삭제가 500 — reading_session FK 미정리로 부모 삭제 실패, 좁은 catch가 못 잡음
+
+**증상**: "내 책장"에서 책 삭제 시 500. 단, **타이머로 한 번이라도 읽은 책만** 터진다(읽은 적 없는 책은 정상 삭제). "어떤 책은 되고 어떤 책은 500"으로 보여 헷갈린다.
+
+**원인**: `reading_session.book_id → book(id)` FK(V4)에 `ON DELETE` 동작이 없다. `BookService.delete`가 그 책을 가리키는 세션을 정리하지 않고 바로 `bookRepository.delete(book)` → FK 제약 위반. 그런데 컨트롤러(`BookController#delete`)는 `IllegalArgumentException`만 `catch`하므로, 실제로 던져지는 `DataIntegrityViolationException`이 안 잡히고 그대로 500으로 샌다.
+- **같은 버그가 환경에 따라 다른 예외로 발현**: 테스트(H2, 세션이 영속성 컨텍스트 안)는 flush 시 ORM이 먼저 잡아 `TransientPropertyValueException`("references an unsaved transient instance")로, 운영(MySQL, 세션이 컨텍스트 밖)은 commit 시 DB FK가 잡아 `DataIntegrityViolationException`으로. 뿌리는 하나(FK 미정리). 개념은 [learning-notes.md N-034](learning-notes.md#n-034-부모-엔티티-삭제와-자식-fk--연결-끊기unlink-vs-함께-삭제cascade-그리고-같은-버그의-두-예외).
+
+**해결 / 예방**:
+- 삭제 전에 그 책을 가리키던 세션을 **"책 미지정"으로 푼다**(`book_id = null`): `sessionRepository.unlinkBook(book)` → `bookRepository.delete(book)`. 한 트랜잭션 안에서 UPDATE→DELETE 순서라 commit 시 FK가 만족된다. `AccountService.purge`가 탈퇴 시 FK 순서(세션→타이머→유저)로 정리하는 것과 같은 패턴.
+- **세션을 지우지 않는 이유**: 책을 책장에서 빼도 그날 읽은 기록(잔디·누적 시간)은 사실이라 보존해야 한다. `ReadingSession.book`은 원래 nullable("책 미지정 측정 허용")이라 null이 정상 상태.
+- 일반화: 부모 삭제 시 자식 FK 정리(연결 끊기 또는 함께 삭제)를 **명시적으로** 설계하고, 컨트롤러 `catch`가 **실제 던져지는 예외 타입**을 포함하는지 본다(좁은 `IllegalArgumentException`만 잡으면 DB 예외가 500으로 샌다 — T-012/T-019와 같은 결).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -465,3 +480,4 @@ private final ObjectMapper objectMapper = new ObjectMapper();  // 주입 대신 
 | 2026-06-02 | T-019 (Boot 4에서 NoResourceFoundException이 ResponseStatusException 비-상속(ServletException+ErrorResponse)→ @ExceptionHandler가 안 잡혀 404가 500으로, jar로 상속 확인) |
 | 2026-06-02 | T-021 (세션 외부화 후 SESSION 쿠키는 DefaultCookieSerializer가 써서 server.servlet.session.cookie.* 프로퍼티 무동작 → 명시 CookieSerializer 빈, Set-Cookie 직접 확인으로 진단, N-022 자매 함정) |
 | 2026-06-03 | T-022 (Thymeleaf SSR 앱엔 ObjectMapper 빈이 없어 주입 시 컨텍스트 전체 로드 실패 → 자체 new ObjectMapper(), 대량 실패=컨텍스트 로드 실패 신호, N-024/T-020 부류) |
+| 2026-06-03 | T-023 (읽은 적 있는 책 삭제가 reading_session FK 미정리로 부모 삭제 실패 → unlinkBook(book_id=null) 후 삭제, 세션 보존 / 좁은 catch가 DataIntegrityViolationException 놓쳐 500, 테스트는 TransientPropertyValueException로 발현, N-034) |
