@@ -35,6 +35,7 @@
 - [N-029. 인메모리 세션은 인스턴스가 죽으면 사라진다 — 세션 외부화와 무상태 앱 서버](#n-029-인메모리-세션은-인스턴스가-죽으면-사라진다--세션-외부화와-무상태-앱-서버)
 - [N-030. 무중단 롤링 배포 — min/max healthy percent로 "헬스 통과 후 교체", circuit breaker 자동 롤백](#n-030-무중단-롤링-배포--minmax-healthy-percent로-헬스-통과-후-교체-circuit-breaker-자동-롤백)
 - [N-031. SameSite=Lax로 CSRF 사전 차단 — 그리고 세션 쿠키 속성은 프로퍼티가 아니라 명시 CookieSerializer 빈으로](#n-031-samesitelax로-csrf-사전-차단--그리고-세션-쿠키-속성은-프로퍼티가-아니라-명시-cookieserializer-빈으로)
+- [N-032. 다중 세션 동시 작업 — git worktree로 워킹 트리 분리 (브랜치만으론 부족)](#n-032-다중-세션-동시-작업--git-worktree로-워킹-트리-분리-브랜치만으론-부족)
 
 ---
 
@@ -1391,6 +1392,53 @@ SameSite·HttpOnly·Secure 셋을 한 번에 바로잡는다. **일반 교훈**:
 
 ---
 
+## N-032. 다중 세션 동시 작업 — git worktree로 워킹 트리 분리 (브랜치만으론 부족)
+
+**한 줄 요약**: 여러 Claude Code 세션을 한 폴더(워킹 트리)에서 동시에 돌리면 파일·브랜치가 충돌한다. 브랜치를 나눠도 같은 폴더면 `git checkout` 이 폴더 전체를 갈아끼워 소용없다 — **격리 단위는 브랜치가 아니라 워킹 트리**다. `git worktree` 로 세션마다 별도 폴더를 주면 한 repo를 공유하면서 충돌 없이 병렬 작업할 수 있다. 단 Flyway 버전·공유 문서·포트 같은 repo 공유 자원은 폴더를 나눠도 따로 조율해야 한다.
+
+### 자세한 설명
+
+**충돌의 근원 = 워킹 트리 공유.** 동시성 버그가 공유 가변 상태에서 나오듯, 두 세션이 한 폴더를 공유하면 그 폴더가 공유 상태가 된다. 실제로 이 프로젝트에서, 한 세션이 메인 폴더를 자기 feature 브랜치로 `checkout` 해 작업 중인데(세션 시작 스냅샷은 `main`이었다) 다른 세션의 `plan.md` 편집이 **그 feature 브랜치 위에 얹히는** 일이 일어났다.
+
+**브랜치 ≠ 격리.** 흔한 오해가 "브랜치를 나누면 된다"인데, 같은 폴더에서 `git checkout <branch>` 는 그 폴더의 **파일 전체를 그 브랜치 상태로 갈아끼운다** → 같은 폴더를 보는 다른 세션의 파일까지 통째로 바뀐다. 나눠야 할 건 브랜치가 아니라 폴더다.
+
+**git worktree — 한 repo, 여러 폴더, 각자 다른 브랜치.**
+```
+git worktree add ../proj-feat -b feat/x main   # 새 폴더 + 새 브랜치(main 기준)
+git worktree list                              # 트리 목록
+git worktree remove ../proj-feat               # 작업·머지 후 정리
+```
+- git 객체·refs·히스토리는 공유하되 **워킹 트리(폴더)만 분리**. 한 폴더에서 커밋하면 다른 폴더에서 `git fetch` 로 보인다.
+- **워크트리 = 새 브랜치 한 세트**: 같은 브랜치를 두 워크트리에 동시 체크아웃할 수 없다 → "워크트리 만들어" = 사실상 "새 브랜치 파서 거기서" 와 한 묶음. PR 우선 워크플로와 그대로 맞물린다.
+- 빌드 산출물(`build/`), Gradle 데몬 락, H2도 폴더별 독립.
+
+**낙관적 동시성 가드 — "File modified since read".** 도구가 파일을 덮어쓰기 직전, 읽은 뒤 외부에서 바뀌었으면 차단한다. 이건 버그가 아니라 **lost update 방지**(낙관적 잠금). 정답 절차는 *다시 읽기 → 그쪽 변경 보존 → 내 변경만 재적용*.
+
+**"늦었나?" — 미커밋이면 안 늦었다.** 미커밋 변경은 브랜치에 묶이지 않고 워킹 트리에 떠 있을 뿐이라, 어느 브랜치로든 깨끗이 옮길 수 있다(이상적 순서는 *편집 전 분리*지만). "늦어서 곤란"한 시점은 **엉뚱한 브랜치에 커밋·push·머지까지 한 뒤**다.
+
+**worktree로도 남는 공유 자원** (폴더를 나눠도 충돌 → 조율 필요):
+- **Flyway 버전 번호**(`V5__`, `V6__`) — 두 세션이 같은 번호를 쓰면 충돌. 번호 구역 배정 또는 머지 후 부여.
+- **공유 문서**(plan.md / README / CLAUDE.md / 노트들) — 작게·원자적으로, 편집 직전 재읽기.
+- **앱 포트 8080** — 두 세션 `bootRun` 충돌 → 트리별 `server.port` 분리.
+
+### 일반화 포인트 (면접 답변용)
+
+- **격리의 단위를 정확히 잡아라.** 충돌은 "공유되는 가변 상태"에서 온다. 멀티 세션 작업에서 그 상태는 *워킹 트리*다. 브랜치는 그 트리가 가리키는 포인터일 뿐이라, 트리를 공유하면 브랜치를 나눠도 소용없다.
+- **낙관적 잠금(read-before-write)** 으로 lost update를 막는 건 DB 버전 컬럼·ETag·`If-Match` 와 같은 사상. 도구의 "modified since read" 차단이 그 구현체.
+- **정책은 두 층에서 강제** — soft(CLAUDE.md: 작업 전 git 상태 확인 후 분리 *판단*) + hard(SessionStart 훅: 매 세션 git 상태 자동 표시·경고). [N-004](#n-004-claude-code-훅으로-워크플로-강제--가이드soft-vs-훅hard)의 soft/hard 역할 분담과 같은 구조다. 단 "다른 세션이 *진짜* 떠있는지"는 git만으론 단정 못 해, 훅은 정보·경고까지(판단은 모델 몫).
+
+### 코드 위치
+
+- `.claude/hooks/warn-multi-session.ps1` — SessionStart 훅(현재 브랜치/미커밋/워크트리 표시 + 경고)
+- `.claude/settings.json` — `SessionStart` 훅 등록
+- `CLAUDE.md` — "🪢 다중 세션 동시 작업 — 워크트리 분리" soft 규칙
+
+### 관련 노트
+
+- [N-004. Claude Code 훅으로 워크플로 강제 — 가이드(soft) vs 훅(hard)](#n-004-claude-code-훅으로-워크플로-강제--가이드soft-vs-훅hard) — 같은 soft/hard 두 층 강제 사상
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1423,3 +1471,4 @@ SameSite·HttpOnly·Secure 셋을 한 번에 바로잡는다. **일반 교훈**:
 | 2026-06-02 | N-029 (인메모리 HttpSession은 인스턴스 교체 시 소멸→재로그인 / 세션 외부화(JDBC·Redis)로 무상태 앱 서버, 무중단·수평확장의 전제, 세션 vs 토큰, 재로그인≠데이터손실) |
 | 2026-06-02 | N-030 (무중단 롤링 배포 — min=100/max=200으로 "헬스 통과 후 교체"(start-then-stop), circuit breaker 자동 롤백, deregistration delay는 속도일 뿐 다운타임 원인 아님, 세션 외부화가 전제, 적용은 인프라 설정) |
 | 2026-06-02 | N-031 (SameSite=Lax로 CSRF 사전 차단(Lax는 OAuth 콜백 호환, Strict는 깸) / 세션 외부화 후 세션 쿠키는 DefaultCookieSerializer가 써서 server.servlet.session.cookie.* 무동작→명시 CookieSerializer 빈, N-022 자매 함정, 보안 속성은 Set-Cookie 직접 확인) |
+| 2026-06-03 | N-032 (다중 세션 동시 작업은 git worktree로 워킹 트리 분리 — 브랜치만으론 부족(checkout이 폴더 전체 전환), 미커밋이면 사후 분리 가능, "modified since read"=낙관적 잠금, Flyway 번호·공유문서·포트는 여전히 조율 / SessionStart 훅+CLAUDE.md soft 두 층) |
