@@ -27,6 +27,15 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
     @Query("select s from ReadingSession s left join fetch s.book where s.user = :user and s.endedAt is null")
     Optional<ReadingSession> findActiveWithBook(@Param("user") User user);
 
+    /**
+     * 한 책의 누적 독서 시간(초) — 그 책에 연결된 세션들의 측정 길이 합.
+     *
+     * <p>진행 중(미종료) 세션은 {@code durationSeconds=0}이라 합계에 영향을 주지 않는다(종료 시 채워짐).
+     * 측정 기록이 없으면 0을 돌려준다(coalesce).
+     */
+    @Query("select coalesce(sum(s.durationSeconds), 0) from ReadingSession s where s.user = :user and s.book = :book")
+    long sumDurationByUserAndBook(@Param("user") User user, @Param("book") Book book);
+
     /** 회원 탈퇴 시 해당 유저의 모든 측정 기록을 제거한다. */
     void deleteByUser(User user);
 

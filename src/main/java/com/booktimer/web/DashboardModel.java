@@ -36,19 +36,26 @@ public class DashboardModel {
 
     /**
      * 라이브 영역 렌더 속성을 채운다 — 타이머 상태(nickname, remainingSeconds, atCap), 측정 상태
-     * (hasActiveSession, activeStartedAt), 측정 중인 책(activeBookTitle), 시작 시 고를 책 목록(books).
+     * (hasActiveSession), 측정 중인 책(activeBookTitle)과 그 책의 누적 독서 시간(activeBookTotalSeconds),
+     * 시작 시 고를 책 목록(books).
+     *
+     * <p>{@code activeStartedAt}은 화면에 시각 자체를 노출하진 않지만(사용자에겐 타임존이 보일 필요 없음),
+     * 타이머 카드의 경과 계산(JS {@code data-started})에 여전히 필요하므로 모델에 남긴다.
      */
     public void populate(Model model, User user) {
         ReadingTimer timer = timerService.accrueToToday(user);
         Optional<ReadingSession> activeSession = sessionRepository.findActiveWithBook(user);
+        Book activeBook = activeSession.map(ReadingSession::getBook).orElse(null);
 
         model.addAttribute("nickname", user.getNickname());
         model.addAttribute("remainingSeconds", timer.getRemainingSeconds());
         model.addAttribute("atCap", timer.isAtCap());
         model.addAttribute("hasActiveSession", activeSession.isPresent());
         model.addAttribute("activeStartedAt", activeSession.map(ReadingSession::getStartedAt).orElse(null));
-        model.addAttribute("activeBookTitle", activeSession.map(ReadingSession::getBook)
-                .map(Book::getTitle).orElse(null));
+        model.addAttribute("activeBookTitle", activeBook != null ? activeBook.getTitle() : null);
+        // 측정 중인 책의 누적 독서 시간(완료 세션 합). 책 미지정 측정이면 0.
+        model.addAttribute("activeBookTotalSeconds",
+                activeBook != null ? sessionRepository.sumDurationByUserAndBook(user, activeBook) : 0L);
         model.addAttribute("books", bookRepository.findByUserOrderByCreatedAtDesc(user));
     }
 }
