@@ -85,7 +85,7 @@
             <li class="book-row" th:each="b : ${books}">
                 <img class="book-cover" th:if="${b.coverUrl}" th:src="${b.coverUrl}" alt="" referrerpolicy="no-referrer">
                 <div class="book-meta">
-                    <span class="book-title" th:text="${b.title}">제목</span>
+                    <a class="book-title" th:href="@{/books/{id}(id=${b.id})}" th:text="${b.title}">제목</a>
                     <span class="book-author" th:if="${b.author}" th:text="${b.author}">저자</span>
                     <span class="book-status-badge" th:text="${b.status.label}">상태</span>
                     <span class="book-time mono" th:with="secs=${bookTimes.get(b.id)}"

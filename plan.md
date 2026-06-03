@@ -148,7 +148,10 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
     알라딘 제휴링크로 302 리다이렉트(`Book.clickCount`, Flyway V5). 소유권(IDOR)·링크 없으면 미집계.
     수익 데이터 토대(어떤 책이 구매 의향을 내나). 개념: N-033(클릭 추적 GET 리다이렉트·CSRF·오픈 리다이렉트).
     TDD: BookTest·BookServiceTest·BookControllerTest.
-  - **③-c 책 상세 페이지 (이후)**: 책별 잔디/세션 목록(잔디 빌더 재사용 + 소유권 검사).
+  - **③-c 책 상세 페이지 완료 ✅ 2026-06-03**: `GET /books/{id}` — 책 메타 + **책별 잔디**(그 책 세션만 필터,
+    `ContributionGraphBuilder` 순수 빌더 재사용) + 일자별 기록 + 누적 시간. 소유권 검사(IDOR, 없으면 책장으로).
+    `BookContributionService`(세션 패키지, Clock+유저 TZ 오늘) + `findByUserAndBook`. 책장에서 제목 클릭 진입.
+    TDD: BookContributionServiceTest(단위)·BookControllerTest(렌더·IDOR). **책 3단계 완료.**
 - SNS 확장의 핵심 컨텐츠 토대
 
 ### OAuth 소셜 로그인

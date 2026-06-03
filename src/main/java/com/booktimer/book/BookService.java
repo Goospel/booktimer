@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 책장 유스케이스 — 검색, 등록, 목록, 상태 변경, 삭제.
@@ -55,6 +56,12 @@ public class BookService {
     @Transactional(readOnly = true)
     public List<Book> myBooks(User user) {
         return bookRepository.findByUserOrderByCreatedAtDesc(user);
+    }
+
+    /** 내 책 한 권을 조회한다(소유권 검사 — 남의 책/없는 책이면 비어 있음). 상세 화면 등 읽기 경로용. */
+    @Transactional(readOnly = true)
+    public Optional<Book> findMyBook(User user, Long bookId) {
+        return bookRepository.findByIdAndUser(bookId, user);
     }
 
     public Book changeStatus(User user, Long bookId, BookStatus status) {

@@ -111,6 +111,31 @@ class BookControllerTest {
     }
 
     @Test
+    @DisplayName("GET /books/{id}: 내 책이면 상세(책별 잔디·기록) 화면을 그린다")
+    void detail_rendersForOwner() throws Exception {
+        User u = newUser("detail@booktimer.com");
+        Book book = bookRepository.save(
+                Book.register(u, "클린 코드", "로버트 마틴", null, null, null, null, BookStatus.READING));
+
+        mockMvc.perform(get("/books/{id}", book.getId()).with(user("detail@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(view().name("book-detail"))
+                .andExpect(model().attributeExists("book", "graph", "history"));
+    }
+
+    @Test
+    @DisplayName("GET /books/{id}: 남의 책이면 상세를 안 보여주고 책장으로 돌려보낸다(IDOR 방지)")
+    void detail_nonOwner_redirectsToBooks() throws Exception {
+        User owner = newUser("downer@booktimer.com");
+        User attacker = newUser("dattacker@booktimer.com");
+        Book book = bookRepository.save(
+                Book.register(owner, "도메인 주도 설계", null, null, null, null, null, BookStatus.READING));
+
+        mockMvc.perform(get("/books/{id}", book.getId()).with(user("dattacker@booktimer.com")))
+                .andExpect(redirectedUrl("/books"));
+    }
+
+    @Test
     @DisplayName("GET /books/{id}/buy: 구매 클릭을 집계하고 제휴 구매링크로 리다이렉트한다")
     void buy_countsAndRedirectsToLink() throws Exception {
         User u = newUser("buyer@booktimer.com");

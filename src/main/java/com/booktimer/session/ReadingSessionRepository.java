@@ -17,6 +17,9 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
 
     List<ReadingSession> findByUser(User user);
 
+    /** 한 책에 연결된(그 책으로 측정한) 세션들 — 책별 상세(잔디·기록) 집계에 쓰인다. */
+    List<ReadingSession> findByUserAndBook(User user, Book book);
+
     /** 진행 중(endedAt == null) 세션. 서비스의 중복 start 방지에 쓰인다. */
     Optional<ReadingSession> findByUserAndEndedAtIsNull(User user);
 
