@@ -1,5 +1,8 @@
 package com.booktimer.session;
 
+import com.booktimer.book.Book;
+import com.booktimer.book.BookRepository;
+import com.booktimer.book.BookStatus;
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.Role;
@@ -44,6 +47,9 @@ class ReadingSessionServiceTest {
     @Mock
     private ReadingTimerRepository timerRepository;
 
+    @Mock
+    private BookRepository bookRepository;
+
     @InjectMocks
     private ReadingSessionService service;
 
@@ -79,6 +85,43 @@ class ReadingSessionServiceTest {
         assertThatThrownBy(() -> service.start(user, T0.plusSeconds(10)))
                 .isInstanceOf(IllegalStateException.class);
         verify(sessionRepository, never()).save(any(ReadingSession.class));
+    }
+
+    @Test
+    @DisplayName("start: 읽고싶음 책으로 시작하면 그 책을 읽는중으로 자동 전환하고 저장한다")
+    void start_withWantToReadBook_marksReadingAndSaves() {
+        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.WANT_TO_READ);
+        when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.empty());
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        service.start(user, T0, book);
+
+        assertThat(book.getStatus()).isEqualTo(BookStatus.READING);
+        verify(bookRepository).save(book);
+    }
+
+    @Test
+    @DisplayName("start: 이미 읽는중인 책으로 시작하면 상태는 그대로, 책을 다시 저장하지 않는다")
+    void start_withReadingBook_doesNotResave() {
+        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
+        when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.empty());
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        service.start(user, T0, book);
+
+        assertThat(book.getStatus()).isEqualTo(BookStatus.READING);
+        verify(bookRepository, never()).save(any(Book.class));
+    }
+
+    @Test
+    @DisplayName("start: 책 미지정(null)이면 책 레포를 건드리지 않는다")
+    void start_withoutBook_doesNotTouchBookRepo() {
+        when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.empty());
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        service.start(user, T0, null);
+
+        verify(bookRepository, never()).save(any(Book.class));
     }
 
     // --- stop ---

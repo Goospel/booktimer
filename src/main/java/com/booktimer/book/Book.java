@@ -95,6 +95,22 @@ public class Book extends BaseTimeEntity {
         return new Book(user, title, author, isbn13, coverUrl, publisher, purchaseLink, status);
     }
 
+    /**
+     * 읽기를 시작했음을 반영한다 — "읽고싶음"이면 "읽는중"으로 자동 전환한다.
+     *
+     * <p>멱등하다: 이미 "읽는중"이거나 "완독"인 책은 건드리지 않는다(완독을 읽는중으로 되돌리지 않음).
+     * 타이머로 이 책을 처음 읽기 시작할 때 호출해, 사용자가 손으로 상태를 바꾸는 수고를 던다.
+     *
+     * @return 실제로 전환이 일어났으면 true(=영속 저장이 필요), 그대로면 false
+     */
+    public boolean startReading() {
+        if (status == BookStatus.WANT_TO_READ) {
+            status = BookStatus.READING;
+            return true;
+        }
+        return false;
+    }
+
     /** 상태 변경(읽고싶음 → 읽는중 → 완독 등). */
     public void changeStatus(BookStatus newStatus) {
         if (newStatus == null) {

@@ -1,6 +1,7 @@
 package com.booktimer.session;
 
 import com.booktimer.book.Book;
+import com.booktimer.book.BookRepository;
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.User;
@@ -25,11 +26,14 @@ public class ReadingSessionService {
 
     private final ReadingSessionRepository sessionRepository;
     private final ReadingTimerRepository timerRepository;
+    private final BookRepository bookRepository;
 
     public ReadingSessionService(ReadingSessionRepository sessionRepository,
-                                 ReadingTimerRepository timerRepository) {
+                                 ReadingTimerRepository timerRepository,
+                                 BookRepository bookRepository) {
         this.sessionRepository = sessionRepository;
         this.timerRepository = timerRepository;
+        this.bookRepository = bookRepository;
     }
 
     /**
@@ -50,7 +54,12 @@ public class ReadingSessionService {
         sessionRepository.findByUserAndEndedAtIsNull(user).ifPresent(s -> {
             throw new IllegalStateException("an active session already exists");
         });
-        return sessionRepository.save(ReadingSession.start(user, now, book));
+        ReadingSession saved = sessionRepository.save(ReadingSession.start(user, now, book));
+        // 책을 대상으로 시작했고 그 책이 "읽고싶음"이었다면 "읽는중"으로 자동 전환(전환 시에만 저장).
+        if (book != null && book.startReading()) {
+            bookRepository.save(book);
+        }
+        return saved;
     }
 
     /**
