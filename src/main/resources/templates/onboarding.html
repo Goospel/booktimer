@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>시작 설정 — BookTimer</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <span class="emoji">📚</span>
+        <h1>BookTimer</h1>
+    </header>
+    <p class="greeting"><span th:text="${nickname}">닉네임</span>님, 환영합니다! 시작 설정을 해볼까요?</p>
+
+    <section class="card">
+        <p class="status-line muted">
+            매일 <strong>증가값</strong>만큼 목표 시간이 쌓이고, 못 채운 시간은 <strong>상한</strong>까지 다음 날로 이월돼요.
+            <strong>초기값</strong>은 지금 시작할 남은 독서 시간입니다. 나중에 설정에서 증가값·상한을 바꿀 수 있어요.
+        </p>
+        <form th:action="@{/onboarding}" th:object="${onboardingForm}" method="post">
+            <div class="field">
+                <label for="initialMinutes">초기값 (분) — 지금 시작할 남은 독서 시간</label>
+                <input type="number" id="initialMinutes" min="0" th:field="*{initialMinutes}">
+                <span class="field-error" th:if="${#fields.hasErrors('initialMinutes')}" th:errors="*{initialMinutes}">초기값 오류</span>
+            </div>
+            <div class="field">
+                <label for="incrementMinutes">하루 증가값 (분)</label>
+                <input type="number" id="incrementMinutes" min="0" th:field="*{incrementMinutes}">
+                <span class="field-error" th:if="${#fields.hasErrors('incrementMinutes')}" th:errors="*{incrementMinutes}">증가값 오류</span>
+            </div>
+            <div class="field">
+                <label for="capMinutes">누적 상한 (분)</label>
+                <input type="number" id="capMinutes" min="0" th:field="*{capMinutes}">
+                <span class="field-error" th:if="${#fields.hasErrors('capMinutes')}" th:errors="*{capMinutes}">상한 오류</span>
+            </div>
+            <button type="submit" class="btn-primary">시작하기</button>
+        </form>
+    </section>
+</div>
+</body>
+</html>

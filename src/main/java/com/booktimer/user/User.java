@@ -65,6 +65,14 @@ public class User extends BaseTimeEntity {
     @Column(nullable = false, columnDefinition = "varchar(20) default 'LOCAL'")
     private AuthProvider authProvider;
 
+    /**
+     * 첫 진입 시 초기 설정(온보딩 — 타이머 초기값/증가값/상한 직접 지정) 완료 여부.
+     * 신규 가입자는 {@code false}로 시작해 온보딩 페이지로 유도되고, 완료하면 {@code true}가 된다.
+     * 기존 사용자는 마이그레이션에서 {@code true}로 백필돼 온보딩을 강요받지 않는다.
+     */
+    @Column(nullable = false)
+    private boolean onboarded = false;
+
     protected User() {
         // JPA
     }
@@ -179,6 +187,19 @@ public class User extends BaseTimeEntity {
     /** 이메일/비밀번호로 가입한 LOCAL 계정인가(=비밀번호를 가진 계정). */
     public boolean isLocalAccount() {
         return authProvider == AuthProvider.LOCAL;
+    }
+
+    /**
+     * 첫 진입 초기 설정(온보딩)을 완료 처리한다. 멱등 — 이미 완료된 계정에 다시 호출해도 무방하다.
+     * 실제 타이머 초기값/증가값/상한 적용은 {@code ReadingTimer}가 맡고, 여기선 완료 플래그만 세운다.
+     */
+    public void completeOnboarding() {
+        this.onboarded = true;
+    }
+
+    /** 첫 진입 초기 설정(온보딩)을 마쳤는가. false면 온보딩 페이지로 유도된다. */
+    public boolean isOnboarded() {
+        return onboarded;
     }
 
     public Long getId() {

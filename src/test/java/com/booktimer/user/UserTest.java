@@ -196,4 +196,34 @@ class UserTest {
         assertThatThrownBy(() -> user.changePassword("$2a$10$NEWHASHvalue000000000"))
                 .isInstanceOf(IllegalStateException.class);
     }
+
+    // --- onboarded: 첫 진입 시 초기 설정(온보딩) 완료 여부 ---
+
+    @Test
+    @DisplayName("새로 만든 LOCAL 사용자는 아직 온보딩 전이다 (isOnboarded=false)")
+    void of_isNotOnboardedYet() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        assertThat(user.isOnboarded()).isFalse();
+    }
+
+    @Test
+    @DisplayName("새로 만든 소셜 사용자도 아직 온보딩 전이다 (isOnboarded=false)")
+    void ofOAuth_isNotOnboardedYet() {
+        User user = User.ofOAuth(EMAIL, NICK, TZ, Role.USER, AuthProvider.GOOGLE);
+
+        assertThat(user.isOnboarded()).isFalse();
+    }
+
+    @Test
+    @DisplayName("completeOnboarding: 온보딩 완료 표시 — isOnboarded=true (멱등)")
+    void completeOnboarding_marksOnboarded() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        user.completeOnboarding();
+        assertThat(user.isOnboarded()).isTrue();
+
+        user.completeOnboarding(); // 다시 호출해도 true 유지(멱등)
+        assertThat(user.isOnboarded()).isTrue();
+    }
 }

@@ -40,6 +40,12 @@ public class DashboardController {
         User user = userRepository.findByEmail(principal.getName())
                 .orElseThrow(() -> new IllegalStateException("authenticated user not found: " + principal.getName()));
 
+        // 첫 진입 게이트: 초기 설정(온보딩)을 마치지 않은 신규 가입자는 온보딩 페이지로 유도한다.
+        // 로그인 후 착지점이 "/"라 LOCAL·OAuth 첫 가입 모두 여기서 걸린다.
+        if (!user.isOnboarded()) {
+            return "redirect:/onboarding";
+        }
+
         dashboardModel.populate(model, user);
         model.addAttribute("graph", contributionService.contributionGraph(user));
         return "dashboard";

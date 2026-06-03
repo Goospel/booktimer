@@ -151,6 +151,40 @@ public class ReadingTimer extends BaseTimeEntity {
     }
 
     /**
+     * 첫 진입 초기 설정(온보딩)에서 <b>초기 잔여(시작값)+증가값+상한</b>을 직접 정한다.
+     *
+     * <p>가입 시에는 잔여가 증가값으로 자동 시드되지만({@link #startFor}), 온보딩에서 사용자가
+     * 원하는 시작값을 직접 고를 수 있게 한다. 초기값이 cap을 넘으면 불변식({@code remainingSeconds <= capSeconds})을
+     * 지키기 위해 cap으로 클램프한다. 또한 누적이 온보딩 시점부터 시작되도록 {@code lastAccrualDate}를
+     * {@code today}로 전진시킨다 — 가입과 온보딩 사이 경과분이 잔여에 섞이지 않게 한다.
+     *
+     * @param initialRemainingSeconds 사용자가 정한 초기 잔여(초, 0 이상 — cap 초과 시 cap으로 클램프)
+     * @param dailyIncrementSeconds   하루 증가값(초, 0 이상)
+     * @param capSeconds              누적 상한(초, 0 이상)
+     * @param today                   온보딩 시점의 "오늘"(사용자 타임존 기준, 누적 기준일로 리셋)
+     * @throws IllegalArgumentException 값이 음수이거나 today가 null인 경우
+     */
+    public void applyInitialSetup(long initialRemainingSeconds, long dailyIncrementSeconds,
+                                  long capSeconds, LocalDate today) {
+        if (initialRemainingSeconds < 0) {
+            throw new IllegalArgumentException("initialRemainingSeconds must be >= 0");
+        }
+        if (dailyIncrementSeconds < 0) {
+            throw new IllegalArgumentException("dailyIncrementSeconds must be >= 0");
+        }
+        if (capSeconds < 0) {
+            throw new IllegalArgumentException("capSeconds must be >= 0");
+        }
+        if (today == null) {
+            throw new IllegalArgumentException("today must not be null");
+        }
+        this.dailyIncrementSeconds = dailyIncrementSeconds;
+        this.capSeconds = capSeconds;
+        this.remainingSeconds = Math.min(initialRemainingSeconds, capSeconds); // cap 이하로 클램프
+        this.lastAccrualDate = today;
+    }
+
+    /**
      * 세션 측정량만큼 누적 잔여(부채)를 갚는다. 잔여는 0 밑으로 내려가지 않는다(floor).
      *
      * @param seconds 갚을 시간(초, 0 이상)
