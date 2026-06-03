@@ -14,12 +14,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 독서 잔디 그리드 빌더 경계값 테스트 — 순수 날짜 계산이라 스프링 없이 빠르게 검증한다.
  *
  * <p>GitHub 잔디와 동일 배치: 53주 열 × 7요일 행(일요일 top → 토요일 bottom), 오늘 주가 맨 오른쪽,
- * 미래 칸은 placeholder. 색 레벨은 시간(분) 임계로 0~4.
+ * 미래 칸은 placeholder. 색 레벨은 <b>하루 목표(goalSeconds) 대비 달성 비율</b>로 0~4.
  */
 class ContributionGraphBuilderTest {
 
     // 화요일
     private static final LocalDate TODAY = LocalDate.of(2026, 6, 2);
+
+    /** 테스트용 하루 목표: 1시간. */
+    private static final long GOAL = 3600L;
 
     /** 일요일=0 ... 토요일=6 (그리드 행 인덱스). */
     private static int sundayOffset(LocalDate d) {
@@ -29,7 +32,7 @@ class ContributionGraphBuilderTest {
     @Test
     @DisplayName("그리드는 53주 × 각 주 7칸이다")
     void grid_is_53_weeks_of_7() {
-        ContributionGraph graph = ContributionGraphBuilder.build(Map.of(), TODAY);
+        ContributionGraph graph = ContributionGraphBuilder.build(Map.of(), TODAY, GOAL);
 
         assertThat(graph.weeks()).hasSize(53);
         assertThat(graph.weeks()).allSatisfy(week -> assertThat(week).hasSize(7));
@@ -38,7 +41,7 @@ class ContributionGraphBuilderTest {
     @Test
     @DisplayName("각 주의 첫 칸(행 0)은 일요일이다")
     void firstRow_isSunday() {
-        ContributionGraph graph = ContributionGraphBuilder.build(Map.of(), TODAY);
+        ContributionGraph graph = ContributionGraphBuilder.build(Map.of(), TODAY, GOAL);
 
         for (List<ContributionDay> week : graph.weeks()) {
             ContributionDay first = week.get(0);
@@ -51,7 +54,7 @@ class ContributionGraphBuilderTest {
     @Test
     @DisplayName("오늘은 맨 오른쪽 주의 요일 위치에 있고 placeholder가 아니다")
     void today_isInLastWeek() {
-        ContributionGraph graph = ContributionGraphBuilder.build(Map.of(), TODAY);
+        ContributionGraph graph = ContributionGraphBuilder.build(Map.of(), TODAY, GOAL);
 
         ContributionDay todayCell = graph.weeks().get(52).get(sundayOffset(TODAY));
         assertThat(todayCell.isPlaceholder()).isFalse();
@@ -61,7 +64,7 @@ class ContributionGraphBuilderTest {
     @Test
     @DisplayName("오늘 이후(미래) 칸은 placeholder다")
     void future_isPlaceholder() {
-        ContributionGraph graph = ContributionGraphBuilder.build(Map.of(), TODAY);
+        ContributionGraph graph = ContributionGraphBuilder.build(Map.of(), TODAY, GOAL);
 
         List<ContributionDay> lastWeek = graph.weeks().get(52);
         int todayOffset = sundayOffset(TODAY); // 화요일=2 → 그 뒤(수~토)는 미래
@@ -73,20 +76,44 @@ class ContributionGraphBuilderTest {
     }
 
     @Test
-    @DisplayName("색 레벨: 0분=0, ~15분=1, ~30분=2, ~60분=3, 초과=4 (경계 포함)")
-    void levels_byMinutes() {
-        LocalDate d = LocalDate.of(2026, 3, 15); // 범위 내 일요일 근처 임의 날짜
-        assertThat(levelOf(0L, d)).isEqualTo(0);
-        assertThat(levelOf(10 * 60L, d)).isEqualTo(1);
-        assertThat(levelOf(15 * 60L, d)).as("15분 경계는 1").isEqualTo(1);
-        assertThat(levelOf(16 * 60L, d)).isEqualTo(2);
-        assertThat(levelOf(30 * 60L, d)).as("30분 경계는 2").isEqualTo(2);
-        assertThat(levelOf(60 * 60L, d)).as("60분 경계는 3").isEqualTo(3);
-        assertThat(levelOf(60 * 60L + 1, d)).isEqualTo(4);
+    @DisplayName("색 레벨: 목표 대비 비율 — 0%=0, ~25%=1, ~50%=2, ~100%미만=3, 100%이상=4 (경계는 위 레벨 포함)")
+    void levels_byGoalRatio() {
+        LocalDate d = LocalDate.of(2026, 3, 15); // 범위 내 임의 날짜, 목표 1시간(GOAL)
+        assertThat(levelOf(0L, d)).as("안 읽음").isEqualTo(0);
+        assertThat(levelOf(1L, d)).as("0 바로 초과").isEqualTo(1);
+        assertThat(levelOf(GOAL / 4, d)).as("정확히 25%는 1").isEqualTo(1);
+        assertThat(levelOf(GOAL / 4 + 1, d)).as("25% 초과").isEqualTo(2);
+        assertThat(levelOf(GOAL / 2, d)).as("정확히 50%는 2").isEqualTo(2);
+        assertThat(levelOf(GOAL / 2 + 1, d)).as("50% 초과").isEqualTo(3);
+        assertThat(levelOf(GOAL - 1, d)).as("100% 직전").isEqualTo(3);
+        assertThat(levelOf(GOAL, d)).as("정확히 100%는 4").isEqualTo(4);
+        assertThat(levelOf(GOAL + 1, d)).as("목표 초과").isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("목표가 0(퇴화)이면 읽은 날은 모두 4, 안 읽은 날은 0 (div-by-zero 없음)")
+    void levels_zeroGoal_degenerate() {
+        LocalDate d = LocalDate.of(2026, 3, 15);
+        assertThat(levelOfWithGoal(0L, d, 0L)).as("목표 0 + 안 읽음").isEqualTo(0);
+        assertThat(levelOfWithGoal(1L, d, 0L)).as("목표 0 + 읽으면 만점").isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("목표가 작으면 같은 독서량도 더 높은 레벨이 된다 (목표를 따라간다)")
+    void levels_followGoal() {
+        LocalDate d = LocalDate.of(2026, 3, 15);
+        long read = 1800L; // 30분
+        // 목표 1시간이면 50% → lv2, 목표 30분이면 100% → lv4
+        assertThat(levelOfWithGoal(read, d, 3600L)).isEqualTo(2);
+        assertThat(levelOfWithGoal(read, d, 1800L)).isEqualTo(4);
     }
 
     private int levelOf(long seconds, LocalDate date) {
-        ContributionGraph graph = ContributionGraphBuilder.build(Map.of(date, seconds), TODAY);
+        return levelOfWithGoal(seconds, date, GOAL);
+    }
+
+    private int levelOfWithGoal(long seconds, LocalDate date, long goalSeconds) {
+        ContributionGraph graph = ContributionGraphBuilder.build(Map.of(date, seconds), TODAY, goalSeconds);
         return findCell(graph, date).level();
     }
 
@@ -97,7 +124,7 @@ class ContributionGraphBuilderTest {
                 LocalDate.of(2026, 3, 15), 1200L,
                 LocalDate.of(2026, 4, 10), 600L);
 
-        ContributionGraph graph = ContributionGraphBuilder.build(data, TODAY);
+        ContributionGraph graph = ContributionGraphBuilder.build(data, TODAY, GOAL);
 
         assertThat(findCell(graph, LocalDate.of(2026, 3, 15)).totalSeconds()).isEqualTo(1200L);
         assertThat(graph.totalSeconds()).isEqualTo(1800L);
@@ -109,7 +136,7 @@ class ContributionGraphBuilderTest {
     void outOfRange_isIgnored() {
         Map<LocalDate, Long> data = Map.of(LocalDate.of(2000, 1, 1), 9999L);
 
-        ContributionGraph graph = ContributionGraphBuilder.build(data, TODAY);
+        ContributionGraph graph = ContributionGraphBuilder.build(data, TODAY, GOAL);
 
         assertThat(graph.totalSeconds()).isZero();
         assertThat(graph.activeDays()).isZero();
@@ -118,7 +145,7 @@ class ContributionGraphBuilderTest {
     @Test
     @DisplayName("월 라벨이 있고 열 인덱스 오름차순이며 '6월' 형식이다")
     void monthLabels_present_andOrdered() {
-        ContributionGraph graph = ContributionGraphBuilder.build(Map.of(), TODAY);
+        ContributionGraph graph = ContributionGraphBuilder.build(Map.of(), TODAY, GOAL);
 
         assertThat(graph.monthLabels()).isNotEmpty();
         assertThat(graph.monthLabels())

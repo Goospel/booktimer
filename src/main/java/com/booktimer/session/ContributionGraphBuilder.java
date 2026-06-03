@@ -20,17 +20,13 @@ public final class ContributionGraphBuilder {
     static final int WEEKS = 53;
 
     /**
-     * 색 농도 임계(초) — 이 값 <b>이하</b>면 해당 레벨. 0초는 level 0.
-     * level 1: ~15분, 2: ~30분, 3: ~60분, 4: 초과. (색은 추후 조정 — 상수로 분리)
-     */
-    static final long[] LEVEL_THRESHOLDS_SECONDS = {15 * 60, 30 * 60, 60 * 60};
-
-    /**
      * @param secondsByDate 날짜→총 독서 초 (없는 날은 0으로 간주)
      * @param today         유저 타임존 기준 오늘
+     * @param goalSeconds   하루 목표 초(유저의 평면 증가값) — 색 농도를 이 목표 대비 달성 비율로 정한다.
+     *                      0이면 "목표 없음"으로 보고 읽은 날은 모두 최고 농도(lv4)가 된다.
      * @return 53주 × 7요일 그리드 모델
      */
-    public static ContributionGraph build(Map<LocalDate, Long> secondsByDate, LocalDate today) {
+    public static ContributionGraph build(Map<LocalDate, Long> secondsByDate, LocalDate today, long goalSeconds) {
         // 일요일=0 ... 토요일=6. 오늘이 속한 주의 일요일이 맨 오른쪽 열의 시작.
         int todayOffset = today.getDayOfWeek().getValue() % 7;
         LocalDate lastSunday = today.minusDays(todayOffset);
@@ -49,7 +45,7 @@ public final class ContributionGraphBuilder {
                     continue;
                 }
                 long seconds = Math.max(0L, secondsByDate.getOrDefault(date, 0L));
-                week.add(new ContributionDay(date, seconds, levelFor(seconds)));
+                week.add(new ContributionDay(date, seconds, levelFor(seconds, goalSeconds)));
                 total += seconds;
                 if (seconds > 0) {
                     activeDays++;
@@ -61,21 +57,26 @@ public final class ContributionGraphBuilder {
         return new ContributionGraph(weeks, monthLabels(weeks), total, activeDays);
     }
 
-    /** 독서 초를 색 농도 0~4로. 임계는 <b>이하</b> 포함. */
-    static int levelFor(long seconds) {
+    /**
+     * 독서 초를 하루 목표 대비 달성 비율로 색 농도 0~4로 매핑한다.
+     * <p>경계는 "이하 포함"(위 레벨로): 25%·50%는 각각 1·2, 정확히 100%는 4.
+     * 부동소수 없이 <b>교차곱</b>으로 정수 비교한다. 목표가 0이면 읽은 날(초>0)은 모두 4로 떨어진다
+     * (div-by-zero 없음 — "목표 없음 = 읽기만 하면 만점").
+     */
+    static int levelFor(long seconds, long goalSeconds) {
         if (seconds <= 0) {
-            return 0;
+            return 0;                       // 안 읽음
         }
-        if (seconds <= LEVEL_THRESHOLDS_SECONDS[0]) {
-            return 1;
+        if (seconds * 4 <= goalSeconds) {
+            return 1;                       // ~25%
         }
-        if (seconds <= LEVEL_THRESHOLDS_SECONDS[1]) {
-            return 2;
+        if (seconds * 2 <= goalSeconds) {
+            return 2;                       // ~50%
         }
-        if (seconds <= LEVEL_THRESHOLDS_SECONDS[2]) {
-            return 3;
+        if (seconds < goalSeconds) {
+            return 3;                       // ~100% 미만
         }
-        return 4;
+        return 4;                           // 100% 이상(목표 달성/초과). goalSeconds=0도 여기로.
     }
 
     /** 월이 바뀌는 첫 열 위에 "M월" 라벨을 둔다(첫 열 포함). 행 0(일요일)은 항상 실제 날짜다. */

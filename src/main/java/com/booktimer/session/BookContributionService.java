@@ -1,6 +1,7 @@
 package com.booktimer.session;
 
 import com.booktimer.book.Book;
+import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,16 +21,23 @@ import java.util.TreeMap;
  * <p>전체 잔디({@link ReadingContributionService})와 같은 사상이되, 집계 대상을 "그 책에 연결된 완료 세션"으로
  * 좁힌다. "오늘"은 유저 타임존 자정 경계로 정하고(N-010, {@link Clock}+{@link User#getTimezone()}),
  * 그리드 구성은 순수 빌더 {@link ContributionGraphBuilder}에 위임한다.
+ *
+ * <p>색 농도는 전체 잔디와 동일하게 유저의 <b>하루 목표</b>(타이머 {@code dailyIncrementSeconds}) 대비 달성 비율로
+ * 정한다 — 책별 칸도 같은 기준이라야 직관적이다. 타이머가 없으면 기본 목표로 폴백한다.
  */
 @Service
 @Transactional(readOnly = true)
 public class BookContributionService {
 
     private final ReadingSessionRepository sessionRepository;
+    private final ReadingTimerRepository timerRepository;
     private final Clock clock;
 
-    public BookContributionService(ReadingSessionRepository sessionRepository, Clock clock) {
+    public BookContributionService(ReadingSessionRepository sessionRepository,
+                                   ReadingTimerRepository timerRepository,
+                                   Clock clock) {
         this.sessionRepository = sessionRepository;
+        this.timerRepository = timerRepository;
         this.clock = clock;
     }
 
@@ -60,6 +68,11 @@ public class BookContributionService {
             total += record.totalSeconds();
         }
 
-        return new BookReadingDetail(ContributionGraphBuilder.build(secondsByDate, today), dailyHistory, total);
+        long goalSeconds = timerRepository.findByUser(user)
+                .map(timer -> timer.getDailyIncrementSeconds())
+                .orElse(ReadingContributionService.DEFAULT_GOAL_SECONDS);
+
+        return new BookReadingDetail(
+                ContributionGraphBuilder.build(secondsByDate, today, goalSeconds), dailyHistory, total);
     }
 }
