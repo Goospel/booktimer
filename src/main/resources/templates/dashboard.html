@@ -48,11 +48,12 @@
         <section class="card">
             <h2>측정</h2>
             <div th:if="${hasActiveSession}">
-                <p class="status-line">측정 진행 중 · 시작
-                    <span class="mono" th:text="${activeStartedAt}">-</span>
-                </p>
                 <p class="status-line" th:if="${activeBookTitle}">📖 읽는 중:
                     <span th:text="${activeBookTitle}">책 제목</span>
+                </p>
+                <p class="status-line" th:unless="${activeBookTitle}">측정 진행 중 (책 미지정)</p>
+                <p class="status-line muted" th:if="${activeBookTitle}">이 책 누적 독서
+                    <strong th:text="${activeBookTotalSeconds / 3600 + '시간 ' + (activeBookTotalSeconds % 3600) / 60 + '분'}">0시간 0분</strong>
                 </p>
                 <form th:action="@{/sessions/stop}" method="post"
                       hx-post="/sessions/stop" hx-target="#dashboard-live" hx-swap="outerHTML">

@@ -1,5 +1,10 @@
 package com.booktimer.web;
 
+import com.booktimer.book.Book;
+import com.booktimer.book.BookRepository;
+import com.booktimer.book.BookStatus;
+import com.booktimer.session.ReadingSession;
+import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.session.ReadingSessionService;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
@@ -13,6 +18,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
@@ -43,6 +49,12 @@ class DashboardControllerTest {
 
     @Autowired
     private ReadingSessionService sessionService;
+
+    @Autowired
+    private ReadingSessionRepository sessionRepository;
+
+    @Autowired
+    private BookRepository bookRepository;
 
     @Autowired
     private Clock clock;
@@ -87,6 +99,32 @@ class DashboardControllerTest {
         mockMvc.perform(get("/").with(user("act@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(model().attribute("hasActiveSession", true));
+    }
+
+    @Test
+    @DisplayName("GET /: 진행 중 세션이 책에 연결돼 있으면 그 책의 누적 독서 시간을 싣는다 (완료 세션 합, 진행 중은 미포함)")
+    void dashboard_activeBookTotalSeconds() throws Exception {
+        User user = registrationService.register("booktotal@booktimer.com", "rawpw1234", "독서가", SEOUL, Role.USER, today());
+        Book book = bookRepository.save(
+                Book.register(user, "전쟁과 평화", null, null, null, null, null, BookStatus.READING));
+
+        // 과거 완료 세션 2건: 600s + 1200s = 1800s
+        Instant base = clock.instant();
+        ReadingSession s1 = ReadingSession.start(user, base.minusSeconds(10_000), book);
+        s1.end(base.minusSeconds(9_400)); // 600s
+        ReadingSession s2 = ReadingSession.start(user, base.minusSeconds(5_000), book);
+        s2.end(base.minusSeconds(3_800)); // 1200s
+        sessionRepository.save(s1);
+        sessionRepository.save(s2);
+
+        // 같은 책으로 진행 중(미종료) 세션 — durationSeconds=0이라 합계에 영향 없어야 함
+        sessionService.start(user, base, book);
+
+        mockMvc.perform(get("/").with(user("booktotal@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("hasActiveSession", true))
+                .andExpect(model().attribute("activeBookTitle", "전쟁과 평화"))
+                .andExpect(model().attribute("activeBookTotalSeconds", 1800L));
     }
 
     @Test
