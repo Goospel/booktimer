@@ -62,7 +62,9 @@ class DashboardControllerTest {
                 .andExpect(model().attribute("nickname", "책벌레"))
                 // 가입 당일 1증가값 시드(1h) — 같은 날 접속이라 추가 누적 없음
                 .andExpect(model().attribute("remainingSeconds", 3600L))
-                .andExpect(model().attribute("hasActiveSession", false));
+                .andExpect(model().attribute("hasActiveSession", false))
+                // 대시보드에도 독서 잔디(컨트리뷰션 그래프)를 싣는다
+                .andExpect(model().attributeExists("graph"));
     }
 
     @Test

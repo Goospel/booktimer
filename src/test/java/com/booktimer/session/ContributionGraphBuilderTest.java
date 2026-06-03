@@ -52,24 +52,37 @@ class ContributionGraphBuilderTest {
     }
 
     @Test
-    @DisplayName("오늘은 맨 오른쪽 주의 요일 위치에 있고 placeholder가 아니다")
-    void today_isInLastWeek() {
+    @DisplayName("오늘은 맨 왼쪽(가장 최근) 주의 요일 위치에 있고 placeholder가 아니다")
+    void today_isInFirstWeek() {
         ContributionGraph graph = ContributionGraphBuilder.build(Map.of(), TODAY, GOAL);
 
-        ContributionDay todayCell = graph.weeks().get(52).get(sundayOffset(TODAY));
+        ContributionDay todayCell = graph.weeks().get(0).get(sundayOffset(TODAY));
         assertThat(todayCell.isPlaceholder()).isFalse();
         assertThat(todayCell.date()).isEqualTo(TODAY);
     }
 
     @Test
-    @DisplayName("오늘 이후(미래) 칸은 placeholder다")
+    @DisplayName("열 순서는 최근이 왼쪽 — weeks[0]가 가장 최근 주, 오른쪽으로 갈수록 과거")
+    void weeks_mostRecentOnLeft() {
+        ContributionGraph graph = ContributionGraphBuilder.build(Map.of(), TODAY, GOAL);
+
+        LocalDate firstCol = graph.weeks().get(0).get(0).date();   // 맨 왼쪽 열의 일요일
+        LocalDate secondCol = graph.weeks().get(1).get(0).date();
+        LocalDate lastCol = graph.weeks().get(52).get(0).date();   // 맨 오른쪽 열의 일요일
+
+        assertThat(firstCol).as("맨 왼쪽이 가장 최근").isAfter(secondCol);
+        assertThat(lastCol).as("맨 오른쪽이 가장 과거").isBefore(secondCol);
+    }
+
+    @Test
+    @DisplayName("오늘 이후(미래) 칸은 placeholder다 — 가장 최근(맨 왼쪽) 주에 위치")
     void future_isPlaceholder() {
         ContributionGraph graph = ContributionGraphBuilder.build(Map.of(), TODAY, GOAL);
 
-        List<ContributionDay> lastWeek = graph.weeks().get(52);
+        List<ContributionDay> recentWeek = graph.weeks().get(0);
         int todayOffset = sundayOffset(TODAY); // 화요일=2 → 그 뒤(수~토)는 미래
         for (int row = todayOffset + 1; row < 7; row++) {
-            assertThat(lastWeek.get(row).isPlaceholder())
+            assertThat(recentWeek.get(row).isPlaceholder())
                     .as("행 %d은 미래라 placeholder여야 한다", row)
                     .isTrue();
         }
