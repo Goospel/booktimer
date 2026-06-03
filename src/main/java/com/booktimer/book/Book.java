@@ -58,6 +58,10 @@ public class Book extends BaseTimeEntity {
     @Column(nullable = false, length = 20)
     private BookStatus status;
 
+    /** "구매"(제휴 링크) 클릭 누적 수. 어떤 책이 구매 의향을 내는지 보는 제휴 수익 데이터. */
+    @Column(nullable = false)
+    private long clickCount = 0L;
+
     protected Book() {
         // JPA
     }
@@ -111,6 +115,11 @@ public class Book extends BaseTimeEntity {
         return false;
     }
 
+    /** 제휴 "구매" 링크 클릭을 1회 집계한다(수익 데이터). */
+    public void recordPurchaseClick() {
+        this.clickCount++;
+    }
+
     /** 상태 변경(읽고싶음 → 읽는중 → 완독 등). */
     public void changeStatus(BookStatus newStatus) {
         if (newStatus == null) {
@@ -153,5 +162,9 @@ public class Book extends BaseTimeEntity {
 
     public BookStatus getStatus() {
         return status;
+    }
+
+    public long getClickCount() {
+        return clickCount;
     }
 }

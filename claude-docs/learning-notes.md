@@ -36,6 +36,7 @@
 - [N-030. 무중단 롤링 배포 — min/max healthy percent로 "헬스 통과 후 교체", circuit breaker 자동 롤백](#n-030-무중단-롤링-배포--minmax-healthy-percent로-헬스-통과-후-교체-circuit-breaker-자동-롤백)
 - [N-031. SameSite=Lax로 CSRF 사전 차단 — 그리고 세션 쿠키 속성은 프로퍼티가 아니라 명시 CookieSerializer 빈으로](#n-031-samesitelax로-csrf-사전-차단--그리고-세션-쿠키-속성은-프로퍼티가-아니라-명시-cookieserializer-빈으로)
 - [N-032. 다중 세션 동시 작업 — git worktree로 워킹 트리 분리 (브랜치만으론 부족)](#n-032-다중-세션-동시-작업--git-worktree로-워킹-트리-분리-브랜치만으론-부족)
+- [N-033. 분석용 클릭 추적은 GET 리다이렉트 — CSRF 면제와 오픈 리다이렉트 트레이드오프](#n-033-분석용-클릭-추적은-get-리다이렉트--csrf-면제와-오픈-리다이렉트-트레이드오프)
 
 ---
 
@@ -1439,6 +1440,43 @@ git worktree remove ../proj-feat               # 작업·머지 후 정리
 
 ---
 
+## N-033. 분석용 클릭 추적은 GET 리다이렉트 — CSRF 면제와 오픈 리다이렉트 트레이드오프
+
+**한 줄 요약**: 제휴 "구매" 링크처럼 *외부로 나가면서 클릭을 집계*하는 기능은, 우리 서버의 경유 엔드포인트(`GET /books/{id}/buy`)로 보내 카운트를 올린 뒤 302로 외부 링크에 리다이렉트한다. 링크 클릭은 폼이 아니라 `<a>` 내비게이션이라 CSRF 토큰을 붙이기 어렵고, Spring Security는 GET을 CSRF 검사에서 면제하므로 GET으로 둔다 — "GET은 상태를 바꾸지 않는다(safe/idempotent)"는 원칙을 분석 목적상 의도적으로 깨는 것. 대신 리다이렉트 대상을 **우리 DB에 저장된 값으로만** 제한해 오픈 리다이렉트를 막는다.
+
+### 자세한 설명
+
+**왜 직접 링크가 아니라 경유 엔드포인트인가.** 책장에서 `<a href="알라딘링크">` 로 바로 보내면 클릭이 우리 서버를 거치지 않아 *몇 번 눌렸는지* 알 수 없다. 수익(제휴 수수료)의 핵심 질문은 "어떤 책이 실제 구매 의향을 내는가"이고, 그 데이터는 클릭이 우리 서버를 한 번 거쳐야만 쌓인다. 그래서 `href` 를 `@{/books/{id}/buy}` 로 바꿔 **집계 → 리다이렉트** 2단계로 만든다. (광고/제휴 네트워크의 클릭 트래커가 다 이 구조다.)
+
+**GET이 상태를 바꾸는 문제.** HTTP 규약상 GET은 *safe*(상태 불변)·*idempotent* 해야 한다. 그런데 이 엔드포인트는 GET이면서 카운트를 +1 한다 — 규약 위반이다. 그럼에도 GET을 쓰는 이유:
+- 링크 클릭(`<a>`)은 GET만 낼 수 있고, **CSRF 토큰을 실을 자리가 없다**(POST 폼이라야 hidden token을 넣는다). Spring Security 기본은 GET/HEAD/OPTIONS/TRACE를 CSRF 검사에서 면제하므로, GET으로 두면 토큰 없이도 통과한다.
+- 부작용이 "분석 카운터 증가"뿐이라 **악용해도 피해가 사용자 자신의 통계 노이즈**에 그친다(돈·권한 변동 없음). 트레이드오프가 받아들일 만하다.
+- 봇 프리페치/크롤러가 GET을 미리 당겨 카운트를 부풀릴 수 있다는 게 대가 — 정밀 과금이 아니라 *경향 데이터*라 감수한다. 정확성이 필요해지면 그때 POST+토큰 비콘이나 봇 필터로 강화한다.
+
+**오픈 리다이렉트 방어 = 신뢰할 수 있는 출처로만 리다이렉트.** "리다이렉트 대상 URL을 외부 입력에서 받는다"는 건 전형적 오픈 리다이렉트 취약점(피싱에 악용)이다. 여기선 리다이렉트 대상이 **클릭 시점의 요청 파라미터가 아니라, 등록 때 알라딘 검색 결과로 우리 DB에 저장된 `purchaseLink`** 뿐이다. 사용자가 클릭 순간에 임의 URL을 끼워 넣을 수 없다. 설령 자기 책에 임의 링크를 저장해도 **리다이렉트되는 건 자기 자신**이라 피싱이 성립하지 않는다. 즉 "대상을 우리가 통제하는 데이터로 한정"이 방어선이다.
+
+**소유권·없음 처리.** 집계도 IDOR을 따른다 — `findByIdAndUser` 로 내 책일 때만 카운트(남의 책 클릭으로 통계 오염 방지). 구매링크가 없는 책(수동 등록)은 갈 곳이 없으니 카운트하지 않고 책장으로 되돌린다 — "없음"을 노출하지 않는 것도 IDOR 일관성.
+
+### 일반화 포인트 (면접 답변용)
+
+- **클릭 추적은 "경유 후 리다이렉트" 패턴.** 외부로 나가는 링크의 효과를 측정하려면 내 서버를 한 번 거치게 한다(트래커). 측정·수익 분석의 기본형.
+- **GET vs POST는 CSRF·안전성과 묶여 있다.** 상태를 바꾸면 원칙은 POST(+CSRF 토큰)다. 링크라서 GET이 불가피하면, *부작용의 무게*를 따져 면제를 감수할지 정한다 — 카운터처럼 가벼우면 OK, 결제·삭제처럼 무거우면 절대 GET 금지.
+- **오픈 리다이렉트의 본질은 "대상 출처".** 리다이렉트 URL을 사용자 입력에서 받으면 취약, 서버가 통제하는 데이터(화이트리스트/내 DB)에서만 받으면 안전. `?next=` 류를 검증 없이 따라가지 말 것.
+
+### 코드 위치
+
+- `src/main/java/com/booktimer/web/BookController.java` — `GET /books/{id}/buy` (집계 후 리다이렉트, 예외 시 책장)
+- `src/main/java/com/booktimer/book/BookService.java` — `recordPurchaseClick` (소유권 + 링크 있을 때만 집계)
+- `src/main/java/com/booktimer/book/Book.java` — `clickCount`, `recordPurchaseClick()`
+- `src/main/resources/db/migration/V5__book_click_count.sql` — `click_count` 컬럼(default 0)
+
+### 관련 노트
+
+- [N-031. SameSite=Lax로 CSRF 사전 차단](#n-031-samesitelax로-csrf-사전-차단--그리고-세션-쿠키-속성은-프로퍼티가-아니라-명시-cookieserializer-빈으로) — CSRF를 다루는 자매 노트(여기선 GET 면제를 *이용*하는 쪽)
+- [N-012. 인증 주체 ≠ 도메인 엔티티 — IDOR 방지 findByIdAndUser](#n-012-인증-주체--도메인-엔티티--principal로-도메인-user를-다시-잇고-접속을-lazy-누적-트리거로) — 같은 소유권 강제 패턴
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1472,3 +1510,4 @@ git worktree remove ../proj-feat               # 작업·머지 후 정리
 | 2026-06-02 | N-030 (무중단 롤링 배포 — min=100/max=200으로 "헬스 통과 후 교체"(start-then-stop), circuit breaker 자동 롤백, deregistration delay는 속도일 뿐 다운타임 원인 아님, 세션 외부화가 전제, 적용은 인프라 설정) |
 | 2026-06-02 | N-031 (SameSite=Lax로 CSRF 사전 차단(Lax는 OAuth 콜백 호환, Strict는 깸) / 세션 외부화 후 세션 쿠키는 DefaultCookieSerializer가 써서 server.servlet.session.cookie.* 무동작→명시 CookieSerializer 빈, N-022 자매 함정, 보안 속성은 Set-Cookie 직접 확인) |
 | 2026-06-03 | N-032 (다중 세션 동시 작업은 git worktree로 워킹 트리 분리 — 브랜치만으론 부족(checkout이 폴더 전체 전환), 미커밋이면 사후 분리 가능, "modified since read"=낙관적 잠금, Flyway 번호·공유문서·포트는 여전히 조율 / SessionStart 훅+CLAUDE.md soft 두 층) |
+| 2026-06-03 | N-033 (분석용 클릭 추적은 경유 엔드포인트 GET 리다이렉트 — 링크 클릭은 CSRF 토큰 못 실음→GET 면제 이용, "GET은 safe" 원칙을 가벼운 부작용에 한해 의도적 위반, 오픈 리다이렉트는 대상을 내 DB 값으로 한정해 방어, IDOR 일관) |

@@ -144,7 +144,10 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
   - **①-a 책 시작 시 상태 자동 전환 완료 ✅ 2026-06-03**: 읽고싶음 책으로 타이머를 시작하면 자동으로
     읽는중 전환(`Book.startReading()` 멱등 — 읽는중/완독은 불변, 완독 되돌리지 않음). 전환 시에만 저장
     (`ReadingSessionService`). TDD: BookTest·ReadingSessionServiceTest·ReadingSessionControllerTest.
-  - **②-b 제휴 클릭 추적 (다음)**: 구매링크 클릭을 서버 경유로 카운트 → 리다이렉트(수익 데이터 토대).
+  - **②-b 제휴 클릭 추적 완료 ✅ 2026-06-03**: "구매"를 서버 경유(`GET /books/{id}/buy`)로 카운트한 뒤
+    알라딘 제휴링크로 302 리다이렉트(`Book.clickCount`, Flyway V5). 소유권(IDOR)·링크 없으면 미집계.
+    수익 데이터 토대(어떤 책이 구매 의향을 내나). 개념: N-033(클릭 추적 GET 리다이렉트·CSRF·오픈 리다이렉트).
+    TDD: BookTest·BookServiceTest·BookControllerTest.
   - **③-c 책 상세 페이지 (이후)**: 책별 잔디/세션 목록(잔디 빌더 재사용 + 소유권 검사).
 - SNS 확장의 핵심 컨텐츠 토대
 

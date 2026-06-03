@@ -127,6 +127,42 @@ class BookServiceTest {
     }
 
     @Test
+    @DisplayName("구매 클릭: 내 책이고 링크가 있으면 카운트를 올리고 구매링크를 돌려준다")
+    void recordPurchaseClick_ownedWithLink_countsAndReturnsLink() {
+        User u = newUser("buy@booktimer.com");
+        Book book = bookService.addFromSearch(u, cleanCode(), BookStatus.WANT_TO_READ);
+
+        String link = bookService.recordPurchaseClick(u, book.getId());
+
+        assertThat(link).isEqualTo("http://aladin/buy?ttbkey=x");
+        assertThat(bookService.myBooks(u).get(0).getClickCount()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("구매 클릭: 남의 책이면 거부된다(IDOR 방지)")
+    void recordPurchaseClick_nonOwner_rejected() {
+        User owner = newUser("o3@booktimer.com");
+        User attacker = newUser("a3@booktimer.com");
+        Book book = bookService.addFromSearch(owner, cleanCode(), BookStatus.WANT_TO_READ);
+
+        assertThatThrownBy(() -> bookService.recordPurchaseClick(attacker, book.getId()))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(bookService.myBooks(owner).get(0).getClickCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("구매 클릭: 구매링크가 없으면 null을 돌려주고 카운트를 올리지 않는다")
+    void recordPurchaseClick_noLink_returnsNullNoCount() {
+        User u = newUser("nolink@booktimer.com");
+        Book book = bookService.addManual(u, "수동 책", null, BookStatus.READING); // 링크 없음
+
+        String link = bookService.recordPurchaseClick(u, book.getId());
+
+        assertThat(link).isNull();
+        assertThat(bookService.myBooks(u).get(0).getClickCount()).isZero();
+    }
+
+    @Test
     @DisplayName("검색은 검색 클라이언트(포트)에 페이지와 함께 위임한다")
     void search_delegatesToClient() {
         when(searchClient.search("clean", 2))
