@@ -169,12 +169,14 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 ### OAuth 소셜 로그인
 - [x] **구글(Google OIDC)** — 완료·배포 (2026-06-02). find-or-create 프로비저닝, principal=email 통일,
       소셜 계정 UX 분기(비번 카드 숨김). Google 동의 화면은 Testing(테스트 사용자만) → 추후 게시(Publish)
-- [ ] **동의 화면 게시(Production 전환)** — 테스트 사용자 100명 제한 해제, 누구나 Google 로그인 가능.
+- [x] **동의 화면 게시(Production 전환) 완료 ✅ 2026-06-03** — 테스트 사용자 100명 제한 해제, 누구나 Google 로그인 가능.
       스코프가 non-sensitive(`openid`/`email`/`profile`)라 **Google 검증 절차 없이 즉시 게시**, 코드 변경 0.
       체크리스트: [x] ① 개인정보처리방침 페이지 (`GET /privacy`, 공개·permitAll, 로그인/가입에서 링크) →
-      [ ] ② 동의 화면 브랜딩 확인(앱 이름·지원 이메일·로고가 사용자에게 노출) + 처리방침 URL `https://booktimer.click/privacy` 등록 →
-      [ ] ③ Console에서 Publish app. ②③은 코드 밖 Google Console 수동 작업.
+      [x] ② 동의 화면 브랜딩(앱 이름·지원 이메일) + 처리방침 URL `https://booktimer.click/privacy` 등록 →
+      [x] ③ Console에서 Publish app(게시 상태=프로덕션, 사용자 유형=외부).
+      ※ "OAuth 사용자 한도 100명"은 **민감/제한 범위 요청 시에만** 적용 — non-sensitive만 쓰므로 표시되어도 미적용(실질 무제한).
       ※ 보안 전제는 이미 충족(하드닝 #1 email_verified·#2 brute-force 완료, 사이트·LOCAL 가입은 이미 공개).
+      ※ 게시 과정에서 Chrome "위험한 사이트" 오탐(T-027) 발생 → Search Console 도메인 인증 후 재평가로 **자연 해소**(Safe Browsing 등재 없음 확인).
 - [ ] 카카오/네이버 등 추가 provider (선택)
 
 ### SNS 기능 — README §2.4
@@ -262,3 +264,4 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 | 2026-06-03 | (계획) 독서 잔디 색 농도를 하루 목표(증가값) 기준 비율 4단계로 — 설계만 기록, 구현은 별도 PR(워크트리 분리) |
 | 2026-06-03 | 개인정보처리방침 페이지(`GET /privacy`, 공개) 추가 — OAuth 동의 화면 게시 체크리스트 ① 완료(②③은 Console 수동). TDD |
 | 2026-06-03 | Safe Browsing "위험한 사이트" 오탐(`.click` 신규 도메인+로그인/OAuth) — T-027/N-036 기록 + 도메인 TLD 이전(.com/.app) 백로그 추가 |
+| 2026-06-03 | OAuth 동의 화면 게시 완료(②③ 체크) — 프로덕션 전환, 100명 제한 해제(non-sensitive라 한도 미적용). Safe Browsing 오탐은 Search Console 인증 후 자연 해소(T-027 보강) |

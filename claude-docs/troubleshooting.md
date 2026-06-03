@@ -473,6 +473,11 @@ private final ObjectMapper objectMapper = new ObjectMapper();  // 주입 대신 
 - **근본 재발 방지**: `.click`은 평판이 근본적으로 낮아 재발 위험. 잦으면 `.com`/`.app`(HTTPS 강제라 평판 양호) 같은 평판 좋은 TLD로 이전(도메인·ACM 인증서·Route53·**OAuth 리디렉션 URI/JS origin 재등록** 동반). plan.md 백로그.
 - 개념: [learning-notes.md N-036](learning-notes.md#n-036-safe-browsing은-서버가-아니라-도메인-평판휴리스틱으로-차단--tld-평판이-신규-사이트-오탐을-키운다).
 
+**실제 결말(2026-06-03)**: Search Console 도메인 인증(DNS TXT)을 마치자 **재평가로 자연 해소**됐다 — 검토 요청 버튼을 누를 필요도 없었다.
+- Search Console **보안 문제 = "감지된 문제 없음"**, Transparency Report = 활성 위험 등재 없음("데이터를 확인할 수 없음"). 즉 구글 **공식 판정은 처음부터 깨끗**, 빨간 화면은 **클라이언트 측 휴리스틱 오탐**이었다(인증/시간 경과로 풀림).
+- 단, Transparency Report에 **2020년 멀웨어 보관처리 이력**이 보였다 — 이 `.click` 도메인은 **이전 소유자 시절 멀웨어로 등재된 적 있는 재활용 도메인**. 그 과거 평판이 오탐을 키운 유력 원인 → TLD/도메인 이전 백로그(plan.md)의 근거.
+- 교훈: "Search Console 문제 없음 + Transparency 깨끗"이면 **검토 요청 없이 인증만으로도 풀릴 수 있다**. 막히면 그때 Safe Browsing 오탐 신고(`safebrowsing.google.com/safebrowsing/report_error/`).
+
 ---
 
 ## 🔄 누적 갱신
@@ -501,3 +506,4 @@ private final ObjectMapper objectMapper = new ObjectMapper();  // 주입 대신 
 | 2026-06-03 | T-022 (Thymeleaf SSR 앱엔 ObjectMapper 빈이 없어 주입 시 컨텍스트 전체 로드 실패 → 자체 new ObjectMapper(), 대량 실패=컨텍스트 로드 실패 신호, N-024/T-020 부류) |
 | 2026-06-03 | T-023 (읽은 적 있는 책 삭제가 reading_session FK 미정리로 부모 삭제 실패 → unlinkBook(book_id=null) 후 삭제, 세션 보존 / 좁은 catch가 DataIntegrityViolationException 놓쳐 500, 테스트는 TransientPropertyValueException로 발현, N-034) |
 | 2026-06-03 | T-027 (구글 로그인 콜백에서 Chrome "위험한 사이트" 차단 — Safe Browsing이 신규 .click 도메인+로그인폼+OAuth 콜백을 피싱 오탐, 서버는 정상 / 해결=Search Console 보안문제 검토요청, 근본은 .com·.app TLD 이전, N-036) |
+| 2026-06-03 | T-027 보강 (결말 — Search Console 도메인 인증만으로 재평가 자연 해소(검토요청 불필요), 공식 판정은 처음부터 깨끗=클라이언트 휴리스틱 오탐 / Transparency에 2020 멀웨어 보관처리 이력=재활용 .click 도메인의 과거 평판이 원인) |
