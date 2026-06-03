@@ -1,5 +1,6 @@
 package com.booktimer.book;
 
+import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,10 +19,13 @@ public class BookService {
 
     private final BookRepository bookRepository;
     private final BookSearchClient searchClient;
+    private final ReadingSessionRepository sessionRepository;
 
-    public BookService(BookRepository bookRepository, BookSearchClient searchClient) {
+    public BookService(BookRepository bookRepository, BookSearchClient searchClient,
+                       ReadingSessionRepository sessionRepository) {
         this.bookRepository = bookRepository;
         this.searchClient = searchClient;
+        this.sessionRepository = sessionRepository;
     }
 
     @Transactional(readOnly = true)
@@ -59,8 +63,14 @@ public class BookService {
         return bookRepository.save(book);
     }
 
+    /**
+     * 내 책을 책장에서 삭제한다. 그 책을 가리키던 측정 세션은 "책 미지정"으로 풀어(book_id = null)
+     * 독서 기록(잔디·누적 시간)을 보존한다 — {@code reading_session.book_id} FK 때문에 이 정리 없이는
+     * 삭제가 제약 위반으로 실패한다(AccountService가 탈퇴 시 FK 순서로 정리하는 것과 같은 이유).
+     */
     public void delete(User user, Long bookId) {
         Book book = ownedBook(user, bookId);
+        sessionRepository.unlinkBook(book);
         bookRepository.delete(book);
     }
 

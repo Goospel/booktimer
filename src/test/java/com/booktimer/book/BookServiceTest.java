@@ -1,5 +1,7 @@
 package com.booktimer.book;
 
+import com.booktimer.session.ReadingSession;
+import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -11,6 +13,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,6 +36,8 @@ class BookServiceTest {
     private UserRepository userRepository;
     @Autowired
     private PasswordEncoder passwordEncoder;
+    @Autowired
+    private ReadingSessionRepository sessionRepository;
 
     @MockitoBean
     private BookSearchClient searchClient;
@@ -124,6 +129,24 @@ class BookServiceTest {
 
         bookService.delete(owner, book.getId());
         assertThat(bookService.myBooks(owner)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("읽은 적 있는 책도 삭제된다 — 측정 세션은 '책 미지정'으로 남아 독서 기록이 보존된다")
+    void delete_unlinksReadingSessions_keepsHistory() {
+        User u = newUser("read@booktimer.com");
+        Book book = bookService.addManual(u, "리눅스 커널 내부구조", null, BookStatus.READING);
+        // 타이머로 30분 읽은 세션을 이 책에 연결한다 → reading_session.book_id 가 이 책을 가리킨다.
+        ReadingSession session = ReadingSession.start(u, Instant.parse("2026-06-01T10:00:00Z"), book);
+        session.end(Instant.parse("2026-06-01T10:30:00Z"));
+        sessionRepository.save(session);
+
+        bookService.delete(u, book.getId()); // FK 위반 없이 삭제되어야 한다
+
+        assertThat(bookService.myBooks(u)).isEmpty();
+        ReadingSession reloaded = sessionRepository.findById(session.getId()).orElseThrow();
+        assertThat(reloaded.getBook()).isNull(); // 책 연결만 풀린다(세션은 남는다)
+        assertThat(reloaded.getDurationSeconds()).isEqualTo(1800L); // 읽은 시간은 보존
     }
 
     @Test

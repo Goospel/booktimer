@@ -37,6 +37,7 @@
 - [N-031. SameSite=Lax로 CSRF 사전 차단 — 그리고 세션 쿠키 속성은 프로퍼티가 아니라 명시 CookieSerializer 빈으로](#n-031-samesitelax로-csrf-사전-차단--그리고-세션-쿠키-속성은-프로퍼티가-아니라-명시-cookieserializer-빈으로)
 - [N-032. 다중 세션 동시 작업 — git worktree로 워킹 트리 분리 (브랜치만으론 부족)](#n-032-다중-세션-동시-작업--git-worktree로-워킹-트리-분리-브랜치만으론-부족)
 - [N-033. 분석용 클릭 추적은 GET 리다이렉트 — CSRF 면제와 오픈 리다이렉트 트레이드오프](#n-033-분석용-클릭-추적은-get-리다이렉트--csrf-면제와-오픈-리다이렉트-트레이드오프)
+- [N-034. 부모 엔티티 삭제와 자식 FK — 연결 끊기(unlink) vs 함께 삭제(cascade), 그리고 같은 버그의 두 예외](#n-034-부모-엔티티-삭제와-자식-fk--연결-끊기unlink-vs-함께-삭제cascade-그리고-같은-버그의-두-예외)
 
 ---
 
@@ -1477,6 +1478,52 @@ git worktree remove ../proj-feat               # 작업·머지 후 정리
 
 ---
 
+## N-034. 부모 엔티티 삭제와 자식 FK — 연결 끊기(unlink) vs 함께 삭제(cascade), 그리고 같은 버그의 두 예외
+
+**한 줄 요약**: 자식이 FK로 가리키는 부모를 지우려면 자식을 먼저 처리해야 한다(앱이 트랜잭션 안에서 unlink/삭제하거나, DB의 `ON DELETE`). 어느 쪽인지는 **데이터의 도메인 의미**로 정한다 — 기록을 남겨야 하면 연결만 끊고(set null), 부모에 종속된 데이터면 함께 삭제. 그리고 같은 "FK 미정리" 버그가 영속성 컨텍스트에 자식이 로드돼 있냐에 따라 ORM 예외(`TransientPropertyValueException`)와 DB 예외(`DataIntegrityViolationException`)의 두 얼굴로 나타난다.
+
+### 자세한 설명
+
+`reading_session.book`은 nullable이다("책 미지정 측정 허용"). 책을 삭제할 때 그 책을 가리키는 세션을 어떻게 할지 두 갈래:
+
+- **함께 삭제(cascade)**: 세션도 지운다 → 그날 읽은 기록(잔디·누적 시간)이 사라진다. ✗ (책을 책장에서 뺐다고 읽은 사실이 없어지면 안 된다)
+- **연결 끊기(unlink, set null)**: 세션은 남기고 `book_id`만 null로 → "책 미지정 측정"이 된다. ✓ 독서 기록·총 시간 보존.
+
+판단 기준: **자식이 부모 없이도 의미가 있나.** 독서 세션은 책과 독립적으로 "그 시간에 읽었다"는 사실을 가지므로 unlink. (주문항목처럼 부모 없으면 무의미한 자식은 cascade.)
+
+**정리를 어디서 하나 — 앱 vs DB**:
+
+- **앱 레벨(채택)**: 삭제 유스케이스가 트랜잭션 안에서 자식을 먼저 처리한다 — `unlinkBook`(벌크 `UPDATE ... SET book_id=null`) → `delete(book)`. 같은 트랜잭션이라 commit 시 FK 만족. 테스트(H2)·운영(MySQL)이 동일하게 동작해 회귀 테스트로 잡힌다. `AccountService.purge`(세션→타이머→유저 순 삭제)와 같은 패턴.
+- **DB 레벨**: FK에 `ON DELETE SET NULL`(또는 CASCADE). DB가 자동 처리하지만, 이 프로젝트의 메인 테스트는 Hibernate `ddl-auto`로 스키마를 만들고 Flyway는 꺼져 있어(테스트 설정) `ON DELETE`가 테스트 스키마에 반영되지 않는다 → 테스트와 운영이 갈린다. 그래서 앱 레벨을 택했다.
+
+**같은 버그의 두 예외 (왜 테스트와 운영이 다른가)**:
+
+- 부모를 `em.remove`하면, **영속성 컨텍스트에 로드된 자식**이 그 부모를 참조한 채 flush될 때 Hibernate가 "삭제 예정(=transient) 부모를 참조"로 보고 `TransientPropertyValueException`을 던진다(ORM 층, DB 가기 전).
+- 자식이 컨텍스트에 **없으면** ORM은 모른 채 통과 → commit 시 **DB FK**가 막아 `DataIntegrityViolationException`(DB 층).
+- 테스트는 한 트랜잭션에서 세션을 막 저장해 컨텍스트에 있으니 전자, 운영의 삭제 요청은 `book`만 로드하니 후자. "테스트와 운영의 예외 타입이 다르다"의 흔한 정체.
+
+> 벌크 `@Modifying` 주의: JPQL 벌크 UPDATE는 영속성 컨텍스트를 우회한다 → 호출 전후 일관성을 위해 `flushAutomatically`(전: 보류된 insert를 flush)/`clearAutomatically`(후: 스테일 캐시 clear)로 보정한다.
+
+### 일반화 포인트 (면접 답변용)
+
+- **FK 제약은 "고아 자식"을 막는 안전장치**다. 부모 삭제 전 자식 정리(연결 끊기/함께 삭제)를 명시적으로 설계해야 하고, 그 선택은 데이터의 도메인 의미(기록 보존 vs 종속)로 결정한다.
+- **같은 무결성 위반이라도 누가 먼저 잡느냐로 예외가 갈린다** — ORM(영속성 컨텍스트에 자식이 있으면)이면 `TransientPropertyValueException`, DB면 `DataIntegrityViolationException`. "왜 테스트와 운영의 예외가 다르지?"의 답.
+- **컨트롤러의 예외 catch는 실제 던져지는 타입을 포함해야** 한다 — 좁은 `IllegalArgumentException`만 잡으면 `DataIntegrityViolationException`이 500으로 샌다(N-028·N-019와 같은 결: 프레임워크/DB가 던지는 예외가 좁은 처리를 빠져나간다).
+
+### 코드 위치
+
+- `src/main/java/com/booktimer/book/BookService.java` — `delete`(unlink 후 삭제)
+- `src/main/java/com/booktimer/session/ReadingSessionRepository.java` — `unlinkBook`(벌크 UPDATE, flush/clear 자동)
+- 대비: `src/main/java/com/booktimer/user/AccountService.java` — `purge`(FK 순서 삭제)
+- 관련: `troubleshooting.md` T-023
+
+### 관련 노트
+
+- [N-019. DB 유니크 제약은 무결성의 마지막 방어선이지, 사용자 검증의 첫 방어선이 아니다](#n-019-db-유니크-제약은-무결성의-마지막-방어선이지-사용자-검증의-첫-방어선이-아니다) — DB 제약을 앱이 어떻게 다루나
+- [N-028. catch-all 예외 핸들러는 프레임워크의 상태보유 예외(404 등)까지 삼킨다 — 상태코드 보존](#n-028-catch-all-예외-핸들러는-프레임워크의-상태보유-예외404-등까지-삼킨다--상태코드-보존) — 좁은/넓은 catch와 예외 누수
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1511,3 +1558,4 @@ git worktree remove ../proj-feat               # 작업·머지 후 정리
 | 2026-06-02 | N-031 (SameSite=Lax로 CSRF 사전 차단(Lax는 OAuth 콜백 호환, Strict는 깸) / 세션 외부화 후 세션 쿠키는 DefaultCookieSerializer가 써서 server.servlet.session.cookie.* 무동작→명시 CookieSerializer 빈, N-022 자매 함정, 보안 속성은 Set-Cookie 직접 확인) |
 | 2026-06-03 | N-032 (다중 세션 동시 작업은 git worktree로 워킹 트리 분리 — 브랜치만으론 부족(checkout이 폴더 전체 전환), 미커밋이면 사후 분리 가능, "modified since read"=낙관적 잠금, Flyway 번호·공유문서·포트는 여전히 조율 / SessionStart 훅+CLAUDE.md soft 두 층) |
 | 2026-06-03 | N-033 (분석용 클릭 추적은 경유 엔드포인트 GET 리다이렉트 — 링크 클릭은 CSRF 토큰 못 실음→GET 면제 이용, "GET은 safe" 원칙을 가벼운 부작용에 한해 의도적 위반, 오픈 리다이렉트는 대상을 내 DB 값으로 한정해 방어, IDOR 일관) |
+| 2026-06-03 | N-034 (부모 삭제와 자식 FK — unlink(set null, 기록 보존) vs cascade(종속 삭제)는 도메인 의미로 결정 / 정리는 앱(트랜잭션 내, 테스트=운영) vs DB(ON DELETE, ddl-auto 테스트엔 미반영) / 같은 FK 미정리가 영속성 컨텍스트 유무로 TransientPropertyValueException(ORM) vs DataIntegrityViolationException(DB) 두 얼굴, T-023) |

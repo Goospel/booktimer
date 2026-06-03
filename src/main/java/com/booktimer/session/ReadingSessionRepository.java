@@ -1,7 +1,9 @@
 package com.booktimer.session;
 
+import com.booktimer.book.Book;
 import com.booktimer.user.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -24,4 +26,16 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
 
     /** 회원 탈퇴 시 해당 유저의 모든 측정 기록을 제거한다. */
     void deleteByUser(User user);
+
+    /**
+     * 책 삭제 시, 그 책을 가리키던 측정 세션을 "책 미지정"으로 푼다(book_id = null).
+     *
+     * <p>세션 자체는 지우지 않는다 — 책을 책장에서 빼도 그날 읽은 기록(잔디·누적 시간)은 보존돼야 한다.
+     * {@code reading_session.book_id} FK 때문에 이 정리 없이 책을 지우면 제약 위반으로 실패한다.
+     *
+     * <p>벌크 갱신이라 영속성 컨텍스트를 우회하므로, 호출 전후 일관성을 위해 flush/clear를 자동 수행한다.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update ReadingSession s set s.book = null where s.book = :book")
+    void unlinkBook(@Param("book") Book book);
 }
