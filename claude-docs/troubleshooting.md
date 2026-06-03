@@ -28,6 +28,7 @@
 - [T-021. Spring Session 쿠키엔 `server.servlet.session.cookie.*`가 무동작 → 명시 CookieSerializer 빈](#t-021-spring-session-쿠키엔-serverservletsessioncookie가-무동작--명시-cookieserializer-빈)
 - [T-022. SSR(웹MVC) 앱엔 `ObjectMapper` 빈이 없어 주입 실패 → 자체 생성](#t-022-ssr웹mvc-앱엔-objectmapper-빈이-없어-주입-실패--자체-생성)
 - [T-023. 직접 추가한 책 삭제가 500 — reading_session FK 미정리로 부모 삭제 실패, 좁은 catch가 못 잡음](#t-023-직접-추가한-책-삭제가-500--reading_session-fk-미정리로-부모-삭제-실패-좁은-catch가-못-잡음)
+- [T-027. 구글 로그인 중 Chrome "위험한 사이트" 차단 — Safe Browsing이 신규 `.click` 도메인 오탐](#t-027-구글-로그인-중-chrome-위험한-사이트-차단--safe-browsing이-신규-click-도메인-오탐)
 
 ---
 
@@ -456,6 +457,24 @@ private final ObjectMapper objectMapper = new ObjectMapper();  // 주입 대신 
 
 ---
 
+## T-027. 구글 로그인 중 Chrome "위험한 사이트" 차단 — Safe Browsing이 신규 `.click` 도메인 오탐
+
+**증상**: OAuth 동의 화면 게시 후, 구글 로그인 콜백(`booktimer.click/login/oauth2/code/google?...`)에서 Chrome이 빨간 **"위험한 사이트"**(기만적인 사이트/피싱) 차단 화면을 띄운다. 이전엔 안 떴다. 우리 코드/서버는 정상(200) 응답 중이고, 차단은 **브라우저 단(Google Safe Browsing)** 에서 일어난다.
+
+**원인**: 동의 화면 게시와는 **무관**(타이밍 우연). Safe Browsing이 도메인을 **오탐(false positive)** 으로 피싱 분류한 것. 전형적 유발 조합:
+- **`.click` TLD** — 피싱 악용이 잦아 평판이 낮은 TLD라 공격적으로 의심받음.
+- **갓 등록한 신규 도메인**(평판 이력 없음).
+- **로그인 폼 + 비밀번호 입력** + URL에 `accounts.google.com`이 든 OAuth 콜백 → "구글 로그인 사칭 피싱"처럼 보이는 휴리스틱에 걸림.
+
+**해결 / 예방**:
+- **Google Search Console**에 `booktimer.click` 속성 등록(Route 53 본인 존이라 **DNS TXT** 인증 쉬움) → **보안 및 수동 조치 → 보안 문제** 리포트에서 사유 확인 → **검토 요청(Request Review)**. 보통 며칠 내 해제.
+- 현재 상태 조회: `https://transparencyreport.google.com/safe-browsing/search?url=booktimer.click`.
+- 임시(본인 테스트만): 차단 화면 **세부정보 → "계속 이동"**. 일반 사용자에겐 기대 불가 → 검토 요청이 본 해결책.
+- **근본 재발 방지**: `.click`은 평판이 근본적으로 낮아 재발 위험. 잦으면 `.com`/`.app`(HTTPS 강제라 평판 양호) 같은 평판 좋은 TLD로 이전(도메인·ACM 인증서·Route53·**OAuth 리디렉션 URI/JS origin 재등록** 동반). plan.md 백로그.
+- 개념: [learning-notes.md N-036](learning-notes.md#n-036-safe-browsing은-서버가-아니라-도메인-평판휴리스틱으로-차단--tld-평판이-신규-사이트-오탐을-키운다).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -481,3 +500,4 @@ private final ObjectMapper objectMapper = new ObjectMapper();  // 주입 대신 
 | 2026-06-02 | T-021 (세션 외부화 후 SESSION 쿠키는 DefaultCookieSerializer가 써서 server.servlet.session.cookie.* 프로퍼티 무동작 → 명시 CookieSerializer 빈, Set-Cookie 직접 확인으로 진단, N-022 자매 함정) |
 | 2026-06-03 | T-022 (Thymeleaf SSR 앱엔 ObjectMapper 빈이 없어 주입 시 컨텍스트 전체 로드 실패 → 자체 new ObjectMapper(), 대량 실패=컨텍스트 로드 실패 신호, N-024/T-020 부류) |
 | 2026-06-03 | T-023 (읽은 적 있는 책 삭제가 reading_session FK 미정리로 부모 삭제 실패 → unlinkBook(book_id=null) 후 삭제, 세션 보존 / 좁은 catch가 DataIntegrityViolationException 놓쳐 500, 테스트는 TransientPropertyValueException로 발현, N-034) |
+| 2026-06-03 | T-027 (구글 로그인 콜백에서 Chrome "위험한 사이트" 차단 — Safe Browsing이 신규 .click 도메인+로그인폼+OAuth 콜백을 피싱 오탐, 서버는 정상 / 해결=Search Console 보안문제 검토요청, 근본은 .com·.app TLD 이전, N-036) |
