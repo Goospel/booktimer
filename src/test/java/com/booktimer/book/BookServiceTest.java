@@ -127,14 +127,17 @@ class BookServiceTest {
     }
 
     @Test
-    @DisplayName("검색은 검색 클라이언트(포트)에 위임한다")
+    @DisplayName("검색은 검색 클라이언트(포트)에 페이지와 함께 위임한다")
     void search_delegatesToClient() {
-        when(searchClient.search("clean")).thenReturn(List.of(cleanCode()));
+        when(searchClient.search("clean", 2))
+                .thenReturn(new BookSearchPage(List.of(cleanCode()), 2, 10, 15));
 
-        List<BookSearchResult> results = bookService.search("clean");
+        BookSearchPage page = bookService.search("clean", 2);
 
-        assertThat(results).hasSize(1);
-        assertThat(results.get(0).title()).isEqualTo("클린 코드");
+        assertThat(page.results()).hasSize(1);
+        assertThat(page.results().get(0).title()).isEqualTo("클린 코드");
+        assertThat(page.page()).isEqualTo(2);
+        assertThat(page.hasNext()).isFalse(); // 15건/10 = 2페이지, 현재 2페이지 = 마지막
     }
 
     @Test

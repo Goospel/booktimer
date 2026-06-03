@@ -1,7 +1,5 @@
 package com.booktimer.book;
 
-import java.util.List;
-
 /**
  * 도서 검색 제공자 추상화(포트). 구현(어댑터)은 알라딘 OpenAPI 등 외부 서비스를 호출한다.
  *
@@ -10,15 +8,19 @@ import java.util.List;
  */
 public interface BookSearchClient {
 
+    /** 페이지당 결과 수. */
+    int PAGE_SIZE = 10;
+
     /**
      * 검색 활성 여부. API 키가 설정되지 않았으면 false — 화면은 검색 대신 수동 입력으로 폴백한다.
      */
     boolean isEnabled();
 
     /**
-     * 질의어로 도서를 검색한다. 비활성이거나 결과가 없으면 빈 목록.
+     * 질의어로 도서를 한 페이지 검색한다. 비활성이거나 결과가 없으면 빈 페이지.
      *
      * @param query 검색어(제목/저자 등)
+     * @param page  1-based 페이지 번호
      */
-    List<BookSearchResult> search(String query);
+    BookSearchPage search(String query, int page);
 }

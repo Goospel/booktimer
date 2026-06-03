@@ -395,3 +395,8 @@ button, .btn {
 .book-pick { display: inline-flex; align-items: center; gap: 8px; margin-right: 10px; color: var(--muted); font-size: .9rem; }
 .book-pick select { padding: 7px 8px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
 .book-time { font-size: .8rem; color: var(--ok); font-weight: 600; }
+
+/* 검색 결과 페이징 */
+.pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 12px 0 4px; }
+.pager .btn-ghost { padding: 6px 12px; font-size: .9rem; text-decoration: none; }
+.pager-info { font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
