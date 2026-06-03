@@ -99,7 +99,7 @@
                                     th:selected="${s == b.status}">상태</option>
                         </select>
                     </form>
-                    <a th:if="${b.purchaseLink}" th:href="${b.purchaseLink}" target="_blank"
+                    <a th:if="${b.purchaseLink}" th:href="@{/books/{id}/buy(id=${b.id})}" target="_blank"
                        rel="noopener nofollow" class="btn-ghost">구매</a>
                     <form method="post" th:action="@{/books/{id}/delete(id=${b.id})}"
                           onsubmit="return confirm('이 책을 삭제할까요?');">

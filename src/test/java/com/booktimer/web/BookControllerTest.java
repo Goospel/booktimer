@@ -109,4 +109,32 @@ class BookControllerTest {
 
         assertThat(bookRepository.findByUserOrderByCreatedAtDesc(owner)).hasSize(1);
     }
+
+    @Test
+    @DisplayName("GET /books/{id}/buy: 구매 클릭을 집계하고 제휴 구매링크로 리다이렉트한다")
+    void buy_countsAndRedirectsToLink() throws Exception {
+        User u = newUser("buyer@booktimer.com");
+        Book book = bookRepository.save(Book.register(u, "클린 코드", null, null, null, null,
+                "http://www.aladin.co.kr/buy?ttbkey=x", BookStatus.WANT_TO_READ));
+
+        mockMvc.perform(get("/books/{id}/buy", book.getId()).with(user("buyer@booktimer.com")))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("http://www.aladin.co.kr/buy?ttbkey=x"));
+
+        assertThat(bookRepository.findById(book.getId()).orElseThrow().getClickCount()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("GET /books/{id}/buy: 남의 책이면 집계 없이 책장으로 돌려보낸다(IDOR 방지)")
+    void buy_nonOwner_noCountRedirectsToBooks() throws Exception {
+        User owner = newUser("bowner@booktimer.com");
+        User attacker = newUser("battacker@booktimer.com");
+        Book book = bookRepository.save(Book.register(owner, "남의 책", null, null, null, null,
+                "http://www.aladin.co.kr/buy?ttbkey=x", BookStatus.WANT_TO_READ));
+
+        mockMvc.perform(get("/books/{id}/buy", book.getId()).with(user("battacker@booktimer.com")))
+                .andExpect(redirectedUrl("/books"));
+
+        assertThat(bookRepository.findById(book.getId()).orElseThrow().getClickCount()).isZero();
+    }
 }

@@ -55,4 +55,22 @@ class BookTest {
         assertThat(changed).isFalse();
         assertThat(book.getStatus()).isEqualTo(BookStatus.FINISHED);
     }
+
+    @Test
+    @DisplayName("새 책의 구매 클릭 수는 0에서 시작한다")
+    void clickCount_startsAtZero() {
+        assertThat(bookWith(BookStatus.WANT_TO_READ).getClickCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("recordPurchaseClick: 호출할 때마다 구매 클릭 수가 1씩 증가한다")
+    void recordPurchaseClick_increments() {
+        Book book = bookWith(BookStatus.WANT_TO_READ);
+
+        book.recordPurchaseClick();
+        assertThat(book.getClickCount()).isEqualTo(1L);
+
+        book.recordPurchaseClick();
+        assertThat(book.getClickCount()).isEqualTo(2L);
+    }
 }

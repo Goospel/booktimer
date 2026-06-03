@@ -89,6 +89,26 @@ public class BookController {
         return "redirect:/books";
     }
 
+    /**
+     * "구매" 클릭 — 집계 후 제휴 구매링크로 리다이렉트(링크가 없거나 내 책이 아니면 책장으로).
+     *
+     * <p>링크 클릭(GET)이라 CSRF 토큰을 붙이기 어려워 GET으로 둔다(상태 변경이지만 분석용 집계).
+     * 리다이렉트 대상은 우리 DB에 저장된 알라딘 링크 — 클릭 시점에 사용자가 임의 URL을 넣지 못한다.
+     */
+    @GetMapping("/books/{id}/buy")
+    public String buy(@PathVariable Long id, Principal principal) {
+        User user = currentUser(principal);
+        try {
+            String link = bookService.recordPurchaseClick(user, id);
+            if (link != null) {
+                return "redirect:" + link;
+            }
+        } catch (IllegalArgumentException ignored) {
+            // 내 책이 아니거나 없음 — 존재 여부 노출 없이 책장으로 되돌린다(IDOR 방지).
+        }
+        return "redirect:/books";
+    }
+
     @PostMapping("/books/{id}/delete")
     public String delete(@PathVariable Long id, Principal principal, RedirectAttributes redirectAttributes) {
         User user = currentUser(principal);
