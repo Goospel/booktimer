@@ -193,6 +193,12 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 > 별도 설계 문서로 합의한 뒤에 TDD로 들어간다. 이 기능은 데이터 노출·권한 경계가 핵심이라
 > 설계 없이 시작하면 되돌리기 어려운 결정(공개 범위·스키마)이 코드에 굳어버린다.
 
+> 📐 **설계 문서 작성됨 → [claude-docs/sns-design.md](claude-docs/sns-design.md)** (초안 2026-06-04).
+> 공개범위(Visibility enum·PRIVATE 기본 opt-in)·관계모델(팔로우 단방향)·IDOR canView 게이트·스키마(follow V7·
+> users.visibility V8)·단계별 로드맵(①책 인기 카운트→②공개 프로필→③팔로우→④악용 대응)·화면별 SSR/SPA 판단·
+> 열린 질문 정리. **결론: SNS 대부분 SSR로 충분(특히 SEO 공개 프로필) → "두 번 짜기" 리스크 작음, API-first big-bang 불필요.**
+> 착수 전 §10 열린 질문 사용자 확정 필요.
+
 > 💡 **헷갈리기 쉬운 점 — "남에게 보여주려면 DB에 저장해야 하나?" → 독서 데이터는 이미 다 저장돼 있다.**
 > "누가 어떤 책을 읽었나/읽는 중인가/얼마나 읽었나"는 이미 `book`(user_id 소유, status) +
 > `reading_session`(book_id + duration_seconds)에 들어 있다. SNS에서 남의 걸 보여주는 건 **데이터 추가가
@@ -369,3 +375,4 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 | 2026-06-03 | SNS — 책 인기 카운트(집계 노출) 항목 추가: ① 검색 결과 리스트에 "읽는 중 N·완독 M" 작게 표시, ② 내 책장에 "몇 명이 읽는 중" 표시. ISBN 키 distinct user count 재사용, 관계 없이 선출시 가능, 소수 재식별·N+1·ISBN 정규화 선결 |
 | 2026-06-03 | 관리자(개발자) 대시보드 항목 추가 — 매번 RDS 접속 없이 운영 데이터·통계를 웹에서 확인. 접근 제어(ADMIN만, `/admin/**` hasRole) 선결, ADMIN 승격 경로 필요, 통계는 읽기 전용 집계(N-037). 온보딩 타임존 백로그도 함께 |
 | 2026-06-04 | 프론트/앱↔SNS 선후 의존 정리 메모 추가 — SNS는 프론트 교체의 선행조건 아님(촉발 사유일 뿐), 앱은 SNS가 아닌 JSON API에 의존, 실질 결정은 "SNS UI를 SSR→SPA로 두 번 짤 것인가". SNS 데이터 설계는 프론트와 독립이라 선행 가능 |
+| 2026-06-04 | SNS 설계 문서(claude-docs/sns-design.md) 작성 — 공개범위(PRIVATE 기본 opt-in)·관계(팔로우 단방향)·IDOR canView 게이트·스키마(follow V7/visibility V8)·4단계 로드맵·화면별 SSR/SPA 판단·열린 질문. 결론: SNS 대부분 SSR로 충분 → API-first big-bang 불필요 |

@@ -74,4 +74,4 @@ ReadingSession N ── 1 Book?     (추후: 어떤 책을 읽었는지)
 
 - `Book` 엔티티 (제목/저자) + `ReadingSession.book` 연결
 - OAuth 계정 연동 테이블
-- SNS: 팔로우, 공유 등
+- SNS: 팔로우, 공유 등 → 엔티티/스키마 설계는 [sns-design.md](sns-design.md) (follow 테이블·users.visibility·canView 게이트)
