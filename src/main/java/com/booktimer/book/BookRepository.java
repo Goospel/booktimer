@@ -2,7 +2,10 @@ package com.booktimer.book;
 
 import com.booktimer.user.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,4 +28,28 @@ public interface BookRepository extends JpaRepository<Book, Long> {
 
     /** 회원 탈퇴 시 해당 유저의 모든 책을 제거한다. */
     void deleteByUser(User user);
+
+    /**
+     * 팔로우 스코프 인기 카운트 (sns-design §7.4) — 주어진 isbn 목록을 <b>한 번의 group by</b>로 집계(N+1 회피).
+     *
+     * <p>{@code viewer}가 팔로우한 사용자(followee)가 PUBLIC으로 가진 책만 대상으로, isbn13별로
+     * 원함(WANT_TO_READ)·읽음(READING∪FINISHED) distinct 사용자 수를 센다. Follow와는 매핑된 연관이
+     * 없어 theta 조인({@code f.followee = b.user})으로 묶는다. PRIVATE·비팔로우·본인(자기 팔로우 없음)은 자연 제외.
+     */
+    @Query("""
+            select b.isbn13 as isbn,
+                   count(distinct case when b.status = com.booktimer.book.BookStatus.WANT_TO_READ
+                                       then b.user.id end) as wantCount,
+                   count(distinct case when b.status in (com.booktimer.book.BookStatus.READING,
+                                                         com.booktimer.book.BookStatus.FINISHED)
+                                       then b.user.id end) as readCount
+            from Book b, com.booktimer.follow.Follow f
+            where f.followee = b.user
+              and f.follower = :viewer
+              and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
+              and b.isbn13 in :isbns
+            group by b.isbn13
+            """)
+    List<FollowScopeCount> followScopePopularity(@Param("viewer") User viewer,
+                                                 @Param("isbns") Collection<String> isbns);
 }

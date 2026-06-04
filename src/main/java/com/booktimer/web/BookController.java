@@ -1,10 +1,12 @@
 package com.booktimer.web;
 
 import com.booktimer.book.Book;
+import com.booktimer.book.BookSearchPage;
 import com.booktimer.book.BookSearchResult;
 import com.booktimer.book.BookService;
 import com.booktimer.book.BookStatus;
 import com.booktimer.book.BookVisibility;
+import com.booktimer.popularity.FollowScopePopularityService;
 import com.booktimer.session.BookContributionService;
 import com.booktimer.session.BookReadingDetail;
 import com.booktimer.session.BookReadingStatsService;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.security.Principal;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -35,14 +38,17 @@ public class BookController {
     private final BookService bookService;
     private final BookReadingStatsService statsService;
     private final BookContributionService contributionService;
+    private final FollowScopePopularityService popularityService;
 
     public BookController(UserRepository userRepository, BookService bookService,
                           BookReadingStatsService statsService,
-                          BookContributionService contributionService) {
+                          BookContributionService contributionService,
+                          FollowScopePopularityService popularityService) {
         this.userRepository = userRepository;
         this.bookService = bookService;
         this.statsService = statsService;
         this.contributionService = contributionService;
+        this.popularityService = popularityService;
     }
 
     @GetMapping("/books")
@@ -51,16 +57,23 @@ public class BookController {
                         Principal principal, Model model) {
         User user = currentUser(principal);
 
+        List<Book> myBooks = bookService.myBooks(user);
         model.addAttribute("nickname", user.getNickname());
-        model.addAttribute("books", bookService.myBooks(user));
+        model.addAttribute("books", myBooks);
         model.addAttribute("bookTimes", statsService.totalSecondsByBook(user)); // 책 id → 누적 초
         model.addAttribute("statuses", BookStatus.values());
         model.addAttribute("visibilities", BookVisibility.values());
         model.addAttribute("searchEnabled", bookService.searchEnabled());
         model.addAttribute("q", q);
+
+        // 화면에 보이는 책들(책장 + 검색결과)의 isbn을 모아 팔로우 스코프 인기 카운트를 한 번에 집계(§7.4, N+1 회피).
+        List<String> isbns = new ArrayList<>(myBooks.stream().map(Book::getIsbn13).toList());
         if (q != null && !q.isBlank()) {
-            model.addAttribute("searchPage", bookService.search(q, page));
+            BookSearchPage searchPage = bookService.search(q, page);
+            model.addAttribute("searchPage", searchPage);
+            searchPage.results().forEach(r -> isbns.add(r.isbn13()));
         }
+        model.addAttribute("popularity", popularityService.countByIsbn(user, isbns)); // isbn → (원함, 읽음)
         return "books";
     }
 
