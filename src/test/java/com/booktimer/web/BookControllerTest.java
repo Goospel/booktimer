@@ -97,6 +97,42 @@ class BookControllerTest {
     }
 
     @Test
+    @DisplayName("GET /books?status=READING: 그 상태의 책만 책장에 싣는다(필터)")
+    @SuppressWarnings("unchecked")
+    void books_filteredByStatus() throws Exception {
+        User u = newUser("filter@booktimer.com");
+        bookRepository.save(Book.register(u, "읽는중책", null, null, null, null, null, BookStatus.READING));
+        bookRepository.save(Book.register(u, "완독책", null, null, null, null, null, BookStatus.FINISHED));
+        bookRepository.save(Book.register(u, "또읽는중", null, null, null, null, null, BookStatus.READING));
+
+        mockMvc.perform(get("/books").param("status", "READING").with(user("filter@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("shelfFilter", BookStatus.READING))
+                .andExpect(result -> {
+                    var books = (List<Book>) result.getModelAndView().getModel().get("books");
+                    assertThat(books).extracting(Book::getStatus).containsOnly(BookStatus.READING);
+                    assertThat(books).hasSize(2);
+                });
+    }
+
+    @Test
+    @DisplayName("GET /books: status가 없으면 전체를 싣고 shelfFilter는 null")
+    @SuppressWarnings("unchecked")
+    void books_noFilter_showsAll() throws Exception {
+        User u = newUser("nofilter@booktimer.com");
+        bookRepository.save(Book.register(u, "a", null, null, null, null, null, BookStatus.READING));
+        bookRepository.save(Book.register(u, "b", null, null, null, null, null, BookStatus.FINISHED));
+
+        mockMvc.perform(get("/books").with(user("nofilter@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("shelfFilter", org.hamcrest.Matchers.nullValue()))
+                .andExpect(result -> {
+                    var books = (List<Book>) result.getModelAndView().getModel().get("books");
+                    assertThat(books).hasSize(2);
+                });
+    }
+
+    @Test
     @DisplayName("POST /books/add: 책을 책장에 추가한다")
     void add_savesBook() throws Exception {
         User u = newUser("b@booktimer.com");

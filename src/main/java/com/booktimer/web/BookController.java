@@ -54,12 +54,20 @@ public class BookController {
     @GetMapping("/books")
     public String books(@RequestParam(value = "q", required = false) String q,
                         @RequestParam(value = "page", required = false, defaultValue = "1") int page,
+                        @RequestParam(value = "status", required = false) String status,
                         Principal principal, Model model) {
         User user = currentUser(principal);
 
+        // 책장 상태 필터(읽고싶음/읽는중/완독). 값이 없거나 잘못되면 전체(null).
+        BookStatus shelfFilter = parseStatus(status);
         List<Book> myBooks = bookService.myBooks(user);
+        List<Book> shelfBooks = shelfFilter == null
+                ? myBooks
+                : myBooks.stream().filter(b -> b.getStatus() == shelfFilter).toList();
+
         model.addAttribute("nickname", user.getNickname());
-        model.addAttribute("books", myBooks);
+        model.addAttribute("books", shelfBooks);
+        model.addAttribute("shelfFilter", shelfFilter); // 필터 칩 활성 표시·빈 메시지 분기
         model.addAttribute("bookTimes", statsService.totalSecondsByBook(user)); // 책 id → 누적 초
         model.addAttribute("statuses", BookStatus.values());
         model.addAttribute("visibilities", BookVisibility.values());
@@ -67,7 +75,7 @@ public class BookController {
         model.addAttribute("q", q);
 
         // 화면에 보이는 책들(책장 + 검색결과)의 isbn을 모아 팔로우 스코프 인기 카운트를 한 번에 집계(§7.4, N+1 회피).
-        List<String> isbns = new ArrayList<>(myBooks.stream().map(Book::getIsbn13).toList());
+        List<String> isbns = new ArrayList<>(shelfBooks.stream().map(Book::getIsbn13).toList());
         if (q != null && !q.isBlank()) {
             BookSearchPage searchPage = bookService.search(q, page);
             model.addAttribute("searchPage", searchPage);
@@ -75,6 +83,18 @@ public class BookController {
         }
         model.addAttribute("popularity", popularityService.countByIsbn(user, isbns)); // isbn → (원함, 읽음)
         return "books";
+    }
+
+    /** 책장 필터 파라미터를 BookStatus로 — 없거나 잘못된 값이면 null(전체). */
+    private BookStatus parseStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+        try {
+            return BookStatus.valueOf(status);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     /**

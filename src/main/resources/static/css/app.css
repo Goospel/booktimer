@@ -245,10 +245,33 @@ button, .btn {
 .danger-zone { border-color: #fecaca; }
 .danger-zone h2 { color: var(--danger); }
 
-/* 공용 링크 행 — 다른 페이지(검색/프로필/책장/기록/로그인 등) 하단 링크가 사용. */
-.link-row { text-align: center; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; }
-.link-row a { color: var(--accent); text-decoration: none; white-space: nowrap; }
-.link-row a:hover { text-decoration: underline; }
+/* 공용 하단 네비 — 대시보드 퀵 액션과 동일한 타일 양식(이것이 표준 양식).
+   모든 페이지(검색/프로필/책장/기록/로그인 등)의 .link-row가 이 2열 타일을 공유한다.
+   링크 수가 홀수면 마지막 타일이 전체폭(단일 링크 페이지=전체폭 버튼 1개). */
+.link-row {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-top: 8px;
+}
+.link-row a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 16px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    text-decoration: none;
+    font-weight: 600;
+    word-break: keep-all;
+    transition: border-color .15s, box-shadow .15s, transform .05s;
+}
+.link-row a:hover { border-color: var(--accent); box-shadow: var(--shadow); text-decoration: none; }
+.link-row a:active { transform: translateY(1px); }
+.link-row a:last-child:nth-child(odd) { grid-column: 1 / -1; }
 
 /* 바로가기 타일 그리드 — 좁은 컬럼에서 라벨이 글자 단위로 깨지던 link-row 대체(대시보드 전용).
    2열 그리드, 각 타일은 카드 톤의 탭 타깃. 5번째(홀수 마지막)는 한 칸 전체폭. */
@@ -454,6 +477,15 @@ a.book-title:hover { text-decoration: underline; }
 .book-pick { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; color: var(--muted); font-size: .9rem; white-space: nowrap; }
 .book-pick select { flex: 1 1 auto; min-width: 0; padding: 7px 8px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
 .book-time { font-size: .8rem; color: var(--ok); font-weight: 600; }
+/* 책장 상태 필터 칩 — 활성은 accent. 좁은 폭에서 줄바꿈 허용. */
+.shelf-filter { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.shelf-filter a {
+    padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px;
+    color: var(--muted); text-decoration: none; font-size: .85rem; font-weight: 600;
+    white-space: nowrap;
+}
+.shelf-filter a:hover { border-color: var(--accent); color: var(--accent); }
+.shelf-filter a.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 /* 팔로우 스코프 인기 카운트(§7.4) — 책 메타 안 작은 배지 */
 .follow-popularity { font-size: .78rem; color: var(--accent); font-weight: 600; }
 
