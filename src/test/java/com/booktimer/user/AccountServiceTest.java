@@ -1,5 +1,6 @@
 package com.booktimer.user;
 
+import com.booktimer.book.BookRepository;
 import com.booktimer.follow.FollowRepository;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.timer.ReadingTimerRepository;
@@ -43,6 +44,8 @@ class AccountServiceTest {
     private ReadingSessionRepository sessionRepository;
     @Mock
     private FollowRepository followRepository;
+    @Mock
+    private BookRepository bookRepository;
     @Mock
     private PasswordEncoder passwordEncoder;
 
@@ -97,11 +100,12 @@ class AccountServiceTest {
 
         service.deleteAccount(EMAIL, "pw");
 
-        var ordered = inOrder(sessionRepository, timerRepository, followRepository, userRepository);
-        ordered.verify(sessionRepository).deleteByUser(user);
+        var ordered = inOrder(sessionRepository, timerRepository, followRepository, bookRepository, userRepository);
+        ordered.verify(sessionRepository).deleteByUser(user); // book FK 참조하는 세션 먼저
         ordered.verify(timerRepository).deleteByUser(user);
         ordered.verify(followRepository).deleteByFollower(user);   // FK: 유저 삭제 전에 관계 정리
         ordered.verify(followRepository).deleteByFollowee(user);
+        ordered.verify(bookRepository).deleteByUser(user);    // FK: 유저 삭제 전에 책 정리(세션 이후)
         ordered.verify(userRepository).delete(user);
     }
 
@@ -130,11 +134,12 @@ class AccountServiceTest {
 
         service.deleteSocialAccount(EMAIL);
 
-        var ordered = inOrder(sessionRepository, timerRepository, followRepository, userRepository);
+        var ordered = inOrder(sessionRepository, timerRepository, followRepository, bookRepository, userRepository);
         ordered.verify(sessionRepository).deleteByUser(social);
         ordered.verify(timerRepository).deleteByUser(social);
         ordered.verify(followRepository).deleteByFollower(social);
         ordered.verify(followRepository).deleteByFollowee(social);
+        ordered.verify(bookRepository).deleteByUser(social);
         ordered.verify(userRepository).delete(social);
         verify(passwordEncoder, never()).matches(any(), any());
     }

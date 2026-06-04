@@ -1,5 +1,6 @@
 package com.booktimer.user;
 
+import com.booktimer.book.BookRepository;
 import com.booktimer.follow.FollowRepository;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.timer.ReadingTimerRepository;
@@ -24,17 +25,20 @@ public class AccountService {
     private final ReadingTimerRepository timerRepository;
     private final ReadingSessionRepository sessionRepository;
     private final FollowRepository followRepository;
+    private final BookRepository bookRepository;
     private final PasswordEncoder passwordEncoder;
 
     public AccountService(UserRepository userRepository,
                           ReadingTimerRepository timerRepository,
                           ReadingSessionRepository sessionRepository,
                           FollowRepository followRepository,
+                          BookRepository bookRepository,
                           PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.timerRepository = timerRepository;
         this.sessionRepository = sessionRepository;
         this.followRepository = followRepository;
+        this.bookRepository = bookRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -78,14 +82,16 @@ public class AccountService {
     }
 
     /**
-     * 연관 데이터까지 FK 순서로 제거: 세션(N) → 타이머(1:1) → 팔로우(내가 건/나를 향한 관계) → 유저.
-     * 팔로우는 follower_id·followee_id로 users를 FK 참조하므로 유저 삭제 전에 양방향 모두 지운다.
+     * 연관 데이터까지 FK 순서로 제거: 세션(N) → 타이머(1:1) → 팔로우(양방향) → 책(N) → 유저.
+     * <p>모두 users를 FK 참조하므로 유저 삭제 전에 정리한다. 책은 {@code reading_session.book_id}가
+     * book을 FK 참조하므로 <b>세션 이후</b>에 지운다(세션이 책을 가리키는 채로 책을 지우면 위반).
      */
     private void purge(User user) {
         sessionRepository.deleteByUser(user);
         timerRepository.deleteByUser(user);
         followRepository.deleteByFollower(user);
         followRepository.deleteByFollowee(user);
+        bookRepository.deleteByUser(user);
         userRepository.delete(user);
     }
 
