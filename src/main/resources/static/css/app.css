@@ -418,15 +418,17 @@ button, .btn {
     color: var(--text);
 }
 .search-type input[type=radio] { accent-color: var(--accent); }
-.search-row { display: flex; gap: 8px; }
+/* 검색 바(넓게) 위 + 검색 버튼 아래로 세로 배치 — 버튼이 입력칸을 잡아먹지 않게. */
+.search-row { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
 .search-row input[type=text] {
-    flex: 1 1 auto;
-    min-width: 0;
-    padding: 8px 10px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px 14px;
     border: 1px solid var(--border);
     border-radius: 8px;
-    font-size: .95rem;
+    font-size: 1rem;
 }
+.search-row .btn-primary { width: 100%; }
 
 .book-list { list-style: none; padding: 0; margin: 8px 0 0; }
 .book-row {
