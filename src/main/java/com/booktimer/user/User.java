@@ -202,6 +202,23 @@ public class User extends BaseTimeEntity {
         return onboarded;
     }
 
+    /**
+     * 이 계정을 운영자(ADMIN)로 승격한다. 멱등 — 이미 ADMIN이면 아무 것도 바꾸지 않는다.
+     *
+     * <p>가입은 항상 {@link Role#USER}로 고정되며(권한 상승 벡터 차단), ADMIN 부여는 이 메서드를
+     * 통해서만 일어난다. 호출 경로는 환경변수로 지정한 이메일을 기동 시 승격하는 시드뿐이다
+     * (자동 가입 승격 없음).
+     *
+     * @return 실제로 USER→ADMIN으로 바뀌었으면 {@code true}, 이미 ADMIN이라 변화가 없으면 {@code false}
+     */
+    public boolean promoteToAdmin() {
+        if (this.role == Role.ADMIN) {
+            return false;
+        }
+        this.role = Role.ADMIN;
+        return true;
+    }
+
     public Long getId() {
         return id;
     }

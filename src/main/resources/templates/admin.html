@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>관리자 — BookTimer</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <span class="emoji">🛠️</span>
+        <h1>BookTimer 관리자</h1>
+    </header>
+    <p class="greeting"><span th:text="${nickname}">운영자</span>님 — 운영 데이터 확인 화면입니다.</p>
+
+    <section class="card">
+        <h2>통계 요약</h2>
+        <p class="status-line muted">통계 카드(가입자·활성 사용자·총 독서 시간 등)는 다음 단계에서 추가됩니다.</p>
+    </section>
+
+    <p class="link-row">
+        <a th:href="@{/}">← 대시보드</a>
+    </p>
+</div>
+</body>
+</html>

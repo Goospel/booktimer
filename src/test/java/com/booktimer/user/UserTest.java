@@ -226,4 +226,28 @@ class UserTest {
         user.completeOnboarding(); // 다시 호출해도 true 유지(멱등)
         assertThat(user.isOnboarded()).isTrue();
     }
+
+    // --- promoteToAdmin: 운영자(ADMIN) 승격 (멱등) ---
+
+    @Test
+    @DisplayName("promoteToAdmin: USER를 ADMIN으로 올리고 실제 변경이면 true를 반환한다")
+    void promoteToAdmin_fromUser_promotesAndReturnsTrue() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        boolean changed = user.promoteToAdmin();
+
+        assertThat(changed).isTrue();
+        assertThat(user.getRole()).isEqualTo(Role.ADMIN);
+    }
+
+    @Test
+    @DisplayName("promoteToAdmin: 이미 ADMIN이면 변경 없이 false (멱등)")
+    void promoteToAdmin_alreadyAdmin_isIdempotent() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.ADMIN);
+
+        boolean changed = user.promoteToAdmin();
+
+        assertThat(changed).isFalse();
+        assertThat(user.getRole()).isEqualTo(Role.ADMIN);
+    }
 }
