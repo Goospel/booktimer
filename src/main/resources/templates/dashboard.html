@@ -62,19 +62,28 @@
             </div>
             <div th:unless="${hasActiveSession}">
                 <p class="status-line">진행 중인 측정이 없습니다.</p>
-                <!-- 측정은 반드시 책을 골라야 시작된다(책 미지정 측정 금지). 책이 없으면 시작 폼 대신 추가 안내만. -->
-                <form th:if="${books != null and !books.isEmpty()}"
+                <!-- 측정은 반드시 책을 골라야 시작된다(책 미지정 측정 금지). "읽고싶음"은 제외하고
+                     「읽는 중」/「완독」을 optgroup으로 구분한다. 측정할 책이 없으면 시작 폼 대신 추가 안내만. -->
+                <form th:if="${(readingBooks != null and !readingBooks.isEmpty()) or (finishedBooks != null and !finishedBooks.isEmpty())}"
                       th:action="@{/sessions/start}" method="post"
                       hx-post="/sessions/start" hx-target="#dashboard-live" hx-swap="outerHTML">
                     <label class="book-pick">읽을 책
                         <select name="bookId" required>
-                            <option th:each="b : ${books}" th:value="${b.id}" th:text="${b.title}">책</option>
+                            <optgroup label="읽는 중" th:if="${readingBooks != null and !readingBooks.isEmpty()}">
+                                <option th:each="b : ${readingBooks}" th:value="${b.id}" th:text="${b.title}"
+                                        th:selected="${recentBookId != null and b.id == recentBookId}">책</option>
+                            </optgroup>
+                            <optgroup label="완독" th:if="${finishedBooks != null and !finishedBooks.isEmpty()}">
+                                <option th:each="b : ${finishedBooks}" th:value="${b.id}" th:text="${b.title}"
+                                        th:selected="${recentBookId != null and b.id == recentBookId}">책</option>
+                            </optgroup>
                         </select>
                     </label>
                     <button type="submit" class="btn-primary">측정 시작</button>
                 </form>
-                <p class="status-line muted" th:if="${books == null or books.isEmpty()}">
-                    <a th:href="@{/books}">책장에 책을 추가</a>하면 측정할 책을 골라 시작할 수 있어요.
+                <p class="status-line muted"
+                   th:if="${(readingBooks == null or readingBooks.isEmpty()) and (finishedBooks == null or finishedBooks.isEmpty())}">
+                    <a th:href="@{/books}">책장에 '읽는 중' 책을 추가</a>하면 측정할 책을 골라 시작할 수 있어요.
                 </p>
             </div>
         </section>
