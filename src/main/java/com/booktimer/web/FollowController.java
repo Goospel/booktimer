@@ -1,6 +1,8 @@
 package com.booktimer.web;
 
 import com.booktimer.follow.FollowService;
+import com.booktimer.security.RateLimitAction;
+import com.booktimer.security.RateLimitService;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
 import org.springframework.stereotype.Controller;
@@ -15,16 +17,22 @@ import java.security.Principal;
  * <p>{@code POST /follow}, {@code POST /unfollow} — 대상 닉네임으로 관계를 만들고/지운다(CSRF, PRG).
  * 자기 자신 팔로우·존재 누설은 조용히 무시하고(예외를 화면에 노출하지 않음) 원래 화면으로 돌아간다.
  * 도메인 규칙(자기 팔로우 금지·멱등)은 {@link FollowService}가 강제한다.
+ *
+ * <p>스팸 팔로우 방어로 사용자별 레이트리밋({@link RateLimitAction#FOLLOW})을 건다 — 한도 초과 시 액션을
+ * 건너뛰고(조용히 드롭) 원래 화면으로 돌아간다(§7.5·§9).
  */
 @Controller
 public class FollowController {
 
     private final UserRepository userRepository;
     private final FollowService followService;
+    private final RateLimitService rateLimitService;
 
-    public FollowController(UserRepository userRepository, FollowService followService) {
+    public FollowController(UserRepository userRepository, FollowService followService,
+                            RateLimitService rateLimitService) {
         this.userRepository = userRepository;
         this.followService = followService;
+        this.rateLimitService = rateLimitService;
     }
 
     @PostMapping("/follow")
@@ -32,13 +40,15 @@ public class FollowController {
                          @RequestParam(value = "redirect", required = false) String redirect,
                          Principal principal) {
         User me = currentUser(principal);
-        userRepository.findByNickname(nickname).ifPresent(target -> {
-            try {
-                followService.follow(me, target);
-            } catch (IllegalArgumentException ignored) {
-                // 자기 자신 팔로우 등 — 조용히 무시(버튼이 애초에 안 떠야 정상)
-            }
-        });
+        if (rateLimitService.allow(RateLimitAction.FOLLOW, me.getId())) {
+            userRepository.findByNickname(nickname).ifPresent(target -> {
+                try {
+                    followService.follow(me, target);
+                } catch (IllegalArgumentException ignored) {
+                    // 자기 자신 팔로우 등 — 조용히 무시(버튼이 애초에 안 떠야 정상)
+                }
+            });
+        }
         return "redirect:" + safeRedirect(redirect, nickname);
     }
 
@@ -47,7 +57,9 @@ public class FollowController {
                            @RequestParam(value = "redirect", required = false) String redirect,
                            Principal principal) {
         User me = currentUser(principal);
-        userRepository.findByNickname(nickname).ifPresent(target -> followService.unfollow(me, target));
+        if (rateLimitService.allow(RateLimitAction.FOLLOW, me.getId())) {
+            userRepository.findByNickname(nickname).ifPresent(target -> followService.unfollow(me, target));
+        }
         return "redirect:" + safeRedirect(redirect, nickname);
     }
 

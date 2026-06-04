@@ -1,5 +1,6 @@
 package com.booktimer.search;
 
+import com.booktimer.block.BlockRepository;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
 import org.springframework.stereotype.Service;
@@ -13,6 +14,9 @@ import java.util.List;
  * <p>부분일치(LIKE)로 닉네임을 찾아 결과 한 줄마다 공개 책 수·내 팔로우 여부·본인 여부를 채운다.
  * 가드: <b>최소 2글자</b>(미만이면 빈 결과), <b>상한 20</b>(리포지토리 Top20) — 열거·크롤링 완화(§9).
  * 검색은 사용자 <i>존재</i>만 노출하고 독서 <i>내용</i>은 노출하지 않는다(공개 책 게이트는 프로필이 담당).
+ *
+ * <p><b>차단 숨김</b>: 나와 차단 관계(어느 방향이든)인 사용자는 결과에서 제외한다 — 차단하면 프로필이
+ * 대칭으로 404이므로 검색 결과에 떠도 열 수 없어, 애초에 노출하지 않는다(sns-design §7.5 후속).
  */
 @Service
 @Transactional(readOnly = true)
@@ -23,10 +27,13 @@ public class UserSearchService {
 
     private final UserRepository userRepository;
     private final UserRowAssembler rowAssembler;
+    private final BlockRepository blockRepository;
 
-    public UserSearchService(UserRepository userRepository, UserRowAssembler rowAssembler) {
+    public UserSearchService(UserRepository userRepository, UserRowAssembler rowAssembler,
+                             BlockRepository blockRepository) {
         this.userRepository = userRepository;
         this.rowAssembler = rowAssembler;
+        this.blockRepository = blockRepository;
     }
 
     public List<UserSearchResult> search(User viewer, String query) {
@@ -38,6 +45,7 @@ public class UserSearchService {
             return List.of();
         }
         return userRepository.findTop20ByNicknameContainingIgnoreCaseOrderByNicknameAsc(q).stream()
+                .filter(u -> !blockRepository.existsBetween(viewer, u)) // 차단 관계는 숨김(대칭)
                 .map(u -> rowAssembler.toRow(viewer, u))
                 .toList();
     }

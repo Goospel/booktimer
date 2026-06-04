@@ -32,6 +32,7 @@
 - [T-028. 유니크 제약 추가가 같은 값을 쓰던 기존 테스트 픽스처를 깨뜨린다](#t-028-유니크-제약-추가가-같은-값을-쓰던-기존-테스트-픽스처를-깨뜨린다)
 - [T-029. 유저 삭제 경로에서 FK 자식 정리 누락 — mock 단위테스트는 못 잡는다](#t-029-유저-삭제-경로에서-fk-자식-정리-누락--mock-단위테스트는-못-잡는다)
 - [T-030. 알라딘 `QueryType=Title`이 문서와 달리 저자까지 매칭 — 결과를 신뢰 말고 후필터](#t-030-알라딘-querytypetitle이-문서와-달리-저자까지-매칭--결과를-신뢰-말고-후필터)
+- [T-031. Thymeleaf `th:if="${!flag}"`에서 flag가 null이면 SpringEL이 터진다 — 모델에 항상 boolean을 넣어라](#t-031-thymeleaf-thifflag에서-flag가-null이면-springel이-터진다--모델에-항상-boolean을-넣어라)
 
 ---
 
@@ -551,6 +552,24 @@ private final ObjectMapper objectMapper = new ObjectMapper();  // 주입 대신 
 
 ---
 
+## T-031. Thymeleaf `th:if="${!flag}"`에서 flag가 null이면 SpringEL이 터진다 — 모델에 항상 boolean을 넣어라
+
+**증상**: 검색 결과 화면에 레이트리밋 안내(`rateLimited`) 플래그를 더한 뒤, **정상 검색 경로**의 기존 테스트들이 `TemplateProcessingException: Exception evaluating SpringEL expression: "!rateLimited and ..."`로 깨졌다. 정작 레이트리밋 케이스(플래그를 `true`로 넣는 경로)는 멀쩡했다.
+
+**원인**: 템플릿에 `th:if="${!rateLimited and ...}"`를 썼는데, 정상 경로에선 컨트롤러가 `rateLimited`를 **모델에 안 넣어 null**이었다. Thymeleaf의 표준 표현식(SpringEL)은 **`!null`(null에 부정 연산)을 평가 못 해 예외**를 던진다 — OGNL/일부 템플릿 엔진의 "null=false 관대 처리"와 다르다. 즉 "값을 안 넣음 = false로 취급"이 아니라 **에러**다.
+
+**해결 / 예방**:
+- **모델에 항상 boolean을 넣는다** — 플래그를 쓰는 컨트롤러의 *모든* 경로에서 `model.addAttribute("rateLimited", false|true)`. 한 경로에서만 넣고 다른 경로에서 빠지면 null이 샌다.
+  ```java
+  // 정상 경로도 명시적으로 false
+  model.addAttribute("results", searchService.search(me, q));
+  model.addAttribute("rateLimited", false);   // ← 없으면 th:if="${!rateLimited}"가 null로 터짐
+  ```
+- 대안(널-세이프 표현식): `th:if="${rateLimited == true}"` / `th:if="${rateLimited != true}"` — null과 비교는 안전(`null == true` → false). 단, 모델에 항상 넣는 쪽이 의도가 더 분명.
+- **일반화**: SSR 템플릿의 boolean 분기는 "안 넣으면 false"를 가정하지 말 것. 컨트롤러가 플래그를 **항상** 채우거나, 템플릿을 null-safe(`== true`)로 쓴다. 새 분기 플래그를 더할 땐 그 플래그를 세팅하는 경로가 **하나라도 빠지지 않았는지** 본다.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -581,3 +600,4 @@ private final ObjectMapper objectMapper = new ObjectMapper();  // 주입 대신 
 | 2026-06-04 | T-028 (닉네임 유니크 제약 추가가 한 메서드에서 같은 닉을 두 사용자에 쓰던 IDOR 테스트를 깨뜨림 — 메서드당 1명·롤백이면 안전, 2명 동일값만 파손 / 픽스처를 이메일 기반 유니크 닉으로 / 제약 강화 PR은 테스트 데이터 가정도 바꾼다, N-039) |
 | 2026-06-04 | T-029 (유저 삭제 경로에서 FK 자식(book) 정리 누락 — purge가 book 미삭제로 탈퇴 FK 위반, BookRepository.deleteByUser 정의됐으나 미호출 / mock 단위테스트는 호출만 검증·실제 FK 안 타 못 잡음 → 실제 H2 통합테스트로 보강 / 삭제 순서 세션→타이머→팔로우→책→유저, 새 FK 추가 시 삭제 경로 점검, 자매 T-023, N-040) |
 | 2026-06-04 | T-030 (알라딘 QueryType=Title이 문서("제목만")와 달리 저자까지 매칭 — "모기" 제목검색에 저자 모기 겐이치로 책 섞임 / 파라미터는 정확, 외부 API 동작이 문서와 불일치 → 결과를 BookService.search에서 후필터(기준 필드에 검색어 든 것만, 공백·대소문자 정규화 contains), 페이저 과대집계는 알려진 한계, N-041) |
+| 2026-06-04 | T-031 (Thymeleaf `th:if="${!flag}"`에서 flag가 모델에 없으면 null → SpringEL이 `!null` 평가 못 해 TemplateProcessingException, 정상 경로 테스트만 깨지고 플래그 true 경로는 멀쩡 / "안 넣으면 false" 아님 → 모든 경로에서 boolean 명시 또는 널-세이프 `== true`, 레이트리밋 안내 플래그 추가 중 발견) |
