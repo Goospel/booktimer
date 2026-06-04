@@ -51,6 +51,9 @@ public class SecurityConfig {
                         .requestMatchers("/signup", "/login", "/privacy", "/error", "/actuator/health", "/css/**", "/js/**", "/favicon.ico").permitAll()
                         // OAuth2 인가요청·콜백 엔드포인트는 미인증 상태에서 접근 가능해야 한다.
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
+                        // 관리자 대시보드는 운영 데이터(개인정보)가 걸려 있어 ADMIN만 — default-deny 위에 역할 매처.
+                        // (ROLE_ 접두는 BookTimerUserDetailsService가 부여, hasRole이 접두를 자동 보정한다.)
+                        .requestMatchers("/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .formLogin(form -> form.loginPage("/login").permitAll())
                 // 소셜 로그인: 같은 커스텀 로그인 화면을 쓰고, OIDC 사용자 처리는 우리 어댑터에 위임한다.
