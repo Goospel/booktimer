@@ -48,6 +48,7 @@
 - [N-042. flex-basis는 주축(main axis) 크기다 — 컨테이너 방향(row↔column)을 바꾸면 같은 `flex` 단축속성이 가로↔세로로 뒤바뀐다](#n-042-flex-basis는-주축main-axis-크기다--컨테이너-방향rowcolumn을-바꾸면-같은-flex-단축속성이-가로세로로-뒤바뀐다)
 - [N-043. Rate Limiting — 요청 속도 제한으로 남용·과부하·비용을 막는다 (토큰 버킷, 429)](#n-043-rate-limiting--요청-속도-제한으로-남용과부하비용을-막는다-토큰-버킷-429)
 - [N-044. CSRF 숨김필드는 세션을 lazy 생성한다 — 큰 페이지·하단 폼이면 응답 버퍼 커밋 후라 실패](#n-044-csrf-숨김필드는-세션을-lazy-생성한다--큰-페이지하단-폼이면-응답-버퍼-커밋-후라-실패)
+- [N-045. Spring Data에서 "최신 N건"은 Pageable로 limit — 파생 메서드 이름으로 못 쓰는 정렬+개수 제한을 @Query에 얹는다](#n-045-spring-data에서-최신-n건은-pageable로-limit--파생-메서드-이름으로-못-쓰는-정렬개수-제한을-query에-얹는다)
 
 ---
 
@@ -2040,6 +2041,52 @@ if (csrf instanceof CsrfToken token) {
 
 ---
 
+## N-045. Spring Data에서 "최신 N건"은 Pageable로 limit — 파생 메서드 이름으로 못 쓰는 정렬+개수 제한을 @Query에 얹는다
+
+**한 줄 요약**: "가장 최근에 읽은 책 1권"처럼 **정렬 후 앞에서 N개만** 필요할 때, JPQL `@Query`에는 `LIMIT` 절을 직접 못 쓴다(JPQL 표준에 LIMIT 없음). 대신 메서드 시그니처에 **`Pageable` 파라미터**를 받고 호출부에서 `PageRequest.of(0, 1)`을 넘기면 Spring Data가 DB 방언에 맞는 `LIMIT`/`FETCH FIRST`로 변환한다. 반환은 `List<T>`로 받아 `isEmpty()` 체크 후 첫 원소를 쓴다.
+
+### 자세한 설명
+
+`reading_session`에서 "이 유저가 가장 최근에 시작한, 책이 연결된 세션의 책 id"가 필요했다(드롭다운 자동 선택용). 세 가지 선택지:
+
+1. **파생 쿼리 메서드** (`findTopBy...OrderBy...`) — `findTopByUserAndBookIsNotNullOrderByStartedAtDesc` 처럼 **메서드 이름만으로** 정렬+1건이 된다(`Top`/`First` 키워드). 이름이 짧으면 깔끔하지만, 조건이 복잡해지면 이름이 비대해지고 `s.book.id`만 골라 받는(프로젝션) 게 어렵다.
+2. **`@Query` + `Pageable`** (택함) — JPQL로 `select s.book.id ... order by s.startedAt desc`를 명시하고, limit은 `Pageable`로 분리. 프로젝션(`s.book.id`만)과 정렬을 쿼리에 또렷이 쓰면서 개수 제한은 호출부가 정한다.
+3. **전부 가져와 자바에서 자르기** — `findByUser(...).stream()....limit(1)`. 행이 많으면 불필요하게 다 읽어 비효율. DB가 할 일을 앱이 떠안음.
+
+택한 형태:
+
+```java
+@Query("select s.book.id from ReadingSession s where s.user = :user and s.book is not null order by s.startedAt desc")
+List<Long> findRecentlyReadBookIds(@Param("user") User user, Pageable pageable);
+
+// 호출부
+List<Long> recent = sessionRepository.findRecentlyReadBookIds(user, PageRequest.of(0, 1));
+Long recentBookId = recent.isEmpty() ? null : recent.get(0);
+```
+
+### 일반화 포인트 (면접 답변용)
+
+- **JPQL엔 LIMIT이 없다**: `LIMIT`/`OFFSET`은 표준 SQL이 아니라 방언(MySQL `LIMIT`, Oracle `FETCH FIRST`, H2 등)마다 다르다. JPA가 이를 추상화한 게 `Pageable` — "몇 번째 페이지의 몇 건"을 넘기면 방언별 구문으로 번역한다. 그래서 **페이징이 필요 없어도 "앞에서 N건"을 위해 `Pageable`을 빌려 쓴다**.
+- **`Top`/`First` 키워드 vs `Pageable`의 분담**: 고정 개수(항상 1건)면 메서드 이름의 `findFirst`/`findTop3`이 간결하다. 개수가 **호출 시점에 달라지거나**, 쿼리를 `@Query`로 명시(프로젝션·조인 페치 등)하고 싶으면 `Pageable`이 맞다.
+- **반환 타입 선택**: 1건이어도 `Optional<T>`가 아니라 `List<T>`로 받는 게 안전하다 — `@Query`+`Pageable`은 결과가 0건일 수 있고, 단일 객체로 받으면 `NonUnique`/`NoResult` 처리가 애매해진다. `List`로 받아 `isEmpty()`로 분기.
+
+### Q&A 대비
+
+- *"왜 `findFirstBy...` 안 쓰고 `@Query`?"* → `s.book.id`만 뽑는 **프로젝션**과 `book is not null` 조건을 쿼리에 또렷이 두고 싶었고, 개수 제한은 직교 관심사라 `Pageable`로 분리했다. 파생 이름으로도 가능하지만 이름이 길어진다.
+- *"`PageRequest.of(0, 1)`의 0과 1?"* → 0번째 페이지(첫 페이지), 페이지 크기 1 → 정렬 후 맨 앞 1건.
+- *"정렬을 `Pageable`의 `Sort`로 안 넣은 이유?"* → 정렬 기준이 고정(`startedAt desc`)이라 쿼리에 박는 게 의도가 분명하다. 호출부가 정렬을 바꿀 일이 없으면 쿼리에 두는 편이 읽기 쉽다.
+
+### 코드 위치
+
+- `src/main/java/com/booktimer/session/ReadingSessionRepository.java` — `findRecentlyReadBookIds(User, Pageable)`.
+- `src/main/java/com/booktimer/web/DashboardModel.java` — `PageRequest.of(0, 1)`로 호출, 최근 읽은 책을 드롭다운에 미리 선택(`recentBookId`).
+
+### 관련 노트
+
+- [N-009. 계층별 테스트 전략](#n-009-계층별-테스트-전략--도메인-단위--슬라이스--서비스-mock-테스트-피라미드) — 이 쿼리는 컨트롤러 통합 테스트(MockMvc+H2)로 끝단 검증했다.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2087,3 +2134,4 @@ if (csrf instanceof CsrfToken token) {
 | 2026-06-04 | N-042 (flex-basis는 width가 아니라 주축(main axis) 크기 — 컨테이너를 row→column으로 바꾸면 상속된 `flex: 1 1 160px`의 160px가 폭→높이로 뒤바뀌어 입력칸이 세로로 길쭉 / 해결은 방향 바뀐 셀렉터에서 `flex: none` 리셋 / CSS 버그는 캐스케이드 상호작용(넓은 셀렉터 잔재)을 봐야 잡힘) |
 | 2026-06-04 | N-043 (Rate Limiting — 시간당 요청 횟수 상한으로 남용/과부하/비용 방어, 신고처럼 남용 표적인 쓰기 트리거에 필수 / per-key(사용자·IP·쌍) 선택이 곧 정책 / 고정·슬라이딩 윈도우 vs 토큰 버킷(burst 허용, 실무 표준) / 초과 시 429+Retry-After(403·503과 구분) / 다중 인스턴스면 카운터 공유 저장소 N-029 / N-026 brute-force IP 잠금의 일반화, N-019 다층 방어) |
 | 2026-06-04 | N-044 (CSRF 숨김필드(`th:action`)는 세션 기반 토큰 저장소면 렌더 중 세션을 lazy 생성 / 큰 본문으로 응답 버퍼가 커밋된 뒤 하단 폼이 첫 세션 생성을 시도하면 "Cannot create a session after the response has been committed" 500 / 평소엔 앞쪽 폼이 먼저 세션 만들어 가려져 있다가 그 폼이 사라지자 노출 — lazy 생성은 "첫 사용 위치"에 동작이 묶임 / 해결=렌더 전 `CsrfToken#getToken()` 선확정(버퍼 키우기·폼 앞배치는 미봉책) / 응답 커밋은 되돌릴 수 없는 경계, T-033) |
+| 2026-06-05 | N-045 (Spring Data에서 "최신 N건"은 Pageable로 limit — JPQL엔 LIMIT 없음(방언 차이를 Pageable이 추상화), `@Query`+`Pageable` 파라미터에 `PageRequest.of(0,1)` 넘김 / `findTop`/`findFirst` 파생 이름 대안과 분담(고정 개수=이름, 가변·프로젝션·명시쿼리=Pageable) / 1건이어도 `List<T>`로 받아 isEmpty 분기 / 측정 드롭다운 "최근 읽은 책" 자동선택에 적용) |
