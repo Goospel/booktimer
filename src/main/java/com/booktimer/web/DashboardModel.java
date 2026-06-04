@@ -2,14 +2,17 @@ package com.booktimer.web;
 
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
+import com.booktimer.book.BookStatus;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerService;
 import com.booktimer.user.User;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.ui.Model;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -37,7 +40,11 @@ public class DashboardModel {
     /**
      * 라이브 영역 렌더 속성을 채운다 — 타이머 상태(nickname, remainingSeconds, atCap), 측정 상태
      * (hasActiveSession), 측정 중인 책(activeBookTitle)과 그 책의 누적 독서 시간(activeBookTotalSeconds),
-     * 시작 시 고를 책 목록(books).
+     * 시작 시 고를 책 목록(readingBooks/finishedBooks, 상태별 그룹)과 미리 선택할 최근 읽은 책(recentBookId).
+     *
+     * <p>측정 대상은 "읽는 중"·"완독"인 책뿐이다 — "읽고싶음"은 아직 펴지 않은 책이라 시간을 재는 게
+     * 이상하므로 드롭다운에서 제외한다(optgroup으로 「읽는 중」/「완독」을 시각적으로 구분). 가장 최근에
+     * 측정한 책(recentBookId)을 미리 선택해 "이어 읽기"를 자연스럽게 한다(없으면 브라우저 기본=첫 옵션).
      *
      * <p>{@code activeStartedAt}은 화면에 시각 자체를 노출하진 않지만(사용자에겐 타임존이 보일 필요 없음),
      * 타이머 카드의 경과 계산(JS {@code data-started})에 여전히 필요하므로 모델에 남긴다.
@@ -56,6 +63,16 @@ public class DashboardModel {
         // 측정 중인 책의 누적 독서 시간(완료 세션 합). 책 미지정 측정이면 0.
         model.addAttribute("activeBookTotalSeconds",
                 activeBook != null ? sessionRepository.sumDurationByUserAndBook(user, activeBook) : 0L);
-        model.addAttribute("books", bookRepository.findByUserOrderByCreatedAtDesc(user));
+
+        // 측정 드롭다운: "읽고싶음"을 빼고 상태별로 나눈다(읽는 중 / 완독). 같은 등록순(최신 먼저)을 유지.
+        List<Book> books = bookRepository.findByUserOrderByCreatedAtDesc(user);
+        model.addAttribute("readingBooks",
+                books.stream().filter(b -> b.getStatus() == BookStatus.READING).toList());
+        model.addAttribute("finishedBooks",
+                books.stream().filter(b -> b.getStatus() == BookStatus.FINISHED).toList());
+
+        // 가장 최근에 읽은 책을 드롭다운에서 미리 선택(이어 읽기). 측정 이력이 없으면 null → 브라우저 기본.
+        List<Long> recent = sessionRepository.findRecentlyReadBookIds(user, PageRequest.of(0, 1));
+        model.addAttribute("recentBookId", recent.isEmpty() ? null : recent.get(0));
     }
 }

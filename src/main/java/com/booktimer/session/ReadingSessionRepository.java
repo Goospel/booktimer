@@ -2,6 +2,7 @@ package com.booktimer.session;
 
 import com.booktimer.book.Book;
 import com.booktimer.user.User;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -35,6 +36,15 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
      */
     @Query("select coalesce(sum(s.durationSeconds), 0) from ReadingSession s where s.user = :user and s.book = :book")
     long sumDurationByUserAndBook(@Param("user") User user, @Param("book") Book book);
+
+    /**
+     * 가장 최근에 측정(읽기 시작)한 책들의 id — startedAt 내림차순. 첫 원소가 "최근 읽은 책"이다.
+     *
+     * <p>대시보드 측정 드롭다운에서 이 책을 미리 선택해 "이어 읽기"를 자연스럽게 한다.
+     * 책 미지정(book is null) 레거시 세션은 제외한다. 호출부에서 {@code PageRequest.of(0, 1)}로 1건만 받는다.
+     */
+    @Query("select s.book.id from ReadingSession s where s.user = :user and s.book is not null order by s.startedAt desc")
+    List<Long> findRecentlyReadBookIds(@Param("user") User user, Pageable pageable);
 
     /** 회원 탈퇴 시 해당 유저의 모든 측정 기록을 제거한다. */
     void deleteByUser(User user);

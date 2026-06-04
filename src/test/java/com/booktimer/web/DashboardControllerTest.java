@@ -22,7 +22,9 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
@@ -154,6 +156,57 @@ class DashboardControllerTest {
                 .andExpect(model().attribute("hasActiveSession", true))
                 .andExpect(model().attribute("activeBookTitle", "전쟁과 평화"))
                 .andExpect(model().attribute("activeBookTotalSeconds", 1800L));
+    }
+
+    @Test
+    @DisplayName("GET /: 측정 드롭다운용 책을 상태별로 나눠 싣고, 읽고싶음은 제외한다")
+    @SuppressWarnings("unchecked")
+    void dashboard_splitsReadableBooks_excludesWantToRead() throws Exception {
+        User user = registerOnboarded("split@booktimer.com", "분류", today());
+        Book reading = bookRepository.save(
+                Book.register(user, "읽는중책", null, null, null, null, null, BookStatus.READING));
+        Book finished = bookRepository.save(
+                Book.register(user, "완독책", null, null, null, null, null, BookStatus.FINISHED));
+        // 읽고싶음 책은 측정 대상이 아니므로 드롭다운 어느 그룹에도 없어야 한다
+        bookRepository.save(
+                Book.register(user, "읽고싶은책", null, null, null, null, null, BookStatus.WANT_TO_READ));
+
+        var result = mockMvc.perform(get("/").with(user("split@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeExists("readingBooks"))
+                .andExpect(model().attributeExists("finishedBooks"))
+                .andReturn();
+
+        var modelMap = result.getModelAndView().getModel();
+        List<Book> readingBooks = (List<Book>) modelMap.get("readingBooks");
+        List<Book> finishedBooks = (List<Book>) modelMap.get("finishedBooks");
+        assertThat(readingBooks).extracting(Book::getId).containsExactly(reading.getId());
+        assertThat(finishedBooks).extracting(Book::getId).containsExactly(finished.getId());
+        assertThat(readingBooks).extracting(Book::getStatus).containsOnly(BookStatus.READING);
+        assertThat(finishedBooks).extracting(Book::getStatus).containsOnly(BookStatus.FINISHED);
+    }
+
+    @Test
+    @DisplayName("GET /: 가장 최근에 읽은 책이 recentBookId로 미리 선택된다")
+    void dashboard_recentBookId_isMostRecentlyReadBook() throws Exception {
+        User user = registerOnboarded("recent@booktimer.com", "최근", today());
+        Book a = bookRepository.save(
+                Book.register(user, "책A", null, null, null, null, null, BookStatus.READING));
+        Book b = bookRepository.save(
+                Book.register(user, "책B", null, null, null, null, null, BookStatus.READING));
+
+        // 책A를 먼저, 책B를 더 나중에 읽음 → 가장 최근 읽은 책은 B
+        Instant base = clock.instant();
+        ReadingSession s1 = ReadingSession.start(user, base.minusSeconds(1000), a);
+        s1.end(base.minusSeconds(900));
+        ReadingSession s2 = ReadingSession.start(user, base.minusSeconds(500), b);
+        s2.end(base.minusSeconds(400));
+        sessionRepository.save(s1);
+        sessionRepository.save(s2);
+
+        mockMvc.perform(get("/").with(user("recent@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("recentBookId", b.getId()));
     }
 
     @Test
