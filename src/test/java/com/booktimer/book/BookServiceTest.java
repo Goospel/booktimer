@@ -215,10 +215,10 @@ class BookServiceTest {
     @Test
     @DisplayName("검색은 검색 클라이언트(포트)에 검색기준·페이지와 함께 위임한다")
     void search_delegatesToClient() {
-        when(searchClient.search("clean", BookSearchType.TITLE, 2))
+        when(searchClient.search("클린", BookSearchType.TITLE, 2))
                 .thenReturn(new BookSearchPage(List.of(cleanCode()), 2, 10, 15));
 
-        BookSearchPage page = bookService.search("clean", BookSearchType.TITLE, 2);
+        BookSearchPage page = bookService.search("클린", BookSearchType.TITLE, 2);
 
         assertThat(page.results()).hasSize(1);
         assertThat(page.results().get(0).title()).isEqualTo("클린 코드");
@@ -235,6 +235,46 @@ class BookServiceTest {
         bookService.search("모기", BookSearchType.AUTHOR, 1);
 
         org.mockito.Mockito.verify(searchClient).search("모기", BookSearchType.AUTHOR, 1);
+    }
+
+    @Test
+    @DisplayName("제목 검색은 제목에 검색어가 든 결과만 남긴다(알라딘 비엄격 Title 방어)")
+    void search_title_keepsOnlyTitleMatches() {
+        BookSearchResult titleMatch = new BookSearchResult("황소 엉덩이를 찌른 모기", "이창건", "1", null, "하늘우물", null);
+        BookSearchResult authorOnly = new BookSearchResult("철학은 어떻게 인생의 길이 되는가", "모기 겐이치로", "2", null, "다산초당", null);
+        when(searchClient.search("모기", BookSearchType.TITLE, 1))
+                .thenReturn(new BookSearchPage(List.of(titleMatch, authorOnly), 1, 10, 2));
+
+        BookSearchPage page = bookService.search("모기", BookSearchType.TITLE, 1);
+
+        assertThat(page.results()).extracting(BookSearchResult::title)
+                .containsExactly("황소 엉덩이를 찌른 모기"); // 저자만 매칭된 책은 제외
+    }
+
+    @Test
+    @DisplayName("저자 검색은 저자에 검색어가 든 결과만 남긴다")
+    void search_author_keepsOnlyAuthorMatches() {
+        BookSearchResult titleMatch = new BookSearchResult("황소 엉덩이를 찌른 모기", "이창건", "1", null, "하늘우물", null);
+        BookSearchResult authorMatch = new BookSearchResult("철학은 어떻게 인생의 길이 되는가", "모기 겐이치로", "2", null, "다산초당", null);
+        when(searchClient.search("모기", BookSearchType.AUTHOR, 1))
+                .thenReturn(new BookSearchPage(List.of(titleMatch, authorMatch), 1, 10, 2));
+
+        BookSearchPage page = bookService.search("모기", BookSearchType.AUTHOR, 1);
+
+        assertThat(page.results()).extracting(BookSearchResult::author)
+                .containsExactly("모기 겐이치로"); // 제목만 매칭된 책은 제외
+    }
+
+    @Test
+    @DisplayName("공백·대소문자 차이는 무시하고 매칭한다(정규화 후 contains)")
+    void search_normalizesWhitespaceAndCase() {
+        BookSearchResult r = new BookSearchResult("Clean Code 클린 코드", "Robert C. Martin", "1", null, null, null);
+        when(searchClient.search("cleancode", BookSearchType.TITLE, 1))
+                .thenReturn(new BookSearchPage(List.of(r), 1, 10, 1));
+
+        BookSearchPage page = bookService.search("cleancode", BookSearchType.TITLE, 1);
+
+        assertThat(page.results()).hasSize(1); // "Clean Code 클린 코드" → "cleancode클린코드" 가 "cleancode" 포함
     }
 
     @Test

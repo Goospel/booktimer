@@ -36,7 +36,38 @@ public class BookService {
 
     @Transactional(readOnly = true)
     public BookSearchPage search(String query, BookSearchType type, int page) {
-        return searchClient.search(query, type, page);
+        BookSearchPage raw = searchClient.search(query, type, page);
+        return filterToSearchType(raw, query, type);
+    }
+
+    /**
+     * 제공자(알라딘)의 {@code QueryType=Title}/{@code Author}가 문서와 달리 다른 필드 매칭을 섞어
+     * 돌려주는 경우를 방어한다 — 사용자가 고른 기준 필드(제목/저자)에 검색어가 실제로 든 결과만 남긴다.
+     * (예: "모기"를 제목으로 검색했는데 저자 "모기 겐이치로" 책이 끼어드는 것을 거른다.)
+     *
+     * <p>공백·대소문자 차이는 무시한다(정규화 후 contains) — "Clean Code"↔"cleancode" 같은 차이로
+     * 정상 결과가 누락되지 않게. 검색어가 비었거나 기준이 없으면 원본을 그대로 둔다.
+     */
+    private static BookSearchPage filterToSearchType(BookSearchPage raw, String query, BookSearchType type) {
+        if (raw == null || type == null || query == null) {
+            return raw;
+        }
+        String needle = normalize(query);
+        if (needle.isEmpty()) {
+            return raw;
+        }
+        List<BookSearchResult> filtered = raw.results().stream()
+                .filter(r -> {
+                    String field = (type == BookSearchType.AUTHOR) ? r.author() : r.title();
+                    return field != null && normalize(field).contains(needle);
+                })
+                .toList();
+        return new BookSearchPage(filtered, raw.page(), raw.pageSize(), raw.totalResults());
+    }
+
+    /** 매칭 비교용 정규화 — 모든 공백 제거 + 소문자(로케일 무관). */
+    private static String normalize(String s) {
+        return s.toLowerCase(java.util.Locale.ROOT).replaceAll("\\s+", "");
     }
 
     public Book addFromSearch(User user, BookSearchResult result, BookStatus status) {
