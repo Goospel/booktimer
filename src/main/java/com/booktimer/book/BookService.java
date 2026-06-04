@@ -35,8 +35,8 @@ public class BookService {
     }
 
     @Transactional(readOnly = true)
-    public BookSearchPage search(String query, int page) {
-        return searchClient.search(query, page);
+    public BookSearchPage search(String query, BookSearchType type, int page) {
+        return searchClient.search(query, type, page);
     }
 
     public Book addFromSearch(User user, BookSearchResult result, BookStatus status) {

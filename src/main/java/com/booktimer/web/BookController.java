@@ -3,6 +3,7 @@ package com.booktimer.web;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookSearchPage;
 import com.booktimer.book.BookSearchResult;
+import com.booktimer.book.BookSearchType;
 import com.booktimer.book.BookService;
 import com.booktimer.book.BookStatus;
 import com.booktimer.book.BookVisibility;
@@ -55,8 +56,12 @@ public class BookController {
     public String books(@RequestParam(value = "q", required = false) String q,
                         @RequestParam(value = "page", required = false, defaultValue = "1") int page,
                         @RequestParam(value = "status", required = false) String status,
+                        @RequestParam(value = "type", required = false) String type,
                         Principal principal, Model model) {
         User user = currentUser(principal);
+
+        // 검색 기준(제목/저자). 없거나 잘못되면 제목으로 폴백 — "모기"를 제목으로 찾는 게 기본 의도.
+        BookSearchType searchType = BookSearchType.from(type);
 
         // 책장 상태 필터(읽고싶음/읽는중/완독). 값이 없거나 잘못되면 전체(null).
         BookStatus shelfFilter = parseStatus(status);
@@ -73,11 +78,13 @@ public class BookController {
         model.addAttribute("visibilities", BookVisibility.values());
         model.addAttribute("searchEnabled", bookService.searchEnabled());
         model.addAttribute("q", q);
+        model.addAttribute("searchType", searchType);          // 검색 기준 셀렉트 활성 표시·페이징 링크 유지
+        model.addAttribute("searchTypes", BookSearchType.values());
 
         // 화면에 보이는 책들(책장 + 검색결과)의 isbn을 모아 팔로우 스코프 인기 카운트를 한 번에 집계(§7.4, N+1 회피).
         List<String> isbns = new ArrayList<>(shelfBooks.stream().map(Book::getIsbn13).toList());
         if (q != null && !q.isBlank()) {
-            BookSearchPage searchPage = bookService.search(q, page);
+            BookSearchPage searchPage = bookService.search(q, searchType, page);
             model.addAttribute("searchPage", searchPage);
             searchPage.results().forEach(r -> isbns.add(r.isbn13()));
         }

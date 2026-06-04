@@ -24,6 +24,17 @@ class AladinBookSearchClientTest {
     }
 
     @Test
+    @DisplayName("검색 기준에 따라 알라딘 QueryType이 Title/Author로 들어간다")
+    void buildUrl_carriesQueryType() {
+        String titleUrl = AladinBookSearchClient.buildSearchUrl("ttb1", "모기", BookSearchType.TITLE, 1);
+        assertThat(titleUrl).contains("QueryType=Title");
+        assertThat(titleUrl).doesNotContain("QueryType=Keyword");
+
+        String authorUrl = AladinBookSearchClient.buildSearchUrl("ttb1", "모기", BookSearchType.AUTHOR, 1);
+        assertThat(authorUrl).contains("QueryType=Author");
+    }
+
+    @Test
     @DisplayName("알라딘 ItemSearch JSON(item 배열)을 검색 결과로 매핑한다")
     void parse_mapsItems() {
         String json = """

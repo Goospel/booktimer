@@ -46,23 +46,12 @@ public class AladinBookSearchClient implements BookSearchClient {
     }
 
     @Override
-    public BookSearchPage search(String query, int page) {
+    public BookSearchPage search(String query, BookSearchType type, int page) {
         int safePage = Math.max(1, page);
         if (!isEnabled() || query == null || query.isBlank()) {
             return BookSearchPage.empty(safePage, PAGE_SIZE);
         }
-        String url = UriComponentsBuilder.fromUriString(ENDPOINT)
-                .queryParam("ttbkey", ttbKey)
-                .queryParam("Query", query.strip())
-                .queryParam("QueryType", "Keyword")
-                .queryParam("MaxResults", PAGE_SIZE)
-                .queryParam("start", safePage)   // 알라딘 start = 시작 페이지(1-based)
-                .queryParam("SearchTarget", "Book")
-                .queryParam("Cover", "MidBig")
-                .queryParam("output", "js")
-                .queryParam("Version", "20131101")
-                .build()
-                .toUriString();
+        String url = buildSearchUrl(ttbKey, query, type, safePage);
         try {
             String body = restClient.get().uri(url).retrieve().body(String.class);
             List<BookSearchResult> items = parse(body, objectMapper);
@@ -73,6 +62,26 @@ public class AladinBookSearchClient implements BookSearchClient {
             log.warn("알라딘 도서 검색 실패 — query='{}' page={}: {}", query, safePage, e.toString());
             return BookSearchPage.empty(safePage, PAGE_SIZE);
         }
+    }
+
+    /**
+     * 알라딘 ItemSearch 호출 URL을 만든다. 검색 기준(제목/저자)이 {@code QueryType}으로 들어간다.
+     * 네트워크 없이 단위테스트할 수 있게 정적·순수 함수로 분리한다.
+     */
+    static String buildSearchUrl(String ttbKey, String query, BookSearchType type, int page) {
+        BookSearchType safeType = (type == null) ? BookSearchType.TITLE : type;
+        return UriComponentsBuilder.fromUriString(ENDPOINT)
+                .queryParam("ttbkey", ttbKey)
+                .queryParam("Query", query.strip())
+                .queryParam("QueryType", safeType.getAladinQueryType())
+                .queryParam("MaxResults", PAGE_SIZE)
+                .queryParam("start", Math.max(1, page))   // 알라딘 start = 시작 페이지(1-based)
+                .queryParam("SearchTarget", "Book")
+                .queryParam("Cover", "MidBig")
+                .queryParam("output", "js")
+                .queryParam("Version", "20131101")
+                .build()
+                .toUriString();
     }
 
     /**
