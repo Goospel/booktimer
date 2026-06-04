@@ -1,5 +1,8 @@
 package com.booktimer.web;
 
+import com.booktimer.book.Book;
+import com.booktimer.book.BookRepository;
+import com.booktimer.book.BookStatus;
 import com.booktimer.session.ContributionGraph;
 import com.booktimer.session.DailyReadingRecord;
 import com.booktimer.session.ReadingSessionService;
@@ -51,6 +54,9 @@ class HistoryControllerTest {
     private ReadingSessionService sessionService;
 
     @Autowired
+    private BookRepository bookRepository;
+
+    @Autowired
     private Clock clock;
 
     private LocalDate today() {
@@ -63,8 +69,10 @@ class HistoryControllerTest {
     void history_rendersForLoggedInUser() throws Exception {
         User user = registrationService.register("hist@booktimer.com", "rawpw1234", "기록가", SEOUL, Role.USER, today());
         // 완료된 세션 하나 (30분)
+        Book book = bookRepository.save(
+                Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING));
         Instant start = clock.instant();
-        sessionService.start(user, start);
+        sessionService.start(user, start, book);
         sessionService.stop(user, start.plusSeconds(1800));
 
         var result = mockMvc.perform(get("/history").with(user("hist@booktimer.com")))

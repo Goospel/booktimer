@@ -82,9 +82,10 @@ class BookSessionTimeTest {
         // 이펙티브 자바: 10분 (완료 1건)
         sessionService.start(u, Instant.parse("2026-06-02T03:00:00Z"), effective);
         sessionService.stop(u, Instant.parse("2026-06-02T03:10:00Z"));
-        // 책 미지정 측정 (집계 제외)
-        sessionService.start(u, Instant.parse("2026-06-02T04:00:00Z"));
-        sessionService.stop(u, Instant.parse("2026-06-02T04:15:00Z"));
+        // 책 미지정 측정(레거시 행) — 운영 경로는 책 필수라 엔티티로 직접 만들어 저장. 집계 제외 확인용.
+        ReadingSession orphan = ReadingSession.start(u, Instant.parse("2026-06-02T04:00:00Z"));
+        orphan.end(Instant.parse("2026-06-02T04:15:00Z"));
+        sessionRepository.save(orphan);
         // 진행 중(미완료) — 클린 코드, 집계 제외
         sessionService.start(u, Instant.parse("2026-06-02T05:00:00Z"), clean);
 

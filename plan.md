@@ -433,6 +433,17 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 - [ ] (검토) 소셜 계정 탈퇴 시 재확인 단계, 가입 시 계정 열거 완화
 - [ ] (후속) 무차별 대입 방어 보강 — 지수 백오프, 다중 인스턴스 대비 공유 저장소(현재 인메모리=인스턴스별), 앞단 WAF 레이트리밋
 
+### 측정 세션 `book_id` NOT NULL 제약 — 레거시 정리 후 (보류, 우선순위: 낮음)
+> **배경**: "측정은 무조건 책을 골라야 한다"(어떤 책을 얼마나 읽었는지 명확히)를 도입하며(PR #133),
+> 강제는 **유스케이스 경계(Service + Controller)** 에서 한다 — 새 세션은 `book` 필수, bookId 없거나 내 책
+> 아니면 거부. 반면 **DB `reading_session.book_id`와 엔티티 필드는 nullable로 유지**했다.
+> **왜 DB 제약을 지금 안 거나**: 과거엔 책 없는 측정이 가능해 운영 DB에 `book_id IS NULL` 행이 남아 있을 수
+> 있다. 지금 `NOT NULL`로 바꾸는 Flyway는 그 기존 행 때문에 **마이그레이션이 실패**한다. 또 고아 세션을
+> 어느 책에 붙일지(backfill)는 알 수 없다(N-039: 제약 강화 전 백필 선결).
+- [ ] (후속) 운영 DB의 `book_id IS NULL` 레거시 세션을 어떻게 할지 결정 — 보존(현행) / 특정 더미책 귀속 / 삭제.
+- [ ] 정리 후에만 `V__ alter ... book_id ... not null` 추가(앱 레이어 강제는 이미 됨 → DB 제약은 "벨트+멜빵").
+- 관련: learning-notes **N-039**(제약 강화는 백필 먼저), 집계는 null-book 세션을 이미 제외(`BookReadingStatsService`).
+
 ### Fargate CPU 상향 — 로그인(BCrypt) 지연 (완료 ✅ 2026-06-04, PR #132 / 배포 검증은 run)
 - **증상**: 로그인이 체감상 느림.
 - **원인**: DB 아님(`findByEmail`은 유니크 인덱스 단건 조회 — 수 ms). 범인은 **BCrypt 비밀번호 검증**(의도적 CPU 집약) ×
@@ -514,3 +525,4 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 | 2026-06-04 | plan.md 정리 — **"실사용에서 발견한 문제(계획 외 UX/사용성)" 섹션 신설**. 스크린샷 피드백으로 발견·수정한 6건(PR #110·#116·#117·#122·#123)을 갱신 이력에서 한 표로 모음(증상·원인·해결·PR) + 후속 후보(출판사 검색 차원·공개여부 필터·ISBN 정규화) 명시. 로드맵 줄에 #123 부수 픽스 반영. 문서만 |
 | 2026-06-04 | **전역 인기 카운트 철회 → 팔로우 카운트 drill-down 채택**(4단계+). 전역 카운트는 *팔로우 없이도* 공짜 사회적 증거를 줘 팔로우 가치를 희석한다고 판단(사용자 결정). 대신 카운트 배지 클릭 시 "그 책 원함/읽음인 내 팔로우 명단"(`GET /books/readers`) — 카운트와 같은 게이트(팔로우·PUBLIC·distinct)로 신원만 펼침(새 노출 0, IDOR 없음), 기존 `UserRowAssembler` 재사용. `BookRepository.followScopeReaders` + `FollowScopeReadersService`/`FollowScopeReaders` + `book-readers.html`. Flyway 신규 없음. TDD(서비스 통합·컨트롤러 끝단). 함정 T-### 기록(Thymeleaf th:each+th:replace 우선순위·파라미터 fragment 인라인 NPE) |
 | 2026-06-04 | **Fargate CPU 상향**(로그인 BCrypt 지연 완화) — `deploy/task-definition.json` `cpu` 256→512(0.5 vCPU), `memory` 512→1024. 원인은 DB 아닌 BCrypt(의도된 CPU 집약)×0.25 vCPU 스로틀. 강도(10)는 유지(보안), CPU만 상향이 정답. 배포 검증은 run. 설정만(PR #132) |
+| 2026-06-04 | **측정에 책 필수화** — 책 미지정 측정 금지(어떤 책을 얼마나 읽었는지 명확화). 강제는 유스케이스 경계: `ReadingSessionService.start`에 `book!=null` 가드(2-arg 오버로드 제거), 컨트롤러는 bookId 없거나 내 책 아니면(IDOR) "책 선택" 에러+세션 미생성, 대시보드는 "선택 안 함" 제거·`select required`·책 0권이면 시작 폼 숨김. 엔티티/`book_id`는 nullable 유지(레거시 null-book 세션 읽기·집계 보존), **DB NOT NULL 제약은 보류**(기존 null 행에 마이그레이션 실패 위험 → 위 후속 항목). 부수로 CSRF 잠복 버그(T-033/N-044) 잡음: 책 0권 사용자에게서 상단 시작 폼이 사라지자 큰 페이지 하단 로그아웃 폼 CSRF가 응답 커밋 후 세션 생성 시도→500, 컨트롤러에서 렌더 전 토큰 선확정으로 해결. TDD(서비스 불변식·컨트롤러 끝단). (PR #133) |

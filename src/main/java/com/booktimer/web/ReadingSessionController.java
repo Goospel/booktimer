@@ -61,13 +61,18 @@ public class ReadingSessionController {
                         @RequestHeader(value = "HX-Request", required = false, defaultValue = "false") boolean htmx,
                         Model model, RedirectAttributes redirectAttributes) {
         User user = currentUser(principal);
-        // bookId가 있으면 내 책일 때만 연결(소유권 검사) — 아니면 책 미지정으로 시작.
+        // 측정은 반드시 "내 책"을 대상으로 한다(책 미지정 측정 금지). bookId가 없거나 내 책이 아니면(IDOR 포함)
+        // 책 선택을 안내하고 세션을 만들지 않는다.
         Book book = (bookId == null) ? null : bookRepository.findByIdAndUser(bookId, user).orElse(null);
         String error = null;
-        try {
-            sessionService.start(user, clock.instant(), book);
-        } catch (IllegalStateException e) {
-            error = "이미 진행 중인 측정이 있습니다.";
+        if (book == null) {
+            error = "측정할 책을 선택하세요.";
+        } else {
+            try {
+                sessionService.start(user, clock.instant(), book);
+            } catch (IllegalStateException e) {
+                error = "이미 진행 중인 측정이 있습니다.";
+            }
         }
         return respond(htmx, user, error, model, redirectAttributes);
     }

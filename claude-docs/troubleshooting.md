@@ -34,6 +34,7 @@
 - [T-030. 알라딘 `QueryType=Title`이 문서와 달리 저자까지 매칭 — 결과를 신뢰 말고 후필터](#t-030-알라딘-querytypetitle이-문서와-달리-저자까지-매칭--결과를-신뢰-말고-후필터)
 - [T-031. Thymeleaf `th:if="${!flag}"`에서 flag가 null이면 SpringEL이 터진다 — 모델에 항상 boolean을 넣어라](#t-031-thymeleaf-thifflag에서-flag가-null이면-springel이-터진다--모델에-항상-boolean을-넣어라)
 - [T-032. Thymeleaf 함정 2종 — `th:each`+`th:replace` 우선순위 역전 & 파라미터 fragment의 인라인 렌더 NPE](#t-032-thymeleaf-함정-2종--theachthreplace-우선순위-역전--파라미터-fragment의-인라인-렌더-npe)
+- [T-033. 큰 페이지에서 폼이 하단에만 있으면 CSRF 숨김필드가 응답 커밋 후 세션 생성 → 500](#t-033-큰-페이지에서-폼이-하단에만-있으면-csrf-숨김필드가-응답-커밋-후-세션-생성--500)
 
 ---
 
@@ -607,6 +608,34 @@ Thymeleaf 속성 **우선순위는 숫자가 작을수록 먼저**다 — `th:in
 
 ---
 
+## T-033. 큰 페이지에서 폼이 하단에만 있으면 CSRF 숨김필드가 응답 커밋 후 세션 생성 → 500
+
+**증상**: 대시보드(`/`)를 그리던 중 500.
+```
+TemplateProcessingException: ... SpringActionTagProcessor (template: "dashboard" - line 143)
+Caused by: java.lang.IllegalStateException: Cannot create a session after the response has been committed
+  at SpringWebMvcThymeleafRequestDataValueProcessor.getExtraHiddenFields(...)
+```
+에러가 가리키는 line 143은 **맨 아래 로그아웃 폼**(`<form th:action="@{/logout}">`). 평소엔 멀쩡하다가, **특정 사용자(책 0권·진행 세션 없음)** 에서만 터졌다.
+
+**원인 — CSRF 숨김필드는 세션을 lazy 생성하는데, 큰 페이지면 그 시점에 응답이 이미 커밋됨**:
+- Spring Security의 `th:action`은 폼에 CSRF 숨김 input을 자동 주입한다(`getExtraHiddenFields`). 토큰이 `HttpSessionCsrfTokenRepository`라 **세션이 없으면 그 순간 새로 만든다**.
+- 대시보드는 **독서 잔디 그래프(53주×7 ≈ 371칸 div)** 로 출력이 커서, 렌더 도중 **응답 버퍼가 commit(flush)** 된다. 커밋 후엔 `request.getSession()`이 `IllegalStateException`을 던진다.
+- 그동안 안 터진 이유: 페이지 **앞쪽**(잔디 그래프 위)의 측정 시작/종료 폼이 먼저 렌더되며 그때 세션을 만들어줬다. 그런데 "측정엔 책 필수" 변경으로 **책 0권 사용자에게선 시작 폼이 사라져**, CSRF가 세션을 만드는 첫 지점이 맨 아래 로그아웃 폼으로 밀렸다 → 그땐 이미 커밋.
+
+**해결 / 예방**:
+- **렌더 전에 CSRF 토큰을 선확정**해 세션을 미리 만든다(폼 위치·페이지 크기와 무관해짐). 컨트롤러에서:
+  ```java
+  Object csrf = request.getAttribute(CsrfToken.class.getName());
+  if (csrf instanceof CsrfToken token) {
+      token.getToken();   // lazy 토큰 강제 로드 → 세션을 렌더 시작 전에 생성
+  }
+  ```
+- **교훈**: "응답 커밋 후 세션 생성" 류 500은 **폼이 페이지 하단에만 있고 본문이 큰** 화면의 잠복 버그다. *첫 CSRF 폼이 어디서 렌더되는가*에 우연히 의존하던 것 — 폼을 옮기거나 지우면 드러난다. 근본 해결은 토큰 선확정. (버퍼 크기 키우기·폼을 앞에 두기는 미봉책.)
+- **개념**: learning-notes **N-044**(CSRF 숨김필드의 lazy 세션 생성 ↔ 응답 버퍼 커밋 타이밍).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -639,3 +668,4 @@ Thymeleaf 속성 **우선순위는 숫자가 작을수록 먼저**다 — `th:in
 | 2026-06-04 | T-030 (알라딘 QueryType=Title이 문서("제목만")와 달리 저자까지 매칭 — "모기" 제목검색에 저자 모기 겐이치로 책 섞임 / 파라미터는 정확, 외부 API 동작이 문서와 불일치 → 결과를 BookService.search에서 후필터(기준 필드에 검색어 든 것만, 공백·대소문자 정규화 contains), 페이저 과대집계는 알려진 한계, N-041) |
 | 2026-06-04 | T-031 (Thymeleaf `th:if="${!flag}"`에서 flag가 모델에 없으면 null → SpringEL이 `!null` 평가 못 해 TemplateProcessingException, 정상 경로 테스트만 깨지고 플래그 true 경로는 멀쩡 / "안 넣으면 false" 아님 → 모든 경로에서 boolean 명시 또는 널-세이프 `== true`, 레이트리밋 안내 플래그 추가 중 발견) |
 | 2026-06-04 | T-032 (Thymeleaf 함정 2종: ① 같은 요소 `th:each`(우선순위 200)+`th:replace`(100)는 replace가 먼저 돌아 루프변수 null → th:block으로 each 분리 / ② 파라미터 fragment를 본문에 정의하면 전체 페이지 렌더 때 그 자리서도 한 번 그려져 파라미터 null NPE → `th:if="${r!=null}"` 가드 또는 별도 fragments 파일·인라인 복제 / 컨트롤러 MockMvc가 실제 템플릿 렌더라 끝단에서 잡힘, drill-down book-readers.html 만들다 발견, 자매 T-031) |
+| 2026-06-04 | T-033 (큰 페이지(독서 잔디 ~371칸)에서 폼이 하단에만 있으면 `th:action` CSRF 숨김필드의 lazy 세션 생성이 응답 커밋 후라 `IllegalStateException: Cannot create a session after the response has been committed` → 500 / 평소엔 앞쪽 측정 폼이 세션을 먼저 만들어 숨었는데 "측정 책 필수"로 책 0권 사용자에게서 시작 폼이 사라지자 드러남 / 컨트롤러에서 렌더 전 `CsrfToken#getToken()`으로 토큰 선확정=세션 미리 생성, 폼 위치·페이지 크기 무관 / N-044) |
