@@ -33,6 +33,7 @@
 - [T-029. 유저 삭제 경로에서 FK 자식 정리 누락 — mock 단위테스트는 못 잡는다](#t-029-유저-삭제-경로에서-fk-자식-정리-누락--mock-단위테스트는-못-잡는다)
 - [T-030. 알라딘 `QueryType=Title`이 문서와 달리 저자까지 매칭 — 결과를 신뢰 말고 후필터](#t-030-알라딘-querytypetitle이-문서와-달리-저자까지-매칭--결과를-신뢰-말고-후필터)
 - [T-031. Thymeleaf `th:if="${!flag}"`에서 flag가 null이면 SpringEL이 터진다 — 모델에 항상 boolean을 넣어라](#t-031-thymeleaf-thifflag에서-flag가-null이면-springel이-터진다--모델에-항상-boolean을-넣어라)
+- [T-032. Thymeleaf 함정 2종 — `th:each`+`th:replace` 우선순위 역전 & 파라미터 fragment의 인라인 렌더 NPE](#t-032-thymeleaf-함정-2종--theachthreplace-우선순위-역전--파라미터-fragment의-인라인-렌더-npe)
 
 ---
 
@@ -570,6 +571,42 @@ private final ObjectMapper objectMapper = new ObjectMapper();  // 주입 대신 
 
 ---
 
+## T-032. Thymeleaf 함정 2종 — `th:each`+`th:replace` 우선순위 역전 & 파라미터 fragment의 인라인 렌더 NPE
+
+**증상**: 재사용 행을 fragment로 빼서 목록을 그렸더니 `TemplateProcessingException: ... SpringEL "r.nickname" ... EL1007E: Property or field 'nickname' cannot be found on null` — 컨트롤러 MockMvc 테스트가 200 대신 500. 두 가지 다른 원인이 같은 "파라미터가 null" 증상으로 나타났다.
+
+**원인 ①  같은 요소에 `th:each`+`th:replace`**:
+```html
+<!-- ✗ replace가 each보다 먼저 실행됨 -->
+<li th:each="r : ${rows}" th:replace="~{::row(${r})}"></li>
+```
+Thymeleaf 속성 **우선순위는 숫자가 작을수록 먼저**다 — `th:insert`/`th:replace`=**100**, `th:each`=**200**. 그래서 같은 요소면 **replace가 each보다 먼저** 돌아 루프 변수 `r`이 아직 없다(null) → fragment에 null이 넘어간다.
+
+**원인 ②  파라미터 있는 fragment를 body에 인라인 정의**:
+```html
+<!-- 이 정의는 호출도 되지만, 전체 페이지 렌더 때 '여기 그 자리'에서도 한 번 그려진다 -->
+<li th:fragment="row(r)"> ... ${r.nickname} ... </li>
+```
+`th:fragment`로 정의한 요소가 템플릿 본문에 있으면, fragment 호출과 **별개로 전체 페이지를 렌더할 때 그 자리에서도 한 번 렌더**된다. 이때는 파라미터 `r`이 바인딩 안 돼 **null** → `${r.nickname}`에서 NPE.
+
+**해결 / 예방**:
+- **①**: `th:each`와 `th:replace`를 **같은 요소에 두지 말 것**. `th:block`으로 each를 감싸 분리한다:
+  ```html
+  <th:block th:each="r : ${rows}">
+      <li th:replace="~{::row(${r})}"></li>
+  </th:block>
+  ```
+- **②**: 파라미터 fragment를 본문에 둘 거면 **null-가드**를 건다(인라인 렌더 시 아무것도 안 그림):
+  ```html
+  <th:block th:fragment="row(r)">
+      <span th:if="${r != null and r.self}">…</span>   <!-- r==null이면 전부 스킵 -->
+  </th:block>
+  ```
+  더 깔끔한 길은 재사용 fragment를 **별도 `fragments.html`** 로 빼서 본문 인라인 렌더 자체를 없애는 것. 또는 그냥 **인라인 복제**(이 코드베이스의 `search.html`처럼 행 마크업을 루프 안에 직접 쓰는 방식)도 작은 중복이면 충분.
+- **일반화**: 템플릿 SpEL의 "... on null"은 대개 **변수 바인딩 타이밍** 문제다. 컨트롤러 MockMvc 테스트가 *실제 템플릿을 렌더*하므로 이런 버그를 끝단에서 잡아준다(순수 서비스 테스트만으론 못 봄). 인기 카운트 drill-down(`book-readers.html`) 만들다 둘 다 밟음. 자매 함정 **T-031**(같은 SpEL null 계열).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -601,3 +638,4 @@ private final ObjectMapper objectMapper = new ObjectMapper();  // 주입 대신 
 | 2026-06-04 | T-029 (유저 삭제 경로에서 FK 자식(book) 정리 누락 — purge가 book 미삭제로 탈퇴 FK 위반, BookRepository.deleteByUser 정의됐으나 미호출 / mock 단위테스트는 호출만 검증·실제 FK 안 타 못 잡음 → 실제 H2 통합테스트로 보강 / 삭제 순서 세션→타이머→팔로우→책→유저, 새 FK 추가 시 삭제 경로 점검, 자매 T-023, N-040) |
 | 2026-06-04 | T-030 (알라딘 QueryType=Title이 문서("제목만")와 달리 저자까지 매칭 — "모기" 제목검색에 저자 모기 겐이치로 책 섞임 / 파라미터는 정확, 외부 API 동작이 문서와 불일치 → 결과를 BookService.search에서 후필터(기준 필드에 검색어 든 것만, 공백·대소문자 정규화 contains), 페이저 과대집계는 알려진 한계, N-041) |
 | 2026-06-04 | T-031 (Thymeleaf `th:if="${!flag}"`에서 flag가 모델에 없으면 null → SpringEL이 `!null` 평가 못 해 TemplateProcessingException, 정상 경로 테스트만 깨지고 플래그 true 경로는 멀쩡 / "안 넣으면 false" 아님 → 모든 경로에서 boolean 명시 또는 널-세이프 `== true`, 레이트리밋 안내 플래그 추가 중 발견) |
+| 2026-06-04 | T-032 (Thymeleaf 함정 2종: ① 같은 요소 `th:each`(우선순위 200)+`th:replace`(100)는 replace가 먼저 돌아 루프변수 null → th:block으로 each 분리 / ② 파라미터 fragment를 본문에 정의하면 전체 페이지 렌더 때 그 자리서도 한 번 그려져 파라미터 null NPE → `th:if="${r!=null}"` 가드 또는 별도 fragments 파일·인라인 복제 / 컨트롤러 MockMvc가 실제 템플릿 렌더라 끝단에서 잡힘, drill-down book-readers.html 만들다 발견, 자매 T-031) |
