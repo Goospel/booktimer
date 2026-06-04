@@ -440,6 +440,11 @@ button, .btn {
 }
 .search-row .btn-primary { width: 100%; }
 
+/* 사용자 검색(/search) 폼: input+버튼이 .book-search-form 바로 밑에 온다(검색 기준 라디오 없음).
+   부모가 column flex라 input의 flex:1 1 160px가 '높이' 160px로 잘못 먹혀 세로로 길쭉해진다 —
+   책 검색은 .search-row가 리셋하지만 이쪽은 감싸는 래퍼가 없어 직접 리셋한다. */
+.book-search-form > input[type=text] { flex: none; width: 100%; box-sizing: border-box; }
+
 .book-list { list-style: none; padding: 0; margin: 8px 0 0; }
 .book-row {
     display: flex;
