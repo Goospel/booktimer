@@ -173,3 +173,4 @@ if 경과일수 > 0:
 - [plan.md](plan.md) — 추후 할 일 / 로드맵 / 기술 부채
 - [claude-docs/learning-notes.md](claude-docs/learning-notes.md) — 작업 중 배운 개념 정리
 - [claude-docs/troubleshooting.md](claude-docs/troubleshooting.md) — 함정·해결 기록
+- [claude-docs/copyright-registration.md](claude-docs/copyright-registration.md) — 한국 저작권 등록 가이드(조건·서류·절차·비용)
