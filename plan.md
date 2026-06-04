@@ -433,14 +433,16 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 - [ ] (검토) 소셜 계정 탈퇴 시 재확인 단계, 가입 시 계정 열거 완화
 - [ ] (후속) 무차별 대입 방어 보강 — 지수 백오프, 다중 인스턴스 대비 공유 저장소(현재 인메모리=인스턴스별), 앞단 WAF 레이트리밋
 
-### Fargate CPU 상향 — 로그인(BCrypt) 지연 (우선순위: 중)
+### Fargate CPU 상향 — 로그인(BCrypt) 지연 (완료 ✅ 2026-06-04, PR #132 / 배포 검증은 run)
 - **증상**: 로그인이 체감상 느림.
 - **원인**: DB 아님(`findByEmail`은 유니크 인덱스 단건 조회 — 수 ms). 범인은 **BCrypt 비밀번호 검증**(의도적 CPU 집약) ×
   **태스크 `cpu:256`=0.25 vCPU**(Fargate 최소). 1/4 코어 스로틀이라 BCrypt가 수백 ms~1s까지 늘어남. JVM JIT 워밍업도 가중.
   실측: health·/login GET는 60~150ms 정상 → 차이는 로그인 POST의 BCrypt뿐.
-- **할 일**: `deploy/task-definition.json`의 `cpu`를 **512(0.5)~1024(1 vCPU)**로 상향(메모리도 비례). BCrypt 강도(10)는
-  **낮추지 말 것**(보안). DB는 손대지 않음. ※ Fargate는 vCPU·메모리 비례 과금 — 비용 소폭 증가.
+- **한 일**: `deploy/task-definition.json`의 `cpu` **256→512**(0.5 vCPU), `memory` **512→1024**로 상향.
+  (Fargate는 CPU·메모리 조합이 정해져 있어 cpu 512면 memory 최소 1024 — JVM 힙 여유도 같이 확보.) BCrypt 강도(10)는
+  **낮추지 않음**(보안). DB는 손대지 않음. ※ Fargate는 vCPU·메모리 비례 과금 — 비용 소폭 증가.
 - 개념: learning-notes(로그인 지연 ≠ DB, BCrypt×작은 vCPU / CPU 집약 해시는 의도된 느림 — 해법은 강도↓가 아니라 CPU↑).
+- **검증**: 설정 변경은 머지 후 실제 배포(run)에서 로그인 POST 지연 단축으로 확인.
 
 ### 전역 예외 핸들러가 404를 500으로 삼킴 (완료 ✅ 2026-06-02, PR #72)
 - `GlobalExceptionHandler(@ExceptionHandler(Exception.class))`가 `NoResourceFoundException`(예: `/favicon.ico`)까지
@@ -511,3 +513,4 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 | 2026-06-04 | **홍보/마케팅 섹션 신설** — 북카페 등 독서 커뮤니티 기반 홍보 아이디어만 가볍게 기록(세부 미정). 문서만 |
 | 2026-06-04 | plan.md 정리 — **"실사용에서 발견한 문제(계획 외 UX/사용성)" 섹션 신설**. 스크린샷 피드백으로 발견·수정한 6건(PR #110·#116·#117·#122·#123)을 갱신 이력에서 한 표로 모음(증상·원인·해결·PR) + 후속 후보(출판사 검색 차원·공개여부 필터·ISBN 정규화) 명시. 로드맵 줄에 #123 부수 픽스 반영. 문서만 |
 | 2026-06-04 | **전역 인기 카운트 철회 → 팔로우 카운트 drill-down 채택**(4단계+). 전역 카운트는 *팔로우 없이도* 공짜 사회적 증거를 줘 팔로우 가치를 희석한다고 판단(사용자 결정). 대신 카운트 배지 클릭 시 "그 책 원함/읽음인 내 팔로우 명단"(`GET /books/readers`) — 카운트와 같은 게이트(팔로우·PUBLIC·distinct)로 신원만 펼침(새 노출 0, IDOR 없음), 기존 `UserRowAssembler` 재사용. `BookRepository.followScopeReaders` + `FollowScopeReadersService`/`FollowScopeReaders` + `book-readers.html`. Flyway 신규 없음. TDD(서비스 통합·컨트롤러 끝단). 함정 T-### 기록(Thymeleaf th:each+th:replace 우선순위·파라미터 fragment 인라인 NPE) |
+| 2026-06-04 | **Fargate CPU 상향**(로그인 BCrypt 지연 완화) — `deploy/task-definition.json` `cpu` 256→512(0.5 vCPU), `memory` 512→1024. 원인은 DB 아닌 BCrypt(의도된 CPU 집약)×0.25 vCPU 스로틀. 강도(10)는 유지(보안), CPU만 상향이 정답. 배포 검증은 run. 설정만(PR #132) |
