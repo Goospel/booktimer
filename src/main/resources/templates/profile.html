@@ -14,10 +14,12 @@
     </header>
     <p class="greeting"><span th:text="${nickname}">닉네임</span>님의 공개 프로필</p>
 
-    <!-- 팔로우 카운트 + 버튼 (관계는 카운트만 노출, §7.3) -->
+    <!-- 팔로우 카운트 + 버튼. 본인 프로필에서만 카운트가 목록(/me/**)으로 링크 — 남의 목록은 비노출(privacy). -->
     <div class="profile-follow">
-        <span class="follow-count">팔로워 <strong th:text="${followerCount}">0</strong></span>
-        <span class="follow-count">팔로잉 <strong th:text="${followingCount}">0</strong></span>
+        <a th:if="${self}" class="follow-count" th:href="@{/me/followers}">팔로워 <strong th:text="${followerCount}">0</strong></a>
+        <span th:unless="${self}" class="follow-count">팔로워 <strong th:text="${followerCount}">0</strong></span>
+        <a th:if="${self}" class="follow-count" th:href="@{/me/following}">팔로잉 <strong th:text="${followingCount}">0</strong></a>
+        <span th:unless="${self}" class="follow-count">팔로잉 <strong th:text="${followingCount}">0</strong></span>
         <form th:unless="${self}" method="post"
               th:action="@{${following} ? '/unfollow' : '/follow'}" class="follow-action">
             <input type="hidden" name="nickname" th:value="${nickname}">

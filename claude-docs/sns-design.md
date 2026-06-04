@@ -306,7 +306,11 @@ create index idx_follow_followee on follow (followee_id);   -- 나를 팔로우�
 - **자기 자신 팔로우 금지**(도메인 검증 + 버튼 비노출). **중복 팔로우 멱등**(유니크 제약 + `existsBy` 가드 — 두 번 눌러도 1행). **언팔로우 즉시**(승인 없음, §4).
 - `POST /follow` / `POST /unfollow`(대상 닉네임 파라미터, CSRF, PRG로 돌아온 화면으로 리다이렉트).
 - 프로필 페이지: **팔로워 N · 팔로잉 M 카운트** + 팔로우/언팔 버튼(자기 프로필이면 버튼 없음).
-- 카운트: `countByFollowee`(팔로워 수) · `countByFollower`(팔로잉 수). 목록 조회는 후속.
+- 카운트: `countByFollowee`(팔로워 수) · `countByFollower`(팔로잉 수).
+- **목록 조회(본인 전용) ✅ 2026-06-04**: 본인 프로필에서만 카운트가 `/me/followers`·`/me/following`로 링크
+  (남의 프로필은 카운트만 — privacy 유지). 경로에 닉네임이 없어 항상 본인 기준(보안 경계 자동). 목록 행은
+  검색과 동일(`UserRowAssembler`→`UserSearchResult`: 닉네임·공개책수·팔로우버튼). `FollowListService`,
+  `findByFollowee/FollowerOrderByCreatedAtDesc`. 큰 목록 시 행당 카운트=N쿼리(현 규모 충분, 필요 시 일괄화).
 
 **스키마(V9 — 신규 테이블, additive·안전)**:
 ```sql
@@ -333,7 +337,8 @@ create index idx_follow_followee on follow (followee_id);
 - 프로필: 팔로워·팔로잉 카운트 정확, 자기 프로필엔 팔로우 버튼 없음
 - 비로그인 → 검색·팔로우 차단(로그인 리다이렉트)
 
-**이번에 안 하는 것**: 팔로워/팔로잉 **목록 화면**(후속) · 인기 카운트(4단계) · 차단/신고/레이트리밋(5단계) · 승인제(후속).
+**이번에 안 하는 것**: 인기 카운트(4단계 ✅) · 차단/신고/레이트리밋(5단계) · 승인제(후속).
+(팔로워/팔로잉 **본인 전용 목록 화면**은 위 "목록 조회"에서 추가 완료 ✅ 2026-06-04.)
 
 ### 7.4 4단계 — 팔로우 스코프 인기 카운트 (요구사항 3) — 구현 완료 ✅ 2026-06-04
 - 책 검색 결과·내 책장 각 책에 **"👥 팔로우 중 N명 원함 · M명 읽음"** 표시.
