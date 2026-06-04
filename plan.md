@@ -381,3 +381,4 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 | 2026-06-04 | 잔디 프라이버시 확정 — 공개 안 한 책은 타인 잔디·총시간에서 제외(PUBLIC 책 세션만, book=null도 제외) |
 | 2026-06-04 | SNS 1단계 일부 — **닉네임 유니크화 구현**(Flyway V7 중복 백필+`uk_users_nickname`, LOCAL 가입 중복 거부, 소셜 자동 유일화 `NicknameAllocator`, 설정 변경 중복 거부, `existsByNickname`). TDD. 남은 1단계: 책별 공개 토글(`book.visibility`) |
 | 2026-06-04 | 소셜 사용자 닉네임 직접 지정 — 구글 가입자가 자동 임시닉 대신 **온보딩에서 닉네임 직접 입력**(폼 필드 추가·prefill·중복 거부). 자동 배정은 온보딩 완료 전 임시값. TDD |
+| 2026-06-04 | SNS 1단계 완성 — **책별 공개 토글**(BookVisibility PRIVATE/PUBLIC, Flyway V8 default PRIVATE 백필, `POST /books/{id}/visibility` 소유권 강제, 책장 셀렉트). 닉네임 유니크와 합쳐 1단계 완료 → 다음은 2단계 프로필 페이지(/u/{nickname}). TDD |

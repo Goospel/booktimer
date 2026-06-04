@@ -4,6 +4,7 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookSearchResult;
 import com.booktimer.book.BookService;
 import com.booktimer.book.BookStatus;
+import com.booktimer.book.BookVisibility;
 import com.booktimer.session.BookContributionService;
 import com.booktimer.session.BookReadingDetail;
 import com.booktimer.session.BookReadingStatsService;
@@ -54,6 +55,7 @@ public class BookController {
         model.addAttribute("books", bookService.myBooks(user));
         model.addAttribute("bookTimes", statsService.totalSecondsByBook(user)); // 책 id → 누적 초
         model.addAttribute("statuses", BookStatus.values());
+        model.addAttribute("visibilities", BookVisibility.values());
         model.addAttribute("searchEnabled", bookService.searchEnabled());
         model.addAttribute("q", q);
         if (q != null && !q.isBlank()) {
@@ -134,6 +136,21 @@ public class BookController {
             }
         } catch (IllegalArgumentException ignored) {
             // 내 책이 아니거나 없음 — 존재 여부 노출 없이 책장으로 되돌린다(IDOR 방지).
+        }
+        return "redirect:/books";
+    }
+
+    @PostMapping("/books/{id}/visibility")
+    public String setVisibility(@PathVariable Long id, @RequestParam BookVisibility visibility,
+                                Principal principal, RedirectAttributes redirectAttributes) {
+        User user = currentUser(principal);
+        try {
+            Book book = bookService.setVisibility(user, id, visibility);
+            redirectAttributes.addFlashAttribute("message",
+                    "'" + book.getTitle() + "'을(를) " + visibility.getLabel() + "로 바꿨습니다.");
+        } catch (IllegalArgumentException e) {
+            // 내 책이 아니거나 없음 — 존재 여부 노출 없이 책장으로(IDOR 방지).
+            redirectAttributes.addFlashAttribute("error", "공개 설정을 바꿀 수 없습니다.");
         }
         return "redirect:/books";
     }

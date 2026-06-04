@@ -99,6 +99,12 @@
                                     th:selected="${s == b.status}">상태</option>
                         </select>
                     </form>
+                    <form method="post" th:action="@{/books/{id}/visibility(id=${b.id})}" title="다른 사용자에게 보일지">
+                        <select name="visibility" onchange="this.form.submit()">
+                            <option th:each="v : ${visibilities}" th:value="${v}" th:text="${v.label}"
+                                    th:selected="${v == b.visibility}">공개여부</option>
+                        </select>
+                    </form>
                     <a th:if="${b.purchaseLink}" th:href="@{/books/{id}/buy(id=${b.id})}" target="_blank"
                        rel="noopener nofollow" class="btn-ghost">구매</a>
                     <form method="post" th:action="@{/books/{id}/delete(id=${b.id})}"

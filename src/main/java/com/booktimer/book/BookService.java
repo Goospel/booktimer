@@ -71,6 +71,18 @@ public class BookService {
     }
 
     /**
+     * 내 책의 공개 범위(공개/비공개)를 바꾼다(SNS). 소유권을 강제한다(IDOR 방지) —
+     * 남의 책 공개 여부는 건드릴 수 없다.
+     *
+     * @throws IllegalArgumentException 내 책이 아니거나 존재하지 않는 경우
+     */
+    public Book setVisibility(User user, Long bookId, BookVisibility visibility) {
+        Book book = ownedBook(user, bookId);
+        book.changeVisibility(visibility);
+        return bookRepository.save(book);
+    }
+
+    /**
      * 내 책을 책장에서 삭제한다. 그 책을 가리키던 측정 세션은 "책 미지정"으로 풀어(book_id = null)
      * 독서 기록(잔디·누적 시간)을 보존한다 — {@code reading_session.book_id} FK 때문에 이 정리 없이는
      * 삭제가 제약 위반으로 실패한다(AccountService가 탈퇴 시 FK 순서로 정리하는 것과 같은 이유).
