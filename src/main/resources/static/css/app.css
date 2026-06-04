@@ -299,6 +299,38 @@ button, .btn {
 .quick-tile .qt-label { font-weight: 600; white-space: nowrap; }
 .quick-tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
 
+/* 하이라이트 밴드 — 측정 카드 바로 밑, '재미' 동선(내 책장·내 공개 프로필) 승격용.
+   quick-tile보다 큼직하고 포인트 색으로 강조해 노출 우선순위를 위로 끌어올린다.
+   좁은 화면(2칸이 답답할 때)에선 1열로 떨어뜨린다. */
+.highlight-actions {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin: 14px 0;
+}
+.highlight-tile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 18px 18px;
+    background: var(--card-bg);
+    border: 1.5px solid var(--accent);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    color: var(--text);
+    text-decoration: none;
+    transition: border-color .15s, box-shadow .15s, transform .05s;
+}
+.highlight-tile:hover { border-color: var(--accent-hover); box-shadow: 0 2px 6px rgba(79, 70, 229, .18), 0 8px 24px rgba(79, 70, 229, .12); }
+.highlight-tile:active { transform: translateY(1px); }
+.highlight-tile .ht-icon { font-size: 1.7rem; line-height: 1; }
+.highlight-tile .ht-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.highlight-tile .ht-label { font-weight: 700; white-space: nowrap; }
+.highlight-tile .ht-sub { font-size: .8rem; color: var(--muted); }
+@media (max-width: 380px) {
+    .highlight-actions { grid-template-columns: 1fr; }
+}
+
 /* 일자별 독서 기록 리스트 */
 .record-list { list-style: none; margin: 0; padding: 0; }
 .record-row {
