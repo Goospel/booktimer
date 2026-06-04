@@ -3,6 +3,8 @@ package com.booktimer.web;
 import com.booktimer.session.ReadingContributionService;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,7 +38,7 @@ public class DashboardController {
     }
 
     @GetMapping("/")
-    public String dashboard(Principal principal, Model model) {
+    public String dashboard(Principal principal, HttpServletRequest request, Model model) {
         User user = userRepository.findByEmail(principal.getName())
                 .orElseThrow(() -> new IllegalStateException("authenticated user not found: " + principal.getName()));
 
@@ -44,6 +46,14 @@ public class DashboardController {
         // 로그인 후 착지점이 "/"라 LOCAL·OAuth 첫 가입 모두 여기서 걸린다.
         if (!user.isOnboarded()) {
             return "redirect:/onboarding";
+        }
+
+        // 렌더 전에 CSRF 토큰을 미리 확정(세션 생성)한다. 대시보드는 잔디 그래프(수백 칸)로 응답 버퍼가
+        // 렌더 도중 커밋될 수 있는데, 그 뒤 첫 폼(맨 아래 로그아웃 등)의 CSRF 숨김필드가 세션을 새로
+        // 만들려 하면 "response already committed"로 500이 난다. 폼 위치에 의존하지 않게 여기서 선확정.
+        Object csrf = request.getAttribute(CsrfToken.class.getName());
+        if (csrf instanceof CsrfToken token) {
+            token.getToken();
         }
 
         dashboardModel.populate(model, user);

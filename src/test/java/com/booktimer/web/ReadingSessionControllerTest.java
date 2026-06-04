@@ -73,23 +73,30 @@ class ReadingSessionControllerTest {
         return registrationService.register(email, "rawpw1234", nickname, SEOUL, Role.USER, today());
     }
 
+    // 측정은 책이 필수다 — 시작 setup이 쓸 책 한 권.
+    private Book book(User owner) {
+        return bookRepository.save(
+                Book.register(owner, "클린 코드", null, null, null, null, null, BookStatus.READING));
+    }
+
     @Test
-    @DisplayName("POST /sessions/start: 진행 중 세션을 만들고 대시보드로 리다이렉트한다")
-    void start_createsActiveSession() throws Exception {
-        User user = register("start@booktimer.com");
+    @DisplayName("POST /sessions/start: bookId 없이 시작하면 책 선택 안내 에러 + 세션을 만들지 않는다")
+    void start_withoutBookId_flashesError_noSession() throws Exception {
+        User user = register("nobook@booktimer.com");
 
-        mockMvc.perform(post("/sessions/start").with(user("start@booktimer.com")).with(csrf()))
+        mockMvc.perform(post("/sessions/start").with(user("nobook@booktimer.com")).with(csrf()))
                 .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/"));
+                .andExpect(redirectedUrl("/"))
+                .andExpect(flash().attributeExists("error"));
 
-        assertThat(sessionRepository.findByUserAndEndedAtIsNull(user)).isPresent();
+        assertThat(sessionRepository.findByUserAndEndedAtIsNull(user)).isEmpty();
     }
 
     @Test
     @DisplayName("POST /sessions/stop: 진행 중 세션을 종료하고 대시보드로 리다이렉트한다")
     void stop_endsActiveSession() throws Exception {
         User user = register("stop@booktimer.com");
-        sessionService.start(user, clock.instant());
+        sessionService.start(user, clock.instant(), book(user));
 
         mockMvc.perform(post("/sessions/stop").with(user("stop@booktimer.com")).with(csrf()))
                 .andExpect(status().is3xxRedirection())
@@ -102,9 +109,11 @@ class ReadingSessionControllerTest {
     @DisplayName("POST /sessions/start: 이미 진행 중이면 플래시 에러로 안내한다 (세션 중복 생성 없음)")
     void start_whenActiveExists_flashesError() throws Exception {
         User user = register("dup@booktimer.com");
-        sessionService.start(user, clock.instant());
+        Book book = book(user);
+        sessionService.start(user, clock.instant(), book);
 
-        mockMvc.perform(post("/sessions/start").with(user("dup@booktimer.com")).with(csrf()))
+        mockMvc.perform(post("/sessions/start").param("bookId", String.valueOf(book.getId()))
+                        .with(user("dup@booktimer.com")).with(csrf()))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/"))
                 .andExpect(flash().attributeExists("error"));
@@ -155,8 +164,8 @@ class ReadingSessionControllerTest {
     }
 
     @Test
-    @DisplayName("POST /sessions/start: 남의 책 bookId면 연결 없이 시작한다(IDOR 방지)")
-    void start_withOtherUsersBookId_startsWithoutBook() throws Exception {
+    @DisplayName("POST /sessions/start: 남의 책 bookId면 책 선택 안내 에러 + 세션을 만들지 않는다(IDOR 방지)")
+    void start_withOtherUsersBookId_flashesError_noSession() throws Exception {
         User owner = register("bookowner@booktimer.com");
         User attacker = register("bookattacker@booktimer.com");
         Book othersBook = bookRepository.save(
@@ -164,10 +173,11 @@ class ReadingSessionControllerTest {
 
         mockMvc.perform(post("/sessions/start").param("bookId", String.valueOf(othersBook.getId()))
                         .with(user("bookattacker@booktimer.com")).with(csrf()))
-                .andExpect(redirectedUrl("/"));
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/"))
+                .andExpect(flash().attributeExists("error"));
 
-        ReadingSession active = sessionRepository.findByUserAndEndedAtIsNull(attacker).orElseThrow();
-        assertThat(active.getBook()).isNull();
+        assertThat(sessionRepository.findByUserAndEndedAtIsNull(attacker)).isEmpty();
     }
 
     // --- htmx(무리로드) 경로: HX-Request 헤더가 있으면 redirect 대신 200 + 라이브 프래그먼트 ---
@@ -176,8 +186,10 @@ class ReadingSessionControllerTest {
     @DisplayName("POST /sessions/start (htmx): 리다이렉트 대신 200 + 대시보드 라이브 프래그먼트를 반환한다")
     void start_htmx_returnsFragment() throws Exception {
         User user = register("hxstart@booktimer.com");
+        Book book = book(user);
 
-        mockMvc.perform(post("/sessions/start").header("HX-Request", "true")
+        mockMvc.perform(post("/sessions/start").param("bookId", String.valueOf(book.getId()))
+                        .header("HX-Request", "true")
                         .with(user("hxstart@booktimer.com")).with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("dashboard-live")));
@@ -189,7 +201,7 @@ class ReadingSessionControllerTest {
     @DisplayName("POST /sessions/stop (htmx): 200 + 프래그먼트를 반환하고 진행 세션을 종료한다")
     void stop_htmx_returnsFragment() throws Exception {
         User user = register("hxstop@booktimer.com");
-        sessionService.start(user, clock.instant());
+        sessionService.start(user, clock.instant(), book(user));
 
         mockMvc.perform(post("/sessions/stop").header("HX-Request", "true")
                         .with(user("hxstop@booktimer.com")).with(csrf()))
@@ -203,9 +215,11 @@ class ReadingSessionControllerTest {
     @DisplayName("POST /sessions/start (htmx): 이미 진행 중이면 200 프래그먼트에 에러 메시지를 담는다 (리다이렉트·플래시 아님)")
     void start_htmx_whenActiveExists_returnsFragmentWithError() throws Exception {
         User user = register("hxdup@booktimer.com");
-        sessionService.start(user, clock.instant());
+        Book book = book(user);
+        sessionService.start(user, clock.instant(), book);
 
-        mockMvc.perform(post("/sessions/start").header("HX-Request", "true")
+        mockMvc.perform(post("/sessions/start").param("bookId", String.valueOf(book.getId()))
+                        .header("HX-Request", "true")
                         .with(user("hxdup@booktimer.com")).with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("이미 진행 중")));

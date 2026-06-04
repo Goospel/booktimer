@@ -1,5 +1,8 @@
 package com.booktimer;
 
+import com.booktimer.book.Book;
+import com.booktimer.book.BookRepository;
+import com.booktimer.book.BookStatus;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.session.ReadingSessionService;
@@ -52,6 +55,14 @@ class ReadingFlowIntegrationTest {
     @Autowired
     private ReadingSessionRepository sessionRepository;
 
+    @Autowired
+    private BookRepository bookRepository;
+
+    private Book book(User owner) {
+        return bookRepository.save(
+                Book.register(owner, "클린 코드", null, null, null, null, null, BookStatus.READING));
+    }
+
     @Test
     @DisplayName("가입하면 User와 ReadingTimer가 함께 영속화된다 (기본 설정)")
     void register_persistsUserAndTimer() {
@@ -85,7 +96,7 @@ class ReadingFlowIntegrationTest {
         assertThat(timer.getRemainingSeconds()).isEqualTo(3 * HOUR);
 
         // start → stop (30분 측정)
-        sessionService.start(user, T0);
+        sessionService.start(user, T0, book(user));
         ReadingSession stopped = sessionService.stop(user, T0.plusSeconds(1800));
 
         // 세션이 종료·영속화되고
@@ -102,9 +113,10 @@ class ReadingFlowIntegrationTest {
     void start_whenActiveExists_rejected() {
         User user = registrationService.register(
                 "busy@booktimer.com", "rawpw1234", "책벌레", "Asia/Seoul", Role.USER, DAY0);
-        sessionService.start(user, T0);
+        Book book = book(user);
+        sessionService.start(user, T0, book);
 
-        assertThatThrownBy(() -> sessionService.start(user, T0.plusSeconds(10)))
+        assertThatThrownBy(() -> sessionService.start(user, T0.plusSeconds(10), book))
                 .isInstanceOf(IllegalStateException.class);
     }
 }

@@ -37,26 +37,24 @@ public class ReadingSessionService {
     }
 
     /**
-     * 새 측정 세션을 시작한다.
+     * 특정 책을 대상으로 새 측정 세션을 시작한다.
      *
-     * @throws IllegalStateException 이미 진행 중인 세션이 있는 경우
-     */
-    public ReadingSession start(User user, Instant now) {
-        return start(user, now, null);
-    }
-
-    /**
-     * 특정 책을 대상으로 새 측정 세션을 시작한다(book이 null이면 미지정).
+     * <p><b>책은 필수</b>다 — "어떤 책을 얼마나 읽었는지"를 명확히 하려고 책 없는(미지정) 측정은 허용하지 않는다.
+     * (과거 데이터엔 책 없는 세션이 남아 있을 수 있어 엔티티/스키마는 nullable을 유지하지만, 이 생성 경로는 막는다.)
      *
-     * @throws IllegalStateException 이미 진행 중인 세션이 있는 경우
+     * @throws IllegalArgumentException book 이 null 인 경우(책 미지정 측정 금지)
+     * @throws IllegalStateException    이미 진행 중인 세션이 있는 경우
      */
     public ReadingSession start(User user, Instant now, Book book) {
+        if (book == null) {
+            throw new IllegalArgumentException("a book is required to start a reading session");
+        }
         sessionRepository.findByUserAndEndedAtIsNull(user).ifPresent(s -> {
             throw new IllegalStateException("an active session already exists");
         });
         ReadingSession saved = sessionRepository.save(ReadingSession.start(user, now, book));
-        // 책을 대상으로 시작했고 그 책이 "읽고싶음"이었다면 "읽는중"으로 자동 전환(전환 시에만 저장).
-        if (book != null && book.startReading()) {
+        // 시작한 책이 "읽고싶음"이었다면 "읽는중"으로 자동 전환(전환 시에만 저장).
+        if (book.startReading()) {
             bookRepository.save(book);
         }
         return saved;

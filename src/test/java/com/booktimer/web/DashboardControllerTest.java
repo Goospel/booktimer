@@ -121,7 +121,9 @@ class DashboardControllerTest {
     @DisplayName("GET /: 진행 중 세션이 있으면 hasActiveSession=true")
     void dashboard_showsActiveSession() throws Exception {
         User user = registerOnboarded("act@booktimer.com", "진행중", today());
-        sessionService.start(user, clock.instant());
+        Book book = bookRepository.save(
+                Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING));
+        sessionService.start(user, clock.instant(), book);
 
         mockMvc.perform(get("/").with(user("act@booktimer.com")))
                 .andExpect(status().isOk())
