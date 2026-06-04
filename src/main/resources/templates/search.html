@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>사용자 검색 — BookTimer</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <span class="emoji">📚</span>
+        <h1>BookTimer</h1>
+    </header>
+    <p class="greeting">사용자 검색</p>
+
+    <!-- 닉네임 검색 -->
+    <section class="card">
+        <h2>닉네임으로 찾기</h2>
+        <form method="get" th:action="@{/search}" class="book-search-form">
+            <input type="text" name="q" th:value="${q}" placeholder="닉네임 (2글자 이상)" minlength="2" required>
+            <button type="submit" class="btn-primary">검색</button>
+        </form>
+
+        <ul class="book-list" th:if="${results != null and !results.isEmpty()}">
+            <li class="book-row" th:each="r : ${results}">
+                <div class="book-meta">
+                    <a class="book-title" th:href="@{/u/{n}(n=${r.nickname})}" th:text="${r.nickname}">닉네임</a>
+                    <span class="book-author" th:text="'공개 책 ' + ${r.publicBookCount} + '권'">공개 책 0권</span>
+                </div>
+                <div class="book-actions">
+                    <span th:if="${r.self}" class="book-status-badge">나</span>
+                    <form th:unless="${r.self}" method="post"
+                          th:action="@{${r.following} ? '/unfollow' : '/follow'}">
+                        <input type="hidden" name="nickname" th:value="${r.nickname}">
+                        <input type="hidden" name="redirect" th:value="@{/search(q=${q})}">
+                        <button type="submit"
+                                th:classappend="${r.following} ? 'btn-ghost' : 'btn-primary'"
+                                th:text="${r.following} ? '언팔로우' : '팔로우'">팔로우</button>
+                    </form>
+                </div>
+            </li>
+        </ul>
+
+        <p th:if="${q != null and q.trim().length() >= 2 and (results == null or results.isEmpty())}"
+           class="status-line muted">검색 결과가 없습니다.</p>
+        <p th:if="${q != null and q.trim().length() < 2}" class="status-line muted">두 글자 이상 입력해 주세요.</p>
+    </section>
+
+    <p class="link-row">
+        <a th:href="@{/}">← 대시보드</a>
+        <a th:href="@{/books}">📚 내 책장</a>
+    </p>
+</div>
+</body>
+</html>

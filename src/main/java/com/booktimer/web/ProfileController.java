@@ -2,6 +2,8 @@ package com.booktimer.web;
 
 import com.booktimer.profile.ProfileService;
 import com.booktimer.profile.ProfileView;
+import com.booktimer.user.User;
+import com.booktimer.user.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -9,33 +11,48 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.security.Principal;
+
 /**
- * 개인 공개 프로필 페이지 (SNS 2단계, sns-design §7.2).
+ * 개인 공개 프로필 페이지 (SNS 2·3단계, sns-design §7.2·§7.3).
  *
- * <p>{@code GET /u/{nickname}} — 닉네임으로 공개 프로필(PUBLIC 책장 + 잔디)을 SSR로 그린다.
+ * <p>{@code GET /u/{nickname}} — 닉네임으로 공개 프로필(PUBLIC 책장 + 잔디 + 팔로우 카운트)을 SSR로 그린다.
  * 이 페이지는 "남에게 보이는 공개 프로필"이라 viewer를 가리지 않는다(본인이 봐도 PUBLIC만, {@link ProfileService}).
+ * 팔로우 버튼만 viewer 기준으로 분기한다(내가 팔로우 중인지 / 본인이면 버튼 없음).
  *
- * <p>접근 제어: 로그인 사용자만(비로그인은 SecurityConfig {@code anyRequest().authenticated()}로 차단 —
- * 2단계는 로그인 한정 시작, SEO 개방은 후속 §11-8). 없는 닉네임은 <b>404</b>(존재 누설 회피 §5.3).
+ * <p>접근 제어: 로그인 사용자만(비로그인은 SecurityConfig {@code anyRequest().authenticated()}로 차단).
+ * 없는 닉네임은 <b>404</b>(존재 누설 회피 §5.3).
  */
 @Controller
 public class ProfileController {
 
     private final ProfileService profileService;
+    private final UserRepository userRepository;
 
-    public ProfileController(ProfileService profileService) {
+    public ProfileController(ProfileService profileService, UserRepository userRepository) {
         this.profileService = profileService;
+        this.userRepository = userRepository;
     }
 
     @GetMapping("/u/{nickname}")
-    public String profile(@PathVariable String nickname, Model model) {
-        ProfileView profile = profileService.profileOf(nickname)
+    public String profile(@PathVariable String nickname, Principal principal, Model model) {
+        User viewer = currentUser(principal);
+        ProfileView profile = profileService.profileOf(viewer, nickname)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "프로필을 찾을 수 없습니다."));
 
         model.addAttribute("nickname", profile.nickname());
         model.addAttribute("books", profile.books());
         model.addAttribute("bookTimes", profile.bookTimes());
         model.addAttribute("graph", profile.graph());
+        model.addAttribute("followerCount", profile.followerCount());
+        model.addAttribute("followingCount", profile.followingCount());
+        model.addAttribute("following", profile.following());
+        model.addAttribute("self", profile.self());
         return "profile";
+    }
+
+    private User currentUser(Principal principal) {
+        return userRepository.findByEmail(principal.getName())
+                .orElseThrow(() -> new IllegalStateException("authenticated user not found: " + principal.getName()));
     }
 }

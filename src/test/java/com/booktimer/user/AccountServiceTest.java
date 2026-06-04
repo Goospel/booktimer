@@ -1,5 +1,6 @@
 package com.booktimer.user;
 
+import com.booktimer.follow.FollowRepository;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.timer.ReadingTimerRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -40,6 +41,8 @@ class AccountServiceTest {
     private ReadingTimerRepository timerRepository;
     @Mock
     private ReadingSessionRepository sessionRepository;
+    @Mock
+    private FollowRepository followRepository;
     @Mock
     private PasswordEncoder passwordEncoder;
 
@@ -94,9 +97,11 @@ class AccountServiceTest {
 
         service.deleteAccount(EMAIL, "pw");
 
-        var ordered = inOrder(sessionRepository, timerRepository, userRepository);
+        var ordered = inOrder(sessionRepository, timerRepository, followRepository, userRepository);
         ordered.verify(sessionRepository).deleteByUser(user);
         ordered.verify(timerRepository).deleteByUser(user);
+        ordered.verify(followRepository).deleteByFollower(user);   // FK: 유저 삭제 전에 관계 정리
+        ordered.verify(followRepository).deleteByFollowee(user);
         ordered.verify(userRepository).delete(user);
     }
 
@@ -125,9 +130,11 @@ class AccountServiceTest {
 
         service.deleteSocialAccount(EMAIL);
 
-        var ordered = inOrder(sessionRepository, timerRepository, userRepository);
+        var ordered = inOrder(sessionRepository, timerRepository, followRepository, userRepository);
         ordered.verify(sessionRepository).deleteByUser(social);
         ordered.verify(timerRepository).deleteByUser(social);
+        ordered.verify(followRepository).deleteByFollower(social);
+        ordered.verify(followRepository).deleteByFollowee(social);
         ordered.verify(userRepository).delete(social);
         verify(passwordEncoder, never()).matches(any(), any());
     }

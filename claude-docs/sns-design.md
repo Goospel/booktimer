@@ -283,9 +283,57 @@ create index idx_follow_followee on follow (followee_id);   -- 나를 팔로우�
 
 **이번에 안 하는 것**: 팔로우 버튼(3단계) · 닉네임 검색 UI(보류) · 인기 카운트(4단계) · 3-state FOLLOWERS(후속).
 
-### 7.3 3단계 — 팔로우 (요구사항 1)
-- `follow`(V9) + 팔로우/언팔로우 + 팔로워/팔로잉 목록.
-- 프로필 페이지에 팔로우 버튼.
+### 7.3 3단계 — 닉네임 검색 + 팔로우 (요구사항 1·6) — ✅ 구현 완료 (2026-06-04)
+
+> 검색과 팔로우를 **한 묶음**으로 간다(사용자 결정 2026-06-04): 남을 발견할 길(검색)이 없으면 팔로우가 무용지물 —
+> "검색 → 프로필 → 팔로우"가 한 흐름으로 완결돼야 한다. 닉네임 검색은 요구사항 6, §7.2에서 보류했던 것.
+>
+> **✅ 구현 완료 (2026-06-04)**: `GET /search`(부분일치·최소2글자·상한20, `UserSearchService`), `Follow`(V9)+`FollowService`(자기팔로우 금지·멱등·언팔즉시),
+> `POST /follow`·`/unfollow`(오픈리다이렉트 방어), 프로필에 팔로워/팔로잉 카운트+팔로우 버튼(`ProfileService` viewer 기준 following/self).
+> 검색 결과 = 닉네임+공개책수+팔로우버튼. 회원 탈퇴 시 follow 양방향 정리(`AccountService.purge`). 대시보드에 검색 링크. TDD Red→Green(서비스 단위 2 + 컨트롤러 통합 3).
+> ※ 별도 발견(범위 밖): 탈퇴 시 book 미삭제 FK 위반(기존) — 후속 작업으로 분리.
+
+**범위(확정)**: ① 닉네임 검색 화면 ② 팔로우/언팔로우 ③ 프로필에 팔로우 버튼 + 팔로워/팔로잉 **카운트만**. 관계 목록 화면은 후속.
+
+**검색(확정 — 부분일치)**:
+- `GET /search?q=...` — SSR(view `search`). 닉네임 **부분일치**(`like %q%`).
+- 가드: **최소 2글자**(미만이면 결과 없이 안내), **결과 상한 20**(열거·크롤링 완화 §9). 로그인 사용자만(default-deny).
+- 결과 항목(확정): **닉네임(프로필 링크) + 공개 책 수 + 팔로우/언팔 버튼**(현재 내가 팔로우 중인지로 분기). 본인이 결과에 걸리면 버튼 대신 "나" 표시.
+- 공개 책 수: `BookRepository.countByUserAndVisibility(user, PUBLIC)`(결과 ≤20이라 건당 카운트 허용).
+
+**팔로우(확정)**:
+- `follow` 테이블(V9) — `(follower_id, followee_id)` 유니크. `Follow` 엔티티 + `FollowRepository`.
+- **자기 자신 팔로우 금지**(도메인 검증 + 버튼 비노출). **중복 팔로우 멱등**(유니크 제약 + `existsBy` 가드 — 두 번 눌러도 1행). **언팔로우 즉시**(승인 없음, §4).
+- `POST /follow` / `POST /unfollow`(대상 닉네임 파라미터, CSRF, PRG로 돌아온 화면으로 리다이렉트).
+- 프로필 페이지: **팔로워 N · 팔로잉 M 카운트** + 팔로우/언팔 버튼(자기 프로필이면 버튼 없음).
+- 카운트: `countByFollowee`(팔로워 수) · `countByFollower`(팔로잉 수). 목록 조회는 후속.
+
+**스키마(V9 — 신규 테이블, additive·안전)**:
+```sql
+create table follow (
+    id bigint not null auto_increment,
+    follower_id bigint not null,
+    followee_id bigint not null,
+    created_at datetime(6) not null,
+    primary key (id),
+    constraint uk_follow unique (follower_id, followee_id),
+    constraint fk_follow_follower foreign key (follower_id) references users(id),
+    constraint fk_follow_followee foreign key (followee_id) references users(id)
+);
+create index idx_follow_follower on follow (follower_id);
+create index idx_follow_followee on follow (followee_id);
+```
+- 메인 테스트 스키마는 ddl-auto(엔티티 파생), V9는 FlywayMigrationTest가 H2로 별도 검증(N-… 분리 관례).
+
+**TDD 도메인·보안 케이스(먼저 실패 테스트로)**:
+- 자기 자신 팔로우 → 거부(예외)
+- 중복 팔로우 → 멱등(1행 유지)
+- 언팔로우 후 `isFollowing=false`, 팔로워 수 감소
+- 검색: 부분일치 매칭 / 2글자 미만 빈 결과 / 상한 20 / 본인은 팔로우 버튼 없음 / 공개 책 수 = PUBLIC만 카운트
+- 프로필: 팔로워·팔로잉 카운트 정확, 자기 프로필엔 팔로우 버튼 없음
+- 비로그인 → 검색·팔로우 차단(로그인 리다이렉트)
+
+**이번에 안 하는 것**: 팔로워/팔로잉 **목록 화면**(후속) · 인기 카운트(4단계) · 차단/신고/레이트리밋(5단계) · 승인제(후속).
 
 ### 7.4 4단계 — 팔로우 스코프 인기 카운트 (요구사항 3)
 - 책 검색 결과·내 책장 각 책에 **"내 팔로우 중 N명이 원함(WANT_TO_READ) · M명이 읽음(READING/FINISHED)"** 표시.
