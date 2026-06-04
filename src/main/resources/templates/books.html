@@ -21,8 +21,17 @@
     <section class="card">
         <h2>책 검색</h2>
         <form th:if="${searchEnabled}" method="get" th:action="@{/books}" class="book-search-form">
-            <input type="text" name="q" th:value="${q}" placeholder="제목·저자로 검색" required>
-            <button type="submit" class="btn-primary">검색</button>
+            <!-- 검색 기준 — 제목(기본)/저자. "모기"를 제목으로 찾을지 저자로 찾을지 분리. -->
+            <div class="search-type" role="radiogroup" aria-label="검색 기준">
+                <label th:each="t : ${searchTypes}">
+                    <input type="radio" name="type" th:value="${t}" th:checked="${t == searchType}">
+                    <span th:text="${t.label}">제목</span>
+                </label>
+            </div>
+            <div class="search-row">
+                <input type="text" name="q" th:value="${q}" placeholder="검색어 입력" required>
+                <button type="submit" class="btn-primary">검색</button>
+            </div>
         </form>
         <p th:unless="${searchEnabled}" class="status-line muted">
             도서 검색이 아직 설정되지 않았습니다. 아래 "직접 추가"로 등록하세요.
@@ -55,11 +64,11 @@
         <!-- 페이징: 결과가 2페이지 이상일 때 -->
         <nav class="pager" th:if="${searchPage != null and searchPage.totalPages() > 1}">
             <a th:if="${searchPage.hasPrev()}" class="btn-ghost"
-               th:href="@{/books(q=${q},page=${searchPage.prevPage()})}">← 이전</a>
+               th:href="@{/books(q=${q},type=${searchType},page=${searchPage.prevPage()})}">← 이전</a>
             <span class="pager-info"
                   th:text="${searchPage.page()} + ' / ' + ${searchPage.totalPages()} + ' 페이지'">1 / 3 페이지</span>
             <a th:if="${searchPage.hasNext()}" class="btn-ghost"
-               th:href="@{/books(q=${q},page=${searchPage.nextPage()})}">다음 →</a>
+               th:href="@{/books(q=${q},type=${searchType},page=${searchPage.nextPage()})}">다음 →</a>
         </nav>
 
         <p th:if="${q != null and (searchPage == null or searchPage.isEmpty())}" class="status-line muted">검색 결과가 없습니다.</p>

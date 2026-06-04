@@ -97,6 +97,20 @@ class BookControllerTest {
     }
 
     @Test
+    @DisplayName("GET /books: 검색 기준 기본값은 제목(TITLE), ?type=AUTHOR면 저자")
+    void books_searchType() throws Exception {
+        newUser("st@booktimer.com");
+
+        mockMvc.perform(get("/books").with(user("st@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("searchType", com.booktimer.book.BookSearchType.TITLE));
+
+        mockMvc.perform(get("/books").param("type", "AUTHOR").with(user("st@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("searchType", com.booktimer.book.BookSearchType.AUTHOR));
+    }
+
+    @Test
     @DisplayName("GET /books?status=READING: 그 상태의 책만 책장에 싣는다(필터)")
     @SuppressWarnings("unchecked")
     void books_filteredByStatus() throws Exception {

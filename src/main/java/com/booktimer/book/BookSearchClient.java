@@ -19,8 +19,9 @@ public interface BookSearchClient {
     /**
      * 질의어로 도서를 한 페이지 검색한다. 비활성이거나 결과가 없으면 빈 페이지.
      *
-     * @param query 검색어(제목/저자 등)
+     * @param query 검색어
+     * @param type  검색 기준(제목/저자) — 제공자의 검색 타입으로 매핑된다
      * @param page  1-based 페이지 번호
      */
-    BookSearchPage search(String query, int page);
+    BookSearchPage search(String query, BookSearchType type, int page);
 }
