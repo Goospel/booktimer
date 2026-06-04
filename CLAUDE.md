@@ -24,6 +24,11 @@
      🤖 Generated with [Claude Code](https://claude.com/claude-code)
      ```
    - PR body 작성 시 글로벌 규칙대로 **troubleshooting / learning-notes sweep** 수행
+   - **plan.md 갱신 이력 항목을 PR 브랜치 안에 포함한다 (필수)** — 그 작업을 `plan.md`
+     맨 아래 `## 🔄 갱신 이력` 표에 한 줄로 남긴다(일자 / 한 일·PR 번호). plan.md에
+     원래 없던 작업(즉흥 기능·UX 수정 등)도 마찬가지로 **갱신 이력엔 무조건 남긴다**.
+     갱신 단위는 PR이므로 이 줄도 그 PR 커밋에 함께 들어가야 한다 — 사후 보충 PR이
+     생기면 누락이다. (배경: 2026-06-05 #134가 plan.md를 안 건드려 #136으로 사후 보충함.)
 5. **머지** — `gh pr merge` (사용자 확인 후). 머지 후 로컬 `main` 갱신(`git checkout main && git pull`) 및 브랜치 정리
 
 ### 예외
