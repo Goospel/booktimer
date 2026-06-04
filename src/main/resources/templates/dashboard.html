@@ -89,6 +89,26 @@
         </section>
     </div>
 
+    <!-- 하이라이트 밴드: 이 서비스의 '재미' 동선(내 책장·내 공개 프로필)을 측정 바로 밑으로 승격.
+         타이머는 히어로로 유지하되 두 동선을 굵게 강조해 노출 우선순위를 올린다.
+         맨 밑 .quick-actions에서는 둘을 빼 중복을 없앤다. -->
+    <nav class="highlight-actions" aria-label="둘러보기">
+        <a class="highlight-tile" th:href="@{/books}">
+            <span class="ht-icon" aria-hidden="true">📚</span>
+            <span class="ht-text">
+                <span class="ht-label">내 책장</span>
+                <span class="ht-sub">읽은 책을 모아보기</span>
+            </span>
+        </a>
+        <a class="highlight-tile" th:href="@{/u/{nickname}(nickname=${nickname})}">
+            <span class="ht-icon" aria-hidden="true">👤</span>
+            <span class="ht-text">
+                <span class="ht-label">내 공개 프로필</span>
+                <span class="ht-sub">남에게 보이는 내 모습</span>
+            </span>
+        </a>
+    </nav>
+
     <!-- 독서 잔디 (지난 1년) — 라이브 영역 밖이라 htmx 무리로드 대상이 아님. /history와 동일 컴포넌트. -->
     <section class="card">
         <h2>독서 잔디</h2>
@@ -130,19 +150,14 @@
     </section>
 
     <!-- 바로가기: 아이콘+라벨 타일 2열 그리드. 좁은 컬럼에서도 라벨이 글자 단위로
-         깨지지 않도록 각 타일이 충분한 폭을 확보(.qt-label nowrap). 홀수(5번째)는 전체폭. -->
+         깨지지 않도록 각 타일이 충분한 폭을 확보(.qt-label nowrap). 홀수(마지막)는 전체폭.
+         내 책장·내 공개 프로필은 위 .highlight-actions로 승격해 여기서 뺐다(중복 방지). -->
     <nav class="quick-actions" aria-label="바로가기">
-        <a class="quick-tile" th:href="@{/books}">
-            <span class="qt-icon" aria-hidden="true">📚</span><span class="qt-label">내 책장</span>
-        </a>
         <a class="quick-tile" th:href="@{/history}">
             <span class="qt-icon" aria-hidden="true">📖</span><span class="qt-label">독서 기록</span>
         </a>
         <a class="quick-tile" th:href="@{/search}">
             <span class="qt-icon" aria-hidden="true">🔍</span><span class="qt-label">사용자 검색</span>
-        </a>
-        <a class="quick-tile" th:href="@{/u/{nickname}(nickname=${nickname})}">
-            <span class="qt-icon" aria-hidden="true">👤</span><span class="qt-label">내 공개 프로필</span>
         </a>
         <a class="quick-tile" th:href="@{/settings}">
             <span class="qt-icon" aria-hidden="true">⚙️</span><span class="qt-label">설정</span>
