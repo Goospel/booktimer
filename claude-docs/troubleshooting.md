@@ -30,6 +30,7 @@
 - [T-023. 직접 추가한 책 삭제가 500 — reading_session FK 미정리로 부모 삭제 실패, 좁은 catch가 못 잡음](#t-023-직접-추가한-책-삭제가-500--reading_session-fk-미정리로-부모-삭제-실패-좁은-catch가-못-잡음)
 - [T-027. 구글 로그인 중 Chrome "위험한 사이트" 차단 — Safe Browsing이 신규 `.click` 도메인 오탐](#t-027-구글-로그인-중-chrome-위험한-사이트-차단--safe-browsing이-신규-click-도메인-오탐)
 - [T-028. 유니크 제약 추가가 같은 값을 쓰던 기존 테스트 픽스처를 깨뜨린다](#t-028-유니크-제약-추가가-같은-값을-쓰던-기존-테스트-픽스처를-깨뜨린다)
+- [T-029. 유저 삭제 경로에서 FK 자식 정리 누락 — mock 단위테스트는 못 잡는다](#t-029-유저-삭제-경로에서-fk-자식-정리-누락--mock-단위테스트는-못-잡는다)
 
 ---
 
@@ -501,6 +502,31 @@ private final ObjectMapper objectMapper = new ObjectMapper();  // 주입 대신 
 
 ---
 
+## T-029. 유저 삭제 경로에서 FK 자식 정리 누락 — mock 단위테스트는 못 잡는다
+
+**증상**: 책을 1권이라도 등록한 사용자가 **회원 탈퇴하면 FK 위반으로 실패**할 수 있다(`book.user_id` → `users` 참조). 그런데 기존 `AccountServiceTest`(mock)는 **통과**해서, 코드 리뷰·CI 어디서도 안 잡혔다.
+
+**원인**: `AccountService.purge`가 세션·타이머는 지웠지만 **book을 안 지웠다**. `book`은 `fk_book_user`(cascade 없음)로 users를 FK 참조하므로, 자식(book)을 먼저 지우지 않으면 `userRepository.delete(user)`가 제약 위반으로 실패한다. `BookRepository.deleteByUser`는 **정의돼 있었지만 아무도 호출하지 않았다**(미사용 데드 메서드).
+- **왜 mock 테스트가 못 잡았나**: 단위테스트가 `inOrder(...).verify(repo).deleteByUser(...)`로 **호출만 검증**하고 실제 DB를 안 탄다. mock 리포지토리는 FK가 없으니 "book 삭제 안 해도" 아무 일도 안 난다. **DB 제약은 mock 경계 밖**이라 누락이 보이지 않는다.
+
+**해결 / 예방**:
+- 삭제 순서를 FK 방향대로: **세션 → 타이머 → 팔로우 → 책 → 유저**. 자식이 부모보다 먼저, 그리고 `reading_session.book_id`가 book을 참조하므로 **세션은 book보다 먼저**.
+  ```java
+  private void purge(User user) {
+      sessionRepository.deleteByUser(user);
+      timerRepository.deleteByUser(user);
+      followRepository.deleteByFollower(user);
+      followRepository.deleteByFollowee(user);
+      bookRepository.deleteByUser(user);   // ← 빠져 있던 자식 정리
+      userRepository.delete(user);
+  }
+  ```
+- **삭제 경로는 mock만으로 끝내지 말고 실제 스키마 통합 테스트를 1개라도 둔다.** 책을 가진 사용자를 만들고 탈퇴가 예외 없이 끝나는지 H2로 검증(`AccountDeletionIntegrationTest`)하면 FK 누락이 즉시 빨개진다.
+- **일반화 — 새 FK(연관)를 추가할 때마다 유저/부모 삭제 경로를 점검한다.** follow(V9)를 추가하며 purge에 follow 정리를 넣다가, 같은 패턴으로 book 정리가 빠져 있던 걸 발견했다. "deleteByUser가 정의돼 있다 ≠ 호출된다."
+- 자매 함정: [T-023](#t-023-읽은-적-있는-책-삭제가-reading_session-fk-미정리로-부모-삭제-실패) — 책 삭제 시 reading_session FK 미정리(같은 "부모 삭제 전 자식 정리" 뿌리). 개념: [learning-notes.md N-040](learning-notes.md#n-040-mock-단위테스트는-db-제약fk-유니크을-검증하지-못한다).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -529,3 +555,4 @@ private final ObjectMapper objectMapper = new ObjectMapper();  // 주입 대신 
 | 2026-06-03 | T-027 (구글 로그인 콜백에서 Chrome "위험한 사이트" 차단 — Safe Browsing이 신규 .click 도메인+로그인폼+OAuth 콜백을 피싱 오탐, 서버는 정상 / 해결=Search Console 보안문제 검토요청, 근본은 .com·.app TLD 이전, N-036) |
 | 2026-06-03 | T-027 보강 (결말 — Search Console 도메인 인증만으로 재평가 자연 해소(검토요청 불필요), 공식 판정은 처음부터 깨끗=클라이언트 휴리스틱 오탐 / Transparency에 2020 멀웨어 보관처리 이력=재활용 .click 도메인의 과거 평판이 원인) |
 | 2026-06-04 | T-028 (닉네임 유니크 제약 추가가 한 메서드에서 같은 닉을 두 사용자에 쓰던 IDOR 테스트를 깨뜨림 — 메서드당 1명·롤백이면 안전, 2명 동일값만 파손 / 픽스처를 이메일 기반 유니크 닉으로 / 제약 강화 PR은 테스트 데이터 가정도 바꾼다, N-039) |
+| 2026-06-04 | T-029 (유저 삭제 경로에서 FK 자식(book) 정리 누락 — purge가 book 미삭제로 탈퇴 FK 위반, BookRepository.deleteByUser 정의됐으나 미호출 / mock 단위테스트는 호출만 검증·실제 FK 안 타 못 잡음 → 실제 H2 통합테스트로 보강 / 삭제 순서 세션→타이머→팔로우→책→유저, 새 FK 추가 시 삭제 경로 점검, 자매 T-023, N-040) |
