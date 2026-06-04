@@ -81,7 +81,18 @@
     <!-- 내 책장 -->
     <section class="card">
         <h2>내 책장</h2>
-        <p th:if="${books.isEmpty()}" class="status-line">아직 등록한 책이 없습니다. 위에서 검색해 추가해 보세요.</p>
+
+        <!-- 상태 필터 칩 — 부합하는 책만 표시(서버사이드 ?status=). 검색어 q는 유지. -->
+        <nav class="shelf-filter">
+            <a th:href="@{/books(q=${q})}" th:classappend="${shelfFilter == null} ? 'active'">전체</a>
+            <a th:each="s : ${statuses}"
+               th:href="@{/books(q=${q}, status=${s})}"
+               th:classappend="${s == shelfFilter} ? 'active'"
+               th:text="${s.label}">상태</a>
+        </nav>
+
+        <p th:if="${books.isEmpty() and shelfFilter == null}" class="status-line">아직 등록한 책이 없습니다. 위에서 검색해 추가해 보세요.</p>
+        <p th:if="${books.isEmpty() and shelfFilter != null}" class="status-line">이 상태의 책이 없습니다.</p>
         <ul class="book-list" th:unless="${books.isEmpty()}">
             <li class="book-row" th:each="b : ${books}">
                 <img class="book-cover" th:if="${b.coverUrl}" th:src="${b.coverUrl}" alt="" referrerpolicy="no-referrer">
