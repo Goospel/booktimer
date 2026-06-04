@@ -2,6 +2,7 @@ package com.booktimer.web;
 
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
+import com.booktimer.user.NicknameAlreadyExistsException;
 import com.booktimer.user.OnboardingService;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -60,18 +61,18 @@ public class OnboardingController {
             ReadingTimer timer = timerRepository.findByUser(user)
                     .orElseThrow(() -> new IllegalStateException("no timer for user: " + principal.getName()));
             OnboardingForm form = new OnboardingForm();
+            form.setNickname(user.getNickname()); // 자동 배정/가입 닉을 기본값으로 — 사용자가 바꿀 수 있다
             form.setInitialMinutes((int) (timer.getRemainingSeconds() / SECONDS_PER_MINUTE));
             form.setIncrementMinutes((int) (timer.getDailyIncrementSeconds() / SECONDS_PER_MINUTE));
             form.setCapMinutes((int) (timer.getCapSeconds() / SECONDS_PER_MINUTE));
             model.addAttribute("onboardingForm", form);
         }
-        model.addAttribute("nickname", user.getNickname());
         return "onboarding";
     }
 
     @PostMapping("/onboarding")
     public String onboarding(@Valid @ModelAttribute("onboardingForm") OnboardingForm form,
-                             BindingResult bindingResult, Principal principal, Model model) {
+                             BindingResult bindingResult, Principal principal) {
         User user = currentUser(principal);
         if (user.isOnboarded()) {
             return "redirect:/";
@@ -83,17 +84,23 @@ public class OnboardingController {
         }
 
         if (bindingResult.hasErrors()) {
-            model.addAttribute("nickname", user.getNickname());
             return "onboarding";
         }
 
         LocalDate today = LocalDate.ofInstant(clock.instant(), ZoneId.of(user.getTimezone()));
-        onboardingService.complete(
-                principal.getName(),
-                form.getInitialMinutes() * (long) SECONDS_PER_MINUTE,
-                form.getIncrementMinutes() * (long) SECONDS_PER_MINUTE,
-                form.getCapMinutes() * (long) SECONDS_PER_MINUTE,
-                today);
+        try {
+            onboardingService.complete(
+                    principal.getName(),
+                    form.getNickname(),
+                    form.getInitialMinutes() * (long) SECONDS_PER_MINUTE,
+                    form.getIncrementMinutes() * (long) SECONDS_PER_MINUTE,
+                    form.getCapMinutes() * (long) SECONDS_PER_MINUTE,
+                    today);
+        } catch (NicknameAlreadyExistsException e) {
+            // 남이 쓰는 닉네임 — 필드 에러로 알리고 재렌더(온보딩 미완료 유지).
+            bindingResult.rejectValue("nickname", "nickname.duplicate", "이미 사용 중인 닉네임입니다");
+            return "onboarding";
+        }
 
         return "redirect:/";
     }

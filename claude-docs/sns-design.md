@@ -226,6 +226,9 @@ create index idx_follow_followee on follow (followee_id);   -- 나를 팔로우�
   앱 레벨 — LOCAL 가입은 중복 거부(`NicknameAlreadyExistsException` → 폼 에러), **소셜 로그인은 거부 못 하므로 자동
   유일화**(`NicknameAllocator` `base-2…`), 설정 변경도 중복 거부(자기 현재 닉 유지는 허용). `existsByNickname` 추가. TDD.
   ※ nickname은 V1부터 NOT NULL이라 NULL 백필 불필요 — 중복만 정리.
+- ✅ **소셜 사용자 닉네임 직접 지정 (2026-06-04)**: 구글 가입자는 자동 배정된 임시 닉(`구글러-2` 등)을 쓰지 않고,
+  **온보딩 페이지에서 직접 닉네임을 정한다**(온보딩 폼에 닉네임 필드 추가, 기존 닉 prefill, 중복 거부·자기 닉 유지 허용).
+  자동 배정은 온보딩 완료 전까지의 임시값 역할(닉은 NOT NULL이라 계정 생성 시점에 유효값 필요). LOCAL도 동일 폼 사용.
 - ⏳ **남은 것**: `book.visibility`(공개/비공개) + 책장에서 책마다 공개/비공개 토글(소유권 검사).
 - 아직 남의 걸 보는 화면은 없음(공개 토글·닉네임만). 다음 단계의 토대.
 

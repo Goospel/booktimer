@@ -89,11 +89,12 @@ class OnboardingControllerTest {
     }
 
     @Test
-    @DisplayName("POST /onboarding: 초기값·증가값·cap(분)을 적용하고 온보딩 완료 후 대시보드로 리다이렉트")
+    @DisplayName("POST /onboarding: 닉네임·초기값·증가값·cap(분)을 적용하고 온보딩 완료 후 대시보드로 리다이렉트")
     void postOnboarding_appliesAndRedirects() throws Exception {
         User u = register("apply@booktimer.com");
 
         mockMvc.perform(post("/onboarding").with(user("apply@booktimer.com")).with(csrf())
+                        .param("nickname", "직접정한닉")
                         .param("initialMinutes", "120")    // 2h
                         .param("incrementMinutes", "90")   // 90분
                         .param("capMinutes", "600"))       // 10h
@@ -102,10 +103,44 @@ class OnboardingControllerTest {
 
         User reloaded = userRepository.findByEmail("apply@booktimer.com").orElseThrow();
         assertThat(reloaded.isOnboarded()).isTrue();
+        assertThat(reloaded.getNickname()).isEqualTo("직접정한닉");
         ReadingTimer timer = timerRepository.findByUser(reloaded).orElseThrow();
         assertThat(timer.getRemainingSeconds()).isEqualTo(7200L);   // 120분
         assertThat(timer.getDailyIncrementSeconds()).isEqualTo(5400L); // 90분
         assertThat(timer.getCapSeconds()).isEqualTo(36000L);        // 600분
+    }
+
+    @Test
+    @DisplayName("POST /onboarding: 남이 쓰는 닉네임이면 화면을 다시 그리고 온보딩되지 않는다")
+    void postOnboarding_duplicateNickname_rerenders() throws Exception {
+        registrationService.register("taken@booktimer.com", "rawpw1234", "선점된닉", SEOUL, Role.USER, today());
+        register("duptry@booktimer.com");
+
+        mockMvc.perform(post("/onboarding").with(user("duptry@booktimer.com")).with(csrf())
+                        .param("nickname", "선점된닉")
+                        .param("initialMinutes", "60")
+                        .param("incrementMinutes", "60")
+                        .param("capMinutes", "300"))
+                .andExpect(status().isOk())
+                .andExpect(view().name("onboarding"));
+
+        assertThat(userRepository.findByEmail("duptry@booktimer.com").orElseThrow().isOnboarded()).isFalse();
+    }
+
+    @Test
+    @DisplayName("POST /onboarding: 닉네임이 비면 검증 실패로 화면을 다시 그린다")
+    void postOnboarding_blankNickname_rerenders() throws Exception {
+        register("blanknick@booktimer.com");
+
+        mockMvc.perform(post("/onboarding").with(user("blanknick@booktimer.com")).with(csrf())
+                        .param("nickname", "")
+                        .param("initialMinutes", "60")
+                        .param("incrementMinutes", "60")
+                        .param("capMinutes", "300"))
+                .andExpect(status().isOk())
+                .andExpect(view().name("onboarding"));
+
+        assertThat(userRepository.findByEmail("blanknick@booktimer.com").orElseThrow().isOnboarded()).isFalse();
     }
 
     @Test
@@ -114,6 +149,7 @@ class OnboardingControllerTest {
         register("over@booktimer.com");
 
         mockMvc.perform(post("/onboarding").with(user("over@booktimer.com")).with(csrf())
+                        .param("nickname", "넘침닉")
                         .param("initialMinutes", "600")    // 10h
                         .param("incrementMinutes", "60")
                         .param("capMinutes", "300"))       // cap 5h < 초기값
@@ -129,6 +165,7 @@ class OnboardingControllerTest {
         register("neg@booktimer.com");
 
         mockMvc.perform(post("/onboarding").with(user("neg@booktimer.com")).with(csrf())
+                        .param("nickname", "음수닉")
                         .param("initialMinutes", "-1")
                         .param("incrementMinutes", "60")
                         .param("capMinutes", "300"))
