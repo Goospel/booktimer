@@ -67,10 +67,13 @@
         <h2>일자별 독서 시간</h2>
         <ul class="record-list">
             <li class="record-row" th:each="r : ${records}">
-                <span class="record-date" th:text="${#temporals.format(r.date(), 'yyyy-MM-dd (E)')}">2026-06-01</span>
+                <div class="record-main">
+                    <span class="record-date" th:text="${#temporals.format(r.date(), 'yyyy-MM-dd (E)')}">2026-06-01</span>
+                    <span class="record-books" th:if="${!r.bookTitles().isEmpty()}"
+                          th:text="${#strings.listJoin(r.bookTitles(), ', ')}">책 제목</span>
+                </div>
                 <span class="record-time mono"
                       th:text="${(r.totalSeconds() / 3600) + '시간 ' + ((r.totalSeconds() % 3600) / 60) + '분'}">0시간 0분</span>
-                <span class="record-count" th:text="${r.sessionCount() + '회'}">0회</span>
             </li>
         </ul>
     </section>

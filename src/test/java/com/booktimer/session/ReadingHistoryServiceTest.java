@@ -66,15 +66,17 @@ class ReadingHistoryServiceTest {
     }
 
     @Test
-    @DisplayName("같은 날 여러 세션은 한 일자로 합산되고 세션 수가 집계된다")
+    @DisplayName("같은 날 여러 세션은 한 일자로 합산되고 그날 읽은 책 제목이 모인다")
     void dailyHistory_sumsSameDay() {
         User user = seoulUser();
-        // 2026-06-01 KST 두 세션 (09:00 +30m, 21:00 +1h)
+        Book a = Book.register(user, "책A", null, null, null, null, null, BookStatus.READING);
+        Book b = Book.register(user, "책B", null, null, null, null, null, BookStatus.READING);
+        // 2026-06-01 KST 두 세션 (09:00 +30m 책A, 21:00 +1h 책B)
         Instant morning = Instant.parse("2026-06-01T00:00:00Z"); // 09:00 KST
         Instant evening = Instant.parse("2026-06-01T12:00:00Z"); // 21:00 KST
         when(sessionRepository.findByUser(user)).thenReturn(List.of(
-                session(user, morning, 1800L),
-                session(user, evening, HOUR)));
+                sessionWithBook(user, morning, 1800L, a),
+                sessionWithBook(user, evening, HOUR, b)));
 
         List<DailyReadingRecord> history = service.dailyHistory(user);
 
@@ -82,7 +84,27 @@ class ReadingHistoryServiceTest {
         DailyReadingRecord day = history.get(0);
         assertThat(day.date()).isEqualTo(LocalDate.of(2026, 6, 1));
         assertThat(day.totalSeconds()).isEqualTo(1800L + HOUR);
-        assertThat(day.sessionCount()).isEqualTo(2);
+        assertThat(day.bookTitles()).containsExactly("책A", "책B");
+    }
+
+    @Test
+    @DisplayName("같은 날 같은 책을 여러 번 읽어도 책 제목은 중복 없이 한 번만 담긴다")
+    void dailyHistory_distinctBookTitles() {
+        User user = seoulUser();
+        Book a = Book.register(user, "책A", null, null, null, null, null, BookStatus.READING);
+        Book b = Book.register(user, "책B", null, null, null, null, null, BookStatus.READING);
+        Instant t1 = Instant.parse("2026-06-01T00:00:00Z");
+        Instant t2 = Instant.parse("2026-06-01T03:00:00Z");
+        Instant t3 = Instant.parse("2026-06-01T06:00:00Z");
+        when(sessionRepository.findByUser(user)).thenReturn(List.of(
+                sessionWithBook(user, t1, HOUR, a),
+                sessionWithBook(user, t2, HOUR, a),   // 같은 책 — 중복 안 됨
+                sessionWithBook(user, t3, HOUR, b)));
+
+        List<DailyReadingRecord> history = service.dailyHistory(user);
+
+        assertThat(history).hasSize(1);
+        assertThat(history.get(0).bookTitles()).containsExactly("책A", "책B");
     }
 
     @Test
@@ -132,7 +154,6 @@ class ReadingHistoryServiceTest {
 
         assertThat(history).hasSize(1);
         assertThat(history.get(0).totalSeconds()).isEqualTo(HOUR); // 진행 중 0초 미포함
-        assertThat(history.get(0).sessionCount()).isEqualTo(1);
     }
 
     @Test
@@ -163,7 +184,7 @@ class ReadingHistoryServiceTest {
         assertThat(history).hasSize(1);
         assertThat(history.get(0).date()).isEqualTo(LocalDate.of(2026, 6, 1));
         assertThat(history.get(0).totalSeconds()).isEqualTo(HOUR); // PUBLIC 1개분만
-        assertThat(history.get(0).sessionCount()).isEqualTo(1);
+        assertThat(history.get(0).bookTitles()).containsExactly("공개 책"); // PUBLIC 책 제목만
     }
 
     @Test

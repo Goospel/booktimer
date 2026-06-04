@@ -17,8 +17,8 @@ import java.util.List;
  * 일자별 독서 기록 조회 화면 (README 2.2).
  *
  * <p>인증 주체(username=email)로 도메인 {@link User}를 찾아, 완료된 측정 세션을 유저 타임존 기준
- * 일자별로 집계({@link ReadingHistoryService})해 화면에 싣는다. MVP에서는 "어떤 책"이 아니라
- * <b>시간만</b> 보여준다.
+ * 일자별로 집계({@link ReadingHistoryService})해 화면에 싣는다. 하루치 행은 <b>총 독서 시간</b>과
+ * 그날 <b>읽은 책 제목</b>을 보여준다(세션 "횟수"는 1분 미만 측정까지 부풀려 빼기로 결정, 2026-06-05).
  */
 @Controller
 public class HistoryController {

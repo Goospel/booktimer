@@ -65,7 +65,7 @@ class ReadingContributionServiceTest {
         long read = 1800L; // 30분
 
         ReadingHistoryService history = mock(ReadingHistoryService.class);
-        when(history.dailyHistory(user)).thenReturn(List.of(new DailyReadingRecord(day, read, 1)));
+        when(history.dailyHistory(user)).thenReturn(List.of(new DailyReadingRecord(day, read, List.of("책"))));
         ReadingTimerRepository timers = mock(ReadingTimerRepository.class);
         Clock fixed = Clock.fixed(INSTANT, ZoneOffset.UTC);
         ReadingContributionService service = new ReadingContributionService(history, timers, fixed);

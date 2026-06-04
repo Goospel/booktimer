@@ -1,5 +1,6 @@
 package com.booktimer.session;
 
+import com.booktimer.book.Book;
 import com.booktimer.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -7,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -16,7 +18,7 @@ import java.util.function.Predicate;
  * 일자별 독서 기록 조회 유스케이스 (README 2.2).
  *
  * <p>완료된 측정 세션({@code endedAt != null})을 <b>유저 타임존 기준 일자</b>로 묶어 그날의 총
- * 독서 시간과 세션 수를 집계한다. "어떤 날인지"는 서버 UTC가 아니라 유저가 사는 곳의 자정 경계로
+ * 독서 시간과 읽은 책 제목을 집계한다. "어떤 날인지"는 서버 UTC가 아니라 유저가 사는 곳의 자정 경계로
  * 정해져야 하므로 {@link User#getTimezone()}으로 {@link java.time.Instant}를 {@link LocalDate}로 변환한다.
  *
  * <p>MVP 규모에서는 유저의 세션을 메모리에서 묶는다. 데이터가 커지면 DB 집계 쿼리로 옮긴다.
@@ -59,19 +61,30 @@ public class ReadingHistoryService {
         ZoneId zone = ZoneId.of(user.getTimezone());
 
         // 최신 일자가 먼저 오도록 내림차순 TreeMap에 누적
-        Map<LocalDate, long[]> byDate = new TreeMap<>(Comparator.reverseOrder());
+        Map<LocalDate, DayAccumulator> byDate = new TreeMap<>(Comparator.reverseOrder());
         for (ReadingSession session : sessionRepository.findByUser(user)) {
             if (session.isActive() || !include.test(session)) {
                 continue; // 진행 중(미종료)·필터 미통과 세션은 집계 제외
             }
             LocalDate date = LocalDate.ofInstant(session.getStartedAt(), zone);
-            long[] agg = byDate.computeIfAbsent(date, d -> new long[2]); // [0]=총초, [1]=세션수
-            agg[0] += session.getDurationSeconds();
-            agg[1] += 1;
+            DayAccumulator acc = byDate.computeIfAbsent(date, d -> new DayAccumulator());
+            acc.seconds += session.getDurationSeconds();
+            // 책 제목을 읽은 순서대로, 중복 없이 모은다. 책 미지정(레거시 null) 세션은 제목 없음.
+            // book은 LAZY라 readOnly 트랜잭션 안에서 접근한다(MVP 규모라 N+1 허용; 커지면 fetch join/집계 쿼리로).
+            Book book = session.getBook();
+            if (book != null) {
+                acc.titles.add(book.getTitle());
+            }
         }
 
         return byDate.entrySet().stream()
-                .map(e -> new DailyReadingRecord(e.getKey(), e.getValue()[0], (int) e.getValue()[1]))
+                .map(e -> new DailyReadingRecord(e.getKey(), e.getValue().seconds, List.copyOf(e.getValue().titles)))
                 .toList();
+    }
+
+    /** 하루치 누적기 — 총 독서 시간(초)과 읽은 책 제목(중복 제거·읽은 순서). */
+    private static final class DayAccumulator {
+        long seconds = 0L;
+        final LinkedHashSet<String> titles = new LinkedHashSet<>();
     }
 }
