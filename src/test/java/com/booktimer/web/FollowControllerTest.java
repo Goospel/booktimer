@@ -1,6 +1,7 @@
 package com.booktimer.web;
 
 import com.booktimer.follow.FollowService;
+import com.booktimer.security.RateLimitAction;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -18,6 +19,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * 팔로우/언팔로우 컨트롤러 통합 테스트 (SNS 3단계, sns-design §7.3).
@@ -103,5 +105,27 @@ class FollowControllerTest {
         mockMvc.perform(post("/follow").param("nickname", "bob").param("redirect", "//evil.com")
                         .with(user("me@booktimer.com")).with(csrf()))
                 .andExpect(redirectedUrl("/u/bob"));
+    }
+
+    @Test
+    @DisplayName("팔로우를 한도 이상 반복하면 초과분은 무시된다(레이트리밋, 사용자별)")
+    void follow_rateLimited_dropsOverLimit() throws Exception {
+        User me = newUser("rl@booktimer.com", "limiter");
+        User t1 = newUser("t1@booktimer.com", "target1");
+        User t2 = newUser("t2@booktimer.com", "target2");
+
+        int limit = RateLimitAction.FOLLOW.limit();
+        for (int i = 0; i < limit; i++) { // 한도 소진(첫 호출은 target1 팔로우, 이후는 멱등이지만 카운트됨)
+            mockMvc.perform(post("/follow").param("nickname", "target1")
+                    .with(user("rl@booktimer.com")).with(csrf()));
+        }
+
+        // 한도 초과 후 새 대상 팔로우 시도 → 무시되어 관계가 안 생긴다
+        mockMvc.perform(post("/follow").param("nickname", "target2")
+                        .with(user("rl@booktimer.com")).with(csrf()))
+                .andExpect(status().is3xxRedirection());
+
+        assertThat(followService.isFollowing(me, t1)).isTrue();  // 한도 내 첫 호출은 성공
+        assertThat(followService.isFollowing(me, t2)).isFalse(); // 초과분은 차단
     }
 }

@@ -42,9 +42,10 @@
             </li>
         </ul>
 
-        <p th:if="${q != null and q.trim().length() >= 2 and (results == null or results.isEmpty())}"
+        <p th:if="${rateLimited}" class="status-line muted">검색이 너무 잦습니다. 잠시 후 다시 시도해 주세요.</p>
+        <p th:if="${!rateLimited and q != null and q.trim().length() >= 2 and (results == null or results.isEmpty())}"
            class="status-line muted">검색 결과가 없습니다.</p>
-        <p th:if="${q != null and q.trim().length() < 2}" class="status-line muted">두 글자 이상 입력해 주세요.</p>
+        <p th:if="${!rateLimited and q != null and q.trim().length() < 2}" class="status-line muted">두 글자 이상 입력해 주세요.</p>
     </section>
 
     <p class="link-row">

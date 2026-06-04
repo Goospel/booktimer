@@ -1,6 +1,7 @@
 package com.booktimer.web;
 
 import com.booktimer.search.UserSearchResult;
+import com.booktimer.security.RateLimitAction;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -19,6 +20,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
@@ -69,6 +71,27 @@ class SearchControllerTest {
         MvcResult res = mockMvc.perform(get("/search").with(user("me@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("search"))
+                .andReturn();
+
+        assertThat(resultsInModel(res)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("검색을 한도 이상 반복하면 레이트리밋 안내가 뜨고 결과를 싣지 않는다")
+    void search_rateLimited_showsNotice() throws Exception {
+        newUser("rl@booktimer.com", "limiter");
+        newUser("bt@booktimer.com", "booklover");
+
+        int limit = RateLimitAction.SEARCH.limit();
+        for (int i = 0; i < limit; i++) {
+            mockMvc.perform(get("/search").param("q", "book").with(user("rl@booktimer.com")))
+                    .andExpect(status().isOk());
+        }
+
+        MvcResult res = mockMvc.perform(get("/search").param("q", "book").with(user("rl@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(view().name("search"))
+                .andExpect(model().attribute("rateLimited", true))
                 .andReturn();
 
         assertThat(resultsInModel(res)).isEmpty();

@@ -2,6 +2,8 @@ package com.booktimer.web;
 
 import com.booktimer.report.ReportReason;
 import com.booktimer.report.ReportService;
+import com.booktimer.security.RateLimitAction;
+import com.booktimer.security.RateLimitService;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
 import org.springframework.stereotype.Controller;
@@ -16,16 +18,22 @@ import java.security.Principal;
  * <p>{@code POST /report} — 대상 닉네임으로 신고를 저장하고 원래 화면으로 돌아간다(CSRF, PRG).
  * 자기 신고·존재 누설은 조용히 무시한다(예외를 화면에 노출하지 않음). 도메인 규칙(자기 신고 금지·멱등)은
  * {@link ReportService}가 강제한다. 오픈 리다이렉트는 내부 상대경로만 허용한다(FollowController와 동일).
+ *
+ * <p>신고 남용 방어로 사용자별 레이트리밋({@link RateLimitAction#REPORT})을 건다 — 한도 초과 시 접수를
+ * 건너뛰고(조용히 드롭) 원래 화면으로 돌아간다(§7.5·§9).
  */
 @Controller
 public class ReportController {
 
     private final UserRepository userRepository;
     private final ReportService reportService;
+    private final RateLimitService rateLimitService;
 
-    public ReportController(UserRepository userRepository, ReportService reportService) {
+    public ReportController(UserRepository userRepository, ReportService reportService,
+                            RateLimitService rateLimitService) {
         this.userRepository = userRepository;
         this.reportService = reportService;
+        this.rateLimitService = rateLimitService;
     }
 
     @PostMapping("/report")
@@ -35,13 +43,15 @@ public class ReportController {
                          @RequestParam(value = "redirect", required = false) String redirect,
                          Principal principal) {
         User me = currentUser(principal);
-        userRepository.findByNickname(nickname).ifPresent(target -> {
-            try {
-                reportService.report(me, target, ReportReason.from(reason), detail);
-            } catch (IllegalArgumentException ignored) {
-                // 자기 신고 등 — 조용히 무시(버튼이 애초에 안 떠야 정상)
-            }
-        });
+        if (rateLimitService.allow(RateLimitAction.REPORT, me.getId())) {
+            userRepository.findByNickname(nickname).ifPresent(target -> {
+                try {
+                    reportService.report(me, target, ReportReason.from(reason), detail);
+                } catch (IllegalArgumentException ignored) {
+                    // 자기 신고 등 — 조용히 무시(버튼이 애초에 안 떠야 정상)
+                }
+            });
+        }
         return "redirect:" + safeRedirect(redirect, nickname);
     }
 
