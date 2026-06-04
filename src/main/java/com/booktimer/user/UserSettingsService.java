@@ -47,6 +47,11 @@ public class UserSettingsService {
         ReadingTimer timer = timerRepository.findByUser(user)
                 .orElseThrow(() -> new IllegalStateException("no timer for user: " + email));
 
+        // 닉네임을 남이 쓰는 값으로 바꾸려 하면 거부(uk_users_nickname). 자기 현재 닉네임 유지는 충돌 아님.
+        if (!user.getNickname().equals(nickname) && userRepository.existsByNickname(nickname)) {
+            throw new NicknameAlreadyExistsException(nickname);
+        }
+
         user.updateProfile(nickname, timezone);
         timer.updateSettings(dailyIncrementSeconds, capSeconds);
 

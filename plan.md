@@ -378,3 +378,5 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 | 2026-06-04 | 프론트/앱↔SNS 선후 의존 정리 메모 추가 — SNS는 프론트 교체의 선행조건 아님(촉발 사유일 뿐), 앱은 SNS가 아닌 JSON API에 의존, 실질 결정은 "SNS UI를 SSR→SPA로 두 번 짤 것인가". SNS 데이터 설계는 프론트와 독립이라 선행 가능 |
 | 2026-06-04 | SNS 설계 문서(claude-docs/sns-design.md) 작성 — 공개범위(PRIVATE 기본 opt-in)·관계(팔로우 단방향)·IDOR canView 게이트·스키마(follow V7/visibility V8)·4단계 로드맵·화면별 SSR/SPA 판단·열린 질문. 결론: SNS 대부분 SSR로 충분 → API-first big-bang 불필요 |
 | 2026-06-04 | SNS 사용자 요구사항 1차 확정 반영 — 공개 단위를 프로필 토글→**책 단위**로, 인기 카운트를 전역→**팔로우 스코프**로, **닉네임 유니크**(검색·핸들) 추가. 잔디 viewer 가시성 필터(비공개 책 간접 누출 차단)·canViewBook·닉네임 백필 선결 반영. 로드맵 재정렬(①닉네임+책공개→②프로필→③팔로우→④팔로우스코프 카운트→⑤악용) |
+| 2026-06-04 | 잔디 프라이버시 확정 — 공개 안 한 책은 타인 잔디·총시간에서 제외(PUBLIC 책 세션만, book=null도 제외) |
+| 2026-06-04 | SNS 1단계 일부 — **닉네임 유니크화 구현**(Flyway V7 중복 백필+`uk_users_nickname`, LOCAL 가입 중복 거부, 소셜 자동 유일화 `NicknameAllocator`, 설정 변경 중복 거부, `existsByNickname`). TDD. 남은 1단계: 책별 공개 토글(`book.visibility`) |

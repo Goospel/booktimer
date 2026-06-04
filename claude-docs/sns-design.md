@@ -222,8 +222,11 @@ create index idx_follow_followee on follow (followee_id);   -- 나를 팔로우�
 > 요구사항을 의존 순서로 쪼갬. 각 단계 독립 출시 가능. **팔로우 스코프 카운트(요구사항 3)는 팔로우+책 공개에 의존**하므로 뒤쪽.
 
 ### 7.1 1단계 — 닉네임 유니크화 + 책별 공개 토글 (기반)
-- `book.visibility`(V7) + 책장에서 책마다 공개/비공개 토글(소유권 검사).
-- `users.nickname` 유니크+NOT NULL(V8) — **기존 중복/NULL 백필 선결**. 설정/온보딩에서 닉네임 입력·중복 검증.
+- ✅ **닉네임 유니크화 완료 (2026-06-04)**: Flyway **V7**(중복 백필 `-{id}` → `uk_users_nickname` 유니크 제약).
+  앱 레벨 — LOCAL 가입은 중복 거부(`NicknameAlreadyExistsException` → 폼 에러), **소셜 로그인은 거부 못 하므로 자동
+  유일화**(`NicknameAllocator` `base-2…`), 설정 변경도 중복 거부(자기 현재 닉 유지는 허용). `existsByNickname` 추가. TDD.
+  ※ nickname은 V1부터 NOT NULL이라 NULL 백필 불필요 — 중복만 정리.
+- ⏳ **남은 것**: `book.visibility`(공개/비공개) + 책장에서 책마다 공개/비공개 토글(소유권 검사).
 - 아직 남의 걸 보는 화면은 없음(공개 토글·닉네임만). 다음 단계의 토대.
 
 ### 7.2 2단계 — 개인 프로필 페이지 (요구사항 4·5)

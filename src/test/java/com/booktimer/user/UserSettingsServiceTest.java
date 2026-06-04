@@ -72,4 +72,31 @@ class UserSettingsServiceTest {
                 settingsService.updateSettings("badtz@booktimer.com", "닉", "Mars/Phobos", 3600L, 18000L))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("updateSettings: 남이 이미 쓰는 닉네임으로 바꾸려 하면 거부한다 (NicknameAlreadyExistsException)")
+    void updateSettings_duplicateNickname_throws() {
+        registrationService.register("owner@booktimer.com", "rawpw1234", "이미쓰는닉", SEOUL, Role.USER, today());
+        registrationService.register("changer@booktimer.com", "rawpw1234", "내닉", SEOUL, Role.USER, today());
+
+        assertThatThrownBy(() ->
+                settingsService.updateSettings("changer@booktimer.com", "이미쓰는닉", SEOUL, 3600L, 18000L))
+                .isInstanceOf(NicknameAlreadyExistsException.class);
+
+        // 거부됐으니 원래 닉네임 유지
+        assertThat(userRepository.findByEmail("changer@booktimer.com").orElseThrow().getNickname())
+                .isEqualTo("내닉");
+    }
+
+    @Test
+    @DisplayName("updateSettings: 자기 현재 닉네임은 그대로 두고 다른 설정만 바꿀 수 있다 (본인 것은 충돌 아님)")
+    void updateSettings_keepingOwnNickname_allowed() {
+        registrationService.register("keep@booktimer.com", "rawpw1234", "내닉", SEOUL, Role.USER, today());
+
+        settingsService.updateSettings("keep@booktimer.com", "내닉", "America/New_York", 7200L, 36000L);
+
+        User reloaded = userRepository.findByEmail("keep@booktimer.com").orElseThrow();
+        assertThat(reloaded.getNickname()).isEqualTo("내닉");
+        assertThat(reloaded.getTimezone()).isEqualTo("America/New_York");
+    }
 }
