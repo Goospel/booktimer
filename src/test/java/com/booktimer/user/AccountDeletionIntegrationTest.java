@@ -3,6 +3,8 @@ package com.booktimer.user;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
+import com.booktimer.report.ReportReason;
+import com.booktimer.report.ReportService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +32,8 @@ class AccountDeletionIntegrationTest {
     @Autowired
     private BookRepository bookRepository;
     @Autowired
+    private ReportService reportService;
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Test
@@ -45,6 +49,24 @@ class AccountDeletionIntegrationTest {
         assertThatCode(() -> {
             accountService.deleteAccount(email, "rawpw1234");
             assertThat(userRepository.findByEmail(email)).isEmpty();
+        }).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("신고를 했거나 당한 사용자도 FK 위반 없이 탈퇴된다(report 정리)")
+    void deleteAccount_withReports_succeeds() {
+        User reporter = userRepository.saveAndFlush(
+                User.of("reporter@booktimer.com", passwordEncoder.encode("rawpw1234"), "신고자", "Asia/Seoul", Role.USER));
+        User target = userRepository.saveAndFlush(
+                User.of("victim@booktimer.com", passwordEncoder.encode("rawpw1234"), "피신고", "Asia/Seoul", Role.USER));
+        reportService.report(reporter, target, ReportReason.SPAM, null);
+
+        // report.reporter_id / reported_id 가 users 를 FK 참조한다 — purge 가 정리 안 하면 위반.
+        assertThatCode(() -> {
+            accountService.deleteAccount("reporter@booktimer.com", "rawpw1234"); // 신고한 쪽 탈퇴
+            accountService.deleteAccount("victim@booktimer.com", "rawpw1234");   // 신고당한 쪽 탈퇴
+            assertThat(userRepository.findByEmail("reporter@booktimer.com")).isEmpty();
+            assertThat(userRepository.findByEmail("victim@booktimer.com")).isEmpty();
         }).doesNotThrowAnyException();
     }
 }
