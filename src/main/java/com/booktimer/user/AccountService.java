@@ -3,6 +3,7 @@ package com.booktimer.user;
 import com.booktimer.block.BlockRepository;
 import com.booktimer.book.BookRepository;
 import com.booktimer.follow.FollowRepository;
+import com.booktimer.report.ReportRepository;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.timer.ReadingTimerRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -27,6 +28,7 @@ public class AccountService {
     private final ReadingSessionRepository sessionRepository;
     private final FollowRepository followRepository;
     private final BlockRepository blockRepository;
+    private final ReportRepository reportRepository;
     private final BookRepository bookRepository;
     private final PasswordEncoder passwordEncoder;
 
@@ -35,6 +37,7 @@ public class AccountService {
                           ReadingSessionRepository sessionRepository,
                           FollowRepository followRepository,
                           BlockRepository blockRepository,
+                          ReportRepository reportRepository,
                           BookRepository bookRepository,
                           PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
@@ -42,6 +45,7 @@ public class AccountService {
         this.sessionRepository = sessionRepository;
         this.followRepository = followRepository;
         this.blockRepository = blockRepository;
+        this.reportRepository = reportRepository;
         this.bookRepository = bookRepository;
         this.passwordEncoder = passwordEncoder;
     }
@@ -86,7 +90,7 @@ public class AccountService {
     }
 
     /**
-     * 연관 데이터까지 FK 순서로 제거: 세션(N) → 타이머(1:1) → 팔로우(양방향) → 차단(양방향) → 책(N) → 유저.
+     * 연관 데이터까지 FK 순서로 제거: 세션(N) → 타이머(1:1) → 팔로우(양방향) → 차단(양방향) → 신고(양방향) → 책(N) → 유저.
      * <p>모두 users를 FK 참조하므로 유저 삭제 전에 정리한다. 책은 {@code reading_session.book_id}가
      * book을 FK 참조하므로 <b>세션 이후</b>에 지운다(세션이 책을 가리키는 채로 책을 지우면 위반).
      */
@@ -97,6 +101,8 @@ public class AccountService {
         followRepository.deleteByFollowee(user);
         blockRepository.deleteByBlocker(user);
         blockRepository.deleteByBlocked(user);
+        reportRepository.deleteByReporter(user);
+        reportRepository.deleteByReported(user);
         bookRepository.deleteByUser(user);
         userRepository.delete(user);
     }

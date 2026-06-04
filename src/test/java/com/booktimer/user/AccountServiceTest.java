@@ -3,6 +3,7 @@ package com.booktimer.user;
 import com.booktimer.block.BlockRepository;
 import com.booktimer.book.BookRepository;
 import com.booktimer.follow.FollowRepository;
+import com.booktimer.report.ReportRepository;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.timer.ReadingTimerRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -47,6 +48,8 @@ class AccountServiceTest {
     private FollowRepository followRepository;
     @Mock
     private BlockRepository blockRepository;
+    @Mock
+    private ReportRepository reportRepository;
     @Mock
     private BookRepository bookRepository;
     @Mock
@@ -103,13 +106,15 @@ class AccountServiceTest {
 
         service.deleteAccount(EMAIL, "pw");
 
-        var ordered = inOrder(sessionRepository, timerRepository, followRepository, blockRepository, bookRepository, userRepository);
+        var ordered = inOrder(sessionRepository, timerRepository, followRepository, blockRepository, reportRepository, bookRepository, userRepository);
         ordered.verify(sessionRepository).deleteByUser(user); // book FK 참조하는 세션 먼저
         ordered.verify(timerRepository).deleteByUser(user);
         ordered.verify(followRepository).deleteByFollower(user);   // FK: 유저 삭제 전에 관계 정리
         ordered.verify(followRepository).deleteByFollowee(user);
         ordered.verify(blockRepository).deleteByBlocker(user);     // FK: 유저 삭제 전에 차단 관계 정리
         ordered.verify(blockRepository).deleteByBlocked(user);
+        ordered.verify(reportRepository).deleteByReporter(user);   // FK: 유저 삭제 전에 신고 관계 정리
+        ordered.verify(reportRepository).deleteByReported(user);
         ordered.verify(bookRepository).deleteByUser(user);    // FK: 유저 삭제 전에 책 정리(세션 이후)
         ordered.verify(userRepository).delete(user);
     }
@@ -139,13 +144,15 @@ class AccountServiceTest {
 
         service.deleteSocialAccount(EMAIL);
 
-        var ordered = inOrder(sessionRepository, timerRepository, followRepository, blockRepository, bookRepository, userRepository);
+        var ordered = inOrder(sessionRepository, timerRepository, followRepository, blockRepository, reportRepository, bookRepository, userRepository);
         ordered.verify(sessionRepository).deleteByUser(social);
         ordered.verify(timerRepository).deleteByUser(social);
         ordered.verify(followRepository).deleteByFollower(social);
         ordered.verify(followRepository).deleteByFollowee(social);
         ordered.verify(blockRepository).deleteByBlocker(social);
         ordered.verify(blockRepository).deleteByBlocked(social);
+        ordered.verify(reportRepository).deleteByReporter(social);
+        ordered.verify(reportRepository).deleteByReported(social);
         ordered.verify(bookRepository).deleteByUser(social);
         ordered.verify(userRepository).delete(social);
         verify(passwordEncoder, never()).matches(any(), any());

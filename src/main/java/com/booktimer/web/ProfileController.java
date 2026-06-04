@@ -2,6 +2,7 @@ package com.booktimer.web;
 
 import com.booktimer.profile.ProfileService;
 import com.booktimer.profile.ProfileView;
+import com.booktimer.report.ReportReason;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
 import org.springframework.http.HttpStatus;
@@ -48,6 +49,7 @@ public class ProfileController {
         model.addAttribute("followingCount", profile.followingCount());
         model.addAttribute("following", profile.following());
         model.addAttribute("self", profile.self());
+        model.addAttribute("reportReasons", ReportReason.values());
         return "profile";
     }
 

@@ -37,6 +37,23 @@
         </span>
     </div>
 
+    <!-- 신고: 사유를 골라 신고를 접수한다(저장만, 관리자 검토는 추후). 신고 후 이 프로필로 복귀. -->
+    <details th:unless="${self}" class="report-box">
+        <summary>🚩 이 사용자 신고</summary>
+        <form method="post" th:action="@{/report}" class="report-form"
+              onsubmit="return confirm('이 사용자를 신고할까요?');">
+            <input type="hidden" name="nickname" th:value="${nickname}">
+            <input type="hidden" name="redirect" th:value="@{/u/{n}(n=${nickname})}">
+            <label>사유
+                <select name="reason">
+                    <option th:each="r : ${reportReasons}" th:value="${r}" th:text="${r.label}">사유</option>
+                </select>
+            </label>
+            <textarea name="detail" rows="2" maxlength="500" placeholder="상세 내용 (선택)"></textarea>
+            <button type="submit" class="btn-ghost btn-block">신고하기</button>
+        </form>
+    </details>
+
     <!-- 공개 독서 잔디 (지난 1년, PUBLIC 책 세션만) -->
     <section class="card">
         <h2>독서 잔디</h2>

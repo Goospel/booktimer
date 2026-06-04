@@ -489,6 +489,18 @@ a.book-title:hover { text-decoration: underline; }
 /* 차단 버튼 — 옅은 위험 톤(삭제만큼 강하지 않게) */
 .btn-block { color: var(--danger); border-color: var(--danger); }
 
+/* 사용자 신고 — 평소엔 접힌 disclosure, 펼치면 사유 선택 폼 */
+.report-box { margin: 0 0 16px; }
+.report-box > summary { cursor: pointer; color: var(--muted); font-size: .85rem; list-style: none; }
+.report-box > summary:hover { color: var(--danger); }
+.report-form { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.report-form label { font-size: .85rem; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+.report-form select, .report-form textarea {
+    width: 100%; box-sizing: border-box; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: 8px; font: inherit; background: #fff;
+}
+.report-form .btn-block { align-self: flex-start; width: auto; padding: 6px 14px; }
+
 /* 팔로워/팔로잉 목록 페이지 탭 */
 .follow-tabs { display: flex; gap: 8px; margin: 0 0 14px; }
 .follow-tabs a {
