@@ -435,6 +435,9 @@ a.book-title:hover { text-decoration: underline; }
 .profile-follow a.follow-count:hover { color: var(--accent); }
 .profile-follow a.follow-count:hover strong { color: var(--accent); }
 .profile-follow .follow-action { margin-left: auto; }
+.profile-follow .profile-actions { display: flex; gap: 8px; }
+/* 차단 버튼 — 옅은 위험 톤(삭제만큼 강하지 않게) */
+.btn-block { color: var(--danger); border-color: var(--danger); }
 
 /* 팔로워/팔로잉 목록 페이지 탭 */
 .follow-tabs { display: flex; gap: 8px; margin: 0 0 14px; }

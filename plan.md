@@ -205,8 +205,9 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 > - ✅ **2단계** (PR #111) — 개인 공개 프로필 `/u/{nickname}`(SSR, PUBLIC 책장+잔디, 비공개 책 세션 간접 누출 차단 §3.5)
 > - ✅ **3단계** (PR #112) — 닉네임 검색(부분일치·상한20) + 팔로우(follow V9, 자기팔로우 금지·멱등·언팔즉시) + 프로필 팔로우 카운트/버튼
 > - ✅ **4단계** (PR #118) — 팔로우 스코프 인기 카운트("👥 팔로우 중 N명 원함 · M명 읽음", 책장·검색결과). 원함=WANT_TO_READ·읽음=READING∪FINISHED 확정, k익명 임계 없음(drill-down 없어 위험 제한적, 확정), isbn 일괄 group by(N+1 회피), Flyway 신규 없음
-> - ⬜ **5단계** — 악용 방지(차단·신고·레이트리밋·열거 완화)
+> - 🔶 **5단계 (진행 중)** — 악용 방지. ✅ **차단(block)** (PR #121, 대칭 — 서로 팔로우·프로필 차단, V10, 차단 시 팔로우 양방향 해제, `/me/blocks` 해제, 탈퇴 정리). ⬜ 신고 · ⬜ 레이트리밋 · ⬜ 열거 완화.
 > - 부수 픽스: 탈퇴 시 follow·book FK 자식 정리(PR #112·#113), sweep T-029·N-040(PR #114).
+> - 보강: 본인 팔로워/팔로잉 목록 `/me/followers`·`/me/following`(PR #119).
 
 > 💡 **헷갈리기 쉬운 점 — "남에게 보여주려면 DB에 저장해야 하나?" → 독서 데이터는 이미 다 저장돼 있다.**
 > "누가 어떤 책을 읽었나/읽는 중인가/얼마나 읽었나"는 이미 `book`(user_id 소유, status) +
@@ -417,3 +418,4 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 | 2026-06-04 | 대시보드 UX 수정 — 하단 바로가기 링크를 퀵 액션 타일 2열 그리드로(한글 글자깨짐 구조 해결, PR #116), 측정 카드 '읽을 책' 라벨 세로깨짐·select 카드밖 넘침 수정(`.book-pick` flex+nowrap+min-width:0, PR #117). CSS/템플릿만 |
 | 2026-06-04 | SNS 보강 — **본인 팔로워/팔로잉 목록**(`/me/followers`·`/me/following`, PR #119). 본인 프로필에서만 카운트가 목록으로 링크(남 프로필은 카운트만, privacy 유지). 경로에 닉네임 없어 항상 본인 기준(보안 경계 자동). 행은 검색과 동일(`UserRowAssembler` 공용 추출→검색·목록 재사용). `FollowListService`+`findByFollowee/FollowerOrderByCreatedAtDesc`. Flyway 신규 없음. TDD |
 | 2026-06-04 | SNS 4단계 — **팔로우 스코프 인기 카운트**(PR #118). 책장·검색결과 각 책에 "👥 팔로우 중 N명 원함 · M명 읽음". 원함=WANT_TO_READ·읽음=READING∪FINISHED, k익명 임계 없음(drill-down 없어 위험 제한적). `BookRepository.followScopePopularity`(isbn 일괄 group by·팔로우 theta조인·PUBLIC·distinct, N+1 회피)+`FollowScopePopularityService`+`books.html` 프래그먼트. Flyway 신규 없음. TDD(서비스 단위·집계 통합·컨트롤러 끝단) |
+| 2026-06-04 | SNS 5단계 시작 — **차단(block)**(PR #121, 대칭). 차단 관계면 서로 팔로우 불가·서로 프로필 404(`existsBetween` 양방향 게이트). 차단 시 기존 팔로우 양방향 해제. `Block`(V10)+`BlockService`+`BlockRepository`, `/block`·`/unblock`·`/me/blocks`(해제는 여기서 — 차단 후 상대 프로필 404라). 프로필에 차단 버튼, 탈퇴 정리에 block 추가. 함정: 동적 path 변수 표현식은 앞서 회피. TDD(서비스·컨트롤러·purge inOrder). 남은 5단계: 신고·레이트리밋·열거완화 |
