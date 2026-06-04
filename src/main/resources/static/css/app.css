@@ -359,8 +359,9 @@ button, .btn {
 .book-list { list-style: none; padding: 0; margin: 8px 0 0; }
 .book-row {
     display: flex;
+    flex-wrap: wrap;            /* 좁으면 액션 줄을 통째로 다음 줄로 내린다 */
     align-items: center;
-    gap: 12px;
+    gap: 12px 16px;
     padding: 12px 0;
     border-bottom: 1px solid var(--border);
 }
@@ -373,8 +374,8 @@ button, .btn {
     flex-shrink: 0;
     background: var(--border);
 }
-.book-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-.book-title { font-weight: 600; color: var(--text); }
+.book-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 220px; }
+.book-title { font-weight: 600; color: var(--text); word-break: keep-all; overflow-wrap: anywhere; }
 a.book-title { text-decoration: none; }
 a.book-title:hover { text-decoration: underline; }
 /* 책 상세 헤더 — 표지 + 메타 가로 배치 */
@@ -393,6 +394,7 @@ a.book-title:hover { text-decoration: underline; }
     border-radius: 999px;
 }
 .book-add-form, .book-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.book-actions { margin-left: auto; }   /* 같은 줄이면 우측 정렬, 줄바꿈되면 다음 줄 전체 사용 */
 .book-actions .btn-ghost, .book-actions .btn-danger { padding: 6px 10px; font-size: .85rem; }
 .book-actions a.btn-ghost { text-decoration: none; display: inline-flex; align-items: center; }
 
