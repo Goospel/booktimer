@@ -266,6 +266,7 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 ### 📚🧬 독서 성향 분석 — "책장 기반 MBTI" (아이디어 ⏳ 2026-06-04, 우선순위: 미정 / 기록만)
 
 > ⚠️ **아직 구상 단계 — 기록만. 구현 금지.** 설계·스키마·기술선택 전부 미확정.
+> 📐 방향 합의 메모: [claude-docs/reading-personality-design.md](claude-docs/reading-personality-design.md) — "AI에 뭘 시키나(사실집계=코드/해석·서술=LLM 분리)·비용·캐시·프라이버시" 초안(2026-06-05).
 
 **컨셉**: 사용자의 **책장(보유/읽는중/완독 책 + 책별 누적 시간)** 을 입력으로, **AI를 돌리든 알고리즘을
 짜든** 일정 과정을 거쳐 그 사람의 **독서 성향(=일종의 "독서 MBTI")** 을 도출한다. 이 성향 프로필을
@@ -531,3 +532,4 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 | 2026-06-05 | **측정 책 드롭다운 상태별 그룹화 + 최근 읽은 책 자동선택** — 드롭다운("읽을 책")에서 완독/읽는중이 안 나뉘고 무조건 맨 위(최근 등록) 책이 잡히던 문제(스크린샷 피드백). 읽고싶음(WANT_TO_READ) 제외(아직 안 편 책 측정은 무의미), `<optgroup>`「읽는 중」/「완독」으로 시각 구분, 가장 최근 측정한 책(startedAt 최신 세션의 책) 미리 선택(이력 없으면 브라우저 기본=첫 옵션). `DashboardModel` `books`→`readingBooks`/`finishedBooks`+`recentBookId`, `ReadingSessionRepository.findRecentlyReadBookIds(user, Pageable)`. Flyway 신규 없음. TDD(상태별 분리·recentBookId, Red→Green). (PR #134) + 학습노트 **N-045**(Spring Data 최신 N건은 Pageable로 limit, PR #135) |
 | 2026-06-05 | **독서 기록에서 세션 "횟수" 제거 → 읽은 책 표시**(스크린샷 피드백) — 1분도 안 읽고 멈춘 측정까지 "N회"로 세어 횟수 지표가 부풀고 의미가 약했음. 횟수를 빼고 그날 **읽은 책 제목**(+총 시간 유지)을 보여줌. `DailyReadingRecord.sessionCount`(int)→`bookTitles`(List, 중복 제거·읽은 순서), `ReadingHistoryService`는 책 미지정(레거시 null) 세션은 제목 없이 시간만 합산, book-detail은 한 책이라 횟수만 제거. history.html 날짜+책 2단 레이아웃, `.record-count` CSS 제거. Flyway 신규 없음. TDD(같은날 책제목 모음·중복제거·공개잔디 제목, Red→Green). (PR #138) |
 | 2026-06-05 | **사용자 검색 입력칸 세로로 길쭉하던 버그 정상화**(스크린샷 피드백) — `/search` 닉네임 입력칸이 비정상적으로 높았음. 원인은 `.book-search-form`이 column flex인데 input이 폼 직계라 `flex:1 1 160px`의 basis가 너비 아닌 **높이**로 먹힌 것(책 검색은 `.search-row`가 리셋, 사용자 검색은 래퍼 없음). `.book-search-form > input[type=text]`에 `flex:none; width:100%; box-sizing:border-box`로 한 줄 리셋 — 직계(`>`) 셀렉터라 `.search-row` 하위인 책 검색 input은 무영향. CSS만. (PR #139) |
+| 2026-06-05 | **독서 성향 분석("책장 기반 MBTI") 설계 메모 작성** — 사용자가 "책장 보고 MBTI식 자유 설명문" 원함, AI 필요성·비용 논의. 합의 방향: **"AI를 쓰냐"가 아니라 "뭘 시키냐"** — 사실 집계(장르·완독률·시간 분포)는 코드($0·결정적), **해석·서술만 LLM**(소형 모델·호출당 1원 미만), 입력은 압축 "독서 프로필"(raw 안 던짐→토큰·환각↓), 출력 2겹(설명문+비교용 태그), 결과 저장·캐시(비용+공유 일관성), 프라이버시는 PUBLIC 책만 노출. `claude-docs/reading-personality-design.md` 신설(sns-design 양식) + plan.md §독서 성향에 링크. **구현 금지 유지**(🟡 항목 확정 후 착수). 문서만. (PR #140) |
