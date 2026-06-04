@@ -1100,8 +1100,8 @@ TLS termination(N-021) 구조에서 앱이 받는 요청은 평문 http다. 그�
 ### 코드 위치
 
 - `src/main/java/com/booktimer/config/SecurityConfig.java` — `BCryptPasswordEncoder()`(기본 강도 10)
-- `deploy/task-definition.json` — `cpu: 256`(0.25 vCPU) ← 지연의 실제 원인, 상향 후보(plan.md)
-- 관련: plan.md "Fargate CPU 상향" 항목
+- `deploy/task-definition.json` — `cpu: 512`(0.5 vCPU)·`memory: 1024` ← 지연 원인이던 0.25 vCPU에서 상향(PR #132). 강도(10)는 유지
+- 관련: plan.md "Fargate CPU 상향" 항목(완료 ✅)
 
 ### 관련 노트
 
