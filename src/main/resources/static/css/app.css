@@ -526,7 +526,11 @@ a.book-title:hover { text-decoration: underline; }
 .shelf-filter a:hover { border-color: var(--accent); color: var(--accent); }
 .shelf-filter a.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 /* 팔로우 스코프 인기 카운트(§7.4) — 책 메타 안 작은 배지 */
-.follow-popularity { font-size: .78rem; color: var(--accent); font-weight: 600; }
+.follow-popularity { font-size: .78rem; color: var(--accent); font-weight: 600; text-decoration: none; cursor: pointer; }
+.follow-popularity:hover { text-decoration: underline; }
+
+/* 인기 카운트 drill-down — "이 책 읽는 내 팔로우" 버킷 제목 */
+.reader-bucket { font-size: .85rem; color: var(--muted); margin: 1rem 0 .4rem; text-align: left; }
 
 /* 개인정보처리방침 등 고지 문서 — 읽기용 본문(카드 기본 h2의 작은 라벨 스타일을 본문 제목으로 되돌림) */
 .legal { text-align: left; line-height: 1.6; }

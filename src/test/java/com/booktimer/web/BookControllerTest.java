@@ -97,6 +97,53 @@ class BookControllerTest {
     }
 
     @Test
+    @DisplayName("GET /books/readers: 인기 카운트 drill-down — 팔로우한 PUBLIC 독자 명단을 버킷별로 싣는다")
+    @SuppressWarnings("unchecked")
+    void readers_listsFollowScopeReaders() throws Exception {
+        User viewer = newUser("rv@booktimer.com");
+        User followee = userRepository.save(
+                User.of("rf@booktimer.com", passwordEncoder.encode("rawpw1234"), "팔로이", "Asia/Seoul", Role.USER));
+        User stranger = userRepository.save(
+                User.of("rs@booktimer.com", passwordEncoder.encode("rawpw1234"), "모르는이", "Asia/Seoul", Role.USER));
+        followRepository.save(Follow.of(viewer, followee));
+
+        String isbn = "9788900067890";
+        Book followeeBook = Book.register(followee, "같은 책", null, isbn, null, null, null, BookStatus.READING);
+        followeeBook.changeVisibility(BookVisibility.PUBLIC);
+        bookRepository.save(followeeBook);
+        // 팔로우 안 한 사람도 같은 책을 PUBLIC으로 가졌지만 — 명단엔 안 나와야 한다(스코프 경계).
+        Book strangerBook = Book.register(stranger, "같은 책", null, isbn, null, null, null, BookStatus.READING);
+        strangerBook.changeVisibility(BookVisibility.PUBLIC);
+        bookRepository.save(strangerBook);
+
+        mockMvc.perform(get("/books/readers").param("isbn", isbn).with(user("rv@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(view().name("book-readers"))
+                .andExpect(model().attributeExists("readers"))
+                .andExpect(result -> {
+                    var readers = (com.booktimer.popularity.FollowScopeReaders)
+                            result.getModelAndView().getModel().get("readers");
+                    assertThat(readers.reading()).extracting("nickname").containsExactly("팔로이");
+                    assertThat(readers.wanting()).isEmpty();
+                });
+    }
+
+    @Test
+    @DisplayName("GET /books/readers: 모르는 isbn이면 빈 명단으로 정상 렌더(존재 누설 없음)")
+    void readers_unknownIsbn_emptyButOk() throws Exception {
+        newUser("re@booktimer.com");
+
+        mockMvc.perform(get("/books/readers").param("isbn", "9780000000000").with(user("re@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(view().name("book-readers"))
+                .andExpect(result -> {
+                    var readers = (com.booktimer.popularity.FollowScopeReaders)
+                            result.getModelAndView().getModel().get("readers");
+                    assertThat(readers.isEmpty()).isTrue();
+                });
+    }
+
+    @Test
     @DisplayName("GET /books: 검색 기준 기본값은 제목(TITLE), ?type=AUTHOR면 저자")
     void books_searchType() throws Exception {
         newUser("st@booktimer.com");

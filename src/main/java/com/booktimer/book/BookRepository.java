@@ -52,4 +52,25 @@ public interface BookRepository extends JpaRepository<Book, Long> {
             """)
     List<FollowScopeCount> followScopePopularity(@Param("viewer") User viewer,
                                                  @Param("isbns") Collection<String> isbns);
+
+    /**
+     * 팔로우 스코프 인기 카운트 <b>drill-down</b> — 한 isbn을 {@code viewer}가 팔로우한 사용자(followee)
+     * 중 주어진 {@code statuses}로 PUBLIC 보유한 사람을 distinct로 돌려준다(닉네임 정렬은 호출부에서).
+     *
+     * <p>카운트({@link #followScopePopularity})와 <b>같은 게이트</b>(팔로우·PUBLIC·distinct)라 명단과 숫자가
+     * 어긋나지 않는다. 노출되는 책은 어차피 각 팔로우 프로필의 PUBLIC 책장에서 볼 수 있는 것뿐(새 노출 없음).
+     * PRIVATE·비팔로우·본인(자기 팔로우 없음)은 자연 제외.
+     */
+    @Query("""
+            select distinct b.user
+            from Book b, com.booktimer.follow.Follow f
+            where f.followee = b.user
+              and f.follower = :viewer
+              and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
+              and b.isbn13 = :isbn
+              and b.status in :statuses
+            """)
+    List<User> followScopeReaders(@Param("viewer") User viewer,
+                                  @Param("isbn") String isbn,
+                                  @Param("statuses") Collection<BookStatus> statuses);
 }
