@@ -1,5 +1,7 @@
 package com.booktimer.session;
 
+import com.booktimer.book.Book;
+import com.booktimer.book.BookStatus;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import org.junit.jupiter.api.DisplayName;
@@ -43,6 +45,24 @@ class ReadingHistoryServiceTest {
         ReadingSession s = ReadingSession.start(user, start);
         s.end(start.plusSeconds(durationSeconds));
         return s;
+    }
+
+    /** 특정 책에 연결된 완료 세션. */
+    private ReadingSession sessionWithBook(User user, Instant start, long durationSeconds, Book book) {
+        ReadingSession s = ReadingSession.start(user, start, book);
+        s.end(start.plusSeconds(durationSeconds));
+        return s;
+    }
+
+    private Book publicBook(User owner) {
+        Book b = Book.register(owner, "공개 책", null, null, null, null, null, BookStatus.READING);
+        b.makePublic();
+        return b;
+    }
+
+    private Book privateBook(User owner) {
+        // 기본값이 PRIVATE
+        return Book.register(owner, "비공개 책", null, null, null, null, null, BookStatus.READING);
     }
 
     @Test
@@ -122,5 +142,40 @@ class ReadingHistoryServiceTest {
         when(sessionRepository.findByUser(user)).thenReturn(List.of());
 
         assertThat(service.dailyHistory(user)).isEmpty();
+    }
+
+    // --- 프로필(SNS 2단계) 공개 잔디: PUBLIC 책 세션만 (sns-design §3.5) ---
+
+    @Test
+    @DisplayName("publicDailyHistory: PUBLIC 책 세션만 합산하고 PRIVATE 책·책 미지정 세션은 제외한다")
+    void publicDailyHistory_onlyPublicBookSessions() {
+        User user = seoulUser();
+        Book pub = publicBook(user);
+        Book priv = privateBook(user);
+        Instant t = Instant.parse("2026-06-01T01:00:00Z"); // 06-01 KST
+        when(sessionRepository.findByUser(user)).thenReturn(List.of(
+                sessionWithBook(user, t, HOUR, pub),   // 포함 (PUBLIC)
+                sessionWithBook(user, t, HOUR, priv),  // 제외 (PRIVATE — 간접 누출 방지)
+                session(user, t, HOUR)));              // 제외 (book=null — 공개 미명시 활동)
+
+        List<DailyReadingRecord> history = service.publicDailyHistory(user);
+
+        assertThat(history).hasSize(1);
+        assertThat(history.get(0).date()).isEqualTo(LocalDate.of(2026, 6, 1));
+        assertThat(history.get(0).totalSeconds()).isEqualTo(HOUR); // PUBLIC 1개분만
+        assertThat(history.get(0).sessionCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("publicDailyHistory: PUBLIC 책 세션이 하나도 없으면 빈 리스트")
+    void publicDailyHistory_noPublicSessions_empty() {
+        User user = seoulUser();
+        Book priv = privateBook(user);
+        Instant t = Instant.parse("2026-06-01T01:00:00Z");
+        when(sessionRepository.findByUser(user)).thenReturn(List.of(
+                sessionWithBook(user, t, HOUR, priv),
+                session(user, t, HOUR)));
+
+        assertThat(service.publicDailyHistory(user)).isEmpty();
     }
 }

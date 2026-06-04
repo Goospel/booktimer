@@ -236,9 +236,14 @@ create index idx_follow_followee on follow (followee_id);   -- 나를 팔로우�
   (`POST /books/{id}/visibility`, 소유권 강제=IDOR 방어). `Book.makePublic/makePrivate/isPublic`. TDD.
 - 아직 남의 걸 보는 화면은 없음(공개 토글·닉네임만). **다음 = 2단계 프로필 페이지**의 토대 완성.
 
-### 7.2 2단계 — 개인 프로필 페이지 (요구사항 4·5) — ✅ 확정 (2026-06-04)
+### 7.2 2단계 — 개인 프로필 페이지 (요구사항 4·5) — ✅ 구현 완료 (2026-06-04)
 
 > 착수 전 4개 결정 확정(사용자 2026-06-04). 아래가 구현 기준. 닉네임 검색 UI는 **이번 범위 제외**.
+>
+> **✅ 구현 완료 (2026-06-04)**: `GET /u/{nickname}` SSR(`profile.html`) — `ProfileService`(profile 패키지)가 PUBLIC 책장 +
+> 공개 잔디를 조립. 가시성 필터는 `ReadingHistoryService.publicDailyHistory`(잔디)·`BookReadingStatsService.publicTotalSecondsByBook`(책별 시간)·
+> `BookRepository.findByUserAndVisibility…`(책장)에 분산, 순수 빌더는 무변경(§11-7). 닉네임 404, 비로그인 차단(default-deny 자동),
+> 본인도 PUBLIC만(공개 미리보기). 신규 마이그레이션 없음. TDD Red→Green 2사이클(단위 잔디·책시간 필터 + 통합 컨트롤러). 대시보드에 진입 링크.
 
 **범위(확정)**: 프로필 페이지 1개만. 닉네임 검색 화면은 제외(추후/3단계 팔로우와 함께). 직접 URL 접근.
 

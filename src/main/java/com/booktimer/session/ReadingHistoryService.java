@@ -10,6 +10,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.Predicate;
 
 /**
  * 일자별 독서 기록 조회 유스케이스 (README 2.2).
@@ -37,13 +38,31 @@ public class ReadingHistoryService {
      * @return 일자별 집계 목록(최신순). 기록이 없으면 빈 목록.
      */
     public List<DailyReadingRecord> dailyHistory(User user) {
+        return aggregate(user, session -> true);
+    }
+
+    /**
+     * 타인 프로필(SNS)에서 보이는 <b>공개 잔디</b>용 일자별 집계 — <b>PUBLIC 책에 연결된 세션만</b> 합산한다.
+     *
+     * <p>비공개 책·책 미지정(book=null) 세션을 빼는 이유: 무슨 책인지 몰라도 "이 날 N분 읽었다"가 새면
+     * 비공개 독서가 간접 누출된다(sns-design §3.5). 본인이 보는 전체 잔디는 {@link #dailyHistory}.
+     *
+     * <p>가시성 필터를 여기(서비스)에 두어 순수 빌더({@link ContributionGraphBuilder})는 viewer를 모른 채
+     * 그대로 둔다(설계 §11-7). {@code book.isPublic()} 접근은 LAZY 로딩이라 트랜잭션 안에서 호출돼야 한다.
+     */
+    public List<DailyReadingRecord> publicDailyHistory(User user) {
+        return aggregate(user, session -> session.getBook() != null && session.getBook().isPublic());
+    }
+
+    /** 완료 세션을 유저 타임존 일자로 묶되 {@code include}를 통과한 것만 합산한다(최신 일자 먼저). */
+    private List<DailyReadingRecord> aggregate(User user, Predicate<ReadingSession> include) {
         ZoneId zone = ZoneId.of(user.getTimezone());
 
         // 최신 일자가 먼저 오도록 내림차순 TreeMap에 누적
         Map<LocalDate, long[]> byDate = new TreeMap<>(Comparator.reverseOrder());
         for (ReadingSession session : sessionRepository.findByUser(user)) {
-            if (session.isActive()) {
-                continue; // 진행 중(미종료) 세션은 집계 제외
+            if (session.isActive() || !include.test(session)) {
+                continue; // 진행 중(미종료)·필터 미통과 세션은 집계 제외
             }
             LocalDate date = LocalDate.ofInstant(session.getStartedAt(), zone);
             long[] agg = byDate.computeIfAbsent(date, d -> new long[2]); // [0]=총초, [1]=세션수
