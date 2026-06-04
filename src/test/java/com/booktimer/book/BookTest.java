@@ -63,6 +63,28 @@ class BookTest {
     }
 
     @Test
+    @DisplayName("새 책은 기본이 비공개(PRIVATE)다 — 공개는 사용자가 명시적으로 켠다")
+    void visibility_defaultsToPrivate() {
+        Book book = bookWith(BookStatus.WANT_TO_READ);
+        assertThat(book.getVisibility()).isEqualTo(BookVisibility.PRIVATE);
+        assertThat(book.isPublic()).isFalse();
+    }
+
+    @Test
+    @DisplayName("makePublic/makePrivate: 책의 공개 여부를 토글한다")
+    void visibility_toggle() {
+        Book book = bookWith(BookStatus.READING);
+
+        book.makePublic();
+        assertThat(book.getVisibility()).isEqualTo(BookVisibility.PUBLIC);
+        assertThat(book.isPublic()).isTrue();
+
+        book.makePrivate();
+        assertThat(book.getVisibility()).isEqualTo(BookVisibility.PRIVATE);
+        assertThat(book.isPublic()).isFalse();
+    }
+
+    @Test
     @DisplayName("recordPurchaseClick: 호출할 때마다 구매 클릭 수가 1씩 증가한다")
     void recordPurchaseClick_increments() {
         Book book = bookWith(BookStatus.WANT_TO_READ);

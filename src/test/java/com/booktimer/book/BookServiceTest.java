@@ -186,6 +186,33 @@ class BookServiceTest {
     }
 
     @Test
+    @DisplayName("공개 설정: 새 책은 비공개 기본이고, 소유자는 공개/비공개를 바꿀 수 있다")
+    void setVisibility_byOwner() {
+        User u = newUser("vis@booktimer.com");
+        Book book = bookService.addManual(u, "공개 토글 책", null, BookStatus.READING);
+        assertThat(book.getVisibility()).isEqualTo(BookVisibility.PRIVATE); // 기본 비공개
+
+        Book published = bookService.setVisibility(u, book.getId(), BookVisibility.PUBLIC);
+        assertThat(published.getVisibility()).isEqualTo(BookVisibility.PUBLIC);
+
+        Book hidden = bookService.setVisibility(u, book.getId(), BookVisibility.PRIVATE);
+        assertThat(hidden.getVisibility()).isEqualTo(BookVisibility.PRIVATE);
+    }
+
+    @Test
+    @DisplayName("공개 설정: 남의 책 공개 변경은 거부된다(IDOR 방지)")
+    void setVisibility_rejectsNonOwner() {
+        User owner = newUser("vo@booktimer.com");
+        User attacker = newUser("va@booktimer.com");
+        Book book = bookService.addManual(owner, "남의 책", null, BookStatus.READING);
+
+        assertThatThrownBy(() -> bookService.setVisibility(attacker, book.getId(), BookVisibility.PUBLIC))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(bookService.myBooks(owner).get(0).getVisibility()).isEqualTo(BookVisibility.PRIVATE);
+    }
+
+    @Test
     @DisplayName("검색은 검색 클라이언트(포트)에 페이지와 함께 위임한다")
     void search_delegatesToClient() {
         when(searchClient.search("clean", 2))

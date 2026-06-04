@@ -111,6 +111,37 @@ class BookControllerTest {
     }
 
     @Test
+    @DisplayName("POST /books/{id}/visibility: 소유자는 책을 공개로 바꿀 수 있다")
+    void setVisibility_byOwner() throws Exception {
+        User u = newUser("vc@booktimer.com");
+        Book book = bookRepository.save(
+                Book.register(u, "공개할 책", null, null, null, null, null, BookStatus.READING));
+
+        mockMvc.perform(post("/books/{id}/visibility", book.getId())
+                        .param("visibility", "PUBLIC")
+                        .with(user("vc@booktimer.com")).with(csrf()))
+                .andExpect(redirectedUrl("/books"));
+
+        assertThat(bookRepository.findById(book.getId()).orElseThrow().isPublic()).isTrue();
+    }
+
+    @Test
+    @DisplayName("POST /books/{id}/visibility: 남의 책 공개 변경은 막힌다(IDOR 방지)")
+    void setVisibility_nonOwner_unchanged() throws Exception {
+        User owner = newUser("vcowner@booktimer.com");
+        User attacker = newUser("vcattacker@booktimer.com");
+        Book book = bookRepository.save(
+                Book.register(owner, "남의 책", null, null, null, null, null, BookStatus.READING));
+
+        mockMvc.perform(post("/books/{id}/visibility", book.getId())
+                        .param("visibility", "PUBLIC")
+                        .with(user("vcattacker@booktimer.com")).with(csrf()))
+                .andExpect(redirectedUrl("/books"));
+
+        assertThat(bookRepository.findById(book.getId()).orElseThrow().isPublic()).isFalse();
+    }
+
+    @Test
     @DisplayName("GET /books/{id}: 내 책이면 상세(책별 잔디·기록) 화면을 그린다")
     void detail_rendersForOwner() throws Exception {
         User u = newUser("detail@booktimer.com");

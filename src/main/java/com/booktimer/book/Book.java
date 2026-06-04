@@ -62,6 +62,14 @@ public class Book extends BaseTimeEntity {
     @Column(nullable = false)
     private long clickCount = 0L;
 
+    /**
+     * 공개 범위(SNS). 기본 비공개 — 공개는 사용자가 책마다 명시적으로 켠다(opt-in).
+     * 기존 책은 마이그레이션(V8)에서 PRIVATE로 백필된다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private BookVisibility visibility = BookVisibility.PRIVATE;
+
     protected Book() {
         // JPA
     }
@@ -120,6 +128,29 @@ public class Book extends BaseTimeEntity {
         this.clickCount++;
     }
 
+    /** 이 책을 공개한다 — 다른 사용자가 조회할 수 있게 된다(SNS). */
+    public void makePublic() {
+        this.visibility = BookVisibility.PUBLIC;
+    }
+
+    /** 이 책을 비공개로 되돌린다 — 나만 볼 수 있다. */
+    public void makePrivate() {
+        this.visibility = BookVisibility.PRIVATE;
+    }
+
+    /** 공개 범위를 직접 지정한다(공개/비공개). */
+    public void changeVisibility(BookVisibility newVisibility) {
+        if (newVisibility == null) {
+            throw new IllegalArgumentException("visibility must not be null");
+        }
+        this.visibility = newVisibility;
+    }
+
+    /** 다른 사용자에게 보이는 공개 책인가. */
+    public boolean isPublic() {
+        return visibility == BookVisibility.PUBLIC;
+    }
+
     /** 상태 변경(읽고싶음 → 읽는중 → 완독 등). */
     public void changeStatus(BookStatus newStatus) {
         if (newStatus == null) {
@@ -166,5 +197,9 @@ public class Book extends BaseTimeEntity {
 
     public long getClickCount() {
         return clickCount;
+    }
+
+    public BookVisibility getVisibility() {
+        return visibility;
     }
 }
