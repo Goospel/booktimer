@@ -1,5 +1,6 @@
 package com.booktimer.profile;
 
+import com.booktimer.block.BlockRepository;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookVisibility;
 import com.booktimer.follow.FollowService;
@@ -30,17 +31,20 @@ public class ProfileService {
     private final BookReadingStatsService statsService;
     private final ReadingContributionService contributionService;
     private final FollowService followService;
+    private final BlockRepository blockRepository;
 
     public ProfileService(UserRepository userRepository,
                           BookRepository bookRepository,
                           BookReadingStatsService statsService,
                           ReadingContributionService contributionService,
-                          FollowService followService) {
+                          FollowService followService,
+                          BlockRepository blockRepository) {
         this.userRepository = userRepository;
         this.bookRepository = bookRepository;
         this.statsService = statsService;
         this.contributionService = contributionService;
         this.followService = followService;
+        this.blockRepository = blockRepository;
     }
 
     /**
@@ -48,7 +52,10 @@ public class ProfileService {
      * 팔로우 버튼 분기를 위해 {@code viewer} 기준 following/self를 함께 계산한다(관계는 카운트만 노출).
      */
     public Optional<ProfileView> profileOf(User viewer, String nickname) {
-        return userRepository.findByNickname(nickname).map(target -> {
+        return userRepository.findByNickname(nickname)
+                // 차단 관계(어느 방향이든)면 존재 누설 없이 빈 결과 → 404 (대칭, §7.5)
+                .filter(target -> !blockRepository.existsBetween(viewer, target))
+                .map(target -> {
             boolean self = target.getId() != null && target.getId().equals(viewer.getId());
             return new ProfileView(
                     target.getNickname(),
