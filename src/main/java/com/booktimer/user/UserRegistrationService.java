@@ -54,6 +54,10 @@ public class UserRegistrationService {
             // DB 유니크 제약(uk_users_email) 위반이 500으로 새기 전에 미리 막아 친절한 에러로.
             throw new EmailAlreadyExistsException(email);
         }
+        if (userRepository.existsByNickname(nickname)) {
+            // 닉네임도 유니크(uk_users_nickname) — 가입자가 직접 고르므로 충돌은 거부해 다른 닉네임을 받는다.
+            throw new NicknameAlreadyExistsException(nickname);
+        }
         String passwordHash = passwordEncoder.encode(rawPassword);
         User user = userRepository.save(User.of(email, passwordHash, nickname, timezone, role));
         timerRepository.save(ReadingTimer.startFor(

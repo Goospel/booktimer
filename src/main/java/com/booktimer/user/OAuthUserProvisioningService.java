@@ -57,9 +57,11 @@ public class OAuthUserProvisioningService {
             throw new OAuth2AuthenticationException("email_not_verified");
         }
         return userRepository.findByEmail(email).orElseGet(() -> {
-            String nickname = (displayName == null || displayName.isBlank())
+            String base = (displayName == null || displayName.isBlank())
                     ? emailLocalPart(email)
                     : displayName.trim();
+            // 닉네임은 유니크 — provider가 준 이름이 충돌하면 로그인을 거부할 수 없으므로 자동 유일화(base-2 …).
+            String nickname = NicknameAllocator.firstAvailable(base, userRepository::existsByNickname);
             LocalDate today = LocalDate.ofInstant(clock.instant(), ZoneId.of(DEFAULT_TIMEZONE));
             return registrationService.registerOAuth(
                     email, nickname, DEFAULT_TIMEZONE, AuthProvider.GOOGLE, today);

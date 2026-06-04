@@ -12,7 +12,7 @@
         <span class="emoji">📚</span>
         <h1>BookTimer</h1>
     </header>
-    <p class="greeting"><span th:text="${nickname}">닉네임</span>님, 환영합니다! 시작 설정을 해볼까요?</p>
+    <p class="greeting">환영합니다! 닉네임과 시작 설정을 정해볼까요?</p>
 
     <section class="card">
         <p class="status-line muted">
@@ -20,6 +20,11 @@
             <strong>초기값</strong>은 지금 시작할 남은 독서 시간입니다. 나중에 설정에서 증가값·상한을 바꿀 수 있어요.
         </p>
         <form th:action="@{/onboarding}" th:object="${onboardingForm}" method="post">
+            <div class="field">
+                <label for="nickname">닉네임 — 다른 사용자에게 보이고 검색되는 이름</label>
+                <input type="text" id="nickname" maxlength="50" th:field="*{nickname}">
+                <span class="field-error" th:if="${#fields.hasErrors('nickname')}" th:errors="*{nickname}">닉네임 오류</span>
+            </div>
             <div class="field">
                 <label for="initialMinutes">초기값 (분) — 지금 시작할 남은 독서 시간</label>
                 <input type="number" id="initialMinutes" min="0" th:field="*{initialMinutes}">

@@ -114,6 +114,21 @@ class UserRegistrationServiceTest {
         verify(passwordEncoder, never()).encode(any());
     }
 
+    @Test
+    @DisplayName("register: 이미 쓰이는 닉네임이면 NicknameAlreadyExistsException을 던지고 아무것도 저장·해싱하지 않는다")
+    void register_whenNicknameExists_throwsAndDoesNotPersist() {
+        when(userRepository.existsByEmail("fresh@booktimer.com")).thenReturn(false);
+        when(userRepository.existsByNickname("책벌레")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.register(
+                "fresh@booktimer.com", "rawpw1234", "책벌레", "Asia/Seoul", Role.USER, DAY0))
+                .isInstanceOf(NicknameAlreadyExistsException.class);
+
+        verify(userRepository, never()).save(any());
+        verify(timerRepository, never()).save(any());
+        verify(passwordEncoder, never()).encode(any());
+    }
+
     // --- registerOAuth: 소셜 가입 (비밀번호 없음) ---
 
     @Test

@@ -7,11 +7,14 @@ import java.util.Optional;
 /**
  * User 영속성 저장소.
  *
- * <p>이메일은 로그인 식별자이자 유니크 키(uk_users_email)다.
+ * <p>이메일은 로그인 식별자이자 유니크 키(uk_users_email)다. 닉네임도 유니크 키(uk_users_nickname)이자
+ * 검색·프로필 핸들이다 — 가입/변경 전에 {@link #existsByNickname}로 중복을 미리 확인한다.
  */
 public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByEmail(String email);
 
     boolean existsByEmail(String email);
+
+    boolean existsByNickname(String nickname);
 }

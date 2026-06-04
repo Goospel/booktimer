@@ -68,7 +68,9 @@ class ReadingSessionControllerTest {
     }
 
     private User register(String email) {
-        return registrationService.register(email, "rawpw1234", "독서가", SEOUL, Role.USER, today());
+        // 닉네임은 유니크(uk_users_nickname) — 한 테스트가 두 사용자를 등록(IDOR)하므로 이메일로 구분한다.
+        String nickname = email.substring(0, email.indexOf('@'));
+        return registrationService.register(email, "rawpw1234", nickname, SEOUL, Role.USER, today());
     }
 
     @Test

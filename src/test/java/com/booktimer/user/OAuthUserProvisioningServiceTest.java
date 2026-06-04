@@ -92,6 +92,23 @@ class OAuthUserProvisioningServiceTest {
     }
 
     @Test
+    @DisplayName("provision: 표시 이름이 이미 쓰이는 닉네임이면 충돌을 피해 -2 를 붙여 만든다 (로그인은 거부 못 하므로 자동 유일화)")
+    void provision_nicknameCollision_autoUniquifies() {
+        when(userRepository.findByEmail("dupname@booktimer.com")).thenReturn(Optional.empty());
+        when(userRepository.existsByNickname("구글러")).thenReturn(true);   // 이미 쓰이는 표시 이름
+        when(userRepository.existsByNickname("구글러-2")).thenReturn(false);
+        when(registrationService.registerOAuth(any(), any(), any(), any(), any()))
+                .thenAnswer(inv -> User.ofOAuth(inv.getArgument(0), inv.getArgument(1),
+                        inv.getArgument(2), Role.USER, inv.getArgument(3)));
+
+        User result = service.provision("dupname@booktimer.com", "구글러", true);
+
+        assertThat(result.getNickname()).isEqualTo("구글러-2");
+        verify(registrationService).registerOAuth(eq("dupname@booktimer.com"), eq("구글러-2"),
+                eq("Asia/Seoul"), eq(AuthProvider.GOOGLE), any());
+    }
+
+    @Test
     @DisplayName("provision: 이메일 미검증(email_verified=false)이면 거부하고 아무 사용자도 만들지/조회하지 않는다")
     void provision_unverifiedEmail_rejected() {
         assertThatThrownBy(() -> service.provision("attacker@booktimer.com", "공격자", false))

@@ -4,6 +4,7 @@ import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.AccountService;
 import com.booktimer.user.InvalidPasswordException;
+import com.booktimer.user.NicknameAlreadyExistsException;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
 import com.booktimer.user.UserSettingsService;
@@ -96,12 +97,18 @@ public class SettingsController {
             return "settings";
         }
 
-        settingsService.updateSettings(
-                principal.getName(),
-                form.getNickname(),
-                form.getTimezone(),
-                form.getIncrementMinutes() * (long) SECONDS_PER_MINUTE,
-                form.getCapMinutes() * (long) SECONDS_PER_MINUTE);
+        try {
+            settingsService.updateSettings(
+                    principal.getName(),
+                    form.getNickname(),
+                    form.getTimezone(),
+                    form.getIncrementMinutes() * (long) SECONDS_PER_MINUTE,
+                    form.getCapMinutes() * (long) SECONDS_PER_MINUTE);
+        } catch (NicknameAlreadyExistsException e) {
+            // 남이 쓰는 닉네임으로 바꾸려 한 경우 — 필드 에러로 알리고 재렌더.
+            bindingResult.rejectValue("nickname", "nickname.duplicate", "이미 사용 중인 닉네임입니다");
+            return "settings";
+        }
 
         redirectAttributes.addFlashAttribute("message", "설정을 저장했습니다.");
         return "redirect:/settings";

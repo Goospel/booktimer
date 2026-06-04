@@ -29,6 +29,7 @@
 - [T-022. SSR(웹MVC) 앱엔 `ObjectMapper` 빈이 없어 주입 실패 → 자체 생성](#t-022-ssr웹mvc-앱엔-objectmapper-빈이-없어-주입-실패--자체-생성)
 - [T-023. 직접 추가한 책 삭제가 500 — reading_session FK 미정리로 부모 삭제 실패, 좁은 catch가 못 잡음](#t-023-직접-추가한-책-삭제가-500--reading_session-fk-미정리로-부모-삭제-실패-좁은-catch가-못-잡음)
 - [T-027. 구글 로그인 중 Chrome "위험한 사이트" 차단 — Safe Browsing이 신규 `.click` 도메인 오탐](#t-027-구글-로그인-중-chrome-위험한-사이트-차단--safe-browsing이-신규-click-도메인-오탐)
+- [T-028. 유니크 제약 추가가 같은 값을 쓰던 기존 테스트 픽스처를 깨뜨린다](#t-028-유니크-제약-추가가-같은-값을-쓰던-기존-테스트-픽스처를-깨뜨린다)
 
 ---
 
@@ -480,6 +481,26 @@ private final ObjectMapper objectMapper = new ObjectMapper();  // 주입 대신 
 
 ---
 
+## T-028. 유니크 제약 추가가 같은 값을 쓰던 기존 테스트 픽스처를 깨뜨린다
+
+**증상**: 닉네임에 유니크 제약(`uk_users_nickname`)을 추가하고 가입 서비스에 `existsByNickname` 사전검사를 넣자, **기존 통합 테스트 하나가 실패**한다(`NicknameAlreadyExistsException`). 코드는 멀쩡한데 테스트만 깨져 헷갈린다 — 그것도 한 테스트만.
+
+**원인**: 그 테스트가 **한 메서드 안에서 두 사용자를 등록하는데, 닉네임을 동일한 하드코딩 값("독서가")으로 재사용**한다(예: IDOR 검증 — A의 책을 B가 못 본다). 지금껏 닉네임은 중복이 허용돼 문제없었지만, **새 유니크 규칙이 "닉은 중복돼도 됨"이라는 픽스처의 숨은 전제를 깨뜨린다**. 두 번째 등록에서 사전검사가 던진다.
+- 대부분의 테스트는 **메서드당 한 사용자만** 등록하고 `@Transactional` 롤백으로 격리되므로 **안 깨진다** — 깨지는 건 *한 트랜잭션에서 2명 이상*을 같은 값으로 만드는 케이스뿐이라 눈에 잘 안 띈다.
+
+**해결 / 예방**:
+- 픽스처에서 **유니크해야 하는 값을 사용자별로 구분**한다. 가장 간단한 건 이메일 local part 등 이미 유니크한 키에서 파생:
+  ```java
+  private User register(String email) {
+      String nickname = email.substring(0, email.indexOf('@')); // 이메일이 유니크 → 닉도 유니크
+      return registrationService.register(email, "rawpw1234", nickname, SEOUL, Role.USER, today());
+  }
+  ```
+- 일반화: **제약을 강화하는 PR은 코드뿐 아니라 "그 값을 재사용하던 테스트 데이터 가정"도 함께 바꾼다.** 전체 스위트를 돌려 깨지는 픽스처를 찾고(여기선 1개), 한 트랜잭션에서 동일 값으로 여러 행을 만들던 곳을 유니크화한다. 백필로 운영 데이터는 메웠어도(N-039) **테스트 픽스처는 별개로 손봐야** 한다.
+- 개념: [learning-notes.md N-039](learning-notes.md#n-039-제약을-뒤늦게-강화하려면-기존-위반-데이터부터-백필한다-backfill) — 백필과 같은 뿌리(제약 강화의 파급).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -507,3 +528,4 @@ private final ObjectMapper objectMapper = new ObjectMapper();  // 주입 대신 
 | 2026-06-03 | T-023 (읽은 적 있는 책 삭제가 reading_session FK 미정리로 부모 삭제 실패 → unlinkBook(book_id=null) 후 삭제, 세션 보존 / 좁은 catch가 DataIntegrityViolationException 놓쳐 500, 테스트는 TransientPropertyValueException로 발현, N-034) |
 | 2026-06-03 | T-027 (구글 로그인 콜백에서 Chrome "위험한 사이트" 차단 — Safe Browsing이 신규 .click 도메인+로그인폼+OAuth 콜백을 피싱 오탐, 서버는 정상 / 해결=Search Console 보안문제 검토요청, 근본은 .com·.app TLD 이전, N-036) |
 | 2026-06-03 | T-027 보강 (결말 — Search Console 도메인 인증만으로 재평가 자연 해소(검토요청 불필요), 공식 판정은 처음부터 깨끗=클라이언트 휴리스틱 오탐 / Transparency에 2020 멀웨어 보관처리 이력=재활용 .click 도메인의 과거 평판이 원인) |
+| 2026-06-04 | T-028 (닉네임 유니크 제약 추가가 한 메서드에서 같은 닉을 두 사용자에 쓰던 IDOR 테스트를 깨뜨림 — 메서드당 1명·롤백이면 안전, 2명 동일값만 파손 / 픽스처를 이메일 기반 유니크 닉으로 / 제약 강화 PR은 테스트 데이터 가정도 바꾼다, N-039) |
