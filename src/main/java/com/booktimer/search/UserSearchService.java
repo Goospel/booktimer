@@ -1,8 +1,5 @@
 package com.booktimer.search;
 
-import com.booktimer.book.BookRepository;
-import com.booktimer.book.BookVisibility;
-import com.booktimer.follow.FollowService;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
 import org.springframework.stereotype.Service;
@@ -25,15 +22,11 @@ public class UserSearchService {
     static final int MIN_QUERY_LENGTH = 2;
 
     private final UserRepository userRepository;
-    private final BookRepository bookRepository;
-    private final FollowService followService;
+    private final UserRowAssembler rowAssembler;
 
-    public UserSearchService(UserRepository userRepository,
-                             BookRepository bookRepository,
-                             FollowService followService) {
+    public UserSearchService(UserRepository userRepository, UserRowAssembler rowAssembler) {
         this.userRepository = userRepository;
-        this.bookRepository = bookRepository;
-        this.followService = followService;
+        this.rowAssembler = rowAssembler;
     }
 
     public List<UserSearchResult> search(User viewer, String query) {
@@ -45,14 +38,7 @@ public class UserSearchService {
             return List.of();
         }
         return userRepository.findTop20ByNicknameContainingIgnoreCaseOrderByNicknameAsc(q).stream()
-                .map(u -> toResult(viewer, u))
+                .map(u -> rowAssembler.toRow(viewer, u))
                 .toList();
-    }
-
-    private UserSearchResult toResult(User viewer, User found) {
-        boolean self = found.getId() != null && found.getId().equals(viewer.getId());
-        long publicBooks = bookRepository.countByUserAndVisibility(found, BookVisibility.PUBLIC);
-        boolean following = !self && followService.isFollowing(viewer, found);
-        return new UserSearchResult(found.getNickname(), publicBooks, following, self);
     }
 }

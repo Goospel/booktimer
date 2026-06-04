@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${heading} + ' — BookTimer'">팔로우 목록 — BookTimer</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <span class="emoji">📚</span>
+        <h1>BookTimer</h1>
+    </header>
+    <p class="greeting" th:text="${heading}">내 팔로워</p>
+
+    <section class="card">
+        <!-- 팔로워 / 팔로잉 탭 전환 -->
+        <nav class="follow-tabs">
+            <a th:href="@{/me/followers}" th:classappend="${listType == 'followers'} ? 'active'">팔로워</a>
+            <a th:href="@{/me/following}" th:classappend="${listType == 'following'} ? 'active'">팔로잉</a>
+        </nav>
+
+        <p th:if="${users.isEmpty()}" class="status-line" th:text="${emptyMessage}">목록이 비어 있습니다.</p>
+        <ul class="book-list" th:unless="${users.isEmpty()}">
+            <li class="book-row" th:each="r : ${users}">
+                <div class="book-meta">
+                    <a class="book-title" th:href="@{/u/{n}(n=${r.nickname})}" th:text="${r.nickname}">닉네임</a>
+                    <span class="book-author" th:text="'공개 책 ' + ${r.publicBookCount} + '권'">공개 책 0권</span>
+                </div>
+                <div class="book-actions">
+                    <span th:if="${r.self}" class="book-status-badge">나</span>
+                    <form th:unless="${r.self}" method="post"
+                          th:action="@{${r.following} ? '/unfollow' : '/follow'}">
+                        <input type="hidden" name="nickname" th:value="${r.nickname}">
+                        <input type="hidden" name="redirect"
+                               th:value="${listType == 'followers'} ? '/me/followers' : '/me/following'">
+                        <button type="submit"
+                                th:classappend="${r.following} ? 'btn-ghost' : 'btn-primary'"
+                                th:text="${r.following} ? '언팔로우' : '팔로우'">팔로우</button>
+                    </form>
+                </div>
+            </li>
+        </ul>
+    </section>
+
+    <p class="link-row">
+        <a th:href="@{/}">← 대시보드</a>
+        <a th:href="@{/u/{n}(n=${nickname})}">👤 내 프로필</a>
+    </p>
+</div>
+</body>
+</html>
