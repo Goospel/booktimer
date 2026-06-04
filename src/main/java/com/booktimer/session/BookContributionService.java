@@ -45,20 +45,20 @@ public class BookContributionService {
         ZoneId zone = ZoneId.of(user.getTimezone());
         LocalDate today = LocalDate.ofInstant(clock.instant(), zone);
 
-        // 그 책의 완료 세션을 유저 타임존 일자로 묶는다(최신 일자 먼저).
-        Map<LocalDate, long[]> byDate = new TreeMap<>(Comparator.reverseOrder()); // [0]=총초, [1]=세션수
+        // 그 책의 완료 세션을 유저 타임존 일자로 묶어 총 독서 시간을 낸다(최신 일자 먼저).
+        Map<LocalDate, Long> byDate = new TreeMap<>(Comparator.reverseOrder());
         for (ReadingSession session : sessionRepository.findByUserAndBook(user, book)) {
             if (session.isActive()) {
                 continue; // 진행 중(미종료) 세션은 제외
             }
             LocalDate date = LocalDate.ofInstant(session.getStartedAt(), zone);
-            long[] agg = byDate.computeIfAbsent(date, d -> new long[2]);
-            agg[0] += session.getDurationSeconds();
-            agg[1] += 1;
+            byDate.merge(date, session.getDurationSeconds(), Long::sum);
         }
 
+        // 이 페이지는 한 책이라 책 제목은 그 책 하나뿐(상세 화면에선 굳이 렌더하지 않음).
+        List<String> titles = List.of(book.getTitle());
         List<DailyReadingRecord> dailyHistory = byDate.entrySet().stream()
-                .map(e -> new DailyReadingRecord(e.getKey(), e.getValue()[0], (int) e.getValue()[1]))
+                .map(e -> new DailyReadingRecord(e.getKey(), e.getValue(), titles))
                 .toList();
 
         Map<LocalDate, Long> secondsByDate = new LinkedHashMap<>();

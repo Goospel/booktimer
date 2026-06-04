@@ -87,7 +87,6 @@
                 <span class="record-date" th:text="${#temporals.format(r.date(), 'yyyy-MM-dd (E)')}">2026-06-01</span>
                 <span class="record-time mono"
                       th:text="${(r.totalSeconds() / 3600) + '시간 ' + ((r.totalSeconds() % 3600) / 60) + '분'}">0시간 0분</span>
-                <span class="record-count" th:text="${r.sessionCount() + '회'}">0회</span>
             </li>
         </ul>
     </section>

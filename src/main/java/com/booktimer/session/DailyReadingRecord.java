@@ -1,16 +1,18 @@
 package com.booktimer.session;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * 하루치 독서 기록 집계 (읽기 전용 뷰 모델).
  *
- * <p>README 2.2 — MVP에서는 "어떤 책"인지는 묻지 않고 <b>시간만</b> 기록한다. 같은 날(유저 타임존
- * 기준)의 완료된 측정 세션들을 묶어 총 독서 시간과 세션 수를 담는다.
+ * <p>같은 날(유저 타임존 기준)의 완료된 측정 세션들을 묶어 <b>총 독서 시간</b>과 그날 읽은
+ * <b>책 제목들</b>을 담는다. 세션 "횟수"는 일부러 담지 않는다 — 1분도 안 읽고 멈춘 측정까지
+ * 세어 숫자가 부풀고 의미가 약하기 때문(사용자 결정 2026-06-05). 대신 "얼마나·무슨 책"을 보여준다.
  *
- * @param date          유저 타임존 기준 일자
- * @param totalSeconds  그날의 총 독서 시간(초)
- * @param sessionCount  그날의 완료된 측정 세션 수
+ * @param date         유저 타임존 기준 일자
+ * @param totalSeconds 그날의 총 독서 시간(초)
+ * @param bookTitles   그날 읽은 책 제목(중복 제거, 읽은 순서). 책 미지정(레거시) 세션만 있으면 빈 목록.
  */
-public record DailyReadingRecord(LocalDate date, long totalSeconds, int sessionCount) {
+public record DailyReadingRecord(LocalDate date, long totalSeconds, List<String> bookTitles) {
 }
