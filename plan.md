@@ -384,3 +384,4 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 | 2026-06-04 | SNS 1단계 완성 — **책별 공개 토글**(BookVisibility PRIVATE/PUBLIC, Flyway V8 default PRIVATE 백필, `POST /books/{id}/visibility` 소유권 강제, 책장 셀렉트). 닉네임 유니크와 합쳐 1단계 완료 → 다음은 2단계 프로필 페이지(/u/{nickname}). TDD |
 | 2026-06-04 | 책장 긴 제목 깨짐 수정 — `.book-meta flex:1 1 220px` + `.book-row flex-wrap` + `word-break:keep-all`(PR #110, CSS만) |
 | 2026-06-04 | SNS 2단계 — **개인 공개 프로필 페이지 `GET /u/{nickname}`**(SSR). PUBLIC 책장 + 공개 잔디(PUBLIC 책 세션만, §3.5). 닉네임 404·비로그인 차단·본인도 PUBLIC만(공개 미리보기). `ProfileService`, `publicDailyHistory`/`publicTotalSecondsByBook` 가시성 필터, 대시보드 진입 링크. 신규 마이그레이션 없음. TDD Red→Green 2사이클 |
+| 2026-06-04 | SNS 3단계 — **닉네임 검색 + 팔로우**. `GET /search`(부분일치·최소2글자·상한20), `Follow`(Flyway V9)+`FollowService`(자기팔로우 금지·멱등·언팔즉시), `POST /follow`·`/unfollow`(오픈리다이렉트 방어), 프로필에 팔로워/팔로잉 카운트+팔로우 버튼. 검색결과=닉네임+공개책수+팔로우버튼. 탈퇴 시 follow 정리. 대시보드 검색 링크. TDD. (별도 발견: 탈퇴 시 book 미삭제 FK 위반 — 후속 분리) |

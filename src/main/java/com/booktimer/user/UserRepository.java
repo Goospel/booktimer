@@ -17,6 +17,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
     /** 닉네임으로 사용자 조회 — 프로필 페이지 핸들(유니크 uk_users_nickname, 1:1). */
     Optional<User> findByNickname(String nickname);
 
+    /**
+     * 닉네임 부분일치 검색(대소문자 무시), 닉네임 오름차순, <b>최대 20명</b>.
+     * 결과 상한(Top20)으로 열거·크롤링을 완화한다(sns-design §7.3·§9). 최소 길이 가드는 서비스가 담당.
+     */
+    java.util.List<User> findTop20ByNicknameContainingIgnoreCaseOrderByNicknameAsc(String nickname);
+
     boolean existsByEmail(String email);
 
     boolean existsByNickname(String nickname);

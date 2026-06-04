@@ -2,8 +2,10 @@ package com.booktimer.profile;
 
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookVisibility;
+import com.booktimer.follow.FollowService;
 import com.booktimer.session.BookReadingStatsService;
 import com.booktimer.session.ReadingContributionService;
+import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,25 +29,36 @@ public class ProfileService {
     private final BookRepository bookRepository;
     private final BookReadingStatsService statsService;
     private final ReadingContributionService contributionService;
+    private final FollowService followService;
 
     public ProfileService(UserRepository userRepository,
                           BookRepository bookRepository,
                           BookReadingStatsService statsService,
-                          ReadingContributionService contributionService) {
+                          ReadingContributionService contributionService,
+                          FollowService followService) {
         this.userRepository = userRepository;
         this.bookRepository = bookRepository;
         this.statsService = statsService;
         this.contributionService = contributionService;
+        this.followService = followService;
     }
 
     /**
      * 닉네임으로 공개 프로필을 조립한다. 없는 닉네임이면 빈 Optional(컨트롤러가 404로 변환 — 존재 누설 회피 §5.3).
+     * 팔로우 버튼 분기를 위해 {@code viewer} 기준 following/self를 함께 계산한다(관계는 카운트만 노출).
      */
-    public Optional<ProfileView> profileOf(String nickname) {
-        return userRepository.findByNickname(nickname).map(target -> new ProfileView(
-                target.getNickname(),
-                bookRepository.findByUserAndVisibilityOrderByCreatedAtDesc(target, BookVisibility.PUBLIC),
-                statsService.publicTotalSecondsByBook(target),
-                contributionService.publicContributionGraph(target)));
+    public Optional<ProfileView> profileOf(User viewer, String nickname) {
+        return userRepository.findByNickname(nickname).map(target -> {
+            boolean self = target.getId() != null && target.getId().equals(viewer.getId());
+            return new ProfileView(
+                    target.getNickname(),
+                    bookRepository.findByUserAndVisibilityOrderByCreatedAtDesc(target, BookVisibility.PUBLIC),
+                    statsService.publicTotalSecondsByBook(target),
+                    contributionService.publicContributionGraph(target),
+                    followService.followerCount(target),
+                    followService.followingCount(target),
+                    !self && followService.isFollowing(viewer, target),
+                    self);
+        });
     }
 }

@@ -1,5 +1,6 @@
 package com.booktimer.user;
 
+import com.booktimer.follow.FollowRepository;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.timer.ReadingTimerRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -22,15 +23,18 @@ public class AccountService {
     private final UserRepository userRepository;
     private final ReadingTimerRepository timerRepository;
     private final ReadingSessionRepository sessionRepository;
+    private final FollowRepository followRepository;
     private final PasswordEncoder passwordEncoder;
 
     public AccountService(UserRepository userRepository,
                           ReadingTimerRepository timerRepository,
                           ReadingSessionRepository sessionRepository,
+                          FollowRepository followRepository,
                           PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.timerRepository = timerRepository;
         this.sessionRepository = sessionRepository;
+        this.followRepository = followRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -73,10 +77,15 @@ public class AccountService {
         purge(user);
     }
 
-    /** 연관 데이터까지 FK 순서로 제거: 세션(N) → 타이머(1:1) → 유저. */
+    /**
+     * 연관 데이터까지 FK 순서로 제거: 세션(N) → 타이머(1:1) → 팔로우(내가 건/나를 향한 관계) → 유저.
+     * 팔로우는 follower_id·followee_id로 users를 FK 참조하므로 유저 삭제 전에 양방향 모두 지운다.
+     */
     private void purge(User user) {
         sessionRepository.deleteByUser(user);
         timerRepository.deleteByUser(user);
+        followRepository.deleteByFollower(user);
+        followRepository.deleteByFollowee(user);
         userRepository.delete(user);
     }
 
