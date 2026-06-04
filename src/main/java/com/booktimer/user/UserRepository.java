@@ -14,6 +14,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByEmail(String email);
 
+    /** 닉네임으로 사용자 조회 — 프로필 페이지 핸들(유니크 uk_users_nickname, 1:1). */
+    Optional<User> findByNickname(String nickname);
+
     boolean existsByEmail(String email);
 
     boolean existsByNickname(String nickname);

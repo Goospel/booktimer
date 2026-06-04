@@ -382,3 +382,5 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 | 2026-06-04 | SNS 1단계 일부 — **닉네임 유니크화 구현**(Flyway V7 중복 백필+`uk_users_nickname`, LOCAL 가입 중복 거부, 소셜 자동 유일화 `NicknameAllocator`, 설정 변경 중복 거부, `existsByNickname`). TDD. 남은 1단계: 책별 공개 토글(`book.visibility`) |
 | 2026-06-04 | 소셜 사용자 닉네임 직접 지정 — 구글 가입자가 자동 임시닉 대신 **온보딩에서 닉네임 직접 입력**(폼 필드 추가·prefill·중복 거부). 자동 배정은 온보딩 완료 전 임시값. TDD |
 | 2026-06-04 | SNS 1단계 완성 — **책별 공개 토글**(BookVisibility PRIVATE/PUBLIC, Flyway V8 default PRIVATE 백필, `POST /books/{id}/visibility` 소유권 강제, 책장 셀렉트). 닉네임 유니크와 합쳐 1단계 완료 → 다음은 2단계 프로필 페이지(/u/{nickname}). TDD |
+| 2026-06-04 | 책장 긴 제목 깨짐 수정 — `.book-meta flex:1 1 220px` + `.book-row flex-wrap` + `word-break:keep-all`(PR #110, CSS만) |
+| 2026-06-04 | SNS 2단계 — **개인 공개 프로필 페이지 `GET /u/{nickname}`**(SSR). PUBLIC 책장 + 공개 잔디(PUBLIC 책 세션만, §3.5). 닉네임 404·비로그인 차단·본인도 PUBLIC만(공개 미리보기). `ProfileService`, `publicDailyHistory`/`publicTotalSecondsByBook` 가시성 필터, 대시보드 진입 링크. 신규 마이그레이션 없음. TDD Red→Green 2사이클 |
