@@ -35,6 +35,7 @@
                     <span class="book-title" th:text="${r.title()}">제목</span>
                     <span class="book-author" th:if="${r.author()}" th:text="${r.author()}">저자</span>
                     <span class="book-pub" th:if="${r.publisher()}" th:text="${r.publisher()}">출판사</span>
+                    <th:block th:replace="~{::followPopularity(${r.isbn13()})}"></th:block>
                 </div>
                 <form method="post" th:action="@{/books/add}" class="book-add-form">
                     <input type="hidden" name="title" th:value="${r.title()}">
@@ -91,6 +92,7 @@
                     <span class="book-time mono" th:with="secs=${bookTimes.get(b.id)}"
                           th:if="${secs != null and secs > 0}"
                           th:text="'⏱ ' + ${secs / 3600 + '시간 ' + (secs % 3600) / 60 + '분'}">⏱ 0시간 0분</span>
+                    <th:block th:replace="~{::followPopularity(${b.isbn13})}"></th:block>
                 </div>
                 <div class="book-actions">
                     <form method="post" th:action="@{/books/{id}/status(id=${b.id})}">
@@ -125,5 +127,17 @@
         <a th:href="@{/history}">📖 독서 기록</a>
     </p>
 </div>
+
+<!-- 팔로우 스코프 인기 카운트 배지(§7.4) — 책장·검색결과 공용. popularity 맵(isbn→원함/읽음)에서 조회.
+     임계 마스킹 없음(확정), 0인 버킷·데이터 없는 isbn은 표시 안 함. -->
+<th:block th:fragment="followPopularity(isbn)"
+          th:with="pop=${popularity != null and isbn != null ? popularity.get(isbn) : null}">
+    <span class="follow-popularity" th:if="${pop != null and pop.hasAny()}">👥 팔로우 중
+        <span th:if="${pop.wantCount() > 0}" th:text="${pop.wantCount()} + '명 원함'">N명 원함</span>
+        <span th:if="${pop.wantCount() > 0 and pop.readCount() > 0}">·</span>
+        <span th:if="${pop.readCount() > 0}" th:text="${pop.readCount()} + '명 읽음'">M명 읽음</span>
+    </span>
+</th:block>
+
 </body>
 </html>

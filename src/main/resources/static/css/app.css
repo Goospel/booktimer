@@ -440,6 +440,8 @@ a.book-title:hover { text-decoration: underline; }
 .book-pick { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; color: var(--muted); font-size: .9rem; white-space: nowrap; }
 .book-pick select { flex: 1 1 auto; min-width: 0; padding: 7px 8px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
 .book-time { font-size: .8rem; color: var(--ok); font-weight: 600; }
+/* 팔로우 스코프 인기 카운트(§7.4) — 책 메타 안 작은 배지 */
+.follow-popularity { font-size: .78rem; color: var(--accent); font-weight: 600; }
 
 /* 개인정보처리방침 등 고지 문서 — 읽기용 본문(카드 기본 h2의 작은 라벨 스타일을 본문 제목으로 되돌림) */
 .legal { text-align: left; line-height: 1.6; }

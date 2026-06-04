@@ -3,6 +3,10 @@ package com.booktimer.web;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
+import com.booktimer.book.BookVisibility;
+import com.booktimer.follow.Follow;
+import com.booktimer.follow.FollowRepository;
+import com.booktimer.popularity.FollowScopePopularity;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -45,6 +49,8 @@ class BookControllerTest {
     @Autowired
     private BookRepository bookRepository;
     @Autowired
+    private FollowRepository followRepository;
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     private User newUser(String email) {
@@ -62,6 +68,32 @@ class BookControllerTest {
                 .andExpect(view().name("books"))
                 .andExpect(model().attributeExists("books", "statuses", "searchEnabled"))
                 .andExpect(model().attribute("searchEnabled", false));
+    }
+
+    @Test
+    @DisplayName("GET /books: 팔로우한 사용자의 PUBLIC 책 인기 카운트를 popularity 모델에 싣는다(§7.4)")
+    @SuppressWarnings("unchecked")
+    void books_includesFollowScopePopularity() throws Exception {
+        User viewer = newUser("pv@booktimer.com");
+        User followee = newUser("pf@booktimer.com");
+        followRepository.save(Follow.of(viewer, followee));
+
+        String isbn = "9788900012345";
+        // 같은 책이 뷰어 책장에 있어야 그 isbn이 페이지에서 집계 대상으로 모인다.
+        bookRepository.save(Book.register(viewer, "같은 책", null, isbn, null, null, null, BookStatus.WANT_TO_READ));
+        Book followeeBook = Book.register(followee, "같은 책", null, isbn, null, null, null, BookStatus.READING);
+        followeeBook.changeVisibility(BookVisibility.PUBLIC);
+        bookRepository.save(followeeBook);
+
+        mockMvc.perform(get("/books").with(user("pv@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeExists("popularity"))
+                .andExpect(result -> {
+                    var popularity = (java.util.Map<String, FollowScopePopularity>)
+                            result.getModelAndView().getModel().get("popularity");
+                    assertThat(popularity.get(isbn).readCount()).isEqualTo(1); // 팔로이 1명 읽음
+                    assertThat(popularity.get(isbn).wantCount()).isEqualTo(0);
+                });
     }
 
     @Test

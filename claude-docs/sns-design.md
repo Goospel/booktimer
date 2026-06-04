@@ -335,12 +335,15 @@ create index idx_follow_followee on follow (followee_id);
 
 **이번에 안 하는 것**: 팔로워/팔로잉 **목록 화면**(후속) · 인기 카운트(4단계) · 차단/신고/레이트리밋(5단계) · 승인제(후속).
 
-### 7.4 4단계 — 팔로우 스코프 인기 카운트 (요구사항 3)
-- 책 검색 결과·내 책장 각 책에 **"내 팔로우 중 N명이 원함(WANT_TO_READ) · M명이 읽음(READING/FINISHED)"** 표시.
+### 7.4 4단계 — 팔로우 스코프 인기 카운트 (요구사항 3) — 구현 완료 ✅ 2026-06-04
+- 책 검색 결과·내 책장 각 책에 **"👥 팔로우 중 N명 원함 · M명 읽음"** 표시.
 - 집계: 내가 팔로우한 사용자(followee) ∩ 그 책(isbn13) ∩ **그 책이 내게 보이는 것(PUBLIC)** 의 status별 distinct user count.
-- ⚠️ **소수 재식별** — 내 팔로우 1~2명이면 사실상 특정 가능(누가 읽는지 클릭 한 번으로 추론). k-익명성 임계(예: N≥? 에서만 숫자, 그 이하면 숨김) 검토.
-- ⚠️ **N+1 회피** — 검색 페이지당 ISBN을 한 번의 `group by`로 일괄 집계(팔로우 조인 포함).
-- "원함/읽음"의 status 매핑 확정 필요(§11).
+- **status 매핑 확정**(§11-4): 원함 = `WANT_TO_READ` · **읽음 = `READING` ∪ `FINISHED`**.
+- **k-익명성 확정**(§11-5): **임계 없음 — 1명부터 항상 표시**. 근거: 1차엔 "누가 읽는지" drill-down 목록이 없어 재식별 위험 제한적(사용자 확정 2026-06-04). drill-down 도입 시 재검토.
+- **N+1 회피**: 페이지의 isbn 목록을 한 번의 `group by`로 일괄 집계(팔로우 theta 조인 포함) — `BookRepository.followScopePopularity`.
+- 구현: `FollowScopePopularityService.countByIsbn(viewer, isbns)` → `Map<isbn, FollowScopePopularity(want, read)>`,
+  `BookController#books`가 책장+검색결과 isbn을 모아 1회 호출·모델 주입, `books.html` `followPopularity` 프래그먼트(0 버킷·데이터 없는 isbn 미표시).
+  Flyway 신규 없음(기존 book/follow 조회). TDD: 서비스 단위 + 집계 통합(실 H2 — 팔로우 스코프·PRIVATE 제외·distinct·status 버킷) + 컨트롤러 끝단.
 
 ### 7.5 5단계 — 악용/스팸 대응 (운영 안정화)
 - 차단(block), 신고, 닉네임 열거 완화, 레이트리밋(스팸 팔로우·크롤링).
@@ -383,8 +386,8 @@ create index idx_follow_followee on follow (followee_id);
 1. ✅ **(해결) 잔디·총시간 프라이버시(§3.5)** — "공개하지 않은 책은 잔디에 노출 안 함"(사용자 2026-06-04). 타인 잔디는 PUBLIC 책 세션만, 책 미지정 세션도 제외.
 2. **닉네임 백필 규칙** — 기존 중복 닉네임 정리(NULL은 이미 NOT NULL이라 없음). 채택: **가장 먼저 가입한(낮은 id) 쪽 유지, 이후 중복은 `-{id}` 접미사**(id가 PK라 유일 보장). 사용자는 이후 설정에서 변경 가능.
 3. **닉네임 변경 허용?** — 허용 시 핸들 URL·검색·외부 링크 깨짐 정책(영구 고정 vs 변경 가능 + 과거 핸들 처리).
-4. **인기 카운트 status 매핑** — "원함"=WANT_TO_READ 확정. "읽음"=FINISHED만? READING 포함?
-5. **인기 카운트 k-익명성** — 내 팔로우 N명 중 몇 이상일 때만 숫자 노출(소수 재식별 방어)?
+4. ✅ **(해결) 인기 카운트 status 매핑** — 원함=`WANT_TO_READ`, **읽음=`READING`∪`FINISHED`**(사용자 확정 2026-06-04).
+5. ✅ **(해결) 인기 카운트 k-익명성** — **임계 없음, 1명부터 항상 표시**(사용자 확정 2026-06-04). drill-down(누구인지 목록)이 1차엔 없어 재식별 위험 제한적이라는 판단. drill-down 도입 시 재검토.
 6. **공개 3-state 필요?** — 지금은 PUBLIC/PRIVATE 2-state. "팔로워에게만"(FOLLOWERS) 단계가 1차에 필요한가? (제안: 후속)
 7. **잔디 viewer 의존 계산 위치** — `ContributionGraphBuilder`는 순수 빌더라 가시성 필터를 서비스에서 세션 필터링으로 넣는 게 자연스러움(빌더 시그니처 영향 최소).
 8. **프로필 SEO 개방(비로그인 열람)** — 2단계는 **로그인 한정**으로 시작(확정 2026-06-04). PUBLIC 프로필을 비로그인·검색엔진에 열지(SecurityConfig `/u/**` permitAll), 연다면 크롤링·열거 완화(레이트리밋·robots)와 함께. 후속 결정.

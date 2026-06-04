@@ -198,13 +198,13 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 > 몇 명이 원함/읽음(팔로우 스코프 카운트) · ④⑤ 개인 프로필 페이지(공개 책장+잔디) · ⑥ **닉네임 유니크**(검색·핸들).
 > 설계: 책별 `visibility`(PRIVATE 기본 백필)·`follow` 테이블·닉네임 유니크화(기존 중복/NULL 백필 선결)·canViewBook 게이트·
 > 잔디 viewer 가시성 필터(비공개 책 세션 간접 누출 차단)·로드맵(①닉네임+책공개→②프로필→③팔로우→④팔로우스코프 카운트→⑤악용).
-> **결론: SNS 대부분 SSR로 충분 → API-first big-bang 불필요.** 남은 §11 열린 질문은 4단계 진입 전 확정(카운트 status 매핑·k익명, 닉네임 변경 정책).
+> **결론: SNS 대부분 SSR로 충분 → API-first big-bang 불필요.** 카운트 status 매핑·k익명은 4단계에서 확정(§11-4·5 해결). 남은 열린 질문은 닉네임 변경 정책(§11-3)·프로필 SEO 개방(§11-8) 정도.
 
 > 🗺️ **로드맵 진행 상태** (정본 상세: [sns-design.md §7](claude-docs/sns-design.md)). 단계별 ✅는 머지·배포 완료 기준.
 > - ✅ **1단계** (PR #108·#109) — 닉네임 유니크화(V7) + 책별 공개 토글(V8, BookVisibility PRIVATE 기본)
 > - ✅ **2단계** (PR #111) — 개인 공개 프로필 `/u/{nickname}`(SSR, PUBLIC 책장+잔디, 비공개 책 세션 간접 누출 차단 §3.5)
 > - ✅ **3단계** (PR #112) — 닉네임 검색(부분일치·상한20) + 팔로우(follow V9, 자기팔로우 금지·멱등·언팔즉시) + 프로필 팔로우 카운트/버튼
-> - ⬜ **4단계** — 팔로우 스코프 인기 카운트("내 팔로우 중 N명이 원함/읽음") — 착수 전 §7.4·§11 결정 확정(원함/읽음 status 매핑·k익명 임계·N+1 일괄집계)
+> - ✅ **4단계** (PR #118) — 팔로우 스코프 인기 카운트("👥 팔로우 중 N명 원함 · M명 읽음", 책장·검색결과). 원함=WANT_TO_READ·읽음=READING∪FINISHED 확정, k익명 임계 없음(drill-down 없어 위험 제한적, 확정), isbn 일괄 group by(N+1 회피), Flyway 신규 없음
 > - ⬜ **5단계** — 악용 방지(차단·신고·레이트리밋·열거 완화)
 > - 부수 픽스: 탈퇴 시 follow·book FK 자식 정리(PR #112·#113), sweep T-029·N-040(PR #114).
 
@@ -393,3 +393,5 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 | 2026-06-04 | 책장 긴 제목 깨짐 수정 — `.book-meta flex:1 1 220px` + `.book-row flex-wrap` + `word-break:keep-all`(PR #110, CSS만) |
 | 2026-06-04 | SNS 2단계 — **개인 공개 프로필 페이지 `GET /u/{nickname}`**(SSR). PUBLIC 책장 + 공개 잔디(PUBLIC 책 세션만, §3.5). 닉네임 404·비로그인 차단·본인도 PUBLIC만(공개 미리보기). `ProfileService`, `publicDailyHistory`/`publicTotalSecondsByBook` 가시성 필터, 대시보드 진입 링크. 신규 마이그레이션 없음. TDD Red→Green 2사이클 |
 | 2026-06-04 | SNS 3단계 — **닉네임 검색 + 팔로우**. `GET /search`(부분일치·최소2글자·상한20), `Follow`(Flyway V9)+`FollowService`(자기팔로우 금지·멱등·언팔즉시), `POST /follow`·`/unfollow`(오픈리다이렉트 방어), 프로필에 팔로워/팔로잉 카운트+팔로우 버튼. 검색결과=닉네임+공개책수+팔로우버튼. 탈퇴 시 follow 정리. 대시보드 검색 링크. TDD. (별도 발견: 탈퇴 시 book 미삭제 FK 위반 — 후속 분리) |
+| 2026-06-04 | 대시보드 UX 수정 — 하단 바로가기 링크를 퀵 액션 타일 2열 그리드로(한글 글자깨짐 구조 해결, PR #116), 측정 카드 '읽을 책' 라벨 세로깨짐·select 카드밖 넘침 수정(`.book-pick` flex+nowrap+min-width:0, PR #117). CSS/템플릿만 |
+| 2026-06-04 | SNS 4단계 — **팔로우 스코프 인기 카운트**(PR #118). 책장·검색결과 각 책에 "👥 팔로우 중 N명 원함 · M명 읽음". 원함=WANT_TO_READ·읽음=READING∪FINISHED, k익명 임계 없음(drill-down 없어 위험 제한적). `BookRepository.followScopePopularity`(isbn 일괄 group by·팔로우 theta조인·PUBLIC·distinct, N+1 회피)+`FollowScopePopularityService`+`books.html` 프래그먼트. Flyway 신규 없음. TDD(서비스 단위·집계 통합·컨트롤러 끝단) |
