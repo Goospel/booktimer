@@ -421,6 +421,9 @@ button, .btn {
 /* 검색 바(넓게) 위 + 검색 버튼 아래로 세로 배치 — 버튼이 입력칸을 잡아먹지 않게. */
 .search-row { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
 .search-row input[type=text] {
+    /* 부모가 column flex라 .book-search-form의 flex:1 1 160px가 '높이' 160px로 잘못 먹힌다 —
+       리셋해서 한 줄 높이로 되돌린다(세로로 길쭉해지던 문제). */
+    flex: none;
     width: 100%;
     box-sizing: border-box;
     padding: 12px 14px;
