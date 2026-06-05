@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title th:text="${nickname} + '님의 프로필 — BookTimer'">프로필 — BookTimer</title>
+    <title th:text="${nickname} + '님의 책방 — BookTimer'">책방 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
 </head>
 <body>
@@ -12,7 +12,7 @@
         <span class="emoji">📚</span>
         <h1>BookTimer</h1>
     </header>
-    <p class="greeting"><span th:text="${nickname}">닉네임</span>님의 공개 프로필</p>
+    <p class="greeting"><span th:text="${nickname}">닉네임</span>님의 책방</p>
     <p class="muted" th:text="'@' + ${loginId}">@아이디</p>
 
     <!-- 팔로우 카운트 + 버튼. 본인 프로필에서만 카운트가 목록(/me/**)으로 링크 — 남의 목록은 비노출(privacy). -->
