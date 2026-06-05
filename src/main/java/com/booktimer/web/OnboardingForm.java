@@ -3,6 +3,7 @@ package com.booktimer.web;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
@@ -16,7 +17,16 @@ import jakarta.validation.constraints.Size;
  */
 public class OnboardingForm {
 
-    /** 표시 닉네임(유니크). 공백 불가. */
+    /**
+     * 로그인/식별/검색용 공개 아이디(@핸들). <b>한번 정하면 바꿀 수 없다</b>. 영소문자/숫자/언더스코어
+     * 3~20자(대문자 입력은 서버가 소문자로 정규화). 예약어 차단·유니크는 도메인/서비스가 검증한다.
+     */
+    @NotBlank
+    @Pattern(regexp = "^[A-Za-z0-9_]{3,20}$",
+            message = "아이디는 영문/숫자/_ 3~20자여야 합니다")
+    private String loginId;
+
+    /** 표시 닉네임(중복 허용·수정 가능). 공백 불가. */
     @NotBlank
     @Size(max = 50)
     private String nickname;
@@ -35,6 +45,14 @@ public class OnboardingForm {
     @NotNull
     @Min(0)
     private Integer capMinutes;
+
+    public String getLoginId() {
+        return loginId;
+    }
+
+    public void setLoginId(String loginId) {
+        this.loginId = loginId;
+    }
 
     public String getNickname() {
         return nickname;

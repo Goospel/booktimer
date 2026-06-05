@@ -243,10 +243,34 @@ public class User extends BaseTimeEntity {
      * (admin·root 등)는 거부한다. <b>유니크 보장은 이 메서드의 책임이 아니다</b> — DB 유니크 제약 +
      * 서비스의 사전 중복 확인(PR-2)이 담당한다(여기선 형식만).
      *
+     * <p><b>한번 정해지면 영원히 불변</b>이다(공개 @핸들 = 영구 식별자, 인스타·X 모델). 이미 설정된 뒤
+     * 재호출하면(같은 값이든 다른 값이든) {@link IllegalStateException}을 던진다. 표시 이름은 nickname이
+     * 담당하며 자유롭게 바꿀 수 있다 — login_id만 불변이다.
+     *
      * @param rawLoginId 사용자가 입력한 아이디(정규화 전)
+     * @throws IllegalStateException    이미 login_id가 설정돼 있는 경우(불변 위반)
      * @throws IllegalArgumentException 공백/형식 불일치/예약어인 경우
      */
     public void assignLoginId(String rawLoginId) {
+        if (this.loginId != null) {
+            throw new IllegalStateException(
+                    "login_id is immutable and already set: " + this.loginId);
+        }
+        this.loginId = normalizeLoginId(rawLoginId);
+    }
+
+    /**
+     * 입력 아이디를 정규화(앞뒤 공백 제거 + 소문자)하고 형식·예약어를 검증해 반환한다 — <b>상태를 바꾸지 않는다</b>.
+     *
+     * <p>서비스가 유니크 사전 확인을 할 때 쓰는 정규화 단일 출처다: {@code assignLoginId} 전에 이 메서드로
+     * 정규화한 값으로 {@code existsByLoginId}를 조회하면, 아직 영속화되지 않은 자기 자신과 오탐 매칭되는
+     * 것을 피하면서 형식·예약어 검증을 한 곳에서 공유한다(불변 검사만 {@code assignLoginId}가 추가로 한다).
+     *
+     * @param rawLoginId 사용자가 입력한 아이디(정규화 전)
+     * @return 정규화된 login_id(소문자)
+     * @throws IllegalArgumentException 공백/형식 불일치/예약어인 경우
+     */
+    public static String normalizeLoginId(String rawLoginId) {
         if (rawLoginId == null || rawLoginId.isBlank()) {
             throw new IllegalArgumentException("login_id must not be blank");
         }
@@ -258,7 +282,7 @@ public class User extends BaseTimeEntity {
         if (RESERVED_LOGIN_IDS.contains(normalized)) {
             throw new IllegalArgumentException("login_id is reserved: " + normalized);
         }
-        this.loginId = normalized;
+        return normalized;
     }
 
     /** 로그인/식별용 아이디(비공개). 아직 설정 전이면 {@code null}. */

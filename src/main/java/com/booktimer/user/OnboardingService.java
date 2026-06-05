@@ -34,31 +34,34 @@ public class OnboardingService {
     /**
      * 온보딩을 완료한다 — 닉네임을 확정하고, 타이머에 초기값/증가값/상한을 적용하고 사용자를 온보딩 완료로 표시한다.
      *
-     * <p>소셜 로그인 사용자는 가입 시 닉네임이 자동 배정되므로(중복 회피 접미사 포함), 여기서 직접 원하는
-     * 닉네임을 고른다. 닉네임은 유니크(uk_users_nickname)라, 남이 쓰는 값으로 바꾸려 하면 거부한다 —
-     * 단 자기 현재(자동 배정된) 닉네임을 그대로 두는 것은 충돌이 아니다.
+     * <p>온보딩은 사용자가 표시 닉네임을 확정하는 입구다(특히 소셜 로그인 사용자는 자동 배정된 닉을 자기
+     * 것으로 바꾼다). 닉네임은 단순 표시 이름이라 중복을 허용한다 — 영구 식별/검색 핸들은 불변의 login_id다.
      *
      * @param email                   대상 사용자 식별자
-     * @param nickname                사용자가 확정한 닉네임(유니크)
+     * @param loginId                 사용자가 정한 공개 핸들(불변 login_id — 정규화·형식·예약어·유니크 검증)
+     * @param nickname                사용자가 확정한 표시 닉네임(중복 허용)
      * @param initialRemainingSeconds 사용자가 정한 초기 잔여(초, cap 초과 시 클램프)
      * @param dailyIncrementSeconds   하루 증가값(초)
      * @param capSeconds              누적 상한(초)
      * @param today                   온보딩 시점의 "오늘"(유저 타임존 기준 — 누적 기준일로 리셋)
      * @throws IllegalStateException          사용자/타이머가 없는 경우
-     * @throws IllegalArgumentException       값 검증 실패 시(도메인 위임)
-     * @throws NicknameAlreadyExistsException 닉네임이 이미 쓰이는 경우(자기 현재 닉 유지는 예외)
+     * @throws IllegalArgumentException       값 검증 실패 시(도메인 위임 — login_id 형식/예약어 포함)
+     * @throws LoginIdAlreadyExistsException  login_id가 이미 쓰이는 경우
      */
-    public void complete(String email, String nickname, long initialRemainingSeconds,
+    public void complete(String email, String loginId, String nickname, long initialRemainingSeconds,
                          long dailyIncrementSeconds, long capSeconds, LocalDate today) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalStateException("user not found: " + email));
         ReadingTimer timer = timerRepository.findByUser(user)
                 .orElseThrow(() -> new IllegalStateException("no timer for user: " + email));
 
-        // 닉네임을 남이 쓰는 값으로 바꾸려 하면 거부(uk_users_nickname). 자기 현재 닉 유지는 충돌 아님.
-        if (!user.getNickname().equals(nickname) && userRepository.existsByNickname(nickname)) {
-            throw new NicknameAlreadyExistsException(nickname);
+        // 공개 핸들(login_id)을 온보딩에서 단 한 번 확정한다. 정규화·형식·예약어는 도메인이 검증(IAE),
+        // 유니크는 정규화값으로 사전 확인한다 — assign 전에 확인해야 (아직 미영속인) 자기 자신과의 오탐을 피한다.
+        String normalizedLoginId = User.normalizeLoginId(loginId);
+        if (userRepository.existsByLoginId(normalizedLoginId)) {
+            throw new LoginIdAlreadyExistsException(normalizedLoginId);
         }
+        user.assignLoginId(loginId); // 불변 — 온보딩은 1회뿐이라 항상 null→확정
 
         user.updateProfile(nickname, user.getTimezone());
         timer.applyInitialSetup(initialRemainingSeconds, dailyIncrementSeconds, capSeconds, today);

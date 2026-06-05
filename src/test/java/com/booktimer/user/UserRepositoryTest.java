@@ -30,6 +30,10 @@ class UserRepositoryTest {
         return User.of(email, "$2a$10$abcdefghijklmnopqrstuv", "책벌레", "Asia/Seoul", Role.USER);
     }
 
+    private User sampleUser(String email, String nickname) {
+        return User.of(email, "$2a$10$abcdefghijklmnopqrstuv", nickname, "Asia/Seoul", Role.USER);
+    }
+
     @Test
     @DisplayName("저장 후 email로 조회된다 (id 부여 확인)")
     void save_thenFindByEmail() {
@@ -58,5 +62,18 @@ class UserRepositoryTest {
 
         assertThatThrownBy(() -> userRepository.saveAndFlush(sampleUser("dup@booktimer.com")))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("같은 nickname 중복 저장은 허용된다 (nickname은 더 이상 유니크가 아님 — 공개 핸들은 login_id)")
+    void duplicateNickname_allowed() {
+        userRepository.saveAndFlush(sampleUser("a@booktimer.com", "같은닉"));
+
+        // V14에서 uk_users_nickname 제거 → 표시 이름 중복은 정상. 식별/검색은 login_id가 담당.
+        User second = userRepository.saveAndFlush(sampleUser("b@booktimer.com", "같은닉"));
+
+        assertThat(second.getId()).isNotNull();
+        assertThat(userRepository.findByEmail("a@booktimer.com")).isPresent();
+        assertThat(userRepository.findByEmail("b@booktimer.com")).isPresent();
     }
 }

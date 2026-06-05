@@ -92,19 +92,18 @@ class OAuthUserProvisioningServiceTest {
     }
 
     @Test
-    @DisplayName("provision: 표시 이름이 이미 쓰이는 닉네임이면 충돌을 피해 -2 를 붙여 만든다 (로그인은 거부 못 하므로 자동 유일화)")
-    void provision_nicknameCollision_autoUniquifies() {
+    @DisplayName("provision: 표시 이름이 이미 쓰여도 그대로 닉네임으로 쓴다 (nickname 중복 허용 — 자동 유일화 없음)")
+    void provision_duplicateDisplayName_usedAsIs() {
         when(userRepository.findByEmail("dupname@booktimer.com")).thenReturn(Optional.empty());
-        when(userRepository.existsByNickname("구글러")).thenReturn(true);   // 이미 쓰이는 표시 이름
-        when(userRepository.existsByNickname("구글러-2")).thenReturn(false);
         when(registrationService.registerOAuth(any(), any(), any(), any(), any()))
                 .thenAnswer(inv -> User.ofOAuth(inv.getArgument(0), inv.getArgument(1),
                         inv.getArgument(2), Role.USER, inv.getArgument(3)));
 
         User result = service.provision("dupname@booktimer.com", "구글러", true);
 
-        assertThat(result.getNickname()).isEqualTo("구글러-2");
-        verify(registrationService).registerOAuth(eq("dupname@booktimer.com"), eq("구글러-2"),
+        // 중복 확인(existsByNickname) 없이 provider가 준 이름을 그대로 쓴다.
+        assertThat(result.getNickname()).isEqualTo("구글러");
+        verify(registrationService).registerOAuth(eq("dupname@booktimer.com"), eq("구글러"),
                 eq("Asia/Seoul"), eq(AuthProvider.GOOGLE), any());
     }
 
