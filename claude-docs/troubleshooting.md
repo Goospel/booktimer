@@ -637,6 +637,32 @@ Caused by: java.lang.IllegalStateException: Cannot create a session after the re
 
 ---
 
+## T-034. 생성자 2개(주입 + 테스트용)인 `@Service`/빈은 주입 생성자에 `@Autowired` 필수 — 없으면 no-arg 탐색 실패(NoSuchMethodException)
+
+**증상**: 멀쩡하던 컨텍스트가 갑자기 **대량 실패**(`@SpringBootTest`·`@DataJpaTest` 등 컨텍스트 로드하는 테스트가 한꺼번에). 단위테스트는 통과.
+```
+BeanCreationException → BeanInstantiationException
+  Caused by: java.lang.NoSuchMethodException: com.booktimer.quote.QuoteService.<init>()
+```
+NoSuchMethodException이 가리키는 건 **no-arg 생성자**(`<init>()`)인데, 그 빈엔 no-arg가 아예 없다.
+
+**원인 — 생성자가 둘 이상인데 `@Autowired`가 없으면 Spring이 주입 대상을 못 정한다**:
+- 격언을 DB로 옮기며 `QuoteService`에 생성자를 둘 뒀다: `public QuoteService(QuoteRepository)`(운영 주입)와 package-private `QuoteService(QuoteRepository, Random)`(테스트용 Random 주입 이음새).
+- Spring은 **생성자가 정확히 1개면** 그걸 자동으로 쓰지만, **2개 이상이면 `@Autowired` 표시가 없는 한 어느 것도 "주입 생성자"로 못 고른다** → 마지막 폴백인 **기본(no-arg) 생성자**를 찾고, 없으니 `NoSuchMethodException`.
+- 직전 버전(JSON 적재)에선 public 생성자가 **no-arg**였어서 우연히 폴백과 맞아 통과했다 — 주입받는 생성자로 바뀌며 드러났다.
+
+**해결 / 예방**:
+- **주입받을 생성자에 `@Autowired`를 명시**한다(테스트용 보조 생성자와 공존할 때 특히):
+  ```java
+  @Autowired
+  public QuoteService(QuoteRepository repository) { this(repository, new Random()); }
+
+  QuoteService(QuoteRepository repository, Random random) { ... } // 테스트용 — Spring은 안 봄
+  ```
+- **교훈**: "테스트용 보조 생성자를 추가했더니 컨텍스트가 대량으로 깨졌다"면 생성자 다중성을 의심하라. `NoSuchMethodException: <init>()`(no-arg)는 "Spring이 주입 생성자를 못 골라 폴백했다"는 신호. 컴파일·단위테스트는 멀쩡하고 **컨텍스트 로드 테스트만** 무더기로 깨지는 패턴(T-022·T-020과 같은 "대량 실패 = 컨텍스트 로드 실패" 부류).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -669,4 +695,6 @@ Caused by: java.lang.IllegalStateException: Cannot create a session after the re
 | 2026-06-04 | T-030 (알라딘 QueryType=Title이 문서("제목만")와 달리 저자까지 매칭 — "모기" 제목검색에 저자 모기 겐이치로 책 섞임 / 파라미터는 정확, 외부 API 동작이 문서와 불일치 → 결과를 BookService.search에서 후필터(기준 필드에 검색어 든 것만, 공백·대소문자 정규화 contains), 페이저 과대집계는 알려진 한계, N-041) |
 | 2026-06-04 | T-031 (Thymeleaf `th:if="${!flag}"`에서 flag가 모델에 없으면 null → SpringEL이 `!null` 평가 못 해 TemplateProcessingException, 정상 경로 테스트만 깨지고 플래그 true 경로는 멀쩡 / "안 넣으면 false" 아님 → 모든 경로에서 boolean 명시 또는 널-세이프 `== true`, 레이트리밋 안내 플래그 추가 중 발견) |
 | 2026-06-04 | T-032 (Thymeleaf 함정 2종: ① 같은 요소 `th:each`(우선순위 200)+`th:replace`(100)는 replace가 먼저 돌아 루프변수 null → th:block으로 each 분리 / ② 파라미터 fragment를 본문에 정의하면 전체 페이지 렌더 때 그 자리서도 한 번 그려져 파라미터 null NPE → `th:if="${r!=null}"` 가드 또는 별도 fragments 파일·인라인 복제 / 컨트롤러 MockMvc가 실제 템플릿 렌더라 끝단에서 잡힘, drill-down book-readers.html 만들다 발견, 자매 T-031) |
+| 2026-06-05 | T-033 (큰 페이지에서 폼이 하단에만 있으면 CSRF 숨김필드의 lazy 세션 생성이 응답 커밋 후 일어나 500 → 컨트롤러에서 렌더 전 토큰 선확정, N-044) |
+| 2026-06-05 | T-034 (생성자 2개(주입+테스트용)인 @Service는 @Autowired 없으면 Spring이 no-arg 탐색 → NoSuchMethodException, 컨텍스트 로드 테스트만 대량 실패 → 주입 생성자에 @Autowired 명시, T-022/T-020 "대량 실패=컨텍스트 로드 실패" 부류) |
 | 2026-06-04 | T-033 (큰 페이지(독서 잔디 ~371칸)에서 폼이 하단에만 있으면 `th:action` CSRF 숨김필드의 lazy 세션 생성이 응답 커밋 후라 `IllegalStateException: Cannot create a session after the response has been committed` → 500 / 평소엔 앞쪽 측정 폼이 세션을 먼저 만들어 숨었는데 "측정 책 필수"로 책 0권 사용자에게서 시작 폼이 사라지자 드러남 / 컨트롤러에서 렌더 전 `CsrfToken#getToken()`으로 토큰 선확정=세션 미리 생성, 폼 위치·페이지 크기 무관 / N-044) |
