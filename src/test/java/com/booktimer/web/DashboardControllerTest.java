@@ -3,6 +3,7 @@ package com.booktimer.web;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
+import com.booktimer.quote.Quote;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.session.ReadingSessionService;
@@ -238,6 +239,22 @@ class DashboardControllerTest {
         mockMvc.perform(get("/").with(user("recent@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(model().attribute("recentBookId", b.getId()));
+    }
+
+    @Test
+    @DisplayName("GET /: 인사말 자리에 띄울 작가 격언을 모델에 싣는다 (큐레이션 목록 안의 한 줄)")
+    void dashboard_includesRandomAuthorQuote() throws Exception {
+        registerOnboarded("quote@booktimer.com", "격언", today());
+
+        var result = mockMvc.perform(get("/").with(user("quote@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeExists("quote"))
+                .andReturn();
+
+        Quote quote = (Quote) result.getModelAndView().getModel().get("quote");
+        assertThat(quote).isNotNull();
+        assertThat(quote.text()).isNotBlank();
+        assertThat(quote.author()).isNotBlank();
     }
 
     @Test

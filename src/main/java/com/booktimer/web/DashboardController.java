@@ -1,5 +1,6 @@
 package com.booktimer.web;
 
+import com.booktimer.quote.QuoteService;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.ReadingContributionService;
 import com.booktimer.user.Role;
@@ -29,13 +30,16 @@ public class DashboardController {
     private final CurrentUserService currentUserService;
     private final DashboardModel dashboardModel;
     private final ReadingContributionService contributionService;
+    private final QuoteService quoteService;
 
     public DashboardController(CurrentUserService currentUserService,
                                DashboardModel dashboardModel,
-                               ReadingContributionService contributionService) {
+                               ReadingContributionService contributionService,
+                               QuoteService quoteService) {
         this.currentUserService = currentUserService;
         this.dashboardModel = dashboardModel;
         this.contributionService = contributionService;
+        this.quoteService = quoteService;
     }
 
     @GetMapping("/")
@@ -64,6 +68,10 @@ public class DashboardController {
 
         dashboardModel.populate(model, user);
         model.addAttribute("graph", contributionService.contributionGraph(user));
+        // 인사말 자리에 띄울 작가 격언 — 전체 페이지 경로에서만 뽑는다(htmx 라이브 영역 밖이라
+        // 측정 start/stop엔 안 바뀌고 페이지 로드 때만 갱신). DashboardModel에 두면 라이브 경로와
+        // 공유돼 start/stop마다 헛돌므로 여기서만 싣는다(잔디 graph와 같은 이유).
+        model.addAttribute("quote", quoteService.random());
         return "dashboard";
     }
 }

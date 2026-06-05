@@ -168,7 +168,14 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 - 점진적 향상: 권한 거부/구형 브라우저면 ②는 건너뛰고 ①(소리+플래시)로 자연 폴백 — htmx 폴백과 같은 결.
 - 주로 `dashboard.js` + CSS/사운드 파일. Java 테스트 게이트엔 안 걸리지만 transition 감지 같은 순수 로직은 작게 검증 가능.
 
-### [ ] (백로그) 대시보드 인사말 → 작가 격언 랜덤 노출 (+ 미래: 책장 작가 / 사용자 저장 문장)
+### 대시보드 인사말 → 작가 격언 랜덤 노출 (MVP 완료 ✅ 2026-06-05, PR #169)
+
+> **MVP 구현 완료** — `님, 환영합니다`를 작가 격언으로 교체. `com.booktimer.quote` 패키지 신설:
+> `Quote`(record text/author), `QuoteService`(classpath `quotes.json` 적재 + `Random` 주입 이음새로 `random()`),
+> 격언 18개 큐레이션(`src/main/resources/quotes.json`). `DashboardController`가 전체 페이지 경로에서만
+> `quote`를 모델에 싣고(`DashboardModel` 아님 — htmx 라이브 공유 회피, 잔디 graph와 같은 자리), `dashboard.html`
+> 인사말을 `${quote.text()} — ${quote.author()}`로 교체(`.greeting.quote` CSS, 작가는 작게·흐리게). TDD: QuoteServiceTest
+> (적재·주입 Random 결정적 선택·항상 목록 내) + DashboardControllerTest(모델 quote 적재). 아래는 설계·미래 진화 기록.
 
 **원하는 것**: 대시보드 상단 `님, 환영합니다`(`dashboard.html:20`, `.greeting`) 자리에 **작가들의 격언/명언을 랜덤으로** 띄운다.
 체크박스·설정 폼 없이 **페이지를 띄울 때마다 자연스럽게 바뀐다**. 보이는 위치·스타일은 지금 그대로.
@@ -752,3 +759,4 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 | 2026-06-05 | **ISBN 개정판/세트 동일성을 "보류 — 아마 불필요"로 강등** — 능동 백로그에서 빼고 판단 근거만 남김(손대지 않기로 결정). 근본 원인: ISBN은 작품(Work)이 아니라 판본(Manifestation)을 가리킴(FRBR) → "같은 작품 다른 판본"은 태생적으로 다른 ISBN이라 isbn13 카운트가 조각남. 개정판=합칠 수도 있으나 작품 ID 상위 키를 알라딘이 안 줘 fuzzy 추론 필요(정답 없음), 세트=조회 막는 문제 아니라 세트 ISBN≠낱권 ISBN 동일성 모호. ROI는 사용자·책 규모 커져 조각남이 눈에 띌 때만 생김 → 그 전엔(영영) 불필요. ISBN10→13(#3)은 명확한 착수 트리거(수동 ISBN 입력) 있어 후속 유지. 문서만. (PR #166) |
 | 2026-06-05 | **목표 달성 알람 백로그 항목 추가** — 측정 중 누적 잔여가 0이 되는 순간(=오늘 목표 달성) 사용자에게 알림을 주고 싶다는 요구. 타이머가 JS에서 1초마다 도므로(`dashboard.js`의 `goalMet`) "잔여 0 순간"을 이미 클라이언트가 계산 → 서버·DB·마이그레이션 불필요. 범위는 ①탭 안 알람(소리+화면 플래시)+②Web Notifications API(탭 떠 있으면 백그라운드여도 OS 알림)로 한정, ③Push API+Service Worker(탭 닫아도 알림)는 오버킬로 안 함(측정은 페이지 열어둔 채 일어남). 구현 메모: 상태 아닌 **전이(false→true) 순간 1회**에 걸기, 측정시작 클릭 제스처로 오디오 차단 없음, 권한 거부/구형 브라우저는 ①로 폴백. 문서만. (PR #167) |
 | 2026-06-05 | **대시보드 인사말 → 작가 격언 랜덤 노출 백로그 항목 추가** — `님, 환영합니다`(`dashboard.html:20`) 자리에 작가 격언을 페이지 로드마다 랜덤 노출(설정 폼 없이 자연스럽게). 인사말이 htmx 라이브 영역 밖이라 측정 start/stop엔 안 바뀌고 전체 페이지 로드 때만 갱신 — 원하는 동작이 구조상 자연히 나옴. 소스 MVP=앱 내장 큐레이션 목록(외부 API는 핫패스 네트워크·영어·장애로 비추), 서버사이드 랜덤(SSR·JS 불필요), `QuoteService`+`Random` 주입(테스트 이음새, Clock 패턴), `DashboardController`에만 추가(`DashboardModel`은 htmx 공유라 금지), `@Cacheable` 금지. 🔮 미래 진화 3단계: ①전역 랜덤 → ②책장 작가(`book.author`) 필터 → ③사용자 저장 문장(하이라이트 신규 엔티티) 회전, `QuoteSource` 이음새로 소스만 교체. 문서만. (PR #168) |
+| 2026-06-05 | **대시보드 인사말 → 작가 격언 랜덤 노출 — MVP 구현** — 백로그(#168)대로 인사말을 작가 격언으로 교체. `com.booktimer.quote` 패키지 신설: `Quote`(record), `QuoteService`(classpath `quotes.json` 적재 + `Random` 주입 이음새—Clock 패턴 N-010—로 `random()` 결정적 테스트, 매 호출 새로 뽑아 캐시 없음), 격언 18개 큐레이션(`quotes.json`). SSR 앱 ObjectMapper 빈 없음(T-022) → `new ObjectMapper()` 직접 적재. `DashboardController`가 **전체 페이지 경로에서만** `quote` 모델 적재(`DashboardModel` 아님 — htmx 라이브 영역과 공유라 start/stop마다 헛돌고 프래그먼트 밖이라 안 그려짐; 잔디 graph와 같은 자리). `dashboard.html` 인사말을 `${quote.text()} — ${quote.author()}`로 교체(`.greeting.quote` CSS — 작가 작게·흐리게). 인사말이 라이브 영역 밖이라 측정 start/stop엔 안 바뀌고 페이지 로드 때만 랜덤 갱신. TDD(QuoteServiceTest: 적재·주입 Random 결정적 선택·항상 목록 내 / DashboardControllerTest: 모델 quote 적재 Red→Green) + 전체 스위트 그린. 🔮 미래(②책장 작가 필터 ③사용자 저장 문장)는 백로그 유지. (PR #169) |

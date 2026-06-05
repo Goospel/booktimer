@@ -55,6 +55,17 @@ body {
     margin: 0 0 20px;
 }
 
+/* 인사말 자리의 작가 격언 — 문장은 본문 톤, 작가는 한 단 작고 흐리게(출처 표기). */
+.greeting.quote .quote-text {
+    font-style: italic;
+}
+.greeting.quote .quote-author {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.85em;
+    opacity: 0.8;
+}
+
 .card {
     background: var(--card-bg);
     border: 1px solid var(--border);
