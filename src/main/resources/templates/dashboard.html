@@ -28,7 +28,10 @@
     <div id="dashboard-live" th:fragment="live">
         <div th:if="${error}" class="alert alert-error" th:text="${error}">에러 메시지</div>
 
-        <!-- 타이머 카드: 서버 값은 data-* 로 주입, Alpine이 1초마다 갱신 -->
+        <!-- 타이머 + 측정 통합 카드: 서버 값은 data-* 로 주입, Alpine이 1초마다 갱신.
+             '남은 독서 시간'과 '측정' 두 카드를 하나로 합쳤다 — 진행 상태를 알리던 문구
+             ("진행 중인 측정이 없습니다."/"읽는 중: …")는 이미 책 선택이 눈에 보여 불필요하므로 제거.
+             start/stop은 hx-post로 무리로드, JS 없으면 일반 form POST(redirect)로 폴백. -->
         <section class="card timer-card"
                  x-data="readingTimer()"
                  th:attr="data-active=${hasActiveSession},data-started=${activeStartedAt},data-remaining=${remainingSeconds}">
@@ -46,16 +49,9 @@
             <p class="cap-badge" th:if="${atCap}">
                 ⚠️ 누적 상한에 도달했어요. 더는 쌓이지 않지만, 지금 읽어 따라잡아 보세요.
             </p>
-        </section>
 
-        <!-- 측정 상태 + start/stop. hx-post로 무리로드, JS 없으면 일반 form POST(redirect)로 폴백 -->
-        <section class="card">
-            <h2>측정</h2>
-            <div th:if="${hasActiveSession}">
-                <p class="status-line" th:if="${activeBookTitle}">📖 읽는 중:
-                    <span th:text="${activeBookTitle}">책 제목</span>
-                </p>
-                <p class="status-line" th:unless="${activeBookTitle}">측정 진행 중 (책 미지정)</p>
+            <!-- 측정 컨트롤: 상태 문구 없이 곧바로 진행 중이면 누적+종료, 아니면 책 선택+시작 -->
+            <div class="timer-controls" th:if="${hasActiveSession}">
                 <p class="status-line muted" th:if="${activeBookTitle}">이 책 누적 독서
                     <strong th:text="${activeBookTotalSeconds / 3600 + '시간 ' + (activeBookTotalSeconds % 3600) / 60 + '분'}">0시간 0분</strong>
                 </p>
@@ -64,8 +60,7 @@
                     <button type="submit" class="btn-danger">측정 종료</button>
                 </form>
             </div>
-            <div th:unless="${hasActiveSession}">
-                <p class="status-line">진행 중인 측정이 없습니다.</p>
+            <div class="timer-controls" th:unless="${hasActiveSession}">
                 <!-- 측정은 반드시 책을 골라야 시작된다(책 미지정 측정 금지). "읽고싶음"은 제외하고
                      「읽는 중」/「완독」을 optgroup으로 구분한다. 측정할 책이 없으면 시작 폼 대신 추가 안내만. -->
                 <form th:if="${(readingBooks != null and !readingBooks.isEmpty()) or (finishedBooks != null and !finishedBooks.isEmpty())}"

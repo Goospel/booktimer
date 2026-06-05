@@ -134,6 +134,9 @@ body {
 .status-line { margin: 0 0 14px; color: var(--muted); }
 .status-line .mono { color: var(--text); font-weight: 600; }
 
+/* 타이머와 한 카드로 합쳐진 측정 컨트롤 — 큰 숫자 바로 아래 답답하지 않게 위 여백을 둔다 */
+.timer-controls { margin-top: 18px; }
+
 /* 버튼 */
 button, .btn {
     font: inherit;
