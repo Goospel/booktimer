@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="'@' + ${detail.loginId} + ' — 관리자'">사용자 상세 — 관리자</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+    <style>
+        .kv { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        .kv th { text-align: left; width: 9rem; padding: 0.35rem 0.6rem; opacity: 0.7; font-weight: 600; vertical-align: top; }
+        .kv td { padding: 0.35rem 0.6rem; }
+        .kv details { display: inline; }
+        .kv details summary { cursor: pointer; list-style: none; }
+        .summary-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.4rem; }
+        .chip { font-size: 0.85rem; padding: 0.3rem 0.6rem; border-radius: 8px; background: rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.06); }
+        .admin-table { width: 100%; border-collapse: collapse; margin-top: 0.4rem; font-size: 0.9rem; }
+        .admin-table th, .admin-table td { padding: 0.45rem 0.6rem; border-bottom: 1px solid rgba(0,0,0,0.08); text-align: left; }
+        .admin-table th { font-size: 0.8rem; opacity: 0.7; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <span class="emoji">🪪</span>
+        <h1 th:text="'@' + ${detail.loginId}">@handle</h1>
+    </header>
+
+    <section class="card">
+        <h2>계정</h2>
+        <table class="kv">
+            <tr><th>닉네임</th><td th:text="${detail.nickname}">닉네임</td></tr>
+            <tr><th>email</th><td>
+                <details>
+                    <summary th:text="${detail.emailMasked}">m***@x.com</summary>
+                    <span th:text="${detail.email}">full@x.com</span>
+                </details>
+            </td></tr>
+            <tr><th>provider</th><td th:text="${detail.provider}">LOCAL</td></tr>
+            <tr><th>역할</th><td th:text="${detail.role}">USER</td></tr>
+            <tr><th>가입일</th><td th:text="${#temporals.format(detail.createdAt, 'yyyy-MM-dd HH:mm')}">2026-01-01</td></tr>
+            <tr><th>온보딩</th><td th:text="${detail.onboarded} ? '완료' : '미완'">완료</td></tr>
+            <tr><th>타임존</th><td th:text="${detail.timezone}">Asia/Seoul</td></tr>
+        </table>
+    </section>
+
+    <section class="card">
+        <h2>타이머 설정</h2>
+        <p class="muted" th:if="${detail.timer == null}">타이머 미설정(온보딩 전).</p>
+        <table class="kv" th:if="${detail.timer != null}">
+            <tr><th>하루 증가값</th><td th:text="${detail.timer.dailyIncrementSeconds / 60} + '분'">60분</td></tr>
+            <tr><th>누적 상한(cap)</th><td th:text="${detail.timer.capSeconds / 60} + '분'">600분</td></tr>
+            <tr><th>현재 잔여</th><td>
+                <span th:text="${detail.timer.remainingSeconds / 60} + '분'">0분</span>
+                <span th:if="${detail.timer.atCap}" class="chip">상한 도달</span>
+            </td></tr>
+            <tr><th>마지막 누적일</th><td th:text="${detail.timer.lastAccrualDate}">2026-01-01</td></tr>
+        </table>
+    </section>
+
+    <section class="card">
+        <h2>책장 요약</h2>
+        <div class="summary-chips">
+            <span class="chip">총 <b th:text="${detail.bookshelf.total}">0</b>권</span>
+            <span class="chip">읽고싶음 <b th:text="${detail.bookshelf.wantToRead}">0</b></span>
+            <span class="chip">읽는중 <b th:text="${detail.bookshelf.reading}">0</b></span>
+            <span class="chip">완독 <b th:text="${detail.bookshelf.finished}">0</b></span>
+            <span class="chip">공개 <b th:text="${detail.bookshelf.publicCount}">0</b></span>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2>최근 측정 세션</h2>
+        <p class="muted" th:if="${detail.recentSessions.isEmpty()}">측정 기록이 없습니다.</p>
+        <table class="admin-table" th:unless="${detail.recentSessions.isEmpty()}">
+            <thead>
+            <tr><th>시작</th><th>책</th><th>측정 시간</th></tr>
+            </thead>
+            <tbody>
+            <tr th:each="s : ${detail.recentSessions}">
+                <td th:text="${#temporals.format(s.startedAt, 'yyyy-MM-dd HH:mm')}">2026-01-01 10:00</td>
+                <td th:text="${s.bookTitle != null} ? ${s.bookTitle} : '(책 미지정)'">책 제목</td>
+                <td th:text="${s.durationSeconds / 60} + '분 ' + ${s.durationSeconds % 60} + '초'">10분 0초</td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <p class="link-row">
+        <a th:href="@{/admin/users}">← 사용자 목록</a>
+    </p>
+</div>
+</body>
+</html>

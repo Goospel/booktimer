@@ -23,6 +23,12 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     /** 공개 범위별 책 수 — 검색 결과의 "공개 책 N권" 표시에 쓰인다. */
     long countByUserAndVisibility(User user, BookVisibility visibility);
 
+    /** 사용자의 총 책 수 — 관리자 드릴다운 책장 요약. */
+    long countByUser(User user);
+
+    /** 사용자의 상태(읽고싶음/읽는중/완독)별 책 수 — 관리자 드릴다운 책장 요약. */
+    long countByUserAndStatus(User user, BookStatus status);
+
     /** 소유권 확인용 — 내 책일 때만 조회된다(IDOR 방지). */
     Optional<Book> findByIdAndUser(Long id, User user);
 

@@ -38,4 +38,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     /** 역할 + 온보딩 완료 여부별 사용자 수 — 운영 통계의 "온보딩 완료자" 카드. */
     long countByRoleAndOnboarded(Role role, boolean onboarded);
+
+    /**
+     * 관리자 사용자 목록 검색 — login_id 또는 nickname 부분일치(대소문자 무시), 페이징.
+     * <b>email로는 검색하지 않는다</b>(노출 최소화 — admin-data-lookup-design §2.1).
+     */
+    org.springframework.data.domain.Page<User> findByLoginIdContainingIgnoreCaseOrNicknameContainingIgnoreCase(
+            String loginId, String nickname, org.springframework.data.domain.Pageable pageable);
 }
