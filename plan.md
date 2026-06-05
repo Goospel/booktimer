@@ -189,17 +189,17 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 **왜 구조가 맞는가**: 인사말은 htmx 라이브 영역(`#dashboard-live`) **밖**에 있다 → 측정 시작/종료(htmx swap)로는 안 바뀌고
 **전체 페이지 로드 때만** 다시 그려진다. "페이지 로드마다 바뀌고 측정 버튼엔 안 바뀜"이 추가 작업 없이 자연히 나온다.
 
-**격언 소스 — MVP는 ① 앱 내장 큐레이션 목록**:
-- ① **내장 목록**(resources JSON 또는 Java 상수 `List<Quote{text, author}>`) — 네트워크·비용·실패 0, 오프라인, 빠름. 작가명 출처 표기.
-  짧은 유명 격언은 출처 달면 저작권 일반적으로 무해(짧게 유지).
-- ② 외부 명언 API — **비추**(영어 위주, 대시보드 핫패스마다 네트워크 왕복·지연·레이트리밋·장애, 책/작가 큐레이션 아님).
-- ③ DB 테이블 — 지금 오버킬이나 **아래 미래 진화의 종착점**.
+**격언 소스 — 초기 비교(MVP는 ①, 그 뒤 ③ 채택)**:
+- ① **내장 목록**(resources JSON) — 네트워크·비용·실패 0, 오프라인, 빠름. 작가명 출처 표기. 짧은 유명 격언은 출처 달면 저작권 일반적으로 무해. → **MVP(PR #169)로 채택**.
+- ② 외부 명언 API — **비추**(영어 위주, 대시보드 핫패스마다 네트워크 왕복·지연·레이트리밋·장애, 책/작가 큐레이션 아님). 미채택.
+- ③ DB 테이블 — 처음엔 오버킬로 봤으나 **운영자가 런타임에 추가/삭제하려면 필수** → **PR #170에서 채택**(아래 미래 진화 ②③의 토대도 됨).
 
-**구현 메모(별도 PR, TDD)**:
-- 서버사이드 랜덤 — 목록 전체를 JS로 내려 고르지 말고, **서버에서 하나 뽑아 모델에 실어 Thymeleaf 렌더**(SSR 우선, JS 불필요, 브라우저엔 한 개만).
-- `QuoteService`(불변 목록 + `random()`). **테스트 이음새**: 랜덤은 비결정적 → `Clock` 주입(N-010)처럼 `java.util.Random`을 **주입**해 테스트는 시드/스텁으로 "n번째 선택" 단언.
-- **`DashboardController`에만** 모델 추가(전체페이지 경로, 온보딩·admin 게이트 뒤). `DashboardModel.populate`엔 넣지 말 것 — htmx 라이브 경로와 공유라 start/stop마다 헛돌고 어차피 라이브 프래그먼트 밖이라 안 그려짐.
-- `dashboard.html:20`을 `${quote}`+`${quoteAuthor}`(예: `"문장" — 작가`)로 교체. **캐시 금지**(`@Cacheable` X — 매 렌더 새로 뽑아야 매번 바뀜).
+**구현 메모 (※ 초기 MVP 설계 기준 — 일부는 PR #170에서 진화함, 아래 ⚠️ 참고)**:
+- 서버사이드 랜덤 — 목록 전체를 JS로 내려 고르지 말고, **서버에서 하나 뽑아 모델에 실어 Thymeleaf 렌더**(SSR 우선, JS 불필요, 브라우저엔 한 개만). *(유지)*
+- **테스트 이음새**: 랜덤은 비결정적 → `Clock` 주입(N-010)처럼 `java.util.Random`을 **주입**해 테스트는 시드/스텁으로 "n번째 선택" 단언. *(유지 — PR #170에선 순수 `QuotePicker`로 분리)*
+- **`DashboardController`에만** 모델 추가(전체페이지 경로, 온보딩·admin 게이트 뒤). `DashboardModel.populate`엔 넣지 말 것 — htmx 라이브 경로와 공유라 start/stop마다 헛돌고 어차피 라이브 프래그먼트 밖이라 안 그려짐. *(유지)*
+- **캐시 금지**(`@Cacheable` X — 매 렌더 새로 뽑아야 매번 바뀜). *(유지)*
+- ⚠️ **PR #170에서 바뀐 것**: 소스가 정적 JSON → **DB(`quote` 테이블)**, `QuoteService`는 불변 목록 → **`QuoteRepository` 백업**(매 호출 `findAll`, 빈 목록이면 폴백). `Quote`는 record → `@Entity`. 템플릿은 `${quote.text}`/`${quote.author}`(getter).
 
 **🔮 미래 진화 (지금 우선순위 아님 — 이 기능이 자라는 방향)**:
 1. **MVP + DB/admin 관리 (위, 완료)** — DB 백업 + 운영자 추가/삭제. ③ DB 테이블 인프라(`quote`·`QuoteRepository`)가 이제 깔려 있어 아래 ②③의 토대가 됨.
@@ -767,3 +767,4 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 | 2026-06-05 | **대시보드 인사말 → 작가 격언 랜덤 노출 백로그 항목 추가** — `님, 환영합니다`(`dashboard.html:20`) 자리에 작가 격언을 페이지 로드마다 랜덤 노출(설정 폼 없이 자연스럽게). 인사말이 htmx 라이브 영역 밖이라 측정 start/stop엔 안 바뀌고 전체 페이지 로드 때만 갱신 — 원하는 동작이 구조상 자연히 나옴. 소스 MVP=앱 내장 큐레이션 목록(외부 API는 핫패스 네트워크·영어·장애로 비추), 서버사이드 랜덤(SSR·JS 불필요), `QuoteService`+`Random` 주입(테스트 이음새, Clock 패턴), `DashboardController`에만 추가(`DashboardModel`은 htmx 공유라 금지), `@Cacheable` 금지. 🔮 미래 진화 3단계: ①전역 랜덤 → ②책장 작가(`book.author`) 필터 → ③사용자 저장 문장(하이라이트 신규 엔티티) 회전, `QuoteSource` 이음새로 소스만 교체. 문서만. (PR #168) |
 | 2026-06-05 | **대시보드 인사말 → 작가 격언 랜덤 노출 — MVP 구현** — 백로그(#168)대로 인사말을 작가 격언으로 교체. `com.booktimer.quote` 패키지 신설: `Quote`(record), `QuoteService`(classpath `quotes.json` 적재 + `Random` 주입 이음새—Clock 패턴 N-010—로 `random()` 결정적 테스트, 매 호출 새로 뽑아 캐시 없음), 격언 18개 큐레이션(`quotes.json`). SSR 앱 ObjectMapper 빈 없음(T-022) → `new ObjectMapper()` 직접 적재. `DashboardController`가 **전체 페이지 경로에서만** `quote` 모델 적재(`DashboardModel` 아님 — htmx 라이브 영역과 공유라 start/stop마다 헛돌고 프래그먼트 밖이라 안 그려짐; 잔디 graph와 같은 자리). `dashboard.html` 인사말을 `${quote.text()} — ${quote.author()}`로 교체(`.greeting.quote` CSS — 작가 작게·흐리게). 인사말이 라이브 영역 밖이라 측정 start/stop엔 안 바뀌고 페이지 로드 때만 랜덤 갱신. TDD(QuoteServiceTest: 적재·주입 Random 결정적 선택·항상 목록 내 / DashboardControllerTest: 모델 quote 적재 Red→Green) + 전체 스위트 그린. 🔮 미래(②책장 작가 필터 ③사용자 저장 문장)는 백로그 유지. (PR #169) |
 | 2026-06-05 | **작가 격언 — DB 이전 + 운영자(admin) 관리** — 격언을 정적 JSON에서 DB로 옮겨 **재시작 없이 추가/삭제**(운영자 요청). `Quote` record→`@Entity`(text varchar500/author varchar100, BaseTimeEntity), `QuoteRepository`(`findAllByOrderByIdDesc` 최신 먼저), 선택 로직은 순수 `QuotePicker`(Random 주입 결정적 테스트)로 분리, `QuoteService`는 repo 백업 + **빈 목록이면 폴백 격언 반환**(운영자가 다 지워도 대시보드 안 깨짐). Flyway `V17__create_quote_table.sql`(테이블 + 기존 18개 seed, created_at/updated_at은 INSERT가 auditing 안 타므로 `current_timestamp` 직접). 운영자 화면 `/admin/quotes`(`AdminQuoteController` — 목록+추가+삭제, POST는 CSRF, 공백은 service가 거부→플래시 흡수, `/admin` 랜딩에 진입 링크). `quotes.json` 삭제, `dashboard.html`은 record→entity 따라 `${quote.text}`(getter)로. **함정: 생성자 2개(public 주입 + 테스트용 package-private)면 Spring이 no-arg를 찾다 NoSuchMethodException → 주입 생성자에 `@Autowired` 명시**. TDD: QuotePickerTest(결정적 선택)·QuoteServiceTest(@DataJpaTest add/all 최신순/delete/폴백/공백거부)·AdminQuoteControllerTest(미인증 리다이렉트·USER 403·ADMIN 추가/삭제/공백 Red→Green) + FlywayMigrationTest(V17 validate) + 전체 스위트 그린. (PR #170) |
+| 2026-06-05 | **plan.md 정리 — 격언 기능 섹션 실제 구현과 화해** — 세션 작업(#167~#170) 기록 점검. 격언 섹션의 초기 설계 기록이 실제 출하와 어긋나던 부분 정리: ③ DB는 "오버킬"→PR #170에서 채택으로, "QuoteService 불변 목록"→repo 백업으로, 소스 비교에 채택 PR 표기, 구현 메모에 "⚠️ PR #170에서 바뀐 것"(JSON→DB·record→entity·템플릿 getter) 추가. 근거는 보존하되 무엇이 실제로 출하됐는지 명확화. 문서만. (PR #171) |
