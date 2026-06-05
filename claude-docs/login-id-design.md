@@ -1,6 +1,6 @@
 # 로그인 아이디(login_id) 도입 — 식별/인증 분리 설계 메모
 
-> **상태**: 진행 중 (PR-1 ✅ #146, PR-2 ✅ #147, PR-3 ✅ #148, PR-4 ✅ #149, wipe ✅ 실행됨). **B안 + 기존 데이터 wipe(그린필드)** + **🔁 모델 전환(2026-06-05): login_id를 공개 @핸들로**. 다음: PR-5 NOT NULL 강화.
+> **상태**: 완료 ✅ (PR-1 ✅ #146, PR-2 ✅ #147, PR-3 ✅ #148, PR-4 ✅ #149, wipe ✅ 실행됨, **PR-5 ✅ #156**). **B안 + 기존 데이터 wipe(그린필드)** + **🔁 모델 전환(2026-06-05): login_id를 공개 @핸들로**. 5단계 전부 머지됨.
 > **왜 설계 먼저**: 인증/식별 경계 변경이다 — `principal.getName()`으로 유저를 찾는 컨트롤러 14곳, `findByEmail` 21곳. auth는 깨지면 위험하다.
 >
 > 관련: [plan.md](../plan.md) §관리자 대시보드 · [sns-design.md](sns-design.md) §3.5(가시성 경계) · [learning-notes.md](learning-notes.md) **N-037**(식별=관계/속성 분리).
@@ -86,7 +86,9 @@
 -- V13 — 로그인 아이디(login_id). wipe로 테이블이 비므로 백필 불필요.
 alter table users add column login_id varchar(50);          -- 처음 nullable(증분 PR 안전)
 alter table users add constraint uk_users_login_id unique (login_id);
--- NOT NULL 강화는 모든 생성 경로가 login_id를 채운 뒤(PR-4): alter ... modify login_id ... not null
+-- 무결성 강화(PR-5): 단순 NOT NULL은 OAuth와 충돌(아래 §7 PR-5) → 조건부 CHECK로:
+--   alter table users add constraint ck_users_login_id_when_onboarded
+--     check (onboarded = false or login_id is not null);   -- V15
 ```
 
 - 처음 **nullable**으로 두는 건 wipe 여부와 무관하게 **증분 PR 안전**을 위해서다(PR-1 배포 시점엔 가입 경로가 아직 login_id를 안 채울 수 있음). 모든 생성 경로가 채우면(PR-2) NOT NULL로 좁힌다(PR-4).
@@ -116,7 +118,7 @@ alter table users add constraint uk_users_login_id unique (login_id);
 ## 6. 열린 질문 (착수 전 확정)
 
 - ~~**login_id 형식 규칙**~~ **확정 ✅** — 표준(GitHub/X/Reddit 공통): charset `a-z0-9_`, 길이 **3~20자**, **소문자 정규화 저장**(대소문자 구분 안 함 → `Goospel`=`goospel` 충돌 방지), **예약어 차단**(`admin`·`root`·`me`·`api` 등). `varchar(50)` 컬럼은 여유로 유지(검증은 20자).
-- **login_id NOT NULL 강화 시점**: 모든 생성 경로(가입·OAuth 온보딩)가 채운 뒤 = PR-4. (백필 없으니 단순.)
+- ~~**login_id NOT NULL 강화 시점**~~ **확정 ✅ (PR-5, #156)** — 단순 NOT NULL은 불가능했다. OAuth 사용자는 프로비저닝(INSERT) 시점엔 login_id가 없고 온보딩에서 정하므로(login_id는 불변 → 자동 핸들 박기도 불가), 그 전환 창의 null은 정상이다. 박을 수 있는 진짜 불변식은 **`onboarded = true ⟹ login_id IS NOT NULL`**(조건부 CHECK, V15). 로컬은 가입에서 채워 항상 만족, OAuth는 온보딩 완료와 동시에 채워진다.
 - **wipe 실행 타이밍/방법**: 컷오버 배포 직전 수동 DELETE(역순) — 실행 스크립트·순서 확정.
 - **login_id 변경 정책**: 변경 허용 여부·빈도·쿨다운(닉네임 §11-3과 동행).
 
@@ -130,6 +132,6 @@ alter table users add constraint uk_users_login_id unique (login_id);
 - **PR-2 불변 + 닉네임 중복허용 + 온보딩 캡처** ✅ — ① `assignLoginId` 불변 가드(재설정 시 ISE). ② nickname 유니크 제거(V14 + register/onboarding/settings/oauth-provisioning 검사 제거, `NicknameAllocator`/`NicknameAlreadyExistsException`/`existsByNickname` 삭제). ③ 온보딩에서 전원 login_id 입력+유니크(`existsByLoginId`)/형식/예약어 강제(`OnboardingForm`·`OnboardingService`·`onboarding.html`). 로그인·검색은 아직 email/nickname. TDD: 도메인 불변·중복허용·온보딩 캡처/유니크.
 - **PR-3 공개 핸들 컷오버** ✅ #148 — 검색을 **login_id 기준**으로(`UserSearchService`·`findTop20ByLoginIdContainingIgnoreCaseOrderByLoginIdAsc`), 프로필/팔로우/차단/신고 핸들을 **nickname→login_id**(`/u/{loginId}`·`ProfileService.findByLoginId`·Follow/Block/Report 컨트롤러 `@RequestParam loginId`). `UserSearchResult`·`ProfileView`에 `loginId` 추가(nickname은 표시 이름으로 유지 — 핸들/표시 분리). **부수 효과**: 닉네임 중복 허용(PR-2) 이후 `findByNickname`이 첫 일치 1명이라 오식별하던 팔로우/차단/신고 정합성 버그를 동시 해소. 인증은 아직 email(principal·14곳은 PR-4). TDD: 검색=login_id·닉네임 중복→login_id 정확 식별 회귀.
 - **PR-4 인증 컷오버** ✅ #149 — wipe(ops) 선행 완료 → `loadUserByUsername`=findByLoginId만(email 폴백 없음), principal=login_id, OIDC principal(`BookTimerOidcUser`), 시드 `BOOKTIMER_ADMIN_LOGIN_IDS`. **설계 미세 보정**: ① 14곳 직접 `findByLoginId` 대신 **`CurrentUserService` 공유 리졸버**(findByLoginId 우선 → OAuth 첫 세션만 email 브리지) — OAuth는 첫 로그인 전 login_id가 없어 principal=login_id가 즉시 불가하므로 그 짧은 창을 email로 브리지(이메일 *로그인*은 여전히 차단). ② **로컬 login_id 캡처를 가입으로 이동**(로그인이 login_id 기준이라 가입 시 필요) — 온보딩 캡처는 OAuth 전용(`needsLoginId`로 조건부). ③ `SettingsController`는 principal→User→email로 서비스 시그니처 보존. **가장 큰 PR.** Flyway 없음. TDD: 로그인(login_id)·이메일 차단·리졸버·OIDC·온보딩 조건부·시드·login_id principal 컨트롤러 경로 전부 그린. **⚠️ 배포 전 prod ENV `BOOKTIMER_ADMIN_LOGIN_IDS` 설정 필요.**
-- **PR-5 NOT NULL 강화** — 모든 경로가 채운 뒤 `login_id` NOT NULL(+ email 로그인 잔재 제거 확인).
+- **PR-5 무결성 강화(조건부 NOT NULL)** ✅ #156 — 단순 `login_id NOT NULL`이 **OAuth와 충돌**함을 발견: OAuth는 `provision`→`registerOAuth`로 **login_id=null인 row를 먼저 INSERT**하고 온보딩에서 login_id를 정한다(그 창의 null은 정상). login_id는 불변이라 X식 가입-시 자동 핸들도 불가. 그래서 진짜 불변식 **`onboarded = true ⟹ login_id IS NOT NULL`을 조건부 CHECK**로 박음(`V15`, `ck_users_login_id_when_onboarded`). MySQL 8·H2(MySQL 모드) CHECK 강제. 메인 스위트는 Hibernate 생성이라 무영향(V14와 동일) → `FlywayMigrationTest`가 Flyway 스키마에 적용해 3경계(온보딩+null→거부·온보딩전 null→허용·정상→허용) 검증. **email 로그인 잔재 없음 재확인**: `loadUserByUsername`=`findByLoginId`만(폴백 없음), 남은 `findByEmail`은 설정 조회(principal→User→email)·OAuth 첫 세션 *해석* 브리지·find-or-create로 전부 **로그인 경로 아님**. Flyway만(V15) — 코드 동작 변화 없음. TDD(Red→Green). **login_id 도입 5단계 전부 완료 ✅.**
 
 > §5의 "인증 컷오버" 본문은 PR-4를 가리킨다(핸들 컷오버 PR-3가 그 앞에 추가됨).

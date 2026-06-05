@@ -76,4 +76,45 @@ class FlywayMigrationTest {
                 User.of("dup@example.com", "hash", "닉2", "Asia/Seoul", Role.USER)))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
+
+    // ── login_id 무결성: onboarded ⟹ login_id IS NOT NULL (V15 CHECK, login-id-design PR-5) ──
+    // 단순 NOT NULL은 OAuth와 충돌한다 — OAuth 사용자는 프로비저닝(INSERT) 시점엔 login_id가 없고
+    // 온보딩에서 비로소 정한다. 그 전환 창에선 login_id=null이 정상이라, 조건부 불변식으로 좁힌다.
+
+    @Test
+    void onboarded_user_without_login_id_is_rejected() {
+        // 온보딩 끝난 정식 계정인데 login_id가 비어 있으면 CHECK 위반이어야 한다.
+        User u = User.of("onboarded-nologin@example.com", "hash", "닉", "Asia/Seoul", Role.USER);
+        u.completeOnboarding();
+
+        assertThatThrownBy(() -> userRepository.saveAndFlush(u))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void not_onboarded_user_without_login_id_is_allowed() {
+        // OAuth 프로비저닝 직후 창 — 온보딩 전이면 login_id=null이 정상이다.
+        User u = User.ofOAuth("pending-oauth@example.com", "소셜", "Asia/Seoul",
+                Role.USER, AuthProvider.GOOGLE);
+
+        User saved = userRepository.saveAndFlush(u);
+
+        assertThat(saved.getId()).isNotNull();
+        assertThat(saved.getLoginId()).isNull();
+        assertThat(saved.isOnboarded()).isFalse();
+    }
+
+    @Test
+    void onboarded_user_with_login_id_is_allowed() {
+        // 정상 정식 계정 — login_id 보유 + 온보딩 완료.
+        User u = User.of("onboarded-ok@example.com", "hash", "닉", "Asia/Seoul", Role.USER);
+        u.assignLoginId("realhandle");
+        u.completeOnboarding();
+
+        User saved = userRepository.saveAndFlush(u);
+
+        assertThat(saved.getId()).isNotNull();
+        assertThat(saved.getLoginId()).isEqualTo("realhandle");
+        assertThat(saved.isOnboarded()).isTrue();
+    }
 }

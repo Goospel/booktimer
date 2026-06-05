@@ -86,7 +86,9 @@ public class User extends BaseTimeEntity {
      * 로그인/식별용 아이디이자 <b>공개 @핸들</b>(인스타/X 모델, 설계: login-id-design.md). email 대신 이걸로
      * 로그인·식별하고, 검색·프로필 URL({@code /u/{loginId}})·팔로우 대상 식별도 이 값 기준이다(PR-3 컷오버).
      * 형식은 {@link #LOGIN_ID_PATTERN}(소문자 영숫자·언더스코어 3~20자). 표시 이름(nickname)과 달리 <b>불변</b>이다
-     * ({@link #assignLoginId}). 처음엔 {@code null}(온보딩에서 채움 — PR-2), 최종 NOT NULL(PR-5).
+     * ({@link #assignLoginId}). 로컬 가입은 가입에서, OAuth는 온보딩에서 확정한다 — 그래서 OAuth 사용자는
+     * 프로비저닝~온보딩 사이 정상적으로 {@code null}이다. 단순 NOT NULL 대신 조건부 불변식
+     * {@code onboarded ⟹ login_id IS NOT NULL}을 DB CHECK로 보장한다(V15, PR-5).
      */
     @Column(name = "login_id", length = 50)
     private String loginId;
