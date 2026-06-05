@@ -19,8 +19,8 @@
     </header>
     <!-- 인사말 자리 = 작가 격언(페이지 로드마다 랜덤, DashboardController가 모델에 싣는다). 라이브 영역 밖이라 측정 start/stop엔 안 바뀐다. -->
     <p class="greeting quote">
-        <span class="quote-text" th:text="${quote.text()}">독서는 정신에 있어 운동이 신체에 하는 것과 같다.</span>
-        <span class="quote-author" th:text="'— ' + ${quote.author()}">— 작가</span>
+        <span class="quote-text" th:text="${quote.text}">독서는 정신에 있어 운동이 신체에 하는 것과 같다.</span>
+        <span class="quote-author" th:text="'— ' + ${quote.author}">— 작가</span>
     </p>
 
     <!-- 라이브 영역: start/stop 시 htmx가 이 div(outerHTML)만 프래그먼트로 교체.

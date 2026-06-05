@@ -253,8 +253,8 @@ class DashboardControllerTest {
 
         Quote quote = (Quote) result.getModelAndView().getModel().get("quote");
         assertThat(quote).isNotNull();
-        assertThat(quote.text()).isNotBlank();
-        assertThat(quote.author()).isNotBlank();
+        assertThat(quote.getText()).isNotBlank();
+        assertThat(quote.getAuthor()).isNotBlank();
     }
 
     @Test
