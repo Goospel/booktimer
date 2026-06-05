@@ -13,6 +13,8 @@ import jakarta.persistence.UniqueConstraint;
 
 import java.time.DateTimeException;
 import java.time.ZoneId;
+import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -34,6 +36,13 @@ public class User extends BaseTimeEntity {
     /** 간단한 이메일 형식 검증(공백 없는 local@domain.tld). 정밀 검증은 서비스/검증 계층 몫. */
     private static final Pattern EMAIL_PATTERN =
             Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
+
+    /** login_id 형식: 영소문자/숫자/언더스코어, 3~20자. 입력은 소문자로 정규화한 뒤 검증한다. */
+    private static final Pattern LOGIN_ID_PATTERN = Pattern.compile("^[a-z0-9_]{3,20}$");
+
+    /** 로그인 아이디로 쓸 수 없는 예약어(혼동·사칭·경로 충돌 방지). 정규화(소문자) 후 비교한다. */
+    private static final Set<String> RESERVED_LOGIN_IDS = Set.of(
+            "admin", "administrator", "root", "me", "api", "system", "support", "help", "booktimer");
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -72,6 +81,14 @@ public class User extends BaseTimeEntity {
      */
     @Column(nullable = false)
     private boolean onboarded = false;
+
+    /**
+     * 로그인/식별용 아이디(비공개). email 대신 이걸로 로그인·식별한다(설계: login-id-design.md).
+     * 형식은 {@link #LOGIN_ID_PATTERN}(소문자 영숫자·언더스코어 3~20자). 공개 핸들(nickname)과 달리
+     * 어디에도 노출하지 않는다. 처음엔 {@code null}(가입/온보딩에서 채움 — PR-2), 최종 NOT NULL(PR-4).
+     */
+    @Column(name = "login_id", length = 50)
+    private String loginId;
 
     protected User() {
         // JPA
@@ -217,6 +234,36 @@ public class User extends BaseTimeEntity {
         }
         this.role = Role.ADMIN;
         return true;
+    }
+
+    /**
+     * 로그인 아이디(login_id)를 설정/변경한다. 입력을 소문자로 정규화한 뒤 형식·예약어를 검증한다.
+     *
+     * <p>형식: 영소문자/숫자/언더스코어 3~20자(대문자는 소문자로 정규화 — 대소문자 구분 안 함). 예약어
+     * (admin·root 등)는 거부한다. <b>유니크 보장은 이 메서드의 책임이 아니다</b> — DB 유니크 제약 +
+     * 서비스의 사전 중복 확인(PR-2)이 담당한다(여기선 형식만).
+     *
+     * @param rawLoginId 사용자가 입력한 아이디(정규화 전)
+     * @throws IllegalArgumentException 공백/형식 불일치/예약어인 경우
+     */
+    public void assignLoginId(String rawLoginId) {
+        if (rawLoginId == null || rawLoginId.isBlank()) {
+            throw new IllegalArgumentException("login_id must not be blank");
+        }
+        String normalized = rawLoginId.strip().toLowerCase(Locale.ROOT);
+        if (!LOGIN_ID_PATTERN.matcher(normalized).matches()) {
+            throw new IllegalArgumentException(
+                    "login_id must be 3-20 chars of [a-z0-9_]: " + rawLoginId);
+        }
+        if (RESERVED_LOGIN_IDS.contains(normalized)) {
+            throw new IllegalArgumentException("login_id is reserved: " + normalized);
+        }
+        this.loginId = normalized;
+    }
+
+    /** 로그인/식별용 아이디(비공개). 아직 설정 전이면 {@code null}. */
+    public String getLoginId() {
+        return loginId;
     }
 
     public Long getId() {
