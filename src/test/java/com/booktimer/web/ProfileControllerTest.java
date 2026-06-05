@@ -56,6 +56,12 @@ class ProfileControllerTest {
         return userRepository.save(u);
     }
 
+    private User newAdmin(String email, String loginId, String nickname) {
+        User u = User.of(email, passwordEncoder.encode("rawpw1234"), nickname, "Asia/Seoul", Role.ADMIN);
+        u.assignLoginId(loginId);
+        return userRepository.save(u);
+    }
+
     private void publicBook(User owner, String title) {
         Book b = Book.register(owner, title, null, null, null, null, null, BookStatus.READING);
         b.makePublic();
@@ -76,6 +82,26 @@ class ProfileControllerTest {
     void profile_unknownLoginId_404() throws Exception {
         newUser("viewer@booktimer.com", "viewer", "뷰어");
         mockMvc.perform(get("/u/{loginId}", "nosuchid").with(user("viewer@booktimer.com")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}: 운영자(ADMIN) 프로필은 핸들을 직접 알아도 404 (존재 누설 회피 — 차단과 동일 처리)")
+    void profile_admin_404() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        newAdmin("admin@booktimer.com", "adminhandle", "운영자");
+
+        // 핸들을 정확히 알아도 운영자 프로필은 노출되지 않는다(검색 제외와 일관 — 존재 자체를 숨김)
+        mockMvc.perform(get("/u/{loginId}", "adminhandle").with(user("viewer@booktimer.com")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}: 운영자 본인이 자기 프로필을 조회해도 404 (소셜 프로필 비대상)")
+    void profile_adminSelf_404() throws Exception {
+        newAdmin("admin@booktimer.com", "adminhandle", "운영자");
+
+        mockMvc.perform(get("/u/{loginId}", "adminhandle").with(user("adminhandle")))
                 .andExpect(status().isNotFound());
     }
 
