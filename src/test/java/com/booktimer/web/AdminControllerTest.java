@@ -14,8 +14,11 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
+import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -81,5 +84,17 @@ class AdminControllerTest {
         mockMvc.perform(get("/admin").with(user("boss@booktimer.com").roles("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(model().attributeExists("stats"));
+    }
+
+    @Test
+    @DisplayName("GET /admin: 로그아웃 폼(POST /logout)이 렌더된다 — 운영자도 로그아웃 가능")
+    void admin_admin_hasLogoutForm() throws Exception {
+        registrationService.register("boss@booktimer.com", "rawpw1234", "사장", SEOUL, Role.ADMIN, today());
+
+        mockMvc.perform(get("/admin").with(user("boss@booktimer.com").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(content().string(allOf(
+                        containsString("action=\"/logout\""),
+                        containsString("method=\"post\""))));
     }
 }

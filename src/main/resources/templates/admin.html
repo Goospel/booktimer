@@ -38,6 +38,10 @@
     </header>
     <p class="greeting"><span th:text="${nickname}">운영자</span>님 — 운영 데이터 확인 화면입니다.</p>
 
+    <form th:action="@{/logout}" method="post" class="link-row">
+        <button type="submit" class="btn-ghost">로그아웃</button>
+    </form>
+
     <section class="card">
         <h2>통계 요약</h2>
         <p class="status-line muted">읽기 전용 집계 — 가입자(운영자 제외)·활성·독서 기록 현황.</p>
