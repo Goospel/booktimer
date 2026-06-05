@@ -6,6 +6,7 @@ import com.booktimer.book.BookVisibility;
 import com.booktimer.follow.FollowService;
 import com.booktimer.session.BookReadingStatsService;
 import com.booktimer.session.ReadingContributionService;
+import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
 import org.springframework.stereotype.Service;
@@ -53,6 +54,9 @@ public class ProfileService {
      */
     public Optional<ProfileView> profileOf(User viewer, String loginId) {
         return userRepository.findByLoginId(loginId)
+                // 운영자(ADMIN)는 소셜 프로필 비대상 — 핸들을 직접 알아도 존재 누설 없이 빈 결과 → 404
+                // (검색 제외와 일관: 운영자 존재 자체를 숨김. 본인이 봐도 동일하게 404 — 운영자는 /admin이 영역)
+                .filter(target -> target.getRole() != Role.ADMIN)
                 // 차단 관계(어느 방향이든)면 존재 누설 없이 빈 결과 → 404 (대칭, §7.5)
                 .filter(target -> !blockRepository.existsBetween(viewer, target))
                 .map(target -> {
