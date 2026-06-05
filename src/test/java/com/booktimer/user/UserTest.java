@@ -250,4 +250,92 @@ class UserTest {
         assertThat(changed).isFalse();
         assertThat(user.getRole()).isEqualTo(Role.ADMIN);
     }
+
+    // --- assignLoginId: 로그인 아이디(login_id) 설정·검증 (a-z0-9_, 3~20, 소문자 정규화, 예약어 차단) ---
+
+    @Test
+    @DisplayName("새로 만든 사용자는 아직 login_id가 없다 (null)")
+    void of_hasNoLoginIdYet() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        assertThat(user.getLoginId()).isNull();
+    }
+
+    @Test
+    @DisplayName("assignLoginId: 유효한 아이디를 그대로 보관한다")
+    void assignLoginId_valid_stored() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        user.assignLoginId("goospel_01");
+
+        assertThat(user.getLoginId()).isEqualTo("goospel_01");
+    }
+
+    @Test
+    @DisplayName("assignLoginId: 대문자는 소문자로 정규화해 저장한다(대소문자 구분 안 함)")
+    void assignLoginId_normalizesToLowercase() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        user.assignLoginId("Goospel");
+
+        assertThat(user.getLoginId()).isEqualTo("goospel");
+    }
+
+    @Test
+    @DisplayName("assignLoginId: 앞뒤 공백은 제거한다")
+    void assignLoginId_stripsWhitespace() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        user.assignLoginId("  reader7  ");
+
+        assertThat(user.getLoginId()).isEqualTo("reader7");
+    }
+
+    @Test
+    @DisplayName("assignLoginId: 3자 미만이면 예외")
+    void assignLoginId_tooShort_throws() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        assertThatThrownBy(() -> user.assignLoginId("ab"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("assignLoginId: 20자 초과면 예외")
+    void assignLoginId_tooLong_throws() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        assertThatThrownBy(() -> user.assignLoginId("a".repeat(21)))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("assignLoginId: 허용되지 않은 문자(하이픈/점/공백/한글)면 예외")
+    void assignLoginId_invalidChars_throws() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        assertThatThrownBy(() -> user.assignLoginId("goo-spel")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> user.assignLoginId("goo.spel")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> user.assignLoginId("goo spel")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> user.assignLoginId("구스펠")).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("assignLoginId: 예약어(admin 등)는 대소문자 무관하게 예외")
+    void assignLoginId_reserved_throws() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        assertThatThrownBy(() -> user.assignLoginId("admin")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> user.assignLoginId("ADMIN")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> user.assignLoginId("root")).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("assignLoginId: null/공백이면 예외")
+    void assignLoginId_blank_throws() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        assertThatThrownBy(() -> user.assignLoginId(null)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> user.assignLoginId("   ")).isInstanceOf(IllegalArgumentException.class);
+    }
 }
