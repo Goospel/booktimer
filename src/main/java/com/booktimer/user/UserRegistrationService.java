@@ -58,14 +58,18 @@ public class UserRegistrationService {
      */
     public User register(String email, String rawPassword, String loginId, String nickname,
                          String timezone, Role role, LocalDate startDate) {
-        if (userRepository.existsByEmail(email)) {
-            // DB 유니크 제약(uk_users_email) 위반이 500으로 새기 전에 미리 막아 친절한 에러로.
-            throw new EmailAlreadyExistsException(email);
-        }
-        // login_id 형식/예약어는 도메인이 검증(IAE), 유니크는 정규화값으로 사전 확인(아직 미영속이라 self-오탐 없음).
+        // 검사 순서: login_id(형식→유니크) 먼저, email은 마지막. login_id는 공개 @핸들이라 "사용 중" 노출이
+        // 무해하고 UX상 필요(다른 아이디를 골라야 함)하지만, email은 비공개 속성이라 "이미 가입됨" 노출이
+        // 곧 계정 열거가 된다. 그래서 email 중복은 가장 마지막에 던지고, 컨트롤러가 이를 가입 성공과 동일한
+        // 응답으로 흡수한다(존재 여부 미노출). login_id 충돌은 그 전에 잡혀 정상적으로 필드 에러로 안내된다.
         String normalizedLoginId = User.normalizeLoginId(loginId);
         if (userRepository.existsByLoginId(normalizedLoginId)) {
             throw new LoginIdAlreadyExistsException(normalizedLoginId);
+        }
+        if (userRepository.existsByEmail(email)) {
+            // DB 유니크 제약(uk_users_email) 위반이 500으로 새기 전에 미리 막는다. 컨트롤러는 열거 완화를 위해
+            // 이 예외를 가입 성공과 동일한 응답으로 흡수한다(이메일 존재 여부를 응답으로 구분할 수 없게).
+            throw new EmailAlreadyExistsException(email);
         }
         // nickname은 더 이상 유니크가 아니다(단순 표시 이름) — 중복 확인 없이 그대로 저장한다.
         String passwordHash = passwordEncoder.encode(rawPassword);

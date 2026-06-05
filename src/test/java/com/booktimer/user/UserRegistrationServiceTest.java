@@ -146,7 +146,7 @@ class UserRegistrationServiceTest {
     @Test
     @DisplayName("register: 이미 쓰이는 login_id면 LoginIdAlreadyExistsException을 던지고 저장하지 않는다")
     void register_duplicateLoginId_throws() {
-        when(userRepository.existsByEmail("lid2@booktimer.com")).thenReturn(false);
+        // login_id를 email보다 먼저 검사한다(열거 완화: email 중복은 가장 마지막) → email 스텁 불필요.
         when(userRepository.existsByLoginId("taken")).thenReturn(true);
 
         assertThatThrownBy(() -> service.register(
