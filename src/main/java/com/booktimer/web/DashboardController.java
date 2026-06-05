@@ -2,6 +2,7 @@ package com.booktimer.web;
 
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.ReadingContributionService;
+import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.web.csrf.CsrfToken;
@@ -40,6 +41,12 @@ public class DashboardController {
     @GetMapping("/")
     public String dashboard(Principal principal, HttpServletRequest request, Model model) {
         User user = currentUserService.resolve(principal);
+
+        // 운영자(ADMIN)는 독서 대시보드가 아니라 운영 화면으로 직행한다 — 책을 읽는 주체가 아니다.
+        // 로그인 후 착지점이 "/"라 폼·OAuth 어느 경로든 여기서 /admin으로 보낸다(온보딩 게이트보다 먼저).
+        if (user.getRole() == Role.ADMIN) {
+            return "redirect:/admin";
+        }
 
         // 첫 진입 게이트: 초기 설정(온보딩)을 마치지 않은 신규 가입자는 온보딩 페이지로 유도한다.
         // 로그인 후 착지점이 "/"라 LOCAL·OAuth 첫 가입 모두 여기서 걸린다.

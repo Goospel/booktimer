@@ -114,6 +114,21 @@ class DashboardControllerTest {
     }
 
     @Test
+    @DisplayName("GET /: ADMIN 역할 사용자는 대시보드 대신 /admin으로 리다이렉트된다 (운영자는 독서 대시보드가 불필요)")
+    void dashboard_adminRedirectsToAdmin() throws Exception {
+        // 운영자(ADMIN)는 책을 읽는 주체가 아니라 운영 화면으로 직행해야 한다.
+        User admin = registrationService.register(
+                "admin@booktimer.com", "rawpw1234", "운영자", SEOUL, Role.ADMIN, today());
+        admin.assignLoginId("adminhandle");
+        admin.completeOnboarding();
+        userRepository.save(admin);
+
+        mockMvc.perform(get("/").with(user("adminhandle")))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/admin"));
+    }
+
+    @Test
     @DisplayName("GET /: 온보딩 전 사용자는 온보딩 페이지로 리다이렉트된다 (첫 진입 게이트)")
     void dashboard_redirectsToOnboardingWhenNotOnboarded() throws Exception {
         // 온보딩 완료 처리 없이 가입만 — 게이트에 걸려야 한다

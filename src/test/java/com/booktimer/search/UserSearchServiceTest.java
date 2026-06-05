@@ -46,6 +46,12 @@ class UserSearchServiceTest {
         return userRepository.save(u);
     }
 
+    private User newAdmin(String email, String loginId, String nickname) {
+        User u = User.of(email, "$2a$10$abcdefghijklmnopqrstuv", nickname, "Asia/Seoul", Role.ADMIN);
+        u.assignLoginId(loginId);
+        return userRepository.save(u);
+    }
+
     private void publicBook(User owner, String title) {
         Book b = Book.register(owner, title, null, null, null, null, null, BookStatus.READING);
         b.makePublic();
@@ -130,6 +136,20 @@ class UserSearchServiceTest {
         assertThat(results).extracting(UserSearchResult::loginId)
                 .containsExactly("readerfree")            // 차단 무관만 남음
                 .doesNotContain("readerone", "readertwo"); // 양방향 모두 숨김
+    }
+
+    @Test
+    @DisplayName("ADMIN 역할 사용자는 검색 결과에서 제외된다 (운영자는 일반 사용자에게 노출되지 않음)")
+    void search_excludesAdmin() {
+        User viewer = newUser("viewer@booktimer.com", "searcher", "검색가");
+        newUser("u@booktimer.com", "readeruser", "독서가");       // 일반 사용자 — 남아야 함
+        newAdmin("admin@booktimer.com", "readeradmin", "운영자"); // 운영자 — 숨겨야 함
+
+        List<UserSearchResult> results = searchService.search(viewer, "reader");
+
+        assertThat(results).extracting(UserSearchResult::loginId)
+                .containsExactly("readeruser")     // 일반 사용자만 남음
+                .doesNotContain("readeradmin");    // 운영자는 검색 불가
     }
 
     @Test
