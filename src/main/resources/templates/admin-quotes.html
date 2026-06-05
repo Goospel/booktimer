@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>격언 관리 — BookTimer 관리자</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+    <style>
+        .quote-add { display: grid; gap: 0.5rem; margin-top: 0.5rem; }
+        .quote-add input[type=text] { width: 100%; box-sizing: border-box; }
+        .quote-list { list-style: none; padding: 0; margin: 0.5rem 0 0; }
+        .quote-list li {
+            display: flex; align-items: flex-start; gap: 0.75rem;
+            padding: 0.6rem 0; border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+        }
+        .quote-list .q-body { flex: 1 1 auto; min-width: 0; }
+        .quote-list .q-text { word-break: keep-all; }
+        .quote-list .q-author { font-size: 0.85em; opacity: 0.7; margin-top: 0.15rem; }
+        .quote-list form { flex: none; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <span class="emoji">🛠️</span>
+        <h1>BookTimer 관리자</h1>
+    </header>
+    <p class="greeting">격언 관리 — 대시보드 인사말 자리에 랜덤으로 노출됩니다.</p>
+
+    <div th:if="${error}" class="alert alert-error" th:text="${error}">에러 메시지</div>
+
+    <section class="card">
+        <h2>격언 추가</h2>
+        <form th:action="@{/admin/quotes}" method="post" class="quote-add">
+            <label>문장
+                <input type="text" name="text" maxlength="500" required placeholder="예: 책은 한 권 한 권이 하나의 세계다.">
+            </label>
+            <label>작가
+                <input type="text" name="author" maxlength="100" required placeholder="예: 윌리엄 워즈워스">
+            </label>
+            <button type="submit" class="btn-primary">추가</button>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>등록된 격언 <span th:text="'(' + ${#lists.size(quotes)} + ')'">(0)</span></h2>
+        <p class="status-line muted" th:if="${#lists.isEmpty(quotes)}">아직 등록된 격언이 없습니다. 위에서 추가하세요.</p>
+        <ul class="quote-list">
+            <li th:each="q : ${quotes}">
+                <div class="q-body">
+                    <div class="q-text" th:text="${q.text}">격언 문장</div>
+                    <div class="q-author" th:text="'— ' + ${q.author}">— 작가</div>
+                </div>
+                <form th:action="@{/admin/quotes/{id}/delete(id=${q.id})}" method="post"
+                      onsubmit="return confirm('이 격언을 삭제할까요?');">
+                    <button type="submit" class="btn-danger">삭제</button>
+                </form>
+            </li>
+        </ul>
+    </section>
+
+    <p class="link-row">
+        <a th:href="@{/admin}">← 관리자 홈</a>
+    </p>
+</div>
+</body>
+</html>

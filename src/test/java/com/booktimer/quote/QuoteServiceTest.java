@@ -1,64 +1,105 @@
 package com.booktimer.quote;
 
+import com.booktimer.config.JpaConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.context.annotation.Import;
 
 import java.util.List;
-import java.util.Random;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 작가 격언 서비스 단위 테스트 — 큐레이션 목록 적재 + 랜덤 선택.
+ * QuoteService 슬라이스 테스트 (@DataJpaTest, H2) — DB 백업 격언 적재/추가/삭제/랜덤.
  *
- * <p>대시보드 인사말 자리에 페이지 로드마다 랜덤 격언을 띄우는 기능의 핵심부.
- * 랜덤은 비결정적이라 {@code Clock} 주입(N-010)과 같은 이음새로 {@link Random}을 주입받아
- * 테스트에서 선택을 결정적으로 검증한다.
+ * <p>격언은 더 이상 정적 JSON이 아니라 DB(`quote` 테이블)에 있다 — admin이 런타임에 추가/삭제하면
+ * 재시작 없이 대시보드에 반영된다. 비어 있으면 대시보드가 깨지지 않게 폴백 격언을 돌려준다.
  */
+@DataJpaTest
+@Import(JpaConfig.class) // BaseTimeEntity auditing(created_at/updated_at) 활성화
 class QuoteServiceTest {
 
-    @Test
-    @DisplayName("기본 생성자는 classpath의 큐레이션 격언 목록을 적재한다 — 비어있지 않고 모든 항목에 문장·작가가 있다")
-    void loadsCuratedQuotes() {
-        QuoteService service = new QuoteService();
+    @Autowired
+    private QuoteRepository repository;
 
-        List<Quote> all = service.all();
-
-        assertThat(all).hasSizeGreaterThanOrEqualTo(10);
-        assertThat(all).allSatisfy(q -> {
-            assertThat(q.text()).isNotBlank();
-            assertThat(q.author()).isNotBlank();
-        });
+    private QuoteService service() {
+        return new QuoteService(repository);
     }
 
     @Test
-    @DisplayName("random()은 주입된 Random이 고른 인덱스의 격언을 반환한다 (결정적 검증)")
-    void random_picksQuoteChosenByInjectedRandom() {
-        Quote q0 = new Quote("첫 문장", "작가0");
-        Quote q1 = new Quote("둘째 문장", "작가1");
-        Quote q2 = new Quote("셋째 문장", "작가2");
+    @DisplayName("add: 격언을 저장하고 id를 부여한다")
+    void add_persistsQuote() {
+        QuoteService service = service();
 
-        // 항상 인덱스 1을 고르는 가짜 Random — 선택 로직을 결정적으로 고정한다.
-        Random alwaysSecond = new Random() {
-            @Override
-            public int nextInt(int bound) {
-                return 1;
-            }
-        };
+        Quote saved = service.add("새 문장", "새 작가");
 
-        QuoteService service = new QuoteService(List.of(q0, q1, q2), alwaysSecond);
-
-        assertThat(service.random()).isEqualTo(q1);
+        assertThat(saved.getId()).isNotNull();
+        assertThat(repository.findById(saved.getId())).isPresent();
     }
 
     @Test
-    @DisplayName("random()은 항상 목록 안의 격언을 반환한다 (실제 시드 Random으로 반복 호출)")
-    void random_alwaysReturnsQuoteWithinList() {
-        QuoteService service = new QuoteService();
+    @DisplayName("all: 최신 등록이 먼저 오도록 정렬한다 (id 내림차순)")
+    void all_listsNewestFirst() {
+        QuoteService service = service();
+        service.add("먼저 넣은 것", "A");
+        service.add("나중에 넣은 것", "B");
+
         List<Quote> all = service.all();
 
-        for (int i = 0; i < 50; i++) {
-            assertThat(all).contains(service.random());
-        }
+        assertThat(all).hasSize(2);
+        assertThat(all.get(0).getText()).isEqualTo("나중에 넣은 것");
+    }
+
+    @Test
+    @DisplayName("delete: 해당 격언을 제거한다")
+    void delete_removesQuote() {
+        QuoteService service = service();
+        Quote a = service.add("지울 것", "A");
+        service.add("남길 것", "B");
+
+        service.delete(a.getId());
+
+        assertThat(service.all()).extracting(Quote::getText).containsExactly("남길 것");
+    }
+
+    @Test
+    @DisplayName("add: 문장이 공백이면 거부한다")
+    void add_rejectsBlankText() {
+        assertThatThrownBy(() -> service().add("   ", "작가"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("add: 작가가 공백이면 거부한다")
+    void add_rejectsBlankAuthor() {
+        assertThatThrownBy(() -> service().add("문장", "  "))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("random: 저장된 격언이 있으면 그중 하나를 반환한다")
+    void random_returnsStoredQuote() {
+        QuoteService service = service();
+        service.add("저장된 문장", "저장 작가");
+
+        Quote picked = service.random();
+
+        assertThat(picked.getText()).isEqualTo("저장된 문장");
+        assertThat(picked.getAuthor()).isEqualTo("저장 작가");
+    }
+
+    @Test
+    @DisplayName("random: 격언이 하나도 없으면 폴백 격언을 반환한다 (대시보드 깨짐 방지)")
+    void random_returnsFallbackWhenEmpty() {
+        QuoteService service = service();
+
+        Quote picked = service.random();
+
+        assertThat(picked).isNotNull();
+        assertThat(picked.getText()).isNotBlank();
+        assertThat(picked.getAuthor()).isNotBlank();
     }
 }

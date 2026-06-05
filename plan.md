@@ -168,14 +168,20 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 - 점진적 향상: 권한 거부/구형 브라우저면 ②는 건너뛰고 ①(소리+플래시)로 자연 폴백 — htmx 폴백과 같은 결.
 - 주로 `dashboard.js` + CSS/사운드 파일. Java 테스트 게이트엔 안 걸리지만 transition 감지 같은 순수 로직은 작게 검증 가능.
 
-### 대시보드 인사말 → 작가 격언 랜덤 노출 (MVP 완료 ✅ 2026-06-05, PR #169)
+### 대시보드 인사말 → 작가 격언 랜덤 노출 (MVP 완료 ✅ PR #169 · DB+admin 관리 ✅ PR #170, 2026-06-05)
 
-> **MVP 구현 완료** — `님, 환영합니다`를 작가 격언으로 교체. `com.booktimer.quote` 패키지 신설:
-> `Quote`(record text/author), `QuoteService`(classpath `quotes.json` 적재 + `Random` 주입 이음새로 `random()`),
-> 격언 18개 큐레이션(`src/main/resources/quotes.json`). `DashboardController`가 전체 페이지 경로에서만
-> `quote`를 모델에 싣고(`DashboardModel` 아님 — htmx 라이브 공유 회피, 잔디 graph와 같은 자리), `dashboard.html`
-> 인사말을 `${quote.text()} — ${quote.author()}`로 교체(`.greeting.quote` CSS, 작가는 작게·흐리게). TDD: QuoteServiceTest
-> (적재·주입 Random 결정적 선택·항상 목록 내) + DashboardControllerTest(모델 quote 적재). 아래는 설계·미래 진화 기록.
+> **MVP 구현 완료(PR #169)** — `님, 환영합니다`를 작가 격언으로 교체. `com.booktimer.quote` 패키지 신설:
+> `Quote`, `QuoteService`(+ `Random` 주입 이음새로 `random()`), 격언 18개 큐레이션. `DashboardController`가 전체 페이지
+> 경로에서만 `quote`를 모델에 싣고(`DashboardModel` 아님 — htmx 라이브 공유 회피, 잔디 graph와 같은 자리), `dashboard.html`
+> 인사말을 격언+작가로 교체(`.greeting.quote` CSS, 작가는 작게·흐리게).
+>
+> **DB 이전 + 운영자 관리(PR #170)** — 정적 JSON → DB(`quote` 테이블, Flyway V17 + 18개 seed)로 옮겨 **재시작 없이
+> 추가/삭제**. `Quote` record→`@Entity`(text varchar500/author varchar100, BaseTimeEntity), `QuoteRepository`,
+> 선택 로직은 순수 `QuotePicker`로 분리(결정적 단위테스트), `QuoteService`는 repo 백업 + 빈 목록이면 폴백 격언 반환
+> (대시보드 깨짐 방지). 운영자 화면 `/admin/quotes`(`AdminQuoteController` — 목록+추가+삭제, POST는 CSRF, `/admin` 랜딩 링크).
+> TDD: QuotePickerTest(결정적 선택)·QuoteServiceTest(@DataJpaTest add/all/delete/폴백/공백거부)·AdminQuoteControllerTest
+> (USER 403·ADMIN 200·추가/삭제/공백). 생성자 2개(public+테스트용)라 `@Autowired`로 주입 생성자 명시(없으면 no-arg 탐색 실패).
+> 아래는 설계·미래 진화 기록.
 
 **원하는 것**: 대시보드 상단 `님, 환영합니다`(`dashboard.html:20`, `.greeting`) 자리에 **작가들의 격언/명언을 랜덤으로** 띄운다.
 체크박스·설정 폼 없이 **페이지를 띄울 때마다 자연스럽게 바뀐다**. 보이는 위치·스타일은 지금 그대로.
@@ -196,7 +202,7 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 - `dashboard.html:20`을 `${quote}`+`${quoteAuthor}`(예: `"문장" — 작가`)로 교체. **캐시 금지**(`@Cacheable` X — 매 렌더 새로 뽑아야 매번 바뀜).
 
 **🔮 미래 진화 (지금 우선순위 아님 — 이 기능이 자라는 방향)**:
-1. **MVP (위)** — 내장 큐레이션 목록에서 전역 랜덤.
+1. **MVP + DB/admin 관리 (위, 완료)** — DB 백업 + 운영자 추가/삭제. ③ DB 테이블 인프라(`quote`·`QuoteRepository`)가 이제 깔려 있어 아래 ②③의 토대가 됨.
 2. **책장 작가 필터** — 사용자 **책장 속 책의 작가**(`book.author`)가 남긴 격언만 뜨게. 격언에 작가 키를 달고 사용자의 distinct 책장 작가와 매칭. "내가 읽는 작가의 말"이라 개인화·몰입↑.
 3. **사용자 저장 문장(하이라이트)** — 책을 읽다 **인상깊은 문장을 저장**하는 기능(신규 엔티티 예: `Highlight{book, text, page}`) 추가 시, 대시보드가 **사용자 본인이 저장한 문장**을 회전 노출(비면 큐레이션으로 폴백). 이게 큰 단계 — 저장 UI·저장소·소스 전환 필요.
 - **지금 설계로 길 터두기**: 대시보드가 "이 사용자용 격언 하나 줘"라고만 묻도록 `QuoteSource`(또는 `QuoteProvider`) 이음새를 두면, 구현이 ①내장→②책장필터→③사용자저장으로 **컨트롤러·템플릿 안 건드리고** 갈아끼워진다.
@@ -760,3 +766,4 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 | 2026-06-05 | **목표 달성 알람 백로그 항목 추가** — 측정 중 누적 잔여가 0이 되는 순간(=오늘 목표 달성) 사용자에게 알림을 주고 싶다는 요구. 타이머가 JS에서 1초마다 도므로(`dashboard.js`의 `goalMet`) "잔여 0 순간"을 이미 클라이언트가 계산 → 서버·DB·마이그레이션 불필요. 범위는 ①탭 안 알람(소리+화면 플래시)+②Web Notifications API(탭 떠 있으면 백그라운드여도 OS 알림)로 한정, ③Push API+Service Worker(탭 닫아도 알림)는 오버킬로 안 함(측정은 페이지 열어둔 채 일어남). 구현 메모: 상태 아닌 **전이(false→true) 순간 1회**에 걸기, 측정시작 클릭 제스처로 오디오 차단 없음, 권한 거부/구형 브라우저는 ①로 폴백. 문서만. (PR #167) |
 | 2026-06-05 | **대시보드 인사말 → 작가 격언 랜덤 노출 백로그 항목 추가** — `님, 환영합니다`(`dashboard.html:20`) 자리에 작가 격언을 페이지 로드마다 랜덤 노출(설정 폼 없이 자연스럽게). 인사말이 htmx 라이브 영역 밖이라 측정 start/stop엔 안 바뀌고 전체 페이지 로드 때만 갱신 — 원하는 동작이 구조상 자연히 나옴. 소스 MVP=앱 내장 큐레이션 목록(외부 API는 핫패스 네트워크·영어·장애로 비추), 서버사이드 랜덤(SSR·JS 불필요), `QuoteService`+`Random` 주입(테스트 이음새, Clock 패턴), `DashboardController`에만 추가(`DashboardModel`은 htmx 공유라 금지), `@Cacheable` 금지. 🔮 미래 진화 3단계: ①전역 랜덤 → ②책장 작가(`book.author`) 필터 → ③사용자 저장 문장(하이라이트 신규 엔티티) 회전, `QuoteSource` 이음새로 소스만 교체. 문서만. (PR #168) |
 | 2026-06-05 | **대시보드 인사말 → 작가 격언 랜덤 노출 — MVP 구현** — 백로그(#168)대로 인사말을 작가 격언으로 교체. `com.booktimer.quote` 패키지 신설: `Quote`(record), `QuoteService`(classpath `quotes.json` 적재 + `Random` 주입 이음새—Clock 패턴 N-010—로 `random()` 결정적 테스트, 매 호출 새로 뽑아 캐시 없음), 격언 18개 큐레이션(`quotes.json`). SSR 앱 ObjectMapper 빈 없음(T-022) → `new ObjectMapper()` 직접 적재. `DashboardController`가 **전체 페이지 경로에서만** `quote` 모델 적재(`DashboardModel` 아님 — htmx 라이브 영역과 공유라 start/stop마다 헛돌고 프래그먼트 밖이라 안 그려짐; 잔디 graph와 같은 자리). `dashboard.html` 인사말을 `${quote.text()} — ${quote.author()}`로 교체(`.greeting.quote` CSS — 작가 작게·흐리게). 인사말이 라이브 영역 밖이라 측정 start/stop엔 안 바뀌고 페이지 로드 때만 랜덤 갱신. TDD(QuoteServiceTest: 적재·주입 Random 결정적 선택·항상 목록 내 / DashboardControllerTest: 모델 quote 적재 Red→Green) + 전체 스위트 그린. 🔮 미래(②책장 작가 필터 ③사용자 저장 문장)는 백로그 유지. (PR #169) |
+| 2026-06-05 | **작가 격언 — DB 이전 + 운영자(admin) 관리** — 격언을 정적 JSON에서 DB로 옮겨 **재시작 없이 추가/삭제**(운영자 요청). `Quote` record→`@Entity`(text varchar500/author varchar100, BaseTimeEntity), `QuoteRepository`(`findAllByOrderByIdDesc` 최신 먼저), 선택 로직은 순수 `QuotePicker`(Random 주입 결정적 테스트)로 분리, `QuoteService`는 repo 백업 + **빈 목록이면 폴백 격언 반환**(운영자가 다 지워도 대시보드 안 깨짐). Flyway `V17__create_quote_table.sql`(테이블 + 기존 18개 seed, created_at/updated_at은 INSERT가 auditing 안 타므로 `current_timestamp` 직접). 운영자 화면 `/admin/quotes`(`AdminQuoteController` — 목록+추가+삭제, POST는 CSRF, 공백은 service가 거부→플래시 흡수, `/admin` 랜딩에 진입 링크). `quotes.json` 삭제, `dashboard.html`은 record→entity 따라 `${quote.text}`(getter)로. **함정: 생성자 2개(public 주입 + 테스트용 package-private)면 Spring이 no-arg를 찾다 NoSuchMethodException → 주입 생성자에 `@Autowired` 명시**. TDD: QuotePickerTest(결정적 선택)·QuoteServiceTest(@DataJpaTest add/all 최신순/delete/폴백/공백거부)·AdminQuoteControllerTest(미인증 리다이렉트·USER 403·ADMIN 추가/삭제/공백 Red→Green) + FlywayMigrationTest(V17 validate) + 전체 스위트 그린. (PR #170) |
