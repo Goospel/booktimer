@@ -3,8 +3,8 @@ package com.booktimer.web;
 import com.booktimer.profile.ProfileService;
 import com.booktimer.profile.ProfileView;
 import com.booktimer.report.ReportReason;
+import com.booktimer.security.CurrentUserService;
 import com.booktimer.user.User;
-import com.booktimer.user.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -28,11 +28,11 @@ import java.security.Principal;
 public class ProfileController {
 
     private final ProfileService profileService;
-    private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
 
-    public ProfileController(ProfileService profileService, UserRepository userRepository) {
+    public ProfileController(ProfileService profileService, CurrentUserService currentUserService) {
         this.profileService = profileService;
-        this.userRepository = userRepository;
+        this.currentUserService = currentUserService;
     }
 
     @GetMapping("/u/{loginId}")
@@ -55,7 +55,6 @@ public class ProfileController {
     }
 
     private User currentUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
-                .orElseThrow(() -> new IllegalStateException("authenticated user not found: " + principal.getName()));
+        return currentUserService.resolve(principal);
     }
 }

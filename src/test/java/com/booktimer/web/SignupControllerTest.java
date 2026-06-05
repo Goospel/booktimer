@@ -56,17 +56,19 @@ class SignupControllerTest {
     }
 
     @Test
-    @DisplayName("POST /signup: 유효 입력이면 사용자를 만들고 로그인으로 리다이렉트한다")
+    @DisplayName("POST /signup: 유효 입력이면 login_id를 확정해 사용자를 만들고 로그인으로 리다이렉트한다")
     void postSignup_valid_persistsAndRedirects() throws Exception {
         mockMvc.perform(post("/signup").with(csrf())
                         .param("email", "newuser@booktimer.com")
+                        .param("loginId", "newuser1")
                         .param("password", "rawpw1234")
                         .param("nickname", "책벌레")
                         .param("timezone", "Asia/Seoul"))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/login?registered"));
 
-        assertThat(userRepository.findByEmail("newuser@booktimer.com")).isPresent();
+        User saved = userRepository.findByEmail("newuser@booktimer.com").orElseThrow();
+        assertThat(saved.getLoginId()).isEqualTo("newuser1"); // 가입에서 로그인 식별자 확정
     }
 
     @Test
@@ -74,6 +76,7 @@ class SignupControllerTest {
     void postSignup_invalid_rerendersWithoutPersisting() throws Exception {
         mockMvc.perform(post("/signup").with(csrf())
                         .param("email", "")
+                        .param("loginId", "someid")
                         .param("password", "rawpw1234")
                         .param("nickname", "책벌레")
                         .param("timezone", "Asia/Seoul"))
@@ -91,6 +94,7 @@ class SignupControllerTest {
 
         mockMvc.perform(post("/signup").with(csrf())
                         .param("email", "dup@booktimer.com")
+                        .param("loginId", "freshid")
                         .param("password", "rawpw1234")
                         .param("nickname", "새사람")
                         .param("timezone", "Asia/Seoul"))
@@ -99,5 +103,25 @@ class SignupControllerTest {
                 .andExpect(model().attributeHasFieldErrors("signupForm", "email"));
 
         assertThat(userRepository.count()).isEqualTo(1);  // 기존 1명만, 중복 생성 없음
+    }
+
+    @Test
+    @DisplayName("POST /signup: 이미 쓰이는 login_id면 화면을 다시 그리고 loginId 필드 에러를 단다 (중복 생성 없음)")
+    void postSignup_duplicateLoginId_rerendersWithFieldError() throws Exception {
+        User owner = User.of("owner@booktimer.com", "$2a$10$alreadyhasheddummy", "기존", "Asia/Seoul", Role.USER);
+        owner.assignLoginId("grabbed");
+        userRepository.save(owner);
+
+        mockMvc.perform(post("/signup").with(csrf())
+                        .param("email", "taker@booktimer.com")
+                        .param("loginId", "grabbed")
+                        .param("password", "rawpw1234")
+                        .param("nickname", "새사람")
+                        .param("timezone", "Asia/Seoul"))
+                .andExpect(status().isOk())
+                .andExpect(view().name("signup"))
+                .andExpect(model().attributeHasFieldErrors("signupForm", "loginId"));
+
+        assertThat(userRepository.findByEmail("taker@booktimer.com")).isEmpty();  // 생성 안 됨
     }
 }

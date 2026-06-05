@@ -47,34 +47,34 @@ class AdminAccountServiceTest {
     }
 
     @Test
-    @DisplayName("seedAdmins: 목록의 이메일을 가진 USER를 ADMIN으로 승격한다")
+    @DisplayName("seedAdmins: 목록의 login_id를 가진 USER를 ADMIN으로 승격한다 (입력 대소문자 무시)")
     void seedAdmins_promotesListedUser() {
-        registrationService.register("boss@booktimer.com", "rawpw1234", "사장", SEOUL, Role.USER, today());
+        registrationService.register("boss@booktimer.com", "rawpw1234", "boss1", "사장", SEOUL, Role.USER, today());
 
-        int promoted = adminAccountService.seedAdmins(List.of("boss@booktimer.com"));
+        int promoted = adminAccountService.seedAdmins(List.of("Boss1")); // 대문자 입력 → 소문자 매칭
 
         assertThat(promoted).isEqualTo(1);
-        assertThat(userRepository.findByEmail("boss@booktimer.com").orElseThrow().getRole())
+        assertThat(userRepository.findByLoginId("boss1").orElseThrow().getRole())
                 .isEqualTo(Role.ADMIN);
     }
 
     @Test
     @DisplayName("seedAdmins: 멱등 — 이미 ADMIN이면 다시 승격하지 않는다(0건)")
     void seedAdmins_idempotent() {
-        registrationService.register("boss@booktimer.com", "rawpw1234", "사장", SEOUL, Role.USER, today());
+        registrationService.register("boss@booktimer.com", "rawpw1234", "boss1", "사장", SEOUL, Role.USER, today());
 
-        adminAccountService.seedAdmins(List.of("boss@booktimer.com"));
-        int again = adminAccountService.seedAdmins(List.of("boss@booktimer.com"));
+        adminAccountService.seedAdmins(List.of("boss1"));
+        int again = adminAccountService.seedAdmins(List.of("boss1"));
 
         assertThat(again).isZero();
-        assertThat(userRepository.findByEmail("boss@booktimer.com").orElseThrow().getRole())
+        assertThat(userRepository.findByLoginId("boss1").orElseThrow().getRole())
                 .isEqualTo(Role.ADMIN);
     }
 
     @Test
-    @DisplayName("seedAdmins: 존재하지 않는 이메일/공백/null은 조용히 무시(예외 없음, 0건)")
+    @DisplayName("seedAdmins: 존재하지 않는 login_id/공백/null은 조용히 무시(예외 없음, 0건)")
     void seedAdmins_unknownOrBlank_noop() {
-        int promoted = adminAccountService.seedAdmins(Arrays.asList("ghost@booktimer.com", "  ", null));
+        int promoted = adminAccountService.seedAdmins(Arrays.asList("ghostid", "  ", null));
 
         assertThat(promoted).isZero();
     }

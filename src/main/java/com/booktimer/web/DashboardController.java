@@ -1,8 +1,8 @@
 package com.booktimer.web;
 
+import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.ReadingContributionService;
 import com.booktimer.user.User;
-import com.booktimer.user.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.stereotype.Controller;
@@ -25,22 +25,21 @@ import java.security.Principal;
 @Controller
 public class DashboardController {
 
-    private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
     private final DashboardModel dashboardModel;
     private final ReadingContributionService contributionService;
 
-    public DashboardController(UserRepository userRepository,
+    public DashboardController(CurrentUserService currentUserService,
                                DashboardModel dashboardModel,
                                ReadingContributionService contributionService) {
-        this.userRepository = userRepository;
+        this.currentUserService = currentUserService;
         this.dashboardModel = dashboardModel;
         this.contributionService = contributionService;
     }
 
     @GetMapping("/")
     public String dashboard(Principal principal, HttpServletRequest request, Model model) {
-        User user = userRepository.findByEmail(principal.getName())
-                .orElseThrow(() -> new IllegalStateException("authenticated user not found: " + principal.getName()));
+        User user = currentUserService.resolve(principal);
 
         // 첫 진입 게이트: 초기 설정(온보딩)을 마치지 않은 신규 가입자는 온보딩 페이지로 유도한다.
         // 로그인 후 착지점이 "/"라 LOCAL·OAuth 첫 가입 모두 여기서 걸린다.

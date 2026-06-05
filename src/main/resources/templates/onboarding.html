@@ -12,7 +12,7 @@
         <span class="emoji">📚</span>
         <h1>BookTimer</h1>
     </header>
-    <p class="greeting">환영합니다! 아이디와 시작 설정을 정해볼까요?</p>
+    <p class="greeting" th:text="${needsLoginId} ? '환영합니다! 아이디와 시작 설정을 정해볼까요?' : '환영합니다! 시작 설정을 정해볼까요?'">환영합니다! 시작 설정을 정해볼까요?</p>
 
     <section class="card">
         <p class="status-line muted">
@@ -20,10 +20,11 @@
             <strong>초기값</strong>은 지금 시작할 남은 독서 시간입니다. 나중에 설정에서 증가값·상한을 바꿀 수 있어요.
         </p>
         <form th:action="@{/onboarding}" th:object="${onboardingForm}" method="post">
-            <div class="field">
+            <!-- login_id는 소셜 로그인 사용자만 여기서 정한다(로컬은 가입에서 받았다 — 불변). -->
+            <div class="field" th:if="${needsLoginId}">
                 <label for="loginId">아이디 — 로그인·검색에 쓰이는 고유 아이디</label>
                 <input type="text" id="loginId" maxlength="20" th:field="*{loginId}"
-                       autocapitalize="none" autocomplete="off" placeholder="영문/숫자/_ 3~20자">
+                       autocapitalize="none" autocomplete="username" placeholder="영문/숫자/_ 3~20자">
                 <span class="field-hint muted">⚠️ 한번 정하면 바꿀 수 없어요. 영소문자·숫자·언더스코어(_)만, 3~20자.</span>
                 <span class="field-error" th:if="${#fields.hasErrors('loginId')}" th:errors="*{loginId}">아이디 오류</span>
             </div>

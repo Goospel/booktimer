@@ -2,6 +2,7 @@ package com.booktimer.web;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
@@ -16,6 +17,11 @@ public class SignupForm {
     @NotBlank
     @Email
     private String email;
+
+    /** 로그인 아이디(공개 @핸들·로그인 식별자). 형식은 도메인과 동일(영문/숫자/_ 3~20자). 불변 — 가입에서 확정. */
+    @NotBlank
+    @Pattern(regexp = "^[A-Za-z0-9_]{3,20}$", message = "아이디는 영문/숫자/_ 3~20자여야 합니다")
+    private String loginId;
 
     @NotBlank
     @Size(min = 8, max = 72) // BCrypt 입력 상한 72바이트
@@ -34,6 +40,14 @@ public class SignupForm {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getLoginId() {
+        return loginId;
+    }
+
+    public void setLoginId(String loginId) {
+        this.loginId = loginId;
     }
 
     public String getPassword() {

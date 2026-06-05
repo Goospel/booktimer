@@ -51,23 +51,37 @@ class SecurityConfigTest {
         return mockMvc;
     }
 
-    @Test
-    @DisplayName("DB에 해시 저장된 사용자가 평문 비번으로 폼 로그인되면 인증된다")
-    void formLogin_withDbUser_authenticates() throws Exception {
-        userRepository.save(User.of(
-                "reader@booktimer.com", passwordEncoder.encode("rawpw1234"), "책벌레", "Asia/Seoul", Role.USER));
+    /** login_id(=로그인 식별자)를 가진 LOCAL 사용자를 저장한다. 폼 로그인은 이메일이 아니라 login_id로 한다. */
+    private void saveUser(String email, String loginId) {
+        User u = User.of(email, passwordEncoder.encode("rawpw1234"), "책벌레", "Asia/Seoul", Role.USER);
+        u.assignLoginId(loginId);
+        userRepository.save(u);
+    }
 
-        mvc().perform(formLogin("/login").user("reader@booktimer.com").password("rawpw1234"))
-                .andExpect(authenticated().withUsername("reader@booktimer.com"));
+    @Test
+    @DisplayName("DB에 해시 저장된 사용자가 login_id+평문 비번으로 폼 로그인되면 인증된다 (이메일 아님)")
+    void formLogin_withDbUser_authenticates() throws Exception {
+        saveUser("reader@booktimer.com", "reader1");
+
+        mvc().perform(formLogin("/login").user("reader1").password("rawpw1234"))
+                .andExpect(authenticated().withUsername("reader1"));
     }
 
     @Test
     @DisplayName("틀린 비밀번호면 인증되지 않는다")
     void formLogin_wrongPassword_unauthenticated() throws Exception {
-        userRepository.save(User.of(
-                "reader@booktimer.com", passwordEncoder.encode("rawpw1234"), "책벌레", "Asia/Seoul", Role.USER));
+        saveUser("reader@booktimer.com", "reader1");
 
-        mvc().perform(formLogin("/login").user("reader@booktimer.com").password("WRONG"))
+        mvc().perform(formLogin("/login").user("reader1").password("WRONG"))
+                .andExpect(unauthenticated());
+    }
+
+    @Test
+    @DisplayName("보안: 이메일로는 로그인되지 않는다 (로그인 식별자는 login_id)")
+    void formLogin_byEmail_unauthenticated() throws Exception {
+        saveUser("reader@booktimer.com", "reader1");
+
+        mvc().perform(formLogin("/login").user("reader@booktimer.com").password("rawpw1234"))
                 .andExpect(unauthenticated());
     }
 

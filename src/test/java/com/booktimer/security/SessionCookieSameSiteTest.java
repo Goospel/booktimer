@@ -58,12 +58,13 @@ class SessionCookieSameSiteTest {
     @Test
     @DisplayName("로그인으로 발급되는 세션 쿠키(SESSION)에 SameSite=Lax가 실린다")
     void sessionCookie_hasSameSiteLax() throws Exception {
-        userRepository.save(User.of(
-                "reader@booktimer.com", passwordEncoder.encode("rawpw1234"), "책벌레", "Asia/Seoul", Role.USER));
+        User u = User.of("reader@booktimer.com", passwordEncoder.encode("rawpw1234"), "책벌레", "Asia/Seoul", Role.USER);
+        u.assignLoginId("reader1");
+        userRepository.save(u);
 
         MvcResult result = mockMvc.perform(
-                        formLogin("/login").user("reader@booktimer.com").password("rawpw1234"))
-                .andExpect(authenticated().withUsername("reader@booktimer.com"))
+                        formLogin("/login").user("reader1").password("rawpw1234"))
+                .andExpect(authenticated().withUsername("reader1"))
                 .andReturn();
 
         List<String> setCookies = result.getResponse().getHeaders("Set-Cookie");

@@ -98,6 +98,22 @@ class DashboardControllerTest {
     }
 
     @Test
+    @DisplayName("GET /: principal이 login_id인 로컬 사용자도 정상 해석된다 (실제 인증 컷오버 경로 — PR-4)")
+    void dashboard_resolvesLoginIdPrincipal() throws Exception {
+        // 7-arg register = 로컬 가입(login_id 확정) → 로그인 시 principal이 login_id가 된다.
+        User u = registrationService.register(
+                "loc@booktimer.com", "rawpw1234", "localhandle", "로컬책", SEOUL, Role.USER, today());
+        u.completeOnboarding();
+        userRepository.save(u);
+
+        mockMvc.perform(get("/").with(user("localhandle"))) // principal = login_id (이메일 아님)
+                .andExpect(status().isOk())
+                .andExpect(view().name("dashboard"))
+                .andExpect(model().attribute("nickname", "로컬책"))
+                .andExpect(model().attribute("loginId", "localhandle"));
+    }
+
+    @Test
     @DisplayName("GET /: 온보딩 전 사용자는 온보딩 페이지로 리다이렉트된다 (첫 진입 게이트)")
     void dashboard_redirectsToOnboardingWhenNotOnboarded() throws Exception {
         // 온보딩 완료 처리 없이 가입만 — 게이트에 걸려야 한다

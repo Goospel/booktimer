@@ -7,7 +7,6 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
-import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
 
@@ -19,10 +18,10 @@ import java.util.List;
  * <p>표준 {@link OidcUserService}로 구글에서 사용자 정보를 받은 뒤, 우리 도메인 사용자를
  * find-or-create({@link OAuthUserProvisioningService})하고, 권한을 우리 {@code Role}로 맞춘다.
  *
- * <p><b>핵심</b>: 반환 principal의 {@code getName()}이 <b>이메일</b>이 되도록
- * {@link DefaultOidcUser}의 name 속성 키를 {@code "email"}로 지정한다. 폼 로그인의 principal name도
- * 이메일이라, 이렇게 맞춰야 모든 컨트롤러({@code principal.getName()} → {@code findByEmail})가
- * 인증 출처와 무관하게 동일하게 동작한다(폼/소셜 통합).
+ * <p><b>핵심</b>(인증 컷오버 PR-4): 반환 principal의 {@code getName()}이 <b>login_id</b>가 되도록
+ * {@link BookTimerOidcUser}로 name을 명시한다 — 폼 로그인 principal도 login_id라 출처와 무관하게 통일된다.
+ * 단 온보딩 전 <b>첫 세션은 아직 login_id가 없어 email</b>을 쓴다(그 짧은 창은 {@code CurrentUserService}가
+ * email로 브리지; 온보딩에서 login_id 확정 후 재로그인부터 login_id가 principal).
  *
  * <p>이 클래스는 네트워크(super.loadUser의 토큰·userinfo 교환)에 묶인 얇은 어댑터다 — find-or-create
  * 규칙 자체는 {@link OAuthUserProvisioningService}로 분리해 단위 테스트한다(N-009).
@@ -51,7 +50,10 @@ public class BookTimerOidcUserService extends OidcUserService {
         List<GrantedAuthority> authorities =
                 List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
 
-        // name 속성 키를 "email"로 → principal.getName()이 이메일을 돌려준다(폼 로그인과 동일 규약).
-        return new DefaultOidcUser(authorities, oidcUser.getIdToken(), oidcUser.getUserInfo(), "email");
+        // principal.getName() = login_id(있으면) / 온보딩 전 첫 세션은 email(아직 login_id 없음).
+        // login_id는 id_token claim이 아니라 BookTimerOidcUser로 name을 명시한다.
+        String principalName = user.getLoginId() != null ? user.getLoginId() : email;
+        return new BookTimerOidcUser(
+                authorities, oidcUser.getIdToken(), oidcUser.getUserInfo(), "email", principalName);
     }
 }

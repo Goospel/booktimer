@@ -44,19 +44,52 @@ public class UserRegistrationService {
     /**
      * 새 사용자를 등록하고 기본 설정의 누적 타이머를 함께 만든다.
      *
+     * <p><b>로컬 가입은 login_id(로그인 식별자·공개 @핸들)를 여기서 확정</b>한다(PR-4 인증 컷오버) — 로그인이
+     * login_id 기준이라 가입 시점에 있어야 첫 로그인이 가능하다. 형식/예약어는 도메인이, 유니크는 사전 확인 +
+     * DB 제약이 담당한다. (소셜 가입은 비밀번호가 없어 {@link #registerOAuth}로 가고, login_id는 온보딩에서 정한다.)
+     *
      * @param rawPassword 평문 비밀번호(여기서 해싱 — 평문은 저장되지 않는다)
+     * @param loginId     사용자가 정한 로그인 아이디(불변 — 정규화·형식·예약어·유니크 검증)
      * @param startDate   누적 시작 기준일(유저 타임존 기준 오늘)
      * @return 저장된 User
+     * @throws EmailAlreadyExistsException    이메일이 이미 쓰이는 경우
+     * @throws LoginIdAlreadyExistsException  login_id가 이미 쓰이는 경우
+     * @throws IllegalArgumentException       login_id 형식/예약어 위반(도메인 검증)
      */
-    public User register(String email, String rawPassword, String nickname,
+    public User register(String email, String rawPassword, String loginId, String nickname,
                          String timezone, Role role, LocalDate startDate) {
         if (userRepository.existsByEmail(email)) {
             // DB 유니크 제약(uk_users_email) 위반이 500으로 새기 전에 미리 막아 친절한 에러로.
             throw new EmailAlreadyExistsException(email);
         }
+        // login_id 형식/예약어는 도메인이 검증(IAE), 유니크는 정규화값으로 사전 확인(아직 미영속이라 self-오탐 없음).
+        String normalizedLoginId = User.normalizeLoginId(loginId);
+        if (userRepository.existsByLoginId(normalizedLoginId)) {
+            throw new LoginIdAlreadyExistsException(normalizedLoginId);
+        }
         // nickname은 더 이상 유니크가 아니다(단순 표시 이름) — 중복 확인 없이 그대로 저장한다.
         String passwordHash = passwordEncoder.encode(rawPassword);
-        User user = userRepository.save(User.of(email, passwordHash, nickname, timezone, role));
+        User user = User.of(email, passwordHash, nickname, timezone, role);
+        user.assignLoginId(loginId); // 불변 — 가입에서 단 한 번 확정
+        return persistWithTimer(user, startDate);
+    }
+
+    /**
+     * login_id를 <b>미설정(null)</b>으로 로컬 사용자를 만든다 — login_id를 나중에(예: 온보딩) 확정하는 경로 또는
+     * 테스트 편의용. <b>프로덕션 로컬 가입은 login_id를 받는 위 오버로드를 쓴다</b>(로그인 식별자가 login_id라
+     * 가입 시 있어야 첫 로그인이 된다). 이 경로로 만든 사용자는 login_id가 채워지기 전엔 로그인할 수 없다.
+     */
+    public User register(String email, String rawPassword, String nickname,
+                         String timezone, Role role, LocalDate startDate) {
+        if (userRepository.existsByEmail(email)) {
+            throw new EmailAlreadyExistsException(email);
+        }
+        String passwordHash = passwordEncoder.encode(rawPassword);
+        return persistWithTimer(User.of(email, passwordHash, nickname, timezone, role), startDate);
+    }
+
+    private User persistWithTimer(User user, LocalDate startDate) {
+        user = userRepository.save(user);
         timerRepository.save(ReadingTimer.startFor(
                 user, DEFAULT_DAILY_INCREMENT_SECONDS, DEFAULT_CAP_SECONDS, startDate));
         return user;

@@ -53,16 +53,17 @@ class SessionJdbcPersistenceTest {
     @Test
     @DisplayName("폼 로그인으로 만들어진 세션이 JDBC 저장소(SPRING_SESSION)에 영속화된다 — 인메모리 아님")
     void authenticatedSession_persistedToJdbcStore() throws Exception {
-        userRepository.save(User.of(
-                "reader@booktimer.com", passwordEncoder.encode("rawpw1234"), "책벌레", "Asia/Seoul", Role.USER));
+        User u = User.of("reader@booktimer.com", passwordEncoder.encode("rawpw1234"), "책벌레", "Asia/Seoul", Role.USER);
+        u.assignLoginId("reader1");
+        userRepository.save(u);
 
-        mockMvc.perform(formLogin("/login").user("reader@booktimer.com").password("rawpw1234"))
-                .andExpect(authenticated().withUsername("reader@booktimer.com"));
+        mockMvc.perform(formLogin("/login").user("reader1").password("rawpw1234"))
+                .andExpect(authenticated().withUsername("reader1"));
 
-        // 로그인 세션이 메모리가 아니라 SPRING_SESSION 테이블에 principal 인덱스와 함께 남아야 한다.
+        // 로그인 세션이 메모리가 아니라 SPRING_SESSION 테이블에 principal(=login_id) 인덱스와 함께 남아야 한다.
         Integer sessions = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM SPRING_SESSION WHERE PRINCIPAL_NAME = ?",
-                Integer.class, "reader@booktimer.com");
+                Integer.class, "reader1");
 
         assertThat(sessions)
                 .as("폼 로그인 세션이 JDBC 저장소에 영속화되어야 한다")

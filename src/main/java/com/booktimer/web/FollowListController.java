@@ -1,8 +1,8 @@
 package com.booktimer.web;
 
 import com.booktimer.follow.FollowListService;
+import com.booktimer.security.CurrentUserService;
 import com.booktimer.user.User;
-import com.booktimer.user.UserRepository;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,11 +18,11 @@ import java.security.Principal;
 @Controller
 public class FollowListController {
 
-    private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
     private final FollowListService followListService;
 
-    public FollowListController(UserRepository userRepository, FollowListService followListService) {
-        this.userRepository = userRepository;
+    public FollowListController(CurrentUserService currentUserService, FollowListService followListService) {
+        this.currentUserService = currentUserService;
         this.followListService = followListService;
     }
 
@@ -49,7 +49,6 @@ public class FollowListController {
     }
 
     private User currentUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
-                .orElseThrow(() -> new IllegalStateException("인증 사용자를 찾을 수 없습니다: " + principal.getName()));
+        return currentUserService.resolve(principal);
     }
 }

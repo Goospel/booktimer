@@ -1,6 +1,7 @@
 package com.booktimer.web;
 
 import com.booktimer.block.BlockService;
+import com.booktimer.security.CurrentUserService;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
 import org.springframework.stereotype.Controller;
@@ -21,10 +22,13 @@ import java.security.Principal;
 public class BlockController {
 
     private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
     private final BlockService blockService;
 
-    public BlockController(UserRepository userRepository, BlockService blockService) {
+    public BlockController(UserRepository userRepository, CurrentUserService currentUserService,
+                           BlockService blockService) {
         this.userRepository = userRepository;
+        this.currentUserService = currentUserService;
         this.blockService = blockService;
     }
 
@@ -57,7 +61,6 @@ public class BlockController {
     }
 
     private User currentUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
-                .orElseThrow(() -> new IllegalStateException("authenticated user not found: " + principal.getName()));
+        return currentUserService.resolve(principal);
     }
 }
