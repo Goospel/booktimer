@@ -1,5 +1,7 @@
 package com.booktimer.web;
 
+import com.booktimer.book.Book;
+import com.booktimer.book.BookStatus;
 import com.booktimer.profile.ProfileService;
 import com.booktimer.profile.ProfileView;
 import com.booktimer.report.ReportReason;
@@ -10,9 +12,11 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.security.Principal;
+import java.util.List;
 
 /**
  * 개인 공개 프로필 페이지 (SNS 2·3단계, sns-design §7.2·§7.3).
@@ -36,14 +40,25 @@ public class ProfileController {
     }
 
     @GetMapping("/u/{loginId}")
-    public String profile(@PathVariable String loginId, Principal principal, Model model) {
+    public String profile(@PathVariable String loginId,
+                          @RequestParam(value = "status", required = false) String status,
+                          Principal principal, Model model) {
         User viewer = currentUser(principal);
         ProfileView profile = profileService.profileOf(viewer, loginId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "프로필을 찾을 수 없습니다."));
 
+        // 공개 책장 상태 필터(읽고싶음/읽는중/완독) — 책장(/books)과 동일하게 서버사이드 ?status= 로 거른다.
+        // 값이 없거나 잘못되면 전체(null). 잔디·팔로우 등 다른 영역은 영향받지 않는다(책 목록만 필터).
+        BookStatus shelfFilter = parseStatus(status);
+        List<Book> shelfBooks = shelfFilter == null
+                ? profile.books()
+                : profile.books().stream().filter(b -> b.getStatus() == shelfFilter).toList();
+
         model.addAttribute("loginId", profile.loginId());
         model.addAttribute("nickname", profile.nickname());
-        model.addAttribute("books", profile.books());
+        model.addAttribute("books", shelfBooks);
+        model.addAttribute("shelfFilter", shelfFilter); // 필터 칩 활성 표시·빈 메시지 분기
+        model.addAttribute("statuses", BookStatus.values());
         model.addAttribute("bookTimes", profile.bookTimes());
         model.addAttribute("graph", profile.graph());
         model.addAttribute("followerCount", profile.followerCount());
@@ -52,6 +67,18 @@ public class ProfileController {
         model.addAttribute("self", profile.self());
         model.addAttribute("reportReasons", ReportReason.values());
         return "profile";
+    }
+
+    /** 공개 책장 필터 파라미터를 BookStatus로 — 없거나 잘못된 값이면 null(전체). (BookController와 동일 규칙) */
+    private BookStatus parseStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+        try {
+            return BookStatus.valueOf(status);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private User currentUser(Principal principal) {

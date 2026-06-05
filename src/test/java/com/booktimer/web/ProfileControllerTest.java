@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
@@ -63,7 +64,11 @@ class ProfileControllerTest {
     }
 
     private void publicBook(User owner, String title) {
-        Book b = Book.register(owner, title, null, null, null, null, null, BookStatus.READING);
+        publicBook(owner, title, BookStatus.READING);
+    }
+
+    private void publicBook(User owner, String title, BookStatus status) {
+        Book b = Book.register(owner, title, null, null, null, null, null, status);
         b.makePublic();
         bookRepository.save(b);
     }
@@ -182,6 +187,59 @@ class ProfileControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(model().attribute("self", true))
                 .andExpect(model().attribute("following", false));
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}?status=FINISHED: 해당 상태의 공개 책만 노출하고 shelfFilter를 싣는다")
+    void profile_statusFilter_onlyMatching() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User owner = newUser("owner@booktimer.com", "openking", "공개왕");
+        publicBook(owner, "완독한 책", BookStatus.FINISHED);
+        publicBook(owner, "읽는 중인 책", BookStatus.READING);
+
+        MvcResult res = mockMvc.perform(get("/u/{loginId}", "openking")
+                        .param("status", "FINISHED").with(user("viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("shelfFilter", BookStatus.FINISHED))
+                .andReturn();
+
+        assertThat(booksInModel(res)).extracting(Book::getTitle).containsExactly("완독한 책");
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}: status 없으면 전체 공개 책 + shelfFilter=null·statuses 제공")
+    void profile_noStatus_allBooks() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User owner = newUser("owner@booktimer.com", "openking", "공개왕");
+        publicBook(owner, "완독한 책", BookStatus.FINISHED);
+        publicBook(owner, "읽는 중인 책", BookStatus.READING);
+
+        MvcResult res = mockMvc.perform(get("/u/{loginId}", "openking").with(user("viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("shelfFilter", nullValue()))
+                .andExpect(model().attributeExists("statuses"))
+                .andReturn();
+
+        assertThat(booksInModel(res)).extracting(Book::getTitle)
+                .containsExactlyInAnyOrder("완독한 책", "읽는 중인 책");
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}?status=BOGUS: 잘못된 상태면 전체(필터 없음)")
+    void profile_invalidStatus_allBooks() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User owner = newUser("owner@booktimer.com", "openking", "공개왕");
+        publicBook(owner, "완독한 책", BookStatus.FINISHED);
+        publicBook(owner, "읽는 중인 책", BookStatus.READING);
+
+        MvcResult res = mockMvc.perform(get("/u/{loginId}", "openking")
+                        .param("status", "BOGUS").with(user("viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("shelfFilter", nullValue()))
+                .andReturn();
+
+        assertThat(booksInModel(res)).extracting(Book::getTitle)
+                .containsExactlyInAnyOrder("완독한 책", "읽는 중인 책");
     }
 
     @Test
