@@ -5,6 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>관리자 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
+    <style>
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 0.75rem;
+            margin-top: 0.5rem;
+        }
+        .stat {
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            border-radius: 10px;
+            padding: 0.85rem 1rem;
+            background: rgba(0, 0, 0, 0.02);
+        }
+        .stat .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+        .stat .stat-label {
+            font-size: 0.8rem;
+            opacity: 0.7;
+            margin-top: 0.2rem;
+        }
+    </style>
 </head>
 <body>
 <div class="container">
@@ -16,7 +40,39 @@
 
     <section class="card">
         <h2>통계 요약</h2>
-        <p class="status-line muted">통계 카드(가입자·활성 사용자·총 독서 시간 등)는 다음 단계에서 추가됩니다.</p>
+        <p class="status-line muted">읽기 전용 집계 — 가입자(운영자 제외)·활성·독서 기록 현황.</p>
+        <div class="stat-grid">
+            <div class="stat">
+                <div class="stat-value" th:text="${stats.totalUsers}">0</div>
+                <div class="stat-label">가입자 (USER)</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" th:text="${stats.onboardedUsers}">0</div>
+                <div class="stat-label">온보딩 완료</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" th:text="${stats.activeUsers}">0</div>
+                <div class="stat-label">최근 <span th:text="${stats.activeWindowDays}">7</span>일 활성</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" th:text="${stats.totalBooks}">0</div>
+                <div class="stat-label">등록된 책</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" th:text="${stats.totalSessions}">0</div>
+                <div class="stat-label">측정 세션</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value"
+                     th:text="|${stats.totalReadingSeconds / 3600}시간 ${(stats.totalReadingSeconds % 3600) / 60}분|">0시간 0분</div>
+                <div class="stat-label">총 독서 시간</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value"
+                     th:text="|${stats.avgReadingSecondsPerUser / 3600}시간 ${(stats.avgReadingSecondsPerUser % 3600) / 60}분|">0시간 0분</div>
+                <div class="stat-label">가입자당 평균</div>
+            </div>
+        </div>
     </section>
 
     <p class="link-row">
