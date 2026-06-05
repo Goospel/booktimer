@@ -29,9 +29,9 @@ public class BlockController {
     }
 
     @PostMapping("/block")
-    public String block(@RequestParam String nickname, Principal principal) {
+    public String block(@RequestParam String loginId, Principal principal) {
         User me = currentUser(principal);
-        userRepository.findByNickname(nickname).ifPresent(target -> {
+        userRepository.findByLoginId(loginId).ifPresent(target -> {
             try {
                 blockService.block(me, target);
             } catch (IllegalArgumentException ignored) {
@@ -42,16 +42,16 @@ public class BlockController {
     }
 
     @PostMapping("/unblock")
-    public String unblock(@RequestParam String nickname, Principal principal) {
+    public String unblock(@RequestParam String loginId, Principal principal) {
         User me = currentUser(principal);
-        userRepository.findByNickname(nickname).ifPresent(target -> blockService.unblock(me, target));
+        userRepository.findByLoginId(loginId).ifPresent(target -> blockService.unblock(me, target));
         return "redirect:/me/blocks";
     }
 
     @GetMapping("/me/blocks")
     public String blocks(Principal principal, Model model) {
         User me = currentUser(principal);
-        model.addAttribute("nickname", me.getNickname());
+        model.addAttribute("loginId", me.getLoginId()); // "내 프로필" 링크(/u/{loginId})용
         model.addAttribute("blocked", blockService.blockedUsers(me));
         return "block-list";
     }

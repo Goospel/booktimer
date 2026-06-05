@@ -55,6 +55,7 @@ public class DashboardModel {
         Book activeBook = activeSession.map(ReadingSession::getBook).orElse(null);
 
         model.addAttribute("nickname", user.getNickname());
+        model.addAttribute("loginId", user.getLoginId()); // "내 공개 프로필" 링크(/u/{loginId})용
         model.addAttribute("remainingSeconds", timer.getRemainingSeconds());
         model.addAttribute("atCap", timer.isAtCap());
         model.addAttribute("hasActiveSession", activeSession.isPresent());

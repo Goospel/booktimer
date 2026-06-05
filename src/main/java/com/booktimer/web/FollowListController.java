@@ -29,7 +29,7 @@ public class FollowListController {
     @GetMapping("/me/followers")
     public String followers(Principal principal, Model model) {
         User me = currentUser(principal);
-        model.addAttribute("nickname", me.getNickname());
+        model.addAttribute("loginId", me.getLoginId()); // "내 프로필" 링크(/u/{loginId})용
         model.addAttribute("listType", "followers");
         model.addAttribute("heading", "내 팔로워");
         model.addAttribute("emptyMessage", "아직 나를 팔로우한 사람이 없습니다.");
@@ -40,7 +40,7 @@ public class FollowListController {
     @GetMapping("/me/following")
     public String following(Principal principal, Model model) {
         User me = currentUser(principal);
-        model.addAttribute("nickname", me.getNickname());
+        model.addAttribute("loginId", me.getLoginId()); // "내 프로필" 링크(/u/{loginId})용
         model.addAttribute("listType", "following");
         model.addAttribute("heading", "내 팔로잉");
         model.addAttribute("emptyMessage", "아직 팔로우한 사람이 없습니다.");

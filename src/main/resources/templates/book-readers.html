@@ -28,8 +28,8 @@
             <ul class="book-list">
                 <li class="book-row" th:each="r : ${readers.reading()}">
                     <div class="book-meta">
-                        <a class="book-title" th:href="@{/u/{n}(n=${r.nickname})}" th:text="${r.nickname}">닉네임</a>
-                        <span class="book-author" th:text="'공개 책 ' + ${r.publicBookCount} + '권'">공개 책 0권</span>
+                        <a class="book-title" th:href="@{/u/{n}(n=${r.loginId})}" th:text="${r.nickname}">닉네임</a>
+                        <span class="book-author" th:text="'@' + ${r.loginId} + ' · 공개 책 ' + ${r.publicBookCount} + '권'">@아이디 · 공개 책 0권</span>
                     </div>
                     <div class="book-actions" th:insert="~{::followAction(${r})}"></div>
                 </li>
@@ -42,8 +42,8 @@
             <ul class="book-list">
                 <li class="book-row" th:each="r : ${readers.wanting()}">
                     <div class="book-meta">
-                        <a class="book-title" th:href="@{/u/{n}(n=${r.nickname})}" th:text="${r.nickname}">닉네임</a>
-                        <span class="book-author" th:text="'공개 책 ' + ${r.publicBookCount} + '권'">공개 책 0권</span>
+                        <a class="book-title" th:href="@{/u/{n}(n=${r.loginId})}" th:text="${r.nickname}">닉네임</a>
+                        <span class="book-author" th:text="'@' + ${r.loginId} + ' · 공개 책 ' + ${r.publicBookCount} + '권'">@아이디 · 공개 책 0권</span>
                     </div>
                     <div class="book-actions" th:insert="~{::followAction(${r})}"></div>
                 </li>
@@ -63,7 +63,7 @@
     <span th:if="${r != null and r.self}" class="book-status-badge">나</span>
     <form th:if="${r != null and !r.self}" method="post"
           th:action="@{${r.following} ? '/unfollow' : '/follow'}">
-        <input type="hidden" name="nickname" th:value="${r.nickname}">
+        <input type="hidden" name="loginId" th:value="${r.loginId}">
         <input type="hidden" name="redirect" th:value="@{/books/readers(isbn=${isbn}, title=${title})}">
         <button type="submit"
                 th:classappend="${r.following} ? 'btn-ghost' : 'btn-primary'"

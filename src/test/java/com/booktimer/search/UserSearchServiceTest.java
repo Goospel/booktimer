@@ -19,10 +19,11 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * UserSearchService 통합 테스트 (실제 빈 + H2) — 닉네임 검색 (sns-design §7.3).
+ * UserSearchService 통합 테스트 (실제 빈 + H2) — <b>login_id(공개 @핸들) 검색</b> (login-id-design §7 PR-3).
  *
- * <p>핵심: ① 부분일치, ② 최소 2글자 미만이면 빈 결과, ③ 결과 상한 20, ④ 공개 책 수는 PUBLIC만,
- * ⑤ 본인은 self·내가 팔로우 중인 사람은 following 플래그.
+ * <p>핵심: ① <b>login_id 부분일치</b>(닉네임이 아니라 아이디로 검색 — 인스타/X 모델), ② 최소 2글자 미만이면
+ * 빈 결과, ③ 결과 상한 20, ④ 공개 책 수는 PUBLIC만, ⑤ 본인은 self·내가 팔로우 중인 사람은 following 플래그.
+ * 결과 행은 <b>핸들(login_id) + 표시 이름(nickname)</b>을 함께 싣는다(링크/식별은 login_id, 표시는 nickname).
  */
 @SpringBootTest
 @Transactional
@@ -39,8 +40,10 @@ class UserSearchServiceTest {
     @Autowired
     private BlockService blockService;
 
-    private User newUser(String email, String nickname) {
-        return userRepository.save(User.of(email, "$2a$10$abcdefghijklmnopqrstuv", nickname, "Asia/Seoul", Role.USER));
+    private User newUser(String email, String loginId, String nickname) {
+        User u = User.of(email, "$2a$10$abcdefghijklmnopqrstuv", nickname, "Asia/Seoul", Role.USER);
+        u.assignLoginId(loginId);
+        return userRepository.save(u);
     }
 
     private void publicBook(User owner, String title) {
@@ -54,20 +57,21 @@ class UserSearchServiceTest {
     }
 
     @Test
-    @DisplayName("부분일치로 닉네임을 찾고, 공개 책 수·팔로우 여부·본인 플래그를 채운다")
+    @DisplayName("login_id 부분일치로 찾고, 핸들·표시이름·공개 책 수·팔로우 여부·본인 플래그를 채운다")
     void search_partialMatch_withFlags() {
-        User viewer = newUser("viewer@booktimer.com", "검색가");
-        User target = newUser("t@booktimer.com", "독서왕");
+        User viewer = newUser("viewer@booktimer.com", "searcher", "검색가");
+        User target = newUser("t@booktimer.com", "bookking", "독서왕");
         publicBook(target, "공개책1");
         publicBook(target, "공개책2");
         privateBook(target, "비공개책"); // 공개 책 수에 안 잡혀야 함
-        newUser("other@booktimer.com", "관계자"); // "독서" 미포함 → 결과 제외
+        newUser("other@booktimer.com", "relator", "관계자"); // "book" 미포함 → 결과 제외
         followService.follow(viewer, target);
 
-        List<UserSearchResult> results = searchService.search(viewer, "독서");
+        List<UserSearchResult> results = searchService.search(viewer, "book");
 
         assertThat(results).hasSize(1);
         UserSearchResult r = results.get(0);
+        assertThat(r.loginId()).isEqualTo("bookking");
         assertThat(r.nickname()).isEqualTo("독서왕");
         assertThat(r.publicBookCount()).isEqualTo(2L); // PUBLIC만
         assertThat(r.following()).isTrue();
@@ -75,12 +79,26 @@ class UserSearchServiceTest {
     }
 
     @Test
+    @DisplayName("검색은 login_id 기준이다 — 닉네임으로는 찾히지 않고, 닉네임이 중복돼도 login_id로 정확히 구분된다")
+    void search_byLoginId_notNickname() {
+        User viewer = newUser("viewer@booktimer.com", "searcher", "검색가");
+        newUser("a@booktimer.com", "alpha", "동명이인"); // 같은 닉네임
+        newUser("b@booktimer.com", "bravo", "동명이인"); // 같은 닉네임, 다른 아이디
+
+        // 닉네임("동명이인")으로는 검색되지 않는다 — 검색 핸들은 login_id다
+        assertThat(searchService.search(viewer, "동명")).isEmpty();
+        // login_id로는 정확히 1명만 (닉네임이 같아도 구분됨)
+        List<UserSearchResult> byAlpha = searchService.search(viewer, "alpha");
+        assertThat(byAlpha).extracting(UserSearchResult::loginId).containsExactly("alpha");
+    }
+
+    @Test
     @DisplayName("검색어가 2글자 미만이면 빈 결과(열거 완화)")
     void search_tooShort_empty() {
-        User viewer = newUser("viewer@booktimer.com", "검색가");
-        newUser("t@booktimer.com", "독서왕");
+        User viewer = newUser("viewer@booktimer.com", "searcher", "검색가");
+        newUser("t@booktimer.com", "bookking", "독서왕");
 
-        assertThat(searchService.search(viewer, "독")).isEmpty();
+        assertThat(searchService.search(viewer, "b")).isEmpty();
         assertThat(searchService.search(viewer, " ")).isEmpty();
         assertThat(searchService.search(viewer, null)).isEmpty();
     }
@@ -88,9 +106,9 @@ class UserSearchServiceTest {
     @Test
     @DisplayName("본인이 검색 결과에 걸리면 self=true (팔로우 버튼 대신 '나' 표시용)")
     void search_self_flagged() {
-        User viewer = newUser("viewer@booktimer.com", "독서가");
+        User viewer = newUser("viewer@booktimer.com", "reader", "독서가");
 
-        List<UserSearchResult> results = searchService.search(viewer, "독서");
+        List<UserSearchResult> results = searchService.search(viewer, "read");
 
         assertThat(results).hasSize(1);
         assertThat(results.get(0).self()).isTrue();
@@ -100,28 +118,28 @@ class UserSearchServiceTest {
     @Test
     @DisplayName("차단 관계(양방향)인 사용자는 검색 결과에서 제외된다")
     void search_excludesBlocked() {
-        User viewer = newUser("viewer@booktimer.com", "검색가");
-        User blocked = newUser("b@booktimer.com", "독서왕");   // viewer가 차단
-        User blocker = newUser("c@booktimer.com", "독서광");   // viewer를 차단(역방향)
-        newUser("v@booktimer.com", "독서가");                  // 차단 무관 — 남아야 함
+        User viewer = newUser("viewer@booktimer.com", "searcher", "검색가");
+        User blocked = newUser("b@booktimer.com", "readerone", "독서왕");   // viewer가 차단
+        User blocker = newUser("c@booktimer.com", "readertwo", "독서광");   // viewer를 차단(역방향)
+        newUser("v@booktimer.com", "readerfree", "독서가");                 // 차단 무관 — 남아야 함
         blockService.block(viewer, blocked);
         blockService.block(blocker, viewer);
 
-        List<UserSearchResult> results = searchService.search(viewer, "독서");
+        List<UserSearchResult> results = searchService.search(viewer, "reader");
 
-        assertThat(results).extracting(UserSearchResult::nickname)
-                .containsExactly("독서가")               // 차단 무관만 남음
-                .doesNotContain("독서왕", "독서광");      // 양방향 모두 숨김
+        assertThat(results).extracting(UserSearchResult::loginId)
+                .containsExactly("readerfree")            // 차단 무관만 남음
+                .doesNotContain("readerone", "readertwo"); // 양방향 모두 숨김
     }
 
     @Test
     @DisplayName("결과는 최대 20명으로 제한된다(상한 가드)")
     void search_cappedAt20() {
-        User viewer = newUser("viewer@booktimer.com", "검색가");
+        User viewer = newUser("viewer@booktimer.com", "searcher", "검색가");
         for (int i = 1; i <= 22; i++) {
-            newUser("u" + i + "@booktimer.com", String.format("북클럽%02d", i));
+            newUser("u" + i + "@booktimer.com", String.format("club%02d", i), String.format("북클럽%02d", i));
         }
 
-        assertThat(searchService.search(viewer, "북클럽")).hasSize(20);
+        assertThat(searchService.search(viewer, "club")).hasSize(20);
     }
 }

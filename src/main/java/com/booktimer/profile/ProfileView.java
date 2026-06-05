@@ -15,7 +15,8 @@ import java.util.Map;
  * <p>팔로우 관계는 <b>카운트만</b> 노출하고(목록 화면은 후속), 버튼 분기를 위해 viewer 기준
  * {@code following}/{@code self}를 함께 담는다.
  *
- * @param nickname       대상 사용자 닉네임(공개 핸들)
+ * @param loginId        대상 사용자 공개 @핸들(login_id) — 프로필 URL·팔로우/차단/신고 폼의 식별자
+ * @param nickname       대상 사용자 표시 이름(중복 가능) — 화면 제목·인사말에 보이는 이름
  * @param books          공개(PUBLIC) 책 목록(최신 등록 먼저)
  * @param bookTimes      책 id → 누적 독서 초(공개 책만)
  * @param graph          공개 잔디(PUBLIC 책 세션만 반영)
@@ -25,6 +26,7 @@ import java.util.Map;
  * @param self           이 프로필이 viewer 본인인지(그러면 팔로우 버튼 없음)
  */
 public record ProfileView(
+        String loginId,
         String nickname,
         List<Book> books,
         Map<Long, Long> bookTimes,
