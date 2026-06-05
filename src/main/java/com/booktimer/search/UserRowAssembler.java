@@ -27,6 +27,6 @@ public class UserRowAssembler {
         boolean self = target.getId() != null && target.getId().equals(viewer.getId());
         long publicBooks = bookRepository.countByUserAndVisibility(target, BookVisibility.PUBLIC);
         boolean following = !self && followService.isFollowing(viewer, target);
-        return new UserSearchResult(target.getNickname(), publicBooks, following, self);
+        return new UserSearchResult(target.getLoginId(), target.getNickname(), publicBooks, following, self);
     }
 }

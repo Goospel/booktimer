@@ -17,12 +17,12 @@ import java.security.Principal;
 /**
  * 개인 공개 프로필 페이지 (SNS 2·3단계, sns-design §7.2·§7.3).
  *
- * <p>{@code GET /u/{nickname}} — 닉네임으로 공개 프로필(PUBLIC 책장 + 잔디 + 팔로우 카운트)을 SSR로 그린다.
+ * <p>{@code GET /u/{loginId}} — login_id(공개 @핸들)로 공개 프로필(PUBLIC 책장 + 잔디 + 팔로우 카운트)을 SSR로 그린다.
  * 이 페이지는 "남에게 보이는 공개 프로필"이라 viewer를 가리지 않는다(본인이 봐도 PUBLIC만, {@link ProfileService}).
  * 팔로우 버튼만 viewer 기준으로 분기한다(내가 팔로우 중인지 / 본인이면 버튼 없음).
  *
  * <p>접근 제어: 로그인 사용자만(비로그인은 SecurityConfig {@code anyRequest().authenticated()}로 차단).
- * 없는 닉네임은 <b>404</b>(존재 누설 회피 §5.3).
+ * 없는 아이디는 <b>404</b>(존재 누설 회피 §5.3).
  */
 @Controller
 public class ProfileController {
@@ -35,12 +35,13 @@ public class ProfileController {
         this.userRepository = userRepository;
     }
 
-    @GetMapping("/u/{nickname}")
-    public String profile(@PathVariable String nickname, Principal principal, Model model) {
+    @GetMapping("/u/{loginId}")
+    public String profile(@PathVariable String loginId, Principal principal, Model model) {
         User viewer = currentUser(principal);
-        ProfileView profile = profileService.profileOf(viewer, nickname)
+        ProfileView profile = profileService.profileOf(viewer, loginId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "프로필을 찾을 수 없습니다."));
 
+        model.addAttribute("loginId", profile.loginId());
         model.addAttribute("nickname", profile.nickname());
         model.addAttribute("books", profile.books());
         model.addAttribute("bookTimes", profile.bookTimes());

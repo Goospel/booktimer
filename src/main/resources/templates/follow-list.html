@@ -25,14 +25,14 @@
         <ul class="book-list" th:unless="${users.isEmpty()}">
             <li class="book-row" th:each="r : ${users}">
                 <div class="book-meta">
-                    <a class="book-title" th:href="@{/u/{n}(n=${r.nickname})}" th:text="${r.nickname}">닉네임</a>
-                    <span class="book-author" th:text="'공개 책 ' + ${r.publicBookCount} + '권'">공개 책 0권</span>
+                    <a class="book-title" th:href="@{/u/{n}(n=${r.loginId})}" th:text="${r.nickname}">닉네임</a>
+                    <span class="book-author" th:text="'@' + ${r.loginId} + ' · 공개 책 ' + ${r.publicBookCount} + '권'">@아이디 · 공개 책 0권</span>
                 </div>
                 <div class="book-actions">
                     <span th:if="${r.self}" class="book-status-badge">나</span>
                     <form th:unless="${r.self}" method="post"
                           th:action="@{${r.following} ? '/unfollow' : '/follow'}">
-                        <input type="hidden" name="nickname" th:value="${r.nickname}">
+                        <input type="hidden" name="loginId" th:value="${r.loginId}">
                         <input type="hidden" name="redirect"
                                th:value="${listType == 'followers'} ? '/me/followers' : '/me/following'">
                         <button type="submit"
@@ -46,7 +46,7 @@
 
     <p class="link-row">
         <a th:href="@{/}">← 대시보드</a>
-        <a th:href="@{/u/{n}(n=${nickname})}">👤 내 프로필</a>
+        <a th:href="@{/u/{n}(n=${loginId})}">👤 내 프로필</a>
     </p>
 </div>
 </body>

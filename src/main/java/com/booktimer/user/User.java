@@ -83,9 +83,10 @@ public class User extends BaseTimeEntity {
     private boolean onboarded = false;
 
     /**
-     * 로그인/식별용 아이디(비공개). email 대신 이걸로 로그인·식별한다(설계: login-id-design.md).
-     * 형식은 {@link #LOGIN_ID_PATTERN}(소문자 영숫자·언더스코어 3~20자). 공개 핸들(nickname)과 달리
-     * 어디에도 노출하지 않는다. 처음엔 {@code null}(가입/온보딩에서 채움 — PR-2), 최종 NOT NULL(PR-4).
+     * 로그인/식별용 아이디이자 <b>공개 @핸들</b>(인스타/X 모델, 설계: login-id-design.md). email 대신 이걸로
+     * 로그인·식별하고, 검색·프로필 URL({@code /u/{loginId}})·팔로우 대상 식별도 이 값 기준이다(PR-3 컷오버).
+     * 형식은 {@link #LOGIN_ID_PATTERN}(소문자 영숫자·언더스코어 3~20자). 표시 이름(nickname)과 달리 <b>불변</b>이다
+     * ({@link #assignLoginId}). 처음엔 {@code null}(온보딩에서 채움 — PR-2), 최종 NOT NULL(PR-5).
      */
     @Column(name = "login_id", length = 50)
     private String loginId;
@@ -285,7 +286,7 @@ public class User extends BaseTimeEntity {
         return normalized;
     }
 
-    /** 로그인/식별용 아이디(비공개). 아직 설정 전이면 {@code null}. */
+    /** 로그인/식별용 아이디이자 공개 @핸들(검색·프로필 URL). 아직 설정 전이면 {@code null}. */
     public String getLoginId() {
         return loginId;
     }

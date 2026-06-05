@@ -28,10 +28,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
 /**
- * 개인 프로필 페이지 컨트롤러 통합 테스트 (SNS 2단계, sns-design §7.2).
+ * 개인 프로필 페이지 컨트롤러 통합 테스트 (SNS 2단계 · login-id-design §7 PR-3).
  *
- * <p>핵심: 이 페이지는 "남에게 보이는 공개 프로필"이라 <b>viewer 무관하게 PUBLIC 책만</b> 노출한다
- * (본인이 자기 프로필을 봐도 PUBLIC만 — 공개 미리보기). 비로그인은 차단(로그인 한정 시작).
+ * <p>프로필은 이제 <b>login_id(공개 @핸들)로 조회</b>한다({@code GET /u/{loginId}}) — 닉네임은 중복될 수
+ * 있어 더 이상 1:1 핸들이 아니다. 이 페이지는 "남에게 보이는 공개 프로필"이라 <b>viewer 무관하게 PUBLIC
+ * 책만</b> 노출한다(본인이 봐도 PUBLIC만). 비로그인은 차단(로그인 한정 시작).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -49,9 +50,10 @@ class ProfileControllerTest {
     @Autowired
     private FollowService followService;
 
-    private User newUser(String email, String nickname) {
-        return userRepository.save(
-                User.of(email, passwordEncoder.encode("rawpw1234"), nickname, "Asia/Seoul", Role.USER));
+    private User newUser(String email, String loginId, String nickname) {
+        User u = User.of(email, passwordEncoder.encode("rawpw1234"), nickname, "Asia/Seoul", Role.USER);
+        u.assignLoginId(loginId);
+        return userRepository.save(u);
     }
 
     private void publicBook(User owner, String title) {
@@ -70,37 +72,59 @@ class ProfileControllerTest {
     }
 
     @Test
-    @DisplayName("GET /u/{nickname}: 없는 닉네임이면 404")
-    void profile_unknownNickname_404() throws Exception {
-        newUser("viewer@booktimer.com", "뷰어");
-        mockMvc.perform(get("/u/{nickname}", "존재하지않는닉").with(user("viewer@booktimer.com")))
+    @DisplayName("GET /u/{loginId}: 없는 아이디면 404")
+    void profile_unknownLoginId_404() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        mockMvc.perform(get("/u/{loginId}", "nosuchid").with(user("viewer@booktimer.com")))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    @DisplayName("GET /u/{nickname}: 타인 프로필은 PUBLIC 책만 노출하고 PRIVATE 책은 누락된다")
+    @DisplayName("GET /u/{loginId}: 타인 프로필은 PUBLIC 책만 노출하고 PRIVATE 책은 누락된다")
     void profile_otherUser_onlyPublicBooks() throws Exception {
-        newUser("viewer@booktimer.com", "뷰어");
-        User owner = newUser("owner@booktimer.com", "공개왕");
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User owner = newUser("owner@booktimer.com", "openking", "공개왕");
         publicBook(owner, "공개한 책");
         privateBook(owner, "비공개 책");
 
-        MvcResult res = mockMvc.perform(get("/u/{nickname}", "공개왕").with(user("viewer@booktimer.com")))
+        MvcResult res = mockMvc.perform(get("/u/{loginId}", "openking").with(user("viewer@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("profile"))
+                .andExpect(model().attribute("loginId", "openking"))
+                .andExpect(model().attribute("nickname", "공개왕"))
                 .andReturn();
 
         assertThat(booksInModel(res)).extracting(Book::getTitle).containsExactly("공개한 책");
     }
 
     @Test
-    @DisplayName("GET /u/{nickname}: 본인이 자기 프로필을 봐도 PUBLIC만 (공개 미리보기)")
+    @DisplayName("GET /u/{loginId}: 닉네임이 같아도 login_id로 각각 정확히 조회된다(핸들은 login_id)")
+    void profile_duplicateNickname_resolvedByLoginId() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User a = newUser("a@booktimer.com", "alpha", "동명이인");
+        User b = newUser("b@booktimer.com", "bravo", "동명이인"); // 같은 닉네임
+        publicBook(a, "알파의책");
+        publicBook(b, "브라보의책");
+
+        MvcResult resA = mockMvc.perform(get("/u/{loginId}", "alpha").with(user("viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andReturn();
+        MvcResult resB = mockMvc.perform(get("/u/{loginId}", "bravo").with(user("viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        assertThat(booksInModel(resA)).extracting(Book::getTitle).containsExactly("알파의책");
+        assertThat(booksInModel(resB)).extracting(Book::getTitle).containsExactly("브라보의책");
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}: 본인이 자기 프로필을 봐도 PUBLIC만 (공개 미리보기)")
     void profile_self_onlyPublic() throws Exception {
-        User me = newUser("me@booktimer.com", "나자신");
+        User me = newUser("me@booktimer.com", "myself", "나자신");
         publicBook(me, "내 공개책");
         privateBook(me, "내 비공개책");
 
-        MvcResult res = mockMvc.perform(get("/u/{nickname}", "나자신").with(user("me@booktimer.com")))
+        MvcResult res = mockMvc.perform(get("/u/{loginId}", "myself").with(user("me@booktimer.com")))
                 .andExpect(status().isOk())
                 .andReturn();
 
@@ -108,15 +132,15 @@ class ProfileControllerTest {
     }
 
     @Test
-    @DisplayName("GET /u/{nickname}: 팔로워/팔로잉 카운트와 팔로우 상태가 모델에 실린다")
+    @DisplayName("GET /u/{loginId}: 팔로워/팔로잉 카운트와 팔로우 상태가 모델에 실린다")
     void profile_followInfo() throws Exception {
-        User viewer = newUser("viewer@booktimer.com", "뷰어");
-        User owner = newUser("owner@booktimer.com", "주인");
-        User third = newUser("third@booktimer.com", "삼자");
+        User viewer = newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User owner = newUser("owner@booktimer.com", "owner", "주인");
+        User third = newUser("third@booktimer.com", "third", "삼자");
         followService.follow(viewer, owner); // 내가 팔로우
         followService.follow(third, owner);  // 다른 사람도 팔로우 → 팔로워 2
 
-        mockMvc.perform(get("/u/{nickname}", "주인").with(user("viewer@booktimer.com")))
+        mockMvc.perform(get("/u/{loginId}", "owner").with(user("viewer@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(model().attribute("followerCount", 2L))
                 .andExpect(model().attribute("following", true))
@@ -124,11 +148,11 @@ class ProfileControllerTest {
     }
 
     @Test
-    @DisplayName("GET /u/{nickname}: 본인 프로필은 self=true (팔로우 버튼 없음)")
+    @DisplayName("GET /u/{loginId}: 본인 프로필은 self=true (팔로우 버튼 없음)")
     void profile_self_noFollowButton() throws Exception {
-        newUser("me@booktimer.com", "나자신");
+        newUser("me@booktimer.com", "myself", "나자신");
 
-        mockMvc.perform(get("/u/{nickname}", "나자신").with(user("me@booktimer.com")))
+        mockMvc.perform(get("/u/{loginId}", "myself").with(user("me@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(model().attribute("self", true))
                 .andExpect(model().attribute("following", false));
@@ -137,9 +161,9 @@ class ProfileControllerTest {
     @Test
     @DisplayName("비로그인 사용자는 프로필을 볼 수 없다 — 로그인으로 리다이렉트(로그인 한정 시작)")
     void profile_anonymous_redirectsToLogin() throws Exception {
-        newUser("owner2@booktimer.com", "공개왕2");
+        newUser("owner2@booktimer.com", "openking2", "공개왕2");
 
-        mockMvc.perform(get("/u/{nickname}", "공개왕2"))
+        mockMvc.perform(get("/u/{loginId}", "openking2"))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/login"));
     }

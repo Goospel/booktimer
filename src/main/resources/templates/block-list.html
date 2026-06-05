@@ -22,12 +22,13 @@
         <ul class="book-list" th:unless="${blocked.isEmpty()}">
             <li class="book-row" th:each="u : ${blocked}">
                 <div class="book-meta">
-                    <!-- 차단 상태라 프로필은 404 — 닉네임은 링크 없이 표시 -->
+                    <!-- 차단 상태라 프로필은 404 — 표시 이름은 링크 없이, @아이디는 보조로 -->
                     <span class="book-title" th:text="${u.nickname}">닉네임</span>
+                    <span class="book-author" th:text="'@' + ${u.loginId}">@아이디</span>
                 </div>
                 <div class="book-actions">
                     <form method="post" th:action="@{/unblock}">
-                        <input type="hidden" name="nickname" th:value="${u.nickname}">
+                        <input type="hidden" name="loginId" th:value="${u.loginId}">
                         <button type="submit" class="btn-ghost">차단 해제</button>
                     </form>
                 </div>
@@ -37,7 +38,7 @@
 
     <p class="link-row">
         <a th:href="@{/}">← 대시보드</a>
-        <a th:href="@{/u/{n}(n=${nickname})}">👤 내 프로필</a>
+        <a th:href="@{/u/{n}(n=${loginId})}">👤 내 프로필</a>
     </p>
 </div>
 </body>

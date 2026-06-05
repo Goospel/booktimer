@@ -13,6 +13,7 @@
         <h1>BookTimer</h1>
     </header>
     <p class="greeting"><span th:text="${nickname}">닉네임</span>님의 공개 프로필</p>
+    <p class="muted" th:text="'@' + ${loginId}">@아이디</p>
 
     <!-- 팔로우 카운트 + 버튼. 본인 프로필에서만 카운트가 목록(/me/**)으로 링크 — 남의 목록은 비노출(privacy). -->
     <div class="profile-follow">
@@ -22,8 +23,8 @@
         <span th:unless="${self}" class="follow-count">팔로잉 <strong th:text="${followingCount}">0</strong></span>
         <span th:unless="${self}" class="follow-action profile-actions">
             <form method="post" th:action="@{${following} ? '/unfollow' : '/follow'}">
-                <input type="hidden" name="nickname" th:value="${nickname}">
-                <input type="hidden" name="redirect" th:value="@{/u/{n}(n=${nickname})}">
+                <input type="hidden" name="loginId" th:value="${loginId}">
+                <input type="hidden" name="redirect" th:value="@{/u/{n}(n=${loginId})}">
                 <button type="submit"
                         th:classappend="${following} ? 'btn-ghost' : 'btn-primary'"
                         th:text="${following} ? '언팔로우' : '팔로우'">팔로우</button>
@@ -31,7 +32,7 @@
             <!-- 차단: 누르면 상대 프로필이 대칭으로 안 보이게 됨 → 차단 목록으로 이동. 해제도 거기서. -->
             <form method="post" th:action="@{/block}"
                   onsubmit="return confirm('이 사용자를 차단할까요? 서로 팔로우·프로필 열람이 막힙니다.');">
-                <input type="hidden" name="nickname" th:value="${nickname}">
+                <input type="hidden" name="loginId" th:value="${loginId}">
                 <button type="submit" class="btn-ghost btn-block">차단</button>
             </form>
         </span>
@@ -42,8 +43,8 @@
         <summary>🚩 이 사용자 신고</summary>
         <form method="post" th:action="@{/report}" class="report-form"
               onsubmit="return confirm('이 사용자를 신고할까요?');">
-            <input type="hidden" name="nickname" th:value="${nickname}">
-            <input type="hidden" name="redirect" th:value="@{/u/{n}(n=${nickname})}">
+            <input type="hidden" name="loginId" th:value="${loginId}">
+            <input type="hidden" name="redirect" th:value="@{/u/{n}(n=${loginId})}">
             <label>사유
                 <select name="reason">
                     <option th:each="r : ${reportReasons}" th:value="${r}" th:text="${r.label}">사유</option>

@@ -40,8 +40,10 @@ class SearchControllerTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    private void newUser(String email, String nickname) {
-        userRepository.save(User.of(email, passwordEncoder.encode("rawpw1234"), nickname, "Asia/Seoul", Role.USER));
+    private void newUser(String email, String loginId, String nickname) {
+        User u = User.of(email, passwordEncoder.encode("rawpw1234"), nickname, "Asia/Seoul", Role.USER);
+        u.assignLoginId(loginId);
+        userRepository.save(u);
     }
 
     @SuppressWarnings("unchecked")
@@ -50,23 +52,23 @@ class SearchControllerTest {
     }
 
     @Test
-    @DisplayName("GET /search?q=: 부분일치 결과를 화면 모델에 싣는다")
+    @DisplayName("GET /search?q=: login_id 부분일치 결과를 화면 모델에 싣는다(핸들로 검색)")
     void search_rendersResults() throws Exception {
-        newUser("me@booktimer.com", "searcher");
-        newUser("t@booktimer.com", "booklover");
+        newUser("me@booktimer.com", "searcher", "검색가");
+        newUser("t@booktimer.com", "booklover", "책좋아");
 
         MvcResult res = mockMvc.perform(get("/search").param("q", "book").with(user("me@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("search"))
                 .andReturn();
 
-        assertThat(resultsInModel(res)).extracting(UserSearchResult::nickname).containsExactly("booklover");
+        assertThat(resultsInModel(res)).extracting(UserSearchResult::loginId).containsExactly("booklover");
     }
 
     @Test
     @DisplayName("GET /search: 검색어 없으면 빈 결과로 화면만 그린다")
     void search_noQuery_empty() throws Exception {
-        newUser("me@booktimer.com", "searcher");
+        newUser("me@booktimer.com", "searcher", "검색가");
 
         MvcResult res = mockMvc.perform(get("/search").with(user("me@booktimer.com")))
                 .andExpect(status().isOk())
@@ -79,8 +81,8 @@ class SearchControllerTest {
     @Test
     @DisplayName("검색을 한도 이상 반복하면 레이트리밋 안내가 뜨고 결과를 싣지 않는다")
     void search_rateLimited_showsNotice() throws Exception {
-        newUser("rl@booktimer.com", "limiter");
-        newUser("bt@booktimer.com", "booklover");
+        newUser("rl@booktimer.com", "limiter", "리미터");
+        newUser("bt@booktimer.com", "booklover", "책좋아");
 
         int limit = RateLimitAction.SEARCH.limit();
         for (int i = 0; i < limit; i++) {
