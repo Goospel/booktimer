@@ -1,6 +1,7 @@
 package com.booktimer.search;
 
 import com.booktimer.block.BlockRepository;
+import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
 import org.springframework.stereotype.Service;
@@ -46,6 +47,7 @@ public class UserSearchService {
             return List.of();
         }
         return userRepository.findTop20ByLoginIdContainingIgnoreCaseOrderByLoginIdAsc(q).stream()
+                .filter(u -> u.getRole() != Role.ADMIN) // 운영자는 일반 사용자에게 노출하지 않음
                 .filter(u -> !blockRepository.existsBetween(viewer, u)) // 차단 관계는 숨김(대칭)
                 .map(u -> rowAssembler.toRow(viewer, u))
                 .toList();
