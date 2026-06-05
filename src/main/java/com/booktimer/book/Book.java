@@ -88,7 +88,8 @@ public class Book extends BaseTimeEntity {
         this.user = user;
         this.title = title.strip();
         this.author = author;
-        this.isbn13 = isbn13;
+        // 적재 단일 통로 — 검색/수동/미래 경로 무관하게 동일성 키를 한 표기로 모은다(빈 값→null).
+        this.isbn13 = Isbn.normalize(isbn13);
         this.coverUrl = coverUrl;
         this.publisher = publisher;
         this.purchaseLink = purchaseLink;

@@ -63,6 +63,18 @@ class BookTest {
     }
 
     @Test
+    @DisplayName("register: isbn13을 적재 시점에 정규화한다 — 하이픈 제거, 빈 값은 null(동일성 키 통일)")
+    void register_normalizesIsbn13() {
+        Book hyphenated = Book.register(reader(), "클린 코드", null, "978-89-954321-0-7",
+                null, null, null, BookStatus.WANT_TO_READ);
+        assertThat(hyphenated.getIsbn13()).isEqualTo("9788995432107");
+
+        Book blankIsbn = Book.register(reader(), "리팩터링", null, "  ",
+                null, null, null, BookStatus.WANT_TO_READ);
+        assertThat(blankIsbn.getIsbn13()).isNull();
+    }
+
+    @Test
     @DisplayName("새 책은 기본이 비공개(PRIVATE)다 — 공개는 사용자가 명시적으로 켠다")
     void visibility_defaultsToPrivate() {
         Book book = bookWith(BookStatus.WANT_TO_READ);
