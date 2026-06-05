@@ -76,17 +76,37 @@ public class AccountService {
     }
 
     /**
-     * 소셜(비밀번호 없는) 계정을 삭제한다. 비밀번호가 없으므로 재확인 대신 provider 인증 세션을 전제로 한다.
-     * LOCAL 계정에는 쓸 수 없다 — LOCAL은 반드시 비밀번호 확인 경로({@link #deleteAccount})를 거쳐야 한다.
+     * 소셜(비밀번호 없는) 계정을 삭제한다. 비밀번호가 없어 비번 재인증을 못 하므로, 대신 <b>본인 공개 @핸들
+     * (login_id)을 정확히 입력</b>받아 재확인한다 — 우발적·CSRF성 삭제 방어(GitHub "저장소 이름 입력" 패턴).
+     * 입력 핸들은 앞뒤 공백·선행 {@code @}·대소문자만 다른 건 같은 것으로 본다. LOCAL 계정에는 쓸 수 없다 —
+     * LOCAL은 반드시 비밀번호 확인 경로({@link #deleteAccount})를 거쳐야 한다.
      *
-     * @throws IllegalStateException 사용자가 없거나, 대상이 LOCAL 계정인 경우
+     * @param confirmHandle 사용자가 재확인용으로 입력한 @핸들(본인 login_id와 일치해야 함)
+     * @throws IllegalStateException                 사용자가 없거나, 대상이 LOCAL 계정인 경우
+     * @throws AccountDeletionConfirmationException   입력 핸들이 본인 login_id와 일치하지 않는 경우(삭제 안 함)
      */
-    public void deleteSocialAccount(String email) {
+    public void deleteSocialAccount(String email, String confirmHandle) {
         User user = load(email);
         if (user.isLocalAccount()) {
             throw new IllegalStateException("local account must be deleted with password verification: " + email);
         }
+        if (!handleMatches(user, confirmHandle)) {
+            throw new AccountDeletionConfirmationException();
+        }
         purge(user);
+    }
+
+    /** 입력 핸들을 정규화(공백 제거·선행 @ 제거·소문자)해 본인 login_id와 같은지 본다. login_id 미설정/입력 null이면 불일치. */
+    private boolean handleMatches(User user, String confirmHandle) {
+        String actual = user.getLoginId();
+        if (actual == null || confirmHandle == null) {
+            return false;
+        }
+        String typed = confirmHandle.strip();
+        if (typed.startsWith("@")) {
+            typed = typed.substring(1);
+        }
+        return actual.equals(typed.toLowerCase(java.util.Locale.ROOT));
     }
 
     /**

@@ -257,8 +257,9 @@ RequestID: , canceled, context deadline exceeded
 > 진단: whitelabel은 스택을 가리므로 **CloudWatch 로그**에서 실제 예외를 본다. 로그 그룹 `/ecs/booktimer`의 최신 스트림 → 스택트레이스가 `UserRegistrationService.register(...:54)` → `SimpleJpaRepository.save` → `com.mysql.cj.jdbc.ClientPreparedStatement.executeUpdate`(users INSERT 실패)를 가리킴. NOT NULL이 폼 검증으로 다 차 있으면, 실패할 제약은 unique 하나뿐 → 중복 이메일 확정.
 
 **해결 / 예방**:
-- 등록 서비스에서 **저장 전 `existsByEmail` 사전 확인** → 있으면 도메인 예외(`EmailAlreadyExistsException`). 컨트롤러가 잡아 **이메일 필드 에러**로 변환(폼 재렌더, 500 아님).
-- **레이스 대비 이중 방어**: 동시 가입(둘 다 사전확인 통과 후 insert)은 컨트롤러에서 `DataIntegrityViolationException`도 함께 catch해 같은 친절한 에러로. (사전확인=흔한 경로, DB제약=마지막 방어선 — 둘 다 필요. [learning-notes.md N-019](learning-notes.md#n-019-db-유니크-제약은-무결성의-마지막-방어선이지-사용자-검증의-첫-방어선이-아니다))
+- 등록 서비스에서 **저장 전 `existsByEmail` 사전 확인** → 있으면 도메인 예외(`EmailAlreadyExistsException`). 컨트롤러가 잡아 500이 아닌 정상 응답으로 처리.
+- **레이스 대비 이중 방어**: 동시 가입(둘 다 사전확인 통과 후 insert)은 컨트롤러에서 `DataIntegrityViolationException`도 함께 catch. (사전확인=흔한 경로, DB제약=마지막 방어선 — 둘 다 필요. [learning-notes.md N-019](learning-notes.md#n-019-db-유니크-제약은-무결성의-마지막-방어선이지-사용자-검증의-첫-방어선이-아니다))
+- ⚠️ **갱신(2026-06-05, PR #159 계정 열거 완화)**: 위 두 예외를 더는 **이메일 필드 에러로 노출하지 않는다** — email은 login_id 도입 후 비공개 속성이라 "이미 가입됨"을 드러내면 계정 열거가 된다. 컨트롤러는 이를 **가입 성공과 동일한 `redirect:/login?registered`로 흡수**(계정 미생성, 응답만 동일). 즉 이 항목의 "친절한 필드 에러"는 **login_id 중복(공개 핸들)에만** 해당하고, 이메일 중복은 무응답차이 처리다.
 - **테스트 함정 인지**: `@Transactional` 통합 테스트는 유니크 충돌 같은 "상태 누적" 버그를 못 잡는다. 중복 케이스는 한 테스트 안에서 **사전 데이터를 저장한 뒤** 같은 키로 시도해 재현(롤백돼도 그 트랜잭션 안에선 보임).
 
 ---

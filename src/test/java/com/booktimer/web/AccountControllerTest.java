@@ -166,11 +166,15 @@ class AccountControllerTest {
     }
 
     @Test
-    @DisplayName("POST /settings/delete: 소셜 계정은 비밀번호 없이 탈퇴하고 로그인(?deleted)으로 보낸다")
-    void deleteAccount_oauthUser_noPassword_removesAccount() throws Exception {
+    @DisplayName("POST /settings/delete: 소셜 계정은 비밀번호가 없어 본인 @핸들이 일치하면 탈퇴하고 로그인(?deleted)으로 보낸다")
+    void deleteAccount_oauthUser_handleConfirmed_removesAccount() throws Exception {
         registerOAuth("oauthdel@booktimer.com");
+        var social = userRepository.findByEmail("oauthdel@booktimer.com").orElseThrow();
+        social.assignLoginId("oauthdel");
+        userRepository.save(social);
 
-        mockMvc.perform(post("/settings/delete").with(user("oauthdel@booktimer.com")).with(csrf()))
+        mockMvc.perform(post("/settings/delete").with(user("oauthdel@booktimer.com")).with(csrf())
+                        .param("confirmHandle", "oauthdel"))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/login?deleted"));
 

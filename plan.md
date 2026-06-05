@@ -514,8 +514,19 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
       + HttpOnly + (prod)Secure. 세션 외부화 후 세션 쿠키는 `DefaultCookieSerializer`가 써서
       `server.servlet.session.cookie.*` 프로퍼티가 무동작이라 명시 빈 필요(T-021, N-031). **파생 수정**: 이
       함정 탓에 prod의 Secure/HttpOnly도 SESSION 쿠키엔 안 먹던 잠재 갭(#73 이후)을 같이 잡음.
-- [ ] (검토) 소셜 계정 탈퇴 시 재확인 단계, 가입 시 계정 열거 완화
+- [x] **소셜 계정 탈퇴 재확인 + 가입 계정 열거 완화** (완료 ✅ 2026-06-05) —
+      ① **가입 이메일 열거 완화**: email은 login_id 도입 후 **비공개 속성**인데 "이미 가입된 이메일입니다"가
+      이를 확인해 줘 열거가 됐다. `UserRegistrationService.register` 검사 순서를 **login_id(형식→유니크) 먼저,
+      email 마지막**으로 바꾸고, `SignupController`가 `EmailAlreadyExistsException`·`DataIntegrityViolationException`을
+      **가입 성공과 동일한 `redirect:/login?registered`로 흡수**(계정 미생성, 응답만 동일 → 존재 여부 미노출).
+      login_id는 **공개 @핸들**이라 "사용 중" 노출이 무해·UX상 필요해 그대로 필드 에러. 트레이드오프: 이메일 발송
+      인프라가 없어 "조용히 수락+메일 통지"의 통지는 불가 → 잊고 재가입한 사용자는 로그인 단계에서 알게 됨(열거 저항 표준 비용).
+      ② **소셜 탈퇴 재확인**: OAuth 계정은 비번이 없어 탈퇴 재인증이 없었음(`confirm()` JS뿐, 우회 가능). 본인
+      **@핸들(login_id) 타이핑**을 서버사이드 게이트로 요구(GitHub "저장소 이름 입력" 패턴). `deleteSocialAccount(email, confirmHandle)`
+      불일치 시 `AccountDeletionConfirmationException`(공백·선행 @·대소문자 정규화 후 비교), LOCAL은 비번 재확인 유지.
+      TDD(서비스 일치/관대매칭/불일치/LOCAL거부 · 컨트롤러 끝단 일치삭제/불일치미삭제 · 가입 이메일중복 silent-success Red→Green) + 전체 그린.
 - [ ] (후속) 무차별 대입 방어 보강 — 지수 백오프, 다중 인스턴스 대비 공유 저장소(현재 인메모리=인스턴스별), 앞단 WAF 레이트리밋
+      (③ 갈래 — 트래픽/세션 쓰기 신호 오면. Redis는 예산 충돌, WAF는 인프라라 코드 가치 낮아 보류.)
 
 ### 측정 세션 `book_id` NOT NULL 제약 — 레거시 정리 후 (보류, 우선순위: 낮음)
 > **배경**: "측정은 무조건 책을 골라야 한다"(어떤 책을 얼마나 읽었는지 명확히)를 도입하며(PR #133),
@@ -645,3 +656,4 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 | 2026-06-05 | **login_id PR-5 — 무결성 강화(조건부 NOT NULL = CHECK)** — 설계 PR 단계 ⑤(마지막). 단순 `login_id NOT NULL`은 OAuth와 충돌함을 발견 — OAuth 사용자는 `OAuthUserProvisioningService.provision`→`registerOAuth`로 **login_id=null인 row를 먼저 INSERT**하고 온보딩에서 비로소 login_id를 정한다(불변이라 X식 자동 핸들도 불가). 그 전환 창의 null은 정상이므로, 박고 싶은 진짜 불변식인 **`onboarded = true ⟹ login_id IS NOT NULL`을 조건부 CHECK로** 좁힘(`V15__user_login_id_when_onboarded_check.sql`, `ck_users_login_id_when_onboarded`, `check (onboarded = false or login_id is not null)`). MySQL 8·H2(MySQL 모드) 모두 CHECK 강제. 메인 테스트 스위트는 Hibernate가 스키마를 생성해 이 제약이 없으므로 무영향(V14 nickname-unique-drop과 동일) — `FlywayMigrationTest`가 Flyway 스키마에 적용해 3경계 검증(온보딩+login_id없음→거부·온보딩전 null→허용·정상→허용). `User.loginId` Javadoc을 "최종 NOT NULL"→조건부 CHECK 현실로 정정. **email 로그인 잔재 없음 재확인**(`loadUserByUsername`=`findByLoginId`만·폴백 없음, 남은 `findByEmail`은 설정 조회·OAuth 첫 세션 브리지 등 *로그인 아님*). Flyway만(V15) — 코드 동작 변화 없음. TDD(Red: CHECK 부재로 온보딩+null 거부 안 됨 → Green) + 전체 스위트 그린. login_id 도입 5단계 전부 완료 ✅. (PR #156) |
 | 2026-06-05 | **README 전면 최신화** — README가 "MVP·시간만 기록·이메일 로그인·SNS 추후 예정"에 머물러 그간 출하분과 크게 벌어져 있던 것을 현행화. 반영: ② 인증/식별 모델(login_id 공개 @핸들·nickname 표시·email 비공개 3분할), ③ 책 단위 기록·책장(상태·공개여부·알라딘 검색·제휴 링크·측정 책 필수), ④ 잔디·일자별 읽은 책, ⑤ 소셜(공개 프로필·검색·팔로우·차단·신고·팔로우범위 인기 drill-down), ⑥ 운영자 대시보드(통계·데이터 조회·PII 최소노출), ⑦ 미구현 설계(독서 MBTI·구독). 기술 스택에 Flyway·세션 외부화(JDBC) 추가, 로드맵 체크 갱신(책·SNS·admin·login_id 완료), 아키텍처에 Spring Session/Flyway, 도메인 규칙에 식별 분리·측정 책 필수·공개 경계, 관련 문서에 설계 메모 6종 링크. 문서만. (PR #157) |
 | 2026-06-05 | **회원가입 폼 UX 개선**(스크린샷 피드백) — 가입 화면이 직관적이지 못했음. ① **입력 순서 재배치**: 이메일이 맨 위라 어색했던 것을 로그인 흐름과 중요도에 맞게 **아이디 → 비밀번호 → 닉네임 → 이메일 → 타임존**으로 변경(로그인 식별자인 아이디·비밀번호를 위로). ② **비밀번호 안내 추가** — 아이디에만 있던 형식 힌트를 비밀번호에도(`최소 8자`, `@Size(min=8)`과 일치, `minlength`/placeholder/`field-hint`). ③ **타임존 설명 추가** — 사용자가 왜 고르는지 몰라 막연하던 것을, "하루의 시작·끝(자정) 기준 → 잔디·일일 기록이 거주 지역 날짜에 맞게 쌓임"으로 안내. `signup.html`만(로직·검증 규칙 무변경, .java 없음). (PR #158) |
+| 2026-06-05 | **회원 인증 하드닝 — 소셜 탈퇴 재확인 + 가입 이메일 열거 완화** — §하드닝 "(검토)" 두 항목 구현. ① **가입 이메일 열거 완화**: login_id 도입으로 email이 **비공개 속성**이 됐는데 가입 시 "이미 가입된 이메일입니다"가 이를 확인해 줘 열거가 됐다. `UserRegistrationService.register` 검사 순서를 **login_id(형식→유니크) 먼저·email 마지막**으로 바꾸고, `SignupController`가 `EmailAlreadyExistsException`·`DataIntegrityViolationException`을 **가입 성공과 동일한 `redirect:/login?registered`로 흡수**(계정 미생성, 응답만 동일 → 이메일 존재 여부 미노출). login_id는 공개 @핸들이라 "사용 중" 노출이 무해·UX상 필요해 그대로 필드 에러. 트레이드오프: 이메일 발송 인프라 없어 통지는 불가(잊고 재가입 시 로그인 단계에서 인지 — 열거 저항 표준 비용). ② **소셜 탈퇴 재확인**: OAuth는 비번이 없어 탈퇴 재인증이 없던 무방비(`confirm()` JS뿐)를, 본인 **@핸들(login_id) 타이핑** 서버사이드 게이트로 보강(GitHub "저장소 이름 입력" 패턴). `AccountService.deleteSocialAccount(email, confirmHandle)`(공백·선행 @·대소문자 정규화 비교)+`AccountDeletionConfirmationException`, `SettingsController` 분기·`settings.html` 소셜 전용 핸들 입력칸, LOCAL은 비번 재확인 유지. Flyway 없음. TDD(서비스 일치/관대매칭/불일치/LOCAL거부·컨트롤러 끝단·가입 silent-success Red→Green) + 전체 412 그린. (PR #159) |
