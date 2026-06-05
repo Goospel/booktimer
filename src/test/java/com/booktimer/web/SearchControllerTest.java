@@ -41,7 +41,11 @@ class SearchControllerTest {
     private PasswordEncoder passwordEncoder;
 
     private void newUser(String email, String loginId, String nickname) {
-        User u = User.of(email, passwordEncoder.encode("rawpw1234"), nickname, "Asia/Seoul", Role.USER);
+        newUser(email, loginId, nickname, Role.USER);
+    }
+
+    private void newUser(String email, String loginId, String nickname, Role role) {
+        User u = User.of(email, passwordEncoder.encode("rawpw1234"), nickname, "Asia/Seoul", role);
         u.assignLoginId(loginId);
         userRepository.save(u);
     }
@@ -49,6 +53,11 @@ class SearchControllerTest {
     @SuppressWarnings("unchecked")
     private List<UserSearchResult> resultsInModel(MvcResult res) {
         return (List<UserSearchResult>) res.getModelAndView().getModel().get("results");
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<UserSearchResult> recommendationsInModel(MvcResult res) {
+        return (List<UserSearchResult>) res.getModelAndView().getModel().get("recommendations");
     }
 
     @Test
@@ -97,6 +106,49 @@ class SearchControllerTest {
                 .andReturn();
 
         assertThat(resultsInModel(res)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("GET /search: 친구 추천(무작위)을 모델에 싣는다 — 본인·운영자는 제외")
+    void search_includesRecommendations_excludingSelfAndAdmin() throws Exception {
+        newUser("me@booktimer.com", "searcher", "검색가");
+        newUser("a@booktimer.com", "alice", "앨리스");
+        newUser("b@booktimer.com", "bob", "밥");
+        newUser("admin@booktimer.com", "rootadmin", "운영자", Role.ADMIN);
+
+        MvcResult res = mockMvc.perform(get("/search").with(user("me@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(view().name("search"))
+                .andReturn();
+
+        assertThat(recommendationsInModel(res)).extracting(UserSearchResult::loginId)
+                .contains("alice", "bob")
+                .doesNotContain("searcher", "rootadmin");
+    }
+
+    @Test
+    @DisplayName("GET /search: 추천은 최대 10명으로 제한한다")
+    void search_recommendations_cappedAtTen() throws Exception {
+        newUser("me@booktimer.com", "searcher", "검색가");
+        for (int i = 0; i < 15; i++) {
+            newUser("u" + i + "@booktimer.com", "candidate" + i, "후보" + i);
+        }
+
+        MvcResult res = mockMvc.perform(get("/search").with(user("me@booktimer.com")))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        assertThat(recommendationsInModel(res)).hasSize(10);
+    }
+
+    @Test
+    @DisplayName("GET /search: 공개 책장 링크용 내 loginId를 모델에 싣는다")
+    void search_exposesMyLoginId() throws Exception {
+        newUser("me@booktimer.com", "searcher", "검색가");
+
+        mockMvc.perform(get("/search").with(user("me@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("myLoginId", "searcher"));
     }
 
     @Test
