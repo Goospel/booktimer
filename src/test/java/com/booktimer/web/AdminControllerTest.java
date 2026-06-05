@@ -16,6 +16,7 @@ import java.time.ZoneId;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
@@ -70,5 +71,15 @@ class AdminControllerTest {
         mockMvc.perform(get("/admin").with(user("boss@booktimer.com").roles("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("admin"));
+    }
+
+    @Test
+    @DisplayName("GET /admin: 운영 통계 요약(stats)이 모델에 실린다")
+    void admin_admin_modelHasStats() throws Exception {
+        registrationService.register("boss@booktimer.com", "rawpw1234", "사장", SEOUL, Role.ADMIN, today());
+
+        mockMvc.perform(get("/admin").with(user("boss@booktimer.com").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeExists("stats"));
     }
 }

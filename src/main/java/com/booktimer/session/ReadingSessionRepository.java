@@ -50,6 +50,20 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
     void deleteByUser(User user);
 
     /**
+     * 최근 활성 사용자 수 — {@code since} 이후 측정(startedAt)을 시작한 <b>distinct 사용자</b>를 센다(운영 통계).
+     * 한 사용자가 여러 번 읽어도 1로 집계한다. "활성"의 창(최근 N일)은 호출부(서비스)가 시계로 정한다.
+     */
+    @Query("select count(distinct s.user.id) from ReadingSession s where s.startedAt >= :since")
+    long countActiveUsersSince(@Param("since") java.time.Instant since);
+
+    /**
+     * 전체 누적 독서 시간(초) — 모든 세션의 측정 길이 합(운영 통계). 진행 중(미종료) 세션은 0이라 영향 없음.
+     * 기록이 없으면 0(coalesce).
+     */
+    @Query("select coalesce(sum(s.durationSeconds), 0) from ReadingSession s")
+    long sumAllDurationSeconds();
+
+    /**
      * 책 삭제 시, 그 책을 가리키던 측정 세션을 "책 미지정"으로 푼다(book_id = null).
      *
      * <p>세션 자체는 지우지 않는다 — 책을 책장에서 빼도 그날 읽은 기록(잔디·누적 시간)은 보존돼야 한다.

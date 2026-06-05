@@ -32,4 +32,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     /** 정규화된 login_id가 이미 쓰이는지 — 온보딩에서 공개 핸들 확정 전 유니크 사전 확인(uk_users_login_id). */
     boolean existsByLoginId(String loginId);
+
+    /** 역할별 사용자 수 — 운영 통계에서 "가입자 수"는 {@code Role.USER}만 세어 ADMIN이 지표를 부풀리지 않게 한다. */
+    long countByRole(Role role);
+
+    /** 역할 + 온보딩 완료 여부별 사용자 수 — 운영 통계의 "온보딩 완료자" 카드. */
+    long countByRoleAndOnboarded(Role role, boolean onboarded);
 }

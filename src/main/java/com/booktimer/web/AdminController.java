@@ -1,5 +1,6 @@
 package com.booktimer.web;
 
+import com.booktimer.admin.AdminStatsService;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.user.User;
 import org.springframework.stereotype.Controller;
@@ -22,15 +23,20 @@ import java.security.Principal;
 public class AdminController {
 
     private final CurrentUserService currentUserService;
+    private final AdminStatsService adminStatsService;
 
-    public AdminController(CurrentUserService currentUserService) {
+    public AdminController(CurrentUserService currentUserService,
+                          AdminStatsService adminStatsService) {
         this.currentUserService = currentUserService;
+        this.adminStatsService = adminStatsService;
     }
 
     @GetMapping("/admin")
     public String dashboard(Principal principal, Model model) {
         User admin = currentUserService.resolve(principal);
         model.addAttribute("nickname", admin.getNickname());
+        // 운영 통계 요약(읽기 전용 집계) — 매번 RDS에 붙지 않고 웹에서 지표 확인(N-037).
+        model.addAttribute("stats", adminStatsService.summary());
         return "admin";
     }
 }
