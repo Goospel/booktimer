@@ -1,7 +1,6 @@
 package com.booktimer.web;
 
 import com.booktimer.user.EmailAlreadyExistsException;
-import com.booktimer.user.NicknameAlreadyExistsException;
 import com.booktimer.user.Role;
 import com.booktimer.user.UserRegistrationService;
 import jakarta.validation.Valid;
@@ -74,10 +73,6 @@ public class SignupController {
             registrationService.register(
                     form.getEmail(), form.getPassword(), form.getNickname(),
                     form.getTimezone(), Role.USER, today);
-        } catch (NicknameAlreadyExistsException e) {
-            // 닉네임은 가입자가 직접 고르므로 충돌은 친절히 알려 다른 닉네임을 받는다.
-            bindingResult.rejectValue("nickname", "nickname.duplicate", "이미 사용 중인 닉네임입니다");
-            return "signup";
         } catch (EmailAlreadyExistsException | DataIntegrityViolationException e) {
             // 사전 확인 + (동시 가입 레이스 대비) DB 제약 위반도 같은 친절한 에러로 — 500 방지
             bindingResult.rejectValue("email", "email.duplicate", "이미 가입된 이메일입니다");

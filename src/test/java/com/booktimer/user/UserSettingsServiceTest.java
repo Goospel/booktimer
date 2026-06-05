@@ -74,18 +74,16 @@ class UserSettingsServiceTest {
     }
 
     @Test
-    @DisplayName("updateSettings: 남이 이미 쓰는 닉네임으로 바꾸려 하면 거부한다 (NicknameAlreadyExistsException)")
-    void updateSettings_duplicateNickname_throws() {
+    @DisplayName("updateSettings: 남이 이미 쓰는 닉네임으로도 바꿀 수 있다 (nickname 중복 허용 — 표시 이름일 뿐)")
+    void updateSettings_duplicateNickname_allowed() {
         registrationService.register("owner@booktimer.com", "rawpw1234", "이미쓰는닉", SEOUL, Role.USER, today());
         registrationService.register("changer@booktimer.com", "rawpw1234", "내닉", SEOUL, Role.USER, today());
 
-        assertThatThrownBy(() ->
-                settingsService.updateSettings("changer@booktimer.com", "이미쓰는닉", SEOUL, 3600L, 18000L))
-                .isInstanceOf(NicknameAlreadyExistsException.class);
+        settingsService.updateSettings("changer@booktimer.com", "이미쓰는닉", SEOUL, 3600L, 18000L);
 
-        // 거부됐으니 원래 닉네임 유지
+        // 중복이어도 변경이 적용된다
         assertThat(userRepository.findByEmail("changer@booktimer.com").orElseThrow().getNickname())
-                .isEqualTo("내닉");
+                .isEqualTo("이미쓰는닉");
     }
 
     @Test

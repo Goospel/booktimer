@@ -2,7 +2,7 @@ package com.booktimer.web;
 
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
-import com.booktimer.user.NicknameAlreadyExistsException;
+import com.booktimer.user.LoginIdAlreadyExistsException;
 import com.booktimer.user.OnboardingService;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -91,14 +91,19 @@ public class OnboardingController {
         try {
             onboardingService.complete(
                     principal.getName(),
+                    form.getLoginId(),
                     form.getNickname(),
                     form.getInitialMinutes() * (long) SECONDS_PER_MINUTE,
                     form.getIncrementMinutes() * (long) SECONDS_PER_MINUTE,
                     form.getCapMinutes() * (long) SECONDS_PER_MINUTE,
                     today);
-        } catch (NicknameAlreadyExistsException e) {
-            // 남이 쓰는 닉네임 — 필드 에러로 알리고 재렌더(온보딩 미완료 유지).
-            bindingResult.rejectValue("nickname", "nickname.duplicate", "이미 사용 중인 닉네임입니다");
+        } catch (LoginIdAlreadyExistsException e) {
+            // 이미 쓰이는 공개 핸들 — 다른 아이디를 받도록 필드 에러로 알리고 재렌더(온보딩 미완료 유지).
+            bindingResult.rejectValue("loginId", "loginId.duplicate", "이미 사용 중인 아이디입니다");
+            return "onboarding";
+        } catch (IllegalArgumentException e) {
+            // 예약어 등 @Pattern으로 못 거른 형식/규칙 위반(도메인 검증) — 필드 에러로 안내.
+            bindingResult.rejectValue("loginId", "loginId.invalid", "사용할 수 없는 아이디입니다");
             return "onboarding";
         }
 

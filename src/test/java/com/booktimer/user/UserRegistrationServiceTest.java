@@ -115,18 +115,18 @@ class UserRegistrationServiceTest {
     }
 
     @Test
-    @DisplayName("register: 이미 쓰이는 닉네임이면 NicknameAlreadyExistsException을 던지고 아무것도 저장·해싱하지 않는다")
-    void register_whenNicknameExists_throwsAndDoesNotPersist() {
+    @DisplayName("register: 닉네임이 이미 쓰여도 가입을 허용한다 (nickname은 더 이상 유니크가 아님 — 중복확인조차 하지 않는다)")
+    void register_allowsDuplicateNickname() {
         when(userRepository.existsByEmail("fresh@booktimer.com")).thenReturn(false);
-        when(userRepository.existsByNickname("책벌레")).thenReturn(true);
+        when(userRepository.save(any(User.class))).thenAnswer(returnsFirstArg());
+        when(passwordEncoder.encode(any())).thenReturn("$2a$10$ENCODED");
 
-        assertThatThrownBy(() -> service.register(
-                "fresh@booktimer.com", "rawpw1234", "책벌레", "Asia/Seoul", Role.USER, DAY0))
-                .isInstanceOf(NicknameAlreadyExistsException.class);
+        User result = service.register(
+                "fresh@booktimer.com", "rawpw1234", "책벌레", "Asia/Seoul", Role.USER, DAY0);
 
-        verify(userRepository, never()).save(any());
-        verify(timerRepository, never()).save(any());
-        verify(passwordEncoder, never()).encode(any());
+        assertThat(result.getNickname()).isEqualTo("책벌레");
+        verify(userRepository).save(any(User.class));
+        // 표시 이름은 자유 중복 — UserRepository.existsByNickname 자체가 제거돼 사전 확인 경로가 없다.
     }
 
     // --- registerOAuth: 소셜 가입 (비밀번호 없음) ---

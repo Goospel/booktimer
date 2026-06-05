@@ -53,11 +53,12 @@ class OnboardingServiceTest {
         registrationService.register("ob@booktimer.com", "rawpw1234", "독서가", SEOUL, Role.USER, today());
 
         // 닉네임 변경 + 초기값 2h, 증가값 90분, cap 10h
-        onboardingService.complete("ob@booktimer.com", "내가정한닉", 7200L, 5400L, 36000L, today());
+        onboardingService.complete("ob@booktimer.com", "reader_one", "내가정한닉", 7200L, 5400L, 36000L, today());
 
         User reloaded = userRepository.findByEmail("ob@booktimer.com").orElseThrow();
         assertThat(reloaded.isOnboarded()).isTrue();
         assertThat(reloaded.getNickname()).isEqualTo("내가정한닉");
+        assertThat(reloaded.getLoginId()).isEqualTo("reader_one");
 
         ReadingTimer timer = timerRepository.findByUser(reloaded).orElseThrow();
         assertThat(timer.getRemainingSeconds()).isEqualTo(7200L); // 사용자가 정한 초기값
@@ -71,7 +72,7 @@ class OnboardingServiceTest {
     void complete_clampsInitialToCap() {
         registrationService.register("obcap@booktimer.com", "rawpw1234", "독서가", SEOUL, Role.USER, today());
 
-        onboardingService.complete("obcap@booktimer.com", "닉캡", 36000L, 3600L, 18000L, today()); // 초기 10h > cap 5h
+        onboardingService.complete("obcap@booktimer.com", "cap_reader", "닉캡", 36000L, 3600L, 18000L, today()); // 초기 10h > cap 5h
 
         ReadingTimer timer = timerRepository.findByUser(
                 userRepository.findByEmail("obcap@booktimer.com").orElseThrow()).orElseThrow();
@@ -84,30 +85,55 @@ class OnboardingServiceTest {
         registrationService.register("obneg@booktimer.com", "rawpw1234", "독서가", SEOUL, Role.USER, today());
 
         assertThatThrownBy(() ->
-                onboardingService.complete("obneg@booktimer.com", "닉음수", -1L, 3600L, 18000L, today()))
+                onboardingService.complete("obneg@booktimer.com", "neg_reader", "닉음수", -1L, 3600L, 18000L, today()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    @DisplayName("complete: 남이 쓰는 닉네임으로 온보딩하려 하면 거부하고 온보딩되지 않는다")
-    void complete_duplicateNickname_throwsAndNotOnboarded() {
+    @DisplayName("complete: 남이 쓰는 닉네임으로도 온보딩이 완료된다 (nickname 중복 허용 — 표시 이름일 뿐)")
+    void complete_duplicateNickname_allowed() {
         registrationService.register("obowner@booktimer.com", "rawpw1234", "선점닉", SEOUL, Role.USER, today());
         registrationService.register("obnew@booktimer.com", "rawpw1234", "임시닉", SEOUL, Role.USER, today());
 
-        assertThatThrownBy(() ->
-                onboardingService.complete("obnew@booktimer.com", "선점닉", 3600L, 3600L, 18000L, today()))
-                .isInstanceOf(NicknameAlreadyExistsException.class);
+        onboardingService.complete("obnew@booktimer.com", "new_reader", "선점닉", 3600L, 3600L, 18000L, today());
 
-        assertThat(userRepository.findByEmail("obnew@booktimer.com").orElseThrow().isOnboarded()).isFalse();
+        User onboarded = userRepository.findByEmail("obnew@booktimer.com").orElseThrow();
+        assertThat(onboarded.isOnboarded()).isTrue();
+        assertThat(onboarded.getNickname()).isEqualTo("선점닉"); // 중복이어도 그대로 확정
     }
 
     @Test
-    @DisplayName("complete: 자동 배정된 자기 닉네임을 그대로 둬도 온보딩이 완료된다 (본인 닉은 충돌 아님)")
-    void complete_keepingOwnNickname_allowed() {
-        registrationService.register("obkeep@booktimer.com", "rawpw1234", "구글러-2", SEOUL, Role.USER, today());
+    @DisplayName("complete: 입력 아이디를 정규화(소문자)해 불변 login_id로 확정한다")
+    void complete_assignsNormalizedImmutableLoginId() {
+        registrationService.register("oblid@booktimer.com", "rawpw1234", "독서가", SEOUL, Role.USER, today());
 
-        onboardingService.complete("obkeep@booktimer.com", "구글러-2", 3600L, 3600L, 18000L, today());
+        onboardingService.complete("oblid@booktimer.com", "Reader_CAP", "닉", 3600L, 3600L, 18000L, today());
 
-        assertThat(userRepository.findByEmail("obkeep@booktimer.com").orElseThrow().isOnboarded()).isTrue();
+        assertThat(userRepository.findByEmail("oblid@booktimer.com").orElseThrow().getLoginId())
+                .isEqualTo("reader_cap"); // 대문자 입력 → 소문자 정규화
+    }
+
+    @Test
+    @DisplayName("complete: 이미 쓰이는 login_id면 거부하고 온보딩되지 않는다 (유니크 사전 확인)")
+    void complete_duplicateLoginId_rejected() {
+        registrationService.register("lidown@booktimer.com", "rawpw1234", "주인", SEOUL, Role.USER, today());
+        registrationService.register("lidnew@booktimer.com", "rawpw1234", "신규", SEOUL, Role.USER, today());
+        onboardingService.complete("lidown@booktimer.com", "taken_id", "주인닉", 3600L, 3600L, 18000L, today());
+
+        assertThatThrownBy(() ->
+                onboardingService.complete("lidnew@booktimer.com", "taken_id", "신규닉", 3600L, 3600L, 18000L, today()))
+                .isInstanceOf(LoginIdAlreadyExistsException.class);
+
+        assertThat(userRepository.findByEmail("lidnew@booktimer.com").orElseThrow().isOnboarded()).isFalse();
+    }
+
+    @Test
+    @DisplayName("complete: 예약어 아이디(admin 등)는 거부한다 (도메인 검증)")
+    void complete_reservedLoginId_rejected() {
+        registrationService.register("lidres@booktimer.com", "rawpw1234", "예약", SEOUL, Role.USER, today());
+
+        assertThatThrownBy(() ->
+                onboardingService.complete("lidres@booktimer.com", "admin", "예약닉", 3600L, 3600L, 18000L, today()))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

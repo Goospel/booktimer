@@ -338,4 +338,18 @@ class UserTest {
         assertThatThrownBy(() -> user.assignLoginId(null)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> user.assignLoginId("   ")).isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("assignLoginId: 한번 정해지면 영원히 불변 — 재설정 시도는 IllegalStateException")
+    void assignLoginId_immutable_onceSet() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+        user.assignLoginId("goospel_01");
+
+        // 다른 값으로도, 같은 값으로도 재설정 불가 — 공개 핸들은 영구 식별자다.
+        assertThatThrownBy(() -> user.assignLoginId("goospel_02"))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> user.assignLoginId("goospel_01"))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(user.getLoginId()).isEqualTo("goospel_01"); // 원래 값 유지
+    }
 }

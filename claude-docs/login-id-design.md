@@ -1,9 +1,24 @@
-# 로그인 아이디(login_id) 도입 — 식별/인증 분리 설계 메모 (구현 전 합의용)
+# 로그인 아이디(login_id) 도입 — 식별/인증 분리 설계 메모
 
-> **상태**: 설계 초안 (⏳ 2026-06-05, 방향 합의 — B안 + **기존 데이터 wipe로 그린필드 단순화**). **코드 없음.** 단계적 PR로 TDD 착수.
+> **상태**: 진행 중 (PR-1 ✅ #146, PR-2 ✅ 진행). **B안 + 기존 데이터 wipe(그린필드)** + **🔁 모델 전환(2026-06-05): login_id를 공개 @핸들로**.
 > **왜 설계 먼저**: 인증/식별 경계 변경이다 — `principal.getName()`으로 유저를 찾는 컨트롤러 14곳, `findByEmail` 21곳. auth는 깨지면 위험하다.
 >
 > 관련: [plan.md](../plan.md) §관리자 대시보드 · [sns-design.md](sns-design.md) §3.5(가시성 경계) · [learning-notes.md](learning-notes.md) **N-037**(식별=관계/속성 분리).
+
+---
+
+## 🔁 방향 전환 (2026-06-05) — login_id = 공개 @핸들 (인스타/X 모델)
+
+최초 초안은 **login_id를 비공개**로, **nickname을 공개 핸들**(검색/프로필 URL)로 뒀다. 사용자 결정으로 **뒤집힌다**:
+"검색을 닉네임이 아니라 **아이디로**(인스타·X처럼)" + "닉네임은 중복 OK·수정 자유" + "**아이디는 한번 정하면 영원히 불변**".
+
+| | 최초 초안 | **현재 모델 (확정)** |
+|---|---|---|
+| **login_id** | 비공개 로그인 식별자 | **공개 @핸들** — 로그인 + 검색 + 프로필 URL, **불변**, 유니크 |
+| **nickname** | 공개 핸들(유니크) | **표시 이름** — 중복 허용, 수정 자유, 핸들 아님 |
+| **email** | 연락/복구 (비공개) | 연락/복구 (비공개 — 유지) |
+
+**보안적으로 동일하게 안전**: 원래 목표("공개된 *이메일*이 로그인 표적")는 그대로 달성된다 — **이메일은 여전히 비공개**(복구용), 로그인 식별자는 email이 아니다. 공개되는 건 login_id뿐인데, 이는 X의 @핸들처럼 알려져도 인증(비밀번호)을 뚫지 못한다. 즉 "식별자를 연락 채널(email)에서 분리"라는 본질은 유지하고, 공개 핸들을 nickname→login_id로 옮겼을 뿐이다.
 
 ---
 
@@ -12,12 +27,15 @@
 | 항목 | 결정 | 확정? | 근거 |
 |---|---|---|---|
 | 로그인 식별자 | **별도 `login_id`(아이디)** — email 아님 | ✅ | 공개 이메일 = 로그인 표적 노출 |
+| login_id 공개성 | **공개 @핸들**(검색·프로필 URL) — 인스타/X | ✅ | 사용자 결정(🔁 전환). email은 계속 비공개 |
+| login_id 불변성 | **한번 정하면 영원히 불변** | ✅ | 영구 식별자 — 표시 이름(nickname)이 가변 역할 담당 |
 | principal(주체) | **`login_id`로 전면 전환 (B안)** | ✅ | 장기 일관성 — email은 속성으로 강등 |
-| email 역할 | 연락/복구/OAuth 연결용 **속성** | ✅ | 식별을 email에 묶지 않음 |
-| nickname 역할 | **공개 핸들**(프로필/검색) — login_id와 별개·비공개 | ✅ | nickname 공개라 로그인 식별자 부적합 |
+| email 역할 | 연락/복구/OAuth 연결용 **속성**(비공개) | ✅ | 식별을 email에 묶지 않음 |
+| nickname 역할 | **표시 이름** — 중복 허용·수정 자유, 핸들 아님 | ✅ | 공개 핸들이 login_id로 이동 |
+| nickname 유니크 | **제거**(uk_users_nickname drop, V14) | ✅ | 단순 표시 이름이라 중복 무방 |
 | **기존 사용자** | **전부 wipe (그린필드 리셋)** — 스냅샷 없이 | ✅ | 출시 전·친구뿐, 백필/전환 복잡성 제거 |
-| OAuth 유저 | **온보딩에서 login_id 직접 선택**(자동생성 없음) | ✅ | 전원이 진짜 아이디 보유, 임시값 불필요 |
-| 마이그레이션 | V13 `login_id varchar unique`(처음 nullable, 최종 NOT NULL) | ✅ | wipe라 백필 없음, 증분 PR 안전 |
+| login_id 캡처 | **온보딩 한 곳에서 전원**(local+OAuth) 직접 선택 | ✅ | 단일 경로·불변 가드와 무충돌(항상 null→확정) |
+| 마이그레이션 | V13 `login_id unique`(nullable→NOT NULL) + V14 nickname unique drop | ✅ | wipe라 백필 없음, 증분 PR 안전 |
 | 인증 컷오버 | `loadUserByUsername`=**findByLoginId만**(email 폴백 없음) | ✅ | wipe라 폴백 불필요 → 표적 약점 즉시 닫힘 |
 | Admin 시드 | `BOOKTIMER_ADMIN_EMAILS` → `BOOKTIMER_ADMIN_LOGIN_IDS` | ✅ | 표적 식별자 비공개·일관 |
 | login_id 형식/규칙 | `a-z0-9_`, 3~20자, 소문자 정규화, 예약어 차단 | ✅ | 표준(GitHub/X/Reddit 공통) |
@@ -37,17 +55,18 @@
 
 ---
 
-## 2. 식별 모델 — login_id 보편화 (B안)
+## 2. 식별 모델 — login_id = 공개 @핸들 (B안 + 🔁 전환)
 
-| 값 | 역할 | 공개? | 유니크 |
-|---|---|---|---|
-| **login_id** | **로그인 + 내부 식별(principal)** | ❌ 비공개 | ✅ |
-| email | 연락·복구·OAuth 계정 연결 | ❌ | ✅ |
-| nickname | **공개 핸들**(`/u/{nickname}`·검색) | ✅ 공개 | ✅(V7) |
+| 값 | 역할 | 공개? | 유니크 | 가변? |
+|---|---|---|---|---|
+| **login_id** | **로그인 + 내부 식별(principal) + 공개 @핸들**(검색·프로필 URL) | ✅ 공개 | ✅ uk_users_login_id | ❌ **불변** |
+| email | 연락·복구·OAuth 계정 연결 | ❌ 비공개 | ✅ uk_users_email | (변경 정책 별도) |
+| nickname | **표시 이름**(화면 표기) | ✅ 공개 | ❌ (V14에서 drop) | ✅ 자유 변경 |
 
 - **principal = login_id (전원)**. local·OAuth 모두 보유, `principal.getName() = login_id`.
-- **nickname을 login_id로 재활용 ❌** — 공개 핸들이라 로그인 식별자로 쓰면 "표적 공개" 재발. login_id는 **별도 비공개 컬럼**.
-- **login_id는 어디에도 화면/URL/API 노출 금지**(§5).
+- **공개 핸들 = login_id** (인스타 `@handle` / X와 동일). 검색·프로필 URL·@멘션이 login_id 기준. nickname은 표시 텍스트일 뿐.
+- **login_id 불변** — `User.assignLoginId`가 이미 설정됐으면 `IllegalStateException`. 한번 확정되면 변경 불가(영구 식별자).
+- **email은 계속 타인 비공개** — 로그인 식별자도 아님. "식별자를 연락 채널에서 분리"라는 원목표 유지.
 
 ---
 
@@ -84,12 +103,13 @@ alter table users add constraint uk_users_login_id unique (login_id);
 - **Admin 시드**: `BOOKTIMER_ADMIN_LOGIN_IDS` 읽어 login_id 조회로 승격(`AdminAccountService`/`AdminAccountSeeder` 전환).
 - **무차별 대입 방어**: `LoginAttemptService`는 IP 키 → 영향 없음.
 
-### 가입/온보딩에서 login_id 선택
-- **LOCAL 가입**: 가입 폼에 아이디 입력(+비번·닉네임·타임존). 유니크·형식 검증.
-- **OAuth 가입**: 첫 로그인 → 온보딩(이미 타임존/타이머 설정 화면)에서 **아이디도 입력**. 자동생성·임시값 없음 → 전원이 직접 정한 login_id 보유.
+### 온보딩에서 login_id 선택 (전원 단일 경로 — 🔁 전환)
+- **LOCAL·OAuth 공통**: 첫 진입 온보딩(타임존/타이머 설정 화면)에서 **아이디를 직접 입력**한다. 로컬도 온보딩 게이트를 반드시 거치므로(`DashboardController`), 가입 폼이 아니라 온보딩 한 곳에서 캡처한다 → 단일 경로 + login_id가 모두에게 온보딩 전까지 null이라 **불변 가드와 무충돌**(항상 null→확정). (PR-2에서 구현 ✅)
+- 자동생성·임시값 없음 → 전원이 직접 정한 login_id 보유. 유니크는 `existsByLoginId` 사전 확인 + DB 제약, 형식/예약어는 도메인(`User.normalizeLoginId`).
 
-### 노출 금지
-- login_id는 프로필·검색·잔디·SNS·URL 어디에도 노출하지 않는다(공개 핸들은 nickname뿐). email도 타인 비노출(현행).
+### 노출 정책 (🔁 전환)
+- **login_id는 공개 핸들** — 검색·프로필 URL·@멘션에 노출된다(인스타/X의 @핸들과 동일). 알려져도 인증(비밀번호)을 뚫지 못한다.
+- **email은 계속 타인 비노출**(현행 유지) — 로그인 식별자도 아님.
 
 ---
 
@@ -104,11 +124,12 @@ alter table users add constraint uk_users_login_id unique (login_id);
 
 ## 7. PR 단계 / 선후
 
-각 단계 독립 PR + TDD(Red→Green 가시화). auth 단계마다 "로그인·OAuth·14곳 조회 안 깨짐" 회귀.
+각 단계 독립 PR + TDD(Red→Green 가시화). auth/핸들 단계마다 "로그인·OAuth·조회 안 깨짐" 회귀.
 
-- **PR-1 스키마 + 도메인** — V13(`login_id` nullable unique). `User`에 login_id 필드·검증·팩토리 반영(형식 규칙). **동작 변화 없음**(인증은 아직 email). TDD: 도메인 규칙·FlywayMigrationTest. ※ `User.of(...)` 시그니처 변경이 가입 서비스·다수 테스트로 파급 — 같이 처리.
-- **PR-2 가입 + OAuth 온보딩** — LOCAL 가입 폼·OAuth 온보딩에서 login_id 입력+유니크/형식 강제. 신규 유저 login_id 채움. 로그인은 아직 email. TDD: 가입/온보딩 유니크·검증.
-- **PR-3 인증 컷오버** — wipe(ops) 선행 → `loadUserByUsername`=findByLoginId, principal=login_id, OIDC principal, 14곳 전환, 로그인폼 라벨, 시드 `BOOKTIMER_ADMIN_LOGIN_IDS`. **가장 큰 PR.** TDD: 로그인·OAuth·각 컨트롤러 회귀·시드.
-- **PR-4 NOT NULL 강화** — 모든 경로가 채운 뒤 `login_id` NOT NULL(+ 필요 시 email 로그인 잔재 제거 확인).
+- **PR-1 스키마 + 도메인** ✅ #146 — V13(`login_id` nullable unique). `User`에 login_id 필드·형식 검증(`assignLoginId`). **동작 변화 없음**(인증·핸들 아직 그대로). TDD: 도메인 규칙·FlywayMigrationTest.
+- **PR-2 불변 + 닉네임 중복허용 + 온보딩 캡처** ✅ — ① `assignLoginId` 불변 가드(재설정 시 ISE). ② nickname 유니크 제거(V14 + register/onboarding/settings/oauth-provisioning 검사 제거, `NicknameAllocator`/`NicknameAlreadyExistsException`/`existsByNickname` 삭제). ③ 온보딩에서 전원 login_id 입력+유니크(`existsByLoginId`)/형식/예약어 강제(`OnboardingForm`·`OnboardingService`·`onboarding.html`). 로그인·검색은 아직 email/nickname. TDD: 도메인 불변·중복허용·온보딩 캡처/유니크.
+- **PR-3 공개 핸들 컷오버** — 검색을 **login_id 기준**으로(`UserSearchService`·`findTop20By...`), 프로필/팔로우/차단/신고 핸들을 **nickname→login_id**(`/u/{loginId}` 등 `ProfileService`·Follow/Block/Report 컨트롤러). 신규 유저가 login_id를 가진 뒤라야 의미 있음. 인증은 아직 email. TDD: 검색/프로필/관계 핸들 회귀.
+- **PR-4 인증 컷오버** — wipe(ops) 선행 → `loadUserByUsername`=findByLoginId, principal=login_id, OIDC principal, 14곳 `findByEmail(principal)`→`findByLoginId`, 로그인폼 라벨, 시드 `BOOKTIMER_ADMIN_LOGIN_IDS`. **가장 큰 PR.** TDD: 로그인·OAuth·각 컨트롤러 회귀·시드.
+- **PR-5 NOT NULL 강화** — 모든 경로가 채운 뒤 `login_id` NOT NULL(+ email 로그인 잔재 제거 확인).
 
-> 이 메모는 **합의용 초안**이다. 구현은 §6 🟡(특히 login_id 형식 규칙) 확정 후 PR-1부터.
+> §5의 "인증 컷오버" 본문은 PR-4를 가리킨다(핸들 컷오버 PR-3가 그 앞에 추가됨).
