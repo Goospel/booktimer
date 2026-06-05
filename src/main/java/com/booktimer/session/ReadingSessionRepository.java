@@ -50,6 +50,13 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
     void deleteByUser(User user);
 
     /**
+     * 한 사용자의 최근 측정 세션(startedAt 내림차순) — 책을 즉시 로딩(left join fetch)해 트랜잭션 밖
+     * 매핑/렌더에서 lazy 예외를 막는다. 호출부가 {@code Pageable}로 최대 N개만 받는다(관리자 드릴다운).
+     */
+    @Query("select s from ReadingSession s left join fetch s.book where s.user = :user order by s.startedAt desc")
+    List<ReadingSession> findRecentWithBookByUser(@Param("user") User user, Pageable pageable);
+
+    /**
      * 최근 활성 사용자 수 — {@code since} 이후 측정(startedAt)을 시작한 <b>distinct 사용자</b>를 센다(운영 통계).
      * 한 사용자가 여러 번 읽어도 1로 집계한다. "활성"의 창(최근 N일)은 호출부(서비스)가 시계로 정한다.
      */

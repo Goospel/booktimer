@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>사용자 목록 — 관리자</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+    <style>
+        .admin-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; font-size: 0.9rem; }
+        .admin-table th, .admin-table td { padding: 0.5rem 0.6rem; border-bottom: 1px solid rgba(0,0,0,0.08); text-align: left; }
+        .admin-table th { font-size: 0.8rem; opacity: 0.7; }
+        .admin-table tr:hover { background: rgba(0,0,0,0.02); }
+        .admin-table details { display: inline; }
+        .admin-table details summary { cursor: pointer; list-style: none; }
+        .role-badge { font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 6px; background: rgba(0,0,0,0.06); }
+        .role-badge.admin { background: #ffe0b2; }
+        .pager { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.8rem; }
+        .pager .muted { opacity: 0.6; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <span class="emoji">👥</span>
+        <h1>사용자 목록</h1>
+    </header>
+
+    <form class="book-search-form" method="get" th:action="@{/admin/users}">
+        <input type="text" name="q" th:value="${q}" placeholder="아이디 또는 닉네임 검색">
+        <button type="submit">검색</button>
+    </form>
+
+    <section class="card">
+        <p class="status-line muted">
+            총 <span th:text="${userPage.totalElements}">0</span>명
+            (email은 클릭 시 전체 표시 · 비밀번호는 노출하지 않음)
+        </p>
+
+        <div th:if="${userPage.isEmpty()}">
+            <p class="muted">해당하는 사용자가 없습니다.</p>
+        </div>
+
+        <table class="admin-table" th:unless="${userPage.isEmpty()}">
+            <thead>
+            <tr>
+                <th>@아이디</th>
+                <th>닉네임</th>
+                <th>email</th>
+                <th>provider</th>
+                <th>가입일</th>
+                <th>온보딩</th>
+                <th>역할</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="row : ${userPage.content}">
+                <td>
+                    <a th:href="@{/admin/users/{id}(id=${row.loginId})}" th:text="'@' + ${row.loginId}">@handle</a>
+                </td>
+                <td th:text="${row.nickname}">닉네임</td>
+                <td>
+                    <details>
+                        <summary th:text="${row.emailMasked}">m***@x.com</summary>
+                        <span th:text="${row.email}">full@x.com</span>
+                    </details>
+                </td>
+                <td th:text="${row.provider}">LOCAL</td>
+                <td th:text="${#temporals.format(row.createdAt, 'yyyy-MM-dd')}">2026-01-01</td>
+                <td th:text="${row.onboarded} ? '완료' : '미완'">완료</td>
+                <td>
+                    <span class="role-badge" th:classappend="${row.role.name() == 'ADMIN'} ? ' admin'"
+                          th:text="${row.role}">USER</span>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+
+        <div class="pager" th:if="${userPage.totalPages > 1}">
+            <a th:if="${userPage.hasPrevious()}"
+               th:href="@{/admin/users(q=${q}, page=${userPage.number - 1}, size=${userPage.size})}">← 이전</a>
+            <span class="muted">
+                <span th:text="${userPage.number + 1}">1</span> / <span th:text="${userPage.totalPages}">1</span>
+            </span>
+            <a th:if="${userPage.hasNext()}"
+               th:href="@{/admin/users(q=${q}, page=${userPage.number + 1}, size=${userPage.size})}">다음 →</a>
+        </div>
+    </section>
+
+    <p class="link-row">
+        <a th:href="@{/admin}">← 관리자 홈</a>
+    </p>
+</div>
+</body>
+</html>
