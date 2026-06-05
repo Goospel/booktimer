@@ -97,7 +97,18 @@
     <!-- 공개 책장 (PUBLIC 책만) -->
     <section class="card">
         <h2>공개 책장</h2>
-        <p th:if="${books.isEmpty()}" class="status-line">아직 공개한 책이 없습니다.</p>
+
+        <!-- 상태 필터 칩 — 부합하는 공개 책만 표시(서버사이드 ?status=). 내 책장(/books)과 동일 패턴. -->
+        <nav class="shelf-filter">
+            <a th:href="@{/u/{n}(n=${loginId})}" th:classappend="${shelfFilter == null} ? 'active'">전체</a>
+            <a th:each="s : ${statuses}"
+               th:href="@{/u/{n}(n=${loginId}, status=${s})}"
+               th:classappend="${s == shelfFilter} ? 'active'"
+               th:text="${s.label}">상태</a>
+        </nav>
+
+        <p th:if="${books.isEmpty() and shelfFilter == null}" class="status-line">아직 공개한 책이 없습니다.</p>
+        <p th:if="${books.isEmpty() and shelfFilter != null}" class="status-line">이 상태의 공개 책이 없습니다.</p>
         <ul class="book-list" th:unless="${books.isEmpty()}">
             <li class="book-row" th:each="b : ${books}">
                 <img class="book-cover" th:if="${b.coverUrl}" th:src="${b.coverUrl}" alt="" referrerpolicy="no-referrer">
