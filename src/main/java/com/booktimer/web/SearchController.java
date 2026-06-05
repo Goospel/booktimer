@@ -2,9 +2,9 @@ package com.booktimer.web;
 
 import com.booktimer.search.UserSearchService;
 import com.booktimer.security.RateLimitAction;
+import com.booktimer.security.CurrentUserService;
 import com.booktimer.security.RateLimitService;
 import com.booktimer.user.User;
-import com.booktimer.user.UserRepository;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,13 +25,13 @@ import java.util.List;
 @Controller
 public class SearchController {
 
-    private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
     private final UserSearchService searchService;
     private final RateLimitService rateLimitService;
 
-    public SearchController(UserRepository userRepository, UserSearchService searchService,
+    public SearchController(CurrentUserService currentUserService, UserSearchService searchService,
                             RateLimitService rateLimitService) {
-        this.userRepository = userRepository;
+        this.currentUserService = currentUserService;
         this.searchService = searchService;
         this.rateLimitService = rateLimitService;
     }
@@ -52,7 +52,6 @@ public class SearchController {
     }
 
     private User currentUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
-                .orElseThrow(() -> new IllegalStateException("authenticated user not found: " + principal.getName()));
+        return currentUserService.resolve(principal);
     }
 }

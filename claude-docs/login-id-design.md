@@ -1,6 +1,6 @@
 # 로그인 아이디(login_id) 도입 — 식별/인증 분리 설계 메모
 
-> **상태**: 진행 중 (PR-1 ✅ #146, PR-2 ✅ #147, PR-3 ✅ #148). **B안 + 기존 데이터 wipe(그린필드)** + **🔁 모델 전환(2026-06-05): login_id를 공개 @핸들로**. 다음: PR-4 인증 컷오버(wipe 선행).
+> **상태**: 진행 중 (PR-1 ✅ #146, PR-2 ✅ #147, PR-3 ✅ #148, PR-4 ✅ #149, wipe ✅ 실행됨). **B안 + 기존 데이터 wipe(그린필드)** + **🔁 모델 전환(2026-06-05): login_id를 공개 @핸들로**. 다음: PR-5 NOT NULL 강화.
 > **왜 설계 먼저**: 인증/식별 경계 변경이다 — `principal.getName()`으로 유저를 찾는 컨트롤러 14곳, `findByEmail` 21곳. auth는 깨지면 위험하다.
 >
 > 관련: [plan.md](../plan.md) §관리자 대시보드 · [sns-design.md](sns-design.md) §3.5(가시성 경계) · [learning-notes.md](learning-notes.md) **N-037**(식별=관계/속성 분리).
@@ -129,7 +129,7 @@ alter table users add constraint uk_users_login_id unique (login_id);
 - **PR-1 스키마 + 도메인** ✅ #146 — V13(`login_id` nullable unique). `User`에 login_id 필드·형식 검증(`assignLoginId`). **동작 변화 없음**(인증·핸들 아직 그대로). TDD: 도메인 규칙·FlywayMigrationTest.
 - **PR-2 불변 + 닉네임 중복허용 + 온보딩 캡처** ✅ — ① `assignLoginId` 불변 가드(재설정 시 ISE). ② nickname 유니크 제거(V14 + register/onboarding/settings/oauth-provisioning 검사 제거, `NicknameAllocator`/`NicknameAlreadyExistsException`/`existsByNickname` 삭제). ③ 온보딩에서 전원 login_id 입력+유니크(`existsByLoginId`)/형식/예약어 강제(`OnboardingForm`·`OnboardingService`·`onboarding.html`). 로그인·검색은 아직 email/nickname. TDD: 도메인 불변·중복허용·온보딩 캡처/유니크.
 - **PR-3 공개 핸들 컷오버** ✅ #148 — 검색을 **login_id 기준**으로(`UserSearchService`·`findTop20ByLoginIdContainingIgnoreCaseOrderByLoginIdAsc`), 프로필/팔로우/차단/신고 핸들을 **nickname→login_id**(`/u/{loginId}`·`ProfileService.findByLoginId`·Follow/Block/Report 컨트롤러 `@RequestParam loginId`). `UserSearchResult`·`ProfileView`에 `loginId` 추가(nickname은 표시 이름으로 유지 — 핸들/표시 분리). **부수 효과**: 닉네임 중복 허용(PR-2) 이후 `findByNickname`이 첫 일치 1명이라 오식별하던 팔로우/차단/신고 정합성 버그를 동시 해소. 인증은 아직 email(principal·14곳은 PR-4). TDD: 검색=login_id·닉네임 중복→login_id 정확 식별 회귀.
-- **PR-4 인증 컷오버** — wipe(ops) 선행 → `loadUserByUsername`=findByLoginId, principal=login_id, OIDC principal, 14곳 `findByEmail(principal)`→`findByLoginId`, 로그인폼 라벨, 시드 `BOOKTIMER_ADMIN_LOGIN_IDS`. **가장 큰 PR.** TDD: 로그인·OAuth·각 컨트롤러 회귀·시드.
+- **PR-4 인증 컷오버** ✅ #149 — wipe(ops) 선행 완료 → `loadUserByUsername`=findByLoginId만(email 폴백 없음), principal=login_id, OIDC principal(`BookTimerOidcUser`), 시드 `BOOKTIMER_ADMIN_LOGIN_IDS`. **설계 미세 보정**: ① 14곳 직접 `findByLoginId` 대신 **`CurrentUserService` 공유 리졸버**(findByLoginId 우선 → OAuth 첫 세션만 email 브리지) — OAuth는 첫 로그인 전 login_id가 없어 principal=login_id가 즉시 불가하므로 그 짧은 창을 email로 브리지(이메일 *로그인*은 여전히 차단). ② **로컬 login_id 캡처를 가입으로 이동**(로그인이 login_id 기준이라 가입 시 필요) — 온보딩 캡처는 OAuth 전용(`needsLoginId`로 조건부). ③ `SettingsController`는 principal→User→email로 서비스 시그니처 보존. **가장 큰 PR.** Flyway 없음. TDD: 로그인(login_id)·이메일 차단·리졸버·OIDC·온보딩 조건부·시드·login_id principal 컨트롤러 경로 전부 그린. **⚠️ 배포 전 prod ENV `BOOKTIMER_ADMIN_LOGIN_IDS` 설정 필요.**
 - **PR-5 NOT NULL 강화** — 모든 경로가 채운 뒤 `login_id` NOT NULL(+ email 로그인 잔재 제거 확인).
 
 > §5의 "인증 컷오버" 본문은 PR-4를 가리킨다(핸들 컷오버 PR-3가 그 앞에 추가됨).

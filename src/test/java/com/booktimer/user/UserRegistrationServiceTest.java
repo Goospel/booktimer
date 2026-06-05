@@ -55,7 +55,7 @@ class UserRegistrationServiceTest {
         when(passwordEncoder.encode("rawpw1234")).thenReturn("$2a$10$ENCODED");
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
 
-        User result = service.register("a@booktimer.com", "rawpw1234", "책벌레", "Asia/Seoul", Role.USER, DAY0);
+        User result = service.register("a@booktimer.com", "rawpw1234", "reader_a", "책벌레", "Asia/Seoul", Role.USER, DAY0);
 
         verify(passwordEncoder).encode("rawpw1234");
         verify(userRepository).save(userCaptor.capture());
@@ -72,7 +72,7 @@ class UserRegistrationServiceTest {
         when(passwordEncoder.encode(any())).thenReturn("$2a$10$ENCODED");
         ArgumentCaptor<ReadingTimer> timerCaptor = ArgumentCaptor.forClass(ReadingTimer.class);
 
-        User result = service.register("a@booktimer.com", "rawpw1234", "책벌레", "Asia/Seoul", Role.USER, DAY0);
+        User result = service.register("a@booktimer.com", "rawpw1234", "reader_a", "책벌레", "Asia/Seoul", Role.USER, DAY0);
 
         verify(timerRepository).save(timerCaptor.capture());
         ReadingTimer timer = timerCaptor.getValue();
@@ -93,7 +93,7 @@ class UserRegistrationServiceTest {
         when(userRepository.save(any(User.class))).thenAnswer(returnsFirstArg());
         when(passwordEncoder.encode(any())).thenReturn("$2a$10$ENCODED");
 
-        service.register("b@booktimer.com", "rawpw1234", "책벌레", "Asia/Seoul", Role.USER, DAY0);
+        service.register("b@booktimer.com", "rawpw1234", "reader_b", "책벌레", "Asia/Seoul", Role.USER, DAY0);
 
         InOrder inOrder = inOrder(userRepository, timerRepository);
         inOrder.verify(userRepository).save(any(User.class));
@@ -106,7 +106,7 @@ class UserRegistrationServiceTest {
         when(userRepository.existsByEmail("dup@booktimer.com")).thenReturn(true);
 
         assertThatThrownBy(() -> service.register(
-                "dup@booktimer.com", "rawpw1234", "책벌레", "Asia/Seoul", Role.USER, DAY0))
+                "dup@booktimer.com", "rawpw1234", "reader_d", "책벌레", "Asia/Seoul", Role.USER, DAY0))
                 .isInstanceOf(EmailAlreadyExistsException.class);
 
         verify(userRepository, never()).save(any());
@@ -122,11 +122,39 @@ class UserRegistrationServiceTest {
         when(passwordEncoder.encode(any())).thenReturn("$2a$10$ENCODED");
 
         User result = service.register(
-                "fresh@booktimer.com", "rawpw1234", "책벌레", "Asia/Seoul", Role.USER, DAY0);
+                "fresh@booktimer.com", "rawpw1234", "reader_f", "책벌레", "Asia/Seoul", Role.USER, DAY0);
 
         assertThat(result.getNickname()).isEqualTo("책벌레");
         verify(userRepository).save(any(User.class));
         // 표시 이름은 자유 중복 — UserRepository.existsByNickname 자체가 제거돼 사전 확인 경로가 없다.
+    }
+
+    @Test
+    @DisplayName("register: 로컬 가입에서 login_id를 정규화해 불변으로 확정한다 (로그인 식별자 — PR-4)")
+    void register_assignsNormalizedLoginId() {
+        when(userRepository.existsByEmail("lid@booktimer.com")).thenReturn(false);
+        when(userRepository.existsByLoginId("goospel")).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenAnswer(returnsFirstArg());
+        when(passwordEncoder.encode(any())).thenReturn("$2a$10$ENCODED");
+
+        User result = service.register(
+                "lid@booktimer.com", "rawpw1234", "Goospel", "책벌레", "Asia/Seoul", Role.USER, DAY0);
+
+        assertThat(result.getLoginId()).isEqualTo("goospel"); // 소문자 정규화
+    }
+
+    @Test
+    @DisplayName("register: 이미 쓰이는 login_id면 LoginIdAlreadyExistsException을 던지고 저장하지 않는다")
+    void register_duplicateLoginId_throws() {
+        when(userRepository.existsByEmail("lid2@booktimer.com")).thenReturn(false);
+        when(userRepository.existsByLoginId("taken")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.register(
+                "lid2@booktimer.com", "rawpw1234", "taken", "책벌레", "Asia/Seoul", Role.USER, DAY0))
+                .isInstanceOf(LoginIdAlreadyExistsException.class);
+
+        verify(userRepository, never()).save(any());
+        verify(timerRepository, never()).save(any());
     }
 
     // --- registerOAuth: 소셜 가입 (비밀번호 없음) ---

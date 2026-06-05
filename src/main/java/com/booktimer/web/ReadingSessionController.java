@@ -2,9 +2,9 @@ package com.booktimer.web;
 
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
+import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.ReadingSessionService;
 import com.booktimer.user.User;
-import com.booktimer.user.UserRepository;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,18 +37,18 @@ import java.time.Clock;
 @RequestMapping("/sessions")
 public class ReadingSessionController {
 
-    private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
     private final ReadingSessionService sessionService;
     private final DashboardModel dashboardModel;
     private final BookRepository bookRepository;
     private final Clock clock;
 
-    public ReadingSessionController(UserRepository userRepository,
+    public ReadingSessionController(CurrentUserService currentUserService,
                                     ReadingSessionService sessionService,
                                     DashboardModel dashboardModel,
                                     BookRepository bookRepository,
                                     Clock clock) {
-        this.userRepository = userRepository;
+        this.currentUserService = currentUserService;
         this.sessionService = sessionService;
         this.dashboardModel = dashboardModel;
         this.bookRepository = bookRepository;
@@ -111,7 +111,6 @@ public class ReadingSessionController {
     }
 
     private User currentUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
-                .orElseThrow(() -> new IllegalStateException("authenticated user not found: " + principal.getName()));
+        return currentUserService.resolve(principal);
     }
 }

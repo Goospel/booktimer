@@ -1,11 +1,11 @@
 package com.booktimer.web;
 
+import com.booktimer.security.CurrentUserService;
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.LoginIdAlreadyExistsException;
 import com.booktimer.user.OnboardingService;
 import com.booktimer.user.User;
-import com.booktimer.user.UserRepository;
 import jakarta.validation.Valid;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -35,16 +35,16 @@ public class OnboardingController {
 
     private static final int SECONDS_PER_MINUTE = 60;
 
-    private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
     private final ReadingTimerRepository timerRepository;
     private final OnboardingService onboardingService;
     private final Clock clock;
 
-    public OnboardingController(UserRepository userRepository,
+    public OnboardingController(CurrentUserService currentUserService,
                                 ReadingTimerRepository timerRepository,
                                 OnboardingService onboardingService,
                                 Clock clock) {
-        this.userRepository = userRepository;
+        this.currentUserService = currentUserService;
         this.timerRepository = timerRepository;
         this.onboardingService = onboardingService;
         this.clock = clock;
@@ -56,6 +56,8 @@ public class OnboardingController {
         if (user.isOnboarded()) {
             return "redirect:/"; // 이미 마쳤으면 다시 보여주지 않는다
         }
+        // login_id를 아직 안 정한 사용자(소셜 로그인)에게만 아이디 입력칸을 보인다. 로컬은 가입에서 받았다(불변).
+        model.addAttribute("needsLoginId", user.getLoginId() == null);
         if (!model.containsAttribute("onboardingForm")) {
             // 가입 시 시드된 타이머 값을 분으로 변환해 기본값으로 채운다.
             ReadingTimer timer = timerRepository.findByUser(user)
@@ -72,15 +74,22 @@ public class OnboardingController {
 
     @PostMapping("/onboarding")
     public String onboarding(@Valid @ModelAttribute("onboardingForm") OnboardingForm form,
-                             BindingResult bindingResult, Principal principal) {
+                             BindingResult bindingResult, Principal principal, Model model) {
         User user = currentUser(principal);
         if (user.isOnboarded()) {
             return "redirect:/";
         }
+        boolean needsLoginId = user.getLoginId() == null;
+        model.addAttribute("needsLoginId", needsLoginId);
+
         // 초기값은 상한을 넘을 수 없다(넘으면 도메인이 클램프하지만, 의도치 않은 손실을 막게 명시 안내).
         if (form.getInitialMinutes() != null && form.getCapMinutes() != null
                 && form.getInitialMinutes() > form.getCapMinutes()) {
             bindingResult.rejectValue("initialMinutes", "initial.aboveCap", "초기값은 상한보다 클 수 없습니다");
+        }
+        // 소셜 로그인 사용자는 여기서 login_id를 반드시 정해야 한다(로컬은 가입에서 받았으므로 입력칸 자체가 없다).
+        if (needsLoginId && (form.getLoginId() == null || form.getLoginId().isBlank())) {
+            bindingResult.rejectValue("loginId", "loginId.required", "아이디를 입력해 주세요");
         }
 
         if (bindingResult.hasErrors()) {
@@ -90,7 +99,7 @@ public class OnboardingController {
         LocalDate today = LocalDate.ofInstant(clock.instant(), ZoneId.of(user.getTimezone()));
         try {
             onboardingService.complete(
-                    principal.getName(),
+                    user,
                     form.getLoginId(),
                     form.getNickname(),
                     form.getInitialMinutes() * (long) SECONDS_PER_MINUTE,
@@ -111,7 +120,6 @@ public class OnboardingController {
     }
 
     private User currentUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
-                .orElseThrow(() -> new IllegalStateException("authenticated user not found: " + principal.getName()));
+        return currentUserService.resolve(principal);
     }
 }

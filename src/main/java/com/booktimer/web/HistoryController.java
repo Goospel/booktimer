@@ -3,9 +3,9 @@ package com.booktimer.web;
 import com.booktimer.session.ContributionGraph;
 import com.booktimer.session.DailyReadingRecord;
 import com.booktimer.session.ReadingContributionService;
+import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.ReadingHistoryService;
 import com.booktimer.user.User;
-import com.booktimer.user.UserRepository;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,22 +23,21 @@ import java.util.List;
 @Controller
 public class HistoryController {
 
-    private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
     private final ReadingHistoryService historyService;
     private final ReadingContributionService contributionService;
 
-    public HistoryController(UserRepository userRepository,
+    public HistoryController(CurrentUserService currentUserService,
                              ReadingHistoryService historyService,
                              ReadingContributionService contributionService) {
-        this.userRepository = userRepository;
+        this.currentUserService = currentUserService;
         this.historyService = historyService;
         this.contributionService = contributionService;
     }
 
     @GetMapping("/history")
     public String history(Principal principal, Model model) {
-        User user = userRepository.findByEmail(principal.getName())
-                .orElseThrow(() -> new IllegalStateException("authenticated user not found: " + principal.getName()));
+        User user = currentUserService.resolve(principal);
 
         List<DailyReadingRecord> records = historyService.dailyHistory(user);
         ContributionGraph graph = contributionService.contributionGraph(user);

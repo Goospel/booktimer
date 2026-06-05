@@ -1,6 +1,7 @@
 package com.booktimer.web;
 
 import com.booktimer.follow.FollowService;
+import com.booktimer.security.CurrentUserService;
 import com.booktimer.security.RateLimitAction;
 import com.booktimer.security.RateLimitService;
 import com.booktimer.user.User;
@@ -25,12 +26,15 @@ import java.security.Principal;
 public class FollowController {
 
     private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
     private final FollowService followService;
     private final RateLimitService rateLimitService;
 
-    public FollowController(UserRepository userRepository, FollowService followService,
+    public FollowController(UserRepository userRepository, CurrentUserService currentUserService,
+                            FollowService followService,
                             RateLimitService rateLimitService) {
         this.userRepository = userRepository;
+        this.currentUserService = currentUserService;
         this.followService = followService;
         this.rateLimitService = rateLimitService;
     }
@@ -75,7 +79,6 @@ public class FollowController {
     }
 
     private User currentUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
-                .orElseThrow(() -> new IllegalStateException("authenticated user not found: " + principal.getName()));
+        return currentUserService.resolve(principal);
     }
 }

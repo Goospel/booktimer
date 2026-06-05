@@ -34,6 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class LoginBruteForceTest {
 
     private static final String EMAIL = "victim@booktimer.com";
+    private static final String LOGIN_ID = "victim1"; // 로그인 식별자(이메일 아님)
     private static final String PASSWORD = "rawpw1234";
     private static final String ATTACKER_IP = "203.0.113.7";
 
@@ -49,8 +50,9 @@ class LoginBruteForceTest {
     @BeforeEach
     void setUp() {
         mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
-        userRepository.save(User.of(
-                EMAIL, passwordEncoder.encode(PASSWORD), "책벌레", "Asia/Seoul", Role.USER));
+        User u = User.of(EMAIL, passwordEncoder.encode(PASSWORD), "책벌레", "Asia/Seoul", Role.USER);
+        u.assignLoginId(LOGIN_ID);
+        userRepository.save(u);
     }
 
     private static RequestPostProcessor fromIp(String ip) {
@@ -62,7 +64,7 @@ class LoginBruteForceTest {
 
     private void attemptLogin(String ip, String password) throws Exception {
         mvc.perform(post("/login")
-                .param("username", EMAIL)
+                .param("username", LOGIN_ID)
                 .param("password", password)
                 .with(csrf())
                 .with(fromIp(ip)));
@@ -77,7 +79,7 @@ class LoginBruteForceTest {
 
         // 이제 올바른 비밀번호여도 차단 — 미인증 + 로그인 에러로 리다이렉트.
         mvc.perform(post("/login")
-                        .param("username", EMAIL)
+                        .param("username", LOGIN_ID)
                         .param("password", PASSWORD)
                         .with(csrf())
                         .with(fromIp(ATTACKER_IP)))
@@ -93,10 +95,10 @@ class LoginBruteForceTest {
         }
 
         mvc.perform(post("/login")
-                        .param("username", EMAIL)
+                        .param("username", LOGIN_ID)
                         .param("password", PASSWORD)
                         .with(csrf())
                         .with(fromIp("198.51.100.20")))
-                .andExpect(authenticated().withUsername(EMAIL));
+                .andExpect(authenticated().withUsername(LOGIN_ID));
     }
 }

@@ -1,6 +1,7 @@
 package com.booktimer.web;
 
 import com.booktimer.user.EmailAlreadyExistsException;
+import com.booktimer.user.LoginIdAlreadyExistsException;
 import com.booktimer.user.Role;
 import com.booktimer.user.UserRegistrationService;
 import jakarta.validation.Valid;
@@ -71,11 +72,19 @@ public class SignupController {
         LocalDate today = LocalDate.ofInstant(clock.instant(), zone);
         try {
             registrationService.register(
-                    form.getEmail(), form.getPassword(), form.getNickname(),
+                    form.getEmail(), form.getPassword(), form.getLoginId(), form.getNickname(),
                     form.getTimezone(), Role.USER, today);
         } catch (EmailAlreadyExistsException | DataIntegrityViolationException e) {
             // 사전 확인 + (동시 가입 레이스 대비) DB 제약 위반도 같은 친절한 에러로 — 500 방지
             bindingResult.rejectValue("email", "email.duplicate", "이미 가입된 이메일입니다");
+            return "signup";
+        } catch (LoginIdAlreadyExistsException e) {
+            // 이미 쓰이는 로그인 아이디 — 다른 아이디를 받도록 필드 에러로 안내(생성 없음)
+            bindingResult.rejectValue("loginId", "loginId.duplicate", "이미 사용 중인 아이디입니다");
+            return "signup";
+        } catch (IllegalArgumentException e) {
+            // 예약어 등 @Pattern으로 못 거른 형식/규칙 위반(도메인 검증) — 필드 에러로 안내
+            bindingResult.rejectValue("loginId", "loginId.invalid", "사용할 수 없는 아이디입니다");
             return "signup";
         }
 

@@ -6,6 +6,9 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
+// login_id는 소셜 로그인 사용자만 여기서 정한다(로컬은 가입에서 확정 — 입력칸 없음). 그래서 선택값:
+// 빈 값을 허용하되(로컬), 입력하면 형식을 검증한다. "필수 여부"는 컨트롤러가 user.loginId==null로 판단한다.
+
 /**
  * 온보딩(첫 진입 초기 설정) 폼 바인딩 객체.
  *
@@ -20,9 +23,11 @@ public class OnboardingForm {
     /**
      * 로그인/식별/검색용 공개 아이디(@핸들). <b>한번 정하면 바꿀 수 없다</b>. 영소문자/숫자/언더스코어
      * 3~20자(대문자 입력은 서버가 소문자로 정규화). 예약어 차단·유니크는 도메인/서비스가 검증한다.
+     *
+     * <p>선택값(빈 값 허용) — 로컬 가입자는 가입에서 이미 받아 입력칸이 없다. 소셜 로그인 사용자는 컨트롤러가
+     * {@code user.loginId==null}로 필수를 강제한다. 입력하면 형식만 검증한다(빈 문자열 통과 → 컨트롤러 위임).
      */
-    @NotBlank
-    @Pattern(regexp = "^[A-Za-z0-9_]{3,20}$",
+    @Pattern(regexp = "^$|^[A-Za-z0-9_]{3,20}$",
             message = "아이디는 영문/숫자/_ 3~20자여야 합니다")
     private String loginId;
 

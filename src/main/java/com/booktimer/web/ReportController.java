@@ -2,6 +2,7 @@ package com.booktimer.web;
 
 import com.booktimer.report.ReportReason;
 import com.booktimer.report.ReportService;
+import com.booktimer.security.CurrentUserService;
 import com.booktimer.security.RateLimitAction;
 import com.booktimer.security.RateLimitService;
 import com.booktimer.user.User;
@@ -26,12 +27,15 @@ import java.security.Principal;
 public class ReportController {
 
     private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
     private final ReportService reportService;
     private final RateLimitService rateLimitService;
 
-    public ReportController(UserRepository userRepository, ReportService reportService,
+    public ReportController(UserRepository userRepository, CurrentUserService currentUserService,
+                            ReportService reportService,
                             RateLimitService rateLimitService) {
         this.userRepository = userRepository;
+        this.currentUserService = currentUserService;
         this.reportService = reportService;
         this.rateLimitService = rateLimitService;
     }
@@ -67,7 +71,6 @@ public class ReportController {
     }
 
     private User currentUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
-                .orElseThrow(() -> new IllegalStateException("authenticated user not found: " + principal.getName()));
+        return currentUserService.resolve(principal);
     }
 }

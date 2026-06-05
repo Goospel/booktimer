@@ -1,7 +1,7 @@
 package com.booktimer.web;
 
+import com.booktimer.security.CurrentUserService;
 import com.booktimer.user.User;
-import com.booktimer.user.UserRepository;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,16 +21,15 @@ import java.security.Principal;
 @Controller
 public class AdminController {
 
-    private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
 
-    public AdminController(UserRepository userRepository) {
-        this.userRepository = userRepository;
+    public AdminController(CurrentUserService currentUserService) {
+        this.currentUserService = currentUserService;
     }
 
     @GetMapping("/admin")
     public String dashboard(Principal principal, Model model) {
-        User admin = userRepository.findByEmail(principal.getName())
-                .orElseThrow(() -> new IllegalStateException("authenticated admin not found: " + principal.getName()));
+        User admin = currentUserService.resolve(principal);
         model.addAttribute("nickname", admin.getNickname());
         return "admin";
     }

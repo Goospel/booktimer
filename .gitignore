@@ -43,3 +43,6 @@ out/
 # UI 미리보기용 임시 정적 서버 하네스 (제품 코드 아님)
 .preview/
 .claude/launch.json
+
+# 사설 운영 문서 (인프라 식별자·접속 런북 — 공개 저장소에 올리지 않음)
+private-docs/

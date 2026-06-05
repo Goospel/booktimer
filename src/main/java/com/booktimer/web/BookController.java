@@ -12,9 +12,9 @@ import com.booktimer.popularity.FollowScopeReaders;
 import com.booktimer.popularity.FollowScopeReadersService;
 import com.booktimer.session.BookContributionService;
 import com.booktimer.session.BookReadingDetail;
+import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.BookReadingStatsService;
 import com.booktimer.user.User;
-import com.booktimer.user.UserRepository;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,19 +37,19 @@ import java.util.List;
 @Controller
 public class BookController {
 
-    private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
     private final BookService bookService;
     private final BookReadingStatsService statsService;
     private final BookContributionService contributionService;
     private final FollowScopePopularityService popularityService;
     private final FollowScopeReadersService readersService;
 
-    public BookController(UserRepository userRepository, BookService bookService,
+    public BookController(CurrentUserService currentUserService, BookService bookService,
                           BookReadingStatsService statsService,
                           BookContributionService contributionService,
                           FollowScopePopularityService popularityService,
                           FollowScopeReadersService readersService) {
-        this.userRepository = userRepository;
+        this.currentUserService = currentUserService;
         this.bookService = bookService;
         this.statsService = statsService;
         this.contributionService = contributionService;
@@ -233,7 +233,6 @@ public class BookController {
     }
 
     private User currentUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
-                .orElseThrow(() -> new IllegalStateException("authenticated user not found: " + principal.getName()));
+        return currentUserService.resolve(principal);
     }
 }
