@@ -38,10 +38,6 @@
     </header>
     <p class="greeting"><span th:text="${nickname}">운영자</span>님 — 운영 데이터 확인 화면입니다.</p>
 
-    <form th:action="@{/logout}" method="post" class="link-row">
-        <button type="submit" class="btn-ghost">로그아웃</button>
-    </form>
-
     <section class="card">
         <h2>통계 요약</h2>
         <p class="status-line muted">읽기 전용 집계 — 가입자(운영자 제외)·활성·독서 기록 현황.</p>
@@ -98,6 +94,11 @@
     <p class="link-row">
         <a th:href="@{/}">← 대시보드</a>
     </p>
+
+    <!-- 로그아웃은 일반 대시보드와 동일하게 화면 최하단에 둔다(상단 노출 방지). -->
+    <form th:action="@{/logout}" method="post">
+        <button type="submit" class="btn-ghost">로그아웃</button>
+    </form>
 </div>
 </body>
 </html>
