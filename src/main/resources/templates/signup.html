@@ -20,7 +20,7 @@
                 <label for="loginId">아이디</label>
                 <input type="text" id="loginId" th:field="*{loginId}" autocomplete="username"
                        pattern="[A-Za-z0-9_]{3,20}" placeholder="영문/숫자/_ 3~20자">
-                <small class="field-hint">로그인·검색·프로필 주소에 쓰여요. ⚠️ 한번 정하면 바꿀 수 없어요.</small>
+                <small class="field-hint">로그인·검색·책방 주소(/u/아이디)에 쓰여요. ⚠️ 한번 정하면 바꿀 수 없어요.</small>
                 <span class="field-error" th:if="${#fields.hasErrors('loginId')}" th:errors="*{loginId}">아이디 오류</span>
             </div>
             <div class="field">
