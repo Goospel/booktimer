@@ -54,6 +54,7 @@
 - [N-048. 유니크 사전확인은 정규화한 값으로, 그리고 엔티티를 바꾸기 전에 한다 — JPA auto-flush가 미영속 자기자신을 오탐한다](#n-048-유니크-사전확인은-정규화한-값으로-그리고-엔티티를-바꾸기-전에-한다--jpa-auto-flush가-미영속-자기자신을-오탐한다)
 - [N-049. 운영 통계는 새 저장 없는 읽기 집계 — Flyway 무변경, 시간창 집계는 Clock 주입으로 결정화](#n-049-운영-통계는-새-저장-없는-읽기-집계--flyway-무변경-시간창-집계는-clock-주입으로-결정화)
 - [N-050. 운영 화면 PII 최소노출은 층이다 — 안 싣기가 가리기보다 우선, 마스킹은 표시일 뿐 비노출이 아니다](#n-050-운영-화면-pii-최소노출은-층이다--안-싣기가-가리기보다-우선-마스킹은-표시일-뿐-비노출이-아니다)
+- [N-051. 상태 의존 불변식은 단순 NOT NULL이 아니라 조건부 CHECK로 — 생성 순서(지연 채움)와 충돌 없이 무결성을 박는다](#n-051-상태-의존-불변식은-단순-not-null이-아니라-조건부-check로--생성-순서지연-채움와-충돌-없이-무결성을-박는다)
 
 ---
 
@@ -2317,6 +2318,56 @@ Instant since = clock.instant().minus(Duration.ofDays(7));  // ✅ 주입된 Clo
 
 ---
 
+## N-051. 상태 의존 불변식은 단순 NOT NULL이 아니라 조건부 CHECK로 — 생성 순서(지연 채움)와 충돌 없이 무결성을 박는다
+
+**한 줄 요약**: "이 컬럼은 항상 값이 있어야 한다"를 무심코 `NOT NULL`로 박으면, **그 값을 나중에 채우는 생성 경로**와 충돌한다. login_id를 NOT NULL로 만들려다, OAuth 사용자는 row를 **먼저 INSERT**하고 온보딩에서 login_id를 정한다는 걸 발견했다(그 창의 null은 정상). 진짜 박고 싶은 규칙은 "항상"이 아니라 **"어떤 상태가 되면"** — `onboarded = true ⟹ login_id IS NOT NULL`. 이런 **상태 의존(부분 함수 종속) 불변식**은 `NOT NULL`이 아니라 **조건부 CHECK 제약**(`check (onboarded = false or login_id is not null)`)으로 표현한다.
+
+### 자세한 설명
+
+login_id 도입의 마지막 단계는 "모든 정식 계정은 login_id가 있다"를 DB로 보장하는 것이었다. 직관은 `alter ... modify login_id ... not null`. 그런데 생성 경로가 둘이고 **채우는 시점이 다르다**:
+
+- **로컬 가입**: `register(...)`가 가입 시점에 login_id를 확정 → INSERT 시 이미 채워짐.
+- **OAuth 가입**: `provision → registerOAuth`가 **login_id=null인 row를 먼저 INSERT**하고, 사용자가 **온보딩에서** login_id를 고른다. login_id는 **불변**이라(N-047) X처럼 가입 시 자동 핸들을 박아 NOT NULL을 만족시키는 것도 설계와 충돌한다.
+
+즉 "항상 NOT NULL"은 **거짓 불변식**이었다 — OAuth의 프로비저닝~온보딩 사이엔 null이 정상이다. 실제로 보장하고 싶은 건 **온보딩이 끝난(=정식 계정) 뒤엔 반드시 있다**는 조건부 규칙. 이건 관계형 용어로 **부분 함수 종속**(어떤 행에만 적용되는 NOT NULL)이고, 표준 도구가 **CHECK 제약**이다:
+
+```sql
+alter table users add constraint ck_users_login_id_when_onboarded
+    check (onboarded = false or login_id is not null);   -- onboarded ⟹ login_id IS NOT NULL
+```
+
+`A ⟹ B`는 불 논리로 `not A or B` = `onboarded = false or login_id is not null`. onboarded가 false면(아직 정식 아님) login_id가 null이어도 통과, true면 login_id가 반드시 있어야 통과.
+
+### 일반화 포인트 (면접 답변용)
+
+- **"항상 있어야 한다"인지 "언제부터 있어야 한다"인지 구분**: 전자는 `NOT NULL`, 후자는 **조건부 CHECK**. 생성과 동시에 못 채우는 값(지연 채움·다단계 온보딩·외부 콜백 후 확정)은 거의 항상 후자다.
+- **제약은 데이터 생성 *순서*를 안다**: 컬럼 제약을 정하기 전에 "이 값을 누가, 언제 채우나"를 모든 경로에서 따져야 한다. 한 경로라도 "나중에 채움"이면 무조건 NOT NULL은 그 경로의 INSERT를 깬다.
+- **조건부 CHECK = 상태 머신의 불변식을 DB에 박기**: "pending 상태엔 비어도 되고 active가 되면 필수"는 흔한 패턴(주문 결제완료⟹결제수단, 발행글⟹본문). 앱 검증에만 두지 말고 DB CHECK로 최후 방어선을 친다(N-019의 연장).
+- **불변(immutable) 제약은 NOT NULL 타이밍을 더 좁힌다**: 값이 불변이면 "나중에 자동값 박고 나중에 교체"가 불가하므로, 지연 채움 경로는 반드시 null 창을 갖는다 → 단순 NOT NULL이 원천 봉쇄된다.
+
+### Q&A 대비
+
+- *"왜 login_id를 NOT NULL로 안 했나?"* → OAuth는 row를 먼저 만들고 온보딩에서 login_id를 정한다. 그 사이 null이 정상이라 NOT NULL은 OAuth 가입 INSERT를 깬다. 진짜 규칙은 "온보딩 끝나면 필수"라 조건부 CHECK로 박았다.
+- *"CHECK가 MySQL에서 진짜 강제되나?"* → MySQL 8.0.16+부터 강제(이전엔 파싱만 하고 무시). H2도 지원. 버전 확인이 전제다.
+- *"앱에서 검증하면 되지 왜 DB까지?"* → 앱 검증은 첫 방어선(UX), DB 제약은 최후 방어선(무결성). 버그·직접 SQL·동시성으로 앱을 우회해도 DB가 막는다(N-019).
+- *"테스트는 어떻게?"* → 메인 스위트는 Hibernate가 스키마를 생성해 CHECK가 없으니(엔티티에 안 박음) 무영향. Flyway 스키마를 격리 H2에 적용하는 전용 테스트(FlywayMigrationTest)가 3경계(거부/허용 두 종)를 검증한다 — DB 제약은 mock으로 못 잡으니 실제 스키마 통합테스트가 필수(N-040).
+
+### 코드 위치
+
+- `src/main/resources/db/migration/V15__user_login_id_when_onboarded_check.sql` — `ck_users_login_id_when_onboarded` CHECK.
+- `src/test/java/com/booktimer/migration/FlywayMigrationTest.java` — 온보딩+null 거부 / 온보딩전 null 허용 / 정상 허용 3경계.
+- `src/main/java/com/booktimer/user/OAuthUserProvisioningService.java`·`UserRegistrationService.registerOAuth` — login_id 없이 먼저 INSERT하는 지연 채움 경로.
+- `claude-docs/login-id-design.md` §7 PR-5 — 충돌 발견·해법 기록.
+
+### 관련 노트
+
+- [N-019. DB 유니크 제약은 무결성의 마지막 방어선](#n-019-db-유니크-제약은-무결성의-마지막-방어선이지-사용자-검증의-첫-방어선이-아니다) — 앱(UX)+DB(무결성) 다층 방어. CHECK도 같은 최후 방어선.
+- [N-039. 제약을 뒤늦게 강화하려면 기존 위반 데이터부터 백필](#n-039-제약을-뒤늦게-강화하려면-기존-위반-데이터부터-백필한다-backfill) — 제약 강화의 *순서*(여기선 wipe 그린필드라 위반 행 0).
+- [N-040. mock 단위테스트는 DB 제약을 검증하지 못한다](#n-040-mock-단위테스트는-db-제약fk유니크을-검증하지-못한다) — CHECK 검증은 실제 스키마 통합테스트로.
+- [N-047. 불변 식별자는 대리키 위에서 도메인 규칙으로 강제](#n-047-불변-식별자는-대리키surrogate-pk-위에서-도메인-규칙으로-강제한다--db가-막아주지-않는다) — 불변성이 지연 채움 null 창을 강제하는 이유.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2370,3 +2421,4 @@ Instant since = clock.instant().minus(Duration.ofDays(7));  // ✅ 주입된 Clo
 | 2026-06-05 | N-048 (유니크 사전확인은 정규화값으로·변이 *전에* — 정규화 저장 컬럼(소문자 login_id)은 검사도 정규화 후 값으로(Reader/reader 우회 방지) / `@Transactional`서 엔티티 바꾼 뒤 `existsBy` 조회하면 auto-flush가 미커밋 자기자신을 내보내 **자기 오탐**(정상입력 거부) → 조회를 assign 앞에 / 정규화를 `static normalizeLoginId`(순수)로 빼 사전확인·저장이 단일 규칙 공유, 검증·변이 분리가 순서의존 버그 차단 / DB 유니크는 레이스 최후방어로 유지 N-019, login_id PR-2) |
 | 2026-06-05 | N-049 (운영 통계 = 새 저장 없는 읽기 집계 → Flyway 무변경, N-037의 "읽기=DB 안 건드림" / 집계는 DB에서 한 방(count·count distinct·coalesce(sum,0)), 앱 전건 로딩·Set 카운트 금지 / 시간창("최근 7일 활성")은 `clock.instant().minus(7d)`로 — Clock 주입해 윈도 경계 테스트 결정화 N-010, Instant.now() 직접호출은 테스트불가 / 평균=총합/인원, 인원 0이면 0(0 나눗셈 가드), 집계엔 빈 경계 상존 / 관리자 통계 카드) |
 | 2026-06-05 | N-050 (운영 화면 PII 최소노출은 *층*이다 — 저장(그대로)≠전송(DTO 제외)≠표시(마스킹)≠검색(키 제한), 각 층 따로 줄임 / **안 싣기 > 가리기**: 비번 해시는 record DTO에서 아예 제외(전송 안 됨=진짜 비노출), email은 마스킹(g***@, 도메인 보존) / **마스킹은 표시일 뿐**: 클릭 토글로 원문 주려면 DOM에 원문 실림 = CSS만 가림, 진짜 비노출은 서버가 안 내려야(별도 fetch는 과설계 보류) / email 검색 제외로 열거 표면 축소 / 인가(hasRole)≠데이터 최소화, 심층방어 N-019 / 관리자 데이터 조회) |
+| 2026-06-05 | N-051 (상태 의존 불변식은 단순 NOT NULL이 아니라 조건부 CHECK로 — "항상 값 있음"을 NOT NULL로 박으면 그 값을 *나중에 채우는* 생성 경로와 충돌(OAuth는 row 먼저 INSERT·온보딩에서 login_id 확정→그 창 null 정상, login_id 불변이라 자동 핸들도 불가) / 진짜 규칙은 "항상"이 아니라 "어떤 상태가 되면" = 부분 함수 종속 `onboarded ⟹ login_id IS NOT NULL` → `check (onboarded=false or login_id is not null)`(A⟹B = not A or B) / 컬럼 제약은 생성 *순서*를 안다 — 한 경로라도 지연 채움이면 무조건 NOT NULL이 그 INSERT 깸 / MySQL 8.0.16+·H2 CHECK 강제, 메인 스위트는 Hibernate 생성이라 CHECK 없어 무영향→Flyway 격리 통합테스트로 3경계 검증 N-040 / 상태머신 불변식의 DB화, N-019·N-039·N-047 연장, login_id PR-5) |
