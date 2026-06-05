@@ -48,9 +48,36 @@
         <p th:if="${!rateLimited and q != null and q.trim().length() < 2}" class="status-line muted">두 글자 이상 입력해 주세요.</p>
     </section>
 
+    <!-- 친구 추천 — 지금은 무작위 N명만 보여준다. (후속: 독서 성향 기반 추천으로 고도화) -->
+    <section class="card">
+        <h2>친구 추천</h2>
+        <p class="status-line muted" th:if="${recommendations == null or recommendations.isEmpty()}">
+            아직 추천할 사용자가 없습니다.
+        </p>
+        <ul class="book-list" th:if="${recommendations != null and !recommendations.isEmpty()}">
+            <li class="book-row" th:each="r : ${recommendations}">
+                <div class="book-meta">
+                    <a class="book-title" th:href="@{/u/{n}(n=${r.loginId})}" th:text="${r.nickname}">닉네임</a>
+                    <span class="book-author" th:text="'@' + ${r.loginId} + ' · 공개 책 ' + ${r.publicBookCount} + '권'">@아이디 · 공개 책 0권</span>
+                </div>
+                <div class="book-actions">
+                    <span th:if="${r.self}" class="book-status-badge">나</span>
+                    <form th:unless="${r.self}" method="post"
+                          th:action="@{${r.following} ? '/unfollow' : '/follow'}">
+                        <input type="hidden" name="loginId" th:value="${r.loginId}">
+                        <input type="hidden" name="redirect" th:value="@{/search}">
+                        <button type="submit"
+                                th:classappend="${r.following} ? 'btn-ghost' : 'btn-primary'"
+                                th:text="${r.following} ? '언팔로우' : '팔로우'">팔로우</button>
+                    </form>
+                </div>
+            </li>
+        </ul>
+    </section>
+
     <p class="link-row">
         <a th:href="@{/}">← 대시보드</a>
-        <a th:href="@{/books}">📚 내 책장</a>
+        <a th:href="@{/u/{n}(n=${myLoginId})}">📖 공개된 내 책장</a>
     </p>
 </div>
 </body>

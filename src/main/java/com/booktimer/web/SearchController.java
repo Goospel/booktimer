@@ -25,6 +25,9 @@ import java.util.List;
 @Controller
 public class SearchController {
 
+    /** 친구 추천에 노출하는 최대 인원 — 현재는 단순 무작위 N명(요구사항: 우선 단순하게). */
+    private static final int RECOMMEND_COUNT = 10;
+
     private final CurrentUserService currentUserService;
     private final UserSearchService searchService;
     private final RateLimitService rateLimitService;
@@ -41,6 +44,9 @@ public class SearchController {
                          Principal principal, Model model) {
         User me = currentUser(principal);
         model.addAttribute("q", q);
+        // 친구 추천·내 공개 책장 링크는 검색 레이트리밋과 무관하게 페이지 기본 구성으로 항상 싣는다.
+        model.addAttribute("recommendations", searchService.recommend(me, RECOMMEND_COUNT));
+        model.addAttribute("myLoginId", me.getLoginId());
         if (!rateLimitService.allow(RateLimitAction.SEARCH, me.getId())) {
             model.addAttribute("results", List.of());
             model.addAttribute("rateLimited", true);
