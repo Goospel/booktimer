@@ -91,10 +91,6 @@
         </p>
     </section>
 
-    <p class="link-row">
-        <a th:href="@{/}">← 대시보드</a>
-    </p>
-
     <!-- 로그아웃은 일반 대시보드와 동일하게 화면 최하단에 둔다(상단 노출 방지). -->
     <form th:action="@{/logout}" method="post">
         <button type="submit" class="btn-ghost">로그아웃</button>
