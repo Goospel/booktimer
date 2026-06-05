@@ -6,6 +6,10 @@
     <title>사용자 목록 — 관리자</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
     <style>
+        /* 운영자 표는 컬럼이 7개라 모바일 우선 폭(.container 460px)에선 짓눌린다.
+           이 페이지는 데스크톱 사용이 대부분이므로 컨테이너를 넓혀 표가 자연스럽게 펼쳐지게 한다.
+           페이지 내 <style>이 app.css보다 늦게 와서 이 페이지에서만 덮어쓴다(다른 화면 영향 없음). */
+        .container { max-width: 920px; }
         .admin-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; font-size: 0.9rem; }
         .admin-table th, .admin-table td { padding: 0.5rem 0.6rem; border-bottom: 1px solid rgba(0,0,0,0.08); text-align: left; }
         .admin-table th { font-size: 0.8rem; opacity: 0.7; }
