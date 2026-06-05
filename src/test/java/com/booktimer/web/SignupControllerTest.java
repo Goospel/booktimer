@@ -88,19 +88,19 @@ class SignupControllerTest {
     }
 
     @Test
-    @DisplayName("POST /signup: 이미 가입된 이메일이면 화면을 다시 그리고 이메일 필드 에러를 단다 (500 아님, 중복 생성 없음)")
-    void postSignup_duplicateEmail_rerendersWithFieldError() throws Exception {
+    @DisplayName("POST /signup: 이미 가입된 이메일이면 계정 열거를 막으려 가입 성공과 동일한 응답을 준다 (중복 생성 없음, 이메일 존재 미노출)")
+    void postSignup_duplicateEmail_silentSuccessNoEnumeration() throws Exception {
         userRepository.save(User.of("dup@booktimer.com", "$2a$10$alreadyhasheddummy", "기존", "Asia/Seoul", Role.USER));
 
+        // 이메일은 비공개 속성 — "이미 가입됨"을 노출하면 열거가 된다. 실제 가입 성공과 같은 리다이렉트로 갈음한다.
         mockMvc.perform(post("/signup").with(csrf())
                         .param("email", "dup@booktimer.com")
                         .param("loginId", "freshid")
                         .param("password", "rawpw1234")
                         .param("nickname", "새사람")
                         .param("timezone", "Asia/Seoul"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("signup"))
-                .andExpect(model().attributeHasFieldErrors("signupForm", "email"));
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login?registered"));   // 성공과 동일 — 이메일 존재 여부 미노출
 
         assertThat(userRepository.count()).isEqualTo(1);  // 기존 1명만, 중복 생성 없음
     }

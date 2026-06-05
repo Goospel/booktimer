@@ -151,7 +151,7 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 - **1단계 완료 ✅ 2026-06-02**: 책 등록·목록(`/books`). 알라딘 OpenAPI 검색(포트/어댑터 `BookSearchClient`
   → `AladinBookSearchClient`, TTBKey=env) → "책장에 추가", 상태(읽고싶음/읽는중/완독)·삭제, 소유권 검사.
   키 없으면 수동 입력 폴백. 구매링크에 제휴 태그 토대(제휴 고지 푸터 포함). Flyway V3.
-  ⏳ 외부: **알라딘 TTBKey 발급**(env `BOOKTIMER_ALADIN_TTB_KEY`) 후 검색 라이브 활성화.
+  ✅ 외부 완료: **알라딘 TTBKey 발급 + SSM 주입**(검색·제휴 라이브 활성화, 2026-06-03 갱신 이력 참고).
 - **2단계 완료 ✅ 2026-06-03**: `ReadingSession`에 nullable `book` 연결(Flyway V4) + 타이머 시작 시 책 선택
   (대시보드 드롭다운, "선택 안 함" 포함, 소유권 검사) + 책별 누적 시간 집계(`BookReadingStatsService`,
   완료·책지정 세션 합) → `/books`에 책별 시간 표시. 측정 중 책은 대시보드에 노출.
@@ -297,7 +297,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 **선후**: 데이터 토대(책장·SNS)는 이미 있음 → **프론트와 독립으로 데이터/알고리즘 설계 선행 가능**.
 구현 착수 전 **설계 문서 합의 필수**(SNS와 동일 원칙 — 프라이버시·노출 경계가 핵심).
 
-### 관리자(개발자) 대시보드 — 운영 데이터 확인 (계획 ⏳ 2026-06-03, 우선순위: 중)
+### 관리자(개발자) 대시보드 — 운영 데이터 확인 (완료 ✅ 2026-06-05, 4단계 전부)
 
 **왜**: 사용자/타이머/세션/책 등 운영 데이터를 확인하려고 **매번 RDS에 직접 접속하는 게 번거롭다**.
 가입자 수·활성 사용자·총 독서 시간 같은 통계나 개별 데이터를 **웹에서 바로 볼 수 있는 관리 화면**이 필요하다.
@@ -311,8 +311,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
     `BOOKTIMER_ADMIN_EMAILS`(쉼표 구분, relaxed binding→`booktimer.admin.emails`)의 이메일을 기동 시 `AdminAccountSeeder`(ApplicationRunner)가
     `AdminAccountService.seedAdmins`로 승격. 승격은 `User.promoteToAdmin()`(멱등, USER→ADMIN만). 미존재·공백·이미 ADMIN은 조용히 무시.
     가입은 `Role.USER` 고정 유지(권한 상승 벡터 차단), ADMIN은 이 시드로만. **이메일은 repo에 커밋 안 함**(공개 저장소 — ENV로만 주입).
-  - ⏳ **운영 적용(후속 ops)**: prod에서 내 계정을 ADMIN으로 올리려면 ECS 태스크에 `BOOKTIMER_ADMIN_EMAILS` 환경변수(또는 시크릿) 설정 후 재배포.
-    task-definition.json엔 값 미커밋(노출 방지) — 콘솔/시크릿으로 주입.
+  - ✅ **운영 적용 완료(2026-06-05)**: prod ECS 태스크에 ADMIN 시드 ENV 설정 + 배포 완료. **단 ENV 이름은 login_id 인증 컷오버(PR #149) 이후 `BOOKTIMER_ADMIN_EMAILS`→`BOOKTIMER_ADMIN_LOGIN_IDS`로 바뀌었다**(아래 §login_id) — 값은 task-definition.json 미커밋(콘솔/시크릿 주입, 노출 방지).
 - [x] **통계 요약 완료 ✅ 2026-06-05 (PR #152)** — 가입자 수(USER만·ADMIN 제외), 온보딩 완료자, 최근 7일 활성 사용자, 총 책/세션 수, 총·가입자당 평균 독서 시간 집계 카드.
   - 기존 테이블 **집계 쿼리**(N-037: 새 저장 아님, 읽기 전용) → DB 안 건드림(Flyway 없음). `AdminStatsService`/`AdminStats`(record), `countByRole`·`countActiveUsersSince`(Clock 주입 → 결정적)·`sumAllDurationSeconds`. 무거운 집계는 캐시 후보(현 규모 불필요).
 - [x] **데이터 조회 완료 ✅ 2026-06-05 (PR #154)** — 사용자 목록(`/admin/users`, 페이징·login_id/nickname 검색·가입일 내림차순) + 드릴다운(`/admin/users/{loginId}`, 타이머 설정·최근 10세션·책장 상태별 요약).
@@ -322,7 +321,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 - **메모**: SSR(Thymeleaf)로 가볍게 시작 가능(N-017 — 내부 도구라 SEO·인터랙션 요구 없음).
   외부 노출 0이 이상적 → 추후 IP 제한/별도 경로 등 추가 방어 검토. 운영 액션 추가 시 **감사 로그** 동반.
 
-### 🪪 로그인 아이디(login_id) 도입 — 식별/인증 분리 (설계 ⏳ 2026-06-05, 우선순위: 높음)
+### 🪪 로그인 아이디(login_id) 도입 — 식별/인증 분리 (완료 ✅ 2026-06-05, PR 1~5 + wipe + 운영 적용)
 
 > 📐 설계 메모: [claude-docs/login-id-design.md](claude-docs/login-id-design.md) — 식별 모델·마이그레이션·전환·PR 단계 합의용. **코드 없음.**
 
@@ -341,7 +340,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
   - ① 한 일: `V13__user_login_id.sql`(`login_id varchar(50)` nullable + `uk_users_login_id`), `User.loginId` 필드 + `assignLoginId`·`getLoginId`. 동작 변화 없음. TDD + FlywayMigrationTest + 전체 그린.
   - ② 한 일: `assignLoginId` **불변 가드**(재설정 시 ISE) + `normalizeLoginId` 정적 추출. **nickname 유니크 제거** — V14(`uk_users_nickname` drop) + register/onboarding/settings/oauth-provisioning 중복검사 제거 + `NicknameAllocator`·`NicknameAlreadyExistsException`·`existsByNickname` 삭제. **온보딩 login_id 캡처** — `OnboardingForm.loginId`(+@Pattern), `OnboardingService.complete`가 `existsByLoginId` 사전확인+`assignLoginId`로 불변 확정, `LoginIdAlreadyExistsException`, `onboarding.html` 아이디 필드(불변 안내)+nickname 라벨 정정. 로그인·검색은 아직 email/nickname. TDD(불변·중복허용·온보딩 캡처/유니크/예약어 Red→Green) + 전체 그린.
   - ③ 한 일: **검색·프로필·관계 식별을 nickname→login_id로 컷오버.** `UserRepository`: `findByLoginId`·`findTop20ByLoginIdContainingIgnoreCaseOrderByLoginIdAsc` 추가, `findByNickname`·`findTop20ByNickname...` 제거. 검색(`UserSearchService`)이 login_id 부분일치, `UserSearchResult`·`ProfileView`에 `loginId` 추가(닉네임은 표시용 유지 — 핸들/표시 분리). 프로필 `/u/{loginId}`(`ProfileController`·`ProfileService.findByLoginId`). 팔로우/차단/신고 컨트롤러 대상 식별 `@RequestParam loginId`+`findByLoginId`(닉네임 중복 시 오식별 정합성 버그 동시 해소). self-프로필 링크용 `loginId` 모델 속성(Dashboard/FollowList/Block). 템플릿 6종 `/u/{loginId}`+`name="loginId"`+`@핸들` 표시. 인증은 아직 email(PR-4). TDD(검색=login_id·닉네임중복→login_id 정확식별 Red→Green) + 전체 그린.
-  - ④ 한 일: **인증 식별자 email→login_id 전면 컷오버.** `loadUserByUsername`=`findByLoginId`만(email 폴백 없음 → 이메일 로그인 차단), principal=login_id. **로컬 가입에서 login_id 캡처**(`SignupForm.loginId`·`register` 7-arg) — 로그인이 login_id 기준이라 가입 시 있어야 함(온보딩 캡처는 OAuth 전용으로 이동, `OnboardingService.complete`가 `loginId==null`일 때만 확정). **OAuth**: `BookTimerOidcUser`로 principal=login_id(온보딩 전 첫 세션만 email). **`CurrentUserService` 공유 리졸버**(login_id 우선 → OAuth 첫 세션만 email 브리지)로 13개 컨트롤러 통일. `SettingsController` 4곳은 principal→User→`getEmail()`로 서비스(findByEmail) 시그니처 보존. **admin 시드 `BOOKTIMER_ADMIN_EMAILS`→`BOOKTIMER_ADMIN_LOGIN_IDS`**(findByLoginId). 로그인폼 라벨 이메일→아이디. **wipe 선행 완료.** Flyway 없음(스키마 무변경). TDD(login_id 로그인·이메일 차단·리졸버·login_id principal 컨트롤러 경로 Red→Green) + 전체 그린. **⚠️ 배포 전 prod ENV `BOOKTIMER_ADMIN_LOGIN_IDS` 설정 필요.**
+  - ④ 한 일: **인증 식별자 email→login_id 전면 컷오버.** `loadUserByUsername`=`findByLoginId`만(email 폴백 없음 → 이메일 로그인 차단), principal=login_id. **로컬 가입에서 login_id 캡처**(`SignupForm.loginId`·`register` 7-arg) — 로그인이 login_id 기준이라 가입 시 있어야 함(온보딩 캡처는 OAuth 전용으로 이동, `OnboardingService.complete`가 `loginId==null`일 때만 확정). **OAuth**: `BookTimerOidcUser`로 principal=login_id(온보딩 전 첫 세션만 email). **`CurrentUserService` 공유 리졸버**(login_id 우선 → OAuth 첫 세션만 email 브리지)로 13개 컨트롤러 통일. `SettingsController` 4곳은 principal→User→`getEmail()`로 서비스(findByEmail) 시그니처 보존. **admin 시드 `BOOKTIMER_ADMIN_EMAILS`→`BOOKTIMER_ADMIN_LOGIN_IDS`**(findByLoginId). 로그인폼 라벨 이메일→아이디. **wipe 선행 완료.** Flyway 없음(스키마 무변경). TDD(login_id 로그인·이메일 차단·리졸버·login_id principal 컨트롤러 경로 Red→Green) + 전체 그린. **✅ 운영 적용 완료(2026-06-05): prod 배포 + ENV `BOOKTIMER_ADMIN_LOGIN_IDS` 교체 완료(admin 시드 정상 동작 확인).**
   - ⑤ 한 일: **login_id 무결성을 DB 제약으로 강화.** 단순 NOT NULL은 불가 — OAuth 사용자는 프로비저닝(INSERT) 시점엔 login_id가 없고 온보딩에서 정하므로 그 창에선 null이 정상. 그래서 **조건부 불변식 `onboarded ⟹ login_id IS NOT NULL`을 CHECK로** 좁힘(`V15__user_login_id_when_onboarded_check.sql`, `ck_users_login_id_when_onboarded`). 메인 스위트는 Hibernate 생성이라 무영향(V14와 동일) — `FlywayMigrationTest`가 Flyway 스키마에 적용해 검증(온보딩+login_id없음 거부·온보딩전 null 허용·정상 허용). 엔티티 Javadoc을 조건부 CHECK 현실로 정정. **email 로그인 잔재 없음 재확인**(`loadUserByUsername`=findByLoginId만, 남은 findByEmail은 설정 조회·OAuth 첫 세션 브리지 등 정당). TDD(Red→Green) + 전체 그린. (PR #156)
 
 ### 프론트엔드 전환 (SSR → SPA) · 앱 프론트 — 선후 의존 정리
@@ -514,8 +513,19 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
       + HttpOnly + (prod)Secure. 세션 외부화 후 세션 쿠키는 `DefaultCookieSerializer`가 써서
       `server.servlet.session.cookie.*` 프로퍼티가 무동작이라 명시 빈 필요(T-021, N-031). **파생 수정**: 이
       함정 탓에 prod의 Secure/HttpOnly도 SESSION 쿠키엔 안 먹던 잠재 갭(#73 이후)을 같이 잡음.
-- [ ] (검토) 소셜 계정 탈퇴 시 재확인 단계, 가입 시 계정 열거 완화
+- [x] **소셜 계정 탈퇴 재확인 + 가입 계정 열거 완화** (완료 ✅ 2026-06-05) —
+      ① **가입 이메일 열거 완화**: email은 login_id 도입 후 **비공개 속성**인데 "이미 가입된 이메일입니다"가
+      이를 확인해 줘 열거가 됐다. `UserRegistrationService.register` 검사 순서를 **login_id(형식→유니크) 먼저,
+      email 마지막**으로 바꾸고, `SignupController`가 `EmailAlreadyExistsException`·`DataIntegrityViolationException`을
+      **가입 성공과 동일한 `redirect:/login?registered`로 흡수**(계정 미생성, 응답만 동일 → 존재 여부 미노출).
+      login_id는 **공개 @핸들**이라 "사용 중" 노출이 무해·UX상 필요해 그대로 필드 에러. 트레이드오프: 이메일 발송
+      인프라가 없어 "조용히 수락+메일 통지"의 통지는 불가 → 잊고 재가입한 사용자는 로그인 단계에서 알게 됨(열거 저항 표준 비용).
+      ② **소셜 탈퇴 재확인**: OAuth 계정은 비번이 없어 탈퇴 재인증이 없었음(`confirm()` JS뿐, 우회 가능). 본인
+      **@핸들(login_id) 타이핑**을 서버사이드 게이트로 요구(GitHub "저장소 이름 입력" 패턴). `deleteSocialAccount(email, confirmHandle)`
+      불일치 시 `AccountDeletionConfirmationException`(공백·선행 @·대소문자 정규화 후 비교), LOCAL은 비번 재확인 유지.
+      TDD(서비스 일치/관대매칭/불일치/LOCAL거부 · 컨트롤러 끝단 일치삭제/불일치미삭제 · 가입 이메일중복 silent-success Red→Green) + 전체 그린.
 - [ ] (후속) 무차별 대입 방어 보강 — 지수 백오프, 다중 인스턴스 대비 공유 저장소(현재 인메모리=인스턴스별), 앞단 WAF 레이트리밋
+      (③ 갈래 — 트래픽/세션 쓰기 신호 오면. Redis는 예산 충돌, WAF는 인프라라 코드 가치 낮아 보류.)
 
 ### 측정 세션 `book_id` NOT NULL 제약 — 레거시 정리 후 (보류, 우선순위: 낮음)
 > **배경**: "측정은 무조건 책을 골라야 한다"(어떤 책을 얼마나 읽었는지 명확히)를 도입하며(PR #133),
@@ -645,3 +655,4 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 | 2026-06-05 | **login_id PR-5 — 무결성 강화(조건부 NOT NULL = CHECK)** — 설계 PR 단계 ⑤(마지막). 단순 `login_id NOT NULL`은 OAuth와 충돌함을 발견 — OAuth 사용자는 `OAuthUserProvisioningService.provision`→`registerOAuth`로 **login_id=null인 row를 먼저 INSERT**하고 온보딩에서 비로소 login_id를 정한다(불변이라 X식 자동 핸들도 불가). 그 전환 창의 null은 정상이므로, 박고 싶은 진짜 불변식인 **`onboarded = true ⟹ login_id IS NOT NULL`을 조건부 CHECK로** 좁힘(`V15__user_login_id_when_onboarded_check.sql`, `ck_users_login_id_when_onboarded`, `check (onboarded = false or login_id is not null)`). MySQL 8·H2(MySQL 모드) 모두 CHECK 강제. 메인 테스트 스위트는 Hibernate가 스키마를 생성해 이 제약이 없으므로 무영향(V14 nickname-unique-drop과 동일) — `FlywayMigrationTest`가 Flyway 스키마에 적용해 3경계 검증(온보딩+login_id없음→거부·온보딩전 null→허용·정상→허용). `User.loginId` Javadoc을 "최종 NOT NULL"→조건부 CHECK 현실로 정정. **email 로그인 잔재 없음 재확인**(`loadUserByUsername`=`findByLoginId`만·폴백 없음, 남은 `findByEmail`은 설정 조회·OAuth 첫 세션 브리지 등 *로그인 아님*). Flyway만(V15) — 코드 동작 변화 없음. TDD(Red: CHECK 부재로 온보딩+null 거부 안 됨 → Green) + 전체 스위트 그린. login_id 도입 5단계 전부 완료 ✅. (PR #156) |
 | 2026-06-05 | **README 전면 최신화** — README가 "MVP·시간만 기록·이메일 로그인·SNS 추후 예정"에 머물러 그간 출하분과 크게 벌어져 있던 것을 현행화. 반영: ② 인증/식별 모델(login_id 공개 @핸들·nickname 표시·email 비공개 3분할), ③ 책 단위 기록·책장(상태·공개여부·알라딘 검색·제휴 링크·측정 책 필수), ④ 잔디·일자별 읽은 책, ⑤ 소셜(공개 프로필·검색·팔로우·차단·신고·팔로우범위 인기 drill-down), ⑥ 운영자 대시보드(통계·데이터 조회·PII 최소노출), ⑦ 미구현 설계(독서 MBTI·구독). 기술 스택에 Flyway·세션 외부화(JDBC) 추가, 로드맵 체크 갱신(책·SNS·admin·login_id 완료), 아키텍처에 Spring Session/Flyway, 도메인 규칙에 식별 분리·측정 책 필수·공개 경계, 관련 문서에 설계 메모 6종 링크. 문서만. (PR #157) |
 | 2026-06-05 | **회원가입 폼 UX 개선**(스크린샷 피드백) — 가입 화면이 직관적이지 못했음. ① **입력 순서 재배치**: 이메일이 맨 위라 어색했던 것을 로그인 흐름과 중요도에 맞게 **아이디 → 비밀번호 → 닉네임 → 이메일 → 타임존**으로 변경(로그인 식별자인 아이디·비밀번호를 위로). ② **비밀번호 안내 추가** — 아이디에만 있던 형식 힌트를 비밀번호에도(`최소 8자`, `@Size(min=8)`과 일치, `minlength`/placeholder/`field-hint`). ③ **타임존 설명 추가** — 사용자가 왜 고르는지 몰라 막연하던 것을, "하루의 시작·끝(자정) 기준 → 잔디·일일 기록이 거주 지역 날짜에 맞게 쌓임"으로 안내. `signup.html`만(로직·검증 규칙 무변경, .java 없음). (PR #158) |
+| 2026-06-05 | **회원 인증 하드닝 — 소셜 탈퇴 재확인 + 가입 이메일 열거 완화** — §하드닝 "(검토)" 두 항목 구현. ① **가입 이메일 열거 완화**: login_id 도입으로 email이 **비공개 속성**이 됐는데 가입 시 "이미 가입된 이메일입니다"가 이를 확인해 줘 열거가 됐다. `UserRegistrationService.register` 검사 순서를 **login_id(형식→유니크) 먼저·email 마지막**으로 바꾸고, `SignupController`가 `EmailAlreadyExistsException`·`DataIntegrityViolationException`을 **가입 성공과 동일한 `redirect:/login?registered`로 흡수**(계정 미생성, 응답만 동일 → 이메일 존재 여부 미노출). login_id는 공개 @핸들이라 "사용 중" 노출이 무해·UX상 필요해 그대로 필드 에러. 트레이드오프: 이메일 발송 인프라 없어 통지는 불가(잊고 재가입 시 로그인 단계에서 인지 — 열거 저항 표준 비용). ② **소셜 탈퇴 재확인**: OAuth는 비번이 없어 탈퇴 재인증이 없던 무방비(`confirm()` JS뿐)를, 본인 **@핸들(login_id) 타이핑** 서버사이드 게이트로 보강(GitHub "저장소 이름 입력" 패턴). `AccountService.deleteSocialAccount(email, confirmHandle)`(공백·선행 @·대소문자 정규화 비교)+`AccountDeletionConfirmationException`, `SettingsController` 분기·`settings.html` 소셜 전용 핸들 입력칸, LOCAL은 비번 재확인 유지. Flyway 없음. TDD(서비스 일치/관대매칭/불일치/LOCAL거부·컨트롤러 끝단·가입 silent-success Red→Green) + 전체 412 그린. (PR #159) |

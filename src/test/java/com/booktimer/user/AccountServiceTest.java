@@ -136,13 +136,19 @@ class AccountServiceTest {
 
     // --- 소셜 계정 탈퇴 (비밀번호 없음) ---
 
-    @Test
-    @DisplayName("deleteSocialAccount: 소셜(비밀번호 없는) 계정은 비번 확인 없이 세션→타이머→유저 순으로 삭제")
-    void deleteSocialAccount_social_deletesInFkOrder() {
+    private User socialWithHandle() {
         User social = User.ofOAuth(EMAIL, "구글러", "Asia/Seoul", Role.USER, AuthProvider.GOOGLE);
+        social.assignLoginId("googler");
+        return social;
+    }
+
+    @Test
+    @DisplayName("deleteSocialAccount: @핸들이 일치하면 비번 확인 없이 세션→타이머→유저 순으로 삭제")
+    void deleteSocialAccount_handleMatches_deletesInFkOrder() {
+        User social = socialWithHandle();
         when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(social));
 
-        service.deleteSocialAccount(EMAIL);
+        service.deleteSocialAccount(EMAIL, "googler");
 
         var ordered = inOrder(sessionRepository, timerRepository, followRepository, blockRepository, reportRepository, bookRepository, userRepository);
         ordered.verify(sessionRepository).deleteByUser(social);
@@ -159,12 +165,36 @@ class AccountServiceTest {
     }
 
     @Test
+    @DisplayName("deleteSocialAccount: 입력한 핸들이 @접두·대소문자만 달라도 일치로 보고 삭제")
+    void deleteSocialAccount_handleLenientMatch_deletes() {
+        User social = socialWithHandle();
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(social));
+
+        service.deleteSocialAccount(EMAIL, "  @GoogLer "); // 앞뒤 공백·@접두·대문자 정규화 후 일치
+
+        verify(userRepository).delete(social);
+    }
+
+    @Test
+    @DisplayName("deleteSocialAccount: @핸들이 일치하지 않으면 확인 예외, 아무것도 삭제하지 않는다")
+    void deleteSocialAccount_handleMismatch_throwsAndDeletesNothing() {
+        User social = socialWithHandle();
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(social));
+
+        assertThatThrownBy(() -> service.deleteSocialAccount(EMAIL, "wrong"))
+                .isInstanceOf(AccountDeletionConfirmationException.class);
+
+        verify(sessionRepository, never()).deleteByUser(any());
+        verify(userRepository, never()).delete(any());
+    }
+
+    @Test
     @DisplayName("deleteSocialAccount: LOCAL 계정엔 쓸 수 없다 — 예외, 삭제 없음 (비번 경로 강제)")
     void deleteSocialAccount_localAccount_throwsAndDeletesNothing() {
         User local = userWithHash(); // LOCAL
         when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(local));
 
-        assertThatThrownBy(() -> service.deleteSocialAccount(EMAIL))
+        assertThatThrownBy(() -> service.deleteSocialAccount(EMAIL, "anything"))
                 .isInstanceOf(IllegalStateException.class);
 
         verify(sessionRepository, never()).deleteByUser(any());

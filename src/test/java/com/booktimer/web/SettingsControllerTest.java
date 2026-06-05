@@ -172,4 +172,50 @@ class SettingsControllerTest {
                 .andExpect(view().name("settings"))
                 .andExpect(model().attributeHasFieldErrors("settingsForm", "incrementMinutes"));
     }
+
+    // --- 회원 탈퇴 (소셜 계정 @핸들 재확인) ---
+
+    private User registerSocialWithHandle(String email, String handle) {
+        User social = registerSocial(email);
+        social.assignLoginId(handle);
+        return userRepository.save(social);
+    }
+
+    @Test
+    @DisplayName("GET /settings: 소셜 계정 탈퇴 폼에 @핸들 입력칸과 본인 핸들 안내를 보여준다")
+    void getSettings_socialAccount_showsHandleConfirmField() throws Exception {
+        registerSocialWithHandle("handlefield@booktimer.com", "handler");
+
+        mockMvc.perform(get("/settings").with(user("handlefield@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("loginId", "handler"))
+                .andExpect(content().string(containsString("confirmHandle")))
+                .andExpect(content().string(containsString("@handler")));
+    }
+
+    @Test
+    @DisplayName("POST /settings/delete: 소셜 계정은 @핸들이 일치하면 삭제하고 /login?deleted로 보낸다")
+    void postDelete_social_handleMatches_deletes() throws Exception {
+        registerSocialWithHandle("delok@booktimer.com", "delok");
+
+        mockMvc.perform(post("/settings/delete").with(user("delok@booktimer.com")).with(csrf())
+                        .param("confirmHandle", "delok"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login?deleted"));
+
+        assertThat(userRepository.findByEmail("delok@booktimer.com")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("POST /settings/delete: 소셜 계정은 @핸들이 틀리면 삭제하지 않고 설정으로 돌려보낸다")
+    void postDelete_social_handleMismatch_doesNotDelete() throws Exception {
+        registerSocialWithHandle("delno@booktimer.com", "delno");
+
+        mockMvc.perform(post("/settings/delete").with(user("delno@booktimer.com")).with(csrf())
+                        .param("confirmHandle", "wrong"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/settings"));
+
+        assertThat(userRepository.findByEmail("delno@booktimer.com")).isPresent(); // 삭제 안 됨
+    }
 }

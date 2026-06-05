@@ -3,6 +3,7 @@ package com.booktimer.web;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
+import com.booktimer.user.AccountDeletionConfirmationException;
 import com.booktimer.user.AccountService;
 import com.booktimer.user.InvalidPasswordException;
 import com.booktimer.user.User;
@@ -74,8 +75,9 @@ public class SettingsController {
             form.setCapMinutes((int) (timer.getCapSeconds() / SECONDS_PER_MINUTE));
             model.addAttribute("settingsForm", form);
         }
-        // 소셜 계정은 비밀번호가 없다 → 비밀번호 변경 카드를 숨기고 탈퇴 폼도 비번 없이 띄운다.
+        // 소셜 계정은 비밀번호가 없다 → 비밀번호 변경 카드를 숨기고, 탈퇴는 본인 @핸들(login_id) 재입력으로 확인한다.
         model.addAttribute("localAccount", user.isLocalAccount());
+        model.addAttribute("loginId", user.getLoginId());
         return "settings";
     }
 
@@ -135,11 +137,13 @@ public class SettingsController {
     }
 
     /**
-     * 회원 탈퇴. 비밀번호를 다시 확인한 뒤 계정·연관 데이터를 삭제하고, 현재 세션을 무효화한 다음
-     * 로그인 화면({@code /login?deleted})으로 보낸다. 실패(비밀번호 불일치)는 플래시 에러로.
+     * 회원 탈퇴. 되돌릴 수 없는 파괴적 동작이라 재확인을 요구한다 — LOCAL은 비밀번호를, 소셜은 비번이 없어
+     * 본인 @핸들(login_id) 재입력을 확인한다. 통과하면 계정·연관 데이터를 삭제하고 현재 세션을 무효화한 다음
+     * 로그인 화면({@code /login?deleted})으로 보낸다. 실패(비번/핸들 불일치)는 플래시 에러로 설정 화면에 되돌린다.
      */
     @PostMapping("/settings/delete")
-    public String deleteAccount(@RequestParam(required = false) String password, Principal principal,
+    public String deleteAccount(@RequestParam(required = false) String password,
+                                @RequestParam(required = false) String confirmHandle, Principal principal,
                                 HttpServletRequest request, HttpServletResponse response,
                                 RedirectAttributes redirectAttributes) {
         User user = currentUser(principal);
@@ -152,8 +156,13 @@ public class SettingsController {
                 return "redirect:/settings";
             }
         } else {
-            // 소셜 계정: 비밀번호가 없으므로 provider 인증 세션을 전제로 곧장 삭제.
-            accountService.deleteSocialAccount(user.getEmail());
+            // 소셜 계정: 비밀번호가 없으므로 본인 @핸들 재입력으로 확인(우발적·CSRF성 삭제 방어).
+            try {
+                accountService.deleteSocialAccount(user.getEmail(), confirmHandle);
+            } catch (AccountDeletionConfirmationException e) {
+                redirectAttributes.addFlashAttribute("error", "아이디가 일치하지 않습니다. 탈퇴하려면 본인 아이디를 정확히 입력하세요.");
+                return "redirect:/settings";
+            }
         }
         // 계정이 사라졌으니 현재 인증 세션을 무효화하고 컨텍스트를 비운다.
         new SecurityContextLogoutHandler().logout(request, response,

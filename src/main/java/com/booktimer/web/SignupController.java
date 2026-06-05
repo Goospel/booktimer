@@ -75,9 +75,12 @@ public class SignupController {
                     form.getEmail(), form.getPassword(), form.getLoginId(), form.getNickname(),
                     form.getTimezone(), Role.USER, today);
         } catch (EmailAlreadyExistsException | DataIntegrityViolationException e) {
-            // 사전 확인 + (동시 가입 레이스 대비) DB 제약 위반도 같은 친절한 에러로 — 500 방지
-            bindingResult.rejectValue("email", "email.duplicate", "이미 가입된 이메일입니다");
-            return "signup";
+            // 계정 열거 완화: 이메일은 비공개 속성이라 "이미 가입됨"을 응답으로 드러내면 열거가 된다.
+            // 그래서 가입 성공과 "동일한 응답"으로 흡수한다 — 계정은 만들어지지 않았고(예외가 저장 전/플러시에 발생),
+            // 응답만 성공과 같아 이메일 존재 여부를 구분할 수 없다. (동시 가입 레이스의 DB 제약 위반도 같은 처리 →
+            // 500 방지 + login_id 레이스조차 안전 측 success. 이메일 발송 인프라가 없어 "조용히 수락+메일 통지" 대신
+            // 동일 리다이렉트로 갈음 — 잊고 재가입한 사용자는 로그인 단계에서 알게 되는 비용은 감수.)
+            return "redirect:/login?registered";
         } catch (LoginIdAlreadyExistsException e) {
             // 이미 쓰이는 로그인 아이디 — 다른 아이디를 받도록 필드 에러로 안내(생성 없음)
             bindingResult.rejectValue("loginId", "loginId.duplicate", "이미 사용 중인 아이디입니다");
