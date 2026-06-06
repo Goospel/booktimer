@@ -210,9 +210,8 @@ public class BookController {
                                 Principal principal, RedirectAttributes redirectAttributes) {
         User user = currentUser(principal);
         try {
-            Book book = bookService.setVisibility(user, id, visibility);
-            redirectAttributes.addFlashAttribute("message",
-                    "'" + book.getTitle() + "'을(를) " + visibility.getLabel() + "로 바꿨습니다.");
+            // 성공 시 플래시 메시지 없음 — 토글 스위치가 바뀐 상태(🌍/🔒)를 이미 보여줘 중복 알림이라 제거(#196).
+            bookService.setVisibility(user, id, visibility);
         } catch (IllegalArgumentException e) {
             // 내 책이 아니거나 없음 — 존재 여부 노출 없이 책장으로(IDOR 방지).
             redirectAttributes.addFlashAttribute("error", "공개 설정을 바꿀 수 없습니다.");

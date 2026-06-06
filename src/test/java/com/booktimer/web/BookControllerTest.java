@@ -26,6 +26,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -261,7 +262,9 @@ class BookControllerTest {
         mockMvc.perform(post("/books/{id}/visibility", book.getId())
                         .param("visibility", "PUBLIC")
                         .with(user("vc@booktimer.com")).with(csrf()))
-                .andExpect(redirectedUrl("/books"));
+                .andExpect(redirectedUrl("/books"))
+                // 토글 디자인이 상태를 이미 보여주므로 성공 플래시 메시지는 띄우지 않는다(중복 알림 제거).
+                .andExpect(flash().attributeCount(0));
 
         assertThat(bookRepository.findById(book.getId()).orElseThrow().isPublic()).isTrue();
     }
