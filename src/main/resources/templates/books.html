@@ -102,7 +102,7 @@
 
         <p th:if="${books.isEmpty() and shelfFilter == null}" class="status-line">아직 등록한 책이 없습니다. 위에서 검색해 추가해 보세요.</p>
         <p th:if="${books.isEmpty() and shelfFilter != null}" class="status-line">이 상태의 책이 없습니다.</p>
-        <ul class="book-list" id="shelf-list" th:unless="${books.isEmpty()}">
+        <ul class="book-list shelf-scroll" th:unless="${books.isEmpty()}">
             <li class="book-row" th:each="b : ${books}">
                 <img class="book-cover" th:if="${b.coverUrl}" th:src="${b.coverUrl}" alt="" loading="lazy" referrerpolicy="no-referrer">
                 <div class="book-meta">

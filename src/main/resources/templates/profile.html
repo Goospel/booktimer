@@ -109,9 +109,9 @@
 
         <p th:if="${books.isEmpty() and shelfFilter == null}" class="status-line">아직 공개한 책이 없습니다.</p>
         <p th:if="${books.isEmpty() and shelfFilter != null}" class="status-line">이 상태의 공개 책이 없습니다.</p>
-        <ul class="book-list" th:unless="${books.isEmpty()}">
+        <ul class="book-list shelf-scroll" th:unless="${books.isEmpty()}">
             <li class="book-row" th:each="b : ${books}">
-                <img class="book-cover" th:if="${b.coverUrl}" th:src="${b.coverUrl}" alt="" referrerpolicy="no-referrer">
+                <img class="book-cover" th:if="${b.coverUrl}" th:src="${b.coverUrl}" alt="" loading="lazy" referrerpolicy="no-referrer">
                 <div class="book-meta">
                     <span class="book-title" th:text="${b.title}">제목</span>
                     <span class="book-author" th:if="${b.author}" th:text="${b.author}">저자</span>
