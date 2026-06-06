@@ -35,6 +35,8 @@
 - [T-031. Thymeleaf `th:if="${!flag}"`에서 flag가 null이면 SpringEL이 터진다 — 모델에 항상 boolean을 넣어라](#t-031-thymeleaf-thifflag에서-flag가-null이면-springel이-터진다--모델에-항상-boolean을-넣어라)
 - [T-032. Thymeleaf 함정 2종 — `th:each`+`th:replace` 우선순위 역전 & 파라미터 fragment의 인라인 렌더 NPE](#t-032-thymeleaf-함정-2종--theachthreplace-우선순위-역전--파라미터-fragment의-인라인-렌더-npe)
 - [T-033. 큰 페이지에서 폼이 하단에만 있으면 CSRF 숨김필드가 응답 커밋 후 세션 생성 → 500](#t-033-큰-페이지에서-폼이-하단에만-있으면-csrf-숨김필드가-응답-커밋-후-세션-생성--500)
+- [T-034. 생성자 2개(주입 + 테스트용)인 빈은 주입 생성자에 `@Autowired` 필수 — 없으면 no-arg 탐색 실패](#t-034-생성자-2개주입--테스트용인-servicebin은-주입-생성자에-autowired-필수--없으면-no-arg-탐색-실패nosuchmethodexception)
+- [T-035. author `display` 규칙이 UA의 `display:none`을 이겨 `<details>`·`[hidden]`이 안 숨겨진다 (cascade origin: author > UA)](#t-035-author-display-규칙이-ua의-displaynone을-이겨-detailshidden이-안-숨겨진다-cascade-origin-author--ua)
 
 ---
 
@@ -663,6 +665,27 @@ NoSuchMethodException이 가리키는 건 **no-arg 생성자**(`<init>()`)인데
 
 ---
 
+## T-035. author `display` 규칙이 UA의 `display:none`을 이겨 `<details>`·`[hidden]`이 안 숨겨진다 (cascade origin: author > UA)
+
+**증상**: 직접 추가 폼을 `<details class="manual-add">`로 접었는데, **배포 후 라이브에서 접어도 폼이 계속 보였다**. JS로 재보니 `details.open === false`(닫힘)인데 `form.offsetHeight === 135`(보임), `getComputedStyle(form).display === "flex"`. (스크린샷은 접힘처럼 보여 처음엔 "정상"으로 넘길 뻔 — **스크린샷 캐시에 속음**.)
+
+**원인 — cascade는 특정성보다 origin을 먼저 본다 (author > UA)**:
+- 브라우저 UA 스타일시트가 닫힌 `<details>`의 자식을 숨긴다: `details:not([open]) > *:not(summary) { display: none }`(또는 동등 메커니즘).
+- 그런데 author 규칙 `.book-manual-form { display: flex }`(검색 폼과 공용 selector)가 그 자식(form)을 직접 타깃해 `display:flex`를 준다.
+- **CSS cascade 우선순위는 `!important` 제외하면 origin(author > UA)을 특정성보다 먼저 적용한다.** 그래서 특정성이 아무리 낮은 author 규칙이라도 UA의 `display:none`을 항상 이긴다 → 닫혀도 폼이 늘 보임.
+- #189에서 `li.hidden=true`(UA `[hidden]{display:none}`)가 `.book-row{display:flex}`(author)에 져서 하나도 안 숨겨지던 것과 **완전히 같은 뿌리**.
+
+**해결 / 예방**:
+- 닫힘 상태를 author 규칙으로 **다시 숨긴다**(특정성을 충돌 규칙보다 높여):
+  ```css
+  .manual-add:not([open]) .book-manual-form { display: none; }   /* (0,3,0) > .book-manual-form (0,1,0) */
+  ```
+- 일반 규칙: **UA의 `display:none`에 기대 숨기는 메커니즘(`<details>` 접힘, `[hidden]` 속성, `<template>` 등)에서 그 요소의 `display`를 author CSS로 건드리면 깨진다** — author가 origin상 늘 이기므로. 숨겨야 할 상태를 author 규칙으로 **명시 재숨김**하거나, 그 요소에 `display`를 직접 주지 말 것.
+- **검증 함정**: UI 토글·접힘은 **스크린샷만 믿지 말고 라이브 DOM(`offsetHeight`/`getComputedStyle`)을 직접 측정**하라. 여기선 스크린샷이 캐시돼 "접힘"으로 보였으나 실제 DOM은 펼쳐져 있었다. (서버 렌더 `th:open` 자체는 정상이었음 — 무결과 URL 서버 HTML에 `open="open"` 확인.)
+- 개념(특정성 vs cascade origin)은 자매 함정 #189(이 항목이 그 미기록분까지 포섭).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -698,3 +721,4 @@ NoSuchMethodException이 가리키는 건 **no-arg 생성자**(`<init>()`)인데
 | 2026-06-05 | T-033 (큰 페이지에서 폼이 하단에만 있으면 CSRF 숨김필드의 lazy 세션 생성이 응답 커밋 후 일어나 500 → 컨트롤러에서 렌더 전 토큰 선확정, N-044) |
 | 2026-06-05 | T-034 (생성자 2개(주입+테스트용)인 @Service는 @Autowired 없으면 Spring이 no-arg 탐색 → NoSuchMethodException, 컨텍스트 로드 테스트만 대량 실패 → 주입 생성자에 @Autowired 명시, T-022/T-020 "대량 실패=컨텍스트 로드 실패" 부류) |
 | 2026-06-04 | T-033 (큰 페이지(독서 잔디 ~371칸)에서 폼이 하단에만 있으면 `th:action` CSRF 숨김필드의 lazy 세션 생성이 응답 커밋 후라 `IllegalStateException: Cannot create a session after the response has been committed` → 500 / 평소엔 앞쪽 측정 폼이 세션을 먼저 만들어 숨었는데 "측정 책 필수"로 책 0권 사용자에게서 시작 폼이 사라지자 드러남 / 컨트롤러에서 렌더 전 `CsrfToken#getToken()`으로 토큰 선확정=세션 미리 생성, 폼 위치·페이지 크기 무관 / N-044) |
+| 2026-06-06 | T-035 (author `display` 규칙이 cascade origin(author > UA)으로 UA의 `display:none`을 이겨 `<details>` 접힘·`[hidden]`이 안 숨겨짐 — `.book-manual-form{display:flex}`가 닫힌 details 자식 숨김을 무력화 → `.manual-add:not([open]) .book-manual-form{display:none}`로 명시 재숨김 / 특정성보다 origin이 먼저, #189 `[hidden]` 함정과 동일 뿌리 / UI 토글은 스크린샷 말고 라이브 DOM offsetHeight 측정으로 검증) |
