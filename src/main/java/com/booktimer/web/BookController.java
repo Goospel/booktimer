@@ -205,6 +205,25 @@ public class BookController {
         return "redirect:/books";
     }
 
+    /**
+     * 남의 책방(공개 프로필)에서 "구매" 클릭 — 공개(PUBLIC) 책이면 그 책의 제휴 링크로 리다이렉트하고
+     * 클릭을 <b>책 주인 카운트</b>에 집계한다. 비공개·없는 책이면 존재 누설 없이 그 프로필로 되돌린다.
+     *
+     * <p>{@code /books/{id}/buy}는 "내 책"만 허용(IDOR)이라 남의 책엔 못 쓴다. 이 경로는 소유권 대신
+     * "공개 여부"를 게이트로 둔다({@link BookService#recordPublicPurchaseClick}) — 공개 책은 이미 프로필에서
+     * 누구나 보는 것이라 새 노출이 없다. {@code loginId}는 라우팅·복귀 대상일 뿐(조회는 bookId로) —
+     * 임의 책방 경로로 와도 클릭은 책의 진짜 주인에게 집계된다. 링크 클릭(GET)이라 CSRF는 붙이지 않는다.
+     */
+    @GetMapping("/u/{loginId}/books/{bookId}/buy")
+    public String buyFromProfile(@PathVariable String loginId, @PathVariable Long bookId, Principal principal) {
+        currentUser(principal); // 로그인 사용자만(시큐리티가 이미 강제 — 명시)
+        String link = bookService.recordPublicPurchaseClick(bookId);
+        if (link != null) {
+            return "redirect:" + link;
+        }
+        return "redirect:/u/" + loginId;
+    }
+
     @PostMapping("/books/{id}/visibility")
     public String setVisibility(@PathVariable Long id, @RequestParam BookVisibility visibility,
                                 Principal principal, RedirectAttributes redirectAttributes) {

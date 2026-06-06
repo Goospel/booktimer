@@ -243,6 +243,40 @@ class ProfileControllerTest {
     }
 
     @Test
+    @DisplayName("GET /u/{loginId}: 공개책에 구매링크가 있으면 그 책방에서 바로 구매하는 링크가 렌더된다(남의 책방 구매)")
+    void profile_publicBookWithLink_rendersBuyLink() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User owner = newUser("owner@booktimer.com", "openking", "공개왕");
+        Book b = Book.register(owner, "구매가능책", null, null, null, null,
+                "http://www.aladin.co.kr/buy?ttbkey=q", BookStatus.READING);
+        b.makePublic();
+        Book saved = bookRepository.save(b);
+
+        String html = mockMvc.perform(get("/u/{loginId}", "openking").with(user("viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        // 라벨 문자열이 아니라 "구매 경로(라우트 계약)"가 그 책방·그 책으로 렌더되는지를 본다
+        assertThat(html).contains("/u/openking/books/" + saved.getId() + "/buy");
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}: 구매링크 없는 공개책엔 구매 링크가 렌더되지 않는다(죽은 버튼 방지)")
+    void profile_publicBookWithoutLink_noBuyLink() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User owner = newUser("owner@booktimer.com", "openking", "공개왕");
+        publicBook(owner, "링크없는공개책"); // purchaseLink 없음(수동 등록류)
+
+        String html = mockMvc.perform(get("/u/{loginId}", "openking").with(user("viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        // 렌더된 실제 구매 앵커(해석된 href)가 없어야 한다 — 주석 속 리터럴 "{loginId}"가 아니라
+        // openking으로 치환된 경로는 버튼이 실제 렌더될 때만 나타난다.
+        assertThat(html).doesNotContain("/u/openking/books/");
+    }
+
+    @Test
     @DisplayName("비로그인 사용자는 프로필을 볼 수 없다 — 로그인으로 리다이렉트(로그인 한정 시작)")
     void profile_anonymous_redirectsToLogin() throws Exception {
         newUser("owner2@booktimer.com", "openking2", "공개왕2");
