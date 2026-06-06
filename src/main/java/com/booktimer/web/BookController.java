@@ -76,11 +76,11 @@ public class BookController {
                 : myBooks.stream().filter(b -> b.getStatus() == shelfFilter).toList();
 
         model.addAttribute("nickname", user.getNickname());
+        model.addAttribute("loginId", user.getLoginId()); // "내 책방"(/u/{loginId}) 링크용 — 공개 토글이 책방에 반영됨을 안내
         model.addAttribute("books", shelfBooks);
         model.addAttribute("shelfFilter", shelfFilter); // 필터 칩 활성 표시·빈 메시지 분기
         model.addAttribute("bookTimes", statsService.totalSecondsByBook(user)); // 책 id → 누적 초
         model.addAttribute("statuses", BookStatus.values());
-        model.addAttribute("visibilities", BookVisibility.values());
         model.addAttribute("searchEnabled", bookService.searchEnabled());
         model.addAttribute("q", q);
         model.addAttribute("searchType", searchType);          // 검색 기준 셀렉트 활성 표시·페이징 링크 유지

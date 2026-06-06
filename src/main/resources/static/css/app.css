@@ -577,6 +577,33 @@ a.book-title:hover { text-decoration: underline; }
 .book-actions .btn-ghost, .book-actions .btn-danger { padding: 6px 10px; font-size: .85rem; }
 .book-actions a.btn-ghost { text-decoration: none; display: inline-flex; align-items: center; }
 
+/* 공개/비공개 토글 스위치 — 드롭다운 대신 on/off. ON=🌍 책방 공개(accent), OFF=🔒 비공개(muted).
+   버튼이 '현재의 반대' 값을 POST해 상태를 뒤집는다(JS 없이 폼 제출). 라벨+미니 트랙/노브로 현재 상태를 보여줌. */
+.vis-toggle-form { display: inline-flex; }
+.vis-toggle {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px;
+    background: #fff; color: var(--muted); cursor: pointer;
+    font-size: .8rem; font-weight: 600; line-height: 1;
+}
+.vis-toggle:hover { border-color: var(--accent); }
+.vis-toggle.is-public { color: var(--accent); border-color: var(--accent); background: #eef2ff; }
+.vis-toggle .vis-text { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.vis-toggle .vis-track {
+    position: relative; width: 30px; height: 16px; border-radius: 999px;
+    background: #cbd5e1; transition: background .15s ease; flex: none;
+}
+.vis-toggle.is-public .vis-track { background: var(--accent); }
+.vis-toggle .vis-knob {
+    position: absolute; top: 2px; left: 2px; width: 12px; height: 12px;
+    border-radius: 50%; background: #fff; transition: transform .15s ease;
+}
+.vis-toggle.is-public .vis-knob { transform: translateX(14px); }
+
+/* 내 책장 상단 안내 — 공개 토글이 '책방'에 반영됨을 한 줄로 설명(책방 링크 겸). */
+.shelf-public-hint { font-size: .85rem; color: var(--muted); margin: 0 0 12px; }
+.shelf-public-hint a { color: var(--accent); }
+
 .affiliate-note { font-size: .8rem; color: var(--muted); text-align: center; margin: 16px 0 4px; }
 
 /* 프로필 — 팔로우 카운트 + 버튼 (관계는 카운트만 노출, SNS §7.3) */

@@ -94,6 +94,11 @@
     <section class="card">
         <h2>내 책장</h2>
 
+        <!-- 공개 토글의 결과를 명시 — '책방 공개'로 켠 책은 내 책방(/u/{loginId})에서 누구나 본다. 책방 링크 겸 안내. -->
+        <p class="shelf-public-hint">
+            🌍 <strong>책방 공개</strong>로 켠 책은 <a th:href="@{/u/{n}(n=${loginId})}">내 책방</a>에서 누구나 볼 수 있어요.
+        </p>
+
         <!-- 상태 필터 칩 — 부합하는 책만 표시(서버사이드 ?status=). 검색어 q는 유지. -->
         <nav class="shelf-filter">
             <a th:href="@{/books(q=${q})}" th:classappend="${shelfFilter == null} ? 'active'">전체</a>
@@ -124,11 +129,20 @@
                                     th:selected="${s == b.status}">상태</option>
                         </select>
                     </form>
-                    <form method="post" th:action="@{/books/{id}/visibility(id=${b.id})}" title="다른 사용자에게 보일지">
-                        <select name="visibility" onchange="this.form.submit()">
-                            <option th:each="v : ${visibilities}" th:value="${v}" th:text="${v.label}"
-                                    th:selected="${v == b.visibility}">공개여부</option>
-                        </select>
+                    <!-- 공개/비공개 토글 스위치 — 드롭다운 대신 on/off. 버튼이 '현재의 반대' 값을 POST해 상태를 뒤집는다(JS 없이 폼 제출).
+                         라벨/아이콘은 현재 상태를 보여주고(🌍 책방 공개 / 🔒 비공개), aria-pressed로 토글 상태를 보조기술에 전달. -->
+                    <form method="post" th:action="@{/books/{id}/visibility(id=${b.id})}" class="vis-toggle-form">
+                        <button type="submit" name="visibility"
+                                th:value="${b.isPublic()} ? 'PRIVATE' : 'PUBLIC'"
+                                class="vis-toggle" th:classappend="${b.isPublic()} ? 'is-public'"
+                                th:attr="aria-pressed=${b.isPublic()}"
+                                th:title="${b.isPublic()} ? '책방에 공개 중 — 누르면 비공개로 전환' : '비공개 — 누르면 책방에 공개'">
+                            <span class="vis-text">
+                                <span class="vis-icon" aria-hidden="true" th:text="${b.isPublic()} ? '🌍' : '🔒'">🔒</span>
+                                <span th:text="${b.isPublic()} ? '책방 공개' : '비공개'">비공개</span>
+                            </span>
+                            <span class="vis-track" aria-hidden="true"><span class="vis-knob"></span></span>
+                        </button>
                     </form>
                     <a th:if="${b.purchaseLink}" th:href="@{/books/{id}/buy(id=${b.id})}" target="_blank"
                        rel="noopener nofollow" class="btn-ghost">구매</a>

@@ -71,6 +71,18 @@ class BookControllerTest {
     }
 
     @Test
+    @DisplayName("GET /books: 내 책방(/u/{loginId}) 링크용 loginId를 모델에 싣는다")
+    void books_includesLoginIdForBookstoreLink() throws Exception {
+        User u = newUser("li@booktimer.com");
+        u.assignLoginId("reader7");
+        userRepository.save(u);
+
+        mockMvc.perform(get("/books").with(user("reader7")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("loginId", "reader7"));
+    }
+
+    @Test
     @DisplayName("GET /books: 팔로우한 사용자의 PUBLIC 책 인기 카운트를 popularity 모델에 싣는다(§7.4)")
     @SuppressWarnings("unchecked")
     void books_includesFollowScopePopularity() throws Exception {
