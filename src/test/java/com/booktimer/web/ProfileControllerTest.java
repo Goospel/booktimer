@@ -261,6 +261,24 @@ class ProfileControllerTest {
     }
 
     @Test
+    @DisplayName("GET /u/{loginId}: 본인 책방에서는 구매링크 있는 공개책이어도 구매 버튼이 렌더되지 않는다(내 책은 이미 내 것)")
+    void profile_selfView_publicBookWithLink_noBuyButton() throws Exception {
+        User me = newUser("me@booktimer.com", "myself", "나자신");
+        Book b = Book.register(me, "내 구매가능책", null, null, null, null,
+                "http://www.aladin.co.kr/buy?ttbkey=q", BookStatus.READING);
+        b.makePublic();
+        Book saved = bookRepository.save(b);
+
+        String html = mockMvc.perform(get("/u/{loginId}", "myself").with(user("me@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("self", true))
+                .andReturn().getResponse().getContentAsString();
+
+        // 본인 책방이면 같은 공개책+링크여도 구매 라우트가 렌더되지 않아야 한다(남의 책방에서만 뜸).
+        assertThat(html).doesNotContain("/u/myself/books/" + saved.getId() + "/buy");
+    }
+
+    @Test
     @DisplayName("GET /u/{loginId}: 구매링크 없는 공개책엔 구매 링크가 렌더되지 않는다(죽은 버튼 방지)")
     void profile_publicBookWithoutLink_noBuyLink() throws Exception {
         newUser("viewer@booktimer.com", "viewer", "뷰어");
