@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>책BTI — BookTimer</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <a class="brand-home" th:href="@{/}" title="메인 대시보드로">
+            <span class="emoji">📚</span>
+            <h1>BookTimer</h1>
+        </a>
+    </header>
+    <p class="greeting"><span th:text="${nickname}">닉네임</span>님의 책BTI 🧬</p>
+
+    <!-- 정확도 고지 (항상) — 과신 금지 포지셔닝 -->
+    <p class="status-line">MBTI처럼 <strong>가볍게 즐기는 재미</strong>예요. 책장이 작거나 장르가 치우치면 부정확할 수 있어요.</p>
+
+    <!-- 성향 서술 (정상) -->
+    <section class="card" th:if="${view.isReady()}">
+        <h2>내 독서 성향</h2>
+        <p class="personality-narrative" th:text="${view.narrative()}">성향 서술 한 문단…</p>
+    </section>
+
+    <!-- 콜드스타트 — 책 부족으로 분석 보류 -->
+    <section class="card" th:if="${view.isColdStart()}">
+        <h2>조금 더 읽으면 성향이 보여요</h2>
+        <p class="status-line">
+            지금 책장에 <strong th:text="${view.profile().totalBooks()}">0</strong>권 있어요.
+            최소 <strong th:text="${view.coldStartMinBooks()}">5</strong>권쯤 모이면 성향을 분석해 드릴게요.
+        </p>
+    </section>
+
+    <!-- 폴백 — LLM 실패/지연(책은 충분) -->
+    <section class="card" th:if="${view.isFallback()}">
+        <h2>잠시 후 다시 분석해 주세요</h2>
+        <p class="status-line">지금은 성향 서술을 불러오지 못했어요. 사실 요약은 아래에서 볼 수 있어요.</p>
+    </section>
+
+    <!-- 사실 요약 (항상) — 콜드스타트·폴백에서도 책장 사실은 보여준다 -->
+    <section class="card">
+        <h2>책장 요약</h2>
+        <ul class="record-list">
+            <li class="record-row">
+                <span class="record-main">보유 / 완독</span>
+                <span class="record-time mono">
+                    <span th:text="${view.profile().totalBooks()}">0</span>권 /
+                    <span th:text="${view.profile().finishedBooks()}">0</span>권
+                </span>
+            </li>
+            <li class="record-row">
+                <span class="record-main">총 독서 시간</span>
+                <span class="record-time mono"
+                      th:text="${(view.profile().totalReadingSeconds() / 3600) + '시간 ' + ((view.profile().totalReadingSeconds() % 3600) / 60) + '분'}">0시간 0분</span>
+            </li>
+            <li class="record-row" th:if="${!view.profile().topGenres().isEmpty()}">
+                <span class="record-main">자주 읽는 장르</span>
+                <span class="record-books"
+                      th:text="${#strings.listJoin(view.profile().topGenres().![label()], ', ')}">장르</span>
+            </li>
+            <li class="record-row" th:if="${!view.profile().topAuthors().isEmpty()}">
+                <span class="record-main">자주 읽는 저자</span>
+                <span class="record-books"
+                      th:text="${#strings.listJoin(view.profile().topAuthors().![label()], ', ')}">저자</span>
+            </li>
+        </ul>
+    </section>
+
+    <!-- 다시 분석 (콜드스타트가 아닐 때만 — 보류 상태는 재생성할 게 없음) -->
+    <form class="refresh-form" th:unless="${view.isColdStart()}" th:action="@{/personality/refresh}" method="post">
+        <button type="submit" class="btn-primary">🔄 다시 분석</button>
+    </form>
+
+    <p class="link-row">
+        <a th:href="@{/}">← 대시보드</a>
+        <a th:href="@{/books}">📚 내 책장</a>
+    </p>
+</div>
+</body>
+</html>
