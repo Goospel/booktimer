@@ -585,7 +585,9 @@ a.book-title:hover { text-decoration: underline; }
 }
 .book-add-form, .book-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .book-actions { margin-left: auto; }   /* 같은 줄이면 우측 정렬, 줄바꿈되면 다음 줄 전체 사용 */
-.book-actions .btn-ghost, .book-actions .btn-danger { padding: 6px 10px; font-size: .85rem; }
+/* 리스트 행 버튼은 작게 통일 — btn-primary(팔로우)도 포함해 btn-ghost(언팔로우)와 같은 크기로
+   (베이스 button은 padding 12px 18px라 팔로우만 부담스럽게 컸음). */
+.book-actions .btn-primary, .book-actions .btn-ghost, .book-actions .btn-danger { padding: 6px 10px; font-size: .85rem; }
 .book-actions a.btn-ghost { text-decoration: none; display: inline-flex; align-items: center; }
 
 /* 공개/비공개 토글 스위치 — 드롭다운 대신 on/off. ON=🌍 책방 공개(accent), OFF=🔒 비공개(muted).
