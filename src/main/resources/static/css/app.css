@@ -502,11 +502,12 @@ button, .btn {
 .book-search-form > input[type=text] { flex: none; width: 100%; box-sizing: border-box; }
 
 .book-list { list-style: none; padding: 0; margin: 8px 0 0; }
-/* 내 책장 — 고정 높이 스크롤 박스. 책이 많아도 목록 자체는 화면의 60%까지만 차지하고
-   그 안에서만 스크롤되므로, 페이지가 길어지지 않아 하단 네비(← 대시보드 등)가 늘 바로 아래 보인다.
+/* 책 목록 — 고정 높이 스크롤 박스. 내 책장(/books)·책방(공개 프로필 /u/{id})의 공개 책장에 공용.
+   책이 많아도 목록 자체는 화면의 60%까지만 차지하고 그 안에서만 스크롤되므로,
+   페이지가 길어지지 않아 하단 네비(← 대시보드 등)가 늘 바로 아래 보인다.
    책이 적으면 max-height에 안 닿아 스크롤바도 안 생긴다(자연 폴백). scrollbar-gutter로 폭 흔들림 방지.
    상태 필터 칩은 이 ul 밖(위)이라 스크롤과 무관하게 고정된다. */
-#shelf-list {
+.shelf-scroll {
     max-height: 60vh;
     overflow-y: auto;
     scrollbar-gutter: stable;
