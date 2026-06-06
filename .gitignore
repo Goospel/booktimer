@@ -37,8 +37,9 @@ out/
 .vscode/
 
 ### Project-specific ###
-# T-026: PowerShell 5.1 한글 깨짐 회피용 commit message 임시 파일 잔재 차단
+# T-026: PowerShell 5.1 한글 깨짐 회피용 commit/PR message 임시 파일 잔재 차단
 .commit-msg-tmp
+.pr-body-tmp
 
 # UI 미리보기용 임시 정적 서버 하네스 (제품 코드 아님)
 .preview/

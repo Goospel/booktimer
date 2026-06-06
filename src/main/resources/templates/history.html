@@ -9,8 +9,10 @@
 <body>
 <div class="container">
     <header class="brand">
-        <span class="emoji">📚</span>
-        <h1>BookTimer</h1>
+        <a class="brand-home" th:href="@{/}" title="메인 대시보드로">
+            <span class="emoji">📚</span>
+            <h1>BookTimer</h1>
+        </a>
     </header>
     <p class="greeting"><span th:text="${nickname}">닉네임</span>님의 독서 기록</p>
 

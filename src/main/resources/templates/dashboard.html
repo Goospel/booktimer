@@ -14,8 +14,10 @@
 <body>
 <div class="container">
     <header class="brand">
-        <span class="emoji">📚</span>
-        <h1>BookTimer</h1>
+        <a class="brand-home" th:href="@{/}" title="메인 대시보드로">
+            <span class="emoji">📚</span>
+            <h1>BookTimer</h1>
+        </a>
     </header>
     <!-- 인사말 자리 = 작가 격언(페이지 로드마다 랜덤, DashboardController가 모델에 싣는다). 라이브 영역 밖이라 측정 start/stop엔 안 바뀐다. -->
     <p class="greeting quote">
