@@ -38,6 +38,9 @@
     </header>
     <p class="greeting"><span th:text="${nickname}">운영자</span>님 — 운영 데이터 확인 화면입니다.</p>
 
+    <!-- 운영 액션 결과(예: 백필) 알림 — POST→리다이렉트 후 1회 노출 -->
+    <p class="alert" th:if="${message}" th:text="${message}">결과</p>
+
     <section class="card">
         <h2>통계 요약</h2>
         <p class="status-line muted">읽기 전용 집계 — 가입자(운영자 제외)·활성·독서 기록 현황.</p>
@@ -89,6 +92,16 @@
         <p class="link-row">
             <a th:href="@{/admin/quotes}">📝 격언 관리 →</a>
         </p>
+    </section>
+
+    <section class="card">
+        <h2>책BTI 카탈로그 백필</h2>
+        <p class="status-line muted">
+            기존 책의 장르·출간일을 알라딘에서 채운다(책BTI 입력). 한 번에 일부만 처리하니, 남은 권수가 있으면 다시 누르세요.
+        </p>
+        <form method="post" th:action="@{/admin/books/backfill-catalog}">
+            <button type="submit" class="btn-primary">📚 카탈로그 백필 실행</button>
+        </form>
     </section>
 
     <!-- 로그아웃은 일반 대시보드와 동일하게 화면 최하단에 둔다(상단 노출 방지). -->

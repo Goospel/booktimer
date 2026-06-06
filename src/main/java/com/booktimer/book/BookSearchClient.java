@@ -1,5 +1,7 @@
 package com.booktimer.book;
 
+import java.util.Optional;
+
 /**
  * 도서 검색 제공자 추상화(포트). 구현(어댑터)은 알라딘 OpenAPI 등 외부 서비스를 호출한다.
  *
@@ -24,4 +26,14 @@ public interface BookSearchClient {
      * @param page  1-based 페이지 번호
      */
     BookSearchPage search(String query, BookSearchType type, int page);
+
+    /**
+     * ISBN-13으로 책 한 건의 카탈로그 메타(장르·출간일 등)를 조회한다 — 기존 책 백필용(알라딘 ItemLookUp).
+     *
+     * <p>{@link #search}가 질의어로 여러 건을 찾는 것과 달리, 정확한 ISBN으로 단건을 집어와 책BTI 입력을
+     * 채운다. 비활성(키 없음)·isbn 공백·결과 없음·외부 오류면 빈 {@link Optional}(호출자는 그 책을 건너뛴다).
+     *
+     * @param isbn13 조회할 ISBN-13
+     */
+    Optional<BookSearchResult> lookupByIsbn(String isbn13);
 }

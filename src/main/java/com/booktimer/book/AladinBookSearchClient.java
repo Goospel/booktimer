@@ -11,6 +11,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 알라딘 OpenAPI(ItemSearch) 기반 도서 검색 어댑터.
@@ -26,6 +27,7 @@ public class AladinBookSearchClient implements BookSearchClient {
 
     private static final Logger log = LoggerFactory.getLogger(AladinBookSearchClient.class);
     private static final String ENDPOINT = "http://www.aladin.co.kr/ttb/api/ItemSearch.aspx";
+    private static final String LOOKUP_ENDPOINT = "http://www.aladin.co.kr/ttb/api/ItemLookUp.aspx";
     private static final String NOT_CONFIGURED = "not-configured";
 
     private final String ttbKey;
@@ -64,6 +66,24 @@ public class AladinBookSearchClient implements BookSearchClient {
         }
     }
 
+    @Override
+    public Optional<BookSearchResult> lookupByIsbn(String isbn13) {
+        if (!isEnabled() || isbn13 == null || isbn13.isBlank()) {
+            return Optional.empty();
+        }
+        String url = buildLookupUrl(ttbKey, isbn13.strip());
+        try {
+            String body = restClient.get().uri(url).retrieve().body(String.class);
+            // ItemLookUp 응답도 ItemSearch와 같은 item[] 구조라 parse()를 그대로 재사용한다(매핑 단일 소스).
+            List<BookSearchResult> items = parse(body, objectMapper);
+            return items.isEmpty() ? Optional.empty() : Optional.of(items.get(0));
+        } catch (Exception e) {
+            // 외부 API 장애가 백필 전체를 깨지 않도록 한 건은 빈 결과로 격리(로그만).
+            log.warn("알라딘 ItemLookUp 실패 — isbn13='{}': {}", isbn13, e.toString());
+            return Optional.empty();
+        }
+    }
+
     /**
      * 알라딘 ItemSearch 호출 URL을 만든다. 검색 기준(제목/저자)이 {@code QueryType}으로 들어간다.
      * 네트워크 없이 단위테스트할 수 있게 정적·순수 함수로 분리한다.
@@ -77,6 +97,22 @@ public class AladinBookSearchClient implements BookSearchClient {
                 .queryParam("MaxResults", PAGE_SIZE)
                 .queryParam("start", Math.max(1, page))   // 알라딘 start = 시작 페이지(1-based)
                 .queryParam("SearchTarget", "Book")
+                .queryParam("Cover", "MidBig")
+                .queryParam("output", "js")
+                .queryParam("Version", "20131101")
+                .build()
+                .toUriString();
+    }
+
+    /**
+     * 알라딘 ItemLookUp 호출 URL을 만든다 — ISBN-13으로 단건 조회(itemIdType=ISBN13). 백필용.
+     * 네트워크 없이 단위테스트할 수 있게 정적·순수 함수로 분리한다(buildSearchUrl과 동일 정신).
+     */
+    static String buildLookupUrl(String ttbKey, String isbn13) {
+        return UriComponentsBuilder.fromUriString(LOOKUP_ENDPOINT)
+                .queryParam("ttbkey", ttbKey)
+                .queryParam("itemIdType", "ISBN13")
+                .queryParam("ItemId", isbn13)
                 .queryParam("Cover", "MidBig")
                 .queryParam("output", "js")
                 .queryParam("Version", "20131101")

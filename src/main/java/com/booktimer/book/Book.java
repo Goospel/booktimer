@@ -170,6 +170,16 @@ public class Book extends BaseTimeEntity {
         this.clickCount++;
     }
 
+    /**
+     * 카탈로그 메타(장르·출간일)를 채운다 — 기존 책 백필(알라딘 ItemLookUp) 경로에서 쓴다.
+     * register와 동일하게 빈/공백은 null로 정규화한다("없음"을 한 표기로). 덮어쓸지(이미 값 있는 책)는
+     * 호출자(백필 서비스)가 대상 선별로 결정한다 — 서비스는 category가 null인 책만 고른다.
+     */
+    public void applyCatalogMetadata(String category, String pubDate) {
+        this.category = blankToNull(category);
+        this.pubDate = blankToNull(pubDate);
+    }
+
     /** 이 책을 공개한다 — 다른 사용자가 조회할 수 있게 된다(SNS). */
     public void makePublic() {
         this.visibility = BookVisibility.PUBLIC;

@@ -159,7 +159,7 @@ LLM이 **한 번의 호출로 JSON 구조화 출력**을 낸다:
 
 1. **Phase 1 — 장르/출간연도 적재** — 적재 사슬과 백필은 위험 프로파일이 달라(백필은 외부 API 호출) 두 PR로 쪼갠다:
    - ✅ **Phase 1a (완료, PR #205 예정) — 전방 적재**: `parse()`에 `categoryName`·`pubDate` 매핑 + `BookSearchResult`(8-인자, 6-인자 편의 생성자로 기존 호출 보존)·`Book`(필드+게터+register 오버로드, blank→null) + Flyway **V18**(`category varchar(300)`, `pub_date varchar(20)`) + 검색폼 hidden 필드 + `addFromSearch` 배선. 이제 검색으로 등록하는 새 책은 장르·출간일이 적재된다. TDD: 파서 매핑·누락 null / Book 적재·8-인자 null 불변식 / addFromSearch 전달 / 컨트롤러 사슬.
-   - ⏳ **Phase 1b (다음) — 백필**: 기존 책(`category IS NULL` + isbn13 있음)을 알라딘 **ItemLookUp**(ISBN)으로 채우는 배치. TDD: ItemLookUp URL·파싱, 백필 멱등(이미 채워진 책 건너뜀), null-isbn 제외.
+   - ✅ **Phase 1b (완료, PR #206 예정) — 백필**: 기존 책(`category IS NULL` + isbn13 있음)을 알라딘 **ItemLookUp**으로 채운다. `BookSearchClient.lookupByIsbn(isbn)` 포트(알라딘 어댑터는 ItemLookUp 호출 + 기존 `parse()` 재사용) + `Book.applyCatalogMetadata` + `BookCatalogBackfillService.backfill(limit)`(외부 HTTP는 트랜잭션 밖, 채운 책만 `saveAll`) + 관리자 트리거 `POST /admin/books/backfill-catalog`(ADMIN·CSRF·결과 플래시). **새 Flyway 없음**(V18 컬럼 재사용). TDD: ItemLookUp URL·lookup 가드 / `applyCatalogMetadata` / 백필 멱등(이미 채워진 책 제외)·null-isbn 제외·미발견 notFound·disabled no-op·limit cap / 관리자 인가(ADMIN 실행·USER 403).
 2. **Phase 2 — 독서 프로필 집계(코드, 결정적)** — `book`+`reading_session`에서 §3 사실을 뽑는 순수 집계기. TDD 경계값: 0권/콜드스타트/완독률/정독↔다독/장르 편식·잡식/저자 편향.
 3. **Phase 3 — LLM 포트 + Gemini 어댑터** — 포트 인터페이스 + Gemini 호출 + 프롬프트(그라운딩) + JSON(설명문+태그) 파싱 + **폴백**. TDD: 가짜 어댑터로 서비스 배선, 파싱·폴백 경로.
 4. **Phase 4 — 저장·캐시·갱신** — `reading_personality` 테이블(Flyway) + `input_signature` 기반 재생성 + "다시 분석". TDD: 시그니처 변동 시만 재호출, 콜드스타트 보류.
