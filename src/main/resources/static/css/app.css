@@ -50,6 +50,17 @@ body {
 
 .brand .emoji { font-size: 1.4rem; }
 
+/* 로고(이모지+제목)를 메인 대시보드(/) 링크로 — 최하단 '대시보드' 버튼 없이 어디서든 홈으로(UX 편의).
+   링크 기본 스타일(파란색·밑줄) 제거하고 헤더 본래 모양 유지, 호버 시에만 제목에 밑줄로 클릭 가능 단서. */
+.brand-home {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    text-decoration: none;
+    color: inherit;
+}
+.brand-home:hover h1 { text-decoration: underline; }
+
 .greeting {
     color: var(--muted);
     margin: 0 0 20px;
