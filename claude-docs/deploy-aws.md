@@ -421,7 +421,8 @@ aws ssm put-parameter --name /booktimer/ALADIN_TTB_KEY \
 
 ### ① API 키 발급 (외부, 1회)
 1. <https://aistudio.google.com/> → Google 계정 로그인 → **"Get API key" → "Create API key"**.
-2. 발급된 키(보통 `AIza...`) 복사. 무료 티어로 시작 가능(분당 요청 제한 있음).
+2. 발급된 키(`AIza...` 또는 신형 `AQ....`) 복사. 무료 티어로 시작 가능(분당 요청 제한 있음).
+   > 신형 `AQ.` 키는 헤더 인증이 막혀 있다 — 아래 "AQ 키 주의(T-037)" 참고. 어댑터는 호환되게 호출한다.
 > 무료 티어는 프롬프트가 모델 개선에 쓰일 수 있다 — 프롬프트엔 집계된 사실(장르명·저자명·권수)만 들어가고
 > 원문/PII는 없지만, 운영 본격화 땐 학습 제외(유료) 티어를 고려한다.
 
@@ -446,9 +447,17 @@ aws ssm put-parameter --name /booktimer/LLM_API_KEY \
 `aws logs tail /ecs/booktimer --follow --region $AWS_REGION`로 "Gemini 서술 생성 실패" 로그 확인(키 오타·모델명·rate limit).
 
 ### (선택) 모델 변경
-기본은 `gemini-2.0-flash`(`@Value("${booktimer.llm.model:gemini-2.0-flash}")`). 코드 수정 없이 바꾸려면
-`BOOKTIMER_LLM_MODEL`을 env로 주입한다(예: `gemini-2.5-flash`). 평문이라 SSM SecureString이 아니라
+기본은 `gemini-2.5-flash`(`@Value("${booktimer.llm.model:gemini-2.5-flash}")`). 코드 수정 없이 바꾸려면
+`BOOKTIMER_LLM_MODEL`을 env로 주입한다(예: `gemini-2.0-flash`). 평문이라 SSM SecureString이 아니라
 task-definition `environment`에 둬도 된다.
+
+### ⚠️ AQ 키 주의 — 인증은 `?key=` 쿼리파라미터 (T-037)
+Google이 2026년 들어 API 키를 구형 `AIza…`(Traffic key)에서 신형 `AQ.…`(Authentication key)로 옮기는 중인데,
+**일부 계정은 `AQ.` 키만 발급**된다. 이 `AQ.` 키는 `x-goog-api-key` 헤더로 보내면
+`401 ACCESS_TOKEN_TYPE_UNSUPPORTED`로 거부되고, `Authorization: Bearer`도 401(UNAUTHENTICATED)이다.
+**`?key=…` 쿼리파라미터 방식만 통한다.** 어댑터는 이 방식으로 호출하므로 `AIza`·`AQ.` 둘 다 동작한다.
+키 검증(CloudShell): `curl -s "https://generativelanguage.googleapis.com/v1beta/models?key=본인키&pageSize=1"`
+→ 모델 목록 JSON이 나오면 정상. (헤더로 테스트하면 AQ 키는 멀쩡해도 실패하니 헷갈리지 말 것.)
 
 > 로컬 테스트: `BOOKTIMER_LLM_API_KEY=AIza...`를 환경변수로 주고 `bootRun`.
 

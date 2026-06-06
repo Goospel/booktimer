@@ -80,6 +80,21 @@ class GeminiReadingPersonalityNarratorTest {
         assertThat(GeminiReadingPersonalityNarrator.parseNarration(noNarrative, objectMapper)).isEmpty();
     }
 
+    // ---- 엔드포인트(인증 방식) ----
+
+    @Test
+    @DisplayName("엔드포인트: 키를 x-goog-api-key 헤더가 아니라 ?key= 쿼리파라미터로 싣는다(AQ 키 호환)")
+    void buildEndpoint_putsKeyAsQueryParam() {
+        String base = "https://generativelanguage.googleapis.com/v1beta/models/";
+
+        String endpoint = GeminiReadingPersonalityNarrator.buildEndpoint(base, "gemini-2.5-flash", "AQ.test-key");
+
+        // 모델별 generateContent 경로 + 키는 쿼리파라미터로(헤더 방식은 AQ 키에서 401이라 회피)
+        assertThat(endpoint)
+                .startsWith(base + "gemini-2.5-flash:generateContent")
+                .contains("key=AQ.test-key");
+    }
+
     // ---- 활성 게이트 ----
 
     @Test

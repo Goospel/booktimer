@@ -11,6 +11,9 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -22,8 +25,10 @@ import java.util.Optional;
  * {@link #isEnabled()} 게이트로 키 없으면 폴백, HTTP는 {@link RestClient}로, JSON 매핑은 정적 메서드로
  * 분리해 네트워크 없이 단위테스트한다. 외부 호출 실패/지연은 빈 결과로 격리한다(화면 안 깨짐).
  *
- * <p>API 키는 운영에서 ECS 환경변수 {@code BOOKTIMER_LLM_API_KEY}로 주입한다(repo 미커밋). 키는 URL이 아니라
- * {@code x-goog-api-key} 헤더로 보낸다(민감정보 URL 노출·로그 유출 회피).
+ * <p>API 키는 운영에서 ECS 환경변수 {@code BOOKTIMER_LLM_API_KEY}로 주입한다(repo 미커밋). 키는 Google이
+ * 문서화한 {@code ?key=} 쿼리파라미터로 싣는다 — 신형 "Authentication key"(AQ.…)는 {@code x-goog-api-key}
+ * 헤더 방식에서 401({@code ACCESS_TOKEN_TYPE_UNSUPPORTED})로 거부되고, 쿼리파라미터 방식만 통하기 때문이다.
+ * (URL에 키가 실리므로 catch에서 URL·요청을 로그에 남기지 않는다.)
  */
 @Component
 public class GeminiReadingPersonalityNarrator implements ReadingPersonalityNarrator {
@@ -40,7 +45,7 @@ public class GeminiReadingPersonalityNarrator implements ReadingPersonalityNarra
 
     public GeminiReadingPersonalityNarrator(
             @Value("${booktimer.llm.api-key:not-configured}") String apiKey,
-            @Value("${booktimer.llm.model:gemini-2.0-flash}") String model) {
+            @Value("${booktimer.llm.model:gemini-2.5-flash}") String model) {
         this.apiKey = apiKey;
         this.model = model;
         this.restClient = RestClient.create();
@@ -56,12 +61,12 @@ public class GeminiReadingPersonalityNarrator implements ReadingPersonalityNarra
         if (!isEnabled() || profile == null) {
             return Optional.empty(); // 키 없음·입력 없음 → 외부 호출 없이 폴백
         }
-        String url = ENDPOINT_BASE + model + ":generateContent";
         try {
             String requestBody = buildRequestBody(buildPrompt(profile, objectMapper), objectMapper);
             String response = restClient.post()
-                    .uri(url)
-                    .header("x-goog-api-key", apiKey) // 키는 헤더로(URL·로그 노출 회피)
+                    // 키는 ?key= 쿼리파라미터로(AQ 키는 x-goog-api-key 헤더에서 401). URI.create로 넘겨
+                    // RestClient의 URI 템플릿 확장(중괄호 치환)을 우회한다.
+                    .uri(URI.create(buildEndpoint(ENDPOINT_BASE, model, apiKey)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(requestBody)
                     .retrieve()
@@ -72,6 +77,16 @@ public class GeminiReadingPersonalityNarrator implements ReadingPersonalityNarra
             log.warn("Gemini 서술 생성 실패 — 사실만 표시로 폴백: {}", e.toString());
             return Optional.empty();
         }
+    }
+
+    /**
+     * generateContent 엔드포인트 URL을 만든다 — 키를 {@code ?key=} 쿼리파라미터로 싣는다.
+     * 신형 AQ 키는 {@code x-goog-api-key} 헤더 방식에서 401로 거부되고 쿼리파라미터 방식만 통하기 때문.
+     * 키에 URL 특수문자가 있어도 깨지지 않게 인코딩한다(현 키 형식엔 불필요하나 방어적).
+     */
+    static String buildEndpoint(String base, String model, String apiKey) {
+        return base + model + ":generateContent?key="
+                + URLEncoder.encode(apiKey, StandardCharsets.UTF_8);
     }
 
     /**
