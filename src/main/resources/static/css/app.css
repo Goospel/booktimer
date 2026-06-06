@@ -511,6 +511,10 @@ button, .btn {
     border-bottom: 1px solid var(--border);
 }
 .book-row:last-child { border-bottom: none; }
+/* 무한 스크롤(books.js)이 li.hidden으로 숨길 때, 위 .book-row{display:flex}가
+   브라우저 기본 [hidden]{display:none}(UA 스타일)을 이겨 안 숨겨지는 특정성 함정 방지.
+   속성 선택자(.book-row[hidden])는 .book-row보다 특정성이 높아 확실히 숨긴다. */
+.book-row[hidden] { display: none; }
 .book-cover {
     width: 44px;
     height: 64px;
