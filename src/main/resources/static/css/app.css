@@ -501,6 +501,22 @@ button, .btn {
    책 검색은 .search-row가 리셋하지만 이쪽은 감싸는 래퍼가 없어 직접 리셋한다. */
 .book-search-form > input[type=text] { flex: none; width: 100%; box-sizing: border-box; }
 
+/* 직접 추가(폴백) — '책 추가' 카드 안에 접어두는 <details>. 검색이 주 경로, 못 찾을 때만 펼친다.
+   검색 결과/페이저 아래에 구분선을 두고, summary는 펼침 화살표(▸/▾)가 달린 은은한 토글. JS 불필요. */
+.manual-add { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.manual-add > summary {
+    cursor: pointer;
+    color: var(--accent);
+    font-size: .9rem;
+    font-weight: 600;
+    list-style: none;                                   /* Firefox 기본 마커 제거 */
+}
+.manual-add > summary::-webkit-details-marker { display: none; }  /* WebKit 기본 마커 제거 */
+.manual-add > summary::before { content: "▸ "; }        /* 접힘 표시 */
+.manual-add[open] > summary::before { content: "▾ "; }  /* 펼침 표시 */
+.manual-add > summary:hover { text-decoration: underline; }
+.manual-add .book-manual-form { margin-top: 12px; }
+
 .book-list { list-style: none; padding: 0; margin: 8px 0 0; }
 /* 책 목록 — 고정 높이 스크롤 박스. 내 책장(/books)·책방(공개 프로필 /u/{id})의 공개 책장에 공용.
    책이 많아도 목록 자체는 화면의 60%까지만 차지하고 그 안에서만 스크롤되므로,
