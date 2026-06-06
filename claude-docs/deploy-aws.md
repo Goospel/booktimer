@@ -413,6 +413,47 @@ aws ssm put-parameter --name /booktimer/ALADIN_TTB_KEY \
 
 ---
 
+## 12-3. 책BTI LLM(Gemini) 키 연동
+
+책BTI(독서 성향 분석, Phase 3~5)는 Gemini Flash로 성향 서술을 생성한다. 앱은 `BOOKTIMER_LLM_API_KEY`
+환경변수를 읽어(`@Value("${booktimer.llm.api-key:not-configured}")`), 없으면 서술을 끄고 **사실만 표시(폴백)** 한다.
+즉 키가 없어도 화면·캐시·콜드스타트는 정상 동작하고, 키가 들어오면 서술이 라이브로 켜진다.
+
+### ① API 키 발급 (외부, 1회)
+1. <https://aistudio.google.com/> → Google 계정 로그인 → **"Get API key" → "Create API key"**.
+2. 발급된 키(보통 `AIza...`) 복사. 무료 티어로 시작 가능(분당 요청 제한 있음).
+> 무료 티어는 프롬프트가 모델 개선에 쓰일 수 있다 — 프롬프트엔 집계된 사실(장르명·저자명·권수)만 들어가고
+> 원문/PII는 없지만, 운영 본격화 땐 학습 제외(유료) 티어를 고려한다.
+
+### ② SSM에 키 저장 (배포보다 먼저!)
+ECS `secrets`는 태스크 시작 시 SSM에서 **필수로** 당겨오므로, 파라미터가 없으면 새 태스크가 기동 실패한다(T-011).
+**반드시 먼저** 만든다. CloudShell에서:
+```bash
+aws ssm put-parameter --name /booktimer/LLM_API_KEY \
+  --value "AIza본인키여기" --type SecureString --region $AWS_REGION
+# 갱신(재발급/회전) 시엔 --overwrite 추가
+```
+> 기본 KMS(aws/ssm) 암호화면 실행역할의 기존 `ssm:GetParameters`(/booktimer/*)로 복호화된다(추가 권한 불필요).
+> 키 값은 셸 명령에 평문으로 남으니(히스토리) 노출되면 AI Studio에서 폐기→재발급 후 `--overwrite`로 교체한다.
+
+### ③ task-definition에 시크릿 참조 + 배포
+`deploy/task-definition.json`의 `secrets`에 추가돼 있다:
+```json
+{ "name": "BOOKTIMER_LLM_API_KEY", "valueFrom": ".../parameter/booktimer/LLM_API_KEY" }
+```
+②가 끝난 뒤 main에 배포가 돌면 새 태스크가 키를 주입받아 **성향 서술이 라이브로 활성화**된다.
+확인: `/personality`에서 책이 임계(5권) 이상일 때 서술 문단이 뜨면 성공(폴백 문구가 아니라). 안 뜨면
+`aws logs tail /ecs/booktimer --follow --region $AWS_REGION`로 "Gemini 서술 생성 실패" 로그 확인(키 오타·모델명·rate limit).
+
+### (선택) 모델 변경
+기본은 `gemini-2.0-flash`(`@Value("${booktimer.llm.model:gemini-2.0-flash}")`). 코드 수정 없이 바꾸려면
+`BOOKTIMER_LLM_MODEL`을 env로 주입한다(예: `gemini-2.5-flash`). 평문이라 SSM SecureString이 아니라
+task-definition `environment`에 둬도 된다.
+
+> 로컬 테스트: `BOOKTIMER_LLM_API_KEY=AIza...`를 환경변수로 주고 `bootRun`.
+
+---
+
 ## Phase 2에서 쓸 GitHub Secrets (미리 메모)
 
 CI/CD 워크플로(다음 단계)에서 저장소 Settings → Secrets에 등록할 값:
