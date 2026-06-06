@@ -5,6 +5,7 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.follow.FollowService;
+import com.booktimer.user.AuthProvider;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -161,5 +162,21 @@ class UserSearchServiceTest {
         }
 
         assertThat(searchService.search(viewer, "club")).hasSize(20);
+    }
+
+    @Test
+    @DisplayName("추천 제외: 아직 공개 핸들(login_id)을 안 정한 사용자(OAuth 온보딩 전)는 추천하지 않는다")
+    void recommend_excludesUsersWithoutLoginId() {
+        User viewer = newUser("viewer@booktimer.com", "searcher", "검색가");
+        newUser("real@booktimer.com", "realuser", "정상유저"); // 핸들 있음 — 추천돼야
+        // OAuth 프로비저닝 직후 = 온보딩 전: loginId=null(아직 아이디 미정), 닉네임은 provider 표시명.
+        // 이 상태면 /u/{loginId} 프로필 링크가 깨지고 팔로우 대상 식별도 불가하므로 추천에 떠선 안 된다.
+        userRepository.save(
+                User.ofOAuth("pending@booktimer.com", "구글이름", "Asia/Seoul", Role.USER, AuthProvider.GOOGLE));
+
+        List<UserSearchResult> recs = searchService.recommend(viewer, 10);
+
+        // 본인(viewer) 제외 후 남는 후보는 realuser·pending 둘인데, 핸들 없는 pending은 빠지고 realuser만 남아야 한다.
+        assertThat(recs).extracting(UserSearchResult::loginId).containsExactly("realuser");
     }
 }
