@@ -516,6 +516,11 @@ button, .btn {
 .manual-add[open] > summary::before { content: "▾ "; }  /* 펼침 표시 */
 .manual-add > summary:hover { text-decoration: underline; }
 .manual-add .book-manual-form { margin-top: 12px; }
+/* ⚠️ <details> 접힘이 실제로 동작하려면 닫혔을 때 폼을 author 규칙으로 직접 숨겨야 한다.
+   위 .book-manual-form{display:flex}(author)가 브라우저 UA의 닫힘-숨김(details:not([open])>*{display:none})을
+   이기기 때문(cascade origin: author > UA). 그대로 두면 접어도 폼이 늘 보인다.
+   특정성을 .book-manual-form(0,1,0)보다 높여(0,3,0) 닫힘일 때만 재숨김. (cf. .book-row[hidden] 동일 함정) */
+.manual-add:not([open]) .book-manual-form { display: none; }
 
 .book-list { list-style: none; padding: 0; margin: 8px 0 0; }
 /* 책 목록 — 고정 높이 스크롤 박스. 내 책장(/books)·책방(공개 프로필 /u/{id})의 공개 책장에 공용.
