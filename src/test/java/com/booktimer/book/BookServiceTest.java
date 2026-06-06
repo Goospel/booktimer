@@ -186,6 +186,53 @@ class BookServiceTest {
     }
 
     @Test
+    @DisplayName("공개 책 구매 클릭: 공개(PUBLIC) 책이고 링크가 있으면 책 주인 카운트를 올리고 링크를 돌려준다(남의 책방 경로)")
+    void recordPublicPurchaseClick_publicWithLink_countsOnOwnerAndReturnsLink() {
+        User owner = newUser("pubowner@booktimer.com");
+        Book book = bookService.addFromSearch(owner, cleanCode(), BookStatus.WANT_TO_READ);
+        book.makePublic(); // 같은 트랜잭션의 영속 엔티티 — 공개로 전환
+
+        String link = bookService.recordPublicPurchaseClick(book.getId());
+
+        assertThat(link).isEqualTo("http://aladin/buy?ttbkey=x");
+        // 클릭은 viewer가 아니라 "그 책(=책 주인 행)"에 집계된다 — 사용자 결정(2026-06-06)
+        assertThat(bookService.myBooks(owner).get(0).getClickCount()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("공개 책 구매 클릭: 비공개(PRIVATE) 책이면 null·집계 없음 — 임의 id로 비공개 책을 캐낼 수 없다(프라이버시 게이트)")
+    void recordPublicPurchaseClick_privateBook_returnsNullNoCount() {
+        User owner = newUser("privowner@booktimer.com");
+        Book book = bookService.addFromSearch(owner, cleanCode(), BookStatus.WANT_TO_READ); // 기본 PRIVATE
+
+        String link = bookService.recordPublicPurchaseClick(book.getId());
+
+        assertThat(link).isNull();
+        assertThat(bookService.myBooks(owner).get(0).getClickCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("공개 책 구매 클릭: 공개여도 구매링크가 없으면 null·집계 없음")
+    void recordPublicPurchaseClick_publicNoLink_returnsNullNoCount() {
+        User owner = newUser("pubnolink@booktimer.com");
+        Book book = bookService.addManual(owner, "수동 공개책", null, BookStatus.READING); // 링크 없음
+        book.makePublic();
+
+        String link = bookService.recordPublicPurchaseClick(book.getId());
+
+        assertThat(link).isNull();
+        assertThat(bookService.myBooks(owner).get(0).getClickCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("공개 책 구매 클릭: 없는 책 id면 예외 없이 null(존재 누설 회피)")
+    void recordPublicPurchaseClick_missing_returnsNull() {
+        String link = bookService.recordPublicPurchaseClick(999_999L);
+
+        assertThat(link).isNull();
+    }
+
+    @Test
     @DisplayName("공개 설정: 새 책은 비공개 기본이고, 소유자는 공개/비공개를 바꿀 수 있다")
     void setVisibility_byOwner() {
         User u = newUser("vis@booktimer.com");

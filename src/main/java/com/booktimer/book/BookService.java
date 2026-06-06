@@ -144,6 +144,30 @@ public class BookService {
         return link;
     }
 
+    /**
+     * 공개(PUBLIC) 책의 "구매" 클릭을 집계하고 이동할 제휴 구매링크를 돌려준다 — <b>남의 책방(공개 프로필)에서</b> 쓴다.
+     *
+     * <p>{@link #recordPurchaseClick}(내 책 전용, 소유권 강제)와 달리 소유권 대신 <b>공개 여부</b>를 게이트로 둔다:
+     * 공개 책은 이미 누구나 프로필에서 보는 것이라 구매링크를 함께 노출해도 새 위험이 없다. 반대로 비공개·없는 책은
+     * 임의 id로 비공개 책의 구매링크/존재를 캐낼 수 없게 거부한다(null 반환). 클릭은 조회된 그 책(=책 주인 행)에
+     * 집계되므로 "어떤 책이 구매 의향을 내나"가 그대로 <b>책 주인 카운트</b>에 쌓인다(사용자 결정 2026-06-06).
+     *
+     * @return 이동할 구매링크. 비공개·존재하지 않음·링크 없음이면 null.
+     */
+    public String recordPublicPurchaseClick(Long bookId) {
+        Book book = bookRepository.findById(bookId).orElse(null);
+        if (book == null || !book.isPublic()) {
+            return null; // 없거나 비공개 — 존재/링크 누설 없이 거부
+        }
+        String link = book.getPurchaseLink();
+        if (link == null || link.isBlank()) {
+            return null;
+        }
+        book.recordPurchaseClick();
+        bookRepository.save(book);
+        return link;
+    }
+
     /** 내 책일 때만 반환한다. 아니면(존재 안 함/남의 책) 거부 — 존재 여부도 노출하지 않는다(IDOR 방지). */
     private Book ownedBook(User user, Long bookId) {
         return bookRepository.findByIdAndUser(bookId, user)

@@ -337,4 +337,40 @@ class BookControllerTest {
 
         assertThat(bookRepository.findById(book.getId()).orElseThrow().getClickCount()).isZero();
     }
+
+    @Test
+    @DisplayName("GET /u/{loginId}/books/{id}/buy: 남의 책방 공개책이면 구매 클릭을 책 주인 카운트에 집계하고 제휴 링크로 리다이렉트한다")
+    void buyFromProfile_publicBook_countsAndRedirectsToLink() throws Exception {
+        User owner = newUser("shelfowner@booktimer.com");
+        owner.assignLoginId("shelfowner");
+        userRepository.save(owner);
+        newUser("shelfviewer@booktimer.com"); // 다른 사람이 그 책방에서 구매를 누른다
+        Book book = Book.register(owner, "공개 클린코드", null, null, null, null,
+                "http://www.aladin.co.kr/buy?ttbkey=z", BookStatus.READING);
+        book.makePublic();
+        bookRepository.save(book);
+
+        mockMvc.perform(get("/u/{loginId}/books/{id}/buy", "shelfowner", book.getId())
+                        .with(user("shelfviewer@booktimer.com")))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("http://www.aladin.co.kr/buy?ttbkey=z"));
+
+        // 클릭은 누른 사람이 아니라 책 주인 행에 쌓인다
+        assertThat(bookRepository.findById(book.getId()).orElseThrow().getClickCount()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}/books/{id}/buy: 비공개 책이면 집계 없이 그 프로필로 돌려보낸다(프라이버시 게이트)")
+    void buyFromProfile_privateBook_noCountRedirectsToProfile() throws Exception {
+        User owner = newUser("ppowner@booktimer.com");
+        newUser("ppviewer@booktimer.com");
+        Book book = bookRepository.save(Book.register(owner, "비공개 책", null, null, null, null,
+                "http://www.aladin.co.kr/buy?ttbkey=z", BookStatus.READING)); // 기본 PRIVATE
+
+        mockMvc.perform(get("/u/{loginId}/books/{id}/buy", "somehandle", book.getId())
+                        .with(user("ppviewer@booktimer.com")))
+                .andExpect(redirectedUrl("/u/somehandle"));
+
+        assertThat(bookRepository.findById(book.getId()).orElseThrow().getClickCount()).isZero();
+    }
 }
