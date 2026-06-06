@@ -162,6 +162,16 @@ button, .btn {
 }
 .btn-ghost:hover { background: var(--bg); }
 
+/* 로그아웃 — 설정 바로가기와 너무 붙어 보여 간격을 띄우고(.logout-form),
+   다른 타일처럼 hover 피드백을 주되 '떠나는' 동작이라 빨강으로 강조한다. */
+.logout-form { margin-top: 18px; }
+.btn-logout { transition: background .15s ease, color .15s ease, border-color .15s ease; }
+.btn-logout:hover {
+    background: var(--bg);
+    color: var(--danger);
+    border-color: var(--danger);
+}
+
 /* 소셜 로그인 */
 .oauth-divider {
     display: flex;
