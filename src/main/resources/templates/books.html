@@ -56,6 +56,9 @@
                     <input type="hidden" name="coverUrl" th:value="${r.coverUrl()}">
                     <input type="hidden" name="publisher" th:value="${r.publisher()}">
                     <input type="hidden" name="purchaseLink" th:value="${r.purchaseLink()}">
+                    <!-- 책BTI 입력 — 장르/출간일을 검색 결과에서 책장으로 넘긴다(없으면 빈 값) -->
+                    <input type="hidden" name="category" th:value="${r.category()}">
+                    <input type="hidden" name="pubDate" th:value="${r.pubDate()}">
                     <select name="status">
                         <option th:each="s : ${statuses}" th:value="${s}" th:text="${s.label}">상태</option>
                     </select>

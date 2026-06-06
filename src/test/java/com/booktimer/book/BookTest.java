@@ -97,6 +97,31 @@ class BookTest {
     }
 
     @Test
+    @DisplayName("register(카탈로그 메타): 장르(category)·출간일(pubDate)을 적재한다 — 빈 값은 null로 정규화")
+    void register_storesCatalogMetadata() {
+        Book book = Book.register(reader(), "한국소설책", "어떤작가", "9788900000001",
+                null, "출판사", null,
+                "국내도서>소설/시/희곡>한국소설", "2020-03-15", BookStatus.READING);
+
+        assertThat(book.getCategory()).isEqualTo("국내도서>소설/시/희곡>한국소설");
+        assertThat(book.getPubDate()).isEqualTo("2020-03-15");
+
+        // 빈/공백 메타는 null로 — 집계·백필에서 "메타 없음"과 동일 취급(동일성)
+        Book blankMeta = Book.register(reader(), "메타빈책", null, null, null, null, null,
+                "  ", "", BookStatus.WANT_TO_READ);
+        assertThat(blankMeta.getCategory()).isNull();
+        assertThat(blankMeta.getPubDate()).isNull();
+    }
+
+    @Test
+    @DisplayName("register(메타 없는 기존 8-인자): category·pubDate는 null이다 — 기존 적재 경로 불변")
+    void register_withoutMetadata_leavesCatalogNull() {
+        Book book = bookWith(BookStatus.WANT_TO_READ);
+        assertThat(book.getCategory()).isNull();
+        assertThat(book.getPubDate()).isNull();
+    }
+
+    @Test
     @DisplayName("recordPurchaseClick: 호출할 때마다 구매 클릭 수가 1씩 증가한다")
     void recordPurchaseClick_increments() {
         Book book = bookWith(BookStatus.WANT_TO_READ);

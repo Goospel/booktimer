@@ -160,11 +160,15 @@ public class BookController {
                       @RequestParam(required = false) String coverUrl,
                       @RequestParam(required = false) String publisher,
                       @RequestParam(required = false) String purchaseLink,
+                      @RequestParam(required = false) String category,
+                      @RequestParam(required = false) String pubDate,
                       @RequestParam(required = false, defaultValue = "WANT_TO_READ") BookStatus status,
                       Principal principal, RedirectAttributes redirectAttributes) {
         User user = currentUser(principal);
         try {
-            BookSearchResult result = new BookSearchResult(title, author, isbn13, coverUrl, publisher, purchaseLink);
+            // category·pubDate는 검색 결과(알라딘)에서 hidden으로 따라온다 — 책BTI 입력. 수동 추가 폼엔 없어 null.
+            BookSearchResult result = new BookSearchResult(title, author, isbn13, coverUrl, publisher,
+                    purchaseLink, category, pubDate);
             Book saved = bookService.addFromSearch(user, result, status);
             redirectAttributes.addFlashAttribute("message", "'" + saved.getTitle() + "'을(를) 책장에 추가했습니다.");
         } catch (IllegalArgumentException e) {

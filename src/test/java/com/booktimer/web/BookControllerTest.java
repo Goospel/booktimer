@@ -224,6 +224,25 @@ class BookControllerTest {
     }
 
     @Test
+    @DisplayName("POST /books/add: 검색 결과의 장르(category)·출간일(pubDate)도 함께 적재된다 — 책BTI 입력 사슬")
+    void add_persistsCatalogMetadata() throws Exception {
+        User u = newUser("meta@booktimer.com");
+
+        mockMvc.perform(post("/books/add")
+                        .param("title", "한국소설책")
+                        .param("isbn13", "9788900000001")
+                        .param("category", "국내도서>소설/시/희곡>한국소설")
+                        .param("pubDate", "2020-03-15")
+                        .param("status", "WANT_TO_READ")
+                        .with(user("meta@booktimer.com")).with(csrf()))
+                .andExpect(redirectedUrl("/books"));
+
+        Book saved = bookRepository.findByUserOrderByCreatedAtDesc(u).get(0);
+        assertThat(saved.getCategory()).isEqualTo("국내도서>소설/시/희곡>한국소설");
+        assertThat(saved.getPubDate()).isEqualTo("2020-03-15");
+    }
+
+    @Test
     @DisplayName("POST /books/{id}/delete: 소유자는 삭제할 수 있다")
     void delete_byOwner() throws Exception {
         User u = newUser("c@booktimer.com");

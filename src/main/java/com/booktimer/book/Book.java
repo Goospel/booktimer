@@ -54,6 +54,20 @@ public class Book extends BaseTimeEntity {
     @Column(length = 1000)
     private String purchaseLink;
 
+    /**
+     * 장르/카테고리(알라딘 categoryName, 예 "국내도서&gt;소설/시/희곡&gt;한국소설").
+     * 책BTI(독서 성향 분석)의 장르 편향 집계 입력. 검색 등록 시 채워지고 수동 등록은 null(백필 대상).
+     */
+    @Column(length = 300)
+    private String category;
+
+    /**
+     * 출간일(알라딘 pubDate, 예 "2020-03-15"). 책BTI의 신/구 분포 집계 입력.
+     * 연도 추출·정규화는 집계 단계(Phase 2)의 몫이라 원문 문자열로 보존한다(적재 견고성).
+     */
+    @Column(length = 20)
+    private String pubDate;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private BookStatus status;
@@ -75,7 +89,8 @@ public class Book extends BaseTimeEntity {
     }
 
     private Book(User user, String title, String author, String isbn13,
-                 String coverUrl, String publisher, String purchaseLink, BookStatus status) {
+                 String coverUrl, String publisher, String purchaseLink,
+                 String category, String pubDate, BookStatus status) {
         if (user == null) {
             throw new IllegalArgumentException("user must not be null");
         }
@@ -93,7 +108,19 @@ public class Book extends BaseTimeEntity {
         this.coverUrl = coverUrl;
         this.publisher = publisher;
         this.purchaseLink = purchaseLink;
+        // 책BTI 카탈로그 메타 — "메타 없음"을 null 한 표기로 통일(집계·백필 동일 취급).
+        this.category = blankToNull(category);
+        this.pubDate = blankToNull(pubDate);
         this.status = status;
+    }
+
+    /** 빈/공백 문자열은 null로 정규화 — 카탈로그 메타의 "없음"을 한 표기로 모은다. */
+    private static String blankToNull(String s) {
+        if (s == null) {
+            return null;
+        }
+        String stripped = s.strip();
+        return stripped.isEmpty() ? null : stripped;
     }
 
     /**
@@ -105,7 +132,21 @@ public class Book extends BaseTimeEntity {
      */
     public static Book register(User user, String title, String author, String isbn13,
                                 String coverUrl, String publisher, String purchaseLink, BookStatus status) {
-        return new Book(user, title, author, isbn13, coverUrl, publisher, purchaseLink, status);
+        return new Book(user, title, author, isbn13, coverUrl, publisher, purchaseLink, null, null, status);
+    }
+
+    /**
+     * 카탈로그 메타(장르·출간일)까지 받아 책장에 등록한다 — 검색(알라딘) 경로 전용.
+     * 책BTI(독서 성향 분석)의 입력이 되는 장르·출간일을 등록 시점에 함께 적재한다.
+     *
+     * @param category 장르/카테고리(알라딘 categoryName, 없으면 null)
+     * @param pubDate  출간일(알라딘 pubDate, 없으면 null)
+     */
+    public static Book register(User user, String title, String author, String isbn13,
+                                String coverUrl, String publisher, String purchaseLink,
+                                String category, String pubDate, BookStatus status) {
+        return new Book(user, title, author, isbn13, coverUrl, publisher, purchaseLink,
+                category, pubDate, status);
     }
 
     /**
@@ -190,6 +231,14 @@ public class Book extends BaseTimeEntity {
 
     public String getPurchaseLink() {
         return purchaseLink;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public String getPubDate() {
+        return pubDate;
     }
 
     public BookStatus getStatus() {
