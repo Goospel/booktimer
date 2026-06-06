@@ -166,6 +166,12 @@ Claude 가 테스트를 빨리 짜므로 **"사람 작성 시간"이라는 전�
 | 불변식 (예: visibility 기본 PRIVATE opt-in, loginId 정규화·once-set) | getter/setter·단순 위임 |
 | 사용자가 명세한 의도를 못 박는 행동 | 자유롭게 리팩터해야 할 구현 디테일 |
 
+> **구체 예 — 발견/노출/목록 기능엔 "미완성(null-state) 엔티티가 새지 않는가"를 경계 테스트로 필수.**
+> *나중에 채우는* 식별자(예: OAuth 온보딩 전 `login_id=null`)가 정상 존재하는데, 조회가 `findAll()`·`findAllByX()`처럼
+> 속성 조건이 없으면 그 미완성 엔티티가 그대로 새어 깨진 링크·동작 불가로 노출된다(같은 불변식이라도 `LIKE` 쿼리는
+> 우연히 걸러주지만 `findAll`은 안 걸러줌). **완성된 픽스처만 만들면 영영 못 잡으니, null-state 엔티티를 일부러 만들어
+> 결과에서 빠지는지 단언하라.** 배경·재발 방지: [learning-notes.md](claude-docs/learning-notes.md) **N-055**.
+
 ### 강제 (커밋 시 테스트 게이트)
 
 - `.claude/hooks/require-tests-before-commit.ps1` 가 `git commit` 을 가로채,
