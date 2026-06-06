@@ -35,6 +35,24 @@ class AladinBookSearchClientTest {
     }
 
     @Test
+    @DisplayName("ItemLookUp URL: ISBN13으로 단건 조회한다(itemIdType=ISBN13, ItemId=isbn, ttbkey) — 백필용")
+    void buildLookupUrl_byIsbn() {
+        String url = AladinBookSearchClient.buildLookupUrl("ttb1", "9788966260959");
+        assertThat(url).contains("ItemLookUp.aspx");
+        assertThat(url).contains("itemIdType=ISBN13");
+        assertThat(url).contains("ItemId=9788966260959");
+        assertThat(url).contains("ttbkey=ttb1");
+    }
+
+    @Test
+    @DisplayName("lookupByIsbn: 비활성 키거나 isbn이 비면 빈 결과(외부 호출 없이 가드)")
+    void lookupByIsbn_guards() {
+        assertThat(new AladinBookSearchClient("not-configured").lookupByIsbn("9788966260959")).isEmpty();
+        assertThat(new AladinBookSearchClient("ttbreal").lookupByIsbn("  ")).isEmpty();
+        assertThat(new AladinBookSearchClient("ttbreal").lookupByIsbn(null)).isEmpty();
+    }
+
+    @Test
     @DisplayName("알라딘 ItemSearch JSON(item 배열)을 검색 결과로 매핑한다")
     void parse_mapsItems() {
         String json = """

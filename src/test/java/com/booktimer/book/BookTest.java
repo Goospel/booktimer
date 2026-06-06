@@ -122,6 +122,21 @@ class BookTest {
     }
 
     @Test
+    @DisplayName("applyCatalogMetadata: 백필로 장르·출간일을 채운다 — 빈 값은 null로 정규화")
+    void applyCatalogMetadata_fillsAndNormalizes() {
+        Book book = bookWith(BookStatus.WANT_TO_READ); // category·pubDate null로 시작
+
+        book.applyCatalogMetadata("국내도서>소설/시/희곡>한국소설", "2020-03-15");
+        assertThat(book.getCategory()).isEqualTo("국내도서>소설/시/희곡>한국소설");
+        assertThat(book.getPubDate()).isEqualTo("2020-03-15");
+
+        // 빈/공백은 null로(register와 동일 정규화 — "없음"을 한 표기로)
+        book.applyCatalogMetadata("  ", "");
+        assertThat(book.getCategory()).isNull();
+        assertThat(book.getPubDate()).isNull();
+    }
+
+    @Test
     @DisplayName("recordPurchaseClick: 호출할 때마다 구매 클릭 수가 1씩 증가한다")
     void recordPurchaseClick_increments() {
         Book book = bookWith(BookStatus.WANT_TO_READ);

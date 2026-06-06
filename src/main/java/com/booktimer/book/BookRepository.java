@@ -1,6 +1,7 @@
 package com.booktimer.book;
 
 import com.booktimer.user.User;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -34,6 +35,16 @@ public interface BookRepository extends JpaRepository<Book, Long> {
 
     /** 회원 탈퇴 시 해당 유저의 모든 책을 제거한다. */
     void deleteByUser(User user);
+
+    /**
+     * 카탈로그 백필 대상 — 장르(category)가 아직 비었고 ISBN-13이 있는 책(책BTI Phase 1b).
+     * isbn이 있어야 알라딘 ItemLookUp으로 채울 수 있다(없으면 조회 키가 없어 제외). {@code Pageable}로
+     * 한 번에 처리할 권수를 제한한다(외부 호출량·요청시간 통제).
+     */
+    List<Book> findByCategoryIsNullAndIsbn13IsNotNull(Pageable pageable);
+
+    /** 백필이 남은 책 수(장르 비었고 isbn 있는) — 백필 결과의 "남은 권수" 표시용. */
+    long countByCategoryIsNullAndIsbn13IsNotNull();
 
     /**
      * 팔로우 스코프 인기 카운트 (sns-design §7.4) — 주어진 isbn 목록을 <b>한 번의 group by</b>로 집계(N+1 회피).
