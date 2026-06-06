@@ -75,6 +75,41 @@ class AladinBookSearchClientTest {
     }
 
     @Test
+    @DisplayName("책BTI 입력 — categoryName(장르)·pubDate(출간일)를 매핑한다. 없는 항목은 null")
+    void parse_mapsCategoryAndPubDate() {
+        String json = """
+                {
+                  "item": [
+                    {
+                      "title": "한국소설책",
+                      "author": "어떤작가",
+                      "isbn13": "9788900000001",
+                      "categoryName": "국내도서>소설/시/희곡>한국소설",
+                      "pubDate": "2020-03-15"
+                    },
+                    {
+                      "title": "메타없는책",
+                      "author": "무명",
+                      "isbn13": "9788900000002"
+                    }
+                  ]
+                }
+                """;
+
+        List<BookSearchResult> results = AladinBookSearchClient.parse(json, objectMapper);
+
+        assertThat(results).hasSize(2);
+        BookSearchResult withMeta = results.get(0);
+        assertThat(withMeta.category()).isEqualTo("국내도서>소설/시/희곡>한국소설");
+        assertThat(withMeta.pubDate()).isEqualTo("2020-03-15");
+
+        // 카테고리/출간일이 없는 응답은 null로 안전 처리(적재 시 정상 — 백필·집계에서 빠짐)
+        BookSearchResult noMeta = results.get(1);
+        assertThat(noMeta.category()).isNull();
+        assertThat(noMeta.pubDate()).isNull();
+    }
+
+    @Test
     @DisplayName("빈/오류 응답은 빈 목록으로 안전 처리한다")
     void parse_handlesEmptyOrBad() {
         assertThat(AladinBookSearchClient.parse(null, objectMapper)).isEmpty();

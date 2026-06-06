@@ -74,8 +74,10 @@ public class BookService {
         if (result == null) {
             throw new IllegalArgumentException("result must not be null");
         }
+        // 카탈로그 메타(장르·출간일)까지 적재 — 책BTI 입력. 수동 경로(addManual)는 메타가 없어 8-인자 register.
         Book book = Book.register(user, result.title(), result.author(), result.isbn13(),
-                result.coverUrl(), result.publisher(), result.purchaseLink(), status);
+                result.coverUrl(), result.publisher(), result.purchaseLink(),
+                result.category(), result.pubDate(), status);
         return bookRepository.save(book);
     }
 

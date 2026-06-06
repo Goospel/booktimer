@@ -103,7 +103,10 @@ public class AladinBookSearchClient implements BookSearchClient {
                             text(item, "isbn13"),
                             text(item, "cover"),
                             text(item, "publisher"),
-                            text(item, "link")));
+                            text(item, "link"),
+                            // 책BTI 입력 — 장르/출간일. 없으면 null(text(): 누락 필드 → null)
+                            text(item, "categoryName"),
+                            text(item, "pubDate")));
                 }
             }
         } catch (Exception e) {

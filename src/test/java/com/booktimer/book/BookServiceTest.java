@@ -69,6 +69,20 @@ class BookServiceTest {
     }
 
     @Test
+    @DisplayName("검색 결과의 장르(category)·출간일(pubDate)도 책장에 적재된다 — 책BTI 입력")
+    void addFromSearch_savesCatalogMetadata() {
+        User u = newUser("meta@booktimer.com");
+        BookSearchResult withMeta = new BookSearchResult(
+                "한국소설책", "어떤작가", "9788900000001", null, "출판사", null,
+                "국내도서>소설/시/희곡>한국소설", "2020-03-15");
+
+        Book saved = bookService.addFromSearch(u, withMeta, BookStatus.WANT_TO_READ);
+
+        assertThat(saved.getCategory()).isEqualTo("국내도서>소설/시/희곡>한국소설");
+        assertThat(saved.getPubDate()).isEqualTo("2020-03-15");
+    }
+
+    @Test
     @DisplayName("수동 입력으로도 책을 등록할 수 있다(제목/저자/상태)")
     void addManual_savesMinimal() {
         User u = newUser("b@booktimer.com");
