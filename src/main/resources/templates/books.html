@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>내 책장 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
+    <!-- 내 책장 무한 스크롤(스크롤이 끝에 닿으면 다음 묶음 표시). JS 없으면 전체 표시로 폴백. -->
+    <script defer th:src="@{/js/books.js}"></script>
 </head>
 <body>
 <div class="container">
@@ -102,9 +104,9 @@
 
         <p th:if="${books.isEmpty() and shelfFilter == null}" class="status-line">아직 등록한 책이 없습니다. 위에서 검색해 추가해 보세요.</p>
         <p th:if="${books.isEmpty() and shelfFilter != null}" class="status-line">이 상태의 책이 없습니다.</p>
-        <ul class="book-list" th:unless="${books.isEmpty()}">
+        <ul class="book-list" id="shelf-list" th:unless="${books.isEmpty()}">
             <li class="book-row" th:each="b : ${books}">
-                <img class="book-cover" th:if="${b.coverUrl}" th:src="${b.coverUrl}" alt="" referrerpolicy="no-referrer">
+                <img class="book-cover" th:if="${b.coverUrl}" th:src="${b.coverUrl}" alt="" loading="lazy" referrerpolicy="no-referrer">
                 <div class="book-meta">
                     <a class="book-title" th:href="@{/books/{id}(id=${b.id})}" th:text="${b.title}">제목</a>
                     <span class="book-author" th:if="${b.author}" th:text="${b.author}">저자</span>

@@ -618,3 +618,20 @@ a.book-title:hover { text-decoration: underline; }
 .pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 12px 0 4px; }
 .pager .btn-ghost { padding: 6px 12px; font-size: .9rem; text-decoration: none; }
 .pager-info { font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* 내 책장 무한 스크롤 센티넬(books.js가 동적 삽입) — 화면에 들어오면 다음 묶음을 펼친다.
+   스크롤이 닿기 전에 트리거되도록 약간의 높이를 주고, '더 있음'을 점으로 살짝 알린다. */
+.shelf-sentinel {
+    height: 28px;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.shelf-sentinel::after {
+    content: '•••';
+    letter-spacing: 4px;
+    font-size: .8rem;
+    color: var(--muted);
+    opacity: .6;
+}
