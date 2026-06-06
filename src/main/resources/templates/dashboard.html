@@ -34,7 +34,6 @@
              start/stop은 hx-post로 무리로드, JS 없으면 일반 form POST(redirect)로 폴백. -->
         <section class="card timer-card"
                  x-data="readingTimer()"
-                 :class="{ 'goal-flash': flash }"
                  th:attr="data-active=${hasActiveSession},data-started=${activeStartedAt},data-remaining=${remainingSeconds}">
             <h2>남은 독서 시간</h2>
             <p class="timer-display"

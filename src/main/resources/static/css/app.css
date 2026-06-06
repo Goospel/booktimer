@@ -119,21 +119,6 @@ body {
     font-weight: 600;
 }
 
-/* 목표 달성 순간 카드 플래시 — 잔여가 0이 되는 전이에서 JS가 .goal-flash를 1.5초 토글.
-   소리(WebAudio)와 함께 시각 신호. 모션 민감 사용자는 reduce-motion으로 무효화. */
-.timer-card.goal-flash {
-    animation: goal-flash 1.5s ease-out;
-}
-
-@keyframes goal-flash {
-    0%   { background: #ecfdf5; box-shadow: 0 0 0 3px var(--ok); }
-    100% { background: inherit;  box-shadow: none; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .timer-card.goal-flash { animation: none; }
-}
-
 /* 누적 상한 도달 경고 (호박색) */
 .cap-badge {
     margin: 12px 0 0;
