@@ -603,7 +603,27 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 ## 💰 비즈니스 모델 / 수익화
 
 > 서비스로 **돈을 버는 축**. 현재 수익 토대는 **제휴(알라딘 3%, 구매 클릭 추적 §책 단위 기록)** 하나뿐 — 이는 거래가 일어나야 들어오는 **간헐적·소액** 수익이다.
-> 아래는 **반복 매출(MRR)** 을 만드는 **월 정액 구독** 모델 구상. ⚠️ **아이디어 단계 — 기록만. 구현 금지.** 가격·무료/유료 경계·법적/운영 부담 전부 미확정.
+> 아래는 두 갈래 구상 — ① **기존 제휴 축 확장**(eBook 제휴 링크) ② **반복 매출(MRR)** 을 만드는 **월 정액 구독**. ⚠️ **아이디어 단계 — 기록만. 구현 금지.** 가격·무료/유료 경계·법적/운영 부담 전부 미확정.
+
+### 📕 eBook 제휴 링크 추가 — 종이책→eBook 귀속 모호 제거 (아이디어 ⏳ 2026-06-07, 우선순위: 미정 / 기록만, 선결 검증 있음)
+
+> ⚠️ **기록만 — 구현 전 (b) eBook 수수료 검증 필수.** (논의: 2026-06-07.)
+
+**배경**: 현재 도서 검색은 **종이책만** 뜬다(`AladinBookSearchClient.buildSearchUrl`이 `SearchTarget=Book` 하드코딩). 사용자가 우리 "구매" 링크로 알라딘에 가면 종이책 페이지가 뜨고, 거기서 eBook으로 갈아타 사면 **그 구매가 내 TTBKey로 정산되는지 모호**하다(제휴 귀속은 알라딘 정책 — TTB는 클릭 후 24h 창 기준이라 갈아타도 잡힐 *가능성*은 있으나 단정 불가).
+
+**아이디어**: eBook을 직접 검색·등록할 수 있게 해서(`SearchTarget=eBook`), **구매 링크가 처음부터 eBook 상품을 가리키게** 한다 → 판본 전환 없이 직접 랜딩이라 귀속 모호함이 사라진다.
+
+**⚠️ 걱정의 종류가 (a)→(b)로 바뀔 뿐, 사라지는 게 아님 (핵심)**:
+- (a) **어느 판본이 내 TTBKey로 잡히나**(추적/귀속) → 직접 eBook 링크면 ✅ 해결.
+- (b) **eBook이 애초에 수수료 대상인가 / 율이 얼만가** → ❌ 링크와 무관한 **알라딘 정책 사실**. eBook이 0%거나 낮은 율이면 직접 링크는 그 율을 *확실히* 받게 할 뿐 더 받게 하지 않는다.
+- **그래서 만들기 전 (b)부터 검증**: TTB 실적 페이지 / 고객센터 / 테스트 구매 1건(단 self-referral은 제외될 수 있어 남의 구매로 봐야 깨끗).
+
+**설계 시 결정할 것**(검증 통과 후):
+- **책 동일성(isbn13)** — eBook은 ISBN이 다르거나 없을 수 있어, 같은 책이라도 책BTI 집계·인기 카운트에서 *다른 책*으로 잡힌다(우리 식별 키가 isbn13). 섞임 처리 정책.
+- **노출 방식** — 종이책/eBook 토글 vs 검색타입 추가 vs **한 책에 두 링크(종이/eBook) 동시 제공**(UX·전환·정산 최선이나 작업량 최대).
+- **대체 아닌 추가** — 종이책 원하는 사용자도 있으니 eBook은 더하는 것.
+
+**선결/연계**: (b) 검증 → 통과 시 설계. 책BTI Phase 1(장르 적재)이 `SearchTarget` 근처를 이미 만졌으므로 검색 타깃 파라미터화는 작은 변경.
 
 ### 🔗 "독서 소셜" 묶음 — 월 정액제 (아이디어 ⏳ 2026-06-05, 우선순위: 미정 / 기록만)
 
@@ -925,3 +945,4 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 | 2026-06-07 | **헤비 리더 SNS(엔진 B) 로드맵 정리 + 책BTI(독서 성향 분석) 설계 확정 + 명명** — "이제 헤비 리더 SNS로 가자" 요청에 plan.md·sns-design·reading-personality-design 정독해 로드맵 도출(토대=프로필·팔로우·검색·카운트·차단/신고는 이미 완료, 남은 건 성향→추천→채팅→구독 레이어). 진입점으로 **독서 성향 분석**을 선택(밀도 독립·획득 후크라 §전략 "밀도 먼저"와 화해). 코드 확인서 **두 발견**: ① 장르(`categoryName`)·출간연도(`pubDate`)가 `Book`·`AladinBookSearchClient.parse()` 둘 다 없어 적재를 새로 깔아야 함 ② 책 공개 기본 PRIVATE라 "공개용 분석"은 대부분 텅 빔 → v1은 본인용·비노출. 미결 🟡 3개 사용자 결정(장르 적재 추가 / v1 본인용 / LLM=Gemini Flash) → reading-personality-design.md를 **설계 확정본**으로 갱신(구현 단계 §10 Phase1~5+후속), plan.md §독서성향 절을 "구상→확정"으로·§전략 순서 화해 메모 추가. 문서만(reading-personality-design.md+plan.md). |
 | 2026-06-07 | **책BTI Phase 1a — 장르/출간일 전방 적재**(검색→Book→DB) — 책BTI 입력인 장르·출간연도가 `Book`·`AladinBookSearchClient.parse()` 둘 다 없던 걸 새로 적재. **사슬 전체**: 알라딘 `parse()`가 `categoryName`·`pubDate` 매핑 → `BookSearchResult`에 2필드(+6-인자 편의 생성자로 기존 호출처 4곳 무변경) → 검색결과 add 폼 hidden 2개 → `POST /books/add` 파라미터 → `addFromSearch` → `Book.register` 오버로드(10-인자, 8-인자는 null 위임해 19개 테스트 churn 0)·`blankToNull` 정규화 → **Flyway V18**(`category varchar(300)`, `pub_date varchar(20)` nullable). 백필(Phase 1b)은 외부 API 호출이라 위험 프로파일 달라 별도 PR로 분리. **register/BookSearchResult 시그니처 churn 회피 = 오버로드+편의 생성자**(브리틀니스 가이드). **TDD Red→Green 4사이클**: parse 매핑(누락 null) / Book 적재(8-인자 null 불변식) / addFromSearch 전달 / 컨트롤러 사슬 적재. FlywayMigrationTest(ddl-auto=validate)가 엔티티↔V18 동기화 검증. BookSearchResult·AladinBookSearchClient·Book·BookService·BookController·books.html·V18+테스트 4. (PR #205 예정) |
 | 2026-06-07 | **책BTI Phase 1b — 기존 책 카탈로그 백필**(알라딘 ItemLookUp) — Phase 1a는 *앞으로 추가되는* 책만 적재하므로, 이미 책장에 있는 책(장르·출간일 null)을 ISBN으로 단건 조회해 채운다. **포트** `BookSearchClient.lookupByIsbn(isbn)`(알라딘 어댑터는 `ItemLookUp.aspx` 호출 + 기존 `parse()` 재사용 — 매핑 단일 소스) + `Book.applyCatalogMetadata`(blank→null 동일 정규화) + `BookCatalogBackfillService.backfill(limit)`: `category IS NULL AND isbn13 IS NOT NULL` 책만 후보(멱등·null-state 제외), **외부 HTTP는 트랜잭션 밖**(커넥션 점유 회피)에서 lookup 후 채운 책만 `saveAll`, `limit`으로 호출량 통제. **트리거 = 관리자 버튼** `POST /admin/books/backfill-catalog`(ADMIN·CSRF, 결과 플래시 "조회/채움/미발견/잔여" — 남으면 다시 클릭). 기동 러너 대신 관리자 트리거 선택(부팅 시 외부 호출이 헬스체크·circuit breaker 위협). **새 Flyway 없음**(V18 컬럼 재사용). **TDD Red→Green 4 increment**: ItemLookUp URL·lookup 가드 / `applyCatalogMetadata` / 백필 6(채움·멱등·null-isbn 제외·미발견·disabled·limit) / 관리자 인가(ADMIN 실행·USER 403). BookSearchClient·AladinBookSearchClient·Book·BookRepository·BackfillResult·BookCatalogBackfillService·AdminBackfillController·admin.html+테스트 3. (PR #206 예정) |
+| 2026-06-07 | **§수익화에 "eBook 제휴 링크" 백로그 추가**(아이디어만, 구현 금지) — 알라딘 제휴 정산 논의 연장선. 현재 검색은 종이책만(`SearchTarget=Book`)이라 종이책 링크로 들어가 eBook으로 갈아타면 귀속이 모호 → eBook 직접 검색(`SearchTarget=eBook`)으로 처음부터 eBook 링크를 주자는 구상. **핵심 기록**: 직접 링크는 (a) 추적/귀속 모호만 없애고 (b) *eBook이 수수료 대상인가·율이 얼만가*는 알라딘 정책이라 안 풀림 → **착수 전 (b) 검증 필수**(TTB 실적/테스트, self-referral 제외 주의). 설계 시 isbn 동일성(eBook ISBN 상이/부재)·노출 방식(토글 vs 두 링크 동시) 결정. 문서만(plan.md). |
