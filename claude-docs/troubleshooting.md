@@ -691,6 +691,34 @@ NoSuchMethodException이 가리키는 건 **no-arg 생성자**(`<init>()`)인데
 
 ---
 
+## T-037. 신형 Gemini `AQ.` API 키는 `x-goog-api-key` 헤더로 401 — `?key=` 쿼리파라미터로만 통한다
+
+**증상**: 책BTI 성향 서술이 운영에서 안 켜지고 늘 폴백(사실만 표시). CloudWatch에 앱은 정상 기동인데
+`Gemini 서술 생성 실패` 로그 + Gemini가 `401 ACCESS_TOKEN_TYPE_UNSUPPORTED`. SSM 키 주입·배선·IAM은 다 정상이고
+키도 AI Studio에서 갓 발급한 진짜 키인데 거부당함.
+
+**원인 — Google의 API 키 세대 교체(2026) + 인증 채널별 호환성 차이**:
+- Google이 키를 구형 `AIza…`(Traffic key)에서 신형 `AQ.…`(Authentication key)로 옮기는 중인데, **일부 계정은
+  `AQ.` 키만 발급**된다(재발급해도 계속 `AQ.`). 처음엔 "잘못된 키"로 오해하기 쉬우나 AI Studio가 발급한 정상 키다.
+- 같은 `AQ.` 키라도 **인증을 어디에 싣느냐로 결과가 갈린다**:
+  | 방식 | 결과 |
+  |---|---|
+  | `x-goog-api-key: AQ…` 헤더 | ❌ 401 `ACCESS_TOKEN_TYPE_UNSUPPORTED` |
+  | `Authorization: Bearer AQ…` | ❌ 401 `UNAUTHENTICATED`(OAuth 토큰 자리라 거부) |
+  | `?key=AQ…` 쿼리파라미터 | ✅ 200 정상 |
+- 구형 `AIza` 키는 헤더·쿼리 둘 다 됐어서, "헤더가 더 안전"이라고 헤더로 짜뒀다가 신형 키에서 조용히 깨진 것.
+
+**해결 / 예방**:
+- 어댑터를 **`?key=` 쿼리파라미터 방식**으로 호출(`GeminiReadingPersonalityNarrator.buildEndpoint`).
+  `AIza`·`AQ.` 둘 다 호환되니 이 방식이 안전한 기본값. URL에 키가 실리므로 **catch에서 URL·요청을 로그에 남기지 말 것.**
+- **키 검증은 반드시 쿼리파라미터로**: `curl -s "https://generativelanguage.googleapis.com/v1beta/models?key=본인키&pageSize=1"`
+  → 모델 목록 JSON이면 정상. **헤더(`-H "x-goog-api-key: ..."`)로 테스트하면 멀쩡한 AQ 키도 401**이라 "키가 죽었다"고 오진하게 된다.
+- curl `-H` 함정: `-H "AQ.키"`처럼 **헤더 이름 없이 값만** 주면 curl이 무효 헤더로 무시 → `403 PERMISSION_DENIED
+  "unregistered callers"`(=자격증명 자체가 안 감). 헤더는 `-H "이름: 값"` 형식 필수 — 이걸로 한참 헤맸음.
+- 배경: ECS 시크릿은 태스크 시작 시 주입되므로 SSM 갱신만으론 안 바뀜 — `--force-new-deployment` 필요(T-011).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -728,4 +756,5 @@ NoSuchMethodException이 가리키는 건 **no-arg 생성자**(`<init>()`)인데
 | 2026-06-04 | T-033 (큰 페이지(독서 잔디 ~371칸)에서 폼이 하단에만 있으면 `th:action` CSRF 숨김필드의 lazy 세션 생성이 응답 커밋 후라 `IllegalStateException: Cannot create a session after the response has been committed` → 500 / 평소엔 앞쪽 측정 폼이 세션을 먼저 만들어 숨었는데 "측정 책 필수"로 책 0권 사용자에게서 시작 폼이 사라지자 드러남 / 컨트롤러에서 렌더 전 `CsrfToken#getToken()`으로 토큰 선확정=세션 미리 생성, 폼 위치·페이지 크기 무관 / N-044) |
 | 2026-06-06 | T-035 (author `display` 규칙이 cascade origin(author > UA)으로 UA의 `display:none`을 이겨 `<details>` 접힘·`[hidden]`이 안 숨겨짐 — `.book-manual-form{display:flex}`가 닫힌 details 자식 숨김을 무력화 → `.manual-add:not([open]) .book-manual-form{display:none}`로 명시 재숨김 / 특정성보다 origin이 먼저, #189 `[hidden]` 함정과 동일 뿌리 / UI 토글은 스크린샷 말고 라이브 DOM offsetHeight 측정으로 검증) |
 | 2026-06-06 | T-036 (Thymeleaf 일반 주석 `<!-- -->`은 파싱 후에도 **클라이언트 HTML로 그대로 출력**된다 — 렌더된 HTML을 substring으로 단언하는 MockMvc 테스트가 주석 속 텍스트에 가짜로 걸림. 예: "구매 버튼 미노출"을 `html.doesNotContain("/buy")`로 단언했는데 주석에 `.../books/{id}/buy` 설명이 있어 Red / 해결 ① 단언을 **해석된 실제 값**으로 정밀화(리터럴 `{loginId}` 대신 치환된 `/u/openking/books/`처럼 — 앵커가 진짜 렌더될 때만 나타나는 문자열) ② 출력에서 빼려면 parser-comment `<!--/* */-->` 사용(일반 주석은 의도적으로 클라에 남김 ↔ 파서 주석은 제거됨) / 본 프로젝트는 주석을 클라에 남기는 관행이라 ①로 해결 — PR #199 프로필 구매 버튼 음성 렌더 테스트) |
+| 2026-06-07 | T-037 (신형 Gemini `AQ.` API 키는 `x-goog-api-key` 헤더로 401 `ACCESS_TOKEN_TYPE_UNSUPPORTED`·`Authorization: Bearer`도 401 — `?key=` 쿼리파라미터로만 통함 / 일부 계정은 `AQ.` 키만 발급(재발급해도 동일, 정상 키) / 어댑터를 buildEndpoint `?key=`로 전환해 AIza·AQ 호환 / 키 검증은 쿼리파라미터 curl로(헤더 테스트는 멀쩡한 키도 401이라 오진), `-H "값"`만 주면 무효헤더→403 unregistered / 책BTI 라이브 서술 살림) |
 | 2026-06-06 | T-031 확장 (null만이 아니다: 단독 `th:if="${stringVar}"`는 Thymeleaf truthiness로 동작하지만 `and`/`or`/`!`로 묶으면 SpringEL이 피연산자를 boolean으로 강제 → String도 boolean화 못 해 `SpelEvaluationException` / `${b.purchaseLink and !self}`가 그 행 렌더 테스트 9개를 한꺼번에 깸 → `${!#strings.isEmpty(b.purchaseLink) and !self}`로 명시 술어화 / 규칙: `${문자열}`을 boolean 연산자와 섞지 말 것 — 본인 책방 구매 버튼 숨기다 발견) |
