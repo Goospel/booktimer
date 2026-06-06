@@ -17,9 +17,10 @@
     <div th:if="${message}" class="alert" th:text="${message}">완료 메시지</div>
     <div th:if="${error}" class="alert alert-error" th:text="${error}">에러 메시지</div>
 
-    <!-- 책 검색 (알라딘) -->
+    <!-- 책 추가 — 검색(알라딘)이 주 경로, 못 찾으면 아래 '직접 추가'(<details> 폴백)를 펼쳐 입력.
+         둘 다 "책 추가"라 한 카드로 합침. (이전엔 '책 검색'·'직접 추가' 두 카드로 분리돼 있었음) -->
     <section class="card">
-        <h2>책 검색</h2>
+        <h2>책 추가</h2>
         <form th:if="${searchEnabled}" method="get" th:action="@{/books}" class="book-search-form">
             <!-- 검색 기준 — 제목(기본)/저자. "모기"를 제목으로 찾을지 저자로 찾을지 분리. -->
             <div class="search-type" role="radiogroup" aria-label="검색 기준">
@@ -34,7 +35,7 @@
             </div>
         </form>
         <p th:unless="${searchEnabled}" class="status-line muted">
-            도서 검색이 아직 설정되지 않았습니다. 아래 "직접 추가"로 등록하세요.
+            도서 검색이 아직 설정되지 않았습니다. 아래에서 직접 등록하세요.
         </p>
 
         <ul class="book-list" th:if="${searchPage != null and !searchPage.isEmpty()}">
@@ -72,19 +73,21 @@
         </nav>
 
         <p th:if="${q != null and (searchPage == null or searchPage.isEmpty())}" class="status-line muted">검색 결과가 없습니다.</p>
-    </section>
 
-    <!-- 직접 추가(폴백) -->
-    <section class="card">
-        <h2>직접 추가</h2>
-        <form method="post" th:action="@{/books/add}" class="book-manual-form">
-            <input type="text" name="title" placeholder="제목" required>
-            <input type="text" name="author" placeholder="저자 (선택)">
-            <select name="status">
-                <option th:each="s : ${statuses}" th:value="${s}" th:text="${s.label}">상태</option>
-            </select>
-            <button type="submit" class="btn-primary">추가</button>
-        </form>
+        <!-- 직접 추가(폴백) — 검색에 안 나오는 책. 평소엔 접혀 있다가 펼치면 제목/저자 직접 입력.
+             검색이 0건이거나(못 찾음) 검색 기능이 꺼져 있으면 자동으로 펼쳐 둔다(th:open). -->
+        <details class="manual-add"
+                 th:open="${!searchEnabled or (q != null and (searchPage == null or searchPage.isEmpty()))}">
+            <summary>찾는 책이 없나요? 직접 추가</summary>
+            <form method="post" th:action="@{/books/add}" class="book-manual-form">
+                <input type="text" name="title" placeholder="제목" required>
+                <input type="text" name="author" placeholder="저자 (선택)">
+                <select name="status">
+                    <option th:each="s : ${statuses}" th:value="${s}" th:text="${s.label}">상태</option>
+                </select>
+                <button type="submit" class="btn-primary">추가</button>
+            </form>
+        </details>
     </section>
 
     <!-- 내 책장 -->
