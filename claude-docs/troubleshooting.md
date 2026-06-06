@@ -573,6 +573,11 @@ private final ObjectMapper objectMapper = new ObjectMapper();  // 주입 대신 
 - 대안(널-세이프 표현식): `th:if="${rateLimited == true}"` / `th:if="${rateLimited != true}"` — null과 비교는 안전(`null == true` → false). 단, 모델에 항상 넣는 쪽이 의도가 더 분명.
 - **일반화**: SSR 템플릿의 boolean 분기는 "안 넣으면 false"를 가정하지 말 것. 컨트롤러가 플래그를 **항상** 채우거나, 템플릿을 null-safe(`== true`)로 쓴다. 새 분기 플래그를 더할 땐 그 플래그를 세팅하는 경로가 **하나라도 빠지지 않았는지** 본다.
 
+**확장 (2026-06-06) — null만이 아니다: `and`/`or`로 묶는 순간 String 등 non-boolean 피연산자도 같은 이유로 터진다.**
+단독 `th:if="${b.purchaseLink}"`는 잘 동작한다 — Thymeleaf가 `th:if` 한 표현식의 **결과값**에 자기 truthiness(문자열은 비어있지 않으면 참)를 적용하기 때문. 그런데 `th:if="${b.purchaseLink and !self}"`처럼 **boolean 연산자(`and`/`or`/`!`)로 감싸면** 이제 SpringEL이 *연산자 단계*에서 피연산자를 boolean으로 강제하고, `purchaseLink`(String)는 boolean으로 못 바뀌어 `SpelEvaluationException`을 던진다(증상: 그 행을 렌더하는 모든 테스트가 한꺼번에 깨짐). 즉 truthiness는 **단독 `th:if` 한정**이고, boolean 연산자 안에선 안 통한다.
+- **해결**: 문자열은 명시 술어로 boolean화한다 — `th:if="${!#strings.isEmpty(b.purchaseLink) and !self}"`. (null/빈 문자열 모두 false 처리되어 원래 truthiness 의도도 보존.)
+- **한 줄 규칙**: `${문자열}`을 `and`/`or`/`!`와 섞지 말 것. 섞을 땐 `#strings.isEmpty(...)`·`!= null`·`== true` 같은 **명시적 boolean 술어**로 바꾼다. (null 사례=위 본문, String 사례=이 확장 — 뿌리는 "boolean 연산자는 boolean 피연산자만 받는다" 하나다.) 발견: 남의 책방에만 구매 버튼을 띄우려 `self` 조건을 더하다 밟음.
+
 ---
 
 ## T-032. Thymeleaf 함정 2종 — `th:each`+`th:replace` 우선순위 역전 & 파라미터 fragment의 인라인 렌더 NPE
@@ -723,3 +728,4 @@ NoSuchMethodException이 가리키는 건 **no-arg 생성자**(`<init>()`)인데
 | 2026-06-04 | T-033 (큰 페이지(독서 잔디 ~371칸)에서 폼이 하단에만 있으면 `th:action` CSRF 숨김필드의 lazy 세션 생성이 응답 커밋 후라 `IllegalStateException: Cannot create a session after the response has been committed` → 500 / 평소엔 앞쪽 측정 폼이 세션을 먼저 만들어 숨었는데 "측정 책 필수"로 책 0권 사용자에게서 시작 폼이 사라지자 드러남 / 컨트롤러에서 렌더 전 `CsrfToken#getToken()`으로 토큰 선확정=세션 미리 생성, 폼 위치·페이지 크기 무관 / N-044) |
 | 2026-06-06 | T-035 (author `display` 규칙이 cascade origin(author > UA)으로 UA의 `display:none`을 이겨 `<details>` 접힘·`[hidden]`이 안 숨겨짐 — `.book-manual-form{display:flex}`가 닫힌 details 자식 숨김을 무력화 → `.manual-add:not([open]) .book-manual-form{display:none}`로 명시 재숨김 / 특정성보다 origin이 먼저, #189 `[hidden]` 함정과 동일 뿌리 / UI 토글은 스크린샷 말고 라이브 DOM offsetHeight 측정으로 검증) |
 | 2026-06-06 | T-036 (Thymeleaf 일반 주석 `<!-- -->`은 파싱 후에도 **클라이언트 HTML로 그대로 출력**된다 — 렌더된 HTML을 substring으로 단언하는 MockMvc 테스트가 주석 속 텍스트에 가짜로 걸림. 예: "구매 버튼 미노출"을 `html.doesNotContain("/buy")`로 단언했는데 주석에 `.../books/{id}/buy` 설명이 있어 Red / 해결 ① 단언을 **해석된 실제 값**으로 정밀화(리터럴 `{loginId}` 대신 치환된 `/u/openking/books/`처럼 — 앵커가 진짜 렌더될 때만 나타나는 문자열) ② 출력에서 빼려면 parser-comment `<!--/* */-->` 사용(일반 주석은 의도적으로 클라에 남김 ↔ 파서 주석은 제거됨) / 본 프로젝트는 주석을 클라에 남기는 관행이라 ①로 해결 — PR #199 프로필 구매 버튼 음성 렌더 테스트) |
+| 2026-06-06 | T-031 확장 (null만이 아니다: 단독 `th:if="${stringVar}"`는 Thymeleaf truthiness로 동작하지만 `and`/`or`/`!`로 묶으면 SpringEL이 피연산자를 boolean으로 강제 → String도 boolean화 못 해 `SpelEvaluationException` / `${b.purchaseLink and !self}`가 그 행 렌더 테스트 9개를 한꺼번에 깸 → `${!#strings.isEmpty(b.purchaseLink) and !self}`로 명시 술어화 / 규칙: `${문자열}`을 boolean 연산자와 섞지 말 것 — 본인 책방 구매 버튼 숨기다 발견) |
