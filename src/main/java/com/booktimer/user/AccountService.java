@@ -3,6 +3,7 @@ package com.booktimer.user;
 import com.booktimer.block.BlockRepository;
 import com.booktimer.book.BookRepository;
 import com.booktimer.follow.FollowRepository;
+import com.booktimer.personality.ReadingPersonalityCacheRepository;
 import com.booktimer.report.ReportRepository;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.timer.ReadingTimerRepository;
@@ -30,6 +31,7 @@ public class AccountService {
     private final BlockRepository blockRepository;
     private final ReportRepository reportRepository;
     private final BookRepository bookRepository;
+    private final ReadingPersonalityCacheRepository personalityCacheRepository;
     private final PasswordEncoder passwordEncoder;
 
     public AccountService(UserRepository userRepository,
@@ -39,6 +41,7 @@ public class AccountService {
                           BlockRepository blockRepository,
                           ReportRepository reportRepository,
                           BookRepository bookRepository,
+                          ReadingPersonalityCacheRepository personalityCacheRepository,
                           PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.timerRepository = timerRepository;
@@ -47,6 +50,7 @@ public class AccountService {
         this.blockRepository = blockRepository;
         this.reportRepository = reportRepository;
         this.bookRepository = bookRepository;
+        this.personalityCacheRepository = personalityCacheRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -110,7 +114,8 @@ public class AccountService {
     }
 
     /**
-     * 연관 데이터까지 FK 순서로 제거: 세션(N) → 타이머(1:1) → 팔로우(양방향) → 차단(양방향) → 신고(양방향) → 책(N) → 유저.
+     * 연관 데이터까지 FK 순서로 제거: 세션(N) → 타이머(1:1) → 팔로우(양방향) → 차단(양방향) → 신고(양방향) → 책(N)
+     * → 책BTI 캐시(1) → 유저.
      * <p>모두 users를 FK 참조하므로 유저 삭제 전에 정리한다. 책은 {@code reading_session.book_id}가
      * book을 FK 참조하므로 <b>세션 이후</b>에 지운다(세션이 책을 가리키는 채로 책을 지우면 위반).
      */
@@ -124,6 +129,7 @@ public class AccountService {
         reportRepository.deleteByReporter(user);
         reportRepository.deleteByReported(user);
         bookRepository.deleteByUser(user);
+        personalityCacheRepository.deleteByUser(user); // 책BTI 캐시도 user_id FK 참조 → 유저 전에 정리
         userRepository.delete(user);
     }
 
