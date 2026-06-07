@@ -148,7 +148,7 @@ class AdminUserServiceTest {
         assertThat(detail.loginId()).isEqualTo("readerone");
         assertThat(detail.emailMasked()).isEqualTo("r***@booktimer.com");
         assertThat(detail.timer()).isNotNull();
-        assertThat(detail.timer().dailyIncrementSeconds()).isEqualTo(3600);
+        assertThat(detail.timer().dailyGoalSeconds()).isEqualTo(3600);
         assertThat(detail.recentSessions()).hasSize(2);
         // 책장 요약
         assertThat(detail.bookshelf().total()).isEqualTo(3);

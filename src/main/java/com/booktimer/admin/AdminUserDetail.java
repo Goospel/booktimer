@@ -4,7 +4,6 @@ import com.booktimer.user.AuthProvider;
 import com.booktimer.user.Role;
 
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -31,13 +30,17 @@ public record AdminUserDetail(
         List<SessionInfo> recentSessions,
         BookshelfSummary bookshelf) {
 
-    /** 타이머 설정/상태 스냅샷. */
+    /**
+     * 타이머 설정/부채 스냅샷 — 7일 윈도우 부채 모델 기준.
+     *
+     * @param dailyGoalSeconds   하루 목표(초)
+     * @param todayDebtSeconds   오늘 부채(초) = max(0, 목표 − 오늘 읽은 양)
+     * @param weeklyDebtSeconds  이번 주 총 부채(초) = 오늘 + 윈도우 내 빠뜨린 날 합
+     */
     public record TimerInfo(
-            long dailyIncrementSeconds,
-            long capSeconds,
-            long remainingSeconds,
-            LocalDate lastAccrualDate,
-            boolean atCap) {
+            long dailyGoalSeconds,
+            long todayDebtSeconds,
+            long weeklyDebtSeconds) {
     }
 
     /** 한 측정 세션 요약 — 책 제목은 조립 시점에 해소(미지정이면 null). */

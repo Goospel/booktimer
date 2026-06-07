@@ -4,9 +4,10 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.book.BookVisibility;
+import com.booktimer.session.ReadingDebtService;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
-import com.booktimer.timer.ReadingTimer;
+import com.booktimer.session.WeeklyDebt;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -37,15 +38,18 @@ public class AdminUserService {
     private final BookRepository bookRepository;
     private final ReadingSessionRepository sessionRepository;
     private final ReadingTimerRepository timerRepository;
+    private final ReadingDebtService debtService;
 
     public AdminUserService(UserRepository userRepository,
                             BookRepository bookRepository,
                             ReadingSessionRepository sessionRepository,
-                            ReadingTimerRepository timerRepository) {
+                            ReadingTimerRepository timerRepository,
+                            ReadingDebtService debtService) {
         this.userRepository = userRepository;
         this.bookRepository = bookRepository;
         this.sessionRepository = sessionRepository;
         this.timerRepository = timerRepository;
+        this.debtService = debtService;
     }
 
     /**
@@ -69,8 +73,15 @@ public class AdminUserService {
     }
 
     private AdminUserDetail assemble(User u) {
+        // 타이머가 있으면 하루 목표 + 7일 윈도우 부채(오늘·이번 주)를 함께 싣는다(부채는 세션에서 유도).
         AdminUserDetail.TimerInfo timer = timerRepository.findByUser(u)
-                .map(AdminUserService::toTimerInfo)
+                .map(t -> {
+                    WeeklyDebt debt = debtService.weeklyDebt(u);
+                    return new AdminUserDetail.TimerInfo(
+                            t.getDailyIncrementSeconds(),
+                            debt.todayDebtSeconds(),
+                            debt.totalDebtSeconds());
+                })
                 .orElse(null);
 
         List<AdminUserDetail.SessionInfo> recent = sessionRepository
@@ -99,15 +110,6 @@ public class AdminUserService {
                 timer,
                 recent,
                 bookshelf);
-    }
-
-    private static AdminUserDetail.TimerInfo toTimerInfo(ReadingTimer t) {
-        return new AdminUserDetail.TimerInfo(
-                t.getDailyIncrementSeconds(),
-                t.getCapSeconds(),
-                t.getRemainingSeconds(),
-                t.getLastAccrualDate(),
-                t.isAtCap());
     }
 
     private static AdminUserDetail.SessionInfo toSessionInfo(ReadingSession s) {

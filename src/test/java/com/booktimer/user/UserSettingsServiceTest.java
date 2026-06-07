@@ -18,9 +18,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * 설정 변경 오케스트레이션 테스트 (실제 빈·H2).
  *
- * <p>설정은 두 엔티티에 걸쳐 있다 — 프로필(User: 닉네임/타임존)과 타이머 설정
- * (ReadingTimer: 증가값/cap). 이 서비스가 한 트랜잭션에서 둘을 함께 갱신하는지 본다.
- * 값 검증·클램프 규칙 자체는 도메인 단위 테스트가 이미 덮으므로(N-009), 여기선 와이어링.
+ * <p>설정은 두 엔티티에 걸쳐 있다 — 프로필(User: 닉네임/타임존)과 타이머 하루 목표
+ * (ReadingTimer). 이 서비스가 한 트랜잭션에서 둘을 함께 갱신하는지 본다.
+ * 값 검증 규칙 자체는 도메인 단위 테스트가 이미 덮으므로(N-009), 여기선 와이어링.
+ * (옛 cap은 7일 윈도우 부채 모델로 설정에서 사라졌다.)
  */
 @SpringBootTest
 @Transactional
@@ -48,11 +49,11 @@ class UserSettingsServiceTest {
     }
 
     @Test
-    @DisplayName("updateSettings: 닉네임·타임존(User)과 증가값·cap(Timer)을 함께 갱신한다")
+    @DisplayName("updateSettings: 닉네임·타임존(User)과 하루 목표(Timer)를 함께 갱신한다")
     void updateSettings_changesProfileAndTimer() {
         registrationService.register("set@booktimer.com", "rawpw1234", "독서가", SEOUL, Role.USER, today());
 
-        settingsService.updateSettings("set@booktimer.com", "새닉", "America/New_York", 7200L, 36000L);
+        settingsService.updateSettings("set@booktimer.com", "새닉", "America/New_York", 7200L);
 
         User reloaded = userRepository.findByEmail("set@booktimer.com").orElseThrow();
         assertThat(reloaded.getNickname()).isEqualTo("새닉");
@@ -60,7 +61,6 @@ class UserSettingsServiceTest {
 
         ReadingTimer timer = timerRepository.findByUser(reloaded).orElseThrow();
         assertThat(timer.getDailyIncrementSeconds()).isEqualTo(7200L);
-        assertThat(timer.getCapSeconds()).isEqualTo(36000L);
     }
 
     @Test
@@ -69,7 +69,7 @@ class UserSettingsServiceTest {
         registrationService.register("badtz@booktimer.com", "rawpw1234", "독서가", SEOUL, Role.USER, today());
 
         assertThatThrownBy(() ->
-                settingsService.updateSettings("badtz@booktimer.com", "닉", "Mars/Phobos", 3600L, 18000L))
+                settingsService.updateSettings("badtz@booktimer.com", "닉", "Mars/Phobos", 3600L))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -79,7 +79,7 @@ class UserSettingsServiceTest {
         registrationService.register("owner@booktimer.com", "rawpw1234", "이미쓰는닉", SEOUL, Role.USER, today());
         registrationService.register("changer@booktimer.com", "rawpw1234", "내닉", SEOUL, Role.USER, today());
 
-        settingsService.updateSettings("changer@booktimer.com", "이미쓰는닉", SEOUL, 3600L, 18000L);
+        settingsService.updateSettings("changer@booktimer.com", "이미쓰는닉", SEOUL, 3600L);
 
         // 중복이어도 변경이 적용된다
         assertThat(userRepository.findByEmail("changer@booktimer.com").orElseThrow().getNickname())
@@ -91,7 +91,7 @@ class UserSettingsServiceTest {
     void updateSettings_keepingOwnNickname_allowed() {
         registrationService.register("keep@booktimer.com", "rawpw1234", "내닉", SEOUL, Role.USER, today());
 
-        settingsService.updateSettings("keep@booktimer.com", "내닉", "America/New_York", 7200L, 36000L);
+        settingsService.updateSettings("keep@booktimer.com", "내닉", "America/New_York", 7200L);
 
         User reloaded = userRepository.findByEmail("keep@booktimer.com").orElseThrow();
         assertThat(reloaded.getNickname()).isEqualTo("내닉");

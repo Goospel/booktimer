@@ -3,8 +3,6 @@ package com.booktimer.session;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
-import com.booktimer.timer.ReadingTimer;
-import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,7 +14,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,22 +27,19 @@ import static org.mockito.Mockito.when;
 /**
  * ReadingSessionService 오케스트레이션 단위 테스트 (Mockito — DB/컨텍스트 무관).
  *
- * <p>레포지토리를 mock으로 주입해 서비스의 조립 로직만 격리 검증한다:
- * start의 중복 거부, stop의 end→deduct 순서와 양쪽 저장. 실제 영속성/트랜잭션은
- * 슬라이스 테스트(Repository)와 도메인 테스트(ReadingTimer/Session)가 커버한다.
+ * <p>레포지토리를 mock으로 주입해 서비스의 조립 로직만 격리 검증한다: start의 중복 거부,
+ * stop의 종료·저장, recordManual의 완료 세션 생성·저장. <b>부채 차감 검증은 없다</b> — 부채는
+ * 저장된 카운터가 아니라 완료 세션에서 유도되므로(7일 윈도우, ReadingDebtService),
+ * "세션을 저장했는가"가 곧 "부채가 줄었는가"다. 부채 계산은 {@link WeeklyDebtCalculatorTest}·
+ * {@link ReadingDebtServiceTest}가 본다.
  */
 @ExtendWith(MockitoExtension.class)
 class ReadingSessionServiceTest {
 
-    private static final long HOUR = 3600L;
     private static final Instant T0 = Instant.parse("2026-06-01T09:00:00Z");
-    private static final LocalDate DAY0 = LocalDate.of(2026, 5, 31);
 
     @Mock
     private ReadingSessionRepository sessionRepository;
-
-    @Mock
-    private ReadingTimerRepository timerRepository;
 
     @Mock
     private BookRepository bookRepository;
@@ -129,21 +123,17 @@ class ReadingSessionServiceTest {
     // --- stop ---
 
     @Test
-    @DisplayName("stop: 진행 중 세션을 종료하고 측정량을 타이머에서 차감한 뒤 둘 다 저장한다")
-    void stop_active_endsAndDeductsAndSaves() {
+    @DisplayName("stop: 진행 중 세션을 종료하고 저장한다 (부채 차감 없음 — 종료 세션이 그날 부채에 자동 반영)")
+    void stop_active_endsAndSaves() {
         ReadingSession active = ReadingSession.start(user, T0);
-        ReadingTimer timer = ReadingTimer.of(HOUR, 5 * HOUR, 2 * HOUR, DAY0); // 잔여 2h
         when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(active));
-        when(timerRepository.findByUser(user)).thenReturn(Optional.of(timer));
         when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
 
         ReadingSession result = service.stop(user, T0.plusSeconds(1800)); // 30분
 
         assertThat(result.isActive()).isFalse();
         assertThat(result.getDurationSeconds()).isEqualTo(1800L);
-        assertThat(timer.getRemainingSeconds()).isEqualTo(2 * HOUR - 1800L); // 차감됨
         verify(sessionRepository).save(active);
-        verify(timerRepository).save(timer);
     }
 
     @Test
@@ -154,30 +144,16 @@ class ReadingSessionServiceTest {
         assertThatThrownBy(() -> service.stop(user, T0))
                 .isInstanceOf(IllegalStateException.class);
         verify(sessionRepository, never()).save(any(ReadingSession.class));
-        verify(timerRepository, never()).save(any(ReadingTimer.class));
-    }
-
-    @Test
-    @DisplayName("stop: 유저 타이머가 없으면 예외")
-    void stop_noTimer_throws() {
-        ReadingSession active = ReadingSession.start(user, T0);
-        when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(active));
-        when(timerRepository.findByUser(user)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.stop(user, T0.plusSeconds(60)))
-                .isInstanceOf(IllegalStateException.class);
     }
 
     // --- recordManual (사후 수동 입력) ---
-    // 측정 시작을 깜빡한 독서를 나중에 기록한다 — start의 "책 필수"와 stop의 "타이머 차감"을 합친 완료 세션.
-    // 진행 중 세션과 무관(이미 끝난 시점을 적는 것)하므로 중복 가드는 두지 않는다.
+    // 측정 깜빡한 독서를 완료 세션 한 건으로 기록. 부채는 세션 저장으로 그 날짜에 자동 반영된다(차감 로직 없음).
+    // 윈도우(최근 7일) 제한은 컨트롤러 책임이라 여기선 안 본다.
 
     @Test
-    @DisplayName("recordManual: 완료 세션(시작~종료)을 만들어 측정량을 타이머에서 차감하고 둘 다 저장한다")
-    void recordManual_createsCompletedSessionAndDeductsAndSaves() {
+    @DisplayName("recordManual: 완료 세션(시작~종료)을 만들어 저장한다")
+    void recordManual_createsCompletedSessionAndSaves() {
         Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
-        ReadingTimer timer = ReadingTimer.of(HOUR, 5 * HOUR, 2 * HOUR, DAY0); // 잔여 2h
-        when(timerRepository.findByUser(user)).thenReturn(Optional.of(timer));
         when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
 
         Instant started = T0;
@@ -189,43 +165,25 @@ class ReadingSessionServiceTest {
         assertThat(result.getEndedAt()).isEqualTo(ended);
         assertThat(result.getDurationSeconds()).isEqualTo(1800L);
         assertThat(result.getBook()).isSameAs(book);
-        assertThat(timer.getRemainingSeconds()).isEqualTo(2 * HOUR - 1800L); // 차감됨
         verify(sessionRepository).save(any(ReadingSession.class));
-        verify(timerRepository).save(timer);
     }
 
     @Test
-    @DisplayName("recordManual: 책 없이(null) 기록하면 거부(IllegalArgumentException)하고 아무것도 저장하지 않는다")
+    @DisplayName("recordManual: 책 없이(null) 기록하면 거부(IllegalArgumentException)하고 저장하지 않는다")
     void recordManual_nullBook_throwsAndDoesNotSave() {
         assertThatThrownBy(() -> service.recordManual(user, T0, T0.plusSeconds(60), null))
                 .isInstanceOf(IllegalArgumentException.class);
 
         verify(sessionRepository, never()).save(any(ReadingSession.class));
-        verify(timerRepository, never()).save(any(ReadingTimer.class));
     }
 
     @Test
-    @DisplayName("recordManual: 종료가 시작보다 이르면 거부하고 아무것도 저장하지 않는다")
+    @DisplayName("recordManual: 종료가 시작보다 이르면 거부하고 저장하지 않는다")
     void recordManual_endedBeforeStarted_throwsAndDoesNotSave() {
         Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
-        ReadingTimer timer = ReadingTimer.of(HOUR, 5 * HOUR, 2 * HOUR, DAY0);
-        when(timerRepository.findByUser(user)).thenReturn(Optional.of(timer));
 
         assertThatThrownBy(() -> service.recordManual(user, T0, T0.minusSeconds(60), book))
                 .isInstanceOf(IllegalArgumentException.class);
-
-        verify(sessionRepository, never()).save(any(ReadingSession.class));
-        verify(timerRepository, never()).save(any(ReadingTimer.class));
-    }
-
-    @Test
-    @DisplayName("recordManual: 유저 타이머가 없으면 예외, 세션을 만들지 않는다")
-    void recordManual_noTimer_throws() {
-        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
-        when(timerRepository.findByUser(user)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.recordManual(user, T0, T0.plusSeconds(60), book))
-                .isInstanceOf(IllegalStateException.class);
 
         verify(sessionRepository, never()).save(any(ReadingSession.class));
     }
@@ -234,8 +192,6 @@ class ReadingSessionServiceTest {
     @DisplayName("recordManual: 읽고싶음 책으로 기록하면 그 책을 읽는중으로 자동 전환하고 저장한다")
     void recordManual_withWantToReadBook_marksReadingAndSaves() {
         Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.WANT_TO_READ);
-        ReadingTimer timer = ReadingTimer.of(HOUR, 5 * HOUR, 2 * HOUR, DAY0);
-        when(timerRepository.findByUser(user)).thenReturn(Optional.of(timer));
         when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
 
         service.recordManual(user, T0, T0.plusSeconds(1800), book);

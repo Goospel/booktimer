@@ -36,7 +36,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @Transactional
 class ReadingFlowIntegrationTest {
 
-    private static final long HOUR = 3600L;
     private static final LocalDate DAY0 = LocalDate.of(2026, 6, 1);
     private static final Instant T0 = Instant.parse("2026-06-01T09:00:00Z");
 
@@ -84,28 +83,20 @@ class ReadingFlowIntegrationTest {
     }
 
     @Test
-    @DisplayName("세션 stop 시 측정량이 영속화된 타이머 잔여에서 차감된다")
-    void startThenStop_deductsFromPersistedTimer() {
+    @DisplayName("세션 start→stop이 완료 세션을 영속화한다 (부채는 차감이 아니라 세션에서 유도)")
+    void startThenStop_persistsCompletedSession() {
         User user = registrationService.register(
                 "reader@booktimer.com", "rawpw1234", "책벌레", "Asia/Seoul", Role.USER, DAY0);
-
-        // 사전조건: 누적 부채 3시간 만들기 (가입 당일 1h 시드 + 2일치 2h, cap 5h 이하)
-        ReadingTimer timer = timerRepository.findByUser(user).orElseThrow();
-        timer.accrueUntil(DAY0.plusDays(2)); // 1h(시드) + 2h = 3h
-        timerRepository.save(timer);
-        assertThat(timer.getRemainingSeconds()).isEqualTo(3 * HOUR);
 
         // start → stop (30분 측정)
         sessionService.start(user, T0, book(user));
         ReadingSession stopped = sessionService.stop(user, T0.plusSeconds(1800));
 
-        // 세션이 종료·영속화되고
+        // 세션이 종료·영속화되고 진행 중 세션이 남지 않는다 (부채는 이 완료 세션에서 유도된다 — 차감 로직 없음).
         assertThat(stopped.isActive()).isFalse();
         assertThat(stopped.getDurationSeconds()).isEqualTo(1800L);
         assertThat(sessionRepository.findByUserAndEndedAtIsNull(user)).isEmpty();
-        // 타이머 잔여가 측정량만큼 줄었다 (3h - 30m = 2h30m)
-        assertThat(timerRepository.findByUser(user).orElseThrow().getRemainingSeconds())
-                .isEqualTo(3 * HOUR - 1800L);
+        assertThat(sessionRepository.findByUser(user)).hasSize(1);
     }
 
     @Test

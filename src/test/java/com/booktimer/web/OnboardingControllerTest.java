@@ -31,8 +31,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 온보딩(첫 진입 초기 설정) 화면/처리 통합 테스트 (MockMvc + 실제 빈·H2).
  *
- * <p>GET은 초기 설정 폼을 보여주되 이미 온보딩한 사용자는 대시보드로 돌려보낸다. POST는 분→초로
- * 변환해 {@code OnboardingService}로 위임하고, 초기값이 cap을 넘는 등 입력 오류는 화면을 다시 그린다.
+ * <p>GET은 초기 설정 폼을 보여주되 이미 온보딩한 사용자는 대시보드로 돌려보낸다. POST는 하루 목표를
+ * 분→초로 변환해 {@code OnboardingService}로 위임한다(옛 초기 잔여·cap은 7일 윈도우 부채 모델로 사라짐).
  * 분↔초 변환·와이어링을 보고, 도메인 규칙은 하위 테스트에 위임(N-009).
  */
 @SpringBootTest
@@ -89,16 +89,14 @@ class OnboardingControllerTest {
     }
 
     @Test
-    @DisplayName("POST /onboarding: 닉네임·초기값·증가값·cap(분)을 적용하고 온보딩 완료 후 대시보드로 리다이렉트")
+    @DisplayName("POST /onboarding: 닉네임·하루 목표(분)를 적용하고 온보딩 완료 후 대시보드로 리다이렉트")
     void postOnboarding_appliesAndRedirects() throws Exception {
         User u = register("apply@booktimer.com");
 
         mockMvc.perform(post("/onboarding").with(user("apply@booktimer.com")).with(csrf())
                         .param("loginId", "apply_user")
                         .param("nickname", "직접정한닉")
-                        .param("initialMinutes", "120")    // 2h
-                        .param("incrementMinutes", "90")   // 90분
-                        .param("capMinutes", "600"))       // 10h
+                        .param("incrementMinutes", "90"))  // 하루 목표 90분
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/"));
 
@@ -107,9 +105,7 @@ class OnboardingControllerTest {
         assertThat(reloaded.getNickname()).isEqualTo("직접정한닉");
         assertThat(reloaded.getLoginId()).isEqualTo("apply_user");
         ReadingTimer timer = timerRepository.findByUser(reloaded).orElseThrow();
-        assertThat(timer.getRemainingSeconds()).isEqualTo(7200L);   // 120분
         assertThat(timer.getDailyIncrementSeconds()).isEqualTo(5400L); // 90분
-        assertThat(timer.getCapSeconds()).isEqualTo(36000L);        // 600분
     }
 
     @Test
@@ -121,9 +117,7 @@ class OnboardingControllerTest {
         mockMvc.perform(post("/onboarding").with(user("duptry@booktimer.com")).with(csrf())
                         .param("loginId", "duptry_user")
                         .param("nickname", "선점된닉")
-                        .param("initialMinutes", "60")
-                        .param("incrementMinutes", "60")
-                        .param("capMinutes", "300"))
+                        .param("incrementMinutes", "60"))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/"));
 
@@ -143,9 +137,7 @@ class OnboardingControllerTest {
         mockMvc.perform(post("/onboarding").with(user("lidtaker@booktimer.com")).with(csrf())
                         .param("loginId", "grabbed_id")
                         .param("nickname", "닉")
-                        .param("initialMinutes", "60")
-                        .param("incrementMinutes", "60")
-                        .param("capMinutes", "300"))
+                        .param("incrementMinutes", "60"))
                 .andExpect(status().isOk())
                 .andExpect(view().name("onboarding"))
                 .andExpect(model().attributeHasFieldErrors("onboardingForm", "loginId"));
@@ -161,9 +153,7 @@ class OnboardingControllerTest {
         mockMvc.perform(post("/onboarding").with(user("blanknick@booktimer.com")).with(csrf())
                         .param("loginId", "blank_user")
                         .param("nickname", "")
-                        .param("initialMinutes", "60")
-                        .param("incrementMinutes", "60")
-                        .param("capMinutes", "300"))
+                        .param("incrementMinutes", "60"))
                 .andExpect(status().isOk())
                 .andExpect(view().name("onboarding"));
 
@@ -171,33 +161,14 @@ class OnboardingControllerTest {
     }
 
     @Test
-    @DisplayName("POST /onboarding: 초기값이 상한보다 크면 화면을 다시 그리고 온보딩되지 않는다")
-    void postOnboarding_initialAboveCap_rerenders() throws Exception {
-        register("over@booktimer.com");
-
-        mockMvc.perform(post("/onboarding").with(user("over@booktimer.com")).with(csrf())
-                        .param("loginId", "over_user")
-                        .param("nickname", "넘침닉")
-                        .param("initialMinutes", "600")    // 10h
-                        .param("incrementMinutes", "60")
-                        .param("capMinutes", "300"))       // cap 5h < 초기값
-                .andExpect(status().isOk())
-                .andExpect(view().name("onboarding"));
-
-        assertThat(userRepository.findByEmail("over@booktimer.com").orElseThrow().isOnboarded()).isFalse();
-    }
-
-    @Test
-    @DisplayName("POST /onboarding: 음수 분이면 검증 실패로 화면을 다시 그린다")
-    void postOnboarding_negativeMinutes_rerenders() throws Exception {
+    @DisplayName("POST /onboarding: 음수 목표(분)면 검증 실패로 화면을 다시 그린다")
+    void postOnboarding_negativeGoal_rerenders() throws Exception {
         register("neg@booktimer.com");
 
         mockMvc.perform(post("/onboarding").with(user("neg@booktimer.com")).with(csrf())
                         .param("loginId", "neg_user")
                         .param("nickname", "음수닉")
-                        .param("initialMinutes", "-1")
-                        .param("incrementMinutes", "60")
-                        .param("capMinutes", "300"))
+                        .param("incrementMinutes", "-1"))
                 .andExpect(status().isOk())
                 .andExpect(view().name("onboarding"));
 

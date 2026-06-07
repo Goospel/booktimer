@@ -44,16 +44,12 @@
     </section>
 
     <section class="card">
-        <h2>타이머 설정</h2>
+        <h2>타이머·부채 (7일 윈도우)</h2>
         <p class="muted" th:if="${detail.timer == null}">타이머 미설정(온보딩 전).</p>
         <table class="kv" th:if="${detail.timer != null}">
-            <tr><th>하루 증가값</th><td th:text="${detail.timer.dailyIncrementSeconds / 60} + '분'">60분</td></tr>
-            <tr><th>누적 상한(cap)</th><td th:text="${detail.timer.capSeconds / 60} + '분'">600분</td></tr>
-            <tr><th>현재 잔여</th><td>
-                <span th:text="${detail.timer.remainingSeconds / 60} + '분'">0분</span>
-                <span th:if="${detail.timer.atCap}" class="chip">상한 도달</span>
-            </td></tr>
-            <tr><th>마지막 누적일</th><td th:text="${detail.timer.lastAccrualDate}">2026-01-01</td></tr>
+            <tr><th>하루 목표</th><td th:text="${detail.timer.dailyGoalSeconds / 60} + '분'">60분</td></tr>
+            <tr><th>오늘 부채</th><td th:text="${detail.timer.todayDebtSeconds / 60} + '분'">0분</td></tr>
+            <tr><th>이번 주 부채(합)</th><td th:text="${detail.timer.weeklyDebtSeconds / 60} + '분'">0분</td></tr>
         </table>
     </section>
 
