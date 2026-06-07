@@ -1,5 +1,6 @@
 package com.booktimer.user;
 
+import com.booktimer.timer.ReadingGoalService;
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
 import org.springframework.stereotype.Service;
@@ -25,11 +26,14 @@ public class UserSettingsService {
 
     private final UserRepository userRepository;
     private final ReadingTimerRepository timerRepository;
+    private final ReadingGoalService goalService;
 
     public UserSettingsService(UserRepository userRepository,
-                               ReadingTimerRepository timerRepository) {
+                               ReadingTimerRepository timerRepository,
+                               ReadingGoalService goalService) {
         this.userRepository = userRepository;
         this.timerRepository = timerRepository;
+        this.goalService = goalService;
     }
 
     /**
@@ -51,7 +55,13 @@ public class UserSettingsService {
 
         // nickname은 단순 표시 이름 — 중복을 허용하고 자유롭게 바꾼다(영구 식별자는 불변의 login_id).
         user.updateProfile(nickname, timezone);
+
+        // 하루 목표가 실제로 바뀔 때만 오늘자 변경 이력을 남긴다 — 닉네임만 바꿔도 행이 쌓이지 않게.
+        boolean goalChanged = timer.getDailyIncrementSeconds() != dailyIncrementSeconds;
         timer.updateSettings(dailyIncrementSeconds); // 하루 목표만 — cap은 7일 윈도우 모델로 대체됨
+        if (goalChanged) {
+            goalService.record(user, dailyIncrementSeconds); // 그날 목표로 과거를 판정하기 위한 시점 기록
+        }
 
         userRepository.save(user);
         timerRepository.save(timer);

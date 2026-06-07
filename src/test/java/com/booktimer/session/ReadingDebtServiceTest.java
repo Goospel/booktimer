@@ -1,5 +1,7 @@
 package com.booktimer.session;
 
+import com.booktimer.timer.ReadingGoalChange;
+import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.Role;
@@ -40,6 +42,8 @@ class ReadingDebtServiceTest {
     private ReadingHistoryService historyService;
     @Mock
     private ReadingTimerRepository timerRepository;
+    @Mock
+    private ReadingGoalChangeRepository goalChangeRepository;
 
     private ReadingDebtService service;
     private User user;
@@ -47,7 +51,8 @@ class ReadingDebtServiceTest {
     @BeforeEach
     void setUp() {
         user = User.of("reader@booktimer.com", "$2a$10$abcdefghijklmnopqrstuv", "책벌레", "Asia/Seoul", Role.USER);
-        service = new ReadingDebtService(historyService, timerRepository, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new ReadingDebtService(historyService, timerRepository, goalChangeRepository,
+                Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -55,6 +60,7 @@ class ReadingDebtServiceTest {
     void weeklyDebt_wiresGoalTodayAndHistory() {
         ReadingTimer timer = ReadingTimer.of(GOAL);
         when(timerRepository.findByUser(user)).thenReturn(Optional.of(timer));
+        when(goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of()); // 이력 없음 → 타이머 목표 폴백
         when(historyService.dailyHistory(user)).thenReturn(List.of(
                 new DailyReadingRecord(TODAY_KST, 1200L, List.of()),          // 오늘 20분 → 부채 2400
                 new DailyReadingRecord(TODAY_KST.minusDays(1), GOAL, List.of()), // 어제 달성 → 제외
@@ -74,10 +80,30 @@ class ReadingDebtServiceTest {
     @DisplayName("타이머가 없으면 기본 목표(1시간)로 계산한다 (불변식상 거의 없지만 안전 폴백)")
     void weeklyDebt_noTimer_usesDefaultGoal() {
         when(timerRepository.findByUser(user)).thenReturn(Optional.empty());
+        when(goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of());
         when(historyService.dailyHistory(user)).thenReturn(List.of());
 
         WeeklyDebt debt = service.weeklyDebt(user);
 
         assertThat(debt.todayDebtSeconds()).isEqualTo(ReadingDebtService.DEFAULT_GOAL_SECONDS);
+    }
+
+    @Test
+    @DisplayName("목표 변경 이력으로 과거 날을 그날 목표로 판정한다 — 목표 인상 전 옛 목표를 채운 날은 빠뜨린 날 아님")
+    void weeklyDebt_usesGoalHistory_pastDayJudgedByItsOwnGoal() {
+        ReadingTimer timer = ReadingTimer.of(3660L); // 현재(폴백) 목표 61분
+        when(timerRepository.findByUser(user)).thenReturn(Optional.of(timer));
+        // 가입 무렵 60분 → 어제부터 61분으로 인상
+        when(goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of(
+                ReadingGoalChange.of(user, TODAY_KST.minusDays(5), 3600L),
+                ReadingGoalChange.of(user, TODAY_KST.minusDays(1), 3660L)));
+        // 이틀 전(인상 전, 목표 60분)에 정확히 60분 읽어 그날 목표를 채움
+        when(historyService.dailyHistory(user)).thenReturn(List.of(
+                new DailyReadingRecord(TODAY_KST.minusDays(2), 3600L, List.of())));
+
+        WeeklyDebt debt = service.weeklyDebt(user);
+
+        // 현재 목표(3660)로 일괄 판정했다면 60초 부족으로 떴겠지만, 그날 목표(3600)로 보면 부채 0 → 제외
+        assertThat(debt.missedDays()).extracting(DayDebt::date).doesNotContain(TODAY_KST.minusDays(2));
     }
 }

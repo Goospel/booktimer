@@ -1,5 +1,6 @@
 package com.booktimer.user;
 
+import com.booktimer.timer.ReadingGoalService;
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
 import org.springframework.stereotype.Service;
@@ -24,11 +25,14 @@ public class OnboardingService {
 
     private final UserRepository userRepository;
     private final ReadingTimerRepository timerRepository;
+    private final ReadingGoalService goalService;
 
     public OnboardingService(UserRepository userRepository,
-                             ReadingTimerRepository timerRepository) {
+                             ReadingTimerRepository timerRepository,
+                             ReadingGoalService goalService) {
         this.userRepository = userRepository;
         this.timerRepository = timerRepository;
+        this.goalService = goalService;
     }
 
     /**
@@ -64,6 +68,7 @@ public class OnboardingService {
 
         user.updateProfile(nickname, user.getTimezone());
         timer.updateSettings(dailyIncrementSeconds); // 하루 목표만 — cap은 7일 윈도우 모델로 대체됨
+        goalService.record(user, dailyIncrementSeconds); // 오늘자 baseline 목표 이력 (이후 변경의 비교 기준 + 과거 판정)
         user.completeOnboarding();
 
         timerRepository.save(timer);

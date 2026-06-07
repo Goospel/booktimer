@@ -80,6 +80,28 @@ class WeeklyDebtCalculatorTest {
     }
 
     @Test
+    @DisplayName("1분 미만 부족한 과거 날은 빠뜨린 날이 아니다 — 분 단위로 올린 목표가 만든 '0분 부족' 거짓 미충족 차단")
+    void missedDays_subMinuteShortfall_forgiven() {
+        // 그날 옛 분 단위 목표(예: 60분=3600초)는 채웠는데, 이후 목표가 1분 올라(61분=3660초) 30초 부족으로 보이는 잔재.
+        // 목표는 항상 분 단위라 1분 미만 부족 = 목표를 사후에 분 단위로 올려 생긴 반올림 잔재 → 미충족으로 치지 않는다.
+        Map<LocalDate, Long> reads = reads();
+        LocalDate met = TODAY.minusDays(2);
+        reads.put(met, GOAL - 30L); // 30초 부족 → 표시상 "0분 부족"
+        WeeklyDebt debt = WeeklyDebtCalculator.compute(reads, GOAL, TODAY);
+        assertThat(debt.missedDays()).extracting(DayDebt::date).doesNotContain(met);
+    }
+
+    @Test
+    @DisplayName("경계: 정확히 1분(60초) 부족한 날은 여전히 빠뜨린 날로 잡힌다 (진짜 미충족)")
+    void missedDays_exactlyOneMinuteShort_stillListed() {
+        Map<LocalDate, Long> reads = reads();
+        LocalDate day = TODAY.minusDays(3);
+        reads.put(day, GOAL - 60L); // 정확히 1분 부족 → 표시상 "1분 부족"
+        WeeklyDebt debt = WeeklyDebtCalculator.compute(reads, GOAL, TODAY);
+        assertThat(debt.missedDays()).extracting(DayDebt::date).contains(day);
+    }
+
+    @Test
     @DisplayName("윈도우 경계: 정확히 6일 전(today-6)은 포함, 7일 전(today-7)은 자동 용서로 제외")
     void missedDays_windowBoundary() {
         WeeklyDebt debt = WeeklyDebtCalculator.compute(reads(), GOAL, TODAY);
@@ -108,6 +130,45 @@ class WeeklyDebtCalculatorTest {
         WeeklyDebt debt = WeeklyDebtCalculator.compute(reads, GOAL, TODAY);
         assertThat(debt.todayDebtSeconds()).isZero();
         assertThat(debt.missedDays()).isEmpty();
+    }
+
+    // --- per-day 목표(날짜별로 목표가 다를 때) ---
+
+    /** 윈도우 7일 각 날짜에 목표를 채운 맵을 만든다. {@code raisedFromOffset}일 전부터(=더 과거) 옛 목표, 그 이후 최근은 새 목표. */
+    private static Map<LocalDate, Long> goalsRaisedRecently(long oldGoal, long newGoal, int raisedFromOffset) {
+        Map<LocalDate, Long> goals = new HashMap<>();
+        for (int offset = 0; offset <= 6; offset++) {
+            goals.put(TODAY.minusDays(offset), offset >= raisedFromOffset ? oldGoal : newGoal);
+        }
+        return goals;
+    }
+
+    @Test
+    @DisplayName("per-day 목표: 과거 날은 그날 목표로 판정 — 목표를 올려도 옛 목표를 채운 날은 빠뜨린 날이 아니다")
+    void perDayGoal_pastDayMetUnderItsOwnGoal_excluded() {
+        LocalDate metDay = TODAY.minusDays(4); // 그날 목표는 옛 60분, 그날 60분 읽어 채움
+        Map<LocalDate, Long> reads = reads();
+        reads.put(metDay, 3600L);
+        // 3일 전부터(=더 과거) 옛 목표 3600, 최근 0~2일 전은 새 목표 3660 — 즉 3일 전 목표 인상
+        Map<LocalDate, Long> goalByDate = goalsRaisedRecently(3600L, 3660L, 3);
+
+        WeeklyDebt debt = WeeklyDebtCalculator.compute(reads, goalByDate, TODAY);
+
+        // 현재 목표(3660)로 일괄 판정했다면 60초 부족으로 떴겠지만, 그날 목표(3600)로 보면 부채 0 → 제외
+        assertThat(debt.missedDays()).extracting(DayDebt::date).doesNotContain(metDay);
+    }
+
+    @Test
+    @DisplayName("per-day 목표: 그날 목표에 진짜 미달한 날은 여전히 빠뜨린 날로 잡힌다 (과용서 안 함)")
+    void perDayGoal_dayUnderItsOwnGoal_stillListed() {
+        LocalDate shortDay = TODAY.minusDays(2); // 이 날 목표는 새 목표 3660, 3000만 읽음 → 660초 부족
+        Map<LocalDate, Long> reads = reads();
+        reads.put(shortDay, 3000L);
+        Map<LocalDate, Long> goalByDate = goalsRaisedRecently(3600L, 3660L, 3);
+
+        WeeklyDebt debt = WeeklyDebtCalculator.compute(reads, goalByDate, TODAY);
+
+        assertThat(debt.missedDays()).contains(new DayDebt(shortDay, 660L));
     }
 
     @Test
