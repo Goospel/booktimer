@@ -116,6 +116,17 @@ class HistoryControllerTest {
     }
 
     @Test
+    @DisplayName("GET /history: 광고 게시자 ID가 없으면(기본) 광고 스크립트가 새지 않는다 (스캐폴드 안전 불변식)")
+    void history_noAdsWhenDisabled() throws Exception {
+        // 테스트 컨텍스트는 booktimer.ads.client-id가 비어 있다 → 광고 비활성.
+        registrationService.register("noads@booktimer.com", "rawpw1234", "무광고", SEOUL, Role.USER, today());
+
+        mockMvc.perform(get("/history").with(user("noads@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.not(containsString("adsbygoogle"))));
+    }
+
+    @Test
     @DisplayName("GET /history: 기록이 없으면 빈 목록을 싣는다(화면은 정상 렌더)")
     void history_emptyForNewUser() throws Exception {
         registrationService.register("empty@booktimer.com", "rawpw1234", "신규", SEOUL, Role.USER, today());

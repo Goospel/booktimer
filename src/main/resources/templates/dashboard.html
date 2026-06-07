@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>대시보드 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
+    <!-- 광고 로더(게시자 ID 설정 시에만) -->
+    <th:block th:replace="~{ads :: loader}"></th:block>
     <!-- htmx: 폼을 AJAX로 보내 라이브 영역만 swap (전체 리로드 없음) -->
     <script defer src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
     <!-- defer: 문서 순서 보존 → dashboard.js(전역 함수)가 Alpine보다 먼저 평가됨 -->
@@ -164,6 +166,9 @@
             <span class="qt-icon" aria-hidden="true">⚙️</span><span class="qt-label">설정</span>
         </a>
     </nav>
+
+    <!-- 광고 (대시보드 하단, 라이브 영역 밖 — 측정 start/stop 시 재요청되지 않음. 게시자 ID 설정 시에만) -->
+    <div th:replace="~{ads :: unit}"></div>
 
     <form class="logout-form" th:action="@{/logout}" method="post">
         <button type="submit" class="btn-ghost btn-logout">로그아웃</button>

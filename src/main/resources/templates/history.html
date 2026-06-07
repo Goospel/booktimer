@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>독서 기록 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
+    <!-- 광고 로더(게시자 ID 설정 시에만) -->
+    <th:block th:replace="~{ads :: loader}"></th:block>
 </head>
 <body>
 <div class="container">
@@ -104,6 +106,9 @@
             <p class="status-line" th:if="${weeklyShortfall == null or weeklyShortfall.isEmpty()}">이번 주는 빠뜨린 날이 없어요. 잘하고 있어요! 🎉</p>
         </div>
     </section>
+
+    <!-- 광고 (하단, 게시자 ID 설정 시에만) -->
+    <div th:replace="~{ads :: unit}"></div>
 
     <p class="link-row">
         <a th:href="@{/}">← 대시보드</a>

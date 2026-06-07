@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<!--
+  광고(Google AdSense) 재사용 fragment — 공유 레이아웃이 없어 페이지마다 include한다.
+  ┌ loader : <head>에 넣는 AdSense 로더 스크립트 (게시자 ID 포함)
+  └ unit   : 본문 하단에 넣는 광고 단위 1개
+  둘 다 ${ads.enabled}일 때만 렌더 → client-id 미설정(스캐폴드) 상태에선 아무것도 안 나온다.
+-->
+<body>
+
+<!-- head용: 광고 켜진 페이지에서만 로더를 1회 로드 -->
+<th:block th:fragment="loader" th:if="${ads != null and ads.enabled}">
+    <script async crossorigin="anonymous"
+            th:src="'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + ${ads.clientId}"></script>
+</th:block>
+
+<!-- 본문용: 콘텐츠 하단에 끼우는 반응형 광고 1개. '광고' 라벨로 콘텐츠와 구분(투명성·정책 준수). -->
+<aside th:fragment="unit" th:if="${ads != null and ads.enabled}" class="ad-slot" aria-label="광고">
+    <span class="ad-label">광고</span>
+    <ins class="adsbygoogle" style="display:block"
+         th:attr="data-ad-client=${ads.clientId},data-ad-slot=${ads.slot}"
+         data-ad-format="auto" data-full-width-responsive="true"></ins>
+    <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+</aside>
+
+</body>
+</html>
