@@ -13,6 +13,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 독서 부채(7일 윈도우 per-day) 조회 유스케이스.
@@ -71,9 +72,17 @@ public class ReadingDebtService {
             changesByDate.put(change.getEffectiveDate(), change.getGoalSeconds());
         }
         GoalSchedule schedule = GoalSchedule.of(changesByDate, currentGoalSeconds);
+
+        // baseline = 사용자가 목표를 처음 가진 날(=시작 시점). 그 이전 윈도우 날은 "시작 전"이라 빠뜨린 날로
+        // 치지 않는다(목표를 넣지 않으면 부채 0 → 제외). 입문자가 가입 전 날을 "못 지킴"으로 보지 않게(N-059 후속).
+        // 이력이 비면(레거시·미온보딩) baseline이 없어 옛 동작대로 폴백 목표를 전 윈도우에 적용한다.
+        Optional<LocalDate> baseline = schedule.earliestEffectiveDate();
         Map<LocalDate, Long> goalByDate = new LinkedHashMap<>();
         for (int offset = 0; offset < WeeklyDebtCalculator.WINDOW_DAYS; offset++) {
             LocalDate date = today.minusDays(offset);
+            if (baseline.isPresent() && date.isBefore(baseline.get())) {
+                continue; // 가입(첫 목표) 이전 날 — 판정에서 제외
+            }
             goalByDate.put(date, schedule.goalFor(date));
         }
 

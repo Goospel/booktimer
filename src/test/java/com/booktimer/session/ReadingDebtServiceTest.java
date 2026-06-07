@@ -106,4 +106,26 @@ class ReadingDebtServiceTest {
         // 현재 목표(3660)로 일괄 판정했다면 60초 부족으로 떴겠지만, 그날 목표(3600)로 보면 부채 0 → 제외
         assertThat(debt.missedDays()).extracting(DayDebt::date).doesNotContain(TODAY_KST.minusDays(2));
     }
+
+    @Test
+    @DisplayName("baseline(첫 목표 기록) 이전 날은 빠뜨린 날에서 제외한다 — 가입(시작) 전 날을 '못 지킴'으로 보지 않음")
+    void weeklyDebt_daysBeforeBaseline_excludedFromMissed() {
+        ReadingTimer timer = ReadingTimer.of(GOAL);
+        when(timerRepository.findByUser(user)).thenReturn(Optional.of(timer));
+        // 목표 이력은 이틀 전(today-2)부터 시작 = 그 전엔 사용자가 목표를 가진 적 없음(가입 전).
+        when(goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of(
+                ReadingGoalChange.of(user, TODAY_KST.minusDays(2), GOAL)));
+        // 아무 날도 안 읽음 → 윈도우 전체가 0 읽음.
+        when(historyService.dailyHistory(user)).thenReturn(List.of());
+
+        WeeklyDebt debt = service.weeklyDebt(user);
+
+        // baseline 이후(today-1, today-2)는 진짜 빠뜨린 날.
+        assertThat(debt.missedDays()).extracting(DayDebt::date)
+                .contains(TODAY_KST.minusDays(1), TODAY_KST.minusDays(2));
+        // baseline 이전(today-3 ~ today-6)은 시작 전이라 제외 — 폴백 목표로 잡히면 안 됨.
+        assertThat(debt.missedDays()).extracting(DayDebt::date)
+                .doesNotContain(TODAY_KST.minusDays(3), TODAY_KST.minusDays(4),
+                        TODAY_KST.minusDays(5), TODAY_KST.minusDays(6));
+    }
 }

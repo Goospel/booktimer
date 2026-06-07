@@ -69,4 +69,24 @@ class ReadingDebtPerDayGoalIntegrationTest {
         // 현재 목표(70분)로 일괄 판정했다면 10분 부족으로 떴겠지만, 그날 목표(60분)로 보면 채운 날 → 제외.
         assertThat(debt.missedDays()).extracting(DayDebt::date).doesNotContain(metDay);
     }
+
+    @Test
+    @DisplayName("목표 이력 baseline 이전 날(가입 전)은 한 줄도 안 읽었어도 빠뜨린 날에 뜨지 않는다")
+    void daysBeforeBaseline_notShownEvenWithZeroReading() {
+        User user = registrationService.register(
+                "baseline@booktimer.com", "rawpw1234", "독서가", SEOUL, Role.USER, today());
+
+        // 목표 이력은 이틀 전부터만 존재 = 그 전엔 사용자가 목표를 가진 적 없음(시작 전).
+        goalChangeRepository.save(ReadingGoalChange.of(user, today().minusDays(2), 4200L));
+
+        // 세션 없음 — 윈도우 전체가 0 읽음.
+        WeeklyDebt debt = debtService.weeklyDebt(user);
+
+        // baseline 이전(today-3 ~ today-6)은 폴백 목표로도 잡히지 않고 제외.
+        assertThat(debt.missedDays()).extracting(DayDebt::date)
+                .doesNotContain(today().minusDays(3), today().minusDays(6));
+        // baseline 이후 빈 날은 정상적으로 빠뜨린 날.
+        assertThat(debt.missedDays()).extracting(DayDebt::date)
+                .contains(today().minusDays(1), today().minusDays(2));
+    }
 }
