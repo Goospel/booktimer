@@ -59,39 +59,48 @@
         </div>
     </section>
 
-    <!-- 독서 기록 카드: '이번 주 빠뜨린 날'(상단 폴더 탭) + '일자별 독서 시간'을 한 장에 합침.
-         빠뜨린 날(7일 윈도우 내 목표 미충족 과거 날, 부채>0)이 있을 때만 카드 상단 모서리에서 탭이 솟고,
-         그 아래 빠뜨린 날 목록 → 구분선 → 일자별 독서 시간 순으로 모은다. 각 "채우기"=수동입력 날짜 프리필
-         (윈도우 7일 밖은 자동 용서라 안 보임 — 입문자 친화·죄책감 누적 차단). -->
-    <section class="card record-card"
-             th:classappend="${weeklyShortfall != null and !weeklyShortfall.isEmpty()} ? ' has-tab' : ''">
-        <!-- 폴더/브라우저 탭: 이번 주 빠뜨린 날 (빠뜨린 날 있을 때만) -->
-        <div class="card-tab" th:if="${weeklyShortfall != null and !weeklyShortfall.isEmpty()}">이번 주 빠뜨린 날</div>
+    <!-- 독서 기록 카드: 헤드의 탭 버튼 2개로 바디를 전환한다 — '일자별 독서 시간'(기본) ↔ '이번 주 빠뜨린 날'.
+         JS 없이 동작하도록 라디오(:checked) + 형제 선택자로 패널을 토글한다(두 데이터는 서버가 이미 렌더해 두고
+         보이기만 전환). "채우기"=수동입력 날짜 프리필(윈도우 7일 밖은 자동 용서라 안 보임 — 입문자 친화). -->
+    <section class="card record-card">
+        <!-- 헤드: 탭 버튼 2개. 라디오 바로 뒤에 그 탭 라벨을 둬, 활성 표시를 인접 형제 선택자(:checked + .record-tab)로
+             건다 — 형제-후손 선택자는 일부 렌더러가 :checked 변경 시 갱신을 빠뜨려 밑줄이 안 따라옴(인접이 견고).
+             라디오는 시각만 숨기고 키보드 포커스는 살린다. 기본 활성=일자별 독서 시간. -->
+        <input type="radio" name="histtab" id="tab-records" class="tab-radio" checked>
+        <label for="tab-records" class="record-tab">일자별 독서 시간</label>
+        <input type="radio" name="histtab" id="tab-missed" class="tab-radio">
+        <label for="tab-missed" class="record-tab">이번 주 빠뜨린 날</label>
 
-        <div class="missed-section" th:if="${weeklyShortfall != null and !weeklyShortfall.isEmpty()}">
-            <p class="muted">최근 7일 중 목표를 못 채운 날이에요. 그날 읽고 기록을 깜빡했다면 채워 넣어요.</p>
-            <ul class="missed-list">
-                <li th:each="d : ${weeklyShortfall}">
-                    <span class="missed-date" th:text="${#temporals.format(d.date, 'M월 d일')}">6월 5일</span>
-                    <span class="missed-debt" th:text="${d.debtSeconds / 60} + '분 부족'">60분 부족</span>
-                    <a class="btn-ghost btn-fill" th:href="@{/sessions/manual(date=${d.date})}">채우기</a>
+        <!-- 바디 ①: 일자별 독서 시간 -->
+        <div class="tab-panel panel-records">
+            <p class="status-line" th:if="${records.isEmpty()}">아직 독서 기록이 없습니다. 측정을 시작해 보세요.</p>
+            <ul class="record-list" th:unless="${records.isEmpty()}">
+                <li class="record-row" th:each="r : ${records}">
+                    <div class="record-main">
+                        <span class="record-date" th:text="${#temporals.format(r.date(), 'yyyy-MM-dd (E)')}">2026-06-01</span>
+                        <span class="record-books" th:if="${!r.bookTitles().isEmpty()}"
+                              th:text="${#strings.listJoin(r.bookTitles(), ', ')}">책 제목</span>
+                    </div>
+                    <span class="record-time mono"
+                          th:text="${(r.totalSeconds() / 3600) + '시간 ' + ((r.totalSeconds() % 3600) / 60) + '분'}">0시간 0분</span>
                 </li>
             </ul>
         </div>
 
-        <h2>일자별 독서 시간</h2>
-        <p class="status-line" th:if="${records.isEmpty()}">아직 독서 기록이 없습니다. 측정을 시작해 보세요.</p>
-        <ul class="record-list" th:unless="${records.isEmpty()}">
-            <li class="record-row" th:each="r : ${records}">
-                <div class="record-main">
-                    <span class="record-date" th:text="${#temporals.format(r.date(), 'yyyy-MM-dd (E)')}">2026-06-01</span>
-                    <span class="record-books" th:if="${!r.bookTitles().isEmpty()}"
-                          th:text="${#strings.listJoin(r.bookTitles(), ', ')}">책 제목</span>
-                </div>
-                <span class="record-time mono"
-                      th:text="${(r.totalSeconds() / 3600) + '시간 ' + ((r.totalSeconds() % 3600) / 60) + '분'}">0시간 0분</span>
-            </li>
-        </ul>
+        <!-- 바디 ②: 이번 주 빠뜨린 날 -->
+        <div class="tab-panel panel-missed">
+            <div th:if="${weeklyShortfall != null and !weeklyShortfall.isEmpty()}">
+                <p class="muted">최근 7일 중 목표를 못 채운 날이에요. 그날 읽고 기록을 깜빡했다면 채워 넣어요.</p>
+                <ul class="missed-list">
+                    <li th:each="d : ${weeklyShortfall}">
+                        <span class="missed-date" th:text="${#temporals.format(d.date, 'M월 d일')}">6월 5일</span>
+                        <span class="missed-debt" th:text="${d.debtSeconds / 60} + '분 부족'">60분 부족</span>
+                        <a class="btn-ghost btn-fill" th:href="@{/sessions/manual(date=${d.date})}">채우기</a>
+                    </li>
+                </ul>
+            </div>
+            <p class="status-line" th:if="${weeklyShortfall == null or weeklyShortfall.isEmpty()}">이번 주는 빠뜨린 날이 없어요. 잘하고 있어요! 🎉</p>
+        </div>
     </section>
 
     <p class="link-row">

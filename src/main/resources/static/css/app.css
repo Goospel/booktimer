@@ -700,28 +700,38 @@ a.book-title:hover { text-decoration: underline; }
 .missed-list .missed-debt { color: var(--muted); font-size: .9rem; font-variant-numeric: tabular-nums; }
 .missed-list .btn-fill { margin-left: auto; padding: 6px 12px; font-size: .85rem; text-decoration: none; }
 
-/* 독서 기록 카드: '이번 주 빠뜨린 날'을 폴더/브라우저 탭으로 카드 상단 모서리에 얹고
-   '일자별 독서 시간'과 한 장으로 합친다. 탭은 빠뜨린 날이 있을 때(.has-tab)만 나타난다. */
+/* 독서 기록 카드: 헤드의 탭 버튼 2개로 바디를 전환한다(일자별 독서 시간 ↔ 이번 주 빠뜨린 날).
+   JS 없이 라디오(:checked) + 형제 선택자(~)로 패널을 토글 — 두 데이터는 서버가 미리 렌더, 보이기만 전환.
+   라디오는 시각만 숨기고(off-screen) 키보드 포커스는 살려 탭 전환이 키보드로도 된다. */
 .record-card { position: relative; }
-.record-card.has-tab { margin-top: 34px; }            /* 솟아오른 탭 높이만큼 위 여백 확보 */
-.record-card .card-tab {
-    position: absolute;
-    top: -24px;                                       /* 카드 상단 모서리 위로 탭이 솟음 */
-    left: 24px;                                        /* 카드 좌측 패딩과 정렬 */
-    padding: 6px 16px;
-    background: var(--card-bg);
-    color: var(--text);
-    font-weight: 700;
-    font-size: .78rem;
-    letter-spacing: .02em;
-    border: 1px solid var(--border);
-    border-bottom: none;                              /* 아래를 터서 카드 본문과 한 몸처럼 이어짐 */
-    border-radius: 10px 10px 0 0;
-    box-shadow: 0 -2px 6px rgba(0, 0, 0, .04);
+.record-card .tab-radio { position: absolute; width: 1px; height: 1px; opacity: 0; margin: 0; }
+/* 탭 버튼 2개(라디오 뒤 라벨)를 가로로 반반 띄운다. float라 인접 라벨 사이 공백 간격이 없어
+   밑줄(탭 바 baseline)이 끊김 없이 이어진다. 패널은 clear:both로 탭 바 아래로 내려간다. */
+.record-card .record-tab {
+    float: left;
+    width: 50%;
+    box-sizing: border-box;
+    text-align: center;
+    padding: 10px 12px;
+    font-weight: 600;
+    font-size: .9rem;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid var(--border);
+    user-select: none;
+    transition: color .15s ease, border-color .15s ease;
 }
-.record-card .missed-section {
-    padding-bottom: 18px;
-    margin-bottom: 16px;
-    border-bottom: 1px solid var(--border);           /* 빠뜨린 날 ↔ 일자별 독서 시간 구분선 */
+.record-card .record-tab:hover { color: var(--text); }
+/* 활성 탭 = 액센트 밑줄. 인접 형제 선택자(:checked + 라벨)라 모든 렌더러가 토글 시 갱신한다. */
+.record-card .tab-radio:checked + .record-tab {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
 }
-.record-card .missed-section .muted { margin: 0; font-size: .85rem; color: var(--muted); }
+.record-card .tab-radio:focus-visible + .record-tab {
+    outline: 2px solid var(--accent);                 /* 키보드 포커스 표시(접근성) */
+    outline-offset: 2px;
+}
+.tab-panel { display: none; }
+#tab-records:checked ~ .panel-records,
+#tab-missed:checked ~ .panel-missed { display: block; clear: both; padding-top: 18px; }
+.panel-missed .muted { margin: 0 0 4px; font-size: .85rem; }
