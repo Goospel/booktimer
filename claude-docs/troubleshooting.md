@@ -37,6 +37,7 @@
 - [T-033. 큰 페이지에서 폼이 하단에만 있으면 CSRF 숨김필드가 응답 커밋 후 세션 생성 → 500](#t-033-큰-페이지에서-폼이-하단에만-있으면-csrf-숨김필드가-응답-커밋-후-세션-생성--500)
 - [T-034. 생성자 2개(주입 + 테스트용)인 빈은 주입 생성자에 `@Autowired` 필수 — 없으면 no-arg 탐색 실패](#t-034-생성자-2개주입--테스트용인-servicebin은-주입-생성자에-autowired-필수--없으면-no-arg-탐색-실패nosuchmethodexception)
 - [T-035. author `display` 규칙이 UA의 `display:none`을 이겨 `<details>`·`[hidden]`이 안 숨겨진다 (cascade origin: author > UA)](#t-035-author-display-규칙이-ua의-displaynone을-이겨-detailshidden이-안-숨겨진다-cascade-origin-author--ua)
+- [T-039. 실시간 시계 통합 테스트는 자정·타임존 경계에서 플레이키 — 고정 클락을 주입하라](#t-039-실시간-시계-통합-테스트는-자정타임존-경계에서-플레이키--고정-클락을-주입하라)
 
 ---
 
@@ -740,6 +741,33 @@ NoSuchMethodException이 가리키는 건 **no-arg 생성자**(`<init>()`)인데
 
 ---
 
+## T-039. 실시간 시계 통합 테스트는 자정·타임존 경계에서 플레이키 — 고정 클락을 주입하라
+
+**증상**: 코드와 무관한 기존 테스트가 어느 날 갑자기 CI에서 깨진다. 로컬 커밋 땐 통과했는데(`./gradlew test` 게이트도 통과) 머지 후 CI가 `546 tests, 3 failed`로 **배포를 skip**. 깨진 건 "오늘 부채 = 목표 − 오늘 읽은 초" / "오늘 수동입력이 오늘 부채를 줄인다" 같은 **"오늘" 기준** 통합 테스트.
+
+**원인 — `@SpringBootTest`가 운영 `Clock` 빈(`Clock.systemUTC()`, 실시간)을 그대로 쓴다**:
+- 테스트가 `clock.instant()`("지금")으로 "오늘 세션"을 만든다(예: `now − 30분 ~ now`). **자정 직후**(예: 06-08 00:0x KST) 실행되면 `now − 30분`이 **전날**로 넘어가, 세션이 유저 TZ 기준 어제 날짜로 묶여(N-010) "오늘 부채"가 안 줄어든다 → 단언 실패.
+- **타임존 경계**도 같이 터질 수 있다: 한 테스트가 설정 변경으로 유저 tz를 `America/New_York`로 바꾸면, 목표 변경 이력의 effectiveDate가 그 tz로 계산돼(예: NY 06-16) 테스트의 SEOUL `today()`(06-17)와 어긋난다 — 두 tz의 달력 날짜가 다른 순간에만 발현.
+- 즉 **테스트가 "실행 시각"에 의존**해 자정/월말/tz 경계에서만 깨지는 잠복 플레이키. 커밋 게이트는 그 경계가 아닌 시각에 돌면 통과시켜 못 잡는다.
+
+**해결 / 예방**:
+- 시간 의존 통합 테스트는 운영 시계 대신 **고정 클락을 주입**한다(`TimeConfig` javadoc의 지침). 클래스마다 nested `@TestConfiguration`으로:
+  ```java
+  @org.springframework.boot.test.context.TestConfiguration
+  static class FixedClockConfig {
+      @org.springframework.context.annotation.Bean
+      @org.springframework.context.annotation.Primary
+      java.time.Clock fixedClock() {
+          return java.time.Clock.fixed(java.time.Instant.parse("2026-06-17T09:00:00Z"), java.time.ZoneOffset.UTC);
+      }
+  }
+  ```
+  (`@Primary`라 `@Autowired Clock`·모든 컴포넌트가 고정 시각을 쓴다. nested `@TestConfiguration`은 `@SpringBootTest`가 자동 등록.)
+- **고정 시각 고르기**: ① 자정에서 충분히 떨어진 **한낮**(±30분 세션이 같은 날) ② 테스트가 여러 tz를 쓰면 그 tz들이 **모두 같은 달력 날짜**가 되는 순간. 예) `09:00Z` = 18:00 KST = 05:00 EDT → SEOUL·America/New_York 둘 다 같은 날짜. ③ 월말·주말·DST 경계도 피하면 안전.
+- 새 시간 의존 통합 테스트를 추가할 땐 처음부터 고정 클락으로. 운영 코드는 안 건드린다(테스트 결정성 문제).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -780,3 +808,4 @@ NoSuchMethodException이 가리키는 건 **no-arg 생성자**(`<init>()`)인데
 | 2026-06-07 | T-037 (신형 Gemini `AQ.` API 키는 `x-goog-api-key` 헤더로 401 `ACCESS_TOKEN_TYPE_UNSUPPORTED`·`Authorization: Bearer`도 401 — `?key=` 쿼리파라미터로만 통함 / 일부 계정은 `AQ.` 키만 발급(재발급해도 동일, 정상 키) / 어댑터를 buildEndpoint `?key=`로 전환해 AIza·AQ 호환 / 키 검증은 쿼리파라미터 curl로(헤더 테스트는 멀쩡한 키도 401이라 오진), `-H "값"`만 주면 무효헤더→403 unregistered / 책BTI 라이브 서술 살림) |
 | 2026-06-06 | T-031 확장 (null만이 아니다: 단독 `th:if="${stringVar}"`는 Thymeleaf truthiness로 동작하지만 `and`/`or`/`!`로 묶으면 SpringEL이 피연산자를 boolean으로 강제 → String도 boolean화 못 해 `SpelEvaluationException` / `${b.purchaseLink and !self}`가 그 행 렌더 테스트 9개를 한꺼번에 깸 → `${!#strings.isEmpty(b.purchaseLink) and !self}`로 명시 술어화 / 규칙: `${문자열}`을 boolean 연산자와 섞지 말 것 — 본인 책방 구매 버튼 숨기다 발견) |
 | 2026-06-07 | T-038 (세션 타임아웃을 `server.servlet.session.timeout` 프로퍼티로 못 늘림 — Boot 4 + Spring Session JDBC에선 만료시간을 서블릿 컨테이너가 아니라 Spring Session 저장소가 들고 있어 프로퍼티가 안 닿음(30분 그대로, 테스트가 720H vs 30M로 포착) / 독서 타이머는 클라이언트(JS)에서만 돌아 읽는 동안 서버 요청 0 → 30분에 끊김(N-057) / 해결: `SessionRepositoryCustomizer<JdbcIndexedSessionRepository>`로 `setDefaultMaxInactiveInterval` 직접 + 쿠키 Max-Age는 `DefaultCookieSerializer.setCookieMaxAge`(기본 -1=세션 쿠키) / 검증 필수: `createSession().getMaxInactiveInterval()`·`Set-Cookie Max-Age` / T-014·T-021 "프로퍼티 무동작→명시 빈" 자매) |
+| 2026-06-08 | T-039 (실시간 시계 통합 테스트가 자정·tz 경계에서 플레이키 — `@SpringBootTest`가 운영 `Clock.systemUTC()`를 써서 `now` 기준 "오늘" 데이터가 자정 직후 전날로 넘어가거나(06-08 00:0x KST CI에서 3개 깨져 배포 skip) tz 변경 시 SEOUL today()와 어긋남 / 해결: 클래스별 nested `@TestConfiguration` `@Primary Clock.fixed(...)` — 한낮+대상 tz 모두 같은 날짜인 시각(예 09:00Z=18:00 KST=05:00 EDT) / 운영 코드 무변경, `TimeConfig` javadoc 지침) |
