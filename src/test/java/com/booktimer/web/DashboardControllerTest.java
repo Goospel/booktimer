@@ -26,8 +26,11 @@ import java.time.ZoneId;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -36,10 +39,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 대시보드(홈) 컨트롤러 통합 테스트 (MockMvc + 실제 빈·H2).
  *
- * <p>로그인 주체(username=email)를 도메인 User로 매핑하고, <b>오늘 부채</b>(remainingSeconds)·이번 주
- * 빠뜨린 날(weeklyShortfall)·진행 중 세션을 화면에 싣는지 검증한다. 부채는 7일 윈도우 per-day로
- * 완료 세션에서 유도된다(옛 단일 카운터·accrual·cap 제거). 대시보드 본화면은 온보딩을 마친 사용자만
- * 볼 수 있으므로(첫 진입 게이트), 헬퍼로 온보딩 완료한 사용자를 만든다.
+ * <p>로그인 주체(username=email)를 도메인 User로 매핑하고, <b>오늘 부채</b>(remainingSeconds)·진행 중
+ * 세션을 화면에 싣는지 검증한다. 부채는 7일 윈도우 per-day로 완료 세션에서 유도된다(옛 단일 카운터·
+ * accrual·cap 제거). "이번 주 빠뜨린 날"(weeklyShortfall)은 독서 기록 화면으로 옮겨져
+ * {@code HistoryControllerTest}가 검증한다. 대시보드 본화면은 온보딩을 마친 사용자만 볼 수 있으므로
+ * (첫 진입 게이트), 헬퍼로 온보딩 완료한 사용자를 만든다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -159,13 +163,15 @@ class DashboardControllerTest {
     }
 
     @Test
-    @DisplayName("GET /: 이번 주 빠뜨린 날 목록(weeklyShortfall)을 모델에 싣는다")
-    void dashboard_includesWeeklyShortfall() throws Exception {
-        registerOnboarded("short@booktimer.com", "빠뜨림", today());
+    @DisplayName("GET /: 빠뜨린 날 섹션과 '빠뜨린 기록' 버튼이 대시보드에서 사라졌다 (독서 기록 화면으로 이전)")
+    void dashboard_omitsMissedDaysSectionAndManualButton() throws Exception {
+        // 갓 가입해 안 읽은 유저면 빠뜨린 날이 있지만(=옛날엔 대시보드에 떴음), 이제 대시보드엔 안 나와야 한다.
+        registerOnboarded("nomissed@booktimer.com", "이전", today());
 
-        mockMvc.perform(get("/").with(user("short@booktimer.com")))
+        mockMvc.perform(get("/").with(user("nomissed@booktimer.com")))
                 .andExpect(status().isOk())
-                .andExpect(model().attributeExists("weeklyShortfall"));
+                .andExpect(content().string(not(containsString("이번 주 빠뜨린 날")))) // 섹션 이전됨
+                .andExpect(content().string(not(containsString("/sessions/manual")))); // '빠뜨린 기록' 버튼 제거
     }
 
     @Test

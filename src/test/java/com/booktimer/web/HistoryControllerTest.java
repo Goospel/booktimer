@@ -24,8 +24,10 @@ import java.time.ZoneId;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
@@ -99,5 +101,25 @@ class HistoryControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(view().name("history"))
                 .andExpect(model().attribute("records", List.<DailyReadingRecord>of()));
+    }
+
+    @Test
+    @DisplayName("GET /history: 이번 주 빠뜨린 날 목록(weeklyShortfall)을 모델에 싣는다 (대시보드에서 이 화면으로 이전)")
+    void history_includesWeeklyShortfall() throws Exception {
+        // 갓 가입해 아무 날도 안 읽은 유저 → 윈도우 내 과거 날이 빠뜨린 날로 잡혀 목록이 비지 않는다.
+        // (계산 자체는 단위 테스트가 검증 — 여기선 컨트롤러가 그 목록을 화면에 엮는 와이어링만 본다.)
+        registrationService.register("histshort@booktimer.com", "rawpw1234", "빠뜨림", SEOUL, Role.USER, today());
+
+        var result = mockMvc.perform(get("/history").with(user("histshort@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(view().name("history"))
+                .andExpect(model().attributeExists("weeklyShortfall"))
+                // 옮긴 섹션이 이 화면에서 실제로 렌더된다(Thymeleaf 표현식이 새 자리에서 깨지지 않음 + 채우기 링크 살아있음)
+                .andExpect(content().string(containsString("이번 주 빠뜨린 날")))
+                .andExpect(content().string(containsString("/sessions/manual")))
+                .andReturn();
+
+        List<?> shortfall = (List<?>) result.getModelAndView().getModel().get("weeklyShortfall");
+        assertThat(shortfall).isNotEmpty();
     }
 }
