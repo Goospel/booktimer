@@ -773,16 +773,10 @@ a.book-title:hover { text-decoration: underline; }
 }
 .landing-lead strong { color: var(--text); }
 
-/* CTA — 앵커지만 .btn 베이스를 받아 버튼 모양. 가로로 나란히, 좁으면 줄바꿈. */
-.landing-cta { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
-.landing-cta a { flex: 1 1 160px; width: auto; text-decoration: none; text-align: center; }
-
-.btn-secondary {
-    background: #fff;
-    color: var(--accent);
-    border: 1px solid var(--accent);
-}
-.btn-secondary:hover { background: #eef2ff; }
+/* CTA — 앵커지만 .btn 베이스를 받아 버튼 모양. 로그인 카드처럼 세로 스택
+   (무료로 시작하기 → "또는" → Google로 시작하기). 간격은 oauth-divider가 자체 마진으로 준다. */
+.landing-cta { display: flex; flex-direction: column; }
+.landing-cta > a { width: 100%; text-decoration: none; text-align: center; }
 
 /* 기능 목록 — 아이콘+강조 제목을 블록으로, 설명은 그 아래 흐리게. */
 .landing-features { list-style: none; margin: 0; padding: 0; text-align: left; }

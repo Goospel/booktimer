@@ -49,4 +49,14 @@ class LandingPageTest {
                 .andExpect(content().string(containsString("/login")))
                 .andExpect(content().string(containsString("/signup")));
     }
+
+    @Test
+    @DisplayName("랜딩 '시작하기' 자리에 Google 원탭 진입(OAuth)도 노출한다")
+    void landing_offersGoogleSignIn() throws Exception {
+        // 구글 OAuth는 신규면 자동 가입이라 '무료로 시작하기' 옆 한 탭 진입이 마찰을 줄인다.
+        mockMvc.perform(get("/"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("/oauth2/authorization/google")))
+                .andExpect(content().string(containsString("Google")));
+    }
 }
