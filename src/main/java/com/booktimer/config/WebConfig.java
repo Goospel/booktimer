@@ -5,9 +5,13 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
+import org.springframework.session.config.SessionRepositoryCustomizer;
+import org.springframework.session.jdbc.JdbcIndexedSessionRepository;
 import org.springframework.session.web.http.CookieSerializer;
 import org.springframework.session.web.http.DefaultCookieSerializer;
 import org.springframework.web.filter.ForwardedHeaderFilter;
+
+import java.time.Duration;
 
 /**
  * 프록시(ALB) 뒤에서의 HTTPS 인식 설정.
@@ -24,6 +28,25 @@ import org.springframework.web.filter.ForwardedHeaderFilter;
  */
 @Configuration
 public class WebConfig {
+
+    /**
+     * 세션·쿠키 수명 — 30일. 서버 세션 비활성 타임아웃과 쿠키 Max-Age를 <b>같은 값</b>으로 맞춰,
+     * 한 달간 비활성이어도 로그인이 유지되고 브라우저를 닫았다 와도 로그인이 살아 있게 한다.
+     * 독서 타이머는 클라이언트(JS)에서만 돌고 읽는 동안 서버 요청이 없어, 짧은 타임아웃이면 측정 중 로그아웃된다.
+     */
+    private static final Duration SESSION_TIMEOUT = Duration.ofDays(30);
+
+    /**
+     * 세션 비활성 타임아웃을 {@link #SESSION_TIMEOUT}으로 강제한다.
+     *
+     * <p>application.properties의 {@code server.servlet.session.timeout}은 Boot 4 + Spring Session JDBC
+     * 조합에서 세션 저장소의 기본 max-inactive-interval에 <b>연결되지 않는다</b>(기본 30분 그대로 — cookieSerializer·
+     * ForwardedHeaderFilter와 같은 계열의 "프로퍼티 무동작" 함정). 그래서 저장소 빈에 직접 설정해 확실히 적용한다.
+     */
+    @Bean
+    public SessionRepositoryCustomizer<JdbcIndexedSessionRepository> sessionTimeoutCustomizer() {
+        return repository -> repository.setDefaultMaxInactiveInterval(SESSION_TIMEOUT);
+    }
 
     @Bean
     public FilterRegistrationBean<ForwardedHeaderFilter> forwardedHeaderFilter() {
@@ -58,6 +81,8 @@ public class WebConfig {
         serializer.setSameSite("Lax");
         serializer.setUseHttpOnlyCookie(true);
         serializer.setUseSecureCookie(secureCookie);
+        // 브라우저 종료 후에도 로그인 유지(서버 세션 타임아웃과 동일 수명). 기본 -1이면 세션 쿠키라 창 닫으면 소멸.
+        serializer.setCookieMaxAge((int) SESSION_TIMEOUT.toSeconds());
         return serializer;
     }
 }
