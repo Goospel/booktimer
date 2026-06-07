@@ -48,7 +48,10 @@ public class SecurityConfig {
                                                    LoginAttemptService loginAttemptService) throws Exception {
         http
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/signup", "/login", "/privacy", "/error", "/actuator/health", "/css/**", "/js/**", "/favicon.ico").permitAll()
+                        // 루트("/")는 공개 소개(랜딩) 페이지를 겸한다 — 익명이면 서비스 소개, 로그인이면 대시보드로
+                        // 컨트롤러가 분기한다(DashboardController). default-deny면 익명 루트가 로그인으로 302 튕겨
+                        // 검색/광고 크롤러가 본문을 못 본다. 대시보드 데이터는 principal이 있을 때만 로드되므로 노출 없음.
+                        .requestMatchers("/", "/signup", "/login", "/privacy", "/error", "/actuator/health", "/css/**", "/js/**", "/favicon.ico").permitAll()
                         // ads.txt(AdSense 소유권·수익 보호) + robots.txt(크롤 지시): 크롤러가 비인증으로 읽어야 하는
                         // 공개 정적 파일. default-deny라 명시 안 하면 로그인으로 302 튕겨 크롤러에게 모호한 신호가 된다.
                         .requestMatchers("/ads.txt", "/robots.txt").permitAll()

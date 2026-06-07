@@ -44,6 +44,13 @@ public class DashboardController {
 
     @GetMapping("/")
     public String dashboard(Principal principal, HttpServletRequest request, Model model) {
+        // 비로그인 방문자·검색/광고 크롤러는 로그인으로 튕기지 않고 공개 소개 페이지를 본다.
+        // 루트가 곧 랜딩이라 크롤러가 "무엇을 하는 서비스인가"를 읽을 수 있다(AdSense 콘텐츠 심사 대비).
+        // principal이 없으면 아래 대시보드 로직(개인 데이터 로드)을 타지 않으므로 노출 위험 없음.
+        if (principal == null) {
+            return "landing";
+        }
+
         User user = currentUserService.resolve(principal);
 
         // 운영자(ADMIN)는 독서 대시보드가 아니라 운영 화면으로 직행한다 — 책을 읽는 주체가 아니다.

@@ -754,3 +754,54 @@ a.book-title:hover { text-decoration: underline; }
     letter-spacing: .04em;
     text-align: left;            /* '광고' 표기로 콘텐츠와 구분(투명성) */
 }
+
+/* === 공개 소개(랜딩) 페이지 — 비로그인 방문자·크롤러용. 루트("/")가 익명일 때 렌더. === */
+.landing-hero { text-align: center; margin: 8px 0 20px; }
+.landing-tagline {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0 0 12px;
+    word-break: keep-all;
+}
+.landing-lead {
+    color: var(--muted);
+    line-height: 1.65;
+    text-align: left;
+    margin: 0 0 20px;
+    word-break: keep-all;
+}
+.landing-lead strong { color: var(--text); }
+
+/* CTA — 앵커지만 .btn 베이스를 받아 버튼 모양. 가로로 나란히, 좁으면 줄바꿈. */
+.landing-cta { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.landing-cta a { flex: 1 1 160px; width: auto; text-decoration: none; text-align: center; }
+
+.btn-secondary {
+    background: #fff;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+}
+.btn-secondary:hover { background: #eef2ff; }
+
+/* 기능 목록 — 아이콘+강조 제목을 블록으로, 설명은 그 아래 흐리게. */
+.landing-features { list-style: none; margin: 0; padding: 0; text-align: left; }
+.landing-features li {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+    line-height: 1.55;
+    word-break: keep-all;
+}
+.landing-features li:last-child { border-bottom: none; }
+.landing-features li strong { display: block; color: var(--text); margin-bottom: 2px; }
+
+/* 동작 방식 — 번호 매긴 단계. */
+.landing-steps { margin: 0; padding-left: 22px; text-align: left; color: var(--muted); line-height: 1.7; }
+.landing-steps li { margin-bottom: 6px; word-break: keep-all; }
+.landing-steps strong { color: var(--text); }
+
+/* 하단 재유도 CTA. */
+.landing-bottom-cta { text-align: center; margin: 8px 0 16px; }
+.landing-bottom-cta p { color: var(--muted); margin: 0 0 12px; word-break: keep-all; }
+.landing-bottom-cta a { width: auto; display: inline-block; text-decoration: none; padding-left: 28px; padding-right: 28px; }
