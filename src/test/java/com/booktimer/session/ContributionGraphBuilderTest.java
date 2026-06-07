@@ -7,6 +7,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.ToLongFunction;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -133,6 +134,35 @@ class ContributionGraphBuilderTest {
 
         // 현재 목표(3600)로 일괄 판정했다면 50%→lv2였겠지만, 그날 목표(1800)로 보면 100%→lv4.
         assertThat(findCell(graph, metDay).level()).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("manualDates에 든 날 칸은 manual=true (사용자가 직접 채운 잔디)")
+    void cell_manualDate_isMarkedManual() {
+        LocalDate d = LocalDate.of(2026, 3, 15);
+        ContributionGraph graph = ContributionGraphBuilder.build(
+                Map.of(d, 1800L), TODAY, date -> GOAL, Set.of(d));
+
+        assertThat(findCell(graph, d).manual()).isTrue();
+    }
+
+    @Test
+    @DisplayName("manualDates에 없는 날 칸은 manual=false (실시간 측정)")
+    void cell_nonManualDate_isNotManual() {
+        LocalDate d = LocalDate.of(2026, 3, 15);
+        ContributionGraph graph = ContributionGraphBuilder.build(
+                Map.of(d, 1800L), TODAY, date -> GOAL, Set.of());
+
+        assertThat(findCell(graph, d).manual()).isFalse();
+    }
+
+    @Test
+    @DisplayName("평면 목표 오버로드로 만든 칸은 manual=false (기본)")
+    void cell_flatGoalOverload_defaultsNotManual() {
+        LocalDate d = LocalDate.of(2026, 3, 15);
+        ContributionGraph graph = ContributionGraphBuilder.build(Map.of(d, 1800L), TODAY, GOAL);
+
+        assertThat(findCell(graph, d).manual()).isFalse();
     }
 
     private int levelOf(long seconds, LocalDate date) {

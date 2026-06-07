@@ -12,12 +12,13 @@ import java.time.LocalDate;
  * @param date         유저 타임존 기준 일자. {@code null}이면 placeholder(빈 칸).
  * @param totalSeconds 그날 총 독서 시간(초)
  * @param level        색 농도 단계 0~4 (0=없음). 임계는 {@link ContributionGraphBuilder}가 정한다.
+ * @param manual       사용자가 직접 채운 날(수동 입력 포함)이면 true — 잔디에서 테두리로 구분한다.
  */
-public record ContributionDay(LocalDate date, long totalSeconds, int level) {
+public record ContributionDay(LocalDate date, long totalSeconds, int level, boolean manual) {
 
     /** 날짜 없는 빈 칸(그리드 가장자리 채움용). */
     public static ContributionDay placeholder() {
-        return new ContributionDay(null, 0L, 0);
+        return new ContributionDay(null, 0L, 0, false);
     }
 
     public boolean isPlaceholder() {

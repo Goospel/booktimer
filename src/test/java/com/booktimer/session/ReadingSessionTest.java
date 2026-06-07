@@ -103,4 +103,22 @@ class ReadingSessionTest {
         assertThat(session.getDurationSeconds()).isZero();
         assertThat(session.isActive()).isFalse();
     }
+
+    @Test
+    @DisplayName("manual: 수동 입력 완료 세션을 만든다 — manualEntry=true, 이미 종료됨")
+    void manual_createsCompletedManualEntry() {
+        ReadingSession session = ReadingSession.manual(sampleUser(), T0, T0.plusSeconds(3600), null);
+
+        assertThat(session.isManualEntry()).isTrue();
+        assertThat(session.isActive()).isFalse();
+        assertThat(session.getDurationSeconds()).isEqualTo(3600L);
+    }
+
+    @Test
+    @DisplayName("start: 실시간 측정은 수동 입력이 아니다 (manualEntry=false)")
+    void start_isNotManualEntry() {
+        ReadingSession session = ReadingSession.start(sampleUser(), T0);
+
+        assertThat(session.isManualEntry()).isFalse();
+    }
 }

@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.ToLongFunction;
 
 /**
@@ -29,7 +30,7 @@ public final class ContributionGraphBuilder {
      * @return 53주 × 7요일 그리드 모델
      */
     public static ContributionGraph build(Map<LocalDate, Long> secondsByDate, LocalDate today, long goalSeconds) {
-        return build(secondsByDate, today, date -> goalSeconds);
+        return build(secondsByDate, today, date -> goalSeconds, Set.of());
     }
 
     /**
@@ -43,6 +44,17 @@ public final class ContributionGraphBuilder {
      */
     public static ContributionGraph build(Map<LocalDate, Long> secondsByDate, LocalDate today,
                                           ToLongFunction<LocalDate> goalForDate) {
+        return build(secondsByDate, today, goalForDate, Set.of());
+    }
+
+    /**
+     * 날짜별 목표 + <b>직접 채운 날(수동 입력)</b> 표시까지 반영해 잔디를 만든다.
+     *
+     * @param manualDates 사용자가 직접 채운(수동 입력) 날짜들 — 그 칸은 {@code manual=true}로 표시돼
+     *                    템플릿에서 테두리로 구별된다. 실시간 측정 날은 여기 들지 않는다.
+     */
+    public static ContributionGraph build(Map<LocalDate, Long> secondsByDate, LocalDate today,
+                                          ToLongFunction<LocalDate> goalForDate, Set<LocalDate> manualDates) {
         // 일요일=0 ... 토요일=6. 오늘이 속한 주의 일요일이 맨 오른쪽 열의 시작.
         int todayOffset = today.getDayOfWeek().getValue() % 7;
         LocalDate lastSunday = today.minusDays(todayOffset);
@@ -61,7 +73,8 @@ public final class ContributionGraphBuilder {
                     continue;
                 }
                 long seconds = Math.max(0L, secondsByDate.getOrDefault(date, 0L));
-                week.add(new ContributionDay(date, seconds, levelFor(seconds, goalForDate.applyAsLong(date))));
+                week.add(new ContributionDay(date, seconds,
+                        levelFor(seconds, goalForDate.applyAsLong(date)), manualDates.contains(date)));
                 total += seconds;
                 if (seconds > 0) {
                     activeDays++;

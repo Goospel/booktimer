@@ -157,6 +157,33 @@ class ReadingHistoryServiceTest {
     }
 
     @Test
+    @DisplayName("그날 수동 입력 세션이 하나라도 있으면 manuallyFilled=true (직접 채운 날)")
+    void dailyHistory_marksManuallyFilledDay() {
+        User user = seoulUser();
+        Book a = Book.register(user, "책A", null, null, null, null, null, BookStatus.READING);
+        Instant t = Instant.parse("2026-05-20T03:00:00Z"); // 05-20 KST
+        ReadingSession manual = ReadingSession.manual(user, t, t.plusSeconds(HOUR), a);
+        when(sessionRepository.findByUser(user)).thenReturn(List.of(manual));
+
+        List<DailyReadingRecord> history = service.dailyHistory(user);
+
+        assertThat(history).hasSize(1);
+        assertThat(history.get(0).manuallyFilled()).isTrue();
+    }
+
+    @Test
+    @DisplayName("실시간 측정만 있는 날은 manuallyFilled=false")
+    void dailyHistory_realtimeDay_notManuallyFilled() {
+        User user = seoulUser();
+        Instant t = Instant.parse("2026-06-01T01:00:00Z");
+        when(sessionRepository.findByUser(user)).thenReturn(List.of(session(user, t, HOUR)));
+
+        List<DailyReadingRecord> history = service.dailyHistory(user);
+
+        assertThat(history.get(0).manuallyFilled()).isFalse();
+    }
+
+    @Test
     @DisplayName("기록이 없으면 빈 리스트")
     void dailyHistory_empty() {
         User user = seoulUser();

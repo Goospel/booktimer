@@ -40,9 +40,9 @@
                     <th:block th:each="week : ${graph.weeks()}">
                         <div class="grass-cell"
                              th:each="day : ${week}"
-                             th:classappend="${day.isPlaceholder() ? 'empty' : 'level-' + day.level()}"
+                             th:classappend="${day.isPlaceholder() ? 'empty' : 'level-' + day.level() + (day.manual() ? ' manual' : '')}"
                              th:attr="title=${day.isPlaceholder() ? null
-                                 : #temporals.format(day.date(), 'yyyy-MM-dd') + ' · ' + (day.totalSeconds() / 60) + '분'}"></div>
+                                 : #temporals.format(day.date(), 'yyyy-MM-dd') + ' · ' + (day.totalSeconds() / 60) + '분' + (day.manual() ? ' · 직접 채움' : '')}"></div>
                     </th:block>
                 </div>
                 <!-- 범례 (색 농도 = 그날 독서 시간 ÷ 하루 목표 달성 비율) -->
@@ -54,6 +54,8 @@
                     <i class="grass-cell level-3"></i>
                     <i class="grass-cell level-4"></i>
                     <span>목표 달성</span>
+                    <i class="grass-cell level-2 manual legend-gap"></i>
+                    <span>직접 채움</span>
                 </div>
             </div>
         </div>

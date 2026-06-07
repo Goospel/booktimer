@@ -12,8 +12,10 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 독서 잔디(컨트리뷰션 그래프) 조회 유스케이스.
@@ -69,8 +71,12 @@ public class ReadingContributionService {
         LocalDate today = LocalDate.ofInstant(clock.instant(), zone);
 
         Map<LocalDate, Long> secondsByDate = new LinkedHashMap<>();
+        Set<LocalDate> manualDates = new LinkedHashSet<>(); // 직접 채운(수동 입력 포함) 날 — 잔디 테두리 표시
         for (DailyReadingRecord record : history) {
             secondsByDate.put(record.date(), record.totalSeconds());
+            if (record.manuallyFilled()) {
+                manualDates.add(record.date());
+            }
         }
 
         // 현재(폴백) 목표 — 이력에 그 날짜 이전 변경이 없을 때 쓴다.
@@ -85,6 +91,6 @@ public class ReadingContributionService {
         }
         GoalSchedule schedule = GoalSchedule.of(changesByDate, currentGoalSeconds);
 
-        return ContributionGraphBuilder.build(secondsByDate, today, schedule::goalFor);
+        return ContributionGraphBuilder.build(secondsByDate, today, schedule::goalFor, manualDates);
     }
 }

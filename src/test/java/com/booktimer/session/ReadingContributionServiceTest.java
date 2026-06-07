@@ -108,6 +108,35 @@ class ReadingContributionServiceTest {
         assertThat(levelOf(service.contributionGraph(user), metDay)).isEqualTo(4);
     }
 
+    @Test
+    @DisplayName("수동 입력으로 채운 날 칸은 manual=true로 잔디에 표시된다 (직접 채운 날 테두리)")
+    void manuallyFilledDay_markedOnGrass() {
+        User user = User.of("m@booktimer.com", "h", "수동", "Asia/Seoul", Role.USER);
+        LocalDate filled = LocalDate.of(2026, 5, 20);
+
+        ReadingHistoryService history = mock(ReadingHistoryService.class);
+        // manuallyFilled=true인 일자 집계(=수동 입력 포함)
+        when(history.dailyHistory(user)).thenReturn(List.of(
+                new DailyReadingRecord(filled, 3600L, List.of("전쟁과 평화 1"), true)));
+        ReadingTimerRepository timers = mock(ReadingTimerRepository.class);
+        when(timers.findByUser(user)).thenReturn(Optional.empty());
+        ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);
+        when(goalChanges.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of());
+        ReadingContributionService service =
+                new ReadingContributionService(history, timers, goalChanges, Clock.fixed(INSTANT, ZoneOffset.UTC));
+
+        ContributionDay cell = cellOf(service.contributionGraph(user), filled);
+        assertThat(cell.manual()).isTrue();
+    }
+
+    private static ContributionDay cellOf(ContributionGraph graph, LocalDate date) {
+        return graph.weeks().stream()
+                .flatMap(List::stream)
+                .filter(c -> date.equals(c.date()))
+                .findFirst()
+                .orElseThrow();
+    }
+
     private static int levelOf(ContributionGraph graph, LocalDate date) {
         return graph.weeks().stream()
                 .flatMap(List::stream)
