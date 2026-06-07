@@ -16,21 +16,6 @@
     </header>
     <p class="greeting"><span th:text="${nickname}">닉네임</span>님의 독서 기록</p>
 
-    <!-- 이번 주 빠뜨린 날: 최근 7일 윈도우 내 목표 미충족 과거 날(부채>0). 각 항목 "채우기"=수동입력 날짜 프리필.
-         윈도우(7일) 밖은 자동 용서라 안 보인다(입문자 친화 — 죄책감 누적 차단). 원래 대시보드에 있었으나
-         "채워 넣기 = 과거 기록 보정"이라 기록 화면이 더 자연스러운 자리라 이리로 옮겼다. -->
-    <section class="card missed-days" th:if="${weeklyShortfall != null and !weeklyShortfall.isEmpty()}">
-        <h2>이번 주 빠뜨린 날</h2>
-        <p class="muted">최근 7일 중 목표를 못 채운 날이에요. 그날 읽고 기록을 깜빡했다면 채워 넣어요.</p>
-        <ul class="missed-list">
-            <li th:each="d : ${weeklyShortfall}">
-                <span class="missed-date" th:text="${#temporals.format(d.date, 'M월 d일')}">6월 5일</span>
-                <span class="missed-debt" th:text="${d.debtSeconds / 60} + '분 부족'">60분 부족</span>
-                <a class="btn-ghost btn-fill" th:href="@{/sessions/manual(date=${d.date})}">채우기</a>
-            </li>
-        </ul>
-    </section>
-
     <!-- 독서 잔디 (지난 1년) — GitHub 컨트리뷰션 그래프 스타일 -->
     <section class="card">
         <h2>독서 잔디</h2>
@@ -74,15 +59,29 @@
         </div>
     </section>
 
-    <!-- 기록 없음 -->
-    <section class="card" th:if="${records.isEmpty()}">
-        <p class="status-line">아직 독서 기록이 없습니다. 측정을 시작해 보세요.</p>
-    </section>
+    <!-- 독서 기록 카드: '이번 주 빠뜨린 날'(상단 폴더 탭) + '일자별 독서 시간'을 한 장에 합침.
+         빠뜨린 날(7일 윈도우 내 목표 미충족 과거 날, 부채>0)이 있을 때만 카드 상단 모서리에서 탭이 솟고,
+         그 아래 빠뜨린 날 목록 → 구분선 → 일자별 독서 시간 순으로 모은다. 각 "채우기"=수동입력 날짜 프리필
+         (윈도우 7일 밖은 자동 용서라 안 보임 — 입문자 친화·죄책감 누적 차단). -->
+    <section class="card record-card"
+             th:classappend="${weeklyShortfall != null and !weeklyShortfall.isEmpty()} ? ' has-tab' : ''">
+        <!-- 폴더/브라우저 탭: 이번 주 빠뜨린 날 (빠뜨린 날 있을 때만) -->
+        <div class="card-tab" th:if="${weeklyShortfall != null and !weeklyShortfall.isEmpty()}">이번 주 빠뜨린 날</div>
 
-    <!-- 일자별 기록 (최신순) -->
-    <section class="card" th:unless="${records.isEmpty()}">
+        <div class="missed-section" th:if="${weeklyShortfall != null and !weeklyShortfall.isEmpty()}">
+            <p class="muted">최근 7일 중 목표를 못 채운 날이에요. 그날 읽고 기록을 깜빡했다면 채워 넣어요.</p>
+            <ul class="missed-list">
+                <li th:each="d : ${weeklyShortfall}">
+                    <span class="missed-date" th:text="${#temporals.format(d.date, 'M월 d일')}">6월 5일</span>
+                    <span class="missed-debt" th:text="${d.debtSeconds / 60} + '분 부족'">60분 부족</span>
+                    <a class="btn-ghost btn-fill" th:href="@{/sessions/manual(date=${d.date})}">채우기</a>
+                </li>
+            </ul>
+        </div>
+
         <h2>일자별 독서 시간</h2>
-        <ul class="record-list">
+        <p class="status-line" th:if="${records.isEmpty()}">아직 독서 기록이 없습니다. 측정을 시작해 보세요.</p>
+        <ul class="record-list" th:unless="${records.isEmpty()}">
             <li class="record-row" th:each="r : ${records}">
                 <div class="record-main">
                     <span class="record-date" th:text="${#temporals.format(r.date(), 'yyyy-MM-dd (E)')}">2026-06-01</span>

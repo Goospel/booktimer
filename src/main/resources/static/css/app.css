@@ -693,9 +693,35 @@ a.book-title:hover { text-decoration: underline; }
 .pager .btn-ghost { padding: 6px 12px; font-size: .9rem; text-decoration: none; }
 .pager-info { font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 
-/* 이번 주 빠뜨린 날 (대시보드 7일 윈도우 부채 채우기) */
+/* 이번 주 빠뜨린 날 (독서 기록 화면 7일 윈도우 부채 채우기) */
 .missed-list { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 8px; }
 .missed-list li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
 .missed-list .missed-date { font-weight: 600; }
 .missed-list .missed-debt { color: var(--muted); font-size: .9rem; font-variant-numeric: tabular-nums; }
 .missed-list .btn-fill { margin-left: auto; padding: 6px 12px; font-size: .85rem; text-decoration: none; }
+
+/* 독서 기록 카드: '이번 주 빠뜨린 날'을 폴더/브라우저 탭으로 카드 상단 모서리에 얹고
+   '일자별 독서 시간'과 한 장으로 합친다. 탭은 빠뜨린 날이 있을 때(.has-tab)만 나타난다. */
+.record-card { position: relative; }
+.record-card.has-tab { margin-top: 34px; }            /* 솟아오른 탭 높이만큼 위 여백 확보 */
+.record-card .card-tab {
+    position: absolute;
+    top: -24px;                                       /* 카드 상단 모서리 위로 탭이 솟음 */
+    left: 24px;                                        /* 카드 좌측 패딩과 정렬 */
+    padding: 6px 16px;
+    background: var(--card-bg);
+    color: var(--text);
+    font-weight: 700;
+    font-size: .78rem;
+    letter-spacing: .02em;
+    border: 1px solid var(--border);
+    border-bottom: none;                              /* 아래를 터서 카드 본문과 한 몸처럼 이어짐 */
+    border-radius: 10px 10px 0 0;
+    box-shadow: 0 -2px 6px rgba(0, 0, 0, .04);
+}
+.record-card .missed-section {
+    padding-bottom: 18px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);           /* 빠뜨린 날 ↔ 일자별 독서 시간 구분선 */
+}
+.record-card .missed-section .muted { margin: 0; font-size: .85rem; color: var(--muted); }
