@@ -719,6 +719,27 @@ NoSuchMethodException이 가리키는 건 **no-arg 생성자**(`<init>()`)인데
 
 ---
 
+## T-038. 세션 타임아웃을 프로퍼티로 못 늘린다(Spring Session JDBC) — `SessionRepositoryCustomizer` 빈으로
+
+**증상**: 책 읽다 "측정 종료"를 누르니 로그아웃, ~50분 비웠다 오니 재로그인. 세션이 30분 만에 끊김.
+`server.servlet.session.timeout=30d`를 application.properties에 넣어도 **여전히 30분**(테스트가 `expected: 720H but was: 30M`로 포착).
+
+**원인 — Boot 4 + Spring Session JDBC "프로퍼티 무동작" 함정(T-014·T-021 자매)**:
+- 세션 외부화(Spring Session) 이후 세션 기본 만료시간(maxInactiveInterval)은 서블릿 컨테이너가 아니라 **Spring Session
+  저장소**가 들고 있어, 컨테이너용 프로퍼티 `server.servlet.session.timeout`이 저장소에 **연결되지 않는다**(기본 30분 유지).
+- 게다가 독서 타이머는 **클라이언트(JS)에서만** 돌아 읽는 동안 서버 요청이 0 → 서버가 "비활성"으로 보고 30분에 끊는다(개념 **N-057**).
+
+**해결 / 예방**:
+- 타임아웃: `SessionRepositoryCustomizer<JdbcIndexedSessionRepository>` 빈으로 저장소에 직접
+  `setDefaultMaxInactiveInterval(Duration.ofDays(30))`(`WebConfig`). 프로퍼티는 의도 문서화·컨테이너 기본값용으로만 남김.
+- 브라우저 닫아도 유지: 쿠키 Max-Age도 `DefaultCookieSerializer.setCookieMaxAge(seconds)`로 영속화(기본 -1=세션 쿠키라 창 닫으면 소멸).
+- **검증 필수**(이 함정은 "넣었으니 됐겠지"로 놓치기 쉬움 — 효과를 반드시 테스트):
+  - `sessionRepository.createSession().getMaxInactiveInterval()`이 30일인지(프로퍼티만 넣으면 30분이라 Red로 포착).
+  - 로그인 응답 `Set-Cookie: SESSION=...`에 `Max-Age=2592000`이 실리는지.
+- 같은 "프로퍼티 무동작→명시 빈" 계열: **T-014**(forward headers), **T-021**(쿠키 SameSite/Secure). 개념은 **N-057**.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -758,3 +779,4 @@ NoSuchMethodException이 가리키는 건 **no-arg 생성자**(`<init>()`)인데
 | 2026-06-06 | T-036 (Thymeleaf 일반 주석 `<!-- -->`은 파싱 후에도 **클라이언트 HTML로 그대로 출력**된다 — 렌더된 HTML을 substring으로 단언하는 MockMvc 테스트가 주석 속 텍스트에 가짜로 걸림. 예: "구매 버튼 미노출"을 `html.doesNotContain("/buy")`로 단언했는데 주석에 `.../books/{id}/buy` 설명이 있어 Red / 해결 ① 단언을 **해석된 실제 값**으로 정밀화(리터럴 `{loginId}` 대신 치환된 `/u/openking/books/`처럼 — 앵커가 진짜 렌더될 때만 나타나는 문자열) ② 출력에서 빼려면 parser-comment `<!--/* */-->` 사용(일반 주석은 의도적으로 클라에 남김 ↔ 파서 주석은 제거됨) / 본 프로젝트는 주석을 클라에 남기는 관행이라 ①로 해결 — PR #199 프로필 구매 버튼 음성 렌더 테스트) |
 | 2026-06-07 | T-037 (신형 Gemini `AQ.` API 키는 `x-goog-api-key` 헤더로 401 `ACCESS_TOKEN_TYPE_UNSUPPORTED`·`Authorization: Bearer`도 401 — `?key=` 쿼리파라미터로만 통함 / 일부 계정은 `AQ.` 키만 발급(재발급해도 동일, 정상 키) / 어댑터를 buildEndpoint `?key=`로 전환해 AIza·AQ 호환 / 키 검증은 쿼리파라미터 curl로(헤더 테스트는 멀쩡한 키도 401이라 오진), `-H "값"`만 주면 무효헤더→403 unregistered / 책BTI 라이브 서술 살림) |
 | 2026-06-06 | T-031 확장 (null만이 아니다: 단독 `th:if="${stringVar}"`는 Thymeleaf truthiness로 동작하지만 `and`/`or`/`!`로 묶으면 SpringEL이 피연산자를 boolean으로 강제 → String도 boolean화 못 해 `SpelEvaluationException` / `${b.purchaseLink and !self}`가 그 행 렌더 테스트 9개를 한꺼번에 깸 → `${!#strings.isEmpty(b.purchaseLink) and !self}`로 명시 술어화 / 규칙: `${문자열}`을 boolean 연산자와 섞지 말 것 — 본인 책방 구매 버튼 숨기다 발견) |
+| 2026-06-07 | T-038 (세션 타임아웃을 `server.servlet.session.timeout` 프로퍼티로 못 늘림 — Boot 4 + Spring Session JDBC에선 만료시간을 서블릿 컨테이너가 아니라 Spring Session 저장소가 들고 있어 프로퍼티가 안 닿음(30분 그대로, 테스트가 720H vs 30M로 포착) / 독서 타이머는 클라이언트(JS)에서만 돌아 읽는 동안 서버 요청 0 → 30분에 끊김(N-057) / 해결: `SessionRepositoryCustomizer<JdbcIndexedSessionRepository>`로 `setDefaultMaxInactiveInterval` 직접 + 쿠키 Max-Age는 `DefaultCookieSerializer.setCookieMaxAge`(기본 -1=세션 쿠키) / 검증 필수: `createSession().getMaxInactiveInterval()`·`Set-Cookie Max-Age` / T-014·T-021 "프로퍼티 무동작→명시 빈" 자매) |

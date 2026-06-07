@@ -128,6 +128,17 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
   Redis(인메모리, TTL 네이티브)가 유리. JDBC→Redis는 의존성·설정 교체로 비교적 단순. 지금은 비용(예산 $50)
   고려해 JDBC 유지, 전환은 트래픽 신호가 오면.
 
+#### 세션 비활성 타임아웃 30일 — 독서 중 로그아웃 해결 (완료 ✅ 2026-06-07)
+
+**증상(실사용)**: 책 읽다 "측정 종료"를 누르려니 로그아웃됨, ~50분 비웠다 오니 재로그인 요구.
+**원인**: 타임아웃이 코드에 없어 **Spring Boot 기본 30분**. 게다가 **독서 타이머는 클라이언트(JS)에서만 1초마다
+돌고 읽는 동안 서버 요청이 0**이라 서버가 "노는 사용자"로 보고 30분 뒤 세션을 끊는다 → *오래 읽는 핵심 사용자일수록*
+더 잘 터지는 최악 패턴. (측정 중 `ReadingSession`은 DB에 남아 재로그인하면 살아 있으나 끊김 자체가 마찰.)
+**해결**: 비활성 타임아웃 **30일** + 쿠키 Max-Age **30일**(브라우저 닫아도 유지). 세션이 MySQL 외부화돼 있어 길게 잡아도 비용 0.
+- ⚠️ **Boot 4 함정**: `server.servlet.session.timeout=30d` 프로퍼티는 **Spring Session JDBC 저장소에 안 먹는다**(기본 30분 그대로 — cookieSerializer·ForwardedHeaderFilter와 같은 계열). → `WebConfig#sessionTimeoutCustomizer`(`SessionRepositoryCustomizer`)로 저장소에 직접 `setDefaultMaxInactiveInterval`, 쿠키 Max-Age는 `cookieSerializer.setCookieMaxAge`. 프로퍼티는 의도 문서화용으로 남김.
+- TDD: `SessionCookieSameSiteTest`에 ① `createSession().getMaxInactiveInterval()==30일`(프로퍼티 무동작이면 30분이라 Red로 함정 포착) ② 로그인 응답 SESSION 쿠키 `Max-Age=2592000` 추가.
+- (옵션·후속) 측정 중 keepalive 핑 — 30일도 넘기는 초장기 비활성까지 막진 못하나 현 요구엔 불필요.
+
 ### 무중단 배포 — ECS 롤링 deploymentConfiguration (적용·검증 완료 ✅ 2026-06-02)
 
 - **증상**: 배포 시 홈페이지가 잠깐 먹통(503), 버튼 동작 반영 안 됨. 원인: 단일 태스크(`desiredCount=1`)가
@@ -957,4 +968,5 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 | 2026-06-07 | **책BTI Gemini 키 배포 배선**(운영 활성화) — `deploy/task-definition.json` `secrets[]`에 `BOOKTIMER_LLM_API_KEY` → SSM `/booktimer/LLM_API_KEY` 참조 추가(알라딘 TTBKey와 동일 패턴) + `deploy-aws.md §12-3`(키 발급·SSM 등록·배선·모델 변경) 신설. **순서 주의(T-011)**: SSM 파라미터를 *먼저* 만든 뒤 머지해야 새 태스크가 기동 실패 안 함(secrets는 태스크 시작 시 필수 로드). 실행역할 IAM은 기존 `ssm:GetParameters`(/booktimer/*)로 충분. 키 없으면 `isEnabled()`=false → 사실만 폴백(무해). 문서/배포설정만(`.java` 무변경 → 테스트 게이트 skip). (PR #212 머지) |
 | 2026-06-07 | **책BTI Gemini 인증을 `?key=` 쿼리파라미터로 — 신형 `AQ.` 키 호환**(라이브 서술 살림) — 배포 후 서술이 안 켜지고 `401 ACCESS_TOKEN_TYPE_UNSUPPORTED`. 원인: Google이 API 키를 `AIza`(Traffic)→`AQ.`(Authentication)로 교체 중인데 일부 계정은 `AQ.` 키만 발급되고, 이 키는 기존 `x-goog-api-key` 헤더(·`Authorization: Bearer`)로는 401, **`?key=` 쿼리파라미터로만** 통한다(CloudShell `curl ...?key=`로 모델 목록 200 확인). 어댑터를 `GeminiReadingPersonalityNarrator.buildEndpoint(base,model,key)`로 추출해 `?key=`(URL 인코딩)로 호출·헤더 제거 → `AIza`·`AQ.` 둘 다 호환. 기본 모델도 이 키로 접근 확인된 `gemini-2.5-flash`로 상향(2.0→2.5). URL에 키가 실리므로 catch에서 URL·요청 로그 안 남김. **TDD Red→Green**: `buildEndpoint_putsKeyAsQueryParam`(키가 헤더 아닌 `?key=`에 실림) Red(메서드 없음 컴파일 실패) 확인 → 구현 → Green. 함정 **T-037**(헤더 테스트는 멀쩡한 AQ 키도 401이라 오진, `-H "값"`만 주면 403)·deploy-aws §12-3 AQ 주의 동봉. GeminiReadingPersonalityNarrator.java+테스트+deploy-aws.md+troubleshooting.md. (PR #213 머지) |
 | 2026-06-07 | **책BTI v1 라이브 서술 동작 확인 + 개념 노트 정리**(세션 마무리) — #213 배포 성공 후 `/personality`에서 **성향 서술 문단이 라이브로 노출됨을 확인**(폴백 아님) → 책BTI v1(집계→서술→캐시→화면→운영 LLM)이 **전 구간 실동작**. 인증 채널 비동치(헤더 vs `?key=` vs Bearer)와 Google `AIza`→`AQ.` 키 세대 교체를 면접 설명 수준 개념 노트 **N-056**으로 정리(트랩 T-037의 "왜"). 문서만(learning-notes.md+plan.md). (PR 예정) |
-| 2026-06-07 | **retention 레버 ② — 사후 수동 입력**(엔진 A 복귀, §전략 최우선 백로그) — 책BTI v1 출하 후 §전략 순서대로 엔진 A retention으로 복귀. 측정 깜빡한 독서를 나중에 직접 기록해 "어차피 기록 안 됐네" 이탈 차단. 전용 페이지 `GET/POST /sessions/manual`(`ReadingSessionController`)+`manual-session.html`+대시보드 퀵액션 "✍️ 빠뜨린 기록". 서비스 `ReadingSessionService.recordManual` = `start`(책 필수)+`stop`(누적 차감) 합친 완료 세션(진행 세션 무관). 날짜 안착=startedAt을 유저 TZ로 묶으므로(N-010) 오늘은 endedAt=now·과거는 그날 정오 종료. 차감은 단일 누적 부채(N-001)라 과거 기록도 현재 잔여를 갚음. **DB 무변경(Flyway 없음)**. TDD Red→Green: 서비스 5(완료세션+차감·책null·순서역전·타이머없음·읽고싶음전환)+컨트롤러 7(폼·해피·과거날짜 안착·책없음·IDOR·미래날짜·0분). 전체 스위트 그린. (PR 예정) |
+| 2026-06-07 | **retention 레버 ② — 사후 수동 입력**(엔진 A 복귀, §전략 최우선 백로그) — 책BTI v1 출하 후 §전략 순서대로 엔진 A retention으로 복귀. 측정 깜빡한 독서를 나중에 직접 기록해 "어차피 기록 안 됐네" 이탈 차단. 전용 페이지 `GET/POST /sessions/manual`(`ReadingSessionController`)+`manual-session.html`+대시보드 퀵액션 "✍️ 빠뜨린 기록". 서비스 `ReadingSessionService.recordManual` = `start`(책 필수)+`stop`(누적 차감) 합친 완료 세션(진행 세션 무관). 날짜 안착=startedAt을 유저 TZ로 묶으므로(N-010) 오늘은 endedAt=now·과거는 그날 정오 종료. 차감은 단일 누적 부채(N-001)라 과거 기록도 현재 잔여를 갚음. **DB 무변경(Flyway 없음)**. TDD Red→Green: 서비스 5(완료세션+차감·책null·순서역전·타이머없음·읽고싶음전환)+컨트롤러 7(폼·해피·과거날짜 안착·책없음·IDOR·미래날짜·0분). 전체 스위트 그린. (PR #215 머지) |
+| 2026-06-07 | **세션 비활성 타임아웃 30일 — 독서 중 로그아웃 해결**(실사용 피드백) — 책 읽다 "측정 종료" 누르려니 로그아웃·~50분 비웠다 오니 재로그인 요구. 원인: 타임아웃 미설정 = **Boot 기본 30분** + 독서 타이머는 클라이언트(JS)에서만 돌고 읽는 동안 서버 요청이 0이라 30분 뒤 세션 만료(오래 읽는 핵심 사용자일수록 더 잘 터짐). 해결: 비활성 타임아웃 30일 + 쿠키 Max-Age 30일(브라우저 닫아도 유지), 세션 MySQL 외부화라 비용 0. **Boot 4 함정**: `server.servlet.session.timeout` 프로퍼티가 Spring Session JDBC 저장소에 안 먹어(기본 30분 그대로, cookieSerializer·ForwardedHeaderFilter 계열) `WebConfig#sessionTimeoutCustomizer`(`SessionRepositoryCustomizer`)로 직접 `setDefaultMaxInactiveInterval`+`cookieSerializer.setCookieMaxAge`. TDD Red→Green: `SessionCookieSameSiteTest`에 createSession 타임아웃 30일(프로퍼티만이면 30분 Red로 함정 포착)+쿠키 Max-Age=2592000 단언. 전체 스위트 그린. learning-notes N-### 후보(Boot 4 세션 타임아웃 프로퍼티 무동작). (PR 예정) |
