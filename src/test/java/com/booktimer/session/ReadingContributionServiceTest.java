@@ -1,5 +1,7 @@
 package com.booktimer.session;
 
+import com.booktimer.timer.ReadingGoalChange;
+import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.Role;
@@ -47,8 +49,10 @@ class ReadingContributionServiceTest {
         when(history.dailyHistory(any())).thenReturn(List.of());
         ReadingTimerRepository timers = mock(ReadingTimerRepository.class);
         when(timers.findByUser(any())).thenReturn(Optional.empty());
+        ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);
+        when(goalChanges.findByUserOrderByEffectiveDateAsc(any())).thenReturn(List.of());
         Clock fixed = Clock.fixed(INSTANT, ZoneOffset.UTC);
-        ReadingContributionService service = new ReadingContributionService(history, timers, fixed);
+        ReadingContributionService service = new ReadingContributionService(history, timers, goalChanges, fixed);
 
         User seoul = User.of("s@booktimer.com", "h", "서울", "Asia/Seoul", Role.USER);
         User utc = User.of("u@booktimer.com", "h", "UTC", "UTC", Role.USER);
@@ -67,8 +71,10 @@ class ReadingContributionServiceTest {
         ReadingHistoryService history = mock(ReadingHistoryService.class);
         when(history.dailyHistory(user)).thenReturn(List.of(new DailyReadingRecord(day, read, List.of("책"))));
         ReadingTimerRepository timers = mock(ReadingTimerRepository.class);
+        ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);
+        when(goalChanges.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of()); // 이력 없음 → 타이머 목표 폴백
         Clock fixed = Clock.fixed(INSTANT, ZoneOffset.UTC);
-        ReadingContributionService service = new ReadingContributionService(history, timers, fixed);
+        ReadingContributionService service = new ReadingContributionService(history, timers, goalChanges, fixed);
 
         // 목표 1시간 → 30분은 50% → lv2
         when(timers.findByUser(user)).thenReturn(Optional.of(ReadingTimer.of(3600L)));
@@ -77,6 +83,29 @@ class ReadingContributionServiceTest {
         // 목표 30분 → 30분은 100% → lv4 (목표를 따라간다)
         when(timers.findByUser(user)).thenReturn(Optional.of(ReadingTimer.of(1800L)));
         assertThat(levelOf(service.contributionGraph(user), day)).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("색 농도는 그날 목표로 판정한다 — 목표를 올려도 옛 목표를 채운 과거 날 농도가 안 내려간다(N-059 잔디)")
+    void level_usesGoalHistory_pastDayJudgedByItsOwnGoal() {
+        User user = User.of("h@booktimer.com", "h", "이력", "Asia/Seoul", Role.USER);
+        LocalDate metDay = LocalDate.of(2026, 5, 20); // 1년 창 안
+        long read = 1800L;                            // 30분
+
+        ReadingHistoryService history = mock(ReadingHistoryService.class);
+        when(history.dailyHistory(user)).thenReturn(List.of(new DailyReadingRecord(metDay, read, List.of("책"))));
+        ReadingTimerRepository timers = mock(ReadingTimerRepository.class);
+        when(timers.findByUser(user)).thenReturn(Optional.of(ReadingTimer.of(3600L))); // 현재(폴백) 목표 60분
+        ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);
+        // metDay엔 목표 30분, 이후 6/1부터 60분으로 인상.
+        when(goalChanges.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of(
+                ReadingGoalChange.of(user, metDay.minusDays(1), 1800L),
+                ReadingGoalChange.of(user, LocalDate.of(2026, 6, 1), 3600L)));
+        ReadingContributionService service =
+                new ReadingContributionService(history, timers, goalChanges, Clock.fixed(INSTANT, ZoneOffset.UTC));
+
+        // 현재 목표(3600)로 일괄 판정했다면 30분=50%→lv2였겠지만, 그날 목표(1800)로 보면 100%→lv4.
+        assertThat(levelOf(service.contributionGraph(user), metDay)).isEqualTo(4);
     }
 
     private static int levelOf(ContributionGraph graph, LocalDate date) {

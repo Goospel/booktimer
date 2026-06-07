@@ -1,5 +1,8 @@
 package com.booktimer.session;
 
+import com.booktimer.timer.GoalSchedule;
+import com.booktimer.timer.ReadingGoalChange;
+import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.User;
 import org.springframework.stereotype.Service;
@@ -20,8 +23,10 @@ import java.util.Map;
  * {@link User#getTimezone()}으로 계산한다(N-010). 그리드 구성 자체는 순수 빌더
  * {@link ContributionGraphBuilder}에 위임해 단위테스트로 검증된다.
  *
- * <p>색 농도는 유저의 <b>하루 목표</b>(타이머의 평면 증가값 {@code dailyIncrementSeconds}) 대비 달성 비율로 정한다
- * — 그래서 타이머를 함께 조회해 목표를 빌더에 넘긴다. 타이머가 없으면(불변식상 거의 없음) 기본 목표로 폴백한다.
+ * <p>색 농도는 각 칸을 <b>그날 유효했던 하루 목표</b> 대비 달성 비율로 정한다 — 목표를 올려도 옛 목표를 채운
+ * 과거 날의 색이 새 목표 기준으로 내려가 소급해 다시 칠해지지 않게(N-059의 잔디 판). 목표 변경 이력
+ * ({@link ReadingGoalChange})을 {@link GoalSchedule}로 날짜별로 풀어 빌더에 넘긴다. 이력이 비면(레거시·미온보딩)
+ * 현재 타이머 목표로 폴백하므로 옛 동작과 동일하다. 타이머도 없으면(불변식상 거의 없음) 기본 목표로 폴백한다.
  */
 @Service
 @Transactional(readOnly = true)
@@ -32,13 +37,16 @@ public class ReadingContributionService {
 
     private final ReadingHistoryService historyService;
     private final ReadingTimerRepository timerRepository;
+    private final ReadingGoalChangeRepository goalChangeRepository;
     private final Clock clock;
 
     public ReadingContributionService(ReadingHistoryService historyService,
                                       ReadingTimerRepository timerRepository,
+                                      ReadingGoalChangeRepository goalChangeRepository,
                                       Clock clock) {
         this.historyService = historyService;
         this.timerRepository = timerRepository;
+        this.goalChangeRepository = goalChangeRepository;
         this.clock = clock;
     }
 
@@ -65,10 +73,18 @@ public class ReadingContributionService {
             secondsByDate.put(record.date(), record.totalSeconds());
         }
 
-        long goalSeconds = timerRepository.findByUser(user)
+        // 현재(폴백) 목표 — 이력에 그 날짜 이전 변경이 없을 때 쓴다.
+        long currentGoalSeconds = timerRepository.findByUser(user)
                 .map(timer -> timer.getDailyIncrementSeconds())
                 .orElse(DEFAULT_GOAL_SECONDS);
 
-        return ContributionGraphBuilder.build(secondsByDate, today, goalSeconds);
+        // 목표 변경 이력 → GoalSchedule → 각 칸을 그날 목표로 색칠(소급 재채색 차단, N-059).
+        Map<LocalDate, Long> changesByDate = new LinkedHashMap<>();
+        for (ReadingGoalChange change : goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)) {
+            changesByDate.put(change.getEffectiveDate(), change.getGoalSeconds());
+        }
+        GoalSchedule schedule = GoalSchedule.of(changesByDate, currentGoalSeconds);
+
+        return ContributionGraphBuilder.build(secondsByDate, today, schedule::goalFor);
     }
 }

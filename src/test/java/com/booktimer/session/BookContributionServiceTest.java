@@ -2,6 +2,9 @@ package com.booktimer.session;
 
 import com.booktimer.book.Book;
 import com.booktimer.book.BookStatus;
+import com.booktimer.timer.ReadingGoalChange;
+import com.booktimer.timer.ReadingGoalChangeRepository;
+import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
@@ -10,6 +13,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
@@ -47,8 +51,10 @@ class BookContributionServiceTest {
         ReadingSessionRepository repo = mock(ReadingSessionRepository.class);
         ReadingTimerRepository timers = mock(ReadingTimerRepository.class);
         when(timers.findByUser(any())).thenReturn(Optional.empty());
+        ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);
+        when(goalChanges.findByUserOrderByEffectiveDateAsc(any())).thenReturn(List.of());
         Clock fixed = Clock.fixed(NOW, ZoneOffset.UTC);
-        BookContributionService service = new BookContributionService(repo, timers, fixed);
+        BookContributionService service = new BookContributionService(repo, timers, goalChanges, fixed);
 
         User user = seoulUser();
         Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
@@ -74,7 +80,10 @@ class BookContributionServiceTest {
         ReadingSessionRepository repo = mock(ReadingSessionRepository.class);
         ReadingTimerRepository timers = mock(ReadingTimerRepository.class);
         when(timers.findByUser(any())).thenReturn(Optional.empty());
-        BookContributionService service = new BookContributionService(repo, timers, Clock.fixed(NOW, ZoneOffset.UTC));
+        ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);
+        when(goalChanges.findByUserOrderByEffectiveDateAsc(any())).thenReturn(List.of());
+        BookContributionService service =
+                new BookContributionService(repo, timers, goalChanges, Clock.fixed(NOW, ZoneOffset.UTC));
         User user = seoulUser();
         Book book = Book.register(user, "안 읽은 책", null, null, null, null, null, BookStatus.WANT_TO_READ);
         when(repo.findByUserAndBook(user, book)).thenReturn(List.of());
@@ -84,5 +93,40 @@ class BookContributionServiceTest {
         assertThat(detail.totalSeconds()).isZero();
         assertThat(detail.dailyHistory()).isEmpty();
         assertThat(detail.graph().totalSeconds()).isZero();
+    }
+
+    @Test
+    @DisplayName("책별 잔디도 그날 목표로 색을 정한다 — 목표 인상 후에도 옛 목표 채운 날 농도 유지(N-059)")
+    void detail_level_usesGoalHistory() {
+        ReadingSessionRepository repo = mock(ReadingSessionRepository.class);
+        ReadingTimerRepository timers = mock(ReadingTimerRepository.class);
+        when(timers.findByUser(any())).thenReturn(Optional.of(ReadingTimer.of(3600L))); // 현재(폴백) 목표 60분
+        ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);
+        Clock fixed = Clock.fixed(NOW, ZoneOffset.UTC);
+        BookContributionService service = new BookContributionService(repo, timers, goalChanges, fixed);
+
+        User user = seoulUser();
+        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
+        // 서울 기준 6/1에 30분 읽음.
+        ReadingSession s = completed(user, book, "2026-06-01T01:00:00Z", 1800);
+        when(repo.findByUserAndBook(user, book)).thenReturn(List.of(s));
+        // 6/1엔 목표 30분, 그 뒤 6/2부터 60분으로 인상.
+        when(goalChanges.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of(
+                ReadingGoalChange.of(user, LocalDate.of(2026, 5, 1), 1800L),
+                ReadingGoalChange.of(user, LocalDate.of(2026, 6, 2), 3600L)));
+
+        BookReadingDetail detail = service.detail(user, book);
+
+        // 현재 목표(3600)로 일괄 판정했다면 30분=50%→lv2였겠지만, 그날(6/1) 목표(1800)로 보면 100%→lv4.
+        assertThat(levelOf(detail.graph(), LocalDate.of(2026, 6, 1))).isEqualTo(4);
+    }
+
+    private static int levelOf(ContributionGraph graph, LocalDate date) {
+        return graph.weeks().stream()
+                .flatMap(List::stream)
+                .filter(c -> date.equals(c.date()))
+                .findFirst()
+                .orElseThrow()
+                .level();
     }
 }
