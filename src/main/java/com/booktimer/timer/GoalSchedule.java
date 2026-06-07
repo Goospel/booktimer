@@ -3,6 +3,7 @@ package com.booktimer.timer;
 import java.time.LocalDate;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.Optional;
 import java.util.TreeMap;
 
 /**
@@ -37,5 +38,16 @@ public final class GoalSchedule {
     public long goalFor(LocalDate date) {
         Map.Entry<LocalDate, Long> entry = changesByDate.floorEntry(date);
         return entry != null ? entry.getValue() : fallbackGoalSeconds;
+    }
+
+    /**
+     * 가장 이른 변경일(=사용자가 목표를 처음 가진 시점, baseline). 이력이 비면 {@link Optional#empty()}.
+     *
+     * <p>이보다 이른 날은 "사용자가 아직 시작하기 전"이라 빠뜨린 날로 칠 수 없다 — {@link #goalFor}가
+     * 폴백(현재 목표)을 돌려주더라도 그건 그 옛 날짜의 진짜 목표가 아니다. 호출자가 이 경계로 윈도우의
+     * 가입 전 날짜를 판정에서 제외한다(입문자가 시작 전 날을 "못 지킴"으로 보지 않게).
+     */
+    public Optional<LocalDate> earliestEffectiveDate() {
+        return changesByDate.isEmpty() ? Optional.empty() : Optional.of(changesByDate.firstKey());
     }
 }

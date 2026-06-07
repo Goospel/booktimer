@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -54,6 +55,24 @@ class GoalScheduleTest {
     void goalFor_emptyHistory_alwaysFallback() {
         GoalSchedule schedule = GoalSchedule.of(changes(), FALLBACK);
         assertThat(schedule.goalFor(JUN5)).isEqualTo(FALLBACK);
+    }
+
+    @Test
+    @DisplayName("baseline(가장 이른 변경일)을 돌려준다 — 그 이전 날짜는 '아직 시작 전'이라 호출자가 판정에서 뺀다")
+    void earliestEffectiveDate_returnsFirstChangeDate() {
+        Map<LocalDate, Long> changes = changes();
+        changes.put(JUN5, 3660L); // 일부러 늦은 날짜 먼저 넣음
+        changes.put(JUN1, 3600L);
+        GoalSchedule schedule = GoalSchedule.of(changes, FALLBACK);
+
+        assertThat(schedule.earliestEffectiveDate()).contains(JUN1);
+    }
+
+    @Test
+    @DisplayName("변경 이력이 비면 baseline이 없다 (레거시 — 호출자는 폴백으로 전체 판정)")
+    void earliestEffectiveDate_emptyHistory_isEmpty() {
+        GoalSchedule schedule = GoalSchedule.of(changes(), FALLBACK);
+        assertThat(schedule.earliestEffectiveDate()).isEmpty();
     }
 
     @Test
