@@ -85,21 +85,6 @@
         </section>
     </div>
 
-    <!-- 이번 주 빠뜨린 날: 최근 7일 윈도우 내 목표 미충족 과거 날(부채>0). 각 항목 "채우기"=수동입력 날짜 프리필.
-         윈도우(7일) 밖은 자동 용서라 안 보인다(입문자 친화 — 죄책감 누적 차단). 라이브 영역 밖이라 start/stop엔
-         안 바뀌고(과거 날만 다룸) 수동 입력 후 전체 리로드 때 갱신된다. -->
-    <section class="card missed-days" th:if="${weeklyShortfall != null and !weeklyShortfall.isEmpty()}">
-        <h2>이번 주 빠뜨린 날</h2>
-        <p class="muted">최근 7일 중 목표를 못 채운 날이에요. 그날 읽고 기록을 깜빡했다면 채워 넣어요.</p>
-        <ul class="missed-list">
-            <li th:each="d : ${weeklyShortfall}">
-                <span class="missed-date" th:text="${#temporals.format(d.date, 'M월 d일')}">6월 5일</span>
-                <span class="missed-debt" th:text="${d.debtSeconds / 60} + '분 부족'">60분 부족</span>
-                <a class="btn-ghost btn-fill" th:href="@{/sessions/manual(date=${d.date})}">채우기</a>
-            </li>
-        </ul>
-    </section>
-
     <!-- 하이라이트 밴드: 이 서비스의 '재미' 동선(내 책장·내 책방=공개 프로필)을 측정 바로 밑으로 승격.
          타이머는 히어로로 유지하되 두 동선을 굵게 강조해 노출 우선순위를 올린다.
          맨 밑 .quick-actions에서는 둘을 빼 중복을 없앤다. -->
@@ -166,9 +151,6 @@
     <nav class="quick-actions" aria-label="바로가기">
         <a class="quick-tile" th:href="@{/history}">
             <span class="qt-icon" aria-hidden="true">📖</span><span class="qt-label">독서 기록</span>
-        </a>
-        <a class="quick-tile" th:href="@{/sessions/manual}">
-            <span class="qt-icon" aria-hidden="true">✍️</span><span class="qt-label">빠뜨린 기록</span>
         </a>
         <a class="quick-tile" th:href="@{/personality}">
             <span class="qt-icon" aria-hidden="true">🧬</span><span class="qt-label">책BTI</span>

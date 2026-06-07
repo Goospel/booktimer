@@ -39,13 +39,14 @@ public class DashboardModel {
     }
 
     /**
-     * 라이브 영역 렌더 속성을 채운다 — 부채 상태(nickname, remainingSeconds=오늘 부채, weeklyShortfall=
-     * 이번 주 빠뜨린 날), 측정 상태(hasActiveSession), 측정 중인 책(activeBookTitle)과 그 책의 누적 독서
-     * 시간(activeBookTotalSeconds), 시작 시 고를 책 목록(readingBooks/finishedBooks)과 최근 읽은 책(recentBookId).
+     * 라이브 영역 렌더 속성을 채운다 — 부채 상태(nickname, remainingSeconds=오늘 부채), 측정 상태
+     * (hasActiveSession), 측정 중인 책(activeBookTitle)과 그 책의 누적 독서 시간(activeBookTotalSeconds),
+     * 시작 시 고를 책 목록(readingBooks/finishedBooks)과 최근 읽은 책(recentBookId).
      *
      * <p><b>{@code remainingSeconds}는 "오늘 부채"</b>(목표 − 오늘 읽은 양)다 — 헤드라인 카운트다운(JS
      * {@code data-remaining})의 시작값. 속성명은 옛 이름을 유지해 템플릿·JS가 그대로 동작한다.
-     * {@code weeklyShortfall}은 최근 7일 윈도우 내 과거 빠뜨린 날 목록(최근 먼저, {@link WeeklyDebt}).
+     * 대시보드는 헤드라인(오늘 부채)만 보여준다 — "이번 주 빠뜨린 날" 목록({@link WeeklyDebt#missedDays()})은
+     * 독서 기록 화면({@code /history}, {@link com.booktimer.web.HistoryController})으로 옮겼다.
      *
      * <p>측정 대상은 "읽는 중"·"완독"인 책뿐이다 — "읽고싶음"은 아직 펴지 않은 책이라 시간을 재는 게
      * 이상하므로 드롭다운에서 제외한다(optgroup으로 「읽는 중」/「완독」을 시각적으로 구분). 가장 최근에
@@ -62,7 +63,6 @@ public class DashboardModel {
         model.addAttribute("nickname", user.getNickname());
         model.addAttribute("loginId", user.getLoginId()); // "내 공개 프로필" 링크(/u/{loginId})용
         model.addAttribute("remainingSeconds", debt.todayDebtSeconds()); // 헤드라인 = 오늘 부채(JS data-remaining)
-        model.addAttribute("weeklyShortfall", debt.missedDays());          // 이번 주 빠뜨린 날(최근 먼저)
         model.addAttribute("hasActiveSession", activeSession.isPresent());
         model.addAttribute("activeStartedAt", activeSession.map(ReadingSession::getStartedAt).orElse(null));
         model.addAttribute("activeBookTitle", activeBook != null ? activeBook.getTitle() : null);
