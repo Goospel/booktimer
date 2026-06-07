@@ -24,7 +24,11 @@
         </p>
         <div class="landing-cta">
             <a class="btn btn-primary" th:href="@{/signup}">무료로 시작하기</a>
-            <a class="btn btn-secondary" th:href="@{/login}">로그인</a>
+            <div class="oauth-divider"><span>또는</span></div>
+            <!-- 소셜 가입/로그인: GET /oauth2/authorization/google → 구글 인가 화면. 신규면 자동 가입(온보딩으로). -->
+            <a class="btn btn-oauth btn-oauth-google" th:href="@{/oauth2/authorization/google}">
+                <span class="oauth-icon">G</span> Google로 시작하기
+            </a>
         </div>
     </section>
 
