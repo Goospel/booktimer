@@ -3,7 +3,7 @@
 > 이 파일은 글로벌 `~/.claude/CLAUDE.md` 와 **합쳐서** 적용된다.
 > 글로벌은 사용자 메타 시스템(PKM 등), 이 파일은 BookTimer 고유 규칙.
 
-프로젝트 개요·도메인 규칙은 [README.md](README.md), 학습 노트는 [claude-docs/learning-notes.md](claude-docs/learning-notes.md), 트러블슈팅은 [claude-docs/troubleshooting.md](claude-docs/troubleshooting.md) 참고.
+프로젝트 개요·도메인 규칙은 [README.md](README.md), 로드맵·설계는 [plan.md](plan.md), 갱신 이력(변경 일지)은 [claude-docs/changelog.md](claude-docs/changelog.md), 학습 노트는 [claude-docs/learning-notes.md](claude-docs/learning-notes.md), 트러블슈팅은 [claude-docs/troubleshooting.md](claude-docs/troubleshooting.md) 참고.
 
 ---
 
@@ -24,11 +24,13 @@
      🤖 Generated with [Claude Code](https://claude.com/claude-code)
      ```
    - PR body 작성 시 글로벌 규칙대로 **troubleshooting / learning-notes sweep** 수행
-   - **plan.md 갱신 이력 항목을 PR 브랜치 안에 포함한다 (필수)** — 그 작업을 `plan.md`
-     맨 아래 `## 🔄 갱신 이력` 표에 한 줄로 남긴다(일자 / 한 일·PR 번호). plan.md에
-     원래 없던 작업(즉흥 기능·UX 수정 등)도 마찬가지로 **갱신 이력엔 무조건 남긴다**.
+   - **갱신 이력 항목을 PR 브랜치 안에 포함한다 (필수)** — 그 작업을
+     [claude-docs/changelog.md](claude-docs/changelog.md) 표 **맨 아래에 한 줄**로 남긴다(일자 / 한 일·PR 번호).
+     plan.md에 원래 없던 작업(즉흥 기능·UX 수정 등)도 마찬가지로 **갱신 이력엔 무조건 남긴다**.
+     plan.md 본문의 `## 🔄 갱신 이력 (최근 10개)` 발췌도 같이 갱신한다(가장 오래된 1줄 제거 = 롤링 10개).
      갱신 단위는 PR이므로 이 줄도 그 PR 커밋에 함께 들어가야 한다 — 사후 보충 PR이
-     생기면 누락이다. (배경: 2026-06-05 #134가 plan.md를 안 건드려 #136으로 사후 보충함.)
+     생기면 누락이다. (배경: 2026-06-05 #134가 plan.md를 안 건드려 #136으로 사후 보충함.
+     2026-06-08 갱신 이력 표를 changelog.md로 분리 — plan.md 경량화.)
 5. **머지** — `gh pr merge` (사용자 확인 후). 머지 후 로컬 `main` 갱신(`git checkout main && git pull`) 및 브랜치 정리
 
 ### 예외
@@ -56,7 +58,7 @@
 
 ### 무엇을 — 두 층 모두
 
-1. **갱신 이력 표** (맨 아래 `## 🔄 갱신 이력`) — 그 작업 한 줄(일자 / 한 일·PR 번호)을 **해당 PR 브랜치 안에** 남긴다.
+1. **갱신 이력 표** — 그 작업 한 줄(일자 / 한 일·PR 번호)을 [claude-docs/changelog.md](claude-docs/changelog.md) 맨 아래에 **해당 PR 브랜치 안에** 남긴다(+ plan.md `최근 10개` 발췌 갱신).
    (이건 Git 워크플로 4번에 이미 있는 필수 사항 — 여기서 재확인.)
 2. **본문(로드맵·백로그·기능 섹션)** — 작업이 본문 내용을 바꿨으면 본문도 고친다:
    - 즉흥 기능을 구현했으면 → 해당 섹션을 신설하거나 "완료 ✅" 로 갱신.
@@ -112,7 +114,7 @@ git worktree remove ../BookTimer-<task>
 폴더를 나눠도 repo 전체가 공유하는 것은 여전히 충돌하니 조율한다:
 
 - **Flyway 버전 번호**(`V5__`, `V6__` …) — 세션별 번호 구역 배정 또는 머지 후 부여
-- **공유 문서**(plan.md / README / 이 파일 / learning-notes / troubleshooting) — 작게·원자적으로, **편집 직전 재읽기**
+- **공유 문서**(plan.md / changelog / README / 이 파일 / learning-notes / troubleshooting) — 작게·원자적으로, **편집 직전 재읽기**
 - **앱 포트 8080** — 두 세션이 `bootRun` 하면 충돌 → 트리별 `server.port` 분리(또는 한 곳에서만 실행)
 - **"File modified since read" 가드는 버그가 아니라 덮어쓰기 직전 보호** — 재읽기 → 그쪽 변경 보존 → 내 것만 재적용이 정답
 
