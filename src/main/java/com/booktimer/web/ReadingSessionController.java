@@ -7,6 +7,7 @@ import com.booktimer.session.ReadingSessionService;
 import com.booktimer.user.User;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -15,6 +16,11 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.security.Principal;
 import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 
 /**
  * 측정 세션 시작/종료 — 대시보드의 버튼이 호출하는 경로.
@@ -89,6 +95,92 @@ public class ReadingSessionController {
             error = "진행 중인 측정이 없습니다.";
         }
         return respond(htmx, user, error, model, redirectAttributes);
+    }
+
+    /** 하루를 넘는 단일 수동 기록은 오입력으로 보고 거부한다(살찐 손가락 방지). */
+    private static final long MAX_MANUAL_SECONDS = 24 * 3600L;
+
+    /**
+     * 사후 수동 입력 폼 — 측정 시작을 깜빡한 독서를 직접 적는 화면. 책 미지정 기록은 금지라
+     * 고를 책 목록(전체)을 싣고, 날짜 기본값/상한으로 쓸 "오늘"(유저 타임존)도 함께 싣는다.
+     */
+    @GetMapping("/manual")
+    public String manualForm(Principal principal, Model model) {
+        User user = currentUser(principal);
+        model.addAttribute("books", bookRepository.findByUserOrderByCreatedAtDesc(user));
+        model.addAttribute("today",
+                LocalDate.ofInstant(clock.instant(), ZoneId.of(user.getTimezone())).toString());
+        return "manual-session";
+    }
+
+    /**
+     * 사후 수동 입력 제출 — 책+날짜+시간으로 완료 세션 1건을 만든다.
+     *
+     * <p>검증(거부 시 폼으로 플래시 에러): 책 미선택·남의 책(IDOR), 날짜 형식 오류·미래 날짜, 0 이하·24시간 초과 시간.
+     * 잔디·일자별 기록은 {@code startedAt}을 유저 타임존으로 묶으므로(N-010), 고른 날짜에 안착하도록 시각을 잡는다 —
+     * 오늘이면 "지금" 끝난 것으로(미래 시각 회피), 과거면 그 날 정오를 종료로 삼아 {@code startedAt}이 같은 날에 남게 한다.
+     */
+    @PostMapping("/manual")
+    public String manualSubmit(Principal principal,
+                               @RequestParam(value = "bookId", required = false) Long bookId,
+                               @RequestParam(value = "date", required = false) String date,
+                               @RequestParam(value = "hours", required = false, defaultValue = "0") int hours,
+                               @RequestParam(value = "minutes", required = false, defaultValue = "0") int minutes,
+                               RedirectAttributes redirectAttributes) {
+        User user = currentUser(principal);
+        ZoneId zone = ZoneId.of(user.getTimezone());
+        LocalDate today = LocalDate.ofInstant(clock.instant(), zone);
+
+        Book book = (bookId == null) ? null : bookRepository.findByIdAndUser(bookId, user).orElse(null);
+        LocalDate readDate = parseDate(date);
+        long durationSeconds = hours * 3600L + minutes * 60L;
+
+        String error = validateManual(book, readDate, durationSeconds, today);
+        if (error != null) {
+            redirectAttributes.addFlashAttribute("error", error);
+            return "redirect:/sessions/manual";
+        }
+
+        Instant endedAt = readDate.equals(today)
+                ? clock.instant()
+                : readDate.atTime(LocalTime.NOON).atZone(zone).toInstant();
+        Instant startedAt = endedAt.minusSeconds(durationSeconds);
+
+        sessionService.recordManual(user, startedAt, endedAt, book);
+        redirectAttributes.addFlashAttribute("message", "독서 기록을 추가했어요.");
+        return "redirect:/sessions/manual";
+    }
+
+    /** {@code yyyy-MM-dd} 파싱. 비었거나 형식이 틀리면 null(검증에서 안내). */
+    private static LocalDate parseDate(String date) {
+        if (date == null || date.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(date.strip());
+        } catch (DateTimeParseException e) {
+            return null;
+        }
+    }
+
+    /** 수동 입력 검증 — 통과면 null, 막히면 사용자 안내 문구. 책 미선택과 남의 책(IDOR)은 같은 안내로 묶는다. */
+    private static String validateManual(Book book, LocalDate readDate, long durationSeconds, LocalDate today) {
+        if (book == null) {
+            return "기록할 책을 선택하세요.";
+        }
+        if (readDate == null) {
+            return "읽은 날짜를 올바르게 입력하세요.";
+        }
+        if (readDate.isAfter(today)) {
+            return "미래 날짜는 기록할 수 없어요.";
+        }
+        if (durationSeconds <= 0) {
+            return "읽은 시간을 입력하세요.";
+        }
+        if (durationSeconds > MAX_MANUAL_SECONDS) {
+            return "하루(24시간)를 넘는 기록은 할 수 없어요.";
+        }
+        return null;
     }
 
     /**

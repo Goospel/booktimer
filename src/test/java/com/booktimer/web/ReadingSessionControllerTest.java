@@ -18,13 +18,16 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
@@ -225,5 +228,129 @@ class ReadingSessionControllerTest {
                 .andExpect(content().string(containsString("이미 진행 중")));
 
         assertThat(sessionRepository.findByUser(user)).hasSize(1);
+    }
+
+    // --- 사후 수동 입력: GET 폼 + POST /sessions/manual ---
+
+    @Test
+    @DisplayName("GET /sessions/manual: 수동 기록 폼을 렌더한다(책 선택·날짜·시간 입력 필드)")
+    void manualForm_renders() throws Exception {
+        User user = register("mform@booktimer.com");
+        book(user); // 폼은 고를 책이 있을 때만 렌더된다(책 미지정 기록 금지)
+
+        mockMvc.perform(get("/sessions/manual").with(user("mform@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("name=\"bookId\"")))
+                .andExpect(content().string(containsString("name=\"date\"")));
+    }
+
+    @Test
+    @DisplayName("POST /sessions/manual: 책+날짜+시간을 주면 완료 세션을 만들고 안내 메시지와 함께 폼으로 돌아간다")
+    void manualSubmit_recordsCompletedSession() throws Exception {
+        User user = register("mok@booktimer.com");
+        Book book = book(user);
+
+        mockMvc.perform(post("/sessions/manual")
+                        .param("bookId", String.valueOf(book.getId()))
+                        .param("date", today().toString())
+                        .param("hours", "1").param("minutes", "30")
+                        .with(user("mok@booktimer.com")).with(csrf()))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/sessions/manual"))
+                .andExpect(flash().attributeExists("message"));
+
+        List<ReadingSession> sessions = sessionRepository.findByUser(user);
+        assertThat(sessions).hasSize(1);
+        ReadingSession s = sessions.get(0);
+        assertThat(s.isActive()).isFalse();
+        assertThat(s.getDurationSeconds()).isEqualTo(90 * 60L); // 1시간 30분
+        assertThat(s.getBook().getId()).isEqualTo(book.getId());
+    }
+
+    @Test
+    @DisplayName("POST /sessions/manual: 과거 날짜로 기록하면 그 날짜에 안착한다(잔디·기록 일자)")
+    void manualSubmit_pastDate_landsOnThatDate() throws Exception {
+        User user = register("mpast@booktimer.com");
+        Book book = book(user);
+        LocalDate past = today().minusDays(3);
+
+        mockMvc.perform(post("/sessions/manual")
+                        .param("bookId", String.valueOf(book.getId()))
+                        .param("date", past.toString())
+                        .param("hours", "0").param("minutes", "20")
+                        .with(user("mpast@booktimer.com")).with(csrf()))
+                .andExpect(redirectedUrl("/sessions/manual"));
+
+        ReadingSession s = sessionRepository.findByUser(user).get(0);
+        Instant startedAt = s.getStartedAt();
+        assertThat(LocalDate.ofInstant(startedAt, ZoneId.of(SEOUL))).isEqualTo(past);
+    }
+
+    @Test
+    @DisplayName("POST /sessions/manual: 책을 안 고르면 에러 안내 + 세션을 만들지 않는다")
+    void manualSubmit_withoutBook_flashesError_noSession() throws Exception {
+        User user = register("mnobook@booktimer.com");
+
+        mockMvc.perform(post("/sessions/manual")
+                        .param("date", today().toString())
+                        .param("hours", "1")
+                        .with(user("mnobook@booktimer.com")).with(csrf()))
+                .andExpect(redirectedUrl("/sessions/manual"))
+                .andExpect(flash().attributeExists("error"));
+
+        assertThat(sessionRepository.findByUser(user)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("POST /sessions/manual: 남의 책 bookId면 에러 안내 + 세션을 만들지 않는다(IDOR 방지)")
+    void manualSubmit_withOtherUsersBook_flashesError_noSession() throws Exception {
+        User owner = register("mowner@booktimer.com");
+        User attacker = register("mattacker@booktimer.com");
+        Book othersBook = bookRepository.save(
+                Book.register(owner, "남의 책", null, null, null, null, null, BookStatus.READING));
+
+        mockMvc.perform(post("/sessions/manual")
+                        .param("bookId", String.valueOf(othersBook.getId()))
+                        .param("date", today().toString())
+                        .param("hours", "1")
+                        .with(user("mattacker@booktimer.com")).with(csrf()))
+                .andExpect(redirectedUrl("/sessions/manual"))
+                .andExpect(flash().attributeExists("error"));
+
+        assertThat(sessionRepository.findByUser(attacker)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("POST /sessions/manual: 미래 날짜는 거부(에러 안내 + 세션 없음)")
+    void manualSubmit_futureDate_flashesError_noSession() throws Exception {
+        User user = register("mfuture@booktimer.com");
+        Book book = book(user);
+
+        mockMvc.perform(post("/sessions/manual")
+                        .param("bookId", String.valueOf(book.getId()))
+                        .param("date", today().plusDays(1).toString())
+                        .param("hours", "1")
+                        .with(user("mfuture@booktimer.com")).with(csrf()))
+                .andExpect(redirectedUrl("/sessions/manual"))
+                .andExpect(flash().attributeExists("error"));
+
+        assertThat(sessionRepository.findByUser(user)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("POST /sessions/manual: 읽은 시간이 0이면 거부(에러 안내 + 세션 없음)")
+    void manualSubmit_zeroDuration_flashesError_noSession() throws Exception {
+        User user = register("mzero@booktimer.com");
+        Book book = book(user);
+
+        mockMvc.perform(post("/sessions/manual")
+                        .param("bookId", String.valueOf(book.getId()))
+                        .param("date", today().toString())
+                        .param("hours", "0").param("minutes", "0")
+                        .with(user("mzero@booktimer.com")).with(csrf()))
+                .andExpect(redirectedUrl("/sessions/manual"))
+                .andExpect(flash().attributeExists("error"));
+
+        assertThat(sessionRepository.findByUser(user)).isEmpty();
     }
 }

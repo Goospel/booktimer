@@ -167,4 +167,80 @@ class ReadingSessionServiceTest {
         assertThatThrownBy(() -> service.stop(user, T0.plusSeconds(60)))
                 .isInstanceOf(IllegalStateException.class);
     }
+
+    // --- recordManual (사후 수동 입력) ---
+    // 측정 시작을 깜빡한 독서를 나중에 기록한다 — start의 "책 필수"와 stop의 "타이머 차감"을 합친 완료 세션.
+    // 진행 중 세션과 무관(이미 끝난 시점을 적는 것)하므로 중복 가드는 두지 않는다.
+
+    @Test
+    @DisplayName("recordManual: 완료 세션(시작~종료)을 만들어 측정량을 타이머에서 차감하고 둘 다 저장한다")
+    void recordManual_createsCompletedSessionAndDeductsAndSaves() {
+        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
+        ReadingTimer timer = ReadingTimer.of(HOUR, 5 * HOUR, 2 * HOUR, DAY0); // 잔여 2h
+        when(timerRepository.findByUser(user)).thenReturn(Optional.of(timer));
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        Instant started = T0;
+        Instant ended = T0.plusSeconds(1800); // 30분
+        ReadingSession result = service.recordManual(user, started, ended, book);
+
+        assertThat(result.isActive()).isFalse();
+        assertThat(result.getStartedAt()).isEqualTo(started);
+        assertThat(result.getEndedAt()).isEqualTo(ended);
+        assertThat(result.getDurationSeconds()).isEqualTo(1800L);
+        assertThat(result.getBook()).isSameAs(book);
+        assertThat(timer.getRemainingSeconds()).isEqualTo(2 * HOUR - 1800L); // 차감됨
+        verify(sessionRepository).save(any(ReadingSession.class));
+        verify(timerRepository).save(timer);
+    }
+
+    @Test
+    @DisplayName("recordManual: 책 없이(null) 기록하면 거부(IllegalArgumentException)하고 아무것도 저장하지 않는다")
+    void recordManual_nullBook_throwsAndDoesNotSave() {
+        assertThatThrownBy(() -> service.recordManual(user, T0, T0.plusSeconds(60), null))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(sessionRepository, never()).save(any(ReadingSession.class));
+        verify(timerRepository, never()).save(any(ReadingTimer.class));
+    }
+
+    @Test
+    @DisplayName("recordManual: 종료가 시작보다 이르면 거부하고 아무것도 저장하지 않는다")
+    void recordManual_endedBeforeStarted_throwsAndDoesNotSave() {
+        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
+        ReadingTimer timer = ReadingTimer.of(HOUR, 5 * HOUR, 2 * HOUR, DAY0);
+        when(timerRepository.findByUser(user)).thenReturn(Optional.of(timer));
+
+        assertThatThrownBy(() -> service.recordManual(user, T0, T0.minusSeconds(60), book))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(sessionRepository, never()).save(any(ReadingSession.class));
+        verify(timerRepository, never()).save(any(ReadingTimer.class));
+    }
+
+    @Test
+    @DisplayName("recordManual: 유저 타이머가 없으면 예외, 세션을 만들지 않는다")
+    void recordManual_noTimer_throws() {
+        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
+        when(timerRepository.findByUser(user)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.recordManual(user, T0, T0.plusSeconds(60), book))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(sessionRepository, never()).save(any(ReadingSession.class));
+    }
+
+    @Test
+    @DisplayName("recordManual: 읽고싶음 책으로 기록하면 그 책을 읽는중으로 자동 전환하고 저장한다")
+    void recordManual_withWantToReadBook_marksReadingAndSaves() {
+        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.WANT_TO_READ);
+        ReadingTimer timer = ReadingTimer.of(HOUR, 5 * HOUR, 2 * HOUR, DAY0);
+        when(timerRepository.findByUser(user)).thenReturn(Optional.of(timer));
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        service.recordManual(user, T0, T0.plusSeconds(1800), book);
+
+        assertThat(book.getStatus()).isEqualTo(BookStatus.READING);
+        verify(bookRepository).save(book);
+    }
 }
