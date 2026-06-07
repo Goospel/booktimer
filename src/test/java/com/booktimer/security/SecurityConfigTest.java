@@ -88,7 +88,9 @@ class SecurityConfigTest {
     @Test
     @DisplayName("인증 없이 보호된 경로에 접근하면 로그인 페이지로 리다이렉트된다")
     void protectedPath_unauthenticated_redirectsToLogin() throws Exception {
-        mvc().perform(get("/"))
+        // 루트("/")는 이제 공개 랜딩 페이지라 더 이상 튕기지 않는다(LandingPageTest가 검증).
+        // 보호 경로의 default-deny 리다이렉트는 실제로 인증이 필요한 /books로 확인한다.
+        mvc().perform(get("/books"))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/login"));
     }

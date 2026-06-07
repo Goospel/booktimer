@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BookTimer — 하루 최소 시간만, 끊기지 않는 독서 습관</title>
+    <meta name="description"
+          content="BookTimer는 '하루 딱 이만큼만' 목표로 독서 습관을 만드는 독서 시간 기록 서비스입니다. 책 읽은 시간을 측정하고, 일자별 독서 잔디로 꾸준함을 눈으로 확인하세요.">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <span class="emoji">📚</span>
+        <h1>BookTimer</h1>
+    </header>
+
+    <section class="landing-hero">
+        <p class="landing-tagline">하루 최소 시간만. 끊기지 않는 독서 습관.</p>
+        <p class="landing-lead">
+            “책을 읽어야지” 마음만 먹고 늘 미루게 되나요? BookTimer는 거창한 목표 대신
+            <strong>하루 딱 이만큼만</strong> 읽는 작은 습관에 집중합니다. 읽은 시간을 측정하고
+            매일의 기록을 쌓아, 부담 없이 다시 책을 펴게 만드는 독서 시간 기록 서비스입니다.
+        </p>
+        <div class="landing-cta">
+            <a class="btn btn-primary" th:href="@{/signup}">무료로 시작하기</a>
+            <a class="btn btn-secondary" th:href="@{/login}">로그인</a>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2>BookTimer로 할 수 있는 것</h2>
+        <ul class="landing-features">
+            <li>
+                <strong>⏱️ 독서 시간 측정</strong>
+                지금 읽는 책을 골라 타이머를 켜고 끄면, 오늘 읽은 시간이 자동으로 쌓입니다.
+            </li>
+            <li>
+                <strong>🎯 하루 목표</strong>
+                무리한 권수 대신 “하루 30분”처럼 작은 시간 목표를 정하고, 오늘 남은 분량을 한눈에 봅니다.
+            </li>
+            <li>
+                <strong>🌱 독서 잔디</strong>
+                일자별 독서 활동이 잔디로 채워져, 며칠을 꾸준히 이어왔는지 눈으로 확인할 수 있습니다.
+            </li>
+            <li>
+                <strong>📖 내 책장</strong>
+                읽는 중·다 읽은 책을 정리하고, 책별로 쌓인 독서 시간을 돌아봅니다.
+            </li>
+            <li>
+                <strong>👥 함께 읽기</strong>
+                다른 독자를 팔로우하고 공개 책장과 독서 잔디를 구경하며 자극을 받습니다.
+            </li>
+        </ul>
+    </section>
+
+    <section class="card">
+        <h2>이렇게 동작해요</h2>
+        <ol class="landing-steps">
+            <li><strong>가입하고 하루 목표를 정합니다</strong> — 예: 하루 30분.</li>
+            <li><strong>읽을 책을 등록하고 타이머를 켭니다</strong> — 책을 덮을 때 끄면 끝.</li>
+            <li><strong>매일의 기록이 잔디로 쌓입니다</strong> — 꾸준함이 눈에 보이면 다시 펴게 됩니다.</li>
+        </ol>
+    </section>
+
+    <section class="landing-bottom-cta">
+        <p>오늘 딱 한 페이지부터. 작게 시작해 보세요.</p>
+        <a class="btn btn-primary" th:href="@{/signup}">무료로 시작하기</a>
+    </section>
+
+    <p class="link-row"><a th:href="@{/login}">이미 계정이 있나요? 로그인</a></p>
+    <p class="link-row"><a th:href="@{/privacy}">개인정보처리방침</a></p>
+</div>
+</body>
+</html>
