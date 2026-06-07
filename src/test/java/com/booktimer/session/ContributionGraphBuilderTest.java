@@ -7,6 +7,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.function.ToLongFunction;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -119,6 +120,19 @@ class ContributionGraphBuilderTest {
         // 목표 1시간이면 50% → lv2, 목표 30분이면 100% → lv4
         assertThat(levelOfWithGoal(read, d, 3600L)).isEqualTo(2);
         assertThat(levelOfWithGoal(read, d, 1800L)).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("per-day 목표: 각 칸은 그날 목표로 색을 정한다 — 목표를 올려도 옛 목표를 채운 과거 날 농도가 안 내려간다")
+    void levels_perDayGoal_pastDayKeepsItsOwnLevel() {
+        LocalDate metDay = LocalDate.of(2026, 3, 15); // 그날 목표 30분(1800)에 30분 읽어 100%
+        // 4/1 이전(=과거)엔 목표 30분, 그 뒤엔 60분으로 인상됐다고 가정(그날 목표 리졸버).
+        ToLongFunction<LocalDate> goalForDate = d -> d.isBefore(LocalDate.of(2026, 4, 1)) ? 1800L : 3600L;
+
+        ContributionGraph graph = ContributionGraphBuilder.build(Map.of(metDay, 1800L), TODAY, goalForDate);
+
+        // 현재 목표(3600)로 일괄 판정했다면 50%→lv2였겠지만, 그날 목표(1800)로 보면 100%→lv4.
+        assertThat(findCell(graph, metDay).level()).isEqualTo(4);
     }
 
     private int levelOf(long seconds, LocalDate date) {

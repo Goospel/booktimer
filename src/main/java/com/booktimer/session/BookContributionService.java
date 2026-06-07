@@ -1,6 +1,9 @@
 package com.booktimer.session;
 
 import com.booktimer.book.Book;
+import com.booktimer.timer.GoalSchedule;
+import com.booktimer.timer.ReadingGoalChange;
+import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.User;
 import org.springframework.stereotype.Service;
@@ -22,8 +25,9 @@ import java.util.TreeMap;
  * 좁힌다. "오늘"은 유저 타임존 자정 경계로 정하고(N-010, {@link Clock}+{@link User#getTimezone()}),
  * 그리드 구성은 순수 빌더 {@link ContributionGraphBuilder}에 위임한다.
  *
- * <p>색 농도는 전체 잔디와 동일하게 유저의 <b>하루 목표</b>(타이머 {@code dailyIncrementSeconds}) 대비 달성 비율로
- * 정한다 — 책별 칸도 같은 기준이라야 직관적이다. 타이머가 없으면 기본 목표로 폴백한다.
+ * <p>색 농도는 전체 잔디({@link ReadingContributionService})와 동일하게 각 칸을 <b>그날 유효했던 하루 목표</b> 대비로
+ * 정한다 — 책별 칸도 같은 기준이라야 직관적이고, 목표를 올려도 옛 목표 채운 과거 날이 소급해 재채색되지 않는다
+ * (N-059). 목표 변경 이력({@link ReadingGoalChange})을 {@link GoalSchedule}로 풀어 넘기고, 이력/타이머가 없으면 기본 목표로 폴백.
  */
 @Service
 @Transactional(readOnly = true)
@@ -31,13 +35,16 @@ public class BookContributionService {
 
     private final ReadingSessionRepository sessionRepository;
     private final ReadingTimerRepository timerRepository;
+    private final ReadingGoalChangeRepository goalChangeRepository;
     private final Clock clock;
 
     public BookContributionService(ReadingSessionRepository sessionRepository,
                                    ReadingTimerRepository timerRepository,
+                                   ReadingGoalChangeRepository goalChangeRepository,
                                    Clock clock) {
         this.sessionRepository = sessionRepository;
         this.timerRepository = timerRepository;
+        this.goalChangeRepository = goalChangeRepository;
         this.clock = clock;
     }
 
@@ -68,11 +75,19 @@ public class BookContributionService {
             total += record.totalSeconds();
         }
 
-        long goalSeconds = timerRepository.findByUser(user)
+        // 현재(폴백) 목표 — 이력에 그 날짜 이전 변경이 없을 때 쓴다.
+        long currentGoalSeconds = timerRepository.findByUser(user)
                 .map(timer -> timer.getDailyIncrementSeconds())
                 .orElse(ReadingContributionService.DEFAULT_GOAL_SECONDS);
 
+        // 목표 변경 이력 → GoalSchedule → 각 칸을 그날 목표로 색칠(소급 재채색 차단, N-059).
+        Map<LocalDate, Long> changesByDate = new LinkedHashMap<>();
+        for (ReadingGoalChange change : goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)) {
+            changesByDate.put(change.getEffectiveDate(), change.getGoalSeconds());
+        }
+        GoalSchedule schedule = GoalSchedule.of(changesByDate, currentGoalSeconds);
+
         return new BookReadingDetail(
-                ContributionGraphBuilder.build(secondsByDate, today, goalSeconds), dailyHistory, total);
+                ContributionGraphBuilder.build(secondsByDate, today, schedule::goalFor), dailyHistory, total);
     }
 }

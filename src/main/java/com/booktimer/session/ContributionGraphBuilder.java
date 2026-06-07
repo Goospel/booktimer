@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.function.ToLongFunction;
 
 /**
  * 일자별 독서 시간을 GitHub 잔디 형태의 {@link ContributionGraph}로 펼치는 순수 빌더.
@@ -28,6 +29,20 @@ public final class ContributionGraphBuilder {
      * @return 53주 × 7요일 그리드 모델
      */
     public static ContributionGraph build(Map<LocalDate, Long> secondsByDate, LocalDate today, long goalSeconds) {
+        return build(secondsByDate, today, date -> goalSeconds);
+    }
+
+    /**
+     * 날짜별 목표(per-day)로 잔디를 만든다 — 각 칸의 색 농도를 <b>그날 유효했던 목표</b> 대비로 정한다.
+     *
+     * <p>하루 목표를 현재 평면값 하나로 잡으면 사용자가 목표를 올렸을 때 옛 목표를 채운 과거 날의 색이
+     * 새 목표 기준으로 내려가 소급해 다시 칠해진다(N-059의 잔디 판). {@code goalForDate}가
+     * {@link com.booktimer.timer.GoalSchedule}로 날짜별 목표를 돌려주면 과거 색이 동결된다.
+     *
+     * @param goalForDate 날짜→그날 목표(초) 리졸버. 0을 돌려주면 그 칸은 "목표 없음"(읽으면 lv4).
+     */
+    public static ContributionGraph build(Map<LocalDate, Long> secondsByDate, LocalDate today,
+                                          ToLongFunction<LocalDate> goalForDate) {
         // 일요일=0 ... 토요일=6. 오늘이 속한 주의 일요일이 맨 오른쪽 열의 시작.
         int todayOffset = today.getDayOfWeek().getValue() % 7;
         LocalDate lastSunday = today.minusDays(todayOffset);
@@ -46,7 +61,7 @@ public final class ContributionGraphBuilder {
                     continue;
                 }
                 long seconds = Math.max(0L, secondsByDate.getOrDefault(date, 0L));
-                week.add(new ContributionDay(date, seconds, levelFor(seconds, goalSeconds)));
+                week.add(new ContributionDay(date, seconds, levelFor(seconds, goalForDate.applyAsLong(date))));
                 total += seconds;
                 if (seconds > 0) {
                     activeDays++;
