@@ -16,7 +16,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,7 +45,7 @@ class BookSessionTimeTest {
     private User newUser(String email) {
         User user = userRepository.save(
                 User.of(email, passwordEncoder.encode("rawpw1234"), "독자", "Asia/Seoul", Role.USER));
-        timerRepository.save(ReadingTimer.startFor(user, 3600, 36000, LocalDate.of(2026, 6, 1)));
+        timerRepository.save(ReadingTimer.startFor(user, 3600));
         return user;
     }
 

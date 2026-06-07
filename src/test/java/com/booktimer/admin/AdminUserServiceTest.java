@@ -132,7 +132,7 @@ class AdminUserServiceTest {
     void detail_assembles() {
         User u = user("reader@booktimer.com", "readerone", "독서왕");
 
-        ReadingTimer timer = ReadingTimer.startFor(u, 3600, 36000, today());
+        ReadingTimer timer = ReadingTimer.startFor(u, 3600);
         timerRepository.save(timer);
 
         Book b1 = book(u, "읽는책", BookStatus.READING, true);

@@ -11,18 +11,17 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 
-import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
-
 /**
- * 사용자별 독서 누적 상태 + 설정.
+ * 사용자별 독서 설정 — 하루 목표(daily goal)를 보관한다.
  *
- * <p>"매일 목표가 증가값만큼 늘고, 안 채운 잔여가 다음 날로 이월된다"(N-001)는
- * 핵심 규칙의 상태를 보관한다. 갱신은 배치가 아니라 접속 시 {@link #accrueUntil(LocalDate)}
- * 로 경과 일수만큼 소급 계산(Lazy)한다.
+ * <p>옛날엔 "단일 롤링 잔여(remainingSeconds) + 상한(capSeconds) + 매일 증가 Lazy accrual"(N-001)
+ * 로 부채를 이 엔티티에 누적했지만, <b>7일 윈도우 per-day 부채 모델로 전환(PR #217)</b>하며 부채를
+ * 더는 저장하지 않고 {@code reading_session}에서 유도(derive)한다. 그 잔재 컬럼
+ * (remaining_seconds / cap_seconds / last_accrual_date)과 accrue/deduct/cap 로직은 이 정리 PR에서
+ * 제거됐다(V20 마이그레이션으로 컬럼 drop). 이제 이 엔티티의 유일한 상태는 하루 목표다.
  *
  * <p>User 와는 1:1 — 이 엔티티가 FK(user_id)를 소유한다. 신규 사용자용 타이머는
- * {@link #startFor(User, long, long, LocalDate)} 로 생성한다.
+ * {@link #startFor(User, long)} 로 생성한다.
  */
 @Entity
 public class ReadingTimer extends BaseTimeEntity {
@@ -31,21 +30,12 @@ public class ReadingTimer extends BaseTimeEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** 현재 갚아야 할 누적 잔여(초). */
-    @Column(nullable = false)
-    private long remainingSeconds;
-
-    /** 하루 증가값(초). 기본 1시간, 사용자 설정 가능. */
+    /**
+     * 하루 목표(초). 기본 1시간, 사용자 설정 가능.
+     * (컬럼명은 옛 이름 {@code daily_increment_seconds} 유지 — 의미만 "증가값"→"하루 목표"로 재해석.)
+     */
     @Column(nullable = false)
     private long dailyIncrementSeconds;
-
-    /** 누적 상한(초). 잔여 총합이 이 값을 넘지 않는다. */
-    @Column(nullable = false)
-    private long capSeconds;
-
-    /** 마지막 누적 계산 기준일(사용자 타임존). */
-    @Column(nullable = false)
-    private LocalDate lastAccrualDate;
 
     /** 소유 사용자 (1:1). FK(user_id)는 이 테이블이 소유한다. */
     @OneToOne(fetch = FetchType.LAZY, optional = false)
@@ -56,178 +46,58 @@ public class ReadingTimer extends BaseTimeEntity {
         // JPA
     }
 
-    private ReadingTimer(long dailyIncrementSeconds, long capSeconds,
-                         long remainingSeconds, LocalDate lastAccrualDate) {
+    private ReadingTimer(long dailyIncrementSeconds) {
         if (dailyIncrementSeconds < 0) {
             throw new IllegalArgumentException("dailyIncrementSeconds must be >= 0");
         }
-        if (capSeconds < 0) {
-            throw new IllegalArgumentException("capSeconds must be >= 0");
-        }
-        if (remainingSeconds < 0) {
-            throw new IllegalArgumentException("remainingSeconds must be >= 0");
-        }
-        if (lastAccrualDate == null) {
-            throw new IllegalArgumentException("lastAccrualDate must not be null");
-        }
         this.dailyIncrementSeconds = dailyIncrementSeconds;
-        this.capSeconds = capSeconds;
-        this.remainingSeconds = remainingSeconds;
-        this.lastAccrualDate = lastAccrualDate;
     }
 
     /**
-     * 설정/상태를 직접 지정해 생성한다 (테스트 및 복원용).
+     * 하루 목표를 직접 지정해 생성한다 (테스트 및 복원용).
      */
-    public static ReadingTimer of(long dailyIncrementSeconds, long capSeconds,
-                                  long remainingSeconds, LocalDate lastAccrualDate) {
-        return new ReadingTimer(dailyIncrementSeconds, capSeconds, remainingSeconds, lastAccrualDate);
+    public static ReadingTimer of(long dailyIncrementSeconds) {
+        return new ReadingTimer(dailyIncrementSeconds);
     }
 
     /**
-     * 신규 사용자를 위한 타이머를 생성한다. 기준일은 {@code startDate}이고,
-     * <b>가입 당일(1일차)부터 이미 1증가값을 갚아야 하므로</b> 잔여를 증가값으로 시드한다
-     * (cap 이하로 클램프). README 동작 예시의 "1일차 = 1시간"이 이 시드에서 나온다 —
-     * 0에서 시작해 하루 지나야 늘어나면 첫날치 증가값이 누락된다.
+     * 신규 사용자를 위한 타이머를 만든다 — 하루 목표만 정한다.
+     *
+     * <p>부채는 세션에서 유도되므로(7일 윈도우 모델) 옛날처럼 "첫날치 증가값을 잔여로 시드"하거나
+     * 누적 기준일을 잡을 필요가 없다. 가입 당일치 목표는 그날 부채 계산이 자연히 반영한다.
      *
      * @param user                  소유 사용자(필수)
-     * @param dailyIncrementSeconds 하루 증가값(초)
-     * @param capSeconds            누적 상한(초)
-     * @param startDate             누적 시작 기준일(사용자 타임존)
-     * @throws IllegalArgumentException user 가 null 이거나 설정값이 음수인 경우
+     * @param dailyIncrementSeconds 하루 목표(초)
+     * @throws IllegalArgumentException user 가 null 이거나 목표가 음수인 경우
      */
-    public static ReadingTimer startFor(User user, long dailyIncrementSeconds,
-                                        long capSeconds, LocalDate startDate) {
+    public static ReadingTimer startFor(User user, long dailyIncrementSeconds) {
         if (user == null) {
             throw new IllegalArgumentException("user must not be null");
         }
-        long seededRemaining = Math.min(dailyIncrementSeconds, capSeconds); // 첫날치 증가값, cap 이하
-        ReadingTimer timer = new ReadingTimer(dailyIncrementSeconds, capSeconds, seededRemaining, startDate);
+        ReadingTimer timer = new ReadingTimer(dailyIncrementSeconds);
         timer.user = user;
         return timer;
     }
 
     /**
-     * {@code lastAccrualDate ~ today} 경과 일수만큼 잔여를 소급 누적하고
-     * 기준일을 today 로 전진시킨다. 경과가 0 이하(같은 날/시계 역행)면 아무것도 하지 않는다.
+     * 사용자가 설정/온보딩에서 하루 목표를 변경한다.
      *
-     * @param today 사용자 타임존 기준 오늘 날짜
-     */
-    public void accrueUntil(LocalDate today) {
-        if (today == null) {
-            throw new IllegalArgumentException("today must not be null");
-        }
-        long daysElapsed = ChronoUnit.DAYS.between(lastAccrualDate, today);
-        if (daysElapsed <= 0) {
-            return;
-        }
-        this.remainingSeconds = AccrualCalculator.accrue(
-                remainingSeconds, dailyIncrementSeconds, capSeconds, daysElapsed);
-        this.lastAccrualDate = today;
-    }
-
-    /**
-     * 사용자가 설정 페이지에서 하루 증가값/누적 상한(cap)을 변경한다.
-     *
-     * <p>cap을 현재 잔여보다 낮게 바꾸면 불변식({@code remainingSeconds <= capSeconds})을 지키기
-     * 위해 잔여를 새 cap으로 즉시 클램프한다 — accrue가 항상 cap 이하로 유지하는 것과 같은 규칙.
-     *
-     * @param dailyIncrementSeconds 새 하루 증가값(초, 0 이상)
-     * @param capSeconds            새 누적 상한(초, 0 이상)
+     * @param dailyIncrementSeconds 새 하루 목표(초, 0 이상)
      * @throws IllegalArgumentException 값이 음수인 경우
      */
-    public void updateSettings(long dailyIncrementSeconds, long capSeconds) {
+    public void updateSettings(long dailyIncrementSeconds) {
         if (dailyIncrementSeconds < 0) {
             throw new IllegalArgumentException("dailyIncrementSeconds must be >= 0");
         }
-        if (capSeconds < 0) {
-            throw new IllegalArgumentException("capSeconds must be >= 0");
-        }
         this.dailyIncrementSeconds = dailyIncrementSeconds;
-        this.capSeconds = capSeconds;
-        if (this.remainingSeconds > capSeconds) {
-            this.remainingSeconds = capSeconds;
-        }
-    }
-
-    /**
-     * 첫 진입 초기 설정(온보딩)에서 <b>초기 잔여(시작값)+증가값+상한</b>을 직접 정한다.
-     *
-     * <p>가입 시에는 잔여가 증가값으로 자동 시드되지만({@link #startFor}), 온보딩에서 사용자가
-     * 원하는 시작값을 직접 고를 수 있게 한다. 초기값이 cap을 넘으면 불변식({@code remainingSeconds <= capSeconds})을
-     * 지키기 위해 cap으로 클램프한다. 또한 누적이 온보딩 시점부터 시작되도록 {@code lastAccrualDate}를
-     * {@code today}로 전진시킨다 — 가입과 온보딩 사이 경과분이 잔여에 섞이지 않게 한다.
-     *
-     * @param initialRemainingSeconds 사용자가 정한 초기 잔여(초, 0 이상 — cap 초과 시 cap으로 클램프)
-     * @param dailyIncrementSeconds   하루 증가값(초, 0 이상)
-     * @param capSeconds              누적 상한(초, 0 이상)
-     * @param today                   온보딩 시점의 "오늘"(사용자 타임존 기준, 누적 기준일로 리셋)
-     * @throws IllegalArgumentException 값이 음수이거나 today가 null인 경우
-     */
-    public void applyInitialSetup(long initialRemainingSeconds, long dailyIncrementSeconds,
-                                  long capSeconds, LocalDate today) {
-        if (initialRemainingSeconds < 0) {
-            throw new IllegalArgumentException("initialRemainingSeconds must be >= 0");
-        }
-        if (dailyIncrementSeconds < 0) {
-            throw new IllegalArgumentException("dailyIncrementSeconds must be >= 0");
-        }
-        if (capSeconds < 0) {
-            throw new IllegalArgumentException("capSeconds must be >= 0");
-        }
-        if (today == null) {
-            throw new IllegalArgumentException("today must not be null");
-        }
-        this.dailyIncrementSeconds = dailyIncrementSeconds;
-        this.capSeconds = capSeconds;
-        this.remainingSeconds = Math.min(initialRemainingSeconds, capSeconds); // cap 이하로 클램프
-        this.lastAccrualDate = today;
-    }
-
-    /**
-     * 세션 측정량만큼 누적 잔여(부채)를 갚는다. 잔여는 0 밑으로 내려가지 않는다(floor).
-     *
-     * @param seconds 갚을 시간(초, 0 이상)
-     * @return 실제로 차감된 양(초). 잔여보다 크게 요청하면 있던 잔여만큼만 반환된다.
-     * @throws IllegalArgumentException seconds 가 음수인 경우
-     */
-    public long deduct(long seconds) {
-        if (seconds < 0) {
-            throw new IllegalArgumentException("seconds must be >= 0");
-        }
-        long applied = Math.min(seconds, remainingSeconds);
-        this.remainingSeconds -= applied;
-        return applied;
-    }
-
-    /**
-     * 누적 잔여(부채)가 상한(cap)에 도달했는지. 도달하면 더는 쌓이지 않고 클램프되므로,
-     * 대시보드에서 "상한 도달" 경고 배지를 띄우는 판단에 쓴다.
-     *
-     * <p>cap이 0인 퇴화 설정에서는 잔여도 항상 0이라 "도달"로 보지 않는다(false) — 의미 없는 경고 방지.
-     */
-    public boolean isAtCap() {
-        return capSeconds > 0 && remainingSeconds >= capSeconds;
     }
 
     public Long getId() {
         return id;
     }
 
-    public long getRemainingSeconds() {
-        return remainingSeconds;
-    }
-
     public long getDailyIncrementSeconds() {
         return dailyIncrementSeconds;
-    }
-
-    public long getCapSeconds() {
-        return capSeconds;
-    }
-
-    public LocalDate getLastAccrualDate() {
-        return lastAccrualDate;
     }
 
     public User getUser() {

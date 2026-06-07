@@ -5,289 +5,65 @@ import com.booktimer.user.User;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.time.LocalDate;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * ReadingTimer 도메인 메서드 테스트 (DB 무관 — 객체만 생성해 검증).
  *
- * accrueUntil(today): lastAccrualDate ~ today 경과 일수만큼 소급 누적하고
- * lastAccrualDate 를 today 로 전진시킨다. (N-001 Lazy 계산)
+ * <p>7일 윈도우 부채 모델 전환(PR #217) + 잔재 컬럼 제거(PR #218) 이후 이 엔티티의 상태는
+ * 하루 목표 하나뿐이다. 옛 accrue/deduct/cap/initialSetup 로직은 사라졌으므로, 여기선 남은
+ * 불변식만 못 박는다 — (1) 타이머는 반드시 소유자가 있어야 한다, (2) 하루 목표는 음수일 수 없다.
  */
 class ReadingTimerTest {
 
     private static final long HOUR = 3600L;
-    private static final LocalDate DAY0 = LocalDate.of(2026, 5, 31);
-
-    private ReadingTimer timerWith(long remaining, LocalDate last) {
-        // increment 1h, cap 5h
-        return ReadingTimer.of(HOUR, 5 * HOUR, remaining, last);
-    }
-
-    @Test
-    @DisplayName("3일 경과: 잔여가 3시간 늘고 기준일이 today로 전진한다")
-    void accrueUntil_threeDaysLater() {
-        ReadingTimer timer = timerWith(0L, DAY0);
-
-        timer.accrueUntil(DAY0.plusDays(3));
-
-        assertThat(timer.getRemainingSeconds()).isEqualTo(3 * HOUR);
-        assertThat(timer.getLastAccrualDate()).isEqualTo(DAY0.plusDays(3));
-    }
-
-    @Test
-    @DisplayName("같은 날 재호출: 잔여·기준일 모두 그대로 (멱등)")
-    void accrueUntil_sameDay_idempotent() {
-        ReadingTimer timer = timerWith(1800L, DAY0);
-
-        timer.accrueUntil(DAY0);
-
-        assertThat(timer.getRemainingSeconds()).isEqualTo(1800L);
-        assertThat(timer.getLastAccrualDate()).isEqualTo(DAY0);
-    }
-
-    @Test
-    @DisplayName("누적이 cap을 넘으면 cap으로 클램프된다")
-    void accrueUntil_clampedToCap() {
-        ReadingTimer timer = timerWith(4 * HOUR, DAY0); // +3h(3일) = 7h → cap 5h
-
-        timer.accrueUntil(DAY0.plusDays(3));
-
-        assertThat(timer.getRemainingSeconds()).isEqualTo(5 * HOUR);
-        assertThat(timer.getLastAccrualDate()).isEqualTo(DAY0.plusDays(3));
-    }
-
-    @Test
-    @DisplayName("과거 날짜로 호출(시계 역행): 잔여·기준일 그대로")
-    void accrueUntil_pastDate_noChange() {
-        ReadingTimer timer = timerWith(1800L, DAY0);
-
-        timer.accrueUntil(DAY0.minusDays(2));
-
-        assertThat(timer.getRemainingSeconds()).isEqualTo(1800L);
-        assertThat(timer.getLastAccrualDate()).isEqualTo(DAY0);
-    }
-
-    // --- User 연관 (@OneToOne) 증분 ---
 
     private User sampleUser() {
         return User.of("reader@booktimer.com", "$2a$10$abcdefghijklmnopqrstuv", "책벌레", "Asia/Seoul", Role.USER);
     }
 
     @Test
-    @DisplayName("startFor: 유저와 연결되고 잔여=첫날 증가값, 기준일=시작일, 설정값 반영")
-    void startFor_linksUserAndInitializes() {
+    @DisplayName("startFor: 유저와 연결되고 하루 목표를 설정한다")
+    void startFor_linksUserAndSetsGoal() {
         User user = sampleUser();
 
-        ReadingTimer timer = ReadingTimer.startFor(user, HOUR, 5 * HOUR, DAY0);
+        ReadingTimer timer = ReadingTimer.startFor(user, HOUR);
 
         assertThat(timer.getUser()).isSameAs(user);
-        // 가입 당일(1일차)부터 이미 1증가값을 갚아야 한다(README 1일차 = 1시간). 0이 아니다.
-        assertThat(timer.getRemainingSeconds()).isEqualTo(HOUR);
-        assertThat(timer.getLastAccrualDate()).isEqualTo(DAY0);
         assertThat(timer.getDailyIncrementSeconds()).isEqualTo(HOUR);
-        assertThat(timer.getCapSeconds()).isEqualTo(5 * HOUR);
     }
 
     @Test
-    @DisplayName("startFor: 첫날 증가값이 cap보다 크면 cap으로 클램프된다")
-    void startFor_seedsClampedToCap() {
-        User user = sampleUser();
-
-        ReadingTimer timer = ReadingTimer.startFor(user, 3 * HOUR, 2 * HOUR, DAY0);
-
-        assertThat(timer.getRemainingSeconds()).isEqualTo(2 * HOUR); // increment(3h) > cap(2h) → cap
-    }
-
-    @Test
-    @DisplayName("startFor: user가 null이면 예외")
+    @DisplayName("startFor: user가 null이면 예외 (타이머는 반드시 소유자가 있다)")
     void startFor_nullUser_throws() {
-        assertThatThrownBy(() -> ReadingTimer.startFor(null, HOUR, 5 * HOUR, DAY0))
+        assertThatThrownBy(() -> ReadingTimer.startFor(null, HOUR))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
-    // --- 차감(deduct) 증분: 세션 측정량을 누적 잔여에서 갚는다 ---
-
     @Test
-    @DisplayName("deduct: 잔여보다 적게 갚으면 그만큼 줄고, 차감된 양을 반환")
-    void deduct_lessThanRemaining() {
-        ReadingTimer timer = timerWith(2 * HOUR, DAY0);
-
-        long applied = timer.deduct(1800L); // 30분
-
-        assertThat(applied).isEqualTo(1800L);
-        assertThat(timer.getRemainingSeconds()).isEqualTo(2 * HOUR - 1800L);
-    }
-
-    @Test
-    @DisplayName("deduct: 잔여보다 많이 갚아도 0 밑으로 안 가고, 실제 차감분만 반환(floor)")
-    void deduct_moreThanRemaining_floorsToZero() {
-        ReadingTimer timer = timerWith(1800L, DAY0);
-
-        long applied = timer.deduct(3 * HOUR); // 잔여(30분)보다 큼
-
-        assertThat(applied).isEqualTo(1800L); // 있던 만큼만 갚아짐
-        assertThat(timer.getRemainingSeconds()).isZero();
-    }
-
-    @Test
-    @DisplayName("deduct: 잔여와 정확히 같으면 0이 된다")
-    void deduct_exactlyRemaining() {
-        ReadingTimer timer = timerWith(HOUR, DAY0);
-
-        long applied = timer.deduct(HOUR);
-
-        assertThat(applied).isEqualTo(HOUR);
-        assertThat(timer.getRemainingSeconds()).isZero();
-    }
-
-    @Test
-    @DisplayName("deduct: 0초는 변화 없음")
-    void deduct_zero_noChange() {
-        ReadingTimer timer = timerWith(HOUR, DAY0);
-
-        long applied = timer.deduct(0L);
-
-        assertThat(applied).isZero();
-        assertThat(timer.getRemainingSeconds()).isEqualTo(HOUR);
-    }
-
-    @Test
-    @DisplayName("deduct: 음수는 예외")
-    void deduct_negative_throws() {
-        ReadingTimer timer = timerWith(HOUR, DAY0);
-
-        assertThatThrownBy(() -> timer.deduct(-1L))
+    @DisplayName("startFor: 하루 목표가 음수면 예외")
+    void startFor_negativeGoal_throws() {
+        assertThatThrownBy(() -> ReadingTimer.startFor(sampleUser(), -1L))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
-    // --- isAtCap: 누적 잔여가 상한에 도달했는가 (대시보드 경고 배지용) ---
-
     @Test
-    @DisplayName("isAtCap: 잔여가 cap과 같으면 true")
-    void isAtCap_equalToCap_true() {
-        ReadingTimer timer = timerWith(5 * HOUR, DAY0); // remaining == cap(5h)
+    @DisplayName("updateSettings: 하루 목표를 바꾼다")
+    void updateSettings_changesGoal() {
+        ReadingTimer timer = ReadingTimer.of(HOUR);
 
-        assertThat(timer.isAtCap()).isTrue();
-    }
-
-    @Test
-    @DisplayName("isAtCap: 잔여가 cap보다 작으면 false")
-    void isAtCap_belowCap_false() {
-        ReadingTimer timer = timerWith(4 * HOUR, DAY0); // remaining 4h < cap 5h
-
-        assertThat(timer.isAtCap()).isFalse();
-    }
-
-    @Test
-    @DisplayName("isAtCap: cap이 0인 퇴화 설정이면 false (항상 도달로 표시하지 않음)")
-    void isAtCap_zeroCap_false() {
-        ReadingTimer timer = ReadingTimer.of(0L, 0L, 0L, DAY0); // cap 0, remaining 0
-
-        assertThat(timer.isAtCap()).isFalse();
-    }
-
-    // --- updateSettings: 설정 페이지에서 증가값/cap 변경 ---
-
-    @Test
-    @DisplayName("updateSettings: 증가값과 cap을 바꾼다 (잔여가 새 cap 이하면 잔여 유지)")
-    void updateSettings_changesIncrementAndCap() {
-        ReadingTimer timer = timerWith(2 * HOUR, DAY0); // remaining 2h, cap 5h
-
-        timer.updateSettings(2 * HOUR, 10 * HOUR);
+        timer.updateSettings(2 * HOUR);
 
         assertThat(timer.getDailyIncrementSeconds()).isEqualTo(2 * HOUR);
-        assertThat(timer.getCapSeconds()).isEqualTo(10 * HOUR);
-        assertThat(timer.getRemainingSeconds()).isEqualTo(2 * HOUR); // cap 이하라 유지
     }
 
     @Test
-    @DisplayName("updateSettings: cap을 현재 잔여보다 낮추면 잔여를 새 cap으로 클램프한다")
-    void updateSettings_capBelowRemaining_clampsRemaining() {
-        ReadingTimer timer = timerWith(4 * HOUR, DAY0); // remaining 4h
+    @DisplayName("updateSettings: 하루 목표가 음수면 예외")
+    void updateSettings_negativeGoal_throws() {
+        ReadingTimer timer = ReadingTimer.of(HOUR);
 
-        timer.updateSettings(HOUR, 3 * HOUR); // cap 3h < 4h
-
-        assertThat(timer.getCapSeconds()).isEqualTo(3 * HOUR);
-        assertThat(timer.getRemainingSeconds()).isEqualTo(3 * HOUR); // 클램프됨
-    }
-
-    @Test
-    @DisplayName("updateSettings: 증가값이 음수면 예외")
-    void updateSettings_negativeIncrement_throws() {
-        ReadingTimer timer = timerWith(HOUR, DAY0);
-
-        assertThatThrownBy(() -> timer.updateSettings(-1L, 5 * HOUR))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    @DisplayName("updateSettings: cap이 음수면 예외")
-    void updateSettings_negativeCap_throws() {
-        ReadingTimer timer = timerWith(HOUR, DAY0);
-
-        assertThatThrownBy(() -> timer.updateSettings(HOUR, -1L))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    // --- applyInitialSetup: 온보딩에서 초기값(잔여)+증가값+cap을 직접 정한다 ---
-
-    @Test
-    @DisplayName("applyInitialSetup: 초기 잔여·증가값·cap을 설정하고 기준일을 today로 리셋한다")
-    void applyInitialSetup_setsInitialRemainingIncrementCapAndResetsDate() {
-        ReadingTimer timer = timerWith(HOUR, DAY0); // 가입 시 시드값(1h)
-
-        timer.applyInitialSetup(2 * HOUR, 90 * 60L, 10 * HOUR, DAY0.plusDays(1));
-
-        assertThat(timer.getRemainingSeconds()).isEqualTo(2 * HOUR); // 사용자가 정한 초기값
-        assertThat(timer.getDailyIncrementSeconds()).isEqualTo(90 * 60L);
-        assertThat(timer.getCapSeconds()).isEqualTo(10 * HOUR);
-        // 온보딩 시점부터 누적이 시작되도록 기준일을 today로 전진
-        assertThat(timer.getLastAccrualDate()).isEqualTo(DAY0.plusDays(1));
-    }
-
-    @Test
-    @DisplayName("applyInitialSetup: 초기값이 cap보다 크면 cap으로 클램프된다 (불변식 remaining<=cap)")
-    void applyInitialSetup_clampsInitialToCap() {
-        ReadingTimer timer = timerWith(HOUR, DAY0);
-
-        timer.applyInitialSetup(8 * HOUR, HOUR, 3 * HOUR, DAY0); // 초기값 8h > cap 3h
-
-        assertThat(timer.getRemainingSeconds()).isEqualTo(3 * HOUR);
-        assertThat(timer.getCapSeconds()).isEqualTo(3 * HOUR);
-    }
-
-    @Test
-    @DisplayName("applyInitialSetup: 초기값 0도 허용된다 (시작 잔여 없음)")
-    void applyInitialSetup_zeroInitialAllowed() {
-        ReadingTimer timer = timerWith(HOUR, DAY0);
-
-        timer.applyInitialSetup(0L, HOUR, 5 * HOUR, DAY0);
-
-        assertThat(timer.getRemainingSeconds()).isZero();
-    }
-
-    @Test
-    @DisplayName("applyInitialSetup: 음수 값(초기값/증가값/cap)이면 예외")
-    void applyInitialSetup_negative_throws() {
-        ReadingTimer timer = timerWith(HOUR, DAY0);
-
-        assertThatThrownBy(() -> timer.applyInitialSetup(-1L, HOUR, 5 * HOUR, DAY0))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> timer.applyInitialSetup(HOUR, -1L, 5 * HOUR, DAY0))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> timer.applyInitialSetup(HOUR, HOUR, -1L, DAY0))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    @DisplayName("applyInitialSetup: today가 null이면 예외")
-    void applyInitialSetup_nullToday_throws() {
-        ReadingTimer timer = timerWith(HOUR, DAY0);
-
-        assertThatThrownBy(() -> timer.applyInitialSetup(HOUR, HOUR, 5 * HOUR, null))
+        assertThatThrownBy(() -> timer.updateSettings(-1L))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

@@ -2782,8 +2782,12 @@ long debtOn(LocalDate d, Map<LocalDate,Long> readByDate, long goal) {
 ### 전환이라 마이그레이션이 필요 없다
 
 부채가 **유도값**이 되면 저장된 잔여를 옮길 게 없다 — 기존 세션에서 그대로 재계산된다(과거 행도 손실 없이 재구성). 옛 단일
-카운터(`remainingSeconds`)는 더는 안 읽히는 vestigial이 되고, 후속 PR에서 컬럼·accrual 코드를 제거한다. (만약 *단일 카운터를
-유지*했다면 잘못 깎인 값을 매일 증가가 자가 치유하길 기다려야 했을 것 — 모델을 바꾸면 그 문제 자체가 사라진다.)
+카운터(`remainingSeconds`)는 더는 안 읽히는 vestigial이 됐고, **후속 정리 PR(#218)에서 컬럼(`remaining_seconds`/`cap_seconds`/
+`last_accrual_date`, V20로 DROP)·accrual 코드(`AccrualCalculator`·`ReadingTimerService`)를 제거**했다. (만약 *단일 카운터를
+유지*했다면 잘못 깎인 값을 매일 증가가 자가 치유하길 기다려야 했을 것 — 모델을 바꾸면 그 문제 자체가 사라진다.) 전환을 무파괴
+PR-1(유도 모델 라이브, 컬럼 잔존) → 파괴 PR-2(컬럼 drop)로 **쪼갠 이유**: 새 모델이 먼저 라이브로 검증된 뒤에야 옛 컬럼을
+안전하게 버릴 수 있다(롤백 여지 확보). 컬럼 drop과 엔티티 매핑 제거는 **같은 PR에서 함께** 가야 한다 — `ddl-auto=validate`
+(FlywayMigrationTest)가 둘의 정합을 검사하므로, 한쪽만 빠지면 드리프트로 기동/검증이 깨진다([[n-023-ddl-autoupdate의-한계--스키마-드리프트와-마이그레이션flyway]]).
 
 ### 일반 원칙 (면접에서 본인 표현으로)
 
@@ -2801,7 +2805,7 @@ long debtOn(LocalDate d, Map<LocalDate,Long> readByDate, long goal) {
 
 ### 관련
 
-- **N-001** — 이 함정의 토대였던 *옛* 단일 누적 부채 모델(Lazy 일일 증가·차감). 이 노트의 전환으로 per-day 윈도우 유도값에 의해 대체됨(엔티티 컬럼은 후속 PR에서 제거).
+- **N-001** — 이 함정의 토대였던 *옛* 단일 누적 부채 모델(Lazy 일일 증가·차감). 이 노트의 전환으로 per-day 윈도우 유도값에 의해 대체됨(엔티티 컬럼·accrual 코드는 PR #218에서 제거 완료 — V20 DROP).
 - **N-010** — "오늘"·윈도우 경계는 유저 TZ 자정 기준이라 `Clock` 주입으로 판정 — per-day 부채 계산의 날짜 키가 여기서 나온다.
 - **N-055** — 같은 기능(발견/노출/기록)에서 "데이터 한 건이 소비처마다 다르게 새는" 자매 사례(거긴 null-state 누출, 여긴 백데이트 차감).
 

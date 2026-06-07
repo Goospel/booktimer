@@ -20,8 +20,9 @@ import java.time.Instant;
  * 한 번의 독서 측정 기록. User와 N:1.
  *
  * <p>{@link #start(User, Instant)}로 시작(진행 중)하고 {@link #end(Instant)}로 종료한다.
- * 종료 시 {@code durationSeconds = endedAt - startedAt}을 계산하며, 이 값이 추후
- * ReadingTimer 의 누적 잔여(remainingSeconds) 차감에 쓰인다(다음 증분).
+ * 종료 시 {@code durationSeconds = endedAt - startedAt}을 계산한다. 완료된 세션은 날짜별로
+ * 합산돼 7일 윈도우 부채(목표 − 그날 읽은 양)를 <b>유도</b>하는 원장이 된다(PR #217) —
+ * 옛 모델처럼 타이머 잔여를 직접 차감하지 않는다.
  *
  * <p>측정은 "어떤 책"을 읽었는지({@link #book})에 연결된다 — 책별 누적 시간 집계의 토대.
  * <b>새 측정은 책이 필수</b>이며 그 강제는 유스케이스 경계({@code ReadingSessionService}·컨트롤러)가 한다.

@@ -71,11 +71,11 @@ class ReadingContributionServiceTest {
         ReadingContributionService service = new ReadingContributionService(history, timers, fixed);
 
         // 목표 1시간 → 30분은 50% → lv2
-        when(timers.findByUser(user)).thenReturn(Optional.of(ReadingTimer.of(3600L, 18000L, 0L, day)));
+        when(timers.findByUser(user)).thenReturn(Optional.of(ReadingTimer.of(3600L)));
         assertThat(levelOf(service.contributionGraph(user), day)).isEqualTo(2);
 
         // 목표 30분 → 30분은 100% → lv4 (목표를 따라간다)
-        when(timers.findByUser(user)).thenReturn(Optional.of(ReadingTimer.of(1800L, 18000L, 0L, day)));
+        when(timers.findByUser(user)).thenReturn(Optional.of(ReadingTimer.of(1800L)));
         assertThat(levelOf(service.contributionGraph(user), day)).isEqualTo(4);
     }
 
