@@ -59,6 +59,13 @@ public class ReadingSession extends BaseTimeEntity {
     @Column(nullable = false)
     private long durationSeconds;
 
+    /**
+     * 사용자가 측정을 깜빡한 독서를 <b>나중에 직접 기록</b>한 세션인지(=빠뜨린 날 채우기). 실시간 측정은 false.
+     * 잔디에서 "직접 채운 날"을 테두리로 구분하는 데 쓴다 — 측정값과 손으로 채운 값을 시각적으로 구별.
+     */
+    @Column(nullable = false)
+    private boolean manualEntry;
+
     protected ReadingSession() {
         // JPA
     }
@@ -75,6 +82,7 @@ public class ReadingSession extends BaseTimeEntity {
         this.book = book; // nullable — 책 미지정 측정 허용
         this.endedAt = null;
         this.durationSeconds = 0L;
+        this.manualEntry = false; // 실시간 측정이 기본; 수동 기록은 manual 팩토리가 true로 둔다
     }
 
     /**
@@ -99,6 +107,22 @@ public class ReadingSession extends BaseTimeEntity {
      */
     public static ReadingSession start(User user, Instant startedAt, Book book) {
         return new ReadingSession(user, startedAt, book);
+    }
+
+    /**
+     * 측정을 깜빡한 독서를 나중에 직접 기록한 <b>수동 입력</b> 완료 세션을 만든다(시작~종료가 이미 정해짐).
+     * {@code manualEntry=true}로 표시돼 잔디에서 "직접 채운 날"로 구분된다. 부채/집계 반영은 실시간 측정과 동일.
+     *
+     * @param user      측정 주체(필수)
+     * @param startedAt 읽기 시작 시각(필수)
+     * @param endedAt   읽기 종료 시각(필수, startedAt 이상)
+     * @param book      읽은 책(선택, null이면 미지정 — 운영 생성 경로는 서비스가 책을 필수로 강제)
+     */
+    public static ReadingSession manual(User user, Instant startedAt, Instant endedAt, Book book) {
+        ReadingSession session = new ReadingSession(user, startedAt, book);
+        session.manualEntry = true;
+        session.end(endedAt); // endedAt >= startedAt 검증 + durationSeconds 계산
+        return session;
     }
 
     /**
@@ -149,5 +173,10 @@ public class ReadingSession extends BaseTimeEntity {
 
     public long getDurationSeconds() {
         return durationSeconds;
+    }
+
+    /** 사용자가 직접 기록한 수동 입력 세션이면 true(빠뜨린 날 채우기). 실시간 측정이면 false. */
+    public boolean isManualEntry() {
+        return manualEntry;
     }
 }

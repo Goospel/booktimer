@@ -93,6 +93,29 @@ class HistoryControllerTest {
     }
 
     @Test
+    @DisplayName("GET /history: 수동 입력(직접 채운)으로 채운 날은 잔디 칸에 manual 표시로 실린다 (종단: recordManual→집계→그리드→뷰)")
+    void history_manualEntryDay_markedOnGrass() throws Exception {
+        User user = registrationService.register("histman@booktimer.com", "rawpw1234", "수동", SEOUL, Role.USER, today());
+        Book book = bookRepository.save(
+                Book.register(user, "전쟁과 평화 1", null, null, null, null, null, BookStatus.READING));
+        // 3일 전을 수동으로 채움(빠뜨린 날 채우기) — 잔디 윈도우 안.
+        LocalDate filledDate = today().minusDays(3);
+        Instant manualStart = filledDate.atTime(12, 0).atZone(ZoneId.of(SEOUL)).toInstant();
+        sessionService.recordManual(user, manualStart, manualStart.plusSeconds(3600), book);
+
+        var result = mockMvc.perform(get("/history").with(user("histman@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(view().name("history"))
+                .andReturn();
+
+        ContributionGraph graph = (ContributionGraph) result.getModelAndView().getModel().get("graph");
+        boolean filledDayIsManual = graph.weeks().stream()
+                .flatMap(List::stream)
+                .anyMatch(d -> filledDate.equals(d.date()) && d.manual());
+        assertThat(filledDayIsManual).as("직접 채운 날 칸은 manual=true여야 한다").isTrue();
+    }
+
+    @Test
     @DisplayName("GET /history: 기록이 없으면 빈 목록을 싣는다(화면은 정상 렌더)")
     void history_emptyForNewUser() throws Exception {
         registrationService.register("empty@booktimer.com", "rawpw1234", "신규", SEOUL, Role.USER, today());

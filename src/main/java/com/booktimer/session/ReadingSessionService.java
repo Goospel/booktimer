@@ -83,8 +83,7 @@ public class ReadingSessionService {
         if (book == null) {
             throw new IllegalArgumentException("a book is required to record a reading session");
         }
-        ReadingSession session = ReadingSession.start(user, startedAt, book);
-        session.end(endedAt); // endedAt >= startedAt 검증 + durationSeconds 계산
+        ReadingSession session = ReadingSession.manual(user, startedAt, endedAt, book);
         sessionRepository.save(session);
         // 기록한 책이 "읽고싶음"이었다면 "읽는중"으로 자동 전환(전환 시에만 저장) — start와 동일.
         if (book.startReading()) {

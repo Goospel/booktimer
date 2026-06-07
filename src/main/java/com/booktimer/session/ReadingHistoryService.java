@@ -69,6 +69,7 @@ public class ReadingHistoryService {
             LocalDate date = LocalDate.ofInstant(session.getStartedAt(), zone);
             DayAccumulator acc = byDate.computeIfAbsent(date, d -> new DayAccumulator());
             acc.seconds += session.getDurationSeconds();
+            acc.manual |= session.isManualEntry(); // 그날 수동 입력이 하나라도 있으면 "직접 채운 날"
             // 책 제목을 읽은 순서대로, 중복 없이 모은다. 책 미지정(레거시 null) 세션은 제목 없음.
             // book은 LAZY라 readOnly 트랜잭션 안에서 접근한다(MVP 규모라 N+1 허용; 커지면 fetch join/집계 쿼리로).
             Book book = session.getBook();
@@ -78,13 +79,15 @@ public class ReadingHistoryService {
         }
 
         return byDate.entrySet().stream()
-                .map(e -> new DailyReadingRecord(e.getKey(), e.getValue().seconds, List.copyOf(e.getValue().titles)))
+                .map(e -> new DailyReadingRecord(e.getKey(), e.getValue().seconds,
+                        List.copyOf(e.getValue().titles), e.getValue().manual))
                 .toList();
     }
 
-    /** 하루치 누적기 — 총 독서 시간(초)과 읽은 책 제목(중복 제거·읽은 순서). */
+    /** 하루치 누적기 — 총 독서 시간(초), 읽은 책 제목(중복 제거·읽은 순서), 수동 입력 포함 여부. */
     private static final class DayAccumulator {
         long seconds = 0L;
+        boolean manual = false;
         final LinkedHashSet<String> titles = new LinkedHashSet<>();
     }
 }

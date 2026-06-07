@@ -14,8 +14,10 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -54,12 +56,16 @@ public class BookContributionService {
 
         // 그 책의 완료 세션을 유저 타임존 일자로 묶어 총 독서 시간을 낸다(최신 일자 먼저).
         Map<LocalDate, Long> byDate = new TreeMap<>(Comparator.reverseOrder());
+        Set<LocalDate> manualDates = new LinkedHashSet<>(); // 직접 채운(수동 입력 포함) 날 — 잔디 테두리 표시
         for (ReadingSession session : sessionRepository.findByUserAndBook(user, book)) {
             if (session.isActive()) {
                 continue; // 진행 중(미종료) 세션은 제외
             }
             LocalDate date = LocalDate.ofInstant(session.getStartedAt(), zone);
             byDate.merge(date, session.getDurationSeconds(), Long::sum);
+            if (session.isManualEntry()) {
+                manualDates.add(date);
+            }
         }
 
         // 이 페이지는 한 책이라 책 제목은 그 책 하나뿐(상세 화면에선 굳이 렌더하지 않음).
@@ -88,6 +94,6 @@ public class BookContributionService {
         GoalSchedule schedule = GoalSchedule.of(changesByDate, currentGoalSeconds);
 
         return new BookReadingDetail(
-                ContributionGraphBuilder.build(secondsByDate, today, schedule::goalFor), dailyHistory, total);
+                ContributionGraphBuilder.build(secondsByDate, today, schedule::goalFor, manualDates), dailyHistory, total);
     }
 }
