@@ -1,5 +1,7 @@
 package com.booktimer.user;
 
+import com.booktimer.timer.ReadingGoalChange;
+import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -45,6 +47,9 @@ class OnboardingServiceTest {
     private ReadingTimerRepository timerRepository;
 
     @Autowired
+    private ReadingGoalChangeRepository goalChangeRepository;
+
+    @Autowired
     private Clock clock;
 
     private LocalDate today() {
@@ -71,6 +76,10 @@ class OnboardingServiceTest {
 
         ReadingTimer timer = timerRepository.findByUser(reloaded).orElseThrow();
         assertThat(timer.getDailyIncrementSeconds()).isEqualTo(5400L); // 사용자가 정한 하루 목표
+
+        // 목표 변경 이력에 오늘자 baseline 한 행이 기록된다 — 이후 목표를 바꿔도 과거 날을 그날 목표로 판정하기 위함.
+        ReadingGoalChange goalRow = goalChangeRepository.findByUserAndEffectiveDate(reloaded, today()).orElseThrow();
+        assertThat(goalRow.getGoalSeconds()).isEqualTo(5400L);
     }
 
     @Test

@@ -1,5 +1,7 @@
 package com.booktimer.user;
 
+import com.booktimer.timer.ReadingGoalChange;
+import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -42,6 +44,9 @@ class UserSettingsServiceTest {
     private ReadingTimerRepository timerRepository;
 
     @Autowired
+    private ReadingGoalChangeRepository goalChangeRepository;
+
+    @Autowired
     private Clock clock;
 
     private LocalDate today() {
@@ -61,6 +66,23 @@ class UserSettingsServiceTest {
 
         ReadingTimer timer = timerRepository.findByUser(reloaded).orElseThrow();
         assertThat(timer.getDailyIncrementSeconds()).isEqualTo(7200L);
+
+        // 하루 목표가 바뀌었으니 오늘자 변경 이력이 기록된다 (그날 목표로 과거 판정).
+        ReadingGoalChange goalRow = goalChangeRepository.findByUserAndEffectiveDate(reloaded, today()).orElseThrow();
+        assertThat(goalRow.getGoalSeconds()).isEqualTo(7200L);
+    }
+
+    @Test
+    @DisplayName("updateSettings: 하루 목표가 그대로면 변경 이력을 남기지 않는다 (불필요한 행 방지)")
+    void updateSettings_goalUnchanged_noHistoryRow() {
+        registrationService.register("samegoal@booktimer.com", "rawpw1234", "독서가", SEOUL, Role.USER, today());
+        User user = userRepository.findByEmail("samegoal@booktimer.com").orElseThrow();
+        long currentGoal = timerRepository.findByUser(user).orElseThrow().getDailyIncrementSeconds();
+
+        // 닉네임만 바꾸고 목표는 현재값 그대로
+        settingsService.updateSettings("samegoal@booktimer.com", "닉만바꿈", SEOUL, currentGoal);
+
+        assertThat(goalChangeRepository.findByUserAndEffectiveDate(user, today())).isEmpty();
     }
 
     @Test
