@@ -29,6 +29,18 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @Transactional
 class UserSettingsServiceTest {
 
+    // 통합 테스트는 운영 Clock.systemUTC()(실시간)를 쓰는데, "오늘 목표 이력" 판정이 날짜에 의존해
+    // 자정 경계(예: 06-08 00:0x KST)에 플레이키하게 깨진다. 결정적 날짜로 고정한다(TimeConfig javadoc 지침).
+    @org.springframework.boot.test.context.TestConfiguration
+    static class FixedClockConfig {
+        @org.springframework.context.annotation.Bean
+        @org.springframework.context.annotation.Primary
+        java.time.Clock fixedClock() {
+            // 18:00 KST = 05:00 EDT — SEOUL·America/New_York 둘 다 같은 날짜(06-17)라 tz 변경 테스트도 결정적.
+            return java.time.Clock.fixed(java.time.Instant.parse("2026-06-17T09:00:00Z"), java.time.ZoneOffset.UTC);
+        }
+    }
+
     private static final String SEOUL = "Asia/Seoul";
 
     @Autowired
