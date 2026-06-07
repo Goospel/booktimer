@@ -49,6 +49,8 @@ public class SecurityConfig {
         http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/signup", "/login", "/privacy", "/error", "/actuator/health", "/css/**", "/js/**", "/favicon.ico").permitAll()
+                        // ads.txt: AdSense 소유권 검증·수익 보호용 공개 정적 파일 — 크롤러가 비인증으로 읽어야 한다.
+                        .requestMatchers("/ads.txt").permitAll()
                         // OAuth2 인가요청·콜백 엔드포인트는 미인증 상태에서 접근 가능해야 한다.
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                         // 관리자 대시보드는 운영 데이터(개인정보)가 걸려 있어 ADMIN만 — default-deny 위에 역할 매처.
