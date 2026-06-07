@@ -11,7 +11,6 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 
-import java.time.LocalDate;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,7 +27,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ReadingTimerRepositoryTest {
 
     private static final long HOUR = 3600L;
-    private static final LocalDate DAY0 = LocalDate.of(2026, 5, 31);
 
     @Autowired
     private ReadingTimerRepository readingTimerRepository;
@@ -45,7 +43,7 @@ class ReadingTimerRepositoryTest {
     @DisplayName("저장 후 user로 조회된다 (id 부여 확인)")
     void save_thenFindByUser() {
         User user = persistedUser("reader@booktimer.com");
-        readingTimerRepository.save(ReadingTimer.startFor(user, HOUR, 5 * HOUR, DAY0));
+        readingTimerRepository.save(ReadingTimer.startFor(user, HOUR));
 
         Optional<ReadingTimer> found = readingTimerRepository.findByUser(user);
 
@@ -53,7 +51,6 @@ class ReadingTimerRepositoryTest {
         assertThat(found.get().getId()).isNotNull();
         assertThat(found.get().getUser().getId()).isEqualTo(user.getId());
         assertThat(found.get().getDailyIncrementSeconds()).isEqualTo(HOUR);
-        assertThat(found.get().getCapSeconds()).isEqualTo(5 * HOUR);
     }
 
     @Test
@@ -70,10 +67,10 @@ class ReadingTimerRepositoryTest {
     @DisplayName("같은 user에 타이머 둘이면 user_id 유니크(1:1) 위반")
     void duplicateUser_violatesUnique() {
         User user = persistedUser("dup@booktimer.com");
-        readingTimerRepository.saveAndFlush(ReadingTimer.startFor(user, HOUR, 5 * HOUR, DAY0));
+        readingTimerRepository.saveAndFlush(ReadingTimer.startFor(user, HOUR));
 
         assertThatThrownBy(() ->
-                readingTimerRepository.saveAndFlush(ReadingTimer.startFor(user, HOUR, 5 * HOUR, DAY0)))
+                readingTimerRepository.saveAndFlush(ReadingTimer.startFor(user, HOUR)))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 }

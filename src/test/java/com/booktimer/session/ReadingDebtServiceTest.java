@@ -53,7 +53,7 @@ class ReadingDebtServiceTest {
     @Test
     @DisplayName("타이머 목표 + 유저 TZ 오늘 + 일자별 집계를 엮어 오늘 부채와 빠뜨린 날을 계산한다")
     void weeklyDebt_wiresGoalTodayAndHistory() {
-        ReadingTimer timer = ReadingTimer.of(GOAL, 5 * GOAL, 0L, TODAY_KST);
+        ReadingTimer timer = ReadingTimer.of(GOAL);
         when(timerRepository.findByUser(user)).thenReturn(Optional.of(timer));
         when(historyService.dailyHistory(user)).thenReturn(List.of(
                 new DailyReadingRecord(TODAY_KST, 1200L, List.of()),          // 오늘 20분 → 부채 2400

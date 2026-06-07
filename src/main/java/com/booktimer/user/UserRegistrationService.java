@@ -16,18 +16,19 @@ import java.time.LocalDate;
  * 세션 stop 시 타이머가 없어 실패하는 일이 없다.
  *
  * <p>비밀번호는 <b>평문으로 받아 {@link PasswordEncoder}로 해싱</b>한 뒤 저장한다 — 평문은
- * 영속화되지 않는다. 단, "오늘"(유저 타임존) 계산은 여전히 이 서비스의 책임이 아니다 —
- * 누적 시작일({@code startDate})은 상위 계층(시계+유저 TZ)이 결정해 넘긴다.
+ * 영속화되지 않는다.
+ *
+ * <p>{@code startDate}(가입 시점의 유저-TZ 오늘)는 옛 누적 모델에서 타이머의 시드 기준일
+ * (last_accrual_date)로 쓰였다. 7일 윈도우 부채 모델로 전환(PR #217)하며 타이머 생성엔 더는
+ * 쓰이지 않지만, 가입 API의 인자로는 남겨 둔다 — 제거하면 호출부 30여 곳을 동시에 고쳐야 해
+ * 이 정리 PR의 범위를 넘는다(가입일 의미의 무해한 날짜라 잔재 위험도 낮다).
  */
 @Service
 @Transactional
 public class UserRegistrationService {
 
-    /** 기본 하루 증가값: 1시간. */
+    /** 기본 하루 목표: 1시간. */
     public static final long DEFAULT_DAILY_INCREMENT_SECONDS = 3600L;
-
-    /** 기본 누적 상한: 5시간. */
-    public static final long DEFAULT_CAP_SECONDS = 18_000L;
 
     private final UserRepository userRepository;
     private final ReadingTimerRepository timerRepository;
@@ -50,7 +51,7 @@ public class UserRegistrationService {
      *
      * @param rawPassword 평문 비밀번호(여기서 해싱 — 평문은 저장되지 않는다)
      * @param loginId     사용자가 정한 로그인 아이디(불변 — 정규화·형식·예약어·유니크 검증)
-     * @param startDate   누적 시작 기준일(유저 타임존 기준 오늘)
+     * @param startDate   가입 시점의 유저-TZ 오늘(옛 누적 시드 기준일 — 윈도우 부채 전환 후 미사용, API 호환용 유지)
      * @return 저장된 User
      * @throws EmailAlreadyExistsException    이메일이 이미 쓰이는 경우
      * @throws LoginIdAlreadyExistsException  login_id가 이미 쓰이는 경우
@@ -75,7 +76,7 @@ public class UserRegistrationService {
         String passwordHash = passwordEncoder.encode(rawPassword);
         User user = User.of(email, passwordHash, nickname, timezone, role);
         user.assignLoginId(loginId); // 불변 — 가입에서 단 한 번 확정
-        return persistWithTimer(user, startDate);
+        return persistWithTimer(user);
     }
 
     /**
@@ -89,13 +90,12 @@ public class UserRegistrationService {
             throw new EmailAlreadyExistsException(email);
         }
         String passwordHash = passwordEncoder.encode(rawPassword);
-        return persistWithTimer(User.of(email, passwordHash, nickname, timezone, role), startDate);
+        return persistWithTimer(User.of(email, passwordHash, nickname, timezone, role));
     }
 
-    private User persistWithTimer(User user, LocalDate startDate) {
+    private User persistWithTimer(User user) {
         user = userRepository.save(user);
-        timerRepository.save(ReadingTimer.startFor(
-                user, DEFAULT_DAILY_INCREMENT_SECONDS, DEFAULT_CAP_SECONDS, startDate));
+        timerRepository.save(ReadingTimer.startFor(user, DEFAULT_DAILY_INCREMENT_SECONDS));
         return user;
     }
 
@@ -104,14 +104,13 @@ public class UserRegistrationService {
      * provider가 신원을 보증하므로 평문 비밀번호·해싱이 없다는 점만 {@link #register}와 다르다.
      *
      * @param provider  소셜 provider(GOOGLE 등 — LOCAL 불가)
-     * @param startDate 누적 시작 기준일(유저 타임존 기준 오늘)
+     * @param startDate 가입 시점의 유저-TZ 오늘(옛 누적 시드 기준일 — 윈도우 부채 전환 후 미사용, API 호환용 유지)
      * @return 저장된 User
      */
     public User registerOAuth(String email, String nickname, String timezone,
                               AuthProvider provider, LocalDate startDate) {
         User user = userRepository.save(User.ofOAuth(email, nickname, timezone, Role.USER, provider));
-        timerRepository.save(ReadingTimer.startFor(
-                user, DEFAULT_DAILY_INCREMENT_SECONDS, DEFAULT_CAP_SECONDS, startDate));
+        timerRepository.save(ReadingTimer.startFor(user, DEFAULT_DAILY_INCREMENT_SECONDS));
         return user;
     }
 }

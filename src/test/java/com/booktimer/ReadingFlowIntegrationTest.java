@@ -73,13 +73,9 @@ class ReadingFlowIntegrationTest {
         assertThat(user.getPasswordHash()).isNotEqualTo("rawpw1234").startsWith("$2");
         Optional<ReadingTimer> timer = timerRepository.findByUser(user);
         assertThat(timer).isPresent();
-        // 가입 당일치 증가값으로 시드(0이 아님) — README 1일차 = 1증가값
-        assertThat(timer.get().getRemainingSeconds())
-                .isEqualTo(UserRegistrationService.DEFAULT_DAILY_INCREMENT_SECONDS);
+        // 기본 하루 목표로 부트스트랩된다 (부채는 세션에서 유도 — 옛 시드 잔여·cap·기준일은 사라졌다)
         assertThat(timer.get().getDailyIncrementSeconds())
                 .isEqualTo(UserRegistrationService.DEFAULT_DAILY_INCREMENT_SECONDS);
-        assertThat(timer.get().getCapSeconds())
-                .isEqualTo(UserRegistrationService.DEFAULT_CAP_SECONDS);
     }
 
     @Test

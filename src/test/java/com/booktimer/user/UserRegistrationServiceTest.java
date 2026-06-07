@@ -77,14 +77,9 @@ class UserRegistrationServiceTest {
         verify(timerRepository).save(timerCaptor.capture());
         ReadingTimer timer = timerCaptor.getValue();
         assertThat(timer.getUser()).isSameAs(result);
-        // 가입 당일치 증가값으로 시드된다(0이 아님) — README 1일차 = 1증가값
-        assertThat(timer.getRemainingSeconds())
-                .isEqualTo(UserRegistrationService.DEFAULT_DAILY_INCREMENT_SECONDS);
-        assertThat(timer.getLastAccrualDate()).isEqualTo(DAY0);
+        // 기본 하루 목표로 부트스트랩된다 (부채는 세션에서 유도 — 옛 시드 잔여·cap·기준일은 사라졌다)
         assertThat(timer.getDailyIncrementSeconds())
                 .isEqualTo(UserRegistrationService.DEFAULT_DAILY_INCREMENT_SECONDS);
-        assertThat(timer.getCapSeconds())
-                .isEqualTo(UserRegistrationService.DEFAULT_CAP_SECONDS);
     }
 
     @Test
@@ -178,9 +173,8 @@ class UserRegistrationServiceTest {
         verify(timerRepository).save(timerCaptor.capture());
         ReadingTimer timer = timerCaptor.getValue();
         assertThat(timer.getUser()).isSameAs(result);
-        assertThat(timer.getRemainingSeconds())
+        assertThat(timer.getDailyIncrementSeconds())
                 .isEqualTo(UserRegistrationService.DEFAULT_DAILY_INCREMENT_SECONDS);
-        assertThat(timer.getLastAccrualDate()).isEqualTo(DAY0);
 
         // 소셜 가입은 평문 비밀번호가 없으므로 해싱하지 않는다
         verify(passwordEncoder, never()).encode(any());

@@ -13,7 +13,6 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 
 import java.time.Instant;
-import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -27,8 +26,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DataJpaTest
 @Import(JpaConfig.class)
 class AuditingTest {
-
-    private static final LocalDate DAY0 = LocalDate.of(2026, 5, 31);
 
     @Autowired
     private UserRepository userRepository;
@@ -56,7 +53,7 @@ class AuditingTest {
         User user = userRepository.save(sampleUser("b@booktimer.com"));
 
         ReadingTimer saved = readingTimerRepository.saveAndFlush(
-                ReadingTimer.startFor(user, 3600L, 18000L, DAY0));
+                ReadingTimer.startFor(user, 3600L));
 
         assertThat(saved.getCreatedAt()).isNotNull();
         assertThat(saved.getUpdatedAt()).isNotNull();
@@ -67,10 +64,10 @@ class AuditingTest {
     void timer_updatedAtNotBeforeCreatedOnUpdate() {
         User user = userRepository.save(sampleUser("c@booktimer.com"));
         ReadingTimer saved = readingTimerRepository.saveAndFlush(
-                ReadingTimer.startFor(user, 3600L, 18000L, DAY0));
+                ReadingTimer.startFor(user, 3600L));
         Instant created = saved.getCreatedAt();
 
-        saved.accrueUntil(DAY0.plusDays(3)); // remainingSeconds 변경 → dirty update
+        saved.updateSettings(7200L); // 하루 목표 변경 → dirty update
         ReadingTimer updated = readingTimerRepository.saveAndFlush(saved);
 
         assertThat(updated.getUpdatedAt()).isAfterOrEqualTo(created);

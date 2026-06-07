@@ -16,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 조회·위임·저장만 한다.
  *
  * <p>옛 "초기 잔여"·"누적 상한"은 7일 윈도우 부채 모델로 전환하며 사라졌다 — 온보딩은 이제 하루
- * 목표만 정한다. 타이머의 잔여/cap 컬럼은 아직 남아 있어(미사용) 기존 cap 값을 유지한다(PR-2에서 제거).
+ * 목표만 정한다. 잔재 컬럼(remaining/cap/last_accrual)도 제거됐다(PR #218).
  */
 @Service
 @Transactional
@@ -63,8 +63,7 @@ public class OnboardingService {
         }
 
         user.updateProfile(nickname, user.getTimezone());
-        // 하루 목표만 갱신. cap은 7일 윈도우로 대체돼 기존 값을 유지한다(컬럼은 PR-2에서 제거).
-        timer.updateSettings(dailyIncrementSeconds, timer.getCapSeconds());
+        timer.updateSettings(dailyIncrementSeconds); // 하루 목표만 — cap은 7일 윈도우 모델로 대체됨
         user.completeOnboarding();
 
         timerRepository.save(timer);
