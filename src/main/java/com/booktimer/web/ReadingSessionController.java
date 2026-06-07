@@ -4,6 +4,7 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.ReadingSessionService;
+import com.booktimer.session.WeeklyDebtCalculator;
 import com.booktimer.user.User;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -102,23 +103,37 @@ public class ReadingSessionController {
 
     /**
      * 사후 수동 입력 폼 — 측정 시작을 깜빡한 독서를 직접 적는 화면. 책 미지정 기록은 금지라
-     * 고를 책 목록(전체)을 싣고, 날짜 기본값/상한으로 쓸 "오늘"(유저 타임존)도 함께 싣는다.
+     * 고를 책 목록(전체)을 싣고, 날짜 입력의 범위(최근 7일 윈도우: {@code minDate}~{@code today})와
+     * 미리 채울 날짜({@code selectedDate})도 싣는다.
+     *
+     * <p>{@code date} 쿼리파라미터(대시보드 "이번 주 빠뜨린 날"의 "채우기" 링크)가 윈도우 내 유효 날짜면
+     * 그 날짜를 미리 선택한다 — 빠뜨린 그 날을 곧장 채우게. 없거나 범위를 벗어나면 오늘로 기본 설정.
      */
     @GetMapping("/manual")
-    public String manualForm(Principal principal, Model model) {
+    public String manualForm(Principal principal,
+                             @RequestParam(value = "date", required = false) String date,
+                             Model model) {
         User user = currentUser(principal);
+        ZoneId zone = ZoneId.of(user.getTimezone());
+        LocalDate today = LocalDate.ofInstant(clock.instant(), zone);
+        LocalDate windowStart = today.minusDays(WeeklyDebtCalculator.WINDOW_DAYS - 1L);
+
         model.addAttribute("books", bookRepository.findByUserOrderByCreatedAtDesc(user));
-        model.addAttribute("today",
-                LocalDate.ofInstant(clock.instant(), ZoneId.of(user.getTimezone())).toString());
+        model.addAttribute("today", today.toString());
+        model.addAttribute("minDate", windowStart.toString());
+        LocalDate prefill = parseDate(date);
+        boolean inWindow = prefill != null && !prefill.isAfter(today) && !prefill.isBefore(windowStart);
+        model.addAttribute("selectedDate", inWindow ? prefill.toString() : today.toString());
         return "manual-session";
     }
 
     /**
      * 사후 수동 입력 제출 — 책+날짜+시간으로 완료 세션 1건을 만든다.
      *
-     * <p>검증(거부 시 폼으로 플래시 에러): 책 미선택·남의 책(IDOR), 날짜 형식 오류·미래 날짜, 0 이하·24시간 초과 시간.
-     * 잔디·일자별 기록은 {@code startedAt}을 유저 타임존으로 묶으므로(N-010), 고른 날짜에 안착하도록 시각을 잡는다 —
-     * 오늘이면 "지금" 끝난 것으로(미래 시각 회피), 과거면 그 날 정오를 종료로 삼아 {@code startedAt}이 같은 날에 남게 한다.
+     * <p>검증(거부 시 폼으로 플래시 에러): 책 미선택·남의 책(IDOR), 날짜 형식 오류·미래·<b>윈도우(최근 7일) 밖</b>,
+     * 0 이하·24시간 초과 시간. 잔디·일자별 기록·부채는 {@code startedAt}을 유저 타임존으로 묶으므로(N-010),
+     * 고른 날짜에 안착하도록 시각을 잡는다 — 오늘이면 "지금" 끝난 것으로(미래 시각 회피), 과거면 그 날 정오를
+     * 종료로 삼아 {@code startedAt}이 같은 날에 남게 한다. 그 날짜의 부채는 세션 저장으로 자동 감소한다.
      */
     @PostMapping("/manual")
     public String manualSubmit(Principal principal,
@@ -147,6 +162,7 @@ public class ReadingSessionController {
         Instant startedAt = endedAt.minusSeconds(durationSeconds);
 
         sessionService.recordManual(user, startedAt, endedAt, book);
+        // 부채는 날짜별로 유도되므로, 어느 날짜를 적든 그 날의 부채가 그만큼 준다(오늘/과거 분기 불필요).
         redirectAttributes.addFlashAttribute("message", "독서 기록을 추가했어요.");
         return "redirect:/sessions/manual";
     }
@@ -163,7 +179,11 @@ public class ReadingSessionController {
         }
     }
 
-    /** 수동 입력 검증 — 통과면 null, 막히면 사용자 안내 문구. 책 미선택과 남의 책(IDOR)은 같은 안내로 묶는다. */
+    /**
+     * 수동 입력 검증 — 통과면 null, 막히면 사용자 안내 문구. 책 미선택과 남의 책(IDOR)은 같은 안내로 묶는다.
+     * 날짜는 최근 7일 윈도우({@code today.minusDays(WINDOW_DAYS-1)} ~ {@code today}) 안만 허용 — 그 이전은
+     * 자동 용서라 채울 수 없다(입문자 친화 — 죄책감 누적 차단).
+     */
     private static String validateManual(Book book, LocalDate readDate, long durationSeconds, LocalDate today) {
         if (book == null) {
             return "기록할 책을 선택하세요.";
@@ -173,6 +193,9 @@ public class ReadingSessionController {
         }
         if (readDate.isAfter(today)) {
             return "미래 날짜는 기록할 수 없어요.";
+        }
+        if (readDate.isBefore(today.minusDays(WeeklyDebtCalculator.WINDOW_DAYS - 1L))) {
+            return "최근 7일 이내의 날짜만 기록할 수 있어요(그 이전은 자동으로 넘어가요).";
         }
         if (durationSeconds <= 0) {
             return "읽은 시간을 입력하세요.";

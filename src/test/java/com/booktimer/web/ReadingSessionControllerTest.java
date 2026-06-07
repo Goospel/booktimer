@@ -3,9 +3,11 @@ package com.booktimer.web;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
+import com.booktimer.session.ReadingDebtService;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.session.ReadingSessionService;
+import com.booktimer.session.WeeklyDebt;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
@@ -62,6 +64,9 @@ class ReadingSessionControllerTest {
 
     @Autowired
     private BookRepository bookRepository;
+
+    @Autowired
+    private ReadingDebtService debtService;
 
     @Autowired
     private Clock clock;
@@ -284,6 +289,62 @@ class ReadingSessionControllerTest {
         ReadingSession s = sessionRepository.findByUser(user).get(0);
         Instant startedAt = s.getStartedAt();
         assertThat(LocalDate.ofInstant(startedAt, ZoneId.of(SEOUL))).isEqualTo(past);
+    }
+
+    @Test
+    @DisplayName("POST /sessions/manual: 오늘 날짜로 기록하면 오늘 부채가 그만큼 준다(세션 저장으로 자동 반영)")
+    void manualSubmit_today_reducesTodayDebt() throws Exception {
+        User user = register("mtoday@booktimer.com");
+        Book book = book(user);
+        long todayDebtBefore = debtService.weeklyDebt(user).todayDebtSeconds();
+
+        mockMvc.perform(post("/sessions/manual")
+                        .param("bookId", String.valueOf(book.getId()))
+                        .param("date", today().toString())
+                        .param("hours", "0").param("minutes", "30")
+                        .with(user("mtoday@booktimer.com")).with(csrf()))
+                .andExpect(redirectedUrl("/sessions/manual"));
+
+        long todayDebtAfter = debtService.weeklyDebt(user).todayDebtSeconds();
+        assertThat(todayDebtAfter).isEqualTo(Math.max(0, todayDebtBefore - 30 * 60L)); // 30분 채움
+    }
+
+    @Test
+    @DisplayName("POST /sessions/manual: 윈도우 내 과거 날짜로 기록하면 그 날 부채만 줄고 오늘 부채는 그대로다 — 과거를 오늘에 적용하지 않는다")
+    void manualSubmit_pastInWindow_reducesThatDayNotToday() throws Exception {
+        User user = register("mpastkeep@booktimer.com");
+        Book book = book(user);
+        long todayDebtBefore = debtService.weeklyDebt(user).todayDebtSeconds();
+        long totalDebtBefore = debtService.weeklyDebt(user).totalDebtSeconds();
+
+        mockMvc.perform(post("/sessions/manual")
+                        .param("bookId", String.valueOf(book.getId()))
+                        .param("date", today().minusDays(3).toString()) // 윈도우(7일) 안의 과거
+                        .param("hours", "0").param("minutes", "30")
+                        .with(user("mpastkeep@booktimer.com")).with(csrf()))
+                .andExpect(redirectedUrl("/sessions/manual"));
+
+        assertThat(sessionRepository.findByUser(user)).hasSize(1);
+        WeeklyDebt after = debtService.weeklyDebt(user);
+        assertThat(after.todayDebtSeconds()).isEqualTo(todayDebtBefore);          // 오늘 부채 불변(사용자 버그 회귀 방지)
+        assertThat(after.totalDebtSeconds()).isEqualTo(totalDebtBefore - 30 * 60L); // 그 날 부채만 30분 감소
+    }
+
+    @Test
+    @DisplayName("POST /sessions/manual: 윈도우(최근 7일) 밖 날짜는 거부(에러 안내 + 세션 없음) — 자동 용서")
+    void manualSubmit_outsideWindow_flashesError_noSession() throws Exception {
+        User user = register("moutwin@booktimer.com");
+        Book book = book(user);
+
+        mockMvc.perform(post("/sessions/manual")
+                        .param("bookId", String.valueOf(book.getId()))
+                        .param("date", today().minusDays(8).toString()) // 7일 윈도우 밖
+                        .param("hours", "1")
+                        .with(user("moutwin@booktimer.com")).with(csrf()))
+                .andExpect(redirectedUrl("/sessions/manual"))
+                .andExpect(flash().attributeExists("error"));
+
+        assertThat(sessionRepository.findByUser(user)).isEmpty();
     }
 
     @Test

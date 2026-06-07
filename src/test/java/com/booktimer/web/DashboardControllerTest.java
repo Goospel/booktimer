@@ -36,9 +36,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 대시보드(홈) 컨트롤러 통합 테스트 (MockMvc + 실제 빈·H2).
  *
- * <p>로그인 주체(username=email)를 도메인 User로 매핑하고, 접속 시 누적(accrueToToday)을
- * 적용한 뒤 잔여 시간·진행 중 세션을 화면에 싣는지 검증한다. 대시보드 본화면은 온보딩을 마친
- * 사용자만 볼 수 있으므로(첫 진입 게이트), 헬퍼로 온보딩 완료한 사용자를 만든다.
+ * <p>로그인 주체(username=email)를 도메인 User로 매핑하고, <b>오늘 부채</b>(remainingSeconds)·이번 주
+ * 빠뜨린 날(weeklyShortfall)·진행 중 세션을 화면에 싣는지 검증한다. 부채는 7일 윈도우 per-day로
+ * 완료 세션에서 유도된다(옛 단일 카운터·accrual·cap 제거). 대시보드 본화면은 온보딩을 마친 사용자만
+ * 볼 수 있으므로(첫 진입 게이트), 헬퍼로 온보딩 완료한 사용자를 만든다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -91,7 +92,7 @@ class DashboardControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(view().name("dashboard"))
                 .andExpect(model().attribute("nickname", "책벌레"))
-                // 가입 당일 1증가값 시드(1h) — 같은 날 접속이라 추가 누적 없음
+                // remainingSeconds = 오늘 부채 = 목표(기본 1h) − 오늘 읽은 양(0) = 1h
                 .andExpect(model().attribute("remainingSeconds", 3600L))
                 .andExpect(model().attribute("hasActiveSession", false))
                 // 대시보드에도 독서 잔디(컨트리뷰션 그래프)를 싣는다
@@ -141,14 +142,30 @@ class DashboardControllerTest {
     }
 
     @Test
-    @DisplayName("GET /: 접속 시 경과 일수만큼 누적이 적용된다 (시작일 1h 시드 + 2일치 2h = 3h)")
-    void dashboard_appliesAccrualOnAccess() throws Exception {
-        // 2일 전 시작 → 시드 1h + 접속 시 2일치(1h*2) 누적 = 3h(10800s)
-        registerOnboarded("acc@booktimer.com", "독서가", today().minusDays(2));
+    @DisplayName("GET /: remainingSeconds는 '오늘 부채' — 오늘 읽은 만큼 줄어든다 (누적·accrual 없음)")
+    void dashboard_remainingIsTodayDebt() throws Exception {
+        User user = registerOnboarded("todaydebt@booktimer.com", "오늘", today());
+        Book book = bookRepository.save(
+                Book.register(user, "책", null, null, null, null, null, BookStatus.READING));
+        // 오늘 30분 완료 세션 → 오늘 부채 = 목표(1h) − 30m = 30m
+        Instant base = clock.instant();
+        ReadingSession s = ReadingSession.start(user, base.minusSeconds(1800), book);
+        s.end(base);
+        sessionRepository.save(s);
 
-        mockMvc.perform(get("/").with(user("acc@booktimer.com")))
+        mockMvc.perform(get("/").with(user("todaydebt@booktimer.com")))
                 .andExpect(status().isOk())
-                .andExpect(model().attribute("remainingSeconds", 10800L));
+                .andExpect(model().attribute("remainingSeconds", 3600L - 1800L));
+    }
+
+    @Test
+    @DisplayName("GET /: 이번 주 빠뜨린 날 목록(weeklyShortfall)을 모델에 싣는다")
+    void dashboard_includesWeeklyShortfall() throws Exception {
+        registerOnboarded("short@booktimer.com", "빠뜨림", today());
+
+        mockMvc.perform(get("/").with(user("short@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeExists("weeklyShortfall"));
     }
 
     @Test
@@ -255,27 +272,5 @@ class DashboardControllerTest {
         assertThat(quote).isNotNull();
         assertThat(quote.getText()).isNotBlank();
         assertThat(quote.getAuthor()).isNotBlank();
-    }
-
-    @Test
-    @DisplayName("GET /: 누적 잔여가 cap에 도달하면 atCap=true (상한 경고 배지)")
-    void dashboard_atCapWhenRemainingHitsCap() throws Exception {
-        // 10일 전 시작 → 시드 1h + 10일치 누적이 cap(기본 5h=18000s)으로 클램프 → 잔여 == cap
-        registerOnboarded("cap@booktimer.com", "상한", today().minusDays(10));
-
-        mockMvc.perform(get("/").with(user("cap@booktimer.com")))
-                .andExpect(status().isOk())
-                .andExpect(model().attribute("remainingSeconds", 18000L))
-                .andExpect(model().attribute("atCap", true));
-    }
-
-    @Test
-    @DisplayName("GET /: 잔여가 cap 미만이면 atCap=false")
-    void dashboard_notAtCapWhenBelowCap() throws Exception {
-        registerOnboarded("below@booktimer.com", "여유", today());
-
-        mockMvc.perform(get("/").with(user("below@booktimer.com")))
-                .andExpect(status().isOk())
-                .andExpect(model().attribute("atCap", false));
     }
 }

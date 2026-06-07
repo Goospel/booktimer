@@ -51,12 +51,22 @@ MVP(누적 타이머 + 인증 + 설정 + 일자별 기록 + 계정 보안)는 �
     - **⚠️ 한국 정보통신망법 (선결 검토)**: 재참여 넛지는 *광고성 정보*로 해석될 소지 → **수신동의(opt-in)·수신거부 링크·발신자 정보** 필요, **야간(21시~익일 08시) 발송 시 별도 동의** 필요. 그래서 "저녁"은 **21시 이전**(예: 20시)으로 잡거나 야간 수신동의를 받는다. 온보딩/설정에 알림 수신 토글 추가가 자연스러움.
     - **dedup/빈도**: 하루 1통 상한, 이미 읽은 날엔 미발송(트리거 자체가 그럼), 수신거부 시 영구 제외.
 - [x] **② 마찰 감소 — 사후 수동 입력 (완료 ✅ 2026-06-07)** — 측정 시작을 깜빡한 독서를 *나중에 수동으로 기록*(시간·책 입력). 지금은 타이머를 안 켜면 그 독서가 통째로 유실 → "어차피 기록 안 됐네" 이탈. 약한 사용자일수록 마찰 내성 0.
-  - **구현**: 전용 페이지 `GET/POST /sessions/manual`(`ReadingSessionController`) + 템플릿 `manual-session.html` + 대시보드 퀵액션 "✍️ 빠뜨린 기록" 진입. 서비스 `ReadingSessionService.recordManual(user, startedAt, endedAt, book)` = `start`의 **책 필수** + `stop`의 **누적 차감**을 합친 완료 세션(진행 중 세션과 무관). **DB 무변경**(기존 `reading_session` 재사용 — Flyway 없음, 설계대로). 책 필수 규칙 유지.
-  - **날짜 안착**: 잔디·일자별 기록은 `startedAt`을 유저 TZ로 묶으므로(N-010) 고른 날짜에 안착하게 시각을 잡음 — 오늘이면 `endedAt=now`(미래 시각 회피), 과거면 그 날 정오 종료, `startedAt=endedAt-시간`.
-  - **차감 모델**: 수동 기록도 측정과 동일하게 누적 잔여(단일 부채 N-001)에서 차감 — 안 그러면 "기록은 됐는데 목표엔 반영 안 됨"이라 ②의 취지가 부분 재현됨. 과거 날짜 기록도 현재 잔여를 갚음(원장이 아니라 단일 누적값이라).
-  - **TDD**: 서비스 5(완료세션+차감·책null거부·순서역전거부·타이머없음·읽고싶음→읽는중 전환) + 컨트롤러 7(폼 렌더·해피·**과거날짜 안착**·책없음·IDOR·미래날짜·0분). 전체 스위트 그린.
-- [ ] **③ 부채 용서 장치 (streak freeze)** — 누적 부채([[N-001]])는 밀리면 *죄책감→이탈*을 만들어 입문자에게 역효과. Duolingo식 **1일 면제/주 1회 보호**나 "너무 밀렸을 때 가볍게 리셋" 옵션으로 "이미 글렀다" 이탈 차단. 도메인 로직이라 TDD·경계값 주의(면제 소진·자정 경계).
-- **thesis에 이미 잘 맞는 기존 장치**(유지·강화): 상한(cap, 과몰입 방지), 목표 달성 배지(`goalMet` "오늘 목표 달성! 🎉"·초록색 — 인앱 알람은 실효 없어 제거 PR #185, 배지만 유지), 잔디(습관 시각 증거).
+  - **구현**: 전용 페이지 `GET/POST /sessions/manual`(`ReadingSessionController`) + 템플릿 `manual-session.html` + 대시보드 퀵액션 "✍️ 빠뜨린 기록" + **"이번 주 빠뜨린 날" 목록의 "채우기" 링크**(`?date=` 프리필). 서비스 `ReadingSessionService.recordManual` = `start`의 **책 필수** 규칙을 따른 완료 세션(진행 중 세션과 무관). **차감 로직 없음** — 부채는 완료 세션에서 유도되므로([[N-058]] 7일 윈도우) 세션 저장이 곧 그 날 부채 감소. 날짜는 **최근 7일 윈도우 안만** 허용(그 이전은 자동 용서). **DB 무변경**(기존 `reading_session` 재사용 — Flyway 없음).
+  - **날짜 안착**: 잔디·일자별 기록·부채는 `startedAt`을 유저 TZ로 묶으므로(N-010) 고른 날짜에 안착하게 시각을 잡음 — 오늘이면 `endedAt=now`(미래 시각 회피), 과거면 그 날 정오 종료, `startedAt=endedAt-시간`.
+  - **차감 → 부채 모델 전환 (2026-06-07, PR #217)**: 초기엔 "수동 기록도 측정과 같이 단일 누적 잔여에서 무조건 차감"으로 출하 → 한 달 전 1시간을 적으면 *오늘* 잔여가 줄어 "오늘 목표 채움"으로 오인(실사용 버그). *오늘만 차감* 임시 픽스를 거쳐, 근본적으로 **부채 모델을 단일 롤링 카운터(N-001) → 7일 윈도우 per-day 부채로 전환**(아래 §부채 모델 참조). 이제 부채 = 날짜별 독립 = `max(0, 하루목표 − 그날 읽은 초)`, 활성 범위 최근 7일(그 이전 자동 용서). 백데이트 입력이 *그 날* 부채를 정확히 채우고 오늘을 오염시키지 않는다. 개념·일반 교훈: [[N-058]].
+- [x] **③ 부채 용서 장치 (streak freeze) — 7일 윈도우로 흡수 ✅ (2026-06-07, PR #217)** — 누적 부채가 밀리면 *죄책감→이탈*을 만든다는 문제를, 부채 모델을 **최근 7일 윈도우**로 바꿔 구조적으로 해결했다: 7일보다 오래된 빚은 표시·집계·충전 대상이 아니라 **자동 용서**되고, 최대 부채도 7×목표로 자연 제한된다(옛 cap의 과몰입 방지 역할 흡수). 별도 면제 카운터/리셋 UI 없이 윈도우 자체가 용서 장치. (더 정교한 면제가 필요하면 후속에서.)
+- **thesis에 이미 잘 맞는 기존 장치**(유지·강화): **7일 윈도우**(옛 cap의 과몰입 방지+죄책감 상한을 흡수 — 최대 부채 7×목표, 오래된 빚 자동 용서), 목표 달성 배지(`goalMet` "오늘 목표 달성! 🎉"·초록색 — 인앱 알람은 실효 없어 제거 PR #185, 배지만 유지), 잔디(습관 시각 증거).
+
+### 📐 부채 모델 — 7일 윈도우 per-day (2026-06-07 전환, PR #217)
+
+> 옛 모델(N-001): **단일 누적 카운터**(`remainingSeconds`) + 상한(cap) + 매일 증가하는 Lazy accrual. "지금 시점의 단일 잔액"만 알아서 **백데이트(과거) 기록을 올바른 날에 못 꽂는** 한계(레버 ② 버그의 뿌리). 사용자 결정으로 per-day 모델로 전환.
+
+- **하루 부채 = `max(0, 하루목표 − 그날 읽은 초)`** — 날짜별 독립(이월·뱅킹 없음). 하루목표 = `dailyIncrementSeconds`.
+- **활성 범위 = 최근 7일**(오늘 포함). 그보다 오래된 날은 표시·집계·충전 대상 아님 = **자동 용서**(레버 ③ 흡수, cap 대체). 최대 부채 7×목표로 자연 제한.
+- **부채는 저장 안 하고 완료 세션에서 유도**(`ReadingDebtService`/`WeeklyDebtCalculator`, 유저 TZ+Clock로 오늘·윈도우 산정 N-010). 롤링 카운터·cap·accrual 불필요.
+- **대시보드** = 헤드라인 "오늘 부채"(JS 카운트다운 그대로) + "이번 주 빠뜨린 날" 목록(최근 6일 부채>0, "채우기"=수동입력 `?date=` 프리필).
+- **수동 입력/측정 stop**: 차감 로직 제거 — 세션 저장이 곧 그 날 부채 감소. 수동 입력 날짜는 윈도우(7일) 안만 허용.
+- **PR-1(이번)**: 사용자 대면 전환(엔진+대시보드+수동입력+설정/온보딩 cap·초기값 제거+관리자). 엔티티 `remainingSeconds/capSeconds/lastAccrualDate`·accrual 클래스는 **미사용 vestigial로 잔존**(무파괴, DB 마이그레이션 없음). **PR-2(후속)**: 죽은 컬럼/클래스 제거(Flyway drop). 개념·일반 교훈: [[N-058]].
 
 ### 🔖 리브랜딩(서비스명 변경) — 엔진 B 완성 시점에 (예약, 2026-06-06)
 
@@ -337,7 +347,7 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
       ※ 보안 전제는 이미 충족(하드닝 #1 email_verified·#2 brute-force 완료, 사이트·LOCAL 가입은 이미 공개).
       ※ 게시 과정에서 Chrome "위험한 사이트" 오탐(T-027) 발생 → Search Console 도메인 인증 후 재평가로 **자연 해소**(Safe Browsing 등재 없음 확인).
 - [ ] 카카오/네이버 등 추가 provider (선택)
-- [ ] **(백로그) 온보딩에서 타임존도 받기** — 현재 온보딩 페이지는 초기값·증가값·상한만 묻는다.
+- [ ] **(백로그) 온보딩에서 타임존도 받기** — 현재 온보딩 페이지는 하루 목표만 묻는다(초기값·상한은 7일 윈도우 전환으로 제거).
       구글 가입자는 가입 폼이 없어 타임존이 기본값 `Asia/Seoul`로 생성된다(설정에서 변경 가능).
       잔디 자정 경계·일일 누적이 타임존에 의존(N-010)하므로 해외 사용자 대응 시 온보딩 폼에 타임존
       드롭다운 추가가 자연스럽다. **우선순위 낮음** — 해외 사용자 유입은 아직 먼 얘기. 그때 착수.
@@ -969,4 +979,5 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 | 2026-06-07 | **책BTI Gemini 인증을 `?key=` 쿼리파라미터로 — 신형 `AQ.` 키 호환**(라이브 서술 살림) — 배포 후 서술이 안 켜지고 `401 ACCESS_TOKEN_TYPE_UNSUPPORTED`. 원인: Google이 API 키를 `AIza`(Traffic)→`AQ.`(Authentication)로 교체 중인데 일부 계정은 `AQ.` 키만 발급되고, 이 키는 기존 `x-goog-api-key` 헤더(·`Authorization: Bearer`)로는 401, **`?key=` 쿼리파라미터로만** 통한다(CloudShell `curl ...?key=`로 모델 목록 200 확인). 어댑터를 `GeminiReadingPersonalityNarrator.buildEndpoint(base,model,key)`로 추출해 `?key=`(URL 인코딩)로 호출·헤더 제거 → `AIza`·`AQ.` 둘 다 호환. 기본 모델도 이 키로 접근 확인된 `gemini-2.5-flash`로 상향(2.0→2.5). URL에 키가 실리므로 catch에서 URL·요청 로그 안 남김. **TDD Red→Green**: `buildEndpoint_putsKeyAsQueryParam`(키가 헤더 아닌 `?key=`에 실림) Red(메서드 없음 컴파일 실패) 확인 → 구현 → Green. 함정 **T-037**(헤더 테스트는 멀쩡한 AQ 키도 401이라 오진, `-H "값"`만 주면 403)·deploy-aws §12-3 AQ 주의 동봉. GeminiReadingPersonalityNarrator.java+테스트+deploy-aws.md+troubleshooting.md. (PR #213 머지) |
 | 2026-06-07 | **책BTI v1 라이브 서술 동작 확인 + 개념 노트 정리**(세션 마무리) — #213 배포 성공 후 `/personality`에서 **성향 서술 문단이 라이브로 노출됨을 확인**(폴백 아님) → 책BTI v1(집계→서술→캐시→화면→운영 LLM)이 **전 구간 실동작**. 인증 채널 비동치(헤더 vs `?key=` vs Bearer)와 Google `AIza`→`AQ.` 키 세대 교체를 면접 설명 수준 개념 노트 **N-056**으로 정리(트랩 T-037의 "왜"). 문서만(learning-notes.md+plan.md). (PR 예정) |
 | 2026-06-07 | **retention 레버 ② — 사후 수동 입력**(엔진 A 복귀, §전략 최우선 백로그) — 책BTI v1 출하 후 §전략 순서대로 엔진 A retention으로 복귀. 측정 깜빡한 독서를 나중에 직접 기록해 "어차피 기록 안 됐네" 이탈 차단. 전용 페이지 `GET/POST /sessions/manual`(`ReadingSessionController`)+`manual-session.html`+대시보드 퀵액션 "✍️ 빠뜨린 기록". 서비스 `ReadingSessionService.recordManual` = `start`(책 필수)+`stop`(누적 차감) 합친 완료 세션(진행 세션 무관). 날짜 안착=startedAt을 유저 TZ로 묶으므로(N-010) 오늘은 endedAt=now·과거는 그날 정오 종료. 차감은 단일 누적 부채(N-001)라 과거 기록도 현재 잔여를 갚음. **DB 무변경(Flyway 없음)**. TDD Red→Green: 서비스 5(완료세션+차감·책null·순서역전·타이머없음·읽고싶음전환)+컨트롤러 7(폼·해피·과거날짜 안착·책없음·IDOR·미래날짜·0분). 전체 스위트 그린. (PR #215 머지) |
-| 2026-06-07 | **세션 비활성 타임아웃 30일 — 독서 중 로그아웃 해결**(실사용 피드백) — 책 읽다 "측정 종료" 누르려니 로그아웃·~50분 비웠다 오니 재로그인 요구. 원인: 타임아웃 미설정 = **Boot 기본 30분** + 독서 타이머는 클라이언트(JS)에서만 돌고 읽는 동안 서버 요청이 0이라 30분 뒤 세션 만료(오래 읽는 핵심 사용자일수록 더 잘 터짐). 해결: 비활성 타임아웃 30일 + 쿠키 Max-Age 30일(브라우저 닫아도 유지), 세션 MySQL 외부화라 비용 0. **Boot 4 함정**: `server.servlet.session.timeout` 프로퍼티가 Spring Session JDBC 저장소에 안 먹어(기본 30분 그대로, cookieSerializer·ForwardedHeaderFilter 계열) `WebConfig#sessionTimeoutCustomizer`(`SessionRepositoryCustomizer`)로 직접 `setDefaultMaxInactiveInterval`+`cookieSerializer.setCookieMaxAge`. TDD Red→Green: `SessionCookieSameSiteTest`에 createSession 타임아웃 30일(프로퍼티만이면 30분 Red로 함정 포착)+쿠키 Max-Age=2592000 단언. 전체 스위트 그린. learning-notes N-### 후보(Boot 4 세션 타임아웃 프로퍼티 무동작). (PR 예정) |
+| 2026-06-07 | **세션 비활성 타임아웃 30일 — 독서 중 로그아웃 해결**(실사용 피드백) — 책 읽다 "측정 종료" 누르려니 로그아웃·~50분 비웠다 오니 재로그인 요구. 원인: 타임아웃 미설정 = **Boot 기본 30분** + 독서 타이머는 클라이언트(JS)에서만 돌고 읽는 동안 서버 요청이 0이라 30분 뒤 세션 만료(오래 읽는 핵심 사용자일수록 더 잘 터짐). 해결: 비활성 타임아웃 30일 + 쿠키 Max-Age 30일(브라우저 닫아도 유지), 세션 MySQL 외부화라 비용 0. **Boot 4 함정**: `server.servlet.session.timeout` 프로퍼티가 Spring Session JDBC 저장소에 안 먹어(기본 30분 그대로, cookieSerializer·ForwardedHeaderFilter 계열) `WebConfig#sessionTimeoutCustomizer`(`SessionRepositoryCustomizer`)로 직접 `setDefaultMaxInactiveInterval`+`cookieSerializer.setCookieMaxAge`. TDD Red→Green: `SessionCookieSameSiteTest`에 createSession 타임아웃 30일(프로퍼티만이면 30분 Red로 함정 포착)+쿠키 Max-Age=2592000 단언. 전체 스위트 그린. learning-notes N-057·troubleshooting T-038(Boot 4 세션 타임아웃 프로퍼티 무동작). (PR #216 머지) |
+| 2026-06-07 | **부채 모델 전환 — 단일 롤링 카운터 → 7일 윈도우 per-day**(사용자 방향 결정, 레버 ②·③ 동시 해결) — 발단: "한 달 전 1시간"을 빠뜨린 기록으로 넣으니 *오늘* 잔여가 줄어 오늘 목표를 채운 걸로 처리됨(실사용 버그). 뿌리: 부채가 날짜별 원장이 아니라 매일 증가하는 **단일 누적 카운터([[N-001]])**라 "지금 잔액"만 알아 백데이트를 올바른 날에 못 꽂음. *오늘만 차감* 임시 픽스를 거쳐, 근본적으로 모델 전환: **하루 부채=`max(0,목표−그날 읽은 초)`(날짜별 독립), 활성 최근 7일(그 이전 자동 용서=cap·streak-freeze 흡수), 부채는 완료 세션에서 유도**(`WeeklyDebtCalculator`·`ReadingDebtService`). 대시보드=오늘 부채 헤드라인+이번 주 빠뜨린 날 목록(채우기 `?date=` 프리필), 수동입력은 윈도우 안만·차감 로직 제거(세션 저장이 곧 그 날 부채 감소), 설정/온보딩 cap·초기값 제거, 관리자 표시 교체. **PR-1=사용자 대면 전환(무파괴, 엔티티 컬럼·accrual은 vestigial 잔존)**, PR-2=죽은 컬럼/클래스 Flyway drop. DB 무변경(PR-1). TDD Red→Green(WeeklyDebtCalculator 10·ReadingDebtService 2 신규 + 대시보드·수동입력·온보딩·설정·관리자·통합 테스트 갱신, 전체 그린). 개념·일반 교훈 [[N-058]], §부채 모델·레버 ②③ 본문 갱신. (PR #217 예정) |

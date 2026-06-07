@@ -692,3 +692,10 @@ a.book-title:hover { text-decoration: underline; }
 .pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 12px 0 4px; }
 .pager .btn-ghost { padding: 6px 12px; font-size: .9rem; text-decoration: none; }
 .pager-info { font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* 이번 주 빠뜨린 날 (대시보드 7일 윈도우 부채 채우기) */
+.missed-list { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 8px; }
+.missed-list li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+.missed-list .missed-date { font-weight: 600; }
+.missed-list .missed-debt { color: var(--muted); font-size: .9rem; font-variant-numeric: tabular-nums; }
+.missed-list .btn-fill { margin-left: auto; padding: 6px 12px; font-size: .85rem; text-decoration: none; }

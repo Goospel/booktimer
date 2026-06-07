@@ -75,9 +75,9 @@ class SettingsControllerTest {
     }
 
     @Test
-    @DisplayName("GET /settings: 현재 닉네임/타임존과 분 단위 증가값·cap을 폼에 채워 보여준다")
+    @DisplayName("GET /settings: 현재 닉네임/타임존과 분 단위 하루 목표를 폼에 채워 보여준다")
     void getSettings_showsCurrentValues() throws Exception {
-        register("get@booktimer.com"); // 기본: increment 3600s(60분), cap 18000s(300분)
+        register("get@booktimer.com"); // 기본: 하루 목표 3600s(60분)
 
         mockMvc.perform(get("/settings").with(user("get@booktimer.com")))
                 .andExpect(status().isOk())
@@ -85,8 +85,7 @@ class SettingsControllerTest {
                 .andExpect(model().attributeExists("settingsForm"))
                 .andExpect(content().string(containsString("독서가")))
                 .andExpect(content().string(containsString("Asia/Seoul")))
-                .andExpect(content().string(containsString("60")))   // 증가값 분
-                .andExpect(content().string(containsString("300"))); // cap 분
+                .andExpect(content().string(containsString("60"))); // 하루 목표 분
     }
 
     @Test
@@ -122,15 +121,14 @@ class SettingsControllerTest {
     }
 
     @Test
-    @DisplayName("POST /settings: 유효하면 프로필·타이머를 갱신하고 /settings로 리다이렉트한다")
+    @DisplayName("POST /settings: 유효하면 프로필·하루 목표를 갱신하고 /settings로 리다이렉트한다")
     void postSettings_valid_updatesAndRedirects() throws Exception {
         register("post@booktimer.com");
 
         mockMvc.perform(post("/settings").with(user("post@booktimer.com")).with(csrf())
                         .param("nickname", "새닉")
                         .param("timezone", "America/New_York")
-                        .param("incrementMinutes", "120")
-                        .param("capMinutes", "600"))
+                        .param("incrementMinutes", "120"))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/settings"));
 
@@ -140,7 +138,6 @@ class SettingsControllerTest {
 
         ReadingTimer timer = timerRepository.findByUser(reloaded).orElseThrow();
         assertThat(timer.getDailyIncrementSeconds()).isEqualTo(120 * 60L);
-        assertThat(timer.getCapSeconds()).isEqualTo(600 * 60L);
     }
 
     @Test
@@ -151,23 +148,21 @@ class SettingsControllerTest {
         mockMvc.perform(post("/settings").with(user("badtz@booktimer.com")).with(csrf())
                         .param("nickname", "닉")
                         .param("timezone", "Mars/Phobos")
-                        .param("incrementMinutes", "60")
-                        .param("capMinutes", "300"))
+                        .param("incrementMinutes", "60"))
                 .andExpect(status().isOk())
                 .andExpect(view().name("settings"))
                 .andExpect(model().attributeHasFieldErrors("settingsForm", "timezone"));
     }
 
     @Test
-    @DisplayName("POST /settings: 증가값 분이 음수면 필드 에러로 화면을 다시 그린다")
+    @DisplayName("POST /settings: 하루 목표 분이 음수면 필드 에러로 화면을 다시 그린다")
     void postSettings_negativeMinutes_rerenders() throws Exception {
         register("neg@booktimer.com");
 
         mockMvc.perform(post("/settings").with(user("neg@booktimer.com")).with(csrf())
                         .param("nickname", "닉")
                         .param("timezone", "Asia/Seoul")
-                        .param("incrementMinutes", "-5")
-                        .param("capMinutes", "300"))
+                        .param("incrementMinutes", "-5"))
                 .andExpect(status().isOk())
                 .andExpect(view().name("settings"))
                 .andExpect(model().attributeHasFieldErrors("settingsForm", "incrementMinutes"));

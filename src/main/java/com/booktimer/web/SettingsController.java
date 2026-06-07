@@ -72,7 +72,6 @@ public class SettingsController {
             form.setNickname(user.getNickname());
             form.setTimezone(user.getTimezone());
             form.setIncrementMinutes((int) (timer.getDailyIncrementSeconds() / SECONDS_PER_MINUTE));
-            form.setCapMinutes((int) (timer.getCapSeconds() / SECONDS_PER_MINUTE));
             model.addAttribute("settingsForm", form);
         }
         // 소셜 계정은 비밀번호가 없다 → 비밀번호 변경 카드를 숨기고, 탈퇴는 본인 @핸들(login_id) 재입력으로 확인한다.
@@ -102,8 +101,7 @@ public class SettingsController {
                 currentUser(principal).getEmail(), // 서비스는 email로 조회 — principal(login_id)을 User로 해석해 넘긴다
                 form.getNickname(),
                 form.getTimezone(),
-                form.getIncrementMinutes() * (long) SECONDS_PER_MINUTE,
-                form.getCapMinutes() * (long) SECONDS_PER_MINUTE);
+                form.getIncrementMinutes() * (long) SECONDS_PER_MINUTE);
 
         redirectAttributes.addFlashAttribute("message", "설정을 저장했습니다.");
         return "redirect:/settings";
