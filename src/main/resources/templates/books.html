@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>내 책장 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
+    <!-- 광고 로더(게시자 ID 설정 시에만) -->
+    <th:block th:replace="~{ads :: loader}"></th:block>
 </head>
 <body>
 <div class="container">
@@ -163,6 +165,9 @@
     <p class="affiliate-note">
         ※ "구매" 링크는 제휴(알라딘) 링크로, 구매 시 일부 수수료를 받을 수 있습니다.
     </p>
+
+    <!-- 광고 (하단, 게시자 ID 설정 시에만) -->
+    <div th:replace="~{ads :: unit}"></div>
 
     <p class="link-row">
         <a th:href="@{/}">← 대시보드</a>
