@@ -2,6 +2,7 @@ package com.booktimer.user;
 
 import com.booktimer.block.BlockRepository;
 import com.booktimer.book.BookRepository;
+import com.booktimer.feedback.FeedbackRepository;
 import com.booktimer.follow.FollowRepository;
 import com.booktimer.personality.ReadingPersonalityCacheRepository;
 import com.booktimer.report.ReportRepository;
@@ -32,6 +33,7 @@ public class AccountService {
     private final ReportRepository reportRepository;
     private final BookRepository bookRepository;
     private final ReadingPersonalityCacheRepository personalityCacheRepository;
+    private final FeedbackRepository feedbackRepository;
     private final PasswordEncoder passwordEncoder;
 
     public AccountService(UserRepository userRepository,
@@ -42,6 +44,7 @@ public class AccountService {
                           ReportRepository reportRepository,
                           BookRepository bookRepository,
                           ReadingPersonalityCacheRepository personalityCacheRepository,
+                          FeedbackRepository feedbackRepository,
                           PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.timerRepository = timerRepository;
@@ -51,6 +54,7 @@ public class AccountService {
         this.reportRepository = reportRepository;
         this.bookRepository = bookRepository;
         this.personalityCacheRepository = personalityCacheRepository;
+        this.feedbackRepository = feedbackRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -130,6 +134,7 @@ public class AccountService {
         reportRepository.deleteByReported(user);
         bookRepository.deleteByUser(user);
         personalityCacheRepository.deleteByUser(user); // 책BTI 캐시도 user_id FK 참조 → 유저 전에 정리
+        feedbackRepository.deleteByAuthor(user);       // 문의도 author_id FK 참조 → 유저 전에 정리
         userRepository.delete(user);
     }
 

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>문의·피드백 — BookTimer</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <a class="brand-home" th:href="@{/}" title="메인 대시보드로">
+            <span class="emoji">💬</span>
+            <h1>문의·피드백</h1>
+        </a>
+    </header>
+
+    <p class="alert" th:if="${message}" th:text="${message}">접수 완료</p>
+    <p class="alert alert-error" th:if="${error}" th:text="${error}">에러</p>
+
+    <!-- 보내기 폼: 유형(버그/제안/기타) + 제목 + 내용. POST라 Thymeleaf+Security가 CSRF 토큰을 자동 주입. -->
+    <form class="card fb-form" th:action="@{/feedback}" method="post">
+        <h2>개발자에게 보내기</h2>
+        <p class="status-line muted">버그나 개선 아이디어를 보내주세요. 확인·처리하면 아래 '내 문의'에서 상태로 알려드려요.</p>
+        <label class="fb-field">유형
+            <select name="type">
+                <option th:each="t : ${types}" th:value="${t.name()}" th:text="${t.label}">유형</option>
+            </select>
+        </label>
+        <label class="fb-field">제목
+            <input type="text" name="title" maxlength="150" placeholder="한 줄 요약" required>
+        </label>
+        <label class="fb-field">내용
+            <textarea name="content" rows="5" maxlength="2000" placeholder="무엇이 불편했는지, 어떤 상황이었는지 적어주세요." required></textarea>
+        </label>
+        <button type="submit" class="btn-primary">보내기</button>
+    </form>
+
+    <!-- 내 문의: 작성자 본인 글만(FeedbackService.myFeedback 스코핑). 처리 상태는 본인만 본다. -->
+    <section class="card">
+        <h2>내 문의</h2>
+        <p class="status-line muted" th:if="${myFeedback.isEmpty()}">아직 보낸 문의가 없어요.</p>
+        <ul class="fb-list" th:unless="${myFeedback.isEmpty()}">
+            <li class="fb-item" th:each="f : ${myFeedback}">
+                <div class="fb-head">
+                    <span class="fb-type" th:text="${f.type.label}">유형</span>
+                    <span th:class="'fb-badge fb-' + ${f.status.name().toLowerCase()}"
+                          th:text="${f.status.label}">상태</span>
+                </div>
+                <p class="fb-title" th:text="${f.title}">제목</p>
+                <p class="fb-content" th:text="${f.content}">내용</p>
+                <form th:action="@{/feedback/{id}/delete(id=${f.id})}" method="post"
+                      onsubmit="return confirm('이 문의를 삭제할까요?');">
+                    <button type="submit" class="btn-ghost btn-small">삭제</button>
+                </form>
+            </li>
+        </ul>
+    </section>
+
+    <p class="link-row"><a th:href="@{/}">← 대시보드로</a></p>
+</div>
+</body>
+</html>
