@@ -10,8 +10,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 입력 시그니처 단위 테스트(책BTI Phase 4) — 재생성 트리거의 정확도를 본다.
  *
- * <p>핵심: (1) 같은 프로필이면 같은 시그니처(결정적·캐시 키), (2) 책장 <b>구조</b>가 바뀌면 달라진다(재생성),
- * (3) 독서 시간이 <b>같은 시간(hour) 버킷 안</b>에서만 바뀌면 그대로다(측정 세션마다 재생성 thrash 회피).
+ * <p>핵심: (1) 같은 프로필이면 같은 시그니처(결정적·캐시 키), (2) 완독 책의 <b>구조</b>(권수·저자·장르·연대)가
+ * 바뀌면 달라진다(재생성), (3) <b>독서 시간은 더 이상 성향 입력이 아니므로 시그니처를 바꾸지 않는다</b> —
+ * 책을 더 완독하지 않고 시간만 쌓여도 재분석하지 않는다(완독 책만으로 성향, 시간 제외).
  */
 class ProfileSignatureTest {
 
@@ -49,20 +50,11 @@ class ProfileSignatureTest {
     }
 
     @Test
-    @DisplayName("시간 버킷: 같은 시간(hour) 안의 초 변화는 시그니처를 안 바꾼다(thrash 회피)")
-    void withinSameHour_sameSignature() {
+    @DisplayName("독서 시간은 시그니처에 영향 없음: 시간만 늘어도(시간 버킷을 넘겨도) 시그니처는 그대로 — 시간은 성향 입력이 아님")
+    void readingTimeChange_doesNotChangeSignature() {
         List<LabeledCount> genres = List.of(new LabeledCount("소설/시/희곡", 3));
-        // 3600초(1h)와 7000초(여전히 1h 버킷)는 같은 시그니처
-        assertThat(ProfileSignature.of(profile(3, 7000, genres)))
-                .isEqualTo(ProfileSignature.of(profile(3, 3600, genres)));
-    }
-
-    @Test
-    @DisplayName("시간 버킷: 시간(hour) 버킷을 넘으면 시그니처가 달라진다(의미있는 누적)")
-    void crossingHourBucket_changesSignature() {
-        List<LabeledCount> genres = List.of(new LabeledCount("소설/시/희곡", 3));
-        String oneHour = ProfileSignature.of(profile(3, 3600, genres));   // 1h
-        String twoHours = ProfileSignature.of(profile(3, 7200, genres));  // 2h
-        assertThat(twoHours).isNotEqualTo(oneHour);
+        String oneHour = ProfileSignature.of(profile(3, 3600, genres));    // 1h
+        String fiveHours = ProfileSignature.of(profile(3, 18000, genres)); // 5h (예전이라면 버킷을 넘겨 달랐을 값)
+        assertThat(fiveHours).isEqualTo(oneHour); // 시간이 달라도 같은 시그니처(재분석 안 함)
     }
 }

@@ -42,24 +42,40 @@ class ReadingProfileServiceTest {
     }
 
     @Test
-    @DisplayName("프로필 집계: 사용자의 책장·세션을 읽어 권수·완독률·시간을 낸다")
-    void profileOf_aggregatesUsersShelf() {
+    @DisplayName("프로필 집계: 완독(FINISHED) 책만으로 권수·분포를 낸다 — 성향은 완독 책에서만 뽑는다")
+    void profileOf_aggregatesFinishedBooksOnly() {
         User u = newUser("me@booktimer.com");
         bookRepository.save(Book.register(u, "책A", "김영하", null, null, null, null,
                 "국내도서>소설/시/희곡>한국소설", "2020-03-15", BookStatus.FINISHED));
+        // 같은 저자의 '읽는중' 책 — 완독이 아니므로 분포·권수에 안 잡혀야 한다
         bookRepository.save(Book.register(u, "책B", "김영하", null, null, null, null, null, null, BookStatus.READING));
-        ReadingSession s = ReadingSession.start(u, Instant.parse("2026-06-07T00:00:00Z"));
-        s.end(Instant.parse("2026-06-07T00:10:00Z")); // 600초
-        sessionRepository.save(s);
 
         ReadingProfile p = service.profileOf(u);
 
-        assertThat(p.totalBooks()).isEqualTo(2);
+        assertThat(p.totalBooks()).isEqualTo(1);   // 완독 1권만(읽는중 제외)
         assertThat(p.finishedBooks()).isEqualTo(1);
-        assertThat(p.finishedRatio()).isEqualTo(0.5);
-        assertThat(p.totalReadingSeconds()).isEqualTo(600);
-        assertThat(p.topAuthors()).containsExactly(new LabeledCount("김영하", 2));
+        assertThat(p.topAuthors()).containsExactly(new LabeledCount("김영하", 1)); // 완독분만(2 아님)
         assertThat(p.topGenres()).containsExactly(new LabeledCount("소설/시/희곡", 1));
+    }
+
+    @Test
+    @DisplayName("완독만: 읽고싶음·읽는중 책은 권수·저자·장르·연대 분포 어디에도 새지 않는다")
+    void profileOf_excludesWantToReadAndReading() {
+        User u = newUser("mixed@booktimer.com");
+        bookRepository.save(Book.register(u, "완독", "완독저자", null, null, null, null,
+                "국내도서>소설/시/희곡>한국소설", "2020-01-01", BookStatus.FINISHED));
+        bookRepository.save(Book.register(u, "읽는중", "읽는중저자", null, null, null, null,
+                "국내도서>경제경영>마케팅", "2019-01-01", BookStatus.READING));
+        bookRepository.save(Book.register(u, "읽고싶음", "읽고싶음저자", null, null, null, null,
+                "국내도서>과학>물리학", "2018-01-01", BookStatus.WANT_TO_READ));
+
+        ReadingProfile p = service.profileOf(u);
+
+        assertThat(p.totalBooks()).isEqualTo(1);
+        assertThat(p.distinctAuthors()).isEqualTo(1);
+        assertThat(p.topAuthors()).extracting(LabeledCount::label).containsExactly("완독저자");
+        assertThat(p.topGenres()).extracting(LabeledCount::label).containsExactly("소설/시/희곡");
+        assertThat(p.pubDecades()).extracting(LabeledCount::label).containsExactly("2020");
     }
 
     @Test

@@ -29,8 +29,8 @@
     <section class="card" th:if="${view.isColdStart()}">
         <h2>조금 더 읽으면 성향이 보여요</h2>
         <p class="status-line">
-            지금 책장에 <strong th:text="${view.profile().totalBooks()}">0</strong>권 있어요.
-            최소 <strong th:text="${view.coldStartMinBooks()}">5</strong>권쯤 모이면 성향을 분석해 드릴게요.
+            지금 완독한 책이 <strong th:text="${view.profile().finishedBooks()}">0</strong>권이에요.
+            최소 <strong th:text="${view.coldStartMinBooks()}">5</strong>권쯤 완독하면 성향을 분석해 드릴게요.
         </p>
     </section>
 
@@ -44,18 +44,6 @@
     <section class="card">
         <h2>책장 요약</h2>
         <ul class="record-list">
-            <li class="record-row">
-                <span class="record-main">보유 / 완독</span>
-                <span class="record-time mono">
-                    <span th:text="${view.profile().totalBooks()}">0</span>권 /
-                    <span th:text="${view.profile().finishedBooks()}">0</span>권
-                </span>
-            </li>
-            <li class="record-row">
-                <span class="record-main">총 독서 시간</span>
-                <span class="record-time mono"
-                      th:text="${(view.profile().totalReadingSeconds() / 3600) + '시간 ' + ((view.profile().totalReadingSeconds() % 3600) / 60) + '분'}">0시간 0분</span>
-            </li>
             <li class="record-row" th:if="${!view.profile().topGenres().isEmpty()}">
                 <span class="record-main">자주 읽는 장르</span>
                 <span class="record-books"

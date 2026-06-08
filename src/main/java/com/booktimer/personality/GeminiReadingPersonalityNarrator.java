@@ -125,13 +125,14 @@ public class GeminiReadingPersonalityNarrator implements ReadingPersonalityNarra
 
     /**
      * 프롬프트에 주입할 <b>책 내용 사실만</b> 골라 JSON으로 만든다 — 장르·저자·출간연대 분포와
-     * 다양성(서로 다른 저자/장르 수), 표본 크기(총 권수)만 담는다. 독서 습관 신호
-     * (완독/읽는중/읽고싶음 권수, 완독률, 독서 시간·세션·평균 세션 길이)는 일부러 뺀다(설계 의도, {@link #buildPrompt}).
+     * 다양성(서로 다른 저자/장르 수), 표본 크기(<b>완독 권수</b>)만 담는다. 독서 습관 신호
+     * (완독률, 독서 시간·세션·평균 세션 길이)는 일부러 뺀다(설계 의도, {@link #buildPrompt}).
+     * 프로필 자체가 완독 책만으로 집계되므로({@link ReadingProfileService#profileOf}) 분포·표본 모두 완독분이다.
      */
     private static String bookFactsJson(ReadingProfile profile, ObjectMapper objectMapper) {
         try {
             ObjectNode facts = objectMapper.createObjectNode();
-            facts.put("totalBooks", profile.totalBooks()); // 표본 크기(습관 아님 — 분석 신뢰도 맥락)
+            facts.put("finishedBooks", profile.finishedBooks()); // 표본 크기 = 완독 권수(습관 아님)
             facts.put("distinctAuthors", profile.distinctAuthors());
             facts.set("topAuthors", objectMapper.valueToTree(profile.topAuthors()));
             facts.put("distinctGenres", profile.distinctGenres());

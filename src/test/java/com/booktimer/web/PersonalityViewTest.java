@@ -25,6 +25,11 @@ class PersonalityViewTest {
                 0, List.of(), 0, List.of(), List.of());
     }
 
+    private static ReadingProfile profileWith(int totalBooks, int finishedBooks) {
+        return new ReadingProfile(totalBooks, finishedBooks, 0, 0, 1.0, 0, 0, 0,
+                0, List.of(), 0, List.of(), List.of());
+    }
+
     @Test
     @DisplayName("서술이 있으면 READY")
     void ready_whenNarrationPresent() {
@@ -68,5 +73,16 @@ class PersonalityViewTest {
 
         assertThat(view.isColdStart()).isFalse();
         assertThat(view.isFallback()).isTrue();
+    }
+
+    @Test
+    @DisplayName("콜드스타트는 완독 권수로 판정한다 — 보유는 많아도 완독이 임계 미만이면 콜드스타트")
+    void coldStart_keysOnFinishedNotTotal() {
+        // 보유 10권이지만 완독은 3권(<5) — 성향은 완독 책에서만 뽑으므로 아직 콜드스타트여야 한다
+        ReadingPersonality result = ReadingPersonality.factsOnly(profileWith(10, 3));
+
+        PersonalityView view = PersonalityView.from(result, MIN);
+
+        assertThat(view.isColdStart()).isTrue();
     }
 }

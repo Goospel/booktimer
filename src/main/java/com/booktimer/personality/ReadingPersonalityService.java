@@ -22,7 +22,7 @@ import java.util.Optional;
 @Transactional(readOnly = true)
 public class ReadingPersonalityService {
 
-    /** 콜드스타트 임계 — 이 미만이면 신호가 부족해 분석을 보류한다(reading-personality-design §6, 잠정 5권). */
+    /** 콜드스타트 임계 — <b>완독 책</b>이 이 미만이면 신호가 부족해 분석을 보류한다(reading-personality-design §6, 잠정 5권). */
     public static final int COLD_START_MIN_BOOKS = 5;
 
     /** 태그를 한 컬럼에 이어 붙일 때 쓰는 구분자(개행) — 태그 안에 잘 안 나오는 문자. */
@@ -65,8 +65,8 @@ public class ReadingPersonalityService {
     public ReadingPersonality analyzeCached(User user, boolean force) {
         ReadingProfile profile = profileService.profileOf(user);
 
-        // (1) 콜드스타트 — 신호 부족: LLM·캐시 없이 사실만 보류
-        if (profile.totalBooks() < COLD_START_MIN_BOOKS) {
+        // (1) 콜드스타트 — 완독 책 부족: LLM·캐시 없이 사실만 보류(성향은 완독 책에서만 뽑음)
+        if (profile.finishedBooks() < COLD_START_MIN_BOOKS) {
             return ReadingPersonality.factsOnly(profile);
         }
 
