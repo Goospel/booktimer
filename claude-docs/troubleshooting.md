@@ -768,6 +768,25 @@ NoSuchMethodException이 가리키는 건 **no-arg 생성자**(`<init>()`)인데
 
 ---
 
+## T-040. Gemini 2.5-flash가 HTTP 200인데 `parts[0].text`가 빈 문자열 — thinking이 출력 예산을 삼킨다
+
+**증상**: LLM 서술이 "한 번씩" 안 나온다(빈 화면/폴백). 키도 멀쩡(T-037 해결됨)하고 네트워크 예외도 없는데(catch 로그 안 찍힘) 어쩔 때만 결과가 빈다. 재시도하면 나오기도 한다.
+
+**원인 — "성공인데 알맹이 없음"은 예외가 아니다**:
+- `gemini-2.5-flash`(및 2.5 계열)는 **thinking이 기본 ON**이다. 요청에 `maxOutputTokens`를 안 주고 `responseMimeType=application/json`만 주면, 모델의 thinking 토큰이 출력 예산을 소진해 응답이 **HTTP 200**이면서 `candidates[0].content.parts[0].text`가 **빈 문자열**(또는 parts 자체가 빔)로 온다(`finishReason`이 `MAX_TOKENS`인 경우도).
+- 빈 본문은 `try/catch`에 안 걸린다(200이라 정상 응답). 그래서 "키/네트워크 문제 아닌데 왜 비지?"로 헤맨다. 파싱이 빈 text→빈 결과로 폴백시키는 건 올바르지만, **근본은 요청 쪽**이다.
+
+**해결 / 예방** (`generationConfig`에 두 필드 추가):
+```java
+genConfig.put("maxOutputTokens", 2048);                       // 출력 상한(서술 한 문단엔 충분)
+genConfig.putObject("thinkingConfig").put("thinkingBudget", 0); // 2.5-flash thinking 비활성
+```
+- `thinkingBudget=0` → 2.5-flash의 thinking을 꺼 출력 예산이 onto 서술로 온전히 간다. `maxOutputTokens`로 상한도 명시(비용·지연).
+- **검증**: `buildRequestBody`가 두 필드를 싣는지 정적 단위 테스트로 단언(네트워크 없이). 외부 응답은 형식·내용까지 불신(N-041) — "200=성공"이 아니라 "쓸 수 있는 본문이 왔나"로 본다.
+- 외부 호출의 빈/지연 응답은 화면을 깨면 안 되므로, 호출자에서 **직전 캐시(stale) 폴백**도 함께(serve-stale-on-error, N-060).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -809,3 +828,4 @@ NoSuchMethodException이 가리키는 건 **no-arg 생성자**(`<init>()`)인데
 | 2026-06-06 | T-031 확장 (null만이 아니다: 단독 `th:if="${stringVar}"`는 Thymeleaf truthiness로 동작하지만 `and`/`or`/`!`로 묶으면 SpringEL이 피연산자를 boolean으로 강제 → String도 boolean화 못 해 `SpelEvaluationException` / `${b.purchaseLink and !self}`가 그 행 렌더 테스트 9개를 한꺼번에 깸 → `${!#strings.isEmpty(b.purchaseLink) and !self}`로 명시 술어화 / 규칙: `${문자열}`을 boolean 연산자와 섞지 말 것 — 본인 책방 구매 버튼 숨기다 발견) |
 | 2026-06-07 | T-038 (세션 타임아웃을 `server.servlet.session.timeout` 프로퍼티로 못 늘림 — Boot 4 + Spring Session JDBC에선 만료시간을 서블릿 컨테이너가 아니라 Spring Session 저장소가 들고 있어 프로퍼티가 안 닿음(30분 그대로, 테스트가 720H vs 30M로 포착) / 독서 타이머는 클라이언트(JS)에서만 돌아 읽는 동안 서버 요청 0 → 30분에 끊김(N-057) / 해결: `SessionRepositoryCustomizer<JdbcIndexedSessionRepository>`로 `setDefaultMaxInactiveInterval` 직접 + 쿠키 Max-Age는 `DefaultCookieSerializer.setCookieMaxAge`(기본 -1=세션 쿠키) / 검증 필수: `createSession().getMaxInactiveInterval()`·`Set-Cookie Max-Age` / T-014·T-021 "프로퍼티 무동작→명시 빈" 자매) |
 | 2026-06-08 | T-039 (실시간 시계 통합 테스트가 자정·tz 경계에서 플레이키 — `@SpringBootTest`가 운영 `Clock.systemUTC()`를 써서 `now` 기준 "오늘" 데이터가 자정 직후 전날로 넘어가거나(06-08 00:0x KST CI에서 3개 깨져 배포 skip) tz 변경 시 SEOUL today()와 어긋남 / 해결: 클래스별 nested `@TestConfiguration` `@Primary Clock.fixed(...)` — 한낮+대상 tz 모두 같은 날짜인 시각(예 09:00Z=18:00 KST=05:00 EDT) / 운영 코드 무변경, `TimeConfig` javadoc 지침) |
+| 2026-06-08 | T-040 (Gemini 2.5-flash가 HTTP 200인데 `parts[0].text` 빈 문자열 — thinking 기본 ON이라 `maxOutputTokens` 미설정 시 thinking이 출력 예산 소진 → 본문 빔(`finishReason=MAX_TOKENS`일 수도), 200이라 catch에 안 걸려 "키·네트워크 멀쩡한데 왜 비지"로 헤맴 / 해결: `generationConfig`에 `maxOutputTokens`=2048 + `thinkingConfig.thinkingBudget=0`(thinking 비활성), `buildRequestBody` 정적 단위테스트로 두 필드 단언 / "200=성공" 아니라 "쓸 본문이 왔나"로 봄(N-041), 호출자엔 stale 캐시 폴백 동반(N-060) / T-037 키 문제와 구분되는 별개 빈응답 원인) |

@@ -138,6 +138,19 @@ class GeminiReadingPersonalityNarratorTest {
                 .isEqualTo("application/json");
     }
 
+    @Test
+    @DisplayName("요청 본문: 출력 토큰 상한 + thinking 비활성으로 빈 응답을 방어한다(N-060: 2.5-flash thinking이 예산 소진하면 text 빔)")
+    void buildRequestBody_boundsOutputAndDisablesThinking() throws Exception {
+        String body = GeminiReadingPersonalityNarrator.buildRequestBody("아무 프롬프트", objectMapper);
+
+        JsonNode genConfig = objectMapper.readTree(body).path("generationConfig");
+        // maxOutputTokens가 양수로 설정돼 응답이 한없이 늘지 않게 한다(서술 한 문단엔 충분)
+        assertThat(genConfig.path("maxOutputTokens").asInt(0)).isGreaterThan(0);
+        // thinkingBudget=0 → gemini-2.5-flash의 thinking을 꺼서 thinking 토큰이 출력 예산을 삼켜
+        // parts[0].text가 빈 문자열로 오는 것을 막는다
+        assertThat(genConfig.path("thinkingConfig").path("thinkingBudget").asInt(-1)).isEqualTo(0);
+    }
+
     // ---- narrate 가드(네트워크 없이) ----
 
     @Test

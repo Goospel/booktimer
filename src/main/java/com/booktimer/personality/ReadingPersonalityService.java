@@ -2,6 +2,7 @@ package com.booktimer.personality;
 
 import com.booktimer.user.User;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -53,9 +54,14 @@ public class ReadingPersonalityService {
     /**
      * 사용자의 책BTI 결과를 <b>캐시를 활용해</b> 만든다 — 실사용 진입점.
      *
+     * <p>트랜잭션 경계 주의(N-060): 느린 외부 LLM 호출({@link ReadingPersonalityNarrator#narrate})을 하나의
+     * 트랜잭션으로 감싸면 그 네트워크 시간 내내 DB 커넥션을 점유한다. 그래서 이 메서드는 트랜잭션을 강제하지
+     * 않고({@code SUPPORTS}, 클래스 기본 readOnly도 상속하지 않음), 캐시 조회·저장은 각 repository 호출의
+     * 자체 트랜잭션에 맡긴다 — LLM 호출은 트랜잭션 밖에서 일어나 커넥션을 묶지 않는다.
+     *
      * @param force "다시 분석" 등 강제 재생성이면 true(시그니처가 같아도 LLM 재호출)
      */
-    @Transactional // 캐시를 쓰므로 읽기전용 아님(클래스 기본을 override)
+    @Transactional(propagation = Propagation.SUPPORTS) // LLM 호출을 트랜잭션 밖으로(커넥션 점유 회피)
     public ReadingPersonality analyzeCached(User user, boolean force) {
         ReadingProfile profile = profileService.profileOf(user);
 
@@ -75,7 +81,11 @@ public class ReadingPersonalityService {
         // (3) 재생성 — force거나, 캐시 없거나, 시그니처 변동
         Optional<PersonalityNarration> fresh = narrator.narrate(profile);
         if (fresh.isEmpty()) {
-            return ReadingPersonality.factsOnly(profile); // LLM 실패 → 폴백(기존 캐시는 건드리지 않음)
+            // LLM 실패/빈응답 → 직전 캐시(stale)가 있으면 그걸 내보내 빈 화면을 막는다(serve-stale-on-error, N-060).
+            // 없으면 사실만 폴백. 어느 경우든 기존 캐시 행은 덮어쓰지 않는다(실패가 좋은 캐시를 망가뜨리지 않게).
+            return cached
+                    .map(c -> new ReadingPersonality(profile, toNarration(c)))
+                    .orElseGet(() -> ReadingPersonality.factsOnly(profile));
         }
         PersonalityNarration narration = fresh.get();
         upsert(user, cached.orElse(null), narration, signature);
