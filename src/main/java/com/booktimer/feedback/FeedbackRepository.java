@@ -16,6 +16,9 @@ public interface FeedbackRepository extends JpaRepository<Feedback, Long> {
     /** 관리자 전체 조회 — 최신순. */
     List<Feedback> findAllByOrderByCreatedAtDesc();
 
+    /** 관리자 유형 필터 — 해당 유형만, 최신순. */
+    List<Feedback> findByTypeOrderByCreatedAtDesc(FeedbackType type);
+
     /** 회원 탈퇴 정리 — 내가 쓴 문의를 모두 제거(author_id FK). */
     void deleteByAuthor(User author);
 }

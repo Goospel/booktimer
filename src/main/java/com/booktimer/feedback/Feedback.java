@@ -48,6 +48,10 @@ public class Feedback extends BaseTimeEntity {
     @Column(nullable = false, length = 20)
     private FeedbackStatus status;
 
+    /** 개발자 답장(선택) — 작성자 본인만 본다. 답장을 달면 자동으로 읽음 처리된다. */
+    @Column(length = 1000)
+    private String reply;
+
     protected Feedback() {
         // JPA
     }
@@ -90,6 +94,22 @@ public class Feedback extends BaseTimeEntity {
         this.status = FeedbackStatus.RESOLVED;
     }
 
+    /**
+     * 개발자가 답장을 단다(덮어쓰기). 답장하려면 읽은 것이므로 미확인이면 자동으로 읽음 처리한다
+     * (이미 읽음/처리완료면 상태 유지 — 처리완료를 읽음으로 되돌리지 않음). 처리완료는 별도 동작.
+     *
+     * @throws IllegalArgumentException 답장이 비어 있는 경우
+     */
+    public void applyReply(String reply) {
+        if (reply == null || reply.isBlank()) {
+            throw new IllegalArgumentException("reply must not be blank");
+        }
+        this.reply = reply.strip();
+        if (this.status == FeedbackStatus.SUBMITTED) {
+            this.status = FeedbackStatus.READ; // 답장 = 자동 읽음(처리완료는 별도)
+        }
+    }
+
     public Long getId() {
         return id;
     }
@@ -112,5 +132,9 @@ public class Feedback extends BaseTimeEntity {
 
     public FeedbackStatus getStatus() {
         return status;
+    }
+
+    public String getReply() {
+        return reply;
     }
 }
