@@ -388,6 +388,10 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     border-bottom: 1px solid var(--border);
 }
 .record-row:last-child { border-bottom: none; }
+/* 책장 요약(책BTI): 라벨(예: 자주 읽는 저자) 위 / 내용 아래로 세로 스택.
+   기본 .record-row는 가로(space-between)라 내용이 길면 라벨이 줄바꿈돼 보기 나빴다. */
+.summary-list .record-row { flex-direction: column; align-items: flex-start; gap: 4px; }
+.summary-list .record-books { font-size: .9rem; }
 .record-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .record-date { color: var(--text); font-weight: 600; }
 .record-books {
