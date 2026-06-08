@@ -14,6 +14,7 @@ import com.booktimer.user.UserRegistrationService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -115,6 +116,28 @@ class PersonalityControllerTest {
 
         assertThat(viewOf(result).isReady()).isTrue();
         assertThat(viewOf(result).narrative()).isEqualTo("완독러 독자다.");
+    }
+
+    @Test
+    @DisplayName("GET /personality: 개발용 파서 주석이 렌더 출력에 새지 않는다(주석 닫힘 토큰이 본문에 인용돼 조기 종료되던 함정 방지)")
+    void get_doesNotLeakDevComment() throws Exception {
+        User u = register("leak@booktimer.com");
+        saveBooks(u, 5);
+        when(narrator.narrate(any())).thenReturn(
+                Optional.of(new PersonalityNarration("서술.", List.of("태그"))));
+
+        // 미리 존재하는 세션을 줘 맨 아래 CSRF 폼의 토큰 저장이 세션을 '생성'하지 않게 한다
+        // (응답 버퍼 commit 이후 세션 생성 시 IllegalStateException — 로그인 유저는 세션이 이미 있는 프로덕션과 일치).
+        MvcResult result = mockMvc.perform(get("/personality")
+                        .with(user("leak@booktimer.com")).session(new MockHttpSession()))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String html = result.getResponse().getContentAsString();
+        // 파서 주석 닫힘 토큰이 본문에 보이면 주석이 조기 종료돼 뒷부분이 텍스트로 샌 것
+        assertThat(html).doesNotContain("*/-->");
+        // 개발 주석 내용 자체도 사용자 화면에 새면 안 됨
+        assertThat(html).doesNotContain("응답 버퍼");
     }
 
     @Test
