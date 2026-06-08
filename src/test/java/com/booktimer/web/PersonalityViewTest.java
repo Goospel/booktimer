@@ -9,6 +9,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -21,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PersonalityViewTest {
 
     private static final int MIN = 5;
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private static ReadingProfile profileWith(int totalBooks) {
         return new ReadingProfile(totalBooks, totalBooks, 0, 0, 1.0, 0, 0, 0,
@@ -38,7 +40,7 @@ class PersonalityViewTest {
         ReadingPersonality result = new ReadingPersonality(profileWith(10),
                 new PersonalityNarration("완독러다.", List.of("완독러")));
 
-        PersonalityView view = PersonalityView.from(result, List.of(), MIN);
+        PersonalityView view = PersonalityView.from(result, List.of(), MIN, KST);
 
         assertThat(view.isReady()).isTrue();
         assertThat(view.narrative()).isEqualTo("완독러다.");
@@ -49,7 +51,7 @@ class PersonalityViewTest {
     void coldStart_whenNoNarrationAndFewBooks() {
         ReadingPersonality result = ReadingPersonality.factsOnly(profileWith(3)); // < 5
 
-        PersonalityView view = PersonalityView.from(result, List.of(), MIN);
+        PersonalityView view = PersonalityView.from(result, List.of(), MIN, KST);
 
         assertThat(view.isColdStart()).isTrue();
         assertThat(view.narrative()).isNull();
@@ -60,7 +62,7 @@ class PersonalityViewTest {
     void fallback_whenNoNarrationButEnoughBooks() {
         ReadingPersonality result = ReadingPersonality.factsOnly(profileWith(7)); // >= 5
 
-        PersonalityView view = PersonalityView.from(result, List.of(), MIN);
+        PersonalityView view = PersonalityView.from(result, List.of(), MIN, KST);
 
         assertThat(view.isFallback()).isTrue();
         assertThat(view.narrative()).isNull();
@@ -71,7 +73,7 @@ class PersonalityViewTest {
     void boundary_exactlyThreshold_isNotColdStart() {
         ReadingPersonality result = ReadingPersonality.factsOnly(profileWith(MIN)); // == 5
 
-        PersonalityView view = PersonalityView.from(result, List.of(), MIN);
+        PersonalityView view = PersonalityView.from(result, List.of(), MIN, KST);
 
         assertThat(view.isColdStart()).isFalse();
         assertThat(view.isFallback()).isTrue();
@@ -83,7 +85,7 @@ class PersonalityViewTest {
         // 보유 10권이지만 완독은 3권(<5) — 성향은 완독 책에서만 뽑으므로 아직 콜드스타트여야 한다
         ReadingPersonality result = ReadingPersonality.factsOnly(profileWith(10, 3));
 
-        PersonalityView view = PersonalityView.from(result, List.of(), MIN);
+        PersonalityView view = PersonalityView.from(result, List.of(), MIN, KST);
 
         assertThat(view.isColdStart()).isTrue();
     }
@@ -97,11 +99,33 @@ class PersonalityViewTest {
                 new PersonalityHistoryEntry(2L, "대표 서술.", List.of("태그"), Instant.parse("2026-06-08T01:00:00Z"), true, false),
                 new PersonalityHistoryEntry(1L, "옛 서술.", List.of(), Instant.parse("2026-06-08T00:00:00Z"), false, true));
 
-        PersonalityView view = PersonalityView.from(result, entries, MIN);
+        PersonalityView view = PersonalityView.from(result, entries, MIN, KST);
 
         assertThat(view.isReady()).isTrue();
         assertThat(view.entries()).hasSize(2);
         assertThat(view.entries().get(0).selected()).isTrue();
         assertThat(view.entries().get(1).stale()).isTrue();
+    }
+
+    @Test
+    @DisplayName("분석 시각을 사용자 타임존으로 포맷한다(UTC 저장값 → KST 표시) — 서버 UTC로 9시간 어긋나던 버그 방지")
+    void formatTime_rendersInUserZone() {
+        ReadingPersonality result = new ReadingPersonality(profileWith(10),
+                new PersonalityNarration("서술.", List.of("태그")));
+        PersonalityView view = PersonalityView.from(result, List.of(), MIN, KST);
+
+        // 2026-06-08T08:43:00Z == 2026-06-08 17:43 KST (UTC+9). 서버 UTC로 찍으면 08:43으로 잘못 보였다.
+        assertThat(view.formatTime(Instant.parse("2026-06-08T08:43:00Z")))
+                .isEqualTo("2026-06-08 17:43");
+    }
+
+    @Test
+    @DisplayName("formatTime은 null 시각에 빈 문자열을 돌려준다(방어)")
+    void formatTime_nullSafe() {
+        ReadingPersonality result = new ReadingPersonality(profileWith(10),
+                new PersonalityNarration("서술.", List.of("태그")));
+        PersonalityView view = PersonalityView.from(result, List.of(), MIN, KST);
+
+        assertThat(view.formatTime(null)).isEmpty();
     }
 }

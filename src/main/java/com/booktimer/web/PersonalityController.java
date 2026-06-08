@@ -52,7 +52,7 @@ public class PersonalityController {
         ReadingPersonality result = personalityService.currentPersonality(user); // 대표(필요 시 부트스트랩)
         model.addAttribute("nickname", user.getNickname());
         model.addAttribute("view", PersonalityView.from(result, personalityService.history(user),
-                ReadingPersonalityService.COLD_START_MIN_BOOKS));
+                ReadingPersonalityService.COLD_START_MIN_BOOKS, ZoneId.of(user.getTimezone())));
         model.addAttribute("loginId", user.getLoginId()); // 내 책방(공개 프로필) 링크용 — 책BTI는 항상 책방에 노출됨
         // "다시 분석" 일일 잔여 횟수(버튼 비활성·안내용) — 읽기만(상태 불변)
         model.addAttribute("refreshRemaining", user.remainingPersonalityRefreshes(todayFor(user)));

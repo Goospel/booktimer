@@ -4,6 +4,9 @@ import com.booktimer.personality.PersonalityHistoryEntry;
 import com.booktimer.personality.ReadingPersonality;
 import com.booktimer.personality.ReadingProfile;
 
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -23,13 +26,32 @@ import java.util.List;
  * @param profile           집계된 사실(항상 존재 — 콜드스타트·폴백에서도 요약 표시)
  * @param coldStartMinBooks 콜드스타트 임계(안내 문구의 "최소 N권"에 쓰임)
  * @param entries           분석 히스토리(최신순, 최대 3개) — 각 카드에 대표 여부·stale 표시
+ * @param zone              분석 시각을 표시할 사용자 타임존 — {@link #formatTime}이 UTC 저장값을 사용자 시각으로 변환
  */
 public record PersonalityView(State state, String narrative, List<String> tags,
                               ReadingProfile profile, int coldStartMinBooks,
-                              List<PersonalityHistoryEntry> entries) {
+                              List<PersonalityHistoryEntry> entries, ZoneId zone) {
+
+    /** 분석 시각 표시 포맷 — 날짜+시·분(초는 생략, 카드가 과거 분석을 구분할 정도면 충분). */
+    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     public PersonalityView {
         entries = (entries == null) ? List.of() : List.copyOf(entries);
+        zone = (zone == null) ? ZoneId.of("UTC") : zone; // 방어적 기본값(정상 경로는 항상 사용자 타임존 주입)
+    }
+
+    /**
+     * 분석 생성 시각({@link Instant}, UTC 저장)을 <b>사용자 타임존</b>으로 변환해 "yyyy-MM-dd HH:mm"으로 포맷한다.
+     *
+     * <p>그동안 템플릿이 {@code #temporals.format(Instant,…)}로 찍던 값은 서버 JVM 기본 타임존(컨테이너=UTC)
+     * 기준이라, 한국 사용자에게 9시간 어긋난 시각(예: 17:43 → 08:43)으로 보였다. 변환 지점을 뷰 모델로 옮겨
+     * 사용자 타임존을 명시적으로 적용한다.
+     */
+    public String formatTime(Instant instant) {
+        if (instant == null) {
+            return "";
+        }
+        return TIME_FORMAT.format(instant.atZone(zone));
     }
 
     public enum State { READY, COLD_START, FALLBACK }
@@ -46,16 +68,16 @@ public record PersonalityView(State state, String narrative, List<String> tags,
         return state == State.FALLBACK;
     }
 
-    /** 분석 결과 + 히스토리 + 콜드스타트 임계로 화면 표시 모델을 만든다. */
+    /** 분석 결과 + 히스토리 + 콜드스타트 임계 + 사용자 타임존으로 화면 표시 모델을 만든다. */
     public static PersonalityView from(ReadingPersonality result, List<PersonalityHistoryEntry> entries,
-                                       int coldStartMinBooks) {
+                                       int coldStartMinBooks, ZoneId zone) {
         ReadingProfile profile = result.profile();
         if (result.hasNarration()) {
             return new PersonalityView(State.READY, result.narration().narrative(),
-                    result.narration().tags(), profile, coldStartMinBooks, entries);
+                    result.narration().tags(), profile, coldStartMinBooks, entries, zone);
         }
         // 서술 없음 — 완독 책 부족이면 콜드스타트, 충분하면 LLM 실패(폴백). 성향은 완독 책에서만 뽑으므로 완독 권수로 판정.
         State state = profile.finishedBooks() < coldStartMinBooks ? State.COLD_START : State.FALLBACK;
-        return new PersonalityView(state, null, List.of(), profile, coldStartMinBooks, List.of());
+        return new PersonalityView(state, null, List.of(), profile, coldStartMinBooks, List.of(), zone);
     }
 }
