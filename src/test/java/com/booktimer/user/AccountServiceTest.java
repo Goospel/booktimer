@@ -4,7 +4,6 @@ import com.booktimer.block.BlockRepository;
 import com.booktimer.book.BookRepository;
 import com.booktimer.feedback.FeedbackRepository;
 import com.booktimer.follow.FollowRepository;
-import com.booktimer.personality.PublicReadingPersonalityCacheRepository;
 import com.booktimer.personality.ReadingPersonalityCacheRepository;
 import com.booktimer.report.ReportRepository;
 import com.booktimer.session.ReadingSessionRepository;
@@ -57,8 +56,6 @@ class AccountServiceTest {
     private BookRepository bookRepository;
     @Mock
     private ReadingPersonalityCacheRepository personalityCacheRepository;
-    @Mock
-    private PublicReadingPersonalityCacheRepository publicPersonalityCacheRepository;
     @Mock
     private FeedbackRepository feedbackRepository;
     @Mock
@@ -115,7 +112,7 @@ class AccountServiceTest {
 
         service.deleteAccount(EMAIL, "pw");
 
-        var ordered = inOrder(sessionRepository, timerRepository, followRepository, blockRepository, reportRepository, bookRepository, personalityCacheRepository, publicPersonalityCacheRepository, feedbackRepository, userRepository);
+        var ordered = inOrder(sessionRepository, timerRepository, followRepository, blockRepository, reportRepository, bookRepository, personalityCacheRepository, feedbackRepository, userRepository);
         ordered.verify(sessionRepository).deleteByUser(user); // book FK 참조하는 세션 먼저
         ordered.verify(timerRepository).deleteByUser(user);
         ordered.verify(followRepository).deleteByFollower(user);   // FK: 유저 삭제 전에 관계 정리
@@ -125,8 +122,7 @@ class AccountServiceTest {
         ordered.verify(reportRepository).deleteByReporter(user);   // FK: 유저 삭제 전에 신고 관계 정리
         ordered.verify(reportRepository).deleteByReported(user);
         ordered.verify(bookRepository).deleteByUser(user);    // FK: 유저 삭제 전에 책 정리(세션 이후)
-        ordered.verify(personalityCacheRepository).deleteByUser(user); // FK: 본인용 책BTI 캐시도 유저 전에 정리
-        ordered.verify(publicPersonalityCacheRepository).deleteByUser(user); // FK: 공개용 책BTI 캐시도 유저 전에 정리
+        ordered.verify(personalityCacheRepository).deleteByUser(user); // FK: 책BTI 캐시도 유저 전에 정리
         ordered.verify(feedbackRepository).deleteByAuthor(user);  // FK: 문의도 유저 전에 정리
         ordered.verify(userRepository).delete(user);
     }
@@ -162,7 +158,7 @@ class AccountServiceTest {
 
         service.deleteSocialAccount(EMAIL, "googler");
 
-        var ordered = inOrder(sessionRepository, timerRepository, followRepository, blockRepository, reportRepository, bookRepository, personalityCacheRepository, publicPersonalityCacheRepository, feedbackRepository, userRepository);
+        var ordered = inOrder(sessionRepository, timerRepository, followRepository, blockRepository, reportRepository, bookRepository, personalityCacheRepository, feedbackRepository, userRepository);
         ordered.verify(sessionRepository).deleteByUser(social);
         ordered.verify(timerRepository).deleteByUser(social);
         ordered.verify(followRepository).deleteByFollower(social);
@@ -172,8 +168,7 @@ class AccountServiceTest {
         ordered.verify(reportRepository).deleteByReporter(social);
         ordered.verify(reportRepository).deleteByReported(social);
         ordered.verify(bookRepository).deleteByUser(social);
-        ordered.verify(personalityCacheRepository).deleteByUser(social); // FK: 본인용 책BTI 캐시도 유저 전에 정리
-        ordered.verify(publicPersonalityCacheRepository).deleteByUser(social); // FK: 공개용 책BTI 캐시도 유저 전에 정리
+        ordered.verify(personalityCacheRepository).deleteByUser(social); // FK: 책BTI 캐시도 유저 전에 정리
         ordered.verify(feedbackRepository).deleteByAuthor(social);  // FK: 문의도 유저 전에 정리
         ordered.verify(userRepository).delete(social);
         verify(passwordEncoder, never()).matches(any(), any());

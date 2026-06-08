@@ -51,11 +51,13 @@ class ReadingPersonalityServiceCacheTest {
         return userRepository.save(User.of(email, "$2a$10$abcdefghijklmnopqrstuv", "독자", "Asia/Seoul", Role.USER));
     }
 
-    /** 콜드스타트 임계(5권)를 넘기려고 n권을 적재한다(완독 처리). */
+    /** 콜드스타트 임계(5권)를 넘기려고 n권을 적재한다(공개+완독 — 성향은 공개 책 기반). */
     private void saveBooks(User u, int n) {
         for (int i = 0; i < n; i++) {
-            bookRepository.save(Book.register(u, "책" + i, "저자" + i, null, null, null, null,
-                    null, null, BookStatus.FINISHED));
+            Book b = Book.register(u, "책" + i, "저자" + i, null, null, null, null,
+                    null, null, BookStatus.FINISHED);
+            b.makePublic();
+            bookRepository.save(b);
         }
     }
 

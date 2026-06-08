@@ -83,14 +83,17 @@ public class User extends BaseTimeEntity {
     private boolean onboarded = false;
 
     /**
-     * 책BTI(독서 성향)를 <b>책방(공개 프로필 {@code /u/{loginId}})에 공개할지</b> — opt-in 토글
-     * (reading-personality-design Phase 6). 기본 {@code false}(비노출) — 이 프로젝트의 "기본 PRIVATE·opt-in"
-     * 불변식과 일치하게, 본인이 명시적으로 켜야 남에게 보인다. 책방에 노출되는 책BTI는 본인용(전체 책 기반)과
-     * 달리 <b>공개 책만으로 따로 생성</b>된다(§7 누출 차단) — 이 플래그는 "노출 여부"만 통제하고, 계산 범위 분리는
-     * 캐시·집계 계층이 담당한다.
+     * 책BTI "다시 분석"(강제 재생성 = 매번 LLM 호출)을 <b>하루에 몇 번 했는지</b>와 그 카운트가 속한 날짜.
+     * 악의적 반복 클릭이 LLM을 남용해 서버에 부담을 주는 것을 막는 일일 횟수 제한의 상태다
+     * ({@link #tryConsumePersonalityRefresh}). "하루"는 사용자 타임존 기준이라(자정 경계) 날짜를 함께 들고 있다가,
+     * 날짜가 바뀌면 카운트를 0으로 리셋한다. 인메모리 카운터가 아니라 DB에 두는 이유는 인스턴스가 여럿(ECS)이라도
+     * 한도가 일관되게 적용되고 재기동에도 유지되게 하기 위함이다.
      */
-    @Column(name = "personality_public", nullable = false)
-    private boolean personalityPublic = false;
+    @Column(name = "personality_refresh_count", nullable = false)
+    private int personalityRefreshCount = 0;
+
+    @Column(name = "personality_refresh_date")
+    private java.time.LocalDate personalityRefreshDate;
 
     /**
      * 로그인/식별용 아이디이자 <b>공개 @핸들</b>(인스타/X 모델, 설계: login-id-design.md). email 대신 이걸로
@@ -232,14 +235,42 @@ public class User extends BaseTimeEntity {
         return onboarded;
     }
 
-    /** 책BTI를 책방(공개 프로필)에 공개하는가(opt-in). false면 본인만 본다(누출 없음). */
-    public boolean isPersonalityPublic() {
-        return personalityPublic;
+    /** 책BTI "다시 분석"의 하루 허용 횟수(악의적 반복 클릭 → LLM 남용 방어). */
+    public static final int DAILY_PERSONALITY_REFRESH_LIMIT = 3;
+
+    /**
+     * 책BTI "다시 분석" 한도를 한 번 소비하려 시도한다. 허용되면 카운트를 1 올리고 {@code true},
+     * 오늘 한도를 이미 다 썼으면 상태를 바꾸지 않고 {@code false}를 반환한다.
+     *
+     * <p>{@code today}(사용자 타임존 기준 오늘)가 기록된 날짜와 다르면 새 날로 보고 카운트를 0으로 리셋한 뒤
+     * 센다 — 자정이 지나면 다시 {@value #DAILY_PERSONALITY_REFRESH_LIMIT}번 가능. "오늘"을 직접 계산하지 않고
+     * 인자로 받는 이유는, 타임존·시계 결정을 호출자(서비스/컨트롤러, 주입된 {@code Clock})에 두어 테스트에서
+     * 날짜 경계를 고정·검증할 수 있게 하기 위함이다.
+     *
+     * @param today 사용자 타임존 기준 오늘 날짜
+     * @return 소비에 성공(아직 한도 내)했으면 true, 한도 초과면 false(상태 불변)
+     */
+    public boolean tryConsumePersonalityRefresh(java.time.LocalDate today) {
+        if (!today.equals(personalityRefreshDate)) {
+            personalityRefreshDate = today;
+            personalityRefreshCount = 0;
+        }
+        if (personalityRefreshCount >= DAILY_PERSONALITY_REFRESH_LIMIT) {
+            return false;
+        }
+        personalityRefreshCount++;
+        return true;
     }
 
-    /** 책BTI 책방 노출을 켜거나 끈다(토글). 노출 여부만 통제 — 계산 범위(공개 책만)는 캐시·집계 계층이 분리한다. */
-    public void setPersonalityPublic(boolean personalityPublic) {
-        this.personalityPublic = personalityPublic;
+    /**
+     * 오늘({@code today}) 기준 남은 "다시 분석" 횟수를 계산한다 — <b>상태를 바꾸지 않는 읽기</b>(화면 표시·버튼 비활성용).
+     * 기록된 날짜가 오늘과 다르면(자정 넘김) 아직 안 쓴 것이므로 한도 전부를 반환한다.
+     */
+    public int remainingPersonalityRefreshes(java.time.LocalDate today) {
+        if (!today.equals(personalityRefreshDate)) {
+            return DAILY_PERSONALITY_REFRESH_LIMIT;
+        }
+        return Math.max(0, DAILY_PERSONALITY_REFRESH_LIMIT - personalityRefreshCount);
     }
 
     /**

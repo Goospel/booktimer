@@ -4,8 +4,8 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.follow.FollowService;
-import com.booktimer.personality.PublicReadingPersonalityCache;
-import com.booktimer.personality.PublicReadingPersonalityCacheRepository;
+import com.booktimer.personality.ReadingPersonalityCache;
+import com.booktimer.personality.ReadingPersonalityCacheRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -54,7 +54,7 @@ class ProfileControllerTest {
     @Autowired
     private FollowService followService;
     @Autowired
-    private PublicReadingPersonalityCacheRepository publicCacheRepository;
+    private ReadingPersonalityCacheRepository personalityCacheRepository;
 
     private User newUser(String email, String loginId, String nickname) {
         User u = User.of(email, passwordEncoder.encode("rawpw1234"), nickname, "Asia/Seoul", Role.USER);
@@ -309,22 +309,20 @@ class ProfileControllerTest {
                 .andExpect(redirectedUrl("/login"));
     }
 
-    // --- 책BTI 책방 노출 (opt-in, 공개 책 기반 캐시 읽기 전용) ---
+    // --- 책BTI 책방 노출 (공개 책 기반 단일 캐시, 항상 공개 — opt-in 없음, 캐시 읽기 전용) ---
 
-    /** 대상 유저의 공개 책BTI 캐시를 직접 적재한다(컨트롤러 조회는 캐시를 읽기만 하므로 LLM 무관). */
-    private void savePublicPersonalityCache(User u, String narrative) {
-        publicCacheRepository.save(PublicReadingPersonalityCache.create(
+    /** 대상 유저의 책BTI 캐시를 직접 적재한다(컨트롤러 조회는 캐시를 읽기만 하므로 LLM 무관). */
+    private void savePersonalityCache(User u, String narrative) {
+        personalityCacheRepository.save(ReadingPersonalityCache.create(
                 u, narrative, "태그", "sig", Instant.parse("2026-06-08T00:00:00Z")));
     }
 
     @Test
-    @DisplayName("GET /u/{loginId}: 책BTI를 공개(opt-in)한 사용자면 공개 캐시의 성향 서술이 책방에 실린다")
-    void profile_personalityPublic_exposesNarrative() throws Exception {
+    @DisplayName("GET /u/{loginId}: 책BTI 캐시가 있으면 (항상 공개이므로) 성향 서술이 책방에 실린다")
+    void profile_withPersonalityCache_exposesNarrative() throws Exception {
         newUser("viewer@booktimer.com", "viewer", "뷰어");
         User owner = newUser("owner@booktimer.com", "openking", "공개왕");
-        owner.setPersonalityPublic(true);
-        userRepository.save(owner);
-        savePublicPersonalityCache(owner, "공개 책 기준, 이 사람은 경제서를 정독하는 독자다.");
+        savePersonalityCache(owner, "공개 책 기준, 이 사람은 경제서를 정독하는 독자다.");
 
         mockMvc.perform(get("/u/{loginId}", "openking").with(user("viewer@booktimer.com")))
                 .andExpect(status().isOk())
@@ -332,26 +330,11 @@ class ProfileControllerTest {
     }
 
     @Test
-    @DisplayName("GET /u/{loginId}: 공개하지 않은(기본) 사용자는 공개 캐시가 있어도 성향이 노출되지 않는다 (opt-in 게이트)")
-    void profile_personalityNotPublic_doesNotExpose() throws Exception {
+    @DisplayName("GET /u/{loginId}: 책BTI 캐시가 없으면(공개 완독 책 부족=콜드스타트) 성향은 비어 있어 카드가 숨는다")
+    void profile_noPersonalityCache_hidesCard() throws Exception {
         newUser("viewer@booktimer.com", "viewer", "뷰어");
-        User owner = newUser("owner@booktimer.com", "openking", "공개왕");
-        // setPersonalityPublic 안 함(기본 false) — 캐시는 있지만 노출 금지
-        savePublicPersonalityCache(owner, "샐 뻔한 성향.");
-
-        mockMvc.perform(get("/u/{loginId}", "openking").with(user("viewer@booktimer.com")))
-                .andExpect(status().isOk())
-                .andExpect(model().attribute("personality", nullValue()));
-    }
-
-    @Test
-    @DisplayName("GET /u/{loginId}: 공개했지만 아직 공개 캐시가 없으면 성향은 비어 있다 (방문자가 LLM 생성을 트리거하지 않음)")
-    void profile_personalityPublicButNoCache_empty() throws Exception {
-        newUser("viewer@booktimer.com", "viewer", "뷰어");
-        User owner = newUser("owner@booktimer.com", "openking", "공개왕");
-        owner.setPersonalityPublic(true);
-        userRepository.save(owner);
-        // 공개 캐시 없음 — 방문자 조회는 읽기 전용이라 생성하지 않는다
+        newUser("owner@booktimer.com", "openking", "공개왕");
+        // 캐시 없음 — 방문자 조회는 읽기 전용이라 생성하지 않는다(LLM 미트리거)
 
         mockMvc.perform(get("/u/{loginId}", "openking").with(user("viewer@booktimer.com")))
                 .andExpect(status().isOk())
