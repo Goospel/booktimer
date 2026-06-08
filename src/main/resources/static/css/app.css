@@ -826,3 +826,22 @@ a.book-title:hover { text-decoration: underline; }
 .fb-resolved { background: #e7f6ec; color: #15803d; }
 
 .btn-small { padding: 0.3rem 0.7rem; font-size: 0.85rem; }
+
+/* 문의 — 유형 필터 탭 + 개발자 답장 */
+.fb-filter { display: flex; gap: 0.4rem; flex-wrap: wrap; margin: 0.5rem 0 1rem; }
+.fb-filter a {
+    font-size: 0.85rem; text-decoration: none; padding: 0.25rem 0.7rem;
+    border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 999px; color: inherit;
+}
+.fb-filter a.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.fb-reply-shown { margin: 0.5rem 0; padding: 0.55rem 0.7rem; background: #eef5ff; border-radius: 8px; }
+.fb-reply-shown p { margin: 0.2rem 0 0; white-space: pre-wrap; word-break: break-word; }
+.fb-reply-label { font-size: 0.78rem; font-weight: 700; color: #1d4ed8; }
+
+.fb-reply-form { margin-top: 0.6rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.fb-reply-form textarea {
+    width: 100%; padding: 0.45rem 0.6rem; border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 8px; font: inherit; box-sizing: border-box; resize: vertical;
+}
+.fb-reply-form button { align-self: flex-start; }

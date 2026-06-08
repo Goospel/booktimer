@@ -12,9 +12,18 @@
         <span class="emoji">🛠️</span>
         <h1>문의함</h1>
     </header>
-    <p class="status-line muted">사용자 문의를 읽고 읽음/처리완료를 표시하거나 삭제합니다. 상태는 작성자 본인 화면에만 보입니다.</p>
+    <p class="status-line muted">사용자 문의를 읽고 읽음/처리완료를 표시하거나 답장합니다. 상태·답장은 작성자 본인 화면에만 보입니다.</p>
 
-    <p class="status-line muted" th:if="${feedbackList.isEmpty()}">접수된 문의가 없습니다.</p>
+    <p class="alert alert-error" th:if="${error}" th:text="${error}">에러</p>
+
+    <!-- 유형 필터 — ?type= 쿼리 + 탭. activeType이 null이면 '전체'. -->
+    <nav class="fb-filter" aria-label="유형 필터">
+        <a th:href="@{/admin/feedback}" th:classappend="${activeType == null} ? ' active'">전체</a>
+        <a th:each="t : ${types}" th:href="@{/admin/feedback(type=${t.name()})}"
+           th:text="${t.label}" th:classappend="${activeType == t} ? ' active'">유형</a>
+    </nav>
+
+    <p class="status-line muted" th:if="${feedbackList.isEmpty()}">해당하는 문의가 없습니다.</p>
 
     <section class="card fb-admin-item" th:each="row : ${feedbackList}">
         <div class="fb-head">
@@ -38,6 +47,13 @@
                 <button type="submit" class="btn-danger btn-small">삭제</button>
             </form>
         </div>
+        <!-- 단일 답장(덮어쓰기). 저장하면 자동 '읽음'(처리완료는 별도 버튼). 작성자 본인만 봄. -->
+        <form class="fb-reply-form" th:action="@{/admin/feedback/{id}/reply(id=${row.id})}" method="post">
+            <label class="fb-reply-label">개발자 답장<span class="muted" th:if="${row.reply != null}"> · 작성자에게 노출 중</span></label>
+            <textarea name="reply" rows="2" maxlength="1000"
+                      placeholder="작성자에게 보낼 답장 — 저장하면 자동으로 '읽음' 처리됩니다" th:text="${row.reply}"></textarea>
+            <button type="submit" class="btn-ghost btn-small">답장 저장</button>
+        </form>
     </section>
 
     <p class="link-row"><a th:href="@{/admin}">← 관리자 홈으로</a></p>

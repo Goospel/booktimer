@@ -104,4 +104,31 @@ class FeedbackServiceTest {
 
         assertThat(feedbackRepository.findById(f.getId())).isEmpty();
     }
+
+    @Test
+    @DisplayName("reply: 답장을 저장하고 자동으로 읽음 처리한다")
+    void reply_savesAndAutoReads() {
+        User me = user("rp@booktimer.com", "replyuser");
+        Feedback f = feedbackService.submit(me, FeedbackType.BUG, "버그", "내용");
+
+        feedbackService.reply(f.getId(), "확인했어요. 곧 고칠게요.");
+
+        assertThat(feedbackRepository.findById(f.getId())).get().satisfies(saved -> {
+            assertThat(saved.getReply()).isEqualTo("확인했어요. 곧 고칠게요.");
+            assertThat(saved.getStatus()).isEqualTo(FeedbackStatus.READ);
+        });
+    }
+
+    @Test
+    @DisplayName("feedbackRows(filter): 유형으로 거르고, null이면 전체")
+    void feedbackRows_filtersByType() {
+        User a = user("f1@booktimer.com", "filteruser");
+        feedbackService.submit(a, FeedbackType.BUG, "버그글", "내용");
+        feedbackService.submit(a, FeedbackType.SUGGESTION, "제안글", "내용");
+
+        assertThat(feedbackService.feedbackRows(FeedbackType.BUG))
+                .extracting(AdminFeedbackRow::title).containsExactly("버그글");
+        assertThat(feedbackService.feedbackRows(null))
+                .extracting(AdminFeedbackRow::title).containsExactlyInAnyOrder("버그글", "제안글");
+    }
 }

@@ -132,4 +132,16 @@ class FeedbackControllerTest {
 
         assertThat(feedbackRepository.findById(mineF.getId())).isEmpty();
     }
+
+    @Test
+    @DisplayName("GET /feedback: 개발자 답장이 있으면 내 문의에 함께 보인다")
+    void page_showsReply() throws Exception {
+        User me = newUser("rs@booktimer.com", "replyseer");
+        Feedback f = feedbackService.submit(me, FeedbackType.BUG, "버그제목", "내용");
+        feedbackService.reply(f.getId(), "개발자답장내용WWW");
+
+        mockMvc.perform(get("/feedback").with(user("rs@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("개발자답장내용WWW")));
+    }
 }

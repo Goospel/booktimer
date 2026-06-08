@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -137,5 +138,50 @@ class AdminFeedbackControllerTest {
 
         assertThat(feedbackRepository.findById(f.getId())).get()
                 .extracting(Feedback::getStatus).isEqualTo(FeedbackStatus.SUBMITTED); // 변화 없음
+    }
+
+    @Test
+    @DisplayName("POST /admin/feedback/{id}/reply: ADMIN 답장 → 저장 + 자동 읽음")
+    void reply_admin_savesAndReads() throws Exception {
+        User a = newUser("rp@booktimer.com", "replyadmin");
+        Feedback f = feedbackService.submit(a, FeedbackType.BUG, "버그", "내용");
+
+        mockMvc.perform(post("/admin/feedback/{id}/reply", f.getId())
+                        .param("reply", "확인했어요. 곧 고칠게요.")
+                        .with(user("boss").roles("ADMIN")).with(csrf()))
+                .andExpect(status().is3xxRedirection());
+
+        assertThat(feedbackRepository.findById(f.getId())).get().satisfies(saved -> {
+            assertThat(saved.getReply()).isEqualTo("확인했어요. 곧 고칠게요.");
+            assertThat(saved.getStatus()).isEqualTo(FeedbackStatus.READ);
+        });
+    }
+
+    @Test
+    @DisplayName("POST /admin/feedback/{id}/reply: 일반 USER는 403, 답장 안 달림")
+    void reply_user_forbidden() throws Exception {
+        User a = newUser("rpu@booktimer.com", "replyvictim");
+        Feedback f = feedbackService.submit(a, FeedbackType.ETC, "문의", "내용");
+
+        mockMvc.perform(post("/admin/feedback/{id}/reply", f.getId())
+                        .param("reply", "남이 답장")
+                        .with(user("u@booktimer.com")).with(csrf()))
+                .andExpect(status().isForbidden());
+
+        assertThat(feedbackRepository.findById(f.getId())).get()
+                .extracting(Feedback::getReply).isNull();
+    }
+
+    @Test
+    @DisplayName("GET /admin/feedback?type=BUG: 해당 유형만 보인다(필터)")
+    void list_filterByType() throws Exception {
+        User a = newUser("ft@booktimer.com", "filtertest");
+        feedbackService.submit(a, FeedbackType.BUG, "버그제목ZZZ", "내용");
+        feedbackService.submit(a, FeedbackType.SUGGESTION, "제안제목YYY", "내용");
+
+        mockMvc.perform(get("/admin/feedback").param("type", "BUG").with(user("boss").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("버그제목ZZZ")))
+                .andExpect(content().string(not(containsString("제안제목YYY"))));
     }
 }

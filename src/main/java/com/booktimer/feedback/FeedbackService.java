@@ -36,14 +36,15 @@ public class FeedbackService {
     }
 
     /**
-     * 관리자 전체 조회 — 최신순. 트랜잭션 안에서 행 DTO로 조립해 작성자(LAZY)를 미리 추출한다
-     * (뷰에서 detached 엔티티의 LAZY 연관을 안 건드림 — OSIV 비의존).
+     * 관리자 조회 — 최신순. {@code filter}가 null이면 전체, 아니면 그 유형만. 트랜잭션 안에서 행 DTO로
+     * 조립해 작성자(LAZY)를 미리 추출한다(뷰에서 detached 엔티티의 LAZY 연관을 안 건드림 — OSIV 비의존).
      */
     @Transactional(readOnly = true)
-    public List<AdminFeedbackRow> allFeedbackRows() {
-        return feedbackRepository.findAllByOrderByCreatedAtDesc().stream()
-                .map(AdminFeedbackRow::from)
-                .toList();
+    public List<AdminFeedbackRow> feedbackRows(FeedbackType filter) {
+        List<Feedback> list = (filter == null)
+                ? feedbackRepository.findAllByOrderByCreatedAtDesc()
+                : feedbackRepository.findByTypeOrderByCreatedAtDesc(filter);
+        return list.stream().map(AdminFeedbackRow::from).toList();
     }
 
     /** 개발자: 읽음 표시(없는 id면 무시). */
@@ -54,6 +55,11 @@ public class FeedbackService {
     /** 개발자: 처리완료 표시(없는 id면 무시). */
     public void markResolved(Long id) {
         feedbackRepository.findById(id).ifPresent(Feedback::markResolved);
+    }
+
+    /** 개발자: 답장 — id로 로드해 답장을 달고 자동 읽음 처리(없는 id면 무시, 빈 답장은 거부). */
+    public void reply(Long id, String text) {
+        feedbackRepository.findById(id).ifPresent(f -> f.applyReply(text));
     }
 
     /**

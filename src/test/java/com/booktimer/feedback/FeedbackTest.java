@@ -76,4 +76,41 @@ class FeedbackTest {
         assertThat(FeedbackType.from("bug")).isEqualTo(FeedbackType.BUG);
         assertThat(FeedbackType.from("나쁜값")).isEqualTo(FeedbackType.ETC);
     }
+
+    @Test
+    @DisplayName("applyReply: 답장을 달면 미확인 → 읽음(자동), 답장 보존")
+    void applyReply_autoMarksRead() {
+        Feedback f = Feedback.of(author(), FeedbackType.BUG, "t", "c");
+        f.applyReply("확인했습니다. 다음 배포에 반영할게요.");
+        assertThat(f.getReply()).isEqualTo("확인했습니다. 다음 배포에 반영할게요.");
+        assertThat(f.getStatus()).isEqualTo(FeedbackStatus.READ);
+    }
+
+    @Test
+    @DisplayName("applyReply: 이미 처리완료면 답장만 갱신, 상태는 유지(되돌리지 않음)")
+    void applyReply_keepsResolved() {
+        Feedback f = Feedback.of(author(), FeedbackType.BUG, "t", "c");
+        f.markResolved();
+        f.applyReply("추가로 안내드립니다.");
+        assertThat(f.getReply()).isEqualTo("추가로 안내드립니다.");
+        assertThat(f.getStatus()).isEqualTo(FeedbackStatus.RESOLVED);
+    }
+
+    @Test
+    @DisplayName("applyReply: 빈 답장은 거부한다")
+    void applyReply_rejectsBlank() {
+        Feedback f = Feedback.of(author(), FeedbackType.BUG, "t", "c");
+        assertThatThrownBy(() -> f.applyReply("   ")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> f.applyReply(null)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("FeedbackType.parse: 유효 유형만 반환, 없음/빈/잘못된 값은 null(필터 없음)")
+    void type_parse_nullForFilter() {
+        assertThat(FeedbackType.parse(null)).isNull();
+        assertThat(FeedbackType.parse("  ")).isNull();
+        assertThat(FeedbackType.parse("나쁜값")).isNull();
+        assertThat(FeedbackType.parse("bug")).isEqualTo(FeedbackType.BUG);
+        assertThat(FeedbackType.parse("SUGGESTION")).isEqualTo(FeedbackType.SUGGESTION);
+    }
 }

@@ -15,7 +15,8 @@ public record AdminFeedbackRow(
         FeedbackType type,
         String title,
         String content,
-        FeedbackStatus status) {
+        FeedbackStatus status,
+        String reply) {
 
     static AdminFeedbackRow from(Feedback feedback) {
         User author = feedback.getAuthor();
@@ -26,6 +27,7 @@ public record AdminFeedbackRow(
                 feedback.getType(),
                 feedback.getTitle(),
                 feedback.getContent(),
-                feedback.getStatus());
+                feedback.getStatus(),
+                feedback.getReply());
     }
 }

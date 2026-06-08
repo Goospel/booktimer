@@ -49,6 +49,11 @@
                 </div>
                 <p class="fb-title" th:text="${f.title}">제목</p>
                 <p class="fb-content" th:text="${f.content}">내용</p>
+                <!-- 개발자 답장(있으면) — 작성자 본인만 본다 -->
+                <div class="fb-reply-shown" th:if="${f.reply != null}">
+                    <span class="fb-reply-label">개발자 답장</span>
+                    <p th:text="${f.reply}">답장</p>
+                </div>
                 <form th:action="@{/feedback/{id}/delete(id=${f.id})}" method="post"
                       onsubmit="return confirm('이 문의를 삭제할까요?');">
                     <button type="submit" class="btn-ghost btn-small">삭제</button>

@@ -33,4 +33,19 @@ public enum FeedbackType {
             return ETC;
         }
     }
+
+    /**
+     * 필터용 파싱 — 유효한 유형만 반환하고, null/빈/잘못된 값은 {@code null}(= 필터 없음, 전체)로 본다.
+     * {@link #from}(작성 시 ETC 폴백)과 달리 "전체"를 표현해야 하므로 잘못된 값을 ETC로 뭉개지 않는다.
+     */
+    public static FeedbackType parse(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return FeedbackType.valueOf(raw.strip().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
 }

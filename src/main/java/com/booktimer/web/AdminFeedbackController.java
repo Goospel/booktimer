@@ -1,11 +1,14 @@
 package com.booktimer.web;
 
 import com.booktimer.feedback.FeedbackService;
+import com.booktimer.feedback.FeedbackType;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 /**
  * 관리자 문의함 — 개발자(ADMIN)가 사용자 문의를 전부 읽고, 읽음/처리완료를 표시하거나 삭제한다.
@@ -24,8 +27,11 @@ public class AdminFeedbackController {
     }
 
     @GetMapping("/admin/feedback")
-    public String list(Model model) {
-        model.addAttribute("feedbackList", feedbackService.allFeedbackRows());
+    public String list(@RequestParam(value = "type", required = false) String type, Model model) {
+        FeedbackType filter = FeedbackType.parse(type); // 없음/빈/잘못된 값 → null(전체)
+        model.addAttribute("feedbackList", feedbackService.feedbackRows(filter));
+        model.addAttribute("types", FeedbackType.values());
+        model.addAttribute("activeType", filter); // 탭 강조용
         return "admin-feedback";
     }
 
@@ -44,6 +50,17 @@ public class AdminFeedbackController {
     @PostMapping("/admin/feedback/{id}/delete")
     public String delete(@PathVariable("id") Long id) {
         feedbackService.deleteByAdmin(id);
+        return "redirect:/admin/feedback";
+    }
+
+    @PostMapping("/admin/feedback/{id}/reply")
+    public String reply(@PathVariable("id") Long id, @RequestParam("reply") String reply,
+                        RedirectAttributes redirectAttributes) {
+        try {
+            feedbackService.reply(id, reply); // 답장 = 자동 읽음(서비스/엔티티가 처리)
+        } catch (IllegalArgumentException e) {
+            redirectAttributes.addFlashAttribute("error", "답장 내용을 입력하세요.");
+        }
         return "redirect:/admin/feedback";
     }
 }
