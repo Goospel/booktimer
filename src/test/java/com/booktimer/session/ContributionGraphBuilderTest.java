@@ -212,6 +212,81 @@ class ContributionGraphBuilderTest {
                 .allSatisfy(m -> assertThat(m.label()).matches("\\d{1,2}월"));
     }
 
+    // ───────────────────────── 연속 일수(streak) — 성장 잔디 ─────────────────────────
+    // "잔디 심은 날" = 읽은 날(seconds>0). 오늘부터 거꾸로 끊기지 않고 이어진 일수.
+    // 오늘 유예: 오늘 아직 안 읽었으면 어제부터 센다(자정마다 0으로 리셋 방지). 끊기면 0.
+
+    @Test
+    @DisplayName("연속: 데이터 없으면 0")
+    void streak_empty_isZero() {
+        assertThat(ContributionGraphBuilder.currentStreak(Map.of(), TODAY)).isZero();
+    }
+
+    @Test
+    @DisplayName("연속: 오늘만 읽으면 1")
+    void streak_todayOnly_isOne() {
+        assertThat(ContributionGraphBuilder.currentStreak(Map.of(TODAY, 60L), TODAY)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("연속: 오늘+어제 읽으면 2")
+    void streak_todayAndYesterday_isTwo() {
+        Map<LocalDate, Long> data = Map.of(TODAY, 60L, TODAY.minusDays(1), 60L);
+        assertThat(ContributionGraphBuilder.currentStreak(data, TODAY)).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("연속: 오늘 아직 안 읽었어도 어제까지 이어졌으면 유예로 유지(어제+그제=2)")
+    void streak_todayNotYetRead_graceFromYesterday() {
+        Map<LocalDate, Long> data = Map.of(TODAY.minusDays(1), 60L, TODAY.minusDays(2), 60L);
+        assertThat(ContributionGraphBuilder.currentStreak(data, TODAY)).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("연속: 오늘·어제 모두 비고 그제만 읽었으면 끊겨서 0")
+    void streak_brokenBeforeYesterday_isZero() {
+        Map<LocalDate, Long> data = Map.of(TODAY.minusDays(2), 60L);
+        assertThat(ContributionGraphBuilder.currentStreak(data, TODAY)).isZero();
+    }
+
+    @Test
+    @DisplayName("연속: 중간 구멍은 끊는다 — 오늘 읽고 어제 비고 그제 읽으면 1")
+    void streak_gapBreaks_countsOnlyToday() {
+        Map<LocalDate, Long> data = Map.of(TODAY, 60L, TODAY.minusDays(2), 60L);
+        assertThat(ContributionGraphBuilder.currentStreak(data, TODAY)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("연속: 0초인 날은 안 읽은 것 — 끊는다")
+    void streak_zeroSecondsDoesNotCount() {
+        Map<LocalDate, Long> data = Map.of(TODAY, 0L, TODAY.minusDays(1), 60L);
+        // 오늘=0초(안 읽음)라 유예로 어제부터 → 어제 1일
+        assertThat(ContributionGraphBuilder.currentStreak(data, TODAY)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("연속: 14일 연속이면 14")
+    void streak_fourteenInARow() {
+        java.util.Map<LocalDate, Long> data = new java.util.HashMap<>();
+        for (int i = 0; i < 14; i++) {
+            data.put(TODAY.minusDays(i), 60L);
+        }
+        assertThat(ContributionGraphBuilder.currentStreak(data, TODAY)).isEqualTo(14);
+    }
+
+    @Test
+    @DisplayName("연속: build()가 만든 그래프의 currentStreak·growthStage가 streak를 반영한다")
+    void build_populatesStreakAndStage() {
+        java.util.Map<LocalDate, Long> data = new java.util.HashMap<>();
+        for (int i = 0; i < 5; i++) {
+            data.put(TODAY.minusDays(i), 60L); // 5일 연속 → 꽃(4~13)
+        }
+        ContributionGraph graph = ContributionGraphBuilder.build(data, TODAY, GOAL);
+
+        assertThat(graph.currentStreak()).isEqualTo(5);
+        assertThat(graph.growthStage()).isEqualTo(GrowthStage.FLOWER);
+    }
+
     private static ContributionDay findCell(ContributionGraph graph, LocalDate date) {
         return graph.weeks().stream()
                 .flatMap(List::stream)

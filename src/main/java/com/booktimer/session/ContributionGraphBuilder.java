@@ -87,7 +87,30 @@ public final class ContributionGraphBuilder {
         // (월 라벨은 뒤집힌 순서 위에서 다시 계산해 열과 정렬을 맞춘다.)
         Collections.reverse(weeks);
 
-        return new ContributionGraph(weeks, monthLabels(weeks), total, activeDays);
+        return new ContributionGraph(weeks, monthLabels(weeks), total, activeDays,
+                currentStreak(secondsByDate, today));
+    }
+
+    /**
+     * 현재 연속 독서 일수(성장 잔디용) — 오늘부터 거꾸로 "읽은 날(초&gt;0)"이 끊기지 않고 이어진 일수.
+     *
+     * <p>오늘 유예: 오늘 아직 안 읽었으면 어제부터 센다(자정마다 식물이 0으로 리셋되는 걸 막는다).
+     * 오늘·어제 모두 안 읽었으면 끊겨 0. 중간에 하루라도 비면 거기서 끊는다.
+     */
+    static int currentStreak(Map<LocalDate, Long> secondsByDate, LocalDate today) {
+        // 오늘 읽었으면 오늘부터, 아직이면 어제부터(유예) 거꾸로 센다.
+        LocalDate cursor = hasReading(secondsByDate, today) ? today : today.minusDays(1);
+        int streak = 0;
+        while (hasReading(secondsByDate, cursor)) {
+            streak++;
+            cursor = cursor.minusDays(1);
+        }
+        return streak;
+    }
+
+    /** 그날 읽었는지(초 &gt; 0). null/음수는 안 읽음. */
+    private static boolean hasReading(Map<LocalDate, Long> secondsByDate, LocalDate date) {
+        return secondsByDate.getOrDefault(date, 0L) > 0L;
     }
 
     /**

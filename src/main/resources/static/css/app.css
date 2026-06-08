@@ -409,6 +409,14 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 }
 
 /* === 독서 잔디 (GitHub 컨트리뷰션 그래프 스타일) === */
+/* 헤더: 제목 좌측 / 성장 잔디 뱃지(연속 일수에 따라 땅→새싹→꽃→나무) 우측 상단.
+   h2의 아래 여백(12px)을 래퍼로 옮겨 요약문과의 간격을 그대로 유지한다. */
+.grass-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 12px; }
+.grass-head h2 { margin: 0; }
+.grass-streak { display: inline-flex; align-items: center; gap: 6px; }
+.grass-streak-icon { font-size: 1.5rem; line-height: 1; }
+.grass-streak-days { color: var(--muted); font-size: .8rem; white-space: nowrap; }
+
 .grass-summary { color: var(--muted); font-size: .9rem; margin: 0 0 12px; }
 .grass-summary strong { color: var(--text); }
 
