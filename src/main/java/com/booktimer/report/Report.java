@@ -18,7 +18,7 @@ import jakarta.persistence.UniqueConstraint;
 /**
  * 신고 관계 — {@code reporter}가 {@code reported}를 신고한다 (SNS 5단계, sns-design §7.5·§9).
  *
- * <p>신고는 <b>저장만</b> 한다 — 관리자 검토 화면은 추후(별도 관리자 대시보드 계획). {@code (reporter, reported)}
+ * <p>접수된 신고는 관리자 신고함({@code /admin/reports})에서 운영자가 검토·후속 처리한다. {@code (reporter, reported)}
  * 유니크로 <b>쌍당 1건</b>(중복 신고 스팸 방지), 자기 신고는 생성 시 거부한다. block 기능과 같은 구조.
  */
 @Entity

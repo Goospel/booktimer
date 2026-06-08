@@ -357,16 +357,19 @@ create index idx_follow_followee on follow (followee_id);
   차단 후 상대 프로필이 404라 거기서 해제 불가 → **`/me/blocks`(본인 차단 목록)에서 해제**. 프로필에 차단 버튼, 탈퇴 정리(purge)에 block 양방향 추가.
   대칭 선택 근거: 멘탈모델·구현 단순(둘 사이 차단 존재 한 번만 검사)·강한 단절(사용자 확정 2026-06-04).
   - 차단한 사용자를 **검색 결과에서도 숨기기 — 구현 완료 ✅ 2026-06-04 (PR-2)**: `UserSearchService`가 결과를 `existsBetween`로 필터(양방향). 프로필이 대칭 404라 검색에 떠도 못 여는 모순 제거.
-- **신고(report) — 구현 완료 ✅ 2026-06-04 (PR-1)**: 프로필에서 사용자를 신고(사유 스팸/괴롭힘/부적절/기타 + 상세). **저장만** 한다
-  (관리자 검토 화면은 추후 — 관리자 대시보드 별도 계획). `report` 테이블(V11), `(reporter, reported)` 유니크로 **쌍당 1건**(중복 신고
-  스팸 방지·멱등), 자기 신고 금지(도메인 검증). block과 같은 구조(`ReportService`, `POST /report` 오픈리다이렉트 방어, 탈퇴 purge에
-  report 양방향 정리). TDD Red→Green. ※ reason은 enum→STRING, `ReportReason.from()`은 잘못된 값을 OTHER로 폴백(신고가 막히지 않게).
+- **신고(report) — 구현 완료 ✅ 2026-06-04 (PR-1)**: 프로필에서 사용자를 신고(사유 스팸/괴롭힘/부적절/기타 + 상세). `report` 테이블(V11),
+  `(reporter, reported)` 유니크로 **쌍당 1건**(중복 신고 스팸 방지·멱등), 자기 신고 금지(도메인 검증). block과 같은 구조(`ReportService`,
+  `POST /report` 오픈리다이렉트 방어, 탈퇴 purge에 report 양방향 정리). TDD Red→Green. ※ reason은 enum→STRING, `ReportReason.from()`은
+  잘못된 값을 OTHER로 폴백(신고가 막히지 않게).
+  - **관리자 신고함 — 구현 완료 ✅ 2026-06-08 (PR #245)**: 처음엔 "저장만"이고 검토 UI가 추후였으나, 운영자가 후속 처리하려면 화면이
+    필요해 신설. `/admin/reports`(ADMIN 전용)에서 신고자→대상·사유·상세·시각을 **최신순**(id desc tiebreak)으로 보고, 처리 끝난 신고를
+    삭제(POST·CSRF). 문의함(`/admin/feedback`)과 같은 패턴 — `AdminReportRow` DTO로 트랜잭션 안에서 신고자·대상(LAZY) 평면화(OSIV 비의존).
 - **레이트리밋 + 열거 완화 — 구현 완료 ✅ 2026-06-04 (PR-2)**: `RateLimitService`(인메모리 고정 윈도우, **사용자별** 키 —
   인증 엔드포인트라 IP 아님; LoginAttemptService 미러)가 액션별 한도를 건다 — `RateLimitAction` FOLLOW(30/분)·SEARCH(20/분)·
   REPORT(10/시간). 컨트롤러에서 `allow(action, userId)` 체크: 초과 시 팔로우/신고는 조용히 드롭, 검색은 안내만 그린다(`rateLimited`).
   **열거 완화** = 기존 가드(최소 2글자·상한 20·없는 닉 404) + **검색 레이트리밋**(크롤링/전수 열거 속도 제한). `Clock` 주입(테스트 결정성).
   **한계**: 인메모리=인스턴스별 → 다중 인스턴스/롤링 배포 중 분산 우회 가능(로그인 제한기와 동일, 공유 저장소·WAF는 다층 방어 백로그). TDD Red→Green.
-- **5단계 완료** — 차단·신고·레이트리밋·열거완화·검색숨김 모두 ✅. (후속 여지: 승인제 팔로우, 공유 저장소 레이트리밋, 관리자 신고 검토 화면.)
+- **5단계 완료** — 차단·신고·레이트리밋·열거완화·검색숨김 모두 ✅. 관리자 신고 검토 화면도 ✅(PR #245). (후속 여지: 승인제 팔로우, 공유 저장소 레이트리밋.)
 
 ---
 
