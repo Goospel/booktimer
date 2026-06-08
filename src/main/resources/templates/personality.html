@@ -5,6 +5,43 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>책BTI — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
+    <style>
+        .personality-entry {
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            border-radius: 10px;
+            padding: 0.85rem 1rem;
+            margin-top: 0.75rem;
+            background: rgba(0, 0, 0, 0.015);
+        }
+        .personality-entry-selected {
+            border-color: #f0b429;
+            background: rgba(240, 180, 41, 0.08);
+        }
+        .personality-entry-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            margin-bottom: 0.35rem;
+        }
+        .personality-badge {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #b07900;
+        }
+        .personality-time {
+            font-size: 0.8rem;
+            opacity: 0.6;
+        }
+        .personality-stale {
+            color: #9a6b00;
+            font-size: 0.85rem;
+            margin: 0.4rem 0 0;
+        }
+        .personality-entry form {
+            margin-top: 0.5rem;
+        }
+    </style>
 </head>
 <body>
 <div class="container">
@@ -19,11 +56,32 @@
     <!-- 정확도 고지 (항상) — 과신 금지 포지셔닝 -->
     <p class="status-line">MBTI처럼 <strong>가볍게 즐기는 재미</strong>예요. 책장이 작거나 장르가 치우치면 부정확할 수 있어요.</p>
 
-    <!-- 성향 서술 (정상) -->
+    <!-- 성향 히스토리 (정상) — 과거 분석을 최대 3개까지 보존하고, 하나를 대표로 고른다 -->
     <section class="card" th:if="${view.isReady()}">
         <h2>내 독서 성향</h2>
-        <p class="personality-narrative" th:text="${view.narrative()}">성향 서술 한 문단…</p>
-        <!-- 공개 안내문 — 성향 바로 밑에 작게 -->
+        <p class="status-line muted">
+            '다시 분석'을 돌릴 때마다 과거 결과가 <strong>최대 3개</strong>까지 남아요. 마음에 드는 하나를
+            <strong>⭐ 대표</strong>로 고르면 그게 공개 책방에 노출돼요.
+        </p>
+
+        <div th:each="entry : ${view.entries()}" class="personality-entry"
+             th:classappend="${entry.selected()} ? ' personality-entry-selected' : ''">
+            <div class="personality-entry-head">
+                <span class="personality-badge" th:if="${entry.selected()}">⭐ 대표 (책방 노출)</span>
+                <span class="personality-badge" th:unless="${entry.selected()}">후보</span>
+                <span class="personality-time"
+                      th:text="${#temporals.format(entry.generatedAt(), 'yyyy-MM-dd HH:mm')}">분석 시각</span>
+            </div>
+            <p class="personality-narrative" th:text="${entry.narrative()}">성향 서술 한 문단…</p>
+            <p class="personality-stale" th:if="${entry.stale()}">
+                📚 이 분석 이후 책장이 바뀌었어요 — '다시 분석'하면 지금 책장 기준으로 새로 봐요.
+            </p>
+            <form th:unless="${entry.selected()}" th:action="@{/personality/select/{id}(id=${entry.id()})}" method="post">
+                <button type="submit" class="btn-ghost btn-small">이걸로 대표 선택</button>
+            </form>
+        </div>
+
+        <!-- 공개 안내문 — 히스토리 밑에 작게 -->
         <p class="status-line personality-public-note">
             🌍 이 책BTI는 <strong>공개한 책만</strong>으로 분석해 내 책방(<a th:href="@{/u/{n}(n=${loginId})}">공개 프로필</a>)에 항상 노출돼요. 비공개 책 취향은 빠져요.
         </p>

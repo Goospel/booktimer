@@ -51,7 +51,7 @@ public class GeminiReadingPersonalityNarrator implements ReadingPersonalityNarra
         this.apiKey = apiKey;
         this.model = model;
         // 타임아웃 명시 — 느린/멈춘 LLM 호출이 요청 스레드를 무한정 묶지 않게(기본 무한 대기 회피, N-060).
-        // 실패를 빠르게 만들어야 호출자(analyzeCached)의 stale-캐시 폴백도 빠르게 동작한다.
+        // 실패를 빠르게 만들어야 호출자(reanalyze/currentPersonality)의 stale-캐시 폴백도 빠르게 동작한다.
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(5));
         requestFactory.setReadTimeout(Duration.ofSeconds(20));

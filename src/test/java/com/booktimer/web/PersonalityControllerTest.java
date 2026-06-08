@@ -4,7 +4,10 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.personality.PersonalityNarration;
+import com.booktimer.personality.ReadingPersonalityCache;
+import com.booktimer.personality.ReadingPersonalityCacheRepository;
 import com.booktimer.personality.ReadingPersonalityNarrator;
+import com.booktimer.personality.ReadingPersonalityService;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
@@ -60,6 +63,10 @@ class PersonalityControllerTest {
     private BookRepository bookRepository;
     @Autowired
     private Clock clock;
+    @Autowired
+    private ReadingPersonalityService personalityService;
+    @Autowired
+    private ReadingPersonalityCacheRepository cacheRepository;
 
     @MockitoBean
     private ReadingPersonalityNarrator narrator;
@@ -180,5 +187,60 @@ class PersonalityControllerTest {
                 .andExpect(flash().attribute("refreshLimited", true));
 
         verify(narrator, times(3)).narrate(any()); // 4번째는 호출되지 않음(딱 3번)
+    }
+
+    // ── 히스토리 표시 + 대표 선택(2026-06-08) ──────────────────────────────────
+
+    /** 서로 다른 서술로 n번 "다시 분석"해 히스토리 행을 쌓는다(부트스트랩 1개 + 후보들). */
+    private void buildHistory(User u, String... narratives) {
+        for (String n : narratives) {
+            when(narrator.narrate(any())).thenReturn(Optional.of(new PersonalityNarration(n, List.of("태그"))));
+            personalityService.reanalyze(u);
+        }
+    }
+
+    @Test
+    @DisplayName("GET /personality: 과거 분석이 히스토리(최대 3개)로 뷰에 최신순으로 실리고 대표 1개가 표시된다")
+    void get_rendersHistoryEntries() throws Exception {
+        User u = register("hist@booktimer.com");
+        saveBooks(u, 5);
+        buildHistory(u, "분석1.", "분석2."); // 분석1.이 대표(부트스트랩)
+
+        MvcResult result = mockMvc.perform(get("/personality").with(user("hist@booktimer.com")))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        assertThat(viewOf(result).entries()).hasSize(2);
+        assertThat(viewOf(result).entries().get(0).narrative()).isEqualTo("분석2."); // 최신순
+        assertThat(viewOf(result).entries().stream().filter(e -> e.selected()).count()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("POST /personality/select/{id}: 후보를 대표로 바꾸고 /personality로 리다이렉트(CSRF 필요)")
+    void select_movesRepresentative() throws Exception {
+        User u = register("sel@booktimer.com");
+        saveBooks(u, 5);
+        buildHistory(u, "분석1.", "분석2."); // 분석1.=대표
+        Long secondId = cacheRepository.findByUserOrderByGeneratedAtDescIdDesc(u).get(0).getId(); // 분석2.
+
+        mockMvc.perform(post("/personality/select/{id}", secondId)
+                        .with(user("sel@booktimer.com")).with(csrf()))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/personality"));
+
+        assertThat(cacheRepository.findByUserAndSelectedTrue(u)).get()
+                .extracting(ReadingPersonalityCache::getNarrative).isEqualTo("분석2.");
+    }
+
+    @Test
+    @DisplayName("POST /personality/select/{id}: CSRF 없으면 403")
+    void select_withoutCsrf_forbidden() throws Exception {
+        User u = register("selnocsrf@booktimer.com");
+        saveBooks(u, 5);
+        buildHistory(u, "분석1.");
+        Long id = cacheRepository.findByUserOrderByGeneratedAtDescIdDesc(u).get(0).getId();
+
+        mockMvc.perform(post("/personality/select/{id}", id).with(user("selnocsrf@booktimer.com")))
+                .andExpect(status().isForbidden());
     }
 }

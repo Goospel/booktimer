@@ -1,12 +1,14 @@
 package com.booktimer.web;
 
 import com.booktimer.personality.LabeledCount;
+import com.booktimer.personality.PersonalityHistoryEntry;
 import com.booktimer.personality.PersonalityNarration;
 import com.booktimer.personality.ReadingPersonality;
 import com.booktimer.personality.ReadingProfile;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -36,7 +38,7 @@ class PersonalityViewTest {
         ReadingPersonality result = new ReadingPersonality(profileWith(10),
                 new PersonalityNarration("완독러다.", List.of("완독러")));
 
-        PersonalityView view = PersonalityView.from(result, MIN);
+        PersonalityView view = PersonalityView.from(result, List.of(), MIN);
 
         assertThat(view.isReady()).isTrue();
         assertThat(view.narrative()).isEqualTo("완독러다.");
@@ -47,7 +49,7 @@ class PersonalityViewTest {
     void coldStart_whenNoNarrationAndFewBooks() {
         ReadingPersonality result = ReadingPersonality.factsOnly(profileWith(3)); // < 5
 
-        PersonalityView view = PersonalityView.from(result, MIN);
+        PersonalityView view = PersonalityView.from(result, List.of(), MIN);
 
         assertThat(view.isColdStart()).isTrue();
         assertThat(view.narrative()).isNull();
@@ -58,7 +60,7 @@ class PersonalityViewTest {
     void fallback_whenNoNarrationButEnoughBooks() {
         ReadingPersonality result = ReadingPersonality.factsOnly(profileWith(7)); // >= 5
 
-        PersonalityView view = PersonalityView.from(result, MIN);
+        PersonalityView view = PersonalityView.from(result, List.of(), MIN);
 
         assertThat(view.isFallback()).isTrue();
         assertThat(view.narrative()).isNull();
@@ -69,7 +71,7 @@ class PersonalityViewTest {
     void boundary_exactlyThreshold_isNotColdStart() {
         ReadingPersonality result = ReadingPersonality.factsOnly(profileWith(MIN)); // == 5
 
-        PersonalityView view = PersonalityView.from(result, MIN);
+        PersonalityView view = PersonalityView.from(result, List.of(), MIN);
 
         assertThat(view.isColdStart()).isFalse();
         assertThat(view.isFallback()).isTrue();
@@ -81,8 +83,25 @@ class PersonalityViewTest {
         // 보유 10권이지만 완독은 3권(<5) — 성향은 완독 책에서만 뽑으므로 아직 콜드스타트여야 한다
         ReadingPersonality result = ReadingPersonality.factsOnly(profileWith(10, 3));
 
-        PersonalityView view = PersonalityView.from(result, MIN);
+        PersonalityView view = PersonalityView.from(result, List.of(), MIN);
 
         assertThat(view.isColdStart()).isTrue();
+    }
+
+    @Test
+    @DisplayName("READY일 때 히스토리(최대 3개)가 뷰에 그대로 실린다(최신순·대표 표시 보존)")
+    void ready_carriesHistoryEntries() {
+        ReadingPersonality result = new ReadingPersonality(profileWith(10),
+                new PersonalityNarration("대표 서술.", List.of("태그")));
+        List<PersonalityHistoryEntry> entries = List.of(
+                new PersonalityHistoryEntry(2L, "대표 서술.", List.of("태그"), Instant.parse("2026-06-08T01:00:00Z"), true, false),
+                new PersonalityHistoryEntry(1L, "옛 서술.", List.of(), Instant.parse("2026-06-08T00:00:00Z"), false, true));
+
+        PersonalityView view = PersonalityView.from(result, entries, MIN);
+
+        assertThat(view.isReady()).isTrue();
+        assertThat(view.entries()).hasSize(2);
+        assertThat(view.entries().get(0).selected()).isTrue();
+        assertThat(view.entries().get(1).stale()).isTrue();
     }
 }

@@ -80,14 +80,16 @@ public class ProfileService {
     }
 
     /**
-     * 책방에 노출할 책BTI 서술 — 캐시가 있으면 그 서술, 없으면(콜드스타트=공개 완독 책 부족) {@code null}이라 카드가 숨는다.
+     * 책방에 노출할 책BTI 서술 — <b>대표(selected)</b> 분석이 있으면 그 서술, 없으면(콜드스타트=공개 완독 책 부족,
+     * 또는 아직 대표 미선정) {@code null}이라 카드가 숨는다.
      *
      * <p>책BTI는 <b>공개 책으로만</b> 뽑혀 항상 노출되므로(공개/비공개 분기 폐지 2026-06-08) opt-in 게이트가 없다.
-     * 여기선 캐시를 <b>읽기만</b> 한다 — 생성/갱신(LLM 호출)은 소유자 행동(본인 페이지 방문·"다시 분석")에서만 일어난다.
+     * 사용자가 히스토리(최대 3개) 중 고른 대표만 책방에 실린다(2026-06-08 히스토리 도입). 여기선 캐시를
+     * <b>읽기만</b> 한다 — 생성/갱신(LLM 호출)은 소유자 행동(본인 페이지 부트스트랩·"다시 분석")에서만 일어난다.
      * 즉 방문자가 남의 프로필을 열어도 LLM이 돌지 않는다(비용 안전장치).
      */
     private String personalityNarrative(User target) {
-        return personalityCacheRepository.findByUser(target)
+        return personalityCacheRepository.findByUserAndSelectedTrue(target)
                 .map(c -> c.getNarrative())
                 .orElse(null);
     }
