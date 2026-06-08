@@ -342,4 +342,47 @@ class ProfileControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(model().attribute("personality", nullValue()));
     }
+
+    // --- 공개 책장 탭 유지 (필터/탭 신호로 탭 기본값 보정 — 필터 클릭 후 책BTI로 튕기는 버그 차단) ---
+
+    @Test
+    @DisplayName("GET /u/{loginId}?status=READING: 상태 필터가 걸리면 성향이 있어도 공개 책장 탭이 활성(shelfActive=true) — 필터 클릭 후 책BTI로 안 튕김")
+    void profile_statusFilter_activatesShelfTab() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User owner = newUser("owner@booktimer.com", "openking", "공개왕");
+        savePersonalityCache(owner, "성향 서술."); // 성향 있으면 원래 책BTI 먼저지만, 필터 걸면 책장 탭이어야
+        publicBook(owner, "읽는 중인 책", BookStatus.READING);
+
+        mockMvc.perform(get("/u/{loginId}", "openking")
+                        .param("status", "READING").with(user("viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("shelfActive", true));
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}?tab=shelf: '전체' 칩(상태 없이 tab=shelf만)도 공개 책장 탭을 유지한다 — 전체로 돌아가도 안 튕김")
+    void profile_tabShelf_activatesShelfTab() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User owner = newUser("owner@booktimer.com", "openking", "공개왕");
+        savePersonalityCache(owner, "성향 서술."); // 성향 있어도 tab=shelf면 책장 탭
+        publicBook(owner, "아무책", BookStatus.READING);
+
+        mockMvc.perform(get("/u/{loginId}", "openking")
+                        .param("tab", "shelf").with(user("viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("shelfActive", true));
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}: 파라미터 없는 첫 진입은 shelfActive=false (성향 있으면 책BTI 탭 먼저 — 의도된 흐름 유지)")
+    void profile_firstVisit_shelfInactive() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User owner = newUser("owner@booktimer.com", "openking", "공개왕");
+        savePersonalityCache(owner, "성향 서술.");
+        publicBook(owner, "아무책", BookStatus.READING);
+
+        mockMvc.perform(get("/u/{loginId}", "openking").with(user("viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("shelfActive", false));
+    }
 }

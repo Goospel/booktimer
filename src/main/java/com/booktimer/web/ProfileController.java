@@ -42,6 +42,7 @@ public class ProfileController {
     @GetMapping("/u/{loginId}")
     public String profile(@PathVariable String loginId,
                           @RequestParam(value = "status", required = false) String status,
+                          @RequestParam(value = "tab", required = false) String tab,
                           Principal principal, Model model) {
         User viewer = currentUser(principal);
         ProfileView profile = profileService.profileOf(viewer, loginId)
@@ -54,6 +55,13 @@ public class ProfileController {
                 ? profile.books()
                 : profile.books().stream().filter(b -> b.getStatus() == shelfFilter).toList();
 
+        // 탭(책BTI/공개 책장)은 CSS 라디오라 서버가 상태를 모른다 → 필터 링크는 서버 라운드트립이라
+        // 리로드되면 탭 기본값(personality 유무)으로 리셋돼 책BTI로 튕긴다. 그래서 "책장을 보는 중"이라는
+        // 신호를 URL에 실어(status= 가 있거나 tab=shelf) 그때는 공개 책장 탭을 기본 활성으로 보정한다.
+        // 신호가 전혀 없는 첫 진입만 기존 의도(성향 있으면 책BTI 먼저)대로 둔다.
+        boolean shelfActive = shelfFilter != null || "shelf".equals(tab);
+
+        model.addAttribute("shelfActive", shelfActive);
         model.addAttribute("loginId", profile.loginId());
         model.addAttribute("nickname", profile.nickname());
         model.addAttribute("books", shelfBooks);
