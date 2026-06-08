@@ -70,7 +70,7 @@
                 <span class="personality-badge" th:if="${entry.selected()}">⭐ 대표 (책방 노출)</span>
                 <span class="personality-badge" th:unless="${entry.selected()}">후보</span>
                 <span class="personality-time"
-                      th:text="${#temporals.format(entry.generatedAt(), 'yyyy-MM-dd HH:mm')}">분석 시각</span>
+                      th:text="${view.formatTime(entry.generatedAt())}">분석 시각</span>
             </div>
             <p class="personality-narrative" th:text="${entry.narrative()}">성향 서술 한 문단…</p>
             <p class="personality-stale" th:if="${entry.stale()}">
@@ -119,10 +119,12 @@
         </ul>
     </section>
 
-    <!-- 다시 분석 (콜드스타트가 아닐 때만 — 보류 상태는 재생성할 게 없음) -->
-    <!-- 한도 초과 안내(차단된 직후 리다이렉트에서만 뜸) -->
-    <p class="status-line" th:if="${refreshLimited}">
-        ⏳ 오늘 '다시 분석'을 모두 사용했어요(하루 최대 <strong th:text="${refreshLimit}">3</strong>번). 내일 다시 시도해 주세요.
+    <!--/* 다시 분석 (콜드스타트가 아닐 때만 — 보류 상태는 재생성할 게 없음).
+           한도 소진 안내: 남은 횟수가 0이면 항상 보인다(차단 직후 리다이렉트도 remaining==0이라 같이 덮인다).
+           버튼이 disabled라 POST가 안 가서 'refreshLimited' 플래시만으론 이 문구가 영영 안 떴던 함정(catch-22)을 막는다.
+           파서 수준 주석(<!--/* */-->)이라 출력에 안 나간다 — 응답 버퍼 비대화/주석 유출 방지. */-->
+    <p class="status-line" th:if="${refreshRemaining == 0}">
+        ⏳ 오늘 '다시 분석'을 모두 사용했어요(하루 최대 <strong th:text="${refreshLimit}">3</strong>번). 자정이 지나면 다시 분석할 수 있어요.
     </p>
     <form class="refresh-form" th:unless="${view.isColdStart()}" th:action="@{/personality/refresh}" method="post">
         <button type="submit" class="btn-primary" th:disabled="${refreshRemaining == 0}">🔄 다시 분석<span

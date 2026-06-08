@@ -169,6 +169,11 @@ button, .btn {
 .btn-primary { background: var(--accent); color: #fff; }
 .btn-primary:hover { background: var(--accent-hover); }
 
+/* 비활성(disabled) 버튼 — '다시 분석' 일일 한도 소진 등으로 막혔을 때, 배경색을 명시한 버튼(.btn-primary)이
+   그대로 눌리는 것처럼 보이던 문제를 막는다. 옅게 + 금지 커서로 "지금은 못 누름"을 시각화한다. */
+button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary:disabled:hover { background: var(--accent); } /* 비활성 중엔 hover 색 변화도 끈다 */
+
 .btn-danger { background: var(--danger); color: #fff; }
 .btn-danger:hover { background: var(--danger-hover); }
 
