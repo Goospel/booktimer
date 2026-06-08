@@ -97,26 +97,50 @@ public class GeminiReadingPersonalityNarrator implements ReadingPersonalityNarra
     }
 
     /**
-     * 그라운딩 프롬프트를 만든다 — 집계한 사실(JSON)을 주입하고 "[사실]에 있는 것만 근거, 지어내지 마라"로
-     * 환각(없는 책·장르 발명)을 억제한다. 출력은 {"narrative","tags"} JSON으로만 받도록 형식을 못 박는다.
+     * 그라운딩 프롬프트를 만든다 — <b>'무슨 책을 읽었는가'(장르·저자·출간연대) 사실만</b> 주입하고
+     * "[사실]에 있는 것만 근거, 지어내지 마라"로 환각(없는 책·장르 발명)을 억제한다.
+     * 출력은 {"narrative","tags"} JSON으로만 받도록 형식을 못 박는다.
+     *
+     * <p>설계 의도: 책BTI는 <b>책 선택이 드러내는 사람의 내면</b>(성격·가치관·취향)만 다룬다. 독서 '습관'
+     * (독서 시간·완독률·정독/다독·읽은 권수 등 행동 패턴)은 결과에서 뺀다 — 그래서 (1) 그런 신호는 아예
+     * {@link #bookFactsJson 사실에서 제외}해 모델이 근거 삼을 거리를 없애고, (2) 지시로도 습관 언급을 금지한다.
      */
     static String buildPrompt(ReadingProfile profile, ObjectMapper objectMapper) {
-        String factsJson;
-        try {
-            factsJson = objectMapper.writeValueAsString(profile);
-        } catch (Exception e) {
-            factsJson = "{}";
-        }
         return """
-                당신은 독서 성향을 가볍게 짚어주는 'MBTI 설명문' 작가다.
-                다음은 한 독자의 책장에서 집계한 사실(JSON)이다. 아래 [사실]에 있는 내용만 근거로 삼고,
-                거기 없는 책·장르·정보는 지어내지 마라. 이 사람의 독서 성향을 MBTI 설명문처럼
-                한 문단(3~5문장)으로 서술하고, 비교용 짧은 태그 3~5개를 함께 내라.
+                당신은 '읽은 책으로 사람을 읽어주는' 성향 분석가다.
+                아래 [사실]은 한 독자가 *어떤 책을 읽었는가*만 추린 것이다(장르·저자·출간연대 분포).
+                [사실]에 있는 내용만 근거로 삼고, 거기 없는 책·장르·정보는 지어내지 마라.
+                오직 '읽은 책'이 드러내는 이 사람의 성격·가치관·취향(좋아할 만한 것)을
+                MBTI 설명문처럼 한 문단(3~5문장)으로 서술하고, 비교용 짧은 태그 3~5개를 함께 내라.
+
+                [매우 중요] 독서 '습관'은 절대 언급하지 마라 — 독서 시간·완독률·정독/다독·읽은 권수 같은
+                행동 패턴은 결과에 담지 말고, 오직 '무슨 책을 읽느냐'가 말해주는 내면(성격·가치관·관심사)만 다뤄라.
+
                 반드시 다음 JSON 형식으로만 답하라: {"narrative": "<한 문단>", "tags": ["<태그>", ...]}
 
                 [사실]
                 %s
-                """.formatted(factsJson);
+                """.formatted(bookFactsJson(profile, objectMapper));
+    }
+
+    /**
+     * 프롬프트에 주입할 <b>책 내용 사실만</b> 골라 JSON으로 만든다 — 장르·저자·출간연대 분포와
+     * 다양성(서로 다른 저자/장르 수), 표본 크기(총 권수)만 담는다. 독서 습관 신호
+     * (완독/읽는중/읽고싶음 권수, 완독률, 독서 시간·세션·평균 세션 길이)는 일부러 뺀다(설계 의도, {@link #buildPrompt}).
+     */
+    private static String bookFactsJson(ReadingProfile profile, ObjectMapper objectMapper) {
+        try {
+            ObjectNode facts = objectMapper.createObjectNode();
+            facts.put("totalBooks", profile.totalBooks()); // 표본 크기(습관 아님 — 분석 신뢰도 맥락)
+            facts.put("distinctAuthors", profile.distinctAuthors());
+            facts.set("topAuthors", objectMapper.valueToTree(profile.topAuthors()));
+            facts.put("distinctGenres", profile.distinctGenres());
+            facts.set("topGenres", objectMapper.valueToTree(profile.topGenres()));
+            facts.set("pubDecades", objectMapper.valueToTree(profile.pubDecades()));
+            return objectMapper.writeValueAsString(facts);
+        } catch (Exception e) {
+            return "{}";
+        }
     }
 
     /**
