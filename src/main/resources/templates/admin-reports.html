@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>신고함 — BookTimer 관리자</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <span class="emoji">🛠️</span>
+        <h1>신고함</h1>
+    </header>
+    <p class="status-line muted">사용자가 보낸 신고를 읽고 후속 처리합니다. 처리를 마친 신고는 삭제하세요.</p>
+
+    <p class="status-line muted" th:if="${reportList.isEmpty()}">접수된 신고가 없습니다.</p>
+
+    <section class="card fb-admin-item" th:each="row : ${reportList}">
+        <div class="fb-head">
+            <span class="fb-type" th:text="${row.reason.label}">사유</span>
+            <span class="fb-author muted" th:text="${#temporals.format(row.createdAt, 'yyyy-MM-dd HH:mm')}">시각</span>
+        </div>
+        <p class="fb-title">
+            <span th:text="${row.reporterLoginId != null ? '@' + row.reporterLoginId : row.reporterNickname}">신고자</span>
+            <span class="muted"> → </span>
+            <span th:text="${row.reportedLoginId != null ? '@' + row.reportedLoginId : row.reportedNickname}">대상</span>
+        </p>
+        <p class="fb-content" th:if="${row.detail != null and !row.detail.isBlank()}" th:text="${row.detail}">상세 설명</p>
+        <p class="fb-content muted" th:unless="${row.detail != null and !row.detail.isBlank()}">상세 설명 없음</p>
+        <div class="fb-actions">
+            <a class="btn-ghost btn-small" th:if="${row.reportedLoginId != null}"
+               th:href="@{/u/{loginId}(loginId=${row.reportedLoginId})}" target="_blank" rel="noopener">대상 책방 보기</a>
+            <form th:action="@{/admin/reports/{id}/delete(id=${row.id})}" method="post"
+                  onsubmit="return confirm('이 신고를 삭제할까요?');">
+                <button type="submit" class="btn-danger btn-small">삭제</button>
+            </form>
+        </div>
+    </section>
+
+    <p class="link-row"><a th:href="@{/admin}">← 관리자 홈으로</a></p>
+</div>
+</body>
+</html>
