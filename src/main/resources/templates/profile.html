@@ -98,6 +98,16 @@
         </div>
     </section>
 
+    <!-- 책BTI(공개 책 기준) — 사용자가 공개(opt-in)했고 공개 캐시가 있을 때만. 없으면 섹션 자체가 안 뜬다. -->
+    <section class="card" th:if="${personality != null}">
+        <h2>책BTI <span class="muted">· 독서 성향</span></h2>
+        <p class="personality-narrative" th:text="${personality}">성향 서술</p>
+        <p class="muted personality-note">
+            <span th:text="${self} ? '내 공개 책 기준으로 분석했어요.' : '이 사람이 공개한 책 기준이에요.'">공개 책 기준</span>
+            MBTI처럼 가볍게 즐겨 주세요.
+        </p>
+    </section>
+
     <!-- 공개 책장 (PUBLIC 책만) -->
     <section class="card">
         <h2>공개 책장</h2>

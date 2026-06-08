@@ -24,6 +24,9 @@ import java.util.Map;
  * @param followingCount 팔로잉 수(이 사용자가 팔로우하는 사람)
  * @param following      viewer가 이 사용자를 팔로우 중인지(버튼 분기)
  * @param self           이 프로필이 viewer 본인인지(그러면 팔로우 버튼 없음)
+ * @param personality    책방에 노출할 <b>공개 책BTI 서술</b>(공개 책 기반, 캐시) — 사용자가 공개(opt-in)했고
+ *                       공개 캐시가 있을 때만 채워지고, 아니면 {@code null}(노출 안 함). 본인용 전체-책 책BTI와
+ *                       다른 값일 수 있다(§7 누출 차단 — 입력이 공개 책만이라).
  */
 public record ProfileView(
         String loginId,
@@ -34,5 +37,6 @@ public record ProfileView(
         long followerCount,
         long followingCount,
         boolean following,
-        boolean self) {
+        boolean self,
+        String personality) {
 }

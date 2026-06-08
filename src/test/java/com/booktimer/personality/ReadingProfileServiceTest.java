@@ -96,4 +96,53 @@ class ReadingProfileServiceTest {
         assertThat(p.totalBooks()).isEqualTo(1); // 내 책 1권만
         assertThat(p.totalReadingSeconds()).isZero(); // 남의 세션 안 셈
     }
+
+    // --- publicProfileOf: 책방 노출용 — 공개(PUBLIC)+완독 책만(설계 §7 누출 차단) ---
+
+    @Test
+    @DisplayName("공개 프로필: 공개(PUBLIC)+완독 책만 집계 — 비공개 책은 권수·분포 어디에도 새지 않는다")
+    void publicProfileOf_aggregatesPublicFinishedOnly() {
+        User u = newUser("pub@booktimer.com");
+        Book pub = Book.register(u, "공개완독", "공개저자", null, null, null, null,
+                "국내도서>소설/시/희곡>한국소설", "2020-03-15", BookStatus.FINISHED);
+        pub.makePublic();
+        bookRepository.save(pub);
+        // 비공개 완독 책 — 본인 /personality엔 잡히지만 책방(공개)엔 새면 안 된다
+        bookRepository.save(Book.register(u, "비공개완독", "비공개저자", null, null, null, null,
+                "국내도서>경제경영>마케팅", "2019-01-01", BookStatus.FINISHED));
+        // 공개지만 읽는중 — 완독 아니므로 제외
+        Book pubReading = Book.register(u, "공개읽는중", "공개저자2", null, null, null, null,
+                "국내도서>과학>물리학", "2018-01-01", BookStatus.READING);
+        pubReading.makePublic();
+        bookRepository.save(pubReading);
+
+        ReadingProfile p = service.publicProfileOf(u);
+
+        assertThat(p.totalBooks()).isEqualTo(1); // 공개+완독 1권만
+        assertThat(p.topAuthors()).extracting(LabeledCount::label).containsExactly("공개저자");
+        assertThat(p.topGenres()).extracting(LabeledCount::label).containsExactly("소설/시/희곡"); // 비공개의 경제경영 안 샘
+    }
+
+    @Test
+    @DisplayName("공개 프로필 시간: 비공개 책의 독서 세션 시간은 새지 않는다 (집계기가 세션을 책과 대조 안 하므로 서비스가 걸러야)")
+    void publicProfileOf_excludesPrivateBookSessionTime() {
+        User u = newUser("time@booktimer.com");
+        Book pub = Book.register(u, "공개완독", "저자", null, null, null, null, null, null, BookStatus.FINISHED);
+        pub.makePublic();
+        bookRepository.save(pub);
+        Book priv = Book.register(u, "비공개완독", "저자", null, null, null, null, null, null, BookStatus.FINISHED);
+        bookRepository.save(priv); // PRIVATE 기본
+
+        // 공개 책 세션 1시간, 비공개 책 세션 2시간
+        ReadingSession pubSession = ReadingSession.start(u, Instant.parse("2026-06-07T00:00:00Z"), pub);
+        pubSession.end(Instant.parse("2026-06-07T01:00:00Z"));
+        sessionRepository.save(pubSession);
+        ReadingSession privSession = ReadingSession.start(u, Instant.parse("2026-06-07T02:00:00Z"), priv);
+        privSession.end(Instant.parse("2026-06-07T04:00:00Z"));
+        sessionRepository.save(privSession);
+
+        ReadingProfile p = service.publicProfileOf(u);
+
+        assertThat(p.totalReadingSeconds()).isEqualTo(3600); // 공개 책 1시간만(비공개 2시간 제외)
+    }
 }

@@ -83,6 +83,16 @@ public class User extends BaseTimeEntity {
     private boolean onboarded = false;
 
     /**
+     * 책BTI(독서 성향)를 <b>책방(공개 프로필 {@code /u/{loginId}})에 공개할지</b> — opt-in 토글
+     * (reading-personality-design Phase 6). 기본 {@code false}(비노출) — 이 프로젝트의 "기본 PRIVATE·opt-in"
+     * 불변식과 일치하게, 본인이 명시적으로 켜야 남에게 보인다. 책방에 노출되는 책BTI는 본인용(전체 책 기반)과
+     * 달리 <b>공개 책만으로 따로 생성</b>된다(§7 누출 차단) — 이 플래그는 "노출 여부"만 통제하고, 계산 범위 분리는
+     * 캐시·집계 계층이 담당한다.
+     */
+    @Column(name = "personality_public", nullable = false)
+    private boolean personalityPublic = false;
+
+    /**
      * 로그인/식별용 아이디이자 <b>공개 @핸들</b>(인스타/X 모델, 설계: login-id-design.md). email 대신 이걸로
      * 로그인·식별하고, 검색·프로필 URL({@code /u/{loginId}})·팔로우 대상 식별도 이 값 기준이다(PR-3 컷오버).
      * 형식은 {@link #LOGIN_ID_PATTERN}(소문자 영숫자·언더스코어 3~20자). 표시 이름(nickname)과 달리 <b>불변</b>이다
@@ -220,6 +230,16 @@ public class User extends BaseTimeEntity {
     /** 첫 진입 초기 설정(온보딩)을 마쳤는가. false면 온보딩 페이지로 유도된다. */
     public boolean isOnboarded() {
         return onboarded;
+    }
+
+    /** 책BTI를 책방(공개 프로필)에 공개하는가(opt-in). false면 본인만 본다(누출 없음). */
+    public boolean isPersonalityPublic() {
+        return personalityPublic;
+    }
+
+    /** 책BTI 책방 노출을 켜거나 끈다(토글). 노출 여부만 통제 — 계산 범위(공개 책만)는 캐시·집계 계층이 분리한다. */
+    public void setPersonalityPublic(boolean personalityPublic) {
+        this.personalityPublic = personalityPublic;
     }
 
     /**

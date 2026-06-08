@@ -62,6 +62,22 @@
         <button type="submit" class="btn-primary">🔄 다시 분석</button>
     </form>
 
+    <!-- 책방 노출 opt-in 토글 — 켜면 '공개한 책만'으로 따로 분석한 책BTI가 내 책방(공개 프로필)에 실린다. -->
+    <section class="card personality-visibility">
+        <h2>책방에 공개</h2>
+        <p class="status-line" th:if="${personalityPublic}">
+            🌍 지금 <strong>책방에 공개 중</strong>이에요 — 다른 사람이 내 책방(<a th:href="@{/u/{n}(n=${loginId})}">공개 프로필</a>)에서 내 책BTI를 봐요.
+            <strong>공개한 책만</strong>으로 분석하므로 위 '내 독서 성향'과 다를 수 있어요(비공개 책은 빠짐).
+        </p>
+        <p class="status-line" th:unless="${personalityPublic}">
+            🔒 지금은 <strong>비공개</strong>예요 — 내 책BTI는 나만 봐요. 켜면 <strong>공개한 책만</strong>으로 따로 분석해 책방에 싣습니다(비공개 책 취향은 새지 않아요).
+        </p>
+        <form th:action="@{/personality/visibility}" method="post">
+            <input type="hidden" name="public" th:value="${personalityPublic} ? 'false' : 'true'">
+            <button type="submit" class="btn-ghost" th:text="${personalityPublic} ? '책방 공개 끄기' : '책방에 공개하기'">책방에 공개하기</button>
+        </form>
+    </section>
+
     <p class="link-row">
         <a th:href="@{/}">← 대시보드</a>
         <a th:href="@{/books}">📚 내 책장</a>
