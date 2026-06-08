@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>문의함 — BookTimer 관리자</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <span class="emoji">🛠️</span>
+        <h1>문의함</h1>
+    </header>
+    <p class="status-line muted">사용자 문의를 읽고 읽음/처리완료를 표시하거나 삭제합니다. 상태는 작성자 본인 화면에만 보입니다.</p>
+
+    <p class="status-line muted" th:if="${feedbackList.isEmpty()}">접수된 문의가 없습니다.</p>
+
+    <section class="card fb-admin-item" th:each="row : ${feedbackList}">
+        <div class="fb-head">
+            <span class="fb-type" th:text="${row.type.label}">유형</span>
+            <span th:class="'fb-badge fb-' + ${row.status.name().toLowerCase()}"
+                  th:text="${row.status.label}">상태</span>
+            <span class="fb-author"
+                  th:text="${row.authorLoginId != null ? '@' + row.authorLoginId : row.authorNickname}">작성자</span>
+        </div>
+        <p class="fb-title" th:text="${row.title}">제목</p>
+        <p class="fb-content" th:text="${row.content}">내용</p>
+        <div class="fb-actions">
+            <form th:action="@{/admin/feedback/{id}/read(id=${row.id})}" method="post">
+                <button type="submit" class="btn-ghost btn-small">읽음</button>
+            </form>
+            <form th:action="@{/admin/feedback/{id}/resolve(id=${row.id})}" method="post">
+                <button type="submit" class="btn-primary btn-small">처리완료</button>
+            </form>
+            <form th:action="@{/admin/feedback/{id}/delete(id=${row.id})}" method="post"
+                  onsubmit="return confirm('이 문의를 삭제할까요?');">
+                <button type="submit" class="btn-danger btn-small">삭제</button>
+            </form>
+        </div>
+    </section>
+
+    <p class="link-row"><a th:href="@{/admin}">← 관리자 홈으로</a></p>
+</div>
+</body>
+</html>

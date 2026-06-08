@@ -799,3 +799,30 @@ a.book-title:hover { text-decoration: underline; }
 .landing-bottom-cta { text-align: center; margin: 8px 0 16px; }
 .landing-bottom-cta p { color: var(--muted); margin: 0 0 12px; word-break: keep-all; }
 .landing-bottom-cta a { width: auto; display: inline-block; text-decoration: none; padding-left: 28px; padding-right: 28px; }
+
+/* === 문의·피드백 (feedback.html / admin-feedback.html) === */
+.fb-form .fb-field { display: block; margin: 0.6rem 0; }
+.fb-form .fb-field select,
+.fb-form .fb-field input,
+.fb-form .fb-field textarea {
+    display: block; width: 100%; margin-top: 0.25rem; padding: 0.5rem 0.6rem;
+    border: 1px solid rgba(0, 0, 0, 0.15); border-radius: 8px; font: inherit; box-sizing: border-box;
+}
+.fb-form .fb-field textarea { resize: vertical; }
+
+.fb-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.75rem; }
+.fb-item, .fb-admin-item { border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 10px; padding: 0.8rem 0.9rem; }
+.fb-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.fb-type { font-size: 0.78rem; font-weight: 700; background: rgba(0, 0, 0, 0.05); border-radius: 6px; padding: 0.12rem 0.45rem; }
+.fb-author { font-size: 0.8rem; opacity: 0.65; margin-left: auto; }
+.fb-title { font-weight: 700; margin: 0.45rem 0 0.2rem; }
+.fb-content { margin: 0 0 0.5rem; white-space: pre-wrap; word-break: break-word; opacity: 0.9; }
+.fb-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+
+/* 상태 배지 — 작성자 본인만 보는 처리 상태(미확인/읽음/처리완료) */
+.fb-badge { display: inline-block; font-size: 0.75rem; font-weight: 700; padding: 0.12rem 0.5rem; border-radius: 999px; }
+.fb-submitted { background: rgba(0, 0, 0, 0.06); color: rgba(0, 0, 0, 0.55); }
+.fb-read { background: #e6f0ff; color: #1d4ed8; }
+.fb-resolved { background: #e7f6ec; color: #15803d; }
+
+.btn-small { padding: 0.3rem 0.7rem; font-size: 0.85rem; }
