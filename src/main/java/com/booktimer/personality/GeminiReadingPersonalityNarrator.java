@@ -8,12 +8,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -48,7 +50,12 @@ public class GeminiReadingPersonalityNarrator implements ReadingPersonalityNarra
             @Value("${booktimer.llm.model:gemini-2.5-flash}") String model) {
         this.apiKey = apiKey;
         this.model = model;
-        this.restClient = RestClient.create();
+        // 타임아웃 명시 — 느린/멈춘 LLM 호출이 요청 스레드를 무한정 묶지 않게(기본 무한 대기 회피, N-060).
+        // 실패를 빠르게 만들어야 호출자(analyzeCached)의 stale-캐시 폴백도 빠르게 동작한다.
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(5));
+        requestFactory.setReadTimeout(Duration.ofSeconds(20));
+        this.restClient = RestClient.builder().requestFactory(requestFactory).build();
     }
 
     @Override
@@ -125,6 +132,11 @@ public class GeminiReadingPersonalityNarrator implements ReadingPersonalityNarra
         ObjectNode genConfig = root.putObject("generationConfig");
         genConfig.put("temperature", 0.4);
         genConfig.put("responseMimeType", "application/json");
+        // 출력 토큰 상한 — 서술 한 문단 + 태그엔 넉넉하되 무한정 늘지 않게(비용·지연 상한).
+        genConfig.put("maxOutputTokens", 2048);
+        // thinking 비활성(budget=0) — gemini-2.5-flash는 thinking이 기본 ON이라, maxOutputTokens 안에서
+        // thinking 토큰이 예산을 소진하면 candidates[0].content.parts[0].text가 빈 문자열로 와 폴백된다(N-060).
+        genConfig.putObject("thinkingConfig").put("thinkingBudget", 0);
         try {
             return objectMapper.writeValueAsString(root);
         } catch (Exception e) {

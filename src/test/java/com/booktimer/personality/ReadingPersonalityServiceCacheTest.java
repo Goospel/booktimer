@@ -28,7 +28,8 @@ import static org.mockito.Mockito.when;
  *
  * <p>핵심 불변식: (1) 처음엔 LLM 호출 + 캐시 저장, (2) 책장 안 변하면 LLM 재호출 없이 캐시 사용(비용 절감),
  * (3) 시그니처 변동 or "다시 분석"(force)이면 재생성, (4) 책 부족(콜드스타트)이면 LLM·캐시 안 함,
- * (5) LLM 실패면 사실만 폴백하고 캐시는 안 건드린다.
+ * (5) LLM 실패 시 — <b>직전 캐시(stale)가 있으면 그걸 내보내고(빈 화면 방지, serve-stale-on-error, N-060)</b>,
+ *     없으면 사실만 폴백한다. 어느 경우든 기존 캐시는 망가뜨리지 않는다.
  */
 @SpringBootTest
 @Transactional
@@ -138,8 +139,8 @@ class ReadingPersonalityServiceCacheTest {
     }
 
     @Test
-    @DisplayName("LLM 실패: 사실만 폴백하고 캐시는 만들지 않는다")
-    void llmFails_fallbackNoCache() {
+    @DisplayName("LLM 실패(직전 캐시 없음): 사실만 폴백하고 캐시는 만들지 않는다")
+    void llmFails_noPriorCache_fallbackNoCache() {
         User u = newUser("fail@booktimer.com");
         saveBooks(u, 5);
         when(narrator.narrate(any())).thenReturn(Optional.empty());
@@ -149,5 +150,41 @@ class ReadingPersonalityServiceCacheTest {
         assertThat(result.hasNarration()).isFalse();
         assertThat(result.profile().totalBooks()).isEqualTo(5);
         assertThat(cacheRepository.findByUser(u)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("LLM 실패(직전 캐시 있음, 시그니처 변동): stale 캐시 서술을 내보내고 빈 화면을 막는다(N-060)")
+    void llmFails_withExistingCache_servesStale() {
+        User u = newUser("stale@booktimer.com");
+        saveBooks(u, 5);
+        narratorReturns("예전에 받은 분석.");
+        service.analyzeCached(u, false); // 첫 성공 — "예전에 받은 분석." 캐시됨
+
+        saveBooks(u, 1); // 책장 변화로 시그니처 어긋남 → 재생성 트리거
+        when(narrator.narrate(any())).thenReturn(Optional.empty()); // 그런데 LLM 실패/빈응답
+
+        ReadingPersonality result = service.analyzeCached(u, false);
+
+        // 빈 화면(factsOnly) 대신 직전 캐시(stale) 서술이 나와야 한다
+        assertThat(result.hasNarration()).isTrue();
+        assertThat(result.narration().narrative()).isEqualTo("예전에 받은 분석.");
+        // 기존 캐시는 옛 서술 그대로 보존(실패가 캐시를 덮어쓰지 않음)
+        assertThat(cacheRepository.findByUser(u)).get()
+                .extracting(ReadingPersonalityCache::getNarrative).isEqualTo("예전에 받은 분석.");
+    }
+
+    @Test
+    @DisplayName("다시 분석(force)했는데 LLM 실패: 직전 캐시가 있으면 stale을 내보낸다(빈 화면 금지)")
+    void force_llmFails_withExistingCache_servesStale() {
+        User u = newUser("forcestale@booktimer.com");
+        saveBooks(u, 5);
+        narratorReturns("원래 분석.");
+        service.analyzeCached(u, false); // 첫 성공
+
+        when(narrator.narrate(any())).thenReturn(Optional.empty()); // 이후 LLM 실패
+        ReadingPersonality result = service.analyzeCached(u, true);  // 강제 재생성 시도
+
+        assertThat(result.hasNarration()).isTrue();
+        assertThat(result.narration().narrative()).isEqualTo("원래 분석.");
     }
 }
