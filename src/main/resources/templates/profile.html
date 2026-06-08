@@ -103,9 +103,9 @@
          기본 탭은 동적: 성향이 있으면 책BTI(헤드라인) 먼저, 콜드스타트(공개 완독 책 부족 → personality==null)면
          빈 책BTI 대신 공개 책장을 먼저 띄운다 — 빈 탭 착지 방지. -->
     <section class="card record-card">
-        <input type="radio" name="profiletab" id="tab-bti" class="tab-radio" th:checked="${personality != null}">
+        <input type="radio" name="profiletab" id="tab-bti" class="tab-radio" th:checked="${personality != null and !shelfActive}">
         <label for="tab-bti" class="record-tab">책BTI</label>
-        <input type="radio" name="profiletab" id="tab-shelf" class="tab-radio" th:checked="${personality == null}">
+        <input type="radio" name="profiletab" id="tab-shelf" class="tab-radio" th:checked="${personality == null or shelfActive}">
         <label for="tab-shelf" class="record-tab">공개 책장</label>
 
         <!-- 바디 ①: 책BTI(공개 책 기준). 캐시 없으면 콜드스타트 안내문(독서 기록 카드의 빈 상태와 동일 방식). 항상 공개. -->
@@ -125,11 +125,13 @@
 
         <!-- 바디 ②: 공개 책장(PUBLIC 책만) -->
         <div class="tab-panel panel-shelf">
-            <!-- 상태 필터 칩 — 부합하는 공개 책만 표시(서버사이드 ?status=). 내 책장(/books)과 동일 패턴. -->
+            <!-- 상태 필터 칩 — 부합하는 공개 책만 표시(서버사이드 ?status=). 내 책장(/books)과 동일 패턴.
+                 tab=shelf 신호를 함께 실어, 필터 클릭 후 리로드돼도 공개 책장 탭이 유지되게 한다(전체 칩 포함).
+                 안 그러면 성향이 있는 사용자는 필터를 누를 때마다 책BTI 탭으로 튕긴다(shelfActive 보정). -->
             <nav class="shelf-filter">
-                <a th:href="@{/u/{n}(n=${loginId})}" th:classappend="${shelfFilter == null} ? 'active'">전체</a>
+                <a th:href="@{/u/{n}(n=${loginId}, tab='shelf')}" th:classappend="${shelfFilter == null} ? 'active'">전체</a>
                 <a th:each="s : ${statuses}"
-                   th:href="@{/u/{n}(n=${loginId}, status=${s})}"
+                   th:href="@{/u/{n}(n=${loginId}, status=${s}, tab='shelf')}"
                    th:classappend="${s == shelfFilter} ? 'active'"
                    th:text="${s.label}">상태</a>
             </nav>
