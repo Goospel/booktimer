@@ -37,6 +37,16 @@ public class ReadingTimer extends BaseTimeEntity {
     @Column(nullable = false)
     private long dailyIncrementSeconds;
 
+    /**
+     * 밀린 부채를 대시보드 헤드라인 타이머에 합산해 보여줄지 여부(표시 전용 설정). 기본 켜짐.
+     *
+     * <p>부채 모델 자체는 7일 윈도우 per-day(날짜별 독립, 이월 없음)로 유지된다 — 이 플래그는 <b>표시만</b>
+     * 바꾼다. 켜지면 헤드라인이 "오늘 부채 + 윈도우 내 빠뜨린 날 합"(어제까지 밀린 빚 포함)을, 꺼지면
+     * "오늘 부채"만 보여준다. 어느 쪽이든 어제 빚은 측정으로 갚아지지 않고 '빠뜨린 날 채우기'로만 갚는다.
+     */
+    @Column(nullable = false)
+    private boolean debtCarryover = true;
+
     /** 소유 사용자 (1:1). FK(user_id)는 이 테이블이 소유한다. */
     @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", unique = true)
@@ -92,12 +102,29 @@ public class ReadingTimer extends BaseTimeEntity {
         this.dailyIncrementSeconds = dailyIncrementSeconds;
     }
 
+    /**
+     * 하루 목표와 밀린 부채 합산 표시 토글을 함께 변경한다(설정 화면).
+     *
+     * @param dailyIncrementSeconds 새 하루 목표(초, 0 이상)
+     * @param debtCarryover         밀린 부채를 헤드라인에 합산 표시할지
+     * @throws IllegalArgumentException 목표가 음수인 경우
+     */
+    public void updateSettings(long dailyIncrementSeconds, boolean debtCarryover) {
+        updateSettings(dailyIncrementSeconds);
+        this.debtCarryover = debtCarryover;
+    }
+
     public Long getId() {
         return id;
     }
 
     public long getDailyIncrementSeconds() {
         return dailyIncrementSeconds;
+    }
+
+    /** 밀린 부채를 헤드라인 타이머에 합산 표시할지(표시 전용 토글). */
+    public boolean isDebtCarryover() {
+        return debtCarryover;
     }
 
     public User getUser() {

@@ -43,11 +43,12 @@ public class UserSettingsService {
      * @param nickname              새 닉네임
      * @param timezone              새 IANA 타임존 ID
      * @param dailyIncrementSeconds 새 하루 목표(초)
+     * @param debtCarryover         밀린 부채를 헤드라인에 합산 표시할지(표시 전용 토글)
      * @throws IllegalStateException    사용자/타이머가 없는 경우
      * @throws IllegalArgumentException 값 검증 실패 시(도메인 위임)
      */
     public void updateSettings(String email, String nickname, String timezone,
-                               long dailyIncrementSeconds) {
+                               long dailyIncrementSeconds, boolean debtCarryover) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalStateException("user not found: " + email));
         ReadingTimer timer = timerRepository.findByUser(user)
@@ -56,9 +57,9 @@ public class UserSettingsService {
         // nickname은 단순 표시 이름 — 중복을 허용하고 자유롭게 바꾼다(영구 식별자는 불변의 login_id).
         user.updateProfile(nickname, timezone);
 
-        // 하루 목표가 실제로 바뀔 때만 오늘자 변경 이력을 남긴다 — 닉네임만 바꿔도 행이 쌓이지 않게.
+        // 하루 목표가 실제로 바뀔 때만 오늘자 변경 이력을 남긴다 — 닉네임/토글만 바꿔도 행이 쌓이지 않게.
         boolean goalChanged = timer.getDailyIncrementSeconds() != dailyIncrementSeconds;
-        timer.updateSettings(dailyIncrementSeconds); // 하루 목표만 — cap은 7일 윈도우 모델로 대체됨
+        timer.updateSettings(dailyIncrementSeconds, debtCarryover); // 하루 목표 + 부채 합산 표시 토글
         if (goalChanged) {
             goalService.record(user, dailyIncrementSeconds); // 그날 목표로 과거를 판정하기 위한 시점 기록
         }

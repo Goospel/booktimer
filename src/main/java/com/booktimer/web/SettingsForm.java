@@ -29,6 +29,12 @@ public class SettingsForm {
     @Min(0)
     private Integer incrementMinutes;
 
+    /**
+     * 밀린 부채를 헤드라인 타이머에 합산해 표시할지(표시 전용 토글). 체크박스 바인딩 — 체크 해제 시
+     * 파라미터가 전송되지 않으므로 기본값 false로 두고, GET 폼은 현재 타이머 값으로 채운다.
+     */
+    private boolean debtCarryover;
+
     public String getNickname() {
         return nickname;
     }
@@ -51,5 +57,13 @@ public class SettingsForm {
 
     public void setIncrementMinutes(Integer incrementMinutes) {
         this.incrementMinutes = incrementMinutes;
+    }
+
+    public boolean isDebtCarryover() {
+        return debtCarryover;
+    }
+
+    public void setDebtCarryover(boolean debtCarryover) {
+        this.debtCarryover = debtCarryover;
     }
 }

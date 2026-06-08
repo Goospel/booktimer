@@ -213,4 +213,54 @@ class SettingsControllerTest {
 
         assertThat(userRepository.findByEmail("delno@booktimer.com")).isPresent(); // 삭제 안 됨
     }
+
+    // --- 밀린 부채 합산 표시 토글 (debtCarryover) ---
+
+    @Test
+    @DisplayName("GET /settings: 밀린 부채 합산 표시 토글(체크박스)을 폼에 싣는다")
+    void getSettings_showsDebtCarryoverToggle() throws Exception {
+        register("carryget@booktimer.com"); // 기본 ON
+
+        mockMvc.perform(get("/settings").with(user("carryget@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("debtCarryover")));
+    }
+
+    @Test
+    @DisplayName("POST /settings: 밀린 부채 합산 표시 토글을 끄면(체크박스 해제) 저장된다")
+    void postSettings_debtCarryoverOff_saved() throws Exception {
+        register("carrypost@booktimer.com"); // 기본 ON
+
+        // 체크박스를 해제하면 debtCarryover 파라미터가 전송되지 않는다 → false로 바인딩되어야 한다.
+        mockMvc.perform(post("/settings").with(user("carrypost@booktimer.com")).with(csrf())
+                        .param("nickname", "닉")
+                        .param("timezone", "Asia/Seoul")
+                        .param("incrementMinutes", "60"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/settings"));
+
+        User reloaded = userRepository.findByEmail("carrypost@booktimer.com").orElseThrow();
+        ReadingTimer timer = timerRepository.findByUser(reloaded).orElseThrow();
+        assertThat(timer.isDebtCarryover()).isFalse();
+    }
+
+    @Test
+    @DisplayName("POST /settings: 토글을 켜면(체크박스 체크=true 전송) 저장된다")
+    void postSettings_debtCarryoverOn_saved() throws Exception {
+        register("carryon@booktimer.com");
+        // 먼저 OFF로 만들어 둔 뒤(기본 ON과 구분), 체크해서 다시 ON 되는지 본다.
+        timerRepository.findByUser(userRepository.findByEmail("carryon@booktimer.com").orElseThrow())
+                .orElseThrow().updateSettings(3600L, false);
+
+        mockMvc.perform(post("/settings").with(user("carryon@booktimer.com")).with(csrf())
+                        .param("nickname", "닉")
+                        .param("timezone", "Asia/Seoul")
+                        .param("incrementMinutes", "60")
+                        .param("debtCarryover", "true"))
+                .andExpect(status().is3xxRedirection());
+
+        User reloaded = userRepository.findByEmail("carryon@booktimer.com").orElseThrow();
+        ReadingTimer timer = timerRepository.findByUser(reloaded).orElseThrow();
+        assertThat(timer.isDebtCarryover()).isTrue();
+    }
 }

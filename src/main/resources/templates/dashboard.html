@@ -38,11 +38,15 @@
              start/stop은 hx-post로 무리로드, JS 없으면 일반 form POST(redirect)로 폴백. -->
         <section class="card timer-card"
                  x-data="readingTimer()"
-                 th:attr="data-active=${hasActiveSession},data-started=${activeStartedAt},data-remaining=${remainingSeconds}">
+                 th:attr="data-active=${hasActiveSession},data-started=${activeStartedAt},data-remaining=${remainingSeconds},data-floor=${carriedDebtSeconds}">
             <h2>오늘 남은 독서 시간</h2>
             <p class="timer-display"
                :class="{ met: goalMet }"
                x-text="fmt(remainingNow)">00:00:00</p>
+            <!-- 밀린 부채 합산 표시(설정 ON)일 때만: 헤드라인에 더해진 '어제까지 밀린 빚'을 알려준다.
+                 이 빚은 측정으로 안 줄고(카운트다운이 여기서 멈춤) '빠뜨린 날 채우기'로만 갚는다. -->
+            <p class="timer-carry muted" th:if="${carriedDebtSeconds != null and carriedDebtSeconds > 0}"
+               th:text="'지난 밀린 ' + (${carriedDebtSeconds} / 60) + '분 포함'">지난 밀린 50분 포함</p>
 
             <p class="timer-sub" x-show="active" x-cloak>
                 이번 측정 경과 <span class="mono" x-text="fmt(elapsed)">00:00:00</span>
