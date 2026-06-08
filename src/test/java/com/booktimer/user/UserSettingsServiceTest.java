@@ -70,7 +70,7 @@ class UserSettingsServiceTest {
     void updateSettings_changesProfileAndTimer() {
         registrationService.register("set@booktimer.com", "rawpw1234", "독서가", SEOUL, Role.USER, today());
 
-        settingsService.updateSettings("set@booktimer.com", "새닉", "America/New_York", 7200L);
+        settingsService.updateSettings("set@booktimer.com", "새닉", "America/New_York", 7200L, true);
 
         User reloaded = userRepository.findByEmail("set@booktimer.com").orElseThrow();
         assertThat(reloaded.getNickname()).isEqualTo("새닉");
@@ -92,7 +92,7 @@ class UserSettingsServiceTest {
         long currentGoal = timerRepository.findByUser(user).orElseThrow().getDailyIncrementSeconds();
 
         // 닉네임만 바꾸고 목표는 현재값 그대로
-        settingsService.updateSettings("samegoal@booktimer.com", "닉만바꿈", SEOUL, currentGoal);
+        settingsService.updateSettings("samegoal@booktimer.com", "닉만바꿈", SEOUL, currentGoal, true);
 
         assertThat(goalChangeRepository.findByUserAndEffectiveDate(user, today())).isEmpty();
     }
@@ -103,7 +103,7 @@ class UserSettingsServiceTest {
         registrationService.register("badtz@booktimer.com", "rawpw1234", "독서가", SEOUL, Role.USER, today());
 
         assertThatThrownBy(() ->
-                settingsService.updateSettings("badtz@booktimer.com", "닉", "Mars/Phobos", 3600L))
+                settingsService.updateSettings("badtz@booktimer.com", "닉", "Mars/Phobos", 3600L, true))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -113,7 +113,7 @@ class UserSettingsServiceTest {
         registrationService.register("owner@booktimer.com", "rawpw1234", "이미쓰는닉", SEOUL, Role.USER, today());
         registrationService.register("changer@booktimer.com", "rawpw1234", "내닉", SEOUL, Role.USER, today());
 
-        settingsService.updateSettings("changer@booktimer.com", "이미쓰는닉", SEOUL, 3600L);
+        settingsService.updateSettings("changer@booktimer.com", "이미쓰는닉", SEOUL, 3600L, true);
 
         // 중복이어도 변경이 적용된다
         assertThat(userRepository.findByEmail("changer@booktimer.com").orElseThrow().getNickname())
@@ -125,10 +125,23 @@ class UserSettingsServiceTest {
     void updateSettings_keepingOwnNickname_allowed() {
         registrationService.register("keep@booktimer.com", "rawpw1234", "내닉", SEOUL, Role.USER, today());
 
-        settingsService.updateSettings("keep@booktimer.com", "내닉", "America/New_York", 7200L);
+        settingsService.updateSettings("keep@booktimer.com", "내닉", "America/New_York", 7200L, true);
 
         User reloaded = userRepository.findByEmail("keep@booktimer.com").orElseThrow();
         assertThat(reloaded.getNickname()).isEqualTo("내닉");
         assertThat(reloaded.getTimezone()).isEqualTo("America/New_York");
+    }
+
+    @Test
+    @DisplayName("updateSettings: 밀린 부채 합산 표시 토글(debtCarryover)을 저장한다")
+    void updateSettings_savesDebtCarryover() {
+        registrationService.register("carry@booktimer.com", "rawpw1234", "독서가", SEOUL, Role.USER, today());
+
+        // 기본 ON → OFF로 변경
+        settingsService.updateSettings("carry@booktimer.com", "닉", SEOUL, 3600L, false);
+
+        User reloaded = userRepository.findByEmail("carry@booktimer.com").orElseThrow();
+        ReadingTimer timer = timerRepository.findByUser(reloaded).orElseThrow();
+        assertThat(timer.isDebtCarryover()).isFalse();
     }
 }

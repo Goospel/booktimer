@@ -66,4 +66,23 @@ class ReadingTimerTest {
         assertThatThrownBy(() -> timer.updateSettings(-1L))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("기본값: 밀린 부채 합산 표시(debtCarryover)가 켜져 있다")
+    void debtCarryover_defaultsOn() {
+        ReadingTimer timer = ReadingTimer.startFor(sampleUser(), HOUR);
+
+        assertThat(timer.isDebtCarryover()).isTrue();
+    }
+
+    @Test
+    @DisplayName("updateSettings(목표, 토글): 밀린 부채 합산 표시를 끌 수 있다 (목표도 함께 적용)")
+    void updateSettings_togglesDebtCarryover() {
+        ReadingTimer timer = ReadingTimer.of(HOUR);
+
+        timer.updateSettings(2 * HOUR, false);
+
+        assertThat(timer.getDailyIncrementSeconds()).isEqualTo(2 * HOUR);
+        assertThat(timer.isDebtCarryover()).isFalse();
+    }
 }

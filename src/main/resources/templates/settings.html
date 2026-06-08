@@ -39,6 +39,13 @@
                 <span class="field-hint muted">매일 이만큼 읽는 게 목표예요. 최근 7일까지 빠뜨린 날을 채울 수 있어요.</span>
                 <span class="field-error" th:if="${#fields.hasErrors('incrementMinutes')}" th:errors="*{incrementMinutes}">목표 오류</span>
             </div>
+            <div class="field">
+                <label class="check-row" for="debtCarryover">
+                    <input type="checkbox" id="debtCarryover" th:field="*{debtCarryover}">
+                    <span>밀린 독서 시간을 타이머에 합쳐 표시</span>
+                </label>
+                <span class="field-hint muted">켜면 최근 7일 중 못 채운 시간이 오늘 타이머에 더해져 "갚을 시간"으로 쌓여 보여요. 끄면 오늘 몫만 보여요.</span>
+            </div>
             <button type="submit" class="btn-primary">저장</button>
         </form>
     </section>

@@ -7,6 +7,9 @@ import com.booktimer.quote.Quote;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.session.ReadingSessionService;
+import com.booktimer.timer.ReadingGoalChange;
+import com.booktimer.timer.ReadingGoalChangeRepository;
+import com.booktimer.timer.ReadingGoalService;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
@@ -82,6 +85,12 @@ class DashboardControllerTest {
     private UserRepository userRepository;
 
     @Autowired
+    private ReadingGoalService goalService;
+
+    @Autowired
+    private ReadingGoalChangeRepository goalChangeRepository;
+
+    @Autowired
     private Clock clock;
 
     private LocalDate today() {
@@ -91,11 +100,18 @@ class DashboardControllerTest {
     /**
      * 대시보드(게이트 통과)를 보려면 온보딩을 마친 사용자가 필요하다 — 등록 후 온보딩 완료 처리한다.
      * (온보딩 게이트 자체는 {@code dashboard_redirectsToOnboardingWhenNotOnboarded}가 검증한다.)
+     *
+     * <p>실제 온보딩 경로(OnboardingService)처럼 <b>오늘자 목표 baseline</b>도 남긴다 — 이게 없으면
+     * ReadingDebtService가 폴백 목표를 윈도우 7일 전체에 적용해, '안 읽은 갓 가입자'가 윈도우 내내
+     * 빚으로 잡힌다(부채 합산 ON 기본에서 헤드라인이 오늘 부채보다 커짐). baseline=오늘이면 어제 이전은
+     * '시작 전'으로 제외되어 갓 가입자의 헤드라인이 오늘 부채와 같아진다.
      */
     private User registerOnboarded(String email, String nickname, LocalDate startDate) {
         User user = registrationService.register(email, "rawpw1234", nickname, SEOUL, Role.USER, startDate);
         user.completeOnboarding();
-        return userRepository.save(user);
+        user = userRepository.save(user);
+        goalService.record(user, UserRegistrationService.DEFAULT_DAILY_INCREMENT_SECONDS);
+        return user;
     }
 
     @Test
@@ -183,6 +199,20 @@ class DashboardControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(not(containsString("이번 주 빠뜨린 날")))) // 섹션 이전됨
                 .andExpect(content().string(not(containsString("/sessions/manual")))); // '빠뜨린 기록' 버튼 제거
+    }
+
+    @Test
+    @DisplayName("GET /: 부채 합산 ON(기본) — 어제까지 밀린 빚을 헤드라인에 합산하고 floor(carriedDebtSeconds)를 싣는다")
+    void dashboard_debtCarryover_on_accumulatesWindowDebt() throws Exception {
+        User user = registerOnboarded("carryon@booktimer.com", "합산", today());
+        // baseline을 이틀 전으로 더 이르게 심어 어제·그제가 윈도우 안 '빠뜨린 날'이 되게 한다(아무 날도 안 읽음).
+        goalChangeRepository.save(ReadingGoalChange.of(user, today().minusDays(2), 3600L));
+
+        // 오늘 부채 3600 + (어제·그제) 빚 2×3600=7200 → 헤드라인 10800, floor(carriedDebtSeconds) 7200
+        mockMvc.perform(get("/").with(user("carryon@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("remainingSeconds", 3600L + 7200L))
+                .andExpect(model().attribute("carriedDebtSeconds", 7200L));
     }
 
     @Test
