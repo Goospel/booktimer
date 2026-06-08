@@ -747,6 +747,31 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 
 - [ ] 자세한 채널·방식·메시지는 **아직 미정** — 추후 구체화.
 
+### ⚠️ 홍보 전 선수과정 — 서버 용량 보강 (필수 게이트, 2026-06-08)
+
+> **Claude 지시(고정)**: 사용자가 "홍보글 써줘"라고 하면, **홍보글을 쓰기 전에 먼저 이 선수과정 체크리스트부터
+> 안내한다.** 서버가 트래픽을 못 버티면 홍보 성공이 곧 장애가 된다 — 글보다 인프라가 먼저다.
+
+**왜**: 현재 운영 스펙은 **단일 Fargate 태스크(desired=1, 0.5 vCPU/1GB) + db.t3.micro + HikariCP 기본 풀 10 +
+세션을 DB에 저장(Spring Session JDBC)** 구조다. SSR+DB 앱이라 **CPU보다 DB 커넥션 풀·세션 저장소·단일 인스턴스가
+먼저 막힌다.** 데이터 보관은 수천 명도 무난하나, **동시 접속이 몰리면(홍보로 한순간에 유입) 수백 명대부터 위험**.
+오토스케일링이 없어 자동으로 늘지도 않는다 — 한 태스크가 CPU 100% 치면 그대로 장애.
+
+**병목 순서**: ① 단일 태스크(desired=1, 단일 장애점·무확장) → ② 세션이 DB에 있어 매 요청 DB 추가 부하 →
+③ HikariCP 풀 10 → ④ db.t3.micro 버스트 크레딧 소진.
+
+**홍보글 쓰기 전 체크리스트** (효과 큰 순):
+- [ ] **ECS 오토스케일링 켜기** — desired 1 → min 2 / max 4, CPU 70% 타깃. 단일 장애점 제거 + 자동 확장. **최우선.**
+- [ ] **최소 desired=2 상시** — 한 대 죽어도 서비스 유지.
+- [ ] **세션 DB→Redis(ElastiCache) 외부화** 검토 — DB 부하 크게 감소(트래픽 적으면 인메모리도).
+- [ ] **부하 테스트로 실측** — `k6`/`hey`로 가입·로그인·대시보드·타이머 시나리오를 RPS 올려가며 때려
+      **latency가 꺾이는 RPS**를 숫자로 확보(추정→사실 전환).
+- [ ] (선택) RDS `db.t3.micro`→`db.t3.small` 한 단계, CloudWatch 알람(CPU·DB연결수·5xx) 사전 경보.
+
+> 인프라 스펙 근거: `deploy/task-definition.json`(cpu 512/mem 1024, desired 1), `application-prod.properties`
+> (Spring Session JDBC), `claude-docs/deploy-aws.md`(db.t3.micro). 최소한 **오토스케일링+desired=2**까지는
+> 홍보 전에 마치는 걸 권장.
+
 ---
 
 ## 🧹 기술 부채 / 후속 정리
@@ -883,7 +908,6 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 
 | 일자 | 내용 |
 |---|---|
-| 2026-06-08 | **자정·타임존 경계 플레이키 테스트 3건 고정 클락으로 결정적화**(#228 배포 차단 해소) — #228 머지 직후 CI가 `546 tests, 3 failed`로 **배포 skip**(robots.txt 미반영). 원인은 robots 변경과 무관 — `UserSettingsServiceTest`·`DashboardControllerTest`·`ReadingSessionControllerTest` 3개가 `@SpringBootTest`라 운영 `Clock.systemUTC()`(실시간)를 쓰는데, "오늘 부채/오늘 수동입력"을 `now` 기준으로 만들어 **자정 직후(06-08 00:0x KST)엔 `now−30분`이 전날로 넘어가** 단언이 깨짐(+ UserSettings는 tz를 NY로 바꿔 목표 이력 날짜가 SEOUL today()와 어긋나는 tz 경계도 겹침). 각 클래스에 nested `@TestConfiguration`으로 `@Primary Clock.fixed(2026-06-17T09:00:00Z)` 주입 — 18:00 KST=05:00 EDT라 SEOUL·NY 같은 날짜+자정 회피로 결정적. 운영 코드 무변경(테스트 결정성만). 전체 스위트 그린. 교훈: 실시간 시계 통합 테스트는 경계에서 플레이키 → 고정 클락(TimeConfig javadoc 지침), troubleshooting 후보. (PR #229) |
 | 2026-06-08 | **공개 소개(랜딩) 페이지 — AdSense 콘텐츠 심사 대비**(#227·#228 후속, 광고 승인 절차) — 심사는 콘텐츠 크롤링도 하는데 이 앱은 본문이 전부 로그인 뒤라 크롤러가 볼 게 거의 없어 "저가치 콘텐츠" 반려 위험이 컸다. 루트 `/`를 **익명이면 공개 소개 페이지(`landing.html`), 로그인이면 기존 대시보드**로 분기(`DashboardController`에 `principal==null` 가드) — Google이 크롤하는 루트 도메인에 "무엇을 하는 서비스인가"(소개·핵심 기능·동작 방식·CTA) 실본문을 노출. `SecurityConfig`에 `/` permitAll 추가하되 대시보드 데이터는 principal 있을 때만 로드돼 노출 0(보호 경로 default-deny 유지). 랜딩 전용 CSS(`app.css` `.landing-*`/`.btn-secondary`). 기존 `SecurityConfigTest`의 "보호 경로 미인증→/login" 프로브를 `/`(이제 공개)→`/books`로 교정. TDD Red→Green: `LandingPageTest`(익명 GET / → 200·view=landing·실본문·로그인/가입 링크; 변경 전엔 302 Red) + 전체 스위트 그린. 동의(CMP)는 Google CMP "3가지 선택" 선택(코드 변경 0, `adsbygoogle.js`가 자동 게재). 본문 §비즈니스 모델·디스플레이 광고 절 갱신. (PR #230) |
 | 2026-06-08 | **랜딩 '시작하기'에 Google 원탭 진입(OAuth) 추가**(#230 후속, UX) — 이메일 가입 폼보다 마찰이 적은 구글 진입을 랜딩 히어로에 노출. 구글 OAuth는 신규면 자동 가입(온보딩으로)이라 "무료로 시작하기"와 같은 '시작' 동선. 히어로 CTA를 로그인 카드와 동일한 세로 스택으로 재구성 — 무료로 시작하기(이메일) → "또는" 구분선 → `G Google로 시작하기`(`/oauth2/authorization/google`), 기존 로그인 OAuth 버튼 스타일(`.btn-oauth`/`.oauth-divider`) 재사용. 중복이던 히어로 "로그인" 버튼은 제거(하단 "이미 계정이 있나요? 로그인" 링크로 일원화) → 그에 쓰이던 `.btn-secondary`는 죽은 CSS라 삭제, `.landing-cta`는 row→column. TDD Red→Green: `LandingPageTest.landing_offersGoogleSignIn`(랜딩에 `/oauth2/authorization/google` 노출; 추가 전 Red) + 전체 스위트 그린. 본문 §디스플레이 광고 랜딩 절 갱신. (PR #231) |
 | 2026-06-08 | **갱신 이력 표를 plan.md → claude-docs/changelog.md로 분리**(문서 경량화) — plan.md의 48%(110KB/140행)이던 갱신 이력 표를 sibling changelog.md로 통째 이관(삭제 0·서사 100% 보존), plan.md엔 본문 + 최근 10개 발췌만 남겨 통독 가능 크기로(약 58K→30K 토큰). CLAUDE.md sweep 규칙(Git 워크플로 4·작업 종료 최신화·다중세션 공유문서)의 갱신 이력 추가 대상을 changelog.md로 갱신. 문서만. (PR #232) |
@@ -893,3 +917,4 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 | 2026-06-08 | **책BTI 서술 — 책 내용만으로 성향, 독서 습관 제외**(실사용 피드백) — "결과물에 독서 습관은 빼고, 무슨 책을 읽느냐로 이 사람의 성격·가치관·취향만". 원인: `buildPrompt`가 `ReadingProfile` 전체를 직렬화해 독서시간·완독률·세션·상태별 권수 같은 **습관 신호까지 [사실]로 주입** → 모델이 정독형/완독러 등을 씀. 처방 두 겹: ① 새 `bookFactsJson`로 **책 내용 신호만**(장르·저자·출간연대 분포 + 다양성 distinct 수 + 총권수) 선별 주입(습관 필드 제외) ② 프롬프트 지시를 "읽은 책이 드러내는 **성격·가치관·취향만** 다루고, 독서 습관(시간·완독률·정독/다독·권수)은 절대 언급 말라"로 교체. 핵심: 지시만으론 모델이 새기 쉬워 **입력 사실 자체를 제거(능력 제거) + 지시**를 함께 걸었다. TDD Red→Green: 습관 수치(99999/88888) 미노출 + 책 사실(장르·저자) 유지 단언 + 전체 그린. DB·Flyway 무변경. 본문 §책BTI 갱신. (PR #236) |
 | 2026-06-08 | **learning-notes N-061 추가**(#236 후속) — "LLM 출력에서 원치 않는 차원을 막으려면 지시보다 입력을 차단하라(능력 제거 > 지시 의존)". 책BTI에서 도출한 일반 원칙을 면접 설명 가능 수준으로 박음. 자매 N-060·N-041·N-050 cross-link. 문서만. (PR #237) |
 | 2026-06-08 | **책BTI 성향 입력을 완독 책만으로 + 책장 요약 정리**(실사용 피드백) — "읽고싶음·읽는중 말고 완독한 책만으로, 책장 요약에서 보유/완독·총 독서 시간은 빼 달라". `profileOf`가 전체 책을 집계해 안 읽은 책의 저자·장르까지 LLM으로 갔던 것을: ① `profileOf` 완독(FINISHED) 책만 집계 ② 콜드스타트 `finishedBooks()` 기준 ③ `bookFactsJson` 표본 키 `finishedBooks` ④ `ProfileSignature`에서 독서시간 제거(시간만 쌓여도 재분석되던 낭비 제거) ⑤ `personality.html`에서 보유/완독·총 독서 시간 행 삭제, 콜드스타트 문구 "완독한 책 N권". TDD Red→Green(완독-only 집계 2·완독 기준 콜드스타트 1·시간 무영향 1) + 전체 그린. DB·Flyway 무변경. 본문 §책BTI 갱신. (PR #238) |
+| 2026-06-08 | **홍보 전 선수과정(서버 용량 보강)을 plan.md에 게이트로 명문화**(사용자 요청) — "홍보로 한순간에 유입되면 서버가 터질까". 운영 스펙(Fargate desired=1·0.5vCPU/1GB, 세션 DB저장(Spring Session JDBC), RDS db.t3.micro, Hikari 풀 10)을 읽어 진단 — CPU보다 **DB 커넥션 풀·세션 저장소·단일 인스턴스**가 먼저 막힘(동시 유입 수백 명대부터 위험, 오토스케일링 없음). §홍보/마케팅에 「⚠️ 홍보 전 선수과정」 추가 — Claude 고정 지시(다음 "홍보글 써줘" 때 글보다 먼저 체크리스트 안내) + 병목 순서 + 체크리스트(오토스케일링→desired=2→세션 외부화→k6 부하테스트→RDS/알람). 문서만. (PR #239) |
