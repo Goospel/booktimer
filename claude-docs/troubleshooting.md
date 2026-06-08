@@ -641,7 +641,8 @@ Caused by: java.lang.IllegalStateException: Cannot create a session after the re
   }
   ```
 - **교훈**: "응답 커밋 후 세션 생성" 류 500은 **폼이 페이지 하단에만 있고 본문이 큰** 화면의 잠복 버그다. *첫 CSRF 폼이 어디서 렌더되는가*에 우연히 의존하던 것 — 폼을 옮기거나 지우면 드러난다. 근본 해결은 토큰 선확정. (버퍼 크기 키우기·폼을 앞에 두기는 미봉책.)
-- **개념**: learning-notes **N-044**(CSRF 숨김필드의 lazy 세션 생성 ↔ 응답 버퍼 커밋 타이밍).
+- **재발 트리거(#247)**: 코드량을 안 늘려도, 본문에 **표준 `<!-- … -->` 주석**이 길게 들어가면 같은 500이 난다 — Thymeleaf가 그 주석을 출력에 **그대로 실어**(T-036) 응답이 더 일찍 버퍼 commit 경계를 넘기기 때문. 개발용 주석은 **파서 수준 `<!--/* … */-->`**(출력에서 제거)로 쓰면 버퍼도 안 키우고 내부 주석 유출도 막는다.
+- **개념**: learning-notes **N-044**(CSRF 숨김필드의 lazy 세션 생성 ↔ 응답 버퍼 커밋 타이밍), **N-062**(같은 함정 — 관리자 홈 카드 추가가 트리거).
 
 ---
 
@@ -787,6 +788,28 @@ genConfig.putObject("thinkingConfig").put("thinkingBudget", 0); // 2.5-flash thi
 
 ---
 
+## T-041. Thymeleaf `#temporals.format(Instant, …)`는 서버 기본 타임존으로 찍는다 — 표시 시각은 뷰에서 유저 TZ로 변환
+
+**증상**: 책BTI 분석 카드의 "분석 시각"이 한국 사용자에게 **9시간 이르게** 표시됐다(실제 17:43이 08:43으로). 저장값은 정상, 화면 표기만 어긋남. 로컬·테스트(한국 TZ)에선 안 보이고 **프로덕션(UTC 컨테이너)에서만** 틀려 늦게 발견된다.
+
+**원인 — `Instant`는 타임존이 없어, 포맷터가 어딘가의 존을 빌려 쓴다**:
+- 시각을 `Instant`(절대 시점, TZ 무관)로 저장하는 건 옳다. 문제는 **표시**다.
+- 템플릿이 `#temporals.format(entry.generatedAt(), 'yyyy-MM-dd HH:mm')`로 `Instant`를 바로 찍으면 Thymeleaf가 **서버 JVM 기본 타임존**으로 변환한다. ECS 컨테이너는 보통 **UTC**라 한국 사용자에게 9시간 밀려 보인다.
+
+**해결 / 예방**:
+- **표시 변환을 뷰 모델로 끌어와 유저 TZ를 명시 적용**한다(템플릿의 암묵 변환 금지):
+  ```java
+  // PersonalityView — zone = ZoneId.of(user.getTimezone()) 주입
+  public String formatTime(Instant t) {
+      return (t == null) ? "" : TIME_FORMAT.format(t.atZone(zone));
+  }
+  ```
+  템플릿: `th:text="${view.formatTime(entry.generatedAt())}"`.
+- **교훈**: 저장은 `Instant`로, **표시는 반드시 "누구의 타임존이냐"를 정해 변환**한다(역할 분리). "로컬은 맞는데 운영만 N시간 틀림"은 거의 항상 *서버 기본 TZ로 Instant를 찍은* 신호 — 변환 지점에 유저 TZ가 있는지 본다.
+- **개념**: learning-notes **N-010**(절대 시점 ≠ 민간 날짜/시각, 변환엔 누구의 타임존이 필요). 테스트 쪽 자매 함정은 T-039(고정 클락). (PR #247)
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -829,3 +852,5 @@ genConfig.putObject("thinkingConfig").put("thinkingBudget", 0); // 2.5-flash thi
 | 2026-06-07 | T-038 (세션 타임아웃을 `server.servlet.session.timeout` 프로퍼티로 못 늘림 — Boot 4 + Spring Session JDBC에선 만료시간을 서블릿 컨테이너가 아니라 Spring Session 저장소가 들고 있어 프로퍼티가 안 닿음(30분 그대로, 테스트가 720H vs 30M로 포착) / 독서 타이머는 클라이언트(JS)에서만 돌아 읽는 동안 서버 요청 0 → 30분에 끊김(N-057) / 해결: `SessionRepositoryCustomizer<JdbcIndexedSessionRepository>`로 `setDefaultMaxInactiveInterval` 직접 + 쿠키 Max-Age는 `DefaultCookieSerializer.setCookieMaxAge`(기본 -1=세션 쿠키) / 검증 필수: `createSession().getMaxInactiveInterval()`·`Set-Cookie Max-Age` / T-014·T-021 "프로퍼티 무동작→명시 빈" 자매) |
 | 2026-06-08 | T-039 (실시간 시계 통합 테스트가 자정·tz 경계에서 플레이키 — `@SpringBootTest`가 운영 `Clock.systemUTC()`를 써서 `now` 기준 "오늘" 데이터가 자정 직후 전날로 넘어가거나(06-08 00:0x KST CI에서 3개 깨져 배포 skip) tz 변경 시 SEOUL today()와 어긋남 / 해결: 클래스별 nested `@TestConfiguration` `@Primary Clock.fixed(...)` — 한낮+대상 tz 모두 같은 날짜인 시각(예 09:00Z=18:00 KST=05:00 EDT) / 운영 코드 무변경, `TimeConfig` javadoc 지침) |
 | 2026-06-08 | T-040 (Gemini 2.5-flash가 HTTP 200인데 `parts[0].text` 빈 문자열 — thinking 기본 ON이라 `maxOutputTokens` 미설정 시 thinking이 출력 예산 소진 → 본문 빔(`finishReason=MAX_TOKENS`일 수도), 200이라 catch에 안 걸려 "키·네트워크 멀쩡한데 왜 비지"로 헤맴 / 해결: `generationConfig`에 `maxOutputTokens`=2048 + `thinkingConfig.thinkingBudget=0`(thinking 비활성), `buildRequestBody` 정적 단위테스트로 두 필드 단언 / "200=성공" 아니라 "쓸 본문이 왔나"로 봄(N-041), 호출자엔 stale 캐시 폴백 동반(N-060) / T-037 키 문제와 구분되는 별개 빈응답 원인) |
+| 2026-06-08 | T-033 보강 (#247 — 긴 표준 `<!-- -->` 주석이 출력에 실려(T-036) 본문을 키우면 같은 버퍼 commit/CSRF 500을 유발 → 개발 주석은 파서 수준 `<!--/* */-->`로) |
+| 2026-06-08 | T-041 (Thymeleaf `#temporals.format(Instant)`가 서버 기본 TZ로 찍음 → 한국 사용자에게 9시간 어긋남, 뷰 모델에서 유저 TZ로 `atZone` 변환 / N-010 개념) |
