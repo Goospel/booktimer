@@ -20,7 +20,14 @@
 
     <!-- 독서 잔디 (지난 1년) — GitHub 컨트리뷰션 그래프 스타일 -->
     <section class="card">
-        <h2>독서 잔디</h2>
+        <div class="grass-head">
+            <h2>독서 잔디</h2>
+            <span class="grass-streak" th:title="${graph.growthStage().label()}">
+                <span class="grass-streak-icon" th:text="${graph.growthStage().emoji()}">🌱</span>
+                <small class="grass-streak-days" th:if="${graph.currentStreak() > 0}"
+                       th:text="${graph.currentStreak()} + '일 연속'">3일 연속</small>
+            </span>
+        </div>
         <p class="grass-summary">
             지난 1년 동안 <strong th:text="${graph.activeDays()}">0</strong>일 독서 ·
             총 <strong th:text="${graph.totalSeconds() / 3600 + '시간 ' + (graph.totalSeconds() % 3600) / 60 + '분'}">0시간 0분</strong>

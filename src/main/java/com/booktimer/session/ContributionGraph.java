@@ -13,12 +13,19 @@ import java.util.List;
  * @param monthLabels 상단 월 라벨(열 인덱스 + 라벨)
  * @param totalSeconds 그래프 범위의 총 독서 시간(초)
  * @param activeDays  독서한 날 수(초 &gt; 0)
+ * @param currentStreak 오늘 기준 현재 연속 독서 일수(성장 잔디용). 끊기면 0.
  */
 public record ContributionGraph(
         List<List<ContributionDay>> weeks,
         List<MonthLabel> monthLabels,
         long totalSeconds,
-        int activeDays) {
+        int activeDays,
+        int currentStreak) {
+
+    /** 현재 연속 일수에 대응하는 성장 단계(땅/새싹/꽃/나무). 템플릿이 우측 상단 뱃지로 보여준다. */
+    public GrowthStage growthStage() {
+        return GrowthStage.of(currentStreak);
+    }
 
     /**
      * 상단 월 라벨 — 해당 월이 처음 등장하는 주 열 위에 표시.
