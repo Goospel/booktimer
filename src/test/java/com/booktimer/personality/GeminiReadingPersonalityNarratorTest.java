@@ -108,8 +108,8 @@ class GeminiReadingPersonalityNarratorTest {
     // ---- 프롬프트 그라운딩 ----
 
     @Test
-    @DisplayName("프롬프트: '주어진 사실만/지어내지 마라' 그라운딩 + 출력 JSON 형식 + 프로필 사실(장르)을 담는다")
-    void buildPrompt_groundsAndCarriesFacts() {
+    @DisplayName("프롬프트: '주어진 사실만/지어내지 마라' 그라운딩 + 출력 JSON 형식 + 책 내용 사실(장르·저자)을 담는다")
+    void buildPrompt_groundsAndCarriesBookFacts() {
         ReadingProfile profile = new ReadingProfile(5, 3, 1, 1, 0.6, 7200, 4, 1800,
                 1, List.of(new LabeledCount("김영하", 2)),
                 1, List.of(new LabeledCount("소설/시/희곡", 3)),
@@ -119,7 +119,29 @@ class GeminiReadingPersonalityNarratorTest {
 
         assertThat(prompt).contains("지어내지"); // 환각 억제 그라운딩
         assertThat(prompt).contains("narrative").contains("tags"); // 출력 형식 지시
-        assertThat(prompt).contains("소설/시/희곡"); // 집계된 사실이 프롬프트에 실림
+        assertThat(prompt).contains("소설/시/희곡"); // 무슨 책(장르) 사실이 프롬프트에 실림
+        assertThat(prompt).contains("김영하"); // 무슨 책(저자) 사실이 프롬프트에 실림
+    }
+
+    @Test
+    @DisplayName("프롬프트: '무슨 책을 읽느냐'로 성격·가치관·취향만 뽑게 하고, 독서 습관(시간·완독률 등)은 사실·지시 모두에서 뺀다")
+    void buildPrompt_excludesReadingHabits() {
+        // 습관 신호에 식별 가능한 distinct 값을 박아, 프롬프트에 새어나오면 잡히게 한다.
+        ReadingProfile profile = new ReadingProfile(5, 3, 1, 1, 0.6,
+                /*totalReadingSeconds*/ 99999, 4, /*avgSessionSeconds*/ 88888,
+                1, List.of(new LabeledCount("김영하", 2)),
+                1, List.of(new LabeledCount("소설/시/희곡", 3)),
+                List.of(new LabeledCount("2020", 4)));
+
+        String prompt = GeminiReadingPersonalityNarrator.buildPrompt(profile, objectMapper);
+
+        // (1) 습관 수치는 [사실]에서 빠진다 — 모델이 근거 삼을 거리 자체를 제거
+        assertThat(prompt).doesNotContain("99999"); // totalReadingSeconds
+        assertThat(prompt).doesNotContain("88888"); // avgSessionSeconds
+        assertThat(prompt).doesNotContain("finishedRatio").doesNotContain("avgSessionSeconds");
+        // (2) 지시도 책→내면으로 못 박고, 습관 언급 금지를 명시
+        assertThat(prompt).contains("성격").contains("가치관");
+        assertThat(prompt).contains("습관"); // "독서 습관은 언급하지 마라" 류 금지 지시
     }
 
     // ---- 요청 본문(이스케이프) ----
