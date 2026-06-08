@@ -111,10 +111,10 @@ class PersonalityControllerTest {
     }
 
     @Test
-    @DisplayName("GET /personality: 책이 임계 미만이면 COLD_START")
-    void get_coldStart_whenFewBooks() throws Exception {
+    @DisplayName("GET /personality: 완독 책이 0권(임계 미만)이면 COLD_START")
+    void get_coldStart_whenNoFinishedBooks() throws Exception {
         User u = register("cold@booktimer.com");
-        saveBooks(u, 3);
+        saveBooks(u, 0); // 완독 0권 — 임계(1) 미만
 
         MvcResult result = mockMvc.perform(get("/personality").with(user("cold@booktimer.com")))
                 .andExpect(status().isOk())

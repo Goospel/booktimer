@@ -127,15 +127,30 @@ class ReadingPersonalityServiceCacheTest {
     }
 
     @Test
-    @DisplayName("콜드스타트: 책이 임계 미만이면 LLM·캐시 없이 사실만 보류한다")
+    @DisplayName("완독 1권이면 (정확도 낮아도) 책BTI를 생성한다 — 임계=1, 책 쌓일수록 결과 변화의 재미")
+    void oneBook_generatesPersonality_notColdStart() {
+        User u = newUser("one@booktimer.com");
+        saveBooks(u, 1); // 완독 단 1권
+        narratorReturns("한 권으로 본 잠정 성향.");
+
+        ReadingPersonality result = service.analyzeCached(u, false);
+
+        assertThat(result.hasNarration()).isTrue();
+        assertThat(result.narration().narrative()).isEqualTo("한 권으로 본 잠정 성향.");
+        verify(narrator, times(1)).narrate(any());
+        assertThat(cacheRepository.findByUser(u)).isPresent();
+    }
+
+    @Test
+    @DisplayName("콜드스타트: 완독 책이 0권이면 LLM·캐시 없이 사실만 보류한다(임계=1 미만)")
     void coldStart_belowThreshold_noLlmNoCache() {
         User u = newUser("cold@booktimer.com");
-        saveBooks(u, 4); // 임계(5) 미만
+        saveBooks(u, 0); // 완독 0권 — 임계(1) 미만
 
         ReadingPersonality result = service.analyzeCached(u, false);
 
         assertThat(result.hasNarration()).isFalse();
-        assertThat(result.profile().totalBooks()).isEqualTo(4); // 사실은 있다
+        assertThat(result.profile().finishedBooks()).isEqualTo(0); // 보류지만 사실(완독 0)은 있다
         verify(narrator, never()).narrate(any());
         assertThat(cacheRepository.findByUser(u)).isEmpty();
     }
