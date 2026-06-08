@@ -12,9 +12,9 @@ import java.util.stream.Collectors;
  * <p>캐시된 성향 서술이 아직 유효한지 판단하는 키다. 같은 시그니처면 LLM을 다시 부르지 않고 캐시를 쓴다
  * (비용=호출 빈도를 바닥으로). 시그니처가 달라지면 책장이 의미있게 변한 것 → 재생성.
  *
- * <p>무엇을 "의미있는 변화"로 볼지가 핵심이다 — 권수·상태분포·저자/장르/연대 분포 같은 <b>구조</b>는 넣고,
- * 독서 시간은 <b>시간(hour) 버킷</b>으로 거칠게만 넣는다. 초 단위 raw를 넣으면 측정 세션마다 시그니처가
- * 바뀌어 매번 재생성(thrash)하므로, 누적 시간이 한 시간 단위로 의미있게 늘 때만 반영한다.
+ * <p>무엇을 "의미있는 변화"로 볼지가 핵심이다 — 완독 책의 권수·저자/장르/연대 분포 같은 <b>구조</b>만 넣는다.
+ * <b>독서 시간은 넣지 않는다</b>: 성향은 완독 책 내용에서만 뽑으므로(시간은 입력이 아님), 시간을 넣으면 책을
+ * 더 완독하지 않고 시간만 쌓여도 재생성돼 같은 결과를 다시 만드는 낭비가 된다.
  */
 public final class ProfileSignature {
 
@@ -38,7 +38,6 @@ public final class ProfileSignature {
                 .append(";distGenres=").append(p.distinctGenres())
                 .append(";genres=").append(labels(p.topGenres()))
                 .append(";decades=").append(labels(p.pubDecades()))
-                .append(";hours=").append(p.totalReadingSeconds() / 3600) // 시간 버킷(초 thrash 회피)
                 .toString();
     }
 

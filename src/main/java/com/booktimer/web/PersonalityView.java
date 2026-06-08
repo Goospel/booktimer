@@ -45,8 +45,8 @@ public record PersonalityView(State state, String narrative, List<String> tags,
             return new PersonalityView(State.READY, result.narration().narrative(),
                     result.narration().tags(), profile, coldStartMinBooks);
         }
-        // 서술 없음 — 책 부족이면 콜드스타트, 충분하면 LLM 실패(폴백)
-        State state = profile.totalBooks() < coldStartMinBooks ? State.COLD_START : State.FALLBACK;
+        // 서술 없음 — 완독 책 부족이면 콜드스타트, 충분하면 LLM 실패(폴백). 성향은 완독 책에서만 뽑으므로 완독 권수로 판정.
+        State state = profile.finishedBooks() < coldStartMinBooks ? State.COLD_START : State.FALLBACK;
         return new PersonalityView(state, null, List.of(), profile, coldStartMinBooks);
     }
 }
