@@ -25,6 +25,8 @@ import static org.mockito.Mockito.when;
  *
  * <p>서술 생성기(LLM 포트)는 {@code @MockitoBean}으로 가짜를 끼운다 — 외부 키·네트워크 없이 두 경로를 검증한다:
  * 서술이 나오면 사실+서술을, 못 나오면(비활성/실패) <b>사실만</b> 담은 폴백을 돌려줘야 한다.
+ *
+ * <p>책BTI는 <b>공개(PUBLIC)+완독 책만</b>으로 뽑히므로(공개/비공개 분기 폐지 2026-06-08) 픽스처 책은 공개로 만든다.
  */
 @SpringBootTest
 @Transactional
@@ -44,11 +46,18 @@ class ReadingPersonalityServiceTest {
         return userRepository.save(User.of(email, "$2a$10$abcdefghijklmnopqrstuv", "독자", "Asia/Seoul", Role.USER));
     }
 
+    /** 공개+완독 책 1권 적재(성향 입력 = 공개 책). */
+    private void savePublicFinished(User u, String title) {
+        Book b = Book.register(u, title, null, null, null, null, null, null, null, BookStatus.FINISHED);
+        b.makePublic();
+        bookRepository.save(b);
+    }
+
     @Test
     @DisplayName("분석: 서술이 나오면 사실(프로필) + 서술을 함께 담는다")
     void analyze_withNarration_combinesFactsAndNarration() {
         User u = newUser("narr@booktimer.com");
-        bookRepository.save(Book.register(u, "책A", null, null, null, null, null, null, null, BookStatus.FINISHED));
+        savePublicFinished(u, "책A");
         when(narrator.narrate(any())).thenReturn(
                 Optional.of(new PersonalityNarration("이 사람은 완독러다.", List.of("완독러"))));
 
@@ -64,7 +73,7 @@ class ReadingPersonalityServiceTest {
     @DisplayName("폴백: 서술 생성이 비면(비활성/실패) 사실만 담고 서술은 없다")
     void analyze_narratorEmpty_fallsBackToFactsOnly() {
         User u = newUser("fb@booktimer.com");
-        bookRepository.save(Book.register(u, "책A", null, null, null, null, null, null, null, BookStatus.FINISHED));
+        savePublicFinished(u, "책A");
         when(narrator.narrate(any())).thenReturn(Optional.empty());
 
         ReadingPersonality result = service.analyze(u);

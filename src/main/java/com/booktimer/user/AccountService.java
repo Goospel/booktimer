@@ -4,7 +4,6 @@ import com.booktimer.block.BlockRepository;
 import com.booktimer.book.BookRepository;
 import com.booktimer.feedback.FeedbackRepository;
 import com.booktimer.follow.FollowRepository;
-import com.booktimer.personality.PublicReadingPersonalityCacheRepository;
 import com.booktimer.personality.ReadingPersonalityCacheRepository;
 import com.booktimer.report.ReportRepository;
 import com.booktimer.session.ReadingSessionRepository;
@@ -34,7 +33,6 @@ public class AccountService {
     private final ReportRepository reportRepository;
     private final BookRepository bookRepository;
     private final ReadingPersonalityCacheRepository personalityCacheRepository;
-    private final PublicReadingPersonalityCacheRepository publicPersonalityCacheRepository;
     private final FeedbackRepository feedbackRepository;
     private final PasswordEncoder passwordEncoder;
 
@@ -46,7 +44,6 @@ public class AccountService {
                           ReportRepository reportRepository,
                           BookRepository bookRepository,
                           ReadingPersonalityCacheRepository personalityCacheRepository,
-                          PublicReadingPersonalityCacheRepository publicPersonalityCacheRepository,
                           FeedbackRepository feedbackRepository,
                           PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
@@ -57,7 +54,6 @@ public class AccountService {
         this.reportRepository = reportRepository;
         this.bookRepository = bookRepository;
         this.personalityCacheRepository = personalityCacheRepository;
-        this.publicPersonalityCacheRepository = publicPersonalityCacheRepository;
         this.feedbackRepository = feedbackRepository;
         this.passwordEncoder = passwordEncoder;
     }
@@ -137,8 +133,7 @@ public class AccountService {
         reportRepository.deleteByReporter(user);
         reportRepository.deleteByReported(user);
         bookRepository.deleteByUser(user);
-        personalityCacheRepository.deleteByUser(user);       // 본인용 책BTI 캐시도 user_id FK 참조 → 유저 전에 정리
-        publicPersonalityCacheRepository.deleteByUser(user); // 공개용 책BTI 캐시도 user_id FK 참조 → 유저 전에 정리
+        personalityCacheRepository.deleteByUser(user);       // 책BTI 캐시도 user_id FK 참조 → 유저 전에 정리
         feedbackRepository.deleteByAuthor(user);             // 문의도 author_id FK 참조 → 유저 전에 정리
         userRepository.delete(user);
     }

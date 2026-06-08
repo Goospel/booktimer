@@ -4,7 +4,7 @@ import com.booktimer.block.BlockRepository;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookVisibility;
 import com.booktimer.follow.FollowService;
-import com.booktimer.personality.PublicReadingPersonalityCacheRepository;
+import com.booktimer.personality.ReadingPersonalityCacheRepository;
 import com.booktimer.session.BookReadingStatsService;
 import com.booktimer.session.ReadingContributionService;
 import com.booktimer.user.Role;
@@ -34,7 +34,7 @@ public class ProfileService {
     private final ReadingContributionService contributionService;
     private final FollowService followService;
     private final BlockRepository blockRepository;
-    private final PublicReadingPersonalityCacheRepository publicPersonalityCacheRepository;
+    private final ReadingPersonalityCacheRepository personalityCacheRepository;
 
     public ProfileService(UserRepository userRepository,
                           BookRepository bookRepository,
@@ -42,14 +42,14 @@ public class ProfileService {
                           ReadingContributionService contributionService,
                           FollowService followService,
                           BlockRepository blockRepository,
-                          PublicReadingPersonalityCacheRepository publicPersonalityCacheRepository) {
+                          ReadingPersonalityCacheRepository personalityCacheRepository) {
         this.userRepository = userRepository;
         this.bookRepository = bookRepository;
         this.statsService = statsService;
         this.contributionService = contributionService;
         this.followService = followService;
         this.blockRepository = blockRepository;
-        this.publicPersonalityCacheRepository = publicPersonalityCacheRepository;
+        this.personalityCacheRepository = personalityCacheRepository;
     }
 
     /**
@@ -75,21 +75,19 @@ public class ProfileService {
                     followService.followingCount(target),
                     !self && followService.isFollowing(viewer, target),
                     self,
-                    publicPersonality(target));
+                    personalityNarrative(target));
         });
     }
 
     /**
-     * 책방에 노출할 공개 책BTI 서술 — 대상이 공개(opt-in)했고 공개 캐시가 있을 때만, 아니면 {@code null}.
+     * 책방에 노출할 책BTI 서술 — 캐시가 있으면 그 서술, 없으면(콜드스타트=공개 완독 책 부족) {@code null}이라 카드가 숨는다.
      *
-     * <p>여기선 캐시를 <b>읽기만</b> 한다 — 생성/갱신(LLM 호출)은 소유자 행동에서만 일어난다. 즉 방문자가 남의
-     * 프로필을 열어도 LLM이 돌지 않는다(비용 안전장치). 공개 안 한 사용자는 캐시가 있어도 노출하지 않는다(opt-in 게이트).
+     * <p>책BTI는 <b>공개 책으로만</b> 뽑혀 항상 노출되므로(공개/비공개 분기 폐지 2026-06-08) opt-in 게이트가 없다.
+     * 여기선 캐시를 <b>읽기만</b> 한다 — 생성/갱신(LLM 호출)은 소유자 행동(본인 페이지 방문·"다시 분석")에서만 일어난다.
+     * 즉 방문자가 남의 프로필을 열어도 LLM이 돌지 않는다(비용 안전장치).
      */
-    private String publicPersonality(User target) {
-        if (!target.isPersonalityPublic()) {
-            return null;
-        }
-        return publicPersonalityCacheRepository.findByUser(target)
+    private String personalityNarrative(User target) {
+        return personalityCacheRepository.findByUser(target)
                 .map(c -> c.getNarrative())
                 .orElse(null);
     }

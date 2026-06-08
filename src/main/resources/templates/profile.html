@@ -98,7 +98,7 @@
         </div>
     </section>
 
-    <!-- 책BTI(공개 책 기준) — 사용자가 공개(opt-in)했고 공개 캐시가 있을 때만. 없으면 섹션 자체가 안 뜬다. -->
+    <!-- 책BTI(공개 책 기준) — 캐시가 있을 때만 뜬다(없으면=공개 완독 책 부족 콜드스타트 → 카드 숨김). 항상 공개. -->
     <section class="card" th:if="${personality != null}">
         <h2>책BTI <span class="muted">· 독서 성향</span></h2>
         <p class="personality-narrative" th:text="${personality}">성향 서술</p>

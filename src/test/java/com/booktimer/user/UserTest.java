@@ -227,34 +227,56 @@ class UserTest {
         assertThat(user.isOnboarded()).isTrue();
     }
 
-    // --- personalityPublic: 책BTI 책방 노출 opt-in (기본 비노출) ---
+    // --- 책BTI "다시 분석" 일일 횟수 제한 (악의적 반복 클릭 → LLM 남용 방어) ---
+
+    private static final java.time.LocalDate D1 = java.time.LocalDate.of(2026, 6, 8);
+    private static final java.time.LocalDate D2 = java.time.LocalDate.of(2026, 6, 9);
 
     @Test
-    @DisplayName("새로 만든 사용자는 책BTI를 책방에 공개하지 않는다 (기본 false — opt-in)")
-    void of_personalityNotPublicByDefault() {
+    @DisplayName("tryConsumePersonalityRefresh: 같은 날 한도(3)까지 허용하고 4번째는 거부한다")
+    void tryConsumeRefresh_allowsUpToLimitThenDenies() {
         User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
 
-        assertThat(user.isPersonalityPublic()).isFalse();
+        assertThat(user.tryConsumePersonalityRefresh(D1)).isTrue();  // 1
+        assertThat(user.tryConsumePersonalityRefresh(D1)).isTrue();  // 2
+        assertThat(user.tryConsumePersonalityRefresh(D1)).isTrue();  // 3
+        assertThat(user.tryConsumePersonalityRefresh(D1)).isFalse(); // 4 — 한도 초과
+        assertThat(user.tryConsumePersonalityRefresh(D1)).isFalse(); // 반복 거부(상태 안정)
     }
 
     @Test
-    @DisplayName("새로 만든 소셜 사용자도 책BTI 비공개가 기본이다 (false)")
-    void ofOAuth_personalityNotPublicByDefault() {
-        User user = User.ofOAuth(EMAIL, NICK, TZ, Role.USER, AuthProvider.GOOGLE);
+    @DisplayName("tryConsumePersonalityRefresh: 날짜가 바뀌면 카운트가 리셋돼 다시 허용된다 (자정 경계·일일 이월)")
+    void tryConsumeRefresh_resetsOnNewDay() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+        user.tryConsumePersonalityRefresh(D1);
+        user.tryConsumePersonalityRefresh(D1);
+        user.tryConsumePersonalityRefresh(D1);
+        assertThat(user.tryConsumePersonalityRefresh(D1)).isFalse(); // D1 소진
 
-        assertThat(user.isPersonalityPublic()).isFalse();
+        // 다음 날 — 리셋되어 다시 3번 가능
+        assertThat(user.tryConsumePersonalityRefresh(D2)).isTrue();
+        assertThat(user.tryConsumePersonalityRefresh(D2)).isTrue();
+        assertThat(user.tryConsumePersonalityRefresh(D2)).isTrue();
+        assertThat(user.tryConsumePersonalityRefresh(D2)).isFalse();
     }
 
     @Test
-    @DisplayName("setPersonalityPublic: 켜고 끌 수 있다 (책방 노출 토글)")
-    void setPersonalityPublic_togglesBothWays() {
+    @DisplayName("remainingPersonalityRefreshes: 신규는 한도 전부, 소비할수록 줄고, 다음 날은 다시 가득 (상태 불변 읽기)")
+    void remainingRefreshes_reflectsConsumptionAndRollover() {
         User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
 
-        user.setPersonalityPublic(true);
-        assertThat(user.isPersonalityPublic()).isTrue();
+        assertThat(user.remainingPersonalityRefreshes(D1)).isEqualTo(User.DAILY_PERSONALITY_REFRESH_LIMIT);
+        // 읽기만으로는 줄지 않는다(부수효과 없음)
+        assertThat(user.remainingPersonalityRefreshes(D1)).isEqualTo(User.DAILY_PERSONALITY_REFRESH_LIMIT);
 
-        user.setPersonalityPublic(false);
-        assertThat(user.isPersonalityPublic()).isFalse();
+        user.tryConsumePersonalityRefresh(D1);
+        assertThat(user.remainingPersonalityRefreshes(D1)).isEqualTo(User.DAILY_PERSONALITY_REFRESH_LIMIT - 1);
+
+        user.tryConsumePersonalityRefresh(D1);
+        user.tryConsumePersonalityRefresh(D1);
+        assertThat(user.remainingPersonalityRefreshes(D1)).isZero(); // 다 씀
+
+        assertThat(user.remainingPersonalityRefreshes(D2)).isEqualTo(User.DAILY_PERSONALITY_REFRESH_LIMIT); // 다음 날 가득
     }
 
     // --- promoteToAdmin: 운영자(ADMIN) 승격 (멱등) ---
