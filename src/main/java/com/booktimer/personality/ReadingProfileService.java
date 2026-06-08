@@ -3,6 +3,7 @@ package com.booktimer.personality;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
+import com.booktimer.book.BookVisibility;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.user.User;
@@ -10,6 +11,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 독서 프로필 read 서비스 — 한 사용자의 책장/세션을 읽어 {@link ReadingProfileAggregator}로 사실을 집계한다(책BTI Phase 2).
@@ -44,5 +47,26 @@ public class ReadingProfileService {
                 .toList();
         List<ReadingSession> sessions = sessionRepository.findByUser(user);
         return ReadingProfileAggregator.aggregate(finishedBooks, sessions);
+    }
+
+    /**
+     * <b>책방 노출용</b> 공개 프로필을 집계한다 — <b>공개(PUBLIC)+완독 책만</b>(reading-personality-design §7).
+     *
+     * <p>본인용 {@link #profileOf}와 달리 비공개 책을 입력에서 뺀다 — 안 그러면 비공개로 둔 책에서 나온 장르·저자
+     * 취향이 책방에 간접 누출된다. <b>세션도 공개 책의 것만</b> 넘긴다: {@link ReadingProfileAggregator}는 넘긴
+     * 세션을 책과 대조하지 않고 통째로 합산하므로, 여기서 거르지 않으면 비공개 책 독서시간(정독↔다독 신호)이 샌다.
+     */
+    public ReadingProfile publicProfileOf(User user) {
+        List<Book> publicFinished = bookRepository
+                .findByUserAndVisibilityOrderByCreatedAtDesc(user, BookVisibility.PUBLIC).stream()
+                .filter(b -> b.getStatus() == BookStatus.FINISHED)
+                .toList();
+        Set<Long> publicBookIds = publicFinished.stream()
+                .map(Book::getId)
+                .collect(Collectors.toSet());
+        List<ReadingSession> publicSessions = sessionRepository.findByUser(user).stream()
+                .filter(s -> s.getBook() != null && publicBookIds.contains(s.getBook().getId()))
+                .toList();
+        return ReadingProfileAggregator.aggregate(publicFinished, publicSessions);
     }
 }

@@ -227,6 +227,36 @@ class UserTest {
         assertThat(user.isOnboarded()).isTrue();
     }
 
+    // --- personalityPublic: 책BTI 책방 노출 opt-in (기본 비노출) ---
+
+    @Test
+    @DisplayName("새로 만든 사용자는 책BTI를 책방에 공개하지 않는다 (기본 false — opt-in)")
+    void of_personalityNotPublicByDefault() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        assertThat(user.isPersonalityPublic()).isFalse();
+    }
+
+    @Test
+    @DisplayName("새로 만든 소셜 사용자도 책BTI 비공개가 기본이다 (false)")
+    void ofOAuth_personalityNotPublicByDefault() {
+        User user = User.ofOAuth(EMAIL, NICK, TZ, Role.USER, AuthProvider.GOOGLE);
+
+        assertThat(user.isPersonalityPublic()).isFalse();
+    }
+
+    @Test
+    @DisplayName("setPersonalityPublic: 켜고 끌 수 있다 (책방 노출 토글)")
+    void setPersonalityPublic_togglesBothWays() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        user.setPersonalityPublic(true);
+        assertThat(user.isPersonalityPublic()).isTrue();
+
+        user.setPersonalityPublic(false);
+        assertThat(user.isPersonalityPublic()).isFalse();
+    }
+
     // --- promoteToAdmin: 운영자(ADMIN) 승격 (멱등) ---
 
     @Test

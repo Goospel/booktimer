@@ -4,10 +4,12 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.personality.PersonalityNarration;
+import com.booktimer.personality.PublicReadingPersonalityCacheRepository;
 import com.booktimer.personality.ReadingPersonalityNarrator;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
+import com.booktimer.user.UserRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,6 +60,10 @@ class PersonalityControllerTest {
     private BookRepository bookRepository;
     @Autowired
     private Clock clock;
+    @Autowired
+    private UserRepository userRepository;
+    @Autowired
+    private PublicReadingPersonalityCacheRepository publicCacheRepository;
 
     @MockitoBean
     private ReadingPersonalityNarrator narrator;
@@ -75,6 +81,19 @@ class PersonalityControllerTest {
             bookRepository.save(Book.register(u, "책" + i, "저자" + i, null, null, null, null,
                     null, null, BookStatus.FINISHED));
         }
+    }
+
+    private void savePublicBooks(User u, int n) {
+        for (int i = 0; i < n; i++) {
+            Book b = Book.register(u, "공개책" + i, "저자" + i, null, null, null, null,
+                    null, null, BookStatus.FINISHED);
+            b.makePublic();
+            bookRepository.save(b);
+        }
+    }
+
+    private User reload(String email) {
+        return userRepository.findByEmail(email).orElseThrow();
     }
 
     private PersonalityView viewOf(MvcResult result) {
@@ -154,6 +173,54 @@ class PersonalityControllerTest {
         saveBooks(u, 5);
 
         mockMvc.perform(post("/personality/refresh").with(user("nocsrf@booktimer.com")))
+                .andExpect(status().isForbidden());
+    }
+
+    // --- POST /personality/visibility: 책방 노출 opt-in 토글 ---
+
+    @Test
+    @DisplayName("POST /personality/visibility public=true: 플래그를 켜고, 공개 책BTI를 생성한 뒤 /personality로 리다이렉트")
+    void visibility_turnOn_setsFlagAndGeneratesPublicCache() throws Exception {
+        User u = register("expose@booktimer.com");
+        savePublicBooks(u, 5); // 공개+완독 5권 → 공개 책BTI 생성 가능(콜드스타트 아님)
+        when(narrator.narrate(any())).thenReturn(
+                Optional.of(new PersonalityNarration("공개 책 기준 서술.", List.of("태그"))));
+
+        mockMvc.perform(post("/personality/visibility")
+                        .param("public", "true")
+                        .with(user("expose@booktimer.com")).with(csrf()))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/personality"));
+
+        assertThat(reload("expose@booktimer.com").isPersonalityPublic()).isTrue();
+        // 켤 때 공개 캐시를 즉시 생성해 둔다(방문자 조회는 읽기 전용이므로 소유자가 미리 만들어야)
+        assertThat(publicCacheRepository.findByUser(u)).isPresent();
+    }
+
+    @Test
+    @DisplayName("POST /personality/visibility public=false: 플래그를 끈다(노출 중단)")
+    void visibility_turnOff_clearsFlag() throws Exception {
+        User u = register("hide@booktimer.com");
+        u.setPersonalityPublic(true);
+        userRepository.save(u);
+
+        mockMvc.perform(post("/personality/visibility")
+                        .param("public", "false")
+                        .with(user("hide@booktimer.com")).with(csrf()))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/personality"));
+
+        assertThat(reload("hide@booktimer.com").isPersonalityPublic()).isFalse();
+    }
+
+    @Test
+    @DisplayName("POST /personality/visibility: CSRF 없으면 403 (상태 변경 보호)")
+    void visibility_withoutCsrf_forbidden() throws Exception {
+        register("novis@booktimer.com");
+
+        mockMvc.perform(post("/personality/visibility")
+                        .param("public", "true")
+                        .with(user("novis@booktimer.com")))
                 .andExpect(status().isForbidden());
     }
 }

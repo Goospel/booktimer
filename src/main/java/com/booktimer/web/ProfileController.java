@@ -65,6 +65,7 @@ public class ProfileController {
         model.addAttribute("followingCount", profile.followingCount());
         model.addAttribute("following", profile.following());
         model.addAttribute("self", profile.self());
+        model.addAttribute("personality", profile.personality()); // 공개 책BTI 서술(opt-in+캐시 있을 때만, 아니면 null)
         model.addAttribute("reportReasons", ReportReason.values());
         return "profile";
     }
