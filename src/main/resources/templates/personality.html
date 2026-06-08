@@ -59,10 +59,6 @@
     <!-- 성향 히스토리 (정상) — 과거 분석을 최대 3개까지 보존하고, 하나를 대표로 고른다 -->
     <section class="card" th:if="${view.isReady()}">
         <h2>내 독서 성향</h2>
-        <p class="status-line muted">
-            '다시 분석'을 돌릴 때마다 과거 결과가 <strong>최대 3개</strong>까지 남아요. 마음에 드는 하나를
-            <strong>⭐ 대표</strong>로 고르면 그게 공개 책방에 노출돼요.
-        </p>
 
         <div th:each="entry : ${view.entries()}" class="personality-entry"
              th:classappend="${entry.selected()} ? ' personality-entry-selected' : ''">
