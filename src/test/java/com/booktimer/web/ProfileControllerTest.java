@@ -330,8 +330,8 @@ class ProfileControllerTest {
     }
 
     @Test
-    @DisplayName("GET /u/{loginId}: 책BTI 캐시가 없으면(공개 완독 책 부족=콜드스타트) 성향은 비어 있어 카드가 숨는다")
-    void profile_noPersonalityCache_hidesCard() throws Exception {
+    @DisplayName("GET /u/{loginId}: 책BTI 캐시가 없으면(공개 완독 책 부족=콜드스타트) 성향 모델값이 비어 책BTI 탭은 안내문만 뜬다")
+    void profile_noPersonalityCache_emptyNarrative() throws Exception {
         newUser("viewer@booktimer.com", "viewer", "뷰어");
         newUser("owner@booktimer.com", "openking", "공개왕");
         // 캐시 없음 — 방문자 조회는 읽기 전용이라 생성하지 않는다(LLM 미트리거)

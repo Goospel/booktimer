@@ -98,57 +98,71 @@
         </div>
     </section>
 
-    <!-- 책BTI(공개 책 기준) — 캐시가 있을 때만 뜬다(없으면=공개 완독 책 부족 콜드스타트 → 카드 숨김). 항상 공개. -->
-    <section class="card" th:if="${personality != null}">
-        <h2>책BTI <span class="muted">· 독서 성향</span></h2>
-        <p class="personality-narrative" th:text="${personality}">성향 서술</p>
-        <p class="muted personality-note">
-            <span th:text="${self} ? '내 공개 책 기준으로 분석했어요.' : '이 사람이 공개한 책 기준이에요.'">공개 책 기준</span>
-            MBTI처럼 가볍게 즐겨 주세요.
-        </p>
+    <!-- 책BTI + 공개 책장 — 한 카드에서 탭으로 전환(독서 기록 카드와 동일 패턴: JS 없이 라디오 :checked + 형제 선택자).
+         두 데이터 모두 서버가 미리 렌더하고 탭으로 보이기만 전환한다.
+         기본 탭은 동적: 성향이 있으면 책BTI(헤드라인) 먼저, 콜드스타트(공개 완독 책 부족 → personality==null)면
+         빈 책BTI 대신 공개 책장을 먼저 띄운다 — 빈 탭 착지 방지. -->
+    <section class="card record-card">
+        <input type="radio" name="profiletab" id="tab-bti" class="tab-radio" th:checked="${personality != null}">
+        <label for="tab-bti" class="record-tab">책BTI</label>
+        <input type="radio" name="profiletab" id="tab-shelf" class="tab-radio" th:checked="${personality == null}">
+        <label for="tab-shelf" class="record-tab">공개 책장</label>
+
+        <!-- 바디 ①: 책BTI(공개 책 기준). 캐시 없으면 콜드스타트 안내문(독서 기록 카드의 빈 상태와 동일 방식). 항상 공개. -->
+        <div class="tab-panel panel-bti">
+            <div th:if="${personality != null}">
+                <p class="personality-narrative" th:text="${personality}">성향 서술</p>
+                <p class="muted personality-note">
+                    <span th:text="${self} ? '내 공개 책 기준으로 분석했어요.' : '이 사람이 공개한 책 기준이에요.'">공개 책 기준</span>
+                    MBTI처럼 가볍게 즐겨 주세요.
+                </p>
+            </div>
+            <p class="status-line" th:if="${personality == null}"
+               th:text="${self}
+                   ? '아직 공개 완독 책이 부족해 책BTI가 분석되지 않았어요. 공개 완독 책이 쌓이면 자동으로 분석돼요.'
+                   : '이 사람은 아직 책BTI가 없어요. 공개 완독 책이 쌓이면 분석돼요.'">책BTI 안내</p>
+        </div>
+
+        <!-- 바디 ②: 공개 책장(PUBLIC 책만) -->
+        <div class="tab-panel panel-shelf">
+            <!-- 상태 필터 칩 — 부합하는 공개 책만 표시(서버사이드 ?status=). 내 책장(/books)과 동일 패턴. -->
+            <nav class="shelf-filter">
+                <a th:href="@{/u/{n}(n=${loginId})}" th:classappend="${shelfFilter == null} ? 'active'">전체</a>
+                <a th:each="s : ${statuses}"
+                   th:href="@{/u/{n}(n=${loginId}, status=${s})}"
+                   th:classappend="${s == shelfFilter} ? 'active'"
+                   th:text="${s.label}">상태</a>
+            </nav>
+
+            <p th:if="${books.isEmpty() and shelfFilter == null}" class="status-line">아직 공개한 책이 없습니다.</p>
+            <p th:if="${books.isEmpty() and shelfFilter != null}" class="status-line">이 상태의 공개 책이 없습니다.</p>
+            <ul class="book-list shelf-scroll" th:unless="${books.isEmpty()}">
+                <li class="book-row" th:each="b : ${books}">
+                    <img class="book-cover" th:if="${b.coverUrl}" th:src="${b.coverUrl}" alt="" loading="lazy" referrerpolicy="no-referrer">
+                    <div class="book-meta">
+                        <span class="book-title" th:text="${b.title}">제목</span>
+                        <span class="book-author" th:if="${b.author}" th:text="${b.author}">저자</span>
+                        <span class="book-status-badge" th:text="${b.status.label}">상태</span>
+                        <span class="book-time mono" th:with="secs=${bookTimes.get(b.id)}"
+                              th:if="${secs != null and secs > 0}"
+                              th:text="'⏱ ' + ${secs / 3600 + '시간 ' + (secs % 3600) / 60 + '분'}">⏱ 0시간 0분</span>
+                    </div>
+                    <!-- 남의 책방에서 바로 구매 — 구매링크 있는 공개책만. 내 책장으로 되돌아가 다시 찾는 수고 제거.
+                         클릭은 책 주인 카운트에 집계(/u/{loginId}/books/{id}/buy).
+                         본인 책방(self)에는 노출 안 함 — 내 책은 이미 내 것이라 구매 버튼이 의미 없다. -->
+                    <div class="book-actions" th:if="${!#strings.isEmpty(b.purchaseLink) and !self}">
+                        <a th:href="@{/u/{n}/books/{id}/buy(n=${loginId}, id=${b.id})}"
+                           target="_blank" rel="noopener nofollow" class="btn-ghost">구매</a>
+                    </div>
+                </li>
+            </ul>
+
+            <!-- 제휴 안내문은 구매 버튼이 실제로 뜨는 남의 책방에서만 — 본인 책방(self)엔 버튼이 없어 안내문도 숨긴다. -->
+            <p class="affiliate-note" th:if="${!books.isEmpty() and !self}">
+                ※ "구매" 링크는 제휴(알라딘) 링크로, 구매 시 일부 수수료를 받을 수 있습니다.
+            </p>
+        </div>
     </section>
-
-    <!-- 공개 책장 (PUBLIC 책만) -->
-    <section class="card">
-        <h2>공개 책장</h2>
-
-        <!-- 상태 필터 칩 — 부합하는 공개 책만 표시(서버사이드 ?status=). 내 책장(/books)과 동일 패턴. -->
-        <nav class="shelf-filter">
-            <a th:href="@{/u/{n}(n=${loginId})}" th:classappend="${shelfFilter == null} ? 'active'">전체</a>
-            <a th:each="s : ${statuses}"
-               th:href="@{/u/{n}(n=${loginId}, status=${s})}"
-               th:classappend="${s == shelfFilter} ? 'active'"
-               th:text="${s.label}">상태</a>
-        </nav>
-
-        <p th:if="${books.isEmpty() and shelfFilter == null}" class="status-line">아직 공개한 책이 없습니다.</p>
-        <p th:if="${books.isEmpty() and shelfFilter != null}" class="status-line">이 상태의 공개 책이 없습니다.</p>
-        <ul class="book-list shelf-scroll" th:unless="${books.isEmpty()}">
-            <li class="book-row" th:each="b : ${books}">
-                <img class="book-cover" th:if="${b.coverUrl}" th:src="${b.coverUrl}" alt="" loading="lazy" referrerpolicy="no-referrer">
-                <div class="book-meta">
-                    <span class="book-title" th:text="${b.title}">제목</span>
-                    <span class="book-author" th:if="${b.author}" th:text="${b.author}">저자</span>
-                    <span class="book-status-badge" th:text="${b.status.label}">상태</span>
-                    <span class="book-time mono" th:with="secs=${bookTimes.get(b.id)}"
-                          th:if="${secs != null and secs > 0}"
-                          th:text="'⏱ ' + ${secs / 3600 + '시간 ' + (secs % 3600) / 60 + '분'}">⏱ 0시간 0분</span>
-                </div>
-                <!-- 남의 책방에서 바로 구매 — 구매링크 있는 공개책만. 내 책장으로 되돌아가 다시 찾는 수고 제거.
-                     클릭은 책 주인 카운트에 집계(/u/{loginId}/books/{id}/buy).
-                     본인 책방(self)에는 노출 안 함 — 내 책은 이미 내 것이라 구매 버튼이 의미 없다. -->
-                <div class="book-actions" th:if="${!#strings.isEmpty(b.purchaseLink) and !self}">
-                    <a th:href="@{/u/{n}/books/{id}/buy(n=${loginId}, id=${b.id})}"
-                       target="_blank" rel="noopener nofollow" class="btn-ghost">구매</a>
-                </div>
-            </li>
-        </ul>
-    </section>
-
-    <!-- 제휴 안내문은 구매 버튼이 실제로 뜨는 남의 책방에서만 — 본인 책방(self)엔 버튼이 없어 안내문도 숨긴다. -->
-    <p class="affiliate-note" th:if="${!books.isEmpty() and !self}">
-        ※ "구매" 링크는 제휴(알라딘) 링크로, 구매 시 일부 수수료를 받을 수 있습니다.
-    </p>
 
     <!-- 광고 (하단, 게시자 ID 설정 시에만) -->
     <div th:replace="~{ads :: unit}"></div>
