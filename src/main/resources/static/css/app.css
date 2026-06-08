@@ -637,6 +637,12 @@ a.book-title:hover { text-decoration: underline; }
 
 .affiliate-note { font-size: .8rem; color: var(--muted); text-align: center; margin: 16px 0 4px; }
 
+/* 프로필 헤더 카드 — 책방명·@핸들·팔로우 카운트를 한 박스로 묶는다(페이지 카드 스택과 통일).
+   카드 패딩(24px)이 바깥 여백을 담당하므로 내부 요소의 큰 마진은 제거하고 간격만 다시 잡는다. */
+.profile-card .greeting { margin: 0; }
+.profile-card > .muted { margin: 2px 0 0; }
+.profile-card .profile-follow { margin: 14px 0 0; }
+
 /* 프로필 — 팔로우 카운트 + 버튼 (관계는 카운트만 노출, SNS §7.3) */
 .profile-follow { display: flex; align-items: center; gap: 16px; margin: 0 0 16px; flex-wrap: wrap; }
 .profile-follow .follow-count { font-size: .9rem; color: var(--muted); text-decoration: none; }
