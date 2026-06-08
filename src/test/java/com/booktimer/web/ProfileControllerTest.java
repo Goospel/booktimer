@@ -311,10 +311,12 @@ class ProfileControllerTest {
 
     // --- 책BTI 책방 노출 (공개 책 기반 단일 캐시, 항상 공개 — opt-in 없음, 캐시 읽기 전용) ---
 
-    /** 대상 유저의 책BTI 캐시를 직접 적재한다(컨트롤러 조회는 캐시를 읽기만 하므로 LLM 무관). */
+    /** 대상 유저의 책BTI <b>대표</b> 분석을 직접 적재한다(책방 조회는 대표를 읽기만 하므로 LLM 무관). */
     private void savePersonalityCache(User u, String narrative) {
-        personalityCacheRepository.save(ReadingPersonalityCache.create(
-                u, narrative, "태그", "sig", Instant.parse("2026-06-08T00:00:00Z")));
+        ReadingPersonalityCache cache = ReadingPersonalityCache.create(
+                u, narrative, "태그", "sig", Instant.parse("2026-06-08T00:00:00Z"));
+        cache.select(); // 책방엔 대표(selected) 서술만 실린다
+        personalityCacheRepository.save(cache);
     }
 
     @Test
