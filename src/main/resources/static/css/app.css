@@ -742,7 +742,9 @@ a.book-title:hover { text-decoration: underline; }
 }
 .tab-panel { display: none; }
 #tab-records:checked ~ .panel-records,
-#tab-missed:checked ~ .panel-missed { display: block; clear: both; padding-top: 18px; }
+#tab-missed:checked ~ .panel-missed,
+#tab-bti:checked ~ .panel-bti,
+#tab-shelf:checked ~ .panel-shelf { display: block; clear: both; padding-top: 18px; }
 .panel-missed .muted { margin: 0 0 4px; font-size: .85rem; }
 
 /* --- 광고 (AdSense) — 부가 화면 하단에 1개. 콘텐츠와 떨어뜨려 비침습적으로. --- */
