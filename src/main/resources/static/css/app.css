@@ -145,6 +145,12 @@ body {
 .status-line { margin: 0 0 14px; color: var(--muted); }
 .status-line .mono { color: var(--text); font-weight: 600; }
 
+/* "다시 분석" 버튼 안에 같이 보이는 오늘 남은 횟수 — 작고 옅게(버튼 라벨 보조) */
+.refresh-count { margin-left: 8px; font-weight: 400; font-size: .82em; opacity: .8; }
+
+/* 책BTI 공개 안내문 — '내 독서 성향' 서술 바로 밑에 작은 안내 톤. 서술과 구분되게 옅은 윗선. */
+.personality-public-note { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--border); font-size: .88rem; }
+
 /* 타이머와 한 카드로 합쳐진 측정 컨트롤 — 큰 숫자 바로 아래 답답하지 않게 위 여백을 둔다 */
 .timer-controls { margin-top: 18px; }
 
