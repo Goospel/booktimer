@@ -27,8 +27,12 @@ import java.util.Optional;
 @Transactional(readOnly = true)
 public class ReadingPersonalityService {
 
-    /** 콜드스타트 임계 — <b>(공개) 완독 책</b>이 이 미만이면 신호가 부족해 분석을 보류한다(reading-personality-design §6, 잠정 5권). */
-    public static final int COLD_START_MIN_BOOKS = 5;
+    /**
+     * 콜드스타트 임계 — <b>(공개) 완독 책</b>이 이 미만이면 분석을 보류한다(reading-personality-design §6).
+     * <p>1권으로 설정(2026-06-08): 정확도는 낮아도 "어떤 결과라도 보여주는 재미" + "책을 쌓을수록 결과가
+     * 바뀌는 재미"를 우선(사용자 결정). 완독 0권만 보류한다.
+     */
+    public static final int COLD_START_MIN_BOOKS = 1;
 
     /** 태그를 한 컬럼에 이어 붙일 때 쓰는 구분자(개행) — 태그 안에 잘 안 나오는 문자. */
     private static final String TAG_DELIMITER = "\n";
