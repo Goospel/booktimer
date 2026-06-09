@@ -920,7 +920,6 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 
 | 일자 | 내용 |
 |---|---|
-| 2026-06-09 | **책장 「책방 공개」 토글 시 스크롤 점프 제거 — htmx 부분 swap 적용** — htmx HX-Request 분기로 `books :: visToggle` 조각만 교체, 비-htmx 폴백 유지. CSS·DB·Flyway 무변경. TDD Red→Green 4테스트. (PR #263) |
 | 2026-06-09 | **책BTI 분석 카드 — 세로 스택 → 가로 캐러셀(CSS scroll-snap)** — 분석 카드 가로 스와이프, 대표 첫 칸. `PersonalityView.displayEntries()` 추가(`entries()` 불변). 캐러셀 CSS → app.css. TDD Red→Green 3. (PR #265) |
 | 2026-06-08 | **프로필 헤더를 한 카드로 묶기**(실사용 UX 정리) — 책방(`/u/{loginId}`) 상단 책방명·@핸들·팔로워/팔로잉 3요소가 각각 독립 블록이라 "둥둥 떠다닌다"는 피드백. 원인은 나머지(잔디·책BTI)가 전부 `.card`인데 **헤더만 비카드**라 붕 떠 보인 것. 세 요소를 `<div class="card profile-card">`로 감싸 카드 스택과 통일, `app.css`에 `.profile-card` 내부 여백 정돈 3줄(카드 패딩이 바깥 여백 담당 → `.greeting`·@핸들·`.profile-follow` 큰 마진 제거·간격 재설정). 신고·잔디는 박스 밖 유지. 순수 템플릿+CSS, 로직·DB 무변경 → 게이트 스킵, UI/CSS 브리틀이라 단위 테스트 비대상. (PR #254) |
 | 2026-06-08 | **성장 잔디 — 연속 독서 일수에 따라 자라는 식물 뱃지**(유희성 기능) — 잔디 컨셉 연장: 연속으로 잔디를 심을수록 독서 잔디 카드 우측 상단 식물이 **🟫땅→🌱새싹→🌷꽃→🌳나무**로 자란다(사다리 넓게: 0 / 1~3 / 4~13 / 14+). **연속**=오늘부터 거꾸로 읽은 날(초>0) 이어진 일수(목표 무관·문턱 낮게), **오늘 유예**(오늘 미독이면 어제부터 — 자정 리셋 방지), 끊기면 땅으로. 빌더가 이미 가진 `secondsByDate`+`today`로 추가 쿼리 없이 계산: `ContributionGraphBuilder.currentStreak()` + `ContributionGraph.currentStreak` 필드·`growthStage()` 파생 + 신규 enum `GrowthStage`(이모지·라벨·임계 한 곳, 추후 SVG 교체 쉽게). 대시보드·히스토리·프로필 잔디 헤더에 `.grass-head` 뱃지(책상세 per-book 잔디는 제외). DB·Flyway 무변경, 생성처 빌더 1줄뿐이라 회귀 위험 낮음. TDD Red→Green: streak 9경계+GrowthStage 5경계(스텁 RED→구현 GREEN)+전체 그린. (PR #255) |
@@ -930,6 +929,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 | 2026-06-09 | **CLAUDE.md — 계획 md 핸드오프(계획↔구현 세션 분리) 규칙 추가** — 계획=강모델/고effort, 구현=약모델/저effort를 다른 세션에 배정하는 작업방식을 명시화. 큰 작업 한정으로 계획 세션이 `claude-docs/plans/<날짜>-<요약>.md` 생성→구현 세션이 읽고 TDD. 트리거·md 수명(plan.md와 구분)·드리프트 규칙(어긋나면 멈추고 보고)·통제력↔마찰 트레이드오프 명시. 「계획 우선」 §에 삽입. 문서만(CLAUDE.md). (PR #260) |
 | 2026-06-09 | **`.gitignore` — 계획 핸드오프 md 디렉토리(`claude-docs/plans/`) 무시** — PR #260 후속. 임시 계획 md를 추적 안 함(완료 후 삭제/PR 흡수, 커밋 부담 0). (PR #261) |
 | 2026-06-09 | **대시보드 헤드라인 아래 '지난 밀린 N분 포함' 보조문구 제거** — `dashboard.html` `<p class="timer-carry">` + 주석 삭제, `app.css` `.timer-carry` 규칙 삭제. `data-floor`·`carriedDebtSeconds` 모델·JS floor 유지(합산 동작 보존). 템플릿+CSS만. (PR #262) |
+| 2026-06-09 | **책BTI 캐러셀 2차 — 중앙+양옆 엿보기 & 데스크탑 마우스 드래그** — #265 캐러셀을 중앙 정렬+엿보기(`scroll-snap-align:center`, 카드 80%, 첫/끝 카드 margin 10%)와 데스크탑 마우스 드래그(외부 `personality.js`, `pointerType==='mouse'`만)로 개선. 6px 임계+capture click 흡수로 '대표 선택' 버튼 보호. 발견: 기존 `scroll-behavior:smooth`가 드래그 `scrollLeft` 대입을 애니메이션화→드래그 중 `auto` 토글로 1:1 보정. CSS=app.css·JS=외부(T-033 원칙), 서버·DB·테스트 무변경. (PR #267) |
 
 
 
