@@ -107,12 +107,6 @@ body {
 
 .timer-display.met { color: var(--ok); }
 
-/* 밀린 부채 합산 표시 ON일 때 헤드라인 아래 '지난 밀린 N분 포함' 보조 문구(.muted와 함께). */
-.timer-carry {
-    margin: 6px 0 0;
-    font-size: .9rem;
-}
-
 /* 설정의 체크박스 행 — 라벨 텍스트와 체크박스를 가로로 정렬. */
 .check-row {
     display: flex;
