@@ -715,6 +715,17 @@ a.book-title:hover { text-decoration: underline; }
 .follow-popularity { font-size: .78rem; color: var(--accent); font-weight: 600; text-decoration: none; cursor: pointer; }
 .follow-popularity:hover { text-decoration: underline; }
 
+/* 검색 결과 중 이미 내 책장에 있는 책 표시(중복 추가 방지). followPopularity와 같은 메타 줄의 인포 배지지만,
+   사회적 신호(accent)와 구분되게 소유 상태는 중립(muted) 톤. */
+.shelf-owned-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .2rem;
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
 /* 인기 카운트 drill-down — "이 책 읽는 내 팔로우" 버킷 제목 */
 .reader-bucket { font-size: .85rem; color: var(--muted); margin: 1rem 0 .4rem; text-align: left; }
 

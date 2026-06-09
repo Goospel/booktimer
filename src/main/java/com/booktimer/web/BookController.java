@@ -29,6 +29,9 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import java.security.Principal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 내 책장 — 책 검색(알라딘)·등록·상태 변경·삭제.
@@ -83,6 +86,14 @@ public class BookController {
         model.addAttribute("loginId", user.getLoginId()); // "내 책방"(/u/{loginId}) 링크용 — 공개 토글이 책방에 반영됨을 안내
         model.addAttribute("books", shelfBooks);
         model.addAttribute("shelfFilter", shelfFilter); // 필터 칩 활성 표시·빈 메시지 분기
+
+        // 검색 결과 중 이미 내 책장에 있는 책 표시(중복 추가 방지·UX). 상태 필터(shelfBooks)와 무관하게
+        // 내 책 전체(myBooks)의 isbn 집합으로 소유 판정 — 필터가 '읽는중'이어도 '읽고싶음'으로 가진 책을 소유로 본다.
+        Set<String> myShelfIsbns = myBooks.stream()
+                .map(Book::getIsbn13)
+                .filter(Objects::nonNull)        // 수동 등록(isbn 없음)은 소유 키가 없어 제외 — null이 집합에 새지 않게
+                .collect(Collectors.toSet());
+        model.addAttribute("myShelfIsbns", myShelfIsbns);
         model.addAttribute("bookTimes", statsService.totalSecondsByBook(user)); // 책 id → 누적 초
         model.addAttribute("statuses", BookStatus.values());
         model.addAttribute("searchEnabled", bookService.searchEnabled());

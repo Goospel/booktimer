@@ -23,6 +23,9 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -109,6 +112,39 @@ class BookControllerTest {
                     assertThat(popularity.get(isbn).readCount()).isEqualTo(1); // 팔로이 1명 읽음
                     assertThat(popularity.get(isbn).wantCount()).isEqualTo(0);
                 });
+    }
+
+    @Test
+    @DisplayName("GET /books: 내 책장의 책 isbn이 myShelfIsbns에 담긴다(검색 결과 '이미 있음' 배지 시드)")
+    void books_exposesOwnedIsbns() throws Exception {
+        User me = newUser("owner@booktimer.com");
+        bookRepository.save(Book.register(me,
+                "클린 코드", null, "9788966260959", null, null, null, BookStatus.WANT_TO_READ));
+        mockMvc.perform(get("/books").with(user("owner@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("myShelfIsbns", hasItem("9788966260959")));
+    }
+
+    @Test
+    @DisplayName("GET /books: isbn 없는 수동 책은 myShelfIsbns에 null로 새지 않는다")
+    void books_excludesNullIsbn() throws Exception {
+        User me = newUser("manual@booktimer.com");
+        bookRepository.save(Book.register(me,
+                "직접 추가", null, null, null, null, null, BookStatus.READING)); // isbn null
+        mockMvc.perform(get("/books").with(user("manual@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("myShelfIsbns", not(hasItem(nullValue()))));
+    }
+
+    @Test
+    @DisplayName("GET /books?status=READING: 다른 상태로 가진 책의 isbn도 myShelfIsbns에 포함(소유는 필터 무관)")
+    void books_ownedIsbns_ignoreStatusFilter() throws Exception {
+        User me = newUser("filter@booktimer.com");
+        bookRepository.save(Book.register(me,
+                "원하는 책", null, "9788900000077", null, null, null, BookStatus.WANT_TO_READ));
+        mockMvc.perform(get("/books").param("status", "READING").with(user("filter@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("myShelfIsbns", hasItem("9788900000077")));
     }
 
     @Test
