@@ -920,7 +920,6 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 
 | 일자 | 내용 |
 |---|---|
-| 2026-06-09 | **plan.md 백로그 — 다국어(i18n) Accept-Language 항목 기록** — 영어권 확장 시점 검토용(우선순위 낮음·기록만). `Accept-Language` 협상(브라우저 언어설정 기반, IP/지역 아님)·Spring `AcceptHeaderLocaleResolver`(헤더 읽기는 공짜, 진짜 일은 한글 하드코딩 문구 추출=messages 번들 0 확인)·실무 함정 3종(수동 토글 병행·SEO는 URL 분리+hreflang·동적 데이터 미번역). 사용자 질문에서 출발한 백로그 기록, 문서만. (PR #258) |
 | 2026-06-09 | **plan.md 운영 후속 — AdSense 크롤러 로그인 정보(로그인 뒤 페이지 광고 품질) 기록** — 광고가 로그인 뒤 화면(대시보드·`/history`·`/books`)에 있어 크롤러가 로그인 뒤를 못 보면 맥락 광고 매칭이 약해짐 → 콘솔에 크롤러 로그인 정보 등록 권장. 심사·접근성은 공개 랜딩(#230)+robots `Allow:/`+permitAll로 이미 충족, 이건 *게재 품질* 후속(체크리스트 3번). 애드센스 체크리스트 점검(코드 무해 확인)에서 출발, §광고 「남은 외부 작업」 아래 한 항목. 문서만. (PR #259) |
 | 2026-06-09 | **CLAUDE.md — 계획 md 핸드오프(계획↔구현 세션 분리) 규칙 추가** — 계획=강모델/고effort, 구현=약모델/저effort를 다른 세션에 배정하는 작업방식을 명시화. 큰 작업 한정으로 계획 세션이 `claude-docs/plans/<날짜>-<요약>.md` 생성→구현 세션이 읽고 TDD. 트리거·md 수명(plan.md와 구분)·드리프트 규칙(어긋나면 멈추고 보고)·통제력↔마찰 트레이드오프 명시. 「계획 우선」 §에 삽입. 문서만(CLAUDE.md). (PR #260) |
 | 2026-06-09 | **`.gitignore` — 계획 핸드오프 md 디렉토리(`claude-docs/plans/`) 무시** — PR #260 후속. 임시 계획 md를 추적 안 함(완료 후 삭제/PR 흡수, 커밋 부담 0). (PR #261) |
@@ -930,6 +929,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 | 2026-06-09 | **책BTI 캐러셀 데스크탑 내비 교체 — 마우스 드래그 → 좌우 화살표 버튼**(#267 후속) — 드래그가 "어색"하다는 피드백 → 드래그 제거 + 오버레이 좌우 화살표(‹ ›). 엿보기 슬라이드 CSS(#267)는 무변경. `personality.js` 전면 교체(버튼 `scrollBy({left:±step})`, step=카드폭+gap=다음 카드 중앙; `behavior` 생략→reduced-motion 자동), `personality.html` 트랙을 `.personality-carousel-wrap`로 감싸 버튼 2개 추가, `app.css` grab 블록 제거+버튼 CSS(끝 dim·단일 `.nav-hidden`·`pointer:coarse` 숨김). 드래그/클릭 충돌 보호 로직 원천 소멸. 서버·DB·JUnit 0(목업 수동 검증). (PR #269) |
 | 2026-06-09 | **learning-notes N-066 추가 — `scrollBy` `behavior` 생략 시 CSS `scroll-behavior` 따름** — #269 sweep 후보(사용자 판정: 박기). `behavior` 안 적으면 CSS `scroll-behavior`를 따라 reduced-motion을 JS 분기 없이 자동 존중(`'auto'`=기본=생략은 "즉시"가 아니라 "CSS 따름"; 즉시는 `'instant'`). N-065 ④의 반대면. 문서만. (PR #270) |
 | 2026-06-09 | **책장 필터 클릭 시 스크롤 맨 위 점프 제거 — 내 책장·공개 책방 필터 htmx 부분 swap** — 상태 필터 칩이 `<a href>` 풀 리로드라 클릭마다 페이지 스크롤이 맨 위로 리셋되던 문제. #263 토글의 htmx 부분 swap 패턴 확장: 필터 칩+책 목록을 `th:fragment="shelfPanel"`(`#shelf-panel`)로 묶고 두 컨트롤러에 `HX-Request` 분기(htmx면 조각만). 필터 `<a>`에 `hx-get`+공통 `hx-target/hx-swap=outerHTML/hx-push-url`(`<nav>` 호이스트)→책 목록만 교체, 스크롤 불변·URL 갱신. no-JS면 href 풀 리로드 폴백. profile.html `<head>`에 htmx CDN 직접 추가. 부수효과: 공개 책방 탭 라디오 안 다시 그려 "필터 누르면 책BTI로 튕김"도 소멸. 로직·book-row·CSS·DB 무변경. TDD Red→Green: htmx 분기+풀 뷰 회귀 4테스트. (PR #271) |
+| 2026-06-09 | **프론트엔드 디자인 워크플로 + 템플릿 데이터 계약 문서화** — 입구 미감 이탈을 막는 디자인 트랙 시작 전, 백엔드/디자인 두 세션을 충돌 없이 병렬로 굴리는 법을 못 박음. `frontend-design-workflow.md`(SSR 단일 app.css 현실 / 정적 샌드박스 vs 워크트리 / 4단계: 진단→CSS 토큰 먼저→목업→포팅 / 소유권 분할·공유 계약 2개·충돌 회피) + `template-data-contract.md`(백→디자인 핸드오프; landing=데이터 0 정적 확정, 나머지 스텁) 신설. 코드·DB 무관, 문서만. 다음: 랜딩 디자인 진입. (PR #272) |
 
 
 
