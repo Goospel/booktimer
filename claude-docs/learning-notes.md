@@ -69,6 +69,7 @@
 - [N-063. 덮어쓰는 1행 캐시를 N행 히스토리로 바꿀 땐 읽기 경로와 생성 경로를 분리하라 — 부수효과가 유한·가시화되면 트리거를 암묵→명시로](#n-063-덮어쓰는-1행-캐시를-n행-히스토리로-바꿀-땐-읽기-경로와-생성-경로를-분리하라--부수효과가-유한가시화되면-트리거를-암묵명시로)
 - [N-064. "느리다"는 추측한 자원이 아니라 실측으로 — 메트릭은 평균·최대·포화를 구분해 읽고, 한가하면 증설이 답이 아니다](#n-064-느리다는-추측한-자원이-아니라-실측으로--메트릭은-평균최대포화를-구분해-읽고-한가하면-증설이-답이-아니다)
 - [N-065. 중앙 정렬 scroll-snap 캐러셀의 4가지 클라이언트 함정 — 끝 카드 중앙은 margin, 데스크탑은 드래그, smooth-scroll이 scrollLeft 대입을 애니메이션화](#n-065-중앙-정렬-scroll-snap-캐러셀의-4가지-클라이언트-함정--끝-카드-중앙은-margin-데스크탑은-드래그-smooth-scroll이-scrollleft-대입을-애니메이션화)
+- [N-066. `scrollBy`의 `behavior`를 생략하면 CSS `scroll-behavior`를 따른다 — reduced-motion을 JS 미디어쿼리 없이 자동 존중](#n-066-scrollby의-behavior를-생략하면-css-scroll-behavior를-따른다--reduced-motion을-js-미디어쿼리-없이-자동-존중)
 
 ---
 
@@ -3118,6 +3119,60 @@ ECS **서비스 → 지표** 탭의 실측이 추측을 뒤집었다:
 - **T-042** — 같은 smooth-scroll 함정의 재발 방지 절차(드래그가 손을 안 따라옴 → `scrollBehavior` 토글).
 - **N-016 · N-030** — 암묵 불변식을 명시 구조로(여기선 "GET/표현은 안 바꾼다"와 결이 같은, 능력 자체를 제거하는 발상).
 - 응답 버퍼/인라인 금지 맥락(이 캐러셀의 CSS는 app.css·JS는 외부 파일) — T-033 계열.
+- **N-066** — 같은 캐러셀의 후속(#269): N-065가 추가한 **드래그**가 "어색하다"는 피드백으로 **좌우 화살표 버튼**으로 교체되며 나온 `scrollBy` 거동 노트. N-065 ②의 "드래그(또는 화살표)" 중 *화살표* 쪽을 실제 채택한 결과.
+
+---
+
+## N-066. `scrollBy`의 `behavior`를 생략하면 CSS `scroll-behavior`를 따른다 — reduced-motion을 JS 미디어쿼리 없이 자동 존중
+
+**한 줄 요약**: `el.scrollBy({left: x})`처럼 `behavior`를 **명시하지 않으면** 그 스크롤은 요소의 **CSS `scroll-behavior`** 값을 따른다(기본 `auto`, 캐러셀처럼 `smooth`면 smooth). 그래서 CSS 쪽에 `@media (prefers-reduced-motion: reduce) { scroll-behavior: auto }`만 걸어두면 **버튼 스크롤도 reduced-motion에서 자동으로 즉시 점프**가 된다 — JS에서 `matchMedia('(prefers-reduced-motion)')`를 따로 분기할 필요가 없다.
+
+### 배경 — 드래그를 버린 자리에 화살표 버튼
+
+N-065의 데스크탑 마우스 드래그가 "매우 어색하다"는 피드백으로 #269에서 **좌우 화살표 버튼**으로 교체됐다. 버튼은 한 칸씩 넘기므로 `track.scrollBy({ left: ±step })` 한 줄이면 되는데, 여기서 "애니메이션을 smooth로 줄까? reduced-motion 사용자는 어쩌지?"가 문제가 된다.
+
+### 핵심 — `behavior`의 기본값은 `'auto'`가 아니라 "CSS를 따름"
+
+`ScrollToOptions.behavior`의 기본값은 `'auto'`인데, 이 `'auto'`의 의미가 헷갈리는 지점이다:
+
+- `behavior`를 **생략**(또는 `'auto'`) → 스펙상 그 스크롤은 대상 요소의 **computed `scroll-behavior`** 를 사용한다. CSS가 `smooth`면 smooth로, `auto`면 즉시 점프.
+- `behavior: 'smooth'` / `behavior: 'instant'` → CSS를 **무시하고** 그 값으로 강제.
+
+캐러셀 컨테이너엔 이미 (탄력 스냅용으로) `scroll-behavior: smooth`가 걸려 있고, 그 옆에:
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  .personality-carousel { scroll-behavior: auto; }   /* 모션 줄이기 → 즉시 점프 */
+}
+```
+
+가 함께 있다. 따라서 버튼 핸들러를 **`behavior` 없이** 쓰면:
+
+```js
+prev.addEventListener('click', () => track.scrollBy({ left: -step() }));
+next.addEventListener('click', () => track.scrollBy({ left:  step() }));
+```
+
+- 일반 사용자: CSS `smooth` → 부드럽게 한 칸.
+- reduced-motion 사용자: 미디어쿼리가 CSS를 `auto`로 → **같은 코드가 즉시 점프**.
+
+JS에서 미디어쿼리를 읽어 `behavior`를 분기(`matchMedia(...).matches ? 'auto' : 'smooth'`)할 필요가 없다. 접근성 설정을 **CSS 한 곳**에서 관장하고 JS는 그 결정을 물려받는다.
+
+### 일반 원칙 (면접에서 본인 표현으로)
+
+> "프로그램적 스크롤(`scrollTo`/`scrollBy`)에서 `behavior`를 명시하면 CSS를 덮어쓰지만, **생략하면 요소의 CSS `scroll-behavior`를 따른다.** 그래서 모션 여부 같은 접근성 결정을 CSS 미디어쿼리 한 곳에 두고 JS는 `behavior`를 안 적는 게, JS에서 `prefers-reduced-motion`을 분기하는 것보다 단순하고 일관된다 — 관심사가 한 곳에 모이고 JS·CSS가 안 엇갈린다."
+
+### Q&A 대비
+
+- **Q. `behavior: 'auto'`면 항상 즉시 점프 아닌가?** → 아니다. `'auto'`(=기본=생략)는 "즉시"가 아니라 **"CSS `scroll-behavior`를 따름"** 이다. 즉시를 강제하려면 `behavior: 'instant'`를 써야 한다(`'auto'`와 `'instant'`는 다르다).
+- **Q. 그럼 N-065 ④의 'smooth가 `scrollLeft` 대입을 애니메이션화해 문제'와 모순 아닌가?** → 같은 사실(CSS smooth가 프로그램적 스크롤에 적용됨)의 양면이다. 드래그는 매 프레임 `scrollLeft=N` *직접 대입*으로 1:1 추적이 목표라 smooth가 **방해** → 끌 때만 `auto`로 꺼야 했다. 버튼은 한 번에 한 칸 이동이라 smooth가 **바람직** → 그대로 둔다. 둘 다 "CSS가 프로그램적 스크롤을 지배한다"는 같은 규칙에서 나온 반대 처방.
+- **Q. 왜 굳이 CSS에 맡기나, JS에서 분기하면 안 되나?** → 된다. 다만 모션 정책이 CSS(`scroll-behavior` + 미디어쿼리)와 JS(`behavior` 분기) 두 곳으로 갈리면 한쪽만 고쳐 어긋날 위험이 생긴다. 생략은 그 분기 자체를 없애 단일 출처로 만든다(능력/판단을 한 곳에).
+
+### 관련
+
+- **N-065** — 같은 캐러셀의 ④번 함정(드래그 1:1 추적에선 smooth가 방해). 이 노트는 그 반대 방향(버튼엔 smooth가 이득, 생략으로 물려받기).
+- **N-010** — 접근성/환경 결정을 한 출처에서 관장(Clock 주입과 결이 같은 "분기를 한 곳에").
+- 인라인 금지·외부 파일 맥락 — T-033 계열.
 
 ---
 
@@ -3190,4 +3245,5 @@ ECS **서비스 → 지표** 탭의 실측이 추측을 뒤집었다:
 | 2026-06-08 | N-062 (CSRF 토큰의 지연 세션 생성 × 응답 버퍼 commit — "Cannot create a session after the response has been committed" / `admin.html`에 카드 한 장 추가했더니 무관한 `AdminControllerTest` 3개가 렌더 중 `IllegalStateException`으로 터짐 / 3박자가 겹쳐야: ①Spring CSRF 토큰은 lazy — `<form method=post>` 렌더 시 `_csrf` 주입하려 토큰 처음 읽을 때 `HttpSessionCsrfTokenRepository`가 세션 생성 ②응답은 출력 버퍼 넘으면 commit돼 이후 세션 쿠키 설정 불가(`MockHttpServletResponse` 기본 4096B, 운영 톰캣은 ~8KB라 더 늦게/안 터짐) ③첫 CSRF 폼이 commit 경계 뒤로 밀리면 터짐 — 내 카드가 첫 폼을 4096B 밖으로 밀어냄 / 운영 멀쩡+테스트만 빨감 이유: 운영 admin은 로그인=세션 이미 있어 *생성* 불요, 테스트 `user(...)` PostProcessor는 SecurityContext만 심고 백킹 세션 없어 렌더 중 지연 생성 강제 → "운영 멀쩡+테스트 빨감+페이지 키운 직후"가 지문 / 처방: `<head>`에 `<meta name=_csrf th:content=${_csrf.token}>`로 토큰 선해석=세션 페이지 최상단 생성, 폼 위치 무관해져 구조적 소멸(버퍼 키우기·폼 위치 고정은 암묵 불변식 미봉책) / 세션/쿠키는 응답 헤더라 commit 전 확정 필요 N-031, 암묵 불변식→명시 선행 N-016·N-030, PR #245) |
 | 2026-06-08 | N-063 (덮어쓰는 1행 캐시를 N행 히스토리로 바꿀 땐 읽기 경로와 생성 경로를 분리하라 — 부수효과가 유한·가시화되면 트리거를 암묵→명시로 / 책BTI를 "1행/유저 덮어쓰기 캐시"에서 "최대 3개 히스토리+대표"로 옮기며 발견: 기존 GET 경로가 입력 시그니처 바뀌면 *페이지 로드만으로* 조용히 재생성·덮어썼는데, 1행일 땐 무해(덮어쓸 게 하나, 시점 안 보임)했던 게 N행+상한에선 독 — 방문만으로 사용자가 비교하려 아껴둔 후보가 예상치 못하게 교체됨 / 그래서 사용자도 "'다시 분석' 버튼에서만 쌓이게" 명시 / 처방: `analyzeCached(force)` 한 메서드를 `currentPersonality`(GET=읽기만, 절대 생성·교체 X, 빈 히스토리 부트스트랩 1개만 예외)와 `reanalyze`(버튼=여기서만 추가·교체)로 분리 — 읽기 경로에서 쓰기 *능력 자체*를 제거(N-050 결) / 불리언 force 플래그는 호출부 의도가 흐려 실수로 쓰기 경로 탐, 이름 다른 두 진입점이 "GET은 안 바꾼다"를 구조로 보장 / 일반: 생성·교체 같은 가시적·유한 부수효과는 암묵 트리거(page load)에서 명시 트리거(버튼)로 / 실패 시 stale 유지 N-060, PR #246) |
 | 2026-06-09 | N-065 (중앙 정렬 scroll-snap 캐러셀의 4가지 클라이언트 함정 — ①끝 카드 중앙은 컨테이너 `padding-inline`이 아니라 첫/끝 카드 `margin`으로(`flex-basis %`가 content-box 기준이라 패딩이 카드 폭 이중 축소) ②캐러셀 넘기기는 100% 클라이언트 — 모바일 터치는 공짜, 데스크탑 마우스는 스크롤바 숨기면 수단 0이라 드래그/화살표 별도 ③드래그는 6px 임계+capture 단계 click 1회 흡수로 카드 안 버튼 보호(`pointerType==='mouse'`만 가로채 모바일 무손상) ④핵심: `scroll-behavior:smooth` 컨테이너는 `scrollLeft` 직접 대입까지 애니메이션화(CSSOM 스펙)+`scroll-snap mandatory`가 진행 중 위치 되당김 → 드래그가 손을 1:1로 못 따라옴, 드래그 중 `scrollBehavior='auto'` 토글·놓을 때 복원으로 즉시추적+탄력스냅 둘 다 / 표현(CSS/JS)뿐이라 JUnit 0·preview 목업 수동검증 / 재발 절차 T-042, 능력 제거 발상 N-016·N-030, 인라인 금지 T-033, PR #267) |
+| 2026-06-09 | N-066 (`scrollBy`의 `behavior`를 생략하면 CSS `scroll-behavior`를 따른다 → reduced-motion을 JS 미디어쿼리 없이 자동 존중 / `'auto'`(=기본=생략)는 "즉시"가 아니라 "CSS를 따름", 즉시는 `'instant'`로 강제 / 모션 정책을 CSS 미디어쿼리 한 곳에 두고 JS는 `behavior` 안 적어 단일 출처 — N-065 ④(드래그 1:1엔 smooth가 방해)의 반대면(버튼엔 smooth가 이득), 같은 "CSS가 프로그램적 스크롤 지배" 규칙의 양면 / N-065 드래그가 #269에서 화살표 버튼으로 교체되며 나옴, PR #270) |
 | 2026-06-08 | N-064 ("느리다"는 추측한 자원이 아니라 실측으로 — 메트릭은 평균·최대·포화를 구분해 읽고 한가하면 증설이 답 아님 / 기능 늘며 체감 지연→Dockerfile에 JVM 힙 옵션 없어 1GB의 기본 25%≈256MB만 힙=GC 압박일 거라 1순위 추측했으나 **실측이 반증**: 메모리 ~38% 평탄(OOM 0)·CPU 평균 0~5% / 눈에 띈 CPU 최대 100% 스파이크는 평균과 분리해 보면 간헐 작업 — @Scheduled 부재+메모리 V자(태스크 교체)와 시각 일치+그날 다수 배포 → 배포 워밍업(Spring+Flyway+JIT)이 0.5vCPU 잠깐 점유 = 정상, 과부하 아님 / 자원 한가=증설 무효, 남은 용의자는 latency 축: 콜드스타트(JIT 워밍업)·0.5vCPU 단건 절대속도(평균0%=동시성 여유지 단건 빠름 아님)·세션 매요청 DB왕복+t3.micro I/O / 교훈 ①Fargate는 클러스터 무료지표 없어 서비스탭/CloudWatch에서 봄(빈 그래프≠다운) ②CPU 평균과 최대 분리(평균0+최대100=포화아닌 간헐) ③throughput 병목과 latency 병목은 다른 약 — 한가하면 증설 말고 콜드스타트·단일코어·DB I/O / 힙은 지표가 말할 때(메모리 80%+·중지태스크 OOM) MaxRAMPercentage=75% / 느림추적 N-025, 동기 LLM latency N-060, throughput 게이트 #239) |
