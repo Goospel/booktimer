@@ -83,6 +83,55 @@ class BookServiceTest {
     }
 
     @Test
+    @DisplayName("같은 isbn 책을 또 추가해도 책장에 중복 행이 생기지 않는다(직접 POST 방어, 멱등)")
+    void addFromSearch_duplicateIsbn_doesNotCreateSecondRow() {
+        User u = newUser("dup@booktimer.com");
+
+        Book first = bookService.addFromSearch(u, cleanCode(), BookStatus.WANT_TO_READ);
+        Book again = bookService.addFromSearch(u, cleanCode(), BookStatus.READING);
+
+        assertThat(again.getId()).isEqualTo(first.getId()); // 기존 책을 그대로 반환(멱등)
+        assertThat(bookService.myBooks(u)).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("이미 가진 책을 다른 상태로 재추가해도 기존 상태를 보존한다('추가'가 상태를 몰래 바꾸지 않음)")
+    void addFromSearch_duplicate_preservesExistingStatus() {
+        User u = newUser("dupstatus@booktimer.com");
+
+        bookService.addFromSearch(u, cleanCode(), BookStatus.WANT_TO_READ);
+        Book again = bookService.addFromSearch(u, cleanCode(), BookStatus.FINISHED);
+
+        assertThat(again.getStatus()).isEqualTo(BookStatus.WANT_TO_READ); // 최초 상태 유지
+    }
+
+    @Test
+    @DisplayName("isbn 없는 책은 가드가 적용되지 않아 여러 번 추가된다(null끼리 거짓 병합 방지)")
+    void addFromSearch_nullIsbn_allowsMultiple() {
+        User u = newUser("nullisbn@booktimer.com");
+        BookSearchResult noIsbn = new BookSearchResult("제목만 있는 책", null, null, null, null, null);
+
+        bookService.addFromSearch(u, noIsbn, BookStatus.WANT_TO_READ);
+        bookService.addFromSearch(u, noIsbn, BookStatus.WANT_TO_READ);
+
+        assertThat(bookService.myBooks(u)).hasSize(2); // isbn null은 동일성 키가 없어 면제
+    }
+
+    @Test
+    @DisplayName("같은 isbn이라도 사용자가 다르면 각자 책장에 들어간다(가드는 user 범위)")
+    void addFromSearch_sameIsbnDifferentUsers_bothKept() {
+        User a = newUser("ua@booktimer.com");
+        User b = newUser("ub@booktimer.com");
+
+        Book ba = bookService.addFromSearch(a, cleanCode(), BookStatus.WANT_TO_READ);
+        Book bb = bookService.addFromSearch(b, cleanCode(), BookStatus.WANT_TO_READ);
+
+        assertThat(ba.getId()).isNotEqualTo(bb.getId());
+        assertThat(bookService.myBooks(a)).hasSize(1);
+        assertThat(bookService.myBooks(b)).hasSize(1);
+    }
+
+    @Test
     @DisplayName("수동 입력으로도 책을 등록할 수 있다(제목/저자/상태)")
     void addManual_savesMinimal() {
         User u = newUser("b@booktimer.com");
