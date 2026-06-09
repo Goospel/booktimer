@@ -10,8 +10,8 @@ import java.util.Optional;
  */
 public interface BookSearchClient {
 
-    /** 페이지당 결과 수. */
-    int PAGE_SIZE = 10;
+    /** 검색 결과 단일 배치 상한(= 알라딘 MaxResults, ≤100). 페이저 폐지(스크롤 전환)로 "한 번에 보여줄 최대 수". */
+    int PAGE_SIZE = 40;
 
     /**
      * 검색 활성 여부. API 키가 설정되지 않았으면 false — 화면은 검색 대신 수동 입력으로 폴백한다.

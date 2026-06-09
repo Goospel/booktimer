@@ -585,6 +585,16 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     overscroll-behavior: contain;       /* 끝에서 페이지로 스크롤 번지지 않게 */
     padding-right: 6px;                 /* 스크롤바와 내용 간격 */
 }
+/* 검색 결과 — ~3행 고정높이 스크롤 박스. "다음" 페이저를 대체(한 번에 받아 박스 안에서만 스크롤).
+   shelf-scroll과 같은 관성/거터/번짐방지, 높이만 작게. */
+.search-scroll {
+    max-height: 430px;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    padding-right: 6px;
+}
 .book-row {
     display: flex;
     flex-wrap: wrap;            /* 좁으면 액션 줄을 통째로 다음 줄로 내린다 */
@@ -748,11 +758,6 @@ a.book-title:hover { text-decoration: underline; }
 .legal ul { margin: 0 0 8px; padding-left: 20px; }
 .legal li { margin-bottom: 4px; }
 .legal-date { font-size: .8rem; color: var(--muted); margin-top: 20px; }
-
-/* 검색 결과 페이징 */
-.pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 12px 0 4px; }
-.pager .btn-ghost { padding: 6px 12px; font-size: .9rem; text-decoration: none; }
-.pager-info { font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* 이번 주 빠뜨린 날 (독서 기록 화면 7일 윈도우 부채 채우기) */
 .missed-list { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 8px; }
