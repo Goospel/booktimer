@@ -15,11 +15,14 @@ import com.booktimer.session.BookReadingDetail;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.BookReadingStatsService;
 import com.booktimer.user.User;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
@@ -230,12 +233,21 @@ public class BookController {
 
     @PostMapping("/books/{id}/visibility")
     public String setVisibility(@PathVariable Long id, @RequestParam BookVisibility visibility,
-                                Principal principal, RedirectAttributes redirectAttributes) {
+                                @RequestHeader(value = "HX-Request", required = false, defaultValue = "false") boolean htmx,
+                                Principal principal, Model model,
+                                HttpServletResponse response, RedirectAttributes redirectAttributes) {
         User user = currentUser(principal);
         try {
-            // 성공 시 플래시 메시지 없음 — 토글 스위치가 바뀐 상태(🌍/🔒)를 이미 보여줘 중복 알림이라 제거(#196).
-            bookService.setVisibility(user, id, visibility);
+            Book updated = bookService.setVisibility(user, id, visibility);
+            if (htmx) {
+                model.addAttribute("b", updated);
+                return "books :: visToggle";
+            }
         } catch (IllegalArgumentException e) {
+            if (htmx) {
+                response.setStatus(HttpStatus.UNPROCESSABLE_ENTITY.value());
+                return "books :: visToggle";
+            }
             // 내 책이 아니거나 없음 — 존재 여부 노출 없이 책장으로(IDOR 방지).
             redirectAttributes.addFlashAttribute("error", "공개 설정을 바꿀 수 없습니다.");
         }

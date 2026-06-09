@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>내 책장 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
+    <script defer src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
     <!-- 광고 로더(게시자 ID 설정 시에만) -->
     <th:block th:replace="~{ads :: loader}"></th:block>
 </head>
@@ -138,7 +139,10 @@
                     </form>
                     <!-- 공개/비공개 토글 스위치 — 드롭다운 대신 on/off. 버튼이 '현재의 반대' 값을 POST해 상태를 뒤집는다(JS 없이 폼 제출).
                          라벨/아이콘은 현재 상태를 보여주고(🌍 책방 공개 / 🔒 비공개), aria-pressed로 토글 상태를 보조기술에 전달. -->
-                    <form method="post" th:action="@{/books/{id}/visibility(id=${b.id})}" class="vis-toggle-form">
+                    <form method="post" th:action="@{/books/{id}/visibility(id=${b.id})}"
+                          class="vis-toggle-form" th:fragment="visToggle" th:if="${b != null}"
+                          th:attr="hx-post=@{/books/{id}/visibility(id=${b.id})}"
+                          hx-target="this" hx-swap="outerHTML">
                         <button type="submit" name="visibility"
                                 th:value="${b.isPublic()} ? 'PRIVATE' : 'PUBLIC'"
                                 class="vis-toggle" th:classappend="${b.isPublic()} ? 'is-public'"
