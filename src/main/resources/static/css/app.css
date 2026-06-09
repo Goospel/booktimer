@@ -901,13 +901,21 @@ a.book-title:hover { text-decoration: underline; }
 }
 .personality-carousel::-webkit-scrollbar { display: none; }
 .personality-slide {
-    flex: 0 0 90%;
-    scroll-snap-align: start;
+    flex: 0 0 80%;              /* 90% → 80%: 양옆 이웃이 엿보이게 */
+    scroll-snap-align: center;  /* start → center: 활성 카드를 가운데로 */
     scroll-snap-stop: always;
     min-width: 0;
     margin-top: 0;
 }
-.personality-slide:only-child { flex-basis: 100%; }
+.personality-slide:first-child { margin-left: 10%; }   /* 첫 카드도 중앙 (= (100-80)/2) */
+.personality-slide:last-child  { margin-right: 10%; }  /* 끝 카드도 중앙 */
+.personality-slide:only-child  { flex-basis: 100%; margin-left: 0; margin-right: 0; }  /* 1개면 꽉, 여백 0 */
 @media (prefers-reduced-motion: reduce) {
     .personality-carousel { scroll-behavior: auto; }
+}
+
+/* 데스크탑(마우스)만 grab 커서 — 터치 기기엔 안 보임 */
+@media (pointer: fine) {
+    .personality-carousel { cursor: grab; }
+    .personality-carousel.is-dragging { cursor: grabbing; user-select: none; }
 }

@@ -810,6 +810,29 @@ genConfig.putObject("thinkingConfig").put("thinkingBudget", 0); // 2.5-flash thi
 
 ---
 
+## T-042. 마우스 드래그 캐러셀이 손을 안 따라온다 — 컨테이너 `scroll-behavior: smooth`가 `scrollLeft` 직접 대입까지 애니메이션화
+
+**증상**: `scroll-snap` 캐러셀에 마우스 드래그를 직접 구현(`pointermove`마다 `track.scrollLeft = startLeft - dx`)했는데, 끌어도 콘텐츠가 손을 1:1로 안 따라오고 **끊기거나 제자리로 튀어** 보인다. 디버깅으로 `track.scrollLeft = 150` 직후 읽으면 **`0`** (대입이 안 먹은 듯).
+
+**원인 — `scroll-behavior: smooth`가 `scrollLeft` IDL 대입까지 "스크롤"로 보고 애니메이션화**:
+- CSSOM-View 스펙상 `scrollLeft`/`scrollTop` 대입도 스크롤 동작이라, 컨테이너 computed `scroll-behavior`가 `smooth`면 **즉시 반영이 아니라 부드럽게 애니메이션**된다(Chromium 구현). 그래서 대입 직후 읽으면 아직 0.
+- 더해서 `scroll-snap-type: x mandatory`가 진행 중인 비-스냅 위치를 가장 가까운 스냅으로 **되당긴다**(150은 스냅점이 아니라 0으로 회귀).
+- 두 효과가 겹쳐 드래그가 손을 못 따라오고 끊겨 보인다. (탄력 스냅을 위해 넣어둔 `smooth`가 드래그를 깨는 자가당착.)
+
+**해결 / 예방**:
+- 드래그가 **확정되는 순간** 인라인으로 `track.style.scrollBehavior = 'auto'`(즉시 반영), **놓을 때** `track.style.scrollBehavior = ''`로 CSS `smooth` 복원:
+  ```js
+  // 드래그 시작(임계 넘김) 시:
+  track.style.scrollBehavior = 'auto';   // 손 따라 1:1
+  // 드래그 종료(pointerup/cancel) 시:
+  track.style.scrollBehavior = '';       // CSS smooth 복원 → 놓는 순간 mandatory 스냅이 부드럽게 카드 중앙으로(탄력)
+  ```
+- **확인법**: 같은 `el.scrollLeft = N`이 `auto`에선 즉시(읽으면 그 자리), 종료 후 `getComputedStyle(el).scrollBehavior`가 다시 `smooth`.
+- **교훈**: 즉시 스크롤이 필요한 호출만 콕 집어 `auto`로(전역 CSS는 그대로 둠). `scrollTo({behavior:'instant'})`도 대안. "대입했는데 0"은 거의 항상 smooth-scroll 애니메이션 중인 신호.
+- **개념**: learning-notes **N-065**(중앙 정렬 캐러셀의 4가지 클라이언트 함정 — 이 함정이 ④번). (PR #267)
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -855,3 +878,4 @@ genConfig.putObject("thinkingConfig").put("thinkingBudget", 0); // 2.5-flash thi
 | 2026-06-08 | T-033 보강 (#247 — 긴 표준 `<!-- -->` 주석이 출력에 실려(T-036) 본문을 키우면 같은 버퍼 commit/CSRF 500을 유발 → 개발 주석은 파서 수준 `<!--/* */-->`로) |
 | 2026-06-08 | T-041 (Thymeleaf `#temporals.format(Instant)`가 서버 기본 TZ로 찍음 → 한국 사용자에게 9시간 어긋남, 뷰 모델에서 유저 TZ로 `atZone` 변환 / N-010 개념) |
 | 2026-06-09 | T-033 보강 (#265 — 페이지 전용 인라인 `<head><style>`가 누적돼 응답 버퍼(8KB) 넘으면 같은 commit/CSRF 500 — `personality.html`이 7956B까지 커져 캐러셀 CSS 추가로 초과, `th:action` refresh 폼 렌더에서 `SpringActionTagProcessor` → `CsrfRequestDataValueProcessor.getExtraHiddenFields` → 세션 생성이 commit 후라 `IllegalStateException`. **MockMvc 통합 테스트가 끝단에서 잡음**(`get_ready_rendersNarrative` 등 2개 Red) / 해결: 페이지 전용 CSS도 `app.css`로 빼 인라인 본문을 비운다(T-033 주석 케이스·#247과 같은 뿌리=본문 비대화, 원인만 CSS) — 컨트롤러 토큰 선확정(T-033 본체)으로도 막히지만 버퍼 자체를 줄이는 게 근본) |
+| 2026-06-09 | T-042 (마우스 드래그 캐러셀이 손을 안 따라옴 — 컨테이너 `scroll-behavior:smooth`가 `scrollLeft` 직접 대입까지 애니메이션화(CSSOM 스펙)+`scroll-snap mandatory`가 진행 중 위치 되당김 → `scrollLeft=150` 직후 읽으면 0 / 해결: 드래그 확정 시 인라인 `scrollBehavior='auto'`(즉시 추적)·놓을 때 `''` 복원(탄력 스냅 유지), 또는 `scrollTo({behavior:'instant'})` / "대입했는데 0"=smooth 애니메이션 중 신호, N-065 ④번 함정) |
