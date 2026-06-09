@@ -44,15 +44,19 @@
         </p>
 
         <ul class="book-list" th:if="${searchPage != null and !searchPage.isEmpty()}">
-            <li class="book-row" th:each="r : ${searchPage.results()}">
+            <li class="book-row" th:each="r : ${searchPage.results()}"
+                th:with="owned=${r.isbn13() != null and myShelfIsbns.contains(r.isbn13())}">
                 <img class="book-cover" th:if="${r.coverUrl()}" th:src="${r.coverUrl()}" alt="" referrerpolicy="no-referrer">
                 <div class="book-meta">
                     <span class="book-title" th:text="${r.title()}">제목</span>
                     <span class="book-author" th:if="${r.author()}" th:text="${r.author()}">저자</span>
                     <span class="book-pub" th:if="${r.publisher()}" th:text="${r.publisher()}">출판사</span>
                     <th:block th:replace="~{::followPopularity(${r.isbn13()}, ${r.title()})}"></th:block>
+                    <!-- 이미 내 책장에 있는 책 — 중복 추가 방지(추가 폼은 th:unless로 숨김). followPopularity(사회신호)와
+                         같은 메타 줄이지만 소유 상태는 중립 톤으로 구분. -->
+                    <span class="shelf-owned-badge" th:if="${owned}">📚 이미 책장에 있음</span>
                 </div>
-                <form method="post" th:action="@{/books/add}" class="book-add-form">
+                <form th:unless="${owned}" method="post" th:action="@{/books/add}" class="book-add-form">
                     <input type="hidden" name="title" th:value="${r.title()}">
                     <input type="hidden" name="author" th:value="${r.author()}">
                     <input type="hidden" name="isbn13" th:value="${r.isbn13()}">
