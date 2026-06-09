@@ -22,10 +22,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
@@ -300,6 +302,41 @@ class BookControllerTest {
                         .param("visibility", "PUBLIC")
                         .with(user("vcattacker@booktimer.com")).with(csrf()))
                 .andExpect(redirectedUrl("/books"));
+
+        assertThat(bookRepository.findById(book.getId()).orElseThrow().isPublic()).isFalse();
+    }
+
+    @Test
+    @DisplayName("POST /books/{id}/visibility: HX-Request면 redirect 아닌 200 조각을 반환하고 DB도 바뀐다")
+    void setVisibility_htmx_returnsFragment_not_redirect() throws Exception {
+        User u = newUser("htmxvc@booktimer.com");
+        Book book = bookRepository.save(
+                Book.register(u, "htmx 테스트 책", null, null, null, null, null, BookStatus.READING));
+
+        mockMvc.perform(post("/books/{id}/visibility", book.getId())
+                        .param("visibility", "PUBLIC")
+                        .header("HX-Request", "true")
+                        .with(user("htmxvc@booktimer.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("vis-toggle-form")))
+                .andExpect(content().string(containsString("aria-pressed=\"true\"")));
+
+        assertThat(bookRepository.findById(book.getId()).orElseThrow().isPublic()).isTrue();
+    }
+
+    @Test
+    @DisplayName("POST /books/{id}/visibility: HX-Request + 남의 책이면 422를 반환하고 DB 불변")
+    void setVisibility_htmx_idor_blocked() throws Exception {
+        User owner = newUser("htmxowner@booktimer.com");
+        User attacker = newUser("htmxattacker@booktimer.com");
+        Book book = bookRepository.save(
+                Book.register(owner, "남의 책", null, null, null, null, null, BookStatus.READING));
+
+        mockMvc.perform(post("/books/{id}/visibility", book.getId())
+                        .param("visibility", "PUBLIC")
+                        .header("HX-Request", "true")
+                        .with(user("htmxattacker@booktimer.com")).with(csrf()))
+                .andExpect(status().isUnprocessableEntity());
 
         assertThat(bookRepository.findById(book.getId()).orElseThrow().isPublic()).isFalse();
     }
