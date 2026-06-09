@@ -1,0 +1,44 @@
+# 템플릿 데이터 계약 — 백엔드 → 디자인 핸드오프
+
+> 각 화면이 컨트롤러에서 받는 모델 변수·nullable·**빈 상태**를 적는다.
+> 디자인 세션은 이 문서를 읽고 "그려야 할 상태"를 빠짐없이 안다(존재하지 않는 데이터로 화면을 그리거나
+> 빈 상태를 빠뜨리는 것 방지 — [N-055](learning-notes.md)의 디자인판).
+> 워크플로: [frontend-design-workflow.md](frontend-design-workflow.md). (시작: 2026-06-09)
+
+**채우는 규칙**: 입구 화면을 먼저 채우고, 그 화면 디자인에 들어갈 때 해당 컨트롤러를 읽어 정확히 기입한다.
+한 번에 25개를 다 채우지 않는다(stale 방지) — `TODO: 도달 시 기입`으로 둔다.
+
+범례: `()` = nullable / 빈 상태 = 컬렉션이 비었을 때 / 🔒 = 로그인 필요.
+
+---
+
+## landing — `/` (비로그인) · 공개
+
+- **서빙**: `DashboardController.dashboard()` — `principal == null`이면 `return "landing"`.
+- **모델 데이터**: **없음(완전 정적).** Thymeleaf는 URL 링크(`th:href`)에만 쓰임 — `/signup`, `/oauth2/authorization/google`, `/login`, `/privacy`.
+- **빈 상태**: 해당 없음(데이터 없음).
+- **디자인 자유도**: **최대.** 백엔드 결합 0 → 디자인 세션이 통째 소유. 마크업·CSS 무엇이든 바꿔도 컨트롤러 영향 없음.
+- **현재 구조**(참고): `.brand` 헤더 / `.landing-hero`(태그라인·리드·CTA 2개: 무료 시작 + Google) / `.card`×2(기능 목록 `.landing-features`, 동작 설명 `.landing-steps`) / `.landing-bottom-cta` / 로그인·개인정보 링크.
+- **주의**: CTA `href`(`/signup`, `/oauth2/authorization/google`)와 SEO `<title>`·`<meta description>`는 **의미라 보존**. 시각·레이아웃·카피 톤은 자유.
+
+---
+
+## signup — `/signup` · 공개
+
+- TODO: 도달 시 기입 (가입 폼 — 컨트롤러·검증 에러 표시 변수 확인 필요).
+
+## onboarding — `/onboarding` 🔒
+
+- TODO: 도달 시 기입 (하루 목표 설정 등 — 신규 가입 게이트, `DashboardController`가 `!isOnboarded()`면 리다이렉트).
+
+## dashboard — `/` 🔒 (로그인 착지점)
+
+- TODO: 도달 시 기입. **빈 상태가 핵심** — 책 0권/기록 0일 첫 진입 화면이 입구 인상을 좌우.
+  라이브 영역(타이머·잔여)은 `DashboardModel` 위임 + htmx 무리로드 경로와 상태 공유, 잔디는 전체 렌더에서만.
+
+---
+
+## (내부 화면 — 입구 이후)
+
+books · profile · history · personality · settings · book-detail 등은 입구 사이클 종료 후 필요 시 기입.
+이미 데이터 계약 일부가 코드 주석·테스트에 있음(예: profile의 `personality`는 nullable, `shelfFilter` null=전체).
