@@ -61,6 +61,8 @@
     <section class="card" th:if="${view.isReady()}">
         <h2>내 독서 성향</h2>
 
+        <div class="personality-carousel-wrap">
+        <button type="button" class="carousel-nav carousel-nav-prev" aria-label="이전 분석">‹</button>
         <div class="personality-carousel" tabindex="0" role="group"
              aria-label="독서 성향 분석 — 좌우로 넘겨 보기">
             <div th:each="entry : ${view.displayEntries()}" class="personality-entry personality-slide"
@@ -79,6 +81,8 @@
                     <button type="submit" class="btn-ghost btn-small">이걸로 대표 선택</button>
                 </form>
             </div>
+        </div>
+        <button type="button" class="carousel-nav carousel-nav-next" aria-label="다음 분석">›</button>
         </div>
 
         <!-- 공개 안내문 — 히스토리 밑에 작게 -->
