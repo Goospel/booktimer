@@ -28,7 +28,6 @@ import java.util.List;
  * @param topAuthors          최다독 저자 상위 N(권수 내림차순, 동률 시 이름 오름차순). 저자 없는 책 제외
  * @param distinctGenres      서로 다른 장르 수(장르 null인 책 제외 — 편식↔잡식 신호)
  * @param topGenres           상위 장르 분포 N(권수 내림차순, 동률 시 라벨 오름차순). 장르 = categoryName 대분류
- * @param pubDecades          출간 연대 분포(연대 내림차순=최신 먼저). pubDate 없거나 연도 못 읽는 책 제외 — 신/구 신호
  */
 public record ReadingProfile(
         int totalBooks,
@@ -42,6 +41,5 @@ public record ReadingProfile(
         int distinctAuthors,
         List<LabeledCount> topAuthors,
         int distinctGenres,
-        List<LabeledCount> topGenres,
-        List<LabeledCount> pubDecades) {
+        List<LabeledCount> topGenres) {
 }

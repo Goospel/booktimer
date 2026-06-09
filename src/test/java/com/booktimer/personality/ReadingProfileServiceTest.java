@@ -75,7 +75,6 @@ class ReadingProfileServiceTest {
         assertThat(p.distinctAuthors()).isEqualTo(1);
         assertThat(p.topAuthors()).extracting(LabeledCount::label).containsExactly("완독저자");
         assertThat(p.topGenres()).extracting(LabeledCount::label).containsExactly("소설/시/희곡");
-        assertThat(p.pubDecades()).extracting(LabeledCount::label).containsExactly("2020");
     }
 
     @Test

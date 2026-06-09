@@ -112,8 +112,7 @@ class GeminiReadingPersonalityNarratorTest {
     void buildPrompt_groundsAndCarriesBookFacts() {
         ReadingProfile profile = new ReadingProfile(5, 3, 1, 1, 0.6, 7200, 4, 1800,
                 1, List.of(new LabeledCount("김영하", 2)),
-                1, List.of(new LabeledCount("소설/시/희곡", 3)),
-                List.of(new LabeledCount("2020", 4)));
+                1, List.of(new LabeledCount("소설/시/희곡", 3)));
 
         String prompt = GeminiReadingPersonalityNarrator.buildPrompt(profile, objectMapper);
 
@@ -130,8 +129,7 @@ class GeminiReadingPersonalityNarratorTest {
         ReadingProfile profile = new ReadingProfile(5, 3, 1, 1, 0.6,
                 /*totalReadingSeconds*/ 99999, 4, /*avgSessionSeconds*/ 88888,
                 1, List.of(new LabeledCount("김영하", 2)),
-                1, List.of(new LabeledCount("소설/시/희곡", 3)),
-                List.of(new LabeledCount("2020", 4)));
+                1, List.of(new LabeledCount("소설/시/희곡", 3)));
 
         String prompt = GeminiReadingPersonalityNarrator.buildPrompt(profile, objectMapper);
 
@@ -173,13 +171,26 @@ class GeminiReadingPersonalityNarratorTest {
         assertThat(genConfig.path("thinkingConfig").path("thinkingBudget").asInt(-1)).isEqualTo(0);
     }
 
+    @Test
+    @DisplayName("프롬프트: 출간연대(pubDecades)가 프롬프트 어디에도 노출되지 않는다 — 에디션 인쇄일 오신호 차단")
+    void buildPrompt_omitsPublicationEra() {
+        ReadingProfile profile = new ReadingProfile(5, 3, 1, 1, 0.6, 7200, 4, 1800,
+                1, List.of(new LabeledCount("김영하", 2)),
+                1, List.of(new LabeledCount("소설/시/희곡", 3)));
+
+        String prompt = GeminiReadingPersonalityNarrator.buildPrompt(profile, objectMapper);
+
+        assertThat(prompt).doesNotContain("출간연대");
+        assertThat(prompt).doesNotContain("pubDecades");
+    }
+
     // ---- narrate 가드(네트워크 없이) ----
 
     @Test
     @DisplayName("narrate 가드: 비활성(키 없음)이거나 프로필이 null이면 외부 호출 없이 빈 결과")
     void narrate_guards_noNetwork() {
         ReadingProfile anyProfile = new ReadingProfile(1, 0, 0, 1, 0.0, 0, 0, 0,
-                0, List.of(), 0, List.of(), List.of());
+                0, List.of(), 0, List.of());
 
         // 키 없음 → 폴백
         assertThat(new GeminiReadingPersonalityNarrator("not-configured", "gemini-2.0-flash")

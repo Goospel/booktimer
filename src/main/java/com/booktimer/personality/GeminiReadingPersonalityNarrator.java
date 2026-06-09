@@ -97,7 +97,7 @@ public class GeminiReadingPersonalityNarrator implements ReadingPersonalityNarra
     }
 
     /**
-     * 그라운딩 프롬프트를 만든다 — <b>'무슨 책을 읽었는가'(장르·저자·출간연대) 사실만</b> 주입하고
+     * 그라운딩 프롬프트를 만든다 — <b>'무슨 책을 읽었는가'(장르·저자) 사실만</b> 주입하고
      * "[사실]에 있는 것만 근거, 지어내지 마라"로 환각(없는 책·장르 발명)을 억제한다.
      * 출력은 {"narrative","tags"} JSON으로만 받도록 형식을 못 박는다.
      *
@@ -108,7 +108,7 @@ public class GeminiReadingPersonalityNarrator implements ReadingPersonalityNarra
     static String buildPrompt(ReadingProfile profile, ObjectMapper objectMapper) {
         return """
                 당신은 '읽은 책으로 사람을 읽어주는' 성향 분석가다.
-                아래 [사실]은 한 독자가 *어떤 책을 읽었는가*만 추린 것이다(장르·저자·출간연대 분포).
+                아래 [사실]은 한 독자가 *어떤 책을 읽었는가*만 추린 것이다(장르·저자 분포).
                 [사실]에 있는 내용만 근거로 삼고, 거기 없는 책·장르·정보는 지어내지 마라.
                 오직 '읽은 책'이 드러내는 이 사람의 성격·가치관·취향(좋아할 만한 것)을
                 MBTI 설명문처럼 한 문단(3~5문장)으로 서술하고, 비교용 짧은 태그 3~5개를 함께 내라.
@@ -124,7 +124,7 @@ public class GeminiReadingPersonalityNarrator implements ReadingPersonalityNarra
     }
 
     /**
-     * 프롬프트에 주입할 <b>책 내용 사실만</b> 골라 JSON으로 만든다 — 장르·저자·출간연대 분포와
+     * 프롬프트에 주입할 <b>책 내용 사실만</b> 골라 JSON으로 만든다 — 장르·저자 분포와
      * 다양성(서로 다른 저자/장르 수), 표본 크기(<b>완독 권수</b>)만 담는다. 독서 습관 신호
      * (완독률, 독서 시간·세션·평균 세션 길이)는 일부러 뺀다(설계 의도, {@link #buildPrompt}).
      * 프로필 자체가 완독 책만으로 집계되므로({@link ReadingProfileService#profileOf}) 분포·표본 모두 완독분이다.
@@ -137,7 +137,6 @@ public class GeminiReadingPersonalityNarrator implements ReadingPersonalityNarra
             facts.set("topAuthors", objectMapper.valueToTree(profile.topAuthors()));
             facts.put("distinctGenres", profile.distinctGenres());
             facts.set("topGenres", objectMapper.valueToTree(profile.topGenres()));
-            facts.set("pubDecades", objectMapper.valueToTree(profile.pubDecades()));
             return objectMapper.writeValueAsString(facts);
         } catch (Exception e) {
             return "{}";

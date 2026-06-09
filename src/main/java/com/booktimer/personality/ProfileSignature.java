@@ -12,7 +12,7 @@ import java.util.stream.Collectors;
  * <p>캐시된 성향 서술이 아직 유효한지 판단하는 키다. 같은 시그니처면 LLM을 다시 부르지 않고 캐시를 쓴다
  * (비용=호출 빈도를 바닥으로). 시그니처가 달라지면 책장이 의미있게 변한 것 → 재생성.
  *
- * <p>무엇을 "의미있는 변화"로 볼지가 핵심이다 — 완독 책의 권수·저자/장르/연대 분포 같은 <b>구조</b>만 넣는다.
+ * <p>무엇을 "의미있는 변화"로 볼지가 핵심이다 — 완독 책의 권수·저자/장르 분포 같은 <b>구조</b>만 넣는다.
  * <b>독서 시간은 넣지 않는다</b>: 성향은 완독 책 내용에서만 뽑으므로(시간은 입력이 아님), 시간을 넣으면 책을
  * 더 완독하지 않고 시간만 쌓여도 재생성돼 같은 결과를 다시 만드는 낭비가 된다.
  */
@@ -37,7 +37,6 @@ public final class ProfileSignature {
                 .append(";authors=").append(labels(p.topAuthors()))
                 .append(";distGenres=").append(p.distinctGenres())
                 .append(";genres=").append(labels(p.topGenres()))
-                .append(";decades=").append(labels(p.pubDecades()))
                 .toString();
     }
 

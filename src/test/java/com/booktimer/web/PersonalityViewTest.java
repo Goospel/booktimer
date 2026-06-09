@@ -26,12 +26,12 @@ class PersonalityViewTest {
 
     private static ReadingProfile profileWith(int totalBooks) {
         return new ReadingProfile(totalBooks, totalBooks, 0, 0, 1.0, 0, 0, 0,
-                0, List.of(), 0, List.of(), List.of());
+                0, List.of(), 0, List.of());
     }
 
     private static ReadingProfile profileWith(int totalBooks, int finishedBooks) {
         return new ReadingProfile(totalBooks, finishedBooks, 0, 0, 1.0, 0, 0, 0,
-                0, List.of(), 0, List.of(), List.of());
+                0, List.of(), 0, List.of());
     }
 
     @Test
