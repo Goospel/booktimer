@@ -60,21 +60,24 @@
     <section class="card" th:if="${view.isReady()}">
         <h2>내 독서 성향</h2>
 
-        <div th:each="entry : ${view.entries()}" class="personality-entry"
-             th:classappend="${entry.selected()} ? ' personality-entry-selected' : ''">
-            <div class="personality-entry-head">
-                <span class="personality-badge" th:if="${entry.selected()}">⭐ 대표 (책방 노출)</span>
-                <span class="personality-badge" th:unless="${entry.selected()}">후보</span>
-                <span class="personality-time"
-                      th:text="${view.formatTime(entry.generatedAt())}">분석 시각</span>
+        <div class="personality-carousel" tabindex="0" role="group"
+             aria-label="독서 성향 분석 — 좌우로 넘겨 보기">
+            <div th:each="entry : ${view.displayEntries()}" class="personality-entry personality-slide"
+                 th:classappend="${entry.selected()} ? ' personality-entry-selected' : ''">
+                <div class="personality-entry-head">
+                    <span class="personality-badge" th:if="${entry.selected()}">⭐ 대표 (책방 노출)</span>
+                    <span class="personality-badge" th:unless="${entry.selected()}">후보</span>
+                    <span class="personality-time"
+                          th:text="${view.formatTime(entry.generatedAt())}">분석 시각</span>
+                </div>
+                <p class="personality-narrative" th:text="${entry.narrative()}">성향 서술 한 문단…</p>
+                <p class="personality-stale" th:if="${entry.stale()}">
+                    📚 이 분석 이후 책장이 바뀌었어요 — '다시 분석'하면 지금 책장 기준으로 새로 봐요.
+                </p>
+                <form th:unless="${entry.selected()}" th:action="@{/personality/select/{id}(id=${entry.id()})}" method="post">
+                    <button type="submit" class="btn-ghost btn-small">이걸로 대표 선택</button>
+                </form>
             </div>
-            <p class="personality-narrative" th:text="${entry.narrative()}">성향 서술 한 문단…</p>
-            <p class="personality-stale" th:if="${entry.stale()}">
-                📚 이 분석 이후 책장이 바뀌었어요 — '다시 분석'하면 지금 책장 기준으로 새로 봐요.
-            </p>
-            <form th:unless="${entry.selected()}" th:action="@{/personality/select/{id}(id=${entry.id()})}" method="post">
-                <button type="submit" class="btn-ghost btn-small">이걸로 대표 선택</button>
-            </form>
         </div>
 
         <!-- 공개 안내문 — 히스토리 밑에 작게 -->

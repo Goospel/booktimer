@@ -7,6 +7,7 @@ import com.booktimer.personality.ReadingProfile;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -66,6 +67,17 @@ public record PersonalityView(State state, String narrative, List<String> tags,
 
     public boolean isFallback() {
         return state == State.FALLBACK;
+    }
+
+    /**
+     * 화면 표시 순서: 대표(selected) 먼저, 그 뒤 나머지를 최신순.
+     * entries()는 최신순 원본을 그대로 유지(저장·테스트 계약 보존) — 이건 "표시"만의 파생.
+     */
+    public List<PersonalityHistoryEntry> displayEntries() {
+        return entries().stream()
+                .sorted(Comparator.comparing(PersonalityHistoryEntry::selected).reversed()
+                        .thenComparing(PersonalityHistoryEntry::generatedAt, Comparator.reverseOrder()))
+                .toList();
     }
 
     /** 분석 결과 + 히스토리 + 콜드스타트 임계 + 사용자 타임존으로 화면 표시 모델을 만든다. */
