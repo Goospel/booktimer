@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 입력 시그니처 단위 테스트(책BTI Phase 4) — 재생성 트리거의 정확도를 본다.
  *
- * <p>핵심: (1) 같은 프로필이면 같은 시그니처(결정적·캐시 키), (2) 완독 책의 <b>구조</b>(권수·저자·장르·연대)가
+ * <p>핵심: (1) 같은 프로필이면 같은 시그니처(결정적·캐시 키), (2) 완독 책의 <b>구조</b>(권수·저자·장르)가
  * 바뀌면 달라진다(재생성), (3) <b>독서 시간은 더 이상 성향 입력이 아니므로 시그니처를 바꾸지 않는다</b> —
  * 책을 더 완독하지 않고 시간만 쌓여도 재분석하지 않는다(완독 책만으로 성향, 시간 제외).
  */
@@ -19,8 +19,7 @@ class ProfileSignatureTest {
     private static ReadingProfile profile(int totalBooks, long totalSeconds, List<LabeledCount> genres) {
         return new ReadingProfile(totalBooks, totalBooks, 0, 0, 1.0, totalSeconds, 1, totalSeconds,
                 1, List.of(new LabeledCount("김영하", totalBooks)),
-                genres.size(), genres,
-                List.of(new LabeledCount("2020", totalBooks)));
+                genres.size(), genres);
     }
 
     @Test

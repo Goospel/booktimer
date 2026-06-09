@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 독서 프로필 집계기 단위 테스트 — 영속성 없이 순수 집계 규칙만 본다(책BTI Phase 2).
  *
  * <p>경계값 전수가 핵심: 0권(콜드스타트) / 완독률 0 나눗셈 / 정독↔다독(평균 세션) / 진행 중 세션 제외 /
- * 저자 편향·다양성 / 장르 편식·잡식 / 출간 신·구 / <b>null-state(저자·장르·출간일 없는 책)가 분포에 새지 않음</b>(N-055).
+ * 저자 편향·다양성 / 장르 편식·잡식 / <b>null-state(저자·장르 없는 책)가 분포에 새지 않음</b>(N-055).
  */
 class ReadingProfileAggregatorTest {
 
@@ -55,7 +55,6 @@ class ReadingProfileAggregatorTest {
         assertThat(p.avgSessionSeconds()).isZero();
         assertThat(p.topAuthors()).isEmpty();
         assertThat(p.topGenres()).isEmpty();
-        assertThat(p.pubDecades()).isEmpty();
     }
 
     @Test
@@ -198,24 +197,4 @@ class ReadingProfileAggregatorTest {
         assertThat(p.topGenres()).containsExactly(new LabeledCount("에세이", 1));
     }
 
-    // ---- 출간 신·구 (pubDate→연대, 못 읽는/없는 출간일 제외) ----
-
-    @Test
-    @DisplayName("출간 연대 분포: pubDate에서 연도를 읽어 연대로 묶고 최신 연대 먼저 — 못 읽는/없는 출간일 제외")
-    void pubDecades_newestFirst_excludesUnparseable() {
-        List<Book> books = new ArrayList<>(List.of(
-                book(BookStatus.FINISHED, null, null, "2020-03-15"),
-                book(BookStatus.READING, null, null, "2021-01-01"),
-                book(BookStatus.FINISHED, null, null, "2015-07-20"),
-                book(BookStatus.WANT_TO_READ, null, null, "1999-12-31"),
-                book(BookStatus.FINISHED, null, null, null),    // 출간일 없음 — 제외
-                book(BookStatus.READING, null, null, "출간예정"))); // 연도 못 읽음 — 제외
-
-        ReadingProfile p = ReadingProfileAggregator.aggregate(books, List.of());
-
-        assertThat(p.pubDecades()).containsExactly( // 연대 내림차순(최신 먼저)
-                new LabeledCount("2020", 2),
-                new LabeledCount("2010", 1),
-                new LabeledCount("1990", 1));
-    }
 }
