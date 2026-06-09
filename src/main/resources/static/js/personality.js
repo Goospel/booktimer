@@ -1,49 +1,41 @@
-// 책BTI 캐러셀 — 데스크탑(마우스) 드래그로 좌우 넘기기.
-// 모바일/펜은 네이티브 터치 스크롤이 이미 동작하므로 가로채지 않는다(pointerType 'mouse'만).
-// scroll-snap-type:x mandatory 는 그대로 — 놓는 순간 가장 가까운 카드 중앙으로 탄력 스냅.
+// 책BTI 캐러셀 — 데스크탑 좌우 화살표 버튼으로 한 칸씩 넘기기.
+// 모바일/터치는 네이티브 스와이프를 그대로 쓰고 버튼은 CSS(@media pointer:coarse)로 숨긴다.
+// scroll-snap-type:x mandatory 가 scrollBy 후 가장 가까운 카드 중앙으로 정렬한다.
 (function () {
-  var track = document.querySelector('.personality-carousel');
-  if (!track) return;
+  var wrap = document.querySelector('.personality-carousel-wrap');
+  if (!wrap) return;
+  var track = wrap.querySelector('.personality-carousel');
+  var prev = wrap.querySelector('.carousel-nav-prev');
+  var next = wrap.querySelector('.carousel-nav-next');
+  if (!track || !prev || !next) return;
 
-  var DRAG_THRESHOLD = 6;            // 이 미만 이동은 '클릭'으로 간주(카드 안 버튼/링크 보호)
-  var down = false, dragging = false, startX = 0, startLeft = 0, pid = null;
-
-  track.addEventListener('pointerdown', function (e) {
-    if (e.pointerType !== 'mouse') return;     // 터치/펜: 네이티브 스크롤에 맡김
-    down = true; dragging = false;
-    startX = e.clientX; startLeft = track.scrollLeft; pid = e.pointerId;
-    // 여기서 setPointerCapture 안 함 — 즉시 캡처하면 카드 안 버튼 클릭을 가로채 버림.
-  });
-
-  track.addEventListener('pointermove', function (e) {
-    if (!down) return;
-    var dx = e.clientX - startX;
-    if (!dragging) {
-      if (Math.abs(dx) < DRAG_THRESHOLD) return;  // 아직 클릭일 수 있음
-      dragging = true;
-      track.classList.add('is-dragging');         // cursor:grabbing + user-select:none
-      track.style.scrollBehavior = 'auto';        // 드래그 중엔 손 따라 1:1 — CSS의 smooth가 scrollLeft 대입을 애니메이션화하는 것 차단
-      track.setPointerCapture(pid);               // 드래그 확정 후에만 캡처
-    }
-    e.preventDefault();
-    track.scrollLeft = startLeft - dx;            // 손 따라 스크롤(놓으면 snap이 정리)
-  });
-
-  function end() {
-    if (!down) return;
-    down = false;
-    if (dragging) {
-      track.classList.remove('is-dragging');
-      track.style.scrollBehavior = '';            // CSS smooth 복원 — 놓는 순간 가장 가까운 카드 중앙으로 탄력 스냅
-
-      // 드래그 직후 발생하는 click을 1회 흡수 — '대표 선택' 버튼/프로필 링크 오발동 방지.
-      var swallow = function (ev) { ev.stopPropagation(); ev.preventDefault(); };
-      track.addEventListener('click', swallow, { capture: true, once: true });
-      // click이 안 오는 경우(빈 영역에서 끝) 대비 — 다음 틱에 해제해 이후 정상 클릭은 안 먹게.
-      setTimeout(function () { track.removeEventListener('click', swallow, true); }, 0);
-    }
-    dragging = false; pid = null;
+  // 한 칸 = 카드 폭 + gap. (flex-basis 80% + 첫/끝 margin 덕에 step 만큼 밀면 다음 카드가 정확히 중앙)
+  function step() {
+    var slide = track.querySelector('.personality-slide');
+    if (!slide) return track.clientWidth;
+    var gap = parseFloat(getComputedStyle(track).columnGap) || 0;
+    return slide.getBoundingClientRect().width + gap;
   }
-  track.addEventListener('pointerup', end);
-  track.addEventListener('pointercancel', end);
+
+  // behavior 생략 → CSS scroll-behavior 따름(smooth, reduced-motion 시 auto). JS 미디어쿼리 불필요.
+  prev.addEventListener('click', function () { track.scrollBy({ left: -step() }); });
+  next.addEventListener('click', function () { track.scrollBy({ left:  step() }); });
+
+  // 양끝/단일 카드 상태 반영 — 끝이면 해당 버튼 dim, 넘칠 게 없으면 버튼 자체 숨김.
+  function sync() {
+    var overflow = track.scrollWidth - track.clientWidth;
+    if (overflow <= 1) { wrap.classList.add('nav-hidden'); return; }
+    wrap.classList.remove('nav-hidden');
+    prev.disabled = track.scrollLeft <= 1;
+    next.disabled = track.scrollLeft >= overflow - 1;
+  }
+
+  var ticking = false;
+  track.addEventListener('scroll', function () {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () { ticking = false; sync(); });
+  });
+  window.addEventListener('resize', sync);
+  sync();
 })();
