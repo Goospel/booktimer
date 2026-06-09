@@ -128,4 +128,55 @@ class PersonalityViewTest {
 
         assertThat(view.formatTime(null)).isEmpty();
     }
+
+    // ---- displayEntries() 정렬 테스트 ----
+
+    @Test
+    @DisplayName("displayEntries — 대표가 최신이 아닐 때 대표를 첫 칸으로, 나머지는 최신순")
+    void displayEntries_putsRepresentativeFirstThenNewest() {
+        // entries()는 최신순 계약(service가 그렇게 줌)
+        // 대표(rep_old)가 가장 오래된 경우 — entries() 순서는 cand_new > cand_mid > rep_old
+        PersonalityHistoryEntry candNew = new PersonalityHistoryEntry(3L, "새 후보.", List.of(),
+                Instant.parse("2026-06-09T03:00:00Z"), false, false);
+        PersonalityHistoryEntry candMid = new PersonalityHistoryEntry(2L, "중간 후보.", List.of(),
+                Instant.parse("2026-06-09T02:00:00Z"), false, false);
+        PersonalityHistoryEntry repOld = new PersonalityHistoryEntry(1L, "옛 대표.", List.of(),
+                Instant.parse("2026-06-09T01:00:00Z"), true, true);
+        List<PersonalityHistoryEntry> entries = List.of(candNew, candMid, repOld);
+
+        ReadingPersonality result = new ReadingPersonality(profileWith(10),
+                new PersonalityNarration("옛 대표.", List.of()));
+        PersonalityView view = PersonalityView.from(result, entries, MIN, KST);
+
+        // 대표가 먼저, 나머지는 최신순
+        assertThat(view.displayEntries()).containsExactly(repOld, candNew, candMid);
+        // entries()는 최신순 원본 유지(회귀 가드)
+        assertThat(view.entries()).containsExactly(candNew, candMid, repOld);
+    }
+
+    @Test
+    @DisplayName("displayEntries — 카드 1개면 그 1개만(스와이프 없음 경계)")
+    void displayEntries_singleEntry() {
+        PersonalityHistoryEntry single = new PersonalityHistoryEntry(1L, "서술.", List.of(),
+                Instant.parse("2026-06-09T01:00:00Z"), true, false);
+        ReadingPersonality result = new ReadingPersonality(profileWith(10),
+                new PersonalityNarration("서술.", List.of()));
+        PersonalityView view = PersonalityView.from(result, List.of(single), MIN, KST);
+
+        assertThat(view.displayEntries()).containsExactly(single);
+    }
+
+    @Test
+    @DisplayName("displayEntries — selected 0개(방어)면 최신순 그대로")
+    void displayEntries_noSelected_keepsNewest() {
+        PersonalityHistoryEntry e1 = new PersonalityHistoryEntry(2L, "새 서술.", List.of(),
+                Instant.parse("2026-06-09T02:00:00Z"), false, false);
+        PersonalityHistoryEntry e2 = new PersonalityHistoryEntry(1L, "옛 서술.", List.of(),
+                Instant.parse("2026-06-09T01:00:00Z"), false, false);
+        ReadingPersonality result = new ReadingPersonality(profileWith(10),
+                new PersonalityNarration("새 서술.", List.of()));
+        PersonalityView view = PersonalityView.from(result, List.of(e1, e2), MIN, KST);
+
+        assertThat(view.displayEntries()).containsExactly(e1, e2);
+    }
 }
