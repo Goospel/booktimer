@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title th:text="${nickname} + '님의 책방 — BookTimer'">책방 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
+    <!-- 공개 책장 필터 칩을 htmx 부분 swap으로 — 페이지마다 <head>가 독립이라(공유 레이아웃 없음)
+         books.html과 동일 버전 스크립트를 여기에도 직접 포함해야 한다(빠뜨리면 필터가 풀 리로드로 조용히 폴백). -->
+    <script defer src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
     <!-- 광고 로더(게시자 ID 설정 시에만) -->
     <th:block th:replace="~{ads :: loader}"></th:block>
 </head>
@@ -135,13 +138,19 @@
 
         <!-- 바디 ②: 공개 책장(PUBLIC 책만) -->
         <div class="tab-panel panel-shelf">
-            <!-- 상태 필터 칩 — 부합하는 공개 책만 표시(서버사이드 ?status=). 내 책장(/books)과 동일 패턴.
-                 tab=shelf 신호를 함께 실어, 필터 클릭 후 리로드돼도 공개 책장 탭이 유지되게 한다(전체 칩 포함).
-                 안 그러면 성향이 있는 사용자는 필터를 누를 때마다 책BTI 탭으로 튕긴다(shelfActive 보정). -->
-            <nav class="shelf-filter">
-                <a th:href="@{/u/{n}(n=${loginId}, tab='shelf')}" th:classappend="${shelfFilter == null} ? 'active'">전체</a>
+            <!-- 상태 필터 칩 + 공개 책 목록을 한 프래그먼트로 묶는다 — 필터 클릭은 htmx 부분 swap(#shelf-panel)로
+                 페이지 스크롤 점프를 제거(books.html과 동일 #263 패턴). 부분 swap이라 탭 라디오를 다시 안 그려
+                 "필터 누르면 책BTI 탭으로 튕김"도 htmx 경로에선 자동 소멸. no-JS 풀 리로드 폴백에선 아래 tab=shelf
+                 신호 + shelfActive 보정이 그때 책장 탭을 유지한다(폴백용이라 제거 금지). 공통 htmx 속성은 <nav>에 호이스트. -->
+            <div id="shelf-panel" th:fragment="shelfPanel">
+            <nav class="shelf-filter"
+                 hx-target="#shelf-panel" hx-swap="outerHTML" hx-push-url="true">
+                <a th:href="@{/u/{n}(n=${loginId}, tab='shelf')}"
+                   th:attr="hx-get=@{/u/{n}(n=${loginId}, tab='shelf')}"
+                   th:classappend="${shelfFilter == null} ? 'active'">전체</a>
                 <a th:each="s : ${statuses}"
                    th:href="@{/u/{n}(n=${loginId}, status=${s}, tab='shelf')}"
+                   th:attr="hx-get=@{/u/{n}(n=${loginId}, status=${s}, tab='shelf')}"
                    th:classappend="${s == shelfFilter} ? 'active'"
                    th:text="${s.label}">상태</a>
             </nav>
@@ -169,10 +178,12 @@
                 </li>
             </ul>
 
-            <!-- 제휴 안내문은 구매 버튼이 실제로 뜨는 남의 책방에서만 — 본인 책방(self)엔 버튼이 없어 안내문도 숨긴다. -->
+            <!-- 제휴 안내문은 구매 버튼이 실제로 뜨는 남의 책방에서만 — 본인 책방(self)엔 버튼이 없어 안내문도 숨긴다.
+                 books에 의존(빈 책장이면 숨김)하므로 부분 swap 대상인 프래그먼트 안에 둬 필터 결과와 함께 갱신한다. -->
             <p class="affiliate-note" th:if="${!books.isEmpty() and !self}">
                 ※ "구매" 링크는 제휴(알라딘) 링크로, 구매 시 일부 수수료를 받을 수 있습니다.
             </p>
+            </div><!-- /#shelf-panel -->
         </div>
     </section>
 

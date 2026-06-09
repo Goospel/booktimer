@@ -107,11 +107,17 @@
             🌍 <strong>책방 공개</strong>로 켠 책은 <a th:href="@{/u/{n}(n=${loginId})}">내 책방</a>에서 누구나 볼 수 있어요.
         </p>
 
-        <!-- 상태 필터 칩 — 부합하는 책만 표시(서버사이드 ?status=). 검색어 q는 유지. -->
-        <nav class="shelf-filter">
-            <a th:href="@{/books(q=${q})}" th:classappend="${shelfFilter == null} ? 'active'">전체</a>
+        <!-- 상태 필터 칩 + 책 목록을 한 프래그먼트로 묶는다 — 필터 클릭은 htmx 부분 swap(#shelf-panel)로
+             페이지 스크롤 점프를 제거(#263 토글 패턴 확장). 공통 htmx 속성은 <nav>에 호이스트(자식 <a>에 상속),
+             링크별로 다른 URL만 th:attr="hx-get"으로 주입. no-JS면 th:href로 그대로 풀 리로드 폴백(점진적 향상). -->
+        <div id="shelf-panel" th:fragment="shelfPanel">
+        <nav class="shelf-filter"
+             hx-target="#shelf-panel" hx-swap="outerHTML" hx-push-url="true">
+            <a th:href="@{/books(q=${q})}" th:attr="hx-get=@{/books(q=${q})}"
+               th:classappend="${shelfFilter == null} ? 'active'">전체</a>
             <a th:each="s : ${statuses}"
                th:href="@{/books(q=${q}, status=${s})}"
+               th:attr="hx-get=@{/books(q=${q}, status=${s})}"
                th:classappend="${s == shelfFilter} ? 'active'"
                th:text="${s.label}">상태</a>
         </nav>
@@ -164,6 +170,7 @@
                 </div>
             </li>
         </ul>
+        </div><!-- /#shelf-panel -->
     </section>
 
     <p class="affiliate-note">
