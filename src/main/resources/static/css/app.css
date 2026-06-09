@@ -628,6 +628,12 @@ a.book-title:hover { text-decoration: underline; }
 .book-actions .btn-primary, .book-actions .btn-ghost, .book-actions .btn-danger { padding: 6px 10px; font-size: .85rem; }
 .book-actions a.btn-ghost { text-decoration: none; display: inline-flex; align-items: center; }
 
+/* 검색결과 '추가' 폼 — 상태 셀렉트+버튼을 행 우측 끝에 모으고, 버튼은 콤팩트하게.
+   (전용 규칙이 없으면 베이스 button{width:100%; padding:12px 18px}을 그대로 받아
+    버튼이 전체폭으로 셀렉트 아래 좌측에 떨어진다 — 위 .book-actions와 같은 톤으로 통일.) */
+.book-add-form { margin-left: auto; }
+.book-add-form .btn-primary { width: auto; padding: 6px 14px; font-size: .85rem; }
+
 /* 공개/비공개 토글 스위치 — 드롭다운 대신 on/off. ON=🌍 책방 공개(accent), OFF=🔒 비공개(muted).
    버튼이 '현재의 반대' 값을 POST해 상태를 뒤집는다(JS 없이 폼 제출). 라벨+미니 트랙/노브로 현재 상태를 보여줌. */
 .vis-toggle-form { display: inline-flex; }
