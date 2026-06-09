@@ -74,6 +74,16 @@ public class BookService {
         if (result == null) {
             throw new IllegalArgumentException("result must not be null");
         }
+        // 이미 가진 책(같은 user+isbn13)이면 새 행을 만들지 않고 기존 책을 반환한다(멱등) — UI는 #273이 추가 폼을
+        // 숨기지만 직접 POST 경로로 중복 행이 생기는 풋건을 서버에서도 막는다. 상태(status)는 보존한다("추가"가
+        // 기존 상태를 몰래 바꾸지 않게). isbn 없는 수동 풍 결과는 동일성 키가 없어 가드 미적용(여러 권 허용).
+        String isbn = Isbn.normalize(result.isbn13());
+        if (isbn != null) {
+            Optional<Book> existing = bookRepository.findFirstByUserAndIsbn13(user, isbn);
+            if (existing.isPresent()) {
+                return existing.get();
+            }
+        }
         // 카탈로그 메타(장르·출간일)까지 적재 — 책BTI 입력. 수동 경로(addManual)는 메타가 없어 8-인자 register.
         Book book = Book.register(user, result.title(), result.author(), result.isbn13(),
                 result.coverUrl(), result.publisher(), result.purchaseLink(),

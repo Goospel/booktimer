@@ -33,6 +33,12 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     /** 소유권 확인용 — 내 책일 때만 조회된다(IDOR 방지). */
     Optional<Book> findByIdAndUser(Long id, User user);
 
+    /**
+     * 같은 사용자가 같은 isbn13으로 이미 가진 책 — 검색 등록 시 중복 행 방지(직접 POST 방어).
+     * isbn13은 적재 시 정규화돼 저장되므로({@link Isbn#normalize}) 조회 키도 정규화한 값을 넘긴다.
+     */
+    Optional<Book> findFirstByUserAndIsbn13(User user, String isbn13);
+
     /** 회원 탈퇴 시 해당 유저의 모든 책을 제거한다. */
     void deleteByUser(User user);
 

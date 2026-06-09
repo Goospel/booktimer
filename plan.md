@@ -601,6 +601,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 | 메인 대시보드로 돌아가려면 **매 페이지 최하단 '← 대시보드' 버튼**까지 스크롤해야 함 — 동선이 멂 | 상단 로고(`📚 BookTimer`)가 단순 텍스트라 클릭 불가 | 로고(이모지+제목)를 **`/` 홈 링크로** 감쌈(`.brand-home`, 표준 "로고=홈" 관행). 로그인 후 앱 페이지 10곳 적용, 인증 전(로그인/회원가입/온보딩)·관리자 페이지는 제외(리다이렉트 루프·별도 허브). HTML/CSS만 | ✅ PR #201 |
 | 사용자 검색 친구 추천·검색 결과의 **'팔로우'(채움) 버튼이 '언팔로우'(아웃라인)보다 부담스럽게 큼** — 리스트 행 버튼 크기 불일치 | `.book-actions`의 크기 축소 규칙(`padding:6px 10px; font-size:.85rem`)에 `btn-ghost`·`btn-danger`만 넣고 `btn-primary`(팔로우)를 빠뜨려, 팔로우만 베이스 크기(`padding:12px 18px`+기본 폰트) 유지 | 그 규칙에 **`.book-actions .btn-primary` 추가** — 리스트 행 팔로우 버튼을 언팔로우 크기로 통일. 독립 `btn-primary`(검색·추가 등)·프로필 상단 팔로우는 `.book-actions` 밖이라 무영향. 프리뷰 하네스로 검증(둘 다 padding 6/10·font 13.6px·line-height 20.4px 일치, 높이차 2px=ghost 외곽선뿐). CSS 1줄 | ✅ PR #203 |
 | 책 검색 결과에서 **이미 내 책장에 있는 책이 다시 "추가" 가능**해 보여 혼란 — 재추가가 중복 책장 행을 만드는 풋건(`addFromSearch` 무방비) | 검색 결과 행이 소유 여부와 무관하게 추가 폼을 항상 렌더 | 검색 결과 중 이미 가진 책에 **"📚 이미 책장에 있음" 배지**(followPopularity와 같은 메타 줄, 중립 톤) + **추가 폼 `th:unless`로 숨김**(UI 경로 재추가 차단). 컨트롤러가 `myBooks` 전체(상태 필터 무관)의 isbn 집합 `myShelfIsbns`를 모델에 실어 템플릿은 조회만(새 쿼리 0, null isbn 제외 N-055). 서버측 `(user,isbn13)` 중복 가드는 범위 밖(후속) | ✅ PR #273 |
+| 책 검색 결과에서 **이미 가진 책을 재추가하면 책장에 중복 행**이 생김 — UI는 #273이 추가 폼을 숨겨 닫았지만 `/books/add` **직접 POST로는 여전히 중복 생성** 가능(데이터 무결성) | `addFromSearch`가 중복 검사 없이 `register`→`save`, `(user,isbn13)` 유니크 제약도 없음 | `addFromSearch`에 **서버측 멱등 가드**: isbn `Isbn.normalize` 후 `findFirstByUserAndIsbn13`로 기존 책 조회 → 있으면 새 행 안 만들고 **기존 책 반환·상태 보존**(isbn null 수동책은 키 없어 면제). 서비스 레벨(Option A)로 처리, DB 유니크 제약은 기존 중복 정리 마이그레이션 부담 커 후속 보류. TDD 4테스트(중복 미생성·상태 보존·null 다중·사용자 격리) | ✅ PR #274 |
 
 **관찰 중 / 후속 후보** (아직 미착수 — 발견했으나 우선순위 낮음):
 - [ ] 검색 결과·책장에서 검색 기준에 **출판사** 차원 추가 여부(현재 제목/저자만; 알라딘 `Publisher` 지원).
@@ -921,7 +922,6 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 
 | 일자 | 내용 |
 |---|---|
-| 2026-06-09 | **CLAUDE.md — 계획 md 핸드오프(계획↔구현 세션 분리) 규칙 추가** — 계획=강모델/고effort, 구현=약모델/저effort를 다른 세션에 배정하는 작업방식을 명시화. 큰 작업 한정으로 계획 세션이 `claude-docs/plans/<날짜>-<요약>.md` 생성→구현 세션이 읽고 TDD. 트리거·md 수명(plan.md와 구분)·드리프트 규칙(어긋나면 멈추고 보고)·통제력↔마찰 트레이드오프 명시. 「계획 우선」 §에 삽입. 문서만(CLAUDE.md). (PR #260) |
 | 2026-06-09 | **`.gitignore` — 계획 핸드오프 md 디렉토리(`claude-docs/plans/`) 무시** — PR #260 후속. 임시 계획 md를 추적 안 함(완료 후 삭제/PR 흡수, 커밋 부담 0). (PR #261) |
 | 2026-06-09 | **대시보드 헤드라인 아래 '지난 밀린 N분 포함' 보조문구 제거** — `dashboard.html` `<p class="timer-carry">` + 주석 삭제, `app.css` `.timer-carry` 규칙 삭제. `data-floor`·`carriedDebtSeconds` 모델·JS floor 유지(합산 동작 보존). 템플릿+CSS만. (PR #262) |
 | 2026-06-09 | **책BTI 캐러셀 2차 — 중앙+양옆 엿보기 & 데스크탑 마우스 드래그** — #265 캐러셀을 중앙 정렬+엿보기(`scroll-snap-align:center`, 카드 80%, 첫/끝 카드 margin 10%)와 데스크탑 마우스 드래그(외부 `personality.js`, `pointerType==='mouse'`만)로 개선. 6px 임계+capture click 흡수로 '대표 선택' 버튼 보호. 발견: 기존 `scroll-behavior:smooth`가 드래그 `scrollLeft` 대입을 애니메이션화→드래그 중 `auto` 토글로 1:1 보정. CSS=app.css·JS=외부(T-033 원칙), 서버·DB·테스트 무변경. (PR #267) |
@@ -931,8 +931,4 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 | 2026-06-09 | **책장 필터 클릭 시 스크롤 맨 위 점프 제거 — 내 책장·공개 책방 필터 htmx 부분 swap** — 상태 필터 칩이 `<a href>` 풀 리로드라 클릭마다 페이지 스크롤이 맨 위로 리셋되던 문제. #263 토글의 htmx 부분 swap 패턴 확장: 필터 칩+책 목록을 `th:fragment="shelfPanel"`(`#shelf-panel`)로 묶고 두 컨트롤러에 `HX-Request` 분기(htmx면 조각만). 필터 `<a>`에 `hx-get`+공통 `hx-target/hx-swap=outerHTML/hx-push-url`(`<nav>` 호이스트)→책 목록만 교체, 스크롤 불변·URL 갱신. no-JS면 href 풀 리로드 폴백. profile.html `<head>`에 htmx CDN 직접 추가. 부수효과: 공개 책방 탭 라디오 안 다시 그려 "필터 누르면 책BTI로 튕김"도 소멸. 로직·book-row·CSS·DB 무변경. TDD Red→Green: htmx 분기+풀 뷰 회귀 4테스트. (PR #271) |
 | 2026-06-09 | **프론트엔드 디자인 워크플로 + 템플릿 데이터 계약 문서화** — 입구 미감 이탈을 막는 디자인 트랙 시작 전, 백엔드/디자인 두 세션을 충돌 없이 병렬로 굴리는 법을 못 박음. `frontend-design-workflow.md`(SSR 단일 app.css 현실 / 정적 샌드박스 vs 워크트리 / 4단계: 진단→CSS 토큰 먼저→목업→포팅 / 소유권 분할·공유 계약 2개·충돌 회피) + `template-data-contract.md`(백→디자인 핸드오프; landing=데이터 0 정적 확정, 나머지 스텁) 신설. 코드·DB 무관, 문서만. 다음: 랜딩 디자인 진입. (PR #272) |
 | 2026-06-09 | **책 검색 결과에 "이미 책장에 있음" 배지 + 추가 폼 숨김** — `/books` 검색 결과 중 이미 내 책장에 있는 책을 행은 그대로 두고 명시(followPopularity와 같은 메타 줄, 중립 톤). 재추가가 `addFromSearch` 무방비(중복 행) 풋건이라 소유 시 "추가" 폼을 `th:unless`로 숨겨 UI 경로 차단. 컨트롤러에서 `myBooks` 전체(상태 필터 무관)의 isbn 집합 `myShelfIsbns`를 모델에 실어(followPopularity 동형, 새 쿼리 0) 템플릿은 조회만; null isbn 제외(N-055). `.shelf-owned-badge` app.css(T-033). TDD Red→Green 3테스트(검색 행 렌더는 searchEnabled=false라 모델 시드로 단언). 서버측 중복 가드는 후속 분리. (PR #273) |
-
-
-
-
-
+| 2026-06-09 | **책 추가 서버측 중복 가드 — 같은 (user, isbn13) 재추가 시 멱등 no-op** — #273이 UI(추가 폼 숨김)는 닫았지만 `/books/add` 직접 POST로 중복 책장 행이 생기던 무결성 풋건을 서버에서도 막음. `addFromSearch`에 가드: isbn `Isbn.normalize` 후 `findFirstByUserAndIsbn13` 조회 → 있으면 기존 책 반환(새 행 X)·상태 보존. isbn null(수동)은 키 없어 면제. Option A(서비스 레벨 멱등) 채택, DB 유니크 제약(B)은 기존 중복 정리 마이그레이션 부담 커 후속 보류. TDD Red→Green: 중복 미생성·상태 보존 + null 다중·다른 사용자 격리(과차단 가드) 4테스트. 컨트롤러·DB·Flyway 무변경. (PR #274) |
