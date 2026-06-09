@@ -65,6 +65,7 @@ public class BookController {
                         @RequestParam(value = "page", required = false, defaultValue = "1") int page,
                         @RequestParam(value = "status", required = false) String status,
                         @RequestParam(value = "type", required = false) String type,
+                        @RequestHeader(value = "HX-Request", required = false, defaultValue = "false") boolean htmx,
                         Principal principal, Model model) {
         User user = currentUser(principal);
 
@@ -97,7 +98,8 @@ public class BookController {
             searchPage.results().forEach(r -> isbns.add(r.isbn13()));
         }
         model.addAttribute("popularity", popularityService.countByIsbn(user, isbns)); // isbn → (원함, 읽음)
-        return "books";
+        // 필터 칩은 htmx로 책장 패널만 부분 swap(#263 패턴) — 페이지 스크롤 점프 제거. no-JS면 풀 뷰 폴백.
+        return htmx ? "books :: shelfPanel" : "books";
     }
 
     /** 책장 필터 파라미터를 BookStatus로 — 없거나 잘못된 값이면 null(전체). */

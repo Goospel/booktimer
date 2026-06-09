@@ -374,6 +374,36 @@ class ProfileControllerTest {
     }
 
     @Test
+    @DisplayName("GET /u/{loginId}: HX-Request면 shelfPanel 프래그먼트만 반환(공개 책장 필터 부분 swap)")
+    void profile_htmx_returnsFragment() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User owner = newUser("owner@booktimer.com", "openking", "공개왕");
+        publicBook(owner, "공개한 책", BookStatus.FINISHED);
+
+        String html = mockMvc.perform(get("/u/{loginId}", "openking")
+                        .param("status", "FINISHED").param("tab", "shelf")
+                        .header("HX-Request", "true").with(user("viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(view().name("profile :: shelfPanel"))
+                .andExpect(model().attribute("shelfFilter", BookStatus.FINISHED))
+                .andReturn().getResponse().getContentAsString();
+
+        // 프래그먼트는 필터 칩(hx-get)·책 목록만 담고 전체 문서(<html>)는 아니어야 부분 swap이 성립
+        assertThat(html).contains("hx-get").contains("공개한 책").doesNotContain("<html");
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}: 일반 요청(HX-Request 없음)은 전체 profile 뷰를 반환한다(no-JS 폴백)")
+    void profile_nonHtmx_returnsFullView() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        newUser("owner@booktimer.com", "openking", "공개왕");
+
+        mockMvc.perform(get("/u/{loginId}", "openking").with(user("viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(view().name("profile"));
+    }
+
+    @Test
     @DisplayName("GET /u/{loginId}: 파라미터 없는 첫 진입은 shelfActive=false (성향 있으면 책BTI 탭 먼저 — 의도된 흐름 유지)")
     void profile_firstVisit_shelfInactive() throws Exception {
         newUser("viewer@booktimer.com", "viewer", "뷰어");

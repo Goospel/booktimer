@@ -12,6 +12,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -43,6 +44,7 @@ public class ProfileController {
     public String profile(@PathVariable String loginId,
                           @RequestParam(value = "status", required = false) String status,
                           @RequestParam(value = "tab", required = false) String tab,
+                          @RequestHeader(value = "HX-Request", required = false, defaultValue = "false") boolean htmx,
                           Principal principal, Model model) {
         User viewer = currentUser(principal);
         ProfileView profile = profileService.profileOf(viewer, loginId)
@@ -75,7 +77,9 @@ public class ProfileController {
         model.addAttribute("self", profile.self());
         model.addAttribute("personality", profile.personality()); // 공개 책BTI 서술(opt-in+캐시 있을 때만, 아니면 null)
         model.addAttribute("reportReasons", ReportReason.values());
-        return "profile";
+        // 필터 칩은 htmx로 공개 책장 패널만 부분 swap — 페이지 스크롤 점프 제거 + 탭 라디오 안 다시 그려 탭 튕김도 소멸.
+        // no-JS면 풀 뷰 폴백(shelfActive/tab=shelf 보정이 그때 탭 유지).
+        return htmx ? "profile :: shelfPanel" : "profile";
     }
 
     /** 공개 책장 필터 파라미터를 BookStatus로 — 없거나 잘못된 값이면 null(전체). (BookController와 동일 규칙) */

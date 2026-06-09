@@ -192,6 +192,31 @@ class BookControllerTest {
     }
 
     @Test
+    @DisplayName("GET /books: HX-Request면 shelfPanel 프래그먼트만 반환(필터 클릭 부분 swap)하고 책 목록·hx-get을 담는다")
+    void books_htmx_returnsFragment() throws Exception {
+        User u = newUser("htmxshelf@booktimer.com");
+        bookRepository.save(Book.register(u, "프래그먼트책", null, null, null, null, null, BookStatus.READING));
+
+        mockMvc.perform(get("/books").header("HX-Request", "true").with(user("htmxshelf@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(view().name("books :: shelfPanel"))
+                // 프래그먼트가 필터 칩(hx-get)과 책 목록을 함께 담아야 부분 swap이 성립(전체 문서가 아님)
+                .andExpect(content().string(containsString("hx-get")))
+                .andExpect(content().string(containsString("프래그먼트책")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(containsString("<html"))));
+    }
+
+    @Test
+    @DisplayName("GET /books: 일반 요청(HX-Request 없음)은 전체 books 뷰를 반환한다(no-JS 폴백)")
+    void books_nonHtmx_returnsFullView() throws Exception {
+        newUser("plainshelf@booktimer.com");
+
+        mockMvc.perform(get("/books").with(user("plainshelf@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(view().name("books"));
+    }
+
+    @Test
     @DisplayName("GET /books: status가 없으면 전체를 싣고 shelfFilter는 null")
     @SuppressWarnings("unchecked")
     void books_noFilter_showsAll() throws Exception {
