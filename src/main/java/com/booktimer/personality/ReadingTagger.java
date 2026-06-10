@@ -19,6 +19,8 @@ public final class ReadingTagger {
     static final int BREADTH_OMNIVORE_DISTINCT = 3;
     static final double AUTHOR_LOYAL_MIN = 0.40;
 
+    public static final String AUTHOR_LOYAL_TAG = "한우물형";
+
     private ReadingTagger() {}
 
     /** {@link ReadingProfile} → 정렬된 태그 라벨 목록. null 또는 완독 0권이면 {@code List.of()}. */
@@ -66,7 +68,7 @@ public final class ReadingTagger {
         if (!topAuthors.isEmpty()) {
             double loyalShare = (double) topAuthors.get(0).count() / total;
             if (loyalShare >= AUTHOR_LOYAL_MIN) {
-                tags.add("한우물형");
+                tags.add(AUTHOR_LOYAL_TAG);
             }
         }
 

@@ -1,5 +1,6 @@
 package com.booktimer.personality;
 
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
 
@@ -72,5 +73,14 @@ public enum ReadingTribe {
             return Optional.empty();
         }
         return Optional.ofNullable(CATEGORY_MAP.get(category.strip()));
+    }
+
+    /** 한글 라벨(예 "이야기파") → 종족. 라벨이 8종족 중 어느 것도 아니면 empty(). */
+    public static Optional<ReadingTribe> ofLabel(String label) {
+        if (label == null || label.isBlank()) {
+            return Optional.empty();
+        }
+        String key = label.strip();
+        return Arrays.stream(values()).filter(t -> t.label.equals(key)).findFirst();
     }
 }

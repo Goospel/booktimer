@@ -172,6 +172,20 @@ body {
     font-weight: 500;
     white-space: nowrap;
 }
+/* 클릭 가능한 태그 칩(장르 종족·한우물형) — 폭 태그와 구분되게 호버시 살짝 진해진다. */
+.tag-chip-click { cursor: pointer; text-decoration: none; }
+.tag-chip-click:hover { filter: brightness(0.95); text-decoration: underline; }
+
+/* 칩 클릭 시 근거 책이 펼쳐지는 패널 — 헤더 카드 아래 자연스러운 간격. */
+#tag-books-panel { margin-top: 8px; }
+.tag-books-panel {
+    margin-top: 10px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: 10px;
+    background: var(--card-bg, #fff);
+}
+.tag-books-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.tag-books-head h3 { margin: 0; font-size: 1rem; }
+.tag-books-head .btn-close { padding: 4px 10px; font-size: .85rem; }
 
 /* 책BTI 공개 안내문 — '내 독서 성향' 서술 바로 밑에 작은 안내 톤. 서술과 구분되게 옅은 윗선. */
 .personality-public-note { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--border); font-size: .88rem; }
