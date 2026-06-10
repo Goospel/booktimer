@@ -12,10 +12,13 @@
         <span class="emoji">📚</span>
         <h1>BookTimer</h1>
     </header>
-    <p class="greeting" th:text="${needsLoginId} ? '환영합니다! 아이디와 시작 설정을 정해볼까요?' : '환영합니다! 시작 설정을 정해볼까요?'">환영합니다! 시작 설정을 정해볼까요?</p>
+    <div class="entry-hero">
+        <h2>환영합니다! 🎉</h2>
+        <p th:text="${needsLoginId} ? '아이디와 시작 설정만 정하면 바로 시작이에요.' : '시작 설정만 정하면 바로 시작이에요.'">시작 설정만 정하면 바로 시작이에요.</p>
+    </div>
 
     <section class="card">
-        <p class="status-line muted">
+        <p class="entry-note">
             매일 <strong>하루 목표</strong>만큼 읽는 게 목표예요. 못 채운 날은 <strong>최근 7일까지</strong> 빠뜨린 기록으로
             채울 수 있고, 그보다 오래된 날은 부담 없이 자동으로 넘어가요. 목표는 나중에 설정에서 바꿀 수 있어요.
         </p>

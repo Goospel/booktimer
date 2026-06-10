@@ -33,7 +33,12 @@
 
 ## onboarding — `/onboarding` 🔒
 
-- TODO: 도달 시 기입 (하루 목표 설정 등 — 신규 가입 게이트, `DashboardController`가 `!isOnboarded()`면 리다이렉트).
+- **서빙**: `OnboardingController` — 신규 가입 게이트(`DashboardController`가 `!isOnboarded()`면 리다이렉트). GET은 이미 온보딩했으면 `redirect:/`. POST `@Valid` → `complete` → `redirect:/`(PRG). loginId 필수(소셜)·중복·예약어는 `field-error`로 재렌더.
+- **모델 데이터**: `onboardingForm`(`OnboardingForm`: `loginId`·`nickname`·`incrementMinutes`) · `needsLoginId`(`boolean`). 기본값 prefill: `nickname`=현재 닉, `incrementMinutes`=가입 시드 타이머(분).
+- **분기**: `needsLoginId=true`(소셜 로그인만 `login_id` 미정) → loginId 입력칸 + greeting 서브카피 분기. `false`(로컬, 가입에서 받음) → loginId 칸 없음.
+- **빈 상태**: 없음(폼). 에러 상태 = `#fields.hasErrors`(특히 loginId 필수·중복).
+- **보존 불변식**: `th:object="${onboardingForm}"` · `needsLoginId` `th:if`(loginId 칸)·`th:text`(greeting 분기) · 각 `th:field`·`th:errors` · prefill 기본값 · action `@{/onboarding}`.
+- **현재 구조**(참고): `.brand` / `.entry-hero`(환영 헤드라인+동적 서브카피) / `.card`(`.entry-note` 가치 안내 박스 + form: loginId(`th:if`)·nickname·incrementMinutes + 시작 버튼). 디자인: PR #290에서 `.greeting` → `.entry-hero` + `.status-line muted` 안내 → `.entry-note`(세이지 박스로 위계 강화).
 
 ## dashboard — `/` 🔒 (로그인 착지점)
 
