@@ -189,8 +189,11 @@ body {
     border: none;              /* button 기본 테두리 제거 */
     font-family: inherit;      /* button 기본 폰트로 떨어지지 않게(size/weight는 .tag-chip이 지정) */
     line-height: inherit;
+    width: auto;               /* 전역 button{width:100%} 상쇄 — 빠지면 칩이 가로 전체로 늘어남(#286 회귀 원인) */
+    background: var(--accent);  /* 책 기반(근거 책 드릴다운 가능) 칩 = 진한 채움으로 강조 → 비클릭(복합) 칩과 색 구분(안 A) */
+    color: #fff;
 }
-.tag-chip-click:hover { filter: brightness(0.95); text-decoration: underline; }
+.tag-chip-click:hover { background: var(--accent-hover); }  /* 채움 칩이라 btn-primary와 동일 hover(배경만 진하게). 기존 filter+underline은 채움엔 과함 */
 
 /* 칩 클릭 시 근거 책이 펼쳐지는 패널 — 헤더 카드 아래 자연스러운 간격. */
 #tag-books-panel { margin-top: 8px; }
