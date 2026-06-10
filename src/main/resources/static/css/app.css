@@ -96,6 +96,20 @@ body {
     word-break: keep-all;
 }
 
+/* 입구 폼 안내 — 가치를 전달하는 문단을 연한 세이지 박스로 띄워 위계를 준다(onboarding 하루목표·7일 윈도우 설명).
+   전역 공유 .status-line과 분리한 입구 전용 클래스(다른 화면 영향 차단). */
+.entry-note {
+    margin: 0 0 18px;
+    padding: 14px 16px;
+    background: var(--sage-soft);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    line-height: 1.7;
+    word-break: keep-all;
+    font-size: .92rem;
+}
+.entry-note strong { color: var(--accent-hover); font-weight: 700; }
+
 /* 인사말 자리의 작가 격언 — 문장은 본문 톤, 작가는 한 단 작고 흐리게(출처 표기). */
 .greeting.quote .quote-text {
     font-style: italic;

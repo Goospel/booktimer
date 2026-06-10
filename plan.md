@@ -602,6 +602,8 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 
 - **인디고 잔재 토큰화 + signup 환영 헤더** ✅ (PR #289): #287 토큰 교체가 못 건드린 **`var()` 아닌 raw 옛 인디고(`rgba(79,70,229,…)`)** 하드코딩 2곳(폼 입력칸 `:focus` box-shadow·`.highlight-tile:hover` 그림자)을 세이지로 토큰화 — `:root`에 공유 토큰 `--focus-ring: rgba(110,138,106,.30)` 신설, 전역 grep 0건 확인(focus 링·타일 그림자는 전 화면 공통이라 사이트 전역 동시 수선). signup 1차: `.greeting "회원가입"` → `.entry-hero`(환영 헤드라인+서브카피, landing 히어로 축소판) 교체 + `.field-hint` 종이톤 명시. 데이터 바인딩 보존. 순수 시각(컨트롤러·폼·DB·Flyway 무변경). 다음: onboarding → dashboard 빈상태(후속 분리 PR, dashboard는 라이브 영역 회귀 위험 커 단독).
 
+- **onboarding 마감** ✅ (PR #290): signup이 확립한 `.entry-hero`(환영 헤드라인+동적 서브카피) 패턴을 onboarding에도 통일(`.greeting` 동적 한 줄 → 헤드라인+`needsLoginId` 분기 서브카피). 하루목표·7일 윈도우 안내 문단을 전역 공유 `.status-line` 대신 입구 전용 `.entry-note`(연한 세이지 박스 + strong 딥세이지)로 띄워 **가치 전달 위계 강화**. `needsLoginId` 두 형태(소셜 loginId 칸 / 로컬 없음) + 중복 에러 보존. 순수 시각(컨트롤러·폼·DB·Flyway 무변경, 기존 OnboardingController 테스트 그린). 정적 목업(`.preview/onboarding-mock.html`) computed-style 검증. 다음: dashboard 빈상태(단독 PR, 라이브 영역 회귀 위험).
+
 ### 📨 사용자 피드백/문의 (완료 ✅ 2026-06-08, PR #233 · 답장·유형필터 PR #234)
 
 > **한 줄**: 일반 사용자가 버그·제안을 개발자에게 보내고, 개발자(ADMIN)가 읽음/처리완료를 표시하면 **그 표시는 작성자 본인만** 본다.
