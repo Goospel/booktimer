@@ -212,7 +212,7 @@
                     onclick="document.getElementById('tag-books-panel').innerHTML=''; return false;">× 닫기</button>
         </div>
         <p th:if="${tagBooks.isEmpty()}" class="status-line">해당하는 공개 완독 책이 없어요.</p>
-        <ul class="book-list" th:unless="${tagBooks.isEmpty()}">
+        <ul class="book-list tag-books-scroll" th:unless="${tagBooks.isEmpty()}">
             <li class="book-row" th:each="b : ${tagBooks}">
                 <img class="book-cover" th:if="${b.coverUrl}" th:src="${b.coverUrl}" alt="" loading="lazy" referrerpolicy="no-referrer">
                 <div class="book-meta">
