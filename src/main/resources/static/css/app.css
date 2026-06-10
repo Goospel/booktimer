@@ -247,6 +247,13 @@ body {
 /* 타이머와 한 카드로 합쳐진 측정 컨트롤 — 큰 숫자 바로 아래 답답하지 않게 위 여백을 둔다 */
 .timer-controls { margin-top: 18px; }
 
+/* 대시보드 첫 진입 빈상태(책 0권) — 측정 폼 대신 환영+첫 행동 유도(타이머는 00:00:00로 보이고 그 아래 CTA).
+   "텅 빈 화면"이 아니라 "첫 책을 추가하면 시작"이라는 다음 행동을 또렷이 안내한다. */
+.timer-empty { margin-top: 6px; }
+.timer-empty p { color: var(--muted); line-height: 1.7; margin: 0 0 14px; word-break: keep-all; }
+.timer-empty p strong { color: var(--accent-hover); font-weight: 700; }
+.timer-empty .btn { display: block; text-decoration: none; text-align: center; } /* a는 기본 inline이라 .btn의 width:100%가 안 먹음 → block으로 측정 시작 버튼처럼 풀폭 */
+
 /* 버튼 */
 button, .btn {
     font: inherit;

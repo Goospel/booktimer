@@ -42,8 +42,13 @@
 
 ## dashboard — `/` 🔒 (로그인 착지점)
 
-- TODO: 도달 시 기입. **빈 상태가 핵심** — 책 0권/기록 0일 첫 진입 화면이 입구 인상을 좌우.
-  라이브 영역(타이머·잔여)은 `DashboardModel` 위임 + htmx 무리로드 경로와 상태 공유, 잔디는 전체 렌더에서만.
+- **서빙**: `DashboardController` — `!isOnboarded()`면 `/onboarding`으로 게이트. 라이브 영역은 `DashboardModel.populate`가 채운다.
+- **모델 데이터**:
+  - 라이브(`DashboardModel`): `hasActiveSession`(bool)·`activeStartedAt`·`remainingSeconds`·`carriedDebtSeconds`·`activeBookTitle`(nullable)·`activeBookTotalSeconds`·`readingBooks`(List)·`finishedBooks`(List)·`recentBookId`(nullable)·`error`(nullable).
+  - 전체 렌더 전용: `graph`(잔디 빌더 결과)·`quote`(격언 text/author)·`loginId`(내 책방 링크).
+- **⭐ 빈 상태(핵심)**: `readingBooks`·`finishedBooks` **모두 empty** = 신규 첫 진입 → 타이머 카드가 측정 시작 폼 대신 `.timer-empty`(환영 문구 + "첫 책 추가하기" CTA → `/books`). 잔디는 0일이어도 빈 그리드가 그려져 "채워질 자리"로 보임. **측정 중(active) 상태와 구분**(`hasActiveSession`).
+- **보존 불변식(라이브 영역)**: `#dashboard-live` id·`th:fragment="live"`(ReadingSessionController가 htmx swap으로 공유)·`x-data="readingTimer()"`·`data-active/started/remaining/floor`·`x-text/x-show/:class`·htmx `hx-post/hx-target/hx-swap`(start/stop)·빈상태 `th:if` 조건식. 라이브 밖: 잔디 `th:each`·`quote`·`loginId` 링크·`brand-home`. 폼 no-JS 폴백(htmx 없이 일반 POST) 유지.
+- **현재 구조**(참고): `.brand-home` / `.greeting.quote` / `#dashboard-live`(타이머 카드 — active면 종료 폼, 빈상태면 `.timer-empty`, 책 있으면 시작 폼) / `.highlight-actions`(내 책장·내 책방) / 잔디 카드 / `.quick-actions`(5타일) / 광고 / 로그아웃. 디자인: PR #291에서 빈상태 안내 문단 → `.timer-empty`(환영+풀폭 CTA). 구조·라이브 동작 무변경(시각·카피만).
 
 ---
 
