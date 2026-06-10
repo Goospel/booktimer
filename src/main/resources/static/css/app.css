@@ -1,18 +1,26 @@
-/* BookTimer — 공통 스타일 (1-A 다리: 빈약한 날것 HTML 개선) */
+/* BookTimer — 공통 스타일 (종이톤+세이지 디자인 리프레시: 입구부터 미감 통일) */
+
+/* 본문 폰트 — 둥근 한글 산세리프 '고운돋움'(Google Fonts). 종이톤 무드와 어울리는
+   부드러운 모서리. 한글 위주이며 라틴·숫자도 포함해 전 화면 본문에 깐다. */
+@import url('https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap');
 
 :root {
-    --bg: #f4f5f7;
-    --card-bg: #ffffff;
-    --text: #1f2330;
-    --muted: #6b7280;
-    --accent: #4f46e5;
-    --accent-hover: #4338ca;
+    /* 종이톤 + 세이지 그린 팔레트. 이름은 유지(무파괴), 값만 교체 → 전역 리프레시. */
+    --bg: #F3EEE4;          /* 종이 배경(따뜻한 크림) */
+    --card-bg: #FCFAF5;     /* 카드 표면(종이톤 화이트) */
+    --text: #2C2A24;        /* 잉크(따뜻한 차콜) */
+    --muted: #6F6A5E;       /* 흐린 글자 */
+    --accent: #6E8A6A;      /* 세이지(악센트/CTA) */
+    --accent-hover: #4F6B4C;/* 딥 세이지(hover/강조·아이콘) */
     --danger: #dc2626;
     --danger-hover: #b91c1c;
-    --border: #e5e7eb;
-    --ok: #059669;
+    --border: #E4DDD0;      /* 따뜻한 보더 */
+    --ok: #2F8F6B;          /* 타이머 달성색 — 세이지와 변별되게 더 선명한 초록으로 톤 조정 */
     --radius: 14px;
-    --shadow: 0 1px 3px rgba(0, 0, 0, .08), 0 6px 20px rgba(0, 0, 0, .05);
+    --radius-sm: 8px;       /* 버튼·칩용 작은 라운드 */
+    --shadow: 0 1px 2px rgba(60, 50, 30, .05), 0 8px 24px rgba(60, 50, 30, .06);
+    /* 보조 토큰 — 랜딩부터 점진 적용(전역 강제 아님) */
+    --sage-soft: #E7EEE2;   /* 연한 세이지 fill */
 }
 
 * { box-sizing: border-box; }
@@ -22,7 +30,7 @@ body {
     min-height: 100vh;
     background: var(--bg);
     color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    font-family: "Gowun Dodum", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
         "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
     line-height: 1.5;
     display: flex;
@@ -46,6 +54,7 @@ body {
     font-size: 1.6rem;
     margin: 0;
     letter-spacing: -.02em;
+    color: var(--accent-hover);
 }
 
 .brand .emoji { font-size: 1.4rem; }
@@ -90,7 +99,7 @@ body {
     font-size: .8rem;
     text-transform: uppercase;
     letter-spacing: .08em;
-    color: var(--muted);
+    color: var(--accent-hover);
     margin: 0 0 12px;
 }
 
@@ -266,11 +275,11 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     box-sizing: border-box;
 }
 .btn-oauth-google {
-    background: #fff;
-    color: #1f2328;
+    background: var(--card-bg);
+    color: var(--text);
     border: 1px solid var(--border);
 }
-.btn-oauth-google:hover { background: var(--bg); }
+.btn-oauth-google:hover { background: var(--sage-soft); }
 .oauth-icon {
     display: inline-flex;
     align-items: center;
@@ -868,15 +877,15 @@ a.book-title:hover { text-decoration: underline; }
 /* === 공개 소개(랜딩) 페이지 — 비로그인 방문자·크롤러용. 루트("/")가 익명일 때 렌더. === */
 .landing-hero { text-align: center; margin: 8px 0 20px; }
 .landing-tagline {
-    font-size: 1.35rem;
-    font-weight: 700;
+    font-size: 1.95rem;
+    line-height: 1.35;
     color: var(--text);
-    margin: 0 0 12px;
+    margin: 0 0 16px;
     word-break: keep-all;
 }
 .landing-lead {
     color: var(--muted);
-    line-height: 1.65;
+    line-height: 1.8;
     text-align: left;
     margin: 0 0 20px;
     word-break: keep-all;
@@ -898,7 +907,7 @@ a.book-title:hover { text-decoration: underline; }
     word-break: keep-all;
 }
 .landing-features li:last-child { border-bottom: none; }
-.landing-features li strong { display: block; color: var(--text); margin-bottom: 2px; }
+.landing-features li strong { display: block; color: var(--text); font-size: 1.05rem; margin-bottom: 3px; }
 
 /* 동작 방식 — 번호 매긴 단계. */
 .landing-steps { margin: 0; padding-left: 22px; text-align: left; color: var(--muted); line-height: 1.7; }
