@@ -38,6 +38,7 @@
 - [T-034. 생성자 2개(주입 + 테스트용)인 빈은 주입 생성자에 `@Autowired` 필수 — 없으면 no-arg 탐색 실패](#t-034-생성자-2개주입--테스트용인-servicebin은-주입-생성자에-autowired-필수--없으면-no-arg-탐색-실패nosuchmethodexception)
 - [T-035. author `display` 규칙이 UA의 `display:none`을 이겨 `<details>`·`[hidden]`이 안 숨겨진다 (cascade origin: author > UA)](#t-035-author-display-규칙이-ua의-displaynone을-이겨-detailshidden이-안-숨겨진다-cascade-origin-author--ua)
 - [T-039. 실시간 시계 통합 테스트는 자정·타임존 경계에서 플레이키 — 고정 클락을 주입하라](#t-039-실시간-시계-통합-테스트는-자정타임존-경계에서-플레이키--고정-클락을-주입하라)
+- [T-043. preview_screenshot이 환경에 따라 타임아웃(렌더러는 정상) — preview_inspect/eval computed-style로 시각 검증 대체](#t-043-preview_screenshot이-환경에-따라-타임아웃렌더러는-정상--preview_inspecteval-computed-style로-시각-검증-대체)
 
 ---
 
@@ -833,6 +834,29 @@ genConfig.putObject("thinkingConfig").put("thinkingBudget", 0); // 2.5-flash thi
 
 ---
 
+## T-043. preview_screenshot이 환경에 따라 타임아웃(렌더러는 정상) — preview_inspect/eval computed-style로 시각 검증 대체
+
+**증상**: 디자인 작업에서 `preview_screenshot`이 `timed out after 30s. The preview window may be stuck`로 계속 실패한다. 그러나 같은 서버에 `preview_eval`은 정상 응답(`document.readyState === "complete"`, `getComputedStyle` 값 반환)하고 `preview_console_logs`에 에러 0 — **렌더러는 멀쩡하고 캡처 단계만 멈춘 것**.
+
+**원인**: 이 환경에서 스크린샷 캡처(헤드리스 렌더러 → 이미지 인코딩) 경로가 행(hang)한다. 페이지 로드·DOM·JS 실행과는 독립이라, 페이지가 정상 렌더돼도 이미지만 못 받는다. (재현: #287 랜딩 디자인 리프레시 — landing/책장/기록 목업 모두 eval은 되는데 screenshot만 타임아웃.)
+
+**해결 / 대체 검증** (스크린샷 없이 시각 변경을 정밀 확인):
+- **색·폰트·크기**는 `preview_inspect`(또는 `preview_eval`+`getComputedStyle`)로 computed-style을 **값으로** 단언 — 스크린샷 눈대중보다 정확(read_me도 "색·폰트는 inspect로" 권장).
+  ```js
+  // 예: 토큰 적용·폰트 로드 확인
+  getComputedStyle(document.body).backgroundColor   // "rgb(243, 238, 228)" = #F3EEE4
+  getComputedStyle(document.body).fontFamily.split(',')[0]  // "Gowun Dodum"
+  await document.fonts.ready; document.fonts.check("16px 'Gowun Dodum'")  // true
+  ```
+- **레이아웃·정렬·대비**는 `getBoundingClientRect`·boundingBox로 지오메트리 측정(#276에서도 같은 우회 — 버튼 width/우측 정렬을 픽셀로).
+- **사용자에게 시각 공유**가 필요하면 별도 채널(인라인 위젯 등)로 시안을 렌더하거나, 실제 브라우저에서 직접 확인을 안내(`bootRun`/정적 목업 URL).
+
+**교훈**: "스크린샷이 안 된다 ≠ 변경이 안 됐다." 렌더러 생존(eval 응답·console 무에러)을 먼저 분리 확인하고, 시각 속성은 **DOM 측정으로 대체**한다. 이 우회는 #269·#276·#287에서 반복 — 디자인/UI 검증의 기본기로 둔다.
+
+**관련**: T-035(UI 토글은 스크린샷 캐시 말고 라이브 DOM 측정 — "스크린샷 불신"의 자매), learning-notes **N-068**(CSS 토큰 무파괴 리프레시 — 이 검증으로 회귀 0 확인).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -879,3 +903,4 @@ genConfig.putObject("thinkingConfig").put("thinkingBudget", 0); // 2.5-flash thi
 | 2026-06-08 | T-041 (Thymeleaf `#temporals.format(Instant)`가 서버 기본 TZ로 찍음 → 한국 사용자에게 9시간 어긋남, 뷰 모델에서 유저 TZ로 `atZone` 변환 / N-010 개념) |
 | 2026-06-09 | T-033 보강 (#265 — 페이지 전용 인라인 `<head><style>`가 누적돼 응답 버퍼(8KB) 넘으면 같은 commit/CSRF 500 — `personality.html`이 7956B까지 커져 캐러셀 CSS 추가로 초과, `th:action` refresh 폼 렌더에서 `SpringActionTagProcessor` → `CsrfRequestDataValueProcessor.getExtraHiddenFields` → 세션 생성이 commit 후라 `IllegalStateException`. **MockMvc 통합 테스트가 끝단에서 잡음**(`get_ready_rendersNarrative` 등 2개 Red) / 해결: 페이지 전용 CSS도 `app.css`로 빼 인라인 본문을 비운다(T-033 주석 케이스·#247과 같은 뿌리=본문 비대화, 원인만 CSS) — 컨트롤러 토큰 선확정(T-033 본체)으로도 막히지만 버퍼 자체를 줄이는 게 근본) |
 | 2026-06-09 | T-042 (마우스 드래그 캐러셀이 손을 안 따라옴 — 컨테이너 `scroll-behavior:smooth`가 `scrollLeft` 직접 대입까지 애니메이션화(CSSOM 스펙)+`scroll-snap mandatory`가 진행 중 위치 되당김 → `scrollLeft=150` 직후 읽으면 0 / 해결: 드래그 확정 시 인라인 `scrollBehavior='auto'`(즉시 추적)·놓을 때 `''` 복원(탄력 스냅 유지), 또는 `scrollTo({behavior:'instant'})` / "대입했는데 0"=smooth 애니메이션 중 신호, N-065 ④번 함정) |
+| 2026-06-10 | T-043 (preview_screenshot이 환경따라 타임아웃(`window may be stuck`)인데 렌더러는 정상 — `preview_eval`은 응답·console 에러 0이라 캡처 단계만 행 / 시각 변경 검증은 스크린샷 없이 `preview_inspect`·`getComputedStyle`로 색·폰트·크기를 *값으로* 단언(눈대중보다 정확)·`getBoundingClientRect`로 레이아웃·`document.fonts.check`로 폰트 로드 / "스크린샷 안 됨 ≠ 변경 안 됨" — 렌더러 생존 먼저 분리 확인 후 DOM 측정 대체, #269·#276·#287 반복 / 스크린샷 불신 자매 T-035, 디자인 토큰 검증 N-068, PR #287) |
