@@ -467,6 +467,26 @@ class ProfileControllerTest {
     }
 
     @Test
+    @DisplayName("GET /u/{loginId}: 클릭형 책BTI 태그칩은 앵커 점프를 유발하는 fragment href(href=\"#...\")를 갖지 않는다")
+    void profile_clickableTag_hasNoFragmentHrefThatJumps() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User owner = newUser("owner@booktimer.com", "openking", "공개왕");
+        publicFinishedWithCategory(owner, "소설1", "국내도서>소설/시/희곡>한국소설"); // clickable 종족 칩 렌더
+
+        String html = mockMvc.perform(get("/u/{loginId}", "openking")
+                        .with(user("viewer@booktimer.com")))            // 풀뷰(no HX-Request)
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        // 점프 원인은 a의 href="#tag-books-panel" 한 곳 — 그게 사라져야 한다.
+        // (hx-target="#tag-books-panel"은 정상 속성이라 유지되므로, href= 형태를 콕 집어 단언)
+        assertThat(html).doesNotContain("href=\"#tag-books-panel\"");
+        // 칩이 여전히 htmx 트리거이고 같은 엔드포인트를 가리키는지(기능 보존)
+        assertThat(html).contains("/u/openking/personality-tag");
+        assertThat(html).contains("hx-get");
+    }
+
+    @Test
     @DisplayName("GET /u/{loginId}: PRIVATE 완독 책의 장르는 헤더 태그에 새지 않는다(공개 책 기반 입력 — 누출 차단)")
     void profile_privateFinished_doesNotLeakIntoPersonalityTags() throws Exception {
         newUser("viewer@booktimer.com", "viewer", "뷰어");
