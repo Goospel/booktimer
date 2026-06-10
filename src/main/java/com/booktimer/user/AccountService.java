@@ -7,6 +7,7 @@ import com.booktimer.follow.FollowRepository;
 import com.booktimer.personality.ReadingPersonalityCacheRepository;
 import com.booktimer.report.ReportRepository;
 import com.booktimer.session.ReadingSessionRepository;
+import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.timer.ReadingTimerRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,7 @@ public class AccountService {
 
     private final UserRepository userRepository;
     private final ReadingTimerRepository timerRepository;
+    private final ReadingGoalChangeRepository goalChangeRepository;
     private final ReadingSessionRepository sessionRepository;
     private final FollowRepository followRepository;
     private final BlockRepository blockRepository;
@@ -38,6 +40,7 @@ public class AccountService {
 
     public AccountService(UserRepository userRepository,
                           ReadingTimerRepository timerRepository,
+                          ReadingGoalChangeRepository goalChangeRepository,
                           ReadingSessionRepository sessionRepository,
                           FollowRepository followRepository,
                           BlockRepository blockRepository,
@@ -48,6 +51,7 @@ public class AccountService {
                           PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.timerRepository = timerRepository;
+        this.goalChangeRepository = goalChangeRepository;
         this.sessionRepository = sessionRepository;
         this.followRepository = followRepository;
         this.blockRepository = blockRepository;
@@ -118,14 +122,15 @@ public class AccountService {
     }
 
     /**
-     * 연관 데이터까지 FK 순서로 제거: 세션(N) → 타이머(1:1) → 팔로우(양방향) → 차단(양방향) → 신고(양방향) → 책(N)
-     * → 책BTI 캐시(1) → 유저.
+     * 연관 데이터까지 FK 순서로 제거: 세션(N) → 타이머(1:1) → 목표 변경 이력(N) → 팔로우(양방향) → 차단(양방향)
+     * → 신고(양방향) → 책(N) → 책BTI 캐시(1) → 유저.
      * <p>모두 users를 FK 참조하므로 유저 삭제 전에 정리한다. 책은 {@code reading_session.book_id}가
      * book을 FK 참조하므로 <b>세션 이후</b>에 지운다(세션이 책을 가리키는 채로 책을 지우면 위반).
      */
     private void purge(User user) {
         sessionRepository.deleteByUser(user);
         timerRepository.deleteByUser(user);
+        goalChangeRepository.deleteByUser(user);   // FK: reading_goal_change.user_id → users (유저 삭제 전 정리)
         followRepository.deleteByFollower(user);
         followRepository.deleteByFollowee(user);
         blockRepository.deleteByBlocker(user);
