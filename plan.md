@@ -604,6 +604,8 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 
 - **onboarding 마감** ✅ (PR #290): signup이 확립한 `.entry-hero`(환영 헤드라인+동적 서브카피) 패턴을 onboarding에도 통일(`.greeting` 동적 한 줄 → 헤드라인+`needsLoginId` 분기 서브카피). 하루목표·7일 윈도우 안내 문단을 전역 공유 `.status-line` 대신 입구 전용 `.entry-note`(연한 세이지 박스 + strong 딥세이지)로 띄워 **가치 전달 위계 강화**. `needsLoginId` 두 형태(소셜 loginId 칸 / 로컬 없음) + 중복 에러 보존. 순수 시각(컨트롤러·폼·DB·Flyway 무변경, 기존 OnboardingController 테스트 그린). 정적 목업(`.preview/onboarding-mock.html`) computed-style 검증. 다음: dashboard 빈상태(단독 PR, 라이브 영역 회귀 위험).
 
+- **dashboard 빈상태 마감** ✅ (PR #291): 입구 트랙 마지막 화면. 신규 첫 진입(`readingBooks`·`finishedBooks` 모두 empty)에서 타이머 카드가 측정 폼 대신 보이던 `.status-line muted` 안내 한 줄("책장에 책을 추가하면…")을 **`.timer-empty`**(환영 문구 "아직 책장이 비어 있어요…" + 풀폭 세이지 CTA "첫 책 추가하기" → `/books`)로 강화 — "텅 빈 화면"을 환영+첫 행동 유도로. **고위험 라이브 영역(htmx `hx-*`·Alpine `x-data/x-text/x-show`·`data-*`·`#dashboard-live` 프래그먼트·잔디 루프)은 구조 절대 보존**, 빈상태 `th:if` 조건식도 글자 단위 유지(시각·카피만). `a.btn`이 inline이라 `width:100%` 미적용 → `display:block`으로 측정 시작 버튼처럼 풀폭. 순수 시각(컨트롤러·서비스·DB·Flyway·JS 무변경) → **전체 테스트 그린**(라이브 프래그먼트·빈상태 분기·`ReadingSessionController` 공유 swap 회귀 가드) + 정적 목업(`.preview/dashboard-empty-mock.html`) computed-style·모바일 검증. 입구 디자인 트랙(landing #287·인디고+signup #289·onboarding #290·dashboard #291) **완료**.
+
 ### 📨 사용자 피드백/문의 (완료 ✅ 2026-06-08, PR #233 · 답장·유형필터 PR #234)
 
 > **한 줄**: 일반 사용자가 버그·제안을 개발자에게 보내고, 개발자(ADMIN)가 읽음/처리완료를 표시하면 **그 표시는 작성자 본인만** 본다.

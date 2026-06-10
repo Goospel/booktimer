@@ -78,10 +78,11 @@
                     </label>
                     <button type="submit" class="btn-primary">측정 시작</button>
                 </form>
-                <p class="status-line muted"
-                   th:if="${(readingBooks == null or readingBooks.isEmpty()) and (finishedBooks == null or finishedBooks.isEmpty())}">
-                    <a th:href="@{/books}">책장에 '읽는 중' 책을 추가</a>하면 측정할 책을 골라 시작할 수 있어요.
-                </p>
+                <div class="timer-empty"
+                     th:if="${(readingBooks == null or readingBooks.isEmpty()) and (finishedBooks == null or finishedBooks.isEmpty())}">
+                    <p>아직 책장이 비어 있어요. <strong>첫 책</strong>을 추가하면 타이머를 켜고 오늘의 독서를 시작할 수 있어요. 📖</p>
+                    <a class="btn btn-primary" th:href="@{/books}">첫 책 추가하기</a>
+                </div>
             </div>
         </section>
     </div>
