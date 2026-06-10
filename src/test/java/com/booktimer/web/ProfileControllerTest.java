@@ -4,8 +4,10 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.follow.FollowService;
+import com.booktimer.block.BlockService;
 import com.booktimer.personality.ReadingPersonalityCache;
 import com.booktimer.personality.ReadingPersonalityCacheRepository;
+import com.booktimer.profile.ProfileTag;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -55,6 +57,8 @@ class ProfileControllerTest {
     private FollowService followService;
     @Autowired
     private ReadingPersonalityCacheRepository personalityCacheRepository;
+    @Autowired
+    private BlockService blockService;
 
     private User newUser(String email, String loginId, String nickname) {
         User u = User.of(email, passwordEncoder.encode("rawpw1234"), nickname, "Asia/Seoul", Role.USER);
@@ -419,8 +423,12 @@ class ProfileControllerTest {
     }
 
     @SuppressWarnings("unchecked")
-    private List<String> tagsInModel(MvcResult res) {
-        return (List<String>) res.getModelAndView().getModel().get("personalityTags");
+    private List<ProfileTag> tagsInModel(MvcResult res) {
+        return (List<ProfileTag>) res.getModelAndView().getModel().get("personalityTags");
+    }
+
+    private List<String> tagLabelsInModel(MvcResult res) {
+        return tagsInModel(res).stream().map(ProfileTag::label).toList();
     }
 
     @Test
@@ -435,7 +443,27 @@ class ProfileControllerTest {
                 .andExpect(status().isOk())
                 .andReturn();
 
-        assertThat(tagsInModel(res)).contains("이야기파");
+        assertThat(tagLabelsInModel(res)).contains("이야기파");
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}: 장르 종족·한우물형 칩은 clickable=true, 폭 태그는 clickable=false")
+    void profile_chipClickability_byTagKind() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User owner = newUser("owner@booktimer.com", "openking", "공개왕");
+        // 같은 저자(편애) + 100% STORY → "이야기파", "외길형", "한우물형" 동시 출력
+        publicFinishedWithCategoryAndAuthor(owner, "소설1", "국내도서>소설/시/희곡>한국소설", "저자A");
+        publicFinishedWithCategoryAndAuthor(owner, "소설2", "국내도서>소설/시/희곡>한국소설", "저자A");
+
+        MvcResult res = mockMvc.perform(get("/u/{loginId}", "openking").with(user("viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        List<ProfileTag> tags = tagsInModel(res);
+        assertThat(tags).extracting(ProfileTag::label).contains("이야기파", "외길형", "한우물형");
+        assertThat(tags.stream().filter(t -> t.label().equals("이야기파")).findFirst().orElseThrow().clickable()).isTrue();
+        assertThat(tags.stream().filter(t -> t.label().equals("한우물형")).findFirst().orElseThrow().clickable()).isTrue();
+        assertThat(tags.stream().filter(t -> t.label().equals("외길형")).findFirst().orElseThrow().clickable()).isFalse();
     }
 
     @Test
@@ -451,7 +479,7 @@ class ProfileControllerTest {
                 .andExpect(status().isOk())
                 .andReturn();
 
-        assertThat(tagsInModel(res)).doesNotContain("실용파");
+        assertThat(tagLabelsInModel(res)).doesNotContain("실용파");
     }
 
     @Test
@@ -466,6 +494,132 @@ class ProfileControllerTest {
                 .andReturn();
 
         assertThat(tagsInModel(res)).isEmpty();
+    }
+
+    // --- 태그 클릭 → 근거 책 드릴다운 (Phase 6b 3단계) ---
+
+    private void publicFinishedWithCategoryAndAuthor(User owner, String title, String category, String author) {
+        Book b = Book.register(owner, title, author, null, null, null, null,
+                category, null, BookStatus.FINISHED);
+        b.makePublic();
+        bookRepository.save(b);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Book> tagBooksInModel(MvcResult res) {
+        return (List<Book>) res.getModelAndView().getModel().get("tagBooks");
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}/personality-tag?tag=이야기파: 그 종족 공개 완독 책을 프래그먼트로 반환")
+    void personalityTag_genreTag_returnsTribeFinishedBooks() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User owner = newUser("owner@booktimer.com", "openking", "공개왕");
+        publicFinishedWithCategory(owner, "소설1", "국내도서>소설/시/희곡>한국소설"); // STORY
+        publicFinishedWithCategory(owner, "역사1", "국내도서>역사>한국사");           // KNOWLEDGE
+
+        MvcResult res = mockMvc.perform(get("/u/{loginId}/personality-tag", "openking")
+                        .param("tag", "이야기파").with(user("viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(view().name("profile :: tagBooksPanel"))
+                .andExpect(model().attribute("tagLabel", "이야기파"))
+                .andReturn();
+
+        assertThat(tagBooksInModel(res)).extracting(Book::getTitle).containsExactly("소설1");
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}/personality-tag: PRIVATE 완독 책은 같은 종족이어도 결과에 새지 않는다(누출 차단 — N-055)")
+    void personalityTag_doesNotLeakPrivateBooks() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User owner = newUser("owner@booktimer.com", "openking", "공개왕");
+        publicFinishedWithCategory(owner, "공개소설", "국내도서>소설/시/희곡>한국소설");
+        privateFinishedWithCategory(owner, "비밀소설", "국내도서>소설/시/희곡>한국소설");
+
+        MvcResult res = mockMvc.perform(get("/u/{loginId}/personality-tag", "openking")
+                        .param("tag", "이야기파").with(user("viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        assertThat(tagBooksInModel(res)).extracting(Book::getTitle)
+                .containsExactly("공개소설")
+                .doesNotContain("비밀소설");
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}/personality-tag: 없는 아이디 → 404")
+    void personalityTag_unknownLoginId_404() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+
+        mockMvc.perform(get("/u/{loginId}/personality-tag", "nosuchid")
+                        .param("tag", "이야기파").with(user("viewer@booktimer.com")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}/personality-tag: 운영자(ADMIN) 대상 → 404(존재 누설 회피)")
+    void personalityTag_admin_404() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        newAdmin("admin@booktimer.com", "adminhandle", "운영자");
+
+        mockMvc.perform(get("/u/{loginId}/personality-tag", "adminhandle")
+                        .param("tag", "이야기파").with(user("viewer@booktimer.com")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}/personality-tag: 차단 관계면 → 404(존재 누설 회피, 대칭)")
+    void personalityTag_blocked_404() throws Exception {
+        User viewer = newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User owner = newUser("owner@booktimer.com", "openking", "공개왕");
+        blockService.block(owner, viewer); // 주인이 viewer 차단 — 대칭이므로 viewer도 못 봐야
+
+        mockMvc.perform(get("/u/{loginId}/personality-tag", "openking")
+                        .param("tag", "이야기파").with(user("viewer@booktimer.com")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}/personality-tag: 비로그인은 로그인으로 리다이렉트")
+    void personalityTag_anonymous_redirectsToLogin() throws Exception {
+        newUser("owner@booktimer.com", "openking", "공개왕");
+
+        mockMvc.perform(get("/u/{loginId}/personality-tag", "openking").param("tag", "이야기파"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}/personality-tag?tag=한우물형: 최다독 저자의 공개 완독 책만")
+    void personalityTag_loyalTag_returnsTopAuthorBooks() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User owner = newUser("owner@booktimer.com", "openking", "공개왕");
+        publicFinishedWithCategoryAndAuthor(owner, "A1", "국내도서>소설/시/희곡>x", "저자A");
+        publicFinishedWithCategoryAndAuthor(owner, "A2", "국내도서>소설/시/희곡>x", "저자A");
+        publicFinishedWithCategoryAndAuthor(owner, "B1", "국내도서>소설/시/희곡>x", "저자B");
+
+        MvcResult res = mockMvc.perform(get("/u/{loginId}/personality-tag", "openking")
+                        .param("tag", "한우물형").with(user("viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        assertThat(tagBooksInModel(res)).extracting(Book::getTitle)
+                .containsExactlyInAnyOrder("A1", "A2");
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}/personality-tag: 알 수 없는 태그(폭 라벨)는 빈 목록 + 200(가드는 통과)")
+    void personalityTag_unknownTag_emptyOk() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User owner = newUser("owner@booktimer.com", "openking", "공개왕");
+        publicFinishedWithCategory(owner, "소설1", "국내도서>소설/시/희곡>한국소설");
+
+        MvcResult res = mockMvc.perform(get("/u/{loginId}/personality-tag", "openking")
+                        .param("tag", "외길형").with(user("viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        assertThat(tagBooksInModel(res)).isEmpty();
     }
 
     @Test

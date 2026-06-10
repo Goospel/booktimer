@@ -83,6 +83,24 @@ public class ProfileController {
         return htmx ? "profile :: shelfPanel" : "profile";
     }
 
+    /**
+     * 책방 헤더의 책BTI 태그 칩 클릭 → 그 태그의 <b>근거 책</b>(공개 완독)을 프래그먼트로 반환한다(Phase 6b 3단계).
+     * 칩 아래 패널을 htmx로 인라인 swap한다. 접근 가드(운영자·차단·없는 아이디)는 {@link ProfileService}와 공유 —
+     * 어느 한 가드라도 막히면 404(존재 누설 회피, §5.3).
+     */
+    @GetMapping("/u/{loginId}/personality-tag")
+    public String personalityTagBooks(@PathVariable String loginId,
+                                       @RequestParam String tag,
+                                       Principal principal, Model model) {
+        User viewer = currentUser(principal);
+        List<Book> books = profileService.booksForPersonalityTag(viewer, loginId, tag)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "프로필을 찾을 수 없습니다."));
+        model.addAttribute("loginId", loginId);
+        model.addAttribute("tagLabel", tag);
+        model.addAttribute("tagBooks", books);
+        return "profile :: tagBooksPanel";
+    }
+
     /** 공개 책장 필터 파라미터를 BookStatus로 — 없거나 잘못된 값이면 null(전체). (BookController와 동일 규칙) */
     private BookStatus parseStatus(String status) {
         if (status == null || status.isBlank()) {

@@ -1,12 +1,15 @@
 package com.booktimer.profile;
 
 import com.booktimer.block.BlockRepository;
+import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookVisibility;
 import com.booktimer.follow.FollowService;
+import com.booktimer.personality.PersonalityTagAttribution;
 import com.booktimer.personality.ReadingPersonalityCacheRepository;
 import com.booktimer.personality.ReadingProfileService;
 import com.booktimer.personality.ReadingTagger;
+import com.booktimer.personality.ReadingTribe;
 import com.booktimer.session.BookReadingStatsService;
 import com.booktimer.session.ReadingContributionService;
 import com.booktimer.user.Role;
@@ -63,15 +66,11 @@ public class ProfileService {
      * 팔로우 버튼 분기를 위해 {@code viewer} 기준 following/self를 함께 계산한다(관계는 카운트만 노출).
      */
     public Optional<ProfileView> profileOf(User viewer, String loginId) {
-        return userRepository.findByLoginId(loginId)
-                // 운영자(ADMIN)는 소셜 프로필 비대상 — 핸들을 직접 알아도 존재 누설 없이 빈 결과 → 404
-                // (검색 제외와 일관: 운영자 존재 자체를 숨김. 본인이 봐도 동일하게 404 — 운영자는 /admin이 영역)
-                .filter(target -> target.getRole() != Role.ADMIN)
-                // 차단 관계(어느 방향이든)면 존재 누설 없이 빈 결과 → 404 (대칭, §7.5)
-                .filter(target -> !blockRepository.existsBetween(viewer, target))
-                .map(target -> {
+        return resolveVisibleTarget(viewer, loginId).map(target -> {
             boolean self = target.getId() != null && target.getId().equals(viewer.getId());
-            List<String> tags = ReadingTagger.tagsOf(readingProfileService.publicProfileOf(target));
+            List<ProfileTag> tags = ReadingTagger.tagsOf(readingProfileService.publicProfileOf(target)).stream()
+                    .map(ProfileService::toProfileTag)
+                    .toList();
             return new ProfileView(
                     target.getLoginId(),
                     target.getNickname(),
@@ -85,6 +84,41 @@ public class ProfileService {
                     personalityNarrative(target),
                     tags);
         });
+    }
+
+    /**
+     * 책방 헤더 태그(장르 종족 / 한우물형)를 클릭했을 때 보여줄 <b>근거 책</b>을 돌려준다.
+     *
+     * <p>입력은 {@link #profileOf}와 <b>동일한 가드 체인</b>(운영자·차단·없는 아이디)을 통과한 대상의
+     * 공개 책 목록뿐. PRIVATE 책은 애초에 입력에 들어오지 않아 결과에 새지 않는다(누출 방지 — §3.4).
+     * 접근 거부(가드 실패)·없는 아이디는 모두 {@code Optional.empty()}로 통합 — 컨트롤러가 404로 변환한다.
+     * 알 수 없는 태그(폭 라벨·오타)는 빈 책 목록(가드 통과 → 빈 리스트 반환, 패널이 "없어요"로 그림).
+     */
+    public Optional<List<Book>> booksForPersonalityTag(User viewer, String loginId, String tag) {
+        return resolveVisibleTarget(viewer, loginId)
+                .map(target -> PersonalityTagAttribution.booksForTag(
+                        bookRepository.findByUserAndVisibilityOrderByCreatedAtDesc(target, BookVisibility.PUBLIC),
+                        tag));
+    }
+
+    /**
+     * 소셜 가시성 가드 — 운영자·차단·없는 아이디를 한 곳에서 거른다. 프로필 조회·드릴다운이 동일 보장 공유
+     * (분기 금지). 비어 있으면 컨트롤러가 404로 변환해 존재 누설을 피한다.
+     */
+    private Optional<User> resolveVisibleTarget(User viewer, String loginId) {
+        return userRepository.findByLoginId(loginId)
+                // 운영자(ADMIN)는 소셜 프로필 비대상 — 핸들을 직접 알아도 존재 누설 없이 빈 결과 → 404
+                // (검색 제외와 일관: 운영자 존재 자체를 숨김. 본인이 봐도 동일하게 404 — 운영자는 /admin이 영역)
+                .filter(target -> target.getRole() != Role.ADMIN)
+                // 차단 관계(어느 방향이든)면 존재 누설 없이 빈 결과 → 404 (대칭, §7.5)
+                .filter(target -> !blockRepository.existsBetween(viewer, target));
+    }
+
+    /** 태그 라벨 → ProfileTag. 장르 종족 라벨·{@link ReadingTagger#AUTHOR_LOYAL_TAG}만 클릭 가능. */
+    private static ProfileTag toProfileTag(String label) {
+        boolean clickable = ReadingTribe.ofLabel(label).isPresent()
+                || ReadingTagger.AUTHOR_LOYAL_TAG.equals(label);
+        return new ProfileTag(label, clickable);
     }
 
     /**

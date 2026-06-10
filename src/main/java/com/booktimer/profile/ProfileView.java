@@ -30,6 +30,7 @@ import java.util.Map;
  * @param personalityTags 책방 헤더에 노출할 <b>결정적 책BTI 태그</b> 목록(공개 책 기반, 캐시·LLM 무관 —
  *                       #281 {@code ReadingTagger}). 공개 완독 0권/매핑 장르 없음이면 빈 목록(헤더 칩 행 숨김).
  *                       서술 캐시와 독립 — LLM 서술이 없어도 사실에서 직접 나오므로 채워질 수 있다.
+ *                       각 칩의 {@code clickable}은 근거 책 드릴다운 가능 여부(장르·한우물형=true / 폭 태그=false).
  */
 public record ProfileView(
         String loginId,
@@ -42,5 +43,5 @@ public record ProfileView(
         boolean following,
         boolean self,
         String personality,
-        List<String> personalityTags) {
+        List<ProfileTag> personalityTags) {
 }

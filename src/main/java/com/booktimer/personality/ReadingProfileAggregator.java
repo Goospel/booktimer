@@ -94,7 +94,7 @@ public final class ReadingProfileAggregator {
      * 세그먼트가 하나뿐이면(구분 없는 단순 카테고리) 그 값을 쓴다. 값이 없으면 null(분포에서 제외).
      * (깊이 정책은 reading-personality-design §8의 열린 질문 — v1은 대분류로 고정.)
      */
-    private static String primaryGenre(String category) {
+    public static String primaryGenre(String category) {
         String normalized = blankToNull(category);
         if (normalized == null) {
             return null;

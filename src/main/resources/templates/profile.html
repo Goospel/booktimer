@@ -24,10 +24,20 @@
     <p class="greeting"><span th:text="${nickname}">닉네임</span>님의 책방</p>
     <p class="muted" th:text="'@' + ${loginId}">@아이디</p>
 
-    <!-- 책BTI 태그(#281 결정적 태거 ReadingTagger 출력) — 공개 완독 책 기반, 빈 목록이면 행 자체를 숨김(0권 콜드스타트 등). -->
+    <!-- 책BTI 태그(#281 결정적 태거 ReadingTagger 출력) — 공개 완독 책 기반, 빈 목록이면 행 자체를 숨김(0권 콜드스타트 등).
+         장르 종족·한우물형 칩은 클릭 시 근거 책을 칩 아래 패널(#tag-books-panel)에 htmx로 펼친다(Phase 6b 3단계).
+         폭 태그(외길형·잡식가·균형형)는 부분집합이 정의되지 않아 비클릭(평범 span). -->
     <div class="tag-chip-row" th:if="${!personalityTags.isEmpty()}">
-        <span class="tag-chip" th:each="tag : ${personalityTags}" th:text="${tag}">태그</span>
+        <th:block th:each="t : ${personalityTags}">
+            <a th:if="${t.clickable()}" class="tag-chip tag-chip-click"
+               th:text="${t.label()}"
+               th:attr="hx-get=@{/u/{n}/personality-tag(n=${loginId}, tag=${t.label()})}"
+               hx-target="#tag-books-panel" hx-swap="innerHTML" href="#tag-books-panel">태그</a>
+            <span th:unless="${t.clickable()}" class="tag-chip" th:text="${t.label()}">태그</span>
+        </th:block>
     </div>
+    <!-- 칩 클릭 시 근거 책이 펼쳐질 인라인 패널. 초기엔 비어 있고 칩을 다시 누르면 교체된다(다른 칩 누르면도 교체). -->
+    <div id="tag-books-panel"></div>
 
     <!-- 팔로우 카운트 + 버튼. 본인 프로필에서만 카운트가 목록(/me/**)으로 링크 — 남의 목록은 비노출(privacy). -->
     <div class="profile-follow">
@@ -191,6 +201,27 @@
             </div><!-- /#shelf-panel -->
         </div>
     </section>
+
+    <!-- 책BTI 태그 클릭 → 근거 책 드릴다운 프래그먼트(Phase 6b 3단계). 칩 클릭 시 위 #tag-books-panel에 swap된다.
+         공개 + 완독 + 그 태그를 만든 책만(PersonalityTagAttribution.booksForTag). PRIVATE 책은 입력 단계에서 차단.
+         profile 풀 페이지를 렌더할 땐 tagBooks가 모델에 없으므로 th:if로 통째로 가려 식 평가도 막는다(가드). -->
+    <div th:fragment="tagBooksPanel" th:if="${tagBooks != null}" class="tag-books-panel">
+        <div class="tag-books-head">
+            <h3 th:text="'「' + ${tagLabel} + '」를 만든 책 ' + ${#lists.size(tagBooks)} + '권'">「태그」를 만든 책 N권</h3>
+            <button type="button" class="btn-ghost btn-close"
+                    onclick="document.getElementById('tag-books-panel').innerHTML=''; return false;">× 닫기</button>
+        </div>
+        <p th:if="${tagBooks.isEmpty()}" class="status-line">해당하는 공개 완독 책이 없어요.</p>
+        <ul class="book-list" th:unless="${tagBooks.isEmpty()}">
+            <li class="book-row" th:each="b : ${tagBooks}">
+                <img class="book-cover" th:if="${b.coverUrl}" th:src="${b.coverUrl}" alt="" loading="lazy" referrerpolicy="no-referrer">
+                <div class="book-meta">
+                    <span class="book-title" th:text="${b.title}">제목</span>
+                    <span class="book-author" th:if="${b.author}" th:text="${b.author}">저자</span>
+                </div>
+            </li>
+        </ul>
+    </div>
 
     <!-- 광고 (하단, 게시자 ID 설정 시에만) -->
     <div th:replace="~{ads :: unit}"></div>
