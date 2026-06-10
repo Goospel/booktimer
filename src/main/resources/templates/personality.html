@@ -109,6 +109,12 @@
     <!-- 사실 요약 (항상) — 콜드스타트·폴백에서도 책장 사실은 보여준다 -->
     <section class="card">
         <h2>책장 요약</h2>
+
+        <!-- 독서 종족 태그 칩 (결정적·규칙 기반) -->
+        <div class="tag-chip-row" th:if="${!view.tags().isEmpty()}">
+            <span class="tag-chip" th:each="tag : ${view.tags()}" th:text="${tag}">태그</span>
+        </div>
+
         <ul class="record-list summary-list">
             <li class="record-row" th:if="${!view.profile().topGenres().isEmpty()}">
                 <span class="record-main">자주 읽는 장르</span>
