@@ -21,6 +21,9 @@
     --shadow: 0 1px 2px rgba(60, 50, 30, .05), 0 8px 24px rgba(60, 50, 30, .06);
     /* 보조 토큰 — 랜딩부터 점진 적용(전역 강제 아님) */
     --sage-soft: #E7EEE2;   /* 연한 세이지 fill */
+    /* 포커스 링 — 입력칸 focus·강조 hover가 공유(세이지 #6E8A6A=rgb(110,138,106) 기반).
+       #287 토큰 교체가 못 건드린 raw 인디고 잔재를 토큰화해 전역 일관 유지. */
+    --focus-ring: rgba(110, 138, 106, .30);
 }
 
 * { box-sizing: border-box; }
@@ -73,6 +76,24 @@ body {
 .greeting {
     color: var(--muted);
     margin: 0 0 20px;
+}
+
+/* 입구 폼 화면(signup·onboarding) 환영 헤더 — landing 히어로의 축소판.
+   greeting 한 줄 대신 헤드라인+서브카피로 첫인상을 강화한다(페이크볼드 대신 크기로 위계 — #287 원칙 계승). */
+.entry-hero { margin: 4px 0 22px; }
+.entry-hero h2 {
+    font-size: 1.5rem;
+    line-height: 1.35;
+    color: var(--text);
+    margin: 0 0 8px;
+    letter-spacing: -.01em;
+    word-break: keep-all;
+}
+.entry-hero p {
+    color: var(--muted);
+    margin: 0;
+    line-height: 1.7;
+    word-break: keep-all;
 }
 
 /* 인사말 자리의 작가 격언 — 문장은 본문 톤, 작가는 한 단 작고 흐리게(출처 표기). */
@@ -318,7 +339,17 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .field select:focus {
     outline: none;
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(79, 70, 229, .15);
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+/* 입력 보조 안내 — label과 input 사이/아래의 흐린 설명(아이디 규칙·타임존 이유 등).
+   <small class="field-hint">로 쓰이나 정의가 없어 브라우저 기본 small만 먹던 것을 종이톤에 맞게 명시. */
+.field-hint {
+    display: block;
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: .8rem;
+    line-height: 1.5;
+    word-break: keep-all;
 }
 .field-error {
     display: block;
@@ -425,7 +456,7 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     text-decoration: none;
     transition: border-color .15s, box-shadow .15s, transform .05s;
 }
-.highlight-tile:hover { border-color: var(--accent-hover); box-shadow: 0 2px 6px rgba(79, 70, 229, .18), 0 8px 24px rgba(79, 70, 229, .12); }
+.highlight-tile:hover { border-color: var(--accent-hover); box-shadow: 0 2px 6px rgba(110, 138, 106, .18), 0 8px 24px rgba(110, 138, 106, .12); }
 .highlight-tile:active { transform: translateY(1px); }
 .highlight-tile .ht-icon { font-size: 1.7rem; line-height: 1; }
 .highlight-tile .ht-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

@@ -25,7 +25,11 @@
 
 ## signup — `/signup` · 공개
 
-- TODO: 도달 시 기입 (가입 폼 — 컨트롤러·검증 에러 표시 변수 확인 필요).
+- **서빙**: `SignupController` — GET 빈 폼, POST `@Valid` 검증 → `register` → `redirect:/login?registered`. 검증 실패/`loginId` 중복·예약어/`timezone` IANA 무효는 `field-error`로 **재렌더(입력값 `th:field` 보존)**. 이메일 중복은 열거완화로 성공과 동일 리다이렉트(에러 안 뜸).
+- **모델 데이터**: `signupForm`(`SignupForm`: `loginId`·`password`·`nickname`·`email`·`timezone`) · `timezones`(`List<String>`, `@ModelAttribute`라 GET·POST 재렌더 모두 자동 적재).
+- **빈 상태**: 없음(폼). **에러 상태 = 각 필드 `#fields.hasErrors`** — 마감/검증 시 에러 렌더(빨강 메시지 + 입력 보존)를 반드시 그려봐야.
+- **보존 불변식**: `th:object="${signupForm}"` · 각 `th:field`·`th:errors` · `timezones` `th:each` · action `@{/signup}` · `/login`·`/privacy` 링크 · `<title>`.
+- **현재 구조**(참고): `.brand` 헤더 / `.entry-hero`(환영 헤드라인+서브카피) / `.card`(form 5필드 — 각 `.field`>label+input/select+`.field-hint`(loginId·password·timezone)+`.field-error`) / `.link-row`×2(로그인·개인정보). 디자인: PR #289에서 `.greeting` → `.entry-hero` + `.field-hint` 종이톤 정의.
 
 ## onboarding — `/onboarding` 🔒
 
