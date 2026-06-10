@@ -29,10 +29,12 @@
          폭 태그(외길형·잡식가·균형형)는 부분집합이 정의되지 않아 비클릭(평범 span). -->
     <div class="tag-chip-row" th:if="${!personalityTags.isEmpty()}">
         <th:block th:each="t : ${personalityTags}">
-            <a th:if="${t.clickable()}" class="tag-chip tag-chip-click"
-               th:text="${t.label()}"
-               th:attr="hx-get=@{/u/{n}/personality-tag(n=${loginId}, tag=${t.label()})}"
-               hx-target="#tag-books-panel" hx-swap="innerHTML" href="#tag-books-panel">태그</a>
+            <!-- 패널 펼치기는 navigation이 아니라 action이라 <button> — <a href="#...">는 fragment href라
+                 htmx가 preventDefault를 안 걸어 swap과 동시에 앵커 점프가 남는다(learning-notes 참고). -->
+            <button th:if="${t.clickable()}" type="button" class="tag-chip tag-chip-click"
+                    th:text="${t.label()}"
+                    th:attr="hx-get=@{/u/{n}/personality-tag(n=${loginId}, tag=${t.label()})}"
+                    hx-target="#tag-books-panel" hx-swap="innerHTML">태그</button>
             <span th:unless="${t.clickable()}" class="tag-chip" th:text="${t.label()}">태그</span>
         </th:block>
     </div>
