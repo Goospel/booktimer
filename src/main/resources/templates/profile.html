@@ -24,6 +24,11 @@
     <p class="greeting"><span th:text="${nickname}">닉네임</span>님의 책방</p>
     <p class="muted" th:text="'@' + ${loginId}">@아이디</p>
 
+    <!-- 책BTI 태그(#281 결정적 태거 ReadingTagger 출력) — 공개 완독 책 기반, 빈 목록이면 행 자체를 숨김(0권 콜드스타트 등). -->
+    <div class="tag-chip-row" th:if="${!personalityTags.isEmpty()}">
+        <span class="tag-chip" th:each="tag : ${personalityTags}" th:text="${tag}">태그</span>
+    </div>
+
     <!-- 팔로우 카운트 + 버튼. 본인 프로필에서만 카운트가 목록(/me/**)으로 링크 — 남의 목록은 비노출(privacy). -->
     <div class="profile-follow">
         <a th:if="${self}" class="follow-count" th:href="@{/me/followers}">팔로워 <strong th:text="${followerCount}">0</strong></a>

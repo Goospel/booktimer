@@ -5,6 +5,8 @@ import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookVisibility;
 import com.booktimer.follow.FollowService;
 import com.booktimer.personality.ReadingPersonalityCacheRepository;
+import com.booktimer.personality.ReadingProfileService;
+import com.booktimer.personality.ReadingTagger;
 import com.booktimer.session.BookReadingStatsService;
 import com.booktimer.session.ReadingContributionService;
 import com.booktimer.user.Role;
@@ -13,6 +15,7 @@ import com.booktimer.user.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -35,6 +38,7 @@ public class ProfileService {
     private final FollowService followService;
     private final BlockRepository blockRepository;
     private final ReadingPersonalityCacheRepository personalityCacheRepository;
+    private final ReadingProfileService readingProfileService;
 
     public ProfileService(UserRepository userRepository,
                           BookRepository bookRepository,
@@ -42,7 +46,8 @@ public class ProfileService {
                           ReadingContributionService contributionService,
                           FollowService followService,
                           BlockRepository blockRepository,
-                          ReadingPersonalityCacheRepository personalityCacheRepository) {
+                          ReadingPersonalityCacheRepository personalityCacheRepository,
+                          ReadingProfileService readingProfileService) {
         this.userRepository = userRepository;
         this.bookRepository = bookRepository;
         this.statsService = statsService;
@@ -50,6 +55,7 @@ public class ProfileService {
         this.followService = followService;
         this.blockRepository = blockRepository;
         this.personalityCacheRepository = personalityCacheRepository;
+        this.readingProfileService = readingProfileService;
     }
 
     /**
@@ -65,6 +71,7 @@ public class ProfileService {
                 .filter(target -> !blockRepository.existsBetween(viewer, target))
                 .map(target -> {
             boolean self = target.getId() != null && target.getId().equals(viewer.getId());
+            List<String> tags = ReadingTagger.tagsOf(readingProfileService.publicProfileOf(target));
             return new ProfileView(
                     target.getLoginId(),
                     target.getNickname(),
@@ -75,7 +82,8 @@ public class ProfileService {
                     followService.followingCount(target),
                     !self && followService.isFollowing(viewer, target),
                     self,
-                    personalityNarrative(target));
+                    personalityNarrative(target),
+                    tags);
         });
     }
 

@@ -403,6 +403,71 @@ class ProfileControllerTest {
                 .andExpect(view().name("profile"));
     }
 
+    // --- 책BTI 태그 책방 헤더 노출 (#281 결정적 태거 ReadingTagger·ReadingTribe 출력 노출 — 캐시·LLM 무관) ---
+
+    private void publicFinishedWithCategory(User owner, String title, String category) {
+        Book b = Book.register(owner, title, null, null, null, null, null,
+                category, null, BookStatus.FINISHED);
+        b.makePublic();
+        bookRepository.save(b);
+    }
+
+    private void privateFinishedWithCategory(User owner, String title, String category) {
+        Book b = Book.register(owner, title, null, null, null, null, null,
+                category, null, BookStatus.FINISHED);
+        bookRepository.save(b);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> tagsInModel(MvcResult res) {
+        return (List<String>) res.getModelAndView().getModel().get("personalityTags");
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}: 공개 완독 책의 종족이 책방 헤더 태그(personalityTags)로 실린다 — 캐시·LLM 무관")
+    void profile_publicFinished_populatesPersonalityTags() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User owner = newUser("owner@booktimer.com", "openking", "공개왕");
+        // 알라딘 대분류 "소설/시/희곡" → STORY(이야기파). 결정적 태거가 1위 종족을 항상 출력.
+        publicFinishedWithCategory(owner, "소설1", "국내도서>소설/시/희곡>한국소설");
+
+        MvcResult res = mockMvc.perform(get("/u/{loginId}", "openking").with(user("viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        assertThat(tagsInModel(res)).contains("이야기파");
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}: PRIVATE 완독 책의 장르는 헤더 태그에 새지 않는다(공개 책 기반 입력 — 누출 차단)")
+    void profile_privateFinished_doesNotLeakIntoPersonalityTags() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User owner = newUser("owner@booktimer.com", "openking", "공개왕");
+        publicFinishedWithCategory(owner, "소설1", "국내도서>소설/시/희곡>한국소설"); // STORY 공개
+        // 비공개 경제경영(=PRACTICAL=실용파) — 헤더 태그에 절대 노출되면 안 됨
+        privateFinishedWithCategory(owner, "비밀경제서", "국내도서>경제경영>경영전략");
+
+        MvcResult res = mockMvc.perform(get("/u/{loginId}", "openking").with(user("viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        assertThat(tagsInModel(res)).doesNotContain("실용파");
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}: 공개 완독 0권이면 personalityTags는 빈 목록(헤더 칩 행 숨김)")
+    void profile_noPublicFinished_emptyPersonalityTags() throws Exception {
+        newUser("viewer@booktimer.com", "viewer", "뷰어");
+        newUser("owner@booktimer.com", "openking", "공개왕");
+        // 책 없음 → 태거 콜드스타트 → 빈 목록
+
+        MvcResult res = mockMvc.perform(get("/u/{loginId}", "openking").with(user("viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        assertThat(tagsInModel(res)).isEmpty();
+    }
+
     @Test
     @DisplayName("GET /u/{loginId}: 파라미터 없는 첫 진입은 shelfActive=false (성향 있으면 책BTI 탭 먼저 — 의도된 흐름 유지)")
     void profile_firstVisit_shelfInactive() throws Exception {

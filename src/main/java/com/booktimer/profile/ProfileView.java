@@ -27,6 +27,9 @@ import java.util.Map;
  * @param personality    책방에 노출할 <b>공개 책BTI 서술</b>(공개 책 기반, 캐시) — 사용자가 공개(opt-in)했고
  *                       공개 캐시가 있을 때만 채워지고, 아니면 {@code null}(노출 안 함). 본인용 전체-책 책BTI와
  *                       다른 값일 수 있다(§7 누출 차단 — 입력이 공개 책만이라).
+ * @param personalityTags 책방 헤더에 노출할 <b>결정적 책BTI 태그</b> 목록(공개 책 기반, 캐시·LLM 무관 —
+ *                       #281 {@code ReadingTagger}). 공개 완독 0권/매핑 장르 없음이면 빈 목록(헤더 칩 행 숨김).
+ *                       서술 캐시와 독립 — LLM 서술이 없어도 사실에서 직접 나오므로 채워질 수 있다.
  */
 public record ProfileView(
         String loginId,
@@ -38,5 +41,6 @@ public record ProfileView(
         long followingCount,
         boolean following,
         boolean self,
-        String personality) {
+        String personality,
+        List<String> personalityTags) {
 }

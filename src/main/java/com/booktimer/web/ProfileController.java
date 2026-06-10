@@ -76,6 +76,7 @@ public class ProfileController {
         model.addAttribute("following", profile.following());
         model.addAttribute("self", profile.self());
         model.addAttribute("personality", profile.personality()); // 공개 책BTI 서술(opt-in+캐시 있을 때만, 아니면 null)
+        model.addAttribute("personalityTags", profile.personalityTags()); // 결정적 책BTI 태그(#281) — 빈 목록이면 헤더 칩 행 숨김
         model.addAttribute("reportReasons", ReportReason.values());
         // 필터 칩은 htmx로 공개 책장 패널만 부분 swap — 페이지 스크롤 점프 제거 + 탭 라디오 안 다시 그려 탭 튕김도 소멸.
         // no-JS면 풀 뷰 폴백(shelfActive/tab=shelf 보정이 그때 탭 유지).
