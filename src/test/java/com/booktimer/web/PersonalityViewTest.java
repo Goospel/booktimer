@@ -166,6 +166,50 @@ class PersonalityViewTest {
         assertThat(view.displayEntries()).containsExactly(single);
     }
 
+    // ---- 태그 소스: LLM 아닌 ReadingTagger (Increment 3) ----
+
+    /** 완독 7권, 소설/시/희곡 7권 → ReadingTagger가 ["이야기파", "외길형"] 산출 예상 */
+    private static ReadingProfile profileWithStoryGenre(int finishedBooks) {
+        return new ReadingProfile(finishedBooks, finishedBooks, 0, 0, 1.0, 0, 0, 0,
+                0, List.of(), 1, List.of(new LabeledCount("소설/시/희곡", finishedBooks)));
+    }
+
+    @Test
+    @DisplayName("READY 상태라도 tags는 LLM 태그가 아닌 ReadingTagger에서 온다")
+    void ready_tagsFromTagger_notLlm() {
+        // LLM 태그와 다른 값을 일부러 설정 → 뷰가 LLM 태그를 쓰면 이 단언 실패
+        ReadingPersonality result = new ReadingPersonality(profileWithStoryGenre(7),
+                new PersonalityNarration("서술.", List.of("LLM태그_무시해야함")));
+
+        PersonalityView view = PersonalityView.from(result, List.of(), MIN, KST);
+
+        assertThat(view.tags()).doesNotContain("LLM태그_무시해야함");
+        assertThat(view.tags()).contains("이야기파", "외길형");
+    }
+
+    @Test
+    @DisplayName("FALLBACK 상태에서도 tags가 ReadingTagger에서 온다")
+    void fallback_tagsFromTagger() {
+        ReadingPersonality result = ReadingPersonality.factsOnly(profileWithStoryGenre(7));
+
+        PersonalityView view = PersonalityView.from(result, List.of(), MIN, KST);
+
+        assertThat(view.isFallback()).isTrue();
+        assertThat(view.tags()).contains("이야기파");
+    }
+
+    @Test
+    @DisplayName("COLD_START(완독 0권)는 태그 비어있다")
+    void coldStart_tagsEmpty() {
+        ReadingPersonality result = ReadingPersonality.factsOnly(
+                new ReadingProfile(0, 0, 0, 0, 0.0, 0, 0, 0, 0, List.of(), 0, List.of()));
+
+        PersonalityView view = PersonalityView.from(result, List.of(), MIN, KST);
+
+        assertThat(view.isColdStart()).isTrue();
+        assertThat(view.tags()).isEmpty();
+    }
+
     @Test
     @DisplayName("displayEntries — selected 0개(방어)면 최신순 그대로")
     void displayEntries_noSelected_keepsNewest() {

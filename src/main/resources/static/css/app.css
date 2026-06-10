@@ -160,6 +160,19 @@ body {
 /* "다시 분석" 버튼 안에 같이 보이는 오늘 남은 횟수 — 작고 옅게(버튼 라벨 보조) */
 .refresh-count { margin-left: 8px; font-weight: 400; font-size: .82em; opacity: .8; }
 
+/* 책BTI 독서 종족 태그 칩 — 책장 요약 카드 상단, 결정적 규칙 기반 태그 */
+.tag-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.tag-chip {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--accent-light, #e8f0fe);
+    color: var(--accent, #3b5bdb);
+    font-size: .82rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
 /* 책BTI 공개 안내문 — '내 독서 성향' 서술 바로 밑에 작은 안내 톤. 서술과 구분되게 옅은 윗선. */
 .personality-public-note { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--border); font-size: .88rem; }
 

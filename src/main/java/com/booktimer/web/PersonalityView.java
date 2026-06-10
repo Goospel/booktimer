@@ -3,6 +3,7 @@ package com.booktimer.web;
 import com.booktimer.personality.PersonalityHistoryEntry;
 import com.booktimer.personality.ReadingPersonality;
 import com.booktimer.personality.ReadingProfile;
+import com.booktimer.personality.ReadingTagger;
 
 import java.time.Instant;
 import java.time.ZoneId;
@@ -84,12 +85,13 @@ public record PersonalityView(State state, String narrative, List<String> tags,
     public static PersonalityView from(ReadingPersonality result, List<PersonalityHistoryEntry> entries,
                                        int coldStartMinBooks, ZoneId zone) {
         ReadingProfile profile = result.profile();
+        List<String> tags = ReadingTagger.tagsOf(profile); // 결정적 태그 — LLM 아님
         if (result.hasNarration()) {
             return new PersonalityView(State.READY, result.narration().narrative(),
-                    result.narration().tags(), profile, coldStartMinBooks, entries, zone);
+                    tags, profile, coldStartMinBooks, entries, zone);
         }
         // 서술 없음 — 완독 책 부족이면 콜드스타트, 충분하면 LLM 실패(폴백). 성향은 완독 책에서만 뽑으므로 완독 권수로 판정.
         State state = profile.finishedBooks() < coldStartMinBooks ? State.COLD_START : State.FALLBACK;
-        return new PersonalityView(state, null, List.of(), profile, coldStartMinBooks, List.of(), zone);
+        return new PersonalityView(state, null, tags, profile, coldStartMinBooks, List.of(), zone);
     }
 }
