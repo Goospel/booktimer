@@ -7,6 +7,7 @@ import com.booktimer.follow.FollowRepository;
 import com.booktimer.personality.ReadingPersonalityCacheRepository;
 import com.booktimer.report.ReportRepository;
 import com.booktimer.session.ReadingSessionRepository;
+import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.timer.ReadingTimerRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,6 +45,8 @@ class AccountServiceTest {
     private UserRepository userRepository;
     @Mock
     private ReadingTimerRepository timerRepository;
+    @Mock
+    private ReadingGoalChangeRepository goalChangeRepository;
     @Mock
     private ReadingSessionRepository sessionRepository;
     @Mock
@@ -112,9 +115,10 @@ class AccountServiceTest {
 
         service.deleteAccount(EMAIL, "pw");
 
-        var ordered = inOrder(sessionRepository, timerRepository, followRepository, blockRepository, reportRepository, bookRepository, personalityCacheRepository, feedbackRepository, userRepository);
+        var ordered = inOrder(sessionRepository, timerRepository, goalChangeRepository, followRepository, blockRepository, reportRepository, bookRepository, personalityCacheRepository, feedbackRepository, userRepository);
         ordered.verify(sessionRepository).deleteByUser(user); // book FK 참조하는 세션 먼저
         ordered.verify(timerRepository).deleteByUser(user);
+        ordered.verify(goalChangeRepository).deleteByUser(user);   // FK: 목표 변경 이력도 유저 전에 정리
         ordered.verify(followRepository).deleteByFollower(user);   // FK: 유저 삭제 전에 관계 정리
         ordered.verify(followRepository).deleteByFollowee(user);
         ordered.verify(blockRepository).deleteByBlocker(user);     // FK: 유저 삭제 전에 차단 관계 정리
@@ -158,9 +162,10 @@ class AccountServiceTest {
 
         service.deleteSocialAccount(EMAIL, "googler");
 
-        var ordered = inOrder(sessionRepository, timerRepository, followRepository, blockRepository, reportRepository, bookRepository, personalityCacheRepository, feedbackRepository, userRepository);
+        var ordered = inOrder(sessionRepository, timerRepository, goalChangeRepository, followRepository, blockRepository, reportRepository, bookRepository, personalityCacheRepository, feedbackRepository, userRepository);
         ordered.verify(sessionRepository).deleteByUser(social);
         ordered.verify(timerRepository).deleteByUser(social);
+        ordered.verify(goalChangeRepository).deleteByUser(social);   // FK: 목표 변경 이력도 유저 전에 정리
         ordered.verify(followRepository).deleteByFollower(social);
         ordered.verify(followRepository).deleteByFollowee(social);
         ordered.verify(blockRepository).deleteByBlocker(social);

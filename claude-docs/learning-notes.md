@@ -2587,6 +2587,7 @@ BookTimer의 책 동일성 키는 `book.isbn13`이다. 이게 단순 표시용�
 - *나중에 채우는* 필드(지연 채움 식별자)가 있으면, 그 필드를 키/링크/식별에 쓰는 **모든 읽기 경로**가 null-state를 견디거나 배제해야 한다. 한 곳(검색)이 우연히 안전해도 다른 곳(추천)이 샌다.
 - 노출 불변식을 "공유한다"고 주석에 적었으면, 실제로 *모든 경로에 같은 필터가 적용*되는지 코드로 확인하라 — 조회 방식(LIKE vs findAll)이 다르면 보장이 깨진다.
 - 가장 좁은 필터를 골라라: 실패 모드에 직접 대응하는 약한 불변식(`loginId != null`)이, 그걸 함의하는 더 강한 플래그(`onboarded`)보다 부작용이 적다.
+- **자매 실사례 — 회원 탈퇴 purge × `reading_goal_change`**: 같은 "완성된 픽스처만 만들면 못 잡는다" 함정의 *삭제 방향* 판본. 실유저는 온보딩(`OnboardingService.complete` → `goalService.record`)·설정 변경에서 `reading_goal_change` 자식 행을 거의 항상 갖는데, `AccountService.purge()`가 이 user-FK 자식만 빠뜨려 부모 `users` 삭제 시 FK 위반 → 탈퇴 500(사실상 전원). 단위테스트(mock `inOrder`)는 FK를 모르고, 통합 테스트도 *부수 데이터 없는* 깔끔한 유저만 만들면 통과해 못 잡았다. 처방은 **실코드 진입점(`goalService.record`)으로 그 행을 만든 유저를 일부러 세워** 탈퇴가 FK 위반 없이 되는지 단언(N-055 정신 = "실제 경로가 만드는 부수 데이터를 픽스처가 재현하라"). 일반칙: **user를 FK 참조하는 새 테이블을 추가하면 그 즉시 purge도 갱신**하고, purge 통합 테스트는 자식 행을 실경로로 채운 유저로 검증한다. (수정: PR #292, `AccountDeletionIntegrationTest.deleteAccount_withGoalChangeHistory_succeeds`)
 
 ### Q&A 대비
 

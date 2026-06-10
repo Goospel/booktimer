@@ -5,6 +5,7 @@ import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.report.ReportReason;
 import com.booktimer.report.ReportService;
+import com.booktimer.timer.ReadingGoalService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +34,8 @@ class AccountDeletionIntegrationTest {
     private BookRepository bookRepository;
     @Autowired
     private ReportService reportService;
+    @Autowired
+    private ReadingGoalService goalService;
     @Autowired
     private PasswordEncoder passwordEncoder;
 
@@ -67,6 +70,21 @@ class AccountDeletionIntegrationTest {
             accountService.deleteAccount("victim@booktimer.com", "rawpw1234");   // 신고당한 쪽 탈퇴
             assertThat(userRepository.findByEmail("reporter@booktimer.com")).isEmpty();
             assertThat(userRepository.findByEmail("victim@booktimer.com")).isEmpty();
+        }).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("목표 변경 이력(reading_goal_change)을 가진 사용자도 FK 위반 없이 탈퇴된다")
+    void deleteAccount_withGoalChangeHistory_succeeds() {
+        String email = "goal@booktimer.com";
+        User user = userRepository.saveAndFlush(
+                User.of(email, passwordEncoder.encode("rawpw1234"), "목표러", "Asia/Seoul", Role.USER));
+        goalService.record(user, 1800L);   // 실유저가 온보딩/설정에서 행을 만드는 바로 그 진입점 (N-055 정신)
+
+        // reading_goal_change FK가 정리되지 않으면 flush 시 제약 위반 → findByEmail 쿼리가 flush를 강제한다.
+        assertThatCode(() -> {
+            accountService.deleteAccount(email, "rawpw1234");
+            assertThat(userRepository.findByEmail(email)).isEmpty();
         }).doesNotThrowAnyException();
     }
 }
