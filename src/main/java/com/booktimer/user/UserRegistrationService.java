@@ -129,7 +129,12 @@ public class UserRegistrationService {
      */
     public User registerOAuth(String email, String nickname, String timezone,
                               AuthProvider provider, LocalDate startDate) {
-        User user = userRepository.save(User.ofOAuth(email, nickname, timezone, Role.USER, provider));
+        // 소셜 가입은 provider가 이메일 소유를 보증한다 — 우리 OAuth 프로비저닝도 email_verified=true만
+        // 통과시키므로(N-026) 가입 시 검증 완료로 표시한다. 이게 없으면 소셜 사용자가 재참여 넛지 대상에서
+        // 빠지고(findNudgeTargets가 emailVerified=true 필수) 대시보드·설정에 인증 배너가 무의미하게 노출된다.
+        User user = User.ofOAuth(email, nickname, timezone, Role.USER, provider);
+        user.verifyEmail();
+        user = userRepository.save(user);
         timerRepository.save(ReadingTimer.startFor(user, DEFAULT_DAILY_INCREMENT_SECONDS));
         return user;
     }

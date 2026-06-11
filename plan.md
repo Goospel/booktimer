@@ -932,10 +932,11 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 - [x] **미검증 인증 배너 (정책 ③)** — `emailVerified=false`면 대시보드·설정 화면에 인증 유도 배너(인증 메일 재발송 버튼 → `POST /verify-email/resend`)를 띄운다. 미검증이어도 로그인·사용은 막지 않고 권유만 한다(thesis 마찰 최소). 설정 화면은 재발송 결과(`verifyResendResult`)도 안내. 기존 가입자는 V31 백필(true)이라 안 뜸. 입구 디자인 마감(#287~#291) 후 진행(파일 충돌 회피). → 이메일 인프라 **1단계 코드 완료**. (PR #304)
 
 **2단계 — 재참여 넛지 (정보통신망법 제50조 광고성 규제 동반 · 1단계 위에 얹음):**
-- [ ] (선결) 컴플라이언스 — 개인정보처리방침에 발송목적 고지 + 마케팅 수신을 **선택동의로 분리**(필수와 끼워팔기 금지).
+- [x] **컴플라이언스(처리방침)** — `privacy.html` §2에 마케팅 수신을 **선택동의로 분리**(필수와 끼워팔기 금지 "동의 안 해도 서비스 이용 제한 없음") + transactional/마케팅 2항목 분리 + 철회방법(설정·구독해지) + §1 수집항목에 동의여부·동의시각. (PR #308)
 - [x] **수신동의 토글**(opt-in, **기본 OFF**) — `User.marketingEmailConsent`(기본 false)·`marketingConsentAt` + 가입 폼 선택 체크박스(끼워팔기 금지) + 설정 "소식·알림" 토글(`POST /settings/marketing`). Flyway V32(백필 없음 — 동의 위조 방지). (PR #305)
 - [x] **발송 규약(코드)** — `RetentionNudgeService`가 제목 `(광고)` 접두 + 발신자 정보 + **서명 일회용 토큰 수신거부 링크**(`EmailTokenType.UNSUBSCRIBE` 30일, 추측 불가·IDOR 방어) + **인증된 주소에만**(`emailVerified` 게이트, 반송·평판 보호) 발송. 야간(21~08시) 회피는 KST 10시 단일 배치로 해결. 수신거부 소비 엔드포인트(`/unsubscribe`)는 PR-3. (PR #306 / PR-3) *실발송 점등은 PR-4(법무 9박스).*
 - [x] **넛지 로직** — `findNudgeTargets`(7일 비활동+동의+검증+구간당 1회) + `RetentionNudgeService`(per-recipient 격리·멱등 `lastNudgeSentAt`) + `RetentionNudgeScheduler` `@Scheduled`(매일 KST 10시 — 저녁 대신 야간 제한 자연 회피). cutoff·경계는 Clock(N-010). (PR #306)
+- [x] **OAuth emailVerified 정합** — 소셜 가입(`registerOAuth`)이 검증 표시 + 기존 소셜 백필(Flyway V33). 넛지의 `emailVerified` 게이트(위 발송 규약)가 소셜 사용자를 빠뜨려 동의해도 못 받던 갭 보정(원 설계 외 추가 — phase2 발송 머지 뒤 발견). `provision`의 미검증 거부(N-026) 보존. (PR #308)
 - [ ] (운영) **수신동의 2년마다 재확인** 의무 인지 + 반송·스팸신고 피드백 루프 관리.
 
 ### 측정 세션 `book_id` NOT NULL 제약 — 레거시 정리 후 (보류, 우선순위: 낮음)
