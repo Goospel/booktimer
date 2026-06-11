@@ -71,6 +71,27 @@ class SignupControllerTest {
         assertThat(saved.getLoginId()).isEqualTo("newuser1"); // 가입에서 로그인 식별자 확정
     }
 
+    @Autowired
+    private com.booktimer.email.EmailTokenRepository emailTokenRepository;
+
+    @Test
+    @DisplayName("POST /signup: 가입 직후엔 이메일 미검증이고, 가입 인증 토큰이 발급된다(인증 메일 트리거)")
+    void postSignup_triggersVerification_userUnverifiedWithToken() throws Exception {
+        mockMvc.perform(post("/signup").with(csrf())
+                        .param("email", "verifyflow@booktimer.com")
+                        .param("loginId", "verifyflow")
+                        .param("password", "rawpw1234")
+                        .param("nickname", "책벌레")
+                        .param("timezone", "Asia/Seoul"))
+                .andExpect(redirectedUrl("/login?registered"));
+
+        User saved = userRepository.findByEmail("verifyflow@booktimer.com").orElseThrow();
+        assertThat(saved.isEmailVerified()).isFalse(); // 가입 직후 미검증
+        // 인증 메일 트리거의 부수효과 — VERIFICATION 토큰이 그 사용자로 발급돼 있어야 한다(발송은 LoggingEmailSender).
+        assertThat(emailTokenRepository.findByUserAndTypeAndUsedAtIsNull(
+                saved, com.booktimer.email.EmailTokenType.VERIFICATION)).isNotEmpty();
+    }
+
     @Test
     @DisplayName("POST /signup: 이메일이 비면 화면을 다시 그리고 사용자를 만들지 않는다")
     void postSignup_invalid_rerendersWithoutPersisting() throws Exception {

@@ -227,6 +227,36 @@ class UserTest {
         assertThat(user.isOnboarded()).isTrue();
     }
 
+    // --- emailVerified: 가입 이메일 인증 상태 (이메일 인프라 1단계 PR-B) ---
+
+    @Test
+    @DisplayName("새로 만든 LOCAL 사용자는 이메일 미검증이다 (isEmailVerified=false)")
+    void of_isNotEmailVerifiedYet() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        assertThat(user.isEmailVerified()).isFalse();
+    }
+
+    @Test
+    @DisplayName("새로 만든 소셜 사용자도 기본은 이메일 미검증이다 (검증은 provider 보증과 별개 플래그)")
+    void ofOAuth_isNotEmailVerifiedYet() {
+        User user = User.ofOAuth(EMAIL, NICK, TZ, Role.USER, AuthProvider.GOOGLE);
+
+        assertThat(user.isEmailVerified()).isFalse();
+    }
+
+    @Test
+    @DisplayName("verifyEmail: 이메일 검증 완료 표시 — isEmailVerified=true (멱등)")
+    void verifyEmail_marksVerified() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        user.verifyEmail();
+        assertThat(user.isEmailVerified()).isTrue();
+
+        user.verifyEmail(); // 다시 호출해도 true 유지(멱등)
+        assertThat(user.isEmailVerified()).isTrue();
+    }
+
     // --- 책BTI "다시 분석" 일일 횟수 제한 (악의적 반복 클릭 → LLM 남용 방어) ---
 
     private static final java.time.LocalDate D1 = java.time.LocalDate.of(2026, 6, 8);

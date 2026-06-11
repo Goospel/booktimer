@@ -1,10 +1,14 @@
 package com.booktimer.web;
 
+import com.booktimer.email.EmailVerificationService;
 import com.booktimer.user.EmailAlreadyExistsException;
 import com.booktimer.user.LoginIdAlreadyExistsException;
 import com.booktimer.user.Role;
+import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -30,11 +34,17 @@ import java.time.ZoneId;
 @Controller
 public class SignupController {
 
+    private static final Logger log = LoggerFactory.getLogger(SignupController.class);
+
     private final UserRegistrationService registrationService;
+    private final EmailVerificationService emailVerificationService;
     private final Clock clock;
 
-    public SignupController(UserRegistrationService registrationService, Clock clock) {
+    public SignupController(UserRegistrationService registrationService,
+                            EmailVerificationService emailVerificationService,
+                            Clock clock) {
         this.registrationService = registrationService;
+        this.emailVerificationService = emailVerificationService;
         this.clock = clock;
     }
 
@@ -71,9 +81,16 @@ public class SignupController {
 
         LocalDate today = LocalDate.ofInstant(clock.instant(), zone);
         try {
-            registrationService.register(
+            User user = registrationService.register(
                     form.getEmail(), form.getPassword(), form.getLoginId(), form.getNickname(),
                     form.getTimezone(), Role.USER, today);
+            // 가입 직후 인증 메일 발송 — register 트랜잭션과 분리(컨트롤러에서 호출). 발송 실패는 격리한다:
+            // 메일이 안 가도 가입은 성공이고(미검증 상태로 사용 가능), 사용자는 로그인 후 재발송할 수 있다.
+            try {
+                emailVerificationService.sendVerification(user);
+            } catch (RuntimeException mailError) {
+                log.warn("가입 인증 메일 발송 실패(가입은 성공) — email={}", form.getEmail());
+            }
         } catch (EmailAlreadyExistsException | DataIntegrityViolationException e) {
             // 계정 열거 완화: 이메일은 비공개 속성이라 "이미 가입됨"을 응답으로 드러내면 열거가 된다.
             // 그래서 가입 성공과 "동일한 응답"으로 흡수한다 — 계정은 만들어지지 않았고(예외가 저장 전/플러시에 발생),

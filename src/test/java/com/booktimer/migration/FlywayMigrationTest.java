@@ -1,9 +1,14 @@
 package com.booktimer.migration;
 
+import com.booktimer.email.EmailToken;
+import com.booktimer.email.EmailTokenRepository;
+import com.booktimer.email.EmailTokenType;
 import com.booktimer.user.AuthProvider;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
+
+import java.time.Instant;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.MigrationInfo;
 import org.junit.jupiter.api.Test;
@@ -43,6 +48,9 @@ class FlywayMigrationTest {
 
     @Autowired
     UserRepository userRepository;
+
+    @Autowired
+    EmailTokenRepository emailTokenRepository;
 
     @Test
     void v1_baseline_migration_is_applied() {
@@ -102,6 +110,40 @@ class FlywayMigrationTest {
         assertThat(saved.getId()).isNotNull();
         assertThat(saved.getLoginId()).isNull();
         assertThat(saved.isOnboarded()).isFalse();
+    }
+
+    // ── 이메일 인증 + 토큰(V31) — ddl-auto=validate라 컨텍스트 로딩만으로 엔티티↔스키마 드리프트가 잡힌다 ──
+
+    @Test
+    void new_user_defaults_to_email_unverified() {
+        // V31의 email_verified 컬럼이 엔티티와 매핑되고, 신규 가입은 기본 미검증이어야 한다.
+        // (기존 행 true 백필은 migration의 `update users set email_verified = true`가 담당 — V6 onboarded와 동일 패턴.)
+        User u = User.of("verify-default@example.com", "hash", "닉", "Asia/Seoul", Role.USER);
+        u.assignLoginId("vdefault");
+
+        User saved = userRepository.saveAndFlush(u);
+
+        assertThat(saved.isEmailVerified()).isFalse();
+    }
+
+    @Test
+    void email_token_table_persists_under_flyway_schema() {
+        // email_token 테이블(FK·컬럼)이 Flyway 스키마와 엔티티 매핑이 일치해야 저장된다(validate 모드).
+        User owner = userRepository.saveAndFlush(
+                userWithHandle("token-owner@example.com", "tokenowner"));
+        EmailToken token = EmailToken.issue(owner, EmailTokenType.VERIFICATION,
+                "a".repeat(64), Instant.parse("2026-06-12T00:00:00Z"));
+
+        EmailToken saved = emailTokenRepository.saveAndFlush(token);
+
+        assertThat(saved.getId()).isNotNull();
+        assertThat(emailTokenRepository.findByTokenHash("a".repeat(64))).isPresent();
+    }
+
+    private static User userWithHandle(String email, String handle) {
+        User u = User.of(email, "hash", "닉", "Asia/Seoul", Role.USER);
+        u.assignLoginId(handle);
+        return u;
     }
 
     @Test

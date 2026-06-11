@@ -40,12 +40,14 @@ class OAuthUserProvisioningServiceTest {
     private UserRepository userRepository;
     @Mock
     private UserRegistrationService registrationService;
+    @Mock
+    private AccountService accountService;
 
     private OAuthUserProvisioningService service;
 
     @BeforeEach
     void setUp() {
-        service = new OAuthUserProvisioningService(userRepository, registrationService, clock);
+        service = new OAuthUserProvisioningService(userRepository, registrationService, accountService, clock);
     }
 
     @Test
@@ -105,6 +107,53 @@ class OAuthUserProvisioningServiceTest {
         assertThat(result.getNickname()).isEqualTo("구글러");
         verify(registrationService).registerOAuth(eq("dupname@booktimer.com"), eq("구글러"),
                 eq("Asia/Seoul"), eq(AuthProvider.GOOGLE), any());
+    }
+
+    @Test
+    @DisplayName("pre-hijacking: 같은 이메일의 미검증 LOCAL 계정이 있으면 폐기하고 OAuth 신규로 만든다")
+    void provision_unverifiedLocalAccount_isPurgedAndReprovisioned() {
+        // 공격자가 피해자 이메일로 미검증 로컬 계정을 선점한 상황 — provider가 소유를 보증한 OAuth가 진짜 주인.
+        User unverifiedLocal = User.of("victim@booktimer.com", "hash", "선점자", "Asia/Seoul", Role.USER);
+        // emailVerified 기본 false (미검증)
+        when(userRepository.findByEmail("victim@booktimer.com")).thenReturn(Optional.of(unverifiedLocal));
+        User created = User.ofOAuth("victim@booktimer.com", "진짜주인", "Asia/Seoul", Role.USER, AuthProvider.GOOGLE);
+        when(registrationService.registerOAuth(eq("victim@booktimer.com"), any(),
+                eq("Asia/Seoul"), eq(AuthProvider.GOOGLE), any())).thenReturn(created);
+
+        User result = service.provision("victim@booktimer.com", "진짜주인", true);
+
+        assertThat(result).isSameAs(created); // 새 OAuth 계정
+        verify(accountService).purgeUnverifiedLocalAccount(unverifiedLocal); // 선점 계정 폐기
+        verify(registrationService).registerOAuth(eq("victim@booktimer.com"), eq("진짜주인"),
+                eq("Asia/Seoul"), eq(AuthProvider.GOOGLE), any());
+    }
+
+    @Test
+    @DisplayName("pre-hijacking: 검증된 LOCAL 계정은 폐기하지 않고 기존대로 연결한다(정당한 소유자)")
+    void provision_verifiedLocalAccount_isLinkedNotPurged() {
+        User verifiedLocal = User.of("owner@booktimer.com", "hash", "주인", "Asia/Seoul", Role.USER);
+        verifiedLocal.verifyEmail(); // 검증됨 = 이메일 소유 증명
+        when(userRepository.findByEmail("owner@booktimer.com")).thenReturn(Optional.of(verifiedLocal));
+
+        User result = service.provision("owner@booktimer.com", "주인", true);
+
+        assertThat(result).isSameAs(verifiedLocal); // 기존 계정 그대로
+        verify(accountService, never()).purgeUnverifiedLocalAccount(any());
+        verify(registrationService, never()).registerOAuth(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("pre-hijacking: 기존 OAuth 계정은 미검증이어도 폐기하지 않는다(LOCAL 선점 벡터만 대상)")
+    void provision_existingOAuthAccount_notPurgedEvenIfUnverified() {
+        User existingOAuth = User.ofOAuth("g@booktimer.com", "구글러", "Asia/Seoul", Role.USER, AuthProvider.GOOGLE);
+        // OAuth 계정은 emailVerified 기본 false지만 LOCAL이 아니라 폐기 대상이 아니다
+        when(userRepository.findByEmail("g@booktimer.com")).thenReturn(Optional.of(existingOAuth));
+
+        User result = service.provision("g@booktimer.com", "구글러", true);
+
+        assertThat(result).isSameAs(existingOAuth);
+        verify(accountService, never()).purgeUnverifiedLocalAccount(any());
+        verify(registrationService, never()).registerOAuth(any(), any(), any(), any(), any());
     }
 
     @Test

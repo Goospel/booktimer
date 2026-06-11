@@ -83,6 +83,17 @@ public class User extends BaseTimeEntity {
     private boolean onboarded = false;
 
     /**
+     * 가입 이메일이 검증되었는지(이메일 인프라 1단계 PR-B). 신규 가입은 {@code false}로 시작해 인증 메일의
+     * 링크({@code /verify-email?token=})를 따라야 {@code true}가 된다. 기존 사용자는 마이그레이션에서
+     * {@code true}로 백필돼(grandfather — 이미 활성·신뢰) 인증을 강요받지 않는다.
+     *
+     * <p>핵심 게이트: <b>미검증 LOCAL 계정은 OAuth 자동연결 대상에서 제외</b>해 pre-hijacking을 막는다
+     * (N-053). 미검증이어도 로그인·사용은 정상 허용한다(입문자 마찰 최소 — thesis).
+     */
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified = false;
+
+    /**
      * 책BTI "다시 분석"(강제 재생성 = 매번 LLM 호출)을 <b>하루에 몇 번 했는지</b>와 그 카운트가 속한 날짜.
      * 악의적 반복 클릭이 LLM을 남용해 서버에 부담을 주는 것을 막는 일일 횟수 제한의 상태다
      * ({@link #tryConsumePersonalityRefresh}). "하루"는 사용자 타임존 기준이라(자정 경계) 날짜를 함께 들고 있다가,
@@ -233,6 +244,19 @@ public class User extends BaseTimeEntity {
     /** 첫 진입 초기 설정(온보딩)을 마쳤는가. false면 온보딩 페이지로 유도된다. */
     public boolean isOnboarded() {
         return onboarded;
+    }
+
+    /**
+     * 가입 이메일을 검증 완료로 표시한다. 멱등 — 이미 검증된 계정에 다시 호출해도 무방하다(인증 링크 재클릭 등).
+     * 호출 경로는 인증 토큰을 소비한 뒤({@code EmailTokenService.consume})의 인증 흐름뿐이다.
+     */
+    public void verifyEmail() {
+        this.emailVerified = true;
+    }
+
+    /** 가입 이메일이 검증되었는가. false면 OAuth 자동연결 대상에서 제외(pre-hijacking 차단)되고 인증 배너가 노출된다. */
+    public boolean isEmailVerified() {
+        return emailVerified;
     }
 
     /** 책BTI "다시 분석"의 하루 허용 횟수(악의적 반복 클릭 → LLM 남용 방어). */
