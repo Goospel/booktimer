@@ -30,12 +30,12 @@ class EmailVerificationServiceTest {
     @Mock
     private EmailTokenService tokenService;
     @Mock
-    private EmailSender emailSender;
+    private EmailDispatcher emailDispatcher;
     @Mock
     private UserRepository userRepository;
 
     private EmailVerificationService service() {
-        return new EmailVerificationService(tokenService, emailSender, userRepository, BASE_URL);
+        return new EmailVerificationService(tokenService, emailDispatcher, userRepository, BASE_URL);
     }
 
     private User user() {
@@ -54,7 +54,7 @@ class EmailVerificationServiceTest {
 
         ArgumentCaptor<String> to = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
-        verify(emailSender).send(to.capture(), any(), body.capture());
+        verify(emailDispatcher).dispatch(to.capture(), any(), body.capture());
         assertThat(to.getValue()).isEqualTo("reader@booktimer.com");
         assertThat(body.getValue()).contains(BASE_URL + "/verify-email?token=RAWTOKEN123");
     }

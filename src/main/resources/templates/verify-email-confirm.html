@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>이메일 인증 — BookTimer</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <span class="emoji">📚</span>
+        <h1>BookTimer</h1>
+    </header>
+
+    <section class="card">
+        <div class="entry-hero">
+            <h2>이메일 인증</h2>
+            <p>아래 버튼을 눌러 이메일 인증을 완료해 주세요.</p>
+        </div>
+        <!-- 토큰 소비는 이 POST에서만 일어난다(메일 링크 프리페치가 토큰을 소진하지 못하게 GET과 분리). -->
+        <form th:action="@{/verify-email}" method="post">
+            <input type="hidden" name="token" th:value="${token}">
+            <button type="submit" class="btn-primary" style="display:block">이메일 인증하기</button>
+        </form>
+    </section>
+</div>
+</body>
+</html>
