@@ -39,6 +39,7 @@
 - [T-035. author `display` 규칙이 UA의 `display:none`을 이겨 `<details>`·`[hidden]`이 안 숨겨진다 (cascade origin: author > UA)](#t-035-author-display-규칙이-ua의-displaynone을-이겨-detailshidden이-안-숨겨진다-cascade-origin-author--ua)
 - [T-039. 실시간 시계 통합 테스트는 자정·타임존 경계에서 플레이키 — 고정 클락을 주입하라](#t-039-실시간-시계-통합-테스트는-자정타임존-경계에서-플레이키--고정-클락을-주입하라)
 - [T-043. preview_screenshot이 환경에 따라 타임아웃(렌더러는 정상) — preview_inspect/eval computed-style로 시각 검증 대체](#t-043-preview_screenshot이-환경에-따라-타임아웃렌더러는-정상--preview_inspecteval-computed-style로-시각-검증-대체)
+- [T-044. GitHub branch protection PUT — 4개 최상위 키 필수(422) + PowerShell 파이프로 JSON 넘기면 400](#t-044-github-branch-protection-put--4개-최상위-키-필수422--powershell-파이프로-json-넘기면-400)
 
 ---
 
@@ -857,6 +858,38 @@ genConfig.putObject("thinkingConfig").put("thinkingBudget", 0); // 2.5-flash thi
 
 ---
 
+## T-044. GitHub branch protection PUT — 4개 최상위 키 필수(422) + PowerShell 파이프로 JSON 넘기면 400
+
+**증상**: main branch protection을 `gh api -X PUT .../branches/main/protection`로 적용하려는데 두 단계에서 막힘.
+- 1차: 키를 일부만 보내면 `422 Validation Failed` (또는 누락 키 관련 오류).
+- 2차: 키를 다 채운 JSON을 **PowerShell here-string으로 만들어 `| gh api --input -`** 파이프로 넘겼더니 `400 {"message":"Problems parsing JSON"}`.
+
+**원인**:
+- ① **4개 최상위 키 필수**: protection PUT은 `required_status_checks` / `enforce_admins` / `required_pull_request_reviews` / `restrictions` **네 키를 null이라도 모두 명시**해야 한다(GitHub API 규약). 하나라도 빠지면 422.
+- ② **PowerShell 파이프 인코딩**: PowerShell 5.1에서 문자열을 네이티브 stdin으로 파이프하면 UTF-16(BOM)·CRLF 등이 섞여 `gh`(→GitHub)가 JSON 파싱에 실패 → 400. 내용은 맞는데 바이트가 틀린 케이스(T-026 한글 커밋 깨짐과 같은 뿌리).
+
+**해결**:
+- 본문을 **UTF-8 파일**로 쓰고 `gh api -X PUT ... --input <file>.json` 으로 넘긴다(파이프 금지). Write 도구로 파일 생성 → `--input`이 안전.
+- 4개 키를 모두 포함:
+  ```json
+  {
+    "required_status_checks": { "strict": true, "contexts": ["test"] },
+    "enforce_admins": true,
+    "required_pull_request_reviews": { "required_approving_review_count": 0 },
+    "restrictions": null
+  }
+  ```
+  (+ `allow_force_pushes`/`allow_deletions` `false`는 선택). `contexts`의 체크 이름은 **실제 워크플로 job 이름과 정확히 일치**해야 게이트가 헛돌지 않음 — `gh api repos/<o>/<r>/commits/<sha>/check-runs --jq '.check_runs[].name'`로 실측 후 등록.
+- 적용 후 readback으로 확정: `gh api repos/<o>/<r>/branches/main/protection --jq '{checks: .required_status_checks.contexts, admins: .enforce_admins.enabled, ...}'`.
+
+**닭-달걀 주의**: `contexts:["test"]`가 실재하려면 그 체크를 만드는 워크플로(ci.yml)가 **main에 먼저 안착**해야 한다. protection을 먼저 켜면 ci.yml PR이 (아직 없는) test 체크를 기다리다 막힐 수 있음 — ci.yml 머지 → protection 순서.
+
+**교훈**: GitHub API의 "부분 업데이트 같은데 전체 키 필수"인 PUT은 422를, PowerShell의 "내용 맞는데 바이트 틀림"은 400을 던진다. 둘 다 **파일+`--input`**으로 한 번에 회피. (PR #298 — PR CI 게이트 + branch protection 도입)
+
+**관련**: T-026(PowerShell 5.1 한글 커밋 깨짐 — 파일 우회 같은 뿌리), learning-notes **N-070**(required check + paths-ignore 머지 영구 블록 함정 — 같은 PR).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -904,3 +937,4 @@ genConfig.putObject("thinkingConfig").put("thinkingBudget", 0); // 2.5-flash thi
 | 2026-06-09 | T-033 보강 (#265 — 페이지 전용 인라인 `<head><style>`가 누적돼 응답 버퍼(8KB) 넘으면 같은 commit/CSRF 500 — `personality.html`이 7956B까지 커져 캐러셀 CSS 추가로 초과, `th:action` refresh 폼 렌더에서 `SpringActionTagProcessor` → `CsrfRequestDataValueProcessor.getExtraHiddenFields` → 세션 생성이 commit 후라 `IllegalStateException`. **MockMvc 통합 테스트가 끝단에서 잡음**(`get_ready_rendersNarrative` 등 2개 Red) / 해결: 페이지 전용 CSS도 `app.css`로 빼 인라인 본문을 비운다(T-033 주석 케이스·#247과 같은 뿌리=본문 비대화, 원인만 CSS) — 컨트롤러 토큰 선확정(T-033 본체)으로도 막히지만 버퍼 자체를 줄이는 게 근본) |
 | 2026-06-09 | T-042 (마우스 드래그 캐러셀이 손을 안 따라옴 — 컨테이너 `scroll-behavior:smooth`가 `scrollLeft` 직접 대입까지 애니메이션화(CSSOM 스펙)+`scroll-snap mandatory`가 진행 중 위치 되당김 → `scrollLeft=150` 직후 읽으면 0 / 해결: 드래그 확정 시 인라인 `scrollBehavior='auto'`(즉시 추적)·놓을 때 `''` 복원(탄력 스냅 유지), 또는 `scrollTo({behavior:'instant'})` / "대입했는데 0"=smooth 애니메이션 중 신호, N-065 ④번 함정) |
 | 2026-06-10 | T-043 (preview_screenshot이 환경따라 타임아웃(`window may be stuck`)인데 렌더러는 정상 — `preview_eval`은 응답·console 에러 0이라 캡처 단계만 행 / 시각 변경 검증은 스크린샷 없이 `preview_inspect`·`getComputedStyle`로 색·폰트·크기를 *값으로* 단언(눈대중보다 정확)·`getBoundingClientRect`로 레이아웃·`document.fonts.check`로 폰트 로드 / "스크린샷 안 됨 ≠ 변경 안 됨" — 렌더러 생존 먼저 분리 확인 후 DOM 측정 대체, #269·#276·#287 반복 / 스크린샷 불신 자매 T-035, 디자인 토큰 검증 N-068, PR #287) |
+| 2026-06-11 | T-044 (GitHub branch protection PUT은 4개 최상위 키(`required_status_checks`/`enforce_admins`/`required_pull_request_reviews`/`restrictions`)를 null이라도 모두 보내야 함 — 누락 시 422 / PowerShell 5.1에서 JSON을 here-string 파이프로 넘기면 인코딩 깨져 400 `Problems parsing JSON` → UTF-8 파일+`--input` 사용(T-026 한글 커밋과 같은 뿌리) / `contexts` 체크 이름은 check-runs로 실측 후 등록·ci.yml 머지 후 protection 켜는 닭-달걀 순서, N-070, PR #298) |
