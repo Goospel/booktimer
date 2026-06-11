@@ -1,0 +1,23 @@
+name: CI
+
+# PR에서 test 게이트만 돌린다(배포는 deploy.yml이 main push 때). H2라 Docker 불필요.
+# paths-ignore를 일부러 두지 않는다 — required status check가 "test 통과 필수"인데
+# 문서-only PR에서 job이 스킵되면 체크가 pending으로 남아 PR을 영영 못 머지한다.
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - name: Run tests
+        run: |
+          chmod +x ./gradlew
+          ./gradlew test --no-daemon
