@@ -157,6 +157,8 @@
                     </form>
                     <a th:if="${b.purchaseLink}" th:href="@{/books/{id}/buy(id=${b.id})}" target="_blank"
                        rel="noopener nofollow" class="btn-ghost">구매</a>
+                    <a th:if="${coupangEnabled}" th:href="@{/books/{id}/buy/coupang(id=${b.id})}" target="_blank"
+                       rel="noopener nofollow" class="btn-ghost">쿠팡</a>
                     <form method="post" th:action="@{/books/{id}/delete(id=${b.id})}"
                           onsubmit="return confirm('이 책을 삭제할까요?');">
                         <button type="submit" class="btn-danger">삭제</button>
@@ -169,6 +171,9 @@
 
     <p class="affiliate-note">
         ※ "구매" 링크는 제휴(알라딘) 링크로, 구매 시 일부 수수료를 받을 수 있습니다.
+    </p>
+    <p class="affiliate-note" th:if="${coupangEnabled}">
+        이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
     </p>
 
     <!-- 광고 (하단, 게시자 ID 설정 시에만) -->

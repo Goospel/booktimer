@@ -72,9 +72,16 @@ public class Book extends BaseTimeEntity {
     @Column(nullable = false, length = 20)
     private BookStatus status;
 
-    /** "구매"(제휴 링크) 클릭 누적 수. 어떤 책이 구매 의향을 내는지 보는 제휴 수익 데이터. */
+    /**
+     * 알라딘 "구매"(제휴 링크) 클릭 누적 수. 어떤 책이 구매 의향을 내는지 보는 제휴 수익 데이터.
+     * (이름은 하위호환으로 유지 — 쿠팡 도입 후 의미상 "알라딘 클릭"으로 굳었다. 쿠팡은 {@link #coupangClickCount}.)
+     */
     @Column(nullable = false)
     private long clickCount = 0L;
+
+    /** 쿠팡 파트너스 "구매" 클릭 누적 수. 알라딘({@link #clickCount})과 분리 집계 — 파트너별 성과 비교. */
+    @Column(nullable = false)
+    private long coupangClickCount = 0L;
 
     /**
      * 공개 범위(SNS). 기본 비공개 — 공개는 사용자가 책마다 명시적으로 켠다(opt-in).
@@ -165,9 +172,14 @@ public class Book extends BaseTimeEntity {
         return false;
     }
 
-    /** 제휴 "구매" 링크 클릭을 1회 집계한다(수익 데이터). */
+    /** 제휴 "구매" 링크(알라딘) 클릭을 1회 집계한다(수익 데이터). */
     public void recordPurchaseClick() {
         this.clickCount++;
+    }
+
+    /** 쿠팡 파트너스 "구매" 클릭을 1회 집계한다(알라딘과 분리 집계). */
+    public void recordCoupangClick() {
+        this.coupangClickCount++;
     }
 
     /**
@@ -257,6 +269,10 @@ public class Book extends BaseTimeEntity {
 
     public long getClickCount() {
         return clickCount;
+    }
+
+    public long getCoupangClickCount() {
+        return coupangClickCount;
     }
 
     public BookVisibility getVisibility() {
