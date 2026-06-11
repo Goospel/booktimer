@@ -244,4 +244,16 @@ class UserRegistrationServiceTest {
         inOrder.verify(userRepository).save(any(User.class));
         inOrder.verify(timerRepository).save(any(ReadingTimer.class));
     }
+
+    @Test
+    @DisplayName("registerOAuth: 소셜 가입 사용자는 이메일 검증됨으로 생성된다 (provider가 소유 보증 — 넛지·배너 정상화, N-026)")
+    void registerOAuth_marksEmailVerified() {
+        when(userRepository.save(any(User.class))).thenAnswer(returnsFirstArg());
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+
+        service.registerOAuth("gv@booktimer.com", "구글러", "Asia/Seoul", AuthProvider.GOOGLE, DAY0);
+
+        verify(userRepository).save(userCaptor.capture());
+        assertThat(userCaptor.getValue().isEmailVerified()).isTrue();
+    }
 }
