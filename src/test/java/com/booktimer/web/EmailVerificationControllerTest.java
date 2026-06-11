@@ -51,25 +51,41 @@ class EmailVerificationControllerTest {
     }
 
     @Test
-    @DisplayName("GET /verify-email: 유효 토큰이면 비로그인도 열리고, 사용자가 검증 완료로 바뀐다")
-    void verify_validToken_marksVerified_public() throws Exception {
+    @DisplayName("GET /verify-email: 비로그인도 열리는 확인 페이지를 보여주되 토큰을 소비하지 않는다(프리페치 안전)")
+    void get_showsConfirmPage_withoutConsuming() throws Exception {
         User user = persistUser("verify@booktimer.com", "verifyme");
         String raw = tokenService.issue(user, EmailTokenType.VERIFICATION);
 
         mockMvc.perform(get("/verify-email").param("token", raw))
                 .andExpect(status().isOk())
-                .andExpect(view().name("verify-email-result"))
-                .andExpect(model().attribute("verified", true));
+                .andExpect(view().name("verify-email-confirm"))
+                .andExpect(model().attribute("token", raw));
 
-        assertThat(userRepository.findByEmail("verify@booktimer.com").orElseThrow().isEmailVerified()).isTrue();
+        // GET은 소비하지 않는다 — 사용자 미검증 유지 + 토큰 여전히 유효(이후 POST로 검증 가능)
+        assertThat(userRepository.findByEmail("verify@booktimer.com").orElseThrow().isEmailVerified()).isFalse();
+        assertThat(tokenRepository.findByUserAndTypeAndUsedAtIsNull(user, EmailTokenType.VERIFICATION)).isNotEmpty();
     }
 
     @Test
-    @DisplayName("GET /verify-email: 무효 토큰이면 verified=false 안내 페이지, 검증되지 않는다")
-    void verify_invalidToken_showsFailure() throws Exception {
+    @DisplayName("POST /verify-email: 유효 토큰이면 사용자를 검증 완료로 바꾸고 결과 페이지를 보여준다")
+    void post_validToken_marksVerified() throws Exception {
+        User user = persistUser("postverify@booktimer.com", "postverify");
+        String raw = tokenService.issue(user, EmailTokenType.VERIFICATION);
+
+        mockMvc.perform(post("/verify-email").param("token", raw).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(view().name("verify-email-result"))
+                .andExpect(model().attribute("verified", true));
+
+        assertThat(userRepository.findByEmail("postverify@booktimer.com").orElseThrow().isEmailVerified()).isTrue();
+    }
+
+    @Test
+    @DisplayName("POST /verify-email: 무효 토큰이면 verified=false 안내 페이지, 검증되지 않는다")
+    void post_invalidToken_showsFailure() throws Exception {
         User user = persistUser("noverify@booktimer.com", "noverify");
 
-        mockMvc.perform(get("/verify-email").param("token", "bogus-token"))
+        mockMvc.perform(post("/verify-email").param("token", "bogus-token").with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(view().name("verify-email-result"))
                 .andExpect(model().attribute("verified", false));
@@ -78,15 +94,31 @@ class EmailVerificationControllerTest {
     }
 
     @Test
-    @DisplayName("GET /verify-email: 토큰을 한 번 쓰면 재사용은 거부(일회용) — 두 번째는 verified=false")
-    void verify_tokenIsSingleUse() throws Exception {
+    @DisplayName("POST /verify-email: 토큰은 일회용 — 두 번째 POST는 verified=false")
+    void post_tokenIsSingleUse() throws Exception {
         User user = persistUser("once@booktimer.com", "onceuser");
         String raw = tokenService.issue(user, EmailTokenType.VERIFICATION);
 
-        mockMvc.perform(get("/verify-email").param("token", raw))
+        mockMvc.perform(post("/verify-email").param("token", raw).with(csrf()))
                 .andExpect(model().attribute("verified", true));
-        mockMvc.perform(get("/verify-email").param("token", raw))
+        mockMvc.perform(post("/verify-email").param("token", raw).with(csrf()))
                 .andExpect(model().attribute("verified", false)); // 재사용 거부
+    }
+
+    @Test
+    @DisplayName("프리페치 안전: GET을 여러 번 해도 토큰이 소진되지 않아 이후 POST로 정상 검증된다")
+    void get_prefetchDoesNotBurnToken() throws Exception {
+        User user = persistUser("prefetch@booktimer.com", "prefetchu");
+        String raw = tokenService.issue(user, EmailTokenType.VERIFICATION);
+
+        // 메일 클라이언트 프리페치 시뮬레이션 — GET 2회
+        mockMvc.perform(get("/verify-email").param("token", raw)).andExpect(status().isOk());
+        mockMvc.perform(get("/verify-email").param("token", raw)).andExpect(status().isOk());
+
+        // 사람이 버튼을 눌러 POST하면 여전히 검증 성공
+        mockMvc.perform(post("/verify-email").param("token", raw).with(csrf()))
+                .andExpect(model().attribute("verified", true));
+        assertThat(userRepository.findByEmail("prefetch@booktimer.com").orElseThrow().isEmailVerified()).isTrue();
     }
 
     @Test

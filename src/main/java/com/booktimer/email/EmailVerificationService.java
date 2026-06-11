@@ -21,16 +21,16 @@ import java.util.Optional;
 public class EmailVerificationService {
 
     private final EmailTokenService tokenService;
-    private final EmailSender emailSender;
+    private final EmailDispatcher emailDispatcher;
     private final UserRepository userRepository;
     private final String baseUrl;
 
     public EmailVerificationService(EmailTokenService tokenService,
-                                    EmailSender emailSender,
+                                    EmailDispatcher emailDispatcher,
                                     UserRepository userRepository,
                                     @Value("${booktimer.base-url:http://localhost:8080}") String baseUrl) {
         this.tokenService = tokenService;
-        this.emailSender = emailSender;
+        this.emailDispatcher = emailDispatcher;
         this.userRepository = userRepository;
         this.baseUrl = baseUrl;
     }
@@ -44,7 +44,8 @@ public class EmailVerificationService {
         String rawToken = tokenService.issue(user, EmailTokenType.VERIFICATION);
         String link = baseUrl + "/verify-email?token="
                 + URLEncoder.encode(rawToken, StandardCharsets.UTF_8);
-        emailSender.send(user.getEmail(), "[BookTimer] 이메일 인증을 완료해 주세요", buildBody(user, link));
+        // 토큰 발급(DB)은 동기로 끝내고, SMTP 발송은 비동기로 위임 — 요청 스레드 블로킹·트랜잭션 내 I/O 제거.
+        emailDispatcher.dispatch(user.getEmail(), "[BookTimer] 이메일 인증을 완료해 주세요", buildBody(user, link));
     }
 
     /**

@@ -34,9 +34,22 @@ public class EmailVerificationController {
         this.currentUserService = currentUserService;
     }
 
-    /** 인증 링크 진입(공개) — 토큰을 검증해 결과 페이지({@code verified} 플래그)를 렌더한다. */
+    /**
+     * 인증 링크 진입(공개) — <b>토큰을 소비하지 않고</b> 확인 페이지(버튼 폼)만 렌더한다.
+     *
+     * <p>일회용 토큰 소비를 GET이 아니라 POST({@link #confirm})로 미룬 이유: 메일 클라이언트의 링크 프리페치
+     * (Outlook SafeLinks·백신·메신저 언펄링)는 GET을 자동으로 날린다 — GET에서 소비하면 사용자가 클릭하기도 전에
+     * 토큰이 소진돼 "만료" 페이지를 보게 된다. GET은 폼만 보여주고, 사람이 버튼을 눌러야 일어나는 POST에서 소비한다.
+     */
     @GetMapping("/verify-email")
-    public String verify(@RequestParam(name = "token", required = false) String token, Model model) {
+    public String verifyForm(@RequestParam(name = "token", required = false) String token, Model model) {
+        model.addAttribute("token", token == null ? "" : token);
+        return "verify-email-confirm";
+    }
+
+    /** 인증 확정(공개·CSRF 보호) — 버튼 클릭 시에만 토큰을 소비해 검증하고 결과 페이지를 렌더한다. */
+    @PostMapping("/verify-email")
+    public String confirm(@RequestParam(name = "token", required = false) String token, Model model) {
         boolean verified = emailVerificationService.verify(token);
         model.addAttribute("verified", verified);
         return "verify-email-result";
