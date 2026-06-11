@@ -39,7 +39,7 @@ class ForwardedHeadersHttpsTest {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + port + "/oauth2/authorization/google"))
                 .header("X-Forwarded-Proto", "https")
-                .header("X-Forwarded-Host", "booktimer.click")
+                .header("X-Forwarded-Host", "booktimer.app")
                 .GET()
                 .build();
 
@@ -48,7 +48,7 @@ class ForwardedHeadersHttpsTest {
         assertThat(response.statusCode()).isEqualTo(302);
         String location = response.headers().firstValue("Location").orElse("");
         assertThat(location).contains("accounts.google.com");
-        // 핵심: ALB 뒤에서도 redirect_uri가 http(localhost)가 아니라 https://booktimer.click로 만들어진다.
-        assertThat(location).contains("redirect_uri=https://booktimer.click/login/oauth2/code/google");
+        // 핵심: ALB 뒤에서도 redirect_uri가 http(localhost)가 아니라 https://booktimer.app로 만들어진다.
+        assertThat(location).contains("redirect_uri=https://booktimer.app/login/oauth2/code/google");
     }
 }
