@@ -1,6 +1,7 @@
 package com.booktimer.web;
 
 import com.booktimer.email.EmailVerificationService;
+import com.booktimer.email.SignupNotificationService;
 import com.booktimer.user.EmailAlreadyExistsException;
 import com.booktimer.user.LoginIdAlreadyExistsException;
 import com.booktimer.user.Role;
@@ -38,13 +39,16 @@ public class SignupController {
 
     private final UserRegistrationService registrationService;
     private final EmailVerificationService emailVerificationService;
+    private final SignupNotificationService signupNotificationService;
     private final Clock clock;
 
     public SignupController(UserRegistrationService registrationService,
                             EmailVerificationService emailVerificationService,
+                            SignupNotificationService signupNotificationService,
                             Clock clock) {
         this.registrationService = registrationService;
         this.emailVerificationService = emailVerificationService;
+        this.signupNotificationService = signupNotificationService;
         this.clock = clock;
     }
 
@@ -95,8 +99,15 @@ public class SignupController {
             // 계정 열거 완화: 이메일은 비공개 속성이라 "이미 가입됨"을 응답으로 드러내면 열거가 된다.
             // 그래서 가입 성공과 "동일한 응답"으로 흡수한다 — 계정은 만들어지지 않았고(예외가 저장 전/플러시에 발생),
             // 응답만 성공과 같아 이메일 존재 여부를 구분할 수 없다. (동시 가입 레이스의 DB 제약 위반도 같은 처리 →
-            // 500 방지 + login_id 레이스조차 안전 측 success. 이메일 발송 인프라가 없어 "조용히 수락+메일 통지" 대신
-            // 동일 리다이렉트로 갈음 — 잊고 재가입한 사용자는 로그인 단계에서 알게 되는 비용은 감수.)
+            // 500 방지 + login_id 레이스조차 안전 측 success.) "조용히 수락 + 통지"의 정석(N-052): 응답은 흡수하되
+            // 그 이메일의 실소유자(기존 계정주) 메일함으로 "이미 계정 있음" 안내를 보낸다 — 잊고 재가입한 정직한
+            // 주인이 막막해지지 않게. 통지는 시도자가 아니라 주인에게만 가므로 열거가 아니다(계정 없으면 무발송).
+            // 발송 실패는 격리한다(응답·계정 미생성 불변).
+            try {
+                signupNotificationService.notifyExistingAccount(form.getEmail());
+            } catch (RuntimeException notifyError) {
+                log.warn("중복 가입 통지 메일 발송 실패 — email={}", form.getEmail());
+            }
             return "redirect:/login?registered";
         } catch (LoginIdAlreadyExistsException e) {
             // 이미 쓰이는 로그인 아이디 — 다른 아이디를 받도록 필드 에러로 안내(생성 없음)
