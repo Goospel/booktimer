@@ -11,8 +11,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.booktimer.email.SignupNotificationService;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -37,6 +43,10 @@ class SignupControllerTest {
 
     @Autowired
     private UserRepository userRepository;
+
+    /** 중복 가입 통지는 실소유자 메일함으로 가는 부수효과 — 컨트롤러가 그 발송을 트리거하는지만 여기서 검증한다. */
+    @MockitoBean
+    private SignupNotificationService signupNotificationService;
 
     @Test
     @DisplayName("GET /signup: 비로그인도 가입 화면을 볼 수 있고 폼 모델이 실린다")
@@ -69,6 +79,7 @@ class SignupControllerTest {
 
         User saved = userRepository.findByEmail("newuser@booktimer.com").orElseThrow();
         assertThat(saved.getLoginId()).isEqualTo("newuser1"); // 가입에서 로그인 식별자 확정
+        verify(signupNotificationService, never()).notifyExistingAccount(eq("newuser@booktimer.com")); // 신규 가입엔 통지 없음
     }
 
     @Autowired
@@ -124,6 +135,8 @@ class SignupControllerTest {
                 .andExpect(redirectedUrl("/login?registered"));   // 성공과 동일 — 이메일 존재 여부 미노출
 
         assertThat(userRepository.count()).isEqualTo(1);  // 기존 1명만, 중복 생성 없음
+        // 응답은 흡수하되 실소유자에겐 "이미 계정 있음" 통지를 보낸다(N-052 흡수의 정석) — 시도자에겐 여전히 동일 응답.
+        verify(signupNotificationService).notifyExistingAccount(eq("dup@booktimer.com"));
     }
 
     @Test
