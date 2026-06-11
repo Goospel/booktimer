@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>수신 거부 — BookTimer</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <span class="emoji">📚</span>
+        <h1>BookTimer</h1>
+    </header>
+
+    <section class="card">
+        <div th:if="${unsubscribed}">
+            <div class="entry-hero">
+                <h2>수신 거부 완료</h2>
+                <p>소식·알림 메일을 더 이상 보내지 않을게요. 마음이 바뀌면 언제든 설정에서 다시 켤 수 있어요.</p>
+            </div>
+            <a class="btn-primary" th:href="@{/}" style="display:block">BookTimer 열기</a>
+        </div>
+        <div th:unless="${unsubscribed}">
+            <div class="entry-hero">
+                <h2>링크가 만료됐어요</h2>
+                <p>이 수신거부 링크는 만료됐거나 이미 사용됐어요. 로그인 후 설정에서 직접 수신을 끌 수 있어요.</p>
+            </div>
+            <a class="btn-primary" th:href="@{/settings}" style="display:block">설정으로 가기</a>
+        </div>
+    </section>
+</div>
+</body>
+</html>
