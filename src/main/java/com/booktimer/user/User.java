@@ -117,6 +117,29 @@ public class User extends BaseTimeEntity {
     @Column(name = "login_id", length = 50)
     private String loginId;
 
+    /**
+     * 영리목적 광고성 정보(재참여 넛지 등 마케팅 메일) 수신에 동의했는지(이메일 인프라 2단계).
+     * 정보통신망법 §50의 <b>사전 동의(opt-in)</b> 불변식 — 기본 {@code false}(미동의)이고, 가입 폼·설정의
+     * 별도 선택 항목으로만 켜진다(필수 동의에 끼워팔지 않음 — 개인정보보호법). 미동의자에겐 넛지를 보내지 않는다.
+     */
+    @Column(name = "marketing_email_consent", nullable = false)
+    private boolean marketingEmailConsent = false;
+
+    /**
+     * 마지막으로 마케팅 수신에 동의한 시각. 2년 재동의 고지·감사 근거다. 철회({@link #withdrawMarketingConsent})
+     * 시에도 보존한다 — "언제 동의했었나"의 이력은 지우지 않는다.
+     */
+    @Column(name = "marketing_consent_at")
+    private java.time.Instant marketingConsentAt;
+
+    /**
+     * 마지막 재참여 넛지를 발송한 시각. <b>비활동 구간당 1회</b>를 멱등하게 보장하는 상태다 —
+     * {@code lastNudgeSentAt < lastActivityAt}(마지막 활동 이후 아직 안 보냄)일 때만 다음 넛지 대상이 된다.
+     * 사용자가 다시 읽으면 활동 시각이 갱신돼 자격이 리셋되고, 또 이탈하면 다음 1회 자격이 생긴다.
+     */
+    @Column(name = "last_nudge_sent_at")
+    private java.time.Instant lastNudgeSentAt;
+
     protected User() {
         // JPA
     }
@@ -257,6 +280,49 @@ public class User extends BaseTimeEntity {
     /** 가입 이메일이 검증되었는가. false면 OAuth 자동연결 대상에서 제외(pre-hijacking 차단)되고 인증 배너가 노출된다. */
     public boolean isEmailVerified() {
         return emailVerified;
+    }
+
+    /**
+     * 마케팅 수신에 동의 처리한다 — 동의 플래그를 켜고 동의 시각을 {@code clock} 기준으로 기록한다(멱등).
+     * 시각을 직접 계산하지 않고 {@code Clock}을 주입받는 이유는 테스트에서 동의 경계를 고정하기 위함이다(N-010).
+     *
+     * @param clock 동의 시각 결정 시계(테스트 고정용)
+     */
+    public void consentToMarketing(java.time.Clock clock) {
+        this.marketingEmailConsent = true;
+        this.marketingConsentAt = clock.instant();
+    }
+
+    /**
+     * 마케팅 수신 동의를 철회한다 — 플래그만 끄고 <b>동의 시각은 감사 근거로 보존</b>한다(언제 동의했었는지의 이력은
+     * 지우지 않는다). 설정 토글 OFF·메일 구독해지 링크가 이 경로를 탄다. 멱등.
+     */
+    public void withdrawMarketingConsent() {
+        this.marketingEmailConsent = false;
+    }
+
+    /** 영리목적 광고성 정보(마케팅 메일) 수신에 동의했는가. false면 재참여 넛지 대상에서 제외된다. */
+    public boolean isMarketingEmailConsent() {
+        return marketingEmailConsent;
+    }
+
+    /** 마지막으로 마케팅 수신에 동의한 시각(철회해도 보존). 한 번도 동의 안 했으면 {@code null}. */
+    public java.time.Instant getMarketingConsentAt() {
+        return marketingConsentAt;
+    }
+
+    /**
+     * 마지막 재참여 넛지를 발송한 시각을 기록한다 — 발송 직후 호출해 이 비활동 구간의 중복 발송을 막는다(멱등 보장).
+     *
+     * @param when 발송 시각(배치 시계 기준)
+     */
+    public void recordNudgeSent(java.time.Instant when) {
+        this.lastNudgeSentAt = when;
+    }
+
+    /** 마지막 재참여 넛지 발송 시각. 한 번도 안 보냈으면 {@code null}. */
+    public java.time.Instant getLastNudgeSentAt() {
+        return lastNudgeSentAt;
     }
 
     /** 책BTI "다시 분석"의 하루 허용 횟수(악의적 반복 클릭 → LLM 남용 방어). */

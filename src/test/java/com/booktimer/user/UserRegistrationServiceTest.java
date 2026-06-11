@@ -12,7 +12,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -44,6 +47,9 @@ class UserRegistrationServiceTest {
 
     @Mock
     private PasswordEncoder passwordEncoder;
+
+    @Mock
+    private Clock clock;
 
     @InjectMocks
     private UserRegistrationService service;
@@ -150,6 +156,53 @@ class UserRegistrationServiceTest {
 
         verify(userRepository, never()).save(any());
         verify(timerRepository, never()).save(any());
+    }
+
+    // --- 마케팅 수신동의 (이메일 인프라 2단계 PR-1) ---
+
+    @Test
+    @DisplayName("register(marketingConsent=true): 가입과 동시에 마케팅 동의 + 동의시각을 기록한다")
+    void register_withMarketingConsent_recordsConsent() {
+        when(userRepository.existsByEmail("c@booktimer.com")).thenReturn(false);
+        when(userRepository.existsByLoginId("reader_c")).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenAnswer(returnsFirstArg());
+        when(passwordEncoder.encode(any())).thenReturn("$2a$10$ENCODED");
+        when(clock.instant()).thenReturn(Instant.parse("2026-06-11T01:00:00Z"));
+
+        User result = service.register(
+                "c@booktimer.com", "rawpw1234", "reader_c", "책벌레", "Asia/Seoul", Role.USER, DAY0, true);
+
+        assertThat(result.isMarketingEmailConsent()).isTrue();
+        assertThat(result.getMarketingConsentAt()).isEqualTo(Instant.parse("2026-06-11T01:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("register(marketingConsent=false): 미동의로 가입한다 (기본 OFF·끼워팔기 금지 불변식)")
+    void register_withoutMarketingConsent_staysOptedOut() {
+        when(userRepository.existsByEmail("d@booktimer.com")).thenReturn(false);
+        when(userRepository.existsByLoginId("reader_d2")).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenAnswer(returnsFirstArg());
+        when(passwordEncoder.encode(any())).thenReturn("$2a$10$ENCODED");
+
+        User result = service.register(
+                "d@booktimer.com", "rawpw1234", "reader_d2", "책벌레", "Asia/Seoul", Role.USER, DAY0, false);
+
+        assertThat(result.isMarketingEmailConsent()).isFalse();
+        assertThat(result.getMarketingConsentAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("기존 7-인자 register는 마케팅 미동의로 위임한다 (하위호환)")
+    void register_legacyOverload_defaultsOptedOut() {
+        when(userRepository.existsByEmail("e@booktimer.com")).thenReturn(false);
+        when(userRepository.existsByLoginId("reader_e")).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenAnswer(returnsFirstArg());
+        when(passwordEncoder.encode(any())).thenReturn("$2a$10$ENCODED");
+
+        User result = service.register(
+                "e@booktimer.com", "rawpw1234", "reader_e", "책벌레", "Asia/Seoul", Role.USER, DAY0);
+
+        assertThat(result.isMarketingEmailConsent()).isFalse();
     }
 
     // --- registerOAuth: 소셜 가입 (비밀번호 없음) ---

@@ -6,6 +6,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDate;
 
 /**
@@ -33,13 +34,16 @@ public class UserRegistrationService {
     private final UserRepository userRepository;
     private final ReadingTimerRepository timerRepository;
     private final PasswordEncoder passwordEncoder;
+    private final Clock clock;
 
     public UserRegistrationService(UserRepository userRepository,
                                    ReadingTimerRepository timerRepository,
-                                   PasswordEncoder passwordEncoder) {
+                                   PasswordEncoder passwordEncoder,
+                                   Clock clock) {
         this.userRepository = userRepository;
         this.timerRepository = timerRepository;
         this.passwordEncoder = passwordEncoder;
+        this.clock = clock;
     }
 
     /**
@@ -59,6 +63,19 @@ public class UserRegistrationService {
      */
     public User register(String email, String rawPassword, String loginId, String nickname,
                          String timezone, Role role, LocalDate startDate) {
+        return register(email, rawPassword, loginId, nickname, timezone, role, startDate, false);
+    }
+
+    /**
+     * 위 {@link #register(String, String, String, String, String, Role, LocalDate)}에 <b>마케팅 수신동의</b>를
+     * 더한 오버로드(이메일 인프라 2단계). 가입 폼의 선택 체크박스 값을 받아, 동의면 한 트랜잭션 안에서
+     * {@link User#consentToMarketing(Clock)}로 동의 플래그·시각을 기록한다. 미동의(기본)면 아무것도 하지 않는다
+     * (opt-in 불변식 — 끼워팔기 금지). 동의 시각은 주입된 {@link Clock}이 결정한다(N-010 — 테스트 고정).
+     *
+     * @param marketingConsent 사용자가 마케팅(재참여 넛지) 수신에 동의했는지(기본 false)
+     */
+    public User register(String email, String rawPassword, String loginId, String nickname,
+                         String timezone, Role role, LocalDate startDate, boolean marketingConsent) {
         // 검사 순서: login_id(형식→유니크) 먼저, email은 마지막. login_id는 공개 @핸들이라 "사용 중" 노출이
         // 무해하고 UX상 필요(다른 아이디를 골라야 함)하지만, email은 비공개 속성이라 "이미 가입됨" 노출이
         // 곧 계정 열거가 된다. 그래서 email 중복은 가장 마지막에 던지고, 컨트롤러가 이를 가입 성공과 동일한
@@ -76,6 +93,9 @@ public class UserRegistrationService {
         String passwordHash = passwordEncoder.encode(rawPassword);
         User user = User.of(email, passwordHash, nickname, timezone, role);
         user.assignLoginId(loginId); // 불변 — 가입에서 단 한 번 확정
+        if (marketingConsent) {
+            user.consentToMarketing(clock); // 선택 동의만 켠다(미동의는 기본 OFF 유지)
+        }
         return persistWithTimer(user);
     }
 

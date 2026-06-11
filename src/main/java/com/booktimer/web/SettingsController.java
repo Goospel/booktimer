@@ -80,6 +80,7 @@ public class SettingsController {
         model.addAttribute("loginId", user.getLoginId());
         // 미검증이면 인증 유도 배너를 띄운다(정책 ③). 재발송 버튼은 POST /verify-email/resend로 이 화면에 결과를 남긴다.
         model.addAttribute("emailVerified", user.isEmailVerified());
+        model.addAttribute("marketingEmailConsent", user.isMarketingEmailConsent());
         return "settings";
     }
 
@@ -135,6 +136,20 @@ public class SettingsController {
             return "redirect:/settings";
         }
         redirectAttributes.addFlashAttribute("message", "비밀번호를 변경했습니다.");
+        return "redirect:/settings";
+    }
+
+    /**
+     * 마케팅(재참여 넛지) 수신 동의 토글. 체크박스는 미체크 시 파라미터가 아예 안 실리므로 기본 false로 받는다
+     * (없음=꺼짐). 동의/철회를 {@link UserSettingsService}에 위임하고 PRG로 설정 화면에 되돌린다.
+     */
+    @PostMapping("/settings/marketing")
+    public String updateMarketingConsent(
+            @RequestParam(name = "marketingEmailConsent", defaultValue = "false") boolean marketingEmailConsent,
+            Principal principal, RedirectAttributes redirectAttributes) {
+        settingsService.updateMarketingConsent(currentUser(principal).getEmail(), marketingEmailConsent);
+        redirectAttributes.addFlashAttribute("message",
+                marketingEmailConsent ? "소식·알림 메일 수신을 켰습니다." : "소식·알림 메일 수신을 껐습니다.");
         return "redirect:/settings";
     }
 

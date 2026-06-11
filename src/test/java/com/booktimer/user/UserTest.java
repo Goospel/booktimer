@@ -257,6 +257,65 @@ class UserTest {
         assertThat(user.isEmailVerified()).isTrue();
     }
 
+    // --- 마케팅 수신동의 / 재참여 넛지 (이메일 인프라 2단계 PR-1) ---
+
+    private static final java.time.Clock CLK =
+            java.time.Clock.fixed(java.time.Instant.parse("2026-06-11T01:00:00Z"), java.time.ZoneOffset.UTC);
+
+    @Test
+    @DisplayName("새 LOCAL 사용자는 마케팅 미동의(기본 OFF)이고 동의시각·넛지시각이 없다 (끼워팔기 금지·기본 OFF 불변식)")
+    void of_marketingDefaultsOff() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        assertThat(user.isMarketingEmailConsent()).isFalse();
+        assertThat(user.getMarketingConsentAt()).isNull();
+        assertThat(user.getLastNudgeSentAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("새 소셜 사용자도 마케팅 미동의(기본 OFF)다")
+    void ofOAuth_marketingDefaultsOff() {
+        User user = User.ofOAuth(EMAIL, NICK, TZ, Role.USER, AuthProvider.GOOGLE);
+
+        assertThat(user.isMarketingEmailConsent()).isFalse();
+    }
+
+    @Test
+    @DisplayName("consentToMarketing: 동의 true 전환 + 동의시각 기록 (2년 재동의·감사 근거)")
+    void consentToMarketing_setsTrueAndTimestamp() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        user.consentToMarketing(CLK);
+
+        assertThat(user.isMarketingEmailConsent()).isTrue();
+        assertThat(user.getMarketingConsentAt()).isEqualTo(java.time.Instant.parse("2026-06-11T01:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("withdrawMarketingConsent: 동의 false 전환하되 동의시각은 감사용으로 보존한다")
+    void withdrawMarketingConsent_clearsConsentButKeepsTimestamp() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+        user.consentToMarketing(CLK);
+
+        user.withdrawMarketingConsent();
+
+        assertThat(user.isMarketingEmailConsent()).isFalse();
+        assertThat(user.getMarketingConsentAt())
+                .as("철회해도 동의 이력(시각)은 감사 근거로 남긴다")
+                .isEqualTo(java.time.Instant.parse("2026-06-11T01:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("recordNudgeSent: 마지막 넛지 발송 시각을 기록한다 (이 비활동 구간 1회 보장·멱등)")
+    void recordNudgeSent_storesTimestamp() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+        java.time.Instant when = java.time.Instant.parse("2026-06-11T01:00:00Z");
+
+        user.recordNudgeSent(when);
+
+        assertThat(user.getLastNudgeSentAt()).isEqualTo(when);
+    }
+
     // --- 책BTI "다시 분석" 일일 횟수 제한 (악의적 반복 클릭 → LLM 남용 방어) ---
 
     private static final java.time.LocalDate D1 = java.time.LocalDate.of(2026, 6, 8);

@@ -34,6 +34,12 @@ public class SignupForm {
     @NotBlank
     private String timezone = "Asia/Seoul";
 
+    /**
+     * 마케팅(재참여 넛지) 수신 동의 — <b>선택 항목, 기본 OFF</b>(체크 안 해도 가입됨). 정보통신망법 §50 사전 동의·
+     * 개인정보보호법 끼워팔기 금지에 따라 필수 동의와 분리한다. 체크박스 미체크 시 false로 바인딩된다.
+     */
+    private boolean marketingEmailConsent = false;
+
     public String getEmail() {
         return email;
     }
@@ -72,5 +78,13 @@ public class SignupForm {
 
     public void setTimezone(String timezone) {
         this.timezone = timezone;
+    }
+
+    public boolean isMarketingEmailConsent() {
+        return marketingEmailConsent;
+    }
+
+    public void setMarketingEmailConsent(boolean marketingEmailConsent) {
+        this.marketingEmailConsent = marketingEmailConsent;
     }
 }

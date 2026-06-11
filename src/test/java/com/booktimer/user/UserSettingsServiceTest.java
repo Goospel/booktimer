@@ -132,6 +132,37 @@ class UserSettingsServiceTest {
         assertThat(reloaded.getTimezone()).isEqualTo("America/New_York");
     }
 
+    // --- 마케팅 수신동의 토글 (이메일 인프라 2단계 PR-1 — 철회 경로) ---
+
+    @Test
+    @DisplayName("updateMarketingConsent(true): 동의 ON + 동의시각 기록")
+    void updateMarketingConsent_on_setsConsentAndTimestamp() {
+        registrationService.register("optin@booktimer.com", "rawpw1234", "독서가", SEOUL, Role.USER, today());
+
+        settingsService.updateMarketingConsent("optin@booktimer.com", true);
+
+        User reloaded = userRepository.findByEmail("optin@booktimer.com").orElseThrow();
+        assertThat(reloaded.isMarketingEmailConsent()).isTrue();
+        assertThat(reloaded.getMarketingConsentAt()).isEqualTo(clock.instant());
+    }
+
+    @Test
+    @DisplayName("updateMarketingConsent(false): 철회 시 동의 OFF — 단 동의시각은 감사용으로 보존")
+    void updateMarketingConsent_off_withdrawsButKeepsTimestamp() {
+        registrationService.register("optout@booktimer.com", "rawpw1234", "독서가", SEOUL, Role.USER, today());
+        settingsService.updateMarketingConsent("optout@booktimer.com", true); // 먼저 동의
+        java.time.Instant consentedAt =
+                userRepository.findByEmail("optout@booktimer.com").orElseThrow().getMarketingConsentAt();
+
+        settingsService.updateMarketingConsent("optout@booktimer.com", false); // 철회
+
+        User reloaded = userRepository.findByEmail("optout@booktimer.com").orElseThrow();
+        assertThat(reloaded.isMarketingEmailConsent()).isFalse();
+        assertThat(reloaded.getMarketingConsentAt())
+                .as("철회해도 '언제 동의했었나' 이력은 감사 근거로 보존")
+                .isEqualTo(consentedAt);
+    }
+
     @Test
     @DisplayName("updateSettings: 밀린 부채 합산 표시 토글(debtCarryover)을 저장한다")
     void updateSettings_savesDebtCarryover() {
