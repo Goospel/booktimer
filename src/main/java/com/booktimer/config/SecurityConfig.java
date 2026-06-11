@@ -53,7 +53,9 @@ public class SecurityConfig {
                         // 검색/광고 크롤러가 본문을 못 본다. 대시보드 데이터는 principal이 있을 때만 로드되므로 노출 없음.
                         // /verify-email: 가입 인증 링크는 비로그인 상태로 메일에서 열릴 수 있어 공개. (재발송 POST는
                         // 로그인 필요 — default-deny가 처리.) 토큰 자체가 자격이라 공개여도 안전(추측 불가·일회용·만료).
-                        .requestMatchers("/", "/signup", "/login", "/privacy", "/verify-email", "/error", "/actuator/health", "/css/**", "/js/**", "/favicon.ico").permitAll()
+                        // /password/**: 비밀번호를 잊은 사용자는 비로그인 상태라 재설정 요청·확정 경로(forgot/reset)는 공개.
+                        // 재설정도 토큰이 자격이라 공개여도 안전. CSRF는 POST 폼에 유지(아래 기본 활성).
+                        .requestMatchers("/", "/signup", "/login", "/privacy", "/verify-email", "/password/**", "/error", "/actuator/health", "/css/**", "/js/**", "/favicon.ico").permitAll()
                         // ads.txt(AdSense 소유권·수익 보호) + robots.txt(크롤 지시): 크롤러가 비인증으로 읽어야 하는
                         // 공개 정적 파일. default-deny라 명시 안 하면 로그인으로 302 튕겨 크롤러에게 모호한 신호가 된다.
                         .requestMatchers("/ads.txt", "/robots.txt").permitAll()
