@@ -923,7 +923,8 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 >   1단계 transactional 메일까지 스팸함**으로 동반 사망(연쇄). → transactional이 먼저여야 평판도 안전.
 
 **1단계 — 인프라 + transactional (광고성 규제 무관 · 보안 '높음' 갭 닫힘):**
-- [ ] (선결) 발송 수단 선택 — SES(기존 AWS 자연스러움) vs 3rd-party(Resend 등 연동 편의). 비용보다 딜리버러빌리티·운영으로 판단.
+- [x] **발송 포트 토대 (PR-A)** — `com.booktimer.email`: `EmailSender` 포트 + `SmtpEmailSender`(prod·JavaMailSender)/`LoggingEmailSender`(기본·로그만) 어댑터 + `booktimer.email.enabled` 토글(기본 OFF). 인프라 준비 전 코드 선개발·테스트, 준비되면 토글만 켬(`ReadingPersonalityNarrator` 포트 + Gemini `isEnabled` 게이트와 동형). (PR #293)
+- [ ] (선결) 발송 수단 선택 — SES(기존 AWS 자연스러움) vs 3rd-party(Resend 등 연동 편의). 비용보다 딜리버러빌리티·운영으로 판단. *(SmtpEmailSender=SES SMTP로 기울었으나 도메인 검증·DNS 미결이라 미완.)*
 - [ ] (선결) 발신 도메인 검증 + SPF/DKIM/DMARC DNS 레코드 — 도메인 이전과 묶으면 한 번에.
 - [ ] **가입 이메일 인증** 플로우 — 인증 코드/링크 발급·만료·검증, 미검증 계정 상태 처리 → N-053 pre-hijacking 정방향 갭 차단.
 - [ ] **열거 통지** — 가입 시 이메일 중복이면 "이미 계정 있음" 통지 메일(응답은 여전히 동일) → N-052 흡수의 정석 완성.
