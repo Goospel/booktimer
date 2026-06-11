@@ -926,7 +926,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 - [x] **발송 포트 토대 (PR-A)** — `com.booktimer.email`: `EmailSender` 포트 + `SmtpEmailSender`(prod·JavaMailSender)/`LoggingEmailSender`(기본·로그만) 어댑터 + `booktimer.email.enabled` 토글(기본 OFF). 인프라 준비 전 코드 선개발·테스트, 준비되면 토글만 켬(`ReadingPersonalityNarrator` 포트 + Gemini `isEnabled` 게이트와 동형). (PR #293)
 - [ ] (선결) 발송 수단 선택 — SES(기존 AWS 자연스러움) vs 3rd-party(Resend 등 연동 편의). 비용보다 딜리버러빌리티·운영으로 판단. *(SmtpEmailSender=SES SMTP로 기울었으나 도메인 검증·DNS 미결이라 미완.)*
 - [ ] (선결) 발신 도메인 검증 + SPF/DKIM/DMARC DNS 레코드 — 도메인 이전과 묶으면 한 번에.
-- [x] **가입 이메일 인증 (PR-B)** — `EmailToken`(SHA-256 해시저장·일회용·24h 만료) + `EmailTokenService.issue/consume`(Clock) + 인증 링크 메일(`/verify-email`) + `User.emailVerified`(V31 컬럼·기존 true 백필). **pre-hijacking 차단**: 미검증 LOCAL 선점 계정을 OAuth provision에서 폐기 후 신규(flush로 uk_users_email 순서 강제). 미검증 정책=허용+OAuth 자동연결만 게이트(thesis 마찰 최소). → N-053 정방향 갭 닫음. (PR #294)
+- [x] **가입 이메일 인증 (PR-B)** — `EmailToken`(SHA-256 해시저장·일회용·24h 만료) + `EmailTokenService.issue/consume`(Clock) + 인증 링크 메일(`/verify-email`) + `User.emailVerified`(V31 컬럼·기존 true 백필). **pre-hijacking 차단**: 미검증 LOCAL 선점 계정을 OAuth provision에서 폐기 후 신규(flush로 uk_users_email 순서 강제). 미검증 정책=허용+OAuth 자동연결만 게이트(thesis 마찰 최소). → N-053 정방향 갭 닫음. (PR #294) **+ 하드닝(PR #296)**: GET은 확인 페이지만·POST에서 토큰 소비(메일 링크 프리페치가 토큰 소진 못 하게) + SMTP 발송 비동기화(`EmailDispatcher` @Async — 블로킹·DB커넥션 점유·열거 타이밍 사이드채널 제거). 차후: SHA-256 공용 util·resend UI 배너.
 - [ ] **열거 통지** — 가입 시 이메일 중복이면 "이미 계정 있음" 통지 메일(응답은 여전히 동일) → N-052 흡수의 정석 완성.
 - [ ] **비밀번호 재설정** — 재설정 토큰 메일 + 재설정 폼(로컬 계정 복구 경로).
 
