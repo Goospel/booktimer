@@ -27,13 +27,16 @@ public class OAuthUserProvisioningService {
 
     private final UserRepository userRepository;
     private final UserRegistrationService registrationService;
+    private final AccountService accountService;
     private final Clock clock;
 
     public OAuthUserProvisioningService(UserRepository userRepository,
                                         UserRegistrationService registrationService,
+                                        AccountService accountService,
                                         Clock clock) {
         this.userRepository = userRepository;
         this.registrationService = registrationService;
+        this.accountService = accountService;
         this.clock = clock;
     }
 
@@ -56,16 +59,30 @@ public class OAuthUserProvisioningService {
         if (emailVerified == null || !emailVerified) {
             throw new OAuth2AuthenticationException("email_not_verified");
         }
-        return userRepository.findByEmail(email).orElseGet(() -> {
-            // 닉네임은 단순 표시 이름(중복 허용) — provider가 준 이름을 그대로 쓴다. 식별/검색 핸들은
-            // 온보딩에서 정하는 불변 login_id가 담당한다.
-            String nickname = (displayName == null || displayName.isBlank())
-                    ? emailLocalPart(email)
-                    : displayName.trim();
-            LocalDate today = LocalDate.ofInstant(clock.instant(), ZoneId.of(DEFAULT_TIMEZONE));
-            return registrationService.registerOAuth(
-                    email, nickname, DEFAULT_TIMEZONE, AuthProvider.GOOGLE, today);
-        });
+        return userRepository.findByEmail(email)
+                // pre-hijacking 차단(정책 ①, N-053): 같은 이메일을 *미검증 LOCAL*로 선점한 계정은 자동 연결하지 않고
+                // 폐기한 뒤 OAuth 신규로 만든다 — 미검증 = 이메일 소유 미증명이라, Google이 소유를 보증한 OAuth가
+                // 진짜 주인이다. 검증된 LOCAL·기존 OAuth 계정은 정당한 소유자이므로 그대로 연결한다(폐기 안 함).
+                .map(existing -> {
+                    if (existing.isLocalAccount() && !existing.isEmailVerified()) {
+                        accountService.purgeUnverifiedLocalAccount(existing);
+                        return createOAuthUser(email, displayName);
+                    }
+                    return existing;
+                })
+                .orElseGet(() -> createOAuthUser(email, displayName));
+    }
+
+    /** GOOGLE 소셜 사용자를 기본 타임존으로 새로 만든다(닉네임은 표시 이름, 비면 이메일 local part). */
+    private User createOAuthUser(String email, String displayName) {
+        // 닉네임은 단순 표시 이름(중복 허용) — provider가 준 이름을 그대로 쓴다. 식별/검색 핸들은
+        // 온보딩에서 정하는 불변 login_id가 담당한다.
+        String nickname = (displayName == null || displayName.isBlank())
+                ? emailLocalPart(email)
+                : displayName.trim();
+        LocalDate today = LocalDate.ofInstant(clock.instant(), ZoneId.of(DEFAULT_TIMEZONE));
+        return registrationService.registerOAuth(
+                email, nickname, DEFAULT_TIMEZONE, AuthProvider.GOOGLE, today);
     }
 
     private static String emailLocalPart(String email) {

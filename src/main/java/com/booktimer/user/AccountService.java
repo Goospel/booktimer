@@ -2,6 +2,7 @@ package com.booktimer.user;
 
 import com.booktimer.block.BlockRepository;
 import com.booktimer.book.BookRepository;
+import com.booktimer.email.EmailTokenRepository;
 import com.booktimer.feedback.FeedbackRepository;
 import com.booktimer.follow.FollowRepository;
 import com.booktimer.personality.ReadingPersonalityCacheRepository;
@@ -36,6 +37,7 @@ public class AccountService {
     private final BookRepository bookRepository;
     private final ReadingPersonalityCacheRepository personalityCacheRepository;
     private final FeedbackRepository feedbackRepository;
+    private final EmailTokenRepository emailTokenRepository;
     private final PasswordEncoder passwordEncoder;
 
     public AccountService(UserRepository userRepository,
@@ -48,6 +50,7 @@ public class AccountService {
                           BookRepository bookRepository,
                           ReadingPersonalityCacheRepository personalityCacheRepository,
                           FeedbackRepository feedbackRepository,
+                          EmailTokenRepository emailTokenRepository,
                           PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.timerRepository = timerRepository;
@@ -59,6 +62,7 @@ public class AccountService {
         this.bookRepository = bookRepository;
         this.personalityCacheRepository = personalityCacheRepository;
         this.feedbackRepository = feedbackRepository;
+        this.emailTokenRepository = emailTokenRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -140,7 +144,22 @@ public class AccountService {
         bookRepository.deleteByUser(user);
         personalityCacheRepository.deleteByUser(user);       // 책BTI 캐시도 user_id FK 참조 → 유저 전에 정리
         feedbackRepository.deleteByAuthor(user);             // 문의도 author_id FK 참조 → 유저 전에 정리
+        emailTokenRepository.deleteByUser(user);             // 이메일 토큰도 user_id FK 참조 → 유저 전에 정리
         userRepository.delete(user);
+    }
+
+    /**
+     * pre-hijacking 차단(이메일 인프라 1단계 PR-B) — 같은 이메일로 OAuth가 들어왔을 때, 그 이메일을 미검증으로
+     * 선점한 LOCAL 계정을 폐기한다. 미검증 = 이메일 소유 미증명이라 폐기가 안전하고, provider(Google)가 소유를
+     * 보증한 OAuth가 그 이메일의 진짜 주인이다(N-053). FK 자식까지 {@link #purge}로 정리한다(가입 직후라 거의 비어 있음).
+     *
+     * <p><b>flush 필수</b>: 호출 직후 같은 이메일로 OAuth 사용자를 새로 INSERT하므로, 삭제를 먼저 DB에 반영하지
+     * 않으면 Hibernate 액션 큐가 INSERT를 DELETE보다 먼저 실행해 {@code uk_users_email} 유니크 제약을 위반한다.
+     * 그래서 폐기 후 즉시 flush해 같은 트랜잭션 안에서 삭제→삽입 순서를 강제한다.
+     */
+    public void purgeUnverifiedLocalAccount(User user) {
+        purge(user);
+        userRepository.flush();
     }
 
     private User load(String email) {
