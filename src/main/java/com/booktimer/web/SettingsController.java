@@ -78,6 +78,8 @@ public class SettingsController {
         // 소셜 계정은 비밀번호가 없다 → 비밀번호 변경 카드를 숨기고, 탈퇴는 본인 @핸들(login_id) 재입력으로 확인한다.
         model.addAttribute("localAccount", user.isLocalAccount());
         model.addAttribute("loginId", user.getLoginId());
+        // 미검증이면 인증 유도 배너를 띄운다(정책 ③). 재발송 버튼은 POST /verify-email/resend로 이 화면에 결과를 남긴다.
+        model.addAttribute("emailVerified", user.isEmailVerified());
         return "settings";
     }
 

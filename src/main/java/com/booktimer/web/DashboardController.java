@@ -79,6 +79,9 @@ public class DashboardController {
         // 측정 start/stop엔 안 바뀌고 페이지 로드 때만 갱신). DashboardModel에 두면 라이브 경로와
         // 공유돼 start/stop마다 헛돌므로 여기서만 싣는다(잔디 graph와 같은 이유).
         model.addAttribute("quote", quoteService.random());
+        // 미검증이면 인증 유도 배너를 띄운다(정책 ③ — 미검증이어도 사용은 허용하되 인증을 권한다).
+        // 기존 가입자는 V31에서 true 백필돼 배너가 안 뜬다(grandfather).
+        model.addAttribute("emailVerified", user.isEmailVerified());
         return "dashboard";
     }
 }

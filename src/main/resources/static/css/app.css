@@ -396,6 +396,34 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     color: var(--ok);
     border: 1px solid #a7f3d0;
 }
+.alert-warn {
+    background: #fffbeb;
+    color: #92400e;
+    border: 1px solid #fde68a;
+}
+/* 이메일 미검증 안내 배너 — 안내 문구 + 인라인 재발송 버튼을 한 줄에(좁으면 줄바꿈). */
+.verify-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+.verify-banner form {
+    margin: 0;
+}
+/* 배너 안 재발송 버튼: 전역 button{width:100%}를 받지 않게 width:auto. 링크처럼 보이는 버튼(밑줄). */
+.btn-inline-link {
+    width: auto;
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: #92400e;
+    font-weight: 700;
+    text-decoration: underline;
+    cursor: pointer;
+}
 
 /* 회원 탈퇴 등 위험 작업 구역 */
 .danger-zone { border-color: #fecaca; }

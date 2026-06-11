@@ -121,6 +121,33 @@ class SettingsControllerTest {
     }
 
     @Test
+    @DisplayName("GET /settings: 이메일 미검증이면 인증 유도 배너(재발송 버튼)를 보인다")
+    void getSettings_unverified_showsVerifyBanner() throws Exception {
+        register("unverified@booktimer.com"); // 가입 직후라 emailVerified=false
+
+        mockMvc.perform(get("/settings").with(user("unverified@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("emailVerified", false))
+                .andExpect(content().string(containsString("/verify-email/resend"))); // 재발송 버튼 = 배너 노출
+    }
+
+    @Test
+    @DisplayName("GET /settings: 이메일 검증됐으면 인증 배너를 숨긴다")
+    void getSettings_verified_hidesVerifyBanner() throws Exception {
+        User user = register("verifiedok@booktimer.com");
+        user.verifyEmail();
+        userRepository.save(user);
+
+        mockMvc.perform(get("/settings").with(user("verifiedok@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("emailVerified", true))
+                .andExpect(content().string(not(containsString("/verify-email/resend"))));
+    }
+
+    // 재발송 결과 플래시(verifyResendResult=sent/already/failed)의 화면 표시는 트리비얼한 안내 텍스트 분기라
+    // 단위로 누른다(프로젝트 테스트-깊이 규칙). resend가 그 플래시를 남기는 행동은 EmailVerificationControllerTest가 커버.
+
+    @Test
     @DisplayName("POST /settings: 유효하면 프로필·하루 목표를 갱신하고 /settings로 리다이렉트한다")
     void postSettings_valid_updatesAndRedirects() throws Exception {
         register("post@booktimer.com");
