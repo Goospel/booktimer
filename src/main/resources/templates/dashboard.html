@@ -27,6 +27,14 @@
         <span class="quote-author" th:text="'— ' + ${quote.author}">— 작가</span>
     </p>
 
+    <!-- 이메일 미검증 안내(라이브 영역 밖이라 htmx swap에 영향 없음). 미검증이어도 사용은 막지 않고 인증만 권한다(정책 ③). -->
+    <div th:if="${emailVerified == false}" class="alert alert-warn verify-banner">
+        <span>이메일 인증이 아직 안 됐어요. 받은 메일의 링크로 인증을 완료해 주세요.</span>
+        <form th:action="@{/verify-email/resend}" method="post">
+            <button type="submit" class="btn-inline-link">인증 메일 다시 받기</button>
+        </form>
+    </div>
+
     <!-- 라이브 영역: start/stop 시 htmx가 이 div(outerHTML)만 프래그먼트로 교체.
          같은 fragment("dashboard :: live")를 ReadingSessionController가 반환한다. -->
     <div id="dashboard-live" th:fragment="live">

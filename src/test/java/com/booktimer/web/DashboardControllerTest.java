@@ -306,6 +306,30 @@ class DashboardControllerTest {
     }
 
     @Test
+    @DisplayName("GET /: 이메일 미검증 사용자에겐 인증 유도 배너(재발송 버튼)를 보인다")
+    void dashboard_unverified_showsVerifyBanner() throws Exception {
+        registerOnboarded("unverified@booktimer.com", "미검증", today()); // 가입 직후라 emailVerified=false
+
+        mockMvc.perform(get("/").with(user("unverified@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("emailVerified", false))
+                .andExpect(content().string(containsString("/verify-email/resend"))); // 재발송 버튼 = 배너 노출
+    }
+
+    @Test
+    @DisplayName("GET /: 이메일 검증된 사용자에겐 인증 배너를 보이지 않는다")
+    void dashboard_verified_hidesVerifyBanner() throws Exception {
+        User user = registerOnboarded("verifiedok@booktimer.com", "검증완료", today());
+        user.verifyEmail();
+        userRepository.save(user);
+
+        mockMvc.perform(get("/").with(user("verifiedok@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("emailVerified", true))
+                .andExpect(content().string(not(containsString("/verify-email/resend")))); // 배너 숨김
+    }
+
+    @Test
     @DisplayName("GET /: 인사말 자리에 띄울 작가 격언을 모델에 싣는다 (큐레이션 목록 안의 한 줄)")
     void dashboard_includesRandomAuthorQuote() throws Exception {
         registerOnboarded("quote@booktimer.com", "격언", today());
