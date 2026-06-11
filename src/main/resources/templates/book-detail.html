@@ -34,6 +34,11 @@
             <p>
                 <a th:if="${book.purchaseLink}" th:href="@{/books/{id}/buy(id=${book.id})}" target="_blank"
                    rel="noopener nofollow" class="btn-ghost">구매</a>
+                <a th:if="${coupangEnabled}" th:href="@{/books/{id}/buy/coupang(id=${book.id})}" target="_blank"
+                   rel="noopener nofollow" class="btn-ghost">쿠팡</a>
+            </p>
+            <p class="affiliate-note" th:if="${coupangEnabled}">
+                이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
             </p>
         </div>
     </section>

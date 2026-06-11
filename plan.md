@@ -377,6 +377,16 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
         **`self`(본인 여부) 플래그로 남의 책방에서만** 노출(내 책은 이미 내 것 → 살 이유 없음). 제휴 안내문도 본인 책방엔
         숨김(버튼 없으니 무의미). `${b.purchaseLink and !self}`로 했다 SpringEL boolean 강제로 깨져
         `${!#strings.isEmpty(b.purchaseLink) and !self}`로 정정(T-031 확장). TDD: 본인 책방 음성 렌더 테스트 추가.
+    - **쿠팡 파트너스 병행 ✅ 2026-06-11 (#309)**: 알라딘 "구매" 옆에 쿠팡 "구매" 버튼을 나란히 추가(검색·등록은
+      계속 알라딘 API). 알라딘은 API가 통째로 준 링크를 DB에 저장하지만, 쿠팡 검색 링크는 `f(ISBN·제목, 추적코드, 템플릿)`로
+      결정적이라 **저장 없이 런타임 생성**(`CoupangLinkBuilder`, 백필 0 — 기존 책 전부 즉시 버튼). 추적코드가
+      `not-configured`(가입 전 기본)면 `coupangEnabled=false`로 **버튼·공정위 고지문구를 화면에서 숨김** — 쿠팡 파트너스
+      가입 후 환경변수(`BOOKTIMER_COUPANG_TRACKING_CODE`/`_SEARCH_URL_TEMPLATE`) 주입만으로 점진 활성화(코드 변경 0).
+      엔드포인트는 알라딘과 별도(`/buy/coupang`·`/u/{loginId}/books/{id}/buy/coupang`, 회귀 0), 카운트도 분리
+      (`Book.coupangClickCount`, Flyway V34). `coupangEnabled`는 `AdsModelAdvice` 패턴의 전역 `@ControllerAdvice`로 주입.
+      ⚠️ 미결(가입 후): 실제 추적 URL 형식 확정(템플릿 환경변수로 흡수)·ISBN 검색 품질 재평가·API 키는 판매 15만원 실적 게이트
+      뒤라 초기엔 검색 링크 방식. TDD: CoupangLinkBuilderTest(순수)·CoupangBookServiceTest(IDOR·비활성·공개 게이트)·
+      CoupangBuyControllerTest(엔드포인트 + 뷰 게이트 렌더).
   - **③-c 책 상세 페이지 완료 ✅ 2026-06-03**: `GET /books/{id}` — 책 메타 + **책별 잔디**(그 책 세션만 필터,
     `ContributionGraphBuilder` 순수 빌더 재사용) + 일자별 기록 + 누적 시간. 소유권 검사(IDOR, 없으면 책장으로).
     `BookContributionService`(세션 패키지, Clock+유저 TZ 오늘) + `findByUserAndBook`. 책장에서 제목 클릭 진입.

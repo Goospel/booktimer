@@ -244,6 +244,40 @@ public class BookController {
         return "redirect:/u/" + loginId;
     }
 
+    /**
+     * 쿠팡 "구매" 클릭 — 집계 후 쿠팡 검색 링크로 리다이렉트(비활성·내 책 아님이면 책장으로). 알라딘 {@link #buy}와 대칭.
+     *
+     * <p>링크는 {@link BookService#recordCoupangClick}이 런타임 생성한다(DB 미저장). 추적코드 미설정이면
+     * null이 와 책장으로 돌려보낸다 — 다만 화면은 {@code coupangEnabled}로 버튼 자체를 숨기므로 보통 도달 안 함.
+     */
+    @GetMapping("/books/{id}/buy/coupang")
+    public String buyCoupang(@PathVariable Long id, Principal principal) {
+        User user = currentUser(principal);
+        try {
+            String link = bookService.recordCoupangClick(user, id);
+            if (link != null) {
+                return "redirect:" + link;
+            }
+        } catch (IllegalArgumentException ignored) {
+            // 내 책이 아니거나 없음 — 존재 여부 노출 없이 책장으로(IDOR 방지).
+        }
+        return "redirect:/books";
+    }
+
+    /**
+     * 남의 책방(공개 프로필)에서 쿠팡 "구매" 클릭 — 공개책이면 쿠팡 링크로 리다이렉트하고 책 주인 카운트에 집계한다.
+     * 알라딘 {@link #buyFromProfile}과 대칭(공개 여부 게이트, 비공개·없는 책이면 존재 누설 없이 그 프로필로 복귀).
+     */
+    @GetMapping("/u/{loginId}/books/{bookId}/buy/coupang")
+    public String buyCoupangFromProfile(@PathVariable String loginId, @PathVariable Long bookId, Principal principal) {
+        currentUser(principal); // 로그인 사용자만(시큐리티가 이미 강제 — 명시)
+        String link = bookService.recordPublicCoupangClick(bookId);
+        if (link != null) {
+            return "redirect:" + link;
+        }
+        return "redirect:/u/" + loginId;
+    }
+
     @PostMapping("/books/{id}/visibility")
     public String setVisibility(@PathVariable Long id, @RequestParam BookVisibility visibility,
                                 @RequestHeader(value = "HX-Request", required = false, defaultValue = "false") boolean htmx,
