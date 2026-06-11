@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>수신 거부 — BookTimer</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <span class="emoji">📚</span>
+        <h1>BookTimer</h1>
+    </header>
+
+    <section class="card">
+        <div class="entry-hero">
+            <h2>소식·알림 메일 수신 거부</h2>
+            <p>아래 버튼을 누르면 재참여 안내 메일을 더 이상 받지 않습니다.</p>
+        </div>
+        <!-- 토큰 소비(해지)는 이 POST에서만 일어난다(메일 링크 프리페치가 토큰을 소진하지 못하게 GET과 분리). -->
+        <form th:action="@{/unsubscribe}" method="post">
+            <input type="hidden" name="token" th:value="${token}">
+            <button type="submit" class="btn-primary" style="display:block">수신 거부하기</button>
+        </form>
+    </section>
+</div>
+</body>
+</html>
