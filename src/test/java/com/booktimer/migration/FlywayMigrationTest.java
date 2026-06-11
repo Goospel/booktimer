@@ -140,6 +140,21 @@ class FlywayMigrationTest {
         assertThat(emailTokenRepository.findByTokenHash("a".repeat(64))).isPresent();
     }
 
+    @Test
+    void new_user_defaults_to_marketing_not_consented() {
+        // V32의 marketing_email_consent 컬럼이 엔티티와 매핑되고(validate 모드 드리프트 검출), 신규 가입은
+        // 기본 미동의(opt-in 불변식)여야 한다. email_verified와 달리 기존 행 백필(grandfather)이 없다 —
+        // 동의한 적 없는 사용자를 동의로 채우는 건 동의 위조라, default false만 두고 update 백필을 하지 않는다.
+        User u = User.of("nudge-default@example.com", "hash", "닉", "Asia/Seoul", Role.USER);
+        u.assignLoginId("nudgedefault");
+
+        User saved = userRepository.saveAndFlush(u);
+
+        assertThat(saved.isMarketingEmailConsent()).isFalse();
+        assertThat(saved.getMarketingConsentAt()).isNull();
+        assertThat(saved.getLastNudgeSentAt()).isNull();
+    }
+
     private static User userWithHandle(String email, String handle) {
         User u = User.of(email, "hash", "닉", "Asia/Seoul", Role.USER);
         u.assignLoginId(handle);

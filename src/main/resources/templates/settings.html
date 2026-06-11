@@ -83,6 +83,22 @@
         </form>
     </section>
 
+    <!-- 소식·알림 (마케팅 수신동의 토글 — 선택, 기본 OFF) -->
+    <section class="card">
+        <h2>소식·알림</h2>
+        <form th:action="@{/settings/marketing}" method="post">
+            <div class="field">
+                <label class="check-row" for="marketingEmailConsent">
+                    <input type="checkbox" id="marketingEmailConsent" name="marketingEmailConsent"
+                           th:checked="${marketingEmailConsent}">
+                    <span>책 읽기를 다시 시작하도록 돕는 안내 메일 받기</span>
+                </label>
+                <span class="field-hint muted">오래 쉬면 살짝 알려드리는 재참여 메일이에요. 선택 항목이라 언제든 켜고 끌 수 있어요.</span>
+            </div>
+            <button type="submit" class="btn-primary">저장</button>
+        </form>
+    </section>
+
     <!-- 회원 탈퇴 (위험 구역) -->
     <section class="card danger-zone">
         <h2>회원 탈퇴</h2>

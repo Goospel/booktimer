@@ -51,6 +51,13 @@
                 <small class="field-hint">하루의 시작·끝(자정)을 이 기준으로 계산해요. 잔디와 일일 기록이 내가 사는 곳의 날짜에 맞게 쌓이도록 거주 지역을 골라 주세요.</small>
                 <span class="field-error" th:if="${#fields.hasErrors('timezone')}" th:errors="*{timezone}">타임존 오류</span>
             </div>
+            <div class="field">
+                <label class="check-row" for="marketingEmailConsent">
+                    <input type="checkbox" id="marketingEmailConsent" th:field="*{marketingEmailConsent}">
+                    <span>책 읽기를 다시 시작하도록 돕는 안내 메일 받기 <em>(선택)</em></span>
+                </label>
+                <small class="field-hint muted">오래 쉬면 살짝 알려드리는 재참여 메일이에요. 선택 항목이라 체크 안 해도 가입돼요 — 언제든 설정에서 끌 수 있어요.</small>
+            </div>
             <button type="submit" class="btn-primary">가입</button>
         </form>
     </section>

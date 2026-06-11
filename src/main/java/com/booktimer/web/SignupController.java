@@ -87,7 +87,7 @@ public class SignupController {
         try {
             User user = registrationService.register(
                     form.getEmail(), form.getPassword(), form.getLoginId(), form.getNickname(),
-                    form.getTimezone(), Role.USER, today);
+                    form.getTimezone(), Role.USER, today, form.isMarketingEmailConsent());
             // 가입 직후 인증 메일 발송 — register 트랜잭션과 분리(컨트롤러에서 호출). 발송 실패는 격리한다:
             // 메일이 안 가도 가입은 성공이고(미검증 상태로 사용 가능), 사용자는 로그인 후 재발송할 수 있다.
             try {

@@ -6,6 +6,8 @@ import com.booktimer.timer.ReadingTimerRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+
 /**
  * 설정 변경 오케스트레이션.
  *
@@ -27,13 +29,16 @@ public class UserSettingsService {
     private final UserRepository userRepository;
     private final ReadingTimerRepository timerRepository;
     private final ReadingGoalService goalService;
+    private final Clock clock;
 
     public UserSettingsService(UserRepository userRepository,
                                ReadingTimerRepository timerRepository,
-                               ReadingGoalService goalService) {
+                               ReadingGoalService goalService,
+                               Clock clock) {
         this.userRepository = userRepository;
         this.timerRepository = timerRepository;
         this.goalService = goalService;
+        this.clock = clock;
     }
 
     /**
@@ -66,5 +71,26 @@ public class UserSettingsService {
 
         userRepository.save(user);
         timerRepository.save(timer);
+    }
+
+    /**
+     * 마케팅(재참여 넛지) 수신 동의를 켜거나 끈다 — 설정의 "소식·알림" 토글이 타는 경로(철회 보장).
+     * 동의면 {@link User#consentToMarketing(Clock)}로 동의 시각을 기록하고, 미동의면
+     * {@link User#withdrawMarketingConsent()}로 끈다(동의 시각은 감사용 보존). 동의 시각은 주입된 {@link Clock}이
+     * 결정한다(N-010 — 테스트 고정).
+     *
+     * @param email   대상 사용자 식별자
+     * @param consent 마케팅 수신 동의 여부(true=동의, false=철회)
+     * @throws IllegalStateException 사용자가 없는 경우
+     */
+    public void updateMarketingConsent(String email, boolean consent) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalStateException("user not found: " + email));
+        if (consent) {
+            user.consentToMarketing(clock);
+        } else {
+            user.withdrawMarketingConsent();
+        }
+        userRepository.save(user);
     }
 }
