@@ -29,6 +29,8 @@ dependencies {
 	// starter가 라이브러리 + spring-boot-session-jdbc(autoconfig)를 함께 가져온다(N-024와 같은 패턴).
 	// (스키마는 Flyway V2가 운영에 생성, 테스트 H2는 initialize-schema=embedded 기본값으로 자동 생성)
 	implementation 'org.springframework.boot:spring-boot-starter-session-jdbc'
+	// 이메일 발송(transactional) — JavaMailSender 자동구성. 실발송은 booktimer.email.enabled=true일 때만.
+	implementation 'org.springframework.boot:spring-boot-starter-mail'
 	implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
