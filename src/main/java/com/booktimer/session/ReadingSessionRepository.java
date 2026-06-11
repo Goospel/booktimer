@@ -71,6 +71,28 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
     long sumAllDurationSeconds();
 
     /**
+     * 재참여 넛지 대상 사용자(이메일 인프라 2단계 PR-2). §3-1의 5조건을 모두 만족하는 사용자만 반환한다:
+     * <ol>
+     *   <li>한 번이라도 읽음 — {@code max(startedAt)}이 존재(없으면 서브쿼리 null이라 {@code <= cutoff} 불성립 →
+     *       온보딩 이탈자 자동 제외, null-state 누출 가드 N-055).</li>
+     *   <li>비활동 — 마지막 활동 {@code max(startedAt) <= cutoff}(호출부가 {@code now - 7일}로 cutoff 지정, 경계 포함).</li>
+     *   <li>동의 — {@code marketingEmailConsent = true}(정보통신망법 opt-in).</li>
+     *   <li>검증 — {@code emailVerified = true}(미검증 발송 반송→평판 보호 N-053; 마케팅은 트랜잭션과 달리 검증 필수).</li>
+     *   <li>이 구간 미발송 — {@code lastNudgeSentAt is null OR lastNudgeSentAt < 마지막 활동}(비활동 구간당 1회 멱등).
+     *       재활동 후 재이탈 시 {@code lastNudge < 새 활동}이 되어 다시 대상이 된다('1회'는 영구가 아닌 구간당).</li>
+     * </ol>
+     * 루트는 User지만 활동 출처가 ReadingSession이라(이미 {@code countActiveUsersSince}가 여기 있음) 이 리포지토리에 둔다.
+     */
+    @Query("""
+            select u from User u
+            where u.marketingEmailConsent = true and u.emailVerified = true
+              and (select max(s.startedAt) from ReadingSession s where s.user = u) <= :cutoff
+              and (u.lastNudgeSentAt is null
+                   or u.lastNudgeSentAt < (select max(s.startedAt) from ReadingSession s where s.user = u))
+            """)
+    List<com.booktimer.user.User> findNudgeTargets(@Param("cutoff") java.time.Instant cutoff);
+
+    /**
      * 책 삭제 시, 그 책을 가리키던 측정 세션을 "책 미지정"으로 푼다(book_id = null).
      *
      * <p>세션 자체는 지우지 않는다 — 책을 책장에서 빼도 그날 읽은 기록(잔디·누적 시간)은 보존돼야 한다.

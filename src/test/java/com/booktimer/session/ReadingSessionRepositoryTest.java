@@ -85,4 +85,93 @@ class ReadingSessionRepositoryTest {
 
         assertThat(found).isEmpty();
     }
+
+    // --- findNudgeTargets: 재참여 넛지 대상 선정 (이메일 인프라 2단계 PR-2 — §3-1 5조건 AND) ---
+
+    private static final Instant CUTOFF = Instant.parse("2026-06-11T00:00:00Z");
+    private static final java.time.Clock CONSENT_CLK =
+            java.time.Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), java.time.ZoneOffset.UTC);
+
+    /** 동의·검증 상태와 마지막 활동/넛지 시각을 갖춘 사용자를 만들어 저장한다(넛지 대상 픽스처). */
+    private User nudgeUser(String email, boolean consent, boolean verified,
+                           Instant lastActivity, Instant lastNudge) {
+        User u = User.of(email, "$2a$10$abcdefghijklmnopqrstuv", "책벌레", "Asia/Seoul", Role.USER);
+        if (consent) {
+            u.consentToMarketing(CONSENT_CLK);
+        }
+        if (verified) {
+            u.verifyEmail();
+        }
+        if (lastNudge != null) {
+            u.recordNudgeSent(lastNudge);
+        }
+        u = userRepository.save(u);
+        if (lastActivity != null) {
+            sessionRepository.save(ReadingSession.start(u, lastActivity)); // 마지막 활동 = startedAt
+        }
+        return u;
+    }
+
+    @Test
+    @DisplayName("findNudgeTargets: 7일 경계 포함 — 정확히 cutoff에 마지막 활동한 동의·검증 사용자는 대상")
+    void findNudgeTargets_inactiveAtCutoff_isIncluded() {
+        User target = nudgeUser("target@booktimer.com", true, true, CUTOFF, null);
+
+        List<User> targets = sessionRepository.findNudgeTargets(CUTOFF);
+
+        assertThat(targets).extracting(User::getEmail).containsExactly("target@booktimer.com");
+        assertThat(targets).extracting(User::getId).containsExactly(target.getId());
+    }
+
+    @Test
+    @DisplayName("findNudgeTargets: cutoff 이후 활동(최근 활성)은 제외")
+    void findNudgeTargets_activeAfterCutoff_excluded() {
+        nudgeUser("recent@booktimer.com", true, true, CUTOFF.plusSeconds(1), null);
+
+        assertThat(sessionRepository.findNudgeTargets(CUTOFF)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("findNudgeTargets: 한 번도 안 읽은 사용자는 제외 (재참여 아닌 온보딩 이탈 — null-state 누출 가드 N-055)")
+    void findNudgeTargets_neverRead_excluded() {
+        nudgeUser("neverread@booktimer.com", true, true, null, null); // 세션 없음
+
+        assertThat(sessionRepository.findNudgeTargets(CUTOFF)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("findNudgeTargets: 미동의 사용자는 제외 (opt-in 게이트)")
+    void findNudgeTargets_noConsent_excluded() {
+        nudgeUser("noconsent@booktimer.com", false, true, CUTOFF.minusSeconds(86400), null);
+
+        assertThat(sessionRepository.findNudgeTargets(CUTOFF)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("findNudgeTargets: 미검증 이메일은 제외 (반송·평판 보호 N-053)")
+    void findNudgeTargets_unverified_excluded() {
+        nudgeUser("unverified@booktimer.com", true, false, CUTOFF.minusSeconds(86400), null);
+
+        assertThat(sessionRepository.findNudgeTargets(CUTOFF)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("findNudgeTargets: 이 비활동 구간에 이미 넛지를 보냈으면 제외 (lastNudge >= lastActivity — 1회 보장)")
+    void findNudgeTargets_alreadyNudgedThisPeriod_excluded() {
+        Instant lastActivity = CUTOFF.minusSeconds(86400);
+        nudgeUser("alreadynudged@booktimer.com", true, true, lastActivity, lastActivity.plusSeconds(3600));
+
+        assertThat(sessionRepository.findNudgeTargets(CUTOFF)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("findNudgeTargets: 재활동 후 재이탈은 대상 (lastNudge < lastActivity — '1회'는 구간당이지 영구 아님)")
+    void findNudgeTargets_reInactiveAfterPriorNudge_included() {
+        Instant lastActivity = CUTOFF.minusSeconds(86400);
+        // 직전 구간에 넛지를 보냈고(과거), 그 뒤 다시 읽었다가(lastActivity) 또 이탈
+        User u = nudgeUser("renudge@booktimer.com", true, true, lastActivity, lastActivity.minusSeconds(7 * 86400));
+
+        assertThat(sessionRepository.findNudgeTargets(CUTOFF))
+                .extracting(User::getId).containsExactly(u.getId());
+    }
 }
