@@ -2472,7 +2472,9 @@ BookTimer는 한 사람이 같은 이메일로 두 경로(로컬 가입 / 구글
 - **자동 연결 끄기** — OAuth가 기존 로컬 이메일을 만나면 거부하고 "이 이메일은 비번 로그인으로" 안내. UX 마찰↑.
 - **provisional 표식** — 미검증 로컬 계정이면 OAuth 연결 시 소유권 재증명 요구. 상태 머신 복잡도↑.
 
-BookTimer는 메일 인프라가 없어 지금은 **보류 박스**(메일 붙이는 날 N-052 통지와 함께 닫을 갭)다. 친구 한정·소규모라 위협 모델상 ROI가 낮은 것도 보류 근거.
+BookTimer는 메일 인프라가 없어 **오랫동안 보류 박스**(메일 붙이는 날 N-052 통지와 함께 닫을 갭)였다. 친구 한정·소규모라 위협 모델상 ROI가 낮은 것도 보류 근거였다.
+
+> **✅ 실현 (2026-06-11, PR #294 — 이메일 인프라 1단계 PR-B)**: 정석 처방인 **가입 이메일 인증**을 붙여 정방향 갭을 닫았다. 다만 *미검증 계정 자체를 없애는*(가입을 막는) 대신 **"허용 + 핵심만 게이트"** 정책을 택했다 — 미검증이어도 로그인·사용은 허용(thesis 입문자 마찰 최소)하되, **`provision`의 자동 연결에서만 미검증 LOCAL 계정을 배제**한다. 구체적으로 `provision`이 같은 이메일의 **미검증 LOCAL** 계정을 만나면 그것을 폐기하고 OAuth 신규로 만든다(검증된 LOCAL·기존 OAuth는 그대로 연결). 미검증=이메일 소유 미증명이라 폐기가 안전하고, Google이 소유를 보증한 OAuth가 진짜 주인이다. 즉 "양쪽 경로의 이메일 신뢰 수준을 맞춘다"를 *가입 차단*이 아니라 *자동 연결 시점의 폐기*로 달성했다. (⚠️ 구현 함정: 폐기 후 같은 이메일을 곧장 INSERT하므로 DELETE를 먼저 flush 안 하면 Hibernate 액션 큐가 INSERT를 먼저 실행해 `uk_users_email` 위반 → `AccountService.purgeUnverifiedLocalAccount`에서 `flush()`로 순서 강제. 실DB 통합 테스트 `OAuthPreHijackingIntegrationTest`가 회귀 가드.)
 
 ### 일반화 포인트 (면접 답변용)
 
@@ -2490,8 +2492,8 @@ BookTimer는 메일 인프라가 없어 지금은 **보류 박스**(메일 붙�
 
 ### 코드 위치
 
-- `src/main/java/com/booktimer/user/OAuthUserProvisioningService.java` — `provision`의 find-or-create(`findByEmail(...).orElseGet(registerOAuth)`)와 `email_verified` 거부(역방향만 방어).
-- `src/main/java/com/booktimer/user/UserRegistrationService.java` — `register`(로컬 가입)에 **이메일 검증 단계 없음** = 정방향 갭의 위치.
+- `src/main/java/com/booktimer/user/OAuthUserProvisioningService.java` — `provision`의 find-or-create. PR #294로 **미검증 LOCAL은 폐기 후 OAuth 신규**(`purgeUnverifiedLocalAccount`)로 정방향 갭을 닫음. `email_verified` 거부(역방향)는 그대로.
+- `src/main/java/com/booktimer/email/{EmailToken,EmailTokenService,EmailVerificationService}.java` · `web/EmailVerificationController.java` — 가입 이메일 인증 흐름(PR #294). `web/SignupController.java`가 가입 직후 인증 메일을 트리거(미검증 상태로 시작 → 인증 링크로 `User.emailVerified` true).
 - `src/main/java/com/booktimer/security/BookTimerOidcUserService.java` — OIDC 어댑터가 `provision`을 호출하는 진입점.
 
 ### 관련 노트
