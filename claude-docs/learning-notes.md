@@ -74,6 +74,7 @@
 - [N-068. CSS 커스텀 프로퍼티는 "이름 유지·값만 교체"로 var 참조 전 화면을 무파괴 일괄 리프레시한다 — 디자인 토큰의 핵심 이점](#n-068-css-커스텀-프로퍼티는-이름-유지값만-교체로-var-참조-전-화면을-무파괴-일괄-리프레시한다--디자인-토큰의-핵심-이점)
 - [N-069. 소셜(OAuth)-only 인증으로 로컬 회원가입을 없애는 트레이드오프 — 비밀번호는 IdP에 위임되지만 개인정보 책임·계정 병합·IdP별 함정은 남는다](#n-069-소셜oauth-only-인증으로-로컬-회원가입을-없애는-트레이드오프--비밀번호는-idp에-위임되지만-개인정보-책임계정-병합idp별-함정은-남는다)
 - [N-070. required status check + `paths-ignore`는 머지를 영구 블록한다 — "통과 필수"인 체크가 스킵되면 pending으로 영영 안 끝난다](#n-070-required-status-check--paths-ignore는-머지를-영구-블록한다--통과-필수인-체크가-스킵되면-pending으로-영영-안-끝난다)
+- [N-071. DMARC 정렬(alignment) — SPF·DKIM 통과만으론 부족하고 From 도메인과 정렬돼야 하며, custom MAIL FROM이 SPF를 정렬시킨다](#n-071-dmarc-정렬alignment--spfdkim-통과만으론-부족하고-from-도메인과-정렬돼야-하며-custom-mail-from이-spf를-정렬시킨다)
 
 ---
 
@@ -3345,6 +3346,52 @@ BookTimer에 PR CI 게이트(`ci.yml`)와 main branch protection을 도입(PR #2
 
 ---
 
+## N-071. DMARC 정렬(alignment) — SPF·DKIM 통과만으론 부족하고 From 도메인과 정렬돼야 하며, custom MAIL FROM이 SPF를 정렬시킨다
+
+**한 줄 요약**: 메일 인증 3종에서 수신측이 신뢰 판정에 쓰는 진짜 관문은 **DMARC**고, DMARC pass = `(SPF pass + SPF 정렬)` **또는** `(DKIM pass + DKIM 정렬)`이다. 여기서 *정렬(alignment)* = 인증을 통과한 도메인이 **From 헤더 도메인과 같은 조직 도메인**이어야 한다는 추가 조건 — 단순 "SPF/DKIM 통과"가 아니다. SES 기본은 envelope(Return-Path)이 `amazonses.com`이라 SPF는 *통과하지만 정렬 안 됨*(From=`booktimer.app`과 도메인 불일치) → DKIM 정렬로만 DMARC를 넘긴다. **사용자 지정 MAIL FROM**(`mail.booktimer.app`)을 깔면 envelope이 우리 조직 도메인이 돼 **SPF도 정렬** → SPF·DKIM 이중 정렬.
+
+### 배경
+
+이메일 1단계 transactional 점등(SES SMTP) 후 딜리버러빌리티 보강에서, "DKIM은 검증됐는데 SPF·DMARC는 왜 더 해야 하나"를 정리하며 배운 것. 핵심 질문은 **"SPF가 pass인데 왜 DMARC에 기여를 못 하나"** — 답이 *정렬*이다.
+
+### 핵심 — "인증 통과"와 "정렬"은 다른 관문
+
+- **SPF/DKIM 통과 ≠ DMARC 통과**: SPF·DKIM은 각자 "이 메일이 어떤 도메인의 허락/서명을 받았나"만 본다. DMARC는 거기에 **"그 도메인이 From 헤더 도메인과 같은가(정렬)"**를 더 요구한다. 그래서 SPF가 `pass`여도 그 검사 대상 도메인이 From과 다르면 DMARC는 SPF를 **안 쳐준다**.
+- **SPF는 envelope sender(Return-Path/MAIL FROM)를 검사한다 — From 헤더가 아니다**: 사용자가 보는 From은 `booktimer.app`이지만, SPF가 보는 건 봉투 발신자다. SES 기본은 이게 `…@amazonses.com`(SES 소유) → SPF는 amazonses.com 기준 pass지만 From과 도메인이 달라 **정렬 실패**.
+- **custom MAIL FROM이 envelope을 내 도메인으로 바꾼다**: `mail.booktimer.app`을 MAIL FROM으로 지정하면 봉투 발신자가 `…@mail.booktimer.app` → From(`booktimer.app`)과 **같은 조직 도메인** → relaxed 정렬 성립. (그래서 MX·SPF TXT를 `mail.booktimer.app`에 깐다.)
+- **DKIM은 이미 정렬돼 있었다**: SES Easy DKIM 서명은 `d=booktimer.app`이라 From과 일치 → 처음부터 DKIM 정렬. 그래서 SPF 없이도 DMARC는 통과 *가능*했다. SPF 정렬은 **이중 안전망**(포워딩 등으로 DKIM 서명이 깨질 때 SPF가 폴백).
+- **relaxed vs strict 정렬**: DMARC 기본은 *relaxed* — 조직 도메인(`booktimer.app`)만 같으면 정렬(서브도메인 `mail.`·`bounce.` 허용). *strict*는 완전 동일을 요구. 기본 relaxed라 custom MAIL FROM이 서브도메인이어도 정렬된다.
+
+### 검증으로 읽는 법 (수신측 Authentication-Results)
+
+```
+spf=pass    smtp.mailfrom=…@mail.booktimer.app   ← 정렬(우리 조직 도메인)
+dkim=pass   header.i=@booktimer.app              ← 정렬
+dmarc=pass  header.from=booktimer.app            ← 둘 다 정렬이라 통과
+Return-Path: <…@mail.booktimer.app>              ← custom MAIL FROM 적용 증거
+```
+
+`smtp.mailfrom`이 `amazonses.com`이면 SPF는 pass라도 비정렬 — `Return-Path`/`smtp.mailfrom` 도메인을 보면 custom MAIL FROM이 실제로 먹었는지 알 수 있다.
+
+### 일반 원칙 (면접에서 본인 표현으로)
+
+> "메일 인증 3종에서 진짜 관문은 DMARC고, DMARC는 SPF나 DKIM이 *그냥 통과*하는 게 아니라 *From 도메인과 정렬*돼야 통과시킨다. SPF는 봉투 발신자(MAIL FROM)를 검사하는데 SES 기본은 그게 `amazonses.com`이라 SPF는 pass여도 From(내 도메인)과 안 맞아 정렬 실패 — DKIM 서명만 내 도메인이라 그걸로만 DMARC를 넘기고 있었다. custom MAIL FROM으로 봉투 발신자를 내 서브도메인으로 바꾸면 SPF도 정렬돼 이중 안전망이 된다. 즉 '인증이 통과했나'와 '그 인증이 내 From과 같은 도메인이냐'는 다른 질문이고, DMARC가 보는 건 후자다."
+
+### Q&A 대비
+
+- **Q. SPF가 pass였는데 왜 DMARC에 도움이 안 됐나?** → SES 기본 envelope이 `amazonses.com`이라 SPF는 *그 도메인 기준* pass다. DMARC는 "SPF가 검사한 도메인 = From 도메인"을 요구하는데 둘이 다르니(amazonses.com ≠ booktimer.app) **정렬 실패** → DMARC는 SPF를 무시하고 DKIM 정렬로만 판정했다.
+- **Q. DKIM만 정렬돼도 DMARC 통과인데 왜 SPF까지?** → 단일 의존을 피하는 이중 안전망. 메일이 포워딩·메일링리스트를 거치면 본문 변형으로 DKIM 서명이 깨질 수 있는데, 그때 SPF 정렬이 살아 있으면 DMARC가 유지된다. 대학·기업 수신서버는 셋 다 갖춘 발신자를 선호.
+- **Q. DMARC를 `p=none`으로 깔면 의미가 있나?** → `p=none`은 정렬 실패 메일을 *거부하지 않고 모니터링만* 한다(거부 위험 0). 그래도 "이 도메인은 DMARC를 운영한다"는 신호로 신뢰가 오르고, 리포트로 정렬을 관찰한 뒤 `quarantine`→`reject`로 단계 상향하는 토대가 된다. 처음부터 `reject`로 깔면 설정 실수가 정상 메일을 죽인다.
+- **Q. MAIL FROM은 왜 서브도메인(`mail.`)인가?** → 루트(`booktimer.app`)에 MX를 깔면 수신 메일 라우팅과 충돌할 수 있어, 발신 봉투 전용 서브도메인을 둔다. relaxed 정렬이라 서브도메인이어도 From과 조직 도메인이 같아 정렬에 문제없다.
+
+### 관련
+
+- **N-067** — transactional/마케팅 메일의 법적 분리. 거기서 "발송 인프라(SPF/DKIM/DMARC)는 공유"라 한 그 인프라의 *동작 원리*가 이 노트.
+- **N-036** — 도메인 평판·딜리버러빌리티(`.click`→`.app`). 정렬은 평판과 더불어 수신함 안착의 다른 축(신원 인증).
+- **N-052 · N-053** — 이메일 발송 인프라가 전제였던 보안 항목들. 그 인프라가 실제로 수신함에 닿게 하는 마지막 한 겹.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -3420,3 +3467,4 @@ BookTimer에 PR CI 게이트(`ci.yml`)와 main branch protection을 도입(PR #2
 | 2026-06-10 | N-068 (CSS 커스텀 프로퍼티는 "이름 유지·값만 교체"로 var 참조 전 화면을 무파괴 일괄 리프레시 — 화면들이 색을 하드코딩 않고 `var(--accent)`로 *참조*만 하면, 토큰 이름은 그대로 두고 `:root` 값만 바꿔 그 토큰 쓰는 전 화면을 한 번에 리스킨(정의가 한 곳에 모임=디자인 토큰의 본질) / 무파괴 조건=이름 보존: 값만 바꾸면 참조 0변경, 이름까지 바꾸면 `var` undefined로 색 빠짐(리스킨≠리네이밍·리팩터) / 양날: 영향 범위=회귀 범위라 한 줄로 25개 화면이 바뀜→교체 후 여러 화면 스폿체크가 게이트(종이톤 전제 안 칠한 화면 대비·가독성) / 토큰 아닌 고정 hex(잔디 셀 GitHub 스타일)는 무영향=정체성 보존이자 새 무드와 따로 놀 위험 / 신규 토큰은 추가만·소급 적용 X로 점진(값 교체=전역 즉시, 추가=점진) / 랜딩 인디고→종이톤+세이지 리프레시에서, 시각 검증은 스크린샷 막혀 computed-style로 회귀 0 확인 T-043·T-035, app.css 단일 출처 T-033, frontend-design-workflow.md, PR #287) |
 | 2026-06-11 | N-069 (소셜(OAuth)-only로 로컬 가입을 없애는 트레이드오프 — 비밀번호 관련 부담(해싱·재설정·credential stuffing·brute-force·가입 이메일 인증·pre-hijacking N-053)은 IdP에 *위임*돼 소멸하나 **책임 이전이지 소멸 아님** / 남음: 개인정보보호법 의무(이메일·닉네임은 PII → 동의·처리방침·파기, 제3자 제공 고지 추가 N-027)·OAuth 콜백 보안(state·PKCE·redirect_uri)·세션·IdP 간 계정 병합 / 새 함정: 카카오 이메일 *선택* 동의(이메일 없는 계정 → `email` 유니크 식별자 깨짐)·애플 강제(iOS 앱)+Private Relay 이메일 가림·단일 장애점·벤더 종속 / "다 박으면 단순"은 역설(병합+IdP 특수성으로 복잡도↑) → 하나(구글)로 좁게 시작·식별자를 이메일 아닌 IdP subject ID로 N-046 / 이메일 자동 병합 안전성은 "누가 verified했나"가 좌우 N-053 / "로컬 없애면 법적 제로"는 환상 / 위임 대상 N-026·N-011, 처리방침 책임 N-027, 발송 인프라는 잔존 N-067) |
 | 2026-06-11 | N-070 (required status check + `paths-ignore`는 머지를 영구 블록 — branch protection이 어떤 체크(test) 통과를 머지 필수로 걸면 그 체크는 success 보고돼야 머지 풀림인데, CI에 `paths-ignore`를 두면 제외 경로만 바꾼 PR에서 job이 스킵→스킵은 success 아니라 pending으로 영영 안 끝나 머지 잠김 / "GitHub가 스킵을 통과로 쳐줄 것"이 핵심 오해 — 워크플로/job 레벨 스킵 모두 success로 자동 마킹 안 함 / 회피: required 대상 CI는 paths-ignore 없이 전 PR 실행(가벼우면 최선·BookTimer H2 ~2분), 정말 끄려면 워크플로 스킵 대신 항상 도는 job+내부 분기로 '할 일 없음→성공' / deploy.yml의 paths-ignore는 required 아니고 push 트리거라 정당=같은 paths-ignore도 required냐에 따라 함정/정당 갈림 / 적용 PUT 함정 T-044, PR #298) |
+| 2026-06-12 | N-071 (DMARC 정렬(alignment) — SPF·DKIM 통과 ≠ DMARC 통과, DMARC는 인증된 도메인이 From과 *정렬*돼야 통과 / SPF는 envelope(MAIL FROM) 검사인데 SES 기본은 `amazonses.com`이라 pass여도 비정렬 → DKIM(`d=booktimer.app`) 정렬로만 통과 중이었음 / custom MAIL FROM(`mail.booktimer.app`)로 envelope을 내 도메인화 → SPF도 relaxed 정렬 = 이중 안전망(포워딩으로 DKIM 깨질 때 폴백) / 검증=수신 Authentication-Results `spf=pass smtp.mailfrom=@mail.booktimer.app`·`dkim=pass header.i=@booktimer.app`·`dmarc=pass`, Return-Path로 custom MAIL FROM 적용 확인 / `p=none`은 모니터링만(거부 0)이라 안전 시작·정렬 안정 후 상향 / 발송 인프라 원리 N-067, 평판 축 N-036, 인프라 전제 N-052·N-053, PR #317) |
