@@ -979,6 +979,24 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 - [x] **OAuth emailVerified 정합** — 소셜 가입(`registerOAuth`)이 검증 표시 + 기존 소셜 백필(Flyway V33). 넛지의 `emailVerified` 게이트(위 발송 규약)가 소셜 사용자를 빠뜨려 동의해도 못 받던 갭 보정(원 설계 외 추가 — phase2 발송 머지 뒤 발견). `provision`의 미검증 거부(N-026) 보존. (PR #308)
 - [ ] (운영) **수신동의 2년마다 재확인** 의무 인지 + 반송·스팸신고 피드백 루프 관리.
 
+> **🔒 법무 9박스 — 점등 게이트 (정보통신망법 §50 감사, 2026-06-12):** 마케팅 넛지 실발송(`BOOKTIMER_NUDGE_ENABLED=true`)의 법적 선결. §50 광고성 정보 9개 의무를 현재 구현과 대조한 감사표 — 점등 직전 1~8이 모두 ✅인지 확인하는 체크리스트.
+>
+> | # | §50 의무 | 충족 증거 (코드/문서) | 상태 |
+> |---|---|---|---|
+> | 1 | 사전 수신동의(opt-in) | `marketingEmailConsent` 기본 false(V32·백필 없음)·가입 선택 체크박스(끼워팔기 금지)·설정 토글 | ✅ |
+> | 2 | 제목 `(광고)` 표시 | `RetentionNudgeService.SUBJECT` "(광고) [BookTimer]…" | ✅ |
+> | 3 | 전송자 명칭 | 본문 "발신: BookTimer" | ✅ |
+> | 4 | 전송자 연락처 | 본문 "문의: tlatldhs0504@naver.com"(처리방침 §7과 동일) — 본 작업 보완 | ✅ |
+> | 5 | 수신거부 방법 명시 | 본문 무료 수신거부 링크(`UNSUBSCRIBE` 토큰 30일) | ✅ |
+> | 6 | 무료·쉬운 수신거부 | one-click(로그인 불필요)·"(무료)" 명시·IDOR 방어(`UnsubscribeService`) | ✅ |
+> | 7 | 야간(21~08시) 전송 제한 | KST 10시 단일 배치로 자연 회피(`RetentionNudgeScheduler`) | ✅ |
+> | 8 | 수신동의 증빙 보관 | `marketingConsentAt`(철회해도 보존) | ✅ |
+> | 9 | 2년마다 동의 재확인 | 데이터 근거(`marketingConsentAt`) 有·발송 로직 無 → 운영 항목(위 [ ], 동의 2년 후 도래라 점등 비차단) | ⏳ |
+>
+> 부가: **처리결과 통지**=동의/철회 시 화면 즉시 안내(설정 flash·`unsubscribe-done.html`)로 갈음 ✅. **처리방침**(`privacy.html`) §1 동의여부·시각 수집 + §2 선택동의·끼워팔기 금지·철회방법 ✅.
+>
+> **📡 점등 runbook (`BOOKTIMER_NUDGE_ENABLED=true`) — 아직 켜지 않음**: 전제 게이트 2개 통과 후 켠다. ① **SES 샌드박스 해제(프로덕션 액세스)** — 미해제면 미검증 실주소 발송 실패→반송→발신 평판 하락(transactional까지 연쇄). AWS Support 케이스 178123901400162 대기. ② **법무 9박스** 1~8 ✅. **절차**: `task-definition.json` `environment`에 `{"name":"BOOKTIMER_NUDGE_ENABLED","value":"true"}` 추가 → main push → `deploy.yml` 자동 배포(스케줄러 빈 등록) → 다음 KST 10시 배치 발송. **점등 후**: 반송·스팸신고율·DMARC 정렬(N-071) 모니터링, 안정 시 DMARC `p=none`→`quarantine` 상향.
+
 ### 측정 세션 `book_id` NOT NULL 제약 — 레거시 정리 후 (보류, 우선순위: 낮음)
 > **배경**: "측정은 무조건 책을 골라야 한다"(어떤 책을 얼마나 읽었는지 명확히)를 도입하며(PR #133),
 > 강제는 **유스케이스 경계(Service + Controller)** 에서 한다 — 새 세션은 `book` 필수, bookId 없거나 내 책
