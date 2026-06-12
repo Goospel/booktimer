@@ -67,6 +67,7 @@ public class BookController {
     public String books(@RequestParam(value = "q", required = false) String q,
                         @RequestParam(value = "page", required = false, defaultValue = "1") int page,
                         @RequestParam(value = "status", required = false) String status,
+                        @RequestParam(value = "visibility", required = false) String visibility,
                         @RequestParam(value = "type", required = false) String type,
                         @RequestHeader(value = "HX-Request", required = false, defaultValue = "false") boolean htmx,
                         Principal principal, Model model) {
@@ -75,17 +76,21 @@ public class BookController {
         // 검색 기준(제목/저자). 없거나 잘못되면 제목으로 폴백 — "모기"를 제목으로 찾는 게 기본 의도.
         BookSearchType searchType = BookSearchType.from(type);
 
-        // 책장 상태 필터(읽고싶음/읽는중/완독). 값이 없거나 잘못되면 전체(null).
+        // 책장 필터 — 상태(읽고싶음/읽는중/완독) × 공개여부(공개/비공개)의 직교 2차원. 각 차원은 값이
+        // 없거나 잘못되면 전체(null). 두 차원을 AND로 교차한다(예: 읽는중 + 공개).
         BookStatus shelfFilter = parseStatus(status);
+        BookVisibility visFilter = parseVisibility(visibility);
         List<Book> myBooks = bookService.myBooks(user);
-        List<Book> shelfBooks = shelfFilter == null
-                ? myBooks
-                : myBooks.stream().filter(b -> b.getStatus() == shelfFilter).toList();
+        List<Book> shelfBooks = myBooks.stream()
+                .filter(b -> shelfFilter == null || b.getStatus() == shelfFilter)
+                .filter(b -> visFilter == null || b.getVisibility() == visFilter)
+                .toList();
 
         model.addAttribute("nickname", user.getNickname());
         model.addAttribute("loginId", user.getLoginId()); // "내 책방"(/u/{loginId}) 링크용 — 공개 토글이 책방에 반영됨을 안내
         model.addAttribute("books", shelfBooks);
-        model.addAttribute("shelfFilter", shelfFilter); // 필터 칩 활성 표시·빈 메시지 분기
+        model.addAttribute("shelfFilter", shelfFilter); // 상태 칩 활성 표시·빈 메시지 분기
+        model.addAttribute("visFilter", visFilter);     // 공개여부 칩 활성 표시·빈 메시지 분기
 
         // 검색 결과 중 이미 내 책장에 있는 책 표시(중복 추가 방지·UX). 상태 필터(shelfBooks)와 무관하게
         // 내 책 전체(myBooks)의 isbn 집합으로 소유 판정 — 필터가 '읽는중'이어도 '읽고싶음'으로 가진 책을 소유로 본다.
@@ -113,13 +118,25 @@ public class BookController {
         return htmx ? "books :: shelfPanel" : "books";
     }
 
-    /** 책장 필터 파라미터를 BookStatus로 — 없거나 잘못된 값이면 null(전체). */
+    /** 책장 상태 필터 파라미터를 BookStatus로 — 없거나 잘못된 값이면 null(전체). */
     private BookStatus parseStatus(String status) {
         if (status == null || status.isBlank()) {
             return null;
         }
         try {
             return BookStatus.valueOf(status);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    /** 공개여부 필터 파라미터를 BookVisibility로 — 없거나 잘못된 값이면 null(전체). parseStatus의 쌍둥이. */
+    private BookVisibility parseVisibility(String visibility) {
+        if (visibility == null || visibility.isBlank()) {
+            return null;
+        }
+        try {
+            return BookVisibility.valueOf(visibility);
         } catch (IllegalArgumentException e) {
             return null;
         }
