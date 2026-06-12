@@ -40,6 +40,7 @@
 - [T-039. 실시간 시계 통합 테스트는 자정·타임존 경계에서 플레이키 — 고정 클락을 주입하라](#t-039-실시간-시계-통합-테스트는-자정타임존-경계에서-플레이키--고정-클락을-주입하라)
 - [T-043. preview_screenshot이 환경에 따라 타임아웃(렌더러는 정상) — preview_inspect/eval computed-style로 시각 검증 대체](#t-043-preview_screenshot이-환경에-따라-타임아웃렌더러는-정상--preview_inspecteval-computed-style로-시각-검증-대체)
 - [T-044. GitHub branch protection PUT — 4개 최상위 키 필수(422) + PowerShell 파이프로 JSON 넘기면 400](#t-044-github-branch-protection-put--4개-최상위-키-필수422--powershell-파이프로-json-넘기면-400)
+- [T-045. ECS 오토스케일링 워크플로가 service-linked role 자동 생성 권한 부족으로 실패 — CloudShell에서 직접 1회 생성](#t-045-ecs-오토스케일링-워크플로가-service-linked-role-자동-생성-권한-부족으로-실패--cloudshell에서-직접-1회-생성)
 
 ---
 
@@ -890,6 +891,31 @@ genConfig.putObject("thinkingConfig").put("thinkingBudget", 0); // 2.5-flash thi
 
 ---
 
+## T-045. ECS 오토스케일링 워크플로가 service-linked role 자동 생성 권한 부족으로 실패 — CloudShell에서 직접 1회 생성
+
+**증상**: `Ensure ECS service autoscaling` 워크플로(`autoscaling-config.yml`)를 처음 실행하니 `register-scalable-target` 스텝에서 ~17초 만에 실패:
+```
+ValidationException ... User is missing the following permissions: iam:CreateServiceLinkedRole
+```
+바로 앞 `before describe` 스텝(권한 OK)은 통과했는데 register에서만 막혔다.
+
+**원인**: ECS 오토스케일링이 처음 켜질 때 AWS는 `AWSServiceRoleForApplicationAutoScaling_ECSService`라는 **service-linked role**(오토스케일링이 ECS를 실제 조정할 때 쓰는 내부 역할)을 자동 생성하려 한다. 이 계정엔 그게 아직 없어서 생성을 시도했고, 워크플로 OIDC 역할(`githubActionsDeployRole`)엔 그 생성 권한(`iam:CreateServiceLinkedRole`)이 없어 거부됐다. ⚠️ `AccessDenied`가 아니라 **`ValidationException`** 형태로 온다(권한 누락인데 검증 예외 메시지라 헷갈림 — 메시지 본문의 "missing ... iam:CreateServiceLinkedRole"이 진짜 단서).
+
+**해결 (권장 = 직접 생성, 최소권한)**: 워크플로 역할에 IAM 생성 권한을 더 주기보다, 관리자 자격(CloudShell)으로 그 role을 **직접 한 번** 만든다. 이후엔 이미 존재하니 워크플로가 생성 시도조차 안 해 추가 권한이 필요 없다:
+```bash
+aws iam create-service-linked-role --aws-service-name ecs.application-autoscaling.amazonaws.com
+# 이미 있으면 "has been taken" — 무시(있으면 그걸로 충분)
+```
+그 뒤 실패한 실행을 Re-run하면 register→put이 통과한다(BookTimer는 이 방법으로 Min2/Max4/CPU70 적용 성공).
+
+**대안**: 워크플로 역할 정책에 `iam:CreateServiceLinkedRole`(Resource를 그 role ARN으로 제한)을 더해도 되지만, OIDC 배포 역할에 IAM 쓰기 권한을 주는 셈이라 보안상 직접 생성이 낫다.
+
+**교훈**: "한 작업이 여러 AWS 서비스에 걸치면 권한 경계가 넓어진다"(N-073)의 실제 사례 — 오토스케일링은 `ecs`·`application-autoscaling`·`cloudwatch`에 더해 **첫 1회는 `iam`(service-linked role)**까지 닿는다. 부수 리소스를 자동 생성하는 API는 "그 생성 권한"도 호출자에게 요구한다. (PR #322 후속, 실제 첫 점등에서 발생)
+
+**관련**: learning-notes **N-073**(ECS 오토스케일링 권한 경계 — 왜 `ecs:UpdateService`를 넘어서나), deploy-aws.md §12-1b(절차·해결 스니펫), **N-030**(무중단 배포는 `ecs:UpdateService`로 충분했던 대조).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -938,3 +964,4 @@ genConfig.putObject("thinkingConfig").put("thinkingBudget", 0); // 2.5-flash thi
 | 2026-06-09 | T-042 (마우스 드래그 캐러셀이 손을 안 따라옴 — 컨테이너 `scroll-behavior:smooth`가 `scrollLeft` 직접 대입까지 애니메이션화(CSSOM 스펙)+`scroll-snap mandatory`가 진행 중 위치 되당김 → `scrollLeft=150` 직후 읽으면 0 / 해결: 드래그 확정 시 인라인 `scrollBehavior='auto'`(즉시 추적)·놓을 때 `''` 복원(탄력 스냅 유지), 또는 `scrollTo({behavior:'instant'})` / "대입했는데 0"=smooth 애니메이션 중 신호, N-065 ④번 함정) |
 | 2026-06-10 | T-043 (preview_screenshot이 환경따라 타임아웃(`window may be stuck`)인데 렌더러는 정상 — `preview_eval`은 응답·console 에러 0이라 캡처 단계만 행 / 시각 변경 검증은 스크린샷 없이 `preview_inspect`·`getComputedStyle`로 색·폰트·크기를 *값으로* 단언(눈대중보다 정확)·`getBoundingClientRect`로 레이아웃·`document.fonts.check`로 폰트 로드 / "스크린샷 안 됨 ≠ 변경 안 됨" — 렌더러 생존 먼저 분리 확인 후 DOM 측정 대체, #269·#276·#287 반복 / 스크린샷 불신 자매 T-035, 디자인 토큰 검증 N-068, PR #287) |
 | 2026-06-11 | T-044 (GitHub branch protection PUT은 4개 최상위 키(`required_status_checks`/`enforce_admins`/`required_pull_request_reviews`/`restrictions`)를 null이라도 모두 보내야 함 — 누락 시 422 / PowerShell 5.1에서 JSON을 here-string 파이프로 넘기면 인코딩 깨져 400 `Problems parsing JSON` → UTF-8 파일+`--input` 사용(T-026 한글 커밋과 같은 뿌리) / `contexts` 체크 이름은 check-runs로 실측 후 등록·ci.yml 머지 후 protection 켜는 닭-달걀 순서, N-070, PR #298) |
+| 2026-06-12 | T-045 (ECS 오토스케일링 워크플로 첫 실행이 `register-scalable-target`에서 `ValidationException: missing iam:CreateServiceLinkedRole`로 실패 — 첫 점등 시 AWS가 service-linked role `AWSServiceRoleForApplicationAutoScaling_ECSService`를 자동 생성하려는데 OIDC 역할에 생성 권한 없어 거부(AccessDenied 아닌 ValidationException이라 헷갈림) / 권장 해결=워크플로 역할에 IAM 권한 더하기보다 CloudShell에서 `aws iam create-service-linked-role --aws-service-name ecs.application-autoscaling.amazonaws.com` 직접 1회 생성(최소권한·이후 존재하니 Re-run 통과) / 부수 리소스 자동 생성 API는 그 생성 권한도 호출자에 요구, N-073·N-030, PR #322 후속) |
