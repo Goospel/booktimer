@@ -884,21 +884,22 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 ③ HikariCP 풀 10 → ④ db.t3.micro 버스트 크레딧 소진.
 
 **홍보글 쓰기 전 체크리스트** (효과 큰 순):
-- [~] **ECS 오토스케일링 켜기** — desired 1 → min 2 / max 4, CPU 70% 타깃. 단일 장애점 제거 + 자동 확장. **최우선.** (워크플로 `autoscaling-config.yml` 준비됨 #322 — OIDC 권한 추가 + `workflow_dispatch` 실행은 사용자)
-- [~] **최소 desired=2 상시** — 한 대 죽어도 서비스 유지. (위 오토스케일 `min=2`가 보장)
-- [ ] **세션 DB→Redis(ElastiCache) 외부화** 검토 — DB 부하 크게 감소(트래픽 적으면 인메모리도). (보류 — 부하 테스트가 세션 DB 병목을 가리키면 착수)
-- [~] **부하 테스트로 실측** — `k6` 스크립트 `load-test/booktimer-load.js` 준비됨 #322(로그인→대시보드→기록 시나리오; 가입은 DB 오염이라 제외). 사용자가 RPS 올려가며 실행해 **latency가 꺾이는 RPS**를 숫자로 확보(추정→사실 전환) + 오토스케일 실작동(2→3→4) 검증.
-- [ ] (선택) RDS `db.t3.micro`→`db.t3.small` 한 단계, CloudWatch 알람(CPU·DB연결수·5xx) 사전 경보. (보류 — 부하 테스트가 DB 커넥션 병목을 보이면 근거 갖고 착수)
+- [x] **ECS 오토스케일링 켜기** ✅ — desired 1 → **min 2 / max 4, CPU 70% target-tracking 실제 적용·검증 완료**(2026-06-12, #322 워크플로 + #324). 단일 장애점 제거 + 자동 확장. (적용 함정: service-linked role 자동생성 권한 부족 → CloudShell `aws iam create-service-linked-role`로 해결, T-045)
+- [x] **최소 desired=2 상시** ✅ — `min=2`로 상시 2태스크 보장(한 대 죽어도 유지). ⚠️ 컴퓨트 요금 약 2배(부하 시 최대 4배) — Budgets($50) 모니터.
+- [ ] **세션 DB→Redis(ElastiCache) 외부화** 검토 — DB 부하 크게 감소(트래픽 적으면 인메모리도). (보류 — 아래 ④ 부하 테스트가 세션 DB 병목을 가리키면 착수)
+- [~] **부하 테스트로 실측** — `k6` 스크립트 `load-test/booktimer-load.js` **준비 완료(#322), 실행만 남음(선택·미완)**. 실행: `k6 run -e BASE_URL=https://booktimer.app -e LOGIN_USER=<이메일> -e LOGIN_PASS=<비번> load-test/booktimer-load.js`. **latency 꺾이는 RPS**를 숫자로 확보(추정→사실) + 오토스케일 실작동(2→3→4) 검증. ⚠️ 운영 대상이라 저부하부터.
+- [ ] (선택) RDS `db.t3.micro`→`db.t3.small` 한 단계, CloudWatch 알람(CPU·DB연결수·5xx) 사전 경보. (보류 — ④ 부하 테스트가 DB 커넥션 병목을 보이면 근거 갖고 착수)
 
-> 인프라 스펙 근거: `deploy/task-definition.json`(cpu 512/mem 1024, desired 1), `application-prod.properties`
-> (Spring Session JDBC), `claude-docs/deploy-aws.md`(db.t3.micro). 최소한 **오토스케일링+desired=2**까지는
-> 홍보 전에 마치는 걸 권장.
+> 인프라 스펙 근거: `deploy/task-definition.json`(cpu 512/mem 1024), `application-prod.properties`
+> (Spring Session JDBC), `claude-docs/deploy-aws.md`(db.t3.micro).
 >
-> **🔧 코드·워크플로 준비 (PR #322, 2026-06-12)** — 오토스케일링 + 부하 테스트 1차 스코프. 산출물:
-> `.github/workflows/autoscaling-config.yml`(register-scalable-target min2/max4 + CPU70 target-tracking, before/after describe readback),
-> `load-test/booktimer-load.js`(k6), `deploy-aws.md` §12-1b(절차 + OIDC 권한 추가 스니펫). ⚠️ 오토스케일링은 `ecs:UpdateService`만으론
-> 부족 — OIDC 역할에 `application-autoscaling:*`·`cloudwatch:*Alarm*` 권한 1회 추가가 선결(target-tracking이 CloudWatch 알람 자동 생성).
-> 남은 사용자 작업: ① CloudShell로 권한 추가 → ② 워크플로 실행(describe로 Min2/Max4/CPU70 확인) → ③ k6 부하 실측. 세션 Redis·RDS 업그레이드는 실측 후 후속.
+> **✅ 적용 완료 — 오토스케일링 점등 (2026-06-12, #322·#324)**: 산출물(`.github/workflows/autoscaling-config.yml`·`load-test/booktimer-load.js`·`deploy-aws.md` §12-1b·learning-notes N-073) 머지 후, 사용자가 AWS에 **실제 적용**(① OIDC 역할에 `application-autoscaling:*`·`cloudwatch:*Alarm*` 권한 추가 → ② 워크플로 실행 → describe로 Min2/Max4/CPU70 확인). 첫 실행은 service-linked role 자동생성 권한 부족(`ValidationException: missing iam:CreateServiceLinkedRole`)으로 실패했고 CloudShell `aws iam create-service-linked-role --aws-service-name ecs.application-autoscaling.amazonaws.com`로 해결(T-045 · deploy-aws §12-1b).
+>
+> **🧭 남은 선택 (다음 세션이 이어받을 핸드오프)**:
+> 1. **④ k6 부하 실측** (위 명령) — scale-out(2→3→4)·latency 꺾이는 RPS를 숫자로 확보. *오토스케일링 자체는 이미 켜졌으니 급하지 않음 — 홍보 직전에 권장.*
+> 2. 그 실측이 **세션 DB 병목**을 가리키면 → ③ 세션 Redis(ElastiCache) 외부화.
+> 3. 실측이 **DB 커넥션 병목**(태스크 수 × HikariCP 풀)을 가리키면 → ⑤ RDS small / 풀 크기 조정.
+> ⟶ **③·⑤는 ④의 실측 결과에 종속** — 추측으로 먼저 증설하지 말 것(근거: learning-notes N-064 "한가하면 증설은 무효, throughput/latency 축을 구분").
 
 ---
 
