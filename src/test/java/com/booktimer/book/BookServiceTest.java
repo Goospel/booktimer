@@ -376,6 +376,34 @@ class BookServiceTest {
     }
 
     @Test
+    @DisplayName("출판사 검색은 출판사에 검색어가 든 결과만 남긴다")
+    void search_publisher_keepsOnlyPublisherMatches() {
+        BookSearchResult publisherMatch = new BookSearchResult("자바의 정석", "남궁성", "1", null, "도우출판", null);
+        BookSearchResult titleOnly = new BookSearchResult("도우출판 30년사", "아무개", "2", null, "딴곳", null);
+        when(searchClient.search("도우출판", BookSearchType.PUBLISHER, 1))
+                .thenReturn(new BookSearchPage(List.of(publisherMatch, titleOnly), 1, 10, 2));
+
+        BookSearchPage page = bookService.search("도우출판", BookSearchType.PUBLISHER, 1);
+
+        assertThat(page.results()).extracting(BookSearchResult::publisher)
+                .containsExactly("도우출판"); // 제목에만 "도우출판"이 든 책은 제외
+    }
+
+    @Test
+    @DisplayName("출판사 검색에서 출판사가 null인 결과는 제외된다(미완성 메타가 새지 않음)")
+    void search_publisher_excludesNullPublisher() {
+        BookSearchResult withPub = new BookSearchResult("책A", "저자A", "1", null, "민음사", null);
+        BookSearchResult nullPub = new BookSearchResult("민음사 그 시절", "저자B", "2", null, null, null);
+        when(searchClient.search("민음사", BookSearchType.PUBLISHER, 1))
+                .thenReturn(new BookSearchPage(List.of(withPub, nullPub), 1, 10, 2));
+
+        BookSearchPage page = bookService.search("민음사", BookSearchType.PUBLISHER, 1);
+
+        assertThat(page.results()).extracting(BookSearchResult::publisher)
+                .containsExactly("민음사"); // publisher=null인 둘째 책은 제목에 "민음사"가 있어도 제외
+    }
+
+    @Test
     @DisplayName("공백·대소문자 차이는 무시하고 매칭한다(정규화 후 contains)")
     void search_normalizesWhitespaceAndCase() {
         BookSearchResult r = new BookSearchResult("Clean Code 클린 코드", "Robert C. Martin", "1", null, null, null);

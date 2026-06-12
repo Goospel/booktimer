@@ -28,6 +28,8 @@ class BookSearchTypeTest {
         assertThat(BookSearchType.from("TITLE")).isEqualTo(BookSearchType.TITLE);
         assertThat(BookSearchType.from("AUTHOR")).isEqualTo(BookSearchType.AUTHOR);
         assertThat(BookSearchType.from("author")).isEqualTo(BookSearchType.AUTHOR);
+        assertThat(BookSearchType.from("PUBLISHER")).isEqualTo(BookSearchType.PUBLISHER);
+        assertThat(BookSearchType.from("publisher")).isEqualTo(BookSearchType.PUBLISHER);
     }
 
     @Test
@@ -35,5 +37,6 @@ class BookSearchTypeTest {
     void mapsToAladinQueryType() {
         assertThat(BookSearchType.TITLE.getAladinQueryType()).isEqualTo("Title");
         assertThat(BookSearchType.AUTHOR.getAladinQueryType()).isEqualTo("Author");
+        assertThat(BookSearchType.PUBLISHER.getAladinQueryType()).isEqualTo("Publisher");
     }
 }

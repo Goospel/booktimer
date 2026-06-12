@@ -27,7 +27,7 @@
     <section class="card">
         <h2>책 추가</h2>
         <form th:if="${searchEnabled}" method="get" th:action="@{/books}" class="book-search-form">
-            <!-- 검색 기준 — 제목(기본)/저자. "모기"를 제목으로 찾을지 저자로 찾을지 분리. -->
+            <!-- 검색 기준 — 제목(기본)/저자/출판사. "모기"를 제목으로 찾을지 저자로 찾을지(또는 출판사로) 분리. -->
             <div class="search-type" role="radiogroup" aria-label="검색 기준">
                 <label th:each="t : ${searchTypes}">
                     <input type="radio" name="type" th:value="${t}" th:checked="${t == searchType}">

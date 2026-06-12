@@ -51,7 +51,7 @@ public class BookService {
 
     /**
      * 제공자(알라딘)의 {@code QueryType=Title}/{@code Author}가 문서와 달리 다른 필드 매칭을 섞어
-     * 돌려주는 경우를 방어한다 — 사용자가 고른 기준 필드(제목/저자)에 검색어가 실제로 든 결과만 남긴다.
+     * 돌려주는 경우를 방어한다 — 사용자가 고른 기준 필드(제목/저자/출판사)에 검색어가 실제로 든 결과만 남긴다.
      * (예: "모기"를 제목으로 검색했는데 저자 "모기 겐이치로" 책이 끼어드는 것을 거른다.)
      *
      * <p>공백·대소문자 차이는 무시한다(정규화 후 contains) — "Clean Code"↔"cleancode" 같은 차이로
@@ -67,7 +67,11 @@ public class BookService {
         }
         List<BookSearchResult> filtered = raw.results().stream()
                 .filter(r -> {
-                    String field = (type == BookSearchType.AUTHOR) ? r.author() : r.title();
+                    String field = switch (type) {
+                        case AUTHOR -> r.author();
+                        case PUBLISHER -> r.publisher();
+                        case TITLE -> r.title();
+                    };
                     return field != null && normalize(field).contains(needle);
                 })
                 .toList();
