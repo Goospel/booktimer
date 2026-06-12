@@ -17,8 +17,9 @@ import java.time.Instant;
  * @param emailMasked 마스킹본(기본 표시)
  * @param provider    인증 출처(LOCAL/소셜)
  * @param createdAt   가입 시각
- * @param onboarded   온보딩 완료 여부
- * @param role        역할(USER/ADMIN)
+ * @param onboarded     온보딩 완료 여부
+ * @param emailVerified 가입 이메일 검증 여부
+ * @param role          역할(USER/ADMIN)
  */
 public record AdminUserRow(
         String loginId,
@@ -28,6 +29,7 @@ public record AdminUserRow(
         AuthProvider provider,
         Instant createdAt,
         boolean onboarded,
+        boolean emailVerified,
         Role role) {
 
     /** User 엔티티에서 행을 만든다 — email은 마스킹본을 함께 계산한다. */
@@ -40,6 +42,7 @@ public record AdminUserRow(
                 u.getAuthProvider(),
                 u.getCreatedAt(),
                 u.isOnboarded(),
+                u.isEmailVerified(),
                 u.getRole());
     }
 }

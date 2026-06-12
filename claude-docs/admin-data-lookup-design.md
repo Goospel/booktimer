@@ -36,7 +36,7 @@
 
 ### 2.1 목록 — `GET /admin/users`
 
-- **컬럼**: login_id(@핸들) · nickname · email(**마스킹**) · provider(LOCAL/GOOGLE) · 가입일(createdAt) · 온보딩 여부 · 역할(USER/ADMIN)
+- **컬럼**: login_id(@핸들) · nickname · email(**마스킹**) · 이메일 인증 여부(인증/미인증 배지) · provider(LOCAL/GOOGLE) · 가입일(createdAt) · 온보딩 여부 · 역할(USER/ADMIN)
 - **검색**: `?q=` — login_id 또는 nickname 부분일치(대소문자 무시). email로는 검색 안 함(노출 최소화).
 - **정렬**: 가입일 내림차순(최근 가입 먼저) 기본.
 - **페이지네이션**: `?page=&size=` — Spring Data `Pageable`. 기본 size=20.
@@ -46,7 +46,7 @@
 
 한 사용자의 운영 스냅샷:
 
-- **계정**: login_id · nickname · email(마스킹+클릭 전체) · provider · 가입일 · 온보딩 · 역할 · 타임존
+- **계정**: login_id · nickname · email(마스킹+클릭 전체) · 이메일 인증 여부 · provider · 가입일 · 온보딩 · 역할 · 타임존
 - **타이머 설정**(ReadingTimer, 1:1): 하루 증가값 · 누적 상한(cap) · 현재 잔여 · 마지막 누적일 · cap 도달 여부. (없을 수도 — 온보딩 전이면 null 가능 → "타이머 미설정"으로 표기)
 - **최근 세션**(ReadingSession, 최근 N개·startedAt 내림차순): 책 제목 · 측정 길이 · 시작 시각. N=10 기본.
 - **책장 요약**: 총 책 수 + 상태별(읽고싶음/읽는중/완독) 카운트 + 공개(PUBLIC) 책 수. 책 전체 나열은 안 함(요약만 — 드릴다운 더 깊게는 다음).

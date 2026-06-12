@@ -105,6 +105,7 @@ public class AdminUserService {
                 u.getAuthProvider(),
                 u.getCreatedAt(),
                 u.isOnboarded(),
+                u.isEmailVerified(),
                 u.getRole(),
                 u.getTimezone(),
                 timer,

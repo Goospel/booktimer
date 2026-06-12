@@ -24,6 +24,7 @@ public record AdminUserDetail(
         AuthProvider provider,
         Instant createdAt,
         boolean onboarded,
+        boolean emailVerified,
         Role role,
         String timezone,
         TimerInfo timer,
