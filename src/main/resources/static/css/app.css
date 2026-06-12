@@ -777,7 +777,7 @@ a.book-title:hover { text-decoration: underline; }
 
 /* 구매처 선택 토글 — '구매'를 누르면 알라딘·쿠팡이 아래로 펼쳐지는 순수 CSS <details>(JS 불필요, manual-add 패턴과 동일).
    구매처가 2개일 때만 이 토글이 뜨고, 1개뿐이면 단일 .btn-ghost 버튼이 대신 렌더된다(템플릿 분기). */
-.buy-menu { display: inline-block; }
+.buy-menu { display: inline-block; position: relative; }   /* 펼친 메뉴를 절대배치로 띄울 기준점 */
 .buy-menu > summary {
     list-style: none; cursor: pointer;
     padding: 6px 10px; font-size: .85rem;       /* 다른 행 버튼과 같은 크기로 통일 */
@@ -786,7 +786,16 @@ a.book-title:hover { text-decoration: underline; }
 .buy-menu > summary::-webkit-details-marker { display: none; }   /* WebKit 기본 삼각형 마커 제거 */
 .buy-menu > summary::after { content: " ▾"; font-size: .7rem; margin-left: 2px; }  /* 펼칠 수 있음 표시 */
 .buy-menu[open] > summary::after { content: " ▴"; }
-.buy-menu-items { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+/* 펼친 알라딘·쿠팡 목록 — 흐름에서 빼내 '구매' 버튼 바로 아래에 절대배치로 띄운다.
+   흐름에 두면 .buy-menu 박스가 세로로 커져 형제 버튼(삭제 등) 정렬이 흔들렸음 → 띄워서 레이아웃 고정. */
+.buy-menu-items {
+    display: flex; flex-direction: column; gap: 4px;
+    position: absolute; top: 100%; left: 0; z-index: 10;
+    margin-top: 4px; padding: 6px;
+    background: #fff; border: 1px solid var(--border);
+    border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,.08);
+    min-width: max-content;
+}
 .buy-menu-items a {
     text-decoration: none; color: var(--muted); font-size: .85rem;
     padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
