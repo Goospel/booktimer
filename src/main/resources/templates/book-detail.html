@@ -32,9 +32,17 @@
                       th:text="'· 누적 ' + (${totalSeconds} / 3600) + '시간 ' + ((${totalSeconds} % 3600) / 60) + '분'">· 누적 0시간 0분</span>
             </p>
             <p>
-                <a th:if="${book.purchaseLink}" th:href="@{/books/{id}/buy(id=${book.id})}" target="_blank"
+                <!-- 구매처 2개면 '구매' 토글로 묶고 1개뿐이면 단일 버튼 — 조건은 데이터로 동적 분기. -->
+                <details th:if="${!#strings.isEmpty(book.purchaseLink) and coupangEnabled}" class="buy-menu">
+                    <summary class="btn-ghost">구매</summary>
+                    <div class="buy-menu-items">
+                        <a th:href="@{/books/{id}/buy(id=${book.id})}" target="_blank" rel="noopener nofollow">알라딘</a>
+                        <a th:href="@{/books/{id}/buy/coupang(id=${book.id})}" target="_blank" rel="noopener nofollow">쿠팡</a>
+                    </div>
+                </details>
+                <a th:if="${!#strings.isEmpty(book.purchaseLink) and !coupangEnabled}" th:href="@{/books/{id}/buy(id=${book.id})}" target="_blank"
                    rel="noopener nofollow" class="btn-ghost">구매</a>
-                <a th:if="${coupangEnabled}" th:href="@{/books/{id}/buy/coupang(id=${book.id})}" target="_blank"
+                <a th:if="${#strings.isEmpty(book.purchaseLink) and coupangEnabled}" th:href="@{/books/{id}/buy/coupang(id=${book.id})}" target="_blank"
                    rel="noopener nofollow" class="btn-ghost">쿠팡</a>
             </p>
             <p class="affiliate-note" th:if="${coupangEnabled}">
