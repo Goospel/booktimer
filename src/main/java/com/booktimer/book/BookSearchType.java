@@ -12,7 +12,8 @@ package com.booktimer.book;
 public enum BookSearchType {
 
     TITLE("제목", "Title"),
-    AUTHOR("저자", "Author");
+    AUTHOR("저자", "Author"),
+    PUBLISHER("출판사", "Publisher");
 
     private final String label;
     private final String aladinQueryType;
