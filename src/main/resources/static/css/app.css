@@ -891,6 +891,24 @@ a.book-title:hover { text-decoration: underline; }
 }
 .shelf-filter a:hover { border-color: var(--accent); color: var(--accent); }
 .shelf-filter a.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+/* 공개여부 서브 필터 — 상태 칩과 달리 책 행 공개 토글의 비주얼(연한 트랙 알약 + 흰 알약 active)을 빌린
+   세그먼티드 토글. 형태가 칩(채움)과 달라 '서브 필터'로 읽히고, 우측 정렬로 상태 필터에 종속돼 보인다.
+   링크 동작(URL·htmx·active)은 상태 칩과 동일하게 <a>로 유지 — CSS만 토글 룩. */
+.vis-filter-bar { display: flex; justify-content: flex-end; margin: 0 0 14px; }
+.vis-filter {
+    display: inline-flex; gap: 2px; padding: 3px;
+    background: #EDE7DA; border: 1px solid var(--border); border-radius: 999px;
+}
+.vis-filter a {
+    padding: 5px 12px; border-radius: 999px;
+    color: var(--muted); text-decoration: none; font-size: .76rem; font-weight: 600;
+    white-space: nowrap;
+}
+.vis-filter a:hover { color: var(--accent); }
+.vis-filter a.active {
+    background: var(--card-bg); color: var(--accent-hover);
+    box-shadow: 0 1px 2px rgba(60, 50, 30, .14);
+}
 /* 팔로우 스코프 인기 카운트(§7.4) — 책 메타 안 작은 배지 */
 .follow-popularity { font-size: .78rem; color: var(--accent); font-weight: 600; text-decoration: none; cursor: pointer; }
 .follow-popularity:hover { text-decoration: underline; }
