@@ -27,6 +27,8 @@
         { "name": "GOOGLE_CLIENT_ID", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/GOOGLE_CLIENT_ID" },
         { "name": "GOOGLE_CLIENT_SECRET", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/GOOGLE_CLIENT_SECRET" },
         { "name": "BOOKTIMER_ALADIN_TTB_KEY", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/ALADIN_TTB_KEY" },
+        { "name": "BOOKTIMER_COUPANG_TRACKING_CODE", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/COUPANG_TRACKING_CODE" },
+        { "name": "BOOKTIMER_COUPANG_SEARCH_URL_TEMPLATE", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/COUPANG_SEARCH_URL_TEMPLATE" },
         { "name": "BOOKTIMER_ADMIN_LOGIN_IDS", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/ADMIN_LOGIN_IDS" },
         { "name": "BOOKTIMER_LLM_API_KEY", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/LLM_API_KEY" },
         { "name": "SPRING_MAIL_USERNAME", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/SPRING_MAIL_USERNAME" },
