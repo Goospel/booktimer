@@ -399,6 +399,11 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
         **남은 점등**: SSM에 `COUPANG_TRACKING_CODE=AF…`·`COUPANG_SEARCH_URL_TEMPLATE=…?q={query}&channel=user&lptag={trackingCode}`
         주입 + 재배포(사용자 작업). ⚠️ 잔여: ISBN 검색 품질 재평가·API 딥링크 키는 판매 15만원 실적 게이트 뒤(초기 검색 링크 방식)·
         `lptag` 직접 부착의 약관 허용 범위 확인.
+      - **구매처 선택 토글 통합 ✅ 2026-06-12 (#321)**: 점등으로 알라딘·쿠팡 "구매" 버튼이 한 행에 둘 나란히 뜨던 것을,
+        구매처가 **2개일 때만 "구매" 토글**(`<details>` 순수 CSS·JS 0)로 묶어 펼쳐 고르게 함. **1개뿐이면 단일 버튼 유지**
+        (불필요한 클릭 제거). 분기 조건(`#strings.isEmpty(purchaseLink)`·`coupangEnabled`)이 **매 렌더 그 책 데이터로 평가**돼
+        나중에 구매처가 2개로 늘면 자동 토글 전환(코드 변경 0). 뷰 3곳(books/book-detail/profile)+`app.css` `.buy-menu`
+        (기존 `manual-add` `<details>` 패턴 재사용), 백엔드 무변경. TDD: "2개면 토글+두 링크 / 1개뿐이면 단일" 경계 2개 추가.
   - **③-c 책 상세 페이지 완료 ✅ 2026-06-03**: `GET /books/{id}` — 책 메타 + **책별 잔디**(그 책 세션만 필터,
     `ContributionGraphBuilder` 순수 빌더 재사용) + 일자별 기록 + 누적 시간. 소유권 검사(IDOR, 없으면 책장으로).
     `BookContributionService`(세션 패키지, Clock+유저 TZ 오늘) + `findByUserAndBook`. 책장에서 제목 클릭 진입.
