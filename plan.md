@@ -690,7 +690,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 
 **관찰 중 / 후속 후보** (아직 미착수 — 발견했으나 우선순위 낮음):
 - [x] 검색에 **출판사** 검색 기준 추가 ✅ (PR #326) — `BookSearchType.PUBLISHER`(알라딘 `QueryType=Publisher`) + 후필터 `switch` 확장. 라디오는 `values()` 자동 노출·결과 행은 기존 `book-pub`로 출판사 표시. (※ *검색 기준*만 — 내 책장 목록을 출판사로 거르는 필터는 범위 밖.)
-- [ ] 상태 필터에 **공개여부(PUBLIC/PRIVATE) 차원** 추가 가능(현재 상태만).
+- [x] 상태 필터에 **공개여부(PUBLIC/PRIVATE) 차원** 추가 ✅ (PR #327, 디자인 후속 #328) — 상태 × 공개여부 **직교 2차원 AND 필터**. `BookController.books`에 `visibility` 파라미터·`parseVisibility`(parseStatus 쌍둥이)·기존 status와 동일한 메모리 stream 필터, `books.html`에 🌍공개/🔒비공개 줄(상태와 **상호 파라미터 보존**)·htmx 부분 swap 유지. Repository·서비스 무변경. 표시는 **#328에서 재디자인** — 당초 상태 칩 `.shelf-filter`를 재사용했으나, 공개여부가 상태의 하위 차원임이 드러나게 책 행 공개 토글 룩의 **세그먼티드 토글**(`.vis-filter`: 연한 트랙 + 흰 알약 active·우측 정렬)로 분리(동작·URL 불변, 마크업·CSS만).
 - [~] 책 동일성 키 **ISBN 정규화**(인기 카운트 정확도·중복 표시에 영향, SNS 카운트 선결과 연계).
   - ✅ **적재 시점 정규화**(PR #164) — `Isbn.normalize`(하이픈·공백 제거, 빈 값→null)를 `Book` 생성자 단일 통로에서 적용 + 기존 행 백필(V16). 빈 ISBN을 `""`로 저장해 서로 다른 책이 뭉치는 group-by 키 오염 차단.
   - [ ] (후속) **ISBN10→13 변환** — 현재 적재는 알라딘 `isbn13`만 받아 노출 적음(수동 입력에 ISBN 칸 생기면 선결).

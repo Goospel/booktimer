@@ -228,6 +228,69 @@ class BookControllerTest {
     }
 
     @Test
+    @DisplayName("GET /books?visibility=PUBLIC: 공개 책만 책장에 싣고 visFilter=PUBLIC")
+    @SuppressWarnings("unchecked")
+    void books_filteredByVisibilityPublic() throws Exception {
+        User u = newUser("visfilter@booktimer.com");
+        Book pub = Book.register(u, "공개책", null, null, null, null, null, BookStatus.READING);
+        pub.makePublic();
+        bookRepository.save(pub);
+        bookRepository.save(Book.register(u, "비공개책", null, null, null, null, null, BookStatus.READING)); // 기본 PRIVATE
+
+        mockMvc.perform(get("/books").param("visibility", "PUBLIC").with(user("visfilter@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("visFilter", BookVisibility.PUBLIC))
+                .andExpect(result -> {
+                    var books = (List<Book>) result.getModelAndView().getModel().get("books");
+                    assertThat(books).extracting(Book::getTitle).containsExactly("공개책");
+                    assertThat(books).extracting(Book::getVisibility).containsOnly(BookVisibility.PUBLIC);
+                });
+    }
+
+    @Test
+    @DisplayName("GET /books?status=READING&visibility=PUBLIC: 두 조건을 AND로 교차한다")
+    @SuppressWarnings("unchecked")
+    void books_filteredByStatusAndVisibility() throws Exception {
+        User u = newUser("crossfilter@booktimer.com");
+        Book target = Book.register(u, "읽는중공개", null, null, null, null, null, BookStatus.READING);
+        target.makePublic();
+        bookRepository.save(target);
+        bookRepository.save(Book.register(u, "읽는중비공개", null, null, null, null, null, BookStatus.READING)); // PUBLIC 아님 → 제외
+        Book finishedPublic = Book.register(u, "완독공개", null, null, null, null, null, BookStatus.FINISHED);
+        finishedPublic.makePublic();
+        bookRepository.save(finishedPublic); // READING 아님 → 제외
+
+        mockMvc.perform(get("/books").param("status", "READING").param("visibility", "PUBLIC")
+                        .with(user("crossfilter@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("shelfFilter", BookStatus.READING))
+                .andExpect(model().attribute("visFilter", BookVisibility.PUBLIC))
+                .andExpect(result -> {
+                    var books = (List<Book>) result.getModelAndView().getModel().get("books");
+                    assertThat(books).extracting(Book::getTitle).containsExactly("읽는중공개");
+                });
+    }
+
+    @Test
+    @DisplayName("GET /books?visibility=PRIVATE: 비공개 책만 책장에 싣는다(양 방향 필터)")
+    @SuppressWarnings("unchecked")
+    void books_filteredByVisibilityPrivate() throws Exception {
+        User u = newUser("privfilter@booktimer.com");
+        Book pub = Book.register(u, "공개책", null, null, null, null, null, BookStatus.READING);
+        pub.makePublic();
+        bookRepository.save(pub);
+        bookRepository.save(Book.register(u, "비공개책", null, null, null, null, null, BookStatus.READING)); // 기본 PRIVATE
+
+        mockMvc.perform(get("/books").param("visibility", "PRIVATE").with(user("privfilter@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("visFilter", BookVisibility.PRIVATE))
+                .andExpect(result -> {
+                    var books = (List<Book>) result.getModelAndView().getModel().get("books");
+                    assertThat(books).extracting(Book::getTitle).containsExactly("비공개책");
+                });
+    }
+
+    @Test
     @DisplayName("GET /books: HX-Request면 shelfPanel 프래그먼트만 반환(필터 클릭 부분 swap)하고 책 목록·hx-get을 담는다")
     void books_htmx_returnsFragment() throws Exception {
         User u = newUser("htmxshelf@booktimer.com");

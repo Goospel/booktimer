@@ -107,17 +107,33 @@
         <div id="shelf-panel" th:fragment="shelfPanel">
         <nav class="shelf-filter"
              hx-target="#shelf-panel" hx-swap="outerHTML" hx-push-url="true">
-            <a th:href="@{/books(q=${q})}" th:attr="hx-get=@{/books(q=${q})}"
+            <a th:href="@{/books(q=${q}, visibility=${visFilter})}" th:attr="hx-get=@{/books(q=${q}, visibility=${visFilter})}"
                th:classappend="${shelfFilter == null} ? 'active'">전체</a>
             <a th:each="s : ${statuses}"
-               th:href="@{/books(q=${q}, status=${s})}"
-               th:attr="hx-get=@{/books(q=${q}, status=${s})}"
+               th:href="@{/books(q=${q}, status=${s}, visibility=${visFilter})}"
+               th:attr="hx-get=@{/books(q=${q}, status=${s}, visibility=${visFilter})}"
                th:classappend="${s == shelfFilter} ? 'active'"
                th:text="${s.label}">상태</a>
         </nav>
+        <!-- 공개여부 서브 필터 — 상태와 직교(AND). 책 행의 공개 토글과 같은 비주얼(연한 트랙 알약 + 흰 알약 active)을
+             빌려 상태 칩(채움)과 형태를 구분 → 한눈에 '서브 필터'로 읽히게(우측 정렬). 상태 차원 현재값(shelfFilter)을
+             각 링크에 실어 공개여부를 바꿔도 상태 필터가 풀리지 않게 한다(상호 보존). htmx 속성은 바깥 <nav>에 호이스트(자식 <a> 상속). -->
+        <nav class="vis-filter-bar" aria-label="공개여부 필터"
+             hx-target="#shelf-panel" hx-swap="outerHTML" hx-push-url="true">
+            <span class="vis-filter">
+                <a th:href="@{/books(q=${q}, status=${shelfFilter})}" th:attr="hx-get=@{/books(q=${q}, status=${shelfFilter})}"
+                   th:classappend="${visFilter == null} ? 'active'">전체</a>
+                <a th:href="@{/books(q=${q}, status=${shelfFilter}, visibility='PUBLIC')}"
+                   th:attr="hx-get=@{/books(q=${q}, status=${shelfFilter}, visibility='PUBLIC')}"
+                   th:classappend="${visFilter != null and visFilter.name() == 'PUBLIC'} ? 'active'">🌍 공개</a>
+                <a th:href="@{/books(q=${q}, status=${shelfFilter}, visibility='PRIVATE')}"
+                   th:attr="hx-get=@{/books(q=${q}, status=${shelfFilter}, visibility='PRIVATE')}"
+                   th:classappend="${visFilter != null and visFilter.name() == 'PRIVATE'} ? 'active'">🔒 비공개</a>
+            </span>
+        </nav>
 
-        <p th:if="${books.isEmpty() and shelfFilter == null}" class="status-line">아직 등록한 책이 없습니다. 위에서 검색해 추가해 보세요.</p>
-        <p th:if="${books.isEmpty() and shelfFilter != null}" class="status-line">이 상태의 책이 없습니다.</p>
+        <p th:if="${books.isEmpty() and shelfFilter == null and visFilter == null}" class="status-line">아직 등록한 책이 없습니다. 위에서 검색해 추가해 보세요.</p>
+        <p th:if="${books.isEmpty() and (shelfFilter != null or visFilter != null)}" class="status-line">이 조건의 책이 없습니다.</p>
         <ul class="book-list shelf-scroll" th:unless="${books.isEmpty()}">
             <li class="book-row" th:each="b : ${books}">
                 <img class="book-cover" th:if="${b.coverUrl}" th:src="${b.coverUrl}" alt="" loading="lazy" referrerpolicy="no-referrer">
