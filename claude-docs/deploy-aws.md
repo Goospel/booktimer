@@ -383,6 +383,82 @@ CI 역할로 위를 자동화하려면 `githubActionsDeployRole` 정책에 추�
 
 ---
 
+## 12-1b. ECS 오토스케일링 (홍보 전 서버 용량 게이트)
+
+무중단 배포(§12-1)는 *배포 중* 가용성을 지키지만, 평상시 트래픽이 몰리면 단일 태스크(`desired=1`)가
+CPU 100%를 쳐 그대로 장애가 된다(자동 확장 없음). 홍보로 한순간에 유입되면 특히 위험하다.
+Application Auto Scaling을 붙여 **상시 2태스크(단일 장애점 제거) + 부하 시 최대 4태스크 자동 확장**으로 만든다.
+(배경·병목 분석: plan.md "홍보 전 선수과정 — 서버 용량 보강".)
+
+```bash
+RESOURCE_ID="service/$APP-cluster/$APP-service"   # service/<클러스터 이름>/<서비스 이름>
+
+# 1) 스케일 대상 등록: desired count를 2~4 범위로
+aws application-autoscaling register-scalable-target \
+  --service-namespace ecs --resource-id "$RESOURCE_ID" \
+  --scalable-dimension ecs:service:DesiredCount \
+  --min-capacity 2 --max-capacity 4 --region $AWS_REGION
+
+# 2) target-tracking 정책: 평균 CPU 70% 목표
+aws application-autoscaling put-scaling-policy \
+  --service-namespace ecs --resource-id "$RESOURCE_ID" \
+  --scalable-dimension ecs:service:DesiredCount \
+  --policy-name booktimer-cpu70-target-tracking \
+  --policy-type TargetTrackingScaling \
+  --target-tracking-scaling-policy-configuration \
+    "TargetValue=70.0,PredefinedMetricSpecification={PredefinedMetricType=ECSServiceAverageCPUUtilization}" \
+  --region $AWS_REGION
+```
+
+- `min=2` → 한 태스크가 죽어도 서비스 유지 + 평소 부하 분산. `max=4` → **순간 최대 4배 컴퓨트 요금**(예산 $50 인지).
+- target-tracking은 CPU가 70%를 넘으면 scale-out, 여유로우면 scale-in 한다(기본 cooldown 300초). 더 민감/보수적으로
+  바꾸려면 위 설정에 `ScaleOutCooldown`/`ScaleInCooldown`을 더한다.
+- 한 번 적용하면 서비스에 영속된다(배포는 task definition만 교체 → 드리프트 없음).
+
+> CI로 멱등 적용: `.github/workflows/autoscaling-config.yml`(workflow_dispatch)이 위를 수행하고 before/after를 출력한다.
+> **단, OIDC 역할(`githubActionsDeployRole`)에 권한 추가가 선결**이다 — §12-1 무중단 배포는 `ecs:UpdateService`로
+> 충분했지만 오토스케일링은 아니다(target-tracking이 CloudWatch 알람을 자동 생성하기 때문):
+
+```bash
+cat > /tmp/gh-autoscaling.json <<JSON
+{ "Version": "2012-10-17", "Statement": [
+  { "Effect": "Allow", "Action": [
+      "application-autoscaling:RegisterScalableTarget",
+      "application-autoscaling:DeregisterScalableTarget",
+      "application-autoscaling:DescribeScalableTargets",
+      "application-autoscaling:PutScalingPolicy",
+      "application-autoscaling:DescribeScalingPolicies",
+      "application-autoscaling:DeleteScalingPolicy",
+      "cloudwatch:PutMetricAlarm","cloudwatch:DescribeAlarms","cloudwatch:DeleteAlarms"
+    ], "Resource": "*" }
+] }
+JSON
+aws iam put-role-policy --role-name githubActionsDeployRole \
+  --policy-name booktimer-autoscaling --policy-document file:///tmp/gh-autoscaling.json
+```
+
+> 첫 `register-scalable-target` 시 service-linked role `AWSServiceRoleForApplicationAutoScaling_ECSService`가
+> 없으면 자동 생성을 시도한다 — 대개 계정에 이미 있다. 없어서 `AccessDenied`가 나면 위 정책에
+> `"iam:CreateServiceLinkedRole"`(Resource를 그 role ARN으로 제한 권장)을 한 번만 더한다.
+> 권한 추가는 관리자 자격으로 CloudShell에서 1회. 이후 워크플로 실행 → before/after describe로 Min2/Max4/CPU70 확인.
+
+### 검증
+
+```bash
+# 적용 확인(스케일 타깃·정책)
+aws application-autoscaling describe-scalable-targets \
+  --service-namespace ecs --resource-ids "$RESOURCE_ID" --region $AWS_REGION
+
+# 태스크가 2개로 늘었는지
+aws ecs describe-services --cluster $APP-cluster --services $APP-service \
+  --query 'services[0].{desired:desiredCount,running:runningCount}' --region $AWS_REGION
+```
+
+부하를 줘 실제 scale-out(2→3→4)·latency 곡선을 보려면 `load-test/booktimer-load.js`(k6) 사용. ⚠️ 운영 대상이라
+저부하부터 — 스크립트 상단 주의사항 참고.
+
+---
+
 ## 12-2. 알라딘 도서 검색(TTBKey) 연동
 
 책장의 검색·제휴 구매링크는 알라딘 OpenAPI를 쓴다. 앱은 `BOOKTIMER_ALADIN_TTB_KEY` 환경변수를

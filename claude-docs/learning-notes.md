@@ -76,6 +76,7 @@
 - [N-070. required status check + `paths-ignore`는 머지를 영구 블록한다 — "통과 필수"인 체크가 스킵되면 pending으로 영영 안 끝난다](#n-070-required-status-check--paths-ignore는-머지를-영구-블록한다--통과-필수인-체크가-스킵되면-pending으로-영영-안-끝난다)
 - [N-071. DMARC 정렬(alignment) — SPF·DKIM 통과만으론 부족하고 From 도메인과 정렬돼야 하며, custom MAIL FROM이 SPF를 정렬시킨다](#n-071-dmarc-정렬alignment--spfdkim-통과만으론-부족하고-from-도메인과-정렬돼야-하며-custom-mail-from이-spf를-정렬시킨다)
 - [N-072. 정보통신망법 §50 — 영리목적 광고성 정보 전송의 9대 의무 (마케팅 메일 점검표)](#n-072-정보통신망법-50--영리목적-광고성-정보-전송의-9대-의무-마케팅-메일-점검표)
+- [N-073. ECS 수평 오토스케일링은 별도 서비스(Application Auto Scaling)가 desiredCount를 조절한다 — target-tracking이 CloudWatch 알람을 자동 생성해 IAM 권한이 ecs:UpdateService를 넘어선다](#n-073-ecs-수평-오토스케일링은-별도-서비스application-auto-scaling가-desiredcount를-조절한다--target-tracking이-cloudwatch-알람을-자동-생성해-iam-권한이-ecsupdateservice를-넘어선다)
 
 ---
 
@@ -3438,6 +3439,54 @@ BookTimer 재참여 넛지(7일 비활동 사용자에게 "다시 읽어볼까�
 
 ---
 
+## N-073. ECS 수평 오토스케일링은 별도 서비스(Application Auto Scaling)가 desiredCount를 조절한다 — target-tracking이 CloudWatch 알람을 자동 생성해 IAM 권한이 ecs:UpdateService를 넘어선다
+
+**한 줄 요약**: 단일 Fargate 태스크(`desired=1`)는 단일 장애점·무확장이라 부하가 몰리면 한 태스크가 CPU 100%를 쳐 그대로 장애다. 수평 오토스케일링을 붙이면 상시 2태스크 + 부하 시 자동 확장이 되는데, 이건 ECS *자체* 기능이 아니라 **별도 서비스 Application Auto Scaling**이 ECS 서비스의 `desiredCount`를 "스케일 대상(scalable target)"으로 등록받아 정책대로 조절하는 구조다. 그래서 설정이 두 단계 — ①`register-scalable-target`(min/max 범위) ②`put-scaling-policy`(언제 늘릴까). **target-tracking 정책**(목표 CPU 70% 유지)은 온도조절기처럼 작동하며, 내부적으로 **CloudWatch 알람을 자동 생성**해 스케일 액션을 트리거한다. 그 결과 **IAM 권한 경계가 ecs를 넘어선다** — 무중단 배포(N-030)는 `ecs:UpdateService`로 충분했지만, 오토스케일링은 `application-autoscaling:*` + `cloudwatch:*Alarm*`(알람 자동 생성분)이 필요하다.
+
+### 배경 — 단일 태스크의 두 약점
+
+운영이 단일 Fargate 태스크(`desired=1`, 0.5 vCPU/1GB)였다. 두 약점이 겹친다:
+- **단일 장애점** — 그 한 태스크가 죽으면(또는 배포 교체 공백) 서비스 전체가 내려간다.
+- **무확장** — 동시 접속이 몰려도 자동으로 늘지 않는다. 한 태스크가 CPU 100%를 치면 그대로 포화·장애. 홍보로 한순간 유입되면 특히 위험.
+
+처방: **수평(horizontal) 오토스케일링** — 태스크 *수*를 부하 따라 2~4개로 가감(태스크 *크기*를 키우는 수직 확장과 다름). min=2가 단일 장애점을 없애고, 상한이 폭주를 막는다.
+
+### 핵심 — ECS가 늘리는 게 아니라 Application Auto Scaling이 늘린다
+
+수평 오토스케일링은 **ECS 자체 기능이 아니다.** AWS의 범용 **Application Auto Scaling** 서비스(DynamoDB·Aurora 등도 쓰는 그것)가 ECS 서비스의 `desiredCount`를 "조절 가능한 대상"으로 받아 움직인다. 그래서 설정이 두 단계로 갈린다:
+
+1. **`register-scalable-target`** — "무엇을, 어느 범위로 조절할지" 등록. `ResourceId=service/<클러스터>/<서비스>`, `ScalableDimension=ecs:service:DesiredCount`, `MinCapacity=2`, `MaxCapacity=4`. = 에어컨이 갈 수 있는 최저~최고 세기.
+2. **`put-scaling-policy`** — "언제 늘리고 줄일지" 정책. 여기선 **target-tracking**: 목표 지표 `ECSServiceAverageCPUUtilization=70`을 유지하도록 알아서 가감. = 온도조절기에 목표 온도만 정하면 알아서 켜고 끄는 것.
+
+### target-tracking이 CloudWatch 알람을 자동 생성한다 → 권한 함의
+
+target-tracking 정책은 마법이 아니다 — 내부적으로 **CloudWatch 알람 2개(scale-out용 high·scale-in용 low)를 자동으로 만들어** 그 알람이 임계를 넘으면 스케일 액션을 호출한다. 핵심은 *그 알람을 내가 만드는 게 아니라 AWS가 내 자격증명으로 만든다*는 점 — 그래서 `put-scaling-policy`를 호출하는 주체(여기선 GitHub OIDC 역할)에 **`cloudwatch:PutMetricAlarm`·`DescribeAlarms`·`DeleteAlarms` 권한이 필요**하다. 없으면 정책 생성이 `AccessDenied`로 실패한다.
+
+이게 **무중단 배포(N-030)와 갈리는 지점**이다:
+- 무중단 배포 = ECS 서비스의 `deploymentConfiguration`만 바꾼다 → `ecs:UpdateService` 하나로 충분(N-015 OIDC 역할에 이미 있음).
+- 오토스케일링 = **다른 두 서비스**(application-autoscaling, cloudwatch)를 건드린다 → `ecs:*`만으론 부족, `application-autoscaling:RegisterScalableTarget/PutScalingPolicy/Describe…` + `cloudwatch:*Alarm*`을 더해야 한다.
+
+> **권한 경계는 "어느 AWS 서비스의 API를 호출하나"로 결정된다.** 한 작업이 여러 서비스에 걸치면(여기선 ecs·application-autoscaling·cloudwatch 셋) 권한도 그만큼 넓어진다. "ECS 일이니 ecs 권한이면 되겠지"가 함정 — 실제 호출 대상 API를 보고 권한을 짠다.
+
+추가로, Application Auto Scaling이 실제로 ECS를 조정하려면 **service-linked role**(`AWSServiceRoleForApplicationAutoScaling_ECSService`)을 쓰는데, 대개 계정에 이미 있다(첫 등록 시 자동 생성, 없으면 `iam:CreateServiceLinkedRole` 필요).
+
+### Q&A 대비
+
+- **Q. 수평 확장과 수직 확장의 차이?** → 수평(scale-out)=태스크 *수*를 늘림(2→4), 수직=태스크 *크기*를 키움(0.5→1.0 vCPU). 단일 장애점 제거·처리량(throughput)은 수평이, 단건 응답 속도(latency)는 수직이 약(N-064의 축 구분). 오토스케일링은 보통 수평.
+- **Q. min=2가 왜 중요?** → desired=1은 그 한 대가 죽으면 끝(단일 장애점). min=2면 한 대가 죽어도 나머지가 받고 평소 부하도 분산된다. 그래서 "오토스케일링"의 첫 가치는 *확장*보다 *상시 이중화*다.
+- **Q. CPU 70%는 어떻게 고르나?** → 목표가 낮을수록(예: 50%) 더 일찍·자주 늘려 여유롭지만 비용↑, 높을수록(예: 85%) 빡빡하게 쓰지만 스파이크에 늦다. 70%는 흔한 출발값 — 실측(부하 테스트)으로 조정한다.
+- **Q. max=4의 위험?** → 스케일아웃은 곧 **비용**이다. max=4면 순간 최대 4배 컴퓨트 요금 → 예산 상한(Budgets)·알람과 함께 둔다. 또 태스크가 늘면 **DB 커넥션**(태스크당 HikariCP 풀)도 배수로 늘어 DB가 다음 병목이 될 수 있다(오토스케일링이 CPU 병목만 풀고 DB 병목을 만든다).
+- **Q. 왜 워크플로(workflow_dispatch)로 두고 배포 파이프라인에 안 넣나?** → 한 번 적용하면 서비스에 영속된다(매 배포는 task definition만 교체). 매번 재적용할 필요가 없어 N-030 무중단 설정처럼 분리된 수동 트리거로 둔다(드리프트 없음·멱등).
+
+### 관련
+
+- **N-030** — 무중단 롤링 배포(`deploymentConfiguration`). 같은 ECS 서비스를 건드리지만 `ecs:UpdateService`로 충분했던 대조군 — 이 노트의 "권한이 왜 더 필요한가"의 기준선.
+- **N-015** — GitHub Actions OIDC 역할로 AWS 작업. 그 역할의 권한 경계에 application-autoscaling·cloudwatch를 더해야 이 작업이 된다.
+- **N-064** — "한가하면 증설이 답이 아니다"(latency 축). 오토스케일링은 그 노트가 구분한 *throughput* 게이트의 구현 — 두 축을 헷갈리면 엉뚱한 처방을 한다.
+- **「홍보 전 선수과정」(plan.md)** — 이 오토스케일링이 그 게이트의 1순위 항목. 부하 테스트로 실측해 max·CPU 목표를 조정한다.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -3515,3 +3564,4 @@ BookTimer 재참여 넛지(7일 비활동 사용자에게 "다시 읽어볼까�
 | 2026-06-11 | N-070 (required status check + `paths-ignore`는 머지를 영구 블록 — branch protection이 어떤 체크(test) 통과를 머지 필수로 걸면 그 체크는 success 보고돼야 머지 풀림인데, CI에 `paths-ignore`를 두면 제외 경로만 바꾼 PR에서 job이 스킵→스킵은 success 아니라 pending으로 영영 안 끝나 머지 잠김 / "GitHub가 스킵을 통과로 쳐줄 것"이 핵심 오해 — 워크플로/job 레벨 스킵 모두 success로 자동 마킹 안 함 / 회피: required 대상 CI는 paths-ignore 없이 전 PR 실행(가벼우면 최선·BookTimer H2 ~2분), 정말 끄려면 워크플로 스킵 대신 항상 도는 job+내부 분기로 '할 일 없음→성공' / deploy.yml의 paths-ignore는 required 아니고 push 트리거라 정당=같은 paths-ignore도 required냐에 따라 함정/정당 갈림 / 적용 PUT 함정 T-044, PR #298) |
 | 2026-06-12 | N-071 (DMARC 정렬(alignment) — SPF·DKIM 통과 ≠ DMARC 통과, DMARC는 인증된 도메인이 From과 *정렬*돼야 통과 / SPF는 envelope(MAIL FROM) 검사인데 SES 기본은 `amazonses.com`이라 pass여도 비정렬 → DKIM(`d=booktimer.app`) 정렬로만 통과 중이었음 / custom MAIL FROM(`mail.booktimer.app`)로 envelope을 내 도메인화 → SPF도 relaxed 정렬 = 이중 안전망(포워딩으로 DKIM 깨질 때 폴백) / 검증=수신 Authentication-Results `spf=pass smtp.mailfrom=@mail.booktimer.app`·`dkim=pass header.i=@booktimer.app`·`dmarc=pass`, Return-Path로 custom MAIL FROM 적용 확인 / `p=none`은 모니터링만(거부 0)이라 안전 시작·정렬 안정 후 상향 / 발송 인프라 원리 N-067, 평판 축 N-036, 인프라 전제 N-052·N-053, PR #317) |
 | 2026-06-12 | N-072 (정보통신망법 §50 광고성 정보 9대 의무 — 마케팅 메일은 사전 동의 하나로 끝이 아니라 opt-in(기본OFF·끼워팔기 금지)·제목 `(광고)`·전송자 명칭+연락처·수신거부 명시·무료/쉬운 수신거부(one-click 토큰)·야간(21~08시) 제한·동의 증빙(시각)·2년 재확인·처리결과 통지 9개 전부 / transactional(가입인증·비번재설정)은 서비스 이행이라 규제 무관·단 처리방침 목적 고지(개인정보보호법) / 위반=과태료(§76)+미검증 발송 반송·신고로 도메인 평판 하락→같은 도메인 transactional까지 동반 스팸 / "동의만 받으면 합법"이 가장 흔한 오해 / 넛지 점등 게이트 "법무 9박스"의 명문화 / 분리 근거 N-067, 평판 축 N-071·N-036, PR #318) |
+| 2026-06-12 | N-073 (ECS 수평 오토스케일링은 ECS 자체가 아니라 별도 서비스 Application Auto Scaling이 desiredCount를 scalable target으로 등록받아 조절 — ①register-scalable-target(min2/max4 범위) ②put-scaling-policy(target-tracking CPU70%) 두 단계 / target-tracking이 CloudWatch 알람을 자동 생성해 IAM 권한이 ecs:UpdateService(무중단배포 N-030엔 충분)를 넘어 application-autoscaling:*·cloudwatch:*Alarm*까지 필요 / min=2는 확장보다 상시 이중화(단일 장애점 제거)가 첫 가치 / max=4는 비용 4배·태스크 증가가 DB 커넥션 배수→다음 병목 / throughput 게이트라 latency 축 N-064와 구분 / 홍보 전 선수과정 1순위, PR #322) |
