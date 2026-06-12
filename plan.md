@@ -103,17 +103,16 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 - [x] 보안 그룹: ALB 인바운드 443 허용
 - [ ] (후속) HSTS 헤더 — `.click`이 아닌 커스텀이면 명시 추가 (현재 ALB가 일부 적용)
 
-### 도메인 TLD 이전 — `.click` → `.com`/`.app` (계획 ⏳ 2026-06-03, 우선순위: 중)
+### 도메인 TLD 이전 — `.click` → `.app` (진행 🚧 2026-06-11 — 이메일 점등 선결로 착수)
 
 **왜**: 구글 로그인 게시 후 Chrome이 `booktimer.click`을 **"위험한 사이트"로 차단**(Safe Browsing 피싱 오탐)했다.
 원인은 우리 코드가 아니라 **`.click` TLD의 낮은 평판 + 신규 도메인 + 로그인/OAuth 콜백** 조합(T-027, N-036).
-당장은 **Search Console 보안문제 검토 요청**으로 해제하지만, `.click`은 평판이 근본적으로 낮아 **재발 위험**이 있다.
+`.click`은 평판이 근본적으로 낮아 재발 위험 + **마케팅 메일(이메일 2단계 넛지) 딜리버러빌리티**까지 깎여, 점등 전 `.app`으로 이전한다.
 
-- [ ] **1차 대응**: Google Search Console에 `booktimer.click` 등록(DNS TXT 인증) → 보안 문제 검토 요청 → 해제 확인.
-- [ ] **재발 시 근본 대응**: 평판 좋은 TLD로 이전 — `.com`(범용) 또는 `.app`(레지스트리가 HTTPS 강제, 평판 양호).
-      따라오는 작업: 도메인 재구매 · ACM 인증서 재발급(DNS 검증) · Route 53 호스팅 영역 · ALB alias 재연결 ·
-      **Google OAuth 클라이언트의 승인된 리디렉션 URI / JS origin 재등록** · privacy URL·앱 도메인 갱신 · (구) 도메인 301.
-- 비용: 신규 도메인 등록비(연 단위) + 전환 작업 시간. 데드라인/오탐 재발이 트리거.
+**진행 (2026-06-11)** — `.app`(레지스트리가 HTTPS 강제·평판 양호) 선택. 인프라(콘솔): `booktimer.app` 구매 · ACM(서울 apex+www, DNS 검증) · ALB 443 SNI 인증서 · Route53 alias(apex·www) · Google OAuth redirect URI 병행 등록 완료, `https://booktimer.app` 가동(health UP) 확인. 코드 일관성(base-url 주석·README·`ForwardedHeadersHttpsTest` `.app`) PR #310. base-url은 env 주입·OAuth redirect는 `X-Forwarded-Host` 동적 생성이라 **앱 동작 코드 0 변경**.
+- [x] **근본 대응 — `.app` 이전 착수**: 도메인 · ACM · ALB · alias · OAuth redirect 완료.
+- [ ] **남은 전환**: 운영 `BOOKTIMER_BASE_URL=https://booktimer.app` 주입·재배포 → 로그인 검증 → 동의화면 privacy `.app` → `.click` 301. (실행 런북 `claude-docs/plans/2026-06-11-domain-tld-migration.md`)
+- 비용: `.app` 도메인 ≈$20/년(`.click` 차액 월 ~$1) · ACM 무료 · 전환 작업 시간.
 
 ### AWS 요금 가드레일 — Budgets 월 $50 알람 (완료 ✅ 2026-06-02)
 

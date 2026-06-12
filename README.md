@@ -2,7 +2,7 @@
 
 > 매일 일정 시간 책을 읽도록 독려하고 기록하는 **독서 타이머** 웹 애플리케이션
 >
-> 🌐 **Live**: https://booktimer.click
+> 🌐 **Live**: https://booktimer.app
 
 ---
 
@@ -140,7 +140,7 @@ BookTimer는 사용자가 하루에 일정 시간 책을 읽도록 **독려**하
         ▼
 [ RDS (MySQL) ]
 
-도메인/DNS: Route 53 (booktimer.click)
+도메인/DNS: Route 53 (booktimer.app)
 CI/CD: GitHub Actions → Docker 이미지 → ECS 롤링 배포 (start-then-stop, 자동 롤백)
 ```
 
