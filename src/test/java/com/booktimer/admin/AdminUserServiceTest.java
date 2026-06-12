@@ -112,6 +112,27 @@ class AdminUserServiceTest {
     }
 
     @Test
+    @DisplayName("목록: 미인증·인증 사용자가 모두 실리고 각 emailVerified가 정확하다(미인증 누락·오표시 없음)")
+    void list_emailVerifiedFlag() {
+        // 미인증(신규 가입 기본값 false)
+        user("unverified@booktimer.com", "unverifieduser", "미인증");
+        // 인증 — verifyEmail() 호출(setter 없음)
+        User verified = User.of("verified@booktimer.com", "hash", "인증됨", "Asia/Seoul", Role.USER);
+        verified.assignLoginId("verifieduser");
+        verified.completeOnboarding();
+        verified.verifyEmail();
+        userRepository.save(verified);
+
+        Page<AdminUserRow> page = adminUserService.listUsers(null, PageRequest.of(0, 20));
+
+        assertThat(page.getContent())
+                .extracting(AdminUserRow::loginId, AdminUserRow::emailVerified)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple("unverifieduser", false),
+                        org.assertj.core.groups.Tuple.tuple("verifieduser", true));
+    }
+
+    @Test
     @DisplayName("목록 페이징: size를 넘으면 페이지로 잘린다")
     void list_paging() {
         for (int i = 0; i < 5; i++) {
@@ -188,6 +209,24 @@ class AdminUserServiceTest {
         assertThat(detail.timer()).isNull();
         assertThat(detail.recentSessions()).isEmpty();
         assertThat(detail.bookshelf().total()).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("드릴다운: emailVerified가 미인증·인증 각각 올바르게 실린다")
+    void detail_emailVerifiedFlag() {
+        // 미인증
+        user("unverified@booktimer.com", "unverifieduser", "미인증");
+        // 인증
+        User verified = User.of("verified@booktimer.com", "hash", "인증됨", "Asia/Seoul", Role.USER);
+        verified.assignLoginId("verifieduser");
+        verified.completeOnboarding();
+        verified.verifyEmail();
+        userRepository.save(verified);
+
+        assertThat(adminUserService.userDetail("unverifieduser").orElseThrow().emailVerified())
+                .isFalse();
+        assertThat(adminUserService.userDetail("verifieduser").orElseThrow().emailVerified())
+                .isTrue();
     }
 
     @Test

@@ -35,6 +35,7 @@
                     <span th:text="${detail.email}">full@x.com</span>
                 </details>
             </td></tr>
+            <tr><th>이메일 인증</th><td th:text="${detail.emailVerified} ? '인증 완료' : '미인증'">인증 완료</td></tr>
             <tr><th>provider</th><td th:text="${detail.provider}">LOCAL</td></tr>
             <tr><th>역할</th><td th:text="${detail.role}">USER</td></tr>
             <tr><th>가입일</th><td th:text="${#temporals.format(detail.createdAt, 'yyyy-MM-dd HH:mm')}">2026-01-01</td></tr>
