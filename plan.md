@@ -390,9 +390,15 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
       가입 후 환경변수(`BOOKTIMER_COUPANG_TRACKING_CODE`/`_SEARCH_URL_TEMPLATE`) 주입만으로 점진 활성화(코드 변경 0).
       엔드포인트는 알라딘과 별도(`/buy/coupang`·`/u/{loginId}/books/{id}/buy/coupang`, 회귀 0), 카운트도 분리
       (`Book.coupangClickCount`, Flyway V34). `coupangEnabled`는 `AdsModelAdvice` 패턴의 전역 `@ControllerAdvice`로 주입.
-      ⚠️ 미결(가입 후): 실제 추적 URL 형식 확정(템플릿 환경변수로 흡수)·ISBN 검색 품질 재평가·API 키는 판매 15만원 실적 게이트
-      뒤라 초기엔 검색 링크 방식. TDD: CoupangLinkBuilderTest(순수)·CoupangBookServiceTest(IDOR·비활성·공개 게이트)·
+      TDD: CoupangLinkBuilderTest(순수)·CoupangBookServiceTest(IDOR·비활성·공개 게이트)·
       CoupangBuyControllerTest(엔드포인트 + 뷰 게이트 렌더).
+      - **가입·추적 형식 확정 + 배포 env 자리 ✅ 2026-06-12 (#319)**: 쿠팡 파트너스 가입(개인) 완료, 추적코드 `AF…` 발급.
+        링크 생성 도구 도착 URL로 추적 형식 실측 — 추적 키는 **`lptag` 파라미터**(쿠팡 URL에 `&channel=user&lptag=AF…`
+        부착 시 수익 귀속, 단축 링크는 편의 껍데기일 뿐 실제 귀속은 도착 URL의 `lptag`). 우리 런타임 생성(`{trackingCode}`를
+        `lptag`에 치환)과 일치 확인. `task-definition.json` secrets에 두 env 자리 추가(알라딘 ttb-key와 동일 SSM 주입).
+        **남은 점등**: SSM에 `COUPANG_TRACKING_CODE=AF…`·`COUPANG_SEARCH_URL_TEMPLATE=…?q={query}&channel=user&lptag={trackingCode}`
+        주입 + 재배포(사용자 작업). ⚠️ 잔여: ISBN 검색 품질 재평가·API 딥링크 키는 판매 15만원 실적 게이트 뒤(초기 검색 링크 방식)·
+        `lptag` 직접 부착의 약관 허용 범위 확인.
   - **③-c 책 상세 페이지 완료 ✅ 2026-06-03**: `GET /books/{id}` — 책 메타 + **책별 잔디**(그 책 세션만 필터,
     `ContributionGraphBuilder` 순수 빌더 재사용) + 일자별 기록 + 누적 시간. 소유권 검사(IDOR, 없으면 책장으로).
     `BookContributionService`(세션 패키지, Clock+유저 TZ 오늘) + `findByUserAndBook`. 책장에서 제목 클릭 진입.
