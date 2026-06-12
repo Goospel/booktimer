@@ -14,7 +14,8 @@
         { "containerPort": 8080, "protocol": "tcp" }
       ],
       "environment": [
-        { "name": "SPRING_PROFILES_ACTIVE", "value": "prod" }
+        { "name": "SPRING_PROFILES_ACTIVE", "value": "prod" },
+        { "name": "BOOKTIMER_BASE_URL", "value": "https://booktimer.app" }
       ],
       "secrets": [
         { "name": "SPRING_DATASOURCE_URL", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/SPRING_DATASOURCE_URL" },

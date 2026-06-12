@@ -111,7 +111,9 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 
 **진행 (2026-06-11)** — `.app`(레지스트리가 HTTPS 강제·평판 양호) 선택. 인프라(콘솔): `booktimer.app` 구매 · ACM(서울 apex+www, DNS 검증) · ALB 443 SNI 인증서 · Route53 alias(apex·www) · Google OAuth redirect URI 병행 등록 완료, `https://booktimer.app` 가동(health UP) 확인. 코드 일관성(base-url 주석·README·`ForwardedHeadersHttpsTest` `.app`) PR #310. base-url은 env 주입·OAuth redirect는 `X-Forwarded-Host` 동적 생성이라 **앱 동작 코드 0 변경**.
 - [x] **근본 대응 — `.app` 이전 착수**: 도메인 · ACM · ALB · alias · OAuth redirect 완료.
-- [ ] **남은 전환**: 운영 `BOOKTIMER_BASE_URL=https://booktimer.app` 주입·재배포 → 로그인 검증 → 동의화면 privacy `.app` → `.click` 301. (실행 런북 `claude-docs/plans/2026-06-11-domain-tld-migration.md`)
+- [x] **OAuth 로그인 검증**: `.app` 구글 로그인 성공(`redirect_uri_mismatch` 없음 — ⑤ redirect URI 병행 등록 검증).
+- [x] **base-url `.app` 주입**: `BOOKTIMER_BASE_URL` task def 평문 environment 주입(PR #311 — 그동안 미주입이라 localhost 기본값이던 갭 동시 해소). main push 자동 배포.
+- [ ] **남은 전환**: 동의화면 privacy `.app` → `.click` 301. (실행 런북 `claude-docs/plans/2026-06-11-domain-tld-migration.md`)
 - 비용: `.app` 도메인 ≈$20/년(`.click` 차액 월 ~$1) · ACM 무료 · 전환 작업 시간.
 
 ### AWS 요금 가드레일 — Budgets 월 $50 알람 (완료 ✅ 2026-06-02)
