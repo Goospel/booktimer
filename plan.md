@@ -646,14 +646,46 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 - **v1 (PR #233)**: 작성·본인 조회·상태 표시·삭제. TDD Red→Green: 도메인 6·서비스 5(IDOR)·컨트롤러 13(미인증·USER 403·스코핑·삭제 IDOR) + 전체 그린(FlywayMigrationTest가 V23↔엔티티).
 - **후속 — 개발자 답장 + 유형 필터 (PR #234)**: 개발자 **단일 답장**(`Feedback.reply`·**V24**, 덮어쓰기) — 저장 시 자동 '읽음'(처리완료는 별도, `applyReply`), 작성자 본인만 봄(`POST /admin/feedback/{id}/reply`). 관리자 목록 **유형 필터**(`?type=` 탭 — `FeedbackType.parse`가 없음/잘못된 값을 null=전체로, `from`의 ETC 폴백과 구분). 작성자 수정은 여전히 없음(삭제만). 답장↔상태는 '자동 읽음, 처리는 별도'로 결합(사용자 결정). TDD Red→Green: 도메인 +4·서비스 +2·컨트롤러 +3(답장 저장+자동읽음·USER 403·유형 필터·작성자 답장 노출) + 전체 그린(V24↔엔티티).
 
-### 🌐 다국어(i18n) — Accept-Language 기반 언어 협상 (아이디어 ⏳ 2026-06-09, 우선순위: 낮음 / 기록만)
+### 🌍 영미권(글로벌) 진출 — 검색·구매 소스 region 분리 + UI 영어화 (계획 ⏳ 2026-06-12, 우선순위: 나중 / 백로그)
 
-> **지금 안 한다 — 영어권 확장이 실제 로드맵에 오를 때 검토.** 타깃이 한국(알라딘 제휴·정보통신망법·한국어 책BTI)이라 현재 ROI 낮음. 기술 가능성·방법·함정만 박아둔다. §리브랜딩·§도메인 TLD 이전과 묶일 수 있음(영어권 확장이 공통 트리거).
+> **나중에 할 일 — 영미권 홍보를 실제로 추진할 때 착수.** (사용자 지시 2026-06-12: "plan.md에 정리, 나중에 할 일로".)
+> **동기**: 영미권 홍보. **문제**: 알라딘·쿠팡은 한국 전용이라 영미권 사용자에겐 책 검색·구매가 무의미.
+> 그래서 region별로 **검색 소스·구매처·UI 언어**를 분기한다. 상세 설계 초안 = `claude-docs/plans/2026-06-12-en-region-split.md`(로컬, `.gitignore` — 착수 시 재생성·갱신. 아래 요약이 단일 출처).
+
+**핵심 통찰 — "HTTP 헤더로 분리"의 실체**: 헤더 분리는 *라우팅*(언어/지역 추정)만 푼다 — **Host(도메인)는 확실**, Accept-Language(브라우저 언어)·GeoIP(IP 국가)는 *보조 추정*(현 ALB 직결이라 GeoIP 헤더도 없음). **진짜 작업은 헤더가 아니라 책 데이터 소스·제휴 교체**다 — 이게 아래 「4단계 i18n」이 "동적 데이터는 번역 안 됨 ③"으로 남겨뒀던 문제의 정면 해결이다(영미권은 한국어 알라딘 데이터가 아니라 영어 Google Books 데이터를 받는다).
+
+**✅ 확정 결정 (사용자 합의 2026-06-12)**:
+
+| 항목 | 결정 |
+|---|---|
+| 아키텍처 | **단일 앱 + region 분기** (별도 인스턴스 X, 백엔드 하나) |
+| region 판정 | **같은 도메인 + 언어 전환** (별도 도메인 X, 인프라 추가 0) |
+| 영미권 검색 | 알라딘 → **Google Books / Open Library** |
+| 영미권 구매 | 알라딘·쿠팡 → **Amazon 제휴**(검색링크 + Associate 태그, 쿠팡 패턴) |
+| UI 영어화(i18n) | 백엔드(검색·구매) 먼저, **UI 영어화는 다음 단계**로 분리 |
+
+**아키텍처 골자** (포트·쿠팡 빌더·전역 ModelAdvice 패턴이 이미 있어 그대로 재사용):
+- **Region 표현**: Spring `Locale` 단일 진실 → `Market(KR/EN)` 파생(`Market.from(Locale)`, null·미지정·기타언어→KR로 **현행 보존**). 별도 enum 이중관리 회피(4단계 i18n과 일관).
+- **검색 분기**: `RoutingBookSearchClient implements BookSearchClient`(`@Primary`)가 포트 뒤에서 `LocaleContextHolder` 보고 위임 → `BookService`/`BookController` **시그니처 무변경**(회귀 최소). KR=`AladinBookSearchClient`(현행), EN=신규 `GoogleBooksSearchClient`(JSON→`BookSearchResult` 매핑).
+- **구매 분기**: `AmazonLinkBuilder`(=`CoupangLinkBuilder` 복제: 환경변수 Associate 태그·URL 템플릿·미설정 시 버튼 숨김) + `Book.amazonClickCount` + `recordAmazonClick`/`recordPublicAmazonClick` + 엔드포인트 `/books/{id}/buy/amazon`(쿠팡 대칭). region별 버튼 토글(`CoupangModelAdvice` 패턴).
+- **판정 우선순위**: 로그인 `User.preferredLocale`(신규 컬럼) > 쿠키(`CookieLocaleResolver`) > Accept-Language > 기본 ko. 전환=`?lang=en` 토글 + 로그인 시 저장.
+
+**PR 분할** (각 독립 PR, TDD RED→GREEN. 회귀 가드 = 기본 KR 경로가 안 깨지는지 명시 단언):
+1. **PR1 — region 골격 + Amazon 구매**(묶음): `Market`·LocaleResolver·전환·`User.preferredLocale`(+Flyway)·`AmazonLinkBuilder`·`amazonClickCount`(+Flyway)·구매 엔드포인트·버튼 토글. **검증**: EN→Amazon 버튼·집계, KR→알라딘/쿠팡 현행 그대로. *1·2를 묶어야 "EN 모드에서 Amazon 버튼이 뜬다"는 눈에 보이는 산출이 나옴.*
+2. **PR2 — Google Books 검색**: `GoogleBooksSearchClient`·`RoutingBookSearchClient`(@Primary)·고정 fixture 파싱. **검증**: EN→영어책 검색, KR→알라딘.
+3. **PR3 — UI 영어화(i18n)** = 아래 「4단계」 흡수. 사용자 대면 문자열 수백 개 추출이라 **가장 큼**(별도 상세 계획 필요).
+
+**미결정 (착수 시 확정 — 추천 있음)**: ① 구매 버튼 노출 = **요청 region 기준**(추천·단순) vs 책 출처 기준 ② `lookupByIsbn` 백필 region(ThreadLocal 안 흐름 → 3단계서 결정) ③ 언어 전환 UI(`?lang=` **쿠키 토글 추천**).
+
+**연관**: §리브랜딩(엔진 B 완성 트리거와 겹칠 수 있음)·§도메인 TLD 이전(나중에 별도 도메인 택 시)·§홍보/마케팅(영미권 홍보가 동기)·§eBook 제휴(Amazon 제휴 인프라 공유 여지). **법규**(실제 공개 시 별도): 영어 UI·CAN-SPAM(미)·GDPR(EU)은 이번 백엔드 범위 밖.
+
+#### ▼ 4단계(PR3) — UI 영어화(i18n) 상세 메모 (구 「다국어」 항목 보존, 2026-06-09)
+
+> 이 절은 위 진출의 **마지막 단계**다(백엔드 검색·구매 분리 뒤). Accept-Language·i18n 추출·함정 기록.
 
 - **무엇**: 브라우저가 요청마다 보내는 `Accept-Language` 헤더로 언어를 협상(content negotiation)해 한국어/영어 분기. ⚠️ 이 헤더는 **IP/지역이 아니라 브라우저·OS 언어 설정** 기반이다(한국 IP라도 영어 브라우저면 en). 지역 기반은 GeoIP라는 별개 기술(부정확·프라이버시 이슈로 언어 판별엔 비권장).
 - **Spring 현황**: 헤더 읽기는 Spring Boot 기본 `AcceptHeaderLocaleResolver`로 거의 공짜. **진짜 작업은 i18n 추출** — 현재 모든 UI 문구가 템플릿에 한글 하드코딩(messages 번들 0 · LocaleResolver/MessageSource 커스텀 0, 2026-06-09 확인). `messages.properties`(기본/영어)·`messages_ko.properties`로 빼고 템플릿을 `th:text="#{key}"`로 교체 + 영어 번역(사용자 대면 문자열 수백 개). 작업량의 8할이 이 추출.
-- **실무 고려 3가지**: ① 헤더는 "첫 추정"으로만 — 명시적 언어 토글(`CookieLocaleResolver` + `LocaleChangeInterceptor`, `?lang=en`) 병행 권장(헤더가 틀린 사용자 대비). ② **SEO**: 같은 URL에 헤더로 분기하면 크롤러가 한 언어만 색인 → 다국어 검색 노출 원하면 `/en/`·`/ko/` 경로 분리 + `hreflang`(더 무겁지만 SEO 유리). ③ **동적 데이터는 번역 안 됨** — 작가 격언(DB)·책 제목/저자(알라딘)·책BTI 서술(LLM 한국어)은 데이터 자체가 한국어라 "절반만 영어"가 되기 쉬움(메시지 번들은 UI 껍데기만 번역).
-- **트리거**: 영어권 사용자 유입/확장이 실제 계획에 오를 때. 그 무렵 PoC(헤더 감지 + 핵심 화면 몇 개 영어 번들)로 시작해 점진 확대.
+- **실무 고려 3가지**: ① 헤더는 "첫 추정"으로만 — 명시적 언어 토글(`CookieLocaleResolver` + `LocaleChangeInterceptor`, `?lang=en`) 병행 권장(헤더가 틀린 사용자 대비). ② **SEO**: 같은 URL에 헤더로 분기하면 크롤러가 한 언어만 색인 → 다국어 검색 노출 원하면 `/en/`·`/ko/` 경로 분리 + `hreflang`(더 무겁지만 SEO 유리). ③ **동적 데이터는 번역 안 됨** — 작가 격언(DB)·책 제목/저자(알라딘)·책BTI 서술(LLM 한국어)은 데이터 자체가 한국어라 "절반만 영어"가 되기 쉬움(메시지 번들은 UI 껍데기만 번역). ← **위 진출의 검색 소스 교체(Google Books)가 이 ③의 책 데이터 절반을 해결**한다.
 
 ---
 
