@@ -437,10 +437,19 @@ aws iam put-role-policy --role-name githubActionsDeployRole \
   --policy-name booktimer-autoscaling --policy-document file:///tmp/gh-autoscaling.json
 ```
 
-> 첫 `register-scalable-target` 시 service-linked role `AWSServiceRoleForApplicationAutoScaling_ECSService`가
-> 없으면 자동 생성을 시도한다 — 대개 계정에 이미 있다. 없어서 `AccessDenied`가 나면 위 정책에
-> `"iam:CreateServiceLinkedRole"`(Resource를 그 role ARN으로 제한 권장)을 한 번만 더한다.
-> 권한 추가는 관리자 자격으로 CloudShell에서 1회. 이후 워크플로 실행 → before/after describe로 Min2/Max4/CPU70 확인.
+> ⚠️ 첫 `register-scalable-target` 시 service-linked role `AWSServiceRoleForApplicationAutoScaling_ECSService`가
+> 없으면 자동 생성을 시도하는데, 워크플로 OIDC 역할엔 그 생성 권한이 없어
+> `ValidationException: User is missing ... iam:CreateServiceLinkedRole`로 **실패한다**(BookTimer 실제 첫 실행에서 발생, T-045).
+> **권장 해결 = CloudShell에서 그 role을 직접 1회 생성**(워크플로 역할엔 IAM 생성 권한을 안 줘 최소권한 유지 — 한 번
+> 만들면 이후엔 이미 존재해 워크플로가 생성 시도조차 안 한다):
+>
+> ```bash
+> aws iam create-service-linked-role --aws-service-name ecs.application-autoscaling.amazonaws.com
+> # 이미 있으면 "has been taken" 에러가 나는데 무시(있으면 그걸로 충분).
+> ```
+>
+> (대안: 워크플로 역할 정책에 `iam:CreateServiceLinkedRole`을 더해도 되지만, OIDC 역할에 IAM 쓰기 권한을 주는
+> 셈이라 위 직접 생성이 깔끔하다.) 생성 후 워크플로 재실행 → before/after describe로 Min2/Max4/CPU70 확인.
 
 ### 검증
 
