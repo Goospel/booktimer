@@ -15,7 +15,10 @@
       ],
       "environment": [
         { "name": "SPRING_PROFILES_ACTIVE", "value": "prod" },
-        { "name": "BOOKTIMER_BASE_URL", "value": "https://booktimer.app" }
+        { "name": "BOOKTIMER_BASE_URL", "value": "https://booktimer.app" },
+        { "name": "SPRING_MAIL_HOST", "value": "email-smtp.ap-northeast-2.amazonaws.com" },
+        { "name": "SPRING_MAIL_PORT", "value": "587" },
+        { "name": "BOOKTIMER_EMAIL_ENABLED", "value": "true" }
       ],
       "secrets": [
         { "name": "SPRING_DATASOURCE_URL", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/SPRING_DATASOURCE_URL" },
@@ -25,7 +28,9 @@
         { "name": "GOOGLE_CLIENT_SECRET", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/GOOGLE_CLIENT_SECRET" },
         { "name": "BOOKTIMER_ALADIN_TTB_KEY", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/ALADIN_TTB_KEY" },
         { "name": "BOOKTIMER_ADMIN_LOGIN_IDS", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/ADMIN_LOGIN_IDS" },
-        { "name": "BOOKTIMER_LLM_API_KEY", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/LLM_API_KEY" }
+        { "name": "BOOKTIMER_LLM_API_KEY", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/LLM_API_KEY" },
+        { "name": "SPRING_MAIL_USERNAME", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/SPRING_MAIL_USERNAME" },
+        { "name": "SPRING_MAIL_PASSWORD", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/SPRING_MAIL_PASSWORD" }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
