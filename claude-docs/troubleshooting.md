@@ -43,6 +43,7 @@
 - [T-045. ECS 오토스케일링 워크플로가 service-linked role 자동 생성 권한 부족으로 실패 — CloudShell에서 직접 1회 생성](#t-045-ecs-오토스케일링-워크플로가-service-linked-role-자동-생성-권한-부족으로-실패--cloudshell에서-직접-1회-생성)
 - [T-046. MockMvc nullValue 모델 단언은 속성이 없어도 통과한다 — 폴백은 실제 반대값으로 RED 검증](#t-046-mockmvc-nullvalue-모델-단언은-속성이-없어도-통과한다--폴백은-실제-반대값으로-red-검증)
 - [T-047. 외부 API를 http로 호출하면 CDN(CloudFront)이 https로 301 → RestClient가 미추적해 응답이 HTML이라 JSON 파싱 실패(운영 알라딘 검색 0건)](#t-047-외부-api를-http로-호출하면-cdncloudfront이-https로-301--restclient가-미추적해-응답이-html이라-json-파싱-실패운영-알라딘-검색-0건)
+- [T-048. gh pr merge --squash는 PR 제목이 아니라 커밋 메시지를 squash subject로 쓴다 — PR 제목만 정정하면 main 커밋 제목이 어긋난다](#t-048-gh-pr-merge---squash는-pr-제목이-아니라-커밋-메시지를-squash-subject로-쓴다--pr-제목만-정정하면-main-커밋-제목이-어긋난다)
 
 ---
 
@@ -948,6 +949,21 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 
 ---
 
+## T-048. gh pr merge --squash는 PR 제목이 아니라 커밋 메시지를 squash subject로 쓴다 — PR 제목만 정정하면 main 커밋 제목이 어긋난다
+
+**증상**: PR 제목을 `gh pr edit --title`로 정정한 뒤(이번엔 노트 번호 충돌로 학습노트 `N-074`→`N-075`) `gh pr merge --squash`로 머지했는데, main의 squash 커밋 **제목이 옛 제목(`…(N-074)`)** 으로 박혔다. PR 페이지 제목·실제 파일 내용(learning-notes·changelog)은 `N-075`로 맞는데 **커밋 제목만** 어긋남.
+
+**원인**: `gh pr merge --squash`는 `--subject` 미지정 시 squash 커밋 제목을 **PR 제목이 아니라 브랜치 커밋 메시지**(단일 커밋이면 그 제목, 복수면 첫/HEAD 커밋)에서 가져온다. 웹 UI의 squash 기본(= PR 제목)과 달라서, **PR 제목만 `gh pr edit`로 고치면 무력화**된다 — 내 브랜치 첫 커밋(`docs: …(N-074)`)이 그대로 subject가 됐다.
+
+**해결 / 예방**:
+- 머지 시 최종 제목을 **명시**한다: `gh pr merge --squash --subject "docs: … (N-075)" --body "…"`. PR 제목·커밋 메시지 어느 쪽에도 안 의존해 가장 확실.
+- 또는 PR 제목을 고칠 때 **커밋 메시지도 함께** 맞춘다(`git commit --amend`/새 커밋) — squash가 커밋 메시지를 보므로.
+- **사후엔 못 고친다**: main 커밋 제목 수정은 history rewrite = force push인데 main force push는 금지(T-002). 그러니 **머지 전에** 맞춰야 한다. 영향은 *제목뿐* — 파일 내용·changelog가 맞으면 기능 문제는 없다.
+
+**관련**: T-026(한글 메시지는 인라인 말고 파일로 — 같은 "메시지가 의도대로 안 실린다" 계열), T-002(main force-push 금지라 머지된 커밋 제목은 사후 수정 불가), N-070(같은 머지 게이트 맥락).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -999,3 +1015,4 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 | 2026-06-12 | T-045 (ECS 오토스케일링 워크플로 첫 실행이 `register-scalable-target`에서 `ValidationException: missing iam:CreateServiceLinkedRole`로 실패 — 첫 점등 시 AWS가 service-linked role `AWSServiceRoleForApplicationAutoScaling_ECSService`를 자동 생성하려는데 OIDC 역할에 생성 권한 없어 거부(AccessDenied 아닌 ValidationException이라 헷갈림) / 권장 해결=워크플로 역할에 IAM 권한 더하기보다 CloudShell에서 `aws iam create-service-linked-role --aws-service-name ecs.application-autoscaling.amazonaws.com` 직접 1회 생성(최소권한·이후 존재하니 Re-run 통과) / 부수 리소스 자동 생성 API는 그 생성 권한도 호출자에 요구, N-073·N-030, PR #322 후속) |
 | 2026-06-12 | T-046 (MockMvc `model().attribute(name, nullValue())`가 속성 부재여도 통과 — TDD RED에서 폴백 미구현인데 초록, "속성 없음"과 "속성=null"을 못 가림 / null·폴백은 nullValue() 말고 실제 반대값(visibility=PRIVATE로 비공개만 남는지)으로 단언해야 Red, N-055 양방향, PR #327) |
 | 2026-06-12 | T-047 (운영 알라딘 검색 전부 0건 — 알라딘 CloudFront가 http→https 301 강제하는데 RestClient가 미추적해 응답 본문이 리다이렉트 HTML('<html>') → parse()가 JsonParseException('<')로 빈 결과 / 브라우저는 3xx 자동추적해 정상이라 "PC는 되고 서버만 0건" / 해결=ENDPOINT https로(301 제거+TLS), 진단=curl -D -로 301·Location 확인·로그 '<', 서버출처 재현은 CloudShell / N-074, T-030, PR #329) |
+| 2026-06-12 | T-048 (gh pr merge --squash는 --subject 미지정 시 PR 제목이 아니라 브랜치 커밋 메시지(단일=그 제목, 복수=첫/HEAD 커밋)를 squash subject로 씀 — 웹 UI squash 기본(=PR 제목)과 달라 gh pr edit로 PR 제목만 정정하면 무력화, 이번 N-074→N-075 정정이 main 커밋 제목엔 N-074로 박힘 / 해결=gh pr merge --squash --subject/--body 명시 또는 커밋 메시지 동기화(amend), 사후엔 main force push 금지(T-002)라 불가 → 머지 전에 / 영향은 제목뿐(파일·changelog는 정확) / 한글 메시지 경로 T-026, N-070) |
