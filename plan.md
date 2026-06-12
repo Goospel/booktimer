@@ -404,6 +404,8 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
         (불필요한 클릭 제거). 분기 조건(`#strings.isEmpty(purchaseLink)`·`coupangEnabled`)이 **매 렌더 그 책 데이터로 평가**돼
         나중에 구매처가 2개로 늘면 자동 토글 전환(코드 변경 0). 뷰 3곳(books/book-detail/profile)+`app.css` `.buy-menu`
         (기존 `manual-add` `<details>` 패턴 재사용), 백엔드 무변경. TDD: "2개면 토글+두 링크 / 1개뿐이면 단일" 경계 2개 추가.
+        - **펼침 오버레이 다듬기 ✅ 2026-06-12 (#323)**: 펼친 목록이 흐름에 쌓여 박스가 커지며 형제("삭제")가 밀리던 것을,
+          `.buy-menu-items`를 `position:absolute`로 흐름에서 빼내 "구매" 버튼 바로 아래 드롭다운으로 띄움 → 펼쳐도 박스 높이 고정·형제 안 흔들림. `app.css`만 변경.
   - **③-c 책 상세 페이지 완료 ✅ 2026-06-03**: `GET /books/{id}` — 책 메타 + **책별 잔디**(그 책 세션만 필터,
     `ContributionGraphBuilder` 순수 빌더 재사용) + 일자별 기록 + 누적 시간. 소유권 검사(IDOR, 없으면 책장으로).
     `BookContributionService`(세션 패키지, Clock+유저 TZ 오늘) + `findByUserAndBook`. 책장에서 제목 클릭 진입.
