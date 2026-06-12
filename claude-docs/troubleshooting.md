@@ -41,6 +41,7 @@
 - [T-043. preview_screenshot이 환경에 따라 타임아웃(렌더러는 정상) — preview_inspect/eval computed-style로 시각 검증 대체](#t-043-preview_screenshot이-환경에-따라-타임아웃렌더러는-정상--preview_inspecteval-computed-style로-시각-검증-대체)
 - [T-044. GitHub branch protection PUT — 4개 최상위 키 필수(422) + PowerShell 파이프로 JSON 넘기면 400](#t-044-github-branch-protection-put--4개-최상위-키-필수422--powershell-파이프로-json-넘기면-400)
 - [T-045. ECS 오토스케일링 워크플로가 service-linked role 자동 생성 권한 부족으로 실패 — CloudShell에서 직접 1회 생성](#t-045-ecs-오토스케일링-워크플로가-service-linked-role-자동-생성-권한-부족으로-실패--cloudshell에서-직접-1회-생성)
+- [T-046. MockMvc nullValue 모델 단언은 속성이 없어도 통과한다 — 폴백은 실제 반대값으로 RED 검증](#t-046-mockmvc-nullvalue-모델-단언은-속성이-없어도-통과한다--폴백은-실제-반대값으로-red-검증)
 
 ---
 
@@ -916,6 +917,21 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 
 ---
 
+## T-046. MockMvc nullValue 모델 단언은 속성이 없어도 통과한다 — 폴백은 실제 반대값으로 RED 검증
+
+**증상**: 책장 공개여부 필터(PR #327)를 TDD로 짤 때, 컨트롤러에 `visFilter` 모델 속성을 아직 안 넣은 미구현 상태인데도 폴백 검증 테스트가 **Red가 아니라 통과**했다. `visibility=garbage`면 폴백으로 `visFilter`가 null이어야 함을 `model().attribute("visFilter", nullValue())`로 단언했는데, 속성 자체가 없는데도 초록 — "실패해야 할 테스트"가 안 실패해 폴백 미구현을 못 잡을 뻔했다.
+
+**원인**: MockMvc `model().attribute(name, matcher)`는 모델 맵에서 `get(name)`을 꺼내 matcher에 넘긴다. **속성이 아예 없으면 `get`이 `null`을 돌려주고**, Hamcrest `nullValue()`는 그 null과 매칭한다 → "속성 부재"와 "속성=null"을 구분하지 못해 둘 다 통과한다. 즉 `nullValue()` 단언은 "값이 null"이 아니라 "없거나 null"을 본다.
+
+**해결 / 예방**:
+- null/폴백 동작을 RED로 박으려면 `nullValue()` 말고 **실제 효과(반대값)로 단언**하라. 예: `visibility=garbage`(폴백→전체)가 아니라 `visibility=PRIVATE`로 "비공개 책만 남는지"를 검증하면, 미구현 시 전체가 나와 확실히 Red가 된다(본 PR에서 invalid 테스트를 PRIVATE 양방향으로 교체).
+- 굳이 "명시적 null"을 봐야 하면 `model().attributeExists(name)`로 존재를 먼저 못 박고 값을 검사.
+- 일반 교훈: 폴백·엣지보다 **양방향 동작**을 박는 게 distinct 실패를 잡는다 — 같은 불변식이라도 한 방향(전체로 떨어짐)만 보면 미구현이 새어 나간다(N-055 정신).
+
+**관련**: learning-notes **N-055**(null-state가 새지 않는지 양방향으로 단언), T-030(같은 books 검색 후필터 — 외부/엣지 동작은 결과를 직접 단언).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -965,3 +981,4 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 | 2026-06-10 | T-043 (preview_screenshot이 환경따라 타임아웃(`window may be stuck`)인데 렌더러는 정상 — `preview_eval`은 응답·console 에러 0이라 캡처 단계만 행 / 시각 변경 검증은 스크린샷 없이 `preview_inspect`·`getComputedStyle`로 색·폰트·크기를 *값으로* 단언(눈대중보다 정확)·`getBoundingClientRect`로 레이아웃·`document.fonts.check`로 폰트 로드 / "스크린샷 안 됨 ≠ 변경 안 됨" — 렌더러 생존 먼저 분리 확인 후 DOM 측정 대체, #269·#276·#287 반복 / 스크린샷 불신 자매 T-035, 디자인 토큰 검증 N-068, PR #287) |
 | 2026-06-11 | T-044 (GitHub branch protection PUT은 4개 최상위 키(`required_status_checks`/`enforce_admins`/`required_pull_request_reviews`/`restrictions`)를 null이라도 모두 보내야 함 — 누락 시 422 / PowerShell 5.1에서 JSON을 here-string 파이프로 넘기면 인코딩 깨져 400 `Problems parsing JSON` → UTF-8 파일+`--input` 사용(T-026 한글 커밋과 같은 뿌리) / `contexts` 체크 이름은 check-runs로 실측 후 등록·ci.yml 머지 후 protection 켜는 닭-달걀 순서, N-070, PR #298) |
 | 2026-06-12 | T-045 (ECS 오토스케일링 워크플로 첫 실행이 `register-scalable-target`에서 `ValidationException: missing iam:CreateServiceLinkedRole`로 실패 — 첫 점등 시 AWS가 service-linked role `AWSServiceRoleForApplicationAutoScaling_ECSService`를 자동 생성하려는데 OIDC 역할에 생성 권한 없어 거부(AccessDenied 아닌 ValidationException이라 헷갈림) / 권장 해결=워크플로 역할에 IAM 권한 더하기보다 CloudShell에서 `aws iam create-service-linked-role --aws-service-name ecs.application-autoscaling.amazonaws.com` 직접 1회 생성(최소권한·이후 존재하니 Re-run 통과) / 부수 리소스 자동 생성 API는 그 생성 권한도 호출자에 요구, N-073·N-030, PR #322 후속) |
+| 2026-06-12 | T-046 (MockMvc `model().attribute(name, nullValue())`가 속성 부재여도 통과 — TDD RED에서 폴백 미구현인데 초록, "속성 없음"과 "속성=null"을 못 가림 / null·폴백은 nullValue() 말고 실제 반대값(visibility=PRIVATE로 비공개만 남는지)으로 단언해야 Red, N-055 양방향, PR #327) |
