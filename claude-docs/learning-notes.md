@@ -77,6 +77,7 @@
 - [N-071. DMARC 정렬(alignment) — SPF·DKIM 통과만으론 부족하고 From 도메인과 정렬돼야 하며, custom MAIL FROM이 SPF를 정렬시킨다](#n-071-dmarc-정렬alignment--spfdkim-통과만으론-부족하고-from-도메인과-정렬돼야-하며-custom-mail-from이-spf를-정렬시킨다)
 - [N-072. 정보통신망법 §50 — 영리목적 광고성 정보 전송의 9대 의무 (마케팅 메일 점검표)](#n-072-정보통신망법-50--영리목적-광고성-정보-전송의-9대-의무-마케팅-메일-점검표)
 - [N-073. ECS 수평 오토스케일링은 별도 서비스(Application Auto Scaling)가 desiredCount를 조절한다 — target-tracking이 CloudWatch 알람을 자동 생성해 IAM 권한이 ecs:UpdateService를 넘어선다](#n-073-ecs-수평-오토스케일링은-별도-서비스application-auto-scaling가-desiredcount를-조절한다--target-tracking이-cloudwatch-알람을-자동-생성해-iam-권한이-ecsupdateservice를-넘어선다)
+- [N-074. 브라우저는 3xx 리다이렉트를 자동 추적하지만 서버 HTTP 클라이언트는 아닐 수 있다 — "내 PC는 되는데 서버만 안 됨"의 정체, 외부 의존은 우리 코드가 그대로여도 바뀐다](#n-074-브라우저는-3xx-리다이렉트를-자동-추적하지만-서버-http-클라이언트는-아닐-수-있다--내-pc는-되는데-서버만-안-됨의-정체-외부-의존은-우리-코드가-그대로여도-바뀐다)
 
 ---
 
@@ -3487,6 +3488,25 @@ target-tracking 정책은 마법이 아니다 — 내부적으로 **CloudWatch �
 
 ---
 
+## N-074. 브라우저는 3xx 리다이렉트를 자동 추적하지만 서버 HTTP 클라이언트는 아닐 수 있다 — "내 PC는 되는데 서버만 안 됨"의 정체, 외부 의존은 우리 코드가 그대로여도 바뀐다
+
+**한 줄**: 같은 URL인데 브라우저는 되고 서버(앱)는 안 된다면 **3xx 리다이렉트 자동추적 차이**를 의심하라. 그리고 외부 API는 우리가 안 바꿔도 어느 날 깨진다.
+
+**개념 — 누가 리다이렉트를 따라가나**:
+- HTTP **3xx(301/302)**는 "다른 데로 가라"는 응답(`Location` 헤더). **브라우저는 자동으로 따라간다.** 반면 서버측 HTTP 클라이언트(Spring `RestClient`/JDK `HttpClient`, `RestTemplate`, `curl` 기본 등)는 리다이렉트 정책이 제각각 — 기본이 "안 따라감"이거나 "같은 스킴만"일 수 있다.
+- 안 따라가면 3xx 응답의 **본문**(대개 짧은 안내 HTML `<html>…Moved…</html>`)을 그대로 받는다. 그래서 같은 키·URL인데 **브라우저(추적 O) → 목적지 JSON**, **서버(추적 X) → 리다이렉트 HTML → 파싱 실패**. 이게 "내 PC는 되는데 서버만 0건/에러"의 흔한 정체다(이번 실전은 알라딘 `http→https` CloudFront 301 — [troubleshooting](troubleshooting.md) **T-047**).
+
+**왜 디버깅이 길어지나 (두 함정)**:
+- **외부 의존은 우리 코드가 그대로여도 깨진다.** 알라딘이 어느 날 `http→https`를 CloudFront로 강제하면 그날부터 우리 `http` 호출이 죽는다. "최근 내가 뭘 바꿨지"(직전 기능 PR)에 갇히면 영영 못 찾는다 — 증상이 "갑자기"면 **외부 변경 가설**을 일찍 세운다. **시간적 상관 ≠ 인과**(마침 그 무렵 머지한 PR을 범인으로 오인하기 쉽다 — 이번에도 "출판사 검색 넣은 뒤"가 우연이었다).
+- **환경마다 다른 버그는 "어디서 실행하나"를 분리해 재현한다**: 브라우저(내 PC) vs 서버(클라우드 출처). 서버 출처 재현은 CloudShell(AWS IP)에서 `curl -sS -D -`로 상태줄·`Location`을 본다.
+
+**대응**:
+- 외부 엔드포인트는 **https로**(리다이렉트 없는 경로). 응답이 기대 포맷(JSON)인지 **방어적으로 검증** — 첫 글자가 `<`면 HTML 의심·본문 일부를 로깅하면 다음엔 즉시 진단된다(이번엔 그 로깅이 없어 추적이 길어졌다).
+
+**관련**: [troubleshooting](troubleshooting.md) **T-047**(이 개념의 실전 트랩), [[N-021]](HTTPS는 앞단에서 termination), [[N-041]](외부 검색 API가 문서대로 동작 안 함 — 같은 "외부는 못 믿는다"), [[N-018]](퍼블릭 IP ≠ 인터넷 — 또 다른 "환경 따라 다름").
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -3565,3 +3585,4 @@ target-tracking 정책은 마법이 아니다 — 내부적으로 **CloudWatch �
 | 2026-06-12 | N-071 (DMARC 정렬(alignment) — SPF·DKIM 통과 ≠ DMARC 통과, DMARC는 인증된 도메인이 From과 *정렬*돼야 통과 / SPF는 envelope(MAIL FROM) 검사인데 SES 기본은 `amazonses.com`이라 pass여도 비정렬 → DKIM(`d=booktimer.app`) 정렬로만 통과 중이었음 / custom MAIL FROM(`mail.booktimer.app`)로 envelope을 내 도메인화 → SPF도 relaxed 정렬 = 이중 안전망(포워딩으로 DKIM 깨질 때 폴백) / 검증=수신 Authentication-Results `spf=pass smtp.mailfrom=@mail.booktimer.app`·`dkim=pass header.i=@booktimer.app`·`dmarc=pass`, Return-Path로 custom MAIL FROM 적용 확인 / `p=none`은 모니터링만(거부 0)이라 안전 시작·정렬 안정 후 상향 / 발송 인프라 원리 N-067, 평판 축 N-036, 인프라 전제 N-052·N-053, PR #317) |
 | 2026-06-12 | N-072 (정보통신망법 §50 광고성 정보 9대 의무 — 마케팅 메일은 사전 동의 하나로 끝이 아니라 opt-in(기본OFF·끼워팔기 금지)·제목 `(광고)`·전송자 명칭+연락처·수신거부 명시·무료/쉬운 수신거부(one-click 토큰)·야간(21~08시) 제한·동의 증빙(시각)·2년 재확인·처리결과 통지 9개 전부 / transactional(가입인증·비번재설정)은 서비스 이행이라 규제 무관·단 처리방침 목적 고지(개인정보보호법) / 위반=과태료(§76)+미검증 발송 반송·신고로 도메인 평판 하락→같은 도메인 transactional까지 동반 스팸 / "동의만 받으면 합법"이 가장 흔한 오해 / 넛지 점등 게이트 "법무 9박스"의 명문화 / 분리 근거 N-067, 평판 축 N-071·N-036, PR #318) |
 | 2026-06-12 | N-073 (ECS 수평 오토스케일링은 ECS 자체가 아니라 별도 서비스 Application Auto Scaling이 desiredCount를 scalable target으로 등록받아 조절 — ①register-scalable-target(min2/max4 범위) ②put-scaling-policy(target-tracking CPU70%) 두 단계 / target-tracking이 CloudWatch 알람을 자동 생성해 IAM 권한이 ecs:UpdateService(무중단배포 N-030엔 충분)를 넘어 application-autoscaling:*·cloudwatch:*Alarm*까지 필요 / min=2는 확장보다 상시 이중화(단일 장애점 제거)가 첫 가치 / max=4는 비용 4배·태스크 증가가 DB 커넥션 배수→다음 병목 / throughput 게이트라 latency 축 N-064와 구분 / 홍보 전 선수과정 1순위, PR #322) |
+| 2026-06-12 | N-074 (브라우저는 3xx를 자동 추적하지만 서버 HTTP 클라이언트(RestClient/JDK HttpClient 등)는 미추적일 수 있어 같은 URL이 "내 PC는 되고 서버만 안 됨" — 서버는 3xx 본문(HTML)을 받아 파싱 실패 / 외부 의존은 우리 코드 불변이어도 외부 변경(알라딘 http→https CloudFront 강제)으로 깨짐 → "갑자기"면 외부 변경 가설 일찍, 시간적 상관≠인과(직전 PR 오인 주의) / 대응=https·응답 포맷 방어검증·서버출처 재현(CloudShell) / 실전 T-047, 외부 불신 N-041, PR #329) |
