@@ -45,6 +45,16 @@ class AladinBookSearchClientTest {
     }
 
     @Test
+    @DisplayName("검색·조회 엔드포인트는 https로 호출한다 — http면 알라딘 CloudFront가 301로 https로 보내는데, RestClient가 리다이렉트를 안 따라가 응답 본문이 HTML('<')이 되어 JSON 파싱이 깨지고 운영 검색이 전부 0건이 된다(회귀 가드)")
+    void buildUrl_usesHttps_notHttp() {
+        String searchUrl = AladinBookSearchClient.buildSearchUrl("ttb1", "모기", BookSearchType.TITLE, 1);
+        assertThat(searchUrl).startsWith("https://www.aladin.co.kr");
+
+        String lookupUrl = AladinBookSearchClient.buildLookupUrl("ttb1", "9788966260959");
+        assertThat(lookupUrl).startsWith("https://www.aladin.co.kr");
+    }
+
+    @Test
     @DisplayName("lookupByIsbn: 비활성 키거나 isbn이 비면 빈 결과(외부 호출 없이 가드)")
     void lookupByIsbn_guards() {
         assertThat(new AladinBookSearchClient("not-configured").lookupByIsbn("9788966260959")).isEmpty();
