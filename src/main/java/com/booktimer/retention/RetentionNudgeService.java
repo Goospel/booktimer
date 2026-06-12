@@ -97,7 +97,7 @@ public class RetentionNudgeService {
         return sent;
     }
 
-    /** 넛지 메일 HTML 본문 — 발신자 정보(§50 ④)와 무료·간편 구독해지 링크(③)를 포함한다. */
+    /** 넛지 메일 HTML 본문 — 발신자 명칭·연락처(§50 ④ — 처리방침과 동일 문의처)와 무료·간편 구독해지 링크(③)를 포함한다. */
     private String buildBody(User user, String unsubscribeLink) {
         return """
                 <p>%s님, 오랜만이에요.</p>
@@ -105,7 +105,7 @@ public class RetentionNudgeService {
                 <p><a href="%s/">BookTimer 열기</a></p>
                 <hr>
                 <p style="font-size:12px;color:#888;">
-                    이 메일은 회원님이 수신에 동의하신 (광고) 정보입니다. 발신: BookTimer.<br>
+                    이 메일은 회원님이 수신에 동의하신 (광고) 정보입니다. 발신: BookTimer · 문의: tlatldhs0504@naver.com<br>
                     더 이상 받고 싶지 않으시면 여기서 <a href="%s">수신 거부</a>하실 수 있어요(무료).
                 </p>
                 """.formatted(escape(user.getNickname()), escape(baseUrl), unsubscribeLink);

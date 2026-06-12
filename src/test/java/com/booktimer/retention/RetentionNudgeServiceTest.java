@@ -124,6 +124,21 @@ class RetentionNudgeServiceTest {
     }
 
     @Test
+    @DisplayName("sendNudges: 본문에 전송자 연락처가 포함된다(정보통신망법 §50 ④ 전송자 명시)")
+    void sendNudges_bodyHasSenderContact() {
+        User a = user("a@booktimer.com");
+        when(sessionRepository.findNudgeTargets(any())).thenReturn(List.of(a));
+        when(tokenService.issue(any(), eq(EmailTokenType.UNSUBSCRIBE))).thenReturn("rawtok");
+        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+
+        service().sendNudges();
+
+        verify(emailSender).send(eq("a@booktimer.com"), anyString(), body.capture());
+        // §50 ④: 전송자 명칭(BookTimer)만으론 부족 — 연락처(처리방침과 동일한 문의 이메일)도 본문에 있어야 한다.
+        assertThat(body.getValue()).contains("tlatldhs0504@naver.com");
+    }
+
+    @Test
     @DisplayName("sendNudges: 대상이 없으면 아무 것도 보내지 않는다")
     void sendNudges_noTargets_sendsNothing() {
         when(sessionRepository.findNudgeTargets(any())).thenReturn(List.of());
