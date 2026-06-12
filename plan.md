@@ -103,7 +103,7 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 - [x] 보안 그룹: ALB 인바운드 443 허용
 - [ ] (후속) HSTS 헤더 — `.click`이 아닌 커스텀이면 명시 추가 (현재 ALB가 일부 적용)
 
-### 도메인 TLD 이전 — `.click` → `.app` (진행 🚧 2026-06-11 — 이메일 점등 선결로 착수)
+### 도메인 TLD 이전 — `.click` → `.app` (완료 ✅ 2026-06-12 — 이메일 점등 선결)
 
 **왜**: 구글 로그인 게시 후 Chrome이 `booktimer.click`을 **"위험한 사이트"로 차단**(Safe Browsing 피싱 오탐)했다.
 원인은 우리 코드가 아니라 **`.click` TLD의 낮은 평판 + 신규 도메인 + 로그인/OAuth 콜백** 조합(T-027, N-036).
@@ -113,8 +113,13 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 - [x] **근본 대응 — `.app` 이전 착수**: 도메인 · ACM · ALB · alias · OAuth redirect 완료.
 - [x] **OAuth 로그인 검증**: `.app` 구글 로그인 성공(`redirect_uri_mismatch` 없음 — ⑤ redirect URI 병행 등록 검증).
 - [x] **base-url `.app` 주입**: `BOOKTIMER_BASE_URL` task def 평문 environment 주입(PR #311 — 그동안 미주입이라 localhost 기본값이던 갭 동시 해소). main push 자동 배포.
-- [ ] **남은 전환**: 동의화면 privacy `.app` → `.click` 301. (실행 런북 `claude-docs/plans/2026-06-11-domain-tld-migration.md`)
-- 비용: `.app` 도메인 ≈$20/년(`.click` 차액 월 ~$1) · ACM 무료 · 전환 작업 시간.
+- [x] **`.click`·`www.click` → `.app` 301** (PR #315 cleanup): ALB 443 호스트 규칙(우선순위 1) — 경로·쿼리(`/#{path}`·`#{query}`) 보존, 기본값은 `.app` forward 유지. curl로 apex·www·경로쿼리 301 + `.app` 200 대조 검증.
+- [x] **Google OAuth 동의화면 `.app`** (PR #315): 홈페이지·개인정보처리방침 URL `.click`→`.app`. 승인도메인은 `.click`·`.app` 병행 유지(redirect URI 병행 기간이라 아직 안 뺌).
+- [x] **자동갱신 정리** (PR #315, Route53): `.app` ON(만료 2027-06-11) / `.click` OFF(만료 **2027-06-02** 자연 폐기).
+- [ ] **잔여 ① 기본 SSL 인증서 교체** — `.click` 만료(2027-06-02) **직전**에 ALB 443 기본 인증서를 `.click`→`.app`으로. 지금 기본 인증서가 `.click`이라 `.click` TLS(→301)가 살아있고, 섣불리 바꾸면 깨지므로 만료 임박 시 교체(그래야 `.click` 인증서 삭제돼도 리스너 기본 인증서가 존재).
+- [ ] **잔여 ② (선택) Search Console `.app` 등록** — Safe Browsing 선제 평판.
+- [ ] **잔여 ③ `.click` 폐기 시(2027-06)** — Google 승인도메인·OAuth redirect URI에서 `.click` 제거.
+- 비용: `.app` 도메인 ≈$20/년(`.click`은 자동갱신 OFF로 2027-06 폐기) · ACM 무료.
 
 ### AWS 요금 가드레일 — Budgets 월 $50 알람 (완료 ✅ 2026-06-02)
 
