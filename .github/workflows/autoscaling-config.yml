@@ -1,0 +1,87 @@
+name: Ensure ECS service autoscaling
+
+# ECS 서비스에 Application Auto Scaling을 멱등하게 적용한다(홍보 전 서버 용량 게이트).
+# - register-scalable-target: ecs:service:DesiredCount 차원, Min=2 / Max=4
+#     → 상시 2태스크(단일 장애점 제거 + 평소 부하 분산) + 부하 시 최대 4태스크 자동 확장.
+# - put-scaling-policy: TargetTrackingScaling, ECSServiceAverageCPUUtilization=70
+#     → 평균 CPU 70%를 목표로 태스크 수를 자동 가감(초과=scale-out / 여유=scale-in, 기본 cooldown 300s).
+#
+# 한 번 적용하면 ECS 서비스에 영속된다(매 배포는 task definition만 교체, 이 설정은 안 건드림 → 드리프트 없음).
+# 그래서 평소 배포 파이프라인(deploy.yml)과 분리된 수동 트리거(workflow_dispatch)로 둔다
+# — zero-downtime-config.yml과 동일 패턴.
+#
+# ⚠️ 선결(중요): 이 워크플로의 OIDC 역할(githubActionsDeployRole)에는 application-autoscaling·cloudwatch
+# 권한이 추가로 필요하다(deploy.yml의 ecs:UpdateService만으론 부족). target-tracking 정책이 CloudWatch
+# 알람을 자동 생성하기 때문. 권한 추가 스니펫은 claude-docs/deploy-aws.md "ECS 오토스케일링" 절 참고.
+# 미추가 상태로 실행하면 register/put 단계가 AccessDenied로 실패한다.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write     # OIDC 토큰 발급(역할 assume)
+      contents: read
+    env:
+      # ECS Application Auto Scaling의 대상 식별자: service/<클러스터 이름>/<서비스 이름>
+      RESOURCE_ID: service/${{ secrets.ECS_CLUSTER }}/${{ secrets.ECS_SERVICE }}
+      NAMESPACE: ecs
+      DIMENSION: ecs:service:DesiredCount
+      MIN_CAPACITY: "2"
+      MAX_CAPACITY: "4"
+      TARGET_CPU: "70"
+      POLICY_NAME: booktimer-cpu70-target-tracking
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Show current autoscaling config (before)
+        run: |
+          echo "== scalable targets =="
+          aws application-autoscaling describe-scalable-targets \
+            --service-namespace "$NAMESPACE" \
+            --resource-ids "$RESOURCE_ID" \
+            --output json
+          echo "== scaling policies =="
+          aws application-autoscaling describe-scaling-policies \
+            --service-namespace "$NAMESPACE" \
+            --resource-id "$RESOURCE_ID" \
+            --output json
+
+      - name: Register scalable target (DesiredCount Min=2 / Max=4)
+        run: |
+          aws application-autoscaling register-scalable-target \
+            --service-namespace "$NAMESPACE" \
+            --resource-id "$RESOURCE_ID" \
+            --scalable-dimension "$DIMENSION" \
+            --min-capacity "$MIN_CAPACITY" \
+            --max-capacity "$MAX_CAPACITY"
+
+      - name: Put target-tracking scaling policy (CPU 70%)
+        run: |
+          aws application-autoscaling put-scaling-policy \
+            --service-namespace "$NAMESPACE" \
+            --resource-id "$RESOURCE_ID" \
+            --scalable-dimension "$DIMENSION" \
+            --policy-name "$POLICY_NAME" \
+            --policy-type TargetTrackingScaling \
+            --target-tracking-scaling-policy-configuration \
+              "TargetValue=${TARGET_CPU}.0,PredefinedMetricSpecification={PredefinedMetricType=ECSServiceAverageCPUUtilization}" \
+            --output json
+
+      - name: Show resulting autoscaling config (after)
+        run: |
+          echo "== scalable targets =="
+          aws application-autoscaling describe-scalable-targets \
+            --service-namespace "$NAMESPACE" \
+            --resource-ids "$RESOURCE_ID" \
+            --output json
+          echo "== scaling policies =="
+          aws application-autoscaling describe-scaling-policies \
+            --service-namespace "$NAMESPACE" \
+            --resource-id "$RESOURCE_ID" \
+            --output json

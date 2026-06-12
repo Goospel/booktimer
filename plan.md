@@ -882,16 +882,21 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 ③ HikariCP 풀 10 → ④ db.t3.micro 버스트 크레딧 소진.
 
 **홍보글 쓰기 전 체크리스트** (효과 큰 순):
-- [ ] **ECS 오토스케일링 켜기** — desired 1 → min 2 / max 4, CPU 70% 타깃. 단일 장애점 제거 + 자동 확장. **최우선.**
-- [ ] **최소 desired=2 상시** — 한 대 죽어도 서비스 유지.
-- [ ] **세션 DB→Redis(ElastiCache) 외부화** 검토 — DB 부하 크게 감소(트래픽 적으면 인메모리도).
-- [ ] **부하 테스트로 실측** — `k6`/`hey`로 가입·로그인·대시보드·타이머 시나리오를 RPS 올려가며 때려
-      **latency가 꺾이는 RPS**를 숫자로 확보(추정→사실 전환).
-- [ ] (선택) RDS `db.t3.micro`→`db.t3.small` 한 단계, CloudWatch 알람(CPU·DB연결수·5xx) 사전 경보.
+- [~] **ECS 오토스케일링 켜기** — desired 1 → min 2 / max 4, CPU 70% 타깃. 단일 장애점 제거 + 자동 확장. **최우선.** (워크플로 `autoscaling-config.yml` 준비됨 #322 — OIDC 권한 추가 + `workflow_dispatch` 실행은 사용자)
+- [~] **최소 desired=2 상시** — 한 대 죽어도 서비스 유지. (위 오토스케일 `min=2`가 보장)
+- [ ] **세션 DB→Redis(ElastiCache) 외부화** 검토 — DB 부하 크게 감소(트래픽 적으면 인메모리도). (보류 — 부하 테스트가 세션 DB 병목을 가리키면 착수)
+- [~] **부하 테스트로 실측** — `k6` 스크립트 `load-test/booktimer-load.js` 준비됨 #322(로그인→대시보드→기록 시나리오; 가입은 DB 오염이라 제외). 사용자가 RPS 올려가며 실행해 **latency가 꺾이는 RPS**를 숫자로 확보(추정→사실 전환) + 오토스케일 실작동(2→3→4) 검증.
+- [ ] (선택) RDS `db.t3.micro`→`db.t3.small` 한 단계, CloudWatch 알람(CPU·DB연결수·5xx) 사전 경보. (보류 — 부하 테스트가 DB 커넥션 병목을 보이면 근거 갖고 착수)
 
 > 인프라 스펙 근거: `deploy/task-definition.json`(cpu 512/mem 1024, desired 1), `application-prod.properties`
 > (Spring Session JDBC), `claude-docs/deploy-aws.md`(db.t3.micro). 최소한 **오토스케일링+desired=2**까지는
 > 홍보 전에 마치는 걸 권장.
+>
+> **🔧 코드·워크플로 준비 (PR #322, 2026-06-12)** — 오토스케일링 + 부하 테스트 1차 스코프. 산출물:
+> `.github/workflows/autoscaling-config.yml`(register-scalable-target min2/max4 + CPU70 target-tracking, before/after describe readback),
+> `load-test/booktimer-load.js`(k6), `deploy-aws.md` §12-1b(절차 + OIDC 권한 추가 스니펫). ⚠️ 오토스케일링은 `ecs:UpdateService`만으론
+> 부족 — OIDC 역할에 `application-autoscaling:*`·`cloudwatch:*Alarm*` 권한 1회 추가가 선결(target-tracking이 CloudWatch 알람 자동 생성).
+> 남은 사용자 작업: ① CloudShell로 권한 추가 → ② 워크플로 실행(describe로 Min2/Max4/CPU70 확인) → ③ k6 부하 실측. 세션 Redis·RDS 업그레이드는 실측 후 후속.
 
 ---
 
