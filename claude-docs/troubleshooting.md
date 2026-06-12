@@ -42,6 +42,7 @@
 - [T-044. GitHub branch protection PUT — 4개 최상위 키 필수(422) + PowerShell 파이프로 JSON 넘기면 400](#t-044-github-branch-protection-put--4개-최상위-키-필수422--powershell-파이프로-json-넘기면-400)
 - [T-045. ECS 오토스케일링 워크플로가 service-linked role 자동 생성 권한 부족으로 실패 — CloudShell에서 직접 1회 생성](#t-045-ecs-오토스케일링-워크플로가-service-linked-role-자동-생성-권한-부족으로-실패--cloudshell에서-직접-1회-생성)
 - [T-046. MockMvc nullValue 모델 단언은 속성이 없어도 통과한다 — 폴백은 실제 반대값으로 RED 검증](#t-046-mockmvc-nullvalue-모델-단언은-속성이-없어도-통과한다--폴백은-실제-반대값으로-red-검증)
+- [T-047. 외부 API를 http로 호출하면 CDN(CloudFront)이 https로 301 → RestClient가 미추적해 응답이 HTML이라 JSON 파싱 실패(운영 알라딘 검색 0건)](#t-047-외부-api를-http로-호출하면-cdncloudfront이-https로-301--restclient가-미추적해-응답이-html이라-json-파싱-실패운영-알라딘-검색-0건)
 
 ---
 
@@ -932,6 +933,21 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 
 ---
 
+## T-047. 외부 API를 http로 호출하면 CDN(CloudFront)이 https로 301 → RestClient가 미추적해 응답이 HTML이라 JSON 파싱 실패(운영 알라딘 검색 0건)
+
+**증상**: 운영(Fargate)에서 알라딘 도서 검색이 제목·저자·출판사 **전부 0건**("검색 결과가 없습니다"). 같은 TTBKey로 PC 브라우저 직접 호출은 정상(21건). CloudWatch에 `AladinBookSearchClient … JsonParseException: Unexpected character ('<')`가 반복.
+
+**원인**: 알라딘이 앞단 **CloudFront로 `http://`→`https://` 301 리다이렉트**를 강제. 앱은 `http://`로 호출했고 Spring `RestClient`가 **3xx를 안 따라가** 301 응답 본문(`<html>…301 Moved…CloudFront</html>`)을 그대로 받음 → `parse()`가 JSON으로 읽다 `<`에서 깨져 빈 결과 → 0건. **브라우저는 3xx를 자동 추적**해 https에서 JSON을 받아 정상이라 "내 PC는 되고 서버만 0건"으로 보였다. 코드·키·직전 기능 PR과 무관한 **외부(알라딘)가 http를 https로 막기 시작한 변경**(우리가 안 바꿔도 깨짐).
+
+**해결 / 예방**:
+- 외부 엔드포인트는 **처음부터 `https://`로** 호출한다(301 자체가 사라짐 + 평문→TLS). `ENDPOINT`/`LOOKUP_ENDPOINT` 두 상수 전환으로 끝(PR #329).
+- 진단법: 응답 본문이 `<`로 시작(JSON 아님)하면 HTML/리다이렉트를 의심하고 `curl -sS -D - <url>`로 **상태줄·`Location` 헤더**를 본다(`HTTP/1.1 301` + `Location: https://`면 확정). **서버 출처에서 재현**하려면 CloudShell(AWS IP)에서 curl — 브라우저(내 PC)는 추적해 버려 재현 안 됨.
+- "브라우저는 되는데 서버만 안 됨"은 리다이렉트 자동추적 차이일 수 있다(N-074).
+
+**관련**: learning-notes **N-074**(브라우저 vs 서버 리다이렉트 추적 차이 / 외부 의존은 시간이 지나며 바뀐다), N-021(HTTPS는 앞단에서 termination), T-030·N-041(같은 알라딘 — 외부 API가 문서·관행과 다르게 동작).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -982,3 +998,4 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 | 2026-06-11 | T-044 (GitHub branch protection PUT은 4개 최상위 키(`required_status_checks`/`enforce_admins`/`required_pull_request_reviews`/`restrictions`)를 null이라도 모두 보내야 함 — 누락 시 422 / PowerShell 5.1에서 JSON을 here-string 파이프로 넘기면 인코딩 깨져 400 `Problems parsing JSON` → UTF-8 파일+`--input` 사용(T-026 한글 커밋과 같은 뿌리) / `contexts` 체크 이름은 check-runs로 실측 후 등록·ci.yml 머지 후 protection 켜는 닭-달걀 순서, N-070, PR #298) |
 | 2026-06-12 | T-045 (ECS 오토스케일링 워크플로 첫 실행이 `register-scalable-target`에서 `ValidationException: missing iam:CreateServiceLinkedRole`로 실패 — 첫 점등 시 AWS가 service-linked role `AWSServiceRoleForApplicationAutoScaling_ECSService`를 자동 생성하려는데 OIDC 역할에 생성 권한 없어 거부(AccessDenied 아닌 ValidationException이라 헷갈림) / 권장 해결=워크플로 역할에 IAM 권한 더하기보다 CloudShell에서 `aws iam create-service-linked-role --aws-service-name ecs.application-autoscaling.amazonaws.com` 직접 1회 생성(최소권한·이후 존재하니 Re-run 통과) / 부수 리소스 자동 생성 API는 그 생성 권한도 호출자에 요구, N-073·N-030, PR #322 후속) |
 | 2026-06-12 | T-046 (MockMvc `model().attribute(name, nullValue())`가 속성 부재여도 통과 — TDD RED에서 폴백 미구현인데 초록, "속성 없음"과 "속성=null"을 못 가림 / null·폴백은 nullValue() 말고 실제 반대값(visibility=PRIVATE로 비공개만 남는지)으로 단언해야 Red, N-055 양방향, PR #327) |
+| 2026-06-12 | T-047 (운영 알라딘 검색 전부 0건 — 알라딘 CloudFront가 http→https 301 강제하는데 RestClient가 미추적해 응답 본문이 리다이렉트 HTML('<html>') → parse()가 JsonParseException('<')로 빈 결과 / 브라우저는 3xx 자동추적해 정상이라 "PC는 되고 서버만 0건" / 해결=ENDPOINT https로(301 제거+TLS), 진단=curl -D -로 301·Location 확인·로그 '<', 서버출처 재현은 CloudShell / N-074, T-030, PR #329) |

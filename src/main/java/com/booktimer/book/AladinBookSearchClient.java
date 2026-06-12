@@ -26,8 +26,8 @@ import java.util.Optional;
 public class AladinBookSearchClient implements BookSearchClient {
 
     private static final Logger log = LoggerFactory.getLogger(AladinBookSearchClient.class);
-    private static final String ENDPOINT = "http://www.aladin.co.kr/ttb/api/ItemSearch.aspx";
-    private static final String LOOKUP_ENDPOINT = "http://www.aladin.co.kr/ttb/api/ItemLookUp.aspx";
+    private static final String ENDPOINT = "https://www.aladin.co.kr/ttb/api/ItemSearch.aspx";
+    private static final String LOOKUP_ENDPOINT = "https://www.aladin.co.kr/ttb/api/ItemLookUp.aspx";
     private static final String NOT_CONFIGURED = "not-configured";
 
     private final String ttbKey;
