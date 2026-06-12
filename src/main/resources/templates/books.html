@@ -155,9 +155,18 @@
                             <span class="vis-track" aria-hidden="true"><span class="vis-knob"></span></span>
                         </button>
                     </form>
-                    <a th:if="${b.purchaseLink}" th:href="@{/books/{id}/buy(id=${b.id})}" target="_blank"
+                    <!-- 구매처가 2개(알라딘+쿠팡)면 '구매' 토글로 묶어 펼치게, 1개뿐이면 단일 버튼.
+                         조건은 매 렌더마다 그 책의 데이터(purchaseLink·coupangEnabled)로 평가돼 동적으로 분기한다. -->
+                    <details th:if="${!#strings.isEmpty(b.purchaseLink) and coupangEnabled}" class="buy-menu">
+                        <summary class="btn-ghost">구매</summary>
+                        <div class="buy-menu-items">
+                            <a th:href="@{/books/{id}/buy(id=${b.id})}" target="_blank" rel="noopener nofollow">알라딘</a>
+                            <a th:href="@{/books/{id}/buy/coupang(id=${b.id})}" target="_blank" rel="noopener nofollow">쿠팡</a>
+                        </div>
+                    </details>
+                    <a th:if="${!#strings.isEmpty(b.purchaseLink) and !coupangEnabled}" th:href="@{/books/{id}/buy(id=${b.id})}" target="_blank"
                        rel="noopener nofollow" class="btn-ghost">구매</a>
-                    <a th:if="${coupangEnabled}" th:href="@{/books/{id}/buy/coupang(id=${b.id})}" target="_blank"
+                    <a th:if="${#strings.isEmpty(b.purchaseLink) and coupangEnabled}" th:href="@{/books/{id}/buy/coupang(id=${b.id})}" target="_blank"
                        rel="noopener nofollow" class="btn-ghost">쿠팡</a>
                     <form method="post" th:action="@{/books/{id}/delete(id=${b.id})}"
                           onsubmit="return confirm('이 책을 삭제할까요?');">
