@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<!--
+  방문 통계(Google Analytics 4) 재사용 fragment — 공유 레이아웃이 없어 페이지마다 head에 include한다.
+  gtag : <head>에 넣는 GA4 측정 스크립트. ${analytics.enabled}일 때만 렌더
+         → ga-id 미설정(스캐폴드) 상태에선 아무것도 안 나온다(AdSense loader와 동일 config-gate).
+  new Date()는 클라이언트 JS라 서버 Date 함정과 무관하다.
+-->
+<head>
+<th:block th:fragment="gtag" th:if="${analytics != null and analytics.enabled}">
+    <script async th:src="'https://www.googletagmanager.com/gtag/js?id=' + ${analytics.gaId}"></script>
+    <script th:inline="javascript">
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', /*[[${analytics.gaId}]]*/ 'G-XXXXXXXXXX');
+    </script>
+</th:block>
+</head>
+</html>
