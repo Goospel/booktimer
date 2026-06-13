@@ -628,6 +628,7 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 /* 처음엔 접혀(베타라 opt-in) 잔디만 보이고, 토글(▸)을 누르면 잔디 아래로 펼쳐진다. JS 0.
    토글 summary는 카드(.garden-host = .card) 우측 상단에 absolute로 띄워 잔디 헤더 옆 화살표처럼 보이게 한다.
    접힘일 때 details는 거의 높이를 안 차지(summary가 absolute라 흐름 밖)해 잔디 바로 아래 공간을 비운다. */
+.garden-host { position: relative; }  /* 아래 .garden-toggle(absolute)의 위치 기준 = 이 잔디 카드. 없으면 positioned 조상이 없어 viewport 기준이 돼 토글이 페이지 우측 최상단으로 샌다. */
 .garden { margin: 0; }
 .garden-toggle {
     position: absolute;
