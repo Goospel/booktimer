@@ -79,6 +79,7 @@
 - [N-073. ECS 수평 오토스케일링은 별도 서비스(Application Auto Scaling)가 desiredCount를 조절한다 — target-tracking이 CloudWatch 알람을 자동 생성해 IAM 권한이 ecs:UpdateService를 넘어선다](#n-073-ecs-수평-오토스케일링은-별도-서비스application-auto-scaling가-desiredcount를-조절한다--target-tracking이-cloudwatch-알람을-자동-생성해-iam-권한이-ecsupdateservice를-넘어선다)
 - [N-074. 브라우저는 3xx 리다이렉트를 자동 추적하지만 서버 HTTP 클라이언트는 아닐 수 있다 — "내 PC는 되는데 서버만 안 됨"의 정체, 외부 의존은 우리 코드가 그대로여도 바뀐다](#n-074-브라우저는-3xx-리다이렉트를-자동-추적하지만-서버-http-클라이언트는-아닐-수-있다--내-pc는-되는데-서버만-안-됨의-정체-외부-의존은-우리-코드가-그대로여도-바뀐다)
 - [N-075. "헤더로 지역 분리"는 라우팅만 푼다 — Host는 확실, Accept-Language와 GeoIP는 보조, 진짜 병목은 데이터 소스](#n-075-헤더로-지역-분리는-라우팅만-푼다--host는-확실-accept-language와-geoip는-보조-진짜-병목은-데이터-소스)
+- [N-076. 네이티브 `<details>`는 토글(summary)과 패널이 한 덩어리 — 분리 배치하려면 absolute/JS](#n-076-네이티브-details는-토글summary과-패널이-한-덩어리--분리-배치하려면-absolutejs)
 
 ---
 
@@ -3554,6 +3555,31 @@ target-tracking 정책은 마법이 아니다 — 내부적으로 **CloudWatch �
 
 ---
 
+## N-076. 네이티브 `<details>`는 토글(summary)과 패널이 한 덩어리 — 분리 배치하려면 absolute/JS
+
+> **한 줄 요약**: `<details>`/`<summary>`는 토글과 펼침 패널이 *같은 부모 안 인접 형제*라, "토글은 헤더에, 패널은 멀리(다른 영역)에"처럼 **DOM 흐름상 떼어 배치할 수 없다**. 분리하려면 (a) 토글을 `position:absolute`로 띄우거나 (b) JS, (c) checkbox 해킹 중 하나가 필요하다.
+
+### 배경 — 어디서 만났나
+
+독서 잔디 카드의 베타 "정원" 토글이 연속일수 이모지와 겹쳐, **토글은 제목 옆**에 두되 **펼침 패널은 잔디 아래**로 내리고 싶었다. native `<details>`(JS 0)에서 `<summary>`(토글)는 `<details>`의 첫 자식, 패널은 그다음 형제 — 둘은 늘 붙어 다녀 "토글 따로, 패널 따로"가 안 된다.
+
+### 핵심 — 왜, 그리고 선택지
+
+- **근원**: `<details open>`의 열림 상태는 *자기 자손*에만 작용한다. 패널이 details 밖에 있으면 native 토글이 못 건드린다 → 토글·패널은 한 부모 안에 인접해야 하고, 레이아웃상 한 덩어리로 움직인다.
+- **선택지 / 트레이드오프**:
+  - **(a) summary만 `absolute`** — details는 패널 흐름 위치에 두고 토글만 헤더로 띄움. JS 0·마크업 최소. 단 좌표를 수동으로 잡고, absolute라 형제가 자리를 안 비워줘 겹치기 쉽다(형제에 `padding`으로 자리 확보).
+  - **(b) JS** — 자유롭지만 "JS 0" 원칙을 깸.
+  - **(c) checkbox 해킹**(`input:checked ~ .panel`) — JS 0로 위치 자유, 단 native가 거저 주는 *접근성(disclosure·`aria-expanded`)*을 잃음.
+- **이번 결정**: (a). 패널은 검증된 "잔디 아래" 흐름 그대로, 토글만 좌측 제목 옆에 absolute + 형제 `h2`에 `padding-left`로 자리 확보. (b)/(c)는 비용 대비 이득이 없었다.
+- **곁가지 함정**: `display:contents`로 details 박스를 없애 summary·panel을 부모 flex 아이템으로 올리고 `order`로 재배치를 시도했으나, 이 프리뷰 렌더러에서 `display:contents`+flex `order`가 불안정(열림 시 형제가 패널 아래로 샘)했다. **영리한 우회가 흔들리면 검증된 단순안으로 복귀**가 옳다.
+
+### 관련
+
+- **N-004** — soft(가이드)/hard(훅) 트레이드오프처럼, 여기선 "native 시맨틱(접근성 거저)" vs "레이아웃 자유(해킹)"를 저울질했다.
+- **changelog #334** — 이 노트를 낳은 작업(정원 토글 위치 수정).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -3634,3 +3660,4 @@ target-tracking 정책은 마법이 아니다 — 내부적으로 **CloudWatch �
 | 2026-06-12 | N-073 (ECS 수평 오토스케일링은 ECS 자체가 아니라 별도 서비스 Application Auto Scaling이 desiredCount를 scalable target으로 등록받아 조절 — ①register-scalable-target(min2/max4 범위) ②put-scaling-policy(target-tracking CPU70%) 두 단계 / target-tracking이 CloudWatch 알람을 자동 생성해 IAM 권한이 ecs:UpdateService(무중단배포 N-030엔 충분)를 넘어 application-autoscaling:*·cloudwatch:*Alarm*까지 필요 / min=2는 확장보다 상시 이중화(단일 장애점 제거)가 첫 가치 / max=4는 비용 4배·태스크 증가가 DB 커넥션 배수→다음 병목 / throughput 게이트라 latency 축 N-064와 구분 / 홍보 전 선수과정 1순위, PR #322) |
 | 2026-06-12 | N-074 (브라우저는 3xx를 자동 추적하지만 서버 HTTP 클라이언트(RestClient/JDK HttpClient 등)는 미추적일 수 있어 같은 URL이 "내 PC는 되고 서버만 안 됨" — 서버는 3xx 본문(HTML)을 받아 파싱 실패 / 외부 의존은 우리 코드 불변이어도 외부 변경(알라딘 http→https CloudFront 강제)으로 깨짐 → "갑자기"면 외부 변경 가설 일찍, 시간적 상관≠인과(직전 PR 오인 주의) / 대응=https·응답 포맷 방어검증·서버출처 재현(CloudShell) / 실전 T-047, 외부 불신 N-041, PR #329) |
 | 2026-06-12 | N-075 ("HTTP 헤더로 지역 분리"는 라우팅만 푼다 — 헤더 신호 3층: Host(도메인=명시적 선택, 확실)·Accept-Language(브라우저·OS 언어라 IP/지역 아님, 첫 추정 보조)·GeoIP(IP→국가, 프록시가 헤더 넣어야 존재·VPN 우회) / 언어≠지역(Accept-Language=언어, GeoIP=국가, 자주 어긋남) → 어느 경우든 명시 선택(도메인/저장 설정)이 정답·헤더는 초기값 힌트 / **진짜 병목은 헤더가 아니라 데이터 소스·제휴** — 시장마다 다른 검색 소스(알라딘→Google Books)·구매 제휴(쿠팡→Amazon)·UI 번역(i18n)이 본체, 헤더와 무관한 어댑터/번역 작업 / 단일 앱 vs 별도 사이트는 트래픽 검증 전 단일 앱(포트 추상화로 데이터만 교체)이 린, "분리 사이트 느낌"은 Host로 연출·백엔드는 하나 / 프록시가 넣는 헤더 N-022, 외부 동작 불신 N-041·N-056, 제휴 모델 N-035, 데이터 소스 교체가 본체라 N-037의 대조, 3xx 추적 자매 N-074, plan.md §영미권 진출) |
+| 2026-06-13 | N-076 (네이티브 `<details>`는 summary(토글)+패널이 한 덩어리 — 흐름상 분리 배치 불가 → 토글은 헤더·패널은 멀리 두려면 absolute(좌표 수동·형제 padding으로 자리 확보)/JS/checkbox 해킹(접근성 손실) 중 택1 / `details[open]`은 자손에만 작용해 패널이 밖이면 native 토글이 못 건드림이 근원 / 이번엔 (a) absolute 채택 — 패널은 잔디 아래 유지·토글만 제목 옆 / `display:contents`+flex `order` 우회는 프리뷰 렌더러에서 불안정 → 검증된 단순안 복귀 / soft·hard 트레이드오프 결 N-004, PR #334) |
