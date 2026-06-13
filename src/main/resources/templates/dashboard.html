@@ -166,8 +166,9 @@
                 </div>
             </div>
         </div>
-        <!-- 베타 독서 정원 — 잔디 아래로 펼쳐지는 접힌 패널(기본 접힘). 토글(정원 ▸)은 제목 옆(좌측) 상단에 absolute. -->
-        <th:block th:replace="~{fragments/garden :: panel(${garden})}"></th:block>
+        <!-- 베타 독서 정원 요약 — 잔디 아래로 펼쳐지는 접힌 패널(기본 접힘). 토글(정원 ▸)은 제목 옆(좌측) 상단에 absolute.
+             전체 도감(축 탭·필터)은 전용 페이지 /garden으로 이전, 여기엔 미니정원+진척+링크 요약만 싣는다(계획 §0.1). -->
+        <th:block th:replace="~{fragments/garden :: summary(${garden})}"></th:block>
     </section>
 
     <!-- 바로가기: 아이콘+라벨 타일 2열 그리드. 좁은 컬럼에서도 라벨이 글자 단위로
