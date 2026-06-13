@@ -80,6 +80,8 @@
 - [N-074. 브라우저는 3xx 리다이렉트를 자동 추적하지만 서버 HTTP 클라이언트는 아닐 수 있다 — "내 PC는 되는데 서버만 안 됨"의 정체, 외부 의존은 우리 코드가 그대로여도 바뀐다](#n-074-브라우저는-3xx-리다이렉트를-자동-추적하지만-서버-http-클라이언트는-아닐-수-있다--내-pc는-되는데-서버만-안-됨의-정체-외부-의존은-우리-코드가-그대로여도-바뀐다)
 - [N-075. "헤더로 지역 분리"는 라우팅만 푼다 — Host는 확실, Accept-Language와 GeoIP는 보조, 진짜 병목은 데이터 소스](#n-075-헤더로-지역-분리는-라우팅만-푼다--host는-확실-accept-language와-geoip는-보조-진짜-병목은-데이터-소스)
 - [N-076. 네이티브 `<details>`는 토글(summary)과 패널이 한 덩어리 — 분리 배치하려면 absolute/JS](#n-076-네이티브-details는-토글summary과-패널이-한-덩어리--분리-배치하려면-absolutejs)
+- [N-077. 큰 SSR 페이지는 렌더 도중 응답 버퍼가 커밋돼, 그 뒤 CSRF 폼(`th:action`)이 세션을 못 만들어 깨진다 — 렌더 전 토큰 선확정으로 방어](#n-077-큰-ssr-페이지는-렌더-도중-응답-버퍼가-커밋돼-그-뒤-csrf-폼thaction이-세션을-못-만들어-깨진다--렌더-전-토큰-선확정으로-방어)
+- [N-078. semantic(논리) 머지 충돌 — git이 텍스트로 안 잡는, 각 브랜치는 green인데 합치면 red](#n-078-semantic논리-머지-충돌--git이-텍스트로-안-잡는-각-브랜치는-green인데-합치면-red)
 
 ---
 
@@ -3580,6 +3582,52 @@ target-tracking 정책은 마법이 아니다 — 내부적으로 **CloudWatch �
 
 ---
 
+## N-077. 큰 SSR 페이지는 렌더 도중 응답 버퍼가 커밋돼, 그 뒤 CSRF 폼(`th:action`)이 세션을 못 만들어 깨진다 — 렌더 전 토큰 선확정으로 방어
+
+> **한 줄 요약**: Spring MVC는 응답을 버퍼(기본 ~8KB)에 모으다 차면 **커밋**(상태줄·헤더+앞부분을 클라이언트로 흘려보냄)하는데, 커밋 후엔 **새 세션을 못 만든다**. 페이지가 커서 맨 아래 CSRF 폼(`th:action`)이 렌더될 때 토큰이 `getSession(true)`로 세션을 만들려 하면 `IllegalStateException: Cannot create a session after the response has been committed`. 컨트롤러에서 **렌더 전에 `CsrfToken.getToken()`** 으로 세션을 미리 확정해 막는다.
+
+### 배경 — 어디서 만났나
+
+GA4 방문 통계(#338)가 `head`에 gtag 스크립트 fragment를 전 템플릿에 추가하자 **`/personality`만** 500이 났다(다른 32개 정상). personality는 서술·과거 분석 카드·인라인 `<style>`로 페이지가 컸고, 맨 아래 '다시 분석' 폼이 `th:action`(CSRF 숨김필드)이었다. GA4 몇백 바이트가 버퍼를 임계 너머로 민 "마지막 한 방울"이었고, `DashboardController`는 같은 이유로 이미 토큰 선확정 방어를 했지만 `PersonalityController`는 안 했다.
+
+### 핵심 — 메커니즘과 방어
+
+- **메커니즘**: 응답 버퍼가 차서 커밋 → 그 시점 이후 세션 생성 불가 → 렌더 중 CSRF hidden field가 `request.getSession(true)` → `IllegalStateException`. 즉 *세션 생성이 렌더(버퍼 커밋) 이후로 밀린 것*이 근본이고, 페이지 크기·head 추가는 임계를 넘기는 **방아쇠**일 뿐.
+- **Spring Session 함정**: `SessionRepositoryFilter`(Redis/JDBC 세션)가 끼면, 테스트에서 `.session(new MockHttpSession())`으로 세션을 미리 줘도 **필터가 자체 저장소를 봐** 우회가 불완전하다 → "세션 미리 주기"로는 안 잡히고, 컨트롤러의 토큰 선확정이 진짜 방어(세션 없이 GET해도 통과 = 검증).
+- **방어**: GET 핸들러 끝(렌더 직전)에서 `Object csrf = request.getAttribute(CsrfToken.class.getName()); if (csrf instanceof CsrfToken t) t.getToken();` — 세션 생성을 응답 커밋 전으로 당긴다.
+- **일반화**: CSRF 폼(`th:action`)이 맨 아래 있는 **큰 SSR 페이지**는 이 잠재 버그를 안고 있다. head/본문에 뭔가 추가하다 특정 페이지만 깨지면 버퍼 임계를 의심.
+
+### 관련
+
+- **N-078** — 이 회귀가 #337+#338의 *semantic merge conflict*(각자 green, 합치면 red)로 드러난 면.
+- **T-049** — 같은 사건의 재발 방지 절차(진단·격리·예방 스캔).
+- **changelog #340** — 이 노트를 낳은 핫픽스. `DashboardController`가 이미 쓰던 동일 방어.
+
+---
+
+## N-078. semantic(논리) 머지 충돌 — git이 텍스트로 안 잡는, 각 브랜치는 green인데 합치면 red
+
+> **한 줄 요약**: 두 PR이 **서로 다른 줄/파일**을 바꿔 git 텍스트 충돌이 0이어도, 변경이 **의미적으로 상호작용**하면 합친 결과가 깨질 수 있다. "각 PR의 CI가 green = main이 green"은 거짓 — 진실은 *머지된 상태*의 CI다.
+
+### 배경 — 어디서 만났나
+
+#339(독서 정원 도감 페이지)를 머지하려 main을 브랜치에 합치자 `PersonalityControllerTest`가 red였다. 범인은 #339가 아니라 이미 머지된 **#337(트랙 B)+#338(GA4)의 조합** — 각 PR은 단독 CI green이었으나, #338의 head 추가가 #337과 무관해 보이는 personality 페이지의 응답 버퍼 임계를 넘겨(N-077) main을 red로 만들었다. 텍스트 충돌은 전혀 없었다.
+
+### 핵심 — 왜, 그리고 방어
+
+- **git 머지 충돌은 텍스트(같은 줄) 기반**이다. 다른 줄·다른 파일이면 자동 병합하고, 의미적 결합(버퍼 크기·전역 빈·공유 상태)은 보지 않는다.
+- **"브랜치 각각 green"이 main green을 보장하지 않는다.** 각 PR의 CI는 *그 브랜치 base* 기준이라, 다른 PR이 그 사이 머지되면 합쳐진 결과는 아무도 안 돌렸을 수 있다.
+- **방어**: ① required CI를 *머지 결과*에 대해 돌린다(merge queue, 또는 "base 최신화 필수"로 머지 전 재실행). ② 머지 직후 main CI를 모니터링(green 유지 확인). ③ 다음 PR 준비 시 base 재머지+전체 테스트를 게이트로 — 이번엔 이게 **우연히** 회귀를 잡았다(안 했으면 운영 배포까지 갔다).
+- **일반화**: head·전역 advice·공유 설정처럼 **넓게 퍼지는 변경**(#338은 33개 템플릿)은 semantic 충돌 위험이 크다 — 좁은 변경보다 머지 후 검증을 더 챙긴다.
+
+### 관련
+
+- **N-077** — 이 충돌의 구체 메커니즘(응답 버퍼 + CSRF 세션).
+- **N-070** — required status check 머지 게이트(이게 *머지 결과*에 돌아야 semantic 충돌을 잡는다).
+- **changelog #340** — 발견·분리한 핫픽스.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -3660,4 +3708,6 @@ target-tracking 정책은 마법이 아니다 — 내부적으로 **CloudWatch �
 | 2026-06-12 | N-073 (ECS 수평 오토스케일링은 ECS 자체가 아니라 별도 서비스 Application Auto Scaling이 desiredCount를 scalable target으로 등록받아 조절 — ①register-scalable-target(min2/max4 범위) ②put-scaling-policy(target-tracking CPU70%) 두 단계 / target-tracking이 CloudWatch 알람을 자동 생성해 IAM 권한이 ecs:UpdateService(무중단배포 N-030엔 충분)를 넘어 application-autoscaling:*·cloudwatch:*Alarm*까지 필요 / min=2는 확장보다 상시 이중화(단일 장애점 제거)가 첫 가치 / max=4는 비용 4배·태스크 증가가 DB 커넥션 배수→다음 병목 / throughput 게이트라 latency 축 N-064와 구분 / 홍보 전 선수과정 1순위, PR #322) |
 | 2026-06-12 | N-074 (브라우저는 3xx를 자동 추적하지만 서버 HTTP 클라이언트(RestClient/JDK HttpClient 등)는 미추적일 수 있어 같은 URL이 "내 PC는 되고 서버만 안 됨" — 서버는 3xx 본문(HTML)을 받아 파싱 실패 / 외부 의존은 우리 코드 불변이어도 외부 변경(알라딘 http→https CloudFront 강제)으로 깨짐 → "갑자기"면 외부 변경 가설 일찍, 시간적 상관≠인과(직전 PR 오인 주의) / 대응=https·응답 포맷 방어검증·서버출처 재현(CloudShell) / 실전 T-047, 외부 불신 N-041, PR #329) |
 | 2026-06-12 | N-075 ("HTTP 헤더로 지역 분리"는 라우팅만 푼다 — 헤더 신호 3층: Host(도메인=명시적 선택, 확실)·Accept-Language(브라우저·OS 언어라 IP/지역 아님, 첫 추정 보조)·GeoIP(IP→국가, 프록시가 헤더 넣어야 존재·VPN 우회) / 언어≠지역(Accept-Language=언어, GeoIP=국가, 자주 어긋남) → 어느 경우든 명시 선택(도메인/저장 설정)이 정답·헤더는 초기값 힌트 / **진짜 병목은 헤더가 아니라 데이터 소스·제휴** — 시장마다 다른 검색 소스(알라딘→Google Books)·구매 제휴(쿠팡→Amazon)·UI 번역(i18n)이 본체, 헤더와 무관한 어댑터/번역 작업 / 단일 앱 vs 별도 사이트는 트래픽 검증 전 단일 앱(포트 추상화로 데이터만 교체)이 린, "분리 사이트 느낌"은 Host로 연출·백엔드는 하나 / 프록시가 넣는 헤더 N-022, 외부 동작 불신 N-041·N-056, 제휴 모델 N-035, 데이터 소스 교체가 본체라 N-037의 대조, 3xx 추적 자매 N-074, plan.md §영미권 진출) |
+| 2026-06-13 | N-077 (큰 SSR 페이지는 렌더 도중 응답 버퍼(기본 ~8KB)가 커밋되면 그 뒤 세션을 못 만들어, 맨 아래 CSRF 폼(th:action)이 토큰 생성하며 getSession(true) 시 "response already committed" IllegalStateException / GA4 head 추가(#338)가 personality 버퍼를 임계 너머로 민 방아쇠 — 근본은 세션 생성이 렌더 이후로 밀린 것 / Spring Session(SessionRepositoryFilter)이면 .session(MockHttpSession) 우회 불완전(필터가 자체 저장소 봄) → 컨트롤러서 렌더 전 CsrfToken.getToken()으로 세션 선확정이 진짜 방어(세션 없이 GET해도 통과) / DashboardController 선례, 일반화: th:action 폼 있는 큰 페이지의 잠재버그, 재발절차 T-049·semantic면 N-078, PR #340) |
+| 2026-06-13 | N-078 (semantic 머지 충돌 — 다른 줄/파일이라 git 텍스트 충돌 0이어도 의미적 상호작용으로 합치면 red / #337(트랙B)+#338(GA4) 각자 green인데 main에서 personality 버퍼 임계 초과(N-077)로 red, #339 머지 준비 중 base 재머지+테스트가 우연히 발견 / "각 PR green=main green"은 거짓, 진실은 머지된 상태 CI / 방어: required CI를 머지결과에(merge queue/base최신화), 머지후 main CI 모니터, 다음PR이 base재머지+전체테스트 게이트 / 넓게 퍼지는 변경(head·전역advice·#338은 33템플릿)일수록 위험 / 머지게이트 N-070, 메커니즘 N-077, PR #340) |
 | 2026-06-13 | N-076 (네이티브 `<details>`는 summary(토글)+패널이 한 덩어리 — 흐름상 분리 배치 불가 → 토글은 헤더·패널은 멀리 두려면 absolute(좌표 수동·형제 padding으로 자리 확보)/JS/checkbox 해킹(접근성 손실) 중 택1 / `details[open]`은 자손에만 작용해 패널이 밖이면 native 토글이 못 건드림이 근원 / 이번엔 (a) absolute 채택 — 패널은 잔디 아래 유지·토글만 제목 옆 / `display:contents`+flex `order` 우회는 프리뷰 렌더러에서 불안정 → 검증된 단순안 복귀 / soft·hard 트레이드오프 결 N-004, PR #334) |
