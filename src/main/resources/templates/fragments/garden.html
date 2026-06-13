@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<!--
+  독서 정원(베타) 패널 fragment — 대시보드 잔디 카드 안 접힌 <details>로 싣는다.
+
+  순수 CSS <details>/<summary>로 토글(JS 0). 처음엔 접혀(베타라 opt-in) 잔디만 보이고,
+  잔디 카드 우측 상단 화살표(▸)를 누르면 아래로 펼쳐져 정원이 나타난다. "개발 중(베타)" 배너로
+  빈약한 퀄리티를 납득시킨다. 보유 식물은 저장하지 않고 독서 실적에서 유도된다(GardenService).
+
+  PlantState/GardenView는 record라 메서드 호출 구문으로 접근한다(잔디 graph.weeks()와 동일 관례).
+  Plant는 JPA 엔티티라 getter(getName/getEmoji/...)로 읽는다.
+
+  후속 재사용을 위해 패널을 fragment로 빼둔다(1차는 대시보드만 include).
+-->
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<details class="garden" th:fragment="panel(garden)">
+    <summary class="garden-toggle">
+        <span class="garden-toggle-label">정원</span>
+        <span class="garden-arrow" aria-hidden="true">▸</span>
+    </summary>
+
+    <div class="garden-panel">
+        <p class="garden-beta">🚧 베타 · 정원은 개발 중이에요. 곧 더 다양한 식물로 채워집니다.</p>
+
+        <!-- 미니 정원: 보유한 식물만 -->
+        <h3 class="garden-subtitle">내 정원</h3>
+        <div class="garden-mine" th:if="${garden.ownedCount() > 0}">
+            <th:block th:each="p : ${garden.plants()}" th:if="${p.owned()}">
+                <span class="plant-cell owned" th:title="${p.plant().getName()}">
+                    <span class="plant-emoji" th:text="${p.plant().getEmoji()}">🌱</span>
+                </span>
+            </th:block>
+        </div>
+        <p class="garden-empty" th:unless="${garden.ownedCount() > 0}">
+            아직 심은 식물이 없어요. 오늘 목표를 채워 첫 새싹을 심어보세요 🌱
+        </p>
+
+        <!-- 도감: 전체 카탈로그(보유·미보유 모두) -->
+        <div class="garden-dex-head">
+            <h3 class="garden-subtitle">도감</h3>
+            <span class="garden-progress"
+                  th:text="${garden.ownedCount()} + '/' + ${garden.totalCount()} + '종'">0/14종</span>
+        </div>
+        <div class="garden-grid">
+            <div class="plant-cell" th:each="p : ${garden.plants()}"
+                 th:classappend="${p.owned()} ? 'owned' : 'plant-locked'"
+                 th:title="${p.owned()}
+                     ? ${p.plant().getName()} + (${p.isNew()} ? ' · 최근 획득' : '')
+                     : ('목표 ' + ${p.plant().getUnlockThresholdDays()} + '일 달성 시')">
+                <span class="plant-emoji" th:if="${p.owned()}" th:text="${p.plant().getEmoji()}">🌱</span>
+                <span class="plant-emoji locked" th:unless="${p.owned()}" aria-hidden="true">🔒</span>
+                <span class="plant-name" th:if="${p.owned()}" th:text="${p.plant().getName()}">새싹</span>
+                <span class="plant-name locked" th:unless="${p.owned()}"
+                      th:text="'목표 ' + ${p.plant().getUnlockThresholdDays()} + '일'">목표 1일</span>
+                <span class="plant-new" th:if="${p.isNew()}">NEW</span>
+            </div>
+        </div>
+
+        <p class="garden-next" th:if="${garden.nextPlantName() != null}"
+           th:text="'다음 식물(' + ${garden.nextPlantName()} + ')까지 ' + ${garden.daysToNextUnlock()} + '일'">
+            다음 식물까지 N일</p>
+        <p class="garden-next" th:unless="${garden.nextPlantName() != null}">모든 식물을 모았어요! 🎉</p>
+    </div>
+</details>
+</body>
+</html>

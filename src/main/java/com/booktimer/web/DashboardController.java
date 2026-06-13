@@ -1,5 +1,6 @@
 package com.booktimer.web;
 
+import com.booktimer.garden.GardenService;
 import com.booktimer.quote.QuoteService;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.ReadingContributionService;
@@ -30,15 +31,18 @@ public class DashboardController {
     private final CurrentUserService currentUserService;
     private final DashboardModel dashboardModel;
     private final ReadingContributionService contributionService;
+    private final GardenService gardenService;
     private final QuoteService quoteService;
 
     public DashboardController(CurrentUserService currentUserService,
                                DashboardModel dashboardModel,
                                ReadingContributionService contributionService,
+                               GardenService gardenService,
                                QuoteService quoteService) {
         this.currentUserService = currentUserService;
         this.dashboardModel = dashboardModel;
         this.contributionService = contributionService;
+        this.gardenService = gardenService;
         this.quoteService = quoteService;
     }
 
@@ -75,6 +79,10 @@ public class DashboardController {
 
         dashboardModel.populate(model, user);
         model.addAttribute("graph", contributionService.contributionGraph(user));
+        // 독서 정원(베타) — 잔디와 같은 입력(일자 집계·목표 이력)으로 보유 식물을 유도해 잔디 카드 안
+        // 접힌 패널에 싣는다(별도 /garden 페이지·엔드포인트 없음). 잔디와 마찬가지로 라이브 영역 밖이라
+        // 전체 페이지 렌더에서만 채운다(htmx 무리로드 시 다시 그릴 필요 없음).
+        model.addAttribute("garden", gardenService.view(user));
         // 인사말 자리에 띄울 작가 격언 — 전체 페이지 경로에서만 뽑는다(htmx 라이브 영역 밖이라
         // 측정 start/stop엔 안 바뀌고 페이지 로드 때만 갱신). DashboardModel에 두면 라이브 경로와
         // 공유돼 start/stop마다 헛돌므로 여기서만 싣는다(잔디 graph와 같은 이유).
