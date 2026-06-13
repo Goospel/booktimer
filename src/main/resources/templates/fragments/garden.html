@@ -60,6 +60,31 @@
            th:text="'다음 식물(' + ${garden.nextPlantName()} + ')까지 ' + ${garden.daysToNextUnlock()} + '일'">
             다음 식물까지 N일</p>
         <p class="garden-next" th:unless="${garden.nextPlantName() != null}">모든 식물을 모았어요! 🎉</p>
+
+        <!-- 수집 식물(장르): 어떤 장르의 책을 완독하면 그 장르 식물을 모은다. 시간축과 별개 수집축. -->
+        <div class="garden-dex-head">
+            <h3 class="garden-subtitle">수집 식물 (장르)</h3>
+            <span class="garden-progress"
+                  th:text="${garden.ownedGenreCount()} + '/' + ${garden.totalGenreCount()} + '종'">0/13종</span>
+        </div>
+        <div class="garden-grid">
+            <div class="plant-cell" th:each="g : ${garden.genrePlants()}"
+                 th:classappend="${g.owned()} ? 'owned' : 'plant-locked'"
+                 th:title="${g.owned()}
+                     ? ${g.genrePlant().getName()}
+                     : (${g.genrePlant().getGenreLabel()} != null
+                         ? ${g.genrePlant().getGenreLabel()} + ' 장르 완독 시'
+                         : '시드에 없는 장르 완독 시')">
+                <span class="plant-emoji" th:if="${g.owned()}" th:text="${g.genrePlant().getEmoji()}">🪷</span>
+                <span class="plant-emoji locked" th:unless="${g.owned()}" aria-hidden="true">🔒</span>
+                <span class="plant-name"
+                      th:classappend="${g.owned()} ? '' : 'locked'"
+                      th:text="${g.genrePlant().getGenreLabel()} != null
+                          ? ${g.genrePlant().getGenreLabel()}
+                          : ${g.genrePlant().getName()}">소설/시/희곡</span>
+            </div>
+        </div>
+        <p class="garden-next">📚 장르를 완독해 다양한 식물을 모아보세요</p>
     </div>
 </details>
 </body>

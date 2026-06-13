@@ -340,7 +340,10 @@ class DashboardControllerTest {
                 .andExpect(model().attributeExists("garden"))
                 .andReturn();
 
-        assertThat(result.getModelAndView().getModel().get("garden")).isInstanceOf(GardenView.class);
+        Object garden = result.getModelAndView().getModel().get("garden");
+        assertThat(garden).isInstanceOf(GardenView.class);
+        // 시간축뿐 아니라 장르 수집축 슬롯도 함께 실린다(카탈로그는 V36 시드, 테스트 H2엔 비어 non-null만 확인).
+        assertThat(((GardenView) garden).genrePlants()).isNotNull();
     }
 
     @Test

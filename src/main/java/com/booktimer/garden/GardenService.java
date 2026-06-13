@@ -1,5 +1,8 @@
 package com.booktimer.garden;
 
+import com.booktimer.book.Book;
+import com.booktimer.book.BookRepository;
+import com.booktimer.book.BookStatus;
 import com.booktimer.session.DailyReadingRecord;
 import com.booktimer.session.ReadingHistoryService;
 import com.booktimer.timer.GoalSchedule;
@@ -17,16 +20,23 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 독서 정원(트랙 A) 조회 유스케이스 — 보유 식물을 저장하지 않고 독서 실적에서 유도한다(부채 모델 N-058).
  *
- * <p>잔디({@code ReadingContributionService})와 같은 입력(일자별 집계·목표 변경 이력)을 쓴다 — "그날 목표를
- * 채운 날"의 누적 수로 식물을 해금한다. 목표를 올려도 옛 목표를 채운 과거 날이 소급 박탈되지 않게 날짜별
- * 목표로 판정하고(N-059), baseline 이전(가입 전) 날은 제외한다. "오늘"은 유저 타임존 자정 경계(N-010).
+ * <p>두 수집축을 한 화면에 조립한다:
+ * <ul>
+ *   <li><b>시간축</b>({@link Plant}) — 잔디({@code ReadingContributionService})와 같은 입력(일자별 집계·
+ *       목표 변경 이력)으로 "그날 목표를 채운 날"의 누적 수로 식물을 해금한다. 목표를 올려도 옛 목표를 채운
+ *       과거 날이 소급 박탈되지 않게 날짜별 목표로 판정하고(N-059), baseline 이전(가입 전) 날은 제외한다.
+ *       "오늘"은 유저 타임존 자정 경계(N-010).</li>
+ *   <li><b>장르축</b>({@link GenrePlant}) — 완독(FINISHED) 책의 장르 대분류를 모아 그 장르 식물을 보유로
+ *       친다. 완독만 집계해 파밍을 막고 책BTI와 신호를 일치시킨다(설계 §2.3).</li>
+ * </ul>
  *
- * <p>순수 계산은 {@link PlantUnlockCalculator}에 위임해 단위테스트로 전수 검증된다. 여기선 소스 배선
- * (일자 집계·목표 이력·카탈로그 조회)과 해금일·NEW·진척 조립만 한다.
+ * <p>순수 계산은 {@link PlantUnlockCalculator}·{@link GenreUnlockCalculator}에 위임해 단위테스트로 전수
+ * 검증된다. 여기선 소스 배선(일자 집계·목표 이력·완독책 조회·카탈로그 조회)과 조립만 한다.
  */
 @Service
 @Transactional(readOnly = true)
@@ -39,17 +49,23 @@ public class GardenService {
     static final int NEW_WINDOW_DAYS = 7;
 
     private final PlantRepository plantRepository;
+    private final GenrePlantRepository genrePlantRepository;
+    private final BookRepository bookRepository;
     private final ReadingHistoryService historyService;
     private final ReadingTimerRepository timerRepository;
     private final ReadingGoalChangeRepository goalChangeRepository;
     private final Clock clock;
 
     public GardenService(PlantRepository plantRepository,
+                         GenrePlantRepository genrePlantRepository,
+                         BookRepository bookRepository,
                          ReadingHistoryService historyService,
                          ReadingTimerRepository timerRepository,
                          ReadingGoalChangeRepository goalChangeRepository,
                          Clock clock) {
         this.plantRepository = plantRepository;
+        this.genrePlantRepository = genrePlantRepository;
+        this.bookRepository = bookRepository;
         this.historyService = historyService;
         this.timerRepository = timerRepository;
         this.goalChangeRepository = goalChangeRepository;
@@ -102,6 +118,17 @@ public class GardenService {
             }
         }
 
-        return new GardenView(states, ownedCount, catalog.size(), achievedDays, daysToNextUnlock, nextPlantName);
+        // 5) 장르축 — 완독책의 장르 대분류로 장르 식물 보유 유도(완독만, 파밍 방지·N-055 null 제외)
+        List<String> finishedCategories = bookRepository.findByUserOrderByCreatedAtDesc(user).stream()
+                .filter(b -> b.getStatus() == BookStatus.FINISHED)
+                .map(Book::getCategory)
+                .toList();
+        Set<String> ownedGenres = GenreUnlockCalculator.achievedGenres(finishedCategories);
+        List<GenrePlant> genreCatalog = genrePlantRepository.findAllByOrderByDisplayOrderAsc();
+        List<GenrePlantState> genrePlants = GenreUnlockCalculator.resolve(genreCatalog, ownedGenres);
+        int ownedGenreCount = (int) genrePlants.stream().filter(GenrePlantState::owned).count();
+
+        return new GardenView(states, ownedCount, catalog.size(), achievedDays, daysToNextUnlock, nextPlantName,
+                genrePlants, ownedGenreCount, genreCatalog.size());
     }
 }
