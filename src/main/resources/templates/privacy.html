@@ -2,6 +2,8 @@
 <html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
+    <!-- 방문 통계(GA4, 측정 ID 설정 시에만) -->
+    <th:block th:replace="~{analytics :: gtag}"></th:block>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>개인정보처리방침 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
@@ -54,13 +56,19 @@
         <p>이용자의 개인정보를 제3자에게 제공하지 않습니다. 다만 책 "구매" 링크는 알라딘 제휴 링크로 연결되며,
             링크를 누르면 알라딘 사이트로 이동합니다(이때 서비스가 개인정보를 함께 전달하지는 않습니다).</p>
 
-        <h2>6. 쿠키</h2>
+        <h2>6. 쿠키 및 방문 통계</h2>
         <p>로그인 상태 유지를 위해 세션 쿠키를 사용합니다. 쿠키는 로그아웃 또는 만료 시 제거됩니다.</p>
+        <p>서비스 개선을 위해 <strong>구글 애널리틱스(Google Analytics 4)</strong>를 사용해 방문·이용 통계를
+            수집합니다. 이를 위해 쿠키가 사용되며, 페이지 방문·이동 등 이용 행태 정보가 분석 목적으로
+            <strong>구글(Google)에 전송·처리</strong>됩니다. 이 정보는 개인을 직접 식별하기 위한 것이 아니라
+            전체 방문 추이·유입 경로 등을 파악하는 데 쓰입니다. 통계 수집을 원하지 않으면 브라우저의
+            <a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noopener">구글 애널리틱스 옵트아웃 부가기능</a>을
+            설치해 거부할 수 있습니다.</p>
 
         <h2>7. 문의처</h2>
         <p>개인정보 관련 문의: <a href="mailto:tlatldhs0504@naver.com">tlatldhs0504@naver.com</a></p>
 
-        <p class="legal-date">시행일: 2026-06-03 · 개정: 2026-06-11 (마케팅·재참여 안내 메일 수신 선택 동의 및 철회 방법 명시)</p>
+        <p class="legal-date">시행일: 2026-06-03 · 개정: 2026-06-13 (구글 애널리틱스 방문 통계 수집·전송 및 옵트아웃 방법 명시)</p>
     </section>
 
     <p class="link-row"><a th:href="@{/login}">로그인으로 돌아가기</a></p>
