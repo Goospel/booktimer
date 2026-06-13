@@ -18,7 +18,8 @@
         { "name": "BOOKTIMER_BASE_URL", "value": "https://booktimer.app" },
         { "name": "SPRING_MAIL_HOST", "value": "email-smtp.ap-northeast-2.amazonaws.com" },
         { "name": "SPRING_MAIL_PORT", "value": "587" },
-        { "name": "BOOKTIMER_EMAIL_ENABLED", "value": "true" }
+        { "name": "BOOKTIMER_EMAIL_ENABLED", "value": "true" },
+        { "name": "GA_MEASUREMENT_ID", "value": "G-JFVDPJ036E" }
       ],
       "secrets": [
         { "name": "SPRING_DATASOURCE_URL", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/SPRING_DATASOURCE_URL" },
