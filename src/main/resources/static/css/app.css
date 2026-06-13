@@ -735,6 +735,61 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 /* 트랙 B 미발견 "???" 미스터리 슬롯 — 조건을 숨긴 채 존재만 흐릿하게 드러낸다. */
 .garden-grid .plant-emoji.mystery { font-size: 1.5rem; line-height: 1.2; opacity: .5; }
 
+/* 대시보드 요약(summary fragment) — 전체 도감은 /garden으로 이전, 카드엔 진척 한 줄 + 도감 링크만 남긴다. */
+.garden-summary-progress { margin: 0 0 12px; color: var(--text); font-size: .86rem; word-break: keep-all; }
+.garden-dex-link {
+    display: inline-block;
+    padding: 8px 14px;
+    background: var(--sage-soft);
+    border-radius: var(--radius-sm);
+    color: var(--accent-hover);
+    font-size: .88rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+.garden-dex-link:hover { background: var(--accent); color: #fff; }
+
+/* === 독서 정원 도감 전용 페이지 (/garden) === */
+/* 축 탭·보유/미보유 필터는 Alpine 클라이언트 토글(x-show). no-JS면 x-show가 무시돼 전부 보이는 폴백(점진 향상). */
+.garden-page-progress { margin: 0 0 16px; color: var(--text); font-size: .9rem; word-break: keep-all; }
+.garden-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 18px;
+}
+.garden-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.garden-tab {
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--muted);
+    font-size: .82rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.garden-tab:hover { border-color: var(--accent); color: var(--accent-hover); }
+.garden-tab.active { background: var(--accent); border-color: transparent; color: #fff; }
+.garden-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text);
+    font-size: .82rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.garden-axis { margin-top: 22px; }
+.garden-axis:first-of-type { margin-top: 0; }
+.garden-axis-title { margin: 0; font-size: 1rem; color: var(--accent-hover); }
+.garden-back { margin: 16px 0 0; text-align: center; }
+.garden-back a { color: var(--muted); font-size: .85rem; text-decoration: none; }
+.garden-back a:hover { color: var(--accent-hover); }
+
 /* === 내 책장 (Book) === */
 .muted { color: var(--muted); }
 

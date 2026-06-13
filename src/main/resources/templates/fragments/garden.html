@@ -1,19 +1,20 @@
 <!DOCTYPE html>
 <!--
-  독서 정원(베타) 패널 fragment — 대시보드 잔디 카드 안 접힌 <details>로 싣는다.
+  독서 정원(베타) 요약 fragment — 대시보드 잔디 카드 안 접힌 <details>로 싣는다.
 
-  순수 CSS <details>/<summary>로 토글(JS 0). 처음엔 접혀(베타라 opt-in) 잔디만 보이고,
-  잔디 카드 우측 상단 화살표(▸)를 누르면 아래로 펼쳐져 정원이 나타난다. "개발 중(베타)" 배너로
-  빈약한 퀄리티를 납득시킨다. 보유 식물은 저장하지 않고 독서 실적에서 유도된다(GardenService).
+  전체 도감(시간·장르·레시피 3축 그리드)은 전용 페이지 /garden(templates/garden.html)으로 이전됐고,
+  대시보드에는 이 경량 요약만 남긴다 — 미니 정원(보유 식물) + 3축 진척 한 줄 + "정원 도감 →" 링크.
+  카드를 가볍게 해 대시보드 비대화를 막고, 깊은 도감 탐색은 전용 페이지로 분리한다(계획 §0.1).
 
-  PlantState/GardenView는 record라 메서드 호출 구문으로 접근한다(잔디 graph.weeks()와 동일 관례).
-  Plant는 JPA 엔티티라 getter(getName/getEmoji/...)로 읽는다.
+  순수 CSS <details>/<summary>로 토글(JS 0). 처음엔 접혀(베타라 opt-in) 잔디만 보이고, 잔디 카드 제목 옆
+  화살표(▸)를 누르면 아래로 펼쳐진다. 토글 인프라(.garden-toggle absolute·.garden-host)는 잔디 레이아웃과
+  맞물려 있어 그대로 유지한다(잔디 회귀 0). 발견 토스트는 발견 평가가 대시보드 진입 때 일어나므로 여기 둔다.
 
-  후속 재사용을 위해 패널을 fragment로 빼둔다(1차는 대시보드만 include).
+  PlantState/GardenView는 record라 메서드 호출 구문으로, Plant는 JPA 엔티티라 getter로 읽는다.
 -->
 <html xmlns:th="http://www.thymeleaf.org">
 <body>
-<details class="garden" th:fragment="panel(garden)">
+<details class="garden" th:fragment="summary(garden)">
     <summary class="garden-toggle">
         <span class="garden-toggle-label">정원</span>
         <span class="garden-arrow" aria-hidden="true">▸</span>
@@ -26,8 +27,7 @@
         <p class="garden-toast" th:if="${!garden.justDiscovered().isEmpty()}"
            th:text="'🎉 새 식물 발견! ' + ${#strings.listJoin(garden.justDiscovered(), ', ')}">🎉 새 식물 발견!</p>
 
-        <!-- 미니 정원: 보유한 식물만 -->
-        <h3 class="garden-subtitle">내 정원</h3>
+        <!-- 미니 정원: 보유한 시간축 식물만(전체 도감은 /garden으로 이전) -->
         <div class="garden-mine" th:if="${garden.ownedCount() > 0}">
             <th:block th:each="p : ${garden.plants()}" th:if="${p.owned()}">
                 <span class="plant-cell owned" th:title="${p.plant().getName()}">
@@ -39,81 +39,15 @@
             아직 심은 식물이 없어요. 오늘 목표를 채워 첫 새싹을 심어보세요 🌱
         </p>
 
-        <!-- 도감: 전체 카탈로그(보유·미보유 모두) -->
-        <div class="garden-dex-head">
-            <h3 class="garden-subtitle">도감</h3>
-            <span class="garden-progress"
-                  th:text="${garden.ownedCount()} + '/' + ${garden.totalCount()} + '종'">0/14종</span>
-        </div>
-        <div class="garden-grid">
-            <div class="plant-cell" th:each="p : ${garden.plants()}"
-                 th:classappend="${p.owned()} ? 'owned' : 'plant-locked'"
-                 th:title="${p.owned()}
-                     ? ${p.plant().getName()} + (${p.isNew()} ? ' · 최근 획득' : '')
-                     : ('목표 ' + ${p.plant().getUnlockThresholdDays()} + '일 달성 시')">
-                <span class="plant-emoji" th:if="${p.owned()}" th:text="${p.plant().getEmoji()}">🌱</span>
-                <span class="plant-emoji locked" th:unless="${p.owned()}" aria-hidden="true">🔒</span>
-                <span class="plant-name" th:if="${p.owned()}" th:text="${p.plant().getName()}">새싹</span>
-                <span class="plant-name locked" th:unless="${p.owned()}"
-                      th:text="'목표 ' + ${p.plant().getUnlockThresholdDays()} + '일'">목표 1일</span>
-                <span class="plant-new" th:if="${p.isNew()}">NEW</span>
-            </div>
-        </div>
+        <!-- 3축 진척 한 줄(시간·장르·레시피 합산) — 한눈에 수집 현황. 깊은 도감은 전용 페이지로. -->
+        <p class="garden-summary-progress"
+           th:text="'⏳ 시간 ' + ${garden.ownedCount()} + '/' + ${garden.totalCount()}
+               + ' · 🌸 장르 ' + ${garden.ownedGenreCount()} + '/' + ${garden.totalGenreCount()}
+               + ' · 🔍 레시피 ' + (${garden.recipePlants().size()} - ${garden.mysterySlotCount()}) + '/' + ${garden.recipePlants().size()} + ' 발견'">
+            ⏳ 시간 0/14 · 🌸 장르 0/13 · 🔍 레시피 0/8 발견</p>
 
-        <p class="garden-next" th:if="${garden.nextPlantName() != null}"
-           th:text="'다음 식물(' + ${garden.nextPlantName()} + ')까지 ' + ${garden.daysToNextUnlock()} + '일'">
-            다음 식물까지 N일</p>
-        <p class="garden-next" th:unless="${garden.nextPlantName() != null}">모든 식물을 모았어요! 🎉</p>
-
-        <!-- 수집 식물(장르): 어떤 장르의 책을 완독하면 그 장르 식물을 모은다. 시간축과 별개 수집축. -->
-        <div class="garden-dex-head">
-            <h3 class="garden-subtitle">수집 식물 (장르)</h3>
-            <span class="garden-progress"
-                  th:text="${garden.ownedGenreCount()} + '/' + ${garden.totalGenreCount()} + '종'">0/13종</span>
-        </div>
-        <div class="garden-grid">
-            <div class="plant-cell" th:each="g : ${garden.genrePlants()}"
-                 th:classappend="${g.owned()} ? 'owned' : 'plant-locked'"
-                 th:title="${g.owned()}
-                     ? ${g.genrePlant().getName()}
-                     : (${g.genrePlant().getGenreLabel()} != null
-                         ? ${g.genrePlant().getGenreLabel()} + ' 장르 완독 시'
-                         : '시드에 없는 장르 완독 시')">
-                <span class="plant-emoji" th:if="${g.owned()}" th:text="${g.genrePlant().getEmoji()}">🪷</span>
-                <span class="plant-emoji locked" th:unless="${g.owned()}" aria-hidden="true">🔒</span>
-                <span class="plant-name"
-                      th:classappend="${g.owned()} ? '' : 'locked'"
-                      th:text="${g.genrePlant().getGenreLabel()} != null
-                          ? ${g.genrePlant().getGenreLabel()}
-                          : ${g.genrePlant().getName()}">소설/시/희곡</span>
-            </div>
-        </div>
-        <p class="garden-next">📚 장르를 완독해 다양한 식물을 모아보세요</p>
-
-        <!-- 숨은 레시피(트랙 B): 완독+읽고싶음 책의 '조합'을 발견하면 얻는 식물. 어떤 조합인지는 숨긴다
-             (발견 자체가 재미). 미발견은 조건을 가린 "???" 미스터리 슬롯으로 노출 — "뭔가 더 있다"는
-             호기심만 준다(설계 §2.5). 발견은 영구 저장돼 책장이 바뀌어도 유지된다(§2.2). -->
-        <div class="garden-dex-head">
-            <h3 class="garden-subtitle">숨은 레시피</h3>
-            <span class="garden-progress"
-                  th:text="(${garden.recipePlants().size()} - ${garden.mysterySlotCount()}) + '/' + ${garden.recipePlants().size()} + '종 발견'">0/8종 발견</span>
-        </div>
-        <div class="garden-grid" th:if="${!garden.recipePlants().isEmpty()}">
-            <div class="plant-cell" th:each="r : ${garden.recipePlants()}"
-                 th:classappend="${r.discovered()} ? 'owned' : 'plant-locked'"
-                 th:title="${r.discovered()}
-                     ? ${r.recipePlant().getName()} + ' · ' + ${r.recipePlant().getStory()}
-                     : '아직 발견하지 못한 조합'">
-                <span class="plant-emoji" th:if="${r.discovered()}" th:text="${r.recipePlant().getEmoji()}">💮</span>
-                <span class="plant-emoji mystery" th:unless="${r.discovered()}" aria-hidden="true">❔</span>
-                <span class="plant-name" th:if="${r.discovered()}" th:text="${r.recipePlant().getName()}">연꽃</span>
-                <span class="plant-name locked" th:unless="${r.discovered()}">???</span>
-            </div>
-        </div>
-        <p class="garden-next" th:if="${garden.mysterySlotCount() > 0}"
-           th:text="'🔍 아직 발견 못 한 조합이 ' + ${garden.mysterySlotCount()} + '개 숨어 있어요'">숨은 조합</p>
-        <p class="garden-next"
-           th:if="${garden.mysterySlotCount() == 0 and !garden.recipePlants().isEmpty()}">🎉 모든 숨은 레시피를 발견했어요!</p>
+        <!-- 전체 도감(축 탭·보유/미보유 필터) 전용 페이지로 -->
+        <a class="garden-dex-link" th:href="@{/garden}">🌱 정원 도감 보기 →</a>
     </div>
 </details>
 </body>
