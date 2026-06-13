@@ -44,6 +44,7 @@
 - [T-046. MockMvc nullValue 모델 단언은 속성이 없어도 통과한다 — 폴백은 실제 반대값으로 RED 검증](#t-046-mockmvc-nullvalue-모델-단언은-속성이-없어도-통과한다--폴백은-실제-반대값으로-red-검증)
 - [T-047. 외부 API를 http로 호출하면 CDN(CloudFront)이 https로 301 → RestClient가 미추적해 응답이 HTML이라 JSON 파싱 실패(운영 알라딘 검색 0건)](#t-047-외부-api를-http로-호출하면-cdncloudfront이-https로-301--restclient가-미추적해-응답이-html이라-json-파싱-실패운영-알라딘-검색-0건)
 - [T-048. gh pr merge --squash는 PR 제목이 아니라 커밋 메시지를 squash subject로 쓴다 — PR 제목만 정정하면 main 커밋 제목이 어긋난다](#t-048-gh-pr-merge---squash는-pr-제목이-아니라-커밋-메시지를-squash-subject로-쓴다--pr-제목만-정정하면-main-커밋-제목이-어긋난다)
+- [T-049. head에 작은 스크립트/마크업을 추가했더니 특정 큰 페이지만 500(IllegalStateException) — 응답 버퍼 임계 + CSRF 세션](#t-049-head에-작은-스크립트마크업을-추가했더니-특정-큰-페이지만-500illegalstateexception--응답-버퍼-임계--csrf-세션)
 
 ---
 
@@ -964,6 +965,21 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 
 ---
 
+## T-049. head에 작은 스크립트/마크업을 추가했더니 특정 큰 페이지만 500(IllegalStateException) — 응답 버퍼 임계 + CSRF 세션
+
+**증상**: GA4 fragment(`head`에 gtag 몇백 바이트)를 전 템플릿에 추가(#338)했더니 **`/personality`만** 500. 다른 32개 페이지는 정상. 예외는 `IllegalStateException: Cannot create a session after the response has been committed`, Thymeleaf `th:action`(SpringActionTagProcessor) 처리 중. 텍스트 충돌도 없고, 그 PR이 personality를 건드린 적도 없어 헷갈린다.
+
+**원인**: personality는 서술·기록 카드·인라인 `<style>`로 응답이 커서 **버퍼(기본 ~8KB)가 렌더 도중 커밋**되기 직전이었다. head에 더해진 몇백 바이트가 버퍼를 임계 너머로 밀어, 맨 아래 CSRF 폼이 렌더될 때 토큰이 세션을 새로 만들려다(`getSession(true)`) 커밋 후라 실패. 개념·메커니즘은 learning-notes **N-077**.
+
+**해결 / 예방**:
+- **근본 수정**: 그 컨트롤러 GET 핸들러에서 렌더 전에 CSRF 토큰을 선확정한다 — `Object csrf = request.getAttribute(CsrfToken.class.getName()); if (csrf instanceof CsrfToken t) t.getToken();`(`DashboardController`가 이미 쓰던 패턴). 세션 생성을 응답 커밋 전으로 당긴다.
+- **진단 격리**: "head에 X 추가 → 특정 페이지만 500"이면 그 페이지를 **추가 전 버전으로 되돌려 테스트** → 통과하면 그 추가가 방아쇠(버퍼 임계 확정). 범인은 추가가 아니라 *세션 선확정 누락*.
+- **예방 스캔**: `th:action` 폼이 맨 아래 있는 **큰 SSR 페이지**는 같은 잠재 버그. `DashboardController`처럼 토큰 선확정을 미리 넣어둔다. (전역 버퍼 크기 증가는 다른 페이지 부작용 위험이라 차선.)
+
+**관련**: N-077(메커니즘·개념), N-078(이 회귀가 semantic merge conflict로 드러남), T-002(머지 후 사후 수정 불가라 머지 전 검증 중요), changelog #340.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1016,3 +1032,4 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 | 2026-06-12 | T-046 (MockMvc `model().attribute(name, nullValue())`가 속성 부재여도 통과 — TDD RED에서 폴백 미구현인데 초록, "속성 없음"과 "속성=null"을 못 가림 / null·폴백은 nullValue() 말고 실제 반대값(visibility=PRIVATE로 비공개만 남는지)으로 단언해야 Red, N-055 양방향, PR #327) |
 | 2026-06-12 | T-047 (운영 알라딘 검색 전부 0건 — 알라딘 CloudFront가 http→https 301 강제하는데 RestClient가 미추적해 응답 본문이 리다이렉트 HTML('<html>') → parse()가 JsonParseException('<')로 빈 결과 / 브라우저는 3xx 자동추적해 정상이라 "PC는 되고 서버만 0건" / 해결=ENDPOINT https로(301 제거+TLS), 진단=curl -D -로 301·Location 확인·로그 '<', 서버출처 재현은 CloudShell / N-074, T-030, PR #329) |
 | 2026-06-12 | T-048 (gh pr merge --squash는 --subject 미지정 시 PR 제목이 아니라 브랜치 커밋 메시지(단일=그 제목, 복수=첫/HEAD 커밋)를 squash subject로 씀 — 웹 UI squash 기본(=PR 제목)과 달라 gh pr edit로 PR 제목만 정정하면 무력화, 이번 N-074→N-075 정정이 main 커밋 제목엔 N-074로 박힘 / 해결=gh pr merge --squash --subject/--body 명시 또는 커밋 메시지 동기화(amend), 사후엔 main force push 금지(T-002)라 불가 → 머지 전에 / 영향은 제목뿐(파일·changelog는 정확) / 한글 메시지 경로 T-026, N-070) |
+| 2026-06-13 | T-049 (head에 작은 스크립트(GA4 #338) 추가가 응답 버퍼 임계 근처였던 큰 페이지(personality)만 500 — 버퍼 커밋 후 맨 아래 CSRF 폼(th:action)이 세션 생성 못 해 IllegalStateException / 다른 32템플릿 정상·그 PR이 personality 안 건드림이라 헷갈림 / 해결=컨트롤러 GET서 렌더 전 CsrfToken.getToken() 선확정(DashboardController 패턴), 세션 생성을 커밋 전으로 / 진단=그 페이지를 추가 전으로 격리 테스트해 방아쇠 확정(범인은 추가 아닌 선확정 누락) / 예방=th:action 폼 맨 아래 큰 페이지에 토큰 선확정 미리 / 개념 N-077, semantic conflict N-078, PR #340) |
