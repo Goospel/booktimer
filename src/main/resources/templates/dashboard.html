@@ -115,8 +115,9 @@
         </a>
     </nav>
 
-    <!-- 독서 잔디 (지난 1년) — 라이브 영역 밖이라 htmx 무리로드 대상이 아님. /history와 동일 컴포넌트. -->
-    <section class="card">
+    <!-- 독서 잔디 (지난 1년) — 라이브 영역 밖이라 htmx 무리로드 대상이 아님. /history와 동일 컴포넌트.
+         garden-host = 베타 정원 토글(.garden-toggle)을 카드 우측 상단에 absolute 배치하기 위한 기준. -->
+    <section class="card garden-host">
         <div class="grass-head">
             <h2>독서 잔디</h2>
             <span class="grass-streak" th:title="${graph.growthStage().label()}">
@@ -162,6 +163,8 @@
                 </div>
             </div>
         </div>
+        <!-- 베타 독서 정원 — 잔디 아래로 펼쳐지는 접힌 패널(기본 접힘). 토글 화살표는 카드 우측 상단. -->
+        <th:block th:replace="~{fragments/garden :: panel(${garden})}"></th:block>
     </section>
 
     <!-- 바로가기: 아이콘+라벨 타일 2열 그리드. 좁은 컬럼에서도 라벨이 글자 단위로

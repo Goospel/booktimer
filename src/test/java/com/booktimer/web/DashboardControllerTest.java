@@ -3,6 +3,7 @@ package com.booktimer.web;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
+import com.booktimer.garden.GardenView;
 import com.booktimer.quote.Quote;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
@@ -327,6 +328,19 @@ class DashboardControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(model().attribute("emailVerified", true))
                 .andExpect(content().string(not(containsString("/verify-email/resend")))); // 배너 숨김
+    }
+
+    @Test
+    @DisplayName("GET /: 대시보드에 독서 정원(베타) 뷰를 함께 싣는다 (별도 /garden 엔드포인트 없음)")
+    void dashboard_includesGardenView() throws Exception {
+        registerOnboarded("gardenview@booktimer.com", "정원", today());
+
+        var result = mockMvc.perform(get("/").with(user("gardenview@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeExists("garden"))
+                .andReturn();
+
+        assertThat(result.getModelAndView().getModel().get("garden")).isInstanceOf(GardenView.class);
     }
 
     @Test

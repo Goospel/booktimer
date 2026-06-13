@@ -624,6 +624,98 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 }
 .grass-legend i { display: inline-block; }
 
+/* === 독서 정원 (베타) — 잔디 카드 안 접힌 <details> 패널 === */
+/* 처음엔 접혀(베타라 opt-in) 잔디만 보이고, 토글(▸)을 누르면 잔디 아래로 펼쳐진다. JS 0.
+   토글 summary는 카드(.garden-host = .card) 우측 상단에 absolute로 띄워 잔디 헤더 옆 화살표처럼 보이게 한다.
+   접힘일 때 details는 거의 높이를 안 차지(summary가 absolute라 흐름 밖)해 잔디 바로 아래 공간을 비운다. */
+.garden { margin: 0; }
+.garden-toggle {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    color: var(--accent);
+    font-size: .85rem;
+    font-weight: 600;
+    list-style: none;                                  /* Firefox 기본 마커 제거 */
+    user-select: none;
+}
+.garden-toggle::-webkit-details-marker { display: none; }  /* WebKit 기본 마커 제거 */
+.garden-toggle:hover { color: var(--accent-hover); }
+.garden-arrow { display: inline-block; transition: transform .15s ease; }
+.garden[open] .garden-arrow { transform: rotate(90deg); }
+
+/* ⚠️ <details> 접힘이 실제로 동작하려면 닫혔을 때 패널을 author 규칙으로 직접 숨긴다 — 자식의
+   display:flex/grid(author)가 UA의 닫힘-숨김(details:not([open])>*{display:none})을 이기는 함정(#193·#698 동일). */
+.garden:not([open]) .garden-panel { display: none; }
+.garden-panel { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+
+.garden-beta {
+    margin: 0 0 14px;
+    padding: 8px 12px;
+    background: var(--sage-soft);
+    border-radius: var(--radius-sm);
+    color: var(--accent-hover);
+    font-size: .85rem;
+    font-weight: 600;
+    word-break: keep-all;
+}
+.garden-subtitle { margin: 0 0 8px; font-size: .95rem; color: var(--accent-hover); }
+.garden-mine {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 16px;
+    padding: 10px;
+    background: var(--sage-soft);
+    border-radius: var(--radius-sm);
+}
+.garden-mine .plant-emoji { font-size: 1.6rem; line-height: 1.2; }
+.garden-empty { margin: 0 0 16px; color: var(--muted); font-size: .88rem; word-break: keep-all; }
+
+.garden-dex-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.garden-progress { color: var(--muted); font-size: .8rem; white-space: nowrap; }
+
+/* 도감 그리드 — 자동 채움 칸(반응형). 보유=이모지+이름, 미보유=🔒+목표일. */
+.garden-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+    gap: 8px;
+    margin: 8px 0 12px;
+}
+.garden-grid .plant-cell {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 4px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    text-align: center;
+}
+.garden-grid .plant-cell.owned { background: var(--sage-soft); border-color: transparent; }
+.garden-grid .plant-cell.plant-locked { background: transparent; }
+.garden-grid .plant-emoji { font-size: 1.5rem; line-height: 1.2; }
+.garden-grid .plant-emoji.locked { filter: grayscale(1); opacity: .55; }
+.garden-grid .plant-name { font-size: .72rem; color: var(--text); word-break: keep-all; }
+.garden-grid .plant-name.locked { color: var(--muted); }
+.plant-new {
+    position: absolute;
+    top: -6px;
+    right: -4px;
+    padding: 1px 5px;
+    background: var(--ok);
+    color: #fff;
+    font-size: .6rem;
+    font-weight: 700;
+    border-radius: 8px;
+}
+.garden-next { margin: 0; color: var(--muted); font-size: .82rem; word-break: keep-all; }
+
 /* === 내 책장 (Book) === */
 .muted { color: var(--muted); }
 
