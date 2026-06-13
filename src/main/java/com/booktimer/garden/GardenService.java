@@ -14,10 +14,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -33,10 +35,18 @@ import java.util.Set;
  *       "오늘"은 유저 타임존 자정 경계(N-010).</li>
  *   <li><b>장르축</b>({@link GenrePlant}) — 완독(FINISHED) 책의 장르 대분류를 모아 그 장르 식물을 보유로
  *       친다. 완독만 집계해 파밍을 막고 책BTI와 신호를 일치시킨다(설계 §2.3).</li>
+ *   <li><b>레시피축(트랙 B)</b>({@link RecipePlant}) — 완독+읽고싶음 책의 <b>조합</b>을 발견하면 얻는다.
+ *       시간축·장르축과 달리 발견을 <b>저장</b>한다({@link UserDiscoveredPlant}) — 발견은 이벤트라 박아야
+ *       하고 책장이 바뀌어도 보유가 유지돼야 하기 때문(설계 §2.2). 그래서 조회 시 평가→저장이 일어난다.</li>
  * </ul>
  *
- * <p>순수 계산은 {@link PlantUnlockCalculator}·{@link GenreUnlockCalculator}에 위임해 단위테스트로 전수
- * 검증된다. 여기선 소스 배선(일자 집계·목표 이력·완독책 조회·카탈로그 조회)과 조립만 한다.
+ * <p>순수 계산은 {@link PlantUnlockCalculator}·{@link GenreUnlockCalculator}·{@link RecipeEvaluator}에
+ * 위임해 단위테스트로 전수 검증된다. 여기선 소스 배선(일자 집계·목표 이력·책장 조회·카탈로그 조회)과 조립,
+ * 그리고 트랙 B 발견 저장만 한다.
+ *
+ * <p><b>트랜잭션</b>: 트랙 A는 읽기지만 트랙 B는 발견을 저장(쓰기)한다. 조회가 쓰기를 유발하는 패턴이라
+ * (설계 §2.1 옵션 B — 대시보드 조회 시 평가) {@link #view}를 읽기-쓰기 트랜잭션으로 둔다. 중복 발견은
+ * {@code uk(user_id, plant_code)}와 {@code existsByUserAndPlantCode} 가드로 막는다(멱등).
  */
 @Service
 @Transactional(readOnly = true)
@@ -50,6 +60,8 @@ public class GardenService {
 
     private final PlantRepository plantRepository;
     private final GenrePlantRepository genrePlantRepository;
+    private final RecipePlantRepository recipePlantRepository;
+    private final UserDiscoveredPlantRepository discoveredPlantRepository;
     private final BookRepository bookRepository;
     private final ReadingHistoryService historyService;
     private final ReadingTimerRepository timerRepository;
@@ -58,6 +70,8 @@ public class GardenService {
 
     public GardenService(PlantRepository plantRepository,
                          GenrePlantRepository genrePlantRepository,
+                         RecipePlantRepository recipePlantRepository,
+                         UserDiscoveredPlantRepository discoveredPlantRepository,
                          BookRepository bookRepository,
                          ReadingHistoryService historyService,
                          ReadingTimerRepository timerRepository,
@@ -65,6 +79,8 @@ public class GardenService {
                          Clock clock) {
         this.plantRepository = plantRepository;
         this.genrePlantRepository = genrePlantRepository;
+        this.recipePlantRepository = recipePlantRepository;
+        this.discoveredPlantRepository = discoveredPlantRepository;
         this.bookRepository = bookRepository;
         this.historyService = historyService;
         this.timerRepository = timerRepository;
@@ -72,6 +88,8 @@ public class GardenService {
         this.clock = clock;
     }
 
+    // 트랙 B 발견을 저장하므로 읽기-쓰기 트랜잭션(클래스 기본 readOnly=true를 메서드에서 덮어쓴다).
+    @Transactional
     public GardenView view(User user) {
         ZoneId zone = ZoneId.of(user.getTimezone());
         LocalDate today = LocalDate.ofInstant(clock.instant(), zone);
@@ -118,8 +136,11 @@ public class GardenService {
             }
         }
 
+        // 책장은 트랙 A 장르축·트랙 B 레시피축이 함께 쓰므로 한 번만 조회한다.
+        List<Book> books = bookRepository.findByUserOrderByCreatedAtDesc(user);
+
         // 5) 장르축 — 완독책의 장르 대분류로 장르 식물 보유 유도(완독만, 파밍 방지·N-055 null 제외)
-        List<String> finishedCategories = bookRepository.findByUserOrderByCreatedAtDesc(user).stream()
+        List<String> finishedCategories = books.stream()
                 .filter(b -> b.getStatus() == BookStatus.FINISHED)
                 .map(Book::getCategory)
                 .toList();
@@ -128,7 +149,54 @@ public class GardenService {
         List<GenrePlantState> genrePlants = GenreUnlockCalculator.resolve(genreCatalog, ownedGenres);
         int ownedGenreCount = (int) genrePlants.stream().filter(GenrePlantState::owned).count();
 
+        // 6) 레시피축(트랙 B) — 책장 스냅샷으로 만족된 레시피를 평가하고, 새로 발견한 것을 저장한다.
+        ShelfSnapshot snapshot = shelfSnapshot(books);
+        Set<String> satisfied = RecipeEvaluator.satisfiedPlantCodes(snapshot);
+        Set<String> alreadyDiscovered = discoveredPlantRepository.findByUser(user).stream()
+                .map(UserDiscoveredPlant::getPlantCode)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        Set<String> newlyDiscovered = new LinkedHashSet<>();
+        Instant now = clock.instant();
+        for (String code : satisfied) {
+            // existsBy 가드 + uk 제약으로 중복 발견을 막는다(멱등·동시성 안전망).
+            if (!alreadyDiscovered.contains(code)
+                    && !discoveredPlantRepository.existsByUserAndPlantCode(user, code)) {
+                discoveredPlantRepository.save(UserDiscoveredPlant.of(user, code, now));
+                newlyDiscovered.add(code);
+            }
+        }
+        Set<String> allDiscovered = new LinkedHashSet<>(alreadyDiscovered);
+        allDiscovered.addAll(newlyDiscovered);
+
+        List<RecipePlant> recipeCatalog = recipePlantRepository.findAllByOrderByDisplayOrderAsc();
+        List<DiscoveredPlantState> recipePlants = recipeCatalog.stream()
+                .map(rp -> new DiscoveredPlantState(rp, allDiscovered.contains(rp.getCode())))
+                .toList();
+        int discoveredCount = (int) recipePlants.stream().filter(DiscoveredPlantState::discovered).count();
+        int mysterySlotCount = recipeCatalog.size() - discoveredCount;
+        // 토스트용 — 이번에 새로 발견된 식물 이름(진열 순서, 카탈로그에 있는 것만).
+        List<String> justDiscovered = recipeCatalog.stream()
+                .filter(rp -> newlyDiscovered.contains(rp.getCode()))
+                .map(RecipePlant::getName)
+                .toList();
+
         return new GardenView(states, ownedCount, catalog.size(), achievedDays, daysToNextUnlock, nextPlantName,
-                genrePlants, ownedGenreCount, genreCatalog.size());
+                genrePlants, ownedGenreCount, genreCatalog.size(),
+                recipePlants, mysterySlotCount, justDiscovered);
+    }
+
+    /** 책장을 트랙 B 레시피 평가 입력으로 집계한다 — 완독·읽고싶음 책의 작가·카테고리만 뽑는다. */
+    private static ShelfSnapshot shelfSnapshot(List<Book> books) {
+        List<ShelfSnapshot.BookMeta> finished = new ArrayList<>();
+        List<ShelfSnapshot.BookMeta> wantToRead = new ArrayList<>();
+        for (Book book : books) {
+            ShelfSnapshot.BookMeta meta = new ShelfSnapshot.BookMeta(book.getAuthor(), book.getCategory());
+            if (book.getStatus() == BookStatus.FINISHED) {
+                finished.add(meta);
+            } else if (book.getStatus() == BookStatus.WANT_TO_READ) {
+                wantToRead.add(meta);
+            }
+        }
+        return ShelfSnapshot.of(finished, wantToRead);
     }
 }

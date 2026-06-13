@@ -344,6 +344,9 @@ class DashboardControllerTest {
         assertThat(garden).isInstanceOf(GardenView.class);
         // 시간축뿐 아니라 장르 수집축 슬롯도 함께 실린다(카탈로그는 V36 시드, 테스트 H2엔 비어 non-null만 확인).
         assertThat(((GardenView) garden).genrePlants()).isNotNull();
+        // 트랙 B 레시피축(발견 식물·미스터리 슬롯)도 배선된다(카탈로그는 V37 시드, 테스트 H2엔 비어 non-null만 확인).
+        assertThat(((GardenView) garden).recipePlants()).isNotNull();
+        assertThat(((GardenView) garden).justDiscovered()).isNotNull();
     }
 
     @Test

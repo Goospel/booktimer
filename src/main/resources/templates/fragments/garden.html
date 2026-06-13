@@ -22,6 +22,10 @@
     <div class="garden-panel">
         <p class="garden-beta">🚧 베타 · 정원은 개발 중이에요. 곧 더 다양한 식물로 채워집니다.</p>
 
+        <!-- 발견 토스트: 이번 조회에서 새로 발견된 숨은 레시피 식물을 알린다(저장된 발견 이벤트, 트랙 B). -->
+        <p class="garden-toast" th:if="${!garden.justDiscovered().isEmpty()}"
+           th:text="'🎉 새 식물 발견! ' + ${#strings.listJoin(garden.justDiscovered(), ', ')}">🎉 새 식물 발견!</p>
+
         <!-- 미니 정원: 보유한 식물만 -->
         <h3 class="garden-subtitle">내 정원</h3>
         <div class="garden-mine" th:if="${garden.ownedCount() > 0}">
@@ -85,6 +89,31 @@
             </div>
         </div>
         <p class="garden-next">📚 장르를 완독해 다양한 식물을 모아보세요</p>
+
+        <!-- 숨은 레시피(트랙 B): 완독+읽고싶음 책의 '조합'을 발견하면 얻는 식물. 어떤 조합인지는 숨긴다
+             (발견 자체가 재미). 미발견은 조건을 가린 "???" 미스터리 슬롯으로 노출 — "뭔가 더 있다"는
+             호기심만 준다(설계 §2.5). 발견은 영구 저장돼 책장이 바뀌어도 유지된다(§2.2). -->
+        <div class="garden-dex-head">
+            <h3 class="garden-subtitle">숨은 레시피</h3>
+            <span class="garden-progress"
+                  th:text="(${garden.recipePlants().size()} - ${garden.mysterySlotCount()}) + '/' + ${garden.recipePlants().size()} + '종 발견'">0/8종 발견</span>
+        </div>
+        <div class="garden-grid" th:if="${!garden.recipePlants().isEmpty()}">
+            <div class="plant-cell" th:each="r : ${garden.recipePlants()}"
+                 th:classappend="${r.discovered()} ? 'owned' : 'plant-locked'"
+                 th:title="${r.discovered()}
+                     ? ${r.recipePlant().getName()} + ' · ' + ${r.recipePlant().getStory()}
+                     : '아직 발견하지 못한 조합'">
+                <span class="plant-emoji" th:if="${r.discovered()}" th:text="${r.recipePlant().getEmoji()}">💮</span>
+                <span class="plant-emoji mystery" th:unless="${r.discovered()}" aria-hidden="true">❔</span>
+                <span class="plant-name" th:if="${r.discovered()}" th:text="${r.recipePlant().getName()}">연꽃</span>
+                <span class="plant-name locked" th:unless="${r.discovered()}">???</span>
+            </div>
+        </div>
+        <p class="garden-next" th:if="${garden.mysterySlotCount() > 0}"
+           th:text="'🔍 아직 발견 못 한 조합이 ' + ${garden.mysterySlotCount()} + '개 숨어 있어요'">숨은 조합</p>
+        <p class="garden-next"
+           th:if="${garden.mysterySlotCount() == 0 and !garden.recipePlants().isEmpty()}">🎉 모든 숨은 레시피를 발견했어요!</p>
     </div>
 </details>
 </body>

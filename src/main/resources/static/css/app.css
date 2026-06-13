@@ -721,6 +721,19 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     border-radius: 8px;
 }
 .garden-next { margin: 0; color: var(--muted); font-size: .82rem; word-break: keep-all; }
+/* 트랙 B 발견 토스트 — 이번 조회에서 새로 발견된 숨은 레시피 식물을 알린다. */
+.garden-toast {
+    margin: 0 0 14px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--sage-soft);
+    color: var(--accent-hover);
+    font-size: .86rem;
+    font-weight: 600;
+    word-break: keep-all;
+}
+/* 트랙 B 미발견 "???" 미스터리 슬롯 — 조건을 숨긴 채 존재만 흐릿하게 드러낸다. */
+.garden-grid .plant-emoji.mystery { font-size: 1.5rem; line-height: 1.2; opacity: .5; }
 
 /* === 내 책장 (Book) === */
 .muted { color: var(--muted); }
