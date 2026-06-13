@@ -116,7 +116,8 @@
     </nav>
 
     <!-- 독서 잔디 (지난 1년) — 라이브 영역 밖이라 htmx 무리로드 대상이 아님. /history와 동일 컴포넌트.
-         garden-host = 베타 정원 토글(.garden-toggle)을 카드 우측 상단에 absolute 배치하기 위한 기준. -->
+         garden-host = 베타 정원 토글(.garden-toggle)을 제목("독서 잔디") 옆에 absolute로 띄우기 위한 기준
+         (연속일수 뱃지가 있는 우측을 피해 좌측 제목 옆에 둬 겹침 방지 — app.css .garden-toggle 참고). -->
     <section class="card garden-host">
         <div class="grass-head">
             <h2>독서 잔디</h2>
@@ -163,7 +164,7 @@
                 </div>
             </div>
         </div>
-        <!-- 베타 독서 정원 — 잔디 아래로 펼쳐지는 접힌 패널(기본 접힘). 토글 화살표는 카드 우측 상단. -->
+        <!-- 베타 독서 정원 — 잔디 아래로 펼쳐지는 접힌 패널(기본 접힘). 토글(정원 ▸)은 제목 옆(좌측) 상단에 absolute. -->
         <th:block th:replace="~{fragments/garden :: panel(${garden})}"></th:block>
     </section>
 
