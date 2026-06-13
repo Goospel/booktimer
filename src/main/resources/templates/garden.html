@@ -15,6 +15,8 @@
 <html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
+    <!-- 방문 통계(GA4, 측정 ID 설정 시에만) -->
+    <th:block th:replace="~{analytics :: gtag}"></th:block>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>독서 정원 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">

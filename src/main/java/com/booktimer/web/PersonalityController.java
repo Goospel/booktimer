@@ -5,6 +5,8 @@ import com.booktimer.personality.ReadingPersonalityService;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -47,7 +49,7 @@ public class PersonalityController {
     }
 
     @GetMapping("/personality")
-    public String personality(Principal principal, Model model) {
+    public String personality(Principal principal, HttpServletRequest request, Model model) {
         User user = currentUserService.resolve(principal);
         ReadingPersonality result = personalityService.currentPersonality(user); // 대표(필요 시 부트스트랩)
         model.addAttribute("nickname", user.getNickname());
@@ -57,6 +59,14 @@ public class PersonalityController {
         // "다시 분석" 일일 잔여 횟수(버튼 비활성·안내용) — 읽기만(상태 불변)
         model.addAttribute("refreshRemaining", user.remainingPersonalityRefreshes(todayFor(user)));
         model.addAttribute("refreshLimit", User.DAILY_PERSONALITY_REFRESH_LIMIT);
+        // 렌더 전에 CSRF 토큰을 미리 확정(세션 생성)한다. personality는 서술·기록·인라인 style로 페이지가 커서,
+        // 맨 아래 '다시 분석' 폼(th:action, CSRF 숨김필드) 렌더 전에 응답 버퍼가 커밋될 수 있는데, 그 뒤
+        // CSRF 토큰이 세션을 새로 만들려 하면 "response already committed"로 깨진다(IllegalStateException).
+        // GA4 head 스크립트(#338)가 버퍼를 임계 너머로 밀어 표면화됐다(#339). DashboardController와 동일 방어.
+        Object csrf = request.getAttribute(CsrfToken.class.getName());
+        if (csrf instanceof CsrfToken token) {
+            token.getToken();
+        }
         return "personality";
     }
 

@@ -2,6 +2,8 @@
 <html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
+    <!-- 방문 통계(GA4, 측정 ID 설정 시에만) -->
+    <th:block th:replace="~{analytics :: gtag}"></th:block>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <!-- CSRF 토큰을 head에서 미리 해석해 세션을 페이지 최상단에서 생성한다 — 본문이 길어져
          첫 POST 폼이 응답 버퍼 commit 경계 뒤로 밀려도 세션 생성 실패("response committed")를 막는다. -->
