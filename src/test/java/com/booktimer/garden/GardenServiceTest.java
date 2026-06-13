@@ -1,5 +1,8 @@
 package com.booktimer.garden;
 
+import com.booktimer.book.Book;
+import com.booktimer.book.BookRepository;
+import com.booktimer.book.BookStatus;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.user.Role;
@@ -39,11 +42,15 @@ class GardenServiceTest {
     @Autowired
     private PlantRepository plantRepository;
     @Autowired
+    private GenrePlantRepository genrePlantRepository;
+    @Autowired
+    private BookRepository bookRepository;
+    @Autowired
     private GardenService gardenService;
     @Autowired
     private Clock clock;
 
-    // 테스트 카탈로그(4종) — 운영 시드(V35·14종)와 디커플해 배선만 본다.
+    // 테스트 카탈로그 — 운영 시드(V35·V36)와 디커플해 배선만 본다.
     // Flyway는 테스트에서 꺼져 있어(application.properties) 시드가 안 도므로 직접 심는다.
     @BeforeEach
     void seedCatalog() {
@@ -51,6 +58,16 @@ class GardenServiceTest {
         plantRepository.save(Plant.of("herb", "허브", "🌿", 2, 3));
         plantRepository.save(Plant.of("clover", "클로버", "☘️", 3, 5));
         plantRepository.save(Plant.of("pot", "화분 모종", "🪴", 4, 7));
+
+        genrePlantRepository.save(GenrePlant.of("novel", "소설/시/희곡", "소설나무", "🌳", 1));
+        genrePlantRepository.save(GenrePlant.of("econ", "경제경영", "경제선인장", "🌵", 2));
+        genrePlantRepository.save(GenrePlant.of("wildflower", null, "이름 모를 들꽃", "🌼", 99));
+    }
+
+    /** 주어진 장르(category)·상태로 책 한 권을 등록한다. */
+    private void registerBook(User user, String title, String category, BookStatus status) {
+        bookRepository.save(Book.register(user, title, "저자", null, null, null, null,
+                category, null, status));
     }
 
     private LocalDate today() {
@@ -134,6 +151,81 @@ class GardenServiceTest {
         User older = register("garden-old@booktimer.com");
         metGoalOn(older, today().minusDays(8)); // 8일 전 해금 → 경계 밖(NEW 아님)
         assertThat(plant(gardenService.view(older), "sprout").isNew()).isFalse();
+    }
+
+    @Test
+    @DisplayName("완독한 장르의 식물만 보유 — 읽는중·읽고싶음 책은 장르 식물에 안 들어간다")
+    void genrePlants_finishedOnly() {
+        User user = register("garden-genre-finished@booktimer.com");
+        registerBook(user, "완독소설", "국내도서>소설/시/희곡>한국소설", BookStatus.FINISHED);
+        registerBook(user, "읽는중경제", "국내도서>경제경영>마케팅", BookStatus.READING);
+        registerBook(user, "읽고싶음경제", "국내도서>경제경영>투자", BookStatus.WANT_TO_READ);
+
+        GardenView view = gardenService.view(user);
+
+        assertThat(view.totalGenreCount()).isEqualTo(3);
+        assertThat(view.ownedGenreCount()).isEqualTo(1);
+        assertThat(genrePlant(view, "novel").owned()).isTrue();
+        // 경제는 완독이 아니라 미보유 — 파밍 방지(완독만 집계).
+        assertThat(genrePlant(view, "econ").owned()).isFalse();
+        assertThat(genrePlant(view, "wildflower").owned()).isFalse();
+    }
+
+    @Test
+    @DisplayName("같은 장르 2권 완독 → 식물 1개로 흡수")
+    void genrePlants_sameGenreCollapses() {
+        User user = register("garden-genre-dup@booktimer.com");
+        registerBook(user, "소설A", "국내도서>소설/시/희곡>한국소설", BookStatus.FINISHED);
+        registerBook(user, "소설B", "국내도서>소설/시/희곡>외국소설", BookStatus.FINISHED);
+
+        GardenView view = gardenService.view(user);
+
+        assertThat(view.ownedGenreCount()).isEqualTo(1);
+        assertThat(genrePlant(view, "novel").owned()).isTrue();
+    }
+
+    @Test
+    @DisplayName("category가 null인 완독책은 장르 식물 누수 0 (N-055)")
+    void genrePlants_nullCategoryNoLeak() {
+        User user = register("garden-genre-null@booktimer.com");
+        registerBook(user, "수동등록완독", null, BookStatus.FINISHED);
+
+        GardenView view = gardenService.view(user);
+
+        assertThat(view.ownedGenreCount()).isZero();
+        assertThat(view.genrePlants()).noneMatch(GenrePlantState::owned);
+    }
+
+    @Test
+    @DisplayName("책이 없으면 장르 식물 전부 미보유 (null-state 누수 가드)")
+    void genrePlants_nullStateAllLocked() {
+        User user = register("garden-genre-empty@booktimer.com");
+
+        GardenView view = gardenService.view(user);
+
+        assertThat(view.totalGenreCount()).isEqualTo(3);
+        assertThat(view.ownedGenreCount()).isZero();
+        assertThat(view.genrePlants()).isNotEmpty();
+        assertThat(view.genrePlants()).noneMatch(GenrePlantState::owned);
+    }
+
+    @Test
+    @DisplayName("시드에 없는 장르를 완독하면 폴백 식물(들꽃)이 보유로 잡힌다")
+    void genrePlants_unknownGenreUnlocksFallback() {
+        User user = register("garden-genre-fallback@booktimer.com");
+        registerBook(user, "여행에세이", "국내도서>여행>국내여행", BookStatus.FINISHED);
+
+        GardenView view = gardenService.view(user);
+
+        assertThat(genrePlant(view, "wildflower").owned()).isTrue();
+        assertThat(genrePlant(view, "novel").owned()).isFalse();
+    }
+
+    private static GenrePlantState genrePlant(GardenView view, String code) {
+        return view.genrePlants().stream()
+                .filter(s -> s.genrePlant().getCode().equals(code))
+                .findFirst()
+                .orElseThrow();
     }
 
     private static PlantState plant(GardenView view, String code) {
