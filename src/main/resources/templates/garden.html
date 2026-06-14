@@ -18,6 +18,8 @@
     <!-- 방문 통계(GA4, 측정 ID 설정 시에만) -->
     <th:block th:replace="~{analytics :: gtag}"></th:block>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- CSRF 토큰 — 배치 저장 fetch(POST /garden/layout)가 X-CSRF-TOKEN 헤더로 싣는다(admin.html 관례). -->
+    <meta name="_csrf" th:content="${_csrf != null ? _csrf.token : ''}">
     <title>독서 정원 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
     <!-- 광고 로더(게시자 ID 설정 시에만) -->
@@ -36,6 +38,66 @@
         </a>
     </header>
     <p class="greeting"><span th:text="${nickname}">닉네임</span>님의 정원</p>
+
+    <!-- 🌱 내 정원(꾸미기) — 보유 식물을 격자 캔버스에 놓는다. 보기 모드는 서버 렌더(no-JS 폴백), 편집은 Alpine.
+         탭-투-플레이스: 팔레트에서 식물을 고른 뒤 칸을 탭해 놓고, 놓인 식물을 탭하면 거둔다(모바일 터치 안정·HTML5 drag 회피).
+         저장은 POST /garden/layout(JSON) → 성공 시 페이지를 새로고침해 서버 렌더 캔버스를 최신화한다. -->
+    <section class="card my-garden" x-data="myGarden()">
+        <div class="my-garden-head">
+            <h2 class="garden-axis-title">🌱 내 정원</h2>
+            <div class="my-garden-actions">
+                <button type="button" class="garden-edit-btn" x-show="!editing" @click="startEdit()">✏️ 꾸미기</button>
+                <template x-if="editing">
+                    <span class="my-garden-edit-actions">
+                        <button type="button" class="garden-edit-btn primary" @click="save()" :disabled="saving"
+                                x-text="saving ? '저장 중…' : '저장'">저장</button>
+                        <button type="button" class="garden-edit-btn" @click="cancel()" :disabled="saving">취소</button>
+                    </span>
+                </template>
+            </div>
+        </div>
+        <p class="my-garden-msg" x-show="message" x-text="message" style="display:none"></p>
+
+        <!-- 보기 모드(서버 렌더 = no-JS 폴백). 편집 중엔 숨긴다. -->
+        <div class="garden-canvas" th:style="'grid-template-columns: repeat(' + ${gridColumns} + ', 1fr)'"
+             x-show="!editing">
+            <div class="canvas-cell" th:each="i : ${#numbers.sequence(0, gridCells - 1)}"
+                 th:with="cellPlant=${placedByCell.get(i)}"
+                 th:classappend="${cellPlant != null} ? 'occupied' : ''"
+                 th:title="${cellPlant != null} ? ${cellPlant.name()} : ''">
+                <span class="canvas-plant" th:if="${cellPlant != null}" th:text="${cellPlant.emoji()}">🌱</span>
+            </div>
+        </div>
+        <p class="garden-next" th:if="${#lists.isEmpty(placedPlants)}">
+            <span th:if="${!#lists.isEmpty(garden.ownedPlants())}">아직 빈 정원이에요. 「✏️ 꾸미기」로 모은 식물을 놓아보세요.</span>
+            <span th:if="${#lists.isEmpty(garden.ownedPlants())}">책을 읽어 식물을 모으면 여기에 꾸밀 수 있어요. 🌱</span>
+        </p>
+
+        <!-- 편집 모드: Alpine 인터랙티브 캔버스 + 팔레트. JS 필요 — no-JS면 이 블록은 렌더되지 않는다(점진 향상). -->
+        <template x-if="editing">
+            <div>
+                <p class="my-garden-hint">팔레트에서 식물을 고른 뒤 칸을 탭해 놓아요. 놓인 식물을 탭하면 다시 거둬요.</p>
+                <div class="garden-canvas editing" :style="`grid-template-columns: repeat(${columns}, 1fr)`">
+                    <template x-for="i in cells" :key="i">
+                        <div class="canvas-cell cell-clickable" :class="{ occupied: cellPlant(i-1) }"
+                             @click="tapCell(i-1)" :title="cellPlant(i-1) ? cellPlant(i-1).name : ''">
+                            <span class="canvas-plant" x-show="cellPlant(i-1)" x-text="cellPlant(i-1)?.emoji"></span>
+                        </div>
+                    </template>
+                </div>
+                <div class="garden-palette">
+                    <p class="my-garden-hint" x-show="owned.length === 0">보유한 식물이 없어요 — 책을 읽어 모아보세요.</p>
+                    <template x-for="o in owned" :key="o.axis + '/' + o.code">
+                        <button type="button" class="palette-plant"
+                                :class="{ selected: selected && selected.axis===o.axis && selected.code===o.code, placed: isPlaced(o) }"
+                                @click="selectPalette(o)" :title="o.name">
+                            <span x-text="o.emoji"></span>
+                        </button>
+                    </template>
+                </div>
+            </div>
+        </template>
+    </section>
 
     <section class="card garden-page" x-data="{ tab: 'all', ownedOnly: false }">
         <p class="garden-beta">🚧 베타 · 정원은 개발 중이에요. 곧 더 다양한 식물과 상세 이야기로 채워집니다.</p>
@@ -197,5 +259,86 @@
 
     <p class="garden-back"><a th:href="@{/}">← 대시보드로 돌아가기</a></p>
 </div>
+
+<!-- 내 정원 부트스트랩 데이터 — 서버가 보유 식물(팔레트)·현재 배치를 JSON으로 내려준다(Alpine 편집 초기 상태).
+     보기 모드는 위 서버 렌더 캔버스가 담당하므로, 이 데이터는 편집 진입 시에만 쓰인다. -->
+<script th:inline="javascript">
+    window.__garden = {
+        placed: /*[[${placedPlants}]]*/ [],
+        owned: /*[[${garden.ownedPlants()}]]*/ [],
+        cells: /*[[${gridCells}]]*/ 48,
+        columns: /*[[${gridColumns}]]*/ 8
+    };
+
+    // 탭-투-플레이스 편집 컴포넌트. Alpine(defer) 처리 전에 전역으로 정의된다(이 스크립트는 defer 아님).
+    function myGarden() {
+        const data = window.__garden || { placed: [], owned: [], cells: 48, columns: 8 };
+        const initial = () => {
+            const m = {};
+            (data.placed || []).forEach(p => { m[p.cell] = { axis: p.axis, code: p.code, emoji: p.emoji, name: p.name }; });
+            return m;
+        };
+        return {
+            editing: false,
+            saving: false,
+            message: '',
+            cells: data.cells,
+            columns: data.columns,
+            owned: data.owned || [],
+            placements: initial(),
+            selected: null,
+
+            cellPlant(i) { return this.placements[i] || null; },
+            isPlaced(o) { return Object.values(this.placements).some(p => p.axis === o.axis && p.code === o.code); },
+
+            startEdit() { this.editing = true; this.message = ''; this.selected = null; },
+            cancel() { this.placements = initial(); this.selected = null; this.editing = false; this.message = ''; },
+
+            selectPalette(o) {
+                if (this.selected && this.selected.axis === o.axis && this.selected.code === o.code) {
+                    this.selected = null; // 다시 누르면 선택 해제
+                } else {
+                    this.selected = { axis: o.axis, code: o.code, emoji: o.emoji, name: o.name };
+                }
+            },
+            tapCell(i) {
+                if (this.selected) {
+                    // 고른 식물을 이전 칸에서 떼고(한 식물 한 번) 이 칸에 놓는다(이 칸 점유자는 교체).
+                    for (const k in this.placements) {
+                        const p = this.placements[k];
+                        if (p.axis === this.selected.axis && p.code === this.selected.code) { delete this.placements[k]; }
+                    }
+                    this.placements[i] = { ...this.selected };
+                    this.selected = null;
+                } else if (this.placements[i]) {
+                    delete this.placements[i]; // 선택 없이 놓인 칸을 누르면 거둔다
+                }
+            },
+            async save() {
+                if (this.saving) return;
+                this.saving = true;
+                this.message = '';
+                const payload = Object.entries(this.placements)
+                    .map(([cell, p]) => ({ axis: p.axis, code: p.code, cell: Number(cell) }));
+                try {
+                    const token = document.querySelector('meta[name=_csrf]');
+                    const res = await fetch('/garden/layout', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': token ? token.content : '' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (res.ok) {
+                        window.location.reload(); // 서버 렌더 보기 캔버스를 최신 배치로 갱신
+                        return;
+                    }
+                    this.message = '저장에 실패했어요. 다시 시도해주세요.';
+                } catch (e) {
+                    this.message = '네트워크 오류로 저장하지 못했어요.';
+                }
+                this.saving = false;
+            }
+        };
+    }
+</script>
 </body>
 </html>

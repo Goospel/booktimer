@@ -790,6 +790,75 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .garden-back a { color: var(--muted); font-size: .85rem; text-decoration: none; }
 .garden-back a:hover { color: var(--accent-hover); }
 
+/* === 내 정원(꾸미기) 캔버스 (/garden 상단) === */
+/* 보기 모드는 서버 렌더(no-JS 폴백), 편집은 Alpine 탭-투-플레이스. 격자는 고정 열(gridColumns) × 정사각 칸. */
+.my-garden-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.my-garden-actions { display: inline-flex; align-items: center; gap: 8px; }
+.my-garden-edit-actions { display: inline-flex; gap: 8px; }
+.garden-edit-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--muted);
+    font-size: .82rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.garden-edit-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-hover); }
+.garden-edit-btn.primary { background: var(--accent); border-color: transparent; color: #fff; }
+.garden-edit-btn.primary:hover:not(:disabled) { background: var(--accent-hover); }
+.garden-edit-btn:disabled { opacity: .55; cursor: default; }
+.my-garden-msg { margin: 0 0 12px; color: var(--accent-hover); font-size: .85rem; font-weight: 600; }
+.my-garden-hint { margin: 0 0 10px; color: var(--muted); font-size: .82rem; word-break: keep-all; }
+
+.garden-canvas {
+    display: grid;
+    gap: 6px;
+    margin: 4px 0 12px;
+    padding: 10px;
+    background: var(--sage-soft);
+    border-radius: var(--radius-sm);
+}
+.garden-canvas .canvas-cell {
+    aspect-ratio: 1 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px dashed transparent;
+    border-radius: 6px;
+}
+.garden-canvas.editing .canvas-cell { border-color: var(--border); background: rgba(255, 255, 255, .35); }
+.garden-canvas .canvas-cell.cell-clickable { cursor: pointer; }
+.garden-canvas .canvas-cell.cell-clickable:hover { border-color: var(--accent); }
+.garden-canvas .canvas-cell.occupied { border-style: solid; }
+.garden-canvas .canvas-plant { font-size: 1.4rem; line-height: 1; }
+
+.garden-palette {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+.palette-plant {
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+}
+.palette-plant:hover { border-color: var(--accent); }
+.palette-plant.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.palette-plant.placed { opacity: .4; }
+
 /* === 내 책장 (Book) === */
 .muted { color: var(--muted); }
 

@@ -1,5 +1,6 @@
 package com.booktimer.garden;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -43,4 +44,41 @@ public record GardenView(List<PlantState> plants,
                          List<DiscoveredPlantState> recipePlants,
                          int mysterySlotCount,
                          List<String> justDiscovered) {
+
+    /**
+     * 네 수집축의 <b>보유</b> 식물을 배치용 단일 표현({@link OwnedPlant})으로 평탄화해 모은다.
+     *
+     * <p>꾸미기(배치)는 보유 식물 전부를 대상으로 하므로(설계 §2.1) 축별 메타가 제각각인 상태 리스트를
+     * {@code (axis, code, emoji, name)}로 통일한다. 시간축은 {@code owned}, 장르·다양성축도 {@code owned},
+     * 레시피축은 {@code discovered}가 보유 기준이다. 이 결과가 팔레트 풀이자 {@code GardenLayoutService.save}의
+     * 보유 검증 집합으로 쓰여 미보유 식물 배치(위조)를 막는다(설계 §4).
+     */
+    public List<OwnedPlant> ownedPlants() {
+        List<OwnedPlant> owned = new ArrayList<>();
+        for (PlantState s : plants) {
+            if (s.owned()) {
+                owned.add(new OwnedPlant(PlacementAxis.TIME, s.plant().getCode(),
+                        s.plant().getEmoji(), s.plant().getName()));
+            }
+        }
+        for (GenrePlantState s : genrePlants) {
+            if (s.owned()) {
+                owned.add(new OwnedPlant(PlacementAxis.GENRE, s.genrePlant().getCode(),
+                        s.genrePlant().getEmoji(), s.genrePlant().getName()));
+            }
+        }
+        for (DiversityPlantState s : diversityPlants) {
+            if (s.owned()) {
+                owned.add(new OwnedPlant(PlacementAxis.DIVERSITY, s.plant().getCode(),
+                        s.plant().getEmoji(), s.plant().getName()));
+            }
+        }
+        for (DiscoveredPlantState s : recipePlants) {
+            if (s.discovered()) {
+                owned.add(new OwnedPlant(PlacementAxis.RECIPE, s.recipePlant().getCode(),
+                        s.recipePlant().getEmoji(), s.recipePlant().getName()));
+            }
+        }
+        return owned;
+    }
 }

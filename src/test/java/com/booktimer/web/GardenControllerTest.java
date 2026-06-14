@@ -16,12 +16,15 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
+import org.springframework.http.MediaType;
 
 /**
  * 독서 정원 도감 전용 페이지({@code /garden}) 컨트롤러 통합 테스트 (MockMvc + 실제 빈·H2).
@@ -92,5 +95,46 @@ class GardenControllerTest {
         mockMvc.perform(get("/garden").with(user("me@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(model().attribute("nickname", "나야"));
+    }
+
+    @Test
+    @DisplayName("GET /garden: 배치 렌더 모델(placedPlants·격자 크기)이 함께 실린다")
+    void garden_includesLayoutModel() throws Exception {
+        registrationService.register("garden-layout@booktimer.com", "rawpw1234", "정원사", SEOUL, Role.USER, today());
+
+        mockMvc.perform(get("/garden").with(user("garden-layout@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeExists("placedPlants"))
+                .andExpect(model().attributeExists("gridCells"));
+    }
+
+    @Test
+    @DisplayName("POST /garden/layout: 미인증이면 로그인으로 막힌다 (기본 잠김)")
+    void saveLayout_unauthenticated_blocked() throws Exception {
+        mockMvc.perform(post("/garden/layout").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("[]"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    @DisplayName("POST /garden/layout: 빈 배치 저장은 성공한다 (캔버스 비우기)")
+    void saveLayout_emptyBody_ok() throws Exception {
+        registrationService.register("garden-save@booktimer.com", "rawpw1234", "정원사", SEOUL, Role.USER, today());
+
+        mockMvc.perform(post("/garden/layout").with(user("garden-save@booktimer.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("[]"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("POST /garden/layout: 미보유 식물 배치 요청은 4xx로 거부된다 (H2엔 카탈로그가 비어 무엇이든 미보유)")
+    void saveLayout_unownedPlant_rejected() throws Exception {
+        registrationService.register("garden-reject@booktimer.com", "rawpw1234", "정원사", SEOUL, Role.USER, today());
+
+        mockMvc.perform(post("/garden/layout").with(user("garden-reject@booktimer.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[{\"axis\":\"TIME\",\"code\":\"sprout\",\"cell\":0}]"))
+                .andExpect(status().isBadRequest());
     }
 }
