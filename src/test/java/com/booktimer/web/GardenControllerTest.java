@@ -86,6 +86,20 @@ class GardenControllerTest {
     }
 
     @Test
+    @DisplayName("GET /garden: 식물 SVG 스프라이트 정의가 페이지에 주입된다 (A2 — th:block replace + 14종 symbol 파싱)")
+    void garden_injectsSvgSpriteDefs() throws Exception {
+        registrationService.register("garden-sprites@booktimer.com", "rawpw1234", "정원사", SEOUL, Role.USER, today());
+
+        // 화면 밖 <symbol> 정의가 렌더된 HTML에 실제로 들어오는지 — 프래그먼트 replace·SVG 마크업 파싱 배선 확인.
+        // (보유 종의 <use href> 분기는 카탈로그 의존이라 preview 시각 게이트로 검증 — 좌표·색은 비검증.)
+        String html = mockMvc.perform(get("/garden").with(user("garden-sprites@booktimer.com")))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertThat(html).contains("id=\"sprite-sprout\"");          // 첫 종
+        assertThat(html).contains("id=\"sprite-deciduous_tree\""); // 마지막 종(14종 전체가 주입됨)
+    }
+
+    @Test
     @DisplayName("GET /garden: principal의 유저로 view를 싣는다 (현재 유저 해소 — 닉네임이 그 유저)")
     void garden_loadsCurrentUserView() throws Exception {
         registrationService.register("me@booktimer.com", "rawpw1234", "나야", SEOUL, Role.USER, today());

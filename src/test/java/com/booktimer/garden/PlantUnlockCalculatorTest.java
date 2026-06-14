@@ -112,9 +112,9 @@ class PlantUnlockCalculatorTest {
 
         // 임계 오름차순 카탈로그
         private final List<Plant> catalog = List.of(
-                Plant.of("sprout", "새싹", "🌱", 1, 1),
-                Plant.of("herb", "허브", "🌿", 2, 3),
-                Plant.of("clover", "클로버", "☘️", 3, 5));
+                Plant.of("sprout", "새싹", "🌱", 1, 1, null),
+                Plant.of("herb", "허브", "🌿", 2, 3, null),
+                Plant.of("clover", "클로버", "☘️", 3, 5, null));
 
         @Test
         @DisplayName("달성 0일 → 아무것도 안 보유")

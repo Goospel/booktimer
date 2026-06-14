@@ -56,7 +56,7 @@ class GardenServiceRecipeTest {
     // view()는 세 카탈로그를 모두 읽으므로 시간축·장르축도 최소 시드한다(트랙 B만 보지만 배선상 필요).
     @BeforeEach
     void seedCatalog() {
-        plantRepository.save(Plant.of("sprout", "새싹", "🌱", 1, 1));
+        plantRepository.save(Plant.of("sprout", "새싹", "🌱", 1, 1, null));
         genrePlantRepository.save(GenrePlant.of("novel", "소설/시/희곡", "소설나무", "🌳", 1));
 
         // 트랙 B 결과 식물 카탈로그 — 실제 ALL 코드와 일치시켜 발견이 렌더로 이어지는지 본다.

@@ -56,10 +56,10 @@ class GardenServiceTest {
     // Flyway는 테스트에서 꺼져 있어(application.properties) 시드가 안 도므로 직접 심는다.
     @BeforeEach
     void seedCatalog() {
-        plantRepository.save(Plant.of("sprout", "새싹", "🌱", 1, 1));
-        plantRepository.save(Plant.of("herb", "허브", "🌿", 2, 3));
-        plantRepository.save(Plant.of("clover", "클로버", "☘️", 3, 5));
-        plantRepository.save(Plant.of("pot", "화분 모종", "🪴", 4, 7));
+        plantRepository.save(Plant.of("sprout", "새싹", "🌱", 1, 1, "sprout")); // A2: SVG 스프라이트 보유
+        plantRepository.save(Plant.of("herb", "허브", "🌿", 2, 3, null));       // spriteId 미지정(이모지 폴백)
+        plantRepository.save(Plant.of("clover", "클로버", "☘️", 3, 5, null));
+        plantRepository.save(Plant.of("pot", "화분 모종", "🪴", 4, 7, null));
 
         genrePlantRepository.save(GenrePlant.of("novel", "소설/시/희곡", "소설나무", "🌳", 1));
         genrePlantRepository.save(GenrePlant.of("econ", "경제경영", "경제선인장", "🌵", 2));
@@ -336,5 +336,40 @@ class GardenServiceTest {
                 .filter(s -> s.plant().getCode().equals(code))
                 .findFirst()
                 .orElseThrow();
+    }
+
+    // --- A2: SVG 식물 승격 — spriteId 전파 (시간축) ------------------------------------------
+
+    @Test
+    @DisplayName("시간축 식물의 spriteId가 ownedPlants 전파에 실린다 (A2 SVG 승격)")
+    void spriteId_propagatesForTimeAxis() {
+        User user = register("garden-sprite@booktimer.com");
+        metGoalOn(user, today().minusDays(1)); // 누적 1 → sprout(임계 1, spriteId="sprout") 보유
+
+        OwnedPlant sprout = gardenService.view(user).ownedPlants().stream()
+                .filter(o -> o.axis() == PlacementAxis.TIME && o.code().equals("sprout"))
+                .findFirst().orElseThrow();
+        assertThat(sprout.spriteId()).isEqualTo("sprout");
+    }
+
+    @Test
+    @DisplayName("spriteId 미지정 식물도 ownedPlants에 정상 포함되고 spriteId만 null (폴백 보존·N-055)")
+    void spriteId_nullStateDoesNotLeakOut() {
+        User user = register("garden-sprite-null@booktimer.com");
+        // 누적 3 → sprout(spriteId 있음)·herb(spriteId 미지정) 보유 + 경제책 완독 → 장르 econ(타 축, spriteId 없음)
+        metGoalOn(user, today().minusDays(1));
+        metGoalOn(user, today().minusDays(2));
+        metGoalOn(user, today().minusDays(3));
+        registerBook(user, "경제책", "국내도서>경제경영>마케팅", BookStatus.FINISHED);
+
+        var owned = gardenService.view(user).ownedPlants();
+        // herb(시간축, spriteId 미지정)이 결과에서 빠지지 않고 spriteId만 null이어야 함(이모지 폴백 보존).
+        OwnedPlant herb = owned.stream().filter(o -> o.code().equals("herb")).findFirst().orElseThrow();
+        assertThat(herb.spriteId()).isNull();
+        // 타 축(장르 econ)도 포함되고 spriteId는 null(이번 PR 범위 밖 — 이모지 폴백).
+        OwnedPlant econ = owned.stream()
+                .filter(o -> o.axis() == PlacementAxis.GENRE && o.code().equals("econ"))
+                .findFirst().orElseThrow();
+        assertThat(econ.spriteId()).isNull();
     }
 }

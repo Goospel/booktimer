@@ -51,8 +51,8 @@ class GardenLayoutServiceTest {
     // axis 분별 검증을 위해 시간축과 장르축에 '겹치는 code'(sprout)를 일부러 둔다(code는 테이블 안에서만 유니크).
     @BeforeEach
     void seedCatalog() {
-        plantRepository.save(Plant.of("sprout", "새싹", "🌱", 1, 1));
-        plantRepository.save(Plant.of("herb", "허브", "🌿", 2, 3));
+        plantRepository.save(Plant.of("sprout", "새싹", "🌱", 1, 1, "sprout")); // A2: SVG 스프라이트 보유
+        plantRepository.save(Plant.of("herb", "허브", "🌿", 2, 3, null));       // spriteId 미지정(이모지 폴백)
 
         genrePlantRepository.save(GenrePlant.of("sprout", "소설/시/희곡", "소설나무", "🌳", 1)); // TIME과 같은 code, 다른 축
         genrePlantRepository.save(GenrePlant.of("econ", "경제경영", "경제선인장", "🌵", 2));
@@ -205,6 +205,23 @@ class GardenLayoutServiceTest {
         layoutService.save(me, List.of());
         assertThat(layoutService.layoutOf(me)).isEmpty();
         assertThat(layoutService.layoutOf(other)).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("배치된 시간축 식물에 spriteId가 PlacedPlant까지 결합된다 (A2 SVG 승격)")
+    void layoutOf_carriesSpriteIdForTimeAxis() {
+        User user = register("place-sprite@booktimer.com");
+        grantTimeSproutAndGenreEcon(user);
+
+        layoutService.save(user, List.of(
+                req(PlacementAxis.TIME, "sprout", 0),
+                req(PlacementAxis.GENRE, "econ", 5)));
+
+        List<PlacedPlant> layout = layoutService.layoutOf(user);
+        PlacedPlant sprout = layout.stream().filter(p -> p.code().equals("sprout")).findFirst().orElseThrow();
+        assertThat(sprout.spriteId()).isEqualTo("sprout"); // 시간축 → 카탈로그 spriteId 결합
+        PlacedPlant econ = layout.stream().filter(p -> p.code().equals("econ")).findFirst().orElseThrow();
+        assertThat(econ.spriteId()).isNull(); // 타 축은 폴백(null)
     }
 
     @Test
