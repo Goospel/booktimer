@@ -21,6 +21,12 @@
     --shadow: 0 1px 2px rgba(60, 50, 30, .05), 0 8px 24px rgba(60, 50, 30, .06);
     /* 보조 토큰 — 랜딩부터 점진 적용(전역 강제 아님) */
     --sage-soft: #E7EEE2;   /* 연한 세이지 fill */
+    /* 독서 정원 무대(A0 무대화) — 캔버스를 '정원'으로 연출하는 배경/흙/울타리 색.
+       종이톤·세이지 팔레트와 어울리는 따뜻하고 채도 낮은 톤. 다크모드 미도입 프로젝트라 단일 값. */
+    --garden-sky: #DCEAF0;   /* 옅은 하늘 */
+    --garden-grass: #CADDB2; /* 잔디(세이지 계열) */
+    --garden-soil: #B89576;  /* 갈아엎은 흙(화단 베드) */
+    --garden-fence: #9A7B57; /* 나무 울타리 프레임 */
     /* 포커스 링 — 입력칸 focus·강조 hover가 공유(세이지 #6E8A6A=rgb(110,138,106) 기반).
        #287 토큰 교체가 못 건드린 raw 인디고 잔재를 토큰화해 전역 일관 유지. */
     --focus-ring: rgba(110, 138, 106, .30);
@@ -811,6 +817,19 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .my-garden-msg { margin: 0 0 12px; color: var(--accent-hover); font-size: .85rem; font-weight: 600; }
 .my-garden-hint { margin: 0 0 10px; color: var(--muted); font-size: .82rem; word-break: keep-all; }
 
+/* 무대(stage): 캔버스를 감싸 하늘→잔디 배경 + 나무 울타리 프레임을 둘러 '정원'으로 연출한다.
+   순수 장식 래핑 레이어 — Alpine 토글/서버 렌더 th:each/셀 좌표는 건드리지 않는다(점진 향상·no-JS 폴백 보존). */
+.garden-stage {
+    position: relative;
+    margin: 4px 0 12px;
+    padding: 16px 14px 14px;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(180deg, var(--garden-sky) 0%, var(--garden-grass) 58%);
+    box-shadow: inset 0 0 0 4px var(--garden-fence),    /* 울타리 프레임 */
+                inset 0 0 0 5px rgba(0, 0, 0, .07);     /* 프레임 안쪽 옅은 음영(나무 두께감) */
+    overflow: hidden;
+}
+
 .garden-canvas {
     display: grid;
     gap: 6px;
@@ -819,7 +838,19 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     background: var(--sage-soft);
     border-radius: var(--radius-sm);
 }
+/* 무대 안 캔버스 = 흙 화단(planter bed). 무대가 하늘/잔디면 캔버스는 갈아엎은 흙.
+   옅은 이랑(furrow) 패턴을 깔아 빈 정원도 '심을 밭'으로 읽히게 하고, inset 그림자로 살짝 패인 땅 느낌. */
+.garden-stage .garden-canvas {
+    margin: 0;
+    background:
+        repeating-linear-gradient(90deg,
+            rgba(0, 0, 0, .05) 0, rgba(0, 0, 0, .05) 1px,
+            transparent 1px, transparent 24px),
+        var(--garden-soil);
+    box-shadow: inset 0 2px 6px rgba(60, 40, 20, .22);
+}
 .garden-canvas .canvas-cell {
+    position: relative;                /* 발밑 그림자 ::after 기준 */
     aspect-ratio: 1 / 1;
     display: flex;
     align-items: center;
@@ -831,7 +862,20 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .garden-canvas .canvas-cell.cell-clickable { cursor: pointer; }
 .garden-canvas .canvas-cell.cell-clickable:hover { border-color: var(--accent); }
 .garden-canvas .canvas-cell.occupied { border-style: solid; }
-.garden-canvas .canvas-plant { font-size: 1.4rem; line-height: 1; }
+/* 점유 셀 식물 발밑 타원 그림자 → 이모지가 흙에 '선' 입체감. pointer-events:none으로 탭-투-플레이스 클릭을 막지 않는다. */
+.garden-canvas .canvas-cell.occupied::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 5px;
+    width: 58%;
+    height: 7px;
+    transform: translateX(-50%);
+    background: radial-gradient(ellipse at center, rgba(0, 0, 0, .25), transparent 72%);
+    pointer-events: none;
+    z-index: 0;
+}
+.garden-canvas .canvas-plant { position: relative; z-index: 1; font-size: 1.4rem; line-height: 1; }
 
 .garden-palette {
     display: flex;

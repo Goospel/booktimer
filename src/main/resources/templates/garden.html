@@ -58,14 +58,17 @@
         </div>
         <p class="my-garden-msg" x-show="message" x-text="message" style="display:none"></p>
 
-        <!-- 보기 모드(서버 렌더 = no-JS 폴백). 편집 중엔 숨긴다. -->
-        <div class="garden-canvas" th:style="'grid-template-columns: repeat(' + ${gridColumns} + ', 1fr)'"
-             x-show="!editing">
-            <div class="canvas-cell" th:each="i : ${#numbers.sequence(0, gridCells - 1)}"
-                 th:with="cellPlant=${placedByCell.get(i)}"
-                 th:classappend="${cellPlant != null} ? 'occupied' : ''"
-                 th:title="${cellPlant != null} ? ${cellPlant.name()} : ''">
-                <span class="canvas-plant" th:if="${cellPlant != null}" th:text="${cellPlant.emoji()}">🌱</span>
+        <!-- 보기 모드(서버 렌더 = no-JS 폴백). 편집 중엔 숨긴다.
+             무대(.garden-stage)가 캔버스를 감싸 하늘/잔디/울타리 배경을 깐다(순수 장식 래핑).
+             x-show는 캔버스가 아니라 무대 래퍼에 둔다 — 토글 시 무대째 함께 숨고/보여 동작은 동일하다(no-JS면 무시돼 그대로 노출). -->
+        <div class="garden-stage" x-show="!editing">
+            <div class="garden-canvas" th:style="'grid-template-columns: repeat(' + ${gridColumns} + ', 1fr)'">
+                <div class="canvas-cell" th:each="i : ${#numbers.sequence(0, gridCells - 1)}"
+                     th:with="cellPlant=${placedByCell.get(i)}"
+                     th:classappend="${cellPlant != null} ? 'occupied' : ''"
+                     th:title="${cellPlant != null} ? ${cellPlant.name()} : ''">
+                    <span class="canvas-plant" th:if="${cellPlant != null}" th:text="${cellPlant.emoji()}">🌱</span>
+                </div>
             </div>
         </div>
         <p class="garden-next" th:if="${#lists.isEmpty(placedPlants)}">
@@ -77,13 +80,16 @@
         <template x-if="editing">
             <div>
                 <p class="my-garden-hint">팔레트에서 식물을 고른 뒤 칸을 탭해 놓아요. 놓인 식물을 탭하면 다시 거둬요.</p>
-                <div class="garden-canvas editing" :style="`grid-template-columns: repeat(${columns}, 1fr)`">
-                    <template x-for="i in cells" :key="i">
-                        <div class="canvas-cell cell-clickable" :class="{ occupied: cellPlant(i-1) }"
-                             @click="tapCell(i-1)" :title="cellPlant(i-1) ? cellPlant(i-1).name : ''">
-                            <span class="canvas-plant" x-show="cellPlant(i-1)" x-text="cellPlant(i-1)?.emoji"></span>
-                        </div>
-                    </template>
+                <!-- 편집 중에도 같은 무대를 둘러 보기 모드와 일관된 정원 배경 위에서 배치한다(hint·팔레트는 무대 밖). -->
+                <div class="garden-stage">
+                    <div class="garden-canvas editing" :style="`grid-template-columns: repeat(${columns}, 1fr)`">
+                        <template x-for="i in cells" :key="i">
+                            <div class="canvas-cell cell-clickable" :class="{ occupied: cellPlant(i-1) }"
+                                 @click="tapCell(i-1)" :title="cellPlant(i-1) ? cellPlant(i-1).name : ''">
+                                <span class="canvas-plant" x-show="cellPlant(i-1)" x-text="cellPlant(i-1)?.emoji"></span>
+                            </div>
+                        </template>
+                    </div>
                 </div>
                 <div class="garden-palette">
                     <p class="my-garden-hint" x-show="owned.length === 0">보유한 식물이 없어요 — 책을 읽어 모아보세요.</p>
