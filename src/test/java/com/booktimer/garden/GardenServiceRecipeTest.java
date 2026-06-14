@@ -57,12 +57,13 @@ class GardenServiceRecipeTest {
     @BeforeEach
     void seedCatalog() {
         plantRepository.save(Plant.of("sprout", "새싹", "🌱", 1, 1, null));
-        genrePlantRepository.save(GenrePlant.of("novel", "소설/시/희곡", "소설나무", "🌳", 1));
+        genrePlantRepository.save(GenrePlant.of("novel", "소설/시/희곡", "소설나무", "🌳", 1, null));
 
         // 트랙 B 결과 식물 카탈로그 — 실제 ALL 코드와 일치시켜 발견이 렌더로 이어지는지 본다.
-        recipePlantRepository.save(RecipePlant.of("lotus", "연꽃", "💮", "감성으로 읽고 이성을 탐낸다", 1));
-        recipePlantRepository.save(RecipePlant.of("explorer", "탐험가 야자열매", "🥥", "편식 없는 탐험가", 2));
-        recipePlantRepository.save(RecipePlant.of("regular", "단골 당근", "🥕", "한 작가를 깊이 따라간다", 3));
+        // lotus는 A2 후속 SVG 스프라이트 보유, explorer는 미지정(이모지 폴백 — null-state).
+        recipePlantRepository.save(RecipePlant.of("lotus", "연꽃", "💮", "감성으로 읽고 이성을 탐낸다", 1, "lotus"));
+        recipePlantRepository.save(RecipePlant.of("explorer", "탐험가 야자열매", "🥥", "편식 없는 탐험가", 2, null));
+        recipePlantRepository.save(RecipePlant.of("regular", "단골 당근", "🥕", "한 작가를 깊이 따라간다", 3, "regular"));
     }
 
     private User register(String email) {
@@ -175,5 +176,17 @@ class GardenServiceRecipeTest {
         assertThat(view.recipePlants()).noneMatch(DiscoveredPlantState::discovered);
         assertThat(view.mysterySlotCount()).isEqualTo(3);
         assertThat(view.justDiscovered()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("레시피축 식물의 spriteId가 ownedPlants 전파에 실린다 (A2 후속)")
+    void spriteId_propagatesForRecipeAxis() {
+        User user = register("recipe-sprite@booktimer.com");
+        shelfForLotus(user); // lotus(spriteId="lotus") 발견
+
+        OwnedPlant lotus = gardenService.view(user).ownedPlants().stream()
+                .filter(o -> o.axis() == PlacementAxis.RECIPE && o.code().equals("lotus"))
+                .findFirst().orElseThrow();
+        assertThat(lotus.spriteId()).isEqualTo("lotus");
     }
 }

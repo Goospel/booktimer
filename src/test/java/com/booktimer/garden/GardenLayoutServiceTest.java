@@ -54,10 +54,10 @@ class GardenLayoutServiceTest {
         plantRepository.save(Plant.of("sprout", "새싹", "🌱", 1, 1, "sprout")); // A2: SVG 스프라이트 보유
         plantRepository.save(Plant.of("herb", "허브", "🌿", 2, 3, null));       // spriteId 미지정(이모지 폴백)
 
-        genrePlantRepository.save(GenrePlant.of("sprout", "소설/시/희곡", "소설나무", "🌳", 1)); // TIME과 같은 code, 다른 축
-        genrePlantRepository.save(GenrePlant.of("econ", "경제경영", "경제선인장", "🌵", 2));
+        genrePlantRepository.save(GenrePlant.of("sprout", "소설/시/희곡", "소설나무", "🌳", 1, null)); // TIME과 같은 code, 다른 축
+        genrePlantRepository.save(GenrePlant.of("econ", "경제경영", "경제선인장", "🌵", 2, null));
 
-        diversityPlantRepository.save(DiversityPlant.of("author_1", DiversityKind.AUTHOR, 1, "작가 새싹", "🖋️", 1));
+        diversityPlantRepository.save(DiversityPlant.of("author_1", DiversityKind.AUTHOR, 1, "작가 새싹", "🖋️", 1, null));
     }
 
     private LocalDate today() {

@@ -50,24 +50,33 @@ public class GenrePlant {
     @Column(name = "display_order", nullable = false)
     private int displayOrder;
 
+    /**
+     * 코드 벡터 SVG 스프라이트 식별자(A2 후속). null이면 이모지로 폴백한다 — 정상 상태다(아직 SVG화 안 된 종).
+     * 뷰는 {@code #sprite-{spriteId}} 심볼을 {@code <use>}로 참조한다. 시드(V41)에서만 채워지는 불변 메타.
+     */
+    @Column(name = "sprite_id", length = 50)
+    private String spriteId;
+
     protected GenrePlant() {
         // JPA
     }
 
-    private GenrePlant(String code, String genreLabel, String name, String emoji, int displayOrder) {
+    private GenrePlant(String code, String genreLabel, String name, String emoji, int displayOrder, String spriteId) {
         this.code = code;
         this.genreLabel = genreLabel;
         this.name = name;
         this.emoji = emoji;
         this.displayOrder = displayOrder;
+        this.spriteId = spriteId;
     }
 
     /**
      * 장르 식물 한 종을 만든다 — 운영은 시드(V36)로 채우므로 주 용도는 순수 도메인 테스트다
      * (패키지 안으로 노출 제한). {@code genreLabel}을 {@code null}로 주면 폴백 식물이 된다.
+     * {@code spriteId}는 nullable(이모지 폴백) — SVG 미적용 종은 null로 전달한다(A2 후속).
      */
-    static GenrePlant of(String code, String genreLabel, String name, String emoji, int displayOrder) {
-        return new GenrePlant(code, genreLabel, name, emoji, displayOrder);
+    static GenrePlant of(String code, String genreLabel, String name, String emoji, int displayOrder, String spriteId) {
+        return new GenrePlant(code, genreLabel, name, emoji, displayOrder, spriteId);
     }
 
     /** 특정 장르에 매이지 않고 "시드에 없는 장르"를 담는 폴백 식물인가. */
@@ -97,5 +106,10 @@ public class GenrePlant {
 
     public int getDisplayOrder() {
         return displayOrder;
+    }
+
+    /** 코드 벡터 SVG 스프라이트 식별자 — null이면 이모지 폴백(A2 후속). */
+    public String getSpriteId() {
+        return spriteId;
     }
 }

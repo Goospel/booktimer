@@ -57,7 +57,7 @@ public record GardenView(List<PlantState> plants,
         List<OwnedPlant> owned = new ArrayList<>();
         for (PlantState s : plants) {
             if (s.owned()) {
-                // 시간축만 A2 SVG 스프라이트 보유 — null이면 이모지 폴백(미적용 종은 정상 null).
+                // 네 축 모두 A2 후속 SVG 스프라이트 보유 — null이면 이모지 폴백(미적용 종은 정상 null).
                 owned.add(new OwnedPlant(PlacementAxis.TIME, s.plant().getCode(),
                         s.plant().getEmoji(), s.plant().getName(), s.plant().getSpriteId()));
             }
@@ -65,19 +65,19 @@ public record GardenView(List<PlantState> plants,
         for (GenrePlantState s : genrePlants) {
             if (s.owned()) {
                 owned.add(new OwnedPlant(PlacementAxis.GENRE, s.genrePlant().getCode(),
-                        s.genrePlant().getEmoji(), s.genrePlant().getName(), null));
+                        s.genrePlant().getEmoji(), s.genrePlant().getName(), s.genrePlant().getSpriteId()));
             }
         }
         for (DiversityPlantState s : diversityPlants) {
             if (s.owned()) {
                 owned.add(new OwnedPlant(PlacementAxis.DIVERSITY, s.plant().getCode(),
-                        s.plant().getEmoji(), s.plant().getName(), null));
+                        s.plant().getEmoji(), s.plant().getName(), s.plant().getSpriteId()));
             }
         }
         for (DiscoveredPlantState s : recipePlants) {
             if (s.discovered()) {
                 owned.add(new OwnedPlant(PlacementAxis.RECIPE, s.recipePlant().getCode(),
-                        s.recipePlant().getEmoji(), s.recipePlant().getName(), null));
+                        s.recipePlant().getEmoji(), s.recipePlant().getName(), s.recipePlant().getSpriteId()));
             }
         }
         return owned;

@@ -20,9 +20,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class GenreUnlockCalculatorTest {
 
     // 테스트 카탈로그 — 시드 2종(소설/경제) + 폴백 1종(genreLabel=null).
-    private static final GenrePlant NOVEL = GenrePlant.of("novel", "소설/시/희곡", "소설나무", "🌳", 1);
-    private static final GenrePlant ECON = GenrePlant.of("econ", "경제경영", "경제선인장", "🌵", 2);
-    private static final GenrePlant FALLBACK = GenrePlant.of("wildflower", null, "이름 모를 들꽃", "🌼", 99);
+    private static final GenrePlant NOVEL = GenrePlant.of("novel", "소설/시/희곡", "소설나무", "🌳", 1, null);
+    private static final GenrePlant ECON = GenrePlant.of("econ", "경제경영", "경제선인장", "🌵", 2, null);
+    private static final GenrePlant FALLBACK = GenrePlant.of("wildflower", null, "이름 모를 들꽃", "🌼", 99, null);
     private static final List<GenrePlant> CATALOG = List.of(NOVEL, ECON, FALLBACK);
 
     @Test
