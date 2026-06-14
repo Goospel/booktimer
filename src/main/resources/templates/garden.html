@@ -86,7 +86,12 @@
                         <template x-for="i in cells" :key="i">
                             <div class="canvas-cell cell-clickable" :class="{ occupied: cellPlant(i-1) }"
                                  @click="tapCell(i-1)" :title="cellPlant(i-1) ? cellPlant(i-1).name : ''">
-                                <span class="canvas-plant" x-show="cellPlant(i-1)" x-text="cellPlant(i-1)?.emoji"></span>
+                                <!-- 방금 놓은 셀만 1회 팝(:class) → @animationend로 해제하면 sway 복귀.
+                                     x-transition:enter을 안 쓰는 이유: 편집 진입 시 기존 식물이 전부 재생돼버림(설계 §2.3). -->
+                                <span class="canvas-plant" x-show="cellPlant(i-1)"
+                                      :class="{ 'plant-pop': justPlaced === (i-1) }"
+                                      @animationend="if (justPlaced === (i-1)) justPlaced = null"
+                                      x-text="cellPlant(i-1)?.emoji"></span>
                             </div>
                         </template>
                     </div>
@@ -293,6 +298,7 @@
             owned: data.owned || [],
             placements: initial(),
             selected: null,
+            justPlaced: null,   // 방금 놓은 셀 인덱스 — 그 셀만 1회 팝(표시용 1상태, 저장 payload엔 안 섞임)
 
             cellPlant(i) { return this.placements[i] || null; },
             isPlaced(o) { return Object.values(this.placements).some(p => p.axis === o.axis && p.code === o.code); },
@@ -315,6 +321,7 @@
                         if (p.axis === this.selected.axis && p.code === this.selected.code) { delete this.placements[k]; }
                     }
                     this.placements[i] = { ...this.selected };
+                    this.justPlaced = i;        // 이 칸만 팝 트리거(@animationend에서 해제)
                     this.selected = null;
                 } else if (this.placements[i]) {
                     delete this.placements[i]; // 선택 없이 놓인 칸을 누르면 거둔다
