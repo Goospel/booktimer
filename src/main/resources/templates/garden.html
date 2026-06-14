@@ -44,7 +44,8 @@
     <!-- 🌱 내 정원(꾸미기) — 보유 식물을 격자 캔버스에 놓는다. 보기 모드는 서버 렌더(no-JS 폴백), 편집은 Alpine.
          탭-투-플레이스: 팔레트에서 식물을 고른 뒤 칸을 탭해 놓고, 놓인 식물을 탭하면 거둔다(모바일 터치 안정·HTML5 drag 회피).
          저장은 POST /garden/layout(JSON) → 성공 시 페이지를 새로고침해 서버 렌더 캔버스를 최신화한다. -->
-    <section class="card my-garden" x-data="myGarden()">
+    <section class="card my-garden" x-data="myGarden()"
+             @pointermove="onPointerMove($event)" @pointerup="onPointerUp($event)">
         <div class="my-garden-head">
             <h2 class="garden-axis-title">🌱 내 정원</h2>
             <div class="my-garden-actions">
@@ -87,13 +88,16 @@
         <!-- 편집 모드: Alpine 인터랙티브 캔버스 + 팔레트. JS 필요 — no-JS면 이 블록은 렌더되지 않는다(점진 향상). -->
         <template x-if="editing">
             <div>
-                <p class="my-garden-hint">팔레트에서 식물을 고른 뒤 칸을 탭해 놓아요. 놓인 식물을 탭하면 다시 거둬요.</p>
+                <p class="my-garden-hint">팔레트에서 식물을 고른 뒤 칸을 탭해 놓아요. 놓인 식물을 탭하면 다시 거둬요. 끌어다 빈 칸으로 옮기거나, 휠로 확대해 볼 수도 있어요.</p>
                 <!-- 편집 중에도 같은 무대를 둘러 보기 모드와 일관된 정원 배경 위에서 배치한다(hint·팔레트는 무대 밖). -->
                 <div class="garden-stage">
-                    <div class="garden-canvas editing" :style="`grid-template-columns: repeat(${columns}, 1fr)`">
+                    <div class="garden-canvas editing" :class="{ dragging }" @wheel="onWheel($event)"
+                         :style="`grid-template-columns: repeat(${columns}, 1fr); transform: scale(${scale})`">
                         <template x-for="i in cells" :key="i">
-                            <div class="canvas-cell cell-clickable" :class="{ occupied: cellPlant(i-1) }"
-                                 @click="tapCell(i-1)" :title="cellPlant(i-1) ? cellPlant(i-1).name : ''">
+                            <div class="canvas-cell cell-clickable"
+                                 :class="{ occupied: cellPlant(i-1), 'cell-drop-target': dropTarget === (i-1) }"
+                                 @click="tapCell(i-1)" @pointerdown="onCellPointerDown($event, i-1)"
+                                 :title="cellPlant(i-1) ? cellPlant(i-1).name : ''">
                                 <!-- 방금 놓은 셀만 1회 팝(:class) → @animationend로 해제하면 sway 복귀.
                                      x-transition:enter을 안 쓰는 이유: 편집 진입 시 기존 식물이 전부 재생돼버림(설계 §2.3). -->
                                 <span class="canvas-plant" x-show="cellPlant(i-1)"
@@ -118,7 +122,9 @@
                     <template x-for="o in owned" :key="o.axis + '/' + o.code">
                         <button type="button" class="palette-plant"
                                 :class="{ selected: selected && selected.axis===o.axis && selected.code===o.code, placed: isPlaced(o) }"
-                                @click="selectPalette(o)" :title="o.name">
+                                @click="selectPalette(o)"
+                                @pointerdown="onPointerDown($event, { kind:'palette', axis:o.axis, code:o.code, emoji:o.emoji, name:o.name, spriteId:o.spriteId })"
+                                :title="o.name">
                             <!-- 팔레트도 동일 폴백 — SVG 식물은 작은 미리보기로(A2). -->
                             <template x-if="o.spriteId">
                                 <svg class="plant-svg" aria-hidden="true"><use :href="'#sprite-' + o.spriteId"></use></svg>
@@ -127,6 +133,16 @@
                                 <span x-text="o.emoji"></span>
                             </template>
                         </button>
+                    </template>
+                </div>
+                <!-- 드래그 고스트: 손가락/커서를 따라오는 시각 복제. position:fixed(화면좌표)라 줌과 무관하게 정확히 붙고,
+                     pointer-events:none 으로 아래 셀 hit-test 를 방해하지 않으며 sway/pop 없이 정지한 채 따라온다(§2.2). -->
+                <div class="drag-ghost" x-show="dragging" :style="`left:${ghost.x}px; top:${ghost.y}px`">
+                    <template x-if="ghost.spriteId">
+                        <svg class="plant-svg" aria-hidden="true"><use :href="'#sprite-' + ghost.spriteId"></use></svg>
+                    </template>
+                    <template x-if="!ghost.spriteId">
+                        <span x-text="ghost.emoji"></span>
                     </template>
                 </div>
             </div>
@@ -310,6 +326,38 @@
         columns: /*[[${gridColumns}]]*/ 8
     };
 
+    // A3 드래그 탭/드래그 분기 임계(거리²). 6px 미만 이동은 탭, 이상은 드래그(브리틀이라 비검증 — 튜닝값).
+    const DRAG_THRESHOLD2 = 36;
+
+    /* @a3-pure-core:start */
+    // A3 순수 스냅·줌 코어 — DOM 의존 0(rects를 주입받음). preview 하니스(.preview/a3-pure.test.mjs)가
+    // 이 마커 블록을 추출해 실제 실행으로 단언한다(사본 아님 = 단일 출처).
+    // 줌 자동 정합: getBoundingClientRect 는 transform 적용된 화면좌표를 주므로 clientX/Y 와 같은 좌표계 →
+    // scale 보정 불필요. 그래서 줌돼도 이 함수가 그대로 옳은 셀을 고른다(A3 좌표계 분리의 핵심).
+    function closestCellIndex(clientX, clientY, rects, outOfBoundsMargin = 1.0) {
+        // 1) 포인터를 직접 포함하는 셀(반열린 구간: left 포함·right 불포함) — 가장 흔한 경우.
+        for (const r of rects) {
+            if (clientX >= r.left && clientX < r.right && clientY >= r.top && clientY < r.bottom) return r.index;
+        }
+        // 2) 없으면(갭/패딩/밖) 중심 거리 최소 셀. 단 그 셀 크기 기준 마진 밖이면 -1(유효 셀 없음).
+        let best = null, bestD = Infinity;
+        for (const r of rects) {
+            const cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+            const d = (clientX - cx) ** 2 + (clientY - cy) ** 2;
+            if (d < bestD) { bestD = d; best = r; }
+        }
+        if (!best) return -1;
+        const halfW = (best.right - best.left) / 2, halfH = (best.bottom - best.top) / 2;
+        const cx = (best.left + best.right) / 2, cy = (best.top + best.bottom) / 2;
+        // 마진은 셀 크기 비례 → 줌으로 셀이 커지면 마진도 비례(고정 px 상수였으면 줌에서 깨짐).
+        if (Math.abs(clientX - cx) > halfW * (1 + outOfBoundsMargin) ||
+            Math.abs(clientY - cy) > halfH * (1 + outOfBoundsMargin)) return -1;
+        return best.index;
+    }
+    // 휠 줌 배율 클램프 — [min,max] 밖으로 못 나가게.
+    function clampScale(z, min, max) { return Math.min(max, Math.max(min, z)); }
+    /* @a3-pure-core:end */
+
     // 탭-투-플레이스 편집 컴포넌트. Alpine(defer) 처리 전에 전역으로 정의된다(이 스크립트는 defer 아님).
     function myGarden() {
         const data = window.__garden || { placed: [], owned: [], cells: 48, columns: 8 };
@@ -329,13 +377,89 @@
             selected: null,
             justPlaced: null,   // 방금 놓은 셀 인덱스 — 그 셀만 1회 팝(표시용 1상태, 저장 payload엔 안 섞임)
 
+            // A3 드래그·줌 상태. dragSource/pendingSource = { kind:'palette'|'cell', axis,code,emoji,name,spriteId, fromCell? }.
+            dragging: false,        // 실제 드래그 진행 중(임계 넘긴 뒤)
+            pendingSource: null,    // pointerdown 후보 — 임계 넘으면 dragSource 로 승격
+            dragSource: null,
+            ghost: { x: 0, y: 0, emoji: '', spriteId: null },   // 손가락 따라오는 시각 복제(화면좌표)
+            dropTarget: -1,         // 현재 드롭 예고 셀 인덱스
+            pointerStart: { x: 0, y: 0, id: null },
+            suppressClick: false,   // 드래그 직후 발생하는 click 1회 무시(탭과 충돌 방지)
+            scale: 1,               // 휠 줌 배율(1~2.5)
+
             cellPlant(i) { return this.placements[i] || null; },
             isPlaced(o) { return Object.values(this.placements).some(p => p.axis === o.axis && p.code === o.code); },
 
-            startEdit() { this.editing = true; this.message = ''; this.selected = null; },
-            cancel() { this.placements = initial(); this.selected = null; this.editing = false; this.message = ''; },
+            startEdit() { this.editing = true; this.message = ''; this.selected = null; this.scale = 1; },
+            cancel() {
+                this.placements = initial(); this.selected = null; this.editing = false; this.message = '';
+                this.dragging = false; this.pendingSource = null; this.dragSource = null; this.dropTarget = -1; this.scale = 1;
+            },
+
+            // 편집 캔버스 셀들의 실제 화면 rect 수집(비순수 — DOM). 인덱스=DOM 순서=셀 인덱스.
+            cellRects() {
+                const out = [];
+                this.$root.querySelectorAll('.garden-canvas.editing .canvas-cell').forEach((el, i) => {
+                    const r = el.getBoundingClientRect();
+                    out.push({ index: i, left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+                });
+                return out;
+            },
+            // 셀에서 드래그 시작 — 식물이 있는 칸만 소스(빈 칸은 드롭 타깃일 뿐).
+            onCellPointerDown(e, i) {
+                const p = this.placements[i];
+                if (!p) return;
+                this.onPointerDown(e, { kind: 'cell', axis: p.axis, code: p.code, emoji: p.emoji, name: p.name, spriteId: p.spriteId, fromCell: i });
+            },
+            onPointerDown(e, source) {
+                if (e.pointerType === 'mouse' && e.button !== 0) return;  // 좌클릭/주포인터만
+                this.pointerStart = { x: e.clientX, y: e.clientY, id: e.pointerId };
+                this.pendingSource = source;   // 아직 드래그 아님 — move 에서 임계 넘으면 승격
+                try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+            },
+            onPointerMove(e) {
+                if (!this.pendingSource && !this.dragging) return;
+                if (e.pointerId !== this.pointerStart.id) return;
+                if (!this.dragging) {
+                    const dx = e.clientX - this.pointerStart.x, dy = e.clientY - this.pointerStart.y;
+                    if (dx * dx + dy * dy < DRAG_THRESHOLD2) return;   // 임계 미만 → 탭 후보 유지
+                    const s = this.pendingSource;                       // 임계 넘김 → 드래그 승격
+                    this.dragging = true;
+                    this.dragSource = s;
+                    this.ghost = { x: e.clientX, y: e.clientY, emoji: s.emoji, spriteId: s.spriteId };
+                }
+                this.ghost.x = e.clientX; this.ghost.y = e.clientY;
+                this.dropTarget = closestCellIndex(e.clientX, e.clientY, this.cellRects());
+            },
+            onPointerUp(e) {
+                try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
+                if (!this.dragging) { this.pendingSource = null; return; }  // 임계 미만 = 탭 → @click 이 처리
+                this.applyDrop(closestCellIndex(e.clientX, e.clientY, this.cellRects()));
+                this.dragging = false; this.dragSource = null; this.dropTarget = -1; this.pendingSource = null;
+                this.suppressClick = true;                       // 드래그 직후 click 1회 삼킴
+                setTimeout(() => { this.suppressClick = false; }, 0);
+            },
+            // 드롭 처리 — 빈 칸 이동만. -1(유효 셀 없음)·점유 칸은 무효 복귀(변화 없음). 점유 칸 교체는 탭이 담당(§2.4).
+            applyDrop(target) {
+                const s = this.dragSource;
+                if (!s || target < 0) return;
+                const fromCell = s.kind === 'cell' ? s.fromCell : null;
+                if (this.placements[target] && target !== fromCell) return;  // 점유 칸 = 무효 복귀
+                // 같은 식물이 다른 칸에 있으면 떼기(한 식물 한 번) — 셀 드래그면 출발칸이 곧 제거됨.
+                for (const k in this.placements) {
+                    const p = this.placements[k];
+                    if (p.axis === s.axis && p.code === s.code) delete this.placements[k];
+                }
+                this.placements[target] = { axis: s.axis, code: s.code, emoji: s.emoji, name: s.name, spriteId: s.spriteId };
+                this.justPlaced = target;   // 드롭 pop(@animationend 에서 해제)
+            },
+            onWheel(e) {
+                e.preventDefault();   // 페이지 스크롤 대신 줌
+                this.scale = clampScale(this.scale + (e.deltaY < 0 ? 0.15 : -0.15), 1, 2.5);
+            },
 
             selectPalette(o) {
+                if (this.suppressClick) return;   // 드래그 직후 click 무시
                 if (this.selected && this.selected.axis === o.axis && this.selected.code === o.code) {
                     this.selected = null; // 다시 누르면 선택 해제
                 } else {
@@ -343,6 +467,7 @@
                 }
             },
             tapCell(i) {
+                if (this.suppressClick) return;   // 드래그 직후 click 무시
                 if (this.selected) {
                     // 고른 식물을 이전 칸에서 떼고(한 식물 한 번) 이 칸에 놓는다(이 칸 점유자는 교체).
                     for (const k in this.placements) {
