@@ -16,6 +16,12 @@ import java.util.List;
  * @param genrePlants     장르축 카탈로그 전체(진열 순서, 보유·미보유 모두) — 수집 도감 렌더용
  * @param ownedGenreCount 장르축 보유 종 수
  * @param totalGenreCount 장르축 전체 종 수
+ * @param diversityPlants 다양성축(작가·출판사) 카탈로그 전체(진열 순서, 보유·미보유 모두). 식물의 {@code kind}로
+ *                        작가/출판사 그리드를 가른다 — 수집 도감 렌더용
+ * @param ownedAuthorCount    작가 식물 보유 종 수
+ * @param totalAuthorCount    작가 식물 전체 종 수
+ * @param ownedPublisherCount 출판사 식물 보유 종 수
+ * @param totalPublisherCount 출판사 식물 전체 종 수
  * @param recipePlants    트랙 B 레시피 결과 식물 카탈로그 전체(진열 순서). 미발견은 "???" 슬롯으로 렌더
  * @param mysterySlotCount 미발견 레시피 수(존재·개수는 알리되 조건은 숨김 — 호기심 유도, §2.5)
  * @param justDiscovered  이번 조회에서 새로 발견된 식물 이름들(토스트용, 진열 순서). 없으면 빈 리스트
@@ -29,6 +35,11 @@ public record GardenView(List<PlantState> plants,
                          List<GenrePlantState> genrePlants,
                          int ownedGenreCount,
                          int totalGenreCount,
+                         List<DiversityPlantState> diversityPlants,
+                         int ownedAuthorCount,
+                         int totalAuthorCount,
+                         int ownedPublisherCount,
+                         int totalPublisherCount,
                          List<DiscoveredPlantState> recipePlants,
                          int mysterySlotCount,
                          List<String> justDiscovered) {

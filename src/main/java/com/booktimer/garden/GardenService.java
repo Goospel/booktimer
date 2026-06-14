@@ -35,14 +35,17 @@ import java.util.Set;
  *       "오늘"은 유저 타임존 자정 경계(N-010).</li>
  *   <li><b>장르축</b>({@link GenrePlant}) — 완독(FINISHED) 책의 장르 대분류를 모아 그 장르 식물을 보유로
  *       친다. 완독만 집계해 파밍을 막고 책BTI와 신호를 일치시킨다(설계 §2.3).</li>
+ *   <li><b>다양성축</b>({@link DiversityPlant}) — 완독 책의 <b>서로 다른(distinct) 작가/출판사 수</b>가 임계를
+ *       넘으면 해당 식물을 보유로 친다. 작가·출판사가 같은 카운트 메커닉이라 한 카탈로그에 {@code kind}로
+ *       담는다(설계 §2.2). 장르축과 같이 완독만 집계한다.</li>
  *   <li><b>레시피축(트랙 B)</b>({@link RecipePlant}) — 완독+읽고싶음 책의 <b>조합</b>을 발견하면 얻는다.
  *       시간축·장르축과 달리 발견을 <b>저장</b>한다({@link UserDiscoveredPlant}) — 발견은 이벤트라 박아야
  *       하고 책장이 바뀌어도 보유가 유지돼야 하기 때문(설계 §2.2). 그래서 조회 시 평가→저장이 일어난다.</li>
  * </ul>
  *
- * <p>순수 계산은 {@link PlantUnlockCalculator}·{@link GenreUnlockCalculator}·{@link RecipeEvaluator}에
- * 위임해 단위테스트로 전수 검증된다. 여기선 소스 배선(일자 집계·목표 이력·책장 조회·카탈로그 조회)과 조립,
- * 그리고 트랙 B 발견 저장만 한다.
+ * <p>순수 계산은 {@link PlantUnlockCalculator}·{@link GenreUnlockCalculator}·{@link DiversityUnlockCalculator}·
+ * {@link RecipeEvaluator}에 위임해 단위테스트로 전수 검증된다. 여기선 소스 배선(일자 집계·목표 이력·책장 조회·
+ * 카탈로그 조회)과 조립, 그리고 트랙 B 발견 저장만 한다.
  *
  * <p><b>트랜잭션</b>: 트랙 A는 읽기지만 트랙 B는 발견을 저장(쓰기)한다. 조회가 쓰기를 유발하는 패턴이라
  * (설계 §2.1 옵션 B — 대시보드 조회 시 평가) {@link #view}를 읽기-쓰기 트랜잭션으로 둔다. 중복 발견은
@@ -60,6 +63,7 @@ public class GardenService {
 
     private final PlantRepository plantRepository;
     private final GenrePlantRepository genrePlantRepository;
+    private final DiversityPlantRepository diversityPlantRepository;
     private final RecipePlantRepository recipePlantRepository;
     private final UserDiscoveredPlantRepository discoveredPlantRepository;
     private final BookRepository bookRepository;
@@ -70,6 +74,7 @@ public class GardenService {
 
     public GardenService(PlantRepository plantRepository,
                          GenrePlantRepository genrePlantRepository,
+                         DiversityPlantRepository diversityPlantRepository,
                          RecipePlantRepository recipePlantRepository,
                          UserDiscoveredPlantRepository discoveredPlantRepository,
                          BookRepository bookRepository,
@@ -79,6 +84,7 @@ public class GardenService {
                          Clock clock) {
         this.plantRepository = plantRepository;
         this.genrePlantRepository = genrePlantRepository;
+        this.diversityPlantRepository = diversityPlantRepository;
         this.recipePlantRepository = recipePlantRepository;
         this.discoveredPlantRepository = discoveredPlantRepository;
         this.bookRepository = bookRepository;
@@ -149,6 +155,31 @@ public class GardenService {
         List<GenrePlantState> genrePlants = GenreUnlockCalculator.resolve(genreCatalog, ownedGenres);
         int ownedGenreCount = (int) genrePlants.stream().filter(GenrePlantState::owned).count();
 
+        // 5.5) 다양성축 — 완독책의 distinct 작가/출판사 수로 작가·출판사 식물 보유 유도(완독만, 파밍 방지).
+        // author/publisher는 적재 시 정규화되지 않으므로(category와 달리 blankToNull 없음) distinctCount가
+        // strip + 빈/null 제외를 맡는다(미완성 메타 누수 가드 N-055). 책장 추가 조회 없이 위 books를 재사용.
+        List<String> finishedAuthors = books.stream()
+                .filter(b -> b.getStatus() == BookStatus.FINISHED)
+                .map(Book::getAuthor)
+                .toList();
+        List<String> finishedPublishers = books.stream()
+                .filter(b -> b.getStatus() == BookStatus.FINISHED)
+                .map(Book::getPublisher)
+                .toList();
+        int authorCount = DiversityUnlockCalculator.distinctCount(finishedAuthors);
+        int publisherCount = DiversityUnlockCalculator.distinctCount(finishedPublishers);
+        List<DiversityPlant> diversityCatalog = diversityPlantRepository.findAllByOrderByDisplayOrderAsc();
+        List<DiversityPlantState> diversityPlants =
+                DiversityUnlockCalculator.resolve(diversityCatalog, authorCount, publisherCount);
+        int ownedAuthorCount = (int) diversityPlants.stream()
+                .filter(s -> s.plant().getKind() == DiversityKind.AUTHOR && s.owned()).count();
+        int totalAuthorCount = (int) diversityCatalog.stream()
+                .filter(p -> p.getKind() == DiversityKind.AUTHOR).count();
+        int ownedPublisherCount = (int) diversityPlants.stream()
+                .filter(s -> s.plant().getKind() == DiversityKind.PUBLISHER && s.owned()).count();
+        int totalPublisherCount = (int) diversityCatalog.stream()
+                .filter(p -> p.getKind() == DiversityKind.PUBLISHER).count();
+
         // 6) 레시피축(트랙 B) — 책장 스냅샷으로 만족된 레시피를 평가하고, 새로 발견한 것을 저장한다.
         ShelfSnapshot snapshot = shelfSnapshot(books);
         Set<String> satisfied = RecipeEvaluator.satisfiedPlantCodes(snapshot);
@@ -182,6 +213,7 @@ public class GardenService {
 
         return new GardenView(states, ownedCount, catalog.size(), achievedDays, daysToNextUnlock, nextPlantName,
                 genrePlants, ownedGenreCount, genreCatalog.size(),
+                diversityPlants, ownedAuthorCount, totalAuthorCount, ownedPublisherCount, totalPublisherCount,
                 recipePlants, mysterySlotCount, justDiscovered);
     }
 
