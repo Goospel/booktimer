@@ -632,19 +632,17 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 
 /* === 독서 정원 (베타) — 잔디 카드 안 접힌 <details> 패널 === */
 /* 처음엔 접혀(베타라 opt-in) 잔디만 보이고, 토글(▸)을 누르면 잔디 아래로 펼쳐진다. JS 0.
-   토글 summary는 카드(.garden-host = .card) "좌측 상단 제목 옆"에 absolute로 띄운다 — 우측엔 연속일수
-   뱃지(.grass-streak)가 있어 거기 두면 겹친다(#333 회귀). 그래서 좌측 제목 옆으로 옮기고, 제목(h2)에
-   padding-left로 토글 폭만큼 자리를 비워 토글이 제목 글자와 겹치지 않게 한다. 패널은 details가 흐름 끝(잔디
-   아래)에 그대로라 잔디 바로 아래로 펼쳐진다(summary가 absolute라 흐름 밖 → 접힘 시 잔디 아래 공간 비움). */
+   토글 summary는 카드(.garden-host = .card) "상단 제목 바로 오른쪽"에 absolute로 띄운다 — 우측 끝엔 연속일수
+   뱃지(.grass-streak)가 있어 거기 두면 겹친다(#333 회귀). 그래서 제목 끝(좌측에서 제목 폭만큼)과 연속일수 사이에
+   둔다. 패널은 details가 흐름 끝(잔디 아래)에 그대로라 잔디 바로 아래로 펼쳐진다(summary가 absolute라 흐름 밖 →
+   접힘 시 잔디 아래 공간 비움).
+   ⚠️ 토글 left는 제목 "독서 잔디" 폭에 맞춘 매직넘버 — 제목 문구·폰트가 바뀌면 이 값도 다시 맞춰야 한다. */
 .garden-host { position: relative; }  /* 아래 .garden-toggle(absolute)의 위치 기준 = 이 잔디 카드. 없으면 positioned 조상이 없어 viewport 기준이 돼 토글이 페이지 우측 최상단으로 샌다. */
-/* 제목 옆 토글 자리 — 토글이 absolute(흐름 밖)라 헤더가 공간을 안 비우므로 h2를 토글 폭만큼 들여쓴다.
-   .garden-host 스코프라 정원 토글이 없는 /history 잔디 헤더엔 영향 없음. */
-.garden-host .grass-head h2 { padding-left: 3.4rem; }
 .garden { margin: 0; }
 .garden-toggle {
     position: absolute;
     top: 26px;                                         /* 제목(.8rem) 세로 중앙에 맞춤(.card padding-top 24px 기준) */
-    left: 24px;                                        /* 카드 콘텐츠 좌단(=.card padding 24px) = 제목 시작점에 정렬, 제목은 위 padding-left로 우측으로 밀림 */
+    left: 6.4rem;                                      /* 카드 콘텐츠 좌단(24px)에서 제목 "독서 잔디" 폭(.8rem·letter-spacing)만큼 오른쪽 = 제목 바로 옆 */
     display: inline-flex;
     align-items: center;
     gap: 4px;
