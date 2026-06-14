@@ -76,6 +76,9 @@
    - 네이밍: `feat/<요약>`, `fix/<요약>`, `docs/<요약>`, `chore/<요약>`
    - 예: `feat/reading-timer-entity`, `docs/learning-notes-n004`
 2. **작업 + 커밋** — 의미 단위로 커밋
+   - **커밋 제목에 PR 번호(`(#NNN)`)를 직접 넣지 않는다** — 이 repo는 squash 머지라 머지 시
+     GitHub가 제목 끝에 `(#NNN)`을 **자동 부착**한다. 직접 넣으면 `(#NNN) (#NNN)`으로 중복된다.
+     (배경: 2026-06-15 #351에서 커밋 제목에 `(#351)`을 넣어 머지 후 중복 발생.)
 3. **push** — `git push -u origin <branch>`
 4. **PR 작성** — `gh pr create` 로 작성
    - body 끝에 다음을 붙인다:
