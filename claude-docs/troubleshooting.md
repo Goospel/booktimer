@@ -45,6 +45,8 @@
 - [T-047. 외부 API를 http로 호출하면 CDN(CloudFront)이 https로 301 → RestClient가 미추적해 응답이 HTML이라 JSON 파싱 실패(운영 알라딘 검색 0건)](#t-047-외부-api를-http로-호출하면-cdncloudfront이-https로-301--restclient가-미추적해-응답이-html이라-json-파싱-실패운영-알라딘-검색-0건)
 - [T-048. gh pr merge --squash는 PR 제목이 아니라 커밋 메시지를 squash subject로 쓴다 — PR 제목만 정정하면 main 커밋 제목이 어긋난다](#t-048-gh-pr-merge---squash는-pr-제목이-아니라-커밋-메시지를-squash-subject로-쓴다--pr-제목만-정정하면-main-커밋-제목이-어긋난다)
 - [T-049. head에 작은 스크립트/마크업을 추가했더니 특정 큰 페이지만 500(IllegalStateException) — 응답 버퍼 임계 + CSRF 세션](#t-049-head에-작은-스크립트마크업을-추가했더니-특정-큰-페이지만-500illegalstateexception--응답-버퍼-임계--csrf-세션)
+- [T-050. CSS transform: perspective()로 격자 캔버스를 기울이면 클릭 좌표가 어긋나 탭-투-플레이스가 깨진다](#t-050-css-transform-perspective로-격자-캔버스를-기울이면-클릭-좌표가-어긋나-탭-투-플레이스가-깨진다)
+- [T-051. 워크트리 안에서 연 세션이 gh pr merge --delete-branch를 하면 로컬 정리가 'main is already used by worktree'로 실패한다](#t-051-워크트리-안에서-연-세션이-gh-pr-merge---delete-branch를-하면-로컬-정리가-main-is-already-used-by-worktree로-실패한다)
 
 ---
 
@@ -980,6 +982,36 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 
 ---
 
+## T-050. CSS transform: perspective()로 격자 캔버스를 기울이면 클릭 좌표가 어긋나 탭-투-플레이스가 깨진다
+
+**증상**: 정원 캔버스(격자)에 `transform: perspective()`로 3D 기울임을 주면, 셀을 탭했을 때 배치가 엉뚱한 셀에 꽂히거나 안 먹는다. 반응형·터치에서 특히 불안정.
+
+**원인**: 클릭 hit-test는 변환된 **시각 위치** 기준인데, 격자 인덱스 계산 로직은 **원래 좌표계**를 가정한다 → 둘이 분리돼 클릭→셀 매핑이 어긋난다.
+
+**해결 / 예방**:
+- 격자 클릭 UI엔 perspective/3D 변환을 쓰지 않는다. 깊이감은 그라데이션 + 발밑 그림자 + inset 그림자로 '암시'(좌표계는 불변 유지).
+- 진짜 아이소메트릭이 필요하면 DOM 격자가 아니라 캔버스(PixiJS 등)로 좌표를 직접 계산한다.
+
+**관련**: 정원 무대화 A0에서 채택, changelog #346.
+
+---
+
+## T-051. 워크트리 안에서 연 세션이 gh pr merge --delete-branch를 하면 로컬 정리가 'main is already used by worktree'로 실패한다
+
+**증상**: 별도 워크트리(`.claude/worktrees/<task>`)에서 작업한 브랜치를 `gh pr merge <n> --squash --delete-branch`로 머지하면 `failed to run git: fatal: 'main' is already used by worktree at '...'`로 끝난다. 원격 머지 자체는 성공했는데도 에러로 보여 "머지가 안 됐나" 헷갈린다.
+
+**원인**: `--delete-branch`의 후처리는 머지한 로컬 브랜치를 지우려고 다른 브랜치(main)로 전환을 시도하는데, main이 **이미 다른 워크트리(메인 폴더)에 체크아웃**돼 있어 "같은 브랜치 동시 체크아웃 금지"에 걸린다. 머지(원격 GitHub)와 로컬 정리(git)는 **별개 단계**라, 정리만 실패하고 머지는 이미 끝나 있다.
+
+**해결 / 예방**:
+- 에러에 속지 말고 `gh pr view <n> --json state,mergeCommit`로 **머지 성공(MERGED)부터 확인**한다.
+- 원격 브랜치는 `git push origin --delete <branch>`로 직접 삭제, `git fetch --prune`로 추적 정리.
+- 로컬 main 갱신은 **메인 워크트리에서** `git -C <main-worktree> merge --ff-only origin/main`(그 폴더가 깨끗할 때만 — 다른 세션 점유 주의).
+- 자기 워크트리·로컬 브랜치 제거는 **그 세션을 빠져나온 뒤** 메인에서 `git worktree remove <path>` → `git branch -d <branch>`(현재 점유 폴더는 자기 발밑이라 세션 중 제거 불가).
+
+**관련**: 워크트리 격리 개념 N-032, 머지 후 정리 순서 T-005, squash subject T-048, changelog #347.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1034,3 +1066,4 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 | 2026-06-12 | T-048 (gh pr merge --squash는 --subject 미지정 시 PR 제목이 아니라 브랜치 커밋 메시지(단일=그 제목, 복수=첫/HEAD 커밋)를 squash subject로 씀 — 웹 UI squash 기본(=PR 제목)과 달라 gh pr edit로 PR 제목만 정정하면 무력화, 이번 N-074→N-075 정정이 main 커밋 제목엔 N-074로 박힘 / 해결=gh pr merge --squash --subject/--body 명시 또는 커밋 메시지 동기화(amend), 사후엔 main force push 금지(T-002)라 불가 → 머지 전에 / 영향은 제목뿐(파일·changelog는 정확) / 한글 메시지 경로 T-026, N-070) |
 | 2026-06-13 | T-049 (head에 작은 스크립트(GA4 #338) 추가가 응답 버퍼 임계 근처였던 큰 페이지(personality)만 500 — 버퍼 커밋 후 맨 아래 CSRF 폼(th:action)이 세션 생성 못 해 IllegalStateException / 다른 32템플릿 정상·그 PR이 personality 안 건드림이라 헷갈림 / 해결=컨트롤러 GET서 렌더 전 CsrfToken.getToken() 선확정(DashboardController 패턴), 세션 생성을 커밋 전으로 / 진단=그 페이지를 추가 전으로 격리 테스트해 방아쇠 확정(범인은 추가 아닌 선확정 누락) / 예방=th:action 폼 맨 아래 큰 페이지에 토큰 선확정 미리 / 개념 N-077, semantic conflict N-078, PR #340) |
 | 2026-06-14 | T-050 (CSS `transform: perspective()`로 격자 캔버스를 기울이면 셀의 화면 클릭 좌표가 원근 변환과 어긋나 탭-투-플레이스(칸 탭→배치)가 엉뚱한 셀에 꽂히거나 안 먹는다 — 반응형·터치에서 특히 불안정 / 원인=클릭 hit-test는 변환된 시각 위치 기준인데 격자 인덱스 로직은 원래 좌표계를 가정 → 둘이 분리됨 / 해결=격자 클릭 UI엔 perspective/3D 변환을 쓰지 말고 깊이는 그라데이션+발밑 그림자+inset 그림자로 '암시'(좌표계 불변 유지) / 진짜 아이소메트릭이 필요하면 DOM 격자가 아니라 캔버스(PixiJS 등)로 좌표를 직접 계산 / 정원 무대화 A0에서 채택, PR #346) |
+| 2026-06-14 | T-051 (워크트리 세션이 gh pr merge --delete-branch 하면 로컬 정리가 `fatal: 'main' is already used by worktree`로 실패 — 원격 머지는 성공, --delete-branch 후처리가 로컬 브랜치 지우려 main 전환 시도하나 main이 다른 워크트리 점유라 거부 / 해결=gh pr view로 MERGED 확인 → git push origin --delete로 원격 브랜치 삭제 → 메인 워크트리서 ff-only pull → 세션 종료 후 worktree remove+branch -d(자기 발밑 폴더는 세션 중 제거 불가) / N-032, T-005, T-048, PR #347). T-050 본문·목차 누락도 함께 복원(#346이 누적표에만 추가) |
