@@ -6,8 +6,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.security.web.csrf.CsrfToken;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -26,6 +31,22 @@ class LoginControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private LoginController loginController;
+
+    @Test
+    @DisplayName("GET /login: 렌더 전 CSRF 토큰을 선확정한다 — head가 커져 응답이 커밋된 뒤 세션 생성하다 깨지는 500 방어(T-049 재발)")
+    void getLogin_precommitsCsrfToken() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        CsrfToken token = mock(CsrfToken.class);
+        when(request.getAttribute(CsrfToken.class.getName())).thenReturn(token);
+
+        loginController.loginForm(request);
+
+        // 폼의 CSRF 숨김필드가 렌더되기 전에 토큰을 미리 읽어 세션을 응답 커밋 이전에 만든다.
+        verify(token).getToken();
+    }
 
     @Test
     @DisplayName("GET /login: 커스텀 로그인 뷰를 렌더하고 회원가입 링크를 포함한다 (인증 불필요)")

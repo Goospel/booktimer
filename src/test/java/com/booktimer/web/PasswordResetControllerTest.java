@@ -14,8 +14,14 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.ui.Model;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -45,6 +51,33 @@ class PasswordResetControllerTest {
     private com.booktimer.email.EmailTokenRepository tokenRepository;
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private PasswordResetController passwordResetController;
+
+    @Test
+    @DisplayName("GET /password/forgot: 렌더 전 CSRF 토큰을 선확정한다 — 익명 폼 commit-후-500 방어(T-049 재발)")
+    void forgotForm_precommitsCsrfToken() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        CsrfToken token = mock(CsrfToken.class);
+        when(request.getAttribute(CsrfToken.class.getName())).thenReturn(token);
+
+        passwordResetController.forgotForm(request);
+
+        verify(token).getToken();
+    }
+
+    @Test
+    @DisplayName("GET /password/reset: 렌더 전 CSRF 토큰을 선확정한다 — 익명 폼 commit-후-500 방어(T-049 재발)")
+    void resetForm_precommitsCsrfToken() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        CsrfToken token = mock(CsrfToken.class);
+        when(request.getAttribute(CsrfToken.class.getName())).thenReturn(token);
+
+        passwordResetController.resetForm("any-token", request, mock(Model.class));
+
+        verify(token).getToken();
+    }
 
     private User persistLocal(String email, String handle) {
         User u = User.of(email, passwordEncoder.encode("oldPassword1"), "책벌레", "Asia/Seoul", Role.USER);
