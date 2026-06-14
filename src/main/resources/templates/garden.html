@@ -30,6 +30,8 @@
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
 </head>
 <body>
+<!-- 식물 SVG 스프라이트 정의(A2) — 화면 밖 <symbol>들을 1회 주입, 아래 <use href="#sprite-{code}">가 참조. -->
+<th:block th:replace="~{fragments/garden-sprites :: sprites}"></th:block>
 <div class="container">
     <header class="brand">
         <a class="brand-home" th:href="@{/}" title="메인 대시보드로">
@@ -67,7 +69,13 @@
                      th:with="cellPlant=${placedByCell.get(i)}"
                      th:classappend="${cellPlant != null} ? 'occupied' : ''"
                      th:title="${cellPlant != null} ? ${cellPlant.name()} : ''">
-                    <span class="canvas-plant" th:if="${cellPlant != null}" th:text="${cellPlant.emoji()}">🌱</span>
+                    <!-- spriteId 있으면 SVG, 없으면 이모지 폴백(A2). 둘 다 .canvas-plant라 sway/pop 상속. -->
+                    <span class="canvas-plant" th:if="${cellPlant != null}">
+                        <svg class="plant-svg" th:if="${cellPlant.spriteId() != null}" aria-hidden="true">
+                            <use th:attr="href='#sprite-' + ${cellPlant.spriteId()}"></use>
+                        </svg>
+                        <span th:if="${cellPlant.spriteId() == null}" th:text="${cellPlant.emoji()}">🌱</span>
+                    </span>
                 </div>
             </div>
         </div>
@@ -90,8 +98,17 @@
                                      x-transition:enter을 안 쓰는 이유: 편집 진입 시 기존 식물이 전부 재생돼버림(설계 §2.3). -->
                                 <span class="canvas-plant" x-show="cellPlant(i-1)"
                                       :class="{ 'plant-pop': justPlaced === (i-1) }"
-                                      @animationend="if (justPlaced === (i-1)) justPlaced = null"
-                                      x-text="cellPlant(i-1)?.emoji"></span>
+                                      @animationend="if (justPlaced === (i-1)) justPlaced = null">
+                                    <!-- spriteId 있으면 SVG, 없으면 이모지 — 보기 모드와 동일 폴백(A2 R4). -->
+                                    <template x-if="cellPlant(i-1)?.spriteId">
+                                        <svg class="plant-svg" aria-hidden="true">
+                                            <use :href="'#sprite-' + cellPlant(i-1).spriteId"></use>
+                                        </svg>
+                                    </template>
+                                    <template x-if="cellPlant(i-1) && !cellPlant(i-1).spriteId">
+                                        <span x-text="cellPlant(i-1)?.emoji"></span>
+                                    </template>
+                                </span>
                             </div>
                         </template>
                     </div>
@@ -102,7 +119,13 @@
                         <button type="button" class="palette-plant"
                                 :class="{ selected: selected && selected.axis===o.axis && selected.code===o.code, placed: isPlaced(o) }"
                                 @click="selectPalette(o)" :title="o.name">
-                            <span x-text="o.emoji"></span>
+                            <!-- 팔레트도 동일 폴백 — SVG 식물은 작은 미리보기로(A2). -->
+                            <template x-if="o.spriteId">
+                                <svg class="plant-svg" aria-hidden="true"><use :href="'#sprite-' + o.spriteId"></use></svg>
+                            </template>
+                            <template x-if="!o.spriteId">
+                                <span x-text="o.emoji"></span>
+                            </template>
                         </button>
                     </template>
                 </div>
@@ -151,7 +174,13 @@
                      th:title="${p.owned()}
                          ? ${p.plant().getName()} + (${p.isNew()} ? ' · 최근 획득' : '')
                          : ('목표 ' + ${p.plant().getUnlockThresholdDays()} + '일 달성 시')">
-                    <span class="plant-emoji" th:if="${p.owned()}" th:text="${p.plant().getEmoji()}">🌱</span>
+                    <!-- 보유 종은 spriteId 있으면 SVG, 없으면 이모지(A2). 도감도 캔버스와 동일 폴백. -->
+                    <span class="plant-emoji" th:if="${p.owned()}">
+                        <svg class="plant-svg" th:if="${p.plant().getSpriteId() != null}" aria-hidden="true">
+                            <use th:attr="href='#sprite-' + ${p.plant().getSpriteId()}"></use>
+                        </svg>
+                        <span th:if="${p.plant().getSpriteId() == null}" th:text="${p.plant().getEmoji()}">🌱</span>
+                    </span>
                     <span class="plant-emoji locked" th:unless="${p.owned()}" aria-hidden="true">🔒</span>
                     <span class="plant-name" th:if="${p.owned()}" th:text="${p.plant().getName()}">새싹</span>
                     <span class="plant-name locked" th:unless="${p.owned()}"
@@ -286,7 +315,7 @@
         const data = window.__garden || { placed: [], owned: [], cells: 48, columns: 8 };
         const initial = () => {
             const m = {};
-            (data.placed || []).forEach(p => { m[p.cell] = { axis: p.axis, code: p.code, emoji: p.emoji, name: p.name }; });
+            (data.placed || []).forEach(p => { m[p.cell] = { axis: p.axis, code: p.code, emoji: p.emoji, name: p.name, spriteId: p.spriteId }; });
             return m;
         };
         return {
@@ -310,7 +339,7 @@
                 if (this.selected && this.selected.axis === o.axis && this.selected.code === o.code) {
                     this.selected = null; // 다시 누르면 선택 해제
                 } else {
-                    this.selected = { axis: o.axis, code: o.code, emoji: o.emoji, name: o.name };
+                    this.selected = { axis: o.axis, code: o.code, emoji: o.emoji, name: o.name, spriteId: o.spriteId };
                 }
             },
             tapCell(i) {

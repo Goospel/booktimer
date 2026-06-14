@@ -55,7 +55,8 @@ public class GardenLayoutService {
         for (GardenPlacement gp : placementRepository.findByUser(user)) {
             OwnedPlant meta = ownedByKey.get(new PlacementKey(gp.getAxis(), gp.getPlantCode()));
             if (meta != null) { // 교집합 — 보유 잃은 식물은 렌더에서 제외(유령 방지)
-                placed.add(new PlacedPlant(gp.getAxis(), gp.getPlantCode(), meta.emoji(), meta.name(), gp.getCellIndex()));
+                placed.add(new PlacedPlant(gp.getAxis(), gp.getPlantCode(),
+                        meta.emoji(), meta.name(), meta.spriteId(), gp.getCellIndex())); // spriteId는 보유 메타에서 결합(A2)
             }
         }
         placed.sort(Comparator.comparingInt(PlacedPlant::cell));

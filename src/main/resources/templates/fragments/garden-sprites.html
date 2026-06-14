@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<!--
+  독서 정원 식물 SVG 스프라이트 정의(A2) — 코드 벡터(외부 에셋 0).
+
+  화면 밖 <svg>에 시간축 14종을 <symbol id="sprite-{code}">로 1회 정의하고, 캔버스·도감은
+  <use href="#sprite-{code}">로 N곳에서 참조한다(정의 1·참조 N — 중복 0). spriteId가 없는 식물은
+  뷰가 이모지로 폴백하므로 여기에 없어도 정상이다(타 축·미적용 종).
+
+  모든 심볼 viewBox 0 0 32 32, 발밑(y≈31)·가운데(x=16) 기준 — 부모 .canvas-plant의 sway가
+  transform-origin: bottom center로 흔들 때 뿌리가 고정되도록. 팔레트는 무대(잔디 세이지·흙 갈색)와
+  어울리는 채도 낮은 톤. fill 명시(다색).
+-->
+<svg th:fragment="sprites" class="garden-sprite-defs" width="0" height="0" aria-hidden="true"
+     focusable="false" xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden">
+    <defs>
+        <!-- 새싹 — 짧은 줄기에 두 떡잎 -->
+        <symbol id="sprite-sprout" viewBox="0 0 32 32">
+            <path d="M16 31V19" stroke="#5E8443" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+            <path d="M16 22c-5 0-9-3-10-8 6-1 11 2 10 8z" fill="#7BA05B"/>
+            <path d="M16 20c5 0 9-3 10-8-6-1-11 2-10 8z" fill="#93B873"/>
+        </symbol>
+
+        <!-- 허브 — 한 줄기에 마주난 잎들 -->
+        <symbol id="sprite-herb" viewBox="0 0 32 32">
+            <path d="M16 31V8" stroke="#5E8443" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+            <path d="M16 14c-4 1-8-1-9-5 5-2 9 1 9 5zM16 21c-4 1-8-1-9-5 5-2 9 1 9 5z" fill="#7BA05B"/>
+            <path d="M16 11c4 1 8-1 9-5-5-2-9 1-9 5zM16 18c4 1 8-1 9-5-5-2-9 1-9 5z" fill="#93B873"/>
+        </symbol>
+
+        <!-- 클로버 — 세 하트잎 + 줄기 -->
+        <symbol id="sprite-clover" viewBox="0 0 32 32">
+            <path d="M16 31V17" stroke="#5E8443" stroke-width="2" fill="none" stroke-linecap="round"/>
+            <path d="M16 16c-2-4-8-3-8 1 0 3 4 4 8 1z" fill="#6FA04E"/>
+            <path d="M16 16c2-4 8-3 8 1 0 3-4 4-8 1z" fill="#7BA05B"/>
+            <path d="M16 18c-3-2-3-8 0-9 3 1 3 7 0 9z" fill="#8AB266"/>
+        </symbol>
+
+        <!-- 화분 모종 — 사다리꼴 화분 + 새싹 -->
+        <symbol id="sprite-seedling_pot" viewBox="0 0 32 32">
+            <path d="M16 18V12" stroke="#5E8443" stroke-width="2" fill="none" stroke-linecap="round"/>
+            <path d="M16 15c-3-1-6-3-6-7 4-1 7 2 6 7z" fill="#7BA05B"/>
+            <path d="M16 14c3-1 6-3 6-7-4-1-7 2-6 7z" fill="#93B873"/>
+            <path d="M9 19h14l-2 10H11z" fill="#B5774C"/>
+            <rect x="8" y="17" width="16" height="3" rx="1.2" fill="#C98A5E"/>
+        </symbol>
+
+        <!-- 튤립 — 컵꽃 + 줄기 + 잎 -->
+        <symbol id="sprite-tulip" viewBox="0 0 32 32">
+            <path d="M16 31V15" stroke="#5E8443" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+            <path d="M16 24c-5 0-8-3-9-8 5-1 8 2 9 8z" fill="#7BA05B"/>
+            <path d="M11 14c0-4 2-7 5-9 3 2 5 5 5 9-1 3-3 5-5 5s-4-2-5-5z" fill="#D98AA8"/>
+            <path d="M16 5c-1.6 2-2.4 5-2.4 9M16 5c1.6 2 2.4 5 2.4 9" stroke="#C2718F" stroke-width="1" fill="none"/>
+        </symbol>
+
+        <!-- 데이지 — 흰 꽃잎 + 노란 중심 -->
+        <symbol id="sprite-daisy" viewBox="0 0 32 32">
+            <path d="M16 31V16" stroke="#5E8443" stroke-width="2" fill="none" stroke-linecap="round"/>
+            <path d="M16 19c-4 1-7-1-8-4 4-2 7 0 8 4z" fill="#7BA05B"/>
+            <g fill="#F4F1E6">
+                <ellipse cx="16" cy="6" rx="2.4" ry="3.8"/>
+                <ellipse cx="16" cy="16" rx="2.4" ry="3.8"/>
+                <ellipse cx="11" cy="11" rx="3.8" ry="2.4"/>
+                <ellipse cx="21" cy="11" rx="3.8" ry="2.4"/>
+                <ellipse cx="12.4" cy="7.4" rx="3.4" ry="2.2" transform="rotate(-45 12.4 7.4)"/>
+                <ellipse cx="19.6" cy="7.4" rx="3.4" ry="2.2" transform="rotate(45 19.6 7.4)"/>
+                <ellipse cx="12.4" cy="14.6" rx="3.4" ry="2.2" transform="rotate(45 12.4 14.6)"/>
+                <ellipse cx="19.6" cy="14.6" rx="3.4" ry="2.2" transform="rotate(-45 19.6 14.6)"/>
+            </g>
+            <circle cx="16" cy="11" r="3" fill="#E8C04D"/>
+        </symbol>
+
+        <!-- 해바라기 — 노란 꽃잎 + 갈색 중심 + 잎 -->
+        <symbol id="sprite-sunflower" viewBox="0 0 32 32">
+            <path d="M16 31V14" stroke="#5E8443" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+            <path d="M16 22c-5 0-8-3-9-7 5-1 8 1 9 7zM16 25c5 0 8-3 9-7-5-1-8 1-9 7z" fill="#7BA05B"/>
+            <g fill="#E8B73A">
+                <ellipse cx="16" cy="4" rx="2" ry="3.4"/>
+                <ellipse cx="16" cy="16" rx="2" ry="3.4"/>
+                <ellipse cx="10" cy="10" rx="3.4" ry="2"/>
+                <ellipse cx="22" cy="10" rx="3.4" ry="2"/>
+                <ellipse cx="11.8" cy="5.8" rx="3" ry="2" transform="rotate(-45 11.8 5.8)"/>
+                <ellipse cx="20.2" cy="5.8" rx="3" ry="2" transform="rotate(45 20.2 5.8)"/>
+                <ellipse cx="11.8" cy="14.2" rx="3" ry="2" transform="rotate(45 11.8 14.2)"/>
+                <ellipse cx="20.2" cy="14.2" rx="3" ry="2" transform="rotate(-45 20.2 14.2)"/>
+            </g>
+            <circle cx="16" cy="10" r="3.6" fill="#7A5230"/>
+        </symbol>
+
+        <!-- 벚꽃 — 분홍 다섯 꽃잎 -->
+        <symbol id="sprite-cherry_blossom" viewBox="0 0 32 32">
+            <path d="M16 31V18" stroke="#6B7E4A" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+            <g fill="#F3C3D4">
+                <ellipse cx="16" cy="7" rx="3" ry="4.2"/>
+                <ellipse cx="16" cy="7" rx="3" ry="4.2" transform="rotate(72 16 11)"/>
+                <ellipse cx="16" cy="7" rx="3" ry="4.2" transform="rotate(144 16 11)"/>
+                <ellipse cx="16" cy="7" rx="3" ry="4.2" transform="rotate(216 16 11)"/>
+                <ellipse cx="16" cy="7" rx="3" ry="4.2" transform="rotate(288 16 11)"/>
+            </g>
+            <circle cx="16" cy="11" r="2.2" fill="#E89AB4"/>
+        </symbol>
+
+        <!-- 장미 — 겹꽃 봉오리 + 줄기 -->
+        <symbol id="sprite-rose" viewBox="0 0 32 32">
+            <path d="M16 31V16" stroke="#5E8443" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+            <path d="M16 20c-4 0-7-2-8-5 4-1 7 1 8 5z" fill="#7BA05B"/>
+            <circle cx="16" cy="10" r="7" fill="#C75D6E"/>
+            <path d="M16 5c3 1 5 3 5 6M16 16c-3-1-5-3-5-6" stroke="#A8485A" stroke-width="1.4" fill="none"/>
+            <circle cx="16" cy="10" r="2.6" fill="#A8485A"/>
+        </symbol>
+
+        <!-- 선인장 — 둥근 기둥 + 팔 + 화분 -->
+        <symbol id="sprite-cactus" viewBox="0 0 32 32">
+            <rect x="12.5" y="6" width="7" height="18" rx="3.5" fill="#6E9A6B"/>
+            <path d="M12.5 14c-3 0-4-2-4-5 0-1.4 1.6-1.4 1.6 0 0 1.6.8 2.4 2.4 2.4zM19.5 12c3 0 4-2 4-5 0-1.4-1.6-1.4-1.6 0 0 1.6-.8 2.4-2.4 2.4z" fill="#6E9A6B"/>
+            <path d="M10 22h12l-1.4 7H11.4z" fill="#B5774C"/>
+            <rect x="9" y="20.5" width="14" height="2.6" rx="1.2" fill="#C98A5E"/>
+        </symbol>
+
+        <!-- 대나무 — 마디 있는 줄기 + 잎 -->
+        <symbol id="sprite-bamboo" viewBox="0 0 32 32">
+            <rect x="11" y="4" width="4" height="27" rx="1" fill="#8FB06A"/>
+            <rect x="17" y="8" width="3.4" height="23" rx="1" fill="#A0BE7E"/>
+            <g fill="#5E8443">
+                <rect x="10.6" y="11" width="4.8" height="1.6"/>
+                <rect x="10.6" y="19" width="4.8" height="1.6"/>
+                <rect x="16.6" y="15" width="4.2" height="1.4"/>
+            </g>
+            <path d="M15 7c4-1 7 1 9 4-4 1-8-1-9-4z" fill="#7BA05B"/>
+        </symbol>
+
+        <!-- 단풍나무 — 줄기 + 붉은 단풍 캐노피 -->
+        <symbol id="sprite-maple" viewBox="0 0 32 32">
+            <path d="M16 31V18" stroke="#9A6A45" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+            <circle cx="16" cy="12" r="8" fill="#C56A3A"/>
+            <circle cx="10" cy="15" r="4.6" fill="#D17C46"/>
+            <circle cx="22" cy="15" r="4.6" fill="#B85C30"/>
+        </symbol>
+
+        <!-- 침엽수 — 삼각 층 + 줄기 -->
+        <symbol id="sprite-evergreen" viewBox="0 0 32 32">
+            <rect x="14.4" y="25" width="3.2" height="6" fill="#9A6A45"/>
+            <path d="M16 4l6 9h-12zM16 11l7 10h-14zM16 18l8 11H8z" fill="#4E7350"/>
+        </symbol>
+
+        <!-- 큰나무 — 굵은 줄기 + 넓은 캐노피 -->
+        <symbol id="sprite-deciduous_tree" viewBox="0 0 32 32">
+            <path d="M16 31V16" stroke="#9A6A45" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+            <circle cx="16" cy="11" r="9" fill="#6E9457"/>
+            <circle cx="9" cy="14" r="5.4" fill="#7BA05B"/>
+            <circle cx="23" cy="14" r="5.4" fill="#5E8443"/>
+        </symbol>
+    </defs>
+</svg>

@@ -908,6 +908,14 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     animation: garden-glow .45s ease-out;
 }
 
+/* A2: 코드 벡터 SVG 식물 — 컨텍스트별 이모지 크기에 맞춰 시각 균형을 맞춘다.
+   부모(.canvas-plant/.plant-emoji/.palette-plant)의 sway/pop transform을 상속하고,
+   <symbol> 내부 fill이 다색 채색을 담당한다(외부 요청 0). */
+.plant-svg { width: 1.5rem; height: 1.5rem; display: block; overflow: visible; }
+.garden-canvas .canvas-plant .plant-svg { width: 1.6rem; height: 1.6rem; }
+.garden-grid .plant-emoji .plant-svg { width: 1.7rem; height: 1.7rem; }
+.garden-palette .palette-plant .plant-svg { width: 1.5rem; height: 1.5rem; }
+
 @keyframes garden-sway {
     0%, 100% { transform: rotate(-2.5deg); }
     50%      { transform: rotate(2.5deg); }

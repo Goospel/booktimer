@@ -47,24 +47,33 @@ public class Plant {
     @Column(name = "unlock_threshold_days", nullable = false)
     private long unlockThresholdDays;
 
+    /**
+     * 코드 벡터 SVG 스프라이트 식별자(A2). null이면 이모지로 폴백한다 — 정상 상태다(아직 SVG화 안 된 종).
+     * 뷰는 {@code #sprite-{spriteId}} 심볼을 {@code <use>}로 참조한다. 시드(V40)에서만 채워지는 불변 메타.
+     */
+    @Column(name = "sprite_id", length = 50)
+    private String spriteId;
+
     protected Plant() {
         // JPA
     }
 
-    private Plant(String code, String name, String emoji, int displayOrder, long unlockThresholdDays) {
+    private Plant(String code, String name, String emoji, int displayOrder, long unlockThresholdDays, String spriteId) {
         this.code = code;
         this.name = name;
         this.emoji = emoji;
         this.displayOrder = displayOrder;
         this.unlockThresholdDays = unlockThresholdDays;
+        this.spriteId = spriteId;
     }
 
     /**
-     * 카탈로그 한 종을 코드로 만든다 — 운영은 시드(V35)로 채우므로 주 용도는 순수 도메인 테스트다
+     * 카탈로그 한 종을 코드로 만든다 — 운영은 시드(V35·V40)로 채우므로 주 용도는 순수 도메인 테스트다
      * (패키지 안으로 노출 제한). 보유는 저장하지 않고 유도하므로 식물 인스턴스 자체는 불변 메타다.
+     * {@code spriteId}는 nullable(이모지 폴백) — SVG 미적용 종은 null로 전달한다(A2).
      */
-    static Plant of(String code, String name, String emoji, int displayOrder, long unlockThresholdDays) {
-        return new Plant(code, name, emoji, displayOrder, unlockThresholdDays);
+    static Plant of(String code, String name, String emoji, int displayOrder, long unlockThresholdDays, String spriteId) {
+        return new Plant(code, name, emoji, displayOrder, unlockThresholdDays, spriteId);
     }
 
     public Long getId() {
@@ -89,5 +98,10 @@ public class Plant {
 
     public long getUnlockThresholdDays() {
         return unlockThresholdDays;
+    }
+
+    /** 코드 벡터 SVG 스프라이트 식별자 — null이면 이모지 폴백(A2). */
+    public String getSpriteId() {
+        return spriteId;
     }
 }
