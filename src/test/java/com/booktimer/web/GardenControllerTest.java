@@ -29,7 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>1차 핵심 가치는 "전용 페이지 + 축 탭 + 보유/미보유 필터"이고, 데이터는 대시보드와 같은
  * {@link com.booktimer.garden.GardenService#view}를 재사용한다. 그래서 여기선 라우팅·인증·모델 적재
  * (배선)만 못 박는다 — 탭·필터·상세는 순수 클라이언트(Alpine) 렌더라 단위테스트가 무의미해 preview로 검증한다.
- * 식물 카탈로그(V35~V37 시드)는 H2 테스트엔 비어 있어, 내용이 아니라 GardenView 타입·비-null만 본다
+ * 식물 카탈로그(V35~V38 시드)는 H2 테스트엔 비어 있어, 내용이 아니라 GardenView 타입·비-null만 본다
  * ({@code DashboardControllerTest.dashboard_includesGardenView}와 동일 관례).
  */
 @SpringBootTest
@@ -75,9 +75,10 @@ class GardenControllerTest {
 
         Object garden = result.getModelAndView().getModel().get("garden");
         assertThat(garden).isInstanceOf(GardenView.class);
-        // 3축 슬롯(시간·장르·레시피)이 모두 배선된다(카탈로그는 V35~V37 시드, H2엔 비어 non-null만 확인).
+        // 4축 슬롯(시간·장르·작가출판사·레시피)이 모두 배선된다(카탈로그는 V35~V38 시드, H2엔 비어 non-null만 확인).
         assertThat(((GardenView) garden).plants()).isNotNull();
         assertThat(((GardenView) garden).genrePlants()).isNotNull();
+        assertThat(((GardenView) garden).diversityPlants()).isNotNull();
         assertThat(((GardenView) garden).recipePlants()).isNotNull();
     }
 

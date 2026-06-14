@@ -39,12 +39,14 @@
             아직 심은 식물이 없어요. 오늘 목표를 채워 첫 새싹을 심어보세요 🌱
         </p>
 
-        <!-- 3축 진척 한 줄(시간·장르·레시피 합산) — 한눈에 수집 현황. 깊은 도감은 전용 페이지로. -->
+        <!-- 4축 진척 한 줄(시간·장르·작가출판사·레시피) — 한눈에 수집 현황. 대시보드 경량성 위해 작가·출판사는
+             묶음 표기(전용 페이지에선 따로). 깊은 도감은 전용 페이지로. -->
         <p class="garden-summary-progress"
            th:text="'⏳ 시간 ' + ${garden.ownedCount()} + '/' + ${garden.totalCount()}
                + ' · 🌸 장르 ' + ${garden.ownedGenreCount()} + '/' + ${garden.totalGenreCount()}
+               + ' · 🖋️ 작가·출판사 ' + ${garden.ownedAuthorCount() + garden.ownedPublisherCount()} + '/' + ${garden.totalAuthorCount() + garden.totalPublisherCount()}
                + ' · 🔍 레시피 ' + (${garden.recipePlants().size()} - ${garden.mysterySlotCount()}) + '/' + ${garden.recipePlants().size()} + ' 발견'">
-            ⏳ 시간 0/14 · 🌸 장르 0/13 · 🔍 레시피 0/8 발견</p>
+            ⏳ 시간 0/14 · 🌸 장르 0/13 · 🖋️ 작가·출판사 0/12 · 🔍 레시피 0/8 발견</p>
 
         <!-- 전체 도감(축 탭·보유/미보유 필터) 전용 페이지로 -->
         <a class="garden-dex-link" th:href="@{/garden}">🌱 정원 도감 보기 →</a>

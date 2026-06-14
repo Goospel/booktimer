@@ -44,6 +44,8 @@ class GardenServiceTest {
     @Autowired
     private GenrePlantRepository genrePlantRepository;
     @Autowired
+    private DiversityPlantRepository diversityPlantRepository;
+    @Autowired
     private BookRepository bookRepository;
     @Autowired
     private GardenService gardenService;
@@ -62,12 +64,24 @@ class GardenServiceTest {
         genrePlantRepository.save(GenrePlant.of("novel", "소설/시/희곡", "소설나무", "🌳", 1));
         genrePlantRepository.save(GenrePlant.of("econ", "경제경영", "경제선인장", "🌵", 2));
         genrePlantRepository.save(GenrePlant.of("wildflower", null, "이름 모를 들꽃", "🌼", 99));
+
+        // 다양성축 — 작가 식물(임계 1·3) + 출판사 식물(임계 1·3). prod 시드(V38)와 디커플.
+        diversityPlantRepository.save(DiversityPlant.of("author_1", DiversityKind.AUTHOR, 1, "작가 새싹", "🖋️", 1));
+        diversityPlantRepository.save(DiversityPlant.of("author_3", DiversityKind.AUTHOR, 3, "작가 나무", "✒️", 2));
+        diversityPlantRepository.save(DiversityPlant.of("publisher_1", DiversityKind.PUBLISHER, 1, "출판 새싹", "🏷️", 3));
+        diversityPlantRepository.save(DiversityPlant.of("publisher_3", DiversityKind.PUBLISHER, 3, "출판 나무", "📦", 4));
     }
 
     /** 주어진 장르(category)·상태로 책 한 권을 등록한다. */
     private void registerBook(User user, String title, String category, BookStatus status) {
         bookRepository.save(Book.register(user, title, "저자", null, null, null, null,
                 category, null, status));
+    }
+
+    /** 주어진 작가·출판사·상태로 책 한 권을 등록한다(다양성축 검증용). */
+    private void registerBookWith(User user, String title, String author, String publisher, BookStatus status) {
+        bookRepository.save(Book.register(user, title, author, null, null, publisher, null,
+                null, null, status));
     }
 
     private LocalDate today() {
@@ -219,6 +233,95 @@ class GardenServiceTest {
 
         assertThat(genrePlant(view, "wildflower").owned()).isTrue();
         assertThat(genrePlant(view, "novel").owned()).isFalse();
+    }
+
+    @Test
+    @DisplayName("완독한 책의 distinct 작가·출판사 수로 다양성 식물 보유 — 읽는중·읽고싶음은 제외")
+    void diversityPlants_finishedOnly() {
+        User user = register("garden-diversity-finished@booktimer.com");
+        registerBookWith(user, "완독1", "김영하", "문학동네", BookStatus.FINISHED);
+        registerBookWith(user, "완독2", "한강", "창비", BookStatus.FINISHED);
+        // 읽는중·읽고싶음 작가/출판사를 섞어도 완독이 아니라 집계 제외(파밍 방지·책BTI 신호 일치).
+        registerBookWith(user, "읽는중", "무라카미", "민음사", BookStatus.READING);
+        registerBookWith(user, "읽고싶음", "베르나르", "열린책들", BookStatus.WANT_TO_READ);
+
+        GardenView view = gardenService.view(user);
+
+        // 완독 작가 2 → 임계 1 보유·임계 3 미보유(읽는중·읽고싶음까지 셌다면 4 ≥ 3이라 보유였을 것).
+        assertThat(diversityPlant(view, "author_1").owned()).isTrue();
+        assertThat(diversityPlant(view, "author_3").owned()).isFalse();
+        assertThat(view.ownedAuthorCount()).isEqualTo(1);
+        // 완독 출판사 2 → 임계 1 보유·임계 3 미보유.
+        assertThat(diversityPlant(view, "publisher_1").owned()).isTrue();
+        assertThat(diversityPlant(view, "publisher_3").owned()).isFalse();
+        assertThat(view.ownedPublisherCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("같은 작가·출판사로 2권 완독 → distinct 1로 흡수")
+    void diversityPlants_sameAuthorCollapses() {
+        User user = register("garden-diversity-dup@booktimer.com");
+        registerBookWith(user, "책1", "김영하", "문학동네", BookStatus.FINISHED);
+        registerBookWith(user, "책2", "김영하", "문학동네", BookStatus.FINISHED);
+
+        GardenView view = gardenService.view(user);
+
+        assertThat(view.ownedAuthorCount()).isEqualTo(1);
+        assertThat(view.ownedPublisherCount()).isEqualTo(1);
+        assertThat(diversityPlant(view, "author_1").owned()).isTrue();
+        assertThat(diversityPlant(view, "author_3").owned()).isFalse();
+    }
+
+    @Test
+    @DisplayName("작가·출판사가 null인 완독책은 다양성 식물 누수 0 (N-055)")
+    void diversityPlants_nullAuthorPublisherNoLeak() {
+        User user = register("garden-diversity-null@booktimer.com");
+        registerBookWith(user, "수동등록완독", null, null, BookStatus.FINISHED);
+
+        GardenView view = gardenService.view(user);
+
+        assertThat(view.ownedAuthorCount()).isZero();
+        assertThat(view.ownedPublisherCount()).isZero();
+        assertThat(view.diversityPlants()).noneMatch(DiversityPlantState::owned);
+    }
+
+    @Test
+    @DisplayName("책이 없으면 다양성 식물 전부 미보유 (null-state 누수 가드)")
+    void diversityPlants_nullStateAllLocked() {
+        User user = register("garden-diversity-empty@booktimer.com");
+
+        GardenView view = gardenService.view(user);
+
+        assertThat(view.totalAuthorCount()).isEqualTo(2);
+        assertThat(view.totalPublisherCount()).isEqualTo(2);
+        assertThat(view.diversityPlants()).isNotEmpty();
+        assertThat(view.diversityPlants()).noneMatch(DiversityPlantState::owned);
+    }
+
+    @Test
+    @DisplayName("작가축·출판사축 독립 — 작가 많고 출판사 적으면 출판사 식물이 작가 수에 휩쓸리지 않는다")
+    void diversityPlants_axesIndependent() {
+        User user = register("garden-diversity-indep@booktimer.com");
+        // 작가는 셋 다 다르고(3), 출판사는 한 곳으로 몰아줌(1).
+        registerBookWith(user, "책1", "작가가", "한출판사", BookStatus.FINISHED);
+        registerBookWith(user, "책2", "작가나", "한출판사", BookStatus.FINISHED);
+        registerBookWith(user, "책3", "작가다", "한출판사", BookStatus.FINISHED);
+
+        GardenView view = gardenService.view(user);
+
+        // 작가 3 → 임계 3 보유. 출판사 1 → 임계 3 미보유(작가 수에 안 휩쓸림)·임계 1만 보유.
+        assertThat(diversityPlant(view, "author_3").owned()).isTrue();
+        assertThat(diversityPlant(view, "publisher_3").owned()).isFalse();
+        assertThat(diversityPlant(view, "publisher_1").owned()).isTrue();
+        assertThat(view.ownedAuthorCount()).isEqualTo(2);    // author_1·author_3
+        assertThat(view.ownedPublisherCount()).isEqualTo(1); // publisher_1만
+    }
+
+    private static DiversityPlantState diversityPlant(GardenView view, String code) {
+        return view.diversityPlants().stream()
+                .filter(s -> s.plant().getCode().equals(code))
+                .findFirst()
+                .orElseThrow();
     }
 
     private static GenrePlantState genrePlant(GardenView view, String code) {
