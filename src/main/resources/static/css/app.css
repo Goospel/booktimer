@@ -940,6 +940,8 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     .garden-canvas .canvas-plant,
     .garden-canvas .canvas-plant.plant-pop { animation: none; }
     .garden-canvas .canvas-plant.plant-pop::before { display: none; }
+    /* 줌은 기능이라 유지하되 부드러운 전환(장식)만 끈다 — 배율은 즉시 적용. */
+    .garden-stage .garden-canvas.editing { transition: none; }
 }
 
 .garden-palette {
@@ -965,6 +967,36 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .palette-plant:hover { border-color: var(--accent); }
 .palette-plant.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 .palette-plant.placed { opacity: .4; }
+
+/* A3: 드래그·휠 줌 인터랙션 (편집 캔버스 한정). 좌표계 분리 — 스냅은 rect 순회(JS), 고스트는 화면좌표 fixed. */
+/* 포인터 제스처(드래그·휠)가 pointermove/wheel 을 독점하도록 브라우저 기본 제스처를 끈다.
+   편집 캔버스에만 걺 → 보기 모드·페이지 나머지 스크롤은 정상(§2.6). */
+.garden-canvas.editing { touch-action: none; }
+/* 휠 줌: 캔버스 자체에 scale. 무대(overflow:hidden)가 확대분을 클립 → '살짝 확대해 들여다보기'. 팬 없음(첫 PR). */
+.garden-stage .garden-canvas.editing {
+    transform-origin: center center;
+    transition: transform .12s ease-out;
+}
+.garden-canvas.editing .canvas-cell.cell-clickable { cursor: grab; }
+.garden-canvas.editing.dragging,
+.garden-canvas.editing.dragging .canvas-cell.cell-clickable { cursor: grabbing; }
+/* 드롭 예고 하이라이트 — 어느 칸에 놓일지 미리 보여준다. */
+.garden-canvas.editing .canvas-cell.cell-drop-target {
+    border-color: var(--accent);
+    border-style: solid;
+    background: rgba(255, 240, 170, .5);
+}
+/* 드래그 고스트 — 화면좌표 고정·hit-test 비방해·정지(손가락에 붙어 따라옴). transform 으로 포인터 중심 정렬. */
+.drag-ghost {
+    position: fixed;
+    z-index: 50;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    font-size: 1.6rem;
+    line-height: 1;
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .3));
+}
+.drag-ghost .plant-svg { width: 1.8rem; height: 1.8rem; }
 
 /* === 내 책장 (Book) === */
 .muted { color: var(--muted); }
