@@ -17,11 +17,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 class DiversityUnlockCalculatorTest {
 
     // 테스트 카탈로그 — 작가 식물(임계 1·3·5) + 출판사 식물(임계 1·3). prod 시드(V38)와 디커플.
-    private static final DiversityPlant A1 = DiversityPlant.of("a1", DiversityKind.AUTHOR, 1, "작가 새싹", "🖋️", 1);
-    private static final DiversityPlant A3 = DiversityPlant.of("a3", DiversityKind.AUTHOR, 3, "작가 묘목", "✒️", 2);
-    private static final DiversityPlant A5 = DiversityPlant.of("a5", DiversityKind.AUTHOR, 5, "작가 나무", "📜", 3);
-    private static final DiversityPlant P1 = DiversityPlant.of("p1", DiversityKind.PUBLISHER, 1, "출판 새싹", "🏷️", 4);
-    private static final DiversityPlant P3 = DiversityPlant.of("p3", DiversityKind.PUBLISHER, 3, "출판 묘목", "📦", 5);
+    private static final DiversityPlant A1 = DiversityPlant.of("a1", DiversityKind.AUTHOR, 1, "작가 새싹", "🖋️", 1, null);
+    private static final DiversityPlant A3 = DiversityPlant.of("a3", DiversityKind.AUTHOR, 3, "작가 묘목", "✒️", 2, null);
+    private static final DiversityPlant A5 = DiversityPlant.of("a5", DiversityKind.AUTHOR, 5, "작가 나무", "📜", 3, null);
+    private static final DiversityPlant P1 = DiversityPlant.of("p1", DiversityKind.PUBLISHER, 1, "출판 새싹", "🏷️", 4, null);
+    private static final DiversityPlant P3 = DiversityPlant.of("p3", DiversityKind.PUBLISHER, 3, "출판 묘목", "📦", 5, null);
     private static final List<DiversityPlant> CATALOG = List.of(A1, A3, A5, P1, P3);
 
     @Test

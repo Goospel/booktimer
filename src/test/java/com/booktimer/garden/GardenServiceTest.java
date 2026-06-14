@@ -61,15 +61,15 @@ class GardenServiceTest {
         plantRepository.save(Plant.of("clover", "클로버", "☘️", 3, 5, null));
         plantRepository.save(Plant.of("pot", "화분 모종", "🪴", 4, 7, null));
 
-        genrePlantRepository.save(GenrePlant.of("novel", "소설/시/희곡", "소설나무", "🌳", 1));
-        genrePlantRepository.save(GenrePlant.of("econ", "경제경영", "경제선인장", "🌵", 2));
-        genrePlantRepository.save(GenrePlant.of("wildflower", null, "이름 모를 들꽃", "🌼", 99));
+        genrePlantRepository.save(GenrePlant.of("novel", "소설/시/희곡", "소설나무", "🌳", 1, "novel")); // A2 후속: SVG 스프라이트 보유
+        genrePlantRepository.save(GenrePlant.of("econ", "경제경영", "경제선인장", "🌵", 2, null));        // spriteId 미지정(이모지 폴백)
+        genrePlantRepository.save(GenrePlant.of("wildflower", null, "이름 모를 들꽃", "🌼", 99, "wildflower"));
 
         // 다양성축 — 작가 식물(임계 1·3) + 출판사 식물(임계 1·3). prod 시드(V38)와 디커플.
-        diversityPlantRepository.save(DiversityPlant.of("author_1", DiversityKind.AUTHOR, 1, "작가 새싹", "🖋️", 1));
-        diversityPlantRepository.save(DiversityPlant.of("author_3", DiversityKind.AUTHOR, 3, "작가 나무", "✒️", 2));
-        diversityPlantRepository.save(DiversityPlant.of("publisher_1", DiversityKind.PUBLISHER, 1, "출판 새싹", "🏷️", 3));
-        diversityPlantRepository.save(DiversityPlant.of("publisher_3", DiversityKind.PUBLISHER, 3, "출판 나무", "📦", 4));
+        diversityPlantRepository.save(DiversityPlant.of("author_1", DiversityKind.AUTHOR, 1, "작가 새싹", "🖋️", 1, "author_1")); // A2 후속: SVG
+        diversityPlantRepository.save(DiversityPlant.of("author_3", DiversityKind.AUTHOR, 3, "작가 나무", "✒️", 2, null));      // 미지정(폴백)
+        diversityPlantRepository.save(DiversityPlant.of("publisher_1", DiversityKind.PUBLISHER, 1, "출판 새싹", "🏷️", 3, "publisher_1"));
+        diversityPlantRepository.save(DiversityPlant.of("publisher_3", DiversityKind.PUBLISHER, 3, "출판 나무", "📦", 4, null));
     }
 
     /** 주어진 장르(category)·상태로 책 한 권을 등록한다. */
@@ -366,7 +366,49 @@ class GardenServiceTest {
         // herb(시간축, spriteId 미지정)이 결과에서 빠지지 않고 spriteId만 null이어야 함(이모지 폴백 보존).
         OwnedPlant herb = owned.stream().filter(o -> o.code().equals("herb")).findFirst().orElseThrow();
         assertThat(herb.spriteId()).isNull();
-        // 타 축(장르 econ)도 포함되고 spriteId는 null(이번 PR 범위 밖 — 이모지 폴백).
+        // 장르 econ은 spriteId 미지정 픽스처(null-state)라 포함되고 spriteId만 null(이모지 폴백 보존).
+        OwnedPlant econ = owned.stream()
+                .filter(o -> o.axis() == PlacementAxis.GENRE && o.code().equals("econ"))
+                .findFirst().orElseThrow();
+        assertThat(econ.spriteId()).isNull();
+    }
+
+    // --- A2 후속: 타 축(장르·다양성·레시피) SVG 승격 — spriteId 전파 -----------------------------
+
+    @Test
+    @DisplayName("장르축 식물의 spriteId가 ownedPlants 전파에 실린다 (A2 후속)")
+    void spriteId_propagatesForGenreAxis() {
+        User user = register("garden-sprite-genre@booktimer.com");
+        registerBook(user, "소설책", "국내도서>소설/시/희곡>한국소설", BookStatus.FINISHED); // 장르 novel(spriteId="novel") 보유
+
+        OwnedPlant novel = gardenService.view(user).ownedPlants().stream()
+                .filter(o -> o.axis() == PlacementAxis.GENRE && o.code().equals("novel"))
+                .findFirst().orElseThrow();
+        assertThat(novel.spriteId()).isEqualTo("novel");
+    }
+
+    @Test
+    @DisplayName("다양성축 식물의 spriteId가 ownedPlants 전파에 실린다 (A2 후속)")
+    void spriteId_propagatesForDiversityAxis() {
+        User user = register("garden-sprite-diversity@booktimer.com");
+        // 완독 1권(작가 "저자") → 서로 다른 작가 1명 → author_1(임계 1, spriteId="author_1") 보유.
+        registerBook(user, "어떤책", "국내도서>소설/시/희곡>한국소설", BookStatus.FINISHED);
+
+        OwnedPlant author1 = gardenService.view(user).ownedPlants().stream()
+                .filter(o -> o.axis() == PlacementAxis.DIVERSITY && o.code().equals("author_1"))
+                .findFirst().orElseThrow();
+        assertThat(author1.spriteId()).isEqualTo("author_1");
+    }
+
+    @Test
+    @DisplayName("타 축 spriteId 미지정 식물도 ownedPlants에 정상 포함되고 spriteId만 null (폴백 보존·N-055)")
+    void spriteId_nullStateDoesNotLeakOutForOtherAxes() {
+        User user = register("garden-sprite-other-null@booktimer.com");
+        // 경제책 완독 → 장르 econ(spriteId 미지정) + 작가 author_1(spriteId 있음) 보유.
+        registerBook(user, "경제책", "국내도서>경제경영>마케팅", BookStatus.FINISHED);
+
+        var owned = gardenService.view(user).ownedPlants();
+        // 장르 econ(spriteId 미지정)이 결과에서 빠지지 않고 spriteId만 null이어야 함.
         OwnedPlant econ = owned.stream()
                 .filter(o -> o.axis() == PlacementAxis.GENRE && o.code().equals("econ"))
                 .findFirst().orElseThrow();

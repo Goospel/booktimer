@@ -226,7 +226,13 @@
                          : (${g.genrePlant().getGenreLabel()} != null
                              ? ${g.genrePlant().getGenreLabel()} + ' 장르 완독 시'
                              : '시드에 없는 장르 완독 시')">
-                    <span class="plant-emoji" th:if="${g.owned()}" th:text="${g.genrePlant().getEmoji()}">🪷</span>
+                    <!-- 보유 종은 spriteId 있으면 SVG, 없으면 이모지(A2 후속). -->
+                    <span class="plant-emoji" th:if="${g.owned()}">
+                        <svg class="plant-svg" th:if="${g.genrePlant().getSpriteId() != null}" aria-hidden="true">
+                            <use th:attr="href='#sprite-' + ${g.genrePlant().getSpriteId()}"></use>
+                        </svg>
+                        <span th:if="${g.genrePlant().getSpriteId() == null}" th:text="${g.genrePlant().getEmoji()}">🪷</span>
+                    </span>
                     <span class="plant-emoji locked" th:unless="${g.owned()}" aria-hidden="true">🔒</span>
                     <span class="plant-name"
                           th:classappend="${g.owned()} ? '' : 'locked'"
@@ -254,7 +260,12 @@
                      th:title="${d.owned()}
                          ? ${d.plant().getName()}
                          : ('서로 다른 작가 ' + ${d.plant().getThresholdCount()} + '명 완독 시')">
-                    <span class="plant-emoji" th:if="${d.owned()}" th:text="${d.plant().getEmoji()}">🫐</span>
+                    <span class="plant-emoji" th:if="${d.owned()}">
+                        <svg class="plant-svg" th:if="${d.plant().getSpriteId() != null}" aria-hidden="true">
+                            <use th:attr="href='#sprite-' + ${d.plant().getSpriteId()}"></use>
+                        </svg>
+                        <span th:if="${d.plant().getSpriteId() == null}" th:text="${d.plant().getEmoji()}">🫐</span>
+                    </span>
                     <span class="plant-emoji locked" th:unless="${d.owned()}" aria-hidden="true">🔒</span>
                     <span class="plant-name" th:if="${d.owned()}" th:text="${d.plant().getName()}">블루베리</span>
                     <span class="plant-name locked" th:unless="${d.owned()}"
@@ -275,7 +286,12 @@
                      th:title="${d.owned()}
                          ? ${d.plant().getName()}
                          : ('서로 다른 출판사 ' + ${d.plant().getThresholdCount()} + '곳 완독 시')">
-                    <span class="plant-emoji" th:if="${d.owned()}" th:text="${d.plant().getEmoji()}">🫑</span>
+                    <span class="plant-emoji" th:if="${d.owned()}">
+                        <svg class="plant-svg" th:if="${d.plant().getSpriteId() != null}" aria-hidden="true">
+                            <use th:attr="href='#sprite-' + ${d.plant().getSpriteId()}"></use>
+                        </svg>
+                        <span th:if="${d.plant().getSpriteId() == null}" th:text="${d.plant().getEmoji()}">🫑</span>
+                    </span>
                     <span class="plant-emoji locked" th:unless="${d.owned()}" aria-hidden="true">🔒</span>
                     <span class="plant-name" th:if="${d.owned()}" th:text="${d.plant().getName()}">피망</span>
                     <span class="plant-name locked" th:unless="${d.owned()}"
@@ -300,7 +316,12 @@
                      th:title="${r.discovered()}
                          ? ${r.recipePlant().getName()} + ' · ' + ${r.recipePlant().getStory()}
                          : '아직 발견하지 못한 조합'">
-                    <span class="plant-emoji" th:if="${r.discovered()}" th:text="${r.recipePlant().getEmoji()}">💮</span>
+                    <span class="plant-emoji" th:if="${r.discovered()}">
+                        <svg class="plant-svg" th:if="${r.recipePlant().getSpriteId() != null}" aria-hidden="true">
+                            <use th:attr="href='#sprite-' + ${r.recipePlant().getSpriteId()}"></use>
+                        </svg>
+                        <span th:if="${r.recipePlant().getSpriteId() == null}" th:text="${r.recipePlant().getEmoji()}">💮</span>
+                    </span>
                     <span class="plant-emoji mystery" th:unless="${r.discovered()}" aria-hidden="true">❔</span>
                     <span class="plant-name" th:if="${r.discovered()}" th:text="${r.recipePlant().getName()}">연꽃</span>
                     <span class="plant-name locked" th:unless="${r.discovered()}">???</span>
