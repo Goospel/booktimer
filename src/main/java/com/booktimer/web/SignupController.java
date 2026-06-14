@@ -7,10 +7,12 @@ import com.booktimer.user.LoginIdAlreadyExistsException;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -59,7 +61,13 @@ public class SignupController {
     }
 
     @GetMapping("/signup")
-    public String signupForm(Model model) {
+    public String signupForm(HttpServletRequest request, Model model) {
+        // 렌더 전 CSRF 토큰 선확정 — 가입 화면은 익명이라 세션이 없어, 폼 렌더 시 세션 생성이 응답 커밋
+        // 이후로 밀리면 500(IllegalStateException). DashboardController와 동일 방어(T-049, N-077).
+        Object csrf = request.getAttribute(CsrfToken.class.getName());
+        if (csrf instanceof CsrfToken token) {
+            token.getToken();
+        }
         if (!model.containsAttribute("signupForm")) {
             model.addAttribute("signupForm", new SignupForm());
         }

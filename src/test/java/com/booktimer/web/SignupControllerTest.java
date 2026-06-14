@@ -13,12 +13,17 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.booktimer.email.SignupNotificationService;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.ui.Model;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -47,6 +52,21 @@ class SignupControllerTest {
     /** 중복 가입 통지는 실소유자 메일함으로 가는 부수효과 — 컨트롤러가 그 발송을 트리거하는지만 여기서 검증한다. */
     @MockitoBean
     private SignupNotificationService signupNotificationService;
+
+    @Autowired
+    private SignupController signupController;
+
+    @Test
+    @DisplayName("GET /signup: 렌더 전 CSRF 토큰을 선확정한다 — 익명 폼 페이지 commit-후-500 방어(T-049 재발)")
+    void getSignup_precommitsCsrfToken() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        CsrfToken token = mock(CsrfToken.class);
+        when(request.getAttribute(CsrfToken.class.getName())).thenReturn(token);
+
+        signupController.signupForm(request, mock(Model.class));
+
+        verify(token).getToken();
+    }
 
     @Test
     @DisplayName("GET /signup: 비로그인도 가입 화면을 볼 수 있고 폼 모델이 실린다")
