@@ -811,6 +811,7 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 }
 .garden-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
 .garden-tab {
+    width: auto;               /* 전역 button{width:100%} 상쇄 — 빠지면 pill이 풀폭이 돼 flex-wrap에서 한 줄씩 세로로 쌓임(태블릿/PC 깨짐 원인) */
     padding: 6px 12px;
     border: 1px solid var(--border);
     border-radius: 999px;
