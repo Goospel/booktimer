@@ -50,6 +50,7 @@
 - [T-052. 헤드리스 preview에서 WebGL+RAF 앱(Phaser 등)은 screenshot/renderer.snapshot이 타임아웃 — eval 상태/픽셀 검증으로 우회](#t-052-헤드리스-preview에서-webglraf-앱phaser-등은-screenshotrenderersnapshot이-타임아웃--eval-상태픽셀-검증으로-우회)
 - [T-053. Alpine 편집 위젯에서 Phaser scene/game을 x-data 속성에 저장하니 팔레트 추가가 먹통 — reactive Proxy 오염, 클로저로 분리](#t-053-alpine-편집-위젯에서-phaser-scenegame을-x-data-속성에-저장하니-팔레트-추가가-먹통--reactive-proxy-오염-클로저로-분리)
 - [T-054. defer Phaser를 파싱 즉시 인라인 스크립트가 참조해 class가 TDZ에 빠지고 캔버스가 안 뜬다](#t-054-defer-phaser를-파싱-즉시-인라인-스크립트가-참조해-class가-tdz에-빠지고-캔버스가-안-뜬다)
+- [T-055. Phaser moveAbove는 a가 이미 b 위면 no-op이라 z-order는 setDepth로 박는다](#t-055-phaser-moveabove는-a가-이미-b-위면-no-op이라-z-order는-setdepth로-박는다)
 
 ---
 
@@ -1064,6 +1065,21 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 
 ---
 
+## T-055. Phaser moveAbove는 a가 이미 b 위면 no-op이라 z-order는 setDepth로 박는다
+
+**증상**: 정원 "꾸미기" 변형 툴바에서 식물을 선택하고 **⬇(맨 뒤로)를 눌러도 아무 변화가 없다.** 맨뒤로 보낸 식물이 계속 다른 식물 위에 남고, 겹친 자리를 탭하면 **또 그 식물이 선택**돼(앞에 와야 할 식물이 안 눌림) "화살표가 작동을 안 한다"로 보인다. ⬆(맨 앞으로)는 동작하는데 ⬇만 먹통이라 더 헷갈린다.
+
+**원인**: `GardenScene.sendToBack`이 `this.children.moveAbove(obj, this.bg)`로 식물을 "배경 바로 위 = 식물 중 맨 뒤"에 두려 했는데, **이게 no-op**이다. Phaser `DisplayList.moveAbove(A, B)`는 "A를 B 바로 위로" 옮기지만 **A가 이미 B보다 위(높은 index)면 아무것도 안 한다.** 식물(A)은 항상 배경(B) 위에 있으니 매번 무동작 → 맨뒤로가 영영 안 먹는다. (실측: `children.bringToTop(obj)`로 식물을 최상위(index 5)로 올린 뒤 `moveAbove(obj, bg)` 호출해도 index 5→5 불변.) ⬆는 `children.bringToTop`을 써 우연히 동작했지만, display-list 재정렬 방식 자체가 'A가 이미 위면 무동작'·`setDepth` 정렬에 덮임 등 취약하다.
+
+**해결 / 예방**:
+- **z-order는 display-list 재정렬(`moveAbove`/`bringToTop`)에 맡기지 말고 `setDepth`로 직접 박아라.** 논리적 순서 배열(`plantObjs`)을 단일 출처로 두고, 변경 때마다 `restack()`이 배경 `setDepth(0)`·식물 `setDepth(1..n)`·선택 오버레이 `setDepth(아주 큰 값)`을 일괄 부여. `bringToFront`/`sendToBack`은 배열 재배열 + `restack()`만, `spawn`/`remove`도 `restack()`. depth가 렌더·입력(hit-test) 순서를 결정하므로 "탭하면 맨 앞 식물 선택"도 자동으로 맞는다.
+- **z 검증은 `getIndex`(display index)가 아니라 `.depth`로.** Phaser는 depth 정렬을 **렌더 프레임에** 수행하는데, 헤드리스/비가시 탭은 rAF가 throttle돼 정렬이 안 돌아 `children.getIndex`가 옛 순서를 준다. 단언은 객체의 `.depth`를 직접 보거나 `children.depthSort()`를 강제한 뒤 본다(실 브라우저는 매 프레임 정렬돼 문제없음).
+- **진단은 실 브라우저 scene 상태 측정으로.** Chrome 확장 `javascript_tool`로 실계정 페이지의 scene을 잡아 `sendSelectedToBack` 전후 식물 depth·"탭 top"을 비교하면 "버튼이 안 먹는다"의 진위를 객관 확인할 수 있다(시각 추정보다 빠르고 정확).
+
+**관련**: 같은 정원 Phaser 위젯 T-053·T-054·T-052, 변형·레이어 출하 changelog(#363), 본 수정 changelog(#365).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1123,3 +1139,4 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 | 2026-06-15 | T-052 (헤드리스 preview에서 WebGL+RAF 앱(Phaser)은 screenshot/renderer.snapshot이 30s 타임아웃 — 렌더러 readback/idle 프레임 캡처 불가, 단 엔진은 정상 부팅·console 에러 0(캡처만 막힘=T-043 WebGL판) / 캔버스는 DOM 속성 없어 inspect 우회도 불가 → window.__scene/__game 노출 후 preview_eval로 텍스처 getSourceImage().width>0(디코드)·게임오브젝트 type(Image vs Text)·좌표·exportPlacements 왕복·addPlant/removePlant/isOutsideWorld 로직경로 단언 = 픽셀 없이 확정 / 순수 코어는 @free-pure-core 마커로 빼 node .test.mjs로(렌더러 무관) / eval 안 location.href 이동은 그 컨텍스트 끊김(navigated) → navigate·측정 별도 eval로 분리 / 실제 제스처·시각 품질은 실 브라우저 수동 게이트 / 정원 Phaser 자유배치 전환서, T-043·T-035, N-081, PR #356) |
 | 2026-06-15 | T-053 (Alpine 편집 위젯이 Phaser scene/game을 x-data 속성(this.scene)에 저장 → reactive Proxy 오염으로 팔레트 추가·드래그 전부 먹통, 에러도 없음 / .preview POC·free-pure.test.mjs는 통과한 채 실배포만 깸=헤드리스 검증 사각(수동 게이트로 미룬 실클릭에 버그) / 해결=scene·game을 클로저 let 변수로 빼고 반응 상태(placedKeys)만 this.*, 그리고 preview_eval로 Alpine.$data(el).mountPhaser()·addFromPalette() 호출해 plantObjs 증가 단언=실클릭 경로 자동검증 / 개념·일반화 N-082, 헤드리스 한계 T-052, PR Phase1 핫픽스) |
 | 2026-06-15 | T-054 (정원 꾸미기가 #356부터 실배포 내내 먹통 — htmx·Alpine·Phaser를 모두 defer로 로드하는데 본문 인라인 `<script>`(defer 아님)는 파싱 즉시 실행돼 그 안 최상위 `class GardenScene extends Phaser.Scene`가 아직 없는 Phaser를 참조→`Phaser is not defined`로 던지고 GardenScene이 TDZ로 남아 mountPhaser의 new가 죽어 캔버스 0·추가 무반응 / myGarden은 함수 선언이라 호이스팅돼 팔레트는 떠 보임 / mock·헤드리스가 Phaser를 동기 로드해 가림=#358 closure 수정과 별개 결함 "아직도 안 됨"의 정체 / 해결=클래스 정의를 ensureGardenScene()로 감싸 mountPhaser(클릭=defer 로드 후) 시점 1회 평가, Phaser는 defer 유지 / 검증 하니스도 production처럼 Phaser defer로 맞춰 RED재현 / 진단=Chrome 확장 실계정 콘솔 두 에러+canvas 부재 / 자매 T-053, T-052, PR #364) |
+| 2026-06-15 | T-055 (정원 꾸미기 ⬇'맨 뒤로' 먹통 — sendToBack의 children.moveAbove(obj,bg)가 no-op: Phaser moveAbove(A,B)는 A가 이미 B 위면 무동작인데 식물은 늘 배경 위라 매번 무동작, 맨뒤로 보낸 식물이 계속 위에 남아 탭하면 또 선택 / ⬆ bringToTop은 우연히 동작=비대칭 / 해결=z-order를 plantObjs 순서 단일출처로 setDepth로 직접 박는다(restack: 배경0·식물1..n·선택테두리 최상단, bringToFront/sendToBack/spawn/remove에서 호출) — depth가 렌더·입력순서 결정 / 검증은 getIndex 말고 .depth로(헤드리스 rAF throttle로 display정렬 지연, depthSort() 강제) / 진단=Chrome 확장으로 실계정 scene depth·탭top 측정 / 자매 T-053·T-054, PR #365) |

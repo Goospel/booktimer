@@ -427,7 +427,8 @@
                 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
                 const hex = (s) => { try { return Phaser.Display.Color.HexStringToColor(s).color; } catch (_) { return 0xffffff; } };
                 const g = this.add.graphics();
-                this.bg = g;   // sendToBack이 식물을 배경 위로만 보내도록 기준 보관
+                this.bg = g;   // 배경 — 항상 맨 뒤(restack이 depth 0 유지)
+                g.setDepth(0);
                 g.fillStyle(hex(css('--garden-sky')) || 0xDCEAF0);   g.fillRect(0, 0, W, H * 0.60);          // 하늘
                 g.fillStyle(hex(css('--garden-grass')) || 0xCADDB2); g.fillRect(0, H * 0.55, W, H * 0.45);   // 잔디(살짝 겹쳐 경계 부드럽게)
                 g.fillStyle(hex(css('--garden-soil')) || 0xB89576);  g.fillRect(0, H * 0.82, W, H * 0.18);   // 흙 화단 띠
@@ -452,12 +453,14 @@
                 obj.setData('scale', scale);
                 obj.setInteractive({ draggable: true, useHandCursor: true });
                 this.plantObjs.push(obj);
+                this.restack();   // 새 식물 포함 z-order(depth) 재부여
                 return obj;
             }
             removePlant(obj) {
                 const i = this.plantObjs.indexOf(obj);
                 if (i >= 0) this.plantObjs.splice(i, 1);
                 obj.destroy();
+                this.restack();   // 빈 자리 메워 depth = index+1 불변식 유지
             }
             // 팔레트에서 추가(외부 호출) — 이미 놓인 식물은 무시, 월드 중앙 살짝 위에 놓는다.
             addPlant(meta) {
@@ -503,7 +506,7 @@
                 if (!this._selBox) this._selBox = this.add.graphics();
                 this._selBox.clear();
                 if (!this.selected) return;
-                this.children.bringToTop(this._selBox);
+                this._selBox.setDepth(1e6);   // 선택 테두리는 항상 최상단(depth 정렬 우선이라 bringToTop 무력)
                 const b = this.selected.getBounds();
                 this._selBox.lineStyle(3, 0x6E8A6A, 0.9).strokeRect(b.x - 5, b.y - 5, b.width + 10, b.height + 10);
             }
@@ -523,16 +526,23 @@
                 this.applyScale(this.selected, s); this.selected.setData('scale', s);
                 this.notifySelection(); this.emitChange();
             }
-            // zOrder 수동 정렬 — plantObjs 순서(=export z)와 캔버스 렌더 순서를 함께 옮긴다.
+            // z-order는 plantObjs 순서를 단일 출처로 setDepth로 직접 박는다(배경 0·식물 1..n·선택테두리 최상단).
+            // Phaser display-list 재정렬 메서드(children.bringToTop/moveAbove)는 'A가 이미 B 위면 no-op'이고
+            // depth 정렬에 덮여 신뢰할 수 없어 쓰지 않는다(moveAbove(obj,bg)가 무동작 → '맨 뒤로' 먹통이었음). T-055.
+            restack() {
+                if (this.bg) this.bg.setDepth(0);
+                this.plantObjs.forEach((o, i) => o.setDepth(i + 1));
+                if (this._selBox) this._selBox.setDepth(1e6);
+            }
             bringToFront(obj) {
-                this.children.bringToTop(obj);
                 const i = this.plantObjs.indexOf(obj);
                 if (i >= 0) { this.plantObjs.splice(i, 1); this.plantObjs.push(obj); } // 끝 = export z 최대 = 맨 앞
+                this.restack();
             }
             sendToBack(obj) {
-                if (this.bg) this.children.moveAbove(obj, this.bg); // 배경 바로 위 = 식물 중 맨 뒤
                 const i = this.plantObjs.indexOf(obj);
-                if (i >= 0) { this.plantObjs.splice(i, 1); this.plantObjs.unshift(obj); }
+                if (i >= 0) { this.plantObjs.splice(i, 1); this.plantObjs.unshift(obj); } // 앞 = export z 0 = 맨 뒤
+                this.restack();
             }
             bringSelectedToFront() { if (this.selected) { this.bringToFront(this.selected); this.highlightSelected(); this.emitChange(); } }
             sendSelectedToBack() { if (this.selected) { this.sendToBack(this.selected); this.highlightSelected(); this.emitChange(); } }
