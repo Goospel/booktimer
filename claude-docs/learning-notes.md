@@ -86,6 +86,8 @@
 - [N-080. 검증된 파이프라인의 N축 복제는 새 설계가 아니라 "시드 + 벡터" 노동 — 리스크가 아니라 제작량을 가늠하라](#n-080-검증된-파이프라인의-n축-복제는-새-설계가-아니라-시드--벡터-노동--리스크가-아니라-제작량을-가늠하라)
 - [N-081. 인라인 SVG `<symbol>`을 캔버스 게임엔진 텍스처로 — innerHTML을 독립 SVG로 직렬화 → Blob URL → load.image](#n-081-인라인-svg-symbol을-캔버스-게임엔진-텍스처로--innerhtml을-독립-svg로-직렬화--blob-url--loadimage)
 - [N-082. Alpine/Vue 반응 상태에 Phaser 같은 라이브러리 인스턴스를 저장하면 reactive Proxy가 감싸 깨진다 — 클로저/비반응에 보관](#n-082-alpinevue-반응-상태에-phaser-같은-라이브러리-인스턴스를-저장하면-reactive-proxy가-감싸-깨진다--클로저비반응에-보관)
+- [N-083. defer로 늦게 로드되는 라이브러리를 최상위 `class extends`가 참조하면 ReferenceError로 클래스가 TDZ에 갇힌다 — 형제 function은 hoisting으로 살아남아 실패가 가려진다](#n-083-defer로-늦게-로드되는-라이브러리를-최상위-class-extends가-참조하면-referenceerror로-클래스가-tdz에-갇힌다--형제-function은-hoisting으로-살아남아-실패가-가려진다)
+- [N-084. 프론트 테스트 지형도 — 순수 로직은 Node 단위로 백엔드처럼 가고 브라우저 런타임은 실 브라우저 E2E로만, jsdom과 mock은 로드순서와 canvas를 못 본다](#n-084-프론트-테스트-지형도--순수-로직은-node-단위로-백엔드처럼-가고-브라우저-런타임은-실-브라우저-e2e로만-jsdom과-mock은-로드순서와-canvas를-못-본다)
 
 ---
 
@@ -805,6 +807,21 @@ build & push 이미지(ECR, :sha 태그)
 
 - [N-011. Spring Security 폼 로그인](#n-011-spring-security-폼-로그인--userdetailsservice--passwordencoder-두-빈이-인증을-켠다) — CSRF/세션 vs 토큰: SPA 전환 시 재설계되는 인증 매체
 - [N-001. 누적 카운터 일일 리셋 — Lazy 계산](#n-001-누적-카운터-일일-리셋--배치-스케줄러-vs-lazy-계산) — "비용이 정당화될 때까지 미룬다"는 같은 결의 판단(write-time vs read-time)
+
+### 보강 (2026-06-15) — "프론트 프레임워크 도입?"의 분해: 테스트 가능성은 프레임워크가 아니라 빌드+모듈에서 나온다
+
+테스트 관점에서 "프레임워크 도입"을 다시 보면 **"프레임워크"는 한 덩어리가 아니다** — ① 빌드 스텝(번들러) ② 모듈 시스템 ③ 컴포넌트 모델 ④ 반응성 ⑤ 라우팅을 묶어 파는 패키지다. 프론트 테스트가 막히는 진짜 원인은 ③ 컴포넌트 모델 부재가 아니라 **① 빌드·② 모듈 부재** — 위젯 코드가 `<script th:inline>`에 박혀 import해서 테스트 러너에 넣을 수가 없는 것이다([[n-084]]).
+
+- **#364(defer×`class extends` TDZ)는 프레임워크로 "잡는" 게 아니라 빌드로 "사라진다"** — 번들러가 있으면 import 그래프가 Phaser 선로드를 보장해 "인라인이 defer보다 먼저 실행되는 레이스" 자체가 없다. 빌드 스텝이 그 버그 *부류*를 구조적으로 제거([[n-083]]).
+- **그래도 Phaser canvas 통합 테스트는 어느 수를 써도 실 브라우저(Playwright) 필요** — 프레임워크를 도입해도 jsdom으론 canvas/WebGL을 못 돌린다. "프레임워크=테스트 해결"은 거짓([[n-084]]).
+
+**갱신된 입장 (BookTimer, 2026-06-15)**: 풀 SPA 전환은 위 본문대로 여전히 보류(전환 트리거 0 · SEO=제휴매출). 하지만 정원이 Phaser 게임으로 커지며 헤드리스로 안 잡히는 런타임 버그(#358 reactive proxy·#364 defer/TDZ)가 반복되는 건 **"정원 섬 복잡도가 빌드+모듈을 살 만큼 커졌다"는 신호**다. 대응은 점증한다:
+
+- **현행 유지(지금)** — 정원 런타임 버그는 실 브라우저(Chrome 확장)로 검증(CLAUDE.md `🖥️ 프론트 검증`).
+- **트리거 — 위 부류(헤드리스-블라인드, 실 브라우저로만 잡히는 *정원* 런타임 버그)가 다음 1건 더** 나오면 → **정원부터** ① Vite+Vitest 도입 + 정원 위젯을 import 가능한 모듈로 추출(페이지층 Thymeleaf 유지 = 섬 아키텍처). 이게 #364 부류를 구조적으로 제거하고 단위/컴포넌트 테스트를 연다.
+- **2차(그래도 부족할 때만)** — 정원 섬을 컴포넌트 프레임워크(Vue/Svelte)로 스왑. "정원부터 교체"가 곧장 프레임워크 스왑은 아니다 — 첫 수는 빌드+모듈.
+
+버그 하나로 아키텍처를 뒤집지 않는다(recency bias) — 테스트 가능성은 여러 입력 중 하나일 뿐. (사용자 합의: 2026-06-15. 프로젝트 메모리 `garden-frontend-build-trigger`에도 기록.)
 
 ---
 
@@ -3766,6 +3783,104 @@ function myGarden() {
 
 ---
 
+## N-083. defer로 늦게 로드되는 라이브러리를 최상위 `class extends`가 참조하면 ReferenceError로 클래스가 TDZ에 갇힌다 — 형제 function은 hoisting으로 살아남아 실패가 가려진다
+
+> **한 줄 요약**: `<script defer>`로 늦게 뜨는 라이브러리(Phaser 등)를 **본문 인라인 `<script>`의 최상위 `class X extends Lib.Base`**가 참조하면, 인라인 스크립트는 defer보다 **먼저** 실행돼 `Lib`이 아직 없음 → `extends` 평가에서 ReferenceError → **그 class 바인딩이 TDZ에 갇혀 죽는다**. 같은 블록의 `function`은 hoisting으로 살아남아 **UI는 멀쩡(팔레트·툴바 다 보임)한데 `new X()`만 터진다** — 부분 실패라 더 안 보인다. 클래스 정의를 **지연(lazy)**해 라이브러리 로드 뒤로 미룬다.
+
+### 문제
+
+정원 자유배치 편집(Phase 1)에서 **꾸미기 진입은 되는데 식물이 캔버스에 안 들어가던** 버그(#364, 사용자 보고). 콘솔엔 에러가 떠 있었지만 화면(팔레트·툴바)은 정상이라 "동작은 하는 듯한데 배치만 안 됨"으로 보였다. 헤드리스 mock POC는 통과해 **테스트로는 못 잡았고**, **Chrome 확장으로 실배포 페이지에 직접 붙어 콘솔을 읽고서야** 원인이 드러났다.
+
+### 원인
+
+`garden.html`은 htmx·Alpine·Phaser를 모두 `<script defer>`로 싣고, 본문엔 `<script th:inline="javascript">`(=non-defer)가 있다. **defer 스크립트는 HTML 파싱이 끝난 뒤 실행**되지만 **인라인 non-defer 스크립트는 파싱 도중 즉시 실행**된다 → 인라인이 Phaser보다 **먼저** 돈다.
+
+그 인라인 최상위에 `class GardenScene extends Phaser.Scene { ... }`가 있었다. `class A extends B`의 **상위클래스 식 `B`는 클래스 선언이 실행될 때 평가**된다(parse 시점이 아니라 그 문장 실행 시점). 인라인이 도는 순간 `Phaser`는 아직 미정의 → **`ReferenceError: Phaser is not defined`**가 그 줄에서 던져진다.
+
+여기서 두 비대칭이 증상을 가린다:
+
+- **class는 죽고 function은 산다** — 같은 블록의 `function myGarden(){...}`은 **hoisting**으로 블록 진입 시 이미 바인딩돼 살아남는다(Alpine `x-data="myGarden()"`가 정상 동작 → 팔레트·툴바 렌더). 반면 `class`는 hoisting되되 **TDZ에 머물다 선언 실행에서 던져졌으니 영영 초기화 안 됨** → 이후 `new GardenScene()`은 `Cannot access 'GardenScene' before initialization`(또는 미정의)로 터진다.
+- **부분 실패** — 페이지 전체가 죽지 않고 "엔진 인스턴스화"만 죽어, 겉보기엔 멀쩡해 진단이 늦는다.
+
+그리고 이 버그는 **로드 순서가 본질**이라, 재현 하니스가 Phaser를 **동기 로드**하면 순서가 뒤바뀌어 버그가 사라진다 — #356~#358을 가렸던 함정(T-053, [[n-082]])과 **동일한 헤드리스 사각**.
+
+### 해법
+
+클래스 정의를 **지연시켜** Phaser 로드 뒤에만 평가되게 한다:
+```js
+let GardenScene = null;                 // 파스 시점엔 Phaser 참조 0
+function ensureGardenScene() {
+  if (GardenScene) return;
+  GardenScene = class extends Phaser.Scene { ... };   // 호출될 때(=mount 시점) 평가
+}
+function myGarden() {
+  return { mountPhaser() { ensureGardenScene(); scene = new GardenScene({ ... }); } };
+}
+```
+`new GardenScene()`은 `mountPhaser`(사용자가 꾸미기 진입 시) 안에서 도는데, 그때는 defer Phaser가 이미 로드된 뒤다. 대안: 인라인 스크립트도 `defer`로 돌리거나(`type="module"`은 자동 defer) Phaser 로드 완료 뒤에 정의. 핵심은 **"늦게 오는 의존을 최상위 평가가 참조하지 않게"**.
+
+### 일반화
+
+- **로드 순서 ≠ 소스 순서.** `defer`/`async`/`type=module`은 실행 시점을 바꾼다. non-defer 인라인 스크립트는 그 사이를 비집고 **먼저** 돈다 — 늦게 오는 전역을 최상위에서 만지면 깨진다.
+- **`class`의 `extends`는 선언 실행 시 평가**된다(런타임). 미정의 상위클래스는 그 자리에서 ReferenceError를 던지고, 클래스는 TDZ에 갇혀 죽는다 — `function`의 hoisting과 **생존 비대칭**이라 "UI는 되는데 한 기능만 죽음"으로 위장한다.
+- **부분 실패일수록 실 브라우저로.** 로드 순서·타이밍 버그는 헤드리스/mock이 **다른 로드 의미**(동기 로드)로 재현하면 가짜 green을 준다. 진단은 **실 배포 페이지에 붙어 콘솔을 직접 읽는 것**(Chrome 확장)이 가장 빨랐고, 재현 하니스는 **production의 `defer`까지 충실히 복제**해야 한다(T-053).
+
+### 관련
+
+- **T-054** — 이 버그의 트랩(증상·진단·재현 충실도) 측면.
+- **[[n-082]]** — 같은 정원 Phaser 위젯의 reactive-Proxy 버그. 둘 다 헤드리스 mock이 못 잡고 실페이지만 깨진 같은 사각.
+- **T-053** — 동기 로드 mock이 로드 순서 버그를 가리는 함정의 원본.
+- **changelog** — #364(식물 배치 먹통 핫픽스), 후속 #365(z-order).
+
+---
+
+## N-084. 프론트 테스트 지형도 — 순수 로직은 Node 단위로 백엔드처럼 가고 브라우저 런타임은 실 브라우저 E2E로만, jsdom과 mock은 로드순서와 canvas를 못 본다
+
+> **한 줄 요약**: 프론트도 테스트 피라미드(단위→통합→E2E)와 "행동>구현·경계값" 철학은 **백엔드와 똑같이** 가져간다. 단 프론트의 "정답"은 상당 부분 **DOM·렌더·이벤트·타이밍·브라우저 런타임**에 있어 *도구와 검증 대상*이 다르다 — **순수 로직은 빼서 Node 단위 테스트(백엔드와 동일)**, 컴포넌트는 jsdom, **로드순서·canvas/WebGL·타이밍 버그는 실 브라우저(Playwright/Cypress 또는 수동 Chrome 확장)에서만** 잡힌다. "프레임워크 도입=테스트 해결"은 거짓 — jsdom으론 Phaser canvas를 못 돌린다.
+
+### 문제 (질문 배경)
+
+"프론트 계층은 보통 테스트를 어떻게 하나? 백엔드(JUnit+H2)처럼 해도 되나?" — #364(defer/TDZ)가 헤드리스 테스트·mock으로는 안 잡히고 실 브라우저로만 잡힌 뒤 나온 질문. 백엔드 방식을 그대로 적용해도 되는 부분과, 그러면 영영 못 잡는 부분의 경계를 정리한다.
+
+### 프론트 테스트 계층 (백엔드 피라미드의 프론트판)
+
+| 계층 | 무엇을 | 도구 | 실 브라우저? | BookTimer |
+|---|---|---|---|---|
+| **단위(순수 로직)** | 좌표 계산·포맷·상태 전이 (DOM 무관) | Jest·Vitest·`node --test` | ❌ 불필요 | ✅ 이미 함 — `free-pure.test.mjs` |
+| **컴포넌트/DOM** | 렌더 결과·이벤트 핸들링 | Testing Library + **jsdom** | 가짜 DOM | 적음(SSR이라 JS 컴포넌트 단위가 드묾) |
+| **E2E(통합)** | 실서버+실브라우저 사용자 플로 | **Playwright·Cypress** | ✅ 진짜 | 🔶 **수동** Chrome 확장이 이 자리 |
+| **비주얼 회귀** | 스크린샷 픽셀 diff | Playwright snapshot·Percy | ✅ | 안 함 |
+
+### 백엔드처럼 — 되는 부분 / 안 되는 부분
+
+- **되는 부분(철학 이식)**: 피라미드·"행동>구현"·경계값(0/여러 개/null)·빠른 단위 다수+느린 통합 소수. **순수 로직을 함수로 빼서 Node로 돌리는 건 백엔드 단위와 완전히 동일** — `free-pure.test.mjs`(좌표 정규화·스왑)가 정확히 이 층.
+- **안 되는 부분(환경 차이)**: 프론트의 정답은 **브라우저 런타임**에 있는데 JVM/H2엔 그게 없다. #364는 본질이 `defer` 실행 순서+Alpine 반응성+Phaser canvas — 버그가 런타임 그 자체였다. 그래서:
+  - **jsdom(가짜 DOM)도 부족** — 진짜 `<script defer>` 실행 순서도, layout도, canvas/WebGL도 없다. Phaser는 실제 canvas/WebGL이 필요해 jsdom에선 **아예 안 돈다**.
+  - **mock 동기 로드 하니스는 더 위험** — 로드 순서를 바꿔 **가짜 green**을 준다([[n-083]], T-053).
+  - 결론: 이 부류는 **실 브라우저에서만** 잡힌다.
+
+### BookTimer 권장 믹스
+
+- **순수 로직 → Node 단위 테스트** (지금처럼). 빠르고 결정적 = 백엔드와 동일.
+- **도메인 → JUnit + H2** (지금처럼).
+- **클라이언트 통합·로드순서·Phaser → 지금은 실 브라우저 수동/보조(Chrome 확장)**. 정원 게임이 더 커지면 **Playwright E2E 1~2개**로 핵심 플로(꾸미기 배치·저장·콘솔 무에러)만 표적 자동화 — 전면 도입은 과함.
+
+### 일반화
+
+- **"테스팅 트로피"(Kent C. Dodds)** — 프론트는 버그가 **통합층에 몰려** 단위보다 통합 테스트 비중을 키우는 게 정설. #364가 정확히 통합층 버그였는데 단위+mock만 있어 샜다.
+- **프레임워크는 테스트를 "해결"하지 않는다.** 테스트 가능성은 *컴포넌트 모델*이 아니라 **빌드+모듈 경계**(import 가능 여부)에서 나온다([[n-017]] 보강). 그리고 canvas/실시간 통합은 무엇을 쓰든 결국 실 브라우저(Playwright)가 필요하다.
+- **검증 도구를 "정답이 어디 있나"에 맞춰라** — 순수 계산은 Node, DOM은 jsdom, 런타임·타이밍·렌더는 실 브라우저. 한 층으로 다 덮으려 하면 #364처럼 샌다.
+
+### 관련
+
+- **[[n-083]]** — 실 브라우저로만 잡힌 대표 사례(defer×class extends TDZ). 이 노트의 "왜 실 브라우저인가"의 산증인.
+- **[[n-082]]** — 같은 헤드리스 사각(reactive Proxy).
+- **[[n-017]]** — "프레임워크 도입?"의 분해(보강) — 이 노트의 결론을 아키텍처 판단으로 이음.
+- **CLAUDE.md `🖥️ 프론트 검증`** — 이 지형도를 워크플로 규칙(soft)으로 박은 곳.
+- **T-053·T-054** — 동기 로드 mock·defer가 로드순서 버그를 가리는 트랩.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -3853,3 +3968,6 @@ function myGarden() {
 | 2026-06-15 | N-080 (검증된 파이프라인의 N축 복제는 새 설계가 아니라 시드+벡터 노동 — 한 축에서 검증된 변경 사슬을 다른 축들로 넓힐 땐 설계 난이도가 아니라 반복 제작량이 비용의 본체 / 정원 SVG: A2가 시간축 14종에 깐 sprite_id 사슬(컬럼→필드→전파→폴백분기→symbol)을 A2 후속이 장르13+다양성12+레시피8=33종에 1:1 복제, 새 판단 0·남는 건 plumbing 한 줄씩 + 33 벡터 찍기 / 리스크 가늠을 "기술 위험"이 아니라 "제작 단위 수×단위당 손"으로 / 스코프(한 PR vs 축별 분리)도 제작량 문제 / TDD는 정식 RED→GREEN 유지·첫 축 테스트를 타 축에 복제, 자산(좌표·색)은 브리틀이라 preview 게이트 분리 / 설계세션≠복제세션(재설계 말고 견적·시각게이트) / N-055 null-state 가드, N-079, PR #351·#354) |
 | 2026-06-15 | N-081 (인라인 SVG `<symbol>`을 캔버스 게임엔진 텍스처로 — 페이지에 이미 인라인된 symbol(또는 임의 SVG 노드)의 innerHTML을 viewBox째 독립 `<svg>` 문자열로 감싸 Blob URL→엔진 이미지 로더(Phaser load.image)에 먹임, 새 에셋·서버왕복 0 / 왜 다시 감싸나=symbol은 비렌더 정의·`<use>`는 외부참조라 엔진 디코더가 못 씀 → self-contained 한 장 SVG여야(내부에 `<use`·외부 그라데이션 섞이면 그 정의도 인라인 필요) / Blob URL이 data-URI보다 큰/다수 SVG에 가볍고 CSP 친화·짧은 세션이면 revoke 생략 무방 / 폴백 불변식 계승=텍스처 있으면 Image·없으면 이모지 Text(N-055) / 헤드리스서 픽셀 못 떠도 texture.getSourceImage().width>0·게임오브젝트 type을 eval로 단언하면 "적재돼 스프라이트됨" 픽셀없이 확정 / 정원 격자→Phaser 자유배치 전환의 최대 리스크 POC였음 / T-052(WebGL 캡처 한계), N-055, PR #356) |
 | 2026-06-15 | N-082 (Alpine/Vue 반응 상태에 Phaser·Chart·Leaflet 같은 라이브러리 인스턴스를 저장하면 reactive Proxy가 깊게 감싸 내부 순환참조(scene.sys↔scene·플러그인)·this 식별이 깨져 조용히 오동작 — 정원 편집서 this.scene/this.game에 Phaser 넣어 팔레트 추가 먹통, 재현서 this.scene===s가 false(Proxy)·부팅 폭주·mountPhaser 중단 / mock은 평범 const라 Proxy 0=정상이라 헤드리스 POC 통과·실페이지만 깸(T-053) / 해법=인스턴스를 반응 밖 클로저 변수(let scene·game)에, 반응 표시상태(placedKeys)만 this.*에 = 반응/비반응 분리, Vue면 markRaw/shallowRef / 일반: 반응성은 값 추적용이지 살아있는 객체 래핑용 아님 → 엔진·차트·맵·소켓은 ref 밖, 이벤트만 끌어옴 / N-081, T-053, PR Phase1 핫픽스) |
+| 2026-06-15 | N-083 (defer 로드 라이브러리를 본문 non-defer 인라인 스크립트의 최상위 `class X extends Lib.Base`가 참조 → 인라인이 defer보다 먼저 실행돼 Lib 미정의 → extends 평가서 ReferenceError → 그 class만 TDZ에 갇혀 죽고 형제 function은 hoisting으로 살아 UI 멀쩡·new X()만 터지는 비대칭(부분 실패라 더 안 보임) / 정원 #364 꾸미기 식물 배치 먹통이 이거 — 콘솔 에러 떠도 팔레트·툴바 정상 / extends 상위클래스 식은 parse 아니라 선언 실행 시 평가, 로드순서≠소스순서(defer/async/module이 실행시점 바꿈) / 해법=class 정의 지연(ensureGardenScene로 mount 시점 평가)·또는 인라인도 defer / 로드순서 버그는 동기 로드 mock이 green 거짓을 줘 실 브라우저(Chrome 확장)로 콘솔 직독·재현은 defer까지 복제해야(T-053·N-082 같은 사각) / T-054, N-082, PR #364) |
+| 2026-06-15 | N-084 (프론트 테스트 지형도 — 피라미드(단위→통합→E2E)·"행동>구현"·경계값은 백엔드와 같지만 "정답"이 DOM·렌더·타이밍·브라우저 런타임에 있어 도구·검증대상이 다름 / 순수 로직은 빼서 Node 단위(백엔드와 동일, free-pure.test.mjs)·컴포넌트는 jsdom+Testing Library·로드순서·canvas/WebGL·타이밍 버그는 실 브라우저(Playwright/Cypress·수동 Chrome 확장)에서만 / "프레임워크=테스트 해결"은 거짓: jsdom으론 Phaser canvas 못 돎 / Testing Trophy=프론트 버그는 통합층에 몰려 통합 비중↑, #364가 그 통합층 버그인데 단위+mock만 있어 샘 / BookTimer=순수로직 Node·도메인 JUnit+H2·클라 통합 실브라우저 수동, 정원 커지면 Playwright E2E 표적 1~2개 / N-083·N-082·N-017, T-053·T-054, CLAUDE.md 🖥️ 프론트 검증) |
+| 2026-06-15 | N-017 보강 ("프론트 프레임워크 도입?"의 분해 — "프레임워크"는 빌드+모듈+컴포넌트+반응성+라우팅 묶음이고 테스트 가능성은 컴포넌트가 아니라 빌드+모듈(import 가능 여부)에서 나옴(N-084) / #364는 프레임워크로 잡는 게 아니라 번들러 import 그래프로 "사라짐"(N-083), 단 Phaser canvas 통합은 어느 수든 실브라우저 필요 / 갱신 입장: 풀 SPA 여전히 보류(트리거 0·SEO=매출), 정원 섬은 빌드+모듈 살 만큼 커짐 — 트리거=헤드리스-블라인드 정원 런타임 버그 다음 1건 더면 정원부터 ①Vite+Vitest+모듈 추출(섬 아키텍처)·②프레임워크 스왑은 그 다음 / 버그 하나로 안 뒤집기(recency bias), 메모리 garden-frontend-build-trigger) |
