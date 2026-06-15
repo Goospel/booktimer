@@ -1,7 +1,7 @@
 package com.booktimer.web;
 
 import com.booktimer.session.ContributionGraph;
-import com.booktimer.session.DailyReadingRecord;
+import com.booktimer.session.MonthlyReadingSection;
 import com.booktimer.session.ReadingContributionService;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.ReadingDebtService;
@@ -47,10 +47,10 @@ public class HistoryController {
     public String history(Principal principal, Model model) {
         User user = currentUserService.resolve(principal);
 
-        List<DailyReadingRecord> records = historyService.dailyHistory(user);
+        List<MonthlyReadingSection> months = historyService.monthlyHistory(user);
         ContributionGraph graph = contributionService.contributionGraph(user);
         model.addAttribute("nickname", user.getNickname());
-        model.addAttribute("records", records);
+        model.addAttribute("months", months);
         model.addAttribute("graph", graph);
         // 이번 주 빠뜨린 날(최근 7일 윈도우 내 부채>0 과거 날, 최근 먼저). 각 항목 "채우기"=수동입력 날짜 프리필.
         model.addAttribute("weeklyShortfall", debtService.weeklyDebt(user).missedDays());

@@ -552,6 +552,51 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     white-space: nowrap;
 }
 
+/* 월별 보기: 한 번에 한 달(◀▶ 이동), 그 달 일자 리스트는 고정 높이 스크롤 박스.
+   기록이 쌓여도 페이지가 한없이 길어지지 않게 월 단위로 끊고 그 안에서만 스크롤한다. */
+.month-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+.month-nav-label {
+    flex: 1 1 auto;
+    text-align: center;
+    font-weight: 700;
+    font-size: .9rem;
+    color: var(--text);
+}
+.month-nav-btn {
+    flex: 0 0 auto;
+    width: 38px;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--card-bg);
+    color: var(--text);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: color .15s ease, border-color .15s ease;
+}
+.month-nav-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.month-nav-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.month-nav-btn:disabled { opacity: .35; cursor: default; }
+.month-section[hidden] { display: none; }
+/* 일자 리스트 스크롤 박스: 길어도 화면을 점령하지 않게 고정 높이 + 내부 스크롤(모바일 관성 스크롤).
+   overscroll-behavior:contain 으로 박스 끝에서 페이지로 스크롤이 새지 않게 한다. */
+.record-scroll {
+    max-height: 360px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
+
 /* === 독서 잔디 (GitHub 컨트리뷰션 그래프 스타일) === */
 /* 헤더: 제목 좌측 / 성장 잔디 뱃지(연속 일수에 따라 땅→새싹→꽃→나무) 우측 상단.
    h2의 아래 여백(12px)을 래퍼로 옮겨 요약문과의 간격을 그대로 유지한다. */
