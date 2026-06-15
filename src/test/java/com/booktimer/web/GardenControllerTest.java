@@ -150,7 +150,7 @@ class GardenControllerTest {
 
         mockMvc.perform(post("/garden/layout").with(user("garden-reject@booktimer.com")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("[{\"axis\":\"TIME\",\"code\":\"sprout\",\"x\":0.5,\"y\":0.5,\"z\":0}]"))
+                        .content("[{\"axis\":\"TIME\",\"code\":\"sprout\",\"x\":0.5,\"y\":0.5,\"z\":0,\"rotation\":0,\"scale\":1}]"))
                 .andExpect(status().isBadRequest());
     }
 }

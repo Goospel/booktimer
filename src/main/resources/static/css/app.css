@@ -937,11 +937,12 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
                garden-sway 3.6s ease-in-out .5s infinite;
 }
 /* 비동기 stagger — 전부 동시에 흔들리면 어색하므로 nth-child로 rise·sway 딜레이를 시프트(순수 CSS). */
-.garden-view .garden-view-plant:nth-child(3n)   { animation-delay: .08s, .58s; }
-.garden-view .garden-view-plant:nth-child(3n+1) { animation-delay: .16s, .70s; }
-.garden-view .garden-view-plant:nth-child(3n+2) { animation-delay: .04s, .62s; }
-.garden-view .garden-view-plant:nth-child(5n)   { animation-duration: .5s, 4.2s; }
-.garden-view .garden-view-plant:nth-child(7n)   { animation-duration: .5s, 3.1s; }
+/* sway/rise는 inner .canvas-plant에 있다(wrapper 분리, Phase 2) — nth-child stagger도 자식을 타겟. */
+.garden-view .garden-view-plant:nth-child(3n)   .canvas-plant { animation-delay: .08s, .58s; }
+.garden-view .garden-view-plant:nth-child(3n+1) .canvas-plant { animation-delay: .16s, .70s; }
+.garden-view .garden-view-plant:nth-child(3n+2) .canvas-plant { animation-delay: .04s, .62s; }
+.garden-view .garden-view-plant:nth-child(5n)   .canvas-plant { animation-duration: .5s, 4.2s; }
+.garden-view .garden-view-plant:nth-child(7n)   .canvas-plant { animation-duration: .5s, 3.1s; }
 
 /* A2: 코드 벡터 SVG 식물 — 컨텍스트별 이모지 크기에 맞춰 시각 균형을 맞춘다.
    부모(.canvas-plant/.plant-emoji/.palette-plant)의 sway transform을 상속하고,
@@ -988,6 +989,34 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .palette-plant:hover:not(:disabled) { border-color: var(--accent); }
 .palette-plant.placed { opacity: .4; }
 .palette-plant:disabled { cursor: default; }
+
+/* 변형 툴바(Phase 2) — 식물 선택(탭) 시 캔버스 아래 가로 버튼 줄. 좌표변환 불필요·모바일 친화(설계 추천 A). */
+.garden-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 10px 0 12px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--sage-soft);
+}
+.garden-tool-label { font-size: .8rem; color: var(--muted); margin-right: 4px; }
+.garden-tool-btn {
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+}
+.garden-tool-btn:hover { border-color: var(--accent); }
+.garden-tool-btn.danger:hover { border-color: #c0584e; }
 
 /* 태블릿+ 큰 화면: 정원 페이지(/garden)만 넓혀 정원이 커지고 식물이 잘 보이게 한다.
    앱 기본은 모바일-우선 max-width:460px 단일 컬럼이라, 큰 화면에선 정원이 작은 460px 칸에 갇혀

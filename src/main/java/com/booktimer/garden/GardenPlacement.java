@@ -69,22 +69,33 @@ public class GardenPlacement {
     @Column(name = "z_order", nullable = false)
     private int zOrder;
 
+    /** 사용자 회전(도, 0~360) — 변형·레이어(Phase 2). 기본 0(무변형, Phase 1 행 호환). */
+    @Column(nullable = false)
+    private double rotation;
+
+    /** 사용자 크기 배율(0.5~2.0) — 변형·레이어(Phase 2). 기본 1(무변형). */
+    @Column(nullable = false)
+    private double scale;
+
     protected GardenPlacement() {
         // JPA
     }
 
-    private GardenPlacement(User user, PlacementAxis axis, String plantCode, double posX, double posY, int zOrder) {
+    private GardenPlacement(User user, PlacementAxis axis, String plantCode, double posX, double posY, int zOrder,
+                            double rotation, double scale) {
         this.user = user;
         this.axis = axis;
         this.plantCode = plantCode;
         this.posX = posX;
         this.posY = posY;
         this.zOrder = zOrder;
+        this.rotation = rotation;
+        this.scale = scale;
     }
 
     public static GardenPlacement of(User user, PlacementAxis axis, String plantCode,
-                                     double posX, double posY, int zOrder) {
-        return new GardenPlacement(user, axis, plantCode, posX, posY, zOrder);
+                                     double posX, double posY, int zOrder, double rotation, double scale) {
+        return new GardenPlacement(user, axis, plantCode, posX, posY, zOrder, rotation, scale);
     }
 
     public Long getId() {
@@ -113,5 +124,13 @@ public class GardenPlacement {
 
     public int getZOrder() {
         return zOrder;
+    }
+
+    public double getRotation() {
+        return rotation;
+    }
+
+    public double getScale() {
+        return scale;
     }
 }

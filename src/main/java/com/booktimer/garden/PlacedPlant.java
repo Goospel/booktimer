@@ -16,7 +16,9 @@ package com.booktimer.garden;
  * @param x        가로 위치(정규화 0~1)
  * @param y        세로 위치(정규화 0~1)
  * @param z        겹침 앞뒤 순서(zOrder)
+ * @param rotation 사용자 회전(도, 0~360) — 변형·레이어(Phase 2)
+ * @param scale    사용자 크기 배율(0.5~2.0)
  */
 public record PlacedPlant(PlacementAxis axis, String code, String emoji, String name, String spriteId,
-                          double x, double y, int z) {
+                          double x, double y, int z, double rotation, double scale) {
 }
