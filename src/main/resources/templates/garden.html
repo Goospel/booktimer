@@ -308,7 +308,7 @@
         placed: /*[[${placedPlants}]]*/ [],      // [{axis,code,emoji,name,spriteId,x,y,z}] — x·y 정규화(0~1)
         owned: /*[[${garden.ownedPlants()}]]*/ [],
         worldWidth: /*[[${worldWidth}]]*/ 1000,
-        worldHeight: /*[[${worldHeight}]]*/ 640
+        worldHeight: /*[[${worldHeight}]]*/ 800
     };
 
     /* @free-pure-core:start */
@@ -437,7 +437,7 @@
     // 내 정원 편집 컴포넌트(Alpine). Phaser 인스턴스를 들고 팔레트↔씬을 잇는다.
     // 이 스크립트는 defer 아님 → Alpine(defer) 처리 전에 전역 myGarden이 준비된다.
     function myGarden() {
-        const data = window.__garden || { placed: [], owned: [], worldWidth: 1000, worldHeight: 640 };
+        const data = window.__garden || { placed: [], owned: [], worldWidth: 1000, worldHeight: 800 };
         const placedKeySet = () => new Set((data.placed || []).map(p => p.axis + '/' + p.code));
         // Phaser 인스턴스(scene·game)는 Alpine 반응 상태(this.*) 밖 클로저 변수에 둔다 — x-data 속성에 넣으면
         // reactive Proxy가 Phaser Scene/Game을 감싸 내부 순환참조가 깨진다(부팅 폭주·팔레트 추가 무반응). N-082.
