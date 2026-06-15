@@ -330,6 +330,13 @@
         const mx = worldW * margin, my = worldH * margin;
         return px < -mx || px > worldW + mx || py < -my || py > worldH + my;
     }
+    // 식물 월드 픽셀 크기 — 화면에서 보이길 원하는 px(targetCss)를 캔버스 표시 폭(canvasCss) 기준 월드 px로
+    // 환산한다. FIT 스케일이 월드를 canvasCss/worldW로 줄이므로, 작은 화면(모바일)일수록 월드px를 키워야
+    // 화면 표시 크기가 일정해진다(편집 캔버스 식물이 모바일에서 작던 문제 해소). canvasCss 0(측정 전)이면 목표값 폴백.
+    function plantWorldPx(targetCss, canvasCss, worldW, min = 24, max = 200) {
+        if (!canvasCss || canvasCss <= 0) return targetCss;
+        return Math.min(max, Math.max(min, targetCss * worldW / canvasCss));
+    }
     /* @free-pure-core:end */
 
     // <symbol id="sprite-{code}">(self-contained path, viewBox 0 0 32 32)를 독립 SVG Blob URL로 직렬화 —
@@ -342,7 +349,7 @@
         return URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
     }
 
-    const PLANT_PX = 56;   // 식물 표시 한 변(px, 월드 좌표계). 모던 플랫 톤에서 시각 균형.
+    const TARGET_PLANT_CSS = 36;   // 식물의 화면 표시 목표 한 변(CSS px). 캔버스 표시 폭에 맞춰 월드px로 환산(plantWorldPx)해 모바일·데스크톱 모두 화면에서 일정하게 보인다(모바일에서 작던 문제 해소).
 
     // Phaser 정원 씬 — 배경 + 식물 스프라이트 렌더, 드래그 자유 이동, 월드 밖 드롭=거두기.
     // 게임루프(성장·낮밤)는 Phase 2+ — 이 씬은 자유배치+저장으로 범위 한정(설계 §2.4·로드맵).
@@ -365,6 +372,9 @@
             }
         }
         create() {
+            // 캔버스 표시 폭에 맞춰 식물 월드 크기를 정한다 — 작은 화면(모바일)일수록 월드px를 키워 화면 표시 크기를 일정하게.
+            const canvasCss = this.sys.game.canvas.getBoundingClientRect().width;
+            this.plantPx = plantWorldPx(TARGET_PLANT_CSS, canvasCss, this.cfg.worldW);
             this.drawBackground();
             for (const p of this.cfg.placed) {
                 const { px, py } = normToPixel(p.x, p.y, this.cfg.worldW, this.cfg.worldH);
@@ -393,9 +403,9 @@
         spawnPlant(meta, px, py) {
             let obj;
             if (meta.spriteId && this.textures.exists('plant-' + meta.spriteId)) {
-                obj = this.add.image(px, py, 'plant-' + meta.spriteId).setDisplaySize(PLANT_PX, PLANT_PX);
+                obj = this.add.image(px, py, 'plant-' + meta.spriteId).setDisplaySize(this.plantPx, this.plantPx);
             } else {
-                obj = this.add.text(px, py, meta.emoji || '🌱', { fontSize: '44px' }).setOrigin(0.5);
+                obj = this.add.text(px, py, meta.emoji || '🌱', { fontSize: Math.round(this.plantPx * 0.8) + 'px' }).setOrigin(0.5);
             }
             obj.setData('axis', meta.axis);
             obj.setData('code', meta.code);
