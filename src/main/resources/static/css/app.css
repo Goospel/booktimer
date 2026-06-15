@@ -794,8 +794,8 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .garden-back a { color: var(--muted); font-size: .85rem; text-decoration: none; }
 .garden-back a:hover { color: var(--accent-hover); }
 
-/* === 내 정원(꾸미기) 캔버스 (/garden 상단) === */
-/* 보기 모드는 서버 렌더(no-JS 폴백), 편집은 Alpine 탭-투-플레이스. 격자는 고정 열(gridColumns) × 정사각 칸. */
+/* === 내 정원(꾸미기) — 자유 위치 (/garden 상단) === */
+/* 보기 모드는 서버 렌더(no-JS 폴백, 좌표 절대배치), 편집은 Phaser 게임 위젯(드래그 자유 이동·월드 밖 드롭=거두기). */
 .my-garden-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
 .my-garden-actions { display: inline-flex; align-items: center; gap: 8px; }
 .my-garden-edit-actions { display: inline-flex; gap: 8px; }
@@ -830,89 +830,79 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     overflow: hidden;
 }
 
-.garden-canvas {
-    display: grid;
-    gap: 6px;
-    margin: 4px 0 12px;
-    padding: 10px;
-    background: var(--sage-soft);
+/* 보기 모드 좌표 평면 — 무대(하늘/잔디) 안 고정 종횡비 평면에 식물을 정규화 좌표로 절대배치(no-JS 폴백).
+   하단에 옅은 흙 띠를 깔아 Phaser 편집 배경(하늘/잔디/흙)과 톤을 맞춘다. */
+.garden-view {
+    position: relative;
+    width: 100%;
     border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: linear-gradient(180deg,
+        transparent 0%, transparent 78%,
+        rgba(184, 149, 118, .5) 82%, rgba(184, 149, 118, .65) 100%);   /* 하단 흙 화단 띠 암시(--garden-soil 톤) */
 }
-/* 무대 안 캔버스 = 흙 화단(planter bed). 무대가 하늘/잔디면 캔버스는 갈아엎은 흙.
-   옅은 이랑(furrow) 패턴을 깔아 빈 정원도 '심을 밭'으로 읽히게 하고, inset 그림자로 살짝 패인 땅 느낌. */
-.garden-stage .garden-canvas {
-    margin: 0;
-    background:
-        repeating-linear-gradient(90deg,
-            rgba(0, 0, 0, .05) 0, rgba(0, 0, 0, .05) 1px,
-            transparent 1px, transparent 24px),
-        var(--garden-soil);
-    box-shadow: inset 0 2px 6px rgba(60, 40, 20, .22);
+.garden-view-plant {
+    position: absolute;
+    transform: translate(-50%, -50%);          /* left/top(정규화×100%)을 식물 중심에 정렬 */
+    font-size: 1.7rem;
+    line-height: 1;
 }
-.garden-canvas .canvas-cell {
-    position: relative;                /* 발밑 그림자 ::after 기준 */
-    aspect-ratio: 1 / 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px dashed transparent;
-    border-radius: 6px;
-}
-.garden-canvas.editing .canvas-cell { border-color: var(--border); background: rgba(255, 255, 255, .35); }
-.garden-canvas .canvas-cell.cell-clickable { cursor: pointer; }
-.garden-canvas .canvas-cell.cell-clickable:hover { border-color: var(--accent); }
-.garden-canvas .canvas-cell.occupied { border-style: solid; }
-/* 점유 셀 식물 발밑 타원 그림자 → 이모지가 흙에 '선' 입체감. pointer-events:none으로 탭-투-플레이스 클릭을 막지 않는다. */
-.garden-canvas .canvas-cell.occupied::after {
+/* 발밑 타원 그림자 → 식물이 땅에 '선' 입체감(A0 정신). 중심 정렬이라 박스 하단에 둔다. */
+.garden-view-plant::after {
     content: "";
     position: absolute;
     left: 50%;
-    bottom: 5px;
-    width: 58%;
+    bottom: -7px;
+    width: 62%;
     height: 7px;
     transform: translateX(-50%);
     background: radial-gradient(ellipse at center, rgba(0, 0, 0, .25), transparent 72%);
     pointer-events: none;
-    z-index: 0;
+    z-index: -1;
 }
-.garden-canvas .canvas-plant {
+
+/* Phaser 편집 캔버스 마운트 — 고정 종횡비(인라인 aspect-ratio) 컨테이너에 FIT 스케일 canvas가 채워진다.
+   touch-action:none 으로 드래그 제스처가 페이지 스크롤에 뺏기지 않게 한다(편집 영역 한정). */
+.garden-phaser {
+    width: 100%;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    touch-action: none;
+    background: var(--garden-grass);   /* canvas 로드 전 빈 프레임 톤 */
+}
+.garden-phaser canvas {
+    display: block;
+    width: 100% !important;
+    height: auto !important;
+    border-radius: var(--radius-sm);
+}
+/* 편집 무대는 Phaser canvas가 전체를 덮으므로 안쪽 패딩을 줄여 울타리 프레임만 남긴다. */
+.garden-stage-edit { padding: 5px; }
+
+/* 식물 비주얼(보기 모드 폴백 공통) — 발밑 뿌리 고정 sway + 입장 rise. 편집은 Phaser가 렌더하므로 여기 미적용. */
+.canvas-plant {
     position: relative;
-    z-index: 1;
-    font-size: 1.4rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     line-height: 1;
     transform-origin: bottom center;          /* 발밑 뿌리 고정 → 윗부분만 살랑 */
-    /* 입장 솟아오름(1회) → .5s 뒤 상시 미세 흔들림(무한). 시간 비중첩이라 transform 충돌 없음.
-       backwards로 rise 시작 전 첫 프레임(흙 속) 유지해 깜빡임 방지. */
+    /* 입장 솟아오름(1회) → .5s 뒤 상시 미세 흔들림(무한). backwards로 rise 전 첫 프레임 유지(깜빡임 방지). */
     animation: garden-rise .5s ease-out backwards,
                garden-sway 3.6s ease-in-out .5s infinite;
 }
-/* 셀별 비동기 stagger — 전부 동시에 솟고/흔들리면 어색하므로 nth-child로 rise·sway 딜레이를 시프트.
-   마크업은 안 건드린다(순수 CSS, A0 정신 유지). 두 값 = [rise delay, sway delay]. */
-.garden-canvas .canvas-cell:nth-child(3n)   .canvas-plant { animation-delay: .08s, .58s; }
-.garden-canvas .canvas-cell:nth-child(3n+1) .canvas-plant { animation-delay: .16s, .70s; }
-.garden-canvas .canvas-cell:nth-child(3n+2) .canvas-plant { animation-delay: .04s, .62s; }
-.garden-canvas .canvas-cell:nth-child(5n)   .canvas-plant { animation-duration: .5s, 4.2s; }
-.garden-canvas .canvas-cell:nth-child(7n)   .canvas-plant { animation-duration: .5s, 3.1s; }
-
-/* 심을 때(편집) 방금 놓은 셀만 1회 팝 — sway를 잠시 덮어 오버슈트, @animationend로 해제 시 sway 복귀. */
-.garden-canvas .canvas-plant.plant-pop { animation: garden-pop .35s ease-out; }
-/* 심을 때 옅은 글로우 1회 — '은은' 기조라 딱 이 정도(풍부한 파티클은 B로 보류). */
-.garden-canvas .canvas-plant.plant-pop::before {
-    content: "";
-    position: absolute;
-    inset: -30%;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(255, 240, 170, .65), transparent 68%);
-    pointer-events: none;
-    z-index: -1;
-    animation: garden-glow .45s ease-out;
-}
+/* 비동기 stagger — 전부 동시에 흔들리면 어색하므로 nth-child로 rise·sway 딜레이를 시프트(순수 CSS). */
+.garden-view .garden-view-plant:nth-child(3n)   { animation-delay: .08s, .58s; }
+.garden-view .garden-view-plant:nth-child(3n+1) { animation-delay: .16s, .70s; }
+.garden-view .garden-view-plant:nth-child(3n+2) { animation-delay: .04s, .62s; }
+.garden-view .garden-view-plant:nth-child(5n)   { animation-duration: .5s, 4.2s; }
+.garden-view .garden-view-plant:nth-child(7n)   { animation-duration: .5s, 3.1s; }
 
 /* A2: 코드 벡터 SVG 식물 — 컨텍스트별 이모지 크기에 맞춰 시각 균형을 맞춘다.
-   부모(.canvas-plant/.plant-emoji/.palette-plant)의 sway/pop transform을 상속하고,
+   부모(.canvas-plant/.plant-emoji/.palette-plant)의 sway transform을 상속하고,
    <symbol> 내부 fill이 다색 채색을 담당한다(외부 요청 0). */
 .plant-svg { width: 1.5rem; height: 1.5rem; display: block; overflow: visible; }
-.garden-canvas .canvas-plant .plant-svg { width: 1.6rem; height: 1.6rem; }
+.garden-view-plant .plant-svg { width: 1.9rem; height: 1.9rem; }
 .garden-grid .plant-emoji .plant-svg { width: 1.7rem; height: 1.7rem; }
 .garden-palette .palette-plant .plant-svg { width: 1.5rem; height: 1.5rem; }
 
@@ -925,23 +915,9 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     70%  { transform: translateY(-2px) scale(1.08); opacity: 1; }
     100% { transform: translateY(0) scale(1);      opacity: 1; }
 }
-@keyframes garden-pop {
-    0%   { transform: scale(.5); }
-    60%  { transform: scale(1.18); }
-    100% { transform: scale(1); }
-}
-@keyframes garden-glow {
-    0%   { opacity: 0; transform: scale(.4); }
-    40%  { opacity: 1; }
-    100% { opacity: 0; transform: scale(1.1); }
-}
 /* 접근성: 모션 끄면 식물은 즉시 최종 상태(보임·정지)로 — 기능 손실 0. */
 @media (prefers-reduced-motion: reduce) {
-    .garden-canvas .canvas-plant,
-    .garden-canvas .canvas-plant.plant-pop { animation: none; }
-    .garden-canvas .canvas-plant.plant-pop::before { display: none; }
-    /* 줌은 기능이라 유지하되 부드러운 전환(장식)만 끈다 — 배율은 즉시 적용. */
-    .garden-stage .garden-canvas.editing { transition: none; }
+    .canvas-plant { animation: none; }
 }
 
 .garden-palette {
@@ -964,45 +940,9 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     background: #fff;
     cursor: pointer;
 }
-.palette-plant:hover { border-color: var(--accent); }
-.palette-plant.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.palette-plant:hover:not(:disabled) { border-color: var(--accent); }
 .palette-plant.placed { opacity: .4; }
-
-/* A3: 드래그·휠 줌 인터랙션 (편집 캔버스 한정). 좌표계 분리 — 스냅은 rect 순회(JS), 고스트는 화면좌표 fixed. */
-/* 포인터 제스처(드래그·휠)가 pointermove/wheel 을 독점하도록 브라우저 기본 제스처를 끈다.
-   편집 캔버스에만 걺 → 보기 모드·페이지 나머지 스크롤은 정상(§2.6). */
-.garden-canvas.editing { touch-action: none; }
-/* 휠 줌: 캔버스 자체에 scale. 무대(overflow:hidden)가 확대분을 클립 → '살짝 확대해 들여다보기'. 팬 없음(첫 PR). */
-.garden-stage .garden-canvas.editing {
-    transform-origin: center center;
-    transition: transform .12s ease-out;
-}
-.garden-canvas.editing .canvas-cell.cell-clickable { cursor: grab; }
-.garden-canvas.editing.dragging,
-.garden-canvas.editing.dragging .canvas-cell.cell-clickable { cursor: grabbing; }
-/* 거두기 예고 — 놓인 식물을 캔버스 밖으로 끌어내면(드롭타깃 -1) 붉은 톤으로 "여기서 놓으면 거둠"을 알려 오발 방지. */
-.garden-canvas.editing.drag-removing {
-    outline: 2px dashed rgba(220, 70, 70, .7);
-    outline-offset: 2px;
-    background: rgba(220, 70, 70, .06);
-}
-/* 드롭 예고 하이라이트 — 어느 칸에 놓일지 미리 보여준다. */
-.garden-canvas.editing .canvas-cell.cell-drop-target {
-    border-color: var(--accent);
-    border-style: solid;
-    background: rgba(255, 240, 170, .5);
-}
-/* 드래그 고스트 — 화면좌표 고정·hit-test 비방해·정지(손가락에 붙어 따라옴). transform 으로 포인터 중심 정렬. */
-.drag-ghost {
-    position: fixed;
-    z-index: 50;
-    pointer-events: none;
-    transform: translate(-50%, -50%);
-    font-size: 1.6rem;
-    line-height: 1;
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .3));
-}
-.drag-ghost .plant-svg { width: 1.8rem; height: 1.8rem; }
+.palette-plant:disabled { cursor: default; }
 
 /* === 내 책장 (Book) === */
 .muted { color: var(--muted); }

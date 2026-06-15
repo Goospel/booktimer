@@ -84,6 +84,7 @@
 - [N-078. semantic(논리) 머지 충돌 — git이 텍스트로 안 잡는, 각 브랜치는 green인데 합치면 red](#n-078-semantic논리-머지-충돌--git이-텍스트로-안-잡는-각-브랜치는-green인데-합치면-red)
 - [N-079. 점진 향상(progressive enhancement) 장식 레이어는 토글 경계 밖에 둬야 인터랙션·no-JS 폴백이 보존된다](#n-079-점진-향상progressive-enhancement-장식-레이어는-토글-경계-밖에-둬야-인터랙션no-js-폴백이-보존된다)
 - [N-080. 검증된 파이프라인의 N축 복제는 새 설계가 아니라 "시드 + 벡터" 노동 — 리스크가 아니라 제작량을 가늠하라](#n-080-검증된-파이프라인의-n축-복제는-새-설계가-아니라-시드--벡터-노동--리스크가-아니라-제작량을-가늠하라)
+- [N-081. 인라인 SVG `<symbol>`을 캔버스 게임엔진 텍스처로 — innerHTML을 독립 SVG로 직렬화 → Blob URL → load.image](#n-081-인라인-svg-symbol을-캔버스-게임엔진-텍스처로--innerhtml을-독립-svg로-직렬화--blob-url--loadimage)
 
 ---
 
@@ -3684,6 +3685,45 @@ GA4 방문 통계(#338)가 `head`에 gtag 스크립트 fragment를 전 템플릿
 
 ---
 
+## N-081. 인라인 SVG `<symbol>`을 캔버스 게임엔진 텍스처로 — innerHTML을 독립 SVG로 직렬화 → Blob URL → load.image
+
+> **한 줄 요약**: 이미 페이지에 인라인으로 정의된 SVG `<symbol>`(또는 임의 SVG 노드)을 Phaser·Pixi 같은 캔버스 엔진의 비트맵 텍스처로 쓰려면, **그 노드의 `innerHTML`을 viewBox째 독립 `<svg>` 문자열로 감싸 Blob URL로 만들고** 엔진의 이미지 로더에 먹이면 된다. 새 에셋 파일·서버 왕복 0 — DOM의 벡터 정의를 그대로 GPU 텍스처로 옮긴다.
+
+### 배경 — 어디서 만났나
+
+독서 정원을 격자 DOM에서 **Phaser 캔버스 게임**으로 전환할 때(살아있는 정원 게임 Phase 1, PR #356), 식물 비주얼은 A2/A2후속이 깔아둔 인라인 `<symbol id="sprite-{code}">`(코드 벡터 path, viewBox 0 0 32 32) 47종이었다. 이걸 Phaser 스프라이트로 그리려면 텍스처가 필요한데, `<use href="#sprite-x">`는 SVG DOM 참조라 캔버스 엔진이 직접 못 쓴다. SVG→텍스처 적재가 이 전환의 최대 리스크(POC 선행 대상)였다.
+
+### 핵심 — 왜, 그리고 어떻게
+
+```js
+function svgTextureUrl(symbolId) {
+    const sym = document.getElementById(symbolId);          // 페이지에 이미 인라인된 <symbol>
+    if (!sym) return null;
+    const vb = sym.getAttribute('viewBox') || '0 0 32 32';
+    // innerHTML(path/도형들)을 독립 <svg>로 감싼다 — <use> 참조가 아니라 self-contained 마크업이어야 한다.
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}" width="96" height="96">${sym.innerHTML}</svg>`;
+    return URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));   // Blob URL = 이미지 소스
+}
+// Phaser: this.load.image('plant-' + code, svgTextureUrl('sprite-' + code));
+```
+
+- **왜 `innerHTML`을 다시 감싸나**: `<symbol>` 자체는 렌더되지 않는 정의(템플릿)이고, `<use>`는 외부 참조다. 캔버스 엔진의 이미지 디코더는 **자기 완결적인 한 장의 SVG 문서**를 원한다 → symbol의 내용물(path들)만 꺼내 새 `<svg viewBox=...>`로 감싸야 독립 이미지가 된다. 그래서 symbol 내부가 `<use>` 없이 self-contained여야 한다(외부 참조가 섞이면 직렬화가 깨진다).
+- **Blob URL vs data-URI**: 둘 다 되지만 Blob URL이 큰 SVG·다수일 때 가볍고 CSP 친화적. 편집 세션이 짧으면 `revokeObjectURL` 생략도 실무상 무방(길면 로드 완료 후 해제).
+- **폴백 불변식 계승**: 텍스처가 있으면 `Image` 스프라이트, 없으면(spriteId=null) 이모지 `Text` — DOM 시절의 "있으면 SVG·없으면 이모지" 분기를 엔진에서도 그대로(N-055 정신).
+- **검증을 픽셀 없이**: 헤드리스 환경은 WebGL 캡처가 막혀 스크린샷이 안 떠도(T-052), `texture.getSourceImage().width>0`(디코드 성공)·게임오브젝트 `type`(`Image` vs `Text`)을 eval로 단언하면 "SVG가 실제 텍스처로 적재돼 스프라이트가 됐다"를 픽셀 없이 확정할 수 있다.
+
+### 일반화
+
+DOM에 이미 있는 벡터 정의(아이콘 스프라이트 시트, `<symbol>` 라이브러리)를 캔버스/WebGL 렌더러로 옮기는 모든 경우에 적용 — 별도 PNG 굽기·빌드 파이프라인 없이 런타임에 벡터를 텍스처화한다. 역도 성립(canvas→Blob→`<img>`). 단 **self-contained 직렬화**가 전제다: 그라데이션·필터·`<use>`가 정의 밖을 참조하면 그 정의도 함께 인라인해야 한다.
+
+### 관련
+
+- **T-052** — 헤드리스 preview에서 WebGL+RAF 앱(Phaser)은 screenshot/snapshot이 타임아웃 → eval 상태/픽셀 검증으로 우회.
+- **N-055** — null-state 폴백 불변식(텍스처 없으면 이모지로 빠짐 없이 폴백).
+- **changelog #356** — 정원 자유 위치 전환(Phaser 도입)에서 이 POC 출하.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -3769,3 +3809,4 @@ GA4 방문 통계(#338)가 `head`에 gtag 스크립트 fragment를 전 템플릿
 | 2026-06-13 | N-076 (네이티브 `<details>`는 summary(토글)+패널이 한 덩어리 — 흐름상 분리 배치 불가 → 토글은 헤더·패널은 멀리 두려면 absolute(좌표 수동·형제 padding으로 자리 확보)/JS/checkbox 해킹(접근성 손실) 중 택1 / `details[open]`은 자손에만 작용해 패널이 밖이면 native 토글이 못 건드림이 근원 / 이번엔 (a) absolute 채택 — 패널은 잔디 아래 유지·토글만 제목 옆 / `display:contents`+flex `order` 우회는 프리뷰 렌더러에서 불안정 → 검증된 단순안 복귀 / soft·hard 트레이드오프 결 N-004, PR #334) |
 | 2026-06-14 | N-079 (점진 향상 장식 레이어는 토글 경계 밖에 — 기존 인터랙티브 UI에 순수 배경/무대를 얹을 땐 장식 래퍼를 x-show/x-if·@click 바인딩 DOM 밖에서 감싸기만 / 정원 무대화 A0: 캔버스를 .garden-stage로 래핑, x-show를 캔버스→래퍼로 옮겨도 동작 동일(x-show는 display 토글일 뿐·Alpine 없으면 무시돼 no-JS 폴백 유지) / 덧댄 ::after엔 pointer-events:none로 @click 비간섭 / 검증=편집서 N번 칸 탭→정확히 N번에만 배치(좌표 무결성) / 함정 T-050(perspective가 좌표 깸), 폴백결 N-032, PR #346) |
 | 2026-06-15 | N-080 (검증된 파이프라인의 N축 복제는 새 설계가 아니라 시드+벡터 노동 — 한 축에서 검증된 변경 사슬을 다른 축들로 넓힐 땐 설계 난이도가 아니라 반복 제작량이 비용의 본체 / 정원 SVG: A2가 시간축 14종에 깐 sprite_id 사슬(컬럼→필드→전파→폴백분기→symbol)을 A2 후속이 장르13+다양성12+레시피8=33종에 1:1 복제, 새 판단 0·남는 건 plumbing 한 줄씩 + 33 벡터 찍기 / 리스크 가늠을 "기술 위험"이 아니라 "제작 단위 수×단위당 손"으로 / 스코프(한 PR vs 축별 분리)도 제작량 문제 / TDD는 정식 RED→GREEN 유지·첫 축 테스트를 타 축에 복제, 자산(좌표·색)은 브리틀이라 preview 게이트 분리 / 설계세션≠복제세션(재설계 말고 견적·시각게이트) / N-055 null-state 가드, N-079, PR #351·#354) |
+| 2026-06-15 | N-081 (인라인 SVG `<symbol>`을 캔버스 게임엔진 텍스처로 — 페이지에 이미 인라인된 symbol(또는 임의 SVG 노드)의 innerHTML을 viewBox째 독립 `<svg>` 문자열로 감싸 Blob URL→엔진 이미지 로더(Phaser load.image)에 먹임, 새 에셋·서버왕복 0 / 왜 다시 감싸나=symbol은 비렌더 정의·`<use>`는 외부참조라 엔진 디코더가 못 씀 → self-contained 한 장 SVG여야(내부에 `<use`·외부 그라데이션 섞이면 그 정의도 인라인 필요) / Blob URL이 data-URI보다 큰/다수 SVG에 가볍고 CSP 친화·짧은 세션이면 revoke 생략 무방 / 폴백 불변식 계승=텍스처 있으면 Image·없으면 이모지 Text(N-055) / 헤드리스서 픽셀 못 떠도 texture.getSourceImage().width>0·게임오브젝트 type을 eval로 단언하면 "적재돼 스프라이트됨" 픽셀없이 확정 / 정원 격자→Phaser 자유배치 전환의 최대 리스크 POC였음 / T-052(WebGL 캡처 한계), N-055, PR #356) |

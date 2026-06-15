@@ -47,6 +47,7 @@
 - [T-049. head에 작은 스크립트/마크업을 추가했더니 특정 큰 페이지만 500(IllegalStateException) — 응답 버퍼 임계 + CSRF 세션](#t-049-head에-작은-스크립트마크업을-추가했더니-특정-큰-페이지만-500illegalstateexception--응답-버퍼-임계--csrf-세션)
 - [T-050. CSS transform: perspective()로 격자 캔버스를 기울이면 클릭 좌표가 어긋나 탭-투-플레이스가 깨진다](#t-050-css-transform-perspective로-격자-캔버스를-기울이면-클릭-좌표가-어긋나-탭-투-플레이스가-깨진다)
 - [T-051. 워크트리 안에서 연 세션이 gh pr merge --delete-branch를 하면 로컬 정리가 'main is already used by worktree'로 실패한다](#t-051-워크트리-안에서-연-세션이-gh-pr-merge---delete-branch를-하면-로컬-정리가-main-is-already-used-by-worktree로-실패한다)
+- [T-052. 헤드리스 preview에서 WebGL+RAF 앱(Phaser 등)은 screenshot/renderer.snapshot이 타임아웃 — eval 상태/픽셀 검증으로 우회](#t-052-헤드리스-preview에서-webglraf-앱phaser-등은-screenshotrenderersnapshot이-타임아웃--eval-상태픽셀-검증으로-우회)
 
 ---
 
@@ -1013,6 +1014,25 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 
 ---
 
+## T-052. 헤드리스 preview에서 WebGL+RAF 앱(Phaser 등)은 screenshot/renderer.snapshot이 타임아웃 — eval 상태/픽셀 검증으로 우회
+
+**증상**: Phaser(또는 WebGL 캔버스 + `requestAnimationFrame` 루프) 위젯을 띄운 preview 페이지에서 `preview_screenshot`이 30초 타임아웃(`window may be stuck`)으로 실패한다. `Phaser.Game.renderer.snapshot(cb)`의 콜백조차 안 돌아온다. 그런데 `preview_console_logs`엔 에러가 0이고, 엔진은 정상 부팅(`Phaser vX (WebGL | Web Audio)`)했다.
+
+**원인**: 이 헤드리스 렌더러는 WebGL 프레임버퍼 readback(픽셀 떠오기)을 못 하거나, RAF 루프가 계속 도는 캔버스에서 캡처가 idle 프레임을 못 잡는다. **렌더러는 살아 있고(앱은 정상 동작) 캡처 단계만 막힌다** — T-043(스크린샷 타임아웃인데 렌더러 정상)의 WebGL판. CSS-only 페이지는 `preview_inspect`/`getComputedStyle`로 우회됐지만(T-043), 캔버스는 DOM 속성이 없어 그 길도 안 통한다.
+
+**해결 / 예방**:
+- **스크린샷에 의존하지 말고 엔진 상태를 `preview_eval`로 단언**한다. 게임/씬을 `window.__scene`·`window.__game`으로 노출(목업 한정)하고:
+  - 텍스처 적재: `scene.textures.get(key).getSourceImage().width > 0`(디코드 성공) — SVG→텍스처 POC를 픽셀 없이 확정(N-081).
+  - 객체 타입/좌표: 게임오브젝트 `type`(`Image` vs `Text` 폴백 분기)·`x/y`(좌표 복원 정확도)·`exportPlacements()`(왕복 보존).
+  - 로직 경로: `addPlant()`/`removePlant()`/`isOutsideWorld()` 같은 순수·상태 함수를 직접 호출해 결과 단언(드래그 dragend 거두기·팔레트 추가·중복 거부).
+- **픽셀이 꼭 필요하면** `renderer.snapshot`을 시도하되, 안 돌아오면 환경 한계로 보고 실 브라우저 수동 게이트로 넘긴다 — 실제 제스처·시각 품질은 어차피 헤드리스로 못 잡는다(계획에 "실 브라우저 수동 게이트" 명시).
+- **순수 코어는 캔버스 밖으로 빼 node로 단언**한다(`@free-pure-core` 마커 → `.preview/*.test.mjs`) — 좌표 수학은 렌더러와 무관하니 헤드리스 한계를 안 탄다.
+- `preview_eval` 안에서 `location.href=...`로 **이동시키면 그 eval 컨텍스트가 끊긴다**(`Inspected target navigated`) → navigate와 측정을 **별도 eval 호출로 분리**하고 사이에 로드 대기를 둔다.
+
+**관련**: 스크린샷 불신 자매 T-043(CSS판)·T-035, SVG→텍스처 POC N-081, "200/부팅=성공 아님, 쓸 결과가 왔나로 봄" N-041, changelog #356.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1069,3 +1089,4 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 | 2026-06-14 | T-050 (CSS `transform: perspective()`로 격자 캔버스를 기울이면 셀의 화면 클릭 좌표가 원근 변환과 어긋나 탭-투-플레이스(칸 탭→배치)가 엉뚱한 셀에 꽂히거나 안 먹는다 — 반응형·터치에서 특히 불안정 / 원인=클릭 hit-test는 변환된 시각 위치 기준인데 격자 인덱스 로직은 원래 좌표계를 가정 → 둘이 분리됨 / 해결=격자 클릭 UI엔 perspective/3D 변환을 쓰지 말고 깊이는 그라데이션+발밑 그림자+inset 그림자로 '암시'(좌표계 불변 유지) / 진짜 아이소메트릭이 필요하면 DOM 격자가 아니라 캔버스(PixiJS 등)로 좌표를 직접 계산 / 정원 무대화 A0에서 채택, PR #346) |
 | 2026-06-14 | T-051 (워크트리 세션이 gh pr merge --delete-branch 하면 로컬 정리가 `fatal: 'main' is already used by worktree`로 실패 — 원격 머지는 성공, --delete-branch 후처리가 로컬 브랜치 지우려 main 전환 시도하나 main이 다른 워크트리 점유라 거부 / 해결=gh pr view로 MERGED 확인 → git push origin --delete로 원격 브랜치 삭제 → 메인 워크트리서 ff-only pull → 세션 종료 후 worktree remove+branch -d(자기 발밑 폴더는 세션 중 제거 불가) / N-032, T-005, T-048, PR #347). T-050 본문·목차 누락도 함께 복원(#346이 누적표에만 추가) |
 | 2026-06-15 | T-049 보강 (#350 — 익명 폼 페이지(login/signup/password)는 비로그인=세션 없음이라 CSRF가 매 요청 세션을 새로 만들어, 페이지 크기와 무관하게 commit-후-500에 취약 / 작은 /login마저 운영서 **빈 화면**(이미 커밋된 응답 뒤에 error.html이 덧붙어 중첩·잘린 HTML이 chunked로 나가 브라우저 렌더 실패, curl `transfer closed`로 확정) / 로그아웃 직후에만 /login을 봐서 "로그아웃하면 깨진다"로 체감됐을 뿐 /login 자체가 깨진 상태 / 해결=익명 폼 GET 핸들러 3곳(LoginController·SignupController·PasswordResetController)에 CsrfToken 선확정 일괄 장착 / 단위테스트는 getToken() 호출 검증(MockMvc는 작은 페이지 commit-후-500 재현 불가) / 4번째 재발, N-077) |
+| 2026-06-15 | T-052 (헤드리스 preview에서 WebGL+RAF 앱(Phaser)은 screenshot/renderer.snapshot이 30s 타임아웃 — 렌더러 readback/idle 프레임 캡처 불가, 단 엔진은 정상 부팅·console 에러 0(캡처만 막힘=T-043 WebGL판) / 캔버스는 DOM 속성 없어 inspect 우회도 불가 → window.__scene/__game 노출 후 preview_eval로 텍스처 getSourceImage().width>0(디코드)·게임오브젝트 type(Image vs Text)·좌표·exportPlacements 왕복·addPlant/removePlant/isOutsideWorld 로직경로 단언 = 픽셀 없이 확정 / 순수 코어는 @free-pure-core 마커로 빼 node .test.mjs로(렌더러 무관) / eval 안 location.href 이동은 그 컨텍스트 끊김(navigated) → navigate·측정 별도 eval로 분리 / 실제 제스처·시각 품질은 실 브라우저 수동 게이트 / 정원 Phaser 자유배치 전환서, T-043·T-035, N-081, PR #356) |

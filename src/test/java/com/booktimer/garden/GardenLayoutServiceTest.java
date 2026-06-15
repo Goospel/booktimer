@@ -27,8 +27,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * 정원 꾸미기(배치) 서비스 검증 (실제 빈·H2·자체 시드 카탈로그).
  *
- * <p>보유 식물 검증·격자 범위·중복·IDOR·축 분별·유령(보유 상실) 교집합 — 배치의 핵심 도메인 규칙을 전수로 본다.
- * 보유 집합은 {@link GardenService#view}를 재사용하므로(설계 §3) 보유를 만들려면 독서 실적 픽스처(세션·완독책)를 심는다.
+ * <p>보유 식물 검증·좌표 범위·겹침 허용·한 식물 한 번·IDOR·축 분별·유령(보유 상실) 교집합 — 배치의 핵심 도메인 규칙을
+ * 전수로 본다(자유 위치 전환: 격자 셀 → 정규화 좌표(0~1)+zOrder, Phase 1). 보유 집합은 {@link GardenService#view}를
+ * 재사용하므로(설계 §3) 보유를 만들려면 독서 실적 픽스처(세션·완독책)를 심는다.
  */
 @SpringBootTest
 @Transactional
@@ -87,28 +88,45 @@ class GardenLayoutServiceTest {
         registerFinished(user, "경제책", "국내도서>경제경영>마케팅"); // 장르축 econ 보유
     }
 
-    private static PlacementRequest req(PlacementAxis axis, String code, int cell) {
-        return new PlacementRequest(axis, code, cell);
+    private static PlacementRequest req(PlacementAxis axis, String code, double x, double y, int z) {
+        return new PlacementRequest(axis, code, x, y, z);
     }
 
     @Test
-    @DisplayName("보유 식물을 격자에 저장하면 layoutOf가 셀·메타와 함께 돌려준다 (happy path)")
+    @DisplayName("보유 식물을 좌표에 저장하면 layoutOf가 좌표·메타와 함께 돌려준다 (happy path)")
     void save_thenLayoutReturnsPlaced() {
         User user = register("place-happy@booktimer.com");
         grantTimeSproutAndGenreEcon(user);
 
         layoutService.save(user, List.of(
-                req(PlacementAxis.TIME, "sprout", 0),
-                req(PlacementAxis.GENRE, "econ", 5)));
+                req(PlacementAxis.TIME, "sprout", 0.2, 0.3, 0),
+                req(PlacementAxis.GENRE, "econ", 0.7, 0.8, 1)));
 
         List<PlacedPlant> layout = layoutService.layoutOf(user);
         assertThat(layout).hasSize(2);
-        assertThat(layout).extracting(PlacedPlant::cell).containsExactly(0, 5); // 셀 오름차순 정렬
-        PlacedPlant sprout = layout.stream().filter(p -> p.cell() == 0).findFirst().orElseThrow();
+        PlacedPlant sprout = layout.stream().filter(p -> p.code().equals("sprout")).findFirst().orElseThrow();
         assertThat(sprout.axis()).isEqualTo(PlacementAxis.TIME);
-        assertThat(sprout.code()).isEqualTo("sprout");
+        assertThat(sprout.x()).isEqualTo(0.2);
+        assertThat(sprout.y()).isEqualTo(0.3);
+        assertThat(sprout.z()).isEqualTo(0);
         assertThat(sprout.emoji()).isEqualTo("🌱");
         assertThat(sprout.name()).isEqualTo("새싹");
+    }
+
+    @Test
+    @DisplayName("layoutOf는 zOrder 오름차순(뒤→앞 렌더순)으로 돌려준다")
+    void layoutOf_sortsByZOrder() {
+        User user = register("place-zorder@booktimer.com");
+        grantTimeSproutAndGenreEcon(user);
+
+        // 저장 순서는 z가 큰 것 먼저 — 정렬되면 z 오름차순으로 뒤집혀야 한다.
+        layoutService.save(user, List.of(
+                req(PlacementAxis.GENRE, "econ", 0.5, 0.5, 5),
+                req(PlacementAxis.TIME, "sprout", 0.5, 0.5, 2)));
+
+        List<PlacedPlant> layout = layoutService.layoutOf(user);
+        assertThat(layout).extracting(PlacedPlant::z).containsExactly(2, 5); // zOrder 오름차순
+        assertThat(layout).extracting(PlacedPlant::code).containsExactly("sprout", "econ");
     }
 
     @Test
@@ -117,7 +135,7 @@ class GardenLayoutServiceTest {
         User user = register("place-unowned@booktimer.com");
         grantTimeSproutAndGenreEcon(user); // herb(임계 3)는 미보유
 
-        assertThatThrownBy(() -> layoutService.save(user, List.of(req(PlacementAxis.TIME, "herb", 0))))
+        assertThatThrownBy(() -> layoutService.save(user, List.of(req(PlacementAxis.TIME, "herb", 0.1, 0.1, 0))))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThat(placementRepository.findByUser(user)).isEmpty(); // 저장 자체가 안 됨
     }
@@ -129,43 +147,56 @@ class GardenLayoutServiceTest {
         metGoalOn(user, today().minusDays(1)); // TIME sprout만 보유, GENRE sprout(소설 완독 안 함)는 미보유
 
         // TIME sprout는 통과해야 한다.
-        layoutService.save(user, List.of(req(PlacementAxis.TIME, "sprout", 0)));
+        layoutService.save(user, List.of(req(PlacementAxis.TIME, "sprout", 0.1, 0.1, 0)));
         assertThat(layoutService.layoutOf(user)).extracting(PlacedPlant::axis).containsExactly(PlacementAxis.TIME);
 
         // GENRE sprout는 미보유라 거부.
-        assertThatThrownBy(() -> layoutService.save(user, List.of(req(PlacementAxis.GENRE, "sprout", 0))))
+        assertThatThrownBy(() -> layoutService.save(user, List.of(req(PlacementAxis.GENRE, "sprout", 0.1, 0.1, 0))))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    @DisplayName("격자 범위 밖(음수·총셀 이상) cell은 거부된다")
-    void save_rejectsOutOfGridCell() {
-        User user = register("place-grid@booktimer.com");
+    @DisplayName("정규화 범위 밖(음수·1 초과) 좌표는 x·y 각각 거부된다 (경계 0·1은 허용)")
+    void save_rejectsOutOfRangeCoords() {
+        User user = register("place-coord@booktimer.com");
         grantTimeSproutAndGenreEcon(user);
 
-        assertThatThrownBy(() -> layoutService.save(user, List.of(req(PlacementAxis.TIME, "sprout", -1))))
+        assertThatThrownBy(() -> layoutService.save(user, List.of(req(PlacementAxis.TIME, "sprout", -0.01, 0.5, 0))))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> layoutService.save(user, List.of(
-                req(PlacementAxis.TIME, "sprout", GardenLayoutService.GRID_CELLS))))
+        assertThatThrownBy(() -> layoutService.save(user, List.of(req(PlacementAxis.TIME, "sprout", 1.01, 0.5, 0))))
                 .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> layoutService.save(user, List.of(req(PlacementAxis.TIME, "sprout", 0.5, -0.01, 0))))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> layoutService.save(user, List.of(req(PlacementAxis.TIME, "sprout", 0.5, 1.01, 0))))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        // 경계값(0·1)은 허용 — 저장돼야 한다.
+        layoutService.save(user, List.of(req(PlacementAxis.TIME, "sprout", 0.0, 1.0, 0)));
+        assertThat(layoutService.layoutOf(user)).hasSize(1);
     }
 
     @Test
-    @DisplayName("한 셀에 두 식물 / 한 식물을 두 셀 요청은 거부된다")
-    void save_rejectsDuplicateCellAndPlant() {
+    @DisplayName("두 식물을 같은 좌표에 겹쳐 놓을 수 있다 (자유 위치 — 겹침 허용)")
+    void save_allowsOverlap() {
+        User user = register("place-overlap@booktimer.com");
+        grantTimeSproutAndGenreEcon(user);
+
+        // 격자 시절엔 한 셀 하나만이라 거부됐지만, 자유 위치는 같은 좌표 겹침을 허용한다.
+        layoutService.save(user, List.of(
+                req(PlacementAxis.TIME, "sprout", 0.5, 0.5, 0),
+                req(PlacementAxis.GENRE, "econ", 0.5, 0.5, 1)));
+        assertThat(layoutService.layoutOf(user)).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("같은 식물을 두 번 배치하는 요청은 거부된다 (한 식물 한 번 불변식 유지)")
+    void save_rejectsDuplicatePlant() {
         User user = register("place-dup@booktimer.com");
         grantTimeSproutAndGenreEcon(user);
 
-        // 같은 셀에 둘
         assertThatThrownBy(() -> layoutService.save(user, List.of(
-                req(PlacementAxis.TIME, "sprout", 3),
-                req(PlacementAxis.GENRE, "econ", 3))))
-                .isInstanceOf(IllegalArgumentException.class);
-
-        // 같은 식물을 두 셀에
-        assertThatThrownBy(() -> layoutService.save(user, List.of(
-                req(PlacementAxis.TIME, "sprout", 1),
-                req(PlacementAxis.TIME, "sprout", 2))))
+                req(PlacementAxis.TIME, "sprout", 0.1, 0.1, 0),
+                req(PlacementAxis.TIME, "sprout", 0.9, 0.9, 1))))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -177,8 +208,8 @@ class GardenLayoutServiceTest {
         Book econBook = registerFinished(user, "경제책", "국내도서>경제경영>마케팅");
 
         layoutService.save(user, List.of(
-                req(PlacementAxis.TIME, "sprout", 0),
-                req(PlacementAxis.GENRE, "econ", 1)));
+                req(PlacementAxis.TIME, "sprout", 0.1, 0.1, 0),
+                req(PlacementAxis.GENRE, "econ", 0.2, 0.2, 1)));
         assertThat(layoutService.layoutOf(user)).hasSize(2);
 
         // 경제책을 삭제 → 장르축 econ 보유 상실. 배치 행은 남아도 렌더에선 빠져야 한다.
@@ -195,8 +226,8 @@ class GardenLayoutServiceTest {
         grantTimeSproutAndGenreEcon(me);
         grantTimeSproutAndGenreEcon(other);
 
-        layoutService.save(me, List.of(req(PlacementAxis.TIME, "sprout", 0)));
-        layoutService.save(other, List.of(req(PlacementAxis.GENRE, "econ", 7)));
+        layoutService.save(me, List.of(req(PlacementAxis.TIME, "sprout", 0.1, 0.1, 0)));
+        layoutService.save(other, List.of(req(PlacementAxis.GENRE, "econ", 0.7, 0.7, 0)));
 
         // 각자 본인 것만 본다.
         assertThat(layoutService.layoutOf(me)).extracting(PlacedPlant::code).containsExactly("sprout");
@@ -214,8 +245,8 @@ class GardenLayoutServiceTest {
         grantTimeSproutAndGenreEcon(user);
 
         layoutService.save(user, List.of(
-                req(PlacementAxis.TIME, "sprout", 0),
-                req(PlacementAxis.GENRE, "econ", 5)));
+                req(PlacementAxis.TIME, "sprout", 0.2, 0.3, 0),
+                req(PlacementAxis.GENRE, "econ", 0.7, 0.8, 1)));
 
         List<PlacedPlant> layout = layoutService.layoutOf(user);
         PlacedPlant sprout = layout.stream().filter(p -> p.code().equals("sprout")).findFirst().orElseThrow();
@@ -230,11 +261,11 @@ class GardenLayoutServiceTest {
         User user = register("place-replace@booktimer.com");
         grantTimeSproutAndGenreEcon(user);
 
-        layoutService.save(user, List.of(req(PlacementAxis.TIME, "sprout", 0)));
-        layoutService.save(user, List.of(req(PlacementAxis.GENRE, "econ", 10))); // sprout는 빠지고 econ만
+        layoutService.save(user, List.of(req(PlacementAxis.TIME, "sprout", 0.1, 0.1, 0)));
+        layoutService.save(user, List.of(req(PlacementAxis.GENRE, "econ", 0.6, 0.6, 0))); // sprout는 빠지고 econ만
 
         List<PlacedPlant> layout = layoutService.layoutOf(user);
         assertThat(layout).extracting(PlacedPlant::code).containsExactly("econ");
-        assertThat(layout).extracting(PlacedPlant::cell).containsExactly(10);
+        assertThat(layout).extracting(PlacedPlant::x).containsExactly(0.6);
     }
 }
