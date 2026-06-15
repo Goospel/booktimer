@@ -373,162 +373,171 @@
 
     // Phaser 정원 씬 — 배경 + 식물 스프라이트 렌더, 드래그 자유 이동, 월드 밖 드롭=거두기.
     // 게임루프(성장·낮밤)는 Phase 2+ — 이 씬은 자유배치+저장으로 범위 한정(설계 §2.4·로드맵).
-    class GardenScene extends Phaser.Scene {
-        constructor(cfg) {
-            super('garden');
-            this.cfg = cfg;          // { owned, placed, worldW, worldH, onChange }
-            this.plantObjs = [];     // 캔버스에 놓인 식물 게임오브젝트들(추가 순서 = 기본 zOrder)
-            this.ready = false;
-        }
-        preload() {
-            // 보유 식물 전체의 SVG 텍스처를 미리 적재 — 나중에 팔레트로 추가해도 즉시 그릴 수 있게.
-            const seen = new Set();
-            for (const o of this.cfg.owned) {
-                if (o.spriteId && !seen.has(o.spriteId)) {
-                    seen.add(o.spriteId);
-                    const url = svgTextureUrl('sprite-' + o.spriteId);
-                    if (url) this.load.image('plant-' + o.spriteId, url);
+    // GardenScene은 Phaser 로드 후(mountPhaser 시점)에 1회 정의한다 — 이 인라인 스크립트는 defer가 아니라
+    // 파싱 중 즉시 실행되는데 Phaser 스크립트는 defer라 이 시점엔 아직 없다. 파싱 때 'class … extends
+    // Phaser.Scene'를 평가하면 'Phaser is not defined'로 던져 클래스가 TDZ에 빠지고(myGarden은 함수 선언이라
+    // 호이스팅돼 살아 팔레트는 떠 보이지만) mountPhaser의 new GardenScene()이 죽어 캔버스가 안 뜬다.
+    // 그래서 클래스 정의를 함수로 감싸 Phaser 로드 후에 평가한다. T-054 (defer 로드 순서 + 파싱 시점 extends).
+    let GardenScene = null;
+    function ensureGardenScene() {
+        if (GardenScene) return;
+        GardenScene = class extends Phaser.Scene {
+            constructor(cfg) {
+                super('garden');
+                this.cfg = cfg;          // { owned, placed, worldW, worldH, onChange }
+                this.plantObjs = [];     // 캔버스에 놓인 식물 게임오브젝트들(추가 순서 = 기본 zOrder)
+                this.ready = false;
+            }
+            preload() {
+                // 보유 식물 전체의 SVG 텍스처를 미리 적재 — 나중에 팔레트로 추가해도 즉시 그릴 수 있게.
+                const seen = new Set();
+                for (const o of this.cfg.owned) {
+                    if (o.spriteId && !seen.has(o.spriteId)) {
+                        seen.add(o.spriteId);
+                        const url = svgTextureUrl('sprite-' + o.spriteId);
+                        if (url) this.load.image('plant-' + o.spriteId, url);
+                    }
                 }
             }
-        }
-        create() {
-            // 캔버스 표시 폭에 맞춰 식물 월드 크기를 정한다 — 작은 화면(모바일)일수록 월드px를 키워 화면 표시 크기를 일정하게.
-            const canvasCss = this.sys.game.canvas.getBoundingClientRect().width;
-            this.plantPx = plantWorldPx(TARGET_PLANT_CSS, canvasCss, this.cfg.worldW);
-            this.drawBackground();
-            for (const p of this.cfg.placed) {
-                const { px, py } = normToPixel(p.x, p.y, this.cfg.worldW, this.cfg.worldH);
-                this.spawnPlant(p, px, py);
-            }
-            this.input.on('gameobjectdown', (pointer, obj) => { this._dragged = false; });
-            this.input.on('dragstart', (pointer, obj) => { this._dragged = true; this.bringToFront(obj); });
-            this.input.on('drag', (pointer, obj, dragX, dragY) => { obj.x = dragX; obj.y = dragY; if (obj === this.selected) this.highlightSelected(); });
-            this.input.on('dragend', (pointer, obj) => {
-                if (isOutsideWorld(obj.x, obj.y, this.cfg.worldW, this.cfg.worldH)) {
-                    if (obj === this.selected) this.deselectPlant();
-                    this.removePlant(obj);
+            create() {
+                // 캔버스 표시 폭에 맞춰 식물 월드 크기를 정한다 — 작은 화면(모바일)일수록 월드px를 키워 화면 표시 크기를 일정하게.
+                const canvasCss = this.sys.game.canvas.getBoundingClientRect().width;
+                this.plantPx = plantWorldPx(TARGET_PLANT_CSS, canvasCss, this.cfg.worldW);
+                this.drawBackground();
+                for (const p of this.cfg.placed) {
+                    const { px, py } = normToPixel(p.x, p.y, this.cfg.worldW, this.cfg.worldH);
+                    this.spawnPlant(p, px, py);
                 }
+                this.input.on('gameobjectdown', (pointer, obj) => { this._dragged = false; });
+                this.input.on('dragstart', (pointer, obj) => { this._dragged = true; this.bringToFront(obj); });
+                this.input.on('drag', (pointer, obj, dragX, dragY) => { obj.x = dragX; obj.y = dragY; if (obj === this.selected) this.highlightSelected(); });
+                this.input.on('dragend', (pointer, obj) => {
+                    if (isOutsideWorld(obj.x, obj.y, this.cfg.worldW, this.cfg.worldH)) {
+                        if (obj === this.selected) this.deselectPlant();
+                        this.removePlant(obj);
+                    }
+                    this.emitChange();
+                });
+                // 탭(이동 없음) = 선택. 드래그 후 up은 _dragged로 걸러 선택과 구분한다.
+                this.input.on('gameobjectup', (pointer, obj) => { if (!this._dragged) this.selectPlant(obj); });
+                this.ready = true;
+            }
+            drawBackground() {
+                const W = this.cfg.worldW, H = this.cfg.worldH;
+                const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+                const hex = (s) => { try { return Phaser.Display.Color.HexStringToColor(s).color; } catch (_) { return 0xffffff; } };
+                const g = this.add.graphics();
+                this.bg = g;   // sendToBack이 식물을 배경 위로만 보내도록 기준 보관
+                g.fillStyle(hex(css('--garden-sky')) || 0xDCEAF0);   g.fillRect(0, 0, W, H * 0.60);          // 하늘
+                g.fillStyle(hex(css('--garden-grass')) || 0xCADDB2); g.fillRect(0, H * 0.55, W, H * 0.45);   // 잔디(살짝 겹쳐 경계 부드럽게)
+                g.fillStyle(hex(css('--garden-soil')) || 0xB89576);  g.fillRect(0, H * 0.82, W, H * 0.18);   // 흙 화단 띠
+            }
+            // 식물 게임오브젝트 생성 — spriteId 텍스처 있으면 이미지, 없으면 이모지 텍스트. 드래그 가능.
+            spawnPlant(meta, px, py) {
+                const rotation = clampRotation(meta.rotation || 0);
+                const scale = clampScale(meta.scale || 1);
+                let obj;
+                if (meta.spriteId && this.textures.exists('plant-' + meta.spriteId)) {
+                    obj = this.add.image(px, py, 'plant-' + meta.spriteId).setDisplaySize(this.plantPx * scale, this.plantPx * scale);
+                } else {
+                    obj = this.add.text(px, py, meta.emoji || '🌱', { fontSize: Math.round(this.plantPx * 0.8 * scale) + 'px' }).setOrigin(0.5);
+                }
+                obj.setAngle(rotation);
+                obj.setData('axis', meta.axis);
+                obj.setData('code', meta.code);
+                obj.setData('emoji', meta.emoji);
+                obj.setData('name', meta.name);
+                obj.setData('spriteId', meta.spriteId);
+                obj.setData('rotation', rotation);
+                obj.setData('scale', scale);
+                obj.setInteractive({ draggable: true, useHandCursor: true });
+                this.plantObjs.push(obj);
+                return obj;
+            }
+            removePlant(obj) {
+                const i = this.plantObjs.indexOf(obj);
+                if (i >= 0) this.plantObjs.splice(i, 1);
+                obj.destroy();
+            }
+            // 팔레트에서 추가(외부 호출) — 이미 놓인 식물은 무시, 월드 중앙 살짝 위에 놓는다.
+            addPlant(meta) {
+                if (!this.ready) return false;
+                if (this.plantObjs.some(o => o.getData('axis') === meta.axis && o.getData('code') === meta.code)) return false;
+                this.spawnPlant(meta, this.cfg.worldW / 2, this.cfg.worldH * 0.55);
                 this.emitChange();
-            });
-            // 탭(이동 없음) = 선택. 드래그 후 up은 _dragged로 걸러 선택과 구분한다.
-            this.input.on('gameobjectup', (pointer, obj) => { if (!this._dragged) this.selectPlant(obj); });
-            this.ready = true;
-        }
-        drawBackground() {
-            const W = this.cfg.worldW, H = this.cfg.worldH;
-            const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-            const hex = (s) => { try { return Phaser.Display.Color.HexStringToColor(s).color; } catch (_) { return 0xffffff; } };
-            const g = this.add.graphics();
-            this.bg = g;   // sendToBack이 식물을 배경 위로만 보내도록 기준 보관
-            g.fillStyle(hex(css('--garden-sky')) || 0xDCEAF0);   g.fillRect(0, 0, W, H * 0.60);          // 하늘
-            g.fillStyle(hex(css('--garden-grass')) || 0xCADDB2); g.fillRect(0, H * 0.55, W, H * 0.45);   // 잔디(살짝 겹쳐 경계 부드럽게)
-            g.fillStyle(hex(css('--garden-soil')) || 0xB89576);  g.fillRect(0, H * 0.82, W, H * 0.18);   // 흙 화단 띠
-        }
-        // 식물 게임오브젝트 생성 — spriteId 텍스처 있으면 이미지, 없으면 이모지 텍스트. 드래그 가능.
-        spawnPlant(meta, px, py) {
-            const rotation = clampRotation(meta.rotation || 0);
-            const scale = clampScale(meta.scale || 1);
-            let obj;
-            if (meta.spriteId && this.textures.exists('plant-' + meta.spriteId)) {
-                obj = this.add.image(px, py, 'plant-' + meta.spriteId).setDisplaySize(this.plantPx * scale, this.plantPx * scale);
-            } else {
-                obj = this.add.text(px, py, meta.emoji || '🌱', { fontSize: Math.round(this.plantPx * 0.8 * scale) + 'px' }).setOrigin(0.5);
+                return true;
             }
-            obj.setAngle(rotation);
-            obj.setData('axis', meta.axis);
-            obj.setData('code', meta.code);
-            obj.setData('emoji', meta.emoji);
-            obj.setData('name', meta.name);
-            obj.setData('spriteId', meta.spriteId);
-            obj.setData('rotation', rotation);
-            obj.setData('scale', scale);
-            obj.setInteractive({ draggable: true, useHandCursor: true });
-            this.plantObjs.push(obj);
-            return obj;
-        }
-        removePlant(obj) {
-            const i = this.plantObjs.indexOf(obj);
-            if (i >= 0) this.plantObjs.splice(i, 1);
-            obj.destroy();
-        }
-        // 팔레트에서 추가(외부 호출) — 이미 놓인 식물은 무시, 월드 중앙 살짝 위에 놓는다.
-        addPlant(meta) {
-            if (!this.ready) return false;
-            if (this.plantObjs.some(o => o.getData('axis') === meta.axis && o.getData('code') === meta.code)) return false;
-            this.spawnPlant(meta, this.cfg.worldW / 2, this.cfg.worldH * 0.55);
-            this.emitChange();
-            return true;
-        }
-        // 현재 배치를 저장 payload로 — 추가/앞뒤 순서를 zOrder로, 위치는 정규화(0~1)로.
-        exportPlacements() {
-            return this.plantObjs.map((o, i) => {
-                const { x, y } = pixelToNorm(o.x, o.y, this.cfg.worldW, this.cfg.worldH);
-                return { axis: o.getData('axis'), code: o.getData('code'), x, y, z: i,
-                         rotation: o.getData('rotation') || 0, scale: o.getData('scale') || 1 };
-            });
-        }
-        // Alpine에 현재 놓인 식물 키 집합을 알린다(팔레트 .placed/비활성 동기화).
-        emitChange() {
-            if (this.cfg.onChange) {
-                this.cfg.onChange(this.plantObjs.map(o => o.getData('axis') + '/' + o.getData('code')));
+            // 현재 배치를 저장 payload로 — 추가/앞뒤 순서를 zOrder로, 위치는 정규화(0~1)로.
+            exportPlacements() {
+                return this.plantObjs.map((o, i) => {
+                    const { x, y } = pixelToNorm(o.x, o.y, this.cfg.worldW, this.cfg.worldH);
+                    return { axis: o.getData('axis'), code: o.getData('code'), x, y, z: i,
+                             rotation: o.getData('rotation') || 0, scale: o.getData('scale') || 1 };
+                });
             }
-        }
+            // Alpine에 현재 놓인 식물 키 집합을 알린다(팔레트 .placed/비활성 동기화).
+            emitChange() {
+                if (this.cfg.onChange) {
+                    this.cfg.onChange(this.plantObjs.map(o => o.getData('axis') + '/' + o.getData('code')));
+                }
+            }
 
-        // ── 변형·레이어(Phase 2): 선택 + 회전/크기/앞뒤/삭제 ──
-        // 선택(탭) — 변형 툴바 대상. Alpine에 선택 정보를 onSelect 콜백으로 알린다.
-        selectPlant(obj) { this.selected = obj; this.notifySelection(); }
-        deselectPlant() {
-            this.selected = null;
-            if (this._selBox) this._selBox.clear();
-            if (this.cfg.onSelect) this.cfg.onSelect(null);
-        }
-        notifySelection() {
-            this.highlightSelected();
-            if (this.cfg.onSelect) this.cfg.onSelect(this.selectionInfo());
-        }
-        selectionInfo() {
-            if (!this.selected) return null;
-            return { rotation: Math.round(this.selected.getData('rotation') || 0), scale: this.selected.getData('scale') || 1 };
-        }
-        // 선택 테두리(별도 graphics) — 변형·드래그마다 식물 경계에 맞춰 다시 그린다.
-        highlightSelected() {
-            if (!this._selBox) this._selBox = this.add.graphics();
-            this._selBox.clear();
-            if (!this.selected) return;
-            this.children.bringToTop(this._selBox);
-            const b = this.selected.getBounds();
-            this._selBox.lineStyle(3, 0x6E8A6A, 0.9).strokeRect(b.x - 5, b.y - 5, b.width + 10, b.height + 10);
-        }
-        applyScale(obj, s) {
-            if (obj.type === 'Image') obj.setDisplaySize(this.plantPx * s, this.plantPx * s);
-            else obj.setFontSize(Math.round(this.plantPx * 0.8 * s));  // 이모지 텍스트 폴백
-        }
-        rotateSelected(delta) {
-            if (!this.selected) return;
-            const r = clampRotation((this.selected.getData('rotation') || 0) + delta);
-            this.selected.setAngle(r); this.selected.setData('rotation', r);
-            this.notifySelection(); this.emitChange();
-        }
-        scaleSelected(delta) {
-            if (!this.selected) return;
-            const s = clampScale((this.selected.getData('scale') || 1) + delta);
-            this.applyScale(this.selected, s); this.selected.setData('scale', s);
-            this.notifySelection(); this.emitChange();
-        }
-        // zOrder 수동 정렬 — plantObjs 순서(=export z)와 캔버스 렌더 순서를 함께 옮긴다.
-        bringToFront(obj) {
-            this.children.bringToTop(obj);
-            const i = this.plantObjs.indexOf(obj);
-            if (i >= 0) { this.plantObjs.splice(i, 1); this.plantObjs.push(obj); } // 끝 = export z 최대 = 맨 앞
-        }
-        sendToBack(obj) {
-            if (this.bg) this.children.moveAbove(obj, this.bg); // 배경 바로 위 = 식물 중 맨 뒤
-            const i = this.plantObjs.indexOf(obj);
-            if (i >= 0) { this.plantObjs.splice(i, 1); this.plantObjs.unshift(obj); }
-        }
-        bringSelectedToFront() { if (this.selected) { this.bringToFront(this.selected); this.highlightSelected(); this.emitChange(); } }
-        sendSelectedToBack() { if (this.selected) { this.sendToBack(this.selected); this.highlightSelected(); this.emitChange(); } }
-        removeSelected() { if (this.selected) { const o = this.selected; this.deselectPlant(); this.removePlant(o); this.emitChange(); } }
+            // ── 변형·레이어(Phase 2): 선택 + 회전/크기/앞뒤/삭제 ──
+            // 선택(탭) — 변형 툴바 대상. Alpine에 선택 정보를 onSelect 콜백으로 알린다.
+            selectPlant(obj) { this.selected = obj; this.notifySelection(); }
+            deselectPlant() {
+                this.selected = null;
+                if (this._selBox) this._selBox.clear();
+                if (this.cfg.onSelect) this.cfg.onSelect(null);
+            }
+            notifySelection() {
+                this.highlightSelected();
+                if (this.cfg.onSelect) this.cfg.onSelect(this.selectionInfo());
+            }
+            selectionInfo() {
+                if (!this.selected) return null;
+                return { rotation: Math.round(this.selected.getData('rotation') || 0), scale: this.selected.getData('scale') || 1 };
+            }
+            // 선택 테두리(별도 graphics) — 변형·드래그마다 식물 경계에 맞춰 다시 그린다.
+            highlightSelected() {
+                if (!this._selBox) this._selBox = this.add.graphics();
+                this._selBox.clear();
+                if (!this.selected) return;
+                this.children.bringToTop(this._selBox);
+                const b = this.selected.getBounds();
+                this._selBox.lineStyle(3, 0x6E8A6A, 0.9).strokeRect(b.x - 5, b.y - 5, b.width + 10, b.height + 10);
+            }
+            applyScale(obj, s) {
+                if (obj.type === 'Image') obj.setDisplaySize(this.plantPx * s, this.plantPx * s);
+                else obj.setFontSize(Math.round(this.plantPx * 0.8 * s));  // 이모지 텍스트 폴백
+            }
+            rotateSelected(delta) {
+                if (!this.selected) return;
+                const r = clampRotation((this.selected.getData('rotation') || 0) + delta);
+                this.selected.setAngle(r); this.selected.setData('rotation', r);
+                this.notifySelection(); this.emitChange();
+            }
+            scaleSelected(delta) {
+                if (!this.selected) return;
+                const s = clampScale((this.selected.getData('scale') || 1) + delta);
+                this.applyScale(this.selected, s); this.selected.setData('scale', s);
+                this.notifySelection(); this.emitChange();
+            }
+            // zOrder 수동 정렬 — plantObjs 순서(=export z)와 캔버스 렌더 순서를 함께 옮긴다.
+            bringToFront(obj) {
+                this.children.bringToTop(obj);
+                const i = this.plantObjs.indexOf(obj);
+                if (i >= 0) { this.plantObjs.splice(i, 1); this.plantObjs.push(obj); } // 끝 = export z 최대 = 맨 앞
+            }
+            sendToBack(obj) {
+                if (this.bg) this.children.moveAbove(obj, this.bg); // 배경 바로 위 = 식물 중 맨 뒤
+                const i = this.plantObjs.indexOf(obj);
+                if (i >= 0) { this.plantObjs.splice(i, 1); this.plantObjs.unshift(obj); }
+            }
+            bringSelectedToFront() { if (this.selected) { this.bringToFront(this.selected); this.highlightSelected(); this.emitChange(); } }
+            sendSelectedToBack() { if (this.selected) { this.sendToBack(this.selected); this.highlightSelected(); this.emitChange(); } }
+            removeSelected() { if (this.selected) { const o = this.selected; this.deselectPlant(); this.removePlant(o); this.emitChange(); } }
+        };
     }
 
     // 내 정원 편집 컴포넌트(Alpine). Phaser 인스턴스를 들고 팔레트↔씬을 잇는다.
@@ -557,6 +566,7 @@
             },
             mountPhaser() {
                 const self = this;
+                ensureGardenScene();   // Phaser(defer) 로드 후 클래스 1회 정의 — 파싱 시점 'extends Phaser.Scene' 회피
                 scene = new GardenScene({
                     owned: this.owned,
                     placed: data.placed || [],
