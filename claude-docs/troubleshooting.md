@@ -51,6 +51,7 @@
 - [T-053. Alpine 편집 위젯에서 Phaser scene/game을 x-data 속성에 저장하니 팔레트 추가가 먹통 — reactive Proxy 오염, 클로저로 분리](#t-053-alpine-편집-위젯에서-phaser-scenegame을-x-data-속성에-저장하니-팔레트-추가가-먹통--reactive-proxy-오염-클로저로-분리)
 - [T-054. defer Phaser를 파싱 즉시 인라인 스크립트가 참조해 class가 TDZ에 빠지고 캔버스가 안 뜬다](#t-054-defer-phaser를-파싱-즉시-인라인-스크립트가-참조해-class가-tdz에-빠지고-캔버스가-안-뜬다)
 - [T-055. Phaser moveAbove는 a가 이미 b 위면 no-op이라 z-order는 setDepth로 박는다](#t-055-phaser-moveabove는-a가-이미-b-위면-no-op이라-z-order는-setdepth로-박는다)
+- [T-056. 전역 button{width:100%} 규칙이 flex 자식 버튼으로 새 풀폭 세로 스택, 컴포넌트에 width:auto로 상쇄](#t-056-전역-buttonwidth100-규칙이-flex-자식-버튼으로-새-풀폭-세로-스택-컴포넌트에-widthauto로-상쇄)
 
 ---
 
@@ -1080,6 +1081,22 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 
 ---
 
+## T-056. 전역 button{width:100%} 규칙이 flex 자식 버튼으로 새 풀폭 세로 스택, 컴포넌트에 width:auto로 상쇄
+
+**증상**: `/garden` 도감 **필터 탭**(전체·⏳시간·🌸장르·🖋️작가·출판사·🔍숨은 레시피)이 태블릿/PC처럼 **넓은 화면에서 한 줄 pill이 아니라 풀폭 버튼으로 세로로 쌓여** 길게 늘어진다. 모바일(좁은 화면)에선 풀폭 세로 버튼이 모바일 메뉴처럼 자연스러워 **안 보이고, 화면이 넓어질수록만 어색**해진다("모바일은 괜찮은데 PC만 이상").
+
+**원인**: 전역 `button, .btn { width: 100% }`(`app.css`)가 `.garden-tab`(=`<button>`)으로 **상속**되는데, `.garden-tab`은 `padding`·`border-radius`만 자기 값으로 덮고 **`width`는 안 덮어 100%를 그대로 받는다**. `.garden-tabs`가 `display:flex; flex-wrap:wrap`이라 → **100% 너비 flex 자식**은 한 줄을 꽉 채우고 다음 자식이 줄바꿈 → **세로 스택**(flex 자식의 `width:100%`는 flex-basis 100%로 작용해 한 줄에 하나). 작은 화면에선 풀폭 세로가 자연스러워 버그가 가려지고, 컨테이너가 넓어질수록 드러난다.
+
+**해결 / 예방**:
+- **전역 `button{width:100%}`는 "폼 제출 버튼" 기준이라, flex 행·인라인에 놓는 컴포넌트 버튼(탭·칩·툴바)엔 거의 항상 틀리다.** 그런 컴포넌트엔 **`width:auto`를 명시**해 누수를 상쇄하라(`.garden-tab{width:auto}` 1줄). padding·radius만 덮고 width를 빠뜨리는 게 전형적 실수.
+- **증상 시그니처**: "넓은 화면에서만 버튼이 풀폭으로 세로로 쌓임"이면 십중팔구 이 누수(flex 컨테이너 + width 미설정 `<button>`). 미디어쿼리·`flex-direction`을 의심하기 전에 **전역 button width부터** 본다.
+- **반복 함정(같은 뿌리)**: #286(팔로우·언팔 칩이 풀폭, `app.css` 233줄 인라인 주석), 배너 재발송 버튼(421줄 주석), 이번 #368(정원 필터 탭). 새 버튼 컴포넌트를 flex 안에 놓을 때 **`width:auto` 기본 체크**.
+- **검증**: 순수 레이아웃이라 preview 정적 하니스(실 마크업 + 진짜 `app.css`, 반응형 컨테이너까지 재현)로 폭별 `offsetTop`(한 줄=모든 탭 동일)·`getBoundingClientRect().width`(내용 너비 < 컨테이너)·`getComputedStyle(tab).width`를 **값으로 단언**(스크린샷 불신 T-043 패턴, screenshot 타임아웃돼도 수치로 확정).
+
+**관련**: 같은 뿌리 #286(칩 풀폭)·`app.css` 233·421줄 인라인 주석, 시각 검증 T-043, 본 수정 changelog(#368).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1140,3 +1157,4 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 | 2026-06-15 | T-053 (Alpine 편집 위젯이 Phaser scene/game을 x-data 속성(this.scene)에 저장 → reactive Proxy 오염으로 팔레트 추가·드래그 전부 먹통, 에러도 없음 / .preview POC·free-pure.test.mjs는 통과한 채 실배포만 깸=헤드리스 검증 사각(수동 게이트로 미룬 실클릭에 버그) / 해결=scene·game을 클로저 let 변수로 빼고 반응 상태(placedKeys)만 this.*, 그리고 preview_eval로 Alpine.$data(el).mountPhaser()·addFromPalette() 호출해 plantObjs 증가 단언=실클릭 경로 자동검증 / 개념·일반화 N-082, 헤드리스 한계 T-052, PR Phase1 핫픽스) |
 | 2026-06-15 | T-054 (정원 꾸미기가 #356부터 실배포 내내 먹통 — htmx·Alpine·Phaser를 모두 defer로 로드하는데 본문 인라인 `<script>`(defer 아님)는 파싱 즉시 실행돼 그 안 최상위 `class GardenScene extends Phaser.Scene`가 아직 없는 Phaser를 참조→`Phaser is not defined`로 던지고 GardenScene이 TDZ로 남아 mountPhaser의 new가 죽어 캔버스 0·추가 무반응 / myGarden은 함수 선언이라 호이스팅돼 팔레트는 떠 보임 / mock·헤드리스가 Phaser를 동기 로드해 가림=#358 closure 수정과 별개 결함 "아직도 안 됨"의 정체 / 해결=클래스 정의를 ensureGardenScene()로 감싸 mountPhaser(클릭=defer 로드 후) 시점 1회 평가, Phaser는 defer 유지 / 검증 하니스도 production처럼 Phaser defer로 맞춰 RED재현 / 진단=Chrome 확장 실계정 콘솔 두 에러+canvas 부재 / 자매 T-053, T-052, PR #364) |
 | 2026-06-15 | T-055 (정원 꾸미기 ⬇'맨 뒤로' 먹통 — sendToBack의 children.moveAbove(obj,bg)가 no-op: Phaser moveAbove(A,B)는 A가 이미 B 위면 무동작인데 식물은 늘 배경 위라 매번 무동작, 맨뒤로 보낸 식물이 계속 위에 남아 탭하면 또 선택 / ⬆ bringToTop은 우연히 동작=비대칭 / 해결=z-order를 plantObjs 순서 단일출처로 setDepth로 직접 박는다(restack: 배경0·식물1..n·선택테두리 최상단, bringToFront/sendToBack/spawn/remove에서 호출) — depth가 렌더·입력순서 결정 / 검증은 getIndex 말고 .depth로(헤드리스 rAF throttle로 display정렬 지연, depthSort() 강제) / 진단=Chrome 확장으로 실계정 scene depth·탭top 측정 / 자매 T-053·T-054, PR #365) |
+| 2026-06-15 | T-056 (전역 button{width:100%}가 .garden-tab(=button)으로 상속되는데 .garden-tab이 padding·radius만 덮고 width를 안 덮어 100% 상속 → .garden-tabs가 flex-wrap이라 풀폭 pill이 각자 한 줄씩 세로로 쌓임(태블릿/PC만 어색, 모바일은 풀폭 세로가 자연스러워 가려짐) / 전역 button{width:100%}는 폼 제출 버튼 기준이라 flex 행·인라인 컴포넌트 버튼(탭·칩·툴바)엔 거의 틀림 → 그런 컴포넌트에 width:auto 명시로 상쇄(.garden-tab{width:auto} 1줄) / 증상 시그니처="넓은 화면에서만 버튼이 풀폭 세로 스택"이면 미디어쿼리 의심 전에 전역 button width부터 / 같은 뿌리 #286(칩 풀폭, 233줄)·배너 버튼(421줄) 반복 / 검증=preview 하니스로 offsetTop·width 값 단언, 자매 시각검증 T-043, PR #368) |
