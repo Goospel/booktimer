@@ -58,7 +58,7 @@ public class GardenLayoutService {
             if (meta != null) { // 교집합 — 보유 잃은 식물은 렌더에서 제외(유령 방지)
                 placed.add(new PlacedPlant(gp.getAxis(), gp.getPlantCode(),
                         meta.emoji(), meta.name(), meta.spriteId(), // spriteId는 보유 메타에서 결합(A2)
-                        gp.getPosX(), gp.getPosY(), gp.getZOrder()));
+                        gp.getPosX(), gp.getPosY(), gp.getZOrder(), gp.getRotation(), gp.getScale()));
             }
         }
         placed.sort(Comparator.comparingInt(PlacedPlant::z)); // zOrder 오름차순 = 뒤→앞 렌더
@@ -81,6 +81,12 @@ public class GardenLayoutService {
             if (r.x() < 0 || r.x() > 1 || r.y() < 0 || r.y() > 1) {
                 throw new IllegalArgumentException("정규화 범위(0~1)를 벗어난 좌표입니다: (" + r.x() + ", " + r.y() + ")");
             }
+            if (r.rotation() < 0 || r.rotation() > 360) {
+                throw new IllegalArgumentException("회전 범위(0~360)를 벗어났습니다: " + r.rotation());
+            }
+            if (r.scale() < 0.5 || r.scale() > 2.0) {
+                throw new IllegalArgumentException("크기 범위(0.5~2.0)를 벗어났습니다: " + r.scale());
+            }
             PlacementKey key = new PlacementKey(r.axis(), r.code());
             if (!ownedByKey.containsKey(key)) {
                 throw new IllegalArgumentException("보유하지 않은 식물은 배치할 수 없습니다: " + r.axis() + "/" + r.code());
@@ -93,7 +99,7 @@ public class GardenLayoutService {
         placementRepository.deleteByUser(user);
         placementRepository.flush();
         for (PlacementRequest r : requests) {
-            placementRepository.save(GardenPlacement.of(user, r.axis(), r.code(), r.x(), r.y(), r.z()));
+            placementRepository.save(GardenPlacement.of(user, r.axis(), r.code(), r.x(), r.y(), r.z(), r.rotation(), r.scale()));
         }
     }
 

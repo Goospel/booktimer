@@ -89,7 +89,12 @@ class GardenLayoutServiceTest {
     }
 
     private static PlacementRequest req(PlacementAxis axis, String code, double x, double y, int z) {
-        return new PlacementRequest(axis, code, x, y, z);
+        return new PlacementRequest(axis, code, x, y, z, 0, 1); // 변형 기본(rotation 0·scale 1)
+    }
+
+    private static PlacementRequest req(PlacementAxis axis, String code, double x, double y, int z,
+                                        double rotation, double scale) {
+        return new PlacementRequest(axis, code, x, y, z, rotation, scale);
     }
 
     @Test
@@ -267,5 +272,59 @@ class GardenLayoutServiceTest {
         List<PlacedPlant> layout = layoutService.layoutOf(user);
         assertThat(layout).extracting(PlacedPlant::code).containsExactly("econ");
         assertThat(layout).extracting(PlacedPlant::x).containsExactly(0.6);
+    }
+
+    @Test
+    @DisplayName("rotation·scale을 저장하면 layoutOf가 그대로 돌려준다 (변형 왕복 보존)")
+    void save_preservesRotationAndScale() {
+        User user = register("place-transform@booktimer.com");
+        grantTimeSproutAndGenreEcon(user);
+
+        layoutService.save(user, List.of(req(PlacementAxis.TIME, "sprout", 0.2, 0.3, 0, 90, 1.5)));
+
+        PlacedPlant sprout = layoutService.layoutOf(user).get(0);
+        assertThat(sprout.rotation()).isEqualTo(90);
+        assertThat(sprout.scale()).isEqualTo(1.5);
+    }
+
+    @Test
+    @DisplayName("rotation/scale 없이 저장하면 기본값(0·1)으로 복원된다")
+    void save_defaultsRotationScale() {
+        User user = register("place-transform-default@booktimer.com");
+        grantTimeSproutAndGenreEcon(user);
+
+        layoutService.save(user, List.of(req(PlacementAxis.TIME, "sprout", 0.5, 0.5, 0)));
+
+        PlacedPlant sprout = layoutService.layoutOf(user).get(0);
+        assertThat(sprout.rotation()).isEqualTo(0);
+        assertThat(sprout.scale()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("rotation 범위(0~360) 밖은 거부된다 (경계 0·360 허용)")
+    void save_rejectsOutOfRangeRotation() {
+        User user = register("place-rot@booktimer.com");
+        grantTimeSproutAndGenreEcon(user);
+
+        assertThatThrownBy(() -> layoutService.save(user, List.of(req(PlacementAxis.TIME, "sprout", 0.5, 0.5, 0, -1, 1))))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> layoutService.save(user, List.of(req(PlacementAxis.TIME, "sprout", 0.5, 0.5, 0, 361, 1))))
+                .isInstanceOf(IllegalArgumentException.class);
+        layoutService.save(user, List.of(req(PlacementAxis.TIME, "sprout", 0.5, 0.5, 0, 360, 1)));
+        assertThat(layoutService.layoutOf(user)).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("scale 범위(0.5~2.0) 밖은 거부된다 (경계 0.5·2.0 허용)")
+    void save_rejectsOutOfRangeScale() {
+        User user = register("place-scale@booktimer.com");
+        grantTimeSproutAndGenreEcon(user);
+
+        assertThatThrownBy(() -> layoutService.save(user, List.of(req(PlacementAxis.TIME, "sprout", 0.5, 0.5, 0, 0, 0.49))))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> layoutService.save(user, List.of(req(PlacementAxis.TIME, "sprout", 0.5, 0.5, 0, 0, 2.01))))
+                .isInstanceOf(IllegalArgumentException.class);
+        layoutService.save(user, List.of(req(PlacementAxis.TIME, "sprout", 0.5, 0.5, 0, 0, 2.0)));
+        assertThat(layoutService.layoutOf(user)).hasSize(1);
     }
 }

@@ -12,7 +12,10 @@ package com.booktimer.garden;
  * @param code 식물 code
  * @param x    가로 위치(정규화 0~1, 월드 폭 비율)
  * @param y    세로 위치(정규화 0~1, 월드 높이 비율)
- * @param z    겹침 앞뒤 순서(zOrder, 클수록 앞)
+ * @param z        겹침 앞뒤 순서(zOrder, 클수록 앞)
+ * @param rotation 사용자 회전(도, 0~360) — 변형·레이어(Phase 2)
+ * @param scale    사용자 크기 배율(0.5~2.0)
  */
-public record PlacementRequest(PlacementAxis axis, String code, double x, double y, int z) {
+public record PlacementRequest(PlacementAxis axis, String code, double x, double y, int z,
+                               double rotation, double scale) {
 }
