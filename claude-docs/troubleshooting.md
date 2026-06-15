@@ -49,6 +49,7 @@
 - [T-051. 워크트리 안에서 연 세션이 gh pr merge --delete-branch를 하면 로컬 정리가 'main is already used by worktree'로 실패한다](#t-051-워크트리-안에서-연-세션이-gh-pr-merge---delete-branch를-하면-로컬-정리가-main-is-already-used-by-worktree로-실패한다)
 - [T-052. 헤드리스 preview에서 WebGL+RAF 앱(Phaser 등)은 screenshot/renderer.snapshot이 타임아웃 — eval 상태/픽셀 검증으로 우회](#t-052-헤드리스-preview에서-webglraf-앱phaser-등은-screenshotrenderersnapshot이-타임아웃--eval-상태픽셀-검증으로-우회)
 - [T-053. Alpine 편집 위젯에서 Phaser scene/game을 x-data 속성에 저장하니 팔레트 추가가 먹통 — reactive Proxy 오염, 클로저로 분리](#t-053-alpine-편집-위젯에서-phaser-scenegame을-x-data-속성에-저장하니-팔레트-추가가-먹통--reactive-proxy-오염-클로저로-분리)
+- [T-054. defer Phaser를 파싱 즉시 인라인 스크립트가 참조해 class가 TDZ에 빠지고 캔버스가 안 뜬다](#t-054-defer-phaser를-파싱-즉시-인라인-스크립트가-참조해-class가-tdz에-빠지고-캔버스가-안-뜬다)
 
 ---
 
@@ -1048,6 +1049,21 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 
 ---
 
+## T-054. defer Phaser를 파싱 즉시 인라인 스크립트가 참조해 class가 TDZ에 빠지고 캔버스가 안 뜬다
+
+**증상**: 정원 "꾸미기"(자유배치)에서 ✏️ 진입 후 **팔레트 식물을 눌러도 정원에 안 들어가고, 캔버스(하늘/잔디/흙 배경)조차 안 그려진다**(빈 초록 박스 = `.garden-phaser` div의 CSS 배경만 보임). Phase 1(#356)부터 실배포 내내 깨져 있었는데 #358 reactive Proxy 수정(T-053/N-082)으로도 안 고쳐졌다 — **별개의 두 번째 결함**이었다. 콘솔: `ReferenceError: Phaser is not defined`(인라인 스크립트 줄) + `Cannot access 'GardenScene' before initialization`(mountPhaser).
+
+**원인**: `garden.html`이 htmx·Alpine·**Phaser를 모두 `<head>`에 `defer`로 로드**하는데, 본문의 인라인 `<script>`(`defer` 아님)는 **파싱 중 즉시 실행**돼 `defer` 스크립트들보다 **먼저** 돈다(스펙: 비-defer 인라인은 파서를 막고 즉시 실행, defer 외부 스크립트는 파싱 완료 후). 그 인라인 안 최상위 `class GardenScene extends Phaser.Scene`가 **아직 로드 안 된 `Phaser`를 평가 시점에 참조** → `Phaser is not defined`로 던진다. 그 줄이 던져 `GardenScene` 렉시컬 바인딩이 **TDZ(초기화 안 됨)** 로 남는다. `myGarden`은 **함수 선언이라 호이스팅**돼 살아 있어 Alpine·팔레트·버튼은 정상으로 보이지만, ✏️ 클릭 시 `mountPhaser`의 `new GardenScene()`이 TDZ 에러로 죽어 **Phaser 게임·캔버스가 0개** 생성된다. **mock·헤드리스 repro가 Phaser를 `<head>`에 동기(`defer` 없이) 로드해 이 순서를 가렸다** — 그래서 #358 closure 검증도, `@free-pure-core` 단언도 통과한 채 실배포만 깨졌다(T-053과 같은 "헤드리스 사각"의 다른 얼굴 = 로드 순서판).
+
+**해결 / 예방**:
+- **Phaser 의존 클래스 정의를 파싱 시점에서 빼라.** `class GardenScene extends Phaser.Scene`를 `function ensureGardenScene(){ if (GardenScene) return; GardenScene = class extends Phaser.Scene {…} }`로 감싸 **mountPhaser(사용자 클릭 = `defer` 로드 완료 후)** 시점에 1회 평가. Phaser는 `defer` 유지(비차단 로드·보기 전용 방문 성능 무손), `myGarden`이 Alpine 전에 준비되는 의도 보존.
+- **검증 하니스는 production의 스크립트 로드 속성(`defer`)을 그대로 복제하라.** mock이 외부 라이브러리를 동기 로드하면 "파싱 시점 참조" 버그를 통째로 가린다(이 트랩의 뿌리). `.preview` 하니스를 Phaser `defer`로 맞춰야 RED(캔버스 미마운트·팔레트 클릭 무반응)가 재현되고, 수정 후 GREEN(캔버스 마운트·`placedKeys` 0→1)이 의미를 가진다.
+- **실배포 직접 진단이 빨랐다.** Chrome 확장으로 실계정 페이지를 열어 `read_console_messages`로 두 에러를, `javascript_tool`로 `#garden-phaser canvas` 부재를 1분 내 확정 — 헤드리스 추정보다 실 브라우저 콘솔이 로드 순서 버그엔 직격.
+
+**관련**: 헤드리스 사각의 자매 T-053(같은 정원·다른 원인)·N-082, 헤드리스 캡처 한계 T-052, defer/TDZ/mock-masking 개념 후보 learning-notes, changelog(#364).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1106,3 +1122,4 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 | 2026-06-15 | T-049 보강 (#350 — 익명 폼 페이지(login/signup/password)는 비로그인=세션 없음이라 CSRF가 매 요청 세션을 새로 만들어, 페이지 크기와 무관하게 commit-후-500에 취약 / 작은 /login마저 운영서 **빈 화면**(이미 커밋된 응답 뒤에 error.html이 덧붙어 중첩·잘린 HTML이 chunked로 나가 브라우저 렌더 실패, curl `transfer closed`로 확정) / 로그아웃 직후에만 /login을 봐서 "로그아웃하면 깨진다"로 체감됐을 뿐 /login 자체가 깨진 상태 / 해결=익명 폼 GET 핸들러 3곳(LoginController·SignupController·PasswordResetController)에 CsrfToken 선확정 일괄 장착 / 단위테스트는 getToken() 호출 검증(MockMvc는 작은 페이지 commit-후-500 재현 불가) / 4번째 재발, N-077) |
 | 2026-06-15 | T-052 (헤드리스 preview에서 WebGL+RAF 앱(Phaser)은 screenshot/renderer.snapshot이 30s 타임아웃 — 렌더러 readback/idle 프레임 캡처 불가, 단 엔진은 정상 부팅·console 에러 0(캡처만 막힘=T-043 WebGL판) / 캔버스는 DOM 속성 없어 inspect 우회도 불가 → window.__scene/__game 노출 후 preview_eval로 텍스처 getSourceImage().width>0(디코드)·게임오브젝트 type(Image vs Text)·좌표·exportPlacements 왕복·addPlant/removePlant/isOutsideWorld 로직경로 단언 = 픽셀 없이 확정 / 순수 코어는 @free-pure-core 마커로 빼 node .test.mjs로(렌더러 무관) / eval 안 location.href 이동은 그 컨텍스트 끊김(navigated) → navigate·측정 별도 eval로 분리 / 실제 제스처·시각 품질은 실 브라우저 수동 게이트 / 정원 Phaser 자유배치 전환서, T-043·T-035, N-081, PR #356) |
 | 2026-06-15 | T-053 (Alpine 편집 위젯이 Phaser scene/game을 x-data 속성(this.scene)에 저장 → reactive Proxy 오염으로 팔레트 추가·드래그 전부 먹통, 에러도 없음 / .preview POC·free-pure.test.mjs는 통과한 채 실배포만 깸=헤드리스 검증 사각(수동 게이트로 미룬 실클릭에 버그) / 해결=scene·game을 클로저 let 변수로 빼고 반응 상태(placedKeys)만 this.*, 그리고 preview_eval로 Alpine.$data(el).mountPhaser()·addFromPalette() 호출해 plantObjs 증가 단언=실클릭 경로 자동검증 / 개념·일반화 N-082, 헤드리스 한계 T-052, PR Phase1 핫픽스) |
+| 2026-06-15 | T-054 (정원 꾸미기가 #356부터 실배포 내내 먹통 — htmx·Alpine·Phaser를 모두 defer로 로드하는데 본문 인라인 `<script>`(defer 아님)는 파싱 즉시 실행돼 그 안 최상위 `class GardenScene extends Phaser.Scene`가 아직 없는 Phaser를 참조→`Phaser is not defined`로 던지고 GardenScene이 TDZ로 남아 mountPhaser의 new가 죽어 캔버스 0·추가 무반응 / myGarden은 함수 선언이라 호이스팅돼 팔레트는 떠 보임 / mock·헤드리스가 Phaser를 동기 로드해 가림=#358 closure 수정과 별개 결함 "아직도 안 됨"의 정체 / 해결=클래스 정의를 ensureGardenScene()로 감싸 mountPhaser(클릭=defer 로드 후) 시점 1회 평가, Phaser는 defer 유지 / 검증 하니스도 production처럼 Phaser defer로 맞춰 RED재현 / 진단=Chrome 확장 실계정 콘솔 두 에러+canvas 부재 / 자매 T-053, T-052, PR #364) |
