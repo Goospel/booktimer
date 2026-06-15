@@ -966,6 +966,29 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     .canvas-plant { animation: none; }
 }
 
+/* 소품(데코) 비주얼(보기 모드 폴백) — 식물과 같은 중앙 정렬이되 상시 sway는 없다(연못·길·울타리가 흔들리면 어색).
+   입장 rise만 1회. 편집은 Phaser가 렌더하므로 여기 미적용(식물과 동일). */
+.canvas-decor {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    transform-origin: bottom center;
+    animation: garden-rise .5s ease-out backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+    .canvas-decor { animation: none; }
+}
+
+/* 팔레트 섹션 라벨(🌱 식물 / 🪴 소품) — 두 팔레트를 가르는 작은 머리글. */
+.garden-palette-label {
+    margin: 12px 0 5px;
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--muted);
+}
+
 .garden-palette {
     display: flex;
     flex-wrap: wrap;
