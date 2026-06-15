@@ -48,6 +48,7 @@
 - [T-050. CSS transform: perspective()로 격자 캔버스를 기울이면 클릭 좌표가 어긋나 탭-투-플레이스가 깨진다](#t-050-css-transform-perspective로-격자-캔버스를-기울이면-클릭-좌표가-어긋나-탭-투-플레이스가-깨진다)
 - [T-051. 워크트리 안에서 연 세션이 gh pr merge --delete-branch를 하면 로컬 정리가 'main is already used by worktree'로 실패한다](#t-051-워크트리-안에서-연-세션이-gh-pr-merge---delete-branch를-하면-로컬-정리가-main-is-already-used-by-worktree로-실패한다)
 - [T-052. 헤드리스 preview에서 WebGL+RAF 앱(Phaser 등)은 screenshot/renderer.snapshot이 타임아웃 — eval 상태/픽셀 검증으로 우회](#t-052-헤드리스-preview에서-webglraf-앱phaser-등은-screenshotrenderersnapshot이-타임아웃--eval-상태픽셀-검증으로-우회)
+- [T-053. Alpine 편집 위젯에서 Phaser scene/game을 x-data 속성에 저장하니 팔레트 추가가 먹통 — reactive Proxy 오염, 클로저로 분리](#t-053-alpine-편집-위젯에서-phaser-scenegame을-x-data-속성에-저장하니-팔레트-추가가-먹통--reactive-proxy-오염-클로저로-분리)
 
 ---
 
@@ -1033,6 +1034,20 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 
 ---
 
+## T-053. Alpine 편집 위젯에서 Phaser scene/game을 x-data 속성에 저장하니 팔레트 추가가 먹통 — reactive Proxy 오염, 클로저로 분리
+
+**증상**: 정원 "꾸미기"(자유배치 Phase 1)에서 ✏️ 진입 후 **팔레트 식물을 클릭해도 정원에 안 들어간다**(에러 토스트도 없음). 드래그·거두기 등 다른 조작도 함께 죽는다. `.preview` POC 목업과 `free-pure.test.mjs`는 통과했는데 실배포만 깨졌다.
+
+**원인**: `garden.html`의 Alpine 컴포넌트가 Phaser 인스턴스를 **반응 속성**에 저장했다(`this.scene = new GardenScene(...)`, `this.game = new Phaser.Game({ scene: this.scene })`). Alpine 3가 `x-data` 속성을 reactive Proxy로 감싸, Proxy scene을 Phaser에 넘기니 내부 순환참조가 깨졌다(개념·일반화 N-082). mock은 Phaser를 평범한 `const`에 담아 Proxy가 없어 멀쩡 → **헤드리스 검증의 사각**: 구현 세션이 "실제 클릭은 수동 게이트"로 미룬 바로 그 경로에 버그가 숨었다.
+
+**해결 / 예방**:
+- Phaser `scene`/`game`을 컴포넌트 팩토리의 **클로저 변수**(`let scene, game`)로 옮기고 메서드는 클로저를 참조. 반응 표시 상태(`placedKeys`)만 `this.*` 유지(N-082).
+- **검증을 실클릭까지**: reactive Proxy 오염은 **실제 Alpine 마운트 경로**에서만 터지므로 순수 코어 단언·eval POC만으론 못 잡는다. `preview_eval`로 `Alpine.$data(el)`을 얻어 `mountPhaser()`·`addFromPalette()`를 호출하고 `plantObjs.length` 증가를 단언(또는 reactive vs closure 대조 목업)해 "POC 통과 = 실사용 OK"의 공백을 메운다.
+
+**관련**: 개념·일반화 N-082, 헤드리스 캡처 한계 T-052, SVG 텍스처 POC N-081, changelog Phase 1(#356) 핫픽스.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1090,3 +1105,4 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 | 2026-06-14 | T-051 (워크트리 세션이 gh pr merge --delete-branch 하면 로컬 정리가 `fatal: 'main' is already used by worktree`로 실패 — 원격 머지는 성공, --delete-branch 후처리가 로컬 브랜치 지우려 main 전환 시도하나 main이 다른 워크트리 점유라 거부 / 해결=gh pr view로 MERGED 확인 → git push origin --delete로 원격 브랜치 삭제 → 메인 워크트리서 ff-only pull → 세션 종료 후 worktree remove+branch -d(자기 발밑 폴더는 세션 중 제거 불가) / N-032, T-005, T-048, PR #347). T-050 본문·목차 누락도 함께 복원(#346이 누적표에만 추가) |
 | 2026-06-15 | T-049 보강 (#350 — 익명 폼 페이지(login/signup/password)는 비로그인=세션 없음이라 CSRF가 매 요청 세션을 새로 만들어, 페이지 크기와 무관하게 commit-후-500에 취약 / 작은 /login마저 운영서 **빈 화면**(이미 커밋된 응답 뒤에 error.html이 덧붙어 중첩·잘린 HTML이 chunked로 나가 브라우저 렌더 실패, curl `transfer closed`로 확정) / 로그아웃 직후에만 /login을 봐서 "로그아웃하면 깨진다"로 체감됐을 뿐 /login 자체가 깨진 상태 / 해결=익명 폼 GET 핸들러 3곳(LoginController·SignupController·PasswordResetController)에 CsrfToken 선확정 일괄 장착 / 단위테스트는 getToken() 호출 검증(MockMvc는 작은 페이지 commit-후-500 재현 불가) / 4번째 재발, N-077) |
 | 2026-06-15 | T-052 (헤드리스 preview에서 WebGL+RAF 앱(Phaser)은 screenshot/renderer.snapshot이 30s 타임아웃 — 렌더러 readback/idle 프레임 캡처 불가, 단 엔진은 정상 부팅·console 에러 0(캡처만 막힘=T-043 WebGL판) / 캔버스는 DOM 속성 없어 inspect 우회도 불가 → window.__scene/__game 노출 후 preview_eval로 텍스처 getSourceImage().width>0(디코드)·게임오브젝트 type(Image vs Text)·좌표·exportPlacements 왕복·addPlant/removePlant/isOutsideWorld 로직경로 단언 = 픽셀 없이 확정 / 순수 코어는 @free-pure-core 마커로 빼 node .test.mjs로(렌더러 무관) / eval 안 location.href 이동은 그 컨텍스트 끊김(navigated) → navigate·측정 별도 eval로 분리 / 실제 제스처·시각 품질은 실 브라우저 수동 게이트 / 정원 Phaser 자유배치 전환서, T-043·T-035, N-081, PR #356) |
+| 2026-06-15 | T-053 (Alpine 편집 위젯이 Phaser scene/game을 x-data 속성(this.scene)에 저장 → reactive Proxy 오염으로 팔레트 추가·드래그 전부 먹통, 에러도 없음 / .preview POC·free-pure.test.mjs는 통과한 채 실배포만 깸=헤드리스 검증 사각(수동 게이트로 미룬 실클릭에 버그) / 해결=scene·game을 클로저 let 변수로 빼고 반응 상태(placedKeys)만 this.*, 그리고 preview_eval로 Alpine.$data(el).mountPhaser()·addFromPalette() 호출해 plantObjs 증가 단언=실클릭 경로 자동검증 / 개념·일반화 N-082, 헤드리스 한계 T-052, PR Phase1 핫픽스) |
