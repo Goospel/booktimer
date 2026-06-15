@@ -44,6 +44,7 @@ class GardenLayoutServiceTest {
     @Autowired private DiversityPlantRepository diversityPlantRepository;
     @Autowired private BookRepository bookRepository;
     @Autowired private GardenPlacementRepository placementRepository;
+    @Autowired private AuthorCharacterRepository authorCharacterRepository;
     @Autowired private GardenService gardenService;
     @Autowired private GardenLayoutService layoutService;
     @Autowired private Clock clock;
@@ -59,6 +60,9 @@ class GardenLayoutServiceTest {
         genrePlantRepository.save(GenrePlant.of("econ", "경제경영", "경제선인장", "🌵", 2, null));
 
         diversityPlantRepository.save(DiversityPlant.of("author_1", DiversityKind.AUTHOR, 1, "작가 새싹", "🖋️", 1, null));
+
+        // 작가 캐릭터 — AUTHOR 축 배치 검증용. prod 시드(V45)와 디커플.
+        authorCharacterRepository.save(AuthorCharacter.of("han_gang", "한강", "소설가 한강", "🪶", 1, null));
     }
 
     private LocalDate today() {
@@ -326,5 +330,55 @@ class GardenLayoutServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
         layoutService.save(user, List.of(req(PlacementAxis.TIME, "sprout", 0.5, 0.5, 0, 0, 2.0)));
         assertThat(layoutService.layoutOf(user)).hasSize(1);
+    }
+
+    // --- AUTHOR axis: 작가 캐릭터 배치 검증 ------------------------------------------
+
+    /** '한강 (지은이)' 완독 → han_gang 캐릭터(matchName="한강") 해금. */
+    private Book grantAuthorHanGang(User user) {
+        return bookRepository.save(Book.register(user, "소설책", "한강 (지은이)", null, null, null, null, null, null, BookStatus.FINISHED));
+    }
+
+    @Test
+    @DisplayName("보유한 AUTHOR 캐릭터를 좌표에 저장하면 layoutOf가 저장·재로딩 round-trip으로 돌려준다")
+    void save_author_thenLayoutReturnsPlaced() {
+        User user = register("place-author-happy@booktimer.com");
+        grantAuthorHanGang(user);
+
+        layoutService.save(user, List.of(req(PlacementAxis.AUTHOR, "han_gang", 0.3, 0.5, 0)));
+
+        List<PlacedPlant> layout = layoutService.layoutOf(user);
+        assertThat(layout).hasSize(1);
+        PlacedPlant placed = layout.get(0);
+        assertThat(placed.axis()).isEqualTo(PlacementAxis.AUTHOR);
+        assertThat(placed.code()).isEqualTo("han_gang");
+        assertThat(placed.emoji()).isEqualTo("🪶");
+        assertThat(placed.x()).isEqualTo(0.3);
+        assertThat(placed.y()).isEqualTo(0.5);
+    }
+
+    @Test
+    @DisplayName("미보유 AUTHOR 캐릭터 배치 요청은 거부된다 — save()의 ownedByKey 검증이 축 무관으로 작동")
+    void save_rejectsUnownedAuthorCharacter() {
+        User user = register("place-author-unowned@booktimer.com");
+        // 한강 완독 없음 → han_gang 미보유
+
+        assertThatThrownBy(() -> layoutService.save(user, List.of(req(PlacementAxis.AUTHOR, "han_gang", 0.5, 0.5, 0))))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(placementRepository.findByUser(user)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("저장 후 작가 완독책 삭제 → 보유 상실 → layoutOf 교집합으로 렌더에서 빠짐 (유령 방지)")
+    void layoutOf_excludesAuthorCharacterAfterOwnershipLost() {
+        User user = register("place-author-ghost@booktimer.com");
+        Book hangangBook = grantAuthorHanGang(user);
+
+        layoutService.save(user, List.of(req(PlacementAxis.AUTHOR, "han_gang", 0.3, 0.5, 0)));
+        assertThat(layoutService.layoutOf(user)).hasSize(1);
+
+        // 완독책 삭제 → 보유 상실 → 배치 행은 남아도 렌더에서 빠져야 한다.
+        bookRepository.delete(hangangBook);
+        assertThat(layoutService.layoutOf(user)).isEmpty();
     }
 }

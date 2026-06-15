@@ -64,6 +64,7 @@ public class GardenService {
     private final PlantRepository plantRepository;
     private final GenrePlantRepository genrePlantRepository;
     private final DiversityPlantRepository diversityPlantRepository;
+    private final AuthorCharacterRepository authorCharacterRepository;
     private final RecipePlantRepository recipePlantRepository;
     private final UserDiscoveredPlantRepository discoveredPlantRepository;
     private final BookRepository bookRepository;
@@ -75,6 +76,7 @@ public class GardenService {
     public GardenService(PlantRepository plantRepository,
                          GenrePlantRepository genrePlantRepository,
                          DiversityPlantRepository diversityPlantRepository,
+                         AuthorCharacterRepository authorCharacterRepository,
                          RecipePlantRepository recipePlantRepository,
                          UserDiscoveredPlantRepository discoveredPlantRepository,
                          BookRepository bookRepository,
@@ -85,6 +87,7 @@ public class GardenService {
         this.plantRepository = plantRepository;
         this.genrePlantRepository = genrePlantRepository;
         this.diversityPlantRepository = diversityPlantRepository;
+        this.authorCharacterRepository = authorCharacterRepository;
         this.recipePlantRepository = recipePlantRepository;
         this.discoveredPlantRepository = discoveredPlantRepository;
         this.bookRepository = bookRepository;
@@ -180,6 +183,13 @@ public class GardenService {
         int totalPublisherCount = (int) diversityCatalog.stream()
                 .filter(p -> p.getKind() == DiversityKind.PUBLISHER).count();
 
+        // 5.6) 작가 캐릭터축 — 완독책 작가(정규화·contains)로 캐릭터 보유 유도. finishedAuthors 재사용.
+        Set<String> ownedAuthorNames = AuthorCharacterUnlockCalculator.normalizedAuthors(finishedAuthors);
+        List<AuthorCharacter> authorCatalog = authorCharacterRepository.findAllByOrderByDisplayOrderAsc();
+        List<AuthorCharacterState> authorCharacters =
+                AuthorCharacterUnlockCalculator.resolve(authorCatalog, ownedAuthorNames);
+        int ownedAuthorCharacterCount = (int) authorCharacters.stream().filter(AuthorCharacterState::owned).count();
+
         // 6) 레시피축(트랙 B) — 책장 스냅샷으로 만족된 레시피를 평가하고, 새로 발견한 것을 저장한다.
         ShelfSnapshot snapshot = shelfSnapshot(books);
         Set<String> satisfied = RecipeEvaluator.satisfiedPlantCodes(snapshot);
@@ -214,7 +224,8 @@ public class GardenService {
         return new GardenView(states, ownedCount, catalog.size(), achievedDays, daysToNextUnlock, nextPlantName,
                 genrePlants, ownedGenreCount, genreCatalog.size(),
                 diversityPlants, ownedAuthorCount, totalAuthorCount, ownedPublisherCount, totalPublisherCount,
-                recipePlants, mysterySlotCount, justDiscovered);
+                recipePlants, mysterySlotCount, justDiscovered,
+                authorCharacters, ownedAuthorCharacterCount, authorCatalog.size());
     }
 
     /** 책장을 트랙 B 레시피 평가 입력으로 집계한다 — 완독·읽고싶음 책의 작가·카테고리만 뽑는다. */

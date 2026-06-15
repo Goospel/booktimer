@@ -46,6 +46,8 @@ class GardenServiceTest {
     @Autowired
     private DiversityPlantRepository diversityPlantRepository;
     @Autowired
+    private AuthorCharacterRepository authorCharacterRepository;
+    @Autowired
     private BookRepository bookRepository;
     @Autowired
     private GardenService gardenService;
@@ -70,6 +72,9 @@ class GardenServiceTest {
         diversityPlantRepository.save(DiversityPlant.of("author_3", DiversityKind.AUTHOR, 3, "작가 나무", "✒️", 2, null));      // 미지정(폴백)
         diversityPlantRepository.save(DiversityPlant.of("publisher_1", DiversityKind.PUBLISHER, 1, "출판 새싹", "🏷️", 3, "publisher_1"));
         diversityPlantRepository.save(DiversityPlant.of("publisher_3", DiversityKind.PUBLISHER, 3, "출판 나무", "📦", 4, null));
+
+        // 작가 캐릭터 — 큐레이션 한 종(배선 확인용). prod 시드(V45)와 디커플.
+        authorCharacterRepository.save(AuthorCharacter.of("han_gang", "한강", "소설가 한강", "🪶", 1, null));
     }
 
     /** 주어진 장르(category)·상태로 책 한 권을 등록한다. */
@@ -413,5 +418,55 @@ class GardenServiceTest {
                 .filter(o -> o.axis() == PlacementAxis.GENRE && o.code().equals("econ"))
                 .findFirst().orElseThrow();
         assertThat(econ.spriteId()).isNull();
+    }
+
+    // --- AUTHOR axis: 작가 캐릭터 배선 확인 ------------------------------------------
+
+    @Test
+    @DisplayName("큐레이션 작가 완독 → view().ownedPlants()에 axis=AUTHOR로 등장")
+    void authorCharacters_finishedAuthor_owned() {
+        User user = register("garden-author-owned@booktimer.com");
+        // "한강 (지은이)" — 알라딘 원문 형태로 등록해 정규화 매칭을 배선까지 확인.
+        registerBookWith(user, "소설", "한강 (지은이)", null, BookStatus.FINISHED);
+
+        GardenView view = gardenService.view(user);
+
+        assertThat(authorCharacter(view, "han_gang").owned()).isTrue();
+        assertThat(view.ownedAuthorCharacterCount()).isEqualTo(1);
+        OwnedPlant authorPlant = view.ownedPlants().stream()
+                .filter(o -> o.axis() == PlacementAxis.AUTHOR && o.code().equals("han_gang"))
+                .findFirst().orElseThrow();
+        assertThat(authorPlant.emoji()).isEqualTo("🪶");
+    }
+
+    @Test
+    @DisplayName("읽고싶음 책만 있으면 작가 캐릭터 미owned — 완독만 집계(파밍 방지)")
+    void authorCharacters_wantToReadOnly_notOwned() {
+        User user = register("garden-author-want@booktimer.com");
+        registerBookWith(user, "소설", "한강 (지은이)", null, BookStatus.WANT_TO_READ);
+
+        GardenView view = gardenService.view(user);
+
+        assertThat(authorCharacter(view, "han_gang").owned()).isFalse();
+        assertThat(view.ownedAuthorCharacterCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("null 작가 책만 완독 → 작가 캐릭터 누수 0 (N-055)")
+    void authorCharacters_nullAuthor_noLeak() {
+        User user = register("garden-author-null@booktimer.com");
+        registerBookWith(user, "수동등록", null, null, BookStatus.FINISHED);
+
+        GardenView view = gardenService.view(user);
+
+        assertThat(view.authorCharacters()).noneMatch(AuthorCharacterState::owned);
+        assertThat(view.ownedAuthorCharacterCount()).isZero();
+    }
+
+    private static AuthorCharacterState authorCharacter(GardenView view, String code) {
+        return view.authorCharacters().stream()
+                .filter(s -> s.character().getCode().equals(code))
+                .findFirst()
+                .orElseThrow();
     }
 }

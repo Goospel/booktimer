@@ -52,6 +52,7 @@
 - [T-054. defer Phaser를 파싱 즉시 인라인 스크립트가 참조해 class가 TDZ에 빠지고 캔버스가 안 뜬다](#t-054-defer-phaser를-파싱-즉시-인라인-스크립트가-참조해-class가-tdz에-빠지고-캔버스가-안-뜬다)
 - [T-055. Phaser moveAbove는 a가 이미 b 위면 no-op이라 z-order는 setDepth로 박는다](#t-055-phaser-moveabove는-a가-이미-b-위면-no-op이라-z-order는-setdepth로-박는다)
 - [T-056. 전역 button{width:100%} 규칙이 flex 자식 버튼으로 새 풀폭 세로 스택, 컴포넌트에 width:auto로 상쇄](#t-056-전역-buttonwidth100-규칙이-flex-자식-버튼으로-새-풀폭-세로-스택-컴포넌트에-widthauto로-상쇄)
+- [T-057. PowerShell 5.1 Set-Content -Encoding utf8가 BOM 포함 UTF-8을 생성해 커밋 메시지 앞에 BOM 붙음](#t-057-powershell-51-set-content--encoding-utf8가-bom-포함-utf-8을-생성해-커밋-메시지-앞에-bom-붙음)
 
 ---
 
@@ -1097,6 +1098,22 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 
 ---
 
+## T-057. PowerShell 5.1 `Set-Content -Encoding utf8`가 BOM 포함 UTF-8을 생성해 커밋 메시지 앞에 BOM 붙음
+
+**증상**: `.commit-msg-tmp`를 `Set-Content -Encoding utf8`로 썼을 때 커밋 메시지 제목 앞에 BOM(`﻿`, `﻿`)이 붙어 git log / GitHub에서 `﻿feat:` 처럼 보이지 않는 글자가 앞에 달린다.
+
+**원인**: PowerShell 5.1의 `-Encoding utf8`은 **UTF-8 with BOM**을 생성한다. PowerShell 7+에서는 `utf8NoBOM`이 기본값이지만 5.1은 다르다. `git commit -F .commit-msg-tmp`가 그 BOM을 첫 글자로 포함해 커밋 제목에 박는다.
+
+**해결 / 예방**:
+- `.commit-msg-tmp`에 쓸 때는 **Bash 도구**를 사용한다 (`printf '%s' "$(cat <<'EOF'\n...\nEOF\n)" > .commit-msg-tmp`).
+- PowerShell 5.1에서 BOM-less UTF-8을 강제하려면 `[System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($false))`.
+- 커밋 후 `git show HEAD --format="%s" | head -c 4 | xxd`로 첫 바이트가 `efbbbf`면 BOM 포함.
+- **자매 함정**: T-026(PowerShell 5.1 인라인 한글 깨짐), T-044(JSON here-string 인코딩). `.commit-msg-tmp` 경로를 쓸 때 인코딩을 항상 의식적으로 지정한다.
+
+**관련**: T-026(PowerShell 5.1 한글 커밋 깨짐), T-044(JSON 인코딩), PR #372.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1158,3 +1175,4 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 | 2026-06-15 | T-054 (정원 꾸미기가 #356부터 실배포 내내 먹통 — htmx·Alpine·Phaser를 모두 defer로 로드하는데 본문 인라인 `<script>`(defer 아님)는 파싱 즉시 실행돼 그 안 최상위 `class GardenScene extends Phaser.Scene`가 아직 없는 Phaser를 참조→`Phaser is not defined`로 던지고 GardenScene이 TDZ로 남아 mountPhaser의 new가 죽어 캔버스 0·추가 무반응 / myGarden은 함수 선언이라 호이스팅돼 팔레트는 떠 보임 / mock·헤드리스가 Phaser를 동기 로드해 가림=#358 closure 수정과 별개 결함 "아직도 안 됨"의 정체 / 해결=클래스 정의를 ensureGardenScene()로 감싸 mountPhaser(클릭=defer 로드 후) 시점 1회 평가, Phaser는 defer 유지 / 검증 하니스도 production처럼 Phaser defer로 맞춰 RED재현 / 진단=Chrome 확장 실계정 콘솔 두 에러+canvas 부재 / 자매 T-053, T-052, PR #364) |
 | 2026-06-15 | T-055 (정원 꾸미기 ⬇'맨 뒤로' 먹통 — sendToBack의 children.moveAbove(obj,bg)가 no-op: Phaser moveAbove(A,B)는 A가 이미 B 위면 무동작인데 식물은 늘 배경 위라 매번 무동작, 맨뒤로 보낸 식물이 계속 위에 남아 탭하면 또 선택 / ⬆ bringToTop은 우연히 동작=비대칭 / 해결=z-order를 plantObjs 순서 단일출처로 setDepth로 직접 박는다(restack: 배경0·식물1..n·선택테두리 최상단, bringToFront/sendToBack/spawn/remove에서 호출) — depth가 렌더·입력순서 결정 / 검증은 getIndex 말고 .depth로(헤드리스 rAF throttle로 display정렬 지연, depthSort() 강제) / 진단=Chrome 확장으로 실계정 scene depth·탭top 측정 / 자매 T-053·T-054, PR #365) |
 | 2026-06-15 | T-056 (전역 button{width:100%}가 .garden-tab(=button)으로 상속되는데 .garden-tab이 padding·radius만 덮고 width를 안 덮어 100% 상속 → .garden-tabs가 flex-wrap이라 풀폭 pill이 각자 한 줄씩 세로로 쌓임(태블릿/PC만 어색, 모바일은 풀폭 세로가 자연스러워 가려짐) / 전역 button{width:100%}는 폼 제출 버튼 기준이라 flex 행·인라인 컴포넌트 버튼(탭·칩·툴바)엔 거의 틀림 → 그런 컴포넌트에 width:auto 명시로 상쇄(.garden-tab{width:auto} 1줄) / 증상 시그니처="넓은 화면에서만 버튼이 풀폭 세로 스택"이면 미디어쿼리 의심 전에 전역 button width부터 / 같은 뿌리 #286(칩 풀폭, 233줄)·배너 버튼(421줄) 반복 / 검증=preview 하니스로 offsetTop·width 값 단언, 자매 시각검증 T-043, PR #368) |
+| 2026-06-16 | T-057 (PowerShell 5.1 Set-Content -Encoding utf8가 UTF-8 with BOM 생성 → 커밋 메시지 첫 글자에 BOM(﻿)이 박혀 git log/GitHub에 `﻿feat:` 표시 / PS 7+는 utf8NoBOM 기본, 5.1은 BOM 붙음 / 해결=Bash 도구 printf 사용 또는 [System.IO.File]::WriteAllText(path,content,UTF8Encoding.new($false)) / git show HEAD --format="%s" | head -c 4 | xxd로 efbbbf면 BOM / T-026·T-044 같은 뿌리(PS 5.1 인코딩), PR #372) |
