@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -225,5 +226,67 @@ class ReadingHistoryServiceTest {
                 session(user, t, HOUR)));
 
         assertThat(service.publicDailyHistory(user)).isEmpty();
+    }
+
+    // --- 월별 묶음(history 화면 '한 번에 한 달' 보기): YearMonth 그룹·최신월 먼저·월 합계 ---
+
+    @Test
+    @DisplayName("monthlyHistory: 일자별 기록을 월별로 묶고 최신 월이 먼저, 각 월 안은 최신 일이 먼저다")
+    void monthlyHistory_groupsByMonthNewestFirst() {
+        User user = seoulUser();
+        // 6/2, 6/1, 5/20 (KST) — 입력 순서를 섞어 정렬을 검증한다
+        when(sessionRepository.findByUser(user)).thenReturn(List.of(
+                session(user, Instant.parse("2026-05-20T01:00:00Z"), HOUR),
+                session(user, Instant.parse("2026-06-02T01:00:00Z"), HOUR),
+                session(user, Instant.parse("2026-06-01T01:00:00Z"), HOUR)));
+
+        List<MonthlyReadingSection> months = service.monthlyHistory(user);
+
+        assertThat(months).extracting(MonthlyReadingSection::month)
+                .containsExactly(YearMonth.of(2026, 6), YearMonth.of(2026, 5)); // 최신 월 먼저
+        assertThat(months.get(0).days()).extracting(DailyReadingRecord::date)
+                .containsExactly(LocalDate.of(2026, 6, 2), LocalDate.of(2026, 6, 1)); // 월 안 최신 일 먼저
+        assertThat(months.get(1).days()).extracting(DailyReadingRecord::date)
+                .containsExactly(LocalDate.of(2026, 5, 20));
+    }
+
+    @Test
+    @DisplayName("monthlyHistory: 각 월 섹션은 그 달 총 독서 시간을 합산한다")
+    void monthlyHistory_sumsMonthTotal() {
+        User user = seoulUser();
+        when(sessionRepository.findByUser(user)).thenReturn(List.of(
+                session(user, Instant.parse("2026-06-02T01:00:00Z"), HOUR),
+                session(user, Instant.parse("2026-06-01T01:00:00Z"), 1800L)));
+
+        List<MonthlyReadingSection> months = service.monthlyHistory(user);
+
+        assertThat(months).hasSize(1);
+        assertThat(months.get(0).month()).isEqualTo(YearMonth.of(2026, 6));
+        assertThat(months.get(0).totalSeconds()).isEqualTo(HOUR + 1800L);
+    }
+
+    @Test
+    @DisplayName("monthlyHistory: 월 경계(말일/다음달 1일)는 서로 다른 섹션으로 분리된다")
+    void monthlyHistory_monthBoundarySeparates() {
+        User user = seoulUser();
+        // 06-30 12:00 KST, 07-01 12:00 KST
+        when(sessionRepository.findByUser(user)).thenReturn(List.of(
+                session(user, Instant.parse("2026-06-30T03:00:00Z"), HOUR),
+                session(user, Instant.parse("2026-07-01T03:00:00Z"), HOUR)));
+
+        List<MonthlyReadingSection> months = service.monthlyHistory(user);
+
+        assertThat(months).extracting(MonthlyReadingSection::month)
+                .containsExactly(YearMonth.of(2026, 7), YearMonth.of(2026, 6));
+        assertThat(months).allSatisfy(m -> assertThat(m.days()).hasSize(1));
+    }
+
+    @Test
+    @DisplayName("monthlyHistory: 기록이 없으면 빈 리스트")
+    void monthlyHistory_empty() {
+        User user = seoulUser();
+        when(sessionRepository.findByUser(user)).thenReturn(List.of());
+
+        assertThat(service.monthlyHistory(user)).isEmpty();
     }
 }

@@ -84,20 +84,33 @@
         <input type="radio" name="histtab" id="tab-missed" class="tab-radio">
         <label for="tab-missed" class="record-tab">이번 주 빠뜨린 날</label>
 
-        <!-- 바디 ①: 일자별 독서 시간 -->
+        <!-- 바디 ①: 일자별 독서 시간 — 한 번에 한 달, ◀▶로 이동, 그 달 안에서만 스크롤(기록이 쌓여도 화면이 길어지지 않게).
+             월별 묶음(months, 최신 월 먼저)을 모두 렌더하되 최신 달만 보이고(th:hidden) JS가 ◀▶로 hidden을 토글한다.
+             JS가 꺼져도 최신 달은 보인다(폴백). 월 합계는 네비 라벨에 함께 띄운다. -->
         <div class="tab-panel panel-records">
-            <p class="status-line" th:if="${records.isEmpty()}">아직 독서 기록이 없습니다. 측정을 시작해 보세요.</p>
-            <ul class="record-list" th:unless="${records.isEmpty()}">
-                <li class="record-row" th:each="r : ${records}">
-                    <div class="record-main">
-                        <span class="record-date" th:text="${#temporals.format(r.date(), 'yyyy-MM-dd (E)')}">2026-06-01</span>
-                        <span class="record-books" th:if="${!r.bookTitles().isEmpty()}"
-                              th:text="${#strings.listJoin(r.bookTitles(), ', ')}">책 제목</span>
-                    </div>
-                    <span class="record-time mono"
-                          th:text="${(r.totalSeconds() / 3600) + '시간 ' + ((r.totalSeconds() % 3600) / 60) + '분'}">0시간 0분</span>
-                </li>
-            </ul>
+            <p class="status-line" th:if="${months.isEmpty()}">아직 독서 기록이 없습니다. 측정을 시작해 보세요.</p>
+            <div th:unless="${months.isEmpty()}" class="month-browser">
+                <div class="month-nav">
+                    <button type="button" class="month-nav-btn month-nav-prev" aria-label="이전 달">◀</button>
+                    <span class="month-nav-label"
+                          th:text="${months[0].month().getYear() + '년 ' + months[0].month().getMonthValue() + '월 · ' + (months[0].totalSeconds() / 3600) + '시간 ' + ((months[0].totalSeconds() % 3600) / 60) + '분'}">2026년 6월 · 0시간 0분</span>
+                    <button type="button" class="month-nav-btn month-nav-next" aria-label="다음 달">▶</button>
+                </div>
+                <div class="month-section" th:each="s, it : ${months}" th:hidden="${!it.first}"
+                     th:attr="data-label=${s.month().getYear() + '년 ' + s.month().getMonthValue() + '월 · ' + (s.totalSeconds() / 3600) + '시간 ' + ((s.totalSeconds() % 3600) / 60) + '분'}">
+                    <ul class="record-list record-scroll">
+                        <li class="record-row" th:each="r : ${s.days()}">
+                            <div class="record-main">
+                                <span class="record-date" th:text="${#temporals.format(r.date(), 'yyyy-MM-dd (E)')}">2026-06-01</span>
+                                <span class="record-books" th:if="${!r.bookTitles().isEmpty()}"
+                                      th:text="${#strings.listJoin(r.bookTitles(), ', ')}">책 제목</span>
+                            </div>
+                            <span class="record-time mono"
+                                  th:text="${(r.totalSeconds() / 3600) + '시간 ' + ((r.totalSeconds() % 3600) / 60) + '분'}">0시간 0분</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
         </div>
 
         <!-- 바디 ②: 이번 주 빠뜨린 날 -->
@@ -124,5 +137,27 @@
         <a th:href="@{/books}">📚 내 책장</a>
     </p>
 </div>
+
+<!-- 일자별 독서 기록: 한 번에 한 달만 보이고 ◀(과거)/▶(최신)로 이동. 월 섹션은 최신이 인덱스 0(서버가 최신만 렌더).
+     JS가 없어도 최신 달은 보이는 폴백. 외부 의존(Alpine/htmx) 없이 바닐라로 hidden만 토글한다. -->
+<script>
+  (function () {
+    var sections = Array.prototype.slice.call(document.querySelectorAll('.month-section'));
+    if (sections.length < 1) return;
+    var prev = document.querySelector('.month-nav-prev');
+    var next = document.querySelector('.month-nav-next');
+    var label = document.querySelector('.month-nav-label');
+    var idx = 0; // 0 = 최신 달
+    function render() {
+      for (var i = 0; i < sections.length; i++) sections[i].hidden = (i !== idx);
+      if (label) label.textContent = sections[idx].getAttribute('data-label');
+      if (next) next.disabled = (idx === 0);                   // 더 최신 없음
+      if (prev) prev.disabled = (idx === sections.length - 1); // 더 과거 없음
+    }
+    if (prev) prev.addEventListener('click', function () { if (idx < sections.length - 1) { idx++; render(); } });
+    if (next) next.addEventListener('click', function () { if (idx > 0) { idx--; render(); } });
+    render();
+  })();
+</script>
 </body>
 </html>

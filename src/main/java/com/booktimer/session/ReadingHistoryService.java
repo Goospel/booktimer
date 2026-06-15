@@ -6,8 +6,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +44,29 @@ public class ReadingHistoryService {
      */
     public List<DailyReadingRecord> dailyHistory(User user) {
         return aggregate(user, session -> true);
+    }
+
+    /**
+     * 일자별 기록을 유저 타임존 기준 <b>월별로 묶어</b> 최신 월이 먼저 오도록 반환한다.
+     *
+     * <p>history 화면의 '한 번에 한 달' 보기용. {@link #dailyHistory}(최신 일 먼저) 결과를 그대로
+     * {@link YearMonth}로 묶으므로, 삽입 순서를 보존하는 {@link LinkedHashMap} 덕에 월·일 모두 최신이
+     * 먼저다. 각 섹션은 그 달 총 독서 시간을 동봉한다(월 헤더에 바로 쓰도록).
+     *
+     * @param user 조회 주체
+     * @return 월별 묶음 목록(최신 월 먼저). 기록이 없으면 빈 목록.
+     */
+    public List<MonthlyReadingSection> monthlyHistory(User user) {
+        Map<YearMonth, List<DailyReadingRecord>> byMonth = new LinkedHashMap<>();
+        for (DailyReadingRecord record : dailyHistory(user)) {
+            byMonth.computeIfAbsent(YearMonth.from(record.date()), m -> new ArrayList<>()).add(record);
+        }
+        return byMonth.entrySet().stream()
+                .map(e -> new MonthlyReadingSection(
+                        e.getKey(),
+                        e.getValue().stream().mapToLong(DailyReadingRecord::totalSeconds).sum(),
+                        List.copyOf(e.getValue())))
+                .toList();
     }
 
     /**

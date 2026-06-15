@@ -4,7 +4,7 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.session.ContributionGraph;
-import com.booktimer.session.DailyReadingRecord;
+import com.booktimer.session.MonthlyReadingSection;
 import com.booktimer.session.ReadingSessionService;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
@@ -81,11 +81,16 @@ class HistoryControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(view().name("history"))
                 .andExpect(model().attribute("nickname", "기록가"))
-                .andExpect(model().attributeExists("records"))
+                .andExpect(model().attributeExists("months"))
                 .andExpect(model().attributeExists("graph"))
                 .andReturn();
 
-        // 독서 잔디에 그 30분 세션이 반영돼야 한다(종단 와이어링: 세션→집계→그리드)
+        // 30분 세션이 월별 묶음으로 화면에 실린다(종단 와이어링: 세션→집계→월 그룹→뷰)
+        List<MonthlyReadingSection> months = (List<MonthlyReadingSection>) result.getModelAndView().getModel().get("months");
+        assertThat(months).hasSize(1);
+        assertThat(months.get(0).totalSeconds()).isEqualTo(1800L);
+
+        // 독서 잔디에도 그 30분 세션이 반영돼야 한다(종단 와이어링: 세션→집계→그리드)
         ContributionGraph graph = (ContributionGraph) result.getModelAndView().getModel().get("graph");
         assertThat(graph.activeDays()).isEqualTo(1);
         assertThat(graph.totalSeconds()).isEqualTo(1800L);
@@ -134,7 +139,7 @@ class HistoryControllerTest {
         mockMvc.perform(get("/history").with(user("empty@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("history"))
-                .andExpect(model().attribute("records", List.<DailyReadingRecord>of()));
+                .andExpect(model().attribute("months", List.of()));
     }
 
     @Test
