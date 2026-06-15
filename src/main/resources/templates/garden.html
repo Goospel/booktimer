@@ -439,14 +439,15 @@
     function myGarden() {
         const data = window.__garden || { placed: [], owned: [], worldWidth: 1000, worldHeight: 640 };
         const placedKeySet = () => new Set((data.placed || []).map(p => p.axis + '/' + p.code));
+        // Phaser 인스턴스(scene·game)는 Alpine 반응 상태(this.*) 밖 클로저 변수에 둔다 — x-data 속성에 넣으면
+        // reactive Proxy가 Phaser Scene/Game을 감싸 내부 순환참조가 깨진다(부팅 폭주·팔레트 추가 무반응). N-082.
+        let scene = null, game = null;
         return {
             editing: false,
             saving: false,
             message: '',
             owned: data.owned || [],
             placedKeys: placedKeySet(),   // 어떤 식물이 캔버스에 놓였나 — 팔레트 비활성 판정
-            game: null,
-            scene: null,
 
             isPlaced(o) { return this.placedKeys.has(o.axis + '/' + o.code); },
 
@@ -458,29 +459,29 @@
             },
             mountPhaser() {
                 const self = this;
-                this.scene = new GardenScene({
+                scene = new GardenScene({
                     owned: this.owned,
                     placed: data.placed || [],
                     worldW: data.worldWidth,
                     worldH: data.worldHeight,
                     onChange: (keys) => { self.placedKeys = new Set(keys); }
                 });
-                this.game = new Phaser.Game({
+                game = new Phaser.Game({
                     type: Phaser.AUTO,
                     parent: 'garden-phaser',
                     width: data.worldWidth,
                     height: data.worldHeight,
                     transparent: true,
                     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_HORIZONTALLY },
-                    scene: this.scene
+                    scene: scene
                 });
             },
             destroyPhaser() {
-                if (this.game) { this.game.destroy(true); this.game = null; this.scene = null; }
+                if (game) { game.destroy(true); game = null; scene = null; }
             },
             addFromPalette(o) {
-                if (!this.scene || this.isPlaced(o)) return;
-                this.scene.addPlant(o);
+                if (!scene || this.isPlaced(o)) return;
+                scene.addPlant(o);
             },
             cancel() {
                 this.destroyPhaser();
@@ -489,10 +490,10 @@
                 this.placedKeys = placedKeySet();
             },
             async save() {
-                if (!this.scene || this.saving) return;
+                if (!scene || this.saving) return;
                 this.saving = true;
                 this.message = '';
-                const payload = this.scene.exportPlacements();
+                const payload = scene.exportPlacements();
                 try {
                     const token = document.querySelector('meta[name=_csrf]');
                     const res = await fetch('/garden/layout', {

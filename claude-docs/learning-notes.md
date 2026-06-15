@@ -85,6 +85,7 @@
 - [N-079. 점진 향상(progressive enhancement) 장식 레이어는 토글 경계 밖에 둬야 인터랙션·no-JS 폴백이 보존된다](#n-079-점진-향상progressive-enhancement-장식-레이어는-토글-경계-밖에-둬야-인터랙션no-js-폴백이-보존된다)
 - [N-080. 검증된 파이프라인의 N축 복제는 새 설계가 아니라 "시드 + 벡터" 노동 — 리스크가 아니라 제작량을 가늠하라](#n-080-검증된-파이프라인의-n축-복제는-새-설계가-아니라-시드--벡터-노동--리스크가-아니라-제작량을-가늠하라)
 - [N-081. 인라인 SVG `<symbol>`을 캔버스 게임엔진 텍스처로 — innerHTML을 독립 SVG로 직렬화 → Blob URL → load.image](#n-081-인라인-svg-symbol을-캔버스-게임엔진-텍스처로--innerhtml을-독립-svg로-직렬화--blob-url--loadimage)
+- [N-082. Alpine/Vue 반응 상태에 Phaser 같은 라이브러리 인스턴스를 저장하면 reactive Proxy가 감싸 깨진다 — 클로저/비반응에 보관](#n-082-alpinevue-반응-상태에-phaser-같은-라이브러리-인스턴스를-저장하면-reactive-proxy가-감싸-깨진다--클로저비반응에-보관)
 
 ---
 
@@ -3724,6 +3725,47 @@ DOM에 이미 있는 벡터 정의(아이콘 스프라이트 시트, `<symbol>` 
 
 ---
 
+## N-082. Alpine/Vue 반응 상태에 Phaser 같은 라이브러리 인스턴스를 저장하면 reactive Proxy가 감싸 깨진다 — 클로저/비반응에 보관
+
+> **한 줄 요약**: Alpine `x-data`(또는 Vue `data`) 속성에 Phaser `Game`/`Scene`·Chart.js·Leaflet 같은 **외부 라이브러리 인스턴스를 대입하면** 반응성 시스템이 그 객체를 **reactive Proxy로 깊게 감싼다**. 라이브러리 내부의 순환참조·`this` 식별이 Proxy 경유로 깨져 **조용히 오동작**한다 — 인스턴스는 반응 상태 *밖*(클로저 변수·`markRaw`)에 둔다.
+
+### 문제
+
+정원 자유배치(Phase 1) 편집 위젯이 Phaser를 Alpine 속성에 저장했다:
+```js
+return { scene: null, game: null,
+  mountPhaser() { this.scene = new GardenScene(...); this.game = new Phaser.Game({ scene: this.scene }); } }
+```
+증상: **팔레트 클릭이 식물을 안 넣음**(에러도 없음). preview 재현 결과 `this.scene = s` 직후 `this.scene === s`가 **false**(Proxy로 감싸짐), Phaser 부팅이 **수십 회 폭주**, `mountPhaser`가 중간에 멈춰 이후 줄이 안 돈다.
+
+### 원인
+
+Alpine 3 반응성은 Vue 3 `reactive()` 기반이라 `x-data` 속성에 할당된 **객체를 깊게 Proxy로 추적**한다. Phaser `Game`/`Scene`은 `scene.sys ↔ scene`, `this.add`/`this.load` 플러그인이 서로를 참조하는 **거대한 순환 구조**라, deep-track이 게임루프·플러그인 설치·`instanceof`를 깨뜨린다. mock은 Phaser를 평범한 `const`에 담아 Proxy가 안 생겨 멀쩡 → **헤드리스 POC는 통과하고 실제 Alpine 페이지만 깨졌다**(실클릭 미검증, T-053).
+
+### 해법
+
+인스턴스를 컴포넌트 팩토리의 **클로저 변수**(반응 밖)로:
+```js
+function myGarden() {
+  let scene = null, game = null;                    // Alpine이 안 건드림(비반응)
+  return { mountPhaser() { scene = new GardenScene(...); game = new Phaser.Game({ scene }); },
+           addFromPalette(o) { if (!scene) return; scene.addPlant(o); } };
+}
+```
+반응이 필요한 표시 상태(`placedKeys` 등)만 `this.*`에 두고 엔진은 클로저로 — **반응/비반응 분리**. Vue면 `markRaw()`/`shallowRef`가 같은 역할.
+
+### 일반화
+
+반응성 프레임워크에 **외부에서 생명주기를 관리하는 가변 인스턴스**(게임엔진·차트·지도·미디어플레이어·WebSocket)를 넣지 말 것. 반응성은 *값*을 추적하라고 있는 것이지 *살아있는 객체*를 감싸라고 있는 게 아니다 — 인스턴스는 ref 밖에 두고 그것이 내는 **이벤트만** 반응 상태로 끌어온다(`onChange → placedKeys`).
+
+### 관련
+
+- **T-053** — 이 버그의 트랩(증상·재현·실클릭 검증) 측면.
+- **N-081** — 같은 정원 Phaser 위젯의 SVG 텍스처 POC(통과했으나 이 버그를 못 잡음 = 헤드리스 사각).
+- **changelog** — Phase 1(#356) 직후 핫픽스.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -3810,3 +3852,4 @@ DOM에 이미 있는 벡터 정의(아이콘 스프라이트 시트, `<symbol>` 
 | 2026-06-14 | N-079 (점진 향상 장식 레이어는 토글 경계 밖에 — 기존 인터랙티브 UI에 순수 배경/무대를 얹을 땐 장식 래퍼를 x-show/x-if·@click 바인딩 DOM 밖에서 감싸기만 / 정원 무대화 A0: 캔버스를 .garden-stage로 래핑, x-show를 캔버스→래퍼로 옮겨도 동작 동일(x-show는 display 토글일 뿐·Alpine 없으면 무시돼 no-JS 폴백 유지) / 덧댄 ::after엔 pointer-events:none로 @click 비간섭 / 검증=편집서 N번 칸 탭→정확히 N번에만 배치(좌표 무결성) / 함정 T-050(perspective가 좌표 깸), 폴백결 N-032, PR #346) |
 | 2026-06-15 | N-080 (검증된 파이프라인의 N축 복제는 새 설계가 아니라 시드+벡터 노동 — 한 축에서 검증된 변경 사슬을 다른 축들로 넓힐 땐 설계 난이도가 아니라 반복 제작량이 비용의 본체 / 정원 SVG: A2가 시간축 14종에 깐 sprite_id 사슬(컬럼→필드→전파→폴백분기→symbol)을 A2 후속이 장르13+다양성12+레시피8=33종에 1:1 복제, 새 판단 0·남는 건 plumbing 한 줄씩 + 33 벡터 찍기 / 리스크 가늠을 "기술 위험"이 아니라 "제작 단위 수×단위당 손"으로 / 스코프(한 PR vs 축별 분리)도 제작량 문제 / TDD는 정식 RED→GREEN 유지·첫 축 테스트를 타 축에 복제, 자산(좌표·색)은 브리틀이라 preview 게이트 분리 / 설계세션≠복제세션(재설계 말고 견적·시각게이트) / N-055 null-state 가드, N-079, PR #351·#354) |
 | 2026-06-15 | N-081 (인라인 SVG `<symbol>`을 캔버스 게임엔진 텍스처로 — 페이지에 이미 인라인된 symbol(또는 임의 SVG 노드)의 innerHTML을 viewBox째 독립 `<svg>` 문자열로 감싸 Blob URL→엔진 이미지 로더(Phaser load.image)에 먹임, 새 에셋·서버왕복 0 / 왜 다시 감싸나=symbol은 비렌더 정의·`<use>`는 외부참조라 엔진 디코더가 못 씀 → self-contained 한 장 SVG여야(내부에 `<use`·외부 그라데이션 섞이면 그 정의도 인라인 필요) / Blob URL이 data-URI보다 큰/다수 SVG에 가볍고 CSP 친화·짧은 세션이면 revoke 생략 무방 / 폴백 불변식 계승=텍스처 있으면 Image·없으면 이모지 Text(N-055) / 헤드리스서 픽셀 못 떠도 texture.getSourceImage().width>0·게임오브젝트 type을 eval로 단언하면 "적재돼 스프라이트됨" 픽셀없이 확정 / 정원 격자→Phaser 자유배치 전환의 최대 리스크 POC였음 / T-052(WebGL 캡처 한계), N-055, PR #356) |
+| 2026-06-15 | N-082 (Alpine/Vue 반응 상태에 Phaser·Chart·Leaflet 같은 라이브러리 인스턴스를 저장하면 reactive Proxy가 깊게 감싸 내부 순환참조(scene.sys↔scene·플러그인)·this 식별이 깨져 조용히 오동작 — 정원 편집서 this.scene/this.game에 Phaser 넣어 팔레트 추가 먹통, 재현서 this.scene===s가 false(Proxy)·부팅 폭주·mountPhaser 중단 / mock은 평범 const라 Proxy 0=정상이라 헤드리스 POC 통과·실페이지만 깸(T-053) / 해법=인스턴스를 반응 밖 클로저 변수(let scene·game)에, 반응 표시상태(placedKeys)만 this.*에 = 반응/비반응 분리, Vue면 markRaw/shallowRef / 일반: 반응성은 값 추적용이지 살아있는 객체 래핑용 아님 → 엔진·차트·맵·소켓은 ref 밖, 이벤트만 끌어옴 / N-081, T-053, PR Phase1 핫픽스) |
