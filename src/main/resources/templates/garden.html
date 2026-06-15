@@ -155,10 +155,11 @@
         <p class="garden-page-progress"
            th:text="'⏳ 시간 ' + ${garden.ownedCount()} + '/' + ${garden.totalCount()}
                + ' · 🌸 장르 ' + ${garden.ownedGenreCount()} + '/' + ${garden.totalGenreCount()}
-               + ' · 🖋️ 작가 ' + ${garden.ownedAuthorCount()} + '/' + ${garden.totalAuthorCount()}
+               + ' · 🖋️ 작가다양성 ' + ${garden.ownedAuthorCount()} + '/' + ${garden.totalAuthorCount()}
                + ' · 🏢 출판사 ' + ${garden.ownedPublisherCount()} + '/' + ${garden.totalPublisherCount()}
+               + ' · 🧑 작가캐릭터 ' + ${garden.ownedAuthorCharacterCount()} + '/' + ${garden.totalAuthorCharacterCount()}
                + ' · 🔍 숨은 레시피 ' + (${garden.recipePlants().size()} - ${garden.mysterySlotCount()}) + '/' + ${garden.recipePlants().size()} + ' 발견'">
-            ⏳ 시간 0/14 · 🌸 장르 0/13 · 🖋️ 작가 0/7 · 🏢 출판사 0/5 · 🔍 숨은 레시피 0/8 발견</p>
+            ⏳ 시간 0/14 · 🌸 장르 0/13 · 🖋️ 작가다양성 0/7 · 🏢 출판사 0/5 · 🧑 작가캐릭터 0/20 · 🔍 숨은 레시피 0/8 발견</p>
 
         <!-- 컨트롤 바: 축 탭 + 보유/미보유 필터. no-JS면 동작 안 하지만 아래가 전부 보여 폴백된다. -->
         <div class="garden-controls">
@@ -167,6 +168,7 @@
                 <button type="button" class="garden-tab" :class="{ active: tab==='time' }" @click="tab='time'">⏳ 시간</button>
                 <button type="button" class="garden-tab" :class="{ active: tab==='genre' }" @click="tab='genre'">🌸 장르</button>
                 <button type="button" class="garden-tab" :class="{ active: tab==='diversity' }" @click="tab='diversity'">🖋️ 작가·출판사</button>
+                <button type="button" class="garden-tab" :class="{ active: tab==='author' }" @click="tab='author'">🧑 작가캐릭터</button>
                 <button type="button" class="garden-tab" :class="{ active: tab==='recipe' }" @click="tab='recipe'">🔍 숨은 레시피</button>
             </div>
             <label class="garden-filter">
@@ -298,6 +300,40 @@
                 </div>
             </div>
             <p class="garden-next">✍️ 다양한 작가·출판사를 완독해 독서의 폭을 넓혀보세요</p>
+        </section>
+
+        <!-- 작가 캐릭터(AUTHOR축) — 특정 작가 완독으로 해금. 이모지 캐릭터 → 저폴리 스프라이트 나중(아트 패스).
+             matchName contains+normalize 매칭이라 "한강 (지은이)" 원문도 잡힌다. -->
+        <section class="garden-axis" x-show="tab==='all' || tab==='author'">
+            <div class="garden-dex-head">
+                <h2 class="garden-axis-title">🧑 작가 캐릭터</h2>
+                <span class="garden-progress"
+                      th:text="${garden.ownedAuthorCharacterCount()} + '/' + ${garden.totalAuthorCharacterCount()} + '명'">0/20명</span>
+            </div>
+            <div class="garden-grid">
+                <div class="plant-cell" th:each="a : ${garden.authorCharacters()}"
+                     th:classappend="${a.owned()} ? 'owned' : 'plant-locked'"
+                     th:attr="x-show='!ownedOnly || ' + ${a.owned()}"
+                     th:title="${a.owned()}
+                         ? ${a.character().getName()}
+                         : (${a.character().getMatchName()} + ' 완독 시')">
+                    <!-- 보유: spriteId 있으면 SVG, 없으면 이모지(B1은 전원 이모지 폴백 — 저폴리 아트 후속). -->
+                    <span class="plant-emoji" th:if="${a.owned()}">
+                        <svg class="plant-svg" th:if="${a.character().getSpriteId() != null}" aria-hidden="true">
+                            <use th:attr="href='#sprite-' + ${a.character().getSpriteId()}"></use>
+                        </svg>
+                        <span th:if="${a.character().getSpriteId() == null}" th:text="${a.character().getEmoji()}">🧑</span>
+                    </span>
+                    <span class="plant-emoji locked" th:unless="${a.owned()}" aria-hidden="true">🔒</span>
+                    <span class="plant-name" th:if="${a.owned()}" th:text="${a.character().getName()}">소설가 한강</span>
+                    <span class="plant-name locked" th:unless="${a.owned()}"
+                          th:text="${a.character().getMatchName()}">한강</span>
+                </div>
+            </div>
+            <p class="garden-next" th:if="${garden.ownedAuthorCharacterCount() < garden.totalAuthorCharacterCount()}">
+                🧑 작가의 책을 완독해 캐릭터를 모아보세요</p>
+            <p class="garden-next" th:if="${garden.ownedAuthorCharacterCount() == garden.totalAuthorCharacterCount() and garden.totalAuthorCharacterCount() > 0}">
+                🎉 모든 작가 캐릭터를 모았어요!</p>
         </section>
 
         <!-- 숨은 레시피(트랙 B) — 완독+읽고싶음 책의 '조합'을 발견하면 얻는 식물. 조건은 숨긴다(발견 자체가 재미).

@@ -16,5 +16,10 @@ public enum PlacementAxis {
     /** 작가·출판사 다양성축({@link DiversityPlant}) — distinct 완독 수로 해금. */
     DIVERSITY,
     /** 레시피축({@link RecipePlant}) — 책 조합 발견으로 보유. */
-    RECIPE
+    RECIPE,
+    /**
+     * 작가 캐릭터축({@link AuthorCharacter}) — 특정 작가 완독으로 해금.
+     * DIVERSITY의 "distinct 작가 수" 카운트 축과 다름 — 이쪽은 특정 작가 1:1 매칭.
+     */
+    AUTHOR
 }

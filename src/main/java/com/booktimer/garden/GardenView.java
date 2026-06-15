@@ -26,6 +26,9 @@ import java.util.List;
  * @param recipePlants    트랙 B 레시피 결과 식물 카탈로그 전체(진열 순서). 미발견은 "???" 슬롯으로 렌더
  * @param mysterySlotCount 미발견 레시피 수(존재·개수는 알리되 조건은 숨김 — 호기심 유도, §2.5)
  * @param justDiscovered  이번 조회에서 새로 발견된 식물 이름들(토스트용, 진열 순서). 없으면 빈 리스트
+ * @param authorCharacters 작가 캐릭터 카탈로그 전체(진열 순서, 보유·미보유 모두) — 도감 그리드 렌더용
+ * @param ownedAuthorCharacterCount  작가 캐릭터 보유 종 수
+ * @param totalAuthorCharacterCount  작가 캐릭터 전체 종 수
  */
 public record GardenView(List<PlantState> plants,
                          int ownedCount,
@@ -43,7 +46,10 @@ public record GardenView(List<PlantState> plants,
                          int totalPublisherCount,
                          List<DiscoveredPlantState> recipePlants,
                          int mysterySlotCount,
-                         List<String> justDiscovered) {
+                         List<String> justDiscovered,
+                         List<AuthorCharacterState> authorCharacters,
+                         int ownedAuthorCharacterCount,
+                         int totalAuthorCharacterCount) {
 
     /**
      * 네 수집축의 <b>보유</b> 식물을 배치용 단일 표현({@link OwnedPlant})으로 평탄화해 모은다.
@@ -78,6 +84,12 @@ public record GardenView(List<PlantState> plants,
             if (s.discovered()) {
                 owned.add(new OwnedPlant(PlacementAxis.RECIPE, s.recipePlant().getCode(),
                         s.recipePlant().getEmoji(), s.recipePlant().getName(), s.recipePlant().getSpriteId()));
+            }
+        }
+        for (AuthorCharacterState s : authorCharacters) {
+            if (s.owned()) {
+                owned.add(new OwnedPlant(PlacementAxis.AUTHOR, s.character().getCode(),
+                        s.character().getEmoji(), s.character().getName(), s.character().getSpriteId()));
             }
         }
         return owned;
