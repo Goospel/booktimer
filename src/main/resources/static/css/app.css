@@ -944,16 +944,18 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .palette-plant.placed { opacity: .4; }
 .palette-plant:disabled { cursor: default; }
 
-/* 태블릿+ 큰 화면: 정원 페이지(/garden)만 넓혀 8열 격자가 펴지고 식물이 커지게 한다.
+/* 태블릿+ 큰 화면: 정원 페이지(/garden)만 넓혀 정원이 커지고 식물이 잘 보이게 한다.
    앱 기본은 모바일-우선 max-width:460px 단일 컬럼이라, 큰 화면에선 정원이 작은 460px 칸에 갇혀
-   8열 격자 식물이 작아 보였다(태블릿 체감 ↑ — 터치로 ~25px 식물 식별·조작이 어려움). garden.html 전용
-   클래스 .container.garden-wide 에만 적용 → 다른 페이지 레이아웃 회귀 0. 컨테이너만 넓히면 SVG(rem 고정)는
-   안 커지므로 식물·팔레트도 함께 키워 셀을 적절히 채운다. min-width 가드라 모바일(<600px)은 기존 그대로. */
+   식물이 작아 보였다(태블릿 체감 ↑ — 터치로 식물 식별·조작이 어려움). garden.html 전용 클래스
+   .container.garden-wide 에만 적용 → 다른 페이지 레이아웃 회귀 0. min-width 가드라 모바일(<600px)은 그대로.
+   편집 모드 Phaser 캔버스(.garden-phaser canvas{width:100%})는 컨테이너가 넓어지면 캔버스도 커지고
+   식물이 FIT 스케일로 비례 확대된다 → '꾸미기' 식물이 커지는 핵심(CSS 추가 불필요). 보기 모드·팔레트·도감은
+   DOM이라 SVG(rem 고정)가 안 커지므로 함께 키운다. */
 @media (min-width: 600px) {
     .container.garden-wide { max-width: 720px; }
-    /* 편집 캔버스 식물(SVG·이모지 폴백) — 셀이 커진 만큼 비례 확대 */
-    .garden-wide .garden-canvas .canvas-plant { font-size: 2rem; }
-    .garden-wide .garden-canvas .canvas-plant .plant-svg { width: 2.3rem; height: 2.3rem; }
+    /* 보기 모드 식물(절대배치 DOM) — 좌표 평면이 커진 만큼 비례 확대 */
+    .garden-wide .garden-view-plant { font-size: 2.3rem; }
+    .garden-wide .garden-view-plant .plant-svg { width: 2.6rem; height: 2.6rem; }
     /* 팔레트(고르는 식물) — 터치 타깃도 함께 키움 */
     .garden-wide .palette-plant { width: 60px; height: 60px; font-size: 2rem; }
     .garden-wide .palette-plant .plant-svg { width: 2.1rem; height: 2.1rem; }
