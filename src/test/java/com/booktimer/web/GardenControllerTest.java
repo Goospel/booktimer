@@ -1,5 +1,6 @@
 package com.booktimer.web;
 
+import com.booktimer.garden.GardenLayoutService;
 import com.booktimer.garden.GardenView;
 import com.booktimer.user.Role;
 import com.booktimer.user.UserRegistrationService;
@@ -112,14 +113,15 @@ class GardenControllerTest {
     }
 
     @Test
-    @DisplayName("GET /garden: 배치 렌더 모델(placedPlants·격자 크기)이 함께 실린다")
+    @DisplayName("GET /garden: 배치 렌더 모델(placedPlants·월드 크기)이 함께 실린다")
     void garden_includesLayoutModel() throws Exception {
         registrationService.register("garden-layout@booktimer.com", "rawpw1234", "정원사", SEOUL, Role.USER, today());
 
         mockMvc.perform(get("/garden").with(user("garden-layout@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(model().attributeExists("placedPlants"))
-                .andExpect(model().attributeExists("gridCells"));
+                .andExpect(model().attribute("worldWidth", GardenLayoutService.WORLD_WIDTH))
+                .andExpect(model().attribute("worldHeight", GardenLayoutService.WORLD_HEIGHT));
     }
 
     @Test
@@ -148,7 +150,7 @@ class GardenControllerTest {
 
         mockMvc.perform(post("/garden/layout").with(user("garden-reject@booktimer.com")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("[{\"axis\":\"TIME\",\"code\":\"sprout\",\"cell\":0}]"))
+                        .content("[{\"axis\":\"TIME\",\"code\":\"sprout\",\"x\":0.5,\"y\":0.5,\"z\":0}]"))
                 .andExpect(status().isBadRequest());
     }
 }
