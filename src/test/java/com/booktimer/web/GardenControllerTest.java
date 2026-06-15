@@ -113,33 +113,48 @@ class GardenControllerTest {
     }
 
     @Test
-    @DisplayName("GET /garden: 배치 렌더 모델(placedPlants·월드 크기)이 함께 실린다")
+    @DisplayName("GET /garden: 배치 렌더 모델(placedItems 통합·소품 카탈로그·월드 크기)이 함께 실린다")
     void garden_includesLayoutModel() throws Exception {
         registrationService.register("garden-layout@booktimer.com", "rawpw1234", "정원사", SEOUL, Role.USER, today());
 
         mockMvc.perform(get("/garden").with(user("garden-layout@booktimer.com")))
                 .andExpect(status().isOk())
-                .andExpect(model().attributeExists("placedPlants"))
+                .andExpect(model().attributeExists("placedItems"))   // 식물+소품 통합(z 병합 정렬)
+                .andExpect(model().attributeExists("decorations"))   // 소품 카탈로그(팔레트)
                 .andExpect(model().attribute("worldWidth", GardenLayoutService.WORLD_WIDTH))
                 .andExpect(model().attribute("worldHeight", GardenLayoutService.WORLD_HEIGHT));
+    }
+
+    @Test
+    @DisplayName("GET /garden: 소품 SVG 스프라이트 정의가 페이지에 주입된다 (Phase 3 — decor 프래그먼트 replace)")
+    void garden_injectsDecorSpriteDefs() throws Exception {
+        registrationService.register("garden-decor-sprites@booktimer.com", "rawpw1234", "정원사", SEOUL, Role.USER, today());
+
+        // 소품 <symbol> 정의는 카탈로그 의존 없이 정적이라 항상 주입된다(보유 무관). 첫·끝 종 id로 확인.
+        String html = mockMvc.perform(get("/garden").with(user("garden-decor-sprites@booktimer.com")))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertThat(html).contains("id=\"sprite-stone_path\""); // 첫 소품
+        assertThat(html).contains("id=\"sprite-mushrooms\"");  // 마지막 소품(13종 전체 주입)
     }
 
     @Test
     @DisplayName("POST /garden/layout: 미인증이면 로그인으로 막힌다 (기본 잠김)")
     void saveLayout_unauthenticated_blocked() throws Exception {
         mockMvc.perform(post("/garden/layout").with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON).content("[]"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/login"));
     }
 
     @Test
-    @DisplayName("POST /garden/layout: 빈 배치 저장은 성공한다 (캔버스 비우기)")
+    @DisplayName("POST /garden/layout: 빈 배치 저장은 성공한다 (캔버스 비우기 — 식물·소품 둘 다 빈 래퍼)")
     void saveLayout_emptyBody_ok() throws Exception {
         registrationService.register("garden-save@booktimer.com", "rawpw1234", "정원사", SEOUL, Role.USER, today());
 
+        // 래퍼 {plants, decorations} — null 종은 빈 리스트로 본다(plantsOrEmpty/decorationsOrEmpty).
         mockMvc.perform(post("/garden/layout").with(user("garden-save@booktimer.com")).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON).content("[]"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"plants\":[],\"decorations\":[]}"))
                 .andExpect(status().isOk());
     }
 
@@ -150,7 +165,18 @@ class GardenControllerTest {
 
         mockMvc.perform(post("/garden/layout").with(user("garden-reject@booktimer.com")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("[{\"axis\":\"TIME\",\"code\":\"sprout\",\"x\":0.5,\"y\":0.5,\"z\":0,\"rotation\":0,\"scale\":1}]"))
+                        .content("{\"plants\":[{\"axis\":\"TIME\",\"code\":\"sprout\",\"x\":0.5,\"y\":0.5,\"z\":0,\"rotation\":0,\"scale\":1}],\"decorations\":[]}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("POST /garden/layout: 카탈로그에 없는 소품 배치 요청은 4xx로 거부된다 (H2엔 소품 카탈로그가 비어 무엇이든 미지)")
+    void saveLayout_unknownDecoration_rejected() throws Exception {
+        registrationService.register("garden-decor-reject@booktimer.com", "rawpw1234", "정원사", SEOUL, Role.USER, today());
+
+        mockMvc.perform(post("/garden/layout").with(user("garden-decor-reject@booktimer.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"plants\":[],\"decorations\":[{\"code\":\"bench\",\"x\":0.5,\"y\":0.5,\"z\":0,\"rotation\":0,\"scale\":1}]}"))
                 .andExpect(status().isBadRequest());
     }
 }

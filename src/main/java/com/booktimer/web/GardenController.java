@@ -1,9 +1,10 @@
 package com.booktimer.web;
 
+import com.booktimer.garden.DecorationOption;
 import com.booktimer.garden.GardenLayoutService;
 import com.booktimer.garden.GardenService;
-import com.booktimer.garden.PlacedPlant;
-import com.booktimer.garden.PlacementRequest;
+import com.booktimer.garden.LayoutSaveRequest;
+import com.booktimer.garden.PlacedItem;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.user.User;
 import org.springframework.http.HttpStatus;
@@ -51,25 +52,31 @@ public class GardenController {
         User user = currentUserService.resolve(principal);
         model.addAttribute("nickname", user.getNickname()); // brand 헤더 인사용(books/dashboard 관례)
         model.addAttribute("garden", gardenService.view(user)); // 대시보드와 동일 view 재사용(팔레트는 garden.ownedPlants())
-        // 내 정원 — 저장된 배치 ∩ 현재 보유(zOrder 오름차순). JS 편집·no-JS 정적 렌더가 같은 좌표 소스를 본다.
-        List<PlacedPlant> placed = gardenLayoutService.layoutOf(user);
-        model.addAttribute("placedPlants", placed);
+        // 내 정원 — 저장된 식물+소품 배치를 z 통합 병합 정렬로(설계 §2 결정 ③). JS 편집·no-JS 정적 렌더가 같은 단일 소스를 본다.
+        List<PlacedItem> placed = gardenLayoutService.layoutItemsOf(user);
+        model.addAttribute("placedItems", placed);
+        // 소품 카탈로그 — 보유 무관이라 전체가 팔레트(식물 팔레트는 garden.ownedPlants()). 편집 진입 시 부트스트랩으로 쓰인다.
+        List<DecorationOption> decorations = gardenLayoutService.decorationCatalog();
+        model.addAttribute("decorations", decorations);
         // 정원 월드 종횡비/픽셀 — 프론트가 정규화 좌표(0~1)를 실제 픽셀로 환산하고 카메라를 핏하는 기준(설계 §2.3).
         model.addAttribute("worldWidth", GardenLayoutService.WORLD_WIDTH);
         model.addAttribute("worldHeight", GardenLayoutService.WORLD_HEIGHT);
         return "garden";
     }
 
-    /** 캔버스 배치 저장 — 편집 모드 "저장"이 현재 배치 전체를 JSON으로 보낸다. 본인 범위 교체 저장(설계 §2.4). */
+    /**
+     * 캔버스 배치 저장 — 편집 모드 "저장"이 식물+소품 전체를 JSON({@link LayoutSaveRequest})으로 보낸다.
+     * 한 트랜잭션에서 본인 범위를 교체 저장한다(설계 §2 결정 ②).
+     */
     @PostMapping("/garden/layout")
     @ResponseBody
-    public ResponseEntity<Void> saveLayout(Principal principal, @RequestBody List<PlacementRequest> requests) {
+    public ResponseEntity<Void> saveLayout(Principal principal, @RequestBody LayoutSaveRequest request) {
         User user = currentUserService.resolve(principal);
-        gardenLayoutService.save(user, requests);
+        gardenLayoutService.saveLayout(user, request);
         return ResponseEntity.ok().build();
     }
 
-    /** 보유하지 않은 식물·좌표 범위 밖·같은 식물 중복 등 잘못된 배치 요청은 400으로 돌려준다(설계 §4). */
+    /** 미보유 식물·미지 소품·좌표 범위 밖·같은 식물 중복·소품 개수 초과 등 잘못된 배치 요청은 400으로 돌려준다(설계 §4·§1). */
     @ExceptionHandler(IllegalArgumentException.class)
     @ResponseBody
     public ResponseEntity<String> handleInvalidPlacement(IllegalArgumentException e) {

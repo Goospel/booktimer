@@ -34,13 +34,111 @@ public class GardenLayoutService {
     public static final int WORLD_WIDTH = 1000;
     /** 정원 월드 세로 픽셀(고정 종횡비 5:4 — 좁은 모바일 폭에서 세로가 과압축돼 답답하던 문제 완화, #356의 640에서 키움). */
     public static final int WORLD_HEIGHT = 800;
+    /** 한 사용자가 놓을 수 있는 소품 최대 개수 — 중복 허용이라 무한이라 남용 방어 cap(설계 §3, Phase 3). 식물은 카탈로그(한 종 한 번)로 자연 제한. */
+    public static final int MAX_DECORATIONS = 200;
 
     private final GardenPlacementRepository placementRepository;
     private final GardenService gardenService;
+    private final DecorationRepository decorationRepository;
+    private final GardenDecorationPlacementRepository decorationPlacementRepository;
 
-    public GardenLayoutService(GardenPlacementRepository placementRepository, GardenService gardenService) {
+    public GardenLayoutService(GardenPlacementRepository placementRepository, GardenService gardenService,
+                               DecorationRepository decorationRepository,
+                               GardenDecorationPlacementRepository decorationPlacementRepository) {
         this.placementRepository = placementRepository;
         this.gardenService = gardenService;
+        this.decorationRepository = decorationRepository;
+        this.decorationPlacementRepository = decorationPlacementRepository;
+    }
+
+    // ── 소품(데코) — 살아있는 정원 게임 Phase 3. 식물과 별 테이블·별 검증(보유 무관·중복 허용, 설계 §1). ──
+
+    /** 소품 카탈로그를 팔레트 옵션으로(진열 순서). 소품은 보유 무관이라 카탈로그 전체가 곧 팔레트다(식물은 보유분만). */
+    public List<DecorationOption> decorationCatalog() {
+        List<DecorationOption> options = new ArrayList<>();
+        for (Decoration d : decorationRepository.findAllByOrderByDisplayOrderAsc()) {
+            options.add(new DecorationOption(d.getCode(), d.getName(), d.getEmoji(), d.getSpriteId()));
+        }
+        return options;
+    }
+
+    /**
+     * 식물+소품을 함께 원자적 교체 저장한다 — 한 트랜잭션에서 식물 경로({@link #save})와 소품 경로({@link #saveDecorations})를
+     * 위임 호출한다(설계 §2 결정 ②). 한쪽 검증이 실패하면 트랜잭션이 롤백돼 전체가 무산된다.
+     */
+    @Transactional
+    public void saveLayout(User user, LayoutSaveRequest req) {
+        save(user, req.plantsOrEmpty());                  // 식물 — 보유 검증·한 식물 한 번(기존 경로 그대로)
+        saveDecorations(user, req.decorationsOrEmpty());  // 소품 — 카탈로그 검증·중복 허용
+    }
+
+    /**
+     * 사용자의 배치를 식물+소품 통합으로, z 오름차순 병합 정렬해 렌더용으로 내준다(설계 §2 결정 ③).
+     * 식물은 보유와 교집합(유령 방지, {@link #layoutOf}), 소품은 현재 카탈로그와 교집합(고아 방지)한다.
+     * 보기 뷰·부트스트랩 JSON이 이 단일 출처를 본다 — 연못은 식물 뒤, 벤치는 식물 앞처럼 두 종이 한 z 공간에서 교차한다.
+     */
+    @Transactional
+    public List<PlacedItem> layoutItemsOf(User user) {
+        List<PlacedItem> items = new ArrayList<>();
+        for (PlacedPlant p : layoutOf(user)) {
+            items.add(PlacedItem.plant(p));
+        }
+        Map<String, Decoration> catalog = decorationByCode();
+        for (GardenDecorationPlacement gd : decorationPlacementRepository.findByUser(user)) {
+            Decoration meta = catalog.get(gd.getDecorationCode());
+            if (meta != null) { // 카탈로그 교집합 — 시드에서 빠진 옛 코드(고아)는 렌더에서 제외(깨진 스프라이트 차단)
+                items.add(PlacedItem.decor(meta, gd));
+            }
+        }
+        items.sort(Comparator.comparingInt(PlacedItem::z)); // 식물·소품 통합 z 오름차순(뒤→앞)
+        return items;
+    }
+
+    /**
+     * 소품 배치를 통째 교체 저장한다 — 본인 범위를 비우고 새 배치를 넣는다. 저장 전 전수 검증: 개수 cap·좌표 범위(0~1)·
+     * 회전(0~360)·크기(0.5~2.0)·카탈로그 존재를 본다(설계 §1·§3). 식물과 달리 <b>보유 검증·중복 거부가 없다</b>
+     * (소품은 보유 무관·중복 허용 — 울타리·디딤돌 여러 개가 정상). 검증 실패 시 저장 전체가 무산된다.
+     */
+    @Transactional
+    void saveDecorations(User user, List<DecorationPlacementRequest> requests) {
+        if (requests.size() > MAX_DECORATIONS) { // 중복 허용이라 무한 → 남용 방어 cap(식물은 카탈로그로 자연 제한)
+            throw new IllegalArgumentException("소품은 최대 " + MAX_DECORATIONS + "개까지 놓을 수 있습니다: " + requests.size());
+        }
+        Map<String, Decoration> catalog = decorationByCode();
+        for (DecorationPlacementRequest r : requests) {
+            if (r.code() == null) {
+                throw new IllegalArgumentException("소품 배치 요청에 코드가 비어 있습니다.");
+            }
+            if (r.x() < 0 || r.x() > 1 || r.y() < 0 || r.y() > 1) {
+                throw new IllegalArgumentException("정규화 범위(0~1)를 벗어난 좌표입니다: (" + r.x() + ", " + r.y() + ")");
+            }
+            if (r.rotation() < 0 || r.rotation() > 360) {
+                throw new IllegalArgumentException("회전 범위(0~360)를 벗어났습니다: " + r.rotation());
+            }
+            if (r.scale() < 0.5 || r.scale() > 2.0) {
+                throw new IllegalArgumentException("크기 범위(0.5~2.0)를 벗어났습니다: " + r.scale());
+            }
+            if (!catalog.containsKey(r.code())) {
+                throw new IllegalArgumentException("카탈로그에 없는 소품은 배치할 수 없습니다: " + r.code());
+            }
+            // 식물과 달리 같은 code 중복을 거부하지 않는다 — 소품은 여러 개가 정상(설계 §1).
+        }
+        // 교체 저장: 본인 범위를 비우고(즉시 실행되는 bulk delete) 새 배치를 삽입한다.
+        decorationPlacementRepository.deleteByUser(user);
+        decorationPlacementRepository.flush();
+        for (DecorationPlacementRequest r : requests) {
+            decorationPlacementRepository.save(
+                    GardenDecorationPlacement.of(user, r.code(), r.x(), r.y(), r.z(), r.rotation(), r.scale()));
+        }
+    }
+
+    /** 소품 카탈로그를 code → 엔티티 맵으로 — 검증·메타 결합 공통 소스. */
+    private Map<String, Decoration> decorationByCode() {
+        Map<String, Decoration> map = new HashMap<>();
+        for (Decoration d : decorationRepository.findAll()) {
+            map.put(d.getCode(), d);
+        }
+        return map;
     }
 
     /**

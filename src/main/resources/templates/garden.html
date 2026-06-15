@@ -35,6 +35,8 @@
 <body>
 <!-- 식물 SVG 스프라이트 정의(A2) — 화면 밖 <symbol>들을 1회 주입, 아래 <use href="#sprite-{code}">가 참조. -->
 <th:block th:replace="~{fragments/garden-sprites :: sprites}"></th:block>
+<!-- 소품 SVG 스프라이트 정의(Phase 3) — 길·연못·울타리 등 13종. 식물과 같은 #sprite-{code} 네임스페이스(코드 전역 유니크). -->
+<th:block th:replace="~{fragments/garden-decor-sprites :: sprites}"></th:block>
 <div class="container garden-wide">
     <header class="brand">
         <a class="brand-home" th:href="@{/}" title="메인 대시보드로">
@@ -68,31 +70,31 @@
              x-show는 무대 래퍼에 둔다(no-JS면 무시돼 그대로 노출 = 점진 향상). -->
         <div class="garden-stage" x-show="!editing">
             <div class="garden-view" th:style="'aspect-ratio:' + ${worldWidth} + ' / ' + ${worldHeight}">
-                <!-- 좌표 절대배치: left/top은 정규화×100%, z-index는 zOrder. .canvas-plant라 sway/그림자 상속(A1·A2). -->
+                <!-- 좌표 절대배치: left/top은 정규화×100%, z-index는 zOrder(식물·소품 통합). 식물=.canvas-plant(sway/그림자 상속 A1·A2),
+                     소품=.canvas-decor(정적 — 연못이 흔들리면 어색). placedItems는 z 오름차순 병합 정렬(식물·소품 교차). -->
                 <!-- wrapper 분리(Phase 2): outer=위치+사용자 변형(rotate/scale 인라인 transform), inner=sway 애니메이션.
                      한 요소에 두면 sway transform이 변형을 덮어 사라지므로 부모-자식으로 나눠 자연 합성한다. -->
-                <span class="garden-view-plant" th:each="p : ${placedPlants}"
-                      th:style="'left:' + ${p.x() * 100} + '%; top:' + ${p.y() * 100} + '%; z-index:' + ${p.z()}
-                          + '; transform: translate(-50%,-50%) rotate(' + ${p.rotation()} + 'deg) scale(' + ${p.scale()} + ')'"
-                      th:title="${p.name()}">
-                    <span class="canvas-plant">
-                        <svg class="plant-svg" th:if="${p.spriteId() != null}" aria-hidden="true">
-                            <use th:attr="href='#sprite-' + ${p.spriteId()}"></use>
+                <span class="garden-view-plant" th:each="it : ${placedItems}"
+                      th:style="'left:' + ${it.x() * 100} + '%; top:' + ${it.y() * 100} + '%; z-index:' + ${it.z()}
+                          + '; transform: translate(-50%,-50%) rotate(' + ${it.rotation()} + 'deg) scale(' + ${it.scale()} + ')'"
+                      th:title="${it.name()}">
+                    <span th:class="${it.kind() == 'plant'} ? 'canvas-plant' : 'canvas-decor'">
+                        <svg class="plant-svg" th:if="${it.spriteId() != null}" aria-hidden="true">
+                            <use th:attr="href='#sprite-' + ${it.spriteId()}"></use>
                         </svg>
-                        <span th:if="${p.spriteId() == null}" th:text="${p.emoji()}">🌱</span>
+                        <span th:if="${it.spriteId() == null}" th:text="${it.emoji()}">🌱</span>
                     </span>
                 </span>
             </div>
         </div>
-        <p class="garden-next" th:if="${#lists.isEmpty(placedPlants)}">
-            <span th:if="${!#lists.isEmpty(garden.ownedPlants())}">아직 빈 정원이에요. 「✏️ 꾸미기」로 모은 식물을 놓아보세요.</span>
-            <span th:if="${#lists.isEmpty(garden.ownedPlants())}">책을 읽어 식물을 모으면 여기에 꾸밀 수 있어요. 🌱</span>
+        <p class="garden-next" th:if="${#lists.isEmpty(placedItems)}">
+            아직 빈 정원이에요. 「✏️ 꾸미기」로 모은 식물과 소품(길·연못·울타리…)을 놓아보세요. 🌱
         </p>
 
         <!-- 편집 모드: Phaser 게임 위젯 + 팔레트. JS 필요 — no-JS면 이 블록은 렌더되지 않는다(점진 향상). -->
         <template x-if="editing">
             <div>
-                <p class="my-garden-hint">팔레트에서 누르면 정원에 놓여요. 끌어 옮기고, 밖으로 끌어내면 거둬요. <b>식물을 탭하면</b> 회전·크기·앞뒤를 바꿀 수 있어요.</p>
+                <p class="my-garden-hint">팔레트에서 누르면 정원에 놓여요. 끌어 옮기고, 밖으로 끌어내면 거둬요. <b>탭하면</b> 회전·크기·앞뒤를 바꿀 수 있어요. <b>소품(길·연못·울타리…)</b>은 여러 개 놓을 수 있어요.</p>
                 <!-- 무대 안에 Phaser 캔버스가 마운트된다(고정 종횡비 컨테이너 → FIT 스케일로 화면에 핏). -->
                 <div class="garden-stage garden-stage-edit">
                     <div id="garden-phaser" class="garden-phaser"
@@ -109,6 +111,8 @@
                     <button type="button" class="garden-tool-btn" @click="backSel()" title="맨 뒤로">⬇</button>
                     <button type="button" class="garden-tool-btn danger" @click="removeSel()" title="거두기">🗑</button>
                 </div>
+                <!-- 식물 팔레트 — 보유분만. 한 식물 한 번이라 놓이면 비활성(.placed). -->
+                <p class="garden-palette-label">🌱 식물</p>
                 <div class="garden-palette">
                     <p class="my-garden-hint" x-show="owned.length === 0">보유한 식물이 없어요 — 책을 읽어 모아보세요.</p>
                     <template x-for="o in owned" :key="o.axis + '/' + o.code">
@@ -121,6 +125,21 @@
                             </template>
                             <template x-if="!o.spriteId">
                                 <span x-text="o.emoji"></span>
+                            </template>
+                        </button>
+                    </template>
+                </div>
+                <!-- 소품 팔레트 — 카탈로그 전체(보유 무관). 중복 허용이라 비활성 없음(누를 때마다 새 인스턴스). -->
+                <p class="garden-palette-label">🪴 소품</p>
+                <div class="garden-palette">
+                    <template x-for="d in decorations" :key="d.code">
+                        <button type="button" class="palette-plant"
+                                @click="addDecorFromPalette(d)" :title="d.name">
+                            <template x-if="d.spriteId">
+                                <svg class="plant-svg" aria-hidden="true"><use :href="'#sprite-' + d.spriteId"></use></svg>
+                            </template>
+                            <template x-if="!d.spriteId">
+                                <span x-text="d.emoji"></span>
                             </template>
                         </button>
                     </template>
@@ -321,8 +340,9 @@
      보기 모드는 위 서버 렌더 .garden-view가 담당하므로, 이 데이터는 편집(Phaser) 진입 시에만 쓰인다. -->
 <script th:inline="javascript">
     window.__garden = {
-        placed: /*[[${placedPlants}]]*/ [],      // [{axis,code,emoji,name,spriteId,x,y,z}] — x·y 정규화(0~1)
-        owned: /*[[${garden.ownedPlants()}]]*/ [],
+        placed: /*[[${placedItems}]]*/ [],          // [{kind,axis,code,emoji,name,spriteId,x,y,z,rotation,scale}] — x·y 정규화(0~1), z 식물·소품 통합
+        owned: /*[[${garden.ownedPlants()}]]*/ [],  // 식물 팔레트(보유분)
+        decorations: /*[[${decorations}]]*/ [],     // 소품 팔레트(카탈로그 전체 — 보유 무관)
         worldWidth: /*[[${worldWidth}]]*/ 1000,
         worldHeight: /*[[${worldHeight}]]*/ 800
     };
@@ -384,20 +404,23 @@
         GardenScene = class extends Phaser.Scene {
             constructor(cfg) {
                 super('garden');
-                this.cfg = cfg;          // { owned, placed, worldW, worldH, onChange }
-                this.plantObjs = [];     // 캔버스에 놓인 식물 게임오브젝트들(추가 순서 = 기본 zOrder)
+                this.cfg = cfg;          // { owned, decorations, placed, worldW, worldH, onChange, onSelect }
+                this.objs = [];          // 캔버스에 놓인 식물·소품 게임오브젝트들(추가 순서 = 기본 zOrder, kind 데이터로 구분)
                 this.ready = false;
             }
             preload() {
-                // 보유 식물 전체의 SVG 텍스처를 미리 적재 — 나중에 팔레트로 추가해도 즉시 그릴 수 있게.
+                // 보유 식물 + 소품 카탈로그 전체의 SVG 텍스처를 미리 적재 — 나중에 팔레트로 추가해도 즉시 그릴 수 있게.
+                // 텍스처 키는 'tex-{spriteId}'로 식물·소품 공통(code 전역 유니크라 충돌 0).
                 const seen = new Set();
-                for (const o of this.cfg.owned) {
-                    if (o.spriteId && !seen.has(o.spriteId)) {
-                        seen.add(o.spriteId);
-                        const url = svgTextureUrl('sprite-' + o.spriteId);
-                        if (url) this.load.image('plant-' + o.spriteId, url);
+                const loadTex = (spriteId) => {
+                    if (spriteId && !seen.has(spriteId)) {
+                        seen.add(spriteId);
+                        const url = svgTextureUrl('sprite-' + spriteId);
+                        if (url) this.load.image('tex-' + spriteId, url);
                     }
-                }
+                };
+                for (const o of this.cfg.owned) loadTex(o.spriteId);
+                for (const d of (this.cfg.decorations || [])) loadTex(d.spriteId);
             }
             create() {
                 // 캔버스 표시 폭에 맞춰 식물 월드 크기를 정한다 — 작은 화면(모바일)일수록 월드px를 키워 화면 표시 크기를 일정하게.
@@ -406,7 +429,7 @@
                 this.drawBackground();
                 for (const p of this.cfg.placed) {
                     const { px, py } = normToPixel(p.x, p.y, this.cfg.worldW, this.cfg.worldH);
-                    this.spawnPlant(p, px, py);
+                    this.spawnObject(p, px, py);   // p.kind로 식물/소품 구분(서버 placedItems)
                 }
                 this.input.on('gameobjectdown', (pointer, obj) => { this._dragged = false; });
                 this.input.on('dragstart', (pointer, obj) => { this._dragged = true; this.bringToFront(obj); });
@@ -433,18 +456,20 @@
                 g.fillStyle(hex(css('--garden-grass')) || 0xCADDB2); g.fillRect(0, H * 0.55, W, H * 0.45);   // 잔디(살짝 겹쳐 경계 부드럽게)
                 g.fillStyle(hex(css('--garden-soil')) || 0xB89576);  g.fillRect(0, H * 0.82, W, H * 0.18);   // 흙 화단 띠
             }
-            // 식물 게임오브젝트 생성 — spriteId 텍스처 있으면 이미지, 없으면 이모지 텍스트. 드래그 가능.
-            spawnPlant(meta, px, py) {
+            // 게임오브젝트 생성(식물·소품 공통, kind 데이터로 구분) — spriteId 텍스처 있으면 이미지, 없으면 이모지 텍스트. 드래그 가능.
+            spawnObject(meta, px, py) {
+                const kind = meta.kind || 'plant';
                 const rotation = clampRotation(meta.rotation || 0);
                 const scale = clampScale(meta.scale || 1);
                 let obj;
-                if (meta.spriteId && this.textures.exists('plant-' + meta.spriteId)) {
-                    obj = this.add.image(px, py, 'plant-' + meta.spriteId).setDisplaySize(this.plantPx * scale, this.plantPx * scale);
+                if (meta.spriteId && this.textures.exists('tex-' + meta.spriteId)) {
+                    obj = this.add.image(px, py, 'tex-' + meta.spriteId).setDisplaySize(this.plantPx * scale, this.plantPx * scale);
                 } else {
                     obj = this.add.text(px, py, meta.emoji || '🌱', { fontSize: Math.round(this.plantPx * 0.8 * scale) + 'px' }).setOrigin(0.5);
                 }
                 obj.setAngle(rotation);
-                obj.setData('axis', meta.axis);
+                obj.setData('kind', kind);
+                obj.setData('axis', meta.axis || null);   // 소품은 축 없음(null)
                 obj.setData('code', meta.code);
                 obj.setData('emoji', meta.emoji);
                 obj.setData('name', meta.name);
@@ -452,36 +477,49 @@
                 obj.setData('rotation', rotation);
                 obj.setData('scale', scale);
                 obj.setInteractive({ draggable: true, useHandCursor: true });
-                this.plantObjs.push(obj);
-                this.restack();   // 새 식물 포함 z-order(depth) 재부여
+                this.objs.push(obj);
+                this.restack();   // 새 오브젝트 포함 z-order(depth) 재부여
                 return obj;
             }
             removePlant(obj) {
-                const i = this.plantObjs.indexOf(obj);
-                if (i >= 0) this.plantObjs.splice(i, 1);
+                const i = this.objs.indexOf(obj);
+                if (i >= 0) this.objs.splice(i, 1);
                 obj.destroy();
                 this.restack();   // 빈 자리 메워 depth = index+1 불변식 유지
             }
-            // 팔레트에서 추가(외부 호출) — 이미 놓인 식물은 무시, 월드 중앙 살짝 위에 놓는다.
+            // 팔레트에서 식물 추가(외부 호출) — 이미 놓인 식물은 무시(한 식물 한 번), 월드 중앙 살짝 위에 놓는다.
             addPlant(meta) {
                 if (!this.ready) return false;
-                if (this.plantObjs.some(o => o.getData('axis') === meta.axis && o.getData('code') === meta.code)) return false;
-                this.spawnPlant(meta, this.cfg.worldW / 2, this.cfg.worldH * 0.55);
+                if (this.objs.some(o => o.getData('kind') === 'plant'
+                        && o.getData('axis') === meta.axis && o.getData('code') === meta.code)) return false;
+                this.spawnObject({ ...meta, kind: 'plant' }, this.cfg.worldW / 2, this.cfg.worldH * 0.55);
                 this.emitChange();
                 return true;
             }
-            // 현재 배치를 저장 payload로 — 추가/앞뒤 순서를 zOrder로, 위치는 정규화(0~1)로.
-            exportPlacements() {
-                return this.plantObjs.map((o, i) => {
-                    const { x, y } = pixelToNorm(o.x, o.y, this.cfg.worldW, this.cfg.worldH);
-                    return { axis: o.getData('axis'), code: o.getData('code'), x, y, z: i,
-                             rotation: o.getData('rotation') || 0, scale: o.getData('scale') || 1 };
-                });
+            // 팔레트에서 소품 추가(외부 호출) — 중복 허용이라 매번 새 인스턴스를 놓는다(보유·중복 가드 없음, 설계 §1).
+            addDecoration(meta) {
+                if (!this.ready) return false;
+                this.spawnObject({ ...meta, kind: 'decor' }, this.cfg.worldW / 2, this.cfg.worldH * 0.55);
+                this.emitChange();
+                return true;
             }
-            // Alpine에 현재 놓인 식물 키 집합을 알린다(팔레트 .placed/비활성 동기화).
+            // 현재 배치를 저장 payload로 — 추가/앞뒤 순서를 전역 zOrder(식물·소품 통합)로, 위치는 정규화(0~1)로. 종별 배열로 나눈다(LayoutSaveRequest).
+            exportPlacements() {
+                const plants = [], decorations = [];
+                this.objs.forEach((o, i) => {
+                    const { x, y } = pixelToNorm(o.x, o.y, this.cfg.worldW, this.cfg.worldH);
+                    const t = { code: o.getData('code'), x, y, z: i,
+                                rotation: o.getData('rotation') || 0, scale: o.getData('scale') || 1 };
+                    if (o.getData('kind') === 'decor') decorations.push(t);
+                    else plants.push({ axis: o.getData('axis'), ...t });
+                });
+                return { plants, decorations };
+            }
+            // Alpine에 현재 놓인 '식물' 키 집합을 알린다(식물 팔레트 .placed/비활성 동기화 — 소품은 중복 허용이라 제외).
             emitChange() {
                 if (this.cfg.onChange) {
-                    this.cfg.onChange(this.plantObjs.map(o => o.getData('axis') + '/' + o.getData('code')));
+                    this.cfg.onChange(this.objs.filter(o => o.getData('kind') === 'plant')
+                            .map(o => o.getData('axis') + '/' + o.getData('code')));
                 }
             }
 
@@ -531,17 +569,17 @@
             // depth 정렬에 덮여 신뢰할 수 없어 쓰지 않는다(moveAbove(obj,bg)가 무동작 → '맨 뒤로' 먹통이었음). T-055.
             restack() {
                 if (this.bg) this.bg.setDepth(0);
-                this.plantObjs.forEach((o, i) => o.setDepth(i + 1));
+                this.objs.forEach((o, i) => o.setDepth(i + 1));
                 if (this._selBox) this._selBox.setDepth(1e6);
             }
             bringToFront(obj) {
-                const i = this.plantObjs.indexOf(obj);
-                if (i >= 0) { this.plantObjs.splice(i, 1); this.plantObjs.push(obj); } // 끝 = export z 최대 = 맨 앞
+                const i = this.objs.indexOf(obj);
+                if (i >= 0) { this.objs.splice(i, 1); this.objs.push(obj); } // 끝 = export z 최대 = 맨 앞
                 this.restack();
             }
             sendToBack(obj) {
-                const i = this.plantObjs.indexOf(obj);
-                if (i >= 0) { this.plantObjs.splice(i, 1); this.plantObjs.unshift(obj); } // 앞 = export z 0 = 맨 뒤
+                const i = this.objs.indexOf(obj);
+                if (i >= 0) { this.objs.splice(i, 1); this.objs.unshift(obj); } // 앞 = export z 0 = 맨 뒤
                 this.restack();
             }
             bringSelectedToFront() { if (this.selected) { this.bringToFront(this.selected); this.highlightSelected(); this.emitChange(); } }
@@ -553,8 +591,9 @@
     // 내 정원 편집 컴포넌트(Alpine). Phaser 인스턴스를 들고 팔레트↔씬을 잇는다.
     // 이 스크립트는 defer 아님 → Alpine(defer) 처리 전에 전역 myGarden이 준비된다.
     function myGarden() {
-        const data = window.__garden || { placed: [], owned: [], worldWidth: 1000, worldHeight: 800 };
-        const placedKeySet = () => new Set((data.placed || []).map(p => p.axis + '/' + p.code));
+        const data = window.__garden || { placed: [], owned: [], decorations: [], worldWidth: 1000, worldHeight: 800 };
+        // 식물 팔레트 비활성 판정용 키 — 소품(kind 'decor')은 중복 허용이라 제외(축이 없어 키도 안 맞음).
+        const placedKeySet = () => new Set((data.placed || []).filter(p => p.kind !== 'decor').map(p => p.axis + '/' + p.code));
         // Phaser 인스턴스(scene·game)는 Alpine 반응 상태(this.*) 밖 클로저 변수에 둔다 — x-data 속성에 넣으면
         // reactive Proxy가 Phaser Scene/Game을 감싸 내부 순환참조가 깨진다(부팅 폭주·팔레트 추가 무반응). N-082.
         let scene = null, game = null;
@@ -563,8 +602,9 @@
             saving: false,
             message: '',
             owned: data.owned || [],
-            placedKeys: placedKeySet(),   // 어떤 식물이 캔버스에 놓였나 — 팔레트 비활성 판정
-            selected: null,               // 선택된 식물 변형 정보({rotation, scale}) — 있으면 변형 툴바 표시(Phaser onSelect 콜백)
+            decorations: data.decorations || [],   // 소품 팔레트(카탈로그 전체 — 보유 무관)
+            placedKeys: placedKeySet(),   // 어떤 식물이 캔버스에 놓였나 — 식물 팔레트 비활성 판정
+            selected: null,               // 선택된 오브젝트 변형 정보({rotation, scale}) — 있으면 변형 툴바 표시(Phaser onSelect 콜백)
 
             isPlaced(o) { return this.placedKeys.has(o.axis + '/' + o.code); },
 
@@ -579,6 +619,7 @@
                 ensureGardenScene();   // Phaser(defer) 로드 후 클래스 1회 정의 — 파싱 시점 'extends Phaser.Scene' 회피
                 scene = new GardenScene({
                     owned: this.owned,
+                    decorations: this.decorations,
                     placed: data.placed || [],
                     worldW: data.worldWidth,
                     worldH: data.worldHeight,
@@ -602,7 +643,12 @@
                 if (!scene || this.isPlaced(o)) return;
                 scene.addPlant(o);
             },
-            // 변형 툴바 — 선택된 식물에 회전·크기·앞뒤·삭제를 적용(scene 위임). scene 없으면 무시.
+            // 소품 팔레트 클릭 — 중복 허용이라 비활성 판정 없이 매번 새 인스턴스 추가(scene 위임).
+            addDecorFromPalette(d) {
+                if (!scene) return;
+                scene.addDecoration(d);
+            },
+            // 변형 툴바 — 선택된 오브젝트(식물·소품)에 회전·크기·앞뒤·삭제를 적용(scene 위임). scene 없으면 무시.
             rotateSel(delta) { if (scene) scene.rotateSelected(delta); },
             scaleSel(delta) { if (scene) scene.scaleSelected(delta); },
             frontSel() { if (scene) scene.bringSelectedToFront(); },
