@@ -32,8 +32,8 @@ public class GardenLayoutService {
 
     /** 정원 월드 가로 픽셀(고정 종횡비 — 프론트 좌표 변환·카메라 핏 기준, 설계 §2.3). */
     public static final int WORLD_WIDTH = 1000;
-    /** 정원 월드 세로 픽셀(고정 종횡비). */
-    public static final int WORLD_HEIGHT = 640;
+    /** 정원 월드 세로 픽셀(고정 종횡비 5:4 — 좁은 모바일 폭에서 세로가 과압축돼 답답하던 문제 완화, #356의 640에서 키움). */
+    public static final int WORLD_HEIGHT = 800;
 
     private final GardenPlacementRepository placementRepository;
     private final GardenService gardenService;
