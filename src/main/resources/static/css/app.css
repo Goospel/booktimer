@@ -980,6 +980,12 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .garden-canvas.editing .canvas-cell.cell-clickable { cursor: grab; }
 .garden-canvas.editing.dragging,
 .garden-canvas.editing.dragging .canvas-cell.cell-clickable { cursor: grabbing; }
+/* 거두기 예고 — 놓인 식물을 캔버스 밖으로 끌어내면(드롭타깃 -1) 붉은 톤으로 "여기서 놓으면 거둠"을 알려 오발 방지. */
+.garden-canvas.editing.drag-removing {
+    outline: 2px dashed rgba(220, 70, 70, .7);
+    outline-offset: 2px;
+    background: rgba(220, 70, 70, .06);
+}
 /* 드롭 예고 하이라이트 — 어느 칸에 놓일지 미리 보여준다. */
 .garden-canvas.editing .canvas-cell.cell-drop-target {
     border-color: var(--accent);

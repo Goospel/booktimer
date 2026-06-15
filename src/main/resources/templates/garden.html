@@ -91,7 +91,9 @@
                 <p class="my-garden-hint">팔레트에서 식물을 고른 뒤 칸을 탭해 놓아요. 놓인 식물을 탭하면 다시 거둬요. 끌어다 빈 칸으로 옮기거나, 휠로 확대해 볼 수도 있어요.</p>
                 <!-- 편집 중에도 같은 무대를 둘러 보기 모드와 일관된 정원 배경 위에서 배치한다(hint·팔레트는 무대 밖). -->
                 <div class="garden-stage">
-                    <div class="garden-canvas editing" :class="{ dragging }" @wheel="onWheel($event)"
+                    <div class="garden-canvas editing"
+                         :class="{ dragging, 'drag-removing': dragging && dropTarget === -1 && dragSource && dragSource.kind === 'cell' }"
+                         @wheel="onWheel($event)"
                          :style="`grid-template-columns: repeat(${columns}, 1fr); transform: scale(${scale})`">
                         <template x-for="i in cells" :key="i">
                             <div class="canvas-cell cell-clickable"
@@ -377,6 +379,44 @@
     }
     // 휠 줌 배율 클램프 — [min,max] 밖으로 못 나가게.
     function clampScale(z, min, max) { return Math.min(max, Math.max(min, z)); }
+
+    // 맵에서 source 와 같은 식물(axis·code 동일)을 모두 떼기 — "한 식물 한 번" 불변식 유지(맵을 직접 변형).
+    function removeSamePlant(map, source) {
+        for (const k in map) {
+            if (map[k].axis === source.axis && map[k].code === source.code) delete map[k];
+        }
+    }
+    // 드롭 결정 — A3 후속의 핵심 순수 함수. (source, target, placements) → 새 placements 맵(입력 불변).
+    // 상태 변경(this.placements 대입)과 결정 로직을 분리해 하니스가 결정만 단독 단언한다.
+    //   source.kind: 'palette'(fromCell 없음) | 'cell'(fromCell 있음)
+    //   target: 격자 인덱스, 또는 -1(캔버스 밖 = 거두기)
+    function resolveDrop(source, target, placements) {
+        const next = { ...placements };                       // 얕은 복제 — 원본 불변
+        const fromCell = source.kind === 'cell' ? source.fromCell : null;
+        const plant = { axis: source.axis, code: source.code, emoji: source.emoji, name: source.name, spriteId: source.spriteId };
+        // 캔버스 밖(-1) = 거두기. 셀 소스만 출발칸 제거(팔레트 소스는 캔버스에 없어 무변경).
+        if (target < 0) {
+            if (source.kind === 'cell' && fromCell != null) delete next[fromCell];
+            return next;
+        }
+        // 자기 칸 제자리 = 무변경.
+        if (target === fromCell) return next;
+        const occupant = next[target];
+        if (occupant) {
+            if (source.kind === 'cell') {                      // 셀→점유칸 = 스왑(둘 다 한 칸씩 유지)
+                next[fromCell] = occupant;
+                next[target] = plant;
+            } else {                                           // 팔레트→점유칸 = 교체(점유자 거둠 + 중복 떼기)
+                removeSamePlant(next, source);
+                next[target] = plant;
+            }
+            return next;
+        }
+        // 빈 칸 이동 — 같은 식물 다른 칸 떼고(한 식물 한 번) target 에 놓기.
+        removeSamePlant(next, source);
+        next[target] = plant;
+        return next;
+    }
     /* @a3-pure-core:end */
 
     // 탭-투-플레이스 편집 컴포넌트. Alpine(defer) 처리 전에 전역으로 정의된다(이 스크립트는 defer 아님).
@@ -460,19 +500,15 @@
                 this.suppressClick = true;                       // 드래그 직후 click 1회 삼킴
                 setTimeout(() => { this.suppressClick = false; }, 0);
             },
-            // 드롭 처리 — 빈 칸 이동만. -1(유효 셀 없음)·점유 칸은 무효 복귀(변화 없음). 점유 칸 교체는 탭이 담당(§2.4).
+            // 드롭 처리 — 결정은 순수 resolveDrop 에 위임하고 여기선 결과 맵을 적용만 한다.
+            //   빈 칸 이동 / 셀→점유칸 스왑 / 팔레트→점유칸 교체 / 밖(-1) 거두기 / 제자리 무변경.
             applyDrop(target) {
                 const s = this.dragSource;
-                if (!s || target < 0) return;
+                if (!s) return;
                 const fromCell = s.kind === 'cell' ? s.fromCell : null;
-                if (this.placements[target] && target !== fromCell) return;  // 점유 칸 = 무효 복귀
-                // 같은 식물이 다른 칸에 있으면 떼기(한 식물 한 번) — 셀 드래그면 출발칸이 곧 제거됨.
-                for (const k in this.placements) {
-                    const p = this.placements[k];
-                    if (p.axis === s.axis && p.code === s.code) delete this.placements[k];
-                }
-                this.placements[target] = { axis: s.axis, code: s.code, emoji: s.emoji, name: s.name, spriteId: s.spriteId };
-                this.justPlaced = target;   // 드롭 pop(@animationend 에서 해제)
+                this.placements = resolveDrop(s, target, this.placements);
+                // 새로 식물이 놓인 칸만 pop(거두기·제자리는 pop 없음).
+                if (target >= 0 && target !== fromCell) this.justPlaced = target;
             },
             onWheel(e) {
                 e.preventDefault();   // 페이지 스크롤 대신 줌
