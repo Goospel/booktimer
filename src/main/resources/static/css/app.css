@@ -889,7 +889,7 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .garden-view-plant {
     position: absolute;
     transform: translate(-50%, -50%);          /* left/top(정규화×100%)을 식물 중심에 정렬 */
-    font-size: 1.7rem;
+    font-size: 2.1rem;
     line-height: 1;
 }
 /* 발밑 타원 그림자 → 식물이 땅에 '선' 입체감(A0 정신). 중심 정렬이라 박스 하단에 둔다. */
@@ -947,9 +947,9 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
    부모(.canvas-plant/.plant-emoji/.palette-plant)의 sway transform을 상속하고,
    <symbol> 내부 fill이 다색 채색을 담당한다(외부 요청 0). */
 .plant-svg { width: 1.5rem; height: 1.5rem; display: block; overflow: visible; }
-.garden-view-plant .plant-svg { width: 1.9rem; height: 1.9rem; }
-.garden-grid .plant-emoji .plant-svg { width: 1.7rem; height: 1.7rem; }
-.garden-palette .palette-plant .plant-svg { width: 1.5rem; height: 1.5rem; }
+.garden-view-plant .plant-svg { width: 2.4rem; height: 2.4rem; }
+.garden-grid .plant-emoji .plant-svg { width: 2rem; height: 2rem; }
+.garden-palette .palette-plant .plant-svg { width: 2.1rem; height: 2.1rem; }
 
 @keyframes garden-sway {
     0%, 100% { transform: rotate(-2.5deg); }
@@ -974,12 +974,12 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     border-radius: var(--radius-sm);
 }
 .palette-plant {
-    width: 44px;
-    height: 44px;
+    width: 54px;
+    height: 54px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.4rem;
+    font-size: 1.8rem;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: #fff;
