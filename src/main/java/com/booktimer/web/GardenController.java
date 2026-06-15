@@ -17,9 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseBody;
 
 import java.security.Principal;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 독서 정원 도감 + 꾸미기(배치) 페이지({@code /garden}).
@@ -53,17 +51,12 @@ public class GardenController {
         User user = currentUserService.resolve(principal);
         model.addAttribute("nickname", user.getNickname()); // brand 헤더 인사용(books/dashboard 관례)
         model.addAttribute("garden", gardenService.view(user)); // 대시보드와 동일 view 재사용(팔레트는 garden.ownedPlants())
-        // 내 정원 — 저장된 배치 ∩ 현재 보유. JS 편집용 리스트 + no-JS 정적 렌더용 셀→식물 맵(둘 다 같은 소스).
+        // 내 정원 — 저장된 배치 ∩ 현재 보유(zOrder 오름차순). JS 편집·no-JS 정적 렌더가 같은 좌표 소스를 본다.
         List<PlacedPlant> placed = gardenLayoutService.layoutOf(user);
-        Map<Integer, PlacedPlant> placedByCell = new LinkedHashMap<>();
-        for (PlacedPlant p : placed) {
-            placedByCell.put(p.cell(), p);
-        }
         model.addAttribute("placedPlants", placed);
-        model.addAttribute("placedByCell", placedByCell);
-        model.addAttribute("gridColumns", GardenLayoutService.GRID_COLUMNS);
-        model.addAttribute("gridRows", GardenLayoutService.GRID_ROWS);
-        model.addAttribute("gridCells", GardenLayoutService.GRID_CELLS);
+        // 정원 월드 종횡비/픽셀 — 프론트가 정규화 좌표(0~1)를 실제 픽셀로 환산하고 카메라를 핏하는 기준(설계 §2.3).
+        model.addAttribute("worldWidth", GardenLayoutService.WORLD_WIDTH);
+        model.addAttribute("worldHeight", GardenLayoutService.WORLD_HEIGHT);
         return "garden";
     }
 
@@ -76,7 +69,7 @@ public class GardenController {
         return ResponseEntity.ok().build();
     }
 
-    /** 보유하지 않은 식물·격자 범위 밖·중복 셀/식물 등 잘못된 배치 요청은 400으로 돌려준다(설계 §4). */
+    /** 보유하지 않은 식물·좌표 범위 밖·같은 식물 중복 등 잘못된 배치 요청은 400으로 돌려준다(설계 §4). */
     @ExceptionHandler(IllegalArgumentException.class)
     @ResponseBody
     public ResponseEntity<String> handleInvalidPlacement(IllegalArgumentException e) {
