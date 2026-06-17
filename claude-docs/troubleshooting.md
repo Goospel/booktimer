@@ -54,6 +54,7 @@
 - [T-056. 전역 button{width:100%} 규칙이 flex 자식 버튼으로 새 풀폭 세로 스택, 컴포넌트에 width:auto로 상쇄](#t-056-전역-buttonwidth100-규칙이-flex-자식-버튼으로-새-풀폭-세로-스택-컴포넌트에-widthauto로-상쇄)
 - [T-057. PowerShell 5.1 Set-Content -Encoding utf8가 BOM 포함 UTF-8을 생성해 커밋 메시지 앞에 BOM 붙음](#t-057-powershell-51-set-content--encoding-utf8가-bom-포함-utf-8을-생성해-커밋-메시지-앞에-bom-붙음)
 - [T-058. SES 프로덕션 액세스 거부 — 케이스 '사례 해결'은 승인이 아니라 요청 포기, '사례 다시 열기'로 상세 보강해 재요청](#t-058-ses-프로덕션-액세스-거부--케이스-사례-해결은-승인이-아니라-요청-포기-사례-다시-열기로-상세-보강해-재요청)
+- [T-059. Thymeleaf `<script>` 안 이중 대괄호 `[[` 표기 — 배열 of 배열·주석 속 공백 `[[ ]]`도 인라인 식으로 파싱됨, object 배열로 교체](#t-059-thymeleaf-script-안-이중-대괄호--표기--배열-of-배열주석-속-공백--도-인라인-식으로-파싱됨-object-배열로-교체)
 
 ---
 
@@ -1134,6 +1135,21 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 
 ---
 
+## T-059. Thymeleaf `<script>` 안 이중 대괄호 `[[` 표기 — 배열 of 배열·주석 속 공백 `[[ ]]`도 인라인 식으로 파싱됨
+
+**증상**: `garden.html`의 `<script>` 내에서 `[[-1,0],[1,0],...]` 형태의 배열 of 배열을 쓰거나, 주석에 `[[ ]]`(공백 포함)를 썼을 때 서버 500 에러. 메시지: `Could not parse as expression: "-1,0],[1,0],..."` 또는 `Could not parse as expression: " "`.
+
+**원인**: Thymeleaf는 `<script>` 블록 내에서도 `[[...]]`를 인라인 식으로 파싱한다. `[[-1,0],[1,0],...]` 배열 of 배열에서 `[[-1,0]`가 `[[expr]]` 인라인 식의 시작으로 인식된다. **주석 안의 `[[ ]]`도 파싱한다** — 공백만 있어도 `expression: " "` 오류가 난다.
+
+**해결**:
+- 배열 of 배열 대신 **object 배열** 사용: `[{dc:-1,dr:0},{dc:1,dr:0},...]`
+- 주석에 `[[` 또는 `]]`이 들어가지 않도록 문구를 수정한다.
+- BFS 방향 벡터·격자 이웃 좌표처럼 2차원 상수를 `<script>` 인라인 상수로 쓸 때 자주 마주치는 패턴이다.
+
+**관련**: `garden.html @free-pure-core` 블록, T-032(Thymeleaf 함정), PR #384.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1197,3 +1213,4 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 | 2026-06-15 | T-056 (전역 button{width:100%}가 .garden-tab(=button)으로 상속되는데 .garden-tab이 padding·radius만 덮고 width를 안 덮어 100% 상속 → .garden-tabs가 flex-wrap이라 풀폭 pill이 각자 한 줄씩 세로로 쌓임(태블릿/PC만 어색, 모바일은 풀폭 세로가 자연스러워 가려짐) / 전역 button{width:100%}는 폼 제출 버튼 기준이라 flex 행·인라인 컴포넌트 버튼(탭·칩·툴바)엔 거의 틀림 → 그런 컴포넌트에 width:auto 명시로 상쇄(.garden-tab{width:auto} 1줄) / 증상 시그니처="넓은 화면에서만 버튼이 풀폭 세로 스택"이면 미디어쿼리 의심 전에 전역 button width부터 / 같은 뿌리 #286(칩 풀폭, 233줄)·배너 버튼(421줄) 반복 / 검증=preview 하니스로 offsetTop·width 값 단언, 자매 시각검증 T-043, PR #368) |
 | 2026-06-16 | T-057 (PowerShell 5.1 Set-Content -Encoding utf8가 UTF-8 with BOM 생성 → 커밋 메시지 첫 글자에 BOM(﻿)이 박혀 git log/GitHub에 `﻿feat:` 표시 / PS 7+는 utf8NoBOM 기본, 5.1은 BOM 붙음 / 해결=Bash 도구 printf 사용 또는 [System.IO.File]::WriteAllText(path,content,UTF8Encoding.new($false)) / git show HEAD --format="%s" | head -c 4 | xxd로 efbbbf면 BOM / T-026·T-044 같은 뿌리(PS 5.1 인코딩), PR #372) |
 | 2026-06-17 | T-058 (SES 프로덕션 액세스 거부 — AWS 지원 케이스 "사례 해결"(Resolve)=요청 포기(케이스 종료)지 승인 아님(답답해도 누르지 말 것)·"고객 작업 완료"=공이 AWS로 넘어감(끝 아님) / AWS "추가 정보 요청"에 상세 없이 "검토만 해달라" 하면 불충분으로 거부("우려 있음, 보안상 사유 비공개" 정형) / 승인 진짜 신호=케이스 아니라 SES 콘솔 Account dashboard "Production access" / 거부돼도 "사례 다시 열기"로 AWS가 물은 4가지(발송 빈도·목록 관리·반송/불만/수신거부·메일 예시) 구체 담아 재요청→보통 24h 재심사 / 개념·토글≠실발송 N-091, N-067·N-071, case 178123901400162) |
+| 2026-06-18 | T-059 (Thymeleaf `<script>` 안 이중 대괄호 `[[..` — 배열 of 배열 `[[-1,0],...]`·주석 속 공백 `[[ ]]` 모두 인라인 식 파싱 오류 / 해결=object 배열 `[{dc:-1,dr:0},...]`·주석 문구 수정 / `garden.html @free-pure-core` nearestFreeCell 방향 벡터 / T-032·PR #384) |

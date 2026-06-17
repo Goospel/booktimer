@@ -77,7 +77,7 @@
                 <span class="garden-view-plant"
                       th:classappend="${it.kind() == 'plant'} ? 'gv-plant' : 'gv-decor'"
                       th:each="it : ${placedItems}"
-                      th:style="'left:' + ${it.isoLeftPct()} + '%; top:' + ${it.isoTopPct()} + '%; z-index:' + ${it.z()}
+                      th:style="'left:' + ${it.isoLeftPct()} + '%; top:' + ${it.isoTopPct()} + '%; z-index:' + ${it.depthZ()}
                           + '; transform: translate(-50%,' + ${it.kind() == 'plant' ? '-100%' : '-50%'} + ') rotate(' + ${it.rotation()} + 'deg) scale(' + ${it.scale()} + ')'"
                       th:title="${it.name()}">
                     <span th:class="${it.kind() == 'plant'} ? 'canvas-plant' : 'canvas-decor'">
@@ -96,7 +96,7 @@
         <!-- 편집 모드: Phaser 게임 위젯 + 팔레트. JS 필요 — no-JS면 이 블록은 렌더되지 않는다(점진 향상). -->
         <template x-if="editing">
             <div>
-                <p class="my-garden-hint">팔레트에서 누르면 정원에 놓여요. 끌어 옮기고, 밖으로 끌어내면 거둬요. <b>탭하면</b> 회전·크기·앞뒤를 바꿀 수 있어요. <b>소품(길·연못·울타리…)</b>은 여러 개 놓을 수 있어요.</p>
+                <p class="my-garden-hint">팔레트에서 누르면 정원에 놓여요. 끌어 옮기고, 밖으로 끌어내면 거둬요. <b>탭하면</b> 회전·크기를 바꿀 수 있어요. <b>소품(길·연못·울타리…)</b>은 여러 개 놓을 수 있어요.</p>
                 <!-- 무대 안에 Phaser 캔버스가 마운트된다(고정 종횡비 컨테이너 → FIT 스케일로 화면에 핏). -->
                 <div class="garden-stage garden-stage-edit">
                     <div id="garden-phaser" class="garden-phaser"
@@ -109,8 +109,6 @@
                     <button type="button" class="garden-tool-btn" @click="rotateSel(15)" title="오른쪽으로 15°">⟳</button>
                     <button type="button" class="garden-tool-btn" @click="scaleSel(-0.1)" title="작게">－</button>
                     <button type="button" class="garden-tool-btn" @click="scaleSel(0.1)" title="크게">＋</button>
-                    <button type="button" class="garden-tool-btn" @click="frontSel()" title="맨 앞으로">⬆</button>
-                    <button type="button" class="garden-tool-btn" @click="backSel()" title="맨 뒤로">⬇</button>
                     <button type="button" class="garden-tool-btn danger" @click="removeSel()" title="거두기">🗑</button>
                 </div>
                 <!-- 식물 팔레트 — 보유분만. 한 식물 한 번이라 놓이면 비활성(.placed). -->
@@ -456,6 +454,33 @@
     function isoPixelToNorm(px, py, worldW, worldH, f = ISO_FLATTEN) {
         return isoToNorm(px / worldW, py / worldH, f);
     }
+    // 드롭 결정 — remove(밖 거두기) / revert(점유 칸 막힘) / place(정상 배치). isOutside가 occupied보다 우선.
+    function resolveDrop(isOutside, occupiedByOther) {
+        if (isOutside) return 'remove';
+        if (occupiedByOther) return 'revert';
+        return 'place';
+    }
+    // 가장 가까운 빈 셀 — 선호 (prefCol, prefRow)에서 링 바깥으로 BFS 탐색. 없으면 null.
+    // 이웃 방향 object 배열 — 이중괄호 표기는 Thymeleaf 인라인 구문과 충돌하므로 object 형태 사용(T-053 선례).
+    function nearestFreeCell(prefCol, prefRow, occupiedSet, cols, rows) {
+        const sc = Math.min(cols - 1, Math.max(0, Math.round(prefCol)));
+        const sr = Math.min(rows - 1, Math.max(0, Math.round(prefRow)));
+        const key = (c, r) => `${c},${r}`;
+        const visited = new Set([key(sc, sr)]);
+        const queue = [{ col: sc, row: sr }];
+        const dirs = [{dc:-1,dr:0},{dc:1,dr:0},{dc:0,dr:-1},{dc:0,dr:1},{dc:-1,dr:-1},{dc:-1,dr:1},{dc:1,dr:-1},{dc:1,dr:1}];
+        while (queue.length > 0) {
+            const { col, row } = queue.shift();
+            if (!occupiedSet.has(key(col, row))) return { col, row };
+            for (const {dc, dr} of dirs) {
+                const nc = col + dc, nr = row + dr;
+                if (nc < 0 || nc >= cols || nr < 0 || nr >= rows) continue;
+                const nk = key(nc, nr);
+                if (!visited.has(nk)) { visited.add(nk); queue.push({ col: nc, row: nr }); }
+            }
+        }
+        return null;
+    }
     /* @free-pure-core:end */
 
     // <symbol id="sprite-{code}">(self-contained path, viewBox 0 0 32 32)를 독립 SVG Blob URL로 직렬화 —
@@ -525,19 +550,42 @@
 
                 // 기존 오브젝트 드래그(이동·snap·거두기)·탭 선택 — 줌/팬과 독립(dragX/dragY는 월드 좌표)
                 this.input.on('gameobjectdown', (pointer, obj) => { this._dragged = false; });
-                this.input.on('dragstart', (pointer, obj) => { this._dragged = true; this.bringToFront(obj); });
+                this.input.on('dragstart', (pointer, obj) => {
+                    this._dragged = true;
+                    obj._homeX = obj.x; obj._homeY = obj.y;
+                    obj._rawX = obj.x; obj._rawY = obj.y;
+                });
                 this.input.on('drag', (pointer, obj, dragX, dragY) => {
+                    obj._rawX = dragX; obj._rawY = dragY;
                     const norm = isoPixelToNorm(dragX, dragY, this.cfg.worldW, this.cfg.worldH);
                     const snapped = snapToCell(norm.x, norm.y, GRID_COLS, GRID_ROWS);
                     const pix = normToIsoPixel(snapped.x, snapped.y, this.cfg.worldW, this.cfg.worldH);
                     obj.x = pix.px; obj.y = pix.py;
+                    // 점유 칸 빨간 경고 — 드래그 중 타깃 셀이 점유면 붉게 표시
+                    const occupied = this.occupiedCells(obj);
+                    const { x: nx, y: ny } = isoPixelToNorm(obj.x, obj.y, this.cfg.worldW, this.cfg.worldH);
+                    const { col, row } = cellOf(nx, ny, GRID_COLS, GRID_ROWS);
+                    if (occupied.has(`${col},${row}`)) obj.setTint(0xff6b6b); else obj.clearTint();
                     if (obj === this.selected) this.highlightSelected();
-                    this.drawShadows();
+                    this.restack();
                 });
                 this.input.on('dragend', (pointer, obj) => {
-                    if (isOutsideWorld(obj.x, obj.y, this.cfg.worldW, this.cfg.worldH)) {
+                    obj.clearTint();
+                    const outside = isOutsideWorld(obj._rawX ?? obj.x, obj._rawY ?? obj.y, this.cfg.worldW, this.cfg.worldH);
+                    const { x: nx, y: ny } = isoPixelToNorm(obj.x, obj.y, this.cfg.worldW, this.cfg.worldH);
+                    const { col, row } = cellOf(nx, ny, GRID_COLS, GRID_ROWS);
+                    const occupiedByOther = !outside && this.occupiedCells(obj).has(`${col},${row}`);
+                    const decision = resolveDrop(outside, occupiedByOther);
+                    if (decision === 'remove') {
                         if (obj === this.selected) this.deselectPlant();
                         this.removePlant(obj);
+                    } else if (decision === 'revert') {
+                        obj.x = obj._homeX; obj.y = obj._homeY;
+                        if (obj === this.selected) this.highlightSelected();
+                        this.restack();
+                    } else {
+                        if (obj === this.selected) this.highlightSelected();
+                        this.restack();
                     }
                     this.emitChange();
                 });
@@ -676,22 +724,28 @@
                 obj.destroy();
                 this.restack();   // 빈 자리 메워 depth = index+1 불변식 유지
             }
-            // 팔레트에서 식물 추가(외부 호출) — 이미 놓인 식물은 무시(한 식물 한 번), 월드 중앙 셀 중심에 놓는다.
+            // 팔레트에서 식물 추가(외부 호출) — 이미 놓인 식물은 무시(한 식물 한 번), 가장 가까운 빈 셀에 놓는다.
             addPlant(meta) {
                 if (!this.ready) return false;
                 if (this.objs.some(o => o.getData('kind') === 'plant'
                         && o.getData('axis') === meta.axis && o.getData('code') === meta.code)) return false;
-                const sn = snapToCell(0.5, 0.55, GRID_COLS, GRID_ROWS);
-                const { px, py } = normToIsoPixel(sn.x, sn.y, this.cfg.worldW, this.cfg.worldH);
+                const pref = cellOf(0.5, 0.55, GRID_COLS, GRID_ROWS);
+                const free = nearestFreeCell(pref.col, pref.row, this.occupiedCells(), GRID_COLS, GRID_ROWS);
+                if (!free) { if (this.cfg.onMessage) this.cfg.onMessage('정원이 가득 찼어요 🌿'); return false; }
+                const center = cellCenter(free.col, free.row, GRID_COLS, GRID_ROWS);
+                const { px, py } = normToIsoPixel(center.x, center.y, this.cfg.worldW, this.cfg.worldH);
                 this.spawnObject({ ...meta, kind: 'plant' }, px, py);
                 this.emitChange();
                 return true;
             }
-            // 팔레트에서 소품 추가(외부 호출) — 중복 허용이라 매번 새 인스턴스를 놓는다(보유·중복 가드 없음, 설계 §1).
+            // 팔레트에서 소품 추가(외부 호출) — 중복 허용이나 각 인스턴스는 빈 셀에 놓는다(겹침 금지).
             addDecoration(meta) {
                 if (!this.ready) return false;
-                const sn = snapToCell(0.5, 0.55, GRID_COLS, GRID_ROWS);
-                const { px, py } = normToIsoPixel(sn.x, sn.y, this.cfg.worldW, this.cfg.worldH);
+                const pref = cellOf(0.5, 0.55, GRID_COLS, GRID_ROWS);
+                const free = nearestFreeCell(pref.col, pref.row, this.occupiedCells(), GRID_COLS, GRID_ROWS);
+                if (!free) { if (this.cfg.onMessage) this.cfg.onMessage('정원이 가득 찼어요 🌿'); return false; }
+                const center = cellCenter(free.col, free.row, GRID_COLS, GRID_ROWS);
+                const { px, py } = normToIsoPixel(center.x, center.y, this.cfg.worldW, this.cfg.worldH);
                 this.spawnObject({ ...meta, kind: 'decor' }, px, py);
                 this.emitChange();
                 return true;
@@ -757,27 +811,24 @@
                 this.applyScale(this.selected, s); this.selected.setData('scale', s);
                 this.notifySelection(); this.emitChange(); this.drawShadows();
             }
-            // z-order는 plantObjs 순서를 단일 출처로 setDepth로 직접 박는다(배경 0·식물 1..n·선택테두리 최상단).
-            // Phaser display-list 재정렬 메서드(children.bringToTop/moveAbove)는 'A가 이미 B 위면 no-op'이고
-            // depth 정렬에 덮여 신뢰할 수 없어 쓰지 않는다(moveAbove(obj,bg)가 무동작 → '맨 뒤로' 먹통이었음). T-055.
+            // 점유 셀 키 Set — 자신(exclude)은 빼고 나머지 오브젝트의 셀키를 반환(드롭·팔레트 추가에서 사용).
+            occupiedCells(exclude = null) {
+                const set = new Set();
+                for (const o of this.objs) {
+                    if (o === exclude) continue;
+                    const { x, y } = isoPixelToNorm(o.x, o.y, this.cfg.worldW, this.cfg.worldH);
+                    const { col, row } = cellOf(x, y, GRID_COLS, GRID_ROWS);
+                    set.add(`${col},${row}`);
+                }
+                return set;
+            }
+            // z-order: y 오름차순 정렬(낮은 y=뒤, 높은 y=앞) — CoC 아이소 자동 깊이(Companion D). T-055.
             restack() {
                 if (this.bg) this.bg.setDepth(0);
-                this.objs.forEach((o, i) => o.setDepth(i + 1));
+                this.objs.slice().sort((a, b) => a.y - b.y).forEach((o, i) => o.setDepth(i + 1));
                 if (this._selBox) this._selBox.setDepth(1e6);
                 this.drawShadows();
             }
-            bringToFront(obj) {
-                const i = this.objs.indexOf(obj);
-                if (i >= 0) { this.objs.splice(i, 1); this.objs.push(obj); } // 끝 = export z 최대 = 맨 앞
-                this.restack();
-            }
-            sendToBack(obj) {
-                const i = this.objs.indexOf(obj);
-                if (i >= 0) { this.objs.splice(i, 1); this.objs.unshift(obj); } // 앞 = export z 0 = 맨 뒤
-                this.restack();
-            }
-            bringSelectedToFront() { if (this.selected) { this.bringToFront(this.selected); this.highlightSelected(); this.emitChange(); } }
-            sendSelectedToBack() { if (this.selected) { this.sendToBack(this.selected); this.highlightSelected(); this.emitChange(); } }
             removeSelected() { if (this.selected) { const o = this.selected; this.deselectPlant(); this.removePlant(o); this.emitChange(); } }
         };
     }
@@ -818,7 +869,8 @@
                     worldW: data.worldWidth,
                     worldH: data.worldHeight,
                     onChange: (keys) => { self.placedKeys = new Set(keys); },
-                    onSelect: (info) => { self.selected = info; }   // null이면 선택 해제(툴바 숨김)
+                    onSelect: (info) => { self.selected = info; },   // null이면 선택 해제(툴바 숨김)
+                    onMessage: (msg) => { self.message = msg; }
                 });
                 game = new Phaser.Game({
                     type: Phaser.AUTO,
@@ -845,8 +897,6 @@
             // 변형 툴바 — 선택된 오브젝트(식물·소품)에 회전·크기·앞뒤·삭제를 적용(scene 위임). scene 없으면 무시.
             rotateSel(delta) { if (scene) scene.rotateSelected(delta); },
             scaleSel(delta) { if (scene) scene.scaleSelected(delta); },
-            frontSel() { if (scene) scene.bringSelectedToFront(); },
-            backSel() { if (scene) scene.sendSelectedToBack(); },
             removeSel() { if (scene) scene.removeSelected(); },
             cancel() {
                 this.destroyPhaser();

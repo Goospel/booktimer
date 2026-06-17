@@ -43,4 +43,5 @@ public record PlacedItem(String kind, PlacementAxis axis, String code, String em
 
     public double isoLeftPct() { return GardenIsoProjection.screenXPercent(x, y); }
     public double isoTopPct()  { return GardenIsoProjection.screenYPercent(x, y); }
+    public int depthZ()        { return (int) Math.round(y() * 10000); }
 }
