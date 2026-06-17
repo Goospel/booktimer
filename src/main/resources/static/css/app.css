@@ -675,38 +675,7 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 }
 .grass-legend i { display: inline-block; }
 
-/* === 독서 정원 (베타) — 잔디 카드 안 접힌 <details> 패널 === */
-/* 처음엔 접혀(베타라 opt-in) 잔디만 보이고, 토글(▸)을 누르면 잔디 아래로 펼쳐진다. JS 0.
-   토글 summary는 카드(.garden-host = .card) "상단 제목 바로 오른쪽"에 absolute로 띄운다 — 우측 끝엔 연속일수
-   뱃지(.grass-streak)가 있어 거기 두면 겹친다(#333 회귀). 그래서 제목 끝(좌측에서 제목 폭만큼)과 연속일수 사이에
-   둔다. 패널은 details가 흐름 끝(잔디 아래)에 그대로라 잔디 바로 아래로 펼쳐진다(summary가 absolute라 흐름 밖 →
-   접힘 시 잔디 아래 공간 비움).
-   ⚠️ 토글 left는 제목 "독서 잔디" 폭에 맞춘 매직넘버 — 제목 문구·폰트가 바뀌면 이 값도 다시 맞춰야 한다. */
-.garden-host { position: relative; }  /* 아래 .garden-toggle(absolute)의 위치 기준 = 이 잔디 카드. 없으면 positioned 조상이 없어 viewport 기준이 돼 토글이 페이지 우측 최상단으로 샌다. */
-.garden { margin: 0; }
-.garden-toggle {
-    position: absolute;
-    top: 26px;                                         /* 제목(.8rem) 세로 중앙에 맞춤(.card padding-top 24px 기준) */
-    left: 6.4rem;                                      /* 카드 콘텐츠 좌단(24px)에서 제목 "독서 잔디" 폭(.8rem·letter-spacing)만큼 오른쪽 = 제목 바로 옆 */
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    cursor: pointer;
-    color: var(--accent);
-    font-size: .85rem;
-    font-weight: 600;
-    list-style: none;                                  /* Firefox 기본 마커 제거 */
-    user-select: none;
-}
-.garden-toggle::-webkit-details-marker { display: none; }  /* WebKit 기본 마커 제거 */
-.garden-toggle:hover { color: var(--accent-hover); }
-.garden-arrow { display: inline-block; transition: transform .15s ease; }
-.garden[open] .garden-arrow { transform: rotate(90deg); }
-
-/* ⚠️ <details> 접힘이 실제로 동작하려면 닫혔을 때 패널을 author 규칙으로 직접 숨긴다 — 자식의
-   display:flex/grid(author)가 UA의 닫힘-숨김(details:not([open])>*{display:none})을 이기는 함정(#193·#698 동일). */
-.garden:not([open]) .garden-panel { display: none; }
-.garden-panel { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+/* === 독서 정원 (베타) === */
 
 .garden-beta {
     margin: 0 0 14px;
@@ -718,18 +687,7 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     font-weight: 600;
     word-break: keep-all;
 }
-.garden-subtitle { margin: 0 0 8px; font-size: .95rem; color: var(--accent-hover); }
-.garden-mine {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 16px;
-    padding: 10px;
-    background: var(--sage-soft);
-    border-radius: var(--radius-sm);
-}
-.garden-mine .plant-emoji { font-size: 1.6rem; line-height: 1.2; }
-.garden-empty { margin: 0 0 16px; color: var(--muted); font-size: .88rem; word-break: keep-all; }
+.garden-link-tile { margin-top: 14px; }
 
 .garden-dex-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .garden-progress { color: var(--muted); font-size: .8rem; white-space: nowrap; }
@@ -770,33 +728,8 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     border-radius: 8px;
 }
 .garden-next { margin: 0; color: var(--muted); font-size: .82rem; word-break: keep-all; }
-/* 트랙 B 발견 토스트 — 이번 조회에서 새로 발견된 숨은 레시피 식물을 알린다. */
-.garden-toast {
-    margin: 0 0 14px;
-    padding: 8px 12px;
-    border-radius: 8px;
-    background: var(--sage-soft);
-    color: var(--accent-hover);
-    font-size: .86rem;
-    font-weight: 600;
-    word-break: keep-all;
-}
 /* 트랙 B 미발견 "???" 미스터리 슬롯 — 조건을 숨긴 채 존재만 흐릿하게 드러낸다. */
 .garden-grid .plant-emoji.mystery { font-size: 1.5rem; line-height: 1.2; opacity: .5; }
-
-/* 대시보드 요약(summary fragment) — 전체 도감은 /garden으로 이전, 카드엔 진척 한 줄 + 도감 링크만 남긴다. */
-.garden-summary-progress { margin: 0 0 12px; color: var(--text); font-size: .86rem; word-break: keep-all; }
-.garden-dex-link {
-    display: inline-block;
-    padding: 8px 14px;
-    background: var(--sage-soft);
-    border-radius: var(--radius-sm);
-    color: var(--accent-hover);
-    font-size: .88rem;
-    font-weight: 600;
-    text-decoration: none;
-}
-.garden-dex-link:hover { background: var(--accent); color: #fff; }
 
 /* === 독서 정원 도감 전용 페이지 (/garden) === */
 /* 축 탭·보유/미보유 필터는 Alpine 클라이언트 토글(x-show). no-JS면 x-show가 무시돼 전부 보이는 폴백(점진 향상). */

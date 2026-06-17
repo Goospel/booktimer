@@ -117,10 +117,7 @@
         </a>
     </nav>
 
-    <!-- 독서 잔디 (지난 1년) — 라이브 영역 밖이라 htmx 무리로드 대상이 아님. /history와 동일 컴포넌트.
-         garden-host = 베타 정원 토글(.garden-toggle)을 제목("독서 잔디") 바로 오른쪽에 absolute로 띄우기 위한 기준
-         (연속일수 뱃지가 있는 우측 끝을 피해 제목 끝과 뱃지 사이에 둬 겹침 방지 — app.css .garden-toggle 참고). -->
-    <section class="card garden-host">
+    <section class="card">
         <div class="grass-head">
             <h2>독서 잔디</h2>
             <span class="grass-streak" th:title="${graph.growthStage().label()}">
@@ -166,9 +163,9 @@
                 </div>
             </div>
         </div>
-        <!-- 베타 독서 정원 요약 — 잔디 아래로 펼쳐지는 접힌 패널(기본 접힘). 토글(정원 ▸)은 제목 옆(좌측) 상단에 absolute.
-             전체 도감(축 탭·필터)은 전용 페이지 /garden으로 이전, 여기엔 미니정원+진척+링크 요약만 싣는다(계획 §0.1). -->
-        <th:block th:replace="~{fragments/garden :: summary(${garden})}"></th:block>
+        <a class="quick-tile garden-link-tile" th:href="@{/garden}">
+            <span class="qt-icon" aria-hidden="true">🌱</span><span class="qt-label">정원</span>
+        </a>
     </section>
 
     <!-- 바로가기: 아이콘+라벨 타일 2열 그리드. 좁은 컬럼에서도 라벨이 글자 단위로
