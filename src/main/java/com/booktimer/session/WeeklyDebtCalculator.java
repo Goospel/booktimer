@@ -64,26 +64,60 @@ public final class WeeklyDebtCalculator {
         return compute(secondsByDate, date -> goalByDate.getOrDefault(date, 0L), today);
     }
 
-    /** 공통 코어 — 날짜→그날 목표를 돌려주는 리졸버로 오늘 부채 + 윈도우 빠뜨린 날을 계산한다. */
+    /**
+     * 공통 코어 — backward-only catch-up 재분배 포함.
+     *
+     * <p>윈도우 날짜별로 원시 부채/초과분을 계산한 뒤, 초과분이 자기보다 오래된 날의 부채를
+     * 오래된 것부터 갚는다. 오늘(가장 나중)의 부채는 갚아 줄 나중 날이 없어 항상 원시값 —
+     * 선납 불가, 즉 어제 많이 읽어도 오늘 카운트다운은 줄지 않는다.
+     */
     private static WeeklyDebt compute(Map<LocalDate, Long> secondsByDate, ToLongFunction<LocalDate> goalForDate, LocalDate today) {
-        long todayDebt = debtOn(today, secondsByDate, goalForDate);
+        // window[0] = 가장 오래된 날(today-6), window[WINDOW_DAYS-1] = today
+        LocalDate[] window = new LocalDate[WINDOW_DAYS];
+        long[] remaining = new long[WINDOW_DAYS];  // 재분배 후 잔여 부채
+        long[] surplusLeft = new long[WINDOW_DAYS]; // 아직 쓰지 않은 초과분
 
-        // 윈도우 내 과거(today-1 .. today-(WINDOW_DAYS-1)) 중 부채가 1분 이상인 날만, 최근이 먼저 오도록.
-        // 1분 미만 부채는 분 단위 목표를 사후에 올려 생긴 "0분 부족" 잔재라 제외한다(MIN_MISSED_DEBT_SECONDS).
+        // 1) 날짜별 원시 부채·초과분. goal<=0(가입 전)이면 둘 다 0(가입 전 독서가 뱅킹에 안 낌).
+        for (int i = 0; i < WINDOW_DAYS; i++) {
+            LocalDate d = today.minusDays(WINDOW_DAYS - 1 - i); // i=0 → 가장 오래됨
+            window[i] = d;
+            long goal = goalForDate.applyAsLong(d);
+            long read = secondsByDate.getOrDefault(d, 0L);
+            if (goal <= 0) {
+                remaining[i] = 0;
+                surplusLeft[i] = 0;
+            } else {
+                remaining[i] = Math.max(0L, goal - read);
+                surplusLeft[i] = Math.max(0L, read - goal);
+            }
+            // 오늘 제외 과거 날의 1분 미만 부채는 목표 인상 반올림 잔재라 0 처리 — 초과분 낭비 방지.
+            int todayIdx = WINDOW_DAYS - 1;
+            if (i < todayIdx && remaining[i] < MIN_MISSED_DEBT_SECONDS) {
+                remaining[i] = 0;
+            }
+        }
+
+        // 2) backward-only 재분배: 오래된 부채(낮은 인덱스)를 나중 날(높은 인덱스) 초과분으로 갚는다.
+        int todayIdx = WINDOW_DAYS - 1;
+        for (int i = 0; i < todayIdx; i++) {          // 과거 날만(오늘 제외), 오래된 것 먼저
+            if (remaining[i] == 0) continue;
+            for (int k = i + 1; k <= todayIdx; k++) { // i보다 나중 날(선납 불가)
+                long pay = Math.min(surplusLeft[k], remaining[i]);
+                remaining[i] -= pay;
+                surplusLeft[k] -= pay;
+                if (remaining[i] == 0) break;
+            }
+        }
+
+        // 3) 결과 조립. 오늘 부채는 갚아줄 나중 날이 없어 항상 원시값.
+        long todayDebt = remaining[todayIdx];
         List<DayDebt> missed = new ArrayList<>();
-        for (int offset = 1; offset < WINDOW_DAYS; offset++) {
-            LocalDate date = today.minusDays(offset);
-            long debt = debtOn(date, secondsByDate, goalForDate);
-            if (debt >= MIN_MISSED_DEBT_SECONDS) {
-                missed.add(new DayDebt(date, debt));
+        for (int i = todayIdx - 1; i >= 0; i--) { // 최근이 먼저(내림차순)
+            if (remaining[i] >= MIN_MISSED_DEBT_SECONDS) {
+                missed.add(new DayDebt(window[i], remaining[i]));
             }
         }
         return new WeeklyDebt(todayDebt, List.copyOf(missed));
     }
 
-    /** 하루 부채 = max(0, 그날 목표 − 그날 읽은 초). 맵에 없는 날은 0 읽음으로 본다. */
-    private static long debtOn(LocalDate date, Map<LocalDate, Long> secondsByDate, ToLongFunction<LocalDate> goalForDate) {
-        long read = secondsByDate.getOrDefault(date, 0L);
-        return Math.max(0L, goalForDate.applyAsLong(date) - read);
-    }
 }

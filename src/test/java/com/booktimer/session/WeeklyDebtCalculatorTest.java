@@ -1,6 +1,7 @@
 package com.booktimer.session;
 
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
@@ -181,5 +182,136 @@ class WeeklyDebtCalculatorTest {
         WeeklyDebt debt = WeeklyDebtCalculator.compute(reads, GOAL, TODAY);
         long expected = 3000L + 600L + 5 * GOAL;
         assertThat(debt.totalDebtSeconds()).isEqualTo(expected);
+    }
+
+    // --- backward-only 뱅킹(과거 메우기) ---
+
+    @Nested
+    @DisplayName("backward-only 뱅킹: 오늘 초과분이 과거 부채를 갚는다")
+    class BankingTests {
+
+        /** 윈도우 7일 모두 GOAL 읽음으로 초기화 — 개별 테스트가 특정 날만 재설정한다. */
+        private Map<LocalDate, Long> allMet() {
+            Map<LocalDate, Long> reads = new HashMap<>();
+            for (int i = 0; i <= 6; i++) {
+                reads.put(TODAY.minusDays(i), GOAL);
+            }
+            return reads;
+        }
+
+        @Test
+        @DisplayName("선납 불가(핵심): 어제 초과분은 오늘 부채를 줄이지 않는다")
+        void yesterdaySurplusDoesNotPayTodayDebt() {
+            Map<LocalDate, Long> reads = allMet();
+            reads.put(TODAY.minusDays(1), GOAL + 1800L); // 어제 30분 초과
+            reads.put(TODAY, 0L);                          // 오늘 읽지 않음
+            WeeklyDebt debt = WeeklyDebtCalculator.compute(reads, GOAL, TODAY);
+            assertThat(debt.todayDebtSeconds()).isEqualTo(GOAL);
+        }
+
+        @Test
+        @DisplayName("오늘 초과분이 어제 부채를 완전히 갚는다 — missed에서 어제 사라짐")
+        void todaySurplusFullyPaysYesterdayDebt() {
+            Map<LocalDate, Long> reads = allMet();
+            reads.put(TODAY.minusDays(1), 0L);   // 어제 부채 3600
+            reads.put(TODAY, GOAL + GOAL);         // 오늘 초과분 3600
+            WeeklyDebt debt = WeeklyDebtCalculator.compute(reads, GOAL, TODAY);
+            assertThat(debt.todayDebtSeconds()).isZero();
+            assertThat(debt.missedDays()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("부분 상환: 오늘 초과분 < 과거 부채 → 과거 부채가 줄고 일부 남음")
+        void todaySurplusPartiallyPaysYesterdayDebt() {
+            Map<LocalDate, Long> reads = allMet();
+            reads.put(TODAY.minusDays(1), 0L);    // 어제 부채 3600
+            reads.put(TODAY, GOAL + 1800L);         // 오늘 초과분 1800
+            WeeklyDebt debt = WeeklyDebtCalculator.compute(reads, GOAL, TODAY);
+            assertThat(debt.missedDays()).anySatisfy(d -> {
+                assertThat(d.date()).isEqualTo(TODAY.minusDays(1));
+                assertThat(d.debtSeconds()).isEqualTo(1800L); // 3600 - 1800
+            });
+        }
+
+        @Test
+        @DisplayName("오래된 것 먼저: 오늘 큰 초과분이 3일전→2일전 순서로 차감된다")
+        void multipleDeficitDays_oldestPaidFirst() {
+            Map<LocalDate, Long> reads = allMet();
+            reads.put(TODAY.minusDays(3), 0L);  // 3일 전 부채 3600
+            reads.put(TODAY.minusDays(2), 0L);  // 2일 전 부채 3600
+            reads.put(TODAY, GOAL + 4000L);      // 초과분 4000 → 3600 + 400
+            WeeklyDebt debt = WeeklyDebtCalculator.compute(reads, GOAL, TODAY);
+            // 오래된 3일 전이 먼저 완전 상환
+            assertThat(debt.missedDays()).extracting(DayDebt::date)
+                    .doesNotContain(TODAY.minusDays(3));
+            // 2일 전은 400 감소, 3200 남음
+            assertThat(debt.missedDays()).anySatisfy(d -> {
+                assertThat(d.date()).isEqualTo(TODAY.minusDays(2));
+                assertThat(d.debtSeconds()).isEqualTo(3200L);
+            });
+        }
+
+        @Test
+        @DisplayName("가입 전(goal 0)일 독서는 잉여로 계산되지 않아 과거 부채를 갚지 않는다")
+        void preRegistrationReading_notCountedAsSurplus() {
+            // 오늘·어제만 목표 존재(goal = 3600), 2일전 이상은 goal 0(가입 전)
+            Map<LocalDate, Long> goalByDate = new HashMap<>();
+            for (int i = 0; i <= 6; i++) {
+                goalByDate.put(TODAY.minusDays(i), i < 2 ? GOAL : 0L);
+            }
+            Map<LocalDate, Long> reads = reads();
+            reads.put(TODAY.minusDays(3), GOAL * 10); // 가입 전 날에 많이 읽음
+            reads.put(TODAY.minusDays(1), 0L);          // 어제 부채 발생
+            reads.put(TODAY, GOAL);                      // 오늘 목표 딱 달성(초과분 없음)
+            WeeklyDebt debt = WeeklyDebtCalculator.compute(reads, goalByDate, TODAY);
+            // 가입 전 독서는 잉여 0 → 어제 부채 그대로 남아야 함
+            assertThat(debt.missedDays()).extracting(DayDebt::date)
+                    .contains(TODAY.minusDays(1));
+        }
+
+        @Test
+        @DisplayName("1분 용서 × 뱅킹: 과거 raw 부채 < 1분인 날은 재분배 대상이 0이라 초과분이 낭비되지 않는다")
+        void subMinutePastDebt_notTargetedByBanking_surplusGoesToOlderDebt() {
+            Map<LocalDate, Long> reads = allMet();
+            reads.put(TODAY.minusDays(1), GOAL - 30L); // 어제 30초 부족 → 1분 미만 용서(재분배 대상 0)
+            reads.put(TODAY.minusDays(2), 0L);           // 2일 전 부채 3600
+            reads.put(TODAY, GOAL + 100L);                // 오늘 초과분 100
+            WeeklyDebt debt = WeeklyDebtCalculator.compute(reads, GOAL, TODAY);
+            // 어제 30초는 0 취급 → 100초 초과분 전부 2일 전 부채에 투입
+            assertThat(debt.missedDays()).extracting(DayDebt::date)
+                    .doesNotContain(TODAY.minusDays(1));
+            assertThat(debt.missedDays()).anySatisfy(d -> {
+                assertThat(d.date()).isEqualTo(TODAY.minusDays(2));
+                assertThat(d.debtSeconds()).isEqualTo(3500L); // 3600 - 100
+            });
+        }
+
+        @Test
+        @DisplayName("상환 후 잔여 부채 < 1분이면 빠뜨린 날 목록에서 제외")
+        void residualDebtBelowMinuteAfterRepayment_excluded() {
+            Map<LocalDate, Long> reads = allMet();
+            reads.put(TODAY.minusDays(2), GOAL - 3000L); // 2일 전 부채 3000초
+            reads.put(TODAY, GOAL + 2955L);                // 오늘 초과분 2955 → 갚고 45초 잔여
+            WeeklyDebt debt = WeeklyDebtCalculator.compute(reads, GOAL, TODAY);
+            // 잔여 45초 < 1분 → 빠뜨린 날 목록에서 제외
+            assertThat(debt.missedDays()).extracting(DayDebt::date)
+                    .doesNotContain(TODAY.minusDays(2));
+        }
+
+        @Test
+        @DisplayName("회귀: 초과분이 없으면 결과가 기존 per-day 독립 부채와 동일")
+        void noSurplus_resultEqualsLegacyPerDayDebt() {
+            Map<LocalDate, Long> reads = reads();
+            reads.put(TODAY, 600L);               // 오늘 부채 3000
+            reads.put(TODAY.minusDays(1), 3000L); // 어제 부채 600
+            // 나머지 5일은 읽지 않아 각 3600 부채
+            WeeklyDebt debt = WeeklyDebtCalculator.compute(reads, GOAL, TODAY);
+            assertThat(debt.todayDebtSeconds()).isEqualTo(3000L);
+            assertThat(debt.missedDays()).anySatisfy(d -> {
+                assertThat(d.date()).isEqualTo(TODAY.minusDays(1));
+                assertThat(d.debtSeconds()).isEqualTo(600L);
+            });
+            assertThat(debt.totalDebtSeconds()).isEqualTo(3000L + 600L + 5 * GOAL);
+        }
     }
 }
