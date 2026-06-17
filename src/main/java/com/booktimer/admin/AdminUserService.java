@@ -8,6 +8,7 @@ import com.booktimer.session.ReadingDebtService;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.session.WeeklyDebt;
+import com.booktimer.session.WeeklyDebtTrace;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -17,6 +18,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -39,17 +43,20 @@ public class AdminUserService {
     private final ReadingSessionRepository sessionRepository;
     private final ReadingTimerRepository timerRepository;
     private final ReadingDebtService debtService;
+    private final Clock clock;
 
     public AdminUserService(UserRepository userRepository,
                             BookRepository bookRepository,
                             ReadingSessionRepository sessionRepository,
                             ReadingTimerRepository timerRepository,
-                            ReadingDebtService debtService) {
+                            ReadingDebtService debtService,
+                            Clock clock) {
         this.userRepository = userRepository;
         this.bookRepository = bookRepository;
         this.sessionRepository = sessionRepository;
         this.timerRepository = timerRepository;
         this.debtService = debtService;
+        this.clock = clock;
     }
 
     /**
@@ -70,6 +77,21 @@ public class AdminUserService {
      */
     public Optional<AdminUserDetail> userDetail(String loginId) {
         return userRepository.findByLoginId(loginId).map(this::assemble);
+    }
+
+    /**
+     * 임의 기준일의 날짜별 부채 추적 뷰. 없는 loginId면 빈 Optional(컨트롤러가 404로 변환).
+     *
+     * @param loginId 조회 대상
+     * @param asOf    기준일. null이면 유저 TZ 오늘
+     */
+    public Optional<AdminDebtView> debtTrace(String loginId, LocalDate asOf) {
+        return userRepository.findByLoginId(loginId).map(u -> {
+            LocalDate today = LocalDate.ofInstant(clock.instant(), ZoneId.of(u.getTimezone()));
+            LocalDate effectiveAsOf = asOf != null ? asOf : today;
+            WeeklyDebtTrace trace = debtService.weeklyDebtTrace(u, effectiveAsOf);
+            return new AdminDebtView(u.getLoginId(), u.getNickname(), effectiveAsOf, today, trace);
+        });
     }
 
     private AdminUserDetail assemble(User u) {
