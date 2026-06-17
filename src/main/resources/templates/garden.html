@@ -413,6 +413,23 @@
     function clampRotation(deg) { const r = deg % 360; return r < 0 ? r + 360 : r; }
     // 사용자 크기 배율 클램프 — 기본 [0.5, 2.0](식물이 깨지거나 화면을 덮지 않게). 보기=기본크기×scale, Phaser=plantPx×scale.
     function clampScale(s, min = 0.5, max = 2.0) { return Math.min(max, Math.max(min, s)); }
+    // 직교 사각 격자 — 1000×800 월드에서 50px 사각 셀(ROWS = 0.8·COLS). 단일 상수, 튜닝 가능.
+    const GRID_COLS = 20, GRID_ROWS = 16;
+    // 정규화 점이 속한 셀 (col,row). 경계·범위 밖은 클램프(끝 셀로 흡수).
+    function cellOf(x, y, cols, rows) {
+        const col = Math.min(cols - 1, Math.max(0, Math.floor(x * cols)));
+        const row = Math.min(rows - 1, Math.max(0, Math.floor(y * rows)));
+        return { col, row };
+    }
+    // 셀 (col,row)의 중심 정규화 좌표(역변환).
+    function cellCenter(col, row, cols, rows) {
+        return { x: (col + 0.5) / cols, y: (row + 0.5) / rows };
+    }
+    // 정규화 점을 가장 가까운 셀 중심으로 스냅(cellOf∘cellCenter 합성).
+    function snapToCell(x, y, cols, rows) {
+        const c = cellOf(x, y, cols, rows);
+        return cellCenter(c.col, c.row, cols, rows);
+    }
     /* @free-pure-core:end */
 
     // <symbol id="sprite-{code}">(self-contained path, viewBox 0 0 32 32)를 독립 SVG Blob URL로 직렬화 —
@@ -463,13 +480,20 @@
                 const canvasCss = this.sys.game.canvas.getBoundingClientRect().width;
                 this.plantPx = plantWorldPx(TARGET_PLANT_CSS, canvasCss, this.cfg.worldW);
                 this.drawBackground();
+                this.drawGrid();
                 for (const p of this.cfg.placed) {
                     const { px, py } = normToPixel(p.x, p.y, this.cfg.worldW, this.cfg.worldH);
                     this.spawnObject(p, px, py);   // p.kind로 식물/소품 구분(서버 placedItems)
                 }
                 this.input.on('gameobjectdown', (pointer, obj) => { this._dragged = false; });
                 this.input.on('dragstart', (pointer, obj) => { this._dragged = true; this.bringToFront(obj); });
-                this.input.on('drag', (pointer, obj, dragX, dragY) => { obj.x = dragX; obj.y = dragY; if (obj === this.selected) this.highlightSelected(); });
+                this.input.on('drag', (pointer, obj, dragX, dragY) => {
+                    const norm = pixelToNorm(dragX, dragY, this.cfg.worldW, this.cfg.worldH);
+                    const snapped = snapToCell(norm.x, norm.y, GRID_COLS, GRID_ROWS);
+                    const pix = normToPixel(snapped.x, snapped.y, this.cfg.worldW, this.cfg.worldH);
+                    obj.x = pix.px; obj.y = pix.py;
+                    if (obj === this.selected) this.highlightSelected();
+                });
                 this.input.on('dragend', (pointer, obj) => {
                     if (isOutsideWorld(obj.x, obj.y, this.cfg.worldW, this.cfg.worldH)) {
                         if (obj === this.selected) this.deselectPlant();
@@ -491,6 +515,21 @@
                 g.fillStyle(hex(css('--garden-sky')) || 0xDCEAF0);   g.fillRect(0, 0, W, H * 0.60);          // 하늘
                 g.fillStyle(hex(css('--garden-grass')) || 0xCADDB2); g.fillRect(0, H * 0.55, W, H * 0.45);   // 잔디(살짝 겹쳐 경계 부드럽게)
                 g.fillStyle(hex(css('--garden-soil')) || 0xB89576);  g.fillRect(0, H * 0.82, W, H * 0.18);   // 흙 화단 띠
+            }
+            drawGrid() {
+                const W = this.cfg.worldW, H = this.cfg.worldH;
+                const cellPx = W / GRID_COLS;
+                const g = this.add.graphics();
+                g.setDepth(0.5);
+                g.lineStyle(1, 0x2e7d32, 0.12);
+                for (let col = 0; col <= GRID_COLS; col++) {
+                    const x = col * cellPx;
+                    g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.strokePath();
+                }
+                for (let row = 0; row <= GRID_ROWS; row++) {
+                    const y = row * cellPx;
+                    g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.strokePath();
+                }
             }
             // 게임오브젝트 생성(식물·소품 공통, kind 데이터로 구분) — spriteId 텍스처 있으면 이미지, 없으면 이모지 텍스트. 드래그 가능.
             spawnObject(meta, px, py) {
@@ -523,19 +562,23 @@
                 obj.destroy();
                 this.restack();   // 빈 자리 메워 depth = index+1 불변식 유지
             }
-            // 팔레트에서 식물 추가(외부 호출) — 이미 놓인 식물은 무시(한 식물 한 번), 월드 중앙 살짝 위에 놓는다.
+            // 팔레트에서 식물 추가(외부 호출) — 이미 놓인 식물은 무시(한 식물 한 번), 월드 중앙 셀 중심에 놓는다.
             addPlant(meta) {
                 if (!this.ready) return false;
                 if (this.objs.some(o => o.getData('kind') === 'plant'
                         && o.getData('axis') === meta.axis && o.getData('code') === meta.code)) return false;
-                this.spawnObject({ ...meta, kind: 'plant' }, this.cfg.worldW / 2, this.cfg.worldH * 0.55);
+                const sn = snapToCell(0.5, 0.55, GRID_COLS, GRID_ROWS);
+                const { px, py } = normToPixel(sn.x, sn.y, this.cfg.worldW, this.cfg.worldH);
+                this.spawnObject({ ...meta, kind: 'plant' }, px, py);
                 this.emitChange();
                 return true;
             }
             // 팔레트에서 소품 추가(외부 호출) — 중복 허용이라 매번 새 인스턴스를 놓는다(보유·중복 가드 없음, 설계 §1).
             addDecoration(meta) {
                 if (!this.ready) return false;
-                this.spawnObject({ ...meta, kind: 'decor' }, this.cfg.worldW / 2, this.cfg.worldH * 0.55);
+                const sn = snapToCell(0.5, 0.55, GRID_COLS, GRID_ROWS);
+                const { px, py } = normToPixel(sn.x, sn.y, this.cfg.worldW, this.cfg.worldH);
+                this.spawnObject({ ...meta, kind: 'decor' }, px, py);
                 this.emitChange();
                 return true;
             }
