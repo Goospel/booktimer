@@ -54,6 +54,9 @@
             <tr><th>오늘 부채</th><td th:text="${detail.timer.todayDebtSeconds / 60} + '분'">0분</td></tr>
             <tr><th>이번 주 부채(합)</th><td th:text="${detail.timer.weeklyDebtSeconds / 60} + '분'">0분</td></tr>
         </table>
+        <p style="margin-top:0.6rem;" th:if="${detail.timer != null}">
+            <a th:href="@{/admin/users/{loginId}/debt(loginId=${detail.loginId})}">부채 진단(날짜별) 보기 →</a>
+        </p>
     </section>
 
     <section class="card">

@@ -128,4 +128,61 @@ class ReadingDebtServiceTest {
                 .doesNotContain(TODAY_KST.minusDays(3), TODAY_KST.minusDays(4),
                         TODAY_KST.minusDays(5), TODAY_KST.minusDays(6));
     }
+
+    // --- weeklyDebtTrace(user, asOf) ---
+
+    @Test
+    @DisplayName("weeklyDebtTrace: asOf 윈도우(asOf-6..asOf)로 trace를 구성한다")
+    void weeklyDebtTrace_buildsAsOfWindow() {
+        LocalDate asOf = TODAY_KST.minusDays(2); // 이틀 전 기준
+        ReadingTimer timer = ReadingTimer.of(GOAL);
+        when(timerRepository.findByUser(user)).thenReturn(Optional.of(timer));
+        when(goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of());
+        when(historyService.dailyHistory(user)).thenReturn(List.of());
+
+        WeeklyDebtTrace trace = service.weeklyDebtTrace(user, asOf);
+
+        assertThat(trace.days()).hasSize(WeeklyDebtCalculator.WINDOW_DAYS);
+        assertThat(trace.days().get(WeeklyDebtCalculator.WINDOW_DAYS - 1).date()).isEqualTo(asOf);
+        assertThat(trace.days().get(0).date()).isEqualTo(asOf.minusDays(WeeklyDebtCalculator.WINDOW_DAYS - 1));
+        assertThat(trace.days().get(WeeklyDebtCalculator.WINDOW_DAYS - 1).isToday()).isTrue(); // asOf = trace의 "today"
+    }
+
+    @Test
+    @DisplayName("weeklyDebtTrace: baseline 이전 날은 goal=0으로 구성(빠뜨린 날 제외)")
+    void weeklyDebtTrace_daysBeforeBaseline_goalZero() {
+        LocalDate asOf = TODAY_KST;
+        ReadingTimer timer = ReadingTimer.of(GOAL);
+        when(timerRepository.findByUser(user)).thenReturn(Optional.of(timer));
+        when(goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of(
+                ReadingGoalChange.of(user, TODAY_KST.minusDays(2), GOAL)));
+        when(historyService.dailyHistory(user)).thenReturn(List.of());
+
+        WeeklyDebtTrace trace = service.weeklyDebtTrace(user, asOf);
+
+        // baseline 이전(today-3..today-6)은 goal=0이라 deficit 없음
+        for (int i = 3; i <= 6; i++) {
+            int idx = WeeklyDebtCalculator.WINDOW_DAYS - 1 - i;
+            assertThat(trace.days().get(idx).goalSeconds()).isZero();
+            assertThat(trace.days().get(idx).rawDeficitSeconds()).isZero();
+        }
+        // baseline 이후(today-2, today-1, today)는 goal=GOAL
+        assertThat(trace.days().get(WeeklyDebtCalculator.WINDOW_DAYS - 3).goalSeconds()).isEqualTo(GOAL);
+    }
+
+    @Test
+    @DisplayName("weeklyDebtTrace: weeklyDebt(User)와 결과 동치 — asOf=today이면 같은 계산")
+    void weeklyDebtTrace_nullAsOf_sameAsWeeklyDebt() {
+        ReadingTimer timer = ReadingTimer.of(GOAL);
+        when(timerRepository.findByUser(user)).thenReturn(Optional.of(timer));
+        when(goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of());
+        when(historyService.dailyHistory(user)).thenReturn(List.of(
+                new DailyReadingRecord(TODAY_KST, 1200L, List.of())));
+
+        WeeklyDebt byWeeklyDebt = service.weeklyDebt(user);
+        WeeklyDebt byTrace = service.weeklyDebtTrace(user, TODAY_KST).toWeeklyDebt();
+
+        assertThat(byTrace.todayDebtSeconds()).isEqualTo(byWeeklyDebt.todayDebtSeconds());
+        assertThat(byTrace.totalDebtSeconds()).isEqualTo(byWeeklyDebt.totalDebtSeconds());
+    }
 }

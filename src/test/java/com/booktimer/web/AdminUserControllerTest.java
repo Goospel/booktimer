@@ -95,4 +95,51 @@ class AdminUserControllerTest {
         mockMvc.perform(get("/admin/users/{loginId}", "nosuchid").with(user("boss").roles("ADMIN")))
                 .andExpect(status().isNotFound());
     }
+
+    // --- /admin/users/{loginId}/debt ---
+
+    @Test
+    @DisplayName("GET /admin/users/{loginId}/debt: 미인증이면 로그인으로 리다이렉트")
+    void debt_unauthenticated_redirects() throws Exception {
+        registrationService.register("debt@booktimer.com", "rawpw1234", "debtuser", "부채", SEOUL, Role.USER, today());
+        mockMvc.perform(get("/admin/users/{loginId}/debt", "debtuser"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    @DisplayName("GET /admin/users/{loginId}/debt: 일반 USER는 403 금지")
+    void debt_user_forbidden() throws Exception {
+        mockMvc.perform(get("/admin/users/{loginId}/debt", "anyone").with(user("u@booktimer.com")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("GET /admin/users/{loginId}/debt: ADMIN은 200, debt 모델에 실린다")
+    void debt_admin_ok() throws Exception {
+        registrationService.register("debt2@booktimer.com", "rawpw1234", "debtuser2", "부채2", SEOUL, Role.USER, today());
+        mockMvc.perform(get("/admin/users/{loginId}/debt", "debtuser2").with(user("boss").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(view().name("admin-user-debt"))
+                .andExpect(model().attributeExists("debt"));
+    }
+
+    @Test
+    @DisplayName("GET /admin/users/{loginId}/debt: 없는 loginId면 404")
+    void debt_unknownLoginId_404() throws Exception {
+        mockMvc.perform(get("/admin/users/{loginId}/debt", "nosuchuser").with(user("boss").roles("ADMIN")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("GET /admin/users/{loginId}/debt: ?asOf=2026-06-17 파싱 — 해당 날짜 윈도우 반환")
+    void debt_asOfParam_parsed() throws Exception {
+        registrationService.register("debt3@booktimer.com", "rawpw1234", "debtuser3", "부채3", SEOUL, Role.USER, today());
+        mockMvc.perform(get("/admin/users/{loginId}/debt", "debtuser3")
+                        .param("asOf", "2026-06-17")
+                        .with(user("boss").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(view().name("admin-user-debt"))
+                .andExpect(model().attributeExists("debt"));
+    }
 }

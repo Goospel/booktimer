@@ -16,6 +16,9 @@ import java.util.function.ToLongFunction;
  *
  * <p>"오늘"은 서버 UTC가 아니라 유저 타임존 자정 경계로 정해져야 하므로(N-010) 호출자가 결정해 넘긴다.
  * 그날 읽은 초는 완료 세션을 유저 타임존 일자로 묶은 값({@link ReadingHistoryService})에서 온다.
+ *
+ * <p>진단·관찰성: {@link #computeTrace}가 날짜별 원시 값과 재분배 상세를 {@link WeeklyDebtTrace}로 반환한다.
+ * 기존 {@link #compute} 오버로드들은 {@code computeTrace(...).toWeeklyDebt()}로 유도되어 단일 출처를 보장한다.
  */
 public final class WeeklyDebtCalculator {
 
@@ -65,17 +68,48 @@ public final class WeeklyDebtCalculator {
     }
 
     /**
-     * 공통 코어 — backward-only catch-up 재분배 포함.
+     * 날짜별 목표로 {@link WeeklyDebtTrace}를 만든다 — 원시 부채/초과·재분배 상세까지 포함.
+     *
+     * <p>기존 {@link #compute(Map, Map, LocalDate)}와 동일 경로를 거쳐 {@link WeeklyDebt}를 유도할 수 있어
+     * 진단 뷰와 라이브 대시보드가 항상 동일 값을 보인다.
+     *
+     * @param secondsByDate 날짜→그날 읽은 초
+     * @param goalByDate    날짜→그날 목표(초). 없는 날은 0
+     * @param today         기준일(유저 타임존 오늘 or as-of 날짜)
+     */
+    public static WeeklyDebtTrace computeTrace(Map<LocalDate, Long> secondsByDate,
+                                               Map<LocalDate, Long> goalByDate,
+                                               LocalDate today) {
+        return computeTraceInternal(secondsByDate, date -> goalByDate.getOrDefault(date, 0L), today);
+    }
+
+    /**
+     * 공통 코어 — backward-only catch-up 재분배 포함. trace.toWeeklyDebt()로 결과를 유도한다.
+     */
+    private static WeeklyDebt compute(Map<LocalDate, Long> secondsByDate, ToLongFunction<LocalDate> goalForDate, LocalDate today) {
+        return computeTraceInternal(secondsByDate, goalForDate, today).toWeeklyDebt();
+    }
+
+    /**
+     * trace 생성 코어. backward-only 재분배 포함.
      *
      * <p>윈도우 날짜별로 원시 부채/초과분을 계산한 뒤, 초과분이 자기보다 오래된 날의 부채를
      * 오래된 것부터 갚는다. 오늘(가장 나중)의 부채는 갚아 줄 나중 날이 없어 항상 원시값 —
      * 선납 불가, 즉 어제 많이 읽어도 오늘 카운트다운은 줄지 않는다.
      */
-    private static WeeklyDebt compute(Map<LocalDate, Long> secondsByDate, ToLongFunction<LocalDate> goalForDate, LocalDate today) {
+    private static WeeklyDebtTrace computeTraceInternal(Map<LocalDate, Long> secondsByDate,
+                                                        ToLongFunction<LocalDate> goalForDate,
+                                                        LocalDate today) {
         // window[0] = 가장 오래된 날(today-6), window[WINDOW_DAYS-1] = today
         LocalDate[] window = new LocalDate[WINDOW_DAYS];
-        long[] remaining = new long[WINDOW_DAYS];  // 재분배 후 잔여 부채
+        long[] remaining = new long[WINDOW_DAYS];   // 재분배 후 잔여 부채
         long[] surplusLeft = new long[WINDOW_DAYS]; // 아직 쓰지 않은 초과분
+        long[] rawDeficit = new long[WINDOW_DAYS];
+        long[] rawSurplus = new long[WINDOW_DAYS];
+        long[] goalArr = new long[WINDOW_DAYS];
+        long[] readArr = new long[WINDOW_DAYS];
+        boolean[] forgiven = new boolean[WINDOW_DAYS];
+        int todayIdx = WINDOW_DAYS - 1;
 
         // 1) 날짜별 원시 부채·초과분. goal<=0(가입 전)이면 둘 다 0(가입 전 독서가 뱅킹에 안 낌).
         for (int i = 0; i < WINDOW_DAYS; i++) {
@@ -83,22 +117,24 @@ public final class WeeklyDebtCalculator {
             window[i] = d;
             long goal = goalForDate.applyAsLong(d);
             long read = secondsByDate.getOrDefault(d, 0L);
+            goalArr[i] = goal;
+            readArr[i] = read;
             if (goal <= 0) {
-                remaining[i] = 0;
-                surplusLeft[i] = 0;
+                // rawDeficit, rawSurplus, remaining, surplusLeft 모두 0 (Java 기본값)
             } else {
-                remaining[i] = Math.max(0L, goal - read);
-                surplusLeft[i] = Math.max(0L, read - goal);
+                rawDeficit[i] = Math.max(0L, goal - read);
+                rawSurplus[i] = Math.max(0L, read - goal);
+                remaining[i] = rawDeficit[i];
+                surplusLeft[i] = rawSurplus[i];
             }
             // 오늘 제외 과거 날의 1분 미만 부채는 목표 인상 반올림 잔재라 0 처리 — 초과분 낭비 방지.
-            int todayIdx = WINDOW_DAYS - 1;
-            if (i < todayIdx && remaining[i] < MIN_MISSED_DEBT_SECONDS) {
+            if (i < todayIdx && remaining[i] > 0 && remaining[i] < MIN_MISSED_DEBT_SECONDS) {
+                forgiven[i] = true;
                 remaining[i] = 0;
             }
         }
 
         // 2) backward-only 재분배: 오래된 부채(낮은 인덱스)를 나중 날(높은 인덱스) 초과분으로 갚는다.
-        int todayIdx = WINDOW_DAYS - 1;
         for (int i = 0; i < todayIdx; i++) {          // 과거 날만(오늘 제외), 오래된 것 먼저
             if (remaining[i] == 0) continue;
             for (int k = i + 1; k <= todayIdx; k++) { // i보다 나중 날(선납 불가)
@@ -109,15 +145,21 @@ public final class WeeklyDebtCalculator {
             }
         }
 
-        // 3) 결과 조립. 오늘 부채는 갚아줄 나중 날이 없어 항상 원시값.
-        long todayDebt = remaining[todayIdx];
-        List<DayDebt> missed = new ArrayList<>();
-        for (int i = todayIdx - 1; i >= 0; i--) { // 최근이 먼저(내림차순)
-            if (remaining[i] >= MIN_MISSED_DEBT_SECONDS) {
-                missed.add(new DayDebt(window[i], remaining[i]));
-            }
+        // 3) trace 조립. surplusConsumed = rawSurplus - surplusLeft(재분배에 쓴 양).
+        List<DayDebtTrace> days = new ArrayList<>(WINDOW_DAYS);
+        for (int i = 0; i < WINDOW_DAYS; i++) {
+            days.add(new DayDebtTrace(
+                    window[i],
+                    i == todayIdx,
+                    goalArr[i],
+                    readArr[i],
+                    rawDeficit[i],
+                    rawSurplus[i],
+                    forgiven[i],
+                    remaining[i],
+                    rawSurplus[i] - surplusLeft[i]
+            ));
         }
-        return new WeeklyDebt(todayDebt, List.copyOf(missed));
+        return new WeeklyDebtTrace(List.copyOf(days));
     }
-
 }

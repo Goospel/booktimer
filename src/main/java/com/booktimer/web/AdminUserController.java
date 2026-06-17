@@ -1,11 +1,13 @@
 package com.booktimer.web;
 
+import com.booktimer.admin.AdminDebtView;
 import com.booktimer.admin.AdminUserDetail;
 import com.booktimer.admin.AdminUserRow;
 import com.booktimer.admin.AdminUserService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -13,6 +15,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.time.LocalDate;
 
 /**
  * 관리자 데이터 조회 — 사용자 목록 + 드릴다운 (admin-data-lookup-design §2).
@@ -53,5 +57,16 @@ public class AdminUserController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다"));
         model.addAttribute("detail", detail);
         return "admin-user-detail";
+    }
+
+    @GetMapping("/admin/users/{loginId}/debt")
+    public String userDebt(@PathVariable("loginId") String loginId,
+                           @RequestParam(value = "asOf", required = false)
+                           @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOf,
+                           Model model) {
+        AdminDebtView debt = adminUserService.debtTrace(loginId, asOf)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다"));
+        model.addAttribute("debt", debt);
+        return "admin-user-debt";
     }
 }

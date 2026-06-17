@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <th:block th:replace="~{analytics :: gtag}"></th:block>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="'@' + ${debt.loginId} + ' 부채 진단 — 관리자'">부채 진단 — 관리자</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+    <style>
+        .debt-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin-top: 0.6rem; }
+        .debt-table th, .debt-table td { padding: 0.4rem 0.55rem; border-bottom: 1px solid rgba(0,0,0,0.08); text-align: right; }
+        .debt-table th:first-child, .debt-table td:first-child { text-align: left; }
+        .debt-table th { font-size: 0.78rem; opacity: 0.7; font-weight: 600; }
+        .debt-table tr.today-row td { background: rgba(0,120,255,0.06); font-weight: 600; }
+        .badge-forgiven { font-size: 0.75rem; opacity: 0.6; }
+        .nav-row { display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap; margin-top: 0.5rem; }
+        .asof-form { display: flex; gap: 0.5rem; align-items: center; }
+        .asof-form input[type=date] { padding: 0.3rem 0.5rem; border: 1px solid rgba(0,0,0,0.2); border-radius: 6px; font-size: 0.9rem; }
+        .summary-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.4rem; }
+        .chip { font-size: 0.85rem; padding: 0.3rem 0.6rem; border-radius: 8px; background: rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.06); }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <span class="emoji">📊</span>
+        <h1 th:text="'@' + ${debt.loginId} + ' — 부채 진단'">부채 진단</h1>
+    </header>
+
+    <section class="card">
+        <div class="nav-row">
+            <a th:href="@{/admin/users/{loginId}(loginId=${debt.loginId})}">← 유저 상세로</a>
+            <span class="muted" th:text="'(' + ${debt.nickname} + ')'">닉네임</span>
+        </div>
+
+        <!-- 기준일 폼 -->
+        <form class="asof-form" method="get" style="margin-top:1rem;">
+            <label style="font-size:0.9rem; font-weight:600;">기준일</label>
+            <input type="date" name="asOf" th:value="${#temporals.format(debt.asOf,'yyyy-MM-dd')}">
+            <button type="submit" class="btn btn-sm">조회</button>
+        </form>
+
+        <!-- 빠른 이동 -->
+        <div class="nav-row" style="margin-top:0.5rem; font-size:0.87rem;">
+            <a th:href="@{/admin/users/{loginId}/debt(loginId=${debt.loginId},asOf=${#temporals.format(debt.today.minusDays(1),'yyyy-MM-dd')})}">어제</a>
+            <a th:href="@{/admin/users/{loginId}/debt(loginId=${debt.loginId},asOf=${#temporals.format(debt.today,'yyyy-MM-dd')})}">오늘</a>
+            <a th:href="@{/admin/users/{loginId}/debt(loginId=${debt.loginId},asOf=${#temporals.format(debt.today.plusDays(1),'yyyy-MM-dd')})}">내일</a>
+            <span class="muted">유저 TZ 오늘: <b th:text="${#temporals.format(debt.today,'yyyy-MM-dd')}">오늘</b></span>
+        </div>
+    </section>
+
+    <!-- 요약 -->
+    <section class="card">
+        <h2>요약 (기준일: <span th:text="${#temporals.format(debt.asOf,'yyyy-MM-dd (E)')}">날짜</span>)</h2>
+        <div class="summary-chips">
+            <span class="chip">기준일 부채 <b th:text="${debt.trace.days[__${debt.trace.days.size()-1}__].remainingSeconds / 60} + '분'">0분</b></span>
+            <span class="chip">총 부채 <b th:text="${debt.trace.totalDebtSeconds() / 60} + '분'">0분</b></span>
+            <span class="chip">빠뜨린 날 <b th:text="${debt.trace.toWeeklyDebt().missedDays().size()} + '일'">0일</b></span>
+        </div>
+        <!-- 재계산 충실성 안내 -->
+        <p class="muted" style="font-size:0.8rem;margin-top:0.6rem;">
+            재계산은 현재 세션·목표 이력으로 과거를 재현합니다. 사후 수동 입력·목표 변경이 있었다면 당시 표시값과 다를 수 있습니다(현재 진실 기준).
+        </p>
+    </section>
+
+    <!-- 날짜별 추적 표 -->
+    <section class="card">
+        <h2>날짜별 추적 (오래된 날 → 기준일)</h2>
+        <table class="debt-table">
+            <thead>
+            <tr>
+                <th>날짜(요일)</th>
+                <th>목표(분)</th>
+                <th>읽음(분)</th>
+                <th>원시부채(분)</th>
+                <th>원시초과(분)</th>
+                <th>1분미만용서</th>
+                <th>잔여부채(분)</th>
+                <th>초과소모(분)</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="day : ${debt.trace.days}" th:classappend="${day.isToday()} ? 'today-row' : ''">
+                <td>
+                    <span th:text="${#temporals.format(day.date,'MM-dd (E)')}">날짜</span>
+                    <b th:if="${day.isToday()}" style="color:#0078ff;"> ★</b>
+                </td>
+                <td th:text="${day.goalSeconds / 60}">60</td>
+                <td th:text="${day.readSeconds / 60}">0</td>
+                <td th:text="${day.rawDeficitSeconds / 60}">60</td>
+                <td th:text="${day.rawSurplusSeconds / 60}">0</td>
+                <td>
+                    <span th:if="${day.forgivenSubMinute()}" class="badge-forgiven">용서됨</span>
+                    <span th:unless="${day.forgivenSubMinute()}">—</span>
+                </td>
+                <td th:text="${day.remainingSeconds / 60}">60</td>
+                <td th:text="${day.surplusConsumedSeconds / 60}">0</td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <p class="link-row">
+        <a th:href="@{/admin/users/{loginId}(loginId=${debt.loginId})}">← 유저 상세로</a>
+        &nbsp;·&nbsp;
+        <a th:href="@{/admin/users}">← 사용자 목록</a>
+    </p>
+</div>
+</body>
+</html>

@@ -1,4 +1,4 @@
-# 학습 노트 — 작업 중 모르고 물어봐서 배운 것들
+﻿# 학습 노트 — 작업 중 모르고 물어봐서 배운 것들
 
 > 면접에서 본인이 직접 설명할 수 있는 수준으로 본인 이해 확립.
 > 같은 질문 두 번 안 묻기.
@@ -4293,3 +4293,66 @@ BookTimer SES 프로덕션 요청(case 178123901400162)이 ① AWS "추가 정�
 | 2026-06-17 | N-091 (SES 프로덕션 액세스(샌드박스 해제)는 자동 아님·거부 가능(사유 비공개 정형문)·상세 사용 사례로 재요청해야 뚫림 — 샌드박스는 검증된 ID로만 발송이라 일반 사용자 메일 0, BOOKTIMER_EMAIL_ENABLED 토글 ON이어도 실발송≠점등(토글 점등≠실발송) / 검증 도메인(N-071)은 전제일 뿐 충분조건 아님·사용사례 심사 별도 / case 178123901400162: 추가정보 요청(6/12)→상세 없이 검토요청(6/13)→거부(6/17) 흐름, AWS 4질문(빈도·목록관리·반송/불만/수신거부·예시) 미충족이 원인 → 그 4개 담아 재요청 / 일반화=외부 게이트(SES·AdSense N-088·결제) 있는 기능은 내 토글과 외부 승인 분리, 거부 가능한 심사는 상세·정직이 통과율 / N-067·N-071·N-088·N-036, T-058, plan.md 점등 runbook) |
 | 2026-06-18 | N-092 (아이소메트릭 투영 수학 — 정규화 격자좌표(0~1)를 화면좌표(0~1)로 선형 변환하는 공식: `normToIso(x,y,f=0.5)` → `{sx: 0.5+(x−y)×0.5, sy: 0.5+((x+y)/2−0.5)×f}` / f=ISO_FLATTEN=0.5는 2:1 클래식 아이소(y축이 x축 대비 절반으로 압축) / 4꼭짓점 검증: (0,0)→(0.5,0.25), (1,0)→(1,0.5), (1,1)→(0.5,0.75), (0,1)→(0,0.5) — 격자 사각이 다이아몬드로 / 역변환 `isoToNorm(sx,sy,f)`: a=2sx−1, b=1+2(sy−0.5)/f → x=(a+b)/2, y=(b−a)/2 / 왕복 불변식으로 정확성 못 박기(3점 왕복 단언) / 왜 이 공식이냐: 정규화 공간의 (x,y) 선형 결합이라 스케일·해상도 무관, `clampNorm`으로 역변환 시 경계 밖 좌표 클램핑 / N-085(정규화 저장)·N-086(iso 아트)·N-089(격자 좌표계), PR #380) |
 | 2026-06-18 | N-093 (이기종 런타임(JS·Java) 동일 공식 동기화 — 보기=SSR Thymeleaf, 편집=CSR Phaser, 양쪽이 같은 투영 공식을 써야 "저장 후 리로드 = 배치 위치 일치"(view=edit) / 이기종 런타임이라 코드 공유 불가 → `garden.html @free-pure-core` 블록(JS)과 `GardenIsoProjection.java`(Java)에 동일 수식 독립 구현 + **5샘플 불변식 교차 단언**(JS `.test.mjs` + Java JUnit)으로 어긋남 방지: 어느 한쪽이 수식 바꾸면 동일 샘플 쌍이 빨개짐 — 단일 출처 불가 환경의 대안 앵커 / **Thymeleaf `[[...]]` 충돌 함정(T-055)**: `[[0,0],[1,0],...]` JS 배열 리터럴이 Thymeleaf 인라인 표현식 시작 `[[`과 충돌 → `TemplateProcessingException` / 회피=객체 배열 `[{x:0,y:0},...]`로 교체 — `[` 연속 2개가 핵심이라 한 쪽만 감싸도 됨 / 일반: SSR 템플릿 엔진이 JS 블록을 파싱하면 `[[`, `${`, `#{}` 같은 엔진 구문 문자가 JS 안에서도 충돌 위험 → 뒤늦게 런타임 에러로 발견, 테스트 스위트(GardenControllerTest)로 조기 포착 / N-092(공식)·N-083(이기종 로드순서)·N-017(JS 테스트 전략), PR #380) |
+| 2026-06-18 | N-094 (stateless 불변 데이터는 as-of 재계산으로 임의 시점 역사를 재현할 수 있다 — 완료 세션(불변)에서 100% 유도되는 모델은 스냅샷·스케줄러 없이 임의 기준일 재현 가능 / trace를 단일 출처로 두고 summary를 파생으로 뽑으면 진단-실제 drift 물리적 불가(computeTrace().toWeeklyDebt()==compute() 회귀 앵커 테스트로 봉인) / 이 패턴이 맞는 경우: 불변 데이터·진단+요약 둘 다 필요·as-of 역사 재현 / N-001·PR #381) |
+
+---
+
+## N-094. stateless 불변 데이터는 as-of 재계산으로 임의 시점 역사를 재현할 수 있다 — trace를 단일 출처로, 요약은 파생으로 유도하면 진단-실제 drift를 원천 차단
+
+> **한 줄 요약**: 부채처럼 완료 세션(불변 데이터)에서 100% 유도되는 stateless 모델은 스냅샷 적재 없이 임의 기준일(as-of)의 계산을 언제든 재현할 수 있다. 이 관찰성을 활용할 때, 진단 경로와 실제 경로를 분리하지 말고 **trace를 단일 출처**로 두어 summary를 파생으로 뽑으면 진단값과 표시값이 물리적으로 같은 코드 경로를 거쳐 drift가 불가능해진다.
+
+### 배경
+
+BookTimer 독서 부채 모델(N-001 PR #217)은 완료 세션에서 순수 유도되는 stateless 모델이다. 사용자가 "어제 부채 4h20m → 자정 후 증가 → 왜 4h53m이냐"를 관찰했는데, 날짜별 계산 상세(원시 부채·초과·재분배)를 눈으로 추적할 방법이 없었다.
+
+### 핵심 설계 원칙 두 가지
+
+**① as-of 재계산으로 역사 재현 (스냅샷 적재 불필요)**
+
+부채 = max(0, 목표 - 읽은 양)이고, 세션(읽은 양)과 목표 이력은 모두 불변이다. 따라서 임의 날짜를 "오늘(asOf)"로 넣어 7일 윈도우를 다시 돌리면 당시 계산을 재현할 수 있다. 사후 수동 입력/목표 변경이 있었다면 당시 표시와 다를 수 있지만, 이는 오히려 "현재 진실 기준" 재현이라 진단엔 맞다.
+
+이런 모델에선 별도 스냅샷 테이블·스케줄러·집계 적재가 불필요하다 — 쿼리 한 번으로 재현 가능.
+
+**② trace 단일 출처 → summary 파생 → 진단-실제 drift 불가**
+
+흔한 실수: 진단 경로(trace)와 실제 경로(summary) 코드를 별도로 작성하면 둘이 서로 어긋날 수 있다.
+
+올바른 구조:
+```java
+// 코어가 WeeklyDebtTrace를 만들고
+WeeklyDebtTrace trace = computeTraceInternal(secondsByDate, goalForDate, today);
+// 기존 summary는 trace에서 파생 — 단일 출처
+public WeeklyDebt toWeeklyDebt() {
+    DayDebtTrace today = days.get(days.size() - 1);
+    // ... same logic, derived from trace
+    return new WeeklyDebt(today.remainingSeconds(), missed);
+}
+// compute()도 trace를 거쳐 유도
+public static WeeklyDebt compute(...) { return computeTrace(...).toWeeklyDebt(); }
+```
+
+이렇게 하면 진단 뷰(admin 표)와 라이브 대시보드가 물리적으로 같은 코드 경로를 거쳐 "drift가 존재할 여지"가 원천 차단된다.
+
+### 회귀 앵커 테스트
+
+단일 출처를 테스트로 봉인:
+```java
+// computeTrace().toWeeklyDebt() == compute() — 동치 단언
+WeeklyDebt byCompute = WeeklyDebtCalculator.compute(reads, goalMap, TODAY);
+WeeklyDebt byTrace   = WeeklyDebtCalculator.computeTrace(reads, goalMap, TODAY).toWeeklyDebt();
+assertThat(byTrace.todayDebtSeconds()).isEqualTo(byCompute.todayDebtSeconds());
+assertThat(byTrace.missedDays()).isEqualTo(byCompute.missedDays());
+```
+
+이 테스트가 통과하는 한, 리팩터가 계산 동작을 바꿨을 가능성이 없다.
+
+### 언제 이 패턴이 맞는가
+
+- 데이터가 불변(세션, 목표 이력 등)하고 현재 상태에서 과거 임의 시점을 유도할 수 있을 때
+- 진단·관찰성 뷰를 추가할 때 — 별도 집계 테이블 대신 재계산이 더 싸고 신뢰할 수 있음
+- 요약과 상세가 둘 다 필요할 때 — 상세를 먼저 만들고 요약을 파생으로
+
+### 관련
+
+- [[n-001]] — per-day stateless 부채 모델 기원
+- **PR #380** — admin 부채 진단 뷰(이 패턴의 실전 구현)

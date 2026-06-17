@@ -58,40 +58,51 @@ public class ReadingDebtService {
      * @param user 조회 주체
      */
     public WeeklyDebt weeklyDebt(User user) {
-        ZoneId zone = ZoneId.of(user.getTimezone());
-        LocalDate today = LocalDate.ofInstant(clock.instant(), zone);
+        return weeklyDebtTrace(user, today(user)).toWeeklyDebt();
+    }
 
-        // 현재(폴백) 목표 — 이력에 그 날짜 이전 변경이 없을 때 쓴다.
+    /**
+     * 임의 기준일(asOf) 윈도우의 날짜별 부채 추적 결과를 반환한다 (관찰성·진단용).
+     *
+     * <p>재계산은 <b>현재</b> 세션·목표 이력으로 과거를 재현한다. 사후 수동 입력이나 목표 변경이 있었으면
+     * 당시 표시값과 다를 수 있으나 — 이는 현재 진실이라 진단엔 오히려 맞다(계획 §0 재계산 충실성 주의).
+     *
+     * @param user  조회 주체
+     * @param asOf  기준일(유저 TZ). null이면 유저 TZ 오늘
+     */
+    public WeeklyDebtTrace weeklyDebtTrace(User user, LocalDate asOf) {
+        LocalDate effectiveAsOf = asOf != null ? asOf : today(user);
+
         long currentGoalSeconds = timerRepository.findByUser(user)
                 .map(timer -> timer.getDailyIncrementSeconds())
                 .orElse(DEFAULT_GOAL_SECONDS);
 
-        // 목표 변경 이력 → GoalSchedule → 윈도우 7일 각 날짜의 "그날 목표"를 풀어 둔다.
         Map<LocalDate, Long> changesByDate = new LinkedHashMap<>();
         for (ReadingGoalChange change : goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)) {
             changesByDate.put(change.getEffectiveDate(), change.getGoalSeconds());
         }
         GoalSchedule schedule = GoalSchedule.of(changesByDate, currentGoalSeconds);
 
-        // baseline = 사용자가 목표를 처음 가진 날(=시작 시점). 그 이전 윈도우 날은 "시작 전"이라 빠뜨린 날로
-        // 치지 않는다(목표를 넣지 않으면 부채 0 → 제외). 입문자가 가입 전 날을 "못 지킴"으로 보지 않게(N-059 후속).
-        // 이력이 비면(레거시·미온보딩) baseline이 없어 옛 동작대로 폴백 목표를 전 윈도우에 적용한다.
         Optional<LocalDate> baseline = schedule.earliestEffectiveDate();
         Map<LocalDate, Long> goalByDate = new LinkedHashMap<>();
         for (int offset = 0; offset < WeeklyDebtCalculator.WINDOW_DAYS; offset++) {
-            LocalDate date = today.minusDays(offset);
+            LocalDate date = effectiveAsOf.minusDays(offset);
             if (baseline.isPresent() && date.isBefore(baseline.get())) {
-                continue; // 가입(첫 목표) 이전 날 — 판정에서 제외
+                continue; // 가입(첫 목표) 이전 날 — 판정에서 제외(goal=0으로 내려가 deficit 없음)
             }
             goalByDate.put(date, schedule.goalFor(date));
         }
 
-        // 일자별 읽은 양(완료 세션 합, 유저 TZ 일자). 계산기는 윈도우(7일)만 들여다보므로 전체를 넘겨도 무방.
         Map<LocalDate, Long> secondsByDate = new LinkedHashMap<>();
         for (DailyReadingRecord record : historyService.dailyHistory(user)) {
             secondsByDate.put(record.date(), record.totalSeconds());
         }
 
-        return WeeklyDebtCalculator.compute(secondsByDate, goalByDate, today);
+        return WeeklyDebtCalculator.computeTrace(secondsByDate, goalByDate, effectiveAsOf);
+    }
+
+    /** 유저 타임존 기준 오늘. */
+    public LocalDate today(User user) {
+        return LocalDate.ofInstant(clock.instant(), ZoneId.of(user.getTimezone()));
     }
 }

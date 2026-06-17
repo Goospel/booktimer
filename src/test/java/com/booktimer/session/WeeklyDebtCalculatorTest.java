@@ -314,4 +314,180 @@ class WeeklyDebtCalculatorTest {
             assertThat(debt.totalDebtSeconds()).isEqualTo(3000L + 600L + 5 * GOAL);
         }
     }
+
+    // --- computeTrace — 날짜별 추적 필드 ---
+
+    /** 윈도우 7일 전체를 GOAL 목표로 채운 per-day 목표 맵 */
+    private static Map<LocalDate, Long> flatGoalMap() {
+        Map<LocalDate, Long> m = new HashMap<>();
+        for (int i = 0; i < WeeklyDebtCalculator.WINDOW_DAYS; i++) {
+            m.put(TODAY.minusDays(i), GOAL);
+        }
+        return m;
+    }
+
+    @Nested
+    @DisplayName("computeTrace — 날짜별 추적 필드 검증")
+    class TraceTests {
+
+        @Test
+        @DisplayName("summary 동치(회귀 앵커): computeTrace().toWeeklyDebt() == compute() — 리팩터 동작 불변 증명")
+        void computeTrace_toWeeklyDebt_equalsCompute() {
+            Map<LocalDate, Long> reads = reads();
+            reads.put(TODAY, 600L);
+            reads.put(TODAY.minusDays(1), 0L);
+            reads.put(TODAY.minusDays(2), GOAL + 500L); // 초과분 있는 날 포함
+            Map<LocalDate, Long> goalMap = flatGoalMap();
+
+            WeeklyDebt byCompute = WeeklyDebtCalculator.compute(reads, goalMap, TODAY);
+            WeeklyDebt byTrace = WeeklyDebtCalculator.computeTrace(reads, goalMap, TODAY).toWeeklyDebt();
+
+            assertThat(byTrace.todayDebtSeconds()).isEqualTo(byCompute.todayDebtSeconds());
+            assertThat(byTrace.missedDays()).isEqualTo(byCompute.missedDays());
+            assertThat(byTrace.totalDebtSeconds()).isEqualTo(byCompute.totalDebtSeconds());
+        }
+
+        @Test
+        @DisplayName("read < goal인 날: rawDeficit = goal-read, rawSurplus = 0, remaining = rawDeficit (과거 날)")
+        void dayTrace_readLessGoal_rawDeficit() {
+            Map<LocalDate, Long> reads = reads();
+            reads.put(TODAY.minusDays(1), 1000L); // 어제 부채 2600
+            Map<LocalDate, Long> goalMap = flatGoalMap();
+
+            WeeklyDebtTrace trace = WeeklyDebtCalculator.computeTrace(reads, goalMap, TODAY);
+            DayDebtTrace yesterday = trace.days().get(WeeklyDebtCalculator.WINDOW_DAYS - 2); // index 5
+
+            assertThat(yesterday.rawDeficitSeconds()).isEqualTo(GOAL - 1000L);
+            assertThat(yesterday.rawSurplusSeconds()).isZero();
+            assertThat(yesterday.remainingSeconds()).isEqualTo(GOAL - 1000L);
+        }
+
+        @Test
+        @DisplayName("read > goal인 날: rawSurplus = read-goal, rawDeficit = 0, remaining = 0")
+        void dayTrace_readMoreGoal_rawSurplus() {
+            Map<LocalDate, Long> reads = reads();
+            reads.put(TODAY.minusDays(2), GOAL + 800L);
+            Map<LocalDate, Long> goalMap = flatGoalMap();
+
+            WeeklyDebtTrace trace = WeeklyDebtCalculator.computeTrace(reads, goalMap, TODAY);
+            DayDebtTrace day = trace.days().get(WeeklyDebtCalculator.WINDOW_DAYS - 3); // index 4
+
+            assertThat(day.rawDeficitSeconds()).isZero();
+            assertThat(day.rawSurplusSeconds()).isEqualTo(800L);
+            assertThat(day.remainingSeconds()).isZero();
+        }
+
+        @Test
+        @DisplayName("선납 불가(핵심): 어제 초과분은 오늘 remaining을 줄이지 않는다")
+        void noPrepay_todayRemainingUnchangedByYesterdaySurplus() {
+            // 모든 날 읽음 → 과거 부채 없음. 어제만 초과, 오늘만 미달.
+            Map<LocalDate, Long> reads = new HashMap<>();
+            for (int i = 0; i <= 6; i++) reads.put(TODAY.minusDays(i), GOAL);
+            reads.put(TODAY.minusDays(1), GOAL + 1800L); // 어제 초과 1800
+            reads.put(TODAY, 0L);                          // 오늘 읽지 않음
+
+            WeeklyDebtTrace trace = WeeklyDebtCalculator.computeTrace(reads, flatGoalMap(), TODAY);
+            DayDebtTrace today = trace.days().get(WeeklyDebtCalculator.WINDOW_DAYS - 1);
+            DayDebtTrace yesterday = trace.days().get(WeeklyDebtCalculator.WINDOW_DAYS - 2);
+
+            // 선납 불가 — 어제 초과분은 오늘 부채를 줄이지 않는다
+            assertThat(today.remainingSeconds()).isEqualTo(GOAL);
+            // 과거 날 부채가 전혀 없으므로 어제 초과분 소모량 = 0
+            assertThat(yesterday.surplusConsumedSeconds()).isZero();
+        }
+
+        @Test
+        @DisplayName("과거 메우기: 오래된 날 remaining 감소 + 초과 날 surplusConsumed 증가")
+        void pastRepayment_olderRemainingDecreasesNewerSurplusConsumedIncreases() {
+            // 오직 today-3만 부채, 어제만 초과 → 어제 초과가 today-3을 완전 상환
+            Map<LocalDate, Long> reads = new HashMap<>();
+            for (int i = 0; i <= 6; i++) reads.put(TODAY.minusDays(i), GOAL);
+            reads.put(TODAY.minusDays(3), 0L);           // 3일전 부채 3600
+            reads.put(TODAY.minusDays(1), GOAL + 3600L); // 어제 초과 3600
+
+            WeeklyDebtTrace trace = WeeklyDebtCalculator.computeTrace(reads, flatGoalMap(), TODAY);
+            DayDebtTrace day3ago = trace.days().get(WeeklyDebtCalculator.WINDOW_DAYS - 4); // index 3
+            DayDebtTrace yesterday = trace.days().get(WeeklyDebtCalculator.WINDOW_DAYS - 2); // index 5
+
+            assertThat(day3ago.remainingSeconds()).isZero();       // 완전 상환
+            assertThat(yesterday.surplusConsumedSeconds()).isEqualTo(3600L); // 전부 소모
+        }
+
+        @Test
+        @DisplayName("윈도우 슬라이드: today=D+1이면 D-6 날이 trace에 없고 D+1이 오늘로 들어간다")
+        void windowSlide_dayMovesOutWhenTodayAdvances() {
+            LocalDate d = TODAY;
+            LocalDate dPlus1 = TODAY.plusDays(1);
+            Map<LocalDate, Long> reads = reads();
+            Map<LocalDate, Long> goalMap = new HashMap<>();
+            for (int i = 0; i < WeeklyDebtCalculator.WINDOW_DAYS + 2; i++) {
+                goalMap.put(dPlus1.minusDays(i), GOAL);
+            }
+
+            WeeklyDebtTrace traceD = WeeklyDebtCalculator.computeTrace(reads, goalMap, d);
+            WeeklyDebtTrace traceDPlus1 = WeeklyDebtCalculator.computeTrace(reads, goalMap, dPlus1);
+
+            LocalDate oldestInD = d.minusDays(WeeklyDebtCalculator.WINDOW_DAYS - 1); // D-6
+            assertThat(traceD.days()).extracting(DayDebtTrace::date).contains(oldestInD);
+            assertThat(traceDPlus1.days()).extracting(DayDebtTrace::date).doesNotContain(oldestInD);
+            assertThat(traceDPlus1.days()).extracting(DayDebtTrace::date).contains(dPlus1);
+        }
+
+        @Test
+        @DisplayName("1분 미만 용서: 과거 날 rawDeficit=30s → forgivenSubMinute=true·remaining=0")
+        void subMinutePastDebt_forgivenSubMinute_remainingZero() {
+            Map<LocalDate, Long> reads = reads();
+            reads.put(TODAY.minusDays(2), GOAL - 30L); // 2일전 30초 부족
+            Map<LocalDate, Long> goalMap = flatGoalMap();
+
+            WeeklyDebtTrace trace = WeeklyDebtCalculator.computeTrace(reads, goalMap, TODAY);
+            DayDebtTrace day = trace.days().get(WeeklyDebtCalculator.WINDOW_DAYS - 3); // index 4
+
+            assertThat(day.rawDeficitSeconds()).isEqualTo(30L);
+            assertThat(day.forgivenSubMinute()).isTrue();
+            assertThat(day.remainingSeconds()).isZero();
+        }
+
+        @Test
+        @DisplayName("1분 미만 용서: 오늘 rawDeficit=30s → forgivenSubMinute=false (오늘은 용서 안 함)")
+        void subMinuteTodayDebt_notForgiven() {
+            Map<LocalDate, Long> reads = reads();
+            reads.put(TODAY, GOAL - 30L); // 오늘 30초 부족
+            Map<LocalDate, Long> goalMap = flatGoalMap();
+
+            WeeklyDebtTrace trace = WeeklyDebtCalculator.computeTrace(reads, goalMap, TODAY);
+            DayDebtTrace today = trace.days().get(WeeklyDebtCalculator.WINDOW_DAYS - 1);
+
+            assertThat(today.rawDeficitSeconds()).isEqualTo(30L);
+            assertThat(today.forgivenSubMinute()).isFalse();
+            assertThat(today.remainingSeconds()).isEqualTo(30L);
+        }
+
+        @Test
+        @DisplayName("가입 전(goal 0): 읽어도 rawDeficit=0·rawSurplus=0 — 뱅킹에 안 낌")
+        void preRegistration_goalZero_noDeficitNoSurplus() {
+            Map<LocalDate, Long> reads = reads();
+            reads.put(TODAY.minusDays(4), GOAL * 5); // 가입 전 날에 많이 읽음
+            Map<LocalDate, Long> goalMap = flatGoalMap();
+            goalMap.put(TODAY.minusDays(4), 0L); // 그날 목표 0 = 가입 전
+
+            WeeklyDebtTrace trace = WeeklyDebtCalculator.computeTrace(reads, goalMap, TODAY);
+            DayDebtTrace preReg = trace.days().get(WeeklyDebtCalculator.WINDOW_DAYS - 5); // index 2
+
+            assertThat(preReg.rawDeficitSeconds()).isZero();
+            assertThat(preReg.rawSurplusSeconds()).isZero();
+            assertThat(preReg.remainingSeconds()).isZero();
+            assertThat(preReg.surplusConsumedSeconds()).isZero();
+        }
+
+        @Test
+        @DisplayName("trace days 순서: 오래된 날(index 0=today-6)→최신(index 6=today)")
+        void traceDays_orderedOldestFirst() {
+            Map<LocalDate, Long> goalMap = flatGoalMap();
+            WeeklyDebtTrace trace = WeeklyDebtCalculator.computeTrace(reads(), goalMap, TODAY);
+            assertThat(trace.days().get(0).date()).isEqualTo(TODAY.minusDays(6));
+            assertThat(trace.days().get(WeeklyDebtCalculator.WINDOW_DAYS - 1).date()).isEqualTo(TODAY);
+            assertThat(trace.days().get(WeeklyDebtCalculator.WINDOW_DAYS - 1).isToday()).isTrue();
+        }
+    }
 }
