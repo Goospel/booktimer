@@ -402,12 +402,16 @@
         const mx = worldW * margin, my = worldH * margin;
         return px < -mx || px > worldW + mx || py < -my || py > worldH + my;
     }
-    // 식물 월드 픽셀 크기 — 화면에서 보이길 원하는 px(targetCss)를 캔버스 표시 폭(canvasCss) 기준 월드 px로
-    // 환산한다. FIT 스케일이 월드를 canvasCss/worldW로 줄이므로, 작은 화면(모바일)일수록 월드px를 키워야
-    // 화면 표시 크기가 일정해진다(편집 캔버스 식물이 모바일에서 작던 문제 해소). canvasCss 0(측정 전)이면 목표값 폴백.
-    function plantWorldPx(targetCss, canvasCss, worldW, min = 24, max = 200) {
-        if (!canvasCss || canvasCss <= 0) return targetCss;
-        return Math.min(max, Math.max(min, targetCss * worldW / canvasCss));
+    // 식물 월드 픽셀 크기 = 셀 고정(기기 무관). cellPx = worldW / cols, 결과 = cellPx × ratio.
+    // ratio 기본 1.0 = 정확히 1셀. 셀 안 여백 원하면 0.85~0.9로 튜닝.
+    const PLANT_CELL_RATIO = 1.0;
+    function plantWorldSize(worldW, cols, ratio = PLANT_CELL_RATIO) { return (worldW / cols) * ratio; }
+    // 시작 시 식물 화면 표시 크기 ≈ targetCss가 되도록 초기 줌을 보정 — 기기별 canvasCss 차이를 크기가 아닌 줌에 흡수.
+    // apparent = plantPx × zoom × (canvasCss / worldW) = targetCss 풀면 zoom = targetCss × worldW / (plantPx × canvasCss).
+    // canvasCss ≤ 0(첫 마운트 0폭) 또는 plantPx ≤ 0이면 min 폴백(NaN/Infinity 방지).
+    function initialZoomFor(targetCss, plantPx, canvasCss, worldW, min = ZOOM_MIN, max = ZOOM_MAX) {
+        if (canvasCss <= 0 || plantPx <= 0) return min;
+        return clampZoom(targetCss * worldW / (plantPx * canvasCss), min, max);
     }
     // 사용자 회전 정규화 — 0~360도(음수·360+를 wrap). CSS rotate()·Phaser setAngle 동일 단위. 변형·레이어(Phase 2).
     function clampRotation(deg) { const r = deg % 360; return r < 0 ? r + 360 : r; }
@@ -445,7 +449,7 @@
         return URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
     }
 
-    const TARGET_PLANT_CSS = 36;   // 식물의 화면 표시 목표 한 변(CSS px). 캔버스 표시 폭에 맞춰 월드px로 환산(plantWorldPx)해 모바일·데스크톱 모두 화면에서 일정하게 보인다(모바일에서 작던 문제 해소).
+    const TARGET_PLANT_CSS = 36;   // 식물의 화면 표시 목표 한 변(CSS px). 초기 카메라 줌(initialZoomFor)으로 기기별 차이를 흡수 — 식물 크기 자체는 셀 고정(plantWorldSize).
 
     // Phaser 정원 씬 — 배경 + 식물 스프라이트 렌더, 드래그 자유 이동, 월드 밖 드롭=거두기.
     // 게임루프(성장·낮밤)는 Phase 2+ — 이 씬은 자유배치+저장으로 범위 한정(설계 §2.4·로드맵).
@@ -479,9 +483,9 @@
                 for (const d of (this.cfg.decorations || [])) loadTex(d.spriteId);
             }
             create() {
-                // 캔버스 표시 폭에 맞춰 식물 월드 크기를 정한다 — 작은 화면(모바일)일수록 월드px를 키워 화면 표시 크기를 일정하게.
+                // 식물 크기 = 셀 고정(기기 무관). 기기별 가독성 차이는 초기 줌으로 흡수(initialZoomFor).
                 const canvasCss = this.sys.game.canvas.getBoundingClientRect().width;
-                this.plantPx = plantWorldPx(TARGET_PLANT_CSS, canvasCss, this.cfg.worldW);
+                this.plantPx = plantWorldSize(this.cfg.worldW, GRID_COLS);
                 this.drawBackground();
                 this.drawGrid();
                 for (const p of this.cfg.placed) {
@@ -489,10 +493,12 @@
                     this.spawnObject(p, px, py);   // p.kind로 식물/소품 구분(서버 placedItems)
                 }
 
-                // 카메라 셋업 — 팬은 월드 안으로 클램프(Phaser setBounds 처리), 기본 줌=1(월드 전체 보임)
+                // 카메라 셋업 — 팬은 월드 안으로 클램프(Phaser setBounds 처리).
+                // 초기 줌: 식물 화면 표시 크기≈TARGET_PLANT_CSS — 데스크톱≈1.0, 모바일≈2.1(더 CoC). 줌인 시 중앙 정렬.
                 const cam = this.cameras.main;
                 cam.setBounds(0, 0, this.cfg.worldW, this.cfg.worldH);
-                cam.setZoom(ZOOM_MIN);
+                cam.setZoom(initialZoomFor(TARGET_PLANT_CSS, this.plantPx, canvasCss, this.cfg.worldW));
+                cam.centerOn(this.cfg.worldW / 2, this.cfg.worldH / 2);
                 this.input.addPointer(1);   // 핀치(2번째 터치 포인터) 활성
                 this._pinchDist = 0;
 
