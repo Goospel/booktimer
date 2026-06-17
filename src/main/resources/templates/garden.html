@@ -75,7 +75,7 @@
                 <!-- wrapper 분리(Phase 2): outer=위치+사용자 변형(rotate/scale 인라인 transform), inner=sway 애니메이션.
                      한 요소에 두면 sway transform이 변형을 덮어 사라지므로 부모-자식으로 나눠 자연 합성한다. -->
                 <span class="garden-view-plant" th:each="it : ${placedItems}"
-                      th:style="'left:' + ${it.x() * 100} + '%; top:' + ${it.y() * 100} + '%; z-index:' + ${it.z()}
+                      th:style="'left:' + ${it.isoLeftPct()} + '%; top:' + ${it.isoTopPct()} + '%; z-index:' + ${it.z()}
                           + '; transform: translate(-50%,-50%) rotate(' + ${it.rotation()} + 'deg) scale(' + ${it.scale()} + ')'"
                       th:title="${it.name()}">
                     <span th:class="${it.kind() == 'plant'} ? 'canvas-plant' : 'canvas-decor'">
@@ -437,6 +437,23 @@
     // 카메라 줌 배율 클램프 — [ZOOM_MIN=1, ZOOM_MAX=2.5]. 1=월드 전체(FIT), 2.5=최대 확대(튜닝 가능).
     const ZOOM_MIN = 1, ZOOM_MAX = 2.5;
     function clampZoom(z, min = ZOOM_MIN, max = ZOOM_MAX) { return Math.min(max, Math.max(min, z)); }
+    // 아이소메트릭 투영 — 정규화 격자좌표 (x,y)∈[0,1]² → 정규화 화면좌표 (sx,sy)∈[0,1]².
+    // 다이아몬드 꼭짓점: 위(0,0)=(0.5,0.25), 오른(1,0)=(1,0.5), 아래(1,1)=(0.5,0.75), 왼(0,1)=(0,0.5).
+    // ISO_FLATTEN 0.5 = 2:1 클래식 아이소. CSS polygon과 결합돼 있으니 튜닝 시 app.css .garden-view::before도 같이 수정.
+    const ISO_FLATTEN = 0.5;
+    function normToIso(x, y, f = ISO_FLATTEN) {
+        return { sx: 0.5 + (x - y) * 0.5, sy: 0.5 + ((x + y) / 2 - 0.5) * f };
+    }
+    function isoToNorm(sx, sy, f = ISO_FLATTEN) {
+        const a = 2 * sx - 1, b = 1 + 2 * (sy - 0.5) / f;
+        return { x: clampNorm((a + b) / 2), y: clampNorm((b - a) / 2) };
+    }
+    function normToIsoPixel(x, y, worldW, worldH, f = ISO_FLATTEN) {
+        const p = normToIso(x, y, f); return { px: p.sx * worldW, py: p.sy * worldH };
+    }
+    function isoPixelToNorm(px, py, worldW, worldH, f = ISO_FLATTEN) {
+        return isoToNorm(px / worldW, py / worldH, f);
+    }
     /* @free-pure-core:end */
 
     // <symbol id="sprite-{code}">(self-contained path, viewBox 0 0 32 32)를 독립 SVG Blob URL로 직렬화 —
@@ -489,7 +506,7 @@
                 this.drawBackground();
                 this.drawGrid();
                 for (const p of this.cfg.placed) {
-                    const { px, py } = normToPixel(p.x, p.y, this.cfg.worldW, this.cfg.worldH);
+                    const { px, py } = normToIsoPixel(p.x, p.y, this.cfg.worldW, this.cfg.worldH);
                     this.spawnObject(p, px, py);   // p.kind로 식물/소품 구분(서버 placedItems)
                 }
 
@@ -506,9 +523,9 @@
                 this.input.on('gameobjectdown', (pointer, obj) => { this._dragged = false; });
                 this.input.on('dragstart', (pointer, obj) => { this._dragged = true; this.bringToFront(obj); });
                 this.input.on('drag', (pointer, obj, dragX, dragY) => {
-                    const norm = pixelToNorm(dragX, dragY, this.cfg.worldW, this.cfg.worldH);
+                    const norm = isoPixelToNorm(dragX, dragY, this.cfg.worldW, this.cfg.worldH);
                     const snapped = snapToCell(norm.x, norm.y, GRID_COLS, GRID_ROWS);
-                    const pix = normToPixel(snapped.x, snapped.y, this.cfg.worldW, this.cfg.worldH);
+                    const pix = normToIsoPixel(snapped.x, snapped.y, this.cfg.worldW, this.cfg.worldH);
                     obj.x = pix.px; obj.y = pix.py;
                     if (obj === this.selected) this.highlightSelected();
                 });
@@ -577,23 +594,34 @@
                 const g = this.add.graphics();
                 this.bg = g;   // 배경 — 항상 맨 뒤(restack이 depth 0 유지)
                 g.setDepth(0);
-                g.fillStyle(hex(css('--garden-sky')) || 0xDCEAF0);   g.fillRect(0, 0, W, H * 0.60);          // 하늘
-                g.fillStyle(hex(css('--garden-grass')) || 0xCADDB2); g.fillRect(0, H * 0.55, W, H * 0.45);   // 잔디(살짝 겹쳐 경계 부드럽게)
-                g.fillStyle(hex(css('--garden-soil')) || 0xB89576);  g.fillRect(0, H * 0.82, W, H * 0.18);   // 흙 화단 띠
+                // 하늘 — 전체 배경(다이아 뒤로 비침)
+                g.fillStyle(hex(css('--garden-sky')) || 0xDCEAF0);
+                g.fillRect(0, 0, W, H);
+                // 아이소 바닥 다이아몬드 — 네 꼭짓점: 위(0,0) 오른(1,0) 아래(1,1) 왼(0,1)
+                // [[...]]는 Thymeleaf 인라인 구문과 충돌하므로 object 배열로 표기.
+                const diamondVerts = [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}];
+                const corners = diamondVerts.map(v => {
+                    const p = normToIsoPixel(v.x, v.y, W, H); return { x: p.px, y: p.py };
+                });
+                g.fillStyle(hex(css('--garden-grass')) || 0xCADDB2);
+                g.fillPoints(corners, true);
             }
             drawGrid() {
                 const W = this.cfg.worldW, H = this.cfg.worldH;
-                const cellPx = W / GRID_COLS;
                 const g = this.add.graphics();
                 g.setDepth(0.5);
-                g.lineStyle(1, 0x2e7d32, 0.12);
+                g.lineStyle(1, 0x2e7d32, 0.18);
+                // col 선: (col/COLS, 0) → (col/COLS, 1) — 아이소 투영 후 사선
                 for (let col = 0; col <= GRID_COLS; col++) {
-                    const x = col * cellPx;
-                    g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.strokePath();
+                    const nx = col / GRID_COLS;
+                    const a = normToIsoPixel(nx, 0, W, H), b = normToIsoPixel(nx, 1, W, H);
+                    g.beginPath(); g.moveTo(a.px, a.py); g.lineTo(b.px, b.py); g.strokePath();
                 }
+                // row 선: (0, row/ROWS) → (1, row/ROWS)
                 for (let row = 0; row <= GRID_ROWS; row++) {
-                    const y = row * cellPx;
-                    g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.strokePath();
+                    const ny = row / GRID_ROWS;
+                    const a = normToIsoPixel(0, ny, W, H), b = normToIsoPixel(1, ny, W, H);
+                    g.beginPath(); g.moveTo(a.px, a.py); g.lineTo(b.px, b.py); g.strokePath();
                 }
             }
             // 게임오브젝트 생성(식물·소품 공통, kind 데이터로 구분) — spriteId 텍스처 있으면 이미지, 없으면 이모지 텍스트. 드래그 가능.
@@ -633,7 +661,7 @@
                 if (this.objs.some(o => o.getData('kind') === 'plant'
                         && o.getData('axis') === meta.axis && o.getData('code') === meta.code)) return false;
                 const sn = snapToCell(0.5, 0.55, GRID_COLS, GRID_ROWS);
-                const { px, py } = normToPixel(sn.x, sn.y, this.cfg.worldW, this.cfg.worldH);
+                const { px, py } = normToIsoPixel(sn.x, sn.y, this.cfg.worldW, this.cfg.worldH);
                 this.spawnObject({ ...meta, kind: 'plant' }, px, py);
                 this.emitChange();
                 return true;
@@ -642,7 +670,7 @@
             addDecoration(meta) {
                 if (!this.ready) return false;
                 const sn = snapToCell(0.5, 0.55, GRID_COLS, GRID_ROWS);
-                const { px, py } = normToPixel(sn.x, sn.y, this.cfg.worldW, this.cfg.worldH);
+                const { px, py } = normToIsoPixel(sn.x, sn.y, this.cfg.worldW, this.cfg.worldH);
                 this.spawnObject({ ...meta, kind: 'decor' }, px, py);
                 this.emitChange();
                 return true;
@@ -651,7 +679,7 @@
             exportPlacements() {
                 const plants = [], decorations = [];
                 this.objs.forEach((o, i) => {
-                    const { x, y } = pixelToNorm(o.x, o.y, this.cfg.worldW, this.cfg.worldH);
+                    const { x, y } = isoPixelToNorm(o.x, o.y, this.cfg.worldW, this.cfg.worldH);
                     const t = { code: o.getData('code'), x, y, z: i,
                                 rotation: o.getData('rotation') || 0, scale: o.getData('scale') || 1 };
                     if (o.getData('kind') === 'decor') decorations.push(t);
