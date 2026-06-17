@@ -74,9 +74,11 @@
                      소품=.canvas-decor(정적 — 연못이 흔들리면 어색). placedItems는 z 오름차순 병합 정렬(식물·소품 교차). -->
                 <!-- wrapper 분리(Phase 2): outer=위치+사용자 변형(rotate/scale 인라인 transform), inner=sway 애니메이션.
                      한 요소에 두면 sway transform이 변형을 덮어 사라지므로 부모-자식으로 나눠 자연 합성한다. -->
-                <span class="garden-view-plant" th:each="it : ${placedItems}"
+                <span class="garden-view-plant"
+                      th:classappend="${it.kind() == 'plant'} ? 'gv-plant' : 'gv-decor'"
+                      th:each="it : ${placedItems}"
                       th:style="'left:' + ${it.isoLeftPct()} + '%; top:' + ${it.isoTopPct()} + '%; z-index:' + ${it.z()}
-                          + '; transform: translate(-50%,-50%) rotate(' + ${it.rotation()} + 'deg) scale(' + ${it.scale()} + ')'"
+                          + '; transform: translate(-50%,' + ${it.kind() == 'plant' ? '-100%' : '-50%'} + ') rotate(' + ${it.rotation()} + 'deg) scale(' + ${it.scale()} + ')'"
                       th:title="${it.name()}">
                     <span th:class="${it.kind() == 'plant'} ? 'canvas-plant' : 'canvas-decor'">
                         <svg class="plant-svg" th:if="${it.spriteId() != null}" aria-hidden="true">
@@ -505,6 +507,8 @@
                 this.plantPx = plantWorldSize(this.cfg.worldW, GRID_COLS);
                 this.drawBackground();
                 this.drawGrid();
+                this.shadowLayer = this.add.graphics();
+                this.shadowLayer.setDepth(0.6);   // 격자(0.5) < 그림자 < 식물(1+)
                 for (const p of this.cfg.placed) {
                     const { px, py } = normToIsoPixel(p.x, p.y, this.cfg.worldW, this.cfg.worldH);
                     this.spawnObject(p, px, py);   // p.kind로 식물/소품 구분(서버 placedItems)
@@ -528,6 +532,7 @@
                     const pix = normToIsoPixel(snapped.x, snapped.y, this.cfg.worldW, this.cfg.worldH);
                     obj.x = pix.px; obj.y = pix.py;
                     if (obj === this.selected) this.highlightSelected();
+                    this.drawShadows();
                 });
                 this.input.on('dragend', (pointer, obj) => {
                     if (isOutsideWorld(obj.x, obj.y, this.cfg.worldW, this.cfg.worldH)) {
@@ -624,16 +629,32 @@
                     g.beginPath(); g.moveTo(a.px, a.py); g.lineTo(b.px, b.py); g.strokePath();
                 }
             }
+            drawShadows() {
+                if (!this.shadowLayer) return;
+                this.shadowLayer.clear();
+                this.shadowLayer.fillStyle(0x2e2a22, 0.22);
+                for (const o of this.objs) {
+                    if (o.getData('kind') !== 'plant') continue;
+                    const s = o.getData('scale') || 1;
+                    const w = this.plantPx * s * 0.55;
+                    const h = w * ISO_FLATTEN;   // 아이소 평면에 눕힌 납작 타원
+                    this.shadowLayer.fillEllipse(o.x, o.y, w, h);
+                }
+            }
             // 게임오브젝트 생성(식물·소품 공통, kind 데이터로 구분) — spriteId 텍스처 있으면 이미지, 없으면 이모지 텍스트. 드래그 가능.
             spawnObject(meta, px, py) {
                 const kind = meta.kind || 'plant';
                 const rotation = clampRotation(meta.rotation || 0);
                 const scale = clampScale(meta.scale || 1);
+                const isPlant = kind === 'plant';
+                const oy = isPlant ? 1 : 0.5;   // 식물=발밑 앵커, 데코=현행 중심
                 let obj;
                 if (meta.spriteId && this.textures.exists('tex-' + meta.spriteId)) {
-                    obj = this.add.image(px, py, 'tex-' + meta.spriteId).setDisplaySize(this.plantPx * scale, this.plantPx * scale);
+                    obj = this.add.image(px, py, 'tex-' + meta.spriteId)
+                            .setOrigin(0.5, oy)
+                            .setDisplaySize(this.plantPx * scale, this.plantPx * scale);
                 } else {
-                    obj = this.add.text(px, py, meta.emoji || '🌱', { fontSize: Math.round(this.plantPx * 0.8 * scale) + 'px' }).setOrigin(0.5);
+                    obj = this.add.text(px, py, meta.emoji || '🌱', { fontSize: Math.round(this.plantPx * 0.8 * scale) + 'px' }).setOrigin(0.5, oy);
                 }
                 obj.setAngle(rotation);
                 obj.setData('kind', kind);
@@ -734,7 +755,7 @@
                 if (!this.selected) return;
                 const s = clampScale((this.selected.getData('scale') || 1) + delta);
                 this.applyScale(this.selected, s); this.selected.setData('scale', s);
-                this.notifySelection(); this.emitChange();
+                this.notifySelection(); this.emitChange(); this.drawShadows();
             }
             // z-order는 plantObjs 순서를 단일 출처로 setDepth로 직접 박는다(배경 0·식물 1..n·선택테두리 최상단).
             // Phaser display-list 재정렬 메서드(children.bringToTop/moveAbove)는 'A가 이미 B 위면 no-op'이고
@@ -743,6 +764,7 @@
                 if (this.bg) this.bg.setDepth(0);
                 this.objs.forEach((o, i) => o.setDepth(i + 1));
                 if (this._selBox) this._selBox.setDepth(1e6);
+                this.drawShadows();
             }
             bringToFront(obj) {
                 const i = this.objs.indexOf(obj);

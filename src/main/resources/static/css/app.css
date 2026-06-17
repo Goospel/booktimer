@@ -895,11 +895,11 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 }
 .garden-view-plant {
     position: absolute;
-    transform: translate(-50%, -50%);          /* left/top(정규화×100%)을 식물 중심에 정렬 */
+    transform: translate(-50%, -50%);          /* left/top(정규화×100%)을 식물 중심에 정렬 — 인라인 th:style이 항상 덮으므로 무해 */
     font-size: 2.1rem;
     line-height: 1;
 }
-/* 발밑 타원 그림자 → 식물이 땅에 '선' 입체감(A0 정신). 중심 정렬이라 박스 하단에 둔다. */
+/* 데코 포함 공통 발밑 그림자(중심 앵커 기준). .gv-plant::after가 높은 specificity로 식물만 덮어쓴다. */
 .garden-view-plant::after {
     content: "";
     position: absolute;
@@ -911,6 +911,14 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     background: radial-gradient(ellipse at center, rgba(0, 0, 0, .25), transparent 72%);
     pointer-events: none;
     z-index: -1;
+}
+/* 식물만 발밑 앵커 → 회전·스케일이 밑동 축으로(위로 자람). 데코는 현행 중심 앵커 유지. */
+.garden-view-plant.gv-plant { transform-origin: bottom center; }
+/* 식물 발밑 접지 그림자 — 발(박스 하단)에 재배치. 데코는 위 공통 규칙 유지. */
+.garden-view-plant.gv-plant::after {
+    bottom: -4px;
+    width: 70%;
+    height: 9px;
 }
 
 /* Phaser 편집 캔버스 마운트 — 고정 종횡비(인라인 aspect-ratio) 컨테이너에 FIT 스케일 canvas가 채워진다.
