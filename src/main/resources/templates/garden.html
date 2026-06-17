@@ -430,6 +430,9 @@
         const c = cellOf(x, y, cols, rows);
         return cellCenter(c.col, c.row, cols, rows);
     }
+    // 카메라 줌 배율 클램프 — [ZOOM_MIN=1, ZOOM_MAX=2.5]. 1=월드 전체(FIT), 2.5=최대 확대(튜닝 가능).
+    const ZOOM_MIN = 1, ZOOM_MAX = 2.5;
+    function clampZoom(z, min = ZOOM_MIN, max = ZOOM_MAX) { return Math.min(max, Math.max(min, z)); }
     /* @free-pure-core:end */
 
     // <symbol id="sprite-{code}">(self-contained path, viewBox 0 0 32 32)를 독립 SVG Blob URL로 직렬화 —
@@ -485,6 +488,15 @@
                     const { px, py } = normToPixel(p.x, p.y, this.cfg.worldW, this.cfg.worldH);
                     this.spawnObject(p, px, py);   // p.kind로 식물/소품 구분(서버 placedItems)
                 }
+
+                // 카메라 셋업 — 팬은 월드 안으로 클램프(Phaser setBounds 처리), 기본 줌=1(월드 전체 보임)
+                const cam = this.cameras.main;
+                cam.setBounds(0, 0, this.cfg.worldW, this.cfg.worldH);
+                cam.setZoom(ZOOM_MIN);
+                this.input.addPointer(1);   // 핀치(2번째 터치 포인터) 활성
+                this._pinchDist = 0;
+
+                // 기존 오브젝트 드래그(이동·snap·거두기)·탭 선택 — 줌/팬과 독립(dragX/dragY는 월드 좌표)
                 this.input.on('gameobjectdown', (pointer, obj) => { this._dragged = false; });
                 this.input.on('dragstart', (pointer, obj) => { this._dragged = true; this.bringToFront(obj); });
                 this.input.on('drag', (pointer, obj, dragX, dragY) => {
@@ -503,6 +515,53 @@
                 });
                 // 탭(이동 없음) = 선택. 드래그 후 up은 _dragged로 걸러 선택과 구분한다.
                 this.input.on('gameobjectup', (pointer, obj) => { if (!this._dragged) this.selectPlant(obj); });
+
+                // 팬 — 빈 공간 포인터 드래그. 시작 지점에 오브젝트 없으면 팬(hitTestPointer로 구분).
+                // 오브젝트 위면 Phaser drag(이동)가 먼저 잡으므로 상호 배타.
+                this.input.on('pointerdown', (pointer) => {
+                    this._panning = this.input.hitTestPointer(pointer).length === 0;
+                    this._panMoved = false;
+                });
+                this.input.on('pointermove', (pointer) => {
+                    // 핀치(2 포인터 동시) — 거리 비율로 줌, 중점 포컬 보정
+                    if (this.input.pointer1.isDown && this.input.pointer2.isDown) {
+                        this._panning = false;
+                        const p1 = this.input.pointer1, p2 = this.input.pointer2;
+                        const dist = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
+                        if (this._pinchDist > 0) {
+                            const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+                            const before = cam.getWorldPoint(mx, my);
+                            cam.setZoom(clampZoom(cam.zoom * (dist / this._pinchDist)));
+                            const after = cam.getWorldPoint(mx, my);
+                            cam.scrollX += before.x - after.x;
+                            cam.scrollY += before.y - after.y;
+                        }
+                        this._pinchDist = dist;
+                        return;
+                    }
+                    this._pinchDist = 0;
+                    // 단일 포인터 팬 — 줌으로 나눠 팬 속도를 줌 배율과 일치시킨다
+                    if (!this._panning || !pointer.isDown) return;
+                    cam.scrollX -= (pointer.x - pointer.prevPosition.x) / cam.zoom;
+                    cam.scrollY -= (pointer.y - pointer.prevPosition.y) / cam.zoom;
+                    this._panMoved = true;
+                });
+                this.input.on('pointerup', () => {
+                    this._pinchDist = 0;
+                    // 빈 공간 탭(이동 없음) = 선택 해제
+                    if (this._panning && !this._panMoved && this.selected) this.deselectPlant();
+                    this._panning = false;
+                });
+
+                // 줌 — 데스크톱 휠, 커서 위치를 포컬로 고정(getWorldPoint 전후 scroll 보정)
+                this.input.on('wheel', (pointer, objs, dx, dy) => {
+                    const before = cam.getWorldPoint(pointer.x, pointer.y);
+                    cam.setZoom(clampZoom(cam.zoom * (dy > 0 ? 0.9 : 1.1)));
+                    const after = cam.getWorldPoint(pointer.x, pointer.y);
+                    cam.scrollX += before.x - after.x;
+                    cam.scrollY += before.y - after.y;
+                });
+
                 this.ready = true;
             }
             drawBackground() {
