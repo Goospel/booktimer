@@ -57,6 +57,12 @@ tasks.named('test') {
 	useJUnitPlatform()
 }
 
+tasks.named('bootRun') {
+	// 로컬 개발 실행은 'local' 프로파일 — dev 전용 시드 빈(LocalTestAccountSeeder)을 켠다.
+	// 운영 컨테이너는 SPRING_PROFILES_ACTIVE=prod로 이 설정과 무관하게 prod를 활성화한다(무간섭).
+	systemProperty 'spring.profiles.active', 'local'
+}
+
 // Spring Boot는 실행가능 부트 jar 외에 일반(plain) jar도 만든다.
 // Dockerfile이 build/libs/*.jar 를 단일 복사하므로, 모호함을 없애기 위해 plain jar 비활성.
 tasks.named('jar') {
