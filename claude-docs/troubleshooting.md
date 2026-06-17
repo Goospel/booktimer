@@ -53,6 +53,7 @@
 - [T-055. Phaser moveAbove는 a가 이미 b 위면 no-op이라 z-order는 setDepth로 박는다](#t-055-phaser-moveabove는-a가-이미-b-위면-no-op이라-z-order는-setdepth로-박는다)
 - [T-056. 전역 button{width:100%} 규칙이 flex 자식 버튼으로 새 풀폭 세로 스택, 컴포넌트에 width:auto로 상쇄](#t-056-전역-buttonwidth100-규칙이-flex-자식-버튼으로-새-풀폭-세로-스택-컴포넌트에-widthauto로-상쇄)
 - [T-057. PowerShell 5.1 Set-Content -Encoding utf8가 BOM 포함 UTF-8을 생성해 커밋 메시지 앞에 BOM 붙음](#t-057-powershell-51-set-content--encoding-utf8가-bom-포함-utf-8을-생성해-커밋-메시지-앞에-bom-붙음)
+- [T-058. SES 프로덕션 액세스 거부 — 케이스 '사례 해결'은 승인이 아니라 요청 포기, '사례 다시 열기'로 상세 보강해 재요청](#t-058-ses-프로덕션-액세스-거부--케이스-사례-해결은-승인이-아니라-요청-포기-사례-다시-열기로-상세-보강해-재요청)
 
 ---
 
@@ -1114,6 +1115,25 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 
 ---
 
+## T-058. SES 프로덕션 액세스 거부 — 케이스 '사례 해결'은 승인이 아니라 요청 포기, '사례 다시 열기'로 상세 보강해 재요청
+
+**증상**: SES 샌드박스 해제(프로덕션 액세스) 요청이 진행이 안 되거나 거부됨. AWS 지원 케이스 화면에 "고객 작업 완료"·"해결됨" 같은 상태가 떠 혼란스럽다.
+
+**원인 / 오해**:
+- **"사례 해결"(Resolve case) 버튼 = 요청 *포기*(케이스 종료)지 승인이 아니다.** 답답하다고 누르면 요청을 스스로 닫는 셈(실제로 누를 뻔함).
+- **"고객 작업 완료"** = 내 답변이 등록돼 공이 AWS로 넘어간 상태(끝/승인 아님).
+- AWS가 "추가 정보 요청"을 보냈는데 **상세를 안 채우고 "검토만 해달라"**고 하면 불충분한 정보로 **거부**된다("몇 가지 우려, 보안상 사유 비공개"라는 정형 거부).
+
+**해결 / 예방**:
+- **승인 여부의 진짜 신호는 케이스가 아니라 SES 콘솔** — `SES → Account dashboard`에서 "Sandbox"가 사라지고 "Production access"면 승인.
+- **거부돼도 끝 아님**: 케이스 상세 우상단 **"사례 다시 열기"(Reopen)** → 답장란에 AWS가 물은 4가지(발송 빈도·수신자 목록 관리·반송/불만/수신거부 처리·메일 예시)를 **구체적으로** 담아 제출 → 보통 24h 내 재심사.
+- 진행 중 요청에서 **"사례 해결"은 누르지 말 것**(요청을 닫음). 재요청하려면 "다시 열기".
+- 개념(왜 샌드박스가 관문인지·외부 심사 통과 전략·토글 점등 ≠ 실발송)은 N-091.
+
+**관련**: N-091(개념·토글≠실발송), N-067(메일 법적 분리), N-071(검증 도메인), case 178123901400162.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1176,3 +1196,4 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 | 2026-06-15 | T-055 (정원 꾸미기 ⬇'맨 뒤로' 먹통 — sendToBack의 children.moveAbove(obj,bg)가 no-op: Phaser moveAbove(A,B)는 A가 이미 B 위면 무동작인데 식물은 늘 배경 위라 매번 무동작, 맨뒤로 보낸 식물이 계속 위에 남아 탭하면 또 선택 / ⬆ bringToTop은 우연히 동작=비대칭 / 해결=z-order를 plantObjs 순서 단일출처로 setDepth로 직접 박는다(restack: 배경0·식물1..n·선택테두리 최상단, bringToFront/sendToBack/spawn/remove에서 호출) — depth가 렌더·입력순서 결정 / 검증은 getIndex 말고 .depth로(헤드리스 rAF throttle로 display정렬 지연, depthSort() 강제) / 진단=Chrome 확장으로 실계정 scene depth·탭top 측정 / 자매 T-053·T-054, PR #365) |
 | 2026-06-15 | T-056 (전역 button{width:100%}가 .garden-tab(=button)으로 상속되는데 .garden-tab이 padding·radius만 덮고 width를 안 덮어 100% 상속 → .garden-tabs가 flex-wrap이라 풀폭 pill이 각자 한 줄씩 세로로 쌓임(태블릿/PC만 어색, 모바일은 풀폭 세로가 자연스러워 가려짐) / 전역 button{width:100%}는 폼 제출 버튼 기준이라 flex 행·인라인 컴포넌트 버튼(탭·칩·툴바)엔 거의 틀림 → 그런 컴포넌트에 width:auto 명시로 상쇄(.garden-tab{width:auto} 1줄) / 증상 시그니처="넓은 화면에서만 버튼이 풀폭 세로 스택"이면 미디어쿼리 의심 전에 전역 button width부터 / 같은 뿌리 #286(칩 풀폭, 233줄)·배너 버튼(421줄) 반복 / 검증=preview 하니스로 offsetTop·width 값 단언, 자매 시각검증 T-043, PR #368) |
 | 2026-06-16 | T-057 (PowerShell 5.1 Set-Content -Encoding utf8가 UTF-8 with BOM 생성 → 커밋 메시지 첫 글자에 BOM(﻿)이 박혀 git log/GitHub에 `﻿feat:` 표시 / PS 7+는 utf8NoBOM 기본, 5.1은 BOM 붙음 / 해결=Bash 도구 printf 사용 또는 [System.IO.File]::WriteAllText(path,content,UTF8Encoding.new($false)) / git show HEAD --format="%s" | head -c 4 | xxd로 efbbbf면 BOM / T-026·T-044 같은 뿌리(PS 5.1 인코딩), PR #372) |
+| 2026-06-17 | T-058 (SES 프로덕션 액세스 거부 — AWS 지원 케이스 "사례 해결"(Resolve)=요청 포기(케이스 종료)지 승인 아님(답답해도 누르지 말 것)·"고객 작업 완료"=공이 AWS로 넘어감(끝 아님) / AWS "추가 정보 요청"에 상세 없이 "검토만 해달라" 하면 불충분으로 거부("우려 있음, 보안상 사유 비공개" 정형) / 승인 진짜 신호=케이스 아니라 SES 콘솔 Account dashboard "Production access" / 거부돼도 "사례 다시 열기"로 AWS가 물은 4가지(발송 빈도·목록 관리·반송/불만/수신거부·메일 예시) 구체 담아 재요청→보통 24h 재심사 / 개념·토글≠실발송 N-091, N-067·N-071, case 178123901400162) |

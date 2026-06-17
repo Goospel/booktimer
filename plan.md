@@ -1072,7 +1072,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 >
 > 부가: **처리결과 통지**=동의/철회 시 화면 즉시 안내(설정 flash·`unsubscribe-done.html`)로 갈음 ✅. **처리방침**(`privacy.html`) §1 동의여부·시각 수집 + §2 선택동의·끼워팔기 금지·철회방법 ✅.
 >
-> **📡 점등 runbook (`BOOKTIMER_NUDGE_ENABLED=true`) — 아직 켜지 않음**: 전제 게이트 2개 통과 후 켠다. ① **SES 샌드박스 해제(프로덕션 액세스)** — 미해제면 미검증 실주소 발송 실패→반송→발신 평판 하락(transactional까지 연쇄). AWS Support 케이스 178123901400162 대기. ② **법무 9박스** 1~8 ✅. **절차**: `task-definition.json` `environment`에 `{"name":"BOOKTIMER_NUDGE_ENABLED","value":"true"}` 추가 → main push → `deploy.yml` 자동 배포(스케줄러 빈 등록) → 다음 KST 10시 배치 발송. **점등 후**: 반송·스팸신고율·DMARC 정렬(N-071) 모니터링, 안정 시 DMARC `p=none`→`quarantine` 상향.
+> **📡 점등 runbook (`BOOKTIMER_NUDGE_ENABLED=true`) — 아직 켜지 않음**: 전제 게이트 2개 통과 후 켠다. ① **SES 샌드박스 해제(프로덕션 액세스)** — 미해제면 미검증 실주소 발송 실패→반송→발신 평판 하락(transactional까지 연쇄). AWS Support 케이스 178123901400162는 **1차 거부(2026-06-17, "보안상 사유 비공개")** 후, AWS가 요구한 상세 사용 사례(발송 빈도·수신자 목록 관리·반송/불만/수신거부 처리·메일 예시)를 담아 **재요청(재고 요청) 중**. 진짜 승인 신호는 케이스가 아니라 SES 콘솔 Account dashboard의 "Production access" 표기다(배경·재발 방지: [learning-notes N-091](claude-docs/learning-notes.md), [troubleshooting T-058](claude-docs/troubleshooting.md)). ② **법무 9박스** 1~8 ✅. **절차**: `task-definition.json` `environment`에 `{"name":"BOOKTIMER_NUDGE_ENABLED","value":"true"}` 추가 → main push → `deploy.yml` 자동 배포(스케줄러 빈 등록) → 다음 KST 10시 배치 발송. **점등 후**: 반송·스팸신고율·DMARC 정렬(N-071) 모니터링, 안정 시 DMARC `p=none`→`quarantine` 상향.
 
 ### 측정 세션 `book_id` NOT NULL 제약 — 레거시 정리 후 (보류, 우선순위: 낮음)
 > **배경**: "측정은 무조건 책을 골라야 한다"(어떤 책을 얼마나 읽었는지 명확히)를 도입하며(PR #133),
