@@ -876,16 +876,22 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     overflow: hidden;
 }
 
-/* 보기 모드 좌표 평면 — 무대(하늘/잔디) 안 고정 종횡비 평면에 식물을 정규화 좌표로 절대배치(no-JS 폴백).
-   하단에 옅은 흙 띠를 깔아 Phaser 편집 배경(하늘/잔디/흙)과 톤을 맞춘다. */
+/* 보기 모드 좌표 평면 — 무대(하늘/잔디) 안 고정 종횡비 평면에 식물을 아이소 좌표로 절대배치(no-JS 폴백). */
 .garden-view {
     position: relative;
     width: 100%;
     border-radius: var(--radius-sm);
     overflow: hidden;
-    background: linear-gradient(180deg,
-        transparent 0%, transparent 78%,
-        rgba(184, 149, 118, .5) 82%, rgba(184, 149, 118, .65) 100%);   /* 하단 흙 화단 띠 암시(--garden-soil 톤) */
+}
+/* 아이소 바닥 다이아몬드 — ISO_FLATTEN=0.5 유도값: 위 25%, 아래 75%.
+   FLATTEN 튜닝 시 이 polygon도 함께 수정(JS normToIso 공식과 결합). */
+.garden-view::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--garden-grass);
+    clip-path: polygon(50% 25%, 100% 50%, 50% 75%, 0 50%);
+    z-index: 0;
 }
 .garden-view-plant {
     position: absolute;

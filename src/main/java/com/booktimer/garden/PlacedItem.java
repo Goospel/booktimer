@@ -40,4 +40,7 @@ public record PlacedItem(String kind, PlacementAxis axis, String code, String em
         return new PlacedItem(KIND_DECOR, null, meta.getCode(), meta.getEmoji(), meta.getName(), meta.getSpriteId(),
                 gd.getPosX(), gd.getPosY(), gd.getZOrder(), gd.getRotation(), gd.getScale());
     }
+
+    public double isoLeftPct() { return GardenIsoProjection.screenXPercent(x, y); }
+    public double isoTopPct()  { return GardenIsoProjection.screenYPercent(x, y); }
 }
