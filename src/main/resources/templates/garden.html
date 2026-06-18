@@ -72,13 +72,13 @@
             <div class="garden-view" th:style="'aspect-ratio:' + ${worldWidth} + ' / ' + ${worldHeight}">
                 <!-- 좌표 절대배치: left/top은 정규화×100%, z-index는 zOrder(식물·소품 통합). 식물=.canvas-plant(sway/그림자 상속 A1·A2),
                      소품=.canvas-decor(정적 — 연못이 흔들리면 어색). placedItems는 z 오름차순 병합 정렬(식물·소품 교차). -->
-                <!-- wrapper 분리(Phase 2): outer=위치+사용자 변형(rotate/scale 인라인 transform), inner=sway 애니메이션.
+                <!-- wrapper 분리(Phase 2): outer=위치+사용자 변형(rotate 인라인 transform), inner=sway 애니메이션.
                      한 요소에 두면 sway transform이 변형을 덮어 사라지므로 부모-자식으로 나눠 자연 합성한다. -->
                 <span class="garden-view-plant"
                       th:classappend="${it.kind() == 'plant'} ? 'gv-plant' : 'gv-decor'"
                       th:each="it : ${placedItems}"
                       th:style="'left:' + ${it.isoLeftPct()} + '%; top:' + ${it.isoTopPct()} + '%; z-index:' + ${it.depthZ()}
-                          + '; transform: translate(-50%,' + ${it.kind() == 'plant' ? '-100%' : '-50%'} + ') rotate(' + ${it.rotation()} + 'deg) scale(' + ${it.scale()} + ')'"
+                          + '; transform: translate(-50%,' + ${it.kind() == 'plant' ? '-100%' : '-50%'} + ') rotate(' + ${it.rotation()} + 'deg)'"
                       th:title="${it.name()}">
                     <span th:class="${it.kind() == 'plant'} ? 'canvas-plant' : 'canvas-decor'">
                         <svg class="plant-svg" th:if="${it.spriteId() != null}" aria-hidden="true">
@@ -96,19 +96,17 @@
         <!-- 편집 모드: Phaser 게임 위젯 + 팔레트. JS 필요 — no-JS면 이 블록은 렌더되지 않는다(점진 향상). -->
         <template x-if="editing">
             <div>
-                <p class="my-garden-hint">팔레트에서 누르면 정원에 놓여요. 끌어 옮기고, 밖으로 끌어내면 거둬요. <b>탭하면</b> 회전·크기를 바꿀 수 있어요. <b>소품(길·연못·울타리…)</b>은 여러 개 놓을 수 있어요.</p>
+                <p class="my-garden-hint">팔레트에서 누르면 정원에 놓여요. 끌어 옮기고, 밖으로 끌어내면 거둬요. <b>탭하면</b> 회전을 바꿀 수 있어요. <b>소품(길·연못·울타리…)</b>은 여러 개 놓을 수 있어요.</p>
                 <!-- 무대 안에 Phaser 캔버스가 마운트된다(고정 종횡비 컨테이너 → FIT 스케일로 화면에 핏). -->
                 <div class="garden-stage garden-stage-edit">
                     <div id="garden-phaser" class="garden-phaser"
                          th:style="'aspect-ratio:' + ${worldWidth} + ' / ' + ${worldHeight}"></div>
                 </div>
-                <!-- 변형 툴바 — 식물 선택(탭) 시 표시. 회전 ±15°·크기 ±0.1·맨앞/맨뒤·거두기(scene 위임). -->
+                <!-- 변형 툴바 — 식물 선택(탭) 시 표시. 회전 ±15°·맨앞/맨뒤·거두기(scene 위임). -->
                 <div class="garden-toolbar" x-show="selected" style="display:none">
                     <span class="garden-tool-label">선택한 식물</span>
                     <button type="button" class="garden-tool-btn" @click="rotateSel(-15)" title="왼쪽으로 15°">⟲</button>
                     <button type="button" class="garden-tool-btn" @click="rotateSel(15)" title="오른쪽으로 15°">⟳</button>
-                    <button type="button" class="garden-tool-btn" @click="scaleSel(-0.1)" title="작게">－</button>
-                    <button type="button" class="garden-tool-btn" @click="scaleSel(0.1)" title="크게">＋</button>
                     <button type="button" class="garden-tool-btn danger" @click="removeSel()" title="거두기">🗑</button>
                 </div>
                 <!-- 식물 팔레트 — 보유분만. 한 식물 한 번이라 놓이면 비활성(.placed). -->
@@ -415,8 +413,6 @@
     }
     // 사용자 회전 정규화 — 0~360도(음수·360+를 wrap). CSS rotate()·Phaser setAngle 동일 단위. 변형·레이어(Phase 2).
     function clampRotation(deg) { const r = deg % 360; return r < 0 ? r + 360 : r; }
-    // 사용자 크기 배율 클램프 — 기본 [0.5, 2.0](식물이 깨지거나 화면을 덮지 않게). 보기=기본크기×scale, Phaser=plantPx×scale.
-    function clampScale(s, min = 0.5, max = 2.0) { return Math.min(max, Math.max(min, s)); }
     // 직교 사각 격자 — 1000×800 월드에서 50px 사각 셀(ROWS = 0.8·COLS). 단일 상수, 튜닝 가능.
     const GRID_COLS = 20, GRID_ROWS = 16;
     // 정규화 점이 속한 셀 (col,row). 경계·범위 밖은 클램프(끝 셀로 흡수).
@@ -683,8 +679,7 @@
                 this.shadowLayer.fillStyle(0x2e2a22, 0.22);
                 for (const o of this.objs) {
                     if (o.getData('kind') !== 'plant') continue;
-                    const s = o.getData('scale') || 1;
-                    const w = this.plantPx * s * 0.55;
+                    const w = this.plantPx * 0.55;
                     const h = w * ISO_FLATTEN;   // 아이소 평면에 눕힌 납작 타원
                     this.shadowLayer.fillEllipse(o.x, o.y, w, h);
                 }
@@ -693,16 +688,15 @@
             spawnObject(meta, px, py) {
                 const kind = meta.kind || 'plant';
                 const rotation = clampRotation(meta.rotation || 0);
-                const scale = clampScale(meta.scale || 1);
                 const isPlant = kind === 'plant';
                 const oy = isPlant ? 1 : 0.5;   // 식물=발밑 앵커, 데코=현행 중심
                 let obj;
                 if (meta.spriteId && this.textures.exists('tex-' + meta.spriteId)) {
                     obj = this.add.image(px, py, 'tex-' + meta.spriteId)
                             .setOrigin(0.5, oy)
-                            .setDisplaySize(this.plantPx * scale, this.plantPx * scale);
+                            .setDisplaySize(this.plantPx, this.plantPx);
                 } else {
-                    obj = this.add.text(px, py, meta.emoji || '🌱', { fontSize: Math.round(this.plantPx * 0.8 * scale) + 'px' }).setOrigin(0.5, oy);
+                    obj = this.add.text(px, py, meta.emoji || '🌱', { fontSize: Math.round(this.plantPx * 0.8) + 'px' }).setOrigin(0.5, oy);
                 }
                 obj.setAngle(rotation);
                 obj.setData('kind', kind);
@@ -712,7 +706,7 @@
                 obj.setData('name', meta.name);
                 obj.setData('spriteId', meta.spriteId);
                 obj.setData('rotation', rotation);
-                obj.setData('scale', scale);
+                obj.setData('scale', 1);
                 obj.setInteractive({ draggable: true, useHandCursor: true });
                 this.objs.push(obj);
                 this.restack();   // 새 오브젝트 포함 z-order(depth) 재부여
@@ -756,7 +750,7 @@
                 this.objs.forEach((o, i) => {
                     const { x, y } = isoPixelToNorm(o.x, o.y, this.cfg.worldW, this.cfg.worldH);
                     const t = { code: o.getData('code'), x, y, z: i,
-                                rotation: o.getData('rotation') || 0, scale: o.getData('scale') || 1 };
+                                rotation: o.getData('rotation') || 0, scale: 1 };
                     if (o.getData('kind') === 'decor') decorations.push(t);
                     else plants.push({ axis: o.getData('axis'), ...t });
                 });
@@ -770,7 +764,7 @@
                 }
             }
 
-            // ── 변형·레이어(Phase 2): 선택 + 회전/크기/앞뒤/삭제 ──
+            // ── 변형·레이어(Phase 2): 선택 + 회전/앞뒤/삭제 ──
             // 선택(탭) — 변형 툴바 대상. Alpine에 선택 정보를 onSelect 콜백으로 알린다.
             selectPlant(obj) { this.selected = obj; this.notifySelection(); }
             deselectPlant() {
@@ -784,7 +778,7 @@
             }
             selectionInfo() {
                 if (!this.selected) return null;
-                return { rotation: Math.round(this.selected.getData('rotation') || 0), scale: this.selected.getData('scale') || 1 };
+                return { rotation: Math.round(this.selected.getData('rotation') || 0) };
             }
             // 선택 테두리(별도 graphics) — 변형·드래그마다 식물 경계에 맞춰 다시 그린다.
             highlightSelected() {
@@ -795,21 +789,11 @@
                 const b = this.selected.getBounds();
                 this._selBox.lineStyle(3, 0x6E8A6A, 0.9).strokeRect(b.x - 5, b.y - 5, b.width + 10, b.height + 10);
             }
-            applyScale(obj, s) {
-                if (obj.type === 'Image') obj.setDisplaySize(this.plantPx * s, this.plantPx * s);
-                else obj.setFontSize(Math.round(this.plantPx * 0.8 * s));  // 이모지 텍스트 폴백
-            }
             rotateSelected(delta) {
                 if (!this.selected) return;
                 const r = clampRotation((this.selected.getData('rotation') || 0) + delta);
                 this.selected.setAngle(r); this.selected.setData('rotation', r);
                 this.notifySelection(); this.emitChange();
-            }
-            scaleSelected(delta) {
-                if (!this.selected) return;
-                const s = clampScale((this.selected.getData('scale') || 1) + delta);
-                this.applyScale(this.selected, s); this.selected.setData('scale', s);
-                this.notifySelection(); this.emitChange(); this.drawShadows();
             }
             // 점유 셀 키 Set — 자신(exclude)은 빼고 나머지 오브젝트의 셀키를 반환(드롭·팔레트 추가에서 사용).
             occupiedCells(exclude = null) {
@@ -849,7 +833,7 @@
             owned: data.owned || [],
             decorations: data.decorations || [],   // 소품 팔레트(카탈로그 전체 — 보유 무관)
             placedKeys: placedKeySet(),   // 어떤 식물이 캔버스에 놓였나 — 식물 팔레트 비활성 판정
-            selected: null,               // 선택된 오브젝트 변형 정보({rotation, scale}) — 있으면 변형 툴바 표시(Phaser onSelect 콜백)
+            selected: null,               // 선택된 오브젝트 변형 정보({rotation}) — 있으면 변형 툴바 표시(Phaser onSelect 콜백)
 
             isPlaced(o) { return this.placedKeys.has(o.axis + '/' + o.code); },
 
@@ -894,9 +878,8 @@
                 if (!scene) return;
                 scene.addDecoration(d);
             },
-            // 변형 툴바 — 선택된 오브젝트(식물·소품)에 회전·크기·앞뒤·삭제를 적용(scene 위임). scene 없으면 무시.
+            // 변형 툴바 — 선택된 오브젝트(식물·소품)에 회전·앞뒤·삭제를 적용(scene 위임). scene 없으면 무시.
             rotateSel(delta) { if (scene) scene.rotateSelected(delta); },
-            scaleSel(delta) { if (scene) scene.scaleSelected(delta); },
             removeSel() { if (scene) scene.removeSelected(); },
             cancel() {
                 this.destroyPhaser();
