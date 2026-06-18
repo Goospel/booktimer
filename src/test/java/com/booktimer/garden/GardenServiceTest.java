@@ -466,20 +466,21 @@ class GardenServiceTest {
     // --- AUTHOR axis: 작가 캐릭터 배선 확인 ------------------------------------------
 
     @Test
-    @DisplayName("큐레이션 작가 완독 → view().ownedPlants()에 axis=AUTHOR로 등장")
+    @DisplayName("큐레이션 작가 완독 → view().ownedCharacters()에 등장, ownedPlants()에는 없음 (C2 풀어놓기)")
     void authorCharacters_finishedAuthor_owned() {
         User user = register("garden-author-owned@booktimer.com");
-        // "한강 (지은이)" — 알라딘 원문 형태로 등록해 정규화 매칭을 배선까지 확인.
         registerBookWith(user, "소설", "한강 (지은이)", null, BookStatus.FINISHED);
 
         GardenView view = gardenService.view(user);
 
         assertThat(authorCharacter(view, "han_gang").owned()).isTrue();
         assertThat(view.ownedAuthorCharacterCount()).isEqualTo(1);
-        OwnedPlant authorPlant = view.ownedPlants().stream()
-                .filter(o -> o.axis() == PlacementAxis.AUTHOR && o.code().equals("han_gang"))
+        // C2: AUTHOR는 배회 전용 — ownedCharacters()로 노출, ownedPlants()엔 없음
+        OwnedCharacter ch = view.ownedCharacters().stream()
+                .filter(c -> c.code().equals("han_gang"))
                 .findFirst().orElseThrow();
-        assertThat(authorPlant.emoji()).isEqualTo("🪶");
+        assertThat(ch.emoji()).isEqualTo("🪶");
+        assertThat(view.ownedPlants()).extracting(OwnedPlant::axis).doesNotContain(PlacementAxis.AUTHOR);
     }
 
     @Test

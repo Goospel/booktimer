@@ -105,3 +105,39 @@ export function nearestFreeCell(
     }
     return null;
 }
+
+// ── C2 배회 AI — 순수 상태머신. DOM·Phaser 의존 0. rand 주입으로 결정성 보장. ──
+
+const WANDER_ARRIVAL_EPS = 0.01;   // 도달 판정 정규화 거리
+const WANDER_DWELL_MIN = 500;       // 최소 대기 ms
+const WANDER_DWELL_RANGE = 1500;    // 추가 랜덤 대기 ms (0~1500)
+
+export interface WanderState {
+    phase: 'idle' | 'walk';
+    x: number; y: number;   // 현재 정규화 좌표 [0,1]
+    tx: number; ty: number; // 목표 (walk 시 유효)
+    timer: number;          // idle 잔여 ms
+}
+
+function stepToward(x: number, y: number, tx: number, ty: number, dist: number): { x: number; y: number } {
+    const d = Math.hypot(tx - x, ty - y);
+    if (d <= 0) return { x, y };
+    const step = Math.min(dist, d);
+    return { x: x + (tx - x) / d * step, y: y + (ty - y) / d * step };
+}
+
+export function wanderStep(s: WanderState, dtMs: number, speedPerMs: number, rand: () => number): WanderState {
+    if (s.phase === 'idle') {
+        const timer = s.timer - dtMs;
+        if (timer > 0) return { ...s, timer };
+        const tx = rand(), ty = rand();
+        return { ...s, phase: 'walk', tx, ty, timer: 0 };
+    }
+    const pos = stepToward(s.x, s.y, s.tx, s.ty, dtMs * speedPerMs);
+    const dist = Math.hypot(s.tx - pos.x, s.ty - pos.y);
+    if (dist < WANDER_ARRIVAL_EPS) {
+        const timer = WANDER_DWELL_MIN + rand() * WANDER_DWELL_RANGE;
+        return { ...s, phase: 'idle', x: s.tx, y: s.ty, timer };
+    }
+    return { ...s, x: pos.x, y: pos.y };
+}

@@ -340,28 +340,20 @@ class GardenLayoutServiceTest {
     }
 
     @Test
-    @DisplayName("보유한 AUTHOR 캐릭터를 좌표에 저장하면 layoutOf가 저장·재로딩 round-trip으로 돌려준다")
-    void save_author_thenLayoutReturnsPlaced() {
-        User user = register("place-author-happy@booktimer.com");
-        grantAuthorHanGang(user);
+    @DisplayName("C2 풀어놓기: 보유한 AUTHOR 캐릭터도 save() 배치 요청은 거부된다 (배회로 전환, 좌표 저장 없음)")
+    void save_author_isRejectedEvenWhenOwned() {
+        User user = register("place-author-c2@booktimer.com");
+        grantAuthorHanGang(user);  // 보유 상태이지만
 
-        layoutService.save(user, List.of(req(PlacementAxis.AUTHOR, "han_gang", 0.3, 0.5, 0)));
-
-        List<PlacedPlant> layout = layoutService.layoutOf(user);
-        assertThat(layout).hasSize(1);
-        PlacedPlant placed = layout.get(0);
-        assertThat(placed.axis()).isEqualTo(PlacementAxis.AUTHOR);
-        assertThat(placed.code()).isEqualTo("han_gang");
-        assertThat(placed.emoji()).isEqualTo("🪶");
-        assertThat(placed.x()).isEqualTo(0.3);
-        assertThat(placed.y()).isEqualTo(0.5);
+        assertThatThrownBy(() -> layoutService.save(user, List.of(req(PlacementAxis.AUTHOR, "han_gang", 0.3, 0.5, 0))))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(placementRepository.findByUser(user)).isEmpty();
     }
 
     @Test
-    @DisplayName("미보유 AUTHOR 캐릭터 배치 요청은 거부된다 — save()의 ownedByKey 검증이 축 무관으로 작동")
+    @DisplayName("미보유 AUTHOR 캐릭터 배치 요청은 거부된다 — ownedByKey에 AUTHOR 없음으로 자동 방어")
     void save_rejectsUnownedAuthorCharacter() {
         User user = register("place-author-unowned@booktimer.com");
-        // 한강 완독 없음 → han_gang 미보유
 
         assertThatThrownBy(() -> layoutService.save(user, List.of(req(PlacementAxis.AUTHOR, "han_gang", 0.5, 0.5, 0))))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -369,16 +361,14 @@ class GardenLayoutServiceTest {
     }
 
     @Test
-    @DisplayName("저장 후 작가 완독책 삭제 → 보유 상실 → layoutOf 교집합으로 렌더에서 빠짐 (유령 방지)")
-    void layoutOf_excludesAuthorCharacterAfterOwnershipLost() {
-        User user = register("place-author-ghost@booktimer.com");
-        Book hangangBook = grantAuthorHanGang(user);
+    @DisplayName("C2 풀어놓기: DB에 잔존하는 AUTHOR 배치 행은 layoutOf 교집합에서 제외된다 (유령 방지 재사용)")
+    void layoutOf_excludesResidualAuthorPlacementsFromDB() {
+        User user = register("place-author-residual@booktimer.com");
+        grantAuthorHanGang(user);  // 보유 상태이지만
+        // save()를 우회해 DB에 직접 삽입 — C2 이전 V47 마이그레이션 전 잔존 데이터 시뮬레이션
+        placementRepository.save(GardenPlacement.of(user, PlacementAxis.AUTHOR, "han_gang", 0.3, 0.5, 0, 0, 1));
 
-        layoutService.save(user, List.of(req(PlacementAxis.AUTHOR, "han_gang", 0.3, 0.5, 0)));
-        assertThat(layoutService.layoutOf(user)).hasSize(1);
-
-        // 완독책 삭제 → 보유 상실 → 배치 행은 남아도 렌더에서 빠져야 한다.
-        bookRepository.delete(hangangBook);
+        // layoutOf()의 ownedByKey 교집합: AUTHOR는 ownedPlants()에서 제거되어 렌더에서 제외
         assertThat(layoutService.layoutOf(user)).isEmpty();
     }
 }

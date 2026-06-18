@@ -5,6 +5,7 @@ interface GardenData {
     placed: GardenItemMeta[];
     owned: GardenItemMeta[];
     decorations: GardenItemMeta[];
+    characters: GardenItemMeta[];
     worldWidth: number;
     worldHeight: number;
 }
@@ -14,7 +15,7 @@ interface GardenData {
 // x-data 속성에 넣으면 reactive Proxy가 Phaser 내부 순환참조를 깨뜨린다(N-082).
 export function myGarden() {
     const data: GardenData = (window as unknown as { __garden?: GardenData }).__garden ?? {
-        placed: [], owned: [], decorations: [],
+        placed: [], owned: [], decorations: [], characters: [],
         worldWidth: 1000, worldHeight: 800,
     };
     const placedKeySet = () => new Set(
@@ -48,6 +49,7 @@ export function myGarden() {
                     owned: data.owned || [],
                     decorations: data.decorations || [],
                     placed: data.placed || [],
+                    characters: data.characters || [],
                     worldW: data.worldWidth,
                     worldH: data.worldHeight,
                     readonly: true,
@@ -81,6 +83,7 @@ export function myGarden() {
                 owned: this.owned,
                 decorations: this.decorations,
                 placed: data.placed || [],
+                characters: data.characters || [],
                 worldW: data.worldWidth,
                 worldH: data.worldHeight,
                 onChange: (keys: string[]) => { self.placedKeys = new Set(keys); },

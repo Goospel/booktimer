@@ -85,12 +85,6 @@ public record GardenView(List<PlantState> plants,
                         s.recipePlant().getEmoji(), s.recipePlant().getName(), s.recipePlant().getSpriteId()));
             }
         }
-        for (AuthorCharacterState s : authorCharacters) {
-            if (s.owned()) {
-                owned.add(new OwnedPlant(PlacementAxis.AUTHOR, s.character().getCode(),
-                        s.character().getEmoji(), s.character().getName(), s.character().getSpriteId()));
-            }
-        }
         for (BuildingState s : buildings) {
             if (s.owned()) {
                 owned.add(new OwnedPlant(PlacementAxis.BUILDING, s.building().getCode(),
@@ -98,5 +92,22 @@ public record GardenView(List<PlantState> plants,
             }
         }
         return owned;
+    }
+
+    /**
+     * 배회용 보유 캐릭터 목록 — AUTHOR 축 전용. {@link OwnedPlant}와 달리 axis·배치 의미 없이 노출한다.
+     *
+     * <p>C2 풀어놓기: AUTHOR 캐릭터는 {@link #ownedPlants()}·팔레트·좌표 저장 경로에서 완전히 분리되고
+     * 이 메서드를 통해 배회 전용으로 노출된다 — Phaser {@code update()} 루프가 이 목록으로 캐릭터를 스폰한다.
+     */
+    public List<OwnedCharacter> ownedCharacters() {
+        List<OwnedCharacter> chars = new ArrayList<>();
+        for (AuthorCharacterState s : authorCharacters) {
+            if (s.owned()) {
+                chars.add(new OwnedCharacter(s.character().getCode(),
+                        s.character().getEmoji(), s.character().getName(), s.character().getSpriteId()));
+            }
+        }
+        return chars;
     }
 }
