@@ -51,52 +51,62 @@ public record GardenApiResponse(
 
     public record PlantDto(
             String code, String emoji, String name, String spriteId,
-            boolean owned, LocalDate unlockedOn, boolean isNew
+            boolean owned, LocalDate unlockedOn, boolean isNew,
+            long unlockThresholdDays
     ) {
         static PlantDto from(PlantState s) {
             return new PlantDto(
                     s.plant().getCode(), s.plant().getEmoji(), s.plant().getName(), s.plant().getSpriteId(),
-                    s.owned(), s.unlockedOn(), s.isNew());
+                    s.owned(), s.unlockedOn(), s.isNew(),
+                    s.plant().getUnlockThresholdDays());
         }
     }
 
     public record GenrePlantDto(
-            String code, String emoji, String name, String spriteId, boolean owned
+            String code, String emoji, String name, String spriteId, boolean owned,
+            String genreLabel
     ) {
         static GenrePlantDto from(GenrePlantState s) {
             return new GenrePlantDto(
                     s.genrePlant().getCode(), s.genrePlant().getEmoji(), s.genrePlant().getName(), s.genrePlant().getSpriteId(),
-                    s.owned());
+                    s.owned(),
+                    s.genrePlant().getGenreLabel());
         }
     }
 
     public record DiversityPlantDto(
-            String code, String emoji, String name, String spriteId, boolean owned
+            String code, String emoji, String name, String spriteId, boolean owned,
+            int thresholdCount
     ) {
         static DiversityPlantDto from(DiversityPlantState s) {
             return new DiversityPlantDto(
                     s.plant().getCode(), s.plant().getEmoji(), s.plant().getName(), s.plant().getSpriteId(),
-                    s.owned());
+                    s.owned(),
+                    s.plant().getThresholdCount());
         }
     }
 
     public record RecipePlantDto(
-            String code, String emoji, String name, String spriteId, boolean discovered
+            String code, String emoji, String name, String spriteId, boolean discovered,
+            String story
     ) {
         static RecipePlantDto from(DiscoveredPlantState s) {
             return new RecipePlantDto(
                     s.recipePlant().getCode(), s.recipePlant().getEmoji(), s.recipePlant().getName(), s.recipePlant().getSpriteId(),
-                    s.discovered());
+                    s.discovered(),
+                    s.discovered() ? s.recipePlant().getStory() : null);
         }
     }
 
     public record AuthorCharacterDto(
-            String code, String emoji, String name, String spriteId, boolean owned
+            String code, String emoji, String name, String spriteId, boolean owned,
+            String matchName
     ) {
         static AuthorCharacterDto from(AuthorCharacterState s) {
             return new AuthorCharacterDto(
                     s.character().getCode(), s.character().getEmoji(), s.character().getName(), s.character().getSpriteId(),
-                    s.owned());
+                    s.owned(),
+                    s.character().getMatchName());
         }
     }
 
@@ -118,12 +128,14 @@ public record GardenApiResponse(
     }
 
     public record BuildingDto(
-            String code, String emoji, String name, String spriteId, boolean owned
+            String code, String emoji, String name, String spriteId, boolean owned,
+            String matchName, int thresholdCount
     ) {
         static BuildingDto from(BuildingState s) {
             return new BuildingDto(
                     s.building().getCode(), s.building().getEmoji(), s.building().getName(), s.building().getSpriteId(),
-                    s.owned());
+                    s.owned(),
+                    s.building().getMatchName(), s.building().getThresholdCount());
         }
     }
 

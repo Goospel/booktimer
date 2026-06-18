@@ -75,7 +75,8 @@
             아직 빈 마을이에요. 「✏️ 꾸미기」로 모은 식물과 소품(길·연못·울타리…)을 놓아보세요. 🌱</p>
     </section>
 
-    <section class="card garden-page" x-data="{ tab: 'all', ownedOnly: false }">
+    <!-- S3: Vue 도감 마운트 포인트. x-data 제거(Alpine S3서 제거). SSR 폴백(no-JS용)은 S5까지 유지. -->
+    <section class="card garden-page" id="village-dex">
         <p class="garden-beta">🚧 베타 · 마을은 개발 중이에요. 곧 더 다양한 식물과 상세 이야기로 채워집니다.</p>
 
         <!-- 전체 진척 한 줄(3축 합산) — 한눈에 수집 현황. -->
