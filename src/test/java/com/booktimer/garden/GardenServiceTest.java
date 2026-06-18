@@ -48,13 +48,15 @@ class GardenServiceTest {
     @Autowired
     private AuthorCharacterRepository authorCharacterRepository;
     @Autowired
+    private BuildingRepository buildingRepository;
+    @Autowired
     private BookRepository bookRepository;
     @Autowired
     private GardenService gardenService;
     @Autowired
     private Clock clock;
 
-    // 테스트 카탈로그 — 운영 시드(V35·V36)와 디커플해 배선만 본다.
+    // 테스트 카탈로그 — 운영 시드(V35·V36·V45·V46)와 디커플해 배선만 본다.
     // Flyway는 테스트에서 꺼져 있어(application.properties) 시드가 안 도므로 직접 심는다.
     @BeforeEach
     void seedCatalog() {
@@ -67,14 +69,15 @@ class GardenServiceTest {
         genrePlantRepository.save(GenrePlant.of("econ", "경제경영", "경제선인장", "🌵", 2, null));        // spriteId 미지정(이모지 폴백)
         genrePlantRepository.save(GenrePlant.of("wildflower", null, "이름 모를 들꽃", "🌼", 99, "wildflower"));
 
-        // 다양성축 — 작가 식물(임계 1·3) + 출판사 식물(임계 1·3). prod 시드(V38)와 디커플.
+        // 다양성축 — 작가 식물(임계 1·3). prod 시드(V38)와 디커플. 출판사 식물 제거됨(건물축으로 흡수).
         diversityPlantRepository.save(DiversityPlant.of("author_1", DiversityKind.AUTHOR, 1, "작가 새싹", "🖋️", 1, "author_1")); // A2 후속: SVG
         diversityPlantRepository.save(DiversityPlant.of("author_3", DiversityKind.AUTHOR, 3, "작가 나무", "✒️", 2, null));      // 미지정(폴백)
-        diversityPlantRepository.save(DiversityPlant.of("publisher_1", DiversityKind.PUBLISHER, 1, "출판 새싹", "🏷️", 3, "publisher_1"));
-        diversityPlantRepository.save(DiversityPlant.of("publisher_3", DiversityKind.PUBLISHER, 3, "출판 나무", "📦", 4, null));
 
         // 작가 캐릭터 — 큐레이션 한 종(배선 확인용). prod 시드(V45)와 디커플.
         authorCharacterRepository.save(AuthorCharacter.of("han_gang", "한강", "소설가 한강", "🪶", 1, null));
+
+        // 건물 — 배선 확인용 한 종. prod 시드(V46)와 디커플.
+        buildingRepository.save(Building.of("minumsa", "민음사", "민음사", "🏛️", 3, 1, null));
     }
 
     /** 주어진 장르(category)·상태로 책 한 권을 등록한다. */
@@ -83,7 +86,7 @@ class GardenServiceTest {
                 category, null, status));
     }
 
-    /** 주어진 작가·출판사·상태로 책 한 권을 등록한다(다양성축 검증용). */
+    /** 주어진 작가·출판사·상태로 책 한 권을 등록한다(다양성축/건물축 검증용). */
     private void registerBookWith(User user, String title, String author, String publisher, BookStatus status) {
         bookRepository.save(Book.register(user, title, author, null, null, publisher, null,
                 null, null, status));
@@ -241,12 +244,12 @@ class GardenServiceTest {
     }
 
     @Test
-    @DisplayName("완독한 책의 distinct 작가·출판사 수로 다양성 식물 보유 — 읽는중·읽고싶음은 제외")
+    @DisplayName("완독한 책의 distinct 작가 수로 다양성 식물 보유 — 읽는중·읽고싶음은 제외")
     void diversityPlants_finishedOnly() {
         User user = register("garden-diversity-finished@booktimer.com");
         registerBookWith(user, "완독1", "김영하", "문학동네", BookStatus.FINISHED);
         registerBookWith(user, "완독2", "한강", "창비", BookStatus.FINISHED);
-        // 읽는중·읽고싶음 작가/출판사를 섞어도 완독이 아니라 집계 제외(파밍 방지·책BTI 신호 일치).
+        // 읽는중·읽고싶음 작가를 섞어도 완독이 아니라 집계 제외(파밍 방지·책BTI 신호 일치).
         registerBookWith(user, "읽는중", "무라카미", "민음사", BookStatus.READING);
         registerBookWith(user, "읽고싶음", "베르나르", "열린책들", BookStatus.WANT_TO_READ);
 
@@ -256,14 +259,10 @@ class GardenServiceTest {
         assertThat(diversityPlant(view, "author_1").owned()).isTrue();
         assertThat(diversityPlant(view, "author_3").owned()).isFalse();
         assertThat(view.ownedAuthorCount()).isEqualTo(1);
-        // 완독 출판사 2 → 임계 1 보유·임계 3 미보유.
-        assertThat(diversityPlant(view, "publisher_1").owned()).isTrue();
-        assertThat(diversityPlant(view, "publisher_3").owned()).isFalse();
-        assertThat(view.ownedPublisherCount()).isEqualTo(1);
     }
 
     @Test
-    @DisplayName("같은 작가·출판사로 2권 완독 → distinct 1로 흡수")
+    @DisplayName("같은 작가로 2권 완독 → distinct 1로 흡수")
     void diversityPlants_sameAuthorCollapses() {
         User user = register("garden-diversity-dup@booktimer.com");
         registerBookWith(user, "책1", "김영하", "문학동네", BookStatus.FINISHED);
@@ -272,21 +271,19 @@ class GardenServiceTest {
         GardenView view = gardenService.view(user);
 
         assertThat(view.ownedAuthorCount()).isEqualTo(1);
-        assertThat(view.ownedPublisherCount()).isEqualTo(1);
         assertThat(diversityPlant(view, "author_1").owned()).isTrue();
         assertThat(diversityPlant(view, "author_3").owned()).isFalse();
     }
 
     @Test
-    @DisplayName("작가·출판사가 null인 완독책은 다양성 식물 누수 0 (N-055)")
-    void diversityPlants_nullAuthorPublisherNoLeak() {
+    @DisplayName("작가가 null인 완독책은 다양성 식물 누수 0 (N-055)")
+    void diversityPlants_nullAuthorNoLeak() {
         User user = register("garden-diversity-null@booktimer.com");
         registerBookWith(user, "수동등록완독", null, null, BookStatus.FINISHED);
 
         GardenView view = gardenService.view(user);
 
         assertThat(view.ownedAuthorCount()).isZero();
-        assertThat(view.ownedPublisherCount()).isZero();
         assertThat(view.diversityPlants()).noneMatch(DiversityPlantState::owned);
     }
 
@@ -298,28 +295,74 @@ class GardenServiceTest {
         GardenView view = gardenService.view(user);
 
         assertThat(view.totalAuthorCount()).isEqualTo(2);
-        assertThat(view.totalPublisherCount()).isEqualTo(2);
         assertThat(view.diversityPlants()).isNotEmpty();
         assertThat(view.diversityPlants()).noneMatch(DiversityPlantState::owned);
     }
 
+    // --- 건물축(BUILDING): 출판사 N권 완독 해금 배선 확인 ------------------------------------------
+
     @Test
-    @DisplayName("작가축·출판사축 독립 — 작가 많고 출판사 적으면 출판사 식물이 작가 수에 휩쓸리지 않는다")
-    void diversityPlants_axesIndependent() {
-        User user = register("garden-diversity-indep@booktimer.com");
-        // 작가는 셋 다 다르고(3), 출판사는 한 곳으로 몰아줌(1).
-        registerBookWith(user, "책1", "작가가", "한출판사", BookStatus.FINISHED);
-        registerBookWith(user, "책2", "작가나", "한출판사", BookStatus.FINISHED);
-        registerBookWith(user, "책3", "작가다", "한출판사", BookStatus.FINISHED);
+    @DisplayName("민음사 3권 완독 → 건물 minumsa(임계3) 보유")
+    void buildings_thresholdReached_owned() {
+        User user = register("garden-building-owned@booktimer.com");
+        registerBookWith(user, "책1", "저자가", "민음사", BookStatus.FINISHED);
+        registerBookWith(user, "책2", "저자나", "민음사", BookStatus.FINISHED);
+        registerBookWith(user, "책3", "저자다", "민음사", BookStatus.FINISHED);
 
         GardenView view = gardenService.view(user);
 
-        // 작가 3 → 임계 3 보유. 출판사 1 → 임계 3 미보유(작가 수에 안 휩쓸림)·임계 1만 보유.
-        assertThat(diversityPlant(view, "author_3").owned()).isTrue();
-        assertThat(diversityPlant(view, "publisher_3").owned()).isFalse();
-        assertThat(diversityPlant(view, "publisher_1").owned()).isTrue();
-        assertThat(view.ownedAuthorCount()).isEqualTo(2);    // author_1·author_3
-        assertThat(view.ownedPublisherCount()).isEqualTo(1); // publisher_1만
+        assertThat(building(view, "minumsa").owned()).isTrue();
+        assertThat(view.ownedBuildingCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("민음사 2권만 완독 → 건물 minumsa(임계3) 미보유 (임계 미달)")
+    void buildings_belowThreshold_notOwned() {
+        User user = register("garden-building-below@booktimer.com");
+        registerBookWith(user, "책1", "저자가", "민음사", BookStatus.FINISHED);
+        registerBookWith(user, "책2", "저자나", "민음사", BookStatus.FINISHED);
+
+        GardenView view = gardenService.view(user);
+
+        assertThat(building(view, "minumsa").owned()).isFalse();
+        assertThat(view.ownedBuildingCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("출판사 null 완독책만 있을 때 건물 누수 0 (N-055)")
+    void buildings_nullPublisher_noLeak() {
+        User user = register("garden-building-null@booktimer.com");
+        registerBookWith(user, "수동등록", null, null, BookStatus.FINISHED);
+        registerBookWith(user, "수동등록2", null, null, BookStatus.FINISHED);
+        registerBookWith(user, "수동등록3", null, null, BookStatus.FINISHED);
+
+        GardenView view = gardenService.view(user);
+
+        assertThat(view.buildings()).noneMatch(BuildingState::owned);
+        assertThat(view.ownedBuildingCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("건물 보유 시 ownedPlants()에 axis=BUILDING으로 등장")
+    void buildings_ownedAppearsInOwnedPlants() {
+        User user = register("garden-building-palette@booktimer.com");
+        registerBookWith(user, "책1", null, "민음사", BookStatus.FINISHED);
+        registerBookWith(user, "책2", null, "민음사", BookStatus.FINISHED);
+        registerBookWith(user, "책3", null, "민음사", BookStatus.FINISHED);
+
+        GardenView view = gardenService.view(user);
+
+        OwnedPlant buildingPlant = view.ownedPlants().stream()
+                .filter(o -> o.axis() == PlacementAxis.BUILDING && o.code().equals("minumsa"))
+                .findFirst().orElseThrow();
+        assertThat(buildingPlant.emoji()).isEqualTo("🏛️");
+    }
+
+    private static BuildingState building(GardenView view, String code) {
+        return view.buildings().stream()
+                .filter(s -> s.building().getCode().equals(code))
+                .findFirst()
+                .orElseThrow();
     }
 
     private static DiversityPlantState diversityPlant(GardenView view, String code) {

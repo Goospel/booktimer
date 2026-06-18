@@ -65,6 +65,7 @@ public class GardenService {
     private final GenrePlantRepository genrePlantRepository;
     private final DiversityPlantRepository diversityPlantRepository;
     private final AuthorCharacterRepository authorCharacterRepository;
+    private final BuildingRepository buildingRepository;
     private final RecipePlantRepository recipePlantRepository;
     private final UserDiscoveredPlantRepository discoveredPlantRepository;
     private final BookRepository bookRepository;
@@ -77,6 +78,7 @@ public class GardenService {
                          GenrePlantRepository genrePlantRepository,
                          DiversityPlantRepository diversityPlantRepository,
                          AuthorCharacterRepository authorCharacterRepository,
+                         BuildingRepository buildingRepository,
                          RecipePlantRepository recipePlantRepository,
                          UserDiscoveredPlantRepository discoveredPlantRepository,
                          BookRepository bookRepository,
@@ -88,6 +90,7 @@ public class GardenService {
         this.genrePlantRepository = genrePlantRepository;
         this.diversityPlantRepository = diversityPlantRepository;
         this.authorCharacterRepository = authorCharacterRepository;
+        this.buildingRepository = buildingRepository;
         this.recipePlantRepository = recipePlantRepository;
         this.discoveredPlantRepository = discoveredPlantRepository;
         this.bookRepository = bookRepository;
@@ -158,9 +161,9 @@ public class GardenService {
         List<GenrePlantState> genrePlants = GenreUnlockCalculator.resolve(genreCatalog, ownedGenres);
         int ownedGenreCount = (int) genrePlants.stream().filter(GenrePlantState::owned).count();
 
-        // 5.5) 다양성축 — 완독책의 distinct 작가/출판사 수로 작가·출판사 식물 보유 유도(완독만, 파밍 방지).
-        // author/publisher는 적재 시 정규화되지 않으므로(category와 달리 blankToNull 없음) distinctCount가
-        // strip + 빈/null 제외를 맡는다(미완성 메타 누수 가드 N-055). 책장 추가 조회 없이 위 books를 재사용.
+        // 5.5) 다양성축 — 완독책의 distinct 작가 수로 작가 식물 보유 유도(완독만, 파밍 방지).
+        // author는 적재 시 정규화되지 않으므로 distinctCount가 strip+빈/null 제외를 맡는다(N-055).
+        // 출판사 다양성은 건물축(5.7)으로 흡수됐다. 책장 추가 조회 없이 위 books를 재사용.
         List<String> finishedAuthors = books.stream()
                 .filter(b -> b.getStatus() == BookStatus.FINISHED)
                 .map(Book::getAuthor)
@@ -170,18 +173,11 @@ public class GardenService {
                 .map(Book::getPublisher)
                 .toList();
         int authorCount = DiversityUnlockCalculator.distinctCount(finishedAuthors);
-        int publisherCount = DiversityUnlockCalculator.distinctCount(finishedPublishers);
         List<DiversityPlant> diversityCatalog = diversityPlantRepository.findAllByOrderByDisplayOrderAsc();
         List<DiversityPlantState> diversityPlants =
-                DiversityUnlockCalculator.resolve(diversityCatalog, authorCount, publisherCount);
-        int ownedAuthorCount = (int) diversityPlants.stream()
-                .filter(s -> s.plant().getKind() == DiversityKind.AUTHOR && s.owned()).count();
-        int totalAuthorCount = (int) diversityCatalog.stream()
-                .filter(p -> p.getKind() == DiversityKind.AUTHOR).count();
-        int ownedPublisherCount = (int) diversityPlants.stream()
-                .filter(s -> s.plant().getKind() == DiversityKind.PUBLISHER && s.owned()).count();
-        int totalPublisherCount = (int) diversityCatalog.stream()
-                .filter(p -> p.getKind() == DiversityKind.PUBLISHER).count();
+                DiversityUnlockCalculator.resolve(diversityCatalog, authorCount);
+        int ownedAuthorCount = (int) diversityPlants.stream().filter(DiversityPlantState::owned).count();
+        int totalAuthorCount = diversityCatalog.size();
 
         // 5.6) 작가 캐릭터축 — 완독책 작가(정규화·contains)로 캐릭터 보유 유도. finishedAuthors 재사용.
         Set<String> ownedAuthorNames = AuthorCharacterUnlockCalculator.normalizedAuthors(finishedAuthors);
@@ -189,6 +185,12 @@ public class GardenService {
         List<AuthorCharacterState> authorCharacters =
                 AuthorCharacterUnlockCalculator.resolve(authorCatalog, ownedAuthorNames);
         int ownedAuthorCharacterCount = (int) authorCharacters.stream().filter(AuthorCharacterState::owned).count();
+
+        // 5.7) 건물축 — 완독책 출판사 권수(정규화·contains)로 건물 보유 유도. finishedPublishers 재사용.
+        Map<String, Integer> publisherCounts = BuildingUnlockCalculator.publisherCounts(finishedPublishers);
+        List<Building> buildingCatalog = buildingRepository.findAllByOrderByDisplayOrderAsc();
+        List<BuildingState> buildings = BuildingUnlockCalculator.resolve(buildingCatalog, publisherCounts);
+        int ownedBuildingCount = (int) buildings.stream().filter(BuildingState::owned).count();
 
         // 6) 레시피축(트랙 B) — 책장 스냅샷으로 만족된 레시피를 평가하고, 새로 발견한 것을 저장한다.
         ShelfSnapshot snapshot = shelfSnapshot(books);
@@ -223,9 +225,10 @@ public class GardenService {
 
         return new GardenView(states, ownedCount, catalog.size(), achievedDays, daysToNextUnlock, nextPlantName,
                 genrePlants, ownedGenreCount, genreCatalog.size(),
-                diversityPlants, ownedAuthorCount, totalAuthorCount, ownedPublisherCount, totalPublisherCount,
+                diversityPlants, ownedAuthorCount, totalAuthorCount,
                 recipePlants, mysterySlotCount, justDiscovered,
-                authorCharacters, ownedAuthorCharacterCount, authorCatalog.size());
+                authorCharacters, ownedAuthorCharacterCount, authorCatalog.size(),
+                buildings, ownedBuildingCount, buildingCatalog.size());
     }
 
     /** 책장을 트랙 B 레시피 평가 입력으로 집계한다 — 완독·읽고싶음 책의 작가·카테고리만 뽑는다. */
