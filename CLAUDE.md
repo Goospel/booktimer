@@ -176,7 +176,12 @@ git worktree remove ../BookTimer-<task>
 
 - **Flyway 버전 번호**(`V5__`, `V6__` …) — 세션별 번호 구역 배정 또는 머지 후 부여
 - **공유 문서**(plan.md / changelog / README / 이 파일 / learning-notes / troubleshooting) — 작게·원자적으로, **편집 직전 재읽기**
-- **앱 포트 8080** — 두 세션이 `bootRun` 하면 충돌 → 트리별 `server.port` 분리(또는 한 곳에서만 실행)
+- **앱 포트 8080** — 두 세션이 `bootRun` 하면 충돌 → 트리별 `server.port` 분리(또는 한 곳에서만 실행).
+  **구현 세션은 검증용으로 띄운 `bootRun`을 작업 종료·자원 정리 시 반드시 종료해 8080을 반납한다(본인이 띄운 건 본인이 끈다).** 떠도는 잔재 강제 종료:
+  ```powershell
+  Get-NetTCPConnection -LocalPort 8080 -State Listen -EA SilentlyContinue |
+    ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+  ```
 - **"File modified since read" 가드는 버그가 아니라 덮어쓰기 직전 보호** — 재읽기 → 그쪽 변경 보존 → 내 것만 재적용이 정답
 
 > 개념·배경: [claude-docs/learning-notes.md](claude-docs/learning-notes.md) **N-032**.
@@ -305,7 +310,11 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
 
 - 빌드: `./gradlew build` (Windows: `gradlew.bat`)
 - 컴파일만: `./gradlew compileJava`
-- 실행: `./gradlew bootRun` — Security 가 있어 전 엔드포인트 기본 잠김(콘솔에 임시 비번 출력)
+- 실행: `./gradlew bootRun` — **`local` 프로파일** 자동 활성(build.gradle `bootRun` 태스크). Security 가 있어 전 엔드포인트 기본 잠김(로컬은 아래 시드 계정으로 로그인).
+- **로컬 테스트 계정(시드)**: `bootRun` 시 `LocalTestAccountSeeder(@Profile("local"))`가 멱등하게 시드.
+  - login_id: `testid`(소문자 — loadUserByUsername이 입력을 소문자화하지 않음), 비번: `1234qwer!!`
+  - 이미 존재하면 "시드 생략" 로그만 출력(멱등). 재기동에도 중복 생성 없음.
+  - admin 뷰 필요 시 코드 추가 없이 `BOOKTIMER_ADMIN_LOGIN_IDS=testid` 환경변수로 `AdminAccountSeeder`가 승격.
 - DB: `compose.yaml` 의 MySQL 이 DevTools docker-compose 연동으로 자동 기동 (Docker 필요)
 - 테스트 DB: 운영은 MySQL, **테스트는 H2 인메모리**(`src/test/resources/application.properties`) — Docker 없이 테스트 독립 실행. 테스트 시 docker-compose 자동 기동은 꺼짐(`spring.docker.compose.enabled=false`)
 - toolchain: Java 21 (로컬에 없어도 foojay-resolver 가 자동 다운로드 — 노트 N-002)
