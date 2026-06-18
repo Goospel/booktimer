@@ -55,6 +55,7 @@
 - [T-057. PowerShell 5.1 Set-Content -Encoding utf8가 BOM 포함 UTF-8을 생성해 커밋 메시지 앞에 BOM 붙음](#t-057-powershell-51-set-content--encoding-utf8가-bom-포함-utf-8을-생성해-커밋-메시지-앞에-bom-붙음)
 - [T-058. SES 프로덕션 액세스 거부 — 케이스 '사례 해결'은 승인이 아니라 요청 포기, '사례 다시 열기'로 상세 보강해 재요청](#t-058-ses-프로덕션-액세스-거부--케이스-사례-해결은-승인이-아니라-요청-포기-사례-다시-열기로-상세-보강해-재요청)
 - [T-059. Thymeleaf `<script>` 안 이중 대괄호 `[[` 표기 — 배열 of 배열·주석 속 공백 `[[ ]]`도 인라인 식으로 파싱됨, object 배열로 교체](#t-059-thymeleaf-script-안-이중-대괄호--표기--배열-of-배열주석-속-공백--도-인라인-식으로-파싱됨-object-배열로-교체)
+- [T-060. `@free-pure-core` 블록 순수함수 제거 시 하니스 destructure 목록 미갱신 → `ReferenceError` FAIL](#t-060-free-pure-core-블록-순수함수-제거-시-하니스-destructure-목록-미갱신--referenceerror-fail)
 
 ---
 
@@ -1150,6 +1151,20 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 
 ---
 
+## T-060. `@free-pure-core` 블록 순수함수 제거 시 하니스 destructure 목록 미갱신 → `ReferenceError` FAIL
+
+**증상**: `node .preview/free-pure.test.mjs`가 `ReferenceError: clampScale is not defined`로 FAIL.
+
+**원인**: `garden.html`의 `@free-pure-core:start/end` 블록은 **단일 출처** — 하니스가 이 블록을 통째로 `new Function()`으로 평가하고, factory return 목록과 destructure 목록에서 해당 함수를 끌어온다. 블록에서 순수함수를 **제거**할 때 **두 줄을 같이 갱신하지 않으면** 남아있는 참조가 `ReferenceError`를 낸다.
+
+**해결**: `@free-pure-core` 블록에서 함수를 추가·제거할 때 항상 하니스의 두 줄을 같이 갱신한다:
+1. `factory return { ..., 함수명, ... }` — factory return 목록 (`free-pure.test.mjs` 12번째 줄)
+2. `const { ..., 함수명, ... } = factory()` — destructure 목록 (13번째 줄)
+
+**관련**: `garden.html`, `.preview/free-pure.test.mjs`, PR #387.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1214,3 +1229,4 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 | 2026-06-16 | T-057 (PowerShell 5.1 Set-Content -Encoding utf8가 UTF-8 with BOM 생성 → 커밋 메시지 첫 글자에 BOM(﻿)이 박혀 git log/GitHub에 `﻿feat:` 표시 / PS 7+는 utf8NoBOM 기본, 5.1은 BOM 붙음 / 해결=Bash 도구 printf 사용 또는 [System.IO.File]::WriteAllText(path,content,UTF8Encoding.new($false)) / git show HEAD --format="%s" | head -c 4 | xxd로 efbbbf면 BOM / T-026·T-044 같은 뿌리(PS 5.1 인코딩), PR #372) |
 | 2026-06-17 | T-058 (SES 프로덕션 액세스 거부 — AWS 지원 케이스 "사례 해결"(Resolve)=요청 포기(케이스 종료)지 승인 아님(답답해도 누르지 말 것)·"고객 작업 완료"=공이 AWS로 넘어감(끝 아님) / AWS "추가 정보 요청"에 상세 없이 "검토만 해달라" 하면 불충분으로 거부("우려 있음, 보안상 사유 비공개" 정형) / 승인 진짜 신호=케이스 아니라 SES 콘솔 Account dashboard "Production access" / 거부돼도 "사례 다시 열기"로 AWS가 물은 4가지(발송 빈도·목록 관리·반송/불만/수신거부·메일 예시) 구체 담아 재요청→보통 24h 재심사 / 개념·토글≠실발송 N-091, N-067·N-071, case 178123901400162) |
 | 2026-06-18 | T-059 (Thymeleaf `<script>` 안 이중 대괄호 `[[..` — 배열 of 배열 `[[-1,0],...]`·주석 속 공백 `[[ ]]` 모두 인라인 식 파싱 오류 / 해결=object 배열 `[{dc:-1,dr:0},...]`·주석 문구 수정 / `garden.html @free-pure-core` nearestFreeCell 방향 벡터 / T-032·PR #384) |
+| 2026-06-18 | T-060 (`@free-pure-core` 블록 순수함수 제거 시 하니스 factory return·destructure 양쪽 갱신 안 하면 `ReferenceError` FAIL — PR #387) |
