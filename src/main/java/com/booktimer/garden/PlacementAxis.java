@@ -21,5 +21,10 @@ public enum PlacementAxis {
      * 작가 캐릭터축({@link AuthorCharacter}) — 특정 작가 완독으로 해금.
      * DIVERSITY의 "distinct 작가 수" 카운트 축과 다름 — 이쪽은 특정 작가 1:1 매칭.
      */
-    AUTHOR
+    AUTHOR,
+    /**
+     * 출판사 건물축({@link Building}) — 특정 출판사 N권 완독으로 해금.
+     * DIVERSITY의 "distinct 출판사 수" 카운트 축과 다름 — 이쪽은 특정 출판사 권수 임계.
+     */
+    BUILDING
 }
