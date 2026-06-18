@@ -5,77 +5,279 @@
     <!-- 방문 통계(GA4, 측정 ID 설정 시에만) -->
     <th:block th:replace="~{analytics :: gtag}"></th:block>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>BookTimer — 하루 최소 시간만, 끊기지 않는 독서 습관</title>
+    <title>BookTimer — 하루 딱 N분, 가장 작은 독서 습관</title>
     <meta name="description"
-          content="BookTimer는 '하루 딱 이만큼만' 목표로 독서 습관을 만드는 독서 시간 기록 서비스입니다. 책 읽은 시간을 측정하고, 일자별 독서 잔디로 꾸준함을 눈으로 확인하세요.">
+          content="책을 좋아하진 않아도 읽는 사람이 됩니다. 타이머를 켜고 한 페이지, 그게 오늘의 전부예요. 매일의 기록이 잔디가 되고, 정원이 됩니다.">
     <link rel="stylesheet" th:href="@{/css/app.css}">
+    <link rel="stylesheet" th:href="@{/css/landing.css}">
 </head>
-<body>
-<div class="container">
-    <header class="brand">
-        <span class="emoji">📚</span>
-        <h1>BookTimer</h1>
-    </header>
+<body class="landing-page">
 
-    <section class="landing-hero">
-        <p class="landing-tagline">하루 최소 시간만.<br>끊기지 않는 독서 습관.</p>
-        <p class="landing-lead">
-            “책을 읽어야지” 마음만 먹고 늘 미루게 되나요?<br>
-            BookTimer는 거창한 목표 대신 <strong>하루 딱 이만큼만</strong> 읽는 작은 습관에 집중합니다.<br>
-            읽은 시간을 측정하고 매일의 기록을 쌓아, 부담 없이 다시 책을 펴게 만드는 독서 시간 기록 서비스입니다.
-        </p>
-        <div class="landing-cta">
-            <a class="btn btn-primary" th:href="@{/signup}">무료로 시작하기</a>
-            <div class="oauth-divider"><span>또는</span></div>
-            <!-- 소셜 가입/로그인: GET /oauth2/authorization/google → 구글 인가 화면. 신규면 자동 가입(온보딩으로). -->
-            <a class="btn btn-oauth btn-oauth-google" th:href="@{/oauth2/authorization/google}">
-                <span class="oauth-icon">G</span> Google로 시작하기
-            </a>
+<!-- ① 상단 네비바 -->
+<nav class="lp-nav">
+    <div class="lp-nav-inner">
+        <a th:href="@{/}" class="lp-nav-brand">
+            <span class="lp-nav-emoji">📚</span> BookTimer
+        </a>
+        <ul class="lp-nav-links">
+            <li><a th:href="@{/garden}">독서 정원</a></li>
+            <li><a th:href="@{/social}">함께 읽기</a></li>
+        </ul>
+        <a th:href="@{/signup}" class="lp-nav-cta">무료로 시작하기</a>
+    </div>
+</nav>
+
+<div class="lp-shell">
+
+    <!-- ② 히어로 섹션 -->
+    <section class="lp-hero">
+        <div class="lp-hero-grid">
+            <div class="lp-hero-text">
+                <span class="lp-hero-eyebrow">BookTimer</span>
+                <h1 class="lp-hero-h1 lp-serif">하루 딱 N분,<br>가장 작은 독서 습관</h1>
+                <p class="lp-hero-sub">책을 좋아하진 않아도 읽는 사람이 됩니다</p>
+                <p class="lp-hero-lead">
+                    부담 대신 꾸준함을 보상해요. 타이머를 켜고 한 페이지,
+                    그게 오늘의 전부예요. 매일의 기록이 잔디가 되고, 정원이 됩니다.
+                </p>
+                <div class="lp-cta-stack">
+                    <a class="btn btn-primary" th:href="@{/signup}">무료로 시작하기</a>
+                    <div class="oauth-divider"><span>또는</span></div>
+                    <!-- 소셜 가입/로그인: GET /oauth2/authorization/google → 구글 인가 화면. 신규면 자동 가입(온보딩으로). -->
+                    <a class="btn btn-oauth btn-oauth-google" th:href="@{/oauth2/authorization/google}">
+                        <span class="oauth-icon">G</span> Google로 계속하기
+                    </a>
+                    <p class="lp-cta-micro">신용카드 없이 · 10초면 충분해요</p>
+                </div>
+            </div>
+            <div class="lp-hero-visual">
+                <div class="lp-placeholder">
+                    <span class="lp-placeholder-icon">🌿</span>
+                    <p class="lp-placeholder-label">독서 정원 · 아이소메트릭 일러스트 자리</p>
+                    <p class="lp-placeholder-sub">실제 캡처로 교체 예정</p>
+                </div>
+            </div>
         </div>
     </section>
 
-    <section class="card">
-        <h2>BookTimer로 할 수 있는 것</h2>
-        <ul class="landing-features">
-            <li>
-                <strong>⏱️ 독서 시간 측정</strong>
-                지금 읽는 책을 골라 타이머를 켜고 끄면, 오늘 읽은 시간이 자동으로 쌓입니다.
-            </li>
-            <li>
-                <strong>🎯 하루 목표</strong>
-                무리한 권수 대신 “하루 30분”처럼 작은 시간 목표를 정하고, 오늘 남은 분량을 한눈에 봅니다.
-            </li>
-            <li>
-                <strong>🌱 독서 잔디</strong>
-                일자별 독서 활동이 잔디로 채워져, 며칠을 꾸준히 이어왔는지 눈으로 확인할 수 있습니다.
-            </li>
-            <li>
-                <strong>📖 내 책장</strong>
-                읽는 중·다 읽은 책을 정리하고, 책별로 쌓인 독서 시간을 돌아봅니다.
-            </li>
-            <li>
-                <strong>👥 함께 읽기</strong>
-                다른 독자를 팔로우하고 공개 책장과 독서 잔디를 구경하며 자극을 받습니다.
-            </li>
-        </ul>
+    <!-- ③ 독서 잔디 섹션 -->
+    <section class="lp-section">
+        <div class="lp-grid-2col-b">
+            <div class="lp-section-text">
+                <span class="lp-section-label">독서 잔디</span>
+                <h2 class="lp-section-title lp-serif">읽은 날이 잔디로 쌓여요</h2>
+                <p class="lp-section-lead">
+                    하루를 채울 때마다 한 칸씩 초록이 짙어져요.
+                    비우고 싶지 않은 마음이, 가장 자연스러운 꾸준함이 됩니다.
+                </p>
+            </div>
+            <!-- 잔디 CSS 목업 — 7행×13열 = 91칸 정적 데모 -->
+            <div class="lp-grass-card" aria-label="독서 잔디 미리보기">
+                <div class="lp-grass-header">
+                    <span class="lp-grass-title">연속 독서 중</span>
+                    <span class="lp-grass-badge">2026년 · 최근 3개월</span>
+                </div>
+                <div class="lp-grass-grid" aria-hidden="true">
+                    <!-- row 1 -->
+                    <div class="lp-grass-cell"></div>
+                    <div class="lp-grass-cell g1"></div>
+                    <div class="lp-grass-cell g2"></div>
+                    <div class="lp-grass-cell g1"></div>
+                    <div class="lp-grass-cell g2"></div>
+                    <div class="lp-grass-cell g3"></div>
+                    <div class="lp-grass-cell g2"></div>
+                    <div class="lp-grass-cell g3"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g3"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <!-- row 2 -->
+                    <div class="lp-grass-cell g1"></div>
+                    <div class="lp-grass-cell g2"></div>
+                    <div class="lp-grass-cell g3"></div>
+                    <div class="lp-grass-cell g2"></div>
+                    <div class="lp-grass-cell g3"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g3"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <!-- row 3 -->
+                    <div class="lp-grass-cell"></div>
+                    <div class="lp-grass-cell g1"></div>
+                    <div class="lp-grass-cell g2"></div>
+                    <div class="lp-grass-cell g3"></div>
+                    <div class="lp-grass-cell g2"></div>
+                    <div class="lp-grass-cell g3"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <!-- row 4 -->
+                    <div class="lp-grass-cell g1"></div>
+                    <div class="lp-grass-cell g2"></div>
+                    <div class="lp-grass-cell g3"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g3"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <!-- row 5 -->
+                    <div class="lp-grass-cell g2"></div>
+                    <div class="lp-grass-cell g3"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g3"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <!-- row 6 -->
+                    <div class="lp-grass-cell g1"></div>
+                    <div class="lp-grass-cell g2"></div>
+                    <div class="lp-grass-cell g3"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <!-- row 7 -->
+                    <div class="lp-grass-cell g2"></div>
+                    <div class="lp-grass-cell g3"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g5"></div>
+                    <div class="lp-grass-cell g4"></div>
+                    <div class="lp-grass-cell g5"></div>
+                </div>
+                <div class="lp-grass-footer">
+                    <span>🌱 꾸준히 읽는 중</span>
+                    <span>적음 ← → 많음</span>
+                </div>
+            </div>
+        </div>
     </section>
 
-    <section class="card">
-        <h2>이렇게 동작해요</h2>
-        <ol class="landing-steps">
-            <li><strong>가입하고 하루 목표를 정합니다</strong> — 예: 하루 30분.</li>
-            <li><strong>읽을 책을 등록하고 타이머를 켭니다</strong> — 책을 덮을 때 끄면 끝.</li>
-            <li><strong>매일의 기록이 잔디로 쌓입니다</strong> — 꾸준함이 눈에 보이면 다시 펴게 됩니다.</li>
-        </ol>
+    <!-- ④ 독서 정원 섹션 -->
+    <section class="lp-section">
+        <div class="lp-grid-2col-c">
+            <div class="lp-section-text">
+                <span class="lp-section-label">독서 정원</span>
+                <h2 class="lp-section-title lp-serif">자라는 나의 정원</h2>
+                <p class="lp-section-lead">
+                    쌓인 독서 시간으로 식물을 심고 정원을 가꿔요.
+                    권수를 세는 대신, 매일 조금씩 자라는 걸 보면서 읽게 됩니다.
+                </p>
+                <a th:href="@{/garden}" class="lp-section-link">정원 둘러보기 →</a>
+            </div>
+            <div class="lp-placeholder">
+                <span class="lp-placeholder-icon">🏡</span>
+                <p class="lp-placeholder-label">독서 정원 · 아이소메트릭 게임화 정원 자리</p>
+                <p class="lp-placeholder-sub">실제 캡처로 교체 예정</p>
+            </div>
+        </div>
     </section>
 
-    <section class="landing-bottom-cta">
-        <p>오늘 딱 한 페이지부터.<br>작게 시작해 보세요.</p>
-        <a class="btn btn-primary" th:href="@{/signup}">무료로 시작하기</a>
+    <!-- ⑤ 기능 그리드 -->
+    <section class="lp-features-section">
+        <div class="lp-features-header">
+            <span class="lp-section-label">기능</span>
+            <h2 class="lp-section-title lp-serif">작게 시작하고, 꾸준히 쌓아요</h2>
+        </div>
+        <div class="lp-features-grid">
+            <div class="lp-feature-card">
+                <div class="lp-feature-icon">⏱️</div>
+                <h3 class="lp-feature-name">시간 측정</h3>
+                <p class="lp-feature-desc">오늘 얼마나 읽었는지 타이머가 자동으로 기록해요.</p>
+            </div>
+            <div class="lp-feature-card">
+                <div class="lp-feature-icon">🎯</div>
+                <h3 class="lp-feature-name">하루 목표</h3>
+                <p class="lp-feature-desc">N분이면 충분해요. 부담 없는 작은 목표부터.</p>
+            </div>
+            <div class="lp-feature-card">
+                <div class="lp-feature-icon">📖</div>
+                <h3 class="lp-feature-name">내 책장</h3>
+                <p class="lp-feature-desc">읽는 중·다 읽은 책을 한곳에 모아 둬요.</p>
+            </div>
+            <div class="lp-feature-card">
+                <div class="lp-feature-icon">👥</div>
+                <h3 class="lp-feature-name">함께 읽기</h3>
+                <p class="lp-feature-desc">친구와 같이 읽고 서로의 잔디를 응원해요.</p>
+            </div>
+        </div>
     </section>
 
-    <p class="link-row"><a th:href="@{/login}">이미 계정이 있나요? 로그인</a></p>
-    <p class="link-row"><a th:href="@{/privacy}">개인정보처리방침</a></p>
-</div>
+    <!-- ⑥ 이렇게 동작해요 (3단계) -->
+    <section class="lp-steps-section">
+        <div class="lp-steps-header">
+            <span class="lp-section-label">시작하는 법</span>
+            <h2 class="lp-section-title lp-serif">이렇게 동작해요</h2>
+        </div>
+        <div class="lp-steps-grid">
+            <div class="lp-step">
+                <div class="lp-step-num">1</div>
+                <h3 class="lp-step-name">목표를 정해요</h3>
+                <p class="lp-step-desc">N분, 가볍게 시작할 만큼만 정하면 돼요.</p>
+            </div>
+            <div class="lp-step">
+                <div class="lp-step-num">2</div>
+                <h3 class="lp-step-name">타이머를 켜요</h3>
+                <p class="lp-step-desc">읽는 동안 시간이 쌓이고, 그날의 칸이 채워져요.</p>
+            </div>
+            <div class="lp-step">
+                <div class="lp-step-num">3</div>
+                <h3 class="lp-step-name">잔디를 채워요</h3>
+                <p class="lp-step-desc">매일의 기록이 잔디가 되고, 정원으로 자라요.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ⑦ 하단 CTA -->
+    <section class="lp-bottom-cta">
+        <span class="lp-bottom-cta-eyebrow">지금 바로 시작</span>
+        <h2 class="lp-bottom-cta-h2 lp-serif">오늘 딱 한 페이지부터</h2>
+        <p class="lp-bottom-cta-lead">
+            읽는 사람이 되는 데에 대단한 결심은 필요 없어요.<br>
+            가장 작은 습관부터 시작해요.
+        </p>
+        <a class="lp-bottom-cta-btn" th:href="@{/signup}">무료로 시작하기</a>
+    </section>
+
+</div><!-- /.lp-shell -->
+
+<!-- 푸터 -->
+<footer class="lp-footer">
+    <a th:href="@{/login}">이미 계정이 있나요? 로그인</a>
+    <a th:href="@{/privacy}">개인정보처리방침</a>
+</footer>
+
 </body>
 </html>

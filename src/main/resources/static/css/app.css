@@ -2,7 +2,7 @@
 
 /* 본문 폰트 — 둥근 한글 산세리프 '고운돋움'(Google Fonts). 종이톤 무드와 어울리는
    부드러운 모서리. 한글 위주이며 라틴·숫자도 포함해 전 화면 본문에 깐다. */
-@import url('https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Gowun+Batang&family=Gowun+Dodum&display=swap');
 
 :root {
     /* 종이톤 + 세이지 그린 팔레트. 이름은 유지(무파괴), 값만 교체 → 전역 리프레시. */
@@ -30,6 +30,21 @@
     /* 포커스 링 — 입력칸 focus·강조 hover가 공유(세이지 #6E8A6A=rgb(110,138,106) 기반).
        #287 토큰 교체가 못 건드린 raw 인디고 잔재를 토큰화해 전역 일관 유지. */
     --focus-ring: rgba(110, 138, 106, .30);
+    /* 랜딩 확장 팔레트 — raw hex 산재 금지; 시안에서 추출한 중간 음영 토큰 */
+    --paper-2: #EAE9DD;
+    --paper-3: #ECE6D8;
+    --paper-4: #F1EEE6;
+    --sage-1: #E3E4D4;
+    --sage-2: #D8E2D4;
+    --sage-3: #D6DDC8;
+    --sage-4: #B9C3A8;
+    --sage-5: #B6C9AE;
+    --sage-6: #A9C0A2;
+    --sage-7: #8FAE86;
+    --sage-8: #7E8A6E;
+    --neutral-1: #CFC6B4;
+    --neutral-2: #C4BCAC;
+    --neutral-3: #9A9486;
 }
 
 * { box-sizing: border-box; }
@@ -1391,50 +1406,7 @@ a.book-title:hover { text-decoration: underline; }
     text-align: left;            /* '광고' 표기로 콘텐츠와 구분(투명성) */
 }
 
-/* === 공개 소개(랜딩) 페이지 — 비로그인 방문자·크롤러용. 루트("/")가 익명일 때 렌더. === */
-.landing-hero { text-align: center; margin: 8px 0 20px; }
-.landing-tagline {
-    font-size: 1.95rem;
-    line-height: 1.35;
-    color: var(--text);
-    margin: 0 0 16px;
-    word-break: keep-all;
-}
-.landing-lead {
-    color: var(--muted);
-    line-height: 1.8;
-    text-align: left;
-    margin: 0 0 20px;
-    word-break: keep-all;
-}
-.landing-lead strong { color: var(--text); }
-
-/* CTA — 앵커지만 .btn 베이스를 받아 버튼 모양. 로그인 카드처럼 세로 스택
-   (무료로 시작하기 → "또는" → Google로 시작하기). 간격은 oauth-divider가 자체 마진으로 준다. */
-.landing-cta { display: flex; flex-direction: column; }
-.landing-cta > a { width: 100%; text-decoration: none; text-align: center; }
-
-/* 기능 목록 — 아이콘+강조 제목을 블록으로, 설명은 그 아래 흐리게. */
-.landing-features { list-style: none; margin: 0; padding: 0; text-align: left; }
-.landing-features li {
-    padding: 12px 0;
-    border-bottom: 1px solid var(--border);
-    color: var(--muted);
-    line-height: 1.55;
-    word-break: keep-all;
-}
-.landing-features li:last-child { border-bottom: none; }
-.landing-features li strong { display: block; color: var(--text); font-size: 1.05rem; margin-bottom: 3px; }
-
-/* 동작 방식 — 번호 매긴 단계. */
-.landing-steps { margin: 0; padding-left: 22px; text-align: left; color: var(--muted); line-height: 1.7; }
-.landing-steps li { margin-bottom: 6px; word-break: keep-all; }
-.landing-steps strong { color: var(--text); }
-
-/* 하단 재유도 CTA. */
-.landing-bottom-cta { text-align: center; margin: 8px 0 16px; }
-.landing-bottom-cta p { color: var(--muted); margin: 0 0 12px; word-break: keep-all; }
-.landing-bottom-cta a { width: auto; display: inline-block; text-decoration: none; padding-left: 28px; padding-right: 28px; }
+/* === 공개 소개(랜딩) 페이지 스타일은 static/css/landing.css 로 이관. === */
 
 /* === 문의·피드백 (feedback.html / admin-feedback.html) === */
 .fb-form .fb-field { display: block; margin: 0.6rem 0; }

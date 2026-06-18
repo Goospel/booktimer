@@ -59,4 +59,21 @@ class LandingPageTest {
                 .andExpect(content().string(containsString("/oauth2/authorization/google")))
                 .andExpect(content().string(containsString("Google")));
     }
+
+    @Test
+    @DisplayName("랜딩에 독서 정원 진입 동선(/garden)이 있다")
+    void landing_hasGardenLink() throws Exception {
+        mockMvc.perform(get("/"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("/garden")));
+    }
+
+    @Test
+    @DisplayName("랜딩 본문에 핵심 키워드(정원·잔디)가 있다")
+    void landing_hasCoreKeywords() throws Exception {
+        mockMvc.perform(get("/"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("정원")))
+                .andExpect(content().string(containsString("잔디")));
+    }
 }

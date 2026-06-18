@@ -660,6 +660,8 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 
 - **dashboard 빈상태 마감** ✅ (PR #291): 입구 트랙 마지막 화면. 신규 첫 진입(`readingBooks`·`finishedBooks` 모두 empty)에서 타이머 카드가 측정 폼 대신 보이던 `.status-line muted` 안내 한 줄("책장에 책을 추가하면…")을 **`.timer-empty`**(환영 문구 "아직 책장이 비어 있어요…" + 풀폭 세이지 CTA "첫 책 추가하기" → `/books`)로 강화 — "텅 빈 화면"을 환영+첫 행동 유도로. **고위험 라이브 영역(htmx `hx-*`·Alpine `x-data/x-text/x-show`·`data-*`·`#dashboard-live` 프래그먼트·잔디 루프)은 구조 절대 보존**, 빈상태 `th:if` 조건식도 글자 단위 유지(시각·카피만). `a.btn`이 inline이라 `width:100%` 미적용 → `display:block`으로 측정 시작 버튼처럼 풀폭. 순수 시각(컨트롤러·서비스·DB·Flyway·JS 무변경) → **전체 테스트 그린**(라이브 프래그먼트·빈상태 분기·`ReadingSessionController` 공유 swap 회귀 가드) + 정적 목업(`.preview/dashboard-empty-mock.html`) computed-style·모바일 검증. 입구 디자인 트랙(landing #287·인디고+signup #289·onboarding #290·dashboard #291) **완료**.
 
+- **랜딩 전면 리디자인 — 와이드 마케팅 랜딩(1080px, 세리프, 3단 반응형)** ✅ (PR #NNN, 2026-06-18): 460px 단일 컬럼 랜딩을 Claude Design 시안 기반 마케팅 페이지로 전면 교체. 핵심 결정: `body.landing-page`로 전역 앱 셸 격리·`landing.css` 별 파일 분리(전역 `app.css` 비오염). Gowun Batang 세리프 헤드라인 / 2단 비대칭 그리드(`.85fr 1.15fr` 등) / 잔디 CSS 목업(7×13 칸) / 정원·히어로 플레이스홀더(실제 캡처는 후속) / 4컬럼 기능 그리드 / 3단계 how-it-works / 반응형(860/480px). 음영 토큰 15개 추가. `LandingPageTest` 5/5 Green(신규 2건: garden 동선·핵심 키워드). 다음(백로그): 플레이스홀더 → 실제 화면 캡처 교체.
+
 ### 📨 사용자 피드백/문의 (완료 ✅ 2026-06-08, PR #233 · 답장·유형필터 PR #234)
 
 > **한 줄**: 일반 사용자가 버그·제안을 개발자에게 보내고, 개발자(ADMIN)가 읽음/처리완료를 표시하면 **그 표시는 작성자 본인만** 본다.
