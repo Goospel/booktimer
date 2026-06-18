@@ -31,6 +31,7 @@ export interface GardenSceneConfig {
     placed: GardenItemMeta[];
     worldW: number;
     worldH: number;
+    readonly?: boolean;
     onChange?: (keys: string[]) => void;
     onSelect?: (info: SelectionInfo | null) => void;
     onMessage?: (msg: string) => void;
@@ -86,7 +87,7 @@ export class GardenScene extends Phaser.Scene {
         const canvasCss = this.sys.game.canvas.getBoundingClientRect().width;
         this.plantPx = plantWorldSize(this.cfg.worldW, GRID_COLS);
         this.drawBackground();
-        this.drawGrid();
+        if (!this.cfg.readonly) this.drawGrid();
         this.shadowLayer = this.add.graphics();
         this.shadowLayer.setDepth(0.6);
         for (const p of this.cfg.placed) {
@@ -98,91 +99,94 @@ export class GardenScene extends Phaser.Scene {
         cam.setBounds(0, 0, this.cfg.worldW, this.cfg.worldH);
         cam.setZoom(initialZoomFor(TARGET_PLANT_CSS, this.plantPx, canvasCss, this.cfg.worldW));
         cam.centerOn(this.cfg.worldW / 2, this.cfg.worldH / 2);
-        this.input.addPointer(1);
-        this._pinchDist = 0;
 
-        this.input.on('gameobjectdown', () => { this._dragged = false; });
-        this.input.on('dragstart', (_p: Phaser.Input.Pointer, obj: any) => {
-            this._dragged = true;
-            obj._homeX = obj.x; obj._homeY = obj.y;
-            obj._rawX = obj.x; obj._rawY = obj.y;
-        });
-        this.input.on('drag', (_p: Phaser.Input.Pointer, obj: any, dragX: number, dragY: number) => {
-            obj._rawX = dragX; obj._rawY = dragY;
-            const norm = isoPixelToNorm(dragX, dragY, this.cfg.worldW, this.cfg.worldH);
-            const snapped = snapToCell(norm.x, norm.y, GRID_COLS, GRID_ROWS);
-            const pix = normToIsoPixel(snapped.x, snapped.y, this.cfg.worldW, this.cfg.worldH);
-            obj.x = pix.px; obj.y = pix.py;
-            const occupied = this.occupiedCells(obj as GObj);
-            const { x: nx, y: ny } = isoPixelToNorm(obj.x, obj.y, this.cfg.worldW, this.cfg.worldH);
-            const { col, row } = cellOf(nx, ny, GRID_COLS, GRID_ROWS);
-            if (occupied.has(`${col},${row}`)) obj.setTint(0xff6b6b); else obj.clearTint();
-            if (obj === this.selected) this.highlightSelected();
-            this.restack();
-        });
-        this.input.on('dragend', (_p: Phaser.Input.Pointer, obj: any) => {
-            obj.clearTint();
-            const outside = isOutsideWorld(obj._rawX ?? obj.x, obj._rawY ?? obj.y, this.cfg.worldW, this.cfg.worldH);
-            const { x: nx, y: ny } = isoPixelToNorm(obj.x, obj.y, this.cfg.worldW, this.cfg.worldH);
-            const { col, row } = cellOf(nx, ny, GRID_COLS, GRID_ROWS);
-            const occupiedByOther = !outside && this.occupiedCells(obj as GObj).has(`${col},${row}`);
-            const decision = resolveDrop(outside, occupiedByOther);
-            if (decision === 'remove') {
-                if (obj === this.selected) this.deselectPlant();
-                this.removePlant(obj as GObj);
-            } else if (decision === 'revert') {
-                obj.x = obj._homeX; obj.y = obj._homeY;
+        if (!this.cfg.readonly) {
+            this.input.addPointer(1);
+            this._pinchDist = 0;
+
+            this.input.on('gameobjectdown', () => { this._dragged = false; });
+            this.input.on('dragstart', (_p: Phaser.Input.Pointer, obj: any) => {
+                this._dragged = true;
+                obj._homeX = obj.x; obj._homeY = obj.y;
+                obj._rawX = obj.x; obj._rawY = obj.y;
+            });
+            this.input.on('drag', (_p: Phaser.Input.Pointer, obj: any, dragX: number, dragY: number) => {
+                obj._rawX = dragX; obj._rawY = dragY;
+                const norm = isoPixelToNorm(dragX, dragY, this.cfg.worldW, this.cfg.worldH);
+                const snapped = snapToCell(norm.x, norm.y, GRID_COLS, GRID_ROWS);
+                const pix = normToIsoPixel(snapped.x, snapped.y, this.cfg.worldW, this.cfg.worldH);
+                obj.x = pix.px; obj.y = pix.py;
+                const occupied = this.occupiedCells(obj as GObj);
+                const { x: nx, y: ny } = isoPixelToNorm(obj.x, obj.y, this.cfg.worldW, this.cfg.worldH);
+                const { col, row } = cellOf(nx, ny, GRID_COLS, GRID_ROWS);
+                if (occupied.has(`${col},${row}`)) obj.setTint(0xff6b6b); else obj.clearTint();
                 if (obj === this.selected) this.highlightSelected();
                 this.restack();
-            } else {
-                if (obj === this.selected) this.highlightSelected();
-                this.restack();
-            }
-            this.emitChange();
-        });
-        this.input.on('gameobjectup', (_p: Phaser.Input.Pointer, obj: GObj) => {
-            if (!this._dragged) this.selectPlant(obj);
-        });
-
-        this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-            this._panning = this.input.hitTestPointer(pointer).length === 0;
-            this._panMoved = false;
-        });
-        this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-            if (this.input.pointer1.isDown && this.input.pointer2.isDown) {
-                this._panning = false;
-                const p1 = this.input.pointer1, p2 = this.input.pointer2;
-                const dist = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
-                if (this._pinchDist > 0) {
-                    const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
-                    const before = cam.getWorldPoint(mx, my);
-                    cam.setZoom(clampZoom(cam.zoom * (dist / this._pinchDist)));
-                    const after = cam.getWorldPoint(mx, my);
-                    cam.scrollX += before.x - after.x;
-                    cam.scrollY += before.y - after.y;
+            });
+            this.input.on('dragend', (_p: Phaser.Input.Pointer, obj: any) => {
+                obj.clearTint();
+                const outside = isOutsideWorld(obj._rawX ?? obj.x, obj._rawY ?? obj.y, this.cfg.worldW, this.cfg.worldH);
+                const { x: nx, y: ny } = isoPixelToNorm(obj.x, obj.y, this.cfg.worldW, this.cfg.worldH);
+                const { col, row } = cellOf(nx, ny, GRID_COLS, GRID_ROWS);
+                const occupiedByOther = !outside && this.occupiedCells(obj as GObj).has(`${col},${row}`);
+                const decision = resolveDrop(outside, occupiedByOther);
+                if (decision === 'remove') {
+                    if (obj === this.selected) this.deselectPlant();
+                    this.removePlant(obj as GObj);
+                } else if (decision === 'revert') {
+                    obj.x = obj._homeX; obj.y = obj._homeY;
+                    if (obj === this.selected) this.highlightSelected();
+                    this.restack();
+                } else {
+                    if (obj === this.selected) this.highlightSelected();
+                    this.restack();
                 }
-                this._pinchDist = dist;
-                return;
-            }
-            this._pinchDist = 0;
-            if (!this._panning || !pointer.isDown) return;
-            cam.scrollX -= (pointer.x - pointer.prevPosition.x) / cam.zoom;
-            cam.scrollY -= (pointer.y - pointer.prevPosition.y) / cam.zoom;
-            this._panMoved = true;
-        });
-        this.input.on('pointerup', () => {
-            this._pinchDist = 0;
-            if (this._panning && !this._panMoved && this.selected) this.deselectPlant();
-            this._panning = false;
-        });
+                this.emitChange();
+            });
+            this.input.on('gameobjectup', (_p: Phaser.Input.Pointer, obj: GObj) => {
+                if (!this._dragged) this.selectPlant(obj);
+            });
 
-        this.input.on('wheel', (pointer: Phaser.Input.Pointer, _objs: unknown, _dx: number, dy: number) => {
-            const before = cam.getWorldPoint(pointer.x, pointer.y);
-            cam.setZoom(clampZoom(cam.zoom * (dy > 0 ? 0.9 : 1.1)));
-            const after = cam.getWorldPoint(pointer.x, pointer.y);
-            cam.scrollX += before.x - after.x;
-            cam.scrollY += before.y - after.y;
-        });
+            this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+                this._panning = this.input.hitTestPointer(pointer).length === 0;
+                this._panMoved = false;
+            });
+            this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+                if (this.input.pointer1.isDown && this.input.pointer2.isDown) {
+                    this._panning = false;
+                    const p1 = this.input.pointer1, p2 = this.input.pointer2;
+                    const dist = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
+                    if (this._pinchDist > 0) {
+                        const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+                        const before = cam.getWorldPoint(mx, my);
+                        cam.setZoom(clampZoom(cam.zoom * (dist / this._pinchDist)));
+                        const after = cam.getWorldPoint(mx, my);
+                        cam.scrollX += before.x - after.x;
+                        cam.scrollY += before.y - after.y;
+                    }
+                    this._pinchDist = dist;
+                    return;
+                }
+                this._pinchDist = 0;
+                if (!this._panning || !pointer.isDown) return;
+                cam.scrollX -= (pointer.x - pointer.prevPosition.x) / cam.zoom;
+                cam.scrollY -= (pointer.y - pointer.prevPosition.y) / cam.zoom;
+                this._panMoved = true;
+            });
+            this.input.on('pointerup', () => {
+                this._pinchDist = 0;
+                if (this._panning && !this._panMoved && this.selected) this.deselectPlant();
+                this._panning = false;
+            });
+
+            this.input.on('wheel', (pointer: Phaser.Input.Pointer, _objs: unknown, _dx: number, dy: number) => {
+                const before = cam.getWorldPoint(pointer.x, pointer.y);
+                cam.setZoom(clampZoom(cam.zoom * (dy > 0 ? 0.9 : 1.1)));
+                const after = cam.getWorldPoint(pointer.x, pointer.y);
+                cam.scrollX += before.x - after.x;
+                cam.scrollY += before.y - after.y;
+            });
+        }
 
         this.ready = true;
     }
@@ -256,7 +260,7 @@ export class GardenScene extends Phaser.Scene {
         obj.setData('spriteId', meta.spriteId);
         obj.setData('rotation', rotation);
         obj.setData('scale', 1);
-        obj.setInteractive({ draggable: true, useHandCursor: true });
+        if (!this.cfg.readonly) obj.setInteractive({ draggable: true, useHandCursor: true });
         this.objs.push(obj);
         this.restack();
         return obj;

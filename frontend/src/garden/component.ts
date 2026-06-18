@@ -27,6 +27,7 @@ export function myGarden() {
         editing: false,
         saving: false,
         message: '',
+        phaserReady: false,
         owned: data.owned || [] as GardenItemMeta[],
         decorations: data.decorations || [] as GardenItemMeta[],
         placedKeys: placedKeySet(),
@@ -34,7 +35,38 @@ export function myGarden() {
 
         isPlaced(o: GardenItemMeta) { return this.placedKeys.has(`${o.axis}/${o.code}`); },
 
+        // Alpine 라이프사이클 — 컴포넌트 초기화 시 자동 호출. 보기 Phaser를 바로 마운트.
+        init() {
+            (this as unknown as { mountView: () => void }).mountView();
+        },
+
+        mountView() {
+            // 컨테이너를 먼저 보이게 하고($nextTick 후 실제 마운트) SSR 폴백을 숨긴다.
+            this.phaserReady = true;
+            (this as unknown as { $nextTick: (fn: () => void) => void }).$nextTick(() => {
+                scene = new GardenScene({
+                    owned: data.owned || [],
+                    decorations: data.decorations || [],
+                    placed: data.placed || [],
+                    worldW: data.worldWidth,
+                    worldH: data.worldHeight,
+                    readonly: true,
+                });
+                game = new Phaser.Game({
+                    type: Phaser.AUTO,
+                    parent: 'garden-phaser-view',
+                    width: data.worldWidth,
+                    height: data.worldHeight,
+                    transparent: true,
+                    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_HORIZONTALLY },
+                    scene: scene,
+                });
+            });
+        },
+
         startEdit() {
+            this.destroyPhaser();
+            this.phaserReady = false;
             this.editing = true;
             this.message = '';
             this.placedKeys = placedKeySet();
@@ -84,6 +116,7 @@ export function myGarden() {
             this.message = '';
             this.placedKeys = placedKeySet();
             this.selected = null;
+            (this as unknown as { mountView: () => void }).mountView();
         },
         async save() {
             if (!scene || this.saving) return;
