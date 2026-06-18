@@ -1165,6 +1165,30 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 
 ---
 
+## T-061. `.gitignore` 하니스를 커밋·CI 그물로 승격할 때 — required check는 job 단위라 반드시 같은 job에 스텝 추가
+
+**증상**: gitignore 안에 있는 테스트 하니스를 커밋으로 옮겼는데, CI required check가 그것을 잡지 못한다.
+
+**원인**: GitHub의 required status check는 **job 이름 단위**로 등록된다. 별도 job을 만들면 새 required check로 따로 등록해야 PR 통과 조건이 되는데, 기존 `test` job만 required로 등록된 상태라면 새 job은 **선택사항**이 된다 — 실패해도 머지 차단 안 됨.
+
+**해결**: 기존 required check job(`test`)에 **스텝으로 추가**한다. `npm --prefix frontend test`를 `test` job 안에 넣으면 별도 등록 없이 자동으로 required check에 포함된다.
+
+**적용 예 (BookTimer)**:
+```yaml
+jobs:
+  test:   # ← 이미 required check로 등록된 job
+    steps:
+      - uses: actions/setup-node@v4      # ← 기존 job에 스텝 추가
+      - run: npm --prefix frontend test  # ← 별도 job으로 빼면 required 아님
+      - run: ./gradlew test              # ← 기존 스텝
+```
+
+**파생 주의**: `paths-ignore`를 두면 문서-only PR에서 job이 스킵돼 required check가 `pending`으로 남아 PR을 영영 못 머지하는 함정도 같은 맥락.
+
+**관련**: PR #388, `ci.yml`.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1230,3 +1254,4 @@ aws iam create-service-linked-role --aws-service-name ecs.application-autoscalin
 | 2026-06-17 | T-058 (SES 프로덕션 액세스 거부 — AWS 지원 케이스 "사례 해결"(Resolve)=요청 포기(케이스 종료)지 승인 아님(답답해도 누르지 말 것)·"고객 작업 완료"=공이 AWS로 넘어감(끝 아님) / AWS "추가 정보 요청"에 상세 없이 "검토만 해달라" 하면 불충분으로 거부("우려 있음, 보안상 사유 비공개" 정형) / 승인 진짜 신호=케이스 아니라 SES 콘솔 Account dashboard "Production access" / 거부돼도 "사례 다시 열기"로 AWS가 물은 4가지(발송 빈도·목록 관리·반송/불만/수신거부·메일 예시) 구체 담아 재요청→보통 24h 재심사 / 개념·토글≠실발송 N-091, N-067·N-071, case 178123901400162) |
 | 2026-06-18 | T-059 (Thymeleaf `<script>` 안 이중 대괄호 `[[..` — 배열 of 배열 `[[-1,0],...]`·주석 속 공백 `[[ ]]` 모두 인라인 식 파싱 오류 / 해결=object 배열 `[{dc:-1,dr:0},...]`·주석 문구 수정 / `garden.html @free-pure-core` nearestFreeCell 방향 벡터 / T-032·PR #384) |
 | 2026-06-18 | T-060 (`@free-pure-core` 블록 순수함수 제거 시 하니스 factory return·destructure 양쪽 갱신 안 하면 `ReferenceError` FAIL — PR #387) |
+| 2026-06-18 | T-061 (gitignore 하니스를 CI 그물로 승격 시 required check는 job 단위 — 별도 job 아닌 기존 `test` job에 스텝 추가해야 자동 포함·paths-ignore 없어야 문서 PR도 통과 — PR #388) |
