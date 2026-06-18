@@ -20,7 +20,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <!-- CSRF 토큰 — 배치 저장 fetch(POST /garden/layout)가 X-CSRF-TOKEN 헤더로 싣는다(admin.html 관례). -->
     <meta name="_csrf" th:content="${_csrf != null ? _csrf.token : ''}">
-    <title>독서 정원 — BookTimer</title>
+    <title>독서 마을 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
     <!-- 광고 로더(게시자 ID 설정 시에만) -->
     <th:block th:replace="~{ads :: loader}"></th:block>
@@ -44,14 +44,14 @@
             <h1>BookTimer</h1>
         </a>
     </header>
-    <p class="greeting"><span th:text="${nickname}">닉네임</span>님의 정원</p>
+    <p class="greeting"><span th:text="${nickname}">닉네임</span>님의 마을</p>
 
     <!-- 🌱 내 정원(꾸미기) — 보유 식물을 캔버스 어디든 자유 위치에 놓는다(자유 위치 전환 Phase 1).
          보기 모드는 서버 렌더(no-JS 폴백, 좌표 절대배치), 편집은 Phaser 게임 위젯(드래그 자유 이동·월드 밖 드롭=거두기).
          저장은 정규화 좌표(0~1)를 POST /garden/layout(JSON) → 성공 시 새로고침해 서버 렌더 보기를 최신화한다. -->
     <section class="card my-garden" x-data="myGarden">
         <div class="my-garden-head">
-            <h2 class="garden-axis-title">🌱 내 정원</h2>
+            <h2 class="garden-axis-title">🌱 내 마을</h2>
             <div class="my-garden-actions">
                 <button type="button" class="garden-edit-btn" x-show="!editing" @click="startEdit()">✏️ 꾸미기</button>
                 <template x-if="editing">
@@ -97,13 +97,13 @@
                  th:style="'aspect-ratio:' + ${worldWidth} + ' / ' + ${worldHeight}"></div>
         </div>
         <p class="garden-next" th:if="${#lists.isEmpty(placedItems)}">
-            아직 빈 정원이에요. 「✏️ 꾸미기」로 모은 식물과 소품(길·연못·울타리…)을 놓아보세요. 🌱
+            아직 빈 마을이에요. 「✏️ 꾸미기」로 모은 식물과 소품(길·연못·울타리…)을 놓아보세요. 🌱
         </p>
 
         <!-- 편집 모드: Phaser 게임 위젯 + 팔레트. JS 필요 — no-JS면 이 블록은 렌더되지 않는다(점진 향상). -->
         <template x-if="editing">
             <div>
-                <p class="my-garden-hint">팔레트에서 누르면 정원에 놓여요. 끌어 옮기고, 밖으로 끌어내면 거둬요. <b>탭하면</b> 회전을 바꿀 수 있어요. <b>소품(길·연못·울타리…)</b>은 여러 개 놓을 수 있어요.</p>
+                <p class="my-garden-hint">팔레트에서 누르면 마을에 놓여요. 끌어 옮기고, 밖으로 끌어내면 거둬요. <b>탭하면</b> 회전을 바꿀 수 있어요. <b>소품(길·연못·울타리…)</b>은 여러 개 놓을 수 있어요.</p>
                 <!-- 무대 안에 Phaser 캔버스가 마운트된다(고정 종횡비 컨테이너 → FIT 스케일로 화면에 핏). -->
                 <div class="garden-stage garden-stage-edit">
                     <div id="garden-phaser" class="garden-phaser"
@@ -154,7 +154,7 @@
     </section>
 
     <section class="card garden-page" x-data="{ tab: 'all', ownedOnly: false }">
-        <p class="garden-beta">🚧 베타 · 정원은 개발 중이에요. 곧 더 다양한 식물과 상세 이야기로 채워집니다.</p>
+        <p class="garden-beta">🚧 베타 · 마을은 개발 중이에요. 곧 더 다양한 식물과 상세 이야기로 채워집니다.</p>
 
         <!-- 전체 진척 한 줄(3축 합산) — 한눈에 수집 현황. -->
         <p class="garden-page-progress"
