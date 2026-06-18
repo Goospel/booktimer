@@ -1,0 +1,595 @@
+/* === landing.css — 랜딩 마케팅 페이지 전용. body.landing-page 스코프로 전역 격리. === */
+
+/* 전역 앱 셸(flex + padding) 해제 — 와이드 마케팅 레이아웃으로 전환 */
+body.landing-page {
+    display: block;
+    padding: 0;
+}
+
+/* 세리프 헬퍼 — 헤드라인·섹션 타이틀에만 Gowun Batang 적용 */
+.lp-serif {
+    font-family: "Gowun Batang", "Batang", serif;
+}
+
+/* ================================================================
+   네비게이션 바
+   ================================================================ */
+.lp-nav {
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    padding: 0 24px;
+}
+
+.lp-nav-inner {
+    max-width: 1080px;
+    margin: 0 auto;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+}
+
+.lp-nav-brand {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    text-decoration: none;
+    color: var(--accent-hover);
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: -.02em;
+    white-space: nowrap;
+}
+
+.lp-nav-emoji { font-size: 1.15rem; }
+
+.lp-nav-links {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    flex: 1;
+}
+
+.lp-nav-links a {
+    text-decoration: none;
+    color: var(--muted);
+    font-size: 0.9rem;
+    transition: color .15s;
+}
+
+.lp-nav-links a:hover { color: var(--text); }
+
+.lp-nav-cta {
+    text-decoration: none;
+    background: var(--accent);
+    color: #fff;
+    padding: 9px 20px;
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+    font-weight: 600;
+    transition: background .15s;
+    white-space: nowrap;
+}
+
+.lp-nav-cta:hover { background: var(--accent-hover); }
+
+/* ================================================================
+   1080px 메인 셸
+   ================================================================ */
+.lp-shell {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 24px;
+}
+
+/* ================================================================
+   히어로 섹션
+   ================================================================ */
+.lp-hero {
+    padding: 80px 0 72px;
+    border-bottom: 1px solid var(--border);
+}
+
+.lp-hero-grid {
+    display: grid;
+    grid-template-columns: .85fr 1.15fr;
+    gap: 48px;
+    align-items: center;
+}
+
+.lp-hero-eyebrow {
+    display: inline-block;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+}
+
+.lp-hero-h1 {
+    font-size: 3rem;
+    line-height: 1.2;
+    color: var(--text);
+    margin: 0 0 16px;
+    word-break: keep-all;
+    letter-spacing: -.03em;
+}
+
+.lp-hero-sub {
+    font-size: 1.1rem;
+    color: var(--accent-hover);
+    margin: 0 0 20px;
+    font-weight: 600;
+    word-break: keep-all;
+    line-height: 1.5;
+}
+
+.lp-hero-lead {
+    color: var(--muted);
+    line-height: 1.8;
+    margin: 0 0 32px;
+    word-break: keep-all;
+    font-size: 1rem;
+}
+
+/* CTA 스택 — 세로 배열 */
+.lp-cta-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 340px;
+}
+
+.lp-cta-stack .btn {
+    text-decoration: none;
+    text-align: center;
+}
+
+.lp-cta-micro {
+    font-size: 0.78rem;
+    color: var(--muted);
+    text-align: center;
+    margin: 2px 0 0;
+}
+
+/* ================================================================
+   플레이스홀더 — 비주얼 자리(실제 캡처로 교체 예정)
+   ================================================================ */
+.lp-placeholder {
+    background: linear-gradient(140deg, var(--sage-soft) 0%, var(--sage-5) 100%);
+    border-radius: 20px;
+    min-height: 380px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 40px 32px;
+    border: 1px solid var(--border);
+}
+
+.lp-placeholder-icon {
+    font-size: 3.5rem;
+    opacity: .55;
+}
+
+.lp-placeholder-label {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--accent-hover);
+    text-align: center;
+    word-break: keep-all;
+}
+
+.lp-placeholder-sub {
+    font-size: 0.8rem;
+    color: var(--muted);
+    max-width: 200px;
+    line-height: 1.5;
+    text-align: center;
+}
+
+/* ================================================================
+   공통 섹션 구조
+   ================================================================ */
+.lp-section {
+    padding: 80px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.lp-section-label {
+    display: inline-block;
+    background: var(--sage-soft);
+    color: var(--accent-hover);
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    margin-bottom: 16px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.lp-section-title {
+    font-size: 2rem;
+    color: var(--text);
+    margin: 0 0 16px;
+    word-break: keep-all;
+    line-height: 1.3;
+    letter-spacing: -.025em;
+}
+
+.lp-section-lead {
+    color: var(--muted);
+    line-height: 1.8;
+    margin: 0 0 28px;
+    word-break: keep-all;
+    font-size: 1rem;
+    max-width: 480px;
+}
+
+.lp-section-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: color .15s;
+}
+
+.lp-section-link:hover { color: var(--accent-hover); }
+
+/* 2단 그리드 변형 — 방향별로 비율 조정 */
+.lp-grid-2col-b {
+    display: grid;
+    grid-template-columns: 1.15fr .85fr;
+    gap: 64px;
+    align-items: center;
+}
+
+.lp-grid-2col-c {
+    display: grid;
+    grid-template-columns: 1.04fr .96fr;
+    gap: 64px;
+    align-items: center;
+}
+
+/* ================================================================
+   잔디 CSS 목업
+   ================================================================ */
+.lp-grass-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: var(--shadow);
+}
+
+.lp-grass-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.lp-grass-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.lp-grass-badge {
+    font-size: 0.75rem;
+    color: var(--accent-hover);
+    background: var(--sage-soft);
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-weight: 600;
+}
+
+.lp-grass-grid {
+    display: grid;
+    grid-template-columns: repeat(13, 1fr);
+    grid-template-rows: repeat(7, 1fr);
+    gap: 4px;
+}
+
+.lp-grass-cell {
+    aspect-ratio: 1;
+    border-radius: 3px;
+    background: var(--border);
+}
+
+/* 잔디 농도 — 1(연)~5(진) */
+.lp-grass-cell.g1 { background: var(--sage-2); }
+.lp-grass-cell.g2 { background: var(--sage-4); }
+.lp-grass-cell.g3 { background: var(--sage-5); }
+.lp-grass-cell.g4 { background: var(--sage-7); }
+.lp-grass-cell.g5 { background: var(--accent-hover); }
+
+.lp-grass-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 14px;
+    font-size: 0.78rem;
+    color: var(--muted);
+}
+
+/* ================================================================
+   기능 그리드
+   ================================================================ */
+.lp-features-section {
+    padding: 80px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.lp-features-header {
+    text-align: center;
+    margin-bottom: 48px;
+}
+
+.lp-features-header .lp-section-title { margin-bottom: 0; }
+
+.lp-features-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+}
+
+.lp-feature-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px 22px;
+    box-shadow: var(--shadow);
+}
+
+.lp-feature-icon {
+    font-size: 2rem;
+    margin-bottom: 14px;
+}
+
+.lp-feature-name {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0 0 8px;
+    word-break: keep-all;
+}
+
+.lp-feature-desc {
+    font-size: 0.875rem;
+    color: var(--muted);
+    line-height: 1.65;
+    margin: 0;
+    word-break: keep-all;
+}
+
+/* ================================================================
+   3단계 how-it-works
+   ================================================================ */
+.lp-steps-section {
+    padding: 80px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.lp-steps-header {
+    text-align: center;
+    margin-bottom: 56px;
+}
+
+.lp-steps-header .lp-section-title { margin-bottom: 0; }
+
+.lp-steps-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 40px;
+    position: relative;
+}
+
+/* 단계 사이 연결선 */
+.lp-steps-grid::before {
+    content: '';
+    position: absolute;
+    top: 24px;
+    left: calc(16.66% + 24px);
+    right: calc(16.66% + 24px);
+    height: 1px;
+    background: var(--border);
+    z-index: 0;
+}
+
+.lp-step {
+    text-align: center;
+    position: relative;
+    z-index: 1;
+}
+
+.lp-step-num {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin: 0 auto 20px;
+    position: relative;
+}
+
+.lp-step-name {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0 0 10px;
+    word-break: keep-all;
+}
+
+.lp-step-desc {
+    font-size: 0.875rem;
+    color: var(--muted);
+    line-height: 1.65;
+    margin: 0;
+    word-break: keep-all;
+}
+
+/* ================================================================
+   하단 CTA
+   ================================================================ */
+.lp-bottom-cta {
+    padding: 96px 0;
+    text-align: center;
+}
+
+.lp-bottom-cta-eyebrow {
+    display: inline-block;
+    background: var(--sage-soft);
+    color: var(--accent-hover);
+    padding: 4px 16px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    margin-bottom: 24px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.lp-bottom-cta-h2 {
+    font-size: 2.6rem;
+    color: var(--text);
+    margin: 0 0 16px;
+    word-break: keep-all;
+    letter-spacing: -.03em;
+    line-height: 1.2;
+}
+
+.lp-bottom-cta-lead {
+    color: var(--muted);
+    font-size: 1.05rem;
+    margin: 0 auto 40px;
+    max-width: 460px;
+    word-break: keep-all;
+    line-height: 1.8;
+}
+
+.lp-bottom-cta-btn {
+    display: inline-block;
+    text-decoration: none;
+    background: var(--accent);
+    color: #fff;
+    padding: 16px 44px;
+    border-radius: var(--radius-sm);
+    font-size: 1.05rem;
+    font-weight: 700;
+    transition: background .15s;
+    letter-spacing: -.01em;
+}
+
+.lp-bottom-cta-btn:hover { background: var(--accent-hover); }
+
+/* ================================================================
+   푸터
+   ================================================================ */
+.lp-footer {
+    padding: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    border-top: 1px solid var(--border);
+    background: var(--card-bg);
+    flex-wrap: wrap;
+}
+
+.lp-footer a {
+    text-decoration: none;
+    color: var(--muted);
+    font-size: 0.85rem;
+    transition: color .15s;
+}
+
+.lp-footer a:hover { color: var(--text); }
+
+/* ================================================================
+   반응형 — 태블릿 (≤860px)
+   ================================================================ */
+@media (max-width: 860px) {
+    .lp-hero-grid,
+    .lp-grid-2col-b,
+    .lp-grid-2col-c {
+        grid-template-columns: 1fr;
+        gap: 40px;
+    }
+
+    /* 역방향 그리드(잔디·정원)에서 텍스트를 항상 위로 */
+    .lp-grid-2col-b .lp-section-text { order: -1; }
+
+    .lp-hero { padding: 56px 0 48px; }
+    .lp-hero-h1 { font-size: 2.4rem; }
+
+    .lp-section { padding: 56px 0; }
+    .lp-section-title { font-size: 1.75rem; }
+    .lp-section-lead { max-width: 100%; }
+
+    .lp-features-section,
+    .lp-steps-section { padding: 56px 0; }
+    .lp-features-grid { grid-template-columns: repeat(2, 1fr); }
+
+    .lp-steps-grid::before { display: none; }
+    .lp-steps-grid { gap: 28px; }
+
+    .lp-bottom-cta { padding: 64px 0; }
+    .lp-bottom-cta-h2 { font-size: 2rem; }
+
+    .lp-placeholder { min-height: 280px; }
+
+    .lp-nav-links { display: none; }
+}
+
+/* ================================================================
+   반응형 — 모바일 (≤480px)
+   ================================================================ */
+@media (max-width: 480px) {
+    .lp-nav { padding: 0 16px; }
+
+    .lp-shell { padding: 0 16px; }
+
+    .lp-hero { padding: 40px 0 36px; }
+    .lp-hero-h1 { font-size: 2rem; }
+
+    .lp-section { padding: 40px 0; }
+    .lp-section-title { font-size: 1.5rem; }
+
+    .lp-cta-stack { max-width: 100%; }
+
+    .lp-features-section,
+    .lp-steps-section { padding: 40px 0; }
+    .lp-features-grid { grid-template-columns: 1fr; }
+    .lp-steps-grid { grid-template-columns: 1fr; }
+
+    .lp-bottom-cta { padding: 48px 0; }
+    .lp-bottom-cta-h2 { font-size: 1.75rem; }
+
+    .lp-placeholder { min-height: 220px; }
+
+    .lp-grass-grid {
+        grid-template-columns: repeat(7, 1fr);
+        grid-template-rows: repeat(7, 1fr);
+    }
+}
