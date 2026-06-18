@@ -4301,9 +4301,9 @@ BookTimer SES 프로덕션 요청(case 178123901400162)이 ① AWS "추가 정�
 | 2026-06-18 | N-094 (stateless 불변 데이터는 as-of 재계산으로 임의 시점 역사를 재현할 수 있다 — 완료 세션(불변)에서 100% 유도되는 모델은 스냅샷·스케줄러 없이 임의 기준일 재현 가능 / trace를 단일 출처로 두고 summary를 파생으로 뽑으면 진단-실제 drift 물리적 불가(computeTrace().toWeeklyDebt()==compute() 회귀 앵커 테스트로 봉인) / 이 패턴이 맞는 경우: 불변 데이터·진단+요약 둘 다 필요·as-of 역사 재현 / N-001·PR #381) |
 | 2026-06-18 | N-095 (아이소에서 겹침 금지(발밑 co-location)와 깊이 정렬(스프라이트 레이어링)은 별개 개념 — 둘 다 있어야 CoC식 룩 / 겹침 금지=occupiedCells+nearestFreeCell+resolveDrop, 깊이 정렬=restack(y-sort)+setDepth+PlacedItem.depthZ() / PR #384) |
 | 2026-06-18 | N-096 (`@Profile("local")` ApplicationRunner — 약한 자격증명을 운영에 유출하지 않는 dev-only 시드 빈 fail-closed 패턴 / bootRun→local 프로파일 자동 활성·prod·테스트 컨텍스트에선 빈 미생성·멱등 existsByLoginId 체크 / PR #385) |
-| 2026-06-18 | N-097 (Alpine CDN v3.14.x는 queueMicrotask(Alpine.start)로 defer 배치 끝난 뒤 alpine:init fire — 번들 type=module이 CDN보다 늦어도 alpine:init 등록 보장·x-data="myGarden"(괄호 없음)=Alpine.data 등록명 참조 / PR #NNN) |
-| 2026-06-18 | N-098 (SSR 섬 아키텍처: Vite 번들을 src/main/resources/static/에 커밋해 bootJar 통합 — Docker·build.gradle 무변경·CI stale 게이트로 산출물 낡음 차단 / PR #NNN) |
-| 2026-06-18 | N-099 (Phaser CDN defer→npm import가 T-054 TDZ를 구조 소멸: class extends Phaser.Scene이 번들 정적 import로 실행 시 Phaser 보장·ensureGardenScene() 래핑 불필요·N-082 Alpine Proxy 격리는 여전히 필요 / PR #NNN) |
+| 2026-06-18 | N-097 (Alpine CDN v3.14.x는 queueMicrotask(Alpine.start)로 defer 배치 끝난 뒤 alpine:init fire — 번들 type=module이 CDN보다 늦어도 alpine:init 등록 보장·x-data="myGarden"(괄호 없음)=Alpine.data 등록명 참조 / PR #391) |
+| 2026-06-18 | N-098 (SSR 섬 아키텍처: Vite 번들을 src/main/resources/static/에 커밋해 bootJar 통합 — Docker·build.gradle 무변경·CI stale 게이트로 산출물 낡음 차단 / PR #391) |
+| 2026-06-18 | N-099 (Phaser CDN defer→npm import가 T-054 TDZ를 구조 소멸: class extends Phaser.Scene이 번들 정적 import로 실행 시 Phaser 보장·ensureGardenScene() 래핑 불필요·N-082 Alpine Proxy 격리는 여전히 필요 / PR #391) |
 
 ---
 
@@ -4514,7 +4514,7 @@ document.addEventListener('alpine:init', () => {
 
 - **T-054** — defer × extends TDZ, Phaser CDN→npm으로 구조 제거 (N-099)
 - `frontend/src/garden/main.ts` — 이 패턴 구현체
-- **PR #NNN** — 정원 프론트 빌드 2차 B
+- **PR #391** — 정원 프론트 빌드 2차 B
 
 ---
 
@@ -4568,7 +4568,7 @@ frontend/src/garden/*.ts  → (vite build) → src/main/resources/static/garden/
 - **N-097** — Alpine alpine:init × Alpine.data 타이밍
 - **T-062** — 번들 404 (garden.js 커밋 누락)
 - `vite.config.ts` — `outDir: ../src/main/resources/static/garden`
-- **PR #NNN** — 정원 프론트 빌드 2차 B
+- **PR #391** — 정원 프론트 빌드 2차 B
 
 ---
 
@@ -4620,4 +4620,4 @@ T-054 제거와 별개로, Phaser `Game`/`Scene` 인스턴스를 Alpine `x-data`
 - **N-082** — Alpine reactive Proxy × Phaser 인스턴스 격리
 - **N-083** — defer × class extends TDZ (동일 개념 일반화)
 - `frontend/src/garden/scene.ts` — `class GardenScene extends Phaser.Scene` 직접 선언
-- **PR #NNN** — 정원 프론트 빌드 2차 B
+- **PR #391** — 정원 프론트 빌드 2차 B
