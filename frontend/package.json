@@ -6,6 +6,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
+    "alpinejs": "^3.14.1",
     "phaser": "^3.80.1",
     "typescript": "^5",
     "vite": "^6",
