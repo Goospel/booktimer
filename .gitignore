@@ -50,3 +50,6 @@ private-docs/
 
 # 계획↔구현 세션 분리(CLAUDE.md 「계획 우선」)의 임시 계획 md — 작업용 산출물이라 추적 안 함(완료 후 삭제/PR 흡수)
 claude-docs/plans/
+
+# 프론트엔드 빌드 산출물 — package-lock.json은 커밋(CI 재현성 보장)
+frontend/node_modules/

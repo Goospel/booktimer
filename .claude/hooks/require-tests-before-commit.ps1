@@ -38,6 +38,36 @@ try {
     $staged = @()
 }
 $javaChanged = @($staged | Where-Object { $_ -match '\.java$' })
+# ── 프론트엔드 게이트 — garden.html 또는 frontend/** 변경 시 npm test ──────────
+$frontChanged = @($staged | Where-Object { $_ -match 'garden\.html$|^frontend/' })
+if ($frontChanged.Count -gt 0) {
+    $nodeCmd = (Get-Command node -ErrorAction SilentlyContinue)
+    if (-not $nodeCmd) {
+        [Console]::Error.WriteLine('[WARN] node not found — frontend test gate skipped (install Node.js to enforce)')
+    } else {
+        $prevEAP2 = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        cmd.exe /c "npm --prefix `"$cwd\frontend`" test >nul 2>nul"
+        $frontExit = $LASTEXITCODE
+        $ErrorActionPreference = $prevEAP2
+        if ($frontExit -ne 0) {
+            $msg2 = @"
+[BLOCKED] Frontend tests failed -- commit aborted (frontend TDD gate).
+
+BookTimer rule (CLAUDE.md): commits with garden.html or frontend/** changes
+must pass `npm --prefix frontend test`.
+
+Fix the failing tests (or the code) and commit again. To see details:
+  npm --prefix frontend test
+
+Override: include the token SKIP_TESTS in the commit command to bypass.
+"@
+            [Console]::Error.WriteLine($msg2)
+            exit 2
+        }
+    }
+}
+
 if ($javaChanged.Count -eq 0) { exit 0 }
 
 # gradlew 가 없으면 강제 불가 → 통과 (fail-open)
