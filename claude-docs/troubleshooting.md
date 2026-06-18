@@ -1189,6 +1189,25 @@ jobs:
 
 ---
 
+## T-064. 다중 세션 워크트리·브랜치 잔재 누적 — squash 머지로 `git branch --merged`가 머지된 feat/*를 미머지로 분류·고아 워크트리 폴더는 `prune` 미포착
+
+**증상**: `.claude/worktrees/`에 워크트리 폴더 수십 개가 쌓이고(`git worktree list`엔 메인만 보임), 로컬 브랜치도 수십 개 누적. `git branch --merged main`이 `#399~#403`으로 squash 머지된 `feat/garden-*`를 '미머지'로 분류해 머지 여부 판단이 어긋난다.
+
+**원인**:
+1. 구현 세션들이 작업·머지 후 `git worktree remove`·`git branch -d`를 안 해 잔재가 누적된다.
+2. **squash 머지**는 브랜치의 여러 커밋을 main에 **새 해시 한 개로 합쳐**, 원본 브랜치 커밋이 main 히스토리에 없다 → `--merged`가 "미머지"로 본다(실제론 머지됨). T-048과 같은 squash 특성.
+3. `git worktree remove`로 워크트리 **메타(`.git/worktrees/<id>`)는 끊겼는데 디렉토리만 남으면** `git worktree prune`이 안 잡는다(prune은 메타만 청소, 고아 폴더는 대상 아님) → `git -C <고아폴더>`는 상위 메인 `.git`을 찾아 **메인 상태**를 보여줘 폴더 자체 추적이 안 된다(미커밋 점검 시 noise 주의).
+
+**해결**:
+- **브랜치**: `git branch --merged main`으로 진짜 머지된 자동브랜치(`claude/*`)는 `-d`로 안전 삭제(미머지면 `-d`가 거부 = 안전장치). squash 머지된 `feat/*`는 `--merged`가 못 잡으니 **main 로그의 PR 번호로 머지 확인 후** `-D`(또는 보존).
+- **고아 워크트리 폴더**: `git worktree list`로 **활성 워크트리 0** 확인 → 각 폴더 미커밋(`git -C <d> status --porcelain --untracked-files=no`)·`HEAD`가 `origin/main`에 포함(`git merge-base --is-ancestor HEAD origin/main`)인지 점검 → 손실 위험 0이면 `rm -rf .claude/worktrees/*/`. **삭제 직전 `worktree list` 재확인**(그 사이 다른 세션이 새 워크트리를 만들었으면 중단).
+
+**예방**: 구현 세션이 PR 머지 후 `worktree remove` + `branch -d`로 본인 잔재를 치운다(자기 발밑 워크트리는 세션 종료 후 메인에서 정리 — T-051). 안 그러면 이렇게 수십 개가 쌓여 한 번에 청소해야 한다.
+
+**관련**: N-032(워크트리 격리), T-051(워크트리 세션 머지 후 로컬 정리), T-048(squash 머지 특성), 2026-06-19 청소(`claude/*` 19개 + 고아 폴더 19개 삭제).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1257,3 +1276,4 @@ jobs:
 | 2026-06-18 | T-061 (gitignore 하니스를 CI 그물로 승격 시 required check는 job 단위 — 별도 job 아닌 기존 `test` job에 스텝 추가해야 자동 포함·paths-ignore 없어야 문서 PR도 통과 — PR #388) |
 | 2026-06-18 | T-062 (Vite 번들 `garden.js`를 `static/garden/`에 커밋하지 않으면 bootRun에서 404 — `<script type="module" th:src="@{/garden/garden.js}">`는 서버가 정적 자원을 서빙해야 하므로 `src/main/resources/static/garden/garden.js`가 없으면 브라우저에서 404·정원 캔버스 마운트 실패·콘솔 "Failed to load module script" / 해결=`npm --prefix frontend run build` 후 산출물을 git add·commit까지 해야 bootJar에 포함 / CI stale 게이트(`git diff --exit-code src/main/resources/static/garden`)가 소스 변경 후 재빌드·재커밋 누락을 PR 차단으로 방지 / N-098, PR #391) |
 | 2026-06-18 | T-063 (Vite 빌드 산출물 stale — 소스 TS를 수정했는데 `npm run build`를 안 하면 배포된 `garden.js`가 이전 버전 / 증상=로컬 `bootRun`에서 수정이 반영 안 됨 / 해결=소스 변경 후 반드시 `npm --prefix frontend run build` 재실행 후 `git add src/main/resources/static/garden/garden.js`·커밋 / CI 게이트 예방: `git diff --exit-code src/main/resources/static/garden`이 0이 아니면 빌드 실패 → PR 머지 차단 / N-098, T-062, PR #391) |
+| 2026-06-19 | T-064 (다중 세션 워크트리·브랜치 잔재 누적 — squash 머지로 `git branch --merged`가 머지된 `feat/*`를 미머지로 분류·고아 워크트리 폴더는 `prune` 미포착(메타만 청소) / 청소: `claude/*` `--merged`는 `-d` 안전, `feat/*`는 main 로그 PR로 머지확인 후 `-D`, 고아 폴더는 활성0·미커밋0·`HEAD@origin/main` 점검 후 `rm -rf .claude/worktrees/*/`(삭제 직전 list 재확인) / 예방: 구현 세션이 머지 후 `worktree remove`+`branch -d` / N-032·T-051·T-048) |
