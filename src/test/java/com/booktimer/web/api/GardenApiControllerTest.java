@@ -3,12 +3,16 @@ package com.booktimer.web.api;
 import com.booktimer.garden.GardenLayoutService;
 import com.booktimer.user.Role;
 import com.booktimer.user.UserRegistrationService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +20,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -43,6 +48,17 @@ class GardenApiControllerTest {
 
     @Autowired
     private Clock clock;
+
+    private ObjectMapper objectMapper;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @BeforeEach
+    void setUpObjectMapper() {
+        objectMapper = new ObjectMapper();
+        objectMapper.findAndRegisterModules(); // JavaTimeModule 등 자동 등록
+    }
 
     private LocalDate today() {
         return LocalDate.ofInstant(clock.instant(), ZoneId.of(SEOUL));
@@ -185,5 +201,95 @@ class GardenApiControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"plants\":[],\"decorations\":[{\"code\":\"bench\",\"x\":0.5,\"y\":0.5,\"z\":0,\"rotation\":0,\"scale\":1}]}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    // ── S3: 잠금 라벨 필드 직렬화 단언 ────────────────────────────────────────────────────
+    // RED: 현재 DTO에 필드 없어 JSON에 미포함 → assertThat 실패.
+    // GREEN: §2.1 보강 후 필드 포함 → 통과.
+
+    @Test
+    @DisplayName("S3: PlantDto 직렬화에 unlockThresholdDays 포함")
+    void s3_plantDto_hasUnlockThresholdDays() throws Exception {
+        var dto = new GardenApiResponse.PlantDto("oak", "🌳", "참나무", "oak-01", false, null, false, 7L);
+        String json = objectMapper.writeValueAsString(dto);
+        assertThat(json).contains("\"unlockThresholdDays\"");
+    }
+
+    @Test
+    @DisplayName("S3: GenrePlantDto 직렬화에 genreLabel 포함")
+    void s3_genrePlantDto_hasGenreLabel() throws Exception {
+        var dto = new GardenApiResponse.GenrePlantDto("genre-01", "📚", "소설식물", null, false, "소설");
+        String json = objectMapper.writeValueAsString(dto);
+        assertThat(json).contains("\"genreLabel\"");
+    }
+
+    @Test
+    @DisplayName("S3: DiversityPlantDto 직렬화에 thresholdCount 포함")
+    void s3_diversityPlantDto_hasThresholdCount() throws Exception {
+        var dto = new GardenApiResponse.DiversityPlantDto("div-01", "🫐", "다양성식물", null, false, 3);
+        String json = objectMapper.writeValueAsString(dto);
+        assertThat(json).contains("\"thresholdCount\"");
+    }
+
+    @Test
+    @DisplayName("S3: BuildingDto 직렬화에 matchName·thresholdCount 포함")
+    void s3_buildingDto_hasMatchNameAndThresholdCount() throws Exception {
+        var dto = new GardenApiResponse.BuildingDto("bld-01", "🏢", "민음사빌딩", null, false, "민음사", 3);
+        String json = objectMapper.writeValueAsString(dto);
+        assertThat(json).contains("\"matchName\"").contains("\"thresholdCount\"");
+    }
+
+    @Test
+    @DisplayName("S3: AuthorCharacterDto 직렬화에 matchName 포함")
+    void s3_authorCharacterDto_hasMatchName() throws Exception {
+        var dto = new GardenApiResponse.AuthorCharacterDto("aut-01", "🧑", "한강캐릭터", null, false, "한강");
+        String json = objectMapper.writeValueAsString(dto);
+        assertThat(json).contains("\"matchName\"");
+    }
+
+    @Test
+    @DisplayName("S3: RecipePlantDto 직렬화에 story 포함 (discovered=true)")
+    void s3_recipePlantDto_hasStory() throws Exception {
+        var dto = new GardenApiResponse.RecipePlantDto("lotus", "💮", "연꽃", null, true, "감성으로 읽고 이성을 탐낸다");
+        String json = objectMapper.writeValueAsString(dto);
+        assertThat(json).contains("\"story\"");
+    }
+
+    // ── N-055: 미발견 레시피 story 마스킹 경계 ──────────────────────────────────────────
+    // discovered=false → story null(백엔드 마스킹). discovered=true → story 노출.
+
+    @Test
+    @Sql(statements = "INSERT INTO recipe_plant (code, name, emoji, story, display_order) VALUES ('test-undiscovered', '테스트연꽃', '💮', '이 스토리는 보이면 안 됨', 99)")
+    @DisplayName("N-055: 미발견 레시피 — story null 마스킹 (discovered=false면 API에서 story 0노출)")
+    void n055_recipePlant_undiscovered_storyIsNull() throws Exception {
+        registrationService.register("n055-undiscovered@booktimer.com", "rawpw1234", "미발견자", SEOUL, Role.USER, today());
+
+        mockMvc.perform(get("/api/garden")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("n055-undiscovered@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.catalog.recipePlants[0].code").value("test-undiscovered"))
+                .andExpect(jsonPath("$.catalog.recipePlants[0].discovered").value(false))
+                .andExpect(jsonPath("$.catalog.recipePlants[0].story").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    @Sql(statements = "INSERT INTO recipe_plant (code, name, emoji, story, display_order) VALUES ('test-discovered', '발견꽃', '🌸', '발견된 아름다운 스토리', 99)")
+    @DisplayName("N-055 경계: 발견된 레시피 — story 정상 노출 (discovered=true면 story 반환)")
+    void n055_recipePlant_discovered_storyIsExposed() throws Exception {
+        registrationService.register("n055-discovered@booktimer.com", "rawpw1234", "발견자", SEOUL, Role.USER, today());
+        Long userId = jdbcTemplate.queryForObject(
+                "SELECT id FROM users WHERE email = 'n055-discovered@booktimer.com'", Long.class);
+        jdbcTemplate.update(
+                "INSERT INTO user_discovered_plant (user_id, plant_code, discovered_at) VALUES (?, 'test-discovered', CURRENT_TIMESTAMP)",
+                userId);
+
+        mockMvc.perform(get("/api/garden")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("n055-discovered@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.catalog.recipePlants[0].code").value("test-discovered"))
+                .andExpect(jsonPath("$.catalog.recipePlants[0].discovered").value(true))
+                .andExpect(jsonPath("$.catalog.recipePlants[0].story").value("발견된 아름다운 스토리"));
     }
 }
