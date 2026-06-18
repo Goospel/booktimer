@@ -31,14 +31,14 @@ export function htmlHasNoAlpineCdn(html: string): boolean {
     return !/<script[^>]*\bsrc\s*=\s*["'][^"']*alpinejs[^"']*["']/i.test(withoutComments);
 }
 
-// 번들 진입(main.ts)이 Alpine을 import하고 Alpine.data(...)를 Alpine.start() '앞에' 호출하면 true.
-// import가 없으면(CDN 전역 의존) 또는 start가 data보다 앞서면 로드순서를 코드로 보장 못 해 false.
+// 번들 진입(main.ts)이 Alpine을 import하고 Alpine.start()를 직접 호출하면 true.
+// S2: myGarden이 Vue로 이전해 Alpine.data 호출이 없어도 됨(도감 x-data는 HTML inline).
+// import가 없으면(CDN 전역 의존) 또는 start가 없으면 로드순서를 코드로 보장 못 해 false.
 export function bundleOwnsAlpine(src: string): boolean {
     const code = src.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, ''); // 주석 제거
     const importsAlpine = /import\s+Alpine\s+from\s+['"]alpinejs['"]/.test(code);
-    const dataIdx = code.indexOf('Alpine.data');
     const startIdx = code.indexOf('Alpine.start');
-    return importsAlpine && dataIdx >= 0 && startIdx >= 0 && dataIdx < startIdx;
+    return importsAlpine && startIdx >= 0;
 }
 
 describe('정원 부트스트랩 로드순서 회귀 가드 (#393)', () => {
@@ -64,22 +64,21 @@ describe('정원 부트스트랩 로드순서 회귀 가드 (#393)', () => {
         });
     });
 
-    describe('bundleOwnsAlpine — main.ts가 data→start 순서로 Alpine 소유', () => {
-        test('실제 main.ts는 Alpine import + data→start 순서다', () => {
+    describe('bundleOwnsAlpine — main.ts가 Alpine import + start로 번들 소유(S2~: data 없어도 됨)', () => {
+        test('실제 main.ts는 Alpine import + start를 가진다', () => {
             expect(bundleOwnsAlpine(mainTs())).toBe(true);
         });
-        test('start가 data보다 앞서면 false(순서 역전 회귀)', () => {
-            const reversed =
-                `import Alpine from 'alpinejs';\nAlpine.start();\nAlpine.data('myGarden', f);`;
-            expect(bundleOwnsAlpine(reversed)).toBe(false);
-        });
         test('Alpine import가 없으면 false(CDN 전역 의존 = race 복귀)', () => {
-            const noImport = `Alpine.data('myGarden', f);\nAlpine.start();`;
+            const noImport = `Alpine.start();`;
             expect(bundleOwnsAlpine(noImport)).toBe(false);
         });
-        test('data 없이 start만 있으면 false', () => {
-            const onlyStart = `import Alpine from 'alpinejs';\nAlpine.start();`;
-            expect(bundleOwnsAlpine(onlyStart)).toBe(false);
+        test('Alpine.start 없으면 false(부트스트랩 누락)', () => {
+            const noStart = `import Alpine from 'alpinejs';`;
+            expect(bundleOwnsAlpine(noStart)).toBe(false);
+        });
+        test('import + start만 있어도 true(S2: myGarden→Vue로 이전, data 호출 불필요)', () => {
+            const importAndStart = `import Alpine from 'alpinejs';\nAlpine.start();`;
+            expect(bundleOwnsAlpine(importAndStart)).toBe(true);
         });
     });
 });

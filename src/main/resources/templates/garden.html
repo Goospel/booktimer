@@ -46,34 +46,16 @@
     </header>
     <p class="greeting"><span th:text="${nickname}">닉네임</span>님의 마을</p>
 
-    <!-- 🌱 내 정원(꾸미기) — 보유 식물을 캔버스 어디든 자유 위치에 놓는다(자유 위치 전환 Phase 1).
-         보기 모드는 서버 렌더(no-JS 폴백, 좌표 절대배치), 편집은 Phaser 게임 위젯(드래그 자유 이동·월드 밖 드롭=거두기).
-         저장은 정규화 좌표(0~1)를 POST /garden/layout(JSON) → 성공 시 새로고침해 서버 렌더 보기를 최신화한다. -->
-    <section class="card my-garden" x-data="myGarden">
+    <!-- 🌱 내 마을(게임 위젯) — Vue 마운트 포인트(S2).
+         no-JS 폴백: SSR 뷰(좌표 절대배치)가 그대로 보임.
+         JS 있으면 Vue가 mountEl에 마운트해 이 innerHTML을 자신의 템플릿으로 대체 — 편집·팔레트·Phaser는 모두 Vue 쪽. -->
+    <section class="card my-garden" id="village-game">
+        <!-- no-JS / Vue 로드 전 SSR 폴백 -->
         <div class="my-garden-head">
             <h2 class="garden-axis-title">🌱 내 마을</h2>
-            <div class="my-garden-actions">
-                <button type="button" class="garden-edit-btn" x-show="!editing" @click="startEdit()">✏️ 꾸미기</button>
-                <template x-if="editing">
-                    <span class="my-garden-edit-actions">
-                        <button type="button" class="garden-edit-btn primary" @click="save()" :disabled="saving"
-                                x-text="saving ? '저장 중…' : '저장'">저장</button>
-                        <button type="button" class="garden-edit-btn" @click="cancel()" :disabled="saving">취소</button>
-                    </span>
-                </template>
-            </div>
         </div>
-        <p class="my-garden-msg" x-show="message" x-text="message" style="display:none"></p>
-
-        <!-- 보기 모드(서버 렌더 = no-JS 폴백). Phaser 준비 전 또는 편집 중이 아닐 때만 표시.
-             JS 없으면 phaserReady 미정의 → !phaserReady = true → 그대로 노출(점진 향상 유지).
-             Phaser 마운트 후엔 phaserReady=true로 숨기고 아래 Phaser 캔버스가 인계한다. -->
-        <div class="garden-stage" x-show="!editing && !phaserReady">
+        <div class="garden-stage" th:if="${!#lists.isEmpty(placedItems)}">
             <div class="garden-view" th:style="'aspect-ratio:' + ${worldWidth} + ' / ' + ${worldHeight}">
-                <!-- 좌표 절대배치: left/top은 정규화×100%, z-index는 zOrder(식물·소품 통합). 식물=.canvas-plant(sway/그림자 상속 A1·A2),
-                     소품=.canvas-decor(정적 — 연못이 흔들리면 어색). placedItems는 z 오름차순 병합 정렬(식물·소품 교차). -->
-                <!-- wrapper 분리(Phase 2): outer=위치+사용자 변형(rotate 인라인 transform), inner=sway 애니메이션.
-                     한 요소에 두면 sway transform이 변형을 덮어 사라지므로 부모-자식으로 나눠 자연 합성한다. -->
                 <span class="garden-view-plant"
                       th:classappend="${it.kind() == 'plant'} ? 'gv-plant' : 'gv-decor'"
                       th:each="it : ${placedItems}"
@@ -89,68 +71,8 @@
                 </span>
             </div>
         </div>
-        <!-- 보기 Phaser 캔버스 — JS+Phaser 준비 후 SSR 폴백을 대체해 rendered 보기를 담당.
-             phaserReady=true(Alpine init에서 마운트 후)이고 편집 중이 아닐 때 표시.
-             no-JS면 phaserReady 미정의 → false → 이 div는 숨은 채로(SSR 폴백이 유효). -->
-        <div class="garden-stage" x-show="phaserReady && !editing" style="display:none">
-            <div id="garden-phaser-view" class="garden-phaser"
-                 th:style="'aspect-ratio:' + ${worldWidth} + ' / ' + ${worldHeight}"></div>
-        </div>
         <p class="garden-next" th:if="${#lists.isEmpty(placedItems)}">
-            아직 빈 마을이에요. 「✏️ 꾸미기」로 모은 식물과 소품(길·연못·울타리…)을 놓아보세요. 🌱
-        </p>
-
-        <!-- 편집 모드: Phaser 게임 위젯 + 팔레트. JS 필요 — no-JS면 이 블록은 렌더되지 않는다(점진 향상). -->
-        <template x-if="editing">
-            <div>
-                <p class="my-garden-hint">팔레트에서 누르면 마을에 놓여요. 끌어 옮기고, 밖으로 끌어내면 거둬요. <b>탭하면</b> 회전을 바꿀 수 있어요. <b>소품(길·연못·울타리…)</b>은 여러 개 놓을 수 있어요.</p>
-                <!-- 무대 안에 Phaser 캔버스가 마운트된다(고정 종횡비 컨테이너 → FIT 스케일로 화면에 핏). -->
-                <div class="garden-stage garden-stage-edit">
-                    <div id="garden-phaser" class="garden-phaser"
-                         th:style="'aspect-ratio:' + ${worldWidth} + ' / ' + ${worldHeight}"></div>
-                </div>
-                <!-- 변형 툴바 — 식물 선택(탭) 시 표시. 회전 ±15°·맨앞/맨뒤·거두기(scene 위임). -->
-                <div class="garden-toolbar" x-show="selected" style="display:none">
-                    <span class="garden-tool-label">선택한 식물</span>
-                    <button type="button" class="garden-tool-btn" @click="rotateSel(-15)" title="왼쪽으로 15°">⟲</button>
-                    <button type="button" class="garden-tool-btn" @click="rotateSel(15)" title="오른쪽으로 15°">⟳</button>
-                    <button type="button" class="garden-tool-btn danger" @click="removeSel()" title="거두기">🗑</button>
-                </div>
-                <!-- 식물 팔레트 — 보유분만. 한 식물 한 번이라 놓이면 비활성(.placed). -->
-                <p class="garden-palette-label">🌱 식물</p>
-                <div class="garden-palette">
-                    <p class="my-garden-hint" x-show="owned.length === 0">보유한 식물이 없어요 — 책을 읽어 모아보세요.</p>
-                    <template x-for="o in owned" :key="o.axis + '/' + o.code">
-                        <button type="button" class="palette-plant"
-                                :class="{ placed: isPlaced(o) }" :disabled="isPlaced(o)"
-                                @click="addFromPalette(o)" :title="o.name">
-                            <!-- 팔레트 미리보기 — SVG 식물은 작은 벡터로, 없으면 이모지(A2). -->
-                            <template x-if="o.spriteId">
-                                <svg class="plant-svg" aria-hidden="true"><use :href="'#sprite-' + o.spriteId"></use></svg>
-                            </template>
-                            <template x-if="!o.spriteId">
-                                <span x-text="o.emoji"></span>
-                            </template>
-                        </button>
-                    </template>
-                </div>
-                <!-- 소품 팔레트 — 카탈로그 전체(보유 무관). 중복 허용이라 비활성 없음(누를 때마다 새 인스턴스). -->
-                <p class="garden-palette-label">🪴 소품</p>
-                <div class="garden-palette">
-                    <template x-for="d in decorations" :key="d.code">
-                        <button type="button" class="palette-plant"
-                                @click="addDecorFromPalette(d)" :title="d.name">
-                            <template x-if="d.spriteId">
-                                <svg class="plant-svg" aria-hidden="true"><use :href="'#sprite-' + d.spriteId"></use></svg>
-                            </template>
-                            <template x-if="!d.spriteId">
-                                <span x-text="d.emoji"></span>
-                            </template>
-                        </button>
-                    </template>
-                </div>
-            </div>
-        </template>
+            아직 빈 마을이에요. 「✏️ 꾸미기」로 모은 식물과 소품(길·연못·울타리…)을 놓아보세요. 🌱</p>
     </section>
 
     <section class="card garden-page" x-data="{ tab: 'all', ownedOnly: false }">
@@ -384,17 +306,6 @@
     <p class="garden-back"><a th:href="@{/}">← 대시보드로 돌아가기</a></p>
 </div>
 
-<!-- 내 정원 부트스트랩 데이터: Thymeleaf가 JSON으로 주입, Vite 번들(garden.js)이 읽는다. -->
-<script th:inline="javascript">
-    window.__garden = {
-        placed: /*[[${placedItems}]]*/ [],
-        owned: /*[[${garden.ownedPlants()}]]*/ [],
-        decorations: /*[[${decorations}]]*/ [],
-        characters: /*[[${characters}]]*/ [],
-        worldWidth: /*[[${worldWidth}]]*/ 1000,
-        worldHeight: /*[[${worldHeight}]]*/ 800
-    };
-</script>
 <script type="module" th:src="@{/garden/garden.js}"></script>
 </body>
 </html>

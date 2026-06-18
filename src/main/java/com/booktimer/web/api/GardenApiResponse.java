@@ -17,7 +17,9 @@ public record GardenApiResponse(
         String nickname,
         List<PlacedItem> placed,
         List<DecorationOption> decorationCatalog,
-        CatalogDto catalog
+        CatalogDto catalog,
+        List<OwnedPlantItemDto> owned,
+        List<OwnedCharacterDto> characters
 ) {
 
     public record WorldDto(int width, int height) {}
@@ -106,6 +108,15 @@ public record GardenApiResponse(
         }
     }
 
+    /** 게임 팔레트용 보유 식물 — axis 포함(GardenItemMeta 호환). AUTHOR 캐릭터 제외(characters 필드 분리). */
+    public record OwnedPlantItemDto(String axis, String code, String emoji, String name, String spriteId) {
+        static OwnedPlantItemDto from(OwnedPlant p) {
+            return new OwnedPlantItemDto(
+                    p.axis() != null ? p.axis().name() : null,
+                    p.code(), p.emoji(), p.name(), p.spriteId());
+        }
+    }
+
     public record BuildingDto(
             String code, String emoji, String name, String spriteId, boolean owned
     ) {
@@ -151,6 +162,8 @@ public record GardenApiResponse(
                         view.ownedCharacters().stream().map(OwnedCharacterDto::from).toList(),
                         view.buildings().stream().map(BuildingDto::from).toList(),
                         view.ownedBuildingCount(),
-                        view.totalBuildingCount()));
+                        view.totalBuildingCount()),
+                view.ownedPlants().stream().map(OwnedPlantItemDto::from).toList(),
+                view.ownedCharacters().stream().map(OwnedCharacterDto::from).toList());
     }
 }

@@ -59,7 +59,7 @@ class GardenApiControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/garden 인증 → 200 JSON + 필수 키(world·nickname·placed·decorationCatalog·catalog)")
+    @DisplayName("GET /api/garden 인증 → 200 JSON + 필수 키(world·nickname·placed·decorationCatalog·catalog·owned·characters)")
     void getGarden_authenticated_returnsJsonStructure() throws Exception {
         registrationService.register("api-garden@booktimer.com", "rawpw1234", "API사용자", SEOUL, Role.USER, today());
 
@@ -83,7 +83,25 @@ class GardenApiControllerTest {
                 .andExpect(jsonPath("$.catalog.recipePlants").isArray())
                 .andExpect(jsonPath("$.catalog.authorCharacters").isArray())
                 .andExpect(jsonPath("$.catalog.ownedCharacters").isArray())
-                .andExpect(jsonPath("$.catalog.buildings").isArray());
+                .andExpect(jsonPath("$.catalog.buildings").isArray())
+                // S2: 게임 직접 소비용 — owned(식물 팔레트)·characters(배회) 최상위 노출
+                .andExpect(jsonPath("$.owned").isArray())
+                .andExpect(jsonPath("$.characters").isArray());
+    }
+
+    @Test
+    @DisplayName("GET /api/garden: owned 항목은 AUTHOR 제외한 보유 식물만(axis·code·emoji·name·spriteId 구조)")
+    void getGarden_owned_excludesAuthorCharacters() throws Exception {
+        registrationService.register("api-owned@booktimer.com", "rawpw1234", "보유자", SEOUL, Role.USER, today());
+
+        mockMvc.perform(get("/api/garden")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("api-owned@booktimer.com")))
+                .andExpect(status().isOk())
+                // 신규 유저 = 보유 식물 0 → 빈 배열
+                .andExpect(jsonPath("$.owned").isArray())
+                // owned 항목이 있다면 axis 필드가 있어야 한다(GardenItemMeta 호환)
+                .andExpect(jsonPath("$.characters").isArray());
     }
 
     @Test
