@@ -7,6 +7,7 @@ import {
     GRID_COLS, GRID_ROWS, cellOf, cellCenter, snapToCell,
     normToIso, isoToNorm, normToIsoPixel, isoPixelToNorm,
     resolveDrop, nearestFreeCell,
+    WanderState, wanderStep,
 } from '../src/garden/pure';
 
 const W = 1000, H = 640;
@@ -226,6 +227,77 @@ describe('garden pure.ts', () => {
             expect(result).not.toBeNull();
             expect(result!.col).toBeGreaterThanOrEqual(0);
             expect(result!.row).toBeGreaterThanOrEqual(0);
+        });
+    });
+
+    // C2 — 배회 AI 순수 상태머신 (계획 §3.3 경계 7종)
+    describe('wanderStep', () => {
+        const SPEED = 0.001; // 1ms당 0.001 정규화 단위
+        const idleExpired: WanderState = { phase: 'idle', x: 0.5, y: 0.5, tx: 0, ty: 0, timer: 0 };
+        const constRand = (v: number) => () => v;
+
+        test('① idle timer 만료 → walk 전이 + 목표 설정', () => {
+            const s = wanderStep({ ...idleExpired, timer: 0 }, 1, SPEED, constRand(0.3));
+            expect(s.phase).toBe('walk');
+            expect(s.tx).toBeCloseTo(0.3);
+            expect(s.ty).toBeCloseTo(0.3);
+        });
+
+        test('① idle timer 미만료 → idle 유지 + timer 감소', () => {
+            const s = wanderStep({ ...idleExpired, timer: 500 }, 100, SPEED, constRand(0.3));
+            expect(s.phase).toBe('idle');
+            expect(s.timer).toBeCloseTo(400);
+        });
+
+        test('② walk 미도달 → 목표 방향으로 전진(거리 감소)', () => {
+            const start: WanderState = { phase: 'walk', x: 0.1, y: 0.1, tx: 0.9, ty: 0.9, timer: 0 };
+            const s = wanderStep(start, 100, SPEED, constRand(0));
+            const d0 = Math.hypot(0.9 - 0.1, 0.9 - 0.1);
+            const d1 = Math.hypot(0.9 - s.x, 0.9 - s.y);
+            expect(d1).toBeLessThan(d0);
+            expect(s.phase).toBe('walk');
+        });
+
+        test('③ walk 도달(거리<ε) → idle 전이 + dwell timer 설정', () => {
+            const start: WanderState = { phase: 'walk', x: 0.5, y: 0.5, tx: 0.5001, ty: 0.5001, timer: 0 };
+            const s = wanderStep(start, 100, SPEED, constRand(0.5));
+            expect(s.phase).toBe('idle');
+            expect(s.timer).toBeGreaterThan(0);
+        });
+
+        test('④ overshoot — 큰 dt 한 스텝에 목표 통과 → 목표에 clamp', () => {
+            const start: WanderState = { phase: 'walk', x: 0.5, y: 0.5, tx: 0.51, ty: 0.5, timer: 0 };
+            const s = wanderStep(start, 1000, 1, constRand(0.5));
+            // 목표(0.51)를 넘지 않아야 하고 idle로 전이
+            expect(s.x).toBeCloseTo(0.51);
+            expect(s.phase).toBe('idle');
+        });
+
+        test('⑤ dt=0 → 상태 불변', () => {
+            const start: WanderState = { phase: 'walk', x: 0.3, y: 0.4, tx: 0.7, ty: 0.8, timer: 0 };
+            const s = wanderStep(start, 0, SPEED, constRand(0));
+            expect(s.x).toBeCloseTo(0.3);
+            expect(s.y).toBeCloseTo(0.4);
+            expect(s.phase).toBe('walk');
+        });
+
+        test('⑥ rand 결정성 — 같은 시퀀스 → 같은 목표 좌표', () => {
+            const seq = [0.2, 0.7];
+            const makeRand = () => { let i = 0; return () => seq[i++] ?? 0.5; };
+            const s1 = wanderStep({ ...idleExpired, timer: 0 }, 1, SPEED, makeRand());
+            const s2 = wanderStep({ ...idleExpired, timer: 0 }, 1, SPEED, makeRand());
+            expect(s1.tx).toBeCloseTo(s2.tx);
+            expect(s1.ty).toBeCloseTo(s2.ty);
+        });
+
+        test('⑦ 독립성 — 두 WanderState가 서로 간섭 없음(순수함수)', () => {
+            const s1: WanderState = { phase: 'walk', x: 0.1, y: 0.1, tx: 0.9, ty: 0.9, timer: 0 };
+            const s2: WanderState = { phase: 'idle', x: 0.5, y: 0.5, tx: 0, ty: 0, timer: 1000 };
+            const r1a = wanderStep(s1, 100, SPEED, constRand(0));
+            wanderStep(s2, 100, SPEED, constRand(0));
+            const r1b = wanderStep(s1, 100, SPEED, constRand(0));
+            expect(r1b.x).toBeCloseTo(r1a.x);
+            expect(r1b.y).toBeCloseTo(r1a.y);
         });
     });
 });

@@ -51,13 +51,16 @@ public class GardenController {
     public String garden(Principal principal, Model model) {
         User user = currentUserService.resolve(principal);
         model.addAttribute("nickname", user.getNickname()); // brand 헤더 인사용(books/dashboard 관례)
-        model.addAttribute("garden", gardenService.view(user)); // 대시보드와 동일 view 재사용(팔레트는 garden.ownedPlants())
+        var garden = gardenService.view(user);
+        model.addAttribute("garden", garden); // 대시보드와 동일 view 재사용(팔레트는 garden.ownedPlants())
         // 내 정원 — 저장된 식물+소품 배치를 z 통합 병합 정렬로(설계 §2 결정 ③). JS 편집·no-JS 정적 렌더가 같은 단일 소스를 본다.
         List<PlacedItem> placed = gardenLayoutService.layoutItemsOf(user);
         model.addAttribute("placedItems", placed);
         // 소품 카탈로그 — 보유 무관이라 전체가 팔레트(식물 팔레트는 garden.ownedPlants()). 편집 진입 시 부트스트랩으로 쓰인다.
         List<DecorationOption> decorations = gardenLayoutService.decorationCatalog();
         model.addAttribute("decorations", decorations);
+        // C2 배회 캐릭터 — 보유 AUTHOR만 배회용으로 노출(팔레트·저장 경로와 완전 분리).
+        model.addAttribute("characters", garden.ownedCharacters());
         // 정원 월드 종횡비/픽셀 — 프론트가 정규화 좌표(0~1)를 실제 픽셀로 환산하고 카메라를 핏하는 기준(설계 §2.3).
         model.addAttribute("worldWidth", GardenLayoutService.WORLD_WIDTH);
         model.addAttribute("worldHeight", GardenLayoutService.WORLD_HEIGHT);

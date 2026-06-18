@@ -5,6 +5,7 @@ import {
     cellOf, cellCenter, snapToCell,
     normToIsoPixel, isoPixelToNorm,
     isOutsideWorld, resolveDrop, nearestFreeCell,
+    WanderState, wanderStep,
 } from './pure';
 
 export interface GardenItemMeta {
@@ -29,6 +30,7 @@ export interface GardenSceneConfig {
     owned: GardenItemMeta[];
     decorations: GardenItemMeta[];
     placed: GardenItemMeta[];
+    characters?: GardenItemMeta[];
     worldW: number;
     worldH: number;
     readonly?: boolean;
@@ -81,6 +83,7 @@ export class GardenScene extends Phaser.Scene {
         };
         for (const o of this.cfg.owned) loadTex(o.spriteId);
         for (const d of (this.cfg.decorations || [])) loadTex(d.spriteId);
+        for (const c of (this.cfg.characters || [])) loadTex(c.spriteId);
     }
 
     create() {
@@ -93,6 +96,10 @@ export class GardenScene extends Phaser.Scene {
         for (const p of this.cfg.placed) {
             const { px, py } = normToIsoPixel(p.x ?? 0, p.y ?? 0, this.cfg.worldW, this.cfg.worldH);
             this.spawnObject(p, px, py);
+        }
+
+        for (const c of (this.cfg.characters || [])) {
+            this.spawnCharacter(c);
         }
 
         const cam = this.cameras.main;
@@ -189,6 +196,49 @@ export class GardenScene extends Phaser.Scene {
         }
 
         this.ready = true;
+    }
+
+    // 매 프레임 — 캐릭터 배회 AI. 비-character 오브젝트는 건드리지 않는다.
+    update(_time: number, delta: number) {
+        let moved = false;
+        for (const o of this.objs) {
+            if (o.getData('kind') !== 'character') continue;
+            const s: WanderState = o.getData('wander');
+            if (!s) continue;
+            const next = wanderStep(s, delta, 0.0004, Math.random);
+            o.getData('wander'); // 참조만(no-op), wanderStep은 순수라 새 객체 반환
+            o.setData('wander', next);
+            const { px, py } = normToIsoPixel(next.x, next.y, this.cfg.worldW, this.cfg.worldH);
+            o.x = px;
+            o.y = py;
+            moved = true;
+        }
+        if (moved) this.restack();
+    }
+
+    spawnCharacter(meta: GardenItemMeta) {
+        const sx = 0.2 + Math.random() * 0.6;
+        const sy = 0.2 + Math.random() * 0.6;
+        const { px, py } = normToIsoPixel(sx, sy, this.cfg.worldW, this.cfg.worldH);
+        let obj: GObj;
+        if (meta.spriteId && this.textures.exists('tex-' + meta.spriteId)) {
+            obj = this.add.image(px, py, 'tex-' + meta.spriteId)
+                    .setOrigin(0.5, 1)
+                    .setDisplaySize(this.plantPx, this.plantPx);
+        } else {
+            obj = this.add.text(px, py, meta.emoji || '🧑', { fontSize: Math.round(this.plantPx * 0.8) + 'px' })
+                    .setOrigin(0.5, 1);
+        }
+        obj.setData('kind', 'character');
+        obj.setData('code', meta.code);
+        obj.setData('emoji', meta.emoji);
+        obj.setData('name', meta.name);
+        const initState: WanderState = { phase: 'idle', x: sx, y: sy, tx: sx, ty: sy, timer: Math.random() * 2000 };
+        obj.setData('wander', initState);
+        // interactive 설정 없음 — 드래그·클릭 대상 아님(계획 §3.4)
+        this.objs.push(obj);
+        this.restack();
+        return obj;
     }
 
     drawBackground() {
