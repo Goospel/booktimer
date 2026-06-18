@@ -4296,6 +4296,7 @@ BookTimer SES 프로덕션 요청(case 178123901400162)이 ① AWS "추가 정�
 | 2026-06-18 | N-093 (이기종 런타임(JS·Java) 동일 공식 동기화 — 보기=SSR Thymeleaf, 편집=CSR Phaser, 양쪽이 같은 투영 공식을 써야 "저장 후 리로드 = 배치 위치 일치"(view=edit) / 이기종 런타임이라 코드 공유 불가 → `garden.html @free-pure-core` 블록(JS)과 `GardenIsoProjection.java`(Java)에 동일 수식 독립 구현 + **5샘플 불변식 교차 단언**(JS `.test.mjs` + Java JUnit)으로 어긋남 방지: 어느 한쪽이 수식 바꾸면 동일 샘플 쌍이 빨개짐 — 단일 출처 불가 환경의 대안 앵커 / **Thymeleaf `[[...]]` 충돌 함정(T-055)**: `[[0,0],[1,0],...]` JS 배열 리터럴이 Thymeleaf 인라인 표현식 시작 `[[`과 충돌 → `TemplateProcessingException` / 회피=객체 배열 `[{x:0,y:0},...]`로 교체 — `[` 연속 2개가 핵심이라 한 쪽만 감싸도 됨 / 일반: SSR 템플릿 엔진이 JS 블록을 파싱하면 `[[`, `${`, `#{}` 같은 엔진 구문 문자가 JS 안에서도 충돌 위험 → 뒤늦게 런타임 에러로 발견, 테스트 스위트(GardenControllerTest)로 조기 포착 / N-092(공식)·N-083(이기종 로드순서)·N-017(JS 테스트 전략), PR #380) |
 | 2026-06-18 | N-094 (stateless 불변 데이터는 as-of 재계산으로 임의 시점 역사를 재현할 수 있다 — 완료 세션(불변)에서 100% 유도되는 모델은 스냅샷·스케줄러 없이 임의 기준일 재현 가능 / trace를 단일 출처로 두고 summary를 파생으로 뽑으면 진단-실제 drift 물리적 불가(computeTrace().toWeeklyDebt()==compute() 회귀 앵커 테스트로 봉인) / 이 패턴이 맞는 경우: 불변 데이터·진단+요약 둘 다 필요·as-of 역사 재현 / N-001·PR #381) |
 | 2026-06-18 | N-095 (아이소에서 겹침 금지(발밑 co-location)와 깊이 정렬(스프라이트 레이어링)은 별개 개념 — 둘 다 있어야 CoC식 룩 / 겹침 금지=occupiedCells+nearestFreeCell+resolveDrop, 깊이 정렬=restack(y-sort)+setDepth+PlacedItem.depthZ() / PR #384) |
+| 2026-06-18 | N-096 (`@Profile("local")` ApplicationRunner — 약한 자격증명을 운영에 유출하지 않는 dev-only 시드 빈 fail-closed 패턴 / bootRun→local 프로파일 자동 활성·prod·테스트 컨텍스트에선 빈 미생성·멱등 existsByLoginId 체크 / PR #385) |
 
 ---
 
@@ -4394,3 +4395,56 @@ assertThat(byTrace.missedDays()).isEqualTo(byCompute.missedDays());
 - `PlacedItem.depthZ()` — Java SSR 깊이 값
 - [[n-085]], [[n-086]], [[n-089]] — 아이소 좌표계·아트 선례
 - **PR #384** — 이 두 불변식이 함께 박힌 PR
+
+---
+
+## N-096. `@Profile("local")` ApplicationRunner — 약한 자격증명을 운영에 절대 유출하지 않는 dev-only 시드 빈 패턴
+
+> **한 줄 요약**: 로컬 전용 시드 빈에 `@Profile("local")`을 달면 운영(`prod`)·테스트(프로파일 없음) 컨텍스트에서 빈 자체가 생성되지 않아(fail-closed) 약한 자격증명이 운영에 유출될 수 없다.
+
+### 문제 / 배경
+
+로컬 bootRun에서 실 브라우저 검증을 하려면 로그인 가능한 계정이 로컬 DB에 있어야 한다. 빠르게 만들려면 약한 비밀번호(`1234qwer!!` 등)를 쓰게 되는데, 이 계정이 운영 DB에도 생기면 보안 사고다. 두 가지 잘못된 접근:
+
+- **Flyway 시드 마이그레이션** — 운영에도 같은 마이그레이션이 돌아 약한 자격증명이 운영에 박힌다. **치명**.
+- **Security `inMemory` 사용자** — 실제 `User` 엔티티가 없어 대시보드·정원이 NPE로 뻗는다.
+
+### 해법 / 개념
+
+`@Profile("local")` + `ApplicationRunner`의 조합:
+
+1. **`@Profile("local")`** — Spring이 이 프로파일이 활성일 때만 빈을 컨테이너에 등록한다. 프로파일이 없으면 빈 자체가 생성되지 않는다(fail-closed).
+2. **운영 격리**: 운영 컨테이너는 `SPRING_PROFILES_ACTIVE=prod`로 기동 → `local` 미활성 → **빈 미생성**.
+3. **테스트 격리**: `@DataJpaTest` 등 슬라이스 테스트는 `src/test/resources/application.properties`가 main을 덮어쓰며 프로파일 선언 없음 → `local` 미활성 → **빈 미생성**.
+4. **로컬 자동 활성**: `build.gradle`의 `bootRun` 태스크에 `systemProperty 'spring.profiles.active', 'local'`을 추가하면 `./gradlew bootRun` 한 번으로 시드 빈이 자동으로 도는다.
+
+`ApplicationRunner.run()`에 `@Transactional`을 달면 Spring이 빈을 프록시로 호출해 트랜잭션이 적용된다. 내부 서비스의 `@Transactional(REQUIRED)`는 그 트랜잭션에 합류하므로 생성 전체가 한 커밋이다.
+
+### 멱등 패턴
+
+```java
+@Override
+@Transactional
+public void run(ApplicationArguments args) {
+    if (userRepository.existsByLoginId(LOGIN_ID)) {
+        log.info("이미 존재 — 시드 생략");
+        return;
+    }
+    // 생성 로직
+}
+```
+
+- `existsByLoginId`는 JPQL 파생 쿼리라 FlushMode.AUTO가 실행 전 flush를 보장 → 같은 트랜잭션 안에서 두 번 호출해도 중복 삽입 없음.
+- 로컬 MySQL은 영속(재기동에도 데이터 유지)이라 이 멱등 체크가 없으면 재기동마다 중복 생성 → 유니크 위반.
+
+### 테스트 컨텍스트가 main properties를 "안 읽는" 이유
+
+`src/test/resources/application.properties`는 `main`의 동명 파일을 **병합이 아니라 덮어쓴다(override)**. 이 파일에 `spring.profiles.active=local`을 선언하지 않으면, `@Profile("local")` 빈은 테스트에서도 생성되지 않는다 — 원하는 동작이다.
+
+`@Profile` 활성/비활성 동작 자체는 프레임워크 보장이라 단위테스트하지 않는다. 운영 격리는 *설계 불변식*(프로파일 게이트)으로 두고, 실 동작은 수동 게이트(bootRun → 로그인 확인)로 검증한다.
+
+### 관련
+
+- `LocalTestAccountSeeder.java` — 이 패턴의 구현체
+- `AdminAccountSeeder.java` — 같은 ApplicationRunner 패턴(승격 전용)
+- **PR #385** — 이 패턴이 박힌 PR
