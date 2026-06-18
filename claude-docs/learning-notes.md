@@ -96,6 +96,10 @@
 - [N-090. 격자 밀도는 줌의 함수 — 월드 셀 개수와 화면 체감 크기는 직교, FIT 고정 줌에선 한 밀도에 갇힌다](#n-090-격자-밀도는-줌의-함수--월드-셀-개수와-화면-체감-크기는-직교-fit-고정-줌에선-한-밀도에-갇힌다)
 - [N-091. SES 프로덕션 액세스(샌드박스 해제)는 거부될 수 있고 사유는 비공개 — 상세 사용 사례로 재요청해야 뚫린다 (토글 점등 ≠ 실발송)](#n-091-ses-프로덕션-액세스샌드박스-해제는-거부될-수-있고-사유는-비공개--상세-사용-사례로-재요청해야-뚫린다-토글-점등--실발송)
 - [N-095. 아이소에서 겹침 금지(발밑 co-location)와 깊이 정렬(스프라이트 레이어링)은 별개 — 둘 다 있어야 CoC식 정원 룩](#n-095-아이소에서-겹침-금지발밑-co-location와-깊이-정렬스프라이트-레이어링은-별개--둘-다-있어야-coc식-정원-룩)
+- [N-096. `@Profile("local")` ApplicationRunner — 약한 자격증명을 운영에 절대 유출하지 않는 dev-only 시드 빈 패턴](#n-096-profilelocal-applicationrunner--약한-자격증명을-운영에-절대-유출하지-않는-dev-only-시드-빈-패턴)
+- [N-097. Alpine `alpine:init` × `Alpine.data` 번들 타이밍 — CDN defer와 번들 module의 실행 순서 보장](#n-097-alpine-alpineinit--alpinedata-번들-타이밍--cdn-defer와-번들-module의-실행-순서-보장)
+- [N-098. SSR 섬 아키텍처 — Vite 번들을 static 자원으로 커밋해 bootJar에 통합](#n-098-ssr-섬-아키텍처--vite-번들을-static-자원으로-커밋해-bootjar에-통합)
+- [N-099. Phaser CDN defer → npm import가 T-054 TDZ를 구조적으로 제거하는 이유](#n-099-phaser-cdn-defer--npm-import가-t-054-tdz를-구조적으로-제거하는-이유)
 
 ---
 
@@ -4297,6 +4301,9 @@ BookTimer SES 프로덕션 요청(case 178123901400162)이 ① AWS "추가 정�
 | 2026-06-18 | N-094 (stateless 불변 데이터는 as-of 재계산으로 임의 시점 역사를 재현할 수 있다 — 완료 세션(불변)에서 100% 유도되는 모델은 스냅샷·스케줄러 없이 임의 기준일 재현 가능 / trace를 단일 출처로 두고 summary를 파생으로 뽑으면 진단-실제 drift 물리적 불가(computeTrace().toWeeklyDebt()==compute() 회귀 앵커 테스트로 봉인) / 이 패턴이 맞는 경우: 불변 데이터·진단+요약 둘 다 필요·as-of 역사 재현 / N-001·PR #381) |
 | 2026-06-18 | N-095 (아이소에서 겹침 금지(발밑 co-location)와 깊이 정렬(스프라이트 레이어링)은 별개 개념 — 둘 다 있어야 CoC식 룩 / 겹침 금지=occupiedCells+nearestFreeCell+resolveDrop, 깊이 정렬=restack(y-sort)+setDepth+PlacedItem.depthZ() / PR #384) |
 | 2026-06-18 | N-096 (`@Profile("local")` ApplicationRunner — 약한 자격증명을 운영에 유출하지 않는 dev-only 시드 빈 fail-closed 패턴 / bootRun→local 프로파일 자동 활성·prod·테스트 컨텍스트에선 빈 미생성·멱등 existsByLoginId 체크 / PR #385) |
+| 2026-06-18 | N-097 (Alpine CDN v3.14.x는 queueMicrotask(Alpine.start)로 defer 배치 끝난 뒤 alpine:init fire — 번들 type=module이 CDN보다 늦어도 alpine:init 등록 보장·x-data="myGarden"(괄호 없음)=Alpine.data 등록명 참조 / PR #NNN) |
+| 2026-06-18 | N-098 (SSR 섬 아키텍처: Vite 번들을 src/main/resources/static/에 커밋해 bootJar 통합 — Docker·build.gradle 무변경·CI stale 게이트로 산출물 낡음 차단 / PR #NNN) |
+| 2026-06-18 | N-099 (Phaser CDN defer→npm import가 T-054 TDZ를 구조 소멸: class extends Phaser.Scene이 번들 정적 import로 실행 시 Phaser 보장·ensureGardenScene() 래핑 불필요·N-082 Alpine Proxy 격리는 여전히 필요 / PR #NNN) |
 
 ---
 
@@ -4448,3 +4455,169 @@ public void run(ApplicationArguments args) {
 - `LocalTestAccountSeeder.java` — 이 패턴의 구현체
 - `AdminAccountSeeder.java` — 같은 ApplicationRunner 패턴(승격 전용)
 - **PR #385** — 이 패턴이 박힌 PR
+
+- **PR #388** — 이 패턴이 박힌 PR
+
+---
+
+## N-097. Alpine `alpine:init` × `Alpine.data` 번들 타이밍 — CDN defer와 번들 module의 실행 순서 보장
+
+> **한 줄 요약**: Alpine CDN v3.14.x는 defer 스크립트 배치 실행 후 `queueMicrotask(Alpine.start)`로 시작하므로, 번들이 Alpine CDN보다 늦게 body 끝에 있어도 `alpine:init` 등록이 항상 보장된다.
+
+### 배경 — 두 스크립트의 실행 순서 문제
+
+```html
+<!-- head -->
+<script defer src="...alpine.min.js"></script>
+
+<!-- body 끝 -->
+<script type="module" th:src="@{/garden/garden.js}"></script>
+```
+
+- `defer` 스크립트들은 HTML 파싱 완료 후 **선언 순서대로** 실행된다 — Alpine CDN이 먼저, 번들이 나중.
+- `type="module"` 스크립트도 `defer`처럼 동작하므로 Alpine CDN → 번들 순서가 보장된다.
+
+### Alpine v3.14.x의 start 타이밍
+
+```js
+// Alpine CDN 내부 (v3.14.x)
+document.addEventListener('DOMContentLoaded', () => {
+    queueMicrotask(Alpine.start); // ← defer 배치 실행 끝난 뒤 마이크로태스크
+});
+```
+
+`queueMicrotask(Alpine.start)`는:
+1. DOMContentLoaded 이벤트 핸들러가 호출된다.
+2. 그 핸들러 **내부** `queueMicrotask` — 마이크로태스크 큐에 `Alpine.start`를 예약.
+3. 현재 스크립트 실행 컨텍스트(= defer 배치)가 완전히 끝난 뒤 마이크로태스크가 실행된다.
+4. Alpine이 `Alpine.start`를 호출하기 직전에 `alpine:init` 이벤트를 fire한다.
+
+```js
+// Alpine.start() 내부
+document.dispatchEvent(new CustomEvent("alpine:init")); // ← 시작 직전 fire
+```
+
+### 결론
+
+번들이 아무리 Alpine CDN보다 늦게 실행돼도 (`alpine:init`가 아직 fire되기 전이므로) `document.addEventListener('alpine:init', ...)` 등록이 항상 먼저 완료된다.
+
+```ts
+// main.ts (번들 엔트리)
+document.addEventListener('alpine:init', () => {
+    Alpine.data('myGarden', myGarden); // ← 등록 보장
+});
+```
+
+`x-data="myGarden"` (괄호 없음) = Alpine.data에 등록된 이름 참조. `x-data="myGarden()"` (괄호 있음)는 전역 함수 직접 호출 — 번들에선 전역이 아니므로 반드시 Alpine.data 방식을 써야 한다.
+
+### 관련
+
+- **T-054** — defer × extends TDZ, Phaser CDN→npm으로 구조 제거 (N-099)
+- `frontend/src/garden/main.ts` — 이 패턴 구현체
+- **PR #NNN** — 정원 프론트 빌드 2차 B
+
+---
+
+## N-098. SSR 섬 아키텍처 — Vite 번들을 static 자원으로 커밋해 bootJar에 통합
+
+> **한 줄 요약**: 정원 편집 클라는 Vite 번들 하나(`garden.js`)로 모듈화하고, 그 산출물을 `src/main/resources/static/` 아래에 직접 커밋해 bootJar에 포함시킨다. Docker·build.gradle·서버 코드 무변경으로 "빌드 분리 + 배포 통합"을 달성한다.
+
+### 섬(Island) 아키텍처란
+
+전체 SPA 전환 없이, **특정 위젯만** 클라이언트 프레임워크/번들로 만들고 나머지는 SSR로 둔다. Thymeleaf 페이지에서 그 위젯 영역만 `<script type="module" src="...">` 하나로 교체한다.
+
+```
+SSR (Thymeleaf)
+  ├── 헤더·내비게이션·도감 그리드 (서버 렌더)
+  └── 정원 편집 캔버스 (Vite 번들 섬)
+         └── Phaser + Alpine myGarden (클라이언트 JS)
+```
+
+### 배포 통합 방식 — static 자원 커밋
+
+```
+frontend/src/garden/*.ts  → (vite build) → src/main/resources/static/garden/garden.js
+```
+
+- Spring Boot는 `src/main/resources/static/`을 자동으로 정적 자원으로 서빙한다.
+- `garden.js`를 git에 커밋하면 bootJar 빌드 시 자동으로 jar에 포함된다.
+- 배포(ECS) 측에서 별도 CDN·파일 복사 없이 동일 jar가 번들을 서빙한다.
+
+### CI stale 게이트
+
+소스가 바뀌었는데 번들을 재빌드·재커밋하지 않으면 배포 번들이 낡아진다. 이를 막는 게이트:
+
+```yaml
+- run: npm --prefix frontend run build
+- run: git diff --exit-code src/main/resources/static/garden
+```
+
+빌드 후 `git diff`가 0이 아니면 → 번들이 소스와 다름 → PR 차단.
+
+### 트레이드오프
+
+| 항목 | 이 방식(산출물 커밋) | CDN/별도 빌드 파이프라인 |
+|---|---|---|
+| Docker·build.gradle 변경 | 0 | 필요 |
+| git 크기 | garden.js ~1.5 MB 커밋 | repo는 가볍지만 배포 복잡 |
+| 번들 갱신 | CI stale 게이트로 강제 | 파이프라인이 담보 |
+| 적합한 규모 | 단일 위젯·소팀 | 멀티 위젯·대규모 |
+
+### 관련
+
+- **N-097** — Alpine alpine:init × Alpine.data 타이밍
+- **T-062** — 번들 404 (garden.js 커밋 누락)
+- `vite.config.ts` — `outDir: ../src/main/resources/static/garden`
+- **PR #NNN** — 정원 프론트 빌드 2차 B
+
+---
+
+## N-099. Phaser CDN defer → npm import가 T-054 TDZ를 구조적으로 제거하는 이유
+
+> **한 줄 요약**: `class GardenScene extends Phaser.Scene`이 TDZ를 일으킨 건 Phaser가 CDN defer로 늦게 도착해서였다. Phaser를 npm으로 번들에 정적 import하면 실행 순서 문제 자체가 소멸한다.
+
+### T-054 복기 — 왜 TDZ가 발생했나
+
+```html
+<script defer src="https://cdn.../phaser.min.js"></script>  <!-- defer: 나중에 실행 -->
+<script>  <!-- defer 아님: 파싱 즉시 실행 -->
+    class GardenScene extends Phaser.Scene { ... } // ← Phaser 아직 없음 → ReferenceError
+</script>
+```
+
+- 인라인 `<script>`(defer 없음)는 HTML 파싱 중 즉시 실행된다.
+- 그 시점에 `Phaser`가 아직 로드되지 않아 `extends Phaser.Scene`이 던진다.
+- 이를 T-054에서 `ensureGardenScene()` 함수 래핑으로 "평가 시점 지연"으로 우회했었다.
+
+### npm import가 원인 소멸 — 왜?
+
+```ts
+// scene.ts
+import Phaser from 'phaser'; // Vite가 번들에 포함
+export class GardenScene extends Phaser.Scene { ... } // CDN 타이밍 문제 없음
+```
+
+- Vite 번들(`garden.js`)은 Phaser 소스를 **정적으로 포함**한다(CDN 아님).
+- 번들이 실행될 때 Phaser 코드가 이미 번들 내부에 있으므로 `class extends` 시점에 `Phaser`가 항상 존재한다.
+- 따라서 `ensureGardenScene()` 함수 래핑 패턴이 불필요해지고 `class GardenScene`을 직접 최상위 선언할 수 있다.
+
+### N-082 Alpine Proxy 격리는 여전히 필요
+
+T-054 제거와 별개로, Phaser `Game`/`Scene` 인스턴스를 Alpine `x-data` 반응 객체에 직접 노출하면 reactive Proxy가 씌워져 Phaser 내부 참조가 깨진다 (N-082). 번들로 바꿔도 이 문제는 구조적으로 남으므로 클로저 변수(`let scene: GardenScene | null`)로 격리를 유지한다.
+
+### 요약 대비
+
+| | CDN defer + 인라인 script | npm import + 번들 |
+|---|---|---|
+| Phaser 도착 시점 | 비결정적 (defer) | 번들 내 정적, 결정적 |
+| `class extends Phaser.Scene` | TDZ 가능 | 항상 안전 |
+| 우회 패턴 | `ensureGardenScene()` 래핑 | 불필요 |
+| Alpine Proxy 격리 | 클로저 변수 필요 | 여전히 필요 |
+
+### 관련
+
+- **T-054** — defer × `class extends` TDZ 함정 원인
+- **N-082** — Alpine reactive Proxy × Phaser 인스턴스 격리
+- **N-083** — defer × class extends TDZ (동일 개념 일반화)
+- `frontend/src/garden/scene.ts` — `class GardenScene extends Phaser.Scene` 직접 선언
+- **PR #NNN** — 정원 프론트 빌드 2차 B
