@@ -588,8 +588,7 @@ body.landing-page {
 
     .lp-placeholder { min-height: 220px; }
 
-    .lp-grass-grid {
-        grid-template-columns: repeat(7, 1fr);
-        grid-template-rows: repeat(7, 1fr);
-    }
+    /* 잔디 그리드는 모바일에서도 13열×7행을 유지 — 셀이 카드 폭에 맞춰 작아지며 '비율째 축소'된다.
+       과거 repeat(7,1fr)로 열만 줄였더니 91칸(7×13)이 7열에 채워지며 13행으로 넘쳐
+       세로로 길쭉해지는 버그가 있었다(셀이 aspect-ratio:1이라 폭↑→높이↑→행수↑). */
 }
