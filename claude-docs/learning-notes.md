@@ -4462,7 +4462,7 @@ public void run(ApplicationArguments args) {
 
 ## N-097. Alpine `alpine:init` × `Alpine.data` 번들 타이밍 — CDN defer와 번들 module의 실행 순서 보장
 
-> **한 줄 요약**: Alpine CDN v3.14.x는 defer 스크립트 배치 실행 후 `queueMicrotask(Alpine.start)`로 시작하므로, 번들이 Alpine CDN보다 늦게 body 끝에 있어도 `alpine:init` 등록이 항상 보장된다.
+> **한 줄 요약**: ~~번들이 Alpine CDN보다 늦게 있어도 `alpine:init` 등록이 항상 보장된다~~ → **⚠️ #393이 반증(2026-06-18)**: defer 스크립트는 *하나 실행 직후마다* 마이크로태스크가 돌아, Alpine CDN 직후 `Alpine.start`→`alpine:init`이 끝나버린다. 더 늦은 `type=module` 번들은 아직 리스너를 안 걸어 **놓침** → `myGarden` 미등록 → ReferenceError로 '내 정원' 전체 사망(운영 회귀). **해법 = `alpine:init` 의존을 버리고 번들이 Alpine 직접 소유**(`import Alpine`→`Alpine.data`→`Alpine.start`, 로드순서 무관). 재발은 CI 정적 가드(`frontend/test/garden-bootstrap.test.ts`)가 차단.
 
 ### 배경 — 두 스크립트의 실행 순서 문제
 
@@ -4497,15 +4497,24 @@ document.addEventListener('DOMContentLoaded', () => {
 document.dispatchEvent(new CustomEvent("alpine:init")); // ← 시작 직전 fire
 ```
 
-### 결론
+### 결론 (정정 — #393이 반증)
 
-번들이 아무리 Alpine CDN보다 늦게 실행돼도 (`alpine:init`가 아직 fire되기 전이므로) `document.addEventListener('alpine:init', ...)` 등록이 항상 먼저 완료된다.
+~~번들이 아무리 늦게 실행돼도 `alpine:init` 등록이 항상 먼저 완료된다~~ — **틀렸다.** 위 「start 타이밍」 3단계의 "defer 배치가 *완전히 끝난 뒤* 마이크로태스크 실행"이 오류다: 실제 HTML 스펙은 **defer 스크립트 하나를 실행할 때마다 그 직후** 마이크로태스크 체크포인트를 돈다. 그래서 Alpine CDN(defer) 직후 — 더 늦은 `type=module` 번들이 실행되기 전 — `Alpine.start`→`alpine:init` fire가 끝나버려, 아래 패턴은 번들이 Alpine CDN보다 늦으면 리스너를 못 건다:
 
 ```ts
-// main.ts (번들 엔트리)
+// ❌ #393에서 깨진 패턴 — alpine:init 이벤트에 의존(번들이 늦으면 등록이 init을 놓침)
 document.addEventListener('alpine:init', () => {
-    Alpine.data('myGarden', myGarden); // ← 등록 보장
+    Alpine.data('myGarden', myGarden);
 });
+```
+
+**해법 = 이벤트 의존을 버리고 번들이 Alpine을 직접 소유**(N-099의 Phaser와 같은 결 — CDN 제거·npm import):
+
+```ts
+// ✅ main.ts — 순서를 코드로 보장(스크립트 로드순서 무관)
+import Alpine from 'alpinejs';
+Alpine.data('myGarden', myGarden);
+Alpine.start();
 ```
 
 `x-data="myGarden"` (괄호 없음) = Alpine.data에 등록된 이름 참조. `x-data="myGarden()"` (괄호 있음)는 전역 함수 직접 호출 — 번들에선 전역이 아니므로 반드시 Alpine.data 방식을 써야 한다.
@@ -4513,8 +4522,10 @@ document.addEventListener('alpine:init', () => {
 ### 관련
 
 - **T-054** — defer × extends TDZ, Phaser CDN→npm으로 구조 제거 (N-099)
-- `frontend/src/garden/main.ts` — 이 패턴 구현체
-- **PR #391** — 정원 프론트 빌드 2차 B
+- **N-083** — defer × `class extends` TDZ(같은 "늦게 오는 CDN" 함정의 형제) / **N-084** — jsdom·mock은 로드순서를 못 본다(그래서 정적 가드 + 실 브라우저가 필요)
+- `frontend/src/garden/main.ts` — 정정된 패턴(Alpine 직접 소유) 구현체
+- `frontend/test/garden-bootstrap.test.ts` — CDN 부활·순서 역전을 잡는 CI 정적 가드
+- **PR #391** — 이 노트의 (틀린) 최초 분석 / **PR #393** — 회귀 핫픽스(번들 흡수) / **이 그물 PR** — 재발 차단 가드
 
 ---
 
