@@ -128,7 +128,7 @@ export function myGarden() {
             const payload = scene.exportPlacements();
             try {
                 const token = document.querySelector('meta[name=_csrf]') as HTMLMetaElement | null;
-                const res = await fetch('/garden/layout', {
+                const res = await fetch('/village/layout', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

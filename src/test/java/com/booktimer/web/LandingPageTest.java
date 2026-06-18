@@ -61,19 +61,19 @@ class LandingPageTest {
     }
 
     @Test
-    @DisplayName("랜딩에 독서 정원 진입 동선(/garden)이 있다")
-    void landing_hasGardenLink() throws Exception {
+    @DisplayName("랜딩에 독서 마을 진입 동선(/village)이 있다")
+    void landing_hasVillageLink() throws Exception {
         mockMvc.perform(get("/"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("/garden")));
+                .andExpect(content().string(containsString("/village")));
     }
 
     @Test
-    @DisplayName("랜딩 본문에 핵심 키워드(정원·잔디)가 있다")
+    @DisplayName("랜딩 본문에 핵심 키워드(마을·잔디)가 있다")
     void landing_hasCoreKeywords() throws Exception {
         mockMvc.perform(get("/"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("정원")))
+                .andExpect(content().string(containsString("마을")))
                 .andExpect(content().string(containsString("잔디")));
     }
 }

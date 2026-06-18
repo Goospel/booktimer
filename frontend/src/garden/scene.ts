@@ -329,7 +329,7 @@ export class GardenScene extends Phaser.Scene {
                 && o.getData('axis') === meta.axis && o.getData('code') === meta.code)) return false;
         const pref = cellOf(0.5, 0.55, GRID_COLS, GRID_ROWS);
         const free = nearestFreeCell(pref.col, pref.row, this.occupiedCells(), GRID_COLS, GRID_ROWS);
-        if (!free) { if (this.cfg.onMessage) this.cfg.onMessage('정원이 가득 찼어요 🌿'); return false; }
+        if (!free) { if (this.cfg.onMessage) this.cfg.onMessage('마을이 가득 찼어요 🌿'); return false; }
         const center = cellCenter(free.col, free.row, GRID_COLS, GRID_ROWS);
         const { px, py } = normToIsoPixel(center.x, center.y, this.cfg.worldW, this.cfg.worldH);
         this.spawnObject({ ...meta, kind: 'plant' }, px, py);
@@ -341,7 +341,7 @@ export class GardenScene extends Phaser.Scene {
         if (!this.ready) return false;
         const pref = cellOf(0.5, 0.55, GRID_COLS, GRID_ROWS);
         const free = nearestFreeCell(pref.col, pref.row, this.occupiedCells(), GRID_COLS, GRID_ROWS);
-        if (!free) { if (this.cfg.onMessage) this.cfg.onMessage('정원이 가득 찼어요 🌿'); return false; }
+        if (!free) { if (this.cfg.onMessage) this.cfg.onMessage('마을이 가득 찼어요 🌿'); return false; }
         const center = cellCenter(free.col, free.row, GRID_COLS, GRID_ROWS);
         const { px, py } = normToIsoPixel(center.x, center.y, this.cfg.worldW, this.cfg.worldH);
         this.spawnObject({ ...meta, kind: 'decor' }, px, py);
