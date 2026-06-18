@@ -647,7 +647,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 > 🧪 **테스트 가능성 축 — 트리거는 "프레임워크"가 아니라 "빌드+모듈" (결정 2026-06-15, 사용자 합의).** 정원이 Phaser 게임으로 커지며 로드순서·반응성 런타임 버그(#358 reactive proxy·#364 defer/TDZ)가 헤드리스/mock으론 안 잡히고 실 브라우저로만 잡히는 일이 반복됐다. 그러나 **풀 SPA 전환은 여전히 보류**(위 트리거 0·SEO=제휴매출). 테스트 가능성은 컴포넌트 프레임워크가 아니라 **빌드 스텝+모듈 경계**에서 나오므로(learning-notes N-084·N-017 보강), 대응은 점증한다:
 > - ~~**현행 유지(지금)**~~ → **빌드+모듈화 A→B 점진 착수 (2026-06-18, 트리거 발동)** — 트리거(헤드리스-블라인드 정원 런타임 버그)가 발동돼 정원부터 점진 착수. **1차 A 출하 완료**: `.preview` 표류 하니스를 `frontend/test/garden-pure.test.mjs`(Vitest, 398단언)로 커밋·CI 그물로 승격, npm 토대(`frontend/package.json`) 마련(브라우저 런타임·서버 0 변경). **2차 B 출하 완료**: `garden.html` 540줄 인라인 스크립트를 Vite+TypeScript 4 모듈(`pure.ts`·`scene.ts`·`component.ts`·`main.ts`)로 추출 + Phaser npm import — CDN defer가 T-054의 TDZ 원인이었으므로 번들 정적 import로 구조 소멸. `ensureGardenScene()` 함수래핑 패턴 삭제 → `class GardenScene extends Phaser.Scene` 직접 선언. SSR·보기모드·저장계약·Docker·build.gradle 불변. 번들(`static/garden/garden.js`) 커밋·CI stale 게이트. (PR #391, N-097·N-098·N-099, T-062·T-063)
 > - **섬 아키텍처 현황**: 정원 편집 클라가 Vite 번들로 모듈화됨(Thymeleaf 페이지층 유지). N-082 Alpine reactive Proxy 격리는 번들 클로저 변수로 계속 유지. 다음 수 있다면 컴포넌트 프레임워크(Vue/Svelte) 스왑 — 하지만 현 구조로 단위/통합 테스트가 이미 열렸으므로 즉시 필요성 낮음.
-> - **3차(그래도 부족할 때만)**: 정원 섬을 컴포넌트 프레임워크(Vue/Svelte)로 스왑. (근거: N-083·N-082)
+> - **3차 → 착수 중 (2026-06-18, 사용자 결정)**: 정원(마을) 섬을 **Vue SPA + /api/garden JSON API**로 전환. 개발 코드 관리·개발 루프·기술 자유 목적의 아키텍처 투자(사용자 대면 가치 0, 점진 전환). 병행 컷오버 5단계(S1~S5): **S1 완료(PR #402)** — 백엔드 `GET /api/garden`·`POST /api/garden/layout` 신설 + DTO 평탄화. S2~S4(Vue 셋업·도감 이전·컷오버)는 후속 PR. 기존 `/village` Thymeleaf 뷰는 S4 컷오버까지 병행. (근거: N-083·N-082, 계획: claude-docs/plans/2026-06-18-garden-spa-vue.md)
 
 ### 🎨 입구 디자인 트랙 — 미감 리프레시 (진행 중, 2026-06-10~)
 
