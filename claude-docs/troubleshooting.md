@@ -1273,6 +1273,41 @@ cam.scrollY -= after.y - before.y;
 
 ---
 
+## T-068. 카메라 강제 회전(`cam.setRotation`)은 기기를 거꾸로 들면 방향이 반대 — 순수 반응형이 정답
+
+**증상**: 세로 모바일에서 `cam.setRotation(Math.PI / 2)`로 강제 가로(CW 90°)를 만들면, 사용자가 폰을 거꾸로 쥐었을 때 콘텐츠가 180° 반전된다. 또한 고정 방향이라 기기의 자동 회전과 충돌하고, DOM UI 래퍼도 함께 회전시켜야 해 복잡도가 늘어난다.
+
+**원인**: 강제 회전은 "세로 = 항상 시계방향 90°" 라고 가정하지만, 세로에도 두 방향(정방향·역방향)이 있다. 고정 회전은 역방향으로 쥔 사용자에게 거꾸로 된 화면을 강요한다. 더불어 DOM 회전 대신 카메라 회전을 써야 한다는 T-067의 교훈을 지키더라도, "강제 회전 자체"가 UX 문제다.
+
+**해결**: 회전을 버리고 **순수 반응형**으로 전환한다.
+
+```typescript
+// ❌ 강제 가로 회전 — 역방향 기기에서 반전
+// if (portrait) cam.setRotation(Math.PI / 2);
+
+// ✅ 순수 반응형 — 기기 자연 방향 유지, 줌으로 적응
+fitCamera(w: number, h: number) {
+    const cam = this.cameras.main;
+    if (w > 0 && h > 0) {
+        const containZ = containZoomFor(w, h, this.cfg.worldW, this.cfg.worldH);
+        const plantZ   = initialZoomFor(TARGET_PLANT_CSS, this.plantPx, w, this.cfg.worldW);
+        cam.setZoom(clampZoom(Math.min(plantZ, containZ)));
+    }
+    cam.centerOn(this.cfg.worldW / 2, this.cfg.worldH / 2);
+}
+```
+
+- `containZoomFor(viewW, viewH, worldW, worldH)` = `Math.min(viewW/worldW, viewH/worldH)` — 뷰포트에 세계 전체가 들어가는 최소 줌.
+- `ZOOM_MIN = 0.25`로 완화해 세로 폰(containZ ≈ 0.39)이 충분히 줌아웃 가능하게 한다.
+- 팬·핀치·휠을 `readonly` 블록 밖으로 빼 보기 모드에서도 탐색 가능.
+- DOM `.village-ui-wrap` 회전 래퍼·portrait 미디어 쿼리 불필요.
+
+**예방**: 화면 방향 적응은 회전이 아니라 줌과 레이아웃으로. `cam.setRotation`은 순수 시각 효과(맵 기울기 등)에만 쓴다.
+
+**관련**: T-067(CSS DOM rotate 금지 — 입력 깨짐), PR #411(강제 회전), PR #413(폐기·순수 반응형).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1345,3 +1380,4 @@ cam.scrollY -= after.y - before.y;
 | 2026-06-19 | T-065 (실 브라우저에서 Phaser 씬 런타임 transform 값 수치 introspection 불가 — 번들 Phaser는 IIFE 클로저(`window.Phaser.GAMES` 빈/undefined)·프로덕션 Vue엔 `__vueParentComponent` 없음 → 페이지서 게임/씬 핸들 도달 X / 해결=순수함수 단위테스트 + 실 브라우저 시각 검증(시간차 스크린샷·확대 연사)으로 확정, 캐릭터는 완독 책 임시 시드 후 삭제 / 예방=디버그 필요 시 빌드에 `window.__debugGame` 의도 노출 / T-053/054·N-082·N-080·PR #409) |
 | 2026-06-19 | T-066 (PowerShell `gh pr create --body "$(cat <<'EOF' ...)"` 파서 오류 — Windows PowerShell 5.1에서 bash heredoc `<<'EOF'`를 `"$(...)"` 안에 쓰면 `<`를 리다이렉션으로 파싱해 `Missing file specification`·`The '<' operator is reserved` 파서 오류 / 해결=PR body를 임시 파일(`.pr-body-tmp.md`)에 `Write`로 쓰고 `Get-Content ".pr-body-tmp.md" -Raw`를 변수에 받아 `gh pr create --body $body`로 전달, 사용 후 삭제 / 예방=PowerShell에서 멀티라인 문자열을 CLI 인라인 인자로 넘길 때 항상 파일 경유·`@'...'@` here-string은 할당 전용(인자로 직접 못 넘김) / T-026(한글 커밋 file 경유)과 같은 맥락 / PR #410) |
 | 2026-06-19 | T-067 (Phaser 캔버스를 CSS `transform: rotate()`로 돌리면 포인터 hit-test가 깨진다 — `cam.setRotation()` + 팬 `getWorldPoint` 교체로 입력 정렬 유지 / T-050·N-100·PR #411) |
+| 2026-06-19 | T-068 (`cam.setRotation` 강제 가로 회전은 기기를 거꾸로 들면 방향 반대 — 세로에도 방향이 있어 고정 회전 부적합 / 해결=`fitCamera`+`containZoomFor` 순수 반응형, `ZOOM_MIN=0.25`, 팬·핀치·휠 보기/편집 공통 분리, DOM 회전 래퍼 제거 / T-067·PR #413) |

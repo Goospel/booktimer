@@ -1778,28 +1778,6 @@ a.book-title:hover { text-decoration: underline; }
     color: var(--muted);
 }
 
-/* === 마을 세로폰 UI 가로 회전 — HUD·도감·편집 패널 동반 (S2 후속)
-   Phaser 카메라 setRotation(+π/2) = CW 회전 → 시각 상 콘텐츠 -90°(CCW).
-   DOM UI 래퍼도 rotate(-90deg)로 동일 방향 맞춤.
-   media 조건: scene.ts applyOrientation(w<=900 && h>w)과 동기. */
-@media (orientation: portrait) and (max-width: 900px) {
-    .village-ui-wrap {
-        position: absolute;
-        inset: auto;
-        width: 100dvh;     /* 세로 화면의 높이 → 회전 후 가로 너비 */
-        height: 100dvw;    /* 세로 화면의 너비 → 회전 후 가로 높이 */
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%) rotate(-90deg);
-        overflow: hidden;
-        pointer-events: none;
-        z-index: 10;
-    }
-    .village-ui-wrap > * {
-        pointer-events: auto;
-    }
-}
-
 /* 보기 모드 메시지 오버레이 */
 .village-overlay-msg {
     position: absolute;

@@ -4,6 +4,8 @@ import { describe, test, expect } from 'vitest';
 import {
     clampNorm, pixelToNorm, normToPixel, isOutsideWorld,
     plantWorldSize, initialZoomFor, clampRotation, clampZoom,
+    ZOOM_MIN,
+    containZoomFor,
     GRID_COLS, GRID_ROWS, cellOf, cellCenter, snapToCell,
     normToIso, isoToNorm, normToIsoPixel, isoPixelToNorm,
     resolveDrop, nearestFreeCell,
@@ -70,8 +72,8 @@ describe('garden pure.ts', () => {
         test('데스크톱(720) → 1.0', () => expect(initialZoomFor(36, 50, 720, 1000)).toBeCloseTo(1.0));
         test('중간폭(360) → 2.0', () => expect(initialZoomFor(36, 50, 360, 1000)).toBeCloseTo(2.0));
         test('아주 좁음(200) → max 2.5 클램프', () => expect(initialZoomFor(36, 50, 200, 1000)).toBeCloseTo(2.5));
-        test('canvasCss=0 → min 폴백(NaN 없음)', () => expect(initialZoomFor(36, 50, 0, 1000)).toBeCloseTo(1));
-        test('plantPx=0 → min 폴백(Infinity 없음)', () => expect(initialZoomFor(36, 0, 720, 1000)).toBeCloseTo(1));
+        test('canvasCss=0 → ZOOM_MIN 폴백(NaN 없음)', () => expect(initialZoomFor(36, 50, 0, 1000)).toBeCloseTo(ZOOM_MIN));
+        test('plantPx=0 → ZOOM_MIN 폴백(Infinity 없음)', () => expect(initialZoomFor(36, 0, 720, 1000)).toBeCloseTo(ZOOM_MIN));
     });
 
     describe('clampRotation', () => {
@@ -83,13 +85,28 @@ describe('garden pure.ts', () => {
     });
 
     describe('clampZoom', () => {
-        test('하한 미만(0.5→1)', () => expect(clampZoom(0.5)).toBeCloseTo(1));
+        test('하한 미만(0.1→ZOOM_MIN)', () => expect(clampZoom(0.1)).toBeCloseTo(ZOOM_MIN));
         test('상한 초과(5→2.5)', () => expect(clampZoom(5)).toBeCloseTo(2.5));
         test('범위 내(1.8)', () => expect(clampZoom(1.8)).toBeCloseTo(1.8));
-        test('경계 하(1→1)', () => expect(clampZoom(1)).toBeCloseTo(1));
+        test('경계 하(ZOOM_MIN)', () => expect(clampZoom(ZOOM_MIN)).toBeCloseTo(ZOOM_MIN));
         test('경계 상(2.5→2.5)', () => expect(clampZoom(2.5)).toBeCloseTo(2.5));
         test('커스텀 min(0.5 min=0.5)', () => expect(clampZoom(0.5, 0.5, 3)).toBeCloseTo(0.5));
         test('커스텀 max(4 max=3)', () => expect(clampZoom(4, 0.5, 3)).toBeCloseTo(3));
+    });
+
+    describe('containZoomFor', () => {
+        test('portrait 390x844, world 1000x800 → width-limited 0.39', () =>
+            expect(containZoomFor(390, 844, 1000, 800)).toBeCloseTo(0.39));
+        test('landscape 1024x768, world 1000x800 → height-limited 0.96', () =>
+            expect(containZoomFor(1024, 768, 1000, 800)).toBeCloseTo(0.96));
+        test('정사각 800x800, world 800x800 → 1.0', () =>
+            expect(containZoomFor(800, 800, 800, 800)).toBeCloseTo(1.0));
+        test('viewW=0 → ZOOM_MIN 폴백', () =>
+            expect(containZoomFor(0, 800, 1000, 800)).toBeCloseTo(ZOOM_MIN));
+        test('viewH=0 → ZOOM_MIN 폴백', () =>
+            expect(containZoomFor(390, 0, 1000, 800)).toBeCloseTo(ZOOM_MIN));
+        test('landscape 1440x900, world 1000x800 → height-limited 1.125', () =>
+            expect(containZoomFor(1440, 900, 1000, 800)).toBeCloseTo(1.125));
     });
 
     describe('GRID 상수', () => {
