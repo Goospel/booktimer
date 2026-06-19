@@ -165,31 +165,24 @@ class FlywayMigrationTest {
         assertThat(saved.getLastNudgeSentAt()).isNull();
     }
 
-    // ── 마을 캐릭터·건물 SVG 승격 파일럿(V48) — 부분 승격 불변식(N-055 null-state 폴백) ──
-    // 파일럿은 한강·민음사 둘만 sprite_id=code로 승격하고, 나머지 작가/건물은 sprite_id=null로 둔다.
-    // null이면 뷰가 이모지로 폴백하므로 '미승격 종 혼재'가 정상이다. 이 가드는 V48의 UPDATE가
-    // WHERE를 빠뜨려 전 행을 건드리거나(폴백 소멸) 파일럿 행을 못 채우면(승격 실패) 깨진다.
+    // ── 마을 캐릭터·건물 SVG 승격 전종 완료(V48 파일럿 → V49 나머지) — 전종 승격 불변식 ──
+    // 파일럿(V48)은 한강·민음사 2종만 승격했고, V49가 나머지 작가 19·건물 9종을 sprite_id=code로
+    // 채워 '전종 승격'을 완성한다. 이제 author_character·building 전 행이 sprite_id=code(비null)여야 한다.
+    // 이 가드는 V49의 UPDATE가 일부 code를 빠뜨리거나(미승격 잔존) sprite_id≠code로 채우면 깨진다.
+    // 새 시드 행이 추가됐는데 sprite_id를 안 채운 경우도 여기서 잡힌다(N-055 — 미완성 엔티티 누수 가드).
     @Test
-    void v48_promotes_only_pilot_characters_and_leaves_rest_to_emoji_fallback() {
+    void v49_promotes_all_characters_and_buildings_to_their_code_sprite() {
         var authors = authorCharacterRepository.findAll();
         var buildings = buildingRepository.findAll();
 
-        AuthorCharacter hanGang = authors.stream()
-                .filter(a -> a.getCode().equals("han_gang")).findFirst().orElseThrow();
-        Building minumsa = buildings.stream()
-                .filter(b -> b.getCode().equals("minumsa")).findFirst().orElseThrow();
+        assertThat(authors).isNotEmpty();
+        assertThat(buildings).isNotEmpty();
 
-        // 파일럿 2종은 sprite_id = code 로 승격(SVG 렌더 경로).
-        assertThat(hanGang.getSpriteId()).isEqualTo("han_gang");
-        assertThat(minumsa.getSpriteId()).isEqualTo("minumsa");
-
-        // 미승격 종은 여전히 null — 이모지 폴백 보존(부분 승격이 다른 행을 오염시키지 않음).
-        assertThat(authors).filteredOn(a -> !a.getCode().equals("han_gang"))
-                .isNotEmpty()
-                .allMatch(a -> a.getSpriteId() == null);
-        assertThat(buildings).filteredOn(b -> !b.getCode().equals("minumsa"))
-                .isNotEmpty()
-                .allMatch(b -> b.getSpriteId() == null);
+        // 전 작가·건물이 sprite_id = code 로 승격(SVG 렌더 경로) — 미승격(null) 잔존 0.
+        assertThat(authors)
+                .allSatisfy(a -> assertThat(a.getSpriteId()).isEqualTo(a.getCode()));
+        assertThat(buildings)
+                .allSatisfy(b -> assertThat(b.getSpriteId()).isEqualTo(b.getCode()));
     }
 
     private static User userWithHandle(String email, String handle) {
