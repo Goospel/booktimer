@@ -141,3 +141,47 @@ export function wanderStep(s: WanderState, dtMs: number, speedPerMs: number, ran
     }
     return { ...s, x: pos.x, y: pos.y };
 }
+
+// ── D 폴리시 — 통짜 스프라이트 절차 걷기 pose. DOM·Phaser 의존 0, Date·random 없음(결정성). ──
+// 단일 Image에 적용할 시각 변형: 상하 통통(bob)·좌우 흔들(tilt)·납작늘임(squash)·진행방향(flipX).
+
+export interface WalkPose {
+    bobY: number;        // 시각 상하 offset(px). 위로만: [-WALK_BOB_PX, 0] (발 안 뚫게)
+    tilt: number;        // 좌우 기울기(deg). [-WALK_TILT_DEG, +WALK_TILT_DEG]
+    scaleX: number;      // base scale에 곱할 배수(squash&stretch). ≈1
+    scaleY: number;
+    flipX: boolean;      // 진행 방향(왼쪽이면 true)
+}
+
+export const WALK_BOB_PX = 2.2;      // 통통 진폭(px)
+export const WALK_TILT_DEG = 4;      // 좌우 흔들 각
+export const WALK_SQUASH = 0.06;     // 납작/늘임 폭(±6%)
+export const WALK_STEP_MS = 320;     // 한 걸음(=bob 한 사이클) 주기 ms
+export const IDLE_BREATH_MS = 2600;  // 숨쉬기 주기 ms
+export const IDLE_BREATH = 0.02;     // 숨쉬기 scaleY 폭(±2%)
+export const FLIP_DEADZONE = 0.0006; // |dx| 이하면 flip 유지(미세 흔들림 깜빡임 방지)
+
+export function walkPose(
+    phase: 'idle' | 'walk',
+    clockMs: number,
+    dx: number,
+    prevFlipX: boolean,
+): WalkPose {
+    // flip은 phase 무관 — 데드존 안이면 직전 방향 유지(idle은 dx=0 → 항상 유지).
+    const flipX = dx < -FLIP_DEADZONE ? true : dx > FLIP_DEADZONE ? false : prevFlipX;
+    if (phase === 'walk') {
+        const theta = 2 * Math.PI * clockMs / WALK_STEP_MS;
+        const s = Math.abs(Math.sin(theta));          // 착지=0, 정점=1
+        const stretch = WALK_SQUASH * s;              // 정점 늘임 / 착지 원형
+        return {
+            bobY: -WALK_BOB_PX * s,                   // 위로만(발 안 뚫음)
+            tilt: WALK_TILT_DEG * Math.sin(theta),    // 좌우 무게이동
+            scaleX: 1 - stretch,                      // 부피보존: 세로 늘리면 가로 줄임
+            scaleY: 1 + stretch,
+            flipX,
+        };
+    }
+    // idle — 잔잔한 숨쉬기(없이 완전정지도 무방하나 "살아있음" 위해 약한 breathing).
+    const breath = IDLE_BREATH * Math.sin(2 * Math.PI * clockMs / IDLE_BREATH_MS);
+    return { bobY: 0, tilt: 0, scaleX: 1 - breath * 0.5, scaleY: 1 + breath, flipX };
+}

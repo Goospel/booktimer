@@ -8,6 +8,9 @@ import {
     normToIso, isoToNorm, normToIsoPixel, isoPixelToNorm,
     resolveDrop, nearestFreeCell,
     WanderState, wanderStep,
+    WalkPose, walkPose,
+    WALK_BOB_PX, WALK_TILT_DEG, WALK_SQUASH, WALK_STEP_MS,
+    IDLE_BREATH_MS, IDLE_BREATH, FLIP_DEADZONE,
 } from '../src/garden/pure';
 
 const W = 1000, H = 640;
@@ -298,6 +301,94 @@ describe('garden pure.ts', () => {
             const r1b = wanderStep(s1, 100, SPEED, constRand(0));
             expect(r1b.x).toBeCloseTo(r1a.x);
             expect(r1b.y).toBeCloseTo(r1a.y);
+        });
+    });
+
+    // D 폴리시 — 걷기 pose 순수함수 (계획 §4.1 경계 7종). 통짜 transform(bob·tilt·squash·flip).
+    describe('walkPose', () => {
+        const STEP = WALK_STEP_MS;
+
+        // ① idle 정지: 어느 시각이든 bob·tilt 0 (phase 분기 누락 잡음)
+        test('① idle → bobY=0, tilt=0 (여러 시각)', () => {
+            for (const c of [0, 80, 160, 240, 500, 1234]) {
+                const p: WalkPose = walkPose('idle', c, 0, false);
+                expect(p.bobY).toBeCloseTo(0);
+                expect(p.tilt).toBeCloseTo(0);
+            }
+        });
+
+        // ② walk bob 범위·부호: 항상 [-A,0], 0 초과 절대 없음(발 안 뚫음)
+        test('② walk bobY ∈ [-WALK_BOB_PX, 0] (위로만 — 발 안 뚫음)', () => {
+            for (let c = 0; c <= STEP * 3; c += 7) {
+                const { bobY } = walkPose('walk', c, 0.01, false);
+                expect(bobY).toBeLessThanOrEqual(1e-9);
+                expect(bobY).toBeGreaterThanOrEqual(-WALK_BOB_PX - 1e-9);
+            }
+        });
+
+        // ③ 주기성 + 극값(착지 0·정점 -A 둘 다 한 주기 안에)
+        test('③ bob 주기성 — clock과 clock+STEP 동치', () => {
+            for (const c of [13, 97, 211]) {
+                expect(walkPose('walk', c, 0.01, false).bobY)
+                    .toBeCloseTo(walkPose('walk', c + STEP, 0.01, false).bobY, 6);
+            }
+        });
+        test('③ 극값 — 착지(bobY≈0)·정점(bobY≈-A) 모두 존재', () => {
+            expect(walkPose('walk', 0, 0.01, false).bobY).toBeCloseTo(0);              // sinθ=0
+            expect(walkPose('walk', STEP / 4, 0.01, false).bobY).toBeCloseTo(-WALK_BOB_PX); // |sinθ|=1
+        });
+
+        // ④ 방향 flip + 데드존
+        test('④ dx<-ε → flipX=true (왼쪽 향함)', () => {
+            expect(walkPose('walk', 0, -0.01, false).flipX).toBe(true);
+        });
+        test('④ dx>+ε → flipX=false (오른쪽 향함)', () => {
+            expect(walkPose('walk', 0, 0.01, true).flipX).toBe(false);
+        });
+        test('④ |dx|≤데드존 → prevFlipX 유지(미세 흔들림 깜빡 방지)', () => {
+            expect(walkPose('walk', 0, FLIP_DEADZONE * 0.5, true).flipX).toBe(true);
+            expect(walkPose('walk', 0, -FLIP_DEADZONE * 0.5, false).flipX).toBe(false);
+        });
+
+        // ⑤ squash 위상 정합 + 부피보존
+        test('⑤ 정점 squash — scaleY>1 && scaleX<1 (공중서 늘임)', () => {
+            const p = walkPose('walk', STEP / 4, 0.01, false);
+            expect(p.scaleY).toBeGreaterThan(1);
+            expect(p.scaleX).toBeLessThan(1);
+        });
+        test('⑤ 착지 squash ≈ 1 (원형)', () => {
+            const p = walkPose('walk', 0, 0.01, false);
+            expect(p.scaleX).toBeCloseTo(1);
+            expect(p.scaleY).toBeCloseTo(1);
+        });
+        test('⑤ 부피보존 — scaleX·scaleY ≈ 1', () => {
+            for (const c of [0, STEP / 8, STEP / 4, STEP / 3]) {
+                const p = walkPose('walk', c, 0.01, false);
+                expect(p.scaleX * p.scaleY).toBeCloseTo(1, 2);
+            }
+        });
+
+        // ⑥ 위상 연속성 — 작은 Δclock에 bob·tilt 점프 없음(끊김/번쩍임 잡음)
+        test('⑥ 연속성 — 작은 Δclock → 작은 ΔbobY·Δtilt', () => {
+            for (const c of [0, 50, 130, 290]) {
+                const a = walkPose('walk', c, 0.01, false);
+                const b = walkPose('walk', c + 1, 0.01, false);
+                expect(Math.abs(b.bobY - a.bobY)).toBeLessThan(0.2);
+                expect(Math.abs(b.tilt - a.tilt)).toBeLessThan(0.2);
+            }
+        });
+
+        // ⑦ idle facing 유지 + breathing 경계
+        test('⑦ idle facing 유지 — 멈춰도 보던 방향', () => {
+            expect(walkPose('idle', 123, 0, true).flipX).toBe(true);
+            expect(walkPose('idle', 123, 0, false).flipX).toBe(false);
+        });
+        test('⑦ idle breathing — scaleY ∈ 1±IDLE_BREATH', () => {
+            for (let c = 0; c <= IDLE_BREATH_MS; c += 137) {
+                const p = walkPose('idle', c, 0, false);
+                expect(p.scaleY).toBeGreaterThanOrEqual(1 - IDLE_BREATH - 1e-9);
+                expect(p.scaleY).toBeLessThanOrEqual(1 + IDLE_BREATH + 1e-9);
+            }
         });
     });
 });
