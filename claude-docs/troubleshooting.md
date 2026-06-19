@@ -1208,6 +1208,22 @@ jobs:
 
 ---
 
+## T-065. 실 브라우저에서 Phaser 씬 런타임 값(angle/scale/flipX)을 수치로 읽으려 했으나 — 번들 Phaser는 IIFE 클로저·프로덕션 Vue엔 DOM 컴포넌트 핸들 없음 → introspection 불가, 시각 검증으로 대체
+
+**증상**: 걷기 애니(transform 변형)를 실 브라우저로 검증할 때, 캐릭터의 `angle`/`scaleX/Y`/`flipX`/`footY` 값을 JS로 직접 읽어 "포즈가 실제 적용되는가"를 수치로 단언하려 했으나 게임/씬 핸들에 도달할 길이 없다. `window.Phaser.GAMES`는 빈 배열(이후 undefined), 캔버스에서 부모 체인을 올라가도 `__vueParentComponent`가 없고(전 요소 `comps:0`), `window` 전역에도 `Phaser.Game`(`scene.getScene`+`loop`+`canvas`) 형태가 없다.
+
+**원인**:
+1. **번들 Phaser는 IIFE/모듈 클로저 스코프** — vite 빌드 `garden.js`가 Phaser를 번들 내부로 감싸, 게임 인스턴스는 그 모듈의 `Phaser.GAMES`에 등록된다. 페이지 전역 `window.Phaser`는 같은 객체가 아니라 핸들이 안 잡힌다.
+2. **프로덕션 Vue는 DOM에 컴포넌트 인스턴스를 안 붙임** — `__vueParentComponent`/`__vue__`는 dev 빌드에서만 부착. 프로덕션은 제거돼 컴포넌트의 `setupState`(게임 ref)로 역추적이 불가. 게다가 게임 객체는 N-082 회피로 `markRaw`/클로저에 숨겨져 반응형 트리에도 없다.
+
+**해결**: 핸들 접근을 포기하고 **시각 검증으로 확정**(T-053/054 정신 그대로). ① 순수함수(예: `walkPose`)는 단위 테스트로 수학을 못 박고(결정성), ② 배선은 **시간차 스크린샷·확대 연사**로 움직임/포즈/접지/depth/위상분산/콘솔0을 눈으로 확인. 수치 introspection이 막혔다고 검증을 멈추지 말 것 — 애초에 클라이언트 통합은 실 브라우저가 1차 게이트다. 캐릭터가 필요하면 로컬 DB에 완독 책을 임시 시드(작가 매칭)해 띄우고 **검증 후 삭제로 계정 원상복구**.
+
+**예방**: Phaser/Vue 프로덕션 번들의 런타임 상태를 페이지에서 읽을 수 있다고 가정하지 말 것. 디버그 핸들이 꼭 필요하면 코드에서 `window.__debugGame = game`처럼 **의도적으로 노출**하는 훅을 빌드에 심어야 한다(현재 없음). 평소엔 순수함수 단위 테스트 + 실 브라우저 시각 게이트 조합이 정답.
+
+**관련**: T-053/054(헤드리스 fake-green·실 브라우저 게이트), N-082(reactive Proxy → markRaw/클로저), N-080(시각 검증 파이프라인), PR #409(절차 걷기 애니).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1277,3 +1293,4 @@ jobs:
 | 2026-06-18 | T-062 (Vite 번들 `garden.js`를 `static/garden/`에 커밋하지 않으면 bootRun에서 404 — `<script type="module" th:src="@{/garden/garden.js}">`는 서버가 정적 자원을 서빙해야 하므로 `src/main/resources/static/garden/garden.js`가 없으면 브라우저에서 404·정원 캔버스 마운트 실패·콘솔 "Failed to load module script" / 해결=`npm --prefix frontend run build` 후 산출물을 git add·commit까지 해야 bootJar에 포함 / CI stale 게이트(`git diff --exit-code src/main/resources/static/garden`)가 소스 변경 후 재빌드·재커밋 누락을 PR 차단으로 방지 / N-098, PR #391) |
 | 2026-06-18 | T-063 (Vite 빌드 산출물 stale — 소스 TS를 수정했는데 `npm run build`를 안 하면 배포된 `garden.js`가 이전 버전 / 증상=로컬 `bootRun`에서 수정이 반영 안 됨 / 해결=소스 변경 후 반드시 `npm --prefix frontend run build` 재실행 후 `git add src/main/resources/static/garden/garden.js`·커밋 / CI 게이트 예방: `git diff --exit-code src/main/resources/static/garden`이 0이 아니면 빌드 실패 → PR 머지 차단 / N-098, T-062, PR #391) |
 | 2026-06-19 | T-064 (다중 세션 워크트리·브랜치 잔재 누적 — squash 머지로 `git branch --merged`가 머지된 `feat/*`를 미머지로 분류·고아 워크트리 폴더는 `prune` 미포착(메타만 청소) / 청소: `claude/*` `--merged`는 `-d` 안전, `feat/*`는 main 로그 PR로 머지확인 후 `-D`, 고아 폴더는 활성0·미커밋0·`HEAD@origin/main` 점검 후 `rm -rf .claude/worktrees/*/`(삭제 직전 list 재확인) / 예방: 구현 세션이 머지 후 `worktree remove`+`branch -d` / N-032·T-051·T-048) |
+| 2026-06-19 | T-065 (실 브라우저에서 Phaser 씬 런타임 transform 값 수치 introspection 불가 — 번들 Phaser는 IIFE 클로저(`window.Phaser.GAMES` 빈/undefined)·프로덕션 Vue엔 `__vueParentComponent` 없음 → 페이지서 게임/씬 핸들 도달 X / 해결=순수함수 단위테스트 + 실 브라우저 시각 검증(시간차 스크린샷·확대 연사)으로 확정, 캐릭터는 완독 책 임시 시드 후 삭제 / 예방=디버그 필요 시 빌드에 `window.__debugGame` 의도 노출 / T-053/054·N-082·N-080·PR #409) |
