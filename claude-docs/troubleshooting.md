@@ -56,6 +56,7 @@
 - [T-058. SES 프로덕션 액세스 거부 — 케이스 '사례 해결'은 승인이 아니라 요청 포기, '사례 다시 열기'로 상세 보강해 재요청](#t-058-ses-프로덕션-액세스-거부--케이스-사례-해결은-승인이-아니라-요청-포기-사례-다시-열기로-상세-보강해-재요청)
 - [T-059. Thymeleaf `<script>` 안 이중 대괄호 `[[` 표기 — 배열 of 배열·주석 속 공백 `[[ ]]`도 인라인 식으로 파싱됨, object 배열로 교체](#t-059-thymeleaf-script-안-이중-대괄호--표기--배열-of-배열주석-속-공백--도-인라인-식으로-파싱됨-object-배열로-교체)
 - [T-060. `@free-pure-core` 블록 순수함수 제거 시 하니스 destructure 목록 미갱신 → `ReferenceError` FAIL](#t-060-free-pure-core-블록-순수함수-제거-시-하니스-destructure-목록-미갱신--referenceerror-fail)
+- [T-067. Phaser 캔버스를 CSS `transform: rotate()`로 돌리면 포인터 hit-test가 깨진다 — 카메라 회전을 쓸 것](#t-067-phaser-캔버스를-css-transform-rotate로-돌리면-포인터-hit-test가-깨진다--카메라-회전을-쓸-것)
 
 ---
 
@@ -1244,6 +1245,34 @@ Remove-Item ".pr-body-tmp.md" -ErrorAction SilentlyContinue
 
 ---
 
+## T-067. Phaser 캔버스를 CSS `transform: rotate()`로 돌리면 포인터 hit-test가 깨진다 — 카메라 회전을 쓸 것
+
+**증상**: 모바일 portrait에서 캔버스 DOM 또는 부모 요소에 `transform: rotate(90deg)`를 적용하면 렌더는 올바르게 보이나, 드래그·탭 등 포인터 입력이 회전 전 좌표계 기준으로 들어와 엉뚱한 위치에 반응하거나 전혀 반응하지 않는다. 편집 모드에서 식물을 탭해도 선택이 안 되고, 드래그해도 이상한 방향으로 이동한다.
+
+**원인**: Phaser 3(3.80.1 포함) 내부 포인터 hit-test가 `getBoundingClientRect()` 기준 좌표를 쓰는데, CSS `transform: rotate()`는 레이아웃 영역을 변환하지 않아 hit-test 좌표와 시각 좌표가 어긋난다([phaserjs/phaser#7175](https://github.com/phaserjs/phaser/issues/7175)). PR #7278로 수정 진행 중이지만 3.80.x 직격.
+
+**해결**: DOM을 회전하지 말고 **Phaser 카메라를 회전**한다 (`cam.setRotation(Math.PI / 2)`). 캔버스 DOM은 정상 방향 그대로이므로 입력↔렌더 정렬이 유지된다. 팬 제스처처럼 화면 좌표를 직접 쓰는 곳은 `cam.getWorldPoint(x, y)` 경유로 교체하면 회전이 투명하게 보정된다 ([Phaser Discourse #9710](https://phaser.discourse.group/t/.../9710) 해법).
+
+```typescript
+// ❌ DOM rotate — 입력 깨짐(Phaser#7175)
+// canvas.style.transform = 'rotate(90deg)';
+
+// ✅ 카메라 회전 — 입력 정상
+cam.setRotation(Math.PI / 2);
+
+// 팬 보정: 직접 좌표 대신 getWorldPoint 경유
+const before = cam.getWorldPoint(pointer.prevPosition.x, pointer.prevPosition.y);
+const after  = cam.getWorldPoint(pointer.x, pointer.y);
+cam.scrollX -= after.x - before.x;
+cam.scrollY -= after.y - before.y;
+```
+
+**예방**: Phaser 씬 위에서 시각 변환이 필요하면 항상 Phaser 카메라 API(setRotation·setZoom·setScroll)를 쓴다. DOM transform은 Phaser 입력 파이프라인 밖이라 좌표 불일치를 유발한다.
+
+**관련**: T-050(CSS perspective가 격자 클릭 좌표 깨뜨림 — 같은 뿌리), N-100, PR #411.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1315,3 +1344,4 @@ Remove-Item ".pr-body-tmp.md" -ErrorAction SilentlyContinue
 | 2026-06-19 | T-064 (다중 세션 워크트리·브랜치 잔재 누적 — squash 머지로 `git branch --merged`가 머지된 `feat/*`를 미머지로 분류·고아 워크트리 폴더는 `prune` 미포착(메타만 청소) / 청소: `claude/*` `--merged`는 `-d` 안전, `feat/*`는 main 로그 PR로 머지확인 후 `-D`, 고아 폴더는 활성0·미커밋0·`HEAD@origin/main` 점검 후 `rm -rf .claude/worktrees/*/`(삭제 직전 list 재확인) / 예방: 구현 세션이 머지 후 `worktree remove`+`branch -d` / N-032·T-051·T-048) |
 | 2026-06-19 | T-065 (실 브라우저에서 Phaser 씬 런타임 transform 값 수치 introspection 불가 — 번들 Phaser는 IIFE 클로저(`window.Phaser.GAMES` 빈/undefined)·프로덕션 Vue엔 `__vueParentComponent` 없음 → 페이지서 게임/씬 핸들 도달 X / 해결=순수함수 단위테스트 + 실 브라우저 시각 검증(시간차 스크린샷·확대 연사)으로 확정, 캐릭터는 완독 책 임시 시드 후 삭제 / 예방=디버그 필요 시 빌드에 `window.__debugGame` 의도 노출 / T-053/054·N-082·N-080·PR #409) |
 | 2026-06-19 | T-066 (PowerShell `gh pr create --body "$(cat <<'EOF' ...)"` 파서 오류 — Windows PowerShell 5.1에서 bash heredoc `<<'EOF'`를 `"$(...)"` 안에 쓰면 `<`를 리다이렉션으로 파싱해 `Missing file specification`·`The '<' operator is reserved` 파서 오류 / 해결=PR body를 임시 파일(`.pr-body-tmp.md`)에 `Write`로 쓰고 `Get-Content ".pr-body-tmp.md" -Raw`를 변수에 받아 `gh pr create --body $body`로 전달, 사용 후 삭제 / 예방=PowerShell에서 멀티라인 문자열을 CLI 인라인 인자로 넘길 때 항상 파일 경유·`@'...'@` here-string은 할당 전용(인자로 직접 못 넘김) / T-026(한글 커밋 file 경유)과 같은 맥락 / PR #410) |
+| 2026-06-19 | T-067 (Phaser 캔버스를 CSS `transform: rotate()`로 돌리면 포인터 hit-test가 깨진다 — `cam.setRotation()` + 팬 `getWorldPoint` 교체로 입력 정렬 유지 / T-050·N-100·PR #411) |
