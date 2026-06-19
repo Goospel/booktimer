@@ -4,8 +4,9 @@ import { describe, test, expect } from 'vitest';
 import {
     clampNorm, pixelToNorm, normToPixel, isOutsideWorld,
     plantWorldSize, initialZoomFor, clampRotation, clampZoom,
-    ZOOM_MIN,
+    ZOOM_MIN, ZOOM_MAX,
     containZoomFor,
+    viewZoomBounds, cameraCenterScroll,
     GRID_COLS, GRID_ROWS, cellOf, cellCenter, snapToCell,
     normToIso, isoToNorm, normToIsoPixel, isoPixelToNorm,
     resolveDrop, nearestFreeCell,
@@ -107,6 +108,70 @@ describe('garden pure.ts', () => {
             expect(containZoomFor(390, 0, 1000, 800)).toBeCloseTo(ZOOM_MIN));
         test('landscape 1440x900, world 1000x800 → height-limited 1.125', () =>
             expect(containZoomFor(1440, 900, 1000, 800)).toBeCloseTo(1.125));
+    });
+
+    describe('viewZoomBounds', () => {
+        const worldW = 1000, worldH = 800;
+
+        test('데스크톱 와이드(1440×900) → min≈1.125(세로 기준), max=2.5, initial=min', () => {
+            const { min, max, initial } = viewZoomBounds(1440, 900, worldW, worldH);
+            expect(min).toBeCloseTo(1.125);   // min(1440/1000, 900/800) = 900/800
+            expect(max).toBeCloseTo(ZOOM_MAX);
+            expect(initial).toBeCloseTo(min);
+        });
+
+        test('가로 빡빡(1024×768) → min≈0.96(세로 기준)', () => {
+            const { min } = viewZoomBounds(1024, 768, worldW, worldH);
+            expect(min).toBeCloseTo(0.96);    // min(1024/1000, 768/800) = 768/800
+        });
+
+        test('모바일 세로(390×844) → min≈0.39(가로 기준) — 기존 전체 보기 보존 회귀 가드', () => {
+            const { min } = viewZoomBounds(390, 844, worldW, worldH);
+            expect(min).toBeCloseTo(0.39);    // min(390/1000, 844/800) = 390/1000
+        });
+
+        test('초소형 월드(contain>ZOOM_MAX) → min=initial=ZOOM_MAX 로 clamp', () => {
+            // 뷰 1000×800, 월드 100×80: contain = min(10,10) = 10 > 2.5 → clamp to 2.5
+            const { min, max, initial } = viewZoomBounds(1000, 800, 100, 80);
+            expect(min).toBeCloseTo(ZOOM_MAX);
+            expect(max).toBeCloseTo(ZOOM_MAX);
+            expect(initial).toBeCloseTo(ZOOM_MAX);
+        });
+
+        test('0 뷰포트(viewW=0) → ZOOM_MIN 폴백(NaN 없음)', () => {
+            const { min, initial } = viewZoomBounds(0, 800, worldW, worldH);
+            expect(min).toBeCloseTo(ZOOM_MIN);
+            expect(Number.isFinite(min)).toBe(true);
+            expect(Number.isFinite(initial)).toBe(true);
+        });
+    });
+
+    describe('cameraCenterScroll', () => {
+        const worldW = 1000, worldH = 800;
+
+        test('불변식: 보이는 중심 == 월드 중심 (임의 zoom 5종)', () => {
+            const viewW = 1440, viewH = 900;
+            for (const zoom of [0.5, 1.0, 1.125, 2.0, 2.5]) {
+                const { scrollX, scrollY } = cameraCenterScroll(worldW, worldH, viewW, viewH, zoom);
+                expect(scrollX + viewW / zoom / 2).toBeCloseTo(worldW / 2);
+                expect(scrollY + viewH / zoom / 2).toBeCloseTo(worldH / 2);
+            }
+        });
+
+        test('zoom=1 단순 케이스 → scrollX=worldW/2-viewW/2, scrollY=worldH/2-viewH/2', () => {
+            const viewW = 800, viewH = 600;
+            const { scrollX, scrollY } = cameraCenterScroll(worldW, worldH, viewW, viewH, 1);
+            expect(scrollX).toBeCloseTo(worldW / 2 - viewW / 2);  // 500 - 400 = 100
+            expect(scrollY).toBeCloseTo(worldH / 2 - viewH / 2);  // 400 - 300 = 100
+        });
+
+        test('contain zoom(세로 꽉 참) → scrollY ≈ 0', () => {
+            // viewH/zoom = worldH → 상하 여백 없음 → scrollY = 0
+            const viewW = 1440, viewH = 900;
+            const zoom = viewH / worldH;   // 900/800 = 1.125
+            const { scrollY } = cameraCenterScroll(worldW, worldH, viewW, viewH, zoom);
+            expect(scrollY).toBeCloseTo(0);
+        });
     });
 
     describe('GRID 상수', () => {
