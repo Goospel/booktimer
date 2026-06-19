@@ -57,6 +57,8 @@
 - [T-059. Thymeleaf `<script>` 안 이중 대괄호 `[[` 표기 — 배열 of 배열·주석 속 공백 `[[ ]]`도 인라인 식으로 파싱됨, object 배열로 교체](#t-059-thymeleaf-script-안-이중-대괄호--표기--배열-of-배열주석-속-공백--도-인라인-식으로-파싱됨-object-배열로-교체)
 - [T-060. `@free-pure-core` 블록 순수함수 제거 시 하니스 destructure 목록 미갱신 → `ReferenceError` FAIL](#t-060-free-pure-core-블록-순수함수-제거-시-하니스-destructure-목록-미갱신--referenceerror-fail)
 - [T-067. Phaser 캔버스를 CSS `transform: rotate()`로 돌리면 포인터 hit-test가 깨진다 — 카메라 회전을 쓸 것](#t-067-phaser-캔버스를-css-transform-rotate로-돌리면-포인터-hit-test가-깨진다--카메라-회전을-쓸-것)
+- [T-068. 카메라 강제 회전(`cam.setRotation`)은 기기를 거꾸로 들면 방향이 반대 — 순수 반응형이 정답](#t-068-카메라-강제-회전camsetrotation은-기기를-거꾸로-들면-방향이-반대--순수-반응형이-정답)
+- [T-069. 모바일 가로 첫 로드에서 마을 왼쪽 치우침 — `cam.setBounds`가 centering 음수 scrollX 클램핑](#t-069-모바일-가로-첫-로드에서-마을-왼쪽-치우침--cambounds가-centering-음수-scrollx-클램핑)
 
 ---
 
@@ -1308,6 +1310,38 @@ fitCamera(w: number, h: number) {
 
 ---
 
+## T-069. 모바일 가로 첫 로드에서 마을 왼쪽 치우침 — `cam.setBounds`가 centering 음수 scrollX 클램핑
+
+**증상**: 모바일(/village 첫 로드, 가로 방향)에서 마을이 왼쪽에 치우쳐 보인다. PC에서는 처음부터 정상.
+
+**원인**: `cam.setBounds(0, 0, worldW, worldH)` + 가로 모바일(뷰포트 너비 < 월드 너비)에서 `cameraCenterScroll`이 음수 scrollX를 계산하는데, Phaser의 `clampToBounds`가 `scrollX < bounds.x(=0)`이면 0으로 강제 클램핑한다.
+
+구체적으로, iPhone XR 가로(896×414) + 월드(1000×800) 기준:
+- `containZoom = min(896/1000, 414/800) = 0.5175` (높이 기준 제한)
+- `scrollX = 1000/2 − 896/(2×0.5175) = 500 − 865 = −365` → **음수, 클램핑!**
+- 결과: `scrollX = 0` → 마을이 캔버스 좌측에 고정
+
+PC(뷰포트≈월드 1000×800): `scrollX = 500 − 500 = 0` → 클램핑 불필요, 정상.
+세로 모바일(414×896): `containZoom = 414/1000`, `scrollX = 0` 정확히 → 클램핑 없음.
+
+**해결**: `fitCamera()`에서 centering offset만큼 bounds를 동적 확장 → 음수 스크롤 허용.
+
+```typescript
+// ✅ fitCamera() — containZoom에서 뷰포트가 월드보다 넓을 때 음수 스크롤 허용
+const offX = Math.max(0, -s.scrollX);
+const offY = Math.max(0, -s.scrollY);
+cam.setBounds(-offX, -offY, this.cfg.worldW + 2 * offX, this.cfg.worldH + 2 * offY);
+cam.setScroll(s.scrollX, s.scrollY);
+```
+
+`create()`의 `cam.setBounds(0, 0, worldW, worldH)` 정적 호출 제거 — `fitCamera`가 매 resize마다 갱신.
+
+**예방**: `fitCamera`에서 centering 스크롤 계산 후 bounds를 그 offset 기준으로 맞춘다. `setBounds(0,0,W,H)` 고정은 "월드 > 뷰포트"에서만 올바르고, 월드가 뷰포트보다 작은 방향에서는 centering 음수 스크롤을 차단한다.
+
+**관련**: PR #414(중앙 정렬·containZoom 도입), #415(진짜 원인 확인·수정).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1381,3 +1415,4 @@ fitCamera(w: number, h: number) {
 | 2026-06-19 | T-066 (PowerShell `gh pr create --body "$(cat <<'EOF' ...)"` 파서 오류 — Windows PowerShell 5.1에서 bash heredoc `<<'EOF'`를 `"$(...)"` 안에 쓰면 `<`를 리다이렉션으로 파싱해 `Missing file specification`·`The '<' operator is reserved` 파서 오류 / 해결=PR body를 임시 파일(`.pr-body-tmp.md`)에 `Write`로 쓰고 `Get-Content ".pr-body-tmp.md" -Raw`를 변수에 받아 `gh pr create --body $body`로 전달, 사용 후 삭제 / 예방=PowerShell에서 멀티라인 문자열을 CLI 인라인 인자로 넘길 때 항상 파일 경유·`@'...'@` here-string은 할당 전용(인자로 직접 못 넘김) / T-026(한글 커밋 file 경유)과 같은 맥락 / PR #410) |
 | 2026-06-19 | T-067 (Phaser 캔버스를 CSS `transform: rotate()`로 돌리면 포인터 hit-test가 깨진다 — `cam.setRotation()` + 팬 `getWorldPoint` 교체로 입력 정렬 유지 / T-050·N-100·PR #411) |
 | 2026-06-19 | T-068 (`cam.setRotation` 강제 가로 회전은 기기를 거꾸로 들면 방향 반대 — 세로에도 방향이 있어 고정 회전 부적합 / 해결=`fitCamera`+`containZoomFor` 순수 반응형, `ZOOM_MIN=0.25`, 팬·핀치·휠 보기/편집 공통 분리, DOM 회전 래퍼 제거 / T-067·PR #413) |
+| 2026-06-20 | T-069 (모바일 가로 첫 로드 마을 왼쪽 치우침 / 진짜 원인=`cam.setBounds(0,0,W,H)`가 containZoom 상태 centering 음수 scrollX를 클램핑 / 해결=`fitCamera`에서 centering offset만큼 bounds 동적 확장, `create()` 정적 setBounds 제거 / PR #415) |
