@@ -65,6 +65,7 @@ export class GardenScene extends Phaser.Scene {
     _panning = false;
     _panMoved = false;
     _pinchDist = 0;
+    _portrait = false;
 
     constructor(cfg: GardenSceneConfig) {
         super('garden');
@@ -105,18 +106,17 @@ export class GardenScene extends Phaser.Scene {
 
         const cam = this.cameras.main;
         cam.setBounds(0, 0, this.cfg.worldW, this.cfg.worldH);
-        // RESIZE 모드: 캔버스 크기로 초기 줌 계산. getBoundingClientRect가 0이면 폴백.
+        // RESIZE 모드: 캔버스 크기로 초기 방향·줌·중심 계산. getBoundingClientRect가 0이면 폴백.
         const bounds = this.sys.game.canvas.getBoundingClientRect();
         const initW = bounds.width > 0 ? bounds.width : canvasCss;
-        cam.setZoom(initialZoomFor(TARGET_PLANT_CSS, this.plantPx, initW, this.cfg.worldW));
-        cam.centerOn(this.cfg.worldW / 2, this.cfg.worldH / 2);
+        const initH = bounds.height > 0 ? bounds.height : 0;
+        this.applyOrientation(initW, initH);
 
-        // RESIZE 이벤트 — 뷰포트가 바뀔 때(화면 회전·창 크기 변경) 줌·중심 재계산.
+        // RESIZE 이벤트 — 뷰포트가 바뀔 때(화면 회전·창 크기 변경) 방향·줌·중심 재계산.
         this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
-            const { width: w } = gameSize;
+            const { width: w, height: h } = gameSize;
             if (w <= 0) return;
-            cam.setZoom(initialZoomFor(TARGET_PLANT_CSS, this.plantPx, w, this.cfg.worldW));
-            cam.centerOn(this.cfg.worldW / 2, this.cfg.worldH / 2);
+            this.applyOrientation(w, h);
         });
 
         if (!this.cfg.readonly) {
@@ -188,8 +188,11 @@ export class GardenScene extends Phaser.Scene {
                 }
                 this._pinchDist = 0;
                 if (!this._panning || !pointer.isDown) return;
-                cam.scrollX -= (pointer.x - pointer.prevPosition.x) / cam.zoom;
-                cam.scrollY -= (pointer.y - pointer.prevPosition.y) / cam.zoom;
+                // getWorldPoint 경유 — 카메라 회전 시 축 어긋남 없이 보정.
+                const before = cam.getWorldPoint(pointer.prevPosition.x, pointer.prevPosition.y);
+                const after = cam.getWorldPoint(pointer.x, pointer.y);
+                cam.scrollX -= after.x - before.x;
+                cam.scrollY -= after.y - before.y;
                 this._panMoved = true;
             });
             this.input.on('pointerup', () => {
@@ -453,6 +456,20 @@ export class GardenScene extends Phaser.Scene {
             set.add(`${col},${row}`);
         }
         return set;
+    }
+
+    // portrait 판정: 모바일 폭(≤900px)에서 화면이 세로일 때만 카메라 회전. 데스크톱·태블릿 가로는 0.
+    // portrait 시 월드 X축(worldW)이 캔버스 높이에 매핑 → h를 기준 축으로 initialZoomFor.
+    applyOrientation(w: number, h: number) {
+        const portrait = w <= 900 && h > w;
+        const cam = this.cameras.main;
+        this._portrait = portrait;
+        cam.setRotation(portrait ? Math.PI / 2 : 0);
+        const axis = portrait && h > 0 ? h : w;
+        if (axis > 0) {
+            cam.setZoom(initialZoomFor(TARGET_PLANT_CSS, this.plantPx, axis, this.cfg.worldW));
+        }
+        cam.centerOn(this.cfg.worldW / 2, this.cfg.worldH / 2);
     }
 
     // z-order: y 오름차순 정렬(낮은 y=뒤, 높은 y=앞) — CoC 아이소 자동 깊이. T-055.
