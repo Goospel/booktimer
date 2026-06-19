@@ -1224,6 +1224,26 @@ jobs:
 
 ---
 
+## T-066. PowerShell에서 `gh pr create --body "$(cat <<'EOF' ...)"` 파서 오류 — bash heredoc을 PS 인라인 인자로 못 쓴다
+
+**증상**: `gh pr create --body "$(cat <<'EOF' ...)"` 형태로 PR body를 전달하려 하면 PowerShell 5.1이 `Missing file specification after redirection operator` / `The '<' operator is reserved` 파서 오류를 낸다. 실행조차 안 됨.
+
+**원인**: Windows PowerShell 5.1은 bash가 아니라 `<<'EOF'`를 `<`(입력 리다이렉션) 토큰으로 파싱한다. `"$(...)"` 안에서도 같다.
+
+**해결**: PR body를 임시 파일(`.pr-body-tmp.md`)에 `Write` 툴로 쓰고, PowerShell에서 `Get-Content ".pr-body-tmp.md" -Raw`로 읽어 변수에 담아 `gh pr create --body $body`로 전달. 사용 후 `Remove-Item`으로 삭제.
+
+```powershell
+$body = Get-Content ".pr-body-tmp.md" -Raw
+gh pr create --title "..." --body $body
+Remove-Item ".pr-body-tmp.md" -ErrorAction SilentlyContinue
+```
+
+**예방**: PowerShell에서 멀티라인 문자열을 CLI 인자로 넘길 때는 항상 파일 경유. PowerShell `@'...'@` here-string은 변수 할당 전용이라 직접 `gh --body @'...'@`로 넘기면 역시 안 됨. T-026(한글 커밋 메시지도 `.commit-msg-tmp`로 파일 경유)과 같은 맥락.
+
+**관련**: T-026(커밋 메시지 파일 경유), PR #410.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1294,3 +1314,4 @@ jobs:
 | 2026-06-18 | T-063 (Vite 빌드 산출물 stale — 소스 TS를 수정했는데 `npm run build`를 안 하면 배포된 `garden.js`가 이전 버전 / 증상=로컬 `bootRun`에서 수정이 반영 안 됨 / 해결=소스 변경 후 반드시 `npm --prefix frontend run build` 재실행 후 `git add src/main/resources/static/garden/garden.js`·커밋 / CI 게이트 예방: `git diff --exit-code src/main/resources/static/garden`이 0이 아니면 빌드 실패 → PR 머지 차단 / N-098, T-062, PR #391) |
 | 2026-06-19 | T-064 (다중 세션 워크트리·브랜치 잔재 누적 — squash 머지로 `git branch --merged`가 머지된 `feat/*`를 미머지로 분류·고아 워크트리 폴더는 `prune` 미포착(메타만 청소) / 청소: `claude/*` `--merged`는 `-d` 안전, `feat/*`는 main 로그 PR로 머지확인 후 `-D`, 고아 폴더는 활성0·미커밋0·`HEAD@origin/main` 점검 후 `rm -rf .claude/worktrees/*/`(삭제 직전 list 재확인) / 예방: 구현 세션이 머지 후 `worktree remove`+`branch -d` / N-032·T-051·T-048) |
 | 2026-06-19 | T-065 (실 브라우저에서 Phaser 씬 런타임 transform 값 수치 introspection 불가 — 번들 Phaser는 IIFE 클로저(`window.Phaser.GAMES` 빈/undefined)·프로덕션 Vue엔 `__vueParentComponent` 없음 → 페이지서 게임/씬 핸들 도달 X / 해결=순수함수 단위테스트 + 실 브라우저 시각 검증(시간차 스크린샷·확대 연사)으로 확정, 캐릭터는 완독 책 임시 시드 후 삭제 / 예방=디버그 필요 시 빌드에 `window.__debugGame` 의도 노출 / T-053/054·N-082·N-080·PR #409) |
+| 2026-06-19 | T-066 (PowerShell `gh pr create --body "$(cat <<'EOF' ...)"` 파서 오류 — Windows PowerShell 5.1에서 bash heredoc `<<'EOF'`를 `"$(...)"` 안에 쓰면 `<`를 리다이렉션으로 파싱해 `Missing file specification`·`The '<' operator is reserved` 파서 오류 / 해결=PR body를 임시 파일(`.pr-body-tmp.md`)에 `Write`로 쓰고 `Get-Content ".pr-body-tmp.md" -Raw`를 변수에 받아 `gh pr create --body $body`로 전달, 사용 후 삭제 / 예방=PowerShell에서 멀티라인 문자열을 CLI 인라인 인자로 넘길 때 항상 파일 경유·`@'...'@` here-string은 할당 전용(인자로 직접 못 넘김) / T-026(한글 커밋 file 경유)과 같은 맥락 / PR #410) |
