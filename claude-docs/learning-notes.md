@@ -4632,3 +4632,49 @@ T-054 제거와 별개로, Phaser `Game`/`Scene` 인스턴스를 Alpine `x-data`
 - **N-083** — defer × class extends TDZ (동일 개념 일반화)
 - `frontend/src/garden/scene.ts` — `class GardenScene extends Phaser.Scene` 직접 선언
 - **PR #391** — 정원 프론트 빌드 2차 B
+
+---
+
+## N-100. Phaser 캔버스를 CSS `transform: rotate()`로 돌리면 포인터 hit-test가 깨진다 — 카메라 회전을 쓸 것
+
+> **한 줄**: 캔버스 DOM을 CSS로 회전하면 Phaser 입력 좌표계가 어긋난다. `cam.setRotation()`으로 카메라를 돌리면 렌더·입력이 함께 회전해 안전하다.
+
+### 왜 이렇게 동작하는가
+
+Phaser는 포인터 이벤트 좌표를 `canvas.getBoundingClientRect()`를 이용해 캔버스 상대 좌표로 변환한다. CSS `transform: rotate(90deg)` 로 캔버스 DOM을 돌리면 **시각적으로는 돌아가지만** Phaser의 입력 파이프라인은 회전 전 좌표계를 그대로 사용한다 → 화면 좌측 클릭이 내부적으로 상단으로 해석되는 어긋남 발생. 이 버그는 phaserjs/phaser#7175로 인정됐으며 Phaser 3.80.1 기준 미수정.
+
+반면 `cam.setRotation(Math.PI / 2)`는 렌더링 행렬과 입력 변환을 **Phaser 내부에서 함께** 회전한다. 캔버스 DOM은 정상 방향 유지 → `getBoundingClientRect()` 결과 정상 → 입력↔렌더 정렬 보장.
+
+### 팬 제스처 추가 보정 — `getWorldPoint`
+
+카메라가 회전된 상태에서 `pointer.x - pointer.prevPosition.x` 를 직접 `scrollX` 에 더하면 X/Y 축이 섞인다(캔버스 X가 월드 Y로 대응). `cam.getWorldPoint(screenX, screenY)`는 현재 zoom·rotation·scroll을 반영해 월드 좌표를 돌려주므로 두 지점의 차를 구하면 축 자동 보정:
+
+```typescript
+const before = cam.getWorldPoint(pointer.prevPosition.x, pointer.prevPosition.y);
+const after  = cam.getWorldPoint(pointer.x, pointer.y);
+cam.scrollX -= after.x - before.x;
+cam.scrollY -= after.y - before.y;
+```
+
+rotation=0일 때도 동일 결과 → 분기 없이 항상 안전하게 쓸 수 있다.
+
+### 줌 기준축 전환
+
+`initialZoomFor(targetCss, plantPx, axis, worldW)` 에서 `axis`는 "월드를 몇 픽셀로 담을지"다.  
+- landscape(기본): axis = 캔버스 **width**  
+- portrait(회전 90°): 월드 X축이 화면 세로 방향으로 투영 → axis = 캔버스 **height**
+
+```typescript
+const axis = portrait && h > 0 ? h : w;
+cam.setZoom(initialZoomFor(TARGET_PLANT_CSS, this.plantPx, axis, this.cfg.worldW));
+```
+
+### 어디서 쓰는가
+
+`frontend/src/garden/scene.ts` — `applyOrientation(w, h)` 메서드. `create()` 와 `scale.on('resize')` 콜백에서 호출.
+
+### 관련
+
+- **T-067** — CSS rotate로 캔버스 돌리면 Phaser 입력 깨짐 (phaserjs/phaser#7175)
+- **N-082** — Alpine reactive Proxy × Phaser 인스턴스 격리 (markRaw 패턴)
+- **PR #411** — 마을 모바일 세로 자동 가로 S2
