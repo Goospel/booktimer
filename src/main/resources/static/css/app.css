@@ -1513,3 +1513,287 @@ a.book-title:hover { text-decoration: underline; }
 @media (pointer: coarse) {
     .carousel-nav { display: none; }
 }
+
+/* ===================================================================
+   마을 풀스크린 게임 셸 (/village) — S1
+   스코프: #village-app 및 .village-* 클래스. 다른 페이지 회귀 0.
+   =================================================================== */
+
+/* 루트 — 뷰포트 전체 점유, 페이지 스크롤 제거 */
+#village-app {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    background: var(--garden-sky);
+}
+
+/* 셸 — 모바일: 전체 채움 / 데스크톱: flex 중앙 + 액자 배경 */
+.village-shell {
+    width: 100%;
+    height: 100%;
+    height: 100dvh;   /* 다이나믹 뷰포트 높이(주소창 숨김 보정) */
+    position: relative;
+    overflow: hidden;
+    background: var(--garden-sky);
+}
+
+/* 데스크톱 ≥900px: 중앙 액자 레이아웃 */
+@media (min-width: 900px) {
+    .village-shell {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg);  /* 액자 바깥 종이톤 */
+    }
+}
+
+/* 게임 루트 — 절대배치 기준점. 모바일: 100%×100%; 데스크톱: world 크기 상한 */
+.village-game-root {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--garden-sky);
+}
+
+@media (min-width: 900px) {
+    .village-game-root {
+        width: min(100%, 1000px);
+        height: min(100dvh, 800px);
+        border-radius: var(--radius);
+        box-shadow: 0 8px 40px rgba(44, 42, 36, .28);
+    }
+}
+
+/* 캔버스 충진 — 게임 루트 전체 채움, touch-action: none으로 드래그 뺏김 방지 */
+.garden-phaser-fill {
+    position: absolute;
+    inset: 0;
+    touch-action: none;
+}
+.garden-phaser-fill canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* 로딩·오류 — 중앙 정렬 */
+.village-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    color: var(--muted);
+    background: var(--garden-sky);
+}
+
+/* HUD — 게임 위 절대배치, 자식만 pointer-events */
+.village-hud {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: max(10px, env(safe-area-inset-top))
+             max(14px, env(safe-area-inset-right))
+             max(10px, env(safe-area-inset-bottom))
+             max(14px, env(safe-area-inset-left));
+    z-index: 10;
+}
+.village-hud > * { pointer-events: auto; }
+
+/* HUD 상단 — 브랜드 + 인사말 (반투명 캡슐) */
+.village-hud-top {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    align-self: flex-start;
+    background: rgba(243, 238, 228, .82);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border-radius: 20px;
+    padding: 5px 14px;
+    max-width: 90%;
+}
+
+.village-hud-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 700;
+    font-size: .88rem;
+    color: var(--accent-hover);
+    text-decoration: none;
+    white-space: nowrap;
+}
+.village-hud-brand:hover { text-decoration: underline; }
+
+.village-hud-greeting {
+    color: var(--muted);
+    font-size: .8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* HUD 하단 버튼들 */
+.village-hud-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    align-self: flex-end;
+}
+
+.village-hud-btn {
+    width: auto;
+    padding: 7px 15px;
+    border-radius: 20px;
+    background: rgba(243, 238, 228, .88);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: .85rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: background .15s, border-color .15s;
+    white-space: nowrap;
+}
+.village-hud-btn:hover {
+    background: rgba(243, 238, 228, 1);
+    border-color: var(--accent);
+    text-decoration: none;
+}
+
+/* 도감 전체 오버레이 — backdrop 클릭·ESC로 닫힘 */
+.village-dex-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(44, 42, 36, .55);
+    z-index: 50;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+@media (min-width: 600px) {
+    .village-dex-overlay { align-items: center; }
+}
+
+.village-dex-panel {
+    width: 100%;
+    max-width: 540px;
+    max-height: 80dvh;
+    background: var(--card-bg);
+    border-radius: var(--radius) var(--radius) 0 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 20px;
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+    box-shadow: 0 -4px 32px rgba(44, 42, 36, .2);
+}
+@media (min-width: 600px) {
+    .village-dex-panel {
+        border-radius: var(--radius);
+        max-height: 85dvh;
+        box-shadow: var(--shadow);
+    }
+}
+
+.village-dex-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--accent-hover);
+}
+
+.village-dex-close {
+    width: auto;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: .82rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--muted);
+    transition: border-color .15s;
+}
+.village-dex-close:hover { border-color: var(--accent); color: var(--text); }
+
+/* 편집 패널 — 캔버스 위 하단 오버레이, 스크롤 가능 */
+.village-edit-panel {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-height: 52%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    background: rgba(252, 250, 245, .96);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-top: 1px solid var(--border);
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding: 12px 16px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    z-index: 20;
+}
+
+.village-edit-topbar {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+.village-edit-topbar .my-garden-hint { flex: 1; margin: 0; }
+.village-edit-topbar .my-garden-edit-actions {
+    display: inline-flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+/* 빈 마을 안내 */
+.village-empty-msg {
+    position: absolute;
+    bottom: 14px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    pointer-events: none;
+    margin: 0;
+    padding: 0 16px;
+    font-size: .82rem;
+    color: var(--muted);
+}
+
+/* 보기 모드 메시지 오버레이 */
+.village-overlay-msg {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(252, 250, 245, .92);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border-radius: 20px;
+    padding: 5px 16px;
+    font-size: .85rem;
+    font-weight: 600;
+    color: var(--accent-hover);
+    z-index: 30;
+    white-space: nowrap;
+    pointer-events: none;
+    margin: 0;
+}

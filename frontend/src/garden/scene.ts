@@ -105,8 +105,19 @@ export class GardenScene extends Phaser.Scene {
 
         const cam = this.cameras.main;
         cam.setBounds(0, 0, this.cfg.worldW, this.cfg.worldH);
-        cam.setZoom(initialZoomFor(TARGET_PLANT_CSS, this.plantPx, canvasCss, this.cfg.worldW));
+        // RESIZE 모드: 캔버스 크기로 초기 줌 계산. getBoundingClientRect가 0이면 폴백.
+        const bounds = this.sys.game.canvas.getBoundingClientRect();
+        const initW = bounds.width > 0 ? bounds.width : canvasCss;
+        cam.setZoom(initialZoomFor(TARGET_PLANT_CSS, this.plantPx, initW, this.cfg.worldW));
         cam.centerOn(this.cfg.worldW / 2, this.cfg.worldH / 2);
+
+        // RESIZE 이벤트 — 뷰포트가 바뀔 때(화면 회전·창 크기 변경) 줌·중심 재계산.
+        this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
+            const { width: w } = gameSize;
+            if (w <= 0) return;
+            cam.setZoom(initialZoomFor(TARGET_PLANT_CSS, this.plantPx, w, this.cfg.worldW));
+            cam.centerOn(this.cfg.worldW / 2, this.cfg.worldH / 2);
+        });
 
         if (!this.cfg.readonly) {
             this.input.addPointer(1);
