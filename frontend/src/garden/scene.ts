@@ -6,6 +6,7 @@ import {
     normToIsoPixel, isoPixelToNorm,
     isOutsideWorld, resolveDrop, nearestFreeCell,
     WanderState, wanderStep,
+    walkPose, WALK_STEP_MS,
 } from './pure';
 
 export interface GardenItemMeta {
@@ -206,11 +207,27 @@ export class GardenScene extends Phaser.Scene {
             const s: WanderState = o.getData('wander');
             if (!s) continue;
             const next = wanderStep(s, delta, 0.0004, Math.random);
-            o.getData('wander'); // 참조만(no-op), wanderStep은 순수라 새 객체 반환
             o.setData('wander', next);
+
             const { px, py } = normToIsoPixel(next.x, next.y, this.cfg.worldW, this.cfg.worldH);
+            const clock = (o.getData('animClock') as number) + delta;
+            o.setData('animClock', clock);
+
+            // 진행 방향 = 이번 스텝의 화면 dx(직전 footX 대비). 멈추면 ≈0 → 데드존서 방향 유지.
+            const dx = px - (o.getData('footX') as number);
+            const pose = walkPose(next.phase, clock, dx, o.getData('flipX') as boolean);
+
             o.x = px;
-            o.y = py;
+            o.y = py + pose.bobY;          // bob은 시각에만(논리 발밑 y와 분리)
+            o.setData('footX', px);
+            o.setData('footY', py);         // depth·접지용 논리 y
+            o.setAngle(pose.tilt);
+            o.setData('flipX', pose.flipX);
+            if (o instanceof Phaser.GameObjects.Image) {
+                const base = o.getData('baseScale') as { x: number; y: number };
+                o.setScale(base.x * pose.scaleX, base.y * pose.scaleY); // base 곱(크기 보존)
+                o.setFlipX(pose.flipX);
+            }
             moved = true;
         }
         if (moved) this.restack();
@@ -225,6 +242,8 @@ export class GardenScene extends Phaser.Scene {
             obj = this.add.image(px, py, 'tex-' + meta.spriteId)
                     .setOrigin(0.5, 1)
                     .setDisplaySize(this.plantPx, this.plantPx);
+            // setDisplaySize가 설정한 scale을 base로 저장 — squash가 매 프레임 base×poseScale로 곱해져 크기 보존.
+            obj.setData('baseScale', { x: obj.scaleX, y: obj.scaleY });
         } else {
             obj = this.add.text(px, py, meta.emoji || '🧑', { fontSize: Math.round(this.plantPx * 0.8) + 'px' })
                     .setOrigin(0.5, 1);
@@ -235,6 +254,11 @@ export class GardenScene extends Phaser.Scene {
         obj.setData('name', meta.name);
         const initState: WanderState = { phase: 'idle', x: sx, y: sy, tx: sx, ty: sy, timer: Math.random() * 2000 };
         obj.setData('wander', initState);
+        // 걷기 애니 시드(두 분기 공통 — Text 폴백도 update에서 안전). animClock 위상 오프셋 = 걸음 군무 방지.
+        obj.setData('animClock', Math.random() * WALK_STEP_MS);
+        obj.setData('footX', px);
+        obj.setData('footY', py);
+        obj.setData('flipX', false);
         // interactive 설정 없음 — 드래그·클릭 대상 아님(계획 §3.4)
         this.objs.push(obj);
         this.restack();
@@ -421,9 +445,12 @@ export class GardenScene extends Phaser.Scene {
     }
 
     // z-order: y 오름차순 정렬(낮은 y=뒤, 높은 y=앞) — CoC 아이소 자동 깊이. T-055.
+    // 정렬키는 논리 발밑 footY(캐릭터는 bob으로 o.y≠발밑 → bob이 depth를 흔들지 않게).
+    // 식물·건물은 footY 미설정 → o.y 폴백(기존과 동일).
     restack() {
         if (this.bg) this.bg.setDepth(0);
-        this.objs.slice().sort((a, b) => a.y - b.y).forEach((o, i) => o.setDepth(i + 1));
+        const fy = (o: GObj) => (o.getData('footY') as number | undefined) ?? o.y;
+        this.objs.slice().sort((a, b) => fy(a) - fy(b)).forEach((o, i) => o.setDepth(i + 1));
         if (this._selBox) this._selBox.setDepth(1e6);
         this.drawShadows();
     }
