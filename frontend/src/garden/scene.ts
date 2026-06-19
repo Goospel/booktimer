@@ -281,6 +281,10 @@ export class GardenScene extends Phaser.Scene {
         this.shadowLayer.fillStyle(0x2e2a22, 0.22);
         for (const o of this.objs) {
             if (o.getData('kind') !== 'plant') continue;
+            // 건물은 넓은 아이소 박스라 식물용 작은 발밑 타원(plantPx*0.55)이 바닥보다 좁아
+            // "그림자 위에 뜬" 인상을 준다 → 건물은 타일에 flush로 앉히고 캐스트 그림자를 생략한다
+            // (CoC식: 건물은 제 footprint로 접지). 식물·소품은 기존 발밑 그림자 유지.
+            if (o.getData('axis') === 'BUILDING') continue;
             const w = this.plantPx * 0.55;
             const h = w * ISO_FLATTEN;
             this.shadowLayer.fillEllipse(o.x, o.y, w, h);

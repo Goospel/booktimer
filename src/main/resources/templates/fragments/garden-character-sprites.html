@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<!--
+  마을 작가 캐릭터 SVG 스프라이트 정의 — 코드 벡터(외부 에셋 0).
+
+  식물 스프라이트(garden-sprites.html)와 같은 패턴 — 화면 밖 <svg>에 작가 캐릭터를
+  <symbol id="sprite-{code}">로 1회 정의하고, 캔버스(Phaser)·도감(Vue)이 <use>·텍스처로 참조한다.
+  sprite_id가 null인 작가는 뷰가 이모지로 폴백하므로 여기 없어도 정상이다(미승격 종 혼재 무해).
+
+  모든 심볼 viewBox 0 0 32 32, 발밑(y≈31)·가운데(x=16) 기준 — spawnCharacter가 origin(0.5,1)로
+  발밑을 땅에 접지(아이소). 32×32 작은 크기 + 96px 래스터라 단순 양식화(실루엣·색 구분) 필수.
+  베이스 아바타(머리·머리카락·몸통) + 변형(헤어·옷색·소품)으로 30종을 조합한다(N-080).
+-->
+<svg th:fragment="sprites" class="garden-sprite-defs" width="0" height="0" aria-hidden="true"
+     focusable="false" xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden">
+    <defs>
+        <!-- 한강 — 긴 흑발 + 자주 코트 + 가슴에 안은 책(작가 모티프). 파일럿(룩 확정용). -->
+        <symbol id="sprite-han_gang" viewBox="0 0 32 32">
+            <!-- 접지 그림자(발밑·배회 시 함께 이동) — 캐릭터는 게임 Phaser 그림자 대상이 아니라
+                 심볼에 구워넣어 접지(건물·식물과 일관). -->
+            <ellipse cx="16" cy="30.6" rx="6.6" ry="2.2" fill="#2E2A22" opacity="0.22"/>
+            <!-- 신발 -->
+            <path d="M11 28h4v3h-5z" fill="#3A332E"/>
+            <path d="M17 28h4l1 3h-5z" fill="#3A332E"/>
+            <!-- 긴 코트(어깨→밑단 사다리꼴) -->
+            <path d="M12.5 13c-1.2 0-2.2 0.9-2.4 2.1L8 30h16l-2.1-14.9C21.7 13.9 20.7 13 19.5 13z" fill="#8C5468"/>
+            <!-- 코트 음영(왼쪽) -->
+            <path d="M12.5 13c-1.2 0-2.2 0.9-2.4 2.1L8 30h4l1.5-17z" fill="#784456"/>
+            <!-- 옷섶 세로선 -->
+            <path d="M16 14v15.5" stroke="#6B3C4C" stroke-width="1" fill="none"/>
+            <!-- 머리카락 뒤(어깨까지 흘러내림) -->
+            <path d="M9.6 9.2c0-3.9 2.6-6.6 6.4-6.6s6.4 2.7 6.4 6.6c0 2.3-0.6 4.6-1.3 6.8l-2-1.4-0.6 4.2-1.2-1.2-1.3 1.2-1.2-1.2-0.6-4.2-2 1.4c-0.7-2.2-1.3-4.5-1.3-6.8z" fill="#2B2622"/>
+            <!-- 목 -->
+            <rect x="14.6" y="11" width="2.8" height="3.4" fill="#E6C39E"/>
+            <!-- 얼굴 -->
+            <circle cx="16" cy="9" r="4.4" fill="#EBC9A4"/>
+            <!-- 앞머리 -->
+            <path d="M11.6 8.4c0.4-3.2 2.3-5.2 4.4-5.2s4 2 4.4 5.2c-1.3-1.6-2.7-2.2-4.4-2.2s-3.1 0.6-4.4 2.2z" fill="#2B2622"/>
+            <!-- 가슴에 안은 책(작가·독서 시그니처) -->
+            <rect x="11.6" y="18.4" width="8.8" height="6" rx="0.6" fill="#E4D4AC"/>
+            <path d="M16 18.4v6" stroke="#C2AC7C" stroke-width="0.9" fill="none"/>
+            <rect x="11.6" y="18.4" width="8.8" height="6" rx="0.6" fill="none" stroke="#B59A66" stroke-width="0.7"/>
+        </symbol>
+    </defs>
+</svg>
