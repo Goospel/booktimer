@@ -325,3 +325,4 @@
 | 2026-06-19 | **마을 카메라 중앙 정렬 + 줌아웃 하한 containZoom 동적화** — Phaser Camera.centerOn의 zoom 미보정 결함으로 좌상단 쏠림 → cameraCenterScroll(scrollX=worldW/2-viewW/(2·zoom)) 공식으로 대체. 줌아웃 하한을 고정 ZOOM_MIN=0.25에서 iewZoomBounds() containZoom(월드 전체 딱 들어오는 줌)으로 동적화 — 사용자가 줌아웃 시 마을 전체가 항상 화면에 보임. pure.ts iewZoomBounds·cameraCenterScroll 신설 + TDD 8종 RED→GREEN(vitest 443). scene.ts fitCamera·pinch·wheel 핸들러 갱신. 번들 재빌드. |
 
 | 2026-06-19 | **마을 모바일 초기 중앙 정렬 버그 픽스** — `scene.ts create()` 첫 측정을 `getBoundingClientRect`에서 `this.scale.gameSize`로 통일, `delayedCall(0)` 재보정 추가, `initH: 0` 폴백 제거(T-069). 번들 재빌드. |
+| 2026-06-20 | **마을 모바일 가로 중앙 정렬 진짜 원인 수정** — `cam.setBounds(0,0,W,H)`가 containZoom 상태에서 centering 음수 scrollX를 클램핑해 왼쪽 치우침 발생(T-069). `fitCamera()`에서 centering offset 기반 동적 bounds 확장으로 수정. 번들 재빌드. |

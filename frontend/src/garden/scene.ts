@@ -104,7 +104,6 @@ export class GardenScene extends Phaser.Scene {
         }
 
         const cam = this.cameras.main;
-        cam.setBounds(0, 0, this.cfg.worldW, this.cfg.worldH);
         // RESIZE 모드: gameSize를 초기 측정 소스로 통일 — getBoundingClientRect 혼용 제거.
         // 모바일 100dvh 체인은 create() 시점 캔버스 height가 0일 수 있어 fitCamera 가드를 스킵함(T-069).
         const { width: initW, height: initH } = this.scale.gameSize;
@@ -471,6 +470,12 @@ export class GardenScene extends Phaser.Scene {
             this._minZoom = min;
             cam.setZoom(initial);
             const s = cameraCenterScroll(this.cfg.worldW, this.cfg.worldH, w, h, cam.zoom);
+            // 뷰포트가 월드보다 넓을 때 centering scrollX/Y가 음수 → setBounds(0,0,W,H)가
+            // 클램핑해 왼쪽/위 고정 버그 발생(T-069 진짜 원인).
+            // offset만큼 bounds를 확장해 음수 스크롤을 허용 — containZoom에서 월드 중앙 고정.
+            const offX = Math.max(0, -s.scrollX);
+            const offY = Math.max(0, -s.scrollY);
+            cam.setBounds(-offX, -offY, this.cfg.worldW + 2 * offX, this.cfg.worldH + 2 * offY);
             cam.setScroll(s.scrollX, s.scrollY);
         }
     }
