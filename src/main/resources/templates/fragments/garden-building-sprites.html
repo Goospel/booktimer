@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<!--
+  마을 출판사 건물 SVG 스프라이트 정의 — 코드 벡터(외부 에셋 0).
+
+  식물 스프라이트(garden-sprites.html)와 같은 패턴 — 화면 밖 <svg>에 건물을
+  <symbol id="sprite-{code}">로 1회 정의하고, 캔버스(Phaser)·도감(Vue)이 <use>·텍스처로 참조한다.
+  건물은 도메인상 PlacementAxis.BUILDING 식물로 취급 → spawnObject isPlant=true(발밑 앵커) 경로.
+  sprite_id가 null인 건물은 뷰가 이모지로 폴백하므로 여기 없어도 정상이다(미승격 종 혼재 무해).
+
+  모든 심볼 viewBox 0 0 32 32, 발밑(y≈31)·가운데(x=16) 기준. 아이소 박스(코너뷰) — 두 벽면 명암 +
+  지붕 윗면 + 간판 띠 + 문·창. 32×32라 단순 양식화(3면 실루엣·색 구분) 필수.
+  대표 출판사 소수만 고유, 나머지는 베이스+변형(층수·벽색·지붕형)으로 조합한다(N-080).
+-->
+<svg th:fragment="sprites" class="garden-sprite-defs" width="0" height="0" aria-hidden="true"
+     focusable="false" xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden">
+    <defs>
+        <!-- 민음사 — 아이소 코너뷰 석조 건물 + 남색 지붕·간판. 파일럿(룩 확정용). -->
+        <symbol id="sprite-minumsa" viewBox="0 0 32 32">
+            <!-- 왼쪽 벽(그늘) -->
+            <path d="M16 31 6 26V12l10 5z" fill="#B58E63"/>
+            <!-- 오른쪽 벽(빛) -->
+            <path d="M16 31 26 26V12l-10 5z" fill="#D4B07C"/>
+            <!-- 지붕 윗면(다이아) -->
+            <path d="M16 17 6 12 16 7l10 5z" fill="#3B4E72"/>
+            <!-- 지붕 마루 음영(왼쪽 절반) -->
+            <path d="M16 7 6 12l10 5z" fill="#32436A"/>
+            <!-- 간판 띠(오른쪽 벽 상단, 남색) -->
+            <path d="M16 17 26 12v3l-10 5z" fill="#22324F"/>
+            <!-- 간판 띠(왼쪽 벽 상단) -->
+            <path d="M16 17 6 12v3l10 5z" fill="#1B283F"/>
+            <!-- 문(오른쪽 벽) -->
+            <path d="M19 29.5 22 28v-7l-3 1.5z" fill="#5A3F2A"/>
+            <path d="M19 22.5 22 21v1l-3 1.5z" fill="#7A5638"/>
+            <!-- 창(오른쪽 벽) -->
+            <path d="M23.5 24.5 25 23.75V21l-1.5 0.75z" fill="#A7C0CC"/>
+            <!-- 창(왼쪽 벽) 2개 -->
+            <path d="M8.5 21 11 22.25V19.5L8.5 18.25z" fill="#94B0BE"/>
+            <path d="M12 23 14.5 24.25V21.5L12 20.25z" fill="#94B0BE"/>
+        </symbol>
+    </defs>
+</svg>
