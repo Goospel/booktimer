@@ -59,6 +59,7 @@
 - [T-067. Phaser 캔버스를 CSS `transform: rotate()`로 돌리면 포인터 hit-test가 깨진다 — 카메라 회전을 쓸 것](#t-067-phaser-캔버스를-css-transform-rotate로-돌리면-포인터-hit-test가-깨진다--카메라-회전을-쓸-것)
 - [T-068. 카메라 강제 회전(`cam.setRotation`)은 기기를 거꾸로 들면 방향이 반대 — 순수 반응형이 정답](#t-068-카메라-강제-회전camsetrotation은-기기를-거꾸로-들면-방향이-반대--순수-반응형이-정답)
 - [T-069. 모바일 가로 첫 로드에서 마을 왼쪽 치우침 — `cam.setBounds`가 centering 음수 scrollX 클램핑](#t-069-모바일-가로-첫-로드에서-마을-왼쪽-치우침--cambounds가-centering-음수-scrollx-클램핑)
+- [T-070. bootRun은 장기 실행 태스크라 Gradle 진행률이 80%대에서 멈춘다(정상) — % 아닌 로그/포트로 ready 판정](#t-070-bootrun은-장기-실행-태스크라-gradle-진행률이-80대에서-멈춘다정상---아닌-로그포트로-ready-판정)
 
 ---
 
@@ -1342,6 +1343,24 @@ cam.setScroll(s.scrollX, s.scrollY);
 
 ---
 
+## T-070. bootRun은 장기 실행 태스크라 Gradle 진행률이 80%대에서 멈춘다(정상) — % 아닌 로그/포트로 ready 판정
+
+**증상**: 로컬 `./gradlew bootRun`이 `80% EXECUTING [Nm Ns]`에서 더 안 올라가고 멈춘 듯 보인다. 그러나 브라우저로 접속하면 앱은 완전히 정상 작동. 진행률이 100%/완료되길 기다리면(특히 Claude Code가 foreground로 실행하면) 영영 안 끝나 무한 대기·타임아웃에 걸린다.
+
+**원인**: `bootRun`은 Spring Boot 앱을 띄우고 그 프로세스를 **계속 실행 상태로 유지**하는 장기 실행(long-running) 태스크다. Gradle 진행률 막대는 "태스크 그래프 중 완료된 태스크 비율"인데, 마지막 `bootRun` 태스크가 서버가 살아있는 한 끝나지 않아 그 직전(≈80%, 정확한 값은 태스크 수에 따라 다름)에서 고정된다. 100%는 앱을 종료(Ctrl+C)해야 도달 — **설계상 정상이고 버그 아님**.
+
+**해결**: 진행률 %가 아니라 **로그/포트로 ready 판정**한다.
+- 준비 완료 신호 = `Tomcat started on port 8080` + `Started BooktimerApplication in N seconds` 로그(첫 요청 시 뜨는 `DispatcherServlet` 초기화는 lazy라 무관, 끝에 보이는 `.well-known/...com.chrome.devtools.json` 404 WARN도 크롬 자동요청이라 무해).
+- Claude Code는 `bootRun`을 **background로 실행**(`run_in_background`)하고 위 로그 또는 8080 LISTEN이 잡히면 진행. foreground(blocking)로 두면 명령이 반환을 안 해 무한 대기에 걸린다.
+- 포트 확인(PowerShell): `Get-NetTCPConnection -LocalPort 8080 -State Listen`.
+- 검증 끝나면 8080 반납(본인이 띄운 건 본인이 끔 — CLAUDE.md 워크트리 절).
+
+**예방**: long-running 명령(`bootRun`, `npm run dev`, watch류)은 항상 background + ready 신호(로그/포트)로 판정. Gradle %를 완료 신호로 쓰지 말 것.
+
+**관련**: T-063(번들 stale·bootRun 반영), CLAUDE.md 빌드/실행 메모(bootRun·8080 반납).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1416,3 +1435,4 @@ cam.setScroll(s.scrollX, s.scrollY);
 | 2026-06-19 | T-067 (Phaser 캔버스를 CSS `transform: rotate()`로 돌리면 포인터 hit-test가 깨진다 — `cam.setRotation()` + 팬 `getWorldPoint` 교체로 입력 정렬 유지 / T-050·N-100·PR #411) |
 | 2026-06-19 | T-068 (`cam.setRotation` 강제 가로 회전은 기기를 거꾸로 들면 방향 반대 — 세로에도 방향이 있어 고정 회전 부적합 / 해결=`fitCamera`+`containZoomFor` 순수 반응형, `ZOOM_MIN=0.25`, 팬·핀치·휠 보기/편집 공통 분리, DOM 회전 래퍼 제거 / T-067·PR #413) |
 | 2026-06-20 | T-069 (모바일 가로 첫 로드 마을 왼쪽 치우침 / 진짜 원인=`cam.setBounds(0,0,W,H)`가 containZoom 상태 centering 음수 scrollX를 클램핑 / 해결=`fitCamera`에서 centering offset만큼 bounds 동적 확장, `create()` 정적 setBounds 제거 / PR #415) |
+| 2026-06-20 | T-070 (bootRun은 장기 실행 태스크라 Gradle 진행률이 80%대서 멈춤=정상, 100%는 앱 종료 시 도달 / ready 판정은 % 아닌 로그 `Started ...`·8080 LISTEN, Claude Code는 background 실행해야 foreground 무한대기 회피 / 검증 후 8080 반납 / T-063) |
