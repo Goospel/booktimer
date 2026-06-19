@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
 import {
     GRID_COLS, GRID_ROWS, ISO_FLATTEN,
-    clampRotation, clampZoom, initialZoomFor, containZoomFor, plantWorldSize,
+    ZOOM_MIN, ZOOM_MAX,
+    clampRotation, clampZoom, plantWorldSize,
+    viewZoomBounds, cameraCenterScroll,
     cellOf, cellCenter, snapToCell,
     normToIsoPixel, isoPixelToNorm,
     isOutsideWorld, resolveDrop, nearestFreeCell,
@@ -40,8 +42,6 @@ export interface GardenSceneConfig {
     onMessage?: (msg: string) => void;
 }
 
-const TARGET_PLANT_CSS = 36;
-
 function svgTextureUrl(symbolId: string): string | null {
     const sym = document.getElementById(symbolId);
     if (!sym) return null;
@@ -65,6 +65,7 @@ export class GardenScene extends Phaser.Scene {
     _panning = false;
     _panMoved = false;
     _pinchDist = 0;
+    _minZoom = ZOOM_MIN;
 
     constructor(cfg: GardenSceneConfig) {
         super('garden');
@@ -134,7 +135,7 @@ export class GardenScene extends Phaser.Scene {
                 if (this._pinchDist > 0) {
                     const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
                     const before = cam.getWorldPoint(mx, my);
-                    cam.setZoom(clampZoom(cam.zoom * (dist / this._pinchDist)));
+                    cam.setZoom(clampZoom(cam.zoom * (dist / this._pinchDist), this._minZoom, ZOOM_MAX));
                     const after = cam.getWorldPoint(mx, my);
                     cam.scrollX += before.x - after.x;
                     cam.scrollY += before.y - after.y;
@@ -158,7 +159,7 @@ export class GardenScene extends Phaser.Scene {
         });
         this.input.on('wheel', (pointer: Phaser.Input.Pointer, _objs: unknown, _dx: number, dy: number) => {
             const before = cam.getWorldPoint(pointer.x, pointer.y);
-            cam.setZoom(clampZoom(cam.zoom * (dy > 0 ? 0.9 : 1.1)));
+            cam.setZoom(clampZoom(cam.zoom * (dy > 0 ? 0.9 : 1.1), this._minZoom, ZOOM_MAX));
             const after = cam.getWorldPoint(pointer.x, pointer.y);
             cam.scrollX += before.x - after.x;
             cam.scrollY += before.y - after.y;
@@ -458,16 +459,17 @@ export class GardenScene extends Phaser.Scene {
         return set;
     }
 
-    // 초기 줌: min(식물36px 기준, 전체 contain) — 세로에선 월드 전체가 보이게.
-    // 회전 없음 — 기기 방향 그대로.
+    // 초기 줌 = 월드 전체 보기(containZoom), 중앙 = displayDim 기반 setScroll.
+    // centerOn은 zoom 미보정이라 와이드 화면에서 좌상단 쏠림 발생 → setScroll로 대체.
     fitCamera(w: number, h: number) {
         const cam = this.cameras.main;
         if (w > 0 && h > 0) {
-            const containZ = containZoomFor(w, h, this.cfg.worldW, this.cfg.worldH);
-            const plantZ = initialZoomFor(TARGET_PLANT_CSS, this.plantPx, w, this.cfg.worldW);
-            cam.setZoom(clampZoom(Math.min(plantZ, containZ)));
+            const { min, initial } = viewZoomBounds(w, h, this.cfg.worldW, this.cfg.worldH);
+            this._minZoom = min;
+            cam.setZoom(initial);
+            const s = cameraCenterScroll(this.cfg.worldW, this.cfg.worldH, w, h, cam.zoom);
+            cam.setScroll(s.scrollX, s.scrollY);
         }
-        cam.centerOn(this.cfg.worldW / 2, this.cfg.worldH / 2);
     }
 
     // z-order: y 오름차순 정렬(낮은 y=뒤, 높은 y=앞) — CoC 아이소 자동 깊이. T-055.

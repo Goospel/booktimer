@@ -48,6 +48,18 @@ export function containZoomFor(viewW: number, viewH: number, worldW: number, wor
     return Math.min(viewW / worldW, viewH / worldH);
 }
 
+// 마을 보기 줌 한계 정책: 하한 = 월드 전체가 뷰에 들어오는 줌(containZoom), 상한 = ZOOM_MAX.
+// containZoom이 [ZOOM_MIN, ZOOM_MAX]를 벗어나면 clamp(초소형 월드/0 뷰포트 방어).
+export function viewZoomBounds(viewW: number, viewH: number, worldW: number, worldH: number): { min: number; max: number; initial: number } {
+    const contain = clampZoom(containZoomFor(viewW, viewH, worldW, worldH), ZOOM_MIN, ZOOM_MAX);
+    return { min: contain, max: ZOOM_MAX, initial: contain };
+}
+
+// 보이는 영역의 중심을 (worldW/2, worldH/2)에 맞추는 스크롤(월드 좌표). displayDim = viewDim / zoom.
+export function cameraCenterScroll(worldW: number, worldH: number, viewW: number, viewH: number, zoom: number): { scrollX: number; scrollY: number } {
+    return { scrollX: worldW / 2 - viewW / (2 * zoom), scrollY: worldH / 2 - viewH / (2 * zoom) };
+}
+
 export function cellOf(x: number, y: number, cols: number, rows: number): { col: number; row: number } {
     const col = Math.min(cols - 1, Math.max(0, Math.floor(x * cols)));
     const row = Math.min(rows - 1, Math.max(0, Math.floor(y * rows)));
