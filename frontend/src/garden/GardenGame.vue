@@ -16,10 +16,10 @@
 
     <!-- 편집 모드 -->
     <template v-if="editing">
-      <!-- 편집 Phaser 캔버스 — 풀스크린 (카메라 회전이라 DOM 안 돎) -->
+      <!-- 편집 Phaser 캔버스 — 풀스크린 -->
       <div id="garden-phaser" class="garden-phaser-fill"></div>
 
-      <!-- UI 래퍼 — portrait에서 게임 카메라와 같은 시각 방향으로 회전 -->
+      <!-- 편집 패널 래퍼 -->
       <div class="village-ui-wrap">
       <!-- 편집 패널 — 하단 오버레이 -->
       <div class="village-edit-panel">

@@ -3,35 +3,32 @@
     <div v-if="loadError" class="village-loading">⚠️ 마을을 불러오지 못했어요.</div>
     <div v-else-if="!data" class="village-loading">🌱 불러오는 중…</div>
     <template v-else>
-      <!-- 게임 스테이지 — 풀스크린 채움 (카메라 회전이라 DOM 안 돎) -->
+      <!-- 게임 스테이지 — 풀스크린 채움 -->
       <GardenGame ref="gameRef" :data="data" />
 
-      <!-- UI 래퍼 — portrait에서 게임 카메라(+π/2)와 같은 시각 방향으로 회전 -->
-      <div class="village-ui-wrap">
-        <!-- HUD — 게임 위 절대배치 버튼들 -->
-        <div class="village-hud">
-          <div class="village-hud-top">
-            <a href="/" class="village-hud-brand">
-              <span>📚</span> BookTimer
-            </a>
-            <span class="village-hud-greeting">{{ nickname }}님의 마을</span>
-          </div>
-          <div class="village-hud-actions">
-            <button type="button" class="village-hud-btn" @click="gameRef?.startEdit()">✏️ 꾸미기</button>
-            <button type="button" class="village-hud-btn" @click="dexOpen = true">📖 도감</button>
-            <a href="/" class="village-hud-btn">← 대시보드</a>
-          </div>
+      <!-- HUD — .village-shell 기준 절대배치 -->
+      <div class="village-hud">
+        <div class="village-hud-top">
+          <a href="/" class="village-hud-brand">
+            <span>📚</span> BookTimer
+          </a>
+          <span class="village-hud-greeting">{{ nickname }}님의 마을</span>
         </div>
+        <div class="village-hud-actions">
+          <button type="button" class="village-hud-btn" @click="gameRef?.startEdit()">✏️ 꾸미기</button>
+          <button type="button" class="village-hud-btn" @click="dexOpen = true">📖 도감</button>
+          <a href="/" class="village-hud-btn">← 대시보드</a>
+        </div>
+      </div>
 
-        <!-- 도감 전체 오버레이 (transform 조상 안 — portrait시 래퍼 기준 inset:0) -->
-        <div v-if="dexOpen" class="village-dex-overlay" @click.self="dexOpen = false">
-          <div class="village-dex-panel">
-            <div class="village-dex-head">
-              <span>📖 도감</span>
-              <button type="button" class="village-dex-close" @click="dexOpen = false">✕</button>
-            </div>
-            <GardenDex :catalog="data.catalog" />
+      <!-- 도감 전체 오버레이 -->
+      <div v-if="dexOpen" class="village-dex-overlay" @click.self="dexOpen = false">
+        <div class="village-dex-panel">
+          <div class="village-dex-head">
+            <span>📖 도감</span>
+            <button type="button" class="village-dex-close" @click="dexOpen = false">✕</button>
           </div>
+          <GardenDex :catalog="data.catalog" />
         </div>
       </div>
     </template>

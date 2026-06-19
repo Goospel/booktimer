@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import {
     GRID_COLS, GRID_ROWS, ISO_FLATTEN,
-    clampRotation, clampZoom, initialZoomFor, plantWorldSize,
+    clampRotation, clampZoom, initialZoomFor, containZoomFor, plantWorldSize,
     cellOf, cellCenter, snapToCell,
     normToIsoPixel, isoPixelToNorm,
     isOutsideWorld, resolveDrop, nearestFreeCell,
@@ -65,7 +65,6 @@ export class GardenScene extends Phaser.Scene {
     _panning = false;
     _panMoved = false;
     _pinchDist = 0;
-    _portrait = false;
 
     constructor(cfg: GardenSceneConfig) {
         super('garden');
@@ -106,23 +105,67 @@ export class GardenScene extends Phaser.Scene {
 
         const cam = this.cameras.main;
         cam.setBounds(0, 0, this.cfg.worldW, this.cfg.worldH);
-        // RESIZE 모드: 캔버스 크기로 초기 방향·줌·중심 계산. getBoundingClientRect가 0이면 폴백.
+        // RESIZE 모드: 캔버스 크기로 초기 줌·중심 계산. getBoundingClientRect가 0이면 폴백.
         const bounds = this.sys.game.canvas.getBoundingClientRect();
         const initW = bounds.width > 0 ? bounds.width : canvasCss;
         const initH = bounds.height > 0 ? bounds.height : 0;
-        this.applyOrientation(initW, initH);
+        this.fitCamera(initW, initH);
 
-        // RESIZE 이벤트 — 뷰포트가 바뀔 때(화면 회전·창 크기 변경) 방향·줌·중심 재계산.
+        // RESIZE 이벤트 — 뷰포트가 바뀔 때(화면 회전·창 크기 변경) 줌·중심 재계산.
         this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
             const { width: w, height: h } = gameSize;
             if (w <= 0) return;
-            this.applyOrientation(w, h);
+            this.fitCamera(w, h);
         });
 
-        if (!this.cfg.readonly) {
-            this.input.addPointer(1);
-            this._pinchDist = 0;
+        // 공통 입력 — 보기·편집 모두: 팬·핀치·줌
+        this.input.addPointer(1);
+        this._pinchDist = 0;
 
+        this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+            this._panning = this.input.hitTestPointer(pointer).length === 0;
+            this._panMoved = false;
+        });
+        this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+            if (this.input.pointer1.isDown && this.input.pointer2.isDown) {
+                this._panning = false;
+                const p1 = this.input.pointer1, p2 = this.input.pointer2;
+                const dist = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
+                if (this._pinchDist > 0) {
+                    const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+                    const before = cam.getWorldPoint(mx, my);
+                    cam.setZoom(clampZoom(cam.zoom * (dist / this._pinchDist)));
+                    const after = cam.getWorldPoint(mx, my);
+                    cam.scrollX += before.x - after.x;
+                    cam.scrollY += before.y - after.y;
+                }
+                this._pinchDist = dist;
+                return;
+            }
+            this._pinchDist = 0;
+            if (!this._panning || !pointer.isDown) return;
+            // getWorldPoint 경유 — 카메라 줌에 맞게 스크롤 델타 보정.
+            const before = cam.getWorldPoint(pointer.prevPosition.x, pointer.prevPosition.y);
+            const after = cam.getWorldPoint(pointer.x, pointer.y);
+            cam.scrollX -= after.x - before.x;
+            cam.scrollY -= after.y - before.y;
+            this._panMoved = true;
+        });
+        this.input.on('pointerup', () => {
+            this._pinchDist = 0;
+            if (this._panning && !this._panMoved && this.selected) this.deselectPlant();
+            this._panning = false;
+        });
+        this.input.on('wheel', (pointer: Phaser.Input.Pointer, _objs: unknown, _dx: number, dy: number) => {
+            const before = cam.getWorldPoint(pointer.x, pointer.y);
+            cam.setZoom(clampZoom(cam.zoom * (dy > 0 ? 0.9 : 1.1)));
+            const after = cam.getWorldPoint(pointer.x, pointer.y);
+            cam.scrollX += before.x - after.x;
+            cam.scrollY += before.y - after.y;
+        });
+
+        // 편집 전용 입력 — 드래그·선택
+        if (!this.cfg.readonly) {
             this.input.on('gameobjectdown', () => { this._dragged = false; });
             this.input.on('dragstart', (_p: Phaser.Input.Pointer, obj: any) => {
                 this._dragged = true;
@@ -164,49 +207,6 @@ export class GardenScene extends Phaser.Scene {
             });
             this.input.on('gameobjectup', (_p: Phaser.Input.Pointer, obj: GObj) => {
                 if (!this._dragged) this.selectPlant(obj);
-            });
-
-            this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-                this._panning = this.input.hitTestPointer(pointer).length === 0;
-                this._panMoved = false;
-            });
-            this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-                if (this.input.pointer1.isDown && this.input.pointer2.isDown) {
-                    this._panning = false;
-                    const p1 = this.input.pointer1, p2 = this.input.pointer2;
-                    const dist = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
-                    if (this._pinchDist > 0) {
-                        const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
-                        const before = cam.getWorldPoint(mx, my);
-                        cam.setZoom(clampZoom(cam.zoom * (dist / this._pinchDist)));
-                        const after = cam.getWorldPoint(mx, my);
-                        cam.scrollX += before.x - after.x;
-                        cam.scrollY += before.y - after.y;
-                    }
-                    this._pinchDist = dist;
-                    return;
-                }
-                this._pinchDist = 0;
-                if (!this._panning || !pointer.isDown) return;
-                // getWorldPoint 경유 — 카메라 회전 시 축 어긋남 없이 보정.
-                const before = cam.getWorldPoint(pointer.prevPosition.x, pointer.prevPosition.y);
-                const after = cam.getWorldPoint(pointer.x, pointer.y);
-                cam.scrollX -= after.x - before.x;
-                cam.scrollY -= after.y - before.y;
-                this._panMoved = true;
-            });
-            this.input.on('pointerup', () => {
-                this._pinchDist = 0;
-                if (this._panning && !this._panMoved && this.selected) this.deselectPlant();
-                this._panning = false;
-            });
-
-            this.input.on('wheel', (pointer: Phaser.Input.Pointer, _objs: unknown, _dx: number, dy: number) => {
-                const before = cam.getWorldPoint(pointer.x, pointer.y);
-                cam.setZoom(clampZoom(cam.zoom * (dy > 0 ? 0.9 : 1.1)));
-                const after = cam.getWorldPoint(pointer.x, pointer.y);
-                cam.scrollX += before.x - after.x;
-                cam.scrollY += before.y - after.y;
             });
         }
 
@@ -458,16 +458,14 @@ export class GardenScene extends Phaser.Scene {
         return set;
     }
 
-    // portrait 판정: 모바일 폭(≤900px)에서 화면이 세로일 때만 카메라 회전. 데스크톱·태블릿 가로는 0.
-    // portrait 시 월드 X축(worldW)이 캔버스 높이에 매핑 → h를 기준 축으로 initialZoomFor.
-    applyOrientation(w: number, h: number) {
-        const portrait = w <= 900 && h > w;
+    // 초기 줌: min(식물36px 기준, 전체 contain) — 세로에선 월드 전체가 보이게.
+    // 회전 없음 — 기기 방향 그대로.
+    fitCamera(w: number, h: number) {
         const cam = this.cameras.main;
-        this._portrait = portrait;
-        cam.setRotation(portrait ? Math.PI / 2 : 0);
-        const axis = portrait && h > 0 ? h : w;
-        if (axis > 0) {
-            cam.setZoom(initialZoomFor(TARGET_PLANT_CSS, this.plantPx, axis, this.cfg.worldW));
+        if (w > 0 && h > 0) {
+            const containZ = containZoomFor(w, h, this.cfg.worldW, this.cfg.worldH);
+            const plantZ = initialZoomFor(TARGET_PLANT_CSS, this.plantPx, w, this.cfg.worldW);
+            cam.setZoom(clampZoom(Math.min(plantZ, containZ)));
         }
         cam.centerOn(this.cfg.worldW / 2, this.cfg.worldH / 2);
     }

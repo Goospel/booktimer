@@ -1,6 +1,6 @@
 // 자유 위치(Phase 1) 순수 좌표 코어 — DOM·Phaser 의존 0.
 
-export const ZOOM_MIN = 1, ZOOM_MAX = 2.5;
+export const ZOOM_MIN = 0.25, ZOOM_MAX = 2.5;
 export const PLANT_CELL_RATIO = 1.0;
 export const GRID_COLS = 20, GRID_ROWS = 16;
 export const ISO_FLATTEN = 0.5;
@@ -39,6 +39,13 @@ export function clampRotation(deg: number): number {
 
 export function clampZoom(z: number, min = ZOOM_MIN, max = ZOOM_MAX): number {
     return Math.min(max, Math.max(min, z));
+}
+
+// viewport(vW×vH)에 world(worldW×worldH) 전체가 딱 들어오는 최소 줌 — min(vW/worldW, vH/worldH).
+// 무효값(≤0) 시 ZOOM_MIN 폴백.
+export function containZoomFor(viewW: number, viewH: number, worldW: number, worldH: number): number {
+    if (viewW <= 0 || viewH <= 0 || worldW <= 0 || worldH <= 0) return ZOOM_MIN;
+    return Math.min(viewW / worldW, viewH / worldH);
 }
 
 export function cellOf(x: number, y: number, cols: number, rows: number): { col: number; row: number } {
