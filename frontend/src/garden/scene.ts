@@ -89,7 +89,6 @@ export class GardenScene extends Phaser.Scene {
     }
 
     create() {
-        const canvasCss = this.sys.game.canvas.getBoundingClientRect().width;
         this.plantPx = plantWorldSize(this.cfg.worldW, GRID_COLS);
         this.drawBackground();
         if (!this.cfg.readonly) this.drawGrid();
@@ -106,11 +105,15 @@ export class GardenScene extends Phaser.Scene {
 
         const cam = this.cameras.main;
         cam.setBounds(0, 0, this.cfg.worldW, this.cfg.worldH);
-        // RESIZE 모드: 캔버스 크기로 초기 줌·중심 계산. getBoundingClientRect가 0이면 폴백.
-        const bounds = this.sys.game.canvas.getBoundingClientRect();
-        const initW = bounds.width > 0 ? bounds.width : canvasCss;
-        const initH = bounds.height > 0 ? bounds.height : 0;
+        // RESIZE 모드: gameSize를 초기 측정 소스로 통일 — getBoundingClientRect 혼용 제거.
+        // 모바일 100dvh 체인은 create() 시점 캔버스 height가 0일 수 있어 fitCamera 가드를 스킵함(T-069).
+        const { width: initW, height: initH } = this.scale.gameSize;
         this.fitCamera(initW, initH);
+        // dvh 확정은 첫 프레임 이후 — 한 프레임 뒤 재보정으로 모바일 초기 중앙 정렬 보장.
+        this.time.delayedCall(0, () => {
+            const { width: w, height: h } = this.scale.gameSize;
+            this.fitCamera(w, h);
+        });
 
         // RESIZE 이벤트 — 뷰포트가 바뀔 때(화면 회전·창 크기 변경) 줌·중심 재계산.
         this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {

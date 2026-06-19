@@ -57,6 +57,8 @@
 - [T-059. Thymeleaf `<script>` 안 이중 대괄호 `[[` 표기 — 배열 of 배열·주석 속 공백 `[[ ]]`도 인라인 식으로 파싱됨, object 배열로 교체](#t-059-thymeleaf-script-안-이중-대괄호--표기--배열-of-배열주석-속-공백--도-인라인-식으로-파싱됨-object-배열로-교체)
 - [T-060. `@free-pure-core` 블록 순수함수 제거 시 하니스 destructure 목록 미갱신 → `ReferenceError` FAIL](#t-060-free-pure-core-블록-순수함수-제거-시-하니스-destructure-목록-미갱신--referenceerror-fail)
 - [T-067. Phaser 캔버스를 CSS `transform: rotate()`로 돌리면 포인터 hit-test가 깨진다 — 카메라 회전을 쓸 것](#t-067-phaser-캔버스를-css-transform-rotate로-돌리면-포인터-hit-test가-깨진다--카메라-회전을-쓸-것)
+- [T-068. 카메라 강제 회전(`cam.setRotation`)은 기기를 거꾸로 들면 방향이 반대 — 순수 반응형이 정답](#t-068-카메라-강제-회전camsetrotation은-기기를-거꾸로-들면-방향이-반대--순수-반응형이-정답)
+- [T-069. Phaser RESIZE 모드 `create()` 첫 측정이 모바일 100dvh 체인에서 0 → 초기 `fitCamera` 스킵 — PC는 안 드러남](#t-069-phaser-resize-모드-create-첫-측정이-모바일-100dvh-체인에서-0--초기-fitcamera-스킵--pc는-안-드러남)
 
 ---
 
@@ -1308,6 +1310,41 @@ fitCamera(w: number, h: number) {
 
 ---
 
+## T-069. Phaser RESIZE 모드 `create()` 첫 측정이 모바일 100dvh 체인에서 0 → 초기 `fitCamera` 스킵 — PC는 안 드러남
+
+**증상**: 모바일(/village 첫 로드)에서 마을이 중앙에 오지 않고 치우쳐 보인다. 화면 회전이나 창 크기 변경이 오면 그때야 중앙으로 복귀한다. PC에서는 처음부터 정상.
+
+**원인**: `create()`의 초기 측정이 `getBoundingClientRect()`를 쓰는데, Phaser가 마운트되는 순간 `.village-game-root`의 캔버스 높이가 `100dvh` 기반 `%` 체인에 의해 아직 0(또는 부정확)이다.
+
+```typescript
+// ❌ 기존 — height가 0이면 initH=0, fitCamera(w, 0) → if(w>0 && h>0) 가드에 걸려 스킵
+const bounds = this.sys.game.canvas.getBoundingClientRect();
+const initH = bounds.height > 0 ? bounds.height : 0;   // ← 폴백이 0
+this.fitCamera(initW, initH);
+```
+
+PC는 `.village-game-root`에 명시 높이(`min(100dvh, 800px)`)가 있어 `create()` 시점 측정이 정확하므로 이 버그가 숨겨진다. `resize` 이벤트가 오면 `gameSize`가 이미 확정돼 올바른 크기로 재실행되므로 "회전 후엔 정상"이 된다.
+
+**해결**: 측정 소스를 `this.scale.gameSize`로 통일 + 첫 프레임 뒤 재보정.
+
+```typescript
+// ✅ gameSize로 통일 — 0 폴백 제거, 첫 프레임 후 재보정
+const { width: initW, height: initH } = this.scale.gameSize;
+this.fitCamera(initW, initH);
+this.time.delayedCall(0, () => {
+    const { width: w, height: h } = this.scale.gameSize;
+    this.fitCamera(w, h);
+});
+```
+
+`delayedCall(0, ...)` — 0ms지연이지만 Phaser 타임라인 다음 틱이라 dvh 레이아웃 확정 후 실행된다.
+
+**예방**: Phaser RESIZE 모드 `create()`에서 뷰포트 크기가 필요하면 `this.scale.gameSize`를 쓴다. `canvas.getBoundingClientRect()`는 CSS 레이아웃 확정 전일 수 있어 모바일 dvh 체인에서 0을 돌려준다.
+
+**관련**: T-052·T-053·T-054(헤드리스·타이밍 사각), PR #414(중앙 정렬·containZoom), #415.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1381,3 +1418,4 @@ fitCamera(w: number, h: number) {
 | 2026-06-19 | T-066 (PowerShell `gh pr create --body "$(cat <<'EOF' ...)"` 파서 오류 — Windows PowerShell 5.1에서 bash heredoc `<<'EOF'`를 `"$(...)"` 안에 쓰면 `<`를 리다이렉션으로 파싱해 `Missing file specification`·`The '<' operator is reserved` 파서 오류 / 해결=PR body를 임시 파일(`.pr-body-tmp.md`)에 `Write`로 쓰고 `Get-Content ".pr-body-tmp.md" -Raw`를 변수에 받아 `gh pr create --body $body`로 전달, 사용 후 삭제 / 예방=PowerShell에서 멀티라인 문자열을 CLI 인라인 인자로 넘길 때 항상 파일 경유·`@'...'@` here-string은 할당 전용(인자로 직접 못 넘김) / T-026(한글 커밋 file 경유)과 같은 맥락 / PR #410) |
 | 2026-06-19 | T-067 (Phaser 캔버스를 CSS `transform: rotate()`로 돌리면 포인터 hit-test가 깨진다 — `cam.setRotation()` + 팬 `getWorldPoint` 교체로 입력 정렬 유지 / T-050·N-100·PR #411) |
 | 2026-06-19 | T-068 (`cam.setRotation` 강제 가로 회전은 기기를 거꾸로 들면 방향 반대 — 세로에도 방향이 있어 고정 회전 부적합 / 해결=`fitCamera`+`containZoomFor` 순수 반응형, `ZOOM_MIN=0.25`, 팬·핀치·휠 보기/편집 공통 분리, DOM 회전 래퍼 제거 / T-067·PR #413) |
+| 2026-06-19 | T-069 (Phaser RESIZE `create()` 첫 측정이 모바일 100dvh 체인에서 0 → `fitCamera` 가드 스킵 / 해결=`this.scale.gameSize`로 통일+`delayedCall(0,…)` 재보정 / PC는 명시 height라 숨겨짐 / PR #415) |
