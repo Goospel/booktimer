@@ -1,7 +1,5 @@
 package com.booktimer.web;
 
-import com.booktimer.garden.GardenLayoutService;
-import com.booktimer.garden.GardenView;
 import com.booktimer.user.Role;
 import com.booktimer.user.UserRegistrationService;
 import org.junit.jupiter.api.DisplayName;
@@ -75,24 +73,27 @@ class GardenControllerTest {
     }
 
     @Test
-    @DisplayName("GET /village: 인증 사용자에게 garden 뷰를 그리고 GardenView를 모델에 싣는다")
+    @DisplayName("GET /village: SPA 셸 — nickname만 모델에 담고 garden·placedItems는 모델에 없다 (S4 컷오버)")
+    void village_spaShell_hasNicknameOnly() throws Exception {
+        registrationService.register("spa@booktimer.com", "rawpw1234", "SPA사용자", SEOUL, Role.USER, today());
+
+        mockMvc.perform(get("/village").with(user("spa@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("nickname", "SPA사용자"))
+                .andExpect(model().attributeDoesNotExist("garden"))
+                .andExpect(model().attributeDoesNotExist("placedItems"));
+    }
+
+    @Test
+    @DisplayName("GET /village: 인증 사용자에게 garden 뷰를 그리고 nickname을 모델에 싣는다 (S4: SPA 셸)")
     void village_rendersForLoggedInUser() throws Exception {
         registrationService.register("garden@booktimer.com", "rawpw1234", "정원사", SEOUL, Role.USER, today());
 
-        var result = mockMvc.perform(get("/village").with(user("garden@booktimer.com")))
+        mockMvc.perform(get("/village").with(user("garden@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("garden"))
-                .andExpect(model().attribute("nickname", "정원사"))
-                .andExpect(model().attributeExists("garden"))
-                .andReturn();
-
-        Object garden = result.getModelAndView().getModel().get("garden");
-        assertThat(garden).isInstanceOf(GardenView.class);
-        // 4축 슬롯(시간·장르·작가출판사·레시피)이 모두 배선된다(카탈로그는 V35~V38 시드, H2엔 비어 non-null만 확인).
-        assertThat(((GardenView) garden).plants()).isNotNull();
-        assertThat(((GardenView) garden).genrePlants()).isNotNull();
-        assertThat(((GardenView) garden).diversityPlants()).isNotNull();
-        assertThat(((GardenView) garden).recipePlants()).isNotNull();
+                .andExpect(model().attribute("nickname", "정원사"));
+        // S4 컷오버: garden·placedItems 등 SSR 모델은 제거 — API(/api/garden)로 분리됨.
     }
 
     @Test
@@ -122,16 +123,14 @@ class GardenControllerTest {
     }
 
     @Test
-    @DisplayName("GET /village: 배치 렌더 모델(placedItems 통합·소품 카탈로그·월드 크기)이 함께 실린다")
-    void village_includesLayoutModel() throws Exception {
+    @DisplayName("GET /village: SPA 셸에 #village-app 마운트 포인트가 존재한다 (S4 컷오버)")
+    void village_spaShell_hasVillageAppMount() throws Exception {
         registrationService.register("garden-layout@booktimer.com", "rawpw1234", "정원사", SEOUL, Role.USER, today());
 
-        mockMvc.perform(get("/village").with(user("garden-layout@booktimer.com")))
+        String html = mockMvc.perform(get("/village").with(user("garden-layout@booktimer.com")))
                 .andExpect(status().isOk())
-                .andExpect(model().attributeExists("placedItems"))   // 식물+소품 통합(z 병합 정렬)
-                .andExpect(model().attributeExists("decorations"))   // 소품 카탈로그(팔레트)
-                .andExpect(model().attribute("worldWidth", GardenLayoutService.WORLD_WIDTH))
-                .andExpect(model().attribute("worldHeight", GardenLayoutService.WORLD_HEIGHT));
+                .andReturn().getResponse().getContentAsString();
+        assertThat(html).contains("id=\"village-app\"");
     }
 
     @Test

@@ -20,11 +20,10 @@
          :style="`aspect-ratio:${worldW} / ${worldH}`"></div>
   </div>
 
-  <!-- 로딩 / 빈 마을 상태 -->
+  <!-- Phaser 초기화 중 -->
   <div class="garden-stage" v-if="!phaserReady && !editing">
     <div class="garden-view" :style="`aspect-ratio:${worldW} / ${worldH}`">
-      <p v-if="loadError" style="text-align:center;padding:2rem">⚠️ 마을을 불러오지 못했어요.</p>
-      <p v-else style="text-align:center;padding:2rem">🌱 마을 불러오는 중…</p>
+      <p style="text-align:center;padding:2rem">🌱 마을 불러오는 중…</p>
     </div>
   </div>
   <p class="garden-next" v-if="!editing && phaserReady && emptyVillage">
@@ -83,28 +82,40 @@ import { ref, nextTick, onMounted, onUnmounted, markRaw } from 'vue';
 import Phaser from 'phaser';
 import { GardenScene, GardenItemMeta } from './scene';
 
+interface GameData {
+    world?: { width?: number; height?: number };
+    placed?: GardenItemMeta[];
+    owned?: GardenItemMeta[];
+    decorationCatalog?: GardenItemMeta[];
+    characters?: GardenItemMeta[];
+}
+
+const props = defineProps<{ data: GameData }>();
+
 // ⚠️ N-082: Phaser Game/Scene은 절대 ref/reactive에 넣지 않는다.
 // Vue Proxy가 Phaser 내부 순환참조를 깨뜨려 붕괴한다 — setup 클로저 변수로 반응성 밖에 둔다.
 let scene: GardenScene | null = null;
 let game: Phaser.Game | null = null;
 
-// API에서 받아오는 날 데이터 — 반응성 불필요
-let placed: GardenItemMeta[] = [];
-let chars: GardenItemMeta[] = [];
+// 셸에서 받은 데이터 — 반응성 불필요 (props에서 직접 초기화)
+let placed: GardenItemMeta[] = props.data.placed ?? [];
+let chars: GardenItemMeta[] = props.data.characters ?? [];
 
 // UI 반응 상태 (Phaser 객체 포함 금지)
 const editing = ref(false);
 const saving = ref(false);
 const message = ref('');
 const phaserReady = ref(false);
-const loadError = ref(false);
-const emptyVillage = ref(false);
-const owned = ref<GardenItemMeta[]>([]);
-const decorations = ref<GardenItemMeta[]>([]);
+const emptyVillage = ref(placed.length === 0);
+const owned = ref<GardenItemMeta[]>(props.data.owned ?? []);
+const decorations = ref<GardenItemMeta[]>(props.data.decorationCatalog ?? []);
 const placedKeys = ref<Set<string>>(new Set());
 const selected = ref<{ rotation: number } | null>(null);
-const worldW = ref(1000);
-const worldH = ref(800);
+const worldW = ref(props.data.world?.width ?? 1000);
+const worldH = ref(props.data.world?.height ?? 800);
+
+// placed 초기화 후에 key set을 빌드한다
+placedKeys.value = buildPlacedKeySet();
 
 function buildPlacedKeySet(): Set<string> {
     return new Set(
@@ -229,25 +240,7 @@ async function save() {
 }
 
 onMounted(async () => {
-    try {
-        const res = await fetch('/api/garden');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-
-        worldW.value = data.world?.width ?? 1000;
-        worldH.value = data.world?.height ?? 800;
-        placed = data.placed ?? [];
-        owned.value = data.owned ?? [];
-        decorations.value = data.decorationCatalog ?? [];
-        chars = data.characters ?? [];
-        placedKeys.value = buildPlacedKeySet();
-        emptyVillage.value = placed.length === 0;
-
-        await mountView();
-    } catch (e) {
-        console.error('[GardenGame] API fetch failed:', e);
-        loadError.value = true;
-    }
+    await mountView();
 });
 
 onUnmounted(() => {
