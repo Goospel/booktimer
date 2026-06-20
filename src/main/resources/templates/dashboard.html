@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <!-- 방문 통계(GA4, 측정 ID 설정 시에만) -->
     <th:block th:replace="~{analytics :: gtag}"></th:block>
+    <th:block th:replace="~{fragments/pwa-head :: meta}"></th:block>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>대시보드 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
