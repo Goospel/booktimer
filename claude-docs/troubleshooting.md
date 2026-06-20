@@ -64,6 +64,7 @@
 - [T-072. Service Worker scope = sw.js 파일 위치 — static 루트에 없으면 전역 제어 안 됨](#t-072-service-worker-scope--swjs-파일-위치--static-루트에-없으면-전역-제어-안-됨)
 - [T-073. 푸시 토글 함수에서 VAPID 체크를 최상단에 두면 OFF(철회) 경로도 막힌다](#t-073-푸시-토글-함수에서-vapid-체크를-최상단에-두면-off철회-경로도-막힌다)
 - [T-074. Thymeleaf 산술은 `${}` 안에 넣어야 정수 — `${x} / n`(밖)은 소수로 샌다](#t-074-thymeleaf-산술은--안에-넣어야-정수--x--n밖은-소수로-샌다)
+- [T-075. 파일명 고정 자산(pwa-install.js·app.css)을 SW cache-first로 두면 배포 후에도 stale 서빙](#t-075-파일명-고정-자산pwa-installjsappcss을-sw-cache-first로-두면-배포-후에도-stale-서빙)
 
 ---
 
@@ -1461,6 +1462,32 @@ th:text="${'· 누적 ' + (totalSeconds / 3600) + '시간 ...'}"
 
 ---
 
+## T-075. 파일명 고정 자산(pwa-install.js·app.css)을 SW cache-first로 두면 배포 후에도 stale 서빙
+
+**증상**: `pwa-install.js`에 `white-space:nowrap`을 추가해 배포(#427)했는데, 일부 기기에서 PWA 설치 칩 라벨이 여전히 두 줄로 보인다. 서버에는 최신 파일이 올라가 있다.
+
+**원인**: Service Worker가 구 `pwa-install.js`를 `shell-v3` 캐시에서 **cache-first**로 영구 서빙하고 있었다. `pwa-install.js`는 Vite 번들이 아닌 수동 파일이지만 **파일명이 고정**(해시 없음)이라 SW 캐시 버전을 올리지 않는 한 구 버전이 계속 살아남는다.
+
+**T-071(garden.js)**과 같은 뿌리: 파일명 고정 → SW cache-first → 배포해도 stale.
+
+**해결**:
+1. `sw.js`에 `NETWORK_FIRST` 배열 신설, 파일명 고정 코드·스타일 자산을 모아 network-first 전략으로 통일:
+   ```js
+   const NETWORK_FIRST = ['/garden/garden.js', '/css/app.css', '/pwa-install.js'];
+   // fetch 핸들러에서:
+   if (NETWORK_FIRST.includes(url.pathname)) { /* network-first */ }
+   ```
+2. `CACHE` 버전 상수를 `shell-v3` → `shell-v4`로 올려 activate 시 기존 사용자의 구 캐시를 강제 삭제.
+
+**예방**:
+- SW에서 관리할 **파일명 고정 자산이 생기면 `NETWORK_FIRST`에 추가**한다(garden.js·app.css·pwa-install.js 패턴).
+- 파일명에 콘텐츠 해시를 붙일 수 없는 자산이라면 반드시 network-first + CACHE 버전 관리.
+- 배포 후 "코드는 올라갔는데 화면이 안 바뀜"이면 SW stale 가능성 먼저 의심.
+
+**관련**: T-071(garden.js cache-first stale), N-101(PWA 레벨), PR #430.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1539,3 +1566,4 @@ th:text="${'· 누적 ' + (totalSeconds / 3600) + '시간 ...'}"
 | 2026-06-20 | T-071 (Service Worker + 해시 없는 번들(`garden.js` 파일명 고정) → cache-first만 쓰면 배포해도 사용자에게 안 묻힘 / Vite `entryFileNames: 'garden.js'`로 파일명이 고정이라 SW가 cache-first로 잡으면 캐시가 살아있는 한 구 버전이 계속 서빙됨 / 해결=`garden.js`는 SW에서 **network-first**(온라인이면 항상 네트워크 우선, 캐시는 오프라인 폴백), 나머지 정적 자산(CSS·아이콘·manifest)은 cache-first / 추가 안전장치=`CACHE` 버전 상수 올리면 activate에서 구 캐시 전량 삭제 / N-098(Vite 번들 static), N-101(PWA 레벨), PR L2) |
 | 2026-06-20 | T-072 (Service Worker scope = sw.js 파일 위치 / SW의 scope는 sw.js가 있는 경로를 기준으로 결정됨 — `static/garden/sw.js`이면 scope=`/garden/`이라 `/dashboard`·`/` 등이 제어 안 됨 / 해결=`static/sw.js`(static 루트 직하)에 두면 scope=`/` 전역 → 모든 경로 fetch를 가로챌 수 있음 / Vite의 outDir=`static/garden`이라 빌드 산출물에 섞이지 않도록 손수 파일로 static 루트에 배치 / N-101, PR L2) |
 | 2026-06-20 | T-073 (푸시 토글 함수에서 VAPID 체크를 최상단에 두면 OFF(철회) 경로도 막힌다 / VAPID 체크를 ON 분기 안으로 이동 / §50 수신거부는 즉시 처리 의무라 막히면 안 됨 / N-103·N-102, PWA L3b) |
+| 2026-06-21 | T-075 (파일명 고정 자산 pwa-install.js·app.css를 SW cache-first로 두면 배포 후에도 stale 서빙 — T-071(garden.js)과 같은 뿌리, NETWORK_FIRST 배열 + CACHE 버전 올림으로 해결 / PR #430) |
