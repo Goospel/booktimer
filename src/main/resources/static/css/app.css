@@ -1158,6 +1158,7 @@ a.book-title:hover { text-decoration: underline; }
 .book-detail-head .book-cover { width: 84px; height: 120px; }
 .book-detail-head .book-meta { gap: 6px; }
 .book-sub { font-size: .9rem; color: var(--muted); margin: 0; }
+.book-detail-head .book-meta > p:not(.affiliate-note) { margin: 0; }
 .book-author, .book-pub { font-size: .85rem; color: var(--muted); }
 .book-status-badge {
     align-self: flex-start;
