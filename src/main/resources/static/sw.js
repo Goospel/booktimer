@@ -1,9 +1,9 @@
-// BookTimer Service Worker — 앱 셸 캐싱 (L2)
+// BookTimer Service Worker — 앱 셸 캐싱 + 푸시 알림 (L2/L3a)
 // garden.js는 파일명 고정(해시 없음)이라 network-first로 stale 방지.
 // HTML 내비게이션·API는 network-first — SSR·인증 응답이라 캐시에 개인 데이터 담지 않음.
 // 정적 자산(CSS·아이콘·manifest)만 cache-first로 빠른 재사용.
 // 버전 상수: 정적 자산 갱신 시 올려 activate에서 구 캐시 삭제.
-const CACHE = 'shell-v2';
+const CACHE = 'shell-v3';
 
 const PRECACHE_URLS = [
     '/manifest.json',
@@ -72,6 +72,32 @@ self.addEventListener('fetch', (event) => {
                 caches.open(CACHE).then((c) => c.put(request, clone));
                 return res;
             });
+        })
+    );
+});
+
+// --- PWA L3a: 푸시 알림 수신 ---
+self.addEventListener('push', (event) => {
+    let d = {};
+    try { d = event.data ? event.data.json() : {}; } catch (_) {}
+    event.waitUntil(
+        self.registration.showNotification(d.title ?? '독서 마을', {
+            body: d.body ?? '오늘도 책 한 장 읽어볼까요? 📚',
+            icon: '/icons/icon-192.png',
+            data: d.url ?? '/village',
+        })
+    );
+});
+
+// 알림 클릭 시 /village 열기(또는 페이로드의 url)
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+            const target = event.notification.data || '/village';
+            const existing = wins.find((w) => new URL(w.url).pathname === target);
+            if (existing) return existing.focus();
+            return clients.openWindow(target);
         })
     );
 });

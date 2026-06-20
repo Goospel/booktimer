@@ -325,6 +325,52 @@ public class User extends BaseTimeEntity {
         return lastNudgeSentAt;
     }
 
+    /**
+     * 매일 독서 리마인더 푸시 알림 수신 여부(PWA L3a). 사용자가 직접 켠(opt-in) 상태일 때만 {@code true}.
+     * 기본 {@code false} — 구독 토글 ON → {@code true}, OFF(구독 전체 삭제) → {@code false}.
+     * transactional 성격(본인이 켠 알림)이라 §50 광고성 규제 적용 대상이 아니나,
+     * opt-out(토글 OFF → 구독 삭제)과 주간 발송 배려는 유지한다.
+     */
+    @Column(name = "daily_reminder_enabled", nullable = false)
+    private boolean dailyReminderEnabled = false;
+
+    /**
+     * 마지막 독서 리마인더 푸시를 발송한 시각. <b>하루 1회 멱등</b> 보장용 상태다 —
+     * 배치 실행 시 {@code lastReminderSentAt}이 오늘 KST 이전이면(또는 null) 대상이 된다.
+     * 성공 발송 후에만 기록해, 실패 사용자는 다음 배치에서 재시도된다.
+     */
+    @Column(name = "last_reminder_sent_at")
+    private java.time.Instant lastReminderSentAt;
+
+    /** 매일 독서 리마인더 푸시 알림을 활성화한다(opt-in). 구독 등록 시 호출. 멱등. */
+    public void enableDailyReminder() {
+        this.dailyReminderEnabled = true;
+    }
+
+    /** 매일 독서 리마인더 푸시 알림을 비활성화한다. 마지막 구독 삭제 시 호출. 멱등. */
+    public void disableDailyReminder() {
+        this.dailyReminderEnabled = false;
+    }
+
+    /** 매일 독서 리마인더 푸시 알림이 활성화돼 있는가. */
+    public boolean isDailyReminderEnabled() {
+        return dailyReminderEnabled;
+    }
+
+    /**
+     * 독서 리마인더 발송 시각을 기록한다 — 발송 직후 호출해 하루 1회 멱등을 보장한다.
+     *
+     * @param when 발송 시각(배치 시계 기준)
+     */
+    public void recordReminderSent(java.time.Instant when) {
+        this.lastReminderSentAt = when;
+    }
+
+    /** 마지막 독서 리마인더 발송 시각. 한 번도 안 보냈으면 {@code null}. */
+    public java.time.Instant getLastReminderSentAt() {
+        return lastReminderSentAt;
+    }
+
     /** 책BTI "다시 분석"의 하루 허용 횟수(악의적 반복 클릭 → LLM 남용 방어). */
     public static final int DAILY_PERSONALITY_REFRESH_LIMIT = 3;
 

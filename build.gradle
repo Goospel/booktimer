@@ -31,6 +31,12 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-session-jdbc'
 	// 이메일 발송(transactional) — JavaMailSender 자동구성. 실발송은 booktimer.email.enabled=true일 때만.
 	implementation 'org.springframework.boot:spring-boot-starter-mail'
+	// Web Push(VAPID) — 푸시 알림 발송. BouncyCastle(bcprov-jdk18on)은 VAPID 서명·ECDH 암호화에 쓰인다.
+	// web-push 5.1.1 의 transitives가 jdk15on을 가져오지만 jdk18on이 동일 API를 Java 21에서 제공하므로 교체.
+	implementation('nl.martijndwars:web-push:5.1.1') {
+		exclude group: 'org.bouncycastle', module: 'bcprov-jdk15on'
+	}
+	implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'
 	implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
