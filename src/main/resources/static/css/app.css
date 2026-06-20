@@ -1684,6 +1684,29 @@ a.book-title:hover { text-decoration: underline; }
     text-decoration: none;
 }
 
+/* 설정 알림 섹션 푸시 토글 버튼 — check-row 체크박스와 시각 일관성 */
+.btn-push-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: .9rem;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+    white-space: nowrap;
+}
+.btn-push-toggle:hover {
+    background: rgba(243, 238, 228, 1);
+    border-color: var(--accent);
+}
+.btn-push-toggle:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+}
+
 /* 도감 전체 오버레이 — backdrop 클릭·ESC로 닫힘 */
 .village-dex-overlay {
     position: fixed;

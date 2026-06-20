@@ -671,7 +671,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 
 - **랜딩 전면 리디자인 — 와이드 마케팅 랜딩(1080px, 세리프, 3단 반응형)** ✅ (PR #392, 2026-06-18): 460px 단일 컬럼 랜딩을 Claude Design 시안 기반 마케팅 페이지로 전면 교체. 핵심 결정: `body.landing-page`로 전역 앱 셸 격리·`landing.css` 별 파일 분리(전역 `app.css` 비오염). Gowun Batang 세리프 헤드라인 / 2단 비대칭 그리드(`.85fr 1.15fr` 등) / 잔디 CSS 목업(7×13 칸) / 정원·히어로 플레이스홀더(실제 캡처는 후속) / 4컬럼 기능 그리드 / 3단계 how-it-works / 반응형(860/480px). 음영 토큰 15개 추가. `LandingPageTest` 5/5 Green(신규 2건: garden 동선·핵심 키워드). 다음(백로그): 플레이스홀더 → 실제 화면 캡처 교체.
 
-### 📱 PWA 도입 — 홈 화면 설치 · 오프라인 · 푸시 · 설치 유도 (L1~L3c 전 단계 ✅ 2026-06-20)
+### 📱 PWA 도입 — 홈 화면 설치 · 오프라인 · 푸시 · 설치 유도 (L1~L3c 전 단계 ✅, 알림 설정 통합 ✅ 2026-06-21)
 
 > **동기**: iPad 가로에서 브라우저 주소창·탭바가 화면을 잡아먹어 마을 게임 영역이 좁아지는 문제 해소. `display: standalone`으로 홈 화면 설치 시 브라우저 UI 제거(상태바=시계·배터리 유지). 단계별 출하 내역은 아래 항목 + [changelog.md](claude-docs/changelog.md).
 
@@ -680,6 +680,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 - **L3a 본인 독서 리마인더 푸시 ✅ (2026-06-20)**: VAPID 키쌍(환경변수 주입, 실키 커밋 0) + `PushSubscription`(1:N 멀티 디바이스, endpoint unique) + V50 Flyway + `PushApiController`(subscribe upsert·unsubscribe IDOR 차단·public-key) + `PushSenderService`(404/410 만료 구독 삭제) + `PushReminderScheduler`(매일 KST 20시, `@ConditionalOnProperty push.enabled`) + `PushReminderService`(23h 멱등) + sw.js push/notificationclick + VillageApp HUD 알림 토글(iOS 미설치 게이트). TDD 19종 RED→GREEN. VAPID 키 설정 후 `BOOKTIMER_PUSH_ENABLED=true`로 점등.
 - **L3b 비활동 복귀 nudge 푸시 ✅ (2026-06-20)**: `marketingPushConsent`(이메일·L3a와 채널별 독립, §50 opt-in) + `marketingPushNudgeSentAt`(채널별 멱등) + V51 Flyway + `RetentionPushService`(7일 비활동·exists 구독·null-state 가드·EXPIRED 구독 삭제) + `RetentionPushScheduler`(매일 KST 19시, `@ConditionalOnProperty nudge-push.enabled`) + `/api/push/marketing-consent` 토글 API + VillageApp 복귀 알림 토글(§50: "(광고)" payload, OFF VAPID 불필요). TDD 20종 RED→GREEN. `BOOKTIMER_NUDGE_PUSH_ENABLED=true`·VAPID 설정 후 점등.
 - **L3c 설치 유도 칩 ✅ (2026-06-20)**: `static/pwa-install.js` ESM(빌드 없음) — 우하단 알약 칩 + × 7일 침묵(localStorage). 크로미움(beforeinstallprompt 디퍼드)·iOS Safari(공유→홈 화면 안내 오버레이)·standalone/기타 숨김. `pwa-head.html`에 `<script type="module">` 전역 주입 → 모든 페이지 노출. SecurityConfig `/pwa-install.js` permitAll. vitest 순수 함수 21종 RED→GREEN. 실 브라우저 게이트: 안드 크롬 칩→prompt·iOS Safari 칩→오버레이→수동 설치·× 7일 침묵·타이머 동선 비침범.
+- **알림 설정 통합 ✅ (2026-06-21)**: 마을 HUD 푸시 버튼 2개(L3a·L3b) 제거 → 설정 페이지 "알림" 섹션으로 통합. `notification-settings.js`(빌드 없는 ESM 섬, `pwa-install.js`와 동일 패턴, readyState 타이밍 보호·iOS 미설치 게이트·VAPID 미설정 비활성 포함) 신설. `SettingsController`에 vapidPublicKey·marketingPushConsent 모델 추가. `GardenController`·`garden.html`에서 vapid 주입 제거. VillageApp.vue 푸시 로직 전면 제거·garden.js 재빌드. CSS `.btn-push-toggle` 신설. 로직 중립 추출로 추후 설정 Vue 전환 시 재사용 가능.
 
 ### 📨 사용자 피드백/문의 (완료 ✅ 2026-06-08, PR #233 · 답장·유형필터 PR #234)
 

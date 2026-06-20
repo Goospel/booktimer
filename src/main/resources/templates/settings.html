@@ -7,6 +7,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>설정 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
+    <!-- CSRF 토큰 — notification-settings.js가 fetch 헤더로 사용 -->
+    <meta name="_csrf" th:content="${_csrf != null ? _csrf.token : ''}">
+    <!-- VAPID 공개키 — 설정 페이지 푸시 토글용 -->
+    <meta name="vapid-public-key" th:content="${vapidPublicKey}">
 </head>
 <body>
 <div class="container">
@@ -85,19 +89,45 @@
         </form>
     </section>
 
-    <!-- 소식·알림 (마케팅 수신동의 토글 — 선택, 기본 OFF) -->
-    <section class="card">
-        <h2>소식·알림</h2>
-        <form th:action="@{/settings/marketing}" method="post">
-            <div class="field">
-                <label class="check-row" for="marketingEmailConsent">
-                    <input type="checkbox" id="marketingEmailConsent" name="marketingEmailConsent"
-                           th:checked="${marketingEmailConsent}">
-                    <span>책 읽기를 다시 시작하도록 돕는 안내 메일 받기</span>
-                </label>
-                <span class="field-hint muted">오래 쉬면 살짝 알려드리는 재참여 메일이에요. 선택 항목이라 언제든 켜고 끌 수 있어요.</span>
-            </div>
-            <button type="submit" class="btn-primary">저장</button>
+    <!-- 알림 통합 섹션 — 푸시(①②) + 이메일(③) 한 카드에 -->
+    <section class="card"
+             id="notification-settings-container"
+             th:attr="data-marketing-push-consent=${marketingPushConsent}">
+        <h2>알림</h2>
+
+        <!-- ① 매일 독서 알림 (푸시) -->
+        <div class="field" data-push-row>
+            <button type="button" id="push-reminder-toggle" class="btn-push-toggle">
+                🔕 매일 독서 알림 받기
+            </button>
+            <span class="field-hint muted">오전 9시에 오늘 독서 목표를 알려드려요. 언제든 끌 수 있어요.</span>
+        </div>
+
+        <!-- ② 복귀 알림 (푸시·광고) -->
+        <div class="field" data-push-row>
+            <button type="button" id="push-marketing-toggle" class="btn-push-toggle">
+                📭 복귀 알림 받기
+            </button>
+            <span class="field-hint muted">오래 쉬면 살짝 알려드리는 알림이에요. 광고성 정보 수신 동의 항목이에요.</span>
+            <span id="push-marketing-hint" class="field-hint muted" hidden>
+                💡 매일 독서 알림이 꺼져 있으면 복귀 알림도 오지 않아요.
+            </span>
+        </div>
+
+        <!-- iOS 미설치 안내 -->
+        <div id="push-ios-install-hint" class="field-hint muted" hidden>
+            📱 iOS에서 알림을 받으려면 먼저 "공유 → 홈 화면에 추가"로 설치해 주세요.
+        </div>
+
+        <!-- ③ 복귀 안내 메일 (이메일·광고) -->
+        <form th:action="@{/settings/marketing}" method="post" class="field">
+            <label class="check-row" for="marketingEmailConsent">
+                <input type="checkbox" id="marketingEmailConsent" name="marketingEmailConsent"
+                       th:checked="${marketingEmailConsent}">
+                <span>복귀 안내 메일 받기</span>
+            </label>
+            <span class="field-hint muted">오래 쉬면 살짝 알려드리는 재참여 메일이에요. 선택 항목이라 언제든 켜고 끌 수 있어요.</span>
+            <button type="submit" class="btn-primary" style="margin-top:8px">저장</button>
         </form>
     </section>
 
@@ -122,5 +152,6 @@
 
     <p class="link-row"><a th:href="@{/}">← 대시보드로</a></p>
 </div>
+<script type="module" th:src="@{/notification-settings.js}"></script>
 </body>
 </html>

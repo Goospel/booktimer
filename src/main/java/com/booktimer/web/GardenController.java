@@ -4,7 +4,6 @@ import com.booktimer.garden.GardenLayoutService;
 import com.booktimer.garden.LayoutSaveRequest;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.user.User;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
@@ -29,22 +28,17 @@ public class GardenController {
 
     private final CurrentUserService currentUserService;
     private final GardenLayoutService gardenLayoutService;
-    private final String vapidPublicKey;
 
     public GardenController(CurrentUserService currentUserService,
-                            GardenLayoutService gardenLayoutService,
-                            @Value("${booktimer.push.vapid.public-key:not-configured}") String vapidPublicKey) {
+                            GardenLayoutService gardenLayoutService) {
         this.currentUserService = currentUserService;
         this.gardenLayoutService = gardenLayoutService;
-        this.vapidPublicKey = vapidPublicKey;
     }
 
     @GetMapping("/village")
     public String village(Principal principal, Model model) {
         User user = currentUserService.resolve(principal);
         model.addAttribute("nickname", user.getNickname());
-        model.addAttribute("vapidPublicKey", vapidPublicKey);
-        model.addAttribute("marketingPushConsent", user.isMarketingPushConsent());
         return "garden";
     }
 
