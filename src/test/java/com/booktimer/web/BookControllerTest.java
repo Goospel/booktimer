@@ -7,6 +7,8 @@ import com.booktimer.book.BookVisibility;
 import com.booktimer.follow.Follow;
 import com.booktimer.follow.FollowRepository;
 import com.booktimer.popularity.FollowScopePopularity;
+import com.booktimer.session.ReadingSession;
+import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -19,6 +21,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -56,6 +59,8 @@ class BookControllerTest {
     private BookRepository bookRepository;
     @Autowired
     private FollowRepository followRepository;
+    @Autowired
+    private ReadingSessionRepository sessionRepository;
     @Autowired
     private PasswordEncoder passwordEncoder;
 
@@ -466,7 +471,7 @@ class BookControllerTest {
     }
 
     @Test
-    @DisplayName("GET /books/{id}: 내 책이면 상세(책별 잔디·기록) 화면을 그린다")
+    @DisplayName("GET /books/{id}: 내 책이면 상세(월별 기록) 화면을 그리고 잔디(graph)는 싣지 않는다")
     void detail_rendersForOwner() throws Exception {
         User u = newUser("detail@booktimer.com");
         Book book = bookRepository.save(
@@ -475,7 +480,39 @@ class BookControllerTest {
         mockMvc.perform(get("/books/{id}", book.getId()).with(user("detail@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("book-detail"))
-                .andExpect(model().attributeExists("book", "graph", "history"));
+                .andExpect(model().attributeExists("book", "months", "totalSeconds"))
+                .andExpect(model().attributeDoesNotExist("graph", "history"));
+    }
+
+    @Test
+    @DisplayName("GET /books/{id}: 누적 시간을 소수점 없이 '시간/분'으로 적고, 월별 스크롤 UI를 렌더하며, 잔디는 없다")
+    void detail_rendersIntegerTotalAndMonthlyBrowser_noGrass() throws Exception {
+        User u = newUser("rt@booktimer.com");
+        Book book = bookRepository.save(
+                Book.register(u, "전쟁과 평화", null, null, null, null, null, BookStatus.READING));
+        // 서울 기준 6/1 30분 + 6/2 60분 → 누적 5400초 = 1시간 30분(소수 없음), 6월 섹션
+        saveSession(u, book, "2026-06-01T01:00:00Z", 1800L);
+        saveSession(u, book, "2026-06-02T01:00:00Z", 3600L);
+
+        mockMvc.perform(get("/books/{id}", book.getId()).with(user("rt@booktimer.com")))
+                .andExpect(status().isOk())
+                // 누적: 정확히 "1시간 30분" — 소수(11.09…)가 새지 않음
+                .andExpect(content().string(containsString("누적 1시간 30분")))
+                // 월별 ◀▶ 스크롤 UI 구성요소(독서 기록 화면과 동일)
+                .andExpect(content().string(containsString("month-browser")))
+                .andExpect(content().string(containsString("month-nav-label")))
+                .andExpect(content().string(containsString("record-scroll")))
+                // 잔디(컨트리뷰션 그래프)는 책 상세에서 제거됨
+                .andExpect(content().string(not(containsString("독서 잔디"))))
+                .andExpect(content().string(not(containsString("grass-grid"))));
+    }
+
+    /** 특정 책에 연결된 완료 세션을 저장한다(렌더 검증용 픽스처). */
+    private void saveSession(User u, Book b, String startIso, long durationSec) {
+        Instant start = Instant.parse(startIso);
+        ReadingSession s = ReadingSession.start(u, start, b);
+        s.end(start.plusSeconds(durationSec));
+        sessionRepository.save(s);
     }
 
     @Test

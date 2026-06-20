@@ -2,37 +2,28 @@ package com.booktimer.session;
 
 import com.booktimer.book.Book;
 import com.booktimer.book.BookStatus;
-import com.booktimer.timer.ReadingGoalChange;
-import com.booktimer.timer.ReadingGoalChangeRepository;
-import com.booktimer.timer.ReadingTimer;
-import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.time.YearMonth;
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * 책별 상세(잔디 + 일자별 기록 + 누적 시간) 서비스 단위 테스트 — 레포 mock + fixed Clock.
+ * 책별 상세(월별 일자 기록 + 누적 시간) 서비스 단위 테스트 — 레포 mock.
  *
- * <p>그리드 구성은 {@link ContributionGraphBuilderTest}, "오늘" 경계는 {@link ReadingContributionServiceTest}가
- * 본다. 여기선 "이 책의 완료 세션만" 일자별로 묶어 잔디·기록·총합으로 환산하는 조립을 본다.
+ * <p>"이 책의 완료 세션만" 유저 타임존 일자로 묶고, 월별 섹션(최신 월·일 먼저)과 누적 시간으로
+ * 환산하는 조립을 본다. 월 묶음 규칙 자체는 {@link ReadingHistoryServiceTest}(monthlyHistory)가
+ * 전수 검증하므로, 여기선 "책 필터 + 진행 중 제외 + 월 분리"의 결합만 본다.
  */
 class BookContributionServiceTest {
-
-    // 2026-06-02T15:30Z — Asia/Seoul(UTC+9)로는 6/3 00:30(=오늘)
-    private static final Instant NOW = Instant.parse("2026-06-02T15:30:00Z");
 
     private static User seoulUser() {
         return User.of("reader@booktimer.com", "h", "독자", "Asia/Seoul", Role.USER);
@@ -46,15 +37,10 @@ class BookContributionServiceTest {
     }
 
     @Test
-    @DisplayName("이 책의 완료 세션을 일자별로 묶어 잔디·기록·누적 시간을 만든다(진행 중은 제외)")
+    @DisplayName("이 책의 완료 세션을 월별로 묶어 누적 시간을 만든다(진행 중은 제외, 월 안 최신 일 먼저)")
     void detail_aggregatesThisBooksCompletedSessions() {
         ReadingSessionRepository repo = mock(ReadingSessionRepository.class);
-        ReadingTimerRepository timers = mock(ReadingTimerRepository.class);
-        when(timers.findByUser(any())).thenReturn(Optional.empty());
-        ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);
-        when(goalChanges.findByUserOrderByEffectiveDateAsc(any())).thenReturn(List.of());
-        Clock fixed = Clock.fixed(NOW, ZoneOffset.UTC);
-        BookContributionService service = new BookContributionService(repo, timers, goalChanges, fixed);
+        BookContributionService service = new BookContributionService(repo);
 
         User user = seoulUser();
         Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
@@ -62,28 +48,45 @@ class BookContributionServiceTest {
         // 서울 기준 6/1(30분), 6/2(60분) 완료 세션 + 진행 중 세션 1개(집계 제외)
         ReadingSession s1 = completed(user, book, "2026-06-01T01:00:00Z", 1800);
         ReadingSession s2 = completed(user, book, "2026-06-02T01:00:00Z", 3600);
-        ReadingSession active = ReadingSession.start(user, NOW, book);
+        ReadingSession active = ReadingSession.start(user, Instant.parse("2026-06-02T15:30:00Z"), book);
         when(repo.findByUserAndBook(user, book)).thenReturn(List.of(s1, s2, active));
 
         BookReadingDetail detail = service.detail(user, book);
 
-        assertThat(detail.totalSeconds()).isEqualTo(5400L); // 30분 + 60분
-        assertThat(detail.dailyHistory()).hasSize(2); // 6/1, 6/2 두 날
-        assertThat(detail.dailyHistory().get(0).date().toString()).isEqualTo("2026-06-02"); // 최신순
-        assertThat(detail.graph()).isNotNull();
-        assertThat(detail.graph().totalSeconds()).isEqualTo(5400L); // 최근이라 1년 창 안
+        assertThat(detail.totalSeconds()).isEqualTo(5400L); // 30분 + 60분 (진행 중 0초 미포함)
+        assertThat(detail.monthlyHistory()).hasSize(1); // 6월 한 달
+        MonthlyReadingSection june = detail.monthlyHistory().get(0);
+        assertThat(june.month()).isEqualTo(YearMonth.of(2026, 6));
+        assertThat(june.totalSeconds()).isEqualTo(5400L);
+        assertThat(june.days()).extracting(DailyReadingRecord::date)
+                .containsExactly(LocalDate.of(2026, 6, 2), LocalDate.of(2026, 6, 1)); // 최신 일 먼저
     }
 
     @Test
-    @DisplayName("이 책 기록이 없으면 빈 기록 + 빈 잔디(총합 0)")
+    @DisplayName("여러 달에 걸친 기록은 월별 섹션으로 나뉘고 최신 월이 먼저다")
+    void detail_groupsAcrossMonths() {
+        ReadingSessionRepository repo = mock(ReadingSessionRepository.class);
+        BookContributionService service = new BookContributionService(repo);
+
+        User user = seoulUser();
+        Book book = Book.register(user, "전쟁과 평화", null, null, null, null, null, BookStatus.READING);
+        when(repo.findByUserAndBook(user, book)).thenReturn(List.of(
+                completed(user, book, "2026-05-20T01:00:00Z", 1800),
+                completed(user, book, "2026-06-01T01:00:00Z", 3600)));
+
+        BookReadingDetail detail = service.detail(user, book);
+
+        assertThat(detail.monthlyHistory()).extracting(MonthlyReadingSection::month)
+                .containsExactly(YearMonth.of(2026, 6), YearMonth.of(2026, 5)); // 최신 월 먼저
+        assertThat(detail.totalSeconds()).isEqualTo(5400L);
+    }
+
+    @Test
+    @DisplayName("이 책 기록이 없으면 빈 월별 기록 + 누적 0")
     void detail_emptyWhenNoSessions() {
         ReadingSessionRepository repo = mock(ReadingSessionRepository.class);
-        ReadingTimerRepository timers = mock(ReadingTimerRepository.class);
-        when(timers.findByUser(any())).thenReturn(Optional.empty());
-        ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);
-        when(goalChanges.findByUserOrderByEffectiveDateAsc(any())).thenReturn(List.of());
-        BookContributionService service =
-                new BookContributionService(repo, timers, goalChanges, Clock.fixed(NOW, ZoneOffset.UTC));
+        BookContributionService service = new BookContributionService(repo);
+
         User user = seoulUser();
         Book book = Book.register(user, "안 읽은 책", null, null, null, null, null, BookStatus.WANT_TO_READ);
         when(repo.findByUserAndBook(user, book)).thenReturn(List.of());
@@ -91,68 +94,6 @@ class BookContributionServiceTest {
         BookReadingDetail detail = service.detail(user, book);
 
         assertThat(detail.totalSeconds()).isZero();
-        assertThat(detail.dailyHistory()).isEmpty();
-        assertThat(detail.graph().totalSeconds()).isZero();
-    }
-
-    @Test
-    @DisplayName("책별 잔디도 그날 목표로 색을 정한다 — 목표 인상 후에도 옛 목표 채운 날 농도 유지(N-059)")
-    void detail_level_usesGoalHistory() {
-        ReadingSessionRepository repo = mock(ReadingSessionRepository.class);
-        ReadingTimerRepository timers = mock(ReadingTimerRepository.class);
-        when(timers.findByUser(any())).thenReturn(Optional.of(ReadingTimer.of(3600L))); // 현재(폴백) 목표 60분
-        ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);
-        Clock fixed = Clock.fixed(NOW, ZoneOffset.UTC);
-        BookContributionService service = new BookContributionService(repo, timers, goalChanges, fixed);
-
-        User user = seoulUser();
-        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
-        // 서울 기준 6/1에 30분 읽음.
-        ReadingSession s = completed(user, book, "2026-06-01T01:00:00Z", 1800);
-        when(repo.findByUserAndBook(user, book)).thenReturn(List.of(s));
-        // 6/1엔 목표 30분, 그 뒤 6/2부터 60분으로 인상.
-        when(goalChanges.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of(
-                ReadingGoalChange.of(user, LocalDate.of(2026, 5, 1), 1800L),
-                ReadingGoalChange.of(user, LocalDate.of(2026, 6, 2), 3600L)));
-
-        BookReadingDetail detail = service.detail(user, book);
-
-        // 현재 목표(3600)로 일괄 판정했다면 30분=50%→lv2였겠지만, 그날(6/1) 목표(1800)로 보면 100%→lv4.
-        assertThat(levelOf(detail.graph(), LocalDate.of(2026, 6, 1))).isEqualTo(4);
-    }
-
-    @Test
-    @DisplayName("책별 잔디도 수동 입력으로 채운 날 칸을 manual=true로 표시한다")
-    void detail_marksManuallyFilledDay() {
-        ReadingSessionRepository repo = mock(ReadingSessionRepository.class);
-        ReadingTimerRepository timers = mock(ReadingTimerRepository.class);
-        when(timers.findByUser(any())).thenReturn(Optional.empty());
-        ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);
-        when(goalChanges.findByUserOrderByEffectiveDateAsc(any())).thenReturn(List.of());
-        BookContributionService service =
-                new BookContributionService(repo, timers, goalChanges, Clock.fixed(NOW, ZoneOffset.UTC));
-
-        User user = seoulUser();
-        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
-        // 서울 기준 6/1 — 수동 입력 세션(직접 채움)
-        Instant start = Instant.parse("2026-06-01T01:00:00Z");
-        ReadingSession manual = ReadingSession.manual(user, start, start.plusSeconds(1800), book);
-        when(repo.findByUserAndBook(user, book)).thenReturn(List.of(manual));
-
-        BookReadingDetail detail = service.detail(user, book);
-
-        assertThat(cellOf(detail.graph(), LocalDate.of(2026, 6, 1)).manual()).isTrue();
-    }
-
-    private static int levelOf(ContributionGraph graph, LocalDate date) {
-        return cellOf(graph, date).level();
-    }
-
-    private static ContributionDay cellOf(ContributionGraph graph, LocalDate date) {
-        return graph.weeks().stream()
-                .flatMap(List::stream)
-                .filter(c -> date.equals(c.date()))
-                .findFirst()
-                .orElseThrow();
+        assertThat(detail.monthlyHistory()).isEmpty();
     }
 }
