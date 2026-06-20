@@ -25,6 +25,14 @@
             :title="pushToggleTitle"
             @click="togglePushReminder"
           >{{ pushEnabled ? '🔔 알림 ON' : '🔕 알림 OFF' }}</button>
+          <!-- 복귀 알림 토글 (PWA L3b — §50 광고성) -->
+          <button
+            v-if="pushSupported"
+            type="button"
+            class="village-hud-btn"
+            :title="marketingPushToggleTitle"
+            @click="toggleMarketingPush"
+          >{{ marketingPushEnabled ? '📣 복귀 알림 ON' : '📭 복귀 알림 OFF' }}</button>
           <a href="/" class="village-hud-btn">← 대시보드</a>
         </div>
         <!-- iOS 미설치 안내 (N-101: iOS에서 푸시는 홈 화면 설치 전제) -->
@@ -65,6 +73,15 @@ const showIosInstallHint = ref(false);
 
 const pushToggleTitle = computed(() =>
   pushEnabled.value ? '매일 독서 알림 끄기' : '매일 독서 알림 받기'
+);
+
+// --- PWA L3b: 복귀 알림(광고) 토글 ---
+const marketingPushEnabled = ref(false);
+
+const marketingPushToggleTitle = computed(() =>
+  marketingPushEnabled.value
+    ? '복귀 알림 끄기 (광고 수신 철회)'
+    : '복귀 알림 받기 (광고 — 오랫동안 안 읽으면 알림)'
 );
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -173,9 +190,64 @@ function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape' && dexOpen.value) dexOpen.value = false;
 }
 
+async function toggleMarketingPush() {
+  if (!marketingPushEnabled.value) {
+    // ON: 구독 보장 + 동의 서버 등록 (VAPID 필요)
+    const vapidKey = getVapidPublicKey();
+    if (!vapidKey || vapidKey === 'not-configured') {
+      console.warn('[Push] VAPID 공개키가 설정되지 않았습니다.');
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidKey),
+        });
+        const subJson = sub.toJSON();
+        await fetch('/api/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+          body: JSON.stringify({
+            endpoint: subJson.endpoint,
+            p256dh: subJson.keys?.p256dh ?? '',
+            auth: subJson.keys?.auth ?? '',
+          }),
+        });
+      }
+      await fetch('/api/push/marketing-consent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+        body: JSON.stringify({ enabled: true }),
+      });
+      marketingPushEnabled.value = true;
+    } catch (e) {
+      console.error('[Push] 복귀 알림 동의 실패:', e);
+    }
+  } else {
+    // OFF: 동의만 철회 (L3a 리마인더 구독·dailyReminderEnabled는 유지)
+    try {
+      await fetch('/api/push/marketing-consent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+        body: JSON.stringify({ enabled: false }),
+      });
+      marketingPushEnabled.value = false;
+    } catch (e) {
+      console.error('[Push] 복귀 알림 철회 실패:', e);
+    }
+  }
+}
+
 onMounted(async () => {
-  nickname.value =
-    (document.getElementById('village-app') as HTMLElement | null)?.dataset.nickname ?? '';
+  const appEl = document.getElementById('village-app') as HTMLElement | null;
+  nickname.value = appEl?.dataset.nickname ?? '';
+  marketingPushEnabled.value = appEl?.dataset.marketingPushConsent === 'true';
   document.addEventListener('keydown', onKeydown);
   await initPushState();
 
@@ -184,7 +256,7 @@ onMounted(async () => {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     data.value = await res.json();
   } catch (e) {
-    console.error('[VillageApp] API fetch failed:', e);
+    console.error('[VillageApp] API fetch 실패:', e);
     loadError.value = true;
   }
 });

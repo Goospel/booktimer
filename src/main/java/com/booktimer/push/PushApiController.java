@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.security.Principal;
+import java.time.Clock;
 
 /**
  * Web Push 구독 관리 API (PWA L3a).
@@ -29,20 +30,24 @@ public class PushApiController {
 
     record SubscribeRequest(String endpoint, String p256dh, String auth) {}
     record UnsubscribeRequest(String endpoint) {}
+    record MarketingConsentRequest(boolean enabled) {}
 
     private final CurrentUserService currentUserService;
     private final PushSubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
     private final String vapidPublicKey;
+    private final Clock clock;
 
     public PushApiController(CurrentUserService currentUserService,
                              PushSubscriptionRepository subscriptionRepository,
                              UserRepository userRepository,
-                             @Value("${booktimer.push.vapid.public-key:not-configured}") String vapidPublicKey) {
+                             @Value("${booktimer.push.vapid.public-key:not-configured}") String vapidPublicKey,
+                             Clock clock) {
         this.currentUserService = currentUserService;
         this.subscriptionRepository = subscriptionRepository;
         this.userRepository = userRepository;
         this.vapidPublicKey = vapidPublicKey;
+        this.clock = clock;
     }
 
     /** VAPID 공개키 반환 — 클라이언트가 pushManager.subscribe() 호출 시 applicationServerKey로 사용. */
@@ -82,6 +87,26 @@ public class PushApiController {
             user.disableDailyReminder();
             userRepository.save(user);
         }
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * 마케팅 푸시(비활동 복귀 nudge) 동의 토글 (PWA L3b).
+     *
+     * <p>ON: {@link User#consentToMarketingPush(Clock)} — 플래그 true + 동의 시각 기록.
+     * OFF: {@link User#withdrawMarketingPushConsent()} — 플래그 false, 동의 시각은 감사 근거로 보존.
+     * L3a 리마인더 구독·{@code dailyReminderEnabled}는 변경하지 않는다(두 동의 독립).
+     */
+    @PostMapping("/marketing-consent")
+    public ResponseEntity<Void> setMarketingConsent(Principal principal,
+                                                    @RequestBody MarketingConsentRequest req) {
+        User user = currentUserService.resolve(principal);
+        if (req.enabled()) {
+            user.consentToMarketingPush(clock);
+        } else {
+            user.withdrawMarketingPushConsent();
+        }
+        userRepository.save(user);
         return ResponseEntity.ok().build();
     }
 }

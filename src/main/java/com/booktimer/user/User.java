@@ -326,6 +326,53 @@ public class User extends BaseTimeEntity {
     }
 
     /**
+     * §50 광고성 Web Push 수신 동의(PWA L3b). 비활동 복귀 nudge 푸시를 받으려면 사전 opt-in 필수.
+     * 기본 {@code false} — 끼워팔기 금지(필수 동의에 묻지 않음). 이메일 동의({@link #marketingEmailConsent})와
+     * 완전 독립(매체별 별도 동의 — §50 취지).
+     */
+    @Column(name = "marketing_push_consent", nullable = false)
+    private boolean marketingPushConsent = false;
+
+    /**
+     * 마지막으로 마케팅 푸시 수신에 동의한 시각. 2년 재동의 고지·감사 근거.
+     * 철회({@link #withdrawMarketingPushConsent}) 시에도 보존 — 이력은 지우지 않는다.
+     */
+    @Column(name = "marketing_push_consent_at")
+    private java.time.Instant marketingPushConsentAt;
+
+    /**
+     * 마지막 비활동 복귀 nudge 푸시를 발송한 시각(PWA L3b). <b>이메일 lastNudgeSentAt과 독립</b>.
+     * 비활동 구간당 1회 멱등을 보장하는 상태 — 이메일·푸시 채널 각자 1회.
+     */
+    @Column(name = "marketing_push_nudge_sent_at")
+    private java.time.Instant marketingPushNudgeSentAt;
+
+    public void consentToMarketingPush(java.time.Clock clock) {
+        this.marketingPushConsent = true;
+        this.marketingPushConsentAt = clock.instant();
+    }
+
+    public void withdrawMarketingPushConsent() {
+        this.marketingPushConsent = false;
+    }
+
+    public boolean isMarketingPushConsent() {
+        return marketingPushConsent;
+    }
+
+    public java.time.Instant getMarketingPushConsentAt() {
+        return marketingPushConsentAt;
+    }
+
+    public void recordPushNudgeSent(java.time.Instant when) {
+        this.marketingPushNudgeSentAt = when;
+    }
+
+    public java.time.Instant getMarketingPushNudgeSentAt() {
+        return marketingPushNudgeSentAt;
+    }
+
+    /**
      * 매일 독서 리마인더 푸시 알림 수신 여부(PWA L3a). 사용자가 직접 켠(opt-in) 상태일 때만 {@code true}.
      * 기본 {@code false} — 구독 토글 ON → {@code true}, OFF(구독 전체 삭제) → {@code false}.
      * transactional 성격(본인이 켠 알림)이라 §50 광고성 규제 적용 대상이 아니나,

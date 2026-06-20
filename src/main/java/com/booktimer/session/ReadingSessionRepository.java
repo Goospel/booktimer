@@ -103,4 +103,25 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update ReadingSession s set s.book = null where s.book = :book")
     void unlinkBook(@Param("book") Book book);
+
+    /**
+     * 비활동 복귀 nudge 푸시 발송 대상 사용자(PWA L3b). 이메일 {@link #findNudgeTargets}와 다른 핵심:
+     * <ul>
+     *   <li>{@code emailVerified} 조건 없음 — 푸시는 브라우저 구독 자체가 검증, 반송·평판 이슈 없음.</li>
+     *   <li>{@code exists 구독} 조건 추가 — 동의만 켜고 구독 없으면 발송 불가이므로 선제 제외.</li>
+     *   <li>멱등 상태 = {@code marketingPushNudgeSentAt}(이메일 {@code lastNudgeSentAt}과 독립).</li>
+     * </ul>
+     *
+     * <p>null-state 누출 가드(N-055): {@code max(startedAt) IS NULL}이면 {@code <= :cutoff}가 불성립해
+     * 한 번도 읽지 않은 유저(온보딩 이탈)를 자동 제외한다.
+     */
+    @Query("""
+            select u from User u
+            where u.marketingPushConsent = true
+              and exists (select 1 from PushSubscription p where p.user = u)
+              and (select max(s.startedAt) from ReadingSession s where s.user = u) <= :cutoff
+              and (u.marketingPushNudgeSentAt is null
+                   or u.marketingPushNudgeSentAt < (select max(s.startedAt) from ReadingSession s where s.user = u))
+            """)
+    List<com.booktimer.user.User> findRetentionPushTargets(@Param("cutoff") java.time.Instant cutoff);
 }
