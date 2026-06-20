@@ -107,6 +107,7 @@
 - [N-104. Thymeleaf 표현식의 `${}` 범위가 산술 의미를 바꾼다 — 밖은 Thymeleaf 산술(소수), 안은 SpEL(타입대로)](#n-104-thymeleaf-표현식의--범위가-산술-의미를-바꾼다--밖은-thymeleaf-산술소수-안은-speltype대로)
 - [N-105. 사파리/iOS 캐시 3계층 — HTTP 캐시·SW Cache Storage·SW 스크립트 갱신은 수명이 다르다](#n-105-사파리ios-캐시-3계층--http-캐시sw-cache-storagesw-스크립트-갱신은-수명이-다르다)
 - [N-106. SSR은 즉시 반영, SPA는 캐시에 갇힌다 — 변경분이 '동적 HTML'에 담기냐 '고정명 정적 번들'에 담기냐](#n-106-ssr은-즉시-반영-spa는-캐시에-갇힌다--변경분이-동적-html에-담기냐-고정명-정적-번들에-담기냐)
+- [N-107. `type=module` ESM의 DOMContentLoaded 타이밍 — `readyState` guard 패턴](#n-107-typemodule-esm의-domcontentloaded-타이밍--readystate-guard-패턴)
 
 ---
 
@@ -4993,3 +4994,44 @@ SSR은 **주문마다 새로 요리해 내오는 음식**, SPA 고정 번들은 
 - **N-105** — 캐시 3계층 수명. 이 노트는 그 위의 "왜 SPA에서 처음 생긴 문제인가" 상위 개념.
 - **T-075** — 파일명 고정 자산 × SW cache-first stale(재발 방지 절차).
 - `src/main/resources/static/sw.js` — `CACHE`(셸 버전)·`NETWORK_FIRST` 배열·activate의 옛 키 삭제.
+
+---
+
+## N-107. `type=module` ESM의 DOMContentLoaded 타이밍 — `readyState` guard 패턴
+
+**한 줄 요약**: `type=module` 스크립트는 기본 `defer`처럼 파싱 후 실행되지만, Service Worker 개입이나 브라우저 구현에 따라 `DOMContentLoaded`가 먼저 발화한 **뒤에** 모듈이 실행되는 경우가 있다. `addEventListener('DOMContentLoaded', …)`만 쓰면 이 타이밍에 초기화 콜백이 누락된다.
+
+### 현상
+
+`settings.html`에 `<script type="module" src="/notification-settings.js">`를 추가했더니, 일부 조건(Service Worker 캐시·빠른 페이지 로드)에서 `DOMContentLoaded` 핸들러 안 코드가 DOM 요소를 찾지 못했다. 원인: 모듈이 실행된 시점에 `DOMContentLoaded`는 이미 지나간 상태라 `addEventListener`가 영원히 발화하지 않았다.
+
+### 원인
+
+`type=module` 스크립트는 **암묵적 `defer`**: HTML 파싱이 끝난 뒤 모듈 로더가 fetch → evaluate → execute 순서를 밟는다. 브라우저가 파싱 직후 `DOMContentLoaded`를 발화하는 타이밍과 모듈 실행 타이밍은 **경쟁 관계**다.
+
+```
+[일반 케이스]          HTML 파싱 → DOMContentLoaded → 모듈 실행
+[빠른/캐시 케이스]     HTML 파싱 → 모듈 실행 → DOMContentLoaded  (or 거의 동시)
+```
+
+SW가 모듈을 cache-first로 즉시 반환하면 모듈이 DOMContentLoaded 전에 실행될 수도 있지만, 반대로 SW 처리 지연이 있으면 DOMContentLoaded 뒤에 실행된다 — 즉 **방향이 정해져 있지 않다**.
+
+### 해법 — `readyState` guard
+
+```js
+// ✅ 어느 타이밍이어도 안전
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _init);
+} else {
+    _init();   // 이미 DOMContentLoaded 지났으면 바로 실행
+}
+```
+
+- `readyState === 'loading'`: 아직 파싱 중 → 이벤트를 기다린다.
+- `readyState === 'interactive'` or `'complete'`: DOMContentLoaded 이미 발화 → 직접 호출.
+
+### 관련
+
+- **N-083** — `defer`×`class extends` TDZ 함정(로드 순서가 본질인 같은 계열 문제).
+- **T-053** — 헤드리스 재현이 로드 순서를 왜곡해 실 브라우저 사각이 생기는 이유.
+- `src/main/resources/static/notification-settings.js` — 이 패턴 실제 적용 사례.
