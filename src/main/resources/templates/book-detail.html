@@ -35,7 +35,7 @@
                 <span class="record-time mono"
                       th:text="${'· 누적 ' + (totalSeconds / 3600) + '시간 ' + ((totalSeconds % 3600) / 60) + '분'}">· 누적 0시간 0분</span>
             </p>
-            <p>
+            <div class="book-buy">
                 <!-- 구매처 2개면 '구매' 토글로 묶고 1개뿐이면 단일 버튼 — 조건은 데이터로 동적 분기. -->
                 <details th:if="${!#strings.isEmpty(book.purchaseLink) and coupangEnabled}" class="buy-menu">
                     <summary class="btn-ghost">구매</summary>
@@ -48,7 +48,7 @@
                    rel="noopener nofollow" class="btn-ghost">구매</a>
                 <a th:if="${#strings.isEmpty(book.purchaseLink) and coupangEnabled}" th:href="@{/books/{id}/buy/coupang(id=${book.id})}" target="_blank"
                    rel="noopener nofollow" class="btn-ghost">쿠팡</a>
-            </p>
+            </div>
             <p class="affiliate-note" th:if="${coupangEnabled}">
                 이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
             </p>
