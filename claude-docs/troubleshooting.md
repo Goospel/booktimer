@@ -62,6 +62,7 @@
 - [T-070. bootRun은 장기 실행 태스크라 Gradle 진행률이 80%대에서 멈춘다(정상) — % 아닌 로그/포트로 ready 판정](#t-070-bootrun은-장기-실행-태스크라-gradle-진행률이-80대에서-멈춘다정상---아닌-로그포트로-ready-판정)
 - [T-071. Service Worker + 해시 없는 번들 → cache-first만 쓰면 배포해도 안 묻힘 — garden.js는 network-first 필수](#t-071-service-worker--해시-없는-번들--cache-first만-쓰면-배포해도-안-묻힘--gardenjs는-network-first-필수)
 - [T-072. Service Worker scope = sw.js 파일 위치 — static 루트에 없으면 전역 제어 안 됨](#t-072-service-worker-scope--swjs-파일-위치--static-루트에-없으면-전역-제어-안-됨)
+- [T-073. 푸시 토글 함수에서 VAPID 체크를 최상단에 두면 OFF(철회) 경로도 막힌다](#t-073-푸시-토글-함수에서-vapid-체크를-최상단에-두면-off철회-경로도-막힌다)
 
 ---
 
@@ -1394,6 +1395,52 @@ cam.setScroll(s.scrollX, s.scrollY);
 
 ---
 
+## T-073. 푸시 토글 함수에서 VAPID 체크를 최상단에 두면 OFF(철회) 경로도 막힌다
+
+**증상**: 복귀 알림 "ON→OFF(철회)" 버튼을 눌러도 아무 반응이 없다. 서버에 철회 요청이 전달되지 않는다.
+
+**원인**: `toggleMarketingPush()` 함수 맨 앞에 VAPID 키 존재 여부를 체크하면, **OFF 경로도 동일 게이트를 통과해야** 한다. VAPID 키가 미설정(`not-configured`)이면 경고 후 조기 반환되어 철회조차 불가능해진다.
+
+```typescript
+// ❌ 잘못된 패턴 — OFF도 막힌다
+async function toggleMarketingPush() {
+  const vapidKey = getVapidPublicKey();
+  if (!vapidKey || vapidKey === 'not-configured') { // ← OFF도 여기서 막힘
+    console.warn('[Push] VAPID 공개키가 설정되지 않았습니다.');
+    return;
+  }
+  if (!marketingPushEnabled.value) { /* ON 로직 */ }
+  else { /* OFF 로직 */ }
+}
+```
+
+**해결**: VAPID 체크를 **ON 분기 안**으로 이동한다. OFF(수신거부)는 VAPID 없이도 동의 API(`/api/push/marketing-consent {enabled:false}`)만 호출하면 충분하다.
+
+```typescript
+// ✅ 올바른 패턴
+async function toggleMarketingPush() {
+  if (!marketingPushEnabled.value) {
+    // ON 경로만 VAPID 필요
+    const vapidKey = getVapidPublicKey();
+    if (!vapidKey || vapidKey === 'not-configured') {
+      console.warn('[Push] VAPID 공개키가 설정되지 않았습니다.');
+      return;
+    }
+    /* subscribe + consent API */
+  } else {
+    // OFF 경로: VAPID 불필요, consent API만
+    await fetch('/api/push/marketing-consent', { body: JSON.stringify({ enabled: false }) ... });
+    marketingPushEnabled.value = false;
+  }
+}
+```
+
+**예방**: 푸시 토글 함수를 작성할 때 "ON일 때만 필요한 의존성"과 "공통으로 필요한 의존성"을 분기 전에 분리해 생각한다. 특히 수신거부(OFF)는 §50 정보통신망법상 즉시 처리 의무가 있어 막히면 안 된다.
+
+**관련**: N-103(§50 광고성 푸시 요건), N-102(VAPID), PWA L3b.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1471,3 +1518,4 @@ cam.setScroll(s.scrollX, s.scrollY);
 | 2026-06-20 | T-070 (bootRun은 장기 실행 태스크라 Gradle 진행률이 80%대서 멈춤=정상, 100%는 앱 종료 시 도달 / ready 판정은 % 아닌 로그 `Started ...`·8080 LISTEN, Claude Code는 background 실행해야 foreground 무한대기 회피 / 검증 후 8080 반납 / T-063) |
 | 2026-06-20 | T-071 (Service Worker + 해시 없는 번들(`garden.js` 파일명 고정) → cache-first만 쓰면 배포해도 사용자에게 안 묻힘 / Vite `entryFileNames: 'garden.js'`로 파일명이 고정이라 SW가 cache-first로 잡으면 캐시가 살아있는 한 구 버전이 계속 서빙됨 / 해결=`garden.js`는 SW에서 **network-first**(온라인이면 항상 네트워크 우선, 캐시는 오프라인 폴백), 나머지 정적 자산(CSS·아이콘·manifest)은 cache-first / 추가 안전장치=`CACHE` 버전 상수 올리면 activate에서 구 캐시 전량 삭제 / N-098(Vite 번들 static), N-101(PWA 레벨), PR L2) |
 | 2026-06-20 | T-072 (Service Worker scope = sw.js 파일 위치 / SW의 scope는 sw.js가 있는 경로를 기준으로 결정됨 — `static/garden/sw.js`이면 scope=`/garden/`이라 `/dashboard`·`/` 등이 제어 안 됨 / 해결=`static/sw.js`(static 루트 직하)에 두면 scope=`/` 전역 → 모든 경로 fetch를 가로챌 수 있음 / Vite의 outDir=`static/garden`이라 빌드 산출물에 섞이지 않도록 손수 파일로 static 루트에 배치 / N-101, PR L2) |
+| 2026-06-20 | T-073 (푸시 토글 함수에서 VAPID 체크를 최상단에 두면 OFF(철회) 경로도 막힌다 / VAPID 체크를 ON 분기 안으로 이동 / §50 수신거부는 즉시 처리 의무라 막히면 안 됨 / N-103·N-102, PWA L3b) |

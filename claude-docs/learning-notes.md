@@ -103,6 +103,7 @@
 - [N-100. Phaser 캔버스를 CSS `transform: rotate()`로 돌리면 포인터 hit-test가 깨진다 — 카메라 회전을 쓸 것](#n-100-phaser-캔버스를-css-transform-rotate로-돌리면-포인터-hit-test가-깨진다--카메라-회전을-쓸-것)
 - [N-101. PWA(Progressive Web App) — manifest·메타로 설치·풀스크린, Service Worker로 오프라인·푸시, iOS는 홈화면 설치가 푸시 전제](#n-101-pwaprogressive-web-app--manifest메타로-설치풀스크린-service-worker로-오프라인푸시-ios는-홈화면-설치가-푸시-전제)
 - [N-102. VAPID — Web Push 서버 신원 증명 키쌍](#n-102-vapid--web-push-서버-신원-증명-키쌍)
+- [N-103. §50 정보통신망법 — 광고성 푸시 9박스 (opt-in·표기·야간제한·수신거부)](#n-103-50-정보통신망법--광고성-푸시-9박스-opt-in표기야간제한수신거부)
 
 ---
 
@@ -4307,6 +4308,10 @@ BookTimer SES 프로덕션 요청(case 178123901400162)이 ① AWS "추가 정�
 | 2026-06-18 | N-097 (Alpine CDN v3.14.x는 queueMicrotask(Alpine.start)로 defer 배치 끝난 뒤 alpine:init fire — 번들 type=module이 CDN보다 늦어도 alpine:init 등록 보장·x-data="myGarden"(괄호 없음)=Alpine.data 등록명 참조 / PR #391) |
 | 2026-06-18 | N-098 (SSR 섬 아키텍처: Vite 번들을 src/main/resources/static/에 커밋해 bootJar 통합 — Docker·build.gradle 무변경·CI stale 게이트로 산출물 낡음 차단 / PR #391) |
 | 2026-06-18 | N-099 (Phaser CDN defer→npm import가 T-054 TDZ를 구조 소멸: class extends Phaser.Scene이 번들 정적 import로 실행 시 Phaser 보장·ensureGardenScene() 래핑 불필요·N-082 Alpine Proxy 격리는 여전히 필요 / PR #391) |
+| 2026-06-20 | N-100 (Phaser 캔버스를 CSS transform:rotate()로 돌리면 포인터 hit-test가 깨진다 — cam.setRotation() + getWorldPoint 교체 / T-067·PR #411) |
+| 2026-06-20 | N-101 (PWA — manifest·메타로 설치·풀스크린, SW로 오프라인·푸시, iOS는 홈화면 설치가 푸시 전제, L1~L3 단계 모델 / PR L1~L3a) |
+| 2026-06-20 | N-102 (VAPID — Web Push 서버 신원 증명 EC P-256 키쌍, JWT 서명 흐름, 키 변경=전원 재구독 / N-101, PR L3a) |
+| 2026-06-20 | N-103 (§50 정보통신망법 광고성 푸시 4의무 — ①opt-in ②"(광고)" 표기 ③KST 야간 21~08시 제한 ④수신거부 즉시 처리, 채널별 동의 분리 / N-067·N-102·T-073, PWA L3b) |
 
 ---
 
@@ -4790,3 +4795,47 @@ npx web-push generate-vapid-keys
 ### 관련
 
 - **N-101** — PWA의 L3(푸시). iOS는 홈 화면 설치 + 16.4+에서만 푸시 수신 가능(설치가 전제). VAPID는 그 L3 푸시의 서버 측 신원 증명 메커니즘.
+
+---
+
+## N-103. §50 정보통신망법 — 광고성 푸시 9박스 (opt-in·표기·야간제한·수신거부)
+
+**한 줄 요약**: 한국 정보통신망법 제50조는 **"영리목적 광고성 정보 전송"**에 4가지 의무를 부과한다 — ① 사전 수신동의(opt-in) ② `(광고)` 제목 표기 ③ 야간(21~08시) 별도 동의 ④ 수신거부 즉시 처리. 이메일·SMS·앱 푸시를 채널 구분 없이 동일 조건으로 적용한다.
+
+### 4가지 의무 (9박스 프레임)
+
+| 의무 | 적용 내용 | BookTimer L3b 구현 |
+|---|---|---|
+| **① 사전 수신동의 (opt-in)** | 발송 전 명시적 동의 필수. 기본값은 반드시 false | `marketingPushConsent = false` 기본, 버튼 클릭으로 명시 ON |
+| **② 광고 표기** | 제목(title)에 `(광고)` 포함 | payload: `"title":"(광고) 독서 마을"` |
+| **③ 야간 제한** | 21:00~08:00 발송 불가 (별도 동의 없으면) | `cron = "0 0 19 * * *"` KST 19시 (21시 전) |
+| **④ 수신거부 즉시 처리** | 거부 요청 후 지체 없이 처리, 이후 발송 불가 | OFF 클릭 → `/api/push/marketing-consent {enabled:false}` → DB 즉시 반영 |
+
+### 이메일과 동일 규제, 채널별 동의는 별도
+
+- 정보통신망법은 **채널(이메일·문자·푸시)을 구분하지 않는다** — 모두 "광고성 정보"로 동일 규제.
+- 단, **매체별 동의는 분리 수집**해야 "이메일 동의=푸시도 동의" 해석을 피할 수 있다(§50 매체별 동의 권고).
+- BookTimer: `emailMarketingConsent`(이메일)·`dailyReminderEnabled`(L3a 서비스성)·`marketingPushConsent`(L3b 광고성) 세 필드 독립.
+
+### Transactional vs 마케팅 — 구분이 핵심
+
+| 종류 | 예시 | §50 적용? |
+|---|---|---|
+| **Transactional** (서비스 이행) | 가입 인증·비번 재설정·보안 통보 | **적용 안 됨** |
+| **마케팅** (영리목적 광고성) | 재참여 넛지·프로모션·본인 리마인더 이외 | **§50 적용** |
+
+> L3a 독서 리마인더는 "사용자 본인이 설정한 알람"이라 transactional 성격. L3b 복귀 nudge는 "서비스가 먼저 보내는 마케팅 메시지"라 §50 대상.
+
+### Q&A 대비
+
+- **Q. 앱 푸시도 이메일처럼 §50 적용받는가?** → 그렇다. 정보통신망법 §50는 "정보통신망을 이용한 광고성 정보 전송"이라 채널 무관.
+- **Q. cron을 KST 19시로 잡는 이유는?** → 야간 21시 제한을 넉넉히 피하기 위해. 배치가 늦게 시작돼도 20시 전에 끝나도록 1시간 여유.
+- **Q. 수신거부 즉시 처리 의무를 못 지키면?** → 3천만 원 이하 과태료. 그래서 OFF 경로는 VAPID 없이도 즉시 동작해야 한다(T-073).
+- **Q. 야간에 별도 동의를 받으면 발송할 수 있는가?** → 가능하다. BookTimer L3b는 야간 별도 동의를 구현하지 않고 19시 발송으로 회피.
+
+### 관련
+
+- **N-067** — 이메일 §50 적용 상세(재참여 이메일이 광고성 정보인 이유, 이메일 전용 구현).
+- **N-102** — VAPID(Web Push 서버 인증). L3b가 N-102 인프라를 재사용.
+- **T-073** — 푸시 토글 함수에서 OFF 경로가 VAPID 체크에 막히는 함정.
+- `src/main/java/com/booktimer/retention/RetentionPushService.java` — `PAYLOAD` 상수 + `RetentionPushScheduler` cron.
