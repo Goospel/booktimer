@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-title" content="독서 마을">
     <link rel="apple-touch-icon" th:href="@{/icons/apple-touch-icon.png}">
     <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
-    <script type="module" src="/pwa-install.js"></script>
+    <script type="module" th:src="@{/pwa-install.js}"></script>
 </th:block>
 </head>
 </html>

@@ -47,6 +47,32 @@ describe('PWA L2 Service Worker 정적 가드', () => {
         });
     });
 
+    describe('콘텐츠 해시 전환 — NETWORK_FIRST 졸업', () => {
+        test('NETWORK_FIRST 배열이 제거됐다 — 해시 URL은 cache-first 안전', () => {
+            // 해시 URL은 내용이 바뀌면 URL이 달라지므로 cache-first에서도 stale 불가
+            // NETWORK_FIRST 임시방편 배열은 더 이상 필요 없다
+            expect(swContent()).not.toMatch(/const\s+NETWORK_FIRST/);
+        });
+
+        test('PRECACHE_URLS에 app.css·garden.js가 없다 — 해시 URL이라 고정 경로 프리캐시 불필요', () => {
+            const content = swContent();
+            const match = content.match(/const\s+PRECACHE_URLS\s*=\s*\[([\s\S]*?)\]/);
+            expect(match).not.toBeNull();
+            const precacheBlock = match![1];
+            expect(precacheBlock).not.toMatch(/app\.css/);
+            expect(precacheBlock).not.toMatch(/garden\.js/);
+            expect(precacheBlock).not.toMatch(/pwa-install\.js/);
+        });
+
+        test('CACHE 버전이 shell-v5다 — 기존 캐시 무효화', () => {
+            expect(swContent()).toMatch(/const\s+CACHE\s*=\s*['"]shell-v5['"]/);
+        });
+
+        test('navigate 요청은 여전히 network-first다 — SSR 응답 최신 유지', () => {
+            expect(swContent()).toMatch(/request\.mode.*['"]navigate['"]/);
+        });
+    });
+
     describe('pwa-head.html 프래그먼트 — SW 등록 코드', () => {
         const fragmentPath = resolve(
             repoRoot,
@@ -56,6 +82,11 @@ describe('PWA L2 Service Worker 정적 가드', () => {
 
         test("serviceWorker.register('/sw.js') 가 있다", () => {
             expect(fragment()).toMatch(/serviceWorker\.register\s*\(\s*['"]\/sw\.js['"]/);
+        });
+
+        test('pwa-install.js가 th:src로 참조된다 — 해시 URL 자동 변환', () => {
+            // @{/pwa-install.js}를 th:src로 쓰면 ResourceUrlProvider가 해시 URL로 변환
+            expect(fragment()).toMatch(/th:src\s*=\s*["']@\{\/pwa-install\.js\}["']/);
         });
     });
 });
