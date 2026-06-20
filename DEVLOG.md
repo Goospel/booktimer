@@ -2,6 +2,8 @@
 
 > 기능이 **어떤 흐름으로 추가됐고**, 그 과정에서 **어떤 문제를 만나** **어떻게 해결**했는지 시간순으로 정리한 개발 일지.
 > 개념 상세는 [learning-notes](claude-docs/learning-notes.md)(N-###), 함정·해결 절차는 [troubleshooting](claude-docs/troubleshooting.md)(T-###) 참고.
+>
+> ⚠️ **이 문서는 Phase 10(2026-06-02)까지의 서사 아카이브다.** 이후 개발(책 단위 기록·SNS·로그인 아이디·독서 성향·독서 마을·PWA 등)은 [changelog.md](claude-docs/changelog.md)를 단일 출처로 한다.
 
 개발은 일관된 규율 위에서 진행됐다 — **PR 우선**(main 직접 push 금지, 훅으로 하드 차단), **TDD Red→Green**(실패 테스트를 먼저 짜고 실행으로 실패를 확인한 뒤 최소 구현), 그리고 **막힐 때마다 함정/개념을 즉시 기록**(PKM).
 
