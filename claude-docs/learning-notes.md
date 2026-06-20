@@ -102,6 +102,7 @@
 - [N-099. Phaser CDN defer → npm import가 T-054 TDZ를 구조적으로 제거하는 이유](#n-099-phaser-cdn-defer--npm-import가-t-054-tdz를-구조적으로-제거하는-이유)
 - [N-100. Phaser 캔버스를 CSS `transform: rotate()`로 돌리면 포인터 hit-test가 깨진다 — 카메라 회전을 쓸 것](#n-100-phaser-캔버스를-css-transform-rotate로-돌리면-포인터-hit-test가-깨진다--카메라-회전을-쓸-것)
 - [N-101. PWA(Progressive Web App) — manifest·메타로 설치·풀스크린, Service Worker로 오프라인·푸시, iOS는 홈화면 설치가 푸시 전제](#n-101-pwaprogressive-web-app--manifest메타로-설치풀스크린-service-worker로-오프라인푸시-ios는-홈화면-설치가-푸시-전제)
+- [N-102. VAPID — Web Push 서버 신원 증명 키쌍](#n-102-vapid--web-push-서버-신원-증명-키쌍)
 
 ---
 
@@ -4745,3 +4746,47 @@ cam.setZoom(initialZoomFor(TARGET_PLANT_CSS, this.plantPx, axis, this.cfg.worldW
 - **N-067 / N-072** — 푸시 알림도 "영리 광고성 정보"면 정보통신망법 §50 동의 대상(이메일과 같은 법적 부담). retention 푸시 문구 설계 시 점검.
 - **N-091** — SES 프로덕션 액세스 보류(이메일 retention). Web Push는 같은 "복귀 유도" 축의 대안/보완 — 같은 스케줄러·`lastNudgeSentAt` 패턴 재사용 가능.
 - **N-098** — Vite 번들을 static으로 커밋하는 SSR 섬 구조. PWA의 Service Worker·manifest도 같은 static 자원 경로로 서빙.
+
+---
+
+## N-102. VAPID — Web Push 서버 신원 증명 키쌍
+
+> **한 줄**: EC P-256 공개키/비공개키 쌍으로 브라우저 푸시 서비스에 서버 신원을 증명하는 Web Push 표준. 비공개키로 발송마다 JWT를 서명하고, 푸시 서비스가 공개키로 검증해 "이 endpoint에 보낼 권한이 있는 서버"임을 확인한다.
+
+### 왜 필요한가 — endpoint만으론 누구든 보낼 수 있다
+
+브라우저가 푸시를 구독하면 푸시 서비스(FCM 등)가 고유 `endpoint` URL을 발급한다. 이 URL을 아는 제3자가 그대로 발송 요청을 던지면 스팸이 가능하다. VAPID(Voluntary Application Server Identification)는 발송 요청마다 **서버가 자기 신원을 서명으로 증명**하게 해 이를 막는다 — "endpoint를 안다"와 "보낼 자격이 있다"를 분리한다.
+
+### 키쌍의 역할
+
+| 키 | 어디에 | 쓰임 |
+|---|---|---|
+| **공개키** | 클라이언트로 전달(HTML `<meta>` 태그) | 브라우저가 `pushManager.subscribe(applicationServerKey)`로 구독 요청할 때 사용 |
+| **비공개키** | 서버 전용 | 발송 요청마다 JWT 서명. **절대 커밋·노출 금지** |
+
+흐름: 클라이언트가 공개키로 구독 → 서버가 발송 시 비공개키로 JWT 서명 → 푸시 서비스(FCM 등)가 **공개키로 서명 검증** → 통과하면 브라우저로 전달.
+
+### 생성 — 1회
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+공개키/비공개키 한 쌍이 나온다. 비공개키는 환경변수·시크릿으로만 주입하고 저장소에 커밋하지 않는다.
+
+### 주의 — 키 변경은 전원 재구독
+
+기존 구독은 발급 당시의 공개키(`applicationServerKey`)에 묶여 있다. 서버가 VAPID 키쌍을 교체하면 **기존 구독자 전원이 다시 구독해야** 발송이 닿는다. 즉 키는 한 번 정하면 함부로 못 바꾸는 장기 자산으로 다룬다.
+
+### 비유
+
+- **비공개키 = 도장(인감)** — 서버만 갖고, 요청마다 찍어(서명) 진본임을 증명.
+- **공개키 = 인감증명서** — 누구나 가질 수 있고, 찍힌 도장이 진짜인지(서명) 대조하는 데 쓴다.
+
+### 코드 위치
+
+- `src/main/java/com/booktimer/push/PushSenderService.java` — `PushService` 초기화 부분(VAPID 키쌍 주입).
+
+### 관련
+
+- **N-101** — PWA의 L3(푸시). iOS는 홈 화면 설치 + 16.4+에서만 푸시 수신 가능(설치가 전제). VAPID는 그 L3 푸시의 서버 측 신원 증명 메커니즘.
