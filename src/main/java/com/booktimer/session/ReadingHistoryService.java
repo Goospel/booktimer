@@ -6,11 +6,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.time.YearMonth;
 import java.time.ZoneId;
-import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -57,16 +54,7 @@ public class ReadingHistoryService {
      * @return 월별 묶음 목록(최신 월 먼저). 기록이 없으면 빈 목록.
      */
     public List<MonthlyReadingSection> monthlyHistory(User user) {
-        Map<YearMonth, List<DailyReadingRecord>> byMonth = new LinkedHashMap<>();
-        for (DailyReadingRecord record : dailyHistory(user)) {
-            byMonth.computeIfAbsent(YearMonth.from(record.date()), m -> new ArrayList<>()).add(record);
-        }
-        return byMonth.entrySet().stream()
-                .map(e -> new MonthlyReadingSection(
-                        e.getKey(),
-                        e.getValue().stream().mapToLong(DailyReadingRecord::totalSeconds).sum(),
-                        List.copyOf(e.getValue())))
-                .toList();
+        return MonthlyReadingSection.groupByMonth(dailyHistory(user));
     }
 
     /**

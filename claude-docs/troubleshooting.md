@@ -63,6 +63,7 @@
 - [T-071. Service Worker + 해시 없는 번들 → cache-first만 쓰면 배포해도 안 묻힘 — garden.js는 network-first 필수](#t-071-service-worker--해시-없는-번들--cache-first만-쓰면-배포해도-안-묻힘--gardenjs는-network-first-필수)
 - [T-072. Service Worker scope = sw.js 파일 위치 — static 루트에 없으면 전역 제어 안 됨](#t-072-service-worker-scope--swjs-파일-위치--static-루트에-없으면-전역-제어-안-됨)
 - [T-073. 푸시 토글 함수에서 VAPID 체크를 최상단에 두면 OFF(철회) 경로도 막힌다](#t-073-푸시-토글-함수에서-vapid-체크를-최상단에-두면-off철회-경로도-막힌다)
+- [T-074. Thymeleaf 산술은 `${}` 안에 넣어야 정수 — `${x} / n`(밖)은 소수로 샌다](#t-074-thymeleaf-산술은--안에-넣어야-정수--x--n밖은-소수로-샌다)
 
 ---
 
@@ -1434,6 +1435,25 @@ async function toggleMarketingPush() {
   }
 }
 ```
+
+## T-074. Thymeleaf 산술은 `${}` 안에 넣어야 정수 — `${x} / n`(밖)은 소수로 샌다
+
+**증상**: 책 상세 누적 시간이 `· 누적 11.0944…시간 5.666…분`처럼 소수로 샌다. 그런데 **같은 페이지의 일자별 행과 `/history` 화면은 정수**(`1시간 30분`)로 멀쩡하다.
+
+**원인**: 누적만 나눗셈이 `${}` **밖**에 있었다. `${}` 밖의 산술은 Thymeleaf 자체 산술이 처리해 소수로 평가하고, `${}` 안의 산술은 SpEL이 피연산자 타입(long)대로 정수 나눗셈을 한다.
+
+```html
+<!-- ❌ ${} 밖에서 나눗셈 → Thymeleaf 산술 → 5400/3600 = 1.5 -->
+th:text="'· 누적 ' + (${totalSeconds} / 3600) + '시간 ...'"
+<!-- ✅ 산술 전체를 한 ${...} 안에 → SpEL → 5400L/3600 = 1 -->
+th:text="${'· 누적 ' + (totalSeconds / 3600) + '시간 ...'}"
+```
+
+일자별 행이 멀쩡했던 이유: 거긴 `${(r.totalSeconds() / 3600) + ...}`처럼 산술까지 `${}` 안이라 SpEL 정수 나눗셈.
+
+**해결**: 나눗셈을 포함한 산술 **전체를 하나의 `${...}` 안**에 넣는다(일자별·history와 통일). MockMvc `content().string(containsString("누적 1시간 30분"))`으로 정수 표기를 RED→GREEN 고정. `#numbers.formatInteger`는 반올림이라 1.5→2가 되어 오답 — 쓰지 말 것.
+
+**개념 상세**: [learning-notes.md](learning-notes.md) N-104.
 
 **예방**: 푸시 토글 함수를 작성할 때 "ON일 때만 필요한 의존성"과 "공통으로 필요한 의존성"을 분기 전에 분리해 생각한다. 특히 수신거부(OFF)는 §50 정보통신망법상 즉시 처리 의무가 있어 막히면 안 된다.
 

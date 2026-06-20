@@ -163,7 +163,7 @@ public class BookController {
     }
 
     /**
-     * 책 상세 — 그 책의 독서 잔디 + 일자별 기록 + 누적 시간. 내 책일 때만(IDOR 방지),
+     * 책 상세 — 그 책의 월별 일자 기록 + 누적 시간. 내 책일 때만(IDOR 방지),
      * 아니면 존재 여부 노출 없이 책장으로 돌려보낸다(PRG).
      */
     @GetMapping("/books/{id}")
@@ -175,8 +175,7 @@ public class BookController {
                     BookReadingDetail detail = contributionService.detail(user, book);
                     model.addAttribute("nickname", user.getNickname());
                     model.addAttribute("book", book);
-                    model.addAttribute("graph", detail.graph());
-                    model.addAttribute("history", detail.dailyHistory());
+                    model.addAttribute("months", detail.monthlyHistory());
                     model.addAttribute("totalSeconds", detail.totalSeconds());
                     return "book-detail";
                 })

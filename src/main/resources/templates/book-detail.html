@@ -30,8 +30,10 @@
             </p>
             <p>
                 <span class="book-status-badge" th:text="${book.status.label}">상태</span>
+                <!-- 정수 나눗셈을 쓰려면 산술 전체가 한 ${...}(SpEL) 안에 있어야 한다. `${x} / 3600`처럼 ${} 밖에서
+                     나누면 Thymeleaf 산술이 소수로 평가해 "1.5시간"이 샌다(일자별 행·history 화면과 동일 패턴으로 통일). -->
                 <span class="record-time mono"
-                      th:text="'· 누적 ' + (${totalSeconds} / 3600) + '시간 ' + ((${totalSeconds} % 3600) / 60) + '분'">· 누적 0시간 0분</span>
+                      th:text="${'· 누적 ' + (totalSeconds / 3600) + '시간 ' + ((totalSeconds % 3600) / 60) + '분'}">· 누적 0시간 0분</span>
             </p>
             <p>
                 <!-- 구매처 2개면 '구매' 토글로 묶고 1개뿐이면 단일 버튼 — 조건은 데이터로 동적 분기. -->
@@ -53,63 +55,30 @@
         </div>
     </section>
 
-    <!-- 이 책 독서 잔디 (지난 1년) — GitHub 컨트리뷰션 그래프 스타일 -->
+    <!-- 일자별 독서 시간 — 한 번에 한 달, ◀▶로 이동, 그 달 안에서만 스크롤(독서 기록 화면과 동일 패턴).
+         월별 묶음(months, 최신 월 먼저)을 모두 렌더하되 최신 달만 보이고(th:hidden) JS가 ◀▶로 hidden을 토글한다.
+         JS가 꺼져도 최신 달은 보인다(폴백). 월 합계는 네비 라벨에 함께 띄운다. 책 상세라 행에 책 제목은 안 보인다. -->
     <section class="card">
-        <h2>이 책 독서 잔디</h2>
-        <p class="grass-summary">
-            지난 1년 동안 <strong th:text="${graph.activeDays()}">0</strong>일 ·
-            총 <strong th:text="${graph.totalSeconds() / 3600 + '시간 ' + (graph.totalSeconds() % 3600) / 60 + '분'}">0시간 0분</strong>
-        </p>
-        <div class="grass">
-            <div class="grass-weekdays" aria-hidden="true">
-                <span></span><span>월</span><span></span><span>수</span><span></span><span>금</span><span></span>
+        <h2>일자별 독서 시간</h2>
+        <p class="status-line" th:if="${months.isEmpty()}">아직 이 책으로 측정한 기록이 없습니다. 타이머 시작 시 이 책을 선택해 보세요.</p>
+        <div th:unless="${months.isEmpty()}" class="month-browser">
+            <div class="month-nav">
+                <button type="button" class="month-nav-btn month-nav-prev" aria-label="이전 달">◀</button>
+                <span class="month-nav-label"
+                      th:text="${months[0].month().getYear() + '년 ' + months[0].month().getMonthValue() + '월 · ' + (months[0].totalSeconds() / 3600) + '시간 ' + ((months[0].totalSeconds() % 3600) / 60) + '분'}">2026년 6월 · 0시간 0분</span>
+                <button type="button" class="month-nav-btn month-nav-next" aria-label="다음 달">▶</button>
             </div>
-            <div class="grass-main">
-                <div class="grass-months" aria-hidden="true">
-                    <span th:each="m : ${graph.monthLabels()}"
-                          th:text="${m.label()}"
-                          th:style="'grid-column-start:' + (${m.weekIndex()} + 1)">1월</span>
-                </div>
-                <div class="grass-grid">
-                    <th:block th:each="week : ${graph.weeks()}">
-                        <div class="grass-cell"
-                             th:each="day : ${week}"
-                             th:classappend="${day.isPlaceholder() ? 'empty' : 'level-' + day.level() + (day.manual() ? ' manual' : '')}"
-                             th:attr="title=${day.isPlaceholder() ? null
-                                 : #temporals.format(day.date(), 'yyyy-MM-dd') + ' · ' + (day.totalSeconds() / 60) + '분' + (day.manual() ? ' · 직접 채움' : '')}"></div>
-                    </th:block>
-                </div>
-                <!-- 색 농도 = 그날 독서 시간 ÷ 하루 목표 달성 비율 -->
-                <div class="grass-legend" aria-hidden="true">
-                    <span>목표 미달</span>
-                    <i class="grass-cell level-0"></i>
-                    <i class="grass-cell level-1"></i>
-                    <i class="grass-cell level-2"></i>
-                    <i class="grass-cell level-3"></i>
-                    <i class="grass-cell level-4"></i>
-                    <span>목표 달성</span>
-                    <i class="grass-cell level-2 manual legend-gap"></i>
-                    <span>직접 채움</span>
-                </div>
+            <div class="month-section" th:each="s, it : ${months}" th:hidden="${!it.first}"
+                 th:attr="data-label=${s.month().getYear() + '년 ' + s.month().getMonthValue() + '월 · ' + (s.totalSeconds() / 3600) + '시간 ' + ((s.totalSeconds() % 3600) / 60) + '분'}">
+                <ul class="record-list record-scroll">
+                    <li class="record-row" th:each="r : ${s.days()}">
+                        <span class="record-date" th:text="${#temporals.format(r.date(), 'yyyy-MM-dd (E)')}">2026-06-01</span>
+                        <span class="record-time mono"
+                              th:text="${(r.totalSeconds() / 3600) + '시간 ' + ((r.totalSeconds() % 3600) / 60) + '분'}">0시간 0분</span>
+                    </li>
+                </ul>
             </div>
         </div>
-    </section>
-
-    <!-- 기록 없음 -->
-    <section class="card" th:if="${history.isEmpty()}">
-        <p class="status-line">아직 이 책으로 측정한 기록이 없습니다. 타이머 시작 시 이 책을 선택해 보세요.</p>
-    </section>
-
-    <!-- 일자별 기록 (최신순) -->
-    <section class="card" th:unless="${history.isEmpty()}">
-        <h2>일자별 독서 시간</h2>
-        <ul class="record-list">
-            <li class="record-row" th:each="r : ${history}">
-                <span class="record-date" th:text="${#temporals.format(r.date(), 'yyyy-MM-dd (E)')}">2026-06-01</span>
-                <span class="record-time mono"
-                      th:text="${(r.totalSeconds() / 3600) + '시간 ' + ((r.totalSeconds() % 3600) / 60) + '분'}">0시간 0분</span>
-            </li>
-        </ul>
     </section>
 
     <!-- 광고 (하단, 게시자 ID 설정 시에만) -->
@@ -120,5 +89,27 @@
         <a th:href="@{/}">대시보드</a>
     </p>
 </div>
+
+<!-- 일자별 독서 기록: 한 번에 한 달만 보이고 ◀(과거)/▶(최신)로 이동. 월 섹션은 최신이 인덱스 0(서버가 최신만 렌더).
+     JS가 없어도 최신 달은 보이는 폴백. 외부 의존(Alpine/htmx) 없이 바닐라로 hidden만 토글한다(history 화면과 동일). -->
+<script>
+  (function () {
+    var sections = Array.prototype.slice.call(document.querySelectorAll('.month-section'));
+    if (sections.length < 1) return;
+    var prev = document.querySelector('.month-nav-prev');
+    var next = document.querySelector('.month-nav-next');
+    var label = document.querySelector('.month-nav-label');
+    var idx = 0; // 0 = 최신 달
+    function render() {
+      for (var i = 0; i < sections.length; i++) sections[i].hidden = (i !== idx);
+      if (label) label.textContent = sections[idx].getAttribute('data-label');
+      if (next) next.disabled = (idx === 0);                   // 더 최신 없음
+      if (prev) prev.disabled = (idx === sections.length - 1); // 더 과거 없음
+    }
+    if (prev) prev.addEventListener('click', function () { if (idx < sections.length - 1) { idx++; render(); } });
+    if (next) next.addEventListener('click', function () { if (idx > 0) { idx--; render(); } });
+    render();
+  })();
+</script>
 </body>
 </html>
