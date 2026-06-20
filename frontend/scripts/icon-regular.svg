@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- 배경 (세이지 그린, 둥근 모서리) -->
+  <rect width="512" height="512" rx="96" fill="#6E8A6A"/>
+
+  <!-- 페이지 스택 효과 (오른쪽 끝 살짝 노출) -->
+  <rect x="160" y="108" width="202" height="296" rx="10" fill="#DDD6C6"/>
+
+  <!-- 책 표지 본체 (크림색) -->
+  <rect x="148" y="104" width="204" height="296" rx="12" fill="#FCFAF5"/>
+
+  <!-- 책 등 (spine) -->
+  <rect x="148" y="104" width="36" height="296" rx="12" fill="#E4DDD0"/>
+  <rect x="172" y="104" width="12" height="296" fill="#E4DDD0"/>
+
+  <!-- spine 세로 선 (장식) -->
+  <rect x="155" y="130" width="2" height="244" rx="1" fill="#C8BFAF" opacity="0.5"/>
+  <rect x="163" y="130" width="2" height="244" rx="1" fill="#C8BFAF" opacity="0.5"/>
+
+  <!-- 책 제목 영역 (세이지 그린 바) -->
+  <rect x="196" y="152" width="136" height="10" rx="5" fill="#6E8A6A" opacity="0.55"/>
+  <rect x="196" y="170" width="104" height="10" rx="5" fill="#6E8A6A" opacity="0.40"/>
+
+  <!-- 책 본문 줄 (온기 있는 회색) -->
+  <rect x="196" y="216" width="136" height="8" rx="4" fill="#C8BFAF"/>
+  <rect x="196" y="236" width="136" height="8" rx="4" fill="#C8BFAF"/>
+  <rect x="196" y="256" width="108" height="8" rx="4" fill="#C8BFAF"/>
+  <rect x="196" y="276" width="132" height="8" rx="4" fill="#C8BFAF"/>
+  <rect x="196" y="296" width="88"  height="8" rx="4" fill="#C8BFAF"/>
+  <rect x="196" y="316" width="120" height="8" rx="4" fill="#C8BFAF"/>
+</svg>

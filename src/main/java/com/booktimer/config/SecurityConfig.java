@@ -56,7 +56,7 @@ public class SecurityConfig {
                         // /password/**: 비밀번호를 잊은 사용자는 비로그인 상태라 재설정 요청·확정 경로(forgot/reset)는 공개.
                         // 재설정도 토큰이 자격이라 공개여도 안전. CSRF는 POST 폼에 유지(아래 기본 활성).
                         // /unsubscribe: 마케팅 메일 수신거부 링크는 비로그인 상태로 메일에서 열린다(토큰이 신원 증명).
-                        .requestMatchers("/", "/signup", "/login", "/privacy", "/verify-email", "/password/**", "/unsubscribe", "/error", "/actuator/health", "/css/**", "/js/**", "/favicon.ico").permitAll()
+                        .requestMatchers("/", "/signup", "/login", "/privacy", "/verify-email", "/password/**", "/unsubscribe", "/error", "/actuator/health", "/css/**", "/js/**", "/favicon.ico", "/manifest.json", "/icons/**").permitAll()
                         // ads.txt(AdSense 소유권·수익 보호) + robots.txt(크롤 지시): 크롤러가 비인증으로 읽어야 하는
                         // 공개 정적 파일. default-deny라 명시 안 하면 로그인으로 302 튕겨 크롤러에게 모호한 신호가 된다.
                         .requestMatchers("/ads.txt", "/robots.txt").permitAll()

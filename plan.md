@@ -669,6 +669,14 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 
 - **랜딩 전면 리디자인 — 와이드 마케팅 랜딩(1080px, 세리프, 3단 반응형)** ✅ (PR #392, 2026-06-18): 460px 단일 컬럼 랜딩을 Claude Design 시안 기반 마케팅 페이지로 전면 교체. 핵심 결정: `body.landing-page`로 전역 앱 셸 격리·`landing.css` 별 파일 분리(전역 `app.css` 비오염). Gowun Batang 세리프 헤드라인 / 2단 비대칭 그리드(`.85fr 1.15fr` 등) / 잔디 CSS 목업(7×13 칸) / 정원·히어로 플레이스홀더(실제 캡처는 후속) / 4컬럼 기능 그리드 / 3단계 how-it-works / 반응형(860/480px). 음영 토큰 15개 추가. `LandingPageTest` 5/5 Green(신규 2건: garden 동선·핵심 키워드). 다음(백로그): 플레이스홀더 → 실제 화면 캡처 교체.
 
+### 📱 PWA 도입 — 홈 화면 설치 · 오프라인 · 리마인더 푸시 (3단계 점진 출하, L1 ✅ 2026-06-20)
+
+> **동기**: iPad 가로에서 브라우저 주소창·탭바가 화면을 잡아먹어 마을 게임 영역이 좁아지는 문제 해소. `display: standalone`으로 홈 화면 설치 시 브라우저 UI 제거(상태바=시계·배터리 유지). 단계 설계: [claude-docs/plans/2026-06-20-pwa-l1-to-l3.md](claude-docs/plans/2026-06-20-pwa-l1-to-l3.md).
+
+- **L1 풀스크린 ✅ (2026-06-20)**: `static/manifest.json`(name·short_name·start_url=/dashboard·display=standalone·scope=/·theme_color=#6E8A6A·background_color=#F3EEE4·icons 3종) + 임시 아이콘 4종(`icons/` — 192·512·maskable-512·apple-touch-icon 180, sharp SVG→PNG) + `templates/fragments/pwa-head.html`(manifest link·theme-color·apple 메타·apple-touch-icon 공통 fragment) → garden·dashboard·landing·login 주입 + `SecurityConfig` `/manifest.json`·`/icons/**` permitAll. TDD: vitest `pwa-manifest.test.ts` 8종 RED→GREEN + `PwaStaticAccessTest`(MockMvc 미인증 200) RED→GREEN.
+- **L2 설치형/오프라인 ⏳ (예정)**: `static/sw.js`(손수·버전 상수·SWR·오프라인 폴백) + SW 등록 + SecurityConfig `/sw.js` 공개. 안드 크롬 설치 배너·오프라인 셸 게이트.
+- **L3 리마인더 푸시 ⏳ (예정)**: VAPID 키쌍 + `PushSubscription` 엔티티 + Flyway + `PushApiController` + `PushSender` + 스케줄러 + 클라 권한 UI. 법무(§50) 선결 확정 후 착수.
+
 ### 📨 사용자 피드백/문의 (완료 ✅ 2026-06-08, PR #233 · 답장·유형필터 PR #234)
 
 > **한 줄**: 일반 사용자가 버그·제안을 개발자에게 보내고, 개발자(ADMIN)가 읽음/처리완료를 표시하면 **그 표시는 작성자 본인만** 본다.

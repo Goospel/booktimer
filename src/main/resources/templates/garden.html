@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <th:block th:replace="~{analytics :: gtag}"></th:block>
+    <th:block th:replace="~{fragments/pwa-head :: meta}"></th:block>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <!-- CSRF 토큰 — 배치 저장 fetch(POST /api/garden/layout)가 X-CSRF-TOKEN 헤더로 싣는다. -->
     <meta name="_csrf" th:content="${_csrf != null ? _csrf.token : ''}">

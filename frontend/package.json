@@ -8,6 +8,7 @@
   "devDependencies": {
     "@vitejs/plugin-vue": "^5",
     "phaser": "^3.80.1",
+    "sharp": "^0.35.2",
     "typescript": "^5",
     "vite": "^6",
     "vitest": "^3",

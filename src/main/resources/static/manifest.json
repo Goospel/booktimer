@@ -1,0 +1,31 @@
+{
+  "name": "BookTimer 독서 마을",
+  "short_name": "독서 마을",
+  "description": "하루 딱 N분, 가장 작은 독서 습관. 매일의 기록이 잔디가 되고 마을이 됩니다.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#6E8A6A",
+  "background_color": "#F3EEE4",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
