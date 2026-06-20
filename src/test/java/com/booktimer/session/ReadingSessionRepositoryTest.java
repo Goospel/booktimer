@@ -1,6 +1,8 @@
 package com.booktimer.session;
 
 import com.booktimer.config.JpaConfig;
+import com.booktimer.push.PushSubscription;
+import com.booktimer.push.PushSubscriptionRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -11,6 +13,7 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -34,6 +37,9 @@ class ReadingSessionRepositoryTest {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private PushSubscriptionRepository pushSubRepo;
 
     private User persistedUser(String email) {
         return userRepository.save(
@@ -172,6 +178,110 @@ class ReadingSessionRepositoryTest {
         User u = nudgeUser("renudge@booktimer.com", true, true, lastActivity, lastActivity.minusSeconds(7 * 86400));
 
         assertThat(sessionRepository.findNudgeTargets(CUTOFF))
+                .extracting(User::getId).containsExactly(u.getId());
+    }
+
+    // --- findRetentionPushTargets: L3b 비활동 복귀 푸시 대상 선정 ---
+
+    private static final Instant PUSH_CUTOFF = Instant.parse("2026-06-13T00:00:00Z");
+    private static final java.time.Clock PUSH_CONSENT_CLK =
+            java.time.Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
+
+    /**
+     * L3b 대상 선정 픽스처 — 푸시 동의·구독 유무·이메일 검증·세션·푸시 넛지 시각을 조합해 사용자를 만들어 저장.
+     */
+    private User pushTargetUser(String email, boolean pushConsent,
+                                boolean hasSubscription, boolean emailVerified,
+                                Instant lastActivity, Instant lastPushNudge) {
+        User u = User.of(email, "$2a$10$abcdefghijklmnopqrstuv", "책벌레", "Asia/Seoul", Role.USER);
+        if (pushConsent) {
+            u.consentToMarketingPush(PUSH_CONSENT_CLK);
+        }
+        if (emailVerified) {
+            u.verifyEmail();
+        }
+        if (lastPushNudge != null) {
+            u.recordPushNudgeSent(lastPushNudge);
+        }
+        u = userRepository.save(u);
+        if (hasSubscription) {
+            pushSubRepo.save(PushSubscription.of(u, "https://fcm.test/ep-" + email, "p256", "auth"));
+        }
+        if (lastActivity != null) {
+            sessionRepository.save(ReadingSession.start(u, lastActivity));
+        }
+        return u;
+    }
+
+    @Test
+    @DisplayName("findRetentionPushTargets: 7일 경계 포함 — cutoff에 마지막 활동한 동의+구독 사용자는 대상")
+    void findRetentionPushTargets_inactiveAtCutoff_isIncluded() {
+        User target = pushTargetUser("push1@test.com", true, true, false, PUSH_CUTOFF, null);
+
+        List<User> results = sessionRepository.findRetentionPushTargets(PUSH_CUTOFF);
+
+        assertThat(results).extracting(User::getId).containsExactly(target.getId());
+    }
+
+    @Test
+    @DisplayName("findRetentionPushTargets: cutoff 이후 활동(최근 활성)은 제외")
+    void findRetentionPushTargets_activeAfterCutoff_excluded() {
+        pushTargetUser("push2@test.com", true, true, false, PUSH_CUTOFF.plusSeconds(1), null);
+
+        assertThat(sessionRepository.findRetentionPushTargets(PUSH_CUTOFF)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("findRetentionPushTargets: 한 번도 안 읽은 사용자는 제외 — null-state 누출 가드(N-055)")
+    void findRetentionPushTargets_neverRead_excluded() {
+        pushTargetUser("push3@test.com", true, true, false, null, null);
+
+        assertThat(sessionRepository.findRetentionPushTargets(PUSH_CUTOFF)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("findRetentionPushTargets: 마케팅 푸시 미동의는 제외")
+    void findRetentionPushTargets_noConsent_excluded() {
+        pushTargetUser("push4@test.com", false, true, false, PUSH_CUTOFF.minusSeconds(86400), null);
+
+        assertThat(sessionRepository.findRetentionPushTargets(PUSH_CUTOFF)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("findRetentionPushTargets: 동의 ON이어도 구독 없으면 제외 (exists 구독 조건)")
+    void findRetentionPushTargets_noSubscription_excluded() {
+        pushTargetUser("push5@test.com", true, false, false, PUSH_CUTOFF.minusSeconds(86400), null);
+
+        assertThat(sessionRepository.findRetentionPushTargets(PUSH_CUTOFF)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("findRetentionPushTargets: 이 구간 이미 발송(pushNudgeSentAt >= lastActivity)이면 제외")
+    void findRetentionPushTargets_alreadyNudgedThisPeriod_excluded() {
+        Instant lastActivity = PUSH_CUTOFF.minusSeconds(86400);
+        pushTargetUser("push6@test.com", true, true, false, lastActivity, lastActivity.plusSeconds(3600));
+
+        assertThat(sessionRepository.findRetentionPushTargets(PUSH_CUTOFF)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("findRetentionPushTargets: 재활동 후 재이탈은 다시 포함 (구간당 1회 — 영구 아님)")
+    void findRetentionPushTargets_reInactiveAfterPriorNudge_included() {
+        Instant lastActivity = PUSH_CUTOFF.minusSeconds(86400);
+        User u = pushTargetUser("push7@test.com", true, true, false, lastActivity,
+                lastActivity.minusSeconds(7L * 86400));
+
+        assertThat(sessionRepository.findRetentionPushTargets(PUSH_CUTOFF))
+                .extracting(User::getId).containsExactly(u.getId());
+    }
+
+    @Test
+    @DisplayName("findRetentionPushTargets: emailVerified=false여도 포함 — 이메일 넛지와 달리 푸시는 검증 무관")
+    void findRetentionPushTargets_emailUnverified_isIncluded() {
+        User u = pushTargetUser("push8@test.com", true, true, false /* emailVerified=false */,
+                PUSH_CUTOFF.minusSeconds(86400), null);
+
+        assertThat(sessionRepository.findRetentionPushTargets(PUSH_CUTOFF))
                 .extracting(User::getId).containsExactly(u.getId());
     }
 }

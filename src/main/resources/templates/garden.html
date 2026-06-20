@@ -24,8 +24,9 @@
 <!-- 출판사 건물 SVG 스프라이트 정의 — 아이소 건물(이모지 폴백). -->
 <th:block th:replace="~{fragments/garden-building-sprites :: sprites}"></th:block>
 
-<!-- Vue SPA 마운트 포인트 — 닉네임은 data-nickname으로 실어 Vue가 HUD에서 읽는다. -->
-<div id="village-app" th:attr="data-nickname=${nickname}">불러오는 중…</div>
+<!-- Vue SPA 마운트 포인트 — 닉네임은 data-nickname, 마케팅 푸시 동의 초기값은 data-marketing-push-consent으로 전달. -->
+<div id="village-app"
+     th:attr="data-nickname=${nickname},data-marketing-push-consent=${marketingPushConsent}">불러오는 중…</div>
 
 <script type="module" th:src="@{/garden/garden.js}"></script>
 </body>

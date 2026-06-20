@@ -120,4 +120,60 @@ class PushApiControllerTest {
                         .with(user("anyid").roles("USER")))
                 .andExpect(status().isOk());
     }
+
+    // --- L3b: 마케팅 푸시 동의 토글 /api/push/marketing-consent ---
+
+    @Test
+    @DisplayName("미인증 marketing-consent 요청은 4xx(CSRF 403)로 거부된다")
+    void marketingConsent_unauthenticated_isRejected() throws Exception {
+        mvc.perform(post("/api/push/marketing-consent")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"enabled\":true}"))
+                .andExpect(status().is(403));
+    }
+
+    @Test
+    @DisplayName("enabled=true → marketingPushConsent=true + marketingPushConsentAt 기록")
+    void marketingConsent_enableTrue_setsConsentAndTimestamp() throws Exception {
+        User user = savedUser("mkt1@test.com", "mktid1");
+
+        mvc.perform(post("/api/push/marketing-consent")
+                        .with(user("mktid1").roles("USER"))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"enabled\":true}"))
+                .andExpect(status().isOk());
+
+        User updated = userRepo.findById(user.getId()).orElseThrow();
+        assertThat(updated.isMarketingPushConsent()).isTrue();
+        assertThat(updated.getMarketingPushConsentAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("enabled=false → marketingPushConsent=false, marketingPushConsentAt 보존(감사)")
+    void marketingConsent_enableFalse_withdrawsAndPreservesTimestamp() throws Exception {
+        User user = savedUser("mkt2@test.com", "mktid2");
+
+        // 먼저 동의
+        mvc.perform(post("/api/push/marketing-consent")
+                        .with(user("mktid2").roles("USER"))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"enabled\":true}"))
+                .andExpect(status().isOk());
+
+        // 철회
+        mvc.perform(post("/api/push/marketing-consent")
+                        .with(user("mktid2").roles("USER"))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"enabled\":false}"))
+                .andExpect(status().isOk());
+
+        User updated = userRepo.findById(user.getId()).orElseThrow();
+        assertThat(updated.isMarketingPushConsent()).isFalse();
+        assertThat(updated.getMarketingPushConsentAt())
+                .as("철회 후에도 동의 시각은 감사 근거로 보존된다")
+                .isNotNull();
+    }
 }

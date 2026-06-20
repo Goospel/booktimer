@@ -493,4 +493,56 @@ class UserTest {
                 .isInstanceOf(IllegalStateException.class);
         assertThat(user.getLoginId()).isEqualTo("goospel_01"); // 원래 값 유지
     }
+
+    // --- L3b: 마케팅 푸시 동의 / 비활동 푸시 넛지 멱등 (PWA L3b) ---
+
+    private static final java.time.Clock PUSH_CLK =
+            java.time.Clock.fixed(java.time.Instant.parse("2026-06-20T10:00:00Z"), java.time.ZoneOffset.UTC);
+
+    @Test
+    @DisplayName("새 사용자는 마케팅 푸시 미동의(기본 OFF) — opt-in 불변식(끼워팔기 금지)")
+    void of_marketingPushConsentDefaultsOff() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        assertThat(user.isMarketingPushConsent()).isFalse();
+        assertThat(user.getMarketingPushConsentAt()).isNull();
+        assertThat(user.getMarketingPushNudgeSentAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("consentToMarketingPush: 동의 true 전환 + 동의 시각 기록")
+    void consentToMarketingPush_setsTrueAndTimestamp() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        user.consentToMarketingPush(PUSH_CLK);
+
+        assertThat(user.isMarketingPushConsent()).isTrue();
+        assertThat(user.getMarketingPushConsentAt())
+                .isEqualTo(java.time.Instant.parse("2026-06-20T10:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("withdrawMarketingPushConsent: 동의 false 전환하되 동의 시각은 감사용으로 보존한다")
+    void withdrawMarketingPushConsent_clearsConsentButKeepsTimestamp() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+        user.consentToMarketingPush(PUSH_CLK);
+
+        user.withdrawMarketingPushConsent();
+
+        assertThat(user.isMarketingPushConsent()).isFalse();
+        assertThat(user.getMarketingPushConsentAt())
+                .as("철회해도 동의 이력(시각)은 감사 근거로 남긴다")
+                .isEqualTo(java.time.Instant.parse("2026-06-20T10:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("recordPushNudgeSent: L3b 비활동 푸시 넛지 발송 시각을 기록한다 (멱등 상태)")
+    void recordPushNudgeSent_storesTimestamp() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+        java.time.Instant when = java.time.Instant.parse("2026-06-20T10:00:00Z");
+
+        user.recordPushNudgeSent(when);
+
+        assertThat(user.getMarketingPushNudgeSentAt()).isEqualTo(when);
+    }
 }

@@ -44,6 +44,7 @@ public class GardenController {
         User user = currentUserService.resolve(principal);
         model.addAttribute("nickname", user.getNickname());
         model.addAttribute("vapidPublicKey", vapidPublicKey);
+        model.addAttribute("marketingPushConsent", user.isMarketingPushConsent());
         return "garden";
     }
 
