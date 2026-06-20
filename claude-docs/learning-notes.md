@@ -100,6 +100,8 @@
 - [N-097. Alpine `alpine:init` × `Alpine.data` 번들 타이밍 — CDN defer와 번들 module의 실행 순서 보장](#n-097-alpine-alpineinit--alpinedata-번들-타이밍--cdn-defer와-번들-module의-실행-순서-보장)
 - [N-098. SSR 섬 아키텍처 — Vite 번들을 static 자원으로 커밋해 bootJar에 통합](#n-098-ssr-섬-아키텍처--vite-번들을-static-자원으로-커밋해-bootjar에-통합)
 - [N-099. Phaser CDN defer → npm import가 T-054 TDZ를 구조적으로 제거하는 이유](#n-099-phaser-cdn-defer--npm-import가-t-054-tdz를-구조적으로-제거하는-이유)
+- [N-100. Phaser 캔버스를 CSS `transform: rotate()`로 돌리면 포인터 hit-test가 깨진다 — 카메라 회전을 쓸 것](#n-100-phaser-캔버스를-css-transform-rotate로-돌리면-포인터-hit-test가-깨진다--카메라-회전을-쓸-것)
+- [N-101. PWA(Progressive Web App) — manifest·메타로 설치·풀스크린, Service Worker로 오프라인·푸시, iOS는 홈화면 설치가 푸시 전제](#n-101-pwaprogressive-web-app--manifest메타로-설치풀스크린-service-worker로-오프라인푸시-ios는-홈화면-설치가-푸시-전제)
 
 ---
 
@@ -4678,3 +4680,68 @@ cam.setZoom(initialZoomFor(TARGET_PLANT_CSS, this.plantPx, axis, this.cfg.worldW
 - **T-067** — CSS rotate로 캔버스 돌리면 Phaser 입력 깨짐 (phaserjs/phaser#7175)
 - **N-082** — Alpine reactive Proxy × Phaser 인스턴스 격리 (markRaw 패턴)
 - **PR #411** — 마을 모바일 세로 자동 가로 S2
+
+---
+
+## N-101. PWA(Progressive Web App) — manifest·메타로 설치·풀스크린, Service Worker로 오프라인·푸시, iOS는 홈화면 설치가 푸시 전제
+
+> **한 줄**: 웹앱을 네이티브 앱처럼 "설치·전체화면 실행"하게 하는 웹 표준 묶음. 풀스크린(주소창·탭바 제거)은 `manifest.json` + apple 메타만으로 되고, 오프라인·푸시는 Service Worker가 추가로 필요하다. 도입은 L1(풀스크린)→L2(설치/오프라인)→L3(푸시)로 비용이 누적된다.
+
+### 구성요소 (3 + 전제)
+
+| 요소 | 역할 | 풀스크린에 필수? |
+|---|---|---|
+| `manifest.json` | 앱 이름·아이콘·`display` 모드·테마색. "홈 화면 추가" 시 브라우저가 읽음 | ✅ |
+| apple 메타 태그 | iOS Safari 전용 — `apple-mobile-web-app-capable`(standalone)·상태바 스타일·홈 아이콘 | iOS는 ✅ |
+| Service Worker | 페이지와 독립적으로 브라우저가 돌리는 백그라운드 JS — fetch 가로채 캐싱(오프라인), 푸시 수신 | ❌ (풀스크린엔 불필요) |
+| HTTPS | Service Worker·설치·푸시의 보안 전제(localhost만 예외) | 전제 |
+
+### display 모드 — 주소창을 없애는 스위치
+
+`manifest.json`의 `"display"`: `browser`(일반 탭) / `minimal-ui` / `standalone`(앱처럼, 주소창·탭바 없음) / `fullscreen`(상태바까지 제거). standalone·fullscreen이 "브라우저 UI가 화면을 잡아먹는" 문제를 푸는 핵심. 단 **설치(홈 화면 추가) 후 그 아이콘으로 띄울 때만** 적용된다 — 그냥 탭에서 열면 여전히 브라우저 UI가 남는다.
+
+### 레벨 — 비용이 누적된다
+
+- **L1 풀스크린**: `manifest.json` + apple 메타 + 아이콘. Service Worker 불필요. 가장 적은 작업으로 "앱처럼 풀스크린".
+- **L2 설치형**: + Service Worker(앱 셸 캐싱). 안드로이드 크롬이 "설치" 배너를 띄우는 자격(installability)이 생기고, 오프라인에서도 셸이 뜬다.
+- **L3 푸시**: + Web Push(VAPID 키 쌍으로 서명) + 서버의 구독 저장·발송. 리텐션(복귀 유도) 알림.
+
+### 플랫폼 차이 — iOS가 까다롭다
+
+| | 안드로이드 크롬 | iOS/iPadOS Safari |
+|---|---|---|
+| 설치 | `beforeinstallprompt`로 배너 자동 | "공유 → 홈 화면에 추가" **수동**, apple 메타 필수 |
+| 풀스크린 | standalone 매끄러움 | standalone 됨(메타 필요) |
+| 푸시 | 탭에서도 됨 | **iOS 16.4+ & 홈 화면 설치 상태에서만**(탭에선 불가) |
+
+→ **iOS도 L3까지 다 되지만**, 푸시를 받으려면 사용자가 반드시 홈 화면에 설치해야 한다. 즉 iOS에서 푸시 리텐션은 "설치 유도 → 16.4+ → 권한 허용"이라는 깔때기를 통과한 사용자에게만 닿는다. "iOS는 L1이 한계"가 아니라 **"iOS의 L3는 설치가 전제"**가 정확한 이해.
+
+### 예시 — 최소 manifest + apple 메타
+
+```json
+// manifest.json
+{
+  "name": "BookTimer 독서 마을",
+  "short_name": "독서 마을",
+  "start_url": "/garden",
+  "display": "standalone",
+  "theme_color": "#...",
+  "background_color": "#...",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
+```
+```html
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+```
+
+### 관련
+
+- **N-067 / N-072** — 푸시 알림도 "영리 광고성 정보"면 정보통신망법 §50 동의 대상(이메일과 같은 법적 부담). retention 푸시 문구 설계 시 점검.
+- **N-091** — SES 프로덕션 액세스 보류(이메일 retention). Web Push는 같은 "복귀 유도" 축의 대안/보완 — 같은 스케줄러·`lastNudgeSentAt` 패턴 재사용 가능.
+- **N-098** — Vite 번들을 static으로 커밋하는 SSR 섬 구조. PWA의 Service Worker·manifest도 같은 static 자원 경로로 서빙.

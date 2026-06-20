@@ -60,6 +60,8 @@
 - [T-068. 카메라 강제 회전(`cam.setRotation`)은 기기를 거꾸로 들면 방향이 반대 — 순수 반응형이 정답](#t-068-카메라-강제-회전camsetrotation은-기기를-거꾸로-들면-방향이-반대--순수-반응형이-정답)
 - [T-069. 모바일 가로 첫 로드에서 마을 왼쪽 치우침 — `cam.setBounds`가 centering 음수 scrollX 클램핑](#t-069-모바일-가로-첫-로드에서-마을-왼쪽-치우침--cambounds가-centering-음수-scrollx-클램핑)
 - [T-070. bootRun은 장기 실행 태스크라 Gradle 진행률이 80%대에서 멈춘다(정상) — % 아닌 로그/포트로 ready 판정](#t-070-bootrun은-장기-실행-태스크라-gradle-진행률이-80대에서-멈춘다정상---아닌-로그포트로-ready-판정)
+- [T-071. Service Worker + 해시 없는 번들 → cache-first만 쓰면 배포해도 안 묻힘 — garden.js는 network-first 필수](#t-071-service-worker--해시-없는-번들--cache-first만-쓰면-배포해도-안-묻힘--gardenjs는-network-first-필수)
+- [T-072. Service Worker scope = sw.js 파일 위치 — static 루트에 없으면 전역 제어 안 됨](#t-072-service-worker-scope--swjs-파일-위치--static-루트에-없으면-전역-제어-안-됨)
 
 ---
 
@@ -1361,6 +1363,37 @@ cam.setScroll(s.scrollX, s.scrollY);
 
 ---
 
+## T-071. Service Worker + 해시 없는 번들 → cache-first만 쓰면 배포해도 안 묻힘 — garden.js는 network-first 필수
+
+**증상**: SW를 배포하고 `garden.js` 소스를 수정해 재배포했는데 기존 사용자에게 구 버전이 계속 보인다. DevTools → Application → Cache Storage에 구 `garden.js`가 살아있고, 네트워크 탭에서 "from ServiceWorker"로 서빙됨.
+
+**원인**: Vite 설정 `entryFileNames: 'garden.js'`로 번들 파일명이 고정(콘텐츠 해시 없음). 일반 HTTP 캐시는 ETag·max-age가 있어 브라우저가 알아서 재검증하지만, SW cache-first는 **캐시 히트 즉시 반환**해 버린다 — 서버에 갱신됐는지 묻지 않는다. 파일명이 바뀌지 않으면 SW는 구 버전을 계속 돌려준다.
+
+**해결**:
+1. `garden.js`는 SW `fetch` 핸들러에서 **network-first**로 처리(`fetch(request)` 먼저, 오프라인 시만 캐시 폴백).
+2. **`CACHE` 버전 상수** 올리기 + activate에서 구 캐시 전량 삭제(`caches.delete(oldKey)`)를 추가 안전장치로. activate는 SW 새 버전이 설치된 뒤 이전 버전 클라이언트가 모두 닫히면 발동한다.
+3. 장기적 해결 = Vite에서 해시 번들명 사용(`entryFileNames: '[name].[hash].js'`). 파일명이 달라지면 cache-first를 써도 이전 파일은 별도 URL이라 히트 안 됨.
+
+**예방**: SW를 붙이기 전에 번들 파일명 전략(해시 vs 고정)을 먼저 결정하라. 고정이면 dynamic(해당 파일만 network-first). 해시가 있으면 SW manifest를 빌드마다 자동 재생성하는 플러그인(vite-plugin-pwa 등)이 필요.
+
+**관련**: N-098(Vite 번들 static·파일명 고정), N-101(PWA 레벨·캐싱 전략), T-072(SW scope), PR L2.
+
+---
+
+## T-072. Service Worker scope = sw.js 파일 위치 — static 루트에 없으면 전역 제어 안 됨
+
+**증상**: SW를 등록했는데 `/dashboard`, `/` 등 일부 페이지에서 fetch 이벤트가 안 잡힌다. DevTools → Application → Service Workers에 scope가 `/garden/`으로 좁혀 표시됨.
+
+**원인**: SW의 기본 scope는 **sw.js가 위치한 경로**(디렉터리)다. `static/garden/sw.js`에 두면 scope=`/garden/`이라 `/garden/*` 요청만 가로채고, `/dashboard`, `/login`, `/`는 제어 밖이다.
+
+**해결**: `static/sw.js`(static 루트 직하)에 두면 scope=`/` 전역 → 모든 경로 fetch를 가로챌 수 있다. BookTimer의 Vite outDir=`static/garden`이라 빌드 산출물이 `static/garden/`에만 들어간다 → sw.js를 빌드 산출물로 관리하면 자동으로 `/garden/` scope에 갇힌다. 손수 `static/sw.js`로 배치(빌드가 건드리지 않음)해야 전역 scope 확보.
+
+**예방**: SW를 새로 만들 때는 배치 위치와 scope를 DevTools → Application → Service Workers에서 확인하라. scope를 명시 지정하려면 `serviceWorker.register('/sw.js', { scope: '/' })`로 쓸 수도 있으나, SW 파일이 실제 그 scope 경로에 접근 가능해야 한다(더 넓은 scope는 서버 헤더 `Service-Worker-Allowed`가 필요).
+
+**관련**: N-101(PWA 레벨·SW 전역 등록), T-071(캐싱 전략·network-first), PR L2.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1436,3 +1469,5 @@ cam.setScroll(s.scrollX, s.scrollY);
 | 2026-06-19 | T-068 (`cam.setRotation` 강제 가로 회전은 기기를 거꾸로 들면 방향 반대 — 세로에도 방향이 있어 고정 회전 부적합 / 해결=`fitCamera`+`containZoomFor` 순수 반응형, `ZOOM_MIN=0.25`, 팬·핀치·휠 보기/편집 공통 분리, DOM 회전 래퍼 제거 / T-067·PR #413) |
 | 2026-06-20 | T-069 (모바일 가로 첫 로드 마을 왼쪽 치우침 / 진짜 원인=`cam.setBounds(0,0,W,H)`가 containZoom 상태 centering 음수 scrollX를 클램핑 / 해결=`fitCamera`에서 centering offset만큼 bounds 동적 확장, `create()` 정적 setBounds 제거 / PR #415) |
 | 2026-06-20 | T-070 (bootRun은 장기 실행 태스크라 Gradle 진행률이 80%대서 멈춤=정상, 100%는 앱 종료 시 도달 / ready 판정은 % 아닌 로그 `Started ...`·8080 LISTEN, Claude Code는 background 실행해야 foreground 무한대기 회피 / 검증 후 8080 반납 / T-063) |
+| 2026-06-20 | T-071 (Service Worker + 해시 없는 번들(`garden.js` 파일명 고정) → cache-first만 쓰면 배포해도 사용자에게 안 묻힘 / Vite `entryFileNames: 'garden.js'`로 파일명이 고정이라 SW가 cache-first로 잡으면 캐시가 살아있는 한 구 버전이 계속 서빙됨 / 해결=`garden.js`는 SW에서 **network-first**(온라인이면 항상 네트워크 우선, 캐시는 오프라인 폴백), 나머지 정적 자산(CSS·아이콘·manifest)은 cache-first / 추가 안전장치=`CACHE` 버전 상수 올리면 activate에서 구 캐시 전량 삭제 / N-098(Vite 번들 static), N-101(PWA 레벨), PR L2) |
+| 2026-06-20 | T-072 (Service Worker scope = sw.js 파일 위치 / SW의 scope는 sw.js가 있는 경로를 기준으로 결정됨 — `static/garden/sw.js`이면 scope=`/garden/`이라 `/dashboard`·`/` 등이 제어 안 됨 / 해결=`static/sw.js`(static 루트 직하)에 두면 scope=`/` 전역 → 모든 경로 fetch를 가로챌 수 있음 / Vite의 outDir=`static/garden`이라 빌드 산출물에 섞이지 않도록 손수 파일로 static 루트에 배치 / N-101, PR L2) |
