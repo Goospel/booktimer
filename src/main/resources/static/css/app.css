@@ -1606,6 +1606,16 @@ a.book-title:hover { text-decoration: underline; }
 }
 .village-hud > * { pointer-events: auto; }
 
+@media (min-width: 900px) {
+    .village-hud {
+        inset: auto;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        width: min(100%, 1000px);
+        height: min(100dvh, 800px);
+    }
+}
+
 /* HUD 상단 — 브랜드 + 인사말 (반투명 캡슐) */
 .village-hud-top {
     display: inline-flex;
