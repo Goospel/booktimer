@@ -146,6 +146,7 @@ function _showChip(mode, deferred) {
         'font:inherit',
         'cursor:pointer',
         'padding:0',
+        'white-space:nowrap',
     ].join(';');
 
     // 닫기 버튼
