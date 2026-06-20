@@ -41,6 +41,10 @@ describe('PWA L2 Service Worker 정적 가드', () => {
         test('clients.claim() 호출이 있다 (activate에서 즉시 제어)', () => {
             expect(swContent()).toMatch(/clients\.claim\(\)/);
         });
+
+        test('/api/ 경로 캐시 제외 — 인증 데이터 보안', () => {
+            expect(swContent()).toMatch(/pathname\.startsWith\s*\(\s*['"]\/api\//);
+        });
     });
 
     describe('pwa-head.html 프래그먼트 — SW 등록 코드', () => {
