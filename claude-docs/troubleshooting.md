@@ -1483,6 +1483,7 @@ th:text="${'· 누적 ' + (totalSeconds / 3600) + '시간 ...'}"
 - SW에서 관리할 **파일명 고정 자산이 생기면 `NETWORK_FIRST`에 추가**한다(garden.js·app.css·pwa-install.js 패턴).
 - 파일명에 콘텐츠 해시를 붙일 수 없는 자산이라면 반드시 network-first + CACHE 버전 관리.
 - 배포 후 "코드는 올라갔는데 화면이 안 바뀜"이면 SW stale 가능성 먼저 의심.
+- **신규 정적 파일**을 추가할 때도 마찬가지: SW가 첫 방문 때 캐시하면 그 버전이 stale로 굳는다. `NETWORK_FIRST` 배열에 미리 추가하거나, 개발 중 검증 시 `import('/파일명.js?bust=임의값')`으로 query param을 바꿔 SW 캐시를 bypass한다.
 
 **관련**: T-071(garden.js cache-first stale), N-101(PWA 레벨), PR #430.
 
