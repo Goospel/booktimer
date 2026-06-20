@@ -1,9 +1,9 @@
 // BookTimer Service Worker — 앱 셸 캐싱 + 푸시 알림 (L2/L3a)
-// garden.js는 파일명 고정(해시 없음)이라 network-first로 stale 방지.
+// 파일명 고정 코드/스타일 자산(garden.js·app.css·pwa-install.js)은 network-first로 stale 방지.
 // HTML 내비게이션·API는 network-first — SSR·인증 응답이라 캐시에 개인 데이터 담지 않음.
-// 정적 자산(CSS·아이콘·manifest)만 cache-first로 빠른 재사용.
+// 아이콘·manifest는 cache-first로 빠른 재사용.
 // 버전 상수: 정적 자산 갱신 시 올려 activate에서 구 캐시 삭제.
-const CACHE = 'shell-v3';
+const CACHE = 'shell-v4';
 
 const PRECACHE_URLS = [
     '/manifest.json',
@@ -14,6 +14,8 @@ const PRECACHE_URLS = [
     '/icons/maskable-512.png',
     '/icons/apple-touch-icon.png',
 ];
+
+const NETWORK_FIRST = ['/garden/garden.js', '/css/app.css', '/pwa-install.js'];
 
 self.addEventListener('install', (event) => {
     event.waitUntil(
@@ -49,8 +51,8 @@ self.addEventListener('fetch', (event) => {
     // API 요청 — 캐시 금지(인증·사용자별 데이터; 개인 정보 캐시 보안 위반 방지)
     if (url.pathname.startsWith('/api/')) return;
 
-    // garden.js — network-first(파일명 고정이라 cache-first면 stale)
-    if (url.pathname === '/garden/garden.js') {
+    // 파일명 고정 자산(garden.js·app.css·pwa-install.js) — network-first(cache-first면 stale)
+    if (NETWORK_FIRST.includes(url.pathname)) {
         event.respondWith(
             fetch(request)
                 .then((res) => {
