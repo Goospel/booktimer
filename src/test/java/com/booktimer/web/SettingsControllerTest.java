@@ -290,4 +290,38 @@ class SettingsControllerTest {
         ReadingTimer timer = timerRepository.findByUser(reloaded).orElseThrow();
         assertThat(timer.isDebtCarryover()).isTrue();
     }
+
+    // --- 알림 통합: vapidPublicKey·marketingPushConsent 모델 추가 ---
+
+    @Test
+    @DisplayName("GET /settings: vapidPublicKey를 모델에 싣는다")
+    void getSettings_includesVapidPublicKey() throws Exception {
+        register("vapid@booktimer.com");
+
+        mockMvc.perform(get("/settings").with(user("vapid@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeExists("vapidPublicKey"));
+    }
+
+    @Test
+    @DisplayName("GET /settings: marketingPushConsent=false인 사용자는 false를 모델에 싣는다")
+    void getSettings_marketingPushConsent_false() throws Exception {
+        register("mktpush@booktimer.com"); // 기본 false
+
+        mockMvc.perform(get("/settings").with(user("mktpush@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("marketingPushConsent", false));
+    }
+
+    @Test
+    @DisplayName("GET /settings: marketingPushConsent=true인 사용자는 true를 모델에 싣는다")
+    void getSettings_marketingPushConsent_true() throws Exception {
+        User user = register("mktpushtrue@booktimer.com");
+        user.consentToMarketingPush(clock);
+        userRepository.save(user);
+
+        mockMvc.perform(get("/settings").with(user("mktpushtrue@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("marketingPushConsent", true));
+    }
 }
