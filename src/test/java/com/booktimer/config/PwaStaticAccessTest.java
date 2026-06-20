@@ -41,4 +41,11 @@ class PwaStaticAccessTest {
         mvc().perform(get("/icons/icon-192.png"))
                 .andExpect(status().isOk());
     }
+
+    @Test
+    @DisplayName("미인증 상태에서 /sw.js 가 200 을 반환한다 (Service Worker 전역 등록 필수)")
+    void swJs_isPublic_returns200() throws Exception {
+        mvc().perform(get("/sw.js"))
+                .andExpect(status().isOk());
+    }
 }
