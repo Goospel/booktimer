@@ -17,15 +17,22 @@
 
 ### 1. `User` — 회원/계정
 
+> 식별/인증 모델은 [login-id-design.md](login-id-design.md)에서 **login_id(공개 @핸들)·email(비공개 속성)·nickname(표시명)** 으로 분리·확정됐다(PR #146~#156). 아래는 핵심 필드 — 마케팅 동의·리마인더 푸시 등 부가 속성은 코드(`User.java`) 참조.
+
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | id | `Long` (PK) | auto |
-| email | `String`, unique, not null | 로그인 ID |
-| passwordHash | `String`, not null | 이미 해시된 비밀번호(BCrypt). 평문 저장 금지 |
-| nickname | `String` | 표시명 (추후 SNS) |
+| loginId | `String`, unique, **불변** | **로그인 + 공개 @핸들**(검색·프로필 URL). 소문자 정규화·예약어 차단. OAuth는 온보딩 전까지 null |
+| email | `String`, unique, not null | 연락·복구·OAuth 연결용 **비공개** 속성(로그인 식별자 아님) |
+| passwordHash | `String`, **nullable** | BCrypt 해시. LOCAL 계정만 보유 — OAuth 계정은 null |
+| nickname | `String`, not null | 표시명(중복 허용·자유 변경) |
 | timezone | `String` (IANA, 예 `Asia/Seoul`) | Lazy 누적의 "오늘" 기준 |
 | role | `enum Role { USER, ADMIN }` | 권한 |
+| authProvider | `enum { LOCAL, GOOGLE }` | 인증 출처(기본 LOCAL) |
+| onboarded / emailVerified | `boolean` | 온보딩 완료 / 이메일 검증 |
 | createdAt / updatedAt | auditing | `@CreatedDate` / `@LastModifiedDate` |
+
+> 그 외 retention/PWA 부가 필드(`marketingEmailConsent`·`marketingPushConsent`·`dailyReminderEnabled`·`lastNudgeSentAt` 등)는 코드 참조 — 설계 결정은 각 기능 문서·changelog에 있다.
 
 ### 2. `ReadingTimer` — 하루 목표 (User와 1:1)
 

@@ -669,9 +669,9 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 
 - **랜딩 전면 리디자인 — 와이드 마케팅 랜딩(1080px, 세리프, 3단 반응형)** ✅ (PR #392, 2026-06-18): 460px 단일 컬럼 랜딩을 Claude Design 시안 기반 마케팅 페이지로 전면 교체. 핵심 결정: `body.landing-page`로 전역 앱 셸 격리·`landing.css` 별 파일 분리(전역 `app.css` 비오염). Gowun Batang 세리프 헤드라인 / 2단 비대칭 그리드(`.85fr 1.15fr` 등) / 잔디 CSS 목업(7×13 칸) / 정원·히어로 플레이스홀더(실제 캡처는 후속) / 4컬럼 기능 그리드 / 3단계 how-it-works / 반응형(860/480px). 음영 토큰 15개 추가. `LandingPageTest` 5/5 Green(신규 2건: garden 동선·핵심 키워드). 다음(백로그): 플레이스홀더 → 실제 화면 캡처 교체.
 
-### 📱 PWA 도입 — 홈 화면 설치 · 오프라인 · 리마인더 푸시 (3단계 점진 출하, L1·L2 ✅ 2026-06-20)
+### 📱 PWA 도입 — 홈 화면 설치 · 오프라인 · 푸시 · 설치 유도 (L1~L3c 전 단계 ✅ 2026-06-20)
 
-> **동기**: iPad 가로에서 브라우저 주소창·탭바가 화면을 잡아먹어 마을 게임 영역이 좁아지는 문제 해소. `display: standalone`으로 홈 화면 설치 시 브라우저 UI 제거(상태바=시계·배터리 유지). 단계 설계: [claude-docs/plans/2026-06-20-pwa-l1-to-l3.md](claude-docs/plans/2026-06-20-pwa-l1-to-l3.md).
+> **동기**: iPad 가로에서 브라우저 주소창·탭바가 화면을 잡아먹어 마을 게임 영역이 좁아지는 문제 해소. `display: standalone`으로 홈 화면 설치 시 브라우저 UI 제거(상태바=시계·배터리 유지). 단계별 출하 내역은 아래 항목 + [changelog.md](claude-docs/changelog.md).
 
 - **L1 풀스크린 ✅ (2026-06-20)**: `static/manifest.json`(name·short_name·start_url=/dashboard·display=standalone·scope=/·theme_color=#6E8A6A·background_color=#F3EEE4·icons 3종) + 임시 아이콘 4종(`icons/` — 192·512·maskable-512·apple-touch-icon 180, sharp SVG→PNG) + `templates/fragments/pwa-head.html`(manifest link·theme-color·apple 메타·apple-touch-icon 공통 fragment) → garden·dashboard·landing·login 주입 + `SecurityConfig` `/manifest.json`·`/icons/**` permitAll. TDD: vitest `pwa-manifest.test.ts` 8종 RED→GREEN + `PwaStaticAccessTest`(MockMvc 미인증 200) RED→GREEN.
 - **L2 설치형/오프라인 ✅ (2026-06-20)**: `static/sw.js` 신설(CACHE='shell-v1'·install precache·activate 구 캐시 삭제·clients.claim·fetch: HTML navigate = network-first·garden.js = network-first·정적자산 = cache-first) + `pwa-head` fragment에 `serviceWorker.register('/sw.js')` 전역 등록 + SecurityConfig `/sw.js` permitAll. vitest `pwa-sw.test.ts` 7종 + `PwaStaticAccessTest.swJs_isPublic` RED→GREEN. 실 브라우저 게이트(오프라인 셸·갱신·설치 배너) 필요.
