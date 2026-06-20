@@ -5035,3 +5035,60 @@ if (document.readyState === 'loading') {
 - **N-083** — `defer`×`class extends` TDZ 함정(로드 순서가 본질인 같은 계열 문제).
 - **T-053** — 헤드리스 재현이 로드 순서를 왜곡해 실 브라우저 사각이 생기는 이유.
 - `src/main/resources/static/notification-settings.js` — 이 패턴 실제 적용 사례.
+
+---
+
+## N-108. SSR에서 빌드 자동화 없이 캐시 stale 해결 — Spring resource chain 런타임 해시로 NETWORK_FIRST 졸업
+
+**한 줄 요약**: Thymeleaf SSR 앱에서 Vite manifest 없이도 정적 자산 캐시 stale 문제를 해결할 수 있다 — Spring resource chain content versioning이 런타임에 파일 내용 MD5를 URL에 삽입하고, `@{}` 표현식이 자동 변환한다. 내용이 바뀌면 URL이 바뀌어 SW·브라우저 캐시가 구조적으로 stale이 될 수 없다.
+
+### 문제 — 파일명 고정 자산은 cache-first에서 stale
+
+Vite `entryFileNames: 'garden.js'`처럼 파일명을 고정하면 SW가 `garden.js`를 cache-first로 잡는다. 배포 후 내용이 바뀌어도 파일명이 같으므로 SW 캐시에서 구버전이 계속 서빙된다. 임시방편으로 `NETWORK_FIRST = ['/garden/garden.js', '/css/app.css', '/pwa-install.js']`를 쓰면 매번 네트워크를 거쳐 느리고 목록도 수동 관리해야 한다.
+
+### 해법 — Spring resource chain content versioning
+
+`application.properties` 두 줄:
+
+```properties
+spring.web.resources.chain.strategy.content.enabled=true
+spring.web.resources.chain.strategy.content.paths=/**
+```
+
+- Spring이 기동 시 각 정적 파일의 MD5를 계산해 URL에 삽입: `/css/app.css` → `/css/app-6f8b276c.css`
+- Thymeleaf `@{/css/app.css}`가 `ResourceUrlProvider`를 통해 해시 URL로 자동 변환
+- 내용이 바뀌면 MD5가 달라져 URL이 달라짐 → 새 URL은 캐시 미스 → 무조건 fetch
+- **빌드 파이프라인 무변경** — Vite 설정·npm 스크립트 그대로
+- 단일 파일(`inlineDynamicImports:true`)이면 내부 import 없으므로 ES module도 안전
+
+### SW NETWORK_FIRST 졸업
+
+해시 URL은 cache-first로도 stale이 불가하므로 `NETWORK_FIRST` 배열이 필요 없다:
+
+```js
+// 변경 전: NETWORK_FIRST 임시방편 (파일명 고정 자산만)
+const NETWORK_FIRST = ['/garden/garden.js', '/css/app.css', '/pwa-install.js'];
+if (NETWORK_FIRST.includes(url.pathname)) { /* network-first */ }
+
+// 변경 후: cache-first 단일 전략 (해시 URL이 stale 방어)
+// NETWORK_FIRST 배열 제거 — 모든 정적 자산 cache-first 통합
+```
+
+PRECACHE_URLS에서도 해시 자산 제거(빌드 타임에 URL을 모르므로 프리캐시 불가 → 첫 요청 시 자동 캐시).
+
+### 비교 — Vite manifest 방식(단계 1)과의 차이
+
+| | Spring runtime 해시 (단계 0) | Vite manifest (단계 1) |
+|---|---|---|
+| 빌드 파이프라인 변경 | 없음 | Vite 멀티엔트리 + manifest 생성 |
+| 적용 시점 | 서버 기동 시 (런타임) | 빌드 시 (빌드타임) |
+| 단일 파일 번들 | 적합 | 코드스플릿 있을 때 필요 |
+| 언제 쓰나 | 빌드 자동화 전·단일 번들 | 페이지별 번들이 늘어날 때 |
+
+### 관련
+
+- **N-105** — 사파리/iOS 캐시 3계층(HTTP·SW Cache·SW 스크립트 갱신 수명 차이).
+- **N-106** — SSR 즉시반영 vs SPA 캐시 갇힘(정적 번들 파일명 고정이 왜 문제인가).
+- **T-071** — SW cache-first + 고정 파일명 = stale(NETWORK_FIRST가 나온 근본 원인).
+- `src/main/resources/application.properties` — 실제 적용 설정.
+- `src/main/resources/static/sw.js` — NETWORK_FIRST 졸업 구현.

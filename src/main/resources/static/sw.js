@@ -1,21 +1,20 @@
 // BookTimer Service Worker — 앱 셸 캐싱 + 푸시 알림 (L2/L3a)
-// 파일명 고정 코드/스타일 자산(garden.js·app.css·pwa-install.js)은 network-first로 stale 방지.
-// HTML 내비게이션·API는 network-first — SSR·인증 응답이라 캐시에 개인 데이터 담지 않음.
+// 정적 자산(garden.js·app.css·pwa-install.js)은 Spring resource chain으로 내용 해시 URL을 가진다.
+// 해시 URL은 내용이 바뀌면 URL이 달라지므로 cache-first에서도 stale이 불가 → NETWORK_FIRST 졸업.
 // 아이콘·manifest는 cache-first로 빠른 재사용.
-// 버전 상수: 정적 자산 갱신 시 올려 activate에서 구 캐시 삭제.
-const CACHE = 'shell-v4';
+// HTML 내비게이션·API는 network-first — SSR·인증 응답이라 캐시에 개인 데이터 담지 않음.
+// 버전 상수: 기존 캐시 무효화용(activate에서 구 캐시 삭제).
+const CACHE = 'shell-v5';
 
+// 아이콘·manifest만 프리캐시 — 해시 자산(app.css·garden.js·pwa-install.js)은
+// 빌드 타임에 URL을 모르므로 프리캐시 대신 첫 요청 시 cache-first로 자동 캐시된다.
 const PRECACHE_URLS = [
     '/manifest.json',
-    '/css/app.css',
-    '/garden/garden.js',
     '/icons/icon-192.png',
     '/icons/icon-512.png',
     '/icons/maskable-512.png',
     '/icons/apple-touch-icon.png',
 ];
-
-const NETWORK_FIRST = ['/garden/garden.js', '/css/app.css', '/pwa-install.js'];
 
 self.addEventListener('install', (event) => {
     event.waitUntil(
@@ -51,21 +50,7 @@ self.addEventListener('fetch', (event) => {
     // API 요청 — 캐시 금지(인증·사용자별 데이터; 개인 정보 캐시 보안 위반 방지)
     if (url.pathname.startsWith('/api/')) return;
 
-    // 파일명 고정 자산(garden.js·app.css·pwa-install.js) — network-first(cache-first면 stale)
-    if (NETWORK_FIRST.includes(url.pathname)) {
-        event.respondWith(
-            fetch(request)
-                .then((res) => {
-                    const clone = res.clone();
-                    caches.open(CACHE).then((c) => c.put(request, clone));
-                    return res;
-                })
-                .catch(() => caches.match(request))
-        );
-        return;
-    }
-
-    // 정적 자산 — cache-first(CSS·아이콘·manifest)
+    // 정적 자산 — cache-first(해시 URL이라 stale 불가; 아이콘·manifest·app.css·garden.js 공통)
     event.respondWith(
         caches.match(request).then((cached) => {
             if (cached) return cached;
