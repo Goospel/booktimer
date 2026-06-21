@@ -108,6 +108,8 @@
 - [N-105. 사파리/iOS 캐시 3계층 — HTTP 캐시·SW Cache Storage·SW 스크립트 갱신은 수명이 다르다](#n-105-사파리ios-캐시-3계층--http-캐시sw-cache-storagesw-스크립트-갱신은-수명이-다르다)
 - [N-106. SSR은 즉시 반영, SPA는 캐시에 갇힌다 — 변경분이 '동적 HTML'에 담기냐 '고정명 정적 번들'에 담기냐](#n-106-ssr은-즉시-반영-spa는-캐시에-갇힌다--변경분이-동적-html에-담기냐-고정명-정적-번들에-담기냐)
 - [N-107. `type=module` ESM의 DOMContentLoaded 타이밍 — `readyState` guard 패턴](#n-107-typemodule-esm의-domcontentloaded-타이밍--readystate-guard-패턴)
+- [N-108. SSR에서 빌드 자동화 없이 캐시 stale 해결 — Spring resource chain 런타임 해시로 NETWORK_FIRST 졸업](#n-108-ssr에서-빌드-자동화-없이-캐시-stale-해결--spring-resource-chain-런타임-해시로-network_first-졸업)
+- [N-109. 섬 아키텍처(Island Architecture) 복제 체크리스트 — SSR 셸 + Vue + JSON API](#n-109-섬-아키텍처island-architecture-복제-체크리스트--ssr-셸--vue--json-api)
 
 ---
 
@@ -5092,3 +5094,99 @@ PRECACHE_URLS에서도 해시 자산 제거(빌드 타임에 URL을 모르므로
 - **T-071** — SW cache-first + 고정 파일명 = stale(NETWORK_FIRST가 나온 근본 원인).
 - `src/main/resources/application.properties` — 실제 적용 설정.
 - `src/main/resources/static/sw.js` — NETWORK_FIRST 졸업 구현.
+---
+
+## N-109. 섬 아키텍처(Island Architecture) 복제 체크리스트 — SSR 셸 + Vue + JSON API
+
+> **한 줄 요약**: 인터랙티브 페이지를 Vue로 전환할 때 쓰는 패턴. SSR이 HTML 껍데기만 렌더링하고, Vue가 마운트 시 API를 호출해 화면을 채운다. 두 번째 섬(search)이 마을 패턴을 그대로 복제해 안착.
+
+### 왜 "섬"이라 부르나
+
+전체 페이지를 SPA로 교체하지 않고, **인터랙티브가 필요한 영역만** Vue로 교체하는 방식.
+
+```
+[Thymeleaf layout.html]
+    ↓ SSR 공통 껍데기 (nav·CSS·CSRF meta 포함)
+    ↓
+[<div id="xxx-app" data-xxx="...">]   ← Vue가 마운트할 섬
+    ↓
+[<script type="module" th:src="@{/xxx/xxx.js}">]  ← Vite 빌드 산출물
+    ↓ 마운트
+[Vue 컴포넌트: onMounted → fetch API → 렌더링]
+```
+
+### 체크리스트 (섬 하나 추가할 때마다)
+
+**1. SSR 컨트롤러 슬림화**
+```java
+model.addAttribute("myLoginId", me.getLoginId());
+model.addAttribute("q", q);  // 초기값만
+return "search";  // Vue 셸만 렌더링
+```
+
+**2. HTML 셸 (`data-*`로 초기값 주입)**
+```html
+<meta name="_csrf" th:content="${_csrf != null ? _csrf.token : ''}">
+<div id="search-app"
+     th:attr="data-my-login-id=${myLoginId},
+              data-initial-q=${q != null ? q : ''}">
+    불러오는 중…          <!-- JS 없을 때 보이는 폴백 -->
+</div>
+<script type="module" th:src="@{/search/search.js}"></script>
+```
+
+**3. JSON API 신설** (`/api/xxx` — `@RestController`)
+- 인증은 Spring Security가 이미 걸어줌 (미인증 → 302)
+- CSRF는 `X-CSRF-TOKEN` 헤더로 (POST 계열)
+- N-055: null-state 엔티티(온보딩 전 loginId=null) 누출 방어
+
+**4. Vue 컴포넌트 (data-* 읽기 + fetch)**
+```ts
+const appEl = document.getElementById('xxx-app');
+const myLoginId = ref(appEl?.dataset.myLoginId ?? '');
+const initialQ = appEl?.dataset.initialQ ?? '';
+
+// CSRF
+function getCsrfToken() {
+    return (document.querySelector('meta[name="_csrf"]') as HTMLMetaElement)?.content ?? '';
+}
+
+// POST (팔로우 등)
+await fetch('/api/follow', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+    body: JSON.stringify({ loginId }),
+});
+```
+
+**5. Vite 멀티빌드 등록** (`vite.config.ts`)
+```ts
+const apps = {
+    garden: { input: 'src/garden/main.ts', dir: '…/static/garden', entry: 'garden.js' },
+    search: { input: 'src/search/main.ts', dir: '…/static/search', entry: 'search.js' },
+};
+```
+`package.json`에 `"build:search": "cross-env APP=search vite build"` 추가.
+→ **T-076**: `inlineDynamicImports:true`는 멀티 input 불가 → 페이지별 독립 빌드 필수.
+
+**6. Spring content hash URL 자동 적용**
+- `@{/search/search.js}` → Thymeleaf가 `search-<md5>.js`로 변환 (설정 이미 켜져 있음)
+- 빌드 산출물은 `git add·commit` 수동 (T-063 연장)
+
+### 비교
+
+| | 마을 (garden) | 검색 (search) |
+|---|---|---|
+| 진입점 | `src/garden/main.ts` | `src/search/main.ts` |
+| 빌드 명령 | `npm run build:garden` | `npm run build:search` |
+| 초기값 전달 | `data-*` (SSR 주입) | `data-*` (SSR 주입) |
+| API | `/api/garden/*` | `/api/search`, `/api/follow` |
+| CSRF | POST 계열 X-CSRF-TOKEN | POST 계열 X-CSRF-TOKEN |
+
+### 관련
+
+- **N-108** — Spring resource chain 런타임 해시 (캐시 stale 해결).
+- **N-055** — null-state 엔티티 누출 방어 (boundary test).
+- **T-076** — `inlineDynamicImports` + 멀티 input 에러 → 독립 빌드 분리.
+- **T-053/054/083** — 로드 순서·타이밍 사각, 실 브라우저 게이트 필수.
