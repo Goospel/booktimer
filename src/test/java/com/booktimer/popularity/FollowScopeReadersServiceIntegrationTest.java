@@ -43,8 +43,10 @@ class FollowScopeReadersServiceIntegrationTest {
 
     private static final String ISBN = "9788900000001";
 
-    private User user(String email, String nick) {
-        return userRepository.saveAndFlush(User.of(email, "$2a$10$x", nick, "Asia/Seoul", Role.USER));
+    private User user(String email, String nick, String loginId) {
+        User u = User.of(email, "$2a$10$x", nick, "Asia/Seoul", Role.USER);
+        u.assignLoginId(loginId); // N-055 필터 통과에 loginId 필요
+        return userRepository.saveAndFlush(u);
     }
 
     private void book(User owner, String isbn, BookStatus status, BookVisibility visibility) {
@@ -60,12 +62,12 @@ class FollowScopeReadersServiceIntegrationTest {
     @Test
     @DisplayName("팔로우 스코프·PUBLIC·distinct·status 버킷 명단이 카운트와 같은 경계로 나온다")
     void listsFollowScopeReaders() {
-        User viewer = user("viewer@booktimer.com", "뷰어");
-        User want = user("w@booktimer.com", "원함이");      // 팔로우함, 원함
-        User read = user("r@booktimer.com", "읽음이");      // 팔로우함, 읽음(중복 행)
-        User done = user("d@booktimer.com", "완독이");      // 팔로우함, 완독→읽음 버킷
-        User priv = user("p@booktimer.com", "비공개");      // 팔로우함이지만 PRIVATE
-        User stranger = user("s@booktimer.com", "모르는이"); // 팔로우 안 함
+        User viewer = user("viewer@booktimer.com", "뷰어", "viewerid");
+        User want = user("w@booktimer.com", "원함이", "wantid");      // 팔로우함, 원함
+        User read = user("r@booktimer.com", "읽음이", "readid");      // 팔로우함, 읽음(중복 행)
+        User done = user("d@booktimer.com", "완독이", "doneid");      // 팔로우함, 완독→읽음 버킷
+        User priv = user("p@booktimer.com", "비공개", "privid");      // 팔로우함이지만 PRIVATE
+        User stranger = user("s@booktimer.com", "모르는이", "strangerid"); // 팔로우 안 함
         followRepository.saveAndFlush(Follow.of(viewer, want));
         followRepository.saveAndFlush(Follow.of(viewer, read));
         followRepository.saveAndFlush(Follow.of(viewer, done));
@@ -88,7 +90,7 @@ class FollowScopeReadersServiceIntegrationTest {
     @Test
     @DisplayName("isbn이 null·공백이면 빈 명단(쿼리 안 탐)")
     void blankIsbn_empty() {
-        User viewer = user("v2@booktimer.com", "뷰어2");
+        User viewer = user("v2@booktimer.com", "뷰어2", "viewerid2");
         assertThat(service.readers(viewer, null).isEmpty()).isTrue();
         assertThat(service.readers(viewer, "   ").isEmpty()).isTrue();
     }
@@ -96,8 +98,8 @@ class FollowScopeReadersServiceIntegrationTest {
     @Test
     @DisplayName("아무도 팔로우 안 했으면(또는 팔로이가 그 책을 PUBLIC으로 안 가짐) 빈 명단")
     void noFollow_empty() {
-        User viewer = user("v3@booktimer.com", "뷰어3");
-        User stranger = user("s3@booktimer.com", "남");
+        User viewer = user("v3@booktimer.com", "뷰어3", "viewerid3");
+        User stranger = user("s3@booktimer.com", "남", "strangerid3");
         book(stranger, ISBN, BookStatus.READING, BookVisibility.PUBLIC); // 팔로우 안 한 사람 책 → 안 보임
 
         FollowScopeReaders readers = service.readers(viewer, ISBN);

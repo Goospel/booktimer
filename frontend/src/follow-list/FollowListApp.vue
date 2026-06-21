@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import UserRow from '../shared/UserRow.vue';
-import { toggleFollow } from '../shared/follow';
+import FollowAction from '../shared/FollowAction.vue';
 import type { UserRowData } from '../shared/follow';
 
 const appEl = document.getElementById('follow-list-app');
@@ -66,13 +66,7 @@ onUnmounted(() => {
             <ul v-else class="book-list">
                 <UserRow v-for="u in users" :key="u.loginId" :user="u">
                     <template #default="{ user }">
-                        <span v-if="user.self" class="book-status-badge">나</span>
-                        <button
-                            v-else
-                            :class="user.following ? 'btn-ghost' : 'btn-primary'"
-                            type="button"
-                            @click="toggleFollow(user)"
-                        >{{ user.following ? '언팔로우' : '팔로우' }}</button>
+                        <FollowAction :user="user" />
                     </template>
                 </UserRow>
             </ul>
