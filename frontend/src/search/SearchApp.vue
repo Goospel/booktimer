@@ -82,7 +82,7 @@ function onSearch() {
                 <input
                     v-model="searchQuery"
                     type="text"
-                    placeholder="아이디 (2글자 이상)"
+                    placeholder="아이디 검색 (2글자 이상)"
                     minlength="2"
                 >
                 <button type="submit" class="btn-primary">검색</button>
