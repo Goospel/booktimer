@@ -1515,6 +1515,29 @@ a.book-title:hover { text-decoration: underline; }
     .carousel-nav { display: none; }
 }
 
+/* 책BTI 분석 카드 — 단계 1c Vue 전환 때 인라인 style 삭제분 복원 (#440 회귀) */
+.personality-entry {
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    margin-top: 0.75rem;
+    background: rgba(0, 0, 0, 0.015);
+}
+.personality-entry-selected {
+    border-color: #f0b429;
+    background: rgba(240, 180, 41, 0.08);
+}
+.personality-entry-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+}
+.personality-badge { font-size: 0.8rem; font-weight: 700; color: #b07900; }
+.personality-time  { font-size: 0.8rem; opacity: 0.6; }
+.personality-stale { color: #9a6b00; font-size: 0.85rem; margin: 0.4rem 0 0; }
+
 /* ===================================================================
    마을 풀스크린 게임 셸 (/village) — S1
    스코프: #village-app 및 .village-* 클래스. 다른 페이지 회귀 0.
