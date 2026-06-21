@@ -8,8 +8,6 @@ import com.booktimer.book.BookService;
 import com.booktimer.book.BookStatus;
 import com.booktimer.book.BookVisibility;
 import com.booktimer.popularity.FollowScopePopularityService;
-import com.booktimer.popularity.FollowScopeReaders;
-import com.booktimer.popularity.FollowScopeReadersService;
 import com.booktimer.session.BookContributionService;
 import com.booktimer.session.BookReadingDetail;
 import com.booktimer.security.CurrentUserService;
@@ -48,19 +46,16 @@ public class BookController {
     private final BookReadingStatsService statsService;
     private final BookContributionService contributionService;
     private final FollowScopePopularityService popularityService;
-    private final FollowScopeReadersService readersService;
 
     public BookController(CurrentUserService currentUserService, BookService bookService,
                           BookReadingStatsService statsService,
                           BookContributionService contributionService,
-                          FollowScopePopularityService popularityService,
-                          FollowScopeReadersService readersService) {
+                          FollowScopePopularityService popularityService) {
         this.currentUserService = currentUserService;
         this.bookService = bookService;
         this.statsService = statsService;
         this.contributionService = contributionService;
         this.popularityService = popularityService;
-        this.readersService = readersService;
     }
 
     @GetMapping("/books")
@@ -143,22 +138,16 @@ public class BookController {
     }
 
     /**
-     * 인기 카운트 drill-down — "이 책을 원함/읽음인 내 팔로우"는 누구인지(닉네임·프로필 링크).
-     *
-     * <p>카운트 배지({@code §7.4})를 클릭해 진입한다. 스코프는 카운트와 동일(팔로우·PUBLIC·distinct)이라
-     * 모르는 사람·PRIVATE은 안 보인다 — 임의 isbn을 넣어도 내 팔로우의 공개 책만 나오므로 IDOR 없음.
-     * {@code title}은 머리말 표시용(없어도 무방, Thymeleaf가 이스케이프).
+     * 인기 카운트 drill-down 진입점 — Vue 섬이 {@code /api/book-readers}로 데이터를 직접 로드한다.
+     * 셸은 isbn·title만 data-*로 전달하고 뷰로 돌아간다(인증 트리거 유지).
      */
     @GetMapping("/books/readers")
     public String readers(@RequestParam String isbn,
                           @RequestParam(required = false) String title,
                           Principal principal, Model model) {
-        User user = currentUser(principal);
-        FollowScopeReaders readers = readersService.readers(user, isbn);
-        model.addAttribute("nickname", user.getNickname());
+        currentUser(principal);
         model.addAttribute("isbn", isbn);
         model.addAttribute("title", title);
-        model.addAttribute("readers", readers);
         return "book-readers";
     }
 

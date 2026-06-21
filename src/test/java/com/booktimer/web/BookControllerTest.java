@@ -153,50 +153,31 @@ class BookControllerTest {
     }
 
     @Test
-    @DisplayName("GET /books/readers: 인기 카운트 drill-down — 팔로우한 PUBLIC 독자 명단을 버킷별로 싣는다")
-    @SuppressWarnings("unchecked")
-    void readers_listsFollowScopeReaders() throws Exception {
-        User viewer = newUser("rv@booktimer.com");
-        User followee = userRepository.save(
-                User.of("rf@booktimer.com", passwordEncoder.encode("rawpw1234"), "팔로이", "Asia/Seoul", Role.USER));
-        User stranger = userRepository.save(
-                User.of("rs@booktimer.com", passwordEncoder.encode("rawpw1234"), "모르는이", "Asia/Seoul", Role.USER));
-        followRepository.save(Follow.of(viewer, followee));
-
+    @DisplayName("GET /books/readers: Vue 셸 렌더 — isbn을 모델에 싣고 book-readers 뷰 반환(데이터는 /api/book-readers가 담당)")
+    void readers_rendersVueShell() throws Exception {
+        newUser("rv@booktimer.com");
         String isbn = "9788900067890";
-        Book followeeBook = Book.register(followee, "같은 책", null, isbn, null, null, null, BookStatus.READING);
-        followeeBook.changeVisibility(BookVisibility.PUBLIC);
-        bookRepository.save(followeeBook);
-        // 팔로우 안 한 사람도 같은 책을 PUBLIC으로 가졌지만 — 명단엔 안 나와야 한다(스코프 경계).
-        Book strangerBook = Book.register(stranger, "같은 책", null, isbn, null, null, null, BookStatus.READING);
-        strangerBook.changeVisibility(BookVisibility.PUBLIC);
-        bookRepository.save(strangerBook);
 
         mockMvc.perform(get("/books/readers").param("isbn", isbn).with(user("rv@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("book-readers"))
-                .andExpect(model().attributeExists("readers"))
-                .andExpect(result -> {
-                    var readers = (com.booktimer.popularity.FollowScopeReaders)
-                            result.getModelAndView().getModel().get("readers");
-                    assertThat(readers.reading()).extracting("nickname").containsExactly("팔로이");
-                    assertThat(readers.wanting()).isEmpty();
-                });
+                .andExpect(model().attribute("isbn", isbn))
+                .andExpect(model().attributeDoesNotExist("readers"));
     }
 
     @Test
-    @DisplayName("GET /books/readers: 모르는 isbn이면 빈 명단으로 정상 렌더(존재 누설 없음)")
-    void readers_unknownIsbn_emptyButOk() throws Exception {
+    @DisplayName("GET /books/readers: isbn + title 모두 모델에 전달")
+    void readers_passesIsbnAndTitle() throws Exception {
         newUser("re@booktimer.com");
 
-        mockMvc.perform(get("/books/readers").param("isbn", "9780000000000").with(user("re@booktimer.com")))
+        mockMvc.perform(get("/books/readers")
+                        .param("isbn", "9780000000000")
+                        .param("title", "테스트책")
+                        .with(user("re@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("book-readers"))
-                .andExpect(result -> {
-                    var readers = (com.booktimer.popularity.FollowScopeReaders)
-                            result.getModelAndView().getModel().get("readers");
-                    assertThat(readers.isEmpty()).isTrue();
-                });
+                .andExpect(model().attribute("isbn", "9780000000000"))
+                .andExpect(model().attribute("title", "테스트책"));
     }
 
     @Test

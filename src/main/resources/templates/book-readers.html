@@ -7,6 +7,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>이 책 읽는 사람 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
+    <!-- CSRF 토큰 — Vue 섬의 POST /api/follow·/unfollow 헤더로 사용 -->
+    <meta name="_csrf" th:content="${_csrf != null ? _csrf.token : ''}">
+    <!-- 광고 로더(게시자 ID 설정 시에만) -->
+    <th:block th:replace="~{ads :: loader}"></th:block>
 </head>
 <body>
 <div class="container">
@@ -16,64 +20,20 @@
             <h1>BookTimer</h1>
         </a>
     </header>
-    <p class="greeting">👥 내 팔로우 중 이 책을 보는 사람</p>
 
-    <section class="card">
-        <h2 th:text="${title != null and !title.isBlank()} ? ${title} : '이 책'">책 제목</h2>
+    <!-- Vue 섬 마운트 포인트 — data-* 로 isbn·title 전달, 독자 데이터는 /api/book-readers로 직접 로드 -->
+    <div id="book-readers-app"
+         th:attr="data-isbn=${isbn}, data-title=${title != null ? title : ''}">
+        불러오는 중…
+    </div>
+    <noscript>
+        <p class="status-line muted">이 페이지는 JavaScript가 필요합니다.</p>
+    </noscript>
 
-        <p th:if="${readers.isEmpty()}" class="status-line muted">
-            팔로우한 사람 중 이 책을 공개로 가진 사람이 아직 없습니다.
-            <br>더 많은 사람을 <a th:href="@{/search}">팔로우</a>하면 여기에서 보여요.
-        </p>
-
-        <!-- 읽음(READING∪FINISHED) 버킷 -->
-        <th:block th:if="${!readers.reading().isEmpty()}">
-            <h3 class="reader-bucket">📖 읽는 중 · 완독</h3>
-            <ul class="book-list">
-                <li class="book-row" th:each="r : ${readers.reading()}">
-                    <div class="book-meta">
-                        <a class="book-title" th:href="@{/u/{n}(n=${r.loginId})}" th:text="${r.nickname}">닉네임</a>
-                        <span class="book-author" th:text="'@' + ${r.loginId} + ' · 공개 책 ' + ${r.publicBookCount} + '권'">@아이디 · 공개 책 0권</span>
-                    </div>
-                    <div class="book-actions" th:insert="~{::followAction(${r})}"></div>
-                </li>
-            </ul>
-        </th:block>
-
-        <!-- 원함(WANT_TO_READ) 버킷 -->
-        <th:block th:if="${!readers.wanting().isEmpty()}">
-            <h3 class="reader-bucket">📌 읽고 싶음</h3>
-            <ul class="book-list">
-                <li class="book-row" th:each="r : ${readers.wanting()}">
-                    <div class="book-meta">
-                        <a class="book-title" th:href="@{/u/{n}(n=${r.loginId})}" th:text="${r.nickname}">닉네임</a>
-                        <span class="book-author" th:text="'@' + ${r.loginId} + ' · 공개 책 ' + ${r.publicBookCount} + '권'">@아이디 · 공개 책 0권</span>
-                    </div>
-                    <div class="book-actions" th:insert="~{::followAction(${r})}"></div>
-                </li>
-            </ul>
-        </th:block>
-    </section>
-
-    <p class="link-row">
-        <a th:href="@{/books}">← 내 책장</a>
-        <a th:href="@{/search}">🔍 사용자 검색</a>
-    </p>
+    <!-- 광고 (하단, 게시자 ID 설정 시에만) -->
+    <div th:replace="~{ads :: unit}"></div>
 </div>
-
-<!-- 팔로우/언팔로우 액션(모두 내가 팔로우 중) — 검색/목록과 동일 양식. redirect는 이 drill-down으로 복귀.
-     th:with로 r을 받아(인라인 렌더 시 NPE 회피) self/following 분기. -->
-<th:block th:fragment="followAction(r)">
-    <span th:if="${r != null and r.self}" class="book-status-badge">나</span>
-    <form th:if="${r != null and !r.self}" method="post"
-          th:action="@{${r.following} ? '/unfollow' : '/follow'}">
-        <input type="hidden" name="loginId" th:value="${r.loginId}">
-        <input type="hidden" name="redirect" th:value="@{/books/readers(isbn=${isbn}, title=${title})}">
-        <button type="submit"
-                th:classappend="${r.following} ? 'btn-ghost' : 'btn-primary'"
-                th:text="${r.following} ? '언팔로우' : '팔로우'">팔로우</button>
-    </form>
-</th:block>
-
+<!-- Spring resource chain이 런타임에 book-readers-<hash>.js 로 변환 -->
+<script type="module" th:src="@{/book-readers/book-readers.js}"></script>
 </body>
 </html>
