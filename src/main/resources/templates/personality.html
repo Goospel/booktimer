@@ -2,49 +2,11 @@
 <html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <!-- 방문 통계(GA4, 측정 ID 설정 시에만) -->
     <th:block th:replace="~{analytics :: gtag}"></th:block>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="_csrf" th:content="${_csrf != null ? _csrf.token : ''}">
     <title>책BTI — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
-    <script defer th:src="@{/js/personality.js}"></script>
-    <style>
-        .personality-entry {
-            border: 1px solid rgba(0, 0, 0, 0.08);
-            border-radius: 10px;
-            padding: 0.85rem 1rem;
-            margin-top: 0.75rem;
-            background: rgba(0, 0, 0, 0.015);
-        }
-        .personality-entry-selected {
-            border-color: #f0b429;
-            background: rgba(240, 180, 41, 0.08);
-        }
-        .personality-entry-head {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.5rem;
-            margin-bottom: 0.35rem;
-        }
-        .personality-badge {
-            font-size: 0.8rem;
-            font-weight: 700;
-            color: #b07900;
-        }
-        .personality-time {
-            font-size: 0.8rem;
-            opacity: 0.6;
-        }
-        .personality-stale {
-            color: #9a6b00;
-            font-size: 0.85rem;
-            margin: 0.4rem 0 0;
-        }
-        .personality-entry form {
-            margin-top: 0.5rem;
-        }
-    </style>
 </head>
 <body>
 <div class="container">
@@ -54,100 +16,14 @@
             <h1>BookTimer</h1>
         </a>
     </header>
-    <p class="greeting"><span th:text="${nickname}">닉네임</span>님의 책BTI 🧬</p>
 
-    <!-- 정확도 고지 (항상) — 과신 금지 포지셔닝 -->
-    <p class="status-line">MBTI처럼 <strong>가볍게 즐기는 재미</strong>예요. 책장이 작거나 장르가 치우치면 부정확할 수 있어요.</p>
+    <div id="personality-app"
+         th:attr="data-nickname=${nickname}, data-login-id=${loginId}">불러오는 중…</div>
 
-    <!-- 성향 히스토리 (정상) — 과거 분석을 최대 3개까지 보존하고, 하나를 대표로 고른다 -->
-    <section class="card" th:if="${view.isReady()}">
-        <h2>내 독서 성향</h2>
-
-        <div class="personality-carousel-wrap">
-        <button type="button" class="carousel-nav carousel-nav-prev" aria-label="이전 분석">‹</button>
-        <div class="personality-carousel" tabindex="0" role="group"
-             aria-label="독서 성향 분석 — 좌우로 넘겨 보기">
-            <div th:each="entry : ${view.displayEntries()}" class="personality-entry personality-slide"
-                 th:classappend="${entry.selected()} ? ' personality-entry-selected' : ''">
-                <div class="personality-entry-head">
-                    <span class="personality-badge" th:if="${entry.selected()}">⭐ 대표 (책방 노출)</span>
-                    <span class="personality-badge" th:unless="${entry.selected()}">후보</span>
-                    <span class="personality-time"
-                          th:text="${view.formatTime(entry.generatedAt())}">분석 시각</span>
-                </div>
-                <p class="personality-narrative" th:text="${entry.narrative()}">성향 서술 한 문단…</p>
-                <p class="personality-stale" th:if="${entry.stale()}">
-                    📚 이 분석 이후 책장이 바뀌었어요 — '다시 분석'하면 지금 책장 기준으로 새로 봐요.
-                </p>
-                <form th:unless="${entry.selected()}" th:action="@{/personality/select/{id}(id=${entry.id()})}" method="post">
-                    <button type="submit" class="btn-ghost btn-small">이걸로 대표 선택</button>
-                </form>
-            </div>
-        </div>
-        <button type="button" class="carousel-nav carousel-nav-next" aria-label="다음 분석">›</button>
-        </div>
-
-        <!-- 공개 안내문 — 히스토리 밑에 작게 -->
-        <p class="status-line personality-public-note">
-            🌍 이 책BTI는 <strong>공개한 책만</strong>으로 분석해 내 책방(<a th:href="@{/u/{n}(n=${loginId})}">공개 프로필</a>)에 항상 노출돼요. 비공개 책 취향은 빠져요.
-        </p>
-    </section>
-
-    <!-- 콜드스타트 — 책 부족으로 분석 보류 -->
-    <section class="card" th:if="${view.isColdStart()}">
-        <h2>조금 더 읽으면 성향이 보여요</h2>
-        <p class="status-line">
-            지금 완독한 책이 <strong th:text="${view.profile().finishedBooks()}">0</strong>권이에요.
-            최소 <strong th:text="${view.coldStartMinBooks()}">5</strong>권쯤 완독하면 성향을 분석해 드릴게요.
-        </p>
-    </section>
-
-    <!-- 폴백 — LLM 실패/지연(책은 충분) -->
-    <section class="card" th:if="${view.isFallback()}">
-        <h2>잠시 후 다시 분석해 주세요</h2>
-        <p class="status-line">지금은 성향 서술을 불러오지 못했어요. 사실 요약은 아래에서 볼 수 있어요.</p>
-    </section>
-
-    <!-- 사실 요약 (항상) — 콜드스타트·폴백에서도 책장 사실은 보여준다 -->
-    <section class="card">
-        <h2>책장 요약</h2>
-
-        <!-- 독서 종족 태그 칩 (결정적·규칙 기반) -->
-        <div class="tag-chip-row" th:if="${!view.tags().isEmpty()}">
-            <span class="tag-chip" th:each="tag : ${view.tags()}" th:text="${tag}">태그</span>
-        </div>
-
-        <ul class="record-list summary-list">
-            <li class="record-row" th:if="${!view.profile().topGenres().isEmpty()}">
-                <span class="record-main">자주 읽는 장르</span>
-                <span class="record-books"
-                      th:text="${#strings.listJoin(view.profile().topGenres().![label()], ', ')}">장르</span>
-            </li>
-            <li class="record-row" th:if="${!view.profile().topAuthors().isEmpty()}">
-                <span class="record-main">자주 읽는 저자</span>
-                <span class="record-books"
-                      th:text="${#strings.listJoin(view.profile().topAuthors().![label()], ', ')}">저자</span>
-            </li>
-        </ul>
-    </section>
-
-    <!--/* 다시 분석 (콜드스타트가 아닐 때만 — 보류 상태는 재생성할 게 없음).
-           한도 소진 안내: 남은 횟수가 0이면 항상 보인다(차단 직후 리다이렉트도 remaining==0이라 같이 덮인다).
-           버튼이 disabled라 POST가 안 가서 'refreshLimited' 플래시만으론 이 문구가 영영 안 떴던 함정(catch-22)을 막는다.
-           이건 파서 수준 주석이라 렌더 출력에 실리지 않는다 — 응답 버퍼 비대·주석 유출 방지.
-           주의: 이 블록 안에 파서 주석 닫힘 토큰을 글자로 적으면 거기서 주석이 조기 종료돼 뒷부분이 새므로 적지 않는다(#247 재발). */-->
-    <p class="status-line" th:if="${refreshRemaining == 0}">
-        ⏳ 오늘 '다시 분석'을 모두 사용했어요(하루 최대 <strong th:text="${refreshLimit}">3</strong>번). 자정이 지나면 다시 분석할 수 있어요.
-    </p>
-    <form class="refresh-form" th:unless="${view.isColdStart()}" th:action="@{/personality/refresh}" method="post">
-        <button type="submit" class="btn-primary" th:disabled="${refreshRemaining == 0}">🔄 다시 분석<span
-                class="refresh-count" th:text="|오늘 남은 횟수 ${refreshRemaining}/${refreshLimit}|">오늘 남은 횟수 3/3</span></button>
-    </form>
-
-    <p class="link-row">
-        <a th:href="@{/}">← 대시보드</a>
-        <a th:href="@{/books}">📚 내 책장</a>
-    </p>
+    <noscript>
+        <p class="status-line">JavaScript가 비활성화되어 있습니다. 책BTI를 보려면 JavaScript를 활성화해 주세요.</p>
+    </noscript>
 </div>
+<script type="module" th:src="@{/personality/personality.js}"></script>
 </body>
 </html>
