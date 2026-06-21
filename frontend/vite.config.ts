@@ -24,6 +24,11 @@ const apps = {
     dir: '../src/main/resources/static/personality',
     entry: 'personality.js',
   },
+  'follow-list': {
+    input: 'src/follow-list/main.ts',
+    dir: '../src/main/resources/static/follow-list',
+    entry: 'follow-list.js',
+  },
 } as const;
 
 const cfg = apps[APP as keyof typeof apps] ?? apps.garden;

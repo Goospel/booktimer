@@ -1,8 +1,5 @@
 package com.booktimer.web;
 
-import com.booktimer.follow.Follow;
-import com.booktimer.follow.FollowRepository;
-import com.booktimer.search.UserSearchResult;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -15,9 +12,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
@@ -41,50 +35,35 @@ class FollowListControllerTest {
     @Autowired
     private UserRepository userRepository;
     @Autowired
-    private FollowRepository followRepository;
-    @Autowired
     private PasswordEncoder passwordEncoder;
 
-    private User newUser(String email, String nick) {
-        return userRepository.save(
-                User.of(email, passwordEncoder.encode("rawpw1234"), nick, "Asia/Seoul", Role.USER));
+    private User newUser(String email, String loginId, String nick) {
+        User u = User.of(email, passwordEncoder.encode("rawpw1234"), nick, "Asia/Seoul", Role.USER);
+        u.assignLoginId(loginId);
+        return userRepository.save(u);
     }
 
     @Test
-    @DisplayName("GET /me/followers: 나를 팔로우한 사람들을 목록으로 그린다")
-    @SuppressWarnings("unchecked")
-    void followers_rendersMyFollowers() throws Exception {
-        User viewer = newUser("mfv@booktimer.com", "뷰어");
-        User a = newUser("mfa@booktimer.com", "에이");
-        followRepository.save(Follow.of(a, viewer)); // A → 나
-
+    @DisplayName("GET /me/followers: Vue 셸 — myLoginId·initialTab=followers 모델, follow-list 뷰")
+    void followers_rendersShell() throws Exception {
+        User viewer = newUser("mfv@booktimer.com", "mfviewer1", "뷰어");
+        // 목록 데이터는 API에서 오므로 users·listType은 model에 없음
         mockMvc.perform(get("/me/followers").with(user("mfv@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("follow-list"))
-                .andExpect(model().attribute("listType", "followers"))
-                .andExpect(model().attributeExists("users"))
-                .andExpect(result -> {
-                    var users = (List<UserSearchResult>) result.getModelAndView().getModel().get("users");
-                    assertThat(users).extracting(UserSearchResult::nickname).containsExactly("에이");
-                });
+                .andExpect(model().attribute("myLoginId", "mfviewer1"))
+                .andExpect(model().attribute("initialTab", "followers"));
     }
 
     @Test
-    @DisplayName("GET /me/following: 내가 팔로우한 사람들을 목록으로 그린다")
-    @SuppressWarnings("unchecked")
-    void following_rendersMyFollowing() throws Exception {
-        User viewer = newUser("mgv@booktimer.com", "뷰어");
-        User c = newUser("mgc@booktimer.com", "씨");
-        followRepository.save(Follow.of(viewer, c)); // 나 → C
-
+    @DisplayName("GET /me/following: Vue 셸 — myLoginId·initialTab=following 모델, follow-list 뷰")
+    void following_rendersShell() throws Exception {
+        User viewer = newUser("mgv@booktimer.com", "mgviewer1", "뷰어");
         mockMvc.perform(get("/me/following").with(user("mgv@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("follow-list"))
-                .andExpect(model().attribute("listType", "following"))
-                .andExpect(result -> {
-                    var users = (List<UserSearchResult>) result.getModelAndView().getModel().get("users");
-                    assertThat(users).extracting(UserSearchResult::nickname).containsExactly("씨");
-                });
+                .andExpect(model().attribute("myLoginId", "mgviewer1"))
+                .andExpect(model().attribute("initialTab", "following"));
     }
 
     @Test
