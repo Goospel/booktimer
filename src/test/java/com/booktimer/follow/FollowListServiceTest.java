@@ -38,8 +38,10 @@ class FollowListServiceTest {
     @Autowired
     private BookRepository bookRepository;
 
-    private User user(String email, String nick) {
-        return userRepository.saveAndFlush(User.of(email, "$2a$10$x", nick, "Asia/Seoul", Role.USER));
+    private User user(String email, String loginId, String nick) {
+        User u = User.of(email, "$2a$10$x", nick, "Asia/Seoul", Role.USER);
+        u.assignLoginId(loginId);
+        return userRepository.saveAndFlush(u);
     }
 
     private void follow(User follower, User followee) {
@@ -55,9 +57,9 @@ class FollowListServiceTest {
     @Test
     @DisplayName("팔로워 목록 = 나를 팔로우한 사람들. 내가 그를 팔로우 중인지(following) 함께 표시")
     void followers() {
-        User viewer = user("v@booktimer.com", "뷰어");
-        User a = user("a@booktimer.com", "에이");
-        User b = user("b@booktimer.com", "비");
+        User viewer = user("v@booktimer.com", "flsvc_v", "뷰어");
+        User a = user("a@booktimer.com", "flsvc_a", "에이");
+        User b = user("b@booktimer.com", "flsvc_b", "비");
         follow(a, viewer);  // A → 나
         follow(b, viewer);  // B → 나
         follow(viewer, a);  // 나 → A (맞팔)
@@ -73,8 +75,8 @@ class FollowListServiceTest {
     @Test
     @DisplayName("팔로잉 목록 = 내가 팔로우한 사람들. 공개 책수 포함, following=true·self=false")
     void following() {
-        User viewer = user("v2@booktimer.com", "뷰어2");
-        User c = user("c@booktimer.com", "씨");
+        User viewer = user("v2@booktimer.com", "flsvc_v2", "뷰어2");
+        User c = user("c@booktimer.com", "flsvc_c", "씨");
         follow(viewer, c);
         bookRepository.saveAndFlush(publicBook(c, "공개1"));
         bookRepository.saveAndFlush(publicBook(c, "공개2"));

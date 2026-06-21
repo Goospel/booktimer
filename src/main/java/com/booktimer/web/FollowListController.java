@@ -1,6 +1,5 @@
 package com.booktimer.web;
 
-import com.booktimer.follow.FollowListService;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.user.User;
 import org.springframework.stereotype.Controller;
@@ -10,41 +9,33 @@ import org.springframework.web.bind.annotation.GetMapping;
 import java.security.Principal;
 
 /**
- * 본인 팔로워/팔로잉 목록 — {@code /me/**}.
+ * 본인 팔로워/팔로잉 목록 SSR 셸 — {@code /me/**}.
  *
- * <p>경로에 닉네임이 없고 항상 인증된 본인 기준이라, 남의 목록을 볼 수 있는 경로 자체가 없다(보안 경계 자동).
- * 프로필 페이지의 팔로워/팔로잉 카운트는 본인일 때만 이 페이지로 링크한다(남의 프로필은 카운트만).
+ * <p>Vue 섬 전환 후 얇은 셸: URL 보존·인증 게이트·초기 탭 힌트만. 목록 데이터는 Vue가
+ * {@code GET /api/follow-list} 로 로드한다.
  */
 @Controller
 public class FollowListController {
 
     private final CurrentUserService currentUserService;
-    private final FollowListService followListService;
 
-    public FollowListController(CurrentUserService currentUserService, FollowListService followListService) {
+    public FollowListController(CurrentUserService currentUserService) {
         this.currentUserService = currentUserService;
-        this.followListService = followListService;
     }
 
     @GetMapping("/me/followers")
     public String followers(Principal principal, Model model) {
         User me = currentUser(principal);
-        model.addAttribute("loginId", me.getLoginId()); // "내 프로필" 링크(/u/{loginId})용
-        model.addAttribute("listType", "followers");
-        model.addAttribute("heading", "내 팔로워");
-        model.addAttribute("emptyMessage", "아직 나를 팔로우한 사람이 없습니다.");
-        model.addAttribute("users", followListService.followers(me));
+        model.addAttribute("myLoginId", me.getLoginId());
+        model.addAttribute("initialTab", "followers");
         return "follow-list";
     }
 
     @GetMapping("/me/following")
     public String following(Principal principal, Model model) {
         User me = currentUser(principal);
-        model.addAttribute("loginId", me.getLoginId()); // "내 프로필" 링크(/u/{loginId})용
-        model.addAttribute("listType", "following");
-        model.addAttribute("heading", "내 팔로잉");
-        model.addAttribute("emptyMessage", "아직 팔로우한 사람이 없습니다.");
-        model.addAttribute("users", followListService.following(me));
+        model.addAttribute("myLoginId", me.getLoginId());
+        model.addAttribute("initialTab", "following");
         return "follow-list";
     }
 

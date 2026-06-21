@@ -29,14 +29,18 @@ public class FollowListService {
     /** 나(viewer)를 팔로우한 사람들 — 각 행의 following은 "내가 그를 (맞)팔로우 중인지". */
     public List<UserSearchResult> followers(User viewer) {
         return followRepository.findByFolloweeOrderByCreatedAtDesc(viewer).stream()
-                .map(f -> rowAssembler.toRow(viewer, f.getFollower()))
+                .map(Follow::getFollower)
+                .filter(u -> u.getLoginId() != null) // N-055: 온보딩 전(login_id=null) 사용자 제외
+                .map(u -> rowAssembler.toRow(viewer, u))
                 .toList();
     }
 
     /** 내(viewer)가 팔로우한 사람들 — following은 모두 true(언팔로 버튼으로 관리). */
     public List<UserSearchResult> following(User viewer) {
         return followRepository.findByFollowerOrderByCreatedAtDesc(viewer).stream()
-                .map(f -> rowAssembler.toRow(viewer, f.getFollowee()))
+                .map(Follow::getFollowee)
+                .filter(u -> u.getLoginId() != null) // N-055: 온보딩 전(login_id=null) 사용자 제외
+                .map(u -> rowAssembler.toRow(viewer, u))
                 .toList();
     }
 }
