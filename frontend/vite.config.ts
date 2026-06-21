@@ -14,6 +14,11 @@ const apps = {
     dir: '../src/main/resources/static/search',
     entry: 'search.js',
   },
+  history: {
+    input: 'src/history/main.ts',
+    dir: '../src/main/resources/static/history',
+    entry: 'history.js',
+  },
 } as const;
 
 const cfg = apps[APP as keyof typeof apps] ?? apps.garden;

@@ -18,146 +18,17 @@
             <h1>BookTimer</h1>
         </a>
     </header>
-    <p class="greeting"><span th:text="${nickname}">닉네임</span>님의 독서 기록</p>
 
-    <!-- 독서 잔디 (지난 1년) — GitHub 컨트리뷰션 그래프 스타일 -->
-    <section class="card">
-        <div class="grass-head">
-            <h2>독서 잔디</h2>
-            <span class="grass-streak" th:title="${graph.growthStage().label()}">
-                <span class="grass-streak-icon" th:text="${graph.growthStage().emoji()}">🌱</span>
-                <small class="grass-streak-days" th:if="${graph.currentStreak() > 0}"
-                       th:text="${graph.currentStreak()} + '일 연속'">3일 연속</small>
-            </span>
-        </div>
-        <p class="grass-summary">
-            지난 1년 동안 <strong th:text="${graph.activeDays()}">0</strong>일 독서 ·
-            총 <strong th:text="${graph.totalSeconds() / 3600 + '시간 ' + (graph.totalSeconds() % 3600) / 60 + '분'}">0시간 0분</strong>
-        </p>
-        <div class="grass">
-            <!-- 좌측 요일 라벨 (월/수/금) -->
-            <div class="grass-weekdays" aria-hidden="true">
-                <span></span><span>월</span><span></span><span>수</span><span></span><span>금</span><span></span>
-            </div>
-            <div class="grass-main">
-                <!-- 상단 월 라벨 -->
-                <div class="grass-months" aria-hidden="true">
-                    <span th:each="m : ${graph.monthLabels()}"
-                          th:text="${m.label()}"
-                          th:style="'grid-column-start:' + (${m.weekIndex()} + 1)">1월</span>
-                </div>
-                <!-- 53주 × 7요일 그리드 (열 방향으로 채워짐) -->
-                <div class="grass-grid">
-                    <th:block th:each="week : ${graph.weeks()}">
-                        <div class="grass-cell"
-                             th:each="day : ${week}"
-                             th:classappend="${day.isPlaceholder() ? 'empty' : 'level-' + day.level() + (day.manual() ? ' manual' : '')}"
-                             th:attr="title=${day.isPlaceholder() ? null
-                                 : #temporals.format(day.date(), 'yyyy-MM-dd') + ' · ' + (day.totalSeconds() / 60) + '분' + (day.manual() ? ' · 직접 채움' : '')}"></div>
-                    </th:block>
-                </div>
-                <!-- 범례 (색 농도 = 그날 독서 시간 ÷ 하루 목표 달성 비율) -->
-                <div class="grass-legend" aria-hidden="true">
-                    <span>목표 미달</span>
-                    <i class="grass-cell level-0"></i>
-                    <i class="grass-cell level-1"></i>
-                    <i class="grass-cell level-2"></i>
-                    <i class="grass-cell level-3"></i>
-                    <i class="grass-cell level-4"></i>
-                    <span>목표 달성</span>
-                    <i class="grass-cell level-2 manual legend-gap"></i>
-                    <span>직접 채움</span>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- 독서 기록 카드: 헤드의 탭 버튼 2개로 바디를 전환한다 — '일자별 독서 시간'(기본) ↔ '이번 주 빠뜨린 날'.
-         JS 없이 동작하도록 라디오(:checked) + 형제 선택자로 패널을 토글한다(두 데이터는 서버가 이미 렌더해 두고
-         보이기만 전환). "채우기"=수동입력 날짜 프리필(윈도우 7일 밖은 자동 용서라 안 보임 — 입문자 친화). -->
-    <section class="card record-card">
-        <!-- 헤드: 탭 버튼 2개. 라디오 바로 뒤에 그 탭 라벨을 둬, 활성 표시를 인접 형제 선택자(:checked + .record-tab)로
-             건다 — 형제-후손 선택자는 일부 렌더러가 :checked 변경 시 갱신을 빠뜨려 밑줄이 안 따라옴(인접이 견고).
-             라디오는 시각만 숨기고 키보드 포커스는 살린다. 기본 활성=일자별 독서 시간. -->
-        <input type="radio" name="histtab" id="tab-records" class="tab-radio" checked>
-        <label for="tab-records" class="record-tab">일자별 독서 시간</label>
-        <input type="radio" name="histtab" id="tab-missed" class="tab-radio">
-        <label for="tab-missed" class="record-tab">이번 주 빠뜨린 날</label>
-
-        <!-- 바디 ①: 일자별 독서 시간 — 한 번에 한 달, ◀▶로 이동, 그 달 안에서만 스크롤(기록이 쌓여도 화면이 길어지지 않게).
-             월별 묶음(months, 최신 월 먼저)을 모두 렌더하되 최신 달만 보이고(th:hidden) JS가 ◀▶로 hidden을 토글한다.
-             JS가 꺼져도 최신 달은 보인다(폴백). 월 합계는 네비 라벨에 함께 띄운다. -->
-        <div class="tab-panel panel-records">
-            <p class="status-line" th:if="${months.isEmpty()}">아직 독서 기록이 없습니다. 측정을 시작해 보세요.</p>
-            <div th:unless="${months.isEmpty()}" class="month-browser">
-                <div class="month-nav">
-                    <button type="button" class="month-nav-btn month-nav-prev" aria-label="이전 달">◀</button>
-                    <span class="month-nav-label"
-                          th:text="${months[0].month().getYear() + '년 ' + months[0].month().getMonthValue() + '월 · ' + (months[0].totalSeconds() / 3600) + '시간 ' + ((months[0].totalSeconds() % 3600) / 60) + '분'}">2026년 6월 · 0시간 0분</span>
-                    <button type="button" class="month-nav-btn month-nav-next" aria-label="다음 달">▶</button>
-                </div>
-                <div class="month-section" th:each="s, it : ${months}" th:hidden="${!it.first}"
-                     th:attr="data-label=${s.month().getYear() + '년 ' + s.month().getMonthValue() + '월 · ' + (s.totalSeconds() / 3600) + '시간 ' + ((s.totalSeconds() % 3600) / 60) + '분'}">
-                    <ul class="record-list record-scroll">
-                        <li class="record-row" th:each="r : ${s.days()}">
-                            <div class="record-main">
-                                <span class="record-date" th:text="${#temporals.format(r.date(), 'yyyy-MM-dd (E)')}">2026-06-01</span>
-                                <span class="record-books" th:if="${!r.bookTitles().isEmpty()}"
-                                      th:text="${#strings.listJoin(r.bookTitles(), ', ')}">책 제목</span>
-                            </div>
-                            <span class="record-time mono"
-                                  th:text="${(r.totalSeconds() / 3600) + '시간 ' + ((r.totalSeconds() % 3600) / 60) + '분'}">0시간 0분</span>
-                        </li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-
-        <!-- 바디 ②: 이번 주 빠뜨린 날 -->
-        <div class="tab-panel panel-missed">
-            <div th:if="${weeklyShortfall != null and !weeklyShortfall.isEmpty()}">
-                <p class="muted">최근 7일 중 목표를 못 채운 날이에요. 그날 읽고 기록을 깜빡했다면 채워 넣어요.</p>
-                <ul class="missed-list">
-                    <li th:each="d : ${weeklyShortfall}">
-                        <span class="missed-date" th:text="${#temporals.format(d.date, 'M월 d일')}">6월 5일</span>
-                        <span class="missed-debt" th:text="${d.debtSeconds / 60} + '분 부족'">60분 부족</span>
-                        <a class="btn-ghost btn-fill" th:href="@{/sessions/manual(date=${d.date})}">채우기</a>
-                    </li>
-                </ul>
-            </div>
-            <p class="status-line" th:if="${weeklyShortfall == null or weeklyShortfall.isEmpty()}">이번 주는 빠뜨린 날이 없어요. 잘하고 있어요! 🎉</p>
-        </div>
-    </section>
+    <!-- Vue 섬 마운트 포인트 — data-nickname으로 초기값 전달 -->
+    <div id="history-app" th:attr="data-nickname=${nickname}">불러오는 중…</div>
+    <noscript>
+        <p class="status-line muted">이 페이지는 JavaScript가 필요합니다.</p>
+    </noscript>
 
     <!-- 광고 (하단, 게시자 ID 설정 시에만) -->
     <div th:replace="~{ads :: unit}"></div>
-
-    <p class="link-row">
-        <a th:href="@{/}">← 대시보드</a>
-        <a th:href="@{/books}">📚 내 책장</a>
-    </p>
 </div>
-
-<!-- 일자별 독서 기록: 한 번에 한 달만 보이고 ◀(과거)/▶(최신)로 이동. 월 섹션은 최신이 인덱스 0(서버가 최신만 렌더).
-     JS가 없어도 최신 달은 보이는 폴백. 외부 의존(Alpine/htmx) 없이 바닐라로 hidden만 토글한다. -->
-<script>
-  (function () {
-    var sections = Array.prototype.slice.call(document.querySelectorAll('.month-section'));
-    if (sections.length < 1) return;
-    var prev = document.querySelector('.month-nav-prev');
-    var next = document.querySelector('.month-nav-next');
-    var label = document.querySelector('.month-nav-label');
-    var idx = 0; // 0 = 최신 달
-    function render() {
-      for (var i = 0; i < sections.length; i++) sections[i].hidden = (i !== idx);
-      if (label) label.textContent = sections[idx].getAttribute('data-label');
-      if (next) next.disabled = (idx === 0);                   // 더 최신 없음
-      if (prev) prev.disabled = (idx === sections.length - 1); // 더 과거 없음
-    }
-    if (prev) prev.addEventListener('click', function () { if (idx < sections.length - 1) { idx++; render(); } });
-    if (next) next.addEventListener('click', function () { if (idx > 0) { idx--; render(); } });
-    render();
-  })();
-</script>
+<!-- Spring resource chain이 런타임에 history-<hash>.js 로 변환 -->
+<script type="module" th:src="@{/history/history.js}"></script>
 </body>
 </html>

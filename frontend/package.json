@@ -2,9 +2,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "npm run build:garden && npm run build:search",
+    "build": "npm run build:garden && npm run build:search && npm run build:history",
     "build:garden": "cross-env APP=garden vite build",
     "build:search": "cross-env APP=search vite build",
+    "build:history": "cross-env APP=history vite build",
     "test": "vitest run"
   },
   "devDependencies": {
