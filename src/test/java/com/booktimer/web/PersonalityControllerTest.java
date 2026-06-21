@@ -4,10 +4,7 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.personality.PersonalityNarration;
-import com.booktimer.personality.ReadingPersonalityCache;
-import com.booktimer.personality.ReadingPersonalityCacheRepository;
 import com.booktimer.personality.ReadingPersonalityNarrator;
-import com.booktimer.personality.ReadingPersonalityService;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
@@ -30,24 +27,17 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.atLeastOnce;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
 /**
- * 책BTI 본인 화면 컨트롤러 통합 테스트(Phase 5) — 인증 게이트 + 3상태 라우팅 + "다시 분석"(force) 배선.
+ * 책BTI 셸 컨트롤러 통합 테스트 (선별 SPA 단계 1c 이후).
  *
- * <p>상태 분류 로직은 {@link PersonalityViewTest}(단위)가, 캐시/재생성은 서비스 테스트가 본다. 여기선
- * 인증→유저→분석→뷰 와이어링과, 세 상태가 옳은 뷰 모델로 실리는지를 확인한다. LLM은 가짜로 끼운다.
+ * <p>GET /personality 인증 게이트·셸 렌더만 확인한다.
+ * 뮤테이션(refresh·select) 테스트는 {@link com.booktimer.web.api.PersonalityApiControllerTest}로 이관됨.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -64,10 +54,6 @@ class PersonalityControllerTest {
     private BookRepository bookRepository;
     @Autowired
     private Clock clock;
-    @Autowired
-    private ReadingPersonalityService personalityService;
-    @Autowired
-    private ReadingPersonalityCacheRepository cacheRepository;
 
     @MockitoBean
     private ReadingPersonalityNarrator narrator;
@@ -80,7 +66,6 @@ class PersonalityControllerTest {
         return registrationService.register(email, "rawpw1234", "독자", SEOUL, Role.USER, today());
     }
 
-    /** 책BTI는 공개(PUBLIC)+완독 책만으로 뽑히므로 픽스처는 공개+완독으로 적재한다. */
     private void saveBooks(User u, int n) {
         for (int i = 0; i < n; i++) {
             Book b = Book.register(u, "책" + i, "저자" + i, null, null, null, null,
@@ -88,10 +73,6 @@ class PersonalityControllerTest {
             b.makePublic();
             bookRepository.save(b);
         }
-    }
-
-    private PersonalityView viewOf(MvcResult result) {
-        return (PersonalityView) result.getModelAndView().getModel().get("view");
     }
 
     @Test
@@ -102,168 +83,29 @@ class PersonalityControllerTest {
     }
 
     @Test
-    @DisplayName("GET /personality: 책 충분 + 서술 생성되면 READY로 서술을 싣는다")
-    void get_ready_rendersNarrative() throws Exception {
-        User u = register("ready@booktimer.com");
-        saveBooks(u, 5);
-        when(narrator.narrate(any())).thenReturn(
-                Optional.of(new PersonalityNarration("완독러 독자다.", List.of("완독러"))));
+    @DisplayName("GET /personality: 인증 시 personality 뷰 렌더(Vue 섬 셸)")
+    void get_authenticated_rendersShell() throws Exception {
+        register("shell@booktimer.com");
 
-        MvcResult result = mockMvc.perform(get("/personality").with(user("ready@booktimer.com")))
+        mockMvc.perform(get("/personality").with(user("shell@booktimer.com")))
                 .andExpect(status().isOk())
-                .andExpect(view().name("personality"))
-                .andReturn();
-
-        assertThat(viewOf(result).isReady()).isTrue();
-        assertThat(viewOf(result).narrative()).isEqualTo("완독러 독자다.");
+                .andExpect(view().name("personality"));
     }
 
     @Test
-    @DisplayName("GET /personality: 개발용 파서 주석이 렌더 출력에 새지 않는다(주석 닫힘 토큰이 본문에 인용돼 조기 종료되던 함정 방지)")
+    @DisplayName("GET /personality: 개발용 파서 주석이 렌더 출력에 새지 않는다(#247 재발 방지)")
     void get_doesNotLeakDevComment() throws Exception {
-        User u = register("leak@booktimer.com");
-        saveBooks(u, 5);
+        register("leak2@booktimer.com");
         when(narrator.narrate(any())).thenReturn(
                 Optional.of(new PersonalityNarration("서술.", List.of("태그"))));
 
-        // 미리 존재하는 세션을 줘 맨 아래 CSRF 폼의 토큰 저장이 세션을 '생성'하지 않게 한다
-        // (응답 버퍼 commit 이후 세션 생성 시 IllegalStateException — 로그인 유저는 세션이 이미 있는 프로덕션과 일치).
         MvcResult result = mockMvc.perform(get("/personality")
-                        .with(user("leak@booktimer.com")).session(new MockHttpSession()))
+                        .with(user("leak2@booktimer.com")).session(new MockHttpSession()))
                 .andExpect(status().isOk())
                 .andReturn();
 
         String html = result.getResponse().getContentAsString();
-        // 파서 주석 닫힘 토큰이 본문에 보이면 주석이 조기 종료돼 뒷부분이 텍스트로 샌 것
         assertThat(html).doesNotContain("*/-->");
-        // 개발 주석 내용 자체도 사용자 화면에 새면 안 됨
         assertThat(html).doesNotContain("응답 버퍼");
-    }
-
-    @Test
-    @DisplayName("GET /personality: 완독 책이 0권(임계 미만)이면 COLD_START")
-    void get_coldStart_whenNoFinishedBooks() throws Exception {
-        User u = register("cold@booktimer.com");
-        saveBooks(u, 0); // 완독 0권 — 임계(1) 미만
-
-        MvcResult result = mockMvc.perform(get("/personality").with(user("cold@booktimer.com")))
-                .andExpect(status().isOk())
-                .andReturn();
-
-        assertThat(viewOf(result).isColdStart()).isTrue();
-    }
-
-    @Test
-    @DisplayName("GET /personality: 책 충분하나 LLM 실패면 FALLBACK")
-    void get_fallback_whenLlmEmpty() throws Exception {
-        User u = register("fb@booktimer.com");
-        saveBooks(u, 5);
-        when(narrator.narrate(any())).thenReturn(Optional.empty());
-
-        MvcResult result = mockMvc.perform(get("/personality").with(user("fb@booktimer.com")))
-                .andExpect(status().isOk())
-                .andReturn();
-
-        assertThat(viewOf(result).isFallback()).isTrue();
-    }
-
-    @Test
-    @DisplayName("POST /personality/refresh: 강제 재생성하고 /personality로 리다이렉트(CSRF 필요)")
-    void refresh_forcesAndRedirects() throws Exception {
-        User u = register("refresh@booktimer.com");
-        saveBooks(u, 5);
-        when(narrator.narrate(any())).thenReturn(
-                Optional.of(new PersonalityNarration("서술.", List.of("태그"))));
-
-        mockMvc.perform(post("/personality/refresh").with(user("refresh@booktimer.com")).with(csrf()))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/personality"));
-
-        verify(narrator, atLeastOnce()).narrate(any()); // 재생성 호출됨
-    }
-
-    @Test
-    @DisplayName("POST /personality/refresh: CSRF 없으면 403")
-    void refresh_withoutCsrf_forbidden() throws Exception {
-        User u = register("nocsrf@booktimer.com");
-        saveBooks(u, 5);
-
-        mockMvc.perform(post("/personality/refresh").with(user("nocsrf@booktimer.com")))
-                .andExpect(status().isForbidden());
-    }
-
-    @Test
-    @DisplayName("POST /personality/refresh: 하루 3번까지만 강제 재생성하고, 4번째부턴 LLM 호출 없이 차단(안내 플래그)")
-    void refresh_dailyLimit_blocksAfterThree() throws Exception {
-        User u = register("limit@booktimer.com");
-        saveBooks(u, 5);
-        when(narrator.narrate(any())).thenReturn(
-                Optional.of(new PersonalityNarration("서술.", List.of("태그"))));
-
-        for (int i = 0; i < 3; i++) {
-            mockMvc.perform(post("/personality/refresh").with(user("limit@booktimer.com")).with(csrf()))
-                    .andExpect(redirectedUrl("/personality"));
-        }
-        // 4번째 — 한도 초과: LLM 재호출 없이 같은 페이지로 리다이렉트 + 안내 플래그
-        mockMvc.perform(post("/personality/refresh").with(user("limit@booktimer.com")).with(csrf()))
-                .andExpect(redirectedUrl("/personality"))
-                .andExpect(flash().attribute("refreshLimited", true));
-
-        verify(narrator, times(3)).narrate(any()); // 4번째는 호출되지 않음(딱 3번)
-    }
-
-    // ── 히스토리 표시 + 대표 선택(2026-06-08) ──────────────────────────────────
-
-    /** 서로 다른 서술로 n번 "다시 분석"해 히스토리 행을 쌓는다(부트스트랩 1개 + 후보들). */
-    private void buildHistory(User u, String... narratives) {
-        for (String n : narratives) {
-            when(narrator.narrate(any())).thenReturn(Optional.of(new PersonalityNarration(n, List.of("태그"))));
-            personalityService.reanalyze(u);
-        }
-    }
-
-    @Test
-    @DisplayName("GET /personality: 과거 분석이 히스토리(최대 3개)로 뷰에 최신순으로 실리고 대표 1개가 표시된다")
-    void get_rendersHistoryEntries() throws Exception {
-        User u = register("hist@booktimer.com");
-        saveBooks(u, 5);
-        buildHistory(u, "분석1.", "분석2."); // 분석1.이 대표(부트스트랩)
-
-        MvcResult result = mockMvc.perform(get("/personality").with(user("hist@booktimer.com")))
-                .andExpect(status().isOk())
-                .andReturn();
-
-        assertThat(viewOf(result).entries()).hasSize(2);
-        assertThat(viewOf(result).entries().get(0).narrative()).isEqualTo("분석2."); // 최신순
-        assertThat(viewOf(result).entries().stream().filter(e -> e.selected()).count()).isEqualTo(1L);
-    }
-
-    @Test
-    @DisplayName("POST /personality/select/{id}: 후보를 대표로 바꾸고 /personality로 리다이렉트(CSRF 필요)")
-    void select_movesRepresentative() throws Exception {
-        User u = register("sel@booktimer.com");
-        saveBooks(u, 5);
-        buildHistory(u, "분석1.", "분석2."); // 분석1.=대표
-        Long secondId = cacheRepository.findByUserOrderByGeneratedAtDescIdDesc(u).get(0).getId(); // 분석2.
-
-        mockMvc.perform(post("/personality/select/{id}", secondId)
-                        .with(user("sel@booktimer.com")).with(csrf()))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/personality"));
-
-        assertThat(cacheRepository.findByUserAndSelectedTrue(u)).get()
-                .extracting(ReadingPersonalityCache::getNarrative).isEqualTo("분석2.");
-    }
-
-    @Test
-    @DisplayName("POST /personality/select/{id}: CSRF 없으면 403")
-    void select_withoutCsrf_forbidden() throws Exception {
-        User u = register("selnocsrf@booktimer.com");
-        saveBooks(u, 5);
-        buildHistory(u, "분석1.");
-        Long id = cacheRepository.findByUserOrderByGeneratedAtDescIdDesc(u).get(0).getId();
-
-        mockMvc.perform(post("/personality/select/{id}", id).with(user("selnocsrf@booktimer.com")))
-                .andExpect(status().isForbidden());
     }
 }
