@@ -110,6 +110,8 @@
 - [N-107. `type=module` ESM의 DOMContentLoaded 타이밍 — `readyState` guard 패턴](#n-107-typemodule-esm의-domcontentloaded-타이밍--readystate-guard-패턴)
 - [N-108. SSR에서 빌드 자동화 없이 캐시 stale 해결 — Spring resource chain 런타임 해시로 NETWORK_FIRST 졸업](#n-108-ssr에서-빌드-자동화-없이-캐시-stale-해결--spring-resource-chain-런타임-해시로-network_first-졸업)
 - [N-109. 섬 아키텍처(Island Architecture) 복제 체크리스트 — SSR 셸 + Vue + JSON API](#n-109-섬-아키텍처island-architecture-복제-체크리스트--ssr-셸--vue--json-api)
+- [N-110. LLM 동기 뮤테이션을 섬에서 — 폴링 없이 응답에 갱신 view를 실어 재조회 회피](#n-110-llm-동기-뮤테이션을-섬에서--폴링-없이-응답에-갱신-view를-실어-재조회-회피)
+- [N-111. API DTO에서 enum·시각 문자열 평탄화 — 클라이언트에 ZoneId·enum 상수 노출 안 함](#n-111-api-dto에서-enumsyak-문자열-평탄화--클라이언트에-zoneidlenum-상수-노출-안-함)
 
 ---
 
@@ -5190,3 +5192,123 @@ const apps = {
 - **N-055** — null-state 엔티티 누출 방어 (boundary test).
 - **T-076** — `inlineDynamicImports` + 멀티 input 에러 → 독립 빌드 분리.
 - **T-053/054/083** — 로드 순서·타이밍 사각, 실 브라우저 게이트 필수.
+
+---
+
+## N-110. LLM 동기 뮤테이션을 섬에서 — 폴링 없이 응답에 갱신 view를 실어 재조회 회피
+
+> **한 줄 요약**: LLM 재분석 뮤테이션에서 서버가 직접 갱신된 view를 응답에 실어 반환하면,
+> 클라이언트는 재조회(GET) 없이 응답 하나로 UI를 교체한다. 단, fetch 타임아웃을 서버 타임아웃보다 길게 잡아야 한다.
+
+### 문제 / 배경
+
+LLM API 호출을 트리거하는 "재분석" 버튼이 있을 때:
+- 서버는 LLM을 동기 호출(연결 5초 / 읽기 20초 타임아웃)해 결과를 저장한다.
+- 클라이언트는 POST 응답을 받은 뒤 GET으로 다시 조회해 UI를 갱신한다. → **불필요한 왕복**.
+- 또는 POST → 폴링(setInterval)으로 완료를 기다린다. → **복잡도 증가·경쟁 조건**.
+
+### 해법
+
+**서버 응답에 갱신된 view를 함께 실어 반환한다.**
+
+```
+POST /api/personality/refresh  →  200 { view: {…갱신됨}, refreshRemaining: 2, refreshLimit: 3 }
+```
+
+클라이언트:
+```typescript
+const res = await fetch('/api/personality/refresh', {
+    method: 'POST',
+    signal: AbortSignal.timeout(30_000),   // 서버 읽기 타임아웃(20s) < 클라 타임아웃(30s)
+});
+if (res.status === 429) { refreshRemaining.value = 0; return; }
+const data = await res.json();
+applyResponse(data);   // view, refreshRemaining 한 번에 교체 — 재조회 없음
+```
+
+**왜 타임아웃을 서버보다 길게 잡나?**
+
+서버 읽기 타임아웃(20s)이 트리거되면 서버는 정상적으로 에러 응답을 보낸다.
+클라 타임아웃이 더 짧으면 클라가 먼저 연결을 끊어버려 서버 응답 자체를 못 받는다.
+서버 타임아웃 처리(serve-stale, 오류 응답)가 클라에 전달돼야 상태를 올바르게 반영할 수 있다.
+
+**LLM 실패 시 serve-stale**: 서버가 LLM 실패 시 기존 대표 결과를 FALLBACK 상태로 반환하면
+클라는 응답 view를 그대로 적용 — 별도 에러 처리 없이 상태 머신이 FALLBACK을 표시한다.
+
+### 예시
+
+```
+refresh 버튼 클릭
+  → POST /api/personality/refresh
+     서버: LLM 동기 호출 → 저장 → view 재구성 → { view, refreshRemaining } 반환
+  ← 200 { view: { state: 'READY', ... }, refreshRemaining: 2 }
+     클라: applyResponse(data) → view·refreshRemaining 한번에 교체, GET 0회
+```
+
+### 관련
+
+- **N-109** — 섬 아키텍처 복제 체크리스트 (서버 side).
+- **T-077** — jsdom에서 `scrollBy`/`clientWidth` = 0 (레이아웃 미지원).
+
+---
+
+## N-111. API DTO에서 enum·시각 문자열 평탄화 — 클라이언트에 ZoneId·enum 상수 노출 안 함
+
+> **한 줄 요약**: JSON API DTO에서 enum은 `.name()`(문자열), 시각은 서버에서 포맷된 레이블로 내려보내면
+> 클라이언트가 enum 상수나 ZoneId 없이도 UI를 그릴 수 있다.
+
+### 문제 / 배경
+
+도메인 모델에 `ReadingPersonalityState` enum과 `Instant generatedAt`(ZoneId 필요)이 있다.
+이를 그대로 JSON으로 내리면:
+- 클라이언트가 enum 가능 값을 알아야 한다 → 프론트와 서버 enum 동기화 필요.
+- 시각 포맷을 클라이언트가 담당 → ZoneId(사용자 타임존) 추가 전달 또는 클라 `Intl.DateTimeFormat` 처리.
+
+### 해법
+
+**DTO 변환 레이어(컨트롤러 또는 VO)에서 평탄화한다.**
+
+```java
+// PersonalityApiController
+record ViewDto(
+    String state,          // enum.name() — "READY" / "COLD_START" / "FALLBACK"
+    String generatedAtLabel,  // 서버 포맷 — "2026-06-21 19:00" (ZoneId 미노출)
+    // zone 필드 없음
+) {}
+
+ViewDto toEntryDto(ReadingPersonalityEntry e, PersonalityView view) {
+    return new EntryDto(
+        e.getId(),
+        e.getNarrative(),
+        e.getTags(),
+        view.formatTime(e.getGeneratedAt()),  // 서버가 ZoneId로 포맷
+        e.getGeneratedAt().toString(),        // ISO 보존용(선택)
+        e.isSelected(),
+        e.isStale()
+    );
+}
+```
+
+클라이언트:
+```typescript
+// enum 상수 비교 — 서버가 내린 문자열 그대로
+if (view.state === 'READY') { ... }
+if (view.state === 'COLD_START') { ... }
+
+// 시각 표시 — 서버 레이블 그대로
+<span>{{ entry.generatedAtLabel }}</span>
+```
+
+### 판단 기준
+
+| 상황 | 권장 |
+|---|---|
+| 클라가 enum을 분기에만 씀 | `state=enum.name()` 문자열 |
+| 클라가 시각을 표시만 함 | `generatedAtLabel` 서버 포맷 |
+| 클라가 시각을 가공(정렬·계산)함 | ISO-8601 추가 필드(`generatedAt`) 병행 |
+| 클라가 다국어 처리 | `Intl.DateTimeFormat` 필요 → ZoneId·ISO 전달 |
+
+### 관련
+
+- **N-109** — 섬 아키텍처 복제 체크리스트.
+- **N-110** — LLM 동기 뮤테이션 패턴.
