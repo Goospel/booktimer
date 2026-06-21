@@ -1,0 +1,156 @@
+// @vitest-environment jsdom
+// HistoryApp 동작 위주 테스트 — fetch mock으로 API 호출 검증.
+// 브리틀한 정확 색상/문자열 단언은 피함; 동작·클래스 존재·상태를 확인한다.
+// CSS .tab-panel 가시성(라디오 :checked ~ .panel CSS 셀렉터)은 실 브라우저 게이트로 별도 검증(N-083/T-053).
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mount } from '@vue/test-utils';
+import HistoryApp from '../src/history/HistoryApp.vue';
+import MonthlyRecords from '../src/history/MonthlyRecords.vue';
+
+const MOCK_GRAPH = {
+    weeks: [
+        [
+            { date: null, totalSeconds: 0, level: 0, manual: false },
+            { date: '2026-06-15', totalSeconds: 3600, level: 2, manual: false },
+            { date: '2026-06-16', totalSeconds: 0, level: 0, manual: false },
+            { date: '2026-06-17', totalSeconds: 1800, level: 1, manual: true },
+            { date: '2026-06-18', totalSeconds: 7200, level: 4, manual: false },
+            { date: '2026-06-19', totalSeconds: 0, level: 0, manual: false },
+            { date: '2026-06-20', totalSeconds: 0, level: 0, manual: false },
+        ],
+    ],
+    monthLabels: [{ weekIndex: 0, label: '6월' }],
+    totalSeconds: 12600,
+    activeDays: 3,
+    currentStreak: 1,
+    growthEmoji: '🌱',
+    growthLabel: '새싹',
+};
+
+const MOCK_MONTHS = [
+    {
+        month: '2026-06',
+        totalSeconds: 7200,
+        days: [
+            { date: '2026-06-20', totalSeconds: 3600, bookTitles: ['클린 코드'], manuallyFilled: false },
+            { date: '2026-06-19', totalSeconds: 3600, bookTitles: [], manuallyFilled: false },
+        ],
+    },
+    {
+        month: '2026-05',
+        totalSeconds: 3600,
+        days: [
+            { date: '2026-05-31', totalSeconds: 3600, bookTitles: ['리팩터링'], manuallyFilled: false },
+        ],
+    },
+];
+
+const MOCK_RESPONSE = {
+    nickname: '테스터',
+    months: MOCK_MONTHS,
+    graph: MOCK_GRAPH,
+    weeklyShortfall: [
+        { date: '2026-06-18', debtSeconds: 3000 },
+    ],
+};
+
+beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ ...MOCK_RESPONSE }),
+    }));
+});
+
+afterEach(() => {
+    vi.unstubAllGlobals();
+    document.body.innerHTML = '';
+});
+
+describe('HistoryApp', () => {
+    test('마운트 시 /api/history 를 호출한다', async () => {
+        mount(HistoryApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
+        const url = (fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+        expect(url).toContain('/api/history');
+    });
+
+    test('잔디 셀 렌더: .grass-cell 클래스와 level-N/empty/manual 클래스가 함께 생성된다', async () => {
+        const wrapper = mount(HistoryApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.find('.grass-cell').exists()).toBe(true));
+
+        // placeholder → empty
+        const emptyCell = wrapper.findAll('.grass-cell').find(c => c.classes('empty'));
+        expect(emptyCell).toBeDefined();
+
+        // level-2 셀 존재
+        const level2 = wrapper.findAll('.grass-cell').find(c => c.classes('level-2'));
+        expect(level2).toBeDefined();
+
+        // manual 셀 존재 (level-1 manual)
+        const manualCell = wrapper.findAll('.grass-cell').find(c => c.classes('manual'));
+        expect(manualCell).toBeDefined();
+        expect(manualCell?.classes()).toContain('level-1');
+    });
+});
+
+describe('MonthlyRecords 월 네비 경계', () => {
+    test('초기 monthIndex = 0 (최신 달)', () => {
+        const wrapper = mount(MonthlyRecords, { props: { months: MOCK_MONTHS } });
+        // 최신달 레이블이 보인다
+        expect(wrapper.text()).toContain('2026년 6월');
+    });
+
+    test('prev(◀) 클릭 → 과거 달로 이동 (monthIndex++)', async () => {
+        const wrapper = mount(MonthlyRecords, { props: { months: MOCK_MONTHS } });
+        const prev = wrapper.find('.month-nav-prev');
+        await prev.trigger('click');
+        expect(wrapper.text()).toContain('2026년 5월');
+    });
+
+    test('next(▶) 클릭 → 최신 달로 돌아옴 (monthIndex--)', async () => {
+        const wrapper = mount(MonthlyRecords, { props: { months: MOCK_MONTHS } });
+        const prev = wrapper.find('.month-nav-prev');
+        const next = wrapper.find('.month-nav-next');
+        await prev.trigger('click');           // 5월로
+        await next.trigger('click');           // 6월로
+        expect(wrapper.text()).toContain('2026년 6월');
+    });
+
+    test('최신 달(index=0)에서 next(▶)는 disabled', () => {
+        const wrapper = mount(MonthlyRecords, { props: { months: MOCK_MONTHS } });
+        const next = wrapper.find('.month-nav-next');
+        expect((next.element as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    test('가장 오래된 달에서 prev(◀)는 disabled', async () => {
+        const wrapper = mount(MonthlyRecords, { props: { months: MOCK_MONTHS } });
+        const prev = wrapper.find('.month-nav-prev');
+        await prev.trigger('click'); // 5월(마지막)로
+        expect((prev.element as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    test('단 1개 달이면 prev·next 모두 disabled', () => {
+        const wrapper = mount(MonthlyRecords, { props: { months: [MOCK_MONTHS[0]] } });
+        const prev = wrapper.find('.month-nav-prev');
+        const next = wrapper.find('.month-nav-next');
+        expect((prev.element as HTMLButtonElement).disabled).toBe(true);
+        expect((next.element as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    test('탭 전환: activeTab 변경 시 input[type=radio] checked 상태가 바뀐다', async () => {
+        const wrapper = mount(HistoryApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.find('#tab-records').exists()).toBe(true));
+
+        const recordsRadio = wrapper.find('#tab-records').element as HTMLInputElement;
+        const missedRadio = wrapper.find('#tab-missed').element as HTMLInputElement;
+
+        // 초기: records 선택
+        expect(recordsRadio.checked).toBe(true);
+        expect(missedRadio.checked).toBe(false);
+
+        // missed 라디오 클릭
+        await wrapper.find('#tab-missed').trigger('click');
+        expect(missedRadio.checked).toBe(true);
+        expect(recordsRadio.checked).toBe(false);
+    });
+});
