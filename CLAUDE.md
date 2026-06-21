@@ -184,6 +184,7 @@ git worktree remove ../BookTimer-<task>
   Get-NetTCPConnection -LocalPort 8080 -State Listen -EA SilentlyContinue |
     ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
   ```
+- **gradle 데몬·빌드 락** — 두 세션이 동시에 `./gradlew`(테스트·빌드·커밋 훅의 `gradlew test`)를 돌리면 데몬·빌드 락 경합으로 **무한 hang** 날 수 있다 → 한 세션에서만 빌드/커밋. hang 대처(강제 정리)는 「🧪 TDD → ⚠️ 커밋이 무한 hang 하면」 절 참고(T-078).
 - **"File modified since read" 가드는 버그가 아니라 덮어쓰기 직전 보호** — 재읽기 → 그쪽 변경 보존 → 내 것만 재적용이 정답
 
 > 개념·배경: [claude-docs/learning-notes.md](claude-docs/learning-notes.md) **N-032**.
@@ -249,6 +250,21 @@ Claude 가 테스트를 빨리 짜므로 **"사람 작성 시간"이라는 전�
 - 역할 분담: **"테스트를 먼저"** 라는 판단은 이 가이드(소프트)가, **"테스트 통과 없이 커밋 불가"** 는 훅(하드)이 담당한다.
 - 문서/설정 전용 커밋(`.java` 변경 없음)은 게이트가 자동으로 건너뛴다.
 
+### ⚠️ 커밋이 무한 hang 하면 — esc 말고 강제 정리 (자주 재발)
+
+이 게이트가 `./gradlew test` 를 돌리므로 **"git 이 멈춘" 것처럼 보여도 실제론 gradle 테스트가 hang** 한 것일 때가 많다 —
+Claude Code 는 그 자식 프로세스 종료를 기다릴 뿐이라 **코어 버그가 아니다**(그래서 esc·머지로 안 풀리고 clear 로만 풀렸던 것).
+흔한 뿌리 = **멀티 세션이 gradle 데몬·빌드 락을 동시 점유**. esc 는 이미 뜬 gradle 자식·데몬을 안 죽여 **다음 커밋도 또 hang**한다.
+
+- **감별**: `git status` 가 빠르면(0.x초) git·레포 자체는 정상 → 코어·레포 문제 아님. 떠도는 `java`(gradle 데몬) 잔존이 단서.
+- **강제 정리**:
+  ```powershell
+  Get-Process java, git -EA SilentlyContinue | Stop-Process -Force
+  Remove-Item .git\index.lock -EA SilentlyContinue
+  ./gradlew --stop
+  ```
+- **예방**: 멀티 세션일 땐 **한 세션에서만 커밋/빌드**(gradle 은 워크트리를 나눠도 데몬·캐시를 공유해 경합). 배경: [troubleshooting T-078](claude-docs/troubleshooting.md), 다중 세션 N-032.
+
 ### 예외 (override)
 
 - 커밋 명령에 `SKIP_TESTS` 토큰을 포함하면 게이트를 우회한다.
@@ -296,6 +312,7 @@ Claude 가 테스트를 빨리 짜므로 **"사람 작성 시간"이라는 전�
 - 해결 직후, 답변 끝에 **"🧯 troubleshooting 추가 후보 — `<한 줄 요약>`. 박을까?"** (또는 learning-notes 후보)를 짧게 제안한다.
 - 사용자가 OK 하면 즉시 해당 파일에 `T-###` / `N-###` 로 추가한다.
 - PR 머지 직전에도 sweep 을 함께 수행한다 (Git 워크플로 4번).
+- **자주 재발(2회 이상)하는 트랩은 `troubleshooting.md`(참조용)에 더해 이 `CLAUDE.md`(항상 로드)의 해당 섹션에도 승격**한다 — 매번 troubleshooting 을 안 펼쳐도 바로 대처하게. (예: git/gradle 무한 hang → 「🧪 TDD → ⚠️ 커밋이 무한 hang 하면」, T-078. 사용자 합의: 2026-06-22.)
 
 ---
 
