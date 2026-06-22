@@ -76,7 +76,7 @@ public class ReadingHistoryService {
 
         // 최신 일자가 먼저 오도록 내림차순 TreeMap에 누적
         Map<LocalDate, DayAccumulator> byDate = new TreeMap<>(Comparator.reverseOrder());
-        for (ReadingSession session : sessionRepository.findByUser(user)) {
+        for (ReadingSession session : sessionRepository.findByUserWithBook(user)) {
             if (session.isActive() || !include.test(session)) {
                 continue; // 진행 중(미종료)·필터 미통과 세션은 집계 제외
             }

@@ -1,11 +1,15 @@
 package com.booktimer.session;
 
+import com.booktimer.book.Book;
+import com.booktimer.book.BookRepository;
+import com.booktimer.book.BookStatus;
 import com.booktimer.config.JpaConfig;
 import com.booktimer.push.PushSubscription;
 import com.booktimer.push.PushSubscriptionRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
+import org.hibernate.Hibernate;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,11 +43,150 @@ class ReadingSessionRepositoryTest {
     private UserRepository userRepository;
 
     @Autowired
+    private BookRepository bookRepository;
+
+    @Autowired
     private PushSubscriptionRepository pushSubRepo;
 
     private User persistedUser(String email) {
         return userRepository.save(
                 User.of(email, "$2a$10$abcdefghijklmnopqrstuv", "책벌레", "Asia/Seoul", Role.USER));
+    }
+
+    private Book persistedBook(User owner, boolean isPublic) {
+        Book b = Book.register(owner, "테스트책", null, null, null, null, null, BookStatus.READING);
+        if (isPublic) b.makePublic();
+        return bookRepository.save(b);
+    }
+
+    // --- findByUserWithBook: LEFT join fetch — N+1 제거 + null-book 세션 보존 ---
+
+    @Test
+    @DisplayName("findByUserWithBook: book=null 세션도 보존한다 (LEFT join — INNER면 null-book 세션 누락)")
+    void findByUserWithBook_keepsNullBookSessions() {
+        User u = persistedUser("wbook1@booktimer.com");
+        Book b = persistedBook(u, false);
+        sessionRepository.save(ReadingSession.start(u, T0, b));
+        sessionRepository.save(ReadingSession.start(u, T0.plusSeconds(100))); // book=null
+
+        List<ReadingSession> result = sessionRepository.findByUserWithBook(u);
+
+        assertThat(result).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("findByUserWithBook: 반환된 book이 즉시 초기화된다 (N+1 없음)")
+    void findByUserWithBook_initializesBook() {
+        User u = persistedUser("wbook2@booktimer.com");
+        Book b = persistedBook(u, false);
+        sessionRepository.save(ReadingSession.start(u, T0, b));
+
+        List<ReadingSession> result = sessionRepository.findByUserWithBook(u);
+
+        assertThat(result).hasSize(1);
+        assertThat(Hibernate.isInitialized(result.get(0).getBook())).isTrue();
+    }
+
+    // --- sumSecondsByBook: 완료·책지정 세션만 DB GROUP BY 집계 ---
+
+    @Test
+    @DisplayName("sumSecondsByBook: 세션이 없으면 빈 리스트")
+    void sumSecondsByBook_empty() {
+        User u = persistedUser("sum1@booktimer.com");
+
+        assertThat(sessionRepository.sumSecondsByBook(u)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("sumSecondsByBook: 같은 책 완료 2건의 시간을 합산한다")
+    void sumSecondsByBook_sumsCompletedSessions() {
+        User u = persistedUser("sum2@booktimer.com");
+        Book b = persistedBook(u, false);
+        ReadingSession s1 = ReadingSession.start(u, T0, b);
+        s1.end(T0.plusSeconds(1800));
+        ReadingSession s2 = ReadingSession.start(u, T0.plusSeconds(3600), b);
+        s2.end(T0.plusSeconds(3600 + 3600));
+        sessionRepository.save(s1);
+        sessionRepository.save(s2);
+
+        List<BookSecondsRow> rows = sessionRepository.sumSecondsByBook(u);
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).bookId()).isEqualTo(b.getId());
+        assertThat(rows.get(0).seconds()).isEqualTo(5400L);
+    }
+
+    @Test
+    @DisplayName("sumSecondsByBook: 진행 중(endedAt=null) 세션은 제외된다")
+    void sumSecondsByBook_excludesActiveSession() {
+        User u = persistedUser("sum3@booktimer.com");
+        Book b = persistedBook(u, false);
+        sessionRepository.save(ReadingSession.start(u, T0, b)); // 미종료
+
+        assertThat(sessionRepository.sumSecondsByBook(u)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("sumSecondsByBook: book=null 세션은 제외된다")
+    void sumSecondsByBook_excludesNullBookSession() {
+        User u = persistedUser("sum4@booktimer.com");
+        ReadingSession s = ReadingSession.start(u, T0); // book=null
+        s.end(T0.plusSeconds(3600));
+        sessionRepository.save(s);
+
+        assertThat(sessionRepository.sumSecondsByBook(u)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("sumSecondsByBook: PUBLIC·PRIVATE 책 세션 모두 포함한다 (가시성 무관)")
+    void sumSecondsByBook_includesPublicAndPrivate() {
+        User u = persistedUser("sum5@booktimer.com");
+        Book pub = persistedBook(u, true);
+        Book priv = persistedBook(u, false);
+        ReadingSession s1 = ReadingSession.start(u, T0, pub);
+        s1.end(T0.plusSeconds(3600));
+        ReadingSession s2 = ReadingSession.start(u, T0.plusSeconds(7200), priv);
+        s2.end(T0.plusSeconds(7200 + 1800));
+        sessionRepository.save(s1);
+        sessionRepository.save(s2);
+
+        List<BookSecondsRow> rows = sessionRepository.sumSecondsByBook(u);
+
+        assertThat(rows).hasSize(2);
+        assertThat(rows.stream().mapToLong(BookSecondsRow::seconds).sum()).isEqualTo(5400L);
+    }
+
+    // --- sumSecondsByPublicBook: PUBLIC 책 세션만 (비공개 시간 누출 방지 sns-design §3.5) ---
+
+    @Test
+    @DisplayName("sumSecondsByPublicBook: PRIVATE 책 세션은 제외하고 PUBLIC만 포함한다")
+    void sumSecondsByPublicBook_onlyPublic() {
+        User u = persistedUser("pub1@booktimer.com");
+        Book pub = persistedBook(u, true);
+        Book priv = persistedBook(u, false);
+        ReadingSession s1 = ReadingSession.start(u, T0, pub);
+        s1.end(T0.plusSeconds(3600));
+        ReadingSession s2 = ReadingSession.start(u, T0.plusSeconds(7200), priv);
+        s2.end(T0.plusSeconds(7200 + 1800));
+        sessionRepository.save(s1);
+        sessionRepository.save(s2);
+
+        List<BookSecondsRow> rows = sessionRepository.sumSecondsByPublicBook(u);
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).bookId()).isEqualTo(pub.getId());
+        assertThat(rows.get(0).seconds()).isEqualTo(3600L);
+    }
+
+    @Test
+    @DisplayName("sumSecondsByPublicBook: book=null 세션은 제외된다")
+    void sumSecondsByPublicBook_excludesNullBook() {
+        User u = persistedUser("pub2@booktimer.com");
+        ReadingSession s = ReadingSession.start(u, T0);
+        s.end(T0.plusSeconds(3600));
+        sessionRepository.save(s);
+
+        assertThat(sessionRepository.sumSecondsByPublicBook(u)).isEmpty();
     }
 
     @Test

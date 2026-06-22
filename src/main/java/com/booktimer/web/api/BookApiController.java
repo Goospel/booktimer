@@ -103,7 +103,7 @@ public class BookApiController {
                 req.coverUrl(), req.publisher(), req.purchaseLink(), req.category(), req.pubDate());
         try {
             Book saved = bookService.addFromSearch(user, result, status);
-            return ResponseEntity.ok(MyBookSummary.from(saved, statsService.totalSecondsByBook(user)));
+            return ResponseEntity.ok(MyBookSummary.from(saved, Map.of(saved.getId(), statsService.secondsForBook(user, saved))));
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "책을 추가할 수 없습니다");
         }
@@ -115,7 +115,7 @@ public class BookApiController {
                                                       Principal principal) {
         User user = currentUserService.resolve(principal);
         Book updated = mutate(() -> bookService.changeStatus(user, id, req.status()));
-        return ResponseEntity.ok(MyBookSummary.from(updated, statsService.totalSecondsByBook(user)));
+        return ResponseEntity.ok(MyBookSummary.from(updated, Map.of(updated.getId(), statsService.secondsForBook(user, updated))));
     }
 
     @PostMapping("/api/books/{id}/visibility")
@@ -124,7 +124,7 @@ public class BookApiController {
                                                        Principal principal) {
         User user = currentUserService.resolve(principal);
         Book updated = mutate(() -> bookService.setVisibility(user, id, req.visibility()));
-        return ResponseEntity.ok(MyBookSummary.from(updated, statsService.totalSecondsByBook(user)));
+        return ResponseEntity.ok(MyBookSummary.from(updated, Map.of(updated.getId(), statsService.secondsForBook(user, updated))));
     }
 
     @PostMapping("/api/books/{id}/delete")
