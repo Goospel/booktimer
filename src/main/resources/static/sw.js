@@ -3,6 +3,7 @@
 // 해시 URL은 내용이 바뀌면 URL이 달라지므로 cache-first에서도 stale이 불가 → NETWORK_FIRST 졸업.
 // 아이콘·manifest는 cache-first로 빠른 재사용.
 // HTML 내비게이션·API는 network-first — SSR·인증 응답이라 캐시에 개인 데이터 담지 않음.
+// 내비게이션은 navigationPreload로 SW 부팅과 네트워크 요청을 병렬화(콜드스타트 지연 제거).
 // 버전 상수: 기존 캐시 무효화용(activate에서 구 캐시 삭제).
 // v6: 라우트 충돌(#450) 시기에 번들 500이 cache-first로 영구 캐싱된 shell-v5를 purge.
 const CACHE = 'shell-v6';
@@ -25,12 +26,16 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-    event.waitUntil(
-        caches.keys().then((keys) =>
-            Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-        )
-    );
-    clients.claim();
+    event.waitUntil((async () => {
+        // navigationPreload — 브라우저가 SW 부팅과 내비게이션 네트워크 요청을 병렬화(콜드스타트 지연 제거).
+        // 미지원 브라우저(구형 iOS Safari 등)는 navigationPreload가 없어 자동 스킵 → fetch 폴백.
+        if (self.registration.navigationPreload) {
+            await self.registration.navigationPreload.enable();
+        }
+        const keys = await caches.keys();
+        await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
+        await clients.claim();
+    })());
 });
 
 self.addEventListener('fetch', (event) => {
@@ -41,10 +46,16 @@ self.addEventListener('fetch', (event) => {
     if (url.origin !== self.location.origin) return;
 
     // HTML 내비게이션 — network-first(SSR·인증 콘텐츠; 실패 시 캐시 폴백)
+    // navigationPreload가 켜져 있으면 브라우저가 SW 부팅과 병렬로 미리 받은 응답(event.preloadResponse)을 사용.
+    // preloadResponse는 오프라인 등 네트워크 실패 시 reject되므로 try/catch로 감싸 fetch→cache 폴백을 보존한다.
     if (request.mode === 'navigate') {
-        event.respondWith(
-            fetch(request).catch(() => caches.match(request))
-        );
+        event.respondWith((async () => {
+            try {
+                const preload = await event.preloadResponse;
+                if (preload) return preload;
+            } catch (_) { /* preload 실패(오프라인 등) → 아래 네트워크/캐시 폴백으로 */ }
+            return fetch(request).catch(() => caches.match(request));
+        })());
         return;
     }
 
