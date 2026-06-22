@@ -112,6 +112,7 @@
 - [N-109. 섬 아키텍처(Island Architecture) 복제 체크리스트 — SSR 셸 + Vue + JSON API](#n-109-섬-아키텍처island-architecture-복제-체크리스트--ssr-셸--vue--json-api)
 - [N-110. LLM 동기 뮤테이션을 섬에서 — 폴링 없이 응답에 갱신 view를 실어 재조회 회피](#n-110-llm-동기-뮤테이션을-섬에서--폴링-없이-응답에-갱신-view를-실어-재조회-회피)
 - [N-111. API DTO에서 enum·시각 문자열 평탄화 — 클라이언트에 ZoneId·enum 상수 노출 안 함](#n-111-api-dto에서-enumsyak-문자열-평탄화--클라이언트에-zoneidlenum-상수-노출-안-함)
+- [N-112. Spring 핸들러 매핑 우선순위 — 컨트롤러 경로변수가 정적 자산을 가로챈다](#n-112-spring-핸들러-매핑-우선순위--컨트롤러-경로변수가-정적-자산을-가로챈다)
 
 ---
 
@@ -5312,3 +5313,60 @@ if (view.state === 'COLD_START') { ... }
 
 - **N-109** — 섬 아키텍처 복제 체크리스트.
 - **N-110** — LLM 동기 뮤테이션 패턴.
+
+---
+
+## N-112. Spring 핸들러 매핑 우선순위 — 컨트롤러 경로변수가 정적 자산을 가로챈다
+
+> **한 줄 요약**: `@GetMapping("/x/{id}")` 같은 컨트롤러 매핑은 기본 정적 리소스 핸들러(`/**`)보다
+> 먼저 매칭된다. 정적 자산이 그 prefix를 쓰면(`/x/x-<hash>.js`) 컨트롤러가 가로채 변환 실패→500.
+> 경로변수를 타입에 맞게 제한(`{id:\d+}`)하면 비매칭 → 정적 핸들러로 폴백.
+
+### 문제 / 배경
+
+Vue 섬 번들은 `/<page>/<page>-<hash>.js`로 서빙된다(Vite 멀티빌드 산출물 + Spring resource chain 해시).
+그런데 같은 prefix에 book-detail `@GetMapping("/books/{id}")`가 있으면, 번들 요청 `/books/books-<hash>.js`가
+이 컨트롤러에 매칭된다 — Spring `DispatcherServlet`은 `HandlerMapping`을 **순서대로** 시도하는데,
+`RequestMappingHandlerMapping`(애노테이션 컨트롤러, order 0)이 정적 자원을 서빙하는
+리소스 핸들러(`SimpleUrlHandlerMapping`, `Ordered.LOWEST_PRECEDENCE`)보다 먼저다. 컨트롤러가 먼저 경로를
+"소유"하면 정적 핸들러는 기회조차 없다. `@PathVariable Long id`가 `"books-<hash>.js"`를 못 바꿔 500/503 →
+번들 미로드 → 섬이 "불러오는 중…"에서 무한 정지.
+
+### 해법
+
+경로 변수를 **정적 자산 파일명과 겹치지 않게** 제한한다:
+
+```java
+// 충돌: /books/books-<hash>.js 까지 매칭 → Long 변환 실패 → 500
+@GetMapping("/books/{id}")
+// 해소: 숫자 id만 → 비숫자(번들·css·소스맵)는 정적 핸들러로 폴백 → 200
+@GetMapping("/books/{id:\\d+}")
+```
+
+`{id:\d+}` PathPattern 정규식이 비숫자 단일 세그먼트를 거부 → 매칭 실패 → 다음 `HandlerMapping`(정적)으로 흘러
+번들이 200으로 서빙된다. 대안은 번들을 다른 prefix(`/assets/books/...`)로 빼는 것(아키텍처 변경이 큼).
+
+### 왜 테스트가 못 잡았나 (헤드리스 사각)
+
+섬 단위·통합 테스트는 보통 **`/api/*`를 목으로 두고 Vue를 직접 마운트**하거나, MockMvc로 `/books` 셸 뷰만
+확인한다 — **실제 번들 URL `/books/books-<hash>.js`가 Spring 라우팅을 타지 않는다.** 그래서 충돌이 안 보이고
+실 브라우저에서만 드러난다. 회귀를 잡으려면 라우팅 자체를 친다:
+
+```java
+mockMvc.perform(get("/books/books.js").with(user(...))).andExpect(status().isOk());       // 번들 서빙
+mockMvc.perform(get("/books/not-a-number").with(user(...))).andExpect(status().isNotFound()); // 컨트롤러 미매칭
+```
+
+### 판단 기준
+
+| 상황 | 권장 |
+|---|---|
+| 정적 자산이 컨트롤러 prefix와 같은 경로를 씀 | 경로변수 타입 제한(`{id:\d+}`) 또는 자산을 다른 prefix로 |
+| 경로변수가 항상 특정 타입(숫자/UUID) | PathPattern 정규식 제한(부수적으로 404가 더 정확) |
+| "셸은 뜨는데 화면 안 바뀜"(부분 실패) | 네트워크에서 번들 상태부터 — 503/500=라우팅 충돌, 404=정적 누락(T-062), 해시 불일치=stale 캐시 |
+
+### 관련
+
+- **T-079** — 이 버그의 재발방지 절차(감별·해결).
+- **N-083** — defer×TDZ 등 헤드리스가 못 잡는 클라이언트 로드 사각.
+- **T-062** — 번들 미커밋 404(누락) ↔ 본 건은 충돌 503.

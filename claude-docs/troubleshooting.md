@@ -68,6 +68,7 @@
 - [T-076. `inlineDynamicImports:true`를 멀티 input과 함께 쓰면 Rollup 에러 — 페이지별 독립 빌드로 분리](#t-076-inlinedynamicimportstrue를-멀티-input과-함께-쓰면-rollup-에러--페이지별-독립-빌드로-분리)
 - [T-077. jsdom에선 scroll-snap 컴포넌트의 scroll 계측이 모두 0 — 실 브라우저 게이트로 위임](#t-077-jsdom에선-scroll-snap-컴포넌트의-scroll-계측이-모두-0--실-브라우저-게이트로-위임)
 - [T-078. git/commit 무한 로딩 = 커밋 훅의 gradle test hang(멀티세션 경합) — Claude Code 코어 아님](#t-078-gitcommit-무한-로딩--커밋-훅의-gradle-test-hang멀티세션-경합--claude-code-코어-아님)
+- [T-079. Vue 섬 번들이 book-detail 라우트에 가로채여 무한로딩 — 경로변수 숫자 제한](#t-079-vue-섬-번들이-book-detail-라우트에-가로채여-무한로딩--경로변수-숫자-제한)
 
 ---
 
@@ -1543,6 +1544,29 @@ Remove-Item .git\index.lock -EA SilentlyContinue
 
 ---
 
+## T-079. Vue 섬 번들이 book-detail 라우트에 가로채여 무한로딩 — 경로변수 숫자 제한
+
+**증상**: 프로덕션 `/books`(내 책장, Vue 섬)가 SSR 셸("불러오는 중…")만 뜨고 화면이 안 바뀜. `/search` 등 다른 섬은 정상. 네트워크: `/books/books-<hash>.js`(Vue 번들) → **503/500**(앱 커스텀 에러페이지), HTML·CSS는 200.
+
+**원인(메커니즘)**: book-detail `@GetMapping("/books/{id}")`(`@PathVariable Long id`)가 같은 prefix를 쓰는 정적 번들 요청 `/books/books-<hash>.js`(2세그먼트)를 가로챈다. Spring은 `@RequestMapping` 핸들러(우선순위 0)를 기본 정적 리소스 핸들러(`/**`, 최저 우선순위)보다 **먼저** 매칭하므로, 컨트롤러가 번들을 잡아 `id="books-<hash>.js"`→`Long` 변환 실패→예외→500/503. 번들이 실행 안 돼 Vue 마운트·`/api/books`가 안 일어나고 셸이 영영 로딩. (#425 book-detail + #447 books 섬 번들이 둘 다 `/books/` prefix → 머지 후 잠복.)
+
+**감별**:
+- 셸은 뜨는데 화면 안 바뀜 = JS 번들 로드 실패 의심 → 네트워크에서 `/<page>/<page>-<hash>.js` 상태 확인.
+- **503/500이면(404 아님)** 정적 누락이 아니라 **앱이 그 경로를 컨트롤러로 처리 중** → 같은 prefix `@GetMapping("/<page>/{var}")` 충돌 의심.
+- stale 캐시 배제: `git show origin/main:src/main/resources/static/<page>/<page>.js | md5sum`이 요청 URL 해시와 같으면 캐시 아님(서빙 자체 문제).
+
+**해결**: 경로 변수를 정적 자산과 안 겹치게 제한 — 숫자 id면 `@GetMapping("/books/{id:\\d+}")`. 비숫자 경로(번들·소스맵·css)는 기본 정적 핸들러로 폴백→200.
+
+**예방**:
+- 섬 번들을 `/<page>/<page>.js`(페이지 셸 라우트와 같은 prefix)에 두는데 그 prefix에 `@GetMapping("/<page>/{var}")`가 있으면 충돌 → 경로변수를 타입에 맞게 제한(`{id:\d+}`)하거나 번들을 다른 prefix로.
+- 회귀 테스트로 라우팅을 직접 친다: `GET /<page>/<page>.js`→2xx, `GET /<page>/{비타입값}`→404. **헤드리스/단위테스트는 `/api/*`를 목으로 두고 Vue를 직접 마운트해 실 번들 URL이 라우팅을 안 타 못 잡는다**(N-112).
+- 부작용 주의: `{id:\d+}` 제한은 `POST /books/add` 같은 비숫자 POST를 405→404로 바꾼다(매핑 자체가 사라지므로) — 관련 단언이 있으면 갱신.
+- **로컬 커밋 게이트가 전체 suite를 항상 돌리진 않는다**(PowerShell 커밋 시 Bash-scoped 훅 미발동 등) → 라우팅 변경은 전체 `./gradlew test` 직접 1회 후 push(CI 재실패 방지).
+
+**관련**: N-112(핸들러 매핑 우선순위·헤드리스 사각), N-083(defer×TDZ 클라이언트 사각), T-062(번들 미커밋 404=누락 ↔ 본 건은 충돌 503), T-077/T-053/T-054(헤드리스 사각), PR #450.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1625,3 +1649,4 @@ Remove-Item .git\index.lock -EA SilentlyContinue
 | 2026-06-21 | T-076 (`inlineDynamicImports:true`를 멀티 input 객체와 함께 쓰면 Rollup 에러 / Vite 멀티빌드에서 `input: { pageA: '...', pageB: '...' }` 구조로 여러 엔트리를 하나의 빌드 명령에 넣으면 `inlineDynamicImports is not supported for multiple entry points` 에러 발생 — `inlineDynamicImports`는 단일 엔트리 전용 옵션 / 해결=페이지별 독립 빌드로 분리(`APP` env var 분기: `cross-env APP=search vite build`), 각 빌드는 단일 엔트리이므로 `inlineDynamicImports:true` 유지 가능·단일 파일 산출 그대로 / 배경: Vite는 `rollupOptions.input` 객체를 멀티 엔트리로 해석하고 이때 `inlineDynamicImports`를 허용 안 함 / PR #438) |
 | 2026-06-21 | T-077 (jsdom에서 scroll-snap 컴포넌트 단위테스트 시 `scrollBy`·`clientWidth`·`scrollLeft`·`offsetWidth`가 모두 0 반환 — jsdom은 CSS 레이아웃 엔진이 없어 렌더링 연산을 수행 안 함 / 증상=step()·sync()가 의도한 스크롤을 일으켜도 값이 0이라 "동작 안 함"처럼 나타나 단언이 항상 통과하거나 항상 실패 / 해결(테스트 전략)=① 버튼 존재 + emit 호출·disabled 토글만 단언, ② 실제 스크롤 동작은 실 브라우저 게이트(Chrome 확장)로 위임 / 깊은 스크롤 동작이 필요하면 JSDOM 대신 Playwright·Cypress(headless Chromium=실 레이아웃) / N-083·T-053, PR personality-island) |
 | 2026-06-22 | T-078 (구현 세션에서 git/commit이 무한 로딩·esc·머지로도 안 풀리고 clear로만 해소 — Claude Code 코어 버그가 아니라 **자식 프로세스(git/gradle) hang을 await**하는 구조 때문 / 이 프로젝트는 `git commit`을 require-tests-before-commit.ps1 훅이 가로채 `./gradlew test`를 돌리므로 "git 작업"으로 보여도 실제로 멈춘 건 gradle 테스트일 때가 많음 / hang 뿌리=멀티 세션(워크트리·동시 세션)이 gradle 데몬·빌드 락 동시 점유 / 감별=지금 `git status`가 빠르면 git/레포 정상 / 해결=`Get-Process java,git｜Stop-Process -Force`·`.git/index.lock` 삭제·`./gradlew --stop`, esc만으론 spawn된 자식·데몬이 안 죽어 부족 / 예방=멀티 세션 시 한 세션에서만 커밋·빌드 / N-032·T-070·T-051, 커밋 훅) |
+| 2026-06-22 | T-079 (Vue 섬 번들 `/books/books-<hash>.js`가 book-detail `@GetMapping("/books/{id}")`에 가로채여 500/503·셸 무한로딩 — 컨트롤러 매핑이 기본 정적 핸들러(`/**`)보다 먼저 매칭, id=파일명→Long 변환 실패 / #425 book-detail+#447 섬 번들 둘 다 `/books/` prefix라 머지 후 잠복 / 감별=셸만 뜸+번들 503(404 아님)+배포 해시 일치 / 해결=`@GetMapping("/books/{id:\\d+}")` 숫자 제한→비숫자 정적 폴백 200 / 부작용=POST /books/add 405→404(SsrMutationRemovedTest 갱신) / 회귀=GET /books/books.js→200·/books/not-a-number→404, 헤드리스는 /api 목이라 실 번들 URL 사각 N-112 / PR #450) |
