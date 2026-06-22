@@ -13,10 +13,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import java.security.Principal;
 
 /**
- * 차단/언차단 액션 + 본인 차단 목록 (SNS 5단계, sns-design §7.5).
+ * 차단/언차단 SSR 액션 + 차단 목록 Vue 셸 (SNS 5단계, sns-design §7.5).
  *
- * <p>차단하면 상대 프로필이 대칭으로 404가 되므로(거기서 해제 불가), 차단·언차단은 본인 차단 목록
- * {@code /me/blocks}로 돌아온다 — 해제는 이 목록에서 한다. 자기 차단·존재 누설은 조용히 무시한다.
+ * <p>POST /block·/unblock은 프로필 SSR 폼이 사용하므로 2d까지 유지한다.
+ * GET /me/blocks는 Vue 섬 셸 — 목록 데이터는 {@link com.booktimer.web.api.BlockApiController}가 제공.
  */
 @Controller
 public class BlockController {
@@ -55,8 +55,7 @@ public class BlockController {
     @GetMapping("/me/blocks")
     public String blocks(Principal principal, Model model) {
         User me = currentUser(principal);
-        model.addAttribute("loginId", me.getLoginId()); // "내 프로필" 링크(/u/{loginId})용
-        model.addAttribute("blocked", blockService.blockedUsers(me));
+        model.addAttribute("myLoginId", me.getLoginId());
         return "block-list";
     }
 

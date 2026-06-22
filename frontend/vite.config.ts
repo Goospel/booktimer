@@ -34,6 +34,11 @@ const apps = {
     dir: '../src/main/resources/static/book-readers',
     entry: 'book-readers.js',
   },
+  'block-list': {
+    input: 'src/block-list/main.ts',
+    dir: '../src/main/resources/static/block-list',
+    entry: 'block-list.js',
+  },
 } as const;
 
 const cfg = apps[APP as keyof typeof apps] ?? apps.garden;

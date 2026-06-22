@@ -1,7 +1,6 @@
 package com.booktimer.web;
 
 import com.booktimer.block.BlockService;
-import com.booktimer.search.UserSearchResult;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -13,8 +12,6 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -95,9 +92,8 @@ class BlockControllerTest {
     }
 
     @Test
-    @DisplayName("GET /me/blocks: 내가 차단한 사용자 목록을 그린다(표시는 닉네임)")
-    @SuppressWarnings("unchecked")
-    void blocks_listsBlocked() throws Exception {
+    @DisplayName("GET /me/blocks: Vue 셸 렌더 — myLoginId 주입, blocked 목록은 API(/api/blocks)에서 페치")
+    void blocks_rendersVueShell() throws Exception {
         User me = newUser("lme@booktimer.com", "viewer", "뷰어");
         User target = newUser("lt@booktimer.com", "target", "타겟");
         blockService.block(me, target);
@@ -105,11 +101,8 @@ class BlockControllerTest {
         mockMvc.perform(get("/me/blocks").with(user("lme@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("block-list"))
-                .andExpect(model().attributeExists("blocked"))
-                .andExpect(result -> {
-                    var blocked = (List<UserSearchResult>) result.getModelAndView().getModel().get("blocked");
-                    assertThat(blocked).extracting(UserSearchResult::nickname).containsExactly("타겟");
-                });
+                .andExpect(model().attributeExists("myLoginId"))
+                .andExpect(model().attribute("myLoginId", "viewer"));
     }
 
     @Test

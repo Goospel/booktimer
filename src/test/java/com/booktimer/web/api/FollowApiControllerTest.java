@@ -1,7 +1,9 @@
 package com.booktimer.web.api;
 
+import com.booktimer.security.RateLimitService;
 import com.booktimer.user.Role;
 import com.booktimer.user.UserRegistrationService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,6 +43,14 @@ class FollowApiControllerTest {
 
     @Autowired
     private Clock clock;
+
+    @Autowired
+    private RateLimitService rateLimitService;
+
+    @BeforeEach
+    void clearRateLimits() {
+        rateLimitService.clearForTest();
+    }
 
     private LocalDate today() {
         return LocalDate.ofInstant(clock.instant(), ZoneId.of(SEOUL));
