@@ -225,6 +225,25 @@ class BookApiControllerTest {
         assertThat(bookRepository.findByUserOrderByCreatedAtDesc(me)).hasSize(1);
     }
 
+    // ── 7b. add category·pubDate 적재 ───────────────────────────────────────
+
+    @Test
+    @DisplayName("POST /api/books: category·pubDate 포함 → DB에 적재됨")
+    void add_persistsCatalogMetadata() throws Exception {
+        User me = register("meta@a.com", "metauser", "메타자");
+        mockMvc.perform(post("/api/books")
+                        .with(user("meta@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"한국소설책\",\"isbn13\":\"9788900000001\"," +
+                                "\"category\":\"국내도서>소설/시/희곡>한국소설\",\"pubDate\":\"2020-03-15\"," +
+                                "\"status\":\"WANT_TO_READ\"}"))
+                .andExpect(status().isOk());
+
+        Book saved = bookRepository.findByUserOrderByCreatedAtDesc(me).get(0);
+        assertThat(saved.getCategory()).isEqualTo("국내도서>소설/시/희곡>한국소설");
+        assertThat(saved.getPubDate()).isEqualTo("2020-03-15");
+    }
+
     // ── 8. add 멱등 (isbn 있으면 기존 반환) ─────────────────────────────────
 
     @Test

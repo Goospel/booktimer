@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
@@ -45,7 +46,8 @@ public class GlobalExceptionHandler {
      * <p>이들은 서버 결함이 아니라 클라이언트/요청 상황이라 {@code error} 레벨로 찍지 않고
      * {@code debug}로만 남긴다. 더 구체적인 예외 타입이라 아래 {@code Exception} 핸들러보다 우선한다.
      */
-    @ExceptionHandler({ResponseStatusException.class, NoResourceFoundException.class})
+    @ExceptionHandler({ResponseStatusException.class, NoResourceFoundException.class,
+            HttpRequestMethodNotSupportedException.class})
     public String handleStatusException(Exception ex, Model model, HttpServletResponse response) {
         int status = ((ErrorResponse) ex).getStatusCode().value();
         response.setStatus(status);

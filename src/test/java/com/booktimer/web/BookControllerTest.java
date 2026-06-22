@@ -3,7 +3,6 @@ package com.booktimer.web;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
-import com.booktimer.book.BookVisibility;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.user.Role;
@@ -24,12 +23,9 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -38,8 +34,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 내 책장 컨트롤러 통합 테스트 (MockMvc + 실제 빈·H2).
  *
- * <p>단계 3 이후 GET /books는 얇은 셸 — 데이터·필터 단언은 BookApiControllerTest로 이관.
- * 여기서는 셸 뷰명·myLoginId 모델·SSR 유지 대상(detail·buy·add·delete·setVisibility)을 본다.
+ * <p>GET /books 셸, GET /books/readers, GET /books/{id} 상세, GET /books/{id}/buy* 유지 대상 테스트.
+ * POST 뮤테이션은 BookApiControllerTest로 이관됨.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -107,106 +103,6 @@ class BookControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(model().attribute("isbn", "9780000000000"))
                 .andExpect(model().attribute("title", "테스트책"));
-    }
-
-    // ── POST /books/add ──────────────────────────────────────────────────────
-
-    @Test
-    @DisplayName("POST /books/add: 책을 책장에 추가한다")
-    void add_savesBook() throws Exception {
-        User u = newUser("b@booktimer.com");
-        mockMvc.perform(post("/books/add")
-                        .param("title", "클린 코드")
-                        .param("author", "로버트 마틴")
-                        .param("status", "READING")
-                        .with(user("b@booktimer.com")).with(csrf()))
-                .andExpect(redirectedUrl("/books"));
-
-        assertThat(bookRepository.findByUserOrderByCreatedAtDesc(u))
-                .extracting(Book::getTitle).containsExactly("클린 코드");
-    }
-
-    @Test
-    @DisplayName("POST /books/add: category·pubDate도 함께 적재된다")
-    void add_persistsCatalogMetadata() throws Exception {
-        User u = newUser("meta@booktimer.com");
-        mockMvc.perform(post("/books/add")
-                        .param("title", "한국소설책")
-                        .param("isbn13", "9788900000001")
-                        .param("category", "국내도서>소설/시/희곡>한국소설")
-                        .param("pubDate", "2020-03-15")
-                        .param("status", "WANT_TO_READ")
-                        .with(user("meta@booktimer.com")).with(csrf()))
-                .andExpect(redirectedUrl("/books"));
-
-        Book saved = bookRepository.findByUserOrderByCreatedAtDesc(u).get(0);
-        assertThat(saved.getCategory()).isEqualTo("국내도서>소설/시/희곡>한국소설");
-        assertThat(saved.getPubDate()).isEqualTo("2020-03-15");
-    }
-
-    // ── POST /books/{id}/delete ──────────────────────────────────────────────
-
-    @Test
-    @DisplayName("POST /books/{id}/delete: 소유자는 삭제할 수 있다")
-    void delete_byOwner() throws Exception {
-        User u = newUser("c@booktimer.com");
-        Book book = bookRepository.save(
-                Book.register(u, "리팩터링", null, null, null, null, null, BookStatus.READING));
-
-        mockMvc.perform(post("/books/{id}/delete", book.getId())
-                        .with(user("c@booktimer.com")).with(csrf()))
-                .andExpect(redirectedUrl("/books"));
-
-        assertThat(bookRepository.findByUserOrderByCreatedAtDesc(u)).isEmpty();
-    }
-
-    @Test
-    @DisplayName("POST /books/{id}/delete: 남의 책 삭제 시도는 막힌다(IDOR 방지)")
-    void delete_nonOwner_keepsBook() throws Exception {
-        User owner = newUser("owner@booktimer.com");
-        User attacker = newUser("attacker@booktimer.com");
-        Book book = bookRepository.save(
-                Book.register(owner, "도메인 주도 설계", null, null, null, null, null, BookStatus.READING));
-
-        mockMvc.perform(post("/books/{id}/delete", book.getId())
-                        .with(user("attacker@booktimer.com")).with(csrf()))
-                .andExpect(redirectedUrl("/books"));
-
-        assertThat(bookRepository.findByUserOrderByCreatedAtDesc(owner)).hasSize(1);
-    }
-
-    // ── POST /books/{id}/visibility (PRG-only — htmx 분기 제거됨) ───────────
-
-    @Test
-    @DisplayName("POST /books/{id}/visibility: 소유자는 책을 공개로 바꿀 수 있다")
-    void setVisibility_byOwner() throws Exception {
-        User u = newUser("vc@booktimer.com");
-        Book book = bookRepository.save(
-                Book.register(u, "공개할 책", null, null, null, null, null, BookStatus.READING));
-
-        mockMvc.perform(post("/books/{id}/visibility", book.getId())
-                        .param("visibility", "PUBLIC")
-                        .with(user("vc@booktimer.com")).with(csrf()))
-                .andExpect(redirectedUrl("/books"))
-                .andExpect(flash().attributeCount(0));
-
-        assertThat(bookRepository.findById(book.getId()).orElseThrow().isPublic()).isTrue();
-    }
-
-    @Test
-    @DisplayName("POST /books/{id}/visibility: 남의 책 공개 변경은 막힌다(IDOR 방지)")
-    void setVisibility_nonOwner_unchanged() throws Exception {
-        User owner = newUser("vcowner@booktimer.com");
-        User attacker = newUser("vcattacker@booktimer.com");
-        Book book = bookRepository.save(
-                Book.register(owner, "남의 책", null, null, null, null, null, BookStatus.READING));
-
-        mockMvc.perform(post("/books/{id}/visibility", book.getId())
-                        .param("visibility", "PUBLIC")
-                        .with(user("vcattacker@booktimer.com")).with(csrf()))
-                .andExpect(redirectedUrl("/books"));
-
-        assertThat(bookRepository.findById(book.getId()).orElseThrow().isPublic()).isFalse();
     }
 
     // ── GET /books/{id} 상세 ─────────────────────────────────────────────────

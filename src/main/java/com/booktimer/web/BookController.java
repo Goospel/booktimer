@@ -1,19 +1,14 @@
 package com.booktimer.web;
 
-import com.booktimer.book.Book;
-import com.booktimer.book.BookSearchResult;
 import com.booktimer.book.BookService;
-import com.booktimer.book.BookStatus;
-import com.booktimer.book.BookVisibility;
+import com.booktimer.session.BookReadingDetail;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.BookContributionService;
-import com.booktimer.session.BookReadingDetail;
 import com.booktimer.user.User;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
@@ -23,8 +18,7 @@ import java.security.Principal;
  * 내 책장 — SSR 셸 + 유지 대상(책 상세·buy* 4종·readers).
  *
  * <p>단계 3 선별 SPA 전환으로 GET /books는 myLoginId만 싣는 얇은 셸이 되었다.
- * 6 뮤테이션(추가·상태·공개·삭제·검색)은 {@link BookApiController} JSON API가 담당.
- * add/changeStatus/delete SSR POST 폼 핸들러는 htmx 분기를 제거하고 PRG-only로 유지(§6 백로그까지 보존).
+ * 6 뮤테이션(추가·상태·공개·삭제·검색)은 {@link com.booktimer.web.api.BookApiController} JSON API가 담당.
  */
 @Controller
 public class BookController {
@@ -83,41 +77,6 @@ public class BookController {
                     redirectAttributes.addFlashAttribute("error", "책을 찾을 수 없습니다.");
                     return "redirect:/books";
                 });
-    }
-
-    @PostMapping("/books/add")
-    public String add(@RequestParam String title,
-                      @RequestParam(required = false) String author,
-                      @RequestParam(required = false) String isbn13,
-                      @RequestParam(required = false) String coverUrl,
-                      @RequestParam(required = false) String publisher,
-                      @RequestParam(required = false) String purchaseLink,
-                      @RequestParam(required = false) String category,
-                      @RequestParam(required = false) String pubDate,
-                      @RequestParam(required = false, defaultValue = "WANT_TO_READ") BookStatus status,
-                      Principal principal, RedirectAttributes redirectAttributes) {
-        User user = currentUser(principal);
-        try {
-            BookSearchResult result = new BookSearchResult(title, author, isbn13, coverUrl, publisher,
-                    purchaseLink, category, pubDate);
-            Book saved = bookService.addFromSearch(user, result, status);
-            redirectAttributes.addFlashAttribute("message", "'" + saved.getTitle() + "'을(를) 책장에 추가했습니다.");
-        } catch (IllegalArgumentException e) {
-            redirectAttributes.addFlashAttribute("error", "책을 추가할 수 없습니다. 제목을 확인해 주세요.");
-        }
-        return "redirect:/books";
-    }
-
-    @PostMapping("/books/{id}/status")
-    public String changeStatus(@PathVariable Long id, @RequestParam BookStatus status,
-                               Principal principal, RedirectAttributes redirectAttributes) {
-        User user = currentUser(principal);
-        try {
-            bookService.changeStatus(user, id, status);
-        } catch (IllegalArgumentException e) {
-            redirectAttributes.addFlashAttribute("error", "상태를 변경할 수 없습니다.");
-        }
-        return "redirect:/books";
     }
 
     /**
@@ -179,31 +138,6 @@ public class BookController {
             return "redirect:" + link;
         }
         return "redirect:/u/" + loginId;
-    }
-
-    /** htmx 분기 제거 — PRG-only(셸 템플릿이 더는 htmx로 호출하지 않음). 완전 제거는 §6 백로그. */
-    @PostMapping("/books/{id}/visibility")
-    public String setVisibility(@PathVariable Long id, @RequestParam BookVisibility visibility,
-                                Principal principal, RedirectAttributes redirectAttributes) {
-        User user = currentUser(principal);
-        try {
-            bookService.setVisibility(user, id, visibility);
-        } catch (IllegalArgumentException e) {
-            redirectAttributes.addFlashAttribute("error", "공개 설정을 바꿀 수 없습니다.");
-        }
-        return "redirect:/books";
-    }
-
-    @PostMapping("/books/{id}/delete")
-    public String delete(@PathVariable Long id, Principal principal, RedirectAttributes redirectAttributes) {
-        User user = currentUser(principal);
-        try {
-            bookService.delete(user, id);
-            redirectAttributes.addFlashAttribute("message", "책을 삭제했습니다.");
-        } catch (IllegalArgumentException e) {
-            redirectAttributes.addFlashAttribute("error", "삭제할 수 없습니다.");
-        }
-        return "redirect:/books";
     }
 
     private User currentUser(Principal principal) {
