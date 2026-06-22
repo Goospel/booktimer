@@ -64,8 +64,14 @@ describe('PWA L2 Service Worker 정적 가드', () => {
             expect(precacheBlock).not.toMatch(/pwa-install\.js/);
         });
 
-        test('CACHE 버전이 shell-v5다 — 기존 캐시 무효화', () => {
-            expect(swContent()).toMatch(/const\s+CACHE\s*=\s*['"]shell-v5['"]/);
+        test('CACHE 버전이 versioned다 (shell-v<n>) — 기존 캐시 무효화', () => {
+            // 특정 버전 번호 핀(shell-v5)은 bump마다 가짜로 깨진다 → 패턴으로 검증(의도=버전 상수 존재)
+            expect(swContent()).toMatch(/const\s+CACHE\s*=\s*['"]shell-v\d+['"]/);
+        });
+
+        test('성공 응답만 캐싱한다 (if (res.ok) 가드) — 에러 응답 cache-first stale 방지', () => {
+            // 500/503을 res.ok 검사 없이 캐싱하면 cache-first가 서버 fix 후에도 영구 서빙(T-080)
+            expect(swContent()).toMatch(/if\s*\(\s*res\.ok\s*\)/);
         });
 
         test('navigate 요청은 여전히 network-first다 — SSR 응답 최신 유지', () => {
