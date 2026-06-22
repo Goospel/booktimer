@@ -252,7 +252,6 @@ body {
 .tag-chip-click:hover { background: var(--accent-hover); }  /* 채움 칩이라 btn-primary와 동일 hover(배경만 진하게). 기존 filter+underline은 채움엔 과함 */
 
 /* 칩 클릭 시 근거 책이 펼쳐지는 패널 — 헤더 카드 아래 자연스러운 간격. */
-#tag-books-panel { margin-top: 8px; }
 .tag-books-panel {
     margin-top: 10px; padding: 12px 14px;
     border: 1px solid var(--border); border-radius: 10px;

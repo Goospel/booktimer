@@ -1,8 +1,10 @@
 package com.booktimer.web.api;
 
+import com.booktimer.security.RateLimitAction;
 import com.booktimer.security.RateLimitService;
 import com.booktimer.user.Role;
 import com.booktimer.user.UserRegistrationService;
+import com.booktimer.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,6 +42,9 @@ class FollowApiControllerTest {
 
     @Autowired
     private UserRegistrationService registrationService;
+
+    @Autowired
+    private UserRepository userRepository;
 
     @Autowired
     private Clock clock;
@@ -158,6 +163,25 @@ class FollowApiControllerTest {
                         .with(user("unfol-a@booktimer.com")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"loginId\":\"unfolbid\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.following").value(false));
+    }
+
+    @Test
+    @DisplayName("POST /api/follow 레이트리밋 초과 → 200 {following:false} (팔로우 스킵, 관계 미생성)")
+    void follow_rateLimitExceeded_dropsOverLimit() throws Exception {
+        registrationService.register("rl-fa@booktimer.com", "pw1234qwer!!", "rlfaid", "리밋팔로워", SEOUL, Role.USER, today());
+        registrationService.register("rl-fb@booktimer.com", "pw1234qwer!!", "rlfbid", "리밋대상", SEOUL, Role.USER, today());
+
+        long actorId = userRepository.findByLoginId("rlfaid").orElseThrow().getId();
+        for (int i = 0; i < RateLimitAction.FOLLOW.limit(); i++) {
+            rateLimitService.allow(RateLimitAction.FOLLOW, actorId);
+        }
+
+        mockMvc.perform(post("/api/follow")
+                        .with(user("rl-fa@booktimer.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginId\":\"rlfbid\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.following").value(false));
     }
