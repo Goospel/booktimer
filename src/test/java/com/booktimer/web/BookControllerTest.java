@@ -152,6 +152,24 @@ class BookControllerTest {
                 .andExpect(redirectedUrl("/books"));
     }
 
+    // ── 라우트 충돌 회귀: Vue 번들(/books/books-*.js)이 /books/{id}에 먹히면 안 됨 ──
+
+    @Test
+    @DisplayName("GET /books/books.js: 정적 Vue 번들이 book-detail에 가로채이지 않고 서빙된다")
+    void bundlePath_notShadowedByDetail() throws Exception {
+        newUser("rc@booktimer.com");
+        mockMvc.perform(get("/books/books.js").with(user("rc@booktimer.com")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("GET /books/{비숫자}: 숫자 아닌 id는 book-detail 매핑에 안 걸린다(404)")
+    void detail_nonNumericId_notMatched() throws Exception {
+        newUser("rc2@booktimer.com");
+        mockMvc.perform(get("/books/not-a-number").with(user("rc2@booktimer.com")))
+                .andExpect(status().isNotFound());
+    }
+
     // ── GET /books/{id}/buy ──────────────────────────────────────────────────
 
     @Test

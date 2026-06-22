@@ -59,8 +59,12 @@ public class BookController {
     /**
      * 책 상세 — 그 책의 월별 일자 기록 + 누적 시간. 내 책일 때만(IDOR 방지),
      * 아니면 존재 여부 노출 없이 책장으로 돌려보낸다(PRG).
+     *
+     * <p>{@code {id:\d+}} 로 숫자만 받는다 — 미제한 {@code {id}}는 같은 prefix의 Vue 번들 요청
+     * {@code /books/books-<hash>.js}(2세그먼트)까지 가로채 Long 변환 실패→500을 냈다(books 섬 셸 무한 로딩).
+     * 숫자 제한으로 비숫자 경로는 정적 리소스 핸들러로 폴백한다. (회귀: BookControllerTest)
      */
-    @GetMapping("/books/{id}")
+    @GetMapping("/books/{id:\\d+}")
     public String detail(@PathVariable Long id, Principal principal, Model model,
                          RedirectAttributes redirectAttributes) {
         User user = currentUser(principal);
