@@ -44,6 +44,11 @@ public class RateLimitService {
         return updated.count() <= action.limit();
     }
 
+    /** 테스트 격리용 — 인메모리 윈도우 맵 초기화. 프로덕션 코드에서 호출하지 않는다. */
+    public void clearForTest() {
+        windows.clear();
+    }
+
     private boolean isExpired(RateLimitAction action, Window w, Instant now) {
         return w.windowStart().plus(action.window()).isBefore(now);
     }

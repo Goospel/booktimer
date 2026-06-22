@@ -58,6 +58,12 @@ public class BlockService {
         return blockRepository.existsBetween(a, b);
     }
 
+    /** blocker가 blocked를 차단 중인지 단방향 조회 — API 응답 전용(isBlockedBetween 양방향과 구분). */
+    @Transactional(readOnly = true)
+    public boolean hasBlocked(User blocker, User blocked) {
+        return blockRepository.existsByBlockerAndBlocked(blocker, blocked);
+    }
+
     /** 내가 차단한 사용자 목록(차단 목록 페이지용). */
     @Transactional(readOnly = true)
     public List<UserSearchResult> blockedUsers(User blocker) {
