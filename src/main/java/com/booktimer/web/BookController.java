@@ -1,140 +1,51 @@
 package com.booktimer.web;
 
 import com.booktimer.book.Book;
-import com.booktimer.book.BookSearchPage;
 import com.booktimer.book.BookSearchResult;
-import com.booktimer.book.BookSearchType;
 import com.booktimer.book.BookService;
 import com.booktimer.book.BookStatus;
 import com.booktimer.book.BookVisibility;
-import com.booktimer.popularity.FollowScopePopularityService;
+import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.BookContributionService;
 import com.booktimer.session.BookReadingDetail;
-import com.booktimer.security.CurrentUserService;
-import com.booktimer.session.BookReadingStatsService;
 import com.booktimer.user.User;
-import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.security.Principal;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
- * 내 책장 — 책 검색(알라딘)·등록·상태 변경·삭제.
+ * 내 책장 — SSR 셸 + 유지 대상(책 상세·buy* 4종·readers).
  *
- * <p>검색은 {@link BookService}가 포트에 위임하며, API 키가 없으면 {@code searchEnabled=false}로
- * 화면이 수동 입력 폼으로 폴백한다. 등록/변경/삭제는 서비스가 소유권을 강제한다(IDOR 방지) —
- * 위반 시 {@link IllegalArgumentException}을 플래시 에러로 안내한다(PRG 패턴).
+ * <p>단계 3 선별 SPA 전환으로 GET /books는 myLoginId만 싣는 얇은 셸이 되었다.
+ * 6 뮤테이션(추가·상태·공개·삭제·검색)은 {@link BookApiController} JSON API가 담당.
+ * add/changeStatus/delete SSR POST 폼 핸들러는 htmx 분기를 제거하고 PRG-only로 유지(§6 백로그까지 보존).
  */
 @Controller
 public class BookController {
 
     private final CurrentUserService currentUserService;
     private final BookService bookService;
-    private final BookReadingStatsService statsService;
     private final BookContributionService contributionService;
-    private final FollowScopePopularityService popularityService;
 
     public BookController(CurrentUserService currentUserService, BookService bookService,
-                          BookReadingStatsService statsService,
-                          BookContributionService contributionService,
-                          FollowScopePopularityService popularityService) {
+                          BookContributionService contributionService) {
         this.currentUserService = currentUserService;
         this.bookService = bookService;
-        this.statsService = statsService;
         this.contributionService = contributionService;
-        this.popularityService = popularityService;
     }
 
+    /** 얇은 셸 — myLoginId만 싣고 BooksApp.vue에 위임한다. */
     @GetMapping("/books")
-    public String books(@RequestParam(value = "q", required = false) String q,
-                        @RequestParam(value = "page", required = false, defaultValue = "1") int page,
-                        @RequestParam(value = "status", required = false) String status,
-                        @RequestParam(value = "visibility", required = false) String visibility,
-                        @RequestParam(value = "type", required = false) String type,
-                        @RequestHeader(value = "HX-Request", required = false, defaultValue = "false") boolean htmx,
-                        Principal principal, Model model) {
+    public String books(Principal principal, Model model) {
         User user = currentUser(principal);
-
-        // 검색 기준(제목/저자). 없거나 잘못되면 제목으로 폴백 — "모기"를 제목으로 찾는 게 기본 의도.
-        BookSearchType searchType = BookSearchType.from(type);
-
-        // 책장 필터 — 상태(읽고싶음/읽는중/완독) × 공개여부(공개/비공개)의 직교 2차원. 각 차원은 값이
-        // 없거나 잘못되면 전체(null). 두 차원을 AND로 교차한다(예: 읽는중 + 공개).
-        BookStatus shelfFilter = parseStatus(status);
-        BookVisibility visFilter = parseVisibility(visibility);
-        List<Book> myBooks = bookService.myBooks(user);
-        List<Book> shelfBooks = myBooks.stream()
-                .filter(b -> shelfFilter == null || b.getStatus() == shelfFilter)
-                .filter(b -> visFilter == null || b.getVisibility() == visFilter)
-                .toList();
-
-        model.addAttribute("nickname", user.getNickname());
-        model.addAttribute("loginId", user.getLoginId()); // "내 책방"(/u/{loginId}) 링크용 — 공개 토글이 책방에 반영됨을 안내
-        model.addAttribute("books", shelfBooks);
-        model.addAttribute("shelfFilter", shelfFilter); // 상태 칩 활성 표시·빈 메시지 분기
-        model.addAttribute("visFilter", visFilter);     // 공개여부 칩 활성 표시·빈 메시지 분기
-
-        // 검색 결과 중 이미 내 책장에 있는 책 표시(중복 추가 방지·UX). 상태 필터(shelfBooks)와 무관하게
-        // 내 책 전체(myBooks)의 isbn 집합으로 소유 판정 — 필터가 '읽는중'이어도 '읽고싶음'으로 가진 책을 소유로 본다.
-        Set<String> myShelfIsbns = myBooks.stream()
-                .map(Book::getIsbn13)
-                .filter(Objects::nonNull)        // 수동 등록(isbn 없음)은 소유 키가 없어 제외 — null이 집합에 새지 않게
-                .collect(Collectors.toSet());
-        model.addAttribute("myShelfIsbns", myShelfIsbns);
-        model.addAttribute("bookTimes", statsService.totalSecondsByBook(user)); // 책 id → 누적 초
-        model.addAttribute("statuses", BookStatus.values());
-        model.addAttribute("searchEnabled", bookService.searchEnabled());
-        model.addAttribute("q", q);
-        model.addAttribute("searchType", searchType);          // 검색 기준 셀렉트 활성 표시·페이징 링크 유지
-        model.addAttribute("searchTypes", BookSearchType.values());
-
-        // 화면에 보이는 책들(책장 + 검색결과)의 isbn을 모아 팔로우 스코프 인기 카운트를 한 번에 집계(§7.4, N+1 회피).
-        List<String> isbns = new ArrayList<>(shelfBooks.stream().map(Book::getIsbn13).toList());
-        if (q != null && !q.isBlank()) {
-            BookSearchPage searchPage = bookService.search(q, searchType, page);
-            model.addAttribute("searchPage", searchPage);
-            searchPage.results().forEach(r -> isbns.add(r.isbn13()));
-        }
-        model.addAttribute("popularity", popularityService.countByIsbn(user, isbns)); // isbn → (원함, 읽음)
-        // 필터 칩은 htmx로 책장 패널만 부분 swap(#263 패턴) — 페이지 스크롤 점프 제거. no-JS면 풀 뷰 폴백.
-        return htmx ? "books :: shelfPanel" : "books";
-    }
-
-    /** 책장 상태 필터 파라미터를 BookStatus로 — 없거나 잘못된 값이면 null(전체). */
-    private BookStatus parseStatus(String status) {
-        if (status == null || status.isBlank()) {
-            return null;
-        }
-        try {
-            return BookStatus.valueOf(status);
-        } catch (IllegalArgumentException e) {
-            return null;
-        }
-    }
-
-    /** 공개여부 필터 파라미터를 BookVisibility로 — 없거나 잘못된 값이면 null(전체). parseStatus의 쌍둥이. */
-    private BookVisibility parseVisibility(String visibility) {
-        if (visibility == null || visibility.isBlank()) {
-            return null;
-        }
-        try {
-            return BookVisibility.valueOf(visibility);
-        } catch (IllegalArgumentException e) {
-            return null;
-        }
+        model.addAttribute("myLoginId", user.getLoginId());
+        return "books";
     }
 
     /**
@@ -187,7 +98,6 @@ public class BookController {
                       Principal principal, RedirectAttributes redirectAttributes) {
         User user = currentUser(principal);
         try {
-            // category·pubDate는 검색 결과(알라딘)에서 hidden으로 따라온다 — 책BTI 입력. 수동 추가 폼엔 없어 null.
             BookSearchResult result = new BookSearchResult(title, author, isbn13, coverUrl, publisher,
                     purchaseLink, category, pubDate);
             Book saved = bookService.addFromSearch(user, result, status);
@@ -212,9 +122,6 @@ public class BookController {
 
     /**
      * "구매" 클릭 — 집계 후 제휴 구매링크로 리다이렉트(링크가 없거나 내 책이 아니면 책장으로).
-     *
-     * <p>링크 클릭(GET)이라 CSRF 토큰을 붙이기 어려워 GET으로 둔다(상태 변경이지만 분석용 집계).
-     * 리다이렉트 대상은 우리 DB에 저장된 알라딘 링크 — 클릭 시점에 사용자가 임의 URL을 넣지 못한다.
      */
     @GetMapping("/books/{id}/buy")
     public String buy(@PathVariable Long id, Principal principal) {
@@ -225,23 +132,18 @@ public class BookController {
                 return "redirect:" + link;
             }
         } catch (IllegalArgumentException ignored) {
-            // 내 책이 아니거나 없음 — 존재 여부 노출 없이 책장으로 되돌린다(IDOR 방지).
+            // IDOR 방지 — 존재 여부 노출 없이 책장으로.
         }
         return "redirect:/books";
     }
 
     /**
      * 남의 책방(공개 프로필)에서 "구매" 클릭 — 공개(PUBLIC) 책이면 그 책의 제휴 링크로 리다이렉트하고
-     * 클릭을 <b>책 주인 카운트</b>에 집계한다. 비공개·없는 책이면 존재 누설 없이 그 프로필로 되돌린다.
-     *
-     * <p>{@code /books/{id}/buy}는 "내 책"만 허용(IDOR)이라 남의 책엔 못 쓴다. 이 경로는 소유권 대신
-     * "공개 여부"를 게이트로 둔다({@link BookService#recordPublicPurchaseClick}) — 공개 책은 이미 프로필에서
-     * 누구나 보는 것이라 새 노출이 없다. {@code loginId}는 라우팅·복귀 대상일 뿐(조회는 bookId로) —
-     * 임의 책방 경로로 와도 클릭은 책의 진짜 주인에게 집계된다. 링크 클릭(GET)이라 CSRF는 붙이지 않는다.
+     * 클릭을 책 주인 카운트에 집계한다.
      */
     @GetMapping("/u/{loginId}/books/{bookId}/buy")
     public String buyFromProfile(@PathVariable String loginId, @PathVariable Long bookId, Principal principal) {
-        currentUser(principal); // 로그인 사용자만(시큐리티가 이미 강제 — 명시)
+        currentUser(principal);
         String link = bookService.recordPublicPurchaseClick(bookId);
         if (link != null) {
             return "redirect:" + link;
@@ -250,10 +152,7 @@ public class BookController {
     }
 
     /**
-     * 쿠팡 "구매" 클릭 — 집계 후 쿠팡 검색 링크로 리다이렉트(비활성·내 책 아님이면 책장으로). 알라딘 {@link #buy}와 대칭.
-     *
-     * <p>링크는 {@link BookService#recordCoupangClick}이 런타임 생성한다(DB 미저장). 추적코드 미설정이면
-     * null이 와 책장으로 돌려보낸다 — 다만 화면은 {@code coupangEnabled}로 버튼 자체를 숨기므로 보통 도달 안 함.
+     * 쿠팡 "구매" 클릭 — 집계 후 쿠팡 검색 링크로 리다이렉트.
      */
     @GetMapping("/books/{id}/buy/coupang")
     public String buyCoupang(@PathVariable Long id, Principal principal) {
@@ -264,18 +163,17 @@ public class BookController {
                 return "redirect:" + link;
             }
         } catch (IllegalArgumentException ignored) {
-            // 내 책이 아니거나 없음 — 존재 여부 노출 없이 책장으로(IDOR 방지).
+            // IDOR 방지 — 존재 여부 노출 없이 책장으로.
         }
         return "redirect:/books";
     }
 
     /**
-     * 남의 책방(공개 프로필)에서 쿠팡 "구매" 클릭 — 공개책이면 쿠팡 링크로 리다이렉트하고 책 주인 카운트에 집계한다.
-     * 알라딘 {@link #buyFromProfile}과 대칭(공개 여부 게이트, 비공개·없는 책이면 존재 누설 없이 그 프로필로 복귀).
+     * 남의 책방(공개 프로필)에서 쿠팡 "구매" 클릭.
      */
     @GetMapping("/u/{loginId}/books/{bookId}/buy/coupang")
     public String buyCoupangFromProfile(@PathVariable String loginId, @PathVariable Long bookId, Principal principal) {
-        currentUser(principal); // 로그인 사용자만(시큐리티가 이미 강제 — 명시)
+        currentUser(principal);
         String link = bookService.recordPublicCoupangClick(bookId);
         if (link != null) {
             return "redirect:" + link;
@@ -283,24 +181,14 @@ public class BookController {
         return "redirect:/u/" + loginId;
     }
 
+    /** htmx 분기 제거 — PRG-only(셸 템플릿이 더는 htmx로 호출하지 않음). 완전 제거는 §6 백로그. */
     @PostMapping("/books/{id}/visibility")
     public String setVisibility(@PathVariable Long id, @RequestParam BookVisibility visibility,
-                                @RequestHeader(value = "HX-Request", required = false, defaultValue = "false") boolean htmx,
-                                Principal principal, Model model,
-                                HttpServletResponse response, RedirectAttributes redirectAttributes) {
+                                Principal principal, RedirectAttributes redirectAttributes) {
         User user = currentUser(principal);
         try {
-            Book updated = bookService.setVisibility(user, id, visibility);
-            if (htmx) {
-                model.addAttribute("b", updated);
-                return "books :: visToggle";
-            }
+            bookService.setVisibility(user, id, visibility);
         } catch (IllegalArgumentException e) {
-            if (htmx) {
-                response.setStatus(HttpStatus.UNPROCESSABLE_ENTITY.value());
-                return "books :: visToggle";
-            }
-            // 내 책이 아니거나 없음 — 존재 여부 노출 없이 책장으로(IDOR 방지).
             redirectAttributes.addFlashAttribute("error", "공개 설정을 바꿀 수 없습니다.");
         }
         return "redirect:/books";

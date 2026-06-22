@@ -1,0 +1,193 @@
+package com.booktimer.web.api;
+
+import com.booktimer.book.Book;
+import com.booktimer.book.BookSearchResult;
+import com.booktimer.book.BookSearchType;
+import com.booktimer.book.BookService;
+import com.booktimer.book.BookStatus;
+import com.booktimer.book.BookVisibility;
+import com.booktimer.book.CoupangLinkBuilder;
+import com.booktimer.popularity.FollowScopePopularity;
+import com.booktimer.popularity.FollowScopePopularityService;
+import com.booktimer.security.CurrentUserService;
+import com.booktimer.session.BookReadingStatsService;
+import com.booktimer.user.User;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.security.Principal;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
+
+/**
+ * 내 책장 JSON API (선별 SPA 단계 3).
+ *
+ * <p>GET /api/books(전체 조회) · GET /api/books/search(검색 1페이지) · POST /api/books(추가) ·
+ * POST /api/books/{id}/status · /visibility · /delete.
+ *
+ * <p>⚠️ {@code @RestController}는 {@code @ModelAttribute}(CoupangModelAdvice)를 무시 →
+ * {@link CoupangLinkBuilder#isEnabled()}를 직접 주입해 {@code coupangEnabled}를 계산.
+ */
+@RestController
+public class BookApiController {
+
+    private final CurrentUserService currentUserService;
+    private final BookService bookService;
+    private final BookReadingStatsService statsService;
+    private final FollowScopePopularityService popularityService;
+    private final CoupangLinkBuilder coupangLinkBuilder;
+
+    public BookApiController(CurrentUserService currentUserService, BookService bookService,
+                             BookReadingStatsService statsService,
+                             FollowScopePopularityService popularityService,
+                             CoupangLinkBuilder coupangLinkBuilder) {
+        this.currentUserService = currentUserService;
+        this.bookService = bookService;
+        this.statsService = statsService;
+        this.popularityService = popularityService;
+        this.coupangLinkBuilder = coupangLinkBuilder;
+    }
+
+    // ── 조회: 책장 전체 + 메타 + popularity ──────────────────────────────────
+
+    @GetMapping("/api/books")
+    public ShelfResponse shelf(Principal principal) {
+        User user = currentUserService.resolve(principal);
+        List<Book> books = bookService.myBooks(user);
+        Map<Long, Long> times = statsService.totalSecondsByBook(user);
+        List<String> isbns = books.stream().map(Book::getIsbn13).toList(); // null 포함 — countByIsbn이 방어
+        Map<String, FollowScopePopularity> pop = popularityService.countByIsbn(user, isbns);
+        List<MyBookSummary> rows = books.stream().map(b -> MyBookSummary.from(b, times)).toList();
+        return new ShelfResponse(user.getLoginId(), user.getNickname(),
+                bookService.searchEnabled(), coupangLinkBuilder.isEnabled(),
+                rows, toPopularityMap(pop));
+    }
+
+    // ── 조회: 검색(1페이지) + 검색결과 isbn popularity ───────────────────────
+
+    @GetMapping("/api/books/search")
+    public SearchResponse search(@RequestParam String q,
+                                 @RequestParam(required = false) String type,
+                                 @RequestParam(required = false, defaultValue = "1") int page,
+                                 Principal principal) {
+        User user = currentUserService.resolve(principal);
+        BookSearchType searchType = BookSearchType.from(type);
+        var result = bookService.search(q, searchType, page);
+        Set<String> myIsbns = bookService.myBooks(user).stream()
+                .map(Book::getIsbn13).filter(Objects::nonNull).collect(Collectors.toSet());
+        List<SearchRow> rows = result.results().stream()
+                .map(r -> SearchRow.from(r, myIsbns)).toList();
+        Map<String, FollowScopePopularity> pop = popularityService.countByIsbn(user,
+                result.results().stream().map(BookSearchResult::isbn13).toList());
+        return new SearchResponse(rows, toPopularityMap(pop));
+    }
+
+    // ── 뮤테이션: 추가(검색결과/수동 공용) ───────────────────────────────────
+
+    @PostMapping("/api/books")
+    public ResponseEntity<MyBookSummary> add(@RequestBody AddRequest req, Principal principal) {
+        User user = currentUserService.resolve(principal);
+        BookStatus status = req.status() != null ? req.status() : BookStatus.WANT_TO_READ;
+        BookSearchResult result = new BookSearchResult(req.title(), req.author(), req.isbn13(),
+                req.coverUrl(), req.publisher(), req.purchaseLink(), req.category(), req.pubDate());
+        try {
+            Book saved = bookService.addFromSearch(user, result, status);
+            return ResponseEntity.ok(MyBookSummary.from(saved, statsService.totalSecondsByBook(user)));
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "책을 추가할 수 없습니다");
+        }
+    }
+
+    @PostMapping("/api/books/{id}/status")
+    public ResponseEntity<MyBookSummary> changeStatus(@PathVariable Long id,
+                                                      @RequestBody StatusRequest req,
+                                                      Principal principal) {
+        User user = currentUserService.resolve(principal);
+        Book updated = mutate(() -> bookService.changeStatus(user, id, req.status()));
+        return ResponseEntity.ok(MyBookSummary.from(updated, statsService.totalSecondsByBook(user)));
+    }
+
+    @PostMapping("/api/books/{id}/visibility")
+    public ResponseEntity<MyBookSummary> setVisibility(@PathVariable Long id,
+                                                       @RequestBody VisibilityRequest req,
+                                                       Principal principal) {
+        User user = currentUserService.resolve(principal);
+        Book updated = mutate(() -> bookService.setVisibility(user, id, req.visibility()));
+        return ResponseEntity.ok(MyBookSummary.from(updated, statsService.totalSecondsByBook(user)));
+    }
+
+    @PostMapping("/api/books/{id}/delete")
+    public ResponseEntity<DeleteResult> delete(@PathVariable Long id, Principal principal) {
+        User user = currentUserService.resolve(principal);
+        mutate(() -> { bookService.delete(user, id); return null; });
+        return ResponseEntity.ok(new DeleteResult(true));
+    }
+
+    /** IDOR/없는 책 IAE → 404(존재 비노출). 403 아님 — SSR flash·422를 베끼지 말고 404로 통일. */
+    private static <T> T mutate(Supplier<T> action) {
+        try {
+            return action.get();
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "책을 찾을 수 없습니다");
+        }
+    }
+
+    private static Map<String, Popularity> toPopularityMap(Map<String, FollowScopePopularity> src) {
+        return src.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey,
+                        e -> new Popularity(e.getValue().wantCount(), e.getValue().readCount())));
+    }
+
+    // ── DTO (Book 엔티티 직렬화 금지 — 평탄 record 화이트리스트) ─────────────
+    // status/visibility 는 enum name(select·필터·전송용), *Label 은 한글(배지 표시용) 둘 다 내린다.
+
+    public record MyBookSummary(Long id, String title, String author, String coverUrl, String isbn13,
+                                String status, String statusLabel,
+                                String visibility, String visibilityLabel, boolean isPublic,
+                                long seconds, String purchaseLink) {
+        static MyBookSummary from(Book b, Map<Long, Long> times) {
+            return new MyBookSummary(b.getId(), b.getTitle(), b.getAuthor(), b.getCoverUrl(), b.getIsbn13(),
+                    b.getStatus().name(), b.getStatus().getLabel(),
+                    b.getVisibility().name(), b.getVisibility().getLabel(), b.isPublic(),
+                    times.getOrDefault(b.getId(), 0L), b.getPurchaseLink());
+        }
+    }
+
+    public record SearchRow(String title, String author, String isbn13, String coverUrl,
+                            String publisher, String purchaseLink, String category, String pubDate,
+                            boolean owned) {
+        static SearchRow from(BookSearchResult r, Set<String> myIsbns) {
+            boolean owned = r.isbn13() != null && myIsbns.contains(r.isbn13()); // N-055: null isbn은 owned 아님
+            return new SearchRow(r.title(), r.author(), r.isbn13(), r.coverUrl(),
+                    r.publisher(), r.purchaseLink(), r.category(), r.pubDate(), owned);
+        }
+    }
+
+    public record Popularity(long wantCount, long readCount) {}
+
+    public record ShelfResponse(String myLoginId, String nickname, boolean searchEnabled, boolean coupangEnabled,
+                                List<MyBookSummary> books, Map<String, Popularity> popularity) {}
+
+    public record SearchResponse(List<SearchRow> results, Map<String, Popularity> popularity) {}
+
+    public record AddRequest(String title, String author, String isbn13, String coverUrl,
+                             String publisher, String purchaseLink, String category, String pubDate,
+                             BookStatus status) {}
+
+    public record StatusRequest(BookStatus status) {}
+
+    public record VisibilityRequest(BookVisibility visibility) {}
+
+    public record DeleteResult(boolean deleted) {}
+}
