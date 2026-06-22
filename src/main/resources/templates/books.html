@@ -2,13 +2,11 @@
 <html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <!-- 방문 통계(GA4, 측정 ID 설정 시에만) -->
     <th:block th:replace="~{analytics :: gtag}"></th:block>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="_csrf" th:content="${_csrf != null ? _csrf.token : ''}">
     <title>내 책장 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
-    <script defer src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
-    <!-- 광고 로더(게시자 ID 설정 시에만) -->
     <th:block th:replace="~{ads :: loader}"></th:block>
 </head>
 <body>
@@ -19,211 +17,10 @@
             <h1>BookTimer</h1>
         </a>
     </header>
-    <p class="greeting"><span th:text="${nickname}">닉네임</span>님의 책장</p>
-
-    <div th:if="${message}" class="alert" th:text="${message}">완료 메시지</div>
-    <div th:if="${error}" class="alert alert-error" th:text="${error}">에러 메시지</div>
-
-    <!-- 책 추가 — 검색(알라딘)이 주 경로, 못 찾으면 아래 '직접 추가'(<details> 폴백)를 펼쳐 입력.
-         둘 다 "책 추가"라 한 카드로 합침. (이전엔 '책 검색'·'직접 추가' 두 카드로 분리돼 있었음) -->
-    <section class="card">
-        <h2>책 추가</h2>
-        <form th:if="${searchEnabled}" method="get" th:action="@{/books}" class="book-search-form">
-            <!-- 검색 기준 — 제목(기본)/저자/출판사. "모기"를 제목으로 찾을지 저자로 찾을지(또는 출판사로) 분리. -->
-            <div class="search-type" role="radiogroup" aria-label="검색 기준">
-                <label th:each="t : ${searchTypes}">
-                    <input type="radio" name="type" th:value="${t}" th:checked="${t == searchType}">
-                    <span th:text="${t.label}">제목</span>
-                </label>
-            </div>
-            <div class="search-row">
-                <input type="text" name="q" th:value="${q}" placeholder="검색어 입력" required>
-                <button type="submit" class="btn-primary">검색</button>
-            </div>
-        </form>
-        <p th:unless="${searchEnabled}" class="status-line muted">
-            도서 검색이 아직 설정되지 않았습니다. 아래에서 직접 등록하세요.
-        </p>
-
-        <ul class="book-list search-scroll" th:if="${searchPage != null and !searchPage.isEmpty()}">
-            <li class="book-row" th:each="r : ${searchPage.results()}"
-                th:with="owned=${r.isbn13() != null and myShelfIsbns.contains(r.isbn13())}">
-                <img class="book-cover" th:if="${r.coverUrl()}" th:src="${r.coverUrl()}" alt="" loading="lazy" referrerpolicy="no-referrer">
-                <div class="book-meta">
-                    <span class="book-title" th:text="${r.title()}">제목</span>
-                    <span class="book-author" th:if="${r.author()}" th:text="${r.author()}">저자</span>
-                    <span class="book-pub" th:if="${r.publisher()}" th:text="${r.publisher()}">출판사</span>
-                    <th:block th:replace="~{::followPopularity(${r.isbn13()}, ${r.title()})}"></th:block>
-                    <!-- 이미 내 책장에 있는 책 — 중복 추가 방지(추가 폼은 th:unless로 숨김). followPopularity(사회신호)와
-                         같은 메타 줄이지만 소유 상태는 중립 톤으로 구분. -->
-                    <span class="shelf-owned-badge" th:if="${owned}">📚 이미 책장에 있음</span>
-                </div>
-                <form th:unless="${owned}" method="post" th:action="@{/books/add}" class="book-add-form">
-                    <input type="hidden" name="title" th:value="${r.title()}">
-                    <input type="hidden" name="author" th:value="${r.author()}">
-                    <input type="hidden" name="isbn13" th:value="${r.isbn13()}">
-                    <input type="hidden" name="coverUrl" th:value="${r.coverUrl()}">
-                    <input type="hidden" name="publisher" th:value="${r.publisher()}">
-                    <input type="hidden" name="purchaseLink" th:value="${r.purchaseLink()}">
-                    <!-- 책BTI 입력 — 장르/출간일을 검색 결과에서 책장으로 넘긴다(없으면 빈 값) -->
-                    <input type="hidden" name="category" th:value="${r.category()}">
-                    <input type="hidden" name="pubDate" th:value="${r.pubDate()}">
-                    <select name="status">
-                        <option th:each="s : ${statuses}" th:value="${s}" th:text="${s.label}">상태</option>
-                    </select>
-                    <button type="submit" class="btn-primary">추가</button>
-                </form>
-            </li>
-        </ul>
-
-        <p th:if="${q != null and (searchPage == null or searchPage.isEmpty())}" class="status-line muted">검색 결과가 없습니다.</p>
-
-        <!-- 직접 추가(폴백) — 검색에 안 나오는 책. 평소엔 접혀 있다가 펼치면 제목/저자 직접 입력.
-             검색이 0건이거나(못 찾음) 검색 기능이 꺼져 있으면 자동으로 펼쳐 둔다(th:open). -->
-        <details class="manual-add"
-                 th:open="${!searchEnabled or (q != null and (searchPage == null or searchPage.isEmpty()))}">
-            <summary>찾는 책이 없나요? 직접 추가</summary>
-            <form method="post" th:action="@{/books/add}" class="book-manual-form">
-                <input type="text" name="title" placeholder="제목" required>
-                <input type="text" name="author" placeholder="저자 (선택)">
-                <select name="status">
-                    <option th:each="s : ${statuses}" th:value="${s}" th:text="${s.label}">상태</option>
-                </select>
-                <button type="submit" class="btn-primary">추가</button>
-            </form>
-        </details>
-    </section>
-
-    <!-- 내 책장 -->
-    <section class="card">
-        <h2>내 책장</h2>
-
-        <!-- 공개 토글의 결과를 명시 — '책방 공개'로 켠 책은 내 책방(/u/{loginId})에서 누구나 본다. 책방 링크 겸 안내. -->
-        <p class="shelf-public-hint">
-            🌍 <strong>책방 공개</strong>로 켠 책은 <a th:href="@{/u/{n}(n=${loginId})}">내 책방</a>에서 누구나 볼 수 있어요.
-        </p>
-
-        <!-- 상태 필터 칩 + 책 목록을 한 프래그먼트로 묶는다 — 필터 클릭은 htmx 부분 swap(#shelf-panel)로
-             페이지 스크롤 점프를 제거(#263 토글 패턴 확장). 공통 htmx 속성은 <nav>에 호이스트(자식 <a>에 상속),
-             링크별로 다른 URL만 th:attr="hx-get"으로 주입. no-JS면 th:href로 그대로 풀 리로드 폴백(점진적 향상). -->
-        <div id="shelf-panel" th:fragment="shelfPanel">
-        <nav class="shelf-filter"
-             hx-target="#shelf-panel" hx-swap="outerHTML" hx-push-url="true">
-            <a th:href="@{/books(q=${q}, visibility=${visFilter})}" th:attr="hx-get=@{/books(q=${q}, visibility=${visFilter})}"
-               th:classappend="${shelfFilter == null} ? 'active'">전체</a>
-            <a th:each="s : ${statuses}"
-               th:href="@{/books(q=${q}, status=${s}, visibility=${visFilter})}"
-               th:attr="hx-get=@{/books(q=${q}, status=${s}, visibility=${visFilter})}"
-               th:classappend="${s == shelfFilter} ? 'active'"
-               th:text="${s.label}">상태</a>
-        </nav>
-        <!-- 공개여부 서브 필터 — 상태와 직교(AND). 책 행의 공개 토글과 같은 비주얼(연한 트랙 알약 + 흰 알약 active)을
-             빌려 상태 칩(채움)과 형태를 구분 → 한눈에 '서브 필터'로 읽히게(우측 정렬). 상태 차원 현재값(shelfFilter)을
-             각 링크에 실어 공개여부를 바꿔도 상태 필터가 풀리지 않게 한다(상호 보존). htmx 속성은 바깥 <nav>에 호이스트(자식 <a> 상속). -->
-        <nav class="vis-filter-bar" aria-label="공개여부 필터"
-             hx-target="#shelf-panel" hx-swap="outerHTML" hx-push-url="true">
-            <span class="vis-filter">
-                <a th:href="@{/books(q=${q}, status=${shelfFilter})}" th:attr="hx-get=@{/books(q=${q}, status=${shelfFilter})}"
-                   th:classappend="${visFilter == null} ? 'active'">전체</a>
-                <a th:href="@{/books(q=${q}, status=${shelfFilter}, visibility='PUBLIC')}"
-                   th:attr="hx-get=@{/books(q=${q}, status=${shelfFilter}, visibility='PUBLIC')}"
-                   th:classappend="${visFilter != null and visFilter.name() == 'PUBLIC'} ? 'active'">🌍 공개</a>
-                <a th:href="@{/books(q=${q}, status=${shelfFilter}, visibility='PRIVATE')}"
-                   th:attr="hx-get=@{/books(q=${q}, status=${shelfFilter}, visibility='PRIVATE')}"
-                   th:classappend="${visFilter != null and visFilter.name() == 'PRIVATE'} ? 'active'">🔒 비공개</a>
-            </span>
-        </nav>
-
-        <p th:if="${books.isEmpty() and shelfFilter == null and visFilter == null}" class="status-line">아직 등록한 책이 없습니다. 위에서 검색해 추가해 보세요.</p>
-        <p th:if="${books.isEmpty() and (shelfFilter != null or visFilter != null)}" class="status-line">이 조건의 책이 없습니다.</p>
-        <ul class="book-list shelf-scroll" th:unless="${books.isEmpty()}">
-            <li class="book-row" th:each="b : ${books}">
-                <img class="book-cover" th:if="${b.coverUrl}" th:src="${b.coverUrl}" alt="" loading="lazy" referrerpolicy="no-referrer">
-                <div class="book-meta">
-                    <a class="book-title" th:href="@{/books/{id}(id=${b.id})}" th:text="${b.title}">제목</a>
-                    <span class="book-author" th:if="${b.author}" th:text="${b.author}">저자</span>
-                    <span class="book-status-badge" th:text="${b.status.label}">상태</span>
-                    <span class="book-time mono" th:with="secs=${bookTimes.get(b.id)}"
-                          th:if="${secs != null and secs > 0}"
-                          th:text="'⏱ ' + ${secs / 3600 + '시간 ' + (secs % 3600) / 60 + '분'}">⏱ 0시간 0분</span>
-                    <th:block th:replace="~{::followPopularity(${b.isbn13}, ${b.title})}"></th:block>
-                </div>
-                <div class="book-actions">
-                    <form method="post" th:action="@{/books/{id}/status(id=${b.id})}">
-                        <select name="status" onchange="this.form.submit()">
-                            <option th:each="s : ${statuses}" th:value="${s}" th:text="${s.label}"
-                                    th:selected="${s == b.status}">상태</option>
-                        </select>
-                    </form>
-                    <!-- 공개/비공개 토글 스위치 — 드롭다운 대신 on/off. 버튼이 '현재의 반대' 값을 POST해 상태를 뒤집는다(JS 없이 폼 제출).
-                         라벨/아이콘은 현재 상태를 보여주고(🌍 책방 공개 / 🔒 비공개), aria-pressed로 토글 상태를 보조기술에 전달. -->
-                    <form method="post" th:action="@{/books/{id}/visibility(id=${b.id})}"
-                          class="vis-toggle-form" th:fragment="visToggle" th:if="${b != null}"
-                          th:attr="hx-post=@{/books/{id}/visibility(id=${b.id})}"
-                          hx-target="this" hx-swap="outerHTML">
-                        <button type="submit" name="visibility"
-                                th:value="${b.isPublic()} ? 'PRIVATE' : 'PUBLIC'"
-                                class="vis-toggle" th:classappend="${b.isPublic()} ? 'is-public'"
-                                th:attr="aria-pressed=${b.isPublic()}"
-                                th:title="${b.isPublic()} ? '책방에 공개 중 — 누르면 비공개로 전환' : '비공개 — 누르면 책방에 공개'">
-                            <span class="vis-text">
-                                <span class="vis-icon" aria-hidden="true" th:text="${b.isPublic()} ? '🌍' : '🔒'">🔒</span>
-                                <span th:text="${b.isPublic()} ? '책방 공개' : '비공개'">비공개</span>
-                            </span>
-                            <span class="vis-track" aria-hidden="true"><span class="vis-knob"></span></span>
-                        </button>
-                    </form>
-                    <!-- 구매처가 2개(알라딘+쿠팡)면 '구매' 토글로 묶어 펼치게, 1개뿐이면 단일 버튼.
-                         조건은 매 렌더마다 그 책의 데이터(purchaseLink·coupangEnabled)로 평가돼 동적으로 분기한다. -->
-                    <details th:if="${!#strings.isEmpty(b.purchaseLink) and coupangEnabled}" class="buy-menu">
-                        <summary class="btn-ghost">구매</summary>
-                        <div class="buy-menu-items">
-                            <a th:href="@{/books/{id}/buy(id=${b.id})}" target="_blank" rel="noopener nofollow">알라딘</a>
-                            <a th:href="@{/books/{id}/buy/coupang(id=${b.id})}" target="_blank" rel="noopener nofollow">쿠팡</a>
-                        </div>
-                    </details>
-                    <a th:if="${!#strings.isEmpty(b.purchaseLink) and !coupangEnabled}" th:href="@{/books/{id}/buy(id=${b.id})}" target="_blank"
-                       rel="noopener nofollow" class="btn-ghost">구매</a>
-                    <a th:if="${#strings.isEmpty(b.purchaseLink) and coupangEnabled}" th:href="@{/books/{id}/buy/coupang(id=${b.id})}" target="_blank"
-                       rel="noopener nofollow" class="btn-ghost">쿠팡</a>
-                    <form method="post" th:action="@{/books/{id}/delete(id=${b.id})}"
-                          onsubmit="return confirm('이 책을 삭제할까요?');">
-                        <button type="submit" class="btn-danger">삭제</button>
-                    </form>
-                </div>
-            </li>
-        </ul>
-        </div><!-- /#shelf-panel -->
-    </section>
-
-    <p class="affiliate-note">
-        ※ "구매" 링크는 제휴(알라딘) 링크로, 구매 시 일부 수수료를 받을 수 있습니다.
-    </p>
-    <p class="affiliate-note" th:if="${coupangEnabled}">
-        이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
-    </p>
-
-    <!-- 광고 (하단, 게시자 ID 설정 시에만) -->
+    <div id="books-app" th:attr="data-my-login-id=${myLoginId}">불러오는 중…</div>
+    <noscript><p class="status-line">JavaScript가 필요합니다.</p></noscript>
     <div th:replace="~{ads :: unit}"></div>
-
-    <p class="link-row">
-        <a th:href="@{/}">← 대시보드</a>
-        <a th:href="@{/history}">📖 독서 기록</a>
-    </p>
 </div>
-
-<!-- 팔로우 스코프 인기 카운트 배지(§7.4) — 책장·검색결과 공용. popularity 맵(isbn→원함/읽음)에서 조회.
-     임계 마스킹 없음(확정), 0인 버킷·데이터 없는 isbn은 표시 안 함.
-     클릭하면 그 책을 원함/읽음인 내 팔로우 명단(drill-down)으로 — "궁금하면 팔로우" 동기 강화. -->
-<th:block th:fragment="followPopularity(isbn, title)"
-          th:with="pop=${popularity != null and isbn != null ? popularity.get(isbn) : null}">
-    <a class="follow-popularity" th:if="${pop != null and pop.hasAny()}"
-       th:href="@{/books/readers(isbn=${isbn}, title=${title})}" title="누가 읽는지 보기">👥 팔로우 중
-        <span th:if="${pop.wantCount() > 0}" th:text="${pop.wantCount()} + '명 원함'">N명 원함</span>
-        <span th:if="${pop.wantCount() > 0 and pop.readCount() > 0}">·</span>
-        <span th:if="${pop.readCount() > 0}" th:text="${pop.readCount()} + '명 읽음'">M명 읽음</span>
-    </a>
-</th:block>
-
+<script type="module" th:src="@{/books/books.js}"></script>
 </body>
 </html>
