@@ -49,6 +49,11 @@ const apps = {
     dir: '../src/main/resources/static/books',
     entry: 'books.js',
   },
+  dashboard: {
+    input: 'src/dashboard/main.ts',
+    dir: '../src/main/resources/static/dashboard',
+    entry: 'dashboard.js',
+  },
 } as const;
 
 const cfg = apps[APP as keyof typeof apps] ?? apps.garden;

@@ -139,6 +139,25 @@ public record GardenApiResponse(
         }
     }
 
+    /** 대시보드 패널용 — 보유 식물 도감({@link CatalogDto})만 추출한다. 마을 전용 필드(placed/world/…) 제외. */
+    public static CatalogDto catalogOf(GardenView view) {
+        return new CatalogDto(
+                view.plants().stream().map(PlantDto::from).toList(),
+                view.ownedCount(), view.totalCount(), view.achievedDays(),
+                view.daysToNextUnlock(), view.nextPlantName(),
+                view.genrePlants().stream().map(GenrePlantDto::from).toList(),
+                view.ownedGenreCount(), view.totalGenreCount(),
+                view.diversityPlants().stream().map(DiversityPlantDto::from).toList(),
+                view.ownedAuthorCount(), view.totalAuthorCount(),
+                view.recipePlants().stream().map(RecipePlantDto::from).toList(),
+                view.mysterySlotCount(), view.justDiscovered(),
+                view.authorCharacters().stream().map(AuthorCharacterDto::from).toList(),
+                view.ownedAuthorCharacterCount(), view.totalAuthorCharacterCount(),
+                view.ownedCharacters().stream().map(OwnedCharacterDto::from).toList(),
+                view.buildings().stream().map(BuildingDto::from).toList(),
+                view.ownedBuildingCount(), view.totalBuildingCount());
+    }
+
     static GardenApiResponse of(
             GardenView view,
             List<PlacedItem> placed,
