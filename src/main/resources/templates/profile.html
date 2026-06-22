@@ -5,11 +5,9 @@
     <!-- 방문 통계(GA4, 측정 ID 설정 시에만) -->
     <th:block th:replace="~{analytics :: gtag}"></th:block>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title th:text="${nickname} + '님의 책방 — BookTimer'">책방 — BookTimer</title>
+    <meta name="_csrf" th:content="${_csrf != null ? _csrf.token : ''}">
+    <title>프로필 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
-    <!-- 공개 책장 필터 칩을 htmx 부분 swap으로 — 페이지마다 <head>가 독립이라(공유 레이아웃 없음)
-         books.html과 동일 버전 스크립트를 여기에도 직접 포함해야 한다(빠뜨리면 필터가 풀 리로드로 조용히 폴백). -->
-    <script defer src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
     <!-- 광고 로더(게시자 ID 설정 시에만) -->
     <th:block th:replace="~{ads :: loader}"></th:block>
 </head>
@@ -21,235 +19,17 @@
             <h1>BookTimer</h1>
         </a>
     </header>
-    <!-- 프로필 헤더 — 책방명·@핸들·팔로우 카운트를 한 카드로 묶어 페이지의 카드 스택과 통일(둥둥 뜨는 느낌 제거). -->
-    <div class="card profile-card">
-    <p class="greeting"><span th:text="${nickname}">닉네임</span>님의 책방</p>
-    <p class="muted" th:text="'@' + ${loginId}">@아이디</p>
 
-    <!-- 책BTI 태그(#281 결정적 태거 ReadingTagger 출력) — 공개 완독 책 기반, 빈 목록이면 행 자체를 숨김(0권 콜드스타트 등).
-         장르 종족·한우물형 칩은 클릭 시 근거 책을 칩 아래 패널(#tag-books-panel)에 htmx로 펼친다(Phase 6b 3단계).
-         폭 태그(외길형·잡식가·균형형)는 부분집합이 정의되지 않아 비클릭(평범 span). -->
-    <div class="tag-chip-row" th:if="${!personalityTags.isEmpty()}">
-        <th:block th:each="t : ${personalityTags}">
-            <!-- 패널 펼치기는 navigation이 아니라 action이라 <button> — <a href="#...">는 fragment href라
-                 htmx가 preventDefault를 안 걸어 swap과 동시에 앵커 점프가 남는다(learning-notes 참고). -->
-            <button th:if="${t.clickable()}" type="button" class="tag-chip tag-chip-click"
-                    th:text="${t.label()}"
-                    th:attr="hx-get=@{/u/{n}/personality-tag(n=${loginId}, tag=${t.label()})}"
-                    hx-target="#tag-books-panel" hx-swap="innerHTML">태그</button>
-            <span th:unless="${t.clickable()}" class="tag-chip" th:text="${t.label()}">태그</span>
-        </th:block>
-    </div>
-    <!-- 칩 클릭 시 근거 책이 펼쳐질 인라인 패널. 초기엔 비어 있고 칩을 다시 누르면 교체된다(다른 칩 누르면도 교체). -->
-    <div id="tag-books-panel"></div>
-
-    <!-- 팔로우 카운트 + 버튼. 본인 프로필에서만 카운트가 목록(/me/**)으로 링크 — 남의 목록은 비노출(privacy). -->
-    <div class="profile-follow">
-        <a th:if="${self}" class="follow-count" th:href="@{/me/followers}">팔로워 <strong th:text="${followerCount}">0</strong></a>
-        <span th:unless="${self}" class="follow-count">팔로워 <strong th:text="${followerCount}">0</strong></span>
-        <a th:if="${self}" class="follow-count" th:href="@{/me/following}">팔로잉 <strong th:text="${followingCount}">0</strong></a>
-        <span th:unless="${self}" class="follow-count">팔로잉 <strong th:text="${followingCount}">0</strong></span>
-        <span th:unless="${self}" class="follow-action profile-actions">
-            <form method="post" th:action="@{${following} ? '/unfollow' : '/follow'}">
-                <input type="hidden" name="loginId" th:value="${loginId}">
-                <input type="hidden" name="redirect" th:value="@{/u/{n}(n=${loginId})}">
-                <button type="submit"
-                        th:classappend="${following} ? 'btn-ghost' : 'btn-primary'"
-                        th:text="${following} ? '언팔로우' : '팔로우'">팔로우</button>
-            </form>
-            <!-- 차단: 누르면 상대 프로필이 대칭으로 안 보이게 됨 → 차단 목록으로 이동. 해제도 거기서. -->
-            <form method="post" th:action="@{/block}"
-                  onsubmit="return confirm('이 사용자를 차단할까요? 서로 팔로우·프로필 열람이 막힙니다.');">
-                <input type="hidden" name="loginId" th:value="${loginId}">
-                <button type="submit" class="btn-ghost btn-block">차단</button>
-            </form>
-        </span>
-    </div>
-    </div>
-
-    <!-- 신고: 사유를 골라 신고를 접수한다(저장만, 관리자 검토는 추후). 신고 후 이 프로필로 복귀. -->
-    <details th:unless="${self}" class="report-box">
-        <summary>🚩 이 사용자 신고</summary>
-        <form method="post" th:action="@{/report}" class="report-form"
-              onsubmit="return confirm('이 사용자를 신고할까요?');">
-            <input type="hidden" name="loginId" th:value="${loginId}">
-            <input type="hidden" name="redirect" th:value="@{/u/{n}(n=${loginId})}">
-            <label>사유
-                <select name="reason">
-                    <option th:each="r : ${reportReasons}" th:value="${r}" th:text="${r.label}">사유</option>
-                </select>
-            </label>
-            <textarea name="detail" rows="2" maxlength="500" placeholder="상세 내용 (선택)"></textarea>
-            <button type="submit" class="btn-ghost btn-block">신고하기</button>
-        </form>
-    </details>
-
-    <!-- 공개 독서 잔디 (지난 1년, PUBLIC 책 세션만) -->
-    <section class="card">
-        <div class="grass-head">
-            <h2>독서 잔디</h2>
-            <span class="grass-streak" th:title="${graph.growthStage().label()}">
-                <span class="grass-streak-icon" th:text="${graph.growthStage().emoji()}">🌱</span>
-                <small class="grass-streak-days" th:if="${graph.currentStreak() > 0}"
-                       th:text="${graph.currentStreak()} + '일 연속'">3일 연속</small>
-            </span>
-        </div>
-        <p class="grass-summary">
-            지난 1년 동안 <strong th:text="${graph.activeDays()}">0</strong>일 독서 ·
-            총 <strong th:text="${graph.totalSeconds() / 3600 + '시간 ' + (graph.totalSeconds() % 3600) / 60 + '분'}">0시간 0분</strong>
-        </p>
-        <div class="grass">
-            <div class="grass-weekdays" aria-hidden="true">
-                <span></span><span>월</span><span></span><span>수</span><span></span><span>금</span><span></span>
-            </div>
-            <div class="grass-main">
-                <div class="grass-months" aria-hidden="true">
-                    <span th:each="m : ${graph.monthLabels()}"
-                          th:text="${m.label()}"
-                          th:style="'grid-column-start:' + (${m.weekIndex()} + 1)">1월</span>
-                </div>
-                <div class="grass-grid">
-                    <th:block th:each="week : ${graph.weeks()}">
-                        <div class="grass-cell"
-                             th:each="day : ${week}"
-                             th:classappend="${day.isPlaceholder() ? 'empty' : 'level-' + day.level()}"
-                             th:attr="title=${day.isPlaceholder() ? null
-                                 : #temporals.format(day.date(), 'yyyy-MM-dd') + ' · ' + (day.totalSeconds() / 60) + '분'}"></div>
-                    </th:block>
-                </div>
-                <div class="grass-legend" aria-hidden="true">
-                    <span>목표 미달</span>
-                    <i class="grass-cell level-0"></i>
-                    <i class="grass-cell level-1"></i>
-                    <i class="grass-cell level-2"></i>
-                    <i class="grass-cell level-3"></i>
-                    <i class="grass-cell level-4"></i>
-                    <span>목표 달성</span>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- 책BTI + 공개 책장 — 한 카드에서 탭으로 전환(독서 기록 카드와 동일 패턴: JS 없이 라디오 :checked + 형제 선택자).
-         두 데이터 모두 서버가 미리 렌더하고 탭으로 보이기만 전환한다.
-         기본 탭은 동적: 성향이 있으면 책BTI(헤드라인) 먼저, 콜드스타트(공개 완독 책 부족 → personality==null)면
-         빈 책BTI 대신 공개 책장을 먼저 띄운다 — 빈 탭 착지 방지. -->
-    <section class="card record-card">
-        <input type="radio" name="profiletab" id="tab-bti" class="tab-radio" th:checked="${personality != null and !shelfActive}">
-        <label for="tab-bti" class="record-tab">책BTI</label>
-        <input type="radio" name="profiletab" id="tab-shelf" class="tab-radio" th:checked="${personality == null or shelfActive}">
-        <label for="tab-shelf" class="record-tab">공개 책장</label>
-
-        <!-- 바디 ①: 책BTI(공개 책 기준). 캐시 없으면 콜드스타트 안내문(독서 기록 카드의 빈 상태와 동일 방식). 항상 공개. -->
-        <div class="tab-panel panel-bti">
-            <div th:if="${personality != null}">
-                <p class="personality-narrative" th:text="${personality}">성향 서술</p>
-                <p class="muted personality-note">
-                    <span th:text="${self} ? '내 공개 책 기준으로 분석했어요.' : '이 사람이 공개한 책 기준이에요.'">공개 책 기준</span>
-                    MBTI처럼 가볍게 즐겨 주세요.
-                </p>
-            </div>
-            <p class="status-line" th:if="${personality == null}"
-               th:text="${self}
-                   ? '아직 공개 완독 책이 부족해 책BTI가 분석되지 않았어요. 공개 완독 책이 쌓이면 자동으로 분석돼요.'
-                   : '이 사람은 아직 책BTI가 없어요. 공개 완독 책이 쌓이면 분석돼요.'">책BTI 안내</p>
-        </div>
-
-        <!-- 바디 ②: 공개 책장(PUBLIC 책만) -->
-        <div class="tab-panel panel-shelf">
-            <!-- 상태 필터 칩 + 공개 책 목록을 한 프래그먼트로 묶는다 — 필터 클릭은 htmx 부분 swap(#shelf-panel)로
-                 페이지 스크롤 점프를 제거(books.html과 동일 #263 패턴). 부분 swap이라 탭 라디오를 다시 안 그려
-                 "필터 누르면 책BTI 탭으로 튕김"도 htmx 경로에선 자동 소멸. no-JS 풀 리로드 폴백에선 아래 tab=shelf
-                 신호 + shelfActive 보정이 그때 책장 탭을 유지한다(폴백용이라 제거 금지). 공통 htmx 속성은 <nav>에 호이스트. -->
-            <div id="shelf-panel" th:fragment="shelfPanel">
-            <nav class="shelf-filter"
-                 hx-target="#shelf-panel" hx-swap="outerHTML" hx-push-url="true">
-                <a th:href="@{/u/{n}(n=${loginId}, tab='shelf')}"
-                   th:attr="hx-get=@{/u/{n}(n=${loginId}, tab='shelf')}"
-                   th:classappend="${shelfFilter == null} ? 'active'">전체</a>
-                <a th:each="s : ${statuses}"
-                   th:href="@{/u/{n}(n=${loginId}, status=${s}, tab='shelf')}"
-                   th:attr="hx-get=@{/u/{n}(n=${loginId}, status=${s}, tab='shelf')}"
-                   th:classappend="${s == shelfFilter} ? 'active'"
-                   th:text="${s.label}">상태</a>
-            </nav>
-
-            <p th:if="${books.isEmpty() and shelfFilter == null}" class="status-line">아직 공개한 책이 없습니다.</p>
-            <p th:if="${books.isEmpty() and shelfFilter != null}" class="status-line">이 상태의 공개 책이 없습니다.</p>
-            <ul class="book-list shelf-scroll" th:unless="${books.isEmpty()}">
-                <li class="book-row" th:each="b : ${books}">
-                    <img class="book-cover" th:if="${b.coverUrl}" th:src="${b.coverUrl}" alt="" loading="lazy" referrerpolicy="no-referrer">
-                    <div class="book-meta">
-                        <span class="book-title" th:text="${b.title}">제목</span>
-                        <span class="book-author" th:if="${b.author}" th:text="${b.author}">저자</span>
-                        <span class="book-status-badge" th:text="${b.status.label}">상태</span>
-                        <span class="book-time mono" th:with="secs=${bookTimes.get(b.id)}"
-                              th:if="${secs != null and secs > 0}"
-                              th:text="'⏱ ' + ${secs / 3600 + '시간 ' + (secs % 3600) / 60 + '분'}">⏱ 0시간 0분</span>
-                    </div>
-                    <!-- 남의 책방에서 바로 구매 — 구매링크 있는 공개책만. 내 책장으로 되돌아가 다시 찾는 수고 제거.
-                         클릭은 책 주인 카운트에 집계(/u/{loginId}/books/{id}/buy).
-                         본인 책방(self)에는 노출 안 함 — 내 책은 이미 내 것이라 구매 버튼이 의미 없다. -->
-                    <div class="book-actions" th:if="${!self and (!#strings.isEmpty(b.purchaseLink) or coupangEnabled)}">
-                        <!-- 구매처 2개면 '구매' 토글로 묶고 1개뿐이면 단일 버튼 — 조건은 데이터로 동적 분기. -->
-                        <details th:if="${!#strings.isEmpty(b.purchaseLink) and coupangEnabled}" class="buy-menu">
-                            <summary class="btn-ghost">구매</summary>
-                            <div class="buy-menu-items">
-                                <a th:href="@{/u/{n}/books/{id}/buy(n=${loginId}, id=${b.id})}" target="_blank" rel="noopener nofollow">알라딘</a>
-                                <a th:href="@{/u/{n}/books/{id}/buy/coupang(n=${loginId}, id=${b.id})}" target="_blank" rel="noopener nofollow">쿠팡</a>
-                            </div>
-                        </details>
-                        <a th:if="${!#strings.isEmpty(b.purchaseLink) and !coupangEnabled}"
-                           th:href="@{/u/{n}/books/{id}/buy(n=${loginId}, id=${b.id})}"
-                           target="_blank" rel="noopener nofollow" class="btn-ghost">구매</a>
-                        <a th:if="${#strings.isEmpty(b.purchaseLink) and coupangEnabled}"
-                           th:href="@{/u/{n}/books/{id}/buy/coupang(n=${loginId}, id=${b.id})}"
-                           target="_blank" rel="noopener nofollow" class="btn-ghost">쿠팡</a>
-                    </div>
-                </li>
-            </ul>
-
-            <!-- 제휴 안내문은 구매 버튼이 실제로 뜨는 남의 책방에서만 — 본인 책방(self)엔 버튼이 없어 안내문도 숨긴다.
-                 books에 의존(빈 책장이면 숨김)하므로 부분 swap 대상인 프래그먼트 안에 둬 필터 결과와 함께 갱신한다. -->
-            <p class="affiliate-note" th:if="${!books.isEmpty() and !self}">
-                ※ "구매" 링크는 제휴(알라딘) 링크로, 구매 시 일부 수수료를 받을 수 있습니다.
-            </p>
-            <p class="affiliate-note" th:if="${!books.isEmpty() and !self and coupangEnabled}">
-                이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
-            </p>
-            </div><!-- /#shelf-panel -->
-        </div>
-    </section>
-
-    <!-- 책BTI 태그 클릭 → 근거 책 드릴다운 프래그먼트(Phase 6b 3단계). 칩 클릭 시 위 #tag-books-panel에 swap된다.
-         공개 + 완독 + 그 태그를 만든 책만(PersonalityTagAttribution.booksForTag). PRIVATE 책은 입력 단계에서 차단.
-         profile 풀 페이지를 렌더할 땐 tagBooks가 모델에 없으므로 th:if로 통째로 가려 식 평가도 막는다(가드). -->
-    <div th:fragment="tagBooksPanel" th:if="${tagBooks != null}" class="tag-books-panel">
-        <div class="tag-books-head">
-            <h3 th:text="'「' + ${tagLabel} + '」를 만든 책 ' + ${#lists.size(tagBooks)} + '권'">「태그」를 만든 책 N권</h3>
-            <button type="button" class="btn-ghost btn-close"
-                    onclick="document.getElementById('tag-books-panel').innerHTML=''; return false;">× 닫기</button>
-        </div>
-        <p th:if="${tagBooks.isEmpty()}" class="status-line">해당하는 공개 완독 책이 없어요.</p>
-        <ul class="book-list tag-books-scroll" th:unless="${tagBooks.isEmpty()}">
-            <li class="book-row" th:each="b : ${tagBooks}">
-                <img class="book-cover" th:if="${b.coverUrl}" th:src="${b.coverUrl}" alt="" loading="lazy" referrerpolicy="no-referrer">
-                <div class="book-meta">
-                    <span class="book-title" th:text="${b.title}">제목</span>
-                    <span class="book-author" th:if="${b.author}" th:text="${b.author}">저자</span>
-                </div>
-            </li>
-        </ul>
-    </div>
+    <!-- Vue 섬 마운트 포인트 (선별 SPA 단계 2d).
+         data-login-id: 이 프로필의 주인 loginId.
+         data-my-login-id: 현재 로그인 사용자 loginId (Vue 섬이 self 판정에 사용). -->
+    <div id="profile-app"
+         th:attr="data-login-id=${loginId},data-my-login-id=${myLoginId}">불러오는 중…</div>
+    <noscript><p class="status-line">JavaScript가 필요합니다.</p></noscript>
 
     <!-- 광고 (하단, 게시자 ID 설정 시에만) -->
     <div th:replace="~{ads :: unit}"></div>
-
-    <p class="link-row">
-        <a th:href="@{/}">← 대시보드</a>
-        <a th:href="@{/books}">📚 내 책장</a>
-        <a th:if="${self}" th:href="@{/me/blocks}">🚫 차단 목록</a>
-    </p>
 </div>
+<script type="module" th:src="@{/profile/profile.js}"></script>
 </body>
 </html>
