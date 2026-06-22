@@ -70,6 +70,7 @@
 - [T-078. git/commit 무한 로딩 = 커밋 훅의 gradle test hang(멀티세션 경합) — Claude Code 코어 아님](#t-078-gitcommit-무한-로딩--커밋-훅의-gradle-test-hang멀티세션-경합--claude-code-코어-아님)
 - [T-079. Vue 섬 번들이 book-detail 라우트에 가로채여 무한로딩 — 경로변수 숫자 제한](#t-079-vue-섬-번들이-book-detail-라우트에-가로채여-무한로딩--경로변수-숫자-제한)
 - [T-080. Service Worker가 에러 응답(500/503)을 캐싱 → 서버 fix 후에도 stale](#t-080-service-worker가-에러-응답500503을-캐싱--서버-fix-후에도-stale)
+- [T-081. SPA 전환에서 form 래퍼 제거 → 전역 button width 100%가 flex-row 액션을 풀폭 세로로 깨뜨림](#t-081-spa-전환에서-form-래퍼-제거--전역-button-width-100가-flex-row-액션을-풀폭-세로로-깨뜨림)
 
 ---
 
@@ -1598,6 +1599,36 @@ return fetch(request).then((res) => {
 
 ---
 
+## T-081. SPA 전환에서 form 래퍼 제거 → 전역 button width 100%가 flex-row 액션을 풀폭 세로로 깨뜨림
+
+**증상**: SSR→Vue 전환 후 리스트 행 액션 버튼(예: `/books` 공개토글·삭제, 프로필 팔로우·차단)이 한 줄
+정렬이 아니라 **각자 풀폭으로 세로로 쌓임**. CSS·클래스명은 전환 전후 동일한데 레이아웃만 깨짐.
+
+**원인**: 전역 `button{width:100%}`(app.css). SSR은 각 액션을 작은 `<form>`으로 감싸 버튼이 그 form 폭에
+갇혔는데, Vue(fetch)는 `<form>`을 없애 버튼이 flex-row 컨테이너(`.book-actions`·`.profile-actions`)의
+**직계 자식**이 되며 `width:100%`를 컨테이너 폭으로 받아 풀폭 → `flex-wrap`에서 세로 쌓임. (메커니즘 N-113.)
+
+**감별**:
+- 같은 행의 `<select>`는 멀쩡(작게)한데 `<button>`만 풀폭 = 전역 `button{width:100%}` 의심(select는 안 받음).
+- 실 렌더에서 버튼 `getBoundingClientRect().width`가 컨테이너 폭과 같으면 확정.
+
+**해결**: flex-row 컨테이너의 직계 버튼에 `width:auto` 상쇄(248·761·1213행과 같은 패턴).
+
+```css
+.book-actions > button { width: auto; }                  /* books·follow-list·book-readers·block-list·search 공용 */
+.profile-follow .profile-actions button { width: auto; } /* profile 팔로우·차단 */
+```
+
+`.book-actions`는 `UserRow` 공용 셸을 거쳐 books·follow-list·book-readers·block-list·search를 한 번에 커버.
+
+**예방**: SSR→SPA 전환에서 액션을 감싸던 `<form>`/래퍼를 제거할 때, 그 래퍼가 **전역 폼컨트롤 width를
+가두고 있었는지** 확인 — flex-row면 직계 버튼에 `width:auto`. block 컨테이너(`.timer-controls` 등 단일 CTA)는
+풀폭이 의도라 무관. 순수 CSS 시각 회귀라 실 렌더(폭 측정·스크린샷)로 검증.
+
+**관련**: N-113(개념·메커니즘), N-112/T-079(같은 #447 books 전환의 라우트 충돌 회귀), N-032(구조 변경이 폭로하는 잠복 회귀).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1682,3 +1713,4 @@ return fetch(request).then((res) => {
 | 2026-06-22 | T-078 (구현 세션에서 git/commit이 무한 로딩·esc·머지로도 안 풀리고 clear로만 해소 — Claude Code 코어 버그가 아니라 **자식 프로세스(git/gradle) hang을 await**하는 구조 때문 / 이 프로젝트는 `git commit`을 require-tests-before-commit.ps1 훅이 가로채 `./gradlew test`를 돌리므로 "git 작업"으로 보여도 실제로 멈춘 건 gradle 테스트일 때가 많음 / hang 뿌리=멀티 세션(워크트리·동시 세션)이 gradle 데몬·빌드 락 동시 점유 / 감별=지금 `git status`가 빠르면 git/레포 정상 / 해결=`Get-Process java,git｜Stop-Process -Force`·`.git/index.lock` 삭제·`./gradlew --stop`, esc만으론 spawn된 자식·데몬이 안 죽어 부족 / 예방=멀티 세션 시 한 세션에서만 커밋·빌드 / N-032·T-070·T-051, 커밋 훅) |
 | 2026-06-22 | T-079 (Vue 섬 번들 `/books/books-<hash>.js`가 book-detail `@GetMapping("/books/{id}")`에 가로채여 500/503·셸 무한로딩 — 컨트롤러 매핑이 기본 정적 핸들러(`/**`)보다 먼저 매칭, id=파일명→Long 변환 실패 / #425 book-detail+#447 섬 번들 둘 다 `/books/` prefix라 머지 후 잠복 / 감별=셸만 뜸+번들 503(404 아님)+배포 해시 일치 / 해결=`@GetMapping("/books/{id:\\d+}")` 숫자 제한→비숫자 정적 폴백 200 / 부작용=POST /books/add 405→404(SsrMutationRemovedTest 갱신) / 회귀=GET /books/books.js→200·/books/not-a-number→404, 헤드리스는 /api 목이라 실 번들 URL 사각 N-112 / PR #450) |
 | 2026-06-22 | T-080 (SW가 에러 응답(500/503)을 `res.ok` 검사 없이 캐싱 → cache-first가 서버 fix 후에도 영구 서빙(self-heal 불가) — #450 라우트 충돌 시기 번들 500이 `shell-v5`에 캐싱된 사례 / 감별=fix 배포 후에도 fresh 503인데 캐시버스터 `?cb=1`는 200, `via`/`x-cache` 없으면 SW(`caches.match`의 `.status`로 확인) / 해결=① `put`에 `if(res.ok)` 가드 ② `CACHE` `shell-v5`→`v6`로 activate purge→피해자 다음 방문 자동복구, 개별 즉시복구=SW 해제+`caches.delete` / 예방=SW `put` 항상 `res.ok`, 검증은 실 브라우저 / T-071·T-075·N-101·N-112, PR #450 후속) |
+| 2026-06-22 | T-081 (SSR→Vue 전환 후 리스트 행 버튼이 풀폭 세로로 깨짐 — 전역 `button{width:100%}`를 가두던 `<form>` 래퍼가 SPA 전환으로 사라져 버튼이 flex-row 컨테이너(`.book-actions`·`.profile-actions`)의 직계 자식이 됨 / 감별=같은 행 `<select>`는 멀쩡한데 `<button>`만 풀폭(select는 width:100% 안 받음), `getBoundingClientRect().width`=컨테이너 폭이면 확정 / 해결=`.book-actions > button`·`.profile-follow .profile-actions button`에 `width:auto`(248·761·1213행 상쇄 패턴), `.book-actions`는 UserRow 공용 셸로 books·follow·book-readers·block·search 전부 커버 / 예방=래퍼 제거 시 그게 전역 width를 가뒀는지 확인, block 컨테이너(`.timer-controls` 단일 CTA)는 무관, 실 렌더 폭 측정 검증 / N-113·N-112·T-079) |

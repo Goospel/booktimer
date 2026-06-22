@@ -1174,6 +1174,10 @@ a.book-title:hover { text-decoration: underline; }
    (베이스 button은 padding 12px 18px라 팔로우만 부담스럽게 컸음). */
 .book-actions .btn-primary, .book-actions .btn-ghost, .book-actions .btn-danger { padding: 6px 10px; font-size: .85rem; }
 .book-actions a.btn-ghost { text-decoration: none; display: inline-flex; align-items: center; }
+/* SSR→Vue 전환으로 행 액션이 <form> 래퍼를 잃어, 직계 <button>(.vis-toggle·.btn-danger)이
+   전역 button{width:100%}를 그대로 받아 풀폭으로 터지며 flex-wrap에서 한 줄씩 세로로 쌓였다(회귀).
+   행 버튼은 내용폭으로 되돌린다 — 248·761·1213행과 같은 상쇄 패턴. */
+.book-actions > button { width: auto; }
 
 /* 구매처 선택 토글 — '구매'를 누르면 알라딘·쿠팡이 아래로 펼쳐지는 순수 CSS <details>(JS 불필요, manual-add 패턴과 동일).
    구매처가 2개일 때만 이 토글이 뜨고, 1개뿐이면 단일 .btn-ghost 버튼이 대신 렌더된다(템플릿 분기). */
@@ -1256,6 +1260,9 @@ a.book-title:hover { text-decoration: underline; }
 .profile-follow a.follow-count:hover strong { color: var(--accent); }
 .profile-follow .follow-action { margin-left: auto; }
 .profile-follow .profile-actions { display: flex; gap: 8px; }
+/* SSR→Vue 전환으로 팔로우·차단이 <form> 래퍼를 잃어, 전역 button{width:100%}를 직접 받아
+   풀폭으로 터졌다(.book-actions와 같은 회귀). 내용폭으로 되돌린다. */
+.profile-follow .profile-actions button { width: auto; }
 /* 차단 버튼 — 옅은 위험 톤(삭제만큼 강하지 않게) */
 .btn-block { color: var(--danger); border-color: var(--danger); }
 
