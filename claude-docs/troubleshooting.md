@@ -65,6 +65,9 @@
 - [T-073. 푸시 토글 함수에서 VAPID 체크를 최상단에 두면 OFF(철회) 경로도 막힌다](#t-073-푸시-토글-함수에서-vapid-체크를-최상단에-두면-off철회-경로도-막힌다)
 - [T-074. Thymeleaf 산술은 `${}` 안에 넣어야 정수 — `${x} / n`(밖)은 소수로 샌다](#t-074-thymeleaf-산술은--안에-넣어야-정수--x--n밖은-소수로-샌다)
 - [T-075. 파일명 고정 자산(pwa-install.js·app.css)을 SW cache-first로 두면 배포 후에도 stale 서빙](#t-075-파일명-고정-자산pwa-installjsappcss을-sw-cache-first로-두면-배포-후에도-stale-서빙)
+- [T-076. `inlineDynamicImports:true`를 멀티 input과 함께 쓰면 Rollup 에러 — 페이지별 독립 빌드로 분리](#t-076-inlinedynamicimportstrue를-멀티-input과-함께-쓰면-rollup-에러--페이지별-독립-빌드로-분리)
+- [T-077. jsdom에선 scroll-snap 컴포넌트의 scroll 계측이 모두 0 — 실 브라우저 게이트로 위임](#t-077-jsdom에선-scroll-snap-컴포넌트의-scroll-계측이-모두-0--실-브라우저-게이트로-위임)
+- [T-078. git/commit 무한 로딩 = 커밋 훅의 gradle test hang(멀티세션 경합) — Claude Code 코어 아님](#t-078-gitcommit-무한-로딩--커밋-훅의-gradle-test-hang멀티세션-경합--claude-code-코어-아님)
 
 ---
 
@@ -1489,6 +1492,57 @@ th:text="${'· 누적 ' + (totalSeconds / 3600) + '시간 ...'}"
 
 ---
 
+## T-076. `inlineDynamicImports:true`를 멀티 input과 함께 쓰면 Rollup 에러 — 페이지별 독립 빌드로 분리
+
+**증상**: Vite 멀티빌드를 만들려고 `rollupOptions.input`을 객체(`{ search: '...', history: '...' }`)로 여러 엔트리를 한 빌드에 넣었더니 `inlineDynamicImports is not supported for multiple entry points` 빌드 에러.
+
+**원인**: `inlineDynamicImports`(모든 동적 import를 한 파일로 인라인 = 단일 산출 파일)는 **단일 엔트리 전용** 옵션이다. Vite는 `input` 객체를 멀티 엔트리로 해석하고, 그 조합에서 이 옵션을 거부한다.
+
+**해결**: 페이지별 **독립 빌드**로 분리한다 — `APP` env var로 분기(`cross-env APP=search vite build`), `vite.config.ts`가 `process.env.APP`로 그 페이지의 `input`·`outDir`·`entryFileNames`만 고른다. 각 빌드는 단일 엔트리라 `inlineDynamicImports:true`를 그대로 유지(페이지당 단일 파일 산출). 단계 0의 **Spring resource chain 해시**가 런타임에 파일명을 버저닝하므로 Vite manifest는 불필요.
+
+**예방**: SPA 섬을 페이지마다 늘릴 때 "멀티엔트리 한 빌드"의 유혹을 피하고 페이지별 독립 빌드를 기본으로(Phaser 없는 가벼운 섬은 Vue 중복 번들 비용이 작아 충분). 공유 vendor chunk + manifest는 번들이 정말 클 때만.
+
+**관련**: 선별 SPA 단계 1a(멀티빌드 인프라 첫 도입), T-063(빌드 산출물 수동 커밋), PR #438.
+
+---
+
+## T-077. jsdom에선 scroll-snap 컴포넌트의 scroll 계측이 모두 0 — 실 브라우저 게이트로 위임
+
+**증상**: jsdom 단위테스트에서 캐러셀(scroll-snap) 컴포넌트의 `scrollBy`·`clientWidth`·`scrollLeft`·`offsetWidth`가 전부 0을 반환. `step()`·`sync()`가 의도한 스크롤을 일으켜도 값이 0이라 단언이 항상 통과하거나 항상 실패한다(가짜 신호).
+
+**원인**: jsdom은 **CSS 레이아웃 엔진이 없어** 렌더링·레이아웃 연산을 수행하지 않는다 — 크기·스크롤 계측값이 0으로 고정.
+
+**해결(테스트 전략)**: ① 단위로는 **버튼 존재 + emit 호출 + disabled 토글**만 단언(레이아웃 비의존 로직). ② 실제 스크롤 동작은 **실 브라우저(Chrome 확장) 게이트**로 위임(N-083). 깊은 스크롤 동작 자동화가 꼭 필요하면 jsdom 대신 Playwright·Cypress(headless Chromium=실 레이아웃 엔진).
+
+**예방**: 클라이언트 레이아웃·스크롤·타이밍이 걸린 변경은 jsdom으로 끝내지 말고 실 브라우저 1회를 게이트로(헤드리스-블라인드 회귀 방지).
+
+**관련**: N-083(defer×레이아웃 사각), T-053·T-052(헤드리스 한계), 단계 1c personality 캐러셀.
+
+---
+
+## T-078. git/commit 무한 로딩 = 커밋 훅의 gradle test hang(멀티세션 경합) — Claude Code 코어 아님
+
+**증상**: 구현 세션에서 "git 미커밋 조회" 같은 작업이 무한 로딩에 걸림. esc로 멈추고 머지를 시도해도 Claude Code가 "돌기만 하고" 실제 작업을 안 함. clear로 세션을 날려야 풀림.
+
+**원인(메커니즘)**: Claude Code는 git/gradle을 **자식 프로세스로 실행하고 그 종료를 기다린다**. 그 자식이 hang하면 Claude도 멈춘 것처럼 보인다 — **코어 버그가 아니라 자식 프로세스 hang**. 이 프로젝트는 `git commit`을 `.claude/hooks/require-tests-before-commit.ps1` 훅이 가로채 **`./gradlew test`를 돌리므로**, "git 작업"으로 보여도 실제로 멈춘 건 gradle 테스트일 때가 많다. gradle hang의 흔한 뿌리: **멀티 세션(워크트리 2개·동시 세션)이 같은 gradle 데몬·빌드 락을 동시에 점유**, 데몬 충돌/메모리.
+
+왜 esc·머지로 안 풀렸나: esc는 Claude의 도구 호출만 끊고, 이미 spawn된 gradle 자식·데몬은 즉시 안 죽음 → 다음 커밋도 같은 훅 → 또 hang. **clear(세션 재시작)**가 멈춘 호출 컨텍스트를 정리해 풀린 것.
+
+**감별**: 지금 `git status`가 빠르면(0.x초) git 환경·레포 자체는 정상 = 코어 문제 아님. `.git/index.lock` 없음 + 떠도는 `java`(gradle 데몬) 잔존이 단서.
+
+**해결(hang 시)**:
+```powershell
+Get-Process java, git -EA SilentlyContinue | Stop-Process -Force
+Remove-Item .git\index.lock -EA SilentlyContinue
+./gradlew --stop   # gradle 데몬 정리
+```
+
+**예방**: 멀티 세션일 땐 **한 세션에서만 커밋/빌드**(gradle은 워크트리를 나눠도 데몬·빌드 캐시를 공유해 경합한다 — N-032). 커밋이 길게 멈추면 단순 esc 대신 위 강제 정리부터.
+
+**관련**: N-032(워크트리 분리), T-070(bootRun 진행률 멈춤=정상), T-051(워크트리 머지 정리), 커밋 훅 require-tests-before-commit.ps1.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1570,3 +1624,4 @@ th:text="${'· 누적 ' + (totalSeconds / 3600) + '시간 ...'}"
 | 2026-06-21 | T-075 (파일명 고정 자산 pwa-install.js·app.css를 SW cache-first로 두면 배포 후에도 stale 서빙 — T-071(garden.js)과 같은 뿌리, NETWORK_FIRST 배열 + CACHE 버전 올림으로 해결 / PR #430) |
 | 2026-06-21 | T-076 (`inlineDynamicImports:true`를 멀티 input 객체와 함께 쓰면 Rollup 에러 / Vite 멀티빌드에서 `input: { pageA: '...', pageB: '...' }` 구조로 여러 엔트리를 하나의 빌드 명령에 넣으면 `inlineDynamicImports is not supported for multiple entry points` 에러 발생 — `inlineDynamicImports`는 단일 엔트리 전용 옵션 / 해결=페이지별 독립 빌드로 분리(`APP` env var 분기: `cross-env APP=search vite build`), 각 빌드는 단일 엔트리이므로 `inlineDynamicImports:true` 유지 가능·단일 파일 산출 그대로 / 배경: Vite는 `rollupOptions.input` 객체를 멀티 엔트리로 해석하고 이때 `inlineDynamicImports`를 허용 안 함 / PR #438) |
 | 2026-06-21 | T-077 (jsdom에서 scroll-snap 컴포넌트 단위테스트 시 `scrollBy`·`clientWidth`·`scrollLeft`·`offsetWidth`가 모두 0 반환 — jsdom은 CSS 레이아웃 엔진이 없어 렌더링 연산을 수행 안 함 / 증상=step()·sync()가 의도한 스크롤을 일으켜도 값이 0이라 "동작 안 함"처럼 나타나 단언이 항상 통과하거나 항상 실패 / 해결(테스트 전략)=① 버튼 존재 + emit 호출·disabled 토글만 단언, ② 실제 스크롤 동작은 실 브라우저 게이트(Chrome 확장)로 위임 / 깊은 스크롤 동작이 필요하면 JSDOM 대신 Playwright·Cypress(headless Chromium=실 레이아웃) / N-083·T-053, PR personality-island) |
+| 2026-06-22 | T-078 (구현 세션에서 git/commit이 무한 로딩·esc·머지로도 안 풀리고 clear로만 해소 — Claude Code 코어 버그가 아니라 **자식 프로세스(git/gradle) hang을 await**하는 구조 때문 / 이 프로젝트는 `git commit`을 require-tests-before-commit.ps1 훅이 가로채 `./gradlew test`를 돌리므로 "git 작업"으로 보여도 실제로 멈춘 건 gradle 테스트일 때가 많음 / hang 뿌리=멀티 세션(워크트리·동시 세션)이 gradle 데몬·빌드 락 동시 점유 / 감별=지금 `git status`가 빠르면 git/레포 정상 / 해결=`Get-Process java,git｜Stop-Process -Force`·`.git/index.lock` 삭제·`./gradlew --stop`, esc만으론 spawn된 자식·데몬이 안 죽어 부족 / 예방=멀티 세션 시 한 세션에서만 커밋·빌드 / N-032·T-070·T-051, 커밋 훅) |
