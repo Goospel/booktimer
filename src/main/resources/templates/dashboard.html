@@ -2,19 +2,13 @@
 <html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <!-- 방문 통계(GA4, 측정 ID 설정 시에만) -->
     <th:block th:replace="~{analytics :: gtag}"></th:block>
     <th:block th:replace="~{fragments/pwa-head :: meta}"></th:block>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="_csrf" th:content="${_csrf != null ? _csrf.token : ''}">
     <title>대시보드 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
-    <!-- 광고 로더(게시자 ID 설정 시에만) -->
     <th:block th:replace="~{ads :: loader}"></th:block>
-    <!-- htmx: 폼을 AJAX로 보내 라이브 영역만 swap (전체 리로드 없음) -->
-    <script defer src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
-    <!-- defer: 문서 순서 보존 → dashboard.js(전역 함수)가 Alpine보다 먼저 평가됨 -->
-    <script defer th:src="@{/js/dashboard.js}"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
 </head>
 <body>
 <div class="container">
@@ -24,180 +18,10 @@
             <h1>BookTimer</h1>
         </a>
     </header>
-    <!-- 인사말 자리 = 작가 격언(페이지 로드마다 랜덤, DashboardController가 모델에 싣는다). 라이브 영역 밖이라 측정 start/stop엔 안 바뀐다. -->
-    <p class="greeting quote">
-        <span class="quote-text" th:text="${quote.text}">독서는 정신에 있어 운동이 신체에 하는 것과 같다.</span>
-        <span class="quote-author" th:text="'— ' + ${quote.author}">— 작가</span>
-    </p>
-
-    <!-- 이메일 미검증 안내(라이브 영역 밖이라 htmx swap에 영향 없음). 미검증이어도 사용은 막지 않고 인증만 권한다(정책 ③). -->
-    <div th:if="${emailVerified == false}" class="alert alert-warn verify-banner">
-        <span>이메일 인증이 아직 안 됐어요. 받은 메일의 링크로 인증을 완료해 주세요.</span>
-        <form th:action="@{/verify-email/resend}" method="post">
-            <button type="submit" class="btn-inline-link">인증 메일 다시 받기</button>
-        </form>
-    </div>
-
-    <!-- 라이브 영역: start/stop 시 htmx가 이 div(outerHTML)만 프래그먼트로 교체.
-         같은 fragment("dashboard :: live")를 ReadingSessionController가 반환한다. -->
-    <div id="dashboard-live" th:fragment="live">
-        <div th:if="${error}" class="alert alert-error" th:text="${error}">에러 메시지</div>
-
-        <!-- 타이머 + 측정 통합 카드: 서버 값은 data-* 로 주입, Alpine이 1초마다 갱신.
-             '남은 독서 시간'과 '측정' 두 카드를 하나로 합쳤다 — 진행 상태를 알리던 문구
-             ("진행 중인 측정이 없습니다."/"읽는 중: …")는 이미 책 선택이 눈에 보여 불필요하므로 제거.
-             start/stop은 hx-post로 무리로드, JS 없으면 일반 form POST(redirect)로 폴백. -->
-        <section class="card timer-card"
-                 x-data="readingTimer()"
-                 th:attr="data-active=${hasActiveSession},data-started=${activeStartedAt},data-remaining=${remainingSeconds},data-floor=${carriedDebtSeconds}">
-            <h2>오늘 남은 독서 시간</h2>
-            <p class="timer-display"
-               :class="{ met: goalMet }"
-               x-text="fmt(remainingNow)">00:00:00</p>
-            <p class="timer-sub" x-show="active" x-cloak>
-                이번 측정 경과 <span class="mono" x-text="fmt(elapsed)">00:00:00</span>
-            </p>
-            <span class="goal-badge" x-show="goalMet" x-cloak>오늘 목표 달성! 🎉</span>
-
-            <!-- 측정 컨트롤: 상태 문구 없이 곧바로 진행 중이면 누적+종료, 아니면 책 선택+시작 -->
-            <div class="timer-controls" th:if="${hasActiveSession}">
-                <p class="status-line muted" th:if="${activeBookTitle}">이 책 누적 독서
-                    <strong th:text="${activeBookTotalSeconds / 3600 + '시간 ' + (activeBookTotalSeconds % 3600) / 60 + '분'}">0시간 0분</strong>
-                </p>
-                <form th:action="@{/sessions/stop}" method="post"
-                      hx-post="/sessions/stop" hx-target="#dashboard-live" hx-swap="outerHTML">
-                    <button type="submit" class="btn-danger">측정 종료</button>
-                </form>
-            </div>
-            <div class="timer-controls" th:unless="${hasActiveSession}">
-                <!-- 측정은 반드시 책을 골라야 시작된다(책 미지정 측정 금지). "읽고싶음"은 제외하고
-                     「읽는 중」/「완독」을 optgroup으로 구분한다. 측정할 책이 없으면 시작 폼 대신 추가 안내만. -->
-                <form th:if="${(readingBooks != null and !readingBooks.isEmpty()) or (finishedBooks != null and !finishedBooks.isEmpty())}"
-                      th:action="@{/sessions/start}" method="post"
-                      hx-post="/sessions/start" hx-target="#dashboard-live" hx-swap="outerHTML">
-                    <label class="book-pick">읽을 책
-                        <select name="bookId" required>
-                            <optgroup label="읽는 중" th:if="${readingBooks != null and !readingBooks.isEmpty()}">
-                                <option th:each="b : ${readingBooks}" th:value="${b.id}" th:text="${b.title}"
-                                        th:selected="${recentBookId != null and b.id == recentBookId}">책</option>
-                            </optgroup>
-                            <optgroup label="완독" th:if="${finishedBooks != null and !finishedBooks.isEmpty()}">
-                                <option th:each="b : ${finishedBooks}" th:value="${b.id}" th:text="${b.title}"
-                                        th:selected="${recentBookId != null and b.id == recentBookId}">책</option>
-                            </optgroup>
-                        </select>
-                    </label>
-                    <button type="submit" class="btn-primary">측정 시작</button>
-                </form>
-                <div class="timer-empty"
-                     th:if="${(readingBooks == null or readingBooks.isEmpty()) and (finishedBooks == null or finishedBooks.isEmpty())}">
-                    <p>아직 책장이 비어 있어요. <strong>첫 책</strong>을 추가하면 타이머를 켜고 오늘의 독서를 시작할 수 있어요. 📖</p>
-                    <a class="btn btn-primary" th:href="@{/books}">첫 책 추가하기</a>
-                </div>
-            </div>
-        </section>
-    </div>
-
-    <!-- 하이라이트 밴드: 이 서비스의 '재미' 동선(내 책장·내 책방=공개 프로필)을 측정 바로 밑으로 승격.
-         타이머는 히어로로 유지하되 두 동선을 굵게 강조해 노출 우선순위를 올린다.
-         맨 밑 .quick-actions에서는 둘을 빼 중복을 없앤다. -->
-    <nav class="highlight-actions" aria-label="둘러보기">
-        <a class="highlight-tile" th:href="@{/books}">
-            <span class="ht-icon" aria-hidden="true">📚</span>
-            <span class="ht-text">
-                <span class="ht-label">내 책장</span>
-                <span class="ht-sub">읽은 책을 모아보기</span>
-            </span>
-        </a>
-        <a class="highlight-tile" th:href="@{/u/{loginId}(loginId=${loginId})}">
-            <span class="ht-icon" aria-hidden="true">👤</span>
-            <span class="ht-text">
-                <span class="ht-label">내 책방</span>
-                <span class="ht-sub">남에게 보이는 내 책방</span>
-            </span>
-        </a>
-    </nav>
-
-    <section class="card">
-        <div class="grass-head">
-            <h2>독서 잔디</h2>
-            <span class="grass-streak" th:title="${graph.growthStage().label()}">
-                <span class="grass-streak-icon" th:text="${graph.growthStage().emoji()}">🌱</span>
-                <small class="grass-streak-days" th:if="${graph.currentStreak() > 0}"
-                       th:text="${graph.currentStreak()} + '일 연속'">3일 연속</small>
-            </span>
-        </div>
-        <p class="grass-summary">
-            지난 1년 동안 <strong th:text="${graph.activeDays()}">0</strong>일 독서 ·
-            총 <strong th:text="${graph.totalSeconds() / 3600 + '시간 ' + (graph.totalSeconds() % 3600) / 60 + '분'}">0시간 0분</strong>
-        </p>
-        <div class="grass">
-            <div class="grass-weekdays" aria-hidden="true">
-                <span></span><span>월</span><span></span><span>수</span><span></span><span>금</span><span></span>
-            </div>
-            <div class="grass-main">
-                <div class="grass-months" aria-hidden="true">
-                    <span th:each="m : ${graph.monthLabels()}"
-                          th:text="${m.label()}"
-                          th:style="'grid-column-start:' + (${m.weekIndex()} + 1)">1월</span>
-                </div>
-                <div class="grass-grid">
-                    <th:block th:each="week : ${graph.weeks()}">
-                        <div class="grass-cell"
-                             th:each="day : ${week}"
-                             th:classappend="${day.isPlaceholder() ? 'empty' : 'level-' + day.level() + (day.manual() ? ' manual' : '')}"
-                             th:attr="title=${day.isPlaceholder() ? null
-                                 : #temporals.format(day.date(), 'yyyy-MM-dd') + ' · ' + (day.totalSeconds() / 60) + '분' + (day.manual() ? ' · 직접 채움' : '')}"></div>
-                    </th:block>
-                </div>
-                <!-- 색 농도 = 그날 독서 시간 ÷ 하루 목표 달성 비율. 최근이 왼쪽. -->
-                <div class="grass-legend" aria-hidden="true">
-                    <span>목표 미달</span>
-                    <i class="grass-cell level-0"></i>
-                    <i class="grass-cell level-1"></i>
-                    <i class="grass-cell level-2"></i>
-                    <i class="grass-cell level-3"></i>
-                    <i class="grass-cell level-4"></i>
-                    <span>목표 달성</span>
-                    <i class="grass-cell level-2 manual legend-gap"></i>
-                    <span>직접 채움</span>
-                </div>
-            </div>
-        </div>
-        <a class="quick-tile garden-link-tile" th:href="@{/village}">
-            <span class="qt-icon" aria-hidden="true">🌱</span><span class="qt-label">마을</span>
-        </a>
-    </section>
-
-    <!-- 바로가기: 아이콘+라벨 타일 2열 그리드. 좁은 컬럼에서도 라벨이 글자 단위로
-         깨지지 않도록 각 타일이 충분한 폭을 확보(.qt-label nowrap). 홀수(마지막)는 전체폭.
-         내 책장·내 책방(공개 프로필)은 위 .highlight-actions로 승격해 여기서 뺐다(중복 방지). -->
-    <nav class="quick-actions" aria-label="바로가기">
-        <a class="quick-tile" th:href="@{/history}">
-            <span class="qt-icon" aria-hidden="true">📖</span><span class="qt-label">독서 기록</span>
-        </a>
-        <a class="quick-tile" th:href="@{/personality}">
-            <span class="qt-icon" aria-hidden="true">🧬</span><span class="qt-label">책BTI</span>
-        </a>
-        <a class="quick-tile" th:href="@{/search}">
-            <span class="qt-icon" aria-hidden="true">🔍</span><span class="qt-label">사용자 검색</span>
-        </a>
-        <a class="quick-tile" th:href="@{/settings}">
-            <span class="qt-icon" aria-hidden="true">⚙️</span><span class="qt-label">설정</span>
-        </a>
-        <a class="quick-tile" th:href="@{/feedback}">
-            <span class="qt-icon" aria-hidden="true">💬</span><span class="qt-label">문의·피드백</span>
-        </a>
-    </nav>
-
-    <!-- 광고 (대시보드 하단, 라이브 영역 밖 — 측정 start/stop 시 재요청되지 않음. 게시자 ID 설정 시에만) -->
+    <div id="dashboard-app">불러오는 중…</div>
+    <noscript><p class="status-line">JavaScript가 필요합니다.</p></noscript>
     <div th:replace="~{ads :: unit}"></div>
-
-    <form class="logout-form" th:action="@{/logout}" method="post">
-        <button type="submit" class="btn-ghost btn-logout">로그아웃</button>
-    </form>
 </div>
-
-<style>[x-cloak] { display: none !important; }</style>
+<script type="module" th:src="@{/dashboard/dashboard.js}"></script>
 </body>
 </html>

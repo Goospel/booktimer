@@ -14,6 +14,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.ui.Model;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -44,6 +45,64 @@ public class DashboardModel {
     }
 
     /**
+     * 대시보드 라이브 영역의 순수 계산 결과 — SSR({@link #populate})과 REST API({@code DashboardApiController})가
+     * 함께 쓰는 단일 출처. 엔티티를 직접 노출하므로 API는 별도 DTO로 매핑해 직렬화한다.
+     */
+    public record LiveState(
+            String nickname,
+            String loginId,
+            long remainingSeconds,
+            long carriedDebtSeconds,
+            boolean hasActiveSession,
+            Instant activeStartedAt,
+            String activeBookTitle,
+            long activeBookTotalSeconds,
+            List<Book> readingBooks,
+            List<Book> finishedBooks,
+            Long recentBookId
+    ) {}
+
+    /**
+     * 라이브 영역 상태를 순수하게 계산해 {@link LiveState}로 반환한다.
+     *
+     * <p>{@code carriedDebtSeconds}(floor)는 음수가 불가능하지만 방어적으로 {@code max(0, ...)} 처리한다.
+     * SSR·API 양쪽이 이 메서드를 통해 동일 상태를 만들어 패리티가 보장된다.
+     */
+    public LiveState computeLive(User user) {
+        WeeklyDebt debt = debtService.weeklyDebt(user);
+        boolean carryover = timerRepository.findByUser(user)
+                .map(ReadingTimer::isDebtCarryover)
+                .orElse(true);
+        long carriedDebtSeconds = carryover
+                ? Math.max(0L, debt.totalDebtSeconds() - debt.todayDebtSeconds())
+                : 0L;
+        long headlineSeconds = carryover ? debt.totalDebtSeconds() : debt.todayDebtSeconds();
+
+        Optional<ReadingSession> activeSession = sessionRepository.findActiveWithBook(user);
+        Book activeBook = activeSession.map(ReadingSession::getBook).orElse(null);
+
+        List<Book> books = bookRepository.findByUserOrderByCreatedAtDesc(user);
+        List<Book> readingBooks = books.stream().filter(b -> b.getStatus() == BookStatus.READING).toList();
+        List<Book> finishedBooks = books.stream().filter(b -> b.getStatus() == BookStatus.FINISHED).toList();
+
+        List<Long> recent = sessionRepository.findRecentlyReadBookIds(user, PageRequest.of(0, 1));
+
+        return new LiveState(
+                user.getNickname(),
+                user.getLoginId(),
+                headlineSeconds,
+                carriedDebtSeconds,
+                activeSession.isPresent(),
+                activeSession.map(ReadingSession::getStartedAt).orElse(null),
+                activeBook != null ? activeBook.getTitle() : null,
+                activeBook != null ? sessionRepository.sumDurationByUserAndBook(user, activeBook) : 0L,
+                readingBooks,
+                finishedBooks,
+                recent.isEmpty() ? null : recent.get(0)
+        );
+    }
+
+    /**
      * 라이브 영역 렌더 속성을 채운다 — 부채 상태(nickname, remainingSeconds=오늘 부채), 측정 상태
      * (hasActiveSession), 측정 중인 책(activeBookTitle)과 그 책의 누적 독서 시간(activeBookTotalSeconds),
      * 시작 시 고를 책 목록(readingBooks/finishedBooks)과 최근 읽은 책(recentBookId).
@@ -66,39 +125,17 @@ public class DashboardModel {
      * 타이머 카드의 경과 계산(JS {@code data-started})에 여전히 필요하므로 모델에 남긴다.
      */
     public void populate(Model model, User user) {
-        WeeklyDebt debt = debtService.weeklyDebt(user);
-        // 밀린 부채 합산 표시 토글 — 불변식상 타이머는 항상 있으나, 없으면 기본 ON(합산)으로 폴백.
-        boolean carryover = timerRepository.findByUser(user)
-                .map(ReadingTimer::isDebtCarryover)
-                .orElse(true);
-        // floor = 윈도우 내 빠뜨린 날 부채 합 = 측정으로 줄지 않는 '어제까지 밀린 빚'. 합산 OFF면 0(현행).
-        long carriedDebtSeconds = carryover ? (debt.totalDebtSeconds() - debt.todayDebtSeconds()) : 0L;
-        // 헤드라인 = 합산 ON이면 오늘+밀린 빚, OFF면 오늘 부채만.
-        long headlineSeconds = carryover ? debt.totalDebtSeconds() : debt.todayDebtSeconds();
-
-        Optional<ReadingSession> activeSession = sessionRepository.findActiveWithBook(user);
-        Book activeBook = activeSession.map(ReadingSession::getBook).orElse(null);
-
-        model.addAttribute("nickname", user.getNickname());
-        model.addAttribute("loginId", user.getLoginId()); // "내 공개 프로필" 링크(/u/{loginId})용
-        model.addAttribute("remainingSeconds", headlineSeconds); // 헤드라인 카운트다운 시작값(JS data-remaining)
-        model.addAttribute("carriedDebtSeconds", carriedDebtSeconds); // 측정으로 안 줄어드는 floor(JS data-floor)
-        model.addAttribute("hasActiveSession", activeSession.isPresent());
-        model.addAttribute("activeStartedAt", activeSession.map(ReadingSession::getStartedAt).orElse(null));
-        model.addAttribute("activeBookTitle", activeBook != null ? activeBook.getTitle() : null);
-        // 측정 중인 책의 누적 독서 시간(완료 세션 합). 책 미지정 측정이면 0.
-        model.addAttribute("activeBookTotalSeconds",
-                activeBook != null ? sessionRepository.sumDurationByUserAndBook(user, activeBook) : 0L);
-
-        // 측정 드롭다운: "읽고싶음"을 빼고 상태별로 나눈다(읽는 중 / 완독). 같은 등록순(최신 먼저)을 유지.
-        List<Book> books = bookRepository.findByUserOrderByCreatedAtDesc(user);
-        model.addAttribute("readingBooks",
-                books.stream().filter(b -> b.getStatus() == BookStatus.READING).toList());
-        model.addAttribute("finishedBooks",
-                books.stream().filter(b -> b.getStatus() == BookStatus.FINISHED).toList());
-
-        // 가장 최근에 읽은 책을 드롭다운에서 미리 선택(이어 읽기). 측정 이력이 없으면 null → 브라우저 기본.
-        List<Long> recent = sessionRepository.findRecentlyReadBookIds(user, PageRequest.of(0, 1));
-        model.addAttribute("recentBookId", recent.isEmpty() ? null : recent.get(0));
+        LiveState live = computeLive(user);
+        model.addAttribute("nickname", live.nickname());
+        model.addAttribute("loginId", live.loginId());
+        model.addAttribute("remainingSeconds", live.remainingSeconds());
+        model.addAttribute("carriedDebtSeconds", live.carriedDebtSeconds());
+        model.addAttribute("hasActiveSession", live.hasActiveSession());
+        model.addAttribute("activeStartedAt", live.activeStartedAt());
+        model.addAttribute("activeBookTitle", live.activeBookTitle());
+        model.addAttribute("activeBookTotalSeconds", live.activeBookTotalSeconds());
+        model.addAttribute("readingBooks", live.readingBooks());
+        model.addAttribute("finishedBooks", live.finishedBooks());
+        model.addAttribute("recentBookId", live.recentBookId());
     }
 }
