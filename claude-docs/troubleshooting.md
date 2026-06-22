@@ -69,6 +69,7 @@
 - [T-077. jsdom에선 scroll-snap 컴포넌트의 scroll 계측이 모두 0 — 실 브라우저 게이트로 위임](#t-077-jsdom에선-scroll-snap-컴포넌트의-scroll-계측이-모두-0--실-브라우저-게이트로-위임)
 - [T-078. git/commit 무한 로딩 = 커밋 훅의 gradle test hang(멀티세션 경합) — Claude Code 코어 아님](#t-078-gitcommit-무한-로딩--커밋-훅의-gradle-test-hang멀티세션-경합--claude-code-코어-아님)
 - [T-079. Vue 섬 번들이 book-detail 라우트에 가로채여 무한로딩 — 경로변수 숫자 제한](#t-079-vue-섬-번들이-book-detail-라우트에-가로채여-무한로딩--경로변수-숫자-제한)
+- [T-080. Service Worker가 에러 응답(500/503)을 캐싱 → 서버 fix 후에도 stale](#t-080-service-worker가-에러-응답500503을-캐싱--서버-fix-후에도-stale)
 
 ---
 
@@ -1567,6 +1568,36 @@ Remove-Item .git\index.lock -EA SilentlyContinue
 
 ---
 
+## T-080. Service Worker가 에러 응답(500/503)을 캐싱 → 서버 fix 후에도 stale
+
+**증상**: 서버 버그를 고쳐 배포했는데도 일부 사용자에게 같은 깨짐이 지속. 해당 정적 자산(예: Vue 번들 `/books/books-<hash>.js`) 요청이 **fresh인데도 500/503**. 캐시버스터(`?cb=1`)를 붙이면 200 → 오리진은 정상.
+
+**원인(메커니즘)**: `sw.js`의 정적 cache-first 핸들러가 `res.ok` 검사 없이 응답을 캐싱했다:
+
+```js
+return fetch(request).then((res) => {
+    caches.open(CACHE).then((c) => c.put(request, res.clone())); // ← 500도 캐싱됨
+    return res;
+});
+```
+
+버그 시기(라우트 충돌 #450)에 번들이 낸 500이 캐시(`shell-v5`)에 들어갔고, cache-first(`if (cached) return cached`)는 **재검증 없이 그 500을 영구 서빙** → 오리진을 고쳐도 self-heal 안 됨. 해시 URL은 *내용* stale은 막지만(내용 바뀌면 URL이 바뀜) *캐싱된 에러*는 못 막는다.
+
+**감별**:
+- 서버 fix 배포 후에도 깨짐 지속 + fresh 요청 503/500 + **캐시버스터(`?cb=1`) → 200** = SW(또는 CDN) 캐시.
+- `via`/`x-cache` 헤더 없으면 CDN 아님 → SW. 확인: `caches.keys()` + `cache.match(url)`의 `.status`(예: `shell-v5`에 500), `navigator.serviceWorker.controller`.
+
+**해결**:
+1. **에러 응답 캐싱 금지** — `if (res.ok)` 가드로 2xx만 `put`(재발 방지).
+2. **`CACHE` 버전 bump**(`shell-v5`→`v6`) — activate가 옛 캐시를 지우므로(`keys.filter(k => k !== CACHE)`) 새 `sw.js` 배포 시 나쁜 캐시가 purge돼 기존 피해자가 다음 방문에 자동 복구.
+3. 개별 사용자 즉시 복구: SW 해제 + `caches.delete()` 후 새로고침.
+
+**예방**: SW 캐시 `put`은 항상 `res.ok` 가드 — cache-first 자산은 에러를 절대 캐시에 남기지 말 것. SW 동작은 단위테스트(전역 목 하니스 과대)보다 배포 후 실 브라우저 게이트(`caches.keys()`·번들 200 확인).
+
+**관련**: T-071/T-075(SW 해시 자산 stale·NETWORK_FIRST), N-101(PWA 레벨), N-112(이 캐싱을 유발한 라우트 충돌), PR #450 후속.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1650,3 +1681,4 @@ Remove-Item .git\index.lock -EA SilentlyContinue
 | 2026-06-21 | T-077 (jsdom에서 scroll-snap 컴포넌트 단위테스트 시 `scrollBy`·`clientWidth`·`scrollLeft`·`offsetWidth`가 모두 0 반환 — jsdom은 CSS 레이아웃 엔진이 없어 렌더링 연산을 수행 안 함 / 증상=step()·sync()가 의도한 스크롤을 일으켜도 값이 0이라 "동작 안 함"처럼 나타나 단언이 항상 통과하거나 항상 실패 / 해결(테스트 전략)=① 버튼 존재 + emit 호출·disabled 토글만 단언, ② 실제 스크롤 동작은 실 브라우저 게이트(Chrome 확장)로 위임 / 깊은 스크롤 동작이 필요하면 JSDOM 대신 Playwright·Cypress(headless Chromium=실 레이아웃) / N-083·T-053, PR personality-island) |
 | 2026-06-22 | T-078 (구현 세션에서 git/commit이 무한 로딩·esc·머지로도 안 풀리고 clear로만 해소 — Claude Code 코어 버그가 아니라 **자식 프로세스(git/gradle) hang을 await**하는 구조 때문 / 이 프로젝트는 `git commit`을 require-tests-before-commit.ps1 훅이 가로채 `./gradlew test`를 돌리므로 "git 작업"으로 보여도 실제로 멈춘 건 gradle 테스트일 때가 많음 / hang 뿌리=멀티 세션(워크트리·동시 세션)이 gradle 데몬·빌드 락 동시 점유 / 감별=지금 `git status`가 빠르면 git/레포 정상 / 해결=`Get-Process java,git｜Stop-Process -Force`·`.git/index.lock` 삭제·`./gradlew --stop`, esc만으론 spawn된 자식·데몬이 안 죽어 부족 / 예방=멀티 세션 시 한 세션에서만 커밋·빌드 / N-032·T-070·T-051, 커밋 훅) |
 | 2026-06-22 | T-079 (Vue 섬 번들 `/books/books-<hash>.js`가 book-detail `@GetMapping("/books/{id}")`에 가로채여 500/503·셸 무한로딩 — 컨트롤러 매핑이 기본 정적 핸들러(`/**`)보다 먼저 매칭, id=파일명→Long 변환 실패 / #425 book-detail+#447 섬 번들 둘 다 `/books/` prefix라 머지 후 잠복 / 감별=셸만 뜸+번들 503(404 아님)+배포 해시 일치 / 해결=`@GetMapping("/books/{id:\\d+}")` 숫자 제한→비숫자 정적 폴백 200 / 부작용=POST /books/add 405→404(SsrMutationRemovedTest 갱신) / 회귀=GET /books/books.js→200·/books/not-a-number→404, 헤드리스는 /api 목이라 실 번들 URL 사각 N-112 / PR #450) |
+| 2026-06-22 | T-080 (SW가 에러 응답(500/503)을 `res.ok` 검사 없이 캐싱 → cache-first가 서버 fix 후에도 영구 서빙(self-heal 불가) — #450 라우트 충돌 시기 번들 500이 `shell-v5`에 캐싱된 사례 / 감별=fix 배포 후에도 fresh 503인데 캐시버스터 `?cb=1`는 200, `via`/`x-cache` 없으면 SW(`caches.match`의 `.status`로 확인) / 해결=① `put`에 `if(res.ok)` 가드 ② `CACHE` `shell-v5`→`v6`로 activate purge→피해자 다음 방문 자동복구, 개별 즉시복구=SW 해제+`caches.delete` / 예방=SW `put` 항상 `res.ok`, 검증은 실 브라우저 / T-071·T-075·N-101·N-112, PR #450 후속) |
