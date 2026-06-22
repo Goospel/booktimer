@@ -39,6 +39,11 @@ const apps = {
     dir: '../src/main/resources/static/block-list',
     entry: 'block-list.js',
   },
+  profile: {
+    input: 'src/profile/main.ts',
+    dir: '../src/main/resources/static/profile',
+    entry: 'profile.js',
+  },
 } as const;
 
 const cfg = apps[APP as keyof typeof apps] ?? apps.garden;
