@@ -242,7 +242,7 @@ onUnmounted(() => window.removeEventListener('popstate', onPopState));
                    @click.prevent="selectTab('shelf')">공개 책장</a>
 
                 <!-- 책BTI 패널 -->
-                <div v-if="activeTab === 'bti'" class="tab-panel panel-bti">
+                <div v-if="activeTab === 'bti'" class="panel-bti">
                     <!-- 태그 드릴다운 결과 패널 -->
                     <div v-if="tagPanel" class="tag-books-panel">
                         <div class="tag-books-head">
@@ -278,7 +278,7 @@ onUnmounted(() => window.removeEventListener('popstate', onPopState));
                 </div>
 
                 <!-- 공개 책장 패널 -->
-                <div v-else class="tab-panel panel-shelf">
+                <div v-else class="panel-shelf">
                     <!-- 상태 필터 칩 -->
                     <nav class="shelf-filter">
                         <a href="#" :class="{ active: shelfFilter === null }"
