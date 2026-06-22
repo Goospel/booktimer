@@ -4,7 +4,8 @@
 // 아이콘·manifest는 cache-first로 빠른 재사용.
 // HTML 내비게이션·API는 network-first — SSR·인증 응답이라 캐시에 개인 데이터 담지 않음.
 // 버전 상수: 기존 캐시 무효화용(activate에서 구 캐시 삭제).
-const CACHE = 'shell-v5';
+// v6: 라우트 충돌(#450) 시기에 번들 500이 cache-first로 영구 캐싱된 shell-v5를 purge.
+const CACHE = 'shell-v6';
 
 // 아이콘·manifest만 프리캐시 — 해시 자산(app.css·garden.js·pwa-install.js)은
 // 빌드 타임에 URL을 모르므로 프리캐시 대신 첫 요청 시 cache-first로 자동 캐시된다.
@@ -55,8 +56,12 @@ self.addEventListener('fetch', (event) => {
         caches.match(request).then((cached) => {
             if (cached) return cached;
             return fetch(request).then((res) => {
-                const clone = res.clone();
-                caches.open(CACHE).then((c) => c.put(request, clone));
+                // 2xx만 캐싱 — 500/503 등 에러 응답을 캐싱하면 cache-first가 그걸 영구 서빙해
+                // 서버를 고쳐도 stale 에러가 남는다(#450: 번들 /books/books-<hash>.js 500이 캐싱된 사례).
+                if (res.ok) {
+                    const clone = res.clone();
+                    caches.open(CACHE).then((c) => c.put(request, clone));
+                }
                 return res;
             });
         })
