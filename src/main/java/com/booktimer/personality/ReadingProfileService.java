@@ -64,7 +64,7 @@ public class ReadingProfileService {
         Set<Long> publicBookIds = publicFinished.stream()
                 .map(Book::getId)
                 .collect(Collectors.toSet());
-        List<ReadingSession> publicSessions = sessionRepository.findByUser(user).stream()
+        List<ReadingSession> publicSessions = sessionRepository.findByUserWithBook(user).stream()
                 .filter(s -> s.getBook() != null && publicBookIds.contains(s.getBook().getId()))
                 .toList();
         return ReadingProfileAggregator.aggregate(publicFinished, publicSessions);

@@ -18,6 +18,37 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
 
     List<ReadingSession> findByUser(User user);
 
+    /**
+     * 세션 전체를 책과 함께 즉시 로딩 — 트랜잭션 밖 매핑/렌더에서 lazy 예외 방지 + N+1 제거.
+     * LEFT join: book=null 레거시 세션도 보존(일자·시간 집계에 기여 — N-055 정신).
+     */
+    @Query("select s from ReadingSession s left join fetch s.book where s.user = :user")
+    List<ReadingSession> findByUserWithBook(@Param("user") User user);
+
+    /**
+     * 책별 누적 시간(초) — 완료·책지정 세션만 DB에서 GROUP BY 집계(세션 엔티티 미로딩).
+     * 진행 중(endedAt=null)·book=null 세션은 제외. PUBLIC·PRIVATE 모두 포함.
+     */
+    @Query("""
+            select new com.booktimer.session.BookSecondsRow(s.book.id, coalesce(sum(s.durationSeconds), 0))
+            from ReadingSession s
+            where s.user = :user and s.endedAt is not null and s.book is not null
+            group by s.book.id
+            """)
+    List<BookSecondsRow> sumSecondsByBook(@Param("user") User user);
+
+    /**
+     * 공개 집계(SNS) — PUBLIC 책 세션만(비공개 독서 시간 누출 방지, sns-design §3.5).
+     */
+    @Query("""
+            select new com.booktimer.session.BookSecondsRow(s.book.id, coalesce(sum(s.durationSeconds), 0))
+            from ReadingSession s
+            where s.user = :user and s.endedAt is not null and s.book is not null
+              and s.book.visibility = com.booktimer.book.BookVisibility.PUBLIC
+            group by s.book.id
+            """)
+    List<BookSecondsRow> sumSecondsByPublicBook(@Param("user") User user);
+
     /** 한 책에 연결된(그 책으로 측정한) 세션들 — 책별 상세(잔디·기록) 집계에 쓰인다. */
     List<ReadingSession> findByUserAndBook(User user, Book book);
 
