@@ -110,12 +110,14 @@ class SsrMutationRemovedTest {
     // ── books ────────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("POST /books/add → 405 (GET /books/{id} 패턴과 경로 충돌 — SSR POST 핸들러 제거됨)")
-    void booksAdd_removed_returns405() throws Exception {
+    @DisplayName("POST /books/add → 404 (SSR 핸들러 제거됨; /books/{id:\\d+} 숫자 제한으로 경로 충돌 해소)")
+    void booksAdd_removed_returns404() throws Exception {
+        // book-detail이 /books/{id:\d+}로 숫자만 받게 바뀌어 /books/add는 어떤 매핑에도 안 걸린다.
+        // (이전엔 미제한 /books/{id}가 경로를 매칭해 메서드 불일치로 405였음 — Vue 번들 충돌의 같은 뿌리)
         register("rm-badd@bt.com", "rmaddid", "rm추가자");
         mockMvc.perform(post("/books/add").param("title", "책")
                         .with(user("rm-badd@bt.com")).with(csrf()))
-                .andExpect(status().isMethodNotAllowed());
+                .andExpect(status().isNotFound());
     }
 
     @Test
