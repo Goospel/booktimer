@@ -75,7 +75,7 @@ class ReadingHistoryServiceTest {
         // 2026-06-01 KST 두 세션 (09:00 +30m 책A, 21:00 +1h 책B)
         Instant morning = Instant.parse("2026-06-01T00:00:00Z"); // 09:00 KST
         Instant evening = Instant.parse("2026-06-01T12:00:00Z"); // 21:00 KST
-        when(sessionRepository.findByUser(user)).thenReturn(List.of(
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(
                 sessionWithBook(user, morning, 1800L, a),
                 sessionWithBook(user, evening, HOUR, b)));
 
@@ -97,7 +97,7 @@ class ReadingHistoryServiceTest {
         Instant t1 = Instant.parse("2026-06-01T00:00:00Z");
         Instant t2 = Instant.parse("2026-06-01T03:00:00Z");
         Instant t3 = Instant.parse("2026-06-01T06:00:00Z");
-        when(sessionRepository.findByUser(user)).thenReturn(List.of(
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(
                 sessionWithBook(user, t1, HOUR, a),
                 sessionWithBook(user, t2, HOUR, a),   // 같은 책 — 중복 안 됨
                 sessionWithBook(user, t3, HOUR, b)));
@@ -115,7 +115,7 @@ class ReadingHistoryServiceTest {
         Instant day1 = Instant.parse("2026-06-01T01:00:00Z"); // 06-01 KST
         Instant day3 = Instant.parse("2026-06-03T01:00:00Z"); // 06-03 KST
         Instant day2 = Instant.parse("2026-06-02T01:00:00Z"); // 06-02 KST
-        when(sessionRepository.findByUser(user)).thenReturn(List.of(
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(
                 session(user, day1, HOUR),
                 session(user, day3, HOUR),
                 session(user, day2, HOUR)));
@@ -134,7 +134,7 @@ class ReadingHistoryServiceTest {
         User user = seoulUser();
         // 2026-06-01T15:30:00Z == 2026-06-02 00:30 KST → 유저 기준 06-02
         Instant lateUtc = Instant.parse("2026-06-01T15:30:00Z");
-        when(sessionRepository.findByUser(user)).thenReturn(List.of(
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(
                 session(user, lateUtc, HOUR)));
 
         List<DailyReadingRecord> history = service.dailyHistory(user);
@@ -149,7 +149,7 @@ class ReadingHistoryServiceTest {
         User user = seoulUser();
         ReadingSession active = ReadingSession.start(user, Instant.parse("2026-06-01T01:00:00Z")); // 미종료
         ReadingSession done = session(user, Instant.parse("2026-06-01T02:00:00Z"), HOUR);
-        when(sessionRepository.findByUser(user)).thenReturn(List.of(active, done));
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(active, done));
 
         List<DailyReadingRecord> history = service.dailyHistory(user);
 
@@ -164,7 +164,7 @@ class ReadingHistoryServiceTest {
         Book a = Book.register(user, "책A", null, null, null, null, null, BookStatus.READING);
         Instant t = Instant.parse("2026-05-20T03:00:00Z"); // 05-20 KST
         ReadingSession manual = ReadingSession.manual(user, t, t.plusSeconds(HOUR), a);
-        when(sessionRepository.findByUser(user)).thenReturn(List.of(manual));
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(manual));
 
         List<DailyReadingRecord> history = service.dailyHistory(user);
 
@@ -177,7 +177,7 @@ class ReadingHistoryServiceTest {
     void dailyHistory_realtimeDay_notManuallyFilled() {
         User user = seoulUser();
         Instant t = Instant.parse("2026-06-01T01:00:00Z");
-        when(sessionRepository.findByUser(user)).thenReturn(List.of(session(user, t, HOUR)));
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(session(user, t, HOUR)));
 
         List<DailyReadingRecord> history = service.dailyHistory(user);
 
@@ -188,7 +188,7 @@ class ReadingHistoryServiceTest {
     @DisplayName("기록이 없으면 빈 리스트")
     void dailyHistory_empty() {
         User user = seoulUser();
-        when(sessionRepository.findByUser(user)).thenReturn(List.of());
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of());
 
         assertThat(service.dailyHistory(user)).isEmpty();
     }
@@ -202,7 +202,7 @@ class ReadingHistoryServiceTest {
         Book pub = publicBook(user);
         Book priv = privateBook(user);
         Instant t = Instant.parse("2026-06-01T01:00:00Z"); // 06-01 KST
-        when(sessionRepository.findByUser(user)).thenReturn(List.of(
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(
                 sessionWithBook(user, t, HOUR, pub),   // 포함 (PUBLIC)
                 sessionWithBook(user, t, HOUR, priv),  // 제외 (PRIVATE — 간접 누출 방지)
                 session(user, t, HOUR)));              // 제외 (book=null — 공개 미명시 활동)
@@ -221,7 +221,7 @@ class ReadingHistoryServiceTest {
         User user = seoulUser();
         Book priv = privateBook(user);
         Instant t = Instant.parse("2026-06-01T01:00:00Z");
-        when(sessionRepository.findByUser(user)).thenReturn(List.of(
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(
                 sessionWithBook(user, t, HOUR, priv),
                 session(user, t, HOUR)));
 
@@ -235,7 +235,7 @@ class ReadingHistoryServiceTest {
     void monthlyHistory_groupsByMonthNewestFirst() {
         User user = seoulUser();
         // 6/2, 6/1, 5/20 (KST) — 입력 순서를 섞어 정렬을 검증한다
-        when(sessionRepository.findByUser(user)).thenReturn(List.of(
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(
                 session(user, Instant.parse("2026-05-20T01:00:00Z"), HOUR),
                 session(user, Instant.parse("2026-06-02T01:00:00Z"), HOUR),
                 session(user, Instant.parse("2026-06-01T01:00:00Z"), HOUR)));
@@ -254,7 +254,7 @@ class ReadingHistoryServiceTest {
     @DisplayName("monthlyHistory: 각 월 섹션은 그 달 총 독서 시간을 합산한다")
     void monthlyHistory_sumsMonthTotal() {
         User user = seoulUser();
-        when(sessionRepository.findByUser(user)).thenReturn(List.of(
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(
                 session(user, Instant.parse("2026-06-02T01:00:00Z"), HOUR),
                 session(user, Instant.parse("2026-06-01T01:00:00Z"), 1800L)));
 
@@ -270,7 +270,7 @@ class ReadingHistoryServiceTest {
     void monthlyHistory_monthBoundarySeparates() {
         User user = seoulUser();
         // 06-30 12:00 KST, 07-01 12:00 KST
-        when(sessionRepository.findByUser(user)).thenReturn(List.of(
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(
                 session(user, Instant.parse("2026-06-30T03:00:00Z"), HOUR),
                 session(user, Instant.parse("2026-07-01T03:00:00Z"), HOUR)));
 
@@ -285,7 +285,7 @@ class ReadingHistoryServiceTest {
     @DisplayName("monthlyHistory: 기록이 없으면 빈 리스트")
     void monthlyHistory_empty() {
         User user = seoulUser();
-        when(sessionRepository.findByUser(user)).thenReturn(List.of());
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of());
 
         assertThat(service.monthlyHistory(user)).isEmpty();
     }

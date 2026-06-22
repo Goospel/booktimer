@@ -1154,6 +1154,5 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
   책 테이블이 커지면 풀스캔.
 - **한 일**: `V12__book_isbn13_index.sql` — `create index ix_book_isbn13 on book (isbn13)`. 단일 컬럼(선택도 높은
   필터). 검증은 `FlywayMigrationTest`(격리 H2 적용 + Hibernate validate) 통과.
-- **안 한 것(의식적 보류)**: ① 잔디/기록 집계의 `findByUser`→lazy `getBook()` N+1 — 1차 캐시로 distinct 책 수만큼만
-  추가 쿼리라 효과 한계적(필요 시 `left join fetch`). ② `UserRowAssembler` 행당 count+isFollowing(1+3K) — 이미
+- **안 한 것(의식적 보류)**: ① ~~잔디/기록 집계의 `findByUser`→lazy `getBook()` N+1~~ — ✅ **PR-A 완료** (2026-06-22): `findByUserWithBook`(LEFT join fetch) + `sumSecondsByBook`/`sumSecondsByPublicBook`(DB GROUP BY) + 뮤테이션 단건 `secondsForBook`. ② `UserRowAssembler` 행당 count+isFollowing(1+3K) — 이미
   javadoc에 "현 규모 충분"으로 기록된 트레이드오프. ③ 중복 인덱스(`ix_book_user`·`ix_follow_*`=FK 자동인덱스와 겹침) — 무해.

@@ -315,6 +315,26 @@ class BookApiControllerTest {
                 .isEqualTo(BookStatus.FINISHED);
     }
 
+    // ── 10b. changeStatus 응답 seconds = 그 책의 누적 시간(단건 조회 — 전체 재집계 아님) ──
+
+    @Test
+    @DisplayName("POST /api/books/{id}/status: 응답 seconds는 해당 책의 누적 시간과 일치한다 (단건 집계 경로)")
+    void changeStatus_secondsMatchesBookTotal() throws Exception {
+        User me = register("sec@a.com", "secusr", "초확인");
+        Book book = addBook(me, "시간책", null, BookStatus.READING);
+        // 책에 완료 세션 1시간 추가
+        ReadingSession s = ReadingSession.start(me, java.time.Instant.now(), book);
+        s.end(java.time.Instant.now().plusSeconds(3600));
+        sessionRepository.save(s);
+
+        mockMvc.perform(post("/api/books/{id}/status", book.getId())
+                        .with(user("sec@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"FINISHED\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.seconds", is(3600)));
+    }
+
     // ── 11. changeStatus IDOR → 404 (csrf() 필수 — 없으면 403이 IDOR 가드를 가림) ──
 
     @Test

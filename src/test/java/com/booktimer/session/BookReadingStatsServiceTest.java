@@ -1,7 +1,5 @@
 package com.booktimer.session;
 
-import com.booktimer.book.Book;
-import com.booktimer.book.BookStatus;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import org.junit.jupiter.api.DisplayName;
@@ -11,8 +9,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.lang.reflect.Field;
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -22,8 +18,9 @@ import static org.mockito.Mockito.when;
 /**
  * BookReadingStatsService 단위 테스트 (Mockito — DB/컨텍스트 무관).
  *
- * <p>책별 누적 시간을 집계하되, 프로필(SNS 2단계)용 공개 집계는 <b>PUBLIC 책만</b> 센다(sns-design §3.5).
- * 책 id가 필요한 검증이라 영속성 없이 리플렉션으로 id를 심는다(엔티티 setter 없음).
+ * <p>서비스는 DB GROUP BY 집계({@link ReadingSessionRepository#sumSecondsByBook} /
+ * {@link ReadingSessionRepository#sumSecondsByPublicBook})를 위임받아 {@code Map<Long,Long>}으로
+ * 변환만 한다. 필터 진실(완료·책지정·PUBLIC 조건)은 {@link ReadingSessionRepositoryTest}(@DataJpaTest)가 담당.
  */
 @ExtendWith(MockitoExtension.class)
 class BookReadingStatsServiceTest {
@@ -40,39 +37,37 @@ class BookReadingStatsServiceTest {
         return User.of("reader@booktimer.com", "$2a$10$abcdefghijklmnopqrstuv", "책벌레", "Asia/Seoul", Role.USER);
     }
 
-    /** 영속성 없이 Book.id를 심는다(JPA가 채우는 PK를 단위테스트에서 흉내). */
-    private Book bookWithId(User owner, long id, boolean isPublic) {
-        Book b = Book.register(owner, "책-" + id, null, null, null, null, null, BookStatus.READING);
-        if (isPublic) {
-            b.makePublic();
-        }
-        try {
-            Field f = Book.class.getDeclaredField("id");
-            f.setAccessible(true);
-            f.set(b, id);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException(e);
-        }
-        return b;
-    }
+    @Test
+    @DisplayName("totalSecondsByBook: sumSecondsByBook 결과를 bookId→seconds 맵으로 변환한다")
+    void totalSecondsByBook_mapsRows() {
+        User u = user();
+        when(sessionRepository.sumSecondsByBook(u))
+                .thenReturn(List.of(new BookSecondsRow(1L, HOUR), new BookSecondsRow(2L, 1800L)));
 
-    private ReadingSession sessionWithBook(User user, Instant start, long durationSeconds, Book book) {
-        ReadingSession s = ReadingSession.start(user, start, book);
-        s.end(start.plusSeconds(durationSeconds));
-        return s;
+        Map<Long, Long> totals = service.totalSecondsByBook(u);
+
+        assertThat(totals).containsEntry(1L, HOUR).containsEntry(2L, 1800L);
     }
 
     @Test
-    @DisplayName("publicTotalSecondsByBook: PUBLIC 책만 집계하고 PRIVATE 책·책 미지정 세션은 제외한다")
-    void publicTotalSecondsByBook_onlyPublicBooks() {
+    @DisplayName("totalSecondsByBook: seconds=null인 row는 0으로 폴백한다")
+    void totalSecondsByBook_nullSecondsFallbackZero() {
         User u = user();
-        Book pub = bookWithId(u, 1L, true);
-        Book priv = bookWithId(u, 2L, false);
-        Instant t = Instant.parse("2026-06-01T01:00:00Z");
-        when(sessionRepository.findByUser(u)).thenReturn(List.of(
-                sessionWithBook(u, t, HOUR, pub),     // 포함
-                sessionWithBook(u, t, HOUR, priv),    // 제외 (PRIVATE)
-                ReadingSession.start(u, t)));          // 제외 (book=null, 진행 중)
+        when(sessionRepository.sumSecondsByBook(u))
+                .thenReturn(List.of(new BookSecondsRow(1L, null)));
+
+        Map<Long, Long> totals = service.totalSecondsByBook(u);
+
+        assertThat(totals).containsEntry(1L, 0L);
+    }
+
+    @Test
+    @DisplayName("publicTotalSecondsByBook: sumSecondsByPublicBook 결과를 맵으로 변환하고 PUBLIC 아닌 책은 포함되지 않는다")
+    void publicTotalSecondsByBook_mapsPublicOnlyRows() {
+        User u = user();
+        // 필터는 repo 테스트가 담당 — 여기선 서비스가 rows→Map 매핑을 올바르게 하는지만 검증
+        when(sessionRepository.sumSecondsByPublicBook(u))
+                .thenReturn(List.of(new BookSecondsRow(1L, HOUR)));
 
         Map<Long, Long> totals = service.publicTotalSecondsByBook(u);
 
