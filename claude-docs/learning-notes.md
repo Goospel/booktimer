@@ -113,6 +113,7 @@
 - [N-110. LLM 동기 뮤테이션을 섬에서 — 폴링 없이 응답에 갱신 view를 실어 재조회 회피](#n-110-llm-동기-뮤테이션을-섬에서--폴링-없이-응답에-갱신-view를-실어-재조회-회피)
 - [N-111. API DTO에서 enum·시각 문자열 평탄화 — 클라이언트에 ZoneId·enum 상수 노출 안 함](#n-111-api-dto에서-enumsyak-문자열-평탄화--클라이언트에-zoneidlenum-상수-노출-안-함)
 - [N-112. Spring 핸들러 매핑 우선순위 — 컨트롤러 경로변수가 정적 자산을 가로챈다](#n-112-spring-핸들러-매핑-우선순위--컨트롤러-경로변수가-정적-자산을-가로챈다)
+- [N-113. 전역 폼 컨트롤 width 100%와 flex 레이아웃 — form 래퍼가 가렸던 회귀가 SPA 전환으로 노출](#n-113-전역-폼-컨트롤-width-100와-flex-레이아웃--form-래퍼가-가렸던-회귀가-spa-전환으로-노출)
 
 ---
 
@@ -5370,3 +5371,56 @@ mockMvc.perform(get("/books/not-a-number").with(user(...))).andExpect(status().i
 - **T-079** — 이 버그의 재발방지 절차(감별·해결).
 - **N-083** — defer×TDZ 등 헤드리스가 못 잡는 클라이언트 로드 사각.
 - **T-062** — 번들 미커밋 404(누락) ↔ 본 건은 충돌 503.
+
+---
+
+## N-113. 전역 폼 컨트롤 width 100%와 flex 레이아웃 — form 래퍼가 가렸던 회귀가 SPA 전환으로 노출
+
+> **한 줄 요약**: 전역 `button{width:100%}`는 직계 부모(포함 블록) 폭 기준이다. SSR 땐 액션 버튼이 각자
+> 작은 `<form>` 래퍼 안에 있어 그 폭에 갇혀 내용폭처럼 작게 보였는데, SPA 전환으로 `<form>`을 없애 버튼이
+> flex-row 컨테이너의 직계 자식이 되자 `width:100%`를 컨테이너 폭으로 받아 풀폭으로 터지고 `flex-wrap`에서
+> 한 줄씩 세로로 쌓였다. flex-row 컨테이너의 직계 폼버튼에는 `width:auto` 상쇄가 필요하다.
+
+### 문제 / 배경
+
+`/books`를 Vue로 전환한 뒤 책 행의 액션(공개토글·삭제)이 풀폭으로 세로 배열됐다. CSS·클래스명은 전환 전후
+거의 동일한데도 깨졌다 — 진짜 차이는 **마크업 구조**였다. SSR(Thymeleaf)은 상태변경·공개토글·삭제를 각각
+`<form method=post>`로 감쌌고, Vue(fetch)는 그 `<form>`이 불필요해 `<button>`을 `.book-actions`에 직접 뒀다.
+
+전역 베이스 규칙 `button, .btn { width: 100%; }`의 `width:100%`는 **포함 블록(직계 부모) 폭** 기준이다:
+
+- **SSR**: `.book-actions(flex) > form(flex item, 내용폭) > button(width:100% = 작은 form 폭)` → 버튼이
+  "삭제" 글자 크기로 렌더. form이 폭을 가둬 *우연히* 정상으로 보였다.
+- **Vue**: `.book-actions(flex) > button(직계 flex item, width:100% = .book-actions 폭)` → 각 버튼이 풀폭 →
+  `flex-wrap`이 한 줄에 하나씩 내려 세로로 쌓임.
+
+같은 행의 `<select>`는 `button`이 아니라 `width:100%`를 안 받아 멀쩡했고(작게), 풀폭으로 터진 건 정확히
+`<button>`(공개토글·삭제)뿐이라 증상이 "일부만 깨짐"으로 보였다.
+
+### 해법
+
+flex-row 컨테이너의 직계 폼버튼에 `width:auto`로 전역 규칙을 상쇄한다(이미 코드 곳곳의 검증된 패턴 — chip·pill·book-add-form):
+
+```css
+.book-actions > button { width: auto; }                  /* books·follow-list·book-readers·block-list·search 공용 */
+.profile-follow .profile-actions button { width: auto; } /* profile 팔로우·차단 */
+```
+
+공용 셸(`UserRow`가 `.book-actions`를 씀)을 거치면 한 규칙이 여러 페이지를 동시에 고친다.
+
+### 회귀가 아닌 경우 — block 컨테이너
+
+`.timer-controls`(대시보드 측정 시작/종료)는 **block 컨테이너**라 SSR(form)·Vue 모두 버튼이 풀폭이다 — 이건
+원래 의도된 CTA 디자인이라 회귀가 아니다. 회귀는 **flex-row 컨테이너에서 여러 버튼이 나란히 와야 하는데**
+각자 풀폭이 될 때만 발생한다.
+
+| 컨테이너 | width:100% 버튼 | 처리 |
+|---|---|---|
+| flex-row, 버튼 여럿 나란히 | 풀폭으로 터져 세로 쌓임(회귀) | 직계 버튼에 `width:auto` |
+| block, 단일 CTA | 풀폭이 의도 | 그대로 |
+
+### 관련
+
+- **T-081** — 이 회귀의 재발방지 절차(감별·해결).
+- **N-112** — 같은 #447 books 전환에서 나온 다른 회귀(라우트 충돌).
+- **N-032** — 멀티세션/구조 변경이 잠복 회귀를 폭로하는 패턴.
