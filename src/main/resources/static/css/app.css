@@ -535,6 +535,23 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     .highlight-actions { grid-template-columns: 1fr; }
 }
 
+/* === 대시보드 세로 스택 — 간격 일원화 (간격 책임을 컨테이너 gap으로) ===
+   #dashboard-app 직계 자식(QuoteCard·TimerCard·QuickNav 2nav·잔디·GardenPanel·logout)은
+   Vue fragment라 wrapper 없이 평탄하게 놓인다. SSR→Vue 분할로 "바깥 간격을 누가 책임지나"가
+   각 자식의 개별 마진(.greeting 20 / .highlight-actions 14 / .quick-actions 0 / .card 16 /
+   .logout-form 18)으로 흩어져, quick-actions↔잔디카드가 0px로 붙고 리듬이 20·16·14·0·16·18로
+   들쭉날쭉했다. gap 한 규칙으로 사이를 균일 16px로 잡고, 직계 자식의 수직 마진을 0으로 리셋해
+   이중-간격을 막는다. 스코프가 #dashboard-app 안이라 같은 공유 클래스를 쓰는 다른 페이지엔 영향 0. */
+#dashboard-app {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+#dashboard-app > * {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
 /* 일자별 독서 기록 리스트 */
 .record-list { list-style: none; margin: 0; padding: 0; }
 .record-row {
