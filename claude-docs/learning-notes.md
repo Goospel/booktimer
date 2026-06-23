@@ -114,6 +114,7 @@
 - [N-111. API DTO에서 enum·시각 문자열 평탄화 — 클라이언트에 ZoneId·enum 상수 노출 안 함](#n-111-api-dto에서-enumsyak-문자열-평탄화--클라이언트에-zoneidlenum-상수-노출-안-함)
 - [N-112. Spring 핸들러 매핑 우선순위 — 컨트롤러 경로변수가 정적 자산을 가로챈다](#n-112-spring-핸들러-매핑-우선순위--컨트롤러-경로변수가-정적-자산을-가로챈다)
 - [N-113. 전역 폼 컨트롤 width 100%와 flex 레이아웃 — form 래퍼가 가렸던 회귀가 SPA 전환으로 노출](#n-113-전역-폼-컨트롤-width-100와-flex-레이아웃--form-래퍼가-가렸던-회귀가-spa-전환으로-노출)
+- [N-114. clear 안 된 float 형제가 다음 block grid를 min-content로 짓누름 — block은 fill, grid는 안 됨](#n-114-clear-안-된-float-형제가-다음-block-grid를-min-content로-짓누름--block은-fill-grid는-안-됨)
 
 ---
 
@@ -5424,3 +5425,45 @@ flex-row 컨테이너의 직계 폼버튼에 `width:auto`로 전역 규칙을 �
 - **T-081** — 이 회귀의 재발방지 절차(감별·해결).
 - **N-112** — 같은 #447 books 전환에서 나온 다른 회귀(라우트 충돌).
 - **N-032** — 멀티세션/구조 변경이 잠복 회귀를 폭로하는 패턴.
+
+---
+
+## N-114. clear 안 된 float 형제가 다음 block grid를 min-content로 짓누름 — block은 fill, grid는 안 됨
+
+> **한 줄 요약**: `float:left` 자식만 담은 컨테이너가 clear 없이 collapse(높이 0)하면 그 float가 다음 형제
+> 영역으로 흘러든다. 이때 다음 형제가 `display:block`이면 가용폭을 채우지만(fill), **block-level grid면
+> stretch가 아니라 min-content로 붕괴**한다 — 그래서 같은 깨진 컨텍스트에서 카드(block)는 멀쩡하고 grid만 짓눌린다.
+
+### 문제 / 배경
+
+책방 Vue 탭에서 탭 링크 다음 형제인 `.link-row`(block grid, `grid-template-columns:repeat(2,1fr)`)가
+컨테이너 460px가 아니라 ~25px로 짓눌렸다. 같은 부모의 형제 `.card`(block)는 460 정상. CSS·클래스는 멀쩡,
+부모도 460px. 원인은 탭 링크 `.record-tab{float:left;width:50%}` — 라디오 CSS 탭에서 패널이 `:checked ~
+.panel{clear:both}`로 float를 clear했는데, JS(v-if) 탭으로 옮기며 그 `clear`를 잃어 `.record-card`가 collapse했다.
+
+### 해법 / 개념
+
+- **float collapse**: 부모가 float 자식만 담고 명시 높이가 없으면 높이 0으로 collapse하고, float는 부모 밖으로
+  흘러 다음 형제와 겹친다. clear(또는 BFC: `overflow`/`display:flow-root`)가 부모에게 float 높이를 되돌려준다.
+- **block vs block-level grid의 auto inline-size**: containing block이 *indefinite*(명시 px 없는 auto/percentage
+  체인)일 때, block-level box는 가용폭을 채우는(fill/stretch) 반면 **block-level grid container는 stretch-fit이
+  아니라 min-content로 떨어진다**. 그래서 카드(block)는 460을 채우고 link-row(grid)만 min-content(~25px)로 붕괴하는
+  비대칭이 나온다 — "일부만 깨짐"의 정체.
+- **처방 두 갈래**: ① float를 clear해 부모 collapse를 막으면 다음 형제가 정상 흐름으로 복귀(근본). ② grid에
+  `width:100%`/`min-width:100%`를 줘 used 폭으로 강제(grid만 가리는 반창고 — 패널 흐름·collapse는 그대로).
+
+### 예시
+
+| containing block width | block 자식 | block-level grid 자식 |
+|---|---|---|
+| definite (px) | fill | stretch (정상) |
+| indefinite (auto / %) | fill | **min-content (붕괴)** |
+
+> 디버깅 팁: 깨진 grid를 DOM에서 떼 `width:460px` 고정 div에 넣어 정상화되면 "부모가 폭을 못 주는" 문제,
+> float 형제를 제거했을 때 펴지면 float collapse가 범인이다.
+
+### 관련
+
+- **T-082** — 이 회귀의 재발방지(라디오 CSS탭 → JS 탭 전환 시 clear·display·active 경로 누락).
+- **N-113** — 같은 SPA 전환에서 전역 `button{width:100%}`×flex가 form 래퍼 소실로 폭로된 자매 사례.
+- **N-032** — 구조 변경(래퍼 추가/제거)이 잠복 레이아웃 가정을 폭로하는 패턴.
