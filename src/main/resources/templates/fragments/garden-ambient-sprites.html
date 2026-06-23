@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<!--
+  마을 여백 앰비언트 SVG 스프라이트 — 줌아웃 시 물 위 void를 채우는 배경 장식.
+  기존 garden-decor-sprites.html 패턴 복제. amb_ 접두로 소품 code 네임스페이스와 충돌 0.
+  4종: 작은 모래 섬(amb_island), 물 위 바위(amb_rock), 나무(amb_tree), 수련(amb_lily).
+  물 톤(#6FA8C7 베이스)과 어울리는 채도 낮은 색조. viewBox 0 0 32 32.
+-->
+<svg th:fragment="sprites" class="garden-sprite-defs" width="0" height="0" aria-hidden="true"
+     focusable="false" xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden">
+    <defs>
+        <!-- 작은 모래 섬 — 모래톱(베이지) + 풀 한 줌 -->
+        <symbol id="sprite-amb_island" viewBox="0 0 32 32">
+            <!-- 물 그림자 -->
+            <ellipse cx="16" cy="26" rx="11" ry="4" fill="#5A9ABF" opacity="0.4"/>
+            <!-- 모래톱 -->
+            <ellipse cx="16" cy="23" rx="10" ry="4.5" fill="#D4B896"/>
+            <ellipse cx="16" cy="21.5" rx="8" ry="3.2" fill="#E0C9A8"/>
+            <!-- 풀 -->
+            <ellipse cx="12" cy="19" rx="2.5" ry="3.2" fill="#7A9E5A" transform="rotate(-12 12 19)"/>
+            <ellipse cx="16" cy="17.5" rx="2" ry="3.5" fill="#8BAE66"/>
+            <ellipse cx="20" cy="19.5" rx="2.2" ry="2.8" fill="#7A9E5A" transform="rotate(10 20 19.5)"/>
+        </symbol>
+
+        <!-- 물 위 바위 무리 — 회색 덩어리 2~3개 + 물결 림 -->
+        <symbol id="sprite-amb_rock" viewBox="0 0 32 32">
+            <!-- 물결 림 -->
+            <ellipse cx="16" cy="24" rx="10" ry="3" fill="none" stroke="#5A9ABF" stroke-width="0.8" opacity="0.5"/>
+            <!-- 뒤 바위 -->
+            <ellipse cx="19" cy="21" rx="5" ry="3.5" fill="#8C8C82"/>
+            <ellipse cx="19" cy="20" rx="4.5" ry="2.8" fill="#A9A99F"/>
+            <!-- 앞 바위 -->
+            <ellipse cx="13" cy="23" rx="6" ry="4" fill="#8C8C82"/>
+            <ellipse cx="13" cy="21.5" rx="5.5" ry="3" fill="#B7B7AD"/>
+            <!-- 작은 돌 -->
+            <ellipse cx="22" cy="23.5" rx="2.5" ry="1.8" fill="#9A9A90"/>
+        </symbol>
+
+        <!-- 나무 한 그루 — 발밑 origin 기준(y≈30 바닥), footAnchored=true -->
+        <symbol id="sprite-amb_tree" viewBox="0 0 32 32">
+            <!-- 그림자 -->
+            <ellipse cx="16" cy="29.5" rx="5" ry="1.8" fill="#4A7A3A" opacity="0.25"/>
+            <!-- 줄기 -->
+            <rect x="14.5" y="20" width="3" height="10" rx="1.5" fill="#8B6443"/>
+            <!-- 수관 아래 -->
+            <ellipse cx="16" cy="20" rx="8" ry="7" fill="#5A8A42"/>
+            <!-- 수관 위 -->
+            <ellipse cx="16" cy="14" rx="6" ry="6" fill="#6A9E50"/>
+            <!-- 수관 하이라이트 -->
+            <ellipse cx="14" cy="12" rx="3" ry="2.5" fill="#7AB85E" opacity="0.6"/>
+        </symbol>
+
+        <!-- 수련잎 + 꽃 — 물 위 녹색 원반 2~3장 -->
+        <symbol id="sprite-amb_lily" viewBox="0 0 32 32">
+            <!-- 뒤 수련잎 -->
+            <ellipse cx="20" cy="20" rx="7" ry="4.5" fill="#5A8A42" opacity="0.8"/>
+            <line x1="20" y1="15.5" x2="20" y2="24.5" stroke="#4A7A32" stroke-width="0.6" opacity="0.6"/>
+            <!-- 앞 수련잎 -->
+            <ellipse cx="12" cy="23" rx="7.5" ry="4.8" fill="#6A9E52"/>
+            <line x1="12" y1="18.2" x2="12" y2="27.8" stroke="#4A7A32" stroke-width="0.6" opacity="0.6"/>
+            <!-- 꽃 -->
+            <circle cx="19" cy="17.5" r="2.5" fill="#F9E4EE"/>
+            <circle cx="19" cy="17.5" r="1.2" fill="#F5C8D8"/>
+            <circle cx="19" cy="17.5" r="0.5" fill="#E8A0BA"/>
+        </symbol>
+    </defs>
+</svg>

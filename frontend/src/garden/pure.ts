@@ -125,6 +125,44 @@ export function nearestFreeCell(
     return null;
 }
 
+// ── 여백 앰비언트 장식 — 마름모 판정 + 결정적 배치표 ──
+
+// 화면-norm 점이 아이소 마름모(놀이 가능 격자) 안인가 — 여백 장식이 섬을 침범하지 않게.
+// 마름모: |sx-0.5|/0.5 + |sy-0.5|/(0.5·f) <= 1 (대각선 가로 1.0, 세로 f).
+export function isInsideDiamond(sx: number, sy: number, f = ISO_FLATTEN): boolean {
+    return Math.abs(sx - 0.5) / 0.5 + Math.abs(sy - 0.5) / (0.5 * f) <= 1;
+}
+
+export type AmbientKind = 'island' | 'rock' | 'tree' | 'lily';
+
+export interface AmbientDecor {
+    sx: number;          // 화면-norm x [0,1]
+    sy: number;          // 화면-norm y [0,1]
+    spriteId: string;    // <symbol id="sprite-{spriteId}">
+    kind: AmbientKind;
+    sizeFactor: number;  // plantPx 대비 배수
+    footAnchored: boolean; // true=발밑 origin(0.5,1, 나무), false=중심(0.5,0.5, 물 위 바위·섬·수련)
+}
+
+// 여백(void) 큐레이션 배치 — 결정적(상수). 4개 코너 삼각형 + 상/하 중앙 띠에 분산.
+// 불변식(테스트): 모든 항목이 마름모 밖 + [INSET,1-INSET] 안(containZoom서 안 잘림).
+export const AMBIENT_INSET = 0.04;
+export const AMBIENT_DECOR: ReadonlyArray<AmbientDecor> = [
+    // 상단 좌/우 코너 (sy<0.25 영역 + 좌우 코너)
+    { sx: 0.12, sy: 0.10, spriteId: 'amb_island', kind: 'island', sizeFactor: 1.8, footAnchored: false },
+    { sx: 0.50, sy: 0.07, spriteId: 'amb_rock',   kind: 'rock',   sizeFactor: 0.8, footAnchored: false },
+    { sx: 0.86, sy: 0.12, spriteId: 'amb_tree',   kind: 'tree',   sizeFactor: 1.2, footAnchored: true  },
+    // 좌/우 코너 (마름모 좌우 꼭짓점 위/아래 바깥)
+    { sx: 0.08, sy: 0.22, spriteId: 'amb_rock',   kind: 'rock',   sizeFactor: 0.7, footAnchored: false },
+    { sx: 0.93, sy: 0.30, spriteId: 'amb_lily',   kind: 'lily',   sizeFactor: 0.6, footAnchored: false },
+    { sx: 0.07, sy: 0.74, spriteId: 'amb_lily',   kind: 'lily',   sizeFactor: 0.6, footAnchored: false },
+    { sx: 0.92, sy: 0.72, spriteId: 'amb_island', kind: 'island', sizeFactor: 1.5, footAnchored: false },
+    // 하단 좌/우/중앙 (sy>0.75)
+    { sx: 0.16, sy: 0.90, spriteId: 'amb_tree',   kind: 'tree',   sizeFactor: 1.3, footAnchored: true  },
+    { sx: 0.50, sy: 0.93, spriteId: 'amb_rock',   kind: 'rock',   sizeFactor: 0.9, footAnchored: false },
+    { sx: 0.84, sy: 0.90, spriteId: 'amb_island', kind: 'island', sizeFactor: 1.6, footAnchored: false },
+];
+
 // ── C2 배회 AI — 순수 상태머신. DOM·Phaser 의존 0. rand 주입으로 결정성 보장. ──
 
 const WANDER_ARRIVAL_EPS = 0.01;   // 도달 판정 정규화 거리

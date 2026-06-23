@@ -9,6 +9,7 @@ import {
     isOutsideWorld, resolveDrop, nearestFreeCell,
     WanderState, wanderStep,
     walkPose, WALK_STEP_MS,
+    AMBIENT_DECOR,
 } from './pure';
 
 export interface GardenItemMeta {
@@ -86,11 +87,13 @@ export class GardenScene extends Phaser.Scene {
         for (const o of this.cfg.owned) loadTex(o.spriteId);
         for (const d of (this.cfg.decorations || [])) loadTex(d.spriteId);
         for (const c of (this.cfg.characters || [])) loadTex(c.spriteId);
+        for (const d of AMBIENT_DECOR) loadTex(d.spriteId);
     }
 
     create() {
         this.plantPx = plantWorldSize(this.cfg.worldW, GRID_COLS);
         this.drawBackground();
+        this.drawAmbientDecor();
         if (!this.cfg.readonly) this.drawGrid();
         this.shadowLayer = this.add.graphics();
         this.shadowLayer.setDepth(0.6);
@@ -289,7 +292,7 @@ export class GardenScene extends Phaser.Scene {
         const g = this.add.graphics();
         this.bg = g;
         g.setDepth(0);
-        g.fillStyle(hex(css('--garden-sky')) || 0xDCEAF0);
+        g.fillStyle(hex(css('--garden-water')) || 0x6FA8C7);
         g.fillRect(0, 0, W, H);
         const diamondVerts = [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}];
         const corners = diamondVerts.map(v => {
@@ -297,6 +300,21 @@ export class GardenScene extends Phaser.Scene {
         });
         g.fillStyle(hex(css('--garden-grass')) || 0xCADDB2);
         g.fillPoints(corners, true);
+    }
+
+    drawAmbientDecor() {
+        const W = this.cfg.worldW, H = this.cfg.worldH;
+        for (const d of AMBIENT_DECOR) {
+            const px = d.sx * W, py = d.sy * H;
+            const size = this.plantPx * d.sizeFactor;
+            if (!this.textures.exists('tex-' + d.spriteId)) continue;
+            const obj = this.add.image(px, py, 'tex-' + d.spriteId)
+                    .setOrigin(0.5, d.footAnchored ? 1 : 0.5)
+                    .setDisplaySize(size, size);
+            // 객체(depth≥1) 아래 전용 밴드 — grid(0.5)·shadow(0.6)보다도 아래.
+            obj.setDepth(0.1 + 0.3 * (py / H));
+            // this.objs에 넣지 않는다(격자·저장·배회와 격리).
+        }
     }
 
     drawGrid() {
