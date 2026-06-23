@@ -14,6 +14,7 @@ import {
     WalkPose, walkPose,
     WALK_BOB_PX, WALK_TILT_DEG, WALK_SQUASH, WALK_STEP_MS,
     IDLE_BREATH_MS, IDLE_BREATH, FLIP_DEADZONE,
+    isInsideDiamond, AMBIENT_INSET, AMBIENT_DECOR,
 } from '../src/garden/pure';
 
 const W = 1000, H = 640;
@@ -471,6 +472,81 @@ describe('garden pure.ts', () => {
                 expect(p.scaleY).toBeGreaterThanOrEqual(1 - IDLE_BREATH - 1e-9);
                 expect(p.scaleY).toBeLessThanOrEqual(1 + IDLE_BREATH + 1e-9);
             }
+        });
+    });
+
+    // 여백 앰비언트 장식 — 마름모 판정 + AMBIENT_DECOR 배치 불변식
+    describe('isInsideDiamond', () => {
+        test('중심 (0.5,0.5) → true', () => expect(isInsideDiamond(0.5, 0.5)).toBe(true));
+
+        test('마름모 꼭짓점 상(0.5,0.25) → true (경계)', () =>
+            expect(isInsideDiamond(0.5, 0.25)).toBe(true));
+        test('마름모 꼭짓점 우(1.0,0.5) → true (경계)', () =>
+            expect(isInsideDiamond(1.0, 0.5)).toBe(true));
+        test('마름모 꼭짓점 하(0.5,0.75) → true (경계)', () =>
+            expect(isInsideDiamond(0.5, 0.75)).toBe(true));
+        test('마름모 꼭짓점 좌(0.0,0.5) → true (경계)', () =>
+            expect(isInsideDiamond(0.0, 0.5)).toBe(true));
+
+        test('사각형 코너 (0,0) → false (void)', () => expect(isInsideDiamond(0, 0)).toBe(false));
+        test('사각형 코너 (1,0) → false (void)', () => expect(isInsideDiamond(1, 0)).toBe(false));
+        test('사각형 코너 (0,1) → false (void)', () => expect(isInsideDiamond(0, 1)).toBe(false));
+        test('사각형 코너 (1,1) → false (void)', () => expect(isInsideDiamond(1, 1)).toBe(false));
+
+        test('확실히 안쪽 (0.5,0.4) → true', () => expect(isInsideDiamond(0.5, 0.4)).toBe(true));
+        test('확실히 바깥쪽 (0.1,0.1) → false', () => expect(isInsideDiamond(0.1, 0.1)).toBe(false));
+    });
+
+    describe('AMBIENT_DECOR 불변식', () => {
+        const VALID_KINDS = new Set(['island', 'rock', 'tree', 'lily']);
+
+        test('배열 비어있지 않음', () => expect(AMBIENT_DECOR.length).toBeGreaterThan(0));
+
+        test('모든 항목이 마름모 밖 (섬 침범 없음)', () => {
+            for (const d of AMBIENT_DECOR) {
+                expect(isInsideDiamond(d.sx, d.sy),
+                    `${d.spriteId}(${d.sx},${d.sy})가 마름모 안에 있음`).toBe(false);
+            }
+        });
+
+        test('모든 항목 sx ∈ [INSET, 1-INSET] (containZoom에서 안 잘림)', () => {
+            for (const d of AMBIENT_DECOR) {
+                expect(d.sx, `${d.spriteId} sx=${d.sx} < INSET`).toBeGreaterThanOrEqual(AMBIENT_INSET);
+                expect(d.sx, `${d.spriteId} sx=${d.sx} > 1-INSET`).toBeLessThanOrEqual(1 - AMBIENT_INSET);
+            }
+        });
+
+        test('모든 항목 sy ∈ [INSET, 1-INSET] (containZoom에서 안 잘림)', () => {
+            for (const d of AMBIENT_DECOR) {
+                expect(d.sy, `${d.spriteId} sy=${d.sy} < INSET`).toBeGreaterThanOrEqual(AMBIENT_INSET);
+                expect(d.sy, `${d.spriteId} sy=${d.sy} > 1-INSET`).toBeLessThanOrEqual(1 - AMBIENT_INSET);
+            }
+        });
+
+        test('모든 항목 sizeFactor > 0', () => {
+            for (const d of AMBIENT_DECOR) {
+                expect(d.sizeFactor, `${d.spriteId} sizeFactor`).toBeGreaterThan(0);
+            }
+        });
+
+        test('모든 항목 spriteId 비어있지 않음', () => {
+            for (const d of AMBIENT_DECOR) {
+                expect(d.spriteId.length, `spriteId 빈 문자열`).toBeGreaterThan(0);
+            }
+        });
+
+        test('모든 항목 kind 유효', () => {
+            for (const d of AMBIENT_DECOR) {
+                expect(VALID_KINDS.has(d.kind), `${d.kind} 유효하지 않은 kind`).toBe(true);
+            }
+        });
+
+        test('분산 가드: 상단(sy<0.4)에 최소 1개', () => {
+            expect(AMBIENT_DECOR.some(d => d.sy < 0.4)).toBe(true);
+        });
+
+        test('분산 가드: 하단(sy>0.6)에 최소 1개', () => {
+            expect(AMBIENT_DECOR.some(d => d.sy > 0.6)).toBe(true);
         });
     });
 });
