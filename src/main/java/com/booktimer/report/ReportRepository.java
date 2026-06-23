@@ -1,6 +1,7 @@
 package com.booktimer.report;
 
 import com.booktimer.user.User;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -16,6 +17,7 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
      * 관리자 신고함 — 최신순 전체 조회(운영자가 후속 처리하려고 본다).
      * id 내림차순을 tiebreak으로 둔다 — 같은 초에 들어온 신고도 결정적으로 최신순 정렬(createdAt 동률 방지).
      */
+    @EntityGraph(attributePaths = {"reporter", "reported"})
     List<Report> findAllByOrderByCreatedAtDescIdDesc();
 
     /** 회원 탈퇴 정리 — 내가 한 신고와 나를 향한 신고를 모두 제거한다. */
