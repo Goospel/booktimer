@@ -1661,14 +1661,21 @@ return fetch(request).then((res) => {
 
 **감별**: `gh pr checks <PR>` 단발 호출이 `no checks reported`면 아직 미등록(머지 충돌로 DIRTY일 때도 체크가 안 붙을 수 있으니 `gh pr view <PR> --json mergeStateStatus`로 DIRTY 여부 먼저 배제).
 
-**해결**: watch 전에 등록을 폴링한다 — `gh pr checks <PR>`가 `no checks`를 안 뱉을 때까지 짧게 sleep 반복 후 `--watch`. 한 줄 예:
+**⚠️ 자주 재발 — DIRTY 오진 함정**: `no checks reported` 를 "등록 중" 으로 오해하고 sleep-폴링 루프에 들어가면, PR이 DIRTY(충돌) 상태이면 CI가 **영영** 안 붙어서 타임아웃 없이 무한 대기한다. DIRTY면 먼저 `git rebase origin/main` + `git push --force-with-lease` 로 충돌을 풀어야 CI가 돌기 시작한다.
+
+**해결**: watch 전에 반드시 `mergeStateStatus` 를 확인하고, DIRTY면 재base 후 재진행한다. CI 등록 대기가 필요한 경우에만 sleep-폴링:
 ```bash
 for i in $(seq 1 30); do gh pr checks <PR> 2>&1 | grep -q 'no checks' && sleep 20 || break; done
 gh pr checks <PR> --watch --interval 30 && gh pr merge <PR> --squash --delete-branch
 ```
 (Bash 도구는 foreground sleep을 막으니 이 루프는 `run_in_background`로 실행)
 
-**예방**: `push → checks --watch → merge`를 한 명령으로 엮을 땐 등록 대기 루프를 앞에 둔다. 워크트리에서 `--delete-branch` 로컬정리가 실패하는 건 별개 트랩 **T-051**(원격 머지는 성공하니 `gh pr view`로 MERGED 확인 후 수동 정리).
+**완전한 자동화** — DIRTY 진단 + CI 폴링 + 하드 타임아웃(12분) + 원격 브랜치 삭제를 한 번에:
+```bash
+bash .claude/scripts/pr-merge.sh <PR번호>
+```
+
+**예방**: `push → checks --watch → merge`를 한 명령으로 엮을 땐 mergeStateStatus 진단을 가장 먼저 넣는다(DIRTY → 즉시 bail). 워크트리에서 `--delete-branch` 로컬정리가 실패하는 건 별개 트랩 **T-051**(원격 머지는 성공하니 `gh pr view`로 MERGED 확인 후 수동 정리).
 
 **관련**: T-051(워크트리 gh pr merge 로컬정리 실패), T-048(squash subject), N-070(branch protection required check), T-070(bootRun 진행률=장기 태스크 ready 판정).
 
