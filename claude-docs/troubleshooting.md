@@ -71,6 +71,7 @@
 - [T-079. Vue 섬 번들이 book-detail 라우트에 가로채여 무한로딩 — 경로변수 숫자 제한](#t-079-vue-섬-번들이-book-detail-라우트에-가로채여-무한로딩--경로변수-숫자-제한)
 - [T-080. Service Worker가 에러 응답(500/503)을 캐싱 → 서버 fix 후에도 stale](#t-080-service-worker가-에러-응답500503을-캐싱--서버-fix-후에도-stale)
 - [T-081. SPA 전환에서 form 래퍼 제거 → 전역 button width 100%가 flex-row 액션을 풀폭 세로로 깨뜨림](#t-081-spa-전환에서-form-래퍼-제거--전역-button-width-100가-flex-row-액션을-풀폭-세로로-깨뜨림)
+- [T-082. 라디오 CSS탭 → JS(v-if) 탭 전환에서 clear·display·active 경로 누락 + 빌드 stale (책방 탭 3종 깨짐)](#t-082-라디오-css탭--jsv-if-탭-전환에서-cleardisplayactive-경로-누락--빌드-stale-책방-탭-3종-깨짐)
 
 ---
 
@@ -1629,6 +1630,28 @@ return fetch(request).then((res) => {
 
 ---
 
+## T-082. 라디오 CSS탭 → JS(v-if) 탭 전환에서 clear·display·active 경로 누락 + 빌드 stale (책방 탭 3종 깨짐)
+
+**증상**: 선별 SPA 전환 후 책방(`/u/{loginId}`) 탭에서 ①책BTI·공개 책장 패널 내용 안 보임 ②하단 `.link-row`(대시보드/내 책장/차단)가 우측 ~25px로 짓눌림 ③활성 탭 밑줄 강조 사라짐 — 셋이 동시 발생.
+
+**원인**: history용 라디오 CSS 탭(`.record-card`/`.record-tab{float:left}` + `<input type=radio>` + `#id:checked ~ .panel{display:block;clear:both}`)을 책방이 재사용하다 Vue `v-if`로 옮기며 라디오를 뺐는데, 거기 묶였던 3가지를 함께 잃음:
+1. **패널 display** — `ProfileApp.vue`에서 `tab-panel` 클래스를 뺐으나 `npm build` 누락으로 `profile.js` 산출물이 stale → production은 `tab-panel` 잔존 → `.tab-panel{display:none}` 적중(T-063 빌드 누락 재발).
+2. **float clear** — 죽은 `#tab-bti:checked ~ .panel-bti{display:block;clear:both}` 셀렉터를 지우며 `clear:both`까지 삭제 → `.record-tab{float:left}`가 clear 안 됨 → `.record-card` collapse(높이 0) → 다음 형제 `.link-row`(block grid)가 stretch 폭을 못 받아 min-content로 붕괴(개념 N-114).
+3. **active 스타일** — 활성 강조가 `:checked + .record-tab`에만 있어 JS의 `.active` 클래스엔 안 먹음.
+
+**감별**:
+- 산출물 stale = `git log -- <.vue>` 최신 커밋과 `git log -- <빌드.js>` 최신 커밋이 어긋남. production DOM에 `.vue`엔 없는 옛 클래스(`tab-panel`)가 보이면 확정.
+- link-row 짓눌림 = 실 브라우저에서 그 요소만 `width≈min-content`인데 형제 `.card`(block)는 정상 폭. 그 요소를 DOM에서 떼 `width:460px` 고정 div에 넣어 정상화되면 부모 sizing 문제, float 형제 제거 시 펴지면 float collapse 확정.
+- active 측정은 `transition: border-color .15s` 탓에 주입 직후엔 옛값을 보니 ~300ms 대기 후 측정(안 그러면 "안 먹는다"고 오판).
+
+**해결**: ①`npm build`로 산출물 재생성(`tab-panel` 잔재 제거) ②`.panel-bti,.panel-shelf{clear:both}` 복원 ③`.record-card .record-tab.active`를 `:checked + .record-tab`와 같은 활성 스타일에 합류.
+
+**예방**: 라디오 CSS 탭을 JS 탭으로 옮길 땐 **display·clear·active(:checked) 세 경로를 전수 이전**한다 — 죽은 `:checked ~` 셀렉터엔 시각 표시 외에 `clear`/`display` 같은 레이아웃 책임이 섞여 있어 무심코 지우면 형제까지 깨진다. `.vue` 수정 뒤 `npm build`+산출물 커밋(T-063). 클라 시각 회귀라 실 브라우저 게이트. 파급은 같은 클래스 재사용처만(history는 라디오+`:checked` 유지로 정상).
+
+**관련**: T-063(프론트 빌드 누락), T-081/N-113(같은 SPA 전환 잠복 회귀·전역 width), N-114(float collapse × block grid), N-032(구조 변경이 폭로하는 잠복 회귀).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1713,4 +1736,5 @@ return fetch(request).then((res) => {
 | 2026-06-22 | T-078 (구현 세션에서 git/commit이 무한 로딩·esc·머지로도 안 풀리고 clear로만 해소 — Claude Code 코어 버그가 아니라 **자식 프로세스(git/gradle) hang을 await**하는 구조 때문 / 이 프로젝트는 `git commit`을 require-tests-before-commit.ps1 훅이 가로채 `./gradlew test`를 돌리므로 "git 작업"으로 보여도 실제로 멈춘 건 gradle 테스트일 때가 많음 / hang 뿌리=멀티 세션(워크트리·동시 세션)이 gradle 데몬·빌드 락 동시 점유 / 감별=지금 `git status`가 빠르면 git/레포 정상 / 해결=`Get-Process java,git｜Stop-Process -Force`·`.git/index.lock` 삭제·`./gradlew --stop`, esc만으론 spawn된 자식·데몬이 안 죽어 부족 / 예방=멀티 세션 시 한 세션에서만 커밋·빌드 / N-032·T-070·T-051, 커밋 훅) |
 | 2026-06-22 | T-079 (Vue 섬 번들 `/books/books-<hash>.js`가 book-detail `@GetMapping("/books/{id}")`에 가로채여 500/503·셸 무한로딩 — 컨트롤러 매핑이 기본 정적 핸들러(`/**`)보다 먼저 매칭, id=파일명→Long 변환 실패 / #425 book-detail+#447 섬 번들 둘 다 `/books/` prefix라 머지 후 잠복 / 감별=셸만 뜸+번들 503(404 아님)+배포 해시 일치 / 해결=`@GetMapping("/books/{id:\\d+}")` 숫자 제한→비숫자 정적 폴백 200 / 부작용=POST /books/add 405→404(SsrMutationRemovedTest 갱신) / 회귀=GET /books/books.js→200·/books/not-a-number→404, 헤드리스는 /api 목이라 실 번들 URL 사각 N-112 / PR #450) |
 | 2026-06-22 | T-080 (SW가 에러 응답(500/503)을 `res.ok` 검사 없이 캐싱 → cache-first가 서버 fix 후에도 영구 서빙(self-heal 불가) — #450 라우트 충돌 시기 번들 500이 `shell-v5`에 캐싱된 사례 / 감별=fix 배포 후에도 fresh 503인데 캐시버스터 `?cb=1`는 200, `via`/`x-cache` 없으면 SW(`caches.match`의 `.status`로 확인) / 해결=① `put`에 `if(res.ok)` 가드 ② `CACHE` `shell-v5`→`v6`로 activate purge→피해자 다음 방문 자동복구, 개별 즉시복구=SW 해제+`caches.delete` / 예방=SW `put` 항상 `res.ok`, 검증은 실 브라우저 / T-071·T-075·N-101·N-112, PR #450 후속) |
+| 2026-06-23 | T-082 (라디오 CSS탭→Vue v-if 탭 전환에서 책방 탭 3종 깨짐 — ①패널 미표시=`.vue`의 `tab-panel` 제거 후 `npm build` 누락으로 `profile.js` stale→`.tab-panel{display:none}` 적중(T-063 재발) ②`.link-row` 짓눌림=죽은 `#tab-bti:checked~.panel` 셀렉터 삭제 시 `clear:both` 동반 유실→`.record-tab{float:left}` 미clear→`.record-card` collapse→형제 block grid가 min-content로 붕괴(N-114) ③active 밑줄 누락=`:checked+.record-tab`만 있고 `.active`엔 미적용 / 감별=`git log` `.vue`vs빌드`.js` 커밋 어긋남, float 형제 제거 시 link-row 펴짐, active는 transition .15s라 300ms 대기 후 측정 / 해결=재빌드+`.panel-bti,.panel-shelf{clear:both}`+`.record-tab.active` 셀렉터 / 예방=라디오→JS 탭 옮길 때 display·clear·active 전수 이전, `.vue` 수정 후 npm build·산출물 커밋 / T-063·T-081·N-113·N-114) |
 | 2026-06-22 | T-081 (SSR→Vue 전환 후 리스트 행 버튼이 풀폭 세로로 깨짐 — 전역 `button{width:100%}`를 가두던 `<form>` 래퍼가 SPA 전환으로 사라져 버튼이 flex-row 컨테이너(`.book-actions`·`.profile-actions`)의 직계 자식이 됨 / 감별=같은 행 `<select>`는 멀쩡한데 `<button>`만 풀폭(select는 width:100% 안 받음), `getBoundingClientRect().width`=컨테이너 폭이면 확정 / 해결=`.book-actions > button`·`.profile-follow .profile-actions button`에 `width:auto`(248·761·1213행 상쇄 패턴), `.book-actions`는 UserRow 공용 셸로 books·follow·book-readers·block·search 전부 커버 / 예방=래퍼 제거 시 그게 전역 width를 가뒀는지 확인, block 컨테이너(`.timer-controls` 단일 CTA)는 무관, 실 렌더 폭 측정 검증 / N-113·N-112·T-079) |
