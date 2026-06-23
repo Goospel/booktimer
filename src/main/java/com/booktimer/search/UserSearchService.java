@@ -4,13 +4,11 @@ import com.booktimer.block.BlockRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * 사용자 검색 유스케이스 — <b>login_id(공개 @핸들) 기준</b> (sns-design §7.3, login-id-design §7 PR-3).
@@ -57,25 +55,15 @@ public class UserSearchService {
     }
 
     /**
-     * 친구 추천 — <b>현재는 단순 무작위 {@code limit}명</b>(요구사항: 우선 단순하게).
+     * 친구 추천 — 무작위 {@code limit}명(요구사항: 우선 단순하게).
      *
-     * <p>검색과 같은 노출 불변식을 그대로 적용한다: 운영자 제외·본인 제외·차단 관계(대칭) 제외 +
-     * <b>공개 핸들(login_id) 미설정 제외</b>. login_id가 없는 사용자(OAuth 프로비저닝~온보딩 사이의
-     * 정상 상태)는 프로필 URL {@code /u/{loginId}}가 깨지고 팔로우 대상 식별도 불가하므로 추천 카드로
-     * 떠선 안 된다. 검색은 login_id LIKE라 null이 자연히 빠지지만, 추천은 {@code findAll()}이라 명시 제외한다.
-     * 무작위는 후보를 모두 모아 메모리에서 섞는 방식이라 <b>현 소규모에선 충분</b>하다.
-     * 사용자가 많아지면 이 무작위 방식을 독서 성향 기반 추천 등으로 교체할 자리다(후속 과제).
+     * <p>검색과 같은 노출 불변식을 DB 쿼리로 처리한다: 운영자 제외·본인 제외·차단 관계(대칭) 제외 +
+     * 공개 핸들(login_id) 미설정 제외. 필터·랜덤·상한을 모두 DB에서 처리해 findAll() 전체 로드와
+     * 후보당 existsBetween N+1을 제거한다(PR-C).
+     * 사용자가 많아지면 무작위 방식을 독서 성향 기반 추천 등으로 교체할 자리다(후속 과제).
      */
     public List<UserSearchResult> recommend(User viewer, int limit) {
-        List<User> candidates = new ArrayList<>(userRepository.findAll().stream()
-                .filter(u -> u.getRole() != Role.ADMIN) // 운영자는 추천하지 않음
-                .filter(u -> !Objects.equals(u.getId(), viewer.getId())) // 본인 제외
-                .filter(u -> u.getLoginId() != null) // 공개 핸들 미설정(온보딩 전)은 제외 — 프로필 링크·팔로우 불가
-                .filter(u -> !blockRepository.existsBetween(viewer, u)) // 차단 관계는 숨김(대칭)
-                .toList());
-        Collections.shuffle(candidates);
-        return candidates.stream()
-                .limit(limit)
+        return userRepository.findRecommendCandidates(viewer.getId(), PageRequest.of(0, limit)).stream()
                 .map(u -> rowAssembler.toRow(viewer, u))
                 .toList();
     }
