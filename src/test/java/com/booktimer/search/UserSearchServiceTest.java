@@ -179,4 +179,26 @@ class UserSearchServiceTest {
         // 본인(viewer) 제외 후 남는 후보는 realuser·pending 둘인데, 핸들 없는 pending은 빠지고 realuser만 남아야 한다.
         assertThat(recs).extracting(UserSearchResult::loginId).containsExactly("realuser");
     }
+
+    @Test
+    @DisplayName("추천: toRow 배선 + 차단 제외 — 적격 1명(공개책·팔로우 중)과 차단 1명이 있을 때 적격만 반환된다")
+    void recommend_mapsRowsAndExcludesBlocked() {
+        User viewer = newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User eligible = newUser("eligible@booktimer.com", "eligible", "적격자");
+        publicBook(eligible, "공개책1");
+        followService.follow(viewer, eligible);
+        User blocked = newUser("blocked@booktimer.com", "blocked", "차단됨");
+        blockService.block(viewer, blocked);
+
+        List<UserSearchResult> recs = searchService.recommend(viewer, 10);
+
+        assertThat(recs).hasSize(1);
+        UserSearchResult r = recs.get(0);
+        assertThat(r.loginId()).isEqualTo("eligible");
+        assertThat(r.nickname()).isEqualTo("적격자");
+        assertThat(r.publicBookCount()).isEqualTo(1L);
+        assertThat(r.following()).isTrue();
+        assertThat(r.self()).isFalse();
+        assertThat(recs).extracting(UserSearchResult::loginId).doesNotContain("blocked");
+    }
 }
