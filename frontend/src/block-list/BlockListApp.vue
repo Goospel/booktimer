@@ -33,7 +33,7 @@ onMounted(load);
 </script>
 
 <template>
-    <div>
+    <div class="page-stack">
         <p class="greeting">차단 목록</p>
         <section class="card">
             <h2>내가 차단한 사용자</h2>
