@@ -5,6 +5,10 @@ import com.booktimer.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
+
 /**
  * 팔로우 유스케이스 (sns-design §7.3·§4).
  *
@@ -47,6 +51,19 @@ public class FollowService {
     @Transactional(readOnly = true)
     public boolean isFollowing(User follower, User followee) {
         return followRepository.existsByFollowerAndFollowee(follower, followee);
+    }
+
+    /**
+     * viewer가 주어진 후보들({@code targetIds}) 중 팔로우 중인 id 집합 — 사용자 행 목록 조립용 배치
+     * (행당 {@link #isFollowing} N+1 회피). 빈 입력이면 빈 집합(쿼리 안 탐). 서비스 경계 유지:
+     * assembler는 리포지토리가 아니라 이 서비스를 통해 팔로우 관계를 본다.
+     */
+    @Transactional(readOnly = true)
+    public Set<Long> followingAmong(User viewer, Collection<Long> targetIds) {
+        if (targetIds.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(followRepository.findFollowedIdsAmong(viewer, targetIds));
     }
 
     /** user를 팔로우하는 사람 수(팔로워 수). */

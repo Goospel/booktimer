@@ -70,6 +70,8 @@ class FollowListServiceTest {
                 .containsExactlyInAnyOrder("에이", "비");
         assertThat(rows).extracting(UserSearchResult::nickname, UserSearchResult::following)
                 .contains(tuple("에이", true), tuple("비", false)); // A는 맞팔, B는 내가 안 팔로우
+        // 공개책이 한 권도 없는 대상은 배치 집계에서 행이 빠지므로 0으로 디폴트돼야 한다(0-디폴트 경로)
+        assertThat(rows).allMatch(r -> r.publicBookCount() == 0);
     }
 
     @Test

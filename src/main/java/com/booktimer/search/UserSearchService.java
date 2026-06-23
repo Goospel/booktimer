@@ -47,11 +47,11 @@ public class UserSearchService {
         if (q.length() < MIN_QUERY_LENGTH) {
             return List.of();
         }
-        return userRepository.findTop20ByLoginIdContainingIgnoreCaseOrderByLoginIdAsc(q).stream()
+        List<User> targets = userRepository.findTop20ByLoginIdContainingIgnoreCaseOrderByLoginIdAsc(q).stream()
                 .filter(u -> u.getRole() != Role.ADMIN) // 운영자는 일반 사용자에게 노출하지 않음
-                .filter(u -> !blockRepository.existsBetween(viewer, u)) // 차단 관계는 숨김(대칭)
-                .map(u -> rowAssembler.toRow(viewer, u))
+                .filter(u -> !blockRepository.existsBetween(viewer, u)) // 차단 관계는 숨김(대칭, bounded Top20 — 범위 밖)
                 .toList();
+        return rowAssembler.toRows(viewer, targets);
     }
 
     /**
@@ -63,8 +63,7 @@ public class UserSearchService {
      * 사용자가 많아지면 무작위 방식을 독서 성향 기반 추천 등으로 교체할 자리다(후속 과제).
      */
     public List<UserSearchResult> recommend(User viewer, int limit) {
-        return userRepository.findRecommendCandidates(viewer.getId(), PageRequest.of(0, limit)).stream()
-                .map(u -> rowAssembler.toRow(viewer, u))
-                .toList();
+        List<User> candidates = userRepository.findRecommendCandidates(viewer.getId(), PageRequest.of(0, limit));
+        return rowAssembler.toRows(viewer, candidates);
     }
 }

@@ -24,6 +24,20 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     /** 공개 범위별 책 수 — 검색 결과의 "공개 책 N권" 표시에 쓰인다. */
     long countByUserAndVisibility(User user, BookVisibility visibility);
 
+    /**
+     * 여러 사용자의 PUBLIC 책 수를 한 번에 집계 — 사용자 행 목록 조립의 행당 {@code countByUserAndVisibility}
+     * N+1을 단일 group by로 대체한다. <b>공개 책이 0권인 사용자는 결과에 행이 없으니</b> 호출부에서
+     * {@code getOrDefault(id, 0L)}로 0 디폴트한다(하우스 스타일 {@link FollowScopeCount}와 동일 매핑).
+     */
+    @Query("""
+            select b.user.id as userId, count(b) as publicCount
+            from Book b
+            where b.user.id in :userIds
+              and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
+            group by b.user.id
+            """)
+    List<UserPublicBookCount> countPublicByUsers(@Param("userIds") Collection<Long> userIds);
+
     /** 사용자의 총 책 수 — 관리자 드릴다운 책장 요약. */
     long countByUser(User user);
 
