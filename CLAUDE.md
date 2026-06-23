@@ -94,7 +94,12 @@
      갱신 단위는 PR이므로 이 줄도 그 PR 커밋에 함께 들어가야 한다 — 사후 보충 PR이
      생기면 누락이다. (배경: 2026-06-05 #134가 plan.md를 안 건드려 #136으로 사후 보충함.
      2026-06-08 갱신 이력 표를 changelog.md로 분리 — plan.md 경량화. 2026-06-10 plan.md의 `최근 10개` 발췌도 폐지 — changelog.md를 단일 출처로, plan.md는 본문만 둔다. 2026-06-19 PR 번호 기재 폐지 — push 2회·CI 2회 방지.)
-5. **머지** — `gh pr merge` (사용자 확인 후). 머지 후 로컬 `main` 갱신(`git checkout main && git pull`) 및 브랜치 정리
+5. **머지** — 사용자 확인 후, **머지 전 `mergeStateStatus` 진단이 필수**다 — `no checks reported` 는 DIRTY(충돌)여서 CI가 안 붙은 것일 수 있어, 진단 없이 "CI 등록 대기" 루프로 들어가면 영영 안 끝난다(T-083).
+   - **DIRTY** → `gh pr merge` 전에 `git rebase origin/main` → `git push --force-with-lease` 로 충돌 해결. 그 후 재진행.
+   - **CLEAN** → 즉시 머지.
+   - **BLOCKED** (CI 대기) → CI 통과 후 머지.
+   - 자동화: `bash .claude/scripts/pr-merge.sh <PR번호>` 가 DIRTY 즉시 차단 + CI 폴링 + 하드 타임아웃(12분) + 원격 브랜치 삭제를 한 번에 처리한다.
+   - 머지 후 로컬 `main` 갱신(`git checkout main && git pull`) 및 브랜치 정리
 
 ### 예외
 
