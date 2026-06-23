@@ -67,8 +67,9 @@ public class BlockService {
     /** 내가 차단한 사용자 목록(차단 목록 페이지용). */
     @Transactional(readOnly = true)
     public List<UserSearchResult> blockedUsers(User blocker) {
-        return blockRepository.findByBlockerOrderByCreatedAtDesc(blocker).stream()
-                .map(b -> rowAssembler.toRow(blocker, b.getBlocked()))
+        List<User> targets = blockRepository.findByBlockerOrderByCreatedAtDesc(blocker).stream()
+                .map(Block::getBlocked) // 기존대로 login_id 필터 없음(동작 보존)
                 .toList();
+        return rowAssembler.toRows(blocker, targets);
     }
 }

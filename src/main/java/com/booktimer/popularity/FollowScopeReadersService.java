@@ -47,10 +47,10 @@ public class FollowScopeReadersService {
     }
 
     private List<UserSearchResult> rows(User viewer, String isbn, Collection<BookStatus> statuses) {
-        return bookRepository.followScopeReaders(viewer, isbn, statuses).stream()
+        List<User> targets = bookRepository.followScopeReaders(viewer, isbn, statuses).stream()
                 .filter(target -> target.getLoginId() != null) // N-055: 온보딩 전(login_id=null) 사용자 제외
                 .sorted(Comparator.comparing(User::getNickname)) // DB 무관하게 닉네임 정렬(distinct+order by 회피)
-                .map(target -> rowAssembler.toRow(viewer, target))
                 .toList();
+        return rowAssembler.toRows(viewer, targets);
     }
 }
