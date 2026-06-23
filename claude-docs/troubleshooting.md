@@ -72,6 +72,7 @@
 - [T-080. Service Worker가 에러 응답(500/503)을 캐싱 → 서버 fix 후에도 stale](#t-080-service-worker가-에러-응답500503을-캐싱--서버-fix-후에도-stale)
 - [T-081. SPA 전환에서 form 래퍼 제거 → 전역 button width 100%가 flex-row 액션을 풀폭 세로로 깨뜨림](#t-081-spa-전환에서-form-래퍼-제거--전역-button-width-100가-flex-row-액션을-풀폭-세로로-깨뜨림)
 - [T-082. 라디오 CSS탭 → JS(v-if) 탭 전환에서 clear·display·active 경로 누락 + 빌드 stale (책방 탭 3종 깨짐)](#t-082-라디오-css탭--jsv-if-탭-전환에서-cleardisplayactive-경로-누락--빌드-stale-책방-탭-3종-깨짐)
+- [T-083. gh pr checks --watch가 CI 등록 전 실행되면 "no checks reported"로 즉시 exit 1](#t-083-gh-pr-checks---watch가-ci-등록-전-실행되면-no-checks-reported로-즉시-exit-1)
 
 ---
 
@@ -1652,6 +1653,27 @@ return fetch(request).then((res) => {
 
 ---
 
+## T-083. gh pr checks --watch가 CI 등록 전 실행되면 "no checks reported"로 즉시 exit 1
+
+**증상**: PR push 직후 `gh pr checks <PR> --watch`로 CI 통과를 기다리려는데, watch가 대기하지 않고 즉시 `no checks reported on the '<branch>' branch`를 출력하며 exit 1로 끝난다. 뒤에 `&& gh pr merge`를 체이닝했으면 머지가 실행되지 않는다(백그라운드 작업이 "실패"로 종료).
+
+**원인**: push 후 GitHub Actions 워크플로가 *체크 런으로 등록*되기까지 짧은 지연이 있다. 그 사이에 `--watch`가 돌면 감시할 체크가 0이라 "기다림" 없이 바로 끝난다 — `--watch`는 "이미 있는 체크가 끝나길" 기다리지 "체크가 생기길" 기다리지 않는다. 같은 절차라도 등록이 빠르면(직전 PR은 곧장 pending) 통과하고 늦으면 실패해 **비결정적**으로 보인다.
+
+**감별**: `gh pr checks <PR>` 단발 호출이 `no checks reported`면 아직 미등록(머지 충돌로 DIRTY일 때도 체크가 안 붙을 수 있으니 `gh pr view <PR> --json mergeStateStatus`로 DIRTY 여부 먼저 배제).
+
+**해결**: watch 전에 등록을 폴링한다 — `gh pr checks <PR>`가 `no checks`를 안 뱉을 때까지 짧게 sleep 반복 후 `--watch`. 한 줄 예:
+```bash
+for i in $(seq 1 30); do gh pr checks <PR> 2>&1 | grep -q 'no checks' && sleep 20 || break; done
+gh pr checks <PR> --watch --interval 30 && gh pr merge <PR> --squash --delete-branch
+```
+(Bash 도구는 foreground sleep을 막으니 이 루프는 `run_in_background`로 실행)
+
+**예방**: `push → checks --watch → merge`를 한 명령으로 엮을 땐 등록 대기 루프를 앞에 둔다. 워크트리에서 `--delete-branch` 로컬정리가 실패하는 건 별개 트랩 **T-051**(원격 머지는 성공하니 `gh pr view`로 MERGED 확인 후 수동 정리).
+
+**관련**: T-051(워크트리 gh pr merge 로컬정리 실패), T-048(squash subject), N-070(branch protection required check), T-070(bootRun 진행률=장기 태스크 ready 판정).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1737,4 +1759,5 @@ return fetch(request).then((res) => {
 | 2026-06-22 | T-079 (Vue 섬 번들 `/books/books-<hash>.js`가 book-detail `@GetMapping("/books/{id}")`에 가로채여 500/503·셸 무한로딩 — 컨트롤러 매핑이 기본 정적 핸들러(`/**`)보다 먼저 매칭, id=파일명→Long 변환 실패 / #425 book-detail+#447 섬 번들 둘 다 `/books/` prefix라 머지 후 잠복 / 감별=셸만 뜸+번들 503(404 아님)+배포 해시 일치 / 해결=`@GetMapping("/books/{id:\\d+}")` 숫자 제한→비숫자 정적 폴백 200 / 부작용=POST /books/add 405→404(SsrMutationRemovedTest 갱신) / 회귀=GET /books/books.js→200·/books/not-a-number→404, 헤드리스는 /api 목이라 실 번들 URL 사각 N-112 / PR #450) |
 | 2026-06-22 | T-080 (SW가 에러 응답(500/503)을 `res.ok` 검사 없이 캐싱 → cache-first가 서버 fix 후에도 영구 서빙(self-heal 불가) — #450 라우트 충돌 시기 번들 500이 `shell-v5`에 캐싱된 사례 / 감별=fix 배포 후에도 fresh 503인데 캐시버스터 `?cb=1`는 200, `via`/`x-cache` 없으면 SW(`caches.match`의 `.status`로 확인) / 해결=① `put`에 `if(res.ok)` 가드 ② `CACHE` `shell-v5`→`v6`로 activate purge→피해자 다음 방문 자동복구, 개별 즉시복구=SW 해제+`caches.delete` / 예방=SW `put` 항상 `res.ok`, 검증은 실 브라우저 / T-071·T-075·N-101·N-112, PR #450 후속) |
 | 2026-06-23 | T-082 (라디오 CSS탭→Vue v-if 탭 전환에서 책방 탭 3종 깨짐 — ①패널 미표시=`.vue`의 `tab-panel` 제거 후 `npm build` 누락으로 `profile.js` stale→`.tab-panel{display:none}` 적중(T-063 재발) ②`.link-row` 짓눌림=죽은 `#tab-bti:checked~.panel` 셀렉터 삭제 시 `clear:both` 동반 유실→`.record-tab{float:left}` 미clear→`.record-card` collapse→형제 block grid가 min-content로 붕괴(N-114) ③active 밑줄 누락=`:checked+.record-tab`만 있고 `.active`엔 미적용 / 감별=`git log` `.vue`vs빌드`.js` 커밋 어긋남, float 형제 제거 시 link-row 펴짐, active는 transition .15s라 300ms 대기 후 측정 / 해결=재빌드+`.panel-bti,.panel-shelf{clear:both}`+`.record-tab.active` 셀렉터 / 예방=라디오→JS 탭 옮길 때 display·clear·active 전수 이전, `.vue` 수정 후 npm build·산출물 커밋 / T-063·T-081·N-113·N-114) |
+| 2026-06-23 | T-083 (gh pr checks --watch가 CI 등록 전 실행되면 "no checks reported"로 즉시 exit 1 — 뒤에 `&& gh pr merge` 체이닝 시 머지 무산 / 원인=push 후 체크 런 등록까지 지연, --watch는 "있는 체크 끝나길" 기다리지 "생기길" 안 기다림→비결정적 / 해결=watch 전 `gh pr checks`가 no checks 안 뱉을 때까지 sleep 폴링 후 --watch(run_in_background) / 워크트리 --delete-branch 로컬정리 실패는 별개 T-051 / T-048·N-070) |
 | 2026-06-22 | T-081 (SSR→Vue 전환 후 리스트 행 버튼이 풀폭 세로로 깨짐 — 전역 `button{width:100%}`를 가두던 `<form>` 래퍼가 SPA 전환으로 사라져 버튼이 flex-row 컨테이너(`.book-actions`·`.profile-actions`)의 직계 자식이 됨 / 감별=같은 행 `<select>`는 멀쩡한데 `<button>`만 풀폭(select는 width:100% 안 받음), `getBoundingClientRect().width`=컨테이너 폭이면 확정 / 해결=`.book-actions > button`·`.profile-follow .profile-actions button`에 `width:auto`(248·761·1213행 상쇄 패턴), `.book-actions`는 UserRow 공용 셸로 books·follow·book-readers·block·search 전부 커버 / 예방=래퍼 제거 시 그게 전역 width를 가뒀는지 확인, block 컨테이너(`.timer-controls` 단일 CTA)는 무관, 실 렌더 폭 측정 검증 / N-113·N-112·T-079) |
