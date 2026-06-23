@@ -7,7 +7,9 @@ import ContributionGraph from './ContributionGraph.vue'
 import GardenPanel from './GardenPanel.vue'
 import QuoteCard from './QuoteCard.vue'
 import EmailVerifyBanner from './EmailVerifyBanner.vue'
-import QuickNav from './QuickNav.vue'
+import HighlightActions from './HighlightActions.vue'
+import PrimaryActions from './PrimaryActions.vue'
+import UtilityActions from './UtilityActions.vue'
 
 const data = ref<DashboardResponse | null>(null)
 const loading = ref(true)
@@ -112,13 +114,17 @@ async function handleStop() {
             @stop="handleStop"
         />
 
-        <QuickNav :login-id="data.loginId" />
+        <HighlightActions :login-id="data.loginId" />
 
         <section class="card">
             <ContributionGraph :graph="data.graph" />
         </section>
 
+        <PrimaryActions />
+
         <GardenPanel :garden="data.garden" />
+
+        <UtilityActions />
 
         <form class="logout-form" action="/logout" method="post">
             <input type="hidden" name="_csrf" :value="getCsrfToken()">
