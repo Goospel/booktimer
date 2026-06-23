@@ -1,6 +1,7 @@
 package com.booktimer.feedback;
 
 import com.booktimer.user.User;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -14,9 +15,11 @@ public interface FeedbackRepository extends JpaRepository<Feedback, Long> {
     List<Feedback> findByAuthorOrderByCreatedAtDesc(User author);
 
     /** 관리자 전체 조회 — 최신순. */
+    @EntityGraph(attributePaths = {"author"})
     List<Feedback> findAllByOrderByCreatedAtDesc();
 
     /** 관리자 유형 필터 — 해당 유형만, 최신순. */
+    @EntityGraph(attributePaths = {"author"})
     List<Feedback> findByTypeOrderByCreatedAtDesc(FeedbackType type);
 
     /** 회원 탈퇴 정리 — 내가 쓴 문의를 모두 제거(author_id FK). */
