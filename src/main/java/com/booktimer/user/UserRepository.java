@@ -1,7 +1,11 @@
 package com.booktimer.user;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -32,6 +36,23 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     /** 정규화된 login_id가 이미 쓰이는지 — 온보딩에서 공개 핸들 확정 전 유니크 사전 확인(uk_users_login_id). */
     boolean existsByLoginId(String loginId);
+
+    /**
+     * 친구 추천 후보 — ADMIN·본인·공개핸들(login_id) 미설정·차단(양방향) 제외, 무작위 순서로 Pageable 상한만큼.
+     * 필터·상한·랜덤을 모두 DB에서 처리(메모리 findAll + 후보당 차단 COUNT N+1 제거).
+     */
+    @Query("""
+            select u from User u
+            where u.role <> com.booktimer.user.Role.ADMIN
+              and u.id <> :viewerId
+              and u.loginId is not null
+              and not exists (
+                select 1 from Block b
+                where (b.blocker.id = :viewerId and b.blocked.id = u.id)
+                   or (b.blocker.id = u.id and b.blocked.id = :viewerId))
+            order by function('rand')
+            """)
+    List<User> findRecommendCandidates(@Param("viewerId") Long viewerId, Pageable pageable);
 
     /** 역할별 사용자 수 — 운영 통계에서 "가입자 수"는 {@code Role.USER}만 세어 ADMIN이 지표를 부풀리지 않게 한다. */
     long countByRole(Role role);
