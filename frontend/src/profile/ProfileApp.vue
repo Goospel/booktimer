@@ -168,7 +168,7 @@ onUnmounted(() => window.removeEventListener('popstate', onPopState));
 </script>
 
 <template>
-    <div>
+    <div class="page-stack">
         <!-- 404 -->
         <p v-if="notFound" class="status-line">프로필을 찾을 수 없습니다.</p>
 

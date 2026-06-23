@@ -32,7 +32,7 @@ onMounted(load);
 </script>
 
 <template>
-    <div>
+    <div class="page-stack">
         <p class="greeting">👥 내 팔로우 중 이 책을 보는 사람</p>
         <section class="card">
             <h2>{{ title || '이 책' }}</h2>

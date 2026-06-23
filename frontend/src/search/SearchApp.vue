@@ -74,7 +74,8 @@ function onSearch() {
 </script>
 
 <template>
-    <div>
+    <div class="page-stack">
+        <p class="greeting">사용자 검색</p>
         <!-- 아이디(@핸들) 검색 -->
         <section class="card">
             <h2>아이디로 찾기</h2>

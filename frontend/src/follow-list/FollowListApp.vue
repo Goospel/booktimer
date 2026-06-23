@@ -47,7 +47,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div>
+    <div class="page-stack">
         <p class="greeting">{{ activeTab === 'followers' ? '내 팔로워' : '내 팔로잉' }}</p>
         <section class="card">
             <nav class="follow-tabs">
