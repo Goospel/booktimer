@@ -1381,8 +1381,10 @@ a.book-title:hover { text-decoration: underline; }
     transition: color .15s ease, border-color .15s ease;
 }
 .record-card .record-tab:hover { color: var(--text); }
-/* 활성 탭 = 액센트 밑줄. 인접 형제 선택자(:checked + 라벨)라 모든 렌더러가 토글 시 갱신한다. */
-.record-card .tab-radio:checked + .record-tab {
+/* 활성 탭 = 액센트 밑줄. history는 라디오 :checked + 라벨, profile(Vue 섬)은 JS 토글 .active 클래스로
+   같은 활성 스타일을 공유한다(선별 SPA 2d 전환 시 라디오 → v-if로 바뀌며 .active 경로가 필요해짐). */
+.record-card .tab-radio:checked + .record-tab,
+.record-card .record-tab.active {
     color: var(--accent);
     border-bottom-color: var(--accent);
 }
@@ -1393,7 +1395,10 @@ a.book-title:hover { text-decoration: underline; }
 .tab-panel { display: none; }
 #tab-records:checked ~ .panel-records,
 #tab-missed:checked ~ .panel-missed { display: block; clear: both; padding-top: 18px; }
-.panel-bti, .panel-shelf { padding-top: 18px; }
+/* profile 탭 패널은 record-tab(float:left)을 clear해야 한다 — 안 하면 float가 record-card를
+   collapse시켜 다음 형제 .link-row(block grid)가 stretch 폭을 못 받고 min-content로 짓눌린다.
+   (#449가 죽은 #tab-bti:checked~.panel 셀렉터를 지우며 여기 있던 clear:both를 함께 잃어 회귀.) */
+.panel-bti, .panel-shelf { clear: both; padding-top: 18px; }
 .panel-missed .muted { margin: 0 0 4px; font-size: .85rem; }
 
 /* --- 광고 (AdSense) — 부가 화면 하단에 1개. 콘텐츠와 떨어뜨려 비침습적으로. --- */
