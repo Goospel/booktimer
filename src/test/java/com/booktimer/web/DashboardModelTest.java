@@ -62,9 +62,9 @@ class DashboardModelTest {
         when(sessionRepository.findRecentlyReadBookIds(any(), any())).thenReturn(List.of());
     }
 
-    /** 오늘 부채 70분(4200) + 어제 빚 50분(3000) → 윈도우 미상환 합 7200. */
+    /** 오늘 부채 70분(4200) + 어제 빚 50분(3000) → 윈도우 미상환 합 7200. 오늘 목표 70분(4200). */
     private WeeklyDebt todayPlusYesterday() {
-        return new WeeklyDebt(4200L, List.of(new DayDebt(LocalDate.of(2026, 6, 8), 3000L)));
+        return new WeeklyDebt(4200L, 4200L, List.of(new DayDebt(LocalDate.of(2026, 6, 8), 3000L)));
     }
 
     private ReadingTimer timerWithCarryover(boolean on) {

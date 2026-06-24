@@ -41,6 +41,8 @@ export interface QuoteDto {
 export interface TimerState {
     remainingSeconds: number
     carriedDebtSeconds: number
+    todayGoalSeconds: number
+    carryover: boolean
     hasActiveSession: boolean
     activeStartedAt: string | null
     activeBookTitle: string | null

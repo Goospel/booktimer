@@ -4,6 +4,7 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.book.BookService;
+import com.booktimer.session.ReadingDebtService;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.session.ReadingSessionService;
@@ -52,6 +53,7 @@ class DashboardApiControllerTest {
     @Autowired ReadingSessionRepository sessionRepository;
     @Autowired ReadingSessionService sessionService;
     @Autowired ReadingTimerRepository timerRepository;
+    @Autowired ReadingDebtService readingDebtService;
     @Autowired BookService bookService;
     @Autowired JdbcTemplate jdbc;
     @Autowired Clock clock;
@@ -301,5 +303,84 @@ class DashboardApiControllerTest {
                 .andExpect(jsonPath("$.garden.totalAuthorCharacterCount").isNumber())
                 .andExpect(jsonPath("$.garden.ownedBuildingCount").isNumber())
                 .andExpect(jsonPath("$.garden.totalBuildingCount").isNumber());
+    }
+
+    // ── 16. todayGoalSeconds 필드 존재 ───────────────────────────────────────
+
+    @Test
+    @DisplayName("GET /api/dashboard: todayGoalSeconds 포함 (진행바 분모 단일출처)")
+    void get_todayGoalSeconds_present() throws Exception {
+        register("goal@a.com", "goaltest");
+
+        mockMvc.perform(get("/api/dashboard").with(user("goal@a.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.todayGoalSeconds").isNumber())
+                .andExpect(jsonPath("$.todayGoalSeconds", greaterThan(0)));
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/start: 응답 TimerState에 todayGoalSeconds 포함")
+    void start_todayGoalSeconds_present() throws Exception {
+        User u = register("startgoal@a.com", "startgoal");
+        Book book = addBook(u, "책", BookStatus.READING);
+
+        mockMvc.perform(post("/api/sessions/start")
+                        .with(user("startgoal@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + book.getId() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.todayGoalSeconds").isNumber());
+    }
+
+    @Test
+    @DisplayName("todayGoalSeconds == ReadingDebtService.todayGoalSeconds (부채 분모 단일출처, getDailyIncrementSeconds 직접호출 차단)")
+    void todayGoalSeconds_matchesDebtServiceValue() throws Exception {
+        User u = register("consistent@a.com", "consistent");
+        long expected = readingDebtService.todayGoalSeconds(u);
+
+        mockMvc.perform(get("/api/dashboard").with(user("consistent@a.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.todayGoalSeconds").value(expected));
+    }
+
+    // ── 17. carryover 플래그 노출 (computeProgress 입력 — 진행바 floor 차감 분기) ──────
+
+    @Test
+    @DisplayName("GET /api/dashboard: carryover 불리언 포함 (기본 ON)")
+    void get_carryover_present() throws Exception {
+        register("carryflag@a.com", "carryflag");
+
+        mockMvc.perform(get("/api/dashboard").with(user("carryflag@a.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.carryover").isBoolean())
+                .andExpect(jsonPath("$.carryover").value(true));
+    }
+
+    @Test
+    @DisplayName("carryover OFF 설정 → 응답 carryover=false (설정 반영)")
+    void get_carryover_reflectsOffSetting() throws Exception {
+        User u = register("carryoffflag@a.com", "carryoffflag");
+        timerRepository.findByUser(u).ifPresent(t -> {
+            t.updateSettings(t.getDailyIncrementSeconds(), false);
+            timerRepository.save(t);
+        });
+
+        mockMvc.perform(get("/api/dashboard").with(user("carryoffflag@a.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.carryover").value(false));
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/start: 응답 TimerState에 carryover 포함")
+    void start_carryover_present() throws Exception {
+        User u = register("startcarry@a.com", "startcarry");
+        Book book = addBook(u, "책", BookStatus.READING);
+
+        mockMvc.perform(post("/api/sessions/start")
+                        .with(user("startcarry@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + book.getId() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.carryover").isBoolean());
     }
 }
