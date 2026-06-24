@@ -63,3 +63,24 @@ export function showStreakChip(streak: number): boolean {
 export function displayName(loginId: string, _nickname: string | null): string {
     return loginId
 }
+
+/**
+ * 타이머 우패널 3상태. 측정 중이면 항상 measuring(종료 버튼 보존) — 달성은 좌측 pill·진행바로
+ * 표시한다(사용자 결정 2026-06-24: 측정 중 달성해도 패널 전환 안 함, 종료 흐름 보존).
+ */
+export function panelState(hasActiveSession: boolean, isAchieved: boolean): 'idle' | 'measuring' | 'achieved' {
+    if (hasActiveSession) return 'measuring'
+    return isAchieved ? 'achieved' : 'idle'
+}
+
+/** 진행바 분모 라벨. 0 이하 → '목표 없음'. 60분 이상은 '시간(+분)', 정각이면 분 생략. */
+export function goalLabel(goalSeconds: number): string {
+    if (goalSeconds <= 0) return '목표 없음'
+    const m = Math.round(goalSeconds / 60)
+    if (m >= 60) {
+        const h = Math.floor(m / 60)
+        const rm = m % 60
+        return rm > 0 ? `${h}시간 ${rm}분` : `${h}시간`
+    }
+    return `${m}분`
+}
