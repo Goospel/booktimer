@@ -74,4 +74,20 @@ class PwaStaticAccessTest {
         mvc().perform(get(startUrl))
                 .andExpect(status().is(not(404)));
     }
+
+    /**
+     * PWA 콜드 런치 별칭 회귀 가드 — 미인증 상태에서 {@code /dashboard} 가 {@code /} 와 동일하게 200 이어야 한다.
+     *
+     * <p>이미 설치된 PWA 는 {@code start_url} 을 설치 시점에 동결한다. #473 이 manifest 를
+     * {@code /dashboard → /} 로 고쳤어도, 구 install 은 여전히 콜드 런치마다 {@code /dashboard} 를 쏜다.
+     * 서버가 이 경로를 {@code /} 별칭으로 받아야 한다 — 미인증이면 {@code /} 처럼 landing(200) 을 줘야지,
+     * permitAll 에서 빠지면 default-deny 가 {@code /login} 으로 302 튕겨 콜드 런치 경험이 깨진다.
+     * "404 아님"보다 강하게 "{@code /} 와 같은 200"을 박아 permitAll 매처 누락을 결정적으로 잡는다.
+     */
+    @Test
+    @DisplayName("미인증 상태에서 /dashboard 가 200(landing) — / 와 동일 (permitAll 누락 가드)")
+    void dashboardAlias_unauthenticated_isPublicLikeRoot() throws Exception {
+        mvc().perform(get("/dashboard"))
+                .andExpect(status().isOk());
+    }
 }

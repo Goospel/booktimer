@@ -22,7 +22,10 @@ public class DashboardController {
         this.currentUserService = currentUserService;
     }
 
-    @GetMapping("/")
+    // "/dashboard" 는 "/" 의 별칭 — 이미 설치된 PWA 가 콜드 런치 시 동결된 구 start_url(/dashboard)을
+    // 쏘기 때문이다. manifest 를 /dashboard→/ 로 고쳐도(#473) 구 install 은 설치 시점 start_url 을
+    // 동결해 즉시 안 바뀐다(특히 iOS Safari). 서버가 별칭으로 받아 콜드 런치 404 를 막는다.
+    @GetMapping({"/", "/dashboard"})
     public String dashboard(Principal principal) {
         if (principal == null) {
             return "landing";
