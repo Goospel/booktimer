@@ -291,14 +291,15 @@ class DashboardApiControllerTest {
     // ── 15. garden DTO — 엔티티 User FK 없음 (spot-check) ────────────────────
 
     @Test
-    @DisplayName("GET /api/dashboard: garden.plants[0].code 존재 (엔티티 누출 없이 CatalogDto 직렬화)")
+    @DisplayName("GET /api/dashboard: garden CatalogDto — 작가·건물 카운트 필드 존재 (마을 컨셉 전환 후)")
     void gardenDtoSpotCheck() throws Exception {
         register("garden@a.com", "garden");
 
-        // plants는 비어있을 수 있으므로 catalog 키 존재 여부만 확인
         mockMvc.perform(get("/api/dashboard").with(user("garden@a.com")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.garden.plants").isArray())
-                .andExpect(jsonPath("$.garden.ownedCount").isNumber());
+                .andExpect(jsonPath("$.garden.ownedAuthorCharacterCount").isNumber())
+                .andExpect(jsonPath("$.garden.totalAuthorCharacterCount").isNumber())
+                .andExpect(jsonPath("$.garden.ownedBuildingCount").isNumber())
+                .andExpect(jsonPath("$.garden.totalBuildingCount").isNumber());
     }
 }

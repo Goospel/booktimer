@@ -13,69 +13,40 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 정원 꾸미기(배치) 유스케이스 — 보유 식물을 캔버스 자유 위치에 놓고 저장한다.
+ * 마을 꾸미기(배치) 유스케이스 — BUILDING 축 건물을 캔버스 자유 위치에 놓고 저장한다.
  *
- * <p>도감 보유는 독서 실적에서 유도/저장하지만(부채 모델 N-058·트랙 B 발견), "어디에 놓을지"는 사용자 의도라
- * 별도로 저장한다({@link GardenPlacement}). 보유 집합은 {@link GardenService#view}가 내는 {@link GardenView#ownedPlants()}를
- * 재사용한다 — 새로 계산하지 않고 도감과 같은 한 소스를 본다(설계 §3).
+ * <p>식물 4축(TIME·GENRE·DIVERSITY·RECIPE)·소품(Decoration)은 마을 컨셉 전환으로 제거됨.
+ * DB 테이블(garden_placement)은 보존하되 BUILDING 축 행만 렌더에 사용.
  *
- * <p>자유 위치 전환(Phase 1): 격자 셀 번호 대신 정규화 좌표(0~1)+zOrder로 저장한다. 같은 좌표 겹침을 허용하고,
- * 식물 위치는 월드 픽셀 크기 무관이라 반응형에 자연 정합한다(설계 §2.3).
- *
- * <p><b>유령 방지</b>: 저장된 배치라도 그 식물을 현재 보유하지 않으면(예: 완독책 삭제로 장르 식물 상실)
- * {@link #layoutOf}가 현재 보유와 교집합해 렌더에서 뺀다(설계 §5 리스크 2).
- *
- * <p><b>위조 방어</b>: {@link #save}는 미보유 식물·좌표 범위 밖·같은 식물 중복 요청을 거부한다(설계 §4).
+ * <p>고아 방어: ownedByKey 교집합(BUILDING만)이 1차 방어, layoutOf()의 명시 BUILDING 필터가 2차 방어.
  */
 @Service
 public class GardenLayoutService {
 
-    /** 정원 월드 가로 픽셀(고정 종횡비 — 프론트 좌표 변환·카메라 핏 기준, 설계 §2.3). */
+    /** 정원 월드 가로 픽셀(고정 종횡비 — 프론트 좌표 변환·카메라 핏 기준). */
     public static final int WORLD_WIDTH = 1000;
-    /** 정원 월드 세로 픽셀(고정 종횡비 5:4 — 좁은 모바일 폭에서 세로가 과압축돼 답답하던 문제 완화, #356의 640에서 키움). */
+    /** 정원 월드 세로 픽셀(고정 종횡비 5:4). */
     public static final int WORLD_HEIGHT = 800;
-    /** 한 사용자가 놓을 수 있는 소품 최대 개수 — 중복 허용이라 무한이라 남용 방어 cap(설계 §3, Phase 3). 식물은 카탈로그(한 종 한 번)로 자연 제한. */
-    public static final int MAX_DECORATIONS = 200;
 
     private final GardenPlacementRepository placementRepository;
     private final GardenService gardenService;
-    private final DecorationRepository decorationRepository;
-    private final GardenDecorationPlacementRepository decorationPlacementRepository;
 
-    public GardenLayoutService(GardenPlacementRepository placementRepository, GardenService gardenService,
-                               DecorationRepository decorationRepository,
-                               GardenDecorationPlacementRepository decorationPlacementRepository) {
+    public GardenLayoutService(GardenPlacementRepository placementRepository, GardenService gardenService) {
         this.placementRepository = placementRepository;
         this.gardenService = gardenService;
-        this.decorationRepository = decorationRepository;
-        this.decorationPlacementRepository = decorationPlacementRepository;
-    }
-
-    // ── 소품(데코) — 살아있는 정원 게임 Phase 3. 식물과 별 테이블·별 검증(보유 무관·중복 허용, 설계 §1). ──
-
-    /** 소품 카탈로그를 팔레트 옵션으로(진열 순서). 소품은 보유 무관이라 카탈로그 전체가 곧 팔레트다(식물은 보유분만). */
-    public List<DecorationOption> decorationCatalog() {
-        List<DecorationOption> options = new ArrayList<>();
-        for (Decoration d : decorationRepository.findAllByOrderByDisplayOrderAsc()) {
-            options.add(new DecorationOption(d.getCode(), d.getName(), d.getEmoji(), d.getSpriteId()));
-        }
-        return options;
     }
 
     /**
-     * 식물+소품을 함께 원자적 교체 저장한다 — 한 트랜잭션에서 식물 경로({@link #save})와 소품 경로({@link #saveDecorations})를
-     * 위임 호출한다(설계 §2 결정 ②). 한쪽 검증이 실패하면 트랜잭션이 롤백돼 전체가 무산된다.
+     * 건물 배치를 원자적 교체 저장한다.
      */
     @Transactional
     public void saveLayout(User user, LayoutSaveRequest req) {
-        save(user, req.plantsOrEmpty());                  // 식물 — 보유 검증·한 식물 한 번(기존 경로 그대로)
-        saveDecorations(user, req.decorationsOrEmpty());  // 소품 — 카탈로그 검증·중복 허용
+        save(user, req.plantsOrEmpty());
     }
 
     /**
-     * 사용자의 배치를 식물+소품 통합으로, z 오름차순 병합 정렬해 렌더용으로 내준다(설계 §2 결정 ③).
-     * 식물은 보유와 교집합(유령 방지, {@link #layoutOf}), 소품은 현재 카탈로그와 교집합(고아 방지)한다.
-     * 보기 뷰·부트스트랩 JSON이 이 단일 출처를 본다 — 연못은 식물 뒤, 벤치는 식물 앞처럼 두 종이 한 z 공간에서 교차한다.
+     * 사용자의 배치를 BUILDING 축만, z 오름차순으로 내준다.
+     * 보유를 잃은 건물(고아)은 ownedByKey 교집합 + 명시 BUILDING 필터로 제외.
      */
     @Transactional
     public List<PlacedItem> layoutItemsOf(User user) {
@@ -83,90 +54,40 @@ public class GardenLayoutService {
         for (PlacedPlant p : layoutOf(user)) {
             items.add(PlacedItem.plant(p));
         }
-        Map<String, Decoration> catalog = decorationByCode();
-        for (GardenDecorationPlacement gd : decorationPlacementRepository.findByUser(user)) {
-            Decoration meta = catalog.get(gd.getDecorationCode());
-            if (meta != null) { // 카탈로그 교집합 — 시드에서 빠진 옛 코드(고아)는 렌더에서 제외(깨진 스프라이트 차단)
-                items.add(PlacedItem.decor(meta, gd));
-            }
-        }
-        items.sort(Comparator.comparingInt(PlacedItem::z)); // 식물·소품 통합 z 오름차순(뒤→앞)
+        items.sort(Comparator.comparingInt(PlacedItem::z));
         return items;
     }
 
     /**
-     * 소품 배치를 통째 교체 저장한다 — 본인 범위를 비우고 새 배치를 넣는다. 저장 전 전수 검증: 개수 cap·좌표 범위(0~1)·
-     * 회전(0~360)·크기(0.5~2.0)·카탈로그 존재를 본다(설계 §1·§3). 식물과 달리 <b>보유 검증·중복 거부가 없다</b>
-     * (소품은 보유 무관·중복 허용 — 울타리·디딤돌 여러 개가 정상). 검증 실패 시 저장 전체가 무산된다.
-     */
-    @Transactional
-    void saveDecorations(User user, List<DecorationPlacementRequest> requests) {
-        if (requests.size() > MAX_DECORATIONS) { // 중복 허용이라 무한 → 남용 방어 cap(식물은 카탈로그로 자연 제한)
-            throw new IllegalArgumentException("소품은 최대 " + MAX_DECORATIONS + "개까지 놓을 수 있습니다: " + requests.size());
-        }
-        Map<String, Decoration> catalog = decorationByCode();
-        for (DecorationPlacementRequest r : requests) {
-            if (r.code() == null) {
-                throw new IllegalArgumentException("소품 배치 요청에 코드가 비어 있습니다.");
-            }
-            if (r.x() < 0 || r.x() > 1 || r.y() < 0 || r.y() > 1) {
-                throw new IllegalArgumentException("정규화 범위(0~1)를 벗어난 좌표입니다: (" + r.x() + ", " + r.y() + ")");
-            }
-            if (r.rotation() < 0 || r.rotation() > 360) {
-                throw new IllegalArgumentException("회전 범위(0~360)를 벗어났습니다: " + r.rotation());
-            }
-            if (r.scale() < 0.5 || r.scale() > 2.0) {
-                throw new IllegalArgumentException("크기 범위(0.5~2.0)를 벗어났습니다: " + r.scale());
-            }
-            if (!catalog.containsKey(r.code())) {
-                throw new IllegalArgumentException("카탈로그에 없는 소품은 배치할 수 없습니다: " + r.code());
-            }
-            // 식물과 달리 같은 code 중복을 거부하지 않는다 — 소품은 여러 개가 정상(설계 §1).
-        }
-        // 교체 저장: 본인 범위를 비우고(즉시 실행되는 bulk delete) 새 배치를 삽입한다.
-        decorationPlacementRepository.deleteByUser(user);
-        decorationPlacementRepository.flush();
-        for (DecorationPlacementRequest r : requests) {
-            decorationPlacementRepository.save(
-                    GardenDecorationPlacement.of(user, r.code(), r.x(), r.y(), r.z(), r.rotation(), r.scale()));
-        }
-    }
-
-    /** 소품 카탈로그를 code → 엔티티 맵으로 — 검증·메타 결합 공통 소스. */
-    private Map<String, Decoration> decorationByCode() {
-        Map<String, Decoration> map = new HashMap<>();
-        for (Decoration d : decorationRepository.findAll()) {
-            map.put(d.getCode(), d);
-        }
-        return map;
-    }
-
-    /**
-     * 사용자의 저장된 배치를 현재 보유와 <b>교집합</b>해 렌더용으로 내준다 — 보유를 잃은 식물(유령)은 뺀다(설계 §5 리스크 2).
-     * 식물 메타(이모지·이름)는 보유 식물 풀에서 결합하고, 결과는 zOrder 오름차순(뒤→앞 렌더순)으로 돌려준다.
-     *
-     * <p>{@link GardenService#view}가 트랙 B 발견을 저장(쓰기)할 수 있어 읽기-쓰기 트랜잭션이다(멱등).
+     * 사용자의 저장된 배치를 현재 보유와 교집합해 렌더용으로 내준다.
+     * <ul>
+     *   <li>1차 방어: ownedByKey = ownedPlants() = BUILDING만 → 다른 축 고아 자동 탈락</li>
+     *   <li>2차 방어: 명시 BUILDING 필터 → 고아 행 이중 방어(defense-in-depth)</li>
+     * </ul>
      */
     @Transactional
     public List<PlacedPlant> layoutOf(User user) {
         Map<PlacementKey, OwnedPlant> ownedByKey = ownedByKey(user);
         List<PlacedPlant> placed = new ArrayList<>();
         for (GardenPlacement gp : placementRepository.findByUser(user)) {
+            // 2차 방어: BUILDING 이외 축(TIME·GENRE·DIVERSITY·RECIPE·AUTHOR) 행 명시 차단
+            if (gp.getAxis() != PlacementAxis.BUILDING) {
+                continue;
+            }
             OwnedPlant meta = ownedByKey.get(new PlacementKey(gp.getAxis(), gp.getPlantCode()));
-            if (meta != null) { // 교집합 — 보유 잃은 식물은 렌더에서 제외(유령 방지)
+            if (meta != null) { // 1차 방어: 교집합 — 보유 잃은 건물은 렌더에서 제외(유령 방지)
                 placed.add(new PlacedPlant(gp.getAxis(), gp.getPlantCode(),
-                        meta.emoji(), meta.name(), meta.spriteId(), // spriteId는 보유 메타에서 결합(A2)
+                        meta.emoji(), meta.name(), meta.spriteId(),
                         gp.getPosX(), gp.getPosY(), gp.getZOrder(), gp.getRotation(), gp.getScale()));
             }
         }
-        placed.sort(Comparator.comparingInt(PlacedPlant::z)); // zOrder 오름차순 = 뒤→앞 렌더
+        placed.sort(Comparator.comparingInt(PlacedPlant::z));
         return placed;
     }
 
     /**
-     * 사용자의 배치를 통째 교체 저장한다 — 본인 범위를 비우고 새 배치를 넣는다(설계 §2.4).
-     * 저장 전 전수 검증: 미보유 식물(위조)·좌표 범위 밖(0~1)·같은 식물 중복을 거부한다(설계 §4). 검증 실패 시 저장 전체가 무산된다.
-     * 자유 위치라 같은 좌표 겹침은 허용한다(셀 중복 거부 없음).
+     * 사용자의 배치를 통째 교체 저장한다.
+     * 저장 전 전수 검증: 미보유 건물(위조)·좌표 범위 밖(0~1)·같은 건물 중복·BUILDING 이외 축을 거부.
      */
     @Transactional
     public void save(User user, List<PlacementRequest> requests) {
@@ -187,13 +108,12 @@ public class GardenLayoutService {
             }
             PlacementKey key = new PlacementKey(r.axis(), r.code());
             if (!ownedByKey.containsKey(key)) {
-                throw new IllegalArgumentException("보유하지 않은 식물은 배치할 수 없습니다: " + r.axis() + "/" + r.code());
+                throw new IllegalArgumentException("보유하지 않은 건물은 배치할 수 없습니다: " + r.axis() + "/" + r.code());
             }
             if (!seenPlants.add(key)) {
-                throw new IllegalArgumentException("같은 식물을 두 번 배치할 수 없습니다: " + r.axis() + "/" + r.code());
+                throw new IllegalArgumentException("같은 건물을 두 번 배치할 수 없습니다: " + r.axis() + "/" + r.code());
             }
         }
-        // 교체 저장: 본인 범위를 비우고(즉시 실행되는 bulk delete) 새 배치를 삽입한다.
         placementRepository.deleteByUser(user);
         placementRepository.flush();
         for (PlacementRequest r : requests) {
@@ -201,7 +121,7 @@ public class GardenLayoutService {
         }
     }
 
-    /** 현재 보유 식물을 (axis, code) → 메타 맵으로 — 보유 검증·메타 결합 공통 소스(설계 §3). */
+    /** 현재 보유 건물을 (axis, code) → 메타 맵으로 — 보유 검증·메타 결합 공통 소스. */
     private Map<PlacementKey, OwnedPlant> ownedByKey(User user) {
         Map<PlacementKey, OwnedPlant> map = new HashMap<>();
         for (OwnedPlant p : gardenService.view(user).ownedPlants()) {
@@ -210,7 +130,5 @@ public class GardenLayoutService {
         return map;
     }
 
-    /** 배치 식별 키 — code가 축 간 비유니크라 (axis, code) 복합이다(설계 §1). */
-    private record PlacementKey(PlacementAxis axis, String code) {
-    }
+    private record PlacementKey(PlacementAxis axis, String code) {}
 }

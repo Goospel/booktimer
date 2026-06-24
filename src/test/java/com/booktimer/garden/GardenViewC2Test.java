@@ -12,9 +12,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>검증 항목:
  * <ul>
- *   <li>{@code ownedPlants()}에서 AUTHOR 제거 — 팔레트·저장 검증 집합에서 배제</li>
+ *   <li>{@code ownedPlants()}에서 AUTHOR 제외 — 팔레트·저장 검증 집합에서 배제</li>
  *   <li>{@code ownedCharacters()} — 보유 AUTHOR만 배회용으로 노출</li>
  *   <li>N-055: 미보유 AUTHOR가 {@code ownedCharacters()}에 새지 않는지</li>
+ *   <li>ownedPlants()는 BUILDING만 반환 (식물 4축 제거 후)</li>
  * </ul>
  */
 class GardenViewC2Test {
@@ -26,10 +27,6 @@ class GardenViewC2Test {
 
     private static GardenView viewWith(List<AuthorCharacterState> authorCharacters) {
         return new GardenView(
-                List.of(), 0, 0, 0, null, null,
-                List.of(), 0, 0,
-                List.of(), 0, 0,
-                List.of(), 0, List.of(),
                 authorCharacters, 0, authorCharacters.size(),
                 List.of(), 0, 0
         );
@@ -42,6 +39,19 @@ class GardenViewC2Test {
         assertThat(view.ownedPlants())
                 .extracting(OwnedPlant::axis)
                 .doesNotContain(PlacementAxis.AUTHOR);
+    }
+
+    @Test
+    @DisplayName("ownedPlants()는 보유한 BUILDING만 반환한다 (식물 4축 제거 후)")
+    void ownedPlants_onlyReturnsBuildingAxis() {
+        Building b = Building.of("minumsa", "민음사", "민음사", "🏛️", 3, 1, null);
+        BuildingState bs = new BuildingState(b, true);
+        GardenView view = new GardenView(
+                List.of(), 0, 0,
+                List.of(bs), 1, 1
+        );
+        assertThat(view.ownedPlants()).hasSize(1);
+        assertThat(view.ownedPlants().get(0).axis()).isEqualTo(PlacementAxis.BUILDING);
     }
 
     @Test

@@ -26,20 +26,11 @@ export interface BookOption {
     title: string
 }
 
-export interface PlantDto {
-    code: string
-    emoji: string
-    name: string
-    owned: boolean
-}
-
 export interface CatalogDto {
-    plants: PlantDto[]
-    ownedCount: number
-    totalCount: number
-    achievedDays: number
-    daysToNextUnlock: number | null
-    nextPlantName: string | null
+    ownedAuthorCharacterCount: number
+    totalAuthorCharacterCount: number
+    ownedBuildingCount: number
+    totalBuildingCount: number
 }
 
 export interface QuoteDto {
