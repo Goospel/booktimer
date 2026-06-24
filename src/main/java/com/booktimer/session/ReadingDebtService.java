@@ -63,14 +63,12 @@ public class ReadingDebtService {
     }
 
     /**
-     * 오늘 유효한 하루 목표(초) — 부채 분모와 동일 출처(GoalSchedule.goalFor). 진행바 분모로 쓴다.
-     *
-     * <p>{@link com.booktimer.timer.ReadingTimer#getDailyIncrementSeconds()} 직접 호출 금지 — 목표 변경 이력이
-     * 있으면 그날 유효 목표와 현재 평면값이 달라진다(N-059 소급 함정). {@link GoalSchedule#goalFor}가
-     * 목표 변경 이력에서 오늘 날짜로 정확히 룩업하므로 부채 계산과 항상 동일 값이 보장된다.
+     * 오늘 유효한 하루 목표(초) — 진행바 분모로 쓴다. 부채 계산과 <b>같은 trace</b>에서 유도해(오늘 날의
+     * {@code goalSeconds}) 항상 동일 값이 보장된다 — {@link com.booktimer.timer.ReadingTimer#getDailyIncrementSeconds()}
+     * 직접 호출 시의 N-059 소급 함정(목표 변경 이력이 있으면 그날 유효 목표와 현재 평면값이 달라짐)을 피한다.
      */
     public long todayGoalSeconds(User user) {
-        return buildGoalSchedule(user).goalFor(today(user));
+        return weeklyDebt(user).todayGoalSeconds();
     }
 
     /**

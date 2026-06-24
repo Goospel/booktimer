@@ -342,4 +342,45 @@ class DashboardApiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.todayGoalSeconds").value(expected));
     }
+
+    // ── 17. carryover 플래그 노출 (computeProgress 입력 — 진행바 floor 차감 분기) ──────
+
+    @Test
+    @DisplayName("GET /api/dashboard: carryover 불리언 포함 (기본 ON)")
+    void get_carryover_present() throws Exception {
+        register("carryflag@a.com", "carryflag");
+
+        mockMvc.perform(get("/api/dashboard").with(user("carryflag@a.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.carryover").isBoolean())
+                .andExpect(jsonPath("$.carryover").value(true));
+    }
+
+    @Test
+    @DisplayName("carryover OFF 설정 → 응답 carryover=false (설정 반영)")
+    void get_carryover_reflectsOffSetting() throws Exception {
+        User u = register("carryoffflag@a.com", "carryoffflag");
+        timerRepository.findByUser(u).ifPresent(t -> {
+            t.updateSettings(t.getDailyIncrementSeconds(), false);
+            timerRepository.save(t);
+        });
+
+        mockMvc.perform(get("/api/dashboard").with(user("carryoffflag@a.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.carryover").value(false));
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/start: 응답 TimerState에 carryover 포함")
+    void start_carryover_present() throws Exception {
+        User u = register("startcarry@a.com", "startcarry");
+        Book book = addBook(u, "책", BookStatus.READING);
+
+        mockMvc.perform(post("/api/sessions/start")
+                        .with(user("startcarry@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + book.getId() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.carryover").isBoolean());
+    }
 }

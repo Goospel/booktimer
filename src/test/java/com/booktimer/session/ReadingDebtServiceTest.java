@@ -185,4 +185,44 @@ class ReadingDebtServiceTest {
         assertThat(byTrace.todayDebtSeconds()).isEqualTo(byWeeklyDebt.todayDebtSeconds());
         assertThat(byTrace.totalDebtSeconds()).isEqualTo(byWeeklyDebt.totalDebtSeconds());
     }
+
+    // --- todayGoalSeconds (진행바 분모 — 부채 계산과 단일 출처) ---
+
+    @Test
+    @DisplayName("weeklyDebt: todayGoalSeconds = 오늘 유효 목표 (trace 마지막 날 goal에서 유도)")
+    void weeklyDebt_exposesTodayGoalSeconds() {
+        ReadingTimer timer = ReadingTimer.of(GOAL);
+        when(timerRepository.findByUser(user)).thenReturn(Optional.of(timer));
+        when(goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of());
+        when(historyService.dailyHistory(user)).thenReturn(List.of());
+
+        WeeklyDebt debt = service.weeklyDebt(user);
+
+        assertThat(debt.todayGoalSeconds()).isEqualTo(GOAL);
+    }
+
+    @Test
+    @DisplayName("weeklyDebt.todayGoalSeconds: 목표 변경 이력 있으면 오늘 유효 목표(최신) 반영")
+    void weeklyDebt_todayGoalSeconds_reflectsGoalHistory() {
+        ReadingTimer timer = ReadingTimer.of(3660L);
+        when(timerRepository.findByUser(user)).thenReturn(Optional.of(timer));
+        when(goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of(
+                ReadingGoalChange.of(user, TODAY_KST.minusDays(5), 3600L),
+                ReadingGoalChange.of(user, TODAY_KST.minusDays(1), 3660L)));
+        when(historyService.dailyHistory(user)).thenReturn(List.of());
+
+        assertThat(service.weeklyDebt(user).todayGoalSeconds()).isEqualTo(3660L);
+    }
+
+    @Test
+    @DisplayName("todayGoalSeconds(user) == weeklyDebt(user).todayGoalSeconds() — 단일 출처(buildGoalSchedule 중복 호출 제거)")
+    void todayGoalSeconds_derivesFromWeeklyDebt() {
+        ReadingTimer timer = ReadingTimer.of(7200L);
+        when(timerRepository.findByUser(user)).thenReturn(Optional.of(timer));
+        when(goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of());
+        when(historyService.dailyHistory(user)).thenReturn(List.of());
+
+        assertThat(service.todayGoalSeconds(user)).isEqualTo(7200L);
+        assertThat(service.todayGoalSeconds(user)).isEqualTo(service.weeklyDebt(user).todayGoalSeconds());
+    }
 }

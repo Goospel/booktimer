@@ -10,9 +10,10 @@ import java.util.List;
  * 여기 담기지 않는다(입문자 친화 — 죄책감 누적 차단, plan.md 레버 ③ 흡수).
  *
  * @param todayDebtSeconds 오늘 부채(초) = max(0, 하루목표 − 오늘 읽은 양). 헤드라인 카운트다운의 시작값.
+ * @param todayGoalSeconds 오늘 유효 하루 목표(초). 진행바 분모로 쓴다 — 부채 계산과 같은 trace에서 유도해 단일 출처.
  * @param missedDays       윈도우 내 과거 빠뜨린 날(부채>0)을 <b>최근이 먼저</b> 오도록. 모두 채웠으면 빈 목록.
  */
-public record WeeklyDebt(long todayDebtSeconds, List<DayDebt> missedDays) {
+public record WeeklyDebt(long todayDebtSeconds, long todayGoalSeconds, List<DayDebt> missedDays) {
 
     /** 총 부채(초) = 오늘 부채 + 빠뜨린 날 부채 합. 관리자 요약·전체 현황 표시에 쓴다. */
     public long totalDebtSeconds() {

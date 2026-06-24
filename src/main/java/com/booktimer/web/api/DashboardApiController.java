@@ -75,7 +75,7 @@ public class DashboardApiController {
         return new DashboardResponse(
                 live.nickname(), live.loginId(),
                 live.remainingSeconds(), live.carriedDebtSeconds(),
-                live.todayGoalSeconds(),
+                live.todayGoalSeconds(), live.carryover(),
                 live.hasActiveSession(), live.activeStartedAt(),
                 live.activeBookTitle(), live.activeBookTotalSeconds(),
                 toOptions(live.readingBooks()), toOptions(live.finishedBooks()),
@@ -118,7 +118,7 @@ public class DashboardApiController {
         DashboardModel.LiveState live = dashboardModel.computeLive(user);
         return new TimerState(
                 live.remainingSeconds(), live.carriedDebtSeconds(),
-                live.todayGoalSeconds(),
+                live.todayGoalSeconds(), live.carryover(),
                 live.hasActiveSession(), live.activeStartedAt(),
                 live.activeBookTitle(), live.activeBookTotalSeconds(),
                 toOptions(live.readingBooks()), toOptions(live.finishedBooks()),
@@ -144,6 +144,7 @@ public class DashboardApiController {
             long remainingSeconds,
             long carriedDebtSeconds,
             long todayGoalSeconds,
+            boolean carryover,
             boolean hasActiveSession,
             Instant activeStartedAt,
             String activeBookTitle,
@@ -162,6 +163,7 @@ public class DashboardApiController {
             long remainingSeconds,
             long carriedDebtSeconds,
             long todayGoalSeconds,
+            boolean carryover,
             boolean hasActiveSession,
             Instant activeStartedAt,
             String activeBookTitle,
