@@ -169,11 +169,19 @@ const WANDER_ARRIVAL_EPS = 0.01;   // 도달 판정 정규화 거리
 const WANDER_DWELL_MIN = 500;       // 최소 대기 ms
 const WANDER_DWELL_RANGE = 1500;    // 추가 랜덤 대기 ms (0~1500)
 
+// PR-A — idle 행동 타입 + 분포 가중치 (rand [0,1) 구간 매핑)
+export type IdleAction = 'stand' | 'read' | 'stretch' | 'look';
+export const IDLE_STAND_WEIGHT = 0.60;    // [0, 0.60) → stand
+export const IDLE_READ_WEIGHT  = 0.75;   // [0.60, 0.75) → read
+export const IDLE_STRETCH_WEIGHT = 0.90; // [0.75, 0.90) → stretch
+                                          // [0.90, 1.0) → look
+
 export interface WanderState {
     phase: 'idle' | 'walk';
     x: number; y: number;   // 현재 정규화 좌표 [0,1]
     tx: number; ty: number; // 목표 (walk 시 유효)
     timer: number;          // idle 잔여 ms
+    idleAction?: IdleAction; // idle 행동 (walk→idle 진입 시 1회 결정, idle 동안 고정)
 }
 
 function stepToward(x: number, y: number, tx: number, ty: number, dist: number): { x: number; y: number } {
@@ -194,9 +202,17 @@ export function wanderStep(s: WanderState, dtMs: number, speedPerMs: number, ran
     const dist = Math.hypot(s.tx - pos.x, s.ty - pos.y);
     if (dist < WANDER_ARRIVAL_EPS) {
         const timer = WANDER_DWELL_MIN + rand() * WANDER_DWELL_RANGE;
-        return { ...s, phase: 'idle', x: s.tx, y: s.ty, timer };
+        return { ...s, phase: 'idle', x: s.tx, y: s.ty, timer, idleAction: pickIdleAction(rand) };
     }
     return { ...s, x: pos.x, y: pos.y };
+}
+
+export function pickIdleAction(rand: () => number): IdleAction {
+    const r = rand();
+    if (r < IDLE_STAND_WEIGHT) return 'stand';
+    if (r < IDLE_READ_WEIGHT) return 'read';
+    if (r < IDLE_STRETCH_WEIGHT) return 'stretch';
+    return 'look';
 }
 
 // ── D 폴리시 — 통짜 스프라이트 절차 걷기 pose. DOM·Phaser 의존 0, Date·random 없음(결정성). ──
@@ -217,6 +233,9 @@ export const WALK_STEP_MS = 320;     // 한 걸음(=bob 한 사이클) 주기 ms
 export const IDLE_BREATH_MS = 2600;  // 숨쉬기 주기 ms
 export const IDLE_BREATH = 0.02;     // 숨쉬기 scaleY 폭(±2%)
 export const FLIP_DEADZONE = 0.0006; // |dx| 이하면 flip 유지(미세 흔들림 깜빡임 방지)
+export const LOOK_TOGGLE_MS = 1200;   // look 동작 flipX 토글 주기 ms
+export const STRETCH_PERIOD_MS = 2800; // 기지개 scaleY 주기 ms
+export const STRETCH_AMP = 0.12;      // 기지개 최대 scaleY 늘임
 
 export function walkPose(
     phase: 'idle' | 'walk',
@@ -241,4 +260,40 @@ export function walkPose(
     // idle — 잔잔한 숨쉬기(없이 완전정지도 무방하나 "살아있음" 위해 약한 breathing).
     const breath = IDLE_BREATH * Math.sin(2 * Math.PI * clockMs / IDLE_BREATH_MS);
     return { bobY: 0, tilt: 0, scaleX: 1 - breath * 0.5, scaleY: 1 + breath, flipX };
+}
+
+// PR-A — idle 행동별 pose. stand=기존 breathing / read=조용한 breathing /
+// stretch=느린 세로 늘임 / look=clock 기반 flipX 토글. Date·random 없음.
+export function idlePose(action: IdleAction, clockMs: number, prevFlipX: boolean): WalkPose {
+    if (action === 'stand') {
+        const breath = IDLE_BREATH * Math.sin(2 * Math.PI * clockMs / IDLE_BREATH_MS);
+        return { bobY: 0, tilt: 0, scaleX: 1 - breath * 0.5, scaleY: 1 + breath, flipX: prevFlipX };
+    }
+    if (action === 'read') {
+        // 독서: IDLE_BREATH의 30% — 더 정적인 숨쉬기
+        const breath = IDLE_BREATH * 0.3 * Math.sin(2 * Math.PI * clockMs / IDLE_BREATH_MS);
+        return { bobY: 0, tilt: 0, scaleX: 1 - breath * 0.5, scaleY: 1 + breath, flipX: prevFlipX };
+    }
+    if (action === 'stretch') {
+        // 기지개: [0,1] 범위 t, scaleY = 1+STRETCH_AMP*t (발 끝으로 천천히 늘어남)
+        const t = 0.5 - 0.5 * Math.cos(2 * Math.PI * clockMs / STRETCH_PERIOD_MS);
+        const stretch = STRETCH_AMP * t;
+        return {
+            bobY: -WALK_BOB_PX * t * 0.3,
+            tilt: 0,
+            scaleX: 1 - stretch * 0.5,
+            scaleY: 1 + stretch,
+            flipX: prevFlipX,
+        };
+    }
+    // look: LOOK_TOGGLE_MS마다 flipX 토글 — prevFlipX 기준으로 좌우 두리번
+    const toggleCount = Math.floor(clockMs / LOOK_TOGGLE_MS);
+    const breath = IDLE_BREATH * 0.5 * Math.sin(2 * Math.PI * clockMs / IDLE_BREATH_MS);
+    return {
+        bobY: 0,
+        tilt: 0,
+        scaleX: 1 - breath * 0.5,
+        scaleY: 1 + breath,
+        flipX: toggleCount % 2 === 0 ? prevFlipX : !prevFlipX,
+    };
 }

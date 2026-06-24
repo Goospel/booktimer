@@ -8,7 +8,7 @@ import {
     normToIsoPixel, isoPixelToNorm,
     isOutsideWorld, resolveDrop, nearestFreeCell,
     WanderState, wanderStep,
-    walkPose, WALK_STEP_MS,
+    walkPose, idlePose, WALK_STEP_MS,
     AMBIENT_DECOR,
 } from './pure';
 
@@ -259,7 +259,31 @@ export class GardenScene extends Phaser.Scene {
 
             // 진행 방향 = 이번 스텝의 화면 dx(직전 footX 대비). 멈추면 ≈0 → 데드존서 방향 유지.
             const dx = px - (o.getData('footX') as number);
-            const pose = walkPose(next.phase, clock, dx, o.getData('flipX') as boolean);
+            const flipX = o.getData('flipX') as boolean;
+            const pose = next.phase === 'walk'
+                ? walkPose('walk', clock, dx, flipX)
+                : idlePose(next.idleAction ?? 'stand', clock, flipX);
+
+            // idle 진입 순간(walk→idle)에 read/stretch 이모트 1회 (T-084: 독립 오브젝트)
+            if (s.phase === 'walk' && next.phase === 'idle') {
+                const action = next.idleAction ?? 'stand';
+                if (action === 'read' || action === 'stretch') {
+                    const emote = action === 'read' ? '📖' : '🙆';
+                    const et = this.add.text(px, py - this.plantPx * 0.5, emote, {
+                        fontSize: Math.round(this.plantPx * 0.5) + 'px',
+                    });
+                    et.setOrigin(0.5, 1);
+                    et.setDepth(1e7);
+                    this.tweens.add({
+                        targets: et,
+                        y: et.y - this.plantPx * 0.4,
+                        alpha: 0,
+                        duration: 1000,
+                        ease: 'Cubic.easeOut',
+                        onComplete: () => et.destroy(),
+                    });
+                }
+            }
 
             o.x = px;
             o.y = py + pose.bobY;          // bob은 시각에만(논리 발밑 y와 분리)

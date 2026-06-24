@@ -15,6 +15,9 @@ import {
     WALK_BOB_PX, WALK_TILT_DEG, WALK_SQUASH, WALK_STEP_MS,
     IDLE_BREATH_MS, IDLE_BREATH, FLIP_DEADZONE,
     isInsideDiamond, AMBIENT_INSET, AMBIENT_DECOR,
+    IdleAction, pickIdleAction, idlePose,
+    IDLE_STAND_WEIGHT, IDLE_READ_WEIGHT, IDLE_STRETCH_WEIGHT,
+    LOOK_TOGGLE_MS, STRETCH_PERIOD_MS, STRETCH_AMP,
 } from '../src/garden/pure';
 
 const W = 1000, H = 640;
@@ -547,6 +550,117 @@ describe('garden pure.ts', () => {
 
         test('분산 가드: 하단(sy>0.6)에 최소 1개', () => {
             expect(AMBIENT_DECOR.some(d => d.sy > 0.6)).toBe(true);
+        });
+    });
+
+    // PR-A — idle 행동 다양화 순수함수
+    describe('pickIdleAction — 분포 경계', () => {
+        test('rand 0 → stand', () => expect(pickIdleAction(() => 0)).toBe('stand'));
+        test('rand STAND-ε → stand', () => expect(pickIdleAction(() => IDLE_STAND_WEIGHT - 1e-9)).toBe('stand'));
+        test('rand STAND(0.60) → read', () => expect(pickIdleAction(() => IDLE_STAND_WEIGHT)).toBe('read'));
+        test('rand READ-ε → read', () => expect(pickIdleAction(() => IDLE_READ_WEIGHT - 1e-9)).toBe('read'));
+        test('rand READ(0.75) → stretch', () => expect(pickIdleAction(() => IDLE_READ_WEIGHT)).toBe('stretch'));
+        test('rand STRETCH-ε → stretch', () => expect(pickIdleAction(() => IDLE_STRETCH_WEIGHT - 1e-9)).toBe('stretch'));
+        test('rand STRETCH(0.90) → look', () => expect(pickIdleAction(() => IDLE_STRETCH_WEIGHT)).toBe('look'));
+        test('rand 1-ε → look', () => expect(pickIdleAction(() => 1 - 1e-9)).toBe('look'));
+    });
+
+    describe('idlePose', () => {
+        test('stand = walkPose(idle)와 완전 동일', () => {
+            for (const c of [0, 300, 1000, IDLE_BREATH_MS]) {
+                const a = idlePose('stand', c, false);
+                const b = walkPose('idle', c, 0, false);
+                expect(a.bobY).toBeCloseTo(b.bobY);
+                expect(a.tilt).toBeCloseTo(b.tilt);
+                expect(a.scaleX).toBeCloseTo(b.scaleX);
+                expect(a.scaleY).toBeCloseTo(b.scaleY);
+                expect(a.flipX).toBe(b.flipX);
+            }
+        });
+
+        test('read bobY=0, tilt=0 (정지감)', () => {
+            for (const c of [0, 500, 1300]) {
+                const p = idlePose('read', c, false);
+                expect(p.bobY).toBeCloseTo(0);
+                expect(p.tilt).toBeCloseTo(0);
+            }
+        });
+
+        test('read scaleY 진폭 < stand 진폭 (더 조용)', () => {
+            const c = IDLE_BREATH_MS / 4; // sin 최대 지점
+            const read  = idlePose('read',  c, false);
+            const stand = idlePose('stand', c, false);
+            expect(Math.abs(read.scaleY - 1)).toBeLessThan(Math.abs(stand.scaleY - 1));
+        });
+
+        test('stretch scaleY > 1 구간 존재 (기지개 효과)', () => {
+            // STRETCH_PERIOD_MS/4 에서 t=0.5, scaleY = 1 + STRETCH_AMP*0.5 > 1
+            const p = idlePose('stretch', STRETCH_PERIOD_MS / 4, false);
+            expect(p.scaleY).toBeGreaterThan(1);
+        });
+
+        test('stretch scaleY ≤ 1+STRETCH_AMP (상한 이내)', () => {
+            for (let c = 0; c <= STRETCH_PERIOD_MS; c += 100) {
+                const p = idlePose('stretch', c, false);
+                expect(p.scaleY).toBeLessThanOrEqual(1 + STRETCH_AMP + 1e-9);
+            }
+        });
+
+        test('look: 0ms와 LOOK_TOGGLE_MS에서 flipX 반전', () => {
+            const p0 = idlePose('look', 0, false);
+            const p1 = idlePose('look', LOOK_TOGGLE_MS, false);
+            expect(p0.flipX).not.toBe(p1.flipX);
+        });
+
+        test('look: 주기 보존 — 0ms ≡ 2×LOOK_TOGGLE_MS flipX', () => {
+            const p0 = idlePose('look', 0, false);
+            const p2 = idlePose('look', LOOK_TOGGLE_MS * 2, false);
+            expect(p0.flipX).toBe(p2.flipX);
+        });
+
+        test('look prevFlipX=true → 0ms:true, LOOK_TOGGLE_MS:false', () => {
+            const p0 = idlePose('look', 0, true);
+            const p1 = idlePose('look', LOOK_TOGGLE_MS, true);
+            expect(p0.flipX).toBe(true);
+            expect(p1.flipX).toBe(false);
+        });
+
+        test('stand/read/stretch prevFlipX 유지', () => {
+            for (const action of ['stand', 'read', 'stretch'] as IdleAction[]) {
+                const c = action === 'stretch' ? STRETCH_PERIOD_MS / 4 : 500;
+                expect(idlePose(action, c, true).flipX).toBe(true);
+                expect(idlePose(action, c, false).flipX).toBe(false);
+            }
+        });
+    });
+
+    describe('wanderStep — idleAction 연동', () => {
+        const SPEED = 0.001;
+        const constRand = (v: number) => () => v;
+
+        test('walk→idle 전환 시 idleAction 부여됨', () => {
+            const near: WanderState = { phase: 'walk', x: 0.5, y: 0.5, tx: 0.5001, ty: 0.5001, timer: 0 };
+            const s = wanderStep(near, 100, SPEED, constRand(0.5));
+            expect(s.phase).toBe('idle');
+            expect(s.idleAction).toBeDefined();
+        });
+
+        test('walk→idle: rand 0.95 → idleAction=look', () => {
+            const near: WanderState = { phase: 'walk', x: 0.5, y: 0.5, tx: 0.5001, ty: 0.5001, timer: 0 };
+            const s = wanderStep(near, 100, SPEED, constRand(0.95));
+            expect(s.idleAction).toBe('look');
+        });
+
+        test('idle 유지 중 idleAction 불변 (재선택 금지)', () => {
+            const idle: WanderState = { phase: 'idle', x: 0.5, y: 0.5, tx: 0, ty: 0, timer: 1000, idleAction: 'read' };
+            const s = wanderStep(idle, 100, SPEED, constRand(0.5));
+            expect(s.idleAction).toBe('read');
+        });
+
+        test('idle→walk 전환 후 phase=walk', () => {
+            const idle: WanderState = { phase: 'idle', x: 0.5, y: 0.5, tx: 0, ty: 0, timer: 0, idleAction: 'stretch' };
+            const s = wanderStep(idle, 1, SPEED, constRand(0.3));
+            expect(s.phase).toBe('walk');
         });
     });
 });
