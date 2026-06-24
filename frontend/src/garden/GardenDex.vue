@@ -34,7 +34,8 @@
         :spriteId="a.spriteId"
         :lockedLabel="a.matchName"
         :ownedOnly="ownedOnly"
-        :cellTitle="a.owned ? a.name : a.matchName + ' 완독 시'" />
+        :cellTitle="a.owned ? a.name : a.matchName + ' 완독 시'"
+        :affection="a.affection" />
     </div>
     <p class="garden-next" v-if="catalog.ownedAuthorCharacterCount < catalog.totalAuthorCharacterCount">
       🧑 작가의 책을 완독해 캐릭터를 모아보세요
@@ -71,7 +72,7 @@ import DexCell from './DexCell.vue';
 
 interface AuthorCharacterDto {
   code: string; emoji: string; name: string; spriteId: string | null;
-  owned: boolean; matchName: string;
+  owned: boolean; matchName: string; affection: number;
 }
 interface BuildingDto {
   code: string; emoji: string; name: string; spriteId: string | null;

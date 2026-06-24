@@ -4,7 +4,7 @@
     <div v-else-if="!data" class="village-loading">🌱 불러오는 중…</div>
     <template v-else>
       <!-- 게임 스테이지 — 풀스크린 채움 -->
-      <GardenGame ref="gameRef" :data="data" />
+      <GardenGame ref="gameRef" :data="data" @fed="onFed" />
 
       <!-- HUD — .village-shell 기준 절대배치 -->
       <div class="village-hud">
@@ -13,6 +13,7 @@
             <span>📚</span> BookTimer
           </a>
           <span class="village-hud-greeting">{{ nickname }}님의 마을</span>
+          <span class="village-hud-food">🍙 {{ data.foodBalance ?? 0 }}</span>
         </div>
         <div class="village-hud-actions">
           <button type="button" class="village-hud-btn" @click="gameRef?.startEdit()">✏️ 꾸미기</button>
@@ -64,6 +65,28 @@ onMounted(async () => {
     loadError.value = true;
   }
 });
+
+function onFed(result: { foodBalance: number; characterCode: string; affection: number }) {
+  if (!data.value) return;
+  data.value.foodBalance = result.foodBalance;
+  // 배회 캐릭터 정(affection) 갱신
+  if (data.value.characters) {
+    for (const c of data.value.characters) {
+      if (c.code === result.characterCode) { c.affection = result.affection; break; }
+    }
+  }
+  // 도감 authorCharacters 정 갱신
+  if (data.value.catalog?.authorCharacters) {
+    for (const a of data.value.catalog.authorCharacters) {
+      if (a.code === result.characterCode) { a.affection = result.affection; break; }
+    }
+  }
+  if (data.value.catalog?.ownedCharacters) {
+    for (const o of data.value.catalog.ownedCharacters) {
+      if (o.code === result.characterCode) { o.affection = result.affection; break; }
+    }
+  }
+}
 
 onUnmounted(() => document.removeEventListener('keydown', onKeydown));
 </script>
