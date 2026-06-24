@@ -130,6 +130,35 @@ class DashboardControllerTest {
                 .andExpect(redirectedUrl("/onboarding"));
     }
 
+    // ── PWA 콜드 런치 별칭: /dashboard (동결된 구 install 구제) ─────────────────
+    // 이미 설치된 PWA는 start_url을 설치 시점에 동결한다. #473이 manifest를 /dashboard→/로
+    // 고쳤어도, 구 install은 여전히 콜드 런치마다 /dashboard를 쏜다. 서버가 이를 /와 동일하게
+    // 받아 404를 막는다(별칭이 단순 정적 페이지가 아니라 / 의 분기 로직을 그대로 공유함을 박는다).
+
+    @Test
+    @DisplayName("GET /dashboard: 온보딩 완료 사용자 → 200 dashboard 셸 (/ 별칭)")
+    void dashboardAlias_rendersForLoggedInUser() throws Exception {
+        registerOnboarded("dashalias@booktimer.com", "별칭책벌레", today());
+
+        mockMvc.perform(get("/dashboard").with(user("dashalias@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(view().name("dashboard"));
+    }
+
+    @Test
+    @DisplayName("GET /dashboard: ADMIN → /admin 리다이렉트 (/ 와 동일 분기)")
+    void dashboardAlias_adminRedirectsToAdmin() throws Exception {
+        User admin = registrationService.register(
+                "adminalias@booktimer.com", "rawpw1234", "별칭운영자", SEOUL, Role.ADMIN, today());
+        admin.assignLoginId("adminaliashandle");
+        admin.completeOnboarding();
+        userRepository.save(admin);
+
+        mockMvc.perform(get("/dashboard").with(user("adminaliashandle")))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/admin"));
+    }
+
     // ── 셸 버퍼 안전 게이트 (CSRF 선확정 제거 전제조건) ──────────────────────
 
     @Test
