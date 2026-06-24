@@ -7,9 +7,7 @@ import ContributionGraph from './ContributionGraph.vue'
 import GardenPanel from './GardenPanel.vue'
 import QuoteCard from './QuoteCard.vue'
 import EmailVerifyBanner from './EmailVerifyBanner.vue'
-import HighlightActions from './HighlightActions.vue'
-import PrimaryActions from './PrimaryActions.vue'
-import UtilityActions from './UtilityActions.vue'
+import QuickNav from './QuickNav.vue'
 
 const data = ref<DashboardResponse | null>(null)
 const loading = ref(true)
@@ -19,6 +17,8 @@ const actionError = ref<string | null>(null)
 // 타이머 상태 — start/stop 응답으로 부분 갱신
 const remainingSeconds = ref(0)
 const carriedDebtSeconds = ref(0)
+const todayGoalSeconds = ref(0)
+const carryover = ref(true)
 const hasActiveSession = ref(false)
 const activeStartedAt = ref<string | null>(null)
 const activeBookTitle = ref<string | null>(null)
@@ -30,6 +30,8 @@ const recentBookId = ref<number | null>(null)
 function applyTimerState(s: TimerState) {
     remainingSeconds.value = s.remainingSeconds
     carriedDebtSeconds.value = s.carriedDebtSeconds
+    todayGoalSeconds.value = s.todayGoalSeconds
+    carryover.value = s.carryover
     hasActiveSession.value = s.hasActiveSession
     activeStartedAt.value = s.activeStartedAt
     activeBookTitle.value = s.activeBookTitle
@@ -103,6 +105,9 @@ async function handleStop() {
         <TimerCard
             :remaining-seconds="remainingSeconds"
             :carried-debt-seconds="carriedDebtSeconds"
+            :today-goal-seconds="todayGoalSeconds"
+            :carryover="carryover"
+            :streak="data.graph.currentStreak"
             :has-active-session="hasActiveSession"
             :active-started-at="activeStartedAt"
             :active-book-title="activeBookTitle"
@@ -114,17 +119,11 @@ async function handleStop() {
             @stop="handleStop"
         />
 
-        <HighlightActions :login-id="data.loginId" />
+        <ContributionGraph :graph="data.graph" />
 
-        <section class="card">
-            <ContributionGraph :graph="data.graph" />
-        </section>
-
-        <PrimaryActions />
+        <QuickNav :login-id="data.loginId" />
 
         <GardenPanel :garden="data.garden" />
-
-        <UtilityActions />
 
         <form class="logout-form" action="/logout" method="post">
             <input type="hidden" name="_csrf" :value="getCsrfToken()">

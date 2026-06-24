@@ -6,6 +6,8 @@ import {
     visibleAuthors,
     showStreakChip,
     displayName,
+    panelState,
+    goalLabel,
 } from './timerProgress'
 
 // ── computeProgress ──────────────────────────────────────────────────────────
@@ -176,4 +178,27 @@ describe('displayName', () => {
 
     it('nickname 없어도 loginId 반환', () =>
         expect(displayName('kimsa', null)).toBe('kimsa'))
+})
+
+// ── panelState ────────────────────────────────────────────────────────────────
+
+describe('panelState', () => {
+    it('미측정 + 미달성 → idle', () => expect(panelState(false, false)).toBe('idle'))
+    it('측정중 + 미달성 → measuring', () => expect(panelState(true, false)).toBe('measuring'))
+    // 측정 중이면 달성해도 measuring 유지 — 종료 버튼 보존, 달성은 좌측 pill·진행바로 표시(사용자 결정 2026-06-24)
+    it('측정중 + 달성 → measuring (종료 보존, 좌측만 달성 표시)', () => expect(panelState(true, true)).toBe('measuring'))
+    it('미측정 + 달성 → achieved', () => expect(panelState(false, true)).toBe('achieved'))
+})
+
+// ── goalLabel ─────────────────────────────────────────────────────────────────
+
+describe('goalLabel', () => {
+    it('0 이하 → "목표 없음" (0 분모 가드)', () => {
+        expect(goalLabel(0)).toBe('목표 없음')
+        expect(goalLabel(-1)).toBe('목표 없음')
+    })
+    it('분 단위', () => expect(goalLabel(1800)).toBe('30분'))
+    it('정확히 1시간 → "1시간"(0분 생략)', () => expect(goalLabel(3600)).toBe('1시간'))
+    it('1시간 초과 → "N시간 M분"', () => expect(goalLabel(5400)).toBe('1시간 30분'))
+    it('2시간', () => expect(goalLabel(7200)).toBe('2시간'))
 })

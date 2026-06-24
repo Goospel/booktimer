@@ -1,11 +1,13 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { GraphDto, ContributionDay } from './types'
+import { cellTone } from './timerProgress'
 
-defineProps<{ graph: GraphDto }>()
+const props = defineProps<{ graph: GraphDto }>()
 
-function cellClass(cell: ContributionDay): string[] {
-    if (cell.date === null) return ['grass-cell', 'empty']
-    return ['grass-cell', `level-${cell.level}`, ...(cell.manual ? ['manual'] : [])]
+// 세이지 톤(s1~s5)은 dashboard 스코프 .dash-grass-cell에만 적용 — /history의 .grass-cell.level-*과 격리.
+function cellClasses(cell: ContributionDay): string[] {
+    return ['dash-grass-cell', cellTone(cell), ...(cell.manual ? ['manual'] : [])]
 }
 
 function cellTitle(cell: ContributionDay): string | undefined {
@@ -14,57 +16,47 @@ function cellTitle(cell: ContributionDay): string | undefined {
     return `${cell.date} · ${m}분${cell.manual ? ' · 직접 채움' : ''}`
 }
 
-function totalHM(s: number): string {
-    return `${Math.floor(s / 3600)}시간 ${Math.floor((s % 3600) / 60)}분`
-}
+const totalHM = computed(() =>
+    `${Math.floor(props.graph.totalSeconds / 3600)}시간 ${Math.floor((props.graph.totalSeconds % 3600) / 60)}분`
+)
 </script>
 
 <template>
-    <div class="grass-head">
-        <h2>독서 잔디</h2>
-        <span class="grass-streak" :title="graph.growthStageLabel">
-            <span class="grass-streak-icon">{{ graph.growthStageEmoji }}</span>
-            <small v-if="graph.currentStreak > 0" class="grass-streak-days">
-                {{ graph.currentStreak }}일 연속
-            </small>
-        </span>
-    </div>
-
-    <p class="grass-summary">
-        지난 1년 동안 <strong>{{ graph.activeDays }}</strong>일 독서 ·
-        총 <strong>{{ totalHM(graph.totalSeconds) }}</strong>
-    </p>
-
-    <div class="grass">
-        <div class="grass-weekdays" aria-hidden="true">
-            <span></span><span>월</span><span></span><span>수</span><span></span><span>금</span><span></span>
+    <section class="dash-card dash-grass-card">
+        <div class="dash-grass-head">
+            <span class="dash-pill">최근 독서 기록</span>
+            <span v-if="graph.currentStreak > 0" class="dash-streak-chip">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M5 19c0-8 6-13 14-13 0 8-5 14-13 14-1 0-1-.6-1-1z" />
+                </svg>
+                <strong>{{ graph.currentStreak }}</strong>일 연속 독서
+            </span>
         </div>
-        <div class="grass-main">
-            <div class="grass-months" aria-hidden="true">
-                <span v-for="(m, i) in graph.monthLabels" :key="i"
-                      :style="{ gridColumnStart: m.weekIndex + 1 }">
-                    {{ m.label }}
-                </span>
-            </div>
-            <div class="grass-grid">
+
+        <div class="dash-grass-scroll">
+            <div class="dash-grass-grid">
                 <template v-for="(week, wi) in graph.weeks" :key="wi">
                     <div v-for="(cell, di) in week" :key="`${wi}-${di}`"
-                         :class="cellClass(cell)"
-                         :title="cellTitle(cell)">
-                    </div>
+                         :class="cellClasses(cell)" :title="cellTitle(cell)"></div>
                 </template>
             </div>
-            <div class="grass-legend" aria-hidden="true">
+        </div>
+
+        <div class="dash-grass-foot">
+            <span class="dash-grass-summary">
+                지난 1년 <strong>{{ graph.activeDays }}</strong>일 독서 · 총 <strong>{{ totalHM }}</strong>
+            </span>
+            <div class="dash-grass-legend" aria-hidden="true">
                 <span>목표 미달</span>
-                <i class="grass-cell level-0"></i>
-                <i class="grass-cell level-1"></i>
-                <i class="grass-cell level-2"></i>
-                <i class="grass-cell level-3"></i>
-                <i class="grass-cell level-4"></i>
+                <i class="dash-grass-cell s1"></i>
+                <i class="dash-grass-cell s2"></i>
+                <i class="dash-grass-cell s3"></i>
+                <i class="dash-grass-cell s4"></i>
+                <i class="dash-grass-cell s5"></i>
                 <span>목표 달성</span>
-                <i class="grass-cell level-2 manual legend-gap"></i>
+                <i class="dash-grass-cell s3 manual dash-legend-gap"></i>
                 <span>직접 채움</span>
             </div>
         </div>
-    </div>
+    </section>
 </template>

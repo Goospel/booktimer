@@ -4,8 +4,9 @@ defineProps<{ quote: QuoteDto }>()
 </script>
 
 <template>
-    <p class="greeting quote">
-        <span class="quote-text">{{ quote.text }}</span>
-        <span class="quote-author">— {{ quote.author }}</span>
-    </p>
+    <section class="dash-card dash-quote-card">
+        <span class="dash-pill">오늘의 문장</span>
+        <p class="dash-quote-text">{{ quote.text }}</p>
+        <span class="dash-quote-author">— {{ quote.author }}</span>
+    </section>
 </template>

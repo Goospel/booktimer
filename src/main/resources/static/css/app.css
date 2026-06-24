@@ -1885,3 +1885,228 @@ a.book-title:hover { text-decoration: underline; }
     pointer-events: none;
     margin: 0;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   대시보드 Claude Design 이식 (PR-2) — dashboard 전용 .dash-* 스코프.
+   기존 .grass-cell/.timer-*/.quick-* 등 공유 클래스와 격리(전역 회귀 0).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.dash-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: clamp(18px, 2.4vw, 26px);
+    box-shadow: 0 1px 2px rgba(44, 42, 36, .04);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.dash-pill {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #E7EEE2;
+    color: var(--accent-hover);
+    font-size: 12.5px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    width: auto;
+}
+.dash-pill-ok { background: #E2F0E8; color: var(--ok); font-weight: 700; }
+
+/* 오늘의 문장 */
+.dash-quote-card { gap: 12px; }
+.dash-quote-text {
+    margin: 0;
+    font-family: 'Gowun Batang', serif;
+    font-style: italic;
+    font-size: clamp(17px, 2.2vw, 21px);
+    line-height: 1.6;
+    color: var(--text);
+    max-width: 62ch;
+}
+.dash-quote-author { font-size: 13.5px; color: var(--muted); }
+
+/* 타이머 히어로 */
+.dash-timer-hero {
+    border-radius: 22px;
+    padding: clamp(22px, 3vw, 36px);
+    box-shadow: 0 2px 4px rgba(44, 42, 36, .05), 0 18px 44px rgba(79, 107, 76, .10);
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: clamp(22px, 3vw, 40px);
+    align-items: center;
+}
+.dash-timer-left { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.dash-timer-num {
+    font-family: 'Gowun Batang', serif;
+    font-weight: 700;
+    font-size: clamp(56px, 13vw, 108px);
+    line-height: .95;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -.02em;
+}
+.dash-progress-wrap { display: flex; flex-direction: column; gap: 8px; max-width: 420px; }
+.dash-progress-track { height: 10px; border-radius: 999px; background: #E7EEE2; overflow: hidden; }
+.dash-progress-fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width .5s ease; }
+.dash-progress-meta { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
+.dash-progress-pct { color: var(--accent-hover); font-variant-numeric: tabular-nums; }
+
+.dash-timer-right { flex: 1 1 290px; min-width: 0; }
+
+/* 상태 패널 */
+.dash-state-panel {
+    background: #FAF7EF;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.dash-state-row { display: flex; align-items: center; justify-content: space-between; }
+.dash-pill-pulse { gap: 7px; }
+.dash-pulse-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent);
+    animation: btPulse 1.4s ease-in-out infinite;
+}
+@keyframes btPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: .4; transform: scale(.65); }
+}
+.dash-session-time {
+    font-family: 'Gowun Batang', serif;
+    font-size: 22px;
+    color: var(--accent-hover);
+    font-variant-numeric: tabular-nums;
+}
+.dash-divider { height: 1px; background: var(--border); }
+.dash-kv { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.dash-kv-k { font-size: 13px; color: var(--muted); }
+.dash-kv-v { font-family: 'Gowun Batang', serif; font-size: 16px; color: var(--text); text-align: right; }
+.dash-kv-v-num { font-size: 14.5px; color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* 버튼 — 패널 안 풀폭(전역 button{width:100%} 활용); a는 block 명시 */
+.dash-btn-outline {
+    margin-top: 4px;
+    padding: 14px;
+    border-radius: 12px;
+    border: 1.5px solid var(--accent);
+    background: transparent;
+    color: var(--accent-hover);
+    font-family: 'Gowun Dodum', sans-serif;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background .2s ease;
+}
+.dash-btn-outline:hover { background: #E7EEE2; }
+.dash-btn-fill {
+    padding: 14px;
+    border-radius: 12px;
+    border: none;
+    background: var(--accent);
+    color: var(--card-bg);
+    font-family: 'Gowun Dodum', sans-serif;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background .2s ease;
+}
+.dash-btn-fill:hover { background: var(--accent-hover); }
+.dash-btn-link { display: block; width: 100%; box-sizing: border-box; text-align: center; text-decoration: none; }
+.dash-btn-ok {
+    display: block; width: 100%; box-sizing: border-box;
+    margin-top: 6px;
+    padding: 13px;
+    border-radius: 12px;
+    background: var(--ok);
+    color: var(--card-bg);
+    font-family: 'Gowun Dodum', sans-serif;
+    font-size: 15.5px;
+    text-align: center;
+    text-decoration: none;
+    transition: background .2s ease;
+}
+.dash-btn-ok:hover { background: #27775a; }
+
+/* ACHIEVED */
+.dash-state-achieved { background: #E9F2EB; border-color: #CFE4D6; text-align: center; align-items: center; gap: 12px; }
+.dash-achieved-emoji { font-size: 34px; }
+.dash-achieved-title { margin: 0; font-family: 'Gowun Batang', serif; font-size: 19px; color: var(--ok); line-height: 1.4; }
+.dash-achieved-sub { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+
+/* IDLE 책 선택 */
+.dash-idle-label { font-size: 14px; color: var(--muted); }
+.dash-select-wrap { position: relative; }
+.dash-select {
+    width: 100%;
+    padding: 14px 40px 14px 15px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    color: var(--text);
+    font-size: 15.5px;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+}
+.dash-select-caret {
+    position: absolute; right: 15px; top: 50%; transform: translateY(-50%);
+    pointer-events: none; color: var(--muted); font-size: 12px;
+}
+.dash-empty { display: flex; flex-direction: column; gap: 12px; text-align: center; }
+.dash-empty p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.6; }
+
+/* 독서 잔디 (세이지 — /history .grass-cell과 격리) */
+.dash-grass-card { gap: 18px; }
+.dash-grass-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.dash-streak-chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: #E7EEE2; color: var(--accent-hover);
+    font-size: 13px; padding: 6px 13px; border-radius: 999px;
+}
+.dash-streak-chip strong { font-variant-numeric: tabular-nums; }
+.dash-grass-scroll { overflow-x: auto; padding-bottom: 4px; }
+.dash-grass-grid {
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-rows: repeat(7, 1fr);
+    gap: 3px;
+    width: max-content;
+    margin: 0 auto;
+}
+.dash-grass-cell { width: 13px; height: 13px; border-radius: 3px; background: #E9E3D6; }
+.dash-grass-cell.empty { background: transparent; }
+.dash-grass-cell.s1 { background: #E9E3D6; }
+.dash-grass-cell.s2 { background: #CFE0C2; }
+.dash-grass-cell.s3 { background: #A7C597; }
+.dash-grass-cell.s4 { background: #7BA46F; }
+.dash-grass-cell.s5 { background: #4F6B4C; }
+.dash-grass-cell.manual { box-shadow: inset 0 0 0 2px #C99A3A; }
+.dash-grass-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.dash-grass-summary { font-size: 12.5px; color: var(--muted); }
+.dash-grass-legend { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
+.dash-grass-legend .dash-grass-cell { width: 12px; height: 12px; }
+.dash-legend-gap { margin-left: 6px; }
+
+/* 빠른 이동 */
+.dash-nav { gap: 16px; }
+.dash-nav-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.dash-nav-tile {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 9px; min-height: 96px; padding: 14px;
+    border-radius: 14px; background: #FAF7EF; border: 1px solid var(--border);
+    color: var(--accent-hover); text-decoration: none;
+    transition: background .2s ease, border-color .2s ease;
+}
+.dash-nav-tile:hover { background: #E7EEE2; border-color: #CFE0C2; }
+.dash-nav-tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.dash-nav-label { font-size: 14.5px; color: var(--text); }
+
+/* 좁은 폭: 히어로 2단을 세로로 */
+@media (max-width: 520px) {
+    .dash-timer-hero { flex-direction: column; align-items: stretch; }
+}
