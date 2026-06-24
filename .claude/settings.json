@@ -22,6 +22,15 @@
             "type": "command",
             "command": "powershell.exe -NoProfile -File \".claude\\hooks\\require-tests-before-commit.ps1\"",
             "timeout": 600
+          },
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -File \".claude\\hooks\\check-commit-message.ps1\""
+          },
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -File \".claude\\hooks\\require-bundle-build.ps1\"",
+            "timeout": 600
           }
         ]
       }

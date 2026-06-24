@@ -49,4 +49,47 @@ if ($occupied) {
     Write-Output "(See CLAUDE.md: multi-session worktree rule / learning-notes N-032)"
 }
 
+# ── Extension: stale merged claude/* branches ────────────────────────────────
+# Squash-merged feat/* branches may show as unmerged (git limitation) — count
+# only claude/* auto-branches which are safe to count. feat/* excluded to avoid
+# false positives (see plan note).
+$CLAUDE_BRANCH_THRESHOLD = 10
+try {
+    $allMerged = @(& git -C $cwd branch --merged main 2>$null)
+    $mergedClaude = @($allMerged | Where-Object {
+        $_.Trim().TrimStart('*').Trim() -match '^claude/'
+    })
+    if ($mergedClaude.Count -ge $CLAUDE_BRANCH_THRESHOLD) {
+        Write-Output ""
+        Write-Output ("[i] {0} merged 'claude/*' branches can be pruned: git branch -d <name>" -f $mergedClaude.Count)
+        Write-Output "    Run: git branch --merged main | Select-String 'claude/' | % { git branch -d `$_.Trim() }"
+    }
+} catch { }
+
+# ── Extension: orphaned worktree folders ─────────────────────────────────────
+# Detects folders under .claude/worktrees/ that are NOT registered worktrees
+# (git worktree prune won't remove them; they accumulate after session cleanup
+# is skipped). Advisory only — never blocks (exit 0).
+$wtFolderPath = Join-Path $cwd '.claude\worktrees'
+if (Test-Path $wtFolderPath) {
+    try {
+        $rawWt = @(& git -C $cwd worktree list 2>$null)
+        # Normalize registered paths: forward-slash → backslash, lowercase
+        $registeredPaths = @($rawWt | ForEach-Object {
+            (($_ -split '\s+')[0]).Replace('/', '\').TrimEnd('\').ToLower()
+        } | Where-Object { $_ })
+
+        $subDirs = @(Get-ChildItem $wtFolderPath -Directory -ErrorAction SilentlyContinue)
+        $orphaned = @($subDirs | Where-Object {
+            $norm = $_.FullName.TrimEnd('\').ToLower()
+            -not ($registeredPaths | Where-Object { $_ -eq $norm })
+        })
+        if ($orphaned.Count -gt 0) {
+            Write-Output ""
+            Write-Output ("[i] {0} orphaned worktree folder(s) under .claude/worktrees (not in git worktree list)." -f $orphaned.Count)
+            Write-Output "    Clean: git worktree prune; then remove leftover dirs manually."
+        }
+    } catch { }
+}
+
 exit 0
