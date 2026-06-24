@@ -36,21 +36,23 @@ public record GardenApiResponse(
 
     public record AuthorCharacterDto(
             String code, String emoji, String name, String spriteId, boolean owned,
-            String matchName, int affection
+            String matchName, int affection, int level, String title
     ) {
         static AuthorCharacterDto from(AuthorCharacterState s, int affection) {
+            AffectionLevel al = AffectionLevel.of(affection);
             return new AuthorCharacterDto(
                     s.character().getCode(), s.character().getEmoji(), s.character().getName(),
                     s.character().getSpriteId(), s.owned(), s.character().getMatchName(),
-                    affection);
+                    affection, al.level(), al.title());
         }
     }
 
     public record OwnedCharacterDto(
-            String code, String emoji, String name, String spriteId, int affection
+            String code, String emoji, String name, String spriteId, int affection, int level, String title
     ) {
         static OwnedCharacterDto from(OwnedCharacter c, int affection) {
-            return new OwnedCharacterDto(c.code(), c.emoji(), c.name(), c.spriteId(), affection);
+            AffectionLevel al = AffectionLevel.of(affection);
+            return new OwnedCharacterDto(c.code(), c.emoji(), c.name(), c.spriteId(), affection, al.level(), al.title());
         }
     }
 

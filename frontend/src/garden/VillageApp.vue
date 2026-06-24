@@ -66,7 +66,7 @@ onMounted(async () => {
   }
 });
 
-function onFed(result: { foodBalance: number; characterCode: string; affection: number }) {
+function onFed(result: { foodBalance: number; characterCode: string; affection: number; level: number; title: string; leveledUp: boolean }) {
   if (!data.value) return;
   data.value.foodBalance = result.foodBalance;
   // 배회 캐릭터 정(affection) 갱신
@@ -75,15 +75,25 @@ function onFed(result: { foodBalance: number; characterCode: string; affection: 
       if (c.code === result.characterCode) { c.affection = result.affection; break; }
     }
   }
-  // 도감 authorCharacters 정 갱신
+  // 도감 authorCharacters 정 + 레벨 갱신
   if (data.value.catalog?.authorCharacters) {
     for (const a of data.value.catalog.authorCharacters) {
-      if (a.code === result.characterCode) { a.affection = result.affection; break; }
+      if (a.code === result.characterCode) {
+        a.affection = result.affection;
+        a.level = result.level;
+        a.title = result.title;
+        break;
+      }
     }
   }
   if (data.value.catalog?.ownedCharacters) {
     for (const o of data.value.catalog.ownedCharacters) {
-      if (o.code === result.characterCode) { o.affection = result.affection; break; }
+      if (o.code === result.characterCode) {
+        o.affection = result.affection;
+        o.level = result.level;
+        o.title = result.title;
+        break;
+      }
     }
   }
 }

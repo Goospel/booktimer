@@ -2,6 +2,9 @@ package com.booktimer.web.api;
 
 import com.booktimer.user.Role;
 import com.booktimer.user.UserRegistrationService;
+import com.booktimer.garden.FeedResult;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +18,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -36,6 +40,13 @@ class FeedApiControllerTest {
     @Autowired private MockMvc mockMvc;
     @Autowired private UserRegistrationService registrationService;
     @Autowired private Clock clock;
+    private ObjectMapper objectMapper;
+
+    @BeforeEach
+    void setUpObjectMapper() {
+        objectMapper = new ObjectMapper();
+        objectMapper.findAndRegisterModules();
+    }
 
     private LocalDate today() {
         return LocalDate.ofInstant(clock.instant(), ZoneId.of(SEOUL));
@@ -73,6 +84,14 @@ class FeedApiControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"characterCode\":\"han_gang\"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("FeedResult 직렬화에 level·leveledUp·title 포함 (affection 진화)")
+    void feedResult_serialization_hasLevelAndLeveledUp() throws Exception {
+        var result = new FeedResult(5, "han_gang", 3, 2, "친해지는 중", true);
+        String json = objectMapper.writeValueAsString(result);
+        assertThat(json).contains("\"level\"").contains("\"leveledUp\"").contains("\"title\"");
     }
 
     @Test

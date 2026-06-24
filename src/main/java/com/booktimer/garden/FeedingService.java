@@ -96,6 +96,9 @@ public class FeedingService {
 
         // 3. (user, code) upsert — 있으면 feed_count++, 없으면 feedCount=1로 신규 생성
         Optional<AuthorAffection> opt = affectionRepository.findByUserAndCharacterCode(user, characterCode);
+        int beforeFeedCount = opt.map(AuthorAffection::getFeedCount).orElse(0);
+        int beforeLevel = AffectionLevel.of(beforeFeedCount).level();
+
         AuthorAffection affection;
         if (opt.isPresent()) {
             affection = opt.get();
@@ -105,8 +108,12 @@ public class FeedingService {
         }
         affectionRepository.save(affection);
 
-        // 4. 반환: 잔액은 현재 − 1(저장 완료된 상태와 동일)
-        return new FeedResult(currentBalance - 1, characterCode, affection.getFeedCount());
+        // 4. 레벨 계산 + 반환
+        AffectionLevel afterLevel = AffectionLevel.of(affection.getFeedCount());
+        boolean leveledUp = beforeLevel < afterLevel.level();
+        return new FeedResult(
+                currentBalance - 1, characterCode, affection.getFeedCount(),
+                afterLevel.level(), afterLevel.title(), leveledUp);
     }
 
     // ── 내부 ──────────────────────────────────────────────────────────────────────
