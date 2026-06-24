@@ -2017,20 +2017,6 @@ a.book-title:hover { text-decoration: underline; }
 }
 .dash-btn-fill:hover { background: var(--accent-hover); }
 .dash-btn-link { display: block; width: 100%; box-sizing: border-box; text-align: center; text-decoration: none; }
-.dash-btn-ok {
-    display: block; width: 100%; box-sizing: border-box;
-    margin-top: 6px;
-    padding: 13px;
-    border-radius: 12px;
-    background: var(--ok);
-    color: var(--card-bg);
-    font-family: 'Gowun Dodum', sans-serif;
-    font-size: 15.5px;
-    text-align: center;
-    text-decoration: none;
-    transition: background .2s ease;
-}
-.dash-btn-ok:hover { background: #27775a; }
 
 /* ACHIEVED */
 .dash-state-achieved { background: #E9F2EB; border-color: #CFE4D6; text-align: center; align-items: center; gap: 12px; }
@@ -2117,6 +2103,10 @@ a.book-title:hover { text-decoration: underline; }
 @media (min-width: 640px) {
     body.dashboard-page .container { max-width: 760px; }
 }
+
+/* 카드 사이 간격 — 공유 #dashboard-app gap(16px) 위에 대시보드만 여유롭게.
+   특이도 (1,1,1) > #dashboard-app (1,0,0)이라 history/books/personality엔 회귀 0. (N-115) */
+body.dashboard-page #dashboard-app { gap: 20px; }
 
 /* 헤더 사용자영역 (brand 로고는 dashboard.html SSR 유지 — 로고 중복 0) */
 .dash-header-user { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-bottom: 4px; }
