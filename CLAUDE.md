@@ -79,6 +79,7 @@
    - **커밋 제목에 PR 번호(`(#NNN)`)를 직접 넣지 않는다** — 이 repo는 squash 머지라 머지 시
      GitHub가 제목 끝에 `(#NNN)`을 **자동 부착**한다. 직접 넣으면 `(#NNN) (#NNN)`으로 중복된다.
      (배경: 2026-06-15 #351에서 커밋 제목에 `(#351)`을 넣어 머지 후 중복 발생.)
+     **(훅 `check-commit-message.ps1`이 하드 강제. 우회: `ALLOW_PR_NUM_IN_TITLE` 토큰.)**
 3. **push** — `git push -u origin <branch>`
 4. **PR 작성** — `gh pr create` 로 작성
    - body 끝에 다음을 붙인다:
@@ -327,6 +328,7 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
 → 메시지를 **UTF-8 파일** `.commit-msg-tmp` 로 쓰고 `git commit -F .commit-msg-tmp` 로 커밋.
 
 - `.commit-msg-tmp` 는 `.gitignore` 에 등록되어 있어 추적되지 않는다 (잔재 add 방지).
+- **(훅 `check-commit-message.ps1`이 하드 강제 — `-m` 인라인 한글 감지 시 차단. 우회: `ALLOW_INLINE_MSG` 토큰. `-F` 파일경유는 검사 대상 아님.)**
 
 ---
 
@@ -343,3 +345,4 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
 - 테스트 DB: 운영은 MySQL, **테스트는 H2 인메모리**(`src/test/resources/application.properties`) — Docker 없이 테스트 독립 실행. 테스트 시 docker-compose 자동 기동은 꺼짐(`spring.docker.compose.enabled=false`)
 - toolchain: Java 21 (로컬에 없어도 foojay-resolver 가 자동 다운로드 — 노트 N-002)
 - **프론트 번들 (정원 편집)**: `npm --prefix frontend run build` — `src/main/resources/static/garden/garden.js` 재생성. 정원 관련 TS 수정 후 `bootRun` 전에 반드시 재실행 (T-063). 산출물은 git add·commit까지 해야 반영.
+  **(훅 `require-bundle-build.ps1`이 하드 강제 — `frontend/**` 스테이징 커밋 전 재빌드·diff 검사. 10섬 전수 커버(CI의 garden-only 사각 보완). 우회: `SKIP_BUNDLE_CHECK` 토큰.)**
