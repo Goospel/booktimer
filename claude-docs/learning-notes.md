@@ -119,6 +119,7 @@
 - [N-116. standalone PWA 콜드 런치는 마지막 라우트가 아니라 manifest start_url부터 다시 로딩한다 — start_url은 실재하는 라우트여야](#n-116-standalone-pwa-콜드-런치는-마지막-라우트가-아니라-manifest-start_url부터-다시-로딩한다--start_url은-실재하는-라우트여야)
 - [N-117. 섬 프론트 실 브라우저 검증을 bootRun 없이 — static-preview + fetch mock으로 번들·로드순서는 살리고 API만 가로챈다](#n-117-섬-프론트-실-브라우저-검증을-bootrun-없이--static-preview--fetch-mock으로-번들로드순서는-살리고-api만-가로챈다)
 - [N-118. CSS 주석은 중첩 불가 — 주석 속 `*/`가 조기 종료해 다음 규칙을 침묵 드랍한다](#n-118-css-주석은-중첩-불가--주석-속-가-조기-종료해-다음-규칙을-침묵-드랍한다)
+- [N-119. flex-direction 전환 시 flex-basis가 축을 따라간다 — row의 width가 column에선 height가 된다](#n-119-flex-direction-전환-시-flex-basis가-축을-따라간다--row의-width가-column에선-height가-된다)
 
 ---
 
@@ -5646,3 +5647,37 @@ N-083/N-084의 교훈: jsdom·동기 mock 로드로 단순화하면 `defer`/`typ
 ### 관련
 
 - **T-087**(같은 사건의 트랩 절차), **N-068** 디자인 토큰(`var` 이름 유지·값만 교체)·**N-115** 간격 책임(같은 `.dash-*` 작업 맥락), **T-043** 스크린샷 타임아웃 시 computed-style/CSSOM으로 시각 검증 대체.
+
+---
+
+## N-119. flex-direction 전환 시 flex-basis가 축을 따라간다 — row의 width가 column에선 height가 된다
+
+**한 줄 요약**: `flex: 1 1 320px`의 `flex-basis`는 **main axis 기준 크기**다. `flex-direction`을 `row`→`column`으로 바꾸면 그 `320px`의 의미가 **width → height**로 뒤집힌다. 미디어쿼리로 방향만 바꾸고 basis를 안 풀면, 세로로 쌓인 블록이 콘텐츠보다 큰 고정 높이를 강제당해 빈 공백이 생긴다.
+
+### 증상
+
+- 2단(row) 레이아웃을 좁은 폭에서 세로(column)로 전환했더니 블록 사이(또는 블록 내부)에 콘텐츠와 무관한 큰 빈 공간.
+- 데스크톱(row)에선 멀쩡하고 **모바일(column)에서만** 공백 → "방향 전환만 했는데 왜".
+- 블록 box height가 콘텐츠 height보다 훨씬 큼(예: box 320px, 콘텐츠 151px → 169px 공백).
+
+### 원인
+
+```css
+.hero { display: flex; flex-direction: row; }
+.hero > .col { flex: 1 1 320px; }          /* row: basis = width 320px */
+@media (max-width: 520px) {
+  .hero { flex-direction: column; }         /* column: basis = height 320px! ← 의도 안 함 */
+}
+```
+
+`flex-basis`는 늘 main axis의 크기 — row면 가로(width), column이면 세로(height). `flex-grow:1`이 있어도 basis가 하한이라, 콘텐츠가 320px보다 짧으면 그 차이가 공백으로 남는다. `flex: 1 1 320px` 같은 단축에 px basis를 박은 컨테이너를 반응형으로 **방향 전환**하면 전환 쪽에서 basis 의미가 뒤집힌다.
+
+### 해결·예방
+
+- 방향을 바꾸는 미디어쿼리에서 basis도 함께 리셋: `.col { flex: 0 0 auto; }`(또는 `flex-basis: auto`) → 콘텐츠 높이로.
+- 일반화: px basis가 박힌 flex 컨테이너를 미디어쿼리로 `row↔column` 전환할 땐 **basis도 함께 전환/리셋**한다.
+- 검증: 전환 후 블록 box height와 콘텐츠 height를 실측해 차이(공백)가 0인지 단언(static-preview/실 브라우저, N-117).
+
+### 관련
+
+- **T-089**(이 버그를 처음엔 못 잡은 검증 트랩 — 재현 mock이 worst-case를 안 담음), **N-115·N-113·N-114**(같은 대시보드·SSR→SPA 전환에서 레이아웃 회귀가 폭로된 자매), **T-043**(시각 검증을 눈대중 아닌 값으로).
