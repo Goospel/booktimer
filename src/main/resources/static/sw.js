@@ -7,7 +7,8 @@
 // 버전 상수: 기존 캐시 무효화용(activate에서 구 캐시 삭제).
 // v6: 라우트 충돌(#450) 시기에 번들 500이 cache-first로 영구 캐싱된 shell-v5를 purge.
 // v7: start_url 오기(/dashboard → 매핑 없음 → 콜드 런치 404) 수정 시, 구 manifest.json 캐시를 purge.
-const CACHE = 'shell-v7';
+// v8: 앱 이름 변경(name·short_name "독서 마을" → "BookTimer") 시, cache-first로 잡힌 구 manifest.json purge.
+const CACHE = 'shell-v8';
 
 // 아이콘·manifest만 프리캐시 — 해시 자산(app.css·garden.js·pwa-install.js)은
 // 빌드 타임에 URL을 모르므로 프리캐시 대신 첫 요청 시 cache-first로 자동 캐시된다.
