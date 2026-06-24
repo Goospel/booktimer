@@ -9,22 +9,26 @@ package com.booktimer.garden;
  * 그 축 절반을 맡는다 — 같은 {@code "lotus"} code라도 TIME 'lotus'와 RECIPE 'lotus'는 다른 식물이다.
  */
 public enum PlacementAxis {
-    /** 시간축({@link Plant}) — 누적 목표 달성일로 해금. */
+    /** @deprecated 마을 컨셉 전환으로 제거됨. DB 직렬화 호환 보존. */
+    @Deprecated
     TIME,
-    /** 장르축({@link GenrePlant}) — 장르 완독으로 해금. */
+    /** @deprecated 마을 컨셉 전환으로 제거됨. DB 직렬화 호환 보존. */
+    @Deprecated
     GENRE,
-    /** 작가·출판사 다양성축({@link DiversityPlant}) — distinct 완독 수로 해금. */
+    /** @deprecated 마을 컨셉 전환으로 제거됨. DB 직렬화 호환 보존. */
+    @Deprecated
     DIVERSITY,
-    /** 레시피축({@link RecipePlant}) — 책 조합 발견으로 보유. */
+    /** @deprecated 마을 컨셉 전환으로 제거됨. DB 직렬화 호환 보존. */
+    @Deprecated
     RECIPE,
     /**
      * 작가 캐릭터축({@link AuthorCharacter}) — 특정 작가 완독으로 해금.
-     * DIVERSITY의 "distinct 작가 수" 카운트 축과 다름 — 이쪽은 특정 작가 1:1 매칭.
+     * 배회 전용(배치 좌표 저장 없음) — ownedCharacters()로 노출.
      */
     AUTHOR,
     /**
      * 출판사 건물축({@link Building}) — 특정 출판사 N권 완독으로 해금.
-     * DIVERSITY의 "distinct 출판사 수" 카운트 축과 다름 — 이쪽은 특정 출판사 권수 임계.
+     * 마을 유일 배치 축.
      */
     BUILDING
 }

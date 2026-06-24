@@ -39,7 +39,6 @@ public class GardenApiController {
         return GardenApiResponse.of(
                 gardenService.view(user),
                 gardenLayoutService.layoutItemsOf(user),
-                gardenLayoutService.decorationCatalog(),
                 GardenLayoutService.WORLD_WIDTH,
                 GardenLayoutService.WORLD_HEIGHT,
                 user.getNickname());
