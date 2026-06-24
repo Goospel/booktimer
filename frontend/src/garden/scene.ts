@@ -10,6 +10,7 @@ import {
     WanderState, wanderStep,
     walkPose, idlePose, WALK_STEP_MS,
     AMBIENT_DECOR,
+    isNear, faceEachOther, INTERACT_DIST, INTERACT_COOLDOWN_MS,
 } from './pure';
 
 export interface GardenItemMeta {
@@ -77,6 +78,7 @@ export class GardenScene extends Phaser.Scene {
     _panMoved = false;
     _pinchDist = 0;
     _minZoom = ZOOM_MIN;
+    _greetCooldowns: Map<string, number> = new Map(); // pairKey → lastGreetClock(ms)
 
     constructor(cfg: GardenSceneConfig) {
         super('garden');
@@ -244,7 +246,7 @@ export class GardenScene extends Phaser.Scene {
     }
 
     // 매 프레임 — 캐릭터 배회 AI. 비-character 오브젝트는 건드리지 않는다.
-    update(_time: number, delta: number) {
+    update(time: number, delta: number) {
         let moved = false;
         for (const o of this.objs) {
             if (o.getData('kind') !== 'character') continue;
@@ -298,6 +300,58 @@ export class GardenScene extends Phaser.Scene {
             }
             moved = true;
         }
+
+        // PR-B: 근접 상호작용 — 캐릭터 쌍 순회 (메인 루프 뒤: idlePose look 토글 덮어쓰기 위해)
+        const chars = this.objs.filter(o => o.getData('kind') === 'character');
+        for (let i = 0; i < chars.length - 1; i++) {
+            for (let j = i + 1; j < chars.length; j++) {
+                const a = chars[i], b = chars[j];
+                const sa: WanderState = a.getData('wander');
+                const sb: WanderState = b.getData('wander');
+                if (!sa || !sb) continue;
+
+                if (!isNear(sa.x, sa.y, sb.x, sb.y, INTERACT_DIST)) continue;
+
+                // 마주보기 (idle 상태일 때만 — 걷는 중엔 진행방향 우선)
+                if (sa.phase === 'idle' && sb.phase === 'idle') {
+                    const { aFlipX, bFlipX } = faceEachOther(
+                        sa.x, sb.x,
+                        a.getData('flipX') as boolean,
+                        b.getData('flipX') as boolean,
+                    );
+                    a.setData('flipX', aFlipX);
+                    b.setData('flipX', bFlipX);
+                    if (a instanceof Phaser.GameObjects.Image) a.setFlipX(aFlipX);
+                    if (b instanceof Phaser.GameObjects.Image) b.setFlipX(bFlipX);
+                }
+
+                // 인사 이모트 (쿨다운 보호)
+                const codeA = a.getData('code') as string ?? '';
+                const codeB = b.getData('code') as string ?? '';
+                const pairKey = [codeA, codeB].sort().join(':');
+                const lastGreet = this._greetCooldowns.get(pairKey) ?? -Infinity;
+                if (time - lastGreet < INTERACT_COOLDOWN_MS) continue;
+
+                this._greetCooldowns.set(pairKey, time);
+                const emote = Math.random() < 0.3 ? '❤️' : '👋';
+                for (const ch of [a, b]) {
+                    const cx = ch.x, cy = (ch.getData('footY') as number) - this.plantPx * 0.5;
+                    const et = this.add.text(cx, cy, emote, {
+                        fontSize: Math.round(this.plantPx * 0.5) + 'px',
+                    });
+                    et.setOrigin(0.5, 1).setDepth(1e7);
+                    this.tweens.add({
+                        targets: et,
+                        y: et.y - this.plantPx * 0.4,
+                        alpha: 0,
+                        duration: 900,
+                        ease: 'Cubic.easeOut',
+                        onComplete: () => et.destroy(),
+                    });
+                }
+            }
+        }
+
         if (moved) this.restack();
     }
 

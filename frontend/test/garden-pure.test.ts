@@ -18,6 +18,7 @@ import {
     IdleAction, pickIdleAction, idlePose,
     IDLE_STAND_WEIGHT, IDLE_READ_WEIGHT, IDLE_STRETCH_WEIGHT,
     LOOK_TOGGLE_MS, STRETCH_PERIOD_MS, STRETCH_AMP,
+    isNear, faceEachOther, INTERACT_DIST, INTERACT_COOLDOWN_MS,
 } from '../src/garden/pure';
 
 const W = 1000, H = 640;
@@ -661,6 +662,34 @@ describe('garden pure.ts', () => {
             const idle: WanderState = { phase: 'idle', x: 0.5, y: 0.5, tx: 0, ty: 0, timer: 0, idleAction: 'stretch' };
             const s = wanderStep(idle, 1, SPEED, constRand(0.3));
             expect(s.phase).toBe('walk');
+        });
+    });
+
+    // PR-B — 근접 상호작용 순수함수
+    describe('isNear', () => {
+        const T = 0.13;
+        test('같은 점 = 근접', () => expect(isNear(0.5, 0.5, 0.5, 0.5, T)).toBe(true));
+        test('거리 < threshold = 근접', () => expect(isNear(0, 0, 0.12, 0, T)).toBe(true));
+        test('거리 = threshold = 미근접(미만만 근접)', () => expect(isNear(0, 0, T, 0, T)).toBe(false));
+        test('거리 > threshold = 미근접', () => expect(isNear(0, 0, 0.5, 0, T)).toBe(false));
+        test('대각선 거리', () => {
+            // Math.hypot(0.09,0.09) ≈ 0.127 < 0.13
+            expect(isNear(0, 0, 0.09, 0.09, T)).toBe(true);
+        });
+    });
+
+    describe('faceEachOther', () => {
+        test('a가 왼쪽 → a=오른쪽봄(false), b=왼쪽봄(true)', () => {
+            expect(faceEachOther(0.2, 0.8, false, false)).toEqual({ aFlipX: false, bFlipX: true });
+        });
+        test('a가 오른쪽 → a=왼쪽봄(true), b=오른쪽봄(false)', () => {
+            expect(faceEachOther(0.8, 0.2, false, false)).toEqual({ aFlipX: true, bFlipX: false });
+        });
+        test('같은 x → 현재 flipX 유지', () => {
+            expect(faceEachOther(0.5, 0.5, true, false)).toEqual({ aFlipX: true, bFlipX: false });
+        });
+        test('prevFlipX 무관 — 좌우 배치가 결정', () => {
+            expect(faceEachOther(0.1, 0.9, true, true)).toEqual({ aFlipX: false, bFlipX: true });
         });
     });
 });
