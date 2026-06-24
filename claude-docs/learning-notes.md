@@ -117,6 +117,7 @@
 - [N-114. clear 안 된 float 형제가 다음 block grid를 min-content로 짓누름 — block은 fill, grid는 안 됨](#n-114-clear-안-된-float-형제가-다음-block-grid를-min-content로-짓누름--block은-fill-grid는-안-됨)
 - [N-115. 전역 클래스+margin-collapse 레이아웃을 wrapper 없는 컴포넌트로 쪼개면 '바깥 간격 책임'이 흩어진다 — 간격은 컨테이너 gap으로](#n-115-전역-클래스margin-collapse-레이아웃을-wrapper-없는-컴포넌트로-쪼개면-바깥-간격-책임이-흩어진다--간격은-컨테이너-gap으로)
 - [N-116. standalone PWA 콜드 런치는 마지막 라우트가 아니라 manifest start_url부터 다시 로딩한다 — start_url은 실재하는 라우트여야](#n-116-standalone-pwa-콜드-런치는-마지막-라우트가-아니라-manifest-start_url부터-다시-로딩한다--start_url은-실재하는-라우트여야)
+- [N-117. 섬 프론트 실 브라우저 검증을 bootRun 없이 — static-preview + fetch mock으로 번들·로드순서는 살리고 API만 가로챈다](#n-117-섬-프론트-실-브라우저-검증을-bootrun-없이--static-preview--fetch-mock으로-번들로드순서는-살리고-api만-가로챈다)
 
 ---
 
@@ -5572,3 +5573,33 @@ flex-row 컨테이너의 직계 폼버튼에 `width:auto`로 전역 규칙을 �
 
 - PWA 도입 전반(L1~L3c)·`sw.js` 캐시 전략은 plan.md 「📱 PWA 도입」 + changelog 2026-06-20·2026-06-24.
 - **N-032** — 래퍼 추가/제거가 잠복 레이아웃 가정을 폭로하는 패턴(상위 개념).
+
+---
+
+## N-117. 섬 프론트 실 브라우저 검증을 bootRun 없이 — static-preview + fetch mock으로 번들·로드순서는 살리고 API만 가로챈다
+
+**한 줄 요약**: SSR 섬(N-109)의 로드순서·반응성 검증에 무거운 백엔드(`bootRun` + MySQL Docker) 대신 **정적 서버 + `window.fetch` 가로채기**를 쓴다 — 실제 빌드 번들·CSS·`type=module` defer 로드는 production 그대로 두고 `/api` 응답만 가짜로 줘, N-083(헤드리스 블라인드)을 일으키지 않으면서 gradle 데몬 경합(T-078)·Docker 누적·기동 지연을 피한다.
+
+### 문제
+
+섬 아키텍처(N-109)는 Vite 번들을 static으로 서빙하고 `/api`를 `fetch`한다. 클라이언트 로드순서·타이밍·반응성은 실 브라우저로 검증해야 하는데(헤드리스 사각 N-083·N-084), 보통 `bootRun`(Spring + MySQL compose)을 띄워야 한다. 멀티 워크트리 환경에선 ① gradle 데몬·빌드 락 경합으로 커밋 훅(`gradlew test`)과 무한 hang(T-078) ② compose MySQL 컨테이너 누적 ③ 기동 1~2분의 비용이 든다.
+
+### 함정 — 그냥 mock으로 단순화하면 안 되는 이유
+
+N-083/N-084의 교훈: jsdom·동기 mock 로드로 단순화하면 `defer`/`type=module`의 **실행 시점**이 production과 달라져 로드순서 버그가 사라진 **가짜 green**이 난다. 그래서 "API만 막고 나머지는 진짜"라는 경계가 핵심이다.
+
+### 해법 — 실제 번들 로드 + API만 가로채기
+
+1. **정적 서버**(node `http`)로 production `dashboard.html`과 **동일한 로드 구조**를 복제한 미리보기 HTML을 서빙한다: 같은 `app.css`, 같은 `<script type="module" src=…/dashboard.js>`(defer 동등), 같은 `#dashboard-app`·`<meta name=_csrf>`.
+2. 그 HTML 인라인 `<script>`에서 **번들보다 먼저** `window.fetch`만 오버라이드해 `/api/dashboard`·`/api/sessions/*` 응답을 시나리오별로 돌려준다. 번들·CSS·로드순서는 손대지 않으므로 N-083 사각을 만들지 않는다.
+3. `?state=idle|measuring|achieved` 쿼리로 상태 분기, 버튼 클릭→mock fetch→상태 전환으로 **반응성(N-082)**까지 실 브라우저에서 본다.
+
+### 경계 — 이 방식이 못 보는 것
+
+실제 API 계약(404/409/IDOR/CSRF)·서버 로직·DB 제약은 검증 불가 — 그건 백엔드 통합테스트(MockMvc, H2)의 몫이다(N-040). 이 패턴은 **순수 프론트 렌더·라이브 계산·반응성 전용**이다. 둘은 상보다: 서버 계약=MockMvc / 클라이언트 로드·반응성=static-preview.
+
+### 관련
+
+- **N-083** defer × `class extends` TDZ, **N-084** 프론트 테스트 지형도(이 패턴이 "실 브라우저 E2E"를 싸게 구현하는 구체안).
+- **N-082** reactive Proxy(검증 대상 반응성), **N-109** 섬 복제 체크리스트, **N-040** mock은 DB 제약 못 봄(경계의 반대편).
+- 검증 임시 자원: `.preview/serve.js` + `dashboard-preview.html`(gitignore).
