@@ -34,6 +34,9 @@ export interface FeedResult {
     foodBalance: number;
     characterCode: string;
     affection: number;
+    level: number;
+    title: string;
+    leveledUp: boolean;
 }
 
 export interface GardenSceneConfig {
@@ -186,7 +189,7 @@ export class GardenScene extends Phaser.Scene {
                 const code = obj.getData('code') as string;
                 if (!code) return;
                 this.cfg.onFeed!(code).then(result => {
-                    if (result) this.playFeedReaction(obj);
+                    if (result) this.playFeedReaction(obj, result);
                 });
             });
         }
@@ -542,9 +545,10 @@ export class GardenScene extends Phaser.Scene {
         }
     }
 
-    // ★ 반응 애니: 캐릭터와 독립된 하트 오브젝트로 — update()가 캐릭터 y/scale을 매 프레임 덮어써
-    //   캐릭터에 직접 tween을 걸면 즉시 무효화된다. 하트는 objs에 넣지 않고 별도 tween으로 처리.
-    playFeedReaction(obj: GObj) {
+    // ★ 반응 애니: 캐릭터와 독립된 오브젝트로 — update()가 캐릭터 y/scale을 매 프레임 덮어써
+    //   캐릭터에 직접 tween을 걸면 즉시 무효화된다(T-084). 하트/별/텍스트 전부 objs에 안 넣고 자체 tween.
+    playFeedReaction(obj: GObj, result: FeedResult) {
+        // 하트 (항상)
         const heart = this.add.text(obj.x, obj.y - this.plantPx, '❤️', {
             fontSize: Math.round(this.plantPx * 0.6) + 'px',
         });
@@ -558,5 +562,41 @@ export class GardenScene extends Phaser.Scene {
             ease: 'Cubic.easeOut',
             onComplete: () => heart.destroy(),
         });
+
+        // 레벨업 연출 (leveledUp일 때만)
+        if (result.leveledUp) {
+            // 별 ✨
+            const star = this.add.text(obj.x, obj.y - this.plantPx * 1.6, '✨', {
+                fontSize: Math.round(this.plantPx * 0.7) + 'px',
+            });
+            star.setOrigin(0.5, 1);
+            star.setDepth(1e7);
+            this.tweens.add({
+                targets: star,
+                y: star.y - this.plantPx * 0.6,
+                alpha: 0,
+                duration: 1200,
+                ease: 'Cubic.easeOut',
+                onComplete: () => star.destroy(),
+            });
+
+            // 칭호 텍스트
+            const label = this.add.text(obj.x, obj.y - this.plantPx * 0.6, result.title + '!', {
+                fontSize: Math.round(this.plantPx * 0.38) + 'px',
+                backgroundColor: '#ffffffdd',
+                color: '#333333',
+                padding: { x: 6, y: 3 },
+            });
+            label.setOrigin(0.5, 1);
+            label.setDepth(1e7);
+            this.tweens.add({
+                targets: label,
+                y: label.y - this.plantPx * 0.5,
+                alpha: 0,
+                duration: 1400,
+                ease: 'Cubic.easeOut',
+                onComplete: () => label.destroy(),
+            });
+        }
     }
 }

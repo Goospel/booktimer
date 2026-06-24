@@ -70,6 +70,9 @@ interface FeedResult {
     foodBalance: number;
     characterCode: string;
     affection: number;
+    level: number;
+    title: string;
+    leveledUp: boolean;
 }
 
 interface GameData {

@@ -204,7 +204,7 @@ class GardenApiControllerTest {
     @Test
     @DisplayName("S3: AuthorCharacterDto 직렬화에 matchName 포함")
     void s3_authorCharacterDto_hasMatchName() throws Exception {
-        var dto = new GardenApiResponse.AuthorCharacterDto("aut-01", "🧑", "한강캐릭터", null, false, "한강", 0);
+        var dto = new GardenApiResponse.AuthorCharacterDto("aut-01", "🧑", "한강캐릭터", null, false, "한강", 0, 0, "");
         String json = objectMapper.writeValueAsString(dto);
         assertThat(json).contains("\"matchName\"");
     }
@@ -212,8 +212,16 @@ class GardenApiControllerTest {
     @Test
     @DisplayName("S3: AuthorCharacterDto 직렬화에 affection 포함 (먹이주기 루프)")
     void s3_authorCharacterDto_hasAffection() throws Exception {
-        var dto = new GardenApiResponse.AuthorCharacterDto("aut-01", "🧑", "한강캐릭터", null, false, "한강", 5);
+        var dto = new GardenApiResponse.AuthorCharacterDto("aut-01", "🧑", "한강캐릭터", null, false, "한강", 5, 3, "친한 사이");
         String json = objectMapper.writeValueAsString(dto);
         assertThat(json).contains("\"affection\"").contains("5");
+    }
+
+    @Test
+    @DisplayName("S3: AuthorCharacterDto 직렬화에 level·title 포함 (affection 진화)")
+    void s3_authorCharacterDto_hasLevelAndTitle() throws Exception {
+        var dto = new GardenApiResponse.AuthorCharacterDto("aut-01", "🧑", "한강캐릭터", null, false, "한강", 7, 3, "친한 사이");
+        String json = objectMapper.writeValueAsString(dto);
+        assertThat(json).contains("\"level\"").contains("\"title\"").contains("친한 사이");
     }
 }

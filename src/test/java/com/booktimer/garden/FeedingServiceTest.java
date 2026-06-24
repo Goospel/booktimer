@@ -145,6 +145,81 @@ class FeedingServiceTest {
         assertThat(result.affection()).isEqualTo(2);
     }
 
+    // ── level · title · leveledUp ─────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("feed: count 2→3(Lv1→Lv2) → level=2·title=친해지는중·leveledUp=true")
+    void feed_returns_levelAndTitle() {
+        // 기존 feedCount=2(Lv1), 먹이 후 feedCount=3(Lv2) → 레벨업
+        stubHistory(5);
+        AuthorAffection existing = AuthorAffection.create(user, "han_gang"); // feedCount=1
+        existing.incrementFeedCount();                                         // feedCount=2
+        when(affectionRepository.sumFeedCountByUser(user)).thenReturn(2L);
+        when(gardenService.view(user)).thenReturn(viewWith("han_gang"));
+        when(affectionRepository.findByUserAndCharacterCode(user, "han_gang"))
+                .thenReturn(Optional.of(existing));
+        when(affectionRepository.save(any())).thenReturn(existing);
+
+        FeedResult result = feedingService.feed(user, "han_gang");
+
+        assertThat(result.level()).isEqualTo(2);
+        assertThat(result.title()).isEqualTo("친해지는 중");
+        assertThat(result.leveledUp()).isTrue();
+    }
+
+    @Test
+    @DisplayName("leveledUp: 신규(0→1) = true")
+    void feed_leveledUp_newCharacter_true() {
+        stubHistory(2);
+        when(affectionRepository.sumFeedCountByUser(user)).thenReturn(0L);
+        when(gardenService.view(user)).thenReturn(viewWith("han_gang"));
+        when(affectionRepository.findByUserAndCharacterCode(user, "han_gang"))
+                .thenReturn(Optional.empty());
+        when(affectionRepository.save(any())).thenReturn(AuthorAffection.create(user, "han_gang"));
+
+        FeedResult result = feedingService.feed(user, "han_gang");
+
+        assertThat(result.leveledUp()).isTrue(); // Lv0→Lv1
+    }
+
+    @Test
+    @DisplayName("leveledUp: count 3→4 (Lv2 내) = false")
+    void feed_leveledUp_sameLevel_false() {
+        // feedCount=3(Lv2), 먹이 후 feedCount=4(Lv2) — 레벨 안 오름
+        stubHistory(5);
+        AuthorAffection existing = AuthorAffection.create(user, "han_gang"); // feedCount=1
+        existing.incrementFeedCount();
+        existing.incrementFeedCount(); // feedCount=3
+        when(affectionRepository.sumFeedCountByUser(user)).thenReturn(3L);
+        when(gardenService.view(user)).thenReturn(viewWith("han_gang"));
+        when(affectionRepository.findByUserAndCharacterCode(user, "han_gang"))
+                .thenReturn(Optional.of(existing));
+        when(affectionRepository.save(any())).thenReturn(existing);
+
+        FeedResult result = feedingService.feed(user, "han_gang");
+
+        assertThat(result.leveledUp()).isFalse();
+    }
+
+    @Test
+    @DisplayName("leveledUp: 최대 레벨(Lv5, count 30+)에서 더 먹임 = false")
+    void feed_leveledUp_maxLevel_false() {
+        // feedCount=30(Lv5), 먹이 후 feedCount=31(Lv5) — 최대 레벨 유지
+        stubHistory(50);
+        AuthorAffection existing = AuthorAffection.create(user, "han_gang"); // feedCount=1
+        for (int i = 1; i < 30; i++) existing.incrementFeedCount();          // feedCount=30
+        when(affectionRepository.sumFeedCountByUser(user)).thenReturn(30L);
+        when(gardenService.view(user)).thenReturn(viewWith("han_gang"));
+        when(affectionRepository.findByUserAndCharacterCode(user, "han_gang"))
+                .thenReturn(Optional.of(existing));
+        when(affectionRepository.save(any())).thenReturn(existing);
+
+        FeedResult result = feedingService.feed(user, "han_gang");
+
+        assertThat(result.leveledUp()).isFalse();
+        assertThat(result.level()).isEqualTo(5);
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────────
 
     /** N일 달성 이력으로 스텁 — GoalSchedule baseline은 BASELINE */
