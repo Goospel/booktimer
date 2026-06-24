@@ -4,11 +4,11 @@
     <div id="garden-phaser-view" class="garden-phaser-fill" v-show="phaserReady && !editing"></div>
 
     <!-- Phaser 초기화 중 -->
-    <div class="village-loading" v-if="!phaserReady && !editing">🌱 마을 불러오는 중…</div>
+    <div class="village-loading" v-if="!phaserReady && !editing">🏢 마을 불러오는 중…</div>
 
     <!-- 빈 마을 안내 -->
     <p v-if="!editing && phaserReady && emptyVillage" class="village-empty-msg">
-      아직 빈 마을이에요. 「✏️ 꾸미기」로 모은 식물과 소품(길·연못·울타리…)을 놓아보세요. 🌱
+      아직 빈 마을이에요. 「✏️ 꾸미기」로 모은 건물을 놓아보세요. 🏢
     </p>
 
     <!-- 메시지 (보기 모드) -->
@@ -26,7 +26,7 @@
         <p v-if="message" class="my-garden-msg">{{ message }}</p>
         <div class="village-edit-topbar">
           <p class="my-garden-hint">팔레트에서 누르면 마을에 놓여요. 끌어 옮기고, 밖으로 끌어내면 거둬요.
-            <b>탭하면</b> 회전을 바꿀 수 있어요. <b>소품(길·연못·울타리…)</b>은 여러 개 놓을 수 있어요.</p>
+            <b>탭하면</b> 회전을 바꿀 수 있어요.</p>
           <div class="my-garden-edit-actions">
             <button type="button" class="garden-edit-btn primary" @click="save" :disabled="saving">
               {{ saving ? '저장 중…' : '저장' }}
@@ -35,15 +35,15 @@
           </div>
         </div>
         <div class="garden-toolbar" v-show="selected">
-          <span class="garden-tool-label">선택한 식물</span>
+          <span class="garden-tool-label">선택한 건물</span>
           <button type="button" class="garden-tool-btn" @click="rotateSel(-15)" title="왼쪽으로 15°">⟲</button>
           <button type="button" class="garden-tool-btn" @click="rotateSel(15)" title="오른쪽으로 15°">⟳</button>
           <button type="button" class="garden-tool-btn danger" @click="removeSel" title="거두기">🗑</button>
         </div>
-        <p class="garden-palette-label">🌱 식물</p>
+        <p class="garden-palette-label">🏢 건물</p>
         <div class="garden-palette">
-          <p class="my-garden-hint" v-if="owned.length === 0">보유한 식물이 없어요 — 책을 읽어 모아보세요.</p>
-          <button v-for="o in owned" :key="(o.axis || '') + '/' + o.code"
+          <p class="my-garden-hint" v-if="buildingOwned.length === 0">보유한 건물이 없어요 — 출판사 책을 모아 읽어보세요.</p>
+          <button v-for="o in buildingOwned" :key="(o.axis || '') + '/' + o.code"
                   type="button" class="palette-plant"
                   :class="{ placed: isPlaced(o) }" :disabled="isPlaced(o)"
                   @click="addFromPalette(o)" :title="o.name">
@@ -55,19 +55,6 @@
             </template>
           </button>
         </div>
-        <p class="garden-palette-label">🪴 소품</p>
-        <div class="garden-palette">
-          <button v-for="d in decorations" :key="d.code"
-                  type="button" class="palette-plant"
-                  @click="addDecorFromPalette(d)" :title="d.name">
-            <template v-if="d.spriteId">
-              <svg class="plant-svg" aria-hidden="true"><use :href="'#sprite-' + d.spriteId"></use></svg>
-            </template>
-            <template v-else>
-              <span>{{ d.emoji }}</span>
-            </template>
-          </button>
-        </div>
       </div>
       </div><!-- .village-ui-wrap -->
     </template>
@@ -75,7 +62,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted, onUnmounted, markRaw } from 'vue';
+import { ref, computed, nextTick, onMounted, onUnmounted, markRaw } from 'vue';
 import Phaser from 'phaser';
 import { GardenScene, GardenItemMeta } from './scene';
 
@@ -83,7 +70,6 @@ interface GameData {
     world?: { width?: number; height?: number };
     placed?: GardenItemMeta[];
     owned?: GardenItemMeta[];
-    decorationCatalog?: GardenItemMeta[];
     characters?: GardenItemMeta[];
 }
 
@@ -103,7 +89,8 @@ const message = ref('');
 const phaserReady = ref(false);
 const emptyVillage = ref(placed.length === 0);
 const owned = ref<GardenItemMeta[]>(props.data.owned ?? []);
-const decorations = ref<GardenItemMeta[]>(props.data.decorationCatalog ?? []);
+// BUILDING 축만 팔레트에 표시 — 식물 4축 고아 항목 숨김 (PR-1)
+const buildingOwned = computed(() => owned.value.filter(o => o.axis === 'BUILDING'));
 const placedKeys = ref<Set<string>>(new Set());
 const selected = ref<{ rotation: number } | null>(null);
 const worldW = ref(props.data.world?.width ?? 1000);
@@ -131,7 +118,7 @@ async function mountView() {
     destroyPhaser();
     scene = markRaw(new GardenScene({
         owned: owned.value,
-        decorations: decorations.value,
+        decorations: [],
         placed,
         characters: chars,
         worldW: worldW.value,
@@ -151,7 +138,7 @@ function mountPhaser() {
     destroyPhaser();
     scene = markRaw(new GardenScene({
         owned: owned.value,
-        decorations: decorations.value,
+        decorations: [],
         placed,
         characters: chars,
         worldW: worldW.value,
@@ -183,11 +170,6 @@ async function startEdit() {
 function addFromPalette(o: GardenItemMeta) {
     if (!scene || isPlaced(o)) return;
     scene.addPlant(o);
-}
-
-function addDecorFromPalette(d: GardenItemMeta) {
-    if (!scene) return;
-    scene.addDecoration(d);
 }
 
 function rotateSel(delta: number) { if (scene) scene.rotateSelected(delta); }

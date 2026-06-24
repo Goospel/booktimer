@@ -98,6 +98,7 @@ export class GardenScene extends Phaser.Scene {
         this.shadowLayer = this.add.graphics();
         this.shadowLayer.setDepth(0.6);
         for (const p of this.cfg.placed) {
+            if (p.axis !== 'BUILDING') continue; // 고아 식물·소품 행 무시 (PR-1 필터)
             const { px, py } = normToIsoPixel(p.x ?? 0, p.y ?? 0, this.cfg.worldW, this.cfg.worldH);
             this.spawnObject(p, px, py);
         }
@@ -419,8 +420,10 @@ export class GardenScene extends Phaser.Scene {
             const { x, y } = isoPixelToNorm(o.x, o.y, this.cfg.worldW, this.cfg.worldH);
             const t = { code: o.getData('code'), x, y, z: i,
                         rotation: o.getData('rotation') || 0, scale: 1 };
-            if (o.getData('kind') === 'decor') decorations.push(t);
-            else plants.push({ axis: o.getData('axis'), ...t });
+            // BUILDING 축만 내보냄 — 고아 식물 행이 재저장되지 않게 (PR-1 필터)
+            if (o.getData('kind') !== 'decor' && o.getData('axis') === 'BUILDING') {
+                plants.push({ axis: o.getData('axis'), ...t });
+            }
         });
         return { plants, decorations };
     }
