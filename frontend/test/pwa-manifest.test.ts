@@ -28,8 +28,8 @@ describe('PWA 자산 정적 가드', () => {
             expect(manifest().name).toBeTruthy();
         });
 
-        test('start_url 이 /dashboard 이다', () => {
-            expect(manifest().start_url).toBe('/dashboard');
+        test('start_url 이 / 이다 (콜드 런치 시작점 = 실제 라우트; /dashboard 는 매핑 없음 → 404)', () => {
+            expect(manifest().start_url).toBe('/');
         });
 
         test('display 가 standalone 이다', () => {
