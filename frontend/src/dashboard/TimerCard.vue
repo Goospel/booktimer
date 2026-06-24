@@ -109,7 +109,6 @@ function totalHM(s: number): string {
                     <template v-if="streak > 0">연속 {{ streak }}일째 — 천천히, 꾸준히</template>
                     <template v-else>오늘 목표를 채웠어요</template>
                 </p>
-                <a class="dash-btn-ok" href="/history">오늘 기록 보기</a>
             </div>
         </div>
     </section>
