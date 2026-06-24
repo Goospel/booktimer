@@ -262,6 +262,25 @@ export function walkPose(
     return { bobY: 0, tilt: 0, scaleX: 1 - breath * 0.5, scaleY: 1 + breath, flipX };
 }
 
+// PR-B — 근접 상호작용 순수함수. DOM·Phaser 의존 0.
+export const INTERACT_DIST = 0.13;        // ~13% 월드폭 = 게임에서 2캐릭터 크기 정도(아이소라 근사)
+export const INTERACT_COOLDOWN_MS = 12000; // 같은 쌍 재인사 최소 간격 (12초)
+
+export function isNear(ax: number, ay: number, bx: number, by: number, threshold: number): boolean {
+    return Math.hypot(ax - bx, ay - by) < threshold;
+}
+
+// a가 b의 왼쪽(ax < bx)이면 a는 오른쪽(flipX=false), b는 왼쪽(flipX=true).
+// 같은 x(ax === bx)면 변경 없이 현재값 유지(prevA, prevB).
+export function faceEachOther(
+    ax: number, bx: number,
+    prevAFlipX: boolean, prevBFlipX: boolean,
+): { aFlipX: boolean; bFlipX: boolean } {
+    if (ax < bx) return { aFlipX: false, bFlipX: true };
+    if (ax > bx) return { aFlipX: true, bFlipX: false };
+    return { aFlipX: prevAFlipX, bFlipX: prevBFlipX };
+}
+
 // PR-A — idle 행동별 pose. stand=기존 breathing / read=조용한 breathing /
 // stretch=느린 세로 늘임 / look=clock 기반 flipX 토글. Date·random 없음.
 export function idlePose(action: IdleAction, clockMs: number, prevFlipX: boolean): WalkPose {
