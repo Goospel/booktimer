@@ -1949,7 +1949,7 @@ a.book-title:hover { text-decoration: underline; }
 .dash-timer-num {
     font-family: 'Gowun Batang', serif;
     font-weight: 700;
-    font-size: clamp(56px, 13vw, 108px);
+    font-size: clamp(52px, 8.5vw, 76px);
     line-height: .95;
     color: var(--text);
     font-variant-numeric: tabular-nums;
@@ -2101,6 +2101,9 @@ a.book-title:hover { text-decoration: underline; }
 /* 좁은 폭: 히어로 2단을 세로로 */
 @media (max-width: 520px) {
     .dash-timer-hero { flex-direction: column; align-items: stretch; }
+    /* column 축에선 flex-basis(320/290px)가 height로 잡혀 좌블록이 과잉 높이 → 공백.
+       basis를 auto로 풀어 콘텐츠 높이로 (N-118 부류 아님, flexbox 축 전환 함정) */
+    .dash-timer-left, .dash-timer-right { flex: 0 0 auto; }
 }
 
 /* ── PR-3: 헤더 사용자영역 · 정원/마을 · 로그아웃 · 와이드 2단 ── */
