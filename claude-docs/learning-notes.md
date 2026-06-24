@@ -5543,6 +5543,17 @@ flex-row 컨테이너의 직계 폼버튼에 `width:auto`로 전역 규칙을 �
 - **기존 설치 사용자 캐시**: manifest도 Service Worker가 캐싱하므로, `start_url`만 고치면 이미 설치한 사용자는
   구 manifest를 한동안 더 본다. SW의 캐시 버전 상수를 올려(`shell-vN+1`) `activate`에서 구 캐시를 purge해야
   갱신이 전파된다.
+- **(후속·핵심) 설치된 PWA는 start_url을 "설치 시점에 동결"한다 — manifest 수정만으론 기존 install을 못 고친다**:
+  위 SW 캐시 purge로도 부족하다. SW 캐시와 별개로, **브라우저/OS가 설치 시점의 `start_url`을 install 메타데이터에
+  박아두기** 때문이다. 서버 manifest를 고쳐도 이미 깔린 앱의 시작 주소는 즉시 안 바뀐다 — Android Chrome WebAPK는
+  게으르게(며칠) 갱신, **iOS Safari(홈 화면 추가)는 재설치 전엔 영영** 안 바뀐다. 그래서 `start_url`을 고친
+  manifest 수정(N-116 본문)은 **앞으로 새로 설치할 사용자에게만** 즉효이고, 기존 사용자는 한참(혹은 영영) 옛
+  `/dashboard`를 콜드 런치마다 계속 쏜다 → 404 재발(실제로 이 repo에서 manifest 수정 PR 머지 후에도 재발 보고됨).
+- **처방 — 서버 측 별칭/리다이렉트로 동결 install을 구제한다**: 클라이언트(manifest)는 우리가 강제 갱신 못 하지만
+  **서버는 우리 통제 아래** 있다. 옛 `start_url` 경로를 서버가 실재 라우트로 받게 하면(컨트롤러 매핑에 별칭 추가
+  `@GetMapping({"/", "/dashboard"})` + 보안 permitAll), 동결된 install이 무엇을 쏘든 404가 안 난다. **manifest 수정
+  = 미래 설치용 / 서버 별칭 = 기존 설치용**, 둘 다 필요. 일반 교훈: **클라이언트에 한 번 박혀 우리가 갱신을 강제
+  못 하는 값(설치 manifest·캐시된 URL·구버전 앱이 부르는 엔드포인트)은, 서버가 그 옛 입력도 영구 호환 수신**해야 한다.
 
 ### 예시
 
@@ -5550,7 +5561,8 @@ flex-row 컨테이너의 직계 폼버튼에 `width:auto`로 전역 규칙을 �
 |---|---|---|
 | 시작 경로 | 마지막 라우트 복원 | manifest `start_url`부터 |
 | start_url=`/dashboard`(매핑 없음) | 404 안 보임 | **404 → 에러 페이지** |
-| 처방 | — | start_url을 실재 라우트(`/`)로 + SW 캐시 버전 bump |
+| 처방(미래 설치) | — | start_url을 실재 라우트(`/`)로 + SW 캐시 버전 bump |
+| 처방(동결된 기존 설치) | — | **서버가 옛 경로(`/dashboard`)도 별칭 수신** — manifest 갱신은 설치 시점 동결이라 안 닿음 |
 
 > 일반화: PWA manifest의 `start_url`(과 `scope`)은 "예쁜 의미상의 주소"가 아니라 **브라우저가 실제로 fetch하는
 > 진입 URL**이다. 서버 라우트 테이블과 같은 진실을 공유해야 하고, 그 정합은 문자열 비교가 아니라
