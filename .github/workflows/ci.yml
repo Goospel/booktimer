@@ -23,8 +23,10 @@ jobs:
         run: npm --prefix frontend test
       - name: Build frontend bundle
         run: npm --prefix frontend run build
+      # garden뿐 아니라 10섬 전체를 검사한다 — garden만 보면 profile 등 9섬 stale이
+      # CI를 통과해 새어나간다(T-082). build 스텝이 이미 전 섬을 빌드하므로 검사만 넓힌다.
       - name: Verify bundle is not stale
-        run: git diff --exit-code src/main/resources/static/garden
+        run: git diff --exit-code src/main/resources/static
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
