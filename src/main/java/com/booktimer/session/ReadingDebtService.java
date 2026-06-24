@@ -3,6 +3,7 @@ package com.booktimer.session;
 import com.booktimer.timer.GoalSchedule;
 import com.booktimer.timer.ReadingGoalChange;
 import com.booktimer.timer.ReadingGoalChangeRepository;
+import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.User;
 import org.springframework.stereotype.Service;
@@ -62,6 +63,17 @@ public class ReadingDebtService {
     }
 
     /**
+     * 오늘 유효한 하루 목표(초) — 부채 분모와 동일 출처(GoalSchedule.goalFor). 진행바 분모로 쓴다.
+     *
+     * <p>{@link com.booktimer.timer.ReadingTimer#getDailyIncrementSeconds()} 직접 호출 금지 — 목표 변경 이력이
+     * 있으면 그날 유효 목표와 현재 평면값이 달라진다(N-059 소급 함정). {@link GoalSchedule#goalFor}가
+     * 목표 변경 이력에서 오늘 날짜로 정확히 룩업하므로 부채 계산과 항상 동일 값이 보장된다.
+     */
+    public long todayGoalSeconds(User user) {
+        return buildGoalSchedule(user).goalFor(today(user));
+    }
+
+    /**
      * 임의 기준일(asOf) 윈도우의 날짜별 부채 추적 결과를 반환한다 (관찰성·진단용).
      *
      * <p>재계산은 <b>현재</b> 세션·목표 이력으로 과거를 재현한다. 사후 수동 입력이나 목표 변경이 있었으면
@@ -72,16 +84,7 @@ public class ReadingDebtService {
      */
     public WeeklyDebtTrace weeklyDebtTrace(User user, LocalDate asOf) {
         LocalDate effectiveAsOf = asOf != null ? asOf : today(user);
-
-        long currentGoalSeconds = timerRepository.findByUser(user)
-                .map(timer -> timer.getDailyIncrementSeconds())
-                .orElse(DEFAULT_GOAL_SECONDS);
-
-        Map<LocalDate, Long> changesByDate = new LinkedHashMap<>();
-        for (ReadingGoalChange change : goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)) {
-            changesByDate.put(change.getEffectiveDate(), change.getGoalSeconds());
-        }
-        GoalSchedule schedule = GoalSchedule.of(changesByDate, currentGoalSeconds);
+        GoalSchedule schedule = buildGoalSchedule(user);
 
         Optional<LocalDate> baseline = schedule.earliestEffectiveDate();
         Map<LocalDate, Long> goalByDate = new LinkedHashMap<>();
@@ -104,5 +107,16 @@ public class ReadingDebtService {
     /** 유저 타임존 기준 오늘. */
     public LocalDate today(User user) {
         return LocalDate.ofInstant(clock.instant(), ZoneId.of(user.getTimezone()));
+    }
+
+    private GoalSchedule buildGoalSchedule(User user) {
+        long currentGoalSeconds = timerRepository.findByUser(user)
+                .map(ReadingTimer::getDailyIncrementSeconds)
+                .orElse(DEFAULT_GOAL_SECONDS);
+        Map<LocalDate, Long> changesByDate = new LinkedHashMap<>();
+        for (ReadingGoalChange change : goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)) {
+            changesByDate.put(change.getEffectiveDate(), change.getGoalSeconds());
+        }
+        return GoalSchedule.of(changesByDate, currentGoalSeconds);
     }
 }
