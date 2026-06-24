@@ -190,6 +190,12 @@ git worktree remove ../BookTimer-<task>
   Get-NetTCPConnection -LocalPort 8080 -State Listen -EA SilentlyContinue |
     ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
   ```
+- **bootRun docker-compose 컨테이너** — `bootRun`은 `spring-boot-docker-compose`로 `compose.yaml`의 MySQL을 자동 기동한다(**테스트는 H2라 컨테이너를 안 만든다 — 누적의 범인은 bootRun이다**). 워크트리마다 compose 프로젝트명이 갈려 컨테이너가 따로 쌓이고, 검증 후 미정리(Up 좀비)·워크트리 삭제 후 고아(Exited)로 누적된다. **8080을 반납할 때 docker 컨테이너도 함께 내린다(본인이 띄운 건 본인이 끈다).** 정리:
+  ```bash
+  bash .claude/scripts/docker-cleanup.sh            # 기본: Exited(멈춤)만 — 멀티세션 안전(Up 보존)
+  bash .claude/scripts/docker-cleanup.sh --all      # Up 포함 전부 — 먼저 --dry-run 으로 대상 확인 권장
+  ```
+  스크립트는 `com.docker.compose.project.working_dir` 라벨로 **BookTimer 소속(메인+모든 워크트리)만** 지우고 다른 프로젝트는 보호한다. 특정 워크트리만 내릴 땐 그 폴더에서 `docker compose down`. ⚠️ `--all`은 Up까지 죽이니 다른 세션이 그 워크트리에서 `bootRun` 중이면 기본(Exited만)을 쓴다.
 - **gradle 데몬·빌드 락** — 두 세션이 동시에 `./gradlew`(테스트·빌드·커밋 훅의 `gradlew test`)를 돌리면 데몬·빌드 락 경합으로 **무한 hang** 날 수 있다 → 한 세션에서만 빌드/커밋. hang 대처(강제 정리)는 「🧪 TDD → ⚠️ 커밋이 무한 hang 하면」 절 참고(T-078).
 - **"File modified since read" 가드는 버그가 아니라 덮어쓰기 직전 보호** — 재읽기 → 그쪽 변경 보존 → 내 것만 재적용이 정답
 
@@ -341,7 +347,8 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
   - login_id: `testid`(소문자 — loadUserByUsername이 입력을 소문자화하지 않음), 비번: `1234qwer!!`
   - 이미 존재하면 "시드 생략" 로그만 출력(멱등). 재기동에도 중복 생성 없음.
   - admin 뷰 필요 시 코드 추가 없이 `BOOKTIMER_ADMIN_LOGIN_IDS=testid` 환경변수로 `AdminAccountSeeder`가 승격.
-- DB: `compose.yaml` 의 MySQL 이 DevTools docker-compose 연동으로 자동 기동 (Docker 필요)
+- DB: `compose.yaml` 의 MySQL 이 DevTools docker-compose 연동으로 자동 기동 (Docker 필요).
+  - **이 컨테이너를 만드는 건 `bootRun`이지 `./gradlew test`가 아니다**(테스트는 H2 — 아래). bootRun이 워크트리별로 MySQL 컨테이너를 띄워 누적되니, **검증을 마치거나 주기적으로** `bash .claude/scripts/docker-cleanup.sh`(기본 Exited만, `--all`이면 Up 포함)로 정리한다 — `working_dir` 라벨로 BookTimer 소속만 지우고 타 프로젝트는 보호. 멀티세션 동시 작업 시 정리 주의는 「🪢 다중 세션 → bootRun docker-compose 컨테이너」 절 참고.
 - 테스트 DB: 운영은 MySQL, **테스트는 H2 인메모리**(`src/test/resources/application.properties`) — Docker 없이 테스트 독립 실행. 테스트 시 docker-compose 자동 기동은 꺼짐(`spring.docker.compose.enabled=false`)
 - toolchain: Java 21 (로컬에 없어도 foojay-resolver 가 자동 다운로드 — 노트 N-002)
 - **프론트 번들 (정원 편집)**: `npm --prefix frontend run build` — `src/main/resources/static/garden/garden.js` 재생성. 정원 관련 TS 수정 후 `bootRun` 전에 반드시 재실행 (T-063). 산출물은 git add·commit까지 해야 반영.
