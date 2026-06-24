@@ -6,7 +6,8 @@
 // 내비게이션은 navigationPreload로 SW 부팅과 네트워크 요청을 병렬화(콜드스타트 지연 제거).
 // 버전 상수: 기존 캐시 무효화용(activate에서 구 캐시 삭제).
 // v6: 라우트 충돌(#450) 시기에 번들 500이 cache-first로 영구 캐싱된 shell-v5를 purge.
-const CACHE = 'shell-v6';
+// v7: start_url 오기(/dashboard → 매핑 없음 → 콜드 런치 404) 수정 시, 구 manifest.json 캐시를 purge.
+const CACHE = 'shell-v7';
 
 // 아이콘·manifest만 프리캐시 — 해시 자산(app.css·garden.js·pwa-install.js)은
 // 빌드 타임에 URL을 모르므로 프리캐시 대신 첫 요청 시 cache-first로 자동 캐시된다.
