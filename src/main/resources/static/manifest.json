@@ -1,6 +1,6 @@
 {
-  "name": "BookTimer 독서 마을",
-  "short_name": "독서 마을",
+  "name": "BookTimer",
+  "short_name": "BookTimer",
   "description": "하루 딱 N분, 가장 작은 독서 습관. 매일의 기록이 잔디가 되고 마을이 됩니다.",
   "start_url": "/",
   "scope": "/",
