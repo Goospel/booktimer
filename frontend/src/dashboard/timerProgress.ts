@@ -73,6 +73,12 @@ export function panelState(hasActiveSession: boolean, isAchieved: boolean): 'idl
     return isAchieved ? 'achieved' : 'idle'
 }
 
+/** 아바타 이니셜 — 트림 후 첫 글자. 빈 값이면 '?'(헤더 loginId·방문 작가 name 공용). */
+export function avatarInitial(s: string): string {
+    const t = (s ?? '').trim()
+    return t ? t.charAt(0) : '?'
+}
+
 /** 진행바 분모 라벨. 0 이하 → '목표 없음'. 60분 이상은 '시간(+분)', 정각이면 분 생략. */
 export function goalLabel(goalSeconds: number): string {
     if (goalSeconds <= 0) return '목표 없음'

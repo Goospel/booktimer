@@ -8,6 +8,7 @@ import {
     displayName,
     panelState,
     goalLabel,
+    avatarInitial,
 } from './timerProgress'
 
 // ── computeProgress ──────────────────────────────────────────────────────────
@@ -201,4 +202,14 @@ describe('goalLabel', () => {
     it('정확히 1시간 → "1시간"(0분 생략)', () => expect(goalLabel(3600)).toBe('1시간'))
     it('1시간 초과 → "N시간 M분"', () => expect(goalLabel(5400)).toBe('1시간 30분'))
     it('2시간', () => expect(goalLabel(7200)).toBe('2시간'))
+})
+
+// ── avatarInitial ─────────────────────────────────────────────────────────────
+
+describe('avatarInitial', () => {
+    it('첫 글자', () => expect(avatarInitial('헤세')).toBe('헤'))
+    it('loginId 첫 글자', () => expect(avatarInitial('testid')).toBe('t'))
+    it('앞 공백 트림 후 첫 글자', () => expect(avatarInitial('  소로')).toBe('소'))
+    it('빈 문자열 → "?"', () => expect(avatarInitial('')).toBe('?'))
+    it('공백만 → "?"', () => expect(avatarInitial('   ')).toBe('?'))
 })

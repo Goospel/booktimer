@@ -26,9 +26,18 @@ export interface BookOption {
     title: string
 }
 
+/** 보유 작가 — 대시보드는 name·emoji만 쓴다(affection/level/title은 0 고정이라 참조 금지). */
+export interface OwnedAuthor {
+    code: string
+    emoji: string
+    name: string
+    spriteId: string
+}
+
 export interface CatalogDto {
     ownedAuthorCharacterCount: number
     totalAuthorCharacterCount: number
+    ownedCharacters: OwnedAuthor[]
     ownedBuildingCount: number
     totalBuildingCount: number
 }

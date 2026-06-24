@@ -8,6 +8,7 @@ import GardenPanel from './GardenPanel.vue'
 import QuoteCard from './QuoteCard.vue'
 import EmailVerifyBanner from './EmailVerifyBanner.vue'
 import QuickNav from './QuickNav.vue'
+import DashHeader from './DashHeader.vue'
 
 const data = ref<DashboardResponse | null>(null)
 const loading = ref(true)
@@ -96,6 +97,8 @@ async function handleStop() {
     </div>
 
     <template v-else-if="data">
+        <DashHeader :login-id="data.loginId" />
+
         <QuoteCard :quote="data.quote" />
 
         <EmailVerifyBanner v-if="!data.emailVerified" />
@@ -121,13 +124,19 @@ async function handleStop() {
 
         <ContributionGraph :graph="data.graph" />
 
-        <QuickNav :login-id="data.loginId" />
+        <div class="dash-grid-2col">
+            <QuickNav :login-id="data.loginId" />
+            <GardenPanel :garden="data.garden" />
+        </div>
 
-        <GardenPanel :garden="data.garden" />
-
-        <form class="logout-form" action="/logout" method="post">
+        <form class="dash-logout-form" action="/logout" method="post">
             <input type="hidden" name="_csrf" :value="getCsrfToken()">
-            <button type="submit" class="btn-ghost btn-logout">로그아웃</button>
+            <button type="submit" class="dash-logout-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M15 17l5-5-5-5" /><path d="M20 12H9" /><path d="M9 4H5v16h4" />
+                </svg>
+                로그아웃
+            </button>
         </form>
     </template>
 </template>

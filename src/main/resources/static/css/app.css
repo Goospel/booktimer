@@ -2110,3 +2110,72 @@ a.book-title:hover { text-decoration: underline; }
 @media (max-width: 520px) {
     .dash-timer-hero { flex-direction: column; align-items: stretch; }
 }
+
+/* ── PR-3: 헤더 사용자영역 · 정원/마을 · 로그아웃 · 와이드 2단 ── */
+
+/* 와이드 레이아웃 (대시보드 전용 — 전역 .container max-width 460은 건드리지 않음) */
+@media (min-width: 640px) {
+    body.dashboard-page .container { max-width: 760px; }
+}
+
+/* 헤더 사용자영역 (brand 로고는 dashboard.html SSR 유지 — 로고 중복 0) */
+.dash-header-user { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-bottom: 4px; }
+.dash-header-text { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; }
+.dash-header-name { font-family: 'Gowun Batang', serif; font-size: 16px; color: var(--text); }
+.dash-header-name strong { color: var(--accent-hover); }
+.dash-header-sub { font-size: 12px; color: var(--muted); }
+.dash-header-avatar {
+    width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0;
+    background: var(--accent); color: var(--card-bg);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Gowun Batang', serif; font-size: 18px;
+    box-shadow: inset 0 0 0 3px var(--card-bg), 0 0 0 1px var(--border);
+}
+
+/* 2단 그리드 (QuickNav + 정원) — 좁으면 1단, 넓으면 2단 */
+.dash-grid-2col {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+    gap: clamp(16px, 2.2vw, 22px);
+    align-items: start;
+}
+
+/* 정원/마을 (작가·건물 — 식물 폐기) */
+.dash-garden { gap: 16px; }
+.dash-garden-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.dash-garden-link { font-size: 13.5px; color: var(--accent-hover); text-decoration: none; }
+.dash-garden-link:hover { text-decoration: underline; }
+.dash-garden-stage {
+    position: relative; border-radius: 14px; border: 1px solid var(--border);
+    background: #EAF0E4; overflow: hidden; min-height: 120px;
+    display: flex; align-items: flex-end; justify-content: center;
+    gap: clamp(8px, 2vw, 20px); padding: 18px 14px 24px;
+}
+.dash-garden-emoji { font-size: clamp(30px, 7vw, 46px); line-height: 1; position: relative; z-index: 1; }
+.dash-garden-ground { position: absolute; left: 0; right: 0; bottom: 0; height: 20px; background: #DCE6D3; }
+.dash-garden-summary { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; text-align: center; }
+.dash-garden-authors { display: flex; flex-direction: column; gap: 10px; }
+.dash-garden-authors-label { font-size: 13px; color: var(--muted); }
+.dash-author-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+.dash-author { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.dash-author-avatar {
+    width: 42px; height: 42px; border-radius: 50%;
+    background: #E7EEE2; border: 1px solid #CFE0C2;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Gowun Batang', serif; font-size: 16px; color: var(--accent-hover);
+}
+.dash-author-more { background: var(--card-bg); border: 1px dashed #CFE0C2; color: var(--muted); font-family: 'Gowun Dodum', sans-serif; }
+.dash-author-name { font-size: 11px; color: var(--muted); }
+.dash-garden-empty { font-size: 13px; color: var(--muted); }
+
+/* 로그아웃 알약 — 전역 button{width:100%} 상쇄(width:auto) 필수(#286 회귀 방지) */
+.dash-logout-form { display: flex; justify-content: center; padding-top: 6px; }
+.dash-logout-btn {
+    width: auto;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 11px 22px; border-radius: 12px;
+    border: 1px solid var(--border); background: transparent;
+    color: var(--muted); font-size: 14px; cursor: pointer;
+    transition: background .2s ease, color .2s ease;
+}
+.dash-logout-btn:hover { background: var(--card-bg); color: var(--text); }
