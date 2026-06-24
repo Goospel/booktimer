@@ -19,6 +19,9 @@
     <span v-if="isOwned" class="plant-name">{{ name }}</span>
     <span v-else class="plant-name locked">{{ mystery ? '???' : lockedLabel }}</span>
 
+    <!-- 정(affection) 배지 — 보유 작가 + affection > 0 일 때만 -->
+    <span v-if="isOwned && affection" class="plant-affection">❤️ {{ affection }}</span>
+
     <!-- NEW 배지 -->
     <span v-if="isNew" class="plant-new">NEW</span>
   </div>
@@ -35,5 +38,6 @@ defineProps<{
   cellTitle: string;
   isNew?: boolean;
   mystery?: boolean;
+  affection?: number;
 }>();
 </script>

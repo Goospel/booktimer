@@ -30,6 +30,12 @@ export interface SelectionInfo {
     rotation: number;
 }
 
+export interface FeedResult {
+    foodBalance: number;
+    characterCode: string;
+    affection: number;
+}
+
 export interface GardenSceneConfig {
     owned: GardenItemMeta[];
     decorations: GardenItemMeta[];
@@ -41,6 +47,7 @@ export interface GardenSceneConfig {
     onChange?: (keys: string[]) => void;
     onSelect?: (info: SelectionInfo | null) => void;
     onMessage?: (msg: string) => void;
+    onFeed?: (characterCode: string) => Promise<FeedResult | null>;
 }
 
 function svgTextureUrl(symbolId: string): string | null {
@@ -171,6 +178,19 @@ export class GardenScene extends Phaser.Scene {
             cam.scrollY += before.y - after.y;
         });
 
+        // 보기 전용 입력 — 배회 작가 탭 먹이기
+        if (this.cfg.readonly && this.cfg.onFeed) {
+            this.input.on('gameobjectup', (_p: Phaser.Input.Pointer, obj: GObj) => {
+                if (this._panMoved) return; // 드래그 중 오발 방지
+                if (obj.getData('kind') !== 'character') return;
+                const code = obj.getData('code') as string;
+                if (!code) return;
+                this.cfg.onFeed!(code).then(result => {
+                    if (result) this.playFeedReaction(obj);
+                });
+            });
+        }
+
         // 편집 전용 입력 — 드래그·선택
         if (!this.cfg.readonly) {
             this.input.on('gameobjectdown', () => { this._dragged = false; });
@@ -280,7 +300,8 @@ export class GardenScene extends Phaser.Scene {
         obj.setData('footX', px);
         obj.setData('footY', py);
         obj.setData('flipX', false);
-        // interactive 설정 없음 — 드래그·클릭 대상 아님(계획 §3.4)
+        // 보기 모드에서만 탭 가능(편집 모드는 꾸미기 방해 금지)
+        if (this.cfg.readonly) obj.setInteractive({ useHandCursor: true });
         this.objs.push(obj);
         this.restack();
         return obj;
@@ -519,5 +540,23 @@ export class GardenScene extends Phaser.Scene {
             this.removePlant(o);
             this.emitChange();
         }
+    }
+
+    // ★ 반응 애니: 캐릭터와 독립된 하트 오브젝트로 — update()가 캐릭터 y/scale을 매 프레임 덮어써
+    //   캐릭터에 직접 tween을 걸면 즉시 무효화된다. 하트는 objs에 넣지 않고 별도 tween으로 처리.
+    playFeedReaction(obj: GObj) {
+        const heart = this.add.text(obj.x, obj.y - this.plantPx, '❤️', {
+            fontSize: Math.round(this.plantPx * 0.6) + 'px',
+        });
+        heart.setOrigin(0.5, 1);
+        heart.setDepth(1e7);
+        this.tweens.add({
+            targets: heart,
+            y: heart.y - this.plantPx * 0.8,
+            alpha: 0,
+            duration: 900,
+            ease: 'Cubic.easeOut',
+            onComplete: () => heart.destroy(),
+        });
     }
 }
