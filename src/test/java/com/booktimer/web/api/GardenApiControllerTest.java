@@ -100,7 +100,10 @@ class GardenApiControllerTest {
                 .andExpect(jsonPath("$.catalog.ownedBuildingCount").exists())
                 // S2: 게임 직접 소비용
                 .andExpect(jsonPath("$.owned").isArray())
-                .andExpect(jsonPath("$.characters").isArray());
+                .andExpect(jsonPath("$.characters").isArray())
+                // 먹이주기 루프 — foodBalance(top-level); affection 직렬화는 s3_authorCharacterDto_hasAffection
+                .andExpect(jsonPath("$.foodBalance").exists())
+                .andExpect(jsonPath("$.foodBalance").isNumber());
     }
 
     @Test
@@ -201,8 +204,16 @@ class GardenApiControllerTest {
     @Test
     @DisplayName("S3: AuthorCharacterDto 직렬화에 matchName 포함")
     void s3_authorCharacterDto_hasMatchName() throws Exception {
-        var dto = new GardenApiResponse.AuthorCharacterDto("aut-01", "🧑", "한강캐릭터", null, false, "한강");
+        var dto = new GardenApiResponse.AuthorCharacterDto("aut-01", "🧑", "한강캐릭터", null, false, "한강", 0);
         String json = objectMapper.writeValueAsString(dto);
         assertThat(json).contains("\"matchName\"");
+    }
+
+    @Test
+    @DisplayName("S3: AuthorCharacterDto 직렬화에 affection 포함 (먹이주기 루프)")
+    void s3_authorCharacterDto_hasAffection() throws Exception {
+        var dto = new GardenApiResponse.AuthorCharacterDto("aut-01", "🧑", "한강캐릭터", null, false, "한강", 5);
+        String json = objectMapper.writeValueAsString(dto);
+        assertThat(json).contains("\"affection\"").contains("5");
     }
 }
