@@ -100,6 +100,7 @@
    - **CLEAN** → 즉시 머지.
    - **BLOCKED** (CI 대기) → CI 통과 후 머지.
    - **auto-merge 우선 (2026-06-25~, 레포 `allow_auto_merge=true`)**: 단일·마지막 PR은 `gh pr merge <PR번호> --auto --squash --delete-branch` **한 번**이면 GitHub가 필수체크(`test`) 통과 시 **서버사이드에서 머지 + 원격 브랜치 삭제**까지 한다 — 로컬 폴링·백그라운드 자체가 불필요(머지 hang 클래스가 구조적으로 사라짐, T-094). 연쇄 PR(다음 분기가 이 머지에 의존)은 `--auto` 걸고 `gh pr view <PR> --json state` 가 `MERGED` 될 때까지만 짧게 확인.
+     - **⚠️ 워크트리 세션 caveat (T-095·T-096, 2회+ 승격)**: ① 워크트리에선 `--delete-branch`를 **빼고** `gh pr merge <PR> --auto --squash` 만 — `--delete-branch`는 머지 후 로컬 `main` checkout을 시도하나 main이 주 워크트리 점유라 `fatal: 'main' is already used by worktree`로 깨진다(단 **머지·auto-merge 등록 자체는 성공**). 머지 확인 후 원격=`gh api -X DELETE repos/{owner}/{repo}/git/refs/heads/<branch>`(T-094)·로컬=베이스 브랜치 checkout 후 `git branch -D`. ② 연쇄 PR에서 **다음 브랜치를 `origin/main` 기준으로 따기 전 반드시 `gh pr view <PR> --json state`=`MERGED` 확인** — 폴링이 `TIMEOUT`/`OPEN`/`DIRTY`로 끝난 건 미머지라, 머지 전제로 브랜치를 따면 직전 PR 변경이 빠진 채 시작된다(T-096). 미머지면 DIRTY→rebase·force-push로 해결 후 재머지.
    - 폴백 자동화: `bash .claude/scripts/pr-merge.sh <PR번호>` 가 DIRTY 즉시 차단 + CI 폴링 + 하드 타임아웃(12분) + 원격 브랜치 삭제(gh API)를 한 번에 처리한다 — auto-merge 미허용 환경이나 **동기 머지**(이 세션에서 끝까지 보고)가 필요할 때.
    - 머지 후 로컬 `main` 갱신(`git checkout main && git pull`) 및 브랜치 정리
 
