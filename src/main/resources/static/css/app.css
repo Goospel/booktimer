@@ -2142,13 +2142,43 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .dash-header-name { font-family: 'Gowun Batang', serif; font-size: 16px; color: var(--text); }
 .dash-header-name strong { color: var(--accent-hover); }
 .dash-header-sub { font-size: 12px; color: var(--muted); }
+/* 아바타 = 사용자 메뉴 토글 버튼(클릭 가능). 전역 button{width:100%}은 width:42px 고정(클래스 특이도)으로 상쇄. */
 .dash-header-avatar {
     width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0;
     background: var(--accent); color: var(--card-bg);
     display: flex; align-items: center; justify-content: center;
     font-family: 'Gowun Batang', serif; font-size: 18px;
     box-shadow: inset 0 0 0 3px var(--card-bg), 0 0 0 1px var(--border);
+    padding: 0; border: none; cursor: pointer; appearance: none;
+    transition: filter .15s ease;
 }
+.dash-header-avatar:hover { filter: brightness(1.05); }
+.dash-header-avatar:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: 2px; }
+
+/* 아바타 드롭다운 — 설정·문의·로그아웃 일원화. wrap이 절대배치 기준. */
+.dash-header-menu-wrap { position: relative; flex-shrink: 0; }
+.dash-header-menu {
+    position: absolute; top: calc(100% + 8px); right: 0; z-index: 30;
+    min-width: 168px; padding: 6px;
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, .12);
+    display: flex; flex-direction: column; gap: 2px;
+}
+/* a·button 공용 한 줄 항목. button은 전역 width:100%가 여기선 곧 풀폭 행이라 그대로 둠. */
+.dash-header-menu-item {
+    width: 100%; box-sizing: border-box;
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border-radius: 8px;
+    background: transparent; border: none; cursor: pointer;
+    color: var(--text); font-family: inherit; font-size: 14px; text-align: left;
+    text-decoration: none; transition: background .15s ease;
+}
+.dash-header-menu-item:hover { background: var(--bg); }
+.dash-header-menu-item svg { flex-shrink: 0; color: var(--muted); }
+/* 로그아웃은 구분선으로 위 두 항목과 시각적 분리 */
+.dash-header-menu-logout { margin: 4px 0 0; padding-top: 4px; border-top: 1px solid var(--border); }
+.dash-header-menu-logout .dash-header-menu-item { color: var(--muted); }
+.dash-header-menu-logout .dash-header-menu-item:hover { color: var(--text); }
 
 /* 2단 그리드 (QuickNav + 정원) — 좁으면 1단, 넓으면 2단 */
 .dash-grid-2col {
@@ -2210,15 +2240,3 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .dash-garden-stage-wrap::before { left: 0; background: linear-gradient(to left, rgba(234, 240, 228, 0), #EAF0E4); }
 .dash-garden-summary { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; text-align: center; }
 .dash-garden-empty { font-size: 13px; color: var(--muted); }
-
-/* 로그아웃 알약 — 전역 button{width:100%} 상쇄(width:auto) 필수(#286 회귀 방지) */
-.dash-logout-form { display: flex; justify-content: center; padding-top: 6px; }
-.dash-logout-btn {
-    width: auto;
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 11px 22px; border-radius: 12px;
-    border: 1px solid var(--border); background: transparent;
-    color: var(--muted); font-size: 14px; cursor: pointer;
-    transition: background .2s ease, color .2s ease;
-}
-.dash-logout-btn:hover { background: var(--card-bg); color: var(--text); }
