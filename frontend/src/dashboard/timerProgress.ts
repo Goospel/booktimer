@@ -91,3 +91,22 @@ export function goalLabel(goalSeconds: number): string {
     }
     return `${m}분`
 }
+
+/**
+ * 데스크톱 무대 가로 휠 변환: 세로 휠(deltaY)을 가로 scrollLeft로 바꾼다.
+ * 스크롤 여지가 없거나(scrollWidth<=clientWidth) deltaY가 0이면 null.
+ * 좌/우 경계를 더 넘는 방향이면 null을 돌려 페이지 세로 스크롤에 양보한다
+ * (무대 위에서 페이지 스크롤이 막히지 않게). 그 외엔 새 scrollLeft를 반환.
+ */
+export function wheelScrollLeft(
+    deltaY: number,
+    scrollLeft: number,
+    clientWidth: number,
+    scrollWidth: number
+): number | null {
+    if (scrollWidth <= clientWidth || deltaY === 0) return null
+    const atStart = scrollLeft <= 0
+    const atEnd = scrollLeft + clientWidth >= scrollWidth - 1
+    if ((deltaY < 0 && atStart) || (deltaY > 0 && atEnd)) return null
+    return scrollLeft + deltaY
+}
