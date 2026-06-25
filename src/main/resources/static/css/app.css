@@ -2266,6 +2266,26 @@ body.history-page.history-wide .container { max-width: 940px; }
 .dash-state-achieved .dash-empty,
 .dash-state-achieved .dash-btn-fill { align-self: stretch; width: 100%; box-sizing: border-box; }
 
+/* 타이머 우패널 전환 크로스페이드 — <Transition name="panel-fade" mode="out-in">.
+   측정 시작/종료 시 패널이 "툭" 즉시 교체되던 것을 페이드+살짝 떠오르기로 부드럽게.
+   out-in이라 나가는 패널이 사라진 뒤 들어오는 패널이 등장. */
+.panel-fade-enter-active,
+.panel-fade-leave-active { transition: opacity .2s ease, transform .2s ease; }
+.panel-fade-enter-from { opacity: 0; transform: translateY(6px); }
+.panel-fade-leave-to { opacity: 0; transform: translateY(-6px); }
+
+/* 진행 중(서버 왕복) 비활성 버튼 — 눌렸지만 흐릿하게(중복 클릭 차단을 시각적으로). */
+.dash-btn-fill:disabled,
+.dash-btn-outline:disabled { opacity: .6; cursor: progress; }
+
+@media (prefers-reduced-motion: reduce) {
+    /* 모션 최소화 사용자는 페이드 없이 즉시 교체. */
+    .panel-fade-enter-active,
+    .panel-fade-leave-active { transition: none; }
+    .panel-fade-enter-from { transform: none; }
+    .panel-fade-leave-to { transform: none; }
+}
+
 /* IDLE 책 선택 */
 .dash-idle-label { font-size: 14px; color: var(--muted); }
 .dash-select-wrap { position: relative; }
