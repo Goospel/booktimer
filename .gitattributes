@@ -1,3 +1,7 @@
 /gradlew text eol=lf
 *.bat text eol=crlf
 *.jar binary
+
+# append-only 변경 일지 — 멀티세션이 각자 맨 아래에 행을 추가해 항상 같은 위치 충돌 →
+# union merge 드라이버로 양쪽 새 행을 마커 없이 둘 다 자동 병합(merge/rebase 충돌 제거). T-098.
+claude-docs/changelog.md merge=union
