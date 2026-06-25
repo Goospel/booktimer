@@ -2144,7 +2144,6 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .dash-garden-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .dash-garden-link { font-size: 13.5px; color: var(--accent-hover); text-decoration: none; }
 .dash-garden-link:hover { text-decoration: underline; }
-.dash-garden-authors-label { font-size: 13px; color: var(--muted); }
 /* 무대 = 입주 작가 가로 스크롤 갤러리(통합). wrap이 배경·바닥·페이드, stage가 스크롤 컨테이너. */
 .dash-garden-stage-wrap {
     position: relative; border-radius: 14px; border: 1px solid var(--border);
