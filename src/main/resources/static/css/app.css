@@ -80,12 +80,19 @@ body {
 }
 
 .brand h1 {
+    font-family: 'Gowun Batang', serif;
+    font-weight: 700;
     font-size: 1.6rem;
     margin: 0;
     letter-spacing: -.02em;
     color: var(--accent-hover);
 }
 
+/* 헤더 로고 책 아이콘 — footer·QuickNav와 통일한 라인아트 책 SVG(책등 3권).
+   stroke=currentColor라 로고 색(--accent-hover)을 상속. .brand-home이 align-items:baseline이라
+   inline SVG는 텍스트보다 살짝 떠 보여 align-self:center로 제목과 광학 정렬. */
+.brand .brand-ico { width: 1.5rem; height: 1.5rem; align-self: center; color: var(--accent-hover); }
+/* (구) 이모지 폴백 — admin 등 특수 이모지(🛠️ 등)는 그대로 유지 */
 .brand .emoji { font-size: 1.4rem; }
 
 /* 로고(이모지+제목)를 메인 대시보드(/) 링크로 — 최하단 '대시보드' 버튼 없이 어디서든 홈으로(UX 편의).
