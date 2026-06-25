@@ -69,3 +69,23 @@ export function coverColor(seed: string): CoverColor {
     }
     return { bg: COVER_PALETTE[h % COVER_PALETTE.length], fg: COVER_FG };
 }
+
+// ── 상태 배지 색 ──────────────────────────────────────────────────────────
+// status(BookStatus.name())별 배지 배경·글자색. 시안 My Shelf 의 STATUS 매핑 그대로.
+
+export interface StatusBadge {
+    bg: string;
+    fg: string;
+}
+
+const STATUS_BADGE: Record<string, StatusBadge> = {
+    READING: { bg: '#E7EEE2', fg: '#4F6B4C' },      // 읽는 중 — 세이지
+    FINISHED: { bg: '#E0EFE6', fg: '#2F8F6B' },     // 완독 — 선명한 초록
+    WANT_TO_READ: { bg: '#F0E8DB', fg: '#8A6D3B' }, // 읽고 싶음 — 베이지
+};
+
+export const STATUS_BADGE_FALLBACK: StatusBadge = { bg: '#EFEADD', fg: '#6F6A5E' };
+
+export function statusBadge(status: string): StatusBadge {
+    return STATUS_BADGE[status] ?? STATUS_BADGE_FALLBACK;
+}

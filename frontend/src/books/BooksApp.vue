@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { getCsrfToken } from '../shared/follow'
-import { summarize, initialOf, coverColor, byline } from './pure'
+import { summarize, initialOf, coverColor, byline, statusBadge } from './pure'
 
 const STATUSES = [
     { name: 'WANT_TO_READ', label: '읽고 싶음' },
@@ -37,6 +37,7 @@ const searchEnabled = ref(false)
 const coupangEnabled = ref(false)
 const nickname = ref('')
 const error = ref<string | null>(null)
+const loadError = ref(false)
 
 const statusFilter = ref<string | null>(null)
 const visFilter = ref<string | null>(null)
@@ -64,6 +65,12 @@ function coverStyle(b: { isbn13: string | null; title: string }): Record<string,
     return { background: c.bg, color: c.fg }
 }
 
+// 상태 배지 색(읽는중/완독/읽고싶음) — 시안 STATUS 매핑.
+function statusStyle(status: string): Record<string, string> {
+    const s = statusBadge(status)
+    return { background: s.bg, color: s.fg }
+}
+
 function popularityFor(isbn: string | null): Popularity | null {
     if (!isbn) return null
     const pop = popularity.value[isbn]
@@ -80,14 +87,18 @@ function formatTime(secs: number): string {
 
 async function load() {
     loading.value = true
+    loadError.value = false
     try {
         const res = await fetch('/api/books', { credentials: 'same-origin' })
+        if (!res.ok) throw new Error('load failed')
         const data = await res.json()
         books.value = data.books ?? []
         popularity.value = data.popularity ?? {}
         searchEnabled.value = data.searchEnabled ?? false
         coupangEnabled.value = data.coupangEnabled ?? false
         nickname.value = data.nickname ?? ''
+    } catch {
+        loadError.value = true
     } finally {
         loading.value = false
     }
@@ -187,16 +198,36 @@ async function removeBook(book: MyBookSummary) {
 </script>
 
 <template>
-  <div v-if="loading" class="status-line">불러오는 중…</div>
-  <template v-else>
-    <div class="shelf-greeting">
-      <h1>{{ nickname }}님의 책장 <span class="leaf" aria-hidden="true">🌿</span></h1>
-      <p class="shelf-summary tnum">총 {{ summary.total }}권 · 읽는 중 {{ summary.reading }} · 완독 {{ summary.finished }} · 읽고 싶음 {{ summary.want }}</p>
+  <div v-if="loading" class="shelf-skeleton" aria-label="불러오는 중">
+    <div v-for="n in 4" :key="n" class="skeleton-row">
+      <div class="skeleton-cover"></div>
+      <div class="skeleton-lines">
+        <span class="skeleton-line w70"></span>
+        <span class="skeleton-line w40"></span>
+        <span class="skeleton-line w55"></span>
+      </div>
     </div>
+  </div>
+  <div v-else-if="loadError" class="shelf-load-error" role="alert">
+    <span aria-hidden="true">⚠️</span>
+    <span>책장을 불러오지 못했어요. <button type="button" class="link-btn" @click="load">다시 시도</button></span>
+  </div>
+  <template v-else>
     <div v-if="error" class="alert alert-error">{{ error }}</div>
+    <div class="shelf-layout">
+    <header class="shelf-greeting">
+      <div class="shelf-greeting-text">
+        <h1>{{ nickname }}님의 책장 <span class="leaf" aria-hidden="true">🌿</span></h1>
+        <p class="shelf-summary tnum">총 {{ summary.total }}권 · 읽는 중 {{ summary.reading }} · 완독 {{ summary.finished }} · 읽고 싶음 {{ summary.want }}</p>
+      </div>
+      <nav class="shelf-greeting-nav" aria-label="이동">
+        <a href="/">← 대시보드</a>
+        <a href="/history">📖 독서 기록</a>
+      </nav>
+    </header>
 
     <!-- 책 추가 카드 -->
-    <section class="card">
+    <section class="card shelf-add">
       <h2>책 추가</h2>
       <form v-if="searchEnabled" @submit.prevent="runSearch" class="book-search-form">
         <div class="search-chips" role="radiogroup" aria-label="검색 기준">
@@ -256,38 +287,41 @@ async function removeBook(book: MyBookSummary) {
     </section>
 
     <!-- 내 책장 -->
-    <section class="card">
+    <section class="card shelf-mine">
       <h2>내 책장</h2>
       <p class="shelf-public-hint">
         🌍 <strong>책방 공개</strong>로 켠 책은 <a :href="`/u/${myLoginId}`">내 책방</a>에서 누구나 볼 수 있어요.
       </p>
 
-      <nav class="shelf-filter">
-        <a href="#" @click.prevent="selectStatus(null)" :class="{ active: statusFilter === null }">전체</a>
-        <a v-for="s in STATUSES" :key="s.name" href="#"
-           @click.prevent="selectStatus(s.name)" :class="{ active: statusFilter === s.name }">{{ s.label }}</a>
-      </nav>
-      <nav class="vis-filter-bar" aria-label="공개여부 필터">
-        <span class="vis-filter">
-          <a href="#" @click.prevent="selectVis(null)" :class="{ active: visFilter === null }">전체</a>
-          <a href="#" @click.prevent="selectVis('PUBLIC')" :class="{ active: visFilter === 'PUBLIC' }">🌍 공개</a>
-          <a href="#" @click.prevent="selectVis('PRIVATE')" :class="{ active: visFilter === 'PRIVATE' }">🔒 비공개</a>
-        </span>
-      </nav>
+      <div class="shelf-filter-chips" role="group" aria-label="상태 필터">
+        <button type="button" class="filter-chip" :class="{ active: statusFilter === null }"
+                @click="selectStatus(null)">전체</button>
+        <button v-for="s in STATUSES" :key="s.name" type="button" class="filter-chip"
+                :class="{ active: statusFilter === s.name }" @click="selectStatus(s.name)">{{ s.label }}</button>
+      </div>
+      <div class="shelf-filter-chips" role="group" aria-label="공개여부 필터">
+        <button type="button" class="filter-chip" :class="{ active: visFilter === null }"
+                @click="selectVis(null)">전체</button>
+        <button type="button" class="filter-chip" :class="{ active: visFilter === 'PUBLIC' }"
+                @click="selectVis('PUBLIC')">🌍 공개</button>
+        <button type="button" class="filter-chip" :class="{ active: visFilter === 'PRIVATE' }"
+                @click="selectVis('PRIVATE')">🔒 비공개</button>
+      </div>
 
-      <p v-if="shelfBooks.length === 0 && statusFilter === null && visFilter === null" class="status-line">
-        아직 등록한 책이 없습니다. 위에서 검색해 추가해 보세요.
-      </p>
+      <div v-if="shelfBooks.length === 0 && statusFilter === null && visFilter === null" class="shelf-empty">
+        <div class="shelf-empty-icon" aria-hidden="true">🌱</div>
+        <p>아직 등록한 책이 없습니다.<br>위에서 검색해 추가해 보세요.</p>
+      </div>
       <p v-else-if="shelfBooks.length === 0" class="status-line">이 조건의 책이 없습니다.</p>
 
-      <ul v-if="shelfBooks.length" class="book-list shelf-scroll">
+      <ul v-if="shelfBooks.length" class="book-list shelf-scroll shelf-list">
         <li v-for="book in shelfBooks" :key="book.id" class="book-row">
           <img v-if="book.coverUrl" class="book-cover" :src="book.coverUrl" alt="" loading="lazy" referrerpolicy="no-referrer">
           <span v-else class="book-cover book-cover-ph" :style="coverStyle(book)" aria-hidden="true">{{ initialOf(book.title) }}</span>
           <div class="book-meta">
             <a class="book-title" :href="`/books/${book.id}`">{{ book.title }}</a>
             <span v-if="book.author" class="book-author">{{ book.author }}</span>
-            <span class="book-status-badge">{{ book.statusLabel }}</span>
+            <span class="book-status-badge" :style="statusStyle(book.status)">{{ book.statusLabel }}</span>
             <span v-if="book.seconds > 0" class="book-time mono">⏱ {{ formatTime(book.seconds) }}</span>
             <template v-for="pop in [popularityFor(book.isbn13)]" :key="'bp'">
               <a v-if="pop" class="follow-popularity"
@@ -304,16 +338,10 @@ async function removeBook(book: MyBookSummary) {
                     @change="changeStatus(book, ($event.target as HTMLSelectElement).value)">
               <option v-for="s in STATUSES" :key="s.name" :value="s.name">{{ s.label }}</option>
             </select>
-            <button type="button" class="vis-toggle" :class="{ 'is-public': book.isPublic }"
+            <button type="button" class="vis-chip" :class="{ 'is-public': book.isPublic }"
                     :aria-pressed="String(book.isPublic)"
                     :title="book.isPublic ? '책방에 공개 중 — 누르면 비공개로 전환' : '비공개 — 누르면 책방에 공개'"
-                    @click="toggleVisibility(book)">
-              <span class="vis-text">
-                <span class="vis-icon" aria-hidden="true">{{ book.isPublic ? '🌍' : '🔒' }}</span>
-                <span>{{ book.isPublic ? '책방 공개' : '비공개' }}</span>
-              </span>
-              <span class="vis-track" aria-hidden="true"><span class="vis-knob"></span></span>
-            </button>
+                    @click="toggleVisibility(book)">{{ book.isPublic ? '🌍 공개' : '🔒 비공개' }}</button>
             <!-- 구매 3분기 -->
             <details v-if="book.purchaseLink && coupangEnabled" class="buy-menu">
               <summary class="btn-ghost">구매</summary>
@@ -331,6 +359,7 @@ async function removeBook(book: MyBookSummary) {
         </li>
       </ul>
     </section>
+    </div><!-- /shelf-layout -->
 
     <!-- affiliate-note: 알라딘 무조건, 쿠팡은 조건 -->
     <p class="affiliate-note">

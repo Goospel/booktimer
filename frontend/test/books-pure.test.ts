@@ -5,6 +5,7 @@ import {
     initialOf,
     coverColor, COVER_PALETTE, COVER_FG,
     byline,
+    statusBadge, STATUS_BADGE_FALLBACK,
 } from '../src/books/pure';
 
 // 백엔드 BookStatus.name() = WANT_TO_READ / READING / FINISHED
@@ -120,5 +121,24 @@ describe('byline — 검색 결과 저자·출판사 한 줄', () => {
     test('공백뿐인 값은 trim 후 없음 취급', () => {
         expect(byline('   ', '문학동네')).toBe('문학동네');
         expect(byline('김영하', '   ')).toBe('김영하');
+    });
+});
+
+describe('statusBadge — 상태배지 색 매핑(시안 STATUS)', () => {
+    test('읽는 중 → 세이지', () => {
+        expect(statusBadge('READING')).toEqual({ bg: '#E7EEE2', fg: '#4F6B4C' });
+    });
+
+    test('완독 → 선명한 초록', () => {
+        expect(statusBadge('FINISHED')).toEqual({ bg: '#E0EFE6', fg: '#2F8F6B' });
+    });
+
+    test('읽고 싶음 → 베이지', () => {
+        expect(statusBadge('WANT_TO_READ')).toEqual({ bg: '#F0E8DB', fg: '#8A6D3B' });
+    });
+
+    test('알 수 없는 상태 → 중립 폴백', () => {
+        expect(statusBadge('PAUSED')).toEqual(STATUS_BADGE_FALLBACK);
+        expect(statusBadge('')).toEqual(STATUS_BADGE_FALLBACK);
     });
 });
