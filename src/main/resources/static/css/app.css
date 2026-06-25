@@ -1374,6 +1374,8 @@ a.book-title:hover { text-decoration: underline; }
     border-radius: var(--radius-sm); padding: 11px 13px;
     font-size: .8rem; margin: 0 0 16px;
 }
+.shelf-public-hint-icon { flex: 0 0 auto; }
+.shelf-public-hint-text { flex: 1 1 auto; min-width: 0; }
 .shelf-public-hint strong { font-weight: 600; }
 .shelf-public-hint a { color: var(--accent-hover); font-weight: 600; }
 

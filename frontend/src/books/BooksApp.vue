@@ -290,7 +290,8 @@ async function removeBook(book: MyBookSummary) {
     <section class="card shelf-mine">
       <h2>내 책장</h2>
       <p class="shelf-public-hint">
-        🌍 <strong>책방 공개</strong>로 켠 책은 <a :href="`/u/${myLoginId}`">내 책방</a>에서 누구나 볼 수 있어요.
+        <span class="shelf-public-hint-icon" aria-hidden="true">🌍</span>
+        <span class="shelf-public-hint-text"><strong>책방 공개</strong>로 켠 책은 <a :href="`/u/${myLoginId}`">내 책방</a>에서 누구나 볼 수 있어요.</span>
       </p>
 
       <div class="shelf-filter-chips" role="group" aria-label="상태 필터">
