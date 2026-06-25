@@ -70,7 +70,10 @@ onMounted(async () => {
     <div v-if="error" class="status-line">데이터를 불러오지 못했습니다.</div>
 
     <template v-else-if="data">
-        <p class="greeting"><span>{{ data.nickname }}</span>님의 독서 기록</p>
+        <header class="history-greeting">
+            <h1>{{ data.nickname }}님의 독서 기록</h1>
+            <p>꾸준함이 정원처럼 천천히 쌓이고 있어요.</p>
+        </header>
 
         <!-- 독서 잔디 카드 -->
         <section class="card">

@@ -2,7 +2,7 @@
 
 /* 본문 폰트 — 둥근 한글 산세리프 '고운돋움'(Google Fonts). 종이톤 무드와 어울리는
    부드러운 모서리. 한글 위주이며 라틴·숫자도 포함해 전 화면 본문에 깐다. */
-@import url('https://fonts.googleapis.com/css2?family=Gowun+Batang&family=Gowun+Dodum&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&display=swap');
 
 :root {
     /* 종이톤 + 세이지 그린 팔레트. 이름은 유지(무파괴), 값만 교체 → 전역 리프레시. */
@@ -98,6 +98,23 @@ body {
 .greeting {
     color: var(--muted);
     margin: 0 0 20px;
+}
+
+/* 독서 기록 화면 인사말 — 한 줄 .greeting 대신 헤드라인(고운바탕 serif)+서브카피로 첫인상 강화.
+   전역 .greeting과 분리한 화면 전용 클래스(다른 화면 영향 0). */
+.history-greeting h1 {
+    font-family: 'Gowun Batang', serif;
+    font-size: 31px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0;
+    letter-spacing: -.3px;
+    word-break: keep-all;
+}
+.history-greeting p {
+    font-size: 14px;
+    color: var(--muted);
+    margin: 7px 0 0;
 }
 
 /* 입구 폼 화면(signup·onboarding) 환영 헤더 — landing 히어로의 축소판.
@@ -635,14 +652,23 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 /* === 독서 잔디 (GitHub 컨트리뷰션 그래프 스타일) === */
 /* 헤더: 제목 좌측 / 성장 잔디 뱃지(연속 일수에 따라 땅→새싹→꽃→나무) 우측 상단.
    h2의 아래 여백(12px)을 래퍼로 옮겨 요약문과의 간격을 그대로 유지한다. */
-.grass-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 12px; }
+.grass-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 12px; }
 .grass-head h2 { margin: 0; }
-.grass-streak { display: inline-flex; align-items: center; gap: 6px; }
-.grass-streak-icon { font-size: 1.5rem; line-height: 1; }
-.grass-streak-days { color: var(--muted); font-size: .8rem; white-space: nowrap; }
+/* 성장 잔디 pill 뱃지 — 연한 세이지 알약(연속 일수). */
+.grass-streak {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: var(--sage-soft);
+    border: 1px solid #D7E2CF;
+    padding: 5px 11px;
+    border-radius: 999px;
+}
+.grass-streak-icon { font-size: 15px; line-height: 1; }
+.grass-streak-days { color: #3C5A3A; font-size: 13px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-.grass-summary { color: var(--muted); font-size: .9rem; margin: 0 0 12px; }
-.grass-summary strong { color: var(--text); }
+.grass-summary { color: #4A463D; font-size: 14.5px; margin: 0 0 18px; }
+.grass-summary strong { color: var(--ok); font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .grass {
     display: flex;
@@ -659,9 +685,11 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     grid-template-rows: repeat(7, 11px);
     gap: 3px;
     margin-top: 18px;
-    font-size: 9px;
-    color: var(--muted);
+    font-size: 9.5px;
+    color: #9A917F;
     line-height: 11px;
+    text-align: right;
+    padding-right: 4px;
 }
 
 /* 상단 월 라벨 — 53열 트랙에 grid-column-start로 배치 */
@@ -671,7 +699,7 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     gap: 3px;
     height: 14px;
     font-size: 10px;
-    color: var(--muted);
+    color: #9A917F;
 }
 .grass-months span { white-space: nowrap; }
 
@@ -690,25 +718,47 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     border-radius: 2px;
     background: #ebedf0;       /* level-0 기본 */
 }
-.grass-cell.empty { background: transparent; }
-.grass-cell.level-0 { background: #ebedf0; }
+/* placeholder(선행 빈칸 + 미래 날짜) — 시안의 future 톤(투명 아닌 옅은 베이지 칸). */
+.grass-cell.empty { background: #ECE7DB; }
+/* level-0(기록 없는 날) — 옅어서 카드 위에서 안 보이지 않게 미세한 안쪽 테두리. */
+.grass-cell.level-0 { background: #ebedf0; box-shadow: inset 0 0 0 1px rgba(27, 31, 35, .04); }
 .grass-cell.level-1 { background: #9be9a8; }
 .grass-cell.level-2 { background: #40c463; }
 .grass-cell.level-3 { background: #30a14e; }
 .grass-cell.level-4 { background: #216e39; }
-/* 사용자가 직접 채운 날(수동 입력) — 측정값과 구별되게 안쪽 테두리(레이아웃 안 흔들리게 box-shadow). */
-.grass-cell.manual { box-shadow: inset 0 0 0 2px #f59e0b; }
-.grass-legend .legend-gap { margin-left: 8px; }
+/* 사용자가 직접 채운 날(수동 입력) — 측정값과 구별되게 호박색 안쪽 테두리(레이아웃 안 흔들리게 box-shadow). */
+.grass-cell.manual { box-shadow: inset 0 0 0 1.6px #f59e0b; }
 
 .grass-legend {
     display: flex;
     align-items: center;
-    gap: 3px;
-    margin-top: 8px;
-    font-size: 9px;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid #EFE9DC;
+    font-size: 12px;
     color: var(--muted);
 }
+.grass-legend-group { display: inline-flex; align-items: center; gap: 7px; }
+.grass-legend-scale { display: inline-flex; gap: 3px; }
 .grass-legend i { display: inline-block; }
+
+/* 잔디 셀 hover 다크 툴팁 — 커서를 따라다닌다(JS가 left/top 인라인 지정).
+   position:fixed라 카드의 overflow:auto/hidden에 안 잘리고 뷰포트 기준으로 뜬다. */
+.grass-tip {
+    position: fixed;
+    transform: translateX(-50%);
+    background: var(--text);
+    color: var(--bg);
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 7px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 9999;
+    box-shadow: 0 6px 16px -6px rgba(0, 0, 0, .5);
+}
 
 /* === 독서 정원 (베타) === */
 
