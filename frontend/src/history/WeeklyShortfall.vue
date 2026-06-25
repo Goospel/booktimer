@@ -18,8 +18,10 @@ function formatDebt(debtSeconds: number): string {
         <p class="muted">최근 7일 중 목표를 못 채운 날이에요. 그날 읽고 기록을 깜빡했다면 채워 넣어요.</p>
         <ul class="missed-list">
             <li v-for="d in weeklyShortfall" :key="d.date">
-                <span class="missed-date">{{ formatShortDate(d.date) }}</span>
-                <span class="missed-debt">{{ formatDebt(d.debtSeconds) }}</span>
+                <div class="missed-main">
+                    <span class="missed-date">{{ formatShortDate(d.date) }}</span>
+                    <span class="missed-debt">{{ formatDebt(d.debtSeconds) }}</span>
+                </div>
                 <a class="btn-ghost btn-fill" :href="'/sessions/manual?date=' + d.date">채우기</a>
             </li>
         </ul>

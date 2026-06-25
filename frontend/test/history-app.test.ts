@@ -64,6 +64,8 @@ beforeEach(() => {
 afterEach(() => {
     vi.unstubAllGlobals();
     document.body.innerHTML = '';
+    document.body.className = '';            // 컴포넌트가 토글한 history-wide 잔재 제거
+    window.innerWidth = 1024;                // jsdom 기본값 복구(테스트 간 폭 누수 방지)
 });
 
 describe('HistoryApp', () => {
@@ -137,20 +139,36 @@ describe('MonthlyRecords 월 네비 경계', () => {
         expect((next.element as HTMLButtonElement).disabled).toBe(true);
     });
 
-    test('탭 전환: activeTab 변경 시 input[type=radio] checked 상태가 바뀐다', async () => {
+    test('좁은 폭(stacked): pill 탭 2개 + 클릭 시 active 전환', async () => {
+        window.innerWidth = 500;                              // < SPLIT_MIN_WIDTH → stacked
         const wrapper = mount(HistoryApp, { attachTo: document.body });
-        await vi.waitFor(() => expect(wrapper.find('#tab-records').exists()).toBe(true));
+        await vi.waitFor(() => expect(wrapper.find('.hist-tab').exists()).toBe(true));
 
-        const recordsRadio = wrapper.find('#tab-records').element as HTMLInputElement;
-        const missedRadio = wrapper.find('#tab-missed').element as HTMLInputElement;
+        const tabs = wrapper.findAll('.hist-tab');
+        expect(tabs).toHaveLength(2);
+        // split 컨테이너는 없어야(stacked)
+        expect(wrapper.find('.hist-split').exists()).toBe(false);
 
-        // 초기: records 선택
-        expect(recordsRadio.checked).toBe(true);
-        expect(missedRadio.checked).toBe(false);
+        // 초기: 첫 탭(일자별) active
+        expect(tabs[0].classes()).toContain('active');
+        expect(tabs[1].classes()).not.toContain('active');
 
-        // missed 라디오 클릭
-        await wrapper.find('#tab-missed').trigger('click');
-        expect(missedRadio.checked).toBe(true);
-        expect(recordsRadio.checked).toBe(false);
+        // 둘째 탭(빠뜨린날) 클릭 → active 이동
+        await tabs[1].trigger('click');
+        expect(tabs[0].classes()).not.toContain('active');
+        expect(tabs[1].classes()).toContain('active');
+    });
+
+    test('넓은 폭(split): 탭 없이 2단(일자별/빠뜨린날) 나란히', async () => {
+        window.innerWidth = 1200;                             // >= SPLIT_MIN_WIDTH → split
+        const wrapper = mount(HistoryApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.find('.hist-split').exists()).toBe(true));
+
+        // split이면 pill 탭이 없다
+        expect(wrapper.find('.hist-tab').exists()).toBe(false);
+        // 두 패널(일자별 MonthlyRecords·빠뜨린날) 동시 렌더
+        expect(wrapper.findAll('.hist-pane')).toHaveLength(2);
+        // body에 history-wide(컨테이너 확장 트리거) 부착
+        expect(document.body.classList.contains('history-wide')).toBe(true);
     });
 });
