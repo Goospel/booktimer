@@ -1514,7 +1514,8 @@ a.book-title:hover { text-decoration: underline; }
 .shelf-filter-chips + .shelf-filter-chips { margin-bottom: 18px; }
 .filter-chip {
     width: auto;                                   /* 전역 button{width:100%} 상쇄(#286 가드) */
-    border: 0; background: transparent; color: var(--muted);
+    border: 0; border-radius: 0;                   /* 전역 button{border-radius:10px} 상쇄 — 모서리는 컨테이너 overflow가 8px로 클립(없으면 active 셀이 10px라 겉 박스와 어긋남) */
+    background: transparent; color: var(--muted);
     padding: 6px 14px; font-size: .8rem; font-weight: 600;
     line-height: 1.2; cursor: pointer; white-space: nowrap;
 }
