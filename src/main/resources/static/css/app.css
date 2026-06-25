@@ -1501,7 +1501,7 @@ a.book-title:hover { text-decoration: underline; }
 /* 필터 묶음 = 세그먼트 토글 바(한 덩어리) — 상태/공개여부 두 묶음을 개별 덩어리로 분리 */
 .shelf-filter-chips {
     display: flex; width: fit-content; flex-wrap: nowrap;     /* flex=block레벨→세로 적층, fit-content=내용폭 */
-    border: 1px solid var(--border); border-radius: 999px; overflow: hidden;   /* overflow=셀 모서리 라운드 클립 */
+    border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden;   /* radius-sm(8px)=각진 세그먼트, overflow=셀 모서리 클립 */
     margin: 0 0 9px;
 }
 .shelf-filter-chips + .shelf-filter-chips { margin-bottom: 18px; }
