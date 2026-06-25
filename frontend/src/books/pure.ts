@@ -35,6 +35,15 @@ export function initialOf(title: string): string {
     return t ? t.charAt(0) : '?';
 }
 
+// ── 검색 결과 byline(저자 · 출판사) ───────────────────────────────────────
+// 시안: r.a + ' · ' + r.p. 둘 중 없는 값(null·빈·공백)은 빼고, 남은 것만 ' · '로 잇는다.
+
+export function byline(author: string | null, publisher: string | null): string {
+    const a = (author ?? '').trim();
+    const p = (publisher ?? '').trim();
+    return [a, p].filter(Boolean).join(' · ');
+}
+
 // ── 무표지 플레이스홀더 색(결정적 해시 매핑) ──────────────────────────────
 // coverUrl 이 없을 때 색 배경 + 이니셜로 표지를 대신한다. 같은 책은 항상 같은 색이
 // 되도록 seed(isbn13 우선, 없으면 title)를 해시해 고정 팔레트에서 결정적으로 고른다.
