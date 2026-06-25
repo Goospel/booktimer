@@ -10,6 +10,7 @@ import {
     goalLabel,
     avatarInitial,
     wheelScrollLeft,
+    nextAutoScroll,
 } from './timerProgress'
 
 // ── computeProgress ──────────────────────────────────────────────────────────
@@ -248,4 +249,44 @@ describe('wheelScrollLeft', () => {
         expect(wheelScrollLeft(30, 0, 300, 800)).toBe(30))
     it('끝 경계여도 위로(deltaY<0)는 가로 스크롤(양보 아님)', () =>
         expect(wheelScrollLeft(-30, 500, 300, 800)).toBe(470))
+})
+
+// ── nextAutoScroll ────────────────────────────────────────────────────────────
+
+describe('nextAutoScroll', () => {
+    // 무대 자동 스크롤: 일정 간격마다 한 칸(step)씩 옆으로. 끝/시작에 닿으면 방향을
+    // 뒤집어 왕복(ping-pong). { left, dir } 반환 — left는 다음 scrollLeft, dir는 다음 방향.
+    // maxScroll = scrollWidth - clientWidth.
+
+    it('스크롤 여지 없음(scrollWidth<=clientWidth) → left 0, dir 유지', () => {
+        expect(nextAutoScroll(0, 60, 300, 300, 1)).toEqual({ left: 0, dir: 1 })
+    })
+    it('step<=0(측정 실패) → left 0, dir 유지(0 나눗셈/무한루프 가드)', () => {
+        expect(nextAutoScroll(0, 0, 300, 800, 1)).toEqual({ left: 0, dir: 1 })
+    })
+    it('중간에서 오른쪽으로 → step만큼 증가, 방향 유지', () => {
+        // maxScroll=500, target=60 < 500
+        expect(nextAutoScroll(0, 60, 300, 800, 1)).toEqual({ left: 60, dir: 1 })
+    })
+    it('오른쪽으로 끝을 넘으면 → maxScroll로 clamp + 방향 반전(-1)', () => {
+        // maxScroll=500, target=540 >= 500
+        expect(nextAutoScroll(480, 60, 300, 800, 1)).toEqual({ left: 500, dir: -1 })
+    })
+    it('오른쪽으로 정확히 끝에 닿으면 → clamp + 반전', () => {
+        // target=500 == maxScroll
+        expect(nextAutoScroll(440, 60, 300, 800, 1)).toEqual({ left: 500, dir: -1 })
+    })
+    it('이미 끝에서 오른쪽 → 그 자리(maxScroll) + 반전(끝 dwell 후 복귀, stuck 방지)', () => {
+        expect(nextAutoScroll(500, 60, 300, 800, 1)).toEqual({ left: 500, dir: -1 })
+    })
+    it('중간에서 왼쪽으로 → step만큼 감소, 방향 유지', () => {
+        expect(nextAutoScroll(200, 60, 300, 800, -1)).toEqual({ left: 140, dir: -1 })
+    })
+    it('왼쪽으로 시작을 넘으면 → 0으로 clamp + 방향 반전(+1)', () => {
+        // target=-20 <= 0
+        expect(nextAutoScroll(40, 60, 300, 800, -1)).toEqual({ left: 0, dir: 1 })
+    })
+    it('왼쪽으로 정확히 시작에 닿으면 → clamp + 반전', () => {
+        expect(nextAutoScroll(60, 60, 300, 800, -1)).toEqual({ left: 0, dir: 1 })
+    })
 })

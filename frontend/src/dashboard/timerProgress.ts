@@ -110,3 +110,25 @@ export function wheelScrollLeft(
     if ((deltaY < 0 && atStart) || (deltaY > 0 && atEnd)) return null
     return scrollLeft + deltaY
 }
+
+/**
+ * 무대 자동 스크롤 한 틱: 현재 scrollLeft에서 dir(±1) 방향으로 한 칸(step)씩 이동한 다음
+ * 위치와 방향을 반환한다. 끝(maxScroll)·시작(0)에 닿거나 넘으면 그 경계로 clamp하고
+ * 방향을 반전해 왕복(ping-pong)한다 — 이미 경계에 있으면 그 자리에 머문 채 방향만 반전해
+ * (한 틱 dwell) 다음 틱부터 되돌아오므로 끝에서 막히지 않는다.
+ * 스크롤 여지가 없거나(maxScroll<=0) step이 0 이하면 0에 머물고 dir만 보존한다.
+ */
+export function nextAutoScroll(
+    scrollLeft: number,
+    step: number,
+    clientWidth: number,
+    scrollWidth: number,
+    dir: number
+): { left: number; dir: number } {
+    const maxScroll = Math.max(0, scrollWidth - clientWidth)
+    if (maxScroll <= 0 || step <= 0) return { left: 0, dir }
+    const target = scrollLeft + dir * step
+    if (target >= maxScroll) return { left: maxScroll, dir: -1 }
+    if (target <= 0) return { left: 0, dir: 1 }
+    return { left: target, dir }
+}
