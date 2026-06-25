@@ -1,5 +1,7 @@
 package com.booktimer.quote;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
@@ -27,5 +29,26 @@ public final class QuotePicker {
             throw new IllegalArgumentException("quotes must not be empty");
         }
         return quotes.get(random.nextInt(quotes.size()));
+    }
+
+    /**
+     * 목록을 셔플해 앞에서 최대 {@code max}개를 고른다(슬롯머신 로테이션용 — 매 로드 순서가 달라지게).
+     *
+     * <p>입력을 변형하지 않도록 복사본을 셔플한다. 빈 목록이거나 {@code max <= 0}이면 빈 목록을 돌려준다
+     * (폴백 처리는 호출부가 — {@link QuoteService}). {@link Random}을 주입받아 셔플을 결정적으로 테스트한다.
+     *
+     * @param quotes 격언 목록(변형되지 않음)
+     * @param random 셔플에 쓸 난수원
+     * @param max    반환 상한(이보다 적게 있으면 전체)
+     * @return 셔플된 격언 최대 {@code max}개(불변 리스트)
+     */
+    public static List<Quote> pickList(List<Quote> quotes, Random random, int max) {
+        if (quotes.isEmpty() || max <= 0) {
+            return List.of();
+        }
+        List<Quote> copy = new ArrayList<>(quotes);
+        Collections.shuffle(copy, random);
+        int n = Math.min(max, copy.size());
+        return List.copyOf(copy.subList(0, n));
     }
 }

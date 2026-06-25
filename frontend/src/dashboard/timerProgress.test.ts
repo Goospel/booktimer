@@ -12,6 +12,7 @@ import {
     wheelScrollLeft,
     nextAutoScroll,
     centeredIndex,
+    nextQuoteIndex,
 } from './timerProgress'
 
 // ── computeProgress ──────────────────────────────────────────────────────────
@@ -310,4 +311,16 @@ describe('centeredIndex', () => {
     it('maxScroll 초과(400) → 4로 clamp', () => expect(centeredIndex(400, 84, 5)).toBe(4))
     it('음수 scrollLeft → 0으로 clamp', () => expect(centeredIndex(-30, 84, 5)).toBe(0))
     it('작가 1명 → 항상 0', () => expect(centeredIndex(0, 84, 1)).toBe(0))
+})
+
+// ── nextQuoteIndex ────────────────────────────────────────────────────────────
+
+describe('nextQuoteIndex', () => {
+    // 명언 슬롯머신 로테이션: 다음 인덱스 = (current+1) % count, count<=0이면 0(가드).
+    it('count 0 → 0 (가드)', () => expect(nextQuoteIndex(0, 0)).toBe(0))
+    it('0 → 1', () => expect(nextQuoteIndex(0, 3)).toBe(1))
+    it('1 → 2', () => expect(nextQuoteIndex(1, 3)).toBe(2))
+    it('마지막(2/3) → 0으로 wrap', () => expect(nextQuoteIndex(2, 3)).toBe(0))
+    it('1개뿐 → 항상 0', () => expect(nextQuoteIndex(0, 1)).toBe(0))
+    it('범위 밖 current도 안전하게 wrap', () => expect(nextQuoteIndex(5, 3)).toBe(0))
 })

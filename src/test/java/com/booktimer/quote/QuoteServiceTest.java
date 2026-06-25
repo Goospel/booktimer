@@ -102,4 +102,44 @@ class QuoteServiceTest {
         assertThat(picked.getText()).isNotBlank();
         assertThat(picked.getAuthor()).isNotBlank();
     }
+
+    @Test
+    @DisplayName("randomList: 저장된 격언 중 최대 max개를 반환한다(슬롯 로테이션용)")
+    void randomList_returnsUpToMax() {
+        QuoteService service = service();
+        service.add("문장1", "작가1");
+        service.add("문장2", "작가2");
+        service.add("문장3", "작가3");
+
+        List<Quote> picked = service.randomList(2);
+
+        assertThat(picked).hasSize(2);
+        assertThat(picked).extracting(Quote::getText)
+                .isSubsetOf("문장1", "문장2", "문장3");
+        assertThat(picked).doesNotHaveDuplicates();
+    }
+
+    @Test
+    @DisplayName("randomList: 개수가 max보다 적으면 전체를 반환한다")
+    void randomList_fewerThanMax_returnsAll() {
+        QuoteService service = service();
+        service.add("문장1", "작가1");
+        service.add("문장2", "작가2");
+
+        List<Quote> picked = service.randomList(10);
+
+        assertThat(picked).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("randomList: 격언이 하나도 없으면 폴백 1개를 반환한다(대시보드 깨짐 방지)")
+    void randomList_returnsFallbackWhenEmpty() {
+        QuoteService service = service();
+
+        List<Quote> picked = service.randomList(10);
+
+        assertThat(picked).hasSize(1);
+        assertThat(picked.get(0).getText()).isNotBlank();
+        assertThat(picked.get(0).getAuthor()).isNotBlank();
+    }
 }

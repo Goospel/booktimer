@@ -101,7 +101,9 @@ class DashboardApiControllerTest {
                 .andExpect(jsonPath("$.graph.growthStageName").isString())
                 .andExpect(jsonPath("$.graph.growthStageLabel").isString())
                 .andExpect(jsonPath("$.garden").exists())
-                .andExpect(jsonPath("$.quote").exists())
+                .andExpect(jsonPath("$.quotes").isArray())
+                .andExpect(jsonPath("$.quotes[0].text").isString())
+                .andExpect(jsonPath("$.quotes[0].author").isString())
                 .andExpect(jsonPath("$.emailVerified").isBoolean());
     }
 

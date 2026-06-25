@@ -47,6 +47,16 @@ public class QuoteService {
         return all.isEmpty() ? FALLBACK : QuotePicker.pick(all, random);
     }
 
+    /**
+     * 셔플된 격언 최대 {@code max}개(대시보드 슬롯머신 로테이션용 — 클라이언트가 순환 표시).
+     * 매 호출 새로 셔플해 페이지 로드마다 순서가 달라진다. 하나도 없으면 폴백 1개를 돌려준다.
+     */
+    @Transactional(readOnly = true)
+    public List<Quote> randomList(int max) {
+        List<Quote> picked = QuotePicker.pickList(repository.findAll(), random, max);
+        return picked.isEmpty() ? List.of(FALLBACK) : picked;
+    }
+
     /** 등록된 격언 전체 — 최신 등록 먼저(admin 목록용). */
     @Transactional(readOnly = true)
     public List<Quote> all() {

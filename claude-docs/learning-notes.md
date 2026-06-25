@@ -122,6 +122,7 @@
 - [N-119. flex-direction 전환 시 flex-basis가 축을 따라간다 — row의 width가 column에선 height가 된다](#n-119-flex-direction-전환-시-flex-basis가-축을-따라간다--row의-width가-column에선-height가-된다)
 - [N-120. overflow-x:auto는 데스크톱에서 터치 스크롤만 — 휠·드래그는 JS로](#n-120-overflow-xauto는-데스크톱에서-터치-스크롤만--휠드래그는-js로)
 - [N-121. CSS 중앙 포커스 캐러셀 — 좌우 패딩으로 step 스크롤이 곧 가운데 정렬](#n-121-css-중앙-포커스-캐러셀--좌우-패딩으로-step-스크롤이-곧-가운데-정렬)
+- [N-122. CSS grid-stack으로 가변 콘텐츠 최대 높이 예약 — 슬라이드/캐러셀 클립·점프 방지](#n-122-css-grid-stack으로-가변-콘텐츠-최대-높이-예약--슬라이드캐러셀-클립점프-방지)
 
 ---
 
@@ -5738,3 +5739,50 @@ N-083/N-084의 교훈: jsdom·동기 mock 로드로 단순화하면 `defer`/`typ
 ### 관련
 
 - **N-120**(overflow-x 데스크톱 휠·드래그 — 이 캐러셀의 스크롤 입력 토대), **N-117**(섬 실 브라우저 검증), **N-055**(null-state 가드 — 중앙 인덱스 out-of-range 시 이름 옵셔널 체이닝으로 ''). 대시보드 '내 정원' 무대 가운데 포커스 캐러셀 + 중앙 작가 이름 상단 표시.
+
+---
+
+## N-122. CSS grid-stack으로 가변 콘텐츠 최대 높이 예약 — 슬라이드/캐러셀 클립·점프 방지
+
+**한 줄 요약**: 슬라이드·캐러셀·슬롯머신처럼 **항목을 겹쳐서 전환**할 때, 항목마다 높이가 다르면 ① 전환용 `position:absolute`는 부모 높이를 못 만들어 무대가 찌부러져 **클립**되고 ② in-flow로 두면 새 항목이 들어올 때마다 무대 높이가 **점프**한다. 모든 항목을 `display:grid` **한 칸(`grid-area:1/1`)에 겹쳐 쌓은 숨은 sizer**(`visibility:hidden`)를 두면 그 트랙 높이 = **가장 긴 항목**이 되어, JS 측정 없이 CSS만으로 고정 높이 무대를 **반응형**으로 확보한다.
+
+### 배경 / 문제
+
+- 한 번에 하나만 보이는 전환(명언 슬롯머신, 이미지 캐러셀, 탭 크로스페이드)에서 나가는/들어오는 두 항목을 **겹쳐** 애니메이션하려면 보통 `position:absolute`로 포갠다.
+- 그런데 absolute 자식은 부모 높이에 기여하지 않는다 → 무대 컨테이너가 높이 0(또는 패딩만)으로 찌부러져 내용이 잘린다.
+- in-flow로 두고 나가는 쪽만 absolute로 하면, 항목 높이가 다를 때 새 항목이 flow에 들어오는 순간 컨테이너 높이가 튀어 **레이아웃 점프**가 생긴다.
+- 고정 px 높이는 화면폭에 따라 줄바꿈 수가 달라지는 텍스트엔 깨진다(데스크톱 2줄 ↔ 모바일 4줄).
+
+### 개념 (왜 grid-stack이 푸는가)
+
+- CSS Grid에서 **여러 자식을 같은 셀(`grid-area: 1 / 1`)에 배치**하면 자식들이 겹쳐 쌓이고, 그 **행 트랙 높이 = 자식들 중 최대 콘텐츠 높이**가 된다(겹쳐도 각 자식의 자연 높이를 측정해 최댓값을 트랙에 반영).
+- 이 grid를 **숨은 sizer**(`visibility:hidden`, `aria-hidden`)로 두면 화면엔 안 보이지만 **공간(높이)은 차지**해 무대 높이를 "가장 긴 항목"으로 예약한다.
+- 실제 보이는 항목은 무대 위에 `position:absolute; inset:0`로 띄워 전환(예: `translateY(100%)→0` 슬롯 롤)하고, 무대는 `overflow:hidden`으로 클립한다.
+- 화면폭이 바뀌면 sizer가 다시 줄바꿈돼 트랙 높이가 재계산 → **반응형 자동**(JS 리사이즈 핸들러 불필요).
+
+### 예시 (구조)
+
+```html
+<div class="reel">                  <!-- position:relative; overflow:hidden -->
+  <div class="sizer" aria-hidden>   <!-- display:grid; visibility:hidden -->
+    <div class="item">…긴 항목…</div>  <!-- 전부 grid-area:1/1 로 겹침 -->
+    <div class="item">…짧은 항목…</div>
+  </div>
+  <Transition><div class="item live" :key="i">…현재 항목…</div></Transition>  <!-- absolute; inset:0 -->
+</div>
+```
+```css
+.sizer { display: grid; visibility: hidden; }
+.sizer > .item { grid-area: 1 / 1; }   /* 한 칸에 겹침 → 트랙 높이 = 최댓값 */
+.live { position: absolute; inset: 0; }
+```
+
+### 주의 / 트레이드오프
+
+- 항목을 **두 번 렌더**한다(sizer용 N개 + 보이는 1개). 항목 수가 많으면 DOM 비용↑ — 캐러셀(수~수십 개)엔 무해, 수백 개면 다른 방법(가상 측정).
+- sizer는 `aria-hidden`으로 스크린리더 중복 읽기를 막고, 보이는 항목에 `aria-live`를 준다.
+- 대안: ResizeObserver로 max를 JS 측정해 높이 고정 — 정확하지만 코드·리렌더 비용. CSS-only grid-stack이 더 단순하고 선언적.
+
+### 관련
+
+- **N-121**(중앙 포커스 캐러셀 — 같은 대시보드 위젯 계열, step 스크롤 무대), **N-115**(간격은 컨테이너 gap으로 — 레이아웃 책임 배치), **N-117**(섬 실 브라우저 검증으로 전환·높이 실측). 대시보드 명언 카드 슬롯머신 자동 로테이션.

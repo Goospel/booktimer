@@ -40,4 +40,56 @@ class QuotePickerTest {
 
         assertThat(QuotePicker.pick(List.of(only), new Random())).isSameAs(only);
     }
+
+    // ── pickList: 슬롯머신 로테이션용 셔플 N개 ────────────────────────────────────
+
+    @Test
+    @DisplayName("pickList: max개만 반환하고 모두 입력에서 온 서로 다른 격언이다")
+    void pickList_returnsAtMostMax_subsetNoDupes() {
+        Quote q0 = Quote.of("문장0", "작가0");
+        Quote q1 = Quote.of("문장1", "작가1");
+        Quote q2 = Quote.of("문장2", "작가2");
+
+        List<Quote> result = QuotePicker.pickList(List.of(q0, q1, q2), new Random(1), 2);
+
+        assertThat(result).hasSize(2);
+        assertThat(result).isSubsetOf(List.of(q0, q1, q2));
+        assertThat(result).doesNotHaveDuplicates();
+    }
+
+    @Test
+    @DisplayName("pickList: max가 개수보다 크면 전체를 반환한다(셔플된 순서)")
+    void pickList_fewerThanMax_returnsAll() {
+        Quote q0 = Quote.of("문장0", "작가0");
+        Quote q1 = Quote.of("문장1", "작가1");
+
+        List<Quote> result = QuotePicker.pickList(List.of(q0, q1), new Random(1), 5);
+
+        assertThat(result).containsExactlyInAnyOrder(q0, q1);
+    }
+
+    @Test
+    @DisplayName("pickList: 같은 시드 Random이면 같은 결과(셔플 사용·결정적)")
+    void pickList_deterministicForSameSeed() {
+        List<Quote> input = List.of(
+                Quote.of("a", "A"), Quote.of("b", "B"), Quote.of("c", "C"), Quote.of("d", "D"));
+
+        List<Quote> r1 = QuotePicker.pickList(input, new Random(42), 3);
+        List<Quote> r2 = QuotePicker.pickList(input, new Random(42), 3);
+
+        assertThat(r1).isEqualTo(r2);
+    }
+
+    @Test
+    @DisplayName("pickList: 빈 목록 → 빈 목록(폴백은 호출부가)")
+    void pickList_empty_returnsEmpty() {
+        assertThat(QuotePicker.pickList(List.of(), new Random(), 5)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("pickList: max<=0 → 빈 목록(가드)")
+    void pickList_nonPositiveMax_returnsEmpty() {
+        List<Quote> input = List.of(Quote.of("a", "A"), Quote.of("b", "B"));
+        assertThat(QuotePicker.pickList(input, new Random(), 0)).isEmpty();
+    }
 }

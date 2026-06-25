@@ -1922,8 +1922,15 @@ a.book-title:hover { text-decoration: underline; }
 .dash-grass-head,
 .dash-garden-head { margin-bottom: 4px; }
 
-/* 오늘의 문장 */
-.dash-quote-card { gap: 12px; }
+/* 오늘의 문장 — 슬롯머신 로테이션(아래→위 롤) */
+/* reel: 클리핑 무대. 높이는 숨은 sizer가 '가장 긴 명언'으로 잡아줘 클립·점프 없음. */
+.dash-quote-reel { position: relative; overflow: hidden; }
+/* sizer: 모든 명언을 grid 한 칸(1/1)에 겹쳐 쌓아 트랙 높이 = 가장 긴 명언. 보이지 않음(공간만 차지). */
+.dash-quote-sizer { display: grid; visibility: hidden; }
+.dash-quote-sizer > .dash-quote-item { grid-area: 1 / 1; }
+.dash-quote-item { display: flex; flex-direction: column; gap: 6px; }
+/* 실제 보이는 한 줄: reel을 채우고 세로 중앙. 들어오고 나가는 두 줄이 겹쳐 롤 되도록 absolute. */
+.dash-quote-live { position: absolute; inset: 0; justify-content: center; }
 .dash-quote-text {
     margin: 0;
     font-family: 'Gowun Batang', serif;
@@ -1934,6 +1941,18 @@ a.book-title:hover { text-decoration: underline; }
     max-width: 62ch;
 }
 .dash-quote-author { font-size: 13.5px; color: var(--muted); }
+/* 슬롯 롤: 새 줄은 아래(translateY 100%)에서 0으로, 옛 줄은 0에서 위(-100%)로. reel이 클립. */
+.dash-quote-slot-enter-active,
+.dash-quote-slot-leave-active { transition: transform .55s cubic-bezier(.4, 0, .2, 1), opacity .55s ease; }
+.dash-quote-slot-enter-from { transform: translateY(100%); opacity: 0; }
+.dash-quote-slot-leave-to { transform: translateY(-100%); opacity: 0; }
+/* 모션 최소화: 슬라이드만 끔(로테이션=명언 다양성은 유지, 즉시 교체). */
+@media (prefers-reduced-motion: reduce) {
+    .dash-quote-slot-enter-active,
+    .dash-quote-slot-leave-active { transition: none; }
+    .dash-quote-slot-enter-from,
+    .dash-quote-slot-leave-to { transform: none; }
+}
 
 /* 타이머 히어로 */
 .dash-timer-hero {
