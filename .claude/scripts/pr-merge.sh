@@ -66,18 +66,21 @@ read_checks() {
 do_merge() {
   local head
   if [ "${PR_MERGE_DRYRUN:-0}" = "1" ]; then
-    note "would: gh pr merge $PR --squash + 원격 브랜치 삭제"
+    note "would: gh pr merge $PR --squash + 원격 브랜치 삭제(gh API)"
     return 0
   fi
+  # head는 머지 전에 확보(머지 후에도 남지만 안전하게 먼저).
+  head="$(timeout 30 gh pr view "$PR" --json headRefName -q .headRefName 2>/dev/null)"
   note "squash 머지 실행…"
-  gh pr merge "$PR" --squash || return 1
-  head="$(gh pr view "$PR" --json headRefName -q .headRefName 2>/dev/null)"
+  timeout 120 gh pr merge "$PR" --squash || return 1
   if [ -n "$head" ]; then
-    note "원격 브랜치 삭제: $head"
-    # 백그라운드(비대화형) git push가 credential/원격 단계에서 멈추면 머지는 됐는데 스크립트가
-    # exit 못 하고 영원히 매달린다(T-091) → 30s 하드 타임아웃. 실패해도 머지는 끝났으니 진행.
-    timeout 30 git push origin --delete "$head" 2>/dev/null \
-      || note "원격 브랜치 삭제 실패/타임아웃 — 수동 정리: git push origin --delete $head"
+    note "원격 브랜치 삭제(gh API): $head"
+    # ⚠️ git push origin --delete 금지(T-091/T-094): Windows Git Bash에선 git이 띄운 자식
+    # (git-remote-https·credential helper)이 SIGTERM을 안 받아 `timeout`으로도 안 죽고 매달려,
+    # 머지는 됐는데 스크립트가 exit 못 해 백그라운드 태스크가 40분+ "출력 없음"으로 좀비가 된다.
+    # → gh API(자체 토큰 HTTP, 자식 프로세스 없음)로 ref를 직접 삭제하면 hang이 원천 차단된다.
+    timeout 30 gh api -X DELETE "repos/{owner}/{repo}/git/refs/heads/$head" >/dev/null 2>&1 \
+      || note "원격 브랜치 삭제 실패 — 수동: gh api -X DELETE repos/{owner}/{repo}/git/refs/heads/$head"
   fi
   note "✅ 머지 완료. 로컬 main 갱신은 호출자가 마무리하세요."
 }
