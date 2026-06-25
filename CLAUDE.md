@@ -99,7 +99,8 @@
    - **DIRTY** → `gh pr merge` 전에 `git rebase origin/main` → `git push --force-with-lease` 로 충돌 해결. 그 후 재진행.
    - **CLEAN** → 즉시 머지.
    - **BLOCKED** (CI 대기) → CI 통과 후 머지.
-   - 자동화: `bash .claude/scripts/pr-merge.sh <PR번호>` 가 DIRTY 즉시 차단 + CI 폴링 + 하드 타임아웃(12분) + 원격 브랜치 삭제를 한 번에 처리한다.
+   - **auto-merge 우선 (2026-06-25~, 레포 `allow_auto_merge=true`)**: 단일·마지막 PR은 `gh pr merge <PR번호> --auto --squash --delete-branch` **한 번**이면 GitHub가 필수체크(`test`) 통과 시 **서버사이드에서 머지 + 원격 브랜치 삭제**까지 한다 — 로컬 폴링·백그라운드 자체가 불필요(머지 hang 클래스가 구조적으로 사라짐, T-094). 연쇄 PR(다음 분기가 이 머지에 의존)은 `--auto` 걸고 `gh pr view <PR> --json state` 가 `MERGED` 될 때까지만 짧게 확인.
+   - 폴백 자동화: `bash .claude/scripts/pr-merge.sh <PR번호>` 가 DIRTY 즉시 차단 + CI 폴링 + 하드 타임아웃(12분) + 원격 브랜치 삭제(gh API)를 한 번에 처리한다 — auto-merge 미허용 환경이나 **동기 머지**(이 세션에서 끝까지 보고)가 필요할 때.
    - 머지 후 로컬 `main` 갱신(`git checkout main && git pull`) 및 브랜치 정리
 
 ### 예외
