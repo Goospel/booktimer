@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import ContributionGraph from './ContributionGraph.vue';
 import MonthlyRecords from './MonthlyRecords.vue';
 import WeeklyShortfall from './WeeklyShortfall.vue';
+import { chooseLayout, type RecordsLayout } from './layout';
 
 export interface ContributionDay {
     date: string | null;
@@ -55,7 +56,19 @@ const data = ref<HistoryApiResponse | null>(null);
 const error = ref(false);
 const activeTab = ref<'records' | 'missed'>('records');
 
+// 반응형 레이아웃: 좁으면 pill 탭(stacked), 넓으면 2단(split). 판단은 순수함수 chooseLayout에 위임.
+// split일 때 body에 history-wide를 달아 컨테이너를 넓힌다(미디어쿼리 대신 JS로 토글 — innerWidth와
+// CSS @media의 스크롤바 폭 불일치로 경계에서 어긋나는 것 방지, 단일 출처=chooseLayout(innerWidth)).
+const layout = ref<RecordsLayout>(chooseLayout(typeof window !== 'undefined' ? window.innerWidth : 0));
+
+function applyLayout(): void {
+    layout.value = chooseLayout(window.innerWidth);
+    document.body.classList.toggle('history-wide', layout.value === 'split');
+}
+
 onMounted(async () => {
+    applyLayout();
+    window.addEventListener('resize', applyLayout);
     try {
         const res = await fetch('/api/history', { credentials: 'same-origin' });
         if (!res.ok) throw new Error('fetch failed');
@@ -63,6 +76,11 @@ onMounted(async () => {
     } catch {
         error.value = true;
     }
+});
+
+onUnmounted(() => {
+    window.removeEventListener('resize', applyLayout);
+    document.body.classList.remove('history-wide');
 });
 </script>
 
@@ -80,23 +98,31 @@ onMounted(async () => {
             <ContributionGraph :graph="data.graph" />
         </section>
 
-        <!-- 독서 기록 탭 카드 -->
-        <section class="card record-card">
-            <!-- 탭 헤더: CSS 라디오 + v-model로 activeTab 동기화 -->
-            <input type="radio" v-model="activeTab" value="records"
-                   name="histtab" id="tab-records" class="tab-radio">
-            <label for="tab-records" class="record-tab">일자별 독서 시간</label>
-            <input type="radio" v-model="activeTab" value="missed"
-                   name="histtab" id="tab-missed" class="tab-radio">
-            <label for="tab-missed" class="record-tab">이번 주 빠뜨린 날</label>
+        <!-- 독서 기록: 넓으면 2단 split, 좁으면 pill 탭 stacked (JS chooseLayout 분기) -->
+        <div v-if="layout === 'split'" class="hist-split">
+            <section class="card hist-pane">
+                <h2>일자별 독서 시간</h2>
+                <MonthlyRecords :months="data.months" />
+            </section>
+            <section class="card hist-pane">
+                <h2>이번 주 빠뜨린 날</h2>
+                <WeeklyShortfall :weeklyShortfall="data.weeklyShortfall" />
+            </section>
+        </div>
 
-            <!-- 패널 ①: 일자별 독서 -->
-            <div class="tab-panel panel-records">
+        <section v-else class="card hist-records">
+            <div class="hist-tabs" role="tablist" aria-label="독서 기록 보기">
+                <button type="button" class="hist-tab" :class="{ active: activeTab === 'records' }"
+                        role="tab" :aria-selected="activeTab === 'records'"
+                        @click="activeTab = 'records'">일자별 독서 시간</button>
+                <button type="button" class="hist-tab" :class="{ active: activeTab === 'missed' }"
+                        role="tab" :aria-selected="activeTab === 'missed'"
+                        @click="activeTab = 'missed'">이번 주 빠뜨린 날</button>
+            </div>
+            <div v-show="activeTab === 'records'" class="hist-panel">
                 <MonthlyRecords :months="data.months" />
             </div>
-
-            <!-- 패널 ②: 이번 주 빠뜨린 날 -->
-            <div class="tab-panel panel-missed">
+            <div v-show="activeTab === 'missed'" class="hist-panel">
                 <WeeklyShortfall :weeklyShortfall="data.weeklyShortfall" />
             </div>
         </section>

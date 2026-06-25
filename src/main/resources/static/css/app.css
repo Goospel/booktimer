@@ -622,8 +622,8 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 }
 .month-nav-btn {
     flex: 0 0 auto;
-    width: 38px;
-    height: 38px;
+    width: 34px;
+    height: 34px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1423,12 +1423,15 @@ a.book-title:hover { text-decoration: underline; }
 .legal li { margin-bottom: 4px; }
 .legal-date { font-size: .8rem; color: var(--muted); margin-top: 20px; }
 
-/* 이번 주 빠뜨린 날 (독서 기록 화면 7일 윈도우 부채 채우기) */
-.missed-list { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 8px; }
-.missed-list li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+/* 이번 주 빠뜨린 날 (독서 기록 화면 7일 윈도우 부채 채우기) — 시안: 박스 행 → border-bottom 리스트,
+   날짜 위 / "N분 부족"(호박색) 아래 세로 스택 + 우측 채우기 고스트 버튼. */
+.missed-list { list-style: none; padding: 0; margin: 8px 0 0; }
+.missed-list li { display: flex; align-items: center; gap: 12px; padding: 13px 4px; border-bottom: 1px solid #F0EBDF; }
+.missed-list li:last-child { border-bottom: none; }
+.missed-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .missed-list .missed-date { font-weight: 600; }
-.missed-list .missed-debt { color: var(--muted); font-size: .9rem; font-variant-numeric: tabular-nums; }
-.missed-list .btn-fill { margin-left: auto; padding: 6px 12px; font-size: .85rem; text-decoration: none; }
+.missed-list .missed-debt { color: #B06A2C; font-size: .9rem; font-variant-numeric: tabular-nums; }
+.missed-list .btn-fill { margin-left: auto; padding: 7px 15px; font-size: .85rem; text-decoration: none; white-space: nowrap; }
 
 /* 독서 기록 카드: 헤드의 탭 버튼 2개로 바디를 전환한다(일자별 독서 시간 ↔ 이번 주 빠뜨린 날).
    JS 없이 라디오(:checked) + 형제 선택자(~)로 패널을 토글 — 두 데이터는 서버가 미리 렌더, 보이기만 전환.
@@ -1471,6 +1474,46 @@ a.book-title:hover { text-decoration: underline; }
    (#449가 죽은 #tab-bti:checked~.panel 셀렉터를 지우며 여기 있던 clear:both를 함께 잃어 회귀.) */
 .panel-bti, .panel-shelf { clear: both; padding-top: 18px; }
 .panel-missed .muted { margin: 0 0 4px; font-size: .85rem; }
+
+/* === 독서 기록(/history) 반응형 기록 카드 (PR-2) ===
+   좁으면 pill 탭(stacked) 한 카드, 넓으면 좌 일자별 / 우 빠뜨린날 2단(split).
+   분기는 JS chooseLayout(innerWidth)가 하고(layout.ts), CSS는 두 모드의 시각만 담당.
+   ※ 컨테이너 확장은 body.history-wide(JS 토글)로 — @media와 innerWidth의 스크롤바 폭 불일치 회피. */
+
+/* split일 때만 컨테이너를 넓혀 2단이 안 찌그러지게(전역 .container max-width:460 무손상). */
+body.history-page.history-wide .container { max-width: 940px; }
+
+/* split: 좌(일자별) 1.45 : 우(빠뜨린날) 1 */
+.hist-split { display: grid; grid-template-columns: 1.45fr 1fr; gap: 22px; align-items: start; }
+.hist-pane { margin: 0; }
+.hist-pane > h2 { margin: 0 0 12px; }
+.hist-pane .muted { margin: 0 0 8px; font-size: .85rem; }
+
+/* stacked: pill 탭 2개(활성=세이지 채움/흰 글자, 비활성=투명+보더) + 선택 패널 하나 */
+.hist-tabs { display: flex; gap: 8px; margin-bottom: 4px; }
+.hist-tab {
+    width: auto;                              /* 전역 button{width:100%} 상쇄(#286 가드) */
+    flex: 0 0 auto;
+    font-family: inherit;
+    font-size: .9rem;
+    font-weight: 600;
+    padding: 9px 16px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: #7A7566;
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.hist-tab:not(.active) { border-color: var(--border); }
+.hist-tab:not(.active):hover { color: var(--text); }
+.hist-tab.active { background: var(--accent); color: #fff; }
+.hist-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hist-panel { padding-top: 14px; }
+
+/* 일자별 시간 색 — 시안 #4F6B4C(딥 세이지). 책장 summary-list 등 타 .record-time는 안 건드리게 스코프. */
+.hist-records .record-time,
+.hist-pane .record-time { color: var(--accent-hover); }
 
 /* --- 광고 (AdSense) — 부가 화면 하단에 1개. 콘텐츠와 떨어뜨려 비침습적으로. --- */
 .ad-slot {
