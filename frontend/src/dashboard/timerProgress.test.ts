@@ -161,6 +161,18 @@ describe('visibleAuthors', () => {
         const r = visibleAuthors([a(''), a('   '), a('이작가')])
         expect(r).toHaveLength(1)
     })
+
+    // 무대 SVG 캐릭터 렌더는 spriteId가 필요 — 필터를 통과한 작가가 spriteId·code 등
+    // 추가 필드를 그대로 보존해야 한다(누군가 .map으로 name·emoji만 추리면 새는 회귀 가드).
+    it('spriteId·code 등 추가 필드 보존 (무대 SVG 렌더용)', () => {
+        const r = visibleAuthors([
+            { name: '카뮈', emoji: '🌅', spriteId: 'albert_camus', code: 'albert_camus' },
+            { name: null, emoji: '🕯️', spriteId: 'dostoevsky', code: 'dostoevsky' },
+        ])
+        expect(r).toHaveLength(1)
+        expect(r[0].spriteId).toBe('albert_camus')
+        expect(r[0].code).toBe('albert_camus')
+    })
 })
 
 // ── showStreakChip ────────────────────────────────────────────────────────────

@@ -47,11 +47,12 @@ export function cellTone(cell: ContributionDay): 'empty' | 's1' | 's2' | 's3' | 
     return `s${cell.level + 1}` as 's1' | 's2' | 's3' | 's4' | 's5'
 }
 
-/** name null/빈 제외. 컴포넌트에서 .slice(0,3) + +N 처리. */
-export function visibleAuthors(
-    owned: Array<{ name: string | null; emoji: string }>
-): Array<{ name: string; emoji: string }> {
-    return owned.filter(a => a.name != null && a.name.trim().length > 0) as Array<{ name: string; emoji: string }>
+/**
+ * name null/빈 제외. 제네릭으로 입력 객체의 모든 필드(emoji·spriteId·code 등)를 보존해
+ * 무대 SVG 캐릭터 렌더(spriteId)에 그대로 흐르게 한다. name은 non-null로 좁혀 반환.
+ */
+export function visibleAuthors<T extends { name: string | null }>(owned: T[]): Array<T & { name: string }> {
+    return owned.filter(a => a.name != null && a.name.trim().length > 0) as Array<T & { name: string }>
 }
 
 /** streak > 0일 때만 칩 표시. */
