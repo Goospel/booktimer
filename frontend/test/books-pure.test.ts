@@ -4,6 +4,7 @@ import {
     summarize, type ShelfSummary,
     initialOf,
     coverColor, COVER_PALETTE, COVER_FG,
+    byline,
 } from '../src/books/pure';
 
 // 백엔드 BookStatus.name() = WANT_TO_READ / READING / FINISHED
@@ -92,5 +93,32 @@ describe('coverColor — 무표지 플레이스홀더 색(결정적 해시 매�
 
     test('팔레트는 시안 mock의 12색', () => {
         expect(COVER_PALETTE).toHaveLength(12);
+    });
+});
+
+describe('byline — 검색 결과 저자·출판사 한 줄', () => {
+    test('둘 다 있으면 "저자 · 출판사"', () => {
+        expect(byline('알랭 드 보통', '은행나무')).toBe('알랭 드 보통 · 은행나무');
+    });
+
+    test('저자만 → 저자', () => {
+        expect(byline('김영하', null)).toBe('김영하');
+    });
+
+    test('출판사만 → 출판사', () => {
+        expect(byline(null, '문학동네')).toBe('문학동네');
+    });
+
+    test('둘 다 없음 → 빈 문자열', () => {
+        expect(byline(null, null)).toBe('');
+    });
+
+    test('빈 문자열도 없음 취급', () => {
+        expect(byline('', '')).toBe('');
+    });
+
+    test('공백뿐인 값은 trim 후 없음 취급', () => {
+        expect(byline('   ', '문학동네')).toBe('문학동네');
+        expect(byline('김영하', '   ')).toBe('김영하');
     });
 });

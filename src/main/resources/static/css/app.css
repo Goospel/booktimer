@@ -1128,6 +1128,15 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 /* === 내 책장 (Book) === */
 .muted { color: var(--muted); }
 
+/* 내 책장 카드 소제목 — 시안 .lbl(작은 라벨·넓은 자간). 전역 .card h2를 books 페이지에서만 오버라이드. */
+#books-app .card h2 {
+    font-size: 12px;
+    letter-spacing: .13em;
+    color: var(--accent-hover);
+    font-weight: 600;
+    text-transform: none;
+}
+
 .book-search-form, .book-manual-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .book-search-form input[type=text],
 .book-manual-form input[type=text] {
@@ -1145,18 +1154,24 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     background: #fff;
 }
 
-/* 검색 폼: 검색 기준(제목/저자) 라디오를 위에 두고, 입력+버튼을 아래 한 줄로. */
+/* 검색 폼: 검색 기준 칩을 위에 두고, 입력+버튼을 아래 한 줄로. */
 .book-search-form { flex-direction: column; align-items: stretch; }
-.search-type { display: flex; flex-wrap: wrap; gap: 16px; }
-.search-type label {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+/* 검색 기준 칩 — 라디오 대신 제목/저자/출판사 토글(활성=세이지 채움). 시안 My Shelf. */
+.search-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.search-chip {
+    width: auto;                                   /* 전역 button{width:100%} 상쇄(#286 가드) */
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: .85rem;
+    font-weight: 600;
     cursor: pointer;
-    font-size: .9rem;
-    color: var(--text);
+    line-height: 1;
 }
-.search-type input[type=radio] { accent-color: var(--accent); }
+.search-chip:hover { border-color: var(--accent); color: var(--accent); }
+.search-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 /* 검색 바(넓게) 위 + 검색 버튼 아래로 세로 배치 — 버튼이 입력칸을 잡아먹지 않게. */
 .search-row { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
 .search-row input[type=text] {
@@ -1182,15 +1197,17 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .manual-add { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
 .manual-add > summary {
     cursor: pointer;
-    color: var(--accent);
+    color: var(--muted);                                /* 시안: 안내문은 흐리게, '직접 추가'만 강조 */
     font-size: .9rem;
     font-weight: 600;
     list-style: none;                                   /* Firefox 기본 마커 제거 */
 }
 .manual-add > summary::-webkit-details-marker { display: none; }  /* WebKit 기본 마커 제거 */
-.manual-add > summary::before { content: "▸ "; }        /* 접힘 표시 */
+.manual-add > summary::before { content: "▸ "; color: var(--accent); }        /* 접힘 표시 */
 .manual-add[open] > summary::before { content: "▾ "; }  /* 펼침 표시 */
-.manual-add > summary:hover { text-decoration: underline; }
+/* '직접 추가' CTA만 세이지+밑줄로 강조(시안 My Shelf). */
+.manual-add-cta { color: var(--accent); text-decoration: underline; }
+.manual-add > summary:hover .manual-add-cta { text-decoration: none; }
 .manual-add .book-manual-form { margin-top: 12px; }
 /* ⚠️ <details> 접힘이 실제로 동작하려면 닫혔을 때 폼을 author 규칙으로 직접 숨겨야 한다.
    위 .book-manual-form{display:flex}(author)가 브라우저 UA의 닫힘-숨김(details:not([open])>*{display:none})을
@@ -1273,6 +1290,8 @@ a.book-title:hover { text-decoration: underline; }
 .book-sub { font-size: .9rem; color: var(--muted); margin: 0; }
 .book-detail-head .book-meta > p:not(.affiliate-note) { margin: 0; }
 .book-author, .book-pub { font-size: .85rem; color: var(--muted); }
+/* 검색 결과 byline — 저자 · 출판사 한 줄(byline() 조립). 시안 My Shelf. */
+.book-byline { font-size: .85rem; color: var(--muted); }
 .book-status-badge {
     align-self: flex-start;
     margin-top: 2px;

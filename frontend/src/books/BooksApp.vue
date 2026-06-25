@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { getCsrfToken } from '../shared/follow'
-import { summarize, initialOf, coverColor } from './pure'
+import { summarize, initialOf, coverColor, byline } from './pure'
 
 const STATUSES = [
     { name: 'WANT_TO_READ', label: '읽고 싶음' },
     { name: 'READING', label: '읽는 중' },
     { name: 'FINISHED', label: '완독' },
+]
+const SEARCH_TYPES = [
+    { name: 'TITLE', label: '제목' },
+    { name: 'AUTHOR', label: '저자' },
+    { name: 'PUBLISHER', label: '출판사' },
 ]
 
 interface Popularity { wantCount: number; readCount: number }
@@ -194,10 +199,11 @@ async function removeBook(book: MyBookSummary) {
     <section class="card">
       <h2>책 추가</h2>
       <form v-if="searchEnabled" @submit.prevent="runSearch" class="book-search-form">
-        <div class="search-type" role="radiogroup" aria-label="검색 기준">
-          <label><input type="radio" name="type" value="TITLE" v-model="searchType"><span>제목</span></label>
-          <label><input type="radio" name="type" value="AUTHOR" v-model="searchType"><span>저자</span></label>
-          <label><input type="radio" name="type" value="PUBLISHER" v-model="searchType"><span>출판사</span></label>
+        <div class="search-chips" role="radiogroup" aria-label="검색 기준">
+          <button v-for="t in SEARCH_TYPES" :key="t.name" type="button"
+                  class="search-chip" :class="{ active: searchType === t.name }"
+                  role="radio" :aria-checked="searchType === t.name"
+                  @click="searchType = t.name">{{ t.label }}</button>
         </div>
         <div class="search-row">
           <input type="text" v-model="q" placeholder="검색어 입력" required>
@@ -214,8 +220,7 @@ async function removeBook(book: MyBookSummary) {
           <span v-else class="book-cover book-cover-ph" :style="coverStyle(row)" aria-hidden="true">{{ initialOf(row.title) }}</span>
           <div class="book-meta">
             <span class="book-title">{{ row.title }}</span>
-            <span v-if="row.author" class="book-author">{{ row.author }}</span>
-            <span v-if="row.publisher" class="book-pub">{{ row.publisher }}</span>
+            <span v-if="byline(row.author, row.publisher)" class="book-byline">{{ byline(row.author, row.publisher) }}</span>
             <template v-for="pop in [popularityForSearch(row.isbn13)]" :key="'sp'">
               <a v-if="pop" class="follow-popularity"
                  :href="`/books/readers?isbn=${row.isbn13}&title=${encodeURIComponent(row.title)}`"
@@ -238,7 +243,7 @@ async function removeBook(book: MyBookSummary) {
       <p v-if="searched && searchResults.length === 0" class="status-line muted">검색 결과가 없습니다.</p>
 
       <details class="manual-add" :open="manualOpen">
-        <summary>찾는 책이 없나요? 직접 추가</summary>
+        <summary>찾는 책이 없나요? <span class="manual-add-cta">직접 추가</span></summary>
         <form @submit.prevent="addManual" class="book-manual-form">
           <input type="text" v-model="manualTitle" placeholder="제목" required>
           <input type="text" v-model="manualAuthor" placeholder="저자 (선택)">
