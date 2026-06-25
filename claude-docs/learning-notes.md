@@ -121,6 +121,7 @@
 - [N-118. CSS 주석은 중첩 불가 — 주석 속 `*/`가 조기 종료해 다음 규칙을 침묵 드랍한다](#n-118-css-주석은-중첩-불가--주석-속-가-조기-종료해-다음-규칙을-침묵-드랍한다)
 - [N-119. flex-direction 전환 시 flex-basis가 축을 따라간다 — row의 width가 column에선 height가 된다](#n-119-flex-direction-전환-시-flex-basis가-축을-따라간다--row의-width가-column에선-height가-된다)
 - [N-120. overflow-x:auto는 데스크톱에서 터치 스크롤만 — 휠·드래그는 JS로](#n-120-overflow-xauto는-데스크톱에서-터치-스크롤만--휠드래그는-js로)
+- [N-121. CSS 중앙 포커스 캐러셀 — 좌우 패딩으로 step 스크롤이 곧 가운데 정렬](#n-121-css-중앙-포커스-캐러셀--좌우-패딩으로-step-스크롤이-곧-가운데-정렬)
 
 ---
 
@@ -5708,3 +5709,32 @@ N-083/N-084의 교훈: jsdom·동기 mock 로드로 단순화하면 `defer`/`typ
 ### 관련
 
 - **N-117**(static-preview 검증), **N-083**(클라이언트 로드순서·타이밍·반응성은 실 브라우저로), 정원 무대 통합의 시각/레이아웃 자매(N-119·N-115). PR #495(대시보드 '내 정원' 무대 데스크톱 휠·드래그 스크롤).
+
+---
+
+## N-121. CSS 중앙 포커스 캐러셀 — 좌우 패딩으로 step 스크롤이 곧 가운데 정렬
+
+**한 줄 요약**: 가로 스크롤 컨테이너에 좌우 패딩 `padding-inline: calc(50% - 반칸)`(반칸 = 아이템 폭/2)을 주면, `scrollLeft = i·step`일 때 i번째 아이템이 **화면 정중앙**에 온다. 그래서 평범한 한 칸(step) 스크롤 엔진이 **JS 변경 0으로 "가운데 포커스 캐러셀"**이 되고, 지금 중앙 아이템 인덱스 = `round(scrollLeft / step)`.
+
+### 배경 / 문제
+
+- 가로 갤러리를 "한 아이템씩 중앙에 두고 보여주기"(캐러셀/coverflow)로 만들고 싶다. 흔히 JS로 각 카드 위치를 계산해 `scrollIntoView` 하거나 라이브러리를 쓴다.
+- 하지만 이미 step 기반(한 칸=카드폭+gap) 스크롤이 있다면(예: 자동 한 칸 스크롤·휠·드래그가 `scrollLeft`를 step 단위로 움직임), 중앙 정렬은 **순수 CSS 패딩 한 줄**로 떨어진다.
+
+### 개념 (왜 되는가)
+
+- 컨테이너 좌우에 패딩 `P = (clientWidth - cardWidth)/2`를 주면, `scrollLeft=0`일 때 첫 카드 중심 = `P + cardWidth/2 = clientWidth/2` → **정중앙**.
+- CSS로는 `padding-inline: calc(50% - cardWidth/2)`(패딩 `%`는 컨테이너 width 기준). 카드폭 고정(예 60px)이면 `calc(50% - 30px)`.
+- `box-sizing:border-box`여도 성립(패딩이 스크롤 콘텐츠를 그만큼 밀어줌). `scrollWidth = clientWidth + (n-1)·step` → `maxScroll = (n-1)·step` = "마지막 카드 중앙". 양끝 패딩이 곧 **"양 끝 빈칸"**(첫·마지막 카드도 중앙에 도달).
+- 결국 `scrollLeft = i·step`이 i번째 카드 중앙. **자동 스크롤(한 칸씩 ping-pong)·휠·드래그 로직을 하나도 안 바꿔도** 모두 중앙 정렬 캐러셀로 동작한다(엔진 재사용).
+- "지금 중앙 카드" = `clamp(round(scrollLeft/step), 0, n-1)` — 순수함수라 DOM 없이 RED→GREEN 단위테스트. 이름 라벨 등 UI는 이 인덱스에 바인딩하고, `scroll` 이벤트마다 갱신하면 카드가 중앙을 지날 때 라벨도 함께 바뀐다.
+
+### 디테일 · 주의
+
+- 카드 폭이 들쭉날쭉(sprite vs emoji)하면 중앙이 어긋난다 → **아이템 폭 고정**(`width:60px`)으로 패딩 반칸(30px)과 짝을 맞춘다.
+- 빈 상태(아이템 0개)엔 이 큰 패딩을 주지 말 것(`:not(.is-empty)`로 스코프) — 빈 메시지가 한 칸(60px)으로 눌린다.
+- 수동 휠/드래그가 중앙에서 살짝 어긋나는 게 싫으면 `scroll-snap-type: x proximity` + 아이템 `scroll-snap-align: center`. `proximity`는 **정착할 때만** 살짝 당겨 프로그래매틱 `scrollTo({behavior:'smooth'})`와 충돌하지 않는다(`mandatory`는 드래그 중에도 되돌려 충돌). 자동 스크롤이 어차피 정확히 snap point(`i·step`)에 착지해 조화롭다.
+
+### 관련
+
+- **N-120**(overflow-x 데스크톱 휠·드래그 — 이 캐러셀의 스크롤 입력 토대), **N-117**(섬 실 브라우저 검증), **N-055**(null-state 가드 — 중앙 인덱스 out-of-range 시 이름 옵셔널 체이닝으로 ''). 대시보드 '내 정원' 무대 가운데 포커스 캐러셀 + 중앙 작가 이름 상단 표시.

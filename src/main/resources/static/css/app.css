@@ -2160,19 +2160,39 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 }
 .dash-garden-stage::-webkit-scrollbar { display: none; }
 .dash-garden-stage.is-empty { justify-content: center; align-items: center; }
-/* 데스크톱 잡아끌기(grab) — JS가 휠/드래그로 가로 스크롤. 비어 있으면 기본 커서. */
-.dash-garden-stage:not(.is-empty) { cursor: grab; }
+/* 가운데 포커스 캐러셀: 좌우 중앙 패딩으로 scrollLeft=i·step일 때 i번째 작가가 정중앙에 온다
+   (60px=한 칸 .dash-garden-resident 폭, 절반 30px). 양끝 패딩이 곧 "양 끝 빈칸".
+   비어 있을 땐(.is-empty) 빈 메시지가 눌리지 않게 이 패딩을 안 준다. grab 커서 겸용. */
+.dash-garden-stage:not(.is-empty) {
+    cursor: grab;
+    padding-inline: max(16px, calc(50% - 30px));
+    scroll-snap-type: x proximity;
+}
 .dash-garden-stage.is-grabbing { cursor: grabbing; user-select: none; }
-/* 이름 텍스트 폐지(길어서 잘림) — 캐릭터 그림만. 이름은 hover title·aria-label로 보존. */
-.dash-garden-resident { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; }
+/* 개별 이름 텍스트 폐지 — 중앙 작가 이름만 상단(.dash-garden-focus-name)에 1줄. 폭 60px 고정으로
+   sprite/emoji 폭차에도 중앙 정렬 정확(30px 패딩과 짝). 수동 스크롤도 가운데로 안착(snap center). */
+.dash-garden-resident {
+    flex: 0 0 auto; width: 60px; scroll-snap-align: center;
+    display: flex; flex-direction: column; align-items: center;
+}
 .dash-garden-sprite { width: 60px; height: 60px; display: block; overflow: visible; }
 .dash-garden-resident-emoji { font-size: clamp(34px, 7vw, 46px); line-height: 1; }
-/* 오른쪽 스크롤-가능 힌트(옅은 페이드) */
-.dash-garden-stage-wrap::after {
-    content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 26px;
-    background: linear-gradient(to right, rgba(234, 240, 228, 0), #EAF0E4);
+/* 상단 중앙 "지금 중앙 작가" 이름 — 스크롤 따라 바뀜. 캐릭터는 바닥 정렬이라 상단이 비어 안 겹침. */
+.dash-garden-focus-name {
+    position: absolute; top: 10px; left: 0; right: 0; z-index: 3;
+    text-align: center; padding: 0 14px;
+    font-size: 14px; font-weight: 600; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    pointer-events: none;
+}
+/* 양옆 스크롤-가능 힌트(옅은 페이드, 대칭) */
+.dash-garden-stage-wrap::after,
+.dash-garden-stage-wrap::before {
+    content: ''; position: absolute; top: 0; bottom: 0; width: 26px;
     pointer-events: none; z-index: 2;
 }
+.dash-garden-stage-wrap::after { right: 0; background: linear-gradient(to right, rgba(234, 240, 228, 0), #EAF0E4); }
+.dash-garden-stage-wrap::before { left: 0; background: linear-gradient(to left, rgba(234, 240, 228, 0), #EAF0E4); }
 .dash-garden-summary { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; text-align: center; }
 .dash-garden-empty { font-size: 13px; color: var(--muted); }
 
