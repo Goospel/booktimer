@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { CatalogDto } from './types'
-import { visibleAuthors, wheelScrollLeft, nextAutoScroll, centeredIndex } from './timerProgress'
+import { visibleAuthors, nextAutoScroll, centeredIndex } from './timerProgress'
 
 const props = defineProps<{ garden: CatalogDto }>()
 
@@ -22,50 +22,14 @@ function onScroll() {
     focusIdx.value = centeredIndex(el.scrollLeft, measureStep(el), residents.value.length)
 }
 
-// 데스크톱: 세로 마우스 휠을 가로 스크롤로. 경계를 넘는 방향이면 페이지 세로 스크롤에 양보.
-function onWheel(e: WheelEvent) {
-    const el = stageEl.value
-    if (!el) return
-    const next = wheelScrollLeft(e.deltaY, el.scrollLeft, el.clientWidth, el.scrollWidth)
-    if (next === null) return
-    e.preventDefault()
-    el.scrollLeft = next
-}
-
-// 데스크톱: 마우스로 잡아끌기(grab). 터치는 네이티브 가로 스크롤을 그대로 둔다(충돌 방지).
-let dragging = false
-let dragStartX = 0
-let dragStartScroll = 0
-function onPointerDown(e: PointerEvent) {
-    if (e.pointerType === 'touch') return
-    const el = stageEl.value
-    if (!el || el.scrollWidth <= el.clientWidth) return
-    dragging = true
-    dragStartX = e.clientX
-    dragStartScroll = el.scrollLeft
-    try { el.setPointerCapture(e.pointerId) } catch { /* 캡처 미지원 환경 — 무시(드래그는 계속) */ }
-    el.classList.add('is-grabbing')
-}
-function onPointerMove(e: PointerEvent) {
-    if (!dragging) return
-    const el = stageEl.value
-    if (!el) return
-    el.scrollLeft = dragStartScroll - (e.clientX - dragStartX)
-}
-function onPointerUp() {
-    if (!dragging) return
-    dragging = false
-    stageEl.value?.classList.remove('is-grabbing')
-}
-
 // ── 자동 스크롤(한 칸씩, 끝에서 왕복) ─────────────────────────────────────────
 // 일정 간격마다 한 작가(=한 칸)씩 옆으로 부드럽게 이동. 끝·시작에 닿으면 방향 반전.
-// 사용자 조작(hover·드래그·터치) 중에는 일시정지해 충돌을 피한다.
+// 사용자 스크롤(휠·드래그·터치)은 폐지 — 무대는 CSS overflow:hidden이라 사용자가 못 굴리고
+// 오직 이 자동 스크롤만 scrollTo로 움직인다. hover 중에는 멈춰 읽을 시간을 준다.
 // prefers-reduced-motion이면 아예 켜지 않는다(접근성).
 const AUTO_INTERVAL_MS = 2500
 let autoDir = 1
 let hovering = false
-let touching = false
 let timer: ReturnType<typeof setInterval> | null = null
 
 // 한 칸 너비 = 첫 작가 카드 폭 + gap. 측정 실패 시 0 → nextAutoScroll이 멈춤 처리.
@@ -78,7 +42,7 @@ function measureStep(el: HTMLElement): number {
 
 function autoTick() {
     const el = stageEl.value
-    if (!el || hovering || dragging || touching) return
+    if (!el || hovering) return
     if (residents.value.length <= 1) return
     const step = measureStep(el)
     const r = nextAutoScroll(el.scrollLeft, step, el.clientWidth, el.scrollWidth, autoDir)
@@ -88,8 +52,6 @@ function autoTick() {
 
 function onMouseEnter() { hovering = true }
 function onMouseLeave() { hovering = false }
-function onTouchStart() { touching = true }
-function onTouchEnd() { touching = false }
 
 onMounted(() => {
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
@@ -115,10 +77,7 @@ onUnmounted(() => {
             <div v-if="residents.length > 0" class="dash-garden-focus-name" aria-live="polite">{{ focusName }}</div>
             <div ref="stageEl" class="dash-garden-stage" :class="{ 'is-empty': residents.length === 0 }"
                  @scroll="onScroll"
-                 @wheel="onWheel" @pointerdown="onPointerDown" @pointermove="onPointerMove"
-                 @pointerup="onPointerUp" @pointercancel="onPointerUp"
-                 @mouseenter="onMouseEnter" @mouseleave="onMouseLeave"
-                 @touchstart="onTouchStart" @touchend="onTouchEnd" @touchcancel="onTouchEnd">
+                 @mouseenter="onMouseEnter" @mouseleave="onMouseLeave">
                 <div v-for="(a, i) in residents" :key="a.code ?? i" class="dash-garden-resident"
                      :title="a.name" :aria-label="a.name">
                     <svg v-if="a.spriteId" class="dash-garden-sprite" aria-hidden="true">

@@ -9,7 +9,6 @@ import {
     panelState,
     goalLabel,
     avatarInitial,
-    wheelScrollLeft,
     nextAutoScroll,
     centeredIndex,
     nextQuoteIndex,
@@ -228,29 +227,6 @@ describe('avatarInitial', () => {
     it('앞 공백 트림 후 첫 글자', () => expect(avatarInitial('  소로')).toBe('소'))
     it('빈 문자열 → "?"', () => expect(avatarInitial('')).toBe('?'))
     it('공백만 → "?"', () => expect(avatarInitial('   ')).toBe('?'))
-})
-
-// ── wheelScrollLeft ───────────────────────────────────────────────────────────
-
-describe('wheelScrollLeft', () => {
-    // 데스크톱 무대 가로 휠 변환: 세로 deltaY를 scrollLeft로. 스크롤 여지 없거나
-    // 경계를 넘는 방향이면 null(페이지 세로 스크롤에 양보 — 무대 위에서 페이지가 안 막히게).
-    it('스크롤 여지 없음(scrollWidth<=clientWidth) → null', () =>
-        expect(wheelScrollLeft(50, 0, 300, 300)).toBeNull())
-    it('deltaY 0 → null', () =>
-        expect(wheelScrollLeft(0, 50, 300, 800)).toBeNull())
-    it('중간에서 아래로(deltaY>0) → scrollLeft 증가', () =>
-        expect(wheelScrollLeft(40, 100, 300, 800)).toBe(140))
-    it('중간에서 위로(deltaY<0) → scrollLeft 감소', () =>
-        expect(wheelScrollLeft(-40, 100, 300, 800)).toBe(60))
-    it('시작 경계에서 위로(deltaY<0, scrollLeft<=0) → null 양보', () =>
-        expect(wheelScrollLeft(-30, 0, 300, 800)).toBeNull())
-    it('끝 경계에서 아래로(deltaY>0, scrollLeft+clientWidth=scrollWidth) → null 양보', () =>
-        expect(wheelScrollLeft(30, 500, 300, 800)).toBeNull())
-    it('시작 경계여도 아래로(deltaY>0)는 가로 스크롤(양보 아님)', () =>
-        expect(wheelScrollLeft(30, 0, 300, 800)).toBe(30))
-    it('끝 경계여도 위로(deltaY<0)는 가로 스크롤(양보 아님)', () =>
-        expect(wheelScrollLeft(-30, 500, 300, 800)).toBe(470))
 })
 
 // ── nextAutoScroll ────────────────────────────────────────────────────────────
