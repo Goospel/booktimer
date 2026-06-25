@@ -1,0 +1,96 @@
+// pure.ts를 직접 ESM import — 함수 하나 누락/시그니처 불일치 시 import 실패로 즉시 RED.
+import { describe, test, expect } from 'vitest';
+import {
+    summarize, type ShelfSummary,
+    initialOf,
+    coverColor, COVER_PALETTE, COVER_FG,
+} from '../src/books/pure';
+
+// 백엔드 BookStatus.name() = WANT_TO_READ / READING / FINISHED
+const want = (n = 1) => Array.from({ length: n }, () => ({ status: 'WANT_TO_READ' }));
+const reading = (n = 1) => Array.from({ length: n }, () => ({ status: 'READING' }));
+const finished = (n = 1) => Array.from({ length: n }, () => ({ status: 'FINISHED' }));
+
+describe('summarize — 책장 상태 집계', () => {
+    test('빈 배열 → 전부 0', () => {
+        expect(summarize([])).toEqual<ShelfSummary>({ total: 0, reading: 0, finished: 0, want: 0 });
+    });
+
+    test('한 상태만 (읽는 중 3권)', () => {
+        expect(summarize(reading(3))).toEqual<ShelfSummary>({ total: 3, reading: 3, finished: 0, want: 0 });
+    });
+
+    test('혼합 — 시안 mock과 동일 분포(총 13 · 읽는중 5 · 완독 4 · 읽고싶음 4)', () => {
+        const books = [...reading(5), ...finished(4), ...want(4)];
+        expect(summarize(books)).toEqual<ShelfSummary>({ total: 13, reading: 5, finished: 4, want: 4 });
+    });
+
+    test('total 은 항상 books.length (알 수 없는 상태도 총합엔 포함, 세부엔 미포함)', () => {
+        const books = [...reading(2), { status: 'PAUSED' }];
+        const s = summarize(books);
+        expect(s.total).toBe(3);
+        expect(s.reading).toBe(2);
+        expect(s.finished + s.want).toBe(0);
+    });
+});
+
+describe('initialOf — 표지 이니셜 추출', () => {
+    test('일반 제목 → 첫 글자', () => {
+        expect(initialOf('불안')).toBe('불');
+        expect(initialOf('Atomic Habits')).toBe('A');
+    });
+
+    test('앞 공백 trim 후 첫 글자', () => {
+        expect(initialOf('  데미안')).toBe('데');
+    });
+
+    test('빈 제목 → 폴백 ?', () => {
+        expect(initialOf('')).toBe('?');
+    });
+
+    test('공백뿐인 제목 → 폴백 ?', () => {
+        expect(initialOf('   ')).toBe('?');
+    });
+
+    test('null/undefined 방어 → 폴백 ?', () => {
+        expect(initialOf(null as unknown as string)).toBe('?');
+        expect(initialOf(undefined as unknown as string)).toBe('?');
+    });
+
+    test('특수문자/이모지로 시작 → 그 문자', () => {
+        expect(initialOf('#1 베스트셀러')).toBe('#');
+    });
+});
+
+describe('coverColor — 무표지 플레이스홀더 색(결정적 해시 매핑)', () => {
+    test('같은 seed → 항상 같은 색 (결정적·순수)', () => {
+        expect(coverColor('불안')).toEqual(coverColor('불안'));
+        expect(coverColor('9788937473135')).toEqual(coverColor('9788937473135'));
+    });
+
+    test('결과 bg 는 항상 시안 팔레트 안의 색', () => {
+        for (const seed of ['불안', '데미안', '코스모스', '사피엔스', '', 'x']) {
+            expect(COVER_PALETTE).toContain(coverColor(seed).bg);
+        }
+    });
+
+    test('fg 는 시안 cover-present 톤으로 고정', () => {
+        expect(coverColor('불안').fg).toBe(COVER_FG);
+    });
+
+    test('빈/누락 seed 도 폴백 색 반환(throw 안 함)', () => {
+        expect(COVER_PALETTE).toContain(coverColor('').bg);
+        expect(COVER_PALETTE).toContain(coverColor(null as unknown as string).bg);
+    });
+
+    test('서로 다른 seed 는 색이 분산된다(전부 같은 색 아님)', () => {
+        const seeds = ['불안', '아주 작은 습관의 힘', '데미안', '미드나잇 라이브러리', '코스모스',
+            '나미야 잡화점의 기적', '사피엔스', '작별인사', '달러구트 꿈 백화점', '트렌드 코리아 2026'];
+        const distinct = new Set(seeds.map(s => coverColor(s).bg));
+        expect(distinct.size).toBeGreaterThan(1);
+    });
+
+    test('팔레트는 시안 mock의 12색', () => {
+        expect(COVER_PALETTE).toHaveLength(12);
+    });
+});

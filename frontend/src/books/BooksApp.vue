@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { getCsrfToken } from '../shared/follow'
+import { summarize, initialOf, coverColor } from './pure'
 
 const STATUSES = [
     { name: 'WANT_TO_READ', label: '읽고 싶음' },
@@ -50,6 +51,13 @@ const shelfBooks = computed(() => books.value.filter(b =>
     (!visFilter.value || b.visibility === visFilter.value)
 ))
 const manualOpen = computed(() => !searchEnabled.value || (searched.value && searchResults.value.length === 0))
+const summary = computed(() => summarize(books.value))
+
+// 무표지 책의 표지 플레이스홀더 색 — seed 는 isbn13 우선, 없으면 제목(결정적 매핑).
+function coverStyle(b: { isbn13: string | null; title: string }): Record<string, string> {
+    const c = coverColor(b.isbn13 || b.title)
+    return { background: c.bg, color: c.fg }
+}
 
 function popularityFor(isbn: string | null): Popularity | null {
     if (!isbn) return null
@@ -176,7 +184,10 @@ async function removeBook(book: MyBookSummary) {
 <template>
   <div v-if="loading" class="status-line">불러오는 중…</div>
   <template v-else>
-    <p class="greeting"><span>{{ nickname }}</span>님의 책장</p>
+    <div class="shelf-greeting">
+      <h1>{{ nickname }}님의 책장 <span class="leaf" aria-hidden="true">🌿</span></h1>
+      <p class="shelf-summary tnum">총 {{ summary.total }}권 · 읽는 중 {{ summary.reading }} · 완독 {{ summary.finished }} · 읽고 싶음 {{ summary.want }}</p>
+    </div>
     <div v-if="error" class="alert alert-error">{{ error }}</div>
 
     <!-- 책 추가 카드 -->
@@ -200,6 +211,7 @@ async function removeBook(book: MyBookSummary) {
       <ul v-if="searchResults.length" class="book-list search-scroll">
         <li v-for="row in searchResults" :key="(row.isbn13 ?? '') + row.title" class="book-row">
           <img v-if="row.coverUrl" class="book-cover" :src="row.coverUrl" alt="" loading="lazy" referrerpolicy="no-referrer">
+          <span v-else class="book-cover book-cover-ph" :style="coverStyle(row)" aria-hidden="true">{{ initialOf(row.title) }}</span>
           <div class="book-meta">
             <span class="book-title">{{ row.title }}</span>
             <span v-if="row.author" class="book-author">{{ row.author }}</span>
@@ -266,6 +278,7 @@ async function removeBook(book: MyBookSummary) {
       <ul v-if="shelfBooks.length" class="book-list shelf-scroll">
         <li v-for="book in shelfBooks" :key="book.id" class="book-row">
           <img v-if="book.coverUrl" class="book-cover" :src="book.coverUrl" alt="" loading="lazy" referrerpolicy="no-referrer">
+          <span v-else class="book-cover book-cover-ph" :style="coverStyle(book)" aria-hidden="true">{{ initialOf(book.title) }}</span>
           <div class="book-meta">
             <a class="book-title" :href="`/books/${book.id}`">{{ book.title }}</a>
             <span v-if="book.author" class="book-author">{{ book.author }}</span>
