@@ -74,7 +74,10 @@ do_merge() {
   head="$(gh pr view "$PR" --json headRefName -q .headRefName 2>/dev/null)"
   if [ -n "$head" ]; then
     note "원격 브랜치 삭제: $head"
-    git push origin --delete "$head" 2>/dev/null || note "원격 브랜치 삭제 건너뜀(이미 없음?)"
+    # 백그라운드(비대화형) git push가 credential/원격 단계에서 멈추면 머지는 됐는데 스크립트가
+    # exit 못 하고 영원히 매달린다(T-091) → 30s 하드 타임아웃. 실패해도 머지는 끝났으니 진행.
+    timeout 30 git push origin --delete "$head" 2>/dev/null \
+      || note "원격 브랜치 삭제 실패/타임아웃 — 수동 정리: git push origin --delete $head"
   fi
   note "✅ 머지 완료. 로컬 main 갱신은 호출자가 마무리하세요."
 }
