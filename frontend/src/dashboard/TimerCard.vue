@@ -18,6 +18,8 @@ const props = defineProps<{
     readingBooks: BookOption[]
     finishedBooks: BookOption[]
     recentBookId: number | null
+    starting?: boolean
+    stopping?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -71,53 +73,61 @@ function totalHM(s: number): string {
             </div>
         </div>
 
-        <!-- 우: 상태 3패널 -->
+        <!-- 우: 상태 3패널. <Transition mode="out-in">으로 패널 교체를 크로스페이드해
+             측정 시작/종료 시 "툭" 끊기던 즉시 DOM 교체를 부드럽게 한다(key=state로 전환 트리거).
+             reduced-motion이면 CSS에서 트랜지션 0초로 즉시 교체. -->
         <div class="dash-timer-right">
-            <!-- MEASURING (측정 중이면 달성해도 유지 — 종료 보존) -->
-            <div v-if="state === 'measuring'" class="dash-state-panel">
-                <div class="dash-state-row">
-                    <span class="dash-pill dash-pill-pulse"><span class="dash-pulse-dot"></span>측정 중</span>
-                    <span class="dash-session-time">{{ sessionDisplay }}</span>
+            <Transition name="panel-fade" mode="out-in">
+                <!-- MEASURING (측정 중이면 달성해도 유지 — 종료 보존) -->
+                <div v-if="state === 'measuring'" key="measuring" class="dash-state-panel">
+                    <div class="dash-state-row">
+                        <span class="dash-pill dash-pill-pulse"><span class="dash-pulse-dot"></span>측정 중</span>
+                        <span class="dash-session-time">{{ sessionDisplay }}</span>
+                    </div>
+                    <div class="dash-divider"></div>
+                    <div class="dash-kv">
+                        <span class="dash-kv-k">지금 읽는 책</span>
+                        <span class="dash-kv-v">{{ activeBookTitle }}</span>
+                    </div>
+                    <div class="dash-kv">
+                        <span class="dash-kv-k">이 책 누적 독서</span>
+                        <span class="dash-kv-v-num">{{ totalHM(activeBookTotalSeconds) }}</span>
+                    </div>
+                    <button type="button" class="dash-btn-outline" @click="emit('stop')" :disabled="stopping">
+                        {{ stopping ? '종료하는 중…' : '측정 종료' }}
+                    </button>
                 </div>
-                <div class="dash-divider"></div>
-                <div class="dash-kv">
-                    <span class="dash-kv-k">지금 읽는 책</span>
-                    <span class="dash-kv-v">{{ activeBookTitle }}</span>
-                </div>
-                <div class="dash-kv">
-                    <span class="dash-kv-k">이 책 누적 독서</span>
-                    <span class="dash-kv-v-num">{{ totalHM(activeBookTotalSeconds) }}</span>
-                </div>
-                <button type="button" class="dash-btn-outline" @click="emit('stop')">측정 종료</button>
-            </div>
 
-            <!-- IDLE -->
-            <div v-else-if="state === 'idle'" class="dash-state-panel">
-                <BookPickForm
-                    :reading-books="readingBooks"
-                    :finished-books="finishedBooks"
-                    :recent-book-id="recentBookId"
-                    @start="(id) => emit('start', id)"
-                />
-            </div>
+                <!-- IDLE -->
+                <div v-else-if="state === 'idle'" key="idle" class="dash-state-panel">
+                    <BookPickForm
+                        :reading-books="readingBooks"
+                        :finished-books="finishedBooks"
+                        :recent-book-id="recentBookId"
+                        :pending="starting"
+                        @start="(id) => emit('start', id)"
+                    />
+                </div>
 
-            <!-- ACHIEVED (측정 안 하는데 오늘 달성) — 격려는 유지하되 측정 시작 폼도 함께 노출.
-                 목표를 채워도 계속 시간을 측정할 수 있어야 한다(시작 버튼이 사라지면 안 됨). -->
-            <div v-else class="dash-state-panel dash-state-achieved">
-                <span class="dash-achieved-emoji">🌱</span>
-                <p class="dash-achieved-title">오늘도 약속을 지켰어요</p>
-                <p class="dash-achieved-sub">
-                    <template v-if="streak > 0">연속 {{ streak }}일째 — 천천히, 꾸준히</template>
-                    <template v-else>오늘 목표를 채웠어요</template>
-                </p>
-                <div class="dash-divider"></div>
-                <BookPickForm
-                    :reading-books="readingBooks"
-                    :finished-books="finishedBooks"
-                    :recent-book-id="recentBookId"
-                    @start="(id) => emit('start', id)"
-                />
-            </div>
+                <!-- ACHIEVED (측정 안 하는데 오늘 달성) — 격려는 유지하되 측정 시작 폼도 함께 노출.
+                     목표를 채워도 계속 시간을 측정할 수 있어야 한다(시작 버튼이 사라지면 안 됨). -->
+                <div v-else key="achieved" class="dash-state-panel dash-state-achieved">
+                    <span class="dash-achieved-emoji">🌱</span>
+                    <p class="dash-achieved-title">오늘도 약속을 지켰어요</p>
+                    <p class="dash-achieved-sub">
+                        <template v-if="streak > 0">연속 {{ streak }}일째 — 천천히, 꾸준히</template>
+                        <template v-else>오늘 목표를 채웠어요</template>
+                    </p>
+                    <div class="dash-divider"></div>
+                    <BookPickForm
+                        :reading-books="readingBooks"
+                        :finished-books="finishedBooks"
+                        :recent-book-id="recentBookId"
+                        :pending="starting"
+                        @start="(id) => emit('start', id)"
+                    />
+                </div>
+            </Transition>
         </div>
     </section>
 </template>

@@ -14,6 +14,9 @@ const data = ref<DashboardResponse | null>(null)
 const loading = ref(true)
 const fetchError = ref(false)
 const actionError = ref<string | null>(null)
+// 서버 왕복 동안 버튼에 "진행 중"을 표시해 멈칫을 의도된 피드백으로 보이게 + 중복 클릭(409) 방지
+const starting = ref(false)
+const stopping = ref(false)
 
 // 타이머 상태 — start/stop 응답으로 부분 갱신
 const remainingSeconds = ref(0)
@@ -56,7 +59,9 @@ onMounted(async () => {
 })
 
 async function handleStart(bookId: number) {
+    if (starting.value) return
     actionError.value = null
+    starting.value = true
     try {
         const res = await fetch('/api/sessions/start', {
             method: 'POST',
@@ -69,11 +74,15 @@ async function handleStart(bookId: number) {
         applyTimerState(await res.json() as TimerState)
     } catch {
         actionError.value = '네트워크 오류가 발생했습니다'
+    } finally {
+        starting.value = false
     }
 }
 
 async function handleStop() {
+    if (stopping.value) return
     actionError.value = null
+    stopping.value = true
     try {
         const res = await fetch('/api/sessions/stop', {
             method: 'POST',
@@ -85,6 +94,8 @@ async function handleStop() {
         applyTimerState(await res.json() as TimerState)
     } catch {
         actionError.value = '네트워크 오류가 발생했습니다'
+    } finally {
+        stopping.value = false
     }
 }
 </script>
@@ -118,6 +129,8 @@ async function handleStop() {
             :reading-books="readingBooks"
             :finished-books="finishedBooks"
             :recent-book-id="recentBookId"
+            :starting="starting"
+            :stopping="stopping"
             @start="handleStart"
             @stop="handleStop"
         />

@@ -69,3 +69,34 @@ describe('TimerCard 회귀 가드', () => {
         expect(w.findAll('button').some(b => b.text().includes('측정 시작'))).toBe(false);
     });
 });
+
+// 시작/종료 진행 중 피드백 — 서버 왕복 동안 버튼이 멈춰 보이지 않게 "진행 중"을 표시하고
+// 중복 클릭(409)을 막는다. 패널 크로스페이드는 순수 시각이라 jsdom 무의미 → 실 브라우저 게이트.
+describe('TimerCard 진행 중 피드백', () => {
+    test('starting=true → 시작 버튼 비활성 + "시작하는 중…"', () => {
+        const w = make({ remainingSeconds: 1800, starting: true }); // idle
+        const btn = w.findAll('button').find(b => b.text().includes('시작'));
+        expect(btn).toBeTruthy();
+        expect(btn!.attributes('disabled')).toBeDefined();
+        expect(btn!.text()).toContain('시작하는 중');
+    });
+
+    test('starting=false(기본) → "측정 시작", 활성', () => {
+        const w = make({ remainingSeconds: 1800 });
+        const btn = w.findAll('button').find(b => b.text().includes('측정 시작'))!;
+        expect(btn.attributes('disabled')).toBeUndefined();
+    });
+
+    test('달성 패널에서도 starting=true면 시작 버튼 비활성', () => {
+        const w = make({ starting: true }); // remainingSeconds=0 → achieved
+        const btn = w.findAll('button').find(b => b.text().includes('시작'))!;
+        expect(btn.attributes('disabled')).toBeDefined();
+    });
+
+    test('stopping=true(measuring) → 종료 버튼 비활성 + "종료하는 중…"', () => {
+        const w = make({ hasActiveSession: true, activeStartedAt: '2026-06-25T00:00:00Z', activeBookTitle: '데미안', stopping: true });
+        const btn = w.findAll('button').find(b => b.text().includes('종료'))!;
+        expect(btn.attributes('disabled')).toBeDefined();
+        expect(btn.text()).toContain('종료하는 중');
+    });
+});
