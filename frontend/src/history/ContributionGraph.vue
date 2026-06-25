@@ -35,10 +35,12 @@ function onCellLeave(): void {
 <template>
     <div class="grass-head">
         <h2>독서 잔디</h2>
-        <!-- 성장 잔디 pill 뱃지(연속 일수). streak 0이면 통째로 숨김(시안). -->
-        <span v-if="graph.currentStreak > 0" class="grass-streak" :title="graph.growthLabel">
-            <span class="grass-streak-icon">{{ graph.growthEmoji }}</span>
-            <span class="grass-streak-days">{{ graph.currentStreak }}일 연속</span>
+        <!-- 연속 일수 뱃지 — 대시보드(.dash-streak-chip)와 통일: SVG 새싹 + "N일 연속 독서". streak 0이면 숨김. -->
+        <span v-if="graph.currentStreak > 0" class="grass-streak">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M5 19c0-8 6-13 14-13 0 8-5 14-13 14-1 0-1-.6-1-1z" />
+            </svg>
+            <strong>{{ graph.currentStreak }}</strong>일 연속 독서
         </span>
     </div>
 
