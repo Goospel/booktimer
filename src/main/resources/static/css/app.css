@@ -1498,16 +1498,22 @@ a.book-title:hover { text-decoration: underline; }
 .shelf-filter a.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 /* 내 책장 필터 칩 — 상태/공개여부 토글(활성=세이지 채움). books 전용(프로필 .shelf-filter와 별개). 시안 My Shelf.
    두 칩 그룹(상태·공개여부)을 같은 모양으로 통일 — 기존 세그먼티드 '서브 필터' 룩 대신 시안의 단일 칩. */
-.shelf-filter-chips { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 9px; }
+/* 필터 묶음 = 세그먼트 토글 바(한 덩어리) — 상태/공개여부 두 묶음을 개별 덩어리로 분리 */
+.shelf-filter-chips {
+    display: flex; width: fit-content; flex-wrap: nowrap;     /* flex=block레벨→세로 적층, fit-content=내용폭 */
+    border: 1px solid var(--border); border-radius: 999px; overflow: hidden;   /* overflow=셀 모서리 라운드 클립 */
+    margin: 0 0 9px;
+}
 .shelf-filter-chips + .shelf-filter-chips { margin-bottom: 18px; }
 .filter-chip {
     width: auto;                                   /* 전역 button{width:100%} 상쇄(#286 가드) */
-    border: 1px solid var(--border); background: transparent; color: var(--muted);
-    border-radius: 999px; padding: 5px 13px; font-size: .8rem; font-weight: 600;
-    line-height: 1.2; cursor: pointer;
+    border: 0; background: transparent; color: var(--muted);
+    padding: 6px 14px; font-size: .8rem; font-weight: 600;
+    line-height: 1.2; cursor: pointer; white-space: nowrap;
 }
-.filter-chip:hover { border-color: var(--accent); color: var(--accent); }
-.filter-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.filter-chip + .filter-chip { border-left: 1px solid var(--border); }   /* 셀 사이 구분선 */
+.filter-chip:hover:not(.active) { background: var(--sage-soft); color: var(--accent-hover); }
+.filter-chip.active { background: var(--accent); color: #fff; }
 /* 팔로우 스코프 인기 카운트(§7.4) — 책 메타 안 작은 배지 */
 .follow-popularity { font-size: .78rem; color: var(--accent); font-weight: 600; text-decoration: none; cursor: pointer; }
 .follow-popularity:hover { text-decoration: underline; }
