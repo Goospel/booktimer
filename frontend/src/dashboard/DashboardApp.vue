@@ -128,15 +128,5 @@ async function handleStop() {
             <QuickNav :login-id="data.loginId" />
             <GardenPanel :garden="data.garden" />
         </div>
-
-        <form class="dash-logout-form" action="/logout" method="post">
-            <input type="hidden" name="_csrf" :value="getCsrfToken()">
-            <button type="submit" class="dash-logout-btn">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M15 17l5-5-5-5" /><path d="M20 12H9" /><path d="M9 4H5v16h4" />
-                </svg>
-                로그아웃
-            </button>
-        </form>
     </template>
 </template>

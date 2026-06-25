@@ -36,18 +36,6 @@ defineProps<{ loginId: string }>()
                 </svg>
                 <span class="dash-nav-label">책BTI</span>
             </a>
-            <a class="dash-nav-tile" href="/settings">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="3.2" /><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.1 5.1l2.1 2.1M16.8 16.8l2.1 2.1M18.9 5.1l-2.1 2.1M7.2 16.8l-2.1 2.1" />
-                </svg>
-                <span class="dash-nav-label">설정</span>
-            </a>
-            <a class="dash-nav-tile" href="/feedback">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-                <span class="dash-nav-label">문의·피드백</span>
-            </a>
         </nav>
     </section>
 </template>

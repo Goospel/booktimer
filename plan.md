@@ -703,7 +703,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 
 > **한 줄**: 일반 사용자가 버그·제안을 개발자에게 보내고, 개발자(ADMIN)가 읽음/처리완료를 표시하면 **그 표시는 작성자 본인만** 본다.
 
-- **사용자 동선**: `GET/POST /feedback`([FeedbackController](src/main/java/com/booktimer/web/FeedbackController.java)) — 유형(버그/제안/기타)+제목+내용 작성, 아래 "내 문의"에 **본인 글만** 처리 상태(미확인/읽음/처리완료) 배지와 함께 노출. `POST /feedback/{id}/delete`는 **본인 글만** 삭제. 대시보드 바로가기 "💬 문의·피드백".
+- **사용자 동선**: `GET/POST /feedback`([FeedbackController](src/main/java/com/booktimer/web/FeedbackController.java)) — 유형(버그/제안/기타)+제목+내용 작성, 아래 "내 문의"에 **본인 글만** 처리 상태(미확인/읽음/처리완료) 배지와 함께 노출. `POST /feedback/{id}/delete`는 **본인 글만** 삭제. 대시보드 진입점은 **우상단 아바타 드롭다운(사용자 메뉴)의 "문의"**(설정·로그아웃과 일원화 — 옛 빠른이동 타일에서 이전).
 - **관리자 동선**: `GET /admin/feedback`([AdminFeedbackController](src/main/java/com/booktimer/web/AdminFeedbackController.java)) — 전체 문의를 작성자와 함께 조회(유형 필터 탭 전체/버그/제안/기타, `?type=`), `read`/`resolve`/`reply`/`delete` POST로 상태 표시·답장·삭제. `/admin/**` ADMIN 인가 + CSRF. admin 홈에 "문의함" 카드.
 - **노출 스코핑·IDOR**: 내 목록은 `findByAuthor` 쿼리로 태생적 스코핑(남의 글 안 보임), 삭제는 작성자 일치 검사(`deleteOwn` — 남의 글 id면 조용히 무시, 존재 누설 없음). 상태 표시 결과는 작성자 본인 화면에만. 보안 경계는 기존 매처로 충분(`/feedback`=authenticated, `/admin/**`=ADMIN) — **SecurityConfig 무변경**.
 - **모델**: `Feedback`(author FK·type·title·content·status, BaseTimeEntity) + `FeedbackType`(BUG/SUGGESTION/ETC)·`FeedbackStatus`(SUBMITTED→READ→RESOLVED, 단조 진행) enum, **V23** `feedback` 테이블(report 구조 모방). 관리자 목록은 `AdminFeedbackRow` DTO로 트랜잭션 안에서 조립(LAZY author OSIV 비의존). 탈퇴 정리(`AccountService.purge`)에 `deleteByAuthor` 추가(author_id FK).
