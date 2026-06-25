@@ -132,3 +132,15 @@ export function nextAutoScroll(
     if (target <= 0) return { left: 0, dir: 1 }
     return { left: target, dir }
 }
+
+/**
+ * 화면 정중앙에 온 작가 인덱스. 무대 좌우 중앙 패딩(calc(50% - 반칸)) 덕에
+ * scrollLeft = i·step 이면 i번째 작가가 중앙이므로 round(scrollLeft/step)로 역산하고
+ * [0, count-1]로 clamp한다. count·step이 0 이하면 0(가드). 이름 라벨이 이 값으로
+ * "지금 중앙 작가"를 표시한다.
+ */
+export function centeredIndex(scrollLeft: number, step: number, count: number): number {
+    if (count <= 0 || step <= 0) return 0
+    const i = Math.round(scrollLeft / step)
+    return Math.min(count - 1, Math.max(0, i))
+}

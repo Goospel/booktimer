@@ -11,6 +11,7 @@ import {
     avatarInitial,
     wheelScrollLeft,
     nextAutoScroll,
+    centeredIndex,
 } from './timerProgress'
 
 // ── computeProgress ──────────────────────────────────────────────────────────
@@ -289,4 +290,24 @@ describe('nextAutoScroll', () => {
     it('왼쪽으로 정확히 시작에 닿으면 → clamp + 반전', () => {
         expect(nextAutoScroll(60, 60, 300, 800, -1)).toEqual({ left: 0, dir: 1 })
     })
+})
+
+// ── centeredIndex ─────────────────────────────────────────────────────────────
+
+describe('centeredIndex', () => {
+    // 가운데 포커스 캐러셀: 좌우 중앙 패딩 덕에 scrollLeft = i·step 이면 i번째 작가가
+    // 화면 정중앙. 따라서 중앙 작가 인덱스 = round(scrollLeft/step), [0, count-1] clamp.
+    // 이름 라벨이 이 인덱스로 "지금 중앙 작가"를 표시한다.
+
+    it('count 0 → 0 (가드)', () => expect(centeredIndex(0, 84, 0)).toBe(0))
+    it('step 0 → 0 (측정 실패 가드, 0 나눗셈 방지)', () => expect(centeredIndex(100, 0, 5)).toBe(0))
+    it('scrollLeft 0 → 0 (첫 작가가 중앙)', () => expect(centeredIndex(0, 84, 5)).toBe(0))
+    it('scrollLeft=step → 1', () => expect(centeredIndex(84, 84, 5)).toBe(1))
+    it('정확히 절반(42) → round 1', () => expect(centeredIndex(42, 84, 5)).toBe(1))
+    it('절반 직전(41) → 0', () => expect(centeredIndex(41, 84, 5)).toBe(0))
+    it('2.5칸(210) → round 3', () => expect(centeredIndex(210, 84, 5)).toBe(3))
+    it('끝(4·84=336, count 5) → 4 (마지막 작가)', () => expect(centeredIndex(336, 84, 5)).toBe(4))
+    it('maxScroll 초과(400) → 4로 clamp', () => expect(centeredIndex(400, 84, 5)).toBe(4))
+    it('음수 scrollLeft → 0으로 clamp', () => expect(centeredIndex(-30, 84, 5)).toBe(0))
+    it('작가 1명 → 항상 0', () => expect(centeredIndex(0, 84, 1)).toBe(0))
 })

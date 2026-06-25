@@ -1,16 +1,26 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { CatalogDto } from './types'
-import { visibleAuthors, wheelScrollLeft, nextAutoScroll } from './timerProgress'
+import { visibleAuthors, wheelScrollLeft, nextAutoScroll, centeredIndex } from './timerProgress'
 
 const props = defineProps<{ garden: CatalogDto }>()
 
 // affection/level/title은 대시보드에서 0 고정이라 참조 금지 — name·emoji·spriteId만.
-// 무대 하나로 통합: 입주한 작가 전체를 가로 스크롤로 보여준다(slice·+N 폐지).
-// 이름 텍스트는 폐지(길어서 잘림) — 이름은 hover title·aria-label로만 보존.
+// 무대 하나로 통합: 입주한 작가 전체를 가운데 포커스 캐러셀로(좌우 중앙 패딩).
+// 개별 이름 텍스트는 폐지 — 대신 "지금 중앙 작가"의 이름만 상단에 한 줄로 보여준다.
 const residents = computed(() => visibleAuthors(props.garden.ownedCharacters))
 
 const stageEl = ref<HTMLElement | null>(null)
+
+// 가운데(중앙)에 온 작가 인덱스 + 그 이름. 스크롤(자동·수동)마다 onScroll이 갱신해
+// 작가가 중앙을 지날 때 상단 이름도 함께 바뀐다.
+const focusIdx = ref(0)
+const focusName = computed(() => residents.value[focusIdx.value]?.name ?? '')
+function onScroll() {
+    const el = stageEl.value
+    if (!el) return
+    focusIdx.value = centeredIndex(el.scrollLeft, measureStep(el), residents.value.length)
+}
 
 // 데스크톱: 세로 마우스 휠을 가로 스크롤로. 경계를 넘는 방향이면 페이지 세로 스크롤에 양보.
 function onWheel(e: WheelEvent) {
@@ -103,7 +113,10 @@ onUnmounted(() => {
 
         <div class="dash-garden-stage-wrap">
             <div class="dash-garden-ground" aria-hidden="true"></div>
+            <!-- 상단 중앙: 지금 가운데에 온 작가 이름(스크롤 따라 바뀜). 한 명만 표시라 잘릴 일 적음. -->
+            <div v-if="residents.length > 0" class="dash-garden-focus-name" aria-live="polite">{{ focusName }}</div>
             <div ref="stageEl" class="dash-garden-stage" :class="{ 'is-empty': residents.length === 0 }"
+                 @scroll="onScroll"
                  @wheel="onWheel" @pointerdown="onPointerDown" @pointermove="onPointerMove"
                  @pointerup="onPointerUp" @pointercancel="onPointerUp"
                  @mouseenter="onMouseEnter" @mouseleave="onMouseLeave"
