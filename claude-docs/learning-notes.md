@@ -125,6 +125,7 @@
 - [N-122. CSS grid-stack으로 가변 콘텐츠 최대 높이 예약 — 슬라이드/캐러셀 클립·점프 방지](#n-122-css-grid-stack으로-가변-콘텐츠-최대-높이-예약--슬라이드캐러셀-클립점프-방지)
 - [N-123. overflow:hidden은 사용자 스크롤만 막는다 — 프로그래매틱 scrollTo는 그대로 동작](#n-123-overflowhidden은-사용자-스크롤만-막는다--프로그래매틱-scrollto는-그대로-동작)
 - [N-124. 반응형 분기를 JS·CSS로 이원화하면 스크롤바 폭만큼 경계가 어긋난다 — 단일 출처로 통일](#n-124-반응형-분기를-jscss로-이원화하면-스크롤바-폭만큼-경계가-어긋난다--단일-출처로-통일)
+- [N-125. 합성 preview의 getComputedStyle은 Vue v-for 패치 노드에서 비결정적일 수 있다 — 규칙 매칭으로 교차검증](#n-125-합성-preview의-getcomputedstyle은-vue-v-for-패치-노드에서-비결정적일-수-있다--규칙-매칭으로-교차검증)
 
 ---
 
@@ -5851,3 +5852,34 @@ N-083/N-084의 교훈: jsdom·동기 mock 로드로 단순화하면 `defer`/`typ
 ### 관련
 
 - **N-115**(페이지 세로 스택 간격을 컨테이너 gap으로 일원화 — 같은 "간격/폭 책임을 한 곳으로"), **N-117**(섬 static-preview 검증 — 이 경계를 스크롤바 있는 폭에서 실측), **N-083·T-053**(클라이언트 로드순서/타이밍 사각 — 헤드리스가 못 보는 부류), **T-093**(워크트리 번들 CRLF 오탐). 독서 기록 리디자인 PR-2.
+
+## N-125. 합성 preview의 getComputedStyle은 Vue v-for 패치 노드에서 비결정적일 수 있다 — 규칙 매칭으로 교차검증
+
+**한 줄 요약**: static-preview(헤드리스) 환경에서 `getComputedStyle(el).backgroundColor`가 **`v-for`로 패치된 노드**에서만 실제와 다른 stale 값(`transparent`)을 돌려줄 수 있다. 측정 한 번으로 시각 버그를 단정하지 말고 ① CSS 소스 ② `el.matches('.rule')`(규칙이 그 노드에 매칭되는가) ③ 정적 노드·수동 생성 probe ④ 더 강한 override 부재(grep)로 **삼각측량**한다.
+
+### 배경 / 문제
+
+- /books 필터 칩(`.filter-chip.active{background:var(--accent)}`)을 static-preview로 검증: 정적 '전체' 칩·수동 생성 probe·공개여부 칩은 active일 때 accent(`#6E8A6A`)로 측정되는데, **`v-for`로 렌더된 상태 칩('읽는 중'·'완독')만 active인데 `backgroundColor`가 `rgba(0,0,0,0)`(transparent)** 으로 나왔다.
+- 같은 규칙·같은 `--accent`·같은 클래스(`matches('.filter-chip.active')=true`)인데 노드 종류로 결과가 갈렸다. `requestAnimationFrame`·`async` eval은 이 환경에서 **타임아웃**(페인트 사이클 미동작)이라 "패치 후 한 프레임 기다려 재측정"도 못 했다.
+
+### 개념 (왜 비결정적인가)
+
+- `getComputedStyle`은 보통 강제 reflow로 최신 스타일을 주지만, 이 합성/헤드리스 preview 렌더러에선 **Vue reactivity가 노드를 패치(클래스 토글)한 직후의 computed 값이 stale**하게 남는 경우가 있다(정적 노드는 패치를 안 거쳐 초기 계산이 유지돼 정상). rAF 미동작·async eval 타임아웃과 같은 **페인트/스타일 파이프라인 불안정**의 일부로 보인다.
+- 즉 transparent는 "CSS가 안 먹었다"가 아니라 "측정 도구가 못 따라왔다"일 수 있다 — 브라우저 CSS 모델상 `matches('.filter-chip.active')=true`이고 그 규칙이 `background:var(--accent)`를 선언하며 더 강한 override가 없으면 **실 페인트는 반드시 accent**다.
+
+### 해결 — 측정 삼각측량
+
+1. **CSS 소스 확인**(규칙·특이도·var 정의)
+2. **`el.matches('.selector')`** 로 그 노드에 규칙이 실제 매칭되는지 — 매칭되면 브라우저는 적용한다
+3. **정적 노드 + 수동 probe**(`document.createElement` 후 같은 클래스) 측정 — 같은 규칙이 정상 노드에서 무슨 값인지
+4. **override 부재**를 grep으로(예: `button:hover{background}` 없음)
+- 넷이 일관되면 한 노드의 이상 measured는 환경 아티팩트로 판정. 확실히 하려면 실 브라우저 픽셀(스크린샷·사용자 눈) 1회 — 단 이 환경은 스크린샷도 타임아웃이라 미수행일 수 있고, 그땐 위 삼각측량 + 머지 후 실사용 확인으로 대체한다.
+
+### 디테일 · 주의
+
+- 정적 노드와 v-for 노드의 차이가 핵심 단서 — 같은 규칙이 노드 종류로 갈리면 "CSS 버그"보다 "측정/패치 타이밍"을 먼저 의심한다.
+- preview의 스크린샷·async eval 타임아웃은 페이지 stuck이 아니라 렌더러 특성일 수 있다(직후 sync eval은 정상 응답). 타임아웃났다고 검증을 포기하지 말고 sync 측정 + 교차검증으로 전환한다.
+
+### 관련
+
+- **N-117**(static-preview 검증 토대), **T-092**(prod 번들 컴포넌트 상태 주입 — 같은 합성 환경의 다른 한계), **T-089**(mock worst-case로 RED 확보 — 측정 신뢰성 자매), **N-055**(완성 픽스처만으론 못 잡는 부류의 시각판). /books 리디자인 PR-3 검증.
