@@ -1349,32 +1349,91 @@ a.book-title:hover { text-decoration: underline; }
 .book-add-form { margin-left: auto; }
 .book-add-form .btn-primary { width: auto; padding: 6px 14px; font-size: .85rem; }
 
-/* 공개/비공개 토글 스위치 — 드롭다운 대신 on/off. ON=🌍 책방 공개(accent), OFF=🔒 비공개(muted).
-   버튼이 '현재의 반대' 값을 POST해 상태를 뒤집는다(JS 없이 폼 제출). 라벨+미니 트랙/노브로 현재 상태를 보여줌. */
-.vis-toggle-form { display: inline-flex; }
-.vis-toggle {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px;
-    background: #fff; color: var(--muted); cursor: pointer;
-    font-size: .8rem; font-weight: 600; line-height: 1;
+/* 공개/비공개 토글 칩 — ON=🌍 공개(연초록), OFF=🔒 비공개(중립). 클릭 시 반대값 POST(낙관적+롤백).
+   books 전용(프로필 책방은 읽기전용이라 미사용). 시안 My Shelf — 트랙/노브 스위치를 칩으로 단순화. */
+.vis-chip {
+    width: auto;                                   /* 전역 button{width:100%} 상쇄(#286 가드) */
+    border: 1px solid var(--border); background: transparent; color: var(--muted);
+    border-radius: 999px; padding: 5px 11px; font-size: .8rem; font-weight: 600;
+    line-height: 1; cursor: pointer; white-space: nowrap;
 }
-.vis-toggle:hover { border-color: var(--accent); }
-.vis-toggle.is-public { color: var(--accent); border-color: var(--accent); background: #eef2ff; }
-.vis-toggle .vis-text { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
-.vis-toggle .vis-track {
-    position: relative; width: 30px; height: 16px; border-radius: 999px;
-    background: #cbd5e1; transition: background .15s ease; flex: none;
-}
-.vis-toggle.is-public .vis-track { background: var(--accent); }
-.vis-toggle .vis-knob {
-    position: absolute; top: 2px; left: 2px; width: 12px; height: 12px;
-    border-radius: 50%; background: #fff; transition: transform .15s ease;
-}
-.vis-toggle.is-public .vis-knob { transform: translateX(14px); }
+.vis-chip:hover { border-color: var(--accent); }
+.vis-chip.is-public { background: #E0EFE6; border-color: #C9E3D4; color: var(--ok); }
 
 /* 내 책장 상단 안내 — 공개 토글이 '책방'에 반영됨을 한 줄로 설명(책방 링크 겸). */
-.shelf-public-hint { font-size: .85rem; color: var(--muted); margin: 0 0 12px; }
-.shelf-public-hint a { color: var(--accent); }
+/* ===== 내 책장 리디자인 PR-3 — 헤더·안내·필터·상태·와이드 셸 (시안 My Shelf) ===== */
+
+/* 인사말 헤더 — 좁으면 제목만(하단 .link-row가 이동 담당), 넓으면 우상단 이동 링크 노출. */
+.shelf-greeting { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.shelf-greeting-nav { display: none; }      /* 좁은 폭: 숨김 */
+
+/* 공개 안내 — 시안 연세이지 박스(책방 링크 겸). books 전용. */
+.shelf-public-hint {
+    display: flex; gap: 8px; align-items: flex-start;
+    background: var(--sage-soft); color: var(--accent-hover);
+    border-radius: var(--radius-sm); padding: 11px 13px;
+    font-size: .8rem; margin: 0 0 16px;
+}
+.shelf-public-hint strong { font-weight: 600; }
+.shelf-public-hint a { color: var(--accent-hover); font-weight: 600; }
+
+/* 빈 책장 — 점선 박스 + 🌱(시안). 필터 결과 0은 기존 .status-line 유지(다른 메시지). */
+.shelf-empty {
+    margin-top: 4px; text-align: center; padding: 26px 12px;
+    border: 1px dashed #D8CFBE; border-radius: 12px; background: #FBF8F1;
+}
+.shelf-empty-icon { font-size: 34px; }
+.shelf-empty p { margin: 12px 0 0; font-size: .9rem; color: var(--muted); }
+
+/* 로드 실패 — 시안 에러 박스(⚠️ + 다시 시도). */
+.shelf-load-error {
+    display: flex; gap: 10px; align-items: center;
+    background: #F7ECEA; border: 1px solid #ECD6D2; color: #A6584F;
+    border-radius: var(--radius-sm); padding: 12px 14px; font-size: .9rem; margin: 8px 0;
+}
+.shelf-load-error .link-btn {
+    width: auto; border: none; background: none; padding: 0; font: inherit;
+    color: #A6584F; font-weight: 600; text-decoration: underline; cursor: pointer;
+}
+
+/* 로딩 스켈레톤 — 표지 + 텍스트 바(시안). */
+.shelf-skeleton { display: flex; flex-direction: column; gap: 14px; padding: 4px 0; }
+.skeleton-row { display: flex; gap: 13px; }
+.skeleton-cover { width: 54px; height: 78px; border-radius: 5px; background: #EFEADD; flex: none; }
+.skeleton-lines { flex: 1; display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+.skeleton-line { height: 12px; border-radius: 4px; background: #EFEADD; }
+.skeleton-line.w70 { width: 70%; }
+.skeleton-line.w40 { width: 40%; }
+.skeleton-line.w55 { width: 55%; background: #F2EEE4; }
+
+/* ── 와이드: 2열 리스트 + 340px 사이드바(확정안). CSS @media 단일 출처 — JS 분기 안 씀(N-124 회피). ── */
+@media (min-width: 880px) {
+    .container.shelf-page { max-width: 1180px; }
+    .shelf-layout {
+        display: grid; grid-template-columns: 340px 1fr; gap: 24px; align-items: start;
+        grid-template-areas: "greeting greeting" "add mine";
+    }
+    .shelf-layout > .alert { grid-column: 1 / -1; }   /* 에러는 전체 폭 */
+    .shelf-greeting { grid-area: greeting; }
+    .shelf-add { grid-area: add; }
+    .shelf-mine { grid-area: mine; }
+    .shelf-layout .card { margin-bottom: 0; }          /* grid gap이 간격 담당 */
+    .shelf-greeting-nav { display: flex; gap: 18px; }
+    .shelf-greeting-nav a { color: var(--accent); font-weight: 600; text-decoration: none; }
+    .shelf-greeting-nav a:hover { text-decoration: underline; }
+    .shelf-page .link-row { display: none; }           /* 와이드: 헤더 링크가 대신 */
+
+    /* 책 목록을 2열 카드 그리드로 — 스크롤 박스 해제(본문이 책 수만큼 늘어남, 시안). */
+    #books-app .shelf-list {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+        max-height: none; overflow: visible; padding-right: 0;
+    }
+    #books-app .shelf-list .book-row {
+        border: 1px solid var(--border); border-radius: 12px; background: #fff;
+        padding: 14px; align-items: flex-start;
+    }
+    #books-app .shelf-list .book-row:last-child { border-bottom: 1px solid var(--border); }
+}
 
 .affiliate-note { font-size: .8rem; color: var(--muted); text-align: center; margin: 16px 0 4px; }
 
@@ -1435,24 +1494,18 @@ a.book-title:hover { text-decoration: underline; }
 }
 .shelf-filter a:hover { border-color: var(--accent); color: var(--accent); }
 .shelf-filter a.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-/* 공개여부 서브 필터 — 상태 칩과 달리 책 행 공개 토글의 비주얼(연한 트랙 알약 + 흰 알약 active)을 빌린
-   세그먼티드 토글. 형태가 칩(채움)과 달라 '서브 필터'로 읽히고, 우측 정렬로 상태 필터에 종속돼 보인다.
-   링크 동작(URL·htmx·active)은 상태 칩과 동일하게 <a>로 유지 — CSS만 토글 룩. */
-.vis-filter-bar { display: flex; justify-content: flex-end; margin: 0 0 14px; }
-.vis-filter {
-    display: inline-flex; gap: 2px; padding: 3px;
-    background: #EDE7DA; border: 1px solid var(--border); border-radius: 999px;
+/* 내 책장 필터 칩 — 상태/공개여부 토글(활성=세이지 채움). books 전용(프로필 .shelf-filter와 별개). 시안 My Shelf.
+   두 칩 그룹(상태·공개여부)을 같은 모양으로 통일 — 기존 세그먼티드 '서브 필터' 룩 대신 시안의 단일 칩. */
+.shelf-filter-chips { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 9px; }
+.shelf-filter-chips + .shelf-filter-chips { margin-bottom: 18px; }
+.filter-chip {
+    width: auto;                                   /* 전역 button{width:100%} 상쇄(#286 가드) */
+    border: 1px solid var(--border); background: transparent; color: var(--muted);
+    border-radius: 999px; padding: 5px 13px; font-size: .8rem; font-weight: 600;
+    line-height: 1.2; cursor: pointer;
 }
-.vis-filter a {
-    padding: 5px 12px; border-radius: 999px;
-    color: var(--muted); text-decoration: none; font-size: .76rem; font-weight: 600;
-    white-space: nowrap;
-}
-.vis-filter a:hover { color: var(--accent); }
-.vis-filter a.active {
-    background: var(--card-bg); color: var(--accent-hover);
-    box-shadow: 0 1px 2px rgba(60, 50, 30, .14);
-}
+.filter-chip:hover { border-color: var(--accent); color: var(--accent); }
+.filter-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 /* 팔로우 스코프 인기 카운트(§7.4) — 책 메타 안 작은 배지 */
 .follow-popularity { font-size: .78rem; color: var(--accent); font-weight: 600; text-decoration: none; cursor: pointer; }
 .follow-popularity:hover { text-decoration: underline; }
