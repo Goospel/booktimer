@@ -2256,6 +2256,13 @@ body.history-page.history-wide .container { max-width: 940px; }
 .dash-achieved-emoji { font-size: 34px; }
 .dash-achieved-title { margin: 0; font-family: 'Gowun Batang', serif; font-size: 19px; color: var(--ok); line-height: 1.4; }
 .dash-achieved-sub { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+/* 달성 패널에 측정 시작 폼이 함께 들어갈 때: 격려 텍스트는 가운데 유지, 폼 컨트롤은 풀폭으로
+   (패널이 align-items:center라 폼 자식이 좁아지는 것 방지). */
+.dash-state-achieved .dash-divider,
+.dash-state-achieved .dash-idle-label,
+.dash-state-achieved .dash-select-wrap,
+.dash-state-achieved .dash-empty,
+.dash-state-achieved .dash-btn-fill { align-self: stretch; width: 100%; box-sizing: border-box; }
 
 /* IDLE 책 선택 */
 .dash-idle-label { font-size: 14px; color: var(--muted); }

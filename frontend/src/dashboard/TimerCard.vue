@@ -101,7 +101,8 @@ function totalHM(s: number): string {
                 />
             </div>
 
-            <!-- ACHIEVED (측정 안 하는데 오늘 달성) -->
+            <!-- ACHIEVED (측정 안 하는데 오늘 달성) — 격려는 유지하되 측정 시작 폼도 함께 노출.
+                 목표를 채워도 계속 시간을 측정할 수 있어야 한다(시작 버튼이 사라지면 안 됨). -->
             <div v-else class="dash-state-panel dash-state-achieved">
                 <span class="dash-achieved-emoji">🌱</span>
                 <p class="dash-achieved-title">오늘도 약속을 지켰어요</p>
@@ -109,6 +110,13 @@ function totalHM(s: number): string {
                     <template v-if="streak > 0">연속 {{ streak }}일째 — 천천히, 꾸준히</template>
                     <template v-else>오늘 목표를 채웠어요</template>
                 </p>
+                <div class="dash-divider"></div>
+                <BookPickForm
+                    :reading-books="readingBooks"
+                    :finished-books="finishedBooks"
+                    :recent-book-id="recentBookId"
+                    @start="(id) => emit('start', id)"
+                />
             </div>
         </div>
     </section>
