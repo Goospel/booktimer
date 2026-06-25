@@ -99,7 +99,7 @@ async function handleStop() {
     <template v-else-if="data">
         <DashHeader :login-id="data.loginId" />
 
-        <QuoteCard :quote="data.quote" />
+        <QuoteCard :quotes="data.quotes" />
 
         <EmailVerifyBanner v-if="!data.emailVerified" />
 

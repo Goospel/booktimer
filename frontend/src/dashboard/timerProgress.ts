@@ -144,3 +144,12 @@ export function centeredIndex(scrollLeft: number, step: number, count: number): 
     const i = Math.round(scrollLeft / step)
     return Math.min(count - 1, Math.max(0, i))
 }
+
+/**
+ * 명언 슬롯머신 로테이션의 다음 인덱스 = (current+1) % count. 끝에서 0으로 순환한다.
+ * count가 0 이하면 0(빈 목록 가드). 범위 밖 current도 모듈로로 안전하게 감싼다.
+ */
+export function nextQuoteIndex(current: number, count: number): number {
+    if (count <= 0) return 0
+    return (current + 1) % count
+}

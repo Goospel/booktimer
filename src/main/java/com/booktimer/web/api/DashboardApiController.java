@@ -3,7 +3,6 @@ package com.booktimer.web.api;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.garden.GardenService;
-import com.booktimer.quote.Quote;
 import com.booktimer.quote.QuoteService;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.ContributionDay;
@@ -36,6 +35,9 @@ import java.util.List;
  */
 @RestController
 public class DashboardApiController {
+
+    /** 대시보드 슬롯머신 로테이션에 실어 보낼 격언 최대 개수(셔플 후 상한). */
+    private static final int QUOTE_ROTATION_MAX = 10;
 
     private final CurrentUserService currentUserService;
     private final DashboardModel dashboardModel;
@@ -70,7 +72,9 @@ public class DashboardApiController {
         DashboardModel.LiveState live = dashboardModel.computeLive(user);
         ContributionGraph graph = contributionService.contributionGraph(user);
         GardenApiResponse.CatalogDto garden = GardenApiResponse.catalogOf(gardenService.view(user));
-        Quote quote = quoteService.random();
+        List<QuoteDto> quotes = quoteService.randomList(QUOTE_ROTATION_MAX).stream()
+                .map(q -> new QuoteDto(q.getText(), q.getAuthor()))
+                .toList();
 
         return new DashboardResponse(
                 live.nickname(), live.loginId(),
@@ -82,7 +86,7 @@ public class DashboardApiController {
                 live.recentBookId(),
                 toGraphDto(graph),
                 garden,
-                new QuoteDto(quote.getText(), quote.getAuthor()),
+                quotes,
                 user.isEmailVerified());
     }
 
@@ -154,7 +158,7 @@ public class DashboardApiController {
             Long recentBookId,
             ContributionGraphDto graph,
             GardenApiResponse.CatalogDto garden,
-            QuoteDto quote,
+            List<QuoteDto> quotes,
             boolean emailVerified
     ) {}
 

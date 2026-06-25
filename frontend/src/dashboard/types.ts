@@ -66,6 +66,6 @@ export interface DashboardResponse extends TimerState {
     loginId: string
     graph: GraphDto
     garden: CatalogDto
-    quote: QuoteDto
+    quotes: QuoteDto[]
     emailVerified: boolean
 }
