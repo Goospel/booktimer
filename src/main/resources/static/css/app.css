@@ -121,6 +121,27 @@ body {
     margin: 7px 0 0;
 }
 
+/* 내 책장 인사말 — 고운바탕 serif 제목 + 요약통계 한 줄(시안 My Shelf).
+   history-greeting 과 같은 '화면 전용 분리' 패턴(전역 .greeting 영향 0). */
+.shelf-greeting { margin: 0 0 20px; }
+.shelf-greeting h1 {
+    font-family: 'Gowun Batang', serif;
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0;
+    letter-spacing: -.01em;
+    word-break: keep-all;
+}
+.shelf-greeting .leaf { font-size: 20px; }
+.shelf-summary {
+    margin: 8px 0 0;
+    font-size: 13px;
+    color: var(--muted);
+}
+/* 표 형식 숫자 — 요약통계 등 숫자 폭 고정(시안 .tnum). 명시 적용한 곳만 영향. */
+.tnum { font-variant-numeric: tabular-nums; }
+
 /* 입구 폼 화면(signup·onboarding) 환영 헤더 — landing 히어로의 축소판.
    greeting 한 줄 대신 헤드라인+서브카피로 첫인상을 강화한다(페이크볼드 대신 크기로 위계 — #287 원칙 계승). */
 .entry-hero { margin: 4px 0 22px; }
@@ -1228,6 +1249,18 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     border-radius: 4px;
     flex-shrink: 0;
     background: var(--border);
+}
+/* 무표지 책 표지 플레이스홀더 — coverUrl 이 없을 때 색 배경 + 이니셜(고운바탕 serif).
+   배경/글자색은 coverColor()가 결정적으로 골라 인라인 주입(시안 My Shelf 무표지 카드). */
+.book-cover-ph {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Gowun Batang', serif;
+    font-size: 18px;
+    line-height: 1;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .4), 0 2px 4px rgba(120, 100, 70, .18);
+    user-select: none;
 }
 .book-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 220px; }
 .book-title { font-weight: 600; color: var(--text); word-break: keep-all; overflow-wrap: anywhere; }
