@@ -190,7 +190,7 @@ async function selectEntry(id: number) {
 
         <p class="link-row">
             <a href="/">← 대시보드</a>
-            <a href="/books">📚 내 책장</a>
+            <a href="/books"><svg class="link-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="3.4" height="16" rx="1" /><rect x="9.3" y="4" width="3.4" height="16" rx="1" /><path d="M15 5.4l3.3-.7 2.4 15.4-3.3.7z" /></svg>내 책장</a>
         </p>
     </template>
 
