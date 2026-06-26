@@ -1246,17 +1246,6 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     overscroll-behavior: contain;
     padding-right: 6px;
 }
-/* 태그 드릴다운 — 헤더 카드 안 보조 미리보기라 메인 책 목록(shelf-scroll 60vh)보다 짧게 둬
-   아래 팔로우·잔디·탭을 덜 밀어낸다. 헤드(제목·×닫기)는 이 ul 밖이라 스크롤 중에도 고정.
-   shelf/search-scroll와 같은 관성·거터·번짐방지, 높이만 다름. 책 적으면 max-height 미도달로 스크롤바 없음(자연 폴백). */
-.tag-books-scroll {
-    max-height: 50vh;
-    overflow-y: auto;
-    scrollbar-gutter: stable;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-    padding-right: 6px;
-}
 .book-row {
     display: flex;
     flex-wrap: wrap;            /* 좁으면 액션 줄을 통째로 다음 줄로 내린다 */
@@ -1560,7 +1549,18 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 .shop-drill-head h3 { font-family: 'Gowun Batang', serif; font-size: 15px; color: var(--text); margin: 0; }
 .shop-drill-close { width: auto; flex: none; background: transparent; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-family: 'Gowun Dodum', sans-serif; font-size: 12.5px; color: var(--muted); padding: 2px; }
 .shop-drill-close:hover { color: var(--text); }
-.shop-drill .shop-books { grid-template-columns: 1fr; gap: 8px; }  /* 사이드바 폭이라 와이드에서도 1열 유지 */
+/* 드릴다운(근거책) 리스트 — 헤더 카드 안 보조 미리보기라 셸프(.shop-shelf>.shop-books 60vh)보다
+   짧은 스크롤 박스(50vh). 헤드(제목·×닫기)는 이 ul 밖이라 스크롤 중 고정, 책 적으면 미도달=스크롤바 없음.
+   (원래 .tag-books-scroll로 있던 50vh 레시피가 마크업 리네임으로 단절돼 무한정 길어지던 것 복원.) */
+.shop-drill .shop-books {
+    grid-template-columns: 1fr; gap: 8px;  /* 사이드바 폭이라 와이드에서도 1열 유지 */
+    max-height: 50vh;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    padding-right: 6px;
+}
 
 /* 공개 책장 */
 .shop-shelf { display: flex; flex-direction: column; gap: 14px; }
