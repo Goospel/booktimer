@@ -1574,6 +1574,19 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 /* 책 그리드 — 모바일 1열, 와이드 2열 */
 .shop-books { display: grid; grid-template-columns: 1fr; gap: 12px; list-style: none; padding: 0; margin: 0; }
 .shop-wide .shop-books { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }  /* 카드 최소 300px — 넓으면 2열, 중간폭(메인<614px)이면 1열 풀폭으로 우아하게 강등(대시보드 .dash-grid-2col 관용구) */
+
+/* 공개 책장 ul을 스크롤 박스로(PC·모바일 공통) — max-height에 닿으면 내부 스크롤이라 페이지가
+   책 수만큼 길어지지 않고, 하단 네비(대시보드·내 책장)가 늘 바로 아래 보인다. 책 적으면
+   미도달=스크롤바 없음(자연 폴백). 필터칩(.shop-shelf-head)·제휴고지는 이 ul 밖이라 고정.
+   /books의 .shelf-scroll 전례와 같은 거터·관성·번짐방지 레시피(60vh는 뷰포트 적응).
+   직계(>)라 BTI 드릴다운(.shop-drill > .shop-books.shop-drill-books)엔 영향 0. */
+.shop-shelf > .shop-books {
+    max-height: 60vh;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
 .shop-book { display: flex; gap: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: #FAF7EF; }
 
 /* 책등 표지 + 줄무늬 종이결 폴백(회색 단색 금지) */
