@@ -8,6 +8,7 @@ import ShopHeader from './ShopHeader.vue';
 import BtiPanel from './BtiPanel.vue';
 import ShelfPanel from './ShelfPanel.vue';
 import NavLinks from '../shared/NavLinks.vue';
+import UserSearchPanel from '../shared/UserSearchPanel.vue';
 
 // ── 상수 ────────────────────────────────────────────────────────────────
 const REPORT_REASONS = [
@@ -194,6 +195,13 @@ onUnmounted(() => {
 
         <!-- 본체 -->
         <template v-else-if="profile">
+
+            <!-- 내 책방(self)에서만: '다른 책방 찾기'(사용자 검색) + 친구 추천을 상단에 흡수.
+                 탐색은 SNS 발견 기능이라 대시보드 타일에서 내려 책방으로 합침(A안).
+                 남의 책방엔 렌더하지 않는다 — 누수 방지 불변식(profile-app.test.ts). -->
+            <UserSearchPanel v-if="profile.self"
+                             heading="다른 책방 찾기"
+                             placeholder="다른 사람 책방 찾기 (아이디 2글자 이상)" />
 
             <!-- ── 모바일: 단일열(헤더 → (other)신고 → 탭카드 → 링크) ── -->
             <template v-if="!isWide">
