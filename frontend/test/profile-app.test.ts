@@ -53,6 +53,7 @@ beforeEach(() => {
 afterEach(() => {
     vi.unstubAllGlobals();
     document.body.innerHTML = '';
+    window.history.pushState({}, '', '/');   // URL(tab/status) 복원 — 다른 테스트 onMounted 파싱 오염 방지
 });
 
 describe('ProfileApp 내 책방 검색 진입점', () => {
@@ -80,5 +81,52 @@ describe('ProfileApp 내 책방 검색 진입점', () => {
         expect(wrapper.find('a[href="/search"]').exists()).toBe(false);
         expect(wrapper.text()).not.toContain('다른 책방 찾기');
         expect(searchCalled()).toBe(false);
+    });
+});
+
+// 모바일(좁은 화면)에선 BtiPanel이 activeTab==='bti'일 때만 렌더된다. 공개 책장(shelf) 탭에서
+// 헤더의 책BTI 태그칩을 눌러도 BTI 탭으로 넘어가지 않으면 드릴다운이 DOM에 없어 화면이 그대로다.
+// → 태그를 누르면 자동으로 BTI 탭으로 전환되어 드릴다운이 보여야 한다(회귀 가드).
+describe('ProfileApp 책BTI 태그 드릴다운', () => {
+    const TAG_BOOKS = [
+        { id: 1, title: '안나 카레니나', author: '톨스토이', coverUrl: null,
+          status: 'DONE', seconds: 0, purchaseLink: null },
+    ];
+    function mockTagFetch() {
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes('/api/profile/personality-tag')) {
+                return Promise.resolve({ ok: true, json: async () => ({ books: TAG_BOOKS }) });
+            }
+            if (url.includes('/api/profile/books')) {
+                return Promise.resolve({ ok: true, json: async () => ({ books: [] }) });
+            }
+            return Promise.resolve({ ok: true, status: 200, json: async () => ({
+                loginId: 'owner', nickname: '주인',
+                followerCount: 0, followingCount: 0,
+                following: false, self: true,
+                personality: '깊이 있는 사유를 즐기는 독자',
+                personalityTags: [{ label: '이야기파', clickable: true }],
+                books: [], coupangEnabled: false,
+            }) });
+        }));
+    }
+
+    test('공개 책장 탭에서 태그칩을 누르면 BTI 탭으로 전환되어 드릴다운이 보인다', async () => {
+        setupDom('owner', 'owner');
+        window.history.pushState({}, '', '/u/owner?tab=shelf');   // 공개 책장 탭으로 진입
+        mockTagFetch();
+        const wrapper = mount(ProfileApp, { attachTo: document.body });
+
+        // 로드 완료 → 헤더의 clickable 태그칩 등장 대기
+        await vi.waitFor(() => expect(wrapper.find('.shop-tag-click').exists()).toBe(true));
+        // 진입 직후엔 공개 책장 탭이라 드릴다운이 아직 없다
+        expect(wrapper.find('.shop-drill').exists()).toBe(false);
+
+        await wrapper.find('.shop-tag-click').trigger('click');
+
+        // 태그 클릭 → BTI 탭 전환 → 드릴다운(근거책)이 화면에 나타난다
+        await vi.waitFor(() => expect(wrapper.find('.shop-drill').exists()).toBe(true));
+        expect(wrapper.text()).toContain('「이야기파」를 만든 책');
+        expect(wrapper.text()).toContain('안나 카레니나');
     });
 });
