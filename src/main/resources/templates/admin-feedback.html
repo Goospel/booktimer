@@ -58,7 +58,9 @@
         </form>
     </section>
 
-    <p class="link-row"><a th:href="@{/admin}">← 관리자 홈으로</a></p>
+    <nav class="link-row" aria-label="페이지 이동">
+        <th:block th:replace="~{fragments/nav-links :: navLink(@{/admin}, 'back', '관리자 홈')}"></th:block>
+    </nav>
 </div>
 </body>
 </html>

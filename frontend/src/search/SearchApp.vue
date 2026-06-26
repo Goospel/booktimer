@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import NavLinks from '../shared/NavLinks.vue';
 
 interface UserResult {
     loginId: string;
@@ -138,9 +139,9 @@ function onSearch() {
             </ul>
         </section>
 
-        <p class="link-row">
-            <a href="/">← 대시보드</a>
-            <a :href="`/u/${myLoginId}`">📖 내 책방</a>
-        </p>
+        <NavLinks :links="[
+            { href: '/', icon: 'home', label: '대시보드' },
+            { href: `/u/${myLoginId}`, icon: 'user', label: '내 책방' },
+        ]" />
     </div>
 </template>

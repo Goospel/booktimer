@@ -87,9 +87,9 @@
         </table>
     </section>
 
-    <p class="link-row">
-        <a th:href="@{/admin/users}">← 사용자 목록</a>
-    </p>
+    <nav class="link-row" aria-label="페이지 이동">
+        <th:block th:replace="~{fragments/nav-links :: navLink(@{/admin/users}, 'back', '사용자 목록')}"></th:block>
+    </nav>
 </div>
 </body>
 </html>

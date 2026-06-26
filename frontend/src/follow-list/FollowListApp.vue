@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue';
 import UserRow from '../shared/UserRow.vue';
 import FollowAction from '../shared/FollowAction.vue';
 import type { UserRowData } from '../shared/follow';
+import NavLinks from '../shared/NavLinks.vue';
 
 const appEl = document.getElementById('follow-list-app');
 const myLoginId = ref(appEl?.dataset.myLoginId ?? '');
@@ -72,9 +73,9 @@ onUnmounted(() => {
             </ul>
         </section>
 
-        <p class="link-row">
-            <a href="/">← 대시보드</a>
-            <a :href="`/u/${myLoginId}`">📖 내 책방</a>
-        </p>
+        <NavLinks :links="[
+            { href: '/', icon: 'home', label: '대시보드' },
+            { href: `/u/${myLoginId}`, icon: 'user', label: '내 책방' },
+        ]" />
     </div>
 </template>

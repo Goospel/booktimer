@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { getCsrfToken } from '../shared/follow'
 import { summarize, initialOf, coverColor, byline, statusBadge } from './pure'
+import NavLinks from '../shared/NavLinks.vue'
 
 const STATUSES = [
     { name: 'WANT_TO_READ', label: '읽고 싶음' },
@@ -370,9 +371,9 @@ async function removeBook(book: MyBookSummary) {
       이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
     </p>
 
-    <p class="link-row">
-      <a href="/">← 대시보드</a>
-      <a href="/history">📖 독서 기록</a>
-    </p>
+    <NavLinks :links="[
+      { href: '/', icon: 'home', label: '대시보드' },
+      { href: '/history', icon: 'history', label: '독서 기록' },
+    ]" />
   </template>
 </template>

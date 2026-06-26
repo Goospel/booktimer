@@ -23,7 +23,9 @@
         </p>
     </section>
 
-    <p class="link-row"><a th:href="@{/}">← 대시보드로</a></p>
+    <nav class="link-row" aria-label="페이지 이동">
+        <th:block th:replace="~{fragments/nav-links :: navLink(@{/}, 'home', '대시보드')}"></th:block>
+    </nav>
 </div>
 </body>
 </html>
