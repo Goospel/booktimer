@@ -1479,6 +1479,137 @@ a.book-title:hover { text-decoration: underline; }
 }
 .report-form .btn-block { align-self: flex-start; width: auto; padding: 6px 14px; }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   책방(/u/{loginId}) — 대시보드 스킨 이식. .dash-* 재사용 + 고유는 .shop-*.
+   공유 .book- 과 .record- 계열은 절대 수정하지 않고 .shop- 로 분리(타 페이지 회귀 0).
+   값은 계획 §10 스펙 그대로. 컨테이너·패딩 등 §10 미지정분만 시안에 맞춰 보완.
+   ───────────────────────────────────────────────────────────────────────── */
+body.profile-page .container { max-width: 920px; }   /* 와이드 2열 여유. 페이지 스코프 = 타 페이지 회귀 0 */
+
+.shop-wide { display: flex; gap: 28px; align-items: flex-start; }
+.shop-side { flex: 0 0 360px; display: flex; flex-direction: column; gap: 18px; }
+.shop-main { flex: 1; min-width: 0; }
+
+/* 헤더 정체성 — 이니셜 아바타(대시보드 .dash-header-avatar 재사용) + 책방명/핸들 */
+.shop-id-head { display: flex; align-items: center; gap: 14px; }
+.shop-avatar { cursor: default; }                     /* 비클릭 div라 .dash-header-avatar의 pointer 상쇄 */
+.shop-id-title { font-family: 'Gowun Batang', serif; font-size: clamp(22px, 3vw, 28px); color: var(--text); line-height: 1.3; }
+.shop-id-handle { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+/* BTI 태그칩 — 클릭형 vs 정적형 */
+.shop-tags { display: flex; flex-wrap: wrap; gap: 7px; }
+.shop-tag { font-size: 12.5px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); background: transparent; }
+.shop-tag-click { border-color: #CFE0C2; color: var(--accent-hover); background: var(--sage-soft); cursor: pointer; width: auto; }
+.shop-tag-click:hover { background: #DCE8D2; }
+
+/* 카운트 + 액션 */
+.shop-counts { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.shop-count { font-size: 13.5px; color: var(--muted); text-decoration: none; }
+.shop-count strong { font-family: 'Gowun Batang', serif; color: var(--text); font-variant-numeric: tabular-nums; }
+a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
+.shop-actions { margin-left: auto; display: flex; gap: 8px; }
+.shop-actions .dash-btn-fill, .shop-actions .dash-btn-outline { width: auto; padding: 9px 16px; border-radius: 10px; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; }
+
+/* 신고 박스 — 콤팩트 카드(시안: 박스 4px + summary 자체 패딩) */
+.shop-report { background: var(--card-bg); border: 1px solid #D8CDB9; border-radius: 18px; padding: 4px; box-shadow: 0 1px 2px rgba(44, 42, 36, .04); }
+.shop-report > summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); padding: 12px 14px; }
+.shop-report > summary::-webkit-details-marker { display: none; }
+.shop-report > summary:hover { color: var(--danger); }
+.shop-report[open] > summary { margin-bottom: 0; }
+.shop-report-caret { transition: transform .15s ease; }            /* §6 chevron — 펼침 시 90° 회전 */
+.shop-report[open] > summary .shop-report-caret { transform: rotate(90deg); }
+.shop-report-form { display: flex; flex-direction: column; gap: 10px; padding: 0 14px 14px; }
+.shop-report-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.shop-report-field select, .shop-report-form textarea {
+    width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; color: var(--text);
+    background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 11px;
+}
+.shop-report-form textarea { resize: vertical; line-height: 1.5; }
+.shop-report-submit { width: auto; align-self: flex-start; }       /* 전역 button{width:100%} 상쇄 */
+.shop-report-ok { margin: 0; font-size: 13px; color: var(--ok); }
+
+/* 탭 (모바일 전용) */
+.shop-tab-card { gap: 0; }                             /* dash-card flex gap 상쇄 — 탭 margin-bottom만 간격 */
+.shop-tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.shop-tab { flex: 1; text-align: center; padding: 11px 0; font-size: 14.5px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; width: auto; border-radius: 0; }
+.shop-tab.active { color: var(--accent-hover); border-bottom-color: var(--accent); font-weight: 600; }
+
+/* 책BTI */
+.shop-bti { display: flex; flex-direction: column; gap: 12px; }
+.shop-bti-text { font-family: 'Gowun Batang', serif; font-size: 15.5px; line-height: 1.75; color: var(--text); margin: 0; }
+.shop-bti-note { font-size: 12.5px; color: var(--muted); margin: 0; }
+.shop-bti-cold { font-size: 13.5px; color: var(--muted); border: 1px dashed var(--border); border-radius: 12px; padding: 16px; line-height: 1.6; margin: 0; }
+
+/* 드릴다운 */
+.shop-drill { background: #FAF7EF; border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+.shop-drill-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.shop-drill-head h3 { font-family: 'Gowun Batang', serif; font-size: 15px; color: var(--text); margin: 0; }
+.shop-drill-close { width: auto; flex: none; background: transparent; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-family: 'Gowun Dodum', sans-serif; font-size: 12.5px; color: var(--muted); padding: 2px; }
+.shop-drill-close:hover { color: var(--text); }
+.shop-drill .shop-books { grid-template-columns: 1fr; gap: 8px; }  /* 사이드바 폭이라 와이드에서도 1열 유지 */
+
+/* 공개 책장 */
+.shop-shelf { display: flex; flex-direction: column; gap: 14px; }
+.shop-shelf-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.shop-shelf-title { font-family: 'Gowun Batang', serif; font-size: 18px; color: var(--text); margin: 0; }
+.shop-filter { display: flex; flex-wrap: wrap; gap: 7px; }
+.shop-filter button { font-size: 12.5px; padding: 5px 13px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); background: transparent; cursor: pointer; width: auto; }
+.shop-filter button:hover { border-color: var(--accent); color: var(--accent); }
+.shop-filter button.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+
+/* 책 그리드 — 모바일 1열, 와이드 2열 */
+.shop-books { display: grid; grid-template-columns: 1fr; gap: 12px; list-style: none; padding: 0; margin: 0; }
+.shop-wide .shop-books { grid-template-columns: 1fr 1fr; gap: 14px; }
+.shop-book { display: flex; gap: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: #FAF7EF; }
+
+/* 책등 표지 + 줄무늬 종이결 폴백(회색 단색 금지) */
+.shop-cover { flex: 0 0 auto; width: 54px; height: 78px; border-radius: 5px; display: flex; align-items: center; justify-content: center; object-fit: cover;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .4), 0 2px 5px rgba(120, 100, 70, .18); }
+.shop-cover-ph { background: repeating-linear-gradient(#FCFAF5, #FCFAF5 19px, #E8E0D2 20px);
+    font-family: 'Gowun Batang', serif; font-size: 22px; color: rgba(110, 138, 106, .85); }
+
+/* 책 메타 */
+.shop-book-meta { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.shop-book-title { font-size: 14.5px; color: var(--text); font-weight: 600; line-height: 1.4; }
+.shop-book-author { font-size: 12.5px; color: var(--muted); }
+.shop-book-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+
+/* 상태 배지 3색 */
+.shop-badge { font-size: 11.5px; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
+.shop-badge-finished { background: #E0EFE6; color: #2F8F6B; }
+.shop-badge-reading  { background: var(--sage-soft); color: #4F6B4C; }
+.shop-badge-want     { background: #F0E8DB; color: #8A6D3B; }
+
+/* 독서시간 / 구매 / 제휴 */
+.shop-time { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ok); font-weight: 600; }
+.shop-buy-row { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 6px; }
+.shop-buy { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--accent-hover); text-decoration: none; }
+.shop-buy:hover { text-decoration: underline; }
+/* 구매 드롭다운 — 알라딘+쿠팡 둘 다일 때(구매처 추가 대비). summary=칩, items=팝업. */
+.shop-buy-menu { display: inline-block; position: relative; }
+.shop-buy-menu > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; width: auto; font-size: 12.5px; color: var(--accent-hover); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; }
+.shop-buy-menu > summary::-webkit-details-marker { display: none; }
+.shop-buy-menu > summary:hover { background: var(--sage-soft); }
+.shop-buy-caret { transition: transform .15s ease; }
+.shop-buy-menu[open] > summary .shop-buy-caret { transform: rotate(90deg); }
+.shop-buy-menu-items { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; min-width: 112px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 4px; display: flex; flex-direction: column; gap: 2px; }
+.shop-buy-menu-items a { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 7px; font-size: 12.5px; color: var(--text); text-decoration: none; }
+.shop-buy-menu-items a:hover { background: var(--bg); color: var(--accent-hover); }
+.shop-affiliate { font-size: 11.5px; color: var(--muted); margin: 0; line-height: 1.5; }
+
+/* 빈/콜드 상태 한 줄 */
+.shop-empty { font-size: 13.5px; color: var(--muted); padding: 18px 0; text-align: center; margin: 0; }
+
+/* 404 — 미존재·차단·운영자 통합 카드 */
+.shop-notfound { align-items: center; text-align: center; gap: 14px; padding: 44px 24px; }
+.shop-notfound .shop-ico { color: var(--accent); opacity: .5; }
+.shop-notfound-msg { margin: 0; font-family: 'Gowun Batang', serif; font-size: 19px; color: var(--text); }
+.shop-notfound-link { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--accent-hover); text-decoration: none; font-weight: 600; }
+.shop-notfound-link:hover { text-decoration: underline; }
+
+/* 와이드에서 탭 숨김 / 모바일에서 사이드바 평탄화는 isWide 분기로 처리(이 CSS는 안전망) */
+@media (max-width: 859px) { .shop-wide { display: block; } .shop-side { flex: none; } }
+
 /* 팔로워/팔로잉 목록 페이지 탭 */
 .follow-tabs { display: flex; gap: 8px; margin: 0 0 14px; }
 .follow-tabs a {
