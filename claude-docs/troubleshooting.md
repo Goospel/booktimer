@@ -101,6 +101,7 @@
 - [T-082. 라디오 CSS탭 → JS(v-if) 탭 전환에서 clear·display·active 경로 누락 + 빌드 stale (책방 탭 3종 깨짐)](#t-082-라디오-css탭--jsv-if-탭-전환에서-cleardisplayactive-경로-누락--빌드-stale-책방-탭-3종-깨짐)
 - [T-083. gh pr checks --watch가 CI 등록 전 실행되면 "no checks reported"로 즉시 exit 1](#t-083-gh-pr-checks---watch가-ci-등록-전-실행되면-no-checks-reported로-즉시-exit-1)
 - [T-103. 스크립트로 파일 재생성 시 ReadAllText + UTF8Encoding(false)가 원본 BOM을 떨어뜨린다](#t-103-스크립트로-파일-재생성-시-readalltext--utf8encodingfalse가-원본-bom을-떨어뜨린다)
+- [T-104. squash 머지가 브랜치 커밋 trailer를 메시지 중간으로 밀어 git %(trailers) 구조 조회를 깨뜨린다](#t-104-squash-머지가-브랜치-커밋-trailer를-메시지-중간으로-밀어-git-trailers-구조-조회를-깨뜨린다)
 
 ---
 
@@ -1731,6 +1732,26 @@ bash .claude/scripts/pr-merge.sh <PR번호>
 
 ---
 
+## T-104. squash 머지가 브랜치 커밋 trailer를 메시지 중간으로 밀어 git %(trailers) 구조 조회를 깨뜨린다
+
+**증상**: 세션 메타(`Session-Model`/`Session-Effort`)를 브랜치 커밋 trailer로 남기고 squash 머지했는데, `main`에서 `git log --format='%(trailers:key=Session-Model,valueonly)'`로 조회하면 **전부 빈 값**. 반면 `git log --grep='Session-Model'`로는 #543·#544·#545가 다 잡힌다 — 텍스트는 보존됐는데 구조 조회만 빈다.
+
+**원인**: git의 trailer 파서(`%(trailers)`·`git interpret-trailers --parse` 공통)는 커밋 메시지의 **맨 끝 문단(블록) 하나만** trailer 후보로 본다. GitHub squash는 브랜치 커밋 메시지들을 이어붙인 뒤 **맨 끝에 자기 `Co-authored-by`를 `---------` 구분선과 함께 새 블록으로 덧붙인다**. 그래서 내 `Session-*` 줄은 메시지 *중간*으로 밀려 본문 텍스트로 취급되고, 마지막 블록(=`Co-authored-by`)만 trailer로 인식된다. 실증(scratch repo): `Session-*`가 마지막 블록인 대조군은 `%(trailers)`가 값을 정확히 반환, 중간이면 빈 값. 게다가 마지막 블록에 평문·구분선이 **한 줄만 섞여도** 25% 임계 휴리스틱이 깨져 그 블록의 진짜 trailer까지 동반 탈락한다.
+
+**해결 / 예방**:
+- 조회는 구조 포맷 대신 **grep으로** 한다(위치 비의존):
+  ```bash
+  git log --grep='Session-Effort'                                     # 존재 여부
+  git log -1 --format=%B <commit> | grep -oP '^Session-Model:\s*\K.*' # 값 추출
+  ```
+  PowerShell이면 `Select-String '^Session-Model:\s*(.*)'`의 캡처 그룹.
+- 근본책(원하면): squash 메시지 조립 시 `Session-*`를 **맨 마지막 trailer 블록**(=`Co-authored-by`와 같은 블록)에 합류시키면 `%(trailers:key=...)`가 정상 동작. 단 GitHub 기본 squash 조립은 제어가 어려워 grep 우회가 현실적.
+- 일반 원칙: 커스텀 trailer는 "메시지 어디 있든 `Key: value`면 잡힌다"가 **아니다** — 마지막 블록 한정이라 squash·rebase가 위치를 흔들면 구조 조회가 깨진다. 위치 비의존이 필요하면 grep / `git notes`.
+
+**관련**: 세션 메타 기록 규칙(#543), 개념은 [learning-notes.md](learning-notes.md) N-128. **1회차(신규)** — 트래커 표 미등재.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1839,3 +1860,4 @@ bash .claude/scripts/pr-merge.sh <PR번호>
 | 2026-06-26 | T-101 (content-hash 정적자산 인증 누수 — `spring.web.resources.chain`이 `@{/pwa-install.js}`를 `/pwa-install-<md5>.js`로 렌더하는데 SecurityConfig permitAll이 정확 경로 `/pwa-install.js`만 둬서 해시 URL이 `anyRequest().authenticated()`로 떨어짐 → 미인증 페이지 로드 시 302 redirect + `RequestCache`에 SavedRequest 저장 → 로그인 성공(`SavedRequestAwareAuthenticationSuccessHandler`)이 그 .js로 리다이렉트 → 대시보드 대신 깨진 랜딩 / `manifest.json`도 동일(`@{}` 참조), `/sw.js`는 JS 문자열(`register('/sw.js')`)이라 해시 안 됨·`/css/**`·`/icons/**`는 와일드카드라 안전 — 루트 단일 파일을 `@{}`로 참조하는 것만 정확매칭에 갇힘 / 해시 자산 max-age 365일이라 **캐시 빈 신규 세션에서만** 재현(실사용자 첫 로그인·Playwright fresh context 100%·캐시되면 안 남) → 기존 `PwaStaticAccessTest`가 `get("/manifest.json")` 정확경로만 단언해 은폐(N-055 변형판) / **표적 E2E 도입 첫 실행이 발견**: 로그인 setup이 `#dashboard-app` 미도달, 디버그로 최종 URL=`/pwa-install-<hash>.js?continue`(SavedRequest) 실측(로그인 자체는 302 성공) / 해결=permitAll `/pwa-install*.js`·`/manifest*.json` 와일드카드(해시 변형 포함, ant `*`는 세그먼트 내) / 회귀가드=`PwaStaticAccessTest`에 가짜 해시 `get("/pwa-install-deadbeef.js")`·`/manifest-deadbeef.json` 미인증 `not(302)` 단언(파일부재 404 무방, content-hash 활성 무관하게 인가만 검증) RED(SecurityConfig 원복 시 1건 FAILED)→GREEN / E2E도 RED(버그)→수정→GREEN 4 passed / 개념 N-126·N-108(resource chain 해시)·N-055, 인가매처 누락 N-070, PR feat/playwright-e2e) |
 | 2026-06-26 | T-103 (rebuild-troubleshooting-toc.ps1가 ReadAllText+UTF8Encoding($false)로 원본 BOM 떨굼 → 첫 줄 phantom diff·매번 changed / 바이트로 BOM 감지+보존으로 수정 / 도구 재생성 시 인코딩 메타(BOM·EOL) 미보존 군 — T-093(CRLF)·T-057(BOM 추가)와 2회차, 트래커 등재) |
 | 2026-06-26 | T-102 (auto-merge 등록 후 **직접 짠** 백그라운드 머지 워처가 `MERGED`/`CLOSED`만 보고 `DIRTY`를 안 봐서, 멀티세션 중 분기 직후 타 PR 머지로 생긴 충돌을 못 알리고 auto-merge가 침묵 정지 — 탐색→책방 PR #536을 `origin/main`에서 따 auto-merge 등록한 직후 다른 세션 #535(E2E)가 머지되며 `plan.md`·`changelog.md`가 겹쳐 PR이 DIRTY/CONFLICTING로 전환, 워처는 MERGED만 기다려 헛폴링·사용자가 먼저 충돌 발견 / 증상=PR이 OPEN인데 한참 안 머지됨, 워처는 계속 running / 감별=`gh pr view <PR> --json state,mergeStateStatus,mergeable` — state=OPEN+mergeStateStatus=`DIRTY`+mergeable=`CONFLICTING`이면 충돌(auto-merge 못 돎), `BLOCKED`면 단순 CI 대기(이 둘 구분 필수 — T-083) / 원인=auto-merge는 DIRTY면 머지 못 함 → 분기 후 타 PR이 같은 파일을 머지하면 충돌이 **사후** 발생하는데, 머지 감시 폴링이 MERGED/CLOSED만 분기하면 DIRTY를 영영 안 잡아 hang처럼 보임(T-083 DIRTY 진단·T-096 폴링 DIRTY 감지의 재발) / 해결=`git rebase origin/main`(changelog는 `merge=union`이라 양쪽 append 자동 병합 → 로컬 충돌 0, GitHub만 union 미적용으로 DIRTY 표시였음, T-098) → 검증(내 커밋만·내 파일만·양쪽 docs 둘 다 보존) → `git push --force-with-lease` → PR MERGEABLE 복귀(auto-merge 등록은 force-push에도 유지돼 CI 통과 시 재개) / **정답=손수 워처를 짜지 말 것 — `.claude/scripts/pr-merge.sh <PR>`가 이미 DIRTY 즉시 차단 + CI 폴링 + 하드 타임아웃(동기 머지)을 제공한다. 굳이 워처가 필요하면 MERGED/CLOSED뿐 아니라 `mergeStateStatus==DIRTY` 분기를 반드시 넣어 재충돌을 일찍 알린다** / 예방=auto-merge "등록=끝"이 아니다 — 멀티세션 활발기엔 분기 후 충돌이 사후 발생하니 머지까지 DIRTY를 감시하거나 pr-merge.sh로 동기 머지 / 머지 자동화 hang·DIRTY-blind 군 5회차 — 이번 뿌리는 "하드픽스(pr-merge.sh)가 있는데 안 쓰고 워처를 손수 짬" / T-083·T-096·T-098·T-094) |
+| 2026-06-26 | T-104 (squash 머지가 브랜치 커밋 trailer(`Session-Model`/`Effort`)를 메시지 중간으로 밀어 `git %(trailers)` 구조 조회가 빈 값 — git trailer 파서는 **맨 끝 문단 1개**만 인식, GitHub squash가 `Co-authored-by`를 `---------` 구분선과 함께 맨 끝 블록으로 붙여 `Session-*`가 중간으로 밀림 / 마지막 블록에 평문·구분선 한 줄만 섞여도 25% 임계로 그 블록 trailer 동반 탈락 / 값은 보존(`git log --grep`으로 잡힘)·조회만 깨짐 → 우회=grep(`%B|grep -oP`), 근본=마지막 trailer 블록에 합류 / 1회차 신규 / N-128·#543) |
