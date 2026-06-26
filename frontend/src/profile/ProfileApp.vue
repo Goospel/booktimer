@@ -111,6 +111,7 @@ async function openTag(label: string) {
         const data = await res.json();
         tagPanel.value = data.books;
         tagLabel.value = label;
+        activeTab.value = 'bti';   // 모바일: shelf 탭에서도 드릴다운이 보이도록 BTI 탭으로 전환(와이드는 무영향)
     }
 }
 function closeTag() { tagPanel.value = null; }
