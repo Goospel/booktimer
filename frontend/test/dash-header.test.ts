@@ -19,16 +19,18 @@ describe('DashHeader 사용자 메뉴', () => {
         expect(w.find('.dash-header-avatar').attributes('aria-expanded')).toBe('false');
     });
 
-    test('아바타 클릭 → 메뉴 열림 + 설정·문의·로그아웃 일원화', async () => {
+    test('아바타 클릭 → 메뉴 열림 + 설정·차단 목록·문의·로그아웃 일원화', async () => {
         const w = make();
         await w.find('.dash-header-avatar').trigger('click');
 
         expect(w.find('[role="menu"]').exists()).toBe(true);
         expect(w.find('.dash-header-avatar').attributes('aria-expanded')).toBe('true');
 
-        // 설정·문의는 링크
+        // 설정·차단 목록·문의는 링크. 차단 목록은 책방 하단 버튼에서 이 사용자 메뉴로 이동
+        // (자주 안 쓰는 계정 관리라 책방에 상시 노출 대신 여기로 일원화).
         const hrefs = w.findAll('a[role="menuitem"]').map(a => a.attributes('href'));
         expect(hrefs).toContain('/settings');
+        expect(hrefs).toContain('/me/blocks');
         expect(hrefs).toContain('/feedback');
 
         // 로그아웃은 POST /logout form + CSRF
