@@ -2622,3 +2622,252 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .dash-garden-stage-wrap::before { left: 0; background: linear-gradient(to left, rgba(234, 240, 228, 0), #EAF0E4); }
 .dash-garden-summary { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; text-align: center; }
 .dash-garden-empty { font-size: 13px; color: var(--muted); }
+
+/* ============================================================
+   인증 화면(로그인·회원가입) — claude.ai/design 시안 재이식.
+   전역 공유 클래스(.card·.field·.btn-primary·.alert·.oauth-계열·.entry-hero 등)는
+   landing·onboarding·password-*·verify-email-*·unsubscribe- 등 형제 페이지가 공유하므로
+   절대 건드리지 않는다. 이 블록은 body.auth-page 스코프 전용 클래스(.auth-*)로만 구성 →
+   타 페이지 회귀 0. 픽셀값 출처: 시안 프레임 1~6(로그인 기본/회원가입 기본/로그인 에러/
+   가입직후 안내/로그아웃 안내/회원가입 필드에러). 색은 :root 토큰 재사용, 토큰 없는
+   에러톤(테라코타 #B0524A 계열)만 raw hex. */
+.auth-page .auth-shell {
+    width: 100%;
+    max-width: 400px;   /* 시안 콘텐츠 컬럼(480 - 좌우 40 패딩) — 페이지 스코프 폭(전역 .container 무손상) */
+}
+
+/* 브랜드 워드마크 — 책 라인아이콘 + 'BookTimer'(Gowun Batang 22px) */
+.auth-page .auth-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 26px;
+}
+.auth-page .auth-brand-ico { flex: 0 0 auto; color: var(--accent); }
+.auth-page .auth-brand-name {
+    font-family: 'Gowun Batang', serif;
+    font-weight: 400;
+    font-size: 22px;
+    line-height: 1;
+    color: var(--text);
+    letter-spacing: .01em;
+}
+
+/* 로그인 화면 소제목('로그인') */
+.auth-page .auth-greeting {
+    font-size: 15px;
+    color: var(--muted);
+    margin: 0 0 18px;
+}
+
+/* 회원가입 히어로 — 'Gowun Batang' 25px 제목 + 서브카피(나머지는 Gowun Dodum) */
+.auth-page .auth-hero { margin: 0 0 22px; }
+.auth-page .auth-hero-title {
+    font-family: 'Gowun Batang', serif;
+    font-weight: 400;
+    font-size: 25px;
+    line-height: 1.45;
+    color: var(--text);
+    margin: 0 0 8px;
+    word-break: keep-all;
+}
+.auth-page .auth-hero-sub {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--muted);
+    margin: 0;
+    word-break: keep-all;
+}
+
+/* 카드 */
+.auth-page .auth-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    box-shadow: 0 1px 2px rgba(44, 42, 36, .05);
+    padding: 26px 24px;
+}
+
+/* 필드 */
+.auth-page .auth-field { margin-bottom: 18px; }
+.auth-page .auth-field:last-of-type { margin-bottom: 20px; }
+.auth-page .auth-label {
+    display: block;
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 6px;
+}
+.auth-page .auth-input,
+.auth-page .auth-select {
+    width: 100%;
+    padding: 13px 15px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card-bg);
+    font-family: 'Gowun Dodum', sans-serif;
+    font-size: 15.5px;
+    color: var(--text);
+    outline: none;
+}
+.auth-page .auth-input:focus,
+.auth-page .auth-select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+/* 필드 에러 — 입력 테두리·링을 테라코타로(서버 검증 실패 시 th:classappend로 토글) */
+.auth-page .auth-input.is-error,
+.auth-page .auth-select.is-error {
+    border-color: #B0524A;
+    box-shadow: 0 0 0 3px rgba(176, 82, 74, .18);
+}
+
+/* 셀렉트 — 기본 화살표 제거 + 커스텀 chevron */
+.auth-page .auth-select-wrap { position: relative; }
+.auth-page .auth-select {
+    padding-right: 40px;
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+}
+.auth-page .auth-select-chevron {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    color: var(--muted);
+}
+
+/* 입력 보조 힌트 — 아이디 힌트만 강조색(--accent-hover), 나머지는 --muted */
+.auth-page .auth-hint {
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--muted);
+    word-break: keep-all;
+}
+.auth-page .auth-hint-accent { color: var(--accent-hover); }
+.auth-page .auth-check-hint { margin-left: 26px; margin-top: 7px; }  /* 체크박스(17) + gap(9) 아래로 정렬 */
+
+/* 필드 에러 메시지(th:errors가 채움) */
+.auth-page .auth-field-error {
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #B0524A;
+    word-break: keep-all;
+}
+
+/* 마케팅 동의 체크 행 */
+.auth-page .auth-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    cursor: pointer;
+}
+.auth-page .auth-check input[type="checkbox"] {
+    width: 17px;
+    height: 17px;
+    margin: 2px 0 0;
+    accent-color: var(--accent);
+    flex-shrink: 0;
+}
+.auth-page .auth-check-label {
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--text);
+}
+
+/* 주 버튼(로그인/가입) */
+.auth-page .auth-btn-primary {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 12px;
+    background: var(--accent);
+    color: #fff;
+    font-family: 'Gowun Dodum', sans-serif;
+    font-weight: 400;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background .15s ease;
+}
+.auth-page .auth-btn-primary:hover { background: var(--accent-hover); }
+
+/* 구분선 '또는' */
+.auth-page .auth-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 18px 0;
+}
+.auth-page .auth-divider::before,
+.auth-page .auth-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+}
+.auth-page .auth-divider span {
+    font-size: 12.5px;
+    color: var(--muted);
+}
+
+/* Google 버튼 — 좌측 멀티컬러 G 로고 + '계속하기' */
+.auth-page .auth-btn-google {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    width: 100%;
+    padding: 13px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card-bg);
+    color: var(--text);
+    font-family: 'Gowun Dodum', sans-serif;
+    font-size: 15px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background .15s ease;
+}
+.auth-page .auth-btn-google:hover { background: var(--bg); }
+.auth-page .auth-btn-google svg { flex: 0 0 auto; }
+
+/* 알림 배너 — 에러/성공/로그아웃 (아이콘 + 텍스트) */
+.auth-page .auth-alert {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 11px 14px;
+    border-radius: 10px;
+    margin-bottom: 16px;
+    font-size: 13.5px;
+    line-height: 1.6;
+    word-break: keep-all;
+}
+.auth-page .auth-alert svg { flex: 0 0 auto; }
+.auth-page .auth-alert-error  { background: #F6E7E4; color: #B0524A; }
+.auth-page .auth-alert-ok     { background: var(--sage-soft); color: var(--ok); }
+.auth-page .auth-alert-logout { background: var(--sage-soft); color: var(--text); }
+.auth-page .auth-alert-logout svg { color: var(--accent); }  /* 로그아웃만 아이콘 색≠텍스트 색(세이지 강조) */
+
+/* 하단 링크 — 중앙정렬 세로 스택 */
+.auth-page .auth-links {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 11px;
+    margin-top: 20px;
+    text-align: center;
+}
+.auth-page .auth-links a {
+    font-size: 13.5px;
+    color: var(--accent);
+    text-decoration: none;
+}
+.auth-page .auth-links a:hover { text-decoration: underline; }
+.auth-page .auth-links a.auth-link-muted { color: var(--muted); }
+.auth-page .auth-link-accent { color: var(--accent); }
