@@ -2483,6 +2483,7 @@ body.history-page.history-wide .container { max-width: 940px; }
 /* 독서 잔디 (세이지 — /history .grass-cell과 격리) */
 .dash-grass-card { gap: 18px; }
 .dash-grass-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.dash-grass-head-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .dash-streak-chip {
     display: inline-flex; align-items: center; gap: 7px;
     background: #E7EEE2; color: var(--accent-hover);
@@ -2600,8 +2601,8 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 /* 정원/마을 (작가·건물 — 식물 폐기) */
 .dash-garden { gap: 16px; }
 .dash-garden-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.dash-garden-link { font-size: 13.5px; color: var(--accent-hover); text-decoration: none; }
-.dash-garden-link:hover { text-decoration: underline; }
+.dash-garden-link, .dash-grass-link { font-size: 13.5px; color: var(--accent-hover); text-decoration: none; }
+.dash-garden-link:hover, .dash-grass-link:hover { text-decoration: underline; }
 /* 무대 = 입주 작가 가로 스크롤 갤러리(통합). wrap이 배경·바닥·페이드, stage가 스크롤 컨테이너. */
 .dash-garden-stage-wrap {
     position: relative; border-radius: 14px; border: 1px solid var(--border);
