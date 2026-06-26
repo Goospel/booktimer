@@ -296,11 +296,11 @@ onUnmounted(() => {
                 </div>
             </div>
 
-            <!-- ── 하단 링크 (전 페이지 공유 .link-row 타일) ── -->
+            <!-- ── 하단 링크 (전 페이지 공유 .link-row 타일) ──
+                 차단 목록은 자주 안 쓰는 계정 관리라 책방 상시 노출 대신 대시보드 아바타 메뉴(DashHeader)로 이동. -->
             <NavLinks :links="[
                 { href: '/', icon: 'home', label: '대시보드' },
                 { href: '/books', icon: 'books', label: '내 책장' },
-                ...(profile.self ? [{ href: '/me/blocks', icon: 'block', label: '차단 목록' }] : []),
             ]" />
 
         </template>

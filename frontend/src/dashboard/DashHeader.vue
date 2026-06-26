@@ -50,6 +50,14 @@ onUnmounted(() => {
                     </svg>
                     <span>설정</span>
                 </a>
+                <!-- 차단 목록: 자주 안 쓰는 계정 관리라 책방 하단 상시 버튼에서 이 사용자 메뉴로 이동.
+                     설정 다음(계정 관리끼리)·로그아웃 앞. block 아이콘(금지원, navIcons와 동일 모양). -->
+                <a class="dash-header-menu-item" role="menuitem" href="/me/blocks">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="8.5" /><path d="M6 6l12 12" />
+                    </svg>
+                    <span>차단 목록</span>
+                </a>
                 <a class="dash-header-menu-item" role="menuitem" href="/feedback">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
