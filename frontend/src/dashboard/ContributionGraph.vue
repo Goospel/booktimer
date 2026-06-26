@@ -24,13 +24,16 @@ const totalHM = computed(() =>
 <template>
     <section class="dash-card dash-grass-card">
         <div class="dash-grass-head">
-            <span class="dash-pill">최근 독서 기록</span>
-            <span v-if="graph.currentStreak > 0" class="dash-streak-chip">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <path d="M5 19c0-8 6-13 14-13 0 8-5 14-13 14-1 0-1-.6-1-1z" />
-                </svg>
-                <strong>{{ graph.currentStreak }}</strong>일 연속 독서
-            </span>
+            <div class="dash-grass-head-left">
+                <span class="dash-pill">독서 기록</span>
+                <span v-if="graph.currentStreak > 0" class="dash-streak-chip">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M5 19c0-8 6-13 14-13 0 8-5 14-13 14-1 0-1-.6-1-1z" />
+                    </svg>
+                    <strong>{{ graph.currentStreak }}</strong>일 연속 독서
+                </span>
+            </div>
+            <a class="dash-grass-link" href="/history">전체 기록 →</a>
         </div>
 
         <div class="dash-grass-scroll">
