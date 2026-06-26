@@ -69,3 +69,9 @@ export interface DashboardResponse extends TimerState {
     quotes: QuoteDto[]
     emailVerified: boolean
 }
+
+/** stop 응답 — 타이머 + 방금 확정된 세션이 반영된 잔디(측정 종료 즉시 잔디 갱신용). */
+export interface StopResponse {
+    timer: TimerState
+    graph: GraphDto
+}

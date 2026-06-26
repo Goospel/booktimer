@@ -194,6 +194,28 @@ class DashboardApiControllerTest {
                 .andExpect(status().isConflict());
     }
 
+    // ── 8b. stop 성공 → timer + graph 동봉 (측정 종료 즉시 잔디 갱신용) ────────
+    // 종료 응답이 타이머만 주면 클라이언트가 잔디(contribution graph)를 새로고침 없이 못 갱신한다.
+    // 측정 종료는 잔디가 변하는 바로 그 순간이므로, 응답에 방금 확정된 세션이 반영된 graph를 동봉한다.
+
+    @Test
+    @DisplayName("POST /api/sessions/stop: 성공 응답에 timer + graph(잔디) 동봉 — 새로고침 없이 잔디 갱신")
+    void stopSession_responseIncludesGraph() throws Exception {
+        User u = register("stopgraph@a.com", "stopgraph");
+        Book book = addBook(u, "책", BookStatus.READING);
+        sessionService.start(u, clock.instant(), book);
+
+        mockMvc.perform(post("/api/sessions/stop")
+                        .with(user("stopgraph@a.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.timer.hasActiveSession").value(false))
+                .andExpect(jsonPath("$.timer.remainingSeconds").isNumber())
+                .andExpect(jsonPath("$.timer.todayGoalSeconds").isNumber())
+                .andExpect(jsonPath("$.graph").exists())
+                .andExpect(jsonPath("$.graph.weeks").isArray())
+                .andExpect(jsonPath("$.graph.currentStreak").isNumber());
+    }
+
     // ── 9. DTO 화이트리스트 ───────────────────────────────────────────────────
 
     @Test
