@@ -1486,6 +1486,20 @@ a.book-title:hover { text-decoration: underline; }
    ───────────────────────────────────────────────────────────────────────── */
 body.profile-page .container { max-width: 1160px; }  /* 와이드 2열 여유 — 데스크톱 빈 옆 공간 활용. 페이지 스코프 = 타 페이지 회귀 0 */
 
+/* 내 책방(self) 상단 사용자 검색 진입점 — 검색 input처럼 보이되 실제론 /search 링크(트위터식).
+   책방엔 슬림 진입점만, 무거운 검색 패널/추천은 전용 페이지로 위임(책방 비대화 방지).
+   톤: .book-search-form input(테두리·라운드) + .dash-nav-tile(연베이지 채움·hover 토큰) 혼합. */
+.shop-search-entry {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 16px;
+    border: 1px solid var(--border); border-radius: 999px;
+    background: #FAF7EF; color: var(--muted);
+    text-decoration: none; font-size: .95rem;
+    transition: background .2s ease, border-color .2s ease;
+}
+.shop-search-entry:hover { background: var(--nav-hover-bg); border-color: var(--nav-hover-border); }
+.shop-search-entry svg { flex: 0 0 auto; color: var(--accent-hover); }
+
 .shop-wide { display: flex; gap: 28px; align-items: flex-start; }
 .shop-side { flex: 0 0 360px; display: flex; flex-direction: column; gap: 18px; }
 .shop-main { flex: 1; min-width: 0; }
