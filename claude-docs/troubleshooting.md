@@ -19,6 +19,7 @@
 | changelog 멀티세션 동시 append → 같은 위치 머지 충돌 | T-098 | 5+ (2026-06-26 하루, #516·#518·#520·#523) | ✅ 하드픽스(`.gitattributes` `claude-docs/changelog.md merge=union` — 양쪽 새 행 자동 병합으로 rebase 충돌 자체 제거) |
 | 전역 `button` 속성 누수(컴포넌트가 명시 안 한 속성을 상속) | T-056 · T-081 · T-099 | width 3+ · radius 1 | ✅ 코드 패턴(flex 안 칩·탭·세그먼트엔 `width:auto`·`border-radius:0`로 상쇄, 인라인 주석) |
 | CSS 주석 속 `*/`(특히 wildcard-slash `.foo-*/.bar-*`)가 주석 조기 종료 → 다음 규칙 침묵 드랍 | T-087 | 3 (#522 .dash-card → #526 .book-*/.record- → 이 PR .oauth-*/.entry-hero) | ✅ **하드픽스 훅 `require-css-comment-safe.ps1`**(3회차에 승격) — 주석 닫는 `*/`가 **양옆 모두 셀렉터문자에 붙은** 경우만 차단(=기존 보류 사유 FP 해소: ` */color`는 앞이 공백·`/*x*/`+개행은 뒤가 공백이라 통과, 잔여 FP는 `/*c*/.sel`류 희귀패턴+우회 토큰 `SKIP_CSS_COMMENT_CHECK`). 보조: 예방 규칙(슬래시→`·`/`과`) + §11 실 브라우저/static-preview 게이트(N-118) |
+| 도구 재생성 시 BOM/EOL 미보존 → phantom diff(첫 줄·전체 줄끝) | T-093 · T-103 | 2 | ✅ 코드 패턴(원본 BOM은 바이트로·EOL은 첫 매치로 감지해 쓸 때 보존; `rebuild-troubleshooting-toc.ps1`) |
 
 ## 📑 목차
 
@@ -99,6 +100,7 @@
 - [T-081. SPA 전환에서 form 래퍼 제거 → 전역 button width 100%가 flex-row 액션을 풀폭 세로로 깨뜨림](#t-081-spa-전환에서-form-래퍼-제거--전역-button-width-100가-flex-row-액션을-풀폭-세로로-깨뜨림)
 - [T-082. 라디오 CSS탭 → JS(v-if) 탭 전환에서 clear·display·active 경로 누락 + 빌드 stale (책방 탭 3종 깨짐)](#t-082-라디오-css탭--jsv-if-탭-전환에서-cleardisplayactive-경로-누락--빌드-stale-책방-탭-3종-깨짐)
 - [T-083. gh pr checks --watch가 CI 등록 전 실행되면 "no checks reported"로 즉시 exit 1](#t-083-gh-pr-checks---watch가-ci-등록-전-실행되면-no-checks-reported로-즉시-exit-1)
+- [T-103. 스크립트로 파일 재생성 시 ReadAllText + UTF8Encoding(false)가 원본 BOM을 떨어뜨린다](#t-103-스크립트로-파일-재생성-시-readalltext--utf8encodingfalse가-원본-bom을-떨어뜨린다)
 
 ---
 
@@ -1707,6 +1709,28 @@ bash .claude/scripts/pr-merge.sh <PR번호>
 
 ---
 
+## T-103. 스크립트로 파일 재생성 시 ReadAllText + UTF8Encoding(false)가 원본 BOM을 떨어뜨린다
+
+**증상**: troubleshooting.md 목차를 자동 재생성하는 스크립트(`rebuild-troubleshooting-toc.ps1`)를 처음 돌렸더니, 의도한 목차 9줄 외에 **파일 첫 줄 전체가 diff에 떴다**(`-﻿# 트러블슈팅` → `+# 트러블슈팅`).
+
+**원인**: `[System.IO.File]::ReadAllText`는 BOM을 감지해 **떼고** 문자열을 돌려준다. 그 문자열을 `New-Object System.Text.UTF8Encoding($false)`(BOM 없음)로 다시 쓰면 원본에 있던 BOM이 사라진다. troubleshooting.md는 UTF-8 BOM 포함이라 매 재생성마다 BOM이 빠져 **첫 줄 phantom diff + 매번 'changed'** 로, 정작 바뀐 목차가 노이즈에 묻힌다.
+
+**해결 / 예방**:
+- 재생성 전 **바이트로 BOM 유무를 감지**하고, 쓸 때 그 유무를 그대로 보존한다:
+  ```powershell
+  $head = [System.IO.File]::ReadAllBytes($Path)
+  $hasBom = ($head.Length -ge 3 -and $head[0] -eq 0xEF -and $head[1] -eq 0xBB -and $head[2] -eq 0xBF)
+  # ...
+  $enc = New-Object System.Text.UTF8Encoding($hasBom)
+  [System.IO.File]::WriteAllText($Path, $newText, $enc)
+  ```
+- EOL(`\r\n` vs `\n`)·끝 개행도 같은 원리로 원본 감지 후 보존(phantom CRLF 회피).
+- 일반 원칙: **도구로 파일을 재생성할 땐 내용뿐 아니라 인코딩 메타(BOM·EOL)도 원본과 맞춘다** — 안 그러면 "한 줄 바꾸려다 파일 전체가 diff"가 된다.
+
+**관련**: T-093(번들 빌드 phantom CRLF), T-057(`Set-Content -Encoding utf8`가 원치 않는 BOM 추가) — 같은 "재생성 시 인코딩 메타 미보존" 군. **2회차(T-093 재발)**.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -1813,4 +1837,5 @@ bash .claude/scripts/pr-merge.sh <PR번호>
 | 2026-06-25 | T-087 (빈 워크트리 폴더가 `Device or resource busy`로 안 지워짐 — 죽은 Claude 세션의 도구 셸 좀비가 cwd로 점유 / 증상=`git worktree` 정리 후 `.claude/worktrees/<name>` 또는 형제 `BookTimer-*` 빈 폴더가 남아 `rm -rf`가 "Device or resource busy", 폴더 안엔 작업물 0(`.`·`..`만) / 원인=Claude Code의 Bash/PowerShell 도구가 그 워크트리에서 띄운 셸(`bash.exe`·`powershell.exe`)이 세션 종료 후에도 cwd를 그 폴더로 유지한 채 좀비로 남아 디렉토리를 점유 — **node/java가 아니라 셸 프로세스**라 `Get-Process node,java`로는 안 잡힘(실제로 한 폴더에 bash 10·powershell 1개가 남아 있었음) / 감별=`handle.exe`(Sysinternals) 있으면 `handle <path>`; 없으면 `NtQueryInformationProcess`(PEB→ProcessParameters→CurrentDirectory) C# P/Invoke로 전체 프로세스 cwd를 읽어 그 폴더를 cwd로 가진 PID만 식별 / 해결=cwd 검증된 그 PID만 `Stop-Process -Force` 후 폴더 삭제 — 살아있는 세션 셸(cwd=메인/타 워크트리)·gradle 데몬(cwd=`~/.gradle`)·타 프로젝트는 cwd가 달라 자동 제외 / 안전=PID 하드코딩 말고 삭제 직전 cwd 재검증(PID 재사용 방지), 대량 종료는 자동 분류기가 막을 수 있어 사용자 승인 필요 / 예방=세션 종료 시 도구 셸 정리, 워크트리 제거 전 그 폴더 기반 셸 종료. T-086(docker)과 같은 "세션 종료 후 자원 미정리" 계열) |
 | 2026-06-26 | T-100 (워크트리 세션에서 프론트 vitest/vite 빌드가 `Could not resolve 'vite'`/`Cannot find package 'vite'`로 즉시 실패 — 워크트리에 `frontend/node_modules`가 없어서 / 증상=`npx vitest run`·`npm run build`가 `vite.config.ts` 로드 단계에서 vite·@vitejs/plugin-vue 미해결로 startup error, 소스·테스트는 멀쩡 / 원인=`git worktree add`는 **git 추적 파일만** 복제하고 `node_modules`(gitignore)는 안 만든다 → 워크트리 frontend는 의존성 0 / 함정=메인 `frontend/node_modules`를 junction(`New-Item -ItemType Junction`)으로 재사용하려 해도, 메인 node_modules가 **빈 디렉토리거나 빌드도구(vite·vitest) 미설치**면 무용 — 이번 사례는 메인 node_modules가 빈 껍데기라 `test -d`엔 EXISTS로 잡혀 "있다"고 오인(디렉토리 존재 ≠ 패키지 설치), junction을 걸어도 vite 미해결 동일 / 감별=`ls node_modules | wc -l`(0이면 빈 껍데기)·`test -d node_modules/vite`로 **핵심 패키지** 존재를 확인(디렉토리 유무가 아니라) / 해결=워크트리 frontend에서 `npm ci`(package-lock 기준 완전 설치); 메인도 비었으면 메인에서도 `npm ci`로 채움. junction은 메인이 **완전 설치돼 있을 때만** 빠른 재사용 가치, 제거는 `cmd //c rmdir <link>`(reparse point만 제거, `/S` 금지 — 타겟 보존; PowerShell `Remove-Item -Recurse`는 타겟까지 지울 위험) / 예방=워크트리에서 프론트 테스트/빌드 전 `test -d frontend/node_modules` + 핵심 패키지 확인, 없거나 빈 껍데기면 `npm ci` 먼저 — node_modules는 "디렉토리 존재"가 아니라 "vite 등 핵심 패키지 존재"로 판정 / N-032(워크트리 격리)·T-063·T-093(번들 빌드)) |
 | 2026-06-26 | T-101 (content-hash 정적자산 인증 누수 — `spring.web.resources.chain`이 `@{/pwa-install.js}`를 `/pwa-install-<md5>.js`로 렌더하는데 SecurityConfig permitAll이 정확 경로 `/pwa-install.js`만 둬서 해시 URL이 `anyRequest().authenticated()`로 떨어짐 → 미인증 페이지 로드 시 302 redirect + `RequestCache`에 SavedRequest 저장 → 로그인 성공(`SavedRequestAwareAuthenticationSuccessHandler`)이 그 .js로 리다이렉트 → 대시보드 대신 깨진 랜딩 / `manifest.json`도 동일(`@{}` 참조), `/sw.js`는 JS 문자열(`register('/sw.js')`)이라 해시 안 됨·`/css/**`·`/icons/**`는 와일드카드라 안전 — 루트 단일 파일을 `@{}`로 참조하는 것만 정확매칭에 갇힘 / 해시 자산 max-age 365일이라 **캐시 빈 신규 세션에서만** 재현(실사용자 첫 로그인·Playwright fresh context 100%·캐시되면 안 남) → 기존 `PwaStaticAccessTest`가 `get("/manifest.json")` 정확경로만 단언해 은폐(N-055 변형판) / **표적 E2E 도입 첫 실행이 발견**: 로그인 setup이 `#dashboard-app` 미도달, 디버그로 최종 URL=`/pwa-install-<hash>.js?continue`(SavedRequest) 실측(로그인 자체는 302 성공) / 해결=permitAll `/pwa-install*.js`·`/manifest*.json` 와일드카드(해시 변형 포함, ant `*`는 세그먼트 내) / 회귀가드=`PwaStaticAccessTest`에 가짜 해시 `get("/pwa-install-deadbeef.js")`·`/manifest-deadbeef.json` 미인증 `not(302)` 단언(파일부재 404 무방, content-hash 활성 무관하게 인가만 검증) RED(SecurityConfig 원복 시 1건 FAILED)→GREEN / E2E도 RED(버그)→수정→GREEN 4 passed / 개념 N-126·N-108(resource chain 해시)·N-055, 인가매처 누락 N-070, PR feat/playwright-e2e) |
+| 2026-06-26 | T-103 (rebuild-troubleshooting-toc.ps1가 ReadAllText+UTF8Encoding($false)로 원본 BOM 떨굼 → 첫 줄 phantom diff·매번 changed / 바이트로 BOM 감지+보존으로 수정 / 도구 재생성 시 인코딩 메타(BOM·EOL) 미보존 군 — T-093(CRLF)·T-057(BOM 추가)와 2회차, 트래커 등재) |
 | 2026-06-26 | T-102 (auto-merge 등록 후 **직접 짠** 백그라운드 머지 워처가 `MERGED`/`CLOSED`만 보고 `DIRTY`를 안 봐서, 멀티세션 중 분기 직후 타 PR 머지로 생긴 충돌을 못 알리고 auto-merge가 침묵 정지 — 탐색→책방 PR #536을 `origin/main`에서 따 auto-merge 등록한 직후 다른 세션 #535(E2E)가 머지되며 `plan.md`·`changelog.md`가 겹쳐 PR이 DIRTY/CONFLICTING로 전환, 워처는 MERGED만 기다려 헛폴링·사용자가 먼저 충돌 발견 / 증상=PR이 OPEN인데 한참 안 머지됨, 워처는 계속 running / 감별=`gh pr view <PR> --json state,mergeStateStatus,mergeable` — state=OPEN+mergeStateStatus=`DIRTY`+mergeable=`CONFLICTING`이면 충돌(auto-merge 못 돎), `BLOCKED`면 단순 CI 대기(이 둘 구분 필수 — T-083) / 원인=auto-merge는 DIRTY면 머지 못 함 → 분기 후 타 PR이 같은 파일을 머지하면 충돌이 **사후** 발생하는데, 머지 감시 폴링이 MERGED/CLOSED만 분기하면 DIRTY를 영영 안 잡아 hang처럼 보임(T-083 DIRTY 진단·T-096 폴링 DIRTY 감지의 재발) / 해결=`git rebase origin/main`(changelog는 `merge=union`이라 양쪽 append 자동 병합 → 로컬 충돌 0, GitHub만 union 미적용으로 DIRTY 표시였음, T-098) → 검증(내 커밋만·내 파일만·양쪽 docs 둘 다 보존) → `git push --force-with-lease` → PR MERGEABLE 복귀(auto-merge 등록은 force-push에도 유지돼 CI 통과 시 재개) / **정답=손수 워처를 짜지 말 것 — `.claude/scripts/pr-merge.sh <PR>`가 이미 DIRTY 즉시 차단 + CI 폴링 + 하드 타임아웃(동기 머지)을 제공한다. 굳이 워처가 필요하면 MERGED/CLOSED뿐 아니라 `mergeStateStatus==DIRTY` 분기를 반드시 넣어 재충돌을 일찍 알린다** / 예방=auto-merge "등록=끝"이 아니다 — 멀티세션 활발기엔 분기 후 충돌이 사후 발생하니 머지까지 DIRTY를 감시하거나 pr-merge.sh로 동기 머지 / 머지 자동화 hang·DIRTY-blind 군 5회차 — 이번 뿌리는 "하드픽스(pr-merge.sh)가 있는데 안 쓰고 워처를 손수 짬" / T-083·T-096·T-098·T-094) |
