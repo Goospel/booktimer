@@ -122,6 +122,7 @@
 - [T-103. 스크립트로 파일 재생성 시 ReadAllText + UTF8Encoding(false)가 원본 BOM을 떨어뜨린다](#t-103-스크립트로-파일-재생성-시-readalltext--utf8encodingfalse가-원본-bom을-떨어뜨린다)
 - [T-104. squash 머지가 브랜치 커밋 trailer를 메시지 중간으로 밀어 git %(trailers) 구조 조회를 깨뜨린다](#t-104-squash-머지가-브랜치-커밋-trailer를-메시지-중간으로-밀어-git-trailers-구조-조회를-깨뜨린다)
 - [T-105. 빈 워크트리 폴더가 `Device or resource busy`로 안 지워짐 — 죽은 세션 좀비 셸이 cwd 점유, cwd 검증 PID만 종료](#t-105-빈-워크트리-폴더가-device-or-resource-busy로-안-지워짐--죽은-세션-좀비-셸이-cwd-점유-cwd-검증-pid만-종료)
+- [T-106. auto-merge `--delete-branch`는 비동기 머지라 원격 브랜치가 안 지워진다 — 머지 확인 후 gh API로 삭제](#t-106-auto-merge---delete-branch는-비동기-머지라-원격-브랜치가-안-지워진다--머지-확인-후-gh-api로-삭제)
 
 ---
 
@@ -2044,6 +2045,25 @@ bash .claude/scripts/docker-cleanup.sh --all      # Up 포함 전부 (먼저 --d
 
 ---
 
+## T-106. auto-merge `--delete-branch`는 비동기 머지라 원격 브랜치가 안 지워진다 — 머지 확인 후 gh API로 삭제
+
+**증상**: `gh pr merge <PR> --auto --squash --delete-branch`로 머지했는데, 머지 완료(`state=MERGED`) 후에도 원격 브랜치가 남아 `git ls-remote --heads origin <branch>`에 잡힌다. 워크트리 세션이 아닌 **주 워크트리에서도** 발생(T-095의 워크트리 점유 충돌과는 다른 원인).
+
+**원인**: `--auto`(auto-merge)는 CI 통과 후 **나중에 서버사이드로** 머지한다(비동기). 반면 `gh pr merge --delete-branch`의 브랜치 삭제는 gh CLI가 **머지 직후 로컬에서** 처리하는데, auto-merge 등록 시점엔 아직 머지 전이라 즉시 못 지우고, 실제 서버 머지가 일어날 땐 gh 프로세스가 이미 끝나 삭제가 누락된다. repo의 "Automatically delete head branches" 설정이 켜져 있으면 GitHub가 서버에서 지우지만, 이 repo는 그 설정에 의존하지 않아 잔존한다.
+
+**해결 / 예방**:
+- 머지 확인(`gh pr view <PR> --json state`=`MERGED`) 후 원격 브랜치를 **gh API로 명시 삭제**(T-094 — Windows `git push --delete` hang도 동시 회피):
+  ```bash
+  gh api -X DELETE repos/{owner}/{repo}/git/refs/heads/<branch>
+  ```
+  로컬은 `git branch -D <branch>`. 잔존 여부는 `git ls-remote --heads origin <branch>`로 확인.
+- 근본책(원하면): repo 설정 **"Automatically delete head branches"**를 켜면 서버가 머지 시 자동 삭제 → `--auto`와 무관하게 정리된다.
+- 일반 원칙: `--auto`(비동기 머지)와 `--delete-branch`(즉시 로컬 처리)는 **시점이 어긋난다** — auto-merge를 쓰면 브랜치 삭제는 "MERGED 확인 후 별도 단계"로 다룬다.
+
+**관련**: T-094(gh api로 원격 ref 삭제 + Windows push hang 회피), T-095(워크트리 `--delete-branch` 로컬 정리 실패 — 그쪽은 워크트리 main 점유 충돌, 본 건은 auto-merge 비동기), auto-merge 우선 경로(CLAUDE.md Git워크플로). **1회차(신규)** — T-095(`--delete-branch` 정리 실패) 계열과 묶일 소지, 재발 시 트래커 등재.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2153,3 +2173,4 @@ bash .claude/scripts/docker-cleanup.sh --all      # Up 포함 전부 (먼저 --d
 | 2026-06-26 | T-103 (rebuild-troubleshooting-toc.ps1가 ReadAllText+UTF8Encoding($false)로 원본 BOM 떨굼 → 첫 줄 phantom diff·매번 changed / 바이트로 BOM 감지+보존으로 수정 / 도구 재생성 시 인코딩 메타(BOM·EOL) 미보존 군 — T-093(CRLF)·T-057(BOM 추가)와 2회차, 트래커 등재) |
 | 2026-06-26 | T-102 (auto-merge 등록 후 **직접 짠** 백그라운드 머지 워처가 `MERGED`/`CLOSED`만 보고 `DIRTY`를 안 봐서, 멀티세션 중 분기 직후 타 PR 머지로 생긴 충돌을 못 알리고 auto-merge가 침묵 정지 — 탐색→책방 PR #536을 `origin/main`에서 따 auto-merge 등록한 직후 다른 세션 #535(E2E)가 머지되며 `plan.md`·`changelog.md`가 겹쳐 PR이 DIRTY/CONFLICTING로 전환, 워처는 MERGED만 기다려 헛폴링·사용자가 먼저 충돌 발견 / 증상=PR이 OPEN인데 한참 안 머지됨, 워처는 계속 running / 감별=`gh pr view <PR> --json state,mergeStateStatus,mergeable` — state=OPEN+mergeStateStatus=`DIRTY`+mergeable=`CONFLICTING`이면 충돌(auto-merge 못 돎), `BLOCKED`면 단순 CI 대기(이 둘 구분 필수 — T-083) / 원인=auto-merge는 DIRTY면 머지 못 함 → 분기 후 타 PR이 같은 파일을 머지하면 충돌이 **사후** 발생하는데, 머지 감시 폴링이 MERGED/CLOSED만 분기하면 DIRTY를 영영 안 잡아 hang처럼 보임(T-083 DIRTY 진단·T-096 폴링 DIRTY 감지의 재발) / 해결=`git rebase origin/main`(changelog는 `merge=union`이라 양쪽 append 자동 병합 → 로컬 충돌 0, GitHub만 union 미적용으로 DIRTY 표시였음, T-098) → 검증(내 커밋만·내 파일만·양쪽 docs 둘 다 보존) → `git push --force-with-lease` → PR MERGEABLE 복귀(auto-merge 등록은 force-push에도 유지돼 CI 통과 시 재개) / **정답=손수 워처를 짜지 말 것 — `.claude/scripts/pr-merge.sh <PR>`가 이미 DIRTY 즉시 차단 + CI 폴링 + 하드 타임아웃(동기 머지)을 제공한다. 굳이 워처가 필요하면 MERGED/CLOSED뿐 아니라 `mergeStateStatus==DIRTY` 분기를 반드시 넣어 재충돌을 일찍 알린다** / 예방=auto-merge "등록=끝"이 아니다 — 멀티세션 활발기엔 분기 후 충돌이 사후 발생하니 머지까지 DIRTY를 감시하거나 pr-merge.sh로 동기 머지 / 머지 자동화 hang·DIRTY-blind 군 5회차 — 이번 뿌리는 "하드픽스(pr-merge.sh)가 있는데 안 쓰고 워처를 손수 짬" / T-083·T-096·T-098·T-094) |
 | 2026-06-26 | T-104 (squash 머지가 브랜치 커밋 trailer(`Session-Model`/`Effort`)를 메시지 중간으로 밀어 `git %(trailers)` 구조 조회가 빈 값 — git trailer 파서는 **맨 끝 문단 1개**만 인식, GitHub squash가 `Co-authored-by`를 `---------` 구분선과 함께 맨 끝 블록으로 붙여 `Session-*`가 중간으로 밀림 / 마지막 블록에 평문·구분선 한 줄만 섞여도 25% 임계로 그 블록 trailer 동반 탈락 / 값은 보존(`git log --grep`으로 잡힘)·조회만 깨짐 → 우회=grep(`%B|grep -oP`), 근본=마지막 trailer 블록에 합류 / 1회차 신규 / N-128·#543) |
+| 2026-06-27 | T-106 (auto-merge `--delete-branch`는 비동기 머지라 원격 브랜치가 안 지워진다 — `gh pr merge <PR> --auto --squash --delete-branch`로 머지(MERGED) 후에도 원격 브랜치가 `git ls-remote`에 잔존, 주 워크트리에서도 발생 / 원인=`--auto`는 CI 통과 후 나중에 서버사이드로 머지(비동기)하는데 `--delete-branch`의 삭제는 gh CLI가 머지 직후 로컬에서 처리 → 등록 시점엔 머지 전이라 못 지우고, 서버 머지 땐 gh가 이미 끝나 누락 / 해결=MERGED 확인 후 `gh api -X DELETE repos/{owner}/{repo}/git/refs/heads/<branch>`(T-094, Windows push hang 회피)·로컬 `git branch -D` / 근본=repo "Automatically delete head branches" 설정 / 1회차 신규, T-095(--delete-branch 정리 실패) 계열·T-094) |
