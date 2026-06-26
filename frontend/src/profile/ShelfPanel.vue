@@ -56,16 +56,22 @@ defineEmits<{ (e: 'selectStatus', value: string | null): void }>()
                             <ShopIcon name="clock" :size="13" />{{ formatReadingTime(b.seconds) }}
                         </span>
                     </div>
-                    <!-- 구매 — other + (제휴링크 or 쿠팡). 리다이렉트 경유, 외부링크 nofollow(§4) -->
+                    <!-- 구매 — other + (제휴링크 or 쿠팡). 둘 다면 드롭다운(구매처 추가 대비),
+                         하나면 단일 링크. 리다이렉트 경유, 외부링크 nofollow(§4) — 현행 로직 유지. -->
                     <div v-if="!self && (b.purchaseLink || coupangEnabled)" class="shop-buy-row">
-                        <a v-if="b.purchaseLink" :href="`/u/${loginId}/books/${b.id}/buy`"
-                           target="_blank" rel="noopener nofollow" class="shop-buy">
-                            알라딘<ShopIcon name="external" :size="13" />
-                        </a>
-                        <a v-if="coupangEnabled" :href="`/u/${loginId}/books/${b.id}/buy/coupang`"
-                           target="_blank" rel="noopener nofollow" class="shop-buy">
-                            쿠팡<ShopIcon name="external" :size="13" />
-                        </a>
+                        <details v-if="b.purchaseLink && coupangEnabled" class="shop-buy-menu">
+                            <summary>구매<ShopIcon name="chevron" :size="12" class="shop-buy-caret" /></summary>
+                            <div class="shop-buy-menu-items">
+                                <a :href="`/u/${loginId}/books/${b.id}/buy`"
+                                   target="_blank" rel="noopener nofollow">알라딘<ShopIcon name="external" :size="12" /></a>
+                                <a :href="`/u/${loginId}/books/${b.id}/buy/coupang`"
+                                   target="_blank" rel="noopener nofollow">쿠팡<ShopIcon name="external" :size="12" /></a>
+                            </div>
+                        </details>
+                        <a v-else-if="b.purchaseLink && !coupangEnabled" :href="`/u/${loginId}/books/${b.id}/buy`"
+                           target="_blank" rel="noopener nofollow" class="shop-buy">구매<ShopIcon name="external" :size="13" /></a>
+                        <a v-else-if="!b.purchaseLink && coupangEnabled" :href="`/u/${loginId}/books/${b.id}/buy/coupang`"
+                           target="_blank" rel="noopener nofollow" class="shop-buy">쿠팡<ShopIcon name="external" :size="13" /></a>
                     </div>
                 </div>
             </li>

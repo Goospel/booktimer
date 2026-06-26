@@ -1585,6 +1585,16 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 .shop-buy-row { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 6px; }
 .shop-buy { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--accent-hover); text-decoration: none; }
 .shop-buy:hover { text-decoration: underline; }
+/* 구매 드롭다운 — 알라딘+쿠팡 둘 다일 때(구매처 추가 대비). summary=칩, items=팝업. */
+.shop-buy-menu { display: inline-block; position: relative; }
+.shop-buy-menu > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; width: auto; font-size: 12.5px; color: var(--accent-hover); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; }
+.shop-buy-menu > summary::-webkit-details-marker { display: none; }
+.shop-buy-menu > summary:hover { background: var(--sage-soft); }
+.shop-buy-caret { transition: transform .15s ease; }
+.shop-buy-menu[open] > summary .shop-buy-caret { transform: rotate(90deg); }
+.shop-buy-menu-items { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; min-width: 112px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 4px; display: flex; flex-direction: column; gap: 2px; }
+.shop-buy-menu-items a { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 7px; font-size: 12.5px; color: var(--text); text-decoration: none; }
+.shop-buy-menu-items a:hover { background: var(--bg); color: var(--accent-hover); }
 .shop-affiliate { font-size: 11.5px; color: var(--muted); margin: 0; line-height: 1.5; }
 
 /* 빈/콜드 상태 한 줄 */
