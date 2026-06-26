@@ -127,6 +127,7 @@
 - [N-124. 반응형 분기를 JS·CSS로 이원화하면 스크롤바 폭만큼 경계가 어긋난다 — 단일 출처로 통일](#n-124-반응형-분기를-jscss로-이원화하면-스크롤바-폭만큼-경계가-어긋난다--단일-출처로-통일)
 - [N-125. 합성 preview의 getComputedStyle은 Vue v-for 패치 노드에서 비결정적일 수 있다 — 규칙 매칭으로 교차검증](#n-125-합성-preview의-getcomputedstyle은-vue-v-for-패치-노드에서-비결정적일-수-있다--규칙-매칭으로-교차검증)
 - [N-126. content-hash 정적자산을 정확 경로로만 permitAll하면 해시 URL이 인증에 걸려 샌다 — 와일드카드로 변형까지 허용](#n-126-content-hash-정적자산을-정확-경로로만-permitall하면-해시-url이-인증에-걸려-샌다--와일드카드로-변형까지-허용)
+- [N-127. Playwright 실행과 결과 육안 확인 — 헤드리스가 기본, headed·ui·HTML 리포트·trace viewer로 눈으로 본다](#n-127-playwright-실행과-결과-육안-확인--헤드리스가-기본-headeduihtml-리포트trace-viewer로-눈으로-본다)
 
 ---
 
@@ -5939,3 +5940,52 @@ N-083/N-084의 교훈: jsdom·동기 mock 로드로 단순화하면 `defer`/`typ
 - **[[n-108]]** — Spring resource chain 런타임 해시(이 버그를 만든 메커니즘, 캐시 stale 해결의 대가).
 - **[[n-084]]** — 이 버그를 잡은 E2E 도입의 배경. 신규 세션에서만 새는 통합 버그의 사례.
 - **[[n-031]]** — Security 인가/세션 매처 계열.
+
+---
+
+## N-127. Playwright 실행과 결과 육안 확인 — 헤드리스가 기본, headed·ui·HTML 리포트·trace viewer로 눈으로 본다
+
+> **한 줄 요약**: Playwright는 기본이 **headless**(브라우저 창 없이 백그라운드) 실행이라 결과가 터미널 `✓/✗`로만 보인다. **테스트가 도는 화면을 눈으로** 보려면 `--headed`(실 브라우저 창)·`--ui`(스텝별 DOM 스냅샷 타임트래블)를, **결과를 사후 재현**하려면 HTML 리포트·trace viewer를 쓴다. 우리 프로젝트는 로컬 수동이라 **`bootRun`(8080)을 먼저 띄운 뒤** `npm --prefix frontend run test:e2e`.
+
+### 실행 (우리 프로젝트, 로컬 수동)
+
+E2E는 mock이 아니라 **실서버에 붙는다** — 서버가 떠 있어야 한다. 두 단계:
+
+```bash
+./gradlew bootRun                       # 터미널 A: 실서버(8080) 기동
+npm --prefix frontend run test:e2e      # 터미널 B: = playwright test
+```
+
+옵션은 `--`로 전달: `npm --prefix frontend run test:e2e -- --headed`. config(`frontend/playwright.config.ts`)에 `webServer`를 두지 않아 **떠 있는 bootRun을 재사용**한다(Playwright가 서버를 직접 안 띄움). 테스트는 `frontend/e2e/`(`auth.setup.ts`·`auth.spec.ts`·`garden.spec.ts`).
+
+### 육안 확인 4계층
+
+| 목적 | 방법 | 무엇이 보이나 |
+|---|---|---|
+| **도는 걸 실시간으로** | `--headed` | 실 브라우저 창이 떠서 입력·클릭이 눈앞에 |
+| **스텝별 되감기(추천)** | `--ui`(또는 `--debug`) | 테스트 목록 + 각 스텝 타임라인 + **스텝마다 DOM 스냅샷 time-travel** + 네트워크·콘솔 |
+| **결과 사후 확인** | HTML 리포트 | `--reporter=html` → `playwright-report/` → `npx playwright show-report`(통과/실패·스크린샷·소요시간) |
+| **실패 단계 재현** | trace viewer | `npx playwright show-trace <zip>` — 실패 스텝의 스냅샷·네트워크·콘솔 time-travel |
+
+(추가로 config `use.screenshot`/`video`를 켜면 실패 시 png·mp4 자동 저장.)
+
+### 우리 config의 기본값 (왜 평소엔 안 보이나)
+
+- `reporter: 'list'` — 결과는 **터미널 한 줄씩**만(HTML 리포트는 `--reporter=html`을 붙여야 생성).
+- headless 기본 — 브라우저 창 없음(`--headed`/`--ui`로 켠다).
+- `trace: 'on-first-retry'` + `retries: 0` — **재시도가 없어 평소엔 trace가 안 남는다**. trace를 보려면 `--trace on`을 붙이거나 재시도를 켠다.
+- `playwright-report/`·`test-results/`·`e2e/.auth/`는 `.gitignore` — 로컬 산출물이라 커밋 안 함.
+
+### 비유
+
+`--headed`는 **무대를 객석에서 보는 것**(공연이 실시간으로 지나감), `--ui`/trace viewer는 **녹화본을 프레임 단위로 되감는 것**(멈춘 지점의 DOM·네트워크를 들여다봄). 디버깅엔 후자가 압도적 — "꾸미기 클릭 **직전** 화면"을 클릭 한 번으로 되돌린다.
+
+### Q&A 대비
+
+- **Q. 헤드리스인데 어떻게 결과를 믿나?** → 터미널 `✓/✗`가 1차 신호. 실패하면 trace/리포트로 그 순간을 재현해 **왜** 실패했는지 본다. 통과는 단언(assert)이 다 맞았다는 뜻이라 화면을 볼 필요가 없다.
+- **Q. CI에선?** → 우리는 아직 **로컬 수동**(커밋 게이트·CI 미포함, 의도). CI에 넣으면 headless로 돌리고 실패 시 trace를 아티팩트로 올려 사후에 본다.
+
+### 관련
+
+- **[[n-084]]** — E2E(Playwright) 표적 도입의 배경·판단.
+- **[[n-126]]** — 그 도입 첫 실행이 잡아낸 실버그(content-hash 인증누수). trace/디버그로 최종 URL을 실측해 원인을 좁힌 사례.
