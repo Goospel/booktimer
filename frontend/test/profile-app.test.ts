@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-// ProfileApp 내 책방 검색 흡수 — 탐색(/search 사용자검색)을 내 책방(self) 상단으로 흡수.
-// 핵심 불변식: 검색 패널은 self(내 책방)에서만 뜨고, 남의 책방엔 새지 않는다.
+// ProfileApp 내 책방 검색 진입점 — 탐색(/search 사용자검색)을 책방 self 상단의 '슬림 진입 링크'로.
+// 핵심 불변식: 검색 진입점(→/search)은 self(내 책방)에서만 뜨고, 남의 책방엔 새지 않는다.
+//   + 책방은 진입점만 소유 — 무거운 검색 본체/추천은 /search가 가짐 → 책방에서 /api/search 호출 0.
 // 동작·노출 여부 위주(브리틀한 정확 문자열 회피). 실 렌더/로드순서는 크롬 확장 별도 게이트.
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
@@ -24,6 +25,7 @@ function setupDom(loginId = 'owner', myLoginId = 'me') {
     `;
 }
 
+// /api/search 도 모킹은 해두되(혹시 호출되면 가짜 응답), 책방은 이를 호출하지 않아야 한다.
 function mockFetch(self: boolean) {
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
         if (url.includes('/api/search')) {
@@ -53,29 +55,30 @@ afterEach(() => {
     document.body.innerHTML = '';
 });
 
-describe('ProfileApp 내 책방 검색 흡수', () => {
-    test('self=true(내 책방): 다른 책방 찾기 검색 패널이 보인다', async () => {
+describe('ProfileApp 내 책방 검색 진입점', () => {
+    test('self=true(내 책방): /search로 가는 검색 진입 링크가 뜨고, 책방에서 라이브 검색은 안 한다', async () => {
         setupDom();
         mockFetch(true);
         const wrapper = mount(ProfileApp, { attachTo: document.body });
 
-        await vi.waitFor(() => expect(wrapper.text()).toContain('다른 책방 찾기'));
-        // 사용자 검색 입력칸이 존재
-        expect(wrapper.find('input[type="text"]').exists()).toBe(true);
-        // 패널이 /api/search 를 호출(추천/검색 로드)
-        await vi.waitFor(() => expect(searchCalled()).toBe(true));
+        // 진입점은 profile 로드 후 self일 때만 렌더 → /search 링크가 등장
+        await vi.waitFor(() => expect(wrapper.find('a[href="/search"]').exists()).toBe(true));
+        expect(wrapper.find('a[href="/search"]').text()).toContain('다른 책방 찾기');
+        // 책방은 진입점만 — 무거운 검색 패널(입력칸)이 책방에 없다
+        expect(wrapper.find('input[type="text"]').exists()).toBe(false);
+        // 라이브 검색 본체가 사라져 책방에선 /api/search 를 호출하지 않는다(회귀 가드)
+        expect(searchCalled()).toBe(false);
     });
 
-    test('self=false(남의 책방): 검색 패널이 새지 않는다', async () => {
+    test('self=false(남의 책방): 검색 진입점이 새지 않는다', async () => {
         setupDom('other', 'me');
         mockFetch(false);
         const wrapper = mount(ProfileApp, { attachTo: document.body });
 
         // 헤더가 렌더될 때까지 대기(프로필 로드 완료 신호)
         await vi.waitFor(() => expect(wrapper.text()).toContain('주인'));
+        expect(wrapper.find('a[href="/search"]').exists()).toBe(false);
         expect(wrapper.text()).not.toContain('다른 책방 찾기');
-        expect(wrapper.find('input[type="text"]').exists()).toBe(false);
-        // 남의 책방에선 /api/search 를 아예 호출하지 않는다
         expect(searchCalled()).toBe(false);
     });
 });
