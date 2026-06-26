@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import PersonalityCarousel from './PersonalityCarousel.vue';
 import type { EntryDto } from './PersonalityCarousel.vue';
+import NavLinks from '../shared/NavLinks.vue';
 
 interface ReadingProfile {
     totalBooks: number;
@@ -188,10 +189,10 @@ async function selectEntry(id: number) {
             </div>
         </template>
 
-        <p class="link-row">
-            <a href="/">← 대시보드</a>
-            <a href="/books"><svg class="link-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="3.4" height="16" rx="1" /><rect x="9.3" y="4" width="3.4" height="16" rx="1" /><path d="M15 5.4l3.3-.7 2.4 15.4-3.3.7z" /></svg>내 책장</a>
-        </p>
+        <NavLinks :links="[
+            { href: '/', icon: 'home', label: '대시보드' },
+            { href: '/books', icon: 'books', label: '내 책장' },
+        ]" />
     </template>
 
     <div v-else class="status-line">불러오는 중…</div>

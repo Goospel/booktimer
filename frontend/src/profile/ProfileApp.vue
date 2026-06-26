@@ -7,6 +7,7 @@ import ShopIcon from './ShopIcon.vue';
 import ShopHeader from './ShopHeader.vue';
 import BtiPanel from './BtiPanel.vue';
 import ShelfPanel from './ShelfPanel.vue';
+import NavLinks from '../shared/NavLinks.vue';
 
 // ── 상수 ────────────────────────────────────────────────────────────────
 const REPORT_REASONS = [
@@ -285,11 +286,11 @@ onUnmounted(() => {
             </div>
 
             <!-- ── 하단 링크 (전 페이지 공유 .link-row 타일) ── -->
-            <p class="link-row">
-                <a href="/"><ShopIcon name="home" :size="16" class="link-ico" />대시보드</a>
-                <a href="/books"><ShopIcon name="books" :size="16" class="link-ico" />내 책장</a>
-                <a v-if="profile.self" href="/me/blocks"><ShopIcon name="block" :size="16" class="link-ico" />차단 목록</a>
-            </p>
+            <NavLinks :links="[
+                { href: '/', icon: 'home', label: '대시보드' },
+                { href: '/books', icon: 'books', label: '내 책장' },
+                ...(profile.self ? [{ href: '/me/blocks', icon: 'block', label: '차단 목록' }] : []),
+            ]" />
 
         </template>
     </div>

@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import UserRow from '../shared/UserRow.vue';
 import { setBlock } from '../shared/block';
+import NavLinks from '../shared/NavLinks.vue';
 import type { UserRowData } from '../shared/follow';
 
 const appEl = document.getElementById('block-list-app');
@@ -50,9 +51,9 @@ onMounted(load);
             </ul>
         </section>
 
-        <p class="link-row">
-            <a href="/">← 대시보드</a>
-            <a :href="`/u/${myLoginId}`">📖 내 책방</a>
-        </p>
+        <NavLinks :links="[
+            { href: '/', icon: 'home', label: '대시보드' },
+            { href: `/u/${myLoginId}`, icon: 'user', label: '내 책방' },
+        ]" />
     </div>
 </template>

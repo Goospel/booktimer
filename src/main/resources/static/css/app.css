@@ -528,10 +528,10 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .link-row a:hover { background: var(--nav-hover-bg); border-color: var(--nav-hover-border); text-decoration: none; }
 .link-row a:active { transform: translateY(1px); }
 .link-row a:last-child:nth-child(odd) { grid-column: 1 / -1; }
-/* footer .link-row 내 인라인 책 아이콘 — 이모지(📚) 대신 대시보드 QuickNav와 동일한
-   라인아트 SVG로 통일(stroke=currentColor라 링크 색을 그대로 따라감). 정렬·간격은
-   .link-row a의 flex(center, gap:8px)가 처리하고, 여기선 축소만 막는다. */
-.link-row a svg.link-ico { flex: 0 0 auto; }
+/* footer .link-row 내 라인 아이콘 — 전 페이지 공통(Vue NavIcon · Thymeleaf nav-icons fragment
+   가 공유). 색은 대시보드 타일 아이콘과 동일한 딥세이지(accent-hover)로 통일 — 라벨(차콜)과
+   분리되어 대시보드 QuickNav 타일과 같은 룩. 정렬·간격은 .link-row a의 flex가 처리. */
+.link-row a svg.link-ico { flex: 0 0 auto; color: var(--accent-hover); }
 
 /* 바로가기 타일 그리드 — 좁은 컬럼에서 라벨이 글자 단위로 깨지던 link-row 대체(대시보드 전용).
    2열 그리드, 각 타일은 카드 톤의 탭 타깃. 5번째(홀수 마지막)는 한 칸 전체폭. */

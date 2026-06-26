@@ -84,10 +84,10 @@
     <!-- 광고 (하단, 게시자 ID 설정 시에만) -->
     <div th:replace="~{ads :: unit}"></div>
 
-    <p class="link-row">
-        <a th:href="@{/books}">← 내 책장</a>
-        <a th:href="@{/}">대시보드</a>
-    </p>
+    <nav class="link-row" aria-label="페이지 이동">
+        <th:block th:replace="~{fragments/nav-links :: navLink(@{/books}, 'books', '내 책장')}"></th:block>
+        <th:block th:replace="~{fragments/nav-links :: navLink(@{/}, 'home', '대시보드')}"></th:block>
+    </nav>
 </div>
 
 <!-- 일자별 독서 기록: 한 번에 한 달만 보이고 ◀(과거)/▶(최신)로 이동. 월 섹션은 최신이 인덱스 0(서버가 최신만 렌더).

@@ -71,7 +71,9 @@
         <p class="legal-date">시행일: 2026-06-03 · 개정: 2026-06-13 (구글 애널리틱스 방문 통계 수집·전송 및 옵트아웃 방법 명시)</p>
     </section>
 
-    <p class="link-row"><a th:href="@{/login}">로그인으로 돌아가기</a></p>
+    <nav class="link-row" aria-label="페이지 이동">
+        <th:block th:replace="~{fragments/nav-links :: navLink(@{/login}, 'back', '로그인')}"></th:block>
+    </nav>
 </div>
 </body>
 </html>
