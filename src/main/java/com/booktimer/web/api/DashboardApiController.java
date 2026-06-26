@@ -108,14 +108,18 @@ public class DashboardApiController {
     }
 
     @PostMapping("/api/sessions/stop")
-    public ResponseEntity<TimerState> stop(Principal principal) {
+    public ResponseEntity<StopResponse> stop(Principal principal) {
         User user = currentUserService.resolve(principal);
         try {
             sessionService.stop(user, clock.instant());
         } catch (IllegalStateException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "진행 중인 측정이 없습니다");
         }
-        return ResponseEntity.ok(buildTimerState(user));
+        // 측정 종료는 잔디가 변하는 바로 그 순간 — 방금 확정된 세션이 반영된 graph를 동봉해
+        // 클라이언트가 새로고침 없이 잔디·연속일을 즉시 갱신하게 한다(start는 잔디 불변이라 TimerState 그대로).
+        TimerState timer = buildTimerState(user);
+        ContributionGraphDto graph = toGraphDto(contributionService.contributionGraph(user));
+        return ResponseEntity.ok(new StopResponse(timer, graph));
     }
 
     private TimerState buildTimerState(User user) {
@@ -162,7 +166,10 @@ public class DashboardApiController {
             boolean emailVerified
     ) {}
 
-    /** start/stop 응답 — 라이브 부분집합(graph/garden/quote/emailVerified 제외). */
+    /** stop 응답 — 타이머 + 방금 확정된 세션이 반영된 잔디(측정 종료 즉시 잔디 갱신용). */
+    public record StopResponse(TimerState timer, ContributionGraphDto graph) {}
+
+    /** start 응답 — 라이브 부분집합(graph/garden/quote/emailVerified 제외). 잔디는 stop 때만 변함. */
     public record TimerState(
             long remainingSeconds,
             long carriedDebtSeconds,

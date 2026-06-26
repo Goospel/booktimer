@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import type { DashboardResponse, TimerState } from './types'
+import type { DashboardResponse, TimerState, StopResponse } from './types'
 import { getCsrfToken } from '../shared/follow'
 import TimerCard from './TimerCard.vue'
 import ContributionGraph from './ContributionGraph.vue'
@@ -91,7 +91,11 @@ async function handleStop() {
         })
         if (res.status === 409) { actionError.value = '진행 중인 측정이 없습니다'; return }
         if (!res.ok) { actionError.value = '측정을 종료할 수 없습니다'; return }
-        applyTimerState(await res.json() as TimerState)
+        // stop 응답은 타이머 + 잔디(graph) 동봉 — 측정 종료가 잔디가 변하는 순간이라
+        // data.graph를 갈아끼워 새로고침 없이 잔디·연속일을 즉시 갱신한다(Vue deep ref가 재렌더 트리거).
+        const r = await res.json() as StopResponse
+        applyTimerState(r.timer)
+        if (data.value) data.value.graph = r.graph
     } catch {
         actionError.value = '네트워크 오류가 발생했습니다'
     } finally {
