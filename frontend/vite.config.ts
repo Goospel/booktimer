@@ -76,5 +76,8 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    // vitest는 test/ 디렉토리만 잡는다. Playwright E2E(e2e/**/*.spec.ts)와 패턴이 겹치지
+    // 않게 명시 한정 — 안 그러면 vitest 기본 include가 e2e의 .spec.ts까지 실행하려다 깨진다.
+    include: ['test/**/*.{test,spec}.ts'],
   },
 });

@@ -13,9 +13,11 @@
     "build:profile": "cross-env APP=profile vite build",
     "build:books": "cross-env APP=books vite build",
     "build:dashboard": "cross-env APP=dashboard vite build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@vitejs/plugin-vue": "^5",
     "@vue/test-utils": "^2",
     "cross-env": "^7",

@@ -53,3 +53,8 @@ claude-docs/plans/
 
 # node_modules — frontend/ 빌드 산출물 + 루트에 잘못 생긴 잔재 모두 차단(전역 매치). package-lock.json은 커밋(CI 재현성 보장)
 node_modules/
+
+# Playwright E2E 산출물 — 리포트·결과·저장된 인증 세션. .auth/는 세션 쿠키(자격증명)라 추적 금지.
+test-results/
+playwright-report/
+**/e2e/.auth/

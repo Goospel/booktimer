@@ -126,6 +126,7 @@
 - [N-123. overflow:hidden은 사용자 스크롤만 막는다 — 프로그래매틱 scrollTo는 그대로 동작](#n-123-overflowhidden은-사용자-스크롤만-막는다--프로그래매틱-scrollto는-그대로-동작)
 - [N-124. 반응형 분기를 JS·CSS로 이원화하면 스크롤바 폭만큼 경계가 어긋난다 — 단일 출처로 통일](#n-124-반응형-분기를-jscss로-이원화하면-스크롤바-폭만큼-경계가-어긋난다--단일-출처로-통일)
 - [N-125. 합성 preview의 getComputedStyle은 Vue v-for 패치 노드에서 비결정적일 수 있다 — 규칙 매칭으로 교차검증](#n-125-합성-preview의-getcomputedstyle은-vue-v-for-패치-노드에서-비결정적일-수-있다--규칙-매칭으로-교차검증)
+- [N-126. content-hash 정적자산을 정확 경로로만 permitAll하면 해시 URL이 인증에 걸려 샌다 — 와일드카드로 변형까지 허용](#n-126-content-hash-정적자산을-정확-경로로만-permitall하면-해시-url이-인증에-걸려-샌다--와일드카드로-변형까지-허용)
 
 ---
 
@@ -3917,6 +3918,16 @@ function myGarden() {
 - **CLAUDE.md `🖥️ 프론트 검증`** — 이 지형도를 워크플로 규칙(soft)으로 박은 곳.
 - **T-053·T-054** — 동기 로드 mock·defer가 로드순서 버그를 가리는 트랩.
 
+### 갱신된 입장 (2026-06-26) — 트리거 충족, 표적 E2E 실도입
+
+이 노트가 "정원 게임이 더 커지면 Playwright 1~2개만 표적 자동화"로 미뤄둔 트리거가 **충족됐다**:
+- **트리거 1(헤드리스-블라인드 반복)**: #358·#364로 패턴 확정(troubleshooting 재발 트래커 「헤드리스 로드순서·타이밍」 T-053·T-054 2회 승격).
+- **트리거 2(프론트/백 분리)**: 마을 S4 컷오버(2026-06-19)로 SSR→Vue SPA + `/api/garden` JSON API 완전 분리, 선별 SPA 단계 0~4 완료(2026-06-22). "둘을 합쳤을 때 되나"라는 E2E 핵심 질문이 비로소 성립.
+
+→ **로컬 수동 Playwright 2개 도입**(`frontend/e2e/` — 로그인 성공/실패 + 정원 진입→꾸미기→저장 200·콘솔0). **전면은 여전히 과함**(회귀 월 1회·flaky·1인 개발): 커밋 게이트 미포함(별도 — 느린 E2E가 `gradlew test` 루프를 안 막게), 표적은 헤드리스가 못 보는 자리만.
+- **유지비는 금전이 아니라 본인이 매주 내는 시간·주의력**(브리틀니스·flaky 판별·실행시간·신호 희석) — "테스트 N배 = 안전 N배"가 거짓이라 **적은 핵심 플로**가 ROI 최적. 그래서 2개.
+- **도입 즉시 실버그 1건 검출**: 첫 E2E가 content-hash 정적자산 인증 누수(미인증 SavedRequest → 로그인 후 깨진 랜딩)를 잡았다 — 정확히 "신규 세션에서만 새는 통합 버그"라 도입 가치를 즉시 입증([[n-126]], T-101).
+
 ---
 
 ## N-085. 게임 UI 스케일링 — 디자인 해상도(균일 스케일) vs 반응형, 정규화 좌표와 고정 크기의 분리가 만드는 density 발산
@@ -5886,3 +5897,45 @@ N-083/N-084의 교훈: jsdom·동기 mock 로드로 단순화하면 `defer`/`typ
 ### 관련
 
 - **N-117**(static-preview 검증 토대), **T-092**(prod 번들 컴포넌트 상태 주입 — 같은 합성 환경의 다른 한계), **T-089**(mock worst-case로 RED 확보 — 측정 신뢰성 자매), **N-055**(완성 픽스처만으론 못 잡는 부류의 시각판). /books 리디자인 PR-3 검증.
+
+---
+
+## N-126. content-hash 정적자산을 정확 경로로만 permitAll하면 해시 URL이 인증에 걸려 샌다 — 와일드카드로 변형까지 허용
+
+> **한 줄 요약**: `spring.web.resources.chain.strategy.content`가 켜지면 `@{/pwa-install.js}`는 `/pwa-install-<md5>.js`로 렌더된다. SecurityConfig permitAll이 **정확 경로**(`/pwa-install.js`)만 두면 이 해시 URL이 `anyRequest().authenticated()`로 떨어져, 미인증 페이지 로드 시 **302 → SavedRequest**로 저장되고 **로그인 성공 후 그 자산으로 리다이렉트**돼 대시보드 대신 깨진 화면이 뜬다. permitAll을 `/pwa-install*.js`로 와일드카드화해 해시 변형까지 덮는다.
+
+### 문제 (E2E가 발견)
+
+표적 E2E(로그인 setup) 도입 첫 실행에서 로그인은 **성공**(POST /login → 302)하는데 `#dashboard-app`에 도달하지 못했다. 디버그로 최종 URL이 `/pwa-install-<hash>.js?continue`(Spring Security SavedRequest 파라미터)임을 실측 — 즉 로그인 자체가 아니라 **로그인 후 리다이렉트 목적지**가 정적 자산으로 잘못 잡혔다.
+
+### 원인
+
+- `spring.web.resources.chain.strategy.content.enabled=true`(캐시 stale 근본해결, [[n-108]])가 정적 자산 URL에 내용 MD5를 박는다 — `@{/pwa-install.js}` → `/pwa-install-<md5>.js`, `@{/manifest.json}` → `/manifest-<md5>.json`.
+- SecurityConfig permitAll은 `/pwa-install.js`·`/manifest.json` **정확 경로**만 나열 → 해시 URL은 매칭 안 됨 → `anyRequest().authenticated()` → 미인증 시 **302 redirect to /login** + 그 URL을 `RequestCache`(SavedRequest)에 저장.
+- 로그인 성공 시 `SavedRequestAwareAuthenticationSuccessHandler`(폼 로그인 기본)가 SavedRequest로 리다이렉트 → **로그인 후 대시보드 대신 .js 파일**을 받는다.
+- `/css/**`·`/icons/**`는 와일드카드라 해시 URL도 걸려 안전했고, `/sw.js`는 JS 문자열(`register('/sw.js')`)이라 해시 안 됨. **루트 단일 파일을 `@{}`로 참조하는 `pwa-install.js`·`manifest.json`만** 정확매칭에 갇혀 샜다.
+
+### 왜 여태 안 드러났나 (검출 난이도)
+
+- 해시 자산은 max-age 365일 캐시 → **캐시가 빈 신규 세션에서만** 302가 난다. 실사용자 첫 로그인, 그리고 Playwright의 매번 fresh context가 정확히 그 조건이라 100% 재현. 한 번 받아 캐시되면 이후 안 남 → 산발적·재현난.
+- 기존 `PwaStaticAccessTest`가 이 영역을 지켰지만 `get("/manifest.json")`처럼 **해시 없는 정확 경로**만 단언 — MockMvc는 ResourceUrlProvider 해시를 안 거쳐 통과하므로 버그를 은폐했다([[n-055]]: 완성 픽스처만 테스트하면 변형이 샌다).
+
+### 해법
+
+- permitAll을 `/pwa-install*.js`·`/manifest*.json`으로 와일드카드화(해시 변형 `-<md5>` 포함). Spring ant `*`는 세그먼트 내 매칭이라 `/pwa-install-abc.js`·`/manifest-abc.json`을 덮고 `/`는 안 넘는다.
+- 회귀 가드(MockMvc): 가짜 해시 경로 `get("/pwa-install-deadbeef.js")`가 미인증 **302가 아님**을 단언 — 파일 부재 404는 무방(인가는 통과한 것). test 환경의 content-hash 활성 여부와 무관하게 URL 패턴 매칭(인가)만 검증한다.
+
+### 일반화
+
+- **렌더 URL ≠ 소스 경로.** 빌드/런타임이 자산 URL을 변형(content-hash·fingerprint)하면, 그 자산을 가리키는 **모든 매처(보안 permitAll·캐시·CSP)**가 변형 후 URL을 기준으로 다시 검토돼야 한다. 정확 경로 화이트리스트는 변형을 못 따라간다.
+- **정적 자산 인가는 와일드카드/`PathRequest.toStaticResources()`로.** 루트 단일 파일을 한 개씩 정확 경로로 여는 건 해시·버전 변형에 취약하다.
+- **로그인 후 리다이렉트가 이상하면 SavedRequest를 의심.** 폼 로그인 성공 핸들러는 "인증 거부됐던 마지막 GET"으로 돌려보낸다 — 그 GET이 의도치 않은 자산이면 보호 범위가 과한 것.
+- **캐시가 가리는 버그는 신규 세션으로.** 장기 캐시 자산이 얽힌 통합 버그는 캐시 빈 fresh context(E2E·시크릿창)에서만 드러난다 — [[n-084]] "헤드리스로 못 보는 통합 버그"의 한 갈래.
+
+### 관련
+
+- **T-101** — 이 버그의 트랩(증상·진단·해결) 측면.
+- **[[n-055]]** — 완성 픽스처만 테스트하면 미완성/변형이 샌다(여기선 해시 변형). 회귀 가드 설계의 뿌리.
+- **[[n-108]]** — Spring resource chain 런타임 해시(이 버그를 만든 메커니즘, 캐시 stale 해결의 대가).
+- **[[n-084]]** — 이 버그를 잡은 E2E 도입의 배경. 신규 세션에서만 새는 통합 버그의 사례.
+- **[[n-031]]** — Security 인가/세션 매처 계열.

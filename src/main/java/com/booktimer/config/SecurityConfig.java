@@ -58,7 +58,11 @@ public class SecurityConfig {
                         // /unsubscribe: 마케팅 메일 수신거부 링크는 비로그인 상태로 메일에서 열린다(토큰이 신원 증명).
                         // /dashboard: "/"의 별칭 — 동결된 구 PWA install이 콜드 런치 시 쏘는 구 start_url. "/"와
                         // 똑같이 공개여야 미인증 콜드 런치도 landing을 보고 404/로그인 튕김 없이 들어온다(DashboardController).
-                        .requestMatchers("/", "/dashboard", "/signup", "/login", "/privacy", "/verify-email", "/password/**", "/unsubscribe", "/error", "/actuator/health", "/css/**", "/js/**", "/favicon.ico", "/manifest.json", "/icons/**", "/sw.js", "/pwa-install.js").permitAll()
+                        // ⚠️ content-hash 정적자산(spring.web.resources.chain): @{/pwa-install.js}·@{/manifest.json}는
+                        // /pwa-install-<md5>.js · /manifest-<md5>.json 으로 렌더된다. 정확 매칭만 두면 해시 URL이 누락돼
+                        // 미인증 페이지 로드 시 302→SavedRequest로 저장되고, 로그인 성공 후 그 자산으로 리다이렉트되는
+                        // 버그가 난다(캐시 빈 신규 세션에서만 재현 — E2E auth/garden 스펙이 회귀 가드). 와일드카드로 해시 변형까지 허용.
+                        .requestMatchers("/", "/dashboard", "/signup", "/login", "/privacy", "/verify-email", "/password/**", "/unsubscribe", "/error", "/actuator/health", "/css/**", "/js/**", "/favicon.ico", "/manifest*.json", "/icons/**", "/sw.js", "/pwa-install*.js").permitAll()
                         // ads.txt(AdSense 소유권·수익 보호) + robots.txt(크롤 지시): 크롤러가 비인증으로 읽어야 하는
                         // 공개 정적 파일. default-deny라 명시 안 하면 로그인으로 302 튕겨 크롤러에게 모호한 신호가 된다.
                         .requestMatchers("/ads.txt", "/robots.txt").permitAll()

@@ -90,4 +90,28 @@ class PwaStaticAccessTest {
         mvc().perform(get("/dashboard"))
                 .andExpect(status().isOk());
     }
+
+    @Test
+    @DisplayName("미인증 상태에서 /pwa-install.js 가 200 을 반환한다 (PWA 설치 칩 스크립트 공개 자산)")
+    void pwaInstallJs_isPublic_returns200() throws Exception {
+        mvc().perform(get("/pwa-install.js"))
+                .andExpect(status().isOk());
+    }
+
+    /**
+     * content-hash 정적자산 인증 누수 회귀 가드 — {@code @{/pwa-install.js}}·{@code @{/manifest.json}} 는
+     * spring.web.resources.chain 으로 {@code /pwa-install-<md5>.js}·{@code /manifest-<md5>.json} 으로 렌더된다.
+     * permitAll 이 정확 경로만 두면 이 해시 URL 이 default-deny 에 걸려 미인증 302(login)→SavedRequest 로
+     * 저장되고, 로그인 성공 후 그 자산으로 리다이렉트되는 버그가 난다(캐시 빈 신규 세션에서만 재현 — E2E 가 발견).
+     * 위 manifest/icon 케이스가 해시 없는 정확 경로만 박아 이 변형이 사각으로 샜다(N-055). 해시 변형 경로가
+     * 인증 거부(302)되지 않음을 박는다 — 파일 부재로 인한 404 는 무방(인가는 통과한 것).
+     */
+    @Test
+    @DisplayName("content-hash 변형 정적자산(/pwa-install-<hash>.js·/manifest-<hash>.json)이 미인증 302 로 안 튕긴다")
+    void contentHashedStaticAssets_unauthenticated_notRedirected() throws Exception {
+        mvc().perform(get("/pwa-install-deadbeef0123.js"))
+                .andExpect(status().is(not(302)));
+        mvc().perform(get("/manifest-deadbeef0123.json"))
+                .andExpect(status().is(not(302)));
+    }
 }

@@ -222,12 +222,14 @@ for 날짜 in [어제 ~ 7일 전] (오래된 순):
 ./gradlew build          # 빌드 (Windows: gradlew.bat)
 ./gradlew test           # 테스트 (H2 인메모리 + Vitest — Docker 불필요)
 ./gradlew bootRun        # 로컬 실행 (MySQL은 compose.yaml로 자동 기동, Docker 필요)
+npm --prefix frontend run test:e2e   # E2E (Playwright; 별도 터미널에서 bootRun이 8080에 떠 있는 상태)
 ```
 
 - toolchain: Java 21 (로컬에 없어도 foojay-resolver 가 자동 다운로드)
 - 테스트는 H2 인메모리로 독립 실행되며, 운영은 MySQL을 사용한다. 스키마는 **Flyway** 마이그레이션이 단일 소스(`src/main/resources/db/migration`).
 - 실행 시 Spring Security가 전 엔드포인트를 기본 잠금 — 가입/로그인 후 사용.
 - **마을 프론트엔드 번들**(`src/main/resources/static/garden/garden.js`)은 커밋되어 있어 별도 빌드 불필요. 마을 TypeScript 소스(`frontend/`) 수정 시: `npm --prefix frontend run build`.
+- **E2E(Playwright)**는 로컬 수동 — 별도 터미널에서 `bootRun`(시드계정 `testid`)을 띄운 뒤 `npm --prefix frontend run test:e2e`. 테스트는 `frontend/e2e/`(로그인·정원 저장). 커밋 게이트·CI엔 미포함(CI는 vitest·JUnit만).
 
 ---
 
