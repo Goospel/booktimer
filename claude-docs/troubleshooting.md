@@ -100,8 +100,28 @@
 - [T-081. SPA 전환에서 form 래퍼 제거 → 전역 button width 100%가 flex-row 액션을 풀폭 세로로 깨뜨림](#t-081-spa-전환에서-form-래퍼-제거--전역-button-width-100가-flex-row-액션을-풀폭-세로로-깨뜨림)
 - [T-082. 라디오 CSS탭 → JS(v-if) 탭 전환에서 clear·display·active 경로 누락 + 빌드 stale (책방 탭 3종 깨짐)](#t-082-라디오-css탭--jsv-if-탭-전환에서-cleardisplayactive-경로-누락--빌드-stale-책방-탭-3종-깨짐)
 - [T-083. gh pr checks --watch가 CI 등록 전 실행되면 "no checks reported"로 즉시 exit 1](#t-083-gh-pr-checks---watch가-ci-등록-전-실행되면-no-checks-reported로-즉시-exit-1)
+- [T-084. Phaser `update()`가 매 프레임 덮는 속성에 tween을 걸면 즉시 무효화 — 효과는 독립 오브젝트로 분리](#t-084-phaser-update가-매-프레임-덮는-속성에-tween을-걸면-즉시-무효화--효과는-독립-오브젝트로-분리)
+- [T-085. PowerShell `docker exec … mysql -e`로 한글 INSERT 시 CP949로 `?????` 저장 — 한글은 Spring API(JSON) 경유 삽입](#t-085-powershell-docker-exec--mysql--e로-한글-insert-시-cp949로--저장--한글은-spring-apijson-경유-삽입)
+- [T-086. Docker 컨테이너 수십 개 누적의 범인은 `bootRun`(테스트 아님) — `working_dir` 라벨로 BookTimer 것만 정리](#t-086-docker-컨테이너-수십-개-누적의-범인은-bootrun테스트-아님--working_dir-라벨로-booktimer-것만-정리)
+- [T-087. CSS 주석 속 `*/`가 주석을 조기 종료해 다음 규칙을 침묵 드랍](#t-087-css-주석-속-가-주석을-조기-종료해-다음-규칙을-침묵-드랍)
+- [T-088. 백그라운드 PR 머지 태스크를 띄우고 완료 후속(exit 코드 확인)을 안 챙겨 머지 방치](#t-088-백그라운드-pr-머지-태스크를-띄우고-완료-후속exit-코드-확인을-안-챙겨-머지-방치)
+- [T-089. 반응형 재현 하니스 mock이 production worst-case(최장 문자열)를 안 담으면 RED가 안 떠 레이아웃 버그를 놓침](#t-089-반응형-재현-하니스-mock이-production-worst-case최장-문자열를-안-담으면-red가-안-떠-레이아웃-버그를-놓침)
+- [T-090. Windows preview `launch.json`으로 `gradlew bootRun` 못 띄움 — `cmd /c <절대경로>gradlew.bat -p <절대경로> bootRun`](#t-090-windows-preview-launchjson으로-gradlew-bootrun-못-띄움--cmd-c-절대경로gradlewbat--p-절대경로-bootrun)
+- [T-091. `pr-merge.sh`가 머지 성공 후 `git push origin --delete`에서 hang → 백그라운드 머지 안 끝남](#t-091-pr-mergesh가-머지-성공-후-git-push-origin---delete에서-hang--백그라운드-머지-안-끝남)
+- [T-092. minified Vue 프로덕션 번들은 `setupState` 키가 숨겨짐 — 루트 `_vnode.component`에서 `subTree` BFS+props 변이](#t-092-minified-vue-프로덕션-번들은-setupstate-키가-숨겨짐--루트-_vnodecomponent에서-subtree-bfsprops-변이)
+- [T-093. 워크트리 `npm run build`가 무관 9개 번들을 CRLF-only로 ` M` 표시 — `git diff --numstat`로 감별, 변경 파일만 stage](#t-093-워크트리-npm-run-build가-무관-9개-번들을-crlf-only로--m-표시--git-diff---numstat로-감별-변경-파일만-stage)
+- [T-094. Windows `timeout 30 git push --delete`도 hang 못 막음 → `gh api -X DELETE repos/{owner}/{repo}/git/refs/heads/<branch>`](#t-094-windows-timeout-30-git-push---delete도-hang-못-막음--gh-api--x-delete-reposownerrepogitrefsheadsbranch)
+- [T-095. 워크트리 `gh pr merge --delete-branch`가 `main is already used by worktree`로 깨짐 — 머지는 성공](#t-095-워크트리-gh-pr-merge---delete-branch가-main-is-already-used-by-worktree로-깨짐--머지는-성공)
+- [T-096. 연쇄 PR 폴링 미머지 종료(TIMEOUT/OPEN/DIRTY)를 머지 완료로 오인 — 다음 브랜치 전 `gh pr view --json state`=MERGED 확인](#t-096-연쇄-pr-폴링-미머지-종료timeoutopendirty를-머지-완료로-오인--다음-브랜치-전-gh-pr-view---json-statemerged-확인)
+- [T-097. Git Bash에서 멀티바이트(이모지·한글) `grep`/`sed` 패턴이 조용히 0건 — PowerShell `.Contains/.Replace` 또는 Grep(ripgrep)](#t-097-git-bash에서-멀티바이트이모지한글-grepsed-패턴이-조용히-0건--powershell-containsreplace-또는-grepripgrep)
+- [T-098. changelog 멀티세션 동시 append 충돌 → `.gitattributes` `merge=union`](#t-098-changelog-멀티세션-동시-append-충돌--gitattributes-mergeunion)
+- [T-099. 전역 `button{border-radius}` 누수 — 명시값 제거 시 전역값이 샌다, `border-radius:0`로 상쇄](#t-099-전역-buttonborder-radius-누수--명시값-제거-시-전역값이-샌다-border-radius0로-상쇄)
+- [T-100. 워크트리 frontend `node_modules` 없음 → vite 미해결, `npm ci` (디렉토리 존재 ≠ 패키지 설치)](#t-100-워크트리-frontend-node_modules-없음--vite-미해결-npm-ci-디렉토리-존재--패키지-설치)
+- [T-101. content-hash 정적자산 인증 누수 — `@{}` 단일파일 해시 URL이 정확매칭 permitAll에서 빠져 302, 와일드카드로](#t-101-content-hash-정적자산-인증-누수---단일파일-해시-url이-정확매칭-permitall에서-빠져-302-와일드카드로)
+- [T-102. auto-merge 후 손수 짠 워처가 DIRTY를 안 봐 침묵 정지 — `pr-merge.sh` 쓰거나 워처에 DIRTY 분기](#t-102-auto-merge-후-손수-짠-워처가-dirty를-안-봐-침묵-정지--pr-mergesh-쓰거나-워처에-dirty-분기)
 - [T-103. 스크립트로 파일 재생성 시 ReadAllText + UTF8Encoding(false)가 원본 BOM을 떨어뜨린다](#t-103-스크립트로-파일-재생성-시-readalltext--utf8encodingfalse가-원본-bom을-떨어뜨린다)
 - [T-104. squash 머지가 브랜치 커밋 trailer를 메시지 중간으로 밀어 git %(trailers) 구조 조회를 깨뜨린다](#t-104-squash-머지가-브랜치-커밋-trailer를-메시지-중간으로-밀어-git-trailers-구조-조회를-깨뜨린다)
+- [T-105. 빈 워크트리 폴더가 `Device or resource busy`로 안 지워짐 — 죽은 세션 좀비 셸이 cwd 점유, cwd 검증 PID만 종료](#t-105-빈-워크트리-폴더가-device-or-resource-busy로-안-지워짐--죽은-세션-좀비-셸이-cwd-점유-cwd-검증-pid만-종료)
 
 ---
 
@@ -1710,6 +1730,264 @@ bash .claude/scripts/pr-merge.sh <PR번호>
 
 ---
 
+## T-084. Phaser `update()`가 매 프레임 덮는 속성에 tween을 걸면 즉시 무효화 — 효과는 독립 오브젝트로 분리
+
+**증상**: 배회 캐릭터 먹이 반응 애니로 `this.tweens.add({targets: obj, y: ..., scaleY: ...})`를 걸었더니 `update()`가 매 프레임 `walkPose`로 `o.y = py+bobY`, `o.setScale(...)`, `o.setAngle(...)`를 덮어써 tween이 보이지 않는 현상.
+
+**감별**: tween 콜백은 실행되는데 화면에 변화 없음. `update()`에 breakpoint 걸면 tween 값 덮임 확인.
+
+**해결 / 예방**: 캐릭터와 독립된 오브젝트(`this.add.text(...)`)를 `objs`에 넣지 않고 별도 tween으로 처리 → `update()`가 그 오브젝트를 건드리지 않아 충돌 없음. Phaser에서 매 프레임 속성을 직접 세팅하는 `update()` 루프가 있으면, 그 오브젝트에 직접 tween 금지 — 독립 오브젝트로 효과 분리할 것.
+
+**관련**: PR #475.
+
+---
+
+## T-085. PowerShell `docker exec … mysql -e`로 한글 INSERT 시 CP949로 `?????` 저장 — 한글은 Spring API(JSON) 경유 삽입
+
+**증상**: PowerShell에서 `docker exec ... mysql -e "INSERT ... VALUES('한강'...)"`을 실행하면 CP949(ANSI)로 인코딩된 바이트가 MySQL로 전달돼 DB에 `?????`로 저장됨. UTF-8 파일을 `docker cp` 후 stdin으로 넘겨도 PowerShell `Get-Content`의 CRLF 처리나 character set 협상 실패로 동일하게 깨질 수 있음.
+
+**감별**: INSERT 후 `SELECT HEX(col)` 결과가 올바른 UTF-8 HEX(한강=`ED959CEA B095`)가 아닌 다른 바이트열이면 깨진 것.
+
+**해결 / 예방**: 한글이 포함된 데이터는 **Spring Boot API(JSON POST)를 경유**해 삽입 — HTTP 요청은 UTF-8 Content-Type으로 전달되고 서버가 JPA로 올바르게 저장. 크롬 확장 `javascript_tool`로 `fetch('/api/...', {method:'POST', body: JSON.stringify({author:'한강'})})` 형태. 영문 컬럼(code·status 등)만 포함된 INSERT는 docker exec mysql로 직접 가능. 로컬 DB 시드 시 한글 포함 여부 확인 후 경로 선택.
+
+---
+
+## T-086. Docker 컨테이너 수십 개 누적의 범인은 `bootRun`(테스트 아님) — `working_dir` 라벨로 BookTimer 것만 정리
+
+**증상**: `docker ps -a`에 `booktimer-*`·랜덤이름 mysql 컨테이너가 워크트리 수만큼 쌓이고 일부는 검증 후 안 꺼진 Up 좀비·일부는 워크트리 삭제 후 Exited 고아.
+
+**원인**: `./gradlew test`는 H2라 컨테이너를 안 만든다(`spring.docker.compose.enabled=false`) — `bootRun`만 `spring-boot-docker-compose`로 `compose.yaml` MySQL을 자동 기동하고, compose 프로젝트명이 **워크트리 폴더명별로 갈려** 컨테이너가 따로 생기며 Spring은 stop만 하고 rm은 안 해 사라진 워크트리의 것이 고아로 남음.
+
+**해결 / 예방**:
+```bash
+bash .claude/scripts/docker-cleanup.sh            # 기본: Exited만 (멀티세션 안전)
+bash .claude/scripts/docker-cleanup.sh --all      # Up 포함 전부 (먼저 --dry-run 권장)
+```
+`com.docker.compose.project.working_dir` 라벨이 BookTimer 경로 계열인 것만 지워 타 프로젝트는 보호. 검증용 bootRun 종료 시 8080 반납과 함께 컨테이너도 내린다. 멀티세션 땐 Up 보존 위해 기본 모드 사용.
+
+**관련**: CLAUDE.md 「🪢 다중 세션」·「🛠️ 빌드/실행 메모」.
+
+---
+
+## T-087. CSS 주석 속 `*/`가 주석을 조기 종료해 다음 규칙을 침묵 드랍
+
+**증상**: 특정 클래스만 전부 스타일 미적용·바로 다음 규칙부터 정상. 파일·`fetch`엔 이상 없음. 콘솔 에러 0.
+
+**감별**: `[...document.styleSheets[0].cssRules].some(r=>r.selectorText==='.해당-클래스')`가 false면 파싱 드랍. 캐시는 `?v=` cache-bust로 분리.
+
+**원인**: CSS 주석 안에 `.timer-*/.quick-*` 같은 wildcard-slash 표기가 있으면, `.quick-*/`의 `*/`가 주석 닫는 토큰으로 해석돼 주석이 일찍 닫힘 → 뒤따르는 셀렉터와 규칙이 invalid로 묶여 드랍.
+
+**해결 / 예방**: 주석 안 `*/` 유발 토큰 회피 — `.timer-*/.quick-*` → `.timer-*·.quick-*` (슬래시를 `·` 또는 `과`로). wildcard 클래스를 주석에 나열할 땐 슬래시 금지를 반사적으로. **하드픽스 훅 `require-css-comment-safe.ps1`** 적용(3회차에 승격).
+
+**관련**: 개념 N-118, 시각검증 T-043. **3회차(#522·#526·이 계열)** — 트래커 등재.
+
+---
+
+## T-088. 백그라운드 PR 머지 태스크를 띄우고 완료 후속(exit 코드 확인)을 안 챙겨 머지 방치
+
+**증상**: PR 머지 태스크를 백그라운드로 띄운 후 `exit≠0`(DIRTY 등)으로 종료됐는데 후속을 안 해 PR이 ~40분 OPEN 방치.
+
+**원인**: `pr-merge.sh`의 "12분 하드 타임아웃"은 **스크립트가 도는 동안만** 유효 — exit 후엔 아무도 안 돌아 타임아웃조차 안 걸려 무한 방치처럼 보임.
+
+**감별**: PR이 아직 OPEN인데 백그라운드 태스크는 이미 종료(`exit≠0`이면 사람이 손대야 할 신호).
+
+**해결 / 예방**: ① 호출자 규칙 = 백그라운드 머지 태스크 **완료 알림이 오면 반드시 output 파일을 읽어 exit 코드 확인 후 후속 처리**(0 머지완료→로컬 main 갱신 / 3 DIRTY·rebase 충돌→수동 / 4 CI 실패→원인 / 5 타임아웃→상태 확인). ② `pr-merge.sh <PR> --rebase`로 DIRTY 자동 rebase+force push 후 머지 폴링을 **한 호출 안에서** 이어가 흐름 끊김 자체를 제거.
+
+**관련**: T-083(DIRTY 헛폴링), T-051(워크트리 로컬정리), PR #489.
+
+---
+
+## T-089. 반응형 재현 하니스 mock이 production worst-case(최장 문자열)를 안 담으면 RED가 안 떠 레이아웃 버그를 놓침
+
+**증상**: static-preview mock이 짧은 값(`remainingSeconds=1200` → "20:00", 5글자)라 실제 `01:43:47`(8글자 HH:MM:SS) 오버플로가 재현 안 돼 첫 측정이 "겹침 없음(-38px)"으로 나옴.
+
+**원인**: 숫자·문자열의 폭/줄수처럼 길이에 비례하는 레이아웃은 **가장 긴 케이스에서만** 깨지는데 mock이 짧은 값이라 그 경계를 안 건드림(헤드리스 green = 가짜 green, T-053 부류).
+
+**감별**: element box rect는 컬럼 폭에 맞아 멀쩡해 보이니 텍스트 실폭은 `range.getBoundingClientRect()`/`scrollWidth`로 따로 잰다(block div는 overflow돼도 box는 안 늘어남).
+
+**해결 / 예방**: 재현 mock을 production 최악 케이스로 맞춘다(최대 글자수·최장 문자열·최다 항목) 후 RED 확인 → 수정 → GREEN. 레이아웃 회귀를 static-preview로 잡을 땐 "이 화면에서 가장 넓어질 수 있는 콘텐츠가 뭔가"를 먼저 mock에 박는다.
+
+**관련**: N-055(null-state 누락과 같은 뿌리), N-119(축 전환 함정), N-117(static-preview), T-043, PR #491.
+
+---
+
+## T-090. Windows preview `launch.json`으로 `gradlew bootRun` 못 띄움 — `cmd /c <절대경로>gradlew.bat -p <절대경로> bootRun`
+
+**증상**: `runtimeExecutable: "gradlew.bat"`(상대경로)은 "내부/외부 명령이 아님" 에러로 즉시 실패. `cmd /c gradlew.bat`로 감싸도 cwd가 안 맞아 또 실패.
+
+**원인**: preview가 PATH에서 `.bat`을 찾는데 cwd가 워크트리 루트라는 보장 없음.
+
+**해결 / 예방**:
+```json
+{
+  "runtimeExecutable": "cmd",
+  "runtimeArgs": ["/c", "<절대경로>\\gradlew.bat", "-p", "<워크트리 절대경로>", "bootRun"]
+}
+```
+`.bat`은 cmd 셸 경유 필수 + 절대경로로 cwd 의존 제거 + `-p`(gradle `--project-dir`)로 프로젝트 디렉토리 고정. `bootRun`은 무겁다(빌드+MySQL Docker) — SSR fragment 로드순서처럼 정적 mock으론 못 잡는 검증에만 쓰고, 순수 로직·반응성은 N-117 static-preview 우선. `.claude/launch.json`은 gitignore라 커밋 안 됨.
+
+**관련**: N-117(static-preview), T-078(gradle 데몬 경합), T-086(Docker 누적).
+
+---
+
+## T-091. `pr-merge.sh`가 머지 성공 후 `git push origin --delete`에서 hang → 백그라운드 머지 안 끝남
+
+**증상**: PR은 이미 **MERGED**인데 백그라운드 Bash 작업이 계속 "실행 중". 완료 알림조차 안 옴(`do_merge`가 `exit 0`에 도달 못 해 명령 끝의 `| tail`이 프로세스 종료를 영원히 대기).
+
+**감별**: `gh pr view <PR> --json state`가 MERGED + 원격 브랜치는 **미삭제**로 남아 있고 + 머지 직후 시각에 시작된 `git` 좀비 프로세스가 잔존(`Get-Process git | Select StartTime`). `git status`는 빠름(레포·코어 정상, 매달린 건 자식 프로세스, T-078 진단과 동형).
+
+**원인**: `gh pr merge`(자체 토큰)는 됐지만 뒤이은 `git push origin --delete`가 비대화형 백그라운드에서 credential/원격 단계에 멈춤.
+
+**해결 / 예방**: `TaskStop`으로 작업 종료 → 좀비 `git` PID `Stop-Process -Force` + `.git/index.lock` 정리 → 수동 `git push origin --delete <branch>` → 로컬 main 갱신. `do_merge`의 push를 `timeout 30`으로 감싸 hang을 30s로 제한(실패해도 머지는 끝났으니 진행). 백그라운드 머지가 시간 내 완료 알림 없으면 PR 상태부터 직접 확인(MERGED면 스크립트 hang 확정).
+
+**관련**: T-088(exit 후 후속 누락), T-094(T-091의 재발 — `timeout 30` 미봉책 한계 드러남), T-083, T-078.
+
+---
+
+## T-092. minified Vue 프로덕션 번들은 `setupState` 키가 숨겨짐 — 루트 `_vnode.component`에서 `subTree` BFS+props 변이
+
+**증상**: preview 검증용으로 `el.__vue_app__._instance`/`setupState.data`를 건드리려 했으나 `_instance`가 null처럼 보이고 `setupState`는 `Object.keys`가 `[]`·`setupState.data` 접근은 null 반환(빌드 minify로 `<script setup>` 바인딩 키가 숨겨짐).
+
+**감별**: `el._vnode.component`는 살아 있음(루트 instance). 거기서 `subTree`로 자식 vnode 트리를 탈 수 있음.
+
+**해결 / 예방**: 루트(`el._vnode.component`)부터 `subTree`를 BFS로 훑어 **목표 자식 컴포넌트**(예: `props.garden`을 가진 GardenPanel)를 찾고, 그 `inst.props.<객체>`(reactive 프록시·부모 ref와 같은 참조)를 직접 변이 → Vue가 재렌더(`el.__vue_app__`는 존재하나 그 경유는 막힘). 주의: `props`는 읽기전용이라 **재할당(`inst.props.x = ...`)이 아니라 객체 내부 속성 변이**(`g.ownedCharacters = [...]`)로, 부모 reactive 객체를 직접 건드려 reactivity 발동. setupState 대신 트리 BFS+props 변이가 prod 빌드 정공법.
+
+**관련**: N-117(static-preview), N-082(reactive Proxy), T-090(bootRun preview).
+
+---
+
+## T-093. 워크트리 `npm run build`가 무관 9개 번들을 CRLF-only로 ` M` 표시 — `git diff --numstat`로 감별, 변경 파일만 stage
+
+**증상**: history만 고쳤는데 garden·dashboard·books 등 9개 `.js`가 전부 modified로 보여 "안 건드린 번들이 왜?" 혼란. `git add -A` 하면 무관 번들까지 stage.
+
+**원인**: `core.autocrlf=true`라 working tree LF↔CRLF 차이뿐 — 커밋된 블롭은 LF인데 워크트리 새 `node_modules`의 vite가 재생성하며 mtime·줄바꿈 상태가 바뀌어 status는 dirty로 보이나 git 정규화 후 동일.
+
+**감별**: `git diff --numstat <bundle>`이 행을 안 뱉으면(경고만) 내용차 0=CRLF뿐. 실 변경은 numstat에 `+/-` 줄수가 찍힘(예: history.js `5 5`, app.css `68 18`).
+
+**해결 / 예방**: 실 변경 파일만 명시 stage(history.js·app.css·소스·docs), 무관 9개는 add 안 함. 번들 훅 `require-bundle-build.ps1`은 `git diff --exit-code -- src/main/resources/static`(내용 비교)라 CRLF-only는 통과(전체 빌드가 커밋 번들을 결정적으로 재현하면 exit 0). 워크트리에서 프론트 PR 커밋 시 `git add -A` 금지·변경 파일만 명시. **2회차(T-103 재발)**.
+
+**관련**: N-117(static-preview), T-082, T-063, T-103(BOM/EOL 미보존 군).
+
+---
+
+## T-094. Windows `timeout 30 git push --delete`도 hang 못 막음 → `gh api -X DELETE repos/{owner}/{repo}/git/refs/heads/<branch>`
+
+**증상**: PR은 MERGED인데 백그라운드 Bash가 계속 running·완료 알림 없음·출력 0(파이프 풀버퍼링이라 hang 중엔 그간 찍은 로그도 flush 안 됨). `Get-Process git`에 머지 시각 시작된 git이 수십 분째 잔존하고 `Stop-Process`/`taskkill /F`도 "Access denied"(하네스 태스크 트리 소속이라 외부서 못 죽임).
+
+**원인**: git push가 띄운 **자식 프로세스**(git-remote-https·credential helper)가 SIGTERM을 안 받아 `timeout`이 죽이려 해도 살아남고, 그 자식이 stdout 파이프를 쥐고 있어 `timeout`/스크립트가 exit를 못 함. T-091의 `timeout 30` 처방이 실제론 무효였음이 재발로 드러남(사용자 40분 대기).
+
+**해결 / 예방**: **git push를 아예 안 쓴다** — `gh api -X DELETE repos/{owner}/{repo}/git/refs/heads/<branch>`로 원격 ref를 HTTP 삭제(gh는 자체 토큰·자식 프로세스 없음이라 hang 불가). `pr-merge.sh do_merge`를 이 방식으로 교체. 좀비 응급: PR `MERGED`면 머지는 끝난 것 → `TaskStop`으로 태스크 종료. 원격 브랜치가 남았으면 `gh api -X DELETE .../git/refs/heads/<branch>`로 정리.
+
+**관련**: T-091(이 트랩의 1차 — `timeout 30` 미봉책), T-088, T-078. **T-091의 재발**.
+
+---
+
+## T-095. 워크트리 `gh pr merge --delete-branch`가 `main is already used by worktree`로 깨짐 — 머지는 성공
+
+**증상**: `gh pr merge --auto --squash --delete-branch`가 `failed to run git: fatal: 'main' is already used by worktree at '<주 워크트리>'`로 비정상 종료 — 단 **머지·auto-merge 등록 자체는 성공**하고 로컬 `--delete-branch` 단계만 깨진다.
+
+**감별**: `gh pr view <PR> --json state`가 `MERGED`이면 머지는 성공. `git ls-remote --heads origin <branch>`로 원격 브랜치 잔존 확인.
+
+**원인**: `gh pr merge --delete-branch`는 머지 후 로컬 브랜치를 지우려고 기본 브랜치(main)로 `git checkout`을 시도하는데, 워크트리 세션에선 main이 **주 워크트리에 이미 체크아웃**돼 있어 gh의 그 로컬 git 단계가 거부됨. 서버사이드 머지·`--auto` 등록은 그 전에 끝나 영향 없음.
+
+**해결 / 예방**: ① 머지 확인(`state=MERGED`) ② 원격 정리 `gh api -X DELETE repos/{owner}/{repo}/git/refs/heads/<branch>` ③ 로컬 정리는 main 말고 그 워크트리의 **베이스 브랜치로** `git checkout <base>` 후 `git branch -D <branch>`. 워크트리에서 머지할 땐 `--delete-branch`를 빼고 `gh pr merge <PR> --auto --squash`만 등록.
+
+**관련**: T-094(Windows `git push --delete` hang 동시 회피), #511·#515. **2회차 — 트래커 등재 + CLAUDE.md Git워크플로 auto-merge 절 caveat 승격 완료.**
+
+---
+
+## T-096. 연쇄 PR 폴링 미머지 종료(TIMEOUT/OPEN/DIRTY)를 머지 완료로 오인 — 다음 브랜치 전 `gh pr view --json state`=MERGED 확인
+
+**증상**: PR-1 머지 폴링이 `RESULT: TIMEOUT last=OPEN`(CI는 SUCCESS였으나 다른 세션 머지로 DIRTY라 머지 안 됨)인데 "머지됨"으로 읽고 `git checkout -b <pr2> origin/main` → origin/main에 PR-1이 없어 직전 PR 변경이 PR-2 브랜치에 빠진 채 시작. 빌드·테스트는 통과해 **조용한 회귀**.
+
+**원인**: 폴링 종료를 "머지 완료"와 동일시 — `TIMEOUT`/`OPEN`/`DIRTY`는 미머지 종료인데 다음 단계가 그걸 머지 전제로 진행.
+
+**해결 / 예방**: 다음 단계 브랜치를 따기 전 **반드시 `gh pr view <PR> --json state`가 `MERGED`인지 확인**(폴링 exit·메시지가 아니라 PR 상태가 단일 진실). DIRTY면 `git rebase origin/main`+`push --force-with-lease`로 해결 후 재머지(CLAUDE.md Git워크플로 5번). 연쇄 PR에서 "폴링 끝 ≠ 머지 완료".
+
+**관련**: N-032(워크트리·브랜치 격리), T-083(DIRTY 헛폴링).
+
+---
+
+## T-097. Git Bash에서 멀티바이트(이모지·한글) `grep`/`sed` 패턴이 조용히 0건 — PowerShell `.Contains/.Replace` 또는 Grep(ripgrep)
+
+**증상**: `grep -rl '<span class="emoji">📚</span>' ... | while read f; do sed -i ...; done`이 grep 0건이라 while 루프가 한 번도 안 돌아 **치환 0건인데 에러 없이 성공처럼 종료**.
+
+**원인**: 이 환경 Git Bash가 C 로케일이라 4바이트 이모지 등 멀티바이트를 패턴으로 신뢰성 있게 못 잡음(반면 **Grep 도구=ripgrep은 같은 패턴을 정상 매칭**해 대비로 진단됨).
+
+**해결 / 예방**: 일괄 치환은 PowerShell 리터럴 `.Contains`/`.Replace`로 우회(정규식 아닌 리터럴이라 SVG의 `/`·`"`·`$` 이스케이프 불필요). 쓰기는 BOM 없는 UTF-8(`New-Object System.Text.UTF8Encoding $false` + `[IO.File]::WriteAllText`)로 저장(PS5.1 `Set-Content -Encoding utf8`는 BOM 부착). 검증은 **bash grep 말고 Grep 도구(ripgrep)**로. 멀티바이트(이모지·한글) 검색·치환은 Grep 도구나 PowerShell로, bash `grep`/`sed`에 멀티바이트 패턴을 직접 넣지 말 것.
+
+**관련**: T-026, T-003(PowerShell 5.1 인코딩·멀티바이트 처리 함정 군).
+
+---
+
+## T-098. changelog 멀티세션 동시 append 충돌 → `.gitattributes` `merge=union`
+
+**증상**: 멀티세션이 전부 `claude-docs/changelog.md` 맨 아래에 행을 추가해 항상 같은 위치가 충돌 → PR마다 rebase·force-push 왕복. 2026-06-26 하루에만 #516·#518·#520·#523에서 반복(한 PR이 두 번 DIRTY 나기도).
+
+**원인**: CLAUDE.md가 "changelog 맨 아래 한 줄"을 강제하는데 append-only 로그라 서로 다른 새 행이 파일 끝 같은 hunk에 떨어져 git이 자동 병합 불가 → 멀티세션 활발기엔 구조적으로 불가피.
+
+**해결 / 예방**: `.gitattributes`에 `claude-docs/changelog.md merge=union` — git 내장 union merge 드라이버가 충돌 시 양쪽 hunk를 마커 없이 **둘 다** 보존(append-only에 정확히 맞음, 중복 행 없음). 주의: union은 **양쪽이 같은 행을 수정**하면 둘 다 남겨 중복 가능 — changelog는 각자 새 행만 추가라 안전, 본문을 동시 편집하는 파일엔 부적합. 적용 시점: 이 PR이 main에 들어간 **다음** rebase부터 효과.
+
+**관련**: T-083(DIRTY 진단), T-096(미머지 오인). **멀티세션 충돌 군 5회+**.
+
+---
+
+## T-099. 전역 `button{border-radius}` 누수 — 명시값 제거 시 전역값이 샌다, `border-radius:0`로 상쇄
+
+**증상**: 책장 필터 세그먼트를 각지게(컨테이너 `border-radius:8px`+`overflow:hidden`) 만든 뒤 선택된 active 셀의 초록 하이라이트만 더 둥글어(10px) 겉 박스(8px)와 어긋남.
+
+**원인**: 세그먼트화 때 `.filter-chip`의 명시적 `border-radius`를 **제거**하자 전역 `button, .btn{border-radius:10px}`(app.css §buttons)가 셀에 그대로 상속 → active 셀 배경이 컨테이너보다 둥근 10px라 첫/끝 셀 active 시 코너에 카드배경 틈.
+
+**감별**: static-preview에서 active 셀 `getComputedStyle.borderTopLeftRadius`가 10px(컨테이너 8px와 불일치). 좌상단 곡선 안쪽 hit-test(`elementFromPoint(left+2,top+2)`)가 셀 아닌 컨테이너로 잡힘=초록이 코너 못 채움.
+
+**해결 / 예방**: `.filter-chip`에 `border-radius:0` 명시(전역 10px 상쇄) → 셀 직각 + 컨테이너 `overflow:hidden`이 첫/끝 active를 8px로 클립해 겉 박스와 동심 일치. 전역 `button`의 속성(width·border-radius 등)을 칩·탭·세그먼트로 쓸 때 **명시값을 제거하면 전역값이 샌다** — 기존 명시값을 지울 땐 그 속성을 `0`/`auto`로 끄거나 의도값을 다시 박을 것.
+
+**관련**: **전역 button 누수 군** — width판 T-056·T-081, radius판 이 항목. #523, N-118.
+
+---
+
+## T-100. 워크트리 frontend `node_modules` 없음 → vite 미해결, `npm ci` (디렉토리 존재 ≠ 패키지 설치)
+
+**증상**: `npx vitest run`·`npm run build`가 `vite.config.ts` 로드 단계에서 vite·@vitejs/plugin-vue 미해결로 startup error. 소스·테스트는 멀쩡.
+
+**원인**: `git worktree add`는 **git 추적 파일만** 복제하고 `node_modules`(gitignore)는 안 만든다 → 워크트리 frontend는 의존성 0. 함정: 메인 `frontend/node_modules`가 **빈 디렉토리거나 빌드도구 미설치**면 junction으로 재사용해도 무용 — 디렉토리 존재 ≠ 패키지 설치.
+
+**감별**: `ls node_modules | wc -l`(0이면 빈 껍데기)·`test -d node_modules/vite`로 **핵심 패키지** 존재를 확인.
+
+**해결 / 예방**: 워크트리 frontend에서 `npm ci`(package-lock 기준 완전 설치). junction은 메인이 **완전 설치돼 있을 때만** 빠른 재사용 가치. junction 제거는 `cmd //c rmdir <link>`(reparse point만 제거, `/S` 금지 — 타겟 보존. PowerShell `Remove-Item -Recurse`는 타겟까지 지울 위험). 워크트리에서 프론트 테스트/빌드 전 `test -d frontend/node_modules/vite`로 핵심 패키지 확인 먼저.
+
+**관련**: N-032(워크트리 격리), T-063, T-093(번들 빌드).
+
+---
+
+## T-101. content-hash 정적자산 인증 누수 — `@{}` 단일파일 해시 URL이 정확매칭 permitAll에서 빠져 302, 와일드카드로
+
+**증상**: 미인증 페이지 로드 시 `/pwa-install.js` → 해시 URL로 렌더되는데 SecurityConfig permitAll이 `/pwa-install.js`만 둬서 해시 URL이 `anyRequest().authenticated()`로 떨어짐 → 302 redirect + `RequestCache`에 SavedRequest 저장 → 로그인 성공이 그 .js로 리다이렉트 → 대시보드 대신 깨진 랜딩. 캐시된 세션에선 재현 안 됨.
+
+**원인**: `spring.web.resources.chain`이 `@{/pwa-install.js}`를 `/pwa-install-<md5>.js`로 렌더하는데 인가 매처가 정확 경로만 허용해 해시 변형 URL이 걸림. 루트 단일 파일을 `@{}`로 참조하는 것만 정확매칭에 갇힘.
+
+**감별**: 표적 E2E 도입 첫 실행에서 로그인 setup이 `#dashboard-app` 미도달. 디버그로 최종 URL=`/pwa-install-<hash>.js?continue`(SavedRequest) 실측.
+
+**해결 / 예방**: `permitAll("/pwa-install*.js", "/manifest*.json")` 와일드카드(해시 변형 포함, ant `*`는 세그먼트 내). 회귀가드: `PwaStaticAccessTest`에 가짜 해시 `get("/pwa-install-deadbeef.js")`·`/manifest-deadbeef.json` 미인증 `not(302)` 단언.
+
+**관련**: 개념 N-126, N-108(resource chain 해시), N-055, N-070(인가매처 누락), PR feat/playwright-e2e.
+
+---
+
+## T-102. auto-merge 후 손수 짠 워처가 DIRTY를 안 봐 침묵 정지 — `pr-merge.sh` 쓰거나 워처에 DIRTY 분기
+
+**증상**: auto-merge 등록 후 직접 짠 백그라운드 머지 워처가 `MERGED`/`CLOSED`만 기다려 헛폴링. 멀티세션 중 타 PR 머지로 생긴 `DIRTY`/`CONFLICTING`를 못 알리고 침묵 정지.
+
+**감별**: `gh pr view <PR> --json state,mergeStateStatus,mergeable` — state=OPEN+mergeStateStatus=`DIRTY`+mergeable=`CONFLICTING`이면 충돌(auto-merge 못 돎), `BLOCKED`면 단순 CI 대기(이 둘 구분 필수 — T-083).
+
+**원인**: auto-merge는 DIRTY면 머지 못 함 → 분기 후 타 PR이 같은 파일을 머지하면 충돌이 **사후** 발생하는데, 머지 감시 폴링이 MERGED/CLOSED만 분기하면 DIRTY를 영영 안 잡아 hang처럼 보임.
+
+**해결 / 예방**: **손수 워처를 짜지 말 것 — `.claude/scripts/pr-merge.sh <PR>`**가 이미 DIRTY 즉시 차단 + CI 폴링 + 하드 타임아웃을 제공한다. 굳이 워처가 필요하면 MERGED/CLOSED뿐 아니라 `mergeStateStatus==DIRTY` 분기를 반드시 넣어 재충돌을 일찍 알린다. auto-merge "등록=끝"이 아니다 — 멀티세션 활발기엔 분기 후 충돌이 사후 발생하니 머지까지 DIRTY를 감시하거나 pr-merge.sh로 동기 머지.
+
+**관련**: T-083, T-096, T-098, T-094. **머지 자동화 hang·DIRTY-blind 군 5회차**.
+
+---
+
 ## T-103. 스크립트로 파일 재생성 시 ReadAllText + UTF8Encoding(false)가 원본 BOM을 떨어뜨린다
 
 **증상**: troubleshooting.md 목차를 자동 재생성하는 스크립트(`rebuild-troubleshooting-toc.ps1`)를 처음 돌렸더니, 의도한 목차 9줄 외에 **파일 첫 줄 전체가 diff에 떴다**(`-﻿# 트러블슈팅` → `+# 트러블슈팅`).
@@ -1749,6 +2027,20 @@ bash .claude/scripts/pr-merge.sh <PR번호>
 - 일반 원칙: 커스텀 trailer는 "메시지 어디 있든 `Key: value`면 잡힌다"가 **아니다** — 마지막 블록 한정이라 squash·rebase가 위치를 흔들면 구조 조회가 깨진다. 위치 비의존이 필요하면 grep / `git notes`.
 
 **관련**: 세션 메타 기록 규칙(#543), 개념은 [learning-notes.md](learning-notes.md) N-128. **1회차(신규)** — 트래커 표 미등재.
+
+---
+
+## T-105. 빈 워크트리 폴더가 `Device or resource busy`로 안 지워짐 — 죽은 세션 좀비 셸이 cwd 점유, cwd 검증 PID만 종료
+
+**증상**: `git worktree` 정리 후 `.claude/worktrees/<name>` 또는 형제 `BookTimer-*` 빈 폴더가 남아 `rm -rf`가 "Device or resource busy". 폴더 안엔 작업물 0(`.`·`..`만).
+
+**원인**: Claude Code의 Bash/PowerShell 도구가 그 워크트리에서 띄운 셸(`bash.exe`·`powershell.exe`)이 세션 종료 후에도 cwd를 그 폴더로 유지한 채 좀비로 남아 디렉토리를 점유 — **node/java가 아니라 셸 프로세스**라 `Get-Process node,java`로는 안 잡힘(실제로 한 폴더에 bash 10·powershell 1개가 남아 있었음).
+
+**감별**: `handle.exe`(Sysinternals) 있으면 `handle <path>`. 없으면 `NtQueryInformationProcess`(PEB→ProcessParameters→CurrentDirectory) C# P/Invoke로 전체 프로세스 cwd를 읽어 그 폴더를 cwd로 가진 PID만 식별.
+
+**해결 / 예방**: cwd 검증된 그 PID만 `Stop-Process -Force` 후 폴더 삭제 — 살아있는 세션 셸(cwd=메인/타 워크트리)·gradle 데몬(cwd=`~/.gradle`)·타 프로젝트는 cwd가 달라 자동 제외. PID 하드코딩 말고 삭제 직전 cwd 재검증(PID 재사용 방지). 세션 종료 시 도구 셸 정리, 워크트리 제거 전 그 폴더 기반 셸 종료.
+
+**관련**: T-086(docker — 같은 "세션 종료 후 자원 미정리" 계열).
 
 ---
 
@@ -1855,7 +2147,7 @@ bash .claude/scripts/pr-merge.sh <PR번호>
 | 2026-06-26 | T-097 (Git Bash에서 멀티바이트 문자열(이모지·한글)을 `grep`/`sed` 패턴으로 쓰면 조용히 0건 매칭 → 일괄 치환이 통째로 누락 — 헤더 로고 📚→책 SVG 일괄 교체 때 `grep -rl '<span class="emoji">📚</span>' ... | while read f; do sed -i ...; done`이 grep 0건이라 while 루프가 한 번도 안 돌아 **치환 0건인데 에러 없이 성공처럼 종료** / 증상=치환 스크립트가 정상 종료하는데 파일은 그대로, "치환된 파일 0"·grep 카운트 0 / 원인=이 환경 Git Bash가 C 로케일이라 4바이트 이모지 등 멀티바이트를 패턴으로 신뢰성 있게 못 잡음(반면 **Grep 도구=ripgrep은 같은 패턴을 정상 매칭**해 대비로 진단됨) / 해결=일괄 치환은 PowerShell 리터럴 `.Contains`/`.Replace`로 우회(정규식 아닌 리터럴이라 SVG의 `/`·`"`·`$` 이스케이프 불필요), 쓰기는 BOM 없는 UTF-8(`New-Object System.Text.UTF8Encoding $false` + `[IO.File]::WriteAllText`)로 저장(PS5.1 `Set-Content -Encoding utf8`은 BOM 부착) / 검증=치환 전후 카운트는 **bash grep 말고 Grep 도구(ripgrep)**로 — 여기선 brand 📚 0·brand-ico 25 확인 / 예방=멀티바이트(이모지·한글) 검색·치환은 Grep 도구나 PowerShell로, bash `grep`/`sed`에 멀티바이트 패턴을 직접 넣지 말 것 / T-026·T-003(PowerShell 5.1 인코딩·멀티바이트 처리 함정 군)) |
 | 2026-06-26 | T-098 (멀티세션이 전부 `claude-docs/changelog.md` **맨 아래에 행을 추가**해 항상 같은 위치가 충돌 → PR마다 rebase·force-push 왕복 — 2026-06-26 하루에만 #516·#518·#520·#523에서 반복(한 PR이 두 번 DIRTY 나기도) / 원인=CLAUDE.md가 "changelog 맨 아래 한 줄"을 강제하는데 append-only 로그라 서로 다른 새 행이 파일 끝 같은 hunk에 떨어져 git이 자동 병합 불가 → 멀티세션 활발기엔 구조적으로 불가피 / **해결(하드픽스)=`.gitattributes`에 `claude-docs/changelog.md merge=union`** — git 내장 union merge 드라이버가 충돌 시 양쪽 hunk를 마커 없이 **둘 다** 보존(append-only에 정확히 맞음, 중복 행 없음). 적용 후 changelog는 merge/rebase에서 충돌 안 나고 양쪽 새 행이 자동으로 합쳐짐(순서는 날짜대로는 아니어도 둘 다 들어감) / 주의=union은 **양쪽이 같은 행을 수정**하면 둘 다 남겨 중복 가능 — changelog는 각자 새 행만 추가라 안전, 본문을 동시 편집하는 파일엔 부적합 / 적용 시점=이 PR이 main에 들어간 **다음** rebase부터 효과(merge 시 양쪽 브랜치에 `.gitattributes`가 있어야 드라이버 작동) / 수동 해결 잔존 절차는 CLAUDE.md Git워크플로 5번(DIRTY→rebase) 그대로 / T-083(DIRTY 진단)·T-096(미머지 오인)) |
 | 2026-06-26 | T-099 (전역 `button{border-radius:10px}`가 컴포넌트 버튼에 누수 — 책장 필터 세그먼트를 각지게(컨테이너 `border-radius:8px`+`overflow:hidden`) 만든 뒤 선택된 active 셀의 초록 하이라이트만 더 둥글어(10px) 겉 박스(8px)와 어긋남 / 원인=세그먼트화 때 `.filter-chip`의 명시적 `border-radius`(원래 `999px` pill)를 **제거**하자 전역 `button, .btn{border-radius:10px}`(app.css §buttons)가 셀에 그대로 상속 → active 셀 배경이 컨테이너보다 둥근 10px라 첫/끝 셀 active 시 코너에 카드배경 틈 / 감별=static-preview에서 active 셀 `getComputedStyle.borderTopLeftRadius`가 10px(컨테이너 8px와 불일치)·좌상단 곡선 안쪽 hit-test(`elementFromPoint(left+2,top+2)`)가 셀 아닌 컨테이너로 잡힘=초록이 코너 못 채움 / 해결=`.filter-chip`에 `border-radius:0` 명시(전역 10px 상쇄) → 셀 직각 + 컨테이너 `overflow:hidden`이 첫/끝 active를 8px로 클립해 겉 박스와 동심 일치(수정 후 activeRadius 0px·코너가 셀로 채워짐 실측) / 예방=전역 `button`의 속성(width·border-radius 등)을 칩·탭·세그먼트로 쓸 때 **명시값을 제거하면 전역값이 샌다** — 기존 명시값을 지울 땐 그 속성을 `0`/`auto`로 끄거나 의도값을 다시 박을 것 / **전역 button 누수 계열: width판은 T-056(`width:auto` 상쇄)·T-081·#286·#368, 이번은 radius판 — 트래커 「전역 button 속성 누수」 군 등재**, 같은 뿌리(전역 요소 셀렉터 속성이 자식 컴포넌트에 상속) / #523, N-118(CSS 침묵 드랍 계열)) |
-| 2026-06-25 | T-087 (빈 워크트리 폴더가 `Device or resource busy`로 안 지워짐 — 죽은 Claude 세션의 도구 셸 좀비가 cwd로 점유 / 증상=`git worktree` 정리 후 `.claude/worktrees/<name>` 또는 형제 `BookTimer-*` 빈 폴더가 남아 `rm -rf`가 "Device or resource busy", 폴더 안엔 작업물 0(`.`·`..`만) / 원인=Claude Code의 Bash/PowerShell 도구가 그 워크트리에서 띄운 셸(`bash.exe`·`powershell.exe`)이 세션 종료 후에도 cwd를 그 폴더로 유지한 채 좀비로 남아 디렉토리를 점유 — **node/java가 아니라 셸 프로세스**라 `Get-Process node,java`로는 안 잡힘(실제로 한 폴더에 bash 10·powershell 1개가 남아 있었음) / 감별=`handle.exe`(Sysinternals) 있으면 `handle <path>`; 없으면 `NtQueryInformationProcess`(PEB→ProcessParameters→CurrentDirectory) C# P/Invoke로 전체 프로세스 cwd를 읽어 그 폴더를 cwd로 가진 PID만 식별 / 해결=cwd 검증된 그 PID만 `Stop-Process -Force` 후 폴더 삭제 — 살아있는 세션 셸(cwd=메인/타 워크트리)·gradle 데몬(cwd=`~/.gradle`)·타 프로젝트는 cwd가 달라 자동 제외 / 안전=PID 하드코딩 말고 삭제 직전 cwd 재검증(PID 재사용 방지), 대량 종료는 자동 분류기가 막을 수 있어 사용자 승인 필요 / 예방=세션 종료 시 도구 셸 정리, 워크트리 제거 전 그 폴더 기반 셸 종료. T-086(docker)과 같은 "세션 종료 후 자원 미정리" 계열) |
+| 2026-06-25 | T-105 (빈 워크트리 폴더가 `Device or resource busy`로 안 지워짐 — 죽은 Claude 세션의 도구 셸 좀비가 cwd로 점유 / 증상=`git worktree` 정리 후 `.claude/worktrees/<name>` 또는 형제 `BookTimer-*` 빈 폴더가 남아 `rm -rf`가 "Device or resource busy", 폴더 안엔 작업물 0(`.`·`..`만) / 원인=Claude Code의 Bash/PowerShell 도구가 그 워크트리에서 띄운 셸(`bash.exe`·`powershell.exe`)이 세션 종료 후에도 cwd를 그 폴더로 유지한 채 좀비로 남아 디렉토리를 점유 — **node/java가 아니라 셸 프로세스**라 `Get-Process node,java`로는 안 잡힘(실제로 한 폴더에 bash 10·powershell 1개가 남아 있었음) / 감별=`handle.exe`(Sysinternals) 있으면 `handle <path>`; 없으면 `NtQueryInformationProcess`(PEB→ProcessParameters→CurrentDirectory) C# P/Invoke로 전체 프로세스 cwd를 읽어 그 폴더를 cwd로 가진 PID만 식별 / 해결=cwd 검증된 그 PID만 `Stop-Process -Force` 후 폴더 삭제 — 살아있는 세션 셸(cwd=메인/타 워크트리)·gradle 데몬(cwd=`~/.gradle`)·타 프로젝트는 cwd가 달라 자동 제외 / 안전=PID 하드코딩 말고 삭제 직전 cwd 재검증(PID 재사용 방지), 대량 종료는 자동 분류기가 막을 수 있어 사용자 승인 필요 / 예방=세션 종료 시 도구 셸 정리, 워크트리 제거 전 그 폴더 기반 셸 종료. T-086(docker)과 같은 "세션 종료 후 자원 미정리" 계열) |
 | 2026-06-26 | T-100 (워크트리 세션에서 프론트 vitest/vite 빌드가 `Could not resolve 'vite'`/`Cannot find package 'vite'`로 즉시 실패 — 워크트리에 `frontend/node_modules`가 없어서 / 증상=`npx vitest run`·`npm run build`가 `vite.config.ts` 로드 단계에서 vite·@vitejs/plugin-vue 미해결로 startup error, 소스·테스트는 멀쩡 / 원인=`git worktree add`는 **git 추적 파일만** 복제하고 `node_modules`(gitignore)는 안 만든다 → 워크트리 frontend는 의존성 0 / 함정=메인 `frontend/node_modules`를 junction(`New-Item -ItemType Junction`)으로 재사용하려 해도, 메인 node_modules가 **빈 디렉토리거나 빌드도구(vite·vitest) 미설치**면 무용 — 이번 사례는 메인 node_modules가 빈 껍데기라 `test -d`엔 EXISTS로 잡혀 "있다"고 오인(디렉토리 존재 ≠ 패키지 설치), junction을 걸어도 vite 미해결 동일 / 감별=`ls node_modules | wc -l`(0이면 빈 껍데기)·`test -d node_modules/vite`로 **핵심 패키지** 존재를 확인(디렉토리 유무가 아니라) / 해결=워크트리 frontend에서 `npm ci`(package-lock 기준 완전 설치); 메인도 비었으면 메인에서도 `npm ci`로 채움. junction은 메인이 **완전 설치돼 있을 때만** 빠른 재사용 가치, 제거는 `cmd //c rmdir <link>`(reparse point만 제거, `/S` 금지 — 타겟 보존; PowerShell `Remove-Item -Recurse`는 타겟까지 지울 위험) / 예방=워크트리에서 프론트 테스트/빌드 전 `test -d frontend/node_modules` + 핵심 패키지 확인, 없거나 빈 껍데기면 `npm ci` 먼저 — node_modules는 "디렉토리 존재"가 아니라 "vite 등 핵심 패키지 존재"로 판정 / N-032(워크트리 격리)·T-063·T-093(번들 빌드)) |
 | 2026-06-26 | T-101 (content-hash 정적자산 인증 누수 — `spring.web.resources.chain`이 `@{/pwa-install.js}`를 `/pwa-install-<md5>.js`로 렌더하는데 SecurityConfig permitAll이 정확 경로 `/pwa-install.js`만 둬서 해시 URL이 `anyRequest().authenticated()`로 떨어짐 → 미인증 페이지 로드 시 302 redirect + `RequestCache`에 SavedRequest 저장 → 로그인 성공(`SavedRequestAwareAuthenticationSuccessHandler`)이 그 .js로 리다이렉트 → 대시보드 대신 깨진 랜딩 / `manifest.json`도 동일(`@{}` 참조), `/sw.js`는 JS 문자열(`register('/sw.js')`)이라 해시 안 됨·`/css/**`·`/icons/**`는 와일드카드라 안전 — 루트 단일 파일을 `@{}`로 참조하는 것만 정확매칭에 갇힘 / 해시 자산 max-age 365일이라 **캐시 빈 신규 세션에서만** 재현(실사용자 첫 로그인·Playwright fresh context 100%·캐시되면 안 남) → 기존 `PwaStaticAccessTest`가 `get("/manifest.json")` 정확경로만 단언해 은폐(N-055 변형판) / **표적 E2E 도입 첫 실행이 발견**: 로그인 setup이 `#dashboard-app` 미도달, 디버그로 최종 URL=`/pwa-install-<hash>.js?continue`(SavedRequest) 실측(로그인 자체는 302 성공) / 해결=permitAll `/pwa-install*.js`·`/manifest*.json` 와일드카드(해시 변형 포함, ant `*`는 세그먼트 내) / 회귀가드=`PwaStaticAccessTest`에 가짜 해시 `get("/pwa-install-deadbeef.js")`·`/manifest-deadbeef.json` 미인증 `not(302)` 단언(파일부재 404 무방, content-hash 활성 무관하게 인가만 검증) RED(SecurityConfig 원복 시 1건 FAILED)→GREEN / E2E도 RED(버그)→수정→GREEN 4 passed / 개념 N-126·N-108(resource chain 해시)·N-055, 인가매처 누락 N-070, PR feat/playwright-e2e) |
 | 2026-06-26 | T-103 (rebuild-troubleshooting-toc.ps1가 ReadAllText+UTF8Encoding($false)로 원본 BOM 떨굼 → 첫 줄 phantom diff·매번 changed / 바이트로 BOM 감지+보존으로 수정 / 도구 재생성 시 인코딩 메타(BOM·EOL) 미보존 군 — T-093(CRLF)·T-057(BOM 추가)와 2회차, 트래커 등재) |
