@@ -18,12 +18,6 @@ defineProps<{ loginId: string }>()
                 </svg>
                 <span class="dash-nav-label">독서 기록</span>
             </a>
-            <a class="dash-nav-tile" href="/search">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" />
-                </svg>
-                <span class="dash-nav-label">탐색</span>
-            </a>
             <a class="dash-nav-tile" :href="`/u/${loginId}`">
                 <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="8" r="3.6" /><path d="M5 20a7 7 0 0 1 14 0" />
