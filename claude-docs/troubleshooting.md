@@ -123,6 +123,7 @@
 - [T-104. squash 머지가 브랜치 커밋 trailer를 메시지 중간으로 밀어 git %(trailers) 구조 조회를 깨뜨린다](#t-104-squash-머지가-브랜치-커밋-trailer를-메시지-중간으로-밀어-git-trailers-구조-조회를-깨뜨린다)
 - [T-105. 빈 워크트리 폴더가 `Device or resource busy`로 안 지워짐 — 죽은 세션 좀비 셸이 cwd 점유, cwd 검증 PID만 종료](#t-105-빈-워크트리-폴더가-device-or-resource-busy로-안-지워짐--죽은-세션-좀비-셸이-cwd-점유-cwd-검증-pid만-종료)
 - [T-106. auto-merge `--delete-branch`는 비동기 머지라 원격 브랜치가 안 지워진다 — 머지 확인 후 gh API로 삭제](#t-106-auto-merge---delete-branch는-비동기-머지라-원격-브랜치가-안-지워진다--머지-확인-후-gh-api로-삭제)
+- [T-107. `git add`와 `git commit`을 한 명령으로 묶으면 PreToolUse 자동수정 훅(목차·번들)이 skip된다 — add는 별도 호출로](#t-107-git-add와-git-commit을-한-명령으로-묶으면-pretooluse-자동수정-훅목차번들이-skip된다--add는-별도-호출로)
 
 ---
 
@@ -2064,6 +2065,21 @@ bash .claude/scripts/docker-cleanup.sh --all      # Up 포함 전부 (먼저 --d
 
 ---
 
+## T-107. `git add`와 `git commit`을 한 명령으로 묶으면 PreToolUse 자동수정 훅(목차·번들)이 skip된다 — add는 별도 호출로
+
+**증상**: troubleshooting.md(또는 프론트 번들)를 고치고 `git add <file> && git commit -F msg`처럼 **한 Bash 명령으로 묶어** 커밋했더니, 목차 자동생성 훅(`require-troubleshooting-toc`)이 안 돌아 **목차가 갱신 안 된 채** 커밋됐다(본문 헤딩만 추가되고 목차에 그 줄이 빠짐). 같은 변경을 `git add` 따로, `git commit` 따로 하면 정상 작동했다(실제로 직전 T-106 커밋이 이 함정에 당해 목차 누락 → 스크립트 수동 실행 + amend로 보정).
+
+**원인**: 이 자동수정 훅들은 **PreToolUse**(도구 실행 *전*)로 `git commit`을 가로채, 그 순간 스테이징(`git diff --cached`)을 보고 대상 파일이 있으면 산출물을 재생성해 다시 `git add` 한다. 그런데 `git add X && git commit`을 **한 호출**로 주면, 훅은 그 명령 문자열이 실행되기 **전에** 한 번 끼어드는데 — 그 시점엔 아직 `git add`가 안 돌아 스테이징이 비어 있다 → 훅이 "대상 변경 없음"으로 **skip**하고, 곧바로 명령이 add+commit을 한꺼번에 실행해 훅이 다시 끼어들 틈이 없다. `;`로 묶어도 동일(한 명령 문자열 = PreToolUse 1회, 실행 전 기준).
+
+**해결 / 예방**:
+- **`git add`를 별도 Bash 호출로 먼저** 실행하고, 그다음 `git commit`을 단독 호출한다 — commit 가로채기 시점에 이미 스테이징돼 있어 훅이 본다. (분리하면 `git add → (PreToolUse 통과) → git commit → (PreToolUse: 스테이징 봄 → 재생성·re-add)`.)
+- 이미 묶어 커밋해 skip됐으면: 해당 스크립트(`rebuild-troubleshooting-toc.ps1` 등)를 수동 실행 → `git add` → `git commit --amend`로 보정.
+- ⚠️ **주의(미검증 소지)**: 같은 PreToolUse 계열인 번들 빌드(`require-bundle-build`)·테스트 게이트(`require-tests-before-commit`)도 묶음 커밋이면 스테이징을 못 봐 **무력화될 수 있다**(특히 테스트 게이트가 skip되면 테스트 없이 커밋되는 셈) — 커밋은 항상 add 분리가 안전.
+
+**관련**: T-106(직전 커밋이 이 함정에 당함), 훅 `require-troubleshooting-toc`·`require-bundle-build`·`require-tests-before-commit`(PreToolUse 자동수정·게이트 군). **1회차(신규)**.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2174,3 +2190,4 @@ bash .claude/scripts/docker-cleanup.sh --all      # Up 포함 전부 (먼저 --d
 | 2026-06-26 | T-102 (auto-merge 등록 후 **직접 짠** 백그라운드 머지 워처가 `MERGED`/`CLOSED`만 보고 `DIRTY`를 안 봐서, 멀티세션 중 분기 직후 타 PR 머지로 생긴 충돌을 못 알리고 auto-merge가 침묵 정지 — 탐색→책방 PR #536을 `origin/main`에서 따 auto-merge 등록한 직후 다른 세션 #535(E2E)가 머지되며 `plan.md`·`changelog.md`가 겹쳐 PR이 DIRTY/CONFLICTING로 전환, 워처는 MERGED만 기다려 헛폴링·사용자가 먼저 충돌 발견 / 증상=PR이 OPEN인데 한참 안 머지됨, 워처는 계속 running / 감별=`gh pr view <PR> --json state,mergeStateStatus,mergeable` — state=OPEN+mergeStateStatus=`DIRTY`+mergeable=`CONFLICTING`이면 충돌(auto-merge 못 돎), `BLOCKED`면 단순 CI 대기(이 둘 구분 필수 — T-083) / 원인=auto-merge는 DIRTY면 머지 못 함 → 분기 후 타 PR이 같은 파일을 머지하면 충돌이 **사후** 발생하는데, 머지 감시 폴링이 MERGED/CLOSED만 분기하면 DIRTY를 영영 안 잡아 hang처럼 보임(T-083 DIRTY 진단·T-096 폴링 DIRTY 감지의 재발) / 해결=`git rebase origin/main`(changelog는 `merge=union`이라 양쪽 append 자동 병합 → 로컬 충돌 0, GitHub만 union 미적용으로 DIRTY 표시였음, T-098) → 검증(내 커밋만·내 파일만·양쪽 docs 둘 다 보존) → `git push --force-with-lease` → PR MERGEABLE 복귀(auto-merge 등록은 force-push에도 유지돼 CI 통과 시 재개) / **정답=손수 워처를 짜지 말 것 — `.claude/scripts/pr-merge.sh <PR>`가 이미 DIRTY 즉시 차단 + CI 폴링 + 하드 타임아웃(동기 머지)을 제공한다. 굳이 워처가 필요하면 MERGED/CLOSED뿐 아니라 `mergeStateStatus==DIRTY` 분기를 반드시 넣어 재충돌을 일찍 알린다** / 예방=auto-merge "등록=끝"이 아니다 — 멀티세션 활발기엔 분기 후 충돌이 사후 발생하니 머지까지 DIRTY를 감시하거나 pr-merge.sh로 동기 머지 / 머지 자동화 hang·DIRTY-blind 군 5회차 — 이번 뿌리는 "하드픽스(pr-merge.sh)가 있는데 안 쓰고 워처를 손수 짬" / T-083·T-096·T-098·T-094) |
 | 2026-06-26 | T-104 (squash 머지가 브랜치 커밋 trailer(`Session-Model`/`Effort`)를 메시지 중간으로 밀어 `git %(trailers)` 구조 조회가 빈 값 — git trailer 파서는 **맨 끝 문단 1개**만 인식, GitHub squash가 `Co-authored-by`를 `---------` 구분선과 함께 맨 끝 블록으로 붙여 `Session-*`가 중간으로 밀림 / 마지막 블록에 평문·구분선 한 줄만 섞여도 25% 임계로 그 블록 trailer 동반 탈락 / 값은 보존(`git log --grep`으로 잡힘)·조회만 깨짐 → 우회=grep(`%B|grep -oP`), 근본=마지막 trailer 블록에 합류 / 1회차 신규 / N-128·#543) |
 | 2026-06-27 | T-106 (auto-merge `--delete-branch`는 비동기 머지라 원격 브랜치가 안 지워진다 — `gh pr merge <PR> --auto --squash --delete-branch`로 머지(MERGED) 후에도 원격 브랜치가 `git ls-remote`에 잔존, 주 워크트리에서도 발생 / 원인=`--auto`는 CI 통과 후 나중에 서버사이드로 머지(비동기)하는데 `--delete-branch`의 삭제는 gh CLI가 머지 직후 로컬에서 처리 → 등록 시점엔 머지 전이라 못 지우고, 서버 머지 땐 gh가 이미 끝나 누락 / 해결=MERGED 확인 후 `gh api -X DELETE repos/{owner}/{repo}/git/refs/heads/<branch>`(T-094, Windows push hang 회피)·로컬 `git branch -D` / 근본=repo "Automatically delete head branches" 설정 / 1회차 신규, T-095(--delete-branch 정리 실패) 계열·T-094) |
+| 2026-06-27 | T-107 (`git add`와 `git commit`을 한 Bash 명령으로 묶으면 PreToolUse 자동수정 훅이 skip된다 — `git add <file> && git commit`처럼 묶으면 목차 자동생성 훅(require-troubleshooting-toc)이 안 돌아 목차 갱신 누락(본문 헤딩만 추가되고 목차 줄 빠짐), add/commit 분리하면 정상 / 원인=훅이 PreToolUse(명령 실행 *전*)로 commit을 가로채 `git diff --cached`를 보는데, 묶음 명령은 그 시점에 아직 add 전이라 스테이징이 비어 skip → 곧 add+commit이 한꺼번에 실행돼 끼어들 틈 없음(`;`로 묶어도 동일) / 해결=`git add`를 별도 호출로 먼저, 그다음 `git commit` 단독 호출 / 보정=스크립트 수동실행→add→`git commit --amend` / 주의=번들(require-bundle-build)·테스트게이트(require-tests-before-commit)도 같은 식 무력화 소지(테스트 skip되면 위험) / 1회차 신규, T-106에서 실제 당함) |
