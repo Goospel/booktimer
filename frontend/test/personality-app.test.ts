@@ -89,6 +89,21 @@ describe('PersonalityApp', () => {
         await vi.waitFor(() => expect(wrapper.find('.personality-carousel-wrap').exists()).toBe(true));
     });
 
+    test('READY: 책장 요약 메타·장르·저자가 실데이터로 바인딩된다(필드 뒤바뀜 가드)', async () => {
+        setupDom();
+        const wrapper = mount(PersonalityApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.find('.pbti-meta').exists()).toBe(true));
+        const text = wrapper.text();
+        // 인접 3필드는 픽스처에서 전부 다른 값(완독5·저자4·장르3) → distinctAuthors↔distinctGenres 뒤바뀜이나
+        // finishedBooks→totalBooks(=10) 오바인딩을 조용히 통과시키지 않게 수치+단위까지 단언한다.
+        expect(text).toContain('완독 5권');
+        expect(text).toContain('저자 4명');
+        expect(text).toContain('장르 3종');
+        // joinLabels(' · ') 통합 경로 — 요약 라벨 값(장르·저자)이 실데이터로 흐르는지 컴포넌트 레벨에서 1회 못박기
+        expect(text).toContain('소설');
+        expect(text).toContain('한강');
+    });
+
     test('COLD_START: 안내 문구 보임, refresh 버튼 없음', async () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
             ok: true,
@@ -97,7 +112,10 @@ describe('PersonalityApp', () => {
         setupDom();
         const wrapper = mount(PersonalityApp, { attachTo: document.body });
         await vi.waitFor(() => expect(wrapper.text()).toContain('조금 더 읽으면'));
-        expect(wrapper.find('.refresh-form').exists()).toBe(false);
+        expect(wrapper.find('.pbti-refresh').exists()).toBe(false);
+        // §4.2/§4.3: 콜드스타트 카피의 수치도 실데이터 바인딩(완독 0권 / 최소 1권)
+        expect(wrapper.text()).toContain('0권');
+        expect(wrapper.text()).toContain('1권');
     });
 
     test('FALLBACK: 안내 문구 보임, refresh 버튼 있음', async () => {
@@ -108,7 +126,7 @@ describe('PersonalityApp', () => {
         setupDom();
         const wrapper = mount(PersonalityApp, { attachTo: document.body });
         await vi.waitFor(() => expect(wrapper.text()).toContain('잠시 후 다시 분석'));
-        expect(wrapper.find('.refresh-form').exists()).toBe(true);
+        expect(wrapper.find('.pbti-refresh').exists()).toBe(true);
     });
 
     test('refresh 클릭 → POST /api/personality/refresh + X-CSRF-TOKEN 헤더', async () => {
@@ -123,9 +141,9 @@ describe('PersonalityApp', () => {
         );
         setupDom();
         const wrapper = mount(PersonalityApp, { attachTo: document.body });
-        await vi.waitFor(() => expect(wrapper.find('.refresh-form').exists()).toBe(true));
+        await vi.waitFor(() => expect(wrapper.find('.pbti-refresh').exists()).toBe(true));
 
-        const refreshBtn = wrapper.find('.refresh-form button');
+        const refreshBtn = wrapper.find('.pbti-refresh button');
         await refreshBtn.trigger('click');
 
         await vi.waitFor(() => {
@@ -152,11 +170,11 @@ describe('PersonalityApp', () => {
         );
         setupDom();
         const wrapper = mount(PersonalityApp, { attachTo: document.body });
-        await vi.waitFor(() => expect(wrapper.find('.refresh-form').exists()).toBe(true));
+        await vi.waitFor(() => expect(wrapper.find('.pbti-refresh').exists()).toBe(true));
 
-        await wrapper.find('.refresh-form button').trigger('click');
+        await wrapper.find('.pbti-refresh button').trigger('click');
 
-        await vi.waitFor(() => expect(wrapper.text()).toContain('2/3'));
+        await vi.waitFor(() => expect(wrapper.text()).toContain('2 / 3'));
     });
 
     test('refreshRemaining=0 이면 refresh 버튼이 disabled', async () => {
@@ -166,8 +184,8 @@ describe('PersonalityApp', () => {
         }));
         setupDom();
         const wrapper = mount(PersonalityApp, { attachTo: document.body });
-        await vi.waitFor(() => expect(wrapper.find('.refresh-form button').exists()).toBe(true));
-        const btn = wrapper.find('.refresh-form button').element as HTMLButtonElement;
+        await vi.waitFor(() => expect(wrapper.find('.pbti-refresh button').exists()).toBe(true));
+        const btn = wrapper.find('.pbti-refresh button').element as HTMLButtonElement;
         expect(btn.disabled).toBe(true);
     });
 
