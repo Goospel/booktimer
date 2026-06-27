@@ -1,0 +1,35 @@
+# Dependabot — 의존성 취약점·노후 버전을 주간으로 점검해 업데이트 PR을 자동 생성한다(SCA).
+# 보안 알림(vulnerability alerts)은 PUBLIC repo 기본 활성 — 취약 버전이 끼면 보안 업데이트 PR이
+# 별도로 즉시 뜨고, 아래 schedule은 그와 별개로 일반 버전 노후를 정리한다.
+# gap#4(CI 보안 게이트): 내 코드 정적분석은 CodeQL(.github/workflows/codeql.yml)이 담당.
+version: 2
+updates:
+  # 백엔드(Gradle) — build.gradle 의존성
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "backend"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # 프론트(npm) — frontend/package.json
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "frontend"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # GitHub Actions — 워크플로가 핀한 액션 버전(actions/checkout 등)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: "chore(ci)"
