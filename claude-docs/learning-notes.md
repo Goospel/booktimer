@@ -129,6 +129,7 @@
 - [N-126. content-hash 정적자산을 정확 경로로만 permitAll하면 해시 URL이 인증에 걸려 샌다 — 와일드카드로 변형까지 허용](#n-126-content-hash-정적자산을-정확-경로로만-permitall하면-해시-url이-인증에-걸려-샌다--와일드카드로-변형까지-허용)
 - [N-127. Playwright 실행과 결과 육안 확인 — 헤드리스가 기본, headed·ui·HTML 리포트·trace viewer로 눈으로 본다](#n-127-playwright-실행과-결과-육안-확인--헤드리스가-기본-headeduihtml-리포트trace-viewer로-눈으로-본다)
 - [N-128. git trailer는 "맨 끝 문단" 하나만 파싱한다 — squash가 위치를 흔들면 %(trailers) 조회가 깨진다](#n-128-git-trailer는-맨-끝-문단-하나만-파싱한다--squash가-위치를-흔들면-trailers-조회가-깨진다)
+- [N-129. SAST(내 코드) vs SCA(의존성) — CodeQL·Dependabot·SpotBugs·OWASP의 자리](#n-129-sast내-코드-vs-sca의존성--codeqldependabotspotbugsowasp의-자리)
 
 ---
 
@@ -5906,3 +5907,37 @@ git이 trailer 블록을 찾는 규칙(porcelain `%(trailers)`와 plumbing `inte
 
 - 트러블슈팅 **T-104** — 같은 함정의 재발 방지 절차(조회는 grep으로).
 - 세션 메타 기록 규칙 **#543**(CLAUDE.md 「계획 우선 → 세션 메타 기록」)에서 이 함정이 드러났다.
+
+---
+
+## N-129. SAST(내 코드) vs SCA(의존성) — CodeQL·Dependabot·SpotBugs·OWASP의 자리
+
+> **한 줄 요약**: 코드 보안 점검은 "검사 대상"이 둘로 갈린다 — **내가 쓴 코드**를 보는 SAST(정적 분석)와 **남이 만든 라이브러리(의존성)**를 보는 SCA. 둘은 다른 도구가 담당하고 한쪽만 하면 반대쪽이 뚫린다. 우리(PUBLIC repo·Spring Boot 4)엔 GitHub 네이티브인 CodeQL(SAST)+Dependabot(SCA)가 마찰이 가장 적다.
+
+### 비유로 잡기
+
+- **SAST** = 건축 검사관이 *네가 그린 설계도·시공*을 직접 뜯어보며 결함(누수·균열)을 찾는다 → 네 코드의 SQL 인젝션·XSS·인증 우회.
+- **SCA** = *사 온 부품*에 리콜이 걸렸는지 부품 일련번호를 리콜 DB와 대조한다 → 네가 의존하는 라이브러리의 알려진 CVE.
+
+### 네 도구의 자리
+
+| | 내 코드 (SAST) | 의존성 (SCA) |
+|---|---|---|
+| **GitHub 네이티브** | **CodeQL** | **Dependabot** |
+| **빌드 통합형** | SpotBugs | OWASP dependency-check |
+
+- **CodeQL** — 코드를 *질의 가능한 DB*로 바꿔 "이런 모양의 취약점 있나?"를 쿼리로 찾는다(보안 특화). Java+JS 동시, PUBLIC repo 무료, GitHub Actions로 돌고 결과가 PR·Security 탭에 뜬다. `build-mode: none`이면 빌드 없이 분석.
+- **Dependabot** — 의존성 manifest를 감시하다 취약/노후 버전이 끼면 알림 + 버전 올리는 PR 자동 생성. CI 비용 0.
+- **SpotBugs** — Java 전용, 컴파일된 바이트코드에서 버그 패턴(널 참조·자원 누수)+일부 보안. Gradle 플러그인이라 build.gradle을 건드린다(우리 Boot 4 같은 최신은 플러그인 호환 리스크).
+- **OWASP dependency-check** — NVD(취약점 DB)를 통째로 내려받아 대조. 무겁고 느리고 CI에서 플래키.
+
+### 면접 Q&A 대비
+
+- *"SAST와 SCA 차이?"* → SAST는 내가 작성한 소스의 취약점(실행 않고 코드 자체 분석), SCA는 제3자 의존성의 알려진 취약점(버전 대조). 보완 관계라 둘 다 필요.
+- *"왜 SpotBugs 대신 CodeQL?"* → SpotBugs는 빌드 플러그인이라 최신 Boot/Java toolchain과 충돌 가능 + 보안보다 버그 패턴 위주. CodeQL은 빌드 무관(build-mode none)·보안 특화·PUBLIC 무료·GitHub 통합. 단 **private repo는 GitHub Advanced Security(유료)** 필요.
+- *"required check로 만들면?"* → 통과 못 하면 머지 불가(branch protection). 단 required 체크는 모든 PR에서 돌아야 한다 — `paths-ignore`로 스킵되면 pending으로 영구 블록(N-070 함정). 또 문서-only PR에도 돌아 매 PR 시간이 는다 → required 승격은 비용을 따져 결정.
+
+### 코드 위치 / 관련
+
+- `.github/workflows/codeql.yml`(CodeQL), `.github/dependabot.yml`(Dependabot) — gap#4 Phase A 도입.
+- N-070(required status check × `paths-ignore` 함정), N-127·N-084(E2E는 별 축 — 로컬 수동 유지, CI 승격 보류).

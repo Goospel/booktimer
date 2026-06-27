@@ -1,0 +1,49 @@
+name: CodeQL
+
+# CodeQL — 내 코드의 보안 취약점을 정적 분석한다(SAST). PUBLIC repo라 무료.
+# gap#4(CI 보안 게이트): 의존성(SCA)은 Dependabot(.github/dependabot.yml)이 담당.
+#
+# 현재는 advisory(머지를 막지 않음) — 결과는 PR Checks·Security 탭에 뜬다.
+# required check 승격(branch protection)은 green 확인 후 Phase B에서 별도 결정.
+# build-mode: none — Java도 빌드 없이 분석(Gradle/Java21 toolchain 빌드 복잡성 회피).
+#
+# paths-ignore를 두지 않는다 — required로 올릴 때 문서-only PR에서 스킵되면 체크가
+# pending으로 남아 PR을 영영 못 막는 함정(N-070) 회피. 전 PR에서 동일하게 돈다.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 4 * * 1'   # 매주 월요일 04:17 UTC — 새 CodeQL 룰셋 반영
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write   # SARIF 결과 업로드
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: java-kotlin
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
