@@ -254,4 +254,23 @@ describe('PersonalityApp', () => {
         const selectBtns = wrapper.findAll('button').filter(b => b.text().includes('이걸로 대표 선택'));
         expect(selectBtns.length).toBe(1);
     });
+
+    test('상단 가시 제목 제거(sr-only 보존) + 안내문은 최하단 .pbti-disclaimer 1개로 이동', async () => {
+        // 헤더의 가시 제목 행(DNA 아이콘 + "{닉}님의 책BTI")과 헤더 안내문(.pbti-subtitle)을 없애되,
+        // 제목은 sr-only h1로 보존(문서 제목·접근성·SEO)하고 안내문은 페이지 최하단 작은 고지로 옮긴다.
+        setupDom();
+        const wrapper = mount(PersonalityApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.find('.personality-carousel-wrap').exists()).toBe(true));
+        // ① 상단 가시 제목 행·헤더 안내문은 제거됨
+        expect(wrapper.find('.pbti-title-row').exists()).toBe(false);
+        expect(wrapper.find('.pbti-subtitle').exists()).toBe(false);
+        // ② 제목은 sr-only h1로 보존(시각 숨김이나 DOM·접근성엔 남음)
+        const h1 = wrapper.find('h1.sr-only');
+        expect(h1.exists()).toBe(true);
+        expect(h1.text()).toContain('책BTI');
+        // ③ 안내문은 최하단 작은 고지(.pbti-disclaimer) 1개로만 노출
+        const disc = wrapper.findAll('.pbti-disclaimer');
+        expect(disc.length).toBe(1);
+        expect(disc[0].text()).toContain('MBTI처럼');
+    });
 });

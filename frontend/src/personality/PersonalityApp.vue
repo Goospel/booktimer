@@ -128,16 +128,9 @@ async function selectEntry(id: number) {
     <div v-if="error" class="status-line">데이터를 불러오지 못했습니다.</div>
 
     <template v-else-if="view">
-        <!-- 헤더: DNA 아이콘 + 제목 + 정확도 고지 -->
-        <header class="pbti-header">
-            <div class="pbti-title-row">
-                <svg class="pbti-title-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M8 3c0 4.5 8 4.5 8 9s-8 4.5-8 9"/><path d="M16 3c0 4.5-8 4.5-8 9s8 4.5 8 9"/><path d="M9 6.5h6M8.3 12h7.4M9 17.5h6"/>
-                </svg>
-                <h1 class="pbti-title">{{ nickname }}님의 책BTI</h1>
-            </div>
-            <p class="pbti-subtitle">MBTI처럼 가볍게 즐기는 재미예요. 책장이 작거나 장르가 치우치면 부정확할 수 있어요.</p>
-        </header>
+        <!-- 페이지 제목 — 화면엔 숨기고(sr-only) 문서 제목·접근성·SEO만 보존.
+             시각 최상단은 BookTimer 브랜드 로고 → 바로 카드(요청: 상단 제목 제거). -->
+        <h1 class="sr-only">{{ nickname }}님의 책BTI</h1>
 
         <!-- READY: 성향 히스토리 캐러셀 -->
         <section v-if="view.state === 'READY'" class="pbti-card">
@@ -235,6 +228,9 @@ async function selectEntry(id: number) {
             { href: '/', icon: 'home', label: '대시보드' },
             { href: '/books', icon: 'books', label: '내 책장' },
         ]" />
+
+        <!-- 최하단 정확도 고지 — 보험 약관식 작은 글씨(모든 상태 공통 노출, 옛 헤더 안내문 이전) -->
+        <p class="pbti-disclaimer">MBTI처럼 가볍게 즐기는 재미예요. 책장이 작거나 장르가 치우치면 부정확할 수 있어요.</p>
     </template>
 
     <div v-else class="status-line">불러오는 중…</div>
