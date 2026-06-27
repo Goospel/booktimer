@@ -1938,16 +1938,14 @@ body.personality-page #personality-app { gap: 18px; }
     body.personality-page .container { max-width: 720px; }
 }
 
-/* 헤더 — DNA 아이콘 + 제목 + 정확도 고지 */
-.pbti-header { display: flex; flex-direction: column; gap: 8px; }
-.pbti-title-row { display: flex; align-items: center; gap: 9px; }
-.pbti-title-ico { width: 23px; height: 23px; flex: 0 0 auto; color: var(--accent-hover); }
-.pbti-title {
-    font-family: 'Gowun Batang', serif;
-    font-size: 22px; font-weight: 700; color: var(--text);
-    margin: 0; letter-spacing: -.01em; word-break: keep-all;
+/* 페이지 제목 — sr-only(시각 숨김, 문서 제목·접근성·SEO만 보존). 표준 visually-hidden 유틸. */
+.sr-only {
+    position: absolute; width: 1px; height: 1px;
+    padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
-.pbti-subtitle { font-size: 12.5px; color: var(--muted); line-height: 1.6; margin: 0; word-break: keep-all; }
+/* 최하단 정확도 고지 — 보험 약관식 작은 글씨(옛 헤더 안내문을 페이지 맨 아래로 이전, 모든 상태 공통) */
+.pbti-disclaimer { font-size: 11px; color: var(--muted); text-align: center; line-height: 1.5; margin: 0; word-break: keep-all; }
 
 /* 카드 — 시안 personality/책장요약 카드(종이톤 표면 + 따뜻한 보더 + 둥근 18) */
 .pbti-card {
