@@ -2048,6 +2048,8 @@ bash .claude/scripts/docker-cleanup.sh --all      # Up 포함 전부 (먼저 --d
 
 ## T-106. auto-merge `--delete-branch`는 비동기 머지라 원격 브랜치가 안 지워진다 — 머지 확인 후 gh API로 삭제
 
+> ✅ **근본 해결됨 (2026-06-27, gap#3)**: repo 설정 `deleteBranchOnMerge=true`를 켰다 → GitHub가 머지(auto-merge 포함) 직후 **서버사이드로 원격 브랜치를 자동 삭제**한다. 이 트랩(원격 잔존)도 아래 gh API 수동삭제도 더는 필요 없다. 아래 본문은 그 설정이 꺼진 환경을 위한 기록.
+
 **증상**: `gh pr merge <PR> --auto --squash --delete-branch`로 머지했는데, 머지 완료(`state=MERGED`) 후에도 원격 브랜치가 남아 `git ls-remote --heads origin <branch>`에 잡힌다. 워크트리 세션이 아닌 **주 워크트리에서도** 발생(T-095의 워크트리 점유 충돌과는 다른 원인).
 
 **원인**: `--auto`(auto-merge)는 CI 통과 후 **나중에 서버사이드로** 머지한다(비동기). 반면 `gh pr merge --delete-branch`의 브랜치 삭제는 gh CLI가 **머지 직후 로컬에서** 처리하는데, auto-merge 등록 시점엔 아직 머지 전이라 즉시 못 지우고, 실제 서버 머지가 일어날 땐 gh 프로세스가 이미 끝나 삭제가 누락된다. repo의 "Automatically delete head branches" 설정이 켜져 있으면 GitHub가 서버에서 지우지만, 이 repo는 그 설정에 의존하지 않아 잔존한다.
@@ -2058,7 +2060,7 @@ bash .claude/scripts/docker-cleanup.sh --all      # Up 포함 전부 (먼저 --d
   gh api -X DELETE repos/{owner}/{repo}/git/refs/heads/<branch>
   ```
   로컬은 `git branch -D <branch>`. 잔존 여부는 `git ls-remote --heads origin <branch>`로 확인.
-- 근본책(원하면): repo 설정 **"Automatically delete head branches"**를 켜면 서버가 머지 시 자동 삭제 → `--auto`와 무관하게 정리된다.
+- ✅ 근본책(적용 완료 2026-06-27): repo 설정 **"Automatically delete head branches"**(`deleteBranchOnMerge=true`)를 켜면 서버가 머지 시 자동 삭제 → `--auto`와 무관하게 정리된다.
 - 일반 원칙: `--auto`(비동기 머지)와 `--delete-branch`(즉시 로컬 처리)는 **시점이 어긋난다** — auto-merge를 쓰면 브랜치 삭제는 "MERGED 확인 후 별도 단계"로 다룬다.
 
 **관련**: T-094(gh api로 원격 ref 삭제 + Windows push hang 회피), T-095(워크트리 `--delete-branch` 로컬 정리 실패 — 그쪽은 워크트리 main 점유 충돌, 본 건은 auto-merge 비동기), auto-merge 우선 경로(CLAUDE.md Git워크플로). **1회차(신규)** — T-095(`--delete-branch` 정리 실패) 계열과 묶일 소지, 재발 시 트래커 등재.

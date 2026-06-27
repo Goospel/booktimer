@@ -10,6 +10,18 @@
         ]
       }
     ],
+    "SessionEnd": [
+      {
+        "matcher": "clear|logout|prompt_input_exit|other",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -File \".claude\\hooks\\cleanup-docker-on-session-end.ps1\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash|PowerShell",
