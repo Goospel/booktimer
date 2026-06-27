@@ -124,6 +124,7 @@
 - [T-105. 빈 워크트리 폴더가 `Device or resource busy`로 안 지워짐 — 죽은 세션 좀비 셸이 cwd 점유, cwd 검증 PID만 종료](#t-105-빈-워크트리-폴더가-device-or-resource-busy로-안-지워짐--죽은-세션-좀비-셸이-cwd-점유-cwd-검증-pid만-종료)
 - [T-106. auto-merge `--delete-branch`는 비동기 머지라 원격 브랜치가 안 지워진다 — 머지 확인 후 gh API로 삭제](#t-106-auto-merge---delete-branch는-비동기-머지라-원격-브랜치가-안-지워진다--머지-확인-후-gh-api로-삭제)
 - [T-107. `git add`와 `git commit`을 한 명령으로 묶으면 PreToolUse 자동수정 훅(목차·번들)이 skip된다 — add는 별도 호출로](#t-107-git-add와-git-commit을-한-명령으로-묶으면-pretooluse-자동수정-훅목차번들이-skip된다--add는-별도-호출로)
+- [T-108. `gradlew.bat`이 phantom-modified로 rebase를 막는다 — `.gitattributes eol=crlf`와 커밋된 블롭 EOL 불일치, `--assume-unchanged`로 우회](#t-108-gradlewbat이-phantom-modified로-rebase를-막는다--gitattributes-eolcrlf와-커밋된-블롭-eol-불일치---assume-unchanged로-우회)
 
 ---
 
@@ -2082,6 +2083,20 @@ bash .claude/scripts/docker-cleanup.sh --all      # Up 포함 전부 (먼저 --d
 
 ---
 
+## T-108. `gradlew.bat`이 phantom-modified로 rebase를 막는다 — `.gitattributes eol=crlf`와 커밋된 블롭 EOL 불일치, `--assume-unchanged`로 우회
+
+**증상**: Dependabot PR 브랜치를 받아 `git rebase origin/main` 하려는데 매번 `error: cannot rebase: You have unstaged changes`로 막힘. `git status`엔 `gradlew.bat`만 `modified`로 뜨고, `git checkout -- gradlew.bat`·`git -c core.autocrlf=false checkout -- .`로도 안 지워짐(즉시 다시 modified). `git diff gradlew.bat`은 "82 insertions, 82 deletions"(전 줄 변경)으로 EOL 차이 신호. `git rebase --autostash`를 써도 autostash 직후 파일이 다시 더럽혀져 rebase가 또 막힘(`Applying autostash resulted in conflicts`).
+
+**원인**: `.gitattributes`에 `*.bat text eol=crlf`(체크아웃 시 CRLF, repo엔 LF 정규화 저장)인데, **저장된 블롭이 그 규칙과 어긋나게 커밋돼 있다**(이번엔 #560 gradle-wrapper bump가 `gradlew.bat`을 비정규 EOL로 커밋). → git이 "working tree(정규화) ≠ 블롭"으로 보고 **영구 modified**. `git add --renormalize gradlew.bat`은 그 차이를 스테이징해버려(=실제 EOL 수정이 커밋에 끼어듦) 내 작업 PR과 무관한 변경이 섞인다.
+
+**해결 / 우회**:
+- rebase만 통과하면 될 땐 그 파일을 무시: `git update-index --assume-unchanged gradlew.bat` → `git -c core.autocrlf=false rebase origin/main` → `git update-index --no-assume-unchanged gradlew.bat`. (rebase가 replay하는 커밋들이 `gradlew.bat`을 안 건드릴 때 안전 — 안 건드리면 충돌 없음.)
+- 근본 수정은 **별도 PR**로: `git add --renormalize gradlew.bat`를 정식 커밋해 블롭을 규칙대로(LF) 맞춘다(의존성/기능 PR과 섞지 말 것).
+
+**관련**: T-093(CRLF)·T-103(BOM)·T-057 — "파일의 EOL·인코딩 메타가 repo 규칙과 어긋나 phantom diff" 군(이번은 *외부 bump가 커밋한 블롭* × `.gitattributes` 불일치판). `--assume-unchanged`, `git add --renormalize`. **1회차(신규)**.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2192,4 +2207,5 @@ bash .claude/scripts/docker-cleanup.sh --all      # Up 포함 전부 (먼저 --d
 | 2026-06-26 | T-102 (auto-merge 등록 후 **직접 짠** 백그라운드 머지 워처가 `MERGED`/`CLOSED`만 보고 `DIRTY`를 안 봐서, 멀티세션 중 분기 직후 타 PR 머지로 생긴 충돌을 못 알리고 auto-merge가 침묵 정지 — 탐색→책방 PR #536을 `origin/main`에서 따 auto-merge 등록한 직후 다른 세션 #535(E2E)가 머지되며 `plan.md`·`changelog.md`가 겹쳐 PR이 DIRTY/CONFLICTING로 전환, 워처는 MERGED만 기다려 헛폴링·사용자가 먼저 충돌 발견 / 증상=PR이 OPEN인데 한참 안 머지됨, 워처는 계속 running / 감별=`gh pr view <PR> --json state,mergeStateStatus,mergeable` — state=OPEN+mergeStateStatus=`DIRTY`+mergeable=`CONFLICTING`이면 충돌(auto-merge 못 돎), `BLOCKED`면 단순 CI 대기(이 둘 구분 필수 — T-083) / 원인=auto-merge는 DIRTY면 머지 못 함 → 분기 후 타 PR이 같은 파일을 머지하면 충돌이 **사후** 발생하는데, 머지 감시 폴링이 MERGED/CLOSED만 분기하면 DIRTY를 영영 안 잡아 hang처럼 보임(T-083 DIRTY 진단·T-096 폴링 DIRTY 감지의 재발) / 해결=`git rebase origin/main`(changelog는 `merge=union`이라 양쪽 append 자동 병합 → 로컬 충돌 0, GitHub만 union 미적용으로 DIRTY 표시였음, T-098) → 검증(내 커밋만·내 파일만·양쪽 docs 둘 다 보존) → `git push --force-with-lease` → PR MERGEABLE 복귀(auto-merge 등록은 force-push에도 유지돼 CI 통과 시 재개) / **정답=손수 워처를 짜지 말 것 — `.claude/scripts/pr-merge.sh <PR>`가 이미 DIRTY 즉시 차단 + CI 폴링 + 하드 타임아웃(동기 머지)을 제공한다. 굳이 워처가 필요하면 MERGED/CLOSED뿐 아니라 `mergeStateStatus==DIRTY` 분기를 반드시 넣어 재충돌을 일찍 알린다** / 예방=auto-merge "등록=끝"이 아니다 — 멀티세션 활발기엔 분기 후 충돌이 사후 발생하니 머지까지 DIRTY를 감시하거나 pr-merge.sh로 동기 머지 / 머지 자동화 hang·DIRTY-blind 군 5회차 — 이번 뿌리는 "하드픽스(pr-merge.sh)가 있는데 안 쓰고 워처를 손수 짬" / T-083·T-096·T-098·T-094) |
 | 2026-06-26 | T-104 (squash 머지가 브랜치 커밋 trailer(`Session-Model`/`Effort`)를 메시지 중간으로 밀어 `git %(trailers)` 구조 조회가 빈 값 — git trailer 파서는 **맨 끝 문단 1개**만 인식, GitHub squash가 `Co-authored-by`를 `---------` 구분선과 함께 맨 끝 블록으로 붙여 `Session-*`가 중간으로 밀림 / 마지막 블록에 평문·구분선 한 줄만 섞여도 25% 임계로 그 블록 trailer 동반 탈락 / 값은 보존(`git log --grep`으로 잡힘)·조회만 깨짐 → 우회=grep(`%B|grep -oP`), 근본=마지막 trailer 블록에 합류 / 1회차 신규 / N-128·#543) |
 | 2026-06-27 | T-106 (auto-merge `--delete-branch`는 비동기 머지라 원격 브랜치가 안 지워진다 — `gh pr merge <PR> --auto --squash --delete-branch`로 머지(MERGED) 후에도 원격 브랜치가 `git ls-remote`에 잔존, 주 워크트리에서도 발생 / 원인=`--auto`는 CI 통과 후 나중에 서버사이드로 머지(비동기)하는데 `--delete-branch`의 삭제는 gh CLI가 머지 직후 로컬에서 처리 → 등록 시점엔 머지 전이라 못 지우고, 서버 머지 땐 gh가 이미 끝나 누락 / 해결=MERGED 확인 후 `gh api -X DELETE repos/{owner}/{repo}/git/refs/heads/<branch>`(T-094, Windows push hang 회피)·로컬 `git branch -D` / 근본=repo "Automatically delete head branches" 설정 / 1회차 신규, T-095(--delete-branch 정리 실패) 계열·T-094) |
+| 2026-06-27 | T-108 (`gradlew.bat` phantom-modified로 `git rebase`가 `cannot rebase: You have unstaged changes`로 막힘 — `.gitattributes`의 `*.bat text eol=crlf`와 #560 gradle-wrapper bump가 비정규 EOL로 커밋한 블롭이 불일치해 영구 modified, `checkout`·`--autostash`로 안 풀림 / 우회=`git update-index --assume-unchanged gradlew.bat` 후 rebase(replay 커밋이 그 파일 미변경 시 안전), 근본=`git add --renormalize`를 별도 PR로 / EOL·인코딩 phantom diff 군 T-093·T-103·T-057, 1회차) |
 | 2026-06-27 | T-107 (`git add`와 `git commit`을 한 Bash 명령으로 묶으면 PreToolUse 자동수정 훅이 skip된다 — `git add <file> && git commit`처럼 묶으면 목차 자동생성 훅(require-troubleshooting-toc)이 안 돌아 목차 갱신 누락(본문 헤딩만 추가되고 목차 줄 빠짐), add/commit 분리하면 정상 / 원인=훅이 PreToolUse(명령 실행 *전*)로 commit을 가로채 `git diff --cached`를 보는데, 묶음 명령은 그 시점에 아직 add 전이라 스테이징이 비어 skip → 곧 add+commit이 한꺼번에 실행돼 끼어들 틈 없음(`;`로 묶어도 동일) / 해결=`git add`를 별도 호출로 먼저, 그다음 `git commit` 단독 호출 / 보정=스크립트 수동실행→add→`git commit --amend` / 주의=번들(require-bundle-build)·테스트게이트(require-tests-before-commit)도 같은 식 무력화 소지(테스트 skip되면 위험) / 1회차 신규, T-106에서 실제 당함) |
