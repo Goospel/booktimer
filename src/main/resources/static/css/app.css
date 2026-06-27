@@ -1927,6 +1927,17 @@ body.history-page.history-wide .container { max-width: 940px; }
    (시안 본문 gap). 공유 규칙은 건드리지 않는다. */
 body.personality-page #personality-app { gap: 18px; }
 
+/* 데스크톱(태블릿+): 책BTI 페이지만 컨테이너를 넓혀 분석 카드가 가로로 펴지게 한다.
+   앱 기본은 모바일-우선 .container max-width:460px라, 큰 화면에선 긴 AI 서술이 좁은 460px
+   칸에 갇혀 세로로 길쭉했다(모바일은 이 폭이 적절해 무변경). 캐러셀 슬라이드(80% peek)·도트·
+   스크롤 로직은 그대로 두고 폭만 키우면 같은 글이 더 적은 줄로 흘러 카드 높이가 준다
+   (실측 narrative 232→440px, 17줄→9줄). garden-wide·dashboard와 동일한 페이지-스코프 패턴이라
+   body.personality-page 한정 → 다른 페이지 회귀 0. min-width 가드라 모바일(<600px)은 무손상.
+   카드 폭은 PersonalityCarousel의 step()/dotIndex가 실측 폭에서 역산하므로 JS 변경 불필요. */
+@media (min-width: 600px) {
+    body.personality-page .container { max-width: 720px; }
+}
+
 /* 헤더 — DNA 아이콘 + 제목 + 정확도 고지 */
 .pbti-header { display: flex; flex-direction: column; gap: 8px; }
 .pbti-title-row { display: flex; align-items: center; gap: 9px; }
