@@ -311,7 +311,7 @@ body {
 .tag-books-head h3 { margin: 0; font-size: 1rem; }
 .tag-books-head .btn-close { padding: 4px 10px; font-size: .85rem; }
 
-/* 책BTI 공개 안내문(.personality-public-note)은 아래 "책BTI 페이지 재스킨" 블록에서 정의 — 하단 안내 박스(지구본). */
+/* 책BTI 공개 안내문은 아래 "책BTI 페이지 재스킨" 블록의 ? 헬프 팝오버(.pbti-help-pop)에서 정의. */
 
 /* 타이머와 한 카드로 합쳐진 측정 컨트롤 — 큰 숫자 바로 아래 답답하지 않게 위 여백을 둔다 */
 .timer-controls { margin-top: 18px; }
@@ -1958,6 +1958,45 @@ body.personality-page #personality-app { gap: 18px; }
 }
 .pbti-card-title { font-family: 'Gowun Batang', serif; font-size: 18px; font-weight: 700; color: var(--text); margin: 0; }
 
+/* "내 독서 성향" 카드 헤더 — 제목(좌) + ? 헬프 버튼(우) 행, 팝오버 앵커(position:relative) */
+.pbti-card-head { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pbti-card-head.is-open { z-index: 60; }   /* 열림 시 버튼·팝오버를 백드롭(z50) 위로 — 실 브라우저 클릭 보장 */
+
+/* ? 헬프 아이콘 버튼 — 작은 원형, 차분한 세이지 톤 */
+.pbti-help-btn {
+    flex: 0 0 auto; width: 26px; height: 26px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--sage-soft); color: var(--accent-hover);
+    border: none; border-radius: 999px; cursor: pointer;
+    transition: background .15s ease;
+}
+.pbti-help-btn:hover { background: #DDE7D8; }
+.pbti-help-btn svg { width: 16px; height: 16px; }
+
+/* 투명 풀스크린 백드롭 — 팝오버 밖 클릭 시 닫기 */
+.pbti-help-backdrop { position: fixed; inset: 0; z-index: 50; background: transparent; }
+
+/* 안내 팝오버 — 카드 헤더 우측 아래로 펼치는 말풍선(공개 안내 + 정확도 고지) */
+.pbti-help-pop {
+    position: absolute; top: calc(100% + 9px); right: 0; z-index: 61;
+    width: min(300px, calc(100vw - 56px));
+    background: var(--card-bg);
+    border: 1px solid var(--border); border-radius: 14px; padding: 14px;
+    box-shadow: 0 10px 28px -10px rgba(44, 42, 36, .28);
+    display: flex; flex-direction: column; gap: 11px; text-align: left;
+}
+.pbti-help-pop::before {   /* ? 버튼을 가리키는 말풍선 꼭지 */
+    content: ''; position: absolute; top: -6px; right: 8px;
+    width: 11px; height: 11px; background: var(--card-bg);
+    border-left: 1px solid var(--border); border-top: 1px solid var(--border);
+    transform: rotate(45deg);
+}
+.pbti-help-note { display: flex; gap: 9px; align-items: flex-start; }
+.pbti-help-note span { font-size: 12.5px; line-height: 1.6; color: var(--accent-hover); word-break: keep-all; }
+.pbti-help-note a { color: var(--accent-hover); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+.pbti-help-note--muted { border-top: 1px solid #E9E2D4; padding-top: 11px; }
+.pbti-help-note--muted span { color: var(--muted); }
+
 /* COLD_START / FALLBACK 상태 카드 — 아이콘 + 제목 행, 본문, 보조 안내 */
 .pbti-state-head { display: flex; align-items: center; gap: 9px; }
 .pbti-state-ico { width: 19px; height: 19px; flex: 0 0 auto; color: var(--accent-hover); }
@@ -2014,14 +2053,8 @@ body.personality-page #personality-app { gap: 18px; }
 .pbti-exhausted .pbti-hint-ico { width: 17px; height: 17px; margin-top: 1px; }
 .pbti-exhausted span { font-size: 13px; line-height: 1.65; color: var(--muted); word-break: keep-all; }
 
-/* 하단 공개 안내 — 지구본 아이콘 + 연세이지 박스 (시안 bottom note) */
-.personality-public-note {
-    display: flex; gap: 11px; align-items: flex-start;
-    background: var(--sage-soft); border-radius: 16px; padding: 16px; margin: 0;
-}
+/* 공개 안내 지구본 아이콘 — 이제 ? 헬프 팝오버(.pbti-help-note) 안에서 사용(상시 박스는 폐지) */
 .pbti-note-ico { width: 18px; height: 18px; flex: 0 0 auto; margin-top: 1px; color: var(--accent-hover); }
-.personality-public-note span { font-size: 13px; line-height: 1.65; color: var(--accent-hover); word-break: keep-all; }
-.personality-public-note a { color: var(--accent-hover); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
 
 /* ── 분석 카드 캐러셀 (CSS scroll-snap + 화살표 버튼 JS — 스크롤 로직 보존, 시각만 재스킨) ── */
 .pbti-carousel-block { display: flex; flex-direction: column; gap: 14px; }
