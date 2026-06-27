@@ -134,6 +134,7 @@
 - [N-131. 라이브 클라이언트 미러는 서버 권위 계산과 같은 규칙을 따라야 한다](#n-131-라이브-클라이언트-미러는-서버-권위-계산과-같은-규칙을-따라야-한다)
 - [N-132. node_modules는 git 미추적이라 워크트리에 안 따라온다 — 커밋은 안티패턴(sharp 네이티브), 답은 lock + 정션 공유](#n-132-node_modules는-git-미추적이라-워크트리에-안-따라온다--커밋은-안티패턴sharp-네이티브-답은-lock--정션-공유)
 - [N-133. CodeQL을 pull_request·push:main 둘 다 트리거하는 이유 — 게이트 vs default branch baseline](#n-133-codeql을-pull_requestpushmain-둘-다-트리거하는-이유--게이트-vs-default-branch-baseline)
+- [N-134. overflow-x:auto는 overflow-y를 auto로 끌어올린다 — 가로 스크롤러 속 자식의 세로 그림자가 잘린다](#n-134-overflow-xauto는-overflow-y를-auto로-끌어올린다--가로-스크롤러-속-자식의-세로-그림자가-잘린다)
 
 ---
 
@@ -6107,3 +6108,44 @@ squash 머지 직후 GitHub Actions 목록에 CodeQL이 두 번 보인다 — �
 - `.github/workflows/codeql.yml` — `on: pull_request[main] + push[main] + schedule(주간)`. 주간 cron은 코드 안 바뀌어도 *새 CodeQL 룰셋*을 기존 main에 다시 적용하는 용도(또 다른 baseline 갱신).
 - `.github/workflows/ci.yml`(`pull_request`만), `.github/workflows/deploy.yml`(`push: main`만) — 같은 main push에 CodeQL과 나란히 뜨지만 서로 독립.
 - [[N-129]](SAST vs SCA — CodeQL의 자리). 도입 배경: gap#4 Phase A/B(advisory→required 승격).
+
+---
+
+## N-134. overflow-x:auto는 overflow-y를 auto로 끌어올린다 — 가로 스크롤러 속 자식의 세로 그림자가 잘린다
+
+> **한 줄 요약**: 한 축만 `overflow: visible`이 아닌 값(`auto`/`scroll`/`hidden`)으로 두면, **나머지 축의 `visible`은 자동으로 `auto`로 계산**된다(CSS 스펙). 그래서 가로 캐러셀(`overflow-x: auto`)은 사실상 `overflow-y`도 `auto`라, 자식 카드의 `box-shadow`가 트랙 위·아래 경계에서 **잘린다**. 해결 = 스크롤 트랙에 그 축 **padding**으로 그림자가 들어갈 여유를 준다.
+
+### 배경 — "가로로만 스크롤되는데 카드 그림자 위아래가 싹둑"
+
+`/personality` 책BTI 캐러셀에서 각 슬라이드를 `box-shadow`로 띄운 카드로 만들었더니, 카드 위·아래 그림자만 잘려 보였다. 좌우 그림자는 멀쩡(스크롤되는 축이라 넘쳐도 보임). "가로 스크롤만 켰는데 왜 세로가 잘리지?"가 출발점.
+
+### 원인 — overflow는 축마다 독립이지만, visible은 혼자 못 남는다
+
+CSS Overflow 스펙의 규칙: **`overflow-x`와 `overflow-y` 중 하나가 `visible`(또는 `clip`)이고 다른 하나가 그렇지 않으면, `visible`은 `auto`로(‘clip`은 `hidden`으로) 계산된다.**
+
+- 직관: "한 축만 클리핑하는 박스"는 만들 수 없다. 가로로 잘라내려면 세로 경계도 박스로 닫혀야 하니, 한 축을 `auto`로 두는 순간 다른 축의 `visible`은 의미를 잃고 `auto`로 승격된다.
+- 결과: `overflow-x: auto` 한 줄 = `overflow: auto auto`와 사실상 동일. `auto`/`scroll`/`hidden` 박스는 자식이 **그 축으로 삐져나온 픽셀(그림자 포함)을 잘라낸다.** 그래서 세로 그림자가 클립된다.
+
+### 해결 — 잘리는 축으로 트랙에 여유를 준다
+
+```css
+.carousel-track {
+  display: flex;
+  overflow-x: auto;       /* → overflow-y 도 auto 로 승격됨 */
+  padding-block: 6px;     /* 카드 세로 그림자가 잘리지 않게 위·아래 여유 */
+}
+```
+
+- **`padding`이 정답, `margin`은 아님**: 트랙의 패딩 영역 안쪽에 그림자가 그려져 클립을 면한다. 자식에 세로 `margin`을 주면 콘텐츠 박스가 커져 **불필요한 세로 스크롤**이 생길 수 있다(`auto`라서).
+- **가로 스크롤 로직 불변**: 세로 `padding-block`은 슬라이드 `width`·`column-gap`·`scrollLeft`/`scrollWidth`에 영향이 없어, step·sync 같은 가로 스크롤 계산을 안 건드린다.
+- **대안**: 구분을 그림자 대신 **테두리/배경**으로(테두리는 박스 안쪽이라 안 잘림), 또는 그림자 카드를 감싸는 **바깥 래퍼**를 스크롤시키고 그림자는 안쪽 요소에.
+
+### 면접 Q&A 대비
+
+- *"`overflow-x: auto`만 줬는데 왜 세로 그림자가 잘리나?"* → overflow는 축별 속성이지만, 한 축이 비-visible이면 다른 축의 `visible`이 `auto`로 자동 승격된다(한 축만 클리핑하는 박스는 불가능하므로). 즉 가로 스크롤러는 세로로도 클리핑 박스다.
+- *"그림자를 살리려면?"* → 잘리는 축으로 스크롤 컨테이너에 `padding`을 줘 여유 공간을 확보한다(margin은 스크롤 길이를 늘려 부작용).
+
+### 코드 위치 / 관련
+
+- `src/main/resources/static/css/app.css` — `.personality-carousel { overflow-x: auto; padding-block: 6px; }` + `.personality-entry { box-shadow: … }`.
+- [[N-120]](overflow-x:auto는 데스크톱에서 터치 스크롤만), [[N-121]](중앙 포커스 캐러셀 — step 스크롤), [[N-122]](grid-stack으로 캐러셀 클립·점프 방지), [[N-123]](overflow:hidden은 사용자 스크롤만 막는다).
