@@ -370,6 +370,7 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
   - login_id: `testid`(소문자 — loadUserByUsername이 입력을 소문자화하지 않음), 비번: `1234qwer!!`
   - 이미 존재하면 "시드 생략" 로그만 출력(멱등). 재기동에도 중복 생성 없음.
   - admin 뷰 필요 시 코드 추가 없이 `BOOKTIMER_ADMIN_LOGIN_IDS=testid` 환경변수로 `AdminAccountSeeder`가 승격.
+  - **운영(`booktimer.app`)에도 동일 계정(`testid` / `1234qwer!!`)이 존재** — 로컬·운영 양쪽에서 Chrome MCP 폼에 직접 입력해도 된다. 로그인 화면이 뜨면 이 계정으로 바로 로그인하고, 새 회원가입은 금지.
 - DB: `compose.yaml` 의 MySQL 이 DevTools docker-compose 연동으로 자동 기동 (Docker 필요).
   - **이 컨테이너를 만드는 건 `bootRun`이지 `./gradlew test`가 아니다**(테스트는 H2 — 아래). bootRun이 워크트리별로 MySQL 컨테이너를 띄워 누적되니, **검증을 마치거나 주기적으로** `bash .claude/scripts/docker-cleanup.sh`(기본 Exited만, `--all`이면 Up 포함)로 정리한다 — `working_dir` 라벨로 BookTimer 소속만 지우고 타 프로젝트는 보호. 세션 종료 시엔 `SessionEnd` 훅이 기본 모드로 자동 정리한다(gap#3 자동배선). 멀티세션 동시 작업 시 정리 주의는 「🪢 다중 세션 → bootRun docker-compose 컨테이너」 절 참고.
 - 테스트 DB: 운영은 MySQL, **테스트는 H2 인메모리**(`src/test/resources/application.properties`) — Docker 없이 테스트 독립 실행. 테스트 시 docker-compose 자동 기동은 꺼짐(`spring.docker.compose.enabled=false`)
