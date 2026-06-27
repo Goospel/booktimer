@@ -2,6 +2,12 @@
 *.bat text eol=crlf
 *.jar binary
 
+# vite/Node가 LF로 생성하는 프론트 번들 산출물 — core.autocrlf=true 환경은
+# 작업트리를 CRLF로 기대해, LF인 번들이 빌드마다 '유령 변경(modified)'으로 뜬다.
+# (git diff는 0줄이지만 git status가 EOL 불일치로 modified 표시 → 세션 정리 방해)
+# LF로 고정하면 git 기대와 vite 출력이 일치해 유령이 구조적으로 사라진다. N-135.
+src/main/resources/static/**/*.js text eol=lf
+
 # append-only 변경 일지 — 멀티세션이 각자 맨 아래에 행을 추가해 항상 같은 위치 충돌 →
 # union merge 드라이버로 양쪽 새 행을 마커 없이 둘 다 자동 병합(merge/rebase 충돌 제거). T-098.
 claude-docs/changelog.md merge=union
