@@ -1,7 +1,8 @@
 package com.booktimer.book;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -34,7 +35,8 @@ public class AladinBookSearchClient implements BookSearchClient {
     private final RestClient restClient;
     // SSR 앱이라 Jackson ObjectMapper 빈이 자동 등록되지 않는다(Boot 4 모듈러 autoconfig).
     // 주입 대신 자체 인스턴스를 둔다 — 외부 빈 의존 없이 격리(스레드 안전, 재사용).
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    // Jackson 3은 빌더로 만든다(ObjectMapper 직접 생성 폐지 — JsonMapper가 ObjectMapper를 상속).
+    private final ObjectMapper objectMapper = JsonMapper.builder().build();
 
     public AladinBookSearchClient(
             @Value("${booktimer.aladin.ttb-key:not-configured}") String ttbKey) {

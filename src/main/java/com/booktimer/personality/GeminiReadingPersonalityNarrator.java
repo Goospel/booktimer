@@ -1,9 +1,10 @@
 package com.booktimer.personality;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -43,7 +44,8 @@ public class GeminiReadingPersonalityNarrator implements ReadingPersonalityNarra
     private final String model;
     private final RestClient restClient;
     // Boot 4 모듈러 autoconfig라 ObjectMapper 빈이 자동 등록되지 않음 → 자체 인스턴스(스레드 안전·재사용).
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    // Jackson 3은 빌더로 만든다(ObjectMapper 직접 생성 폐지 — JsonMapper가 ObjectMapper를 상속).
+    private final ObjectMapper objectMapper = JsonMapper.builder().build();
 
     public GeminiReadingPersonalityNarrator(
             @Value("${booktimer.llm.api-key:not-configured}") String apiKey,

@@ -130,6 +130,7 @@
 - [N-127. Playwright 실행과 결과 육안 확인 — 헤드리스가 기본, headed·ui·HTML 리포트·trace viewer로 눈으로 본다](#n-127-playwright-실행과-결과-육안-확인--헤드리스가-기본-headeduihtml-리포트trace-viewer로-눈으로-본다)
 - [N-128. git trailer는 "맨 끝 문단" 하나만 파싱한다 — squash가 위치를 흔들면 %(trailers) 조회가 깨진다](#n-128-git-trailer는-맨-끝-문단-하나만-파싱한다--squash가-위치를-흔들면-trailers-조회가-깨진다)
 - [N-129. SAST(내 코드) vs SCA(의존성) — CodeQL·Dependabot·SpotBugs·OWASP의 자리](#n-129-sast내-코드-vs-sca의존성--codeqldependabotspotbugsowasp의-자리)
+- [N-130. 직접 import하는 라이브러리는 명시적 의존성으로 선언 — transitive 의존은 업그레이드에 끊긴다](#n-130-직접-import하는-라이브러리는-명시적-의존성으로-선언--transitive-의존은-업그레이드에-끊긴다)
 
 ---
 
@@ -5941,3 +5942,38 @@ git이 trailer 블록을 찾는 규칙(porcelain `%(trailers)`와 plumbing `inte
 
 - `.github/workflows/codeql.yml`(CodeQL), `.github/dependabot.yml`(Dependabot) — gap#4 Phase A 도입.
 - N-070(required status check × `paths-ignore` 함정), N-127·N-084(E2E는 별 축 — 로컬 수동 유지, CI 승격 보류).
+
+---
+
+## N-130. 직접 import하는 라이브러리는 명시적 의존성으로 선언 — transitive 의존은 업그레이드에 끊긴다
+
+> **한 줄 요약**: `import`로 직접 쓰는 라이브러리는 build.gradle에 *명시적으로* 선언하라. "다른 의존성이 전이(transitive)로 끌어와줘서" 컴파일되던 코드는, 그 의존성 업그레이드가 전이를 끊는 순간 컴파일이 깨진다 — **테스트는 그대로인데 의존성 bump 하나로 빌드가 무너지는** 정체가 이것이다.
+
+### 배경 — Dependabot bump 2개가 같은 날 같은 이유로 터짐
+
+2026-06-27 Dependabot이 연 의존성 PR 중 둘(web-push patch·Spring Boot minor)이 컴파일 실패했다. 원인은 같았다 — 우리 코드가 *직접 import*하던 타입이 사실은 그 의존성의 **전이로만** 들어와 있었고, 업그레이드가 그 전이를 끊었다. 끊긴 **메커니즘**은 둘로 갈렸다.
+
+### 두 가지 끊기는 메커니즘
+
+| 메커니즘 | 무슨 일 | 우리 사례 | 고치는 법 |
+|---|---|---|---|
+| **① scope 축소** | 전이 의존은 *그대로 있지만* `compile`→`runtime`으로 좁혀져 **컴파일** 클래스패스에서만 빠짐 | web-push 5.1.1→5.1.2가 httpasyncclient(→`org.apache.http`)·jose4j를 runtime으로 내림 → `PushSenderService`의 `HttpResponse`·`send()`의 `throws JoseException` 컴파일 실패(API·버전은 그대로) | 끊긴 걸 `implementation`으로 명시(httpcore·jose4j) |
+| **② 라이브러리 교체/리네임** | 전이가 *다른 라이브러리*로 바뀜(패키지 리네임 포함) | Boot 4.0.6→4.1.0이 Jackson 2(`com.fasterxml`)를 빼고 Jackson 3(`tools.jackson`)을 기본화 → `com.fasterxml.*` 직접 import 소멸 | 새 라이브러리로 마이그레이션(또는 옛것 명시 핀) |
+
+### 왜 전이에 기대면 안 되나
+
+- 전이 의존은 *그 라이브러리의 구현 디테일*이다 — 버전·scope·교체로 언제든 바뀔 수 있고, 너와 계약하지 않았다.
+- "내가 import = 내가 직접 쓴다"는 곧 *나의* 의존성이다. 선언해야 빌드가 그 존재·버전을 보장한다(전이는 우연히 있을 뿐).
+- Gradle은 Maven `runtime` scope를 `runtimeOnly`로 매핑 → 전이가 runtime이면 **런타임엔 있어도 컴파일엔 없다**(메커니즘 ①의 핵심). 그래서 "실행은 되는데 빌드가 안 되는" 게 아니라 "빌드(컴파일)부터 깨진다".
+
+### 면접 Q&A 대비
+
+- *"테스트도 안 바꿨는데 의존성 버전만 올렸더니 컴파일이 깨졌다, 왜?"* → 직접 import하던 타입이 그 의존성의 전이로만 들어와 있었고, 업그레이드가 그 전이를 (scope 축소/교체로) 끊었다. 직접 쓰는 건 명시 선언이 답.
+- *"명시하면 버전은 어떻게 관리?"* → BOM(예: Spring Boot dependency management)이 관리하는 건 버전 생략, 관리 밖(예: httpcomponents 4.x — Boot 4 BOM은 5.x만 관리)은 버전을 직접 박는다.
+- *"Jackson 2→3은 왜 단순 추가가 아니라 마이그레이션?"* → 그룹/패키지가 `com.fasterxml.jackson`→`tools.jackson`으로 바뀐 메이저라 import·생성(`new ObjectMapper()`→`JsonMapper.builder().build()`)이 달라진다(drop-in 아님). `asText()`는 deprecated로 남아 컴파일은 됨.
+
+### 코드 위치 / 관련
+
+- build.gradle — `httpcore:4.4.16`·`jose4j:0.7.9` 명시(#559, 메커니즘 ①) / Jackson 2→3 마이그레이션(#557, 메커니즘 ②).
+- `AladinBookSearchClient`·`GeminiReadingPersonalityNarrator`(+테스트) — `com.fasterxml.jackson`→`tools.jackson`, `new ObjectMapper()`→`JsonMapper.builder().build()`.
+- [[N-129]](SAST/SCA — Dependabot이 이 bump들을 자동 생성), N-024(Boot 4 모듈러 autoconfig — starter가 raw lib+autoconfig를 함께 가져오는 같은 "명시" 정신).

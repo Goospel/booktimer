@@ -1,7 +1,7 @@
 package com.booktimer.config;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -67,7 +67,7 @@ class PwaStaticAccessTest {
     @Test
     @DisplayName("manifest.json 의 start_url 경로가 404 가 아니다 (콜드 런치 시작점은 실제 라우트여야 함)")
     void manifestStartUrl_isNotNotFound() throws Exception {
-        JsonNode manifest = new ObjectMapper()
+        JsonNode manifest = JsonMapper.builder().build()
                 .readTree(Files.readString(Path.of("src/main/resources/static/manifest.json")));
         String startUrl = manifest.get("start_url").asText();
 
