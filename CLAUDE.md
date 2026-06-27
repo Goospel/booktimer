@@ -185,9 +185,12 @@ git worktree list           # 워크트리가 이미 여럿인가?
 
 ```
 git worktree add ../BookTimer-<task> -b <type>/<summary> main
-# → 그 폴더에서 작업(절대경로 편집/커밋). frontend 작업이면(빌드 필요) node_modules 정션 연결:
-#     powershell -File .claude/scripts/link-node-modules.ps1   (매번 npm install 회피 — N-132)
-# 머지 후:
+# → 그 폴더에서 작업(절대경로 편집/커밋). frontend 의존성(node_modules)은 SessionStart 훅
+#   (link-node-modules-on-session-start.ps1)이 새 세션마다 자동 정션 연결한다 — 수동 입력 0(N-132).
+#   수동 실행도 가능: powershell -File .claude/scripts/link-node-modules.ps1
+# 머지 후 정리 — ⚠️ frontend/node_modules 정션을 먼저 끊고 워크트리를 지운다(안 그러면
+#   worktree remove 가 정션을 따라가 main 의 node_modules 까지 삭제할 수 있다; 다음 정션
+#   연결이 npm ci 로 복구하나 낭비). 정션 제거: powershell -c "[IO.Directory]::Delete('<wt>/frontend/node_modules')"
 git worktree remove ../BookTimer-<task>
 ```
 
