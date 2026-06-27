@@ -32,11 +32,18 @@ dependencies {
 	// 이메일 발송(transactional) — JavaMailSender 자동구성. 실발송은 booktimer.email.enabled=true일 때만.
 	implementation 'org.springframework.boot:spring-boot-starter-mail'
 	// Web Push(VAPID) — 푸시 알림 발송. BouncyCastle(bcprov-jdk18on)은 VAPID 서명·ECDH 암호화에 쓰인다.
-	// web-push 5.1.1 의 transitives가 jdk15on을 가져오지만 jdk18on이 동일 API를 Java 21에서 제공하므로 교체.
+	// web-push 의 transitives가 jdk15on을 가져오지만 jdk18on이 동일 API를 Java 21에서 제공하므로 교체.
 	implementation('nl.martijndwars:web-push:5.1.2') {
 		exclude group: 'org.bouncycastle', module: 'bcprov-jdk15on'
 	}
 	implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'
+	// web-push 5.1.2가 transitives(httpasyncclient·jose4j 등)를 compile→runtime scope로 내려, PushSenderService가
+	// 컴파일에 직접 필요로 하는 타입이 클래스패스에서 빠졌다(API·버전은 그대로 — scope만 변경). 명시적 선언으로 복원:
+	//  - org.apache.http.HttpResponse/StatusLine (send() 반환·상태코드 조회) → httpcore. Boot 4 BOM은 httpcomponents 5.x만
+	//    관리하므로 4.x 버전을 직접 명시.
+	//  - JoseException (PushService.send()의 throws 절이 참조) → jose4j. web-push 5.1.2가 쓰는 0.7.9와 맞춘다.
+	implementation 'org.apache.httpcomponents:httpcore:4.4.16'
+	implementation 'org.bitbucket.b_c:jose4j:0.7.9'
 	implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
