@@ -133,6 +133,7 @@
 - [N-130. 직접 import하는 라이브러리는 명시적 의존성으로 선언 — transitive 의존은 업그레이드에 끊긴다](#n-130-직접-import하는-라이브러리는-명시적-의존성으로-선언--transitive-의존은-업그레이드에-끊긴다)
 - [N-131. 라이브 클라이언트 미러는 서버 권위 계산과 같은 규칙을 따라야 한다](#n-131-라이브-클라이언트-미러는-서버-권위-계산과-같은-규칙을-따라야-한다)
 - [N-132. node_modules는 git 미추적이라 워크트리에 안 따라온다 — 커밋은 안티패턴(sharp 네이티브), 답은 lock + 정션 공유](#n-132-node_modules는-git-미추적이라-워크트리에-안-따라온다--커밋은-안티패턴sharp-네이티브-답은-lock--정션-공유)
+- [N-133. CodeQL을 pull_request·push:main 둘 다 트리거하는 이유 — 게이트 vs default branch baseline](#n-133-codeql을-pull_requestpushmain-둘-다-트리거하는-이유--게이트-vs-default-branch-baseline)
 
 ---
 
@@ -6065,3 +6066,44 @@ git이 trailer 블록을 찾는 규칙(porcelain `%(trailers)`와 plumbing `inte
 - `.claude/scripts/link-node-modules.ps1` — 워크트리에서 main node_modules를 정션 연결(멱등·`-Force`·`-DryRun`). main이 비어 있으면 먼저 `npm ci`로 채운다.
 - `CLAUDE.md` 「🪢 다중 세션 → worktree로 분리」 — 워크트리 생성 직후 이 스크립트 호출 안내.
 - [[N-032]](다중 세션 worktree 분리 — 정션은 그 워크플로의 마찰 감소), [[N-098]](SSR 섬 — Vite 번들은 *산출물*을 커밋하지만 node_modules는 안 하는 경계), N-130(의존성 선언 vs 전이 — lock/명시로 재현하는 같은 정신).
+
+---
+
+## N-133. CodeQL을 pull_request·push:main 둘 다 트리거하는 이유 — 게이트 vs default branch baseline
+
+> **한 줄 요약**: SAST(CodeQL)를 PR과 main push **둘 다** 돌리는 건 중복이 아니라 *역할 분담*이다. PR 스캔 = 머지 **게이트**(취약점이 main에 들어오기 전 차단), main push 스캔 = default branch **보안 baseline**(GitHub Security 탭의 alert를 main 기준으로 추적). 코드가 거의 같아도 목적이 다르다.
+
+### 배경 — "방금 PR에서 돌았는데 머지하니 또 도네?"
+
+squash 머지 직후 GitHub Actions 목록에 CodeQL이 두 번 보인다 — 하나는 PR 브랜치(Pull request), 하나는 머지된 main 커밋(push). 분석 대상 코드는 squash라 *사실상 동일*한데 왜 또 도나? (게다가 같은 `push: main` 이벤트에 배포 워크플로도 같이 떠, "배포가 CodeQL을 부른다"고 오해하기 쉽다 — 둘은 같은 트리거에 걸린 **독립** 워크플로다.)
+
+### 두 스캔의 역할이 다르다
+
+| | PR 스캔 (`pull_request`) | main push 스캔 (`push: main`) |
+|---|---|---|
+| 목적 | 머지 **게이트** — required check, 통과해야 머지 | default branch **baseline** — 출시 코드의 공식 보안 상태 |
+| 분석 대상 | `refs/pull/N/merge`(PR을 그 시점 main에 가상 머지한 커밋) | 머지로 생성된 실제 main 커밋 |
+| 결과가 가는 곳 | PR diff에 alert 코멘트 | **Security 탭 Code scanning alerts**(신규/해결/추세 추적) |
+
+### 왜 main 스캔이 따로 필요한가 (미묘한 차이)
+
+- **PR의 "가상 머지"는 진짜 결과와 다를 수 있다**: PR이 열려 있는 동안 *다른 PR이 먼저 머지*되면, 내 PR이 본 가상 머지와 실제 main 통합 결과가 갈린다. main push 스캔이 "진짜 통합된 코드"의 진실. (이 노트 PR도 실제로 그새 다른 PR이 머지돼 충돌·rebase를 겪었다 — 같은 메커니즘.)
+- **Security 탭 추적은 main 스캔만 갱신한다**: alert의 신규 발생·해결·dismiss 시계열 기준선이 default branch다. PR 스캔만 두면 대시보드가 비거나 멈춘다.
+- **main 직접 push 커버**: PR을 안 거치고 main에 들어오는 경우(hotfix 등)도 스캔된다.
+
+### 비용 / 판단
+
+- 추가 비용 = 머지당 스캔 1회. public repo면 Actions·CodeQL **무료**라 사실상 0. private이어도 수 분.
+- baseline 추적 가치 > 1회 스캔 비용 → **현행유지(둘 다)가 기본**. GitHub 공식 권장 패턴이기도 하다.
+- 끄려면 `push: main` 트리거 제거 = 게이트만 남고 **Security 탭 추적 포기**. private + Actions 한도 압박 + 보안 대시보드를 안 볼 때만 고려.
+
+### 면접 Q&A 대비
+
+- *"PR에서 SAST 돌렸는데 머지 후 또 도는 거 낭비 아닌가?"* → 코드는 같아도 역할이 다르다. PR = 머지 전 차단(게이트), main = 출시 코드의 보안 baseline(Security 탭 추적). 한쪽만으론 "차단"이나 "추적" 중 하나를 잃는다.
+- *"그럼 PR 스캔만 두면 안 되나?"* → Security 탭 alert 추적이 default branch 기준이라 멈춘다. 또 다른 PR이 끼어들면 PR 가상 머지 ≠ 실제 main이라 통합 결과 검증이 빠진다.
+
+### 코드 위치 / 관련
+
+- `.github/workflows/codeql.yml` — `on: pull_request[main] + push[main] + schedule(주간)`. 주간 cron은 코드 안 바뀌어도 *새 CodeQL 룰셋*을 기존 main에 다시 적용하는 용도(또 다른 baseline 갱신).
+- `.github/workflows/ci.yml`(`pull_request`만), `.github/workflows/deploy.yml`(`push: main`만) — 같은 main push에 CodeQL과 나란히 뜨지만 서로 독립.
+- [[N-129]](SAST vs SCA — CodeQL의 자리). 도입 배경: gap#4 Phase A/B(advisory→required 승격).
