@@ -53,7 +53,7 @@ const menuOpen = ref(false)
         <div class="shop-id-head">
             <div class="dash-header-avatar shop-avatar" aria-hidden="true">{{ avatarInitial(loginId) }}</div>
             <div class="shop-id-text">
-                <div class="shop-id-title">{{ nickname }}님의 책방</div>
+                <div class="shop-id-title">{{ nickname }}</div>
                 <div class="shop-id-handle">@{{ loginId }}</div>
             </div>
         </div>

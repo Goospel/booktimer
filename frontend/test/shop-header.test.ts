@@ -76,3 +76,17 @@ describe('ShopHeader — self(self=true) 누수 가드', () => {
         expect(text).not.toContain('신고');
     });
 });
+
+describe('ShopHeader — 제목 닉네임만 표시', () => {
+    test('제목에 닉네임이 보인다', () => {
+        const wrapper = mount(ShopHeader, { props: baseProps() });
+        expect(wrapper.find('.shop-id-title').text()).toContain('주인');
+    });
+
+    test('제목이 닉네임만이고 "님의 책방"을 포함하지 않는다', () => {
+        const wrapper = mount(ShopHeader, { props: baseProps() });
+        const titleText = wrapper.find('.shop-id-title').text();
+        expect(titleText).toBe('주인');
+        expect(titleText).not.toContain('책방');
+    });
+});
