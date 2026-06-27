@@ -132,6 +132,7 @@
 - [N-129. SAST(내 코드) vs SCA(의존성) — CodeQL·Dependabot·SpotBugs·OWASP의 자리](#n-129-sast내-코드-vs-sca의존성--codeqldependabotspotbugsowasp의-자리)
 - [N-130. 직접 import하는 라이브러리는 명시적 의존성으로 선언 — transitive 의존은 업그레이드에 끊긴다](#n-130-직접-import하는-라이브러리는-명시적-의존성으로-선언--transitive-의존은-업그레이드에-끊긴다)
 - [N-131. 라이브 클라이언트 미러는 서버 권위 계산과 같은 규칙을 따라야 한다](#n-131-라이브-클라이언트-미러는-서버-권위-계산과-같은-규칙을-따라야-한다)
+- [N-132. node_modules는 git 미추적이라 워크트리에 안 따라온다 — 커밋은 안티패턴(sharp 네이티브), 답은 lock + 정션 공유](#n-132-node_modules는-git-미추적이라-워크트리에-안-따라온다--커밋은-안티패턴sharp-네이티브-답은-lock--정션-공유)
 
 ---
 
@@ -6007,3 +6008,60 @@ git이 trailer 블록을 찾는 규칙(porcelain `%(trailers)`와 plumbing `inte
 - `frontend/src/dashboard/useReadingTimer.ts` `remainingNow` — `max(baseFloor, …)` → `max(0, …)`. 미사용이 된 `baseFloor` 인자·`goalMet` 정리.
 - `WeeklyDebtCalculator`(backward-only 재분배) — 서버 권위 계산. 클라가 따라야 했던 규칙.
 - 같은 버그를 "의도된 동작"으로 적어둔 `DashboardModel` floor 주석·plan.md 부채 절을 함께 정정.
+
+---
+
+## N-132. node_modules는 git 미추적이라 워크트리에 안 따라온다 — 커밋은 안티패턴(sharp 네이티브), 답은 lock + 정션 공유
+
+> **한 줄 요약**: `git worktree`로 폴더를 분리하면 `frontend/node_modules`가 없어 매번 `npm install`을 다시 한다. 원인은 "main엔 커밋돼 있는데 워크트리만 빠진" 게 아니라 **node_modules가 git 미추적(.gitignore)이라 어느 워킹트리에도 git이 복제하지 않는 것**이다. 답은 gitignore 해제(커밋)가 아니다 — `sharp` 같은 OS별 네이티브 바이너리 때문에 커밋은 깨지는 안티패턴이고, **lock 파일로 재현 + main의 node_modules를 워크트리에서 디렉토리 정션으로 재사용**이 정석이다.
+
+### 배경
+
+워크트리 세션마다 frontend 빌드를 하려면 의존성이 필요한데 `frontend/node_modules`가 비어 매번 `npm install`을 돌렸다. "main엔 있는데 왜 워크트리만 없지? gitignore에서 빼면 커밋돼서 따라오지 않나?"가 출발 질문.
+
+확인해보니 전제가 틀렸다:
+
+- `git ls-files '*node_modules*'` = **0개** — node_modules는 한 번도 커밋된 적 없다.
+- `.gitignore:55` `node_modules/` — 의도적 ignore(주석에 "package-lock.json은 커밋(CI 재현성)"이라 근거까지).
+- main의 `frontend/node_modules`도 지금은 비어 있다(예전 빌드 잔재 기억일 뿐).
+
+### 워크트리가 node_modules를 안 받는 진짜 이유
+
+`git worktree add`로 만든 워킹트리는 **git이 추적하는 파일만** 체크아웃한다. node_modules는 ignore돼 추적되지 않으니, main이든 워크트리든 **git의 복제 대상이 아니다**. 각 폴더의 node_modules는 그 폴더에서 `npm install`한 로컬 산출물일 뿐, 브랜치/워크트리에 묶여 따라다니는 게 아니다. (→ gitignore가 "워크트리에서 숨긴" 게 아니라, 애초에 git의 관리 밖이다.)
+
+### 왜 "gitignore 해제 = 커밋"은 안티패턴인가
+
+| 이유 | 내용 |
+|---|---|
+| **OS별 네이티브 바이너리** | `sharp`(이미지)·`phaser`·playwright 등은 **플랫폼·아키텍처별 네이티브 모듈**을 깐다. Windows에서 커밋한 바이너리를 리눅스 CI/타 머신이 그대로 못 쓴다 — 오히려 깨진다. lock 기준으로 각 환경이 자기 바이너리를 받아야 정상. |
+| **repo 비대·느림** | 수천~수만 파일이 들어가 clone/fetch가 느려지고 머지 충돌이 폭증. |
+| **노이즈** | 보안 스캔(SAST/SCA)·CI diff가 vendored 코드로 오염. |
+
+→ 정석은 **lock 파일(`package-lock.json`)만 커밋**해 `npm ci`로 *재현*하는 것. 이 repo는 이미 그 선택을 했다.
+
+### 해법 스펙트럼 (커밋 ❌ 이후)
+
+| 방법 | 비용 | 효과 | 비고 |
+|---|---|---|---|
+| `npm ci` + npm 캐시(`~/.npm`) | 변경 0 | 부분 — **네트워크 다운로드는 사라짐**(캐시 공유), 압축해제·네이티브 빌드는 남음 | 이미 동작 중이나 체감 부족 |
+| **main node_modules를 정션 공유**(채택) | 워크트리당 한 줄 | **다운로드 0·디스크 0** | frontend가 **빌드 전용(watch 아님)**이라 워크트리 간 읽기 공유 안전 |
+| pnpm 전환 | 큼(빌드·CI·훅 전반) | 근본적(전역 store + 하드링크) | 별도 작업 규모 |
+
+### 정션(junction)이 이 프로젝트에 맞는 이유
+
+- **Windows 디렉토리 정션** = 한 폴더를 다른 실제 폴더로 가리키는 링크. **관리자권한 불필요**(심볼릭 링크와 달리). `New-Item -ItemType Junction -Path <워크트리>/frontend/node_modules -Target <main>/frontend/node_modules`.
+- frontend는 **일회성 빌드**(`npm run build`)지 dev watch가 아니라, 여러 워크트리가 main의 node_modules를 동시에 *읽어도* 안전.
+- node_modules 이름이 `.gitignore`에 매치되므로 정션도 git에 안 잡힌다.
+- **주의**: 어떤 브랜치가 `package-lock.json`을 바꾸면 그 워크트리는 정션 대신 자기 `npm ci`를 써야 한다(정션은 main의 의존성을 본다).
+
+### 면접 Q&A 대비
+
+- *"워크트리마다 node_modules가 없던데, gitignore에서 빼서 커밋하면 되지 않나?"* → node_modules는 git 관리 밖이라 워크트리에 안 따라오는 것. 커밋은 OS별 네이티브 바이너리(sharp 등) 때문에 깨지는 안티패턴 — lock으로 재현하고, 굳이 재설치를 피하려면 main 것을 정션으로 공유한다.
+- *"정션과 심볼릭 링크 차이?"* → 둘 다 링크지만 Windows 정션은 디렉토리 전용·관리자권한 불필요·로컬 경로만. node_modules 공유엔 정션이 충분하고 마찰이 적다.
+- *"왜 lock 파일은 커밋하면서 node_modules는 안 하나?"* → lock은 *무엇을 어떤 버전으로* 깔지의 **선언**(작고 플랫폼 독립). node_modules는 그 선언을 푼 *결과물*(거대·플랫폼 의존). 선언만 공유하고 결과는 각자 재현하는 게 재현성과 이식성을 둘 다 잡는다.
+
+### 코드 위치 / 관련
+
+- `.claude/scripts/link-node-modules.ps1` — 워크트리에서 main node_modules를 정션 연결(멱등·`-Force`·`-DryRun`). main이 비어 있으면 먼저 `npm ci`로 채운다.
+- `CLAUDE.md` 「🪢 다중 세션 → worktree로 분리」 — 워크트리 생성 직후 이 스크립트 호출 안내.
+- [[N-032]](다중 세션 worktree 분리 — 정션은 그 워크플로의 마찰 감소), [[N-098]](SSR 섬 — Vite 번들은 *산출물*을 커밋하지만 node_modules는 안 하는 경계), N-130(의존성 선언 vs 전이 — lock/명시로 재현하는 같은 정신).
