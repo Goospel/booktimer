@@ -6,6 +6,11 @@
           {
             "type": "command",
             "command": "powershell.exe -NoProfile -File \".claude\\hooks\\warn-multi-session.ps1\""
+          },
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -File \".claude\\hooks\\link-node-modules-on-session-start.ps1\"",
+            "timeout": 120
           }
         ]
       }
