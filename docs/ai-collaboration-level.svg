@@ -1,0 +1,107 @@
+<svg viewBox="0 0 1000 460" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AI 협업 성숙도 — LEVEL 5 자가개선 메타시스템" font-family="'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR','Segoe UI',system-ui,sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d1424"/>
+      <stop offset="1" stop-color="#111c33"/>
+    </linearGradient>
+    <linearGradient id="track" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#3b4a63"/>
+      <stop offset="0.25" stop-color="#3f6e8c"/>
+      <stop offset="0.5" stop-color="#3f8f9c"/>
+      <stop offset="0.75" stop-color="#36b39a"/>
+      <stop offset="1" stop-color="#4ee0a8"/>
+    </linearGradient>
+    <radialGradient id="peak" cx="0.5" cy="0.4" r="0.7">
+      <stop offset="0" stop-color="#7dffce"/>
+      <stop offset="0.55" stop-color="#34d99a"/>
+      <stop offset="1" stop-color="#159c74"/>
+    </radialGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#4ee0a8" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#4ee0a8" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <!-- 불투명 배경 카드 (라이트/다크 양쪽 동일) -->
+  <rect x="0" y="0" width="1000" height="460" fill="url(#bg)"/>
+  <rect x="0.5" y="0.5" width="999" height="459" fill="none" stroke="#22324d" stroke-width="1"/>
+
+  <!-- 헤더 -->
+  <text x="60" y="62" font-size="30" font-weight="700" fill="#f2f6fc">AI 협업 성숙도</text>
+  <text x="61" y="88" font-size="13" font-weight="500" fill="#7e90ad" letter-spacing="1.5">AI COLLABORATION MATURITY</text>
+
+  <!-- 우상단 대표 레벨 배지 -->
+  <g filter="url(#soft)">
+    <rect x="648" y="40" width="292" height="54" rx="27" fill="#14352a" stroke="#2fae82" stroke-width="1.5"/>
+  </g>
+  <circle cx="681" cy="67" r="15" fill="url(#peak)"/>
+  <text x="681" y="72" text-anchor="middle" font-size="14" font-weight="800" fill="#06281d">5</text>
+  <text x="708" y="62" font-size="16" font-weight="700" fill="#7dffce">LEVEL 5 도달</text>
+  <text x="708" y="82" font-size="12" font-weight="500" fill="#9fe9cc">자가개선 메타시스템</text>
+
+  <!-- 마일스톤 트랙 -->
+  <line x1="130" y1="252" x2="876" y2="252" stroke="#26344c" stroke-width="10" stroke-linecap="round"/>
+  <line x1="130" y1="252" x2="876" y2="252" stroke="url(#track)" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- 정점 헤일로 -->
+  <circle cx="876" cy="252" r="88" fill="url(#halo)"/>
+
+  <!-- ===== 노드 ===== -->
+  <!-- L1 -->
+  <circle cx="130" cy="252" r="16" fill="#3b4a63" stroke="#0d1424" stroke-width="4"/>
+  <text x="130" y="257" text-anchor="middle" font-size="13" font-weight="700" fill="#cdd7e6">1</text>
+  <text x="130" y="306" text-anchor="middle" font-size="14" font-weight="700" fill="#b7c2d4">단발 질의</text>
+  <text x="130" y="327" text-anchor="middle" font-size="11.5" fill="#7e90ad">검색·복붙 도우미</text>
+
+  <!-- L2 -->
+  <circle cx="316" cy="252" r="17" fill="#3f6e8c" stroke="#0d1424" stroke-width="4"/>
+  <text x="316" y="257" text-anchor="middle" font-size="13" font-weight="700" fill="#e6f1f8">2</text>
+  <text x="316" y="306" text-anchor="middle" font-size="14" font-weight="700" fill="#c4d3e0">작업 위임</text>
+  <text x="316" y="327" text-anchor="middle" font-size="11.5" fill="#88a0b5">기능 단위·수동 지시</text>
+
+  <!-- L3 -->
+  <circle cx="502" cy="252" r="18" fill="#3f8f9c" stroke="#0d1424" stroke-width="4"/>
+  <text x="502" y="257" text-anchor="middle" font-size="13" font-weight="700" fill="#eafafb">3</text>
+  <text x="502" y="306" text-anchor="middle" font-size="14" font-weight="700" fill="#cfe2e4">워크플로 정착</text>
+  <text x="502" y="327" text-anchor="middle" font-size="11.5" fill="#8db5b6">PR-first · TDD 게이트</text>
+
+  <!-- L4 -->
+  <circle cx="688" cy="252" r="19" fill="#36b39a" stroke="#0d1424" stroke-width="4"/>
+  <text x="688" y="257" text-anchor="middle" font-size="13" font-weight="700" fill="#06281d">4</text>
+  <text x="688" y="306" text-anchor="middle" font-size="14" font-weight="700" fill="#bdeede">자동 강제</text>
+  <text x="688" y="327" text-anchor="middle" font-size="11.5" fill="#7fc9b3">훅(.ps1) 하드 강제</text>
+
+  <!-- L5 정점 노드 -->
+  <g filter="url(#soft)">
+    <circle cx="876" cy="252" r="33" fill="url(#peak)" stroke="#0d1424" stroke-width="4"/>
+  </g>
+  <text x="876" y="261" text-anchor="middle" font-size="23" font-weight="800" fill="#04261b">5</text>
+
+  <!-- 자가개선 루프 화살표 (marker 미사용 — 화살촉 직접 그림) -->
+  <path d="M876 207 A45 45 0 1 1 834 230" fill="none" stroke="#7dffce" stroke-width="3.2" stroke-linecap="round"/>
+  <polygon points="828,221 842,228 829,238" fill="#7dffce"/>
+  <path d="M876 297 A45 45 0 1 1 918 274" fill="none" stroke="#7dffce" stroke-width="3.2" stroke-linecap="round"/>
+  <polygon points="924,283 910,276 923,266" fill="#7dffce"/>
+
+  <!-- "현재 위치" 마커 -->
+  <rect x="811" y="148" width="130" height="28" rx="14" fill="#7dffce"/>
+  <text x="876" y="167" text-anchor="middle" font-size="13" font-weight="700" fill="#05281c">★ 현재 위치</text>
+  <polygon points="870,176 882,176 876,186" fill="#7dffce"/>
+
+  <!-- L5 캡션 -->
+  <text x="876" y="319" text-anchor="middle" font-size="15" font-weight="700" fill="#7dffce">자가개선 메타시스템</text>
+  <text x="876" y="339" text-anchor="middle" font-size="11.5" fill="#86d9bb">실패 → 규칙 → 훅 자동 승격 루프</text>
+
+  <!-- 하단 배지 -->
+  <line x1="60" y1="394" x2="940" y2="394" stroke="#22324d" stroke-width="1"/>
+  <circle cx="72" cy="420" r="4" fill="#4ee0a8"/>
+  <text x="86" y="425" font-size="13" font-weight="500" fill="#c4d3e0">마지막 누수 4개 봉합 + 실전 검증</text>
+  <text x="394" y="425" font-size="12" font-weight="500" fill="#7e90ad">2026-06-27</text>
+
+  <circle cx="560" cy="420" r="4" fill="#3f8f9c"/>
+  <text x="574" y="425" font-size="13" font-weight="500" fill="#c4d3e0">진단: 5축 워크플로</text>
+  <text x="746" y="425" font-size="12" font-weight="500" fill="#7e90ad">2026-06-26</text>
+</svg>
