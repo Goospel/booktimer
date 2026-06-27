@@ -1494,6 +1494,7 @@ body.profile-page .container { max-width: 1160px; }  /* 와이드 2열 여유 �
 .shop-main { flex: 1; min-width: 0; }
 
 /* 헤더 정체성 — 이니셜 아바타(대시보드 .dash-header-avatar 재사용) + 책방명/핸들 */
+.shop-header-card { position: relative; }   /* 케밥 메뉴 absolute 기준 */
 .shop-id-head { display: flex; align-items: center; gap: 14px; }
 .shop-avatar { cursor: default; }                     /* 비클릭 div라 .dash-header-avatar의 pointer 상쇄 */
 .shop-id-title { font-family: 'Gowun Batang', serif; font-size: clamp(22px, 3vw, 28px); color: var(--text); line-height: 1.3; }
@@ -1511,7 +1512,52 @@ body.profile-page .container { max-width: 1160px; }  /* 와이드 2열 여유 �
 .shop-count strong { font-family: 'Gowun Batang', serif; color: var(--text); font-variant-numeric: tabular-nums; }
 a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 .shop-actions { margin-left: auto; display: flex; gap: 8px; }
-.shop-actions .dash-btn-fill, .shop-actions .dash-btn-outline { width: auto; padding: 9px 16px; border-radius: 10px; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; }
+.shop-actions .dash-btn-fill, .shop-actions .dash-btn-outline { width: auto; padding: 9px 16px; border-radius: 10px; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; }
+
+/* 케밥 더보기 메뉴 (헤더 우상단 절대 배치) */
+.shop-menu { position: absolute; top: 12px; right: 14px; }
+.shop-menu-btn {
+    background: none; border: none; cursor: pointer; padding: 4px; border-radius: 6px;
+    display: inline-flex; align-items: center; color: var(--muted); width: auto;
+}
+.shop-menu-btn:hover { background: var(--sage-soft); color: var(--text); }
+.shop-menu-backdrop { position: fixed; inset: 0; z-index: 100; }
+.shop-menu-list {
+    position: absolute; top: calc(100% + 4px); right: 0; z-index: 101;
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(44, 42, 36, .12); min-width: 110px; padding: 6px;
+    display: flex; flex-direction: column; gap: 2px;
+}
+.shop-menu-item {
+    background: none; border: none; cursor: pointer; width: 100%;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 9px 12px; border-radius: 8px; font-size: 14px; color: var(--text); text-align: left;
+}
+.shop-menu-item:hover { background: var(--sage-soft); }
+.shop-menu-item-danger { color: var(--danger); }
+.shop-menu-item-danger:hover { background: #FFF0EE; }
+
+/* 신고 모달 */
+.shop-report-modal-overlay {
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(0, 0, 0, .45);
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.shop-report-modal-panel {
+    background: var(--card-bg); border-radius: 18px; padding: 24px;
+    width: 100%; max-width: 360px; box-shadow: 0 8px 32px rgba(44, 42, 36, .18);
+    display: flex; flex-direction: column; gap: 16px;
+}
+.shop-report-modal-head { display: flex; align-items: center; justify-content: space-between; }
+.shop-report-modal-title { font-size: 16px; font-weight: 600; color: var(--text); margin: 0; }
+.shop-report-modal-close {
+    background: none; border: none; cursor: pointer; padding: 4px; border-radius: 6px;
+    display: inline-flex; color: var(--muted); width: auto;
+}
+.shop-report-modal-close:hover { color: var(--text); background: var(--sage-soft); }
+.shop-report-modal-body { display: flex; flex-direction: column; gap: 10px; }
+.shop-report-modal-submit { width: auto; align-self: flex-start; }
+.shop-report-modal-ok { margin: 0; font-size: 13px; color: var(--ok); }
 
 /* 신고 박스 — 콤팩트 카드(시안: 박스 4px + summary 자체 패딩) */
 .shop-report { background: var(--card-bg); border: 1px solid #D8CDB9; border-radius: 18px; padding: 4px; box-shadow: 0 1px 2px rgba(44, 42, 36, .04); }

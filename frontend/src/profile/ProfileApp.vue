@@ -2,20 +2,12 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { getCsrfToken } from '../shared/follow';
 import { setBlock } from '../shared/block';
-import { report as doReport } from '../shared/report';
 import ShopIcon from './ShopIcon.vue';
 import ShopHeader from './ShopHeader.vue';
+import ReportModal from './ReportModal.vue';
 import BtiPanel from './BtiPanel.vue';
 import ShelfPanel from './ShelfPanel.vue';
 import NavLinks from '../shared/NavLinks.vue';
-
-// ── 상수 ────────────────────────────────────────────────────────────────
-const REPORT_REASONS = [
-    { value: 'SPAM',          label: '스팸/광고' },
-    { value: 'HARASSMENT',    label: '괴롭힘/욕설' },
-    { value: 'INAPPROPRIATE', label: '부적절한 콘텐츠' },
-    { value: 'OTHER',         label: '기타' },
-];
 
 // ── dataset ──────────────────────────────────────────────────────────────
 const appEl = document.getElementById('profile-app');
@@ -45,10 +37,7 @@ const activeTab  = ref<'bti' | 'shelf'>('shelf');
 const shelfFilter = ref<string | null>(null);
 const tagPanel   = ref<BookSummary[] | null>(null);
 const tagLabel   = ref('');
-const reported   = ref(false);
-const reportReason  = ref('SPAM');
-const reportDetail  = ref('');
-const reportSubmitted = ref(false);
+const reportOpen = ref(false);
 
 // 반응형 분기 — presentational only(데이터/액션 로직 불변). 와이드(≥860px)=2열, 모바일=탭.
 const isWide = ref(false);
@@ -142,14 +131,6 @@ async function doBlock() {
     location.href = '/me/blocks';
 }
 
-// ── 신고 ─────────────────────────────────────────────────────────────────
-async function submitReport() {
-    if (!confirm('이 사용자를 신고할까요?')) return;
-    const result = await doReport(loginId, reportReason.value, reportDetail.value);
-    reported.value = result;
-    reportSubmitted.value = true;
-}
-
 // ── popstate ─────────────────────────────────────────────────────────────
 function onPopState(e: PopStateEvent) {
     const s = e.state ?? {};
@@ -207,33 +188,15 @@ onUnmounted(() => {
                 <span>다른 책방 찾기</span>
             </a>
 
-            <!-- ── 모바일: 단일열(헤더 → (other)신고 → 탭카드 → 링크) ── -->
+            <!-- ── 모바일: 단일열(헤더 → 탭카드 → 링크) ── -->
             <template v-if="!isWide">
                 <ShopHeader
                     :nickname="profile.nickname" :login-id="profile.loginId"
                     :personality-tags="profile.personalityTags"
                     :follower-count="profile.followerCount" :following-count="profile.followingCount"
                     :self="profile.self" :following="profile.following"
-                    @open-tag="openTag" @toggle-follow="toggleFollow" @do-block="doBlock" />
-
-                <details v-if="!profile.self" class="shop-report">
-                    <summary>
-                        <ShopIcon name="chevron" :size="14" class="shop-report-caret" />
-                        <ShopIcon name="report" :size="15" />이 사용자 신고
-                    </summary>
-                    <div class="shop-report-form">
-                        <label class="shop-report-field">사유
-                            <select v-model="reportReason">
-                                <option v-for="r in REPORT_REASONS" :key="r.value" :value="r.value">{{ r.label }}</option>
-                            </select>
-                        </label>
-                        <textarea v-model="reportDetail" rows="2" maxlength="500"
-                                  placeholder="상세 내용 (선택)"></textarea>
-                        <button type="button" class="dash-btn-outline shop-report-submit"
-                                @click="submitReport">신고하기</button>
-                        <p v-if="reportSubmitted && reported" class="shop-report-ok">신고가 접수되었습니다.</p>
-                    </div>
-                </details>
+                    @open-tag="openTag" @toggle-follow="toggleFollow" @do-block="doBlock"
+                    @open-report="reportOpen = true" />
 
                 <section class="dash-card shop-tab-card">
                     <div class="shop-tabs">
@@ -252,7 +215,7 @@ onUnmounted(() => {
                 </section>
             </template>
 
-            <!-- ── 와이드: 2열(좌 사이드바: 헤더+책BTI 상시+신고 / 우 공개책장) ── -->
+            <!-- ── 와이드: 2열(좌 사이드바: 헤더+책BTI 상시 / 우 공개책장) ── -->
             <div v-else class="shop-wide">
                 <div class="shop-side">
                     <ShopHeader
@@ -260,32 +223,14 @@ onUnmounted(() => {
                         :personality-tags="profile.personalityTags"
                         :follower-count="profile.followerCount" :following-count="profile.followingCount"
                         :self="profile.self" :following="profile.following"
-                        @open-tag="openTag" @toggle-follow="toggleFollow" @do-block="doBlock" />
+                        @open-tag="openTag" @toggle-follow="toggleFollow" @do-block="doBlock"
+                        @open-report="reportOpen = true" />
 
                     <section class="dash-card shop-bti-card">
                         <span class="dash-pill">책BTI</span>
                         <BtiPanel :personality="profile.personality" :self="profile.self"
                                   :tag-panel="tagPanel" :tag-label="tagLabel" @close-tag="closeTag" />
                     </section>
-
-                    <details v-if="!profile.self" class="shop-report">
-                        <summary>
-                            <ShopIcon name="chevron" :size="14" class="shop-report-caret" />
-                            <ShopIcon name="report" :size="15" />이 사용자 신고
-                        </summary>
-                        <div class="shop-report-form">
-                            <label class="shop-report-field">사유
-                                <select v-model="reportReason">
-                                    <option v-for="r in REPORT_REASONS" :key="r.value" :value="r.value">{{ r.label }}</option>
-                                </select>
-                            </label>
-                            <textarea v-model="reportDetail" rows="2" maxlength="500"
-                                      placeholder="상세 내용 (선택)"></textarea>
-                            <button type="button" class="dash-btn-outline shop-report-submit"
-                                    @click="submitReport">신고하기</button>
-                            <p v-if="reportSubmitted && reported" class="shop-report-ok">신고가 접수되었습니다.</p>
-                        </div>
-                    </details>
                 </div>
 
                 <div class="shop-main">
@@ -296,6 +241,10 @@ onUnmounted(() => {
                     </section>
                 </div>
             </div>
+
+            <!-- 신고 모달 (other only) — 모바일·와이드 공통 단일 인스턴스 -->
+            <ReportModal v-if="reportOpen && !profile.self" :login-id="loginId"
+                         @close="reportOpen = false" />
 
             <!-- ── 하단 링크 (전 페이지 공유 .link-row 타일) ──
                  차단 목록은 자주 안 쓰는 계정 관리라 책방 상시 노출 대신 대시보드 아바타 메뉴(DashHeader)로 이동. -->
