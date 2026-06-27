@@ -3,7 +3,8 @@ package com.booktimer.web.api;
 import com.booktimer.user.Role;
 import com.booktimer.user.UserRegistrationService;
 import com.booktimer.garden.FeedResult;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,8 +45,7 @@ class FeedApiControllerTest {
 
     @BeforeEach
     void setUpObjectMapper() {
-        objectMapper = new ObjectMapper();
-        objectMapper.findAndRegisterModules();
+        objectMapper = JsonMapper.builder().findAndAddModules().build();
     }
 
     private LocalDate today() {
