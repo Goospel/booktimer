@@ -36,7 +36,7 @@ dependencies {
 	implementation('nl.martijndwars:web-push:5.1.2') {
 		exclude group: 'org.bouncycastle', module: 'bcprov-jdk15on'
 	}
-	implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'
+	implementation 'org.bouncycastle:bcprov-jdk18on:1.84'
 	// web-push 5.1.2가 transitives(httpasyncclient·jose4j 등)를 compile→runtime scope로 내려, PushSenderService가
 	// 컴파일에 직접 필요로 하는 타입이 클래스패스에서 빠졌다(API·버전은 그대로 — scope만 변경). 명시적 선언으로 복원:
 	//  - org.apache.http.HttpResponse/StatusLine (send() 반환·상태코드 조회) → httpcore. Boot 4 BOM은 httpcomponents 5.x만
