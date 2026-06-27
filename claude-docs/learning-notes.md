@@ -135,6 +135,7 @@
 - [N-132. node_modules는 git 미추적이라 워크트리에 안 따라온다 — 커밋은 안티패턴(sharp 네이티브), 답은 lock + 정션 공유](#n-132-node_modules는-git-미추적이라-워크트리에-안-따라온다--커밋은-안티패턴sharp-네이티브-답은-lock--정션-공유)
 - [N-133. CodeQL을 pull_request·push:main 둘 다 트리거하는 이유 — 게이트 vs default branch baseline](#n-133-codeql을-pull_requestpushmain-둘-다-트리거하는-이유--게이트-vs-default-branch-baseline)
 - [N-134. overflow-x:auto는 overflow-y를 auto로 끌어올린다 — 가로 스크롤러 속 자식의 세로 그림자가 잘린다](#n-134-overflow-xauto는-overflow-y를-auto로-끌어올린다--가로-스크롤러-속-자식의-세로-그림자가-잘린다)
+- [N-135. autocrlf=true와 빌드 도구의 LF 출력이 부딪혀 '유령 변경'을 만든다 — .gitattributes eol=lf로 고정](#n-135-autocrlftrue와-빌드-도구의-lf-출력이-부딪혀-유령-변경을-만든다--gitattributes-eollf로-고정)
 
 ---
 
@@ -6149,3 +6150,54 @@ CSS Overflow 스펙의 규칙: **`overflow-x`와 `overflow-y` 중 하나가 `vis
 
 - `src/main/resources/static/css/app.css` — `.personality-carousel { overflow-x: auto; padding-block: 6px; }` + `.personality-entry { box-shadow: … }`.
 - [[N-120]](overflow-x:auto는 데스크톱에서 터치 스크롤만), [[N-121]](중앙 포커스 캐러셀 — step 스크롤), [[N-122]](grid-stack으로 캐러셀 클립·점프 방지), [[N-123]](overflow:hidden은 사용자 스크롤만 막는다).
+
+---
+
+## N-135. autocrlf=true와 빌드 도구의 LF 출력이 부딪혀 '유령 변경'을 만든다 — .gitattributes eol=lf로 고정
+
+> **한 줄 요약**: `core.autocrlf=true`(Windows 기본)는 작업트리를 **CRLF로 기대**하는데, vite/Node 같은 빌드 도구는 산출물을 **LF로 쓴다**. 그래서 빌드된 번들이 `git status`에 **영구 'modified(유령)'** 로 뜬다 — `git diff`는 내용 정규화 비교라 **0줄**인데도. `.gitattributes`에 그 경로를 `text eol=lf`로 박아 git의 기대 EOL을 LF로 맞추면 충돌이 구조적으로 사라진다.
+
+### 증상 — "세션 정리하려는데 커밋 안 된 변경이 있대"
+
+작업을 다 커밋·머지했는데도 `git status`에 빌드 산출물(`src/main/resources/static/<app>/<app>.js`) 여러 개가 modified로 남아, 세션/워크트리 삭제 때 "uncommitted changes" 경고가 **매번 반복**된다. `git diff`를 찍어보면 **내용 차이가 한 줄도 없다**(가짜처럼 보임).
+
+### 진단 — `git ls-files --eol`이 진실을 보여준다
+
+`git diff`로는 안 보인다. **`git ls-files --eol <path>`** 가 결정적 도구다 — 각 파일의 `i/`(index) `w/`(working tree) `attr/`(적용된 속성) EOL을 보여준다.
+
+```
+i/lf  w/lf   attr/                  static/dashboard/dashboard.js   ← 유령(범인)
+i/lf  w/crlf attr/                  static/css/app.css              ← 정상
+```
+
+- 정상 파일은 전부 `w/crlf`(autocrlf가 체크아웃 시 CRLF로 smudge). **유령만 `w/lf`** — autocrlf의 CRLF 기대와 어긋난다.
+- **`git diff`(empty)와 `git status`(modified)가 갈리면 = EOL 유령 신호.** `git diff`는 EOL 정규화 후 내용을 비교(0줄)하지만, `git status`는 "체크아웃하면 CRLF로 바뀔 것"이라는 EOL 불일치까지 modified로 본다.
+
+### 왜 빌드 산출물만 유령이 되나
+
+vite/Node는 파일을 **LF로 생성**한다. 빌드 직후 번들은 작업트리에 LF로 남는데, autocrlf=true는 그 자리를 CRLF로 기대하므로 어긋난다. (커밋→재체크아웃을 거치면 smudge로 CRLF가 돼 깨끗해지지만, 자기가 방금 빌드한 파일을 재체크아웃할 일은 없으니 **빌드된 채로 LF에 머물러 영구 유령**이 된다. 손으로 쓰는 `.java`/`.css`/`.vue`는 에디터·git이 일관되게 CRLF라 안 생긴다 — 외부 도구가 LF로 덮어쓰는 파일만의 문제.)
+
+### 해결 — `.gitattributes`로 EOL 정책을 코드로 고정
+
+```gitattributes
+# vite/Node가 LF로 만드는 번들 — autocrlf의 CRLF 기대와 충돌해 유령이 됨. LF로 고정.
+src/main/resources/static/**/*.js text eol=lf
+```
+
+- `.gitattributes`는 `core.autocrlf`보다 **우선**하고 **커밋**되므로, 모든 워크트리·재클론·CI·팀원에게 동일 적용된다(로컬 config보다 견고·portable).
+- 적용 절차: 규칙 추가 → **`git add --renormalize .`** 1회(인덱스 stat을 새 정책에 맞춤; 블롭이 이미 LF면 내용 churn 0) → 커밋. 이후 빌드는 LF→LF로 깨끗하게 유지된다.
+- **1회 전이 주의**: 규칙 적용 시점에 작업트리가 CRLF이던 번들은, 그 다음 빌드(CRLF→LF로 파일 크기가 줄어 인덱스 stat과 어긋남)에서 *한 번* modified로 떴다가 `git add`/커밋으로 settle된다. 그 이후 재빌드부터는 유령이 안 생긴다(실측 확인).
+
+### 대안 — `git config core.autocrlf input` (로컬)
+
+CRLF→LF는 커밋 때만, 체크아웃 땐 변환 안 함 → 작업트리가 LF로 수렴해 유령이 사라진다. **즉시·재기록 0**이지만 **커밋되지 않아**(이 머신/레포 한정) 재클론·CI엔 안 따라온다. 워크트리는 config를 공유해 전 워크트리는 커버. → 빠른 응급책. 영구·portable 해결은 `.gitattributes`.
+
+### 면접 Q&A 대비
+
+- *"`git diff`는 깨끗한데 `git status`는 modified, 뭐가 문제?"* → 십중팔구 EOL 유령. diff는 EOL 무시 내용 비교라 0줄, status는 체크아웃 시 EOL이 바뀔 것까지 modified로 본다. `git ls-files --eol`로 `i/ w/` EOL을 비교해 확인하고, `.gitattributes`로 정책을 고정한다.
+- *"왜 빌드 산출물만 그러나?"* → 빌드 도구가 LF로 쓰는데 autocrlf=true는 CRLF를 기대해서. 손편집 파일은 일관돼 안 걸린다.
+
+### 코드 위치 / 관련
+
+- `.gitattributes` — `src/main/resources/static/**/*.js text eol=lf`(+ 기존 `/gradlew eol=lf`, `*.bat eol=crlf`, `*.jar binary`, `changelog.md merge=union`(T-098)).
+- 진단 명령: `git ls-files --eol <path>`, `git diff --numstat`(0줄이면 내용 동일=EOL 유령 의심).
