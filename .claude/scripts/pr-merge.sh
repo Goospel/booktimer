@@ -1,17 +1,24 @@
 #!/usr/bin/env bash
 # pr-merge.sh — PR 머지 보조기 (BookTimer)
 #
-# 목적: PR 머지 자동화에서 두 가지 함정을 구조적으로 막는다.
+# 목적: PR 머지 자동화에서 세 가지 함정을 구조적으로 막는다.
 #   1) 머지 충돌(DIRTY)인데 "체크 등록 대기"로 오인해 헛폴링하는 것 → 폴링 전 진단으로 차단.
 #   2) CI가 pending/충돌에 멈춰 대기가 영영 안 끝나는 것 → 모든 대기에 하드 타임아웃.
+#   3) "머지 전 브랜치 최신화 필수" 정책에서 BEHIND(base에 뒤처짐)면 GitHub가 브랜치를 자동
+#      갱신하지 않아 --auto 가 영영 못 머지하는 것 → BEHIND를 gh pr update-branch로 자동 해소
+#      (폴링 루프·--arm 양쪽). (T-111 — T-083/T-091/T-094 머지-hang 계열)
 #
-# 사용:  bash .claude/scripts/pr-merge.sh <PR번호> [최대대기초] [--rebase]
+# 사용:  bash .claude/scripts/pr-merge.sh <PR번호> [최대대기초] [--rebase] [--arm]
 #   - 최대대기초 기본 720(12분). 초과 시 현재 상태를 출력하고 비정상 종료(무한 대기 불가).
 #   - 머지는 squash. 성공 시 원격 브랜치까지 삭제. 로컬 main 갱신은 호출자가 한다.
 #   - --rebase: DIRTY(머지 충돌)를 만나면 origin/main에 자동 rebase + force-with-lease push 후
 #               머지 폴링을 한 호출 안에서 이어간다(흐름 끊김=재실행 누락 방지). 텍스트 충돌이면
 #               rebase --abort 후 exit 3(수동 필요). 안전장치: 현재 브랜치==PR head·워킹트리 clean.
 #               플래그 없으면 기존대로 DIRTY 즉시 exit 3(파괴적 자동화는 opt-in).
+#   - --arm:   무폴링 "걸고 떠나기". gh pr merge --auto --squash 를 걸고 상태를 1회 점검해 BEHIND면
+#               gh pr update-branch(비파괴 서버사이드 갱신), DIRTY면 rebase(--rebase일 때)로 풀고
+#               "즉시" 종료한다 — 머지는 서버(--auto)가 마저 한다(세션을 머지까지 안 묶음). 동기
+#               머지(끝까지 보고)가 필요하면 --arm 없이(폴링 루프) 쓴다.
 #
 # 환경변수(테스트용):
 #   PR_MERGE_DRYRUN=1     실제 머지/삭제/rebase를 하지 않고 "would: ..."만 출력.
@@ -20,12 +27,14 @@
 # 종료코드: 0 머지/이미머지, 3 충돌(DIRTY), 4 CI실패, 5 타임아웃, 2 사용법오류.
 set -u
 
-# 위치 인자 <PR번호> [최대대기초] + 위치 무관 플래그 --rebase
+# 위치 인자 <PR번호> [최대대기초] + 위치 무관 플래그 --rebase / --arm
 AUTO_REBASE=0
+ARM=0
 ARGS=()
 for a in "$@"; do
   case "$a" in
     --rebase) AUTO_REBASE=1 ;;
+    --arm)    ARM=1 ;;
     *)        ARGS+=("$a") ;;
   esac
 done
@@ -34,7 +43,7 @@ DEADLINE_SECS="${ARGS[1]:-720}"
 POLL_SECS=15
 
 if [ -z "$PR" ]; then
-  echo "사용법: bash .claude/scripts/pr-merge.sh <PR번호> [최대대기초] [--rebase]" >&2
+  echo "사용법: bash .claude/scripts/pr-merge.sh <PR번호> [최대대기초] [--rebase] [--arm]" >&2
   exit 2
 fi
 
@@ -118,6 +127,64 @@ try_rebase() {
   return 1
 }
 
+# BEHIND(base에 뒤처짐, 충돌은 아님)를 비파괴로 푼다. "머지 전 브랜치 최신화 필수" 정책에서
+# --auto가 영영 못 머지하는 주된 원인 — GitHub는 BEHIND 브랜치를 자동 갱신하지 않는다(이 레포
+# auto-update off). gh pr update-branch(서버사이드 base→head merge, force-push·로컬 체크아웃
+# 불필요)로 갱신하면 CI가 재실행되고 머지가 진행된다. 성공 0, 수동 필요 3.
+try_update_branch() {
+  note "🔃 BEHIND — gh pr update-branch 로 비파괴 갱신(서버사이드 base→head merge)…"
+  if [ "${PR_MERGE_DRYRUN:-0}" = "1" ]; then
+    note "would: gh pr update-branch $PR"
+    return 0
+  fi
+  if timeout 60 gh pr update-branch "$PR" >/dev/null 2>&1; then
+    note "✅ 브랜치 갱신 요청됨 — CI 재실행 후 머지 진행."
+    return 0
+  fi
+  note "⚠️ update-branch 실패 — 갱신 중 충돌로 DIRTY 전환됐을 수 있음." >&2
+  if [ "$AUTO_REBASE" = "1" ] && try_rebase; then return 0; fi
+  note "   --rebase 옵션으로 재시도하거나 수동 rebase·force push 필요." >&2
+  return 3
+}
+
+# --arm: auto-merge를 걸고 상태를 1회 점검해 BEHIND/DIRTY만 풀어준 뒤 "즉시" 종료한다(무폴링).
+# 머지 자체는 서버(--auto)가 조건 충족 시 마저 한다 → 세션을 머지까지 묶지 않으면서도
+# "BEHIND라 영영 안 머지"(T-111) 사각을 닫는 "걸고 떠나기"의 안전판. 종료코드는 호출부로 전파.
+arm_and_exit() {
+  if [ "${PR_MERGE_DRYRUN:-0}" = "1" ]; then
+    note "would: gh pr merge $PR --auto --squash"
+  else
+    note "auto-merge(squash) 설정…"
+    timeout 60 gh pr merge "$PR" --auto --squash 2>&1 | sed 's/^/[pr-merge] /'
+  fi
+  local st state merge
+  st="$(read_state)"; state="${st%% *}"; merge="${st##* }"
+  note "arm 후 상태: state=$state mergeStateStatus=$merge"
+  case "$state" in
+    MERGED) note "이미 머지됨."; return 0 ;;
+    CLOSED) note "PR이 닫힘(머지 아님)." >&2; return 2 ;;
+  esac
+  case "$merge" in
+    BEHIND)
+      try_update_branch; return $? ;;
+    DIRTY)
+      if [ "$AUTO_REBASE" = "1" ]; then
+        try_rebase && { note "✅ rebase 완료 — CI 재실행 후 --auto가 마저 머지."; return 0; } || return 3
+      fi
+      note "❌ DIRTY(머지 충돌) — --rebase로 풀거나 수동 처리 필요." >&2
+      return 3 ;;
+    *)
+      note "✅ auto-merge 걸림 — 필수체크 통과 시 서버가 머지(이 세션 대기 불필요)." ;;
+  esac
+  return 0
+}
+
+# --arm 무폴링 모드: 걸고 BEHIND/DIRTY만 풀고 종료(머지는 서버가 마저).
+if [ "$ARM" = "1" ]; then
+  arm_and_exit
+  exit $?
+fi
+
 while :; do
   if [ "$SECONDS" -ge "$DEADLINE_SECS" ]; then
     note "⏱ 타임아웃(${DEADLINE_SECS}s 초과). 마지막 상태: $(read_state). 자동 머지 중단 — 사람이 확인 필요." >&2
@@ -156,6 +223,13 @@ while :; do
         pending)  note "CI 진행 중 — 대기(${POLL_SECS}s)"; ;;
       esac
       sleep "$POLL_SECS" ;;
+    BEHIND)
+      if try_update_branch; then
+        [ "${PR_MERGE_DRYRUN:-0}" = "1" ] && exit 0   # dry-run 스모크: 경로 확인 후 종료(무한루프 방지)
+        sleep "$POLL_SECS"                            # 실제: 갱신됨 → CI 재실행, 다음 루프에서 재평가
+      else
+        exit 3                                         # 갱신 실패(충돌 등) → 수동 필요
+      fi ;;
     UNKNOWN|"")
       note "머지 가능성 계산 중 — 잠시 대기(5s)"; sleep 5 ;;
     *)

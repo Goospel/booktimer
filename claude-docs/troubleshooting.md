@@ -9,7 +9,7 @@
 
 | 트랩군 | 발생 T-### | 회차 | 승격 상태 |
 |---|---|---|---|
-| PR 머지 자동화(`pr-merge.sh`) — 백그라운드 hang·미완료·헛폴링·DIRTY-blind | T-083 · T-088 · T-091 · T-094 · T-102 | 5 | ✅ 하드픽스(`pr-merge.sh`: gh API 브랜치삭제 + `timeout`, T-094) + 절차(머지=완료확인) + CLAUDE.md Git워크플로 DIRTY 진단. **T-102(5회차): 하드픽스가 있는데 안 쓰고 워처를 손수 짜 DIRTY 누락 — `pr-merge.sh`를 쓰거나 워처에 `mergeStateStatus==DIRTY` 분기 필수** |
+| PR 머지 자동화(`pr-merge.sh`) — 백그라운드 hang·미완료·헛폴링·DIRTY-blind·BEHIND 무한대기 | T-083 · T-088 · T-091 · T-094 · T-102 · T-111 | 6 | ✅ 하드픽스(`pr-merge.sh`: gh API 브랜치삭제 + `timeout`, T-094) + 절차(머지=완료확인) + CLAUDE.md Git워크플로 DIRTY 진단. **T-102(5회차): 하드픽스 안 쓰고 손수 워처→DIRTY 누락. T-111(6회차): "up-to-date 필수 + `--auto` + BEHIND = 무한대기" — `pr-merge.sh`에 BEHIND `gh pr update-branch` 자동해소 + `--arm`("걸고 떠나기") 모드 추가·표준 경로로 승격, bare `--auto` 단독 금지** |
 | Vue 섬 번들 stale(산출물 미커밋·CI 사각) | T-063 · T-082 | 2 | ✅ 훅 `require-bundle-build.ps1`(전 10섬) + CI 확장 |
 | Service Worker stale 캐시(파일명 고정 자산) | T-071 · T-075 · T-080 | 3 | ✅ 코드 패턴(SW `NETWORK_FIRST` 배열 + `res.ok` 가드 + `CACHE` 버전업) |
 | 커밋/git 무한 hang(멀티세션 gradle 데몬·빌드락) | T-078 | 2+ | ✅ CLAUDE.md 「🧪 TDD → ⚠️ 커밋이 무한 hang 하면」 + 강제정리 절차 |
@@ -127,6 +127,7 @@
 - [T-108. `gradlew.bat`이 phantom-modified로 rebase를 막는다 — `.gitattributes eol=crlf`와 커밋된 블롭 EOL 불일치, `--assume-unchanged`로 우회](#t-108-gradlewbat이-phantom-modified로-rebase를-막는다--gitattributes-eolcrlf와-커밋된-블롭-eol-불일치---assume-unchanged로-우회)
 - [T-109. vitest include가 test/ 디렉토리만 잡아 src/ 곁 테스트가 조용히 미실행 — include에 src/** 추가](#t-109-vitest-include가-test-디렉토리만-잡아-src-곁-테스트가-조용히-미실행--include에-src-추가)
 - [T-110. 정션 둔 워크트리를 `git worktree remove --force`하면 정션 타깃(main node_modules)이 비워진다 — 정션 먼저 끊어라](#t-110-정션-둔-워크트리를-git-worktree-remove---force하면-정션-타깃main-node_modules이-비워진다--정션-먼저-끊어라)
+- [T-111. "머지 전 브랜치 최신화 필수" 정책에서 BEHIND인 PR에 `--auto`만 걸면 영영 안 머지된다 — GitHub가 BEHIND 브랜치를 자동 갱신하지 않음](#t-111-머지-전-브랜치-최신화-필수-정책에서-behind인-pr에---auto만-걸면-영영-안-머지된다--github가-behind-브랜치를-자동-갱신하지-않음)
 
 ---
 
@@ -2134,6 +2135,20 @@ git worktree remove ../BookTimer-<task>
 
 ---
 
+## T-111. "머지 전 브랜치 최신화 필수" 정책에서 BEHIND인 PR에 `--auto`만 걸면 영영 안 머지된다 — GitHub가 BEHIND 브랜치를 자동 갱신하지 않음
+
+**증상**: `gh pr merge <PR> --auto --squash`를 걸었는데 CI(필수체크 `test`)는 "All checks have passed"인데도 머지가 안 되고 PR이 OPEN으로 무한 대기. PR 화면에 "This branch is out-of-date with the base branch / Update branch" 배너. `gh pr view`는 `mergeStateStatus=BEHIND`, `mergeable=MERGEABLE`(= 충돌 아님, 그냥 base에 뒤처짐).
+
+**원인**: 레포 브랜치 보호가 **"머지 전 브랜치 최신화 필수"**(require branches to be up to date)인데 이 레포는 **auto-update가 꺼져 있어** GitHub가 BEHIND 브랜치를 스스로 갱신하지 않는다. `--auto`는 "머지 조건이 충족되면 서버가 머지"인데, BEHIND는 **시간이 지난다고 자기해결되지 않고 누가 `update-branch`를 해줘야만** 풀리는 조건이라 영원히 대기한다. DIRTY(충돌)와 달리 BEHIND는 충돌이 아니라서 기존 DIRTY 진단·rebase 경로에도 안 잡혔고, 폴백 `pr-merge.sh`도 BEHIND를 메인 루프 catch-all `*`로 흘려 12분 타임아웃까지 **대기만** 했다(해결 시도 없음).
+
+**해결**: BEHIND는 **`gh pr update-branch <PR>`**(비파괴 서버사이드 base→head merge, force-push·로컬 체크아웃 불필요)로 갱신하면 CI가 재실행되고 `--auto`가 마저 머지한다. 수동이면 `git rebase origin/main && git push --force-with-lease`도 가능하나 파괴적(force-push)이라 비파괴 `update-branch`가 우선.
+
+**예방(하드픽스)**: `pr-merge.sh`에 BEHIND를 명시 처리 — 폴링 루프·신규 `--arm` 모드 양쪽에서 `gh pr update-branch`로 자동 해소(`try_update_branch`). **표준 머지 경로를 `bash .claude/scripts/pr-merge.sh <PR> --arm`("걸고 떠나기": `--auto` 걸고 BEHIND/DIRTY만 1회 풀고 즉시 종료, 머지는 서버가 마저)로 승격**, bare `gh pr merge --auto` 단독 사용 금지(CLAUDE.md 🔀 Git 워크플로 5번 반영). 스모크 테스트 `.claude/scripts/tests/test-pr-merge-behind.sh`(arm/sync BEHIND→update-branch·DIRTY→exit3·CLEAN→arm 4케이스).
+
+**관련**: PR 머지 자동화 hang 군 — T-083(no-checks→DIRTY 오인), T-091·T-094(push-delete hang→gh API + `--auto` 전환), T-102(하드픽스 안 쓰고 손수 워처→DIRTY 누락). 이번은 `--auto` 전환(T-094)이 만든 새 사각. 개념 [[N-070]]. **6회차(이 군 — BEHIND 무한 대기, 발견 즉시 하드픽스 `--arm`+`update-branch`로 승격)**.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2248,3 +2263,4 @@ git worktree remove ../BookTimer-<task>
 | 2026-06-27 | T-109 (vitest `test.include`가 `test/**`만 잡아 `src/` 곁 단위 테스트(`timerProgress.test.ts` 등 4파일·105개)가 silent 미실행 — npm run test 목록에 안 뜨고 깨져도 green처럼, CLI 경로 인자는 include 교집합이라 "No test files found" / 해결=include에 `src/**/*.{test,spec}.ts` 추가(E2E는 `e2e/`라 무충돌), 부활 후 전부 green / 예방=테스트 추가 시 실행 카운트 증가 확인, 1회차) |
 | 2026-06-27 | T-107 (`git add`와 `git commit`을 한 Bash 명령으로 묶으면 PreToolUse 자동수정 훅이 skip된다 — `git add <file> && git commit`처럼 묶으면 목차 자동생성 훅(require-troubleshooting-toc)이 안 돌아 목차 갱신 누락(본문 헤딩만 추가되고 목차 줄 빠짐), add/commit 분리하면 정상 / 원인=훅이 PreToolUse(명령 실행 *전*)로 commit을 가로채 `git diff --cached`를 보는데, 묶음 명령은 그 시점에 아직 add 전이라 스테이징이 비어 skip → 곧 add+commit이 한꺼번에 실행돼 끼어들 틈 없음(`;`로 묶어도 동일) / 해결=`git add`를 별도 호출로 먼저, 그다음 `git commit` 단독 호출 / 보정=스크립트 수동실행→add→`git commit --amend` / 주의=번들(require-bundle-build)·테스트게이트(require-tests-before-commit)도 같은 식 무력화 소지(테스트 skip되면 위험) / 1회차 신규, T-106에서 실제 당함) |
 | 2026-06-27 | T-110 (정션 둔 워크트리를 `git worktree remove --force`하면 정션을 따라가 타깃(main node_modules) **내용**을 삭제 — 폴더는 남고 패키지 0개, #567에서 137→0이던 정체 / 격리 재현으로 확정(임시 repo·`.gitignore` node_modules 미추적·더미 keep.txt 소멸) / 해결=worktree remove **전에** `[IO.Directory]::Delete()`로 정션만 끊기(`Remove-Item -Recurse`는 타깃까지 지워 금물), #569에서 먼저 끊어 137 보존 대조입증 / 예방=정리순서 "정션 끊기→remove" 고정(CLAUDE.md 반영), 링크 품은 폴더 재귀삭제는 타깃 건드림 / N-132 정션 워크플로, 1회차 신규) |
+| 2026-06-27 | T-111 ("머지 전 브랜치 최신화 필수" 정책 + BEHIND인 PR에 `--auto`만 걸면 무한 대기 — GitHub가 BEHIND 브랜치를 자동 갱신 안 함(auto-update off), `--auto`는 자기해결 안 되는 BEHIND 조건을 영영 기다림, DIRTY 아님이라 기존 rebase 경로에도 안 잡히고 `pr-merge.sh`는 catch-all로 타임아웃까지 대기만 / 증상=체크 통과인데 OPEN·"out-of-date with base" 배너·`mergeStateStatus=BEHIND` / 해결=`gh pr update-branch <PR>`(비파괴 서버사이드 갱신)→CI 재실행→`--auto` 머지 / 하드픽스=`pr-merge.sh`에 BEHIND `try_update_branch`(폴링·`--arm` 양쪽)+`--arm` 걸고떠나기 모드, 표준 경로 승격·bare `--auto` 금지(CLAUDE.md) / 스모크 `.claude/scripts/tests/test-pr-merge-behind.sh` / 머지 자동화 hang 군 T-083·T-091·T-094·T-102의 6회차) |
