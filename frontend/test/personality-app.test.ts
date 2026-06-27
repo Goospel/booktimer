@@ -230,4 +230,28 @@ describe('PersonalityApp', () => {
         await vi.waitFor(() => expect(wrapper.find('.carousel-nav-prev').exists()).toBe(true));
         expect(wrapper.find('.carousel-nav-next').exists()).toBe(true);
     });
+
+    test('선택 카드는 비클릭 "선택됨" 상태를 보이고, 선택 버튼은 후보 카드에만 있다', async () => {
+        // 2-엔트리(선택1 + 후보1): 대표 카드 하단이 비지 않도록 '선택됨' 상태 풋터가 채우고,
+        // '이걸로 대표 선택' 버튼은 후보 카드 1개에만 존재해야 한다(선택 카드는 재선택 불가 = 비대칭 해소).
+        const candidate: object = { ...MOCK_ENTRY, id: 202, selected: false, narrative: '후보 서술.' };
+        const initial = {
+            ...MOCK_READY,
+            view: { ...(MOCK_READY as { view: object }).view, entries: [MOCK_ENTRY, candidate] },
+        };
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => initial }));
+        setupDom();
+        const wrapper = mount(PersonalityApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.find('.personality-carousel-wrap').exists()).toBe(true));
+
+        // ① 선택 카드 하단에 '선택됨' 상태 요소가 렌더된다
+        const mark = wrapper.find('.pbti-selected-mark');
+        expect(mark.exists()).toBe(true);
+        expect(mark.text()).toContain('선택됨');
+        // ② 상태 요소는 버튼이 아니다(클릭 불가 — 상태 표시일 뿐)
+        expect(mark.element.tagName).not.toBe('BUTTON');
+        // ③ '이걸로 대표 선택' 버튼은 후보 카드 1개에만 존재(선택 카드에는 없음)
+        const selectBtns = wrapper.findAll('button').filter(b => b.text().includes('이걸로 대표 선택'));
+        expect(selectBtns.length).toBe(1);
+    });
 });

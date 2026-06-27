@@ -2026,6 +2026,7 @@ body.personality-page #personality-app { gap: 18px; }
     -webkit-overflow-scrolling: touch;
     scroll-behavior: smooth;
     scrollbar-width: none;
+    padding-block: 6px;  /* 카드 그림자가 overflow-x 트랙에 위아래로 잘리지 않게 여유 */
 }
 .personality-carousel::-webkit-scrollbar { display: none; }
 .personality-slide {
@@ -2069,10 +2070,21 @@ body.personality-page #personality-app { gap: 18px; }
 .pbti-dot { width: 7px; height: 7px; border-radius: 999px; background: #D8CDB9; transition: background .2s ease; }
 .pbti-dot.is-active { background: var(--accent-hover); }
 
-/* 슬라이드 내용 — 배지 행 / 서술 / 변경 알림 / 대표 선택 (테두리 없는 깔끔한 본문) */
+/* 슬라이드 내용 — 배지 행 / 서술 / 변경 알림 / 대표 선택.
+   각 슬라이드를 테두리+은은한 그림자로 띄워 개별 카드로 인식되게 한다(섹션 안의 패널). */
 .personality-entry {
     display: flex; flex-direction: column; gap: 13px;
-    min-height: 170px; margin: 0;
+    min-height: 200px; margin: 0;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 18px;
+    box-shadow: 0 2px 8px rgba(44, 42, 36, 0.07);
+}
+/* 대표(선택) 카드 — sage 테두리 + 은은한 sage 리프트로 한눈에 구분 */
+.personality-entry.is-selected {
+    border-color: var(--accent);
+    box-shadow: 0 2px 10px rgba(110, 138, 106, 0.18);
 }
 .personality-entry-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .personality-badge {
@@ -2096,7 +2108,7 @@ body.personality-page #personality-app { gap: 18px; }
 .personality-stale svg { width: 16px; height: 16px; flex: 0 0 auto; margin-top: 1px; color: var(--accent-hover); }
 .personality-stale span { font-size: 13px; line-height: 1.6; color: var(--accent-hover); word-break: keep-all; }
 .pbti-select-rep {
-    width: 100%;
+    width: 100%; margin-top: auto;  /* 카드 하단에 고정 — 카드 높이 정렬 */
     background: transparent; border: 1px solid var(--accent); color: var(--accent-hover);
     border-radius: 14px; padding: 10px;
     font-family: 'Gowun Dodum', sans-serif; font-size: 14px;
@@ -2105,6 +2117,15 @@ body.personality-page #personality-app { gap: 18px; }
 }
 .pbti-select-rep svg { width: 14px; height: 14px; flex: 0 0 auto; }
 .pbti-select-rep:hover { background: var(--sage-soft); }
+/* 대표 카드 하단 — 비클릭 '선택됨' 상태(선택 버튼과 같은 footprint로 카드 균형·빈 느낌 해소) */
+.pbti-selected-mark {
+    width: 100%; margin-top: auto;
+    background: var(--sage-soft); border: 1px solid transparent; color: var(--accent-hover);
+    border-radius: 14px; padding: 10px;
+    font-family: 'Gowun Dodum', sans-serif; font-size: 14px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.pbti-selected-mark svg { width: 15px; height: 15px; flex: 0 0 auto; }
 
 /* ===================================================================
    마을 풀스크린 게임 셸 (/village) — S1

@@ -90,7 +90,8 @@ function next() {
 
             <div class="personality-carousel" ref="trackRef" tabindex="0" role="group"
                  aria-label="독서 성향 분석 — 좌우로 넘겨 보기">
-                <div v-for="entry in entries" :key="entry.id" class="personality-entry personality-slide">
+                <div v-for="entry in entries" :key="entry.id" class="personality-entry personality-slide"
+                     :class="{ 'is-selected': entry.selected }">
                     <div class="personality-entry-head">
                         <span v-if="entry.selected" class="personality-badge personality-badge-rep">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.85-4.2 4.1.99 5.75L12 16.9l-5.19 2.7.99-5.75-4.2-4.1 5.8-.85z"/></svg>
@@ -109,6 +110,10 @@ function next() {
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.85-4.2 4.1.99 5.75L12 16.9l-5.19 2.7.99-5.75-4.2-4.1 5.8-.85z"/></svg>
                         이걸로 대표 선택
                     </button>
+                    <div v-else class="pbti-selected-mark" role="status">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.4l2.5 2.5 4.6-5.3"/></svg>
+                        선택됨
+                    </div>
                 </div>
             </div>
 
