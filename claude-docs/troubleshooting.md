@@ -126,6 +126,7 @@
 - [T-107. `git add`와 `git commit`을 한 명령으로 묶으면 PreToolUse 자동수정 훅(목차·번들)이 skip된다 — add는 별도 호출로](#t-107-git-add와-git-commit을-한-명령으로-묶으면-pretooluse-자동수정-훅목차번들이-skip된다--add는-별도-호출로)
 - [T-108. `gradlew.bat`이 phantom-modified로 rebase를 막는다 — `.gitattributes eol=crlf`와 커밋된 블롭 EOL 불일치, `--assume-unchanged`로 우회](#t-108-gradlewbat이-phantom-modified로-rebase를-막는다--gitattributes-eolcrlf와-커밋된-블롭-eol-불일치---assume-unchanged로-우회)
 - [T-109. vitest include가 test/ 디렉토리만 잡아 src/ 곁 테스트가 조용히 미실행 — include에 src/** 추가](#t-109-vitest-include가-test-디렉토리만-잡아-src-곁-테스트가-조용히-미실행--include에-src-추가)
+- [T-110. 정션 둔 워크트리를 `git worktree remove --force`하면 정션 타깃(main node_modules)이 비워진다 — 정션 먼저 끊어라](#t-110-정션-둔-워크트리를-git-worktree-remove---force하면-정션-타깃main-node_modules이-비워진다--정션-먼저-끊어라)
 
 ---
 
@@ -2112,6 +2113,27 @@ bash .claude/scripts/docker-cleanup.sh --all      # Up 포함 전부 (먼저 --d
 
 ---
 
+## T-110. 정션 둔 워크트리를 `git worktree remove --force`하면 정션 타깃(main node_modules)이 비워진다 — 정션 먼저 끊어라
+
+**증상**: `link-node-modules.ps1`로 `frontend/node_modules` 정션을 건 워크트리를 작업 후 `git worktree remove --force`로 지웠더니, 나중에 보니 **main의 `frontend/node_modules`가 텅 비어 있다**(폴더는 존재하는데 패키지 0개). 워크트리 정리 뒤 main에서 빌드가 깨지거나, 다음 정션 연결이 `npm ci`부터 다시 돈다.
+
+**원인**: 정션(junction)은 폴더를 가리키는 링크지만 파일시스템엔 일반 디렉토리처럼 보인다. `git worktree remove --force`가 워크트리 폴더를 **재귀 삭제**할 때 정션을 *따라 들어가* **타깃(main의 node_modules) 내용까지 지운다**. 정션 자체(빈 폴더)는 남고 타깃 내용만 증발 → "폴더는 있는데 0개". **격리 재현으로 확정**(임시 repo: `.gitignore`로 node_modules 미추적 → 워크트리 정션 → `worktree remove --force` → 더미 `keep.txt`가 폴더 존재·내용 삭제로 사라짐). #567 워크트리 정리 후 main node_modules가 `137→0`이던 정체.
+
+**해결**: worktree remove **전에 정션을 먼저 끊는다** — 링크만 제거하고 타깃은 보존하는 `[System.IO.Directory]::Delete()`를 쓴다(`Remove-Item -Recurse`는 정션 타깃까지 지울 수 있어 **금물**).
+
+```
+powershell -c "[IO.Directory]::Delete('<wt>/frontend/node_modules')"
+git worktree remove ../BookTimer-<task>
+```
+
+대조 입증: #569 정리에서 정션을 먼저 끊으니 main 137개가 그대로 보존됐다.
+
+**예방**: 정션을 쓰는 워크트리는 정리 순서가 "**정션 끊기 → worktree remove**"로 고정이다(CLAUDE.md 다중 세션 절에 반영). 자동 정리 스크립트도 worktree remove 앞에 정션 제거를 넣는다. 일반화: **링크(정션·심볼릭)를 품은 폴더의 재귀 삭제는 타깃을 건드릴 수 있다**.
+
+**관련**: 정션 워크플로([[N-132]] — node_modules 정션 공유)의 정리측 함정. **1회차(신규, 격리 재현으로 확정)**.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2225,3 +2247,4 @@ bash .claude/scripts/docker-cleanup.sh --all      # Up 포함 전부 (먼저 --d
 | 2026-06-27 | T-108 (`gradlew.bat` phantom-modified로 `git rebase`가 `cannot rebase: You have unstaged changes`로 막힘 — `.gitattributes`의 `*.bat text eol=crlf`와 #560 gradle-wrapper bump가 비정규 EOL로 커밋한 블롭이 불일치해 영구 modified, `checkout`·`--autostash`로 안 풀림 / 우회=`git update-index --assume-unchanged gradlew.bat` 후 rebase(replay 커밋이 그 파일 미변경 시 안전), 근본=`git add --renormalize`를 별도 PR로 / EOL·인코딩 phantom diff 군 T-093·T-103·T-057, 1회차) |
 | 2026-06-27 | T-109 (vitest `test.include`가 `test/**`만 잡아 `src/` 곁 단위 테스트(`timerProgress.test.ts` 등 4파일·105개)가 silent 미실행 — npm run test 목록에 안 뜨고 깨져도 green처럼, CLI 경로 인자는 include 교집합이라 "No test files found" / 해결=include에 `src/**/*.{test,spec}.ts` 추가(E2E는 `e2e/`라 무충돌), 부활 후 전부 green / 예방=테스트 추가 시 실행 카운트 증가 확인, 1회차) |
 | 2026-06-27 | T-107 (`git add`와 `git commit`을 한 Bash 명령으로 묶으면 PreToolUse 자동수정 훅이 skip된다 — `git add <file> && git commit`처럼 묶으면 목차 자동생성 훅(require-troubleshooting-toc)이 안 돌아 목차 갱신 누락(본문 헤딩만 추가되고 목차 줄 빠짐), add/commit 분리하면 정상 / 원인=훅이 PreToolUse(명령 실행 *전*)로 commit을 가로채 `git diff --cached`를 보는데, 묶음 명령은 그 시점에 아직 add 전이라 스테이징이 비어 skip → 곧 add+commit이 한꺼번에 실행돼 끼어들 틈 없음(`;`로 묶어도 동일) / 해결=`git add`를 별도 호출로 먼저, 그다음 `git commit` 단독 호출 / 보정=스크립트 수동실행→add→`git commit --amend` / 주의=번들(require-bundle-build)·테스트게이트(require-tests-before-commit)도 같은 식 무력화 소지(테스트 skip되면 위험) / 1회차 신규, T-106에서 실제 당함) |
+| 2026-06-27 | T-110 (정션 둔 워크트리를 `git worktree remove --force`하면 정션을 따라가 타깃(main node_modules) **내용**을 삭제 — 폴더는 남고 패키지 0개, #567에서 137→0이던 정체 / 격리 재현으로 확정(임시 repo·`.gitignore` node_modules 미추적·더미 keep.txt 소멸) / 해결=worktree remove **전에** `[IO.Directory]::Delete()`로 정션만 끊기(`Remove-Item -Recurse`는 타깃까지 지워 금물), #569에서 먼저 끊어 137 보존 대조입증 / 예방=정리순서 "정션 끊기→remove" 고정(CLAUDE.md 반영), 링크 품은 폴더 재귀삭제는 타깃 건드림 / N-132 정션 워크플로, 1회차 신규) |
