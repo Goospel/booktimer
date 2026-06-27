@@ -255,22 +255,93 @@ describe('PersonalityApp', () => {
         expect(selectBtns.length).toBe(1);
     });
 
-    test('상단 가시 제목 제거(sr-only 보존) + 안내문은 최하단 .pbti-disclaimer 1개로 이동', async () => {
+    test('상단 가시 제목 제거 — sr-only h1로만 보존(가시 제목 행·헤더 안내문 부재)', async () => {
         // 헤더의 가시 제목 행(DNA 아이콘 + "{닉}님의 책BTI")과 헤더 안내문(.pbti-subtitle)을 없애되,
-        // 제목은 sr-only h1로 보존(문서 제목·접근성·SEO)하고 안내문은 페이지 최하단 작은 고지로 옮긴다.
+        // 제목은 sr-only h1로 보존(문서 제목·접근성·SEO).
         setupDom();
         const wrapper = mount(PersonalityApp, { attachTo: document.body });
         await vi.waitFor(() => expect(wrapper.find('.personality-carousel-wrap').exists()).toBe(true));
-        // ① 상단 가시 제목 행·헤더 안내문은 제거됨
         expect(wrapper.find('.pbti-title-row').exists()).toBe(false);
         expect(wrapper.find('.pbti-subtitle').exists()).toBe(false);
-        // ② 제목은 sr-only h1로 보존(시각 숨김이나 DOM·접근성엔 남음)
         const h1 = wrapper.find('h1.sr-only');
         expect(h1.exists()).toBe(true);
         expect(h1.text()).toContain('책BTI');
-        // ③ 안내문은 최하단 작은 고지(.pbti-disclaimer) 1개로만 노출
+    });
+
+    test('READY: 안내 ? 버튼 — 초기 팝오버 닫힘(두 문구 미노출), 클릭 시 공개안내·정확도 고지 노출, 재클릭 닫힘', async () => {
+        // 상시 노출되던 두 문구(공개 안내 + 정확도 고지)를 "내 독서 성향" 카드 우상단 ? 헬프 팝오버 뒤로 숨긴다.
+        setupDom();
+        const wrapper = mount(PersonalityApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.find('.personality-carousel-wrap').exists()).toBe(true));
+        // ① ? 헬프 버튼은 카드 헤더에 존재
+        const help = wrapper.find('.pbti-help-btn');
+        expect(help.exists()).toBe(true);
+        // ② 초기: 팝오버 닫힘 + 두 문구 화면 미노출(상시 노출 제거)
+        expect(wrapper.find('.pbti-help-pop').exists()).toBe(false);
+        expect(wrapper.text()).not.toContain('MBTI처럼');
+        expect(wrapper.text()).not.toContain('공개한 책만');
+        // ③ 클릭 → 팝오버 열림 + 두 문구 모두 노출
+        await help.trigger('click');
+        const pop = wrapper.find('.pbti-help-pop');
+        expect(pop.exists()).toBe(true);
+        expect(pop.text()).toContain('공개한 책만');
+        expect(pop.text()).toContain('MBTI처럼');
+        // ④ 재클릭 → 닫힘
+        await help.trigger('click');
+        expect(wrapper.find('.pbti-help-pop').exists()).toBe(false);
+    });
+
+    test('READY: 팝오버 백드롭 클릭으로 닫힘 + ? 버튼 aria-expanded 토글', async () => {
+        setupDom();
+        const wrapper = mount(PersonalityApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.find('.pbti-help-btn').exists()).toBe(true));
+        const help = wrapper.find('.pbti-help-btn');
+        // 닫힘 상태 aria-expanded=false
+        expect(help.attributes('aria-expanded')).toBe('false');
+        await help.trigger('click');
+        // 열림: aria-expanded=true + 백드롭 존재
+        expect(wrapper.find('.pbti-help-btn').attributes('aria-expanded')).toBe('true');
+        expect(wrapper.find('.pbti-help-backdrop').exists()).toBe(true);
+        // 백드롭(밖) 클릭 → 닫힘
+        await wrapper.find('.pbti-help-backdrop').trigger('click');
+        expect(wrapper.find('.pbti-help-pop').exists()).toBe(false);
+        expect(wrapper.find('.pbti-help-btn').attributes('aria-expanded')).toBe('false');
+    });
+
+    test('COLD_START: ? 헬프 버튼 없음 + 최하단 정확도 고지(.pbti-disclaimer) 그대로 노출(비-READY 무변경)', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ...MOCK_COLD_START }) }));
+        setupDom();
+        const wrapper = mount(PersonalityApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.text()).toContain('조금 더 읽으면'));
+        // 비-READY엔 "내 독서 성향" 카드가 없어 ? 버튼도 없음
+        expect(wrapper.find('.pbti-help-btn').exists()).toBe(false);
+        // 정확도 고지는 최하단에 그대로(상시) 노출 — 비-READY 동작 무변경
         const disc = wrapper.findAll('.pbti-disclaimer');
         expect(disc.length).toBe(1);
         expect(disc[0].text()).toContain('MBTI처럼');
+    });
+
+    test('팝오버 열린 채 refresh가 FALLBACK 반환 → 백드롭·팝오버 고아로 안 남음(applyResponse가 helpOpen 닫음)', async () => {
+        // READY에서 ? 팝오버를 연 뒤 다시 분석 결과가 FALLBACK이면 READY 섹션(버튼·팝오버)이 언마운트되는데,
+        // 백드롭은 v-if=helpOpen이라 닫지 않으면 투명 전체화면 고아로 남는다 → applyResponse에서 helpOpen=false로 차단.
+        const fallbackResult = {
+            view: { state: 'FALLBACK', narrative: null, tags: [], profile: MOCK_PROFILE, coldStartMinBooks: 1, entries: [] },
+            refreshRemaining: 2, refreshLimit: 3,
+        };
+        vi.stubGlobal('fetch', vi.fn()
+            .mockResolvedValueOnce({ ok: true, json: async () => ({ ...MOCK_READY }) })
+            .mockResolvedValueOnce({ ok: true, json: async () => ({ ...fallbackResult }) }),
+        );
+        setupDom();
+        const wrapper = mount(PersonalityApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.find('.pbti-help-btn').exists()).toBe(true));
+        await wrapper.find('.pbti-help-btn').trigger('click');
+        expect(wrapper.find('.pbti-help-backdrop').exists()).toBe(true);
+        // 다시 분석 → FALLBACK 전환
+        await wrapper.find('.pbti-refresh button').trigger('click');
+        await vi.waitFor(() => expect(wrapper.text()).toContain('잠시 후 다시 분석'));
+        // 백드롭·팝오버 모두 사라짐(고아 없음)
+        expect(wrapper.find('.pbti-help-backdrop').exists()).toBe(false);
+        expect(wrapper.find('.pbti-help-pop').exists()).toBe(false);
     });
 });
