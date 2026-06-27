@@ -128,6 +128,7 @@
 - [T-109. vitest include가 test/ 디렉토리만 잡아 src/ 곁 테스트가 조용히 미실행 — include에 src/** 추가](#t-109-vitest-include가-test-디렉토리만-잡아-src-곁-테스트가-조용히-미실행--include에-src-추가)
 - [T-110. 정션 둔 워크트리를 `git worktree remove --force`하면 정션 타깃(main node_modules)이 비워진다 — 정션 먼저 끊어라](#t-110-정션-둔-워크트리를-git-worktree-remove---force하면-정션-타깃main-node_modules이-비워진다--정션-먼저-끊어라)
 - [T-111. "머지 전 브랜치 최신화 필수" 정책에서 BEHIND인 PR에 `--auto`만 걸면 영영 안 머지된다 — GitHub가 BEHIND 브랜치를 자동 갱신하지 않음](#t-111-머지-전-브랜치-최신화-필수-정책에서-behind인-pr에---auto만-걸면-영영-안-머지된다--github가-behind-브랜치를-자동-갱신하지-않음)
+- [T-112. Chrome MCP `resize_window`가 렌더 뷰포트(`innerWidth`)를 못 바꿔 모바일 미디어쿼리 검증이 막힌다 — 폭 N px iframe에 페이지를 로드해 우회](#t-112-chrome-mcp-resize_window가-렌더-뷰포트innerwidth를-못-바꿔-모바일-미디어쿼리-검증이-막힌다--폭-n-px-iframe에-페이지를-로드해-우회)
 
 ---
 
@@ -2149,6 +2150,20 @@ git worktree remove ../BookTimer-<task>
 
 ---
 
+## T-112. Chrome MCP `resize_window`가 렌더 뷰포트(`innerWidth`)를 못 바꿔 모바일 미디어쿼리 검증이 막힌다 — 폭 N px iframe에 페이지를 로드해 우회
+
+**증상**: 모바일 전용 CSS(`@media (max-width: 599px)` — 예: 서술 내부 스크롤·반응형 레이아웃)를 실 브라우저로 검증하려고 Chrome MCP `resize_window`로 창을 430px로 줄여도, `window.innerWidth`가 **1920 고정**이라 모바일 브레이크포인트가 발동하지 않고 데스크톱 렌더만 나온다. 모바일 규칙의 적용·스크롤·오버플로를 확인할 길이 막힘.
+
+**원인**: 이 환경의 `resize_window`는 **OS 창 크기만** 바꾸고 콘텐츠 **렌더(layout) 뷰포트**는 안 바꾼다(고DPI·창 최소폭·렌더 고정 추정). CSS 미디어쿼리는 layout viewport 폭을 보므로, 창만 줄여선 `max-width:599px`가 안 걸린다. (책BTI 작업에서 2회 봉착 — 상단 제목 작업 때 모바일 확인을 못 해 "불필요"로 우회했고, 모바일 서술 스크롤 작업에서 다시 막혀 이 우회법을 확립.)
+
+**해결**: **폭 N px(예 390) iframe**을 만들어 같은 페이지(static-preview URL 등)를 `src`로 로드한다 — **미디어쿼리는 iframe 자체의 뷰포트 폭을 보므로** iframe 안에서 모바일 규칙이 진짜로 발동한다. 같은 오리진이면 `iframe.contentWindow`/`contentDocument`로 내부를 측정: `getComputedStyle(el).maxHeight`, `iwin.matchMedia('(max-width: 599px)').matches`, `scrollHeight > clientHeight`, `el.scrollTop = 9999`로 스크롤 가능 확인. **부모(1920)와 iframe(390)을 한 페이지에서 동시에 재면 데스크톱·모바일 대조가 한 번에** 된다(부모=캡 미적용 `max-height:none`, iframe=캡 적용). 스크린샷은 iframe을 `position:fixed`로 좌상단에 띄워 캡처.
+
+**예방**: 모바일 한정 반응형 CSS는 이 iframe 기법을 검증 게이트로 삼는다. **static-preview(N-117)와 자연 결합** — 같은 오리진이라 `contentDocument` 접근이 열린다. `resize_window`의 뷰포트 무변경을 "환경 버그"로 의심해 시간 쓰지 말 것(이미 2회 확인).
+
+**관련**: N-117(static-preview), N-118(CSS 침묵 드랍 시각검증), T-053(헤드리스 가짜 green), T-089(반응형 재현 mock worst-case). 2회차(직전 책BTI 모바일 검증 봉착 미기록 → 이번 iframe 우회 확립).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2264,3 +2279,4 @@ git worktree remove ../BookTimer-<task>
 | 2026-06-27 | T-107 (`git add`와 `git commit`을 한 Bash 명령으로 묶으면 PreToolUse 자동수정 훅이 skip된다 — `git add <file> && git commit`처럼 묶으면 목차 자동생성 훅(require-troubleshooting-toc)이 안 돌아 목차 갱신 누락(본문 헤딩만 추가되고 목차 줄 빠짐), add/commit 분리하면 정상 / 원인=훅이 PreToolUse(명령 실행 *전*)로 commit을 가로채 `git diff --cached`를 보는데, 묶음 명령은 그 시점에 아직 add 전이라 스테이징이 비어 skip → 곧 add+commit이 한꺼번에 실행돼 끼어들 틈 없음(`;`로 묶어도 동일) / 해결=`git add`를 별도 호출로 먼저, 그다음 `git commit` 단독 호출 / 보정=스크립트 수동실행→add→`git commit --amend` / 주의=번들(require-bundle-build)·테스트게이트(require-tests-before-commit)도 같은 식 무력화 소지(테스트 skip되면 위험) / 1회차 신규, T-106에서 실제 당함) |
 | 2026-06-27 | T-110 (정션 둔 워크트리를 `git worktree remove --force`하면 정션을 따라가 타깃(main node_modules) **내용**을 삭제 — 폴더는 남고 패키지 0개, #567에서 137→0이던 정체 / 격리 재현으로 확정(임시 repo·`.gitignore` node_modules 미추적·더미 keep.txt 소멸) / 해결=worktree remove **전에** `[IO.Directory]::Delete()`로 정션만 끊기(`Remove-Item -Recurse`는 타깃까지 지워 금물), #569에서 먼저 끊어 137 보존 대조입증 / 예방=정리순서 "정션 끊기→remove" 고정(CLAUDE.md 반영), 링크 품은 폴더 재귀삭제는 타깃 건드림 / N-132 정션 워크플로, 1회차 신규) |
 | 2026-06-27 | T-111 ("머지 전 브랜치 최신화 필수" 정책 + BEHIND인 PR에 `--auto`만 걸면 무한 대기 — GitHub가 BEHIND 브랜치를 자동 갱신 안 함(auto-update off), `--auto`는 자기해결 안 되는 BEHIND 조건을 영영 기다림, DIRTY 아님이라 기존 rebase 경로에도 안 잡히고 `pr-merge.sh`는 catch-all로 타임아웃까지 대기만 / 증상=체크 통과인데 OPEN·"out-of-date with base" 배너·`mergeStateStatus=BEHIND` / 해결=`gh pr update-branch <PR>`(비파괴 서버사이드 갱신)→CI 재실행→`--auto` 머지 / 하드픽스=`pr-merge.sh`에 BEHIND `try_update_branch`(폴링·`--arm` 양쪽)+`--arm` 걸고떠나기 모드, 표준 경로 승격·bare `--auto` 금지(CLAUDE.md) / 스모크 `.claude/scripts/tests/test-pr-merge-behind.sh` / 머지 자동화 hang 군 T-083·T-091·T-094·T-102의 6회차) |
+| 2026-06-28 | T-112 (Chrome MCP `resize_window`가 렌더(layout) 뷰포트를 못 바꿔 `window.innerWidth`가 1920 고정 → 모바일 미디어쿼리(`@media max-width:599px`) 검증 봉착 — 창을 430px로 줄여도 데스크톱 렌더만 나와 모바일 전용 CSS(서술 내부 스크롤 등) 적용·스크롤을 확인 못 함 / 원인=resize_window가 OS 창 크기만 바꾸고 콘텐츠 렌더 뷰포트는 고정, 미디어쿼리는 layout viewport를 봄 / 해결=폭 N px(예 390) iframe에 같은 페이지를 src로 로드 — 미디어쿼리는 iframe 자체 뷰포트를 보므로 모바일 규칙 실발동, 같은 오리진이면 `contentWindow`/`contentDocument`로 `getComputedStyle`·`matchMedia`·`scrollHeight>clientHeight`·`scrollTop` 측정, 부모(1920)+iframe(390) 동시 측정으로 데스크톱·모바일 대조, 스크린샷은 iframe `position:fixed`로 캡처 / 예방=모바일 한정 반응형 CSS는 이 iframe 기법을 게이트로, static-preview(N-117)와 같은 오리진이라 자연 결합 / N-117·N-118·T-053·T-089, 책BTI 모바일 검증 2회 봉착에 확립) |
