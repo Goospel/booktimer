@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import ShopIcon from './ShopIcon.vue'
 import { avatarInitial } from '../dashboard/timerProgress'
 
 // 책방 정체성 헤더 카드 — 아바타·책방명·핸들·책BTI 태그칩·팔로우 카운트·(other)액션.
 // 모바일 상단·와이드 좌 사이드바 양쪽에서 공유(§7 DRY 추출). self/other 분기를 한 곳에.
-// 데이터/액션은 ProfileApp 소유 — 태그 클릭·팔로우·차단은 emit으로 올린다.
+// 데이터/액션은 ProfileApp 소유 — 태그 클릭·팔로우·차단·신고는 emit으로 올린다.
 interface TagChip { label: string; clickable: boolean }
 
 defineProps<{
@@ -20,11 +21,34 @@ defineEmits<{
     (e: 'openTag', label: string): void
     (e: 'toggleFollow'): void
     (e: 'doBlock'): void
+    (e: 'openReport'): void
 }>()
+
+const menuOpen = ref(false)
 </script>
 
 <template>
     <div class="dash-card shop-header-card">
+
+        <!-- 케밥 더보기 메뉴 (other only) — 절대 우상단 배치, 차단·신고를 모음 -->
+        <div v-if="!self" class="shop-menu">
+            <button type="button" class="shop-menu-btn" aria-haspopup="true" :aria-expanded="menuOpen"
+                    aria-label="더보기" @click="menuOpen = !menuOpen">
+                <ShopIcon name="more" :size="20" />
+            </button>
+            <div v-if="menuOpen" class="shop-menu-backdrop" @click="menuOpen = false"></div>
+            <div v-if="menuOpen" class="shop-menu-list" role="menu" @keydown.esc="menuOpen = false">
+                <button type="button" role="menuitem" class="shop-menu-item"
+                        @click="menuOpen = false; $emit('doBlock')">
+                    <ShopIcon name="block" :size="16" />차단
+                </button>
+                <button type="button" role="menuitem" class="shop-menu-item shop-menu-item-danger"
+                        @click="menuOpen = false; $emit('openReport')">
+                    <ShopIcon name="report" :size="16" />신고
+                </button>
+            </div>
+        </div>
+
         <!-- 정체성: 이니셜 아바타(대시보드 헤더와 동일 42px 세이지 원) + 책방명/핸들 -->
         <div class="shop-id-head">
             <div class="dash-header-avatar shop-avatar" aria-hidden="true">{{ avatarInitial(loginId) }}</div>
@@ -43,7 +67,7 @@ defineEmits<{
             </template>
         </div>
 
-        <!-- 팔로워/팔로잉 카운트 + (other) 팔로우·차단 액션 -->
+        <!-- 팔로워/팔로잉 카운트 + (other) 팔로우 액션 -->
         <div class="shop-counts">
             <a v-if="self" class="shop-count" href="/me/followers">
                 팔로워 <strong>{{ followerCount }}</strong>
@@ -59,9 +83,6 @@ defineEmits<{
                 <button type="button" :class="following ? 'dash-btn-outline' : 'dash-btn-fill'"
                         @click="$emit('toggleFollow')">
                     <ShopIcon :name="following ? 'unfollow' : 'follow'" :size="16" />{{ following ? '언팔로우' : '팔로우' }}
-                </button>
-                <button type="button" class="dash-btn-outline" @click="$emit('doBlock')">
-                    <ShopIcon name="block" :size="16" />차단
                 </button>
             </span>
         </div>

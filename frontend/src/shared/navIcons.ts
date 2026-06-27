@@ -46,4 +46,8 @@ export const NAV_ICONS: Record<string, string> = {
     users: '<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.4a3 3 0 0 1 0 5.2"/><path d="M17.5 13.2A5.5 5.5 0 0 1 20.5 19"/>',
     // 자물쇠 (비밀번호 찾기)
     lock: '<rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+    // 케밥(세로 점 3개) — 더보기/액션 메뉴 (점=채운 원 → 인라인 fill 지정)
+    more: '<circle cx="12" cy="5"  r="1.6" fill="currentColor" stroke="none"/>'
+        + '<circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/>'
+        + '<circle cx="12" cy="19" r="1.6" fill="currentColor" stroke="none"/>',
 }

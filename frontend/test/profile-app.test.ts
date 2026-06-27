@@ -84,6 +84,38 @@ describe('ProfileApp 내 책방 검색 진입점', () => {
     });
 });
 
+describe('ProfileApp 신고 모달', () => {
+    test('other: 기존 details(.shop-report) 신고박스가 더 이상 없다', async () => {
+        setupDom('other', 'me');
+        mockFetch(false);
+        const wrapper = mount(ProfileApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.text()).toContain('주인'));
+        expect(wrapper.find('.shop-report').exists()).toBe(false);
+    });
+
+    test('other: 케밥→신고 흐름 → ReportModal 오픈, 사유 select·상세 textarea 존재', async () => {
+        setupDom('other', 'me');
+        mockFetch(false);
+        const wrapper = mount(ProfileApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.find('.shop-menu-btn').exists()).toBe(true));
+        await wrapper.find('.shop-menu-btn').trigger('click');
+        const reportItem = wrapper.findAll('.shop-menu-item').find(item => item.text().includes('신고'));
+        await reportItem!.trigger('click');
+        await vi.waitFor(() => expect(wrapper.find('select').exists()).toBe(true));
+        expect(wrapper.find('textarea').exists()).toBe(true);
+    });
+
+    test('self: 신고 모달·케밥 안 뜸', async () => {
+        setupDom('owner', 'owner');
+        mockFetch(true);
+        const wrapper = mount(ProfileApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.text()).toContain('주인'));
+        expect(wrapper.find('.shop-menu-btn').exists()).toBe(false);
+        expect(wrapper.find('.shop-report').exists()).toBe(false);
+        expect(wrapper.find('select').exists()).toBe(false);
+    });
+});
+
 // 모바일(좁은 화면)에선 BtiPanel이 activeTab==='bti'일 때만 렌더된다. 공개 책장(shelf) 탭에서
 // 헤더의 책BTI 태그칩을 눌러도 BTI 탭으로 넘어가지 않으면 드릴다운이 DOM에 없어 화면이 그대로다.
 // → 태그를 누르면 자동으로 BTI 탭으로 전환되어 드릴다운이 보여야 한다(회귀 가드).
