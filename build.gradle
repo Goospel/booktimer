@@ -43,7 +43,7 @@ dependencies {
 	//    관리하므로 4.x 버전을 직접 명시.
 	//  - JoseException (PushService.send()의 throws 절이 참조) → jose4j. web-push 5.1.2가 쓰는 0.7.9와 맞춘다.
 	implementation 'org.apache.httpcomponents:httpcore:4.4.16'
-	implementation 'org.bitbucket.b_c:jose4j:0.7.9'
+	implementation 'org.bitbucket.b_c:jose4j:0.9.6'
 	implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
