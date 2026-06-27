@@ -112,9 +112,9 @@
    - **DIRTY** → `gh pr merge` 전에 `git rebase origin/main` → `git push --force-with-lease` 로 충돌 해결. 그 후 재진행.
    - **CLEAN** → 즉시 머지.
    - **BLOCKED** (CI 대기) → CI 통과 후 머지.
-   - **auto-merge 우선 (2026-06-25~, 레포 `allow_auto_merge=true`)**: 단일·마지막 PR은 `gh pr merge <PR번호> --auto --squash --delete-branch` **한 번**이면 GitHub가 필수체크(`test`) 통과 시 **서버사이드에서 머지 + 원격 브랜치 삭제**까지 한다 — 로컬 폴링·백그라운드 자체가 불필요(머지 hang 클래스가 구조적으로 사라짐, T-094). 연쇄 PR(다음 분기가 이 머지에 의존)은 `--auto` 걸고 `gh pr view <PR> --json state` 가 `MERGED` 될 때까지만 짧게 확인.
-     - **⚠️ 워크트리 세션 caveat (T-095·T-096, 2회+ 승격)**: ① 워크트리에선 `--delete-branch`를 **빼고** `gh pr merge <PR> --auto --squash` 만 — `--delete-branch`는 머지 후 로컬 `main` checkout을 시도하나 main이 주 워크트리 점유라 `fatal: 'main' is already used by worktree`로 깨진다(단 **머지·auto-merge 등록 자체는 성공**). 머지 확인 후 원격=`gh api -X DELETE repos/{owner}/{repo}/git/refs/heads/<branch>`(T-094)·로컬=베이스 브랜치 checkout 후 `git branch -D`. ② 연쇄 PR에서 **다음 브랜치를 `origin/main` 기준으로 따기 전 반드시 `gh pr view <PR> --json state`=`MERGED` 확인** — 폴링이 `TIMEOUT`/`OPEN`/`DIRTY`로 끝난 건 미머지라, 머지 전제로 브랜치를 따면 직전 PR 변경이 빠진 채 시작된다(T-096). 미머지면 DIRTY→rebase·force-push로 해결 후 재머지.
-   - 폴백 자동화: `bash .claude/scripts/pr-merge.sh <PR번호>` 가 DIRTY 즉시 차단 + CI 폴링 + 하드 타임아웃(12분) + 원격 브랜치 삭제(gh API)를 한 번에 처리한다 — auto-merge 미허용 환경이나 **동기 머지**(이 세션에서 끝까지 보고)가 필요할 때.
+   - **auto-merge 우선 (2026-06-25~, 레포 `allow_auto_merge=true`)**: 단일·마지막 PR은 `gh pr merge <PR번호> --auto --squash` **한 번**이면 GitHub가 필수체크(`test`) 통과 시 **서버사이드에서 머지**한다 — 로컬 폴링·백그라운드 자체가 불필요(머지 hang 클래스가 구조적으로 사라짐, T-094). **원격 브랜치 삭제는 레포 설정 `deleteBranchOnMerge=true`(2026-06-27~)가 머지 직후 서버사이드로 자동 처리**하므로 `--delete-branch` 플래그도, 수동 `gh api DELETE`도 불필요하다(T-106 근본 해결 — 과거 `--delete-branch`는 클라이언트측 삭제라 비동기 auto-merge에선 원격이 남았다). 연쇄 PR(다음 분기가 이 머지에 의존)은 `--auto` 걸고 `gh pr view <PR> --json state` 가 `MERGED` 될 때까지만 짧게 확인.
+     - **⚠️ 워크트리 세션 caveat (T-095·T-096, 2회+ 승격)**: ① 위처럼 `--delete-branch`를 애초에 안 쓰므로(원격은 `deleteBranchOnMerge`가 서버사이드 자동 삭제) T-095의 `fatal: 'main' is already used by worktree` 깨짐은 발생하지 않는다 — 워크트리에서도 `gh pr merge <PR> --auto --squash` 그대로. 머지 확인 후 **로컬만** 정리: 베이스 브랜치 checkout 후 `git branch -D <branch>`(원격은 손대지 않음). ② 연쇄 PR에서 **다음 브랜치를 `origin/main` 기준으로 따기 전 반드시 `gh pr view <PR> --json state`=`MERGED` 확인** — 폴링이 `TIMEOUT`/`OPEN`/`DIRTY`로 끝난 건 미머지라, 머지 전제로 브랜치를 따면 직전 PR 변경이 빠진 채 시작된다(T-096). 미머지면 DIRTY→rebase·force-push로 해결 후 재머지.
+   - 폴백 자동화: `bash .claude/scripts/pr-merge.sh <PR번호>` 가 DIRTY 즉시 차단 + CI 폴링 + 하드 타임아웃(12분) + 원격 브랜치 삭제(gh API)를 한 번에 처리한다 — auto-merge 미허용 환경이나 **동기 머지**(이 세션에서 끝까지 보고)가 필요할 때. (레포 `deleteBranchOnMerge`가 켜진 지금은 스크립트의 원격 삭제가 서버 자동삭제와 중복되나 무해 — 이미 지워졌으면 조용히 넘어간다.)
    - 머지 후 로컬 `main` 갱신(`git checkout main && git pull`) 및 브랜치 정리
 
 ### 예외
@@ -211,6 +211,7 @@ git worktree remove ../BookTimer-<task>
   bash .claude/scripts/docker-cleanup.sh --all      # Up 포함 전부 — 먼저 --dry-run 으로 대상 확인 권장
   ```
   스크립트는 `com.docker.compose.project.working_dir` 라벨로 **BookTimer 소속(메인+모든 워크트리)만** 지우고 다른 프로젝트는 보호한다. 특정 워크트리만 내릴 땐 그 폴더에서 `docker compose down`. ⚠️ `--all`은 Up까지 죽이니 다른 세션이 그 워크트리에서 `bootRun` 중이면 기본(Exited만)을 쓴다.
+  - **세션 종료 시 자동 정리 (2026-06-27~, gap#3 자동배선)**: `SessionEnd` 훅 `.claude/hooks/cleanup-docker-on-session-end.ps1`이 위 **기본 모드(Exited만 — Up 보존)**를 세션 종료마다 자동 호출한다 → 일상적 누적은 손대지 않아도 청소된다(fail-open: docker 없거나 실패해도 종료를 막지 않음). 위 수동 호출은 이제 세션 중 즉시 정리나 `--all` 대청소용. (테스트: `.claude/hooks/tests/test-cleanup-docker-on-session-end.sh` — 기본모드·fail-open 불변식 검증.)
 - **gradle 데몬·빌드 락** — 두 세션이 동시에 `./gradlew`(테스트·빌드·커밋 훅의 `gradlew test`)를 돌리면 데몬·빌드 락 경합으로 **무한 hang** 날 수 있다 → 한 세션에서만 빌드/커밋. hang 대처(강제 정리)는 「🧪 TDD → ⚠️ 커밋이 무한 hang 하면」 절 참고(T-078).
 - **"File modified since read" 가드는 버그가 아니라 덮어쓰기 직전 보호** — 재읽기 → 그쪽 변경 보존 → 내 것만 재적용이 정답
 
@@ -365,7 +366,7 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
   - 이미 존재하면 "시드 생략" 로그만 출력(멱등). 재기동에도 중복 생성 없음.
   - admin 뷰 필요 시 코드 추가 없이 `BOOKTIMER_ADMIN_LOGIN_IDS=testid` 환경변수로 `AdminAccountSeeder`가 승격.
 - DB: `compose.yaml` 의 MySQL 이 DevTools docker-compose 연동으로 자동 기동 (Docker 필요).
-  - **이 컨테이너를 만드는 건 `bootRun`이지 `./gradlew test`가 아니다**(테스트는 H2 — 아래). bootRun이 워크트리별로 MySQL 컨테이너를 띄워 누적되니, **검증을 마치거나 주기적으로** `bash .claude/scripts/docker-cleanup.sh`(기본 Exited만, `--all`이면 Up 포함)로 정리한다 — `working_dir` 라벨로 BookTimer 소속만 지우고 타 프로젝트는 보호. 멀티세션 동시 작업 시 정리 주의는 「🪢 다중 세션 → bootRun docker-compose 컨테이너」 절 참고.
+  - **이 컨테이너를 만드는 건 `bootRun`이지 `./gradlew test`가 아니다**(테스트는 H2 — 아래). bootRun이 워크트리별로 MySQL 컨테이너를 띄워 누적되니, **검증을 마치거나 주기적으로** `bash .claude/scripts/docker-cleanup.sh`(기본 Exited만, `--all`이면 Up 포함)로 정리한다 — `working_dir` 라벨로 BookTimer 소속만 지우고 타 프로젝트는 보호. 세션 종료 시엔 `SessionEnd` 훅이 기본 모드로 자동 정리한다(gap#3 자동배선). 멀티세션 동시 작업 시 정리 주의는 「🪢 다중 세션 → bootRun docker-compose 컨테이너」 절 참고.
 - 테스트 DB: 운영은 MySQL, **테스트는 H2 인메모리**(`src/test/resources/application.properties`) — Docker 없이 테스트 독립 실행. 테스트 시 docker-compose 자동 기동은 꺼짐(`spring.docker.compose.enabled=false`)
 - toolchain: Java 21 (로컬에 없어도 foojay-resolver 가 자동 다운로드 — 노트 N-002)
 - **프론트 번들 (정원 편집)**: `npm --prefix frontend run build` — `src/main/resources/static/garden/garden.js` 재생성. 정원 관련 TS 수정 후 `bootRun` 전에 반드시 재실행 (T-063). 산출물은 git add·commit까지 해야 반영.
