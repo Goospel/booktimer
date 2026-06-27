@@ -311,8 +311,7 @@ body {
 .tag-books-head h3 { margin: 0; font-size: 1rem; }
 .tag-books-head .btn-close { padding: 4px 10px; font-size: .85rem; }
 
-/* 책BTI 공개 안내문 — '내 독서 성향' 서술 바로 밑에 작은 안내 톤. 서술과 구분되게 옅은 윗선. */
-.personality-public-note { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--border); font-size: .88rem; }
+/* 책BTI 공개 안내문(.personality-public-note)은 아래 "책BTI 페이지 재스킨" 블록에서 정의 — 하단 안내 박스(지구본). */
 
 /* 타이머와 한 카드로 합쳐진 측정 컨트롤 — 큰 숫자 바로 아래 답답하지 않게 위 여백을 둔다 */
 .timer-controls { margin-top: 18px; }
@@ -1915,8 +1914,111 @@ body.history-page.history-wide .container { max-width: 940px; }
 }
 .fb-reply-form button { align-self: flex-start; }
 
-/* 책BTI 분석 카드 캐러셀 (CSS scroll-snap + 화살표 버튼 JS) */
+/* ═══════════════════════════════════════════════════════════════════════
+   책BTI 페이지 재스킨 (/personality) — Claude Design 이식.
+   스코프: .pbti-* 신규 클래스 + personality 전용 .personality-* 와 .carousel-*
+   (이 둘은 personality 페이지에서만 쓰여 재스킨해도 회귀 0). 공유 클래스
+   (.card · .greeting · .status-line · .tag-chip · .btn-* · .record-* · .link-row)는 미접촉.
+   토큰: --bg #F3EEE4 · --card-bg #FCFAF5 · --text #2C2A24 · --muted #6F6A5E
+        · --accent #6E8A6A · --accent-hover #4F6B4C · --border #E4DDD0 · --sage-soft #E7EEE2
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* #personality-app 직계 간격: 공유 16px(N-115) 그룹 위에 페이지 스코프로 18px 덮어쓰기
+   (시안 본문 gap). 공유 규칙은 건드리지 않는다. */
+body.personality-page #personality-app { gap: 18px; }
+
+/* 헤더 — DNA 아이콘 + 제목 + 정확도 고지 */
+.pbti-header { display: flex; flex-direction: column; gap: 8px; }
+.pbti-title-row { display: flex; align-items: center; gap: 9px; }
+.pbti-title-ico { width: 23px; height: 23px; flex: 0 0 auto; color: var(--accent-hover); }
+.pbti-title {
+    font-family: 'Gowun Batang', serif;
+    font-size: 22px; font-weight: 700; color: var(--text);
+    margin: 0; letter-spacing: -.01em; word-break: keep-all;
+}
+.pbti-subtitle { font-size: 12.5px; color: var(--muted); line-height: 1.6; margin: 0; word-break: keep-all; }
+
+/* 카드 — 시안 personality/책장요약 카드(종이톤 표면 + 따뜻한 보더 + 둥근 18) */
+.pbti-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 22px 20px;
+    box-shadow: 0 1px 2px rgba(44, 42, 36, .03), 0 8px 20px -14px rgba(44, 42, 36, .16);
+    display: flex; flex-direction: column; gap: 16px;
+}
+.pbti-card-title { font-family: 'Gowun Batang', serif; font-size: 18px; font-weight: 700; color: var(--text); margin: 0; }
+
+/* COLD_START / FALLBACK 상태 카드 — 아이콘 + 제목 행, 본문, 보조 안내 */
+.pbti-state-head { display: flex; align-items: center; gap: 9px; }
+.pbti-state-ico { width: 19px; height: 19px; flex: 0 0 auto; color: var(--accent-hover); }
+.pbti-state-text { font-size: 14.5px; line-height: 1.75; color: var(--text); margin: 0; word-break: keep-all; }
+.pbti-hint {
+    display: flex; gap: 9px; align-items: center;
+    background: var(--sage-soft); border-radius: 14px; padding: 11px 13px;
+}
+.pbti-hint-ico { width: 16px; height: 16px; flex: 0 0 auto; color: var(--accent-hover); }
+.pbti-hint span { font-size: 13px; line-height: 1.55; color: var(--accent-hover); word-break: keep-all; }
+
+/* 책장 요약 — 균일 비클릭 칩(시안의 button/span 구분은 /personality엔 부적합, §4.1) */
+.pbti-chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.pbti-chip {
+    display: inline-flex; align-items: center;
+    background: var(--sage-soft); color: var(--accent-hover);
+    padding: 6px 13px; border-radius: 999px;
+    font-size: 13.5px; white-space: nowrap;
+}
+.pbti-divider { height: 1px; background: #E9E2D4; }
+.pbti-summary { display: flex; flex-direction: column; gap: 13px; }
+.pbti-summary-row { display: flex; flex-direction: column; gap: 3px; }
+.pbti-summary-label { font-size: 12px; color: var(--muted); }
+.pbti-summary-value { font-size: 15px; color: var(--text); word-break: keep-all; }
+.pbti-meta { font-size: 12px; color: var(--muted); margin: 0; word-break: keep-all; }
+/* 강조 수치(완독·저자·장르 수, 남은 횟수) — 시안: 고운바탕 딥세이지 굵게 */
+.pbti-num { font-family: 'Gowun Batang', serif; color: var(--accent-hover); font-weight: 700; }
+
+/* 다시 분석 — ready(세이지 채움) / refreshing(비활성 옅음) / exhausted(회색 + 안내 박스) */
+.pbti-refresh { display: flex; flex-direction: column; gap: 9px; }
+.pbti-btn-refresh {
+    width: 100%;
+    background: var(--accent); color: var(--card-bg);
+    border: none; border-radius: 14px; padding: 15px;
+    font-family: 'Gowun Dodum', sans-serif; font-size: 16px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 9px;
+    cursor: pointer; box-shadow: 0 6px 16px -8px rgba(79, 107, 76, .5);
+    transition: background .15s ease;
+}
+.pbti-btn-refresh:hover { background: var(--accent-hover); }
+.pbti-btn-ico { width: 18px; height: 18px; flex: 0 0 auto; }
+.pbti-btn-refresh:disabled { cursor: default; opacity: .8; box-shadow: none; }   /* refreshing(세이지 옅게) */
+.pbti-btn-refresh:disabled:hover { background: var(--accent); }
+.pbti-btn-refresh.is-exhausted {                                                /* 한도 소진(회색·금지) */
+    background: #ECE6D9; color: #A89F8C; border: 1px solid var(--border);
+    box-shadow: none; cursor: not-allowed; opacity: 1;
+}
+.pbti-btn-refresh.is-exhausted:hover { background: #ECE6D9; }
+.pbti-refresh-note { text-align: center; font-size: 13px; color: var(--muted); margin: 0; }
+.pbti-exhausted {
+    display: flex; gap: 9px; align-items: flex-start;
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 14px; padding: 13px;
+}
+.pbti-exhausted .pbti-hint-ico { width: 17px; height: 17px; margin-top: 1px; }
+.pbti-exhausted span { font-size: 13px; line-height: 1.65; color: var(--muted); word-break: keep-all; }
+
+/* 하단 공개 안내 — 지구본 아이콘 + 연세이지 박스 (시안 bottom note) */
+.personality-public-note {
+    display: flex; gap: 11px; align-items: flex-start;
+    background: var(--sage-soft); border-radius: 16px; padding: 16px; margin: 0;
+}
+.pbti-note-ico { width: 18px; height: 18px; flex: 0 0 auto; margin-top: 1px; color: var(--accent-hover); }
+.personality-public-note span { font-size: 13px; line-height: 1.65; color: var(--accent-hover); word-break: keep-all; }
+.personality-public-note a { color: var(--accent-hover); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+
+/* ── 분석 카드 캐러셀 (CSS scroll-snap + 화살표 버튼 JS — 스크롤 로직 보존, 시각만 재스킨) ── */
+.pbti-carousel-block { display: flex; flex-direction: column; gap: 14px; }
+.personality-carousel-wrap { display: flex; align-items: center; gap: 6px; }
 .personality-carousel {
+    flex: 1; min-width: 0;
     display: flex;
     gap: 0.75rem;
     overflow-x: auto;
@@ -1927,8 +2029,8 @@ body.history-page.history-wide .container { max-width: 940px; }
 }
 .personality-carousel::-webkit-scrollbar { display: none; }
 .personality-slide {
-    flex: 0 0 80%;              /* 90% → 80%: 양옆 이웃이 엿보이게 */
-    scroll-snap-align: center;  /* start → center: 활성 카드를 가운데로 */
+    flex: 0 0 80%;              /* 양옆 이웃이 엿보이게 */
+    scroll-snap-align: center;  /* 활성 카드를 가운데로 */
     scroll-snap-stop: always;
     min-width: 0;
     margin-top: 0;
@@ -1940,63 +2042,69 @@ body.history-page.history-wide .container { max-width: 940px; }
     .personality-carousel { scroll-behavior: auto; }
 }
 
-.personality-carousel-wrap { position: relative; }
-
+/* 좌우 네비 — 시안: 34px 원형(인라인). 전역 button{width:100%}을 명시 폭으로 상쇄. */
 .carousel-nav {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 2;
-    width: 2.25rem;
-    height: 2.25rem;
+    flex: 0 0 auto;
+    width: 34px; height: 34px;
     padding: 0;
-    border-radius: 50%;
-    border: 1px solid rgba(0, 0, 0, 0.12);
-    background: rgba(255, 255, 255, 0.92);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
-    color: #333;
-    font-size: 1.4rem;
-    line-height: 1;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    color: var(--accent-hover);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: background .15s ease;
 }
-.carousel-nav-prev { left: 0.25rem; }
-.carousel-nav-next { right: 0.25rem; }
-.carousel-nav:hover { background: #fff; }
-.carousel-nav[disabled] { opacity: 0.35; cursor: default; box-shadow: none; }
-
-/* 넘칠 게 없으면(단일 카드 등) 버튼 자체 숨김 — JS가 .nav-hidden 토글 */
+.carousel-nav svg { width: 17px; height: 17px; }
+.carousel-nav:hover { background: var(--bg); }
+.carousel-nav[disabled] { opacity: 0.4; cursor: default; }
+/* 넘칠 게 없으면(단일 카드 등) 버튼 숨김 — JS가 .nav-hidden 토글, 트랙이 풀폭 */
 .personality-carousel-wrap.nav-hidden .carousel-nav { display: none; }
-
-/* 터치 기기: 네이티브 스와이프 사용 — 버튼 숨김 */
+/* 터치 기기: 네이티브 스와이프 — 버튼 숨김(도트는 유지) */
 @media (pointer: coarse) {
     .carousel-nav { display: none; }
 }
 
-/* 책BTI 분석 카드 — 단계 1c Vue 전환 때 인라인 style 삭제분 복원 (#440 회귀) */
+/* 도트 인디케이터 — 시안 신규(entries>1일 때). 활성=중앙 슬라이드(dotIndex) */
+.pbti-dots { display: flex; justify-content: center; gap: 6px; }
+.pbti-dot { width: 7px; height: 7px; border-radius: 999px; background: #D8CDB9; transition: background .2s ease; }
+.pbti-dot.is-active { background: var(--accent-hover); }
+
+/* 슬라이드 내용 — 배지 행 / 서술 / 변경 알림 / 대표 선택 (테두리 없는 깔끔한 본문) */
 .personality-entry {
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: 10px;
-    padding: 0.85rem 1rem;
-    margin-top: 0.75rem;
-    background: rgba(0, 0, 0, 0.015);
+    display: flex; flex-direction: column; gap: 13px;
+    min-height: 170px; margin: 0;
 }
-.personality-entry-selected {
-    border-color: #f0b429;
-    background: rgba(240, 180, 41, 0.08);
+.personality-entry-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.personality-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 11px; border-radius: 999px;
+    font-size: 12px; white-space: nowrap;
 }
-.personality-entry-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-    margin-bottom: 0.35rem;
+.personality-badge svg { width: 13px; height: 13px; flex: 0 0 auto; }
+.personality-badge-rep { background: var(--accent); color: var(--card-bg); font-weight: 600; }
+.personality-badge-cand { background: transparent; border: 1px solid #C9D3C2; color: var(--accent-hover); padding: 5px 12px; }
+.personality-time { font-size: 12px; color: var(--muted); flex: 0 0 auto; }
+.personality-narrative {
+    font-family: 'Gowun Batang', serif;
+    font-size: 16px; line-height: 1.85; color: var(--text);
+    margin: 0; word-break: keep-all; text-wrap: pretty;
 }
-.personality-badge { font-size: 0.8rem; font-weight: 700; color: #b07900; }
-.personality-time  { font-size: 0.8rem; opacity: 0.6; }
-.personality-stale { color: #9a6b00; font-size: 0.85rem; margin: 0.4rem 0 0; }
+.personality-stale {
+    display: flex; gap: 9px; align-items: flex-start;
+    background: var(--sage-soft); border-radius: 14px; padding: 11px 13px; margin: 0;
+}
+.personality-stale svg { width: 16px; height: 16px; flex: 0 0 auto; margin-top: 1px; color: var(--accent-hover); }
+.personality-stale span { font-size: 13px; line-height: 1.6; color: var(--accent-hover); word-break: keep-all; }
+.pbti-select-rep {
+    width: 100%;
+    background: transparent; border: 1px solid var(--accent); color: var(--accent-hover);
+    border-radius: 14px; padding: 10px;
+    font-family: 'Gowun Dodum', sans-serif; font-size: 14px;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    cursor: pointer; transition: background .15s ease;
+}
+.pbti-select-rep svg { width: 14px; height: 14px; flex: 0 0 auto; }
+.pbti-select-rep:hover { background: var(--sage-soft); }
 
 /* ===================================================================
    마을 풀스크린 게임 셸 (/village) — S1
