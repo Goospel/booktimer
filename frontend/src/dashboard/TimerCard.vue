@@ -29,16 +29,14 @@ const emit = defineEmits<{
 
 // props를 ref로 래핑해 composable에 전달(props 변경 시 반응 — N-082 보존)
 const baseRemaining = ref(props.remainingSeconds)
-const baseFloor = ref(props.carriedDebtSeconds)
 const active = ref(props.hasActiveSession)
 const startedAtIso = ref<string | null>(props.activeStartedAt)
 
 watch(() => props.remainingSeconds, v => baseRemaining.value = v)
-watch(() => props.carriedDebtSeconds, v => baseFloor.value = v)
 watch(() => props.hasActiveSession, v => active.value = v)
 watch(() => props.activeStartedAt, v => startedAtIso.value = v)
 
-const { elapsed, remainingNow } = useReadingTimer(baseRemaining, baseFloor, active, startedAtIso)
+const { elapsed, remainingNow } = useReadingTimer(baseRemaining, active, startedAtIso)
 
 // 진행바·달성은 서버 스냅샷이 아니라 라이브 remainingNow에서 파생(계획 §3-B/D)
 const progress = computed(() =>

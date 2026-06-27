@@ -125,6 +125,7 @@
 - [T-106. auto-merge `--delete-branch`는 비동기 머지라 원격 브랜치가 안 지워진다 — 머지 확인 후 gh API로 삭제](#t-106-auto-merge---delete-branch는-비동기-머지라-원격-브랜치가-안-지워진다--머지-확인-후-gh-api로-삭제)
 - [T-107. `git add`와 `git commit`을 한 명령으로 묶으면 PreToolUse 자동수정 훅(목차·번들)이 skip된다 — add는 별도 호출로](#t-107-git-add와-git-commit을-한-명령으로-묶으면-pretooluse-자동수정-훅목차번들이-skip된다--add는-별도-호출로)
 - [T-108. `gradlew.bat`이 phantom-modified로 rebase를 막는다 — `.gitattributes eol=crlf`와 커밋된 블롭 EOL 불일치, `--assume-unchanged`로 우회](#t-108-gradlewbat이-phantom-modified로-rebase를-막는다--gitattributes-eolcrlf와-커밋된-블롭-eol-불일치---assume-unchanged로-우회)
+- [T-109. vitest include가 test/ 디렉토리만 잡아 src/ 곁 테스트가 조용히 미실행 — include에 src/** 추가](#t-109-vitest-include가-test-디렉토리만-잡아-src-곁-테스트가-조용히-미실행--include에-src-추가)
 
 ---
 
@@ -2097,6 +2098,20 @@ bash .claude/scripts/docker-cleanup.sh --all      # Up 포함 전부 (먼저 --d
 
 ---
 
+## T-109. vitest include가 test/ 디렉토리만 잡아 src/ 곁 테스트가 조용히 미실행 — include에 src/** 추가
+
+**증상**: `src/dashboard/timerProgress.test.ts`(79개) 등 소스 파일 곁에 둔 `*.test.ts`가 `npm run test`(vitest) 결과에 **아예 안 나타난다** — 실패도 통과도 아닌 *미실행*. 실행 파일 목록이 전부 `test/`로만 나오고, 소스 곁 테스트가 깨져 있어도 silent green처럼 보인다. `npx vitest run src/…/foo.test.ts`로 직접 경로를 줘도 "No test files found".
+
+**원인**: `frontend/vite.config.ts`의 `test.include`가 `['test/**/*.{test,spec}.ts']`로 한정돼 있었다 — Playwright E2E(`e2e/**/*.spec.ts`)가 vitest 기본 include에 걸려 깨지는 걸 막으려 `test/`로 좁혔는데, 그 바람에 `src/` 곁 단위 테스트까지 배제됐다. CLI 경로 인자는 include와 *교집합*이라 include 밖 경로는 0개로 잡혀 "No test files found"가 된다.
+
+**해결**: include에 `'src/**/*.{test,spec}.ts'`를 더한다 → `['test/**/*.{test,spec}.ts', 'src/**/*.{test,spec}.ts']`. E2E는 `e2e/` 디렉토리라 두 패턴 어디에도 안 걸려 안전. 이 한 줄로 죽어 있던 4개 파일(`timerProgress`·`profile/format`·`profile/icons`·`shared/navIcons`, 105개)이 부활하고 전부 green이었다.
+
+**예방**: 테스트를 추가했으면 **실행 카운트가 늘었는지** 확인한다("작성=실행"이 아니다). include를 디렉토리로 좁히는 설정은 *새 위치의 테스트를 조용히 삼키는* 사각이 된다. 개념: [[N-131]](테스트 신호 사각과는 별개지만, "있는 줄 알았는데 안 돌던" 부류).
+
+**관련**: 테스트 신호 희석/사각 군. **1회차(신규)**.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2208,4 +2223,5 @@ bash .claude/scripts/docker-cleanup.sh --all      # Up 포함 전부 (먼저 --d
 | 2026-06-26 | T-104 (squash 머지가 브랜치 커밋 trailer(`Session-Model`/`Effort`)를 메시지 중간으로 밀어 `git %(trailers)` 구조 조회가 빈 값 — git trailer 파서는 **맨 끝 문단 1개**만 인식, GitHub squash가 `Co-authored-by`를 `---------` 구분선과 함께 맨 끝 블록으로 붙여 `Session-*`가 중간으로 밀림 / 마지막 블록에 평문·구분선 한 줄만 섞여도 25% 임계로 그 블록 trailer 동반 탈락 / 값은 보존(`git log --grep`으로 잡힘)·조회만 깨짐 → 우회=grep(`%B|grep -oP`), 근본=마지막 trailer 블록에 합류 / 1회차 신규 / N-128·#543) |
 | 2026-06-27 | T-106 (auto-merge `--delete-branch`는 비동기 머지라 원격 브랜치가 안 지워진다 — `gh pr merge <PR> --auto --squash --delete-branch`로 머지(MERGED) 후에도 원격 브랜치가 `git ls-remote`에 잔존, 주 워크트리에서도 발생 / 원인=`--auto`는 CI 통과 후 나중에 서버사이드로 머지(비동기)하는데 `--delete-branch`의 삭제는 gh CLI가 머지 직후 로컬에서 처리 → 등록 시점엔 머지 전이라 못 지우고, 서버 머지 땐 gh가 이미 끝나 누락 / 해결=MERGED 확인 후 `gh api -X DELETE repos/{owner}/{repo}/git/refs/heads/<branch>`(T-094, Windows push hang 회피)·로컬 `git branch -D` / 근본=repo "Automatically delete head branches" 설정 / 1회차 신규, T-095(--delete-branch 정리 실패) 계열·T-094) |
 | 2026-06-27 | T-108 (`gradlew.bat` phantom-modified로 `git rebase`가 `cannot rebase: You have unstaged changes`로 막힘 — `.gitattributes`의 `*.bat text eol=crlf`와 #560 gradle-wrapper bump가 비정규 EOL로 커밋한 블롭이 불일치해 영구 modified, `checkout`·`--autostash`로 안 풀림 / 우회=`git update-index --assume-unchanged gradlew.bat` 후 rebase(replay 커밋이 그 파일 미변경 시 안전), 근본=`git add --renormalize`를 별도 PR로 / EOL·인코딩 phantom diff 군 T-093·T-103·T-057, 1회차) |
+| 2026-06-27 | T-109 (vitest `test.include`가 `test/**`만 잡아 `src/` 곁 단위 테스트(`timerProgress.test.ts` 등 4파일·105개)가 silent 미실행 — npm run test 목록에 안 뜨고 깨져도 green처럼, CLI 경로 인자는 include 교집합이라 "No test files found" / 해결=include에 `src/**/*.{test,spec}.ts` 추가(E2E는 `e2e/`라 무충돌), 부활 후 전부 green / 예방=테스트 추가 시 실행 카운트 증가 확인, 1회차) |
 | 2026-06-27 | T-107 (`git add`와 `git commit`을 한 Bash 명령으로 묶으면 PreToolUse 자동수정 훅이 skip된다 — `git add <file> && git commit`처럼 묶으면 목차 자동생성 훅(require-troubleshooting-toc)이 안 돌아 목차 갱신 누락(본문 헤딩만 추가되고 목차 줄 빠짐), add/commit 분리하면 정상 / 원인=훅이 PreToolUse(명령 실행 *전*)로 commit을 가로채 `git diff --cached`를 보는데, 묶음 명령은 그 시점에 아직 add 전이라 스테이징이 비어 skip → 곧 add+commit이 한꺼번에 실행돼 끼어들 틈 없음(`;`로 묶어도 동일) / 해결=`git add`를 별도 호출로 먼저, 그다음 `git commit` 단독 호출 / 보정=스크립트 수동실행→add→`git commit --amend` / 주의=번들(require-bundle-build)·테스트게이트(require-tests-before-commit)도 같은 식 무력화 소지(테스트 skip되면 위험) / 1회차 신규, T-106에서 실제 당함) |
