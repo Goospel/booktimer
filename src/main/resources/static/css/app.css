@@ -2143,6 +2143,19 @@ body.personality-page #personality-app { gap: 18px; }
     font-size: 16px; line-height: 1.85; color: var(--text);
     margin: 0; word-break: keep-all; text-wrap: pretty;
 }
+/* 모바일(<600px)만: 좁은 폭에서 긴 AI 서술이 카드를 길쭉하게 늘이던 걸,
+   본문만 내부 세로 스크롤(≈8줄 캡)로 잘라 카드 높이를 일정하게 한다. 배지·시간·대표선택 버튼은
+   슬라이드의 형제라 고정(가운데 본문만 스크롤). 캐러셀은 가로(overflow-x)라 세로 내부 스크롤과
+   축이 직교 → 가로 스와이프와 충돌 없음. step()/dotIndex는 가로 로직이라 높이 무관(JS 무변경).
+   데스크톱(≥600px)은 task1 와이드(.container 720px)로 이미 짧아 무변경 — min-width:600px 경계와 정합. */
+@media (max-width: 599px) {
+    .personality-narrative {
+        max-height: 240px;
+        overflow-y: auto;
+        overscroll-behavior: contain;   /* 끝까지 스크롤해도 페이지로 체이닝 안 됨 */
+        scrollbar-width: thin;           /* "더 있다" 힌트 — 캐러셀과 달리 스크롤바 숨기지 않음 */
+    }
+}
 .personality-stale {
     display: flex; gap: 9px; align-items: flex-start;
     background: var(--sage-soft); border-radius: 14px; padding: 11px 13px; margin: 0;
