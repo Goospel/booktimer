@@ -4,6 +4,10 @@
 >
 > 🌐 **Live**: https://booktimer.app
 
+<p align="center">
+  <img src="docs/ai-collaboration-level.svg" alt="AI 협업 성숙도 — LEVEL 5 자가개선 메타시스템" width="840">
+</p>
+
 ---
 
 ## 1. 프로젝트 개요
