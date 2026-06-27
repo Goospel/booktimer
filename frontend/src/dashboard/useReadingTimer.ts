@@ -9,7 +9,6 @@ import type { Ref } from 'vue'
  */
 export function useReadingTimer(
     baseRemaining: Ref<number>,
-    baseFloor: Ref<number>,
     active: Ref<boolean>,
     startedAtIso: Ref<string | null>
 ) {
@@ -57,12 +56,15 @@ export function useReadingTimer(
 
     onUnmounted(stopTimer)
 
+    // 남은 시간은 0까지 라이브로 줄어든다. baseRemaining(서버 remainingSeconds)은 전체 빚
+    // (오늘 부채 + 과거 빚 합)이고, 서버는 오늘 목표 초과분으로 과거 빚을 갚는다(WeeklyDebtCalculator
+    // backward-only 재분배). 따라서 elapsed가 오늘 부채분을 넘으면 baseRemaining - elapsed가
+    // 그대로 과거 빚을 깎는 값이 되어 0까지 매초 감소한다 — 과거 빚 구간에서 멈추던 옛 floor clamp는
+    // 도메인 모델과 어긋난 버그였다(측정 종료 시에만 갱신되어 통일성이 깨졌다).
     const remainingNow = computed(() => {
         const r = active.value ? baseRemaining.value - elapsed.value : baseRemaining.value
-        return Math.max(baseFloor.value, r)
+        return Math.max(0, r)
     })
-
-    const goalMet = computed(() => remainingNow.value <= baseFloor.value)
 
     function fmt(totalSeconds: number): string {
         const s = Math.max(0, Math.floor(totalSeconds))
@@ -72,5 +74,5 @@ export function useReadingTimer(
         return `${hh}:${mm}:${ss}`
     }
 
-    return { elapsed, remainingNow, goalMet, fmt }
+    return { elapsed, remainingNow, fmt }
 }

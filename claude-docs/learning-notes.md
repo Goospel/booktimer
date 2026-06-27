@@ -131,6 +131,7 @@
 - [N-128. git trailer는 "맨 끝 문단" 하나만 파싱한다 — squash가 위치를 흔들면 %(trailers) 조회가 깨진다](#n-128-git-trailer는-맨-끝-문단-하나만-파싱한다--squash가-위치를-흔들면-trailers-조회가-깨진다)
 - [N-129. SAST(내 코드) vs SCA(의존성) — CodeQL·Dependabot·SpotBugs·OWASP의 자리](#n-129-sast내-코드-vs-sca의존성--codeqldependabotspotbugsowasp의-자리)
 - [N-130. 직접 import하는 라이브러리는 명시적 의존성으로 선언 — transitive 의존은 업그레이드에 끊긴다](#n-130-직접-import하는-라이브러리는-명시적-의존성으로-선언--transitive-의존은-업그레이드에-끊긴다)
+- [N-131. 라이브 클라이언트 미러는 서버 권위 계산과 같은 규칙을 따라야 한다](#n-131-라이브-클라이언트-미러는-서버-권위-계산과-같은-규칙을-따라야-한다)
 
 ---
 
@@ -5977,3 +5978,32 @@ git이 trailer 블록을 찾는 규칙(porcelain `%(trailers)`와 plumbing `inte
 - build.gradle — `httpcore:4.4.16`·`jose4j:0.7.9` 명시(#559, 메커니즘 ①) / Jackson 2→3 마이그레이션(#557, 메커니즘 ②).
 - `AladinBookSearchClient`·`GeminiReadingPersonalityNarrator`(+테스트) — `com.fasterxml.jackson`→`tools.jackson`, `new ObjectMapper()`→`JsonMapper.builder().build()`.
 - [[N-129]](SAST/SCA — Dependabot이 이 bump들을 자동 생성), N-024(Boot 4 모듈러 autoconfig — starter가 raw lib+autoconfig를 함께 가져오는 같은 "명시" 정신).
+
+---
+
+## N-131. 라이브 클라이언트 미러는 서버 권위 계산과 같은 규칙을 따라야 한다
+
+> **한 줄 요약**: 클라이언트가 서버 계산을 매초 라이브로 미러링(낙관적 표시)할 때, 미러의 갱신 규칙이 서버의 권위 계산과 어긋나면 "라이브 동안엔 멈춰 있다가 서버 왕복 때만 점프"하는 불일치가 난다. 미러는 서버 계산식을 *그대로* 시간 축으로 보간해야 한다.
+
+### 배경 — 타이머 '남은 시간'이 부채 갚는 구간에서만 멈춤
+
+대시보드 타이머는 서버가 준 시작값(`remainingSeconds`)을 받아 클라이언트가 `remainingSeconds − 경과초`로 매초 다시 그린다(서버 왕복 없이 부드럽게 = 낙관적 라이브 미러). 그런데 라이브 잔여를 `max(carriedDebtSeconds, …)`로 clamp해 **과거 빚(floor)에서 멈추게** 해뒀다 — "어제 빚은 오늘 읽어서 못 갚는다"는 (틀린) 가정.
+
+서버의 권위 계산(`WeeklyDebtCalculator`)은 정반대였다 — **backward-only 재분배**로, 오늘 목표를 초과해 읽으면 그 초과분이 과거 빠뜨린 날의 빚을 갚는다. 그래서 오늘 할당량을 채운 뒤 더 읽으면 서버에선 전체 빚이 계속 줄지만, 클라 미러는 floor에서 멈춰 **측정 종료(서버 왕복) 때만** 줄어든 값으로 점프했다. 사용자에겐 "타이머가 고장난 것처럼" 보였다.
+
+### 교훈 — 미러는 권위와 같은 규칙을
+
+- **단일 진실 = 서버 계산**. 클라 라이브는 그 계산을 *시간 축으로 보간*하는 것일 뿐, 다른 규칙을 끼워넣으면 안 된다. 여기선 서버가 "전체 빚이 0까지 줄어든다"이므로 클라도 `max(0, 전체빚 − 경과)`여야 했다.
+- **불일치의 냄새**: "라이브로는 안 움직이는데 새로고침/액션하면 값이 점프한다" = 클라 표시 규칙 ≠ 서버 계산 규칙의 전형적 신호.
+- floor는 버그가 아니라 **용도를 오용**했다 — `carriedDebtSeconds`는 라이브 잔여의 하한이 아니라, 라이브 잔여에서 "오늘 목표 진행바"를 분리해내는 계산 입력으로만 쓰여야 했다(진행바는 floor를 빼 오늘 부채분을 구함).
+
+### 면접 Q&A 대비
+
+- *"낙관적 UI(라이브 카운트다운)가 서버 응답 때만 갱신되고 그 사이엔 멈춘 버그, 원인은?"* → 클라가 서버 권위 계산과 *다른* 규칙으로 미러를 그렸다. 서버는 줄이는 구간을 클라는 (잘못된 하한 clamp로) 안 줄였고, 그 차이가 서버 왕복 때 점프로 드러났다.
+- *"어떻게 고치나?"* → 미러 규칙을 서버 계산식과 일치시킨다. 표시용 보조값(floor)을 잔여의 하한으로 오용하지 말고 본래 용도(진행바 분리)로만 둔다.
+
+### 코드 위치 / 관련
+
+- `frontend/src/dashboard/useReadingTimer.ts` `remainingNow` — `max(baseFloor, …)` → `max(0, …)`. 미사용이 된 `baseFloor` 인자·`goalMet` 정리.
+- `WeeklyDebtCalculator`(backward-only 재분배) — 서버 권위 계산. 클라가 따라야 했던 규칙.
+- 같은 버그를 "의도된 동작"으로 적어둔 `DashboardModel` floor 주석·plan.md 부채 절을 함께 정정.

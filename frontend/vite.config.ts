@@ -76,8 +76,10 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    // vitest는 test/ 디렉토리만 잡는다. Playwright E2E(e2e/**/*.spec.ts)와 패턴이 겹치지
-    // 않게 명시 한정 — 안 그러면 vitest 기본 include가 e2e의 .spec.ts까지 실행하려다 깨진다.
-    include: ['test/**/*.{test,spec}.ts'],
+    // test/와 소스 곁(src/**) 두 곳의 단위 테스트를 잡는다. Playwright E2E(e2e/**/*.spec.ts)와
+    // 패턴이 겹치지 않게 두 디렉토리로 명시 한정 — 기본 include였다면 e2e의 .spec.ts까지
+    // 실행하려다 깨진다. src/** 누락 시 소스 곁 테스트(예: dashboard/timerProgress.test.ts)가
+    // 조용히 미실행되던 사각을 막는다.
+    include: ['test/**/*.{test,spec}.ts', 'src/**/*.{test,spec}.ts'],
   },
 });

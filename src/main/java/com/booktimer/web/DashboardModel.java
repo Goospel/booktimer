@@ -116,10 +116,13 @@ public class DashboardModel {
      * "오늘 부채 + 윈도우 내 빠뜨린 날 합"(어제까지 밀린 빚 포함, {@link WeeklyDebt#totalDebtSeconds()}),
      * 꺼지면 "오늘 부채"만(목표 − 오늘 읽은 양). 속성명은 옛 이름을 유지해 템플릿·JS가 그대로 동작한다.
      *
-     * <p>{@code carriedDebtSeconds}는 <b>floor</b>(JS {@code data-floor})다 — 윈도우 내 빠뜨린 날 부채 합으로,
-     * 측정 카운트다운이 이 값에서 멈춘다(어제 빚은 오늘 읽어서는 못 갚으니까 — 날짜별 독립 모델과 일관).
-     * 합산 OFF면 0이라 측정은 0까지 줄어 현행과 동일하다. "이번 주 빠뜨린 날" 목록 자체는
-     * 독서 기록 화면({@code /history}, {@link com.booktimer.web.HistoryController})에 있다.
+     * <p>{@code carriedDebtSeconds}는 윈도우 내 빠뜨린 날 부채 합으로, 클라이언트의 <b>오늘 목표 진행바</b>
+     * 계산에 쓰인다(라이브 {@code remainingNow}에서 이 값을 빼 "오늘 부채분"을 구해 진행률·달성을 판정).
+     * 라이브 카운트다운 자체는 이 값에서 멈추지 <b>않고</b> 0까지 줄어든다 — 서버가 오늘 목표 초과분으로
+     * 과거 빚을 갚으므로({@link com.booktimer.session.WeeklyDebtCalculator} backward-only 재분배),
+     * "남은 시간"도 전체 빚이 0이 될 때까지 매초 줄어야 도메인 모델과 일관된다. 합산 OFF면 0이라 진행바
+     * 계산이 라이브 잔여만 쓰는 현행과 동일하다. "이번 주 빠뜨린 날" 목록 자체는 독서 기록
+     * 화면({@code /history}, {@link com.booktimer.web.HistoryController})에 있다.
      *
      * <p>측정 대상은 "읽는 중"·"완독"인 책뿐이다 — "읽고싶음"은 아직 펴지 않은 책이라 시간을 재는 게
      * 이상하므로 드롭다운에서 제외한다(optgroup으로 「읽는 중」/「완독」을 시각적으로 구분). 가장 최근에

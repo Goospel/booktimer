@@ -59,6 +59,16 @@ describe('computeProgress', () => {
         expect(r.isAchieved).toBe(true)
     })
 
+    // 오늘 달성 후에도 계속 측정해 과거 빚을 갚는 동안 라이브 remainingNow는 floor 아래 0까지
+    // 내려간다(useReadingTimer가 floor가 아니라 0에서 멈춤). 그래도 "오늘 목표" 진행바는 100%·달성을
+    // 유지해야 한다 — todayDebtLive가 음수가 되어 todayRead > goal → pct 100 clamp.
+    it('carryover ON: remainingNow < floor(과거 빚 갚는 중) → pct=100 clamp, 달성 유지', () => {
+        // floor=1800(과거 빚), remainingNow=1700(빚 100초 갚음): todayDebtLive=-100, todayRead=goal+100
+        const r = computeProgress(1700, 1800, 3600, true)
+        expect(r.pct).toBe(100)
+        expect(r.isAchieved).toBe(true)
+    })
+
     it('carryover ON: 오늘 절반만 읽은 경우 pct=50', () => {
         // goal=3600, floor=900(어제 빚), 오늘 1800 남음: remainingNow = max(floor, 900+1800-1800)?
         // 실제: remainingNow = 2700 (total remaining), floor=900
