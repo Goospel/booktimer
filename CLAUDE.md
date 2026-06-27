@@ -185,7 +185,9 @@ git worktree list           # 워크트리가 이미 여럿인가?
 
 ```
 git worktree add ../BookTimer-<task> -b <type>/<summary> main
-# → 그 폴더에서 작업(절대경로 편집/커밋), 머지 후:
+# → 그 폴더에서 작업(절대경로 편집/커밋). frontend 작업이면(빌드 필요) node_modules 정션 연결:
+#     powershell -File .claude/scripts/link-node-modules.ps1   (매번 npm install 회피 — N-132)
+# 머지 후:
 git worktree remove ../BookTimer-<task>
 ```
 
