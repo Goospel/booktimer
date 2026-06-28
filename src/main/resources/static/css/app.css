@@ -1361,6 +1361,11 @@ a.book-title:hover { text-decoration: underline; }
 /* 인사말 헤더 — 제목·통계만. 페이지 이동은 모든 폭에서 하단 .link-row 타일이 담당. */
 .shelf-greeting { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
 
+/* '내 책장' 카드 헤드 — 제목(좌) + 제휴 고지 ⓘ(우). 책방 .shop-shelf-head 대응(카드 안 우상단).
+   .card h2의 margin-bottom(12px)을 헤드 행으로 옮겨 제목·ⓘ를 한 줄에 정렬. */
+.shelf-mine-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 12px; }
+.shelf-mine-head h2 { margin: 0; }
+
 /* 공개 안내 — 시안 연세이지 박스(책방 링크 겸). books 전용. */
 .shelf-public-hint {
     display: flex; gap: 8px; align-items: flex-start;
