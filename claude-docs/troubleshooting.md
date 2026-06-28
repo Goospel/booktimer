@@ -129,6 +129,7 @@
 - [T-110. 정션 둔 워크트리를 `git worktree remove --force`하면 정션 타깃(main node_modules)이 비워진다 — 정션 먼저 끊어라](#t-110-정션-둔-워크트리를-git-worktree-remove---force하면-정션-타깃main-node_modules이-비워진다--정션-먼저-끊어라)
 - [T-111. "머지 전 브랜치 최신화 필수" 정책에서 BEHIND인 PR에 `--auto`만 걸면 영영 안 머지된다 — GitHub가 BEHIND 브랜치를 자동 갱신하지 않음](#t-111-머지-전-브랜치-최신화-필수-정책에서-behind인-pr에---auto만-걸면-영영-안-머지된다--github가-behind-브랜치를-자동-갱신하지-않음)
 - [T-112. Chrome MCP `resize_window`가 렌더 뷰포트(`innerWidth`)를 못 바꿔 모바일 미디어쿼리 검증이 막힌다 — 폭 N px iframe에 페이지를 로드해 우회](#t-112-chrome-mcp-resize_window가-렌더-뷰포트innerwidth를-못-바꿔-모바일-미디어쿼리-검증이-막힌다--폭-n-px-iframe에-페이지를-로드해-우회)
+- [T-113. 도메인 TLD 이전 후 `www.<신규>`를 ALB 301 규칙에서 빠뜨려 검색 유입자가 redirect_uri_mismatch + host-only 세션 분리](#t-113-도메인-tld-이전-후-www신규를-alb-301-규칙에서-빠뜨려-검색-유입자가-redirect_uri_mismatch--host-only-세션-분리)
 
 ---
 
@@ -2164,6 +2165,20 @@ git worktree remove ../BookTimer-<task>
 
 ---
 
+## T-113. 도메인 TLD 이전 후 `www.<신규>`를 ALB 301 규칙에서 빠뜨려 검색 유입자가 redirect_uri_mismatch + host-only 세션 분리
+
+**증상**: 평소 `booktimer.app`(apex)에서 로그인을 유지하던 사용자가 **구글 검색창**에서 "booktimer"를 쳐 1위 결과를 클릭해 들어가니 ① 비로그인 소개 랜딩이 뜨고(로그인 유지 중이었는데) ② 거기서 구글 로그인을 누르니 `400 redirect_uri_mismatch`. **주소창에 직접 `booktimer.app`을 치면 멀쩡** — "검색 유입자만" 깨진다.
+
+**원인**: 도메인 TLD 이전(`.click`→`.app`, PR #315)에서 ALB 443 우선순위1 리디렉트 규칙의 호스트 조건을 `booktimer.click`·`www.booktimer.click`으로만 등록하고 **신규 `www.booktimer.app`을 빠뜨렸다.** 그래서 `www.app`은 301 규칙에 안 잡히고 기본값(대상그룹 forward)으로 흘러 앱에 그대로 도달(200). 그런데 세 가지가 겹쳐 한 호스트 누락이 OAuth·세션을 동시에 깬다 — ⓐ canonical 신호 전무(`<link rel=canonical>`·sitemap·www→apex 301 모두 없음)라 **구글이 `www.booktimer.app`을 독립 색인·검색 1위로 노출**(실측: 검색 1위가 `https://www.booktimer.app`, signup은 apex로 호스트 혼재) → 검색 유입자는 `www`로 진입. ⓑ 앱은 `ForwardedHeaderFilter`가 `X-Forwarded-Host: www.booktimer.app`을 반영해 redirect_uri를 `https://www.booktimer.app/login/oauth2/code/google`로 **동적 생성**(구글 콘솔엔 apex만 등록 → mismatch). ⓒ 세션 쿠키는 `setCookieDomain` 미설정이라 **host-only** — apex에서 발급된 쿠키가 `www`엔 안 실려 비로그인 랜딩.
+
+**해결**: ALB 콘솔에서 그 우선순위1 규칙의 **호스트 헤더 조건에 `www.booktimer.app` 한 값을 OR로 추가**(리디렉트 액션 `https://booktimer.app:443/#{path}?#{query}` 301은 그대로). ⚠️ 함정: "조건 추가"로 **새 HTTP-헤더 조건**을 만들면 안 된다 — 서로 다른 조건 타입은 **AND**로 묶여 기존 `.click` 301까지 깨진다(매칭 0). 반드시 **같은 호스트-헤더 조건 안에 OR 값**으로 넣는다(같은 타입 다중 값=OR). 검증: `curl -sD -`로 `www.app` 홈·`/oauth2/authorization/google`이 301→apex, `-L` 추적 시 최종 `redirect_uri=https://booktimer.app/…`·구글 로그인화면 200, `.click`·apex 무회귀 실측.
+
+**예방**: 도메인/호스트를 추가·이전할 때 **모든 변형(apex·www·구/신 TLD)을 redirect 규칙·OAuth 콘솔·인증서 양쪽에 전수 등록**한다. canonical 미설정은 구글이 비정규 호스트를 1위로 띄우는 트리거이므로 `www→apex 301`+`<link rel=canonical>`로 정규화(후속). **"내 PC(주소창 apex)는 되는데 검색 유입만 깨짐"은 호스트 정규화 누락의 전형.**
+
+**관련**: T-014(forward-headers 무동작으로 redirect_uri http — 이번은 헤더는 정상, 호스트 누락), T-027(`.click` 평판), N-021/N-022(TLS termination·X-Forwarded), N-138(canonical×OAuth×쿠키 이중타격 개념). 1회차 신규.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2280,3 +2295,4 @@ git worktree remove ../BookTimer-<task>
 | 2026-06-27 | T-110 (정션 둔 워크트리를 `git worktree remove --force`하면 정션을 따라가 타깃(main node_modules) **내용**을 삭제 — 폴더는 남고 패키지 0개, #567에서 137→0이던 정체 / 격리 재현으로 확정(임시 repo·`.gitignore` node_modules 미추적·더미 keep.txt 소멸) / 해결=worktree remove **전에** `[IO.Directory]::Delete()`로 정션만 끊기(`Remove-Item -Recurse`는 타깃까지 지워 금물), #569에서 먼저 끊어 137 보존 대조입증 / 예방=정리순서 "정션 끊기→remove" 고정(CLAUDE.md 반영), 링크 품은 폴더 재귀삭제는 타깃 건드림 / N-132 정션 워크플로, 1회차 신규) |
 | 2026-06-27 | T-111 ("머지 전 브랜치 최신화 필수" 정책 + BEHIND인 PR에 `--auto`만 걸면 무한 대기 — GitHub가 BEHIND 브랜치를 자동 갱신 안 함(auto-update off), `--auto`는 자기해결 안 되는 BEHIND 조건을 영영 기다림, DIRTY 아님이라 기존 rebase 경로에도 안 잡히고 `pr-merge.sh`는 catch-all로 타임아웃까지 대기만 / 증상=체크 통과인데 OPEN·"out-of-date with base" 배너·`mergeStateStatus=BEHIND` / 해결=`gh pr update-branch <PR>`(비파괴 서버사이드 갱신)→CI 재실행→`--auto` 머지 / 하드픽스=`pr-merge.sh`에 BEHIND `try_update_branch`(폴링·`--arm` 양쪽)+`--arm` 걸고떠나기 모드, 표준 경로 승격·bare `--auto` 금지(CLAUDE.md) / 스모크 `.claude/scripts/tests/test-pr-merge-behind.sh` / 머지 자동화 hang 군 T-083·T-091·T-094·T-102의 6회차) |
 | 2026-06-28 | T-112 (Chrome MCP `resize_window`가 렌더(layout) 뷰포트를 못 바꿔 `window.innerWidth`가 1920 고정 → 모바일 미디어쿼리(`@media max-width:599px`) 검증 봉착 — 창을 430px로 줄여도 데스크톱 렌더만 나와 모바일 전용 CSS(서술 내부 스크롤 등) 적용·스크롤을 확인 못 함 / 원인=resize_window가 OS 창 크기만 바꾸고 콘텐츠 렌더 뷰포트는 고정, 미디어쿼리는 layout viewport를 봄 / 해결=폭 N px(예 390) iframe에 같은 페이지를 src로 로드 — 미디어쿼리는 iframe 자체 뷰포트를 보므로 모바일 규칙 실발동, 같은 오리진이면 `contentWindow`/`contentDocument`로 `getComputedStyle`·`matchMedia`·`scrollHeight>clientHeight`·`scrollTop` 측정, 부모(1920)+iframe(390) 동시 측정으로 데스크톱·모바일 대조, 스크린샷은 iframe `position:fixed`로 캡처 / 예방=모바일 한정 반응형 CSS는 이 iframe 기법을 게이트로, static-preview(N-117)와 같은 오리진이라 자연 결합 / N-117·N-118·T-053·T-089, 책BTI 모바일 검증 2회 봉착에 확립) |
+| 2026-06-28 | T-113 (도메인 TLD 이전 후 `www.<신규>`를 ALB 301 규칙에서 누락 → 검색 유입자(구글이 canonical 미설정으로 www 색인·1위)가 `www.app`에 닿아 redirect_uri가 www로 동적 생성돼 `redirect_uri_mismatch` + host-only 세션 쿠키 분리로 비로그인 랜딩, 주소창 apex 직접진입은 정상 / 해결=ALB 우선순위1 규칙 호스트조건에 `www.booktimer.app`을 OR 값으로 추가(새 조건 추가는 AND라 .click 301 파손—금물) / 예방=호스트 변형 전수 등록 + canonical·www→apex 정규화 / N-138, 1회차 신규) |
