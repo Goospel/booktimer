@@ -103,7 +103,7 @@ function next() {
                     <p class="personality-narrative">{{ entry.narrative }}</p>
                     <div v-if="entry.stale" class="personality-stale">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-                        <span>이 분석 이후 책장이 바뀌었어요 — '다시 분석'하면 지금 책장 기준으로 새로 봐요.</span>
+                        <span>지난 책장 기준 분석이에요.</span>
                     </div>
                     <button v-if="!entry.selected" type="button" class="pbti-select-rep"
                             @click="emit('select', entry.id)">
