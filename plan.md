@@ -115,7 +115,7 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 - [x] **근본 대응 — `.app` 이전 착수**: 도메인 · ACM · ALB · alias · OAuth redirect 완료.
 - [x] **OAuth 로그인 검증**: `.app` 구글 로그인 성공(`redirect_uri_mismatch` 없음 — ⑤ redirect URI 병행 등록 검증).
 - [x] **base-url `.app` 주입**: `BOOKTIMER_BASE_URL` task def 평문 environment 주입(PR #311 — 그동안 미주입이라 localhost 기본값이던 갭 동시 해소). main push 자동 배포.
-- [x] **`.click`·`www.click` → `.app` 301** (PR #315 cleanup): ALB 443 호스트 규칙(우선순위 1) — 경로·쿼리(`/#{path}`·`#{query}`) 보존, 기본값은 `.app` forward 유지. curl로 apex·www·경로쿼리 301 + `.app` 200 대조 검증.
+- [x] **`.click`·`www.click`·`www.app` → `.app`(apex) 301** (PR #315 cleanup + 2026-06-28 `www.app` 보강): ALB 443 호스트 규칙(우선순위 1) — 경로·쿼리(`/#{path}`·`#{query}`) 보존, 기본값은 `.app`(apex) forward 유지. curl로 apex·www·경로쿼리 301 + `.app` 200 대조 검증. **⚠️ PR #315가 `.click`·`www.click`만 등록하고 신규 `www.booktimer.app`을 빠뜨려, canonical 미설정(rel=canonical·sitemap·www→apex 301 전무)으로 구글이 `www.app`을 독립 색인·검색 1위로 노출 → 검색 유입자가 `www.app`에 닿으면 redirect_uri가 `www`로 동적 생성돼 `redirect_uri_mismatch` + host-only 세션 쿠키 분리로 비로그인 랜딩(2026-06-28 발견·해소: 같은 규칙 호스트 조건에 `www.booktimer.app`을 OR 값으로 추가, T-113·N-138). 잔여(후속): canonical 태그·sitemap으로 구글 재색인 가속.**
 - [x] **Google OAuth 동의화면 `.app`** (PR #315): 홈페이지·개인정보처리방침 URL `.click`→`.app`. 승인도메인은 `.click`·`.app` 병행 유지(redirect URI 병행 기간이라 아직 안 뺌).
 - [x] **자동갱신 정리** (PR #315, Route53): `.app` ON(만료 2027-06-11) / `.click` OFF(만료 **2027-06-02** 자연 폐기).
 - [ ] **잔여 ① 기본 SSL 인증서 교체** — `.click` 만료(2027-06-02) **직전**에 ALB 443 기본 인증서를 `.click`→`.app`으로. 지금 기본 인증서가 `.click`이라 `.click` TLS(→301)가 살아있고, 섣불리 바꾸면 깨지므로 만료 임박 시 교체(그래야 `.click` 인증서 삭제돼도 리스너 기본 인증서가 존재).

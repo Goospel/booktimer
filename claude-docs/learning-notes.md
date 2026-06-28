@@ -138,6 +138,7 @@
 - [N-135. autocrlf=true와 빌드 도구의 LF 출력이 부딪혀 '유령 변경'을 만든다 — .gitattributes eol=lf로 고정](#n-135-autocrlftrue와-빌드-도구의-lf-출력이-부딪혀-유령-변경을-만든다--gitattributes-eollf로-고정)
 - [N-136. 정규화 유틸은 목적 종속이다 — 표시·집계용과 매칭용은 같은 원본이라도 다른 함수다](#n-136-정규화-유틸은-목적-종속이다--표시집계용과-매칭용은-같은-원본이라도-다른-함수다)
 - [N-137. 같은 데이터라도 청중(audience)이 반대인 두 화면은 합치지 말고 가른다 — 가시성 게이트를 한 곳에 몰면 누수·IDOR](#n-137-같은-데이터라도-청중audience이-반대인-두-화면은-합치지-말고-가른다--가시성-게이트를-한-곳에-몰면-누수idor)
+- [N-138. 호스트 정규화(canonical) 누락의 이중 타격 — redirect_uri는 진입 호스트로 동적 생성되고 세션 쿠키는 host-only라, 구글이 비정규 호스트를 색인하면 검색 유입 전원이 로그인 불가](#n-138-호스트-정규화canonical-누락의-이중-타격--redirect_uri는-진입-호스트로-동적-생성되고-세션-쿠키는-host-only라-구글이-비정규-호스트를-색인하면-검색-유입-전원이-로그인-불가)
 
 ---
 
@@ -6272,3 +6273,37 @@ CRLF→LF는 커밋 때만, 체크아웃 땐 변환 안 함 → 작업트리가 
 - BookTimer #588: 책방(`/u/{id}`, 공개 프로필) 패널 라벨 `공개 책장`→`공개한 책`, 책장(`/books`, 본인 전용) 하단에 `내 책방` 네비 타일 추가(양방향 대칭). 통합은 폐기, 표면 정리만.
 - `frontend/src/books/pure.ts`(`booksNavLinks`), `frontend/src/profile/ShelfPanel.vue`, `frontend/src/books/BooksApp.vue`.
 - 관련: [[N-037]](조회 주체만 바뀜), [[N-050]](공개 화면 PII 최소노출은 층), [[N-055]](findAll은 미완성 null-state를 흘림 — 공개 노출 경로의 누수 가드).
+
+---
+
+## N-138. 호스트 정규화(canonical) 누락의 이중 타격 — redirect_uri는 진입 호스트로 동적 생성되고 세션 쿠키는 host-only라, 구글이 비정규 호스트를 색인하면 검색 유입 전원이 로그인 불가
+
+> **한 줄 요약**: 같은 앱이라도 닿는 호스트가 여럿(apex·www·구/신 TLD)일 때 하나로 **정규화(canonical)**하지 않으면, ① 구글이 비정규 호스트(`www`)를 독립 색인해 검색 1위로 노출하고 ② 그 호스트로 들어온 사용자는 OAuth `redirect_uri`가 그 호스트로 동적 생성돼 콘솔 미등록으로 `redirect_uri_mismatch`, ③ 세션 쿠키가 host-only면 정규 호스트에서 받은 로그인도 안 실려 비로그인으로 보인다. **호스트 하나 빠뜨린 게 검색 유입자 전원의 로그인을 막는다.**
+
+### 무엇을 모르고 물었나
+
+"주소창에 직접 치면 로그인 잘 되는데, 구글 검색으로 들어가니 비로그인 랜딩 + 재로그인 시 `redirect_uri_mismatch`. 왜 검색 유입만 깨지지?" — 같은 사이트인데 진입 경로에 따라 동작이 갈리는 게 이상해 보였다. 핵심 구분: **주소창 입력**은 호스트를 *사용자*가 고르고(보통 평소 쓰던 apex), **구글 검색 결과 클릭**은 호스트를 *구글의 색인*이 고른다.
+
+### 핵심 — 세 메커니즘이 '호스트'라는 한 축에 묶인다
+
+1. **`redirect_uri`는 코드에 없고 진입 호스트로 동적 생성된다.** Spring Security OAuth2는 `redirect_uri`를 `HttpServletRequest`의 scheme/host로 만든다(프록시 뒤에선 `X-Forwarded-Host`). 그래서 `www.booktimer.app`으로 들어오면 `redirect_uri`도 `https://www.booktimer.app/…`가 되고, 구글 콘솔에 apex만 등록돼 있으면 mismatch. (cf. [[N-022]] X-Forwarded 신뢰)
+2. **세션 쿠키 `Domain` 미설정 = host-only.** `DefaultCookieSerializer`에 `setCookieDomain`을 안 주면 쿠키는 **발급된 정확한 호스트에만** 유효하다. apex에서 로그인한 세션 쿠키는 `www`엔 전송되지 않아 비로그인으로 인식. (cf. [[N-031]] 쿠키 속성은 명시 빈으로)
+3. **canonical 미설정이면 구글이 호스트를 마음대로 고른다.** `<link rel=canonical>`·sitemap·`www→apex 301`이 모두 없으면 구글은 apex와 www를 별개 페이지로 색인하고, 백링크·평판으로 **비정규 호스트(www)를 1위로** 띄울 수 있다(실측: BookTimer 검색 1위 홈이 `www`, signup은 apex로 호스트 혼재 = 정규화 부재의 직접 증거). → 검색 유입자가 하필 깨지는 호스트로 진입.
+
+이 셋이 겹치면 "주소창 apex = 정상, 검색(www) = 로그인 불가"라는 비대칭이 나온다. **하나라도 정규화돼 있으면 안 터진다** — `www→apex 301`만 있어도 `redirect_uri`·쿠키가 전부 apex로 수렴한다.
+
+### 그래서 무엇이 정답인가 — canonical host 하나로 수렴
+
+`www→apex 301`(또는 반대)을 **엣지(ALB·CDN)에서** 강제하면 `redirect_uri`·세션·SEO가 전부 정규 호스트 하나로 모인다. 점적 대응(콘솔에 www `redirect_uri` 추가 / 쿠키 도메인을 `.example.com`으로 확대)은 각 증상은 막아도 **호스트가 둘로 갈린 구조 자체**는 남긴다. 근본은 "유효 호스트를 하나로 줄이는 것". 추가로 `<link rel=canonical>`·sitemap으로 구글 재색인을 앞당긴다.
+
+### 일반 원칙
+
+- **"내 PC는 되는데 일부 사용자만 안 됨"의 단골 원인은 진입 호스트 차이다.** 외부 의존이 우리 코드와 무관하게 바뀌는 [[N-074]]의 사촌 — 여기선 "구글이 어떤 호스트를 노출하느냐"가 외부 변수.
+- **도메인을 이전·추가하면 변형 호스트(apex·www·구/신 TLD)를 redirect 규칙·OAuth 콘솔·인증서에 전수 등록**한다. 하나 누락이 OAuth와 세션을 동시에 깬다(같은 '호스트' 축이라).
+- **canonical은 SEO만의 문제가 아니다** — 로그인·OAuth의 정확성 문제이기도 하다.
+
+### 코드 위치 / 관련
+
+- BookTimer 2026-06-28: `.click`→`.app` 이전 때 ALB 301 규칙이 `www.booktimer.app`을 빠뜨려([[N-022]] 정상 작동에도 불구) 검색 유입자가 로그인 불가(T-113). 호스트 조건에 `www.app` 추가로 해소. 진단=병렬 워크플로(OAuth·세션·도메인·프록시·랜딩 5스캔)+라이브 curl로 호스트별 `redirect_uri` 실측.
+- `WebConfig`(ForwardedHeaderFilter·CookieSerializer), `SecurityConfig`(oauth2Login), ALB 443 리스너 규칙.
+- 관련: [[N-021]](TLS termination), [[N-022]](X-Forwarded 신뢰), [[N-031]](쿠키 속성 명시 빈), [[N-074]](외부 의존은 우리 코드 그대로여도 바뀐다), [[N-036]](도메인 평판), T-113(이 트랩의 실전 절차).
