@@ -167,6 +167,20 @@ class ReadingProfileAggregatorTest {
                 new LabeledCount("다작가", 1));
     }
 
+    @Test
+    @DisplayName("옮긴이 제외: 글쓴이만 센다 — 같은 저자·다른 옮긴이 책은 합산, 옮긴이만 있는 책은 제외")
+    void topAuthors_excludesTranslators() {
+        List<Book> books = new ArrayList<>(List.of(
+                book(BookStatus.FINISHED, "한강 (지은이), 김역자 (옮긴이)", null, null),
+                book(BookStatus.FINISHED, "한강 (지은이), 박역자 (옮긴이)", null, null), // 다른 옮긴이 → 같은 글쓴이로 합산
+                book(BookStatus.FINISHED, "연진희 (옮긴이)", null, null)));            // 옮긴이만 — 분포에 새면 안 됨
+
+        ReadingProfile p = ReadingProfileAggregator.aggregate(books, List.of());
+
+        assertThat(p.distinctAuthors()).isEqualTo(1); // 한강 하나(옮긴이만 책 제외)
+        assertThat(p.topAuthors()).containsExactly(new LabeledCount("한강", 2));
+    }
+
     // ---- 장르 편식·잡식 (장르 = categoryName 대분류, 장르 없는 책 제외) ----
 
     @Test

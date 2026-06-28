@@ -111,6 +111,19 @@ class PersonalityTagAttributionTest {
     }
 
     @Test
+    @DisplayName("한우물형 → 최다독 '글쓴이'(옮긴이 제외) 기준으로 책 선택")
+    void loyalTag_topAuthorExcludesTranslator() {
+        // 옮긴이가 달라 author 원문은 서로 다르지만, 글쓴이는 모두 '무라카미 하루키'
+        Book h1 = book("H1", BookStatus.FINISHED, "무라카미 하루키 (지은이), 양윤옥 (옮긴이)", "국내도서>소설/시/희곡>일본소설");
+        Book h2 = book("H2", BookStatus.FINISHED, "무라카미 하루키 (지은이), 홍은주 (옮긴이)", "국내도서>소설/시/희곡>일본소설");
+        Book other = book("O1", BookStatus.FINISHED, "정유정 (지은이)", "국내도서>소설/시/희곡>한국소설");
+
+        List<Book> result = PersonalityTagAttribution.booksForTag(List.of(h1, h2, other), "한우물형");
+
+        assertThat(result).containsExactlyInAnyOrder(h1, h2); // 글쓴이 기준 최다독 = 하루키 2권
+    }
+
+    @Test
     @DisplayName("한우물형 → 완독 아닌 책 / null·blank 저자 제외")
     void loyalTag_excludesNonFinishedAndBlankAuthor() {
         Book finishedA = book("A1", BookStatus.FINISHED, "저자A", "국내도서>소설/시/희곡>x");

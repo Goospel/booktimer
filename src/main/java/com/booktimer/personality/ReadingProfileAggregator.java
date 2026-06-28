@@ -45,7 +45,7 @@ public final class ReadingProfileAggregator {
                 case READING -> reading++;
                 case WANT_TO_READ -> wantToRead++;
             }
-            String author = blankToNull(b.getAuthor());
+            String author = WriterName.lead(b.getAuthor()); // 옮긴이·그림 등 비저자 역할 제외, 대표 글쓴이만
             if (author != null) {
                 authorCounts.merge(author, 1, Integer::sum);
             }
