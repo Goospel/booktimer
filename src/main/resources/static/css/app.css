@@ -1358,9 +1358,8 @@ a.book-title:hover { text-decoration: underline; }
 /* 내 책장 상단 안내 — 공개 토글이 '책방'에 반영됨을 한 줄로 설명(책방 링크 겸). */
 /* ===== 내 책장 리디자인 PR-3 — 헤더·안내·필터·상태·와이드 셸 (시안 My Shelf) ===== */
 
-/* 인사말 헤더 — 좁으면 제목만(하단 .link-row가 이동 담당), 넓으면 우상단 이동 링크 노출. */
+/* 인사말 헤더 — 제목·통계만. 페이지 이동은 모든 폭에서 하단 .link-row 타일이 담당. */
 .shelf-greeting { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
-.shelf-greeting-nav { display: none; }      /* 좁은 폭: 숨김 */
 
 /* 공개 안내 — 시안 연세이지 박스(책방 링크 겸). books 전용. */
 .shelf-public-hint {
@@ -1415,15 +1414,12 @@ a.book-title:hover { text-decoration: underline; }
     .shelf-add { grid-area: add; }
     .shelf-mine { grid-area: mine; }
     .shelf-layout .card { margin-bottom: 0; }          /* grid gap이 간격 담당 */
-    .shelf-greeting-nav { display: flex; gap: 18px; }
-    .shelf-greeting-nav a { color: var(--accent); font-weight: 600; text-decoration: none; }
-    .shelf-greeting-nav a:hover { text-decoration: underline; }
-    .shelf-page .link-row { display: none; }           /* 와이드: 헤더 링크가 대신 */
 
-    /* 책 목록을 2열 카드 그리드로 — 스크롤 박스 해제(본문이 책 수만큼 늘어남, 시안). */
+    /* 책 목록을 2열 카드 그리드로 — .shelf-scroll의 60vh 내부 스크롤은 유지(grid와 overflow 공존).
+       책방 공개 책장(.shop-shelf > .shop-books)과 같은 패턴이라 책이 많아도 페이지가 길어지지 않고
+       하단 네비가 늘 바로 아래 보인다. (예전엔 max-height:none; overflow:visible로 해제했었음.) */
     #books-app .shelf-list {
         display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
-        max-height: none; overflow: visible; padding-right: 0;
     }
     #books-app .shelf-list .book-row {
         border: 1px solid var(--border); border-radius: 12px; background: #fff;
