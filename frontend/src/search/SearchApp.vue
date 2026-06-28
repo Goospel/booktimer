@@ -15,7 +15,7 @@ const initialQ = appEl?.dataset.initialQ ?? '';
         <p class="greeting">사용자 검색</p>
         <UserSearchPanel :initial-q="initialQ" />
         <NavLinks :links="[
-            { href: '/', icon: 'home', label: '대시보드' },
+            { href: '/', icon: 'home', label: '홈' },
             { href: `/u/${myLoginId}`, icon: 'user', label: '내 책방' },
         ]" />
     </div>

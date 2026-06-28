@@ -168,7 +168,7 @@ onUnmounted(() => {
         <div v-if="notFound" class="dash-card shop-notfound">
             <ShopIcon name="books" :size="40" />
             <p class="shop-notfound-msg">프로필을 찾을 수 없습니다.</p>
-            <a class="shop-notfound-link" href="/"><ShopIcon name="home" :size="15" />대시보드</a>
+            <a class="shop-notfound-link" href="/"><ShopIcon name="home" :size="15" />홈</a>
         </div>
 
         <!-- 로딩 -->
@@ -249,7 +249,7 @@ onUnmounted(() => {
             <!-- ── 하단 링크 (전 페이지 공유 .link-row 타일) ──
                  차단 목록은 자주 안 쓰는 계정 관리라 책방 상시 노출 대신 대시보드 아바타 메뉴(DashHeader)로 이동. -->
             <NavLinks :links="[
-                { href: '/', icon: 'home', label: '대시보드' },
+                { href: '/', icon: 'home', label: '홈' },
                 { href: '/books', icon: 'books', label: '내 책장' },
             ]" />
 

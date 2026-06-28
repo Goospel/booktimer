@@ -52,7 +52,7 @@ onMounted(load);
         </section>
 
         <NavLinks :links="[
-            { href: '/', icon: 'home', label: '대시보드' },
+            { href: '/', icon: 'home', label: '홈' },
             { href: `/u/${myLoginId}`, icon: 'user', label: '내 책방' },
         ]" />
     </div>

@@ -18,7 +18,7 @@
         <div class="village-hud-actions">
           <button type="button" class="village-hud-btn" @click="gameRef?.startEdit()">✏️ 꾸미기</button>
           <button type="button" class="village-hud-btn" @click="dexOpen = true">📖 도감</button>
-          <a href="/" class="village-hud-btn">← 대시보드</a>
+          <a href="/" class="village-hud-btn">← 홈</a>
         </div>
       </div>
 

@@ -105,7 +105,7 @@ export interface NavLinkSpec {
 
 export function booksNavLinks(myLoginId: string): NavLinkSpec[] {
     const links: NavLinkSpec[] = [
-        { href: '/', icon: 'home', label: '대시보드' },
+        { href: '/', icon: 'home', label: '홈' },
         { href: '/history', icon: 'history', label: '독서 기록' },
     ];
     if ((myLoginId ?? '').trim()) {

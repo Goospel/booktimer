@@ -5,7 +5,7 @@
   하단 네비 버튼 하나(타일) — SSR 페이지가 공유하는 단일 출처. Vue의 shared/NavLinks.vue 와
   같은 .link-row a CSS·같은 아이콘 의미를 쓴다(런타임만 다름). 호출:
     <nav class="link-row" aria-label="페이지 이동">
-      <th:block th:replace="~{fragments/nav-links :: navLink(@{/}, 'home', '대시보드')}"></th:block>
+      <th:block th:replace="~{fragments/nav-links :: navLink(@{/}, 'home', '홈')}"></th:block>
       <th:block th:replace="~{fragments/nav-links :: navLink(@{/history}, 'history', '독서 기록')}"></th:block>
     </nav>
   href 는 호출부가 @{...} 로 평가해 넘긴다. 링크 수가 홀수면 마지막이 전체폭(.link-row CSS).
