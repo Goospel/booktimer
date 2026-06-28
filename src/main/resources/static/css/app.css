@@ -2143,17 +2143,22 @@ body.personality-page #personality-app { gap: 18px; }
     font-size: 16px; line-height: 1.85; color: var(--text);
     margin: 0; word-break: keep-all; text-wrap: pretty;
 }
-/* 모바일(<600px)만: 좁은 폭에서 긴 AI 서술이 카드를 길쭉하게 늘이던 걸,
-   본문만 내부 세로 스크롤(≈8줄 캡)로 잘라 카드 높이를 일정하게 한다. 배지·시간·대표선택 버튼은
-   슬라이드의 형제라 고정(가운데 본문만 스크롤). 캐러셀은 가로(overflow-x)라 세로 내부 스크롤과
-   축이 직교 → 가로 스와이프와 충돌 없음. step()/dotIndex는 가로 로직이라 높이 무관(JS 무변경).
-   데스크톱(≥600px)은 task1 와이드(.container 720px)로 이미 짧아 무변경 — min-width:600px 경계와 정합. */
+/* 모바일(<600px)만: 좁은 폭에서 긴 AI 서술이 카드를 길쭉하게 늘이던 걸 본문 내부 세로 스크롤로 자른다.
+   ⚠️ 서술을 고정 max-height로 자르면 빈칸이 생긴다: 캐러셀(display:flex, align stretch)은 모든 슬라이드를
+   가장 높은 카드로 늘이는데, 모바일 좁은 폭에선 'stale 알림'(이 분석 이후 책장이 바뀌었어요…)이 여러 줄로
+   감겨 그 카드가 제일 커진다. 그러면 stale 없는 카드는 (고정 높이 본문 + margin-top:auto 풋터) 사이에 큰 빈칸.
+   해결: 서술을 flex 아이템으로 남는 세로 공간을 채우게(flex:1 1 0) + 슬라이드에 기준 높이(min-height).
+   → stale 없는 카드는 본문이 더 길게 차고(빈칸 0), stale 카드는 본문이 그만큼 줄어 내부 스크롤(카드 높이 일정).
+   데스크톱(≥600px)은 task1 와이드(.container 720px)로 이미 짧아 무변경 — min-width:600px 경계와 정합.
+   step()/dotIndex는 가로 로직이라 높이 무관(JS 무변경). */
 @media (max-width: 599px) {
+    .personality-entry { min-height: 500px; }   /* 카드 기준 높이 — 빈칸 대신 본문이 채움(요청: 더 길어도 OK) */
     .personality-narrative {
-        max-height: 240px;
+        flex: 1 1 0;
+        min-height: 0;                  /* flex 자식 내부 스크롤 가능(기본 min-height:auto 상쇄) */
         overflow-y: auto;
         overscroll-behavior: contain;   /* 끝까지 스크롤해도 페이지로 체이닝 안 됨 */
-        scrollbar-width: thin;           /* "더 있다" 힌트 — 캐러셀과 달리 스크롤바 숨기지 않음 */
+        scrollbar-width: thin;          /* "더 있다" 힌트 — 캐러셀과 달리 스크롤바 숨기지 않음 */
     }
 }
 .personality-stale {
