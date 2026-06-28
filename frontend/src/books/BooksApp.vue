@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { getCsrfToken } from '../shared/follow'
 import { summarize, initialOf, coverColor, byline, statusBadge, booksNavLinks } from './pure'
 import NavLinks from '../shared/NavLinks.vue'
@@ -39,6 +39,12 @@ const coupangEnabled = ref(false)
 const nickname = ref('')
 const error = ref<string | null>(null)
 const loadError = ref(false)
+
+// 제휴 고지 ⓘ 팝오버 — 우상단 버튼 클릭 토글 / 밖 클릭·Esc 닫힘(책BTI ? 헬프와 동일 패턴).
+const noteOpen = ref(false)
+function onNoteKeydown(e: KeyboardEvent) { if (e.key === 'Escape') noteOpen.value = false }
+onMounted(() => window.addEventListener('keydown', onNoteKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onNoteKeydown))
 
 const statusFilter = ref<string | null>(null)
 const visFilter = ref<string | null>(null)
@@ -221,6 +227,20 @@ async function removeBook(book: MyBookSummary) {
         <h1>{{ nickname }}님의 책장 <span class="leaf" aria-hidden="true">🌿</span></h1>
         <p class="shelf-summary tnum">총 {{ summary.total }}권 · 읽는 중 {{ summary.reading }} · 완독 {{ summary.finished }} · 읽고 싶음 {{ summary.want }}</p>
       </div>
+      <!-- 우상단 제휴 고지 ⓘ — 클릭 시 안내문 팝오버(옛 본문 하단 상시 문구 이전). -->
+      <span class="affiliate-pop-wrap" :class="{ 'is-open': noteOpen }">
+        <button type="button" class="affiliate-pop-btn" :aria-expanded="noteOpen" aria-label="구매 링크 안내 보기"
+                @click="noteOpen = !noteOpen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+          </svg>
+        </button>
+        <div v-if="noteOpen" class="affiliate-pop" role="dialog" aria-label="구매 링크 안내">
+          <p class="affiliate-pop-item">※ "구매" 링크는 제휴(알라딘) 링크로, 구매 시 일부 수수료를 받을 수 있습니다.</p>
+          <p v-if="coupangEnabled" class="affiliate-pop-item">이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
+        </div>
+      </span>
+      <div v-if="noteOpen" class="affiliate-pop-backdrop" @click="noteOpen = false"></div>
     </header>
 
     <!-- 책 추가 카드 -->
@@ -359,13 +379,7 @@ async function removeBook(book: MyBookSummary) {
     </section>
     </div><!-- /shelf-layout -->
 
-    <!-- affiliate-note: 알라딘 무조건, 쿠팡은 조건 -->
-    <p class="affiliate-note">
-      ※ "구매" 링크는 제휴(알라딘) 링크로, 구매 시 일부 수수료를 받을 수 있습니다.
-    </p>
-    <p v-if="coupangEnabled" class="affiliate-note">
-      이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
-    </p>
+    <!-- 제휴 고지는 상단 인사말 우상단 ⓘ 팝오버로 이전(본문 하단 상시 노출 폐지). -->
 
     <NavLinks :links="booksNavLinks(myLoginId)" />
   </template>
