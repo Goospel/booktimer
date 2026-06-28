@@ -6,14 +6,14 @@
     <th:block th:replace="~{fragments/pwa-head :: meta}"></th:block>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="_csrf" th:content="${_csrf != null ? _csrf.token : ''}">
-    <title>대시보드 — BookTimer</title>
+    <title>홈 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
     <th:block th:replace="~{ads :: loader}"></th:block>
 </head>
 <body class="dashboard-page">
 <div class="container">
     <header class="brand">
-        <a class="brand-home" th:href="@{/}" title="메인 대시보드로">
+        <a class="brand-home" th:href="@{/}" title="홈으로">
             <svg class="brand-ico" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="3.4" height="16" rx="1"/><rect x="9.3" y="4" width="3.4" height="16" rx="1"/><path d="M15 5.4l3.3-.7 2.4 15.4-3.3.7z"/></svg>
             <h1>BookTimer</h1>
         </a>

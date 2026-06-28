@@ -149,9 +149,13 @@ describe('statusBadge — 상태배지 색 매핑(시안 STATUS)', () => {
 // 타일을 추가하되, myLoginId가 비면(dataset 미주입 등) /u/ 로 끝나는 깨진 링크가 새지
 // 않게 책방 타일을 뺀다(N-055 정신 — null-state가 노출되지 않는가).
 describe('booksNavLinks — 책장 하단 네비 링크', () => {
-    test('myLoginId 있으면 대시보드·독서기록·내 책방(/u/{id}) 순으로 포함', () => {
+    test('myLoginId 있으면 홈·독서기록·내 책방(/u/{id}) 순으로 포함', () => {
         const links = booksNavLinks('alice');
         expect(links.map(l => l.href)).toEqual(['/', '/history', '/u/alice']);
+        // 메인(루트) 타일 라벨은 '홈'(이 웹의 메인 페이지 명칭 = 홈, 옛 '대시보드' 폐기).
+        expect(links.find(l => l.href === '/')).toEqual({
+            href: '/', icon: 'home', label: '홈',
+        });
         expect(links.find(l => l.label === '내 책방')).toEqual({
             href: '/u/alice', icon: 'user', label: '내 책방',
         });

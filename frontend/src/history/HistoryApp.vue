@@ -129,7 +129,7 @@ onUnmounted(() => {
         </section>
 
         <NavLinks :links="[
-            { href: '/', icon: 'home', label: '대시보드' },
+            { href: '/', icon: 'home', label: '홈' },
             { href: '/books', icon: 'books', label: '내 책장' },
         ]" />
     </template>
