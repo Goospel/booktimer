@@ -54,7 +54,7 @@ public final class PersonalityTagAttribution {
         Map<String, Integer> counts = new HashMap<>();
         for (Book b : books) {
             if (b.getStatus() != BookStatus.FINISHED) continue;
-            String author = blankToNull(b.getAuthor());
+            String author = WriterName.lead(b.getAuthor()); // 글쓴이만(옮긴이·그림 등 비저자 역할 제외)
             if (author == null) continue;
             counts.merge(author, 1, Integer::sum);
         }
@@ -69,13 +69,7 @@ public final class PersonalityTagAttribution {
 
         return books.stream()
                 .filter(b -> b.getStatus() == BookStatus.FINISHED)
-                .filter(b -> topAuthor.equals(blankToNull(b.getAuthor())))
+                .filter(b -> topAuthor.equals(WriterName.lead(b.getAuthor())))
                 .toList();
-    }
-
-    private static String blankToNull(String s) {
-        if (s == null) return null;
-        String stripped = s.strip();
-        return stripped.isEmpty() ? null : stripped;
     }
 }
