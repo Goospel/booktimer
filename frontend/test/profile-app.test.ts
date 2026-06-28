@@ -116,7 +116,7 @@ describe('ProfileApp 신고 모달', () => {
     });
 });
 
-// 모바일(좁은 화면)에선 BtiPanel이 activeTab==='bti'일 때만 렌더된다. 공개 책장(shelf) 탭에서
+// 모바일(좁은 화면)에선 BtiPanel이 activeTab==='bti'일 때만 렌더된다. 공개한 책(shelf) 탭에서
 // 헤더의 책BTI 태그칩을 눌러도 BTI 탭으로 넘어가지 않으면 드릴다운이 DOM에 없어 화면이 그대로다.
 // → 태그를 누르면 자동으로 BTI 탭으로 전환되어 드릴다운이 보여야 한다(회귀 가드).
 describe('ProfileApp 책BTI 태그 드릴다운', () => {
@@ -143,15 +143,15 @@ describe('ProfileApp 책BTI 태그 드릴다운', () => {
         }));
     }
 
-    test('공개 책장 탭에서 태그칩을 누르면 BTI 탭으로 전환되어 드릴다운이 보인다', async () => {
+    test('공개한 책 탭에서 태그칩을 누르면 BTI 탭으로 전환되어 드릴다운이 보인다', async () => {
         setupDom('owner', 'owner');
-        window.history.pushState({}, '', '/u/owner?tab=shelf');   // 공개 책장 탭으로 진입
+        window.history.pushState({}, '', '/u/owner?tab=shelf');   // 공개한 책 탭으로 진입
         mockTagFetch();
         const wrapper = mount(ProfileApp, { attachTo: document.body });
 
         // 로드 완료 → 헤더의 clickable 태그칩 등장 대기
         await vi.waitFor(() => expect(wrapper.find('.shop-tag-click').exists()).toBe(true));
-        // 진입 직후엔 공개 책장 탭이라 드릴다운이 아직 없다
+        // 진입 직후엔 공개한 책 탭이라 드릴다운이 아직 없다
         expect(wrapper.find('.shop-drill').exists()).toBe(false);
 
         await wrapper.find('.shop-tag-click').trigger('click');
