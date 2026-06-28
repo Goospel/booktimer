@@ -221,10 +221,6 @@ async function removeBook(book: MyBookSummary) {
         <h1>{{ nickname }}님의 책장 <span class="leaf" aria-hidden="true">🌿</span></h1>
         <p class="shelf-summary tnum">총 {{ summary.total }}권 · 읽는 중 {{ summary.reading }} · 완독 {{ summary.finished }} · 읽고 싶음 {{ summary.want }}</p>
       </div>
-      <nav class="shelf-greeting-nav" aria-label="이동">
-        <a href="/">← 대시보드</a>
-        <a href="/history">📖 독서 기록</a>
-      </nav>
     </header>
 
     <!-- 책 추가 카드 -->
