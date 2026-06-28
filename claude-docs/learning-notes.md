@@ -136,6 +136,7 @@
 - [N-133. CodeQL을 pull_request·push:main 둘 다 트리거하는 이유 — 게이트 vs default branch baseline](#n-133-codeql을-pull_requestpushmain-둘-다-트리거하는-이유--게이트-vs-default-branch-baseline)
 - [N-134. overflow-x:auto는 overflow-y를 auto로 끌어올린다 — 가로 스크롤러 속 자식의 세로 그림자가 잘린다](#n-134-overflow-xauto는-overflow-y를-auto로-끌어올린다--가로-스크롤러-속-자식의-세로-그림자가-잘린다)
 - [N-135. autocrlf=true와 빌드 도구의 LF 출력이 부딪혀 '유령 변경'을 만든다 — .gitattributes eol=lf로 고정](#n-135-autocrlftrue와-빌드-도구의-lf-출력이-부딪혀-유령-변경을-만든다--gitattributes-eollf로-고정)
+- [N-136. 정규화 유틸은 목적 종속이다 — 표시·집계용과 매칭용은 같은 원본이라도 다른 함수다](#n-136-정규화-유틸은-목적-종속이다--표시집계용과-매칭용은-같은-원본이라도-다른-함수다)
 
 ---
 
@@ -6201,3 +6202,37 @@ CRLF→LF는 커밋 때만, 체크아웃 땐 변환 안 함 → 작업트리가 
 
 - `.gitattributes` — `src/main/resources/static/**/*.js text eol=lf`(+ 기존 `/gradlew eol=lf`, `*.bat eol=crlf`, `*.jar binary`, `changelog.md merge=union`(T-098)).
 - 진단 명령: `git ls-files --eol <path>`, `git diff --numstat`(0줄이면 내용 동일=EOL 유령 의심).
+
+---
+
+## N-136. 정규화 유틸은 목적 종속이다 — 표시·집계용과 매칭용은 같은 원본이라도 다른 함수다
+
+> **한 줄 요약**: 같은 원본 문자열(예: 도서 `author` `"톨스토이 (지은이), 연진희 (옮긴이)"`)을 정규화하더라도 **무엇에 쓰느냐**에 따라 정답이 갈린다 — 화면 표시·집계용은 *옮긴이를 떼고 공백을 보존*해야 하고, 부분문자열 contains 매칭용은 *옮긴이를 남기고 공백을 지워야* 한다. 기존 normalize를 "정규화니까 재사용"하려다 목적 불일치로 못 쓰는 게 흔한 함정. **정규화는 단일 정답이 아니라 용도별 함수다.**
+
+### 배경 — 책BTI '자주 읽는 저자'에서 옮긴이 제외 (PR #586)
+
+알라딘 `author`는 `"이름 (역할), 이름 (역할)…"` 형식이라 번역서는 `"톨스토이 (지은이), 연진희 (옮긴이)"`가 통째로 한 라벨이 돼 옮긴이가 '자주 읽는 저자'에 섞여 노출됐다. 고치려고 보니 코드베이스에 이미 author 정규화 유틸 `AuthorCharacterUnlockCalculator.normalize`(정원 작가 캐릭터 해금용)가 있었다 — 재사용하려 했으나 **목적이 정반대라 못 썼다**.
+
+### 두 유틸, 정반대 규칙 (같은 원본)
+
+| | `AuthorCharacterUnlockCalculator.normalize` (정원 캐릭터) | `WriterName.lead` (책BTI 집계, 신규) |
+|---|---|---|
+| 용도 | 캐릭터 matchName과 **부분문자열 contains 매칭** | 화면 **표시·집계 키** |
+| 옮긴이 | **남긴다**("…톨스토이…전미연") — lead 작가가 contains로 걸리니 무관 | **뗀다** — 옮긴이가 저자로 새면 안 됨(요청의 핵심) |
+| 공백 | **전부 제거**("레프니콜라예비치톨스토이") — 표기 흔들림 흡수 | **보존**("레프 니콜라예비치 톨스토이") — 사람이 읽음 |
+| 빈 결과 | `""`(빈 contains=항상참 사고 차단) | `null`(분포에서 제외) |
+
+`normalize`를 표시에 쓰면 옮긴이가 남고 이름이 `"레프니콜라예비치톨스토이"`로 붙어버린다. **정반대 규칙이라 공유가 오히려 버그**다.
+
+### 교훈
+
+- **"정규화"는 목적의 함수다.** "정규화 함수가 이미 있으니 재사용"은 위험한 반사 — *무엇을 위한 정규화인지*가 규칙을 결정한다(매칭 vs 표시 vs 집계 키 vs 검색 인덱스…).
+- 재사용 판단은 이름("normalize")이 아니라 **출력 계약**을 본다 — 옮긴이를 남기나 떼나, 공백을 지우나 보존하나, 빈 입력을 `""`로 주나 `null`로 주나. 이게 다르면 다른 함수다.
+- 두 유틸이 같은 원본을 다르게 정규화하면 **그 분리를 주석으로 명시**해 미래의 "왜 둘이지? 합치자"를 차단한다(`WriterName` javadoc에 normalize와의 차이를 박아둠).
+- 같은 도메인에 정규화가 셋일 수 있다 — 검색 매칭용 `BookService.normalize`(소문자·공백 제거)까지 합치면 author 정규화만 매칭·검색·표시 3종.
+
+### 코드 위치 / 관련
+
+- `WriterName.lead`(src/main/java/com/booktimer/personality/WriterName.java) — 표시·집계용(옮긴이 제거·공백 보존).
+- `AuthorCharacterUnlockCalculator.normalize`(src/main/java/com/booktimer/garden/) — contains 매칭용(옮긴이 보존·공백 제거).
+- [[N-055]](미완성 null-state 엔티티가 발견/노출로 새지 않게 — 빈 결과를 분포에서 제외하는 같은 정신).
