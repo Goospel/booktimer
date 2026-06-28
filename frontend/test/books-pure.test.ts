@@ -6,6 +6,7 @@ import {
     coverColor, COVER_PALETTE, COVER_FG,
     byline,
     statusBadge, STATUS_BADGE_FALLBACK,
+    booksNavLinks,
 } from '../src/books/pure';
 
 // 백엔드 BookStatus.name() = WANT_TO_READ / READING / FINISHED
@@ -140,5 +141,34 @@ describe('statusBadge — 상태배지 색 매핑(시안 STATUS)', () => {
     test('알 수 없는 상태 → 중립 폴백', () => {
         expect(statusBadge('PAUSED')).toEqual(STATUS_BADGE_FALLBACK);
         expect(statusBadge('')).toEqual(STATUS_BADGE_FALLBACK);
+    });
+});
+
+// 책장(/books) 하단 네비 — 책방 하단엔 '내 책장' 타일이 있는데 책장 하단엔 '내 책방'이
+// 없어 동선이 비대칭이었다(책장→책방은 본문 힌트 문구로만). 양방향 대칭화로 '내 책방'
+// 타일을 추가하되, myLoginId가 비면(dataset 미주입 등) /u/ 로 끝나는 깨진 링크가 새지
+// 않게 책방 타일을 뺀다(N-055 정신 — null-state가 노출되지 않는가).
+describe('booksNavLinks — 책장 하단 네비 링크', () => {
+    test('myLoginId 있으면 대시보드·독서기록·내 책방(/u/{id}) 순으로 포함', () => {
+        const links = booksNavLinks('alice');
+        expect(links.map(l => l.href)).toEqual(['/', '/history', '/u/alice']);
+        expect(links.find(l => l.label === '내 책방')).toEqual({
+            href: '/u/alice', icon: 'user', label: '내 책방',
+        });
+    });
+
+    test('myLoginId 비면 내 책방 타일 제외 (/u/ 깨진 링크 방지)', () => {
+        const links = booksNavLinks('');
+        expect(links.map(l => l.href)).toEqual(['/', '/history']);
+        expect(links.some(l => l.label === '내 책방')).toBe(false);
+    });
+
+    test('공백뿐인 myLoginId도 제외(방어)', () => {
+        expect(booksNavLinks('   ').some(l => l.href.startsWith('/u/'))).toBe(false);
+    });
+
+    test('null/undefined myLoginId도 제외(방어 — dataset 미주입)', () => {
+        expect(booksNavLinks(null as unknown as string).some(l => l.href.startsWith('/u/'))).toBe(false);
+        expect(booksNavLinks(undefined as unknown as string).some(l => l.href.startsWith('/u/'))).toBe(false);
     });
 });

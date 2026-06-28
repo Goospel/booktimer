@@ -203,7 +203,7 @@ onUnmounted(() => {
                         <button type="button" class="shop-tab" :class="{ active: activeTab === 'bti' }"
                                 @click="selectTab('bti')">책BTI</button>
                         <button type="button" class="shop-tab" :class="{ active: activeTab === 'shelf' }"
-                                @click="selectTab('shelf')">공개 책장</button>
+                                @click="selectTab('shelf')">공개한 책</button>
                     </div>
                     <BtiPanel v-if="activeTab === 'bti'"
                               :personality="profile.personality" :self="profile.self"
@@ -215,7 +215,7 @@ onUnmounted(() => {
                 </section>
             </template>
 
-            <!-- ── 와이드: 2열(좌 사이드바: 헤더+책BTI 상시 / 우 공개책장) ── -->
+            <!-- ── 와이드: 2열(좌 사이드바: 헤더+책BTI 상시 / 우 공개한 책) ── -->
             <div v-else class="shop-wide">
                 <div class="shop-side">
                     <ShopHeader

@@ -2,9 +2,9 @@
 import ShopIcon from './ShopIcon.vue'
 import { hasCover, coverInitial, statusBadgeClass, formatReadingTime } from './format'
 
-// 공개 책장 패널 — 상태필터칩 + 책 리스트 + 구매 + 제휴 고지. 모바일 탭·와이드 메인 공유.
+// 공개한 책 패널 — 상태필터칩 + 책 리스트 + 구매 + 제휴 고지. 모바일 탭·와이드 메인 공유.
 // 데이터/액션 로직은 ProfileApp이 소유(필터는 selectStatus emit). showTitle은 와이드에서만
-// "공개 책장" 소제목을 띄우는 presentational 플래그(모바일은 탭 라벨이 대신).
+// "공개한 책" 소제목을 띄우는 presentational 플래그(모바일은 탭 라벨이 대신).
 interface BookSummary {
     id: number; title: string; author: string | null; coverUrl: string | null;
     status: string; seconds: number; purchaseLink: string | null;
@@ -30,8 +30,8 @@ defineEmits<{ (e: 'selectStatus', value: string | null): void }>()
 <template>
     <div class="shop-shelf">
         <div class="shop-shelf-head">
-            <h2 v-if="showTitle" class="shop-shelf-title">공개 책장</h2>
-            <nav class="shop-filter" aria-label="공개 책장 상태 필터">
+            <h2 v-if="showTitle" class="shop-shelf-title">공개한 책</h2>
+            <nav class="shop-filter" aria-label="공개한 책 상태 필터">
                 <button type="button" :class="{ active: shelfFilter === null }"
                         @click="$emit('selectStatus', null)">전체</button>
                 <button v-for="s in STATUS_OPTIONS" :key="s.value" type="button"

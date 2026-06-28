@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { getCsrfToken } from '../shared/follow'
-import { summarize, initialOf, coverColor, byline, statusBadge } from './pure'
+import { summarize, initialOf, coverColor, byline, statusBadge, booksNavLinks } from './pure'
 import NavLinks from '../shared/NavLinks.vue'
 
 const STATUSES = [
@@ -371,9 +371,6 @@ async function removeBook(book: MyBookSummary) {
       이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
     </p>
 
-    <NavLinks :links="[
-      { href: '/', icon: 'home', label: '대시보드' },
-      { href: '/history', icon: 'history', label: '독서 기록' },
-    ]" />
+    <NavLinks :links="booksNavLinks(myLoginId)" />
   </template>
 </template>
