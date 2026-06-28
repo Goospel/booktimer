@@ -1430,6 +1430,38 @@ a.book-title:hover { text-decoration: underline; }
 
 .affiliate-note { font-size: .8rem; color: var(--muted); text-align: center; margin: 16px 0 4px; }
 
+/* 제휴 고지 ⓘ 팝오버 — 책장 인사말·책방 헤드 우상단 공용. 책BTI ?(.pbti-help-*) 시각 복제이되
+   앵커가 ⓘ 버튼 래퍼(페이지 헤더 무관)라 말풍선 꼬리가 버튼에 정확히 맞는다. 책BTI는 무손상. */
+.affiliate-pop-wrap { position: relative; flex: 0 0 auto; align-self: flex-start; display: inline-flex; }
+.affiliate-pop-wrap.is-open { z-index: 60; }   /* 열림 시 ⓘ를 백드롭(z50) 위로 — 실 브라우저 클릭 보장 */
+.affiliate-pop-btn {
+    flex: 0 0 auto; width: 26px; height: 26px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--sage-soft); color: var(--accent-hover);
+    border: none; border-radius: 999px; cursor: pointer;
+    transition: background .15s ease;
+}
+.affiliate-pop-btn:hover { background: #DDE7D8; }
+.affiliate-pop-btn svg { width: 16px; height: 16px; }
+/* 투명 풀스크린 백드롭 — 팝오버 밖 클릭 시 닫기 */
+.affiliate-pop-backdrop { position: fixed; inset: 0; z-index: 50; background: transparent; }
+/* 안내 말풍선 — ⓘ 버튼 우측 아래로 펼침(제휴 고지 2줄) */
+.affiliate-pop {
+    position: absolute; top: calc(100% + 9px); right: 0; z-index: 61;
+    width: min(300px, calc(100vw - 56px));
+    background: var(--card-bg);
+    border: 1px solid var(--border); border-radius: 14px; padding: 14px;
+    box-shadow: 0 10px 28px -10px rgba(44, 42, 36, .28);
+    display: flex; flex-direction: column; gap: 10px; text-align: left;
+}
+.affiliate-pop::before {   /* ⓘ 버튼을 가리키는 말풍선 꼭지 */
+    content: ''; position: absolute; top: -6px; right: 8px;
+    width: 11px; height: 11px; background: var(--card-bg);
+    border-left: 1px solid var(--border); border-top: 1px solid var(--border);
+    transform: rotate(45deg);
+}
+.affiliate-pop-item { margin: 0; font-size: 12px; line-height: 1.6; color: var(--muted); word-break: keep-all; }
+
 /* 프로필 헤더 카드 — 책방명·@핸들·팔로우 카운트를 한 박스로 묶는다(페이지 카드 스택과 통일).
    카드 패딩(24px)이 바깥 여백을 담당하므로 내부 요소의 큰 마진은 제거하고 간격만 다시 잡는다. */
 .profile-card .greeting { margin: 0; }
@@ -1608,6 +1640,8 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 .shop-shelf { display: flex; flex-direction: column; gap: 14px; }
 .shop-shelf-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .shop-shelf-title { font-family: 'Gowun Batang', serif; font-size: 18px; color: var(--text); margin: 0; }
+/* 헤드 우측 도구 묶음 — 필터칩 + 제휴 고지 ⓘ. head는 제목|도구 2분할 유지(space-between). */
+.shop-shelf-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .shop-filter { display: flex; flex-wrap: wrap; gap: 7px; }
 .shop-filter button { font-size: 12.5px; padding: 5px 13px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); background: transparent; cursor: pointer; width: auto; }
 .shop-filter button:hover { border-color: var(--accent); color: var(--accent); }
@@ -1664,7 +1698,7 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 .shop-buy-menu-items { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; min-width: 112px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 4px; display: flex; flex-direction: column; gap: 2px; }
 .shop-buy-menu-items a { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 7px; font-size: 12.5px; color: var(--text); text-decoration: none; }
 .shop-buy-menu-items a:hover { background: var(--bg); color: var(--accent-hover); }
-.shop-affiliate { font-size: 11.5px; color: var(--muted); margin: 0; line-height: 1.5; }
+/* (구) .shop-affiliate 하단 상시 고지문은 헤드 우상단 ⓘ 팝오버(.affiliate-pop)로 이전·폐지. */
 
 /* 빈/콜드 상태 한 줄 */
 .shop-empty { font-size: 13.5px; color: var(--muted); padding: 18px 0; text-align: center; margin: 0; }
