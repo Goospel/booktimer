@@ -130,6 +130,7 @@
 - [T-111. "머지 전 브랜치 최신화 필수" 정책에서 BEHIND인 PR에 `--auto`만 걸면 영영 안 머지된다 — GitHub가 BEHIND 브랜치를 자동 갱신하지 않음](#t-111-머지-전-브랜치-최신화-필수-정책에서-behind인-pr에---auto만-걸면-영영-안-머지된다--github가-behind-브랜치를-자동-갱신하지-않음)
 - [T-112. Chrome MCP `resize_window`가 렌더 뷰포트(`innerWidth`)를 못 바꿔 모바일 미디어쿼리 검증이 막힌다 — 폭 N px iframe에 페이지를 로드해 우회](#t-112-chrome-mcp-resize_window가-렌더-뷰포트innerwidth를-못-바꿔-모바일-미디어쿼리-검증이-막힌다--폭-n-px-iframe에-페이지를-로드해-우회)
 - [T-113. 도메인 TLD 이전 후 `www.<신규>`를 ALB 301 규칙에서 빠뜨려 검색 유입자가 redirect_uri_mismatch + host-only 세션 분리](#t-113-도메인-tld-이전-후-www신규를-alb-301-규칙에서-빠뜨려-검색-유입자가-redirect_uri_mismatch--host-only-세션-분리)
+- [T-114. preview_inspect가 border-radius·padding 등 shorthand CSS를 빈 객체로 반환 — longhand나 eval getComputedStyle로 읽어라](#t-114-preview_inspect가-border-radiuspadding-등-shorthand-css를-빈-객체로-반환--longhand나-eval-getcomputedstyle로-읽어라)
 
 ---
 
@@ -2179,6 +2180,18 @@ git worktree remove ../BookTimer-<task>
 
 ---
 
+## T-114. preview_inspect가 border-radius·padding 등 shorthand CSS를 빈 객체로 반환 — longhand나 eval getComputedStyle로 읽어라
+
+**증상**: `mcp__Claude_Preview__preview_inspect`에 `styles:["border-radius"]`·`["padding"]`을 주면 요소는 매칭되는데(text·className·boundingBox는 정상) `styles`가 `{}`로 빈다. 같은 호출에서 `display`·`grid-template-columns`·`background-color`·`width`·`height`는 정상 반환된다.
+
+**원인**: inspect가 shorthand 속성(`border-radius`=4개 corner longhand 합성, `padding`=4방향 합성)을 computed style에서 못 끌어오는 듯 — longhand·단일값 속성만 신뢰 가능.
+
+**해결**: ① longhand로 요청(`border-top-left-radius`·`padding-top` 등), 또는 ② `preview_eval`로 직접 `getComputedStyle(el).borderRadius`/`.padding`을 읽으면 shorthand도 정확히 나온다(여러 요소를 한 IIFE로 `pick`하면 1콜로 끝). 랜딩 디자인 토큰 통일(버튼 8px·카드 14px/24px) 검증을 eval로 갈음해 전부 실측했다.
+
+**관련**: 「🖥️ 프론트 검증」 static-preview 게이트, T-112(Chrome MCP `resize_window`가 뷰포트 못 바꿈 — preview 도구 계열 검증 한계라는 같은 결). 1회차 신규.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2296,3 +2309,4 @@ git worktree remove ../BookTimer-<task>
 | 2026-06-27 | T-111 ("머지 전 브랜치 최신화 필수" 정책 + BEHIND인 PR에 `--auto`만 걸면 무한 대기 — GitHub가 BEHIND 브랜치를 자동 갱신 안 함(auto-update off), `--auto`는 자기해결 안 되는 BEHIND 조건을 영영 기다림, DIRTY 아님이라 기존 rebase 경로에도 안 잡히고 `pr-merge.sh`는 catch-all로 타임아웃까지 대기만 / 증상=체크 통과인데 OPEN·"out-of-date with base" 배너·`mergeStateStatus=BEHIND` / 해결=`gh pr update-branch <PR>`(비파괴 서버사이드 갱신)→CI 재실행→`--auto` 머지 / 하드픽스=`pr-merge.sh`에 BEHIND `try_update_branch`(폴링·`--arm` 양쪽)+`--arm` 걸고떠나기 모드, 표준 경로 승격·bare `--auto` 금지(CLAUDE.md) / 스모크 `.claude/scripts/tests/test-pr-merge-behind.sh` / 머지 자동화 hang 군 T-083·T-091·T-094·T-102의 6회차) |
 | 2026-06-28 | T-112 (Chrome MCP `resize_window`가 렌더(layout) 뷰포트를 못 바꿔 `window.innerWidth`가 1920 고정 → 모바일 미디어쿼리(`@media max-width:599px`) 검증 봉착 — 창을 430px로 줄여도 데스크톱 렌더만 나와 모바일 전용 CSS(서술 내부 스크롤 등) 적용·스크롤을 확인 못 함 / 원인=resize_window가 OS 창 크기만 바꾸고 콘텐츠 렌더 뷰포트는 고정, 미디어쿼리는 layout viewport를 봄 / 해결=폭 N px(예 390) iframe에 같은 페이지를 src로 로드 — 미디어쿼리는 iframe 자체 뷰포트를 보므로 모바일 규칙 실발동, 같은 오리진이면 `contentWindow`/`contentDocument`로 `getComputedStyle`·`matchMedia`·`scrollHeight>clientHeight`·`scrollTop` 측정, 부모(1920)+iframe(390) 동시 측정으로 데스크톱·모바일 대조, 스크린샷은 iframe `position:fixed`로 캡처 / 예방=모바일 한정 반응형 CSS는 이 iframe 기법을 게이트로, static-preview(N-117)와 같은 오리진이라 자연 결합 / N-117·N-118·T-053·T-089, 책BTI 모바일 검증 2회 봉착에 확립) |
 | 2026-06-28 | T-113 (도메인 TLD 이전 후 `www.<신규>`를 ALB 301 규칙에서 누락 → 검색 유입자(구글이 canonical 미설정으로 www 색인·1위)가 `www.app`에 닿아 redirect_uri가 www로 동적 생성돼 `redirect_uri_mismatch` + host-only 세션 쿠키 분리로 비로그인 랜딩, 주소창 apex 직접진입은 정상 / 해결=ALB 우선순위1 규칙 호스트조건에 `www.booktimer.app`을 OR 값으로 추가(새 조건 추가는 AND라 .click 301 파손—금물) / 예방=호스트 변형 전수 등록 + canonical·www→apex 정규화 / N-138, 1회차 신규) |
+| 2026-06-29 | T-114 (preview_inspect가 border-radius·padding 등 shorthand CSS를 빈 객체 `{}`로 반환 — 같은 호출의 display·background-color·width 등 longhand/단일값은 정상 / 해결=longhand로 요청(border-top-left-radius·padding-top)하거나 preview_eval로 getComputedStyle 직접 읽기(shorthand 정확), 여러 요소 IIFE pick으로 1콜 / 랜딩 디자인 토큰 통일(버튼 8px·카드 14px/24px) 검증 때 발생, T-112와 같은 preview 도구 검증 한계 결, 1회차 신규) |
