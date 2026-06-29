@@ -20,6 +20,7 @@
 | 전역 `button` 속성 누수(컴포넌트가 명시 안 한 속성을 상속) | T-056 · T-081 · T-099 | width 3+ · radius 1 | ✅ 코드 패턴(flex 안 칩·탭·세그먼트엔 `width:auto`·`border-radius:0`로 상쇄, 인라인 주석) |
 | CSS 주석 속 `*/`(특히 wildcard-slash `.foo-*/.bar-*`)가 주석 조기 종료 → 다음 규칙 침묵 드랍 | T-087 | 3 (#522 .dash-card → #526 .book-*/.record- → 이 PR .oauth-*/.entry-hero) | ✅ **하드픽스 훅 `require-css-comment-safe.ps1`**(3회차에 승격) — 주석 닫는 `*/`가 **양옆 모두 셀렉터문자에 붙은** 경우만 차단(=기존 보류 사유 FP 해소: ` */color`는 앞이 공백·`/*x*/`+개행은 뒤가 공백이라 통과, 잔여 FP는 `/*c*/.sel`류 희귀패턴+우회 토큰 `SKIP_CSS_COMMENT_CHECK`). 보조: 예방 규칙(슬래시→`·`/`과`) + §11 실 브라우저/static-preview 게이트(N-118) |
 | 도구 재생성 시 BOM/EOL 미보존 → phantom diff(첫 줄·전체 줄끝) | T-093 · T-103 | 2 | ✅ 코드 패턴(원본 BOM은 바이트로·EOL은 첫 매치로 감지해 쓸 때 보존; `rebuild-troubleshooting-toc.ps1`) |
+| 빈 워크트리 폴더가 cwd 점유로 안 지워짐 | T-105 · T-115 | 2 | ✅ 절차(정션 끊기+`worktree prune`+`branch -D`로 실질 정리 후 빈 폴더는 세션 종료 후 `rmdir` / 워크트리 정리는 그 세션 아닌 **메인·다른 세션**에서) |
 
 ## 📑 목차
 
@@ -131,6 +132,8 @@
 - [T-112. Chrome MCP `resize_window`가 렌더 뷰포트(`innerWidth`)를 못 바꿔 모바일 미디어쿼리 검증이 막힌다 — 폭 N px iframe에 페이지를 로드해 우회](#t-112-chrome-mcp-resize_window가-렌더-뷰포트innerwidth를-못-바꿔-모바일-미디어쿼리-검증이-막힌다--폭-n-px-iframe에-페이지를-로드해-우회)
 - [T-113. 도메인 TLD 이전 후 `www.<신규>`를 ALB 301 규칙에서 빠뜨려 검색 유입자가 redirect_uri_mismatch + host-only 세션 분리](#t-113-도메인-tld-이전-후-www신규를-alb-301-규칙에서-빠뜨려-검색-유입자가-redirect_uri_mismatch--host-only-세션-분리)
 - [T-114. preview_inspect가 border-radius·padding 등 shorthand CSS를 빈 객체로 반환 — longhand나 eval getComputedStyle로 읽어라](#t-114-preview_inspect가-border-radiuspadding-등-shorthand-css를-빈-객체로-반환--longhand나-eval-getcomputedstyle로-읽어라)
+- [T-115. 워크트리에서 작업한 세션이 그 워크트리를 직접 정리하면 최상위 빈 폴더가 안 지워진다(세션 cwd 점유)](#t-115-워크트리에서-작업한-세션이-그-워크트리를-직접-정리하면-최상위-빈-폴더가-안-지워진다세션-cwd-점유)
+- [T-116. 순수 마크업/CSS 변경이라 '단위 TDD 무의미'라 본 게 기존 통합 테스트를 놓쳐 CI에서 RED](#t-116-순수-마크업css-변경이라-단위-tdd-무의미라-본-게-기존-통합-테스트를-놓쳐-ci에서-red)
 
 ---
 
@@ -2192,6 +2195,32 @@ git worktree remove ../BookTimer-<task>
 
 ---
 
+## T-115. 워크트리에서 작업한 세션이 그 워크트리를 직접 정리하면 최상위 빈 폴더가 안 지워진다(세션 cwd 점유)
+
+**증상**: 머지 후 `remove-worktree.ps1`(또는 `git worktree remove`)로 작업 워크트리를 정리하는데, 정션 끊기·내부 파일 삭제까지는 되지만 **최상위 폴더만** `Permission denied`/`Device or resource busy`로 안 지워진다. `worktree list`에선 빠졌는데(메타는 정리됨) 빈 폴더가 남는다.
+
+**원인**: 그 워크트리에서 작업하던 **현재 세션 자신이 폴더를 작업 디렉토리(cwd)로 점유**한다. Claude Code harness가 매 도구 호출 후 cwd를 그 워크트리로 고정(reset)하므로, `remove-worktree.ps1`을 메인에서 `Set-Location`으로 실행해도 Bash/PowerShell 도구 셸의 cwd가 다시 워크트리가 돼 락이 안 풀린다. Windows에선 프로세스 cwd인 폴더의 **최상위는** 삭제 불가(하위 파일은 가능).
+
+**해결**:
+- 실질 정리는 끝낼 수 있다 — 정션 끊기(node_modules 보호) + `git -C <메인> worktree prune` + `git -C <메인> branch -D <branch>`까지 되면 사실상 완료. **빈 폴더만 그 세션 종료 후** 다른 셸에서 `rmdir "<경로>"` 한 줄(다음 SessionStart가 치우기도).
+- 더 깔끔하게는 **워크트리 정리를 그 워크트리 세션이 아니라 메인/다른 세션에서** 한다 — 정리하는 세션의 cwd가 대상이 아니면 폴더째 삭제된다.
+
+**관련**: T-105(빈 워크트리 폴더 cwd 점유 — 죽은 세션 좀비 셸 버전), T-110(정션 먼저 끊기), N-032(워크트리 격리). **T-105 재발(2회차, cwd-점유 군)**.
+
+---
+
+## T-116. 순수 마크업/CSS 변경이라 '단위 TDD 무의미'라 본 게 기존 통합 테스트를 놓쳐 CI에서 RED
+
+**증상**: Thymeleaf 템플릿의 링크·문구만 바꾼 순수 마크업 변경이라 단위 TDD가 무의미하다 판단하고 preview 검증만 했는데, **CI의 통합 테스트(`@SpringBootTest` MockMvc)가 RED**. 예: 랜딩 `/village` 직접 링크를 `#village` 앵커로 바꾸자 `LandingPageTest.landing_hasVillageLink`(렌더 HTML에 `/village` 문자열 존재 기대)가 깨짐.
+
+**원인**: 마크업 자체엔 단위테스트가 없어도, **기존 통합 테스트가 렌더된 HTML의 링크·키워드를 `content().string(containsString(...))`로 검증**하고 있었다. "단위 TDD 무의미"는 *새 테스트를 안 짠다*는 뜻일 뿐, *기존 테스트가 그 마크업을 검증하지 않는다*는 보장이 아니다.
+
+**해결**: 마크업/카피/링크를 바꾸기 전에 **그 경로·문자열을 검증하는 기존 테스트를 grep**한다(예: `containsString("/village")`·뷰 이름·핵심 키워드). 변경이 의도된 설계 개선이면 테스트를 새 동작에 맞게 갱신(이번엔 동선 검증 `#village`·`#together` 앵커+섹션으로)하고, 가능하면 변경 전 로컬에서 그 테스트를 돌려 RED를 먼저 확인(TDD 가시성).
+
+**관련**: 「🧪 TDD」, N-055(노출 기능 경계 테스트), T-114(같은 랜딩 작업의 preview 검증 한계). 1회차 신규.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2310,3 +2339,5 @@ git worktree remove ../BookTimer-<task>
 | 2026-06-28 | T-112 (Chrome MCP `resize_window`가 렌더(layout) 뷰포트를 못 바꿔 `window.innerWidth`가 1920 고정 → 모바일 미디어쿼리(`@media max-width:599px`) 검증 봉착 — 창을 430px로 줄여도 데스크톱 렌더만 나와 모바일 전용 CSS(서술 내부 스크롤 등) 적용·스크롤을 확인 못 함 / 원인=resize_window가 OS 창 크기만 바꾸고 콘텐츠 렌더 뷰포트는 고정, 미디어쿼리는 layout viewport를 봄 / 해결=폭 N px(예 390) iframe에 같은 페이지를 src로 로드 — 미디어쿼리는 iframe 자체 뷰포트를 보므로 모바일 규칙 실발동, 같은 오리진이면 `contentWindow`/`contentDocument`로 `getComputedStyle`·`matchMedia`·`scrollHeight>clientHeight`·`scrollTop` 측정, 부모(1920)+iframe(390) 동시 측정으로 데스크톱·모바일 대조, 스크린샷은 iframe `position:fixed`로 캡처 / 예방=모바일 한정 반응형 CSS는 이 iframe 기법을 게이트로, static-preview(N-117)와 같은 오리진이라 자연 결합 / N-117·N-118·T-053·T-089, 책BTI 모바일 검증 2회 봉착에 확립) |
 | 2026-06-28 | T-113 (도메인 TLD 이전 후 `www.<신규>`를 ALB 301 규칙에서 누락 → 검색 유입자(구글이 canonical 미설정으로 www 색인·1위)가 `www.app`에 닿아 redirect_uri가 www로 동적 생성돼 `redirect_uri_mismatch` + host-only 세션 쿠키 분리로 비로그인 랜딩, 주소창 apex 직접진입은 정상 / 해결=ALB 우선순위1 규칙 호스트조건에 `www.booktimer.app`을 OR 값으로 추가(새 조건 추가는 AND라 .click 301 파손—금물) / 예방=호스트 변형 전수 등록 + canonical·www→apex 정규화 / N-138, 1회차 신규) |
 | 2026-06-29 | T-114 (preview_inspect가 border-radius·padding 등 shorthand CSS를 빈 객체 `{}`로 반환 — 같은 호출의 display·background-color·width 등 longhand/단일값은 정상 / 해결=longhand로 요청(border-top-left-radius·padding-top)하거나 preview_eval로 getComputedStyle 직접 읽기(shorthand 정확), 여러 요소 IIFE pick으로 1콜 / 랜딩 디자인 토큰 통일(버튼 8px·카드 14px/24px) 검증 때 발생, T-112와 같은 preview 도구 검증 한계 결, 1회차 신규) |
+| 2026-06-29 | T-115 (워크트리에서 작업한 세션이 그 워크트리를 직접 정리하면 최상위 빈 폴더가 안 지워짐 — 세션이 폴더를 cwd로 점유(harness가 매 호출 후 워크트리로 cwd reset)해 `git worktree remove`가 Permission denied/Device or resource busy, worktree list·메타·내부파일은 정리되나 빈 폴더 잔존 / 해결=정션 끊기+`worktree prune`+`branch -D`로 실질 정리하고 빈 폴더는 세션 종료 후 `rmdir`(다음 SessionStart가 치우기도), 또는 정리를 메인·다른 세션에서 / T-105 재발 2회차 cwd-점유 군) |
+| 2026-06-29 | T-116 (순수 마크업/CSS 변경이라 '단위 TDD 무의미'라 보고 preview만 했는데 기존 통합 테스트(@SpringBootTest MockMvc)가 CI에서 RED — LandingPageTest가 렌더 HTML의 /village 링크를 containsString으로 검증 중이라 #village 앵커 전환에 깨짐 / 해결=마크업·링크·문구 변경 전 그 문자열·경로·뷰명을 검증하는 기존 테스트 grep, 의도된 변경이면 새 동작에 맞게 갱신하고 변경 전 로컬 RED 먼저 확인 / 1회차 신규) |
