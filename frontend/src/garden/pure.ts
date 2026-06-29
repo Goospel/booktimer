@@ -270,6 +270,23 @@ export function isNear(ax: number, ay: number, bx: number, by: number, threshold
     return Math.hypot(ax - bx, ay - by) < threshold;
 }
 
+// portrait CSS 90°CW 회전 시 터치·포인터 좌표 역회전 — 화면 좌표 → canvas 게임 좌표.
+// village-shell에 rotate(90deg) translateX(-100%) 적용 시:
+//   canvas 레이아웃 = 100dvh(가로)×100dvw(세로), getBoundingClientRect = {width:screenW, height:screenH}.
+//   순방향: canvas(cx,cy) → screen(cy, screenH-cx)
+//   역방향: screen(sx,sy) → canvas(screenH-sy, sx) [where sx/sy = pageX/Y - rect.left/top]
+export function rotateTouchForPortrait(
+    pageX: number,
+    pageY: number,
+    rectLeft: number,
+    rectTop: number,
+    rectHeight: number,
+): { x: number; y: number } {
+    const relX = pageX - rectLeft;
+    const relY = pageY - rectTop;
+    return { x: rectHeight - relY, y: relX };
+}
+
 // a가 b의 왼쪽(ax < bx)이면 a는 오른쪽(flipX=false), b는 왼쪽(flipX=true).
 // 같은 x(ax === bx)면 변경 없이 현재값 유지(prevA, prevB).
 export function faceEachOther(

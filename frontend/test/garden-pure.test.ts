@@ -19,6 +19,7 @@ import {
     IDLE_STAND_WEIGHT, IDLE_READ_WEIGHT, IDLE_STRETCH_WEIGHT,
     LOOK_TOGGLE_MS, STRETCH_PERIOD_MS, STRETCH_AMP,
     isNear, faceEachOther, INTERACT_DIST, INTERACT_COOLDOWN_MS,
+    rotateTouchForPortrait,
 } from '../src/garden/pure';
 
 const W = 1000, H = 640;
@@ -675,6 +676,40 @@ describe('garden pure.ts', () => {
         test('대각선 거리', () => {
             // Math.hypot(0.09,0.09) ≈ 0.127 < 0.13
             expect(isNear(0, 0, 0.09, 0.09, T)).toBe(true);
+        });
+    });
+
+    // portrait CSS 90°CW 회전 입력 역변환 — 4 모서리·중앙·rect offset 경계 6종
+    describe('rotateTouchForPortrait', () => {
+        // portrait 375×812, canvas 레이아웃 812×375
+        // rect: {left:0, top:0, width:375, height:812}
+        // 순방향: canvas(cx,cy) → screen(cy, 812-cx)
+        // 역방향: screen(sx,sy) → canvas(812-sy, sx)
+        const RL = 0, RT = 0, RH = 812;
+
+        test('portrait 좌상단(0,0) → canvas(812,0) [canvas 우상단이 portrait 좌상단으로]', () => {
+            const { x, y } = rotateTouchForPortrait(0, 0, RL, RT, RH);
+            expect(x).toBeCloseTo(812); expect(y).toBeCloseTo(0);
+        });
+        test('portrait 우상단(375,0) → canvas(812,375)', () => {
+            const { x, y } = rotateTouchForPortrait(375, 0, RL, RT, RH);
+            expect(x).toBeCloseTo(812); expect(y).toBeCloseTo(375);
+        });
+        test('portrait 좌하단(0,812) → canvas(0,0) [canvas 좌상단이 portrait 좌하단으로]', () => {
+            const { x, y } = rotateTouchForPortrait(0, 812, RL, RT, RH);
+            expect(x).toBeCloseTo(0); expect(y).toBeCloseTo(0);
+        });
+        test('portrait 우하단(375,812) → canvas(0,375)', () => {
+            const { x, y } = rotateTouchForPortrait(375, 812, RL, RT, RH);
+            expect(x).toBeCloseTo(0); expect(y).toBeCloseTo(375);
+        });
+        test('portrait 중앙(187.5,406) → canvas 중앙(406,187.5)', () => {
+            const { x, y } = rotateTouchForPortrait(187.5, 406, RL, RT, RH);
+            expect(x).toBeCloseTo(406); expect(y).toBeCloseTo(187.5);
+        });
+        test('rect offset 보정 — rect{left:10,top:5}: page(15,100) → rel(5,95) → canvas(717,5)', () => {
+            const { x, y } = rotateTouchForPortrait(15, 100, 10, 5, 812);
+            expect(x).toBeCloseTo(717); expect(y).toBeCloseTo(5);
         });
     });
 

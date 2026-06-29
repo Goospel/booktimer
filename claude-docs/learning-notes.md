@@ -140,6 +140,7 @@
 - [N-137. 같은 데이터라도 청중(audience)이 반대인 두 화면은 합치지 말고 가른다 — 가시성 게이트를 한 곳에 몰면 누수·IDOR](#n-137-같은-데이터라도-청중audience이-반대인-두-화면은-합치지-말고-가른다--가시성-게이트를-한-곳에-몰면-누수idor)
 - [N-138. 호스트 정규화(canonical) 누락의 이중 타격 — redirect_uri는 진입 호스트로 동적 생성되고 세션 쿠키는 host-only라, 구글이 비정규 호스트를 색인하면 검색 유입 전원이 로그인 불가](#n-138-호스트-정규화canonical-누락의-이중-타격--redirect_uri는-진입-호스트로-동적-생성되고-세션-쿠키는-host-only라-구글이-비정규-호스트를-색인하면-검색-유입-전원이-로그인-불가)
 - [N-139. 친구 추천의 두 엔진과 콜드스타트 사다리 — 그래프·관심사 하이브리드, 추천 이유의 효과](#n-139-친구-추천의-두-엔진과-콜드스타트-사다리--그래프관심사-하이브리드-추천-이유의-효과)
+- [N-140. CSS rotate90 + translateX(-100%) 의 역좌표 수식 — portrait 강제 landscape 회전 시 Phaser 입력 보정](#n-140-css-rotate90--translatex-100-의-역좌표-수식--portrait-강제-landscape-회전-시-phaser-입력-보정)
 
 ---
 
@@ -6340,3 +6341,35 @@ CRLF→LF는 커밋 때만, 체크아웃 땐 변환 안 함 → 작업트리가 
 
 - BookTimer: `UserSearchService.recommend`(계단식 사다리), `FollowRepository.findFriendsOfFriends`·`findFollowBackCandidateIds`(그래프), `BookRepository.findCoReadCandidates`(관심사=같은 책), `ReadingSessionRepository.findActiveReaderCandidates`(활동량 폴백), `RecommendedUser`(이유 칩). plan.md §SNS·changelog 2026-06-29.
 - 관련: [[N-055]](발견 기능의 null-state 경계 — 추천 후보에서 미완성 엔티티 누수 방지), [[N-037]](공개/비공개 게이트 — 후보 PUBLIC만 매칭), T-117(공유 컴포넌트 칩 CSS 함정).
+
+---
+
+## N-140. CSS rotate90 + translateX(-100%) 의 역좌표 수식 — portrait 강제 landscape 회전 시 Phaser 입력 보정
+
+> **한 줄 요약**: `transform: rotate(90deg) translateX(-100%)` 으로 portrait 컨테이너를 CW 90° 돌려 landscape 처럼 표시할 때, 브라우저 터치 좌표(pageX, pageY)를 Phaser 캔버스 좌표로 역변환하는 수식은 `canvas_x = bounds.height - relY, canvas_y = relX` 다.
+
+### 변환 방향
+
+`rotate(90deg) translateX(-100%)` 의 순방향 (canvas→screen) 과 역방향 (screen→canvas):
+
+- **순방향 (canvas cx,cy → screen sx,sy)**: `sx = cy`, `sy = rectH - cx`
+- **역방향 (screen sx,sy → canvas cx,cy)**: `cx = rectH - sy`, `cy = sx`
+
+여기서 `rectH = getBoundingClientRect().height` (CSS transform 후 시각적 세로 크기).
+
+### 왜 이 수식인가
+
+`transform-origin: top left` 에서 CW 90° 회전하면 원소 좌상단 기준으로 다음 변환이 일어난다:
+1. `translateX(-100%)`: 원소를 자기 너비(W)만큼 왼쪽으로 이동 → 원소 왼쪽 모서리가 (-W, 0)
+2. `rotate(90deg)`: CW 90° 회전. (x, y) → (y, -x). (-W, 0) → (0, W)
+
+따라서 원소의 왼쪽 상단 코너가 화면 (0, 0) 에 위치하게 되고, 원소의 canvas(cx, cy) 점은 화면 (cy, W-cx) 위치에 나타난다. 역으로 화면 (sx, sy) = canvas (W-sy, sx).
+
+### Phaser `_sx/_sy` 우회가 필요한 이유
+
+Phaser의 `InputManager.transformPointer`는 내부적으로 `(pageX - canvasLeft) * _sx` 계산을 한다. 여기서 `_sx = canvas.width / canvasBounds.width`. CSS transform으로 컨테이너가 회전되면 `canvasBounds` 가 시각적 크기(portrait 치수 375×812)를 반환하지만 `canvas.width`는 landscape(812px)라 `_sx ≈ 2.17`이 되어 좌표가 완전히 틀린다. → `transformPointer` 를 몽키패치해 `_sx/_sy` 를 완전히 우회하고 역좌표 수식을 직접 적용.
+
+### 코드 위치 / 관련
+
+- BookTimer: `frontend/src/garden/pure.ts` `rotateTouchForPortrait`, `frontend/src/garden/GardenGame.vue` `applyPortraitInputPatch`, `src/main/resources/static/css/app.css` portrait 미디어쿼리. T-118(Phaser `_sx/_sy` 함정).
+- 관련: [[N-082]](Vue Proxy × Phaser 내부 상태 파괴 — setup 클로저 변수).
