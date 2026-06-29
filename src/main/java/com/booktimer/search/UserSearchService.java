@@ -6,6 +6,8 @@ import com.booktimer.book.CoReadCount;
 import com.booktimer.follow.FollowRepository;
 import com.booktimer.follow.FollowService;
 import com.booktimer.follow.FriendOfFriendCount;
+import com.booktimer.session.ActiveDayCount;
+import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -14,6 +16,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -46,16 +50,21 @@ public class UserSearchService {
     private final FollowRepository followRepository;
     private final FollowService followService;
     private final BookRepository bookRepository;
+    private final ReadingSessionRepository readingSessionRepository;
+    private final Clock clock;
 
     public UserSearchService(UserRepository userRepository, UserRowAssembler rowAssembler,
                              BlockRepository blockRepository, FollowRepository followRepository,
-                             FollowService followService, BookRepository bookRepository) {
+                             FollowService followService, BookRepository bookRepository,
+                             ReadingSessionRepository readingSessionRepository, Clock clock) {
         this.userRepository = userRepository;
         this.rowAssembler = rowAssembler;
         this.blockRepository = blockRepository;
         this.followRepository = followRepository;
         this.followService = followService;
         this.bookRepository = bookRepository;
+        this.readingSessionRepository = readingSessionRepository;
+        this.clock = clock;
     }
 
     public List<UserSearchResult> search(User viewer, String query) {
@@ -75,8 +84,9 @@ public class UserSearchService {
 
     /**
      * 친구 추천 — 계단식 하이브리드(친구 추천 1단계). 우선순위 생성기 사다리:
-     * G1 맞팔 후보 → G2 친구의 친구(공통 친구 수) → C 같은 책(겹친 권수) → F 랜덤 폴백. userId로 dedup하며
-     * 중복 시 이유 칩을 합치고(예: FoF이자 같은 책), {@code limit}을 채울 때까지 우선순위 순으로 모은다.
+     * G1 맞팔 후보 → G2 친구의 친구(공통 친구 수) → C 같은 책(겹친 권수)
+     * → E 활동량(최근 14일 distinct 활동일 수) → F 랜덤 폴백. userId로 dedup하며
+     * 중복 시 이유 칩을 합치고(예: 같은 책이자 활동량), {@code limit}을 채울 때까지 우선순위 순으로 모은다.
      * 모든 생성기는 노출 불변식(운영자·본인·차단 양방향·login_id null 제외) + 이미 팔로우한 사람 제외를 지킨다.
      */
     public List<RecommendedUser> recommend(User viewer, int limit) {
@@ -102,6 +112,13 @@ public class UserSearchService {
         if (!myIsbns.isEmpty()) {
             for (CoReadCount co : bookRepository.findCoReadCandidates(viewerId, myIsbns, cap)) {
                 addReason(reasonsById, co.getUserId(), "같이 읽은 책 " + co.getSharedBookCount() + "권", limit);
+            }
+        }
+        // E 활동량 폴백 — "요즘 꾸준히 읽어요"(최근 14일 distinct 활동일 수 기준; 신호로 limit을 못 채웠을 때만)
+        if (reasonsById.size() < limit) {
+            java.time.Instant since = clock.instant().minus(14, ChronoUnit.DAYS);
+            for (ActiveDayCount ac : readingSessionRepository.findActiveReaderCandidates(viewerId, since, cap)) {
+                addReason(reasonsById, ac.getUserId(), "요즘 꾸준히 읽어요", limit);
             }
         }
         // F 폴백(랜덤) — 신호로 limit을 못 채웠을 때만, 이미 모은/팔로우한 사람 제외
