@@ -43,10 +43,16 @@ public class SearchApiController {
     public SearchResponse search(@RequestParam(value = "q", required = false) String q,
                                  Principal principal) {
         User me = currentUserService.resolve(principal);
-        List<RecommendedUserDto> recommendations = toRecommendDto(searchService.recommend(me, RECOMMEND_COUNT));
         String myLoginId = me.getLoginId();
+        boolean isSearch = q != null && !q.isBlank();
 
-        if (!rateLimitService.allow(RateLimitAction.SEARCH, me.getId())) {
+        // 추천은 q와 무관 → 검색(q 있음)일 땐 재계산하지 않고 빈 배열. 진입(q 없음)에서만, RECOMMEND 한도 내에서 계산.
+        List<RecommendedUserDto> recommendations =
+                (!isSearch && rateLimitService.allow(RateLimitAction.RECOMMEND, me.getId()))
+                        ? toRecommendDto(searchService.recommend(me, RECOMMEND_COUNT))
+                        : List.of();
+
+        if (isSearch && !rateLimitService.allow(RateLimitAction.SEARCH, me.getId())) {
             return new SearchResponse(q, List.of(), recommendations, myLoginId, true);
         }
         return new SearchResponse(q, toDto(searchService.search(me, q)), recommendations, myLoginId, false);
