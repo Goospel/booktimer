@@ -1245,6 +1245,17 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     overscroll-behavior: contain;
     padding-right: 6px;
 }
+/* 친구 추천 — 고정높이 스크롤 박스. 추천이 꽉 차면(최대 10명) 또는 이유 칩으로 길어져도
+   페이지가 늘어나 하단 네비가 밀리지 않게. 적으면 max-height 미도달=스크롤바 없음(자연 폴백).
+   .search-scroll과 같은 관성/거터/번짐방지 레시피. */
+.recommend-scroll {
+    max-height: 430px;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    padding-right: 6px;
+}
 .book-row {
     display: flex;
     flex-wrap: wrap;            /* 좁으면 액션 줄을 통째로 다음 줄로 내린다 */

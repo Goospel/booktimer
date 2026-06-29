@@ -99,7 +99,7 @@ function onSearch() {
     <section class="card">
         <h2>친구 추천</h2>
         <p v-if="recommendations.length === 0" class="status-line muted">아직 추천할 사용자가 없습니다.</p>
-        <ul v-else class="book-list">
+        <ul v-else class="book-list recommend-scroll">
             <li class="book-row" v-for="r in recommendations" :key="r.loginId">
                 <div class="book-meta">
                     <a class="book-title" :href="`/u/${r.loginId}`">{{ r.nickname }}</a>

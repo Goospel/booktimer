@@ -20,8 +20,9 @@
             <h1>BookTimer</h1>
         </a>
     </header>
-    <p class="greeting">사용자 검색</p>
 
+    <!-- 사용자 검색 greeting은 다른 섬 페이지와 동일하게 Vue(SearchApp.vue page-stack)가 렌더한다 —
+         SSR에 또 두면 마운트 후 greeting이 두 번 보인다(브랜드 아래 + 카드 위). -->
     <!-- Vue 섬 마운트 포인트 — data-* 로 초기값 전달 -->
     <div id="search-app"
          th:attr="data-my-login-id=${myLoginId}, data-initial-q=${q != null ? q : ''}">
