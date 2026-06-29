@@ -1,7 +1,10 @@
 package com.booktimer.web.api;
 
+import com.booktimer.follow.FollowService;
 import com.booktimer.user.Role;
+import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
+import com.booktimer.user.UserRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,6 +41,12 @@ class SearchApiControllerTest {
 
     @Autowired
     private UserRegistrationService registrationService;
+
+    @Autowired
+    private FollowService followService;
+
+    @Autowired
+    private UserRepository userRepository;
 
     @Autowired
     private Clock clock;
@@ -102,6 +111,26 @@ class SearchApiControllerTest {
         String body = result.getResponse().getContentAsString();
         // null loginId 가진 항목이 recommendations에 새면 \"loginId\":null 이 직렬화된다
         assertThat(body).doesNotContain("\"loginId\":null");
+    }
+
+    @Test
+    @DisplayName("recommendations 항목에 reasons 칩이 실린다 (맞팔 후보 → '나를 팔로우함')")
+    void recommendations_carryReasons() throws Exception {
+        registrationService.register("rc-me@booktimer.com", "pw1234qwer!!", "rcmeid", "나", SEOUL, Role.USER, today());
+        registrationService.register("rc-fb@booktimer.com", "pw1234qwer!!", "rcfbid", "맞팔", SEOUL, Role.USER, today());
+        User me = userRepository.findByEmail("rc-me@booktimer.com").orElseThrow();
+        User fb = userRepository.findByEmail("rc-fb@booktimer.com").orElseThrow();
+        followService.follow(fb, me); // fb→me, me는 안 함 → 맞팔 후보
+
+        var result = mockMvc.perform(get("/api/search")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("rc-me@booktimer.com")))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String body = result.getResponse().getContentAsString();
+        assertThat(body).contains("\"reasons\"");        // 추천 DTO에 reasons 필드 존재
+        assertThat(body).contains("나를 팔로우함");        // 맞팔 후보의 이유 칩
     }
 
     @Test

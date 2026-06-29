@@ -110,4 +110,50 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     List<User> followScopeReaders(@Param("viewer") User viewer,
                                   @Param("isbn") String isbn,
                                   @Param("statuses") Collection<BookStatus> statuses);
+
+    /**
+     * 내가 읽은(읽는중∪완독) 책의 isbn13 — 친구 추천 "같은 책" 신호의 입력(viewer 본인 책이라 PRIVATE 포함).
+     * null isbn(수동 등록 등)은 동일성 키가 없어 제외. distinct로 중복 제거.
+     */
+    @Query("""
+            select distinct b.isbn13
+            from Book b
+            where b.user.id = :userId
+              and b.isbn13 is not null
+              and b.status in (com.booktimer.book.BookStatus.READING,
+                               com.booktimer.book.BookStatus.FINISHED)
+            """)
+    List<String> findReadIsbnsByUser(@Param("userId") Long userId);
+
+    /**
+     * "같은 책" 추천 후보 — 친구 추천 하이브리드 1단계(C). 내 isbn 목록과 겹치는 책을 <b>PUBLIC</b>으로
+     * 읽은/완독한 사용자를, 겹친 권수(distinct isbn13) 내림차순으로.
+     *
+     * <p>노출 불변식을 모두 보존: 본인 제외·ADMIN 제외·login_id null 제외(N-055)·차단(양방향) 제외 +
+     * 내가 이미 팔로우한 사람 제외. <b>visibility=PUBLIC</b>으로 비공개 독서가 새지 않게 막고
+     * (후보 쪽만 PUBLIC 강제 — 내 isbn 입력은 PRIVATE 포함 내 데이터), 상태는 읽는중∪완독("읽음")만.
+     * 동률은 id 오름차순. {@code Pageable}로 상한. {@code myIsbns}가 비면 호출부가 이 쿼리를 스킵한다.
+     */
+    @Query("""
+            select b.user.id as userId,
+                   count(distinct b.isbn13) as sharedBookCount
+            from Book b
+            where b.isbn13 in :myIsbns
+              and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
+              and b.status in (com.booktimer.book.BookStatus.READING,
+                               com.booktimer.book.BookStatus.FINISHED)
+              and b.user.id <> :viewerId
+              and b.user.role <> com.booktimer.user.Role.ADMIN
+              and b.user.loginId is not null
+              and not exists (select 1 from com.booktimer.follow.Follow f
+                              where f.follower.id = :viewerId and f.followee.id = b.user.id)
+              and not exists (select 1 from com.booktimer.block.Block bl
+                              where (bl.blocker.id = :viewerId and bl.blocked.id = b.user.id)
+                                 or (bl.blocker.id = b.user.id and bl.blocked.id = :viewerId))
+            group by b.user.id
+            order by count(distinct b.isbn13) desc, b.user.id asc
+            """)
+    List<CoReadCount> findCoReadCandidates(@Param("viewerId") Long viewerId,
+                                           @Param("myIsbns") Collection<String> myIsbns,
+                                           Pageable pageable);
 }

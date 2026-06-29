@@ -1,5 +1,6 @@
 package com.booktimer.web.api;
 
+import com.booktimer.search.RecommendedUser;
 import com.booktimer.search.UserSearchResult;
 import com.booktimer.search.UserSearchService;
 import com.booktimer.security.CurrentUserService;
@@ -42,7 +43,7 @@ public class SearchApiController {
     public SearchResponse search(@RequestParam(value = "q", required = false) String q,
                                  Principal principal) {
         User me = currentUserService.resolve(principal);
-        List<UserSearchResultDto> recommendations = toDto(searchService.recommend(me, RECOMMEND_COUNT));
+        List<RecommendedUserDto> recommendations = toRecommendDto(searchService.recommend(me, RECOMMEND_COUNT));
         String myLoginId = me.getLoginId();
 
         if (!rateLimitService.allow(RateLimitAction.SEARCH, me.getId())) {
@@ -57,10 +58,17 @@ public class SearchApiController {
                 .toList();
     }
 
+    private List<RecommendedUserDto> toRecommendDto(List<RecommendedUser> list) {
+        return list.stream()
+                .map(r -> new RecommendedUserDto(r.row().loginId(), r.row().nickname(), r.row().publicBookCount(),
+                        r.row().following(), r.row().self(), r.reasons()))
+                .toList();
+    }
+
     public record SearchResponse(
             String q,
             List<UserSearchResultDto> results,
-            List<UserSearchResultDto> recommendations,
+            List<RecommendedUserDto> recommendations,
             String myLoginId,
             boolean rateLimited) {
     }
@@ -71,5 +79,15 @@ public class SearchApiController {
             long publicBookCount,
             boolean following,
             boolean self) {
+    }
+
+    /** 친구 추천 한 줄 — 검색 결과 행({@link UserSearchResultDto})에 "추천 이유" 칩을 더한다(검색 행은 무변경). */
+    public record RecommendedUserDto(
+            String loginId,
+            String nickname,
+            long publicBookCount,
+            boolean following,
+            boolean self,
+            List<String> reasons) {
     }
 }

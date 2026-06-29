@@ -1302,6 +1302,17 @@ a.book-title:hover { text-decoration: underline; }
    (베이스 button은 padding 12px 18px라 팔로우만 부담스럽게 컸음). */
 .book-actions .btn-primary, .book-actions .btn-ghost, .book-actions .btn-danger { padding: 6px 10px; font-size: .85rem; }
 .book-actions a.btn-ghost { text-decoration: none; display: inline-flex; align-items: center; }
+/* 친구 추천 "추천 이유" 칩 — 공통 친구·같은 책·맞팔 근거(=.book-status-badge와 같은 pill 레시피). */
+.reason-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.reason-chip {
+    font-size: .72rem;
+    line-height: 1.3;
+    color: var(--accent);
+    background: #eef2ff;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
 /* SSR→Vue 전환으로 행 액션이 <form> 래퍼를 잃어, 직계 <button>(.vis-toggle·.btn-danger)이
    전역 button{width:100%}를 그대로 받아 풀폭으로 터지며 flex-wrap에서 한 줄씩 세로로 쌓였다(회귀).
    행 버튼은 내용폭으로 되돌린다 — 248·761·1213행과 같은 상쇄 패턴. */
