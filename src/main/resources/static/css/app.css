@@ -2277,6 +2277,27 @@ body.personality-page #personality-app { gap: 18px; }
     }
 }
 
+/* 모바일 portrait: CSS 90°CW 강제 가로 뷰
+   마을은 가로로 넓은 무대 — portrait에서 좁게 눌리는 문제 해소.
+   width=100dvh·height=100dvw(landscape 치수)로 shell 재정의 후
+   rotate(90deg) translateX(-100%)로 portrait 화면을 가득 채움:
+     순방향 canvas(cx,cy) → screen(cy, 100dvh-cx), 역방향은 scene.ts 입력 패치.
+   데스크탑(≥900px)·landscape(orientation:landscape)는 이 규칙 미적용 — 회귀 0.
+   ⚠️ position:fixed 자식(.village-dex-overlay 등)의 containing block이 이 shell로 됨
+     (transform이 있는 조상 = fixed containing block 생성 — CSS spec). 의도된 동작. */
+@media (max-width: 899px) and (orientation: portrait) {
+    .village-shell {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100dvh;          /* 회전 후 가로폭 = 현재 portrait 화면 높이 */
+        height: 100dvw;         /* 회전 후 세로 = 현재 portrait 화면 폭 */
+        transform-origin: top left;
+        transform: rotate(90deg) translateX(-100%);
+        overflow: hidden;
+    }
+}
+
 /* 게임 루트 — 절대배치 기준점. 모바일: 100%×100%; 데스크톱: world 크기 상한 */
 .village-game-root {
     position: relative;
