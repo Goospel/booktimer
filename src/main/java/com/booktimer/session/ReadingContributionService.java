@@ -57,14 +57,6 @@ public class ReadingContributionService {
         return graphFrom(user, historyService.dailyHistory(user));
     }
 
-    /**
-     * 타인 프로필(SNS)에서 보이는 <b>공개 잔디</b> — PUBLIC 책 세션만 합산한다(sns-design §3.5).
-     * 색 농도 목표·타임존은 대상 사용자 기준(자기 잔디를 자기 기준으로 본다).
-     */
-    public ContributionGraph publicContributionGraph(User user) {
-        return graphFrom(user, historyService.publicDailyHistory(user));
-    }
-
     /** 일자별 집계를 받아 유저 타임존 "오늘"·하루 목표로 잔디 그리드를 만든다(가시성 필터는 호출자가 끝낸 상태). */
     private ContributionGraph graphFrom(User user, List<DailyReadingRecord> history) {
         ZoneId zone = ZoneId.of(user.getTimezone());

@@ -55,17 +55,6 @@ class ReadingHistoryServiceTest {
         return s;
     }
 
-    private Book publicBook(User owner) {
-        Book b = Book.register(owner, "공개 책", null, null, null, null, null, BookStatus.READING);
-        b.makePublic();
-        return b;
-    }
-
-    private Book privateBook(User owner) {
-        // 기본값이 PRIVATE
-        return Book.register(owner, "비공개 책", null, null, null, null, null, BookStatus.READING);
-    }
-
     @Test
     @DisplayName("같은 날 여러 세션은 한 일자로 합산되고 그날 읽은 책 제목이 모인다")
     void dailyHistory_sumsSameDay() {
@@ -191,41 +180,6 @@ class ReadingHistoryServiceTest {
         when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of());
 
         assertThat(service.dailyHistory(user)).isEmpty();
-    }
-
-    // --- 프로필(SNS 2단계) 공개 잔디: PUBLIC 책 세션만 (sns-design §3.5) ---
-
-    @Test
-    @DisplayName("publicDailyHistory: PUBLIC 책 세션만 합산하고 PRIVATE 책·책 미지정 세션은 제외한다")
-    void publicDailyHistory_onlyPublicBookSessions() {
-        User user = seoulUser();
-        Book pub = publicBook(user);
-        Book priv = privateBook(user);
-        Instant t = Instant.parse("2026-06-01T01:00:00Z"); // 06-01 KST
-        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(
-                sessionWithBook(user, t, HOUR, pub),   // 포함 (PUBLIC)
-                sessionWithBook(user, t, HOUR, priv),  // 제외 (PRIVATE — 간접 누출 방지)
-                session(user, t, HOUR)));              // 제외 (book=null — 공개 미명시 활동)
-
-        List<DailyReadingRecord> history = service.publicDailyHistory(user);
-
-        assertThat(history).hasSize(1);
-        assertThat(history.get(0).date()).isEqualTo(LocalDate.of(2026, 6, 1));
-        assertThat(history.get(0).totalSeconds()).isEqualTo(HOUR); // PUBLIC 1개분만
-        assertThat(history.get(0).bookTitles()).containsExactly("공개 책"); // PUBLIC 책 제목만
-    }
-
-    @Test
-    @DisplayName("publicDailyHistory: PUBLIC 책 세션이 하나도 없으면 빈 리스트")
-    void publicDailyHistory_noPublicSessions_empty() {
-        User user = seoulUser();
-        Book priv = privateBook(user);
-        Instant t = Instant.parse("2026-06-01T01:00:00Z");
-        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(
-                sessionWithBook(user, t, HOUR, priv),
-                session(user, t, HOUR)));
-
-        assertThat(service.publicDailyHistory(user)).isEmpty();
     }
 
     // --- 월별 묶음(history 화면 '한 번에 한 달' 보기): YearMonth 그룹·최신월 먼저·월 합계 ---

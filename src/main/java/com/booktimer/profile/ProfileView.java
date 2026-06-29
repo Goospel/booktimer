@@ -1,7 +1,6 @@
 package com.booktimer.profile;
 
 import com.booktimer.book.Book;
-import com.booktimer.session.ContributionGraph;
 
 import java.util.List;
 import java.util.Map;
@@ -19,7 +18,6 @@ import java.util.Map;
  * @param nickname       대상 사용자 표시 이름(중복 가능) — 화면 제목·인사말에 보이는 이름
  * @param books          공개(PUBLIC) 책 목록(최신 등록 먼저)
  * @param bookTimes      책 id → 누적 독서 초(공개 책만)
- * @param graph          공개 잔디(PUBLIC 책 세션만 반영)
  * @param followerCount  팔로워 수(이 사용자를 팔로우하는 사람)
  * @param followingCount 팔로잉 수(이 사용자가 팔로우하는 사람)
  * @param following      viewer가 이 사용자를 팔로우 중인지(버튼 분기)
@@ -37,7 +35,6 @@ public record ProfileView(
         String nickname,
         List<Book> books,
         Map<Long, Long> bookTimes,
-        ContributionGraph graph,
         long followerCount,
         long followingCount,
         boolean following,

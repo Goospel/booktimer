@@ -11,7 +11,6 @@ import com.booktimer.personality.ReadingProfileService;
 import com.booktimer.personality.ReadingTagger;
 import com.booktimer.personality.ReadingTribe;
 import com.booktimer.session.BookReadingStatsService;
-import com.booktimer.session.ReadingContributionService;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -37,7 +36,6 @@ public class ProfileService {
     private final UserRepository userRepository;
     private final BookRepository bookRepository;
     private final BookReadingStatsService statsService;
-    private final ReadingContributionService contributionService;
     private final FollowService followService;
     private final BlockRepository blockRepository;
     private final ReadingPersonalityCacheRepository personalityCacheRepository;
@@ -46,7 +44,6 @@ public class ProfileService {
     public ProfileService(UserRepository userRepository,
                           BookRepository bookRepository,
                           BookReadingStatsService statsService,
-                          ReadingContributionService contributionService,
                           FollowService followService,
                           BlockRepository blockRepository,
                           ReadingPersonalityCacheRepository personalityCacheRepository,
@@ -54,7 +51,6 @@ public class ProfileService {
         this.userRepository = userRepository;
         this.bookRepository = bookRepository;
         this.statsService = statsService;
-        this.contributionService = contributionService;
         this.followService = followService;
         this.blockRepository = blockRepository;
         this.personalityCacheRepository = personalityCacheRepository;
@@ -76,7 +72,6 @@ public class ProfileService {
                     target.getNickname(),
                     bookRepository.findByUserAndVisibilityOrderByCreatedAtDesc(target, BookVisibility.PUBLIC),
                     statsService.publicTotalSecondsByBook(target),
-                    contributionService.publicContributionGraph(target),
                     followService.followerCount(target),
                     followService.followingCount(target),
                     !self && followService.isFollowing(viewer, target),

@@ -192,6 +192,23 @@ class ProfileApiControllerTest {
     }
 
     @Test
+    @DisplayName("GET /api/profile: 남의 독서 잔디(graph)는 응답에 없다 — 현재 미열람 기능, 재유입 가드")
+    void profile_doesNotExposeOthersGrass() throws Exception {
+        // 남의 잔디 열람은 미구현(라우트·직렬화 없음). 죽은 publicContributionGraph 경로를 제거한 뒤,
+        // 누군가 graph를 ProfileResponse에 다시 끼워 넣어 남의 잔디가 새지 않도록 불변식으로 가드한다.
+        register("pa-grass-vw@booktimer.com", "pagrassvw", "뷰어");
+        User owner = register("pa-grass-ow@booktimer.com", "pagrassow", "주인");
+        publicBook(owner, "공개책G");
+
+        mockMvc.perform(get("/api/profile")
+                        .param("loginId", "pagrassow")
+                        .with(user("pa-grass-vw@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.graph").doesNotExist())
+                .andExpect(content().string(not(containsString("\"graph\""))));
+    }
+
+    @Test
     @DisplayName("GET /api/profile/books: PUBLIC 책만, PRIVATE 책 제외")
     void books_onlyPublicBooksInResponse() throws Exception {
         register("pa-vw3@booktimer.com", "pavw3id", "뷰어3");
