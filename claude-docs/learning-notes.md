@@ -6328,9 +6328,9 @@ CRLF→LF는 커밋 때만, 체크아웃 땐 변환 안 함 → 작업트리가 
 
 "공통 친구 N명"·"같이 읽은 책 N권" 같은 근거를 함께 보여주면 수락률이 오른다(연구 다수 — 공통 친구가 많을수록 친구요청 수락 확률이 급증). 저비용 신뢰 레버라 소규모일수록 효과가 크다.
 
-### BookTimer 적용 (친구 추천 1단계, 2026-06-29)
+### BookTimer 적용 (친구 추천 1단계 + 활동량 폴백, 2026-06-29)
 
-`/search` 추천을 순수 랜덤 → **계단식 하이브리드**로: 맞팔 후보(그래프) → 친구의 친구(그래프) → 같은 책(관심사, StoryGraph식) → 랜덤 폴백(콜드스타트). 각 후보에 이유 칩을 단다. 소규모라 무거운 ML(임베딩·random walk)은 과잉이라 **단순·해석가능한 조합**을 택했다. 성향 태그(종족) 유사도는 같은 관심사 엔진이지만 태그가 DB에 영속 안 돼(매 요청 계산) 영속화가 선행이라 2단계로 미룸 — 같은 책(isbn 정규화·인덱스 보유)이 더 싸고 세밀한 같은 신호다.
+`/search` 추천을 순수 랜덤 → **계단식 하이브리드**로: 맞팔 후보(그래프) → 친구의 친구(그래프) → 같은 책(관심사, StoryGraph식) → **활동량 폴백(최근 14일 distinct 활동일 수, → "요즘 꾸준히 읽어요")** → 랜덤 폴백(콜드스타트). 각 후보에 이유 칩을 단다. 소규모라 무거운 ML(임베딩·random walk)은 과잉이라 **단순·해석가능한 조합**을 택했다. 활동량 신호는 `reading_session.started_at`의 distinct DATE 수(14일 윈도우)로 정의 — 세션 수(한 날 여러 번 중복)·recency(순위 역전 가능성)는 기각. 성향 태그(종족) 유사도는 태그가 DB에 영속 안 돼 2단계로 미룸.
 
 ### 비유
 
@@ -6338,5 +6338,5 @@ CRLF→LF는 커밋 때만, 체크아웃 땐 변환 안 함 → 작업트리가 
 
 ### 코드 위치 / 관련
 
-- BookTimer: `UserSearchService.recommend`(계단식 사다리), `FollowRepository.findFriendsOfFriends`·`findFollowBackCandidateIds`(그래프), `BookRepository.findCoReadCandidates`(관심사=같은 책), `RecommendedUser`(이유 칩). plan.md §SNS·changelog 2026-06-29.
+- BookTimer: `UserSearchService.recommend`(계단식 사다리), `FollowRepository.findFriendsOfFriends`·`findFollowBackCandidateIds`(그래프), `BookRepository.findCoReadCandidates`(관심사=같은 책), `ReadingSessionRepository.findActiveReaderCandidates`(활동량 폴백), `RecommendedUser`(이유 칩). plan.md §SNS·changelog 2026-06-29.
 - 관련: [[N-055]](발견 기능의 null-state 경계 — 추천 후보에서 미완성 엔티티 누수 방지), [[N-037]](공개/비공개 게이트 — 후보 PUBLIC만 매칭), T-117(공유 컴포넌트 칩 CSS 함정).

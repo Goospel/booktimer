@@ -5,6 +5,8 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.follow.FollowService;
+import com.booktimer.session.ReadingSession;
+import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.user.AuthProvider;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
@@ -15,6 +17,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,6 +44,8 @@ class UserSearchServiceTest {
     private FollowService followService;
     @Autowired
     private BlockService blockService;
+    @Autowired
+    private ReadingSessionRepository readingSessionRepository;
 
     private User newUser(String email, String loginId, String nickname) {
         User u = User.of(email, "$2a$10$abcdefghijklmnopqrstuv", nickname, "Asia/Seoul", Role.USER);
@@ -281,5 +287,121 @@ class UserSearchServiceTest {
         }
 
         assertThat(searchService.recommend(viewer, 5)).hasSize(5);
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // E 활동량 폴백 테스트 (6개)
+    // ──────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("추천 E(활동량): 활동일 수가 많은 사용자가 더 앞서 추천된다")
+    void recommend_activeReader_orderedByActiveDays() {
+        User viewer = newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User moreActive = newUser("more@booktimer.com", "moreactive", "활발");
+        User lessActive = newUser("less@booktimer.com", "lessactive", "조금활발");
+
+        Instant now = Instant.now();
+        // moreActive: 3개 distinct 날에 읽음
+        readingSessionRepository.save(ReadingSession.start(moreActive, now.minus(1, ChronoUnit.DAYS)));
+        readingSessionRepository.save(ReadingSession.start(moreActive, now.minus(3, ChronoUnit.DAYS)));
+        readingSessionRepository.save(ReadingSession.start(moreActive, now.minus(5, ChronoUnit.DAYS)));
+        // lessActive: 1개 날에 읽음
+        readingSessionRepository.save(ReadingSession.start(lessActive, now.minus(2, ChronoUnit.DAYS)));
+
+        List<RecommendedUser> recs = searchService.recommend(viewer, 10);
+
+        List<String> ids = recs.stream().map(r -> r.row().loginId()).toList();
+        assertThat(ids).contains("moreactive", "lessactive");
+        assertThat(ids.indexOf("moreactive")).isLessThan(ids.indexOf("lessactive"));
+        assertThat(reasonsOf(recs, "moreactive")).containsExactly("요즘 꾸준히 읽어요");
+        assertThat(reasonsOf(recs, "lessactive")).containsExactly("요즘 꾸준히 읽어요");
+    }
+
+    @Test
+    @DisplayName("추천 E(활동량): 14일 이내 활동만 집계 — 15일 전 활동은 신호 대상 아님")
+    void recommend_activeReader_windowBoundary() {
+        User viewer = newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User inWindow = newUser("in@booktimer.com", "inwindow", "기간내");
+        User outWindow = newUser("out@booktimer.com", "outwindow", "기간외");
+
+        Instant now = Instant.now();
+        readingSessionRepository.save(ReadingSession.start(inWindow, now.minus(13, ChronoUnit.DAYS)));
+        readingSessionRepository.save(ReadingSession.start(outWindow, now.minus(15, ChronoUnit.DAYS)));
+
+        List<RecommendedUser> recs = searchService.recommend(viewer, 10);
+
+        // inWindow는 E 신호로 추천됨
+        assertThat(recs.stream().anyMatch(r -> "inwindow".equals(r.row().loginId()))).isTrue();
+        assertThat(reasonsOf(recs, "inwindow")).containsExactly("요즘 꾸준히 읽어요");
+        // outWindow는 E 신호 없음 — 폴백(F)에 나오더라도 이유 칩이 없어야 한다
+        recs.stream()
+                .filter(r -> "outwindow".equals(r.row().loginId()))
+                .forEach(r -> assertThat(r.reasons()).doesNotContain("요즘 꾸준히 읽어요"));
+    }
+
+    @Test
+    @DisplayName("추천 E(활동량): login_id null인 사용자는 활동 기록이 있어도 추천하지 않는다 (N-055)")
+    void recommend_activeReader_excludesNullLoginId() {
+        User viewer = newUser("viewer@booktimer.com", "viewer", "뷰어");
+        // OAuth 온보딩 전 상태 — loginId=null
+        User pending = userRepository.save(
+                User.ofOAuth("pending@booktimer.com", "구글이름", "Asia/Seoul", Role.USER, AuthProvider.GOOGLE));
+        readingSessionRepository.save(ReadingSession.start(pending, Instant.now().minus(2, ChronoUnit.DAYS)));
+
+        List<RecommendedUser> recs = searchService.recommend(viewer, 10);
+
+        // login_id=null인 사용자는 추천에 떠선 안 됨
+        assertThat(recs.stream().anyMatch(r -> r.row().loginId() == null)).isFalse();
+        assertThat(recs).isEmpty(); // viewer 외엔 pending뿐이고 그건 제외
+    }
+
+    @Test
+    @DisplayName("추천 E(활동량): G1/G2/C 신호 없어도 꾸준히 읽는 사람을 이유 칩과 함께 채운다")
+    void recommend_activeReader_fillsWhenNoOtherSignals() {
+        User viewer = newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User activeReader = newUser("active@booktimer.com", "activereader", "꾸준독서가");
+        // 팔로우/같은책 신호 없음, 활동 기록만 있음
+        readingSessionRepository.save(ReadingSession.start(activeReader, Instant.now().minus(3, ChronoUnit.DAYS)));
+
+        List<RecommendedUser> recs = searchService.recommend(viewer, 10);
+
+        assertThat(recs.stream().anyMatch(r -> "activereader".equals(r.row().loginId()))).isTrue();
+        assertThat(reasonsOf(recs, "activereader")).containsExactly("요즘 꾸준히 읽어요");
+    }
+
+    @Test
+    @DisplayName("추천 E(활동량): 활동 신호 있는 사람이 순수 랜덤 폴백(이유 없음)보다 먼저 나온다")
+    void recommend_activeReader_beforeRandomFallback() {
+        User viewer = newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User activeReader = newUser("active@booktimer.com", "activereader", "꾸준독서가");
+        User randomUser = newUser("random@booktimer.com", "randomuser", "무신호");
+        // activeReader만 활동 기록 있음; randomUser는 신호 없음(→ F 폴백)
+        readingSessionRepository.save(ReadingSession.start(activeReader, Instant.now().minus(3, ChronoUnit.DAYS)));
+
+        List<RecommendedUser> recs = searchService.recommend(viewer, 10);
+
+        List<String> ids = recs.stream().map(r -> r.row().loginId()).toList();
+        assertThat(ids).contains("activereader", "randomuser");
+        assertThat(ids.indexOf("activereader")).isLessThan(ids.indexOf("randomuser"));
+    }
+
+    @Test
+    @DisplayName("추천 dedup: 같은 책 읽고(C) + 활동도 꾸준한(E) 사람은 한 줄로 합쳐 이유를 모두 단다")
+    void recommend_activeReader_dedupWithCoRead() {
+        User viewer = newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User overlap = newUser("overlap@booktimer.com", "overlapcand", "중복후보");
+        // C 신호: 같은 ISBN PUBLIC 완독
+        publicReadBook(viewer, "9788900000011");
+        publicReadBook(overlap, "9788900000011");
+        // E 신호: 최근 활동
+        readingSessionRepository.save(ReadingSession.start(overlap, Instant.now().minus(2, ChronoUnit.DAYS)));
+
+        List<RecommendedUser> recs = searchService.recommend(viewer, 10);
+
+        // 한 줄로 dedup
+        assertThat(recs.stream().filter(r -> "overlapcand".equals(r.row().loginId()))).hasSize(1);
+        // C 이유 + E 이유 합집합
+        assertThat(reasonsOf(recs, "overlapcand"))
+                .containsExactlyInAnyOrder("같이 읽은 책 1권", "요즘 꾸준히 읽어요");
     }
 }

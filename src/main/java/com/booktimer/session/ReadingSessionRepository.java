@@ -136,6 +136,31 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
     void unlinkBook(@Param("book") Book book);
 
     /**
+     * 친구 추천 활동량 폴백(E 생성기) — {@code since} 이후 distinct 활동일(DATE(startedAt)) 수가 많은 사용자 순.
+     * 노출 불변식: ADMIN·본인·login_id null·차단(양방향)·이미 팔로우 제외.
+     */
+    @Query("""
+            select s.user.id as userId,
+                   count(distinct function('date', s.startedAt)) as activeDayCount
+            from ReadingSession s
+            where s.startedAt >= :since
+              and s.user.id <> :viewerId
+              and s.user.role <> com.booktimer.user.Role.ADMIN
+              and s.user.loginId is not null
+              and not exists (select 1 from com.booktimer.follow.Follow f
+                              where f.follower.id = :viewerId and f.followee.id = s.user.id)
+              and not exists (select 1 from com.booktimer.block.Block b
+                              where (b.blocker.id = :viewerId and b.blocked.id = s.user.id)
+                                 or (b.blocker.id = s.user.id and b.blocked.id = :viewerId))
+            group by s.user.id
+            order by count(distinct function('date', s.startedAt)) desc, s.user.id asc
+            """)
+    List<ActiveDayCount> findActiveReaderCandidates(
+            @Param("viewerId") Long viewerId,
+            @Param("since") java.time.Instant since,
+            Pageable pageable);
+
+    /**
      * 비활동 복귀 nudge 푸시 발송 대상 사용자(PWA L3b). 이메일 {@link #findNudgeTargets}와 다른 핵심:
      * <ul>
      *   <li>{@code emailVerified} 조건 없음 — 푸시는 브라우저 구독 자체가 검증, 반송·평판 이슈 없음.</li>
