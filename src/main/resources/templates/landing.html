@@ -21,8 +21,8 @@
             <span class="lp-nav-emoji">📚</span> BookTimer
         </a>
         <ul class="lp-nav-links">
-            <li><a th:href="@{/village}">독서 마을</a></li>
-            <li><a th:href="@{/social}">함께 읽기</a></li>
+            <li><a href="#village">독서 마을</a></li>
+            <li><a href="#together">함께 읽기</a></li>
         </ul>
         <a th:href="@{/signup}" class="lp-nav-cta">무료로 시작하기</a>
     </div>
@@ -185,22 +185,69 @@
         </div>
     </section>
 
-    <!-- ④ 독서 정원 섹션 -->
-    <section class="lp-section">
+    <!-- ④ 독서 마을 섹션 -->
+    <section class="lp-section" id="village">
         <div class="lp-grid-2col-c">
             <div class="lp-section-text">
                 <span class="lp-section-label">독서 마을</span>
                 <h2 class="lp-section-title lp-serif">자라는 나의 마을</h2>
                 <p class="lp-section-lead">
-                    쌓인 독서 시간으로 식물을 심고 마을을 가꿔요.
-                    권수를 세는 대신, 매일 조금씩 자라는 걸 보면서 읽게 됩니다.
+                    쌓인 독서 시간이 마을이 됩니다. 읽을수록 작가들이 모여들고,
+                    새 건물이 하나씩 들어서요. 권수를 세는 대신, 매일 조금씩
+                    자라는 마을을 보면서 읽게 됩니다.
                 </p>
-                <a th:href="@{/village}" class="lp-section-link">마을 둘러보기 →</a>
+                <a th:href="@{/signup}" class="lp-section-link">무료로 시작하고 마을 만들기 →</a>
             </div>
             <div class="lp-placeholder">
                 <span class="lp-placeholder-icon">🏡</span>
                 <p class="lp-placeholder-label">독서 마을 · 아이소메트릭 게임화 마을 자리</p>
                 <p class="lp-placeholder-sub">실제 캡처로 교체 예정</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ④-b 함께 읽기 섹션 -->
+    <section class="lp-section" id="together">
+        <div class="lp-grid-2col-c">
+            <div class="lp-section-text">
+                <span class="lp-section-label">함께 읽기</span>
+                <h2 class="lp-section-title lp-serif">혼자보다 오래, 함께</h2>
+                <p class="lp-section-lead">
+                    읽는 친구를 찾아 팔로우하고, 서로의 공개 프로필에서
+                    독서 잔디와 마을을 구경해요. 누군가 읽고 있다는 사실이
+                    오늘 한 페이지의 가장 큰 응원이 됩니다.
+                </p>
+                <a th:href="@{/signup}" class="lp-section-link">함께 읽기 시작하기 →</a>
+            </div>
+            <!-- 팔로잉 미리보기 CSS 목업 — 정적 데모(실데이터 아님) -->
+            <div class="lp-social-card" aria-label="함께 읽는 사람들 미리보기">
+                <div class="lp-social-head">
+                    <span class="lp-social-title">함께 읽는 사람들</span>
+                    <span class="lp-grass-badge">팔로잉 미리보기</span>
+                </div>
+                <ul class="lp-social-list" aria-hidden="true">
+                    <li class="lp-social-row">
+                        <span class="lp-social-avatar">🦊</span>
+                        <span class="lp-social-name">여우의서재</span>
+                        <span class="lp-social-mini">
+                            <i class="g2"></i><i class="g3"></i><i class="g5"></i><i class="g4"></i><i class="g5"></i>
+                        </span>
+                    </li>
+                    <li class="lp-social-row">
+                        <span class="lp-social-avatar">🐢</span>
+                        <span class="lp-social-name">느림보독서</span>
+                        <span class="lp-social-mini">
+                            <i class="g1"></i><i class="g3"></i><i class="g4"></i><i class="g3"></i><i class="g4"></i>
+                        </span>
+                    </li>
+                    <li class="lp-social-row">
+                        <span class="lp-social-avatar">🦉</span>
+                        <span class="lp-social-name">밤샘올빼미</span>
+                        <span class="lp-social-mini">
+                            <i class="g3"></i><i class="g5"></i><i class="g4"></i><i class="g5"></i><i class="g5"></i>
+                        </span>
+                    </li>
+                </ul>
             </div>
         </div>
     </section>
@@ -228,9 +275,19 @@
                 <p class="lp-feature-desc">읽는 중·다 읽은 책을 한곳에 모아 둬요.</p>
             </div>
             <div class="lp-feature-card">
+                <div class="lp-feature-icon">📊</div>
+                <h3 class="lp-feature-name">독서 기록</h3>
+                <p class="lp-feature-desc">읽은 시간이 날짜별로 쌓여 한눈에 돌아봐요.</p>
+            </div>
+            <div class="lp-feature-card">
+                <div class="lp-feature-icon">🧬</div>
+                <h3 class="lp-feature-name">책BTI</h3>
+                <p class="lp-feature-desc">나의 독서 성향을 진단해 알려줘요.</p>
+            </div>
+            <div class="lp-feature-card">
                 <div class="lp-feature-icon">👥</div>
                 <h3 class="lp-feature-name">함께 읽기</h3>
-                <p class="lp-feature-desc">친구와 같이 읽고 서로의 잔디를 응원해요.</p>
+                <p class="lp-feature-desc">친구를 찾아 팔로우하고 서로의 잔디를 구경해요.</p>
             </div>
         </div>
     </section>

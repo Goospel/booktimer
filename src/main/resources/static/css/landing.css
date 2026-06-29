@@ -4,6 +4,7 @@
 body.landing-page {
     display: block;
     padding: 0;
+    scroll-behavior: smooth; /* 상단 네비 #village·#together 앵커 점프를 부드럽게 */
 }
 
 /* 세리프 헬퍼 — 헤드라인·섹션 타이틀에만 Gowun Batang 적용 */
@@ -151,6 +152,7 @@ body.landing-page {
 .lp-cta-stack .btn {
     text-decoration: none;
     text-align: center;
+    border-radius: var(--radius-sm); /* nav-cta·bottom-cta와 라운드 통일(8px) */
 }
 
 /* ================================================================
@@ -196,6 +198,7 @@ body.landing-page {
 .lp-section {
     padding: 80px 0;
     border-bottom: 1px solid var(--border);
+    scroll-margin-top: 80px; /* sticky 네비(64px)에 앵커 타겟 제목이 가리지 않도록 */
 }
 
 .lp-section-label {
@@ -263,7 +266,7 @@ body.landing-page {
 .lp-grass-card {
     background: var(--card-bg);
     border: 1px solid var(--border);
-    border-radius: 16px;
+    border-radius: var(--radius); /* 앱 .card(14px)와 통일 */
     padding: 24px;
     box-shadow: var(--shadow);
 }
@@ -322,6 +325,92 @@ body.landing-page {
 }
 
 /* ================================================================
+   함께 읽기 — 팔로잉 미리보기 CSS 목업
+   ================================================================ */
+.lp-social-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    box-shadow: var(--shadow);
+}
+
+.lp-social-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.lp-social-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.lp-social-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.lp-social-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+}
+
+.lp-social-avatar {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    line-height: 1;
+    background: var(--sage-soft);
+    border-radius: 50%;
+}
+
+.lp-social-name {
+    flex: 1;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text);
+    word-break: keep-all;
+}
+
+.lp-social-mini {
+    display: inline-flex;
+    gap: 3px;
+    flex-shrink: 0;
+}
+
+.lp-social-mini i {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    background: var(--border);
+}
+
+/* 잔디 농도 색 재사용 — lp-grass-cell과 동일 스케일 */
+.lp-social-mini i.g1 { background: var(--sage-2); }
+.lp-social-mini i.g2 { background: var(--sage-4); }
+.lp-social-mini i.g3 { background: var(--sage-5); }
+.lp-social-mini i.g4 { background: var(--sage-7); }
+.lp-social-mini i.g5 { background: var(--accent-hover); }
+
+/* ================================================================
    기능 그리드
    ================================================================ */
 .lp-features-section {
@@ -338,7 +427,7 @@ body.landing-page {
 
 .lp-features-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 20px;
 }
 
@@ -346,7 +435,7 @@ body.landing-page {
     background: var(--card-bg);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 28px 22px;
+    padding: 24px; /* 앱 .card와 패딩 통일 */
     box-shadow: var(--shadow);
 }
 
