@@ -10,7 +10,7 @@ const MOCK_RESPONSE = {
     q: null,
     results: [],
     recommendations: [
-        { loginId: 'recuser1', nickname: '추천1', publicBookCount: 3, following: false, self: false },
+        { loginId: 'recuser1', nickname: '추천1', publicBookCount: 3, following: false, self: false, reasons: ['공통 친구 3명'] },
     ],
     myLoginId: 'testuser',
     rateLimited: false,
@@ -61,6 +61,15 @@ describe('SearchApp', () => {
         await vi.waitFor(() => {
             expect(wrapper.text()).toContain('추천1');
         });
+    });
+
+    test('추천 행에 "추천 이유" 칩이 렌더링된다', async () => {
+        setupDom();
+        const wrapper = mount(SearchApp, { attachTo: document.body });
+        await vi.waitFor(() => {
+            expect(wrapper.text()).toContain('공통 친구 3명');
+        });
+        expect(wrapper.find('.reason-chip').exists()).toBe(true);
     });
 
     test('rateLimited=true 응답 시 레이트리밋 안내가 노출된다', async () => {

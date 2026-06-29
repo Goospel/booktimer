@@ -3,12 +3,12 @@
 // 마운트 엘리먼트 dataset에 의존하지 않게 prop만 받는다(책방 섬에서도 재사용 가능).
 // 팔로우 토글·CSRF는 shared/follow 재사용(SearchApp 인라인과 동일 동작 — 기존 테스트 보존).
 import { ref, onMounted } from 'vue';
-import { toggleFollow as doToggleFollow, type UserRowData } from './follow';
+import { toggleFollow as doToggleFollow, type UserRowData, type RecommendedUser } from './follow';
 
 interface SearchResponse {
     q: string | null;
     results: UserRowData[];
-    recommendations: UserRowData[];
+    recommendations: RecommendedUser[];
     myLoginId: string;
     rateLimited: boolean;
 }
@@ -25,7 +25,7 @@ const props = withDefaults(defineProps<{
 
 const searchQuery = ref(props.initialQ);
 const results = ref<UserRowData[]>([]);
-const recommendations = ref<UserRowData[]>([]);
+const recommendations = ref<RecommendedUser[]>([]);
 const rateLimited = ref(false);
 const loading = ref(false);
 const searched = ref(false);
@@ -104,6 +104,9 @@ function onSearch() {
                 <div class="book-meta">
                     <a class="book-title" :href="`/u/${r.loginId}`">{{ r.nickname }}</a>
                     <span class="book-author">@{{ r.loginId }} · 공개 책 {{ r.publicBookCount }}권</span>
+                    <span v-if="r.reasons && r.reasons.length" class="reason-chips">
+                        <span v-for="reason in r.reasons" :key="reason" class="reason-chip">{{ reason }}</span>
+                    </span>
                 </div>
                 <div class="book-actions">
                     <span v-if="r.self" class="book-status-badge">나</span>
