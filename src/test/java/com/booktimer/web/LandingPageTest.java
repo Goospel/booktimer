@@ -9,6 +9,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -89,5 +90,26 @@ class LandingPageTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("마을")))
                 .andExpect(content().string(containsString("잔디")));
+    }
+
+    @Test
+    @DisplayName("랜딩 브랜드 로고가 앱 전역과 같은 통일 SVG(brand-ico)를 쓴다(옛 📚 이모지 잔재 제거)")
+    void landing_usesUnifiedBrandLogo() throws Exception {
+        // 홈·책장·기록·프로필·로그인·회원가입 전부 brand-ico 책등 SVG로 통일됐는데 랜딩만 📚 이모지가 남아 있었다.
+        // 로고가 앱 통일 마크와 어긋나지 않도록 구조 불변식으로 가드한다.
+        mockMvc.perform(get("/"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("brand-ico")));
+    }
+
+    @Test
+    @DisplayName("랜딩은 '남의 잔디·마을 구경'처럼 현재 없는 기능을 광고하지 않는다")
+    void landing_doesNotAdvertiseViewingOthersGardenOrGrass() throws Exception {
+        // 남의 독서 잔디·마을 열람은 미구현(마을·잔디 라우트는 본인 전용, 남의 공개 잔디는 직렬화 안 되는 dead-code).
+        // 거짓 광고가 다시 새어들지 않게 진실성 불변식으로 가드한다. '마을'·'잔디' 자체(본인 기능 소개)는 허용.
+        mockMvc.perform(get("/"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(not(containsString("독서 잔디와 마을을 구경"))))
+                .andExpect(content().string(not(containsString("서로의 잔디를 구경"))));
     }
 }

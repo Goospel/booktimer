@@ -46,7 +46,8 @@ body.landing-page {
     white-space: nowrap;
 }
 
-.lp-nav-emoji { font-size: 1.15rem; }
+/* 브랜드 로고 SVG — .lp-nav-brand가 align-items:baseline이라 SVG가 떠 보여 광학 중앙 정렬(app.css .brand-ico와 동일 처리) */
+.lp-nav-brand svg { align-self: center; flex: 0 0 auto; }
 
 .lp-nav-links {
     display: flex;
@@ -382,33 +383,27 @@ body.landing-page {
     border-radius: 50%;
 }
 
-.lp-social-name {
+.lp-social-info {
     flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.lp-social-name {
     font-size: 0.9rem;
     font-weight: 600;
     color: var(--text);
     word-break: keep-all;
 }
 
-.lp-social-mini {
-    display: inline-flex;
-    gap: 3px;
-    flex-shrink: 0;
+/* 팔로잉 미리보기 메타 — 실제 팔로잉 목록(/me/following)의 '공개 책 N권'을 미러링.
+   남의 잔디·마을은 열람 불가라 미니 잔디바를 두지 않는다(거짓 광고 방지). */
+.lp-social-meta {
+    font-size: 0.78rem;
+    color: var(--muted);
 }
-
-.lp-social-mini i {
-    width: 10px;
-    height: 10px;
-    border-radius: 2px;
-    background: var(--border);
-}
-
-/* 잔디 농도 색 재사용 — lp-grass-cell과 동일 스케일 */
-.lp-social-mini i.g1 { background: var(--sage-2); }
-.lp-social-mini i.g2 { background: var(--sage-4); }
-.lp-social-mini i.g3 { background: var(--sage-5); }
-.lp-social-mini i.g4 { background: var(--sage-7); }
-.lp-social-mini i.g5 { background: var(--accent-hover); }
 
 /* ================================================================
    기능 그리드
@@ -440,8 +435,15 @@ body.landing-page {
 }
 
 .lp-feature-icon {
-    font-size: 2rem;
     margin-bottom: 14px;
+    line-height: 0; /* SVG 아래 여백 제거 */
+}
+
+/* 기능 아이콘 = 앱 라인아트 SVG. 앱 타일 아이콘과 같은 accent 그린, 2rem 크기로 통일. */
+.lp-feature-icon svg {
+    width: 2rem;
+    height: 2rem;
+    color: var(--accent);
 }
 
 .lp-feature-name {

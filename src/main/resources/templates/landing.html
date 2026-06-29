@@ -18,7 +18,9 @@
 <nav class="lp-nav">
     <div class="lp-nav-inner">
         <a th:href="@{/}" class="lp-nav-brand">
-            <span class="lp-nav-emoji">📚</span> BookTimer
+            <!-- 앱 전역(홈·책장·로그인 등)과 동일한 brand-ico 책등 SVG로 통일. currentColor로 .lp-nav-brand 색 상속. -->
+            <svg class="brand-ico" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="3.4" height="16" rx="1"/><rect x="9.3" y="4" width="3.4" height="16" rx="1"/><path d="M15 5.4l3.3-.7 2.4 15.4-3.3.7z"/></svg>
+            <span>BookTimer</span>
         </a>
         <ul class="lp-nav-links">
             <li><a href="#village">독서 마을</a></li>
@@ -178,7 +180,7 @@
                     <div class="lp-grass-cell g5"></div>
                 </div>
                 <div class="lp-grass-footer">
-                    <span>🌱 꾸준히 읽는 중</span>
+                    <span>꾸준히 읽는 중</span>
                     <span>적음 ← → 많음</span>
                 </div>
             </div>
@@ -213,13 +215,15 @@
                 <span class="lp-section-label">함께 읽기</span>
                 <h2 class="lp-section-title lp-serif">혼자보다 오래, 함께</h2>
                 <p class="lp-section-lead">
-                    읽는 친구를 찾아 팔로우하고, 서로의 공개 프로필에서
-                    독서 잔디와 마을을 구경해요. 누군가 읽고 있다는 사실이
+                    읽는 친구를 찾아 팔로우하고, 서로의 책방에서
+                    공개한 책과 책BTI를 구경해요. 누군가 읽고 있다는 사실이
                     오늘 한 페이지의 가장 큰 응원이 됩니다.
                 </p>
                 <a th:href="@{/signup}" class="lp-section-link">함께 읽기 시작하기 →</a>
             </div>
-            <!-- 팔로잉 미리보기 CSS 목업 — 정적 데모(실데이터 아님) -->
+            <!-- 팔로잉 미리보기 CSS 목업 — 정적 데모(실데이터 아님).
+                 실제 팔로잉 목록(/me/following)이 보여주는 '공개 책 N권'을 그대로 미러링한다.
+                 ⚠️ 남의 독서 잔디·마을은 현재 열람 불가라 미니 잔디바를 넣지 않는다(거짓 광고 방지). -->
             <div class="lp-social-card" aria-label="함께 읽는 사람들 미리보기">
                 <div class="lp-social-head">
                     <span class="lp-social-title">함께 읽는 사람들</span>
@@ -228,23 +232,23 @@
                 <ul class="lp-social-list" aria-hidden="true">
                     <li class="lp-social-row">
                         <span class="lp-social-avatar">🦊</span>
-                        <span class="lp-social-name">여우의서재</span>
-                        <span class="lp-social-mini">
-                            <i class="g2"></i><i class="g3"></i><i class="g5"></i><i class="g4"></i><i class="g5"></i>
+                        <span class="lp-social-info">
+                            <span class="lp-social-name">여우의서재</span>
+                            <span class="lp-social-meta">공개 책 24권</span>
                         </span>
                     </li>
                     <li class="lp-social-row">
                         <span class="lp-social-avatar">🐢</span>
-                        <span class="lp-social-name">느림보독서</span>
-                        <span class="lp-social-mini">
-                            <i class="g1"></i><i class="g3"></i><i class="g4"></i><i class="g3"></i><i class="g4"></i>
+                        <span class="lp-social-info">
+                            <span class="lp-social-name">느림보독서</span>
+                            <span class="lp-social-meta">공개 책 8권</span>
                         </span>
                     </li>
                     <li class="lp-social-row">
                         <span class="lp-social-avatar">🦉</span>
-                        <span class="lp-social-name">밤샘올빼미</span>
-                        <span class="lp-social-mini">
-                            <i class="g3"></i><i class="g5"></i><i class="g4"></i><i class="g5"></i><i class="g5"></i>
+                        <span class="lp-social-info">
+                            <span class="lp-social-name">밤샘올빼미</span>
+                            <span class="lp-social-meta">공개 책 51권</span>
                         </span>
                     </li>
                 </ul>
@@ -259,35 +263,49 @@
             <h2 class="lp-section-title lp-serif">작게 시작하고, 꾸준히 쌓아요</h2>
         </div>
         <div class="lp-features-grid">
+            <!-- 기능 아이콘 = 앱 라인아트 SVG(viewBox 0 0 24 / stroke 1.6 / currentColor)로 통일.
+                 path는 fragments/nav-icons.html·navIcons.ts의 검증된 값을 인라인 복사(SSR 전용, 번들 무관). -->
             <div class="lp-feature-card">
-                <div class="lp-feature-icon">⏱️</div>
+                <div class="lp-feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12.5" r="7.5"/><path d="M12 8.5v4.2l2.8 1.8"/><path d="M9.5 3.5h5"/></svg>
+                </div>
                 <h3 class="lp-feature-name">시간 측정</h3>
                 <p class="lp-feature-desc">오늘 얼마나 읽었는지 타이머가 자동으로 기록해요.</p>
             </div>
             <div class="lp-feature-card">
-                <div class="lp-feature-icon">🎯</div>
+                <div class="lp-feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></svg>
+                </div>
                 <h3 class="lp-feature-name">하루 목표</h3>
                 <p class="lp-feature-desc">N분이면 충분해요. 부담 없는 작은 목표부터.</p>
             </div>
             <div class="lp-feature-card">
-                <div class="lp-feature-icon">📖</div>
+                <div class="lp-feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="3.4" height="16" rx="1"/><rect x="9.3" y="4" width="3.4" height="16" rx="1"/><path d="M15 5.4l3.3-.7 2.4 15.4-3.3.7z"/></svg>
+                </div>
                 <h3 class="lp-feature-name">내 책장</h3>
                 <p class="lp-feature-desc">읽는 중·다 읽은 책을 한곳에 모아 둬요.</p>
             </div>
             <div class="lp-feature-card">
-                <div class="lp-feature-icon">📊</div>
+                <div class="lp-feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 20h18"/><path d="M6 20v-6"/><path d="M12 20V6"/><path d="M18 20v-9"/></svg>
+                </div>
                 <h3 class="lp-feature-name">독서 기록</h3>
                 <p class="lp-feature-desc">읽은 시간이 날짜별로 쌓여 한눈에 돌아봐요.</p>
             </div>
             <div class="lp-feature-card">
-                <div class="lp-feature-icon">🧬</div>
+                <div class="lp-feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4c0 5 10 5 10 8s-10 3-10 8"/><path d="M17 4c0 5-10 5-10 8s10 3 10 8"/><path d="M8.5 7h7"/><path d="M8.5 17h7"/></svg>
+                </div>
                 <h3 class="lp-feature-name">책BTI</h3>
                 <p class="lp-feature-desc">나의 독서 성향을 진단해 알려줘요.</p>
             </div>
             <div class="lp-feature-card">
-                <div class="lp-feature-icon">👥</div>
+                <div class="lp-feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.4a3 3 0 0 1 0 5.2"/><path d="M17.5 13.2A5.5 5.5 0 0 1 20.5 19"/></svg>
+                </div>
                 <h3 class="lp-feature-name">함께 읽기</h3>
-                <p class="lp-feature-desc">친구를 찾아 팔로우하고 서로의 잔디를 구경해요.</p>
+                <p class="lp-feature-desc">친구를 찾아 팔로우하고 서로의 책방(공개한 책·책BTI)을 구경해요.</p>
             </div>
         </div>
     </section>
