@@ -134,6 +134,7 @@
 - [T-114. preview_inspect가 border-radius·padding 등 shorthand CSS를 빈 객체로 반환 — longhand나 eval getComputedStyle로 읽어라](#t-114-preview_inspect가-border-radiuspadding-등-shorthand-css를-빈-객체로-반환--longhand나-eval-getcomputedstyle로-읽어라)
 - [T-115. 워크트리에서 작업한 세션이 그 워크트리를 직접 정리하면 최상위 빈 폴더가 안 지워진다(세션 cwd 점유)](#t-115-워크트리에서-작업한-세션이-그-워크트리를-직접-정리하면-최상위-빈-폴더가-안-지워진다세션-cwd-점유)
 - [T-116. 순수 마크업/CSS 변경이라 '단위 TDD 무의미'라 본 게 기존 통합 테스트를 놓쳐 CI에서 RED](#t-116-순수-마크업css-변경이라-단위-tdd-무의미라-본-게-기존-통합-테스트를-놓쳐-ci에서-red)
+- [T-117. 공유 Vue 컴포넌트에 `<style scoped>`를 넣으면 페이지가 링크하지 않는 별도 번들 CSS가 생성된다](#t-117-공유-vue-컴포넌트에-style-scoped를-넣으면-페이지가-링크하지-않는-별도-번들-css가-생성된다)
 
 ---
 
@@ -2221,6 +2222,18 @@ git worktree remove ../BookTimer-<task>
 
 ---
 
+## T-117. 공유 Vue 컴포넌트에 `<style scoped>`를 넣으면 페이지가 링크하지 않는 별도 번들 CSS가 생성된다
+
+**증상**: 검색·내 책방이 공유하는 `UserSearchPanel.vue`에 추천 이유 칩용 `<style scoped>`를 추가했더니 vite 빌드가 새 산출물 `src/main/resources/static/search/search.css`를 생성. 그런데 `search.html`은 `app.css`와 `search.js`만 `<link>`하고 이 CSS는 안 받아, 실 페이지에서 칩이 무스타일(전역 fallback)로 뜬다. 게다가 컴포넌트가 둘 이상 페이지(검색·내 책방)에서 쓰여 페이지별 `<link>` 추가는 한쪽 누락이 쉽다.
+
+**원인**: 이 프로젝트의 Vue 섬은 **컴포넌트에 `<style>`을 두지 않고 전역 `app.css` 클래스만 쓰는** 패턴이다(기존 `UserSearchPanel.vue`엔 `<style>`이 없었음 — `book-meta`·`book-author` 등 전역 클래스 사용). 컴포넌트에 `<style scoped>`를 넣으면 vite가 그 섬 번들 옆에 `<bundle>.css`를 따로 뽑는데, Thymeleaf 템플릿이 그 파일을 `<link>`하지 않는 한 JS 번들만 로드돼 스타일이 적용되지 않는다(헤드리스 vitest는 CSS 불요라 통과해 못 잡음 — 실 페이지에서만 드러남).
+
+**해결**: 공유 컴포넌트의 스타일은 `<style scoped>`가 아니라 **전역 `app.css`에 클래스로** 넣는다(기존 `.book-status-badge` pill 레시피를 재사용하면 테마 일관성도 덤). 이미 생긴 orphan `<bundle>.css`는 삭제하고 재빌드해 산출물을 JS 번들만 남긴다. 페이지별 `<link>` 추가는 공유 컴포넌트엔 부적합(소비 페이지마다 누락 위험).
+
+**관련**: 「🛠️ 빌드/실행 메모 — 프론트 번들」, T-063·T-082(번들 stale 군), N-083(헤드리스가 못 보는 클라 사각). 친구 추천 칩 작업(2026-06-29). 1회차 신규.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2341,3 +2354,4 @@ git worktree remove ../BookTimer-<task>
 | 2026-06-29 | T-114 (preview_inspect가 border-radius·padding 등 shorthand CSS를 빈 객체 `{}`로 반환 — 같은 호출의 display·background-color·width 등 longhand/단일값은 정상 / 해결=longhand로 요청(border-top-left-radius·padding-top)하거나 preview_eval로 getComputedStyle 직접 읽기(shorthand 정확), 여러 요소 IIFE pick으로 1콜 / 랜딩 디자인 토큰 통일(버튼 8px·카드 14px/24px) 검증 때 발생, T-112와 같은 preview 도구 검증 한계 결, 1회차 신규) |
 | 2026-06-29 | T-115 (워크트리에서 작업한 세션이 그 워크트리를 직접 정리하면 최상위 빈 폴더가 안 지워짐 — 세션이 폴더를 cwd로 점유(harness가 매 호출 후 워크트리로 cwd reset)해 `git worktree remove`가 Permission denied/Device or resource busy, worktree list·메타·내부파일은 정리되나 빈 폴더 잔존 / 해결=정션 끊기+`worktree prune`+`branch -D`로 실질 정리하고 빈 폴더는 세션 종료 후 `rmdir`(다음 SessionStart가 치우기도), 또는 정리를 메인·다른 세션에서 / T-105 재발 2회차 cwd-점유 군) |
 | 2026-06-29 | T-116 (순수 마크업/CSS 변경이라 '단위 TDD 무의미'라 보고 preview만 했는데 기존 통합 테스트(@SpringBootTest MockMvc)가 CI에서 RED — LandingPageTest가 렌더 HTML의 /village 링크를 containsString으로 검증 중이라 #village 앵커 전환에 깨짐 / 해결=마크업·링크·문구 변경 전 그 문자열·경로·뷰명을 검증하는 기존 테스트 grep, 의도된 변경이면 새 동작에 맞게 갱신하고 변경 전 로컬 RED 먼저 확인 / 1회차 신규) |
+| 2026-06-29 | T-117 (공유 Vue 컴포넌트에 `<style scoped>` 추가 → vite가 페이지가 `<link>` 안 하는 별도 `<bundle>.css`(search.css) 생성, 칩이 무스타일로 뜸 — 헤드리스 vitest는 CSS 불요라 통과해 못 잡고 실 페이지에서만 드러남 / 원인=이 프로젝트 Vue 섬은 컴포넌트 `<style>` 없이 전역 app.css 클래스만 쓰는 패턴 / 해결=공유 컴포넌트 스타일은 전역 app.css 클래스로(`.book-status-badge` pill 레시피 재사용), orphan css 삭제+재빌드해 산출물 JS만 / 페이지별 `<link>`는 공유 컴포넌트엔 누락 위험 / T-063·T-082 번들 군·N-083, 친구 추천 칩 작업, 1회차 신규) |
