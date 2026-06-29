@@ -61,11 +61,25 @@ class LandingPageTest {
     }
 
     @Test
-    @DisplayName("랜딩에 독서 마을 진입 동선(/village)이 있다")
-    void landing_hasVillageLink() throws Exception {
+    @DisplayName("랜딩에 독서 마을 소개 섹션·앵커 동선(#village)이 있다")
+    void landing_hasVillageSection() throws Exception {
+        // 비로그인 방문자를 로그인 필요한 /village로 직접 보내면 로그인으로 튕긴다.
+        // 대신 페이지 내 마을 소개 섹션(#village)으로 안내하고 회원가입(/signup)으로 유도한다.
         mockMvc.perform(get("/"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("/village")));
+                .andExpect(content().string(containsString("id=\"village\"")))
+                .andExpect(content().string(containsString("#village")));
+    }
+
+    @Test
+    @DisplayName("랜딩에 함께 읽기 소개 섹션·앵커 동선(#together)이 있다")
+    void landing_hasTogetherSection() throws Exception {
+        // '함께 읽기'는 단일 페이지(/social)가 없고 검색·팔로우·공개 프로필로 분산돼 있어,
+        // 비로그인 랜딩에선 소개 섹션(#together)으로 안내한 뒤 회원가입으로 유도한다.
+        mockMvc.perform(get("/"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("id=\"together\"")))
+                .andExpect(content().string(containsString("#together")));
     }
 
     @Test
