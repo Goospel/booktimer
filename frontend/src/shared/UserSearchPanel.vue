@@ -38,7 +38,9 @@ async function fetchSearch(q: string) {
         if (!res.ok) return;
         const data: SearchResponse = await res.json();
         results.value = data.results;
-        recommendations.value = data.recommendations;
+        if (!q.trim()) {
+            recommendations.value = data.recommendations; // 진입(q 없음)에서만 추천 세팅 — 검색 시엔 진입 때 받은 추천 유지
+        }
         rateLimited.value = data.rateLimited;
         searched.value = true;
     } finally {

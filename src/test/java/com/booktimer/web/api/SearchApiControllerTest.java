@@ -1,6 +1,8 @@
 package com.booktimer.web.api;
 
 import com.booktimer.follow.FollowService;
+import com.booktimer.security.RateLimitAction;
+import com.booktimer.security.RateLimitService;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
@@ -50,6 +52,9 @@ class SearchApiControllerTest {
 
     @Autowired
     private Clock clock;
+
+    @Autowired
+    private RateLimitService rateLimitService;
 
     private LocalDate today() {
         return LocalDate.ofInstant(clock.instant(), ZoneId.of(SEOUL));
@@ -143,5 +148,68 @@ class SearchApiControllerTest {
                         .with(user("search-myid@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.myLoginId").value("myloginid1"));
+    }
+
+    // ── 추천 분리 + RECOMMEND 레이트리밋 (fix/recommend-skip-on-search) ────────────
+
+    @Test
+    @DisplayName("GET /api/search?q=ab(검색) 응답엔 recommendations가 빈 배열이다 — q 있을 땐 추천 미계산")
+    void search_withQuery_returnsEmptyRecommendations() throws Exception {
+        registrationService.register("search-skip1@booktimer.com", "pw1234qwer!!", "skipid1a", "건너뜀", SEOUL, Role.USER, today());
+        registrationService.register("search-skip1fb@booktimer.com", "pw1234qwer!!", "skipid1b", "맞팔후보", SEOUL, Role.USER, today());
+        User me = userRepository.findByEmail("search-skip1@booktimer.com").orElseThrow();
+        User fb = userRepository.findByEmail("search-skip1fb@booktimer.com").orElseThrow();
+        followService.follow(fb, me); // fb→me: 맞팔 후보 생성 → 원래 추천이 채워질 상황
+
+        rateLimitService.clearForTest();
+
+        mockMvc.perform(get("/api/search?q=ab")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("search-skip1@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recommendations").isEmpty());
+    }
+
+    @Test
+    @DisplayName("GET /api/search(진입, q 없음) 응답엔 recommendations가 채워진다 — 회귀 가드")
+    void search_withoutQuery_returnsFilledRecommendations() throws Exception {
+        registrationService.register("search-entry1@booktimer.com", "pw1234qwer!!", "entryid1a", "진입자", SEOUL, Role.USER, today());
+        registrationService.register("search-entry1fb@booktimer.com", "pw1234qwer!!", "entryid1b", "맞팔후보", SEOUL, Role.USER, today());
+        User me = userRepository.findByEmail("search-entry1@booktimer.com").orElseThrow();
+        User fb = userRepository.findByEmail("search-entry1fb@booktimer.com").orElseThrow();
+        followService.follow(fb, me);
+
+        rateLimitService.clearForTest();
+
+        var result = mockMvc.perform(get("/api/search")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("search-entry1@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recommendations").isNotEmpty())
+                .andReturn();
+
+        assertThat(result.getResponse().getContentAsString()).contains("나를 팔로우함");
+    }
+
+    @Test
+    @DisplayName("RECOMMEND 한도 초과 시 진입(q 없음) 응답의 recommendations가 빈 배열이다")
+    void search_withoutQuery_recommendRateExhausted_returnsEmptyRecommendations() throws Exception {
+        registrationService.register("search-rl1@booktimer.com", "pw1234qwer!!", "rlid1a", "한도자", SEOUL, Role.USER, today());
+        registrationService.register("search-rl1fb@booktimer.com", "pw1234qwer!!", "rlid1b", "맞팔후보", SEOUL, Role.USER, today());
+        User me = userRepository.findByEmail("search-rl1@booktimer.com").orElseThrow();
+        User fb = userRepository.findByEmail("search-rl1fb@booktimer.com").orElseThrow();
+        followService.follow(fb, me);
+
+        rateLimitService.clearForTest();
+        int limit = RateLimitAction.RECOMMEND.limit();
+        for (int i = 0; i < limit; i++) {
+            rateLimitService.allow(RateLimitAction.RECOMMEND, me.getId());
+        }
+
+        mockMvc.perform(get("/api/search")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("search-rl1@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recommendations").isEmpty());
     }
 }
