@@ -1,7 +1,6 @@
 package com.booktimer.web;
 
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 
@@ -17,14 +16,9 @@ public class LoginController {
 
     @GetMapping("/login")
     public String loginForm(HttpServletRequest request) {
-        // 렌더 전에 CSRF 토큰을 선확정한다. 로그인 폼(th:action)의 CSRF 숨김필드는 세션이 없으면 그 순간
-        // 새로 만드는데, head가 커지면(GA4 #338) 폼 렌더 전에 응답이 커밋돼 "session after response
-        // committed"로 500이 난다(IllegalStateException). 로그인 화면은 익명이라 세션이 늘 없어 특히 취약.
-        // DashboardController·PersonalityController와 동일 방어(T-033·T-049, N-044·N-077).
-        Object csrf = request.getAttribute(CsrfToken.class.getName());
-        if (csrf instanceof CsrfToken token) {
-            token.getToken();
-        }
+        // 렌더 전 CSRF 토큰 선확정 — 익명 로그인 폼은 세션이 없어, head가 커지면(#338) 폼 렌더 시 세션
+        // 생성이 응답 커밋 이후로 밀려 500(IllegalStateException). 배경 T-033·T-049, N-044·N-077.
+        CsrfTokenUtil.precommit(request);
         return "login";
     }
 }

@@ -33,6 +33,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.ui.ConcurrentModel;
+import java.security.Principal;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * 설정 화면/처리 통합 테스트 (MockMvc + 실제 빈·H2).
@@ -73,6 +80,23 @@ class SettingsControllerTest {
 
     private User registerSocial(String email) {
         return registrationService.registerOAuth(email, "구글러", SEOUL, AuthProvider.GOOGLE, today());
+    }
+
+    @Autowired
+    private SettingsController controller;
+
+    @Test
+    @DisplayName("GET /settings: 렌더 전 CSRF 토큰을 선확정한다 — 폼 여러 개 큰 페이지 commit-후-500 방어(T-049 재발)")
+    void settingsForm_precommitsCsrfToken() {
+        register("csrf-settings@booktimer.com");
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        CsrfToken token = mock(CsrfToken.class);
+        when(request.getAttribute(CsrfToken.class.getName())).thenReturn(token);
+        Principal principal = () -> "csrf-settings@booktimer.com";
+
+        controller.settingsForm(request, principal, new ConcurrentModel());
+
+        verify(token).getToken();
     }
 
     @Test

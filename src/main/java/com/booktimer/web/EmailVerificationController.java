@@ -3,6 +3,7 @@ package com.booktimer.web;
 import com.booktimer.email.EmailVerificationService;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.user.User;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Controller;
@@ -42,7 +43,8 @@ public class EmailVerificationController {
      * 토큰이 소진돼 "만료" 페이지를 보게 된다. GET은 폼만 보여주고, 사람이 버튼을 눌러야 일어나는 POST에서 소비한다.
      */
     @GetMapping("/verify-email")
-    public String verifyForm(@RequestParam(name = "token", required = false) String token, Model model) {
+    public String verifyForm(HttpServletRequest request, @RequestParam(name = "token", required = false) String token, Model model) {
+        CsrfTokenUtil.precommit(request); // 폼 렌더 전 세션 선확정 — commit-후-500 방어(T-049)
         model.addAttribute("token", token == null ? "" : token);
         return "verify-email-confirm";
     }

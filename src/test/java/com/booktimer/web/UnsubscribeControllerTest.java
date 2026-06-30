@@ -24,6 +24,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.ui.ConcurrentModel;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * 구독해지 컨트롤러 통합 테스트 (MockMvc + 실제 빈·H2).
@@ -47,6 +53,21 @@ class UnsubscribeControllerTest {
         u.assignLoginId(handle);
         u.consentToMarketing(CLK);
         return userRepository.saveAndFlush(u);
+    }
+
+    @Autowired
+    private UnsubscribeController controller;
+
+    @Test
+    @DisplayName("GET /unsubscribe: 렌더 전 CSRF 토큰을 선확정한다 — SSR 폼 commit-후-500 방어(T-049 재발)")
+    void unsubscribeForm_precommitsCsrfToken() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        CsrfToken token = mock(CsrfToken.class);
+        when(request.getAttribute(CsrfToken.class.getName())).thenReturn(token);
+
+        controller.unsubscribeForm(request, "tok", new ConcurrentModel());
+
+        verify(token).getToken();
     }
 
     @Test

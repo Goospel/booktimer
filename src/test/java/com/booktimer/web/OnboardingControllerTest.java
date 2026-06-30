@@ -27,6 +27,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.ui.ConcurrentModel;
+import java.security.Principal;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * 온보딩(첫 진입 초기 설정) 화면/처리 통합 테스트 (MockMvc + 실제 빈·H2).
@@ -63,6 +70,23 @@ class OnboardingControllerTest {
 
     private User register(String email) {
         return registrationService.register(email, "rawpw1234", "독서가", SEOUL, Role.USER, today());
+    }
+
+    @Autowired
+    private OnboardingController controller;
+
+    @Test
+    @DisplayName("GET /onboarding: 렌더 전 CSRF 토큰을 선확정한다 — SSR 폼 commit-후-500 방어(T-049 재발)")
+    void onboardingForm_precommitsCsrfToken() {
+        register("csrf-onb@booktimer.com");
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        CsrfToken token = mock(CsrfToken.class);
+        when(request.getAttribute(CsrfToken.class.getName())).thenReturn(token);
+        Principal principal = () -> "csrf-onb@booktimer.com";
+
+        controller.onboardingForm(request, principal, new ConcurrentModel());
+
+        verify(token).getToken();
     }
 
     @Test

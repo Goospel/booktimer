@@ -23,7 +23,7 @@
 | CSS 주석 속 `*/`(특히 wildcard-slash `.foo-*/.bar-*`)가 주석 조기 종료 → 다음 규칙 침묵 드랍 | T-087 | 3 (#522 .dash-card → #526 .book-*/.record- → 이 PR .oauth-*/.entry-hero) | ✅ **하드픽스 훅 `require-css-comment-safe.ps1`**(3회차에 승격) — 주석 닫는 `*/`가 **양옆 모두 셀렉터문자에 붙은** 경우만 차단(=기존 보류 사유 FP 해소: ` */color`는 앞이 공백·`/*x*/`+개행은 뒤가 공백이라 통과, 잔여 FP는 `/*c*/.sel`류 희귀패턴+우회 토큰 `SKIP_CSS_COMMENT_CHECK`). 보조: 예방 규칙(슬래시→`·`/`과`) + §11 실 브라우저/static-preview 게이트(N-118) |
 | 도구 재생성 시 BOM/EOL 미보존 → phantom diff(첫 줄·전체 줄끝) | T-093 · T-103 | 2 | ✅ 코드 패턴(원본 BOM은 바이트로·EOL은 첫 매치로 감지해 쓸 때 보존; `rebuild-troubleshooting-toc.ps1`) |
 | 빈 워크트리 폴더가 cwd 점유로 안 지워짐 | T-105 · T-115 | 2 | ✅ 절차(정션 끊기+`worktree prune`+`branch -D`로 실질 정리 후 빈 폴더는 세션 종료 후 `rmdir` / 워크트리 정리는 그 세션 아닌 **메인·다른 세션**에서) |
-| CSRF 숨김필드 lazy 세션 ↔ 응답 버퍼 커밋 타이밍(큰 SSR·익명 폼 500) | T-033 · T-049 | 4+ | ✅ prose CLAUDE.md 「🔒 CSRF 폼 세션 선확정」(N-077). **1회 백필로 소급 등재(2026-06-30)**. 선확정 누락 코드 6곳(Settings·AdminFeedback·Feedback·EmailVerification·Unsubscribe·Onboarding)은 **별도 작업으로 분리** |
+| CSRF 숨김필드 lazy 세션 ↔ 응답 버퍼 커밋 타이밍(큰 SSR·익명 폼 500) | T-033 · T-049 | 4+ | ✅ prose CLAUDE.md 「🔒 CSRF 폼 세션 선확정」(N-077) + **공유 헬퍼 `CsrfTokenUtil.precommit`로 9곳(기존3+신규6) 통일**. 1회 백필 소급 등재(2026-06-30) → 누락 6곳(Settings·AdminFeedback·Feedback·EmailVerification·Unsubscribe·Onboarding) **수정 완료**. 훅 미채택=컨트롤러↔템플릿 역매핑·POST 재렌더 FP 과다 |
 | FK 자식 미정리로 부모 삭제 실패(mock 단위테스트가 못 잡음) | T-023 · T-029 | 2 | ✅ prose CLAUDE.md TDD절(부모 삭제 경로 H2 통합테스트 필수). **1회 백필로 소급 등재(2026-06-30)**. 현행 경로(`AccountService.purge`·`BookService.delete`)는 정리·통합테스트 완료 |
 
 ## 📑 목차
