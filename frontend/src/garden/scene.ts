@@ -1,12 +1,10 @@
 import Phaser from 'phaser';
 import {
-    GRID_COLS, GRID_ROWS, ISO_FLATTEN,
+    GRID_COLS,
     ZOOM_MIN, ZOOM_MAX,
-    clampRotation, clampZoom, plantWorldSize,
+    clampZoom, plantWorldSize,
     viewZoomBounds, cameraCenterScroll,
-    cellOf, cellCenter, snapToCell,
-    normToIsoPixel, isoPixelToNorm,
-    isOutsideWorld, resolveDrop, nearestFreeCell,
+    normToIsoPixel,
     WanderState, wanderStep,
     walkPose, idlePose, WALK_STEP_MS,
     AMBIENT_DECOR,
@@ -20,15 +18,6 @@ export interface GardenItemMeta {
     emoji?: string;
     name?: string;
     spriteId?: string;
-    x?: number;
-    y?: number;
-    z?: number;
-    rotation?: number;
-    scale?: number;
-}
-
-export interface SelectionInfo {
-    rotation: number;
 }
 
 export interface FeedResult {
@@ -40,16 +29,16 @@ export interface FeedResult {
     leveledUp: boolean;
 }
 
+/**
+ * 보기 전용 마을 무대 설정.
+ *
+ * <p>배치/편집 엔진 은퇴(PR-2) 후 좌표 저장·팔레트·드래그가 사라졌다 — 배회 캐릭터를 그리고
+ * 탭으로 먹이를 주는 보기 전용 씬만 남는다.
+ */
 export interface GardenSceneConfig {
-    owned: GardenItemMeta[];
-    decorations: GardenItemMeta[];
-    placed: GardenItemMeta[];
     characters?: GardenItemMeta[];
     worldW: number;
     worldH: number;
-    readonly?: boolean;
-    onChange?: (keys: string[]) => void;
-    onSelect?: (info: SelectionInfo | null) => void;
     onMessage?: (msg: string) => void;
     onFeed?: (characterCode: string) => Promise<FeedResult | null>;
 }
@@ -70,10 +59,6 @@ export class GardenScene extends Phaser.Scene {
     ready: boolean;
     plantPx!: number;
     bg?: Phaser.GameObjects.Graphics;
-    shadowLayer?: Phaser.GameObjects.Graphics;
-    selected?: GObj | null;
-    _selBox?: Phaser.GameObjects.Graphics;
-    _dragged = false;
     _panning = false;
     _panMoved = false;
     _pinchDist = 0;
@@ -96,8 +81,6 @@ export class GardenScene extends Phaser.Scene {
                 if (url) this.load.image('tex-' + spriteId, url);
             }
         };
-        for (const o of this.cfg.owned) loadTex(o.spriteId);
-        for (const d of (this.cfg.decorations || [])) loadTex(d.spriteId);
         for (const c of (this.cfg.characters || [])) loadTex(c.spriteId);
         for (const d of AMBIENT_DECOR) loadTex(d.spriteId);
     }
@@ -106,14 +89,6 @@ export class GardenScene extends Phaser.Scene {
         this.plantPx = plantWorldSize(this.cfg.worldW, GRID_COLS);
         this.drawBackground();
         this.drawAmbientDecor();
-        if (!this.cfg.readonly) this.drawGrid();
-        this.shadowLayer = this.add.graphics();
-        this.shadowLayer.setDepth(0.6);
-        for (const p of this.cfg.placed) {
-            if (p.axis !== 'BUILDING') continue; // 고아 식물·소품 행 무시 (PR-1 필터)
-            const { px, py } = normToIsoPixel(p.x ?? 0, p.y ?? 0, this.cfg.worldW, this.cfg.worldH);
-            this.spawnObject(p, px, py);
-        }
 
         for (const c of (this.cfg.characters || [])) {
             this.spawnCharacter(c);
@@ -137,7 +112,7 @@ export class GardenScene extends Phaser.Scene {
             this.fitCamera(w, h);
         });
 
-        // 공통 입력 — 보기·편집 모두: 팬·핀치·줌
+        // 입력 — 팬·핀치·줌
         this.input.addPointer(1);
         this._pinchDist = 0;
 
@@ -172,7 +147,6 @@ export class GardenScene extends Phaser.Scene {
         });
         this.input.on('pointerup', () => {
             this._pinchDist = 0;
-            if (this._panning && !this._panMoved && this.selected) this.deselectPlant();
             this._panning = false;
         });
         this.input.on('wheel', (pointer: Phaser.Input.Pointer, _objs: unknown, _dx: number, dy: number) => {
@@ -183,62 +157,16 @@ export class GardenScene extends Phaser.Scene {
             cam.scrollY += before.y - after.y;
         });
 
-        // 보기 전용 입력 — 배회 작가 탭 먹이기
-        if (this.cfg.readonly && this.cfg.onFeed) {
+        // 배회 작가 탭 → 먹이주기
+        if (this.cfg.onFeed) {
             this.input.on('gameobjectup', (_p: Phaser.Input.Pointer, obj: GObj) => {
-                if (this._panMoved) return; // 드래그 중 오발 방지
+                if (this._panMoved) return; // 드래그(팬) 중 오발 방지
                 if (obj.getData('kind') !== 'character') return;
                 const code = obj.getData('code') as string;
                 if (!code) return;
                 this.cfg.onFeed!(code).then(result => {
                     if (result) this.playFeedReaction(obj, result);
                 });
-            });
-        }
-
-        // 편집 전용 입력 — 드래그·선택
-        if (!this.cfg.readonly) {
-            this.input.on('gameobjectdown', () => { this._dragged = false; });
-            this.input.on('dragstart', (_p: Phaser.Input.Pointer, obj: any) => {
-                this._dragged = true;
-                obj._homeX = obj.x; obj._homeY = obj.y;
-                obj._rawX = obj.x; obj._rawY = obj.y;
-            });
-            this.input.on('drag', (_p: Phaser.Input.Pointer, obj: any, dragX: number, dragY: number) => {
-                obj._rawX = dragX; obj._rawY = dragY;
-                const norm = isoPixelToNorm(dragX, dragY, this.cfg.worldW, this.cfg.worldH);
-                const snapped = snapToCell(norm.x, norm.y, GRID_COLS, GRID_ROWS);
-                const pix = normToIsoPixel(snapped.x, snapped.y, this.cfg.worldW, this.cfg.worldH);
-                obj.x = pix.px; obj.y = pix.py;
-                const occupied = this.occupiedCells(obj as GObj);
-                const { x: nx, y: ny } = isoPixelToNorm(obj.x, obj.y, this.cfg.worldW, this.cfg.worldH);
-                const { col, row } = cellOf(nx, ny, GRID_COLS, GRID_ROWS);
-                if (occupied.has(`${col},${row}`)) obj.setTint(0xff6b6b); else obj.clearTint();
-                if (obj === this.selected) this.highlightSelected();
-                this.restack();
-            });
-            this.input.on('dragend', (_p: Phaser.Input.Pointer, obj: any) => {
-                obj.clearTint();
-                const outside = isOutsideWorld(obj._rawX ?? obj.x, obj._rawY ?? obj.y, this.cfg.worldW, this.cfg.worldH);
-                const { x: nx, y: ny } = isoPixelToNorm(obj.x, obj.y, this.cfg.worldW, this.cfg.worldH);
-                const { col, row } = cellOf(nx, ny, GRID_COLS, GRID_ROWS);
-                const occupiedByOther = !outside && this.occupiedCells(obj as GObj).has(`${col},${row}`);
-                const decision = resolveDrop(outside, occupiedByOther);
-                if (decision === 'remove') {
-                    if (obj === this.selected) this.deselectPlant();
-                    this.removePlant(obj as GObj);
-                } else if (decision === 'revert') {
-                    obj.x = obj._homeX; obj.y = obj._homeY;
-                    if (obj === this.selected) this.highlightSelected();
-                    this.restack();
-                } else {
-                    if (obj === this.selected) this.highlightSelected();
-                    this.restack();
-                }
-                this.emitChange();
-            });
-            this.input.on('gameobjectup', (_p: Phaser.Input.Pointer, obj: GObj) => {
-                if (!this._dragged) this.selectPlant(obj);
             });
         }
 
@@ -381,8 +309,7 @@ export class GardenScene extends Phaser.Scene {
         obj.setData('footX', px);
         obj.setData('footY', py);
         obj.setData('flipX', false);
-        // 보기 모드에서만 탭 가능(편집 모드는 꾸미기 방해 금지)
-        if (this.cfg.readonly) obj.setInteractive({ useHandCursor: true });
+        obj.setInteractive({ useHandCursor: true }); // 탭 → 먹이주기
         this.objs.push(obj);
         this.restack();
         return obj;
@@ -414,174 +341,10 @@ export class GardenScene extends Phaser.Scene {
             const obj = this.add.image(px, py, 'tex-' + d.spriteId)
                     .setOrigin(0.5, d.footAnchored ? 1 : 0.5)
                     .setDisplaySize(size, size);
-            // 객체(depth≥1) 아래 전용 밴드 — grid(0.5)·shadow(0.6)보다도 아래.
+            // 객체(depth≥1) 아래 전용 밴드.
             obj.setDepth(0.1 + 0.3 * (py / H));
-            // this.objs에 넣지 않는다(격자·저장·배회와 격리).
+            // this.objs에 넣지 않는다(배회와 격리).
         }
-    }
-
-    drawGrid() {
-        const W = this.cfg.worldW, H = this.cfg.worldH;
-        const g = this.add.graphics();
-        g.setDepth(0.5);
-        g.lineStyle(1, 0x2e7d32, 0.18);
-        for (let col = 0; col <= GRID_COLS; col++) {
-            const nx = col / GRID_COLS;
-            const a = normToIsoPixel(nx, 0, W, H), b = normToIsoPixel(nx, 1, W, H);
-            g.beginPath(); g.moveTo(a.px, a.py); g.lineTo(b.px, b.py); g.strokePath();
-        }
-        for (let row = 0; row <= GRID_ROWS; row++) {
-            const ny = row / GRID_ROWS;
-            const a = normToIsoPixel(0, ny, W, H), b = normToIsoPixel(1, ny, W, H);
-            g.beginPath(); g.moveTo(a.px, a.py); g.lineTo(b.px, b.py); g.strokePath();
-        }
-    }
-
-    drawShadows() {
-        if (!this.shadowLayer) return;
-        this.shadowLayer.clear();
-        this.shadowLayer.fillStyle(0x2e2a22, 0.22);
-        for (const o of this.objs) {
-            if (o.getData('kind') !== 'plant') continue;
-            // 건물은 넓은 아이소 박스라 식물용 작은 발밑 타원(plantPx*0.55)이 바닥보다 좁아
-            // "그림자 위에 뜬" 인상을 준다 → 건물은 타일에 flush로 앉히고 캐스트 그림자를 생략한다
-            // (CoC식: 건물은 제 footprint로 접지). 식물·소품은 기존 발밑 그림자 유지.
-            if (o.getData('axis') === 'BUILDING') continue;
-            const w = this.plantPx * 0.55;
-            const h = w * ISO_FLATTEN;
-            this.shadowLayer.fillEllipse(o.x, o.y, w, h);
-        }
-    }
-
-    spawnObject(meta: GardenItemMeta, px: number, py: number): GObj {
-        const kind = meta.kind || 'plant';
-        const rotation = clampRotation(meta.rotation || 0);
-        const isPlant = kind === 'plant';
-        const oy = isPlant ? 1 : 0.5;
-        let obj: GObj;
-        if (meta.spriteId && this.textures.exists('tex-' + meta.spriteId)) {
-            obj = this.add.image(px, py, 'tex-' + meta.spriteId)
-                    .setOrigin(0.5, oy)
-                    .setDisplaySize(this.plantPx, this.plantPx);
-        } else {
-            obj = this.add.text(px, py, meta.emoji || '🌱', { fontSize: Math.round(this.plantPx * 0.8) + 'px' })
-                    .setOrigin(0.5, oy);
-        }
-        obj.setAngle(rotation);
-        obj.setData('kind', kind);
-        obj.setData('axis', meta.axis || null);
-        obj.setData('code', meta.code);
-        obj.setData('emoji', meta.emoji);
-        obj.setData('name', meta.name);
-        obj.setData('spriteId', meta.spriteId);
-        obj.setData('rotation', rotation);
-        obj.setData('scale', 1);
-        if (!this.cfg.readonly) obj.setInteractive({ draggable: true, useHandCursor: true });
-        this.objs.push(obj);
-        this.restack();
-        return obj;
-    }
-
-    removePlant(obj: GObj) {
-        const i = this.objs.indexOf(obj);
-        if (i >= 0) this.objs.splice(i, 1);
-        obj.destroy();
-        this.restack();
-    }
-
-    addPlant(meta: GardenItemMeta): boolean {
-        if (!this.ready) return false;
-        if (this.objs.some(o => o.getData('kind') === 'plant'
-                && o.getData('axis') === meta.axis && o.getData('code') === meta.code)) return false;
-        const pref = cellOf(0.5, 0.55, GRID_COLS, GRID_ROWS);
-        const free = nearestFreeCell(pref.col, pref.row, this.occupiedCells(), GRID_COLS, GRID_ROWS);
-        if (!free) { if (this.cfg.onMessage) this.cfg.onMessage('마을이 가득 찼어요 🌿'); return false; }
-        const center = cellCenter(free.col, free.row, GRID_COLS, GRID_ROWS);
-        const { px, py } = normToIsoPixel(center.x, center.y, this.cfg.worldW, this.cfg.worldH);
-        this.spawnObject({ ...meta, kind: 'plant' }, px, py);
-        this.emitChange();
-        return true;
-    }
-
-    addDecoration(meta: GardenItemMeta): boolean {
-        if (!this.ready) return false;
-        const pref = cellOf(0.5, 0.55, GRID_COLS, GRID_ROWS);
-        const free = nearestFreeCell(pref.col, pref.row, this.occupiedCells(), GRID_COLS, GRID_ROWS);
-        if (!free) { if (this.cfg.onMessage) this.cfg.onMessage('마을이 가득 찼어요 🌿'); return false; }
-        const center = cellCenter(free.col, free.row, GRID_COLS, GRID_ROWS);
-        const { px, py } = normToIsoPixel(center.x, center.y, this.cfg.worldW, this.cfg.worldH);
-        this.spawnObject({ ...meta, kind: 'decor' }, px, py);
-        this.emitChange();
-        return true;
-    }
-
-    exportPlacements(): { plants: Array<Record<string, unknown>>; decorations: Array<Record<string, unknown>> } {
-        const plants: Array<Record<string, unknown>> = [];
-        const decorations: Array<Record<string, unknown>> = [];
-        this.objs.forEach((o, i) => {
-            const { x, y } = isoPixelToNorm(o.x, o.y, this.cfg.worldW, this.cfg.worldH);
-            const t = { code: o.getData('code'), x, y, z: i,
-                        rotation: o.getData('rotation') || 0, scale: 1 };
-            // BUILDING 축만 내보냄 — 고아 식물 행이 재저장되지 않게 (PR-1 필터)
-            if (o.getData('kind') !== 'decor' && o.getData('axis') === 'BUILDING') {
-                plants.push({ axis: o.getData('axis'), ...t });
-            }
-        });
-        return { plants, decorations };
-    }
-
-    emitChange() {
-        if (this.cfg.onChange) {
-            this.cfg.onChange(
-                this.objs.filter(o => o.getData('kind') === 'plant')
-                         .map(o => `${o.getData('axis')}/${o.getData('code')}`)
-            );
-        }
-    }
-
-    selectPlant(obj: GObj) { this.selected = obj; this.notifySelection(); }
-
-    deselectPlant() {
-        this.selected = null;
-        if (this._selBox) this._selBox.clear();
-        if (this.cfg.onSelect) this.cfg.onSelect(null);
-    }
-
-    notifySelection() {
-        this.highlightSelected();
-        if (this.cfg.onSelect) this.cfg.onSelect(this.selectionInfo());
-    }
-
-    selectionInfo(): SelectionInfo | null {
-        if (!this.selected) return null;
-        return { rotation: Math.round(this.selected.getData('rotation') || 0) };
-    }
-
-    highlightSelected() {
-        if (!this._selBox) this._selBox = this.add.graphics();
-        this._selBox.clear();
-        if (!this.selected) return;
-        this._selBox.setDepth(1e6);
-        const b = this.selected.getBounds();
-        this._selBox.lineStyle(3, 0x6E8A6A, 0.9).strokeRect(b.x - 5, b.y - 5, b.width + 10, b.height + 10);
-    }
-
-    rotateSelected(delta: number) {
-        if (!this.selected) return;
-        const r = clampRotation((this.selected.getData('rotation') || 0) + delta);
-        this.selected.setAngle(r); this.selected.setData('rotation', r);
-        this.notifySelection(); this.emitChange();
-    }
-
-    occupiedCells(exclude: GObj | null = null): Set<string> {
-        const set = new Set<string>();
-        for (const o of this.objs) {
-            if (o === exclude) continue;
-            const { x, y } = isoPixelToNorm(o.x, o.y, this.cfg.worldW, this.cfg.worldH);
-            const { col, row } = cellOf(x, y, GRID_COLS, GRID_ROWS);
-            set.add(`${col},${row}`);
-        }
-        return set;
     }
 
     // 초기 줌 = 월드 전체 보기(containZoom), 중앙 = displayDim 기반 setScroll.
@@ -605,22 +368,10 @@ export class GardenScene extends Phaser.Scene {
 
     // z-order: y 오름차순 정렬(낮은 y=뒤, 높은 y=앞) — CoC 아이소 자동 깊이. T-055.
     // 정렬키는 논리 발밑 footY(캐릭터는 bob으로 o.y≠발밑 → bob이 depth를 흔들지 않게).
-    // 식물·건물은 footY 미설정 → o.y 폴백(기존과 동일).
     restack() {
         if (this.bg) this.bg.setDepth(0);
         const fy = (o: GObj) => (o.getData('footY') as number | undefined) ?? o.y;
         this.objs.slice().sort((a, b) => fy(a) - fy(b)).forEach((o, i) => o.setDepth(i + 1));
-        if (this._selBox) this._selBox.setDepth(1e6);
-        this.drawShadows();
-    }
-
-    removeSelected() {
-        if (this.selected) {
-            const o = this.selected;
-            this.deselectPlant();
-            this.removePlant(o);
-            this.emitChange();
-        }
     }
 
     // ★ 반응 애니: 캐릭터와 독립된 오브젝트로 — update()가 캐릭터 y/scale을 매 프레임 덮어써

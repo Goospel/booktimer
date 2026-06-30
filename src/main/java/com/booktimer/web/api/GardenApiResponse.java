@@ -9,16 +9,15 @@ import java.util.Map;
  * GET /api/garden 응답 전용 DTO.
  *
  * <p>건물(BUILDING)축은 마을 컨셉 전환(작가 꾸미기 피벗)으로 은퇴됨 — 작가(AUTHOR)축만 포함.
- * {@code placed}/{@code owned}는 배치 엔진용으로 유지(건물 은퇴로 빈 배열) — 엔진 제거는 후속(PR-2).
+ * 배치/편집 엔진 제거(PR-2): {@code placed}·{@code owned} 필드가 사라졌다 — 보기 전용 마을은
+ * 좌표 저장이 없다. 응답엔 world·nickname·catalog·characters·foodBalance만 남는다.
  * 먹이주기 루프: {@code foodBalance}(top-level), 각 작가 DTO에 {@code affection}.
  */
 public record GardenApiResponse(
         WorldDto world,
         String nickname,
         int foodBalance,
-        List<PlacedItem> placed,
         CatalogDto catalog,
-        List<OwnedPlantItemDto> owned,
         List<OwnedCharacterDto> characters
 ) {
 
@@ -53,15 +52,6 @@ public record GardenApiResponse(
         }
     }
 
-    /** 게임 팔레트용 보유 건물 — axis 포함(GardenItemMeta 호환). AUTHOR 캐릭터 제외(characters 필드 분리). */
-    public record OwnedPlantItemDto(String axis, String code, String emoji, String name, String spriteId) {
-        static OwnedPlantItemDto from(OwnedPlant p) {
-            return new OwnedPlantItemDto(
-                    p.axis() != null ? p.axis().name() : null,
-                    p.code(), p.emoji(), p.name(), p.spriteId());
-        }
-    }
-
     /**
      * 대시보드 패널용 — 도감({@link CatalogDto})만 추출. affection은 0 기본(대시보드에서 불필요).
      */
@@ -84,32 +74,26 @@ public record GardenApiResponse(
      */
     static GardenApiResponse of(
             GardenView view,
-            List<PlacedItem> placed,
             int worldWidth,
             int worldHeight,
             String nickname,
             int foodBalance,
             Map<String, Integer> affectionByCharacter
     ) {
+        List<OwnedCharacterDto> characters = view.ownedCharacters().stream()
+                .map(c -> OwnedCharacterDto.from(c, affectionByCharacter.getOrDefault(c.code(), 0)))
+                .toList();
         return new GardenApiResponse(
                 new WorldDto(worldWidth, worldHeight),
                 nickname,
                 foodBalance,
-                placed,
                 new CatalogDto(
                         view.authorCharacters().stream()
                                 .map(s -> AuthorCharacterDto.from(s,
                                         affectionByCharacter.getOrDefault(s.character().getCode(), 0)))
                                 .toList(),
                         view.ownedAuthorCharacterCount(), view.totalAuthorCharacterCount(),
-                        view.ownedCharacters().stream()
-                                .map(c -> OwnedCharacterDto.from(c,
-                                        affectionByCharacter.getOrDefault(c.code(), 0)))
-                                .toList()),
-                view.ownedPlants().stream().map(OwnedPlantItemDto::from).toList(),
-                view.ownedCharacters().stream()
-                        .map(c -> OwnedCharacterDto.from(c,
-                                affectionByCharacter.getOrDefault(c.code(), 0)))
-                        .toList());
+                        characters),
+                characters);
     }
 }

@@ -19,17 +19,8 @@ public record GardenView(
         int totalAuthorCharacterCount) {
 
     /**
-     * 배치 가능한 보유 오브젝트 — 건물 은퇴로 항상 빈 목록.
-     * 배치/편집 엔진({@link GardenLayoutService})이 보유 검증 집합으로 계속 호출하므로 메서드는 유지한다
-     * (배회 전용 AUTHOR는 애초 제외). 엔진 자체 제거는 후속(PR-2).
-     */
-    public List<OwnedPlant> ownedPlants() {
-        return List.of();
-    }
-
-    /**
      * 배회용 보유 캐릭터 목록 — AUTHOR 축 전용.
-     * AUTHOR 캐릭터는 ownedPlants()·팔레트·좌표 저장 경로에서 완전히 분리된다(C2 풀어놓기).
+     * 배치/편집 엔진(은퇴, PR-2) 제거로 좌표 저장 경로가 사라졌다 — AUTHOR 캐릭터는 이 목록으로만 노출된다.
      */
     public List<OwnedCharacter> ownedCharacters() {
         List<OwnedCharacter> chars = new ArrayList<>();
