@@ -141,6 +141,7 @@
 - [N-138. 호스트 정규화(canonical) 누락의 이중 타격 — redirect_uri는 진입 호스트로 동적 생성되고 세션 쿠키는 host-only라, 구글이 비정규 호스트를 색인하면 검색 유입 전원이 로그인 불가](#n-138-호스트-정규화canonical-누락의-이중-타격--redirect_uri는-진입-호스트로-동적-생성되고-세션-쿠키는-host-only라-구글이-비정규-호스트를-색인하면-검색-유입-전원이-로그인-불가)
 - [N-139. 친구 추천의 두 엔진과 콜드스타트 사다리 — 그래프·관심사 하이브리드, 추천 이유의 효과](#n-139-친구-추천의-두-엔진과-콜드스타트-사다리--그래프관심사-하이브리드-추천-이유의-효과)
 - [N-140. CSS rotate90 + translateX(-100%) 의 역좌표 수식 — portrait 강제 landscape 회전 시 Phaser 입력 보정](#n-140-css-rotate90--translatex-100-의-역좌표-수식--portrait-강제-landscape-회전-시-phaser-입력-보정)
+- [N-141. 모바일 게임 portrait 강제 회전 접근의 실패 교훈 — CSS rotate90 대신 반응형 fitCamera](#n-141-모바일-게임-portrait-강제-회전-접근의-실패-교훈--css-rotate90-대신-반응형-fitcamera)
 
 ---
 
@@ -6371,5 +6372,38 @@ Phaser의 `InputManager.transformPointer`는 내부적으로 `(pageX - canvasLef
 
 ### 코드 위치 / 관련
 
-- BookTimer: `frontend/src/garden/pure.ts` `rotateTouchForPortrait`, `frontend/src/garden/GardenGame.vue` `applyPortraitInputPatch`, `src/main/resources/static/css/app.css` portrait 미디어쿼리. T-118(Phaser `_sx/_sy` 함정).
-- 관련: [[N-082]](Vue Proxy × Phaser 내부 상태 파괴 — setup 클로저 변수).
+- BookTimer: 코드는 #606에서 전부 제거됨(아래 N-141 참고). T-118(Phaser `_sx/_sy` 함정).
+- 관련: [[N-082]](Vue Proxy × Phaser 내부 상태 파괴 — setup 클로저 변수), [[N-141]](강제 회전 실패 교훈 → 반응형 전환).
+
+---
+
+## N-141. 모바일 게임 portrait 강제 회전 접근의 실패 교훈 — CSS rotate90 대신 반응형 fitCamera
+
+> **한 줄 요약**: CSS `rotate(90deg)`으로 portrait 컨테이너를 강제로 landscape처럼 돌리는 방식은 실기기에서 파란 화면을 유발했다 — 게임은 강제 회전 대신 `Scale.RESIZE + fitCamera`로 양쪽 orientation을 반응형으로 처리하는 게 더 안정적이다.
+
+### 맥락
+
+Phaser 기반 마을 게임은 가로로 넓은 월드(world) 때문에 portrait 모바일에서 화면이 좁아 보이는 문제가 있었다.  
+첫 접근 = **CSS `rotate(90deg) translateX(-100%)`으로 `.village-shell` 컨테이너를 90° 돌려** portrait 기기에서도 landscape 뷰를 강제하는 방식. 좌표 역변환(`rotateTouchForPortrait`), `transformPointer` 몽키패치(`applyPortraitInputPatch`), matchMedia 리스너까지 구현했지만, **실기기 portrait에서 파란 화면이 나왔다.**
+
+### 왜 CSS 강제 회전이 문제인가
+
+CSS `transform`이 있는 조상 요소는 `position: fixed` 자식의 containing block이 된다(CSS spec). Phaser canvas 렌더링 초기화 시 `100dvh`·`100dvw` 치수가 아직 확정되지 않은 시점에 `height: 0`으로 읽히면 씬 초기화가 빈 canvas로 끝날 수 있다 (T-069 계열). 게임 엔진이 예상하는 뷰포트 좌표계와 CSS transform 후의 실제 렌더 영역이 어긋나면서 파란 화면(비어있는 씬)이 발생.
+
+### 올바른 접근 — 반응형 fitCamera
+
+Phaser `Scale.RESIZE`는 컨테이너 크기가 바뀔 때마다 canvas를 자동으로 맞춘다. `fitCamera(w, h)`가 현재 canvas 치수에 맞게 줌·센터를 재계산하면 portrait·landscape 모두 "있는 그대로의 뷰포트에서 월드를 최적 표시"한다. CSS 좌표계가 게임 좌표계와 충돌하지 않고, 입력(`transformPointer`)도 패치 없이 표준 동작.
+
+### 교훈
+
+| 강제 회전 (CSS rotate90) | 반응형 (Scale.RESIZE + fitCamera) |
+|---|---|
+| CSS transform이 containing block을 바꿔 fixed 자식·렌더 초기화에 부작용 | CSS 건드리지 않음 — 렌더 영역과 뷰포트 일치 |
+| 좌표 역변환·transformPointer 패치 필요(복잡도 높음) | 표준 입력 좌표 그대로 |
+| OS orientation lock 없으면 사용자가 직접 기기를 돌려야 함 | portrait/landscape 양쪽 자연스럽게 동작 |
+
+### 관련
+
+- [[N-140]](CSS rotate90 역좌표 수식 — 수학적 접근은 옳았으나 실기기 렌더에서 실패).
+- 함정: T-118(Phaser `_sx/_sy` 스케일 팩터), T-069(canvas height 0 초기화 실패).
+- BookTimer PR: #605(강제 회전 구현) → #606(제거 + 반응형 복귀).
