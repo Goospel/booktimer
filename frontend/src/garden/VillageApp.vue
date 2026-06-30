@@ -1,6 +1,6 @@
 <template>
   <div class="village-shell">
-    <div v-if="loadError" class="village-loading">⚠️ 마을을 불러오지 못했어요.</div>
+    <div v-if="loadError" class="village-loading">⚠️ 서재를 불러오지 못했어요.</div>
     <div v-else-if="!data" class="village-loading">🌱 불러오는 중…</div>
     <template v-else>
       <!-- 돌봄 뷰(다마고치) — 모든 화면 단일 모드. CoC 가로 무대(GardenGame)는 은퇴. -->

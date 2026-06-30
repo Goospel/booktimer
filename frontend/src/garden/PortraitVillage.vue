@@ -3,7 +3,7 @@
     <!-- 슬림 HUD -->
     <div class="pv-hud">
       <a href="/" class="pv-hud-home" aria-label="홈으로">🏠 홈</a>
-      <span class="pv-hud-title">{{ nickname }}님의 마을</span>
+      <span class="pv-hud-title">{{ nickname }}님의 서재</span>
       <span class="pv-hud-food">🍙 {{ foodBalance }}</span>
       <button type="button" class="pv-hud-dex" @click="emit('open-dex')" aria-label="도감 열기">📖 도감</button>
     </div>
@@ -11,8 +11,8 @@
     <!-- 식구가 없을 때 -->
     <div v-if="!hero" class="pv-empty">
       <div class="pv-empty-emoji" aria-hidden="true">🏡</div>
-      <p>아직 마을 식구가 없어요.</p>
-      <p class="pv-empty-sub">작가의 책을 완독하면 그 작가가 마을로 찾아와요.</p>
+      <p>아직 서재 식구가 없어요.</p>
+      <p class="pv-empty-sub">작가의 책을 완독하면 그 작가가 서재로 찾아와요.</p>
     </div>
 
     <template v-else>
@@ -52,7 +52,7 @@
 
       <!-- 식구 작가 카드 스택 -->
       <div v-if="ownedCharacters.length > 1" class="pv-family">
-        <p class="pv-family-label">마을 식구 {{ ownedCharacters.length }}명</p>
+        <p class="pv-family-label">서재 식구 {{ ownedCharacters.length }}명</p>
         <div class="pv-family-scroll">
           <button v-for="c in ownedCharacters" :key="c.code" type="button"
                   class="pv-family-card" :class="{ active: c.code === heroCode }"

@@ -7,7 +7,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <!-- CSRF 토큰 — 먹이주기 fetch(POST /api/garden/feed)가 X-CSRF-TOKEN 헤더로 싣는다. -->
     <meta name="_csrf" th:content="${_csrf != null ? _csrf.token : ''}">
-    <title>독서 마을 — BookTimer</title>
+    <title>나의 서재 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
     <th:block th:replace="~{ads :: loader}"></th:block>
 </head>

@@ -8,7 +8,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>BookTimer — 하루 딱 N분, 가장 작은 독서 습관</title>
     <meta name="description"
-          content="책을 좋아하진 않아도 읽는 사람이 됩니다. 타이머를 켜고 한 페이지, 그게 오늘의 전부예요. 매일의 기록이 잔디가 되고, 마을이 됩니다.">
+          content="책을 좋아하진 않아도 읽는 사람이 됩니다. 타이머를 켜고 한 페이지, 그게 오늘의 전부예요. 매일의 기록이 잔디가 되고, 작가가 찾아오는 서재가 됩니다.">
     <link rel="stylesheet" th:href="@{/css/app.css}">
     <link rel="stylesheet" th:href="@{/css/landing.css}">
 </head>
@@ -23,7 +23,7 @@
             <span>BookTimer</span>
         </a>
         <ul class="lp-nav-links">
-            <li><a href="#village">독서 마을</a></li>
+            <li><a href="#village">독서 서재</a></li>
             <li><a href="#together">함께 읽기</a></li>
         </ul>
         <a th:href="@{/signup}" class="lp-nav-cta">무료로 시작하기</a>
@@ -41,7 +41,7 @@
                 <p class="lp-hero-sub">책을 좋아하진 않아도 읽는 사람이 됩니다</p>
                 <p class="lp-hero-lead">
                     부담 대신 꾸준함을 보상해요. 타이머를 켜고 한 페이지,
-                    그게 오늘의 전부예요. 매일의 기록이 잔디가 되고, 마을이 됩니다.
+                    그게 오늘의 전부예요. 매일의 기록이 잔디가 되고, 작가가 찾아오는 서재가 됩니다.
                 </p>
                 <div class="lp-cta-stack">
                     <a class="btn btn-primary" th:href="@{/signup}">무료로 시작하기</a>
@@ -55,7 +55,7 @@
             <div class="lp-hero-visual">
                 <div class="lp-placeholder">
                     <span class="lp-placeholder-icon">🌿</span>
-                    <p class="lp-placeholder-label">독서 마을 · 아이소메트릭 일러스트 자리</p>
+                    <p class="lp-placeholder-label">독서 서재 · 작가 돌봄 일러스트 자리</p>
                     <p class="lp-placeholder-sub">실제 캡처로 교체 예정</p>
                 </div>
             </div>
@@ -187,22 +187,22 @@
         </div>
     </section>
 
-    <!-- ④ 독서 마을 섹션 -->
+    <!-- ④ 독서 서재 섹션 -->
     <section class="lp-section" id="village">
         <div class="lp-grid-2col-c">
             <div class="lp-section-text">
-                <span class="lp-section-label">독서 마을</span>
-                <h2 class="lp-section-title lp-serif">자라는 나의 마을</h2>
+                <span class="lp-section-label">독서 서재</span>
+                <h2 class="lp-section-title lp-serif">작가가 찾아오는 나의 서재</h2>
                 <p class="lp-section-lead">
-                    쌓인 독서 시간이 마을이 됩니다. 읽을수록 작가들이 모여들고,
-                    새 건물이 하나씩 들어서요. 권수를 세는 대신, 매일 조금씩
-                    자라는 마을을 보면서 읽게 됩니다.
+                    완독한 책의 작가가 내 서재로 찾아옵니다. 밥을 주고 정을 쌓으며
+                    함께 지내는 재미 — 권수를 세는 대신, 매일 조금씩 깊어지는
+                    작가들과의 사이를 보면서 읽게 됩니다.
                 </p>
-                <a th:href="@{/signup}" class="lp-section-link">무료로 시작하고 마을 만들기 →</a>
+                <a th:href="@{/signup}" class="lp-section-link">무료로 시작하고 내 서재 만들기 →</a>
             </div>
             <div class="lp-placeholder">
                 <span class="lp-placeholder-icon">🏡</span>
-                <p class="lp-placeholder-label">독서 마을 · 아이소메트릭 게임화 마을 자리</p>
+                <p class="lp-placeholder-label">독서 서재 · 작가 돌봄 일러스트 자리</p>
                 <p class="lp-placeholder-sub">실제 캡처로 교체 예정</p>
             </div>
         </div>
@@ -223,7 +223,7 @@
             </div>
             <!-- 팔로잉 미리보기 CSS 목업 — 정적 데모(실데이터 아님).
                  실제 팔로잉 목록(/me/following)이 보여주는 '공개 책 N권'을 그대로 미러링한다.
-                 ⚠️ 남의 독서 잔디·마을은 현재 열람 불가라 미니 잔디바를 넣지 않는다(거짓 광고 방지). -->
+                 ⚠️ 남의 독서 잔디·서재는 현재 열람 불가라 미니 잔디바를 넣지 않는다(거짓 광고 방지). -->
             <div class="lp-social-card" aria-label="함께 읽는 사람들 미리보기">
                 <div class="lp-social-head">
                     <span class="lp-social-title">함께 읽는 사람들</span>
@@ -330,7 +330,7 @@
             <div class="lp-step">
                 <div class="lp-step-num">3</div>
                 <h3 class="lp-step-name">잔디를 채워요</h3>
-                <p class="lp-step-desc">매일의 기록이 잔디가 되고, 마을로 자라요.</p>
+                <p class="lp-step-desc">매일의 기록이 잔디가 되고, 작가가 찾아오는 서재가 돼요.</p>
             </div>
         </div>
     </section>

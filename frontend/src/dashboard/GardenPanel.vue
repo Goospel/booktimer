@@ -67,8 +67,8 @@ onUnmounted(() => {
 <template>
     <section class="dash-card dash-garden">
         <div class="dash-garden-head">
-            <span class="dash-pill">정원</span>
-            <a class="dash-garden-link" href="/village">정원 가기 →</a>
+            <span class="dash-pill">서재</span>
+            <a class="dash-garden-link" href="/village">서재 가기 →</a>
         </div>
 
         <div class="dash-garden-stage-wrap">
