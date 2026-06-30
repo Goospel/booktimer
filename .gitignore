@@ -48,6 +48,9 @@ out/
 # 사설 운영 문서 (인프라 식별자·접속 런북 — 공개 저장소에 올리지 않음)
 private-docs/
 
+# B1 알림 훅(notify-when-waiting.ps1)의 런타임 디버그 로그 — 실측용 산출물이라 추적 안 함
+.claude/hooks/notify-debug.log
+
 # 계획↔구현 세션 분리(CLAUDE.md 「계획 우선」)의 임시 계획 md — 작업용 산출물이라 추적 안 함(완료 후 삭제/PR 흡수)
 claude-docs/plans/
 
