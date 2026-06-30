@@ -143,6 +143,7 @@
 - [N-140. CSS rotate90 + translateX(-100%) 의 역좌표 수식 — portrait 강제 landscape 회전 시 Phaser 입력 보정](#n-140-css-rotate90--translatex-100-의-역좌표-수식--portrait-강제-landscape-회전-시-phaser-입력-보정)
 - [N-141. 모바일 게임 portrait 강제 회전 접근의 실패 교훈 — CSS rotate90 대신 반응형 fitCamera](#n-141-모바일-게임-portrait-강제-회전-접근의-실패-교훈--css-rotate90-대신-반응형-fitcamera)
 - [N-142. 세로 모바일에서 부감형 게임 무대는 게임감 천장 — 세로 재미는 애착/수집, 반응형 2모드로 자세별 분기](#n-142-세로-모바일에서-부감형-게임-무대는-게임감-천장--세로-재미는-애착수집-반응형-2모드로-자세별-분기)
+- [N-143. 외부 harness 타임아웃은 동기 native 자식 hang을 못 끊는다 — 무한 hang은 내부 타임아웃으로](#n-143-외부-harness-타임아웃은-동기-native-자식-hang을-못-끊는다--무한-hang은-내부-타임아웃으로)
 
 ---
 
@@ -6440,3 +6441,41 @@ CoC식 아이소메트릭 마을(가로로 넓은 부감 무대)을 모바일 �
 
 - [[N-141]](강제 회전 실패 → 반응형 fitCamera). BookTimer: PortraitVillage 2모드 PoC(세로 돌봄 뷰).
 - [[N-082]](Phaser는 orientation 분기 밖 — markRaw).
+
+---
+
+## N-143. 외부 harness 타임아웃은 동기 native 자식 hang을 못 끊는다 — 무한 hang은 내부 타임아웃으로
+
+> **한 줄 요약**: 훅·래퍼에 "바깥에서" 건 타임아웃(예: Claude Code `settings.json`의 hook `timeout`)은, 그 훅이 **동기로 spawn한 native 자식**(gradle 등)이 hang하면 무력할 수 있다. 무한 hang을 확실히 끊으려면 그 자식을 직접 띄우고 기다리는 코드 **"안에서"** 타임아웃을 걸고 **프로세스 트리를 죽여야** 한다.
+
+### 맥락
+
+2026-06-30 커밋 게이트(`require-tests-before-commit.ps1`)가 `gradlew test`에서 **45분 freeze**(멀티세션 gradle 빌드 락 경합, T-078 3회차). 그런데 `settings.json`엔 이미 그 훅에 `timeout: 600`(10분)이 걸려 있었는데도 **안 끊겼다** — 45분 ≫ 10분.
+
+### 왜 — 바깥 타임아웃이 자식 트리를 못 잡는다
+
+- 바깥 타임아웃(harness가 훅 프로세스에 거는 것)은 보통 **훅 프로세스(powershell)만** 죽인다. 훅이 `cmd /c gradlew …`로 **동기 spawn한 손자(cmd→gradlew→java)** 는 별도 프로세스 트리라 함께 안 죽거나, 데몬으로 detached돼 살아남아 빌드 락을 계속 쥔다.
+- 게다가 그 바깥 타임아웃이 환경(데스크톱 앱 등)에서 **확실히 강제되지 않을 수도** 있다. 어느 쪽이든 결과는 "선언된 타임아웃이 있는데도 무한 hang".
+- 즉 **타임아웃은 'hang하는 그 자식을 직접 들고 있는 코드'에 있어야** 신뢰할 수 있다. 한 단계 바깥은 자식을 못 본다.
+
+### 해법 — 내부 타임아웃 + 트리 kill + 자가복구
+
+훅 **안에서** 자식을 비동기로 띄우고 기한을 직접 관리한다:
+
+- `Process.Start` (또는 `Start-Process -PassThru`) → `WaitForExit($timeoutMs)`.
+- 초과 시 `taskkill /T /F /PID`로 **프로세스 트리 전체**(cmd→gradlew→java)를 죽이고, 도메인 자가복구(`gradlew --stop`로 데몬 정리)까지 한 뒤 **fail-closed**(차단)로 끝낸다.
+- 타임아웃 값은 정상 작업의 최댓값보다 충분히 크게(여기선 8분, 정상 전체 테스트 ~2.5분) + env로 조정 가능하게(테스트에서 작은 값으로).
+
+### 교훈
+
+| 바깥(harness) 타임아웃에만 의존 | 내부 타임아웃 |
+|---|---|
+| 훅만 죽고 손자(데몬)는 살아남아 락 유지 → 다음에 또 hang | 트리째 kill + 데몬 정리로 락 해제 |
+| 환경이 강제 안 하면 무한 hang | 코드가 직접 거니 환경 무관하게 발동 |
+| "타임아웃 선언했으니 안전" 착각 | 자식을 들고 있는 그 코드가 책임진다 |
+
+> 일반화: **방어는 위험을 직접 들고 있는 레이어에 둔다.** 자원(자식 프로세스·락·소켓)을 spawn한 코드가 그 자원의 수명·타임아웃·정리를 책임져야 하고, 한 단계 바깥의 선언적 타임아웃은 그걸 대체 못 한다.
+
+### 관련
+
+- [troubleshooting T-078](troubleshooting.md)(무한 hang 본체·3회차·하드픽스), [T-122](troubleshooting.md)(이 타임아웃을 TDD로 짤 때 테스트 하니스 hang 함정). BookTimer A1 게이트 타임아웃(#620).

@@ -140,6 +140,8 @@
 - [T-116. 순수 마크업/CSS 변경이라 '단위 TDD 무의미'라 본 게 기존 통합 테스트를 놓쳐 CI에서 RED](#t-116-순수-마크업css-변경이라-단위-tdd-무의미라-본-게-기존-통합-테스트를-놓쳐-ci에서-red)
 - [T-117. 공유 Vue 컴포넌트에 `<style scoped>`를 넣으면 페이지가 링크하지 않는 별도 번들 CSS가 생성된다](#t-117-공유-vue-컴포넌트에-style-scoped를-넣으면-페이지가-링크하지-않는-별도-번들-css가-생성된다)
 - [T-119. PowerShell→`docker exec mysql -e`로 한글 INSERT 시 mojibake — `UNHEX`로 정확한 UTF-8 바이트 주입](#t-119-powershelldocker-exec-mysql--e로-한글-insert-시-mojibake--unhex로-정확한-utf-8-바이트-주입)
+- [T-121. WinRT 토스트가 미등록 AppUserModelID면 API 성공해도 화면에 안 뜬다(조용히 드랍)](#t-121-winrt-토스트가-미등록-appusermodelid면-api-성공해도-화면에-안-뜬다조용히-드랍)
+- [T-122. 타임아웃/hang 수정의 RED 테스트는 하니스를 outer `timeout`으로 감싸지 않으면 테스트가 세션째 hang한다](#t-122-타임아웃hang-수정의-red-테스트는-하니스를-outer-timeout으로-감싸지-않으면-테스트가-세션째-hang한다)
 
 ---
 
@@ -2253,6 +2255,30 @@ git worktree remove ../BookTimer-<task>
 
 ---
 
+## T-121. WinRT 토스트가 미등록 AppUserModelID면 API 성공해도 화면에 안 뜬다(조용히 드랍)
+
+**증상**: PowerShell에서 `[Windows.UI.Notifications.ToastNotificationManager]`로 토스트를 띄우는데 `.Show()`가 **예외 없이 성공**(반환 OK)하는데도 화면에 토스트가 **안 나타난다**. 에러 로그도 없어 "보냈다고는 하는데 안 보임".
+
+**원인**: `CreateToastNotifier($appId)`의 `$appId`(AppUserModelID)가 **시스템에 등록돼 있어야** Windows가 토스트를 표시한다. 미등록 AppID(예: 임의의 PowerShell 경로 ID `{1AC14E77…}\WindowsPowerShell\v1.0\powershell.exe`)면 Windows가 **조용히 드랍**(API는 성공으로 보임). 추가로 **집중 지원(Focus Assist)·방해 금지**가 켜져 있어도 억제된다(`HKCU:\…\PushNotifications\ToastEnabled=0`이면 전역 off).
+
+**해결**: **등록된 시스템 AppID를 쓴다** — `Microsoft.Windows.Explorer`가 어디서나 뜬다(실측 확인). 자체 AppID가 필요하면 Start Menu 바로가기에 `System.AppUserModel.ID`를 박아 등록하거나 `BurntToast` 모듈 사용. 진단: API가 성공인데 안 뜨면 ① AppID 등록 여부 ② 집중지원/`ToastEnabled` ③ 알림 센터(`Win+N`)에 배너 없이 쌓였는지 순으로 본다.
+
+**관련**: B1 확인-대기 알림 훅 `notify-when-waiting.ps1`(#621)이 이 AppID로 발사. PowerShell↔Windows API 함정. 1회차 신규.
+
+---
+
+## T-122. 타임아웃/hang 수정의 RED 테스트는 하니스를 outer `timeout`으로 감싸지 않으면 테스트가 세션째 hang한다
+
+**증상**: "무한 hang을 끊는 타임아웃"을 TDD로 짤 때, 구현 전(RED) 상태에서 hang을 재현하는 테스트를 돌리면 **테스트 자체가 안 끝나고 세션이 얼어붙는다**(고치려는 바로 그 증상을 테스트가 겪음).
+
+**원인**: hang 케이스는 "안 끊기는 동작"(영영 안 돌아오는 자식)을 부른다. 타임아웃이 아직 없는 RED에선 그 호출이 무한정 블록 → 테스트 러너도 같이 블록 → 세션 hang.
+
+**해결**: 테스트 하니스에서 그 호출을 **coreutils `timeout N …`(outer timeout)으로 감싸** RED에서도 유한 시간에 반환·실패 단언하게 한다. + 가짜 느린 자식(`ping -n`/`sleep`으로 지연 후 **exit 0**)을 써서, "미구현=오래 기다린 뒤 통과(=커밋 허용, 잘못)" vs "구현=타임아웃 차단(exit 2)"로 RED↔GREEN을 종료코드로 가른다(자식이 sleep 후 exit 1이면 RED도 차단처럼 보여 구분 실패 — **반드시 exit 0**). `--stop` 류 자가복구 호출은 가짜 자식이 빠르게 분기 처리하게 해 테스트가 또 안 늘어지게.
+
+**관련**: T-078(무한 hang 본체), A1 게이트 타임아웃 테스트 `test-require-tests-timeout.sh`(#620), [learning-notes N-143](learning-notes.md)(외부 vs 내부 타임아웃). 1회차 신규.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2378,3 +2404,5 @@ git worktree remove ../BookTimer-<task>
 | 2026-06-30 | T-119 (PowerShell→`docker exec mysql -e` 한글 INSERT가 mojibake로 저장돼 도감 매칭 실패 — `HEX`로 진단, `UNHEX('ED959C…')`로 정확한 UTF-8 바이트 직접 주입(또는 UTF-8 파일·UI), T-026·T-044 PowerShell→native exe 인자 인코딩 군, 검증 데이터 셋업 한정, 1회차) |
 | 2026-06-30 | T-120 (rebase로 sibling PR의 새 `.java` 테스트가 들어온 뒤 `git commit --amend`가 비-`.java`(번들 `.js`)만 스테이징하면 `require-tests-before-commit` 게이트가 스킵돼 컴파일 에러가 CI까지 샌다 — 건물 은퇴 PR이 `GardenView`를 6→3-arg로 줄였는데 같은 시각 머지된 #610의 새 `ProfileCharacterServiceTest`가 옛 6-arg로 `GardenView` 생성, rebase가 그 테스트를 가져왔으나 amend 스테이징 델타엔 `dashboard.js`만 있어 훅이 `gradlew test`를 안 돎(훅은 staged `.java` 있을 때만 발동) → 로컬 GREEN인데 CI `compileTestJava` FAILED(1m6s 조기 실패) / 감별=CI 로그 `constructor X cannot be applied to given types`가 **내가 안 건드린 파일**에서 나면 rebase가 가져온 sibling 변경이 내 시그니처 변경과 충돌 / 해결=그 파일을 새 시그니처로 고치고 **`.java` 포함해** 다시 amend(이번엔 게이트 발동·GREEN)→force-push / 예방=**rebase가 sibling PR 변경을 끌어온 뒤엔 push 전 `./gradlew test`(최소 `compileTestJava`) 1회 수동** — 훅의 staged-delta 휴리스틱은 rebase가 가져온 파일을 못 봄(스테이징에 없음). 타입 시그니처(생성자·필드)를 바꾸는 PR일수록 sibling이 그 타입을 새로 쓰면 머지 시점에야 충돌 표출 / 1회차 신규, T-096(폴링≠머지)·T-107(묶음 명령이 훅 무력화) 같은 '게이트 우회' 계열) |
 | 2026-06-30 | T-107 **2회차** (`require-bundle-build`에서 묶음 명령 함정 실증 — `git add -A && git commit`을 한 Bash 명령으로 묶으면 PreToolUse 번들 훅이 명령 실행 *전* 발동→그 시점 인덱스가 직전 시도의 구버전 산출물→훅이 새로 빌드한 워킹트리 `garden.js`와 어긋나 `Bundle is stale`로 오탐 BLOCK 3회 연속. `git add`를 별도 호출로 분리하니 인덱스=워킹트리로 통과. 1회차(T-107)는 목차훅 **skip**(무력화)이었고 이번은 번들훅 **오탐 BLOCK** — 증상은 반대지만 근본 동일(PreToolUse는 명령 문자열 실행 전 1회만 가로챔). 이번엔 `npm ci`로 node_modules가 갈려 구버전 산출물과 새 빌드 차이가 또렷이 드러남(결정적 빌드여도 묶음이면 동일 함정) / **2회+ → 하드픽스 승격 후보**: 훅이 명령 문자열에 `git add`+`git commit` 동시 포함을 감지하면 분리 안내. PreToolUse 게이트 걸린 커밋은 add·commit 분리가 정답) |
+| 2026-07-01 | T-121 (WinRT 토스트가 미등록 AppUserModelID면 `.Show()`가 예외 없이 성공해도 화면에 안 뜸(조용히 드랍) — 등록 시스템 AppID `Microsoft.Windows.Explorer` 사용(실측 확인), 집중지원/`ToastEnabled`도 점검. B1 확인-대기 알림 훅 #621, PowerShell↔Windows API 함정, 1회차 신규) |
+| 2026-07-01 | T-122 (타임아웃/hang 수정의 RED 테스트는 하니스를 outer `timeout`으로 안 감싸면 테스트가 세션째 hang — 가짜 느린 자식을 **exit 0**으로 두어 RED=오래 기다린 뒤 통과(=허용, 잘못)·GREEN=타임아웃 차단(exit 2)로 종료코드로 가름. A1 게이트 타임아웃 테스트 #620·N-143, 1회차 신규) |
