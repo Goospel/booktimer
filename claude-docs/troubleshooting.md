@@ -135,6 +135,7 @@
 - [T-115. 워크트리에서 작업한 세션이 그 워크트리를 직접 정리하면 최상위 빈 폴더가 안 지워진다(세션 cwd 점유)](#t-115-워크트리에서-작업한-세션이-그-워크트리를-직접-정리하면-최상위-빈-폴더가-안-지워진다세션-cwd-점유)
 - [T-116. 순수 마크업/CSS 변경이라 '단위 TDD 무의미'라 본 게 기존 통합 테스트를 놓쳐 CI에서 RED](#t-116-순수-마크업css-변경이라-단위-tdd-무의미라-본-게-기존-통합-테스트를-놓쳐-ci에서-red)
 - [T-117. 공유 Vue 컴포넌트에 `<style scoped>`를 넣으면 페이지가 링크하지 않는 별도 번들 CSS가 생성된다](#t-117-공유-vue-컴포넌트에-style-scoped를-넣으면-페이지가-링크하지-않는-별도-번들-css가-생성된다)
+- [T-119. PowerShell→`docker exec mysql -e`로 한글 INSERT 시 mojibake — `UNHEX`로 정확한 UTF-8 바이트 주입](#t-119-powershelldocker-exec-mysql--e로-한글-insert-시-mojibake--unhex로-정확한-utf-8-바이트-주입)
 
 ---
 
@@ -2234,6 +2235,18 @@ git worktree remove ../BookTimer-<task>
 
 ---
 
+## T-119. PowerShell→`docker exec mysql -e`로 한글 INSERT 시 mojibake — `UNHEX`로 정확한 UTF-8 바이트 주입
+
+**증상**: 실 브라우저 검증용 데이터를 만들려 `docker exec <mysql> mysql -e "INSERT INTO book (... author ...) VALUES ('한강')"`로 넣었더니 도감 보유 판정이 안 됨(설정 "프로필 사진" 카드에 "아직 모은 작가가 없어요"). `HEX(author)`로 보니 `C3ADE280A2…`(mojibake)라, `match_name`의 정상 `ED959CEAB095`("한강")와 안 맞아 contains 매칭 실패.
+
+**원인**: Windows PowerShell 5.1이 native exe(`docker`) 인자를 UTF-8로 안 넘긴다(시스템 로캘 CP949). 한글이 docker→mysql 경로에서 깨져 컬럼에 잘못된 바이트로 저장. T-026(git commit `-m` 인라인 한글 깨짐)과 같은 뿌리(PowerShell→native exe 인자 인코딩).
+
+**해결**: 한글 값은 `UNHEX('ED959CEAB095')`로 **정확한 UTF-8 바이트를 직접** 주입(`UPDATE book SET author=UNHEX('…')`). UNHEX는 바이트 리터럴이라 PowerShell·connection charset 인코딩을 안 탄다. 또는 SQL을 UTF-8 파일로 써서 `docker cp` 후 `source`, 혹은 앱 UI(브라우저=UTF-8)로 입력. 진단은 `HEX(컬럼)`을 기대 UTF-8 바이트와 대조한다(콘솔 출력 텍스트도 CP949라 같이 깨져 신뢰 불가).
+
+**관련**: T-026(인라인 한글 커밋 → `.commit-msg-tmp`), T-044(PowerShell here-string JSON 인코딩 → 파일+`--input`). PowerShell→native exe 인자 인코딩 군. 검증 데이터 셋업 한정(운영 무관). 1회차 신규.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2356,3 +2369,4 @@ git worktree remove ../BookTimer-<task>
 | 2026-06-29 | T-116 (순수 마크업/CSS 변경이라 '단위 TDD 무의미'라 보고 preview만 했는데 기존 통합 테스트(@SpringBootTest MockMvc)가 CI에서 RED — LandingPageTest가 렌더 HTML의 /village 링크를 containsString으로 검증 중이라 #village 앵커 전환에 깨짐 / 해결=마크업·링크·문구 변경 전 그 문자열·경로·뷰명을 검증하는 기존 테스트 grep, 의도된 변경이면 새 동작에 맞게 갱신하고 변경 전 로컬 RED 먼저 확인 / 1회차 신규) |
 | 2026-06-29 | T-118 (CSS `rotate(90deg)` 으로 컨테이너 회전 시 Phaser `InputManager.transformPointer` 의 `_sx/_sy` 스케일 팩터가 잘못된 좌표를 계산 — 내부 `_sx = canvas.width / canvasBounds.width` 인데, 회전 후 `canvasBounds` 는 시각적(portrait) 치수를 반환하고 `canvas.width` 는 landscape 치수라 팩터가 틀린 배율(예: 812/375≈2.17)로 계산됨 / 증상=portrait 강제 가로 회전 후 터치 포인터가 실제 탭 위치와 크게 어긋남 / 해결=`transformPointer` 몽키패치 — `_sx/_sy` 를 우회하고 `scaleManager.canvasBounds`에서 직접 역좌표 수식 `canvas_x = bounds.height - relY, canvas_y = relX` 를 계산(N-140). 패치는 게임 인스턴스 생성 직후 호출, landscape나 데스크탑 진입엔 origFn으로 fall-through / 관련: N-140(역좌표 수식 도출), N-082(Phaser Game은 Vue ref 금지)) |
 | 2026-06-29 | T-117 (공유 Vue 컴포넌트에 `<style scoped>` 추가 → vite가 페이지가 `<link>` 안 하는 별도 `<bundle>.css`(search.css) 생성, 칩이 무스타일로 뜸 — 헤드리스 vitest는 CSS 불요라 통과해 못 잡고 실 페이지에서만 드러남 / 원인=이 프로젝트 Vue 섬은 컴포넌트 `<style>` 없이 전역 app.css 클래스만 쓰는 패턴 / 해결=공유 컴포넌트 스타일은 전역 app.css 클래스로(`.book-status-badge` pill 레시피 재사용), orphan css 삭제+재빌드해 산출물 JS만 / 페이지별 `<link>`는 공유 컴포넌트엔 누락 위험 / T-063·T-082 번들 군·N-083, 친구 추천 칩 작업, 1회차 신규) |
+| 2026-06-30 | T-119 (PowerShell→`docker exec mysql -e` 한글 INSERT가 mojibake로 저장돼 도감 매칭 실패 — `HEX`로 진단, `UNHEX('ED959C…')`로 정확한 UTF-8 바이트 직접 주입(또는 UTF-8 파일·UI), T-026·T-044 PowerShell→native exe 인자 인코딩 군, 검증 데이터 셋업 한정, 1회차) |
