@@ -277,6 +277,13 @@ Claude 가 테스트를 빨리 짜므로 **"사람 작성 시간"이라는 전�
 > 우연히 걸러주지만 `findAll`은 안 걸러줌). **완성된 픽스처만 만들면 영영 못 잡으니, null-state 엔티티를 일부러 만들어
 > 결과에서 빠지는지 단언하라.** 배경·재발 방지: [learning-notes.md](claude-docs/learning-notes.md) **N-055**.
 
+> **구체 예 — 부모 엔티티 삭제 경로엔 FK 자식을 먼저 정리하는지를 H2 통합 테스트로 필수.**
+> `ON DELETE CASCADE`가 없는 JPA 앱(이 repo)에선 부모(User·Book 등)를 지우기 전에 그를 FK 참조하는 모든 자식
+> (reading_session·book·follow·block·report 등)을 먼저 끊거나 지워야 한다 — 안 하면 제약 위반으로 삭제가 500.
+> **mock 단위테스트는 FK 제약을 검증하지 않으니** 이 결함을 못 잡는다. 자식 픽스처를 가진 부모를 일부러 만들어
+> **실 H2 스키마 통합 테스트**로 부모 삭제가 제약 위반 없이 성공하는지(flush 강제로 쿼리 실행) 단언하라.
+> 배경·재발 방지: [troubleshooting.md](claude-docs/troubleshooting.md) **T-023**(책 삭제 시 reading_session FK 미정리)·**T-029**(유저 삭제 시 자식 book 미정리).
+
 ### 강제 (커밋 시 테스트 게이트)
 
 - `.claude/hooks/require-tests-before-commit.ps1` 가 `git commit` 을 가로채,
@@ -323,6 +330,26 @@ Claude Code 는 그 자식 프로세스 종료를 기다릴 뿐이라 **코어 �
 - **E2E(Playwright) 자동화 위치 — 커밋 훅 금지, 승격은 CI로 (2026-06-26 결정)**: 위 실 브라우저 검증의 자동화 형태가 `frontend/e2e/`의 Playwright(로그인·정원 저장 **표적 2개**)다. 이건 **로컬 수동**으로 두고 **커밋 게이트(훅)에 넣지 않는다** — E2E는 실서버(`bootRun`)·Docker·브라우저가 전제라 매 커밋마다 돌리면 수 초 게이트가 수 분으로 불고, 멀티세션 8080 경합·플래키로 `SKIP_TESTS` 우회를 습관화시켜 게이트를 무력화한다. per-commit이 아니라 **머지 전** 레이어가 맞다. **승격 트리거**: ① E2E가 잡았어야 할 회귀가 또 새거나 ② 스펙이 2~3개 흐름 이상으로 커지면 → 커밋 훅이 아니라 **CI 잡(머지 게이트)**으로 올린다. 실행법·결과 육안 확인은 [learning-notes N-127](claude-docs/learning-notes.md), 도입 배경·판단은 N-084.
 
 > 역할 분담: TDD 게이트(훅)는 `.java` 도메인 로직을 막고, 이 가이드(soft)는 **TDD가 못 보는 클라이언트 로드순서·타이밍 사각**을 실 브라우저 검증으로 메운다. 개념: [learning-notes N-083](claude-docs/learning-notes.md)(defer × `class extends` TDZ), N-082(reactive Proxy), 함정 T-053·T-054.
+
+---
+
+## 🔒 CSRF 폼 세션 선확정 — 큰 SSR·익명 폼 GET 핸들러 (T-033·T-049)
+
+**`th:action` 폼이 있는 SSR 페이지를 렌더하는 GET 핸들러는, 폼을 렌더하기 전에 CSRF 토큰을 한 번 당겨 세션을 선확정한다.**
+
+### 왜 (배경)
+
+Thymeleaf가 폼의 CSRF 숨김필드를 그릴 때 세션을 **lazy 생성**하는데, 페이지가 크면 그 시점엔 응답 버퍼(기본 ~8KB)가 이미 커밋된 뒤다 — 커밋 후 `getSession(true)`는 `IllegalStateException("Cannot create a session after the response has been committed")`로 터져 **그 페이지만 500**이 난다. 익명 폼(로그인·가입·비번재설정·이메일검증·구독해지)과 폼이 여럿인 큰 페이지(설정 등)가 특히 위험. 규칙 도입 전부터 4회+ 재발(T-033·T-049). 개념: [learning-notes N-077](claude-docs/learning-notes.md).
+
+### 어떻게
+
+- GET 핸들러에서 폼 렌더 전에 **토큰을 한 번 호출**해 세션을 즉시 만든다:
+  ```java
+  Object attr = request.getAttribute(CsrfToken.class.getName());
+  if (attr instanceof CsrfToken token) { token.getToken(); } // 세션 즉시 생성 → 버퍼 커밋 전 확정
+  ```
+  여러 핸들러에 반복되면 `PasswordResetController.precommitCsrfToken(request)`처럼 헬퍼로 묶는다.
+- **훅으로 강제하지 않는 이유**: "th:action 폼 템플릿을 렌더하는 GET 핸들러인데 선확정이 없다"를 정적 감지하려면 컨트롤러↔템플릿 역매핑·POST 재렌더 분기 때문에 오탐(FP)이 30~50%라 게이트가 무력화된다 — 그래서 이 prose 규칙 + 코드 리뷰가 담당한다(하드픽스 부적합 사례).
 
 ---
 
