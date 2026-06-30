@@ -2451,13 +2451,21 @@ body.personality-page #personality-app { gap: 18px; }
     padding: 4px 2px;
 }
 .pv-hud-home {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 4px 10px;
     color: var(--accent-hover);
     font-weight: 600;
     font-size: .85rem;
     text-decoration: none;
     white-space: nowrap;
 }
-.pv-hud-home:hover { text-decoration: underline; }
+.pv-hud-home:hover { border-color: var(--accent-hover); }
 .pv-hud-title {
     flex: 1 1 auto;
     color: var(--muted);
@@ -2474,13 +2482,22 @@ body.personality-page #personality-app { gap: 18px; }
     white-space: nowrap;
 }
 .pv-hud-dex {
+    flex: 0 0 auto;
+    width: auto;               /* 전역 button{width:100%} 상쇄 — 빠지면 도감 버튼이 가로로 늘어남(#286 가드) */
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
     border: 1px solid var(--border);
     background: var(--card-bg);
     border-radius: 16px;
     padding: 4px 10px;
-    font-size: .95rem;
+    color: var(--text);
+    font-weight: 600;
+    font-size: .85rem;
+    white-space: nowrap;
     cursor: pointer;
 }
+.pv-hud-dex:hover { border-color: var(--accent-hover); }
 
 /* 빈 상태 — 보유 작가 0 */
 .pv-empty {

@@ -17,7 +17,7 @@
 | PowerShell 한글 깨짐(커밋 메시지·.ps1 스크립트) | T-026 | 2+ | ✅ CLAUDE.md 「🈲 한글 커밋 `.commit-msg-tmp`」 + 훅 `check-commit-message.ps1` |
 | 워크트리 머지 `--delete-branch`(로컬 main checkout 충돌) | T-095 | 2 (#511 → #515) | ✅ CLAUDE.md Git워크플로 auto-merge caveat(워크트리에선 `--delete-branch` 빼고 머지 → 원격=gh api·로컬=수동 정리) |
 | changelog 멀티세션 동시 append → 같은 위치 머지 충돌 | T-098 | 5+ (2026-06-26 하루, #516·#518·#520·#523) | ✅ 하드픽스(`.gitattributes` `claude-docs/changelog.md merge=union` — 양쪽 새 행 자동 병합으로 rebase 충돌 자체 제거) |
-| 전역 `button` 속성 누수(컴포넌트가 명시 안 한 속성을 상속) | T-056 · T-081 · T-099 | width 3+ · radius 1 | ✅ 코드 패턴(flex 안 칩·탭·세그먼트엔 `width:auto`·`border-radius:0`로 상쇄, 인라인 주석) |
+| 전역 `button` 속성 누수(컴포넌트가 명시 안 한 속성을 상속) | T-056 · T-081 · T-099 | width 4+ (이 PR `.pv-hud-dex` 도감 버튼 풀폭) · radius 1 | ✅ 코드 패턴(flex 안 칩·탭·세그먼트엔 `width:auto`·`border-radius:0`로 상쇄, 인라인 주석) — 이번엔 in-code `#286 가드` 주석이 재디버깅을 막아줌(패턴 작동) |
 | CSS 주석 속 `*/`(특히 wildcard-slash `.foo-*/.bar-*`)가 주석 조기 종료 → 다음 규칙 침묵 드랍 | T-087 | 3 (#522 .dash-card → #526 .book-*/.record- → 이 PR .oauth-*/.entry-hero) | ✅ **하드픽스 훅 `require-css-comment-safe.ps1`**(3회차에 승격) — 주석 닫는 `*/`가 **양옆 모두 셀렉터문자에 붙은** 경우만 차단(=기존 보류 사유 FP 해소: ` */color`는 앞이 공백·`/*x*/`+개행은 뒤가 공백이라 통과, 잔여 FP는 `/*c*/.sel`류 희귀패턴+우회 토큰 `SKIP_CSS_COMMENT_CHECK`). 보조: 예방 규칙(슬래시→`·`/`과`) + §11 실 브라우저/static-preview 게이트(N-118) |
 | 도구 재생성 시 BOM/EOL 미보존 → phantom diff(첫 줄·전체 줄끝) | T-093 · T-103 | 2 | ✅ 코드 패턴(원본 BOM은 바이트로·EOL은 첫 매치로 감지해 쓸 때 보존; `rebuild-troubleshooting-toc.ps1`) |
 | 빈 워크트리 폴더가 cwd 점유로 안 지워짐 | T-105 · T-115 | 2 | ✅ 절차(정션 끊기+`worktree prune`+`branch -D`로 실질 정리 후 빈 폴더는 세션 종료 후 `rmdir` / 워크트리 정리는 그 세션 아닌 **메인·다른 세션**에서) |
