@@ -136,6 +136,20 @@ class DashboardApiControllerTest {
                 .andExpect(jsonPath("$.carriedDebtSeconds").value(0));
     }
 
+    // ── 프로필 사진(도감 작가 얼굴) ───────────────────────────────────────────
+
+    @Test
+    @DisplayName("GET /api/dashboard: 프로필 작가를 선택했으면 profileCharacterCode를 응답에 싣는다")
+    void get_withProfileCharacter_includesCode() throws Exception {
+        User u = register("pcdash@a.com", "pcdash");
+        u.selectProfileCharacter("han_gang"); // 엔티티 직접(보유검증 우회) — 노출 경로만 검증
+        userRepository.save(u);
+
+        mockMvc.perform(get("/api/dashboard").with(user("pcdash@a.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.profileCharacterCode").value("han_gang"));
+    }
+
     // ── 5. start IDOR → 404 ──────────────────────────────────────────────────
 
     @Test

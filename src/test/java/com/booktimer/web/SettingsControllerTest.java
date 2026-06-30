@@ -28,6 +28,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -323,5 +324,62 @@ class SettingsControllerTest {
         mockMvc.perform(get("/settings").with(user("mktpushtrue@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(model().attribute("marketingPushConsent", true));
+    }
+
+    // --- 프로필 사진(도감 작가 얼굴) 선택 ---
+
+    @Test
+    @DisplayName("GET /settings: 보유 작가 목록(ownedCharacters)을 모델에 싣는다(미보유면 빈 목록)")
+    void getSettings_includesOwnedCharacters() throws Exception {
+        register("profchar-get@booktimer.com"); // 완독책 없음 → 보유 작가 0(빈 목록)
+
+        mockMvc.perform(get("/settings").with(user("profchar-get@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeExists("ownedCharacters"));
+    }
+
+    @Test
+    @DisplayName("GET /settings: 현재 선택한 프로필 작가 코드(profileCharacterCode)를 모델에 싣는다")
+    void getSettings_includesSelectedProfileCharacter() throws Exception {
+        User u = register("profchar-sel@booktimer.com");
+        u.selectProfileCharacter("han_gang"); // 엔티티 직접(보유검증 우회) — 모델 전달만 검증
+        userRepository.save(u);
+
+        mockMvc.perform(get("/settings").with(user("profchar-sel@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("profileCharacterCode", "han_gang"));
+    }
+
+    @Test
+    @DisplayName("POST /settings/profile-character: 미보유 작가는 거부하고 error 플래시로 되돌린다(IDOR 방어)")
+    void postProfileCharacter_unowned_flashErrorAndNotSaved() throws Exception {
+        register("profchar-unowned@booktimer.com"); // 완독책 없음 → 어떤 작가도 미보유
+
+        mockMvc.perform(post("/settings/profile-character")
+                        .with(user("profchar-unowned@booktimer.com")).with(csrf())
+                        .param("characterCode", "han_gang"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/settings"))
+                .andExpect(flash().attributeExists("error"));
+
+        User reloaded = userRepository.findByEmail("profchar-unowned@booktimer.com").orElseThrow();
+        assertThat(reloaded.getProfileCharacterCode()).isNull(); // 저장 안 됨
+    }
+
+    @Test
+    @DisplayName("POST /settings/profile-character: 빈 코드면 선택 해제(이니셜 폴백)하고 /settings로 되돌린다")
+    void postProfileCharacter_blank_clears() throws Exception {
+        User u = register("profchar-clear@booktimer.com");
+        u.selectProfileCharacter("han_gang"); // 보유검증 우회(엔티티 직접) — 해제 동작만 검증
+        userRepository.save(u);
+
+        mockMvc.perform(post("/settings/profile-character")
+                        .with(user("profchar-clear@booktimer.com")).with(csrf())
+                        .param("characterCode", ""))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/settings"));
+
+        User reloaded = userRepository.findByEmail("profchar-clear@booktimer.com").orElseThrow();
+        assertThat(reloaded.getProfileCharacterCode()).isNull();
     }
 }

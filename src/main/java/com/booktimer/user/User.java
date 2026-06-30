@@ -118,6 +118,18 @@ public class User extends BaseTimeEntity {
     private String loginId;
 
     /**
+     * 프로필 아바타로 선택한 도감 작가 캐릭터 코드({@code author_character.code}). <b>파일 업로드 없이</b>
+     * 사용자가 도감에서 <b>보유(완독)한 작가</b>의 얼굴(SVG 스프라이트 {@code #sprite-{code}})을 아바타로 재사용한다.
+     * {@code null}이면 미선택 — 기존 로그인ID 이니셜 원형으로 폴백한다(opt-in).
+     *
+     * <p><b>보유 여부 검증은 엔티티가 아니라 서비스</b>({@code ProfileCharacterService})가 한다 — 보유 판정이
+     * 완독책·도감 카탈로그에 의존해 엔티티 순수성을 벗어나기 때문(먹이주기 IDOR 방어와 동일 경로). 엔티티는
+     * 마케팅 동의 setter처럼 값만 받는다({@link #selectProfileCharacter}/{@link #clearProfileCharacter}).
+     */
+    @Column(name = "profile_character_code", length = 50)
+    private String profileCharacterCode;
+
+    /**
      * 영리목적 광고성 정보(재참여 넛지 등 마케팅 메일) 수신에 동의했는지(이메일 인프라 2단계).
      * 정보통신망법 §50의 <b>사전 동의(opt-in)</b> 불변식 — 기본 {@code false}(미동의)이고, 가입 폼·설정의
      * 별도 선택 항목으로만 켜진다(필수 동의에 끼워팔지 않음 — 개인정보보호법). 미동의자에겐 넛지를 보내지 않는다.
@@ -232,6 +244,32 @@ public class User extends BaseTimeEntity {
         }
         this.nickname = nickname;
         this.timezone = timezone;
+    }
+
+    /**
+     * 프로필 아바타로 쓸 도감 작가 캐릭터를 선택한다. <b>보유(해금) 여부 검증은 호출 전에</b>
+     * 서비스({@code ProfileCharacterService})가 끝낸 상태로 들어온다 — 엔티티는 값만 받는다
+     * (마케팅 동의 setter와 같은 얇은 책임 분리). {@code null}/공백이면 {@link #clearProfileCharacter()}로
+     * 위임해 미선택(이니셜 폴백) 상태로 되돌린다.
+     *
+     * @param code author_character.code (보유 검증을 통과한 값) — null/공백이면 선택 해제
+     */
+    public void selectProfileCharacter(String code) {
+        if (code == null || code.isBlank()) {
+            clearProfileCharacter();
+            return;
+        }
+        this.profileCharacterCode = code;
+    }
+
+    /** 프로필 아바타 선택을 해제한다 — 기본(로그인ID 이니셜)으로 되돌린다. 멱등. */
+    public void clearProfileCharacter() {
+        this.profileCharacterCode = null;
+    }
+
+    /** 프로필 아바타로 선택한 도감 작가 캐릭터 코드. 미선택이면 {@code null}(이니셜 폴백). */
+    public String getProfileCharacterCode() {
+        return profileCharacterCode;
     }
 
     /**

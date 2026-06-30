@@ -112,7 +112,7 @@ async function handleStop() {
     </div>
 
     <template v-else-if="data">
-        <DashHeader :login-id="data.loginId" />
+        <DashHeader :login-id="data.loginId" :profile-character-code="data.profileCharacterCode" />
 
         <QuoteCard :quotes="data.quotes" />
 

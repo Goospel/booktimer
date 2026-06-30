@@ -78,6 +78,7 @@ public class DashboardApiController {
 
         return new DashboardResponse(
                 live.nickname(), live.loginId(),
+                user.getProfileCharacterCode(),
                 live.remainingSeconds(), live.carriedDebtSeconds(),
                 live.todayGoalSeconds(), live.carryover(),
                 live.hasActiveSession(), live.activeStartedAt(),
@@ -149,6 +150,7 @@ public class DashboardApiController {
     public record DashboardResponse(
             String nickname,
             String loginId,
+            String profileCharacterCode,
             long remainingSeconds,
             long carriedDebtSeconds,
             long todayGoalSeconds,

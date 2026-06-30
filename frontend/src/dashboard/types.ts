@@ -64,6 +64,7 @@ export interface TimerState {
 export interface DashboardResponse extends TimerState {
     nickname: string
     loginId: string
+    profileCharacterCode: string | null
     graph: GraphDto
     garden: CatalogDto
     quotes: QuoteDto[]
