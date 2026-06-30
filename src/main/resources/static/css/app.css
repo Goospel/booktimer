@@ -817,7 +817,7 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 /* 도감 그리드 — 자동 채움 칸(반응형). 보유=이모지+이름, 미보유=🔒+목표일. */
 .garden-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
     gap: 8px;
     margin: 8px 0 12px;
 }
@@ -838,6 +838,18 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .garden-grid .plant-emoji.locked { filter: grayscale(1); opacity: .55; }
 .garden-grid .plant-name { font-size: .72rem; color: var(--text); word-break: keep-all; }
 .garden-grid .plant-name.locked { color: var(--muted); }
+/* 정(affection) 배지 — 좁은 셀에서 과개행 방지: 작은 글자 + 단어 단위 줄바꿈. */
+.garden-grid .plant-affection {
+    font-size: .6rem;
+    line-height: 1.25;
+    color: var(--muted);
+    word-break: keep-all;
+    text-align: center;
+    margin-top: 1px;
+}
+/* 정 깊은 단계(단짝·베프)는 따뜻한 강조색으로 보상감. */
+.garden-grid .plant-affection.affection-lv4,
+.garden-grid .plant-affection.affection-lv5 { color: var(--accent-hover); font-weight: 600; }
 .plant-new {
     position: absolute;
     top: -6px;
@@ -2668,7 +2680,7 @@ body.personality-page #personality-app { gap: 18px; }
 
 .village-dex-panel {
     width: 100%;
-    max-width: 540px;
+    max-width: 760px;
     max-height: 80dvh;
     background: var(--card-bg);
     border-radius: var(--radius) var(--radius) 0 0;
