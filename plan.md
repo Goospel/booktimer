@@ -229,7 +229,7 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 
 > **마을 D 폴리시 PR-B — 근접 상호작용 ✅ (2026-06-24)**: 두 작가 캐릭터가 서로 가까이 있을 때 마주보고 인사 이모트. `pure.ts`에 `INTERACT_DIST`(0.13)·`INTERACT_COOLDOWN_MS`(12000ms)·`isNear`·`faceEachOther` 추가(순수함수, T-084 불변식 준수). `scene.ts` `update()` 캐릭터 쌍 순회 — idle 시 flipX 마주보기(메인 루프 **뒤** 배치로 look 토글 우선순위 확보)·쿨다운 보호 👋/❤️ 이모트 독립 Text tween(T-084 회피). TDD: `isNear` 5종·`faceEachOther` 4종 RED→GREEN. 577 vitest GREEN. 번들 재빌드(T-063). **후속**: 8방위·파츠·스프라이트시트(아트 졸업 시).
 
-> **모바일 portrait 강제 가로 뷰 (2026-06-29)**: 모바일 세로(portrait) 진입 시 `.village-shell`을 CSS `rotate(90deg) translateX(-100%)` CW 회전으로 마을 게임 화면을 가로 풀스크린으로 표시. `@media (max-width: 899px) and (orientation: portrait)` → `position: fixed; width: 100dvh; height: 100dvw; transform-origin: top left`. Phaser `InputManager.transformPointer` 몽키패치(`applyPortraitInputPatch`)로 터치 좌표를 역회전(`rotateTouchForPortrait` 순수함수 — `canvas_x = bounds.height - relY, canvas_y = relX`). `window.matchMedia` 리스너로 portrait↔landscape 전환 시 `_isPortraitRotated` 플래그 갱신 + `fitCamera` 보강. TDD: `rotateTouchForPortrait` 경계 6종 vitest RED→GREEN(784 GREEN). 번들 재빌드. 데스크탑 회귀 0(미디어쿼리 미작동 확인).
+> **모바일 portrait 강제 가로 뷰 (2026-06-29)**: #605로 구현했으나 실기기 세로(portrait)에서 파란 화면이 나와 방향 전환 — **#605 강제 회전 제거 → 반응형 (2026-06-30)**: CSS `rotate90`·`applyPortraitInputPatch`·`rotateTouchForPortrait` 일체 제거. portrait·landscape 모두 Phaser `Scale.RESIZE`·표준 `transformPointer`·`fitCamera` 반응형으로 동작. vitest 778 GREEN. 번들 재빌드.
 
 **명칭 전환 (방향 결정)**: 이 기능은 **이제부터 "잔디"가 아니라 "정원(Garden)"**이다. GitHub 컨트리뷰션을 그대로 빼다 박은 "잔디"에서 출발했지만, 정체성을 *독서로 가꾸는 나만의 정원*으로 재정의한다. (코드·UI의 `잔디`/`contribution` 명칭 실제 리네이밍은 구현 단계의 일 — 지금은 방향만 못 박음.)
 
