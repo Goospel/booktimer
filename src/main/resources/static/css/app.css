@@ -2289,36 +2289,6 @@ body.personality-page #personality-app { gap: 18px; }
     }
 }
 
-/* 게임 루트 — 절대배치 기준점. 모바일: 100%×100%; 데스크톱: world 크기 상한 */
-.village-game-root {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    background: var(--garden-water);
-}
-
-@media (min-width: 900px) {
-    .village-game-root {
-        width: min(100%, 1000px);
-        height: min(100dvh, 800px);
-        border-radius: var(--radius);
-        box-shadow: 0 8px 40px rgba(44, 42, 36, .28);
-    }
-}
-
-/* 캔버스 충진 — 게임 루트 전체 채움, touch-action: none으로 드래그 뺏김 방지 */
-.garden-phaser-fill {
-    position: absolute;
-    inset: 0;
-    touch-action: none;
-}
-.garden-phaser-fill canvas {
-    display: block;
-    width: 100% !important;
-    height: 100% !important;
-}
-
 /* 로딩·오류 — 중앙 정렬 */
 .village-loading {
     position: absolute;
@@ -2331,102 +2301,8 @@ body.personality-page #personality-app { gap: 18px; }
     background: var(--garden-sky);
 }
 
-/* HUD — 게임 위 절대배치, 자식만 pointer-events */
-.village-hud {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    padding: max(10px, env(safe-area-inset-top))
-             max(14px, env(safe-area-inset-right))
-             max(10px, env(safe-area-inset-bottom))
-             max(14px, env(safe-area-inset-left));
-    z-index: 10;
-}
-.village-hud > * { pointer-events: auto; }
-
-@media (min-width: 900px) {
-    .village-hud {
-        inset: auto;
-        top: 50%; left: 50%;
-        transform: translate(-50%, -50%);
-        width: min(100%, 1000px);
-        height: min(100dvh, 800px);
-    }
-}
-
-/* HUD 상단 — 브랜드 + 인사말 (반투명 캡슐) */
-.village-hud-top {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    align-self: flex-start;
-    background: rgba(243, 238, 228, .82);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    border-radius: 20px;
-    padding: 5px 14px;
-    max-width: 90%;
-}
-
-.village-hud-brand {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-weight: 700;
-    font-size: .88rem;
-    color: var(--accent-hover);
-    text-decoration: none;
-    white-space: nowrap;
-}
-.village-hud-brand:hover { text-decoration: underline; }
-
-.village-hud-greeting {
-    color: var(--muted);
-    font-size: .8rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-/* HUD 하단 버튼들 */
-.village-hud-actions {
-    display: flex;
-    gap: 8px;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-    align-self: flex-end;
-}
-
-.village-hud-btn {
-    width: auto;
-    padding: 7px 15px;
-    border-radius: 20px;
-    background: rgba(243, 238, 228, .88);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-size: .85rem;
-    font-weight: 600;
-    cursor: pointer;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    transition: background .15s, border-color .15s;
-    white-space: nowrap;
-}
-.village-hud-btn:hover {
-    background: rgba(243, 238, 228, 1);
-    border-color: var(--accent);
-    text-decoration: none;
-}
-
-/* ── PortraitVillage — 모바일 세로 경량 돌봄 뷰 (반응형 2모드 PoC) ──
-   세로(≤899px·portrait)에서만 마운트. CoC 무대 대신 1:1 애착(돌봄) 루프. */
+/* ── 돌봄 뷰(다마고치) — 모든 화면 단일 모드 ──
+   CoC 가로 무대 은퇴 후 유일한 마을 화면. 모바일은 풀스크린, 데스크톱은 중앙 카드(액자). */
 .portrait-village {
     position: absolute;
     inset: 0;
@@ -2440,6 +2316,19 @@ body.personality-page #personality-app { gap: 18px; }
              max(14px, env(safe-area-inset-right))
              max(16px, env(safe-area-inset-bottom))
              max(14px, env(safe-area-inset-left));
+}
+
+/* 데스크톱 ≥900px: 풀스크린 대신 중앙 카드(액자) — .village-shell이 flex로 가운데 놓는다. */
+@media (min-width: 900px) {
+    .portrait-village {
+        position: relative;
+        inset: auto;
+        width: min(100%, 460px);
+        height: min(100dvh, 760px);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: 0 8px 40px rgba(44, 42, 36, .28);
+    }
 }
 
 /* 슬림 HUD */

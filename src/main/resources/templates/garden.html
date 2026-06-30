@@ -5,17 +5,15 @@
     <th:block th:replace="~{analytics :: gtag}"></th:block>
     <th:block th:replace="~{fragments/pwa-head :: meta}"></th:block>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <!-- CSRF 토큰 — 배치 저장 fetch(POST /api/garden/layout)가 X-CSRF-TOKEN 헤더로 싣는다. -->
+    <!-- CSRF 토큰 — 먹이주기 fetch(POST /api/garden/feed)가 X-CSRF-TOKEN 헤더로 싣는다. -->
     <meta name="_csrf" th:content="${_csrf != null ? _csrf.token : ''}">
     <title>독서 마을 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
     <th:block th:replace="~{ads :: loader}"></th:block>
 </head>
 <body>
-<!-- 작가 캐릭터 SVG 스프라이트 정의 — 배회 작가(이모지 폴백). -->
+<!-- 작가 캐릭터 SVG 스프라이트 정의 — 돌봄 뷰 히어로·식구 카드(이모지 폴백). -->
 <th:block th:replace="~{fragments/garden-character-sprites :: sprites}"></th:block>
-<!-- 여백(앰비언트) SVG 스프라이트 — 줌아웃 시 물 위 섬·바위·나무. -->
-<th:block th:replace="~{fragments/garden-ambient-sprites :: sprites}"></th:block>
 
 <!-- Vue SPA 마운트 포인트 — 닉네임은 data-nickname으로 전달. -->
 <div id="village-app"
