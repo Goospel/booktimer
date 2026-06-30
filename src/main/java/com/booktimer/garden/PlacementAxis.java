@@ -27,8 +27,8 @@ public enum PlacementAxis {
      */
     AUTHOR,
     /**
-     * 출판사 건물축({@link Building}) — 특정 출판사 N권 완독으로 해금.
-     * 마을 유일 배치 축.
+     * 출판사 건물축 — 마을 컨셉 전환(작가 꾸미기 피벗)으로 카탈로그·해금이 은퇴됨(Building 엔티티 제거).
+     * enum 값은 배치 엔진의 잔존 데이터 필터·DB 직렬화 호환을 위해 보존(엔진 자체 제거는 후속 PR-2).
      */
     BUILDING
 }

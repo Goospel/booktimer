@@ -8,14 +8,13 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * C2 풀어놓기 — GardenView 단위 테스트(Spring 컨텍스트 불필요, 순수 레코드 메서드 검증).
+ * GardenView 단위 테스트(Spring 컨텍스트 불필요, 순수 레코드 메서드 검증).
  *
  * <p>검증 항목:
  * <ul>
- *   <li>{@code ownedPlants()}에서 AUTHOR 제외 — 팔레트·저장 검증 집합에서 배제</li>
+ *   <li>{@code ownedPlants()}는 건물 은퇴로 항상 빈 목록 — 배치 대상 없음(AUTHOR는 배회 전용)</li>
  *   <li>{@code ownedCharacters()} — 보유 AUTHOR만 배회용으로 노출</li>
  *   <li>N-055: 미보유 AUTHOR가 {@code ownedCharacters()}에 새지 않는지</li>
- *   <li>ownedPlants()는 BUILDING만 반환 (식물 4축 제거 후)</li>
  * </ul>
  */
 class GardenViewC2Test {
@@ -26,32 +25,14 @@ class GardenViewC2Test {
     }
 
     private static GardenView viewWith(List<AuthorCharacterState> authorCharacters) {
-        return new GardenView(
-                authorCharacters, 0, authorCharacters.size(),
-                List.of(), 0, 0
-        );
+        return new GardenView(authorCharacters, 0, authorCharacters.size());
     }
 
     @Test
-    @DisplayName("C2 풀어놓기: ownedPlants()가 보유 AUTHOR 캐릭터를 포함하지 않는다")
-    void ownedPlants_excludesAuthorCharacter() {
+    @DisplayName("건물 은퇴: ownedPlants()는 보유 작가가 있어도 항상 빈 목록(배치 대상 0)")
+    void ownedPlants_alwaysEmptyAfterBuildingRetired() {
         GardenView view = viewWith(List.of(state("han_gang", true)));
-        assertThat(view.ownedPlants())
-                .extracting(OwnedPlant::axis)
-                .doesNotContain(PlacementAxis.AUTHOR);
-    }
-
-    @Test
-    @DisplayName("ownedPlants()는 보유한 BUILDING만 반환한다 (식물 4축 제거 후)")
-    void ownedPlants_onlyReturnsBuildingAxis() {
-        Building b = Building.of("minumsa", "민음사", "민음사", "🏛️", 3, 1, null);
-        BuildingState bs = new BuildingState(b, true);
-        GardenView view = new GardenView(
-                List.of(), 0, 0,
-                List.of(bs), 1, 1
-        );
-        assertThat(view.ownedPlants()).hasSize(1);
-        assertThat(view.ownedPlants().get(0).axis()).isEqualTo(PlacementAxis.BUILDING);
+        assertThat(view.ownedPlants()).isEmpty();
     }
 
     @Test

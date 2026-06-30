@@ -331,7 +331,7 @@ class DashboardApiControllerTest {
     // ── 15. garden DTO — 엔티티 User FK 없음 (spot-check) ────────────────────
 
     @Test
-    @DisplayName("GET /api/dashboard: garden CatalogDto — 작가·건물 카운트 필드 존재 (마을 컨셉 전환 후)")
+    @DisplayName("GET /api/dashboard: garden CatalogDto — 작가 카운트 필드 존재, 건물 필드는 은퇴로 부재")
     void gardenDtoSpotCheck() throws Exception {
         register("garden@a.com", "garden");
 
@@ -339,8 +339,8 @@ class DashboardApiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.garden.ownedAuthorCharacterCount").isNumber())
                 .andExpect(jsonPath("$.garden.totalAuthorCharacterCount").isNumber())
-                .andExpect(jsonPath("$.garden.ownedBuildingCount").isNumber())
-                .andExpect(jsonPath("$.garden.totalBuildingCount").isNumber());
+                .andExpect(jsonPath("$.garden.ownedBuildingCount").doesNotExist())
+                .andExpect(jsonPath("$.garden.totalBuildingCount").doesNotExist());
     }
 
     // ── 16. todayGoalSeconds 필드 존재 ───────────────────────────────────────

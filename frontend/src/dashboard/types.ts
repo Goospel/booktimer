@@ -38,8 +38,6 @@ export interface CatalogDto {
     ownedAuthorCharacterCount: number
     totalAuthorCharacterCount: number
     ownedCharacters: OwnedAuthor[]
-    ownedBuildingCount: number
-    totalBuildingCount: number
 }
 
 export interface QuoteDto {
