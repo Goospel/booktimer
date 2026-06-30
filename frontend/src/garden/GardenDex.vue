@@ -1,5 +1,5 @@
 <template>
-  <p class="garden-beta">🚧 베타 · 마을은 개발 중이에요. 더 다양한 작가·이야기로 채워집니다.</p>
+  <p class="garden-beta">🚧 베타 · 서재는 개발 중이에요. 더 다양한 작가·이야기로 채워집니다.</p>
 
   <!-- 전체 진척 한 줄(작가 축) -->
   <p class="garden-page-progress">

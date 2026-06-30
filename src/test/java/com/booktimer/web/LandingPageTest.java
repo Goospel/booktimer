@@ -62,10 +62,10 @@ class LandingPageTest {
     }
 
     @Test
-    @DisplayName("랜딩에 독서 마을 소개 섹션·앵커 동선(#village)이 있다")
+    @DisplayName("랜딩에 독서 서재 소개 섹션·앵커 동선(#village)이 있다")
     void landing_hasVillageSection() throws Exception {
         // 비로그인 방문자를 로그인 필요한 /village로 직접 보내면 로그인으로 튕긴다.
-        // 대신 페이지 내 마을 소개 섹션(#village)으로 안내하고 회원가입(/signup)으로 유도한다.
+        // 대신 페이지 내 서재 소개 섹션(#village)으로 안내하고 회원가입(/signup)으로 유도한다.
         mockMvc.perform(get("/"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("id=\"village\"")))
@@ -84,11 +84,11 @@ class LandingPageTest {
     }
 
     @Test
-    @DisplayName("랜딩 본문에 핵심 키워드(마을·잔디)가 있다")
+    @DisplayName("랜딩 본문에 핵심 키워드(서재·잔디)가 있다")
     void landing_hasCoreKeywords() throws Exception {
         mockMvc.perform(get("/"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("마을")))
+                .andExpect(content().string(containsString("독서 서재")))
                 .andExpect(content().string(containsString("잔디")));
     }
 
@@ -103,13 +103,13 @@ class LandingPageTest {
     }
 
     @Test
-    @DisplayName("랜딩은 '남의 잔디·마을 구경'처럼 현재 없는 기능을 광고하지 않는다")
+    @DisplayName("랜딩은 '남의 잔디·서재 구경'처럼 현재 없는 기능을 광고하지 않는다")
     void landing_doesNotAdvertiseViewingOthersGardenOrGrass() throws Exception {
-        // 남의 독서 잔디·마을 열람은 미구현(마을·잔디 라우트는 본인 전용, 남의 공개 잔디는 직렬화 안 되는 dead-code).
-        // 거짓 광고가 다시 새어들지 않게 진실성 불변식으로 가드한다. '마을'·'잔디' 자체(본인 기능 소개)는 허용.
+        // 남의 독서 잔디·서재 열람은 미구현(서재·잔디 라우트는 본인 전용, 남의 공개 잔디는 직렬화 안 되는 dead-code).
+        // 거짓 광고가 다시 새어들지 않게 진실성 불변식으로 가드한다. '서재'·'잔디' 자체(본인 기능 소개)는 허용.
         mockMvc.perform(get("/"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(not(containsString("독서 잔디와 마을을 구경"))))
+                .andExpect(content().string(not(containsString("독서 잔디와 서재을 구경"))))
                 .andExpect(content().string(not(containsString("서로의 잔디를 구경"))));
     }
 }

@@ -91,7 +91,7 @@ onUnmounted(() => {
     <template v-else-if="data">
         <header class="history-greeting">
             <h1>{{ data.nickname }}님의 독서 기록</h1>
-            <p>꾸준함이 정원처럼 천천히 쌓이고 있어요.</p>
+            <p>꾸준함이 차곡차곡 쌓이고 있어요.</p>
         </header>
 
         <!-- 독서 잔디 카드 -->
