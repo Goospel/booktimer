@@ -108,6 +108,6 @@ class ProfileCharacterServiceTest {
             AuthorCharacter ch = AuthorCharacter.of(code, code, code, "🪶", 1, code);
             states.add(new AuthorCharacterState(ch, true));
         }
-        return new GardenView(states, codes.length, codes.length, List.of(), 0, 0);
+        return new GardenView(states, codes.length, codes.length);
     }
 }

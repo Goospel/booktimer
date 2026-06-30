@@ -29,8 +29,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * GET /api/garden · POST /api/garden/layout 컨트롤러 통합 테스트.
  *
- * <p>마을 컨셉 전환 후: 식물 4축(TIME·GENRE·DIVERSITY·RECIPE)·소품(Decoration) 제거.
- * catalog에 authorCharacters·buildings만, decorationCatalog 필드 없음.
+ * <p>건물(BUILDING)축 은퇴 후: catalog에 authorCharacters만(buildings·decorationCatalog·식물 4축 없음).
+ * placed/owned는 배치 엔진용으로 유지하되 건물 은퇴로 빈 배열(엔진 제거는 후속 PR-2).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -92,12 +92,14 @@ class GardenApiControllerTest {
                 .andExpect(jsonPath("$.catalog.genrePlants").doesNotExist())
                 .andExpect(jsonPath("$.catalog.diversityPlants").doesNotExist())
                 .andExpect(jsonPath("$.catalog.recipePlants").doesNotExist())
-                // 유지 — 작가·건물
+                // 유지 — 작가
                 .andExpect(jsonPath("$.catalog.authorCharacters").isArray())
                 .andExpect(jsonPath("$.catalog.ownedAuthorCharacterCount").exists())
                 .andExpect(jsonPath("$.catalog.ownedCharacters").isArray())
-                .andExpect(jsonPath("$.catalog.buildings").isArray())
-                .andExpect(jsonPath("$.catalog.ownedBuildingCount").exists())
+                // 건물 은퇴(PR-1) — catalog에서 건물 필드 전부 제거됨
+                .andExpect(jsonPath("$.catalog.buildings").doesNotExist())
+                .andExpect(jsonPath("$.catalog.ownedBuildingCount").doesNotExist())
+                .andExpect(jsonPath("$.catalog.totalBuildingCount").doesNotExist())
                 // S2: 게임 직접 소비용
                 .andExpect(jsonPath("$.owned").isArray())
                 .andExpect(jsonPath("$.characters").isArray())
@@ -192,14 +194,6 @@ class GardenApiControllerTest {
     }
 
     // ── S3: 유지 DTO 직렬화 단언 ────────────────────────────────────────────────
-
-    @Test
-    @DisplayName("S3: BuildingDto 직렬화에 matchName·thresholdCount 포함")
-    void s3_buildingDto_hasMatchNameAndThresholdCount() throws Exception {
-        var dto = new GardenApiResponse.BuildingDto("bld-01", "🏢", "민음사빌딩", null, false, "민음사", 3);
-        String json = objectMapper.writeValueAsString(dto);
-        assertThat(json).contains("\"matchName\"").contains("\"thresholdCount\"");
-    }
 
     @Test
     @DisplayName("S3: AuthorCharacterDto 직렬화에 matchName 포함")

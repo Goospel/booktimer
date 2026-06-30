@@ -22,8 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 독서 마을 서비스 배선 검증 (실제 빈·H2·자체 시드 카탈로그).
  *
- * <p>식물 4축(TIME·GENRE·DIVERSITY·RECIPE)·소품(Decoration)은 제거됨.
- * AUTHOR 캐릭터·BUILDING 건물 2축의 배선 확인.
+ * <p>건물(BUILDING)축은 마을 컨셉 전환(작가 꾸미기 피벗)으로 은퇴됨 — AUTHOR 캐릭터 축 배선만 확인.
  */
 @SpringBootTest
 @Transactional
@@ -36,8 +35,6 @@ class GardenServiceTest {
     @Autowired
     private AuthorCharacterRepository authorCharacterRepository;
     @Autowired
-    private BuildingRepository buildingRepository;
-    @Autowired
     private BookRepository bookRepository;
     @Autowired
     private GardenService gardenService;
@@ -48,9 +45,6 @@ class GardenServiceTest {
     void seedCatalog() {
         // 작가 캐릭터 — 배선 확인용 한 종. prod 시드(V45)와 디커플.
         authorCharacterRepository.save(AuthorCharacter.of("han_gang", "한강", "소설가 한강", "🪶", 1, null));
-
-        // 건물 — 배선 확인용 한 종. prod 시드(V46)와 디커플.
-        buildingRepository.save(Building.of("minumsa", "민음사", "민음사", "🏛️", 3, 1, null));
     }
 
     /** 주어진 작가·출판사·상태로 책 한 권을 등록한다. */
@@ -67,63 +61,19 @@ class GardenServiceTest {
         return registrationService.register(email, "rawpw1234", "정원사", SEOUL, Role.USER, today());
     }
 
-    // --- 건물축(BUILDING): 출판사 N권 완독 해금 배선 확인 ------------------------------------------
+    // --- 건물 은퇴: 배치 가능 보유 오브젝트 0 ------------------------------------------
 
     @Test
-    @DisplayName("민음사 3권 완독 → 건물 minumsa(임계3) 보유")
-    void buildings_thresholdReached_owned() {
-        User user = register("garden-building-owned@booktimer.com");
+    @DisplayName("건물 은퇴 — 완독책이 많아도 ownedPlants()는 항상 비어 있다 (배치 대상 0)")
+    void buildings_retired_ownedPlantsAlwaysEmpty() {
+        User user = register("garden-building-retired@booktimer.com");
         registerBookWith(user, "책1", "저자가", "민음사", BookStatus.FINISHED);
-        registerBookWith(user, "책2", "저자나", "민음사", BookStatus.FINISHED);
-        registerBookWith(user, "책3", "저자다", "민음사", BookStatus.FINISHED);
+        registerBookWith(user, "책2", "저자나", "창비", BookStatus.FINISHED);
+        registerBookWith(user, "소설", "한강 (지은이)", null, BookStatus.FINISHED);
 
         GardenView view = gardenService.view(user);
 
-        assertThat(building(view, "minumsa").owned()).isTrue();
-        assertThat(view.ownedBuildingCount()).isEqualTo(1);
-    }
-
-    @Test
-    @DisplayName("민음사 2권만 완독 → 건물 minumsa(임계3) 미보유 (임계 미달)")
-    void buildings_belowThreshold_notOwned() {
-        User user = register("garden-building-below@booktimer.com");
-        registerBookWith(user, "책1", "저자가", "민음사", BookStatus.FINISHED);
-        registerBookWith(user, "책2", "저자나", "민음사", BookStatus.FINISHED);
-
-        GardenView view = gardenService.view(user);
-
-        assertThat(building(view, "minumsa").owned()).isFalse();
-        assertThat(view.ownedBuildingCount()).isZero();
-    }
-
-    @Test
-    @DisplayName("출판사 null 완독책만 있을 때 건물 누수 0 (N-055)")
-    void buildings_nullPublisher_noLeak() {
-        User user = register("garden-building-null@booktimer.com");
-        registerBookWith(user, "수동등록", null, null, BookStatus.FINISHED);
-        registerBookWith(user, "수동등록2", null, null, BookStatus.FINISHED);
-        registerBookWith(user, "수동등록3", null, null, BookStatus.FINISHED);
-
-        GardenView view = gardenService.view(user);
-
-        assertThat(view.buildings()).noneMatch(BuildingState::owned);
-        assertThat(view.ownedBuildingCount()).isZero();
-    }
-
-    @Test
-    @DisplayName("건물 보유 시 ownedPlants()에 axis=BUILDING으로 등장")
-    void buildings_ownedAppearsInOwnedPlants() {
-        User user = register("garden-building-palette@booktimer.com");
-        registerBookWith(user, "책1", null, "민음사", BookStatus.FINISHED);
-        registerBookWith(user, "책2", null, "민음사", BookStatus.FINISHED);
-        registerBookWith(user, "책3", null, "민음사", BookStatus.FINISHED);
-
-        GardenView view = gardenService.view(user);
-
-        OwnedPlant buildingPlant = view.ownedPlants().stream()
-                .filter(o -> o.axis() == PlacementAxis.BUILDING && o.code().equals("minumsa"))
-                .findFirst().orElseThrow();
-        assertThat(buildingPlant.emoji()).isEqualTo("🏛️");
+        assertThat(view.ownedPlants()).isEmpty();
     }
 
     // --- AUTHOR axis: 작가 캐릭터 배선 확인 ------------------------------------------
@@ -171,23 +121,15 @@ class GardenServiceTest {
     }
 
     @Test
-    @DisplayName("책이 없으면 건물·작가 캐릭터 전부 미보유 (null-state 누수 가드)")
+    @DisplayName("책이 없으면 작가 캐릭터 전부 미보유 (null-state 누수 가드)")
     void nullState_noBooksAllLocked() {
         User user = register("garden-empty@booktimer.com");
 
         GardenView view = gardenService.view(user);
 
-        assertThat(view.ownedBuildingCount()).isZero();
         assertThat(view.ownedAuthorCharacterCount()).isZero();
-        assertThat(view.buildings()).noneMatch(BuildingState::owned);
         assertThat(view.authorCharacters()).noneMatch(AuthorCharacterState::owned);
-    }
-
-    private static BuildingState building(GardenView view, String code) {
-        return view.buildings().stream()
-                .filter(s -> s.building().getCode().equals(code))
-                .findFirst()
-                .orElseThrow();
+        assertThat(view.ownedPlants()).isEmpty();
     }
 
     private static AuthorCharacterState authorCharacter(GardenView view, String code) {

@@ -91,7 +91,6 @@ onUnmounted(() => {
 
         <p class="dash-garden-summary">
             작가 {{ garden.ownedAuthorCharacterCount }}/{{ garden.totalAuthorCharacterCount }}
-            · 건물 {{ garden.ownedBuildingCount }}/{{ garden.totalBuildingCount }}
         </p>
     </section>
 </template>

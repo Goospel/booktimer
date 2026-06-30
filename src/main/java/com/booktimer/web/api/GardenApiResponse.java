@@ -8,9 +8,9 @@ import java.util.Map;
 /**
  * GET /api/garden 응답 전용 DTO.
  *
- * <p>식물 4축(TIME·GENRE·DIVERSITY·RECIPE)·소품(Decoration)은 마을 컨셉 전환으로 제거됨.
- * 작가(AUTHOR)·건물(BUILDING) 2축만 포함.
- * 먹이주기 루프 추가: {@code foodBalance}(top-level), 각 작가 DTO에 {@code affection}.
+ * <p>건물(BUILDING)축은 마을 컨셉 전환(작가 꾸미기 피벗)으로 은퇴됨 — 작가(AUTHOR)축만 포함.
+ * {@code placed}/{@code owned}는 배치 엔진용으로 유지(건물 은퇴로 빈 배열) — 엔진 제거는 후속(PR-2).
+ * 먹이주기 루프: {@code foodBalance}(top-level), 각 작가 DTO에 {@code affection}.
  */
 public record GardenApiResponse(
         WorldDto world,
@@ -28,10 +28,7 @@ public record GardenApiResponse(
             List<AuthorCharacterDto> authorCharacters,
             int ownedAuthorCharacterCount,
             int totalAuthorCharacterCount,
-            List<OwnedCharacterDto> ownedCharacters,
-            List<BuildingDto> buildings,
-            int ownedBuildingCount,
-            int totalBuildingCount
+            List<OwnedCharacterDto> ownedCharacters
     ) {}
 
     public record AuthorCharacterDto(
@@ -65,18 +62,6 @@ public record GardenApiResponse(
         }
     }
 
-    public record BuildingDto(
-            String code, String emoji, String name, String spriteId, boolean owned,
-            String matchName, int thresholdCount
-    ) {
-        static BuildingDto from(BuildingState s) {
-            return new BuildingDto(
-                    s.building().getCode(), s.building().getEmoji(), s.building().getName(),
-                    s.building().getSpriteId(), s.owned(),
-                    s.building().getMatchName(), s.building().getThresholdCount());
-        }
-    }
-
     /**
      * 대시보드 패널용 — 도감({@link CatalogDto})만 추출. affection은 0 기본(대시보드에서 불필요).
      */
@@ -88,9 +73,7 @@ public record GardenApiResponse(
                 view.ownedAuthorCharacterCount(), view.totalAuthorCharacterCount(),
                 view.ownedCharacters().stream()
                         .map(c -> OwnedCharacterDto.from(c, 0))
-                        .toList(),
-                view.buildings().stream().map(BuildingDto::from).toList(),
-                view.ownedBuildingCount(), view.totalBuildingCount());
+                        .toList());
     }
 
     /**
@@ -122,9 +105,7 @@ public record GardenApiResponse(
                         view.ownedCharacters().stream()
                                 .map(c -> OwnedCharacterDto.from(c,
                                         affectionByCharacter.getOrDefault(c.code(), 0)))
-                                .toList(),
-                        view.buildings().stream().map(BuildingDto::from).toList(),
-                        view.ownedBuildingCount(), view.totalBuildingCount()),
+                                .toList()),
                 view.ownedPlants().stream().map(OwnedPlantItemDto::from).toList(),
                 view.ownedCharacters().stream()
                         .map(c -> OwnedCharacterDto.from(c,
