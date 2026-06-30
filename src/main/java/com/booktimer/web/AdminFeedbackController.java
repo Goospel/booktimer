@@ -2,6 +2,7 @@ package com.booktimer.web;
 
 import com.booktimer.feedback.FeedbackService;
 import com.booktimer.feedback.FeedbackType;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,7 +28,8 @@ public class AdminFeedbackController {
     }
 
     @GetMapping("/admin/feedback")
-    public String list(@RequestParam(value = "type", required = false) String type, Model model) {
+    public String list(HttpServletRequest request, @RequestParam(value = "type", required = false) String type, Model model) {
+        CsrfTokenUtil.precommit(request); // 폼 렌더 전 세션 선확정 — commit-후-500 방어(T-049)
         FeedbackType filter = FeedbackType.parse(type); // 없음/빈/잘못된 값 → null(전체)
         model.addAttribute("feedbackList", feedbackService.feedbackRows(filter));
         model.addAttribute("types", FeedbackType.values());

@@ -4,6 +4,7 @@ import com.booktimer.feedback.FeedbackService;
 import com.booktimer.feedback.FeedbackType;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.user.User;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,7 +34,8 @@ public class FeedbackController {
     }
 
     @GetMapping("/feedback")
-    public String page(Principal principal, Model model) {
+    public String page(HttpServletRequest request, Principal principal, Model model) {
+        CsrfTokenUtil.precommit(request); // 폼 렌더 전 세션 선확정 — commit-후-500 방어(T-049)
         User me = currentUserService.resolve(principal);
         model.addAttribute("myFeedback", feedbackService.myFeedback(me));
         model.addAttribute("types", FeedbackType.values());

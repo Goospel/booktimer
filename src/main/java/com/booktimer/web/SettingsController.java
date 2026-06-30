@@ -74,7 +74,8 @@ public class SettingsController {
     }
 
     @GetMapping("/settings")
-    public String settingsForm(Principal principal, Model model) {
+    public String settingsForm(HttpServletRequest request, Principal principal, Model model) {
+        CsrfTokenUtil.precommit(request); // 폼 렌더 전 세션 선확정 — 큰 페이지 commit-후-500 방어(T-049)
         User user = currentUser(principal);
         if (!model.containsAttribute("settingsForm")) {
             ReadingTimer timer = timerRepository.findByUser(user)

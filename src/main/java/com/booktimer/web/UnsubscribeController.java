@@ -1,6 +1,7 @@
 package com.booktimer.web;
 
 import com.booktimer.retention.UnsubscribeService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,7 +27,8 @@ public class UnsubscribeController {
 
     /** 수신거부 링크 진입(공개) — 토큰을 소비하지 않고 확인 버튼 폼만 보여준다(프리페치 안전). */
     @GetMapping("/unsubscribe")
-    public String unsubscribeForm(@RequestParam(name = "token", required = false) String token, Model model) {
+    public String unsubscribeForm(HttpServletRequest request, @RequestParam(name = "token", required = false) String token, Model model) {
+        CsrfTokenUtil.precommit(request); // 폼 렌더 전 세션 선확정 — commit-후-500 방어(T-049)
         model.addAttribute("token", token == null ? "" : token);
         return "unsubscribe-confirm";
     }

@@ -27,6 +27,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.ui.ConcurrentModel;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * 관리자 문의함 컨트롤러 통합 테스트 (MockMvc + 실제 빈·H2).
@@ -52,6 +58,21 @@ class AdminFeedbackControllerTest {
         User u = User.of(email, "$2a$10$x", "유저", "Asia/Seoul", Role.USER);
         u.assignLoginId(loginId);
         return userRepository.saveAndFlush(u);
+    }
+
+    @Autowired
+    private AdminFeedbackController controller;
+
+    @Test
+    @DisplayName("GET /admin/feedback: 렌더 전 CSRF 토큰을 선확정한다 — SSR 폼 commit-후-500 방어(T-049 재발)")
+    void list_precommitsCsrfToken() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        CsrfToken token = mock(CsrfToken.class);
+        when(request.getAttribute(CsrfToken.class.getName())).thenReturn(token);
+
+        controller.list(request, null, new ConcurrentModel());
+
+        verify(token).getToken();
     }
 
     @Test

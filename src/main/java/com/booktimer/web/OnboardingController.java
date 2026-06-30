@@ -6,6 +6,7 @@ import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.LoginIdAlreadyExistsException;
 import com.booktimer.user.OnboardingService;
 import com.booktimer.user.User;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -44,7 +45,8 @@ public class OnboardingController {
     }
 
     @GetMapping("/onboarding")
-    public String onboardingForm(Principal principal, Model model) {
+    public String onboardingForm(HttpServletRequest request, Principal principal, Model model) {
+        CsrfTokenUtil.precommit(request); // 폼 렌더 전 세션 선확정 — commit-후-500 방어(T-049)
         User user = currentUser(principal);
         if (user.isOnboarded()) {
             return "redirect:/"; // 이미 마쳤으면 다시 보여주지 않는다

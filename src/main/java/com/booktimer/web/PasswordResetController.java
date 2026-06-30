@@ -2,7 +2,6 @@ package com.booktimer.web;
 
 import com.booktimer.email.PasswordResetService;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -35,7 +34,7 @@ public class PasswordResetController {
 
     @GetMapping("/password/forgot")
     public String forgotForm(HttpServletRequest request) {
-        precommitCsrfToken(request);
+        CsrfTokenUtil.precommit(request);
         return "password-forgot";
     }
 
@@ -50,7 +49,7 @@ public class PasswordResetController {
     @GetMapping("/password/reset")
     public String resetForm(@RequestParam(name = "token", required = false) String token,
                             HttpServletRequest request, Model model) {
-        precommitCsrfToken(request);
+        CsrfTokenUtil.precommit(request);
         model.addAttribute("token", token == null ? "" : token);
         return "password-reset";
     }
@@ -73,18 +72,6 @@ public class PasswordResetController {
         boolean success = passwordResetService.reset(token, password);
         model.addAttribute("success", success);
         return "password-reset-result";
-    }
-
-    /**
-     * 렌더 전에 CSRF 토큰을 선확정해 세션을 응답 커밋 이전에 만든다. 두 GET(forgot·reset) 모두 익명 폼
-     * 페이지라 세션이 없어, 폼의 CSRF 숨김필드가 렌더 중(응답 커밋 후) 세션을 만들려다 500을 내던 함정
-     * 방어(IllegalStateException, T-049 · DashboardController와 동일 패턴).
-     */
-    private static void precommitCsrfToken(HttpServletRequest request) {
-        Object csrf = request.getAttribute(CsrfToken.class.getName());
-        if (csrf instanceof CsrfToken token) {
-            token.getToken();
-        }
     }
 
     /** 새 비밀번호 형식 검증 — 통과면 null, 실패면 사용자 안내 메시지. */

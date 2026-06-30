@@ -27,6 +27,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.ui.ConcurrentModel;
+import java.security.Principal;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * 사용자 피드백/문의 컨트롤러 통합 테스트 (MockMvc + 실제 빈·H2).
@@ -54,6 +61,23 @@ class FeedbackControllerTest {
         User u = User.of(email, passwordEncoder.encode("rawpw1234"), "유저", "Asia/Seoul", Role.USER);
         u.assignLoginId(loginId);
         return userRepository.save(u);
+    }
+
+    @Autowired
+    private FeedbackController controller;
+
+    @Test
+    @DisplayName("GET /feedback: 렌더 전 CSRF 토큰을 선확정한다 — SSR 폼 commit-후-500 방어(T-049 재발)")
+    void page_precommitsCsrfToken() {
+        newUser("csrf-fb@booktimer.com", "csrffb");
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        CsrfToken token = mock(CsrfToken.class);
+        when(request.getAttribute(CsrfToken.class.getName())).thenReturn(token);
+        Principal principal = () -> "csrf-fb@booktimer.com";
+
+        controller.page(request, principal, new ConcurrentModel());
+
+        verify(token).getToken();
     }
 
     @Test
