@@ -14,7 +14,7 @@
 | PR 머지 자동화(`pr-merge.sh`) — 백그라운드 hang·미완료·헛폴링·DIRTY-blind·BEHIND 무한대기 | T-083 · T-088 · T-091 · T-094 · T-102 · T-111 | 6 | ✅ 하드픽스(`pr-merge.sh`: gh API 브랜치삭제 + `timeout`, T-094) + 절차(머지=완료확인) + CLAUDE.md Git워크플로 DIRTY 진단. **T-102(5회차): 하드픽스 안 쓰고 손수 워처→DIRTY 누락. T-111(6회차): "up-to-date 필수 + `--auto` + BEHIND = 무한대기" — `pr-merge.sh`에 BEHIND `gh pr update-branch` 자동해소 + `--arm`("걸고 떠나기") 모드 추가·표준 경로로 승격, bare `--auto` 단독 금지** |
 | Vue 섬 번들 stale(산출물 미커밋·CI 사각) | T-063 · T-082 | 2 | ✅ 훅 `require-bundle-build.ps1`(전 10섬) + CI 확장 |
 | Service Worker stale 캐시(파일명 고정 자산) | T-071 · T-075 · T-080 | 3 | ✅ 코드 패턴(SW `NETWORK_FIRST` 배열 + `res.ok` 가드 + `CACHE` 버전업) |
-| 커밋/git 무한 hang(멀티세션 gradle 데몬·빌드락) | T-078 | 2+ | ✅ CLAUDE.md 「🧪 TDD → ⚠️ 커밋이 무한 hang 하면」 + 강제정리 절차 |
+| 커밋/git 무한 hang(멀티세션 gradle 데몬·빌드락) | T-078 | 3+ (2026-06-30 45분 freeze 3회차) | ✅ **하드픽스(2026-07-01): 커밋 훅 `gradlew test`에 8분 타임아웃 — 초과 시 `taskkill /T`+`gradlew --stop` 자가복구 후 차단(exit 2)** + CLAUDE.md(bootRun 정리=8080+`--stop`·「무한 hang」절) + 강제정리 절차 |
 | 헤드리스/preview 못 보는 클라 로드순서·타이밍 | T-053 · T-054 | 2 | ✅ CLAUDE.md 「🖥️ 프론트 검증 실 브라우저 게이트」(N-082·N-083) |
 | PowerShell 한글 깨짐(커밋 메시지·.ps1 스크립트) | T-026 | 2+ | ✅ CLAUDE.md 「🈲 한글 커밋 `.commit-msg-tmp`」 + 훅 `check-commit-message.ps1` |
 | 워크트리 머지 `--delete-branch`(로컬 main checkout 충돌) | T-095 | 2 (#511 → #515) | ✅ CLAUDE.md Git워크플로 auto-merge caveat(워크트리에선 `--delete-branch` 빼고 머지 → 원격=gh api·로컬=수동 정리) |
@@ -1609,7 +1609,9 @@ Remove-Item .git\index.lock -EA SilentlyContinue
 ./gradlew --stop   # gradle 데몬 정리
 ```
 
-**예방**: 멀티 세션일 땐 **한 세션에서만 커밋/빌드**(gradle은 워크트리를 나눠도 데몬·빌드 캐시를 공유해 경합한다 — N-032). 커밋이 길게 멈추면 단순 esc 대신 위 강제 정리부터.
+**예방**: 멀티 세션일 땐 **한 세션에서만 커밋/빌드**(gradle은 워크트리를 나눠도 데몬·빌드 캐시를 공유해 경합한다 — N-032). 커밋이 길게 멈추면 단순 esc 대신 위 강제 정리부터. **bootRun 정리는 8080 반납만으로 부족 — 포트로 죽이면 앱 JVM만 가고 gradle 데몬이 남아 다음 게이트와 경합하므로 `./gradlew --stop`까지 한 쌍으로**(CLAUDE.md 「🪢 8080」).
+
+**3회차 재발 + 하드픽스 승격(2026-07-01)**: 2026-06-30 PR-B(#619) 커밋이 이 경합으로 **45분간 무한 freeze**(13:51:40→14:37:10, 다른 세션이 `java` 강제 종료해서야 풀림). bootRun 종료 시 8080만 Stop-Process하고 `--stop`을 안 해 데몬이 남은 게 직접 원인. 회차가 누적돼(2+→3+) **prose를 넘어 하드픽스로 승격**: 커밋 훅 `require-tests-before-commit.ps1`의 `gradlew test`를 **8분 타임아웃**(`BOOKTIMER_TEST_GATE_TIMEOUT_MS`로 조정)으로 감싸 — 초과 시 **프로세스 트리 `taskkill /T` + `gradlew --stop` 자가복구 후 `exit 2`(fail-closed)** 로 차단한다. 이제 무한 freeze는 8분짜리 자기보고 실패로 바뀐다(스모크 테스트: `.claude/hooks/tests/test-require-tests-timeout.sh`). 경합 *빈도* 감소(단일세션 빌드·`--stop`)는 여전히 예방 측 몫.
 
 **관련**: N-032(워크트리 분리), T-070(bootRun 진행률 멈춤=정상), T-051(워크트리 머지 정리), 커밋 훅 require-tests-before-commit.ps1.
 

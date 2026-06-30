@@ -222,6 +222,7 @@ powershell -File .claude/scripts/remove-worktree.ps1 ../BookTimer-<task>   # 또
   Get-NetTCPConnection -LocalPort 8080 -State Listen -EA SilentlyContinue |
     ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
   ```
+  ⚠️ **포트로 죽이면 `bootRun` 앱 JVM·8080만 반납되고 gradle 데몬은 살아남는다** — 그 떠도는 데몬이 다음 커밋의 테스트 게이트(`gradlew test`)와 빌드 락을 경합해 hang을 만든다(실제 45분 freeze 발생, T-078). 그래서 **bootRun 정리 = 8080 반납 + `./gradlew --stop`(데몬까지 반납)** 을 한 쌍으로 한다. 무거운 `.java` 커밋 직전엔 떠 있는 `java`(데몬)·타세션 빌드를 한 번 점검한다.
 - **bootRun docker-compose 컨테이너** — `bootRun`은 `spring-boot-docker-compose`로 `compose.yaml`의 MySQL을 자동 기동한다(**테스트는 H2라 컨테이너를 안 만든다 — 누적의 범인은 bootRun이다**). 워크트리마다 compose 프로젝트명이 갈려 컨테이너가 따로 쌓이고, 검증 후 미정리(Up 좀비)·워크트리 삭제 후 고아(Exited)로 누적된다. **8080을 반납할 때 docker 컨테이너도 함께 내린다(본인이 띄운 건 본인이 끈다).** 정리:
   ```bash
   bash .claude/scripts/docker-cleanup.sh            # 기본: Exited(멈춤)만 — 멀티세션 안전(Up 보존)
@@ -308,6 +309,7 @@ Claude 가 테스트를 빨리 짜므로 **"사람 작성 시간"이라는 전�
 Claude Code 는 그 자식 프로세스 종료를 기다릴 뿐이라 **코어 버그가 아니다**(그래서 esc·머지로 안 풀리고 clear 로만 풀렸던 것).
 흔한 뿌리 = **멀티 세션이 gradle 데몬·빌드 락을 동시 점유**. esc 는 이미 뜬 gradle 자식·데몬을 안 죽여 **다음 커밋도 또 hang**한다.
 
+- **이젠 게이트가 자가차단(하드, 2026-07-01)**: 커밋 훅 `require-tests-before-commit.ps1` 의 `gradlew test` 가 **8분 타임아웃**(`BOOKTIMER_TEST_GATE_TIMEOUT_MS` 로 조정)으로 감싸여, 초과 시 **프로세스 트리 `taskkill /T` + `gradlew --stop` 자가복구 후 커밋 차단(exit 2)** 한다 → 45분 무한 freeze는 더 안 난다. **그래도 커밋이 8분+ 멈춰 있으면** 그건 게이트가 아닌 다른 빌드 hang일 수 있으니 아래 수동 정리로 간다.
 - **감별**: `git status` 가 빠르면(0.x초) git·레포 자체는 정상 → 코어·레포 문제 아님. 떠도는 `java`(gradle 데몬) 잔존이 단서.
 - **강제 정리**:
   ```powershell
@@ -315,7 +317,7 @@ Claude Code 는 그 자식 프로세스 종료를 기다릴 뿐이라 **코어 �
   Remove-Item .git\index.lock -EA SilentlyContinue
   ./gradlew --stop
   ```
-- **예방**: 멀티 세션일 땐 **한 세션에서만 커밋/빌드**(gradle 은 워크트리를 나눠도 데몬·캐시를 공유해 경합). 배경: [troubleshooting T-078](claude-docs/troubleshooting.md), 다중 세션 N-032.
+- **예방**: 멀티 세션일 땐 **한 세션에서만 커밋/빌드**(gradle 은 워크트리를 나눠도 데몬·캐시를 공유해 경합). **bootRun 정리는 8080 반납에 더해 `./gradlew --stop` 까지**(포트만 죽이면 데몬이 남아 다음 게이트와 경합 — 위 「🪢 8080」 절). 배경: [troubleshooting T-078](claude-docs/troubleshooting.md), 다중 세션 N-032.
 
 ### 예외 (override)
 
