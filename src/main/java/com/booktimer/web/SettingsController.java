@@ -1,5 +1,7 @@
 package com.booktimer.web;
 
+import com.booktimer.garden.GardenService;
+import com.booktimer.garden.ProfileCharacterService;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
@@ -45,17 +47,23 @@ public class SettingsController {
     private final ReadingTimerRepository timerRepository;
     private final UserSettingsService settingsService;
     private final AccountService accountService;
+    private final GardenService gardenService;
+    private final ProfileCharacterService profileCharacterService;
     private final String vapidPublicKey;
 
     public SettingsController(CurrentUserService currentUserService,
                               ReadingTimerRepository timerRepository,
                               UserSettingsService settingsService,
                               AccountService accountService,
+                              GardenService gardenService,
+                              ProfileCharacterService profileCharacterService,
                               @Value("${booktimer.push.vapid.public-key:not-configured}") String vapidPublicKey) {
         this.currentUserService = currentUserService;
         this.timerRepository = timerRepository;
         this.settingsService = settingsService;
         this.accountService = accountService;
+        this.gardenService = gardenService;
+        this.profileCharacterService = profileCharacterService;
         this.vapidPublicKey = vapidPublicKey;
     }
 
@@ -88,6 +96,9 @@ public class SettingsController {
         // 알림 통합 — 설정 페이지 푸시 토글용
         model.addAttribute("vapidPublicKey", vapidPublicKey);
         model.addAttribute("marketingPushConsent", user.isMarketingPushConsent());
+        // 프로필 사진(도감 작가 얼굴) — 보유(완독)한 작가만 고를 수 있다. 현재 선택 코드도 함께 싣는다.
+        model.addAttribute("ownedCharacters", gardenService.view(user).ownedCharacters());
+        model.addAttribute("profileCharacterCode", user.getProfileCharacterCode());
         return "settings";
     }
 
@@ -157,6 +168,26 @@ public class SettingsController {
         settingsService.updateMarketingConsent(currentUser(principal).getEmail(), marketingEmailConsent);
         redirectAttributes.addFlashAttribute("message",
                 marketingEmailConsent ? "소식·알림 메일 수신을 켰습니다." : "소식·알림 메일 수신을 껐습니다.");
+        return "redirect:/settings";
+    }
+
+    /**
+     * 프로필 사진(도감 작가 얼굴) 선택/해제. 빈 코드는 선택 해제(이니셜 폴백)다. 보유(해금) 검증은
+     * {@link ProfileCharacterService}가 담당 — 미보유 작가 위조(IDOR)는 {@link IllegalArgumentException}으로
+     * 거부되어 error 플래시로 변환된다. 마케팅 토글과 동일한 PRG로 설정 화면에 되돌린다.
+     */
+    @PostMapping("/settings/profile-character")
+    public String updateProfileCharacter(
+            @RequestParam(name = "characterCode", required = false) String characterCode,
+            Principal principal, RedirectAttributes redirectAttributes) {
+        try {
+            profileCharacterService.select(currentUser(principal), characterCode);
+            boolean cleared = characterCode == null || characterCode.isBlank();
+            redirectAttributes.addFlashAttribute("message",
+                    cleared ? "프로필 사진을 기본(이니셜)으로 되돌렸어요." : "프로필 사진을 바꿨어요.");
+        } catch (IllegalArgumentException e) {
+            redirectAttributes.addFlashAttribute("error", "보유하지 않은 작가는 프로필 사진으로 설정할 수 없어요.");
+        }
         return "redirect:/settings";
     }
 

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { avatarInitial } from './timerProgress'
 import { getCsrfToken } from '../shared/follow'
+import AuthorAvatar from '../shared/AuthorAvatar.vue'
 
-defineProps<{ loginId: string }>()
+defineProps<{ loginId: string; profileCharacterCode?: string | null }>()
 
 // 아바타 클릭 드롭다운: 설정·문의·로그아웃을 한곳으로 일원화. 토글 + 바깥클릭·Esc 닫힘.
 const open = ref(false)
@@ -40,7 +40,7 @@ onUnmounted(() => {
         <div class="dash-header-menu-wrap" @click.stop>
             <button type="button" class="dash-header-avatar" aria-haspopup="menu"
                     :aria-expanded="open" aria-label="사용자 메뉴" @click="toggle">
-                {{ avatarInitial(loginId) }}
+                <AuthorAvatar :code="profileCharacterCode" :fallback-text="loginId" />
             </button>
 
             <div v-if="open" class="dash-header-menu" role="menu">

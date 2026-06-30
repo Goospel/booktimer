@@ -16,6 +16,8 @@ import java.util.Map;
  *
  * @param loginId        대상 사용자 공개 @핸들(login_id) — 프로필 URL·팔로우/차단/신고 폼의 식별자
  * @param nickname       대상 사용자 표시 이름(중복 가능) — 화면 제목·인사말에 보이는 이름
+ * @param profileCharacterCode 프로필 아바타로 선택한 도감 작가 캐릭터 코드(SVG {@code #sprite-{code}} 재사용).
+ *                       미선택이면 {@code null} — 헤더는 로그인ID 이니셜 원형으로 폴백한다.
  * @param books          공개(PUBLIC) 책 목록(최신 등록 먼저)
  * @param bookTimes      책 id → 누적 독서 초(공개 책만)
  * @param followerCount  팔로워 수(이 사용자를 팔로우하는 사람)
@@ -33,6 +35,7 @@ import java.util.Map;
 public record ProfileView(
         String loginId,
         String nickname,
+        String profileCharacterCode,
         List<Book> books,
         Map<Long, Long> bookTimes,
         long followerCount,

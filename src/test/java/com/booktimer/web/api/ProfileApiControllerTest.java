@@ -172,6 +172,20 @@ class ProfileApiControllerTest {
                 .andExpect(jsonPath("$.self").value(true));
     }
 
+    @Test
+    @DisplayName("GET /api/profile: 대상이 프로필 작가를 선택했으면 profileCharacterCode를 응답에 싣는다")
+    void profile_withProfileCharacter_includesCode() throws Exception {
+        User u = register("pa-pc@booktimer.com", "papcid", "프사주인");
+        u.selectProfileCharacter("han_gang"); // 엔티티 직접(보유검증 우회) — 노출 경로만 검증
+        userRepository.save(u);
+
+        mockMvc.perform(get("/api/profile")
+                        .param("loginId", "papcid")
+                        .with(user("pa-pc@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.profileCharacterCode").value("han_gang"));
+    }
+
     // ── 3. PRIVATE 책 비노출 (최우선 누수 가드) ──────────────────────────
 
     @Test

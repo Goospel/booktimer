@@ -69,6 +69,42 @@
         </form>
     </section>
 
+    <!-- 프로필 사진(도감 작가 얼굴) 선택 그리드의 <use href="#sprite-{code}">가 참조할 심볼 정의. -->
+    <th:block th:replace="~{fragments/garden-character-sprites :: sprites}"></th:block>
+
+    <!-- 프로필 사진: 도감에서 모은(완독한) 작가의 얼굴만 고를 수 있다. 업로드 없이 SVG 스프라이트 재사용. -->
+    <section class="card">
+        <h2>프로필 사진</h2>
+        <p class="field-hint muted">도감에서 모은 작가의 얼굴을 프로필 사진으로 쓸 수 있어요. 책을 완독해 작가를 모으면 여기에 나타나요.</p>
+        <form th:action="@{/settings/profile-character}" method="post">
+            <div class="profile-char-grid">
+                <!-- 기본(이니셜) — 항상 첫 칸. 선택 해제와 동일(빈 코드). -->
+                <label class="profile-char-opt">
+                    <input type="radio" name="characterCode" value="" th:checked="${profileCharacterCode == null}">
+                    <span class="profile-char-face profile-char-initial"
+                          th:text="${#strings.substring(loginId,0,1)}">t</span>
+                    <span class="profile-char-label">기본</span>
+                </label>
+                <!-- 보유(완독)한 작가들 — sprite 있으면 SVG, 없으면 이모지 폴백(도감과 동일). -->
+                <label class="profile-char-opt" th:each="ch : ${ownedCharacters}">
+                    <input type="radio" name="characterCode" th:value="${ch.code}"
+                           th:checked="${ch.code == profileCharacterCode}">
+                    <span class="profile-char-face">
+                        <svg th:if="${ch.spriteId != null}" class="profile-char-svg" aria-hidden="true">
+                            <use th:attr="href='#sprite-' + ${ch.code}"></use>
+                        </svg>
+                        <span th:unless="${ch.spriteId != null}" th:text="${ch.emoji}">🪶</span>
+                    </span>
+                    <span class="profile-char-label" th:text="${ch.name}">작가</span>
+                </label>
+            </div>
+            <p th:if="${#lists.isEmpty(ownedCharacters)}" class="field-hint muted">
+                아직 모은 작가가 없어요. 책을 완독하면 도감에서 작가를 모을 수 있어요.
+            </p>
+            <button type="submit" class="btn-primary" style="margin-top:8px">저장</button>
+        </form>
+    </section>
+
     <!--/* 비밀번호 카드: LOCAL 계정만 노출 — 소셜 계정은 비밀번호가 없다. Thymeleaf 파서 주석이라 출력에 남지 않는다. */-->
     <section class="card" th:if="${localAccount}">
         <h2>비밀번호 변경</h2>
