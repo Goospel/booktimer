@@ -2413,6 +2413,222 @@ body.personality-page #personality-app { gap: 18px; }
     text-decoration: none;
 }
 
+/* ── PortraitVillage — 모바일 세로 경량 돌봄 뷰 (반응형 2모드 PoC) ──
+   세로(≤899px·portrait)에서만 마운트. CoC 무대 대신 1:1 애착(돌봄) 루프. */
+.portrait-village {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background: linear-gradient(180deg, var(--garden-sky) 0%, var(--sage-soft) 38%, var(--bg) 100%);
+    padding: max(8px, env(safe-area-inset-top))
+             max(14px, env(safe-area-inset-right))
+             max(16px, env(safe-area-inset-bottom))
+             max(14px, env(safe-area-inset-left));
+}
+
+/* 슬림 HUD */
+.pv-hud {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 2px;
+}
+.pv-hud-home {
+    color: var(--accent-hover);
+    font-weight: 600;
+    font-size: .85rem;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.pv-hud-home:hover { text-decoration: underline; }
+.pv-hud-title {
+    flex: 1 1 auto;
+    color: var(--muted);
+    font-size: .82rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.pv-hud-food {
+    font-size: .9rem;
+    font-weight: 700;
+    color: var(--text);
+    white-space: nowrap;
+}
+.pv-hud-dex {
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 4px 10px;
+    font-size: .95rem;
+    cursor: pointer;
+}
+
+/* 빈 상태 — 보유 작가 0 */
+.pv-empty {
+    margin: auto;
+    text-align: center;
+    color: var(--muted);
+    padding: 24px;
+}
+.pv-empty-emoji { font-size: 3rem; }
+.pv-empty p { margin: 4px 0; }
+.pv-empty-sub { font-size: .82rem; }
+
+/* 히어로(오늘의 작가) 카드 */
+.pv-hero {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 18px 18px 20px;
+    text-align: center;
+}
+.pv-hero-label {
+    font-size: .76rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    color: var(--accent);
+    text-transform: uppercase;
+}
+.pv-hero-portrait {
+    position: relative;
+    width: 148px;
+    height: 148px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at 50% 62%, var(--sage-soft), transparent 70%);
+    border-radius: 50%;
+}
+.pv-hero-svg { width: 128px; height: 128px; }
+.pv-hero-emoji { font-size: 5rem; line-height: 1; }
+.pv-hero-sparkle {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 3rem;
+    pointer-events: none;
+    animation: pv-sparkle 1.6s ease-out;
+}
+.pv-hero-name { font-size: 1.2rem; font-weight: 700; color: var(--text); }
+.pv-hero-rank { font-size: .85rem; color: var(--muted); }
+
+/* 정 미터 */
+.pv-meter {
+    width: 100%;
+    max-width: 280px;
+    height: 12px;
+    margin-top: 4px;
+    background: var(--paper-2);
+    border-radius: 999px;
+    overflow: hidden;
+}
+.pv-meter-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--sage-6), var(--accent));
+    border-radius: 999px;
+    transition: width .6s cubic-bezier(.2, .8, .2, 1);
+}
+.pv-meter-caption { font-size: .78rem; color: var(--muted); }
+
+/* 밥 주기 — 엄지 사정권 큰 CTA */
+.pv-feed-btn {
+    width: 100%;
+    max-width: 280px;
+    min-height: 56px;
+    margin-top: 10px;
+    border: none;
+    border-radius: 16px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .15s, transform .1s;
+}
+.pv-feed-btn:hover:not(:disabled) { background: var(--accent-hover); }
+.pv-feed-btn:active:not(:disabled) { transform: scale(.97); }
+.pv-feed-btn:disabled { background: var(--neutral-2); color: var(--paper-4); cursor: not-allowed; }
+.pv-feed-hint { font-size: .78rem; color: var(--muted); min-height: 1em; }
+
+/* 레벨업 연출 */
+.pv-hero-levelup { animation: pv-levelup 1.6s ease-out; }
+@keyframes pv-sparkle {
+    0%   { opacity: 0; transform: scale(.4); }
+    30%  { opacity: 1; transform: scale(1.1); }
+    100% { opacity: 0; transform: scale(1.6); }
+}
+@keyframes pv-levelup {
+    0%, 100% { box-shadow: var(--shadow); }
+    40%      { box-shadow: 0 0 0 4px var(--sage-5), var(--shadow); }
+}
+
+/* 식구 작가 카드 스택 — 가로 스크롤, 탭으로 히어로 전환 */
+.pv-family { flex: 0 0 auto; }
+.pv-family-label {
+    font-size: .8rem;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 6px;
+    padding-left: 2px;
+}
+.pv-family-scroll {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 2px 2px 8px;
+    scroll-snap-type: x proximity;
+}
+.pv-family-card {
+    flex: 0 0 auto;
+    width: 84px;
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 6px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: border-color .15s, transform .1s, box-shadow .15s;
+}
+.pv-family-card.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring); }
+.pv-family-card:active { transform: scale(.96); }
+.pv-family-svg { width: 48px; height: 48px; }
+.pv-family-emoji { font-size: 2rem; line-height: 48px; }
+.pv-family-name {
+    max-width: 72px;
+    font-size: .72rem;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.pv-family-lv { font-size: .68rem; color: var(--muted); }
+
+@media (prefers-reduced-motion: reduce) {
+    .pv-meter-fill { transition: none; }
+    .pv-hero-levelup, .pv-hero-sparkle { animation: none; }
+}
+
 /* 설정 알림 섹션 푸시 토글 버튼 — check-row 체크박스와 시각 일관성 */
 .btn-push-toggle {
     display: inline-flex;
