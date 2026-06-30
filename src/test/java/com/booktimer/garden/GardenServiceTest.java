@@ -61,25 +61,10 @@ class GardenServiceTest {
         return registrationService.register(email, "rawpw1234", "정원사", SEOUL, Role.USER, today());
     }
 
-    // --- 건물 은퇴: 배치 가능 보유 오브젝트 0 ------------------------------------------
-
-    @Test
-    @DisplayName("건물 은퇴 — 완독책이 많아도 ownedPlants()는 항상 비어 있다 (배치 대상 0)")
-    void buildings_retired_ownedPlantsAlwaysEmpty() {
-        User user = register("garden-building-retired@booktimer.com");
-        registerBookWith(user, "책1", "저자가", "민음사", BookStatus.FINISHED);
-        registerBookWith(user, "책2", "저자나", "창비", BookStatus.FINISHED);
-        registerBookWith(user, "소설", "한강 (지은이)", null, BookStatus.FINISHED);
-
-        GardenView view = gardenService.view(user);
-
-        assertThat(view.ownedPlants()).isEmpty();
-    }
-
     // --- AUTHOR axis: 작가 캐릭터 배선 확인 ------------------------------------------
 
     @Test
-    @DisplayName("큐레이션 작가 완독 → view().ownedCharacters()에 등장, ownedPlants()에는 없음 (C2 풀어놓기)")
+    @DisplayName("큐레이션 작가 완독 → view().ownedCharacters()에 등장 (배회 캐릭터로 노출)")
     void authorCharacters_finishedAuthor_owned() {
         User user = register("garden-author-owned@booktimer.com");
         registerBookWith(user, "소설", "한강 (지은이)", null, BookStatus.FINISHED);
@@ -88,12 +73,11 @@ class GardenServiceTest {
 
         assertThat(authorCharacter(view, "han_gang").owned()).isTrue();
         assertThat(view.ownedAuthorCharacterCount()).isEqualTo(1);
-        // C2: AUTHOR는 배회 전용 — ownedCharacters()로 노출, ownedPlants()엔 없음
+        // AUTHOR는 배회 전용 — ownedCharacters()로 노출
         OwnedCharacter ch = view.ownedCharacters().stream()
                 .filter(c -> c.code().equals("han_gang"))
                 .findFirst().orElseThrow();
         assertThat(ch.emoji()).isEqualTo("🪶");
-        assertThat(view.ownedPlants()).extracting(OwnedPlant::axis).doesNotContain(PlacementAxis.AUTHOR);
     }
 
     @Test
@@ -129,7 +113,7 @@ class GardenServiceTest {
 
         assertThat(view.ownedAuthorCharacterCount()).isZero();
         assertThat(view.authorCharacters()).noneMatch(AuthorCharacterState::owned);
-        assertThat(view.ownedPlants()).isEmpty();
+        assertThat(view.ownedCharacters()).isEmpty();
     }
 
     private static AuthorCharacterState authorCharacter(GardenView view, String code) {

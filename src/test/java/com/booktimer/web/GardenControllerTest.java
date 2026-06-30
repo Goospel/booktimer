@@ -113,32 +113,12 @@ class GardenControllerTest {
     }
 
     @Test
-    @DisplayName("POST /village/layout: 미인증이면 로그인으로 막힌다 (기본 잠김)")
-    void saveLayout_unauthenticated_blocked() throws Exception {
-        mockMvc.perform(post("/village/layout").with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/login"));
-    }
-
-    @Test
-    @DisplayName("POST /village/layout: 빈 배치 저장은 성공한다 (캔버스 비우기)")
-    void saveLayout_emptyBody_ok() throws Exception {
+    @DisplayName("POST /village/layout: 배치 엔진 은퇴(PR-2)로 엔드포인트 제거 → 인증·CSRF 갖춰도 404")
+    void saveLayout_endpointRemoved_returns404() throws Exception {
         registrationService.register("garden-save@booktimer.com", "rawpw1234", "정원사", SEOUL, Role.USER, today());
 
         mockMvc.perform(post("/village/layout").with(user("garden-save@booktimer.com")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"plants\":[]}"))
-                .andExpect(status().isOk());
-    }
-
-    @Test
-    @DisplayName("POST /village/layout: 미보유 건물 배치 요청은 4xx로 거부된다 (H2엔 카탈로그가 비어 무엇이든 미보유)")
-    void saveLayout_unownedBuilding_rejected() throws Exception {
-        registrationService.register("garden-reject@booktimer.com", "rawpw1234", "정원사", SEOUL, Role.USER, today());
-
-        mockMvc.perform(post("/village/layout").with(user("garden-reject@booktimer.com")).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"plants\":[{\"axis\":\"BUILDING\",\"code\":\"minumsa\",\"x\":0.5,\"y\":0.5,\"z\":0,\"rotation\":0,\"scale\":1}]}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isNotFound());
     }
 }

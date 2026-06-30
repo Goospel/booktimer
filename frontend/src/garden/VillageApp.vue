@@ -10,7 +10,7 @@
       <!-- 가로·데스크탑: 기존 CoC 게임 무대 + HUD -->
       <template v-else>
         <!-- 게임 스테이지 — 풀스크린 채움 -->
-        <GardenGame ref="gameRef" :data="data" @fed="onFed" />
+        <GardenGame :data="data" @fed="onFed" />
 
         <!-- HUD — .village-shell 기준 절대배치 -->
         <div class="village-hud">
@@ -22,7 +22,6 @@
             <span class="village-hud-food">🍙 {{ data.foodBalance ?? 0 }}</span>
           </div>
           <div class="village-hud-actions">
-            <button type="button" class="village-hud-btn" @click="gameRef?.startEdit()">✏️ 꾸미기</button>
             <button type="button" class="village-hud-btn" @click="dexOpen = true">📖 도감</button>
             <a href="/" class="village-hud-btn">← 홈</a>
           </div>
@@ -52,7 +51,6 @@ import PortraitVillage from './PortraitVillage.vue';
 const data = ref<any>(null);
 const loadError = ref(false);
 const dexOpen = ref(false);
-const gameRef = ref<any>(null);
 const nickname = ref('');
 
 // 모바일 세로 분기 — 세로면 경량 돌봄 뷰(PortraitVillage), 아니면 CoC 게임(GardenGame).

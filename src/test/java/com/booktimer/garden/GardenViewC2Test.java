@@ -12,8 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>검증 항목:
  * <ul>
- *   <li>{@code ownedPlants()}는 건물 은퇴로 항상 빈 목록 — 배치 대상 없음(AUTHOR는 배회 전용)</li>
- *   <li>{@code ownedCharacters()} — 보유 AUTHOR만 배회용으로 노출</li>
+ *   <li>{@code ownedCharacters()} — 보유 AUTHOR만 배회용으로 노출(배치/편집 엔진 은퇴, PR-2)</li>
  *   <li>N-055: 미보유 AUTHOR가 {@code ownedCharacters()}에 새지 않는지</li>
  * </ul>
  */
@@ -26,13 +25,6 @@ class GardenViewC2Test {
 
     private static GardenView viewWith(List<AuthorCharacterState> authorCharacters) {
         return new GardenView(authorCharacters, 0, authorCharacters.size());
-    }
-
-    @Test
-    @DisplayName("건물 은퇴: ownedPlants()는 보유 작가가 있어도 항상 빈 목록(배치 대상 0)")
-    void ownedPlants_alwaysEmptyAfterBuildingRetired() {
-        GardenView view = viewWith(List.of(state("han_gang", true)));
-        assertThat(view.ownedPlants()).isEmpty();
     }
 
     @Test
