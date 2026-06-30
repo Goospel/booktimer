@@ -65,7 +65,6 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, markRaw } from 'vue';
 import Phaser from 'phaser';
 import { GardenScene, GardenItemMeta } from './scene';
-import { rotateTouchForPortrait } from './pure';
 
 interface FeedResult {
     foodBalance: number;
@@ -91,39 +90,6 @@ const emit = defineEmits<{ fed: [result: FeedResult] }>();
 // Vue Proxy가 Phaser 내부 순환참조를 깨뜨린다 — setup 클로저 변수로 반응성 밖에 둔다.
 let scene: GardenScene | null = null;
 let game: Phaser.Game | null = null;
-
-// portrait 강제 가로 뷰 입력 패치 상태 (반응성 불필요 — 클로저 변수)
-let _isPortraitRotated = false;
-let _portraitMq: MediaQueryList | null = null;
-let _portraitMqListener: ((e: MediaQueryListEvent) => void) | null = null;
-
-// Phaser InputManager.transformPointer를 CW90° 역회전으로 패치한다.
-// portrait에서만 동작(landscape·데스크탑은 origFn 경유). game 재생성 시마다 호출.
-function applyPortraitInputPatch(g: Phaser.Game) {
-    const mgr = (g as any).input?.manager;
-    if (!mgr || typeof mgr.transformPointer !== 'function') return;
-    const origFn = mgr.transformPointer.bind(mgr);
-    mgr.transformPointer = function(pointer: any, pageX: number, pageY: number, wasMove: boolean) {
-        if (!_isPortraitRotated) {
-            origFn(pointer, pageX, pageY, wasMove);
-            return;
-        }
-        const bounds = this.scaleManager?.canvasBounds;
-        if (!bounds) {
-            origFn(pointer, pageX, pageY, wasMove);
-            return;
-        }
-        const p0 = pointer.position;
-        const p1 = pointer.prevPosition;
-        p1.x = p0.x; p1.y = p0.y;
-        const r = rotateTouchForPortrait(pageX, pageY, bounds.left, bounds.top, bounds.height);
-        p0.x = r.x; p0.y = r.y;
-        if (wasMove) {
-            pointer.velocity.x = p0.x - p1.x;
-            pointer.velocity.y = p0.y - p1.y;
-        }
-    };
-}
 
 let placed: GardenItemMeta[] = props.data.placed ?? [];
 let chars: GardenItemMeta[] = props.data.characters ?? [];
@@ -205,7 +171,6 @@ async function mountView() {
         scale: { mode: Phaser.Scale.RESIZE },
         scene,
     }));
-    applyPortraitInputPatch(game);
 }
 
 function mountPhaser() {
@@ -228,7 +193,6 @@ function mountPhaser() {
         scale: { mode: Phaser.Scale.RESIZE },
         scene,
     }));
-    applyPortraitInputPatch(game);
 }
 
 async function startEdit() {
@@ -286,25 +250,10 @@ async function save() {
 }
 
 onMounted(async () => {
-    // portrait 강제 가로 뷰 — orientation 변경 리스너 (입력 패치 플래그 갱신 + fitCamera)
-    _portraitMq = window.matchMedia('(max-width: 899px) and (orientation: portrait)');
-    _isPortraitRotated = _portraitMq.matches;
-    _portraitMqListener = (e: MediaQueryListEvent) => {
-        _isPortraitRotated = e.matches;
-        // orientation 전환 시 fitCamera 재계산 — scale resize 이벤트가 이미 트리거되지만 보강
-        if (game && scene) {
-            const gs = (game as any).scale?.gameSize;
-            if (gs && gs.width > 0) scene.fitCamera(gs.width, gs.height);
-        }
-    };
-    _portraitMq.addEventListener('change', _portraitMqListener);
     await mountView();
 });
 
 onUnmounted(() => {
-    if (_portraitMq && _portraitMqListener) {
-        _portraitMq.removeEventListener('change', _portraitMqListener);
-    }
     destroyPhaser();
 });
 
