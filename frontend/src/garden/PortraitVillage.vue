@@ -2,10 +2,10 @@
   <div class="portrait-village">
     <!-- 슬림 HUD -->
     <div class="pv-hud">
-      <a href="/" class="pv-hud-home" aria-label="홈으로">← 홈</a>
+      <a href="/" class="pv-hud-home" aria-label="홈으로">🏠 홈</a>
       <span class="pv-hud-title">{{ nickname }}님의 마을</span>
       <span class="pv-hud-food">🍙 {{ foodBalance }}</span>
-      <button type="button" class="pv-hud-dex" @click="emit('open-dex')" aria-label="도감 열기">📖</button>
+      <button type="button" class="pv-hud-dex" @click="emit('open-dex')" aria-label="도감 열기">📖 도감</button>
     </div>
 
     <!-- 식구가 없을 때 -->
