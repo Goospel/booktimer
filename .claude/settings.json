@@ -59,6 +59,17 @@
           }
         ]
       }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -File \".claude\\hooks\\notify-when-waiting.ps1\"",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }
