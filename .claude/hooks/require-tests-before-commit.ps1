@@ -74,16 +74,64 @@ if ($javaChanged.Count -eq 0) { exit 0 }
 $gradlew = Join-Path $cwd 'gradlew.bat'
 if (-not (Test-Path $gradlew)) { exit 0 }
 
-# 테스트 실행 — 종료코드만 사용.
+# 테스트 실행 — 종료코드만 사용. 무한 hang(T-078: gradle 데몬/빌드 락 경합) 방지를 위해
+# 타임아웃으로 감싼다. 멀티세션이거나 정리 안 된 bootRun 데몬이 빌드 락을 쥐고 있으면
+# `./gradlew test` 가 영영 안 끝나 커밋 게이트가 통째로 얼어붙는다(과거 45분 freeze).
+#   → Start(비동기) + WaitForExit(타임아웃). 초과 시 프로세스 트리(cmd→gradlew→java)를
+#     taskkill /T 로 죽이고 `gradlew --stop` 으로 데몬을 정리(자가복구)한 뒤,
+#     fail-closed(exit 2)로 차단한다 — 테스트 통과 여부를 알 수 없으니 차단이 안전.
 # 주의(PowerShell 5.1): gradlew 는 JDK 경고 등을 stderr 로 내보내는데,
 # $ErrorActionPreference='Stop' 상태에서 native stderr 는 terminating error 로
 # 승격되어(NativeCommandError) 테스트가 통과해도 스크립트가 죽는다.
-# → cmd.exe /c 로 격리 실행하고 $LASTEXITCODE(=gradlew 실제 종료코드)만 본다.
+# → cmd.exe 자식 프로세스로 격리 실행하고 종료코드만 본다(redirection 은 cmd 내부 >nul).
+$timeoutMs = 8 * 60 * 1000   # 기본 8분 — 정상 전체 테스트(~2.5분)보다 충분히 큼
+if ($env:BOOKTIMER_TEST_GATE_TIMEOUT_MS) {
+    $parsed = 0
+    if ([int]::TryParse($env:BOOKTIMER_TEST_GATE_TIMEOUT_MS, [ref]$parsed) -and $parsed -gt 0) {
+        $timeoutMs = $parsed
+    }
+}
+
 $prevEAP = $ErrorActionPreference
 $ErrorActionPreference = 'Continue'
-cmd.exe /c "`"$gradlew`" -p `"$cwd`" test --console=plain >nul 2>nul"
-$testExit = $LASTEXITCODE
+
+# cmd.exe /c 의 canonical 인용: 바깥 한 쌍이 명령 전체를, 안쪽이 경로를 감싼다(`"" "exe" args "`).
+$gateArgs = '/c ""' + $gradlew + '" -p "' + $cwd + '" test --console=plain >nul 2>nul"'
+$psi = New-Object System.Diagnostics.ProcessStartInfo
+$psi.FileName        = 'cmd.exe'
+$psi.Arguments       = $gateArgs
+$psi.UseShellExecute = $false
+$psi.CreateNoWindow  = $true
+$proc = [System.Diagnostics.Process]::Start($psi)
+
+$testExit = 0
+$timedOut = $false
+if ($proc.WaitForExit($timeoutMs)) {
+    $testExit = $proc.ExitCode
+} else {
+    $timedOut = $true
+    # 매달린 프로세스 트리 강제 종료 + 데몬 정리(다음 커밋이 같은 경합에 또 안 걸리게)
+    cmd.exe /c "taskkill /T /F /PID $($proc.Id) >nul 2>nul"
+    cmd.exe /c "`"$gradlew`" -p `"$cwd`" --stop >nul 2>nul"
+}
+
 $ErrorActionPreference = $prevEAP
+
+if ($timedOut) {
+    $tmin = [math]::Round($timeoutMs / 60000.0, 1)
+    $msgTimeout = @"
+[BLOCKED] Test gate exceeded ${tmin} min -- commit aborted (likely gradle daemon/lock
+contention, T-078). The hung gradle process tree was killed and `gradlew --stop` was
+run to clear daemons.
+
+This usually means another session (or a leftover bootRun daemon) is holding the gradle
+build lock. End stray builds (`./gradlew --stop`; free port 8080) and commit again.
+
+Override only when intentional: include the token SKIP_TESTS in the commit command.
+"@
+    [Console]::Error.WriteLine($msgTimeout)
+    exit 2
+}
 
 if ($testExit -ne 0) {
     $msg = @"
