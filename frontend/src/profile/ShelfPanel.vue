@@ -17,15 +17,26 @@ const STATUS_OPTIONS = [
     { value: 'WANT_TO_READ', label: '읽고 싶음' },
 ]
 
-defineProps<{
+const props = defineProps<{
     books: BookSummary[]
     shelfFilter: string | null
     self: boolean
     coupangEnabled: boolean
+    yes24Enabled: boolean
     loginId: string
     showTitle?: boolean
 }>()
 defineEmits<{ (e: 'selectStatus', value: string | null): void }>()
+
+// 구매 옵션 리스트 — 활성 제공자만(알라딘=구매링크 유무 / 쿠팡·Yes24=활성 플래그). 남의 책방 경로 prefix.
+// 조합 분기(purchaseLink×coupang×yes24) 폭발을 없애는 리팩터: 2개↑면 드롭다운, 1개면 제공자명 단일 버튼.
+function buyOptions(b: BookSummary): { label: string; href: string }[] {
+    const o: { label: string; href: string }[] = []
+    if (b.purchaseLink) o.push({ label: '알라딘', href: `/u/${props.loginId}/books/${b.id}/buy` })
+    if (props.coupangEnabled) o.push({ label: '쿠팡', href: `/u/${props.loginId}/books/${b.id}/buy/coupang` })
+    if (props.yes24Enabled) o.push({ label: 'Yes24', href: `/u/${props.loginId}/books/${b.id}/buy/yes24` })
+    return o
+}
 
 // 제휴 고지 ⓘ 팝오버 — 우상단 버튼 클릭 토글 / 밖 클릭·Esc 닫힘(책장·책BTI와 동일 패턴).
 // 이 컴포넌트는 모바일 탭·와이드 메인에 각각 마운트되나 noteOpen이 인스턴스 로컬이라 독립.
@@ -58,6 +69,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onNoteKeydown))
                     <div v-if="noteOpen" class="affiliate-pop" role="dialog" aria-label="구매 링크 안내">
                         <p class="affiliate-pop-item">※ "구매" 링크는 제휴(알라딘) 링크로, 구매 시 일부 수수료를 받을 수 있습니다.</p>
                         <p v-if="coupangEnabled" class="affiliate-pop-item">이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
+                        <p v-if="yes24Enabled" class="affiliate-pop-item">이 포스팅은 Yes24 제휴 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
                     </div>
                 </span>
             </div>
@@ -80,22 +92,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onNoteKeydown))
                             <ShopIcon name="clock" :size="13" />{{ formatReadingTime(b.seconds) }}
                         </span>
                     </div>
-                    <!-- 구매 — other + (제휴링크 or 쿠팡). 둘 다면 드롭다운(구매처 추가 대비),
-                         하나면 단일 링크. 리다이렉트 경유, 외부링크 nofollow(§4) — 현행 로직 유지. -->
-                    <div v-if="!self && (b.purchaseLink || coupangEnabled)" class="shop-buy-row">
-                        <details v-if="b.purchaseLink && coupangEnabled" class="shop-buy-menu">
+                    <!-- 구매 — 활성 제공자 리스트(알라딘/쿠팡/Yes24). 2개↑면 드롭다운, 1개면 제공자명 단일 버튼.
+                         리다이렉트 경유, 외부링크 nofollow(§4). -->
+                    <div v-if="!self && buyOptions(b).length > 0" class="shop-buy-row">
+                        <details v-if="buyOptions(b).length > 1" class="shop-buy-menu">
                             <summary>구매<ShopIcon name="chevron" :size="12" class="shop-buy-caret" /></summary>
                             <div class="shop-buy-menu-items">
-                                <a :href="`/u/${loginId}/books/${b.id}/buy`"
-                                   target="_blank" rel="noopener nofollow">알라딘<ShopIcon name="external" :size="12" /></a>
-                                <a :href="`/u/${loginId}/books/${b.id}/buy/coupang`"
-                                   target="_blank" rel="noopener nofollow">쿠팡<ShopIcon name="external" :size="12" /></a>
+                                <a v-for="opt in buyOptions(b)" :key="opt.label" :href="opt.href"
+                                   target="_blank" rel="noopener nofollow">{{ opt.label }}<ShopIcon name="external" :size="12" /></a>
                             </div>
                         </details>
-                        <a v-else-if="b.purchaseLink && !coupangEnabled" :href="`/u/${loginId}/books/${b.id}/buy`"
-                           target="_blank" rel="noopener nofollow" class="shop-buy">구매<ShopIcon name="external" :size="13" /></a>
-                        <a v-else-if="!b.purchaseLink && coupangEnabled" :href="`/u/${loginId}/books/${b.id}/buy/coupang`"
-                           target="_blank" rel="noopener nofollow" class="shop-buy">쿠팡<ShopIcon name="external" :size="13" /></a>
+                        <a v-else :href="buyOptions(b)[0].href"
+                           target="_blank" rel="noopener nofollow" class="shop-buy">{{ buyOptions(b)[0].label }}<ShopIcon name="external" :size="13" /></a>
                     </div>
                 </div>
             </li>

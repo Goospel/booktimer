@@ -26,7 +26,7 @@ interface ProfileData {
     followerCount: number; followingCount: number;
     following: boolean; self: boolean;
     personality: string | null; personalityTags: TagChip[];
-    books: BookSummary[]; coupangEnabled: boolean;
+    books: BookSummary[]; coupangEnabled: boolean; yes24Enabled: boolean;
 }
 
 // ── 상태 ref ──────────────────────────────────────────────────────────────
@@ -212,7 +212,7 @@ onUnmounted(() => {
                               :tag-panel="tagPanel" :tag-label="tagLabel" @close-tag="closeTag" />
                     <ShelfPanel v-else
                                 :books="books" :shelf-filter="shelfFilter" :self="profile.self"
-                                :coupang-enabled="profile.coupangEnabled" :login-id="loginId"
+                                :coupang-enabled="profile.coupangEnabled" :yes24-enabled="profile.yes24Enabled" :login-id="loginId"
                                 @select-status="selectStatus" />
                 </section>
             </template>
@@ -239,7 +239,7 @@ onUnmounted(() => {
                 <div class="shop-main">
                     <section class="dash-card">
                         <ShelfPanel :books="books" :shelf-filter="shelfFilter" :self="profile.self"
-                                    :coupang-enabled="profile.coupangEnabled" :login-id="loginId"
+                                    :coupang-enabled="profile.coupangEnabled" :yes24-enabled="profile.yes24Enabled" :login-id="loginId"
                                     :show-title="true" @select-status="selectStatus" />
                     </section>
                 </div>

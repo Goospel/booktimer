@@ -13,7 +13,7 @@ function profileJson(self: boolean) {
         followerCount: 0, followingCount: 0,
         following: false, self,
         personality: null, personalityTags: [],
-        books: [], coupangEnabled: false,
+        books: [], coupangEnabled: false, yes24Enabled: false,
     };
 }
 const SEARCH_JSON = { q: null, results: [], recommendations: [], myLoginId: 'me', rateLimited: false };
@@ -138,7 +138,7 @@ describe('ProfileApp 책BTI 태그 드릴다운', () => {
                 following: false, self: true,
                 personality: '깊이 있는 사유를 즐기는 독자',
                 personalityTags: [{ label: '이야기파', clickable: true }],
-                books: [], coupangEnabled: false,
+                books: [], coupangEnabled: false, yes24Enabled: false,
             }) });
         }));
     }

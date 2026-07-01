@@ -103,13 +103,15 @@ class BookApiControllerTest {
                 .andExpect(jsonPath("$.books[0].visibility", is("PRIVATE")))
                 .andExpect(jsonPath("$.books[0].visibilityLabel", is("비공개")))
                 .andExpect(jsonPath("$.myLoginId", is("mybooks")))
-                .andExpect(jsonPath("$.searchEnabled", is(false)));
+                .andExpect(jsonPath("$.searchEnabled", is(false)))
+                .andExpect(jsonPath("$.coupangEnabled", is(false)))
+                .andExpect(jsonPath("$.yes24Enabled", is(false)));
     }
 
     // ── 3. DTO 화이트리스트 ──────────────────────────────────────────────────
 
     @Test
-    @DisplayName("GET /api/books: Book 엔티티 직렬화 금지 — user·clickCount·coupangClickCount 없음")
+    @DisplayName("GET /api/books: Book 엔티티 직렬화 금지 — user·clickCount·coupangClickCount·yes24ClickCount 없음")
     void shelf_dtoWhitelist() throws Exception {
         User me = register("dto@a.com", "dtouser", "화이트");
         addBook(me, "테스트책", null, BookStatus.WANT_TO_READ);
@@ -118,7 +120,8 @@ class BookApiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(not(containsString("\"user\""))))
                 .andExpect(content().string(not(containsString("clickCount"))))
-                .andExpect(content().string(not(containsString("coupangClickCount"))));
+                .andExpect(content().string(not(containsString("coupangClickCount"))))
+                .andExpect(content().string(not(containsString("yes24ClickCount"))));
     }
 
     // ── 4. N-055: isbn null 책은 popularity 맵에 키 없음 ────────────────────

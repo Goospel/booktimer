@@ -36,6 +36,7 @@ const books = ref<MyBookSummary[]>([])
 const popularity = ref<Record<string, Popularity>>({})
 const searchEnabled = ref(false)
 const coupangEnabled = ref(false)
+const yes24Enabled = ref(false)
 const nickname = ref('')
 const error = ref<string | null>(null)
 const loadError = ref(false)
@@ -92,6 +93,16 @@ function formatTime(secs: number): string {
     return `${Math.floor(secs / 3600)}시간 ${Math.floor((secs % 3600) / 60)}분`
 }
 
+// 구매 옵션 리스트 — 활성 제공자만 담는다(알라딘=구매링크 유무 / 쿠팡·Yes24=활성 플래그). 제공자가 늘어도 push 한 줄.
+// 조합 분기(purchaseLink×coupang×yes24) 폭발을 없애려는 핵심 리팩터: 2개↑면 드롭다운, 1개면 제공자명 단일 버튼.
+function buyOptions(book: MyBookSummary): { label: string; href: string }[] {
+    const o: { label: string; href: string }[] = []
+    if (book.purchaseLink) o.push({ label: '알라딘', href: `/books/${book.id}/buy` })
+    if (coupangEnabled.value) o.push({ label: '쿠팡', href: `/books/${book.id}/buy/coupang` })
+    if (yes24Enabled.value) o.push({ label: 'Yes24', href: `/books/${book.id}/buy/yes24` })
+    return o
+}
+
 async function load() {
     loading.value = true
     loadError.value = false
@@ -103,6 +114,7 @@ async function load() {
         popularity.value = data.popularity ?? {}
         searchEnabled.value = data.searchEnabled ?? false
         coupangEnabled.value = data.coupangEnabled ?? false
+        yes24Enabled.value = data.yes24Enabled ?? false
         nickname.value = data.nickname ?? ''
     } catch {
         loadError.value = true
@@ -304,6 +316,7 @@ async function removeBook(book: MyBookSummary) {
           <div v-if="noteOpen" class="affiliate-pop" role="dialog" aria-label="구매 링크 안내">
             <p class="affiliate-pop-item">※ "구매" 링크는 제휴(알라딘) 링크로, 구매 시 일부 수수료를 받을 수 있습니다.</p>
             <p v-if="coupangEnabled" class="affiliate-pop-item">이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
+            <p v-if="yes24Enabled" class="affiliate-pop-item">이 포스팅은 Yes24 제휴 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
           </div>
         </span>
         <div v-if="noteOpen" class="affiliate-pop-backdrop" @click="noteOpen = false"></div>
@@ -362,18 +375,16 @@ async function removeBook(book: MyBookSummary) {
                     :aria-pressed="String(book.isPublic)"
                     :title="book.isPublic ? '책방에 공개 중 — 누르면 비공개로 전환' : '비공개 — 누르면 책방에 공개'"
                     @click="toggleVisibility(book)">{{ book.isPublic ? '🌍 공개' : '🔒 비공개' }}</button>
-            <!-- 구매 3분기 -->
-            <details v-if="book.purchaseLink && coupangEnabled" class="buy-menu">
+            <!-- 구매 — 활성 제공자 리스트(알라딘/쿠팡/Yes24). 2개↑면 드롭다운, 1개면 제공자명 단일 버튼. -->
+            <details v-if="buyOptions(book).length > 1" class="buy-menu">
               <summary class="btn-ghost">구매</summary>
               <div class="buy-menu-items">
-                <a :href="`/books/${book.id}/buy`" target="_blank" rel="noopener nofollow">알라딘</a>
-                <a :href="`/books/${book.id}/buy/coupang`" target="_blank" rel="noopener nofollow">쿠팡</a>
+                <a v-for="opt in buyOptions(book)" :key="opt.label" :href="opt.href"
+                   target="_blank" rel="noopener nofollow">{{ opt.label }}</a>
               </div>
             </details>
-            <a v-else-if="book.purchaseLink && !coupangEnabled"
-               :href="`/books/${book.id}/buy`" target="_blank" rel="noopener nofollow" class="btn-ghost">구매</a>
-            <a v-else-if="!book.purchaseLink && coupangEnabled"
-               :href="`/books/${book.id}/buy/coupang`" target="_blank" rel="noopener nofollow" class="btn-ghost">쿠팡</a>
+            <a v-else-if="buyOptions(book).length === 1" :href="buyOptions(book)[0].href"
+               target="_blank" rel="noopener nofollow" class="btn-ghost">{{ buyOptions(book)[0].label }}</a>
             <button type="button" class="btn-danger" @click="removeBook(book)">삭제</button>
           </div>
         </li>

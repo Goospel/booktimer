@@ -5,6 +5,7 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.book.CoupangLinkBuilder;
+import com.booktimer.book.Yes24LinkBuilder;
 import com.booktimer.personality.ReadingPersonalityCache;
 import com.booktimer.personality.ReadingPersonalityCacheRepository;
 import com.booktimer.report.ReportReason;
@@ -68,6 +69,9 @@ class ProfileApiControllerTest {
 
     @MockitoBean
     private CoupangLinkBuilder coupangLinkBuilder;
+
+    @MockitoBean
+    private Yes24LinkBuilder yes24LinkBuilder;
 
     private LocalDate today() {
         return LocalDate.ofInstant(clock.instant(), ZoneId.of(SEOUL));
@@ -157,7 +161,8 @@ class ProfileApiControllerTest {
                 .andExpect(jsonPath("$.self").value(false))
                 .andExpect(jsonPath("$.personalityTags").isArray())
                 .andExpect(jsonPath("$.books").isArray())
-                .andExpect(jsonPath("$.coupangEnabled").isBoolean());
+                .andExpect(jsonPath("$.coupangEnabled").isBoolean())
+                .andExpect(jsonPath("$.yes24Enabled").isBoolean());
     }
 
     @Test
@@ -479,6 +484,36 @@ class ProfileApiControllerTest {
                         .with(user("pa-cvw2@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.coupangEnabled").value(false));
+    }
+
+    @Test
+    @DisplayName("GET /api/profile yes24Enabled=true 시 응답에 true 반영 (false 하드코딩 회귀 방지)")
+    void profile_yes24Enabled_true_reflectedInResponse() throws Exception {
+        when(yes24LinkBuilder.isEnabled()).thenReturn(true);
+        register("pa-yvw@booktimer.com", "payvwid", "예스뷰어");
+        User owner = register("pa-yow@booktimer.com", "payowid", "예스주인");
+        publicBook(owner, "예스책");
+
+        mockMvc.perform(get("/api/profile")
+                        .param("loginId", "payowid")
+                        .with(user("pa-yvw@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.yes24Enabled").value(true));
+    }
+
+    @Test
+    @DisplayName("GET /api/profile yes24Enabled=false 시 응답에 false 반영")
+    void profile_yes24Enabled_false_reflectedInResponse() throws Exception {
+        when(yes24LinkBuilder.isEnabled()).thenReturn(false);
+        register("pa-yvw2@booktimer.com", "payvw2id", "예스뷰어2");
+        User owner = register("pa-yow2@booktimer.com", "payow2id", "예스주인2");
+        publicBook(owner, "예스책2");
+
+        mockMvc.perform(get("/api/profile")
+                        .param("loginId", "payow2id")
+                        .with(user("pa-yvw2@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.yes24Enabled").value(false));
     }
 
     @Test
