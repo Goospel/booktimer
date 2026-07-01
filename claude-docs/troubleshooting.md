@@ -25,7 +25,7 @@
 | 빈 워크트리 폴더가 cwd 점유로 안 지워짐 | T-105 · T-115 | 2 | ✅ 절차(정션 끊기+`worktree prune`+`branch -D`로 실질 정리 후 빈 폴더는 세션 종료 후 `rmdir` / 워크트리 정리는 그 세션 아닌 **메인·다른 세션**에서) |
 | CSRF 숨김필드 lazy 세션 ↔ 응답 버퍼 커밋 타이밍(큰 SSR·익명 폼 500) | T-033 · T-049 | 4+ | ✅ prose CLAUDE.md 「🔒 CSRF 폼 세션 선확정」(N-077) + **공유 헬퍼 `CsrfTokenUtil.precommit`로 9곳(기존3+신규6) 통일**. 1회 백필 소급 등재(2026-06-30) → 누락 6곳(Settings·AdminFeedback·Feedback·EmailVerification·Unsubscribe·Onboarding) **수정 완료**. 훅 미채택=컨트롤러↔템플릿 역매핑·POST 재렌더 FP 과다 |
 | FK 자식 미정리로 부모 삭제 실패(mock 단위테스트가 못 잡음) | T-023 · T-029 | 2 | ✅ prose CLAUDE.md TDD절(부모 삭제 경로 H2 통합테스트 필수). **1회 백필로 소급 등재(2026-06-30)**. 현행 경로(`AccountService.purge`·`BookService.delete`)는 정리·통합테스트 완료 |
-| author `display`(flex/grid)가 UA `[hidden]`/`<details>` `display:none`을 origin 우선으로 덮어 숨김 실패 | (#189) · T-035 · T-123 | 3 | ⚠️ prose(T-035 패턴)만 승격됐는데 재발 지속(3회차). 이 PR은 페이지 스코프 `.settings-page [hidden]{display:none!important}`로 국소 해결 → **전역 `[hidden]{display:none!important}` 리셋 하드픽스가 다음 승격(별도 PR, spawn_task로 큐잉)** |
+| author `display`(flex/grid)가 UA `[hidden]`/`<details>` `display:none`을 origin 우선으로 덮어 숨김 실패 | (#189) · T-035 · T-123 | 3 | ✅ **하드픽스(전역 `[hidden]{display:none!important}` 리셋을 `app.css` 베이스에 추가)** — `[hidden]` 속성 변형을 앱 전역에서 제거(T-123의 페이지 스코프 `.settings-page [hidden]` 리셋은 이걸로 승격돼 삭제). ⚠️ 닫힌 `<details>` 자식 변형(T-035)은 `[hidden]` 속성이 아니라 UA `details:not([open])` 메커니즘이라 이 리셋 밖 — 개별 `:not([open])` 재숨김 유지 필요 |
 
 ## 📑 목차
 
@@ -2289,7 +2289,7 @@ git worktree remove ../BookTimer-<task>
 
 **해결(이 PR)**: 페이지 스코프에 재숨김 리셋 `.settings-page [hidden]{display:none !important}` 추가 → author `display`를 `!important`로 눌러 UA 숨김을 복원.
 
-**예방·승격**: JS `[hidden]` 토글에 기대는 요소엔 author `display`를 직접 주지 말거나, 페이지/전역에 `[hidden]{display:none !important}` 리셋을 깐다. **재발 3회차라 국소 리셋(prose·T-035 패턴)만으론 계속 샌다 → 전역 하드픽스 후보**: `app.css` 베이스에 전역 `[hidden]{display:none !important}`(normalize류)로 `[hidden]`-속성 변형을 앱 전역에서 제거(별도 PR로 분리 — 이 PR은 스코프 재스킨 유지). T-035·#189, N-083.
+**예방·승격**: JS `[hidden]` 토글에 기대는 요소엔 author `display`를 직접 주지 말거나, 전역 리셋에 맡긴다. **재발 3회차라 국소 리셋(prose·T-035 패턴)만으론 계속 새서 전역 하드픽스로 승격 완료**: `app.css` 베이스에 전역 `[hidden]{display:none !important}`(normalize류) 추가 → `[hidden]`-속성 변형을 앱 전역에서 제거하고, T-123이 넣었던 `.settings-page [hidden]` 스코프 리셋은 삭제(전역이 커버). ⚠️ 닫힌 `<details>` 자식(T-035)은 `[hidden]` 속성이 아니라 UA `details:not([open])` 메커니즘이라 이 리셋 밖 — 개별 `:not([open])` 재숨김 유지. T-035·#189, N-083.
 
 ---
 
