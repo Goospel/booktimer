@@ -3365,8 +3365,8 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 
 /* (이전의 .settings-page [hidden] 스코프 리셋은 전역 [hidden]{display:none!important}로 승격돼 제거 — 파일 상단 리셋 참조) */
 
-/* 헤더 — 제목 + 톱니(장식) */
-.settings-page .set-header { display: flex; align-items: center; justify-content: space-between; padding: 6px 2px 18px; }
+/* 헤더 — 톱니(왼쪽·장식) + 제목. 상단 .brand(홈 링크)는 전역 스타일 그대로 사용. */
+.settings-page .set-header { display: flex; align-items: center; gap: 10px; padding: 6px 2px 18px; }
 .settings-page .set-title { font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 26px; margin: 0; color: var(--text); }
 .settings-page .set-header-ico { display: flex; color: var(--accent-hover); }
 

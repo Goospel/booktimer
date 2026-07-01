@@ -15,12 +15,20 @@
 <body class="settings-page">
 <div class="set-shell">
 
-    <!-- 헤더 — 제목 + 톱니 아이콘(장식). 페이지 이동은 하단 네비 타일이 담당(시안 준수). -->
+    <!-- 브랜드 홈 링크 — 앱 전역 .brand 패턴(어디서든 홈으로). 책등 SVG는 전역 통일 아이콘. -->
+    <header class="brand">
+        <a class="brand-home" th:href="@{/}" title="홈으로">
+            <svg class="brand-ico" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="3.4" height="16" rx="1"/><rect x="9.3" y="4" width="3.4" height="16" rx="1"/><path d="M15 5.4l3.3-.7 2.4 15.4-3.3.7z"/></svg>
+            <h1>BookTimer</h1>
+        </a>
+    </header>
+
+    <!-- 설정 헤더 — 톱니(왼쪽·장식) + 제목. 페이지 이동은 상단 브랜드/하단 네비 타일이 담당. -->
     <header class="set-header">
-        <h1 class="set-title">설정</h1>
         <span class="set-header-ico" aria-hidden="true">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </span>
+        <h2 class="set-title">설정</h2>
     </header>
 
     <!-- 플래시: 저장/오류 -->
