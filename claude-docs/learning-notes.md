@@ -144,6 +144,7 @@
 - [N-141. 모바일 게임 portrait 강제 회전 접근의 실패 교훈 — CSS rotate90 대신 반응형 fitCamera](#n-141-모바일-게임-portrait-강제-회전-접근의-실패-교훈--css-rotate90-대신-반응형-fitcamera)
 - [N-142. 세로 모바일에서 부감형 게임 무대는 게임감 천장 — 세로 재미는 애착/수집, 반응형 2모드로 자세별 분기](#n-142-세로-모바일에서-부감형-게임-무대는-게임감-천장--세로-재미는-애착수집-반응형-2모드로-자세별-분기)
 - [N-143. 외부 harness 타임아웃은 동기 native 자식 hang을 못 끊는다 — 무한 hang은 내부 타임아웃으로](#n-143-외부-harness-타임아웃은-동기-native-자식-hang을-못-끊는다--무한-hang은-내부-타임아웃으로)
+- [N-144. @RestController는 ControllerAdvice의 @ModelAttribute를 무시 — 전역 뷰 플래그는 JSON API에 직접 주입](#n-144-restcontroller는-controlleradvice의-modelattribute를-무시--전역-뷰-플래그는-json-api에-직접-주입)
 
 ---
 
@@ -6479,3 +6480,27 @@ CoC식 아이소메트릭 마을(가로로 넓은 부감 무대)을 모바일 �
 ### 관련
 
 - [troubleshooting T-078](troubleshooting.md)(무한 hang 본체·3회차·하드픽스), [T-122](troubleshooting.md)(이 타임아웃을 TDD로 짤 때 테스트 하니스 hang 함정). BookTimer A1 게이트 타임아웃(#620).
+
+---
+
+## N-144. @RestController는 ControllerAdvice의 @ModelAttribute를 무시 — 전역 뷰 플래그는 JSON API에 직접 주입
+
+> **한 줄 요약**: `@ControllerAdvice`의 `@ModelAttribute`로 모든 뷰 모델에 한 번에 싣는 전역 플래그(예: `coupangEnabled`)는 **`@Controller`(뷰 렌더) 응답에만** 실린다. **`@RestController`(JSON API)는 `@ModelAttribute`를 무시**하므로, 같은 플래그가 필요하면 그 컨트롤러에 소스(빌더/서비스)를 **직접 주입**해 응답 DTO에 담아야 한다.
+
+### 맥락
+
+제휴 링크 활성 여부(`coupangEnabled`·`yes24Enabled`)를 SSR 3뷰(books·book-detail·profile)에 한 곳에서 주입하려고 `@ControllerAdvice`(`AffiliateModelAdvice`)의 `@ModelAttribute`를 쓴다 — SSR엔 이게 가장 얇다. 그런데 같은 화면의 **Vue 섬**은 `@RestController`인 `BookApiController`·`ProfileApiController`가 JSON으로 먹인다. 이 JSON 응답엔 ModelAdvice가 **안 통한다**.
+
+### 왜
+
+`@ModelAttribute`(+`Model`)는 **뷰 렌더링 파이프라인**의 개념이다 — 컨트롤러가 뷰 이름을 반환하면 그 Model이 템플릿에 바인딩된다. `@RestController`(=`@Controller`+`@ResponseBody`)는 반환값을 **본문으로 직렬화**할 뿐 뷰·Model 단계를 거치지 않아, `@ControllerAdvice`의 `@ModelAttribute` 기여분이 응답에 들어갈 자리가 없다(조용히 무시).
+
+### 해법 / 교훈
+
+- JSON API엔 그 플래그의 **소스(여기선 `CoupangLinkBuilder`/`Yes24LinkBuilder`)를 컨트롤러에 직접 주입**해 `isEnabled()`를 응답 record 필드로 담는다. ModelAdvice만 고치고 끝내면 **SSR만 반영되고 JSON API는 조용히 누락**되는 회귀 사각이 생긴다(플래그가 화면 종류에 따라 갈림).
+- 재발 방지: 컨트롤러 테스트에서 그 필드의 노출(`$.yes24Enabled` isBoolean·true/false 반영)을 단언해 "false 하드코딩·누락"을 가드한다. 이 프로젝트는 두 API 컨트롤러 주석에도 이 사각을 명시해 둔다.
+- 일반화: **한 곳에서 거는 전역 관심사(cross-cutting)라도, 그게 특정 응답 파이프라인(뷰 렌더)에만 붙는 메커니즘이면 다른 파이프라인(JSON 직렬화)엔 안 닿는다.** "전역 = 어디나"로 착각하지 말고 그 메커니즘이 사는 레이어를 확인한다.
+
+### 관련
+
+- Yes24 제휴 링크 PR #625(`AffiliateModelAdvice`·`ShelfResponse`/`ProfileResponse.yes24Enabled` 직접 주입). 자매: `AdsModelAdvice`(같은 패턴).

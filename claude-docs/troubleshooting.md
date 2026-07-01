@@ -144,6 +144,7 @@
 - [T-121. WinRT 토스트가 미등록 AppUserModelID면 API 성공해도 화면에 안 뜬다(조용히 드랍)](#t-121-winrt-토스트가-미등록-appusermodelid면-api-성공해도-화면에-안-뜬다조용히-드랍)
 - [T-122. 타임아웃/hang 수정의 RED 테스트는 하니스를 outer `timeout`으로 감싸지 않으면 테스트가 세션째 hang한다](#t-122-타임아웃hang-수정의-red-테스트는-하니스를-outer-timeout으로-감싸지-않으면-테스트가-세션째-hang한다)
 - [T-123. 커스텀 `display`(flex/grid)를 준 요소를 JS `[hidden]`으로 토글해도 author가 UA `[hidden]{display:none}`을 이겨 안 숨겨진다 (T-035 재발 3회차)](#t-123-커스텀-displayflexgrid를-준-요소를-js-hidden으로-토글해도-author가-ua-hiddendisplaynone을-이겨-안-숨겨진다-t-035-재발-3회차)
+- [T-124. `npm install`(무인자)이 vite dist를 불완전하게 남겨 빌드가 `ERR_MODULE_NOT_FOUND`(cli.js 없음) — `npm ci`로 클린 복구](#t-124-npm-install무인자이-vite-dist를-불완전하게-남겨-빌드가-err_module_not_foundclijs-없음--npm-ci로-클린-복구)
 
 ---
 
@@ -2293,6 +2294,18 @@ git worktree remove ../BookTimer-<task>
 
 ---
 
+## T-124. `npm install`(무인자)이 vite dist를 불완전하게 남겨 빌드가 `ERR_MODULE_NOT_FOUND`(cli.js 없음) — `npm ci`로 클린 복구
+
+**증상**: 프론트 번들 재빌드(`npm --prefix frontend run build`)가 첫 앱부터 `Error [ERR_MODULE_NOT_FOUND]: Cannot find module '…/vite/dist/node/cli.js' imported from …/vite/bin/vite.js`로 실패. `vite/bin/vite.js`는 있는데 `dist/node/cli.js`만 없다(패키지가 반만 설치된 상태).
+
+**원인**: 워크트리 세션에서 `frontend/node_modules`는 메인 워크트리로의 정션인데, 어느 시점 `cross-env` 같은 devDependency가 메인 설치에서 빠져 있었다(그래서 빌드가 `cross-env … 아닙니다`로 먼저 실패). 이를 채우려 `npm install`(무인자)을 돌렸더니 패키지들을 재정렬(dedupe·부분 갱신)하면서 **vite 패키지를 불완전 상태**로 남겼다(bin만 있고 dist 누락). `npm install`은 기존 트리 위에 얹는 증분 조작이라 이런 부분 손상이 날 수 있다.
+
+**해결**: 메인 `frontend`에서 `npm ci` — 락파일(`package-lock.json`) 기준으로 node_modules를 **통째 지우고 정확히 재설치**해 일관성을 복구(`cli.js` 포함). 정션이라 모든 워크트리가 함께 고쳐진다. 이후 `npm run build`·`npm test` 정상.
+
+**교훈**: node_modules가 이상하면(부분 누락·손상) `npm install`(증분)로 덧대지 말고 `npm ci`(클린)로 간다 — 특히 워크트리 정션으로 공유되는 트리에서. 빠진 dep 하나 채우려던 `npm install`이 멀쩡하던 vite까지 깨뜨릴 수 있다. Yes24 PR #625에서 번들 재빌드 중 발생. 1회차 신규.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2421,3 +2434,4 @@ git worktree remove ../BookTimer-<task>
 | 2026-07-01 | T-121 (WinRT 토스트가 미등록 AppUserModelID면 `.Show()`가 예외 없이 성공해도 화면에 안 뜸(조용히 드랍) — 등록 시스템 AppID `Microsoft.Windows.Explorer` 사용(실측 확인), 집중지원/`ToastEnabled`도 점검. B1 확인-대기 알림 훅 #621, PowerShell↔Windows API 함정, 1회차 신규) |
 | 2026-07-01 | T-123 (커스텀 `display:flex`를 준 요소를 JS `el.hidden`으로 토글해도 author가 UA `[hidden]{display:none}`을 origin 우선으로 이겨 안 숨겨짐 — `/settings` 재스킨의 iOS/복귀 힌트가 화면에 샘 / 해결=`.settings-page [hidden]{display:none!important}` 재숨김 리셋 / 감별=실 브라우저 `getComputedStyle(el).display!=='none'`, MockMvc·헤드리스 못 잡음 / **T-035 재발 3회차**(#189→T-035→이 건), 전역 `[hidden]` 리셋 하드픽스가 다음 승격, N-083) |
 | 2026-07-01 | T-122 (타임아웃/hang 수정의 RED 테스트는 하니스를 outer `timeout`으로 안 감싸면 테스트가 세션째 hang — 가짜 느린 자식을 **exit 0**으로 두어 RED=오래 기다린 뒤 통과(=허용, 잘못)·GREEN=타임아웃 차단(exit 2)로 종료코드로 가름. A1 게이트 타임아웃 테스트 #620·N-143, 1회차 신규) |
+| 2026-07-02 | T-124 (`npm install`(무인자)이 vite dist(`cli.js`)를 불완전하게 남겨 빌드 `ERR_MODULE_NOT_FOUND` → `npm ci`로 클린 복구, 워크트리 정션 공유 트리, Yes24 PR #625, 1회차 신규) |
