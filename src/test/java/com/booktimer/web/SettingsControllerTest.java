@@ -350,6 +350,27 @@ class SettingsControllerTest {
                 .andExpect(model().attribute("marketingPushConsent", true));
     }
 
+    @Test
+    @DisplayName("GET /settings: 알림 스위치의 JS 연동 계약(ID·속성)과 role=switch를 유지한다(리스킨 회귀 가드 §4.1)")
+    void getSettings_preservesNotificationJsContract() throws Exception {
+        register("jscontract@booktimer.com");
+
+        // notification-settings.js가 조회하는 훅 — 이름이 바뀌면 알림 토글이 조용히 깨진다.
+        // 리스킨(이모지 라벨→스위치)에도 이 계약과 접근성 role=switch를 유지해야 한다.
+        mockMvc.perform(get("/settings").with(user("jscontract@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("id=\"notification-settings-container\"")))
+                .andExpect(content().string(containsString("data-marketing-push-consent")))
+                .andExpect(content().string(containsString("id=\"push-reminder-toggle\"")))
+                .andExpect(content().string(containsString("id=\"push-marketing-toggle\"")))
+                .andExpect(content().string(containsString("btn-push-toggle")))
+                .andExpect(content().string(containsString("data-push-row")))
+                .andExpect(content().string(containsString("id=\"push-ios-install-hint\"")))
+                .andExpect(content().string(containsString("id=\"push-marketing-hint\"")))
+                // 스위치 리스킨: 접근성 role=switch를 부여한다(현재 미부여 → RED)
+                .andExpect(content().string(containsString("role=\"switch\"")));
+    }
+
     // --- 프로필 사진(도감 작가 얼굴) 선택 ---
 
     @Test

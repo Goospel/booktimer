@@ -12,70 +12,105 @@
     <!-- VAPID 공개키 — 설정 페이지 푸시 토글용 -->
     <meta name="vapid-public-key" th:content="${vapidPublicKey}">
 </head>
-<body>
-<div class="container">
-    <header class="brand">
-        <a class="brand-home" th:href="@{/}" title="홈으로">
-            <svg class="brand-ico" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="3.4" height="16" rx="1"/><rect x="9.3" y="4" width="3.4" height="16" rx="1"/><path d="M15 5.4l3.3-.7 2.4 15.4-3.3.7z"/></svg>
-            <h1>BookTimer</h1>
-        </a>
+<body class="settings-page">
+<div class="set-shell">
+
+    <!-- 헤더 — 제목 + 톱니 아이콘(장식). 페이지 이동은 하단 네비 타일이 담당(시안 준수). -->
+    <header class="set-header">
+        <h1 class="set-title">설정</h1>
+        <span class="set-header-ico" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </span>
     </header>
-    <p class="greeting">설정</p>
 
-    <div th:if="${message}" class="alert alert-ok" th:text="${message}">저장됨</div>
-    <div th:if="${error}" class="alert alert-error" th:text="${error}">오류</div>
-
-    <!-- 인증 메일 재발송 결과 플래시(resend 엔드포인트가 남김) — sent/already/failed -->
-    <div th:if="${verifyResendResult == 'sent'}" class="alert alert-ok">인증 메일을 보냈어요. 메일함을 확인해 주세요.</div>
-    <div th:if="${verifyResendResult == 'already'}" class="alert alert-ok">이미 이메일 인증이 완료된 계정이에요.</div>
-    <div th:if="${verifyResendResult == 'failed'}" class="alert alert-error">메일 발송에 실패했어요. 잠시 후 다시 시도해 주세요.</div>
-
-    <!-- 이메일 미검증 안내 배너 — 미검증이어도 사용은 막지 않고 인증만 권한다(정책 ③). -->
-    <div th:if="${emailVerified == false}" class="alert alert-warn verify-banner">
-        <span>이메일 인증이 아직 안 됐어요. 받은 메일의 링크로 인증을 완료해 주세요.</span>
-        <form th:action="@{/verify-email/resend}" method="post">
-            <button type="submit" class="btn-inline-link">인증 메일 다시 받기</button>
-        </form>
+    <!-- 플래시: 저장/오류 -->
+    <div th:if="${message}" class="set-alert set-alert-ok">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+        <span th:text="${message}">저장됨</span>
+    </div>
+    <div th:if="${error}" class="set-alert set-alert-error">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+        <span th:text="${error}">오류</span>
     </div>
 
-    <section class="card">
+    <!-- 인증 메일 재발송 결과 플래시(resend 엔드포인트가 남김) — sent/already/failed -->
+    <div th:if="${verifyResendResult == 'sent'}" class="set-alert set-alert-ok">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+        <span>인증 메일을 보냈어요. 메일함을 확인해 주세요.</span>
+    </div>
+    <div th:if="${verifyResendResult == 'already'}" class="set-alert set-alert-ok">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+        <span>이미 이메일 인증이 완료된 계정이에요.</span>
+    </div>
+    <div th:if="${verifyResendResult == 'failed'}" class="set-alert set-alert-error">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+        <span>메일 발송에 실패했어요. 잠시 후 다시 시도해 주세요.</span>
+    </div>
+
+    <!-- 이메일 미검증 안내 배너 — 미검증이어도 사용은 막지 않고 인증만 권한다(정책 ③).
+         null-safe: 검증 실패 재렌더 경로엔 emailVerified가 모델에 없어(null) `!emailVerified`는 SpEL 예외를
+         내므로, null==false(=false)로 안전하게 다룬다. GET 경로엔 값이 실려 정상 판별된다. -->
+    <div th:if="${emailVerified == false}" class="set-banner">
+        <svg class="set-banner-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+        <div class="set-banner-body">
+            <span>이메일 인증이 아직 안 됐어요. 받은 메일의 링크로 인증을 완료해 주세요.</span>
+            <form th:action="@{/verify-email/resend}" method="post">
+                <button type="submit" class="set-banner-link">인증 메일 다시 받기</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 카드: 기본 설정 -->
+    <section class="set-card">
+        <h2 class="set-card-title">기본 설정</h2>
         <form th:action="@{/settings}" th:object="${settingsForm}" method="post">
-            <div class="field">
-                <label for="nickname">닉네임</label>
-                <input type="text" id="nickname" th:field="*{nickname}">
-                <span class="field-error" th:if="${#fields.hasErrors('nickname')}" th:errors="*{nickname}">닉네임 오류</span>
+            <div class="set-field">
+                <label class="set-label" for="nickname">닉네임</label>
+                <input class="set-input" type="text" id="nickname" th:field="*{nickname}">
+                <span class="set-field-error" th:if="${#fields.hasErrors('nickname')}" th:errors="*{nickname}">닉네임 오류</span>
             </div>
-            <div class="field">
-                <label for="timezone">타임존</label>
-                <select id="timezone" th:field="*{timezone}">
-                    <option th:each="tz : ${timezones}" th:value="${tz}" th:text="${tz}">Asia/Seoul</option>
-                </select>
-                <span class="field-error" th:if="${#fields.hasErrors('timezone')}" th:errors="*{timezone}">타임존 오류</span>
+
+            <div class="set-field">
+                <label class="set-label" for="timezone">타임존</label>
+                <div class="set-select-wrap">
+                    <select class="set-select" id="timezone" th:field="*{timezone}">
+                        <option th:each="tz : ${timezones}" th:value="${tz}" th:text="${tz}">Asia/Seoul</option>
+                    </select>
+                    <span class="set-select-chevron" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+                </div>
+                <span class="set-field-error" th:if="${#fields.hasErrors('timezone')}" th:errors="*{timezone}">타임존 오류</span>
             </div>
-            <div class="field">
-                <label for="incrementMinutes">하루 목표 (분)</label>
-                <input type="number" id="incrementMinutes" min="0" th:field="*{incrementMinutes}">
-                <span class="field-hint muted">매일 이만큼 읽는 게 목표예요. 최근 7일까지 빠뜨린 날을 채울 수 있어요.</span>
-                <span class="field-error" th:if="${#fields.hasErrors('incrementMinutes')}" th:errors="*{incrementMinutes}">목표 오류</span>
+
+            <div class="set-field">
+                <label class="set-label" for="incrementMinutes">하루 목표 (분)</label>
+                <input class="set-input" type="number" id="incrementMinutes" min="0" th:field="*{incrementMinutes}">
+                <span class="set-hint">매일 이만큼 읽는 게 목표예요. 최근 7일까지 빠뜨린 날을 채울 수 있어요.</span>
+                <span class="set-field-error" th:if="${#fields.hasErrors('incrementMinutes')}" th:errors="*{incrementMinutes}">목표 오류</span>
             </div>
-            <div class="field">
-                <label class="check-row" for="debtCarryover">
-                    <input type="checkbox" id="debtCarryover" th:field="*{debtCarryover}">
-                    <span>밀린 독서 시간을 타이머에 합쳐 표시</span>
-                </label>
-                <span class="field-hint muted">켜면 최근 7일 중 못 채운 시간이 오늘 타이머에 더해져 "갚을 시간"으로 쌓여 보여요. 끄면 오늘 몫만 보여요.</span>
+
+            <!-- 밀린 독서 시간 합산 표시 토글 — 폼과 함께 제출되는 실제 체크박스(시각만 커스텀 박스). -->
+            <label class="set-check set-check--card" for="debtCarryover">
+                <input type="checkbox" id="debtCarryover" th:field="*{debtCarryover}">
+                <span class="set-check-box" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
+                <span class="set-check-body">
+                    <span class="set-check-title">밀린 독서 시간을 타이머에 합쳐 표시</span>
+                    <span class="set-check-desc">켜면 최근 7일 중 못 채운 시간이 오늘 타이머에 더해져 "갚을 시간"으로 쌓여 보여요. 끄면 오늘 몫만 보여요.</span>
+                </span>
+            </label>
+
+            <div class="set-actions">
+                <button type="submit" class="set-btn-save">저장</button>
             </div>
-            <button type="submit" class="btn-primary">저장</button>
         </form>
     </section>
 
     <!-- 프로필 사진(도감 작가 얼굴) 선택 그리드의 <use href="#sprite-{code}">가 참조할 심볼 정의. -->
     <th:block th:replace="~{fragments/garden-character-sprites :: sprites}"></th:block>
 
-    <!-- 프로필 사진: 도감에서 모은(완독한) 작가의 얼굴만 고를 수 있다. 업로드 없이 SVG 스프라이트 재사용. -->
-    <section class="card">
-        <h2>프로필 사진</h2>
-        <p class="field-hint muted">도감에서 모은 작가의 얼굴을 프로필 사진으로 쓸 수 있어요. 책을 완독해 작가를 모으면 여기에 나타나요.</p>
+    <!-- 카드: 프로필 사진 — 도감에서 모은(완독한) 작가의 얼굴만 고를 수 있다. 업로드 없이 SVG 스프라이트 재사용. -->
+    <section class="set-card">
+        <h2 class="set-card-title">프로필 사진</h2>
+        <p class="set-card-desc">도감에서 모은 작가의 얼굴을 프로필 사진으로 쓸 수 있어요. 책을 완독해 작가를 모으면 여기에 나타나요.</p>
         <form th:action="@{/settings/profile-character}" method="post">
             <div class="profile-char-grid">
                 <!-- 기본(이니셜) — 항상 첫 칸. 선택 해제와 동일(빈 코드). -->
@@ -98,96 +133,132 @@
                     <span class="profile-char-label" th:text="${ch.name}">작가</span>
                 </label>
             </div>
-            <p th:if="${#lists.isEmpty(ownedCharacters)}" class="field-hint muted">
+            <p th:if="${#lists.isEmpty(ownedCharacters)}" class="set-card-desc" style="margin-top:16px">
                 아직 모은 작가가 없어요. 책을 완독하면 도감에서 작가를 모을 수 있어요.
             </p>
-            <button type="submit" class="btn-primary" style="margin-top:8px">저장</button>
+            <div class="set-actions">
+                <button type="submit" class="set-btn-save">저장</button>
+            </div>
         </form>
     </section>
 
     <!--/* 비밀번호 카드: LOCAL 계정만 노출 — 소셜 계정은 비밀번호가 없다. Thymeleaf 파서 주석이라 출력에 남지 않는다. */-->
-    <section class="card" th:if="${localAccount}">
-        <h2>비밀번호 변경</h2>
+    <section class="set-card" th:if="${localAccount}">
+        <h2 class="set-card-title">비밀번호 변경</h2>
         <form th:action="@{/settings/password}" method="post">
-            <div class="field">
-                <label for="currentPassword">현재 비밀번호</label>
-                <input type="password" id="currentPassword" name="currentPassword" autocomplete="current-password">
+            <div class="set-field">
+                <label class="set-label" for="currentPassword">현재 비밀번호</label>
+                <input class="set-input" type="password" id="currentPassword" name="currentPassword" placeholder="현재 비밀번호" autocomplete="current-password">
             </div>
-            <div class="field">
-                <label for="newPassword">새 비밀번호 (8자 이상)</label>
-                <input type="password" id="newPassword" name="newPassword" autocomplete="new-password">
+            <div class="set-field">
+                <label class="set-label" for="newPassword">새 비밀번호 (8자 이상)</label>
+                <input class="set-input" type="password" id="newPassword" name="newPassword" placeholder="8자 이상" autocomplete="new-password">
             </div>
-            <div class="field">
-                <label for="confirmPassword">새 비밀번호 확인</label>
-                <input type="password" id="confirmPassword" name="confirmPassword" autocomplete="new-password">
+            <div class="set-field">
+                <label class="set-label" for="confirmPassword">새 비밀번호 확인</label>
+                <input class="set-input" type="password" id="confirmPassword" name="confirmPassword" placeholder="새 비밀번호 다시 입력" autocomplete="new-password">
             </div>
-            <button type="submit" class="btn-primary">비밀번호 변경</button>
+            <div class="set-actions">
+                <button type="submit" class="set-btn-save">비밀번호 변경</button>
+            </div>
         </form>
     </section>
 
-    <!-- 알림 통합 섹션 — 푸시(①②) + 이메일(③) 한 카드에 -->
-    <section class="card"
+    <!-- 알림 통합 섹션 — 푸시(①②, JS 즉시 토글) + 이메일(③, 폼 제출) 한 카드에.
+         푸시 토글은 폼이 아니라 type=button — notification-settings.js가 /api/push/*로 즉시 처리한다. -->
+    <section class="set-card"
              id="notification-settings-container"
              th:attr="data-marketing-push-consent=${marketingPushConsent}">
-        <h2>알림</h2>
+        <h2 class="set-card-title">알림</h2>
 
         <!-- ① 매일 독서 알림 (푸시) -->
-        <div class="field" data-push-row>
-            <button type="button" id="push-reminder-toggle" class="btn-push-toggle">
-                🔕 매일 독서 알림 받기
+        <div class="set-notif-row" data-push-row>
+            <div class="set-notif-text">
+                <div class="set-notif-name">매일 독서 알림</div>
+                <div class="set-notif-desc">오전 9시에 오늘 독서 목표를 알려드려요. 언제든 끌 수 있어요.</div>
+            </div>
+            <button type="button" id="push-reminder-toggle" class="btn-push-toggle"
+                    role="switch" aria-checked="false" aria-label="매일 독서 알림">
+                <span class="set-switch-knob" aria-hidden="true">
+                    <svg class="set-switch-ico set-switch-ico-on" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    <svg class="set-switch-ico set-switch-ico-off" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.9 17.9 0 0 1 18 8"/><path d="M6.26 6.26A5.9 5.9 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/><path d="M2 2l20 20"/></svg>
+                </span>
             </button>
-            <span class="field-hint muted">오전 9시에 오늘 독서 목표를 알려드려요. 언제든 끌 수 있어요.</span>
         </div>
 
+        <div class="set-notif-divider"></div>
+
         <!-- ② 복귀 알림 (푸시·광고) -->
-        <div class="field" data-push-row>
-            <button type="button" id="push-marketing-toggle" class="btn-push-toggle">
-                📭 복귀 알림 받기
+        <div class="set-notif-row" data-push-row>
+            <div class="set-notif-text">
+                <div class="set-notif-name-row">
+                    <span class="set-notif-name">복귀 알림</span>
+                    <span class="set-badge">광고</span>
+                </div>
+                <div class="set-notif-desc">오래 쉬면 살짝 알려드리는 알림이에요. 광고성 정보 수신 동의 항목이에요.</div>
+                <div id="push-marketing-hint" class="set-notif-subhint" hidden>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+                    <span>매일 독서 알림이 꺼져 있으면 복귀 알림도 오지 않아요.</span>
+                </div>
+            </div>
+            <button type="button" id="push-marketing-toggle" class="btn-push-toggle"
+                    role="switch" aria-checked="false" aria-label="복귀 알림">
+                <span class="set-switch-knob" aria-hidden="true">
+                    <svg class="set-switch-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h3l6 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M16.5 9a3 3 0 0 1 0 6"/></svg>
+                </span>
             </button>
-            <span class="field-hint muted">오래 쉬면 살짝 알려드리는 알림이에요. 광고성 정보 수신 동의 항목이에요.</span>
-            <span id="push-marketing-hint" class="field-hint muted" hidden>
-                💡 매일 독서 알림이 꺼져 있으면 복귀 알림도 오지 않아요.
-            </span>
         </div>
 
         <!-- iOS 미설치 안내 -->
-        <div id="push-ios-install-hint" class="field-hint muted" hidden>
-            📱 iOS에서 알림을 받으려면 먼저 "공유 → 홈 화면에 추가"로 설치해 주세요.
+        <div id="push-ios-install-hint" class="set-notif-subhint" hidden>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 5h2"/></svg>
+            <span>iOS에서 알림을 받으려면 먼저 "공유 → 홈 화면에 추가"로 설치해 주세요.</span>
         </div>
 
-        <!-- ③ 복귀 안내 메일 (이메일·광고) -->
-        <form th:action="@{/settings/marketing}" method="post" class="field">
-            <label class="check-row" for="marketingEmailConsent">
+        <div class="set-notif-divider"></div>
+
+        <!-- ③ 복귀 안내 메일 (이메일·광고) — 실제 폼 제출(푸시 토글과 분리). -->
+        <form th:action="@{/settings/marketing}" method="post" class="set-notif-mail">
+            <label class="set-check" for="marketingEmailConsent">
                 <input type="checkbox" id="marketingEmailConsent" name="marketingEmailConsent"
                        th:checked="${marketingEmailConsent}">
-                <span>복귀 안내 메일 받기</span>
+                <span class="set-check-box" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
+                <span class="set-check-body">
+                    <span class="set-check-title-row">
+                        <span class="set-check-title">복귀 안내 메일 받기</span>
+                        <span class="set-badge">광고</span>
+                    </span>
+                    <span class="set-check-desc">오래 쉬면 살짝 알려드리는 재참여 메일이에요. 선택 항목이라 언제든 켜고 끌 수 있어요.</span>
+                </span>
             </label>
-            <span class="field-hint muted">오래 쉬면 살짝 알려드리는 재참여 메일이에요. 선택 항목이라 언제든 켜고 끌 수 있어요.</span>
-            <button type="submit" class="btn-primary" style="margin-top:8px">저장</button>
+            <div class="set-actions">
+                <button type="submit" class="set-btn-save">저장</button>
+            </div>
         </form>
     </section>
 
     <!-- 회원 탈퇴 (위험 구역) -->
-    <section class="card danger-zone">
-        <h2>회원 탈퇴</h2>
-        <p class="status-line">계정과 모든 독서 기록이 영구 삭제됩니다. 되돌릴 수 없습니다.</p>
+    <section class="set-card set-card-danger">
+        <h2 class="set-card-title set-card-title-danger">회원 탈퇴</h2>
+        <p class="set-card-desc">계정과 모든 독서 기록이 영구 삭제됩니다. 되돌릴 수 없습니다.</p>
         <form th:action="@{/settings/delete}" method="post"
               onsubmit="return confirm('정말 탈퇴하시겠어요? 모든 기록이 삭제되며 되돌릴 수 없습니다.');">
             <!--/* LOCAL 계정은 비밀번호로, 소셜 계정은 비밀번호가 없어 본인 @핸들(login_id) 재입력으로 확인한다. */-->
-            <div class="field" th:if="${localAccount}">
-                <label for="password">확인을 위해 비밀번호를 입력하세요</label>
-                <input type="password" id="password" name="password" autocomplete="current-password">
+            <div class="set-field" th:if="${localAccount}">
+                <label class="set-label" for="password">확인을 위해 비밀번호를 입력하세요</label>
+                <input class="set-input set-input-danger" type="password" id="password" name="password" placeholder="비밀번호" autocomplete="current-password">
             </div>
-            <div class="field" th:unless="${localAccount}">
-                <label for="confirmHandle">확인을 위해 아이디 <strong th:text="'@' + ${loginId}">@handle</strong> 를 입력하세요</label>
-                <input type="text" id="confirmHandle" name="confirmHandle" autocomplete="off" autocapitalize="none" autocorrect="off">
+            <div class="set-field" th:unless="${localAccount}">
+                <label class="set-label" for="confirmHandle">확인을 위해 아이디 <strong th:text="'@' + ${loginId}">@handle</strong> 를 입력하세요</label>
+                <input class="set-input set-input-danger" type="text" id="confirmHandle" name="confirmHandle" th:placeholder="'@' + ${loginId}" autocomplete="off" autocapitalize="none" autocorrect="off">
             </div>
-            <button type="submit" class="btn-danger">계정 영구 삭제</button>
+            <button type="submit" class="set-btn-danger">계정 영구 삭제</button>
         </form>
     </section>
 
     <nav class="link-row" aria-label="페이지 이동">
         <th:block th:replace="~{fragments/nav-links :: navLink(@{/}, 'home', '홈')}"></th:block>
+        <th:block th:replace="~{fragments/nav-links :: navLink(@{/books}, 'books', '내 책장')}"></th:block>
     </nav>
 </div>
 <script type="module" th:src="@{/notification-settings.js}"></script>

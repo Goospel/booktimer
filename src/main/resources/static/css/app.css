@@ -2547,28 +2547,8 @@ body.personality-page #personality-app { gap: 18px; }
     .pv-hero-levelup, .pv-hero-sparkle { animation: none; }
 }
 
-/* 설정 알림 섹션 푸시 토글 버튼 — check-row 체크박스와 시각 일관성 */
-.btn-push-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 7px 14px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    font-size: .9rem;
-    cursor: pointer;
-    transition: background .15s, border-color .15s;
-    white-space: nowrap;
-}
-.btn-push-toggle:hover {
-    background: rgba(243, 238, 228, 1);
-    border-color: var(--accent);
-}
-.btn-push-toggle:disabled {
-    opacity: .5;
-    cursor: not-allowed;
-}
+/* 설정 알림 섹션 푸시 토글 = 스위치. 정의는 파일 끝 "설정 페이지 재스킨"(body.settings-page)에 있다.
+   JS(notification-settings.js)가 클래스명 .btn-push-toggle / .is-on 에 의존하므로 이름은 유지한다. */
 
 /* 도감 전체 오버레이 — backdrop 클릭·ESC로 닫힘 */
 .village-dex-overlay {
@@ -3362,3 +3342,139 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .auth-page .auth-links a:hover { text-decoration: underline; }
 .auth-page .auth-links a.auth-link-muted { color: var(--muted); }
 .auth-page .auth-link-accent { color: var(--accent); }
+
+/* ============================================================
+   설정 페이지 재스킨 — claude.ai/design 시안(설정.decoded.html) 이식.
+   전역 공유 클래스(.card·.field·.btn-primary·.btn-danger·.alert·.link-row·.check-row·
+   .status-line·.danger-zone·.verify-banner·.btn-inline-link 등)는 로그인·가입·온보딩·
+   비번재설정 등 형제 페이지가 공유하므로 절대 건드리지 않는다. 이 블록은 body.settings-page
+   스코프 + .set-* 클래스로만 구성 → 타 페이지 회귀 0(auth-page 재스킨과 같은 격리 규약).
+   색은 :root 토큰 재사용, 토큰 없는 경고(#F6ECD9/#8A6D3B)·위험(#C0524A 계열) 톤만 raw hex(시안값).
+   .btn-push-toggle / .profile-char-* 는 설정 전용(JS·구조 의존)이라 여기서 스위치/그리드로 재정의
+   (클래스명은 JS·CSS 선택자 의존 때문에 유지). ============================================================ */
+
+/* 셸 — 시안 프레임 폭(480) */
+.settings-page .set-shell { max-width: 480px; margin: 0 auto; padding: 20px 18px 40px; }
+
+/* hidden 리셋 — .set-notif-row/.set-notif-subhint의 display:flex가 UA의 [hidden]{display:none}을
+   특정성으로 덮어써, JS(notification-settings.js)가 el.hidden=true로 감춘 iOS/복귀 힌트·미지원
+   푸시행이 그대로 보이던 버그를 막는다(실브라우저에서 발견). */
+.settings-page [hidden] { display: none !important; }
+
+/* 헤더 — 제목 + 톱니(장식) */
+.settings-page .set-header { display: flex; align-items: center; justify-content: space-between; padding: 6px 2px 18px; }
+.settings-page .set-title { font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 26px; margin: 0; color: var(--text); }
+.settings-page .set-header-ico { display: flex; color: var(--accent-hover); }
+
+/* 카드 */
+.settings-page .set-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 18px; padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(44, 42, 36, .05); }
+.settings-page .set-card-danger { border: 1.5px solid #C0524A; box-shadow: 0 1px 2px rgba(192, 82, 74, .08); margin-bottom: 20px; }
+.settings-page .set-card-title { font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 17px; margin: 0 0 18px; color: var(--text); }
+.settings-page .set-card-title-danger { color: #C0524A; margin-bottom: 8px; }
+.settings-page .set-card-desc { margin: 0 0 18px; font-size: 12.5px; color: var(--muted); line-height: 1.5; word-break: keep-all; }
+.settings-page .set-card-danger .set-card-desc { font-size: 13px; line-height: 1.55; }
+
+/* 필드 */
+.settings-page .set-field { margin-bottom: 16px; }
+.settings-page .set-label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 7px; color: var(--text); }
+.settings-page .set-input,
+.settings-page .set-select {
+    width: 100%; background: #fff; border: 1px solid var(--border); border-radius: 14px;
+    padding: 12px 14px; font-family: inherit; font-size: 15px; color: var(--text);
+    outline: none; transition: border-color .15s, box-shadow .15s;
+}
+.settings-page .set-input:focus,
+.settings-page .set-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
+.settings-page .set-input-danger { border-color: #E4C6C2; }
+.settings-page .set-input-danger:focus { border-color: #C0524A; box-shadow: 0 0 0 3px rgba(192, 82, 74, .18); }
+
+/* select — 기본 화살표 제거 + 커스텀 chevron */
+.settings-page .set-select-wrap { position: relative; }
+.settings-page .set-select { appearance: none; -webkit-appearance: none; padding-right: 40px; cursor: pointer; }
+.settings-page .set-select-chevron { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--muted); display: flex; }
+
+/* 힌트 · 필드 에러 */
+.settings-page .set-hint { display: block; margin-top: 7px; font-size: 12.5px; color: var(--muted); line-height: 1.5; word-break: keep-all; }
+.settings-page .set-field-error { display: block; margin-top: 7px; font-size: 12.5px; color: #C0524A; line-height: 1.5; }
+
+/* 저장 버튼(우측 정렬 pill) / 위험 버튼(전체폭 pill) */
+.settings-page .set-actions { display: flex; justify-content: flex-end; margin-top: 20px; }
+.settings-page .set-btn-save { width: auto; background: var(--accent); color: #fff; border: none; border-radius: 999px; padding: 11px 24px; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; transition: background .15s; }
+.settings-page .set-btn-save:hover { background: var(--accent-hover); }
+.settings-page .set-btn-danger { width: 100%; background: #C0524A; color: #fff; border: none; border-radius: 999px; padding: 12px 24px; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; transition: background .15s; }
+.settings-page .set-btn-danger:hover { background: #A5443C; }
+
+/* 커스텀 체크박스(밀린시간 합산 / 복귀 메일) — 실제 <input>은 숨기고 박스 span으로 그린다 */
+.settings-page .set-check { display: flex; align-items: flex-start; gap: 11px; cursor: pointer; }
+.settings-page .set-check--card { background: var(--sage-soft); border: 1px solid #C4D3BC; border-radius: 14px; padding: 14px; }
+.settings-page .set-check input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
+.settings-page .set-check-box {
+    flex-shrink: 0; width: 22px; height: 22px; border-radius: 7px; border: 1.6px solid var(--accent);
+    background: #fff; display: flex; align-items: center; justify-content: center; margin-top: 1px;
+    color: #fff; transition: background .15s;
+}
+.settings-page .set-check-box svg { opacity: 0; }
+.settings-page .set-check input:checked + .set-check-box { background: var(--accent); }
+.settings-page .set-check input:checked + .set-check-box svg { opacity: 1; }
+.settings-page .set-check input:focus-visible + .set-check-box { outline: 2px solid var(--accent-hover); outline-offset: 2px; }
+.settings-page .set-check-body { flex: 1; }
+.settings-page .set-check-title { display: block; font-size: 14px; font-weight: 700; color: var(--text); }
+.settings-page .set-check-title-row { display: flex; align-items: center; gap: 7px; }
+.settings-page .set-check-desc { display: block; margin-top: 5px; font-size: 12.5px; color: var(--muted); line-height: 1.5; word-break: keep-all; }
+
+/* 광고 배지 */
+.settings-page .set-badge { font-size: 10.5px; color: #8A857A; border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
+
+/* 플래시(아이콘 + 텍스트) */
+.settings-page .set-alert { display: flex; align-items: center; gap: 10px; border-radius: 14px; padding: 12px 14px; margin-bottom: 16px; font-size: 13.5px; line-height: 1.5; word-break: keep-all; }
+.settings-page .set-alert svg { flex-shrink: 0; }
+.settings-page .set-alert-ok { background: var(--sage-soft); border: 1px solid #C4D3BC; color: #2F5D3E; }
+.settings-page .set-alert-ok svg { color: #2F8F6B; }
+.settings-page .set-alert-error { background: #F7E3E0; border: 1px solid #E4B7B1; color: #9A3A32; }
+.settings-page .set-alert-error svg { color: #C0524A; }
+
+/* 이메일 미검증 배너(경고 톤) */
+.settings-page .set-banner { display: flex; align-items: flex-start; gap: 10px; background: #F6ECD9; border: 1px solid #E6D3AE; color: #8A6D3B; border-radius: 14px; padding: 13px 14px; margin-bottom: 16px; font-size: 13px; line-height: 1.5; }
+.settings-page .set-banner-ico { flex-shrink: 0; margin-top: 1px; }
+.settings-page .set-banner-body { flex: 1; }
+.settings-page .set-banner-body form { margin: 6px 0 0; }
+.settings-page .set-banner-link { width: auto; background: none; border: none; padding: 0; font: inherit; color: #8A6D3B; font-weight: 700; font-size: 13px; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+
+/* 알림 행 */
+.settings-page .set-notif-row { display: flex; align-items: flex-start; gap: 12px; padding: 14px 0; }
+.settings-page .set-notif-text { flex: 1; }
+.settings-page .set-notif-name { font-size: 14px; font-weight: 700; color: var(--text); }
+.settings-page .set-notif-name-row { display: flex; align-items: center; gap: 7px; }
+.settings-page .set-notif-desc { margin-top: 5px; font-size: 12.5px; color: var(--muted); line-height: 1.5; word-break: keep-all; }
+.settings-page .set-notif-divider { height: 1px; background: #EDE7DA; }
+.settings-page .set-notif-subhint { display: flex; align-items: flex-start; gap: 6px; margin-top: 8px; font-size: 11.5px; color: #8A857A; line-height: 1.5; }
+.settings-page .set-notif-subhint svg { flex-shrink: 0; margin-top: 1px; }
+.settings-page .set-notif-mail { padding-top: 14px; }
+.settings-page .set-notif-mail .set-actions { margin-top: 16px; }
+
+/* 스위치(푸시 토글) — .btn-push-toggle(JS가 .is-on 토글). 전역 button{width:100%}를 스코프로 덮는다. */
+.settings-page .btn-push-toggle {
+    flex-shrink: 0; position: relative; width: 52px; height: 30px; margin-top: 2px;
+    border: none; border-radius: 999px; padding: 0; background: #D8CDB9; cursor: pointer;
+    transition: background .2s;
+}
+.settings-page .btn-push-toggle.is-on { background: var(--accent); }
+.settings-page .btn-push-toggle:disabled { opacity: .5; cursor: not-allowed; }
+.settings-page .set-switch-knob {
+    position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 999px;
+    background: #fff; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .25); color: #8A857A; transition: transform .2s;
+}
+.settings-page .btn-push-toggle.is-on .set-switch-knob { transform: translateX(22px); color: var(--accent-hover); }
+/* 리마인더: 켜짐=종, 꺼짐=종끄기(모양 교체). 마케팅: 확성기 1개(색만 knob color로 변함). */
+.settings-page .set-switch-ico { display: block; }
+.settings-page .set-switch-ico-on { display: none; }
+.settings-page .btn-push-toggle.is-on .set-switch-ico-on { display: block; }
+.settings-page .btn-push-toggle.is-on .set-switch-ico-off { display: none; }
+
+/* 프로필 사진 그리드 — 얼굴 크기·선택 링을 시안(이중 링)으로 (설정 전용 클래스라 스코프 오버라이드) */
+.settings-page .profile-char-grid { grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); }
+.settings-page .profile-char-face { width: 56px; height: 56px; border: none; }
+.settings-page .profile-char-opt input:checked + .profile-char-face {
+    border: none; box-shadow: 0 0 0 3px var(--accent), 0 0 0 5px var(--card-bg);
+}

@@ -141,17 +141,22 @@ async function _initNotificationSettings() {
     }
 }
 
+// 스위치 시각 상태는 CSS(.btn-push-toggle / .btn-push-toggle.is-on)가 구동한다.
+// 정적 라벨('매일 독서 알림' 등)은 템플릿에 있고, 여기선 켜짐/꺼짐 상태(class·aria)만 반영한다.
+// dataset.enabled는 다른 핸들러가 읽으므로 유지한다(마케팅 힌트 판단 등).
 function _updateReminderBtn(enabled) {
     const btn = document.getElementById('push-reminder-toggle');
     if (!btn) return;
-    btn.textContent = enabled ? '🔔 매일 독서 알림 끄기' : '🔕 매일 독서 알림 받기';
+    btn.classList.toggle('is-on', enabled);
+    btn.setAttribute('aria-checked', String(enabled));
     btn.dataset.enabled = String(enabled);
 }
 
 function _updateMarketingBtn(enabled) {
     const btn = document.getElementById('push-marketing-toggle');
     if (!btn) return;
-    btn.textContent = enabled ? '📣 복귀 알림 끄기' : '📭 복귀 알림 받기';
+    btn.classList.toggle('is-on', enabled);
+    btn.setAttribute('aria-checked', String(enabled));
     btn.dataset.enabled = String(enabled);
 
     // 리마인더 꺼져 있으면 힌트 표시
