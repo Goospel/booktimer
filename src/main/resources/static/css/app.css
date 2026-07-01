@@ -54,6 +54,13 @@
 
 * { box-sizing: border-box; }
 
+/* [hidden] 전역 리셋 (normalize류) — author의 display:flex/grid가 CSS cascade origin 우선순위
+   (author > UA, !important 제외)로 UA의 [hidden]{display:none}을 이겨, JS가 el.hidden=true로 감춘
+   요소가 화면에 그대로 남는 트랩(T-035·T-123, #189→T-035→/settings로 3회 재발)을 앱 전역에서 제거.
+   ⚠️ 이 리셋은 [hidden] "속성" 변형만 커버한다 — 닫힌 <details>의 자식 숨김은 UA의
+   details:not([open]) 메커니즘이라 여기 안 걸리며, 그 케이스는 개별 :not([open]) 재숨김이 필요하다. */
+[hidden] { display: none !important; }
+
 body {
     margin: 0;
     min-height: 100vh;
@@ -3356,10 +3363,7 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 /* 셸 — 시안 프레임 폭(480) */
 .settings-page .set-shell { max-width: 480px; margin: 0 auto; padding: 20px 18px 40px; }
 
-/* hidden 리셋 — .set-notif-row/.set-notif-subhint의 display:flex가 UA의 [hidden]{display:none}을
-   특정성으로 덮어써, JS(notification-settings.js)가 el.hidden=true로 감춘 iOS/복귀 힌트·미지원
-   푸시행이 그대로 보이던 버그를 막는다(실브라우저에서 발견). */
-.settings-page [hidden] { display: none !important; }
+/* (이전의 .settings-page [hidden] 스코프 리셋은 전역 [hidden]{display:none!important}로 승격돼 제거 — 파일 상단 리셋 참조) */
 
 /* 헤더 — 제목 + 톱니(장식) */
 .settings-page .set-header { display: flex; align-items: center; justify-content: space-between; padding: 6px 2px 18px; }
