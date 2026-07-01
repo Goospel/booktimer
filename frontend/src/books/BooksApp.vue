@@ -316,7 +316,7 @@ async function removeBook(book: MyBookSummary) {
           <div v-if="noteOpen" class="affiliate-pop" role="dialog" aria-label="구매 링크 안내">
             <p class="affiliate-pop-item">※ "구매" 링크는 제휴(알라딘) 링크로, 구매 시 일부 수수료를 받을 수 있습니다.</p>
             <p v-if="coupangEnabled" class="affiliate-pop-item">이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
-            <p v-if="yes24Enabled" class="affiliate-pop-item">이 포스팅은 Yes24 제휴 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
+            <p v-if="yes24Enabled" class="affiliate-pop-item">Yes24 "구매" 링크는 제휴 링크로, 구매 시 일부 수수료를 받을 수 있습니다.</p>
           </div>
         </span>
         <div v-if="noteOpen" class="affiliate-pop-backdrop" @click="noteOpen = false"></div>
