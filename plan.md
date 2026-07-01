@@ -448,6 +448,16 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
         (기존 `manual-add` `<details>` 패턴 재사용), 백엔드 무변경. TDD: "2개면 토글+두 링크 / 1개뿐이면 단일" 경계 2개 추가.
         - **펼침 오버레이 다듬기 ✅ 2026-06-12 (#323)**: 펼친 목록이 흐름에 쌓여 박스가 커지며 형제("삭제")가 밀리던 것을,
           `.buy-menu-items`를 `position:absolute`로 흐름에서 빼내 "구매" 버튼 바로 아래 드롭다운으로 띄움 → 펼쳐도 박스 높이 고정·형제 안 흔들림. `app.css`만 변경.
+    - **Yes24 제휴 병행 ✅ 2026-07-02**: 알라딘·쿠팡 옆에 Yes24 "구매"를 추가(쿠팡 `CoupangLinkBuilder` 패턴을 그대로
+      미러링). `Yes24LinkBuilder`가 `f(ISBN·제목, 추적코드, 템플릿)`로 **저장 없이 런타임 생성**, 추적코드가 `not-configured`(가입 전
+      기본)면 `yes24Enabled=false`로 버튼·고지문구를 숨김 → 가입 후 환경변수(`BOOKTIMER_YES24_TRACKING_CODE`/`_SEARCH_URL_TEMPLATE`)
+      주입만으로 점등(코드 변경 0). 엔드포인트 별도(`/buy/yes24`·`/u/{loginId}/books/{id}/buy/yes24`), 카운트 분리
+      (`Book.yes24ClickCount`, Flyway V55). 3제공자로 늘며 뷰 3곳(books/book-detail/profile)의 조합 분기(최대 7분기)를
+      **`buyOptions` 리스트 렌더로 리팩터**(제공자 추가 시 push 한 줄, 조합 폭발 제거) — 단일 구매처는 제공자명 버튼으로 통일.
+      `CoupangModelAdvice`는 두 제휴 플래그를 싣는 `AffiliateModelAdvice`로 리네임. TDD: Yes24LinkBuilderTest(순수)·
+      Yes24BookServiceTest(IDOR·비활성·공개 게이트)·Yes24BuyControllerTest(엔드포인트) + 기존 4곳 누수/노출 가드.
+      **남은 점등**: Yes24 제휴(링크프라이스 등 CPS 네트워크) 가입 + 약관상 필수 고지 문구 확정 + SSM 주입(사용자 작업).
+      실 브라우저: books 구매 드롭다운·book-detail SSR `th:each`·Yes24 고지문구 확인(로컬 테스트 추적코드 주입).
   - **③-c 책 상세 페이지 완료 ✅ 2026-06-03**: `GET /books/{id}` — 책 메타 + 월별 일자 기록 + 누적 시간. 소유권 검사(IDOR, 없으면 책장으로).
     `BookContributionService`(세션 패키지, 유저 TZ 일자) + `findByUserAndBook`. 책장에서 제목 클릭 진입.
     TDD: BookContributionServiceTest(단위)·BookControllerTest(렌더·IDOR). **책 3단계 완료.**

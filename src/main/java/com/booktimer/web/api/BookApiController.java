@@ -7,6 +7,7 @@ import com.booktimer.book.BookService;
 import com.booktimer.book.BookStatus;
 import com.booktimer.book.BookVisibility;
 import com.booktimer.book.CoupangLinkBuilder;
+import com.booktimer.book.Yes24LinkBuilder;
 import com.booktimer.popularity.FollowScopePopularity;
 import com.booktimer.popularity.FollowScopePopularityService;
 import com.booktimer.security.CurrentUserService;
@@ -36,8 +37,9 @@ import java.util.stream.Collectors;
  * <p>GET /api/books(전체 조회) · GET /api/books/search(검색 1페이지) · POST /api/books(추가) ·
  * POST /api/books/{id}/status · /visibility · /delete.
  *
- * <p>⚠️ {@code @RestController}는 {@code @ModelAttribute}(CoupangModelAdvice)를 무시 →
- * {@link CoupangLinkBuilder#isEnabled()}를 직접 주입해 {@code coupangEnabled}를 계산.
+ * <p>⚠️ {@code @RestController}는 {@code @ModelAttribute}(AffiliateModelAdvice)를 무시 →
+ * {@link CoupangLinkBuilder#isEnabled()}·{@link Yes24LinkBuilder#isEnabled()}를 직접 주입해
+ * {@code coupangEnabled}·{@code yes24Enabled}를 계산.
  */
 @RestController
 public class BookApiController {
@@ -47,16 +49,19 @@ public class BookApiController {
     private final BookReadingStatsService statsService;
     private final FollowScopePopularityService popularityService;
     private final CoupangLinkBuilder coupangLinkBuilder;
+    private final Yes24LinkBuilder yes24LinkBuilder;
 
     public BookApiController(CurrentUserService currentUserService, BookService bookService,
                              BookReadingStatsService statsService,
                              FollowScopePopularityService popularityService,
-                             CoupangLinkBuilder coupangLinkBuilder) {
+                             CoupangLinkBuilder coupangLinkBuilder,
+                             Yes24LinkBuilder yes24LinkBuilder) {
         this.currentUserService = currentUserService;
         this.bookService = bookService;
         this.statsService = statsService;
         this.popularityService = popularityService;
         this.coupangLinkBuilder = coupangLinkBuilder;
+        this.yes24LinkBuilder = yes24LinkBuilder;
     }
 
     // ── 조회: 책장 전체 + 메타 + popularity ──────────────────────────────────
@@ -70,7 +75,7 @@ public class BookApiController {
         Map<String, FollowScopePopularity> pop = popularityService.countByIsbn(user, isbns);
         List<MyBookSummary> rows = books.stream().map(b -> MyBookSummary.from(b, times)).toList();
         return new ShelfResponse(user.getLoginId(), user.getNickname(),
-                bookService.searchEnabled(), coupangLinkBuilder.isEnabled(),
+                bookService.searchEnabled(), coupangLinkBuilder.isEnabled(), yes24LinkBuilder.isEnabled(),
                 rows, toPopularityMap(pop));
     }
 
@@ -176,7 +181,8 @@ public class BookApiController {
 
     public record Popularity(long wantCount, long readCount) {}
 
-    public record ShelfResponse(String myLoginId, String nickname, boolean searchEnabled, boolean coupangEnabled,
+    public record ShelfResponse(String myLoginId, String nickname, boolean searchEnabled,
+                                boolean coupangEnabled, boolean yes24Enabled,
                                 List<MyBookSummary> books, Map<String, Popularity> popularity) {}
 
     public record SearchResponse(List<SearchRow> results, Map<String, Popularity> popularity) {}

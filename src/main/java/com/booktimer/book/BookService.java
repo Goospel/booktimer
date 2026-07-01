@@ -22,14 +22,17 @@ public class BookService {
     private final BookSearchClient searchClient;
     private final ReadingSessionRepository sessionRepository;
     private final CoupangLinkBuilder coupangLinkBuilder;
+    private final Yes24LinkBuilder yes24LinkBuilder;
 
     public BookService(BookRepository bookRepository, BookSearchClient searchClient,
                        ReadingSessionRepository sessionRepository,
-                       CoupangLinkBuilder coupangLinkBuilder) {
+                       CoupangLinkBuilder coupangLinkBuilder,
+                       Yes24LinkBuilder yes24LinkBuilder) {
         this.bookRepository = bookRepository;
         this.searchClient = searchClient;
         this.sessionRepository = sessionRepository;
         this.coupangLinkBuilder = coupangLinkBuilder;
+        this.yes24LinkBuilder = yes24LinkBuilder;
     }
 
     @Transactional(readOnly = true)
@@ -41,6 +44,12 @@ public class BookService {
     @Transactional(readOnly = true)
     public boolean coupangEnabled() {
         return coupangLinkBuilder.isEnabled();
+    }
+
+    /** Yes24 제휴 링크 노출 여부(추적코드 설정 시 true) — {@link #coupangEnabled()}와 대칭. */
+    @Transactional(readOnly = true)
+    public boolean yes24Enabled() {
+        return yes24LinkBuilder.isEnabled();
     }
 
     @Transactional(readOnly = true)
@@ -238,6 +247,47 @@ public class BookService {
             return null; // 비활성(추적코드 미설정)
         }
         book.recordCoupangClick();
+        bookRepository.save(book);
+        return link;
+    }
+
+    /**
+     * 내 책의 Yes24 "구매" 클릭을 집계하고 이동할 Yes24 검색 링크를 돌려준다 — 쿠팡 {@link #recordCoupangClick}과 대칭.
+     *
+     * <p>소유권을 강제한다(IDOR 방지). 링크는 DB에 없고 {@link Yes24LinkBuilder}가 런타임 생성한다 —
+     * Yes24는 제목이 항상 있어 링크가 늘 만들어지므로, null 사유는 "비활성(추적코드 미설정)"뿐이다(그땐 무집계).
+     *
+     * @return 이동할 Yes24 검색 링크. 비활성이면 null.
+     * @throws IllegalArgumentException 내 책이 아니거나 존재하지 않는 경우
+     */
+    public String recordYes24Click(User user, Long bookId) {
+        Book book = ownedBook(user, bookId);
+        String link = yes24LinkBuilder.buildSearchLink(book);
+        if (link == null) {
+            return null; // 비활성(추적코드 미설정) — 집계하지 않음
+        }
+        book.recordYes24Click();
+        bookRepository.save(book);
+        return link;
+    }
+
+    /**
+     * 공개(PUBLIC) 책의 Yes24 "구매" 클릭을 집계하고 링크를 돌려준다 — 남의 책방(공개 프로필)에서 쓴다.
+     * {@link #recordPublicCoupangClick}(쿠팡)과 같은 정신: 소유권 대신 공개 여부를 게이트로 두고,
+     * 클릭은 책 주인 행에 집계한다(2026-06-06 결정의 근거는 {@link #recordPublicPurchaseClick} JavaDoc 참조).
+     *
+     * @return 이동할 Yes24 검색 링크. 비공개·존재하지 않음·비활성이면 null.
+     */
+    public String recordPublicYes24Click(Long bookId) {
+        Book book = bookRepository.findById(bookId).orElse(null);
+        if (book == null || !book.isPublic()) {
+            return null; // 없거나 비공개 — 존재 누설 없이 거부
+        }
+        String link = yes24LinkBuilder.buildSearchLink(book);
+        if (link == null) {
+            return null; // 비활성(추적코드 미설정)
+        }
+        book.recordYes24Click();
         bookRepository.save(book);
         return link;
     }

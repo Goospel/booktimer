@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.security.Principal;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 내 책장 — SSR 셸 + 유지 대상(책 상세·buy* 4종·readers).
@@ -75,6 +77,8 @@ public class BookController {
                     model.addAttribute("book", book);
                     model.addAttribute("months", detail.monthlyHistory());
                     model.addAttribute("totalSeconds", detail.totalSeconds());
+                    // 구매 옵션 리스트 — Vue(BooksApp.buyOptions)와 같은 로직을 서버가 계산해 SSR에 실는다(조합 분기 폭발 방지).
+                    model.addAttribute("buyOptions", ownedBuyOptions(book));
                     return "book-detail";
                 })
                 .orElseGet(() -> {
@@ -132,6 +136,23 @@ public class BookController {
     }
 
     /**
+     * Yes24 "구매" 클릭 — 집계 후 Yes24 검색 링크로 리다이렉트.
+     */
+    @GetMapping("/books/{id}/buy/yes24")
+    public String buyYes24(@PathVariable Long id, Principal principal) {
+        User user = currentUser(principal);
+        try {
+            String link = bookService.recordYes24Click(user, id);
+            if (link != null) {
+                return "redirect:" + link;
+            }
+        } catch (IllegalArgumentException ignored) {
+            // IDOR 방지 — 존재 여부 노출 없이 책장으로.
+        }
+        return "redirect:/books";
+    }
+
+    /**
      * 남의 책방(공개 프로필)에서 쿠팡 "구매" 클릭.
      */
     @GetMapping("/u/{loginId}/books/{bookId}/buy/coupang")
@@ -143,6 +164,41 @@ public class BookController {
         }
         return "redirect:/u/" + loginId;
     }
+
+    /**
+     * 남의 책방(공개 프로필)에서 Yes24 "구매" 클릭.
+     */
+    @GetMapping("/u/{loginId}/books/{bookId}/buy/yes24")
+    public String buyYes24FromProfile(@PathVariable String loginId, @PathVariable Long bookId, Principal principal) {
+        currentUser(principal);
+        String link = bookService.recordPublicYes24Click(bookId);
+        if (link != null) {
+            return "redirect:" + link;
+        }
+        return "redirect:/u/" + loginId;
+    }
+
+    /**
+     * 내 책 상세의 구매 옵션 리스트(알라딘/쿠팡/Yes24) — 활성 제공자만 담는다(프론트 buyOptions와 동형).
+     * 알라딘=구매링크 유무, 쿠팡·Yes24=제휴 활성 여부. 템플릿은 size로 드롭다운/단일 버튼을 가른다.
+     */
+    private List<BuyOption> ownedBuyOptions(com.booktimer.book.Book book) {
+        List<BuyOption> opts = new ArrayList<>();
+        String base = "/books/" + book.getId();
+        if (book.getPurchaseLink() != null && !book.getPurchaseLink().isBlank()) {
+            opts.add(new BuyOption("알라딘", base + "/buy"));
+        }
+        if (bookService.coupangEnabled()) {
+            opts.add(new BuyOption("쿠팡", base + "/buy/coupang"));
+        }
+        if (bookService.yes24Enabled()) {
+            opts.add(new BuyOption("Yes24", base + "/buy/yes24"));
+        }
+        return opts;
+    }
+
+    /** 구매 옵션 한 줄(제공자 라벨 + 이동 경로) — SSR 템플릿 th:each 렌더용. */
+    public record BuyOption(String label, String url) {}
 
     private User currentUser(Principal principal) {
         return currentUserService.resolve(principal);

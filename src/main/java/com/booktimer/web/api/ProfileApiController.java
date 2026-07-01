@@ -3,6 +3,7 @@ package com.booktimer.web.api;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookStatus;
 import com.booktimer.book.CoupangLinkBuilder;
+import com.booktimer.book.Yes24LinkBuilder;
 import com.booktimer.profile.ProfileService;
 import com.booktimer.profile.ProfileTag;
 import com.booktimer.profile.ProfileView;
@@ -24,8 +25,9 @@ import java.util.Map;
  * <p>GET /api/profile(헤더+책BTI+전체책), /api/profile/books(상태필터), /api/profile/personality-tag(태그 드릴다운).
  * 모두 {@link ProfileService} 가드({@code resolveVisibleTarget} 3중)를 통과 — 차단·ADMIN·미존재 → 404.
  *
- * <p>⚠️ {@code @ModelAttribute}(CoupangModelAdvice)는 {@code @RestController}에 무시됨 →
- * {@link CoupangLinkBuilder#isEnabled()}를 직접 주입해 {@code coupangEnabled}를 계산한다(회귀 방지).
+ * <p>⚠️ {@code @ModelAttribute}(AffiliateModelAdvice)는 {@code @RestController}에 무시됨 →
+ * {@link CoupangLinkBuilder#isEnabled()}·{@link Yes24LinkBuilder#isEnabled()}를 직접 주입해
+ * {@code coupangEnabled}·{@code yes24Enabled}를 계산한다(회귀 방지).
  */
 @RestController
 public class ProfileApiController {
@@ -33,13 +35,16 @@ public class ProfileApiController {
     private final ProfileService profileService;
     private final CurrentUserService currentUserService;
     private final CoupangLinkBuilder coupangLinkBuilder;
+    private final Yes24LinkBuilder yes24LinkBuilder;
 
     public ProfileApiController(ProfileService profileService,
                                 CurrentUserService currentUserService,
-                                CoupangLinkBuilder coupangLinkBuilder) {
+                                CoupangLinkBuilder coupangLinkBuilder,
+                                Yes24LinkBuilder yes24LinkBuilder) {
         this.profileService = profileService;
         this.currentUserService = currentUserService;
         this.coupangLinkBuilder = coupangLinkBuilder;
+        this.yes24LinkBuilder = yes24LinkBuilder;
     }
 
     /** 프로필 헤더 + 책BTI 서술/태그칩 + 전체 PUBLIC 책 목록(상태필터 없음). */
@@ -49,7 +54,8 @@ public class ProfileApiController {
         ProfileView v = profileService.profileOf(viewer, loginId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "프로필을 찾을 수 없습니다"));
         boolean coupangEnabled = coupangLinkBuilder.isEnabled();
-        return ProfileResponse.from(v, coupangEnabled);
+        boolean yes24Enabled = yes24LinkBuilder.isEnabled();
+        return ProfileResponse.from(v, coupangEnabled, yes24Enabled);
     }
 
     /** 상태필터 적용된 PUBLIC 책 목록. status 없거나 잘못되면 전체(관대 파싱). */
@@ -114,10 +120,10 @@ public class ProfileApiController {
             long followerCount, long followingCount,
             boolean following, boolean self,
             String personality, List<TagChip> personalityTags,
-            List<BookSummary> books, boolean coupangEnabled) {
+            List<BookSummary> books, boolean coupangEnabled, boolean yes24Enabled) {
 
-        /** ⚠️ coupangEnabled는 CoupangLinkBuilder.isEnabled()로 계산해 전달 — 여기서 false 하드코딩 금지. */
-        static ProfileResponse from(ProfileView v, boolean coupangEnabled) {
+        /** ⚠️ coupangEnabled·yes24Enabled는 각 빌더의 isEnabled()로 계산해 전달 — 여기서 false 하드코딩 금지. */
+        static ProfileResponse from(ProfileView v, boolean coupangEnabled, boolean yes24Enabled) {
             List<BookSummary> books = v.books().stream()
                     .map(b -> BookSummary.from(b, v.bookTimes()))
                     .toList();
@@ -127,7 +133,7 @@ public class ProfileApiController {
             return new ProfileResponse(v.loginId(), v.nickname(), v.profileCharacterCode(),
                     v.followerCount(), v.followingCount(),
                     v.following(), v.self(),
-                    v.personality(), tags, books, coupangEnabled);
+                    v.personality(), tags, books, coupangEnabled, yes24Enabled);
         }
     }
 }

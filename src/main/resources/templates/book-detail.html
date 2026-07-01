@@ -35,22 +35,24 @@
                 <span class="record-time mono"
                       th:text="${'· 누적 ' + (totalSeconds / 3600) + '시간 ' + ((totalSeconds % 3600) / 60) + '분'}">· 누적 0시간 0분</span>
             </p>
-            <div class="book-buy">
-                <!-- 구매처 2개면 '구매' 토글로 묶고 1개뿐이면 단일 버튼 — 조건은 데이터로 동적 분기. -->
-                <details th:if="${!#strings.isEmpty(book.purchaseLink) and coupangEnabled}" class="buy-menu">
+            <div class="book-buy" th:if="${!buyOptions.isEmpty()}">
+                <!-- 활성 제공자 리스트(알라딘/쿠팡/Yes24) — 2개↑면 '구매' 토글로 묶고 1개뿐이면 제공자명 단일 버튼.
+                     리스트는 컨트롤러가 계산해 넘긴다(프론트 buyOptions와 동일 로직 공유, 조합 분기 폭발 방지). -->
+                <details th:if="${buyOptions.size() > 1}" class="buy-menu">
                     <summary class="btn-ghost">구매</summary>
                     <div class="buy-menu-items">
-                        <a th:href="@{/books/{id}/buy(id=${book.id})}" target="_blank" rel="noopener nofollow">알라딘</a>
-                        <a th:href="@{/books/{id}/buy/coupang(id=${book.id})}" target="_blank" rel="noopener nofollow">쿠팡</a>
+                        <a th:each="opt : ${buyOptions}" th:href="@{${opt.url}}" th:text="${opt.label}"
+                           target="_blank" rel="noopener nofollow">구매처</a>
                     </div>
                 </details>
-                <a th:if="${!#strings.isEmpty(book.purchaseLink) and !coupangEnabled}" th:href="@{/books/{id}/buy(id=${book.id})}" target="_blank"
-                   rel="noopener nofollow" class="btn-ghost">구매</a>
-                <a th:if="${#strings.isEmpty(book.purchaseLink) and coupangEnabled}" th:href="@{/books/{id}/buy/coupang(id=${book.id})}" target="_blank"
-                   rel="noopener nofollow" class="btn-ghost">쿠팡</a>
+                <a th:if="${buyOptions.size() == 1}" th:href="@{${buyOptions[0].url}}" th:text="${buyOptions[0].label}"
+                   target="_blank" rel="noopener nofollow" class="btn-ghost">구매</a>
             </div>
             <p class="affiliate-note" th:if="${coupangEnabled}">
                 이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
+            </p>
+            <p class="affiliate-note" th:if="${yes24Enabled}">
+                이 포스팅은 Yes24 제휴 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
             </p>
         </div>
     </section>

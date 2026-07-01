@@ -233,7 +233,7 @@ class DashboardApiControllerTest {
     // ── 9. DTO 화이트리스트 ───────────────────────────────────────────────────
 
     @Test
-    @DisplayName("GET /api/dashboard: 엔티티 직접 직렬화 금지 — user·clickCount·coupangClickCount 없음")
+    @DisplayName("GET /api/dashboard: 엔티티 직접 직렬화 금지 — user·clickCount·coupangClickCount·yes24ClickCount 없음")
     void dtoWhitelist_noEntityLeak() throws Exception {
         register("wl@a.com", "wltest");
 
@@ -241,7 +241,8 @@ class DashboardApiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(not(containsString("\"user\""))))
                 .andExpect(content().string(not(containsString("clickCount"))))
-                .andExpect(content().string(not(containsString("coupangClickCount"))));
+                .andExpect(content().string(not(containsString("coupangClickCount"))))
+                .andExpect(content().string(not(containsString("yes24ClickCount"))));
     }
 
     // ── 10. 빈 책장 ─────────────────────────────────────────────────────────
