@@ -25,6 +25,7 @@
 | 빈 워크트리 폴더가 cwd 점유로 안 지워짐 | T-105 · T-115 | 2 | ✅ 절차(정션 끊기+`worktree prune`+`branch -D`로 실질 정리 후 빈 폴더는 세션 종료 후 `rmdir` / 워크트리 정리는 그 세션 아닌 **메인·다른 세션**에서) |
 | CSRF 숨김필드 lazy 세션 ↔ 응답 버퍼 커밋 타이밍(큰 SSR·익명 폼 500) | T-033 · T-049 | 4+ | ✅ prose CLAUDE.md 「🔒 CSRF 폼 세션 선확정」(N-077) + **공유 헬퍼 `CsrfTokenUtil.precommit`로 9곳(기존3+신규6) 통일**. 1회 백필 소급 등재(2026-06-30) → 누락 6곳(Settings·AdminFeedback·Feedback·EmailVerification·Unsubscribe·Onboarding) **수정 완료**. 훅 미채택=컨트롤러↔템플릿 역매핑·POST 재렌더 FP 과다 |
 | FK 자식 미정리로 부모 삭제 실패(mock 단위테스트가 못 잡음) | T-023 · T-029 | 2 | ✅ prose CLAUDE.md TDD절(부모 삭제 경로 H2 통합테스트 필수). **1회 백필로 소급 등재(2026-06-30)**. 현행 경로(`AccountService.purge`·`BookService.delete`)는 정리·통합테스트 완료 |
+| author `display`(flex/grid)가 UA `[hidden]`/`<details>` `display:none`을 origin 우선으로 덮어 숨김 실패 | (#189) · T-035 · T-123 | 3 | ⚠️ prose(T-035 패턴)만 승격됐는데 재발 지속(3회차). 이 PR은 페이지 스코프 `.settings-page [hidden]{display:none!important}`로 국소 해결 → **전역 `[hidden]{display:none!important}` 리셋 하드픽스가 다음 승격(별도 PR, spawn_task로 큐잉)** |
 
 ## 📑 목차
 
@@ -142,6 +143,7 @@
 - [T-119. PowerShell→`docker exec mysql -e`로 한글 INSERT 시 mojibake — `UNHEX`로 정확한 UTF-8 바이트 주입](#t-119-powershelldocker-exec-mysql--e로-한글-insert-시-mojibake--unhex로-정확한-utf-8-바이트-주입)
 - [T-121. WinRT 토스트가 미등록 AppUserModelID면 API 성공해도 화면에 안 뜬다(조용히 드랍)](#t-121-winrt-토스트가-미등록-appusermodelid면-api-성공해도-화면에-안-뜬다조용히-드랍)
 - [T-122. 타임아웃/hang 수정의 RED 테스트는 하니스를 outer `timeout`으로 감싸지 않으면 테스트가 세션째 hang한다](#t-122-타임아웃hang-수정의-red-테스트는-하니스를-outer-timeout으로-감싸지-않으면-테스트가-세션째-hang한다)
+- [T-123. 커스텀 `display`(flex/grid)를 준 요소를 JS `[hidden]`으로 토글해도 author가 UA `[hidden]{display:none}`을 이겨 안 숨겨진다 (T-035 재발 3회차)](#t-123-커스텀-displayflexgrid를-준-요소를-js-hidden으로-토글해도-author가-ua-hiddendisplaynone을-이겨-안-숨겨진다-t-035-재발-3회차)
 
 ---
 
@@ -2277,6 +2279,18 @@ git worktree remove ../BookTimer-<task>
 
 **관련**: T-078(무한 hang 본체), A1 게이트 타임아웃 테스트 `test-require-tests-timeout.sh`(#620), [learning-notes N-143](learning-notes.md)(외부 vs 내부 타임아웃). 1회차 신규.
 
+## T-123. 커스텀 `display`(flex/grid)를 준 요소를 JS `[hidden]`으로 토글해도 author가 UA `[hidden]{display:none}`을 이겨 안 숨겨진다 (T-035 재발 3회차)
+
+**증상**: `/settings` 재스킨 후, `notification-settings.js`가 `el.hidden = true`로 감춘 iOS 설치 안내(`#push-ios-install-hint`)·복귀 알림 힌트(`#push-marketing-hint`)가 화면에 그대로 보였다. 두 요소엔 `.set-notif-subhint{display:flex}`가 걸려 있었다(같은 트랩으로 `[data-push-row]`=`.set-notif-row{display:flex}`도 미지원 브라우저에서 잠재).
+
+**원인**: T-035와 **완전히 같은 뿌리** — CSS cascade는 `!important` 제외 시 origin(author > UA)을 특정성보다 먼저 적용한다. author `.set-notif-subhint{display:flex}`가 UA `[hidden]{display:none}`을 늘 이겨, `hidden` 속성이 있어도 flex로 보인다. `el.hidden` 프로퍼티는 `[hidden]` 속성으로 반영되지만, 그 속성을 무력화하는 건 author의 `display` 선언이다. (#189 `li.hidden` vs `.book-row{display:flex}` → T-035 닫힌 `<details>` 자식 → 이 건, **3회차**.)
+
+**감별**: 실 브라우저에서 JS로 `el.hidden`을 켠 요소가 `getComputedStyle(el).display !== 'none'`이면 이 트랩. MockMvc·헤드리스·preview는 못 잡는다(런타임 CSS 계산이라) → 실 브라우저 게이트에서만 노출(N-083/T-053 계열). 실제로 이 건도 bootRun+Chrome 실페이지에서 처음 드러났다.
+
+**해결(이 PR)**: 페이지 스코프에 재숨김 리셋 `.settings-page [hidden]{display:none !important}` 추가 → author `display`를 `!important`로 눌러 UA 숨김을 복원.
+
+**예방·승격**: JS `[hidden]` 토글에 기대는 요소엔 author `display`를 직접 주지 말거나, 페이지/전역에 `[hidden]{display:none !important}` 리셋을 깐다. **재발 3회차라 국소 리셋(prose·T-035 패턴)만으론 계속 샌다 → 전역 하드픽스 후보**: `app.css` 베이스에 전역 `[hidden]{display:none !important}`(normalize류)로 `[hidden]`-속성 변형을 앱 전역에서 제거(별도 PR로 분리 — 이 PR은 스코프 재스킨 유지). T-035·#189, N-083.
+
 ---
 
 ## 🔄 누적 갱신
@@ -2405,4 +2419,5 @@ git worktree remove ../BookTimer-<task>
 | 2026-06-30 | T-120 (rebase로 sibling PR의 새 `.java` 테스트가 들어온 뒤 `git commit --amend`가 비-`.java`(번들 `.js`)만 스테이징하면 `require-tests-before-commit` 게이트가 스킵돼 컴파일 에러가 CI까지 샌다 — 건물 은퇴 PR이 `GardenView`를 6→3-arg로 줄였는데 같은 시각 머지된 #610의 새 `ProfileCharacterServiceTest`가 옛 6-arg로 `GardenView` 생성, rebase가 그 테스트를 가져왔으나 amend 스테이징 델타엔 `dashboard.js`만 있어 훅이 `gradlew test`를 안 돎(훅은 staged `.java` 있을 때만 발동) → 로컬 GREEN인데 CI `compileTestJava` FAILED(1m6s 조기 실패) / 감별=CI 로그 `constructor X cannot be applied to given types`가 **내가 안 건드린 파일**에서 나면 rebase가 가져온 sibling 변경이 내 시그니처 변경과 충돌 / 해결=그 파일을 새 시그니처로 고치고 **`.java` 포함해** 다시 amend(이번엔 게이트 발동·GREEN)→force-push / 예방=**rebase가 sibling PR 변경을 끌어온 뒤엔 push 전 `./gradlew test`(최소 `compileTestJava`) 1회 수동** — 훅의 staged-delta 휴리스틱은 rebase가 가져온 파일을 못 봄(스테이징에 없음). 타입 시그니처(생성자·필드)를 바꾸는 PR일수록 sibling이 그 타입을 새로 쓰면 머지 시점에야 충돌 표출 / 1회차 신규, T-096(폴링≠머지)·T-107(묶음 명령이 훅 무력화) 같은 '게이트 우회' 계열) |
 | 2026-06-30 | T-107 **2회차** (`require-bundle-build`에서 묶음 명령 함정 실증 — `git add -A && git commit`을 한 Bash 명령으로 묶으면 PreToolUse 번들 훅이 명령 실행 *전* 발동→그 시점 인덱스가 직전 시도의 구버전 산출물→훅이 새로 빌드한 워킹트리 `garden.js`와 어긋나 `Bundle is stale`로 오탐 BLOCK 3회 연속. `git add`를 별도 호출로 분리하니 인덱스=워킹트리로 통과. 1회차(T-107)는 목차훅 **skip**(무력화)이었고 이번은 번들훅 **오탐 BLOCK** — 증상은 반대지만 근본 동일(PreToolUse는 명령 문자열 실행 전 1회만 가로챔). 이번엔 `npm ci`로 node_modules가 갈려 구버전 산출물과 새 빌드 차이가 또렷이 드러남(결정적 빌드여도 묶음이면 동일 함정) / **2회+ → 하드픽스 승격 후보**: 훅이 명령 문자열에 `git add`+`git commit` 동시 포함을 감지하면 분리 안내. PreToolUse 게이트 걸린 커밋은 add·commit 분리가 정답) |
 | 2026-07-01 | T-121 (WinRT 토스트가 미등록 AppUserModelID면 `.Show()`가 예외 없이 성공해도 화면에 안 뜸(조용히 드랍) — 등록 시스템 AppID `Microsoft.Windows.Explorer` 사용(실측 확인), 집중지원/`ToastEnabled`도 점검. B1 확인-대기 알림 훅 #621, PowerShell↔Windows API 함정, 1회차 신규) |
+| 2026-07-01 | T-123 (커스텀 `display:flex`를 준 요소를 JS `el.hidden`으로 토글해도 author가 UA `[hidden]{display:none}`을 origin 우선으로 이겨 안 숨겨짐 — `/settings` 재스킨의 iOS/복귀 힌트가 화면에 샘 / 해결=`.settings-page [hidden]{display:none!important}` 재숨김 리셋 / 감별=실 브라우저 `getComputedStyle(el).display!=='none'`, MockMvc·헤드리스 못 잡음 / **T-035 재발 3회차**(#189→T-035→이 건), 전역 `[hidden]` 리셋 하드픽스가 다음 승격, N-083) |
 | 2026-07-01 | T-122 (타임아웃/hang 수정의 RED 테스트는 하니스를 outer `timeout`으로 안 감싸면 테스트가 세션째 hang — 가짜 느린 자식을 **exit 0**으로 두어 RED=오래 기다린 뒤 통과(=허용, 잘못)·GREEN=타임아웃 차단(exit 2)로 종료코드로 가름. A1 게이트 타임아웃 테스트 #620·N-143, 1회차 신규) |
