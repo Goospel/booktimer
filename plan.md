@@ -456,7 +456,9 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
       **`buyOptions` 리스트 렌더로 리팩터**(제공자 추가 시 push 한 줄, 조합 폭발 제거) — 단일 구매처는 제공자명 버튼으로 통일.
       `CoupangModelAdvice`는 두 제휴 플래그를 싣는 `AffiliateModelAdvice`로 리네임. TDD: Yes24LinkBuilderTest(순수)·
       Yes24BookServiceTest(IDOR·비활성·공개 게이트)·Yes24BuyControllerTest(엔드포인트) + 기존 4곳 누수/노출 가드.
-      **남은 점등**: Yes24 제휴(링크프라이스 등 CPS 네트워크) 가입 + 약관상 필수 고지 문구 확정 + SSM 주입(사용자 작업).
+      **점등 준비 완료 (2026-07-02)**: 링크프라이스 가입(affiliate `A100705638`)·리다이렉트 래퍼 템플릿(`lpweb.kr/click.php?…&tu=<Yes24 검색 URL>`) 확정,
+      고지 문구를 알라딘 라인과 같은 집 문체(`Yes24 "구매" 링크는 제휴 링크로, 구매 시 일부 수수료를 받을 수 있습니다.`)로 3곳 통일, SSM 파라미터 2개 생성(현재 `YES24_TRACKING_CODE=not-configured`로 **꺼둠**).
+      **남은 것 = 점등 스위치 하나**: SSM `YES24_TRACKING_CODE`를 실값(`A100705638`)으로 `--overwrite`+재배포하면 버튼·고지 노출(코드 변경 0·외부 작업).
       실 브라우저: books 구매 드롭다운·book-detail SSR `th:each`·Yes24 고지문구 확인(로컬 테스트 추적코드 주입).
   - **③-c 책 상세 페이지 완료 ✅ 2026-06-03**: `GET /books/{id}` — 책 메타 + 월별 일자 기록 + 누적 시간. 소유권 검사(IDOR, 없으면 책장으로).
     `BookContributionService`(세션 패키지, 유저 TZ 일자) + `findByUserAndBook`. 책장에서 제목 클릭 진입.
