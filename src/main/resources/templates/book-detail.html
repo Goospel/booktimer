@@ -10,7 +10,7 @@
     <!-- 광고 로더(게시자 ID 설정 시에만) -->
     <th:block th:replace="~{ads :: loader}"></th:block>
 </head>
-<body>
+<body class="bookdetail-page">
 <div class="container">
     <header class="brand">
         <a class="brand-home" th:href="@{/}" title="홈으로">
@@ -22,31 +22,54 @@
     <!-- 책 헤더 (표지 + 메타) -->
     <section class="card book-detail-head">
         <img th:if="${book.coverUrl}" th:src="${book.coverUrl}" alt="표지" class="book-cover">
+        <!-- 무표지 플레이스홀더 — 책장 목록의 coverColor() 다색 랜덤과 달리 단일 책 상세라 고정 세이지 톤 + 제목 이니셜. -->
+        <div th:unless="${book.coverUrl}" class="book-cover bd-cover-ph">
+            <span th:text="${#strings.substring(book.title, 0, 1)}">모</span>
+        </div>
         <div class="book-meta">
-            <h2 th:text="${book.title}">책 제목</h2>
+            <h2 class="bd-title" th:text="${book.title}">책 제목</h2>
             <p class="book-sub">
                 <span th:if="${book.author}" th:text="${book.author}">저자</span>
                 <span th:if="${book.publisher}" th:text="' · ' + ${book.publisher}">출판사</span>
             </p>
-            <p>
-                <span class="book-status-badge" th:text="${book.status.label}">상태</span>
-                <!-- 정수 나눗셈을 쓰려면 산술 전체가 한 ${...}(SpEL) 안에 있어야 한다. `${x} / 3600`처럼 ${} 밖에서
-                     나누면 Thymeleaf 산술이 소수로 평가해 "1.5시간"이 샌다(일자별 행·history 화면과 동일 패턴으로 통일). -->
-                <span class="record-time mono"
-                      th:text="${'· 누적 ' + (totalSeconds / 3600) + '시간 ' + ((totalSeconds % 3600) / 60) + '분'}">· 누적 0시간 0분</span>
-            </p>
+            <div class="bd-status-row">
+                <span class="book-status-badge"
+                      th:classappend="${book.status.name() == 'READING' ? 'bd-status-reading' : (book.status.name() == 'FINISHED' ? 'bd-status-finished' : 'bd-status-want')}"
+                      th:text="${book.status.label}">상태</span>
+                <!-- 공개 범위 표시 전용(읽기 전용) — 전환 UI 아님, 공개설정 변경은 /books SPA 소관. -->
+                <span class="bd-visibility-chip"
+                      th:classappend="${book.visibility.name() == 'PUBLIC' ? 'is-public' : 'is-private'}">
+                    <svg th:if="${book.visibility.name() == 'PRIVATE'}" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/></svg>
+                    <svg th:if="${book.visibility.name() == 'PUBLIC'}" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.4 3.8 5.6 3.8 9s-1.3 6.6-3.8 9c-2.5-2.4-3.8-5.6-3.8-9s1.3-6.6 3.8-9z"/></svg>
+                    <span th:text="${book.visibility.label}">비공개</span>
+                </span>
+            </div>
+            <!-- 정수 나눗셈을 쓰려면 산술 전체가 한 ${...}(SpEL) 안에 있어야 한다. `${x} / 3600`처럼 ${} 밖에서
+                 나누면 Thymeleaf 산술이 소수로 평가해 "1.5시간"이 샌다(일자별 행·history 화면과 동일 패턴으로 통일). -->
+            <p class="bd-accum">누적 <span class="bd-accum-value"
+                  th:text="${(totalSeconds / 3600) + '시간 ' + ((totalSeconds % 3600) / 60) + '분'}">0시간 0분</span></p>
             <div class="book-buy" th:if="${!buyOptions.isEmpty()}">
                 <!-- 활성 제공자 리스트(알라딘/쿠팡/Yes24) — 2개↑면 '구매' 토글로 묶고 1개뿐이면 제공자명 단일 버튼.
                      리스트는 컨트롤러가 계산해 넘긴다(프론트 buyOptions와 동일 로직 공유, 조합 분기 폭발 방지). -->
                 <details th:if="${buyOptions.size() > 1}" class="buy-menu">
-                    <summary class="btn-ghost">구매</summary>
+                    <summary class="btn-ghost bd-buy-toggle">
+                        구매
+                        <svg class="bd-buy-chevron bd-chevron-down" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                        <svg class="bd-buy-chevron bd-chevron-up" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
+                    </summary>
                     <div class="buy-menu-items">
-                        <a th:each="opt : ${buyOptions}" th:href="@{${opt.url}}" th:text="${opt.label}"
-                           target="_blank" rel="noopener nofollow">구매처</a>
+                        <a th:each="opt : ${buyOptions}" th:href="@{${opt.url}}"
+                           target="_blank" rel="noopener nofollow">
+                            <span th:text="${opt.label}">구매처</span>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/></svg>
+                        </a>
                     </div>
                 </details>
-                <a th:if="${buyOptions.size() == 1}" th:href="@{${buyOptions[0].url}}" th:text="${buyOptions[0].label}"
-                   target="_blank" rel="noopener nofollow" class="btn-ghost">구매</a>
+                <a th:if="${buyOptions.size() == 1}" th:href="@{${buyOptions[0].url}}"
+                   target="_blank" rel="noopener nofollow" class="btn-ghost bd-buy-single">
+                    <span th:text="${buyOptions[0].label}">구매</span>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/></svg>
+                </a>
             </div>
             <p class="affiliate-note" th:if="${coupangEnabled}">
                 이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
@@ -61,14 +84,25 @@
          월별 묶음(months, 최신 월 먼저)을 모두 렌더하되 최신 달만 보이고(th:hidden) JS가 ◀▶로 hidden을 토글한다.
          JS가 꺼져도 최신 달은 보인다(폴백). 월 합계는 네비 라벨에 함께 띄운다. 책 상세라 행에 책 제목은 안 보인다. -->
     <section class="card">
-        <h2>일자별 독서 시간</h2>
-        <p class="status-line" th:if="${months.isEmpty()}">아직 이 책으로 측정한 기록이 없습니다. 타이머 시작 시 이 책을 선택해 보세요.</p>
+        <h2 class="bd-section-title">일자별 독서 시간</h2>
+        <div class="bd-empty" th:if="${months.isEmpty()}">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M6 3h12"/><path d="M6 21h12"/>
+                <path d="M7 3v3.5c0 2.5 5 4 5 5.5s-5 3-5 5.5V21"/>
+                <path d="M17 3v3.5c0 2.5-5 4-5 5.5s5 3 5 5.5V21"/>
+            </svg>
+            <p class="status-line">아직 이 책으로 측정한 기록이 없습니다. 타이머 시작 시 이 책을 선택해 보세요.</p>
+        </div>
         <div th:unless="${months.isEmpty()}" class="month-browser">
             <div class="month-nav">
-                <button type="button" class="month-nav-btn month-nav-prev" aria-label="이전 달">◀</button>
+                <button type="button" class="month-nav-btn month-nav-prev" aria-label="이전 달">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+                </button>
                 <span class="month-nav-label"
                       th:text="${months[0].month().getYear() + '년 ' + months[0].month().getMonthValue() + '월 · ' + (months[0].totalSeconds() / 3600) + '시간 ' + ((months[0].totalSeconds() % 3600) / 60) + '분'}">2026년 6월 · 0시간 0분</span>
-                <button type="button" class="month-nav-btn month-nav-next" aria-label="다음 달">▶</button>
+                <button type="button" class="month-nav-btn month-nav-next" aria-label="다음 달">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                </button>
             </div>
             <div class="month-section" th:each="s, it : ${months}" th:hidden="${!it.first}"
                  th:attr="data-label=${s.month().getYear() + '년 ' + s.month().getMonthValue() + '월 · ' + (s.totalSeconds() / 3600) + '시간 ' + ((s.totalSeconds() % 3600) / 60) + '분'}">

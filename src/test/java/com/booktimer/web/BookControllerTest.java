@@ -132,7 +132,8 @@ class BookControllerTest {
 
         mockMvc.perform(get("/books/{id}", book.getId()).with(user("rt@booktimer.com")))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("누적 1시간 30분")))
+                .andExpect(content().string(containsString("누적")))
+                .andExpect(content().string(containsString("1시간 30분")))
                 .andExpect(content().string(containsString("month-browser")))
                 .andExpect(content().string(containsString("month-nav-label")))
                 .andExpect(content().string(containsString("record-scroll")))
