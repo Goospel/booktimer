@@ -1309,11 +1309,95 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 a.book-title { text-decoration: none; }
 a.book-title:hover { text-decoration: underline; }
 /* 책 상세 헤더 — 표지 + 메타 가로 배치 */
-.book-detail-head { display: flex; gap: 16px; align-items: flex-start; }
-.book-detail-head .book-cover { width: 84px; height: 120px; }
-.book-detail-head .book-meta { gap: 6px; }
+.book-detail-head { display: flex; gap: 18px; align-items: flex-start; }
+.book-detail-head .book-cover { width: 84px; height: 120px; border-radius: 10px; border: 1px solid var(--border); }
+.book-detail-head .book-meta { gap: 10px; }
 .book-sub { font-size: .9rem; color: var(--muted); margin: 0; }
 .book-detail-head .book-meta > p:not(.affiliate-note) { margin: 0; }
+
+/* === 책 상세 리스킨 (body.bookdetail-page 스코프 — 다른 페이지 무영향) ===
+   아래 대상 클래스 다수는 책장(BooksApp.vue)·독서 기록(MonthlyRecords.vue) 등과 공유되지만,
+   body.bookdetail-page 접두로 스코프해 이 페이지에서만 오버라이드한다(전역 규칙 자체는 무손상). */
+body.bookdetail-page .card { border-radius: 18px; }
+
+/* 표지 플레이스홀더(무표지 책) — 책장 목록의 coverColor() 다색 랜덤과 달리 단일 상세라 고정 세이지 톤. */
+body.bookdetail-page .bd-cover-ph {
+    display: flex; align-items: center; justify-content: center;
+    background: var(--sage-soft); color: var(--accent-hover);
+    font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 40px;
+}
+
+/* 책 제목 — 전역 .card h2(uppercase 라벨체) 대신 시안 크기로 격상. 카드 섹션 제목도 같은 세리프로 통일. */
+body.bookdetail-page .bd-title {
+    font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 1.35rem;
+    line-height: 1.3; color: var(--text); text-transform: none; letter-spacing: normal; margin: 0;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+body.bookdetail-page .bd-section-title {
+    font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 16px; color: var(--text);
+}
+
+/* 상태 배지(상태별 색) + 공개 범위 칩(읽기 전용 표시) */
+body.bookdetail-page .bd-status-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+body.bookdetail-page .book-status-badge {
+    align-self: auto; margin-top: 0; font-size: 12px; padding: 4px 11px; border: 1px solid transparent;
+}
+body.bookdetail-page .bd-status-reading { background: var(--sage-soft); color: var(--accent-hover); border-color: var(--sage-soft); }
+body.bookdetail-page .bd-status-finished { background: rgba(47, 143, 107, .12); color: var(--ok); border-color: rgba(47, 143, 107, .25); }
+body.bookdetail-page .bd-status-want { background: var(--paper-2); color: var(--muted); border-color: var(--border); }
+body.bookdetail-page .bd-visibility-chip {
+    display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 999px; padding: 3px 9px; background: var(--paper-4);
+}
+body.bookdetail-page .bd-visibility-chip svg { flex: 0 0 auto; width: 12px; height: 12px; }
+
+/* 누적 시간 — 라벨은 흐리게, 수치만 고운바탕·딥세이지로 강조 */
+body.bookdetail-page .bd-accum { font-size: 13.5px; color: var(--muted); }
+body.bookdetail-page .bd-accum-value { font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 17px; color: var(--accent-hover); }
+
+/* 구매 버튼 — 전역 .btn-ghost(무채색) 대신 세이지 pill. 드롭다운은 세로 목록 + 종이톤 카드로. */
+body.bookdetail-page .bd-buy-toggle,
+body.bookdetail-page .bd-buy-single {
+    display: inline-flex; align-items: center; gap: 6px; border-radius: 999px;
+    border-color: var(--accent); color: var(--accent-hover); padding: 7px 14px; font-size: 13px;
+}
+body.bookdetail-page .bd-buy-toggle:hover,
+body.bookdetail-page .bd-buy-single:hover { background: var(--sage-soft); }
+/* 전역 ▾▴ 글리프(content) 무력화 — 이 페이지는 summary 안 SVG 셰브론으로 대체(마크업). 전역 .buy-menu는 무손상. */
+body.bookdetail-page .buy-menu > summary::after { content: none; }
+body.bookdetail-page .bd-buy-chevron { flex: 0 0 auto; }
+body.bookdetail-page .bd-chevron-up { display: none; }
+body.bookdetail-page .buy-menu[open] .bd-chevron-down { display: none; }
+body.bookdetail-page .buy-menu[open] .bd-chevron-up { display: inline; }
+body.bookdetail-page .buy-menu-items {
+    flex-direction: column; gap: 2px; background: var(--card-bg); border-radius: 14px;
+    box-shadow: 0 4px 14px rgba(44, 42, 36, .1); min-width: 148px;
+}
+body.bookdetail-page .buy-menu-items a {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    border: none; border-radius: 10px; padding: 9px 12px; font-size: 13px; color: var(--text);
+}
+body.bookdetail-page .buy-menu-items a:hover { background: var(--sage-soft); color: var(--accent-hover); }
+body.bookdetail-page .buy-menu-items a svg { color: var(--muted); flex: 0 0 auto; }
+body.bookdetail-page .buy-menu-items a:hover svg { color: var(--accent-hover); }
+
+/* 월 브라우저 — 원형 버튼(◀▶ 텍스트 글리프는 템플릿에서 SVG로 교체) + 고운바탕 라벨 + 일자 행 톤 재배색.
+   .record-date/.record-time/.month-nav-btn/.record-row/.record-scroll은 독서 기록(history)과 공유라
+   반드시 body.bookdetail-page 스코프 아래에서만 건드린다(전역·history 화면 무손상). */
+body.bookdetail-page .month-nav-btn { border-radius: 999px; }
+body.bookdetail-page .month-nav-btn svg { flex: 0 0 auto; }
+body.bookdetail-page .month-nav-label { font-family: 'Gowun Batang', serif; font-size: 15px; }
+body.bookdetail-page .record-row { padding: 10px 2px; border-bottom-color: #EFE9DD; }
+body.bookdetail-page .record-date { color: var(--muted); font-weight: 400; font-size: 13px; letter-spacing: .3px; }
+body.bookdetail-page .record-time { color: var(--accent-hover); font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 14px; }
+body.bookdetail-page .record-scroll { max-height: 296px; }
+
+/* 빈 상태 — 모래시계 아이콘 + 중앙 정렬(기존 문구 그대로, .status-line 색상 유지) */
+body.bookdetail-page .bd-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 28px 16px; text-align: center; color: var(--accent); }
+body.bookdetail-page .bd-empty .status-line { margin: 0; line-height: 1.6; font-size: 13.5px; }
+
+/* 하단 이동 타일 — 세로 스택(아이콘 위/라벨 아래). 전역 .link-row(가로 배치)는 다른 페이지 그대로. */
+body.bookdetail-page .link-row a { flex-direction: column; gap: 8px; padding: 20px 16px; border-radius: 18px; }
 .book-author, .book-pub { font-size: .85rem; color: var(--muted); }
 /* 검색 결과 byline — 저자 · 출판사 한 줄(byline() 조립). 시안 My Shelf. */
 .book-byline { font-size: .85rem; color: var(--muted); }
@@ -1474,7 +1558,8 @@ a.book-title:hover { text-decoration: underline; }
     #books-app .shelf-list .book-row:last-child { border-bottom: 1px solid var(--border); }
 }
 
-.affiliate-note { font-size: .8rem; color: var(--muted); text-align: center; margin: 16px 0 4px; }
+.affiliate-note { font-size: 10.5px; color: var(--muted); text-align: left; opacity: .85; line-height: 1.5; margin: 6px 0 0; }
+.affiliate-note + .affiliate-note { margin-top: 3px; }
 
 /* 제휴 고지 ⓘ 팝오버 — 책장 인사말·책방 헤드 우상단 공용. 책BTI ?(.pbti-help-*) 시각 복제이되
    앵커가 ⓘ 버튼 래퍼(페이지 헤더 무관)라 말풍선 꼬리가 버튼에 정확히 맞는다. 책BTI는 무손상. */
