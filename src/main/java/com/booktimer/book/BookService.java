@@ -1,6 +1,7 @@
 package com.booktimer.book;
 
 import com.booktimer.session.ReadingSessionRepository;
+import com.booktimer.story.StoryRepository;
 import com.booktimer.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,16 +22,19 @@ public class BookService {
     private final BookRepository bookRepository;
     private final BookSearchClient searchClient;
     private final ReadingSessionRepository sessionRepository;
+    private final StoryRepository storyRepository;
     private final CoupangLinkBuilder coupangLinkBuilder;
     private final Yes24LinkBuilder yes24LinkBuilder;
 
     public BookService(BookRepository bookRepository, BookSearchClient searchClient,
                        ReadingSessionRepository sessionRepository,
+                       StoryRepository storyRepository,
                        CoupangLinkBuilder coupangLinkBuilder,
                        Yes24LinkBuilder yes24LinkBuilder) {
         this.bookRepository = bookRepository;
         this.searchClient = searchClient;
         this.sessionRepository = sessionRepository;
+        this.storyRepository = storyRepository;
         this.coupangLinkBuilder = coupangLinkBuilder;
         this.yes24LinkBuilder = yes24LinkBuilder;
     }
@@ -155,6 +159,7 @@ public class BookService {
     public void delete(User user, Long bookId) {
         Book book = ownedBook(user, bookId);
         sessionRepository.unlinkBook(book);
+        storyRepository.unlinkBook(book); // 스토리도 첨부만 풀어 문장 보존 (story.book_id FK — 같은 이유)
         bookRepository.delete(book);
     }
 

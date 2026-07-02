@@ -13,7 +13,8 @@ public enum RateLimitAction {
     FOLLOW(30, Duration.ofMinutes(1)),
     SEARCH(20, Duration.ofMinutes(1)),
     RECOMMEND(20, Duration.ofMinutes(1)),
-    REPORT(10, Duration.ofHours(1));
+    REPORT(10, Duration.ofHours(1)),
+    STORY_CREATE(10, Duration.ofHours(1));
 
     private final int limit;
     private final Duration window;

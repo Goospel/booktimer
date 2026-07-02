@@ -98,10 +98,10 @@ public class ProfileService {
     }
 
     /**
-     * 소셜 가시성 가드 — 운영자·차단·없는 아이디를 한 곳에서 거른다. 프로필 조회·드릴다운이 동일 보장 공유
-     * (분기 금지). 비어 있으면 컨트롤러가 404로 변환해 존재 누설을 피한다.
+     * 소셜 가시성 가드 — 운영자·차단·없는 아이디를 한 곳에서 거른다. 프로필 조회·드릴다운·스토리가 동일 보장
+     * 공유(분기 금지 — {@code StoryService}가 재사용). 비어 있으면 호출부가 404로 변환해 존재 누설을 피한다.
      */
-    private Optional<User> resolveVisibleTarget(User viewer, String loginId) {
+    public Optional<User> resolveVisibleTarget(User viewer, String loginId) {
         return userRepository.findByLoginId(loginId)
                 // 운영자(ADMIN)는 소셜 프로필 비대상 — 핸들을 직접 알아도 존재 누설 없이 빈 결과 → 404
                 // (검색 제외와 일관: 운영자 존재 자체를 숨김. 본인이 봐도 동일하게 404 — 운영자는 /admin이 영역)

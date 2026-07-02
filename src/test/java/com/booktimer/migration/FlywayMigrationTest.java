@@ -4,6 +4,10 @@ import com.booktimer.email.EmailToken;
 import com.booktimer.email.EmailTokenRepository;
 import com.booktimer.email.EmailTokenType;
 import com.booktimer.garden.AuthorCharacterRepository;
+import com.booktimer.story.Story;
+import com.booktimer.story.StoryRepository;
+import com.booktimer.story.StoryView;
+import com.booktimer.story.StoryViewRepository;
 import com.booktimer.user.AuthProvider;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
@@ -55,6 +59,12 @@ class FlywayMigrationTest {
 
     @Autowired
     AuthorCharacterRepository authorCharacterRepository;
+
+    @Autowired
+    StoryRepository storyRepository;
+
+    @Autowired
+    StoryViewRepository storyViewRepository;
 
     @Test
     void v1_baseline_migration_is_applied() {
@@ -174,6 +184,31 @@ class FlywayMigrationTest {
         // 전 작가가 sprite_id = code 로 승격(SVG 렌더 경로) — 미승격(null) 잔존 0.
         assertThat(authors)
                 .allSatisfy(a -> assertThat(a.getSpriteId()).isEqualTo(a.getCode()));
+    }
+
+    // ── 독서 스토리 (V56 story · V57 story_view) — 스키마↔엔티티 일치 + 열람 멱등 유니크 ──
+    @Test
+    void story_and_story_view_tables_persist_under_flyway_schema() {
+        // story·story_view 테이블(FK·컬럼)이 Flyway 스키마와 엔티티 매핑이 일치해야 저장된다(validate 모드).
+        User author = userRepository.saveAndFlush(userWithHandle("story-author@example.com", "storyauthor"));
+        Story story = storyRepository.saveAndFlush(Story.of(author, "마이그레이션 검증 문장", null, "night"));
+        assertThat(story.getId()).isNotNull();
+
+        User viewer = userRepository.saveAndFlush(userWithHandle("story-viewer@example.com", "storyviewer"));
+        StoryView view = storyViewRepository.saveAndFlush(StoryView.of(story, viewer));
+        assertThat(view.getId()).isNotNull();
+    }
+
+    @Test
+    void story_view_unique_constraint_is_enforced() {
+        // uk_story_view(story_id, viewer_id) — 열람 기록 멱등의 DB 레벨 근거(§13.3).
+        User author = userRepository.saveAndFlush(userWithHandle("uk-author@example.com", "ukauthor"));
+        User viewer = userRepository.saveAndFlush(userWithHandle("uk-viewer@example.com", "ukviewer"));
+        Story story = storyRepository.saveAndFlush(Story.of(author, "유니크 검증 문장", null, null));
+        storyViewRepository.saveAndFlush(StoryView.of(story, viewer));
+
+        assertThatThrownBy(() -> storyViewRepository.saveAndFlush(StoryView.of(story, viewer)))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     private static User userWithHandle(String email, String handle) {
