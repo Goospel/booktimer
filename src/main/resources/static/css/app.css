@@ -3507,7 +3507,12 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 
 /* ── 스트립 (홈 상단 아바타 링 가로 스크롤) ── */
 .story-strip {
-    display: flex; gap: 14px; overflow-x: auto; padding: 4px 2px 2px;
+    display: flex; gap: 14px; overflow-x: auto;
+    padding: 12px 14px;
+    /* 박스화: 상단 빈 공간 완화 — 테두리·모서리는 .dash-card와 통일, 배경만 세이지 틴트로 구분 */
+    background: #EDF2E9;
+    border: 1px solid #D8CDB9;
+    border-radius: 18px;
     scrollbar-width: none;
 }
 .story-strip::-webkit-scrollbar { display: none; }
@@ -3528,7 +3533,7 @@ body.dashboard-page #dashboard-app { gap: 20px; }
     width: 18px; height: 18px; border-radius: 50%;
     background: var(--accent); color: var(--card-bg);
     font-size: 14px; line-height: 18px; text-align: center;
-    box-shadow: 0 0 0 2px var(--card-bg);
+    box-shadow: 0 0 0 2px #EDF2E9;
     border: none; padding: 0; cursor: pointer; appearance: none;
 }
 .story-ring-name {
