@@ -1,6 +1,7 @@
 package com.booktimer.web;
 
 import com.booktimer.book.BookService;
+import com.booktimer.book.Yes24LinkBuilder;
 import com.booktimer.session.BookReadingDetail;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.BookContributionService;
@@ -9,6 +10,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
@@ -137,12 +139,17 @@ public class BookController {
 
     /**
      * Yes24 "구매" 클릭 — 집계 후 Yes24 검색 링크로 리다이렉트.
+     *
+     * <p>모바일 UA면 Yes24 자체 제휴 게이트가 딥링크를 버려 모바일 메인으로 치환해버리므로(T-128),
+     * User-Agent로 판별해 제휴 래퍼 없이 모바일 검색으로 직행시킨다.
      */
     @GetMapping("/books/{id}/buy/yes24")
-    public String buyYes24(@PathVariable Long id, Principal principal) {
+    public String buyYes24(@PathVariable Long id, Principal principal,
+                           @RequestHeader(value = "User-Agent", required = false) String userAgent) {
         User user = currentUser(principal);
+        boolean mobile = Yes24LinkBuilder.isMobileUserAgent(userAgent);
         try {
-            String link = bookService.recordYes24Click(user, id);
+            String link = bookService.recordYes24Click(user, id, mobile);
             if (link != null) {
                 return "redirect:" + link;
             }
@@ -166,12 +173,14 @@ public class BookController {
     }
 
     /**
-     * 남의 책방(공개 프로필)에서 Yes24 "구매" 클릭.
+     * 남의 책방(공개 프로필)에서 Yes24 "구매" 클릭. 모바일 UA 분기는 {@link #buyYes24} 참조(T-128).
      */
     @GetMapping("/u/{loginId}/books/{bookId}/buy/yes24")
-    public String buyYes24FromProfile(@PathVariable String loginId, @PathVariable Long bookId, Principal principal) {
+    public String buyYes24FromProfile(@PathVariable String loginId, @PathVariable Long bookId, Principal principal,
+                                      @RequestHeader(value = "User-Agent", required = false) String userAgent) {
         currentUser(principal);
-        String link = bookService.recordPublicYes24Click(bookId);
+        boolean mobile = Yes24LinkBuilder.isMobileUserAgent(userAgent);
+        String link = bookService.recordPublicYes24Click(bookId, mobile);
         if (link != null) {
             return "redirect:" + link;
         }
