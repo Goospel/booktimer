@@ -9,6 +9,7 @@ import QuoteCard from './QuoteCard.vue'
 import EmailVerifyBanner from './EmailVerifyBanner.vue'
 import QuickNav from './QuickNav.vue'
 import DashHeader from './DashHeader.vue'
+import StoryStrip from '../shared/story/StoryStrip.vue'
 
 const data = ref<DashboardResponse | null>(null)
 const loading = ref(true)
@@ -113,6 +114,10 @@ async function handleStop() {
 
     <template v-else-if="data">
         <DashHeader :login-id="data.loginId" :profile-character-code="data.profileCharacterCode" />
+
+        <!-- 독서 스토리 스트립 (sns-design §13.7) — 로드 실패·스토리 0이어도 홈을 막지 않는다 -->
+        <StoryStrip :my-login-id="data.loginId" :my-nickname="data.nickname"
+                    :my-profile-character-code="data.profileCharacterCode" />
 
         <QuoteCard :quotes="data.quotes" />
 

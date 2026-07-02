@@ -29,20 +29,23 @@ describe('ICONS 사전', () => {
     })
 })
 
-// 무결성 — 같은 폴더의 .vue가 <ShopIcon name="X">로 참조하는 모든 X가 ICONS에 존재.
+// 무결성 — profile·shared 폴더의 .vue가 <ShopIcon name="X">로 참조하는 모든 X가 ICONS에 존재.
+// (ReportModal이 shared/로 이동하면서 스캔 대상에 shared/를 추가 — 원래 커버리지 보존.)
 // 정적 name만 검사(동적 :name 바인딩은 스킵). 오타난 아이콘 name이 빈 아이콘으로
 // 조용히 새는 것(시각 게이트가 놓치기 쉬운)을 컴파일 단계에서 잡는다.
 describe('템플릿 참조 무결성', () => {
     it('.vue가 참조하는 모든 정적 ShopIcon name이 ICONS에 있다', () => {
-        const vues = readdirSync(HERE).filter(f => f.endsWith('.vue'))
+        const dirs = [HERE, join(HERE, '..', 'shared')]
         const re = /<ShopIcon\b[^>]*?\sname="([a-zA-Z]+)"/g
         const missing: string[] = []
-        for (const f of vues) {
-            const src = readFileSync(join(HERE, f), 'utf8')
-            let m: RegExpExecArray | null
-            while ((m = re.exec(src)) !== null) {
-                const name = m[1]
-                if (!(name in ICONS)) missing.push(`${f}: ${name}`)
+        for (const dir of dirs) {
+            for (const f of readdirSync(dir).filter(f => f.endsWith('.vue'))) {
+                const src = readFileSync(join(dir, f), 'utf8')
+                let m: RegExpExecArray | null
+                while ((m = re.exec(src)) !== null) {
+                    const name = m[1]
+                    if (!(name in ICONS)) missing.push(`${f}: ${name}`)
+                }
             }
         }
         expect(missing, `ICONS에 없는 참조: ${missing.join(', ')}`).toEqual([])
