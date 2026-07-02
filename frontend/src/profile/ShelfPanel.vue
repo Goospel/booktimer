@@ -17,16 +17,27 @@ const STATUS_OPTIONS = [
     { value: 'WANT_TO_READ', label: '읽고 싶음' },
 ]
 
+// 완독 한정 정렬 — null=이름순(서버 기본), finished_desc/asc=완독 시각 순(서버 정렬 파라미터 그대로).
+const SORT_OPTIONS: { value: string | null; label: string }[] = [
+    { value: null,            label: '이름순' },
+    { value: 'finished_desc', label: '최신순' },
+    { value: 'finished_asc',  label: '오래된순' },
+]
+
 const props = defineProps<{
     books: BookSummary[]
     shelfFilter: string | null
+    shelfSort: string | null
     self: boolean
     coupangEnabled: boolean
     yes24Enabled: boolean
     loginId: string
     showTitle?: boolean
 }>()
-defineEmits<{ (e: 'selectStatus', value: string | null): void }>()
+defineEmits<{
+    (e: 'selectStatus', value: string | null): void
+    (e: 'selectSort', value: string | null): void
+}>()
 
 // 구매 옵션 리스트 — 활성 제공자만(알라딘=구매링크 유무 / 쿠팡·Yes24=활성 플래그). 남의 책방 경로 prefix.
 // 조합 분기(purchaseLink×coupang×yes24) 폭발을 없애는 리팩터: 2개↑면 드롭다운, 1개면 제공자명 단일 버튼.
@@ -75,6 +86,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onNoteKeydown))
             </div>
             <div v-if="noteOpen" class="affiliate-pop-backdrop" @click="noteOpen = false"></div>
         </div>
+
+        <!-- 완독 정렬 — 완독(FINISHED) 필터에서만 노출(다른 상태엔 완독 시각이 없어 무의미).
+             정렬 로직은 서버(sort 파라미터), 여기는 emit만(상태필터와 동일 소유 구조). -->
+        <nav v-if="shelfFilter === 'FINISHED'" class="shop-filter shop-sort" aria-label="완독 정렬">
+            <button v-for="o in SORT_OPTIONS" :key="o.label" type="button"
+                    :class="{ active: shelfSort === o.value }"
+                    @click="$emit('selectSort', o.value)">{{ o.label }}</button>
+        </nav>
 
         <p v-if="books.length === 0 && shelfFilter === null" class="shop-empty">아직 공개한 책이 없습니다.</p>
         <p v-else-if="books.length === 0" class="shop-empty">이 상태의 공개 책이 없습니다.</p>

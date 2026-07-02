@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.security.Principal;
+import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -58,17 +60,28 @@ public class ProfileApiController {
         return ProfileResponse.from(v, coupangEnabled, yes24Enabled);
     }
 
-    /** 상태필터 적용된 PUBLIC 책 목록. status 없거나 잘못되면 전체(관대 파싱). */
+    /**
+     * 상태필터·정렬 적용된 PUBLIC 책 목록. status/sort 없거나 잘못되면 전체/이름순(관대 파싱).
+     * 기본 정렬은 이름순(리포지토리가 title asc로 공급). sort=finished_desc·finished_asc는 완독 시각
+     * 정렬 — UI는 완독(FINISHED) 필터에서만 노출하지만 서버는 조합을 강제하지 않는다(완독 시각 없는
+     * 책은 뒤로 — null-state가 앞을 오염하지 않게, N-055 정신).
+     */
     @GetMapping("/api/profile/books")
     public BooksResponse books(@RequestParam String loginId,
                                @RequestParam(required = false) String status,
+                               @RequestParam(required = false) String sort,
                                Principal principal) {
         User viewer = currentUserService.resolve(principal);
         ProfileView v = profileService.profileOf(viewer, loginId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "프로필을 찾을 수 없습니다"));
         BookStatus filter = parseStatus(status);
-        List<BookSummary> rows = v.books().stream()
-                .filter(b -> filter == null || b.getStatus() == filter)
+        var books = v.books().stream()
+                .filter(b -> filter == null || b.getStatus() == filter);
+        Comparator<Book> order = parseSort(sort);
+        if (order != null) {
+            books = books.sorted(order);
+        }
+        List<BookSummary> rows = books
                 .map(b -> BookSummary.from(b, v.bookTimes()))
                 .toList();
         return new BooksResponse(rows);
@@ -99,6 +112,22 @@ public class ProfileApiController {
         } catch (IllegalArgumentException e) {
             return null;
         }
+    }
+
+    /**
+     * 관대 파싱: finished_desc(완독 최신순)·finished_asc(완독 오래된순)만 인식, 그 외/미지정 → null
+     * (= 리포지토리 기본 이름순 유지). 완독 시각이 null인 책은 방향과 무관하게 뒤로 보내고 이름순 tie-break.
+     */
+    private static Comparator<Book> parseSort(String raw) {
+        if (raw == null) return null;
+        Comparator<Instant> time = switch (raw.strip().toLowerCase()) {
+            case "finished_desc" -> Comparator.reverseOrder();
+            case "finished_asc" -> Comparator.naturalOrder();
+            default -> null;
+        };
+        if (time == null) return null;
+        return Comparator.comparing(Book::getFinishedAt, Comparator.nullsLast(time))
+                .thenComparing(Book::getTitle);
     }
 
     // ── DTO (Book 엔티티 직렬화 금지 — 평탄 record로 화이트리스트) ──────────

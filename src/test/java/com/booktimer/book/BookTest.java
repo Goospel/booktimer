@@ -5,6 +5,8 @@ import com.booktimer.user.User;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -146,5 +148,74 @@ class BookTest {
 
         book.recordPurchaseClick();
         assertThat(book.getClickCount()).isEqualTo(2L);
+    }
+
+    // ── 완독 시각(finishedAt) — 책방 완독 정렬의 데이터 소스 ────────────────
+    // 불변식: 완독(FINISHED) 상태 ⇒ finishedAt 존재(엔티티 단독 register 직후만 예외 — 서비스가 스탬프).
+
+    private static final Instant T1 = Instant.parse("2026-07-01T00:00:00Z");
+    private static final Instant T2 = Instant.parse("2026-07-02T00:00:00Z");
+
+    @Test
+    @DisplayName("changeStatus: 완독으로 진입하면 완독 시각을 기록한다")
+    void changeStatus_toFinished_stampsFinishedAt() {
+        Book book = bookWith(BookStatus.READING);
+
+        book.changeStatus(BookStatus.FINISHED, T1);
+
+        assertThat(book.getStatus()).isEqualTo(BookStatus.FINISHED);
+        assertThat(book.getFinishedAt()).isEqualTo(T1);
+    }
+
+    @Test
+    @DisplayName("changeStatus: 완독에서 이탈하면 완독 시각을 지운다(완독 아닌 책에 시각 잔존 금지)")
+    void changeStatus_leavingFinished_clearsFinishedAt() {
+        Book book = bookWith(BookStatus.READING);
+        book.changeStatus(BookStatus.FINISHED, T1);
+
+        book.changeStatus(BookStatus.READING, T2);
+
+        assertThat(book.getStatus()).isEqualTo(BookStatus.READING);
+        assertThat(book.getFinishedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("changeStatus: 완독→완독 재저장은 기존 완독 시각을 유지한다(멱등 — 시각이 밀리지 않음)")
+    void changeStatus_finishedToFinished_keepsStamp() {
+        Book book = bookWith(BookStatus.READING);
+        book.changeStatus(BookStatus.FINISHED, T1);
+
+        book.changeStatus(BookStatus.FINISHED, T2);
+
+        assertThat(book.getFinishedAt()).isEqualTo(T1);
+    }
+
+    @Test
+    @DisplayName("changeStatus: 이탈 후 재완독하면 새 시각을 기록한다")
+    void changeStatus_refinish_stampsNewTime() {
+        Book book = bookWith(BookStatus.READING);
+        book.changeStatus(BookStatus.FINISHED, T1);
+        book.changeStatus(BookStatus.READING, T1);
+
+        book.changeStatus(BookStatus.FINISHED, T2);
+
+        assertThat(book.getFinishedAt()).isEqualTo(T2);
+    }
+
+    @Test
+    @DisplayName("changeStatus: 완독인데 시각이 없으면 채운다 — 완독 상태로 등록된 직후의 서비스 스탬프 경로")
+    void changeStatus_finishedWithoutStamp_heals() {
+        Book book = bookWith(BookStatus.FINISHED); // register는 시각을 모름 → null로 시작
+
+        book.changeStatus(BookStatus.FINISHED, T1);
+
+        assertThat(book.getFinishedAt()).isEqualTo(T1);
+    }
+
+    @Test
+    @DisplayName("register: 엔티티 단독 등록은 완독 시각이 null이다 — 스탬프는 서비스(Clock 보유) 책임")
+    void register_leavesFinishedAtNull() {
+        assertThat(bookWith(BookStatus.FINISHED).getFinishedAt()).isNull();
+        assertThat(bookWith(BookStatus.READING).getFinishedAt()).isNull();
     }
 }

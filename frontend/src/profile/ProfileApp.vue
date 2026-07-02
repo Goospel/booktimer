@@ -39,6 +39,7 @@ const loading    = ref(true);
 const notFound   = ref(false);
 const activeTab  = ref<'bti' | 'shelf'>('shelf');
 const shelfFilter = ref<string | null>(null);
+const shelfSort   = ref<string | null>(null); // null=이름순(기본) / finished_desc / finished_asc — 완독 필터 한정
 const tagPanel   = ref<BookSummary[] | null>(null);
 const tagLabel   = ref('');
 const reportOpen = ref(false);
@@ -81,9 +82,14 @@ function onMqChange(e: MediaQueryListEvent) { isWide.value = e.matches; }
 function urlFor(): string {
     const p = new URLSearchParams();
     if (shelfFilter.value) p.set('status', shelfFilter.value);
+    if (shelfSort.value) p.set('sort', shelfSort.value);
     if (activeTab.value === 'shelf') p.set('tab', 'shelf');
     const qs = p.toString();
     return `/u/${loginId}` + (qs ? `?${qs}` : '');
+}
+
+function historyState() {
+    return { tab: activeTab.value, status: shelfFilter.value, sort: shelfSort.value };
 }
 
 // ── 로드 ─────────────────────────────────────────────────────────────────
@@ -102,6 +108,10 @@ async function load() {
         if (activeTab.value !== 'shelf') {
             activeTab.value = (data.personality != null && shelfFilter.value == null) ? 'bti' : 'shelf';
         }
+
+        // 딥링크(?status=·?sort=)로 들어온 초기 로드 — 전체 목록 대신 필터·정렬 적용 목록으로 교체
+        // (기존엔 칩만 활성화되고 목록은 전체가 뜨던 사각).
+        if (shelfFilter.value || shelfSort.value) await loadBooks();
     } finally {
         loading.value = false;
     }
@@ -110,21 +120,29 @@ async function load() {
 async function loadBooks() {
     const p = new URLSearchParams({ loginId });
     if (shelfFilter.value) p.set('status', shelfFilter.value);
+    if (shelfSort.value) p.set('sort', shelfSort.value);
     const res = await fetch(`/api/profile/books?${p}`, { credentials: 'same-origin' });
     if (res.ok) books.value = (await res.json()).books;
 }
 
-// ── 탭·필터 ──────────────────────────────────────────────────────────────
+// ── 탭·필터·정렬 ──────────────────────────────────────────────────────────
 function selectTab(tab: 'bti' | 'shelf') {
     activeTab.value = tab;
-    history.pushState({ tab, status: shelfFilter.value }, '', urlFor());
+    history.pushState(historyState(), '', urlFor());
 }
 
 async function selectStatus(s: string | null) {
     shelfFilter.value = s;
+    if (s !== 'FINISHED') shelfSort.value = null; // 완독 한정 정렬 — 다른 필터로 가면 이름순(기본) 복귀
     activeTab.value   = 'shelf';
     await loadBooks();
-    history.pushState({ tab: 'shelf', status: s }, '', urlFor());
+    history.pushState(historyState(), '', urlFor());
+}
+
+async function selectSort(sort: string | null) {
+    shelfSort.value = sort;
+    await loadBooks();
+    history.pushState(historyState(), '', urlFor());
 }
 
 // ── 태그 드릴다운 ─────────────────────────────────────────────────────────
@@ -170,6 +188,7 @@ async function doBlock() {
 function onPopState(e: PopStateEvent) {
     const s = e.state ?? {};
     shelfFilter.value = s.status ?? null;
+    shelfSort.value   = s.sort ?? null;
     activeTab.value   = s.tab ?? 'shelf';
     if (activeTab.value === 'shelf') loadBooks();
 }
@@ -179,8 +198,10 @@ onMounted(() => {
     // 딥링크 초기 파싱
     const params = new URLSearchParams(location.search);
     const statusParam = params.get('status');
+    const sortParam   = params.get('sort');
     const tabParam    = params.get('tab');
     if (statusParam)       shelfFilter.value = statusParam;
+    if (sortParam)         shelfSort.value = sortParam;
     if (tabParam === 'shelf') activeTab.value = 'shelf';
 
     // 반응형 분기 초기화 + 구독
@@ -246,9 +267,9 @@ onUnmounted(() => {
                               :personality="profile.personality" :self="profile.self"
                               :tag-panel="tagPanel" :tag-label="tagLabel" @close-tag="closeTag" />
                     <ShelfPanel v-else
-                                :books="books" :shelf-filter="shelfFilter" :self="profile.self"
+                                :books="books" :shelf-filter="shelfFilter" :shelf-sort="shelfSort" :self="profile.self"
                                 :coupang-enabled="profile.coupangEnabled" :yes24-enabled="profile.yes24Enabled" :login-id="loginId"
-                                @select-status="selectStatus" />
+                                @select-status="selectStatus" @select-sort="selectSort" />
                 </section>
             </template>
 
@@ -274,9 +295,9 @@ onUnmounted(() => {
 
                 <div class="shop-main">
                     <section class="dash-card">
-                        <ShelfPanel :books="books" :shelf-filter="shelfFilter" :self="profile.self"
+                        <ShelfPanel :books="books" :shelf-filter="shelfFilter" :shelf-sort="shelfSort" :self="profile.self"
                                     :coupang-enabled="profile.coupangEnabled" :yes24-enabled="profile.yes24Enabled" :login-id="loginId"
-                                    :show-title="true" @select-status="selectStatus" />
+                                    :show-title="true" @select-status="selectStatus" @select-sort="selectSort" />
                     </section>
                 </div>
             </div>

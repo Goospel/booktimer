@@ -1777,6 +1777,9 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 .shop-filter button { font-size: 12.5px; padding: 5px 13px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); background: transparent; cursor: pointer; width: auto; }
 .shop-filter button:hover { border-color: var(--accent); color: var(--accent); }
 .shop-filter button.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+/* 완독 정렬 칩 행 — 완독 필터에서만 뜨는 둘째 행. 상태필터 칩(head 우측) 바로 아래 우측 정렬로 이어붙인다
+   (.shop-shelf gap 14px를 -6px로 좁혀 필터칩과 한 묶음으로 읽히게). */
+.shop-sort { justify-content: flex-end; margin-top: -6px; }
 
 /* 책 그리드 — 모바일 1열, 와이드 2열 */
 .shop-books { display: grid; grid-template-columns: 1fr; gap: 12px; list-style: none; padding: 0; margin: 0; }

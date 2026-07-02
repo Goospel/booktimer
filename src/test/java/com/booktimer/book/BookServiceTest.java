@@ -170,6 +170,49 @@ class BookServiceTest {
     }
 
     @Test
+    @DisplayName("완독 상태로 수동 등록하면 완독 시각이 함께 기록된다(등록 경로 스탬프)")
+    void addManual_finished_stampsFinishedAt() {
+        User u = newUser("fin-add@booktimer.com");
+
+        Book saved = bookService.addManual(u, "완독으로 등록한 책", null, BookStatus.FINISHED);
+
+        assertThat(saved.getFinishedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("완독 아닌 상태로 등록하면 완독 시각은 없다")
+    void addManual_notFinished_finishedAtNull() {
+        User u = newUser("fin-add2@booktimer.com");
+
+        Book saved = bookService.addManual(u, "읽는 중 책", null, BookStatus.READING);
+
+        assertThat(saved.getFinishedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("검색 등록도 완독 상태면 완독 시각이 기록된다")
+    void addFromSearch_finished_stampsFinishedAt() {
+        User u = newUser("fin-search@booktimer.com");
+
+        Book saved = bookService.addFromSearch(u, cleanCode(), BookStatus.FINISHED);
+
+        assertThat(saved.getFinishedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("changeStatus: 완독 전환 시 완독 시각을 기록하고, 완독 해제 시 지운다")
+    void changeStatus_maintainsFinishedAt() {
+        User u = newUser("fin-chg@booktimer.com");
+        Book book = bookService.addManual(u, "완독 시각 추적 책", null, BookStatus.READING);
+
+        Book finished = bookService.changeStatus(u, book.getId(), BookStatus.FINISHED);
+        assertThat(finished.getFinishedAt()).isNotNull();
+
+        Book reopened = bookService.changeStatus(u, book.getId(), BookStatus.READING);
+        assertThat(reopened.getFinishedAt()).isNull();
+    }
+
+    @Test
     @DisplayName("남의 책 상태 변경은 거부된다(IDOR 방지)")
     void changeStatus_rejectsNonOwner() {
         User owner = newUser("owner@booktimer.com");
