@@ -1,6 +1,7 @@
 # SNS 기능 — 설계 문서 (구현 전 합의용)
 
 > **상태**: ✅ **구현 완료** — 1~5단계 전부 출하됨(§7 참조). 이 문서로 공유 모델·프라이버시·관계·스키마를 먼저 못 박은 뒤 TDD로 구현했다. (이 문서는 설계 기록 — 단계별 구현 결과는 §7과 changelog에 있다.)
+> **예외**: **§13 독서 스토리는 새 설계(2026-07-02 확정) — 미구현.** 구현 전 합의용 절차(이 문서의 존재 이유)를 그대로 따른 것.
 > **왜 설계 먼저**: SNS는 **데이터 노출·권한 경계가 핵심**이라, 설계 없이 시작하면 되돌리기 어려운 결정(공개 범위·스키마)이 코드에 굳는다.
 > 비공개 기록이 한 번 새면 회수 불가 — 인가 경계는 사후 패치가 아니라 **설계 단계의 1순위**다.
 >
@@ -425,3 +426,195 @@ create index idx_follow_followee on follow (followee_id);
 - [ ] 각 단계 착수 전 canViewBook/잔디 가시성 필터 **보안 테스트 우선 작성**(§5.4)
 
 > 이 문서는 **살아있는 문서** — 결정이 바뀌면 §1·§0 표와 해당 절을 갱신한다.
+
+---
+
+## 13. 독서 스토리 — 인스타 스토리식 24h 문장 공유 (설계 확정 2026-07-02 · 구현 전)
+
+> **컨셉**: 책을 읽다 인상 깊은 **문장**을 올리면 **나를 팔로우한 사람에게 24시간만** 보이고 만료되는
+> 텍스트 카드. UI는 인스타 스토리 문법 — 상단 아바타 링(미열람 강조) → 탭하면 풀스크린 카드·진행바·
+> 자동 넘김·좌우 탭. 배경·1차 방향(텍스트만·책 연결 선택)은 [plan.md](../plan.md) §독서 스토리(2026-06-29).
+>
+> **착수 근거**: 원래 "밀도 신호 뒤" 백로그였으나 **사용자 결정(2026-07-02)으로 지금 착수** — 설계를 먼저
+> 이 절로 못 박고(§전략 SNS 규칙 그대로) TDD 구현으로 넘긴다. 구현 핸드오프는 `claude-docs/plans/`의 계획 md.
+
+### 13.0 한눈에 — 이 절이 못 박는 것
+
+| 항목 | 결정 | 확정 |
+|---|---|---|
+| 공개범위 | **팔로워 한정 단일**(+작성자 본인). `visibility` 컬럼 없이 시작 — 전체공개는 additive 확장 후속 | ✅ 사용자 2026-07-02 |
+| 콘텐츠 | **텍스트 카드만**(1~500자, 비공백) + 배경 팔레트(닫힌 코드) + 책 연결(선택) | ✅ 사용자 2026-06-29 |
+| 책 연결 | **본인 소유 + PUBLIC 책만** 첨부 가능 — §3.5 불변식("PRIVATE는 타인 표면에 안 샌다") 예외 없이 유지 | ✅ §13.2 |
+| 열람 추적 | **`story_view` 테이블** — 미열람 링(기기 무관) + 작성자에게 열람자 목록("누가 봤나") v1 포함 | ✅ 사용자 2026-07-02 |
+| 장수 | **여러 장** — 작성자별 묶음 순차 재생. 활성 상한 20장 + 작성 레이트리밋 | ✅ 사용자 2026-07-02 |
+| 만료 | `created_at + 24h` **표시 필터**(만료 잡 없음). 데이터 보존, 물리 삭제 배치는 후속 | ✅ 사용자 2026-07-02 |
+| 본인 삭제 | 작성자는 자기 스토리 **즉시 삭제** 가능(v1 — 실수 게시 회수 수단) | ✅ |
+| 신고 | **기존 사용자 신고(Report) 재사용** — 뷰어에서 작성자 신고, detail에 스토리 원문 발췌 자동 첨부 | ✅ §13.5 |
+| 레이트리밋 | `RateLimitAction.STORY_CREATE(10, 1시간)` | ✅ §13.5 |
+| 렌더 | 새 섬 아님 — **shared 스토리 컴포넌트**를 dashboard·profile 두 섬에 삽입 | ✅ §13.7 |
+| 스키마 | `story`·`story_view` 신규 테이블 2개 — **번호는 머지 직전 확정**(2026-07-02 현재 최신 V55 → V56·V57 예상) | ✅ §13.3 |
+
+### 13.1 v1 범위
+
+**포함**: 작성(문장 + 공개 책 선택 + 배경색) · 홈(`/`) 스트립(내 스토리 + 팔로잉 아바타 링, 미열람 강조·정렬) ·
+풀스크린 뷰어(진행바·자동 넘김·좌우 탭·열람 기록) · 책방(`/u/{loginId}`) 아바타 링(그 사람 스토리) ·
+본인 스토리의 열람자 수/목록/삭제 · 신고 · 차단·레이트리밋 게이트.
+
+**제외(후속 백로그)**: 전체공개 옵션 · 사진/이미지 스토리(인프라 비용 — 2026-06-29 결정 유지) ·
+카드 안 구매링크/책 페이지 링크(풀스크린 탭 UI와 오탭 충돌 + 남의 책 링크 대상 설계 필요 — 표시는 하되 링크는 후속) ·
+만료 후 본인 보관함 · 물리 삭제 배치 · 콘텐츠 단위 신고 · 답장/DM.
+
+### 13.2 노출 경계 (가장 위험한 지점 — §5 정신)
+
+**canViewStory(viewer, story)** — id를 직접 받는 모든 진입점에서 강제:
+
+```
+1. 작성자 == viewer          → 허용 (단 만료분은 v1에선 본인도 화면 진입점 없음 — 보관함 후속)
+2. 차단(existsBetween 양방향) → 404/빈 결과 (존재 누설 금지)
+3. viewer가 작성자를 팔로우   → 아니면 미노출
+4. 만료(createdAt < now-24h)  → 미노출
+5. 불변식: ADMIN 작성자·login_id null 작성자 제외 (FoF 쿼리 노출 불변식과 동일, N-055)
+```
+
+- **피드 쿼리** = 기존 `followScopePopularity` theta 조인 패턴 미러:
+  `select s from Story s, Follow f where f.followee = s.user and f.follower = :viewer and s.createdAt >= :cutoff`
+  (+ ADMIN·login_id null 제외). **차단 필터는 쿼리에 없어도 안전** — "팔로우 존재 → 차단 없음" 불변식
+  (차단 시 팔로우 양방향 해제 + 차단 중 팔로우 생성 불가, §7.5)이 write 시점에 보장. 이 불변식을
+  **회귀 테스트로 못 박는다**("차단하면 피드에서 사라진다"). 단 id 직접 진입점(열람 기록 POST)은
+  차단·팔로우·만료 **전체 게이트 재검사**(IDOR·stale id 방어).
+- **비공개 책 간접 누출 차단**: 스토리에 붙일 수 있는 책 = **본인 소유 + PUBLIC만**.
+  - 근거: 책 라벨(《제목》·표지)이 팔로워에게 보이므로, PRIVATE 책 첨부를 허용하면 비공개 책장이 새는
+    유일 경로가 된다. §3.5 불변식을 예외 없이 유지하는 쪽이 구현·테스트 모두 단순.
+  - 작성 UI는 공개 책만 목록에 올리고 "비공개 책은 책장에서 공개로 바꾸면 붙일 수 있어요" 안내 한 줄.
+  - 대안 기각 기록: ① "첨부 = 그 문맥 공개 동의로 간주" — 불변식이 둘로 갈라져 테스트·리뷰 부담 증가, 기각.
+    ② "첨부 시 자동 PUBLIC 전환" — 숨은 부수효과(책장 상태 변경)라 기각. 명시 전환 UI가 생기면 후속 재검토.
+  - **첨부 후 책이 PRIVATE로 바뀌면**: 스토리는 라이브 참조라 **표시 시점에 `book.visibility` 재검사** —
+    비공개면 책 라벨만 숨기고 문장은 유지(작성자 본인 뷰 포함 동일 규칙 — 단순·일관). "한 번 새면 회수 불가"를
+    표시 시점 게이트로 보완하는 셈.
+- **DTO 화이트리스트(§3.4 동일)**: 피드·열람자 응답에 노출하는 것 = loginId·nickname·profileCharacterCode·
+  스토리(text·bgCode·책 라벨(제목/표지)·createdAt·viewed)뿐. 이메일·타이머 내부값 등은 설계적 차단.
+- 책방 링 노출 조건: **팔로워/본인만**. 비팔로워 방문자에겐 링 자체 미표시 — `of/{loginId}` API는 비팔로워에
+  **200 + 빈 배열**(스토리 유무 정보도 안 샘. 404는 차단·ADMIN·미존재 전용 — 프로필 가드와 일관).
+
+### 13.3 스키마 (가안 — 번호는 머지 직전 확정, 멀티세션 충돌 회피)
+
+```sql
+-- V56__story.sql (가안)
+create table story (
+    id          bigint       not null auto_increment,
+    user_id     bigint       not null,             -- 작성자
+    book_id     bigint       null,                 -- 선택 첨부(본인 소유+PUBLIC만, §13.2)
+    text        varchar(500) not null,
+    bg_code     varchar(20)  null,                 -- 배경 팔레트 닫힌 코드(자유 hex 금지 — 스타일 주입 차단)
+    created_at  datetime(6)  not null,
+    updated_at  datetime(6)  not null,
+    primary key (id),
+    constraint fk_story_user foreign key (user_id) references users (id),
+    constraint fk_story_book foreign key (book_id) references book (id)
+);
+create index ix_story_user_created on story (user_id, created_at);
+
+-- V57__story_view.sql (가안)
+create table story_view (
+    id          bigint      not null auto_increment,
+    story_id    bigint      not null,
+    viewer_id   bigint      not null,
+    created_at  datetime(6) not null,
+    updated_at  datetime(6) not null,
+    primary key (id),
+    constraint uk_story_view unique (story_id, viewer_id),   -- 열람 기록 멱등
+    constraint fk_story_view_story  foreign key (story_id)  references story (id),
+    constraint fk_story_view_viewer foreign key (viewer_id) references users (id)
+);
+create index ix_story_view_viewer on story_view (viewer_id);
+```
+
+- 관례 준수: varchar 코드 저장·datetime(6)·`fk_`/`ix_`/`uk_` 네이밍(V1~). 엔티티는 `BaseTimeEntity` 상속(createdAt=만료 기준).
+- **FK 자식 정리(T-023·T-029 재발 방지)** — 세 경로 모두 실 H2 통합 테스트로 못 박는다:
+  1. **회원 탈퇴**(`AccountService.purge`): [내가 남긴 story_view] → [내 스토리에 달린 story_view] → [내 스토리] 순으로
+     삭제를 **기존 book 삭제보다 앞에** 끼운다(story.book_id가 book을 참조하므로 book이 먼저 지워지면 FK 위반).
+  2. **책 삭제**(`BookService.delete`): `reading_session.unlinkBook` 패턴 미러 — `story.book_id`를 null로 풀고 책 삭제(스토리는 유지).
+  3. **스토리 삭제**(본인 삭제): story_view 먼저 삭제 후 스토리 삭제.
+- 메인 테스트 스키마는 ddl-auto(엔티티 파생), 마이그레이션 자체는 `FlywayMigrationTest`가 H2로 검증(기존 관례).
+
+### 13.4 API (전부 로그인 필수 — default-deny. record DTO + `Principal`+`CurrentUserService` + 404 통일 관례)
+
+| 메서드 | 경로 | 역할 | 게이트 |
+|---|---|---|---|
+| GET | `/api/stories/feed` | 홈 스트립: 내 활성 스토리 + 팔로잉 작성자별 그룹 | 피드 쿼리 자체가 게이트(§13.2) |
+| GET | `/api/stories/of/{loginId}` | 책방: 그 사람 활성 스토리 | 소셜 가시성 가드(ADMIN·차단·미존재→404) + 비팔로워 빈 배열 + 본인 허용 |
+| POST | `/api/stories` | 작성 `{text, bookId?, bgCode?}` | 검증(1~500자 비공백·본인 소유+PUBLIC 책·팔레트 코드) + `STORY_CREATE` 레이트리밋 + 활성 상한 20 |
+| DELETE | `/api/stories/{id}` | 본인 삭제 | 소유자 아니면 404 (IDOR) |
+| POST | `/api/stories/{id}/view` | 열람 기록(멱등 — `uk_story_view`) | canViewStory 전체 재검사. **본인 열람은 기록 안 함**(인스타 동일) |
+| GET | `/api/stories/{id}/viewers` | 열람자 목록 | **작성자 본인만**(아니면 404). 차단 관계 열람자는 목록에서 제외 |
+
+- **개별 스토리 GET 없음** — 본문(≤500자)이 피드 응답에 통째로 실리므로 상세 조회가 불필요, 노출 경계 진입점 최소화.
+- 소셜 가시성 가드는 `ProfileService.resolveVisibleTarget`(현재 private)을 **공용으로 승격해 재사용** —
+  "프로필 조회·드릴다운이 동일 보장 공유(분기 금지)" 주석의 정신 그대로, 스토리도 같은 한 곳을 탄다.
+- 피드 응답 형태(가안): `{ mine: AuthorStories|null, groups: AuthorStories[] }`,
+  `AuthorStories = { loginId, nickname, profileCharacterCode, allViewed, stories: StoryCard[] }`,
+  `StoryCard = { id, text, bgCode, bookTitle?, bookCoverUrl?, createdAt, viewed }`.
+  정렬: 내 스토리 맨 앞 고정 → 미열람 있는 작성자(최신 스토리 desc) → 전부 열람한 작성자. 그룹 내부는 작성순 asc(인스타 동일).
+
+### 13.5 모더레이션
+
+- **신고 = 기존 Report 재사용**: 뷰어의 신고 버튼 → 기존 신고 모달(작성자를 신고), detail 앞에
+  `[스토리#{id}] {원문 발췌 ~200자}`를 자동 첨부(전체 500자 내 절삭). 만료 후에도 행이 보존되므로(§13.6)
+  운영자는 관리자 신고함에서 id로 원문 대조 가능. 한계 = `(reporter, reported)` 쌍당 1건 유니크라 같은
+  작성자 재신고 불가 — 기존 사용자 신고와 동일한 기존 제약. 콘텐츠 단위 신고가 필요해지면 별도
+  `story_report` CREATE-only 테이블로 후속(기존 유니크 재정의는 MySQL/H2 DROP 구문 갈림 함정 — V26 주석 참조).
+- **차단**: 차단 시 팔로우 양방향 해제(기존 동작) → 피드에서 자동 소멸. `of/{loginId}`·열람자 목록도 `existsBetween` 게이트.
+- **레이트리밋**: `RateLimitAction.STORY_CREATE(10, Duration.ofHours(1))`. 초과 시 **안내 응답**(무음 드롭 아님 —
+  프론트가 "잠시 후 다시 올려주세요" 안내). FOLLOW의 무음 드롭과 다른 결정인 근거: 팔로우는 멱등 토글이라
+  무음이 무해하지만, 작성은 콘텐츠 소실이라 사용자가 원인을 알아야 한다.
+- **활성 상한 20장**: 활성(미만료) 스토리 20장 도달 시 작성 거부 + 안내 — 뷰어 진행바 UI 보호 + 도배 방지.
+  (레이트리밋만으론 24h 내 이론상 240장 가능 — 상한이 뷰어 경험을 지킨다.)
+
+### 13.6 만료·데이터 수명
+
+- **만료 = 표시 필터**: `cutoff = clock.instant() - 24h` (Clock 주입, **절대시간이라 사용자 타임존·자정 경계 무관**).
+  만료 잡·스케줄러 없음.
+- **보존**: 만료 후에도 DB 보존(신고 대응 원문 근거 + 후속 보관함 여지). 텍스트 500자뿐이라 용량 부담 미미.
+  물리 삭제 배치는 용량·개인정보 삭제 요구가 생기면 후속 도입. (사용자 확정 2026-07-02)
+- **본인 삭제 = 즉시 물리 삭제**(story_view 포함). 실수 게시 회수 수단 — 24h 강제 노출 방지.
+
+### 13.7 프론트 — shared 컴포넌트 (새 섬 아님)
+
+- plan.md 초안의 "새 Vue 섬 `frontend/src/story/`"를 **정정**: 스트립은 홈·책방 **기존 섬 내부 상단**에 들어가야
+  하므로 별도 섬(별도 마운트 포인트·엔트리)이 아니라 **`frontend/src/shared/story/` 공용 컴포넌트**로 만들어
+  dashboard 섬(홈 스트립+작성 진입)·profile 섬(아바타 링)에 삽입한다. `vite.config.ts` 무변경(새 엔트리 없음),
+  **dashboard·profile 두 섬 재빌드** 필요(`require-bundle-build.ps1` 훅이 하드 강제, T-063).
+- 구성(가안): `StoryStrip.vue`(아바타 링 가로 스트립 — 미열람 링 강조는 서버 `allViewed`/`viewed` 기준, 기기 무관) ·
+  `StoryViewer.vue`(풀스크린 오버레이 — 장당 ~5초 진행바·자동 넘김·좌우 탭·Esc/배경 탭 닫기, 카드 표시 시점에
+  열람 POST(멱등), 본인 스토리엔 열람자 수/목록/삭제) · `StoryComposer.vue`(작성 모달 — 500자 카운터·공개 책
+  드롭다운·배경 팔레트 스와치) · `storyApi.ts`(fetch 래퍼 — `shared/follow.ts`의 `getCsrfToken()` 재사용).
+- 오버레이 전례 재사용: 마을 도감(z-index 50)·신고 모달(z-index 200) 패턴. 아바타 = `profileCharacterCode` 기존 렌더 재사용.
+- ⚠️ **머지 전 실 브라우저 1회 게이트**(CLAUDE.md 프론트 검증 규칙) — 자동 넘김 타이머·오버레이·열람 POST 타이밍은
+  헤드리스로 가짜 green이 나기 쉬운 클래스(T-053).
+
+### 13.8 TDD로 못 박을 경계 케이스 (Red→Green 필수 — 각 단계 실패 확인 후 구현)
+
+- **노출 게이트**: 팔로워→보임 / 비팔로워→안 보임 / 본인→보임 / 차단(양방향)→404·피드 소멸 /
+  만료 정확히 24h→제외·24h−1s→포함(Clock.fixed 경계) / ADMIN·login_id null 작성자 피드 제외(N-055) /
+  비팔로워 `of/{loginId}`→빈 배열(404 아님)
+- **작성**: 501자·공백만 거부 / PRIVATE 책·남의 책 첨부 거부 / 팔레트 외 bgCode 거부 / 활성 20장 도달 시 거부 /
+  레이트리밋 초과 시 안내 응답
+- **책 라벨 재검사**: 첨부 후 책 PRIVATE 전환 → 피드에서 책 라벨만 숨고 문장 유지
+- **삭제**: 본인 OK(view 자식 있어도 FK 위반 없음 — **실 H2**) / 타인 404(IDOR)
+- **열람**: 두 번 POST→1행(멱등) / 본인 열람 기록 안 됨 / 비팔로워·만료·차단 POST→404 /
+  열람자 목록 작성자만·차단 관계 제외
+- **FK 통합(실 H2, T-023·T-029)**: 스토리+열람 픽스처 가진 회원 탈퇴 성공(flush) / 스토리 붙은 책 삭제 성공+`book_id` null화
+- **피드 조립**: 그룹핑·정렬(미열람 우선)·`allViewed` 계산·내 스토리 분리
+- **마이그레이션**: `FlywayMigrationTest`로 신규 V 2건 H2 적용 검증
+
+### 13.9 열린 질문 해소 기록 (plan.md 2026-06-29 → 2026-07-02 사용자 확정)
+
+| 열린 질문 | 결정 |
+|---|---|
+| 공개범위 — 팔로워 한정 단일 vs 전체공개 허용 | **팔로워 한정 단일**(컬럼 없음, 확장은 additive 후속) |
+| 조회 표시("누가 봤나") v1 포함? | **포함** — 미열람 링이 어차피 `story_view`를 요구, 열람자 목록은 그 위에 거의 공짜 + 작성자 리텐션 후크 |
+| 여러 장 vs 1장 | **여러 장** — 스키마 비용 0(1행=1장), 활성 상한 20 + 레이트리밋으로 남용 방지 |
+| 만료 스토리 물리 삭제 / 미열람 추적 위치 | **보존 + 표시 필터**(물리 삭제 배치는 후속) / 미열람 추적 = `story_view`(서버, 기기 무관) |
+
+**남은 후속 백로그**: 전체공개 옵션 · 사진 스토리 · 카드 내 구매링크/책 링크 · 만료 후 본인 보관함 ·
+물리 삭제 배치 · 콘텐츠 단위 신고(`story_report`) · 답장/DM 없음 유지 여부.
