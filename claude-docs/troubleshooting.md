@@ -147,6 +147,9 @@
 - [T-123. 커스텀 `display`(flex/grid)를 준 요소를 JS `[hidden]`으로 토글해도 author가 UA `[hidden]{display:none}`을 이겨 안 숨겨진다 (T-035 재발 3회차)](#t-123-커스텀-displayflexgrid를-준-요소를-js-hidden으로-토글해도-author가-ua-hiddendisplaynone을-이겨-안-숨겨진다-t-035-재발-3회차)
 - [T-124. `npm install`(무인자)이 vite dist를 불완전하게 남겨 빌드가 `ERR_MODULE_NOT_FOUND`(cli.js 없음) — `npm ci`로 클린 복구](#t-124-npm-install무인자이-vite-dist를-불완전하게-남겨-빌드가-err_module_not_foundclijs-없음--npm-ci로-클린-복구)
 - [T-125. Thymeleaf `th:field` 체크박스가 삽입하는 hidden sibling이 CSS 인접 형제 선택자(`+`)를 깨뜨린다](#t-125-thymeleaf-thfield-체크박스가-삽입하는-hidden-sibling이-css-인접-형제-선택자를-깨뜨린다)
+- [T-126. 검증 명령을 `| tail`/`| grep`으로 파이프하면 exit code가 가려져 실패가 GREEN으로 보임](#t-126-검증-명령을--tail-grep으로-파이프하면-exit-code가-가려져-실패가-green으로-보임)
+- [T-127. 크롬 확장 네트워크 로그의 간헐 503 — 서비스워커 pass-through 내부 fallback 아티팩트(앱 결함 아님)](#t-127-크롬-확장-네트워크-로그의-간헐-503--서비스워커-pass-through-내부-fallback-아티팩트앱-결함-아님)
+- [T-128. Yes24 링크프라이스 딥링크, 모바일 UA면 Yes24 게이트가 목적지를 m.yes24 메인으로 치환 (tu에 모바일 URL을 넣어도 우회 불가)](#t-128-yes24-링크프라이스-딥링크-모바일-ua면-yes24-게이트가-목적지를-myes24-메인으로-치환-tu에-모바일-url을-넣어도-우회-불가)
 
 ---
 
@@ -2355,6 +2358,20 @@ git worktree remove ../BookTimer-<task>
 
 ---
 
+## T-128. Yes24 링크프라이스 딥링크, 모바일 UA면 Yes24 게이트가 목적지를 m.yes24 메인으로 치환 (tu에 모바일 URL을 넣어도 우회 불가)
+
+**증상**: Yes24 "구매" 버튼이 데스크톱에서는 Yes24 검색 결과로 정상 이동하는데, 모바일(iPhone 사파리 실사용 보고·Android도 동일 실측)에서는 검색 결과 대신 **Yes24 모바일 메인(m.yes24.com)에 떨어진다**. 알라딘·쿠팡은 모바일에서도 정상.
+
+**원인**: 현재 체인은 `/books/{id}/buy/yes24` → 링크프라이스 래퍼(`lpweb.kr/click.php?...&tu=<목적지 URL 인코딩>`) → `www.yes24.com/Cooperate/LinkPrice/lpfront.asp` → `lpfront.aspx` → `Yes24Gateway.aspx?pid=…&ReturnURL=<목적지>`(meta refresh로 최종 이동)다. **`www.yes24.com/Cooperate/LinkPrice/lpfront.aspx`가 UA 판별로 모바일(iPhone·Android 공통)이면 `ReturnURL`을 통째로 버리고 `http://m.yes24.com/`(모바일 메인)으로 치환**한다 — 목적지 URL 자체는 그 앞 단계까지 파라미터에 온전히 보존돼 있으므로 치환 주체는 링크프라이스가 아니라 Yes24 자신. `tu`에 모바일 검색 URL(`https://m.yes24.com/search?query=…`)을 넣어도 모바일 UA면 똑같이 메인으로 치환됨(판별 기준이 UA일 뿐 URL 형태와 무관) → **래퍼를 유지한 채로는 우회 불가**. `https://m.yes24.com/search?query=<ISBN13>`을 직접 열면 모바일에서 정상 동작(2026-07-02 운영 booktimer.app에서 curl UA별 리다이렉트 실측).
+
+**해결**: 모바일 UA면 제휴 래퍼를 아예 타지 않고 `m.yes24.com/search`로 직행(모바일 클릭 커미션은 포기, 사용자 승인). `Yes24LinkBuilder.isMobileUserAgent`가 Yes24 자신의 기기 판별(`RedirectWebSiteList.min.js` `list_mobile_device`: `Android|BlackBerry|iPhone|iPad|iPod|Opera Mini|IEMobile`)을 미러링해 판별하고, `BookController`의 buy 2 엔드포인트가 `User-Agent` 헤더로 분기한다. 데스크톱 경로(래퍼)는 무변경.
+
+**일반화**: **제휴 리다이렉트 래퍼는 최종 목적지 보존을 UA별로 실측하라** — 데스크톱만 확인하면 모바일에서 중간자(이번엔 제휴사 자신)가 목적지를 버리는 사각을 놓친다.
+
+**관련**: 계획 md `claude-docs/plans/2026-07-02-yes24-mobile-ua-branch.md`(진단 체인 상세). 1회차 신규 — 재발·승격 트래커에는 올리지 않는다.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2488,3 +2505,4 @@ git worktree remove ../BookTimer-<task>
 | 2026-07-02 | T-126 (검증 명령 파이프가 exit code 가림 — pipefail·PIPESTATUS 판정, 가짜 GREEN) |
 | 2026-07-02 | T-127 (크롬 확장 네트워크 로그 간헐 503 = SW pass-through 표시 아티팩트 — 페이지 실측·서버 로그·DB 3중 교차 검증) |
 | 2026-07-02 | T-085 보강 (docker exec mysql 한글 군 3회차: T-085→T-119→이번 — UTF-8 파일 stdin 파이프 + --default-character-set + HEX 검증, 트래커 등재) |
+| 2026-07-02 | T-128 (Yes24 링크프라이스 딥링크, 모바일 UA면 Yes24 자체 게이트 `lpfront.aspx`가 목적지를 m.yes24 메인으로 치환 — tu에 모바일 URL을 넣어도 우회 불가, 해결=모바일 UA면 래퍼 없이 m.yes24.com/search 직행, 운영 curl 실측, 1회차 신규) |

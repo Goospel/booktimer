@@ -460,6 +460,7 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
       고지 문구를 알라딘 라인과 같은 집 문체(`Yes24 "구매" 링크는 제휴 링크로, 구매 시 일부 수수료를 받을 수 있습니다.`)로 3곳 통일, SSM 파라미터 2개 생성(현재 `YES24_TRACKING_CODE=not-configured`로 **꺼둠**).
       **남은 것 = 점등 스위치 하나**: SSM `YES24_TRACKING_CODE`를 실값(`A100705638`)으로 `--overwrite`+재배포하면 버튼·고지 노출(코드 변경 0·외부 작업).
       실 브라우저: books 구매 드롭다운·book-detail SSR `th:each`·Yes24 고지문구 확인(로컬 테스트 추적코드 주입).
+      모바일 UA는 Yes24 게이트가 딥링크를 버려(모바일 메인 치환, T-128) 래퍼 없이 `m.yes24.com/search` 직행으로 분기(커미션은 데스크톱만) ✅ 2026-07-02.
   - **③-c 책 상세 페이지 완료 ✅ 2026-06-03**: `GET /books/{id}` — 책 메타 + 월별 일자 기록 + 누적 시간. 소유권 검사(IDOR, 없으면 책장으로).
     `BookContributionService`(세션 패키지, 유저 TZ 일자) + `findByUserAndBook`. 책장에서 제목 클릭 진입.
     TDD: BookContributionServiceTest(단위)·BookControllerTest(렌더·IDOR). **책 3단계 완료.**

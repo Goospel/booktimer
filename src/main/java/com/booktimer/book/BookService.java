@@ -262,12 +262,14 @@ public class BookService {
      * <p>소유권을 강제한다(IDOR 방지). 링크는 DB에 없고 {@link Yes24LinkBuilder}가 런타임 생성한다 —
      * Yes24는 제목이 항상 있어 링크가 늘 만들어지므로, null 사유는 "비활성(추적코드 미설정)"뿐이다(그땐 무집계).
      *
+     * @param mobileDevice true면 모바일 UA — Yes24 게이트가 딥링크를 버리므로(T-128) 제휴 래퍼 없이
+     *                      모바일 검색으로 직행하는 링크를 받는다. 집계 자체는 mobile 여부와 무관하게 동일.
      * @return 이동할 Yes24 검색 링크. 비활성이면 null.
      * @throws IllegalArgumentException 내 책이 아니거나 존재하지 않는 경우
      */
-    public String recordYes24Click(User user, Long bookId) {
+    public String recordYes24Click(User user, Long bookId, boolean mobileDevice) {
         Book book = ownedBook(user, bookId);
-        String link = yes24LinkBuilder.buildSearchLink(book);
+        String link = yes24LinkBuilder.buildSearchLink(book, mobileDevice);
         if (link == null) {
             return null; // 비활성(추적코드 미설정) — 집계하지 않음
         }
@@ -281,14 +283,15 @@ public class BookService {
      * {@link #recordPublicCoupangClick}(쿠팡)과 같은 정신: 소유권 대신 공개 여부를 게이트로 두고,
      * 클릭은 책 주인 행에 집계한다(2026-06-06 결정의 근거는 {@link #recordPublicPurchaseClick} JavaDoc 참조).
      *
+     * @param mobileDevice {@link #recordYes24Click} 참조.
      * @return 이동할 Yes24 검색 링크. 비공개·존재하지 않음·비활성이면 null.
      */
-    public String recordPublicYes24Click(Long bookId) {
+    public String recordPublicYes24Click(Long bookId, boolean mobileDevice) {
         Book book = bookRepository.findById(bookId).orElse(null);
         if (book == null || !book.isPublic()) {
             return null; // 없거나 비공개 — 존재 누설 없이 거부
         }
-        String link = yes24LinkBuilder.buildSearchLink(book);
+        String link = yes24LinkBuilder.buildSearchLink(book, mobileDevice);
         if (link == null) {
             return null; // 비활성(추적코드 미설정)
         }
