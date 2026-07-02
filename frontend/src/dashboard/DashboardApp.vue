@@ -5,7 +5,7 @@ import { getCsrfToken } from '../shared/follow'
 import TimerCard from './TimerCard.vue'
 import ContributionGraph from './ContributionGraph.vue'
 import GardenPanel from './GardenPanel.vue'
-import QuoteCard from './QuoteCard.vue'
+import BrandQuote from './BrandQuote.vue'
 import EmailVerifyBanner from './EmailVerifyBanner.vue'
 import QuickNav from './QuickNav.vue'
 import DashHeader from './DashHeader.vue'
@@ -119,7 +119,7 @@ async function handleStop() {
         <StoryStrip :my-login-id="data.loginId" :my-nickname="data.nickname"
                     :my-profile-character-code="data.profileCharacterCode" />
 
-        <QuoteCard :quotes="data.quotes" />
+        <BrandQuote :quotes="data.quotes" />
 
         <EmailVerifyBanner v-if="!data.emailVerified" />
 
