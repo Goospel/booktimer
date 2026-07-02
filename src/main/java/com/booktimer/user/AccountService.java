@@ -8,6 +8,8 @@ import com.booktimer.follow.FollowRepository;
 import com.booktimer.personality.ReadingPersonalityCacheRepository;
 import com.booktimer.report.ReportRepository;
 import com.booktimer.session.ReadingSessionRepository;
+import com.booktimer.story.StoryRepository;
+import com.booktimer.story.StoryViewRepository;
 import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.timer.ReadingTimerRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -38,6 +40,8 @@ public class AccountService {
     private final ReadingPersonalityCacheRepository personalityCacheRepository;
     private final FeedbackRepository feedbackRepository;
     private final EmailTokenRepository emailTokenRepository;
+    private final StoryRepository storyRepository;
+    private final StoryViewRepository storyViewRepository;
     private final PasswordEncoder passwordEncoder;
 
     public AccountService(UserRepository userRepository,
@@ -51,6 +55,8 @@ public class AccountService {
                           ReadingPersonalityCacheRepository personalityCacheRepository,
                           FeedbackRepository feedbackRepository,
                           EmailTokenRepository emailTokenRepository,
+                          StoryRepository storyRepository,
+                          StoryViewRepository storyViewRepository,
                           PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.timerRepository = timerRepository;
@@ -63,6 +69,8 @@ public class AccountService {
         this.personalityCacheRepository = personalityCacheRepository;
         this.feedbackRepository = feedbackRepository;
         this.emailTokenRepository = emailTokenRepository;
+        this.storyRepository = storyRepository;
+        this.storyViewRepository = storyViewRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -127,9 +135,10 @@ public class AccountService {
 
     /**
      * 연관 데이터까지 FK 순서로 제거: 세션(N) → 타이머(1:1) → 목표 변경 이력(N) → 팔로우(양방향) → 차단(양방향)
-     * → 신고(양방향) → 책(N) → 책BTI 캐시(1) → 유저.
+     * → 신고(양방향) → 스토리 열람·스토리(N) → 책(N) → 책BTI 캐시(1) → 유저.
      * <p>모두 users를 FK 참조하므로 유저 삭제 전에 정리한다. 책은 {@code reading_session.book_id}가
      * book을 FK 참조하므로 <b>세션 이후</b>에 지운다(세션이 책을 가리키는 채로 책을 지우면 위반).
+     * 스토리도 같은 이유로 <b>책보다 앞</b>에 지운다({@code story.book_id}가 book을 참조).
      */
     private void purge(User user) {
         sessionRepository.deleteByUser(user);
@@ -141,6 +150,9 @@ public class AccountService {
         blockRepository.deleteByBlocked(user);
         reportRepository.deleteByReporter(user);
         reportRepository.deleteByReported(user);
+        storyViewRepository.deleteByViewer(user);      // 내가 남긴 열람 기록
+        storyViewRepository.deleteByStoryAuthor(user); // 내 스토리에 달린 열람 기록 (스토리 삭제 전)
+        storyRepository.deleteByUser(user);            // 내 스토리 — story.book_id 때문에 책보다 앞
         bookRepository.deleteByUser(user);
         personalityCacheRepository.deleteByUser(user);       // 책BTI 캐시도 user_id FK 참조 → 유저 전에 정리
         feedbackRepository.deleteByAuthor(user);             // 문의도 author_id FK 참조 → 유저 전에 정리

@@ -7,6 +7,8 @@ import com.booktimer.follow.FollowRepository;
 import com.booktimer.personality.ReadingPersonalityCacheRepository;
 import com.booktimer.report.ReportRepository;
 import com.booktimer.session.ReadingSessionRepository;
+import com.booktimer.story.StoryRepository;
+import com.booktimer.story.StoryViewRepository;
 import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.timer.ReadingTimerRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -64,6 +66,10 @@ class AccountServiceTest {
     @Mock
     private com.booktimer.email.EmailTokenRepository emailTokenRepository;
     @Mock
+    private StoryRepository storyRepository;
+    @Mock
+    private StoryViewRepository storyViewRepository;
+    @Mock
     private PasswordEncoder passwordEncoder;
 
     @InjectMocks
@@ -117,7 +123,7 @@ class AccountServiceTest {
 
         service.deleteAccount(EMAIL, "pw");
 
-        var ordered = inOrder(sessionRepository, timerRepository, goalChangeRepository, followRepository, blockRepository, reportRepository, bookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository, userRepository);
+        var ordered = inOrder(sessionRepository, timerRepository, goalChangeRepository, followRepository, blockRepository, reportRepository, storyViewRepository, storyRepository, bookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository, userRepository);
         ordered.verify(sessionRepository).deleteByUser(user); // book FK 참조하는 세션 먼저
         ordered.verify(timerRepository).deleteByUser(user);
         ordered.verify(goalChangeRepository).deleteByUser(user);   // FK: 목표 변경 이력도 유저 전에 정리
@@ -127,7 +133,10 @@ class AccountServiceTest {
         ordered.verify(blockRepository).deleteByBlocked(user);
         ordered.verify(reportRepository).deleteByReporter(user);   // FK: 유저 삭제 전에 신고 관계 정리
         ordered.verify(reportRepository).deleteByReported(user);
-        ordered.verify(bookRepository).deleteByUser(user);    // FK: 유저 삭제 전에 책 정리(세션 이후)
+        ordered.verify(storyViewRepository).deleteByViewer(user);      // FK: 내가 남긴 열람 기록
+        ordered.verify(storyViewRepository).deleteByStoryAuthor(user); // FK: 내 스토리의 열람 기록(스토리 전)
+        ordered.verify(storyRepository).deleteByUser(user);            // FK: 스토리는 book 참조라 책보다 앞
+        ordered.verify(bookRepository).deleteByUser(user);    // FK: 유저 삭제 전에 책 정리(세션·스토리 이후)
         ordered.verify(personalityCacheRepository).deleteByUser(user); // FK: 책BTI 캐시도 유저 전에 정리
         ordered.verify(feedbackRepository).deleteByAuthor(user);  // FK: 문의도 유저 전에 정리
         ordered.verify(emailTokenRepository).deleteByUser(user);  // FK: 이메일 토큰도 유저 전에 정리
