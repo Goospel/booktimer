@@ -174,9 +174,10 @@
 
     <!-- 알림 통합 섹션 — 푸시(①②, JS 즉시 토글) + 이메일(③, 폼 제출) 한 카드에.
          푸시 토글은 폼이 아니라 type=button — notification-settings.js가 /api/push/*로 즉시 처리한다. -->
-    <section class="set-card"
+    <section class="set-card set-card-disabled"
              id="notification-settings-container"
              th:attr="data-marketing-push-consent=${marketingPushConsent}">
+    <div class="set-card-disabled-body" inert>
         <h2 class="set-card-title">알림</h2>
 
         <!-- ① 매일 독서 알림 (푸시) -->
@@ -243,6 +244,8 @@
                 <button type="submit" class="set-btn-save">저장</button>
             </div>
         </form>
+    </div>
+        <div class="set-card-overlay" role="note">알람 기능은 아직 개발 중 입니다</div>
     </section>
 
     <!-- 회원 탈퇴 (위험 구역) -->
