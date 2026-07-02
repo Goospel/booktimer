@@ -3377,6 +3377,21 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .settings-page .set-card-title-danger { color: #C0524A; margin-bottom: 8px; }
 .settings-page .set-card-desc { margin: 0 0 18px; font-size: 12.5px; color: var(--muted); line-height: 1.5; word-break: keep-all; }
 .settings-page .set-card-danger .set-card-desc { font-size: 13px; line-height: 1.55; }
+.settings-page .set-card-disabled { position: relative; }
+.settings-page .set-card-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    text-align: center;
+    background: rgba(128, 128, 128, .45);
+    border-radius: inherit;
+    font-weight: 600;
+    color: var(--text);
+}
 
 /* 필드 */
 .settings-page .set-field { margin-bottom: 16px; }
