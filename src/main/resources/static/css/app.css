@@ -2718,36 +2718,40 @@ body.personality-page #personality-app { gap: 18px; }
 .dash-grass-head,
 .dash-garden-head { margin-bottom: 4px; }
 
-/* 오늘의 문장 — 슬롯머신 로테이션(아래→위 롤) */
-/* reel: 클리핑 무대. 높이는 숨은 sizer가 '가장 긴 명언'으로 잡아줘 클립·점프 없음. */
-.dash-quote-reel { position: relative; overflow: hidden; }
-/* sizer: 모든 명언을 grid 한 칸(1/1)에 겹쳐 쌓아 트랙 높이 = 가장 긴 명언. 보이지 않음(공간만 차지). */
-.dash-quote-sizer { display: grid; visibility: hidden; }
-.dash-quote-sizer > .dash-quote-item { grid-area: 1 / 1; }
-.dash-quote-item { display: flex; flex-direction: column; gap: 6px; }
-/* 실제 보이는 한 줄: reel을 채우고 세로 중앙. 들어오고 나가는 두 줄이 겹쳐 롤 되도록 absolute. */
-.dash-quote-live { position: absolute; inset: 0; justify-content: center; }
-.dash-quote-text {
-    margin: 0;
+/* 헤더 한 줄 명언 — 스토리 도입으로 카드(QuoteCard)에서 브랜드 바로 아래 한 줄로 약화(2026-07-02,
+   사용자 피드백으로 브랜드 "옆"→"아래" 배치 변경: 옆은 폭이 좁아 말줄임이 잦았음).
+   슬롯(#brand-quote-slot)은 dashboard.html SSR — header.brand 밖의 형제 요소 — Vue(BrandQuote)가
+   Teleport로 채운다. 공유 .brand 스타일은 건드리지 않는다(타 페이지 회귀 0) — 슬롯은 홈에만 존재. */
+.brand-quote-slot { margin: 0 0 8px; }
+/* 클리핑 무대 — 높이는 콘텐츠 기준 가변(줄 수만큼 자동으로 늘어남). overflow:hidden은
+   슬라이드 트랜지션 중 무대 경계 밖으로 나가는 부분을 자르기 위함(Transition mode="out-in"이라
+   한 시점엔 옛/새 줄 중 하나만 DOM에 존재 — 겹침 없이 사라진 뒤 나타남). */
+.brand-quote {
+    position: relative;
+    overflow: hidden;
     font-family: 'Gowun Batang', serif;
     font-style: italic;
-    font-size: clamp(17px, 2.2vw, 21px);
-    line-height: 1.6;
-    color: var(--text);
-    max-width: 62ch;
+    font-size: 1.05rem;   /* BookTimer h1(1.6rem)보다 살짝 작게 — 조율 포인트 §4-1(사용자 피드백으로 1.2rem→1.05rem 축소) */
+    color: var(--muted);  /* 카드 시절(--text)보다 톤 다운 — 약화 취지 */
 }
-.dash-quote-author { font-size: 13.5px; color: var(--muted); }
-/* 슬롯 롤: 새 줄은 아래(translateY 100%)에서 0으로, 옛 줄은 0에서 위(-100%)로. reel이 클립. */
-.dash-quote-slot-enter-active,
-.dash-quote-slot-leave-active { transition: transform .55s cubic-bezier(.4, 0, .2, 1), opacity .55s ease; }
-.dash-quote-slot-enter-from { transform: translateY(100%); opacity: 0; }
-.dash-quote-slot-leave-to { transform: translateY(-100%); opacity: 0; }
-/* 모션 최소화: 슬라이드만 끔(로테이션=명언 다양성은 유지, 즉시 교체). */
+.brand-quote-line {
+    display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px;
+}
+/* 긴 명언은 자연 줄바꿈(사용자 피드백: 말줄임 대신 개행) — 저자는 flex-shrink:0으로 항상 온전히 보임 */
+.brand-quote-text { min-width: 0; overflow-wrap: break-word; }
+.brand-quote-author { flex-shrink: 0; font-size: .78em; }
+/* 슬롯 롤: 새 줄은 아래에서 위로, 옛 줄은 위로 사라짐(고정 %가 아니라 짧은 고정 거리 —
+   줄 수가 가변이라 자기 높이 기준 %는 일관성이 없음). .brand-quote가 클립. */
+.brand-quote-roll-enter-active,
+.brand-quote-roll-leave-active { transition: transform .3s cubic-bezier(.4, 0, .2, 1), opacity .3s ease; }
+.brand-quote-roll-enter-from { transform: translateY(10px); opacity: 0; }
+.brand-quote-roll-leave-to { transform: translateY(-10px); opacity: 0; }
+/* 모션 최소화: 슬라이드만 끔(로테이션=명언 다양성은 유지, 즉시 교체) */
 @media (prefers-reduced-motion: reduce) {
-    .dash-quote-slot-enter-active,
-    .dash-quote-slot-leave-active { transition: none; }
-    .dash-quote-slot-enter-from,
-    .dash-quote-slot-leave-to { transform: none; }
+    .brand-quote-roll-enter-active,
+    .brand-quote-roll-leave-active { transition: none; }
+    .brand-quote-roll-enter-from,
+    .brand-quote-roll-leave-to { transform: none; }
 }
 
 /* 타이머 히어로 */
