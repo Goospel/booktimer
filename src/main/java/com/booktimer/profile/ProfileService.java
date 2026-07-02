@@ -71,7 +71,7 @@ public class ProfileService {
                     target.getLoginId(),
                     target.getNickname(),
                     target.getProfileCharacterCode(),
-                    bookRepository.findByUserAndVisibilityOrderByCreatedAtDesc(target, BookVisibility.PUBLIC),
+                    bookRepository.findByUserAndVisibilityOrderByTitleAscIdAsc(target, BookVisibility.PUBLIC),
                     statsService.publicTotalSecondsByBook(target),
                     followService.followerCount(target),
                     followService.followingCount(target),
@@ -93,7 +93,7 @@ public class ProfileService {
     public Optional<List<Book>> booksForPersonalityTag(User viewer, String loginId, String tag) {
         return resolveVisibleTarget(viewer, loginId)
                 .map(target -> PersonalityTagAttribution.booksForTag(
-                        bookRepository.findByUserAndVisibilityOrderByCreatedAtDesc(target, BookVisibility.PUBLIC),
+                        bookRepository.findByUserAndVisibilityOrderByTitleAscIdAsc(target, BookVisibility.PUBLIC),
                         tag));
     }
 

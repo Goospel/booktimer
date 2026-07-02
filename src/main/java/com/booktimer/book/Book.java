@@ -14,6 +14,8 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
+import java.time.Instant;
+
 /**
  * 사용자 책장에 등록된 책. User와 N:1.
  *
@@ -71,6 +73,16 @@ public class Book extends BaseTimeEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private BookStatus status;
+
+    /**
+     * 완독 시각 — 책방 "완독 시간 순" 정렬의 데이터 소스. 불변식: FINISHED ⇒ finishedAt 존재
+     * (완독 이탈 시 클리어). 기록·클리어는 {@link #changeStatus(BookStatus, Instant)}가 담당하고,
+     * 시각(Clock)은 서비스가 넘긴다(엔티티는 now를 모름 — 하우스 스타일). 완독 상태로 <b>등록</b>되는
+     * 책도 서비스({@code BookService})가 등록 직후 changeStatus로 스탬프한다. V58 이전의 기존 완독
+     * 책은 updated_at으로 백필된 근사치다.
+     */
+    @Column
+    private Instant finishedAt;
 
     /**
      * 알라딘 "구매"(제휴 링크) 클릭 누적 수. 어떤 책이 구매 의향을 내는지 보는 제휴 수익 데이터.
@@ -224,10 +236,29 @@ public class Book extends BaseTimeEntity {
         return visibility == BookVisibility.PUBLIC;
     }
 
-    /** 상태 변경(읽고싶음 → 읽는중 → 완독 등). */
-    public void changeStatus(BookStatus newStatus) {
+    /**
+     * 상태 변경(읽고싶음 → 읽는중 → 완독 등) + 완독 시각 유지.
+     *
+     * <p>완독 진입 시 {@code now}를 기록하고(재완독이면 새 시각), 완독 이탈 시 지운다.
+     * 완독→완독 재저장은 기존 시각을 보존한다(멱등 — 시각이 밀리지 않음). 단, 완독인데 시각이
+     * 없으면(완독 상태로 방금 등록된 책, 또는 백필 전 레거시) {@code now}로 채운다 — 등록 경로의
+     * 서비스 스탬프가 이 분기를 쓴다.
+     *
+     * @param now 현재 시각(필수) — 서비스가 Clock에서 받아 넘긴다
+     */
+    public void changeStatus(BookStatus newStatus, Instant now) {
         if (newStatus == null) {
             throw new IllegalArgumentException("status must not be null");
+        }
+        if (now == null) {
+            throw new IllegalArgumentException("now must not be null");
+        }
+        if (newStatus == BookStatus.FINISHED) {
+            if (this.status != BookStatus.FINISHED || this.finishedAt == null) {
+                this.finishedAt = now;
+            }
+        } else {
+            this.finishedAt = null;
         }
         this.status = newStatus;
     }
@@ -274,6 +305,10 @@ public class Book extends BaseTimeEntity {
 
     public BookStatus getStatus() {
         return status;
+    }
+
+    public Instant getFinishedAt() {
+        return finishedAt;
     }
 
     public long getClickCount() {

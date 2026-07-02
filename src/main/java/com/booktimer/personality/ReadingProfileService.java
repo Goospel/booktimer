@@ -58,7 +58,7 @@ public class ReadingProfileService {
      */
     public ReadingProfile publicProfileOf(User user) {
         List<Book> publicFinished = bookRepository
-                .findByUserAndVisibilityOrderByCreatedAtDesc(user, BookVisibility.PUBLIC).stream()
+                .findByUserAndVisibilityOrderByTitleAscIdAsc(user, BookVisibility.PUBLIC).stream()
                 .filter(b -> b.getStatus() == BookStatus.FINISHED)
                 .toList();
         Set<Long> publicBookIds = publicFinished.stream()

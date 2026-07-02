@@ -6,6 +6,7 @@ import com.booktimer.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,18 +26,21 @@ public class BookService {
     private final StoryRepository storyRepository;
     private final CoupangLinkBuilder coupangLinkBuilder;
     private final Yes24LinkBuilder yes24LinkBuilder;
+    private final Clock clock;
 
     public BookService(BookRepository bookRepository, BookSearchClient searchClient,
                        ReadingSessionRepository sessionRepository,
                        StoryRepository storyRepository,
                        CoupangLinkBuilder coupangLinkBuilder,
-                       Yes24LinkBuilder yes24LinkBuilder) {
+                       Yes24LinkBuilder yes24LinkBuilder,
+                       Clock clock) {
         this.bookRepository = bookRepository;
         this.searchClient = searchClient;
         this.sessionRepository = sessionRepository;
         this.storyRepository = storyRepository;
         this.coupangLinkBuilder = coupangLinkBuilder;
         this.yes24LinkBuilder = yes24LinkBuilder;
+        this.clock = clock;
     }
 
     @Transactional(readOnly = true)
@@ -114,12 +118,23 @@ public class BookService {
         Book book = Book.register(user, result.title(), result.author(), result.isbn13(),
                 result.coverUrl(), result.publisher(), result.purchaseLink(),
                 result.category(), result.pubDate(), status);
-        return bookRepository.save(book);
+        return bookRepository.save(stampIfFinished(book, status));
     }
 
     public Book addManual(User user, String title, String author, BookStatus status) {
         Book book = Book.register(user, title, author, null, null, null, null, status);
-        return bookRepository.save(book);
+        return bookRepository.save(stampIfFinished(book, status));
+    }
+
+    /**
+     * 완독 상태로 <b>등록</b>되는 책의 완독 시각 스탬프 — register는 now를 모르므로(엔티티는 Clock 미보유)
+     * 등록 직후 changeStatus로 채운다(완독인데 시각 없음 → now 기록, 그 외 no-op). FINISHED ⇒ finishedAt 불변식 유지.
+     */
+    private Book stampIfFinished(Book book, BookStatus status) {
+        if (status == BookStatus.FINISHED) {
+            book.changeStatus(status, clock.instant());
+        }
+        return book;
     }
 
     @Transactional(readOnly = true)
@@ -135,7 +150,7 @@ public class BookService {
 
     public Book changeStatus(User user, Long bookId, BookStatus status) {
         Book book = ownedBook(user, bookId);
-        book.changeStatus(status);
+        book.changeStatus(status, clock.instant());
         return bookRepository.save(book);
     }
 

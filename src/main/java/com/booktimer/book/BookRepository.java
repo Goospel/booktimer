@@ -18,8 +18,8 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     /** 내 책장(최신 등록 먼저). */
     List<Book> findByUserOrderByCreatedAtDesc(User user);
 
-    /** 공개 범위로 거른 책장 — 프로필 페이지에서 PUBLIC 책만 노출(최신 등록 먼저). */
-    List<Book> findByUserAndVisibilityOrderByCreatedAtDesc(User user, BookVisibility visibility);
+    /** 공개 범위로 거른 책장 — 프로필(책방)에서 PUBLIC 책만 노출. 기본 이름순(제목, 동명이면 id로 안정 정렬). */
+    List<Book> findByUserAndVisibilityOrderByTitleAscIdAsc(User user, BookVisibility visibility);
 
     /** 공개 범위별 책 수 — 검색 결과의 "공개 책 N권" 표시에 쓰인다. */
     long countByUserAndVisibility(User user, BookVisibility visibility);

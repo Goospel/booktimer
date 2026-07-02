@@ -310,6 +310,123 @@ class ProfileApiControllerTest {
                 .andExpect(jsonPath("$.books", hasSize(2)));
     }
 
+    // ── 5b. 정렬 — 기본 이름순 + 완독 시각 정렬 ──────────────────────────
+
+    private void publicFinishedAt(User owner, String title, Instant finishedAt) {
+        Book b = Book.register(owner, title, null, null, null, null, null, BookStatus.READING);
+        b.changeStatus(BookStatus.FINISHED, finishedAt);
+        b.makePublic();
+        bookRepository.save(b);
+    }
+
+    @Test
+    @DisplayName("GET /api/profile/books 기본 정렬은 이름순(제목 오름차순) — 상태 무관")
+    void books_defaultSort_titleAsc() throws Exception {
+        register("pa-svw@booktimer.com", "pasvwid", "정렬뷰어");
+        User owner = register("pa-sow@booktimer.com", "pasowid", "정렬주인");
+        publicBook(owner, "다책", BookStatus.READING);
+        publicBook(owner, "가책", BookStatus.FINISHED);
+        publicBook(owner, "나책", BookStatus.WANT_TO_READ);
+
+        mockMvc.perform(get("/api/profile/books")
+                        .param("loginId", "pasowid")
+                        .with(user("pa-svw@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.books[0].title").value("가책"))
+                .andExpect(jsonPath("$.books[1].title").value("나책"))
+                .andExpect(jsonPath("$.books[2].title").value("다책"));
+    }
+
+    @Test
+    @DisplayName("GET /api/profile 초기 전체 목록도 이름순")
+    void profile_booksSortedByTitle() throws Exception {
+        register("pa-svw2@booktimer.com", "pasvw2id", "정렬뷰어2");
+        User owner = register("pa-sow2@booktimer.com", "pasow2id", "정렬주인2");
+        publicBook(owner, "나책2", BookStatus.READING);
+        publicBook(owner, "가책2", BookStatus.FINISHED);
+
+        mockMvc.perform(get("/api/profile")
+                        .param("loginId", "pasow2id")
+                        .with(user("pa-svw2@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.books[0].title").value("가책2"))
+                .andExpect(jsonPath("$.books[1].title").value("나책2"));
+    }
+
+    @Test
+    @DisplayName("GET /api/profile/books?status=FINISHED&sort=finished_desc → 완독 최신순")
+    void books_sortFinishedDesc() throws Exception {
+        register("pa-svw3@booktimer.com", "pasvw3id", "정렬뷰어3");
+        User owner = register("pa-sow3@booktimer.com", "pasow3id", "정렬주인3");
+        publicFinishedAt(owner, "가책3", Instant.parse("2026-06-01T00:00:00Z"));
+        publicFinishedAt(owner, "나책3", Instant.parse("2026-06-03T00:00:00Z"));
+        publicFinishedAt(owner, "다책3", Instant.parse("2026-06-02T00:00:00Z"));
+
+        mockMvc.perform(get("/api/profile/books")
+                        .param("loginId", "pasow3id")
+                        .param("status", "FINISHED")
+                        .param("sort", "finished_desc")
+                        .with(user("pa-svw3@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.books[0].title").value("나책3"))
+                .andExpect(jsonPath("$.books[1].title").value("다책3"))
+                .andExpect(jsonPath("$.books[2].title").value("가책3"));
+    }
+
+    @Test
+    @DisplayName("GET /api/profile/books?status=FINISHED&sort=finished_asc → 완독 오래된순")
+    void books_sortFinishedAsc() throws Exception {
+        register("pa-svw4@booktimer.com", "pasvw4id", "정렬뷰어4");
+        User owner = register("pa-sow4@booktimer.com", "pasow4id", "정렬주인4");
+        publicFinishedAt(owner, "가책4", Instant.parse("2026-06-02T00:00:00Z"));
+        publicFinishedAt(owner, "나책4", Instant.parse("2026-06-01T00:00:00Z"));
+
+        mockMvc.perform(get("/api/profile/books")
+                        .param("loginId", "pasow4id")
+                        .param("status", "FINISHED")
+                        .param("sort", "finished_asc")
+                        .with(user("pa-svw4@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.books[0].title").value("나책4"))
+                .andExpect(jsonPath("$.books[1].title").value("가책4"));
+    }
+
+    @Test
+    @DisplayName("완독 시각 없는 완독 책(백필 전 레거시 형태)은 완독 정렬에서 뒤로 간다 — null-state 경계(N-055)")
+    void books_sortFinished_nullFinishedAtGoesLast() throws Exception {
+        register("pa-svw5@booktimer.com", "pasvw5id", "정렬뷰어5");
+        User owner = register("pa-sow5@booktimer.com", "pasow5id", "정렬주인5");
+        publicBook(owner, "시각없는완독책", BookStatus.FINISHED); // 엔티티 단독 register → finishedAt null
+        publicFinishedAt(owner, "시각있는완독책", Instant.parse("2026-06-01T00:00:00Z"));
+
+        mockMvc.perform(get("/api/profile/books")
+                        .param("loginId", "pasow5id")
+                        .param("status", "FINISHED")
+                        .param("sort", "finished_desc")
+                        .with(user("pa-svw5@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.books[0].title").value("시각있는완독책"))
+                .andExpect(jsonPath("$.books[1].title").value("시각없는완독책"));
+    }
+
+    @Test
+    @DisplayName("GET /api/profile/books?sort=garbage → 이름순(관대 파싱 — status와 동일 정신)")
+    void books_garbageSort_fallsBackToTitle() throws Exception {
+        register("pa-svw6@booktimer.com", "pasvw6id", "정렬뷰어6");
+        User owner = register("pa-sow6@booktimer.com", "pasow6id", "정렬주인6");
+        publicFinishedAt(owner, "나책6", Instant.parse("2026-06-03T00:00:00Z"));
+        publicFinishedAt(owner, "가책6", Instant.parse("2026-06-01T00:00:00Z"));
+
+        mockMvc.perform(get("/api/profile/books")
+                        .param("loginId", "pasow6id")
+                        .param("status", "FINISHED")
+                        .param("sort", "BOGUS_SORT")
+                        .with(user("pa-svw6@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.books[0].title").value("가책6"))
+                .andExpect(jsonPath("$.books[1].title").value("나책6"));
+    }
+
     // ── 6. 차단 → 404 (세 API 모두) ────────────────────────────────────
 
     @Test
