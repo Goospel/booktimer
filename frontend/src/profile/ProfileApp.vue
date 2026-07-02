@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { getCsrfToken } from '../shared/follow';
 import { setBlock } from '../shared/block';
 import ShopIcon from './ShopIcon.vue';
 import ShopHeader from './ShopHeader.vue';
-import ReportModal from './ReportModal.vue';
+import ReportModal from '../shared/ReportModal.vue';
 import BtiPanel from './BtiPanel.vue';
 import ShelfPanel from './ShelfPanel.vue';
 import NavLinks from '../shared/NavLinks.vue';
+import StoryViewer from '../shared/story/StoryViewer.vue';
+import { fetchStoriesOf } from '../shared/story/storyApi';
+import type { AuthorStories, StoryCard } from '../shared/story/storyFeed';
 
 // ── dataset ──────────────────────────────────────────────────────────────
 const appEl = document.getElementById('profile-app');
@@ -40,6 +43,35 @@ const tagPanel   = ref<BookSummary[] | null>(null);
 const tagLabel   = ref('');
 const reportOpen = ref(false);
 
+// ── 독서 스토리 (sns-design §13.7) — 아바타 링 + 뷰어. 비팔로워·차단은 서버가 빈 배열로 수렴(링 미표시).
+const stories = ref<StoryCard[]>([]);
+const storyViewerOpen = ref(false);
+const storiesStale = ref(false); // 뷰어 재생 중 목록 교체 금지 — 닫힐 때 재조회(인덱스 드리프트 방지)
+const storyGroups = computed<AuthorStories[]>(() => {
+    const p = profile.value;
+    if (!p || stories.value.length === 0) return [];
+    return [{
+        loginId: p.loginId, nickname: p.nickname, profileCharacterCode: p.profileCharacterCode,
+        allViewed: stories.value.every(s => s.viewed), stories: stories.value,
+    }];
+});
+
+async function loadStories() {
+    try {
+        stories.value = await fetchStoriesOf(loginId);
+    } catch {
+        stories.value = []; // 네트워크 실패 — 링 미표시로 수렴(unhandled rejection 방지)
+    }
+}
+
+function onStoryViewerClose() {
+    storyViewerOpen.value = false;
+    if (storiesStale.value) {
+        storiesStale.value = false;
+        loadStories();
+    }
+}
+
 // 반응형 분기 — presentational only(데이터/액션 로직 불변). 와이드(≥860px)=2열, 모바일=탭.
 const isWide = ref(false);
 let mq: MediaQueryList | null = null;
@@ -64,6 +96,8 @@ async function load() {
         const data: ProfileData = await res.json();
         profile.value = data;
         books.value   = data.books;
+        loadStories(); // 프로필이 보이는 사람에게만 링 시도 — 결과 빈 배열이면 링 없음
+
         // 기본 탭 결정: personality 있고 필터 신호 없으면 bti, 콜드스타트·필터 신호면 shelf
         if (activeTab.value !== 'shelf') {
             activeTab.value = (data.personality != null && shelfFilter.value == null) ? 'bti' : 'shelf';
@@ -197,8 +231,9 @@ onUnmounted(() => {
                     :personality-tags="profile.personalityTags"
                     :follower-count="profile.followerCount" :following-count="profile.followingCount"
                     :self="profile.self" :following="profile.following"
+                    :has-stories="stories.length > 0" :stories-unviewed="stories.some(s => !s.viewed)"
                     @open-tag="openTag" @toggle-follow="toggleFollow" @do-block="doBlock"
-                    @open-report="reportOpen = true" />
+                    @open-report="reportOpen = true" @open-stories="storyViewerOpen = true" />
 
                 <section class="dash-card shop-tab-card">
                     <div class="shop-tabs">
@@ -226,8 +261,9 @@ onUnmounted(() => {
                         :personality-tags="profile.personalityTags"
                         :follower-count="profile.followerCount" :following-count="profile.followingCount"
                         :self="profile.self" :following="profile.following"
+                        :has-stories="stories.length > 0" :stories-unviewed="stories.some(s => !s.viewed)"
                         @open-tag="openTag" @toggle-follow="toggleFollow" @do-block="doBlock"
-                        @open-report="reportOpen = true" />
+                        @open-report="reportOpen = true" @open-stories="storyViewerOpen = true" />
 
                     <section class="dash-card shop-bti-card">
                         <span class="dash-pill">책BTI</span>
@@ -248,6 +284,11 @@ onUnmounted(() => {
             <!-- 신고 모달 (other only) — 모바일·와이드 공통 단일 인스턴스 -->
             <ReportModal v-if="reportOpen && !profile.self" :login-id="loginId"
                          @close="reportOpen = false" />
+
+            <!-- 스토리 뷰어 — 아바타 링 탭. 삭제(본인) 재조회는 닫힐 때(재생 중 목록 교체 금지) -->
+            <StoryViewer v-if="storyViewerOpen && storyGroups.length" :groups="storyGroups"
+                         :start-group="0" :my-login-id="myLoginId"
+                         @close="onStoryViewerClose" @changed="storiesStale = true" />
 
             <!-- ── 하단 링크 (전 페이지 공유 .link-row 타일) ──
                  차단 목록은 자주 안 쓰는 계정 관리라 책방 상시 노출 대신 대시보드 아바타 메뉴(DashHeader)로 이동. -->

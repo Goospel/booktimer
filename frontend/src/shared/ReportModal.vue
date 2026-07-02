@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import ShopIcon from './ShopIcon.vue'
-import { report as doReport } from '../shared/report'
+import { onMounted, ref } from 'vue'
+import ShopIcon from '../profile/ShopIcon.vue'
+import { report as doReport } from './report'
+import { composeReportDetail } from './story/storyFeed'
 
-const props = defineProps<{ loginId: string }>()
+// 사용자 신고 모달 — 책방(profile)·스토리 뷰어(dashboard/profile) 공용이라 shared/ 소속.
+// detailPrefix: 스토리 신고 시 `[스토리#id] 원문 발췌`를 detail 앞에 자동 첨부(§13.5 — 만료 후에도
+// 운영자가 관리자 신고함에서 id로 원문 대조). 전체 500자 절삭.
+const props = defineProps<{ loginId: string; detailPrefix?: string }>()
 defineEmits<{ (e: 'close'): void }>()
 
 const REPORT_REASONS = [
@@ -17,16 +21,24 @@ const reason = ref('SPAM')
 const detail = ref('')
 const submitted = ref(false)
 const ok = ref(false)
+const overlayEl = ref<HTMLElement | null>(null)
+
+// 포커스를 모달 안으로 — 여는 버튼(모달 밖)에 포커스가 남으면 @keydown.esc가 이벤트를 못 받아
+// Esc가 무반응이 된다(리뷰 파인딩). tabindex=-1 오버레이에 focus를 주면 즉시 동작.
+onMounted(() => overlayEl.value?.focus())
 
 async function submitReport() {
-    const result = await doReport(props.loginId, reason.value, detail.value)
+    const fullDetail = props.detailPrefix
+        ? composeReportDetail(props.detailPrefix, detail.value)
+        : detail.value
+    const result = await doReport(props.loginId, reason.value, fullDetail)
     ok.value = result
     submitted.value = true
 }
 </script>
 
 <template>
-    <div class="shop-report-modal-overlay" @click.self="$emit('close')" @keydown.esc="$emit('close')"
+    <div ref="overlayEl" class="shop-report-modal-overlay" @click.self="$emit('close')" @keydown.esc="$emit('close')"
          tabindex="-1">
         <div class="shop-report-modal-panel" role="dialog" aria-modal="true"
              aria-labelledby="report-modal-title">
@@ -39,6 +51,7 @@ async function submitReport() {
             </div>
 
             <div v-if="!submitted" class="shop-report-modal-body">
+                <p v-if="detailPrefix" class="story-report-context">신고에 첨부됨: {{ detailPrefix }}</p>
                 <label class="shop-report-field">사유
                     <select v-model="reason">
                         <option v-for="r in REPORT_REASONS" :key="r.value" :value="r.value">{{ r.label }}</option>
