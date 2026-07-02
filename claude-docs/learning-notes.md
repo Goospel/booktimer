@@ -145,6 +145,7 @@
 - [N-142. 세로 모바일에서 부감형 게임 무대는 게임감 천장 — 세로 재미는 애착/수집, 반응형 2모드로 자세별 분기](#n-142-세로-모바일에서-부감형-게임-무대는-게임감-천장--세로-재미는-애착수집-반응형-2모드로-자세별-분기)
 - [N-143. 외부 harness 타임아웃은 동기 native 자식 hang을 못 끊는다 — 무한 hang은 내부 타임아웃으로](#n-143-외부-harness-타임아웃은-동기-native-자식-hang을-못-끊는다--무한-hang은-내부-타임아웃으로)
 - [N-144. @RestController는 ControllerAdvice의 @ModelAttribute를 무시 — 전역 뷰 플래그는 JSON API에 직접 주입](#n-144-restcontroller는-controlleradvice의-modelattribute를-무시--전역-뷰-플래그는-json-api에-직접-주입)
+- [N-145. 참여 @Transactional 안에서 DataIntegrityViolationException을 삼켜도 늦다 — rollback-only와 UnexpectedRollbackException](#n-145-참여-transactional-안에서-dataintegrityviolationexception을-삼켜도-늦다--rollback-only와-unexpectedrollbackexception)
 
 ---
 
@@ -6504,3 +6505,33 @@ CoC식 아이소메트릭 마을(가로로 넓은 부감 무대)을 모바일 �
 ### 관련
 
 - Yes24 제휴 링크 PR #625(`AffiliateModelAdvice`·`ShelfResponse`/`ProfileResponse.yes24Enabled` 직접 주입). 자매: `AdsModelAdvice`(같은 패턴).
+
+---
+
+## N-145. 참여 @Transactional 안에서 DataIntegrityViolationException을 삼켜도 늦다 — rollback-only와 UnexpectedRollbackException
+
+> **한 줄 요약**: 유니크 제약으로 멱등을 구현할 때 `@Transactional` 서비스 안에서 `save()`의 `DataIntegrityViolationException`을 try/catch로 삼켜도, 예외가 repository 프록시(참여 트랜잭션)를 통과하는 순간 트랜잭션이 이미 **rollback-only로 마킹**돼 커밋 시점에 `UnexpectedRollbackException`(→500)이 터진다. **멱등 변환은 트랜잭션 경계 밖(컨트롤러)에서** 한다.
+
+### 맥락
+
+독서 스토리 열람 기록(`story_view`, `uk_story_view(story_id, viewer_id)`)의 멱등 처리. 같은 (스토리, 열람자)의 POST가 동시에 오면 둘 다 `existsByStoryAndViewer` 사전검사를 통과하고, 진 쪽 INSERT가 유니크 위반을 낸다. 처음엔 `StoryService.markViewed`(@Transactional) 안에서 `catch (DataIntegrityViolationException ignored)`로 "무시=멱등 성공"을 의도했다 — 다중 에이전트 적대 리뷰가 이 catch가 무효임을 잡아냈다(PR #632).
+
+### 왜 — 예외가 아니라 "마킹"이 문제
+
+1. IDENTITY 전략이라 `save()`가 INSERT를 **즉시 실행**한다(커밋까지 지연되지 않음) — catch 자체는 도달한다.
+2. 하지만 그 예외는 Spring Data repository 프록시의 `@Transactional`(REQUIRED — 바깥 트랜잭션에 **참여**) 경계를 넘으며 던져지고, 참여 트랜잭션에서 RuntimeException이 프록시 경계를 통과하면 인터셉터가 공유 트랜잭션을 **rollback-only로 마킹**한다("Participating transaction failed - marking existing transaction as rollback-only").
+3. 서비스가 예외를 삼키고 정상 반환해도, 최외곽 트랜잭션 경계(서비스 메서드)가 커밋을 시도하는 순간 rollback-only가 발각돼 `UnexpectedRollbackException` → 500. **데이터는 멱등(승자 행 커밋)인데 응답만 500**이 된다.
+
+### 함정 위의 함정 — mock 단위테스트는 가짜 GREEN
+
+`when(repo.save(...)).thenThrow(DataIntegrityViolationException)`로 짠 단위테스트는 **실제 트랜잭션이 없어 rollback-only 마킹이 재현되지 않는다** — "삼켰으니 예외 없음"으로 통과해 버린다(가짜 green). 트랜잭션 시맨틱이 걸린 동작은 mock으로 검증되지 않는다(T-023·T-029의 "mock이 FK를 못 잡는다"와 같은 계열).
+
+### 해법
+
+- **catch를 트랜잭션 경계 밖으로**: 서비스는 예외를 전파시키고(트랜잭션은 깨끗하게 롤백), **컨트롤러**(비-트랜잭션)가 `DataIntegrityViolationException`을 잡아 멱등 성공(200)으로 변환한다. 이 프로젝트: `StoryService.markViewed`는 전파 + javadoc에 근거 명시, `StoryApiController.markViewed`가 catch → 200 (`StoryApiControllerRaceTest`가 고정).
+- 대안: ① INSERT만 `REQUIRES_NEW`로 분리(자기호출 프록시 함정 — 별도 빈/`TransactionTemplate` 필요) ② DB 방언 insert-ignore(네이티브 쿼리 — H2/MySQL 문법 갈림).
+- 사전 `exists` 검사는 유지 — 평상시 중복을 싸게 걸러 예외 경로 빈도를 낮춘다(유니크 제약은 최후 방어선).
+
+### 관련
+
+- 독서 스토리 v1 백엔드 PR(#632 리뷰 반영 커밋). [troubleshooting T-023·T-029](troubleshooting.md)(mock이 못 잡는 DB 시맨틱 계열), CLAUDE.md 「🧪 TDD」의 실 H2 통합 테스트 정신.
