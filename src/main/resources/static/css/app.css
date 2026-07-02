@@ -3433,9 +3433,9 @@ body.dashboard-page #dashboard-app { gap: 20px; }
     color: #fff; transition: background .15s;
 }
 .settings-page .set-check-box svg { opacity: 0; }
-.settings-page .set-check input:checked + .set-check-box { background: var(--accent); }
-.settings-page .set-check input:checked + .set-check-box svg { opacity: 1; }
-.settings-page .set-check input:focus-visible + .set-check-box { outline: 2px solid var(--accent-hover); outline-offset: 2px; }
+.settings-page .set-check input:checked ~ .set-check-box { background: var(--accent); }
+.settings-page .set-check input:checked ~ .set-check-box svg { opacity: 1; }
+.settings-page .set-check input:focus-visible ~ .set-check-box { outline: 2px solid var(--accent-hover); outline-offset: 2px; }
 .settings-page .set-check-body { flex: 1; }
 .settings-page .set-check-title { display: block; font-size: 14px; font-weight: 700; color: var(--text); }
 .settings-page .set-check-title-row { display: flex; align-items: center; gap: 7px; }
