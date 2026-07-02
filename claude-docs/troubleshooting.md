@@ -145,6 +145,7 @@
 - [T-122. 타임아웃/hang 수정의 RED 테스트는 하니스를 outer `timeout`으로 감싸지 않으면 테스트가 세션째 hang한다](#t-122-타임아웃hang-수정의-red-테스트는-하니스를-outer-timeout으로-감싸지-않으면-테스트가-세션째-hang한다)
 - [T-123. 커스텀 `display`(flex/grid)를 준 요소를 JS `[hidden]`으로 토글해도 author가 UA `[hidden]{display:none}`을 이겨 안 숨겨진다 (T-035 재발 3회차)](#t-123-커스텀-displayflexgrid를-준-요소를-js-hidden으로-토글해도-author가-ua-hiddendisplaynone을-이겨-안-숨겨진다-t-035-재발-3회차)
 - [T-124. `npm install`(무인자)이 vite dist를 불완전하게 남겨 빌드가 `ERR_MODULE_NOT_FOUND`(cli.js 없음) — `npm ci`로 클린 복구](#t-124-npm-install무인자이-vite-dist를-불완전하게-남겨-빌드가-err_module_not_foundclijs-없음--npm-ci로-클린-복구)
+- [T-125. Thymeleaf `th:field` 체크박스가 삽입하는 hidden sibling이 CSS 인접 형제 선택자(`+`)를 깨뜨린다](#t-125-thymeleaf-thfield-체크박스가-삽입하는-hidden-sibling이-css-인접-형제-선택자를-깨뜨린다)
 
 ---
 
@@ -2306,6 +2307,22 @@ git worktree remove ../BookTimer-<task>
 
 ---
 
+## T-125. Thymeleaf `th:field` 체크박스가 삽입하는 hidden sibling이 CSS 인접 형제 선택자(`+`)를 깨뜨린다
+
+**증상**: `/settings` "밀린 독서 시간을 타이머에 합쳐 표시" 커스텀 체크박스를 클릭해도 육안으로 아무 변화가 없다(실사용 피드백). `input.checked` 값 자체는 정상 토글되고 폼 제출·저장도 멀쩡하지만, 배경색·체크 아이콘(`.set-check-box`)이 영원히 초기 상태로 고정.
+
+**원인**: Thymeleaf `th:field="*{debtCarryover}"`는 체크박스가 해제됐을 때도 폼이 그 필드를 인식하도록 실제 체크박스 **바로 뒤에** `<input type="hidden" name="_debtCarryover" value="on">`을 자동 삽입한다. 그런데 커스텀 체크박스 CSS가 인접 형제 선택자를 쓰고 있었다:
+```css
+.set-check input:checked + .set-check-box { background: var(--accent); }
+```
+`+`는 "바로 다음 형제"만 매칭하는데, 이제 `input` 바로 다음은 그 hidden input이라 `.set-check-box`(그 다음 형제)까지는 매칭이 안 닿는다 — 규칙이 조용히 죽어 있었다. 같은 페이지의 "복귀 안내 메일 받기" 체크박스는 `th:field`가 아니라 `th:checked` 수동 바인딩이라 hidden sibling이 없어 원래부터 정상 동작했다 — 그래서 "저 체크박스는 되는데 이건 안 된다"는 대조가 원인 추적의 단서가 될 수 있다.
+
+**해결**: `app.css`에서 `.set-check-box`를 타깃하는 `input:checked`·`input:focus-visible` 규칙을 인접 형제(`+`) 대신 **일반 형제 선택자(`~`)**로 바꾼다 — 중간에 hidden input이 몇 개 끼어도 "그 이후에 나오는 형제"는 다 매칭되므로 안전하다. hidden sibling이 없는 체크박스에도 `~`는 `+`와 동일하게 동작해 회귀가 없다.
+
+**교훈**: Spring/Thymeleaf `th:field`를 커스텀 스타일 체크박스·라디오에 쓸 때는 **DOM에 보이지 않는 hidden sibling이 끼어든다는 전제**로 CSS를 짠다 — `input:checked + .box` 같은 인접 형제 선택자는 th:field 체크박스에서 구조적으로 깨진다. 처음부터 `~`(일반 형제)를 기본으로 쓰거나, 값 바인딩은 되는데 시각만 안 바뀌는 체크박스를 보면 이 패턴부터 의심한다. `/settings` 재스킨(PR #623) 때부터 있던 결함으로 추정, 실사용 피드백으로 발견(PR #629). 1회차 신규.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2435,3 +2452,4 @@ git worktree remove ../BookTimer-<task>
 | 2026-07-01 | T-123 (커스텀 `display:flex`를 준 요소를 JS `el.hidden`으로 토글해도 author가 UA `[hidden]{display:none}`을 origin 우선으로 이겨 안 숨겨짐 — `/settings` 재스킨의 iOS/복귀 힌트가 화면에 샘 / 해결=`.settings-page [hidden]{display:none!important}` 재숨김 리셋 / 감별=실 브라우저 `getComputedStyle(el).display!=='none'`, MockMvc·헤드리스 못 잡음 / **T-035 재발 3회차**(#189→T-035→이 건), 전역 `[hidden]` 리셋 하드픽스가 다음 승격, N-083) |
 | 2026-07-01 | T-122 (타임아웃/hang 수정의 RED 테스트는 하니스를 outer `timeout`으로 안 감싸면 테스트가 세션째 hang — 가짜 느린 자식을 **exit 0**으로 두어 RED=오래 기다린 뒤 통과(=허용, 잘못)·GREEN=타임아웃 차단(exit 2)로 종료코드로 가름. A1 게이트 타임아웃 테스트 #620·N-143, 1회차 신규) |
 | 2026-07-02 | T-124 (`npm install`(무인자)이 vite dist(`cli.js`)를 불완전하게 남겨 빌드 `ERR_MODULE_NOT_FOUND` → `npm ci`로 클린 복구, 워크트리 정션 공유 트리, Yes24 PR #625, 1회차 신규) |
+| 2026-07-02 | T-125 (Thymeleaf `th:field` 체크박스가 자동 삽입하는 hidden sibling(`_필드명`)이 CSS 인접 형제 선택자 `input:checked + .box`의 사슬을 끊어 값은 저장되는데 커스텀 체크 시각만 영원히 안 바뀜 → `+`를 `~`(일반 형제)로 교체. `/settings` debtCarryover 체크박스, 실사용 피드백, PR #629, 1회차 신규) |
