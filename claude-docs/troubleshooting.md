@@ -26,6 +26,7 @@
 | CSRF 숨김필드 lazy 세션 ↔ 응답 버퍼 커밋 타이밍(큰 SSR·익명 폼 500) | T-033 · T-049 | 4+ | ✅ prose CLAUDE.md 「🔒 CSRF 폼 세션 선확정」(N-077) + **공유 헬퍼 `CsrfTokenUtil.precommit`로 9곳(기존3+신규6) 통일**. 1회 백필 소급 등재(2026-06-30) → 누락 6곳(Settings·AdminFeedback·Feedback·EmailVerification·Unsubscribe·Onboarding) **수정 완료**. 훅 미채택=컨트롤러↔템플릿 역매핑·POST 재렌더 FP 과다 |
 | FK 자식 미정리로 부모 삭제 실패(mock 단위테스트가 못 잡음) | T-023 · T-029 | 2 | ✅ prose CLAUDE.md TDD절(부모 삭제 경로 H2 통합테스트 필수). **1회 백필로 소급 등재(2026-06-30)**. 현행 경로(`AccountService.purge`·`BookService.delete`)는 정리·통합테스트 완료 |
 | author `display`(flex/grid)가 UA `[hidden]`/`<details>` `display:none`을 origin 우선으로 덮어 숨김 실패 | (#189) · T-035 · T-123 | 3 | ✅ **하드픽스(전역 `[hidden]{display:none!important}` 리셋을 `app.css` 베이스에 추가)** — `[hidden]` 속성 변형을 앱 전역에서 제거(T-123의 페이지 스코프 `.settings-page [hidden]` 리셋은 이걸로 승격돼 삭제). ⚠️ 닫힌 `<details>` 자식 변형(T-035)은 `[hidden]` 속성이 아니라 UA `details:not([open])` 메커니즘이라 이 리셋 밖 — 개별 `:not([open])` 재숨김 유지 필요 |
+| docker exec mysql 한글 시드 INSERT 깨짐(CP949/이중 인코딩/mojibake) | T-085 · T-119 | 3 | ✅ 절차 확립(T-085 보강 — UTF-8 파일 + `docker exec -i … < file.sql` + `--default-character-set=utf8mb4`, `HEX()` 검증; T-119의 `UNHEX()` 주입은 대안). 검증 데이터 셋업 한정·저빈도라 CLAUDE.md/훅 승격은 보류 — 4회차 나오면 재검토 |
 
 ## 📑 목차
 
@@ -1776,6 +1777,8 @@ bash .claude/scripts/pr-merge.sh <PR번호>
 
 **해결 / 예방**: 한글이 포함된 데이터는 **Spring Boot API(JSON POST)를 경유**해 삽입 — HTTP 요청은 UTF-8 Content-Type으로 전달되고 서버가 JPA로 올바르게 저장. 크롬 확장 `javascript_tool`로 `fetch('/api/...', {method:'POST', body: JSON.stringify({author:'한강'})})` 형태. 영문 컬럼(code·status 등)만 포함된 INSERT는 docker exec mysql로 직접 가능. 로컬 DB 시드 시 한글 포함 여부 확인 후 경로 선택.
 
+**보강(2026-07-02, 3회차 재발)**: git-bash에서 `docker exec ... mysql -e "INSERT ...한글..."` 인라인도 **이중 인코딩**(UTF-8 바이트가 latin1로 재해석 — `SELECT HEX()`가 `C3AC C2B2…` 패턴)으로 깨진다. API 경유가 곤란한 직접 시드(브라우저 게이트용 픽스처 등)는 **UTF-8 파일 + stdin 파이프**가 동작 확인된 대안: SQL을 도구(Write)로 UTF-8 파일에 쓰고 `docker exec -i <컨테이너> mysql --default-character-set=utf8mb4 … < file.sql`. 검증은 `SELECT HEX(LEFT(col,3))` — 한글 1자가 3바이트(`EAxxxx`~`EDxxxx` 대역)면 정상. 이 군의 3회차(T-085 → T-119(UNHEX 주입 대안) → 이번) — 재발·승격 트래커 등재.
+
 ---
 
 ## T-086. Docker 컨테이너 수십 개 누적의 범인은 `bootRun`(테스트 아님) — `working_dir` 라벨로 BookTimer 것만 정리
@@ -2323,6 +2326,35 @@ git worktree remove ../BookTimer-<task>
 
 ---
 
+## T-126. 검증 명령을 `| tail`/`| grep`으로 파이프하면 exit code가 가려져 실패가 GREEN으로 보임
+
+**증상**: 백그라운드로 돌린 `./gradlew test 2>&1 | tail -4`가 exit 0으로 끝나 "전체 스위트 GREEN"으로 보고했는데, 실제로는 BUILD FAILED(테스트 3건 실패)였다 — 다중 에이전트 리뷰가 같은 스위트를 직접 돌려보고서야 발각(독서 스토리 PR #632 작업 중).
+
+**원인**: 셸 파이프라인의 exit code는 **마지막 명령**(tail/grep) 것이다. gradle이 1로 죽어도 tail이 0이면 파이프라인 전체가 0. `| grep`은 반대로 "매치 없음"만으로 1을 만들기도 한다(성공을 실패로 보는 오탐). 출력을 요약하려고 붙인 파이프가 검증 명령의 성패 신호를 삼킨다.
+
+**해결 / 예방**:
+- 검증(테스트·빌드) 명령은 **exit code를 보존**해 판정: `set -o pipefail && ./gradlew test 2>&1 | tail -5; echo "EXIT=${PIPESTATUS[0]}"` — 또는 파이프 없이 돌리고 로그 파일을 따로 tail.
+- 성패를 출력 문자열(BUILD SUCCESSFUL 검색)로 판정하지 않는다 — 출력은 잘리거나 버퍼링될 수 있다. 판정은 exit code, 요약 파이프는 사람 눈용으로 분리.
+- 백그라운드 실행 완료 통지의 exit code는 "파이프 마지막 명령의 exit"일 수 있음을 의심한다 — 이번 건은 통지의 "exit 0"을 그대로 믿은 것이 뿌리.
+
+**교훈**: 테스트를 돌리는 것과 결과를 **믿을 수 있게 읽는 것**은 별개다. 1회차 신규.
+
+---
+
+## T-127. 크롬 확장 네트워크 로그의 간헐 503 — 서비스워커 pass-through 내부 fallback 아티팩트(앱 결함 아님)
+
+**증상**: 실 브라우저 게이트 중 크롬 확장의 네트워크 로그(`read_network_requests`)에 일부 POST(스토리 열람 `/api/stories/{id}/view`·DELETE)가 **503**으로 찍힘. 그런데 ① 서버 로그 에러 0 ② DB엔 해당 행이 정상 커밋 ③ 같은 요청을 페이지에서 fetch로 직접 쏘면 200 ④ `res.ok` 분기 클라 코드도 성공 경로를 탐(삭제 후 스트립 갱신 동작).
+
+**원인**: PWA 서비스워커의 fetch 핸들러가 `/api/`를 `return`(no respondWith)으로 **브라우저 기본 처리에 넘기는데**, Chrome은 "SW를 거쳤으나 네트워크로 fallback"한 요청에 대해 확장(webRequest)/DevTools 계층에 **합성 503 엔트리**를 남길 수 있다 — 실제 네트워크 응답(200)과 별개의 표시 아티팩트. SW 콜드 부팅 타이밍 등에서 간헐적으로만 보인다.
+
+**감별(3중 교차 검증)**: ① 서버 로그(예외 스택 유무) ② DB 상태(행 커밋 여부) ③ **페이지 레벨 실측** — `window.fetch` 몽키패치로 status 캡처(리로드 후 패치 → 트리거 순서 주의) 또는 코드의 `res.ok` 분기 동작 관찰. 셋 다 성공인데 확장 로그만 503이면 아티팩트.
+
+**해결 / 예방**: 앱 수정 불필요. 실 브라우저 게이트에서 **확장 네트워크 로그의 상태코드를 단독 증거로 쓰지 않는다** — 특히 SW 스코프 페이지의 fire-and-forget POST(응답 본문을 안 읽는 요청)에 잘 낀다. 판정은 페이지 레벨 실측 + 서버 로그 + DB로.
+
+**교훈**: 관측 도구도 계층이다 — 확장의 webRequest 관측엔 SW 계층의 내부 이벤트가 섞일 수 있다. "어느 계층의 관측인가"를 먼저 물어야 가짜 신호에 시간을 안 태운다(이번 진단 ~30분). 1회차 신규.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2453,3 +2485,6 @@ git worktree remove ../BookTimer-<task>
 | 2026-07-01 | T-122 (타임아웃/hang 수정의 RED 테스트는 하니스를 outer `timeout`으로 안 감싸면 테스트가 세션째 hang — 가짜 느린 자식을 **exit 0**으로 두어 RED=오래 기다린 뒤 통과(=허용, 잘못)·GREEN=타임아웃 차단(exit 2)로 종료코드로 가름. A1 게이트 타임아웃 테스트 #620·N-143, 1회차 신규) |
 | 2026-07-02 | T-124 (`npm install`(무인자)이 vite dist(`cli.js`)를 불완전하게 남겨 빌드 `ERR_MODULE_NOT_FOUND` → `npm ci`로 클린 복구, 워크트리 정션 공유 트리, Yes24 PR #625, 1회차 신규) |
 | 2026-07-02 | T-125 (Thymeleaf `th:field` 체크박스가 자동 삽입하는 hidden sibling(`_필드명`)이 CSS 인접 형제 선택자 `input:checked + .box`의 사슬을 끊어 값은 저장되는데 커스텀 체크 시각만 영원히 안 바뀜 → `+`를 `~`(일반 형제)로 교체. `/settings` debtCarryover 체크박스, 실사용 피드백, PR #629, 1회차 신규) |
+| 2026-07-02 | T-126 (검증 명령 파이프가 exit code 가림 — pipefail·PIPESTATUS 판정, 가짜 GREEN) |
+| 2026-07-02 | T-127 (크롬 확장 네트워크 로그 간헐 503 = SW pass-through 표시 아티팩트 — 페이지 실측·서버 로그·DB 3중 교차 검증) |
+| 2026-07-02 | T-085 보강 (docker exec mysql 한글 군 3회차: T-085→T-119→이번 — UTF-8 파일 stdin 파이프 + --default-character-set + HEX 검증, 트래커 등재) |
