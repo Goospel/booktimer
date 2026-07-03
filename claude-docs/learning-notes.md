@@ -146,6 +146,7 @@
 - [N-143. 외부 harness 타임아웃은 동기 native 자식 hang을 못 끊는다 — 무한 hang은 내부 타임아웃으로](#n-143-외부-harness-타임아웃은-동기-native-자식-hang을-못-끊는다--무한-hang은-내부-타임아웃으로)
 - [N-144. @RestController는 ControllerAdvice의 @ModelAttribute를 무시 — 전역 뷰 플래그는 JSON API에 직접 주입](#n-144-restcontroller는-controlleradvice의-modelattribute를-무시--전역-뷰-플래그는-json-api에-직접-주입)
 - [N-145. 참여 @Transactional 안에서 DataIntegrityViolationException을 삼켜도 늦다 — rollback-only와 UnexpectedRollbackException](#n-145-참여-transactional-안에서-dataintegrityviolationexception을-삼켜도-늦다--rollback-only와-unexpectedrollbackexception)
+- [N-146. 어필리에이트 클릭 추적은 "파라미터"가 아니라 "플랫폼이 생성한 링크"가 전제 — 쿠팡 파트너스 lptag의 함정](#n-146-어필리에이트-클릭-추적은-파라미터가-아니라-플랫폼이-생성한-링크가-전제--쿠팡-파트너스-lptag의-함정)
 
 ---
 
@@ -6535,3 +6536,29 @@ CoC식 아이소메트릭 마을(가로로 넓은 부감 무대)을 모바일 �
 ### 관련
 
 - 독서 스토리 v1 백엔드 PR(#632 리뷰 반영 커밋). [troubleshooting T-023·T-029](troubleshooting.md)(mock이 못 잡는 DB 시맨틱 계열), CLAUDE.md 「🧪 TDD」의 실 H2 통합 테스트 정신.
+
+---
+
+## N-146. 어필리에이트 클릭 추적은 "파라미터"가 아니라 "플랫폼이 생성한 링크"가 전제 — 쿠팡 파트너스 lptag의 함정
+
+> **한 줄 요약**: 어필리에이트(쿠팡 파트너스 등) 클릭 추적은 목적지 URL에 추적 파라미터(`lptag=AF…`)를 **손으로 붙인다고 켜지지 않는다**. 플랫폼의 링크 생성기/딥링크 API로 **"생성"**해 그 리다이렉트 서버(`link.coupang.com`)를 **경유**해야 클릭 레코드·추적 쿠키가 심긴다. 파라미터는 그 생성의 *결과*지 *원인*이 아니다.
+
+### 맥락
+
+BookTimer가 쿠팡 "구매" 버튼을 `www.coupang.com/np/search?q={ISBN}&lptag={추적코드}`(`CoupangLinkBuilder`의 문자열 치환)로 만들어 302 리다이렉트했는데, 파트너스 리포트에 **클릭이 0**. 실배포 운영자가 본인이 앱을 통해 2번 구매까지 했는데 클릭조차 안 잡혀 조사(2026-07-03, 다중 에이전트 워크플로로 교차검증). → 트랩·해법은 [troubleshooting T-129](troubleshooting.md).
+
+### 왜 — 추적은 "생성된 링크의 리다이렉트 경유"에서 성립한다
+
+- 쿠팡 공식 이용 가이드 원문: *"쿠팡 페이지의 URL을 그대로 복사하거나, 쿠팡 내 공유 기능을 사용하면 수익금에 반영되지 않습니다."* 정식 링크는 파트너스 센터 "간편 링크 만들기"/딥링크 API로 **[링크 생성]**을 거쳐야 하고, 그때 `link.coupang.com`·`coupa.ng` **추적 리다이렉트 서버**를 경유하며 고유 `pageKey`와 추적 쿠키를 심는다.
+- 커뮤니티 판별 기준: **수익(추적)링크 = `lptag=` + `isshortened=Y` 둘 다** 있어야 한다. `isshortened=Y`는 공식 생성을 통과한 흔적이라, 손으로 `lptag`만 붙인 검색 URL엔 없다 → 쿠팡이 "추적 클릭"으로 인식할 근거가 없다.
+- 그래서 파라미터 값이 정확해도(추적코드 오타가 없어도) **생성 관문을 안 거치면 0**이다.
+
+### 교훈 / 일반화
+
+- **어필리에이트 링크는 합성(concatenate)하지 말고 발급(generate)받아라** — 제휴사의 링크 생성 API/도구를 통과시켜라. "추적 코드를 URL에 끼우면 된다"는 가정은 무성 실패(에러 없이 클릭 0)를 만든다.
+- **제휴사마다 "정식 링크 만드는 관문"이 다르다** — 같은 앱의 Yes24 제휴는 linkprice 딥링크 래퍼(`lpfront.aspx`)를 **실제로 통과**해 추적됨([troubleshooting T-128](troubleshooting.md)). 쿠팡만 자작이라 안 됐다. 새 제휴를 붙일 땐 그 사의 생성 경로를 먼저 확인한다.
+- **별개 사실 — 본인 트래픽 제외**: 파트너 본인의 자가 구매·자가 클릭은 실적에서 빠진다(부정행위 위험). **자기 링크로 자기가 사서 검증하면 안 된다** — 링크가 완벽해도 0으로 보여 오진을 부른다.
+
+### 관련
+
+- [troubleshooting T-129](troubleshooting.md)(이 앱의 결함·딥링크 API 해법), [T-128](troubleshooting.md)(Yes24 딥링크 래퍼 대조). 계획 md `claude-docs/plans/2026-07-03-coupang-deeplink-api.md`. 자동 메모리 `coupang-affiliate-tracking-broken`.

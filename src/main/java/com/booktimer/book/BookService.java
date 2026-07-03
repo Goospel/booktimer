@@ -25,6 +25,7 @@ public class BookService {
     private final ReadingSessionRepository sessionRepository;
     private final StoryRepository storyRepository;
     private final CoupangLinkBuilder coupangLinkBuilder;
+    private final CoupangDeeplinkClient coupangDeeplinkClient;
     private final Yes24LinkBuilder yes24LinkBuilder;
     private final Clock clock;
 
@@ -32,6 +33,7 @@ public class BookService {
                        ReadingSessionRepository sessionRepository,
                        StoryRepository storyRepository,
                        CoupangLinkBuilder coupangLinkBuilder,
+                       CoupangDeeplinkClient coupangDeeplinkClient,
                        Yes24LinkBuilder yes24LinkBuilder,
                        Clock clock) {
         this.bookRepository = bookRepository;
@@ -39,6 +41,7 @@ public class BookService {
         this.sessionRepository = sessionRepository;
         this.storyRepository = storyRepository;
         this.coupangLinkBuilder = coupangLinkBuilder;
+        this.coupangDeeplinkClient = coupangDeeplinkClient;
         this.yes24LinkBuilder = yes24LinkBuilder;
         this.clock = clock;
     }
@@ -48,7 +51,7 @@ public class BookService {
         return searchClient.isEnabled();
     }
 
-    /** 쿠팡 파트너스 링크 노출 여부(추적코드 설정 시 true) — {@link #searchEnabled()}와 대칭. */
+    /** 쿠팡 파트너스 링크 노출 여부(파트너 등록 시 true, 딥링크 API 키 유무와 무관) — {@link #searchEnabled()}와 대칭. */
     @Transactional(readOnly = true)
     public boolean coupangEnabled() {
         return coupangLinkBuilder.isEnabled();
@@ -234,20 +237,24 @@ public class BookService {
      * 내 책의 쿠팡 "구매" 클릭을 집계하고 이동할 쿠팡 검색 링크를 돌려준다 — 알라딘 {@link #recordPurchaseClick}과 대칭.
      *
      * <p>소유권을 강제한다(IDOR 방지). 링크는 DB에 없고 {@link CoupangLinkBuilder}가 런타임 생성한다 —
-     * 쿠팡은 제목이 항상 있어 링크가 늘 만들어지므로, null 사유는 "비활성(추적코드 미설정)"뿐이다(그땐 무집계).
+     * 쿠팡은 제목이 항상 있어 링크가 늘 만들어지므로, null 사유는 "비활성(딥링크 API 키 미설정)"뿐이다(그땐 무집계).
      *
-     * @return 이동할 쿠팡 검색 링크. 비활성이면 null.
+     * <p>raw 검색 URL은 그 자체로 추적되지 않으므로(N-146/T-129) {@link CoupangDeeplinkClient}로 정식
+     * 추적링크(shortenUrl)로 변환해 그걸로 리다이렉트한다. 변환 실패(키 미설정·API 오류·429 등)면 raw URL로
+     * 폴백한다 — 버튼 작동은 유지하되 그 클릭만 추적 안 됨(graceful degrade, 집계는 그대로 한다).
+     *
+     * @return 이동할 쿠팡 링크(가능하면 추적링크, 아니면 raw 검색 URL). 비활성이면 null.
      * @throws IllegalArgumentException 내 책이 아니거나 존재하지 않는 경우
      */
     public String recordCoupangClick(User user, Long bookId) {
         Book book = ownedBook(user, bookId);
-        String link = coupangLinkBuilder.buildSearchLink(book);
-        if (link == null) {
-            return null; // 비활성(추적코드 미설정) — 집계하지 않음
+        String rawLink = coupangLinkBuilder.buildSearchLink(book);
+        if (rawLink == null) {
+            return null; // 비활성(딥링크 API 키 미설정) — 집계하지 않음
         }
         book.recordCoupangClick();
         bookRepository.save(book);
-        return link;
+        return coupangDeeplinkClient.toTrackingLink(rawLink).orElse(rawLink);
     }
 
     /**
@@ -255,20 +262,20 @@ public class BookService {
      * {@link #recordPublicPurchaseClick}(알라딘)과 같은 정신: 소유권 대신 공개 여부를 게이트로 두고,
      * 클릭은 책 주인 행에 집계한다(2026-06-06 결정의 근거는 알라딘 메서드 JavaDoc 참조).
      *
-     * @return 이동할 쿠팡 검색 링크. 비공개·존재하지 않음·비활성이면 null.
+     * @return 이동할 쿠팡 링크(가능하면 추적링크, 아니면 raw 검색 URL). 비공개·존재하지 않음·비활성이면 null.
      */
     public String recordPublicCoupangClick(Long bookId) {
         Book book = bookRepository.findById(bookId).orElse(null);
         if (book == null || !book.isPublic()) {
             return null; // 없거나 비공개 — 존재 누설 없이 거부
         }
-        String link = coupangLinkBuilder.buildSearchLink(book);
-        if (link == null) {
-            return null; // 비활성(추적코드 미설정)
+        String rawLink = coupangLinkBuilder.buildSearchLink(book);
+        if (rawLink == null) {
+            return null; // 비활성(딥링크 API 키 미설정)
         }
         book.recordCoupangClick();
         bookRepository.save(book);
-        return link;
+        return coupangDeeplinkClient.toTrackingLink(rawLink).orElse(rawLink);
     }
 
     /**

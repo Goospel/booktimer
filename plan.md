@@ -444,6 +444,29 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
         **남은 점등**: SSM에 `COUPANG_TRACKING_CODE=AF…`·`COUPANG_SEARCH_URL_TEMPLATE=…?q={query}&channel=user&lptag={trackingCode}`
         주입 + 재배포(사용자 작업). ⚠️ 잔여: ISBN 검색 품질 재평가·API 딥링크 키는 판매 15만원 실적 게이트 뒤(초기 검색 링크 방식)·
         `lptag` 직접 부착의 약관 허용 범위 확인.
+      - **추적 0 발견 → 딥링크 API 연동(dark-launch) ✅ 2026-07-03**: 위 `lptag` 직접 부착 방식이 파트너스 리포트에
+        **클릭 0**으로 잡혀 조사 — `lptag`만 붙인 자작 검색 URL은 파트너스가 "생성"한 정식 링크가 아니라 구조적으로
+        미집계(수익 링크 판별 조건 `isshortened=Y` 부재, [N-146](claude-docs/learning-notes.md)/[T-129](claude-docs/troubleshooting.md)).
+        `CoupangDeeplinkClient`(HMAC-SHA256 서명 딥링크 API 호출)로 정식 추적링크(`shortenUrl`)를 생성해 그걸로 리다이렉트하도록
+        교체. **API 키는 여전히 파트너스 '최종 승인'(누적 판매 15만원) 게이트 뒤라 미발급** → 활성 게이트를 기존 `lptag`
+        `tracking-code`에서 `CoupangDeeplinkProperties.isEnabled()`(access-key·secret-key 존재)로 재정의 — 키 미설정 시
+        API 호출 자체를 시도하지 않고 raw 검색 URL로 즉시 폴백(버튼 작동 유지, 그 클릭만 추적 안 됨). 키 확보 후
+        SSM(`BOOKTIMER_COUPANG_ACCESS_KEY`/`SECRET_KEY`/`SUB_ID`) 주입만으로 점등(코드 변경 0). 캐시는 인메모리
+        (옵션 A — `computeIfAbsent`로 동시요청도 API 1회만, 재기동 시 초기화되나 단일/소수 인스턴스라 무해). TDD:
+        CoupangDeeplinkSignerTest(openssl 독립 HMAC 벡터)·CoupangDeeplinkPropertiesTest(키+subId 게이트)·
+        CoupangDeeplinkClientTest(MockRestServiceServer)·CoupangBookServiceTest 확장(딥링크 성공/실패 폴백 2케이스 추가)·
+        기존 CoupangBuyControllerTest 4케이스 회귀 유지.
+        - **⚠️ 다중 에이전트 코드리뷰로 발견 → 버튼 노출을 딥링크 키에서 분리 (같은 날 후속 수정)**: 위 구현이
+          `CoupangLinkBuilder.isEnabled()`(버튼·고지문구 노출)를 딥링크 API 키 게이트에 그대로 묶어, 파트너 가입은
+          이미 완료(2026-06-12, #319)돼 운영에 떠 있던 버튼이 **키 미발급 상태 그대로 배포하면 사라지는 회귀**가
+          됨(dark-launch=무영향이어야 하는데 실제론 후퇴). 8종 파인더+7건 검증 코드리뷰(전부 CONFIRMED)로 발견,
+          사용자 확인 후 즉시 분리: `CoupangLinkBuilder.isEnabled()`는 새 독립 플래그
+          `booktimer.coupang.partner-enabled`(기본 false, `task-definition.json`에서 운영만 명시적 `true`)로 되돌리고,
+          딥링크 API 키 게이트는 `CoupangDeeplinkClient`에서만 독립 판단 — 버튼은 그대로 뜨고(raw 링크는 키 없이도
+          유효한 구매 경로) 키가 오면 추적만 조용히 업그레이드. `buildSearchLink`는 운영 SSM에 남을 옛
+          `{trackingCode}` 플레이스홀더도 방어적으로 제거. 같은 리뷰에서 확인된 나머지(캐시 동시요청 경쟁 →
+          `computeIfAbsent`, RestClient 타임아웃 부재 → 커넥트 3초·리드 5초, 예외 로깅에 클래스명 추가, subId 누락 시
+          정산 제외 사각 → `isEnabled()`에 subId 포함, 정적 Javadoc 정정)도 같은 커밋에 반영.
       - **구매처 선택 토글 통합 ✅ 2026-06-12 (#321)**: 점등으로 알라딘·쿠팡 "구매" 버튼이 한 행에 둘 나란히 뜨던 것을,
         구매처가 **2개일 때만 "구매" 토글**(`<details>` 순수 CSS·JS 0)로 묶어 펼쳐 고르게 함. **1개뿐이면 단일 버튼 유지**
         (불필요한 클릭 제거). 분기 조건(`#strings.isEmpty(purchaseLink)`·`coupangEnabled`)이 **매 렌더 그 책 데이터로 평가**돼
