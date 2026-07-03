@@ -134,3 +134,22 @@ export function nextQuoteIndex(current: number, count: number): number {
     if (count <= 0) return 0
     return (current + 1) % count
 }
+
+/**
+ * 헤더 한 줄 명언의 폰트 스케일(CSS 변수 --q-scale). 명언 블록은 CSS로 2줄 높이를 고정하므로
+ * 아래 요소는 명언 길이와 무관하게 안 밀린다 — 다만 2줄에도 넘칠 만큼 긴 명언은 잘리지 않도록
+ * 폰트를 줄여 2줄 안에 온전히 담는다(사용자 요청: 문장이 길면 폰트 축소).
+ *
+ * effLen = 본문 글자수 + round(저자 글자수 * 0.8) + 2 — 저자는 .78em이라 폭 가중 0.8,
+ * 상수 2는 저자 앞 간격 여유. 본문+저자를 한 흐름으로 이어 붙이는 CSS 구조라 좁은 폭(~360px)에서도
+ * 대부분 명언이 2줄에 들어간다 — 실측(모바일 328~460px 전수) 결과 현 18개 중 최장(eff 63)만 3줄이라
+ * eff>58에서만 축소한다. 데스크톱(≥640px, 홈 컬럼 760px)은 CSS 미디어쿼리로 축소를 꺼 원 크기(1.05rem)
+ * 를 유지한다. 글자수는 실렌더 폭의 근사이므로 clamp 하한·상한과 실브라우저 육안으로 튜닝했다.
+ * 반환은 항상 [0.78, 1].
+ */
+export function quoteFontScale(textLen: number, authorLen: number): number {
+    const effLen = textLen + Math.round(authorLen * 0.8) + 2
+    if (effLen <= 58) return 1
+    if (effLen <= 70) return 0.84
+    return 0.78
+}
