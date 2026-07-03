@@ -151,6 +151,7 @@
 - [T-127. 크롬 확장 네트워크 로그의 간헐 503 — 서비스워커 pass-through 내부 fallback 아티팩트(앱 결함 아님)](#t-127-크롬-확장-네트워크-로그의-간헐-503--서비스워커-pass-through-내부-fallback-아티팩트앱-결함-아님)
 - [T-128. Yes24 링크프라이스 딥링크, 모바일 UA면 Yes24 게이트가 목적지를 m.yes24 메인으로 치환 (tu에 모바일 URL을 넣어도 우회 불가)](#t-128-yes24-링크프라이스-딥링크-모바일-ua면-yes24-게이트가-목적지를-myes24-메인으로-치환-tu에-모바일-url을-넣어도-우회-불가)
 - [T-129. 쿠팡 파트너스 "구매" 링크가 추적 0 — CoupangLinkBuilder 자작 lptag 검색 URL은 정식 추적링크가 아님(딥링크 API 필요)](#t-129-쿠팡-파트너스-구매-링크가-추적-0--coupanglinkbuilder-자작-lptag-검색-url은-정식-추적링크가-아님딥링크-api-필요)
+- [T-130. dark-launch 기능 secret을 task-def valueFrom으로 배선하면 SSM 파라미터 미생성 시 ECS 배포가 서킷브레이커 롤백](#t-130-dark-launch-기능-secret을-task-def-valuefrom으로-배선하면-ssm-파라미터-미생성-시-ecs-배포가-서킷브레이커-롤백)
 
 ---
 
@@ -2387,6 +2388,20 @@ git worktree remove ../BookTimer-<task>
 
 ---
 
+## T-130. dark-launch 기능 secret을 task-def valueFrom으로 배선하면 SSM 파라미터 미생성 시 ECS 배포가 서킷브레이커 롤백
+
+**증상**: #641(쿠팡 딥링크 dark-launch) 머지 후 자동 ECS 배포가 "Deploy to ECS" 단계에서 실패 — GitHub Actions 로그는 `Deployment ... not found after stabilization. The deployment was likely rolled back by the deployment circuit breaker.`만 남긴다. 앱은 구 리비전으로 계속 서비스(무중단)되나 새 코드가 안 나가고, 이후 main에 코드가 푸시될 때마다 같은 이유로 배포가 계속 막힌다.
+
+**원인**: `deploy/task-definition.json`이 새로 추가한 기능 secret 3개(`COUPANG_ACCESS_KEY`/`SECRET_KEY`/`SUB_ID`)를 `secrets[].valueFrom`(SSM 파라미터 ARN)으로 참조했는데, 그 SSM 파라미터가 아직 미생성. Fargate는 태스크 기동 시 `valueFrom` secret을 SSM에서 pull해 env로 주입하는데, 파라미터가 없으면 컨테이너가 아예 못 뜬다 → 새 태스크 연속 실패 → 배포 서킷브레이커가 롤백. **핵심 함정**: `application.properties`에 안전 기본값(`${BOOKTIMER_COUPANG_ACCESS_KEY:not-configured}`)이 있어도 소용없다 — `valueFrom`은 "런타임에 이 env를 SSM에서 채운다"는 뜻이라, 파라미터 부재는 기본값 폴백이 아니라 **앱 코드 실행 전 태스크 기동 실패**다. "키 없이도 안전한 dark-launch"라는 의도가 코드 게이트(`isEnabled()`)엔 있어도 배포 배선(task-def)에서 깨진다.
+
+**감별·배제**: ① Spring 기동 실패(새 빈 미주입 등) 아님 — 새 `CoupangDeeplinkClient`가 요구하는 `Clock` 빈은 `TimeConfig`에 이미 존재하고, 나머지 새 의존(@ConfigurationProperties·RestClient)은 전부 기본값 보유. ② 코드 버그 아님 — CI `test` green, 이미지 빌드·태스크 정의 등록까지 성공하고 오직 안정화(=태스크 기동) 단계만 실패. ③ **100% 확정처**: ECS 콘솔 → 서비스 → 중지된 태스크 → **Stopped reason**(SSM 부재면 `ResourceNotFoundException`·`unable to pull secrets ... parameter ... not found`). GitHub Actions 로그는 circuit-breaker 문구까지만 보여줘 원인 특정엔 부족하다.
+
+**해결**: 미점등(dark-launch) 기능의 secret은 **① task-def에서 빼서 앱 기본값을 쓰거나, ② placeholder SSM 파라미터를 먼저 만든 뒤** 배선한다. 이번엔 ①로 secret 3줄 제거(PR #642) → 앱 기본값 `not-configured` 적용 → `CoupangDeeplinkProperties.isEnabled()` false로 기능 skip → 재배포 green으로 확정. 키 확보(점등) 시 **SSM 파라미터 생성 + secret 재배선 + 기능 플래그 on을 한 PR로** 묶는다(존재 보장과 배선을 분리하지 않기).
+
+**예방**: 새 기능을 dark-launch로 심을 때 "코드 게이트가 꺼져 있으니 안전"과 "배포 인프라(task-def)도 안전"은 **별개**다 — `valueFrom` 한 줄이 SSM 파라미터 존재를 하드 의존으로 만든다. 커밋 전 자문: *"이 task-def가 참조하는 SSM 파라미터가 배포 시점에 전부 존재하는가?"* 다른 원인의 Fargate SSM pull 실패는 T-011(네트워크 도달 불가). 개념 = [learning-notes N-146](learning-notes.md). 1회차 신규 — 재발·승격 트래커에는 올리지 않는다.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2522,3 +2537,4 @@ git worktree remove ../BookTimer-<task>
 | 2026-07-02 | T-085 보강 (docker exec mysql 한글 군 3회차: T-085→T-119→이번 — UTF-8 파일 stdin 파이프 + --default-character-set + HEX 검증, 트래커 등재) |
 | 2026-07-02 | T-128 (Yes24 링크프라이스 딥링크, 모바일 UA면 Yes24 자체 게이트 `lpfront.aspx`가 목적지를 m.yes24 메인으로 치환 — tu에 모바일 URL을 넣어도 우회 불가, 해결=모바일 UA면 래퍼 없이 m.yes24.com/search 직행, 운영 curl 실측, 1회차 신규) |
 | 2026-07-03 | T-129 (쿠팡 파트너스 "구매" 링크 추적 0 — CoupangLinkBuilder가 정식 추적링크 아닌 자작 lptag 검색 URL을 302로 보냄, 쿠팡 추적은 딥링크 API/간편링크 생성·`isshortened=Y` 전제라 미집계, 본인구매 0은 별개(자가구매 제외), 해법=딥링크 API 연동 계획, 1회차 신규) |
+| 2026-07-04 | T-130 (dark-launch 기능 secret을 task-def valueFrom으로 배선하면, 앱 기본값(application.properties)이 있어도 SSM 파라미터 미생성 시 ECS 배포가 서킷브레이커 롤백 — valueFrom이 파라미터 존재를 하드 강제해 태스크 기동 실패. 해결=미점등 기능 secret은 task-def에서 빼거나 placeholder 파라미터 먼저 생성, PR #642로 secret 3줄 제거해 언블록. 1회차 신규) |
