@@ -150,6 +150,7 @@
 - [T-126. 검증 명령을 `| tail`/`| grep`으로 파이프하면 exit code가 가려져 실패가 GREEN으로 보임](#t-126-검증-명령을--tail-grep으로-파이프하면-exit-code가-가려져-실패가-green으로-보임)
 - [T-127. 크롬 확장 네트워크 로그의 간헐 503 — 서비스워커 pass-through 내부 fallback 아티팩트(앱 결함 아님)](#t-127-크롬-확장-네트워크-로그의-간헐-503--서비스워커-pass-through-내부-fallback-아티팩트앱-결함-아님)
 - [T-128. Yes24 링크프라이스 딥링크, 모바일 UA면 Yes24 게이트가 목적지를 m.yes24 메인으로 치환 (tu에 모바일 URL을 넣어도 우회 불가)](#t-128-yes24-링크프라이스-딥링크-모바일-ua면-yes24-게이트가-목적지를-myes24-메인으로-치환-tu에-모바일-url을-넣어도-우회-불가)
+- [T-129. 쿠팡 파트너스 "구매" 링크가 추적 0 — CoupangLinkBuilder 자작 lptag 검색 URL은 정식 추적링크가 아님(딥링크 API 필요)](#t-129-쿠팡-파트너스-구매-링크가-추적-0--coupanglinkbuilder-자작-lptag-검색-url은-정식-추적링크가-아님딥링크-api-필요)
 
 ---
 
@@ -2372,6 +2373,20 @@ git worktree remove ../BookTimer-<task>
 
 ---
 
+## T-129. 쿠팡 파트너스 "구매" 링크가 추적 0 — CoupangLinkBuilder 자작 lptag 검색 URL은 정식 추적링크가 아님(딥링크 API 필요)
+
+**증상**: 쿠팡 파트너스 리포트에 BookTimer 경유 클릭이 **0**(구매·수익도 0). 실배포 운영자가 본인이 앱을 통해 쿠팡에서 2번 구매까지 했는데 **클릭조차 안 잡힘**(그 달 클릭 0). 알라딘·Yes24와 달리 쿠팡만.
+
+**원인**: `CoupangLinkBuilder.buildSearchLink`가 `https://www.coupang.com/np/search?q={ISBN}&lptag={추적코드}`를 **문자열 치환**으로만 만들고(네트워크 호출 0), `/books/{id}/buy/coupang`(`BookController`)이 그 URL로 302 리다이렉트한다. 이건 파트너스가 **"생성"한 정식 추적링크가 아니다**. 쿠팡 추적은 파트너스 센터 "간편 링크 만들기"/딥링크 API로 생성한 링크(→ `link.coupang.com`·`coupa.ng` 리다이렉트 서버 경유 + `isshortened=Y`·`pageKey`)라야 클릭이 집계된다. 공식 이용 가이드 원문: *"쿠팡 페이지의 URL을 그대로 복사하거나, 쿠팡 내 공유 기능을 사용하면 수익금에 반영되지 않습니다."* → 자작 URL은 구조적으로 미집계.
+
+**감별·배제**: ① 반영 지연 아님 — 지연은 최대 익일 정오±인데 한 달 내내 0. ② 추적코드 오타 아님 — 코드가 맞아도 `isshortened=Y`(정식 생성 흔적)가 없으면 0. ③ **본인 구매 0은 별개 원인** — 공식 가이드 STEP5 *"본인 링크를 통한 자가 구매는 실적이 집계되지 않아요"*라, 링크가 정상이었어도 운영자 자가 구매는 0(어뷰징 위험이라 본인 검증 금지). 즉 **클릭 0 = 링크 결함 / 수익 0 = 자가 구매 제외**로 나눠 본다.
+
+**해결**: 302 목적지를 딥링크 API로 생성한 정식 추적링크(`shortenUrl`)로 교체한다. **⚠️ 환경변수 템플릿(`COUPANG_SEARCH_URL_TEMPLATE`) 교체로는 못 고친다** — 문자열 치환 방식 자체가 raw URL만 만드는 게 결함이다. 계획 md `claude-docs/plans/2026-07-03-coupang-deeplink-api.md`. 개념 = [learning-notes N-146](learning-notes.md).
+
+**대조**: 같은 앱 Yes24는 linkprice 딥링크 래퍼(`lpfront.aspx`)를 **실제로 통과**해 추적됨(T-128) — 쿠팡만 자작이라 안 됐다. 1회차 신규 — 재발·승격 트래커에는 올리지 않는다.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2506,3 +2521,4 @@ git worktree remove ../BookTimer-<task>
 | 2026-07-02 | T-127 (크롬 확장 네트워크 로그 간헐 503 = SW pass-through 표시 아티팩트 — 페이지 실측·서버 로그·DB 3중 교차 검증) |
 | 2026-07-02 | T-085 보강 (docker exec mysql 한글 군 3회차: T-085→T-119→이번 — UTF-8 파일 stdin 파이프 + --default-character-set + HEX 검증, 트래커 등재) |
 | 2026-07-02 | T-128 (Yes24 링크프라이스 딥링크, 모바일 UA면 Yes24 자체 게이트 `lpfront.aspx`가 목적지를 m.yes24 메인으로 치환 — tu에 모바일 URL을 넣어도 우회 불가, 해결=모바일 UA면 래퍼 없이 m.yes24.com/search 직행, 운영 curl 실측, 1회차 신규) |
+| 2026-07-03 | T-129 (쿠팡 파트너스 "구매" 링크 추적 0 — CoupangLinkBuilder가 정식 추적링크 아닌 자작 lptag 검색 URL을 302로 보냄, 쿠팡 추적은 딥링크 API/간편링크 생성·`isshortened=Y` 전제라 미집계, 본인구매 0은 별개(자가구매 제외), 해법=딥링크 API 연동 계획, 1회차 신규) |
