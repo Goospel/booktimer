@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { QuoteDto } from './types'
-import { nextQuoteIndex } from './timerProgress'
+import { nextQuoteIndex, quoteFontScale } from './timerProgress'
 
 const props = defineProps<{ quotes: QuoteDto[] }>()
 
@@ -11,6 +11,9 @@ const props = defineProps<{ quotes: QuoteDto[] }>()
 const QUOTE_INTERVAL_MS = 6000
 const idx = ref(0)
 const current = computed<QuoteDto | null>(() => props.quotes[idx.value] ?? props.quotes[0] ?? null)
+// 블록은 CSS로 2줄 높이 고정 → 아래 요소는 안 밀린다. 2줄에도 넘칠 만큼 긴 명언만
+// 글자수 기반으로 폰트를 줄여(--q-scale) 잘림 없이 2줄에 담는다(데스크톱은 CSS가 축소 무시).
+const scale = computed(() => current.value ? quoteFontScale(current.value.text.length, current.value.author.length) : 1)
 
 let hovering = false
 let timer: ReturnType<typeof setInterval> | null = null
@@ -34,7 +37,7 @@ onUnmounted(() => {
         <div v-if="current" class="brand-quote" aria-live="polite"
              @mouseenter="onEnter" @mouseleave="onLeave">
             <Transition name="brand-quote-roll" mode="out-in">
-                <span :key="idx" class="brand-quote-line">
+                <span :key="idx" class="brand-quote-line" :style="{ '--q-scale': scale }">
                     <span class="brand-quote-text">{{ current.text }}</span>
                     <span class="brand-quote-author">— {{ current.author }}</span>
                 </span>

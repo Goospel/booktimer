@@ -2817,17 +2817,36 @@ body.personality-page #personality-app { gap: 18px; }
 .brand-quote {
     position: relative;
     overflow: hidden;
+    /* 2줄 높이로 고정 → 명언 길이가 바뀌어도 아래 요소(#dashboard-app)가 안 밀린다.
+       짧은 1줄 명언은 flex 세로중앙 정렬. 3줄 극단은 overflow:hidden으로 클립(안전망 — 정상은
+       아래 --q-scale 폰트 축소가 2줄 안에 담아 클립을 안 태운다). height=1.05rem 2줄 기준. */
+    display: flex;
+    align-items: center;
+    height: calc(1.05rem * 1.5 * 2);
+    line-height: 1.5;
     font-family: 'Gowun Batang', serif;
     font-style: italic;
-    font-size: 1.05rem;   /* BookTimer h1(1.6rem)보다 살짝 작게 — 조율 포인트 §4-1(사용자 피드백으로 1.2rem→1.05rem 축소) */
     color: var(--muted);  /* 카드 시절(--text)보다 톤 다운 — 약화 취지 */
 }
 .brand-quote-line {
-    display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px;
+    /* 본문+저자를 하나의 연속 텍스트 흐름으로(flex 아님) — 저자가 별도 줄을 차지하지 않고
+       본문 끝에 이어 붙어, 본문이 2줄이어도 저자까지 2줄 안에 담긴다(flex 시절엔 본문이 2줄이면
+       저자 span이 3번째 줄로 밀려 잘렸다). width:100%로 flex 부모(.brand-quote) 안에서 전체폭 확보. */
+    width: 100%;
+    /* 긴 명언만 폰트 축소(--q-scale = BrandQuote.vue가 글자수로 계산 주입) — 2줄에도 넘칠 때
+       잘림 없이 담기 위함. clamp가 하한(0.78rem)·상한(1.05rem)을 하드가드. font-size는
+       transition 대상(transform·opacity)이 아니라 롤 애니메이션과 독립(즉시 확정, 깜빡임 없음). */
+    font-size: clamp(0.78rem, calc(1.05rem * var(--q-scale, 1)), 1.05rem);
 }
-/* 긴 명언은 자연 줄바꿈(사용자 피드백: 말줄임 대신 개행) — 저자는 flex-shrink:0으로 항상 온전히 보임 */
-.brand-quote-text { min-width: 0; overflow-wrap: break-word; }
-.brand-quote-author { flex-shrink: 0; font-size: .78em; }
+/* 본문은 자연 줄바꿈(사용자 피드백: 말줄임 대신 개행). 저자는 본문 끝에 이어지되 이름 중간
+   줄바꿈은 막아(nowrap) 통째로 넘어가게 — 별도 줄을 강제로 차지하지 않음. */
+.brand-quote-text { overflow-wrap: break-word; }
+.brand-quote-author { font-size: .78em; margin-left: 6px; white-space: nowrap; }
+/* 데스크톱(홈 컬럼 760px)은 폭이 넓어 최장 명언도 2줄 여유 → 축소를 꺼 원 크기(1.05rem) 유지.
+   글자수 기반 --q-scale는 좁은 모바일 폭 기준이라, 넓은 폭에선 불필요한 축소를 막는다. */
+@media (min-width: 640px) {
+    .brand-quote-line { font-size: 1.05rem; }
+}
 /* 슬롯 롤: 새 줄은 아래에서 위로, 옛 줄은 위로 사라짐(고정 %가 아니라 짧은 고정 거리 —
    줄 수가 가변이라 자기 높이 기준 %는 일관성이 없음). .brand-quote가 클립. */
 .brand-quote-roll-enter-active,

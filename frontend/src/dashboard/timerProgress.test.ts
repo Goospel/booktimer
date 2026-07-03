@@ -12,6 +12,7 @@ import {
     nextAutoScroll,
     centeredIndex,
     nextQuoteIndex,
+    quoteFontScale,
 } from './timerProgress'
 
 // ── computeProgress ──────────────────────────────────────────────────────────
@@ -309,4 +310,38 @@ describe('nextQuoteIndex', () => {
     it('마지막(2/3) → 0으로 wrap', () => expect(nextQuoteIndex(2, 3)).toBe(0))
     it('1개뿐 → 항상 0', () => expect(nextQuoteIndex(0, 1)).toBe(0))
     it('범위 밖 current도 안전하게 wrap', () => expect(nextQuoteIndex(5, 3)).toBe(0))
+})
+
+// ── quoteFontScale ────────────────────────────────────────────────────────────
+
+describe('quoteFontScale', () => {
+    // 명언 블록은 CSS로 2줄 높이 고정 → 2줄에도 넘칠 만큼 긴 명언만 폰트를 줄인다.
+    // effLen = textLen + round(authorLen*0.8) + 2. 좁은 폭(~460px, 2줄≈50자) 기준 스텝.
+    // 반환은 항상 [0.78, 1] 범위(불변식).
+
+    // 짧은/중간 명언 — 축소 없음(스케일 1). 본문+저자 한 흐름 구조라 대부분 2줄 이내 → 축소 불필요.
+    it('빈 명언 → 1', () => expect(quoteFontScale(0, 0)).toBe(1))
+    it('짧은 명언(17자+저자8자) → 1', () => expect(quoteFontScale(17, 8)).toBe(1))
+    it('effLen=58 경계(56자, 저자 0) → 1', () => expect(quoteFontScale(56, 0)).toBe(1))
+
+    // 축소 구간 경계 (저자 0으로 effLen = textLen+2 고정)
+    it('effLen=59(57자) → 0.84', () => expect(quoteFontScale(57, 0)).toBe(0.84))
+    it('effLen=70(68자) → 0.84', () => expect(quoteFontScale(68, 0)).toBe(0.84))
+    it('effLen=71(69자) → 0.78', () => expect(quoteFontScale(69, 0)).toBe(0.78))
+    it('초장문(200자) → 0.78(하한)', () => expect(quoteFontScale(200, 0)).toBe(0.78))
+
+    // 저자 가중 반영 — 본문 56자(저자0이면 1.0)라도 저자가 길면 effLen이 58을 넘어 축소가 발동
+    it('저자 가중: 56자 본문+저자5자 → round(4)+2로 effLen 62 → 0.84', () =>
+        expect(quoteFontScale(56, 5)).toBe(0.84))
+
+    // 불변식 — 모든 반환값이 [0.78, 1]
+    it('모든 길이에서 반환값은 [0.78, 1] 범위', () => {
+        for (let t = 0; t <= 300; t += 7) {
+            for (const a of [0, 3, 8, 20]) {
+                const s = quoteFontScale(t, a)
+                expect(s).toBeGreaterThanOrEqual(0.78)
+                expect(s).toBeLessThanOrEqual(1)
+            }
+        }
+    })
 })
