@@ -48,6 +48,9 @@ out/
 # 사설 운영 문서 (인프라 식별자·접속 런북 — 공개 저장소에 올리지 않음)
 private-docs/
 
+# 로컬 스크립트용 비밀값 (예: affiliate-report.mjs 의 LinkPrice auth_key) — 커밋 금지
+.claude/.secrets/
+
 # B1 알림 훅(notify-when-waiting.ps1)의 런타임 디버그 로그 — 실측용 산출물이라 추적 안 함
 .claude/hooks/notify-debug.log
 
