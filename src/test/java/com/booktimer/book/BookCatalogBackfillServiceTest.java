@@ -47,6 +47,10 @@ class BookCatalogBackfillServiceTest {
         return bookRepository.save(Book.register(u, "책", null, isbn13, null, null, null, BookStatus.WANT_TO_READ));
     }
 
+    private Book saveBookWithLink(User u, String isbn13, String purchaseLink) {
+        return bookRepository.save(Book.register(u, "책", null, isbn13, null, null, purchaseLink, BookStatus.WANT_TO_READ));
+    }
+
     @Test
     @DisplayName("백필: category가 null이고 isbn 있는 책을 알라딘 ItemLookUp으로 채운다")
     void backfill_fillsNullCategoryBookWithIsbn() {
@@ -138,5 +142,101 @@ class BookCatalogBackfillServiceTest {
 
         assertThat(result.scanned()).isEqualTo(2);
         assertThat(result.remaining()).isEqualTo(1); // 3권 중 2권만 처리 → 1권 남음
+    }
+
+    // --- 제휴링크(purchaseLink) 백필 — 알라딘 includeKey=1 픽스 후, 이미 저장된 ttbkey 없는 링크를 재조회로 교체 ---
+
+    @Test
+    @DisplayName("제휴링크 백필: purchaseLink에 ttbkey가 없는 책을 lookupByIsbn(includeKey=1) 재조회로 ttbkey 실린 링크로 교체한다")
+    void backfillPurchaseLinks_replacesLinkMissingTtbkey() {
+        User u = newUser("pl-fill@booktimer.com");
+        Book book = saveBookWithLink(u, "9788900000021",
+                "https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=1&partner=openAPI&start=api"); // ttbkey 없음
+        when(searchClient.isEnabled()).thenReturn(true);
+        when(searchClient.lookupByIsbn("9788900000021")).thenReturn(Optional.of(
+                new BookSearchResult("책", null, "9788900000021", null, null,
+                        "https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=1&partner=openAPI&start=api&ttbkey=ttbreal",
+                        null, null)));
+
+        BackfillResult result = backfillService.backfillPurchaseLinks(50);
+
+        Book reloaded = bookRepository.findById(book.getId()).orElseThrow();
+        assertThat(reloaded.getPurchaseLink()).contains("ttbkey=ttbreal");
+        assertThat(result.updated()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("제휴링크 백필 멱등: 이미 ttbkey가 실린 책은 대상이 아니다(조회조차 안 함)")
+    void backfillPurchaseLinks_skipsBooksAlreadyHavingTtbkey() {
+        User u = newUser("pl-idem@booktimer.com");
+        saveBookWithLink(u, "9788900000022",
+                "https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=2&ttbkey=ttbreal");
+        when(searchClient.isEnabled()).thenReturn(true);
+
+        BackfillResult result = backfillService.backfillPurchaseLinks(50);
+
+        verify(searchClient, never()).lookupByIsbn(any());
+        assertThat(result.scanned()).isZero();
+    }
+
+    @Test
+    @DisplayName("제휴링크 백필: 알라딘이 여전히 ttbkey 없는 링크를 주면 옛 링크를 유지하고 notFound로 센다(무추적 링크로 덮어쓰지 않음)")
+    void backfillPurchaseLinks_lookupStillMissingTtbkey_keepsOldAndCountsNotFound() {
+        User u = newUser("pl-nf@booktimer.com");
+        Book book = saveBookWithLink(u, "9788900000023",
+                "https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=3&partner=openAPI&start=api");
+        when(searchClient.isEnabled()).thenReturn(true);
+        when(searchClient.lookupByIsbn("9788900000023")).thenReturn(Optional.of(
+                new BookSearchResult("책", null, "9788900000023", null, null,
+                        "https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=3&partner=openAPI&start=api",
+                        null, null))); // 여전히 ttbkey 없음
+
+        BackfillResult result = backfillService.backfillPurchaseLinks(50);
+
+        Book reloaded = bookRepository.findById(book.getId()).orElseThrow();
+        assertThat(reloaded.getPurchaseLink()).doesNotContain("ttbkey");
+        assertThat(result.updated()).isZero();
+        assertThat(result.notFound()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("제휴링크 백필: purchaseLink가 없는 책(수동 등록)은 대상 제외 — 갱신할 링크 자체가 없음")
+    void backfillPurchaseLinks_skipsBooksWithoutPurchaseLink() {
+        User u = newUser("pl-nolink@booktimer.com");
+        saveBook(u, "9788900000024"); // purchaseLink null
+        when(searchClient.isEnabled()).thenReturn(true);
+
+        BackfillResult result = backfillService.backfillPurchaseLinks(50);
+
+        verify(searchClient, never()).lookupByIsbn(any());
+        assertThat(result.scanned()).isZero();
+    }
+
+    @Test
+    @DisplayName("제휴링크 백필: isbn13이 없는 책은 제외(재조회 키 없음)")
+    void backfillPurchaseLinks_skipsBooksWithoutIsbn() {
+        User u = newUser("pl-noisbn@booktimer.com");
+        saveBookWithLink(u, null,
+                "https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=6&partner=openAPI&start=api");
+        when(searchClient.isEnabled()).thenReturn(true);
+
+        BackfillResult result = backfillService.backfillPurchaseLinks(50);
+
+        verify(searchClient, never()).lookupByIsbn(any());
+        assertThat(result.scanned()).isZero();
+    }
+
+    @Test
+    @DisplayName("제휴링크 백필: 검색 클라이언트 비활성이면 no-op(키 없음)")
+    void backfillPurchaseLinks_disabledClient_noOp() {
+        User u = newUser("pl-dis@booktimer.com");
+        saveBookWithLink(u, "9788900000025",
+                "https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=5&partner=openAPI&start=api");
+        when(searchClient.isEnabled()).thenReturn(false);
+
+        BackfillResult result = backfillService.backfillPurchaseLinks(50);
+
+        verify(searchClient, never()).lookupByIsbn(any());
+        assertThat(result.scanned()).isZero();
     }
 }

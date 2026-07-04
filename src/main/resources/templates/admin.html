@@ -125,6 +125,16 @@
         </form>
     </section>
 
+    <section class="card">
+        <h2>알라딘 제휴링크 백필</h2>
+        <p class="status-line muted">
+            TTBKey가 빠진 옛 구매링크(제휴 추적 안 됨)를 알라딘에서 재조회해 정식 제휴링크로 교체한다. 한 번에 일부만 처리하니, 남은 권수가 있으면 다시 누르세요.
+        </p>
+        <form method="post" th:action="@{/admin/books/backfill-purchase-links}">
+            <button type="submit" class="btn-primary">🔗 제휴링크 백필 실행</button>
+        </form>
+    </section>
+
     <!-- 로그아웃은 일반 대시보드와 동일하게 화면 최하단에 둔다(상단 노출 방지). -->
     <form th:action="@{/logout}" method="post">
         <button type="submit" class="btn-ghost">로그아웃</button>

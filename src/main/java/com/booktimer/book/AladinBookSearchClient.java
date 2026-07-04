@@ -100,6 +100,9 @@ public class AladinBookSearchClient implements BookSearchClient {
                 .queryParam("start", Math.max(1, page))   // 알라딘 start = 시작 페이지(1-based)
                 .queryParam("SearchTarget", "Book")
                 .queryParam("Cover", "MidBig")
+                // includeKey=1이라야 응답 link에 TTBKey(제휴 식별자)가 실린다(기본 0=미포함). 없으면 저장·재생되는
+                // 구매링크에 제휴키가 빠져 클릭이 귀속되지 않아 제휴 수익 0(무성 추적실패 — 운영 실측으로 확인, 쿠팡 lptag와 동일 계열).
+                .queryParam("includeKey", 1)
                 .queryParam("output", "js")
                 .queryParam("Version", "20131101")
                 .build()
@@ -116,6 +119,8 @@ public class AladinBookSearchClient implements BookSearchClient {
                 .queryParam("itemIdType", "ISBN13")
                 .queryParam("ItemId", isbn13)
                 .queryParam("Cover", "MidBig")
+                // 백필로 갱신되는 link에도 TTBKey가 실리게 한다(buildSearchUrl과 동일 이유). 없으면 백필해도 무추적.
+                .queryParam("includeKey", 1)
                 .queryParam("output", "js")
                 .queryParam("Version", "20131101")
                 .build()

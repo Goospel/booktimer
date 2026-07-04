@@ -36,6 +36,16 @@ class AladinBookSearchClientTest {
     }
 
     @Test
+    @DisplayName("검색·조회 URL에 includeKey=1을 실어 알라딘 응답 link에 TTBKey(제휴 식별자)가 포함되게 한다 — 없으면(기본 0) 응답 link에 ttbkey가 빠져 제휴 클릭이 귀속 안 됨(무성 추적실패, 쿠팡 lptag와 동일 계열)")
+    void buildUrl_carriesIncludeKey_forAffiliateTracking() {
+        String searchUrl = AladinBookSearchClient.buildSearchUrl("ttb1", "모기", BookSearchType.TITLE, 1);
+        assertThat(searchUrl).contains("includeKey=1");
+
+        String lookupUrl = AladinBookSearchClient.buildLookupUrl("ttb1", "9788966260959");
+        assertThat(lookupUrl).contains("includeKey=1");
+    }
+
+    @Test
     @DisplayName("ItemLookUp URL: ISBN13으로 단건 조회한다(itemIdType=ISBN13, ItemId=isbn, ttbkey) — 백필용")
     void buildLookupUrl_byIsbn() {
         String url = AladinBookSearchClient.buildLookupUrl("ttb1", "9788966260959");
