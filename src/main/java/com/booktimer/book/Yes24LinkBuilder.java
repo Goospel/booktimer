@@ -48,9 +48,19 @@ public class Yes24LinkBuilder {
         this.mobileSearchUrlTemplate = mobileSearchUrlTemplate;
     }
 
-    /** 추적코드가 실제 값으로 설정됐는가 — false면 Yes24 버튼·고지문구를 화면에서 숨긴다. */
+    /**
+     * Yes24 제휴가 실제로 추적 가능한 상태인가 — false면 버튼·고지문구를 화면에서 숨긴다.
+     *
+     * <p>추적코드가 설정됐고(가입) <b>동시에</b> 데스크톱 {@code searchUrlTemplate}에 {@code {trackingCode}}
+     * 자리가 있어야 한다. 추적코드만 있고 템플릿이 순수 검색 URL(자리 없음)이면 코드가 링크에 실릴 곳이 없어
+     * "추적 0인데 버튼 뜨는" 무성실패가 된다(T-131 계열 — 알라딘 {@code includeKey}·쿠팡 {@code lptag}와
+     * 같은 클래스). {@code buildSearchLink}의 {@code .replace}가 자리 없으면 조용히 no-op이라 이 게이트가 유일한
+     * 방어다. (모바일 템플릿은 T-128대로 추적을 의도적으로 포기하므로 이 게이트에 넣지 않는다 — 데스크톱 추적
+     * 가능 여부로 노출을 결정한다.)
+     */
     public boolean isEnabled() {
-        return trackingCode != null && !trackingCode.isBlank() && !NOT_CONFIGURED.equals(trackingCode);
+        return trackingCode != null && !trackingCode.isBlank() && !NOT_CONFIGURED.equals(trackingCode)
+                && searchUrlTemplate != null && searchUrlTemplate.contains("{trackingCode}");
     }
 
     /**

@@ -488,6 +488,7 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
       **남은 것 = 점등 스위치 하나**: SSM `YES24_TRACKING_CODE`를 실값(`A100705638`)으로 `--overwrite`+재배포하면 버튼·고지 노출(코드 변경 0·외부 작업).
       실 브라우저: books 구매 드롭다운·book-detail SSR `th:each`·Yes24 고지문구 확인(로컬 테스트 추적코드 주입).
       모바일 UA는 Yes24 게이트가 딥링크를 버려(모바일 메인 치환, T-128) 래퍼 없이 `m.yes24.com/search` 직행으로 분기(커미션은 데스크톱만) ✅ 2026-07-02.
+      ⚠️ **추적 결함 발견·가드 2026-07-04**: 점등 후 운영 Chrome 실측 결과 `YES24_TRACKING_CODE`는 실값으로 켜졌으나(버튼 노출) **`YES24_SEARCH_URL_TEMPLATE`가 링크프라이스 래퍼가 아닌 순수 검색 URL**(`www.yes24.com/product/search?query=<ISBN>`)이라 추적코드가 링크에 안 실려 **데스크톱도 추적 0**이었다(알라딘 T-131과 같은 무성실패 계열, 2건 실측). 위 "남은 것 = TRACKING_CODE 스위치 하나"는 부정확 — TRACKING_CODE만 켜고 SEARCH_URL_TEMPLATE를 래퍼로 안 채우면 추적이 안 된다. `isEnabled()`가 `trackingCode`만 보던 것을 **템플릿에 `{trackingCode}` 포함까지 검증**하도록 가드 추가(추적 안 될 상황이면 버튼 숨김 — 무성실패를 명시화). **근본 복구**=SSM `YES24_SEARCH_URL_TEMPLATE`를 래퍼(`lpweb.kr/click.php?a_id={trackingCode}&…&tu=…{query}`)로 `--overwrite`. 상세 changelog 2026-07-04, 자동 메모리 `aladin-affiliate-tracking-broken`(YES24 후속 포함).
   - **③-c 책 상세 페이지 완료 ✅ 2026-06-03**: `GET /books/{id}` — 책 메타 + 월별 일자 기록 + 누적 시간. 소유권 검사(IDOR, 없으면 책장으로).
     `BookContributionService`(세션 패키지, 유저 TZ 일자) + `findByUserAndBook`. 책장에서 제목 클릭 진입.
     TDD: BookContributionServiceTest(단위)·BookControllerTest(렌더·IDOR). **책 3단계 완료.**
