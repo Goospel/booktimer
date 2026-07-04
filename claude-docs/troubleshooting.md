@@ -27,7 +27,7 @@
 | FK 자식 미정리로 부모 삭제 실패(mock 단위테스트가 못 잡음) | T-023 · T-029 | 2 | ✅ prose CLAUDE.md TDD절(부모 삭제 경로 H2 통합테스트 필수). **1회 백필로 소급 등재(2026-06-30)**. 현행 경로(`AccountService.purge`·`BookService.delete`)는 정리·통합테스트 완료 |
 | author `display`(flex/grid)가 UA `[hidden]`/`<details>` `display:none`을 origin 우선으로 덮어 숨김 실패 | (#189) · T-035 · T-123 | 3 | ✅ **하드픽스(전역 `[hidden]{display:none!important}` 리셋을 `app.css` 베이스에 추가)** — `[hidden]` 속성 변형을 앱 전역에서 제거(T-123의 페이지 스코프 `.settings-page [hidden]` 리셋은 이걸로 승격돼 삭제). ⚠️ 닫힌 `<details>` 자식 변형(T-035)은 `[hidden]` 속성이 아니라 UA `details:not([open])` 메커니즘이라 이 리셋 밖 — 개별 `:not([open])` 재숨김 유지 필요 |
 | docker exec mysql 한글 시드 INSERT 깨짐(CP949/이중 인코딩/mojibake) | T-085 · T-119 | 3 | ✅ 절차 확립(T-085 보강 — UTF-8 파일 + `docker exec -i … < file.sql` + `--default-character-set=utf8mb4`, `HEX()` 검증; T-119의 `UNHEX()` 주입은 대안). 검증 데이터 셋업 한정·저빈도라 CLAUDE.md/훅 승격은 보류 — 4회차 나오면 재검토 |
-| 어필리에이트 클릭 추적 무성 실패(생성 링크·제휴키·옵션 미탑재로 클릭 0) | T-129 · T-131 | 2 | ⚠️ prose([N-146](learning-notes.md)) + 개별 픽스(#644 알라딘 `includeKey=1`+백필). **완전 하드픽스(커밋 가드) 보류** — 제공자마다 추적 관문이 달라(쿠팡=딥링크 shortenUrl / 알라딘=includeKey ttbkey / YES24=linkprice 래퍼) 일반 정적 가드가 부적합. 대신 신규 제휴를 붙일 때 **"링크에 추적자가 실제로 실렸나"를 한 건 까서 실측**하는 걸 감사·리뷰로 강제(3회차 나오면 제공자별 런타임 assert로 승격 검토) |
+| 어필리에이트 클릭 추적 무성 실패(생성 링크·제휴키·옵션 미탑재로 클릭 0) | T-129 · T-131(알라딘·YES24) | 2 | ⚠️ prose([N-146](learning-notes.md)) + **제공자별 가드로 하나씩 닫는 중**: 알라딘=`includeKey=1`+백필(#644), YES24=`isEnabled()`에 템플릿 `{trackingCode}` 포함 검증(순수 URL이면 버튼 숨김). **범용 커밋 가드는 보류** — 제공자마다 추적 관문이 달라(쿠팡=딥링크 shortenUrl / 알라딘=includeKey ttbkey / YES24=linkprice 래퍼) 일반 정적 가드가 부적합. 신규 제휴를 붙일 때 **"링크에 추적자가 실제로 실렸나"를 한 건 까서 실측**하는 걸 감사·리뷰로 강제(3회차 나오면 제공자별 런타임 assert로 승격 재검토) |
 
 ## 📑 목차
 
@@ -2415,6 +2415,8 @@ git worktree remove ../BookTimer-<task>
 **해결**: `buildSearchUrl`·`buildLookupUrl`에 `.queryParam("includeKey", 1)` 추가(새 검색·백필부터 ttbkey 실림). **이미 저장된 무추적 링크는 픽스만으론 안 고쳐지므로**(purchaseLink는 검색 시점에 박혀 저장됨) `BookCatalogBackfillService.backfillPurchaseLinks`(대상=`purchaseLink`에 `ttbkey=` 없고 isbn 있는 책, `lookupByIsbn` 재조회로 교체, 재조회에도 ttbkey 없으면 옛 링크 유지·`notFound` — 무추적 링크로 덮어쓰지 않음) + `POST /admin/books/backfill-purchase-links`(ADMIN·CSRF·limit) + admin 버튼. 배포 후 운영 ttbkey로 백필 실행 → `/buy` 링크에 ttbkey 재확인이 최종 검증(PR #644).
 
 **일반화**: **"플랫폼이 생성한 링크"라도 제휴키가 실제로 실렸는지 실측하라** — 제휴사가 link를 발급해준다고 끝이 아니라, 그 발급에 제휴키 포함 옵션(알라딘 `includeKey=1`)이 켜졌는지까지 확인해야 한다. 저장형 링크(DB 적재)는 결함이 있으면 기존 데이터 전량이 영구 무추적이 되니 픽스와 **백필**이 짝이다.
+
+**같은 계열 YES24(2026-07-04 실측·가드)**: 데스크톱 "구매" 링크가 링크프라이스 래퍼 없이 순수 `www.yes24.com/product/search?query=<ISBN>`(추적코드 부재)라 추적 0 — 운영 SSM `YES24_SEARCH_URL_TEMPLATE`가 래퍼가 아닌 순수 URL인데 `Yes24LinkBuilder.isEnabled()`가 `trackingCode`만 봐 버튼이 떠 있었다(무성실패). 가드 = `isEnabled()`에 `searchUrlTemplate.contains("{trackingCode}")` 추가(자리 없으면 비활성 → 버튼 숨김). 근본 복구는 SSM를 링크프라이스 래퍼(`lpweb.kr/click.php?a_id={trackingCode}&…&tu=…{query}`)로 교체. 알라딘(코드)과 달리 **원인이 운영 설정(SSM)**이라 코드 가드는 "무성실패를 티나게" 하는 역할.
 
 **2회차(T-129 쿠팡 재발)** — "어필리에이트 클릭 추적 무성 실패" 트랩군으로 재발·승격 트래커에 등재. 개념 = [learning-notes N-146](learning-notes.md), [N-035](learning-notes.md). 자동 메모리 `aladin-affiliate-tracking-broken`.
 

@@ -64,6 +64,18 @@ class Yes24LinkBuilderTest {
     }
 
     @Test
+    @DisplayName("추적코드는 설정됐어도 데스크톱 템플릿에 {trackingCode} 자리가 없으면 비활성 — 추적코드가 링크에 실릴 곳이 없어 '추적 0인데 버튼 뜨는' 무성실패가 되므로 버튼·고지문을 숨긴다(운영 SSM이 순수 검색 URL로 잘못/미설정된 상황 방어, T-131 계열)")
+    void disabled_whenTemplateLacksTrackingCodePlaceholder() {
+        String pureTemplate = "https://www.yes24.com/product/search?query={query}"; // {trackingCode} 자리 없음
+        Yes24LinkBuilder b = new Yes24LinkBuilder("LP1234567", pureTemplate, MOBILE_TEMPLATE);
+
+        assertThat(b.isEnabled()).isFalse();
+        // 비활성이면 데스크톱·모바일 모두 링크 생성 안 함(무추적 링크로 사용자를 보내지 않음)
+        assertThat(b.buildSearchLink(book("클린 코드", "9788966260959"), false)).isNull();
+        assertThat(b.buildSearchLink(book("클린 코드", "9788966260959"), true)).isNull();
+    }
+
+    @Test
     @DisplayName("검색어는 ISBN13을 우선 사용한다(동명 책 회피)")
     void query_usesIsbn13WhenPresent() {
         assertThat(Yes24LinkBuilder.queryFor(book("클린 코드", "9788966260959")))
@@ -91,7 +103,7 @@ class Yes24LinkBuilderTest {
     @Test
     @DisplayName("검색어의 한글·공백·&는 퍼센트 인코딩된다(깨진 URL·쿼리 오염 방지) — mobile=false")
     void link_encodesQuery() {
-        String link = new Yes24LinkBuilder("LP1", "https://www.yes24.com/product/search?query={query}",
+        String link = new Yes24LinkBuilder("LP1", "https://www.yes24.com/product/search?query={query}&pid={trackingCode}",
                 MOBILE_TEMPLATE)
                 .buildSearchLink(book("클린 코드 & 리팩터링", null), false);
 
