@@ -46,4 +46,22 @@ class AdminBackfillControllerTest {
                         .with(user("u@booktimer.com")).with(csrf()))
                 .andExpect(status().isForbidden());
     }
+
+    @Test
+    @DisplayName("POST /admin/books/backfill-purchase-links: ADMIN이면 실행하고 결과 플래시와 함께 /admin으로 리다이렉트")
+    void backfillPurchaseLinks_admin_runsAndRedirects() throws Exception {
+        mockMvc.perform(post("/admin/books/backfill-purchase-links")
+                        .with(user("boss").roles("ADMIN")).with(csrf()))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/admin"))
+                .andExpect(flash().attributeExists("message"));
+    }
+
+    @Test
+    @DisplayName("POST /admin/books/backfill-purchase-links: 일반 USER는 403 금지")
+    void backfillPurchaseLinks_user_forbidden() throws Exception {
+        mockMvc.perform(post("/admin/books/backfill-purchase-links")
+                        .with(user("u@booktimer.com")).with(csrf()))
+                .andExpect(status().isForbidden());
+    }
 }

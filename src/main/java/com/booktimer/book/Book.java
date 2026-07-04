@@ -213,6 +213,15 @@ public class Book extends BaseTimeEntity {
         this.pubDate = blankToNull(pubDate);
     }
 
+    /**
+     * 제휴 구매링크를 갱신한다 — 기존 책 purchaseLink 백필(알라딘 ItemLookUp, includeKey=1 재조회) 경로에서 쓴다.
+     * TTBKey가 빠진 옛 링크를 ttbkey 실린 정식 링크로 교체한다. 대상 선별과 유효성(ttbkey 포함 여부) 판단은
+     * 호출자(백필 서비스)가 하므로 여기선 단순 대입만 한다 — 무추적 링크로 덮어쓰지 않게 막는 건 호출자 책임.
+     */
+    public void updatePurchaseLink(String purchaseLink) {
+        this.purchaseLink = purchaseLink;
+    }
+
     /** 이 책을 공개한다 — 다른 사용자가 조회할 수 있게 된다(SNS). */
     public void makePublic() {
         this.visibility = BookVisibility.PUBLIC;

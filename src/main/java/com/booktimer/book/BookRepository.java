@@ -67,6 +67,17 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     long countByCategoryIsNullAndIsbn13IsNotNull();
 
     /**
+     * 제휴링크 백필 대상 — purchaseLink는 있으나 TTBKey 마커({@code marker}, 예: {@code "ttbkey="})가 없는 알라딘
+     * 링크 + ISBN-13이 있는 책. {@code includeKey=1} 픽스 전에 저장된 무추적 링크를 {@code lookupByIsbn} 재조회로
+     * 갱신하기 위한 후보다. isbn이 있어야 재조회할 수 있고(없으면 조회 키가 없어 제외), purchaseLink가 없는 수동
+     * 등록분도 갱신할 링크가 없어 제외한다. {@code Pageable}로 한 번에 처리할 권수를 제한한다(외부 호출량 통제).
+     */
+    List<Book> findByIsbn13IsNotNullAndPurchaseLinkIsNotNullAndPurchaseLinkNotContaining(String marker, Pageable pageable);
+
+    /** 제휴링크 백필이 남은 책 수(purchaseLink에 ttbkey 마커 없는, isbn 있는) — 백필 결과의 "남은 권수" 표시용. */
+    long countByIsbn13IsNotNullAndPurchaseLinkIsNotNullAndPurchaseLinkNotContaining(String marker);
+
+    /**
      * 팔로우 스코프 인기 카운트 (sns-design §7.4) — 주어진 isbn 목록을 <b>한 번의 group by</b>로 집계(N+1 회피).
      *
      * <p>{@code viewer}가 팔로우한 사용자(followee)가 PUBLIC으로 가진 책만 대상으로, isbn13별로

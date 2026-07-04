@@ -35,4 +35,19 @@ public class AdminBackfillController {
                 result.scanned(), result.updated(), result.notFound(), result.remaining()));
         return "redirect:/admin";
     }
+
+    /**
+     * 제휴링크 백필 — TTBKey가 빠진 기존 구매링크를 알라딘 ItemLookUp(includeKey=1)으로 재조회해 교체한다.
+     * {@code includeKey=1} 픽스 전 저장된 무추적 링크를 정식 제휴링크로 갱신(제휴 수익 복구). 카탈로그 백필과
+     * 같은 인가 경계(/admin/** = ADMIN)·POST+CSRF·limit 배치·결과 플래시를 따른다.
+     */
+    @PostMapping("/admin/books/backfill-purchase-links")
+    public String backfillPurchaseLinks(@RequestParam(defaultValue = "" + DEFAULT_LIMIT) int limit,
+                                        RedirectAttributes redirectAttributes) {
+        BackfillResult result = backfillService.backfillPurchaseLinks(limit);
+        redirectAttributes.addFlashAttribute("message", String.format(
+                "제휴링크 백필 — 조회 %d권, 갱신 %d권, 미발견 %d권, 남은 %d권",
+                result.scanned(), result.updated(), result.notFound(), result.remaining()));
+        return "redirect:/admin";
+    }
 }
