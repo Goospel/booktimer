@@ -6557,8 +6557,9 @@ BookTimer가 쿠팡 "구매" 버튼을 `www.coupang.com/np/search?q={ISBN}&lptag
 
 - **어필리에이트 링크는 합성(concatenate)하지 말고 발급(generate)받아라** — 제휴사의 링크 생성 API/도구를 통과시켜라. "추적 코드를 URL에 끼우면 된다"는 가정은 무성 실패(에러 없이 클릭 0)를 만든다.
 - **제휴사마다 "정식 링크 만드는 관문"이 다르다** — 같은 앱의 Yes24 제휴는 linkprice 딥링크 래퍼(`lpfront.aspx`)를 **실제로 통과**해 추적됨([troubleshooting T-128](troubleshooting.md)). 쿠팡만 자작이라 안 됐다. 새 제휴를 붙일 땐 그 사의 생성 경로를 먼저 확인한다.
+- **"생성된 링크"라도 제휴키가 실렸는지 실측하라(알라딘 `includeKey` 함정)** — 플랫폼이 링크를 발급해줘도(합성 아님) 그 발급에 제휴키 포함 옵션이 꺼져 있으면 결과는 같다. 알라딘 OpenAPI는 `includeKey=1`이라야 응답 link에 TTBKey가 실리는데(기본 0), 이를 안 켜 링크에 ttbkey가 빠져 추적 0이었다([troubleshooting T-131](troubleshooting.md), 운영 실측 확정). 쿠팡(자작 합성)과 알라딘(API 옵션 미설정)은 원인 지점은 다르나 "링크에 추적자가 없다"는 무성 실패는 동일 — **발급받은 링크를 한 건 까서 추적자가 실제로 실렸는지 확인**하는 게 유일한 방어(파라미터 값이 맞아도, 링크가 "생성"돼도 이 실측 없이는 조용히 0일 수 있다).
 - **별개 사실 — 본인 트래픽 제외**: 파트너 본인의 자가 구매·자가 클릭은 실적에서 빠진다(부정행위 위험). **자기 링크로 자기가 사서 검증하면 안 된다** — 링크가 완벽해도 0으로 보여 오진을 부른다.
 
 ### 관련
 
-- [troubleshooting T-129](troubleshooting.md)(이 앱의 결함·딥링크 API 해법), [T-128](troubleshooting.md)(Yes24 딥링크 래퍼 대조). 계획 md `claude-docs/plans/2026-07-03-coupang-deeplink-api.md`. 자동 메모리 `coupang-affiliate-tracking-broken`.
+- [troubleshooting T-129](troubleshooting.md)(쿠팡 결함·딥링크 API 해법), [T-131](troubleshooting.md)(알라딘 `includeKey` 함정 — 같은 계열 2회차), [T-128](troubleshooting.md)(Yes24 딥링크 래퍼 대조). 계획 md `claude-docs/plans/2026-07-03-coupang-deeplink-api.md`. 자동 메모리 `coupang-affiliate-tracking-broken`·`aladin-affiliate-tracking-broken`.

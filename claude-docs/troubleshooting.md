@@ -27,6 +27,7 @@
 | FK 자식 미정리로 부모 삭제 실패(mock 단위테스트가 못 잡음) | T-023 · T-029 | 2 | ✅ prose CLAUDE.md TDD절(부모 삭제 경로 H2 통합테스트 필수). **1회 백필로 소급 등재(2026-06-30)**. 현행 경로(`AccountService.purge`·`BookService.delete`)는 정리·통합테스트 완료 |
 | author `display`(flex/grid)가 UA `[hidden]`/`<details>` `display:none`을 origin 우선으로 덮어 숨김 실패 | (#189) · T-035 · T-123 | 3 | ✅ **하드픽스(전역 `[hidden]{display:none!important}` 리셋을 `app.css` 베이스에 추가)** — `[hidden]` 속성 변형을 앱 전역에서 제거(T-123의 페이지 스코프 `.settings-page [hidden]` 리셋은 이걸로 승격돼 삭제). ⚠️ 닫힌 `<details>` 자식 변형(T-035)은 `[hidden]` 속성이 아니라 UA `details:not([open])` 메커니즘이라 이 리셋 밖 — 개별 `:not([open])` 재숨김 유지 필요 |
 | docker exec mysql 한글 시드 INSERT 깨짐(CP949/이중 인코딩/mojibake) | T-085 · T-119 | 3 | ✅ 절차 확립(T-085 보강 — UTF-8 파일 + `docker exec -i … < file.sql` + `--default-character-set=utf8mb4`, `HEX()` 검증; T-119의 `UNHEX()` 주입은 대안). 검증 데이터 셋업 한정·저빈도라 CLAUDE.md/훅 승격은 보류 — 4회차 나오면 재검토 |
+| 어필리에이트 클릭 추적 무성 실패(생성 링크·제휴키·옵션 미탑재로 클릭 0) | T-129 · T-131 | 2 | ⚠️ prose([N-146](learning-notes.md)) + 개별 픽스(#644 알라딘 `includeKey=1`+백필). **완전 하드픽스(커밋 가드) 보류** — 제공자마다 추적 관문이 달라(쿠팡=딥링크 shortenUrl / 알라딘=includeKey ttbkey / YES24=linkprice 래퍼) 일반 정적 가드가 부적합. 대신 신규 제휴를 붙일 때 **"링크에 추적자가 실제로 실렸나"를 한 건 까서 실측**하는 걸 감사·리뷰로 강제(3회차 나오면 제공자별 런타임 assert로 승격 검토) |
 
 ## 📑 목차
 
@@ -152,6 +153,7 @@
 - [T-128. Yes24 링크프라이스 딥링크, 모바일 UA면 Yes24 게이트가 목적지를 m.yes24 메인으로 치환 (tu에 모바일 URL을 넣어도 우회 불가)](#t-128-yes24-링크프라이스-딥링크-모바일-ua면-yes24-게이트가-목적지를-myes24-메인으로-치환-tu에-모바일-url을-넣어도-우회-불가)
 - [T-129. 쿠팡 파트너스 "구매" 링크가 추적 0 — CoupangLinkBuilder 자작 lptag 검색 URL은 정식 추적링크가 아님(딥링크 API 필요)](#t-129-쿠팡-파트너스-구매-링크가-추적-0--coupanglinkbuilder-자작-lptag-검색-url은-정식-추적링크가-아님딥링크-api-필요)
 - [T-130. dark-launch 기능 secret을 task-def valueFrom으로 배선하면 SSM 파라미터 미생성 시 ECS 배포가 서킷브레이커 롤백](#t-130-dark-launch-기능-secret을-task-def-valuefrom으로-배선하면-ssm-파라미터-미생성-시-ecs-배포가-서킷브레이커-롤백)
+- [T-131. 알라딘 OpenAPI includeKey 미전송으로 응답 link에 TTBKey 없어 제휴 클릭 추적 0](#t-131-알라딘-openapi-includekey-미전송으로-응답-link에-ttbkey-없어-제휴-클릭-추적-0)
 
 ---
 
@@ -2402,6 +2404,22 @@ git worktree remove ../BookTimer-<task>
 
 ---
 
+## T-131. 알라딘 OpenAPI includeKey 미전송으로 응답 link에 TTBKey 없어 제휴 클릭 추적 0
+
+**증상**: 알라딘 "구매" 버튼(`/books/{id}/buy`)이 정상 이동하고 클릭 집계(`clickCount`)도 오르는데, 알라딘 제휴(판매수익) 귀속이 잡히지 않는다(쿠팡 T-129와 같은 계열의 무성 실패). 운영 실측: `/books/60/buy`·`/books/59/buy`의 302 최종 목적지가 `www.aladin.co.kr/shop/wproduct.aspx?ItemId=…&partner=openAPI&start=api`로 **`ttbkey=`가 없다**(2건).
+
+**원인**: 알라딘 제휴 귀속은 상품 link에 **TTBKey(제휴 식별자)**가 실려야 성립하는데([N-035](learning-notes.md)), 그 link에 TTBKey가 실리려면 알라딘 OpenAPI 요청 파라미터 **`includeKey=1`**이 필요하다(공식 매뉴얼, **기본값 0**). `AladinBookSearchClient.buildSearchUrl`·`buildLookupUrl`이 이 파라미터를 안 보내(기본 0), 알라딘이 돌려주는 `item.link`에 ttbkey가 빠진다. BookTimer는 그 link를 검증 없이 `book.purchaseLink`에 저장하고 `/buy`가 그대로 302 재생하므로 구매링크가 영영 무추적이다. 쿠팡(T-129)이 "플랫폼이 생성한 링크 미경유(자작 합성)"였다면, 알라딘은 "API가 생성한 link를 쓰되 제휴키 포함 옵션을 안 켬" — **합성 함정은 회피했으나 결과(추적 0)는 동일**한 한 겹 다른 함정.
+
+**감별·배제**: ① 검색은 정상 — 요청의 `ttbkey`는 인증키로 실리고, 결함은 *응답 link*의 제휴키다(요청 ttbkey ≠ 응답 link ttbkey). ② 테스트가 못 잡음(가짜 GREEN): `AladinBookSearchClientTest.parse_mapsItems`가 픽스처 link에 `ttbkey=x`를 손으로 박고 그 존재를 단언 → 파서 verbatim 복사만 증명, 실 API가 includeKey 없이 ttbkey를 주는지는 미검증. ③ 자가 클릭·구매는 실적 제외(N-146·T-129)라 링크가 고쳐져도 본인 트래픽으론 검증 불가 — **링크 형식(ttbkey 유무)으로 판별**하고 실적은 제3자로.
+
+**해결**: `buildSearchUrl`·`buildLookupUrl`에 `.queryParam("includeKey", 1)` 추가(새 검색·백필부터 ttbkey 실림). **이미 저장된 무추적 링크는 픽스만으론 안 고쳐지므로**(purchaseLink는 검색 시점에 박혀 저장됨) `BookCatalogBackfillService.backfillPurchaseLinks`(대상=`purchaseLink`에 `ttbkey=` 없고 isbn 있는 책, `lookupByIsbn` 재조회로 교체, 재조회에도 ttbkey 없으면 옛 링크 유지·`notFound` — 무추적 링크로 덮어쓰지 않음) + `POST /admin/books/backfill-purchase-links`(ADMIN·CSRF·limit) + admin 버튼. 배포 후 운영 ttbkey로 백필 실행 → `/buy` 링크에 ttbkey 재확인이 최종 검증(PR #644).
+
+**일반화**: **"플랫폼이 생성한 링크"라도 제휴키가 실제로 실렸는지 실측하라** — 제휴사가 link를 발급해준다고 끝이 아니라, 그 발급에 제휴키 포함 옵션(알라딘 `includeKey=1`)이 켜졌는지까지 확인해야 한다. 저장형 링크(DB 적재)는 결함이 있으면 기존 데이터 전량이 영구 무추적이 되니 픽스와 **백필**이 짝이다.
+
+**2회차(T-129 쿠팡 재발)** — "어필리에이트 클릭 추적 무성 실패" 트랩군으로 재발·승격 트래커에 등재. 개념 = [learning-notes N-146](learning-notes.md), [N-035](learning-notes.md). 자동 메모리 `aladin-affiliate-tracking-broken`.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2538,3 +2556,4 @@ git worktree remove ../BookTimer-<task>
 | 2026-07-02 | T-128 (Yes24 링크프라이스 딥링크, 모바일 UA면 Yes24 자체 게이트 `lpfront.aspx`가 목적지를 m.yes24 메인으로 치환 — tu에 모바일 URL을 넣어도 우회 불가, 해결=모바일 UA면 래퍼 없이 m.yes24.com/search 직행, 운영 curl 실측, 1회차 신규) |
 | 2026-07-03 | T-129 (쿠팡 파트너스 "구매" 링크 추적 0 — CoupangLinkBuilder가 정식 추적링크 아닌 자작 lptag 검색 URL을 302로 보냄, 쿠팡 추적은 딥링크 API/간편링크 생성·`isshortened=Y` 전제라 미집계, 본인구매 0은 별개(자가구매 제외), 해법=딥링크 API 연동 계획, 1회차 신규) |
 | 2026-07-04 | T-130 (dark-launch 기능 secret을 task-def valueFrom으로 배선하면, 앱 기본값(application.properties)이 있어도 SSM 파라미터 미생성 시 ECS 배포가 서킷브레이커 롤백 — valueFrom이 파라미터 존재를 하드 강제해 태스크 기동 실패. 해결=미점등 기능 secret은 task-def에서 빼거나 placeholder 파라미터 먼저 생성, PR #642로 secret 3줄 제거해 언블록. 1회차 신규) |
+| 2026-07-04 | T-131 (알라딘 제휴 클릭 추적 0 — OpenAPI 요청에 includeKey=1 미전송(기본 0)이라 응답 link에 TTBKey 안 실림, 저장·302 재생 구매링크가 무추적, 운영 실측 2건(partner=openAPI&start=api·ttbkey 부재)으로 확정, 해법=includeKey=1 추가+기존 저장분 백필, PR #644, **2회차=T-129 쿠팡 재발·"어필리에이트 추적 무성실패" 트래커 등재**) |
