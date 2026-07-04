@@ -147,6 +147,7 @@
 - [N-144. @RestController는 ControllerAdvice의 @ModelAttribute를 무시 — 전역 뷰 플래그는 JSON API에 직접 주입](#n-144-restcontroller는-controlleradvice의-modelattribute를-무시--전역-뷰-플래그는-json-api에-직접-주입)
 - [N-145. 참여 @Transactional 안에서 DataIntegrityViolationException을 삼켜도 늦다 — rollback-only와 UnexpectedRollbackException](#n-145-참여-transactional-안에서-dataintegrityviolationexception을-삼켜도-늦다--rollback-only와-unexpectedrollbackexception)
 - [N-146. 어필리에이트 클릭 추적은 "파라미터"가 아니라 "플랫폼이 생성한 링크"가 전제 — 쿠팡 파트너스 lptag의 함정](#n-146-어필리에이트-클릭-추적은-파라미터가-아니라-플랫폼이-생성한-링크가-전제--쿠팡-파트너스-lptag의-함정)
+- [N-147. 제휴 점등 상태는 문서가 아니라 운영 302 실측이 정본 — SSM 드리프트와 referrer 앞단 함정](#n-147-제휴-점등-상태는-문서가-아니라-운영-302-실측이-정본--ssm-드리프트와-referrer-앞단-함정)
 
 ---
 
@@ -6563,3 +6564,24 @@ BookTimer가 쿠팡 "구매" 버튼을 `www.coupang.com/np/search?q={ISBN}&lptag
 ### 관련
 
 - [troubleshooting T-129](troubleshooting.md)(쿠팡 결함·딥링크 API 해법), [T-131](troubleshooting.md)(알라딘 `includeKey` 함정 — 같은 계열 2회차), [T-128](troubleshooting.md)(Yes24 딥링크 래퍼 대조). 계획 md `claude-docs/plans/2026-07-03-coupang-deeplink-api.md`. 자동 메모리 `coupang-affiliate-tracking-broken`·`aladin-affiliate-tracking-broken`.
+
+---
+
+## N-147. 제휴 점등 상태는 문서가 아니라 운영 302 실측이 정본 — SSM 드리프트와 referrer 앞단 함정
+
+> **한 줄 요약**: 제휴 추적이 실제로 켜졌는지는 문서(plan.md) 서술로 판단하면 틀린다 — SSM 파라미터 `--overwrite` 같은 콘솔 작업은 코드·문서에 안 남아 드리프트하기 때문. 운영 `/buy` 302 목적지에 추적자(알라딘 `ttbkey`·Yes24 `pid`)가 실렸는지 직접 실측하는 게 정본이고, 그 302 체인은 **최종 referrer가 아니라 앞단 중개 게이트까지** 봐야 채널을 오판하지 않는다.
+
+### 맥락
+
+2026-07-04 "제휴 점등 됐나?" 확인 세션. 세 번 헛디딜 뻔했다: ① plan.md 앞부분(옛 서술)만 보고 Yes24를 "미점등 — 남은 스위치 하나"로 판단했으나, 같은 문서 하단(최신 정정)엔 이미 "점등 완료·실측 확정"이 적혀 있었다. ② 알라딘은 코드 픽스(`includeKey=1`, [N-146](#n-146-어필리에이트-클릭-추적은-파라미터가-아니라-플랫폼이-생성한-링크가-전제--쿠팡-파트너스-lptag의-함정)/T-131)는 배포됐으나 "기존 저장분 백필을 운영에서 **실행**했는지"가 문서로 불명확 → 운영 실측하니 여전히 무추적이라 admin 백필을 직접 실행해야 했다. ③ Yes24 `/buy/yes24`의 referrer가 `www.yes24.com/Cooperate/Yes24Gateway.aspx?pid=…`라 "Yes24 직접 제휴"로 오해했으나, 그 앞단 `newtip.net`(링크프라이스) 경유가 정본이라 실적은 링크프라이스 API로 잡힌다.
+
+### 교훈 / 일반화
+
+- **"켜졌나?"는 문서가 아니라 실측으로 답하라** — 점등의 마지막 한 걸음이 SSM `--overwrite`·콘솔 토글 같은 **repo 밖 작업**이면 코드·문서엔 안 남아 드리프트한다. 운영 엔드포인트(여기선 `/buy` 302 목적지)를 직접 까서 추적자(`ttbkey`/`pid`) 유무를 눈으로 본다. 이게 "상태"의 유일한 정본.
+- **긴 문서는 끝까지 읽어라 — 최신 정정은 하단에 쌓인다** — plan.md처럼 누적되는 문서는 앞부분에 옛 서술("남은 스위치 하나")이 남고 하단에 최신 정정("점등 완료")이 붙는다. 앞만 보고 판단하면 이미 해결된 걸 미해결로 오진한다. 상태를 묻기 전에 그 항목의 **모든** 언급을 grep해 최신을 잡아라.
+- **302/리다이렉트 추적은 최종 referrer가 아니라 체인 앞단까지 본다** — 중개 제휴사(링크프라이스)는 최종 목적지의 referrer엔 자기 도메인을 안 남기고(그 앞 홉이라) 사라진다. referrer의 `pid`만 보면 "직접 제휴"로 오판한다. `read_network_requests`로 302 홉을 순서대로 보거나 우리 서버가 반환하는 Location(SSM 템플릿)을 확인해 **누구를 경유하는지**를 잡아라 — 실적이 어느 대시보드에 잡히는지가 여기서 갈린다.
+- **되돌릴 수 있게 설계된 백필은 곧장 실행 가능** — 이 백필은 재조회 실패 시 옛 링크를 유지(무추적으로 덮어쓰지 않음)라 안전. "실행하면 뭐가 깨지나"를 코드로 먼저 확인하면 운영 액션도 근거 있게 친다.
+
+### 관련
+
+- [N-146](#n-146-어필리에이트-클릭-추적은-파라미터가-아니라-플랫폼이-생성한-링크가-전제--쿠팡-파트너스-lptag의-함정)(추적이 켜지는 *원리* — 이 노트는 그 켜짐을 *어떻게 확인*하나의 짝). [troubleshooting T-128](troubleshooting.md)(Yes24 링크프라이스 래퍼)·[T-129](troubleshooting.md)·[T-131](troubleshooting.md). changelog 2026-07-04(알라딘 백필 운영 실행). 자동 메모리 `aladin-affiliate-tracking-broken`·`coupang-affiliate-tracking-broken`.
