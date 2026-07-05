@@ -31,6 +31,7 @@ const props = defineProps<{
     self: boolean
     coupangEnabled: boolean
     yes24Enabled: boolean
+    kyoboEnabled: boolean
     loginId: string
     showTitle?: boolean
 }>()
@@ -46,6 +47,7 @@ function buyOptions(b: BookSummary): { label: string; href: string }[] {
     if (b.purchaseLink) o.push({ label: '알라딘', href: `/u/${props.loginId}/books/${b.id}/buy` })
     if (props.coupangEnabled) o.push({ label: '쿠팡', href: `/u/${props.loginId}/books/${b.id}/buy/coupang` })
     if (props.yes24Enabled) o.push({ label: 'Yes24', href: `/u/${props.loginId}/books/${b.id}/buy/yes24` })
+    if (props.kyoboEnabled) o.push({ label: '교보문고', href: `/u/${props.loginId}/books/${b.id}/buy/kyobo` })
     return o
 }
 
@@ -81,6 +83,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onNoteKeydown))
                         <p class="affiliate-pop-item">※ "구매" 링크는 제휴(알라딘) 링크로, 구매 시 일부 수수료를 받을 수 있습니다.</p>
                         <p v-if="coupangEnabled" class="affiliate-pop-item">이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
                         <p v-if="yes24Enabled" class="affiliate-pop-item">Yes24 "구매" 링크는 제휴 링크로, 구매 시 일부 수수료를 받을 수 있습니다.</p>
+                        <p v-if="kyoboEnabled" class="affiliate-pop-item">교보문고 "구매" 링크는 제휴 링크로, 구매 시 일부 수수료를 받을 수 있습니다.</p>
                     </div>
                 </span>
             </div>

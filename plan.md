@@ -491,6 +491,15 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
       ⚠️ **추적 결함 발견·가드 2026-07-04**: 점등 후 운영 Chrome 실측 결과 `YES24_TRACKING_CODE`는 실값으로 켜졌으나(버튼 노출) **`YES24_SEARCH_URL_TEMPLATE`가 링크프라이스 래퍼가 아닌 순수 검색 URL**(`www.yes24.com/product/search?query=<ISBN>`)이라 추적코드가 링크에 안 실려 **데스크톱도 추적 0**이었다(알라딘 T-131과 같은 무성실패 계열, 2건 실측). 위 "남은 것 = TRACKING_CODE 스위치 하나"는 부정확 — TRACKING_CODE만 켜고 SEARCH_URL_TEMPLATE를 래퍼로 안 채우면 추적이 안 된다. `isEnabled()`가 `trackingCode`만 보던 것을 **템플릿에 `{trackingCode}` 포함까지 검증**하도록 가드 추가(추적 안 될 상황이면 버튼 숨김 — 무성실패를 명시화). **근본 복구**=SSM `YES24_SEARCH_URL_TEMPLATE`를 래퍼로 `--overwrite`. 상세 changelog 2026-07-04, 자동 메모리 `aladin-affiliate-tracking-broken`(YES24 후속 포함).
       ✅ **복구 완료·실측 확정 2026-07-04**: SSM `YES24_SEARCH_URL_TEMPLATE`를 링크프라이스 래퍼(실제 값 `newtip.net/click.php?m=yes24&a={trackingCode}&l=9999&l_cd1=3&l_cd2=0&tu=<Yes24 검색 URL>{query}` — 위 초안의 `lpweb.kr/a_id=`가 아니라 컨버터가 준 `newtip.net/a=` 형식)로 교체 후 재배포(GitHub Actions Deploy to ECS Fargate). 운영 Chrome 재실측: `/buy/yes24` referrer가 `www.yes24.com/Cooperate/Yes24Gateway.aspx?pid=…&ReturnURL=…`(링크프라이스 제휴 게이트, `pid` 실림) 경유 = 데스크톱 추적 복구 확정. (SSM 교체·재배포는 운영자 작업, 실측 검증은 Claude.)
       ✅ **실적 조회 자동화 착수 2026-07-04**: 커미션 확인을 브라우저·세션 없이 무인화하려고 LinkPrice 실적 조회 오픈 API(`api.linkprice.com/affiliate/translist.php`)를 집계·요약하는 로컬 스크립트 `.claude/scripts/affiliate-report.mjs` 신설(즉석 조회 A안). `auth_key` 발급(링크프라이스 문의)만 되면 `a_id=A100705638`로 판매·커미션·정산상태를 당겨 요약. 알라딘은 실적 조회 API 없음(TTB 2022 종료)·쿠팡 OFF라 YES24만 대상. 상세 changelog 2026-07-04.
+    - **교보문고 제휴 추가 (dark-launch) ✅ 2026-07-05**: 링크프라이스 4번째 머천트로 교보문고 "구매" 추가 — `Yes24LinkBuilder` 패턴을 그대로 미러링(대칭 복제).
+      `KyoboLinkBuilder`가 `f(ISBN·제목, 추적코드, 템플릿)`로 저장 없이 런타임 생성(목적지는 교보 통합검색 URL — 상품 상세는 내부ID(S000…) 기반이라 ISBN 조립 불가),
+      추적코드 `not-configured` 기본이면 `kyoboEnabled=false`로 버튼·고지문 숨김 → 대시보드에서 교보 링크프라이스 실 URL(m/l/tu) 발급 후 SSM
+      `BOOKTIMER_KYOBO_TRACKING_CODE`/`_SEARCH_URL_TEMPLATE` 주입만으로 점등(코드 변경 0, 미점등 secret을 task-def valueFrom으로 안 걸어 T-130 롤백 회피).
+      `isEnabled()` 이중 게이트(추적코드 AND 템플릿에 `{trackingCode}` 자리)로 Yes24 T-131 무성실패 방어 상속, 모바일 UA 분기 T-128 대칭(교보 게이트 실측은 점등 후).
+      엔드포인트 `/buy/kyobo`·`/u/{loginId}/books/{id}/buy/kyobo`, 카운트 분리(`Book.kyoboClickCount`, Flyway V59). 활성 플래그 3경로(AffiliateModelAdvice SSR
+      + BookApiController·ProfileApiController JSON 직접 주입 N-144), 뷰 3곳 buyOptions push + 고지문구 + 번들 재빌드. `application.properties`는 Yes24 대칭으로 키 미기재(@Value 기본값).
+      실적 조회는 `affiliate-report.mjs`가 `m_id`로 교보를 자동 집계(코드 변경 0). TDD: KyoboLinkBuilderTest(게이트·인코딩·queryFor)·KyoboBuyControllerTest(302·집계·IDOR·공개/비공개) RED→GREEN.
+      **점등 미지값**: 교보 m/l/tu 실값·모바일 게이트·SSM 주입은 대시보드 발급 시점 확정. 상세 changelog 2026-07-05.
   - **③-c 책 상세 페이지 완료 ✅ 2026-06-03**: `GET /books/{id}` — 책 메타 + 월별 일자 기록 + 누적 시간. 소유권 검사(IDOR, 없으면 책장으로).
     `BookContributionService`(세션 패키지, 유저 TZ 일자) + `findByUserAndBook`. 책장에서 제목 클릭 진입.
     TDD: BookContributionServiceTest(단위)·BookControllerTest(렌더·IDOR). **책 3단계 완료.**
