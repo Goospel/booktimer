@@ -34,6 +34,7 @@
         { "name": "BOOKTIMER_YES24_SEARCH_URL_TEMPLATE", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/YES24_SEARCH_URL_TEMPLATE" },
         { "name": "BOOKTIMER_KYOBO_TRACKING_CODE", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/KYOBO_TRACKING_CODE" },
         { "name": "BOOKTIMER_KYOBO_SEARCH_URL_TEMPLATE", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/KYOBO_SEARCH_URL_TEMPLATE" },
+        { "name": "BOOKTIMER_KYOBO_MOBILE_SEARCH_URL_TEMPLATE", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/KYOBO_MOBILE_SEARCH_URL_TEMPLATE" },
         { "name": "BOOKTIMER_ADMIN_LOGIN_IDS", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/ADMIN_LOGIN_IDS" },
         { "name": "BOOKTIMER_LLM_API_KEY", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/LLM_API_KEY" },
         { "name": "SPRING_MAIL_USERNAME", "valueFrom": "arn:aws:ssm:<REGION>:<ACCOUNT_ID>:parameter/booktimer/SPRING_MAIL_USERNAME" },
