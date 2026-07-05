@@ -22,7 +22,6 @@
     "@vue/test-utils": "^2",
     "cross-env": "^7",
     "jsdom": "^26",
-    "phaser": "^3.80.1",
     "sharp": "^0.35.2",
     "typescript": "^5",
     "vite": "^6",
