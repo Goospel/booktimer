@@ -29,7 +29,7 @@ interface ProfileData {
     followerCount: number; followingCount: number;
     following: boolean; self: boolean;
     personality: string | null; personalityTags: TagChip[];
-    books: BookSummary[]; coupangEnabled: boolean; yes24Enabled: boolean;
+    books: BookSummary[]; coupangEnabled: boolean; yes24Enabled: boolean; kyoboEnabled: boolean;
 }
 
 // ── 상태 ref ──────────────────────────────────────────────────────────────
@@ -268,7 +268,7 @@ onUnmounted(() => {
                               :tag-panel="tagPanel" :tag-label="tagLabel" @close-tag="closeTag" />
                     <ShelfPanel v-else
                                 :books="books" :shelf-filter="shelfFilter" :shelf-sort="shelfSort" :self="profile.self"
-                                :coupang-enabled="profile.coupangEnabled" :yes24-enabled="profile.yes24Enabled" :login-id="loginId"
+                                :coupang-enabled="profile.coupangEnabled" :yes24-enabled="profile.yes24Enabled" :kyobo-enabled="profile.kyoboEnabled" :login-id="loginId"
                                 @select-status="selectStatus" @select-sort="selectSort" />
                 </section>
             </template>
@@ -296,7 +296,7 @@ onUnmounted(() => {
                 <div class="shop-main">
                     <section class="dash-card">
                         <ShelfPanel :books="books" :shelf-filter="shelfFilter" :shelf-sort="shelfSort" :self="profile.self"
-                                    :coupang-enabled="profile.coupangEnabled" :yes24-enabled="profile.yes24Enabled" :login-id="loginId"
+                                    :coupang-enabled="profile.coupangEnabled" :yes24-enabled="profile.yes24Enabled" :kyobo-enabled="profile.kyoboEnabled" :login-id="loginId"
                                     :show-title="true" @select-status="selectStatus" @select-sort="selectSort" />
                     </section>
                 </div>

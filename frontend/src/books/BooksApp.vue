@@ -37,6 +37,7 @@ const popularity = ref<Record<string, Popularity>>({})
 const searchEnabled = ref(false)
 const coupangEnabled = ref(false)
 const yes24Enabled = ref(false)
+const kyoboEnabled = ref(false)
 const nickname = ref('')
 const error = ref<string | null>(null)
 const loadError = ref(false)
@@ -100,6 +101,7 @@ function buyOptions(book: MyBookSummary): { label: string; href: string }[] {
     if (book.purchaseLink) o.push({ label: '알라딘', href: `/books/${book.id}/buy` })
     if (coupangEnabled.value) o.push({ label: '쿠팡', href: `/books/${book.id}/buy/coupang` })
     if (yes24Enabled.value) o.push({ label: 'Yes24', href: `/books/${book.id}/buy/yes24` })
+    if (kyoboEnabled.value) o.push({ label: '교보문고', href: `/books/${book.id}/buy/kyobo` })
     return o
 }
 
@@ -115,6 +117,7 @@ async function load() {
         searchEnabled.value = data.searchEnabled ?? false
         coupangEnabled.value = data.coupangEnabled ?? false
         yes24Enabled.value = data.yes24Enabled ?? false
+        kyoboEnabled.value = data.kyoboEnabled ?? false
         nickname.value = data.nickname ?? ''
     } catch {
         loadError.value = true
@@ -317,6 +320,7 @@ async function removeBook(book: MyBookSummary) {
             <p class="affiliate-pop-item">※ "구매" 링크는 제휴(알라딘) 링크로, 구매 시 일부 수수료를 받을 수 있습니다.</p>
             <p v-if="coupangEnabled" class="affiliate-pop-item">이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
             <p v-if="yes24Enabled" class="affiliate-pop-item">Yes24 "구매" 링크는 제휴 링크로, 구매 시 일부 수수료를 받을 수 있습니다.</p>
+            <p v-if="kyoboEnabled" class="affiliate-pop-item">교보문고 "구매" 링크는 제휴 링크로, 구매 시 일부 수수료를 받을 수 있습니다.</p>
           </div>
         </span>
         <div v-if="noteOpen" class="affiliate-pop-backdrop" @click="noteOpen = false"></div>

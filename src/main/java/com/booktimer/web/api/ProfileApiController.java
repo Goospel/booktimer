@@ -3,6 +3,7 @@ package com.booktimer.web.api;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookStatus;
 import com.booktimer.book.CoupangLinkBuilder;
+import com.booktimer.book.KyoboLinkBuilder;
 import com.booktimer.book.Yes24LinkBuilder;
 import com.booktimer.profile.ProfileService;
 import com.booktimer.profile.ProfileTag;
@@ -38,15 +39,18 @@ public class ProfileApiController {
     private final CurrentUserService currentUserService;
     private final CoupangLinkBuilder coupangLinkBuilder;
     private final Yes24LinkBuilder yes24LinkBuilder;
+    private final KyoboLinkBuilder kyoboLinkBuilder;
 
     public ProfileApiController(ProfileService profileService,
                                 CurrentUserService currentUserService,
                                 CoupangLinkBuilder coupangLinkBuilder,
-                                Yes24LinkBuilder yes24LinkBuilder) {
+                                Yes24LinkBuilder yes24LinkBuilder,
+                                KyoboLinkBuilder kyoboLinkBuilder) {
         this.profileService = profileService;
         this.currentUserService = currentUserService;
         this.coupangLinkBuilder = coupangLinkBuilder;
         this.yes24LinkBuilder = yes24LinkBuilder;
+        this.kyoboLinkBuilder = kyoboLinkBuilder;
     }
 
     /** 프로필 헤더 + 책BTI 서술/태그칩 + 전체 PUBLIC 책 목록(상태필터 없음). */
@@ -57,7 +61,8 @@ public class ProfileApiController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "프로필을 찾을 수 없습니다"));
         boolean coupangEnabled = coupangLinkBuilder.isEnabled();
         boolean yes24Enabled = yes24LinkBuilder.isEnabled();
-        return ProfileResponse.from(v, coupangEnabled, yes24Enabled);
+        boolean kyoboEnabled = kyoboLinkBuilder.isEnabled();
+        return ProfileResponse.from(v, coupangEnabled, yes24Enabled, kyoboEnabled);
     }
 
     /**
@@ -149,10 +154,10 @@ public class ProfileApiController {
             long followerCount, long followingCount,
             boolean following, boolean self,
             String personality, List<TagChip> personalityTags,
-            List<BookSummary> books, boolean coupangEnabled, boolean yes24Enabled) {
+            List<BookSummary> books, boolean coupangEnabled, boolean yes24Enabled, boolean kyoboEnabled) {
 
-        /** ⚠️ coupangEnabled·yes24Enabled는 각 빌더의 isEnabled()로 계산해 전달 — 여기서 false 하드코딩 금지. */
-        static ProfileResponse from(ProfileView v, boolean coupangEnabled, boolean yes24Enabled) {
+        /** ⚠️ coupangEnabled·yes24Enabled·kyoboEnabled는 각 빌더의 isEnabled()로 계산해 전달 — 여기서 false 하드코딩 금지. */
+        static ProfileResponse from(ProfileView v, boolean coupangEnabled, boolean yes24Enabled, boolean kyoboEnabled) {
             List<BookSummary> books = v.books().stream()
                     .map(b -> BookSummary.from(b, v.bookTimes()))
                     .toList();
@@ -162,7 +167,7 @@ public class ProfileApiController {
             return new ProfileResponse(v.loginId(), v.nickname(), v.profileCharacterCode(),
                     v.followerCount(), v.followingCount(),
                     v.following(), v.self(),
-                    v.personality(), tags, books, coupangEnabled, yes24Enabled);
+                    v.personality(), tags, books, coupangEnabled, yes24Enabled, kyoboEnabled);
         }
     }
 }
