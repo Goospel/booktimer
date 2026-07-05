@@ -1,6 +1,7 @@
 package com.booktimer.web;
 
 import com.booktimer.book.CoupangLinkBuilder;
+import com.booktimer.book.KyoboLinkBuilder;
 import com.booktimer.book.Yes24LinkBuilder;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -19,10 +20,13 @@ public class AffiliateModelAdvice {
 
     private final CoupangLinkBuilder coupangLinkBuilder;
     private final Yes24LinkBuilder yes24LinkBuilder;
+    private final KyoboLinkBuilder kyoboLinkBuilder;
 
-    public AffiliateModelAdvice(CoupangLinkBuilder coupangLinkBuilder, Yes24LinkBuilder yes24LinkBuilder) {
+    public AffiliateModelAdvice(CoupangLinkBuilder coupangLinkBuilder, Yes24LinkBuilder yes24LinkBuilder,
+                                KyoboLinkBuilder kyoboLinkBuilder) {
         this.coupangLinkBuilder = coupangLinkBuilder;
         this.yes24LinkBuilder = yes24LinkBuilder;
+        this.kyoboLinkBuilder = kyoboLinkBuilder;
     }
 
     @ModelAttribute("coupangEnabled")
@@ -33,5 +37,10 @@ public class AffiliateModelAdvice {
     @ModelAttribute("yes24Enabled")
     public boolean yes24Enabled() {
         return yes24LinkBuilder.isEnabled();
+    }
+
+    @ModelAttribute("kyoboEnabled")
+    public boolean kyoboEnabled() {
+        return kyoboLinkBuilder.isEnabled();
     }
 }
