@@ -1,6 +1,7 @@
 package com.booktimer.web;
 
 import com.booktimer.book.BookService;
+import com.booktimer.book.KyoboLinkBuilder;
 import com.booktimer.book.Yes24LinkBuilder;
 import com.booktimer.session.BookReadingDetail;
 import com.booktimer.security.CurrentUserService;
@@ -160,6 +161,25 @@ public class BookController {
     }
 
     /**
+     * 교보문고 "구매" 클릭 — 집계 후 교보 검색 링크로 리다이렉트. 모바일 UA 분기는 {@link #buyYes24} 참조(T-128 대칭).
+     */
+    @GetMapping("/books/{id}/buy/kyobo")
+    public String buyKyobo(@PathVariable Long id, Principal principal,
+                           @RequestHeader(value = "User-Agent", required = false) String userAgent) {
+        User user = currentUser(principal);
+        boolean mobile = KyoboLinkBuilder.isMobileUserAgent(userAgent);
+        try {
+            String link = bookService.recordKyoboClick(user, id, mobile);
+            if (link != null) {
+                return "redirect:" + link;
+            }
+        } catch (IllegalArgumentException ignored) {
+            // IDOR 방지 — 존재 여부 노출 없이 책장으로.
+        }
+        return "redirect:/books";
+    }
+
+    /**
      * 남의 책방(공개 프로필)에서 쿠팡 "구매" 클릭.
      */
     @GetMapping("/u/{loginId}/books/{bookId}/buy/coupang")
@@ -188,6 +208,21 @@ public class BookController {
     }
 
     /**
+     * 남의 책방(공개 프로필)에서 교보문고 "구매" 클릭. 모바일 UA 분기는 {@link #buyYes24} 참조(T-128 대칭).
+     */
+    @GetMapping("/u/{loginId}/books/{bookId}/buy/kyobo")
+    public String buyKyoboFromProfile(@PathVariable String loginId, @PathVariable Long bookId, Principal principal,
+                                      @RequestHeader(value = "User-Agent", required = false) String userAgent) {
+        currentUser(principal);
+        boolean mobile = KyoboLinkBuilder.isMobileUserAgent(userAgent);
+        String link = bookService.recordPublicKyoboClick(bookId, mobile);
+        if (link != null) {
+            return "redirect:" + link;
+        }
+        return "redirect:/u/" + loginId;
+    }
+
+    /**
      * 내 책 상세의 구매 옵션 리스트(알라딘/쿠팡/Yes24) — 활성 제공자만 담는다(프론트 buyOptions와 동형).
      * 알라딘=구매링크 유무, 쿠팡·Yes24=제휴 활성 여부. 템플릿은 size로 드롭다운/단일 버튼을 가른다.
      */
@@ -202,6 +237,9 @@ public class BookController {
         }
         if (bookService.yes24Enabled()) {
             opts.add(new BuyOption("Yes24", base + "/buy/yes24"));
+        }
+        if (bookService.kyoboEnabled()) {
+            opts.add(new BuyOption("교보문고", base + "/buy/kyobo"));
         }
         return opts;
     }

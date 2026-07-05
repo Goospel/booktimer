@@ -7,6 +7,7 @@ import com.booktimer.book.BookService;
 import com.booktimer.book.BookStatus;
 import com.booktimer.book.BookVisibility;
 import com.booktimer.book.CoupangLinkBuilder;
+import com.booktimer.book.KyoboLinkBuilder;
 import com.booktimer.book.Yes24LinkBuilder;
 import com.booktimer.popularity.FollowScopePopularity;
 import com.booktimer.popularity.FollowScopePopularityService;
@@ -50,18 +51,21 @@ public class BookApiController {
     private final FollowScopePopularityService popularityService;
     private final CoupangLinkBuilder coupangLinkBuilder;
     private final Yes24LinkBuilder yes24LinkBuilder;
+    private final KyoboLinkBuilder kyoboLinkBuilder;
 
     public BookApiController(CurrentUserService currentUserService, BookService bookService,
                              BookReadingStatsService statsService,
                              FollowScopePopularityService popularityService,
                              CoupangLinkBuilder coupangLinkBuilder,
-                             Yes24LinkBuilder yes24LinkBuilder) {
+                             Yes24LinkBuilder yes24LinkBuilder,
+                             KyoboLinkBuilder kyoboLinkBuilder) {
         this.currentUserService = currentUserService;
         this.bookService = bookService;
         this.statsService = statsService;
         this.popularityService = popularityService;
         this.coupangLinkBuilder = coupangLinkBuilder;
         this.yes24LinkBuilder = yes24LinkBuilder;
+        this.kyoboLinkBuilder = kyoboLinkBuilder;
     }
 
     // ── 조회: 책장 전체 + 메타 + popularity ──────────────────────────────────
@@ -76,7 +80,7 @@ public class BookApiController {
         List<MyBookSummary> rows = books.stream().map(b -> MyBookSummary.from(b, times)).toList();
         return new ShelfResponse(user.getLoginId(), user.getNickname(),
                 bookService.searchEnabled(), coupangLinkBuilder.isEnabled(), yes24LinkBuilder.isEnabled(),
-                rows, toPopularityMap(pop));
+                kyoboLinkBuilder.isEnabled(), rows, toPopularityMap(pop));
     }
 
     // ── 조회: 검색(1페이지) + 검색결과 isbn popularity ───────────────────────
@@ -182,7 +186,7 @@ public class BookApiController {
     public record Popularity(long wantCount, long readCount) {}
 
     public record ShelfResponse(String myLoginId, String nickname, boolean searchEnabled,
-                                boolean coupangEnabled, boolean yes24Enabled,
+                                boolean coupangEnabled, boolean yes24Enabled, boolean kyoboEnabled,
                                 List<MyBookSummary> books, Map<String, Popularity> popularity) {}
 
     public record SearchResponse(List<SearchRow> results, Map<String, Popularity> popularity) {}

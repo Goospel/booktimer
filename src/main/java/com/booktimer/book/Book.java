@@ -99,6 +99,10 @@ public class Book extends BaseTimeEntity {
     @Column(nullable = false)
     private long yes24ClickCount = 0L;
 
+    /** 교보문고 제휴 "구매" 클릭 누적 수. 알라딘·쿠팡·Yes24와 분리 집계 — 파트너별 성과 비교. */
+    @Column(nullable = false)
+    private long kyoboClickCount = 0L;
+
     /**
      * 공개 범위(SNS). 기본 비공개 — 공개는 사용자가 책마다 명시적으로 켠다(opt-in).
      * 기존 책은 마이그레이션(V8)에서 PRIVATE로 백필된다.
@@ -201,6 +205,11 @@ public class Book extends BaseTimeEntity {
     /** Yes24 제휴 "구매" 클릭을 1회 집계한다(알라딘·쿠팡과 분리 집계). */
     public void recordYes24Click() {
         this.yes24ClickCount++;
+    }
+
+    /** 교보문고 제휴 "구매" 클릭을 1회 집계한다(알라딘·쿠팡·Yes24와 분리 집계). */
+    public void recordKyoboClick() {
+        this.kyoboClickCount++;
     }
 
     /**
@@ -330,6 +339,10 @@ public class Book extends BaseTimeEntity {
 
     public long getYes24ClickCount() {
         return yes24ClickCount;
+    }
+
+    public long getKyoboClickCount() {
+        return kyoboClickCount;
     }
 
     public BookVisibility getVisibility() {

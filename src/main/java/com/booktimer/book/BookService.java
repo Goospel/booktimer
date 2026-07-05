@@ -27,6 +27,7 @@ public class BookService {
     private final CoupangLinkBuilder coupangLinkBuilder;
     private final CoupangDeeplinkClient coupangDeeplinkClient;
     private final Yes24LinkBuilder yes24LinkBuilder;
+    private final KyoboLinkBuilder kyoboLinkBuilder;
     private final Clock clock;
 
     public BookService(BookRepository bookRepository, BookSearchClient searchClient,
@@ -35,6 +36,7 @@ public class BookService {
                        CoupangLinkBuilder coupangLinkBuilder,
                        CoupangDeeplinkClient coupangDeeplinkClient,
                        Yes24LinkBuilder yes24LinkBuilder,
+                       KyoboLinkBuilder kyoboLinkBuilder,
                        Clock clock) {
         this.bookRepository = bookRepository;
         this.searchClient = searchClient;
@@ -43,6 +45,7 @@ public class BookService {
         this.coupangLinkBuilder = coupangLinkBuilder;
         this.coupangDeeplinkClient = coupangDeeplinkClient;
         this.yes24LinkBuilder = yes24LinkBuilder;
+        this.kyoboLinkBuilder = kyoboLinkBuilder;
         this.clock = clock;
     }
 
@@ -61,6 +64,12 @@ public class BookService {
     @Transactional(readOnly = true)
     public boolean yes24Enabled() {
         return yes24LinkBuilder.isEnabled();
+    }
+
+    /** 교보문고 제휴 링크 노출 여부(추적코드 설정 시 true) — {@link #yes24Enabled()}와 대칭. */
+    @Transactional(readOnly = true)
+    public boolean kyoboEnabled() {
+        return kyoboLinkBuilder.isEnabled();
     }
 
     @Transactional(readOnly = true)
@@ -318,6 +327,50 @@ public class BookService {
             return null; // 비활성(추적코드 미설정)
         }
         book.recordYes24Click();
+        bookRepository.save(book);
+        return link;
+    }
+
+    /**
+     * 내 책의 교보문고 "구매" 클릭을 집계하고 이동할 교보 검색 링크를 돌려준다 — Yes24 {@link #recordYes24Click}과 대칭.
+     *
+     * <p>소유권을 강제한다(IDOR 방지). 링크는 DB에 없고 {@link KyoboLinkBuilder}가 런타임 생성한다 —
+     * 교보는 제목이 항상 있어 링크가 늘 만들어지므로, null 사유는 "비활성(추적코드 미설정)"뿐이다(그땐 무집계).
+     *
+     * @param mobileDevice true면 모바일 UA — 교보 게이트가 딥링크를 버리는지는 실측 전이라 대칭으로 모바일 검색으로
+     *                      직행하는 링크를 받는다(T-128 대칭). 집계 자체는 mobile 여부와 무관하게 동일.
+     * @return 이동할 교보 검색 링크. 비활성이면 null.
+     * @throws IllegalArgumentException 내 책이 아니거나 존재하지 않는 경우
+     */
+    public String recordKyoboClick(User user, Long bookId, boolean mobileDevice) {
+        Book book = ownedBook(user, bookId);
+        String link = kyoboLinkBuilder.buildSearchLink(book, mobileDevice);
+        if (link == null) {
+            return null; // 비활성(추적코드 미설정) — 집계하지 않음
+        }
+        book.recordKyoboClick();
+        bookRepository.save(book);
+        return link;
+    }
+
+    /**
+     * 공개(PUBLIC) 책의 교보문고 "구매" 클릭을 집계하고 링크를 돌려준다 — 남의 책방(공개 프로필)에서 쓴다.
+     * {@link #recordPublicYes24Click}(Yes24)과 같은 정신: 소유권 대신 공개 여부를 게이트로 두고,
+     * 클릭은 책 주인 행에 집계한다(2026-06-06 결정의 근거는 {@link #recordPublicPurchaseClick} JavaDoc 참조).
+     *
+     * @param mobileDevice {@link #recordKyoboClick} 참조.
+     * @return 이동할 교보 검색 링크. 비공개·존재하지 않음·비활성이면 null.
+     */
+    public String recordPublicKyoboClick(Long bookId, boolean mobileDevice) {
+        Book book = bookRepository.findById(bookId).orElse(null);
+        if (book == null || !book.isPublic()) {
+            return null; // 없거나 비공개 — 존재 누설 없이 거부
+        }
+        String link = kyoboLinkBuilder.buildSearchLink(book, mobileDevice);
+        if (link == null) {
+            return null; // 비활성(추적코드 미설정)
+        }
+        book.recordKyoboClick();
         bookRepository.save(book);
         return link;
     }
