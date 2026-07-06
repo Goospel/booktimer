@@ -3,7 +3,7 @@
 // 실행: node --test .claude/scripts/tests/affiliate-report.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { summarize, formatReport, secretPathFor } from '../affiliate-report.mjs';
+import { summarize, formatReport, secretPathFor, classifyResult } from '../affiliate-report.mjs';
 
 test('빈 order_list → 0 요약', () => {
   const s = summarize([]);
@@ -113,4 +113,20 @@ test('formatReport: 실적 있는 요약도 문자열 반환(금액·상태 라�
   assert.ok(out.includes('정산완료'));
   assert.ok(out.includes('취소완료'));
   assert.ok(out.includes('머천트별')); // 2개 머천트 → 분해 노출
+});
+
+// result 코드 3분류 — 이 불변식이 양방향으로 중요:
+//  ① 101(실적 0건)을 error로 두면 데이터 없을 때마다 "❌ API 오류"라는 오해 메시지가 뜬다.
+//  ② 반대로 실제 설정 오류(100 a_id·300 인증키 등)를 no-data로 삼키면 깨진 설정이 조용히 "실적 없음"으로 숨는다.
+test('classifyResult: 0=ok · 101=no-data(실적0건) · 실제 오류코드는 error 유지', () => {
+  assert.equal(classifyResult('0'), 'ok');
+  assert.equal(classifyResult('101'), 'no-data');
+  assert.equal(classifyResult(101), 'no-data'); // 숫자 응답도 정규화
+  // 실제 오류는 삼키지 않고 error로 — 무데이터로 감추면 설정 버그가 침묵한다
+  assert.equal(classifyResult('100'), 'error'); // a_id 없음
+  assert.equal(classifyResult('200'), 'error'); // 조회일자 없음
+  assert.equal(classifyResult('210'), 'error'); // 조회일자 길이 오류
+  assert.equal(classifyResult('300'), 'error'); // auth_key 불일치
+  assert.equal(classifyResult('400'), 'error'); // 통화 미지원
+  assert.equal(classifyResult(undefined), 'error'); // 빈 응답
 });

@@ -31,9 +31,26 @@ const CANCELLED = new Set(['300', '310']); // active(취소제외) 계산에서 
 const DEFAULT_A_ID = 'A100705638';
 const API_URL = 'https://api.linkprice.com/affiliate/translist.php';
 
+// translist.php result=101 "정상 page 번호 아님" — 실적 0건이면 반환할 page가 없어 이 코드가 온다.
+// 에러가 아니라 "데이터 없음" 신호로 다룬다(가이드 실적_조회_오픈_API_v1.6). 100 a_id·200/210 날짜·300 인증키·400 통화는 실제 오류.
+const NO_DATA_RESULT = '101';
+
 function num(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * translist.php의 result 코드를 3분류. (순수 함수 — 단위테스트 대상)
+ *   'ok'      = '0'   (정상 — 데이터 있음)
+ *   'no-data' = '101' (유효 page 없음 = 실적 0건 / 페이지 끝) — 에러 아님
+ *   'error'   = 그 외 (100 a_id 없음·200/210 날짜·300 인증키·400 통화 등 실제 오류)
+ */
+export function classifyResult(result) {
+  const r = String(result ?? '');
+  if (r === '0') return 'ok';
+  if (r === NO_DATA_RESULT) return 'no-data';
+  return 'error';
 }
 
 /**
@@ -170,8 +187,11 @@ async function fetchAllOrders(opts) {
   const all = [];
   for (let page = 1; page <= 100; page++) { // page>100 안전 상한
     const data = await fetchPage({ ...opts, page });
-    const result = String(data.result ?? '');
-    if (result !== '0') return { result, orders: [], listCount: 0 };
+    const kind = classifyResult(data.result);
+    // no-data(101) = 유효 page 없음 = 실적 0건(또는 페이지 끝) → 지금까지 모은 것으로 정상 종료
+    if (kind === 'no-data') return { result: '0', orders: all, listCount: all.length };
+    // 실제 오류(a_id·날짜·인증키·통화)는 코드를 그대로 올려 호출부가 안내
+    if (kind === 'error') return { result: String(data.result ?? ''), orders: [], listCount: 0 };
     const orders = data.order_list ?? [];
     all.push(...orders);
     const listCount = num(data.list_count);
