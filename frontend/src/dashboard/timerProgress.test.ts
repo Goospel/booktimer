@@ -106,6 +106,63 @@ describe('computeProgress', () => {
     })
 })
 
+// ── computeProgress: 히어로 카운트업 값 (발견 3·4) ─────────────────────────────
+// 히어로 큰 숫자를 "남은 시간 카운트다운" → "오늘 읽은 시간 카운트업"으로 바꾼다.
+// todayRead = 오늘 읽은 초(히어로 표시값), remainingToGoal = 목표까지 남은 초(진행바 메타 우측).
+// remainingToGoal = max(0, todayDebtLive) — 달성(todayDebtLive<=0)이면 0.
+
+describe('computeProgress — 히어로 카운트업(todayRead)·목표까지(remainingToGoal)', () => {
+    it('read=0 → todayRead=0, remainingToGoal=goal(목표 전부 남음)', () => {
+        const r = computeProgress(3600, 0, 3600, false)
+        expect(r.todayRead).toBe(0)
+        expect(r.remainingToGoal).toBe(3600)
+    })
+
+    it('절반 읽음(remainingNow=1800) → todayRead=1800, remainingToGoal=1800', () => {
+        const r = computeProgress(1800, 0, 3600, false)
+        expect(r.todayRead).toBe(1800)
+        expect(r.remainingToGoal).toBe(1800)
+    })
+
+    it('정확히 달성(remainingNow=0) → todayRead=goal, remainingToGoal=0', () => {
+        const r = computeProgress(0, 0, 3600, false)
+        expect(r.todayRead).toBe(3600)
+        expect(r.remainingToGoal).toBe(0)
+    })
+
+    // ★ 카운트업: 측정으로 remainingNow가 줄면 todayRead가 라이브로 증가
+    it('★ remainingNow 감소 → todayRead 증가(카운트업)', () => {
+        const a = computeProgress(3600, 0, 3600, false) // 0 읽음
+        const b = computeProgress(3000, 0, 3600, false) // 600 읽음
+        const c = computeProgress(1200, 0, 3600, false) // 2400 읽음
+        expect(a.todayRead).toBeLessThan(b.todayRead)
+        expect(b.todayRead).toBeLessThan(c.todayRead)
+        expect(b.todayRead).toBe(600)
+        expect(c.todayRead).toBe(2400)
+    })
+
+    it('carryover ON: 오늘분만 카운트업(과거 빚 floor 제외)', () => {
+        // remainingNow=2700(전체), floor=900(과거 빚), goal=3600 → todayRead=1800
+        const r = computeProgress(2700, 900, 3600, true)
+        expect(r.todayRead).toBe(1800)
+        expect(r.remainingToGoal).toBe(1800)
+    })
+
+    it('carryover ON: 과거 빚 갚는 중(remainingNow<floor) → 달성 유지, remainingToGoal=0, todayRead>goal', () => {
+        // remainingNow=1700, floor=1800 → todayDebtLive=-100, todayRead=3700(초과분 반영)
+        const r = computeProgress(1700, 1800, 3600, true)
+        expect(r.isAchieved).toBe(true)
+        expect(r.remainingToGoal).toBe(0)
+        expect(r.todayRead).toBe(3700)
+    })
+
+    it('goal=0 가드 → todayRead=0, remainingToGoal=0', () => {
+        const r = computeProgress(0, 0, 0, false)
+        expect(r.todayRead).toBe(0)
+        expect(r.remainingToGoal).toBe(0)
+    })
+})
+
 // ── fmtMSS ───────────────────────────────────────────────────────────────────
 
 describe('fmtMSS', () => {
