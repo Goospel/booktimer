@@ -215,4 +215,58 @@ class ReadingSessionServiceTest {
         assertThat(book.getStatus()).isEqualTo(BookStatus.READING);
         verify(bookRepository).save(book);
     }
+
+    // --- tagBook (종료 후 태깅, 발견 1) ---
+
+    @Test
+    @DisplayName("tagBook: 책 미지정 세션을 찾아 책을 연결하고 저장한다")
+    void tagBook_untaggedSession_linksBookAndSaves() {
+        ReadingSession session = ReadingSession.start(user, T0); // book=null
+        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
+        when(sessionRepository.findByIdAndUser(1L, user)).thenReturn(Optional.of(session));
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        ReadingSession result = service.tagBook(user, 1L, book);
+
+        assertThat(result.getBook()).isSameAs(book);
+        verify(sessionRepository).save(session);
+    }
+
+    @Test
+    @DisplayName("tagBook: 읽고싶음 책으로 태깅하면 그 책을 읽는중으로 자동 전환한다(측정 시작과 동일 시맨틱)")
+    void tagBook_withWantToReadBook_marksReading() {
+        ReadingSession session = ReadingSession.start(user, T0);
+        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.WANT_TO_READ);
+        when(sessionRepository.findByIdAndUser(1L, user)).thenReturn(Optional.of(session));
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        service.tagBook(user, 1L, book);
+
+        assertThat(book.getStatus()).isEqualTo(BookStatus.READING);
+        verify(bookRepository).save(book);
+    }
+
+    @Test
+    @DisplayName("tagBook: 그 사용자의 세션이 없으면 거부한다(IDOR — IllegalArgumentException, 저장 없음)")
+    void tagBook_sessionNotFound_throwsAndDoesNotSave() {
+        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
+        when(sessionRepository.findByIdAndUser(99L, user)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.tagBook(user, 99L, book))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(sessionRepository, never()).save(any(ReadingSession.class));
+    }
+
+    @Test
+    @DisplayName("tagBook: 이미 책이 지정된 세션이면 거부한다(IllegalStateException, 저장 없음)")
+    void tagBook_alreadyTagged_throwsAndDoesNotSave() {
+        Book existing = Book.register(user, "기존 책", null, null, null, null, null, BookStatus.READING);
+        ReadingSession session = ReadingSession.start(user, T0, existing);
+        Book other = Book.register(user, "다른 책", null, null, null, null, null, BookStatus.READING);
+        when(sessionRepository.findByIdAndUser(1L, user)).thenReturn(Optional.of(session));
+
+        assertThatThrownBy(() -> service.tagBook(user, 1L, other))
+                .isInstanceOf(IllegalStateException.class);
+        verify(sessionRepository, never()).save(any(ReadingSession.class));
+    }
 }

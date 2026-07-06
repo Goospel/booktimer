@@ -61,6 +61,7 @@ public class DashboardModel {
             long activeBookTotalSeconds,
             List<Book> readingBooks,
             List<Book> finishedBooks,
+            List<Book> wantToReadBooks,
             Long recentBookId
     ) {}
 
@@ -86,6 +87,8 @@ public class DashboardModel {
         List<Book> books = bookRepository.findByUserOrderByCreatedAtDesc(user);
         List<Book> readingBooks = books.stream().filter(b -> b.getStatus() == BookStatus.READING).toList();
         List<Book> finishedBooks = books.stream().filter(b -> b.getStatus() == BookStatus.FINISHED).toList();
+        // 읽고싶음 책 — 시작 드롭다운엔 안 넣지만(아직 안 편 책), "종료 후 태깅" 시트에선 고를 수 있다(발견 1).
+        List<Book> wantToReadBooks = books.stream().filter(b -> b.getStatus() == BookStatus.WANT_TO_READ).toList();
 
         List<Long> recent = sessionRepository.findRecentlyReadBookIds(user, PageRequest.of(0, 1));
 
@@ -102,6 +105,7 @@ public class DashboardModel {
                 activeBook != null ? sessionRepository.sumDurationByUserAndBook(user, activeBook) : 0L,
                 readingBooks,
                 finishedBooks,
+                wantToReadBooks,
                 recent.isEmpty() ? null : recent.get(0)
         );
     }

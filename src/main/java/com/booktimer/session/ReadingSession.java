@@ -146,6 +146,25 @@ public class ReadingSession extends BaseTimeEntity {
         this.durationSeconds = Duration.between(startedAt, endedAt).toSeconds();
     }
 
+    /**
+     * 책 미지정 세션에 나중에 책을 연결한다 — <b>종료 후 태깅</b>(발견 1). 책 없이 시작한 측정을
+     * "무슨 책이었나요?"로 되돌아보며 책을 붙이는 경로다. 이미 책이 지정된 세션은 재태깅하지 않는다
+     * (측정 시작 시 고른 책을 사후에 바꾸는 건 다른 관심사).
+     *
+     * @param book 연결할 책(필수)
+     * @throws IllegalArgumentException book 이 null 인 경우
+     * @throws IllegalStateException    이미 책이 지정된 세션인 경우(재태깅 금지)
+     */
+    public void tagBook(Book book) {
+        if (book == null) {
+            throw new IllegalArgumentException("book must not be null");
+        }
+        if (this.book != null) {
+            throw new IllegalStateException("session already has a book");
+        }
+        this.book = book;
+    }
+
     public boolean isActive() {
         return endedAt == null;
     }

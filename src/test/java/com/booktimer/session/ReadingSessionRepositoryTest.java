@@ -235,6 +235,27 @@ class ReadingSessionRepositoryTest {
         assertThat(found).isEmpty();
     }
 
+    // --- findByIdAndUser: 종료 후 태깅의 IDOR-안전 세션 조회 ---
+
+    @Test
+    @DisplayName("findByIdAndUser: 그 사용자의 세션이면 반환한다")
+    void findByIdAndUser_ownSession_returns() {
+        User u = persistedUser("fbiau1@booktimer.com");
+        ReadingSession s = sessionRepository.save(ReadingSession.start(u, T0));
+
+        assertThat(sessionRepository.findByIdAndUser(s.getId(), u)).isPresent();
+    }
+
+    @Test
+    @DisplayName("findByIdAndUser: 다른 사용자의 세션이면 빈 결과 (IDOR 경계 — 남의 세션 태깅 차단)")
+    void findByIdAndUser_othersSession_empty() {
+        User owner = persistedUser("fbiau2@booktimer.com");
+        User other = persistedUser("fbiau3@booktimer.com");
+        ReadingSession s = sessionRepository.save(ReadingSession.start(owner, T0));
+
+        assertThat(sessionRepository.findByIdAndUser(s.getId(), other)).isEmpty();
+    }
+
     // --- findNudgeTargets: 재참여 넛지 대상 선정 (이메일 인프라 2단계 PR-2 — §3-1 5조건 AND) ---
 
     private static final Instant CUTOFF = Instant.parse("2026-06-11T00:00:00Z");

@@ -102,4 +102,29 @@ public class ReadingSessionService {
         active.end(now);
         return sessionRepository.save(active);
     }
+
+    /**
+     * <b>종료 후 태깅</b>(발견 1) — 책 없이 측정한 세션에 나중에 책을 연결한다. 책 없이 시작한 측정을
+     * 종료한 뒤 "무슨 책이었나요?"로 되돌아보며 붙이는 경로다.
+     *
+     * <p>소유 경계(IDOR): 그 세션이 {@code user}의 것이어야 한다 — 아니면 없는 것으로 취급(404 마스킹).
+     * 책 소유 검증은 호출부(컨트롤러)가 {@code findByIdAndUser}로 이미 마친 뒤 넘긴다. 태깅한 책이
+     * "읽고싶음"이면 {@code start}와 동일하게 "읽는중"으로 자동 전환한다.
+     *
+     * @param sessionId 태깅할 세션 id
+     * @param book      연결할 책(호출부에서 소유 검증 완료)
+     * @return 책이 연결된 세션
+     * @throws IllegalArgumentException 해당 사용자의 그 세션이 없는 경우(IDOR — 컨트롤러가 404로 마스킹)
+     * @throws IllegalStateException    이미 책이 지정된 세션인 경우(컨트롤러가 409로)
+     */
+    public ReadingSession tagBook(User user, Long sessionId, Book book) {
+        ReadingSession session = sessionRepository.findByIdAndUser(sessionId, user)
+                .orElseThrow(() -> new IllegalArgumentException("session not found for user"));
+        session.tagBook(book); // 이미 책 있으면 IllegalStateException
+        // 태깅한 책이 "읽고싶음"이었다면 "읽는중"으로 자동 전환(측정 시작과 동일).
+        if (book.startReading()) {
+            bookRepository.save(book);
+        }
+        return sessionRepository.save(session);
+    }
 }

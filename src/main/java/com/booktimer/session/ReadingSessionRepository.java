@@ -55,6 +55,12 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
     /** 진행 중(endedAt == null) 세션. 서비스의 중복 start 방지에 쓰인다. */
     Optional<ReadingSession> findByUserAndEndedAtIsNull(User user);
 
+    /**
+     * id + 소유자(user)로 세션을 조회 — 종료 후 태깅의 IDOR-안전 경계.
+     * 남의 세션 id를 넘겨도 소유자가 다르면 빈 결과라(→ 404 마스킹) 남의 측정에 책을 붙일 수 없다.
+     */
+    Optional<ReadingSession> findByIdAndUser(Long id, User user);
+
     /** 진행 중 세션을 책과 함께 즉시 로딩 — 트랜잭션 밖(뷰)에서 책 제목 접근 시 lazy 예외 방지. */
     @Query("select s from ReadingSession s left join fetch s.book where s.user = :user and s.endedAt is null")
     Optional<ReadingSession> findActiveWithBook(@Param("user") User user);

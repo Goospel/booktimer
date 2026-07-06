@@ -1,5 +1,7 @@
 package com.booktimer.session;
 
+import com.booktimer.book.Book;
+import com.booktimer.book.BookStatus;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import org.junit.jupiter.api.DisplayName;
@@ -120,5 +122,41 @@ class ReadingSessionTest {
         ReadingSession session = ReadingSession.start(sampleUser(), T0);
 
         assertThat(session.isManualEntry()).isFalse();
+    }
+
+    // --- tagBook (종료 후 태깅, 발견 1) ---
+
+    @Test
+    @DisplayName("tagBook: 책 미지정 세션에 나중에 책을 연결한다")
+    void tagBook_linksBookToUntaggedSession() {
+        User user = sampleUser();
+        ReadingSession session = ReadingSession.start(user, T0); // book=null
+        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
+
+        session.tagBook(book);
+
+        assertThat(session.getBook()).isSameAs(book);
+    }
+
+    @Test
+    @DisplayName("tagBook: 이미 책이 지정된 세션에 태깅하면 예외(재태깅 금지)")
+    void tagBook_alreadyTagged_throws() {
+        User user = sampleUser();
+        Book existing = Book.register(user, "기존 책", null, null, null, null, null, BookStatus.READING);
+        ReadingSession session = ReadingSession.start(user, T0, existing);
+        Book other = Book.register(user, "다른 책", null, null, null, null, null, BookStatus.READING);
+
+        assertThatThrownBy(() -> session.tagBook(other))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(session.getBook()).isSameAs(existing); // 원래 책 보존
+    }
+
+    @Test
+    @DisplayName("tagBook: null 책으로 태깅하면 예외")
+    void tagBook_nullBook_throws() {
+        ReadingSession session = ReadingSession.start(sampleUser(), T0);
+
+        assertThatThrownBy(() -> session.tagBook(null))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }
