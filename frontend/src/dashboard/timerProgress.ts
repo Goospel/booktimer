@@ -11,15 +11,17 @@ export function computeProgress(
     floor: number,
     goal: number,
     carryover: boolean
-): { todayRead: number; pct: number; pctStr: string; isAchieved: boolean } {
+): { todayRead: number; remainingToGoal: number; pct: number; pctStr: string; isAchieved: boolean } {
     if (goal <= 0) {
-        return { todayRead: 0, pct: 100, pctStr: '100%', isAchieved: true }
+        return { todayRead: 0, remainingToGoal: 0, pct: 100, pctStr: '100%', isAchieved: true }
     }
     const todayDebtLive = carryover ? remainingNow - floor : remainingNow
     const todayRead = goal - todayDebtLive
+    // 목표까지 남은 초(히어로 보조·진행바 메타 우측). 달성(todayDebtLive<=0)이면 0.
+    const remainingToGoal = Math.max(0, todayDebtLive)
     const pct = Math.min(100, Math.max(0, Math.round((todayRead / goal) * 100)))
     const isAchieved = todayDebtLive <= 0
-    return { todayRead, pct, pctStr: `${pct}%`, isAchieved }
+    return { todayRead, remainingToGoal, pct, pctStr: `${pct}%`, isAchieved }
 }
 
 /** M:SS, 3600초 이상은 H:MM:SS 폴백. 음수·NaN → "00:00". */

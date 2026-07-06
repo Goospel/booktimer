@@ -43,9 +43,18 @@ const progress = computed(() =>
     computeProgress(remainingNow.value, props.carriedDebtSeconds, props.todayGoalSeconds, props.carryover)
 )
 const state = computed(() => panelState(props.hasActiveSession, progress.value.isAchieved))
-const remainingDisplay = computed(() => fmtMSS(remainingNow.value))
+// 히어로 큰 숫자 = 오늘 읽은 시간(카운트업). 측정 중엔 remainingNow가 매초 줄어 todayRead가
+// 매초 늘어난다 — 별도 tick 없이 라이브 증가(발견 3·4: 남은시간 카운트다운 → 성취 카운트업).
+const todayReadDisplay = computed(() => fmtMSS(progress.value.todayRead))
 const sessionDisplay = computed(() => fmtMSS(elapsed.value))
 const goalText = computed(() => goalLabel(props.todayGoalSeconds))
+// 진행바 메타 우측: 달성이면 "목표 달성 ✓", 아니면 "목표까지 M:SS"(남은 시간은 보조 정보로 강등).
+const remainingLabel = computed(() =>
+    progress.value.isAchieved ? '목표 달성 ✓' : `목표까지 ${fmtMSS(progress.value.remainingToGoal)}`
+)
+// 7일 자동 용서 안내 — 밀린 빚이 있을 때만. 빚을 위협이 아니라 "괜찮다"로 프레이밍(발견 3의 상위 근거).
+const showForgive = computed(() => props.carriedDebtSeconds > 0)
+const forgiveMinutes = computed(() => Math.max(1, Math.round(props.carriedDebtSeconds / 60)))
 
 function totalHM(s: number): string {
     return `${Math.floor(s / 3600)}시간 ${Math.floor((s % 3600) / 60)}분`
@@ -57,18 +66,22 @@ function totalHM(s: number): string {
         <!-- 좌: 대형 숫자 + 진행바 -->
         <div class="dash-timer-left">
             <span class="dash-pill" :class="{ 'dash-pill-ok': progress.isAchieved }">
-                {{ progress.isAchieved ? '🌿 오늘 목표 달성!' : '오늘 남은 독서 시간' }}
+                {{ progress.isAchieved ? '🌿 오늘 목표 달성!' : '오늘 읽은 시간' }}
             </span>
-            <div class="dash-timer-num">{{ remainingDisplay }}</div>
+            <div class="dash-timer-num" :class="{ 'dash-timer-num-ok': progress.isAchieved }">{{ todayReadDisplay }}</div>
             <div class="dash-progress-wrap">
                 <div class="dash-progress-track">
-                    <div class="dash-progress-fill" :style="{ width: progress.pctStr }"></div>
+                    <div class="dash-progress-fill" :class="{ 'dash-progress-fill-ok': progress.isAchieved }"
+                         :style="{ width: progress.pctStr }"></div>
                 </div>
                 <div class="dash-progress-meta">
                     <span>오늘 목표 {{ goalText }}</span>
-                    <span class="dash-progress-pct">{{ progress.pctStr }} 달성</span>
+                    <span class="dash-progress-pct">{{ remainingLabel }}</span>
                 </div>
             </div>
+            <p v-if="showForgive" class="dash-forgive-note">
+                밀린 {{ forgiveMinutes }}분은 최근 7일이 지나면 자동으로 사라져요 — 뒤처져도 괜찮아요.
+            </p>
         </div>
 
         <!-- 우: 상태 3패널. <Transition mode="out-in">으로 패널 교체를 크로스페이드해

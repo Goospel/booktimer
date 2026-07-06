@@ -2880,12 +2880,25 @@ body.personality-page #personality-app { gap: 18px; }
     color: var(--text);
     font-variant-numeric: tabular-nums;
     letter-spacing: -.02em;
+    transition: color .4s ease;
 }
+/* 목표 달성 시 히어로 숫자·진행바를 --ok(성취 초록)로 전환 — 색만, 새 색 없음(가드레일) */
+.dash-timer-num-ok { color: var(--ok); }
 .dash-progress-wrap { display: flex; flex-direction: column; gap: 8px; max-width: 420px; }
 .dash-progress-track { height: 10px; border-radius: 999px; background: #E7EEE2; overflow: hidden; }
-.dash-progress-fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width .5s ease; }
+.dash-progress-fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width .5s ease, background .4s ease; }
+.dash-progress-fill-ok { background: var(--ok); }
 .dash-progress-meta { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
 .dash-progress-pct { color: var(--accent-hover); font-variant-numeric: tabular-nums; }
+/* 7일 자동 용서 안내 — 점선 상단 구분, 톤 다운(밀린 빚을 위협이 아니라 안심으로) */
+.dash-forgive-note {
+    margin: 2px 0 0;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border);
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--muted);
+}
 
 .dash-timer-right { flex: 1 1 290px; min-width: 0; }
 
