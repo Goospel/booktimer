@@ -65,21 +65,28 @@ onMounted(refresh)
 
 <template>
     <div v-if="feed" class="story-strip" aria-label="스토리">
-        <div v-for="ring in rings" :key="ring.loginId" class="story-ring-item">
-            <button type="button" class="story-ring-btn"
-                    :aria-label="ring.mine ? '내 스토리 보기' : ring.nickname + ' 스토리 보기'"
-                    @click="onRingClick(ring)">
-                <span class="dash-header-avatar story-ring"
-                      :class="{ 'story-ring-unviewed': ring.unviewed, 'story-ring-none': ring.mine && !ring.hasStories }"
-                      aria-hidden="true">
-                    <AuthorAvatar :code="ring.profileCharacterCode" :fallback-text="ring.loginId" />
-                </span>
-            </button>
-            <!-- + 배지: 항상 작성 진입(내 스토리가 있어도). 형제 버튼 — button 중첩은 키보드 접근 불가(리뷰 파인딩) -->
-            <button v-if="ring.mine" type="button" class="story-ring-plus" aria-label="스토리 올리기"
+        <!-- + 올리기: 맨 앞 독립 타일(발견 8) — 아바타 겹침 배지 대신 별도 타일로 터치 타깃을 키운다.
+             내 스토리 유무와 무관하게 항상 작성 진입. -->
+        <div class="story-add-tile">
+            <button type="button" class="story-add-btn" aria-label="스토리 올리기"
                     @click="composerOpen = true">+</button>
-            <span class="story-ring-name">{{ ring.mine ? '내 스토리' : ring.nickname }}</span>
+            <span class="story-add-label">올리기</span>
         </div>
+        <!-- 내 스토리가 없는 빈 내 링은 그리지 않는다(작성은 위 + 타일로 일원화). 뷰잉 링만 표시. -->
+        <template v-for="ring in rings" :key="ring.loginId">
+            <div v-if="!(ring.mine && !ring.hasStories)" class="story-ring-item">
+                <button type="button" class="story-ring-btn"
+                        :aria-label="ring.mine ? '내 스토리 보기' : ring.nickname + ' 스토리 보기'"
+                        @click="onRingClick(ring)">
+                    <span class="dash-header-avatar story-ring"
+                          :class="{ 'story-ring-unviewed': ring.unviewed }"
+                          aria-hidden="true">
+                        <AuthorAvatar :code="ring.profileCharacterCode" :fallback-text="ring.loginId" />
+                    </span>
+                </button>
+                <span class="story-ring-name">{{ ring.mine ? '내 스토리' : ring.nickname }}</span>
+            </div>
+        </template>
 
         <StoryViewer v-if="viewerOpen && groups.length" :groups="groups" :start-group="viewerStart"
                      :my-login-id="myLoginId" @close="onViewerClose" @changed="onViewerChanged" />
