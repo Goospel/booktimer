@@ -79,11 +79,21 @@ export function summarize(orderList) {
 
 // ───────────────────────── CLI (부수효과 — 테스트 대상 아님) ─────────────────────────
 
+/**
+ * 비밀키 파일 경로를 스크립트 디렉터리 기준으로 해석한다. (순수 함수 — 단위테스트 대상)
+ * 스크립트는 `.claude/scripts/` 에 있고 비밀 파일은 `.claude/.secrets/` 에 둔다 —
+ * 그래야 `.gitignore` 의 `.claude/.secrets/` 로 커버돼 커밋 사고가 원천 차단된다.
+ * 따라서 스크립트 폴더의 **상위**(`..`)로 올라가 `.secrets/` 를 잡는다.
+ */
+export function secretPathFor(scriptDir) {
+  return resolve(scriptDir, '..', '.secrets', 'linkprice-auth');
+}
+
 function readAuthKey() {
   const env = process.env.LINKPRICE_AUTH_KEY;
   if (env && env.trim()) return env.trim();
   const here = dirname(fileURLToPath(import.meta.url));
-  const secretPath = resolve(here, '.secrets', 'linkprice-auth');
+  const secretPath = secretPathFor(here);
   try {
     const v = readFileSync(secretPath, 'utf8').trim();
     if (v) return v;

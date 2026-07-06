@@ -3,7 +3,7 @@
 // 실행: node --test .claude/scripts/tests/affiliate-report.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { summarize, formatReport } from '../affiliate-report.mjs';
+import { summarize, formatReport, secretPathFor } from '../affiliate-report.mjs';
 
 test('빈 order_list → 0 요약', () => {
   const s = summarize([]);
@@ -79,6 +79,21 @@ test('알 수 없는 status 코드도 집계·라벨 폴백', () => {
   const s = summarize([{ m_id: 'yes24', sales: 1000, commission: 30, status: '999' }]);
   assert.equal(s.byStatus['999'].count, 1);
   assert.ok(s.byStatus['999'].label && s.byStatus['999'].label.length > 0);
+});
+
+// 비밀키 경로 불변식 — 반드시 gitignored 위치(.claude/.secrets/)에서 읽어야 커밋 사고를 막는다.
+// (스크립트는 .claude/scripts/ 에 있으므로 상위 .claude/.secrets/ 로 올라가야 함. 이 불변식이
+//  깨지면 코드가 읽는 경로와 .gitignore 가 어긋나 조용히 실패하거나 키가 커밋된다.)
+test('secretPathFor: 비밀키는 gitignored 위치 .claude/.secrets/ 에서 읽는다 (scripts/ 밑 아님)', () => {
+  const p = secretPathFor('/repo/.claude/scripts').replaceAll('\\', '/');
+  assert.ok(
+    p.endsWith('/.claude/.secrets/linkprice-auth'),
+    `비밀키 경로가 .claude/.secrets/linkprice-auth 로 끝나야 함(gitignore 일치): 실제=${p}`,
+  );
+  assert.ok(
+    !p.includes('/scripts/'),
+    `비밀키 경로가 scripts/ 밑이면 .gitignore(.claude/.secrets/) 밖이라 커밋 위험: 실제=${p}`,
+  );
 });
 
 // 사용자 대면 출력 경로 스모크 — 정확한 레이아웃은 브리틀이라 안 박고 "크래시 없이 문자열을 낸다"만 방어.
