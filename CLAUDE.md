@@ -356,12 +356,11 @@ Thymeleaf가 폼의 CSRF 숨김필드를 그릴 때 세션을 **lazy 생성**하
 
 ### 어떻게
 
-- GET 핸들러에서 폼 렌더 전에 **토큰을 한 번 호출**해 세션을 즉시 만든다:
+- GET 핸들러에서 폼 렌더 전에 공용 헬퍼 `web/CsrfTokenUtil.precommit(request)`를 호출해 세션을 즉시 만든다:
   ```java
-  Object attr = request.getAttribute(CsrfToken.class.getName());
-  if (attr instanceof CsrfToken token) { token.getToken(); } // 세션 즉시 생성 → 버퍼 커밋 전 확정
+  CsrfTokenUtil.precommit(request); // 요청에 CsrfToken이 있으면 getToken()으로 세션 즉시 생성(버퍼 커밋 전 확정), 없으면 no-op
   ```
-  여러 핸들러에 반복되면 `PasswordResetController.precommitCsrfToken(request)`처럼 헬퍼로 묶는다.
+  헬퍼 내부는 `request.getAttribute(CsrfToken.class.getName())`로 토큰을 꺼내 `getToken()`을 호출하는 정적 유틸(`src/main/java/com/booktimer/web/CsrfTokenUtil.java`)이다. 예: `web/PasswordResetController`의 GET 핸들러들이 렌더 전 이 헬퍼를 호출한다.
 - **훅으로 강제하지 않는 이유**: "th:action 폼 템플릿을 렌더하는 GET 핸들러인데 선확정이 없다"를 정적 감지하려면 컨트롤러↔템플릿 역매핑·POST 재렌더 분기 때문에 오탐(FP)이 30~50%라 게이트가 무력화된다 — 그래서 이 prose 규칙 + 코드 리뷰가 담당한다(하드픽스 부적합 사례).
 
 ---
