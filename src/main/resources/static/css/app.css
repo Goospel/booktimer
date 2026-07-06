@@ -1824,6 +1824,51 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 .shop-report-modal-submit { width: auto; align-self: flex-start; }
 .shop-report-modal-ok { margin: 0; font-size: 13px; color: var(--ok); }
 
+/* 종료 후 태깅 시트(발견 1) — 책 없이 측정을 끝냈을 때 "무슨 책?"을 고르는 바텀시트.
+   모달 토큰(card-bg·border·sage-soft·muted) 재사용, 새 색 없음. 모바일=하단 시트, 데스크톱=하단 정렬 카드. */
+.tag-sheet-overlay {
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(0, 0, 0, .45);
+    display: flex; align-items: flex-end; justify-content: center;
+}
+.tag-sheet-panel {
+    background: var(--card-bg); border-radius: 18px 18px 0 0;
+    padding: 20px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+    width: 100%; max-width: 460px; box-shadow: 0 -8px 32px rgba(44, 42, 36, .18);
+    display: flex; flex-direction: column; gap: 14px;
+    max-height: 80vh; overflow-y: auto;
+    animation: tag-sheet-up .22s ease;
+}
+@keyframes tag-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.tag-sheet-head { display: flex; align-items: center; justify-content: space-between; }
+.tag-sheet-title { font-size: 16px; font-weight: 600; color: var(--text); margin: 0; }
+.tag-sheet-close {
+    background: none; border: none; cursor: pointer; padding: 4px 8px; border-radius: 6px;
+    font-size: 16px; line-height: 1; color: var(--muted); width: auto;
+}
+.tag-sheet-close:hover { color: var(--text); background: var(--sage-soft); }
+.tag-sheet-body { display: flex; flex-direction: column; gap: 12px; }
+.tag-sheet-hint { margin: 0; font-size: 13px; color: var(--muted); }
+.tag-sheet-group { display: flex; flex-direction: column; gap: 6px; }
+.tag-sheet-group-label { font-size: 12px; font-weight: 600; color: var(--muted); }
+.tag-sheet-book {
+    width: 100%; text-align: left; min-height: 44px; padding: 11px 14px;
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px;
+    color: var(--text); font-size: 14px; cursor: pointer;
+}
+.tag-sheet-book:hover { background: var(--sage-soft); border-color: var(--accent); }
+.tag-sheet-book:disabled { opacity: .5; cursor: default; }
+.tag-sheet-skip {
+    width: 100%; min-height: 44px; margin-top: 2px;
+    background: none; border: none; cursor: pointer;
+    color: var(--muted); font-size: 13px; text-decoration: underline;
+}
+.tag-sheet-skip:hover { color: var(--text); }
+.tag-sheet-skip:disabled { opacity: .5; cursor: default; }
+@media (prefers-reduced-motion: reduce) {
+    .tag-sheet-panel { animation: none; }
+}
+
 /* 신고 박스 — 콤팩트 카드(시안: 박스 4px + summary 자체 패딩) */
 .shop-report { background: var(--card-bg); border: 1px solid #D8CDB9; border-radius: 18px; padding: 4px; box-shadow: 0 1px 2px rgba(44, 42, 36, .04); }
 .shop-report > summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); padding: 12px 14px; }

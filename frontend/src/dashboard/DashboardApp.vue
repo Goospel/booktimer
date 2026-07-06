@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import type { DashboardResponse, TimerState, StopResponse } from './types'
+import type { DashboardResponse, TimerState, StopResponse, BookOption } from './types'
 import { getCsrfToken } from '../shared/follow'
 import TimerCard from './TimerCard.vue'
+import TagBookSheet from './TagBookSheet.vue'
 import ContributionGraph from './ContributionGraph.vue'
 import GardenPanel from './GardenPanel.vue'
 import BrandQuote from './BrandQuote.vue'
@@ -28,9 +29,15 @@ const hasActiveSession = ref(false)
 const activeStartedAt = ref<string | null>(null)
 const activeBookTitle = ref<string | null>(null)
 const activeBookTotalSeconds = ref(0)
-const readingBooks = ref<{ id: number; title: string }[]>([])
-const finishedBooks = ref<{ id: number; title: string }[]>([])
+const readingBooks = ref<BookOption[]>([])
+const finishedBooks = ref<BookOption[]>([])
+const wantToReadBooks = ref<BookOption[]>([])
 const recentBookId = ref<number | null>(null)
+
+// 종료 후 태깅 시트(발견 1) — 책 없이 시작한 세션을 종료하면 뜬다.
+const showTagSheet = ref(false)
+const pendingSessionId = ref<number | null>(null)
+const tagging = ref(false)
 
 function applyTimerState(s: TimerState) {
     remainingSeconds.value = s.remainingSeconds
@@ -52,6 +59,7 @@ onMounted(async () => {
         if (!res.ok) throw new Error(res.statusText)
         data.value = await res.json() as DashboardResponse
         applyTimerState(data.value)
+        wantToReadBooks.value = data.value.wantToReadBooks ?? []
     } catch {
         fetchError.value = true
     } finally {
@@ -59,7 +67,7 @@ onMounted(async () => {
     }
 })
 
-async function handleStart(bookId: number) {
+async function handleStart(bookId: number | null) {
     if (starting.value) return
     actionError.value = null
     starting.value = true
@@ -97,11 +105,40 @@ async function handleStop() {
         const r = await res.json() as StopResponse
         applyTimerState(r.timer)
         if (data.value) data.value.graph = r.graph
+        // 책 없이 시작한 세션이면 "무슨 책?" 태깅 시트를 띄운다(발견 1). 책 골라 시작했으면 안 뜬다.
+        if (r.untagged) {
+            pendingSessionId.value = r.sessionId
+            showTagSheet.value = true
+        }
     } catch {
         actionError.value = '네트워크 오류가 발생했습니다'
     } finally {
         stopping.value = false
     }
+}
+
+async function tagBook(bookId: number) {
+    if (tagging.value || pendingSessionId.value === null) return
+    tagging.value = true
+    try {
+        const res = await fetch(`/api/sessions/${pendingSessionId.value}/tag-book`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+            body: JSON.stringify({ bookId }),
+        })
+        if (!res.ok) { actionError.value = '책을 연결하지 못했어요'; return }
+        closeTagSheet()
+    } catch {
+        actionError.value = '네트워크 오류가 발생했습니다'
+    } finally {
+        tagging.value = false
+    }
+}
+
+function closeTagSheet() {
+    showTagSheet.value = false
+    pendingSessionId.value = null
 }
 </script>
 
@@ -152,5 +189,16 @@ async function handleStop() {
         </div>
 
         <BrandQuote :quotes="data.quotes" />
+
+        <!-- 종료 후 태깅 시트(발견 1) — 책 없이 측정을 끝냈을 때만. 건너뛰면 세션은 책 없이 정당 유지. -->
+        <TagBookSheet
+            v-if="showTagSheet"
+            :reading-books="readingBooks"
+            :finished-books="finishedBooks"
+            :want-to-read-books="wantToReadBooks"
+            :pending="tagging"
+            @tag="tagBook"
+            @skip="closeTagSheet"
+        />
     </template>
 </template>
