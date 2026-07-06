@@ -159,5 +159,8 @@ class RetentionPushServiceTest {
 
         verify(senderService).send(eq(s), payloadCaptor.capture());
         assertThat(payloadCaptor.getValue()).contains("(광고)");
+        // 명칭 통일(발견 6): 마을 → 서재
+        assertThat(payloadCaptor.getValue()).contains("독서 서재");
+        assertThat(payloadCaptor.getValue()).doesNotContain("독서 마을");
     }
 }

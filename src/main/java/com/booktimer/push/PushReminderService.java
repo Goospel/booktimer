@@ -29,7 +29,7 @@ public class PushReminderService {
     static final Duration DEDUP_WINDOW = Duration.ofHours(23);
 
     private static final String PAYLOAD_TEMPLATE =
-            "{\"title\":\"독서 마을\",\"body\":\"%s\",\"url\":\"/village\"}";
+            "{\"title\":\"독서 서재\",\"body\":\"%s\",\"url\":\"/village\"}";
     private static final String REMINDER_BODY = "오늘도 책 한 장 읽어볼까요? 📚";
 
     private final PushSubscriptionRepository subscriptionRepository;
