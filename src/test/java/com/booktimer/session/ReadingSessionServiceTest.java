@@ -111,13 +111,29 @@ class ReadingSessionServiceTest {
     }
 
     @Test
-    @DisplayName("start: 책 없이(null) 시작하면 거부(IllegalArgumentException)하고 아무것도 저장하지 않는다")
-    void start_nullBook_throwsAndDoesNotSave() {
-        assertThatThrownBy(() -> service.start(user, T0, null))
-                .isInstanceOf(IllegalArgumentException.class);
+    @DisplayName("start: 책 없이(null) 시작하면 책 미지정 세션을 만들어 저장한다 — 시작을 책 선택으로 막지 않음(발견 1)")
+    void start_nullBook_createsSessionWithoutBook() {
+        when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.empty());
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
 
+        ReadingSession result = service.start(user, T0, null);
+
+        assertThat(result.getBook()).isNull();
+        assertThat(result.isActive()).isTrue();
+        assertThat(result.getStartedAt()).isEqualTo(T0);
+        verify(sessionRepository).save(any(ReadingSession.class));
+        verify(bookRepository, never()).save(any(Book.class)); // 책이 없으니 전환·저장 없음
+    }
+
+    @Test
+    @DisplayName("start: 책 없이 시작해도 이미 진행 중 세션이 있으면 거부한다(중복 가드는 그대로)")
+    void start_nullBook_activeExists_throws() {
+        ReadingSession active = ReadingSession.start(user, T0);
+        when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(active));
+
+        assertThatThrownBy(() -> service.start(user, T0.plusSeconds(10), null))
+                .isInstanceOf(IllegalStateException.class);
         verify(sessionRepository, never()).save(any(ReadingSession.class));
-        verify(bookRepository, never()).save(any(Book.class));
     }
 
     // --- stop ---

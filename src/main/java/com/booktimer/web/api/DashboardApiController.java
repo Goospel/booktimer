@@ -31,7 +31,8 @@ import java.util.List;
  * POST /api/sessions/start|stop — start/stop 뮤테이션. 응답은 라이브 부분집합({@link TimerState})만.
  *
  * <p>에러 계약(상태코드만 — {@code GlobalExceptionHandler}가 ResponseStatusException을 잡아 코드 보존):
- * 404 = 책 미선택·IDOR·null bookId(IDOR 마스킹). 409 = 중복 start / 무세션 stop. 403 = CSRF 누락.
+ * 404 = bookId가 '있으나' 소유 아님·미존재(IDOR 마스킹) — bookId를 아예 안 주면 책 미지정 시작 허용(발견 1).
+ * 409 = 중복 start / 무세션 stop. 403 = CSRF 누락.
  */
 @RestController
 public class DashboardApiController {
@@ -94,11 +95,12 @@ public class DashboardApiController {
     @PostMapping("/api/sessions/start")
     public ResponseEntity<TimerState> start(@RequestBody StartSessionRequest req, Principal principal) {
         User user = currentUserService.resolve(principal);
-        Book book = (req.bookId() == null)
-                ? null
-                : bookRepository.findByIdAndUser(req.bookId(), user).orElse(null);
-        if (book == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "책을 찾을 수 없습니다");
+        // bookId를 아예 안 주면 책 미지정 세션(발견 1 — 시작을 책 선택으로 가로막지 않음).
+        // bookId가 '있는데' 소유 아님/미존재면 404(IDOR 마스킹) — 이 경계는 그대로 유지.
+        Book book = null;
+        if (req.bookId() != null) {
+            book = bookRepository.findByIdAndUser(req.bookId(), user)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "책을 찾을 수 없습니다"));
         }
         try {
             sessionService.start(user, clock.instant(), book);

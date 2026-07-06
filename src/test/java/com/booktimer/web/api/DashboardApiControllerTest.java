@@ -28,6 +28,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -166,18 +167,25 @@ class DashboardApiControllerTest {
                 .andExpect(status().isNotFound());
     }
 
-    // ── 6. start bookId null → 404 ───────────────────────────────────────────
+    // ── 6. start bookId 없음 → 200 + 책 미지정 세션 (발견 1 — 책 없이 시작) ──────
+    // 과거엔 bookId null을 404(IDOR 마스킹)로 막았으나, "시작을 책 선택으로 가로막지 않는다"는
+    // 발견 1 취지로 bookId를 아예 안 주면 책 미지정 세션을 허용한다. (bookId가 '있는데' 남의 것/미존재면
+    // 여전히 404 — 그 IDOR 경계는 startSession_otherUserBook_404가 지킨다.)
 
     @Test
-    @DisplayName("POST /api/sessions/start: bookId null → 404 (IDOR 마스킹)")
-    void startSession_bookIdNull_404() throws Exception {
-        register("nullbook@a.com", "nullbook");
+    @DisplayName("POST /api/sessions/start: bookId 없이 → 200 + 책 미지정 세션 시작(발견 1)")
+    void startSession_noBookId_startsWithoutBook() throws Exception {
+        User u = register("nobookstart@a.com", "nobookstart");
 
         mockMvc.perform(post("/api/sessions/start")
-                        .with(user("nullbook@a.com")).with(csrf())
+                        .with(user("nobookstart@a.com")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasActiveSession").value(true));
+
+        ReadingSession active = sessionRepository.findByUserAndEndedAtIsNull(u).orElseThrow();
+        assertThat(active.getBook()).isNull();
     }
 
     // ── 7. start 중복 → 409 ──────────────────────────────────────────────────
