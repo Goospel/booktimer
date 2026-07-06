@@ -40,11 +40,12 @@ com.booktimer/
 
 ## 🚪 2. 온보딩
 
-- **한 줄**: 첫 진입 시 login_id(소셜 가입자)·표시이름·타이머 초기값을 1회 설정.
+- **한 줄**: 첫 진입 시 login_id(소셜 가입자)·표시이름·타이머 초기값을 1회 설정. SSR 폼 + 실시간 미리보기·목표 프리셋 Vue 아일랜드.
 - **진입점**: `/onboarding` GET·POST(`web/OnboardingController` + `web/OnboardingForm`)
 - **소속 패키지**: `user/OnboardingService`
-- **⚠️ 배선 주의**: 소셜 가입자는 **`login_id=null` 상태로 존재**하다가 온보딩에서 채운다 → 발견/검색 쿼리에서 이 미완성 엔티티가 새면 깨진 링크가 된다(null-state 누출 방지 — README·learning-notes N-055). 완료 플래그는 `user_onboarded`.
+- **⚠️ 배선 주의**: 소셜 가입자는 **`login_id=null` 상태로 존재**하다가 온보딩에서 채운다 → 발견/검색 쿼리에서 이 미완성 엔티티가 새면 깨진 링크가 된다(null-state 누출 방지 — README·learning-notes N-055). 완료 플래그는 `user_onboarded`. 하루 목표는 **최소 1분**(`OnboardingForm @Min(1)` — 0분 방지). **온보딩 강화(아이디·닉네임 실시간 미리보기·목표 프리셋)는 Vue 아일랜드** — SSR 폼(th:field)을 값의 단일 소스로 두고 얹는다(TS 수정 후 `npm --prefix frontend run build`, 훅 강제). **아이디 클라 정제(`loginIdPreview.ts`)는 서버 `user/User.normalizeLoginId`의 거울**(소문자·`[a-z0-9_]`·20자) — 미리보기=제출값 일치를 위해 규칙 단일 출처.
 - **템플릿**: `onboarding.html`
+- **프론트**: `frontend/src/onboarding/`(`OnboardingPreview.vue`, `GoalPresets.vue`, `loginIdPreview.ts`, `main.ts`) · 번들 `static/onboarding/onboarding.js`
 - **DB**: `V6`(user_onboarded) · `V15`(login_id-when-onboarded 체크제약)
 - **설계**: README §2.2
 

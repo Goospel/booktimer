@@ -195,6 +195,105 @@ body {
 }
 .entry-note strong { color: var(--accent-hover); font-weight: 700; }
 
+/* ── 온보딩 강화 (발견 9·10·11·12) — 시작을 가로막지 않으면서 프레이밍만 손본다 ───────────── */
+
+/* 부채 규칙(7일 윈도우·자동 용서) 아코디언(발견 9) — 신규 사용자 위축 방지로 기본 접힘.
+   entry-note의 연세이지 박스 톤을 계승하되, 궁금한 사람만 펼치게 <details>로 감싼다.
+   ⚠️ body 자식에 display를 강제하지 않는다 — UA의 details:not([open]) 숨김을 이기지 않도록(파일 상단 리셋 주석). */
+.entry-accordion {
+    margin: 0 0 18px;
+    background: var(--sage-soft);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+}
+.entry-accordion > summary {
+    cursor: pointer;
+    list-style: none;
+    font-size: .92rem;
+    font-weight: 600;
+    color: var(--accent-hover);
+    word-break: keep-all;
+}
+.entry-accordion > summary::-webkit-details-marker { display: none; }
+.entry-accordion > summary::after { content: " ▾"; font-size: .7rem; }
+.entry-accordion[open] > summary::after { content: " ▴"; }
+.entry-accordion-body {
+    margin: 10px 0 0;
+    color: var(--text);
+    line-height: 1.7;
+    font-size: .9rem;
+    word-break: keep-all;
+}
+.entry-accordion-body strong { color: var(--accent-hover); font-weight: 700; }
+
+/* 불변 아이디 경고(발견 11) — 흐린 힌트가 아니라 앰버 경고 박스로 격상. README 8절 지정 앰버색
+   (경고 전용, 다른 화면 무영향). 되돌릴 수 없는 결정임을 시각적으로 분명히 한다. */
+.warn-box {
+    margin: 6px 0 0;
+    padding: 10px 12px;
+    background: #FFF6E5;
+    border: 1px solid #F1D48A;
+    border-radius: var(--radius-sm);
+    color: #8A6A1C;
+    font-size: .82rem;
+    line-height: 1.55;
+    word-break: keep-all;
+}
+.warn-box strong { font-weight: 700; }
+
+/* 하루 목표 프리셋 칩(발견 10) — [20][30][60][직접]. 0 입력을 밀어내고 작게 시작하도록 유도.
+   터치 타깃 ≥44px(min-height). Vue 아일랜드가 아래 목표 input을 세팅한다. */
+.onb-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 8px;
+}
+.onb-preset-chip {
+    width: auto;               /* 전역 button{width:100%} 상쇄 — 빠지면 칩이 풀폭이 돼 flex-wrap에서 세로로 쌓임(#286 가드) */
+    flex: 1 1 auto;
+    min-width: 60px;
+    min-height: 44px;
+    padding: 8px 12px;
+    font: inherit;
+    font-size: .9rem;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    cursor: pointer;
+}
+.onb-preset-chip:hover { background: var(--sage-soft); }
+.onb-preset-chip.is-active {
+    background: var(--sage-soft);
+    border-color: var(--accent);
+    color: var(--accent-hover);
+    font-weight: 700;
+}
+
+/* 실시간 미리보기 카드(발견 12) — "다른 사람에게 이렇게 보여요". 종이톤 카드로 폼 흐름 안에 둔다. */
+.onb-preview-mount:empty { display: none; }   /* 아일랜드 미마운트(JS 비활성) 시 빈 자리 숨김 */
+.onb-preview {
+    margin: 0 0 16px;
+    padding: 12px 14px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+.onb-preview-label { margin: 0 0 8px; font-size: .78rem; color: var(--muted); }
+.onb-preview-card { display: flex; align-items: center; gap: 12px; }
+.onb-preview-avatar {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px; border-radius: 50%;
+    background: var(--sage-soft); color: var(--accent-hover);
+    font-size: 1.1rem; font-weight: 700; flex: none;
+}
+.onb-preview-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.onb-preview-name { font-size: .95rem; font-weight: 700; color: var(--text); word-break: break-all; }
+.onb-preview-handle { font-size: .82rem; color: var(--accent-hover); word-break: break-all; }
+.onb-preview-handle.is-muted { color: var(--muted); }
+.onb-preview-hint { margin: 8px 0 0; font-size: .78rem; color: var(--muted); }
+
 /* 인사말 자리의 작가 격언 — 문장은 본문 톤, 작가는 한 단 작고 흐리게(출처 표기). */
 .greeting.quote .quote-text {
     font-style: italic;
