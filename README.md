@@ -249,6 +249,7 @@ npm --prefix frontend run test:e2e   # E2E (Playwright; 별도 터미널에서 b
 
 - [DEVLOG.md](DEVLOG.md) — 개발 일지 (기능 추가 흐름 / 만난 문제 / 해결)
 - [plan.md](plan.md) — 추후 할 일 / 로드맵 / 기술 부채 / 갱신 이력
+- [claude-docs/code-map.md](claude-docs/code-map.md) — **기능별 코드 지도** (기능 작업 전 진입점·소속 파일 직행용 참조)
 - [claude-docs/domain-design.md](claude-docs/domain-design.md) — 도메인 모델 설계
 - [claude-docs/login-id-design.md](claude-docs/login-id-design.md) — 로그인 아이디(식별/인증 분리) 설계
 - [claude-docs/sns-design.md](claude-docs/sns-design.md) — 소셜(공개범위·관계·IDOR·스키마) 설계
