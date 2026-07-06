@@ -38,9 +38,9 @@ public class OnboardingForm {
     @Size(max = 50)
     private String nickname;
 
-    /** 하루 목표(분). 0 이상. */
+    /** 하루 목표(분). 최소 1분 — 0분은 "안 읽어도 됨"이라 목표의 의미가 사라진다(발견 10). */
     @NotNull
-    @Min(0)
+    @Min(1)
     private Integer incrementMinutes;
 
     public String getLoginId() {

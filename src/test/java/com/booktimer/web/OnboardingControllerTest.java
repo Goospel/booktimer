@@ -198,4 +198,20 @@ class OnboardingControllerTest {
 
         assertThat(userRepository.findByEmail("neg@booktimer.com").orElseThrow().isOnboarded()).isFalse();
     }
+
+    @Test
+    @DisplayName("POST /onboarding: 0분 목표는 검증 실패로 화면을 다시 그린다 (하루 목표는 최소 1분 — 발견 10)")
+    void postOnboarding_zeroGoal_rerenders() throws Exception {
+        register("zero@booktimer.com");
+
+        mockMvc.perform(post("/onboarding").with(user("zero@booktimer.com")).with(csrf())
+                        .param("loginId", "zero_user")
+                        .param("nickname", "제로닉")
+                        .param("incrementMinutes", "0")) // 0분 = "안 읽어도 됨"이라 목표의 의미가 사라짐
+                .andExpect(status().isOk())
+                .andExpect(view().name("onboarding"))
+                .andExpect(model().attributeHasFieldErrors("onboardingForm", "incrementMinutes"));
+
+        assertThat(userRepository.findByEmail("zero@booktimer.com").orElseThrow().isOnboarded()).isFalse();
+    }
 }
