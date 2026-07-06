@@ -1245,16 +1245,18 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 >
 > **📡 점등 runbook (`BOOKTIMER_NUDGE_ENABLED=true`) — 아직 켜지 않음**: 전제 게이트 2개 통과 후 켠다. ① **SES 샌드박스 해제(프로덕션 액세스)** — 미해제면 미검증 실주소 발송 실패→반송→발신 평판 하락(transactional까지 연쇄). AWS Support 케이스 178123901400162는 **1차 거부(2026-06-17, "보안상 사유 비공개")** 후, AWS가 요구한 상세 사용 사례(발송 빈도·수신자 목록 관리·반송/불만/수신거부 처리·메일 예시)를 담아 **재요청(재고 요청) 중**. 진짜 승인 신호는 케이스가 아니라 SES 콘솔 Account dashboard의 "Production access" 표기다(배경·재발 방지: [learning-notes N-091](claude-docs/learning-notes.md), [troubleshooting T-058](claude-docs/troubleshooting.md)). ② **법무 9박스** 1~8 ✅. **절차**: `task-definition.json` `environment`에 `{"name":"BOOKTIMER_NUDGE_ENABLED","value":"true"}` 추가 → main push → `deploy.yml` 자동 배포(스케줄러 빈 등록) → 다음 KST 10시 배치 발송. **점등 후**: 반송·스팸신고율·DMARC 정렬(N-071) 모니터링, 안정 시 DMARC `p=none`→`quarantine` 상향.
 
-### 측정 세션 `book_id` NOT NULL 제약 — 레거시 정리 후 (보류, 우선순위: 낮음)
-> **배경**: "측정은 무조건 책을 골라야 한다"(어떤 책을 얼마나 읽었는지 명확히)를 도입하며(PR #133),
-> 강제는 **유스케이스 경계(Service + Controller)** 에서 한다 — 새 세션은 `book` 필수, bookId 없거나 내 책
-> 아니면 거부. 반면 **DB `reading_session.book_id`와 엔티티 필드는 nullable로 유지**했다.
-> **왜 DB 제약을 지금 안 거나**: 과거엔 책 없는 측정이 가능해 운영 DB에 `book_id IS NULL` 행이 남아 있을 수
-> 있다. 지금 `NOT NULL`로 바꾸는 Flyway는 그 기존 행 때문에 **마이그레이션이 실패**한다. 또 고아 세션을
-> 어느 책에 붙일지(backfill)는 알 수 없다(N-039: 제약 강화 전 백필 선결).
-- [ ] (후속) 운영 DB의 `book_id IS NULL` 레거시 세션을 어떻게 할지 결정 — 보존(현행) / 특정 더미책 귀속 / 삭제.
-- [ ] 정리 후에만 `V__ alter ... book_id ... not null` 추가(앱 레이어 강제는 이미 됨 → DB 제약은 "벨트+멜빵").
-- 관련: learning-notes **N-039**(제약 강화는 백필 먼저), 집계는 null-book 세션을 이미 제외(`BookReadingStatsService`).
+### 측정 세션 `book_id` NOT NULL 제약 — ❌ 폐기(방향 역전, 2026-07-07 발견 1)
+> **폐기 이유**: UX 리뷰 **발견 1(PR-E)**로 "책 없이 측정 시작 + 종료 후 태깅"을 도입하며 방향이 **역전**됐다.
+> 이제 `book_id IS NULL`은 정리해야 할 레거시가 아니라 **정당한 1급 상태**(무엇을 읽을지 안 정한 채 시작)다.
+> 따라서 `book_id`를 `NOT NULL`로 조이는 건 "책 없이 시작"을 원천 차단하므로 **더 이상 목표가 아니다** — 이 백로그를 접는다.
+>
+> **(역사 보존) 원래 배경**: 한때 "측정은 무조건 책을 골라야 한다"(어떤 책을 얼마나 읽었는지 명확히)를 도입해(PR #133)
+> 유스케이스 경계(Service + Controller)에서 book 필수를 강제했다(DB·엔티티 필드는 nullable 유지). 당시엔 이 앱-레이어
+> 강제 위에 DB `NOT NULL`을 "벨트+멜빵"으로 얹는 걸 후속으로 뒀으나, 발견 1이 그 앱-레이어 강제 자체를 걷어냈다.
+> 이미 그때도 DB 제약을 미룬 이유(레거시 `book_id IS NULL` 행 때문에 마이그레이션 실패 + 고아 세션 backfill 불가,
+> N-039)가 있었는데, 이제는 그 nullable 유지가 **오히려 새 설계와 맞아떨어진다**(마이그레이션 0으로 발견 1 구현).
+- 관련: learning-notes **N-039**(제약 강화는 백필 먼저). 집계는 null-book 세션을 잔디·부채엔 포함·책별 통계엔 이미 제외
+  (`ReadingSessionRepository` `where s.book is not null`, `ReadingSessionRepositoryTest`가 불변식 잠금) — 발견 1이 이 갈림을 그대로 활용.
 
 ### Fargate CPU 상향 — 로그인(BCrypt) 지연 (완료 ✅ 2026-06-04, PR #132 / 배포 검증은 run)
 - **증상**: 로그인이 체감상 느림.
