@@ -113,13 +113,9 @@ async function handleStop() {
     </div>
 
     <template v-else-if="data">
+        <!-- 발견 2(상단 정리): 헤더 → 타이머 → 잔디 → 스토리 → 바로가기 → 격언(발밑).
+             격언(BrandQuote)은 Teleport로 #brand-quote-slot(대시보드 발밑)에 렌더되므로 여기 순서상 위치는 무관. -->
         <DashHeader :login-id="data.loginId" :profile-character-code="data.profileCharacterCode" />
-
-        <!-- 독서 스토리 스트립 (sns-design §13.7) — 로드 실패·스토리 0이어도 홈을 막지 않는다 -->
-        <StoryStrip :my-login-id="data.loginId" :my-nickname="data.nickname"
-                    :my-profile-character-code="data.profileCharacterCode" />
-
-        <BrandQuote :quotes="data.quotes" />
 
         <EmailVerifyBanner v-if="!data.emailVerified" />
 
@@ -146,9 +142,15 @@ async function handleStop() {
 
         <ContributionGraph :graph="data.graph" />
 
+        <!-- 독서 스토리 스트립 (sns-design §13.7) — 타이머 아래로 강등(발견 2). 로드 실패·스토리 0이어도 홈을 막지 않는다 -->
+        <StoryStrip :my-login-id="data.loginId" :my-nickname="data.nickname"
+                    :my-profile-character-code="data.profileCharacterCode" />
+
         <div class="dash-grid-2col">
             <QuickNav :login-id="data.loginId" />
             <GardenPanel :garden="data.garden" />
         </div>
+
+        <BrandQuote :quotes="data.quotes" />
     </template>
 </template>

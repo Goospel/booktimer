@@ -18,13 +18,13 @@
             <h1>BookTimer</h1>
         </a>
     </header>
-    <!-- 명언 슬롯 — Vue(BrandQuote)가 Teleport로 채움. 브랜드 바로 아래 한 줄(사용자 피드백: 브랜드 옆은 폭이 좁아 말줄임이 잦음).
-         header 밖 — 공유 .brand는 무변경. 홈 전용(다른 페이지엔 이 슬롯 자체가 없음 → 영향 0) -->
-    <div id="brand-quote-slot" class="brand-quote-slot"></div>
     <!-- 정원 패널 무대의 SVG 작가 캐릭터(<use href="#sprite-{code}">)가 참조할 심볼 정의.
          Vue 마운트 전에 DOM에 존재하도록 #dashboard-app 앞에 둔다(화면 밖 svg width=0). -->
     <th:block th:replace="~{fragments/garden-character-sprites :: sprites}"></th:block>
     <div id="dashboard-app">불러오는 중…</div>
+    <!-- 명언 슬롯 — Vue(BrandQuote)가 Teleport로 채움. 발밑 배치(발견 2: 상단 정리 — 격언을 대시보드 맨 아래로).
+         header 밖 — 공유 .brand는 무변경. 홈 전용(다른 페이지엔 이 슬롯 자체가 없음 → 영향 0) -->
+    <div id="brand-quote-slot" class="brand-quote-slot"></div>
     <noscript><p class="status-line">JavaScript가 필요합니다.</p></noscript>
     <div th:replace="~{ads :: unit}"></div>
 </div>

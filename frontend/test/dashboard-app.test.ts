@@ -73,6 +73,10 @@ function fetchImpl(url: string) {
     if (url.includes('/api/sessions/stop')) {
         return Promise.resolve({ ok: true, status: 200, json: async () => STOP_RESPONSE });
     }
+    if (url.includes('/api/stories/feed')) {
+        // 스토리 스트립 렌더용 최소 피드(빈 그룹) — 렌더 순서 테스트에서 .story-strip이 그려지도록.
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ mine: null, groups: [] }) });
+    }
     // 기본: /api/dashboard
     return Promise.resolve({ ok: true, status: 200, json: async () => ({ ...DASHBOARD_RESPONSE }) });
 }
@@ -114,5 +118,18 @@ describe('DashboardApp', () => {
 
         // 잔디가 새 graph로 갱신 — 연속일 5로 (현재는 graph 미갱신이라 RED)
         await vi.waitFor(() => expect(wrapper.find('.dash-streak-chip strong').text()).toBe('5'));
+    });
+
+    // 발견 2: 상단 4겹(브랜드→격언→인사→스토리) 정리 — 렌더 순서를
+    // 헤더 → 타이머 → 잔디 → 스토리 → 바로가기 순으로. 스토리를 타이머 아래로 강등.
+    test('렌더 순서: 타이머 → 잔디 → 스토리 → 바로가기 (발견 2)', async () => {
+        const wrapper = mount(DashboardApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.find('.dash-timer-hero').exists()).toBe(true));
+        await vi.waitFor(() => expect(wrapper.find('.story-strip').exists()).toBe(true));
+        const html = wrapper.html();
+        const pos = (s: string) => html.indexOf(s);
+        expect(pos('dash-timer-hero')).toBeLessThan(pos('dash-grass-card'));
+        expect(pos('dash-grass-card')).toBeLessThan(pos('story-strip'));
+        expect(pos('story-strip')).toBeLessThan(pos('dash-grid-2col'));
     });
 });

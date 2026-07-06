@@ -50,6 +50,13 @@
     --neutral-1: #CFC6B4;
     --neutral-2: #C4BCAC;
     --neutral-3: #9A9486;
+    /* 잔디 5단계 — 히스토리(.grass-cell.level-*)·대시보드(.dash-grass-cell.s*) 단일 출처.
+       값 바꾸면 둘 다 반영(발견 7: 대비 강화). 미달→달성 순으로 진해진다. */
+    --grass-0: #EAE4D7;
+    --grass-1: #C3D9B0;
+    --grass-2: #94BE7F;
+    --grass-3: #5E9250;
+    --grass-4: #35662F;
 }
 
 * { box-sizing: border-box; }
@@ -762,14 +769,14 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     width: 13px;
     height: 13px;
     border-radius: 3px;
-    background: #E9E3D6;       /* level-0(목표 미달/없음) 기본 */
+    background: var(--grass-0);       /* level-0(목표 미달/없음) 기본 */
 }
 .grass-cell.empty { background: transparent; }    /* placeholder(선행 빈칸 + 미래) — 대시보드와 동일 투명 */
-.grass-cell.level-0 { background: #E9E3D6; }
-.grass-cell.level-1 { background: #CFE0C2; }
-.grass-cell.level-2 { background: #A7C597; }
-.grass-cell.level-3 { background: #7BA46F; }
-.grass-cell.level-4 { background: #4F6B4C; }
+.grass-cell.level-0 { background: var(--grass-0); }
+.grass-cell.level-1 { background: var(--grass-1); }
+.grass-cell.level-2 { background: var(--grass-2); }
+.grass-cell.level-3 { background: var(--grass-3); }
+.grass-cell.level-4 { background: var(--grass-4); }
 /* 직접 채운 날 — 대시보드와 동일 호박색 안쪽 테두리. */
 .grass-cell.manual { box-shadow: inset 0 0 0 2px #C99A3A; }
 
@@ -2810,7 +2817,7 @@ body.personality-page #personality-app { gap: 18px; }
    사용자 피드백으로 브랜드 "옆"→"아래" 배치 변경: 옆은 폭이 좁아 말줄임이 잦았음).
    슬롯(#brand-quote-slot)은 dashboard.html SSR — header.brand 밖의 형제 요소 — Vue(BrandQuote)가
    Teleport로 채운다. 공유 .brand 스타일은 건드리지 않는다(타 페이지 회귀 0) — 슬롯은 홈에만 존재. */
-.brand-quote-slot { margin: 0 0 8px; }
+.brand-quote-slot { margin: 4px 0 8px; }
 /* 클리핑 무대 — 높이는 콘텐츠 기준 가변(줄 수만큼 자동으로 늘어남). overflow:hidden은
    슬라이드 트랜지션 중 무대 경계 밖으로 나가는 부분을 자르기 위함(Transition mode="out-in"이라
    한 시점엔 옛/새 줄 중 하나만 DOM에 존재 — 겹침 없이 사라진 뒤 나타남). */
@@ -3037,13 +3044,13 @@ body.personality-page #personality-app { gap: 18px; }
     width: max-content;
     margin: 0 auto;
 }
-.dash-grass-cell { width: 13px; height: 13px; border-radius: 3px; background: #E9E3D6; }
+.dash-grass-cell { width: 13px; height: 13px; border-radius: 3px; background: var(--grass-0); }
 .dash-grass-cell.empty { background: transparent; }
-.dash-grass-cell.s1 { background: #E9E3D6; }
-.dash-grass-cell.s2 { background: #CFE0C2; }
-.dash-grass-cell.s3 { background: #A7C597; }
-.dash-grass-cell.s4 { background: #7BA46F; }
-.dash-grass-cell.s5 { background: #4F6B4C; }
+.dash-grass-cell.s1 { background: var(--grass-0); }
+.dash-grass-cell.s2 { background: var(--grass-1); }
+.dash-grass-cell.s3 { background: var(--grass-2); }
+.dash-grass-cell.s4 { background: var(--grass-3); }
+.dash-grass-cell.s5 { background: var(--grass-4); }
 .dash-grass-cell.manual { box-shadow: inset 0 0 0 2px #C99A3A; }
 .dash-grass-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .dash-grass-summary { font-size: 12.5px; color: var(--muted); }
@@ -3647,15 +3654,21 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 }
 .story-ring { outline: 2px solid var(--border); outline-offset: 2px; }
 .story-ring-unviewed { outline: 3px solid var(--accent); }
-.story-ring-none { outline-style: dashed; }
-.story-ring-plus {
-    position: absolute; right: 5px; top: 31px; /* 아바타(3px 패딩 + 42px 원) 우하단에 겹침 */
-    width: 18px; height: 18px; border-radius: 50%;
-    background: var(--accent); color: var(--card-bg);
-    font-size: 14px; line-height: 18px; text-align: center;
-    box-shadow: 0 0 0 2px #EDF2E9;
-    border: none; padding: 0; cursor: pointer; appearance: none;
+/* + 올리기: 아바타 겹침 배지 대신 맨 앞 독립 타일(발견 8) — 52px 점선 원, 터치 타깃 분리. */
+.story-add-tile {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    width: 64px; flex-shrink: 0;
 }
+.story-add-btn {
+    width: 52px; height: 52px; border-radius: 50%;
+    border: 2px dashed var(--accent); background: transparent;
+    color: var(--accent-hover); font-size: 26px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; padding: 0; appearance: none;
+    transition: background .15s ease;
+}
+.story-add-btn:hover { background: #EDF2E9; }
+.story-add-label { font-size: 11px; color: var(--muted); }
 .story-ring-name {
     font-size: 11px; color: var(--muted); max-width: 64px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
