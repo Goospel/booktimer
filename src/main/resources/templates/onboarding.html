@@ -20,17 +20,23 @@
     </div>
 
     <section class="card">
-        <p class="entry-note">
-            매일 <strong>하루 목표</strong>만큼 읽는 게 목표예요. 못 채운 날은 <strong>최근 7일까지</strong> 빠뜨린 기록으로
-            채울 수 있고, 그보다 오래된 날은 부담 없이 자동으로 넘어가요. 목표는 나중에 설정에서 바꿀 수 있어요.
-        </p>
+        <!-- 부채 규칙(7일 윈도우·자동 용서)은 신규 사용자에게 부담이므로 기본 접힘 아코디언으로 숨긴다(발견 9).
+             궁금한 사람만 펼쳐 보고, 시작 자체는 가로막지 않는다. -->
+        <details class="entry-accordion">
+            <summary>📖 목표를 못 채운 날은 어떻게 되나요?</summary>
+            <p class="entry-accordion-body">
+                매일 <strong>하루 목표</strong>만큼 읽는 게 목표예요. 못 채운 날은 <strong>최근 7일까지</strong> 빠뜨린 기록으로
+                채울 수 있고, 그보다 오래된 날은 부담 없이 자동으로 넘어가요. 목표는 나중에 설정에서 바꿀 수 있어요.
+            </p>
+        </details>
         <form th:action="@{/onboarding}" th:object="${onboardingForm}" method="post">
             <!-- login_id는 소셜 로그인 사용자만 여기서 정한다(로컬은 가입에서 받았다 — 불변). -->
             <div class="field" th:if="${needsLoginId}">
                 <label for="loginId">아이디 — 로그인·검색에 쓰이는 고유 아이디</label>
                 <input type="text" id="loginId" maxlength="20" th:field="*{loginId}"
                        autocapitalize="none" autocomplete="username" placeholder="영문/숫자/_ 3~20자">
-                <span class="field-hint muted">⚠️ 한번 정하면 바꿀 수 없어요. 영소문자·숫자·언더스코어(_)만, 3~20자.</span>
+                <!-- 불변 경고는 흐린 힌트가 아니라 앰버 경고 박스로 격상 — 되돌릴 수 없는 결정임을 분명히(발견 11). -->
+                <p class="warn-box">⚠️ <strong>한번 정하면 바꿀 수 없어요.</strong> 영소문자·숫자·언더스코어(_)만, 3~20자.</p>
                 <span class="field-error" th:if="${#fields.hasErrors('loginId')}" th:errors="*{loginId}">아이디 오류</span>
             </div>
             <div class="field">
@@ -38,9 +44,13 @@
                 <input type="text" id="nickname" maxlength="50" th:field="*{nickname}">
                 <span class="field-error" th:if="${#fields.hasErrors('nickname')}" th:errors="*{nickname}">닉네임 오류</span>
             </div>
+            <!-- 실시간 미리보기 마운트(발견 12) — Vue 아일랜드가 아이디·닉네임을 "이렇게 보여요" 카드로 렌더. -->
+            <div id="onboarding-preview" class="onb-preview-mount" th:attr="data-needs-login-id=${needsLoginId}"></div>
             <div class="field">
                 <label for="incrementMinutes">하루 목표 (분) — 매일 읽고 싶은 시간</label>
-                <input type="number" id="incrementMinutes" min="0" th:field="*{incrementMinutes}">
+                <!-- 프리셋 칩 마운트(발견 10) — Vue 아일랜드가 [20][30][60][직접] 칩으로 아래 input을 세팅. -->
+                <div id="onboarding-goal-presets"></div>
+                <input type="number" id="incrementMinutes" min="1" th:field="*{incrementMinutes}">
                 <span class="field-hint muted">작게 시작하는 걸 추천해요(예: 20~30분). 나중에 바꿀 수 있어요.</span>
                 <span class="field-error" th:if="${#fields.hasErrors('incrementMinutes')}" th:errors="*{incrementMinutes}">목표 오류</span>
             </div>
@@ -48,5 +58,6 @@
         </form>
     </section>
 </div>
+<script type="module" th:src="@{/onboarding/onboarding.js}"></script>
 </body>
 </html>
