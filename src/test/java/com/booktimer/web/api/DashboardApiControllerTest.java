@@ -28,6 +28,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -166,18 +167,25 @@ class DashboardApiControllerTest {
                 .andExpect(status().isNotFound());
     }
 
-    // ── 6. start bookId null → 404 ───────────────────────────────────────────
+    // ── 6. start bookId 없음 → 200 + 책 미지정 세션 (발견 1 — 책 없이 시작) ──────
+    // 과거엔 bookId null을 404(IDOR 마스킹)로 막았으나, "시작을 책 선택으로 가로막지 않는다"는
+    // 발견 1 취지로 bookId를 아예 안 주면 책 미지정 세션을 허용한다. (bookId가 '있는데' 남의 것/미존재면
+    // 여전히 404 — 그 IDOR 경계는 startSession_otherUserBook_404가 지킨다.)
 
     @Test
-    @DisplayName("POST /api/sessions/start: bookId null → 404 (IDOR 마스킹)")
-    void startSession_bookIdNull_404() throws Exception {
-        register("nullbook@a.com", "nullbook");
+    @DisplayName("POST /api/sessions/start: bookId 없이 → 200 + 책 미지정 세션 시작(발견 1)")
+    void startSession_noBookId_startsWithoutBook() throws Exception {
+        User u = register("nobookstart@a.com", "nobookstart");
 
         mockMvc.perform(post("/api/sessions/start")
-                        .with(user("nullbook@a.com")).with(csrf())
+                        .with(user("nobookstart@a.com")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasActiveSession").value(true));
+
+        ReadingSession active = sessionRepository.findByUserAndEndedAtIsNull(u).orElseThrow();
+        assertThat(active.getBook()).isNull();
     }
 
     // ── 7. start 중복 → 409 ──────────────────────────────────────────────────
@@ -228,6 +236,123 @@ class DashboardApiControllerTest {
                 .andExpect(jsonPath("$.graph").exists())
                 .andExpect(jsonPath("$.graph.weeks").isArray())
                 .andExpect(jsonPath("$.graph.currentStreak").isNumber());
+    }
+
+    // ── 8c. stop 응답 sessionId + untagged (종료 후 태깅 트리거) ───────────────
+    // 책 없이 시작한 세션은 종료 시 "무슨 책이었나요?" 태깅 시트를 띄운다 — 프론트가 방금 세션의 id와
+    // "미태깅 여부"를 알아야 하므로 응답에 담는다. 책 골라 시작한 세션은 untagged=false(시트 안 뜸).
+
+    @Test
+    @DisplayName("POST /api/sessions/stop: 책 없이 시작한 세션 → 응답에 sessionId + untagged=true")
+    void stop_booklessSession_responseHasSessionIdAndUntagged() throws Exception {
+        User u = register("stopuntag@a.com", "stopuntag");
+        sessionService.start(u, clock.instant(), null); // 책 없이 시작
+
+        mockMvc.perform(post("/api/sessions/stop").with(user("stopuntag@a.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sessionId").isNumber())
+                .andExpect(jsonPath("$.untagged").value(true));
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/stop: 책 골라 시작한 세션 → untagged=false (태깅 시트 안 뜸)")
+    void stop_taggedSession_untaggedFalse() throws Exception {
+        User u = register("stoptag@a.com", "stoptag");
+        Book book = addBook(u, "책", BookStatus.READING);
+        sessionService.start(u, clock.instant(), book);
+
+        mockMvc.perform(post("/api/sessions/stop").with(user("stoptag@a.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.untagged").value(false));
+    }
+
+    // ── 8d. 종료 후 태깅 엔드포인트 (IDOR·재태깅 경계) ─────────────────────────
+
+    @Test
+    @DisplayName("POST /api/sessions/{id}/tag-book: 책 미지정 세션에 책 연결 + 읽고싶음→읽는중 전환")
+    void tagBook_linksBookAndFlipsWantToRead() throws Exception {
+        User u = register("tagok@a.com", "tagok");
+        Book book = addBook(u, "태깅책", BookStatus.WANT_TO_READ);
+        ReadingSession s = sessionService.start(u, clock.instant(), null);
+        sessionService.stop(u, clock.instant());
+
+        mockMvc.perform(post("/api/sessions/" + s.getId() + "/tag-book")
+                        .with(user("tagok@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + book.getId() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sessionId").value(s.getId().intValue()))
+                .andExpect(jsonPath("$.bookTitle").value("태깅책"));
+
+        assertThat(sessionRepository.findById(s.getId()).orElseThrow().getBook().getId())
+                .isEqualTo(book.getId());
+        assertThat(bookRepository.findById(book.getId()).orElseThrow().getStatus())
+                .isEqualTo(BookStatus.READING);
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/{id}/tag-book: 남의 세션 태깅 → 404 (IDOR)")
+    void tagBook_othersSession_404() throws Exception {
+        User alice = register("tagalice@a.com", "tagalice");
+        User bob = register("tagbob@a.com", "tagbob");
+        ReadingSession aliceSession = sessionService.start(alice, clock.instant(), null);
+        sessionService.stop(alice, clock.instant());
+        Book bobBook = addBook(bob, "밥책", BookStatus.READING);
+
+        mockMvc.perform(post("/api/sessions/" + aliceSession.getId() + "/tag-book")
+                        .with(user("tagbob@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + bobBook.getId() + "}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/{id}/tag-book: 남의 책으로 태깅 → 404 (IDOR)")
+    void tagBook_othersBook_404() throws Exception {
+        User alice = register("tbalice@a.com", "tbalice");
+        User bob = register("tbbob@a.com", "tbbob");
+        ReadingSession bobSession = sessionService.start(bob, clock.instant(), null);
+        sessionService.stop(bob, clock.instant());
+        Book aliceBook = addBook(alice, "앨리스책", BookStatus.READING);
+
+        mockMvc.perform(post("/api/sessions/" + bobSession.getId() + "/tag-book")
+                        .with(user("tbbob@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + aliceBook.getId() + "}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/{id}/tag-book: 이미 책이 지정된 세션 재태깅 → 409")
+    void tagBook_alreadyTagged_409() throws Exception {
+        User u = register("retag@a.com", "retag");
+        Book first = addBook(u, "첫 책", BookStatus.READING);
+        Book second = addBook(u, "둘째 책", BookStatus.READING);
+        ReadingSession s = sessionService.start(u, clock.instant(), first);
+        sessionService.stop(u, clock.instant());
+
+        mockMvc.perform(post("/api/sessions/" + s.getId() + "/tag-book")
+                        .with(user("retag@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + second.getId() + "}"))
+                .andExpect(status().isConflict());
+    }
+
+    // ── 8e. wantToReadBooks 노출 (태깅 시트용) ────────────────────────────────
+
+    @Test
+    @DisplayName("GET /api/dashboard: wantToReadBooks(읽고싶음) 목록을 응답에 싣는다 — 태깅 시트용")
+    void get_includesWantToReadBooks() throws Exception {
+        User u = register("wtr@a.com", "wtr");
+        addBook(u, "읽고싶은 책", BookStatus.WANT_TO_READ);
+        addBook(u, "읽는 책", BookStatus.READING);
+
+        mockMvc.perform(get("/api/dashboard").with(user("wtr@a.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.wantToReadBooks").isArray())
+                .andExpect(jsonPath("$.wantToReadBooks.length()").value(1))
+                .andExpect(jsonPath("$.wantToReadBooks[0].title").value("읽고싶은 책"))
+                .andExpect(jsonPath("$.readingBooks.length()").value(1));
     }
 
     // ── 9. DTO 화이트리스트 ───────────────────────────────────────────────────

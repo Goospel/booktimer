@@ -52,11 +52,12 @@ com.booktimer/
 ## ⏱️ 3. 누적 타이머 · 7일 부채 모델 (핵심)
 
 - **한 줄**: 하루 목표 대비 부족분을 7일 윈도우 부채로 lazy 누적/상환. 초과 읽기로 과거 빚 상환, 7일 초과 빚은 자동 용서.
-- **진입점**: `/`·`/dashboard`(`web/DashboardController`) · `/api/dashboard`·`/api/sessions/start`·`/api/sessions/stop`(`web/api/DashboardApiController`) · `/sessions/start`·`/sessions/stop`·`/sessions/manual`(`web/ReadingSessionController`) · 목표 설정 `/settings`(`web/SettingsController` + `web/SettingsForm`)
+- **진입점**: `/`·`/dashboard`(`web/DashboardController`) · `/api/dashboard`·`/api/sessions/start`·`/api/sessions/stop`·`/api/sessions/{id}/tag-book`(`web/api/DashboardApiController`) · `/sessions/start`·`/sessions/stop`·`/sessions/manual`(`web/ReadingSessionController`) · 목표 설정 `/settings`(`web/SettingsController` + `web/SettingsForm`)
 - **소속 패키지**: `timer/`(목표·타이머 엔티티·목표변경 이력) · `session/`(세션·부채계산 — 잔디와 공유)
 - **핵심**: 부채 `session/WeeklyDebtCalculator`·`session/ReadingDebtService`·`session/DayDebt`·`session/WeeklyDebt`·`session/DayDebtTrace` · 목표 `timer/GoalSchedule`·`timer/ReadingGoalService`·`timer/ReadingTimer`·`timer/ReadingGoalChange` · 세션 `session/ReadingSessionService`·`session/ReadingSession`·`session/ReadingSessionRepository`
 - **⚠️ 배선 주의**: **부채 계산 로직은 `timer/`가 아니라 `session/`에 있다**(`WeeklyDebtCalculator`·`ReadingDebtService`). 목표 변경 시 과거 날짜 소급오염 방지는 `timer/GoalSchedule`(per-day 목표 스냅샷). 배치 스케줄러 없이 **접속 시 Lazy 계산**. 수동입력 경로는 `/sessions/manual`(README 서술의 표현과 실제 URL이 다르니 주의).
-- **프론트**: `frontend/src/dashboard/`(`TimerCard.vue`, `useReadingTimer.ts`, `timerProgress.ts`, `ContributionGraph.vue`)
+- **📌 책 없이 시작 + 종료 후 태깅(발견 1)**: `start`는 **책 선택**(bookId 없이 시작 허용) — 서비스·`DashboardApiController.start`·폼 컨트롤러 3층이 완화됐다. **IDOR 경계는 보존**: bookId가 '있는데' 남의 것/미존재면 여전히 404(API)·에러(폼). 종료 후 태깅 = `ReadingSession.tagBook` + `ReadingSessionService.tagBook`(세션 IDOR=`findByIdAndUser`) + `POST /api/sessions/{id}/tag-book`(책·세션 이중 IDOR, 재태깅 409). `StopResponse`가 `sessionId`·`untagged`를 노출해 프론트가 시트를 띄운다. **집계 무변경**: null-book 세션은 잔디·부채(시간 기반)엔 포함, 책별 통계(`sumSecondsByBook`=`where s.book is not null`)엔 제외 — 이미 그렇게 갈렸고 `ReadingSessionRepositoryTest`가 잠금.
+- **프론트**: `frontend/src/dashboard/`(`TimerCard.vue`, `BookPickForm.vue`, `TagBookSheet.vue`, `DashboardApp.vue`, `useReadingTimer.ts`, `timerProgress.ts`, `ContributionGraph.vue`) — 시작 진입(책 없이 옵션)·종료 후 태깅 시트
 - **템플릿**: `dashboard.html`·`manual-session.html`
 - **DB**: `V4`(세션-책 연결) · `V20`(레거시 컬럼 제거) · `V21`(목표변경 이력) · `V22`(수동입력) · `V30`(부채 이월) · `V53`(세션 인덱스)
 - **설계**: [domain-design.md](domain-design.md) · README §2.1·§6·§7

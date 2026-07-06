@@ -55,15 +55,20 @@ public class ReadingSessionController {
                         @RequestParam(value = "bookId", required = false) Long bookId,
                         RedirectAttributes redirectAttributes) {
         User user = currentUser(principal);
-        Book book = (bookId == null) ? null : bookRepository.findByIdAndUser(bookId, user).orElse(null);
-        if (book == null) {
-            redirectAttributes.addFlashAttribute("error", "측정할 책을 선택하세요.");
-        } else {
-            try {
-                sessionService.start(user, clock.instant(), book);
-            } catch (IllegalStateException e) {
-                redirectAttributes.addFlashAttribute("error", "이미 진행 중인 측정이 있습니다.");
+        // bookId 없이 시작하면 책 미지정 세션(발견 1 — 시작을 막지 않음).
+        // bookId가 '있는데' 소유 아님/미존재면 에러(IDOR 방지) — 조용히 책 없이 시작하지 않는다.
+        Book book = null;
+        if (bookId != null) {
+            book = bookRepository.findByIdAndUser(bookId, user).orElse(null);
+            if (book == null) {
+                redirectAttributes.addFlashAttribute("error", "측정할 책을 찾을 수 없어요.");
+                return "redirect:/";
             }
+        }
+        try {
+            sessionService.start(user, clock.instant(), book);
+        } catch (IllegalStateException e) {
+            redirectAttributes.addFlashAttribute("error", "이미 진행 중인 측정이 있습니다.");
         }
         return "redirect:/";
     }

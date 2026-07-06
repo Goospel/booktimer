@@ -99,16 +99,17 @@ class ReadingSessionControllerTest {
     }
 
     @Test
-    @DisplayName("POST /sessions/start: bookId 없이 시작하면 책 선택 안내 에러 + 세션을 만들지 않는다")
-    void start_withoutBookId_flashesError_noSession() throws Exception {
+    @DisplayName("POST /sessions/start: bookId 없이 시작하면 책 미지정 세션을 만든다(발견 1 — 시작을 막지 않음, 에러 없음)")
+    void start_withoutBookId_startsBooklessSession() throws Exception {
         User user = register("nobook@booktimer.com");
 
         mockMvc.perform(post("/sessions/start").with(user("nobook@booktimer.com")).with(csrf()))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/"))
-                .andExpect(flash().attributeExists("error"));
+                .andExpect(flash().attributeCount(0));
 
-        assertThat(sessionRepository.findByUserAndEndedAtIsNull(user)).isEmpty();
+        ReadingSession active = sessionRepository.findByUserAndEndedAtIsNull(user).orElseThrow();
+        assertThat(active.getBook()).isNull();
     }
 
     @Test

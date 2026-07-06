@@ -8,10 +8,12 @@ import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.ContributionDay;
 import com.booktimer.session.ContributionGraph;
 import com.booktimer.session.ReadingContributionService;
+import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionService;
 import com.booktimer.user.User;
 import com.booktimer.web.DashboardModel;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -31,7 +33,8 @@ import java.util.List;
  * POST /api/sessions/start|stop — start/stop 뮤테이션. 응답은 라이브 부분집합({@link TimerState})만.
  *
  * <p>에러 계약(상태코드만 — {@code GlobalExceptionHandler}가 ResponseStatusException을 잡아 코드 보존):
- * 404 = 책 미선택·IDOR·null bookId(IDOR 마스킹). 409 = 중복 start / 무세션 stop. 403 = CSRF 누락.
+ * 404 = bookId가 '있으나' 소유 아님·미존재(IDOR 마스킹) — bookId를 아예 안 주면 책 미지정 시작 허용(발견 1).
+ * 409 = 중복 start / 무세션 stop. 403 = CSRF 누락.
  */
 @RestController
 public class DashboardApiController {
@@ -84,6 +87,7 @@ public class DashboardApiController {
                 live.hasActiveSession(), live.activeStartedAt(),
                 live.activeBookTitle(), live.activeBookTotalSeconds(),
                 toOptions(live.readingBooks()), toOptions(live.finishedBooks()),
+                toOptions(live.wantToReadBooks()),
                 live.recentBookId(),
                 toGraphDto(graph),
                 garden,
@@ -94,11 +98,12 @@ public class DashboardApiController {
     @PostMapping("/api/sessions/start")
     public ResponseEntity<TimerState> start(@RequestBody StartSessionRequest req, Principal principal) {
         User user = currentUserService.resolve(principal);
-        Book book = (req.bookId() == null)
-                ? null
-                : bookRepository.findByIdAndUser(req.bookId(), user).orElse(null);
-        if (book == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "책을 찾을 수 없습니다");
+        // bookId를 아예 안 주면 책 미지정 세션(발견 1 — 시작을 책 선택으로 가로막지 않음).
+        // bookId가 '있는데' 소유 아님/미존재면 404(IDOR 마스킹) — 이 경계는 그대로 유지.
+        Book book = null;
+        if (req.bookId() != null) {
+            book = bookRepository.findByIdAndUser(req.bookId(), user)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "책을 찾을 수 없습니다"));
         }
         try {
             sessionService.start(user, clock.instant(), book);
@@ -111,8 +116,9 @@ public class DashboardApiController {
     @PostMapping("/api/sessions/stop")
     public ResponseEntity<StopResponse> stop(Principal principal) {
         User user = currentUserService.resolve(principal);
+        ReadingSession stopped;
         try {
-            sessionService.stop(user, clock.instant());
+            stopped = sessionService.stop(user, clock.instant());
         } catch (IllegalStateException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "진행 중인 측정이 없습니다");
         }
@@ -120,7 +126,33 @@ public class DashboardApiController {
         // 클라이언트가 새로고침 없이 잔디·연속일을 즉시 갱신하게 한다(start는 잔디 불변이라 TimerState 그대로).
         TimerState timer = buildTimerState(user);
         ContributionGraphDto graph = toGraphDto(contributionService.contributionGraph(user));
-        return ResponseEntity.ok(new StopResponse(timer, graph));
+        // sessionId + untagged: 책 없이 시작한 세션(book==null)이면 종료 후 "무슨 책?" 태깅 시트를 띄운다(발견 1).
+        // getBook()==null은 lazy 프록시를 초기화하지 않는 참조 비교라 트랜잭션 밖에서도 안전(null 연관=실제 null).
+        boolean untagged = stopped.getBook() == null;
+        return ResponseEntity.ok(new StopResponse(stopped.getId(), untagged, timer, graph));
+    }
+
+    /**
+     * 종료 후 태깅 — 책 없이 측정한 세션에 나중에 책을 연결한다(발견 1).
+     *
+     * <p>IDOR 이중 방어: 책은 {@code findByIdAndUser}로 소유 검증(남의 책이면 404), 세션은 서비스가
+     * {@code findByIdAndUser}로 소유 검증(남의 세션이면 404 마스킹). 이미 책이 지정된 세션 재태깅은 409.
+     */
+    @PostMapping("/api/sessions/{id}/tag-book")
+    public ResponseEntity<TagBookResponse> tagBook(@PathVariable("id") Long id,
+                                                   @RequestBody TagBookRequest req,
+                                                   Principal principal) {
+        User user = currentUserService.resolve(principal);
+        Book book = bookRepository.findByIdAndUser(req.bookId(), user)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "책을 찾을 수 없습니다")); // 책 IDOR
+        try {
+            ReadingSession tagged = sessionService.tagBook(user, id, book);
+            return ResponseEntity.ok(new TagBookResponse(tagged.getId(), book.getTitle()));
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "측정을 찾을 수 없습니다"); // 세션 IDOR 마스킹
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 책이 지정된 측정입니다");
+        }
     }
 
     private TimerState buildTimerState(User user) {
@@ -161,6 +193,7 @@ public class DashboardApiController {
             long activeBookTotalSeconds,
             List<BookOption> readingBooks,
             List<BookOption> finishedBooks,
+            List<BookOption> wantToReadBooks,
             Long recentBookId,
             ContributionGraphDto graph,
             GardenApiResponse.CatalogDto garden,
@@ -168,8 +201,16 @@ public class DashboardApiController {
             boolean emailVerified
     ) {}
 
-    /** stop 응답 — 타이머 + 방금 확정된 세션이 반영된 잔디(측정 종료 즉시 잔디 갱신용). */
-    public record StopResponse(TimerState timer, ContributionGraphDto graph) {}
+    /**
+     * stop 응답 — 방금 종료된 세션의 id·미태깅 여부 + 타이머 + 잔디(측정 종료 즉시 잔디 갱신용).
+     * {@code untagged}이면 클라이언트가 "무슨 책?" 태깅 시트를 띄우고 {@code sessionId}로 태깅 요청한다(발견 1).
+     */
+    public record StopResponse(Long sessionId, boolean untagged, TimerState timer, ContributionGraphDto graph) {}
+
+    public record TagBookRequest(Long bookId) {}
+
+    /** tag-book 응답 — 어느 세션에 어떤 책을 붙였는지 확인용. */
+    public record TagBookResponse(Long sessionId, String bookTitle) {}
 
     /** start 응답 — 라이브 부분집합(graph/garden/quote/emailVerified 제외). 잔디는 stop 때만 변함. */
     public record TimerState(

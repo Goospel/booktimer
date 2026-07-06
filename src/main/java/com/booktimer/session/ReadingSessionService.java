@@ -38,24 +38,23 @@ public class ReadingSessionService {
     }
 
     /**
-     * 특정 책을 대상으로 새 측정 세션을 시작한다.
+     * 새 측정 세션을 시작한다. <b>책은 선택</b>이다(발견 1) — 무엇을 읽을지 아직 안 정했어도
+     * 시작을 가로막지 않고, 나중에 "종료 후 태깅"({@code tagBook})으로 책을 연결할 수 있다.
+     * 책을 주면 그 책에 세션이 연결되고, 그 책이 "읽고싶음"이면 "읽는중"으로 자동 전환한다.
      *
-     * <p><b>책은 필수</b>다 — "어떤 책을 얼마나 읽었는지"를 명확히 하려고 책 없는(미지정) 측정은 허용하지 않는다.
-     * (과거 데이터엔 책 없는 세션이 남아 있을 수 있어 엔티티/스키마는 nullable을 유지하지만, 이 생성 경로는 막는다.)
+     * <p>(책 없는 세션은 잔디·연속일·부채엔 시간 기반으로 정상 반영되고, 책별 통계에선 자연히 빠진다 —
+     * 집계 쿼리가 이미 그렇게 갈린다. {@link ReadingSessionRepository})
      *
-     * @throws IllegalArgumentException book 이 null 인 경우(책 미지정 측정 금지)
-     * @throws IllegalStateException    이미 진행 중인 세션이 있는 경우
+     * @param book 측정 대상 책(선택 — null이면 책 미지정 세션)
+     * @throws IllegalStateException 이미 진행 중인 세션이 있는 경우
      */
     public ReadingSession start(User user, Instant now, Book book) {
-        if (book == null) {
-            throw new IllegalArgumentException("a book is required to start a reading session");
-        }
         sessionRepository.findByUserAndEndedAtIsNull(user).ifPresent(s -> {
             throw new IllegalStateException("an active session already exists");
         });
         ReadingSession saved = sessionRepository.save(ReadingSession.start(user, now, book));
-        // 시작한 책이 "읽고싶음"이었다면 "읽는중"으로 자동 전환(전환 시에만 저장).
-        if (book.startReading()) {
+        // 책을 지정했고 그 책이 "읽고싶음"이었다면 "읽는중"으로 자동 전환(전환 시에만 저장).
+        if (book != null && book.startReading()) {
             bookRepository.save(book);
         }
         return saved;
@@ -102,5 +101,30 @@ public class ReadingSessionService {
                 .orElseThrow(() -> new IllegalStateException("no active session to stop"));
         active.end(now);
         return sessionRepository.save(active);
+    }
+
+    /**
+     * <b>종료 후 태깅</b>(발견 1) — 책 없이 측정한 세션에 나중에 책을 연결한다. 책 없이 시작한 측정을
+     * 종료한 뒤 "무슨 책이었나요?"로 되돌아보며 붙이는 경로다.
+     *
+     * <p>소유 경계(IDOR): 그 세션이 {@code user}의 것이어야 한다 — 아니면 없는 것으로 취급(404 마스킹).
+     * 책 소유 검증은 호출부(컨트롤러)가 {@code findByIdAndUser}로 이미 마친 뒤 넘긴다. 태깅한 책이
+     * "읽고싶음"이면 {@code start}와 동일하게 "읽는중"으로 자동 전환한다.
+     *
+     * @param sessionId 태깅할 세션 id
+     * @param book      연결할 책(호출부에서 소유 검증 완료)
+     * @return 책이 연결된 세션
+     * @throws IllegalArgumentException 해당 사용자의 그 세션이 없는 경우(IDOR — 컨트롤러가 404로 마스킹)
+     * @throws IllegalStateException    이미 책이 지정된 세션인 경우(컨트롤러가 409로)
+     */
+    public ReadingSession tagBook(User user, Long sessionId, Book book) {
+        ReadingSession session = sessionRepository.findByIdAndUser(sessionId, user)
+                .orElseThrow(() -> new IllegalArgumentException("session not found for user"));
+        session.tagBook(book); // 이미 책 있으면 IllegalStateException
+        // 태깅한 책이 "읽고싶음"이었다면 "읽는중"으로 자동 전환(측정 시작과 동일).
+        if (book.startReading()) {
+            bookRepository.save(book);
+        }
+        return sessionRepository.save(session);
     }
 }

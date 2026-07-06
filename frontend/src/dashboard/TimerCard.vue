@@ -23,7 +23,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-    start: [bookId: number]
+    start: [bookId: number | null]
     stop: []
 }>()
 
