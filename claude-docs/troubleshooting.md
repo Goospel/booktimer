@@ -2436,6 +2436,22 @@ git worktree remove ../BookTimer-<task>
 
 ---
 
+## T-134. 외부 API의 "에러처럼 생긴" result 코드가 실은 정상 무데이터일 수 있다 — 비-성공을 뭉뚱그려 fatal 처리 금지
+
+**증상**: LinkPrice 실적 조회(`translist.php`)에 유효한 auth_key로 이번 달을 조회했더니 `❌ API 오류 (result=101)`. `test=Y` 스모크는 `result=0`·더미 10건으로 멀쩡 → 인증·a_id·page 인덱싱은 정상인데 실 조회만 "오류"로 보였다.
+
+**원인**: `result=101`은 가이드(`실적_조회_오픈_API_v1.6`)상 "정상 page 번호 아님"이지만, **실적이 0건이면 반환할 page가 없어** 이 코드가 온다(운영 실측: `202605`·`202606`·`202607` 전부 `result=101`·`list_count=0`, `page=0/1/2` 동일). 즉 101은 치명 오류가 아니라 **"해당 기간 데이터 없음"** 신호. 그런데 `fetchAllOrders`가 `result != '0'`을 전부 하드 에러(exit 1)로 처리해, 실적이 쌓이기 전(제휴 점등 직후·본인 클릭 제외)엔 매번 가짜 오류가 떴다.
+
+**해결**: result 코드를 **3분류**하는 순수 함수 `classifyResult(result)`로 분리 — `'0'`=ok / `'101'`=no-data(빈 성공으로 종료 → "실적 없음") / 그 외(`100` a_id·`200`/`210` 날짜·`300` 인증키·`400` 통화)=error 유지. no-data면 지금까지 모은 것(0건이면 빈 배열)으로 정상 종료. **양방향 불변식을 테스트로 못박음**: 101을 error로 두면 무데이터마다 가짜 오류 / 실제 오류코드를 no-data로 삼키면 깨진 설정이 조용히 "실적 없음"으로 숨는다.
+
+**감별**: `test=Y`(더미 데이터)가 `result=0`으로 오면 인증·요청 파라미터는 정상 → 실 조회만 비-0이면 "설정 오류"가 아니라 "데이터 상태" 코드를 의심하라. 벤더 코드 표를 실제로 열어 각 코드 의미를 확인(추측 금지).
+
+**일반화**: **외부 API 응답 코드를 "0 아니면 전부 에러"로 뭉뚱그리지 말라.** 코드 표를 확인해 각 코드를 no-data / 재시도 가능 / 치명으로 구분하고, 특히 "빈 결과"를 에러로 오표기하지 않게 한다 — 정상 운영에서 늘 뜨는 가짜 알람이 되면 진짜 오류를 가린다. 코드 판정을 순수 함수로 뽑으면 경계를 싸게 테스트로 고정한다.
+
+**1회차 신규**. `classifyResult`(`affiliate-report.mjs`), PR #661. 자매 T-133(같은 스크립트의 비밀키 경로 버그).
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2575,3 +2591,4 @@ git worktree remove ../BookTimer-<task>
 | 2026-07-04 | T-131 (알라딘 제휴 클릭 추적 0 — OpenAPI 요청에 includeKey=1 미전송(기본 0)이라 응답 link에 TTBKey 안 실림, 저장·302 재생 구매링크가 무추적, 운영 실측 2건(partner=openAPI&start=api·ttbkey 부재)으로 확정, 해법=includeKey=1 추가+기존 저장분 백필, PR #644, **2회차=T-129 쿠팡 재발·"어필리에이트 추적 무성실패" 트래커 등재**) |
 | 2026-07-05 | T-132 (dependabot 프론트 dep bump 중 **런타임 번들에 인라인되는 것**(vue 등)은 lockfile만 올려 CI `Verify bundle is not stale`가 RED — vue 런타임은 각 섬 번들 JS에 인라인되는데(`@vue/* 버전 마커`가 `static/**/*.js`에 박힘) dependabot은 `src/main/resources/static/**` 번들을 재빌드·커밋 안 해 lock↔아티팩트 드리프트로 stale 게이트가 실패 / 감별=CI에서 test·build는 GREEN인데 "Verify bundle is not stale"만 RED이고 PR diff가 `package-lock.json`뿐이면 코드 회귀가 아니라 번들 미재빌드 / 해결=PR 브랜치 체크아웃→`npm ci`→`npm run build`→재생성 번들 커밋·push→머지(번들이 새 버전 반영해 stale 해소) / **대조**: vitest(테스트러너)·@vitejs/plugin-vue(빌드타임 SFC 컴파일러)는 서빙 JS에 안 실려 재빌드 없이 통과 — "그 major dep이 런타임 번들에 들어가나"가 stale 실패 여부를 가름(vue=인라인→RED / vitest·plugin-vue=미포함→GREEN). phaser처럼 죽은 dep도 미포함이라 통과하되 bump 무의미→제거(#656) / 2026-07-05 dependabot 프론트 PR 정리 #649(vue), T-063·T-082 번들 군·N-083, 1회차 신규) |
 | 2026-07-06 | T-133 (스크립트가 읽는 비밀 파일 경로가 `.gitignore` 무시 경로·문서와 어긋나 조용히 실패 or 비밀 커밋 — `affiliate-report.mjs` `readAuthKey`가 `resolve(here,'.secrets')`로 `scripts/.secrets`를 잡아 `.claude/.secrets`(gitignore·문서)와 불일치. 해결=`secretPathFor` 순수함수+`..`로 상위 `.claude/.secrets`, gitignore 위치 일치를 단위테스트로 못박음. PR #660, 1회차 신규) |
+| 2026-07-06 | T-134 (외부 API의 "에러처럼 생긴" result 코드가 실은 정상 무데이터일 수 있다 — LinkPrice `result=101`("정상 page 번호 아님")이 실적 0건이면 반환할 page 없어서 온 코드였는데 `result!='0'`을 전부 fatal 처리해 무데이터마다 가짜 오류. 해결=`classifyResult` 3분류(0=ok·101=no-data·나머지=error), 양방향 불변식 테스트. `test=Y`가 정상이면 인증 OK→"데이터 상태 코드" 의심, 벤더 코드표 확인. PR #661, 1회차 신규, 자매 T-133) |
