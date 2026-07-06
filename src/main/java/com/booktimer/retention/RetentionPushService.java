@@ -35,7 +35,7 @@ public class RetentionPushService {
 
     /** §50 의무: title 맨 앞에 "(광고)" 표기. */
     private static final String PAYLOAD =
-            "{\"title\":\"(광고) 독서 마을\",\"body\":\"오랜만이에요! 오늘 책 한 장 어떠세요? \\uD83D\\uDCDA\",\"url\":\"/village\"}";
+            "{\"title\":\"(광고) 독서 서재\",\"body\":\"오랜만이에요! 오늘 책 한 장 어떠세요? \\uD83D\\uDCDA\",\"url\":\"/village\"}";
 
     private final ReadingSessionRepository sessionRepository;
     private final PushSubscriptionRepository subscriptionRepository;

@@ -106,6 +106,24 @@ class PushReminderServiceTest {
     }
 
     @Test
+    @DisplayName("payload title이 '독서 서재'다 (명칭 통일 — 발견 6)")
+    void sendReminders_payloadTitleSaysSeojae() {
+        User u = user("e@test.com");
+        u.enableDailyReminder();
+        PushSubscription s = sub(u);
+        given(subRepo.findReminderTargetUsers(any())).willReturn(List.of(u));
+        given(subRepo.findByUser(u)).willReturn(List.of(s));
+        given(senderService.send(eq(s), any())).willReturn(PushSenderService.SendResult.OK);
+        ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
+
+        reminderService.sendReminders();
+
+        verify(senderService).send(eq(s), payloadCaptor.capture());
+        assertThat(payloadCaptor.getValue()).contains("독서 서재");
+        assertThat(payloadCaptor.getValue()).doesNotContain("독서 마을");
+    }
+
+    @Test
     @DisplayName("cutoff 는 now - DEDUP_WINDOW(23h) 로 계산된다")
     void sendReminders_cutoffIsNowMinusDedupWindow() {
         given(subRepo.findReminderTargetUsers(any())).willReturn(List.of());

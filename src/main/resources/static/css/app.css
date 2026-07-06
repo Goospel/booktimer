@@ -3190,14 +3190,16 @@ body.dashboard-page #dashboard-app { gap: 20px; }
     background: #EAF0E4; overflow: hidden; min-height: 124px;
 }
 .dash-garden-ground { position: absolute; left: 0; right: 0; bottom: 0; height: 20px; background: #DCE6D3; z-index: 0; }
-/* overflow:hidden — 사용자 스크롤(휠·드래그·터치·스크롤바)은 막고, 자동 스크롤(JS scrollTo)만
-   허용한다(overflow:hidden 컨테이너도 프로그램적 scrollLeft/scrollTo는 그대로 동작). */
+/* 사용자 가로 스크롤 갤러리 — 휠·드래그·터치로 직접 넘긴다(발견 5: 2.5초 자동 스크롤 폐지).
+   스크롤바는 숨기고 양옆 페이드로 "더 있음"을 암시. */
 .dash-garden-stage {
     position: relative; z-index: 1; box-sizing: border-box; min-height: 124px;
     display: flex; align-items: flex-end; gap: clamp(12px, 3vw, 26px);
     padding: 18px 16px 22px;
-    overflow-x: hidden; overflow-y: hidden;
+    overflow-x: auto; overflow-y: hidden;
+    scrollbar-width: none;
 }
+.dash-garden-stage::-webkit-scrollbar { display: none; }
 .dash-garden-stage.is-empty { justify-content: center; align-items: center; }
 /* 가운데 포커스 캐러셀: 좌우 중앙 패딩으로 scrollLeft=i·step일 때 i번째 작가가 정중앙에 온다
    (60px=한 칸 .dash-garden-resident 폭, 절반 30px). 양끝 패딩이 곧 "양 끝 빈칸".
