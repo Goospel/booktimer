@@ -2422,6 +2422,20 @@ git worktree remove ../BookTimer-<task>
 
 ---
 
+## T-133. 스크립트가 읽는 비밀 파일 경로가 `.gitignore` 무시 경로·문서와 어긋나 조용히 실패 or 비밀 커밋
+
+**증상**: LinkPrice 실적 스크립트 `affiliate-report.mjs`에 발급받은 `auth_key`를, 주석·에러메시지·자동 메모리·`.gitignore`가 모두 가리키는 `.claude/.secrets/linkprice-auth`에 저장했는데 스크립트가 "auth_key 없음"으로 `exit 2`. 반대로 스크립트가 실제 읽는 위치에 저장하면 그 경로가 gitignore 밖이라 비밀키가 `git status`에 떠서 커밋될 위험. 어느 쪽이든 에러 로그 없이 조용히 틀린다.
+
+**원인**: `readAuthKey()`가 `resolve(here, '.secrets', 'linkprice-auth')`로 경로를 잡아 **스크립트 폴더 기준**(`.claude/scripts/.secrets/`)이 됐다. 스크립트가 `.claude/scripts/`에 있으니 `.claude/.secrets/`를 잡으려면 상위(`..`)로 올라가야 하는데 `..`이 빠졌다. 그런데 `.gitignore`는 `.claude/.secrets/`만 무시한다 → **코드 경로(`scripts/.secrets`) ≠ gitignore 경로(`.claude/.secrets`) ≠ 문서**. 문서대로 저장하면 스크립트가 못 읽고, 코드 경로에 저장하면 gitignore 밖이라 비밀이 커밋되는 **양방향 무성 함정**.
+
+**해결**: 경로 해석을 순수 함수 `secretPathFor(scriptDir)`로 뽑고 `resolve(scriptDir, '..', '.secrets', 'linkprice-auth')`로 상위 `.claude/.secrets/`를 잡게 함. 단위테스트로 **경로가 `.claude/.secrets/linkprice-auth`로 끝나고 `scripts/` 밑이 아님**을 단언(gitignore 위치 일치 불변식) — 현 코드로 RED(`…/scripts/.secrets/…` 실측) → `..` 추가로 GREEN. 저장 후 `git check-ignore`로 실제 무시되는지·`git status`에 비밀 파일이 안 뜨는지 확인.
+
+**일반화**: **비밀·설정 파일 경로를 코드가 `resolve()`로 잡을 땐, 그 경로가 `.gitignore` 무시 위치·문서와 정확히 일치하는지 테스트로 못박아라.** 셋(코드 경로·gitignore·문서)이 한 곳을 안 가리키면 에러 없이 "못 읽음" 또는 "비밀 커밋" 중 하나로 조용히 깨진다. 경로를 순수 함수로 분리하면 문자열 단언으로 싸게 고정된다.
+
+**1회차 신규**. 자동 메모리 `affiliate-report-automation-pending`, PR #660.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2560,3 +2574,4 @@ git worktree remove ../BookTimer-<task>
 | 2026-07-04 | T-130 (dark-launch 기능 secret을 task-def valueFrom으로 배선하면, 앱 기본값(application.properties)이 있어도 SSM 파라미터 미생성 시 ECS 배포가 서킷브레이커 롤백 — valueFrom이 파라미터 존재를 하드 강제해 태스크 기동 실패. 해결=미점등 기능 secret은 task-def에서 빼거나 placeholder 파라미터 먼저 생성, PR #642로 secret 3줄 제거해 언블록. 1회차 신규) |
 | 2026-07-04 | T-131 (알라딘 제휴 클릭 추적 0 — OpenAPI 요청에 includeKey=1 미전송(기본 0)이라 응답 link에 TTBKey 안 실림, 저장·302 재생 구매링크가 무추적, 운영 실측 2건(partner=openAPI&start=api·ttbkey 부재)으로 확정, 해법=includeKey=1 추가+기존 저장분 백필, PR #644, **2회차=T-129 쿠팡 재발·"어필리에이트 추적 무성실패" 트래커 등재**) |
 | 2026-07-05 | T-132 (dependabot 프론트 dep bump 중 **런타임 번들에 인라인되는 것**(vue 등)은 lockfile만 올려 CI `Verify bundle is not stale`가 RED — vue 런타임은 각 섬 번들 JS에 인라인되는데(`@vue/* 버전 마커`가 `static/**/*.js`에 박힘) dependabot은 `src/main/resources/static/**` 번들을 재빌드·커밋 안 해 lock↔아티팩트 드리프트로 stale 게이트가 실패 / 감별=CI에서 test·build는 GREEN인데 "Verify bundle is not stale"만 RED이고 PR diff가 `package-lock.json`뿐이면 코드 회귀가 아니라 번들 미재빌드 / 해결=PR 브랜치 체크아웃→`npm ci`→`npm run build`→재생성 번들 커밋·push→머지(번들이 새 버전 반영해 stale 해소) / **대조**: vitest(테스트러너)·@vitejs/plugin-vue(빌드타임 SFC 컴파일러)는 서빙 JS에 안 실려 재빌드 없이 통과 — "그 major dep이 런타임 번들에 들어가나"가 stale 실패 여부를 가름(vue=인라인→RED / vitest·plugin-vue=미포함→GREEN). phaser처럼 죽은 dep도 미포함이라 통과하되 bump 무의미→제거(#656) / 2026-07-05 dependabot 프론트 PR 정리 #649(vue), T-063·T-082 번들 군·N-083, 1회차 신규) |
+| 2026-07-06 | T-133 (스크립트가 읽는 비밀 파일 경로가 `.gitignore` 무시 경로·문서와 어긋나 조용히 실패 or 비밀 커밋 — `affiliate-report.mjs` `readAuthKey`가 `resolve(here,'.secrets')`로 `scripts/.secrets`를 잡아 `.claude/.secrets`(gitignore·문서)와 불일치. 해결=`secretPathFor` 순수함수+`..`로 상위 `.claude/.secrets`, gitignore 위치 일치를 단위테스트로 못박음. PR #660, 1회차 신규) |
