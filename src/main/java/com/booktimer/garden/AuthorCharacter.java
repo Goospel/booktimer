@@ -8,7 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 /**
- * 독서 정원의 <b>작가 캐릭터</b> 카탈로그 한 종 (읽기 전용·정적 시드, V45).
+ * 서재의 <b>작가 캐릭터</b> 카탈로그 한 종 (읽기 전용·정적 시드, V45).
  *
  * <p>트랙 A의 다섯 번째 수집축이다 — <b>특정 작가의 책을 완독</b>하면 그 작가 캐릭터를 보유로
  * <b>유도</b>한다(부채 모델 N-058 — 보유 이력 저장 안 함). 다양성축({@link DiversityPlant})이

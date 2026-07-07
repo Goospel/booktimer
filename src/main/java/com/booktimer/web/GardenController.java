@@ -9,12 +9,12 @@ import org.springframework.web.bind.annotation.GetMapping;
 import java.security.Principal;
 
 /**
- * 독서 마을 셸 컨트롤러.
+ * 서재 셸 컨트롤러.
  *
  * <p>S4 컷오버: GET /village는 얇은 셸(nickname만 모델)만 반환한다. 도감·월드 데이터는
  * {@code /api/garden}(JSON API)이 단일 출처로 제공하고, Vue SPA가 마운트 후 fetch한다.
  *
- * <p>배치/편집 엔진 은퇴(PR-2): 좌표 저장({@code POST /village/layout})이 사라졌다 — 보기 전용 마을.
+ * <p>배치/편집 엔진 은퇴(PR-2): 좌표 저장({@code POST /village/layout})이 사라졌다 — 보기 전용 서재.
  */
 @Controller
 public class GardenController {

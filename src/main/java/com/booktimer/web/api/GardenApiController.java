@@ -16,12 +16,12 @@ import java.security.Principal;
 import java.util.Map;
 
 /**
- * 독서 마을 SPA용 JSON API (S1 — 백엔드 레이어).
+ * 서재 SPA용 JSON API (S1 — 백엔드 레이어).
  *
  * <p>기존 {@code /village} Thymeleaf 뷰와 병행 제공한다. {@code /api/**}는 SecurityConfig
  * default-deny에 의해 자동으로 인증·CSRF 보호된다.
  *
- * <p>배치/편집 엔진 은퇴(PR-2): 좌표 저장({@code POST /layout})이 사라졌다 — 보기 전용 마을은
+ * <p>배치/편집 엔진 은퇴(PR-2): 좌표 저장({@code POST /layout})이 사라졌다 — 보기 전용 서재는
  * 도감·배회 캐릭터·먹이주기만 제공한다.
  */
 @RestController

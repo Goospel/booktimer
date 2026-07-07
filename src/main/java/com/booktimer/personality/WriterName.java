@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
  * <p>검색·책 상세의 author 표시는 원문을 그대로 쓴다(거기선 옮긴이 정보가 유용) — 이 정제는
  * 책BTI 집계({@link ReadingProfileAggregator}·{@link PersonalityTagAttribution})에서만 쓴다.
  *
- * <p>정원 작가 캐릭터의 {@link com.booktimer.garden.AuthorCharacterUnlockCalculator#normalize}와는
+ * <p>서재 작가 캐릭터의 {@link com.booktimer.garden.AuthorCharacterUnlockCalculator#normalize}와는
  * 목적이 다르다 — 그쪽은 옮긴이 이름을 남기고 공백까지 지워 contains 매칭에 쓴다. 여기선 옮긴이를
  * 떼고 표시 가능한 이름(내부 공백 보존)을 돌려준다.
  */

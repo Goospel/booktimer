@@ -976,7 +976,7 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 /* 트랙 B 미발견 "???" 미스터리 슬롯 — 조건을 숨긴 채 존재만 흐릿하게 드러낸다. */
 .garden-grid .plant-emoji.mystery { font-size: 1.5rem; line-height: 1.2; opacity: .5; }
 
-/* === 독서 정원 도감 전용 페이지 (/garden) === */
+/* === 서재 도감 전용 페이지 (/garden) === */
 /* 축 탭·보유/미보유 필터는 Alpine 클라이언트 토글(x-show). no-JS면 x-show가 무시돼 전부 보이는 폴백(점진 향상). */
 .garden-dex-progress { margin: 0 0 16px; }
 .garden-page-progress { margin: 0 0 6px; color: var(--text); font-size: .9rem; word-break: keep-all; }
@@ -2567,7 +2567,7 @@ body.personality-page #personality-app { gap: 18px; }
 .pbti-selected-mark svg { width: 15px; height: 15px; flex: 0 0 auto; }
 
 /* ===================================================================
-   마을 풀스크린 게임 셸 (/village) — S1
+   서재 풀스크린 셸 (/village) — S1
    스코프: #village-app 및 .village-* 클래스. 다른 페이지 회귀 0.
    =================================================================== */
 
@@ -2612,7 +2612,7 @@ body.personality-page #personality-app { gap: 18px; }
 }
 
 /* ── 돌봄 뷰(다마고치) — 모든 화면 단일 모드 ──
-   CoC 가로 무대 은퇴 후 유일한 마을 화면. 모바일은 풀스크린, 데스크톱은 중앙 카드(액자). */
+   CoC 가로 무대 은퇴 후 유일한 서재 화면. 모바일은 풀스크린, 데스크톱은 중앙 카드(액자). */
 .portrait-village {
     position: absolute;
     inset: 0;
@@ -3017,7 +3017,7 @@ body.personality-page #personality-app { gap: 18px; }
     flex-shrink: 0;
 }
 
-/* 빈 마을 안내 */
+/* 빈 서재 안내 */
 .village-empty-msg {
     position: absolute;
     bottom: 14px;
@@ -3380,7 +3380,7 @@ body.personality-page #personality-app { gap: 18px; }
     .dash-timer-left, .dash-timer-right { flex: 0 0 auto; }
 }
 
-/* ── PR-3: 헤더 사용자영역 · 정원/마을 · 로그아웃 · 와이드 2단 ── */
+/* ── PR-3: 헤더 사용자영역 · 서재 · 로그아웃 · 와이드 2단 ── */
 
 /* 와이드 레이아웃 (대시보드 전용 — 전역 .container max-width 460은 건드리지 않음) */
 @media (min-width: 640px) {
@@ -3471,7 +3471,7 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .dash-header-menu-logout .dash-header-menu-item { color: var(--muted); }
 .dash-header-menu-logout .dash-header-menu-item:hover { color: var(--text); }
 
-/* 2단 그리드 (QuickNav + 정원) — 좁으면 1단, 넓으면 2단 */
+/* 2단 그리드 (QuickNav + 서재) — 좁으면 1단, 넓으면 2단 */
 .dash-grid-2col {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
@@ -3479,7 +3479,7 @@ body.dashboard-page #dashboard-app { gap: 20px; }
     align-items: start;
 }
 
-/* 정원/마을 (작가·건물 — 식물 폐기) */
+/* 서재 (작가·건물 — 식물 폐기) */
 .dash-garden { gap: 16px; }
 .dash-garden-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .dash-garden-link, .dash-grass-link { font-size: 13.5px; color: var(--accent-hover); text-decoration: none; }

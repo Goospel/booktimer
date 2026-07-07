@@ -29,7 +29,7 @@ import java.util.List;
 /**
  * 대시보드 Vue 섬용 JSON API.
  *
- * <p>GET /api/dashboard — 페이지 최초 로드 시 필요한 모든 상태(타이머·잔디·정원·격언·이메일인증)를 단일 응답으로.
+ * <p>GET /api/dashboard — 페이지 최초 로드 시 필요한 모든 상태(타이머·잔디·서재·격언·이메일인증)를 단일 응답으로.
  * POST /api/sessions/start|stop — start/stop 뮤테이션. 응답은 라이브 부분집합({@link TimerState})만.
  *
  * <p>에러 계약(상태코드만 — {@code GlobalExceptionHandler}가 ResponseStatusException을 잡아 코드 보존):

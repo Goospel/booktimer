@@ -8,8 +8,8 @@ import java.util.Map;
 /**
  * GET /api/garden 응답 전용 DTO.
  *
- * <p>건물(BUILDING)축은 마을 컨셉 전환(작가 꾸미기 피벗)으로 은퇴됨 — 작가(AUTHOR)축만 포함.
- * 배치/편집 엔진 제거(PR-2): {@code placed}·{@code owned} 필드가 사라졌다 — 보기 전용 마을은
+ * <p>건물(BUILDING)축은 작가 꾸미기 피벗으로 은퇴됨 — 작가(AUTHOR)축만 포함.
+ * 배치/편집 엔진 제거(PR-2): {@code placed}·{@code owned} 필드가 사라졌다 — 보기 전용 서재는
  * 좌표 저장이 없다. 응답엔 world·nickname·catalog·characters·foodBalance만 남는다.
  * 먹이주기 루프: {@code foodBalance}(top-level), 각 작가 DTO에 {@code affection}.
  */
@@ -67,7 +67,7 @@ public record GardenApiResponse(
     }
 
     /**
-     * 마을 전체 응답 조립 — 먹이주기 루프 정보 포함.
+     * 서재 전체 응답 조립 — 먹이주기 루프 정보 포함.
      *
      * @param foodBalance          현재 먹이 잔액(달성일 − 먹인합)
      * @param affectionByCharacter code → feed_count 맵(없는 코드는 0)
