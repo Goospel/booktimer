@@ -11,9 +11,9 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 독서 마을 조회 유스케이스 — 작가(AUTHOR) 축.
+ * 서재 조회 유스케이스 — 작가(AUTHOR) 축.
  *
- * <p>건물(BUILDING)축은 마을 컨셉 전환(작가 꾸미기 피벗)으로 은퇴됨 — 식물 4축·소품에 이어 제거.
+ * <p>건물(BUILDING)축은 작가 꾸미기 피벗으로 은퇴됨 — 식물 4축·소품에 이어 제거.
  * DB 테이블(publisher_building)은 보존(소프트 제거).
  */
 @Service

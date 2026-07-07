@@ -399,7 +399,7 @@ body.landing-page {
 }
 
 /* 팔로잉 미리보기 메타 — 실제 팔로잉 목록(/me/following)의 '공개 책 N권'을 미러링.
-   남의 잔디·마을은 열람 불가라 미니 잔디바를 두지 않는다(거짓 광고 방지). */
+   남의 잔디·서재는 열람 불가라 미니 잔디바를 두지 않는다(거짓 광고 방지). */
 .lp-social-meta {
     font-size: 0.78rem;
     color: var(--muted);
@@ -621,7 +621,7 @@ body.landing-page {
         gap: 40px;
     }
 
-    /* 역방향 그리드(잔디·정원)에서 텍스트를 항상 위로 */
+    /* 역방향 그리드(잔디·서재)에서 텍스트를 항상 위로 */
     .lp-grid-2col-b .lp-section-text { order: -1; }
 
     .lp-hero { padding: 56px 0 48px; }

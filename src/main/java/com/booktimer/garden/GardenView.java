@@ -4,9 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 독서 마을 뷰 모델 — 작가(AUTHOR) 캐릭터 배회 축.
+ * 서재 뷰 모델 — 작가(AUTHOR) 캐릭터 배회 축.
  *
- * <p>건물(BUILDING)축은 마을 컨셉 전환(작가 꾸미기 피벗)으로 은퇴됨 — 식물 4축·소품에 이어 제거.
+ * <p>건물(BUILDING)축은 작가 꾸미기 피벗으로 은퇴됨 — 식물 4축·소품에 이어 제거.
  * DB 테이블은 보존(소프트 제거).
  *
  * @param authorCharacters           작가 캐릭터 카탈로그 전체(진열 순서, 보유·미보유 모두)
