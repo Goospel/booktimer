@@ -1824,49 +1824,99 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 .shop-report-modal-submit { width: auto; align-self: flex-start; }
 .shop-report-modal-ok { margin: 0; font-size: 13px; color: var(--ok); }
 
-/* 종료 후 태깅 시트(발견 1) — 책 없이 측정을 끝냈을 때 "무슨 책?"을 고르는 바텀시트.
-   모달 토큰(card-bg·border·sage-soft·muted) 재사용, 새 색 없음. 모바일=하단 시트, 데스크톱=하단 정렬 카드. */
-.tag-sheet-overlay {
+/* 통합 책 시트(발견 1, §6.5) — 측정 전 책 고르기('start') + 종료 후 태깅('tag')을 한 시트가 겸한다.
+   모달 토큰(card-bg·border·sage-soft·muted·accent·ok) 재사용 + 설계 §6.5/§8 지정 시트색(배경 #F6F2E9·
+   백드롭 rgba(34,32,26,.34), 지정 예외)만 새로 쓴다. 모바일=하단 시트, 데스크톱=하단 정렬 카드. */
+.book-sheet-overlay {
     position: fixed; inset: 0; z-index: 200;
-    background: rgba(0, 0, 0, .45);
+    background: rgba(34, 32, 26, .34);              /* 설계 §8 지정 백드롭(따뜻한 ink 톤) */
     display: flex; align-items: flex-end; justify-content: center;
 }
-.tag-sheet-panel {
-    background: var(--card-bg); border-radius: 18px 18px 0 0;
-    padding: 20px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+.book-sheet-panel {
+    background: #F6F2E9;                             /* 설계 §6.5 지정 시트 배경 */
+    border-radius: 24px 24px 0 0;
+    padding: 12px 20px calc(20px + env(safe-area-inset-bottom, 0px));
     width: 100%; max-width: 460px; box-shadow: 0 -8px 32px rgba(44, 42, 36, .18);
-    display: flex; flex-direction: column; gap: 14px;
-    max-height: 80vh; overflow-y: auto;
-    animation: tag-sheet-up .22s ease;
+    display: flex; flex-direction: column; gap: 12px;
+    max-height: 85vh; overflow-y: auto;
+    animation: book-sheet-up .28s cubic-bezier(.32, .72, 0, 1);
 }
-@keyframes tag-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
-.tag-sheet-head { display: flex; align-items: center; justify-content: space-between; }
-.tag-sheet-title { font-size: 16px; font-weight: 600; color: var(--text); margin: 0; }
-.tag-sheet-close {
+@keyframes book-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.sheet-handle {
+    width: 36px; height: 4px; border-radius: 999px; background: var(--border);
+    margin: 0 auto 2px; flex-shrink: 0;
+}
+.book-sheet-head { display: flex; align-items: center; justify-content: space-between; }
+.book-sheet-title { font-size: 16px; font-weight: 600; color: var(--text); margin: 0; }
+.book-sheet-close {
     background: none; border: none; cursor: pointer; padding: 4px 8px; border-radius: 6px;
     font-size: 16px; line-height: 1; color: var(--muted); width: auto;
 }
-.tag-sheet-close:hover { color: var(--text); background: var(--sage-soft); }
-.tag-sheet-body { display: flex; flex-direction: column; gap: 12px; }
-.tag-sheet-hint { margin: 0; font-size: 13px; color: var(--muted); }
-.tag-sheet-group { display: flex; flex-direction: column; gap: 6px; }
-.tag-sheet-group-label { font-size: 12px; font-weight: 600; color: var(--muted); }
-.tag-sheet-book {
-    width: 100%; text-align: left; min-height: 44px; padding: 11px 14px;
-    background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px;
-    color: var(--text); font-size: 14px; cursor: pointer;
+.book-sheet-close:hover { color: var(--text); background: var(--sage-soft); }
+.book-sheet-hint { margin: 0; font-size: 13px; color: var(--muted); }
+
+/* 검색해서 담기 — 시트 안에서 카탈로그를 찾아 바로 책장에 담는다(책장 검색 재사용). */
+.book-sheet-search { display: flex; gap: 8px; align-items: stretch; }
+.book-sheet-search input {
+    flex: 1 1 auto; min-width: 0; box-sizing: border-box;
+    padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px;
+    background: var(--card-bg); color: var(--text); font-size: 14px;
 }
-.tag-sheet-book:hover { background: var(--sage-soft); border-color: var(--accent); }
-.tag-sheet-book:disabled { opacity: .5; cursor: default; }
-.tag-sheet-skip {
+.book-sheet-search-btn {
+    width: auto; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+    padding: 0 14px; border: none; border-radius: 12px; background: var(--accent); color: #fff; cursor: pointer;
+}
+.book-sheet-search-btn svg { width: 18px; height: 18px; }
+.book-sheet-search-btn:hover { background: var(--accent-hover); }
+
+/* 상태 필터칩(전체/읽는중/완독/읽고싶음) — pill, 좁으면 줄바꿈. */
+.book-sheet-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.book-sheet-chip {
+    width: auto; padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--card-bg); color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.book-sheet-chip:hover:not(.active) { border-color: var(--accent); color: var(--accent); }
+.book-sheet-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* 책 목록 · 검색결과 — 표지 34×48 + 제목/저자 + 상태 배지. */
+.book-sheet-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.book-sheet-results { max-height: 220px; overflow-y: auto; }
+.book-sheet-book, .book-sheet-result {
+    width: 100%; display: flex; align-items: center; gap: 12px; text-align: left;
+    min-height: 44px; padding: 8px 10px; border-radius: 12px;
+    background: var(--card-bg); border: 1px solid var(--border); color: var(--text);
+}
+.book-sheet-book { cursor: pointer; }
+.book-sheet-book:hover { border-color: var(--accent); background: var(--sage-soft); }
+.book-sheet-book:disabled { opacity: .5; cursor: default; }
+.book-sheet-cover {
+    width: 34px; height: 48px; border-radius: 4px; flex-shrink: 0; object-fit: cover;
+    background: var(--border); display: flex; align-items: center; justify-content: center;
+    font-family: 'Gowun Batang', serif; font-size: 15px; line-height: 1; user-select: none;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .4), 0 2px 4px rgba(120, 100, 70, .18);
+}
+.book-sheet-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.book-sheet-book-title { font-weight: 600; color: var(--text); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.book-sheet-byline { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.book-sheet-badge { flex-shrink: 0; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; }
+.book-sheet-owned { flex-shrink: 0; font-size: 12px; color: var(--muted); }
+.book-sheet-add-btn {
+    width: auto; flex-shrink: 0; padding: 8px 14px; border: none; border-radius: 10px;
+    background: var(--ok); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.book-sheet-add-btn:hover { filter: brightness(.96); }
+.book-sheet-add-btn:disabled { opacity: .5; cursor: default; }
+.book-sheet-empty { margin: 0; font-size: 13px; color: var(--muted); text-align: center; padding: 8px 0; }
+
+.book-sheet-cta {
     width: 100%; min-height: 44px; margin-top: 2px;
     background: none; border: none; cursor: pointer;
     color: var(--muted); font-size: 13px; text-decoration: underline;
 }
-.tag-sheet-skip:hover { color: var(--text); }
-.tag-sheet-skip:disabled { opacity: .5; cursor: default; }
+.book-sheet-cta:hover { color: var(--text); }
+.book-sheet-cta:disabled { opacity: .5; cursor: default; }
 @media (prefers-reduced-motion: reduce) {
-    .tag-sheet-panel { animation: none; }
+    .book-sheet-panel { animation: none; }
 }
 
 /* 신고 박스 — 콤팩트 카드(시안: 박스 4px + summary 자체 패딩) */
@@ -3123,7 +3173,7 @@ body.personality-page #personality-app { gap: 18px; }
    (패널이 align-items:center라 폼 자식이 좁아지는 것 방지). */
 .dash-state-achieved .dash-divider,
 .dash-state-achieved .dash-idle-label,
-.dash-state-achieved .dash-select-wrap,
+.dash-state-achieved .dash-book-chip,
 .dash-state-achieved .dash-empty,
 .dash-state-achieved .dash-btn-fill { align-self: stretch; width: 100%; box-sizing: border-box; }
 
@@ -3168,6 +3218,32 @@ body.personality-page #personality-app { gap: 18px; }
 }
 .dash-empty { display: flex; flex-direction: column; gap: 12px; text-align: center; }
 .dash-empty p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.6; }
+
+/* 책 칩(측정 시작 진입, §6.5) — 기본 책 표지 + 제목 + '바꾸기' pill. 카드 토큰 재사용(새 색 없음). */
+.dash-book-chip {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--card-bg);
+}
+.dash-book-chip-cover {
+    width: 30px; height: 42px; border-radius: 4px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Gowun Batang', serif; font-size: 14px; line-height: 1; user-select: none;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .4), 0 2px 4px rgba(120, 100, 70, .18);
+}
+.dash-book-chip-title { flex: 1 1 auto; min-width: 0; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-book-chip-change {
+    width: auto; flex-shrink: 0; padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px;
+    background: none; color: var(--muted); font-size: 13px; cursor: pointer;
+}
+.dash-book-chip-change:hover { border-color: var(--accent); color: var(--accent); }
+.dash-book-chip-change:disabled { opacity: .5; cursor: default; }
+/* '책 없이 시작' — 눈에 띄지 않는 보조 링크(시작을 막지 않되 기본 강조는 '측정 시작'). */
+.dash-bookless {
+    align-self: center; width: auto; background: none; border: none; cursor: pointer;
+    color: var(--muted); font-size: 13px; text-decoration: underline;
+}
+.dash-bookless:hover { color: var(--text); }
+.dash-bookless:disabled { opacity: .5; cursor: default; }
 
 /* 독서 잔디 (세이지 — /history .grass-cell과 격리) */
 .dash-grass-card { gap: 18px; }

@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 // DashboardApp — 종료 후 태깅 플로우(발견 1). 책 없이 시작한 세션을 종료하면(stop 응답 untagged=true)
-// 태깅 시트가 뜨고, 책을 고르면 POST /api/sessions/{sessionId}/tag-book 을 호출한다. 건너뛰면 미호출.
-// 순수 시각은 실 브라우저 게이트. 여기선 시트 등장·태깅 요청 배선만.
+// 통합 책 시트(mode=tag)가 뜨고, 책을 고르면 POST /api/sessions/{sessionId}/tag-book 을 호출한다. 건너뛰면 미호출.
+// 시트는 표지 목록을 /api/books 로 로드(재사용). 순수 시각은 실 브라우저 게이트 — 여기선 시트 등장·태깅 배선만.
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import DashboardApp from '../src/dashboard/DashboardApp.vue';
 
 const GRAPH = {
@@ -22,6 +22,15 @@ const DASHBOARD = {
     graph: GRAPH,
     garden: { ownedAuthorCharacterCount: 0, totalAuthorCharacterCount: 0, ownedCharacters: [] },
     quotes: [], emailVerified: true,
+};
+
+// 태깅 시트가 /api/books 로 로드하는 책장(표지 목록). 태깅 대상 '읽고싶은 책'(id 3) 포함.
+const SHELF = {
+    searchEnabled: false,
+    books: [
+        { id: 1, title: '읽는 책', author: null, coverUrl: null, isbn13: 'i1', status: 'READING', statusLabel: '읽는 중' },
+        { id: 3, title: '읽고싶은 책', author: null, coverUrl: null, isbn13: 'i3', status: 'WANT_TO_READ', statusLabel: '읽고 싶음' },
+    ],
 };
 
 const STOP_UNTAGGED = {
@@ -47,6 +56,9 @@ function fetchImpl(url: string, opts?: { body?: string }) {
     if (url.includes('/api/stories/feed')) {
         return Promise.resolve({ ok: true, status: 200, json: async () => ({ mine: null, groups: [] }) });
     }
+    if (url.includes('/api/books')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => SHELF });
+    }
     return Promise.resolve({ ok: true, status: 200, json: async () => ({ ...DASHBOARD }) });
 }
 
@@ -61,16 +73,17 @@ describe('DashboardApp — 종료 후 태깅 시트 (발견 1)', () => {
         const stopBtn = wrapper.findAll('button').find(b => b.text().includes('측정 종료'))!;
         await stopBtn.trigger('click');
 
-        await vi.waitFor(() => expect(wrapper.find('.tag-sheet-overlay').exists()).toBe(true));
+        await vi.waitFor(() => expect(wrapper.find('.book-sheet-overlay').exists()).toBe(true));
+        await flushPromises();
 
-        const bookBtn = wrapper.findAll('button').find(b => b.text().includes('읽고싶은 책'))!;
+        const bookBtn = wrapper.findAll('.book-sheet-book').find(b => b.text().includes('읽고싶은 책'))!;
         await bookBtn.trigger('click');
 
         await vi.waitFor(() => expect(tagCall).toBeTruthy());
         expect(tagCall!.url).toContain('/api/sessions/77/tag-book');
         expect(tagCall!.body).toEqual({ bookId: 3 });
 
-        await vi.waitFor(() => expect(wrapper.find('.tag-sheet-overlay').exists()).toBe(false));
+        await vi.waitFor(() => expect(wrapper.find('.book-sheet-overlay').exists()).toBe(false));
     });
 
     test('건너뛰기 → 시트 닫힘, tag-book 미호출', async () => {
@@ -78,10 +91,11 @@ describe('DashboardApp — 종료 후 태깅 시트 (발견 1)', () => {
         await vi.waitFor(() => expect(wrapper.find('.dash-timer-hero').exists()).toBe(true));
 
         await wrapper.findAll('button').find(b => b.text().includes('측정 종료'))!.trigger('click');
-        await vi.waitFor(() => expect(wrapper.find('.tag-sheet-overlay').exists()).toBe(true));
+        await vi.waitFor(() => expect(wrapper.find('.book-sheet-overlay').exists()).toBe(true));
+        await flushPromises();
 
         await wrapper.findAll('button').find(b => b.text().includes('건너뛰기'))!.trigger('click');
-        await vi.waitFor(() => expect(wrapper.find('.tag-sheet-overlay').exists()).toBe(false));
+        await vi.waitFor(() => expect(wrapper.find('.book-sheet-overlay').exists()).toBe(false));
         expect(tagCall).toBeNull();
     });
 });
