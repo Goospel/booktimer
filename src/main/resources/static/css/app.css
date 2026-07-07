@@ -594,6 +594,30 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .verify-banner form {
     margin: 0;
 }
+/* 가입완료 환영 배너 (§6.4) — 온보딩 직후 1회. 안내 문구 + 닫기(✕)를 한 줄에(.alert 기반). */
+.welcome-banner {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    background: var(--sage-soft);
+    border: 1px solid var(--accent);
+    color: var(--text);
+}
+.welcome-banner-body { display: flex; flex-direction: column; gap: 3px; word-break: keep-all; }
+.welcome-banner-body strong { color: var(--accent-hover); }
+.welcome-banner-close {
+    width: auto;
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    padding: 0 2px;
+    font-size: 1rem;
+    line-height: 1;
+    color: var(--muted);
+    cursor: pointer;
+}
+.welcome-banner-close:hover { color: var(--text); }
 /* 배너 안 재발송 버튼: 전역 button{width:100%}를 받지 않게 width:auto. 링크처럼 보이는 버튼(밑줄). */
 .btn-inline-link {
     width: auto;

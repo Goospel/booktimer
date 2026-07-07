@@ -3,7 +3,10 @@ package com.booktimer.web;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 
 import java.security.Principal;
@@ -26,7 +29,7 @@ public class DashboardController {
     // 쏘기 때문이다. manifest 를 /dashboard→/ 로 고쳐도(#473) 구 install 은 설치 시점 start_url 을
     // 동결해 즉시 안 바뀐다(특히 iOS Safari). 서버가 별칭으로 받아 콜드 런치 404 를 막는다.
     @GetMapping({"/", "/dashboard"})
-    public String dashboard(Principal principal) {
+    public String dashboard(Principal principal, HttpServletRequest request, Model model) {
         if (principal == null) {
             return "landing";
         }
@@ -39,6 +42,13 @@ public class DashboardController {
 
         if (!user.isOnboarded()) {
             return "redirect:/onboarding";
+        }
+
+        // 가입완료 환영(§6.4): 온보딩이 심은 세션 신호를 읽은 즉시 지워 셸 data 속성으로 1회만 넘긴다(show-once).
+        HttpSession session = request.getSession(false);
+        if (session != null && Boolean.TRUE.equals(session.getAttribute("justOnboarded"))) {
+            session.removeAttribute("justOnboarded");
+            model.addAttribute("justOnboarded", true);
         }
 
         return "dashboard";

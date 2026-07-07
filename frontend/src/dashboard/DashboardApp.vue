@@ -8,9 +8,14 @@ import ContributionGraph from './ContributionGraph.vue'
 import GardenPanel from './GardenPanel.vue'
 import BrandQuote from './BrandQuote.vue'
 import EmailVerifyBanner from './EmailVerifyBanner.vue'
+import WelcomeBanner from './WelcomeBanner.vue'
 import QuickNav from './QuickNav.vue'
 import DashHeader from './DashHeader.vue'
 import StoryStrip from '../shared/story/StoryStrip.vue'
+
+// justOnboarded: 온보딩 직후 셸 data 속성 → main.ts가 읽어 주입. 1회 환영 배너 트리거(§6.4).
+const props = defineProps<{ justOnboarded?: boolean }>()
+const showWelcome = ref(props.justOnboarded === true)
 
 const data = ref<DashboardResponse | null>(null)
 const loading = ref(true)
@@ -173,6 +178,8 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
         <!-- 발견 2(상단 정리): 헤더 → 타이머 → 잔디 → 스토리 → 바로가기 → 격언(발밑).
              격언(BrandQuote)은 Teleport로 #brand-quote-slot(대시보드 발밑)에 렌더되므로 여기 순서상 위치는 무관. -->
         <DashHeader :login-id="data.loginId" :profile-character-code="data.profileCharacterCode" />
+
+        <WelcomeBanner v-if="showWelcome" :nickname="data.nickname" @close="showWelcome = false" />
 
         <EmailVerifyBanner v-if="!data.emailVerified" />
 

@@ -34,6 +34,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import org.springframework.ui.ConcurrentModel;
+import org.springframework.ui.Model;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
+import java.security.Principal;
 
 /**
  * 대시보드 라우팅·셸 통합 테스트.
@@ -68,6 +77,7 @@ class DashboardControllerTest {
     @Autowired ReadingGoalService goalService;
     @Autowired ReadingGoalChangeRepository goalChangeRepository;
     @Autowired Clock clock;
+    @Autowired DashboardController dashboardController;
 
     private LocalDate today() {
         return LocalDate.ofInstant(clock.instant(), ZoneId.of(SEOUL));
@@ -170,5 +180,42 @@ class DashboardControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(not(containsString("grass-grid"))))
                 .andExpect(content().string(containsString("dashboard-app")));
+    }
+
+    // ── 가입완료 환영 신호 (§6.4): 세션 → 모델(justOnboarded) → 셸 data 속성, 읽고 삭제 = show-once ──
+    // 컨트롤러를 직접 호출해 mock 세션으로 검증한다 — MockMvc 보안 필터체인은 세션을 갈아끼워
+    // 컨트롤러가 읽는 세션을 결정적으로 주입할 수 없다. 템플릿 렌더(data-just-onboarded="true")는 프리뷰가 커버.
+
+    @Test
+    @DisplayName("GET /: 세션에 justOnboarded 신호가 있으면 모델에 담고 즉시 제거한다 (show-once, §6.4)")
+    void dashboard_withJustOnboardedSignal_addsModelAndConsumes() {
+        registerOnboarded("welcomesig@booktimer.com", "환영", today());
+        Principal principal = () -> "welcomesig@booktimer.com";
+        HttpServletRequest req = mock(HttpServletRequest.class);
+        HttpSession session = mock(HttpSession.class);
+        when(req.getSession(false)).thenReturn(session);
+        when(session.getAttribute("justOnboarded")).thenReturn(Boolean.TRUE);
+        Model model = new ConcurrentModel();
+
+        String view = dashboardController.dashboard(principal, req, model);
+
+        assertThat(view).isEqualTo("dashboard");
+        assertThat(model.getAttribute("justOnboarded")).isEqualTo(true);
+        verify(session).removeAttribute("justOnboarded"); // 읽은 즉시 소비(1회성)
+    }
+
+    @Test
+    @DisplayName("GET /: 세션 신호가 없으면 모델에 justOnboarded가 없다 (일반 로드엔 환영 배너 없음) (§6.4)")
+    void dashboard_withoutSignal_noModelAttr() {
+        registerOnboarded("nosig@booktimer.com", "일반", today());
+        Principal principal = () -> "nosig@booktimer.com";
+        HttpServletRequest req = mock(HttpServletRequest.class);
+        when(req.getSession(false)).thenReturn(null); // 세션 자체가 없음
+        Model model = new ConcurrentModel();
+
+        String view = dashboardController.dashboard(principal, req, model);
+
+        assertThat(view).isEqualTo("dashboard");
+        assertThat(model.getAttribute("justOnboarded")).isNull();
     }
 }
