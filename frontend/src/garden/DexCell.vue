@@ -1,8 +1,8 @@
 <template>
-  <div class="plant-cell"
+  <button type="button" class="plant-cell"
        :class="isOwned ? 'owned' : 'plant-locked'"
-       v-show="!ownedOnly || isOwned"
-       :title="cellTitle">
+       :title="cellTitle"
+       @click="emit('select')">
     <!-- 보유/발견: sprite 있으면 SVG, 없으면 이모지 -->
     <span v-if="isOwned" class="plant-emoji">
       <svg v-if="spriteId" class="plant-svg" aria-hidden="true">
@@ -26,7 +26,7 @@
 
     <!-- NEW 배지 -->
     <span v-if="isNew" class="plant-new">NEW</span>
-  </div>
+  </button>
 </template>
 
 <script setup lang="ts">
@@ -36,7 +36,6 @@ defineProps<{
   emoji: string;
   spriteId: string | null;
   lockedLabel: string;
-  ownedOnly: boolean;
   cellTitle: string;
   isNew?: boolean;
   mystery?: boolean;
@@ -44,4 +43,5 @@ defineProps<{
   level?: number;
   affectionTitle?: string;
 }>();
+const emit = defineEmits<{ select: [] }>();
 </script>
