@@ -27,6 +27,7 @@ function baseProps(over: Record<string, unknown> = {}) {
         activeBookTotalSeconds: 0,
         readingBooks: books,
         finishedBooks: [] as BookOption[],
+        wantToReadBooks: [] as BookOption[],
         recentBookId: 1,
         ...over,
     };
@@ -44,7 +45,8 @@ describe('TimerCard 달성 상태', () => {
         // 측정 시작 버튼이 사라지지 않아야 함(회귀 가드)
         const startBtn = w.findAll('button').find(b => b.text().includes('측정 시작'));
         expect(startBtn).toBeTruthy();
-        expect(w.find('select').exists()).toBe(true);
+        // 드롭다운 → 표지 칩으로 교체(§6.5). 달성 패널에도 책 칩이 함께 보인다.
+        expect(w.find('.dash-book-chip').exists()).toBe(true);
     });
 
     test('달성 상태에서 측정 시작 → start 이벤트가 선택한 책 id로 발생', async () => {

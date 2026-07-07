@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue'
 import type { DashboardResponse, TimerState, StopResponse, BookOption } from './types'
 import { getCsrfToken } from '../shared/follow'
 import TimerCard from './TimerCard.vue'
-import TagBookSheet from './TagBookSheet.vue'
+import BookPickSheet from './BookPickSheet.vue'
 import ContributionGraph from './ContributionGraph.vue'
 import GardenPanel from './GardenPanel.vue'
 import BrandQuote from './BrandQuote.vue'
@@ -34,8 +34,8 @@ const finishedBooks = ref<BookOption[]>([])
 const wantToReadBooks = ref<BookOption[]>([])
 const recentBookId = ref<number | null>(null)
 
-// 종료 후 태깅 시트(발견 1) — 책 없이 시작한 세션을 종료하면 뜬다.
-const showTagSheet = ref(false)
+// 책 고르기/태깅 통합 시트(발견 1, §6.5) — 'start'=측정 전 고르기, 'tag'=종료 후 태깅. 같은 시트를 모드로 겸한다.
+const sheetMode = ref<'start' | 'tag' | null>(null)
 const pendingSessionId = ref<number | null>(null)
 const tagging = ref(false)
 
@@ -108,7 +108,7 @@ async function handleStop() {
         // 책 없이 시작한 세션이면 "무슨 책?" 태깅 시트를 띄운다(발견 1). 책 골라 시작했으면 안 뜬다.
         if (r.untagged) {
             pendingSessionId.value = r.sessionId
-            showTagSheet.value = true
+            sheetMode.value = 'tag'
         }
     } catch {
         actionError.value = '네트워크 오류가 발생했습니다'
@@ -128,7 +128,7 @@ async function tagBook(bookId: number) {
             body: JSON.stringify({ bookId }),
         })
         if (!res.ok) { actionError.value = '책을 연결하지 못했어요'; return }
-        closeTagSheet()
+        closeSheet()
     } catch {
         actionError.value = '네트워크 오류가 발생했습니다'
     } finally {
@@ -136,9 +136,29 @@ async function tagBook(bookId: number) {
     }
 }
 
-function closeTagSheet() {
-    showTagSheet.value = false
+function openStartSheet() { sheetMode.value = 'start' }
+function closeSheet() {
+    sheetMode.value = null
     pendingSessionId.value = null
+}
+
+// 시트에서 책을 고르면 — start 모드면 그 책으로 측정 시작, tag 모드면 방금 세션에 태깅.
+function onSheetPick(bookId: number) {
+    if (sheetMode.value === 'tag') { tagBook(bookId); return }
+    sheetMode.value = null
+    handleStart(bookId)
+}
+// start 모드 하단 CTA — 책 없이 바로 시작.
+function onSheetBookless() {
+    sheetMode.value = null
+    handleStart(null)
+}
+// 담기 성공(시트 안 검색담기) — 담은 책을 대시보드 목록에도 낙관적 반영(칩·시트 최신화).
+function onSheetAdded(book: { id: number; title: string; status: string }) {
+    const opt: BookOption = { id: book.id, title: book.title }
+    const list = book.status === 'READING' ? readingBooks
+        : book.status === 'FINISHED' ? finishedBooks : wantToReadBooks
+    if (!list.value.find(b => b.id === book.id)) list.value = [opt, ...list.value]
 }
 </script>
 
@@ -170,11 +190,13 @@ function closeTagSheet() {
             :active-book-total-seconds="activeBookTotalSeconds"
             :reading-books="readingBooks"
             :finished-books="finishedBooks"
+            :want-to-read-books="wantToReadBooks"
             :recent-book-id="recentBookId"
             :starting="starting"
             :stopping="stopping"
             @start="handleStart"
             @stop="handleStop"
+            @open-sheet="openStartSheet"
         />
 
         <ContributionGraph :graph="data.graph" />
@@ -190,15 +212,19 @@ function closeTagSheet() {
 
         <BrandQuote :quotes="data.quotes" />
 
-        <!-- 종료 후 태깅 시트(발견 1) — 책 없이 측정을 끝냈을 때만. 건너뛰면 세션은 책 없이 정당 유지. -->
-        <TagBookSheet
-            v-if="showTagSheet"
+        <!-- 통합 책 시트(발견 1, §6.5) — 'start'=측정 전 고르기, 'tag'=종료 후 태깅. 같은 시트를 모드로 겸한다. -->
+        <BookPickSheet
+            v-if="sheetMode"
+            :mode="sheetMode"
             :reading-books="readingBooks"
             :finished-books="finishedBooks"
             :want-to-read-books="wantToReadBooks"
-            :pending="tagging"
-            @tag="tagBook"
-            @skip="closeTagSheet"
+            :pending="sheetMode === 'tag' ? tagging : starting"
+            @pick="onSheetPick"
+            @bookless="onSheetBookless"
+            @skip="closeSheet"
+            @close="closeSheet"
+            @added="onSheetAdded"
         />
     </template>
 </template>

@@ -17,6 +17,7 @@ const props = defineProps<{
     activeBookTotalSeconds: number
     readingBooks: BookOption[]
     finishedBooks: BookOption[]
+    wantToReadBooks: BookOption[]
     recentBookId: number | null
     starting?: boolean
     stopping?: boolean
@@ -25,6 +26,7 @@ const props = defineProps<{
 const emit = defineEmits<{
     start: [bookId: number | null]
     stop: []
+    openSheet: []
 }>()
 
 // props를 ref로 래핑해 composable에 전달(props 변경 시 반응 — N-082 보존)
@@ -114,9 +116,11 @@ function totalHM(s: number): string {
                     <BookPickForm
                         :reading-books="readingBooks"
                         :finished-books="finishedBooks"
+                        :want-to-read-books="wantToReadBooks"
                         :recent-book-id="recentBookId"
                         :pending="starting"
                         @start="(id) => emit('start', id)"
+                        @open-sheet="emit('openSheet')"
                     />
                 </div>
 
@@ -133,9 +137,11 @@ function totalHM(s: number): string {
                     <BookPickForm
                         :reading-books="readingBooks"
                         :finished-books="finishedBooks"
+                        :want-to-read-books="wantToReadBooks"
                         :recent-book-id="recentBookId"
                         :pending="starting"
                         @start="(id) => emit('start', id)"
+                        @open-sheet="emit('openSheet')"
                     />
                 </div>
             </Transition>
