@@ -25,6 +25,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
+import org.springframework.validation.BeanPropertyBindingResult;
+import org.springframework.validation.BindingResult;
+import jakarta.servlet.http.HttpSession;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 import jakarta.servlet.http.HttpServletRequest;
@@ -32,6 +35,7 @@ import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.ui.ConcurrentModel;
 import java.security.Principal;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -213,5 +217,48 @@ class OnboardingControllerTest {
                 .andExpect(model().attributeHasFieldErrors("onboardingForm", "incrementMinutes"));
 
         assertThat(userRepository.findByEmail("zero@booktimer.com").orElseThrow().isOnboarded()).isFalse();
+    }
+
+    // 세션 신호(§6.4)는 컨트롤러를 직접 호출해 mock 세션으로 검증한다 — 보안 필터체인을 거치면
+    // MockMvc가 세션을 갈아끼워(session fixation) 컨트롤러가 심은 세션을 관측할 수 없기 때문.
+    // 템플릿(data-just-onboarded)·환영 배너 렌더는 프리뷰 실 브라우저 + 프론트 vitest가 커버한다.
+
+    @Test
+    @DisplayName("POST /onboarding: 온보딩 완료 시 세션에 justOnboarded 신호를 심는다 — 대시보드 1회 환영 유도 (§6.4)")
+    void postOnboarding_setsJustOnboardedSessionSignal() {
+        register("welcome@booktimer.com");
+        OnboardingForm form = new OnboardingForm();
+        form.setLoginId("welcome_user");
+        form.setNickname("환영닉");
+        form.setIncrementMinutes(30);
+        BindingResult br = new BeanPropertyBindingResult(form, "onboardingForm");
+        Principal principal = () -> "welcome@booktimer.com";
+        HttpServletRequest req = mock(HttpServletRequest.class);
+        HttpSession session = mock(HttpSession.class);
+        when(req.getSession()).thenReturn(session);
+
+        String view = controller.onboarding(form, br, principal, new ConcurrentModel(), req);
+
+        assertThat(view).isEqualTo("redirect:/");
+        verify(session).setAttribute("justOnboarded", Boolean.TRUE);
+    }
+
+    @Test
+    @DisplayName("POST /onboarding: 검증 실패로 재렌더될 땐 세션 신호를 심지 않는다 (완료된 경우만 환영) (§6.4)")
+    void postOnboarding_validationError_noSignal() {
+        register("noflash@booktimer.com");
+        OnboardingForm form = new OnboardingForm();
+        form.setLoginId("noflash_user");
+        form.setNickname("닉있음");
+        form.setIncrementMinutes(30);
+        BindingResult br = new BeanPropertyBindingResult(form, "onboardingForm");
+        br.reject("forced", "검증 실패 강제(직접 호출이라 @Valid가 안 돎)");
+        Principal principal = () -> "noflash@booktimer.com";
+        HttpServletRequest req = mock(HttpServletRequest.class);
+
+        String view = controller.onboarding(form, br, principal, new ConcurrentModel(), req);
+
+        assertThat(view).isEqualTo("onboarding");
+        verify(req, never()).getSession(); // 신호 심기 코드에 진입하지 않았다
     }
 }

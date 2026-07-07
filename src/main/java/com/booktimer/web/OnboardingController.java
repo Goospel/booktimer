@@ -67,7 +67,8 @@ public class OnboardingController {
 
     @PostMapping("/onboarding")
     public String onboarding(@Valid @ModelAttribute("onboardingForm") OnboardingForm form,
-                             BindingResult bindingResult, Principal principal, Model model) {
+                             BindingResult bindingResult, Principal principal, Model model,
+                             HttpServletRequest request) {
         User user = currentUser(principal);
         if (user.isOnboarded()) {
             return "redirect:/";
@@ -100,6 +101,8 @@ public class OnboardingController {
             return "onboarding";
         }
 
+        // 방금 온보딩을 마쳤음을 대시보드에 1회 신호 — 세션 속성을 심고 대시보드(GET /)가 읽은 즉시 지운다(show-once, §6.4).
+        request.getSession().setAttribute("justOnboarded", Boolean.TRUE);
         return "redirect:/";
     }
 
