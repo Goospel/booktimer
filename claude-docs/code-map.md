@@ -94,7 +94,8 @@ com.booktimer/
 - **소속 패키지**: `garden/`
 - **핵심**: 뷰 `garden/GardenService`·`garden/GardenView`·`garden/GardenWorld` · 해금 `garden/AuthorCharacterUnlockCalculator`·`garden/DailyQuotaCalculator` · 먹이/애정 `garden/FeedingService`·`garden/AuthorAffection`·`garden/AffectionLevel`·`garden/FeedRequest`·`garden/FeedResult` · 캐릭터 `garden/AuthorCharacter`·`garden/AuthorCharacterState`·`garden/OwnedCharacter`·`garden/ProfileCharacterService`
 - **⚠️ 배선 주의**: **마을 프론트는 Vue 3 SPA** — TS 소스(`frontend/`) 수정 후 `npm --prefix frontend run build`로 `static/garden/garden.js`를 재생성하고 **커밋까지** 해야 반영(훅 `require-bundle-build.ps1`이 강제). 배치/편집 엔진은 은퇴(좌표 저장 없음, 보기 전용). 식물·캐릭터·건물 카탈로그는 Flyway 시드.
-- **프론트**: `frontend/src/garden/`(`VillageApp.vue`, `PortraitVillage.vue`, `GardenDex.vue`, `DexCell.vue`) · `frontend/src/dashboard/GardenPanel.vue` · 번들 `src/main/resources/static/garden/garden.js`
+- **프론트**: `frontend/src/garden/`(`VillageApp.vue`, `PortraitVillage.vue`, 도감 `GardenDex.vue`+`DexCell.vue`(클릭 가능 button)+`DexDetailSheet.vue`(캐릭터 상세 바텀시트), `pure.ts`) · `frontend/src/dashboard/GardenPanel.vue` · 번들 `src/main/resources/static/garden/garden.js`
+  - **도감(§6.6)**: `GardenDex`=상태 필터칩(전체/보유/미보유)+시각 진행바(`.garden-meter`)+그리드. 셀 클릭→`DexDetailSheet`(보유=정 진행바·Lv, 미보유=해금 힌트). 백엔드 0(`/api/garden` `AuthorCharacterDto` 재사용). 중첩 모달 ESC는 상세시트가 `@keydown.esc.stop`으로 한 레벨만 닫음.
 - **템플릿**: `garden.html` · `fragments/garden-character-sprites.html`
 - **DB**: `V35`~`V44`(식물·장르·레시피·다양성·배치·소품) · `V45`(작가캐릭터)·`V46`~`V49`(출판사건물) · `V52`(애정)·`V54`(프로필 캐릭터)
 - **설계**: README §2.5 · memory: garden-spa-vue-migration / garden-vision-coc-zoo

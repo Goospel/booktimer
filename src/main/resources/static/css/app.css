@@ -910,18 +910,8 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     box-shadow: 0 6px 16px -6px rgba(0, 0, 0, .5);
 }
 
-/* === 독서 정원 (베타) === */
+/* === 서재 도감 (그리드·셀) === */
 
-.garden-beta {
-    margin: 0 0 14px;
-    padding: 8px 12px;
-    background: var(--sage-soft);
-    border-radius: var(--radius-sm);
-    color: var(--accent-hover);
-    font-size: .85rem;
-    font-weight: 600;
-    word-break: keep-all;
-}
 .garden-link-tile { margin-top: 14px; }
 
 .garden-dex-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
@@ -944,7 +934,15 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     text-align: center;
+    background: none;      /* button 기본 크롬 리셋 — .owned/.plant-locked이 배경을 지정 */
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    transition: border-color .15s, transform .1s;
 }
+.garden-grid .plant-cell:hover { border-color: var(--accent); }
+.garden-grid .plant-cell:active { transform: scale(.97); }
+.garden-grid .plant-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .garden-grid .plant-cell.owned { background: var(--sage-soft); border-color: transparent; }
 .garden-grid .plant-cell.plant-locked { background: transparent; }
 .garden-grid .plant-emoji { font-size: 1.5rem; line-height: 1.2; }
@@ -980,7 +978,23 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 
 /* === 독서 정원 도감 전용 페이지 (/garden) === */
 /* 축 탭·보유/미보유 필터는 Alpine 클라이언트 토글(x-show). no-JS면 x-show가 무시돼 전부 보이는 폴백(점진 향상). */
-.garden-page-progress { margin: 0 0 16px; color: var(--text); font-size: .9rem; word-break: keep-all; }
+.garden-dex-progress { margin: 0 0 16px; }
+.garden-page-progress { margin: 0 0 6px; color: var(--text); font-size: .9rem; word-break: keep-all; }
+/* 진행바 — pv-meter와 동일 비주얼(도감 전용 클래스). */
+.garden-meter {
+    width: 100%;
+    height: 12px;
+    background: var(--paper-2);
+    border-radius: 999px;
+    overflow: hidden;
+}
+.garden-meter-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--sage-6), var(--accent));
+    border-radius: 999px;
+    transition: width .6s cubic-bezier(.2, .8, .2, 1);
+}
+@media (prefers-reduced-motion: reduce) { .garden-meter-fill { transition: none; } }
 .garden-controls {
     display: flex;
     flex-wrap: wrap;
@@ -2903,6 +2917,72 @@ body.personality-page #personality-app { gap: 18px; }
     transition: border-color .15s;
 }
 .village-dex-close:hover { border-color: var(--accent); color: var(--text); }
+
+/* 도감 캐릭터 상세 바텀시트 — 도감 오버레이(z 50) 위에 뜨므로 z 60. backdrop·ESC로 닫힘 */
+.dex-detail-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(44, 42, 36, .55);
+    z-index: 60;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+@media (min-width: 600px) { .dex-detail-overlay { align-items: center; } }
+.dex-detail-panel {
+    width: 100%;
+    max-width: 420px;
+    max-height: 80dvh;
+    background: var(--card-bg);
+    border-radius: var(--radius) var(--radius) 0 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 20px;
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+    box-shadow: 0 -4px 32px rgba(44, 42, 36, .2);
+    text-align: center;
+}
+@media (min-width: 600px) {
+    .dex-detail-panel { border-radius: var(--radius); box-shadow: var(--shadow); }
+}
+.dex-detail-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-weight: 700;
+    font-size: .9rem;
+    color: var(--accent-hover);
+    text-align: left;
+}
+.dex-detail-close {
+    width: auto;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: .82rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--muted);
+    transition: border-color .15s;
+}
+.dex-detail-close:hover { border-color: var(--accent); color: var(--text); }
+.dex-detail-portrait {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 96px;
+    margin: 8px 0 4px;
+}
+.dex-detail-svg { width: 88px; height: 88px; overflow: visible; }
+.dex-detail-emoji { font-size: 4rem; line-height: 1; }
+.dex-detail-emoji.locked { filter: grayscale(1); opacity: .55; }
+.dex-detail-name { margin: 4px 0 2px; font-size: 1.25rem; font-weight: 700; color: var(--text); word-break: keep-all; }
+.dex-detail-rank { margin: 0 0 10px; font-size: .88rem; color: var(--muted); }
+.dex-detail-panel .garden-meter { max-width: 280px; margin: 0 auto; }
+.dex-detail-caption { margin: 8px 0 0; font-size: .8rem; color: var(--muted); word-break: keep-all; }
+.dex-detail-hint { margin: 6px 0 0; font-size: .9rem; color: var(--muted); line-height: 1.5; word-break: keep-all; }
 
 /* 편집 패널 — 캔버스 위 하단 오버레이, 스크롤 가능 */
 .village-edit-panel {
