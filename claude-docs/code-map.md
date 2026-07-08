@@ -16,7 +16,7 @@ com.booktimer/
     api/          ←   JSON API 컨트롤러 (Vue SPA용, /api/**. default-deny + CSRF 자동보호)
   <feature>/      ← 도메인 패키지 (기능 응집: user, book, session, timer, garden, follow,
                      block, report, search, popularity, profile, story, personality,
-                     email, push, retention, quote, feedback, admin)
+                     email, retention, quote, feedback, admin)
   security/       ← 인증·인가 (UserDetails, OIDC, 로그인시도 방어)
   config/ common/ dev/  ← 횡단 관심사 (설정, 공통 엔티티, 로컬 시드)
 ```
@@ -165,16 +165,16 @@ com.booktimer/
 - **DB**: `V31`(email verification & tokens)·`V33`(oauth email_verified backfill)
 - **설계**: README §2.2
 
-## 🔔 13. 푸시 알림 · 리텐션 넛지
+## 🔔 13. 리텐션 넛지 (이메일)
 
-- **한 줄**: Web Push 구독·리마인더 + 이메일/푸시 리텐션 넛지(스케줄러) + 구독 해지.
-- **진입점**: `/api/push/public-key`·`/api/push/subscribe`·`/api/push/unsubscribe`·`/api/push/marketing-consent`(**`push/PushApiController` — `web/`가 아님**) · `/unsubscribe` GET·POST(`web/UnsubscribeController`)
-- **소속 패키지**: `push/`(웹푸시 구독·발송) · `retention/`(넛지 스케줄러·구독해지)
-- **핵심**: 푸시 `push/PushSenderService`·`push/PushReminderService`·`push/PushReminderScheduler`·`push/PushSubscription`·`push/PushSubscriptionRepository` · 리텐션 `retention/RetentionNudgeScheduler`(cron 10시 KST)·`retention/RetentionPushScheduler`(cron 19시 KST)·`retention/RetentionNudgeService`·`retention/RetentionPushService`·`retention/UnsubscribeService`
-- **⚠️ 배선 주의**: **푸시 컨트롤러는 `web/`가 아니라 `push/PushApiController`**(파일 찾을 때 주의). 스케줄러는 `config/SchedulingConfig` 활성 전제(@Scheduled, Asia/Seoul). 이메일 넛지(`retention/`)와 웹푸시(`push/`)는 **별개 채널**.
-- **템플릿**: `unsubscribe-confirm.html`·`unsubscribe-done.html`·`fragments/pwa-head.html`
-- **DB**: `V32`(marketing nudge 컬럼)·`V50`(push subscriptions & reminder)·`V51`(push consent)
-- **설계**: memory: pwa-adoption · README 로드맵
+- **한 줄**: 7일 비활동 복귀 이메일 넛지(스케줄러) + 구독 해지. (웹 푸시는 2026-07-09 제거 → 네이티브 백로그)
+- **진입점**: `/settings/marketing`(수신 동의 토글, `web/SettingsController`) · `/unsubscribe` GET·POST(`web/UnsubscribeController`)
+- **소속 패키지**: `retention/`(넛지 스케줄러·발송·구독해지)
+- **핵심**: `retention/RetentionNudgeScheduler`(cron 10시 KST)·`retention/RetentionNudgeService`(7일 비활동·`ReadingSessionRepository.findNudgeTargets`·(광고) 표기·서명 수신거부 링크)·`retention/UnsubscribeService`
+- **⚠️ 배선 주의**: 스케줄러는 `config/SchedulingConfig` 활성 전제(@Scheduled, Asia/Seoul) + `booktimer.nudge.enabled` 게이트(기본 OFF, 법무 9박스 후 점등). 발송은 §12 이메일 인프라 재사용. (웹 푸시 `push/`·`retention/RetentionPush*`는 제거됨.)
+- **템플릿**: `unsubscribe-confirm.html`·`unsubscribe-done.html`
+- **DB**: `V32`(marketing nudge 컬럼) · ~~`V50`(push subscriptions & reminder)·`V51`(push consent)~~ → 웹 푸시 제거로 dead(테이블·컬럼 보존, forward-only·`DEFAULT FALSE`)
+- **설계**: memory: pwa-adoption(웹 푸시 제거 반영)·native-packaging-backlog · README 로드맵
 
 ## 📜 14. 격언 (작가 명언)
 
@@ -216,7 +216,7 @@ com.booktimer/
 | `web/AdminController`, `web/AdminUserController`, `web/AdminBackfillController` | 10 운영자 |
 | `web/FeedbackController`, `web/AdminFeedbackController` | 11 피드백 |
 | `web/EmailVerificationController`, `web/PasswordResetController` | 12 이메일 |
-| `push/PushApiController`, `web/UnsubscribeController` | 13 푸시·리텐션 |
+| `web/UnsubscribeController` | 13 리텐션 넛지(이메일) |
 | `web/AdminQuoteController` | 14 격언 |
 | `web/SettingsController` | 1 인증(계정) + 3 타이머(목표) + 6 마을(프로필 캐릭터) |
 | `web/PrivacyController` | 15 공통 |
