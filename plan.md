@@ -1193,7 +1193,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 >   ② 딜리버러빌리티(신규 발신 도메인은 평판 0 → 초기 스팸 처리 위험 — `.click` TLD 평판 이슈 N-036과 같은 뿌리),
 >   ③ 개발 시간(`JavaMailSender`/SES SDK 연동 + 토큰 발급·만료·검증 플로우 + 템플릿 + 재시도·실패 처리).
 > - **보류 근거**: 셋업·운영 손이 들고, 친구 한정 규모라 *현재* 위협 ROI가 낮다. 트래픽이 크거나 규모가 늘면 필수.
-> - **✅ 외부 관문 해제 — SES 프로덕션 액세스 승인 (2026-07-06)**: 1차(6/17)·2차(6/23) 거부로 한때 "기술적으로도 보류"였으나, 거부 사유(deliverability·sender reputation)를 **코드 근거로 조목조목 반박한 4차 재요청(6/29 제출)이 승인**됨(case 178123901400162, 발신 한도 50,000통/일·14통/초, 서울 리전 샌드박스 해제). 신규·저트래픽·실적 0에서도 상세·정직한 반박이 통했다([[N-091]] 결론 갱신). 이제 메일 인프라의 외부 차단은 없다 — (a) AWS 승인문이 명시한 **바운스/컴플레인 처리 루프는 ✅ 구현 완료**(`email_suppression` + SES→SNS 웹훅 `/internal/ses/notifications` + 발송 게이트, SNS 서명검증·SSRF 가드 포함), 남은 건 (b) 실발송 점등(`BOOKTIMER_EMAIL_ENABLED`/`BOOKTIMER_NUDGE_ENABLED`)과 (c) 운영 SES→SNS 배선뿐.
+> - **✅ 외부 관문 해제 — SES 프로덕션 액세스 승인 (2026-07-06)**: 1차(6/17)·2차(6/23) 거부로 한때 "기술적으로도 보류"였으나, 거부 사유(deliverability·sender reputation)를 **코드 근거로 조목조목 반박한 4차 재요청(6/29 제출)이 승인**됨(case 178123901400162, 발신 한도 50,000통/일·14통/초, 서울 리전 샌드박스 해제). 신규·저트래픽·실적 0에서도 상세·정직한 반박이 통했다([[N-091]] 결론 갱신). 이제 메일 인프라의 외부 차단은 없다 — (a) AWS 승인문이 명시한 **바운스/컴플레인 처리 루프 ✅ 구현+운영 배선 완료**(`email_suppression` + SES→SNS 웹훅 `/internal/ses/notifications` + 발송 게이트, SNS 서명검증·SSRF 가드; **SES 피드백 알림→SNS 토픽 `booktimer-ses-bounce-complaint`→HTTPS 구독 자동확인 + `BOOKTIMER_SES_SNS_TOPIC_ARN` 허용목록**까지 콘솔·env 배선, 2026-07-08). (b) **transactional 실발송은 이미 ON**(`BOOKTIMER_EMAIL_ENABLED=true` — 샌드박스로만 제약됐다가 7/6 승인으로 해제). 남은 건 **마케팅 넛지 점등**(`BOOKTIMER_NUDGE_ENABLED`, 아래 법무 9박스 충족 후)뿐.
 >
 > **착수 트리거(이때 하면 한계비용 최소)**: `.click` → `.com`/`.app` **도메인 이전**(§도메인 TLD 이전)과 **함께** —
 > 어차피 ACM·Route 53·DNS를 만지는 김에 발신 도메인 검증·SPF/DKIM/DMARC를 같이 박으면 작업이 겹친다. 또는 트래픽/회원 신호.
@@ -1225,7 +1225,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 - [x] **발송 규약(코드)** — `RetentionNudgeService`가 제목 `(광고)` 접두 + 발신자 정보 + **서명 일회용 토큰 수신거부 링크**(`EmailTokenType.UNSUBSCRIBE` 30일, 추측 불가·IDOR 방어) + **인증된 주소에만**(`emailVerified` 게이트, 반송·평판 보호) 발송. 야간(21~08시) 회피는 KST 10시 단일 배치로 해결. 수신거부 소비 엔드포인트(`/unsubscribe`)는 PR-3. (PR #306 / PR-3) *실발송 점등: `RetentionNudgeScheduler`가 독립 게이트 `booktimer.nudge.enabled`(기본 OFF)로 transactional과 분리됨(#312) — 법무 9박스 충족 후 `BOOKTIMER_NUDGE_ENABLED=true`로 점등.*
 - [x] **넛지 로직** — `findNudgeTargets`(7일 비활동+동의+검증+구간당 1회) + `RetentionNudgeService`(per-recipient 격리·멱등 `lastNudgeSentAt`) + `RetentionNudgeScheduler` `@Scheduled`(매일 KST 10시 — 저녁 대신 야간 제한 자연 회피). cutoff·경계는 Clock(N-010). (PR #306)
 - [x] **OAuth emailVerified 정합** — 소셜 가입(`registerOAuth`)이 검증 표시 + 기존 소셜 백필(Flyway V33). 넛지의 `emailVerified` 게이트(위 발송 규약)가 소셜 사용자를 빠뜨려 동의해도 못 받던 갭 보정(원 설계 외 추가 — phase2 발송 머지 뒤 발견). `provision`의 미검증 거부(N-026) 보존. (PR #308)
-- [ ] (운영) **수신동의 2년마다 재확인** 의무 인지 + 반송·스팸신고 피드백 루프 관리.
+- [~] (운영) **수신동의 2년마다 재확인** 의무 인지(넛지 실발송 시작 후 주기 관리) + 반송·스팸신고 피드백 루프 관리 → **피드백 루프는 ✅ 구현+배선 완료**(`email_suppression` + SES→SNS 웹훅으로 영구반송·불만 자동 억제·불만 시 마케팅 동의 철회, changelog 2026-07-08). 2년 재확인만 넛지 점등 후 잔여.
 
 > **🔒 법무 9박스 — 점등 게이트 (정보통신망법 §50 감사, 2026-06-12):** 마케팅 넛지 실발송(`BOOKTIMER_NUDGE_ENABLED=true`)의 법적 선결. §50 광고성 정보 9개 의무를 현재 구현과 대조한 감사표 — 점등 직전 1~8이 모두 ✅인지 확인하는 체크리스트.
 >

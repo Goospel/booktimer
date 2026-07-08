@@ -19,6 +19,7 @@
         { "name": "SPRING_MAIL_HOST", "value": "email-smtp.ap-northeast-2.amazonaws.com" },
         { "name": "SPRING_MAIL_PORT", "value": "587" },
         { "name": "BOOKTIMER_EMAIL_ENABLED", "value": "true" },
+        { "name": "BOOKTIMER_SES_SNS_TOPIC_ARN", "value": "arn:aws:sns:<REGION>:<ACCOUNT_ID>:booktimer-ses-bounce-complaint" },
         { "name": "GA_MEASUREMENT_ID", "value": "G-JFVDPJ036E" },
         { "name": "BOOKTIMER_COUPANG_PARTNER_ENABLED", "value": "false" }
       ],
