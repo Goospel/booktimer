@@ -2,6 +2,7 @@ package com.booktimer.email;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
  * 테스트할 수 있게 한다. 본문 전체는 로그에 남기지 않는다(토큰 링크 등 민감정보 노출 방지) — 수신자·제목만 남긴다.
  */
 @Component
+@Qualifier("rawEmailSender") // 억제 데코레이터가 감쌀 실제(폴백) 발송기 — SmtpEmailSender와 동일 자격
 @ConditionalOnProperty(name = "booktimer.email.enabled", havingValue = "false", matchIfMissing = true)
 public class LoggingEmailSender implements EmailSender {
 

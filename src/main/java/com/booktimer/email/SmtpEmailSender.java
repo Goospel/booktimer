@@ -2,6 +2,7 @@ package com.booktimer.email;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -24,6 +25,7 @@ import java.nio.charset.StandardCharsets;
  * 사용자에게 안내(인증·재설정)한다.
  */
 @Component
+@Qualifier("rawEmailSender") // 억제 데코레이터가 감쌀 실제 발송기(SuppressionAwareEmailSender가 이 자격으로 주입받음)
 @ConditionalOnProperty(name = "booktimer.email.enabled", havingValue = "true")
 public class SmtpEmailSender implements EmailSender {
 
