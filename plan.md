@@ -1193,7 +1193,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 >   ② 딜리버러빌리티(신규 발신 도메인은 평판 0 → 초기 스팸 처리 위험 — `.click` TLD 평판 이슈 N-036과 같은 뿌리),
 >   ③ 개발 시간(`JavaMailSender`/SES SDK 연동 + 토큰 발급·만료·검증 플로우 + 템플릿 + 재시도·실패 처리).
 > - **보류 근거**: 셋업·운영 손이 들고, 친구 한정 규모라 *현재* 위협 ROI가 낮다. 트래픽이 크거나 규모가 늘면 필수.
-> - **⏸️ 추가 보류 — SES 2차 거부 (2026-06-24)**: 발송 인프라가 외부 관문(SES 프로덕션 액세스)에 막힘. 1차 거부 후 상세 담은 2차도 거부 → 신규·저트래픽이라 재심사 무망 가능성(레버 ① 보류 박스·[[N-091]]). 이제 "ROI 낮음"뿐 아니라 *기술적으로도* 보류 상태 — retention은 게임화(마을) 등 SES 비의존 경로로, 메일 인프라는 실사용·트래픽 축적 또는 대체 ESP 검토 후 재개.
+> - **✅ 외부 관문 해제 — SES 프로덕션 액세스 승인 (2026-07-06)**: 1차(6/17)·2차(6/23) 거부로 한때 "기술적으로도 보류"였으나, 거부 사유(deliverability·sender reputation)를 **코드 근거로 조목조목 반박한 4차 재요청(6/29 제출)이 승인**됨(case 178123901400162, 발신 한도 50,000통/일·14통/초, 서울 리전 샌드박스 해제). 신규·저트래픽·실적 0에서도 상세·정직한 반박이 통했다([[N-091]] 결론 갱신). 이제 메일 인프라의 외부 차단은 없다 — 남은 건 (a) AWS 승인문이 명시한 **바운스/컴플레인 처리 루프**(현재 앱 미구현, SES 계정 suppression 의존)와 (b) 실발송 점등(`BOOKTIMER_EMAIL_ENABLED`/`BOOKTIMER_NUDGE_ENABLED`)뿐.
 >
 > **착수 트리거(이때 하면 한계비용 최소)**: `.click` → `.com`/`.app` **도메인 이전**(§도메인 TLD 이전)과 **함께** —
 > 어차피 ACM·Route 53·DNS를 만지는 김에 발신 도메인 검증·SPF/DKIM/DMARC를 같이 박으면 작업이 겹친다. 또는 트래픽/회원 신호.
@@ -1243,7 +1243,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 >
 > 부가: **처리결과 통지**=동의/철회 시 화면 즉시 안내(설정 flash·`unsubscribe-done.html`)로 갈음 ✅. **처리방침**(`privacy.html`) §1 동의여부·시각 수집 + §2 선택동의·끼워팔기 금지·철회방법 ✅.
 >
-> **📡 점등 runbook (`BOOKTIMER_NUDGE_ENABLED=true`) — 아직 켜지 않음**: 전제 게이트 2개 통과 후 켠다. ① **SES 샌드박스 해제(프로덕션 액세스)** — 미해제면 미검증 실주소 발송 실패→반송→발신 평판 하락(transactional까지 연쇄). AWS Support 케이스 178123901400162는 **1차 거부(2026-06-17, "보안상 사유 비공개")** 후, AWS가 요구한 상세 사용 사례(발송 빈도·수신자 목록 관리·반송/불만/수신거부 처리·메일 예시)를 담아 **재요청(재고 요청) 중**. 진짜 승인 신호는 케이스가 아니라 SES 콘솔 Account dashboard의 "Production access" 표기다(배경·재발 방지: [learning-notes N-091](claude-docs/learning-notes.md), [troubleshooting T-058](claude-docs/troubleshooting.md)). ② **법무 9박스** 1~8 ✅. **절차**: `task-definition.json` `environment`에 `{"name":"BOOKTIMER_NUDGE_ENABLED","value":"true"}` 추가 → main push → `deploy.yml` 자동 배포(스케줄러 빈 등록) → 다음 KST 10시 배치 발송. **점등 후**: 반송·스팸신고율·DMARC 정렬(N-071) 모니터링, 안정 시 DMARC `p=none`→`quarantine` 상향.
+> **📡 점등 runbook (`BOOKTIMER_NUDGE_ENABLED=true`) — 아직 켜지 않음**: 전제 게이트 2개 통과 후 켠다. ① **SES 샌드박스 해제(프로덕션 액세스)** — ✅ **완료 (2026-07-06)**. 케이스 178123901400162가 1차(6/17)·2차(6/23) 거부 후 거부 사유를 코드 근거로 반박한 **4차 재요청(6/29)으로 승인** — 서울 리전 샌드박스 해제, 발신 한도 50,000통/일·14통/초. 이제 미검증 실주소로도 발송 가능(승인 확인은 예고대로 케이스 상태가 아니라 SES 콘솔 Account dashboard의 발신 한도 급증으로 확인됨). ⚠️ 승인문이 명시한 **바운스/컴플레인 처리 루프 구축을 점등 전 권장**(현재 앱 미구현·SES 계정 suppression 의존). (배경·재발 방지: [learning-notes N-091](claude-docs/learning-notes.md), [troubleshooting T-058](claude-docs/troubleshooting.md)). ② **법무 9박스** 1~8 ✅. **절차**: `task-definition.json` `environment`에 `{"name":"BOOKTIMER_NUDGE_ENABLED","value":"true"}` 추가 → main push → `deploy.yml` 자동 배포(스케줄러 빈 등록) → 다음 KST 10시 배치 발송. **점등 후**: 반송·스팸신고율·DMARC 정렬(N-071) 모니터링, 안정 시 DMARC `p=none`→`quarantine` 상향.
 
 ### 측정 세션 `book_id` NOT NULL 제약 — ❌ 폐기(방향 역전, 2026-07-07 발견 1)
 > **폐기 이유**: UX 리뷰 **발견 1(PR-E)**로 "책 없이 측정 시작 + 종료 후 태깅"을 도입하며 방향이 **역전**됐다.
