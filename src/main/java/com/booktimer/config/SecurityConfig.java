@@ -68,6 +68,9 @@ public class SecurityConfig {
                         .requestMatchers("/ads.txt", "/robots.txt").permitAll()
                         // OAuth2 인가요청·콜백 엔드포인트는 미인증 상태에서 접근 가능해야 한다.
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
+                        // SES 반송·불만 SNS 웹훅 — 외부(AWS SNS)가 POST하는 공개 엔드포인트. 로그인 대신
+                        // TopicArn 허용목록 + SNS 서명 검증(SnsWebhookController)으로 위조를 막는다(CSRF는 아래서 제외).
+                        .requestMatchers("/internal/ses/**").permitAll()
                         // 관리자 대시보드는 운영 데이터(개인정보)가 걸려 있어 ADMIN만 — default-deny 위에 역할 매처.
                         // (ROLE_ 접두는 BookTimerUserDetailsService가 부여, hasRole이 접두를 자동 보정한다.)
                         .requestMatchers("/admin/**").hasRole("ADMIN")
@@ -80,8 +83,10 @@ public class SecurityConfig {
                 // 무차별 대입 방어: 잠긴 IP의 로그인 시도를 인증 필터에 닿기 전에 단락한다.
                 .addFilterBefore(new LoginAttemptFilter(loginAttemptService),
                         UsernamePasswordAuthenticationFilter.class)
-                .logout(logout -> logout.permitAll());
-        // CSRF는 기본 활성 유지 — 세션 기반 로그인이라 토큰 보호가 필요하다(REST 토큰 방식 아님).
+                .logout(logout -> logout.permitAll())
+                // SNS 웹훅은 외부 시스템(AWS)이 CSRF 토큰 없이 POST하므로 이 경로만 CSRF 제외(서명 검증으로 대체 방어).
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/internal/ses/**"));
+        // CSRF는 기본 활성 유지(위 SNS 웹훅만 예외) — 세션 기반 로그인이라 토큰 보호가 필요하다(REST 토큰 방식 아님).
         return http.build();
     }
 }
