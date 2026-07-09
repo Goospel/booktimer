@@ -3203,6 +3203,10 @@ body.personality-page #personality-app { gap: 18px; }
     font-size: 12px;
     line-height: 1.5;
     color: var(--muted);
+    max-width: 420px;          /* 진행바(.dash-progress-wrap)와 폭 정렬 — 형제 폭 불일치 제거 */
+    word-break: keep-all;      /* 한글 어절(공백) 단위 개행 — 조사 중간 끊김 방지 */
+    overflow-wrap: break-word; /* 긴 불가분 토큰 오버플로 안전장치 */
+    text-wrap: pretty;         /* 마지막 줄 고아 단어 방지 (미지원 브라우저는 무시) */
 }
 
 .dash-timer-right { flex: 1 1 290px; min-width: 0; }
