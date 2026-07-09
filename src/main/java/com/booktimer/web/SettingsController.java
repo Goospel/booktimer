@@ -13,7 +13,6 @@ import com.booktimer.user.UserSettingsService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import org.springframework.stereotype.Controller;
@@ -49,22 +48,19 @@ public class SettingsController {
     private final AccountService accountService;
     private final GardenService gardenService;
     private final ProfileCharacterService profileCharacterService;
-    private final String vapidPublicKey;
 
     public SettingsController(CurrentUserService currentUserService,
                               ReadingTimerRepository timerRepository,
                               UserSettingsService settingsService,
                               AccountService accountService,
                               GardenService gardenService,
-                              ProfileCharacterService profileCharacterService,
-                              @Value("${booktimer.push.vapid.public-key:not-configured}") String vapidPublicKey) {
+                              ProfileCharacterService profileCharacterService) {
         this.currentUserService = currentUserService;
         this.timerRepository = timerRepository;
         this.settingsService = settingsService;
         this.accountService = accountService;
         this.gardenService = gardenService;
         this.profileCharacterService = profileCharacterService;
-        this.vapidPublicKey = vapidPublicKey;
     }
 
     /** 타임존 드롭다운 후보 — GET 폼과 POST 검증 실패 재렌더 모두에 자동으로 실린다. */
@@ -94,9 +90,6 @@ public class SettingsController {
         // 미검증이면 인증 유도 배너를 띄운다(정책 ③). 재발송 버튼은 POST /verify-email/resend로 이 화면에 결과를 남긴다.
         model.addAttribute("emailVerified", user.isEmailVerified());
         model.addAttribute("marketingEmailConsent", user.isMarketingEmailConsent());
-        // 알림 통합 — 설정 페이지 푸시 토글용
-        model.addAttribute("vapidPublicKey", vapidPublicKey);
-        model.addAttribute("marketingPushConsent", user.isMarketingPushConsent());
         // 프로필 사진(도감 작가 얼굴) — 보유(완독)한 작가만 고를 수 있다. 현재 선택 코드도 함께 싣는다.
         model.addAttribute("ownedCharacters", gardenService.view(user).ownedCharacters());
         model.addAttribute("profileCharacterCode", user.getProfileCharacterCode());

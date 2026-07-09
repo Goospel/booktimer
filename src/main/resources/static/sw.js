@@ -1,4 +1,4 @@
-// BookTimer Service Worker — 앱 셸 캐싱 + 푸시 알림 (L2/L3a)
+// BookTimer Service Worker — 앱 셸 캐싱 (L2 오프라인)
 // 정적 자산(garden.js·app.css·pwa-install.js)은 Spring resource chain으로 내용 해시 URL을 가진다.
 // 해시 URL은 내용이 바뀌면 URL이 달라지므로 cache-first에서도 stale이 불가 → NETWORK_FIRST 졸업.
 // 아이콘·manifest는 cache-first로 빠른 재사용.
@@ -77,32 +77,6 @@ self.addEventListener('fetch', (event) => {
                 }
                 return res;
             });
-        })
-    );
-});
-
-// --- PWA L3a: 푸시 알림 수신 ---
-self.addEventListener('push', (event) => {
-    let d = {};
-    try { d = event.data ? event.data.json() : {}; } catch (_) {}
-    event.waitUntil(
-        self.registration.showNotification(d.title ?? '독서 마을', {
-            body: d.body ?? '오늘도 책 한 장 읽어볼까요? 📚',
-            icon: '/icons/icon-192.png',
-            data: d.url ?? '/village',
-        })
-    );
-});
-
-// 알림 클릭 시 /village 열기(또는 페이로드의 url)
-self.addEventListener('notificationclick', (event) => {
-    event.notification.close();
-    event.waitUntil(
-        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
-            const target = event.notification.data || '/village';
-            const existing = wins.find((w) => new URL(w.url).pathname === target);
-            if (existing) return existing.focus();
-            return clients.openWindow(target);
         })
     );
 });
