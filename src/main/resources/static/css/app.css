@@ -3111,46 +3111,78 @@ body.personality-page #personality-app { gap: 18px; }
 .dash-grass-head,
 .dash-garden-head { margin-bottom: 4px; }
 
-/* 헤더 한 줄 명언 — 스토리 도입으로 카드(QuoteCard)에서 브랜드 바로 아래 한 줄로 약화(2026-07-02,
-   사용자 피드백으로 브랜드 "옆"→"아래" 배치 변경: 옆은 폭이 좁아 말줄임이 잦았음).
-   슬롯(#brand-quote-slot)은 dashboard.html SSR — header.brand 밖의 형제 요소 — Vue(BrandQuote)가
-   Teleport로 채운다. 공유 .brand 스타일은 건드리지 않는다(타 페이지 회귀 0) — 슬롯은 홈에만 존재. */
-.brand-quote-slot { margin: 4px 0 8px; }
-/* 클리핑 무대 — 높이는 콘텐츠 기준 가변(줄 수만큼 자동으로 늘어남). overflow:hidden은
-   슬라이드 트랜지션 중 무대 경계 밖으로 나가는 부분을 자르기 위함(Transition mode="out-in"이라
-   한 시점엔 옛/새 줄 중 하나만 DOM에 존재 — 겹침 없이 사라진 뒤 나타남). */
+/* 헤더 한 줄 명언 — 홈 카드 묶음을 "닫는 각주"로 정리(2026-07-10, C안 하이브리드).
+   기존엔 카드 밖 맨몸 좌측정렬 이탤릭이라 위 카드들과 동떨어져 보였다. 카드로 감싸지 않되
+   (1) 위로 넉넉한 여백 + 양끝이 사라지는 페이드 구분선, (2) 본문을 감싼 은은한 세이지 따옴표,
+   (3) 중앙정렬 + 폰트 축소로 "각주" 위상을 만들어 위 카드 묶음과의 소속감을 준다.
+   슬롯(#brand-quote-slot)은 dashboard.html SSR — Vue(BrandQuote)가 Teleport로 채운다.
+   장식(구분선·따옴표)은 명언 있을 때만 렌더되는 .brand-quote/.brand-quote-text에만 붙여
+   명언 0개일 때 장식만 뜨는 사고를 막는다. 공유 .brand는 건드리지 않는다(타 페이지 회귀 0). */
+.brand-quote-slot { margin: 4px 0 10px; }
 .brand-quote {
+    --bq-size: 0.9rem;                 /* 각주 톤: 1.05rem → 0.9rem 로 약화 */
     position: relative;
     overflow: hidden;
-    /* 2줄 높이로 고정 → 명언 길이가 바뀌어도 아래 요소(#dashboard-app)가 안 밀린다.
-       짧은 1줄 명언은 flex 세로중앙 정렬. 3줄 극단은 overflow:hidden으로 클립(안전망 — 정상은
-       아래 --q-scale 폰트 축소가 2줄 안에 담아 클립을 안 태운다). height=1.05rem 2줄 기준. */
+    box-sizing: content-box;           /* 전역 리셋이 border-box여도 padding-top(구분선 자리)이 2줄 높이를 안 갉게 못박음 */
+    /* 위 카드 그리드와의 시각적 텀: 위로 넉넉한 여백 + padding-top에 페이드 구분선 자리 */
+    margin-top: 22px;
+    padding-top: 16px;
+    /* 2줄 높이로 고정 → 명언 길이가 바뀌어도(롤링 포함) 아래 요소가 안 밀린다. 3줄 극단은
+       overflow:hidden 안전망. 높이는 --bq-size에 비례해 재계산(데스크톱에서 키워도 자동 동기화). */
     display: flex;
     align-items: center;
-    height: calc(1.05rem * 1.5 * 2);
+    justify-content: center;
+    height: calc(var(--bq-size) * 1.5 * 2);
     line-height: 1.5;
     font-family: 'Gowun Batang', serif;
     font-style: italic;
-    color: var(--muted);  /* 카드 시절(--text)보다 톤 다운 — 약화 취지 */
+    color: var(--muted);               /* 카드 시절(--text)보다 톤 다운 — 약화 취지 */
+    text-align: center;                /* 중앙정렬 각주 */
+}
+/* 페이드-디바이더: 짧은 중앙 헤어라인. 중앙이 세이지톤으로 살짝 진하고 좌우 끝으로 갈수록
+   완전 투명 → 딱딱한 직선 대신 종이톤 배경에 유기적으로 녹는다. 명언 있을 때만 렌더. */
+.brand-quote::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(220px, 58%);
+    height: 1px;
+    pointer-events: none;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        color-mix(in srgb, var(--accent) 48%, var(--border)) 35%,
+        color-mix(in srgb, var(--accent) 48%, var(--border)) 65%,
+        transparent 100%);
 }
 .brand-quote-line {
     /* 본문+저자를 하나의 연속 텍스트 흐름으로(flex 아님) — 저자가 별도 줄을 차지하지 않고
-       본문 끝에 이어 붙어, 본문이 2줄이어도 저자까지 2줄 안에 담긴다(flex 시절엔 본문이 2줄이면
-       저자 span이 3번째 줄로 밀려 잘렸다). width:100%로 flex 부모(.brand-quote) 안에서 전체폭 확보. */
+       본문 끝에 이어 붙어, 본문이 2줄이어도 저자까지 2줄 안에 담긴다. width:100%로 부모 폭 확보,
+       text-align:center는 .brand-quote에서 상속. */
     width: 100%;
     /* 긴 명언만 폰트 축소(--q-scale = BrandQuote.vue가 글자수로 계산 주입) — 2줄에도 넘칠 때
-       잘림 없이 담기 위함. clamp가 하한(0.78rem)·상한(1.05rem)을 하드가드. font-size는
-       transition 대상(transform·opacity)이 아니라 롤 애니메이션과 독립(즉시 확정, 깜빡임 없음). */
-    font-size: clamp(0.78rem, calc(1.05rem * var(--q-scale, 1)), 1.05rem);
+       잘림 없이 담기 위함. 상한=--bq-size, 하한 0.72rem 하드가드. font-size는 롤 트랜지션
+       대상(transform·opacity)이 아니라 즉시 확정(깜빡임 없음). */
+    font-size: clamp(0.72rem, calc(var(--bq-size) * var(--q-scale, 1)), var(--bq-size));
 }
-/* 본문은 자연 줄바꿈(사용자 피드백: 말줄임 대신 개행). 저자는 본문 끝에 이어지되 이름 중간
-   줄바꿈은 막아(nowrap) 통째로 넘어가게 — 별도 줄을 강제로 차지하지 않음. */
+/* 본문은 자연 줄바꿈(사용자 피드백: 말줄임 대신 개행). 은은한 세이지 따옴표로 본문만 감싼다 —
+   장식이 .brand-quote-text에 붙어 롤과 함께 자연 교체되고, 저자("— 저자")는 닫는 따옴표 뒤에
+   이어져 흐름 유지. 명언 없으면 텍스트 자체가 없어 따옴표도 안 뜬다. */
 .brand-quote-text { overflow-wrap: break-word; }
+.brand-quote-text::before,
+.brand-quote-text::after {
+    font-style: normal;
+    color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.brand-quote-text::before { content: "\201C"; margin-right: 1px; }
+.brand-quote-text::after  { content: "\201D"; margin-left: 1px; }
 .brand-quote-author { font-size: .78em; margin-left: 6px; white-space: nowrap; }
-/* 데스크톱(홈 컬럼 760px)은 폭이 넓어 최장 명언도 2줄 여유 → 축소를 꺼 원 크기(1.05rem) 유지.
-   글자수 기반 --q-scale는 좁은 모바일 폭 기준이라, 넓은 폭에선 불필요한 축소를 막는다. */
+/* 데스크톱(홈 컬럼 넓음)은 각주를 아주 살짝만 키우고 --q-scale 축소를 끈다 — 높이는 --bq-size에
+   비례해 자동 재계산되므로 2줄 클립 없음. */
 @media (min-width: 640px) {
-    .brand-quote-line { font-size: 1.05rem; }
+    .brand-quote { --bq-size: 0.95rem; }
+    .brand-quote-line { font-size: var(--bq-size); }
 }
 /* 슬롯 롤: 새 줄은 아래에서 위로, 옛 줄은 위로 사라짐(고정 %가 아니라 짧은 고정 거리 —
    줄 수가 가변이라 자기 높이 기준 %는 일관성이 없음). .brand-quote가 클립. */
