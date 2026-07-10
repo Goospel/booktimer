@@ -5,7 +5,7 @@ description: 이 repo의 git 워크트리를 안전하게 삭제한다 — front
 
 # remove-worktree — 워크트리 안전 삭제
 
-git 워크트리를 지울 때 **`frontend/node_modules` 정션을 먼저 끊어** 메인 워크트리의 node_modules가 함께 삭제되는 사고(T-110)를 막고, `git worktree remove` + 로컬 브랜치 정리까지 한 번에 한다.
+git 워크트리를 지울 때 **`frontend/node_modules` 정션을 먼저 끊어** 메인 워크트리의 node_modules가 함께 삭제되는 사고(T-110)를 막고, `git worktree remove` + 로컬 브랜치 정리 + **메인 워크트리의 main 최신화(`git pull`)** 까지 한 번에 한다.
 
 ## 언제 쓰나
 
@@ -28,6 +28,7 @@ powershell -File .claude/scripts/remove-worktree.ps1 <워크트리경로>
 - `-DryRun` — 무엇을 할지만 출력, 변경 없음 (먼저 확인용 권장)
 - `-Force` — 워크트리에 미커밋/untracked 변경이 있어 `git worktree remove`가 거부할 때 강제
 - `-KeepBranch` — 삭제 후 로컬 브랜치를 지우지 않음 (기본: 머지됐으면 `-d`로 정리, 미머지면 보존)
+- `-NoPull` — 삭제 후 메인 워크트리의 main을 `git pull`로 최신화하지 않음 (기본: 최신화함)
 
 예:
 ```
@@ -48,6 +49,7 @@ powershell -File .claude/scripts/remove-worktree.ps1 ../BookTimer-foo           
 2. `frontend/node_modules`가 정션이면 링크만 끊기(타깃 보존). 일반 폴더면 건드리지 않음.
 3. `git worktree remove` (`-Force` 시 강제)
 4. 로컬 브랜치 `git branch -d` (미머지면 보존)
+5. **메인 워크트리의 main 최신화** — 베스트-에포트 `git pull --ff-only`. 머지분이 원격 main에 얹혀 로컬 main이 뒤처지므로 따라잡는다. **활성 작업을 절대 방해하지 않게** 4가드를 모두 통과할 때만 실행: ① 메인 워크트리가 `main`(또는 `master`) 브랜치일 때만(브랜치 강제 전환 안 함) ② 추적 파일 미커밋 변경이 없을 때만 ③ upstream이 있을 때만 ④ fast-forward만(diverge 시 경고만). 어느 가드에 걸리거나 pull이 실패해도 **워크트리 삭제 성공은 유지**(fail-open, `-NoPull`로 끔).
 
 ## 관련
 
