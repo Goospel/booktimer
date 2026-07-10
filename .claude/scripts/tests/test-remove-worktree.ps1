@@ -58,6 +58,46 @@ function New-Fixture {
   return @{ Main = $main; Wt = $wt; MainNm = $mainNm; WtNm = $wtNm }
 }
 
+# main worktree on 'main' tracking a bare origin/main (clean), plus a feature worktree.
+# Used to exercise the end-of-run "refresh main" (git pull) step.
+function New-FixtureWithOrigin {
+  param([string]$name)
+  $origin = Join-Path $root "$name-origin.git"
+  git init -q --bare $origin | Out-Null
+  $main = Join-Path $root "$name-main"
+  New-Item -ItemType Directory $main | Out-Null
+  Push-Location $main
+  try {
+    git init -q
+    git config user.email 't@t.t'; git config user.name 'tester'
+    Set-Content -Path (Join-Path $main 'README.md') -Value 'v1'
+    git add -A; git commit -qm init | Out-Null
+    git branch -M main
+    git remote add origin $origin
+    git push -q -u origin main | Out-Null
+    $wt = Join-Path $root "$name-wt"
+    git worktree add -q $wt -b "$name-br" | Out-Null
+  } finally { Pop-Location }
+  return @{ Origin = $origin; Main = $main; Wt = $wt }
+}
+
+# push a new commit ($file) to origin/main from a throwaway clone, so the
+# fixture's main worktree becomes exactly 1 behind origin/main.
+function Advance-Origin {
+  param($fx, [string]$file, [string]$content)
+  $bump = "$($fx.Main)-bump"
+  git clone -q $fx.Origin $bump | Out-Null
+  Push-Location $bump
+  try {
+    git config user.email 't2@t.t'; git config user.name 'tester2'
+    git checkout -q -B main origin/main
+    Set-Content -Path (Join-Path $bump $file) -Value $content
+    git add -A; git commit -qm bump | Out-Null
+    git push -q origin main | Out-Null
+  } finally { Pop-Location }
+  Remove-Item $bump -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 Write-Host "== test 1: dry-run is non-destructive =="
 $f = New-Fixture 'dry'
 & $target -Path $f.Wt -DryRun | Out-Null
@@ -87,6 +127,33 @@ $ec = $LASTEXITCODE
 Pop-Location
 check ($ec -eq 3) "cwd-inside-target rejected (exit 3)"
 check (Test-Path $f.Wt) "worktree preserved when cwd inside"
+
+Write-Host "== test 5: default run fast-forwards the main worktree's main (git pull) =="
+$f = New-FixtureWithOrigin 'pull'
+Advance-Origin $f 'NEWFILE.txt' 'from-origin'
+& $target -Path $f.Wt | Out-Null
+check (Test-Path (Join-Path $f.Main 'NEWFILE.txt')) "*** main worktree fast-forwarded (origin commit pulled) ***"
+
+Write-Host "== test 6: dirty main worktree is NOT pulled (skip guard) =="
+$f = New-FixtureWithOrigin 'dirty'
+Advance-Origin $f 'NEWFILE.txt' 'from-origin'
+Set-Content -Path (Join-Path $f.Main 'README.md') -Value 'locally-modified'
+& $target -Path $f.Wt | Out-Null
+check (-not (Test-Path (Join-Path $f.Main 'NEWFILE.txt'))) "dirty main not fast-forwarded"
+check ((Get-Content (Join-Path $f.Main 'README.md')) -eq 'locally-modified') "local edit preserved"
+
+Write-Host "== test 7: main worktree on a feature branch is NOT pulled =="
+$f = New-FixtureWithOrigin 'featbr'
+Advance-Origin $f 'NEWFILE.txt' 'from-origin'
+Push-Location $f.Main; git checkout -q -b side-work; Pop-Location
+& $target -Path $f.Wt | Out-Null
+check (-not (Test-Path (Join-Path $f.Main 'NEWFILE.txt'))) "feature-branch main not fast-forwarded"
+
+Write-Host "== test 8: -NoPull skips the refresh =="
+$f = New-FixtureWithOrigin 'nopull'
+Advance-Origin $f 'NEWFILE.txt' 'from-origin'
+& $target -Path $f.Wt -NoPull | Out-Null
+check (-not (Test-Path (Join-Path $f.Main 'NEWFILE.txt'))) "-NoPull leaves main un-refreshed"
 
 Set-Location $env:TEMP
 Reset-Root

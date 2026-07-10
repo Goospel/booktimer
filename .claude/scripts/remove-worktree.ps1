@@ -12,11 +12,16 @@
 #   a path not registered as a worktree of this repo, or a current directory inside the
 #   target (you cannot delete the folder your shell stands in).
 #
+# After removal it also fast-forwards the MAIN worktree's main branch (git pull), so the
+# local main catches up to the merge that just landed on origin. This is best-effort and
+# only runs when the main worktree is idle on main and clean (see step 10); -NoPull skips it.
+#
 # Usage:
 #   powershell -File .claude/scripts/remove-worktree.ps1 <worktree-path>
 #   ... -DryRun       show what would happen, change nothing
 #   ... -Force        pass --force to git worktree remove (dirty/untracked worktree)
 #   ... -KeepBranch   do not delete the local branch after removing
+#   ... -NoPull       do not fast-forward the main worktree's main after removal
 #
 # Run this from OUTSIDE the target worktree (e.g. the main worktree).
 # Exit: 0 ok, 2 usage, 3 guard violation, 1 git failure.
@@ -24,7 +29,8 @@ param(
   [Parameter(Mandatory = $true, Position = 0)][string]$Path,
   [switch]$DryRun,
   [switch]$Force,
-  [switch]$KeepBranch
+  [switch]$KeepBranch,
+  [switch]$NoPull
 )
 
 # git writes to stderr on normal "not a repo" probes; under a caller's
@@ -114,6 +120,45 @@ if (-not $KeepBranch -and $branch -and $branch -ne 'HEAD') {
       info "branch '$branch' not fully merged - kept (use 'git branch -D $branch' to force)"
     }
     else { info "local branch deleted: $branch" }
+  }
+}
+
+# 10. refresh the MAIN worktree's main branch (best-effort; never disrupt active work).
+#     After a merged worktree is removed, the local main is usually behind origin/main
+#     (the merge landed on the remote). Bring it current - but only when the main worktree
+#     is idle on main and clean, and only via fast-forward. Any failure here is non-fatal:
+#     the removal (this script's real job) already succeeded.
+if (-not $NoPull) {
+  if ($DryRun) {
+    info "(dry-run) would fast-forward main worktree's main (if on main + clean + upstream): $mainDir"
+  }
+  else {
+    $mb = (git -C $mainDir rev-parse --abbrev-ref HEAD 2>$null)
+    git -C $mainDir diff --quiet 2>$null;          $treeDirty = ($LASTEXITCODE -ne 0)
+    git -C $mainDir diff --cached --quiet 2>$null;  if ($LASTEXITCODE -ne 0) { $treeDirty = $true }
+    git -C $mainDir rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>$null | Out-Null
+    $hasUpstream = ($LASTEXITCODE -eq 0)
+    if ($mb -notin @('main', 'master')) {
+      info "main worktree is on '$mb' (not main) - skipping refresh (won't switch branches)"
+    }
+    elseif ($treeDirty) {
+      info "main worktree has uncommitted changes - skipping refresh (won't pull over your edits)"
+    }
+    elseif (-not $hasUpstream) {
+      info "main worktree's '$mb' has no upstream - skipping refresh (offline/local-only)"
+    }
+    else {
+      $before = (git -C $mainDir rev-parse --short HEAD 2>$null)
+      git -C $mainDir pull --ff-only 2>$null | Out-Null
+      if ($LASTEXITCODE -eq 0) {
+        $after = (git -C $mainDir rev-parse --short HEAD 2>$null)
+        if ($before -eq $after) { info "main already up to date ($after)" }
+        else { info "main refreshed (fast-forward): $before..$after" }
+      }
+      else {
+        info "main pull skipped (diverged or offline) - left as-is; run 'git pull' manually"
+      }
+    }
   }
 }
 
