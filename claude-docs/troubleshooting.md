@@ -154,6 +154,9 @@
 - [T-129. 쿠팡 파트너스 "구매" 링크가 추적 0 — CoupangLinkBuilder 자작 lptag 검색 URL은 정식 추적링크가 아님(딥링크 API 필요)](#t-129-쿠팡-파트너스-구매-링크가-추적-0--coupanglinkbuilder-자작-lptag-검색-url은-정식-추적링크가-아님딥링크-api-필요)
 - [T-130. dark-launch 기능 secret을 task-def valueFrom으로 배선하면 SSM 파라미터 미생성 시 ECS 배포가 서킷브레이커 롤백](#t-130-dark-launch-기능-secret을-task-def-valuefrom으로-배선하면-ssm-파라미터-미생성-시-ecs-배포가-서킷브레이커-롤백)
 - [T-131. 알라딘 OpenAPI includeKey 미전송으로 응답 link에 TTBKey 없어 제휴 클릭 추적 0](#t-131-알라딘-openapi-includekey-미전송으로-응답-link에-ttbkey-없어-제휴-클릭-추적-0)
+- [T-133. 스크립트가 읽는 비밀 파일 경로가 `.gitignore` 무시 경로·문서와 어긋나 조용히 실패 or 비밀 커밋](#t-133-스크립트가-읽는-비밀-파일-경로가-gitignore-무시-경로문서와-어긋나-조용히-실패-or-비밀-커밋)
+- [T-134. 외부 API의 "에러처럼 생긴" result 코드가 실은 정상 무데이터일 수 있다 — 비-성공을 뭉뚱그려 fatal 처리 금지](#t-134-외부-api의-에러처럼-생긴-result-코드가-실은-정상-무데이터일-수-있다--비-성공을-뭉뚱그려-fatal-처리-금지)
+- [T-135. `preview_screenshot`이 `readyState=complete`인데도 30초 타임아웃 — `preview_inspect`/`eval` + 비교 위젯으로 시각 검증 우회](#t-135-preview_screenshot이-readystatecomplete인데도-30초-타임아웃--preview_inspecteval--비교-위젯으로-시각-검증-우회)
 
 ---
 
@@ -2453,6 +2456,20 @@ git worktree remove ../BookTimer-<task>
 
 ---
 
+## T-135. `preview_screenshot`이 `readyState=complete`인데도 30초 타임아웃 — `preview_inspect`/`eval` + 비교 위젯으로 시각 검증 우회
+
+**증상**: 정적 preview 서버(`static-preview`)로 페이지를 띄우고 `preview_screenshot`을 호출하면 30초 타임아웃("preview window may be stuck")이 반복된다. 반면 `preview_snapshot`·`preview_inspect`·`preview_eval`은 정상 동작하고, `document.readyState`는 `complete`, `getAnimations().length`는 0 — 페이지·애니메이션은 멈췄는데 캡처 단계만 무한 대기(PC 재부팅·서버 재시작 후에도 재현).
+
+**부분 요인 하나(제거해도 안 풀림)**: `app.css` 첫 줄 Google Fonts `@import`가 preview 환경에서 외부 요청 pending → 페이지 `load` 이벤트가 안 끝나 스크린샷이 대기. serve.js에서 CSS 응답의 `@import ...fonts.googleapis...`를 스트립해 외부 요청을 없앴으나(폰트는 시스템 fallback), **그 뒤에도 스크린샷만 타임아웃** → 폰트가 유일 원인은 아니고 이 환경의 캡처 파이프라인 자체 한계로 판단.
+
+**해결(우회 — 스크린샷 없이 검증)**:
+- **값 실측**: `preview_inspect`(computed styles)와 `preview_eval`(`getComputedStyle(el)`·`getComputedStyle(el, '::before')`로 `::before`/`::after` 장식·`scrollHeight > clientHeight`로 2줄 clip 판정)로 폰트·색·정렬·구분선·클립을 픽셀보다 정확히 확인.
+- **사용자 시각 비교**: `show_widget`(visualize MCP)으로 실제 폰트(위젯은 `fonts.googleapis` 허용)·앱 색을 로드한 비교 목업을 인라인 렌더 → 사용자가 직접 보고 고르게.
+
+**교훈**: 스크린샷이 유일한 시각 검증 수단이 아니다 — 색·크기·간격은 `inspect`/`eval`이 오히려 정확(CLAUDE.md 프론트 검증 원칙과 동일). 자매: T-112(Chrome MCP `resize_window`가 `innerWidth` 못 바꿈→iframe 우회), T-114(`preview_inspect` shorthand 빈 객체→longhand/`eval`). **1회차 신규** — preview 도구 한계 계열이나 각기 다른 도구·증상이라 재발·승격 트래커에는 올리지 않는다.
+
+---
+
 ## 🔄 누적 갱신
 
 | 일자 | 추가 항목 |
@@ -2593,3 +2610,4 @@ git worktree remove ../BookTimer-<task>
 | 2026-07-05 | T-132 (dependabot 프론트 dep bump 중 **런타임 번들에 인라인되는 것**(vue 등)은 lockfile만 올려 CI `Verify bundle is not stale`가 RED — vue 런타임은 각 섬 번들 JS에 인라인되는데(`@vue/* 버전 마커`가 `static/**/*.js`에 박힘) dependabot은 `src/main/resources/static/**` 번들을 재빌드·커밋 안 해 lock↔아티팩트 드리프트로 stale 게이트가 실패 / 감별=CI에서 test·build는 GREEN인데 "Verify bundle is not stale"만 RED이고 PR diff가 `package-lock.json`뿐이면 코드 회귀가 아니라 번들 미재빌드 / 해결=PR 브랜치 체크아웃→`npm ci`→`npm run build`→재생성 번들 커밋·push→머지(번들이 새 버전 반영해 stale 해소) / **대조**: vitest(테스트러너)·@vitejs/plugin-vue(빌드타임 SFC 컴파일러)는 서빙 JS에 안 실려 재빌드 없이 통과 — "그 major dep이 런타임 번들에 들어가나"가 stale 실패 여부를 가름(vue=인라인→RED / vitest·plugin-vue=미포함→GREEN). phaser처럼 죽은 dep도 미포함이라 통과하되 bump 무의미→제거(#656) / 2026-07-05 dependabot 프론트 PR 정리 #649(vue), T-063·T-082 번들 군·N-083, 1회차 신규) |
 | 2026-07-06 | T-133 (스크립트가 읽는 비밀 파일 경로가 `.gitignore` 무시 경로·문서와 어긋나 조용히 실패 or 비밀 커밋 — `affiliate-report.mjs` `readAuthKey`가 `resolve(here,'.secrets')`로 `scripts/.secrets`를 잡아 `.claude/.secrets`(gitignore·문서)와 불일치. 해결=`secretPathFor` 순수함수+`..`로 상위 `.claude/.secrets`, gitignore 위치 일치를 단위테스트로 못박음. PR #660, 1회차 신규) |
 | 2026-07-06 | T-134 (외부 API의 "에러처럼 생긴" result 코드가 실은 정상 무데이터일 수 있다 — LinkPrice `result=101`("정상 page 번호 아님")이 실적 0건이면 반환할 page 없어서 온 코드였는데 `result!='0'`을 전부 fatal 처리해 무데이터마다 가짜 오류. 해결=`classifyResult` 3분류(0=ok·101=no-data·나머지=error), 양방향 불변식 테스트. `test=Y`가 정상이면 인증 OK→"데이터 상태 코드" 의심, 벤더 코드표 확인. PR #661, 1회차 신규, 자매 T-133) |
+| 2026-07-10 | T-135 (`preview_screenshot`이 `readyState=complete`·`getAnimations()=0`인데도 30초 캡처 타임아웃 반복(`snapshot`·`inspect`·`eval`은 정상) — 이 환경 캡처 파이프라인 한계. `app.css` Google Fonts `@import`를 serve.js에서 스트립해도 안 풀림(폰트는 부분요인). 우회=`inspect`/`eval`로 값 실측(`getComputedStyle(el,'::before')`·`scrollHeight>clientHeight` clip 판정) + `show_widget` 비교 위젯으로 사용자 시각 선택. 홈 명언 하이브리드 PR #678, 자매 T-112·T-114, 1회차 신규) |
