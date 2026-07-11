@@ -21,7 +21,7 @@
     "@playwright/test": "^1.61.1",
     "@vitejs/plugin-vue": "^6",
     "@vue/test-utils": "^2",
-    "cross-env": "^7",
+    "cross-env": "^10",
     "jsdom": "^26",
     "sharp": "^0.35.2",
     "typescript": "^5",
