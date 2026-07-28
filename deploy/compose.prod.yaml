@@ -1,0 +1,68 @@
+# BookTimer 운영 스택 (EC2 t3.small 1대).
+# 루트의 compose.yaml 은 로컬 개발용(MySQL만)이고, 이 파일이 운영 전체 스택이다.
+#
+# 메모리 예산 (2GB):
+#   mysql 450MB + app 550MB + caddy 30MB + OS 200MB = 1.23GB (평시)
+#   배포 순간 app이 2개가 되어 1.78GB — 초과분은 스왑 2GB가 흡수한다(bootstrap-ec2.sh가 만든다).
+#
+# 배포는 deploy-on-ec2.sh 가 app-blue ↔ app-green 을 번갈아 띄우는 방식이라,
+# `docker compose up -d`(서비스 미지정)로 전체를 올리지 않는다 — 그러면 app이 둘 다 떠서
+# 메모리를 먹는다. 최초 기동은 bootstrap-ec2.sh 가 caddy·mysql·app-blue 만 명시해 올린다.
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # 발급받은 인증서 — 반드시 영속. 날리면 재발급되는데 Let's Encrypt 실패 한도에 걸릴 수 있다.
+      - caddy-data:/data
+      - caddy-config:/config
+    mem_limit: 128m
+
+  # app-blue / app-green — 동일 정의를 YAML anchor로 공유한다. 항상 둘 중 하나만 실행된다.
+  app-blue: &app
+    image: ${BOOKTIMER_IMAGE}
+    restart: unless-stopped
+    env_file:
+      - .env                 # render-env.sh 가 SSM Parameter Store에서 생성
+    environment:
+      # 컨테이너 메모리 제한(700m) 안에서 힙을 절반으로. 미지정 시 JVM 기본이 컨테이너 한도의
+      # 25%라 여유가 남는데, 배포 순간 2개가 뜨는 구조라 상한을 명시해 OOM 여지를 없앤다.
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=50"
+    mem_limit: 700m
+    depends_on:
+      mysql:
+        condition: service_healthy
+  app-green:
+    <<: *app
+
+  mysql:
+    # RDS 실측이 8.4.8 이므로 메이저·마이너를 맞춘다. mysql:latest·8.0 금지 —
+    # 덤프 호환과 인증 플러그인이 갈린다.
+    image: mysql:8.4
+    restart: unless-stopped
+    command:
+      # RDS는 UTC로 돌고 있었다. 여기서 어긋나면 기존 측정 기록·자정 경계 로직이 전부 밀린다.
+      - --default-time-zone=+00:00
+      - --innodb-buffer-pool-size=256M
+    environment:
+      MYSQL_DATABASE: booktimer
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12          # 최초 기동(스키마 초기화)에 시간이 걸린다
+      start_period: 30s
+    mem_limit: 600m
+
+volumes:
+  mysql-data:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# SSM Parameter Store → .env 생성 (compose가 env_file로 읽는다).
+#
+# 시크릿을 EC2 디스크에 영구 보관하지 않기 위해 배포 때마다 다시 만든다.
+# 파라미터 경로(/booktimer/*)는 ECS 시절 그대로 재사용하므로 시크릿 이관이 필요 없다.
+#
+# ⚠️ SSM 파라미터 이름과 앱 환경변수 이름이 일치하지 않는 것들이 있다(ECS task-definition이
+#    secrets[].name 으로 바꿔 주입했었다). 그 매핑이 아래 SECRET_MAP 이며, task-definition.json 이
+#    삭제된 뒤에는 **이 파일이 매핑의 유일한 출처**다.
+set -euo pipefail
+
+REGION="${AWS_REGION:-ap-northeast-2}"
+OUT="${1:-.env}"
+TMP="$(mktemp)"
+trap 'rm -f "$TMP"' EXIT
+
+ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text --region "$REGION")"
+
+# SSM 파라미터 이름 → 앱 환경변수 이름
+declare -A SECRET_MAP=(
+  [SPRING_DATASOURCE_URL]=SPRING_DATASOURCE_URL
+  [SPRING_DATASOURCE_USERNAME]=SPRING_DATASOURCE_USERNAME
+  [SPRING_DATASOURCE_PASSWORD]=SPRING_DATASOURCE_PASSWORD
+  [GOOGLE_CLIENT_ID]=GOOGLE_CLIENT_ID
+  [GOOGLE_CLIENT_SECRET]=GOOGLE_CLIENT_SECRET
+  [ALADIN_TTB_KEY]=BOOKTIMER_ALADIN_TTB_KEY
+  [COUPANG_SEARCH_URL_TEMPLATE]=BOOKTIMER_COUPANG_SEARCH_URL_TEMPLATE
+  [YES24_TRACKING_CODE]=BOOKTIMER_YES24_TRACKING_CODE
+  [YES24_SEARCH_URL_TEMPLATE]=BOOKTIMER_YES24_SEARCH_URL_TEMPLATE
+  [KYOBO_TRACKING_CODE]=BOOKTIMER_KYOBO_TRACKING_CODE
+  [KYOBO_SEARCH_URL_TEMPLATE]=BOOKTIMER_KYOBO_SEARCH_URL_TEMPLATE
+  [KYOBO_MOBILE_SEARCH_URL_TEMPLATE]=BOOKTIMER_KYOBO_MOBILE_SEARCH_URL_TEMPLATE
+  [ADMIN_LOGIN_IDS]=BOOKTIMER_ADMIN_LOGIN_IDS
+  [LLM_API_KEY]=BOOKTIMER_LLM_API_KEY
+  [SPRING_MAIL_USERNAME]=SPRING_MAIL_USERNAME
+  [SPRING_MAIL_PASSWORD]=SPRING_MAIL_PASSWORD
+  [MYSQL_ROOT_PASSWORD]=MYSQL_ROOT_PASSWORD
+)
+
+# ── 평문 설정 (구 task-definition의 environment 블록) ──
+cat > "$TMP" <<EOF
+SPRING_PROFILES_ACTIVE=prod
+BOOKTIMER_BASE_URL=https://booktimer.app
+SPRING_MAIL_HOST=email-smtp.${REGION}.amazonaws.com
+SPRING_MAIL_PORT=587
+BOOKTIMER_EMAIL_ENABLED=true
+BOOKTIMER_SES_SNS_TOPIC_ARN=arn:aws:sns:${REGION}:${ACCOUNT_ID}:booktimer-ses-bounce-complaint
+GA_MEASUREMENT_ID=G-JFVDPJ036E
+BOOKTIMER_COUPANG_PARTNER_ENABLED=false
+BOOKTIMER_IMAGE=${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/booktimer:latest
+EOF
+
+# ── 시크릿 ──
+missing=()
+while IFS=$'\t' read -r name value; do
+    key="${name##*/}"
+    env_name="${SECRET_MAP[$key]:-}"
+    [ -n "$env_name" ] || continue          # 매핑에 없는 파라미터는 앱이 안 쓰는 것
+    printf '%s=%s\n' "$env_name" "$value" >> "$TMP"
+    unset 'SECRET_MAP[$key]'                # 받은 것은 제거 → 남은 게 곧 누락분
+done < <(aws ssm get-parameters-by-path --path /booktimer --with-decryption \
+             --region "$REGION" --query 'Parameters[].[Name,Value]' --output text)
+
+# 누락은 조용히 넘기지 않는다 — 빈 값으로 앱이 뜨면 "왜 검색이 안 되지" 같은 무성 장애가 된다.
+for leftover in "${!SECRET_MAP[@]}"; do missing+=("/booktimer/$leftover"); done
+if [ "${#missing[@]}" -gt 0 ]; then
+    printf '[render-env] SSM 파라미터 누락: %s\n' "${missing[*]}" >&2
+    exit 1
+fi
+
+install -m 600 "$TMP" "$OUT"     # 시크릿 파일은 소유자만 읽게
+echo "[render-env] $OUT 생성 완료 ($(grep -c '=' "$OUT") 개 변수)"
