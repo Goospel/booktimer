@@ -1,0 +1,53 @@
+# BookTimer 리버스프록시 (EC2 단일 인스턴스).
+#
+# ALB가 하던 두 가지를 그대로 이어받는다:
+#   ① 443 TLS 종료 — ACM 대신 Let's Encrypt 자동 발급·갱신(설정 0줄).
+#   ② 호스트 정규화 301 — apex(booktimer.app) 외 3개 호스트를 apex로 보낸다.
+#
+# ⚠️ www.booktimer.app 을 빠뜨리지 말 것 (T-113): 구글이 www를 독립 색인해 검색 유입자가
+#    여기로 들어오는데, apex로 정규화되지 않으면 OAuth redirect_uri 불일치 + 세션 쿠키 미전송으로
+#    "검색으로 들어온 사람만 로그인 불가"가 된다. ALB 규칙에서 실제로 한 번 터진 사고다.
+#
+# ⚠️ .click 도메인은 2027-06 만료 예정(자동갱신 OFF)이지만 그때까진 301을 유지한다.
+#    컷오버 시 Route53 A레코드를 **4개 호스트 전부** EIP로 옮겨야 인증서가 발급된다.
+
+booktimer.app {
+	# blue-green: 두 upstream을 동시에 등록해두고 헬스체크로 살아있는 쪽에만 보낸다.
+	# 배포 스크립트가 Caddy 설정을 건드리지 않아도 되는 이유 — 새 컨테이너가 healthy 해지면
+	# 자동으로 편입되고, 옛 컨테이너가 사라지면 자동으로 빠진다.
+	reverse_proxy app-blue:8080 app-green:8080 {
+		# first = 앞쪽 healthy upstream 우선. 라운드로빈이면 전환 중 두 버전에 요청이 섞인다.
+		lb_policy first
+
+		# 전체 /actuator/health가 아니라 readiness 그룹을 본다. 전체 health는 mail indicator를
+		# 포함해 SES 장애만으로 DOWN이 되고, 그러면 멀쩡한 앱이 라우팅에서 빠져 서비스가
+		# 통째로 503이 된다(T-009 계열).
+		health_uri /actuator/health/readiness
+		health_interval 3s
+		health_timeout 2s
+		fail_duration 10s
+
+		# 옛 컨테이너를 내리는 순간, 헬스체크가 아직 그 죽음을 모르는 구간이 있다.
+		# 그때 들어온 요청을 살아있는 다음 upstream으로 즉시 재시도한다(연결 실패 한정).
+		# ⚠️ 실측(로컬 150요청 프로브): 이걸 켜도 stop 순간의 in-flight 요청 1건은 끊긴다 —
+		#    이미 서버에 도달한 요청이라 LB가 재시도할 수 없는 종류다. 배포당 최대 1건 수준이며,
+		#    0건으로 만들려면 Caddy admin API로 "먼저 빼고 나중에 죽이는" 순서가 필요하다(미채택 — 복잡도).
+		lb_try_duration 5s
+		lb_try_interval 100ms
+
+		# 앱이 X-Forwarded-Proto=https 를 봐야 한다:
+		#   · server.servlet.session.cookie.secure=true — 아니면 로그인 쿠키가 안 실린다
+		#   · ForwardedHeaderFilter 가 OAuth redirect_uri 를 동적 생성한다
+		# Caddy는 X-Forwarded-{For,Proto,Host} 를 기본 주입하므로 별도 설정이 필요 없다.
+	}
+
+	encode gzip zstd
+	log {
+		output stdout
+		format console
+	}
+}
+
+www.booktimer.app, booktimer.click, www.booktimer.click {
+	redir https://booktimer.app{uri} permanent
+}

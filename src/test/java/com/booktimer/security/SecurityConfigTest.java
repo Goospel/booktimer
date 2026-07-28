@@ -103,6 +103,19 @@ class SecurityConfigTest {
     }
 
     @Test
+    @DisplayName("헬스 프로브(/actuator/health/readiness·liveness)도 인증 없이 공개된다 — 리버스프록시 헬스체크 경로")
+    void actuatorHealthProbes_arePublic() throws Exception {
+        // EC2 단일 인스턴스 + Caddy blue-green 전환에서 upstream 헬스체크로 쓰는 경로다.
+        // 전체 /actuator/health는 mail indicator를 포함해, SES 장애만으로 DOWN이 되고
+        // 리버스프록시가 앱을 통째로 라우팅에서 제외해 서비스 전체 503이 된다(T-009 계열).
+        // 그래서 앱 기동 완료만 보는 readiness 그룹을 쓰는데, 그러려면 공개돼 있어야 한다.
+        mvc().perform(get("/actuator/health/readiness"))
+                .andExpect(status().isOk());
+        mvc().perform(get("/actuator/health/liveness"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     @DisplayName("PasswordEncoder 빈은 BCrypt 해시를 만들고 매칭한다")
     void passwordEncoder_isBcrypt_andMatches() {
         String hash = passwordEncoder.encode("rawpw1234");

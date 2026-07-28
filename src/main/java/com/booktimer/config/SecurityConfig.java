@@ -62,7 +62,11 @@ public class SecurityConfig {
                         // /pwa-install-<md5>.js · /manifest-<md5>.json 으로 렌더된다. 정확 매칭만 두면 해시 URL이 누락돼
                         // 미인증 페이지 로드 시 302→SavedRequest로 저장되고, 로그인 성공 후 그 자산으로 리다이렉트되는
                         // 버그가 난다(캐시 빈 신규 세션에서만 재현 — E2E auth/garden 스펙이 회귀 가드). 와일드카드로 해시 변형까지 허용.
-                        .requestMatchers("/", "/dashboard", "/signup", "/login", "/privacy", "/verify-email", "/password/**", "/unsubscribe", "/error", "/actuator/health", "/css/**", "/js/**", "/favicon.ico", "/manifest*.json", "/icons/**", "/sw.js", "/pwa-install*.js").permitAll()
+                        // /actuator/health/**: 전체 health에 더해 프로브 하위경로(readiness·liveness)도 공개한다.
+                        // 리버스프록시(Caddy) blue-green 전환이 upstream 헬스체크로 readiness를 쓰는데, 여기가 막혀
+                        // 302가 나가면 프록시가 앱을 영영 unhealthy로 보고 서비스 전체가 503이 된다.
+                        // 노출 표면은 {"status":"UP"} 뿐(show-details 기본 never)이라 /actuator/health와 동급이다.
+                        .requestMatchers("/", "/dashboard", "/signup", "/login", "/privacy", "/verify-email", "/password/**", "/unsubscribe", "/error", "/actuator/health", "/actuator/health/**", "/css/**", "/js/**", "/favicon.ico", "/manifest*.json", "/icons/**", "/sw.js", "/pwa-install*.js").permitAll()
                         // ads.txt(AdSense 소유권·수익 보호) + robots.txt(크롤 지시): 크롤러가 비인증으로 읽어야 하는
                         // 공개 정적 파일. default-deny라 명시 안 하면 로그인으로 302 튕겨 크롤러에게 모호한 신호가 된다.
                         .requestMatchers("/ads.txt", "/robots.txt").permitAll()

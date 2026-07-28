@@ -130,8 +130,34 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 콘솔 수동 설정(로컬에 AWS CLI 없음, GitHub Actions OIDC + 콘솔/CloudShell 사용).
 
 - 예상 baseline 월 $30~50(ALB + Fargate 0.25vCPU + RDS micro + Route53, NAT 없음) 상단에 임계치.
+- ⚠️ **실측은 이 추정과 크게 달랐다 (2026-07-28, Cost Explorer)** — 실사용 원가가 **월 ~$100**인데
+  6월까지 **크레딧이 100% 덮어 청구가 $0**이라 예산 알람조차 울리지 않았다(알람은 청구액 기준).
+  7월 크레딧 고갈로 실체가 드러나 $64 청구. 내역: Fargate 2태스크 $36 · RDS $21 ·
+  퍼블릭IPv4 $18(**유휴 EIP $3.6 포함**) · ALB $16 · ECR $2.8(이미지 459개, lifecycle 없었음).
+  **교훈**: 크레딧이 있는 동안 Budgets(청구액 기준)는 원가를 못 보여준다 — 크레딧 계정에선
+  Cost Explorer의 `RECORD_TYPE=Usage`를 따로 봐야 한다.
+  → **§ECS Fargate → EC2 단일 인스턴스 이전**으로 월 ~$30 구조 전환 중. 이전 완료 후 Budgets 임계치 재설정.
 - Budgets는 비용 데이터 하루 ~3회 갱신 → 알림은 실시간 아님(몇 시간~하루).
 - 임계치 기준은 **% (예산 대비)** — 콘솔 한글 라벨 "경우를 기준으로 설정됨"이 곧 % 기준(헷갈림 주의).
+
+### ECS Fargate → EC2 단일 인스턴스 이전 (진행 중 🔜 2026-07-28~)
+
+**왜**: 위 실측대로 원가가 월 ~$100. 수입 0인 개인 서비스가 HA(다중 AZ 이중화)에 월 $50을 쓰는
+구조라, **HA를 내려놓고 배포 무중단만 유지**하는 단일 인스턴스로 합친다 → 월 ~$30(연 ~$840 절감).
+
+**목표 구성**: EC2 t3.small 1대에 Caddy(443 TLS·호스트 301) + app-blue/app-green(무중단 전환)
++ MySQL 8.4 + 일일 S3 백업. ALB·Fargate·RDS 제거, 퍼블릭 IPv4 4개 → 1개(유휴 EIP 회수).
+
+- [x] **지혈** ✅ 2026-07-28 — autoscaling min 2→1, ECR lifecycle(최근 10개만) → 월 −$20.5
+- [x] **코드/설정** ✅ — `compose.prod.yaml` · `Caddyfile` · blue-green 배포 스크립트(테스트 15건, 돌연변이 2종 사살)
+      · `render-env.sh`(SSM→.env 매핑 단일출처) · bootstrap/backup · SecurityConfig 헬스 프로브 공개(TDD RED→GREEN)
+- [ ] 🔜 **인프라** — EC2 생성 → RDS를 바라본 채 앱 검증 → Route53 컷오버(**4개 호스트 전부**)
+- [ ] **DB 이관** — mysqldump(+`flyway_schema_history`) → EC2 MySQL, SSM URL 교체 (다운타임 5~10분)
+- [ ] **정리** — ALB·ECS·RDS 삭제, `deploy.yml`을 SSM Send-Command로 교체(2차 PR)
+
+> 실행 런북: [claude-docs/deploy-ec2.md](claude-docs/deploy-ec2.md) · 구 아키텍처: [deploy-aws.md](claude-docs/deploy-aws.md)(폐기 예정)
+> ⚠️ 수용한 한계: 단일 장애점(인스턴스 다운 = 서비스 다운) · 배포 시 in-flight 요청 1건 끊김 가능
+> (로컬 150요청 프로브 실측) · 백업 입도 24시간(RDS PITR 상실).
 
 ### 세션 외부화 — Spring Session JDBC (완료 ✅ 2026-06-02)
 
@@ -1167,7 +1193,10 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 
 **홍보글 쓰기 전 체크리스트** (효과 큰 순):
 - [x] **ECS 오토스케일링 켜기** ✅ — desired 1 → **min 2 / max 4, CPU 70% target-tracking 실제 적용·검증 완료**(2026-06-12, #322 워크플로 + #324). 단일 장애점 제거 + 자동 확장. (적용 함정: service-linked role 자동생성 권한 부족 → CloudShell `aws iam create-service-linked-role`로 해결, T-045)
-- [x] **최소 desired=2 상시** ✅ — `min=2`로 상시 2태스크 보장(한 대 죽어도 유지). ⚠️ 컴퓨트 요금 약 2배(부하 시 최대 4배) — Budgets($50) 모니터.
+- [x] **최소 desired=2 상시** ✅ → ⏸ **2026-07-28 min=1로 되돌림** — 크레딧 고갈로 원가가 드러나며
+  Fargate 상시 2태스크가 **단일 최대 비용 항목(월 $36)**임이 확인됐다(§AWS 요금 가드레일).
+  HA는 §ECS→EC2 이전에서 어차피 내려놓기로 한 항목이라, 이전 전 지혈로 min 2→1 적용(월 −$18).
+  무중단 배포 설정(min100/max200)은 그대로라 **배포 무중단은 유지**된다.
 - [ ] **세션 DB→Redis(ElastiCache) 외부화** 검토 — DB 부하 크게 감소(트래픽 적으면 인메모리도). (보류 — 아래 ④ 부하 테스트가 세션 DB 병목을 가리키면 착수)
 - [~] **부하 테스트로 실측** — `k6` 스크립트 `load-test/booktimer-load.js` **준비 완료(#322), 실행만 남음(선택·미완)**. 실행: `k6 run -e BASE_URL=https://booktimer.app -e LOGIN_USER=<이메일> -e LOGIN_PASS=<비번> load-test/booktimer-load.js`. **latency 꺾이는 RPS**를 숫자로 확보(추정→사실) + 오토스케일 실작동(2→3→4) 검증. ⚠️ 운영 대상이라 저부하부터.
 - [ ] (선택) RDS `db.t3.micro`→`db.t3.small` 한 단계, CloudWatch 알람(CPU·DB연결수·5xx) 사전 경보. (보류 — ④ 부하 테스트가 DB 커넥션 병목을 보이면 근거 갖고 착수)
