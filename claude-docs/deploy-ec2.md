@@ -73,8 +73,24 @@
     docker compose -f compose.prod.yaml exec -T mysql mysql -uroot -p"$PW" < dump.sql
     ```
     ⚠️ `flyway_schema_history`가 포함됐는지 확인 — 빠지면 새 DB에서 마이그레이션이 재실행된다
-13. SSM `/booktimer/SPRING_DATASOURCE_URL`을 `jdbc:mysql://mysql:3306/booktimer?serverTimezone=UTC`로 `--overwrite`
-14. `./deploy-on-ec2.sh` 재실행 → 데이터 육안 검증(내 책장·측정 기록·로그인 세션)
+13. **앱 DB 사용자를 직접 만든다 (필수 — 실제로 여기서 서비스가 내려갔다)**
+    ```bash
+    docker compose -f compose.prod.yaml exec -T mysql mysql -uroot -p"$ROOT_PASS" -e \
+      "CREATE USER IF NOT EXISTS 'admin'@'%' IDENTIFIED BY '$DB_PASS';
+       GRANT ALL PRIVILEGES ON booktimer.* TO 'admin'@'%'; FLUSH PRIVILEGES;"
+    ```
+    **`mysqldump`는 스키마와 데이터만 옮기고 계정(`mysql.user`)은 옮기지 않는다.** RDS의 앱 계정(`admin`)이
+    새 MySQL엔 없으므로, 이 단계를 빼면 앱이 DB 접속에 실패해 기동하지 못한다.
+14. SSM `/booktimer/SPRING_DATASOURCE_URL`을
+    `jdbc:mysql://mysql:3306/booktimer?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC`로 `--overwrite`
+    > ⚠️ `allowPublicKeyRetrieval=true&useSSL=false`를 빠뜨리지 말 것 — MySQL 8.4는 `caching_sha2_password`가
+    > 기본이라 이게 없으면 드라이버가 공개키를 못 받아 접속이 거부될 수 있다(RDS URL에도 원래 붙어 있었다).
+15. `./deploy-on-ec2.sh` 재실행 → 데이터 육안 검증(내 책장·측정 기록·로그인)
+
+> ⚠️ **재배포 전에 기존 앱 컨테이너를 `rm` 하지 말 것.** blue-green의 안전망("헬스 실패 시 옛 컨테이너 유지")은
+> 옛 컨테이너가 남아 있어야 작동한다. 미리 지우면 새 컨테이너가 실패했을 때 **되돌아갈 대상이 없어 서비스가
+> 완전히 내려간다** — 실제 이관에서 13번을 빠뜨린 채 컨테이너를 먼저 지워 수 분간 503이 났다.
+> 환경변수만 바뀐 경우 compose가 알아서 재생성하므로 `rm`은 불필요하다.
 
 ### D. 정리 (1~2주 안정화 후)
 
