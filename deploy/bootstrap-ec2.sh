@@ -44,6 +44,12 @@ systemctl restart docker
 install -d -o ec2-user -g ec2-user /opt/booktimer
 
 # ── 6) 백업 cron (03:00 KST = 18:00 UTC) ──
+# ⚠️ Amazon Linux 2023은 cron을 기본 포함하지 않는다(systemd timer를 권장). cronie가 없으면
+#    /etc/cron.d 디렉터리 자체가 없어서 아래 리다이렉트가 "No such file or directory"로 죽는다.
+#    (실제로 첫 bootstrap 실행이 여기서 실패했다.)
+dnf install -y cronie
+systemctl enable --now crond
+
 cat > /etc/cron.d/booktimer-backup <<'CRON'
 0 18 * * * ec2-user cd /opt/booktimer && ./backup-mysql.sh >> /var/log/booktimer-backup.log 2>&1
 CRON

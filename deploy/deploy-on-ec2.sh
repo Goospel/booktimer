@@ -43,9 +43,15 @@ else
 fi
 echo "[deploy] $OLD → $NEW 로 전환합니다"
 
-# ── 2) 시크릿 갱신 + 새 이미지 가져오기 ──
+# ── 2) 시크릿 갱신 + ECR 로그인 + 새 이미지 가져오기 ──
 if [ "$DRYRUN" != 1 ]; then
     ./render-env.sh          # SSM Parameter Store → .env (컨테이너가 env_file로 읽음)
+
+    # 인스턴스 역할에 ecr:GetAuthorizationToken 이 있어도 docker 자체는 로그인이 필요하다.
+    # 토큰은 12시간 유효하므로 배포마다 갱신한다.
+    registry="$(grep -m1 '^BOOKTIMER_IMAGE=' .env | cut -d= -f2- | cut -d/ -f1)"
+    aws ecr get-login-password --region "${AWS_REGION:-ap-northeast-2}" \
+        | docker login --username AWS --password-stdin "$registry"
 fi
 dc pull "$NEW"
 

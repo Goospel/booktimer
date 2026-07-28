@@ -42,7 +42,10 @@
 1. **EC2 생성** — `t3.small` / Amazon Linux 2023 / gp3 30GB
 2. **기존 유휴 EIP 연결** — `eipalloc-0458af41a95c1b108`. 새로 할당하지 말 것(이미 과금 중인 것을 회수)
 3. **보안그룹** — 인바운드 80·443 = `0.0.0.0/0`. **SSH(22)는 열지 않는다** (접속은 SSM Session Manager)
-4. **인스턴스 역할** — `AmazonSSMManagedInstanceCore` + ECR pull + `ssm:GetParametersByPath /booktimer/*` + 백업 버킷 S3 쓰기
+4. **인스턴스 역할** — `AmazonSSMManagedInstanceCore` + ECR pull + SSM 파라미터 읽기 + 백업 버킷 S3 쓰기
+   > ⚠️ `ssm:GetParametersByPath`는 **경로 리소스 자체**에도 권한이 필요하다. Resource에
+   > `parameter/booktimer` 와 `parameter/booktimer/*` 를 **둘 다** 넣어야 한다 —
+   > `/*` 만 주면 `AccessDenied`로 `render-env.sh`가 전량 실패한다(실제로 겪음).
 5. **SSM 신규 파라미터** — `/booktimer/MYSQL_ROOT_PASSWORD` (SecureString). 없으면 `render-env.sh`가 누락으로 실패한다
 6. **bootstrap 실행** — SSM Session Manager 접속 후 `sudo bash bootstrap-ec2.sh`
 7. **RDS를 그대로 바라보게 하고 먼저 기동** — DB 이관 전에 앱만 검증한다
@@ -70,8 +73,24 @@
     docker compose -f compose.prod.yaml exec -T mysql mysql -uroot -p"$PW" < dump.sql
     ```
     ⚠️ `flyway_schema_history`가 포함됐는지 확인 — 빠지면 새 DB에서 마이그레이션이 재실행된다
-13. SSM `/booktimer/SPRING_DATASOURCE_URL`을 `jdbc:mysql://mysql:3306/booktimer?serverTimezone=UTC`로 `--overwrite`
-14. `./deploy-on-ec2.sh` 재실행 → 데이터 육안 검증(내 책장·측정 기록·로그인 세션)
+13. **앱 DB 사용자를 직접 만든다 (필수 — 실제로 여기서 서비스가 내려갔다)**
+    ```bash
+    docker compose -f compose.prod.yaml exec -T mysql mysql -uroot -p"$ROOT_PASS" -e \
+      "CREATE USER IF NOT EXISTS 'admin'@'%' IDENTIFIED BY '$DB_PASS';
+       GRANT ALL PRIVILEGES ON booktimer.* TO 'admin'@'%'; FLUSH PRIVILEGES;"
+    ```
+    **`mysqldump`는 스키마와 데이터만 옮기고 계정(`mysql.user`)은 옮기지 않는다.** RDS의 앱 계정(`admin`)이
+    새 MySQL엔 없으므로, 이 단계를 빼면 앱이 DB 접속에 실패해 기동하지 못한다.
+14. SSM `/booktimer/SPRING_DATASOURCE_URL`을
+    `jdbc:mysql://mysql:3306/booktimer?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC`로 `--overwrite`
+    > ⚠️ `allowPublicKeyRetrieval=true&useSSL=false`를 빠뜨리지 말 것 — MySQL 8.4는 `caching_sha2_password`가
+    > 기본이라 이게 없으면 드라이버가 공개키를 못 받아 접속이 거부될 수 있다(RDS URL에도 원래 붙어 있었다).
+15. `./deploy-on-ec2.sh` 재실행 → 데이터 육안 검증(내 책장·측정 기록·로그인)
+
+> ⚠️ **재배포 전에 기존 앱 컨테이너를 `rm` 하지 말 것.** blue-green의 안전망("헬스 실패 시 옛 컨테이너 유지")은
+> 옛 컨테이너가 남아 있어야 작동한다. 미리 지우면 새 컨테이너가 실패했을 때 **되돌아갈 대상이 없어 서비스가
+> 완전히 내려간다** — 실제 이관에서 13번을 빠뜨린 채 컨테이너를 먼저 지워 수 분간 503이 났다.
+> 환경변수만 바뀐 경우 compose가 알아서 재생성하므로 `rm`은 불필요하다.
 
 ### D. 정리 (1~2주 안정화 후)
 
@@ -85,6 +104,25 @@ C 이후면 RDS가 살아있으므로 SSM URL을 RDS로 되돌리고 ECS `desire
 EC2에 쌓인 데이터는 별도 병합이 필요하다. **그래서 C는 짧게, 트래픽이 가장 적은 시간에.**
 
 ---
+
+## 실제 구축된 리소스 (2026-07-28 컷오버 완료)
+
+| 리소스 | 식별자 |
+|---|---|
+| EC2 | `i-07a649585c25707a3` (t3.small, `ap-northeast-2b` — RDS와 동일 AZ) |
+| EIP | `15.165.95.129` / `eipalloc-0458af41a95c1b108` (기존 유휴 EIP 회수) |
+| 보안그룹 | `sg-026943267829a42aa` (80·443 인바운드, SSH 미개방) |
+| IAM | 역할 `booktimerEc2Role` / 프로파일 `booktimerEc2Profile` |
+| S3 | `booktimer-ops-459338751419` (`deploy/` 배포자산 · `mysql/` 백업 7일 보존) |
+| Route53 | `.app` `Z0795663J1W7C48SU27B` · `.click` `Z0571153WI2EVDRD8ZTY` |
+
+**롤백 정보**(ALB가 살아있는 동안 유효): A레코드를 alias로 되돌린다 —
+DNSName `dualstack.booktimer-alb-1798932903.ap-northeast-2.elb.amazonaws.com`,
+HostedZoneId `ZWKZPGTI48KDX`.
+
+> ⚠️ **AWS CLI를 이 PC에서 쓸 때는 T-136**(cp949 인코딩)을 먼저 볼 것 — Git Bash + `PYTHONUTF8=1
+> LC_ALL=C.UTF-8`, 입력 JSON은 ASCII, 경로는 `file://C:/...`. 안 지키면 명령은 성공하는데
+> 결과를 못 읽거나 입력이 거부된다.
 
 ## 알려진 한계
 
