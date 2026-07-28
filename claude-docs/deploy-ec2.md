@@ -96,8 +96,10 @@
 
 15. ALB·타깃그룹·리스너 / ECS 서비스·클러스터 / RDS(**최종 스냅샷 남기고**) 삭제
 16. autoscaling scalable target 등록 해제
-17. 2차 PR: `deploy.yml`을 SSM Send-Command로 교체 + `task-definition.json`·
-    `autoscaling-config.yml`·`zero-downtime-config.yml` 삭제
+17. ~~`deploy.yml`을 SSM Send-Command로 교체~~ ✅ **완료(2026-07-28)** — 컷오버 직후 처리했다.
+    미루면 그 사이 main push가 **ECS에 배포되고 "성공"으로 끝나는데 실제 서비스(EC2)엔 반영되지 않는
+    무성 실패**가 된다(ECS desired=0이라 안정화가 즉시 성공해버린다). 그래서 리소스 삭제(15·16)보다 먼저 한다.
+18. `task-definition.json`·`autoscaling-config.yml`·`zero-downtime-config.yml` 삭제 — 15·16과 함께
 
 **롤백**: C 이전이면 Route53 A레코드를 ALB로 되돌리면 끝(TTL 60초).
 C 이후면 RDS가 살아있으므로 SSM URL을 RDS로 되돌리고 ECS `desired-count 1` — 단 이관 후

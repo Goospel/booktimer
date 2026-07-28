@@ -1,6 +1,7 @@
-name: Deploy to ECS Fargate
+name: Deploy to EC2
 
-# main에 push되면: 테스트 게이트 → ECR 이미지 push → ECS 롤링 배포.
+# main에 push되면: 테스트 게이트 → ECR 이미지 push → EC2 blue-green 배포(SSM) → 라이브 헬스체크.
+# (2026-07-28 ECS Fargate에서 이전 — 배경·런북은 claude-docs/deploy-ec2.md)
 on:
   push:
     branches: [main]
@@ -12,9 +13,6 @@ on:
       - 'claude-docs/**'  # 문서 디렉터리(비-md 자료 포함)
       - '.claude/**'      # 로컬 훅·설정(배포 산출물과 무관)
   workflow_dispatch: {}   # 수동 트리거도 허용 (paths-ignore 영향 없음)
-
-env:
-  CONTAINER_NAME: booktimer
 
 jobs:
   # 1) 테스트 게이트 — 통과해야 배포 진행
@@ -64,29 +62,57 @@ jobs:
           docker push "$REGISTRY/$REPOSITORY:latest"
           echo "uri=$REGISTRY/$REPOSITORY:$TAG" >> "$GITHUB_OUTPUT"
 
-      # 리포의 태스크 정의(IaC)를 소스로 사용 — placeholder만 실값으로 치환.
-      # describe-task-definition은 register가 거부하는 읽기전용 필드가 섞여 불안정하므로 쓰지 않는다.
-      - name: Resolve task definition placeholders
+      # 배포 자산(compose·Caddyfile·스크립트)을 S3로 동기화 — EC2가 여기서 받아간다.
+      # tests/는 EC2에서 쓰지 않고, task-definition.json은 구 ECS 잔재라 제외.
+      - name: Sync deploy assets to S3
         run: |
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          sed -e "s/<ACCOUNT_ID>/$ACCOUNT_ID/g" \
-              -e "s/<REGION>/${{ secrets.AWS_REGION }}/g" \
-              deploy/task-definition.json > task-definition.json
+          aws s3 sync deploy/ "s3://booktimer-ops-$ACCOUNT_ID/deploy/" \
+            --exclude 'tests/*' --exclude 'task-definition.json' --only-show-errors
 
-      # 새 이미지만 갈아끼운 태스크 정의 생성
-      - name: Render new image into task definition
-        id: render
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: task-definition.json
-          container-name: ${{ env.CONTAINER_NAME }}
-          image: ${{ steps.image.outputs.uri }}
+      # EC2에서 blue-green 전환 실행 (SSH 키 없이 SSM Send-Command로).
+      # deploy-on-ec2.sh가 새 컨테이너를 띄우고 헬스 통과 후에야 옛 것을 내린다 —
+      # 실패하면 옛 컨테이너가 계속 서비스하고 이 스텝이 논제로로 끝난다.
+      - name: Deploy to EC2 via SSM
+        env:
+          INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
+          REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          CMD="cd /opt/booktimer && aws s3 sync s3://booktimer-ops-$ACCOUNT_ID/deploy/ . --only-show-errors && chmod +x *.sh && export AWS_REGION=$REGION && ./deploy-on-ec2.sh"
+          printf '{"commands":["%s"]}' "$CMD" > /tmp/ssm-params.json
 
-      # 새 리비전 등록 + 서비스 업데이트 + 안정화 대기(롤링)
-      - name: Deploy to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-        with:
-          task-definition: ${{ steps.render.outputs.task-definition }}
-          service: ${{ secrets.ECS_SERVICE }}
-          cluster: ${{ secrets.ECS_CLUSTER }}
-          wait-for-service-stability: true
+          ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --comment "deploy ${GITHUB_SHA::7}" \
+            --timeout-seconds 1200 \
+            --parameters file:///tmp/ssm-params.json \
+            --query Command.CommandId --output text)
+          echo "CommandId=$ID"
+
+          # wait는 실패 상태에서도 논제로로 끝나므로 삼키고, 아래에서 상태를 명시 검증한다
+          # (그래야 실패 원인 로그를 출력할 수 있다).
+          aws ssm wait command-executed --command-id "$ID" --instance-id "$INSTANCE_ID" || true
+
+          aws ssm get-command-invocation --command-id "$ID" --instance-id "$INSTANCE_ID" \
+            --query 'StandardOutputContent' --output text
+          STATUS=$(aws ssm get-command-invocation --command-id "$ID" --instance-id "$INSTANCE_ID" \
+            --query Status --output text)
+          if [ "$STATUS" != "Success" ]; then
+            echo "::error::EC2 배포 실패 (status=$STATUS)"
+            aws ssm get-command-invocation --command-id "$ID" --instance-id "$INSTANCE_ID" \
+              --query 'StandardErrorContent' --output text | tail -50
+            exit 1
+          fi
+
+      # 배포가 "성공"인데 실제 서비스엔 반영 안 되는 무성 실패를 막는 최종 게이트.
+      - name: Verify live health
+        run: |
+          for i in $(seq 1 12); do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://booktimer.app/actuator/health || true)
+            if [ "$CODE" = "200" ]; then echo "live health OK"; exit 0; fi
+            echo "attempt $i: http=$CODE"; sleep 5
+          done
+          echo "::error::배포 후 라이브 헬스체크 실패"
+          exit 1

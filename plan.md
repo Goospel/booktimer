@@ -152,8 +152,15 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 - [x] **코드/설정** ✅ — `compose.prod.yaml` · `Caddyfile` · blue-green 배포 스크립트(테스트 15건, 돌연변이 2종 사살)
       · `render-env.sh`(SSM→.env 매핑 단일출처) · bootstrap/backup · SecurityConfig 헬스 프로브 공개(TDD RED→GREEN)
 - [ ] 🔜 **인프라** — EC2 생성 → RDS를 바라본 채 앱 검증 → Route53 컷오버(**4개 호스트 전부**)
-- [ ] **DB 이관** — mysqldump(+`flyway_schema_history`) → EC2 MySQL, SSM URL 교체 (다운타임 5~10분)
-- [ ] **정리** — ALB·ECS·RDS 삭제, `deploy.yml`을 SSM Send-Command로 교체(2차 PR)
+- [x] **인프라·컷오버** ✅ 2026-07-28 — EC2 생성 → RDS 바라본 채 검증 → Route53 4개 호스트 EIP 전환,
+      Let's Encrypt 자동 발급, 실트래픽 200/TLS1.3, OAuth redirect_uri apex(T-113 무회귀)
+- [x] **DB 이관** ✅ 2026-07-28 — mysqldump(77MB·30테이블·flyway history 포함) → EC2 MySQL 8.4,
+      행 수 정확 대조로 완전 일치 확인. ⚠️ 계정은 덤프에 안 딸려와 수 분 503(T-137)
+- [x] **배포 파이프라인 전환** ✅ 2026-07-28 — `deploy.yml`을 ECS → S3 sync + SSM Send-Command로 교체.
+      **리소스 삭제보다 먼저** 했다 — 안 하면 main push가 ECS에 배포돼 "성공"인데 실서비스엔 반영 안 되는
+      무성 실패가 된다(desired=0이라 안정화가 즉시 성공). 라이브 헬스체크 게이트도 추가.
+- [ ] 🔜 **정리(1~2주 안정화 후)** — ALB·타깃그룹·ECS·RDS(최종 스냅샷 후) 삭제, autoscaling 등록 해제,
+      `task-definition.json`·`autoscaling-config.yml`·`zero-downtime-config.yml` 제거 → 월 ~$30 확정
 
 > 실행 런북: [claude-docs/deploy-ec2.md](claude-docs/deploy-ec2.md) · 구 아키텍처: [deploy-aws.md](claude-docs/deploy-aws.md)(폐기 예정)
 > ⚠️ 수용한 한계: 단일 장애점(인스턴스 다운 = 서비스 다운) · 배포 시 in-flight 요청 1건 끊김 가능
