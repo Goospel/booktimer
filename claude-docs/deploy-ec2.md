@@ -42,7 +42,10 @@
 1. **EC2 생성** — `t3.small` / Amazon Linux 2023 / gp3 30GB
 2. **기존 유휴 EIP 연결** — `eipalloc-0458af41a95c1b108`. 새로 할당하지 말 것(이미 과금 중인 것을 회수)
 3. **보안그룹** — 인바운드 80·443 = `0.0.0.0/0`. **SSH(22)는 열지 않는다** (접속은 SSM Session Manager)
-4. **인스턴스 역할** — `AmazonSSMManagedInstanceCore` + ECR pull + `ssm:GetParametersByPath /booktimer/*` + 백업 버킷 S3 쓰기
+4. **인스턴스 역할** — `AmazonSSMManagedInstanceCore` + ECR pull + SSM 파라미터 읽기 + 백업 버킷 S3 쓰기
+   > ⚠️ `ssm:GetParametersByPath`는 **경로 리소스 자체**에도 권한이 필요하다. Resource에
+   > `parameter/booktimer` 와 `parameter/booktimer/*` 를 **둘 다** 넣어야 한다 —
+   > `/*` 만 주면 `AccessDenied`로 `render-env.sh`가 전량 실패한다(실제로 겪음).
 5. **SSM 신규 파라미터** — `/booktimer/MYSQL_ROOT_PASSWORD` (SecureString). 없으면 `render-env.sh`가 누락으로 실패한다
 6. **bootstrap 실행** — SSM Session Manager 접속 후 `sudo bash bootstrap-ec2.sh`
 7. **RDS를 그대로 바라보게 하고 먼저 기동** — DB 이관 전에 앱만 검증한다
@@ -85,6 +88,25 @@ C 이후면 RDS가 살아있으므로 SSM URL을 RDS로 되돌리고 ECS `desire
 EC2에 쌓인 데이터는 별도 병합이 필요하다. **그래서 C는 짧게, 트래픽이 가장 적은 시간에.**
 
 ---
+
+## 실제 구축된 리소스 (2026-07-28 컷오버 완료)
+
+| 리소스 | 식별자 |
+|---|---|
+| EC2 | `i-07a649585c25707a3` (t3.small, `ap-northeast-2b` — RDS와 동일 AZ) |
+| EIP | `15.165.95.129` / `eipalloc-0458af41a95c1b108` (기존 유휴 EIP 회수) |
+| 보안그룹 | `sg-026943267829a42aa` (80·443 인바운드, SSH 미개방) |
+| IAM | 역할 `booktimerEc2Role` / 프로파일 `booktimerEc2Profile` |
+| S3 | `booktimer-ops-459338751419` (`deploy/` 배포자산 · `mysql/` 백업 7일 보존) |
+| Route53 | `.app` `Z0795663J1W7C48SU27B` · `.click` `Z0571153WI2EVDRD8ZTY` |
+
+**롤백 정보**(ALB가 살아있는 동안 유효): A레코드를 alias로 되돌린다 —
+DNSName `dualstack.booktimer-alb-1798932903.ap-northeast-2.elb.amazonaws.com`,
+HostedZoneId `ZWKZPGTI48KDX`.
+
+> ⚠️ **AWS CLI를 이 PC에서 쓸 때는 T-136**(cp949 인코딩)을 먼저 볼 것 — Git Bash + `PYTHONUTF8=1
+> LC_ALL=C.UTF-8`, 입력 JSON은 ASCII, 경로는 `file://C:/...`. 안 지키면 명령은 성공하는데
+> 결과를 못 읽거나 입력이 거부된다.
 
 ## 알려진 한계
 
