@@ -151,7 +151,6 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 - [x] **지혈** ✅ 2026-07-28 — autoscaling min 2→1, ECR lifecycle(최근 10개만) → 월 −$20.5
 - [x] **코드/설정** ✅ — `compose.prod.yaml` · `Caddyfile` · blue-green 배포 스크립트(테스트 15건, 돌연변이 2종 사살)
       · `render-env.sh`(SSM→.env 매핑 단일출처) · bootstrap/backup · SecurityConfig 헬스 프로브 공개(TDD RED→GREEN)
-- [ ] 🔜 **인프라** — EC2 생성 → RDS를 바라본 채 앱 검증 → Route53 컷오버(**4개 호스트 전부**)
 - [x] **인프라·컷오버** ✅ 2026-07-28 — EC2 생성 → RDS 바라본 채 검증 → Route53 4개 호스트 EIP 전환,
       Let's Encrypt 자동 발급, 실트래픽 200/TLS1.3, OAuth redirect_uri apex(T-113 무회귀)
 - [x] **DB 이관** ✅ 2026-07-28 — mysqldump(77MB·30테이블·flyway history 포함) → EC2 MySQL 8.4,
@@ -159,6 +158,9 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 - [x] **배포 파이프라인 전환** ✅ 2026-07-28 — `deploy.yml`을 ECS → S3 sync + SSM Send-Command로 교체.
       **리소스 삭제보다 먼저** 했다 — 안 하면 main push가 ECS에 배포돼 "성공"인데 실서비스엔 반영 안 되는
       무성 실패가 된다(desired=0이라 안정화가 즉시 성공). 라이브 헬스체크 게이트도 추가.
+- [x] **일일 백업 복구** ✅ 2026-08-03 — 정리 착수 전 확인하니 백업이 **엿새간 0건**이었다(T-138). cron을 `ec2-user`로 돌려
+      로그(`/var/log`)·`.env`(root:600) 권한이 동시에 막혀 **스크립트가 실행조차 안 됐고**, `BACKUP_BUCKET`도 없었다.
+      `root` 실행 + 버킷 계정ID 유도로 해소. 실백업 1건(6.6MB·30테이블·gzip OK) S3 검증, 회귀 가드 8단언 신설.
 - [ ] 🔜 **정리(1~2주 안정화 후)** — ALB·타깃그룹·ECS·RDS(최종 스냅샷 후) 삭제, autoscaling 등록 해제,
       `task-definition.json`·`autoscaling-config.yml`·`zero-downtime-config.yml` 제거 → 월 ~$30 확정
 
