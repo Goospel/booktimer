@@ -50,8 +50,13 @@ install -d -o ec2-user -g ec2-user /opt/booktimer
 dnf install -y cronie
 systemctl enable --now crond
 
+# ⚠️ root로 돌린다. ec2-user 로 두면 두 가지가 동시에 깨진다(실제로 그래서 백업이 0건이었다):
+#   - /var/log/ 는 root 전용이라 로그 리다이렉트부터 실패 → 스크립트가 실행조차 안 되고
+#     실패 흔적도 안 남는다(무성 실패).
+#   - .env 는 render-env.sh 가 root:600 으로 만드므로 DB 비밀번호를 못 읽는다.
+# 배포 경로(SSM Send-Command)도 root로 도니 소유권이 이쪽에 맞춰져 있다.
 cat > /etc/cron.d/booktimer-backup <<'CRON'
-0 18 * * * ec2-user cd /opt/booktimer && ./backup-mysql.sh >> /var/log/booktimer-backup.log 2>&1
+0 18 * * * root cd /opt/booktimer && ./backup-mysql.sh >> /var/log/booktimer-backup.log 2>&1
 CRON
 chmod 644 /etc/cron.d/booktimer-backup
 

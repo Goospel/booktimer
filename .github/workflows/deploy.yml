@@ -63,12 +63,12 @@ jobs:
           echo "uri=$REGISTRY/$REPOSITORY:$TAG" >> "$GITHUB_OUTPUT"
 
       # 배포 자산(compose·Caddyfile·스크립트)을 S3로 동기화 — EC2가 여기서 받아간다.
-      # tests/는 EC2에서 쓰지 않고, task-definition.json은 구 ECS 잔재라 제외.
+      # tests/는 EC2에서 쓰지 않으므로 제외한다.
       - name: Sync deploy assets to S3
         run: |
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           aws s3 sync deploy/ "s3://booktimer-ops-$ACCOUNT_ID/deploy/" \
-            --exclude 'tests/*' --exclude 'task-definition.json' --only-show-errors
+            --exclude 'tests/*' --only-show-errors
 
       # EC2에서 blue-green 전환 실행 (SSH 키 없이 SSM Send-Command로).
       # deploy-on-ec2.sh가 새 컨테이너를 띄우고 헬스 통과 후에야 옛 것을 내린다 —

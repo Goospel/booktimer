@@ -5,12 +5,21 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-BUCKET="${BACKUP_BUCKET:?BACKUP_BUCKET 환경변수가 필요합니다 (예: booktimer-backup)}"
 REGION="${AWS_REGION:-ap-northeast-2}"
+# 배포 자산과 같은 ops 버킷을 쓴다. cron 환경에는 어떤 변수도 실려 오지 않으므로
+# 계정 ID에서 유도한다 — 예전엔 BACKUP_BUCKET 이 필수라 cron이 매번 이 줄에서 즉시
+# 종료했고, 그 탓에 백업이 엿새 동안 0건이었다(T-138). 명시 지정은 그대로 우선한다.
+BUCKET="${BACKUP_BUCKET:-booktimer-ops-$(aws sts get-caller-identity --query Account --output text --region "$REGION")}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 FILE="booktimer-${STAMP}.sql.gz"
 TMP="/tmp/${FILE}"
 trap 'rm -f "$TMP"' EXIT
+
+# 테스트용 — 실제 덤프·업로드 없이 확정된 대상만 찍고 끝낸다.
+if [ "${BACKUP_DRYRUN:-0}" = 1 ]; then
+    echo "[backup][dryrun] s3://${BUCKET}/mysql/${FILE}"
+    exit 0
+fi
 
 # .env 에서 MYSQL_ROOT_PASSWORD 만 읽는다(전체 source는 다른 변수까지 셸에 퍼뜨린다).
 MYSQL_ROOT_PASSWORD="$(grep -m1 '^MYSQL_ROOT_PASSWORD=' .env | cut -d= -f2-)"
