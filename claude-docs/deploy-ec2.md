@@ -92,18 +92,38 @@
 > 완전히 내려간다** — 실제 이관에서 13번을 빠뜨린 채 컨테이너를 먼저 지워 수 분간 503이 났다.
 > 환경변수만 바뀐 경우 compose가 알아서 재생성하므로 `rm`은 불필요하다.
 
-### D. 정리 (1~2주 안정화 후)
+### D. 정리 ✅ 완료 (2026-08-03)
 
-15. ALB·타깃그룹·리스너 / ECS 서비스·클러스터 / RDS(**최종 스냅샷 남기고**) 삭제
-16. autoscaling scalable target 등록 해제
-17. ~~`deploy.yml`을 SSM Send-Command로 교체~~ ✅ **완료(2026-07-28)** — 컷오버 직후 처리했다.
-    미루면 그 사이 main push가 **ECS에 배포되고 "성공"으로 끝나는데 실제 서비스(EC2)엔 반영되지 않는
-    무성 실패**가 된다(ECS desired=0이라 안정화가 즉시 성공해버린다). 그래서 리소스 삭제(15·16)보다 먼저 한다.
-18. `task-definition.json`·`autoscaling-config.yml`·`zero-downtime-config.yml` 삭제 — 15·16과 함께
+컷오버 후 엿새 안정화를 확인하고 구 리소스를 전부 삭제했다.
 
-**롤백**: C 이전이면 Route53 A레코드를 ALB로 되돌리면 끝(TTL 60초).
-C 이후면 RDS가 살아있으므로 SSM URL을 RDS로 되돌리고 ECS `desired-count 1` — 단 이관 후
-EC2에 쌓인 데이터는 별도 병합이 필요하다. **그래서 C는 짧게, 트래픽이 가장 적은 시간에.**
+| 대상 | 결과 |
+|---|---|
+| ALB `booktimer-alb` · 리스너 · 타깃그룹 `booktimer-tg` | 삭제 ✅ |
+| ECS 서비스 `booktimer-service` · 클러스터 `booktimer-cluster` | 삭제(INACTIVE) ✅ |
+| RDS `booktimer-db` | 삭제 ✅ — 최종 스냅샷 `booktimer-db-final-20260803` 보존 |
+| Application Auto Scaling 타깃 | 등록 해제 ✅ |
+| `task-definition.json`·`autoscaling-config.yml`·`zero-downtime-config.yml` | 삭제 ✅ |
+| `deploy.yml` SSM 전환 | ✅ 2026-07-28 — **리소스 삭제보다 먼저** 했다 |
+
+> `deploy.yml` 전환을 먼저 한 이유: 미루면 그 사이 main push가 ECS에 배포돼 "성공"으로 끝나는데
+> 실제 서비스(EC2)엔 반영되지 않는 **무성 실패**가 된다(desired=0이라 안정화가 즉시 성공해버린다).
+
+**삭제 전 사전 점검** — 되돌릴 수 없으므로 넷 다 통과시키고 지웠다. 유사 작업 때 그대로 재사용할 것:
+
+1. Route53 A레코드 4개가 전부 EIP를 가리키는가 (ALB alias가 아닌가)
+2. `https://booktimer.app/actuator/health` 가 `200` `{"status":"UP"}` 인가
+3. ECS 서비스 `desiredCount`·`runningCount` 가 모두 0인가
+4. 타깃그룹에 등록된 타깃이 없는가 (`[]`)
+
+> ⚠️ **백업 확인이 먼저다.** 이 정리에 착수했을 때 일일 백업이 **엿새간 0건**이었다(T-138).
+> RDS를 지우면 S3 덤프가 유일한 백업이 되므로, **RDS 삭제 전에 백업 객체가 실제로 존재하는지
+> `aws s3 ls` 로 눈으로 확인**한다. "cron이 걸려 있다"는 근거가 못 된다.
+
+> ⏳ ALB 삭제는 **비동기**다. 삭제 직후 타깃그룹을 지우려 하면 `ResourceInUse`(리스너가 아직 정리 중)로
+> 거부되니, 몇 분 뒤 재시도한다.
+
+**롤백**: 🛑 **더 이상 없다.** ALB·ECS·RDS가 사라져 DNS를 되돌리는 경로가 없다. 남은 복구 수단은
+RDS 최종 스냅샷(2026-08-03 시점)과 S3 일일 덤프(7일 보존)뿐이다.
 
 ---
 
@@ -118,9 +138,8 @@ EC2에 쌓인 데이터는 별도 병합이 필요하다. **그래서 C는 짧�
 | S3 | `booktimer-ops-459338751419` (`deploy/` 배포자산 · `mysql/` 백업 7일 보존) |
 | Route53 | `.app` `Z0795663J1W7C48SU27B` · `.click` `Z0571153WI2EVDRD8ZTY` |
 
-**롤백 정보**(ALB가 살아있는 동안 유효): A레코드를 alias로 되돌린다 —
-DNSName `dualstack.booktimer-alb-1798932903.ap-northeast-2.elb.amazonaws.com`,
-HostedZoneId `ZWKZPGTI48KDX`.
+~~**롤백 정보**(ALB가 살아있는 동안 유효)~~ — 🛑 **무효**: ALB를 2026-08-03에 삭제해
+"A레코드를 ALB alias로 되돌리는" 경로는 사라졌다. 위 「D. 정리」의 롤백 항목 참고.
 
 > ⚠️ **AWS CLI를 이 PC에서 쓸 때는 T-136**(cp949 인코딩)을 먼저 볼 것 — Git Bash + `PYTHONUTF8=1
 > LC_ALL=C.UTF-8`, 입력 JSON은 ASCII, 경로는 `file://C:/...`. 안 지키면 명령은 성공하는데

@@ -136,11 +136,12 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
   퍼블릭IPv4 $18(**유휴 EIP $3.6 포함**) · ALB $16 · ECR $2.8(이미지 459개, lifecycle 없었음).
   **교훈**: 크레딧이 있는 동안 Budgets(청구액 기준)는 원가를 못 보여준다 — 크레딧 계정에선
   Cost Explorer의 `RECORD_TYPE=Usage`를 따로 봐야 한다.
-  → **§ECS Fargate → EC2 단일 인스턴스 이전**으로 월 ~$30 구조 전환 중. 이전 완료 후 Budgets 임계치 재설정.
+  → **§ECS Fargate → EC2 단일 인스턴스 이전**으로 월 ~$30 구조 전환 **완료(2026-08-03)**.
+  ⚠️ Budgets 임계치($50)는 아직 옛 원가 기준이라 재설정이 남아 있다.
 - Budgets는 비용 데이터 하루 ~3회 갱신 → 알림은 실시간 아님(몇 시간~하루).
 - 임계치 기준은 **% (예산 대비)** — 콘솔 한글 라벨 "경우를 기준으로 설정됨"이 곧 % 기준(헷갈림 주의).
 
-### ECS Fargate → EC2 단일 인스턴스 이전 (진행 중 🔜 2026-07-28~)
+### ECS Fargate → EC2 단일 인스턴스 이전 (완료 ✅ 2026-07-28 ~ 2026-08-03)
 
 **왜**: 위 실측대로 원가가 월 ~$100. 수입 0인 개인 서비스가 HA(다중 AZ 이중화)에 월 $50을 쓰는
 구조라, **HA를 내려놓고 배포 무중단만 유지**하는 단일 인스턴스로 합친다 → 월 ~$30(연 ~$840 절감).
@@ -161,10 +162,14 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
 - [x] **일일 백업 복구** ✅ 2026-08-03 — 정리 착수 전 확인하니 백업이 **엿새간 0건**이었다(T-138). cron을 `ec2-user`로 돌려
       로그(`/var/log`)·`.env`(root:600) 권한이 동시에 막혀 **스크립트가 실행조차 안 됐고**, `BACKUP_BUCKET`도 없었다.
       `root` 실행 + 버킷 계정ID 유도로 해소. 실백업 1건(6.6MB·30테이블·gzip OK) S3 검증, 회귀 가드 8단언 신설.
-- [ ] 🔜 **정리(1~2주 안정화 후)** — ALB·타깃그룹·ECS·RDS(최종 스냅샷 후) 삭제, autoscaling 등록 해제,
-      `task-definition.json`·`autoscaling-config.yml`·`zero-downtime-config.yml` 제거 → 월 ~$30 확정
+- [x] **정리** ✅ 2026-08-03 — ALB·리스너·타깃그룹 / ECS 서비스·클러스터 / RDS(최종 스냅샷
+      `booktimer-db-final-20260803` 보존) 삭제, autoscaling 등록 해제, `task-definition.json`·
+      `autoscaling-config.yml`·`zero-downtime-config.yml` 제거. 되돌릴 수 없는 작업이라
+      **사전 점검 4종**(DNS가 EIP인가 / 실서비스 200인가 / ECS 0인가 / 타깃 등록 없는가)을
+      통과시키고 지웠다 → **월 ~$30 확정**. 🛑 이 시점부터 DNS 롤백 경로는 없다.
+- [ ] 🔜 **Budgets 임계치 재설정** — 예산 `booktimer-monthly-50`($50)이 새 원가(~$30)엔 헐겁다. $40 전후로 조정.
 
-> 실행 런북: [claude-docs/deploy-ec2.md](claude-docs/deploy-ec2.md) · 구 아키텍처: [deploy-aws.md](claude-docs/deploy-aws.md)(폐기 예정)
+> 실행 런북: [claude-docs/deploy-ec2.md](claude-docs/deploy-ec2.md) · 구 아키텍처: [deploy-aws.md](claude-docs/deploy-aws.md)(리소스 삭제됨 — 역사 기록)
 > ⚠️ 수용한 한계: 단일 장애점(인스턴스 다운 = 서비스 다운) · 배포 시 in-flight 요청 1건 끊김 가능
 > (로컬 150요청 프로브 실측) · 백업 입도 24시간(RDS PITR 상실).
 
