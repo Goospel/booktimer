@@ -997,7 +997,10 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 - **PR-2 연결 코드 발급 UI + 미니앱 온보딩 API** ✅ — 웹 설정의 "토스 앱 연결" 절(**웹 쪽 유일한 신규 UI** — 미연결이면
   발급 버튼, 연결됐으면 상태만. 평문 코드는 저장하지 않으므로 플래시로 한 번만 노출), `POST /api/miniapp/goal`
   (하루 목표만 설정 — `completeOnboarding()`을 부르지 않아 onboarded·login_id 불변).
-- **PR-3 프론트 `miniapp/`** 🔜 — 화면 5개(로그인 브릿지·계정 연결·타이머 홈·기록·목표). 배포는 앱인토스 CLI(우리 CI 밖).
+- **PR-3 프론트 `miniapp/`** ✅ — Vite + React 18 + TDS + `@apps-in-toss/web-framework`로 화면 5개(로그인 브릿지·
+  계정 연결·타이머 홈·기록·목표) 구현. `src/api.ts`가 서버 계약 단일 창구(Bearer 헤더·401 재로그인·`registered:false`
+  분기). 배포는 앱인토스 CLI(`ait build`/`ait deploy` — 우리 CI 밖, 커맨드는 `miniapp/README.md`).
+  ⚠️ **실기기 검증은 PR-0 완료가 전제** — 샌드박스 없이는 `TossAuth.login()` 이후 화면을 확인할 수 없다.
 - **출시** ⬜ — 심사 제출 후 실기기 확인. **인수 시나리오 = 웹 PC ↔ 토스 모바일 교차**(웹에서 시작한 측정이 미니앱에,
   미니앱 측정이 웹 잔디에).
 
