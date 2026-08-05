@@ -64,3 +64,6 @@ node_modules/
 test-results/
 playwright-report/
 **/e2e/.auth/
+
+# 토스 mTLS 클라이언트 인증서 — render-env.sh 가 SSM에서 렌더하는 실파일. 레포 커밋 금지(OAuth 키와 동일 정책).
+deploy/toss/
