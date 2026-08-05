@@ -25,12 +25,26 @@ fi
 MYSQL_ROOT_PASSWORD="$(grep -m1 '^MYSQL_ROOT_PASSWORD=' .env | cut -d= -f2-)"
 [ -n "$MYSQL_ROOT_PASSWORD" ] || { echo "[backup] .env에 MYSQL_ROOT_PASSWORD가 없습니다" >&2; exit 1; }
 
+dump() { docker compose -f compose.prod.yaml exec -T mysql \
+    mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" "$@"; }
+
 # --single-transaction: InnoDB를 잠그지 않고 일관 스냅샷(서비스 중단 없음)
 # flyway_schema_history 도 booktimer DB 안에 있으므로 --databases 로 통째로 뜨면 함께 포함된다.
-docker compose -f compose.prod.yaml exec -T mysql \
-    mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" \
-        --single-transaction --routines --triggers --databases booktimer \
-    | gzip > "$TMP"
+#
+# 세션 테이블은 **데이터만** 뺀다(백업의 ~95%가 이것이었다 — 익명 세션 17,648/17,658행,
+# 디스크 97MB인데 진짜 도메인 데이터는 ~0.5MB). 복원해도 의미 없는 휘발성 데이터라
+# 크기만 부풀려 "진짜 데이터가 얼마나 변했나"를 가린다.
+# 단, --ignore-table 은 구조까지 통째로 빼는데 세션 스키마는 Flyway가 관리하고
+# flyway_schema_history(백업에 포함됨)엔 "이미 적용됨"으로 남아 있다 — 테이블 없이 history만
+# 복원되면 마이그레이션이 재실행되지 않아 앱이 세션 테이블 부재로 기동 실패한다.
+# 그래서 뒤에 --no-data 덤프를 같은 스트림에 이어붙여 빈 테이블 구조는 남긴다
+# (본 덤프의 USE booktimer; 가 먼저 나오므로 뒤 덤프도 같은 DB 컨텍스트에서 실행된다).
+{
+    dump --single-transaction --routines --triggers --databases booktimer \
+        --ignore-table=booktimer.SPRING_SESSION \
+        --ignore-table=booktimer.SPRING_SESSION_ATTRIBUTES
+    dump --no-data booktimer SPRING_SESSION SPRING_SESSION_ATTRIBUTES
+} | gzip > "$TMP"
 
 # 덤프가 비었는데 성공으로 넘어가면 "백업이 있다"는 착각만 남는다.
 if [ ! -s "$TMP" ] || [ "$(stat -c%s "$TMP")" -lt 1024 ]; then

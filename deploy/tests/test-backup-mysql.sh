@@ -49,6 +49,9 @@ assert_has() {   # $1=label $2=haystack $3=needle
 assert_not() {   # $1=label $2=haystack $3=needle
     if printf '%s' "$2" | grep -qF -- "$3"; then echo "FAIL: $1 — unexpected '$3'"; FAILED=1; else echo "PASS: $1"; fi
 }
+assert_re() {    # $1=label $2=haystack $3=ERE (부분일치 오탐을 가르려면 고정문자열로 부족하다)
+    if printf '%s' "$2" | grep -qE -- "$3"; then echo "PASS: $1"; else echo "FAIL: $1 — no match /$3/"; FAILED=1; fi
+}
 
 # ── Case 1: cron 잡이 root로 돈다 (정적 검사 — 환경 권한은 단위테스트로 재현 불가) ──
 cron_line="$(grep -E '^[0-9*]' "$B" | grep 'backup-mysql.sh' || true)"
@@ -66,6 +69,14 @@ assert_not  "  does not demand the env var"      "$out" "BACKUP_BUCKET 환경변
 r="$(run "my-restore-rehearsal")"; rc="${r%%$'\n'*}"; out="${r#*$'\n'}"
 assert_exit "explicit BACKUP_BUCKET honored" "$rc" "0"
 assert_has  "  targets the given bucket"     "$out" "s3://my-restore-rehearsal/mysql/"
+
+# ── Case 4: 세션 테이블은 데이터만 빼고 스키마는 남긴다 (정적 검사 — dry-run은 덤프 전에 끝난다) ──
+# 데이터를 안 빼면 백업의 ~95%가 휘발성 세션이고, 구조까지 빼면 복원 시 flyway_schema_history와
+# 어긋나 앱이 세션 테이블 부재로 기동 실패한다. 그래서 두 방향을 다 못박는다.
+src="$(cat "$S")"
+assert_re  "SPRING_SESSION 데이터 제외"        "$src" '--ignore-table=booktimer\.SPRING_SESSION([^_]|$)'
+assert_has "SPRING_SESSION_ATTRIBUTES 데이터 제외" "$src" "--ignore-table=booktimer.SPRING_SESSION_ATTRIBUTES"
+assert_has "  세션 스키마는 보존(--no-data)"      "$src" "--no-data booktimer SPRING_SESSION SPRING_SESSION_ATTRIBUTES"
 
 echo
 if [ "$FAILED" = 0 ]; then echo "ALL PASS"; else echo "SOME FAILED"; fi
