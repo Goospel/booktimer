@@ -1,18 +1,33 @@
 package com.booktimer.config;
 
+import com.booktimer.auth.ApiTokenService;
+import com.booktimer.security.BearerTokenFilter;
 import com.booktimer.security.BookTimerOidcUserService;
 import com.booktimer.security.LoginAttemptFilter;
 import com.booktimer.security.LoginAttemptService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationEventPublisher;
 import org.springframework.security.authentication.DefaultAuthenticationEventPublisher;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.util.matcher.RequestMatcher;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.CorsUtils;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 /**
  * 웹 보안 설정 — 폼 로그인 + 세션 기반 인증.
@@ -40,6 +55,81 @@ public class SecurityConfig {
     @Bean
     public AuthenticationEventPublisher authenticationEventPublisher(ApplicationEventPublisher publisher) {
         return new DefaultAuthenticationEventPublisher(publisher);
+    }
+
+    /**
+     * 미니앱(앱인토스) 전용 인증 체인 — <b>기존 세션 체인은 한 글자도 건드리지 않는다</b>(설계 §2.3).
+     *
+     * <p>라우팅 스위치는 <b>{@code Authorization: Bearer} 헤더의 유무</b>다. 웹 Vue 섬의 {@code /api/**}
+     * 호출은 쿠키·CSRF 토큰을 달고 Bearer 헤더는 없으므로 이 체인에 걸리지 않고 기존 체인으로 그대로 흐른다 —
+     * 그래서 웹 채널이 무변경으로 산다(채널 병행이 요구사항이다).
+     *
+     * <p>매처에 두 가지를 더 얹는다:
+     * <ul>
+     *   <li>{@code /api/toss/**} — 로그인·가입·연결 요청은 <b>아직 토큰이 없어서</b> Bearer 헤더를 달 수 없다.
+     *       헤더 조건만 두면 이 경로가 기존 체인으로 흘러 {@code /login} 302가 되어 미니앱이 시작조차 못 한다.</li>
+     *   <li>CORS 프리플라이트(OPTIONS) — 브라우저는 프리플라이트에 {@code Authorization}을 싣지 않는다
+     *       (요청 헤더 이름만 알린다). 여기서 안 받으면 교차 출처 호출이 첫 왕복부터 막힌다.</li>
+     * </ul>
+     *
+     * <p>이 체인은 STATELESS(세션 미생성) + CSRF 비활성이다 — 쿠키를 아예 쓰지 않으므로 CSRF의 전제
+     * (브라우저가 자격증명을 자동 첨부)가 성립하지 않는다. 세션 경로의 CSRF는 그대로 살아 있다(회귀 가드로 고정).
+     */
+    @Bean
+    @Order(0)
+    public SecurityFilterChain miniappApiFilterChain(HttpSecurity http,
+                                                     ApiTokenService apiTokenService,
+                                                     MiniappProperties miniappProperties) throws Exception {
+        RequestMatcher miniappRequests = SecurityConfig::isMiniappApiRequest;
+        http
+                .securityMatcher(miniappRequests)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(AbstractHttpConfigurer::disable)
+                .cors(cors -> cors.configurationSource(miniappCorsSource(miniappProperties)))
+                .authorizeHttpRequests(auth -> auth
+                        // 토큰을 받기 전 단계라 인증을 요구할 수 없다. 대신 매 요청이 일회성 토스 인가코드로
+                        // 신원을 다시 증명하고(서버에 pending 상태 없음), 레이트리밋이 남용을 막는다.
+                        .requestMatchers("/api/toss/login", "/api/toss/register", "/api/toss/link").permitAll()
+                        .anyRequest().authenticated())
+                .addFilterBefore(new BearerTokenFilter(apiTokenService),
+                        UsernamePasswordAuthenticationFilter.class)
+                // 기본 엔트리포인트는 403(또는 로그인 리다이렉트)이라, API 클라이언트가 "토큰 만료"를 알아채고
+                // 재로그인 흐름을 타려면 401이어야 한다.
+                .exceptionHandling(handling -> handling
+                        .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)));
+        return http.build();
+    }
+
+    /** 이 요청을 미니앱 체인이 맡는가 — {@code /api/toss/**} 전부, 그 외 {@code /api/**}는 Bearer·프리플라이트일 때만. */
+    private static boolean isMiniappApiRequest(HttpServletRequest request) {
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        if (!path.startsWith("/api/")) {
+            return false;
+        }
+        return path.startsWith("/api/toss/")
+                || BearerTokenFilter.extractToken(request) != null
+                || CorsUtils.isPreFlightRequest(request);
+    }
+
+    /**
+     * 미니앱 교차 출처 설정. 허용 오리진이 <b>비어 있으면 설정을 하나도 등록하지 않은 빈 소스</b>를 준다 —
+     * 어느 경로에도 매칭되지 않으므로 CORS 헤더가 붙지 않는다. 실제 WebView 오리진은 PR-0 실측으로 확정되므로,
+     * 그전까지는 교차 출처를 열지 않는 것이 안전 기본값이다.
+     *
+     * <p>{@code allowCredentials}는 false다 — 미니앱은 쿠키를 쓰지 않고 Bearer 헤더로만 인증한다(설계 §2.1).
+     */
+    private static CorsConfigurationSource miniappCorsSource(MiniappProperties properties) {
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        if (properties.getAllowedOrigins().isEmpty()) {
+            return source; // 등록된 설정 없음 = CORS 헤더 없음(동일 출처 웹 호출에는 아무 영향 없음)
+        }
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(properties.getAllowedOrigins());
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        config.setAllowCredentials(false);
+        source.registerCorsConfiguration("/api/**", config);
+        return source;
     }
 
     @Bean

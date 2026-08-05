@@ -493,4 +493,41 @@ class UserTest {
                 .isInstanceOf(IllegalStateException.class);
         assertThat(user.getLoginId()).isEqualTo("goospel_01"); // 원래 값 유지
     }
+
+    // ── 토스 신원 연결 (앱인토스 미니앱 — 설계 §2.2) ─────────────────────────
+
+    @Test
+    @DisplayName("linkTossUserKey: 처음 연결하면 userKey가 붙는다 (기본값은 null = 미연결)")
+    void linkTossUserKey_firstTime_sets() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+        assertThat(user.getTossUserKey()).isNull();
+
+        user.linkTossUserKey("toss-user-key-1");
+
+        assertThat(user.getTossUserKey()).isEqualTo("toss-user-key-1");
+    }
+
+    @Test
+    @DisplayName("linkTossUserKey: 이미 연결된 계정에 다시 연결하면 IllegalStateException (once-set 불변)")
+    void linkTossUserKey_immutable_onceSet() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+        user.linkTossUserKey("toss-user-key-1");
+
+        // 다른 값으로도, 같은 값으로도 재연결 불가 — 한 계정에 토스 신원은 하나다(assignLoginId와 같은 정신).
+        assertThatThrownBy(() -> user.linkTossUserKey("toss-user-key-2"))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> user.linkTossUserKey("toss-user-key-1"))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(user.getTossUserKey()).isEqualTo("toss-user-key-1"); // 원래 값 유지
+    }
+
+    @Test
+    @DisplayName("linkTossUserKey: null/공백은 거부한다 (빈 신원으로 연결 표시가 켜지지 않게)")
+    void linkTossUserKey_blank_throws() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        assertThatThrownBy(() -> user.linkTossUserKey(null)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> user.linkTossUserKey("  ")).isInstanceOf(IllegalArgumentException.class);
+        assertThat(user.getTossUserKey()).isNull();
+    }
 }

@@ -1,5 +1,6 @@
 package com.booktimer.user;
 
+import com.booktimer.auth.ApiTokenRepository;
 import com.booktimer.block.BlockRepository;
 import com.booktimer.book.BookRepository;
 import com.booktimer.email.EmailTokenRepository;
@@ -42,6 +43,8 @@ public class AccountService {
     private final EmailTokenRepository emailTokenRepository;
     private final StoryRepository storyRepository;
     private final StoryViewRepository storyViewRepository;
+    private final ApiTokenRepository apiTokenRepository;
+    private final TossLinkCodeRepository tossLinkCodeRepository;
     private final PasswordEncoder passwordEncoder;
 
     public AccountService(UserRepository userRepository,
@@ -57,6 +60,8 @@ public class AccountService {
                           EmailTokenRepository emailTokenRepository,
                           StoryRepository storyRepository,
                           StoryViewRepository storyViewRepository,
+                          ApiTokenRepository apiTokenRepository,
+                          TossLinkCodeRepository tossLinkCodeRepository,
                           PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.timerRepository = timerRepository;
@@ -71,6 +76,8 @@ public class AccountService {
         this.emailTokenRepository = emailTokenRepository;
         this.storyRepository = storyRepository;
         this.storyViewRepository = storyViewRepository;
+        this.apiTokenRepository = apiTokenRepository;
+        this.tossLinkCodeRepository = tossLinkCodeRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -157,6 +164,8 @@ public class AccountService {
         personalityCacheRepository.deleteByUser(user);       // 책BTI 캐시도 user_id FK 참조 → 유저 전에 정리
         feedbackRepository.deleteByAuthor(user);             // 문의도 author_id FK 참조 → 유저 전에 정리
         emailTokenRepository.deleteByUser(user);             // 이메일 토큰도 user_id FK 참조 → 유저 전에 정리
+        apiTokenRepository.deleteByUser(user);                // 미니앱 Bearer 토큰(api_token.user_id FK)
+        tossLinkCodeRepository.deleteByUser(user);            // 토스 연결 코드(toss_link_code.user_id FK)
         userRepository.delete(user);
     }
 

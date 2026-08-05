@@ -14,7 +14,20 @@ public enum RateLimitAction {
     SEARCH(20, Duration.ofMinutes(1)),
     RECOMMEND(20, Duration.ofMinutes(1)),
     REPORT(10, Duration.ofHours(1)),
-    STORY_CREATE(10, Duration.ofHours(1));
+    STORY_CREATE(10, Duration.ofHours(1)),
+
+    /**
+     * 미니앱 토스 로그인·신규가입({@code /api/toss/login·register}). 정상 사용은 앱 진입당 1~2회라
+     * 분당 20이면 넉넉하고, 자동화된 인가코드 대량 시도는 걸린다.
+     */
+    TOSS_AUTH(20, Duration.ofMinutes(1)),
+
+    /**
+     * 미니앱 계정 연결 코드 검증({@code /api/toss/link}). <b>브루트포스 방어의 핵심 층</b>이다 —
+     * 연결 코드는 사람이 옮겨 적는 8자라 엔트로피가 낮아, 시도 횟수 상한이 없으면 TTL 5분 안에도
+     * 의미 있는 추측이 가능해진다. 정상 사용자는 코드 하나를 한두 번 입력할 뿐이다.
+     */
+    TOSS_LINK(10, Duration.ofHours(1));
 
     private final int limit;
     private final Duration window;
