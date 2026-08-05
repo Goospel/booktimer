@@ -11,12 +11,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.session.Session;
-import org.springframework.session.SessionRepository;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import java.time.Duration;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,10 +43,8 @@ class SessionCookieSameSiteTest {
     private PasswordEncoder passwordEncoder;
     @Autowired
     private JdbcTemplate jdbcTemplate;
-    @Autowired
-    private SessionRepository<? extends Session> sessionRepository;
 
-    /** 30일(2,592,000초) — 독서 타이머는 클라이언트에서만 돌아 서버 세션을 안 깨우므로 짧은 타임아웃이면 측정 중 로그아웃된다. */
+    /** 30일(2,592,000초) — 쿠키 Max-Age는 로그인 수명(30일)에 맞춘다(익명 세션은 서버에서 24h에 만료). */
     private static final long THIRTY_DAYS_SECONDS = 30L * 24 * 3600;
 
     @AfterEach
@@ -92,17 +87,7 @@ class SessionCookieSameSiteTest {
                 .containsIgnoringCase("HttpOnly");
     }
 
-    @Test
-    @DisplayName("세션 비활성 타임아웃이 30일로 설정된다 — 독서 중 클라이언트 타이머는 서버를 안 깨워, 짧으면 측정 중 로그아웃된다")
-    void sessionTimeout_is30Days() {
-        // createSession()은 DB에 쓰지 않고, 설정된 기본 max-inactive-interval을 그대로 반영한다.
-        // 프로퍼티가 Spring Session에 안 먹으면(Boot 4 와이어링 함정) 기본 30분이라 여기서 깨진다.
-        Session newSession = sessionRepository.createSession();
-
-        assertThat(newSession.getMaxInactiveInterval())
-                .as("세션 타임아웃은 30일이어야 한다 (server.servlet.session.timeout=30d)")
-                .isEqualTo(Duration.ofSeconds(THIRTY_DAYS_SECONDS));
-    }
+    // 세션 비활성 타임아웃(익명 24h / 로그인 30일) 검증은 SessionDualTimeoutTest로 이동했다.
 
     @Test
     @DisplayName("세션 쿠키(SESSION)에 30일 Max-Age가 실려 브라우저를 닫아도 로그인이 유지된다")
