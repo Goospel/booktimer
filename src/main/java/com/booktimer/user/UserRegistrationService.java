@@ -132,8 +132,24 @@ public class UserRegistrationService {
         // 소셜 가입은 provider가 이메일 소유를 보증한다 — 우리 OAuth 프로비저닝도 email_verified=true만
         // 통과시키므로(N-026) 가입 시 검증 완료로 표시한다. 이게 없으면 소셜 사용자가 재참여 넛지 대상에서
         // 빠지고(findNudgeTargets가 emailVerified=true 필수) 대시보드·설정에 인증 배너가 무의미하게 노출된다.
+        return registerOAuth(email, nickname, timezone, provider, startDate, true);
+    }
+
+    /**
+     * 위 {@link #registerOAuth(String, String, String, AuthProvider, LocalDate)}에서 <b>이메일 검증 표시 여부를
+     * 분리</b>한 오버로드. Google 경로는 provider가 이메일 소유를 보증하므로 {@code true}지만,
+     * <b>토스 경로는 그런 보증이 없다</b> — 토스가 준 email(또는 합성 주소)을 검증됨으로 표시하면
+     * 소유하지 않은 주소가 검증 상태로 남고 마케팅·넛지 대상에도 들어간다. 그래서 {@code false}로 만든다
+     * (설계 §2.2).
+     *
+     * @param verifyEmail 가입 즉시 이메일 검증 완료로 표시할지 — provider가 이메일 소유를 보증할 때만 true
+     */
+    public User registerOAuth(String email, String nickname, String timezone,
+                              AuthProvider provider, LocalDate startDate, boolean verifyEmail) {
         User user = User.ofOAuth(email, nickname, timezone, Role.USER, provider);
-        user.verifyEmail();
+        if (verifyEmail) {
+            user.verifyEmail();
+        }
         user = userRepository.save(user);
         timerRepository.save(ReadingTimer.startFor(user, DEFAULT_DAILY_INCREMENT_SECONDS));
         return user;

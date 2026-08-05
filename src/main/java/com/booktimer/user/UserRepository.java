@@ -32,6 +32,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
      */
     java.util.List<User> findTop20ByLoginIdContainingIgnoreCaseOrderByLoginIdAsc(String loginId);
 
+    /**
+     * 토스 userKey로 사용자 조회 — 미니앱 로그인의 신원 키(이메일이 아니다, 설계 §2.2). UNIQUE라 1:1 식별이고,
+     * 미연결 계정은 {@code toss_user_key IS NULL}이라 이 조회에 절대 걸리지 않는다.
+     */
+    Optional<User> findByTossUserKey(String tossUserKey);
+
     boolean existsByEmail(String email);
 
     /** 정규화된 login_id가 이미 쓰이는지 — 온보딩에서 공개 핸들 확정 전 유니크 사전 확인(uk_users_login_id). */

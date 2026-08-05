@@ -118,6 +118,20 @@ public class User extends BaseTimeEntity {
     private String loginId;
 
     /**
+     * 토스 앱인토스(미니앱)의 사용자 식별자({@code userKey} — 앱 단위). 이 계정으로 토스 로그인이 가능함을 뜻한다.
+     * {@code null}이면 미연결(웹 전용 계정)이라 정상이고, 토스에서 시작했거나 웹 계정을 연결한 계정만 값을 가진다.
+     *
+     * <p><b>이메일이 아니라 이 값이 미니앱의 신원</b>이다 — 토스 email은 없을 수 있고 소유 보증도 없어,
+     * 이메일로 자동 연결하면 계정 탈취 벡터가 된다(설계 §2.2, N-026/N-053과 같은 정신). 그래서 기존 계정과의
+     * 연결은 본인이 웹 로그인 상태에서 발급한 일회용 코드로만 이뤄진다({@link #linkTossUserKey}).
+     *
+     * <p>한 계정에 토스 신원은 하나뿐이고 <b>한 번 붙으면 불변</b>이다(login_id와 같은 once-set 규칙).
+     * 한 토스 신원이 두 계정에 붙지 않도록 DB UNIQUE(uk_users_toss_user_key)가 최종 방어선이다.
+     */
+    @Column(name = "toss_user_key", length = 64)
+    private String tossUserKey;
+
+    /**
      * 프로필 아바타로 선택한 도감 작가 캐릭터 코드({@code author_character.code}). <b>파일 업로드 없이</b>
      * 사용자가 도감에서 <b>보유(완독)한 작가</b>의 얼굴(SVG 스프라이트 {@code #sprite-{code}})을 아바타로 재사용한다.
      * {@code null}이면 미선택 — 기존 로그인ID 이니셜 원형으로 폴백한다(opt-in).
@@ -470,6 +484,37 @@ public class User extends BaseTimeEntity {
     /** 로그인/식별용 아이디이자 공개 @핸들(검색·프로필 URL). 아직 설정 전이면 {@code null}. */
     public String getLoginId() {
         return loginId;
+    }
+
+    /**
+     * 이 계정에 토스 신원({@code userKey})을 연결한다 — 이후 미니앱의 토스 로그인이 이 계정으로 들어온다.
+     *
+     * <p><b>한 번 연결되면 불변</b>이다({@link #assignLoginId}와 같은 once-set 규칙): 한 계정에 토스 신원은
+     * 하나뿐이고, 나중에 다른 신원으로 갈아끼우는 것은 계정 이관에 가까워 도메인이 허용하지 않는다. 이미
+     * 연결된 계정에 다시 호출하면(같은 값이든 다른 값이든) {@link IllegalStateException}을 던진다 —
+     * 서비스는 이걸 409로 매핑한다. 연결 해제는 v2(문의 처리)다.
+     *
+     * <p><b>유니크는 이 메서드의 책임이 아니다</b> — 다른 계정이 이미 그 userKey를 쓰는지는 서비스의 사전
+     * 확인과 DB UNIQUE 제약이 담당한다(login_id 유니크 처리와 동일한 분업).
+     *
+     * @param userKey 토스가 준 앱 단위 사용자 식별자(공백 불가)
+     * @throws IllegalStateException    이미 토스 신원이 연결된 경우(불변 위반)
+     * @throws IllegalArgumentException userKey가 null/공백인 경우
+     */
+    public void linkTossUserKey(String userKey) {
+        if (this.tossUserKey != null) {
+            throw new IllegalStateException(
+                    "toss_user_key is immutable and already set: " + this.tossUserKey);
+        }
+        if (userKey == null || userKey.isBlank()) {
+            throw new IllegalArgumentException("toss user key must not be blank");
+        }
+        this.tossUserKey = userKey.strip();
+    }
+
+    /** 연결된 토스 사용자 식별자(userKey). 미연결(웹 전용 계정)이면 {@code null}. */
+    public String getTossUserKey() {
+        return tossUserKey;
     }
 
     public Long getId() {

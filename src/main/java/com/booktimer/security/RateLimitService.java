@@ -33,7 +33,16 @@ public class RateLimitService {
      * 윈도우가 지났으면 새 윈도우로 리셋한다.
      */
     public boolean allow(RateLimitAction action, long userId) {
-        String key = action.name() + ":" + userId;
+        return allow(action, String.valueOf(userId));
+    }
+
+    /**
+     * userId가 아직 없는 경로(예: 미니앱 토스 인증 — 우리 계정이 만들어지기 전이다)를 위해 <b>임의 문자열</b>을
+     * 키로 받는 오버로드. 토스 로그인·연결은 토스 {@code userKey}를 키로 쓴다 — 인가코드가 일회성이라
+     * 공격자도 매 시도마다 같은 신원을 다시 증명해야 하므로, 그 신원이 곧 제한 단위로 맞다.
+     */
+    public boolean allow(RateLimitAction action, String subject) {
+        String key = action.name() + ":" + subject;
         Instant now = clock.instant();
         Window updated = windows.compute(key, (k, prev) -> {
             if (prev == null || isExpired(action, prev, now)) {

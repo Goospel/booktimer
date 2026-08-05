@@ -66,6 +66,12 @@ class FlywayMigrationTest {
     @Autowired
     StoryViewRepository storyViewRepository;
 
+    @Autowired
+    com.booktimer.auth.ApiTokenRepository apiTokenRepository;
+
+    @Autowired
+    com.booktimer.user.TossLinkCodeRepository tossLinkCodeRepository;
+
     @Test
     void v1_baseline_migration_is_applied() {
         boolean v1Applied = Arrays.stream(flyway.info().applied())
@@ -209,6 +215,38 @@ class FlywayMigrationTest {
 
         assertThatThrownBy(() -> storyViewRepository.saveAndFlush(StoryView.of(story, viewer)))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    // ── 토스 미니앱(V61) — users.toss_user_key 유니크 + api_token·toss_link_code 스키마↔엔티티 일치 ──
+
+    @Test
+    void toss_user_key_unique_constraint_is_enforced() {
+        // 한 토스 신원이 두 계정에 붙으면 "어느 계정으로 로그인하나"가 모호해진다 — DB가 마지막 방어선.
+        User first = userWithHandle("toss-uk-a@example.com", "tossuka");
+        first.linkTossUserKey("uk-shared");
+        userRepository.saveAndFlush(first);
+
+        User second = userWithHandle("toss-uk-b@example.com", "tossukb");
+        second.linkTossUserKey("uk-shared");
+
+        assertThatThrownBy(() -> userRepository.saveAndFlush(second))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void api_token_and_link_code_tables_persist_under_flyway_schema() {
+        User owner = userRepository.saveAndFlush(userWithHandle("toss-token@example.com", "tosstoken"));
+        Instant expiresAt = Instant.parse("2026-11-05T00:00:00Z");
+
+        var token = apiTokenRepository.saveAndFlush(
+                com.booktimer.auth.ApiToken.issue(owner, "b".repeat(64), expiresAt));
+        var code = tossLinkCodeRepository.saveAndFlush(
+                com.booktimer.user.TossLinkCode.issue(owner, "c".repeat(64), expiresAt));
+
+        assertThat(token.getId()).isNotNull();
+        assertThat(code.getId()).isNotNull();
+        assertThat(apiTokenRepository.findByTokenHash("b".repeat(64))).isPresent();
+        assertThat(tossLinkCodeRepository.findByCodeHash("c".repeat(64))).isPresent();
     }
 
     private static User userWithHandle(String email, String handle) {
