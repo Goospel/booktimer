@@ -30,14 +30,25 @@ import java.time.Duration;
 public class WebConfig {
 
     /**
-     * 세션·쿠키 수명 — 30일. 서버 세션 비활성 타임아웃과 쿠키 Max-Age를 <b>같은 값</b>으로 맞춰,
-     * 한 달간 비활성이어도 로그인이 유지되고 브라우저를 닫았다 와도 로그인이 살아 있게 한다.
-     * 독서 타이머는 클라이언트(JS)에서만 돌고 읽는 동안 서버 요청이 없어, 짧은 타임아웃이면 측정 중 로그아웃된다.
+     * 익명 세션 수명 — 24시간. 저장소 <b>기본값</b>이라 로그인 전 모든 세션(사람 방문객 + 봇·크롤러)에 적용된다.
+     *
+     * <p>이전에는 익명·로그인 구분 없이 30일이었는데, 운영 {@code SPRING_SESSION} 17,658행 중 <b>17,648행이 익명</b>으로
+     * 97MB를 차지했다(t3.small MySQL 버퍼풀 256MB 대비 과대). 봇·크롤러의 방문 한 번이 한 달짜리 행을 남기는 구조라,
+     * 로그인하지 않은 세션은 24시간만 유지한다.
      */
-    private static final Duration SESSION_TIMEOUT = Duration.ofDays(30);
+    private static final Duration ANONYMOUS_SESSION_TIMEOUT = Duration.ofDays(1);
 
     /**
-     * 세션 비활성 타임아웃을 {@link #SESSION_TIMEOUT}으로 강제한다.
+     * 로그인 세션 수명 — 30일. 한 달간 비활성이어도 로그인이 유지되고 브라우저를 닫았다 와도 로그인이 살아 있게 한다.
+     * 독서 타이머는 클라이언트(JS)에서만 돌고 읽는 동안 서버 요청이 없어, 짧은 타임아웃이면 측정 중 로그아웃된다.
+     *
+     * <p>기본값이 아니라 <b>로그인 성공 시에만</b> 적용된다 —
+     * {@code com.booktimer.security.SessionLifetimeListener}가 이 상수로 세션을 연장한다(값의 단일 출처).
+     */
+    public static final Duration AUTHENTICATED_SESSION_TIMEOUT = Duration.ofDays(30);
+
+    /**
+     * 세션 비활성 타임아웃의 <b>기본값</b>을 {@link #ANONYMOUS_SESSION_TIMEOUT}으로 강제한다(이중 타임아웃의 하한).
      *
      * <p>application.properties의 {@code server.servlet.session.timeout}은 Boot 4 + Spring Session JDBC
      * 조합에서 세션 저장소의 기본 max-inactive-interval에 <b>연결되지 않는다</b>(기본 30분 그대로 — cookieSerializer·
@@ -45,7 +56,7 @@ public class WebConfig {
      */
     @Bean
     public SessionRepositoryCustomizer<JdbcIndexedSessionRepository> sessionTimeoutCustomizer() {
-        return repository -> repository.setDefaultMaxInactiveInterval(SESSION_TIMEOUT);
+        return repository -> repository.setDefaultMaxInactiveInterval(ANONYMOUS_SESSION_TIMEOUT);
     }
 
     @Bean
@@ -81,8 +92,10 @@ public class WebConfig {
         serializer.setSameSite("Lax");
         serializer.setUseHttpOnlyCookie(true);
         serializer.setUseSecureCookie(secureCookie);
-        // 브라우저 종료 후에도 로그인 유지(서버 세션 타임아웃과 동일 수명). 기본 -1이면 세션 쿠키라 창 닫으면 소멸.
-        serializer.setCookieMaxAge((int) SESSION_TIMEOUT.toSeconds());
+        // 브라우저 종료 후에도 로그인 유지. 기본 -1이면 세션 쿠키라 창 닫으면 소멸.
+        // 쿠키는 익명(24h)이 아니라 로그인 수명(30일)에 맞춘다 — 쿠키 하나로 두 수명을 나눌 수 없고,
+        // 익명에게 30일 쿠키가 남아도 서버 세션이 24h에 만료되면 그 쿠키는 무효라 무해하다(비대칭 의도적).
+        serializer.setCookieMaxAge((int) AUTHENTICATED_SESSION_TIMEOUT.toSeconds());
         return serializer;
     }
 }
