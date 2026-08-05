@@ -48,6 +48,8 @@ BOOKTIMER_SES_SNS_TOPIC_ARN=arn:aws:sns:${REGION}:${ACCOUNT_ID}:booktimer-ses-bo
 GA_MEASUREMENT_ID=G-JFVDPJ036E
 BOOKTIMER_COUPANG_PARTNER_ENABLED=false
 BOOKTIMER_IMAGE=${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/booktimer:latest
+SPRING_SSL_BUNDLE_PEM_TOSS_KEYSTORE_CERTIFICATE=file:/etc/booktimer/toss/client-cert.pem
+SPRING_SSL_BUNDLE_PEM_TOSS_KEYSTORE_PRIVATE_KEY=file:/etc/booktimer/toss/client-key.pem
 EOF
 
 # ── 시크릿 ──
@@ -70,3 +72,28 @@ fi
 
 install -m 600 "$TMP" "$OUT"     # 시크릿 파일은 소유자만 읽게
 echo "[render-env] $OUT 생성 완료 ($(grep -c '=' "$OUT") 개 변수)"
+
+# ── 토스 mTLS 클라이언트 인증서 (PEM 2개) ──
+# .env가 아니라 파일로 떨어뜨린다 — env_file은 여러 줄 값을 담지 못하고, Spring SSL 번들도 경로를 받는다.
+# 위 SECRET_MAP 루프에 얹지 않는 이유도 같다: get-parameters-by-path --output text는 한 줄에 한 파라미터라
+# 여러 줄 PEM이 들어오면 레코드가 쪼개진다(그래서 파라미터별로 따로 받는다).
+# compose가 이 디렉터리를 /etc/booktimer/toss 로 읽기전용 마운트한다. 위 평문 블록의 SPRING_SSL_BUNDLE_* 두 줄이 짝.
+# 순서 주의는 없다 — Spring은 번들을 지연 생성해서 PEM이 없어도 앱은 뜨고 토스 호출 시점에만 실패한다(실측).
+TOSS_DIR="${TOSS_DIR:-./toss}"
+mkdir -p "$TOSS_DIR"
+
+render_pem() {  # $1=SSM 파라미터 이름  $2=출력 파일
+    local value
+    # 누락은 조용히 넘기지 않는다 — 빈 PEM으로 앱이 뜨면 토스 로그인만 죽는 무성 장애가 된다.
+    value="$(aws ssm get-parameter --name "$1" --with-decryption --region "$REGION" \
+                 --query Parameter.Value --output text)" || {
+        printf '[render-env] SSM 파라미터를 못 읽었다: %s\n' "$1" >&2
+        exit 1
+    }
+    printf '%s\n' "$value" > "$2"
+    chmod 600 "$2"
+}
+
+render_pem /booktimer/TOSS_MTLS_CERT "$TOSS_DIR/client-cert.pem"
+render_pem /booktimer/TOSS_MTLS_KEY  "$TOSS_DIR/client-key.pem"
+echo "[render-env] $TOSS_DIR 토스 mTLS 인증서 2개 생성 완료"

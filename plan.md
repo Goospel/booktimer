@@ -989,7 +989,11 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
   CHECK 불변식은 그대로 만족하고, null-state 유저가 발견/목록에서 빠지는 기존 동작(N-055)이 프라이버시 기본값으로 맞다.
 
 **PR 로드맵**:
-- **PR-0 스파이크** ⬜ — 앱인토스 콘솔 앱 등록 · mTLS 인증서 발급·배치 · 샌드박스에서 **WebView 오리진 실측**(CORS 설정값).
+- **PR-0 스파이크** 🔜 — 앱인토스 콘솔 앱 등록 · mTLS 인증서 발급·배치 · 샌드박스에서 **WebView 오리진 실측**(CORS 설정값).
+  - **mTLS 인증서 배치** ✅ (2026-08-06) — 발급받은 PEM 2개를 SSM SecureString(`/booktimer/TOSS_MTLS_{CERT,KEY}`)에
+    등록하고, `render-env.sh`가 배포마다 `./toss/`에 600으로 렌더 → compose가 `/etc/booktimer/toss`로 읽기전용 마운트.
+    Spring이 SSL 번들을 **지연 생성**하는 것을 실측했으므로 렌더 실패가 앱 기동을 막지는 않는다(토스 호출 시점에만 실패).
+  - 남은 것: 콘솔 앱 등록 · 샌드박스 WebView 오리진 실측 → `booktimer.miniapp.allowed-origins` 확정(별도 작업).
   ⚠️ 게이트: 여기서 막히면 설계 재소집(커스텀 스킴 등으로 CORS가 성립 안 하면 프록시 등 대안 필요).
 - **PR-1 서버: 토스 로그인 + Bearer 인증 기반** ✅ — V61 마이그레이션(`toss_user_key`·`api_token`·`toss_link_code`),
   `TossUserProvisioningService`·`TossLoginClient`(mTLS)·`ApiTokenService`·`TossLinkCodeService`·`BearerTokenFilter`·

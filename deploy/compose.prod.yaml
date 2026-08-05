@@ -29,6 +29,10 @@ services:
     restart: unless-stopped
     env_file:
       - .env                 # render-env.sh 가 SSM Parameter Store에서 생성
+    volumes:
+      # 토스 mTLS 클라이언트 인증서. render-env.sh 가 SSM에서 600으로 떨어뜨린다(레포엔 커밋 금지).
+      # 경로는 .env 의 SPRING_SSL_BUNDLE_PEM_TOSS_KEYSTORE_* 두 줄과 짝을 이룬다.
+      - ./toss:/etc/booktimer/toss:ro
     environment:
       # 컨테이너 메모리 제한(700m) 안에서 힙을 절반으로. 미지정 시 JVM 기본이 컨테이너 한도의
       # 25%라 여유가 남는데, 배포 순간 2개가 뜨는 구조라 상한을 명시해 OOM 여지를 없앤다.
