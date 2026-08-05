@@ -56,6 +56,10 @@ EOF
 missing=()
 while IFS=$'\t' read -r name value; do
     key="${name##*/}"
+    # /booktimer 아래 여러 줄 SecureString(PEM 등)이 있으면 --output text 가 줄바꿈마다 레코드를
+    # 쪼개 본문 줄이 그대로 흘러든다. 본문 줄은 SECRET_MAP 에 없어 아래 continue 로 걸러지지만,
+    # 빈 줄은 key="" 가 되고 연관배열의 빈 첨자 접근은 bad array subscript 로 죽는다(#702 배포 실패).
+    [ -n "$key" ] || continue
     env_name="${SECRET_MAP[$key]:-}"
     [ -n "$env_name" ] || continue          # 매핑에 없는 파라미터는 앱이 안 쓰는 것
     printf '%s=%s\n' "$env_name" "$value" >> "$TMP"

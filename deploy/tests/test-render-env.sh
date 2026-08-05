@@ -44,7 +44,13 @@ case "\$*" in
                  ADMIN_LOGIN_IDS LLM_API_KEY SPRING_MAIL_USERNAME SPRING_MAIL_PASSWORD \\
                  MYSQL_ROOT_PASSWORD; do
             printf '/booktimer/%s\tvalue-of-%s\n' "\$n" "\$n"
-        done ;;
+        done
+        # 여러 줄 SecureString(PEM)도 같은 /booktimer 경로에 살아 이 목록에 함께 나온다.
+        # --output text 는 줄바꿈에서 레코드를 쪼개므로 PEM 본문 줄이 탭 없이 뒤따르고,
+        # 빈 줄은 name="" 레코드가 된다 — 이게 bad array subscript 로 운영 배포를 죽였다(#702 실측).
+        printf '/booktimer/TOSS_MTLS_CERT\t%s\n' '-----BEGIN CERTIFICATE-----'
+        printf '%s\n' 'MIIBcertLINE2' '' '-----END CERTIFICATE-----'
+        ;;
     *get-parameter*TOSS_MTLS_CERT*)
         [ "\$MISSING" = TOSS_MTLS_CERT ] && { echo "ParameterNotFound" >&2; exit 255; }
         cat <<'PEMEOF'
@@ -88,6 +94,8 @@ assert_no_file() {  # $1=label $2=path
 # ── Case 1: 정상 — PEM 2개가 여러 줄 그대로 떨어지고 .env에 경로가 박힌다 ──
 r="$(run "")"; rc="${r%%$'\n'*}"; out="${r#*$'\n'}"
 assert_exit "정상 렌더" "$rc" "0"
+# by-path 목록에 섞인 여러 줄 PEM(빈 줄 포함)이 시크릿 루프를 죽이지 않는다 — 죽으면 .env 자체가 안 만들어진다.
+assert_has "  여러 줄 PEM 레코드가 섞여도 시크릿 루프가 산다" "$out" ".env 생성 완료"
 assert_eq "  client-cert.pem 이 원문 그대로(여러 줄)" "$(cat "$WORK/toss/client-cert.pem" 2>/dev/null)" "$CERT_PEM"
 assert_eq "  client-key.pem 이 원문 그대로(여러 줄)"  "$(cat "$WORK/toss/client-key.pem" 2>/dev/null)"  "$KEY_PEM"
 
