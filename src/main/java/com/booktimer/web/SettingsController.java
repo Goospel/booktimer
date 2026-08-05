@@ -8,6 +8,8 @@ import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.AccountDeletionConfirmationException;
 import com.booktimer.user.AccountService;
 import com.booktimer.user.InvalidPasswordException;
+import com.booktimer.user.TossLinkCodeService;
+import com.booktimer.user.TossLinkConflictException;
 import com.booktimer.user.User;
 import com.booktimer.user.UserSettingsService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -48,19 +50,22 @@ public class SettingsController {
     private final AccountService accountService;
     private final GardenService gardenService;
     private final ProfileCharacterService profileCharacterService;
+    private final TossLinkCodeService linkCodeService;
 
     public SettingsController(CurrentUserService currentUserService,
                               ReadingTimerRepository timerRepository,
                               UserSettingsService settingsService,
                               AccountService accountService,
                               GardenService gardenService,
-                              ProfileCharacterService profileCharacterService) {
+                              ProfileCharacterService profileCharacterService,
+                              TossLinkCodeService linkCodeService) {
         this.currentUserService = currentUserService;
         this.timerRepository = timerRepository;
         this.settingsService = settingsService;
         this.accountService = accountService;
         this.gardenService = gardenService;
         this.profileCharacterService = profileCharacterService;
+        this.linkCodeService = linkCodeService;
     }
 
     /** 타임존 드롭다운 후보 — GET 폼과 POST 검증 실패 재렌더 모두에 자동으로 실린다. */
@@ -93,7 +98,26 @@ public class SettingsController {
         // 프로필 사진(도감 작가 얼굴) — 보유(완독)한 작가만 고를 수 있다. 현재 선택 코드도 함께 싣는다.
         model.addAttribute("ownedCharacters", gardenService.view(user).ownedCharacters());
         model.addAttribute("profileCharacterCode", user.getProfileCharacterCode());
+        // 토스 앱 연결 — 연결됐으면 상태만 보이고, 아니면 일회용 코드 발급 버튼을 낸다(설계 §2.2).
+        model.addAttribute("tossLinked", user.getTossUserKey() != null);
         return "settings";
+    }
+
+    /**
+     * 토스 앱 연결 코드 발급 — 웹에 로그인해 있다는 사실 자체가 "이 계정의 주인" 증명이라, 그 상태에서 발급한
+     * 일회용 코드를 미니앱에 입력하면 같은 계정에 토스 신원이 붙는다(설계 §2.2 ⓐ).
+     *
+     * <p>평문 코드는 저장하지 않으므로 <b>플래시로 한 번만</b> 보여준다 — 새로고침하면 사라지고, 다시 필요하면
+     * 재발급(직전 코드는 무효화)한다. 이미 연결된 계정의 발급은 서비스가 거부하며 여기선 error 플래시로 옮긴다.
+     */
+    @PostMapping("/settings/toss-link-code")
+    public String issueTossLinkCode(Principal principal, RedirectAttributes redirectAttributes) {
+        try {
+            redirectAttributes.addFlashAttribute("tossLinkCode", linkCodeService.issue(currentUser(principal)));
+        } catch (TossLinkConflictException e) {
+            redirectAttributes.addFlashAttribute("error", "이미 토스 앱에 연결된 계정이에요.");
+        }
+        return "redirect:/settings";
     }
 
     @PostMapping("/settings")

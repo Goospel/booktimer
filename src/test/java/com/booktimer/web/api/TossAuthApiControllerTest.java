@@ -181,9 +181,11 @@ class TossAuthApiControllerTest {
     @DisplayName("link: 이미 토스에 연결된 계정의 코드 → 409 (once-set 불변)")
     void link_alreadyLinkedAccount_conflict() throws Exception {
         User web = localUser("already@booktimer.com", "alreadyl");
+        // 발급 → (다른 경로로) 연결 → 남아 있던 옛 코드로 다시 시도, 라는 실제 순서로 만든다.
+        // 연결된 뒤에는 발급 자체가 거부되므로(TossLinkCodeService.issue) 코드를 먼저 받아 둔다.
+        String code = linkCodeService.issue(web);
         web.linkTossUserKey("uk-existing");
         userRepository.save(web);
-        String code = linkCodeService.issue(web);
         tossReturns("uk-other", null);
 
         callToss("/api/toss/link", body("authorizationCode", "c", "referrer", "r", "linkCode", code))

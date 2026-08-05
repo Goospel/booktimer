@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * TossLinkCodeService — 웹 설정에서 발급하는 일회용 계정 연결 코드(TTL 5분).
@@ -80,6 +81,18 @@ class TossLinkCodeServiceTest {
         assertThat(service.consume("ZZZZZZZZ")).isEmpty();
         assertThat(service.consume(null)).isEmpty();
         assertThat(service.consume("  ")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("이미 토스에 연결된 계정은 코드 발급을 거부한다 — 화면이 버튼을 숨겨도 서비스가 다시 막는다")
+    void alreadyLinkedUser_issueRejected() {
+        User u = user("link-already@booktimer.com");
+        u.linkTossUserKey("uk-already");
+        userRepository.save(u);
+        TossLinkCodeService service = serviceAt(NOW);
+
+        assertThatThrownBy(() -> service.issue(u)).isInstanceOf(TossLinkConflictException.class);
+        assertThat(codeRepository.findByUserAndUsedAtIsNull(u)).isEmpty();
     }
 
     @Test

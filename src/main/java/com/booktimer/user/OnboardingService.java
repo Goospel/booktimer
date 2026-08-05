@@ -74,4 +74,24 @@ public class OnboardingService {
         timerRepository.save(timer);
         userRepository.save(user);
     }
+
+    /**
+     * 하루 목표만 정한다 — 미니앱(앱인토스) 경량 온보딩 (설계 §2.4).
+     *
+     * <p>{@link #complete}에서 <b>login_id 확정과 {@code completeOnboarding()}을 뺀 것</b>이다. 미니앱 계정은
+     * 핸들이 없으므로 여기서 온보딩 완료로 표시하면 DB CHECK({@code onboarded ⟹ login_id IS NOT NULL})를
+     * 위반한다 — 그래서 이 경로는 온보딩 플래그를 <b>건드리지 않는다</b>. 핸들 만들기는 미니앱이 소셜 기능을
+     * 여는 v2에서 {@link #complete}를 재사용한다.
+     *
+     * @throws IllegalStateException    타이머가 없는 경우
+     * @throws IllegalArgumentException 목표가 음수인 경우(도메인 위임)
+     */
+    public void setDailyGoal(User user, long dailyIncrementSeconds) {
+        ReadingTimer timer = timerRepository.findByUser(user)
+                .orElseThrow(() -> new IllegalStateException("no timer for user: " + user.getEmail()));
+
+        timer.updateSettings(dailyIncrementSeconds);
+        goalService.record(user, dailyIncrementSeconds); // 그날 목표로 과거를 판정하기 위한 시점 기록
+        timerRepository.save(timer);
+    }
 }
