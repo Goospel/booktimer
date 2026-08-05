@@ -4,6 +4,8 @@ import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.AuthProvider;
 import com.booktimer.user.Role;
+import com.booktimer.user.TossLinkCodeRepository;
+import com.booktimer.user.TossLinkCodeService;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
 import com.booktimer.user.UserRepository;
@@ -13,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -66,6 +69,12 @@ class SettingsControllerTest {
 
     @Autowired
     private ReadingTimerRepository timerRepository;
+
+    @Autowired
+    private TossLinkCodeService linkCodeService;
+
+    @Autowired
+    private TossLinkCodeRepository linkCodeRepository;
 
     @Autowired
     private Clock clock;
@@ -398,5 +407,72 @@ class SettingsControllerTest {
 
         User reloaded = userRepository.findByEmail("profchar-clear@booktimer.com").orElseThrow();
         assertThat(reloaded.getProfileCharacterCode()).isNull();
+    }
+
+    // ── 토스 앱 연결 (PR-2) ──────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("GET /settings: 미연결이면 tossLinked=false — 화면이 발급 버튼을 노출하는 분기")
+    void getSettings_notLinked_showsIssueBranch() throws Exception {
+        register("toss-unlinked@booktimer.com");
+
+        mockMvc.perform(get("/settings").with(user("toss-unlinked@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("tossLinked", false));
+    }
+
+    @Test
+    @DisplayName("GET /settings: 이미 연결된 계정이면 tossLinked=true — 발급 버튼 대신 연결됨 표시")
+    void getSettings_linked_showsLinkedBranch() throws Exception {
+        User u = register("toss-linked@booktimer.com");
+        u.linkTossUserKey("uk-settings-linked");
+        userRepository.save(u);
+
+        mockMvc.perform(get("/settings").with(user("toss-linked@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("tossLinked", true));
+    }
+
+    @Test
+    @DisplayName("POST /settings/toss-link-code: 코드를 발급해 플래시로 한 번만 보여준다(평문은 DB에 없다)")
+    void postTossLinkCode_issuesCode() throws Exception {
+        User u = register("toss-issue@booktimer.com");
+
+        MvcResult result = mockMvc.perform(post("/settings/toss-link-code")
+                        .with(user("toss-issue@booktimer.com")).with(csrf()))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/settings"))
+                .andExpect(flash().attributeExists("tossLinkCode"))
+                .andReturn();
+
+        String code = (String) result.getFlashMap().get("tossLinkCode");
+        assertThat(linkCodeService.consume(code)).map(User::getId).contains(u.getId());
+    }
+
+    @Test
+    @DisplayName("POST /settings/toss-link-code: 미인증이면 발급하지 않고 로그인으로 보낸다")
+    void postTossLinkCode_anonymous_redirectsToLogin() throws Exception {
+        mockMvc.perform(post("/settings/toss-link-code").with(csrf()))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+
+        assertThat(linkCodeRepository.findAll()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("POST /settings/toss-link-code: 이미 연결된 계정은 코드를 발급하지 않고 error 플래시로 되돌린다")
+    void postTossLinkCode_alreadyLinked_flashError() throws Exception {
+        User u = register("toss-issue-linked@booktimer.com");
+        u.linkTossUserKey("uk-settings-issue");
+        userRepository.save(u);
+
+        mockMvc.perform(post("/settings/toss-link-code")
+                        .with(user("toss-issue-linked@booktimer.com")).with(csrf()))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/settings"))
+                .andExpect(flash().attributeExists("error"))
+                .andExpect(flash().attribute("tossLinkCode", (Object) null));
+
+        assertThat(linkCodeRepository.findByUserAndUsedAtIsNull(u)).isEmpty();
     }
 }

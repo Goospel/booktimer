@@ -193,6 +193,23 @@
         </form>
     </section>
 
+    <!-- 토스 앱 연결 — 미니앱(앱인토스)에서 같은 계정을 쓰기 위한 일회용 코드 발급.
+         연결됐으면 상태만 보이고 버튼은 없앤다(toss_user_key는 once-set 불변 — 발급해도 쓸 데가 없다).
+         평문 코드는 저장하지 않으므로 발급 직후 플래시로 한 번만 보인다. -->
+    <section class="set-card">
+        <h2 class="set-card-title">토스 앱 연결</h2>
+        <p class="set-card-desc">토스 앱에서도 이 계정으로 독서 기록을 이어서 볼 수 있어요. 아래 연결 코드를 받아 토스 앱에 입력하세요.</p>
+
+        <div th:if="${tossLinkCode}" class="set-alert set-alert-ok">
+            <span>연결 코드 <strong th:text="${tossLinkCode}">ABCD2345</strong> — 5분 안에 토스 앱에 입력하세요(한 번만 사용할 수 있어요).</span>
+        </div>
+
+        <p th:if="${tossLinked}" class="set-card-desc"><strong>토스 앱에 연결됨</strong> — 토스 앱에서 로그인하면 이 계정으로 이어져요.</p>
+        <form th:unless="${tossLinked}" th:action="@{/settings/toss-link-code}" method="post">
+            <button type="submit" class="set-btn-save">연결 코드 발급</button>
+        </form>
+    </section>
+
     <!-- 회원 탈퇴 (위험 구역) -->
     <section class="set-card set-card-danger">
         <h2 class="set-card-title set-card-title-danger">회원 탈퇴</h2>

@@ -991,12 +991,13 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 **PR 로드맵**:
 - **PR-0 스파이크** ⬜ — 앱인토스 콘솔 앱 등록 · mTLS 인증서 발급·배치 · 샌드박스에서 **WebView 오리진 실측**(CORS 설정값).
   ⚠️ 게이트: 여기서 막히면 설계 재소집(커스텀 스킴 등으로 CORS가 성립 안 하면 프록시 등 대안 필요).
-- **PR-1 서버: 토스 로그인 + Bearer 인증 기반** 🔜 — V61 마이그레이션(`toss_user_key`·`api_token`·`toss_link_code`),
+- **PR-1 서버: 토스 로그인 + Bearer 인증 기반** ✅ — V61 마이그레이션(`toss_user_key`·`api_token`·`toss_link_code`),
   `TossUserProvisioningService`·`TossLoginClient`(mTLS)·`ApiTokenService`·`TossLinkCodeService`·`BearerTokenFilter`·
   `TossAuthApiController`(login/register/link/logout) + CORS 프로퍼티 외부화.
-- **PR-2 연결 코드 발급 UI + 미니앱 온보딩 API** ⬜ — 웹 설정의 "토스 앱 연결" 절(**웹 쪽 유일한 신규 UI**),
-  `POST /api/miniapp/goal`(하루 목표만 설정 — onboarded·login_id 불변).
-- **PR-3 프론트 `miniapp/`** ⬜ — 화면 5개(로그인 브릿지·계정 연결·타이머 홈·기록·목표). 배포는 앱인토스 CLI(우리 CI 밖).
+- **PR-2 연결 코드 발급 UI + 미니앱 온보딩 API** ✅ — 웹 설정의 "토스 앱 연결" 절(**웹 쪽 유일한 신규 UI** — 미연결이면
+  발급 버튼, 연결됐으면 상태만. 평문 코드는 저장하지 않으므로 플래시로 한 번만 노출), `POST /api/miniapp/goal`
+  (하루 목표만 설정 — `completeOnboarding()`을 부르지 않아 onboarded·login_id 불변).
+- **PR-3 프론트 `miniapp/`** 🔜 — 화면 5개(로그인 브릿지·계정 연결·타이머 홈·기록·목표). 배포는 앱인토스 CLI(우리 CI 밖).
 - **출시** ⬜ — 심사 제출 후 실기기 확인. **인수 시나리오 = 웹 PC ↔ 토스 모바일 교차**(웹에서 시작한 측정이 미니앱에,
   미니앱 측정이 웹 잔디에).
 

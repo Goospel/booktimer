@@ -50,9 +50,16 @@ public class TossLinkCodeService {
      * 연결 코드를 발급한다 — 평문을 돌려주고(화면에만 노출) DB엔 해시·만료를 저장한다.
      * 같은 사용자의 기존 미사용 코드는 무효화해 항상 하나만 유효하게 둔다(EmailTokenService와 동일).
      *
+     * <p>이미 토스에 연결된 계정은 거부한다 — {@code toss_user_key}는 once-set 불변이라 이 코드로 할 수 있는
+     * 일이 없다. 설정 화면이 버튼을 숨기지만 그건 표시일 뿐이라, 실제 방어는 여기서 한다.
+     *
      * @return 사용자에게 보여줄 평문 코드(대문자 8자)
+     * @throws TossLinkConflictException 이미 토스 신원이 붙어 있는 계정인 경우
      */
     public String issue(User user) {
+        if (user.getTossUserKey() != null) {
+            throw new TossLinkConflictException("이미 토스에 연결된 계정입니다");
+        }
         Instant now = clock.instant();
         List<TossLinkCode> previous = repository.findByUserAndUsedAtIsNull(user);
         for (TossLinkCode code : previous) {
