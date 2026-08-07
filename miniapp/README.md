@@ -37,11 +37,14 @@ npm run build                  # tsc -b && vite build → dist/
 ## 배포 (앱인토스 CLI — 우리 CI에 얹지 않는다)
 
 ```bash
-npx ait token add            # 콘솔에서 받은 시크릿 토큰 등록 (최초 1회)
 npm run build                # dist/ 생성 — apps-in-toss.config.ts의 webBundleDir가 여기를 가리킨다
 npx ait build                # 배포용 .ait 아티팩트
-npx ait deploy -m "설명"     # 앱인토스 업로드
+npx ait deploy --api-key "$(cat ../.claude/.secrets/ait-api-key.txt)"   # 앱인토스 업로드
 ```
+
+> ⚠️ `npx ait token add`는 **존재하지 않는다** — 동봉 CLI(`@apps-in-toss/web-framework` 3.0.2의 `ait`)의
+> 서브커맨드는 `build` / `deploy` / `init`뿐(실측 2026-08-07). 인증은 사전 등록이 아니라 **배포 시점에
+> `--api-key`로 전달**한다. 키는 메인 repo `.claude/.secrets/ait-api-key.txt`에 보관(git 미추적).
 
 ## 남은 전제 (PR-0 — 사용자 직접 작업)
 
