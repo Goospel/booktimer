@@ -156,7 +156,7 @@ public class SecurityConfig {
                         // 리버스프록시(Caddy) blue-green 전환이 upstream 헬스체크로 readiness를 쓰는데, 여기가 막혀
                         // 302가 나가면 프록시가 앱을 영영 unhealthy로 보고 서비스 전체가 503이 된다.
                         // 노출 표면은 {"status":"UP"} 뿐(show-details 기본 never)이라 /actuator/health와 동급이다.
-                        .requestMatchers("/", "/dashboard", "/signup", "/login", "/privacy", "/verify-email", "/password/**", "/unsubscribe", "/error", "/actuator/health", "/actuator/health/**", "/css/**", "/js/**", "/favicon.ico", "/manifest*.json", "/icons/**", "/sw.js", "/pwa-install*.js").permitAll()
+                        .requestMatchers("/", "/dashboard", "/signup", "/login", "/privacy", "/terms", "/verify-email", "/password/**", "/unsubscribe", "/error", "/actuator/health", "/actuator/health/**", "/css/**", "/js/**", "/favicon.ico", "/manifest*.json", "/icons/**", "/sw.js", "/pwa-install*.js").permitAll()
                         // ads.txt(AdSense 소유권·수익 보호) + robots.txt(크롤 지시): 크롤러가 비인증으로 읽어야 하는
                         // 공개 정적 파일. default-deny라 명시 안 하면 로그인으로 302 튕겨 크롤러에게 모호한 신호가 된다.
                         .requestMatchers("/ads.txt", "/robots.txt").permitAll()
