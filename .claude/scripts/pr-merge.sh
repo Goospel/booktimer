@@ -49,6 +49,12 @@ fi
 
 note() { echo "[pr-merge] $*"; }
 
+# gh 미해결 환경(PowerShell 경유 bash 등)에서 모든 gh 호출이 조용히 실패해 거짓 성공이 나는 것 차단(T-141).
+if [ "${PR_MERGE_DRYRUN:-0}" != "1" ] && ! command -v gh >/dev/null 2>&1; then
+  note "❌ gh 를 PATH에서 찾을 수 없음 — 이 셸에선 실행 불가. Git Bash에서 재실행하라." >&2
+  exit 2
+fi
+
 # elapsed 시작점 — SECONDS는 bash 내장(스크립트 시작 후 경과초). Date.now류 불필요.
 SECONDS=0
 
@@ -156,9 +162,18 @@ arm_and_exit() {
   else
     note "auto-merge(squash) 설정…"
     timeout 60 gh pr merge "$PR" --auto --squash 2>&1 | sed 's/^/[pr-merge] /'
+    # 파이프 최종 exit는 sed(항상 0)라 gh 실패가 가려진다 → gh 자신의 종료코드로 판정(T-141).
+    if [ "${PIPESTATUS[0]}" != "0" ]; then
+      note "❌ auto-merge 설정 실패(gh pr merge --auto 비정상 종료) — arm 안 걸림. 수동 확인 필요." >&2
+      return 1
+    fi
   fi
   local st state merge
   st="$(read_state)"; state="${st%% *}"; merge="${st##* }"
+  if [ -z "$state" ]; then
+    note "❌ 상태 조회 실패(gh pr view 무응답) — arm 여부 미확인. 성공으로 취급하지 않는다." >&2
+    return 1
+  fi
   note "arm 후 상태: state=$state mergeStateStatus=$merge"
   case "$state" in
     MERGED) note "이미 머지됨."; return 0 ;;
@@ -174,6 +189,18 @@ arm_and_exit() {
       note "❌ DIRTY(머지 충돌) — --rebase로 풀거나 수동 처리 필요." >&2
       return 3 ;;
     *)
+      # 성공 선언 전에 증거를 확인한다 — arm이 실제로 장착됐는지는 autoMergeRequest로만 알 수 있다(T-141).
+      if [ "${PR_MERGE_DRYRUN:-0}" != "1" ]; then
+        local am
+        am="$(timeout 30 gh pr view "$PR" --json autoMergeRequest -q .autoMergeRequest 2>/dev/null)"
+        if [ -z "$am" ] || [ "$am" = "null" ]; then
+          # 레이스: CLEAN이면 --auto가 즉시 머지해 autoMergeRequest가 null일 수 있다 → MERGED면 성공.
+          st="$(read_state)"; state="${st%% *}"
+          if [ "$state" = "MERGED" ]; then note "이미 머지됨."; return 0; fi
+          note "❌ arm 검증 실패: autoMergeRequest 비어 있음 — auto-merge가 실제로 안 걸렸다. 수동 확인 필요." >&2
+          return 1
+        fi
+      fi
       note "✅ auto-merge 걸림 — 필수체크 통과 시 서버가 머지(이 세션 대기 불필요)." ;;
   esac
   return 0
