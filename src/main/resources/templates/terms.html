@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <!-- 방문 통계(GA4, 측정 ID 설정 시에만) -->
+    <th:block th:replace="~{analytics :: gtag}"></th:block>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>서비스 이용약관 — BookTimer</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <svg class="brand-ico" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="3.4" height="16" rx="1"/><rect x="9.3" y="4" width="3.4" height="16" rx="1"/><path d="M15 5.4l3.3-.7 2.4 15.4-3.3.7z"/></svg>
+        <h1>BookTimer</h1>
+    </header>
+    <p class="greeting">서비스 이용약관</p>
+
+    <section class="card legal">
+        <h2>제1조 (목적)</h2>
+        <p>이 약관은 북타이머(이하 "서비스")의 이용과 관련하여 서비스 제공자와 이용자 간의 권리, 의무 및 책임사항을 규정함을 목적으로 합니다.</p>
+
+        <h2>제2조 (서비스의 내용)</h2>
+        <p>서비스는 다음 기능을 제공합니다.</p>
+        <ul>
+            <li>독서 시간 측정 및 기록</li>
+            <li>독서 목표 설정과 달성 현황(잔디) 시각화</li>
+            <li>책 관리(읽는 중·완독·읽고 싶은 책)</li>
+            <li>다른 이용자와의 팔로우 등 소셜 기능</li>
+            <li>도서 구매처 연결(제휴 링크 포함)</li>
+        </ul>
+
+        <h2>제3조 (계정)</h2>
+        <ol>
+            <li>서비스는 이메일 가입 계정과 토스 로그인 계정을 지원합니다.</li>
+            <li>이용자는 자신의 계정 정보를 안전하게 관리할 책임이 있습니다.</li>
+            <li>이용자는 언제든지 설정 화면에서 계정을 삭제할 수 있으며, 삭제 시 독서 기록 등 계정에 귀속된 데이터는 복구할 수 없습니다.</li>
+        </ol>
+
+        <h2>제4조 (이용자의 의무)</h2>
+        <p>이용자는 다음 행위를 해서는 안 됩니다.</p>
+        <ul>
+            <li>타인의 계정을 도용하거나 개인정보를 수집하는 행위</li>
+            <li>서비스의 정상적인 운영을 방해하는 행위</li>
+            <li>관련 법령 또는 공서양속에 위반되는 내용을 게시하는 행위</li>
+        </ul>
+
+        <h2>제5조 (서비스의 변경 및 중단)</h2>
+        <ol>
+            <li>서비스 제공자는 운영상·기술상 필요에 따라 서비스의 전부 또는 일부를 변경하거나 중단할 수 있습니다.</li>
+            <li>서비스에 중대한 변경이 있는 경우 서비스 내 공지 등 합리적인 방법으로 사전에 알립니다.</li>
+        </ol>
+
+        <h2>제6조 (지식재산권)</h2>
+        <ol>
+            <li>서비스에 포함된 소프트웨어, 디자인 등에 대한 권리는 서비스 제공자에게 있습니다.</li>
+            <li>이용자가 서비스에 기록한 독서 데이터에 대한 권리는 이용자에게 있으며, 서비스 제공자는 서비스 제공 목적 범위에서만 이를 이용합니다.</li>
+        </ol>
+
+        <h2>제7조 (책임의 제한)</h2>
+        <ol>
+            <li>서비스는 무료로 제공되며, 서비스 제공자는 천재지변, 시스템 장애 등 불가항력으로 인한 손해에 대해 책임을 지지 않습니다.</li>
+            <li>도서 구매처 연결 기능은 외부 판매처로의 링크를 제공할 뿐이며, 실제 구매 계약은 해당 판매처와 이용자 간에 성립합니다.</li>
+        </ol>
+
+        <h2>제8조 (개인정보 보호)</h2>
+        <p>개인정보의 수집·이용에 관한 사항은 <a th:href="@{/privacy}">개인정보처리방침</a>을 따릅니다.</p>
+
+        <h2>제9조 (약관의 변경)</h2>
+        <ol>
+            <li>이 약관은 관련 법령을 위반하지 않는 범위에서 개정될 수 있습니다.</li>
+            <li>약관이 변경되는 경우 시행일과 변경 내용을 서비스 내에 공지합니다.</li>
+        </ol>
+
+        <h2>제10조 (문의)</h2>
+        <p>서비스 이용 관련 문의는 <a href="mailto:kimsadol369785@gmail.com">kimsadol369785@gmail.com</a> 으로 연락해 주세요.</p>
+
+        <p class="legal-date">시행일: 2026-08-09</p>
+    </section>
+
+    <nav class="link-row" aria-label="페이지 이동">
+        <th:block th:replace="~{fragments/nav-links :: navLink(@{/login}, 'back', '로그인')}"></th:block>
+    </nav>
+</div>
+</body>
+</html>

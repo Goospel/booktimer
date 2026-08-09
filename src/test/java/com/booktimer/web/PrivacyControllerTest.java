@@ -42,4 +42,14 @@ class PrivacyControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("이메일")));
     }
+
+    @Test
+    @DisplayName("GET /terms: 인증 없이 200으로 이용약관 뷰를 렌더한다")
+    void getTerms_isPublicAndRendersView() throws Exception {
+        mockMvc.perform(get("/terms"))
+                .andExpect(status().isOk())
+                .andExpect(view().name("terms"))
+                // 뷰 이름만 보면 템플릿이 깨져도(fragment 참조 오류 등) 통과할 수 있어, 실제 렌더 결과까지 본다.
+                .andExpect(content().string(containsString("제1조 (목적)")));
+    }
 }
