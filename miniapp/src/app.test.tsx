@@ -53,16 +53,18 @@ describe('탭 구조', () => {
   it('탭마다 그 탭의 화면을 그린다 — 탭 선택 ↔ 화면 대응', () => {
     expect(renderTab('home')).toContain('구스펠님의 오늘');
     expect(renderTab('library')).toContain('내 서재');
+    expect(renderTab('social')).toContain('책방 둘러보기');
     expect(renderTab('history')).toContain('내 기록');
   });
 
   it('다른 탭의 화면은 함께 그리지 않는다 — 한 번에 한 화면', () => {
     expect(renderTab('home')).not.toContain('내 기록');
     expect(renderTab('library')).not.toContain('구스펠님의 오늘');
+    expect(renderTab('home')).not.toContain('책방 둘러보기');
   });
 
   it('탭바에서 선택 표시되는 항목은 지금 그려진 탭 자신이다 — index 어긋남 방지', () => {
-    expect(TABS.map((t) => t.label)).toEqual(['홈', '서재', '기록']);
+    expect(TABS.map((t) => t.label)).toEqual(['홈', '서재', '소셜', '기록']);
 
     for (const { key, label } of TABS) {
       const markup = renderTab(key);
@@ -78,11 +80,11 @@ describe('탭 구조', () => {
 
     TABS.forEach((_, index) => change(index));
 
-    expect(picked).toEqual(['home', 'library', 'history']);
+    expect(picked).toEqual(['home', 'library', 'social', 'history']);
   });
 
-  it('소셜 탭은 아직 없다 — 화면 없는 빈 탭을 내보내지 않는다(PR-6)', () => {
-    expect(TABS.map((t) => t.key)).not.toContain('social');
+  it('소셜 탭은 서재와 기록 사이에 온다 — 탭바 순서가 곧 TABS 순서다', () => {
+    expect(TABS.map((t) => t.key)).toEqual(['home', 'library', 'social', 'history']);
   });
 });
 

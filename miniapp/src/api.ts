@@ -267,3 +267,111 @@ export const setBookVisibility = (id: number, visibility: BookVisibility): Promi
 
 export const deleteBook = (id: number): Promise<{ deleted: boolean }> =>
   request(`/api/books/${id}/delete`, { body: {} });
+
+// ── 소셜 (search·follow·profile·block·report 컨트롤러의 record가 타입 단일 출처) ──
+//
+// 소셜 API는 대상 사용자를 **loginId(공개 @핸들)로만** 식별한다 — 서버가 전부
+// `findByLoginId`로 대상을 찾는다. 그래서 login_id가 없는 계정(미니앱 신규 가입)은
+// 대상이 될 수 없고, 자기 자신조차 책방을 열 수 없다(설계 §5-1 — Social이 안내로 처리).
+
+/** `search.UserSearchResult` — 검색·팔로우 목록·차단 목록이 공유하는 사용자 한 줄. */
+export interface UserRow {
+  loginId: string;
+  nickname: string;
+  publicBookCount: number;
+  following: boolean;
+  self: boolean;
+}
+
+/** `SearchApiController.SearchResponse` — 추천(recommendations)은 미니앱이 아직 쓰지 않아 옮기지 않는다. */
+export interface UserSearchResponse {
+  q: string | null;
+  results: UserRow[];
+  /** 내 @핸들 — 온보딩 전(login_id=null) 계정은 null이다(§5-1). */
+  myLoginId: string | null;
+  rateLimited: boolean;
+}
+
+/** 서버는 2글자 미만이면 빈 결과를 준다(열거 방지) — 실패가 아니라 0건이다. */
+export const searchUsers = (q: string): Promise<UserSearchResponse> => request('/api/search', { query: { q } });
+
+export type FollowListType = 'followers' | 'following';
+
+export interface FollowListResponse {
+  type: FollowListType;
+  users: UserRow[];
+  myLoginId: string | null;
+}
+
+export const fetchFollowList = (type: FollowListType): Promise<FollowListResponse> =>
+  request('/api/follow-list', { query: { type } });
+
+/** 팔로우 상태는 낙관 갱신하지 않는다 — 서버가 준 following이 유일한 진실(레이트리밋·차단이면 안 바뀐다). */
+export const follow = (loginId: string): Promise<{ following: boolean }> =>
+  request('/api/follow', { body: { loginId } });
+
+export const unfollow = (loginId: string): Promise<{ following: boolean }> =>
+  request('/api/unfollow', { body: { loginId } });
+
+export interface ProfileTagChip {
+  label: string;
+  clickable: boolean;
+}
+
+/** `ProfileApiController.BookSummary` — status는 enum이 아니라 한글 라벨이다(필터는 서버에 맡긴다). */
+export interface ProfileBook {
+  id: number;
+  title: string;
+  author: string | null;
+  coverUrl: string | null;
+  status: string;
+  seconds: number;
+  purchaseLink: string | null;
+}
+
+/** `ProfileApiController.ProfileResponse` — 제휴 서점 플래그는 미니앱이 안 써서 옮기지 않는다. */
+export interface ProfileResponse {
+  loginId: string;
+  nickname: string;
+  profileCharacterCode: string | null;
+  followerCount: number;
+  followingCount: number;
+  following: boolean;
+  self: boolean;
+  personality: string | null;
+  personalityTags: ProfileTagChip[];
+  books: ProfileBook[];
+}
+
+/** 차단·ADMIN·없는 아이디는 모두 404 — 존재를 누설하지 않는 서버 계약을 그대로 받는다. */
+export const fetchProfile = (loginId: string): Promise<ProfileResponse> =>
+  request('/api/profile', { query: { loginId } });
+
+/** status 생략 = 전체. 라벨→enum 역매핑을 클라이언트가 흉내내지 않으려고 필터를 서버에 맡긴다. */
+export const fetchProfileBooks = (loginId: string, status?: BookStatus): Promise<{ books: ProfileBook[] }> =>
+  request('/api/profile/books', { query: { loginId, status } });
+
+export const fetchPersonalityTagBooks = (loginId: string, tag: string): Promise<{ books: ProfileBook[] }> =>
+  request('/api/profile/personality-tag', { query: { loginId, tag } });
+
+/** 차단하면 상대가 검색·목록에서 사라진다 — 이 목록이 미니앱의 유일한 차단 해제 경로다. */
+export const fetchBlocks = (): Promise<{ blocked: UserRow[]; myLoginId: string | null }> => request('/api/blocks');
+
+export const blockUser = (loginId: string): Promise<{ blocked: boolean }> =>
+  request('/api/block', { body: { loginId } });
+
+export const unblockUser = (loginId: string): Promise<{ blocked: boolean }> =>
+  request('/api/unblock', { body: { loginId } });
+
+/** 서버 `ReportReason` enum과 값이 어긋나면 조용히 OTHER로 접수된다 — 값·순서를 그대로 옮긴다. */
+export const REPORT_REASONS = [
+  { value: 'SPAM', label: '스팸/광고' },
+  { value: 'HARASSMENT', label: '괴롭힘/욕설' },
+  { value: 'INAPPROPRIATE', label: '부적절한 콘텐츠' },
+  { value: 'OTHER', label: '기타' },
+] as const;
+
+export type ReportReason = (typeof REPORT_REASONS)[number]['value'];
+
+export const reportUser = (loginId: string, reason: ReportReason, detail: string): Promise<{ reported: boolean }> =>
+  request('/api/report', { body: { loginId, reason, detail } });

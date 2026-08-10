@@ -123,6 +123,12 @@ async function request<T>(path: string, init?: { method?: 'GET'|'POST'|'DELETE';
    이 유저의 노출·참조가 어떻게 되는지 PR-6에서 **null-state 엔티티 경계 테스트**(N-055 계열)로 실측한다.
    자기 책방 공유·스토리 작성이 loginId를 요구하면: v2 처리 = "웹에서 아이디 설정" 안내 화면(마찰 명시),
    미니앱 내 loginId 설정은 범위 밖.
+   - **실측 완료(PR-6)**: 소셜 API는 전부 대상을 `findByLoginId`로 찾는다. 발견 표면은 이미 온보딩 전
+     계정을 제외한다 — 검색은 `login_id` LIKE(NULL 미매칭), `FollowListService`는 명시적 null 필터,
+     `recommend`도 제외(N-055 서버측 기완료, 서버 테스트 존재). **막히는 경로는 자기 책방 하나**
+     (`@RequestParam String loginId` 필수 → 핸들 없는 계정은 요청이 성립 불가) → 소셜 탭에서 버튼 대신
+     웹 안내를 그린다. 남을 팔로우·차단·신고하고 남의 책방을 보는 건 핸들 없이도 된다.
+     스토리(PR-7)의 `/api/stories/of/{loginId}`는 그 PR에서 다시 확인한다.
 2. **principal 브리지 실측**: 각 컨트롤러가 Bearer principal(이메일 브리지)로 동작하는 계약은 PR-1에서
    확립됐지만, 뮤테이션 계열(books·follow·stories)은 미니앱발 호출이 처음이다 — PR마다 실기기 1회가 게이트.
 3. **App.tsx 재편(PR-5) 회귀**: 타이머·인증 흐름이 전부 이 파일을 지난다. 기존 흐름(로그인→홈→시작/정지→
