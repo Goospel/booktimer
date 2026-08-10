@@ -21,3 +21,15 @@ body {
 [data-tds-mobile-component='Paragraph.Text'] {
   display: block !important;
 }
+
+/*
+ * 가로 스크롤 영역(스토리 스트립 · 잔디)의 스크롤바 숨김 — 모바일 WebView가 두꺼운 회색 바를 상시
+ * 노출해 카드 아래 이물처럼 보인다. 스크롤 자체는 그대로라 손가락으로 넘기는 건 똑같이 된다.
+ */
+.no-scrollbar {
+  scrollbar-width: none; /* 파이어폭스 */
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* 웹킷 — 토스 WebView가 여기 해당 */
+}

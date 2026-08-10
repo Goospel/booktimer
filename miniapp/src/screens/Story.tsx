@@ -11,7 +11,7 @@ import {
   fetchStoryViewers,
   markStoryViewed,
 } from '../api';
-import { ErrorMessage, Screen } from '../ui';
+import { BookCover, ErrorMessage, Screen } from '../ui';
 
 /**
  * 독서 스토리 — 소셜 탭 상단 스트립 · 전체화면 열람 · 작성 (설계 §4 PR-7).
@@ -73,7 +73,7 @@ export function StoryStrip({
   if (feed === null) return null; // 아직 못 받음 — 빈 껍데기를 깜빡이지 않는다
 
   return (
-    <div style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '4px 0 12px' }}>
+    <div className="no-scrollbar" style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '4px 0 12px' }}>
       {feed.mine !== null && <Ring label="내 스토리" fresh={false} onClick={() => onOpen(feed.mine!, true)} />}
       {feed.groups.map((group) => (
         <Ring
@@ -264,16 +264,8 @@ export function StoryCardView({
       {card.bookTitle !== null && (
         // 표지는 서버가 준 것만 — 없으면 옛 아이콘 그대로. 카드 주인공은 문장이라 썸네일은 작게 둔다.
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13, opacity: 0.8 }}>
-          {card.bookCoverUrl === null ? (
-            <span>📖</span>
-          ) : (
-            <img
-              src={card.bookCoverUrl}
-              alt=""
-              loading="lazy"
-              style={{ width: 24, height: 34, borderRadius: 3, objectFit: 'cover' }}
-            />
-          )}
+          {/* 표지가 없으면 옛 아이콘 그대로, 있으면 공용 썸네일 — 로드 실패 폴백을 같이 물려받는다. */}
+          {card.bookCoverUrl === null ? <span>📖</span> : <BookCover url={card.bookCoverUrl} width={24} />}
           <span>{card.bookTitle}</span>
         </div>
       )}

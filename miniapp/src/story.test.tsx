@@ -84,6 +84,10 @@ describe('스토리 스트립 (소셜 탭 상단)', () => {
     expect(renderToStaticMarkup(<StoryStrip feed={null} onOpen={() => {}} onCompose={() => {}} />)).toBe('');
   });
 
+  it('가로 스크롤 스트립의 스크롤바를 숨긴다 — 링 아래로 두꺼운 회색 바가 그대로 보였다', () => {
+    expect(strip({ mine: null, groups: [author('goospel')] })).toContain('class="no-scrollbar"');
+  });
+
   it('내 스토리가 있으면 맨 앞에 내 링을 둔다 — 핸들 없는 계정(loginId=null)도 포함(설계 §5-1)', () => {
     const markup = strip({ mine: author(null, { stories: [card(9)] }), groups: [author('goospel')] });
 

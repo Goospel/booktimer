@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { DashboardResponse } from './api';
 import { History } from './screens/History';
 import { Home } from './screens/Home';
+import { coverSource } from './ui';
 import { graph, userAgent } from './test-fixtures';
 
 /**
@@ -35,6 +36,10 @@ describe('잔디 렌더', () => {
 
   it('주 × 일 수만큼 칸을 그린다', () => {
     expect(markup.match(/border-radius:2px/g)).toHaveLength(6);
+  });
+
+  it('가로 스크롤 컨테이너가 스크롤바 숨김 클래스를 쓴다 — 규칙만 있고 안 붙이면 아무 일도 안 난다', () => {
+    expect(markup).toContain('class="no-scrollbar"');
   });
 });
 
@@ -121,5 +126,38 @@ describe('배경·color-scheme', () => {
 
   it('TDS Text를 블록으로 되돌린다 — TDS가 호출부의 display:block을 inline-block으로 덮어써 줄이 붙는다', () => {
     expect(read('./global.css')).toMatch(/Paragraph\.Text[^}]*display:\s*block\s*!important/);
+  });
+
+  it('가로 스크롤 영역의 스크롤바를 숨긴다 — 파이어폭스·웹킷 양쪽 다', () => {
+    const css = read('./global.css');
+
+    expect(css).toMatch(/\.no-scrollbar[^}]*scrollbar-width:\s*none/);
+    expect(css).toMatch(/\.no-scrollbar::-webkit-scrollbar[^}]*display:\s*none/);
+  });
+
+});
+
+/**
+ * 표지 로드 실패 — `coverUrl`이 있어도 원격 이미지(알라딘 등)는 실패할 수 있고, 그러면 브라우저의
+ * 깨진 이미지 아이콘이 그대로 노출된다. 실패는 "표지가 없는 것"과 같이 취급한다.
+ *
+ * <p>정적 렌더 하니스로는 `onError`가 돌지 않으므로 판단만 순수 함수로 꺼내 계측한다 —
+ * `nextStoryIndex`·`tabChangeHandler`와 같은 방식.
+ */
+describe('표지 출처 결정', () => {
+  it('표지가 없으면 자리 채움', () => {
+    expect(coverSource(null, null)).toBeNull();
+  });
+
+  it('멀쩡한 표지는 그대로 그린다', () => {
+    expect(coverSource('https://img/a.jpg', null)).toBe('https://img/a.jpg');
+  });
+
+  it('로드에 실패한 표지는 없는 것으로 친다 — 깨진 이미지 아이콘 대신 자리 채움', () => {
+    expect(coverSource('https://img/a.jpg', 'https://img/a.jpg')).toBeNull();
+  });
+
+  it('다른 책이 실패한 것은 이 책에 옮지 않는다 — 목록 재사용으로 실패가 번지면 멀쩡한 표지가 사라진다', () => {
+    expect(coverSource('https://img/a.jpg', 'https://img/b.jpg')).toBe('https://img/a.jpg');
   });
 });
