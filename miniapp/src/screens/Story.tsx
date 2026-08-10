@@ -262,7 +262,20 @@ export function StoryCardView({
       </div>
 
       {card.bookTitle !== null && (
-        <p style={{ fontSize: 13, opacity: 0.8, textAlign: 'center' }}>📖 {card.bookTitle}</p>
+        // 표지는 서버가 준 것만 — 없으면 옛 아이콘 그대로. 카드 주인공은 문장이라 썸네일은 작게 둔다.
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13, opacity: 0.8 }}>
+          {card.bookCoverUrl === null ? (
+            <span>📖</span>
+          ) : (
+            <img
+              src={card.bookCoverUrl}
+              alt=""
+              loading="lazy"
+              style={{ width: 24, height: 34, borderRadius: 3, objectFit: 'cover' }}
+            />
+          )}
+          <span>{card.bookTitle}</span>
+        </div>
       )}
 
       {error !== null && <p style={{ fontSize: 13, textAlign: 'center' }}>{error}</p>}

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { BookStatus, MyBookSummary, SearchRow } from '../api';
 import { addBook, changeBookStatus, deleteBook, fetchShelf, searchBooks, setBookVisibility } from '../api';
 import { formatDuration } from '../format';
-import { ErrorMessage, Loading, Screen } from '../ui';
+import { BookCover, ErrorMessage, Loading, Screen } from '../ui';
 
 /** 섹션 순서 = 읽는 흐름 순서(읽는 중 → 다 읽음 → 읽고 싶어요). 빈 섹션은 아예 그리지 않는다. */
 const SECTIONS: { status: BookStatus; title: string }[] = [
@@ -175,14 +175,19 @@ function BookRow({
   return (
     <div style={{ marginBottom: 8, borderRadius: 12, background: 'var(--adaptiveGrey100, #f2f4f6)' }}>
       <button type="button" onClick={onToggle} style={rowStyle}>
-        <Text typography="st11" style={{ display: 'block' }}>
-          {book.title}
-        </Text>
-        <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 4 }}>
-          {book.author ?? '저자 미상'}
-          {book.seconds > 0 && ` · ${formatDuration(book.seconds)}`}
-          {book.isPublic && ' · 공개'}
-        </Text>
+        <BookCover url={book.coverUrl} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div>
+            <Text typography="st11">{book.title}</Text>
+          </div>
+          <div style={{ marginTop: 4 }}>
+            <Text typography="st12" color="grey600">
+              {book.author ?? '저자 미상'}
+              {book.seconds > 0 && ` · ${formatDuration(book.seconds)}`}
+              {book.isPublic && ' · 공개'}
+            </Text>
+          </div>
+        </div>
       </button>
 
       {open && (
@@ -288,13 +293,18 @@ function BookSearch({
           onClick={() => onAdd(row, 'READING')}
           style={{ ...rowStyle, marginTop: 8, borderRadius: 12, background: 'var(--adaptiveGrey100, #f2f4f6)' }}
         >
-          <Text typography="st11" style={{ display: 'block' }}>
-            {row.title}
-          </Text>
-          <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 4 }}>
-            {row.author ?? '저자 미상'}
-            {row.owned && ' · 이미 서재에 있어요'}
-          </Text>
+          <BookCover url={row.coverUrl} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div>
+              <Text typography="st11">{row.title}</Text>
+            </div>
+            <div style={{ marginTop: 4 }}>
+              <Text typography="st12" color="grey600">
+                {row.author ?? '저자 미상'}
+                {row.owned && ' · 이미 서재에 있어요'}
+              </Text>
+            </div>
+          </div>
         </button>
       ))}
 
@@ -305,9 +315,14 @@ function BookSearch({
   );
 }
 
-/** 탭 가능한 줄 — button 기본 스타일을 지워 목록 행처럼 보이게 한다(접근성은 button이 맡는다). */
+/**
+ * 탭 가능한 줄 — button 기본 스타일을 지워 목록 행처럼 보이게 한다(접근성은 button이 맡는다).
+ * 표지 + 텍스트의 가로 배치라 flex다. 제목·메타는 텍스트 쪽 안에서 각자 블록으로 쌓인다.
+ */
 const rowStyle = {
-  display: 'block',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 12,
   width: '100%',
   padding: 16,
   border: 'none',

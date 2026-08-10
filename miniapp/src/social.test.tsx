@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { ProfileBook, ProfileResponse, UserRow } from './api';
 import { ProfileCard } from './screens/Profile';
-import { MyShelfEntry, UserList } from './screens/Social';
+import { MyShelfEntry, Social, UserList } from './screens/Social';
 import { userAgent } from './test-fixtures';
 
 /**
@@ -133,5 +133,25 @@ describe('책방 (프로필)', () => {
 
     expect(markup).toContain('자바 최적화');
     expect(markup).toContain('다 읽음');
+  });
+
+  it('공개 책도 표지를 그린다 — 없으면 자리 채움 상자로 대신한다', () => {
+    expect(card(profile(), [{ ...book(1, '자바 최적화'), coverUrl: 'https://img/java.jpg' }])).toContain(
+      'src="https://img/java.jpg"',
+    );
+    expect(card(profile(), [book(1, '자바 최적화')])).toContain('📚');
+  });
+
+  it('제목과 메타를 각자 다른 블록에 둔다 — 짧은 제목이면 "데미안저자"처럼 붙어 보였다', () => {
+    const markup = card(profile(), [book(1, '데미안')]);
+    const between = markup.slice(markup.indexOf('데미안') + 3, markup.indexOf('저자'));
+
+    expect(between).toContain('</div>');
+  });
+});
+
+describe('소셜 탭 검색', () => {
+  it('검색 버튼에 이름이 붙어 있다 — 스크린리더에 빈 버튼으로 읽히면 안 된다', () => {
+    expect(render(<Social myLoginId="goospel" onError={() => {}} />)).toContain('aria-label="검색"');
   });
 });

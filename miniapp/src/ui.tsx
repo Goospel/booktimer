@@ -32,6 +32,39 @@ export function GrassGrid({ weeks, cellSize = 11 }: { weeks: ContributionDay[][]
   );
 }
 
+/**
+ * 책 표지 썸네일 — 서재·검색·책방이 같은 크기를 쓴다.
+ *
+ * <p>표지가 없는 책도 같은 자리를 차지해야 목록의 줄 높이가 책마다 들쭉날쭉해지지 않는다 — 그래서
+ * `null`이면 아무것도 안 그리는 대신 같은 크기의 자리 채움 상자를 그린다. `alt=""`는 의도적이다
+ * (제목이 바로 옆 줄에 있어 표지를 다시 읽어 주면 같은 말이 두 번 들린다).
+ */
+export function BookCover({ url, width = 40 }: { url: string | null; width?: number }) {
+  const box = { width, height: Math.round(width * 1.4), borderRadius: 4, flex: '0 0 auto' } as const;
+
+  if (url === null) {
+    return (
+      <div
+        aria-hidden="true"
+        style={{
+          ...box,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: Math.round(width * 0.45),
+          background: 'var(--adaptiveGrey200, #e5e8eb)',
+        }}
+      >
+        📚
+      </div>
+    );
+  }
+  return <img src={url} alt="" loading="lazy" style={{ ...box, objectFit: 'cover' }} />;
+}
+
+/** 섹션 블록 — 구분 없이 나열되던 목록에 옅은 배경으로 경계를 준다(홈·소셜의 카드 위계). */
+export const sectionStyle = { marginTop: 20, padding: 16, borderRadius: 12, background: '#f9fafb' } as const;
+
 /** 화면 공통 껍데기 — 제목 + 본문 여백. 미니앱은 화면이 다섯 뿐이라 레이아웃도 이 하나면 된다. */
 export function Screen({ title, children }: { title: string; children: ReactNode }) {
   return (

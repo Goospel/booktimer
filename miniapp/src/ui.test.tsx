@@ -1,4 +1,5 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
@@ -93,5 +94,32 @@ describe('홈 오늘 진행률', () => {
   it('격언이 없으면 카드를 띄우지 않는다 — 빈 인용부호만 남는 걸 막는다', () => {
     expect(home({ quotes: [] })).not.toContain('“');
     expect(home({ quotes: [{ text: '책은 도끼다', author: '카프카' }] })).toContain('카프카');
+  });
+
+  it('게이지 라벨과 값을 각자 다른 블록에 둔다 — "오늘 남은 시간15분"으로 붙어 보였다', () => {
+    const markup = home({ remainingSeconds: 900 });
+    const between = markup.slice(markup.indexOf('오늘 남은 시간') + 8, markup.indexOf('15분'));
+
+    expect(between).toContain('</div>');
+  });
+});
+
+/**
+ * 라이트 캔버스 고정 — 앱이 배경을 안 칠하면 다크 모드 WebView에서 캔버스가 검정이 되는데 본문 글자는
+ * 어두운 색 그대로라 제목·섹션 헤더가 안 보인다. v2는 라이트 고정이라(다크 대응은 범위 밖) 강제한다.
+ */
+describe('배경·color-scheme', () => {
+  const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
+
+  it('color-scheme을 라이트로 못 박는다 — 브라우저가 캔버스를 어둡게 뒤집지 못하게', () => {
+    expect(read('../index.html')).toContain('name="color-scheme" content="light"');
+  });
+
+  it('html·body에 흰 배경을 칠한다 — 투명이면 기기 다크 캔버스가 그대로 비친다', () => {
+    expect(read('./global.css')).toMatch(/html,\s*body\s*\{[^}]*background:\s*#fff/);
+  });
+
+  it('TDS Text를 블록으로 되돌린다 — TDS가 호출부의 display:block을 inline-block으로 덮어써 줄이 붙는다', () => {
+    expect(read('./global.css')).toMatch(/Paragraph\.Text[^}]*display:\s*block\s*!important/);
   });
 });

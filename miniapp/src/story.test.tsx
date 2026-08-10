@@ -101,6 +101,13 @@ describe('스토리 열람 카드', () => {
     expect(markup).toContain('자바 최적화');
   });
 
+  it('첨부 책 표지가 있으면 함께 그린다 — 없으면 제목만(있는 데이터만 쓴다)', () => {
+    expect(viewerCard({ card: card(1, { bookTitle: '자바 최적화', bookCoverUrl: 'https://img/java.jpg' }) })).toContain(
+      'src="https://img/java.jpg"',
+    );
+    expect(viewerCard({ card: card(1, { bookTitle: '자바 최적화' }) })).not.toContain('<img');
+  });
+
   it('남의 스토리에는 삭제·본 사람이 없고 책방 진입이 있다 — 서버가 404로 거절하는 동작이라 화면에서 먼저 막는다', () => {
     const markup = viewerCard({ mine: false });
 

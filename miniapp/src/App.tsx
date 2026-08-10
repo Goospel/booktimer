@@ -1,4 +1,4 @@
-import { Button, Tab } from '@toss/tds-mobile';
+import { Button } from '@toss/tds-mobile';
 import { useCallback, useEffect, useState } from 'react';
 
 import type { DashboardResponse, TimerState } from './api';
@@ -12,13 +12,29 @@ import { LoginBridge } from './screens/LoginBridge';
 import { Social } from './screens/Social';
 import { ErrorMessage, Loading, Screen } from './ui';
 
-/** 메인 탭 — 이 순서가 곧 탭바 순서다(index↔화면 대응의 단일 출처). */
+/**
+ * 메인 탭 — 이 순서가 곧 탭바 순서다(index↔화면 대응의 단일 출처).
+ *
+ * <p>`icon`은 24×24 뷰박스의 단색 스트로크 path다. 아이콘 라이브러리를 새로 달지 않고 네 개를 직접
+ * 그린다 — 탭바가 쓰는 아이콘은 이게 전부라, 의존성 하나가 이 네 줄보다 비싸다.
+ */
 export const TABS = [
-  { key: 'home', label: '홈' },
-  { key: 'library', label: '서재' },
-  { key: 'social', label: '소셜' },
-  { key: 'history', label: '기록' },
+  { key: 'home', label: '홈', icon: 'M3 10.2 12 3l9 7.2M5.5 9v11h13V9' },
+  {
+    key: 'library',
+    label: '서재',
+    icon: 'M12 6.5C9.6 4.9 6.9 4.2 4 4.2v14c2.9 0 5.6.7 8 2.3 2.4-1.6 5.1-2.3 8-2.3v-14c-2.9 0-5.6.7-8 2.3Zm0 0v14',
+  },
+  {
+    key: 'social',
+    label: '소셜',
+    icon: 'M9.5 11.5a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2ZM3 20.2c0-3.1 2.9-5.3 6.5-5.3s6.5 2.2 6.5 5.3M17 5a3.4 3.4 0 0 1 0 6.6M18.6 15.4c1.7.7 2.9 2 2.9 4.1',
+  },
+  { key: 'history', label: '기록', icon: 'M4 20.5V12M9.3 20.5V5M14.7 20.5v-6M20 20.5V9' },
 ] as const;
+
+/** 탭바 한 칸의 최소 높이 — 손가락 최소치(44px)를 넘기고, 본문 하단 여백도 이 값에서 계산한다. */
+export const TAB_BAR_HEIGHT = 56;
 
 export type TabKey = (typeof TABS)[number]['key'];
 
@@ -176,7 +192,8 @@ export function MainTabs({
 }) {
   return (
     <>
-      <div style={{ paddingBottom: 72 }}>
+      {/* 탭바가 하단 고정이라 본문 끝이 그 아래로 숨는다 — 바 높이 + 홈 인디케이터 + 숨 쉴 여백만큼 비운다. */}
+      <div style={{ paddingBottom: `calc(${TAB_BAR_HEIGHT}px + env(safe-area-inset-bottom) + 16px)` }}>
         {tab === 'home' && (
           <Home
             dashboard={dashboard}
@@ -192,24 +209,78 @@ export function MainTabs({
         {tab === 'history' && <History graph={dashboard.graph} />}
       </div>
 
-      <div
-        style={{
-          position: 'fixed',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'var(--adaptiveBackground, #ffffff)',
-          borderTop: '1px solid var(--adaptiveGrey200, #e5e8eb)',
-        }}
-      >
-        <Tab size="small" onChange={tabChangeHandler(onTabChange)}>
-          {TABS.map(({ key, label }) => (
-            <Tab.Item key={key} selected={key === tab}>
-              {label}
-            </Tab.Item>
-          ))}
-        </Tab>
-      </div>
+      <BottomTabBar tab={tab} onTabChange={onTabChange} />
     </>
+  );
+}
+
+/**
+ * 하단 탭바 — 아이콘+라벨 세로 스택의 네이티브 탭바.
+ *
+ * <p>TDS `Tab`(상단 밑줄 탭)을 하단에 고정해 쓰던 것을 걷어낸 자리다 — 높이 37px·아이콘 없음·
+ * safe-area 여백 0이라 홈 인디케이터에 깔렸고, 그 이질감이 실기기 피드백의 주범이었다.
+ */
+export function BottomTabBar({ tab, onTabChange }: { tab: TabKey; onTabChange: (tab: TabKey) => void }) {
+  const change = tabChangeHandler(onTabChange);
+
+  return (
+    <nav
+      role="tablist"
+      aria-label="메인 탭"
+      style={{
+        position: 'fixed',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 100,
+        display: 'flex',
+        background: 'var(--adaptiveBackground, #ffffff)',
+        borderTop: '1px solid rgba(0, 0, 0, 0.06)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}
+    >
+      {TABS.map(({ key, label, icon }, index) => {
+        const selected = key === tab;
+        return (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={selected}
+            title={label}
+            onClick={() => change(index)}
+            style={{
+              flex: 1,
+              minHeight: TAB_BAR_HEIGHT,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 3,
+              padding: 0,
+              border: 'none',
+              background: 'transparent',
+              color: selected ? 'var(--adaptiveBlue500, #3182f6)' : 'var(--adaptiveGrey600, #8b95a1)',
+              cursor: 'pointer',
+            }}
+          >
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d={icon} />
+            </svg>
+            <span style={{ fontSize: 11, fontWeight: selected ? 600 : 400, lineHeight: 1.2 }}>{label}</span>
+          </button>
+        );
+      })}
+    </nav>
   );
 }
