@@ -1,16 +1,18 @@
 import { Button, Text, TextField } from '@toss/tds-mobile';
 import { useCallback, useEffect, useState } from 'react';
 
-import type { FollowListType, UserRow } from '../api';
-import { fetchBlocks, fetchFollowList, searchUsers, unblockUser } from '../api';
+import type { AuthorStories, FollowListType, StoryFeedResponse, UserRow } from '../api';
+import { fetchBlocks, fetchFollowList, fetchStoryFeed, searchUsers, unblockUser } from '../api';
 import { ErrorMessage, Loading, Screen } from '../ui';
 import { Profile } from './Profile';
+import { StoryComposer, StoryStrip, StoryViewer } from './Story';
 
 /**
- * 소셜 탭 — 유저 검색 · 팔로우 목록 · 차단 목록, 그리고 남의 책방 진입.
+ * 소셜 탭 — 스토리 스트립 · 유저 검색 · 팔로우 목록 · 차단 목록, 그리고 남의 책방 진입.
  *
  * <p>책방에서 팔로우·차단이 일어나므로, 책방에서 돌아올 때마다 목록을 다시 받는다 —
  * 차단한 사람은 검색·목록에서 사라져야 하는데 캐시가 남으면 이미 없는 사람이 계속 보인다.
+ * 스토리 피드도 같이 받는다(팔로우가 곧 피드 대상이라 한 쪽만 갱신하면 어긋난다).
  */
 export function Social({ myLoginId, onError }: { myLoginId: string | null; onError: (error: Error) => void }) {
   const [listType, setListType] = useState<FollowListType>('following');
@@ -19,6 +21,9 @@ export function Social({ myLoginId, onError }: { myLoginId: string | null; onErr
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<UserRow[] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [feed, setFeed] = useState<StoryFeedResponse | null>(null);
+  const [viewing, setViewing] = useState<{ author: AuthorStories; mine: boolean } | null>(null);
+  const [composing, setComposing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -37,12 +42,42 @@ export function Social({ myLoginId, onError }: { myLoginId: string | null; onErr
     fetchBlocks()
       .then((page) => setBlocked(page.blocked))
       .catch(fail);
+    fetchStoryFeed().then(setFeed).catch(fail);
   }, [listType, fail]);
 
   // 책방이 닫힐 때(open → null)도 다시 받는다 — 거기서 한 팔로우·차단이 목록에 반영돼야 한다.
   useEffect(() => {
     if (open === null) load();
   }, [open, load]);
+
+  if (composing) {
+    return (
+      <StoryComposer
+        onDone={() => {
+          setComposing(false);
+          load(); // 방금 올린 스토리가 내 링에 바로 보여야 한다
+        }}
+        onCancel={() => setComposing(false)}
+        onError={onError}
+      />
+    );
+  }
+
+  if (viewing !== null) {
+    return (
+      <StoryViewer
+        author={viewing.author}
+        mine={viewing.mine}
+        onClose={() => setViewing(null)}
+        onOpenProfile={(loginId) => {
+          setViewing(null);
+          setOpen(loginId);
+        }}
+        onDeleted={load}
+        onError={onError}
+      />
+    );
+  }
 
   if (open !== null) {
     return <Profile loginId={open} onBack={() => setOpen(null)} onError={onError} />;
@@ -68,6 +103,12 @@ export function Social({ myLoginId, onError }: { myLoginId: string | null; onErr
 
   return (
     <Screen title="책방 둘러보기">
+      <StoryStrip
+        feed={feed}
+        onOpen={(author, mine) => setViewing({ author, mine })}
+        onCompose={() => setComposing(true)}
+      />
+
       <TextField
         variant="box"
         label="아이디로 찾기"
