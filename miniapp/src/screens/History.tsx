@@ -23,7 +23,7 @@ export function History({ graph }: { graph: ContributionGraph }) {
         {graph.growthStageEmoji} {graph.growthStageLabel}
       </Text>
 
-      <div style={{ overflowX: 'auto', paddingBottom: 8 }}>
+      <div className="no-scrollbar" style={{ overflowX: 'auto', paddingBottom: 8 }}>
         <GrassGrid weeks={graph.weeks} />
       </div>
     </Screen>

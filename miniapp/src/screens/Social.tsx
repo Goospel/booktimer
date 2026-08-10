@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import type { AuthorStories, FollowListType, StoryFeedResponse, UserRow } from '../api';
 import { fetchBlocks, fetchFollowList, fetchStoryFeed, searchUsers, unblockUser } from '../api';
-import { ErrorMessage, Loading, Screen } from '../ui';
+import { ErrorMessage, Loading, Screen, sectionStyle } from '../ui';
 import { Profile } from './Profile';
 import { StoryComposer, StoryStrip, StoryViewer } from './Story';
 
@@ -118,7 +118,8 @@ export function Social({ myLoginId, onError }: { myLoginId: string | null; onErr
         onChange={(e) => setQuery(e.target.value)}
       />
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <Button style={{ flex: 1 }} loading={busy} disabled={query.trim() === ''} onClick={search}>
+        {/* aria-label을 명시한다 — loading 중에는 라벨이 스피너로 바뀌어 이름 없는 버튼이 된다. */}
+        <Button aria-label="검색" style={{ flex: 1 }} loading={busy} disabled={query.trim() === ''} onClick={search}>
           검색
         </Button>
         {results !== null && (
@@ -148,38 +149,40 @@ export function Social({ myLoginId, onError }: { myLoginId: string | null; onErr
         <>
           <MyShelfEntry myLoginId={myLoginId} onOpen={setOpen} />
 
-          <div style={{ display: 'flex', gap: 8, margin: '24px 0 12px' }}>
-            {(['following', 'followers'] as const).map((type) => (
-              <Button
-                key={type}
-                size="small"
-                variant={type === listType ? 'fill' : 'weak'}
-                onClick={() => {
-                  setUsers(null);
-                  setListType(type);
-                }}
-              >
-                {type === 'following' ? '팔로잉' : '팔로워'}
-              </Button>
-            ))}
-          </div>
+          <section style={sectionStyle}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              {(['following', 'followers'] as const).map((type) => (
+                <Button
+                  key={type}
+                  size="small"
+                  variant={type === listType ? 'fill' : 'weak'}
+                  onClick={() => {
+                    setUsers(null);
+                    setListType(type);
+                  }}
+                >
+                  {type === 'following' ? '팔로잉' : '팔로워'}
+                </Button>
+              ))}
+            </div>
 
-          {users === null ? (
-            error === null && <Loading />
-          ) : (
-            <UserList
-              users={users}
-              emptyMessage={
-                listType === 'following'
-                  ? '아직 팔로우한 사람이 없어요. 위에서 아이디로 찾아 책방을 구경해 보세요.'
-                  : '아직 나를 팔로우한 사람이 없어요.'
-              }
-              onSelect={setOpen}
-            />
-          )}
+            {users === null ? (
+              error === null && <Loading />
+            ) : (
+              <UserList
+                users={users}
+                emptyMessage={
+                  listType === 'following'
+                    ? '아직 팔로우한 사람이 없어요. 위에서 아이디로 찾아 책방을 구경해 보세요.'
+                    : '아직 나를 팔로우한 사람이 없어요.'
+                }
+                onSelect={setOpen}
+              />
+            )}
+          </section>
 
           {blocked.length > 0 && (
-            <section style={{ marginTop: 32 }}>
+            <section style={sectionStyle}>
               <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
                 차단한 사람 {blocked.length}
               </Text>

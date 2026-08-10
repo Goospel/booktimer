@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import type { BookOption, DashboardResponse, QuoteDto, TimerState } from '../api';
 import { startSession, stopSession, tagBook } from '../api';
 import { elapsedSeconds, formatDuration } from '../format';
-import { ErrorMessage, GrassGrid, Screen } from '../ui';
+import { ErrorMessage, GrassGrid, Screen, sectionStyle } from '../ui';
 
 /** 홈 잔디 미리보기 폭 — 최근 5주만 축약해 보여주고 전체는 기록 화면이 맡는다. */
 const PREVIEW_WEEKS = 5;
@@ -92,12 +92,17 @@ export function Home({
           textAlign: 'center',
         }}
       >
-        <Text typography="st11" color="grey600" style={{ display: 'block' }}>
-          {remaining > 0 ? '오늘 남은 시간' : '오늘 목표를 채웠어요'}
-        </Text>
-        <Text typography="t2" fontWeight="bold" style={{ display: 'block', marginTop: 6 }}>
-          {remaining > 0 ? formatDuration(remaining) : `+${formatDuration(-remaining)}`}
-        </Text>
+        {/* 라벨과 값은 각자 블록이어야 세로로 쌓인다 — 같은 줄에 붙으면 "오늘 남은 시간15분"으로 읽힌다. */}
+        <div>
+          <Text typography="st11" color="grey600">
+            {remaining > 0 ? '오늘 남은 시간' : '오늘 목표를 채웠어요'}
+          </Text>
+        </div>
+        <div style={{ marginTop: 6 }}>
+          <Text typography="t2" fontWeight="bold">
+            {remaining > 0 ? formatDuration(remaining) : `+${formatDuration(-remaining)}`}
+          </Text>
+        </div>
         {progress !== null && (
           <div style={{ marginTop: 16 }}>
             <ProgressBar progress={progress} size="normal" color="#4caf50" />
@@ -120,7 +125,7 @@ export function Home({
       </div>
 
       {!dashboard.hasActiveSession && dashboard.readingBooks.length > 0 && (
-        <section style={{ marginTop: 24 }}>
+        <section style={sectionStyle}>
           <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
             읽는 중인 책 — 탭하면 바로 측정을 시작해요
           </Text>
@@ -141,7 +146,7 @@ export function Home({
       )}
 
       {untagged !== null && (
-        <section style={{ marginTop: 24 }}>
+        <section style={sectionStyle}>
           <Text typography="st11" style={{ display: 'block', marginBottom: 10 }}>
             방금 측정, 무슨 책이었나요?
           </Text>

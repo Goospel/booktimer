@@ -84,6 +84,10 @@ describe('스토리 스트립 (소셜 탭 상단)', () => {
     expect(renderToStaticMarkup(<StoryStrip feed={null} onOpen={() => {}} onCompose={() => {}} />)).toBe('');
   });
 
+  it('가로 스크롤 스트립의 스크롤바를 숨긴다 — 링 아래로 두꺼운 회색 바가 그대로 보였다', () => {
+    expect(strip({ mine: null, groups: [author('goospel')] })).toContain('class="no-scrollbar"');
+  });
+
   it('내 스토리가 있으면 맨 앞에 내 링을 둔다 — 핸들 없는 계정(loginId=null)도 포함(설계 §5-1)', () => {
     const markup = strip({ mine: author(null, { stories: [card(9)] }), groups: [author('goospel')] });
 
@@ -99,6 +103,13 @@ describe('스토리 열람 카드', () => {
     expect(markup).toContain('문장 1');
     expect(markup).toContain('goospel님');
     expect(markup).toContain('자바 최적화');
+  });
+
+  it('첨부 책 표지가 있으면 함께 그린다 — 없으면 제목만(있는 데이터만 쓴다)', () => {
+    expect(viewerCard({ card: card(1, { bookTitle: '자바 최적화', bookCoverUrl: 'https://img/java.jpg' }) })).toContain(
+      'src="https://img/java.jpg"',
+    );
+    expect(viewerCard({ card: card(1, { bookTitle: '자바 최적화' }) })).not.toContain('<img');
   });
 
   it('남의 스토리에는 삭제·본 사람이 없고 책방 진입이 있다 — 서버가 404로 거절하는 동작이라 화면에서 먼저 막는다', () => {

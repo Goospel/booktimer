@@ -1,0 +1,35 @@
+/*
+ * 미니앱 전역 스타일 — TDS가 컴포넌트 단위로만 칠하는 두 자리를 메운다.
+ *
+ * 1) 캔버스: 앱이 배경을 아예 안 칠하면(html/body/main 전부 투명) 다크 모드 WebView에서 캔버스가 검정이
+ *    되는데 본문 글자는 어두운 색 그대로라 제목·섹션 헤더가 사라진다. v2는 라이트 고정이므로(다크 대응은
+ *    범위 밖) 흰 캔버스를 강제한다. index.html의 `color-scheme: light` 메타와 한 쌍이다.
+ * 2) 본문 줄바꿈: 아래 Paragraph.Text 규칙 주석 참고.
+ */
+html,
+body {
+  margin: 0;
+  background: #fff;
+}
+
+/*
+ * TDS `Text`는 호출부가 넘긴 style의 `display`를 자기 `inline-block`으로 덮어쓴다 — 그래서 코드가
+ * `style={{ display: 'block' }}`로 "다음 줄"을 의도한 자리가 전부 한 줄로 붙어 보인다
+ * ("데미안헤르만 헤세 · 12시간 40분", "오늘 남은 시간25분" — 실기기 실측). 인라인 스타일을 이기려면
+ * `!important`가 필요하다. 앱의 모든 Text는 블록 의도이거나 flex 자식이라 되돌려도 안전하다.
+ */
+[data-tds-mobile-component='Paragraph.Text'] {
+  display: block !important;
+}
+
+/*
+ * 가로 스크롤 영역(스토리 스트립 · 잔디)의 스크롤바 숨김 — 모바일 WebView가 두꺼운 회색 바를 상시
+ * 노출해 카드 아래 이물처럼 보인다. 스크롤 자체는 그대로라 손가락으로 넘기는 건 똑같이 된다.
+ */
+.no-scrollbar {
+  scrollbar-width: none; /* 파이어폭스 */
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* 웹킷 — 토스 WebView가 여기 해당 */
+}

@@ -2,7 +2,7 @@ import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { App, MainTabs, TABS, tabChangeHandler } from './App';
+import { App, BottomTabBar, MainTabs, TAB_BAR_HEIGHT, TABS, tabChangeHandler } from './App';
 import type { DashboardResponse } from './api';
 import { graph, userAgent } from './test-fixtures';
 
@@ -85,6 +85,41 @@ describe('탭 구조', () => {
 
   it('소셜 탭은 서재와 기록 사이에 온다 — 탭바 순서가 곧 TABS 순서다', () => {
     expect(TABS.map((t) => t.key)).toEqual(['home', 'library', 'social', 'history']);
+  });
+});
+
+/**
+ * 하단 탭바 — 네이티브 탭바의 최소 조건(아이콘+라벨 · 손가락 크기 · 홈 인디케이터 회피)을 못 박는다.
+ * 색·굵기 같은 순수 시각값은 단언하지 않는다 — 구조와 가림 방지만 회귀 대상이다.
+ */
+describe('하단 탭바', () => {
+  const bar = (tab: (typeof TABS)[number]['key']) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <BottomTabBar tab={tab} onTabChange={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  it('탭마다 아이콘과 라벨을 함께 그린다 — 라벨만 있는 밋밋한 바가 이질감의 주범이었다', () => {
+    const markup = bar('home');
+
+    expect(markup.match(/<svg/g)).toHaveLength(TABS.length);
+    for (const { label } of TABS) expect(markup).toContain(label);
+  });
+
+  it('탭 하나의 터치 영역이 손가락 최소치(44px)를 넘는다', () => {
+    const heights = bar('home').match(/min-height:(\d+)px/g) ?? [];
+
+    expect(heights).toHaveLength(TABS.length);
+    for (const h of heights) expect(Number(h.match(/\d+/)![0])).toBeGreaterThanOrEqual(44);
+  });
+
+  it('홈 인디케이터만큼 아래 여백을 둔다 — safe-area가 없으면 마지막 탭이 인디케이터에 깔린다', () => {
+    expect(bar('home')).toContain('padding-bottom:env(safe-area-inset-bottom)');
+  });
+
+  it('본문 아래 여백이 탭바 높이 + safe-area를 덮는다 — 마지막 요소(격언·목표 바꾸기)가 바에 가리지 않는다', () => {
+    expect(renderTab('home')).toContain(`padding-bottom:calc(${TAB_BAR_HEIGHT}px + env(safe-area-inset-bottom)`);
   });
 });
 

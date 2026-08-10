@@ -14,7 +14,7 @@ import {
   unfollow,
 } from '../api';
 import { formatDuration } from '../format';
-import { ErrorMessage, Loading, Screen } from '../ui';
+import { BookCover, ErrorMessage, Loading, Screen } from '../ui';
 
 /**
  * 책방(프로필) 뷰 — 닉네임·책BTI·공개 책 목록 + 팔로우/언팔로우 + 차단·신고.
@@ -200,14 +200,30 @@ export function ProfileCard({
           </Text>
         ) : (
           books.map((book) => (
-            <div key={book.id} style={{ padding: 16, marginBottom: 8, borderRadius: 12, background: 'var(--adaptiveGrey100, #f2f4f6)' }}>
-              <Text typography="st11" style={{ display: 'block' }}>
-                {book.title}
-              </Text>
-              <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 4 }}>
-                {book.author ?? '저자 미상'} · {book.status}
-                {book.seconds > 0 && ` · ${formatDuration(book.seconds)}`}
-              </Text>
+            <div
+              key={book.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: 16,
+                marginBottom: 8,
+                borderRadius: 12,
+                background: 'var(--adaptiveGrey100, #f2f4f6)',
+              }}
+            >
+              <BookCover url={book.coverUrl} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div>
+                  <Text typography="st11">{book.title}</Text>
+                </div>
+                <div style={{ marginTop: 4 }}>
+                  <Text typography="st12" color="grey600">
+                    {book.author ?? '저자 미상'} · {book.status}
+                    {book.seconds > 0 && ` · ${formatDuration(book.seconds)}`}
+                  </Text>
+                </div>
+              </div>
             </div>
           ))
         )}
