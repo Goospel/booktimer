@@ -2,39 +2,19 @@ import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import type { ContributionDay, ContributionGraph, DashboardResponse } from './api';
+import type { DashboardResponse } from './api';
 import { History } from './screens/History';
 import { Home } from './screens/Home';
+import { graph, userAgent } from './test-fixtures';
 
 /**
  * 잔디 렌더 안전망 — 잔디 그리기를 History에서 `GrassGrid`(ui.tsx)로 추출하는 리팩터가
  * 같은 데이터에 대해 같은 마크업을 내는지 못 박는다(동작 보존 리팩터라 추출 전후 모두 통과해야 한다).
  */
-function day(level: number, extra: Partial<ContributionDay> = {}): ContributionDay {
-  return { date: '2026-08-10', totalSeconds: 600, level, manual: false, ...extra };
-}
-
-const graph: ContributionGraph = {
-  weeks: [
-    [day(0), day(2), day(4)],
-    [day(1, { manual: true }), day(3), day(0, { date: null })],
-  ],
-  monthLabels: [{ weekIndex: 0, label: '8월' }],
-  totalSeconds: 3600,
-  activeDays: 4,
-  currentStreak: 2,
-  growthStageName: 'SPROUT',
-  growthStageEmoji: '🌱',
-  growthStageLabel: '새싹',
-};
-
-/** TDS 컴포넌트는 ThemeProvider(=TDSMobileProvider) 없이는 렌더되지 않는다 — main.tsx와 같은 껍데기. */
-const userAgent = { fontA11y: undefined, fontScale: undefined, isAndroid: false, isIOS: true };
-
 describe('잔디 렌더', () => {
   const markup = renderToStaticMarkup(
     <TDSMobileProvider userAgent={userAgent}>
-      <History graph={graph} onBack={() => {}} />
+      <History graph={graph} />
     </TDSMobileProvider>,
   );
 
