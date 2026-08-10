@@ -1,14 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { SearchRow } from './api';
 import {
   ApiError,
   UnauthorizedError,
+  addBook,
+  changeBookStatus,
+  deleteBook,
   fetchDashboard,
+  fetchShelf,
   linkAccount,
   login,
   logout,
   register,
   request,
+  searchBooks,
+  setBookVisibility,
   setGoal,
   token,
 } from './api';
@@ -213,5 +220,117 @@ describe('request() — 메서드·쿼리 확장', () => {
 
     await expect(request('/api/stories/7', { method: 'DELETE' })).rejects.toBeInstanceOf(UnauthorizedError);
     expect(token.get()).toBeNull();
+  });
+});
+
+describe('서재 API', () => {
+  const searchRow: SearchRow = {
+    title: '자바 최적화',
+    author: '벤저민 J. 에번스',
+    isbn13: '9791162241776',
+    coverUrl: 'https://img/cover.jpg',
+    publisher: '한빛미디어',
+    purchaseLink: 'https://aladin/1',
+    category: '컴퓨터/모바일',
+    pubDate: '2019-01-01',
+    owned: false,
+  };
+
+  beforeEach(() => {
+    token.set('tok');
+  });
+
+  it('책장은 GET /api/books로 받아 섹션 분류용 status를 그대로 전달한다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(
+        200,
+        JSON.stringify({
+          searchEnabled: true,
+          books: [{ id: 7, title: '자바 최적화', status: 'READING', isPublic: false }],
+        }),
+      ) as never,
+    );
+
+    const shelf = await fetchShelf();
+
+    const [url, init] = lastRequest();
+    expect(url).toBe('http://localhost:8080/api/books');
+    expect(init.method).toBe('GET');
+    expect(shelf.searchEnabled).toBe(true);
+    expect(shelf.books[0].status).toBe('READING');
+  });
+
+  it('검색은 q를 쿼리로 보내고 0건이면 빈 목록을 준다 — 결과 없음 안내의 근거', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, JSON.stringify({ results: [] })) as never);
+
+    const result = await searchBooks('없는 책 & 제목');
+
+    expect(new URL(lastRequest()[0]).searchParams.get('q')).toBe('없는 책 & 제목');
+    expect(result.results).toEqual([]);
+  });
+
+  it('책 추가는 검색결과의 서버 필드만 보낸다 — owned는 UI 전용이라 서버로 새지 않는다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(200, JSON.stringify({ id: 9, title: '자바 최적화', status: 'READING' })) as never,
+    );
+
+    const added = await addBook(searchRow, 'READING');
+
+    const [url, init] = lastRequest();
+    expect(url).toBe('http://localhost:8080/api/books');
+    expect(init.method).toBe('POST');
+    const body = JSON.parse(init.body as string);
+    expect(body).toEqual({
+      title: '자바 최적화',
+      author: '벤저민 J. 에번스',
+      isbn13: '9791162241776',
+      coverUrl: 'https://img/cover.jpg',
+      publisher: '한빛미디어',
+      purchaseLink: 'https://aladin/1',
+      category: '컴퓨터/모바일',
+      pubDate: '2019-01-01',
+      status: 'READING',
+    });
+    expect(added.id).toBe(9);
+  });
+
+  it('상태 변경·공개 토글·삭제는 각 책 경로로 POST한다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '{"id":7}') as never);
+
+    await changeBookStatus(7, 'FINISHED');
+    expect(lastRequest()[0]).toBe('http://localhost:8080/api/books/7/status');
+    expect(JSON.parse(lastRequest()[1].body as string)).toEqual({ status: 'FINISHED' });
+
+    await setBookVisibility(7, 'PUBLIC');
+    expect(lastRequest()[0]).toBe('http://localhost:8080/api/books/7/visibility');
+    expect(JSON.parse(lastRequest()[1].body as string)).toEqual({ visibility: 'PUBLIC' });
+
+    await deleteBook(7);
+    expect(lastRequest()[0]).toBe('http://localhost:8080/api/books/7/delete');
+    expect(lastRequest()[1].method).toBe('POST');
+  });
+
+  it('없는 책(404)은 상태를 실은 ApiError로 갈라진다 — 401 재로그인과 섞이지 않는다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(404, '책을 찾을 수 없습니다') as never);
+
+    const error = await deleteBook(7).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).status).toBe(404);
+    expect((error as ApiError).message).toBe('책을 찾을 수 없습니다');
+    expect(token.get()).toBe('tok'); // 401이 아니므로 토큰은 살아 있다
+  });
+
+  it('HTML 에러 페이지 본문은 사용자에게 노출하지 않는다 — 서버가 error 뷰를 렌더해 돌려준다', async () => {
+    // 실측: /api/** 예외는 GlobalExceptionHandler가 잡아 Thymeleaf error 뷰(HTML)로 응답한다.
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(500, '<!DOCTYPE html><html><body>요청을 처리할 수 없습니다.</body></html>') as never,
+    );
+
+    const error = (await fetchShelf().catch((e: unknown) => e)) as ApiError;
+
+    expect(error.status).toBe(500);
+    expect(error.message).not.toContain('<');
+    expect(error.message).toContain('500');
   });
 });

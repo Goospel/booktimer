@@ -69,8 +69,19 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   // 본문을 텍스트로 먼저 받는다 — 성공 응답이 빈 본문일 수 있고(204 logout, 200 goal),
   // 에러 본문은 JSON이 아니라 평문 메시지다.
   const text = await response.text();
-  if (!response.ok) throw new ApiError(response.status, text || `요청에 실패했어요 (${response.status})`);
+  if (!response.ok) throw new ApiError(response.status, errorMessage(response.status, text));
   return (text === '' ? undefined : JSON.parse(text)) as T;
+}
+
+/**
+ * 사용자에게 보여줄 실패 문구 — 서버가 준 평문 메시지가 있으면 그대로 쓴다(연결 코드 오류 등은 문구가 곧 안내).
+ *
+ * <p>다만 `/api/**`의 예외는 `GlobalExceptionHandler`가 잡아 Thymeleaf `error` 뷰로 렌더하므로 본문이
+ * HTML 페이지로 온다 — 그걸 그대로 띄우면 화면에 마크업이 쏟아진다. 그래서 HTML이면 버리고 상태코드로 대체한다.
+ */
+function errorMessage(status: number, body: string): string {
+  const plain = body.trim();
+  return plain === '' || plain.startsWith('<') ? `요청에 실패했어요 (${status})` : plain;
 }
 
 // ── 인증 ────────────────────────────────────────────────────────────────────
@@ -156,12 +167,6 @@ export interface QuoteDto {
   author: string;
 }
 
-/** 작가 격언 — 서버가 셔플해 최대 10개를 실어 준다(`DashboardApiController.QuoteDto`). */
-export interface QuoteDto {
-  text: string;
-  author: string;
-}
-
 export interface DashboardResponse extends TimerState {
   nickname: string;
   loginId: string | null;
@@ -192,3 +197,73 @@ export const tagBook = (sessionId: number, bookId: number): Promise<{ sessionId:
 
 export const setGoal = (dailyIncrementSeconds: number): Promise<void> =>
   request('/api/miniapp/goal', { body: { dailyIncrementSeconds } });
+
+// ── 서재 (`web/api/BookApiController`의 record가 타입 단일 출처) ───────────────
+
+export type BookStatus = 'WANT_TO_READ' | 'READING' | 'FINISHED';
+export type BookVisibility = 'PRIVATE' | 'PUBLIC';
+
+/** `BookApiController.MyBookSummary` — 미니앱이 쓰는 필드만 옮긴다(popularity·제휴 플래그는 웹 전용). */
+export interface MyBookSummary {
+  id: number;
+  title: string;
+  author: string | null;
+  coverUrl: string | null;
+  isbn13: string | null;
+  status: BookStatus;
+  statusLabel: string;
+  visibility: BookVisibility;
+  visibilityLabel: string;
+  isPublic: boolean;
+  seconds: number;
+  purchaseLink: string | null;
+}
+
+/** `BookApiController.SearchRow` — `owned`는 서버가 계산해 주는 UI 표시용이라 추가 요청에 되돌려 보내지 않는다. */
+export interface SearchRow {
+  title: string;
+  author: string | null;
+  isbn13: string | null;
+  coverUrl: string | null;
+  publisher: string | null;
+  purchaseLink: string | null;
+  category: string | null;
+  pubDate: string | null;
+  owned: boolean;
+}
+
+export interface ShelfResponse {
+  searchEnabled: boolean;
+  books: MyBookSummary[];
+}
+
+export const fetchShelf = (): Promise<ShelfResponse> => request('/api/books');
+
+/** 알라딘 1페이지. 서버는 외부 API 장애도 빈 결과로 격리하므로 실패와 0건이 같은 모양으로 온다. */
+export const searchBooks = (q: string): Promise<{ results: SearchRow[] }> =>
+  request('/api/books/search', { query: { q } });
+
+/** 같은 ISBN을 이미 가졌으면 서버가 새 행을 만들지 않고 기존 책을 돌려준다(멱등). */
+export const addBook = (row: SearchRow, status: BookStatus): Promise<MyBookSummary> =>
+  request('/api/books', {
+    body: {
+      title: row.title,
+      author: row.author,
+      isbn13: row.isbn13,
+      coverUrl: row.coverUrl,
+      publisher: row.publisher,
+      purchaseLink: row.purchaseLink,
+      category: row.category,
+      pubDate: row.pubDate,
+      status,
+    },
+  });
+
+export const changeBookStatus = (id: number, status: BookStatus): Promise<MyBookSummary> =>
+  request(`/api/books/${id}/status`, { body: { status } });
+
+export const setBookVisibility = (id: number, visibility: BookVisibility): Promise<MyBookSummary> =>
+  request(`/api/books/${id}/visibility`, { body: { visibility } });
+
+export const deleteBook = (id: number): Promise<{ deleted: boolean }> =>
+  request(`/api/books/${id}/delete`, { body: {} });

@@ -1,4 +1,4 @@
-import { Button, Text } from '@toss/tds-mobile';
+import { Text } from '@toss/tds-mobile';
 
 import type { ContributionGraph } from '../api';
 import { formatDuration } from '../format';
@@ -7,8 +7,10 @@ import { GrassGrid, Screen } from '../ui';
 /**
  * 기록 — 잔디 · 연속일 · 총 시간. stop 응답에 graph가 동봉되므로 이 화면은 다시 받아오지 않고
  * 홈이 넘겨준 최신 graph를 그대로 그린다(설계 §2.5).
+ *
+ * <p>탭 재편(PR-5) 전까지 있던 "돌아가기" 버튼은 탭 전환이 대신하므로 없앴다.
  */
-export function History({ graph, onBack }: { graph: ContributionGraph; onBack: () => void }) {
+export function History({ graph }: { graph: ContributionGraph }) {
   return (
     <Screen title="내 기록">
       <div style={{ display: 'flex', gap: 12 }}>
@@ -24,10 +26,6 @@ export function History({ graph, onBack }: { graph: ContributionGraph; onBack: (
       <div style={{ overflowX: 'auto', paddingBottom: 8 }}>
         <GrassGrid weeks={graph.weeks} />
       </div>
-
-      <Button display="block" variant="weak" style={{ marginTop: 28 }} onClick={onBack}>
-        돌아가기
-      </Button>
     </Screen>
   );
 }
