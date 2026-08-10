@@ -2,10 +2,7 @@ import { Button, Text } from '@toss/tds-mobile';
 
 import type { ContributionGraph } from '../api';
 import { formatDuration } from '../format';
-import { Screen } from '../ui';
-
-/** 잔디 색 농도 0~4 — 웹 잔디와 같은 단계 체계(서버가 level을 계산해 준다). */
-const LEVEL_COLORS = ['#ebedf0', '#c6e6c8', '#8fd694', '#4caf50', '#2e7d32'];
+import { GrassGrid, Screen } from '../ui';
 
 /**
  * 기록 — 잔디 · 연속일 · 총 시간. stop 응답에 graph가 동봉되므로 이 화면은 다시 받아오지 않고
@@ -25,26 +22,7 @@ export function History({ graph, onBack }: { graph: ContributionGraph; onBack: (
       </Text>
 
       <div style={{ overflowX: 'auto', paddingBottom: 8 }}>
-        <div style={{ display: 'flex', gap: 3 }}>
-          {graph.weeks.map((week, weekIndex) => (
-            <div key={weekIndex} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {week.map((day, dayIndex) => (
-                <div
-                  key={dayIndex}
-                  title={day.date ?? ''}
-                  style={{
-                    width: 11,
-                    height: 11,
-                    borderRadius: 2,
-                    // 날짜 없는 칸은 그리드 가장자리 placeholder라 빈 칸으로 둔다.
-                    background: day.date === null ? 'transparent' : LEVEL_COLORS[day.level],
-                    outline: day.manual ? '1px solid #9e9e9e' : undefined,
-                  }}
-                />
-              ))}
-            </div>
-          ))}
-        </div>
+        <GrassGrid weeks={graph.weeks} />
       </div>
 
       <Button display="block" variant="weak" style={{ marginTop: 28 }} onClick={onBack}>

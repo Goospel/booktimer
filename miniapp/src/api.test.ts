@@ -8,6 +8,7 @@ import {
   login,
   logout,
   register,
+  request,
   setGoal,
   token,
 } from './api';
@@ -157,5 +158,60 @@ describe('Bearer 호출·에러 계약', () => {
 
     await expect(setGoal(3600)).resolves.toBeUndefined();
     expect(JSON.parse(lastRequest()[1].body as string)).toEqual({ dailyIncrementSeconds: 3600 });
+  });
+});
+
+describe('request() — 메서드·쿼리 확장', () => {
+  beforeEach(() => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '{}') as never);
+  });
+
+  it('query를 조립하고 undefined 값은 생략한다', async () => {
+    await request('/api/books/search', { query: { q: '자바 & 스프링', page: 2, cursor: undefined } });
+
+    const params = new URL(lastRequest()[0]).searchParams;
+    expect(params.get('q')).toBe('자바 & 스프링'); // 인코딩 왕복 — 공백·&가 살아 돌아온다
+    expect(params.get('page')).toBe('2'); // 숫자도 문자열로 직렬화
+    expect(params.has('cursor')).toBe(false);
+  });
+
+  it('query가 없거나 전부 undefined면 물음표를 붙이지 않는다', async () => {
+    await request('/api/dashboard', { query: { cursor: undefined } });
+
+    expect(lastRequest()[0]).toBe('http://localhost:8080/api/dashboard');
+  });
+
+  it('DELETE 메서드를 그대로 전달하고 본문 없이 보낸다', async () => {
+    await request('/api/stories/7', { method: 'DELETE' });
+
+    const [url, init] = lastRequest();
+    expect(url).toBe('http://localhost:8080/api/stories/7');
+    expect(init.method).toBe('DELETE');
+    expect(init.body).toBeUndefined();
+    expect((init.headers as Record<string, string>)['Content-Type']).toBeUndefined();
+  });
+
+  it('body가 있으면 method 없이도 POST — 기존 호출부 하위호환', async () => {
+    await setGoal(60);
+
+    const [, init] = lastRequest();
+    expect(init.method).toBe('POST');
+    expect(headerOf('Content-Type')).toBe('application/json');
+  });
+
+  it('body도 method도 없으면 GET — 기존 조회 호출부 하위호환', async () => {
+    await fetchDashboard();
+
+    const [, init] = lastRequest();
+    expect(init.method).toBe('GET');
+    expect(init.body).toBeUndefined();
+  });
+
+  it('확장 경로에서도 401은 토큰 폐기 + UnauthorizedError', async () => {
+    token.set('만료된-토큰');
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(401) as never);
+
+    await expect(request('/api/stories/7', { method: 'DELETE' })).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(token.get()).toBeNull();
   });
 });
