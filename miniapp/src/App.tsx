@@ -9,12 +9,14 @@ import { Home } from './screens/Home';
 import { Library } from './screens/Library';
 import { LinkAccount } from './screens/LinkAccount';
 import { LoginBridge } from './screens/LoginBridge';
+import { Social } from './screens/Social';
 import { ErrorMessage, Loading, Screen } from './ui';
 
-/** 메인 탭. 소셜은 화면과 함께 PR-6에서 붙인다 — 빈 탭을 먼저 내보내지 않는다. */
+/** 메인 탭 — 이 순서가 곧 탭바 순서다(index↔화면 대응의 단일 출처). */
 export const TABS = [
   { key: 'home', label: '홈' },
   { key: 'library', label: '서재' },
+  { key: 'social', label: '소셜' },
   { key: 'history', label: '기록' },
 ] as const;
 
@@ -186,6 +188,7 @@ export function MainTabs({
           />
         )}
         {tab === 'library' && <Library onError={onError} />}
+        {tab === 'social' && <Social myLoginId={dashboard.loginId} onError={onError} />}
         {tab === 'history' && <History graph={dashboard.graph} />}
       </div>
 

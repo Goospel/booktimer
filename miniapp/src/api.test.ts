@@ -3,21 +3,33 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SearchRow } from './api';
 import {
   ApiError,
+  REPORT_REASONS,
   UnauthorizedError,
   addBook,
+  blockUser,
   changeBookStatus,
   deleteBook,
+  fetchBlocks,
   fetchDashboard,
+  fetchFollowList,
+  fetchPersonalityTagBooks,
+  fetchProfile,
+  fetchProfileBooks,
   fetchShelf,
+  follow,
   linkAccount,
   login,
   logout,
   register,
+  reportUser,
   request,
   searchBooks,
+  searchUsers,
   setBookVisibility,
   setGoal,
   token,
+  unblockUser,
+  unfollow,
 } from './api';
 import { tossLogin } from './toss';
 
@@ -332,5 +344,160 @@ describe('서재 API', () => {
     expect(error.status).toBe(500);
     expect(error.message).not.toContain('<');
     expect(error.message).toContain('500');
+  });
+});
+
+describe('소셜 API — 검색·팔로우·책방·차단·신고', () => {
+  beforeEach(() => {
+    token.set('tok');
+  });
+
+  it('유저 검색은 q를 쿼리로 보내고, 0건이면 빈 결과를 준다 — 검색 유도 문구의 근거', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(200, JSON.stringify({ q: 'zz', results: [], recommendations: [], myLoginId: 'me', rateLimited: false })) as never,
+    );
+
+    const page = await searchUsers('zz');
+
+    const [url, init] = lastRequest();
+    expect(new URL(url).pathname).toBe('/api/search');
+    expect(new URL(url).searchParams.get('q')).toBe('zz');
+    expect(init.method).toBe('GET');
+    expect(page.results).toEqual([]);
+    expect(page.rateLimited).toBe(false);
+  });
+
+  it('미니앱 신규 계정(login_id=null)은 myLoginId가 null로 온다 — 내 책방 진입을 막는 근거(§5-1)', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(200, JSON.stringify({ q: null, results: [], recommendations: [], myLoginId: null, rateLimited: false })) as never,
+    );
+
+    expect((await searchUsers('goo')).myLoginId).toBeNull();
+  });
+
+  it('팔로우 목록은 type을 쿼리로 갈라 받는다 — 팔로잉/팔로워가 같은 경로를 쓴다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(200, JSON.stringify({ type: 'following', users: [], myLoginId: 'me' })) as never,
+    );
+
+    await fetchFollowList('following');
+
+    const url = new URL(lastRequest()[0]);
+    expect(url.pathname).toBe('/api/follow-list');
+    expect(url.searchParams.get('type')).toBe('following');
+  });
+
+  it('팔로우·언팔로우는 loginId를 실어 보내고 서버가 준 following으로 버튼 상태를 정한다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '{"following":true}') as never);
+
+    await expect(follow('goospel')).resolves.toEqual({ following: true });
+    expect(lastRequest()[0]).toBe('http://localhost:8080/api/follow');
+    expect(JSON.parse(lastRequest()[1].body as string)).toEqual({ loginId: 'goospel' });
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '{"following":false}') as never);
+
+    await expect(unfollow('goospel')).resolves.toEqual({ following: false });
+    expect(lastRequest()[0]).toBe('http://localhost:8080/api/unfollow');
+  });
+
+  it('자기 자신 팔로우는 서버가 400으로 거절한다 — 그 문구를 그대로 보여준다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(400, '자기 자신은 팔로우할 수 없습니다') as never);
+
+    const error = (await follow('me').catch((e: unknown) => e)) as ApiError;
+
+    expect(error.status).toBe(400);
+    expect(error.message).toBe('자기 자신은 팔로우할 수 없습니다');
+  });
+
+  it('책방은 loginId 쿼리로 받는다 — self면 팔로우 버튼을 숨기는 근거가 응답에 실려 온다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(
+        200,
+        JSON.stringify({
+          loginId: 'goospel',
+          nickname: '구스펠',
+          profileCharacterCode: null,
+          followerCount: 3,
+          followingCount: 5,
+          following: false,
+          self: true,
+          personality: '한우물형',
+          personalityTags: [{ label: '한우물형', clickable: true }],
+          books: [],
+        }),
+      ) as never,
+    );
+
+    const profile = await fetchProfile('goospel');
+
+    expect(new URL(lastRequest()[0]).searchParams.get('loginId')).toBe('goospel');
+    expect(profile.self).toBe(true);
+    expect(profile.personalityTags[0].clickable).toBe(true);
+  });
+
+  it('차단·비공개 상대의 책방은 404 — 존재를 누설하지 않는 서버 계약을 그대로 전달한다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(404, '프로필을 찾을 수 없습니다') as never);
+
+    const error = (await fetchProfile('hidden').catch((e: unknown) => e)) as ApiError;
+
+    expect(error.status).toBe(404);
+    expect(error.message).toBe('프로필을 찾을 수 없습니다');
+  });
+
+  it('책방 책 목록은 status 필터를 쿼리로 보내고, 전체(undefined)면 파라미터를 생략한다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '{"books":[]}') as never);
+
+    await fetchProfileBooks('goospel', 'FINISHED');
+    expect(new URL(lastRequest()[0]).searchParams.get('status')).toBe('FINISHED');
+
+    await fetchProfileBooks('goospel');
+    const url = new URL(lastRequest()[0]);
+    expect(url.pathname).toBe('/api/profile/books');
+    expect(url.searchParams.has('status')).toBe(false);
+  });
+
+  it('책BTI 태그 드릴다운은 loginId와 tag를 함께 보낸다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '{"books":[]}') as never);
+
+    await fetchPersonalityTagBooks('goospel', '한우물형');
+
+    const url = new URL(lastRequest()[0]);
+    expect(url.pathname).toBe('/api/profile/personality-tag');
+    expect(url.searchParams.get('loginId')).toBe('goospel');
+    expect(url.searchParams.get('tag')).toBe('한우물형');
+  });
+
+  it('차단·차단해제는 blocked 상태를 돌려준다 — 차단 목록이 유일한 해제 경로다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '{"blocked":true}') as never);
+
+    await expect(blockUser('spammer')).resolves.toEqual({ blocked: true });
+    expect(lastRequest()[0]).toBe('http://localhost:8080/api/block');
+    expect(JSON.parse(lastRequest()[1].body as string)).toEqual({ loginId: 'spammer' });
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '{"blocked":false}') as never);
+
+    await expect(unblockUser('spammer')).resolves.toEqual({ blocked: false });
+    expect(lastRequest()[0]).toBe('http://localhost:8080/api/unblock');
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(200, JSON.stringify({ blocked: [], myLoginId: 'me' })) as never,
+    );
+    await fetchBlocks();
+    expect(lastRequest()[0]).toBe('http://localhost:8080/api/blocks');
+    expect(lastRequest()[1].method).toBe('GET');
+  });
+
+  it('신고는 사유와 상세를 함께 보낸다 — 사유 목록은 서버 enum과 같은 값이어야 접수된다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '{"reported":true}') as never);
+
+    await expect(reportUser('spammer', 'SPAM', '광고 도배')).resolves.toEqual({ reported: true });
+    expect(lastRequest()[0]).toBe('http://localhost:8080/api/report');
+    expect(JSON.parse(lastRequest()[1].body as string)).toEqual({
+      loginId: 'spammer',
+      reason: 'SPAM',
+      detail: '광고 도배',
+    });
+    // 서버 ReportReason enum(SPAM·HARASSMENT·INAPPROPRIATE·OTHER)과 값이 어긋나면 전부 OTHER로 접수된다.
+    expect(REPORT_REASONS.map((r) => r.value)).toEqual(['SPAM', 'HARASSMENT', 'INAPPROPRIATE', 'OTHER']);
   });
 });
