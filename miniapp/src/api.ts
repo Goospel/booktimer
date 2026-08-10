@@ -375,3 +375,69 @@ export type ReportReason = (typeof REPORT_REASONS)[number]['value'];
 
 export const reportUser = (loginId: string, reason: ReportReason, detail: string): Promise<{ reported: boolean }> =>
   request('/api/report', { body: { loginId, reason, detail } });
+
+// ── 독서 스토리 (`web/api/StoryApiController` + `story` record가 타입 단일 출처) ──
+//
+// 소셜 API와 달리 스토리는 loginId에 묶이지 않는다 — 피드가 **내 활성 스토리를 `mine` 필드로 따로**
+// 실어 주므로, 핸들 없는 계정(미니앱 신규 가입)도 자기 스토리를 보고·삭제할 수 있다.
+// 그래서 미니앱은 `/api/stories/of/{loginId}`를 쓰지 않는다(설계 §5-1 재확인).
+
+/** `story.StoryCard` — 책 라벨은 표시 시점에 공개 책만 실린다(비공개 전환 시 문장만 남는다). */
+export interface StoryCard {
+  id: number;
+  text: string;
+  bgCode: string | null;
+  bookTitle: string | null;
+  bookCoverUrl: string | null;
+  createdAt: string;
+  viewed: boolean;
+}
+
+/** `story.AuthorStories` — 스트립의 링 하나. loginId는 내 그룹(mine)에서 null일 수 있다. */
+export interface AuthorStories {
+  loginId: string | null;
+  nickname: string;
+  profileCharacterCode: string | null;
+  allViewed: boolean;
+  stories: StoryCard[];
+}
+
+export interface StoryFeedResponse {
+  mine: AuthorStories | null;
+  groups: AuthorStories[];
+}
+
+export interface StoryViewerEntry {
+  loginId: string;
+  nickname: string;
+  profileCharacterCode: string | null;
+  viewedAt: string;
+}
+
+/**
+ * 배경 팔레트 — 서버 `Story.BG_CODES`와 **값이 같아야** 400이 안 난다(닫힌 코드: 자유 hex 금지).
+ * 색은 웹 `app.css`의 `.story-bg-*`와 같은 값이라 웹·미니앱이 같은 카드로 보인다.
+ */
+export const STORY_BG_CODES = [
+  { code: 'paper', background: '#f6f1e7', color: '#2c2a24' },
+  { code: 'night', background: '#1f2233', color: '#f2f2f6' },
+  { code: 'forest', background: '#23402f', color: '#eef5ee' },
+  { code: 'sunset', background: '#c96a4a', color: '#fff7ef' },
+  { code: 'sea', background: '#2b5d73', color: '#eef7fa' },
+  { code: 'plum', background: '#5a3b5e', color: '#f7eef8' },
+] as const;
+
+export const fetchStoryFeed = (): Promise<StoryFeedResponse> => request('/api/stories/feed');
+
+/** bookId·bgCode는 선택이지만 null을 명시해 보낸다 — 서버 record가 세 필드를 다 받는다. */
+export const createStory = (text: string, bookId: number | null, bgCode: string | null): Promise<StoryCard> =>
+  request('/api/stories', { body: { text, bookId, bgCode } });
+
+/** 없거나 남의 것이면 404 — 존재를 누설하지 않는 서버 계약(IDOR)을 그대로 받는다. */
+export const deleteStory = (id: number): Promise<void> => request(`/api/stories/${id}`, { method: 'DELETE' });
+
+/** 서버가 `@RequestBody`를 안 받으므로 본문 없이 POST한다. 멱등(중복 열람은 서버가 no-op). */
+export const markStoryViewed = (id: number): Promise<void> => request(`/api/stories/${id}/view`, { method: 'POST' });
+
+/** 작성자 본인만 — 남의 스토리면 404. 차단 관계 열람자는 서버가 이미 걸러 준다. */
+export const fetchStoryViewers = (id: number): Promise<StoryViewerEntry[]> => request(`/api/stories/${id}/viewers`);

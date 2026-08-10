@@ -129,6 +129,16 @@ async function request<T>(path: string, init?: { method?: 'GET'|'POST'|'DELETE';
      (`@RequestParam String loginId` 필수 → 핸들 없는 계정은 요청이 성립 불가) → 소셜 탭에서 버튼 대신
      웹 안내를 그린다. 남을 팔로우·차단·신고하고 남의 책방을 보는 건 핸들 없이도 된다.
      스토리(PR-7)의 `/api/stories/of/{loginId}`는 그 PR에서 다시 확인한다.
+   - **실측 완료(PR-7) — 스토리는 핸들 없이도 전부 성립한다**: `GET /api/stories/feed`가 **내 활성
+     스토리를 `mine` 필드로 따로** 실어 준다(`StoryService.feed`는 viewer 엔티티로 바로 조회 —
+     loginId를 안 거친다). 그 카드에 `id`가 실리므로 삭제(`DELETE /api/stories/{id}`)·열람자
+     (`GET /api/stories/{id}/viewers`)까지 id 기반으로 이어지고, 작성(`POST /api/stories`)도
+     `StoryService.create`가 loginId를 안 본다. 따라서 **미니앱은 `/api/stories/of/{loginId}`를
+     쓰지 않는다**(핸들 있는 계정에도 `mine`이 상위집합) — PR-6의 "자기 책방" 같은 막힘은 없다.
+     ⚠️ `mine.loginId`는 null일 수 있으니 표시·식별에 쓰지 않는다. **남는 비대칭**: `canView`가
+     `author.getLoginId() == null`을 미노출로 치므로 핸들 없는 계정의 스토리는 **작성·자기 열람은 되지만
+     팔로워에게는 안 보인다**(N-055 서버측 정책, 의도된 것). 서버는 고치지 않고 그대로 둔다 — 소셜 탭의
+     기존 웹 안내("웹에서 아이디를 정하면…")가 같은 원인을 이미 설명한다.
 2. **principal 브리지 실측**: 각 컨트롤러가 Bearer principal(이메일 브리지)로 동작하는 계약은 PR-1에서
    확립됐지만, 뮤테이션 계열(books·follow·stories)은 미니앱발 호출이 처음이다 — PR마다 실기기 1회가 게이트.
 3. **App.tsx 재편(PR-5) 회귀**: 타이머·인증 흐름이 전부 이 파일을 지난다. 기존 흐름(로그인→홈→시작/정지→

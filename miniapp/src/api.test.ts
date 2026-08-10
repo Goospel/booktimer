@@ -4,11 +4,14 @@ import type { SearchRow } from './api';
 import {
   ApiError,
   REPORT_REASONS,
+  STORY_BG_CODES,
   UnauthorizedError,
   addBook,
   blockUser,
   changeBookStatus,
+  createStory,
   deleteBook,
+  deleteStory,
   fetchBlocks,
   fetchDashboard,
   fetchFollowList,
@@ -16,7 +19,10 @@ import {
   fetchProfile,
   fetchProfileBooks,
   fetchShelf,
+  fetchStoryFeed,
+  fetchStoryViewers,
   follow,
+  markStoryViewed,
   linkAccount,
   login,
   logout,
@@ -499,5 +505,87 @@ describe('소셜 API — 검색·팔로우·책방·차단·신고', () => {
     });
     // 서버 ReportReason enum(SPAM·HARASSMENT·INAPPROPRIATE·OTHER)과 값이 어긋나면 전부 OTHER로 접수된다.
     expect(REPORT_REASONS.map((r) => r.value)).toEqual(['SPAM', 'HARASSMENT', 'INAPPROPRIATE', 'OTHER']);
+  });
+});
+
+describe('독서 스토리 API', () => {
+  it('피드는 GET — 팔로우가 없으면 mine·groups가 빈 응답이다(실패가 아니라 0건)', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(200, JSON.stringify({ mine: null, groups: [] })) as never,
+    );
+
+    const feed = await fetchStoryFeed();
+
+    expect(lastRequest()[0]).toBe('http://localhost:8080/api/stories/feed');
+    expect(lastRequest()[1].method).toBe('GET');
+    expect(feed.mine).toBeNull();
+    expect(feed.groups).toEqual([]);
+  });
+
+  it('피드는 내 스토리를 groups가 아니라 mine으로 준다 — 핸들 없는 계정도 자기 목록을 본다(설계 §5-1)', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(
+        200,
+        JSON.stringify({
+          mine: { loginId: null, nickname: '나', profileCharacterCode: null, allViewed: true, stories: [{ id: 9 }] },
+          groups: [],
+        }),
+      ) as never,
+    );
+
+    const feed = await fetchStoryFeed();
+
+    expect(feed.mine?.loginId).toBeNull(); // 핸들 없이도 mine이 채워진다 = /of/{loginId} 불필요
+    expect(feed.mine?.stories[0].id).toBe(9);
+  });
+
+  it('작성은 문장·책·배경을 함께 보낸다 — 책 미첨부는 null(생략이 아니라 명시)', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, JSON.stringify({ id: 3, text: '한 문장' })) as never);
+
+    await createStory('한 문장', null, 'paper');
+
+    expect(lastRequest()[0]).toBe('http://localhost:8080/api/stories');
+    expect(lastRequest()[1].method).toBe('POST');
+    expect(JSON.parse(lastRequest()[1].body as string)).toEqual({ text: '한 문장', bookId: null, bgCode: 'paper' });
+  });
+
+  it('배경 코드는 서버 팔레트(Story.BG_CODES)와 같은 값이어야 400이 안 난다', () => {
+    expect(STORY_BG_CODES.map((bg) => bg.code)).toEqual(['paper', 'night', 'forest', 'sunset', 'sea', 'plum']);
+  });
+
+  it('삭제는 DELETE + 본문 없음, 남의 스토리는 404를 그대로 전달한다(IDOR 비노출 계약)', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '') as never);
+
+    await deleteStory(7);
+
+    expect(lastRequest()[0]).toBe('http://localhost:8080/api/stories/7');
+    expect(lastRequest()[1].method).toBe('DELETE');
+    expect(lastRequest()[1].body).toBeUndefined();
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(404, '<html>error</html>') as never);
+    const error = (await deleteStory(8).catch((e: unknown) => e)) as ApiError;
+    expect(error.status).toBe(404);
+  });
+
+  it('열람 기록은 POST이고 본문이 없다 — 서버가 @RequestBody를 안 받는다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '') as never);
+
+    await markStoryViewed(7);
+
+    expect(lastRequest()[0]).toBe('http://localhost:8080/api/stories/7/view');
+    expect(lastRequest()[1].method).toBe('POST');
+    expect(lastRequest()[1].body).toBeUndefined();
+  });
+
+  it('뷰어 목록은 그 스토리 경로의 GET이다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(200, JSON.stringify([{ loginId: 'a', nickname: 'A', profileCharacterCode: null, viewedAt: 'x' }])) as never,
+    );
+
+    const viewers = await fetchStoryViewers(7);
+
+    expect(lastRequest()[0]).toBe('http://localhost:8080/api/stories/7/viewers');
+    expect(lastRequest()[1].method).toBe('GET');
+    expect(viewers[0].nickname).toBe('A');
   });
 });
