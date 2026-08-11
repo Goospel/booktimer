@@ -12,6 +12,8 @@ import java.time.LocalDate;
  * @param rawDeficitSeconds    재분배 전 원시 부채 = max(0, goal-read). goal=0이면 0
  * @param rawSurplusSeconds    재분배 전 원시 초과 = max(0, read-goal). goal=0이면 0
  * @param forgivenSubMinute    과거 날에서 rawDeficit∈(0,60)이라 0으로 처리됨(1분 미만 용서)
+ * @param waived               리워드 광고 보상({@link ReadingGoalWaiver})으로 이 날 부채가 소거됨.
+ *                             진단 뷰에서 "부채가 있었는데 remaining=0"이 버그로 보이지 않게 정직하게 남긴다
  * @param remainingSeconds     backward-only 재분배 후 잔여 부채
  * @param surplusConsumedSeconds 이 날 초과분 중 과거 날 상환에 쓴 양 = rawSurplus - surplusLeft
  */
@@ -23,6 +25,7 @@ public record DayDebtTrace(
         long rawDeficitSeconds,
         long rawSurplusSeconds,
         boolean forgivenSubMinute,
+        boolean waived,
         long remainingSeconds,
         long surplusConsumedSeconds
 ) {

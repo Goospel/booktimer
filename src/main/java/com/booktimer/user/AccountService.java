@@ -8,6 +8,7 @@ import com.booktimer.feedback.FeedbackRepository;
 import com.booktimer.follow.FollowRepository;
 import com.booktimer.personality.ReadingPersonalityCacheRepository;
 import com.booktimer.report.ReportRepository;
+import com.booktimer.session.ReadingGoalWaiverRepository;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.story.StoryRepository;
 import com.booktimer.story.StoryViewRepository;
@@ -33,6 +34,7 @@ public class AccountService {
     private final UserRepository userRepository;
     private final ReadingTimerRepository timerRepository;
     private final ReadingGoalChangeRepository goalChangeRepository;
+    private final ReadingGoalWaiverRepository goalWaiverRepository;
     private final ReadingSessionRepository sessionRepository;
     private final FollowRepository followRepository;
     private final BlockRepository blockRepository;
@@ -50,6 +52,7 @@ public class AccountService {
     public AccountService(UserRepository userRepository,
                           ReadingTimerRepository timerRepository,
                           ReadingGoalChangeRepository goalChangeRepository,
+                          ReadingGoalWaiverRepository goalWaiverRepository,
                           ReadingSessionRepository sessionRepository,
                           FollowRepository followRepository,
                           BlockRepository blockRepository,
@@ -66,6 +69,7 @@ public class AccountService {
         this.userRepository = userRepository;
         this.timerRepository = timerRepository;
         this.goalChangeRepository = goalChangeRepository;
+        this.goalWaiverRepository = goalWaiverRepository;
         this.sessionRepository = sessionRepository;
         this.followRepository = followRepository;
         this.blockRepository = blockRepository;
@@ -141,7 +145,7 @@ public class AccountService {
     }
 
     /**
-     * 연관 데이터까지 FK 순서로 제거: 세션(N) → 타이머(1:1) → 목표 변경 이력(N) → 팔로우(양방향) → 차단(양방향)
+     * 연관 데이터까지 FK 순서로 제거: 세션(N) → 타이머(1:1) → 목표 변경 이력(N) → 용서권(N) → 팔로우(양방향) → 차단(양방향)
      * → 신고(양방향) → 스토리 열람·스토리(N) → 책(N) → 책BTI 캐시(1) → 유저.
      * <p>모두 users를 FK 참조하므로 유저 삭제 전에 정리한다. 책은 {@code reading_session.book_id}가
      * book을 FK 참조하므로 <b>세션 이후</b>에 지운다(세션이 책을 가리키는 채로 책을 지우면 위반).
@@ -151,6 +155,7 @@ public class AccountService {
         sessionRepository.deleteByUser(user);
         timerRepository.deleteByUser(user);
         goalChangeRepository.deleteByUser(user);   // FK: reading_goal_change.user_id → users (유저 삭제 전 정리)
+        goalWaiverRepository.deleteByUser(user);   // FK: reading_goal_waiver.user_id → users (리워드 광고 용서 기록)
         followRepository.deleteByFollower(user);
         followRepository.deleteByFollowee(user);
         blockRepository.deleteByBlocker(user);

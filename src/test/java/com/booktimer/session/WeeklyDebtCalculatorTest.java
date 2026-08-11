@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -488,6 +489,99 @@ class WeeklyDebtCalculatorTest {
             assertThat(trace.days().get(0).date()).isEqualTo(TODAY.minusDays(6));
             assertThat(trace.days().get(WeeklyDebtCalculator.WINDOW_DAYS - 1).date()).isEqualTo(TODAY);
             assertThat(trace.days().get(WeeklyDebtCalculator.WINDOW_DAYS - 1).isToday()).isTrue();
+        }
+    }
+
+    /** 윈도우 인덱스 → trace.days() 인덱스. offset=0이 오늘. */
+    private static DayDebtTrace dayAgo(WeeklyDebtTrace trace, int offset) {
+        return trace.days().get(WeeklyDebtCalculator.WINDOW_DAYS - 1 - offset);
+    }
+
+    @Nested
+    @DisplayName("waiver(리워드 광고 용서) — 지정한 과거 날의 잔여 부채만 소거")
+    class WaiverTests {
+
+        @Test
+        @DisplayName("waived 날의 잔여 부채는 0이고 waived=true로 정직하게 남는다")
+        void waivedPastDay_remainingZero_flagged() {
+            Map<LocalDate, Long> reads = reads();
+            reads.put(TODAY.minusDays(2), 600L); // 2일전 10분만 읽음 → 원시 부채 3000
+            LocalDate target = TODAY.minusDays(2);
+
+            WeeklyDebtTrace trace = WeeklyDebtCalculator.computeTrace(reads, flatGoalMap(), Set.of(target), TODAY);
+            DayDebtTrace day = dayAgo(trace, 2);
+
+            assertThat(day.rawDeficitSeconds()).isEqualTo(GOAL - 600L); // 원시값은 정직하게 보존
+            assertThat(day.remainingSeconds()).isZero();
+            assertThat(day.waived()).isTrue();
+            // 빠뜨린 날 목록에서도 빠진다 — 홈 "밀린 시간"이 실제로 줄어드는 경로
+            assertThat(trace.toWeeklyDebt().missedDays()).extracting(DayDebt::date).doesNotContain(target);
+        }
+
+        /** 윈도우 전체를 목표 달성(부채 0)으로 채운 baseline — 뱅킹 검증에서 다른 날이 초과분을 가로채지 않게. */
+        private Map<LocalDate, Long> allMet() {
+            Map<LocalDate, Long> m = reads();
+            for (int i = 0; i < WeeklyDebtCalculator.WINDOW_DAYS; i++) {
+                m.put(TODAY.minusDays(i), GOAL);
+            }
+            return m;
+        }
+
+        @Test
+        @DisplayName("waive는 deficit만 소거 — 그날 초과분의 backward 뱅킹은 불변")
+        void waivedSurplusDay_bankingUnchanged() {
+            Map<LocalDate, Long> reads = allMet();
+            reads.put(TODAY.minusDays(4), 0L);            // 4일전 부채 3600
+            reads.put(TODAY.minusDays(2), GOAL + 3600L);  // 2일전 1시간 초과 → 4일전 부채를 갚아야 함
+            LocalDate surplusDay = TODAY.minusDays(2);
+
+            WeeklyDebtTrace trace = WeeklyDebtCalculator.computeTrace(reads, flatGoalMap(), Set.of(surplusDay), TODAY);
+
+            // 초과분 날을 waive해도 그 초과분이 4일전 부채를 갚는 동작은 그대로
+            assertThat(dayAgo(trace, 4).remainingSeconds()).isZero();
+            assertThat(dayAgo(trace, 2).surplusConsumedSeconds()).isEqualTo(3600L);
+        }
+
+        @Test
+        @DisplayName("waived set에 오늘이 섞여도 오늘 부채는 불변 — 오늘은 용서 대상이 아니다")
+        void today_neverWaived() {
+            Map<LocalDate, Long> reads = reads();
+            reads.put(TODAY, 600L);
+
+            WeeklyDebtTrace trace = WeeklyDebtCalculator.computeTrace(reads, flatGoalMap(), Set.of(TODAY), TODAY);
+            DayDebtTrace today = dayAgo(trace, 0);
+
+            assertThat(today.remainingSeconds()).isEqualTo(GOAL - 600L);
+            assertThat(today.waived()).isFalse();
+        }
+
+        @Test
+        @DisplayName("waived set에 윈도우 밖 날짜가 있어도 무해(no-op)")
+        void outOfWindowWaiver_noOp() {
+            Map<LocalDate, Long> reads = reads();
+            reads.put(TODAY.minusDays(2), 600L);
+
+            WeeklyDebtTrace waived = WeeklyDebtCalculator.computeTrace(
+                    reads, flatGoalMap(), Set.of(TODAY.minusDays(30)), TODAY);
+            WeeklyDebtTrace plain = WeeklyDebtCalculator.computeTrace(reads, flatGoalMap(), TODAY);
+
+            assertThat(waived.totalDebtSeconds()).isEqualTo(plain.totalDebtSeconds());
+            assertThat(waived.days()).isEqualTo(plain.days());
+        }
+
+        @Test
+        @DisplayName("회귀 앵커: waiver 없는 기존 오버로드는 결과 불변(waived 전부 false)")
+        void existingOverload_unchanged() {
+            Map<LocalDate, Long> reads = reads();
+            reads.put(TODAY, 600L);
+            reads.put(TODAY.minusDays(1), 0L);
+            reads.put(TODAY.minusDays(3), GOAL + 1200L);
+
+            WeeklyDebtTrace trace = WeeklyDebtCalculator.computeTrace(reads, flatGoalMap(), TODAY);
+
+            assertThat(trace.days()).extracting(DayDebtTrace::waived).containsOnly(false);
+            // compute() 경로와도 동치 — 오버로드 위임이 결과를 바꾸지 않는다
+            assertThat(trace.toWeeklyDebt()).isEqualTo(WeeklyDebtCalculator.compute(reads, flatGoalMap(), TODAY));
         }
     }
 }

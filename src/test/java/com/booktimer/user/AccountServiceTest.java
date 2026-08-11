@@ -50,6 +50,8 @@ class AccountServiceTest {
     @Mock
     private ReadingGoalChangeRepository goalChangeRepository;
     @Mock
+    private com.booktimer.session.ReadingGoalWaiverRepository goalWaiverRepository;
+    @Mock
     private ReadingSessionRepository sessionRepository;
     @Mock
     private FollowRepository followRepository;
@@ -127,10 +129,11 @@ class AccountServiceTest {
 
         service.deleteAccount(EMAIL, "pw");
 
-        var ordered = inOrder(sessionRepository, timerRepository, goalChangeRepository, followRepository, blockRepository, reportRepository, storyViewRepository, storyRepository, bookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository, apiTokenRepository, tossLinkCodeRepository, userRepository);
+        var ordered = inOrder(sessionRepository, timerRepository, goalChangeRepository, goalWaiverRepository, followRepository, blockRepository, reportRepository, storyViewRepository, storyRepository, bookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository, apiTokenRepository, tossLinkCodeRepository, userRepository);
         ordered.verify(sessionRepository).deleteByUser(user); // book FK 참조하는 세션 먼저
         ordered.verify(timerRepository).deleteByUser(user);
         ordered.verify(goalChangeRepository).deleteByUser(user);   // FK: 목표 변경 이력도 유저 전에 정리
+        ordered.verify(goalWaiverRepository).deleteByUser(user);   // FK: 용서권도 유저 전에 정리
         ordered.verify(followRepository).deleteByFollower(user);   // FK: 유저 삭제 전에 관계 정리
         ordered.verify(followRepository).deleteByFollowee(user);
         ordered.verify(blockRepository).deleteByBlocker(user);     // FK: 유저 삭제 전에 차단 관계 정리
@@ -178,10 +181,11 @@ class AccountServiceTest {
 
         service.deleteSocialAccount(EMAIL, "googler");
 
-        var ordered = inOrder(sessionRepository, timerRepository, goalChangeRepository, followRepository, blockRepository, reportRepository, bookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository, apiTokenRepository, tossLinkCodeRepository, userRepository);
+        var ordered = inOrder(sessionRepository, timerRepository, goalChangeRepository, goalWaiverRepository, followRepository, blockRepository, reportRepository, bookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository, apiTokenRepository, tossLinkCodeRepository, userRepository);
         ordered.verify(sessionRepository).deleteByUser(social);
         ordered.verify(timerRepository).deleteByUser(social);
         ordered.verify(goalChangeRepository).deleteByUser(social);   // FK: 목표 변경 이력도 유저 전에 정리
+        ordered.verify(goalWaiverRepository).deleteByUser(social);   // FK: 용서권도 유저 전에 정리
         ordered.verify(followRepository).deleteByFollower(social);
         ordered.verify(followRepository).deleteByFollowee(social);
         ordered.verify(blockRepository).deleteByBlocker(social);
