@@ -2,7 +2,7 @@ import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { App, BottomTabBar, MainTabs, TAB_BAR_HEIGHT, TABS, tabChangeHandler } from './App';
+import { App, BottomTabBar, MainTabs, TAB_BAR_HEIGHT, TAB_BAR_MARGIN, TABS, tabChangeHandler } from './App';
 import type { DashboardResponse } from './api';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
@@ -122,12 +122,21 @@ describe('하단 탭바', () => {
     expect(bar('home')).not.toContain('#3182f6');
   });
 
-  it('홈 인디케이터만큼 아래 여백을 둔다 — safe-area가 없으면 마지막 탭이 인디케이터에 깔린다', () => {
-    expect(bar('home')).toContain('padding-bottom:env(safe-area-inset-bottom)');
+  it('바닥에 붙지 않고 떠 있다 — 토스 브랜딩 가이드가 요구하는 플로팅 형태(심사 반려 2)', () => {
+    // T-144: 단일 속성 한 조각은 TDS 주입 CSS와 겹쳐 공허해진다 — 인접 속성을 이어 붙인 조합을 키로 쓴다.
+    expect(bar('home')).toContain(`left:${TAB_BAR_MARGIN}px;right:${TAB_BAR_MARGIN}px;bottom:calc(12px + env(safe-area-inset-bottom))`);
+    expect(bar('home')).toMatch(/border-radius:28px;box-shadow:0 4px 16px/);
+    expect(bar('home')).not.toContain('border-top'); // 전폭 부착 형태의 서명
   });
 
-  it('본문 아래 여백이 탭바 높이 + safe-area를 덮는다 — 마지막 요소(격언·목표 바꾸기)가 바에 가리지 않는다', () => {
-    expect(renderTab('home')).toContain(`padding-bottom:calc(${TAB_BAR_HEIGHT}px + env(safe-area-inset-bottom)`);
+  it('홈 인디케이터만큼 아래를 띄운다 — safe-area가 없으면 바가 인디케이터에 깔린다', () => {
+    expect(bar('home')).toContain('env(safe-area-inset-bottom)');
+  });
+
+  it('본문 아래 여백이 떠 있는 바 전체를 덮는다 — 마지막 요소(격언·목표 바꾸기)가 바에 가리지 않는다', () => {
+    expect(renderTab('home')).toContain(
+      `padding-bottom:calc(${TAB_BAR_HEIGHT}px + 12px + env(safe-area-inset-bottom) + 16px)`,
+    );
   });
 });
 
@@ -149,10 +158,10 @@ describe('탭 밖 오케스트레이션 (재편 전 동작 보존)', () => {
       </TDSMobileProvider>,
     );
 
-  it('토큰이 없으면 로그인 브릿지부터 — 탭바는 아직 없다', () => {
+  it('토큰이 없으면 로그인 브릿지의 인트로부터 — 탭바는 아직 없다', () => {
     const markup = renderApp();
 
-    expect(markup).toContain('토스로 로그인하는 중');
+    expect(markup).toContain('토스로 시작하기');
     expect(markup).not.toContain('서재');
   });
 

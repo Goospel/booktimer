@@ -36,6 +36,9 @@ export const TABS = [
 /** 탭바 한 칸의 최소 높이 — 손가락 최소치(44px)를 넘기고, 본문 하단 여백도 이 값에서 계산한다. */
 export const TAB_BAR_HEIGHT = 56;
 
+/** 떠 있는 탭바의 좌우 여백 — 화면 가장자리에서 이만큼 떨어져야 "부착"이 아니라 "플로팅"으로 읽힌다. */
+export const TAB_BAR_MARGIN = 16;
+
 export type TabKey = (typeof TABS)[number]['key'];
 
 /**
@@ -171,7 +174,7 @@ export function App() {
 
 /**
  * 메인 탭 셸 — 탭바와 본문을 같은 `TABS` 목록에서 그려 index와 화면이 어긋날 자리를 없앤다.
- * 탭바는 하단 고정이라 본문 아래에 그만큼 여백을 둔다.
+ * 탭바가 하단에 떠 있으므로 본문 아래에 그만큼 여백을 둔다.
  */
 export function MainTabs({
   tab,
@@ -192,8 +195,8 @@ export function MainTabs({
 }) {
   return (
     <>
-      {/* 탭바가 하단 고정이라 본문 끝이 그 아래로 숨는다 — 바 높이 + 홈 인디케이터 + 숨 쉴 여백만큼 비운다. */}
-      <div style={{ paddingBottom: `calc(${TAB_BAR_HEIGHT}px + env(safe-area-inset-bottom) + 16px)` }}>
+      {/* 떠 있는 탭바 아래로 본문 끝이 숨는다 — 바 높이 + 띄운 높이 + 홈 인디케이터 + 숨 쉴 여백만큼 비운다. */}
+      <div style={{ paddingBottom: `calc(${TAB_BAR_HEIGHT}px + 12px + env(safe-area-inset-bottom) + 16px)` }}>
         {tab === 'home' && (
           <Home
             dashboard={dashboard}
@@ -215,10 +218,11 @@ export function MainTabs({
 }
 
 /**
- * 하단 탭바 — 아이콘+라벨 세로 스택의 네이티브 탭바.
+ * 하단 탭바 — 아이콘+라벨 세로 스택을 **떠 있는 알약(pill)**에 담는다.
  *
- * <p>TDS `Tab`(상단 밑줄 탭)을 하단에 고정해 쓰던 것을 걷어낸 자리다 — 높이 37px·아이콘 없음·
- * safe-area 여백 0이라 홈 인디케이터에 깔렸고, 그 이질감이 실기기 피드백의 주범이었다.
+ * <p>토스 미니앱 브랜딩 가이드가 요구하는 플로팅 형태다(전폭 부착형은 2026-08-12 심사 반려 사유 2).
+ * 홈 인디케이터 회피는 `padding-bottom`이 아니라 **띄운 높이**(`bottom`)가 맡는다 — 둘 다 두면
+ * safe-area가 두 번 더해져 바가 붕 뜬다.
  */
 export function BottomTabBar({ tab, onTabChange }: { tab: TabKey; onTabChange: (tab: TabKey) => void }) {
   const change = tabChangeHandler(onTabChange);
@@ -229,14 +233,15 @@ export function BottomTabBar({ tab, onTabChange }: { tab: TabKey; onTabChange: (
       aria-label="메인 탭"
       style={{
         position: 'fixed',
-        left: 0,
-        right: 0,
-        bottom: 0,
+        left: TAB_BAR_MARGIN,
+        right: TAB_BAR_MARGIN,
+        bottom: 'calc(12px + env(safe-area-inset-bottom))',
         zIndex: 100,
         display: 'flex',
+        overflow: 'hidden', // 모서리 밖으로 새는 탭 눌림 효과를 알약 안에 가둔다
         background: 'var(--adaptiveBackground, #FCFAF5)',
-        borderTop: '1px solid rgba(0, 0, 0, 0.06)',
-        paddingBottom: 'env(safe-area-inset-bottom)',
+        borderRadius: 28,
+        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
       }}
     >
       {TABS.map(({ key, label, icon }, index) => {
