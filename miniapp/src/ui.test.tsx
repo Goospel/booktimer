@@ -7,7 +7,10 @@ import type { DashboardResponse } from './api';
 import { History } from './screens/History';
 import { Home } from './screens/Home';
 import { COVER_PALETTE, GrassGrid, coverColor, coverSource, initialOf } from './ui';
-import { graph, userAgent } from './test-fixtures';
+import { graph, stubLocalStorage, userAgent } from './test-fixtures';
+
+// 홈이 렌더 중에 알림 동의 캐시를 읽는다. 여기선 describe 본문에서도 홈을 그리므로(수집 시점) 모듈 최상단에서 심는다.
+stubLocalStorage();
 
 /**
  * 잔디 렌더 안전망 — 잔디 그리기를 History에서 `GrassGrid`(ui.tsx)로 추출하는 리팩터가

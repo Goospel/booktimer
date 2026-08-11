@@ -4,10 +4,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DashboardResponse } from './api';
 import { ApiError, waiveDebt } from './api';
-import { BookList, Home, claimDebtWaiver, defaultBookId, showWaiverButton, waiverErrorMessage } from './screens/Home';
-import { graph, userAgent } from './test-fixtures';
+import {
+  BookList,
+  Home,
+  askNotificationAgreement,
+  claimDebtWaiver,
+  defaultBookId,
+  shouldShowNotificationCard,
+  showWaiverButton,
+  waiverErrorMessage,
+} from './screens/Home';
+import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 import { coverColor } from './ui';
-import { REWARD_AD_GROUP_ID, watchRewardAd } from './toss';
+import { REWARD_AD_GROUP_ID, notificationAgreementSupported, requestNotificationAgreement, watchRewardAd } from './toss';
 
 /**
  * 리워드 광고 진입점 — 노출 조건과 지급 흐름.
@@ -22,12 +31,22 @@ vi.mock('./api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api')>()),
   waiveDebt: vi.fn(),
 }));
-vi.mock('./toss', () => ({ REWARD_AD_GROUP_ID: 'test-ad-group', watchRewardAd: vi.fn() }));
+vi.mock('./toss', () => ({
+  REWARD_AD_GROUP_ID: 'test-ad-group',
+  watchRewardAd: vi.fn(),
+  GOAL_MET_TEMPLATE_CODE: 'test-template',
+  notificationAgreementSupported: vi.fn(),
+  requestNotificationAgreement: vi.fn(),
+}));
 
 const waiveDebtMock = vi.mocked(waiveDebt);
 const watchRewardAdMock = vi.mocked(watchRewardAd);
+const supportedMock = vi.mocked(notificationAgreementSupported);
+const requestAgreementMock = vi.mocked(requestNotificationAgreement);
 
 const BUTTON_LABEL = '광고 보고 밀린 하루 지우기';
+const NOTIFICATION_LABEL = '알림 받기';
+const AGREEMENT_KEY = 'booktimer.notificationAgreement';
 
 function dashboard(overrides: Partial<DashboardResponse> = {}): DashboardResponse {
   return {
@@ -72,6 +91,10 @@ function renderHome(overrides: Partial<DashboardResponse> = {}) {
 beforeEach(() => {
   waiveDebtMock.mockReset();
   watchRewardAdMock.mockReset();
+  supportedMock.mockReset();
+  requestAgreementMock.mockReset();
+  supportedMock.mockReturnValue(true);
+  stubLocalStorage(); // 홈이 렌더 중에 동의 캐시를 읽는다
 });
 
 describe('버튼 노출 조건 (showWaiverButton)', () => {
@@ -112,6 +135,84 @@ describe('홈 렌더 배선', () => {
   it('진행률 게이지가 웹 달성색(--ok)으로 찬다 — 세이지와 변별되는 초록', () => {
     expect(renderHome()).toContain('#2F8F6B');
     expect(renderHome()).not.toContain('#4caf50');
+  });
+});
+
+/**
+ * 알림 동의 카드 — 노출 조건은 순수 술어로, 배선은 마크업으로 계측한다(광고 버튼과 같은 방식).
+ *
+ * <p>동의 상태의 정본은 토스이고 우리는 캐시만 본다: 캐시가 있으면(동의든 거절이든) 다시 조르지 않고,
+ * 구 토스앱(5.255.0 미만)에는 누를 수 없는 버튼을 띄우지 않는다.
+ */
+describe('알림 동의 카드 노출 조건 (shouldShowNotificationCard)', () => {
+  it('캐시 없음 + 지원되는 토스앱 → 노출', () => {
+    expect(shouldShowNotificationCard(null, true)).toBe(true);
+  });
+
+  it('이미 동의했으면 미노출', () => {
+    expect(shouldShowNotificationCard('alreadyAgreed', true)).toBe(false);
+    expect(shouldShowNotificationCard('newAgreement', true)).toBe(false);
+  });
+
+  it('거절했으면 미노출 — 거절한 사용자를 다시 조르지 않는다', () => {
+    expect(shouldShowNotificationCard('agreementRejected', true)).toBe(false);
+  });
+
+  it('미지원 토스앱이면 미노출 — 눌러도 아무 일이 없는 버튼을 띄우지 않는다', () => {
+    expect(shouldShowNotificationCard(null, false)).toBe(false);
+  });
+});
+
+describe('알림 동의 카드 렌더 배선', () => {
+  it('조건이 맞으면 카드와 버튼이 그려진다', () => {
+    const markup = renderHome();
+
+    expect(markup).toContain('토스 알림');
+    expect(labelsOf(markup)).toContain(NOTIFICATION_LABEL);
+  });
+
+  it('캐시가 있으면 카드가 없다 — 한 번 답한 사용자에게 다시 뜨지 않는다', () => {
+    localStorage.setItem(AGREEMENT_KEY, 'agreementRejected');
+
+    expect(labelsOf(renderHome())).not.toContain(NOTIFICATION_LABEL);
+  });
+
+  it('미지원 토스앱이면 카드가 없다', () => {
+    supportedMock.mockReturnValue(false);
+
+    expect(labelsOf(renderHome())).not.toContain(NOTIFICATION_LABEL);
+  });
+});
+
+describe('동의 요청 흐름 (askNotificationAgreement)', () => {
+  it('결과를 캐시에 그대로 적어 두고 돌려준다 — 이 값이 카드를 끈다', async () => {
+    requestAgreementMock.mockResolvedValue('newAgreement');
+
+    await expect(askNotificationAgreement()).resolves.toBe('newAgreement');
+    expect(localStorage.getItem(AGREEMENT_KEY)).toBe('newAgreement');
+  });
+
+  it('거절도 캐시한다 — 거절한 사용자를 다시 조르지 않는다', async () => {
+    requestAgreementMock.mockResolvedValue('agreementRejected');
+
+    await askNotificationAgreement();
+
+    expect(localStorage.getItem(AGREEMENT_KEY)).toBe('agreementRejected');
+  });
+
+  it('미지원(null)이면 캐시를 건드리지 않는다 — 지원 기기에선 다시 물어야 한다', async () => {
+    requestAgreementMock.mockResolvedValue(null);
+
+    await expect(askNotificationAgreement()).resolves.toBeNull();
+    expect(localStorage.getItem(AGREEMENT_KEY)).toBeNull();
+  });
+
+  it('설정된 템플릿 코드를 그대로 넘긴다 — 코드가 어긋나면 다른 동의문이 뜬다', async () => {
+    requestAgreementMock.mockResolvedValue(null);
+
+    await askNotificationAgreement();
+
+    expect(requestAgreementMock).toHaveBeenCalledWith('test-template');
   });
 });
 

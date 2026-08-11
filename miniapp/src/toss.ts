@@ -1,4 +1,4 @@
-import { TossAuth, loadFullScreenAd, showFullScreenAd } from '@apps-in-toss/web-framework';
+import { Notification, TossAuth, loadFullScreenAd, showFullScreenAd } from '@apps-in-toss/web-framework';
 
 /**
  * 콘솔에서 발급받은 리워드 광고 그룹 ID. **빈 값이면 광고 기능 전체가 꺼진다**(config-gate) —
@@ -6,6 +6,55 @@ import { TossAuth, loadFullScreenAd, showFullScreenAd } from '@apps-in-toss/web-
  * 전면형·리워드형은 같은 API를 쓰고 타입은 이 그룹 ID로 결정된다.
  */
 export const REWARD_AD_GROUP_ID: string = import.meta.env.VITE_REWARD_AD_GROUP_ID ?? '';
+
+/**
+ * 알림 동의문의 콘솔 발송(템플릿) 코드. 캠페인 2종(완독 축하·하루 목표 달성)이 **같은 동의문 한 장**을
+ * 쓰므로 한 번만 물어보면 둘 다 커버된다 — 동의 단위는 캠페인이 아니라 동의문이다.
+ */
+export const GOAL_MET_TEMPLATE_CODE = 'booktimer-daily-goal-met';
+
+/** 동의 화면의 세 가지 결말 — 동의 상태의 정본은 토스이고, 우리는 이 값만 캐시해 카드 노출을 끈다. */
+export type AgreementResult = 'newAgreement' | 'alreadyAgreed' | 'agreementRejected';
+
+/**
+ * 알림 동의 API를 쓸 수 있는 토스앱인가(5.255.0+). 구버전엔 눌러도 아무 일 없는 버튼을 띄우지 않는다.
+ *
+ * <p>`window` 확인이 앞에 있는 이유: SDK가 앱 버전을 `window`에서 읽어 브라우저 밖(테스트의 정적 렌더)에선
+ * 던진다. 홈이 렌더 중에 이걸 부르므로, 없으면 "미지원"으로 접어 화면이 통째로 깨지지 않게 한다.
+ */
+export function notificationAgreementSupported(): boolean {
+  return typeof window !== 'undefined' && Notification.requestAgreement.isSupported();
+}
+
+/**
+ * 알림 동의 화면 요청 — 미지원 토스앱이면 화면을 띄우지 않고 즉시 `null`.
+ *
+ * <p>결과를 받으면 **반드시 cleanup**을 불러 앱브릿지 콜백을 해제해야 한다(SDK 문서 요구).
+ * 콜백이 동기로 올 수도 있어 cleanup이 아직 할당 전일 수 있으므로, 플래그로 해제 시점을 맞춘다.
+ */
+export function requestNotificationAgreement(templateCode: string): Promise<AgreementResult | null> {
+  if (!notificationAgreementSupported()) return Promise.resolve(null);
+  return new Promise((resolve, reject) => {
+    let cleanup: (() => void) | null = null;
+    let settled = false;
+    const release = () => {
+      settled = true;
+      cleanup?.();
+    };
+    cleanup = Notification.requestAgreement({
+      options: { templateCode },
+      onEvent: (result) => {
+        release();
+        resolve(result.type);
+      },
+      onError: (error) => {
+        release();
+        reject(error);
+      },
+    });
+    if (settled) cleanup(); // 동기 콜백이었다면 여기서 해제한다
+  });
+}
 
 /** `appLogin()`이 주는 것 — 서버 `TossAuthRequest`와 같은 모양이라 그대로 실어 보낸다. */
 export interface TossLoginResult {

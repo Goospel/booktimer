@@ -4,11 +4,20 @@ import { useEffect, useState } from 'react';
 import type { BookOption, DashboardResponse, QuoteDto, TimerState, WaiveResponse } from '../api';
 import { ApiError, startSession, stopSession, tagBook, waiveDebt } from '../api';
 import { elapsedSeconds, formatDuration } from '../format';
-import { REWARD_AD_GROUP_ID, watchRewardAd } from '../toss';
+import {
+  GOAL_MET_TEMPLATE_CODE,
+  REWARD_AD_GROUP_ID,
+  notificationAgreementSupported,
+  requestNotificationAgreement,
+  watchRewardAd,
+} from '../toss';
 import { CoverInitial, ErrorMessage, GrassGrid, Screen, sectionStyle } from '../ui';
 
 /** 홈 잔디 미리보기 폭 — 최근 15주만 축약해 보여주고 전체는 기록 화면이 맡는다(카드 폭을 채우는 주 수). */
 const PREVIEW_WEEKS = 15;
+
+/** 알림 동의 결과 캐시 — 값은 토스가 준 결과 문자열 그대로. 정본은 토스이고 이건 카드 노출 스위치일 뿐이다. */
+const AGREEMENT_KEY = 'booktimer.notificationAgreement';
 
 /**
  * 처음 골라 둘 책 — 최근 읽은 책(=이어 읽기)이 읽는 중 목록에 있으면 그 책, 아니면 첫 책, 없으면 `null`.
@@ -44,6 +53,29 @@ export function showWaiverButton(
 export async function claimDebtWaiver(adGroupId: string): Promise<WaiveResponse | null> {
   const rewarded = await watchRewardAd(adGroupId);
   return rewarded ? waiveDebt() : null;
+}
+
+/**
+ * 알림 동의 카드를 띄울지 — 아직 한 번도 답하지 않았고(캐시 없음) 지원되는 토스앱(5.255.0+)일 때만.
+ *
+ * <p>거절(`agreementRejected`)도 캐시라 카드가 사라진다 — 거절한 사람을 다시 조르지 않는다.
+ * 다른 기기에서 이미 동의했다면 캐시가 없어 카드가 한 번 더 보이지만, 누르면 `alreadyAgreed`가
+ * 와서 캐시되고 사라진다(무해).
+ */
+export function shouldShowNotificationCard(cached: string | null, supported: boolean): boolean {
+  return supported && cached === null;
+}
+
+/**
+ * 동의 화면을 띄우고 결과를 캐시한다 — 이 캐시가 카드를 끄는 유일한 스위치다.
+ *
+ * <p>미지원 기기(`null`)에서는 **캐시를 남기지 않는다** — 남기면 나중에 최신 토스앱에서 열어도
+ * 영영 안 묻는다. 클릭 흐름을 화면 밖으로 꺼낸 이유는 광고 쪽과 같다(정적 렌더 하니스라 클릭이 안 돈다).
+ */
+export async function askNotificationAgreement(): Promise<string | null> {
+  const result = await requestNotificationAgreement(GOAL_MET_TEMPLATE_CODE);
+  if (result !== null) localStorage.setItem(AGREEMENT_KEY, result);
+  return result;
 }
 
 /**
@@ -129,6 +161,9 @@ export function Home({
   const [now, setNow] = useState(() => Date.now());
   /** 방금 지운 부채(초) — 성공 직후 한 줄 안내용. */
   const [waived, setWaived] = useState<number | null>(null);
+  /** 알림 동의 캐시·지원 여부 — 렌더마다 다시 묻지 않게 초기값으로 한 번만 읽는다. */
+  const [agreement, setAgreement] = useState(() => localStorage.getItem(AGREEMENT_KEY));
+  const [agreementSupported] = useState(notificationAgreementSupported);
 
   useEffect(() => {
     if (!dashboard.hasActiveSession) return;
@@ -175,6 +210,16 @@ export function Home({
         setWaived(result.waivedSeconds);
       })
       .catch((e: Error) => setError(waiverErrorMessage(e)))
+      .finally(() => setBusy(false));
+  };
+
+  /** 알림 동의 요청 — 결과(동의·이미동의·거절)가 캐시되면 카드가 사라진다. 미지원(null)이면 그대로 둔다. */
+  const askNotification = () => {
+    setBusy(true);
+    setError(null);
+    askNotificationAgreement()
+      .then(setAgreement)
+      .catch(() => setError('알림 동의를 요청하지 못했어요. 잠시 후 다시 시도해 주세요.'))
       .finally(() => setBusy(false));
   };
 
@@ -248,6 +293,18 @@ export function Home({
           </Text>
         )}
       </div>
+
+      {/* 알림 동의 — 발송은 동의한 유저에게만 가능하고, 동의를 받는 주체는 미니앱이다(콘솔 심사 조건). */}
+      {shouldShowNotificationCard(agreement, agreementSupported) && (
+        <section style={sectionStyle}>
+          <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
+            목표 달성과 완독 소식을 토스 알림으로 받아보세요
+          </Text>
+          <Button display="block" variant="weak" size="medium" disabled={busy} onClick={askNotification}>
+            알림 받기
+          </Button>
+        </section>
+      )}
 
       {!dashboard.hasActiveSession && selectedBook !== null && (
         <section style={sectionStyle}>

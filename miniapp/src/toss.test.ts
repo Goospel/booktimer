@@ -1,7 +1,7 @@
-import { loadFullScreenAd, showFullScreenAd } from '@apps-in-toss/web-framework';
+import { Notification, loadFullScreenAd, showFullScreenAd } from '@apps-in-toss/web-framework';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { watchRewardAd } from './toss';
+import { requestNotificationAgreement, watchRewardAd } from './toss';
 
 /**
  * 리워드 광고 래퍼 — SDK 이벤트 시퀀스를 "보상을 받았나"라는 boolean 하나로 접는다.
@@ -16,10 +16,14 @@ vi.mock('@apps-in-toss/web-framework', () => ({
   loadFullScreenAd: vi.fn(),
   showFullScreenAd: vi.fn(),
   TossAuth: { login: vi.fn() },
+  // requestAgreement는 "함수 + isSupported 프로퍼티"라 실물 모양 그대로 흉내 낸다.
+  Notification: { requestAgreement: Object.assign(vi.fn(), { isSupported: vi.fn() }) },
 }));
 
 const loadMock = vi.mocked(loadFullScreenAd);
 const showMock = vi.mocked(showFullScreenAd);
+const agreementMock = vi.mocked(Notification.requestAgreement);
+const supportedMock = vi.mocked(Notification.requestAgreement.isSupported);
 
 type LoadParams = Parameters<typeof loadFullScreenAd>[0];
 type ShowParams = Parameters<typeof showFullScreenAd>[0];
@@ -39,6 +43,10 @@ function stubAd(events: Array<{ type: string; data?: unknown }>) {
 beforeEach(() => {
   loadMock.mockReset();
   showMock.mockReset();
+  agreementMock.mockReset();
+  supportedMock.mockReset();
+  supportedMock.mockReturnValue(true);
+  vi.stubGlobal('window', {}); // 래퍼가 브라우저 밖(window 없음)을 미지원으로 접으므로, 앱 안 상황을 만든다
 });
 
 describe('watchRewardAd', () => {
@@ -91,5 +99,90 @@ describe('watchRewardAd', () => {
     void watchRewardAd('ad-group-1');
 
     expect(showMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 알림 동의 래퍼 — 앱브릿지 콜백 API를 Promise 하나로 접는다.
+ *
+ * <p>계측 지점 셋: ① 결과 타입이 그대로 올라오는가 ② **결과를 받으면 반드시 cleanup을 부르는가**
+ * (문서 요구 — 안 부르면 콜백이 앱브릿지에 남는다) ③ 미지원 토스앱(5.255.0 미만)에서 화면을
+ * 띄우려 들지 않고 즉시 `null`인가. cleanup은 SDK가 콜백을 **동기로 부를 때도** 걸려야 한다.
+ */
+describe('requestNotificationAgreement', () => {
+  /** 결과를 동기로 흘리는 SDK 흉내 — cleanup 자체를 spy로 돌려준다. */
+  function stubAgreement(result: 'newAgreement' | 'alreadyAgreed' | 'agreementRejected') {
+    const cleanup = vi.fn();
+    agreementMock.mockImplementation((params) => {
+      params.onEvent({ type: result });
+      return cleanup;
+    });
+    return cleanup;
+  }
+
+  it('동의(newAgreement) 결과를 그대로 돌려준다', async () => {
+    stubAgreement('newAgreement');
+
+    await expect(requestNotificationAgreement('booktimer-daily-goal-met')).resolves.toBe('newAgreement');
+  });
+
+  it('이미 동의(alreadyAgreed)·거절(agreementRejected)도 구분해 돌려준다 — 카드 숨김 판단의 근거다', async () => {
+    stubAgreement('alreadyAgreed');
+    await expect(requestNotificationAgreement('t')).resolves.toBe('alreadyAgreed');
+
+    stubAgreement('agreementRejected');
+    await expect(requestNotificationAgreement('t')).resolves.toBe('agreementRejected');
+  });
+
+  it('콘솔 템플릿 코드를 그대로 넘긴다 — 코드가 어긋나면 다른 동의문이 뜬다', async () => {
+    stubAgreement('newAgreement');
+
+    await requestNotificationAgreement('booktimer-daily-goal-met');
+
+    expect(agreementMock.mock.calls[0][0].options).toEqual({ templateCode: 'booktimer-daily-goal-met' });
+  });
+
+  it('결과를 받으면 cleanup을 부른다 — 동기 콜백에서도(cleanup 할당 전에 결과가 올 수 있다)', async () => {
+    const cleanup = stubAgreement('newAgreement');
+
+    await requestNotificationAgreement('t');
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('결과가 비동기로 와도 cleanup을 부른다', async () => {
+    const cleanup = vi.fn();
+    agreementMock.mockImplementation((params) => {
+      setTimeout(() => params.onEvent({ type: 'alreadyAgreed' }), 0);
+      return cleanup;
+    });
+
+    await expect(requestNotificationAgreement('t')).resolves.toBe('alreadyAgreed');
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('onError면 reject하고 cleanup도 부른다', async () => {
+    const cleanup = vi.fn();
+    agreementMock.mockImplementation((params) => {
+      params.onError(new Error('bridge failed'));
+      return cleanup;
+    });
+
+    await expect(requestNotificationAgreement('t')).rejects.toThrow('bridge failed');
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('미지원 토스앱이면 화면을 띄우지 않고 즉시 null', async () => {
+    supportedMock.mockReturnValue(false);
+
+    await expect(requestNotificationAgreement('t')).resolves.toBeNull();
+    expect(agreementMock).not.toHaveBeenCalled();
+  });
+
+  it('브라우저 밖(window 없음)이면 SDK를 건드리지 않는다 — SDK가 window를 읽다 던진다', async () => {
+    vi.stubGlobal('window', undefined);
+
+    await expect(requestNotificationAgreement('t')).resolves.toBeNull();
+    expect(supportedMock).not.toHaveBeenCalled();
   });
 });

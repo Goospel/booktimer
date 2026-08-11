@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App, BottomTabBar, MainTabs, TAB_BAR_HEIGHT, TABS, tabChangeHandler } from './App';
 import type { DashboardResponse } from './api';
-import { graph, userAgent } from './test-fixtures';
+import { graph, stubLocalStorage, userAgent } from './test-fixtures';
+
+beforeEach(stubLocalStorage); // 홈 탭이 렌더 중에 알림 동의 캐시를 읽는다
 
 /**
  * 탭 재편 안전망 — 탭 값과 화면의 대응, 그리고 재편 전부터 있던 오케스트레이션(토큰 유무 → 로그인/로딩)을
