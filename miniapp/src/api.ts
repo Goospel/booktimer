@@ -159,6 +159,8 @@ export interface TimerState {
   readingBooks: BookOption[];
   finishedBooks: BookOption[];
   recentBookId: number | null;
+  /** 리워드 광고로 밀린 하루를 지울 수 있는지 — 빠뜨린 날 존재 + 오늘 미사용을 서버가 판정해 준다. */
+  debtWaiverAvailable: boolean;
 }
 
 /** 작가 격언 — 서버가 셔플해 최대 10개를 실어 준다(`DashboardApiController.QuoteDto`). */
@@ -197,6 +199,23 @@ export const tagBook = (sessionId: number, bookId: number): Promise<{ sessionId:
 
 export const setGoal = (dailyIncrementSeconds: number): Promise<void> =>
   request('/api/miniapp/goal', { body: { dailyIncrementSeconds } });
+
+/** 용서 지급 결과 — `timer`가 동봉돼 부채·버튼 노출이 재조회 없이 갱신된다. */
+export interface WaiveResponse {
+  waivedDate: string;
+  waivedSeconds: number;
+  timer: TimerState;
+}
+
+/**
+ * 밀린 하루 지우기 — 리워드 광고 시청 완료 후 호출한다.
+ *
+ * <p>**지울 날짜를 보내지 않는다** — 서버가 잔여 부채 최대인 날을 고르므로 클라이언트에 조작 표면이 없다.
+ * 빈 본문은 `request()`가 POST로 보내게 하는 스위치다(본문 유무로 메서드를 정한다).
+ * 409=오늘 이미 사용 / 400=지울 날 없음. 둘 다 서버가 평문 메시지를 준다.
+ */
+export const waiveDebt = (): Promise<WaiveResponse> =>
+  request('/api/miniapp/debt-waiver', { body: {} });
 
 // ── 서재 (`web/api/BookApiController`의 record가 타입 단일 출처) ───────────────
 

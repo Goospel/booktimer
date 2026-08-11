@@ -61,6 +61,7 @@ function home(overrides: Partial<DashboardResponse>) {
     finishedBooks: [],
     wantToReadBooks: [],
     recentBookId: null,
+    debtWaiverAvailable: false,
     graph,
     quotes: [],
     emailVerified: true,
