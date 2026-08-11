@@ -61,6 +61,28 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
      */
     Optional<ReadingSession> findByIdAndUser(Long id, User user);
 
+    /**
+     * <b>모든 사용자</b>의 진행 중 세션(목표 달성 푸시 감지 배치). 지금 읽고 있는 사람만 후보라
+     * 이 목록이 곧 분당 스캔 대상이다 — 활성 세션은 항상 소수이고 {@code idx_reading_session_ended_at}가 받친다.
+     */
+    List<ReadingSession> findByEndedAtIsNull();
+
+    /**
+     * 한 사용자가 <b>주어진 구간에 시작해 이미 끝낸</b> 세션들의 측정 길이 합(초). 기록이 없으면 0(coalesce).
+     *
+     * <p>구간은 {@code [from, to)} — 유저 타임존 하루의 시작/끝 Instant를 호출부가 넘긴다. 판정 기준이
+     * {@code endedAt}이 아니라 <b>{@code startedAt}</b>인 것이 핵심이다: 세션은 시작일에 귀속되므로
+     * ({@link ReadingHistoryService}와 동일 규칙) 자정을 넘겨 끝난 독서도 시작한 날에 계상된다.
+     */
+    @Query("""
+            select coalesce(sum(s.durationSeconds), 0) from ReadingSession s
+            where s.user = :user and s.endedAt is not null
+              and s.startedAt >= :from and s.startedAt < :to
+            """)
+    long sumCompletedSeconds(@Param("user") User user,
+                             @Param("from") java.time.Instant from,
+                             @Param("to") java.time.Instant to);
+
     /** 진행 중 세션을 책과 함께 즉시 로딩 — 트랜잭션 밖(뷰)에서 책 제목 접근 시 lazy 예외 방지. */
     @Query("select s from ReadingSession s left join fetch s.book where s.user = :user and s.endedAt is null")
     Optional<ReadingSession> findActiveWithBook(@Param("user") User user);

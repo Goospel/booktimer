@@ -47,6 +47,15 @@ public class TossProperties {
         /** 완독 축하 템플릿의 templateSetCode(콘솔 발급). 비어 있으면 발송하지 않는다. */
         private String finishTemplateCode;
 
+        /**
+         * "오늘 목표 달성" 감지 스케줄러 점등 — false면 스케줄러 빈 자체가 없다(분당 배치가 아예 안 돈다).
+         * {@link #enabled}와 <b>별개 토글</b>이라 완독 축하와 독립적으로 켜고 끌 수 있다(둘 다 true여야 실발송).
+         */
+        private boolean goalMetEnabled;
+
+        /** 목표 달성 템플릿의 templateSetCode(콘솔 발급). 비어 있으면 발송하지 않는다. */
+        private String goalMetTemplateCode;
+
         public boolean isEnabled() {
             return enabled;
         }
@@ -61,6 +70,22 @@ public class TossProperties {
 
         public void setFinishTemplateCode(String finishTemplateCode) {
             this.finishTemplateCode = finishTemplateCode;
+        }
+
+        public boolean isGoalMetEnabled() {
+            return goalMetEnabled;
+        }
+
+        public void setGoalMetEnabled(boolean goalMetEnabled) {
+            this.goalMetEnabled = goalMetEnabled;
+        }
+
+        public String getGoalMetTemplateCode() {
+            return goalMetTemplateCode;
+        }
+
+        public void setGoalMetTemplateCode(String goalMetTemplateCode) {
+            this.goalMetTemplateCode = goalMetTemplateCode;
         }
     }
 

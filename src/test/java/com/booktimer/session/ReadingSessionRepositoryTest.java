@@ -339,4 +339,92 @@ class ReadingSessionRepositoryTest {
                 .extracting(User::getId).containsExactly(u.getId());
     }
 
+    // --- findByEndedAtIsNull / sumCompletedSeconds: 목표 달성 푸시 감지의 두 재료 ---
+
+    @Test
+    @DisplayName("findByEndedAtIsNull: 진행 중 세션만 반환한다 (완료 세션 제외)")
+    void findByEndedAtIsNull_activeOnly() {
+        User u = persistedUser("active1@booktimer.com");
+        ReadingSession done = ReadingSession.start(u, T0);
+        done.end(T0.plusSeconds(600));
+        sessionRepository.save(done);
+        ReadingSession active = sessionRepository.save(ReadingSession.start(u, T0.plusSeconds(1000)));
+
+        assertThat(sessionRepository.findByEndedAtIsNull())
+                .extracting(ReadingSession::getId).containsExactly(active.getId());
+    }
+
+    @Test
+    @DisplayName("findByEndedAtIsNull: 여러 사용자의 진행 중 세션을 모두 반환한다 (배치 스캔)")
+    void findByEndedAtIsNull_acrossUsers() {
+        User a = persistedUser("active2@booktimer.com");
+        User b = persistedUser("active3@booktimer.com");
+        sessionRepository.save(ReadingSession.start(a, T0));
+        sessionRepository.save(ReadingSession.start(b, T0));
+
+        assertThat(sessionRepository.findByEndedAtIsNull()).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("sumCompletedSeconds: 세션이 없으면 0 (null 아님)")
+    void sumCompletedSeconds_emptyIsZero() {
+        User u = persistedUser("csum1@booktimer.com");
+
+        assertThat(sessionRepository.sumCompletedSeconds(u, T0, T0.plusSeconds(86400))).isZero();
+    }
+
+    @Test
+    @DisplayName("sumCompletedSeconds: 범위 안 완료 세션만 합산한다 (범위 밖·진행 중 제외)")
+    void sumCompletedSeconds_sumsOnlyCompletedInRange() {
+        User u = persistedUser("csum2@booktimer.com");
+        Instant from = T0;
+        Instant to = T0.plusSeconds(86400);
+
+        ReadingSession before = ReadingSession.start(u, from.minusSeconds(1)); // 범위 직전
+        before.end(from.plusSeconds(600));
+        sessionRepository.save(before);
+
+        ReadingSession in1 = ReadingSession.start(u, from.plusSeconds(10));
+        in1.end(from.plusSeconds(10 + 600));
+        sessionRepository.save(in1);
+
+        ReadingSession in2 = ReadingSession.start(u, from.plusSeconds(3600));
+        in2.end(from.plusSeconds(3600 + 900));
+        sessionRepository.save(in2);
+
+        sessionRepository.save(ReadingSession.start(u, from.plusSeconds(7200))); // 진행 중
+
+        assertThat(sessionRepository.sumCompletedSeconds(u, from, to)).isEqualTo(1500L);
+    }
+
+    @Test
+    @DisplayName("sumCompletedSeconds: from은 포함 경계, to는 제외 경계 (자정 경계 이중계상 방지)")
+    void sumCompletedSeconds_boundaries() {
+        User u = persistedUser("csum3@booktimer.com");
+        Instant from = T0;
+        Instant to = T0.plusSeconds(86400);
+
+        ReadingSession atFrom = ReadingSession.start(u, from);          // 포함
+        atFrom.end(from.plusSeconds(100));
+        sessionRepository.save(atFrom);
+
+        ReadingSession atTo = ReadingSession.start(u, to);              // 제외(다음 날 시작)
+        atTo.end(to.plusSeconds(100));
+        sessionRepository.save(atTo);
+
+        assertThat(sessionRepository.sumCompletedSeconds(u, from, to)).isEqualTo(100L);
+    }
+
+    @Test
+    @DisplayName("sumCompletedSeconds: 남의 세션은 합산하지 않는다")
+    void sumCompletedSeconds_otherUserExcluded() {
+        User me = persistedUser("csum4@booktimer.com");
+        User other = persistedUser("csum5@booktimer.com");
+        ReadingSession s = ReadingSession.start(other, T0);
+        s.end(T0.plusSeconds(600));
+        sessionRepository.save(s);
+
+        assertThat(sessionRepository.sumCompletedSeconds(me, T0, T0.plusSeconds(86400))).isZero();
+    }
+
 }
