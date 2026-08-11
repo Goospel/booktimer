@@ -173,7 +173,7 @@ function BookRow({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
-    <div style={{ marginBottom: 8, borderRadius: 12, background: 'var(--adaptiveGrey100, #f2f4f6)' }}>
+    <div style={{ marginBottom: 8, borderRadius: 12, background: 'var(--adaptiveGrey100, #FCFAF5)' }}>
       <button type="button" onClick={onToggle} style={rowStyle}>
         <BookCover url={book.coverUrl} />
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -291,7 +291,7 @@ function BookSearch({
           type="button"
           disabled={busy || row.owned}
           onClick={() => onAdd(row, 'READING')}
-          style={{ ...rowStyle, marginTop: 8, borderRadius: 12, background: 'var(--adaptiveGrey100, #f2f4f6)' }}
+          style={{ ...rowStyle, marginTop: 8, borderRadius: 12, background: 'var(--adaptiveGrey100, #FCFAF5)' }}
         >
           <BookCover url={row.coverUrl} />
           <div style={{ flex: 1, minWidth: 0 }}>

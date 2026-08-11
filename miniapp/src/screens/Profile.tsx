@@ -209,7 +209,7 @@ export function ProfileCard({
                 padding: 16,
                 marginBottom: 8,
                 borderRadius: 12,
-                background: 'var(--adaptiveGrey100, #f2f4f6)',
+                background: 'var(--adaptiveGrey100, #FCFAF5)',
               }}
             >
               <BookCover url={book.coverUrl} />
@@ -250,7 +250,7 @@ function SafetyPanel({
   const [detail, setDetail] = useState('');
 
   return (
-    <div style={{ marginTop: 12, padding: 16, borderRadius: 12, background: 'var(--adaptiveGrey100, #f2f4f6)' }}>
+    <div style={{ marginTop: 12, padding: 16, borderRadius: 12, background: 'var(--adaptiveGrey100, #FCFAF5)' }}>
       <Text typography="st12" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
         신고 사유
       </Text>
@@ -259,7 +259,7 @@ function SafetyPanel({
         value={reason}
         disabled={busy}
         onChange={(e) => setReason(e.target.value as ReportReason)}
-        style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #d1d6db' }}
+        style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #E4DDD0' }}
       >
         {REPORT_REASONS.map((r) => (
           <option key={r.value} value={r.value}>
@@ -295,7 +295,7 @@ const chipStyle = (clickable: boolean) =>
     borderRadius: 999,
     border: 'none',
     fontSize: 13,
-    background: 'var(--adaptiveGrey100, #f2f4f6)',
-    color: clickable ? 'var(--adaptiveBlue500, #3182f6)' : 'var(--adaptiveGrey700, #6b7684)',
+    background: 'var(--adaptiveGrey100, #FCFAF5)',
+    color: clickable ? 'var(--adaptiveBlue500, #6E8A6A)' : 'var(--adaptiveGrey700, #57534A)',
     cursor: clickable ? 'pointer' : 'default',
   }) as const;

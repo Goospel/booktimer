@@ -4,8 +4,8 @@ import type { ReactNode } from 'react';
 
 import type { ContributionDay } from './api';
 
-/** 잔디 색 농도 0~4 — 웹 잔디와 같은 단계 체계(서버가 level을 계산해 준다). */
-const LEVEL_COLORS = ['#ebedf0', '#c6e6c8', '#8fd694', '#4caf50', '#2e7d32'];
+/** 잔디 색 농도 0~4 — 웹 app.css `--grass-0..4`와 같은 값(서버가 level을 계산해 준다). */
+const LEVEL_COLORS = ['#EAE4D7', '#C3D9B0', '#94BE7F', '#5E9250', '#35662F'];
 
 /** 잔디 그리드 — 기록 화면(전체)과 홈 미리보기(최근 몇 주)가 같은 렌더를 쓴다. */
 export function GrassGrid({ weeks, cellSize = 11 }: { weeks: ContributionDay[][]; cellSize?: number }) {
@@ -23,7 +23,7 @@ export function GrassGrid({ weeks, cellSize = 11 }: { weeks: ContributionDay[][]
                 borderRadius: 2,
                 // 날짜 없는 칸은 그리드 가장자리 placeholder라 빈 칸으로 둔다.
                 background: day.date === null ? 'transparent' : LEVEL_COLORS[day.level],
-                outline: day.manual ? '1px solid #9e9e9e' : undefined,
+                outline: day.manual ? '1px solid #9A9486' : undefined, // 웹 --neutral-3
               }}
             />
           ))}
@@ -66,7 +66,7 @@ export function BookCover({ url, width = 40 }: { url: string | null; width?: num
           alignItems: 'center',
           justifyContent: 'center',
           fontSize: Math.round(width * 0.45),
-          background: 'var(--adaptiveGrey200, #e5e8eb)',
+          background: 'var(--adaptiveGrey200, #E4DDD0)',
         }}
       >
         📚
@@ -84,14 +84,25 @@ export function BookCover({ url, width = 40 }: { url: string | null; width?: num
   );
 }
 
-/** 섹션 블록 — 구분 없이 나열되던 목록에 옅은 배경으로 경계를 준다(홈·소셜의 카드 위계). */
-export const sectionStyle = { marginTop: 20, padding: 16, borderRadius: 12, background: '#f9fafb' } as const;
+/**
+ * 섹션 블록 — 구분 없이 나열되던 목록에 카드 경계를 준다(홈·소셜의 카드 위계).
+ * 크림 캔버스(--bg) 위 카드지(--card-bg)는 명도차가 작아 배경만으로는 경계가 안 보인다 → 보더를 함께 쓰는
+ * 웹 카드 문법을 그대로 옮겼다.
+ */
+export const sectionStyle = {
+  marginTop: 20,
+  padding: 16,
+  borderRadius: 12,
+  background: '#FCFAF5',
+  border: '1px solid #E4DDD0',
+} as const;
 
 /** 화면 공통 껍데기 — 제목 + 본문 여백. 미니앱은 화면이 다섯 뿐이라 레이아웃도 이 하나면 된다. */
 export function Screen({ title, children }: { title: string; children: ReactNode }) {
   return (
     <main style={{ padding: '24px 20px 40px', maxWidth: 480, margin: '0 auto' }}>
-      <Text typography="t3" fontWeight="bold" style={{ marginBottom: 20 }}>
+      {/* 제목만 세리프(고운바탕) — 웹 `.brand h1`과 같은 위계다. 본문은 전역 고운돋움 그대로. */}
+      <Text typography="t3" fontWeight="bold" style={{ marginBottom: 20, fontFamily: "'Gowun Batang', serif" }}>
         {title}
       </Text>
       {children}

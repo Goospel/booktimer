@@ -21,7 +21,8 @@ describe('잔디 렌더', () => {
   );
 
   it('칸마다 level 색을 칠한다 — 0~4 단계가 웹 잔디와 같은 팔레트', () => {
-    for (const color of ['#ebedf0', '#8fd694', '#2e7d32', '#c6e6c8', '#4caf50']) {
+    // 웹 app.css --grass-0..4 와 같은 값(잔디 색의 단일 출처는 웹 브랜드 팔레트다).
+    for (const color of ['#EAE4D7', '#C3D9B0', '#94BE7F', '#5E9250', '#35662F']) {
       expect(markup).toContain(`background:${color}`);
     }
   });
@@ -31,7 +32,7 @@ describe('잔디 렌더', () => {
   });
 
   it('수동 기록 칸은 테두리로 구분한다', () => {
-    expect(markup).toContain('outline:1px solid #9e9e9e');
+    expect(markup).toContain('outline:1px solid #9A9486'); // 웹 --neutral-3
   });
 
   it('주 × 일 수만큼 칸을 그린다', () => {
@@ -110,6 +111,21 @@ describe('홈 오늘 진행률', () => {
   });
 });
 
+/** 카드·제목의 브랜드 문법 — 크림 캔버스 위 카드지(배경+보더)와 세리프 제목이 웹과 같은 위계를 만든다. */
+describe('섹션 카드·화면 제목', () => {
+  // 섹션은 "읽는 중인 책"이 있을 때만 그려진다 — 빈 서재로는 카드 자체가 안 나온다.
+  const markup = home({ readingBooks: [{ id: 1, title: '데미안' }] });
+
+  it('섹션은 크림 캔버스 위 카드지로 뜬다 — 배경만으로는 종이톤끼리 경계가 안 보인다', () => {
+    expect(markup).toContain('background:#FCFAF5'); // 웹 --card-bg
+    expect(markup).toContain('border:1px solid #E4DDD0'); // 웹 --border
+  });
+
+  it('화면 제목은 웹 브랜드와 같은 세리프(고운바탕)로 쓴다', () => {
+    expect(markup).toMatch(/font-family:[^"]*Gowun Batang/);
+  });
+});
+
 /**
  * 라이트 캔버스 고정 — 앱이 배경을 안 칠하면 다크 모드 WebView에서 캔버스가 검정이 되는데 본문 글자는
  * 어두운 색 그대로라 제목·섹션 헤더가 안 보인다. v2는 라이트 고정이라(다크 대응은 범위 밖) 강제한다.
@@ -121,8 +137,9 @@ describe('배경·color-scheme', () => {
     expect(read('../index.html')).toContain('name="color-scheme" content="light"');
   });
 
-  it('html·body에 흰 배경을 칠한다 — 투명이면 기기 다크 캔버스가 그대로 비친다', () => {
-    expect(read('./global.css')).toMatch(/html,\s*body\s*\{[^}]*background:\s*#fff/);
+  it('body에 웹 종이톤 캔버스를 칠한다 — 투명이면 기기 다크 캔버스가 그대로 비친다', () => {
+    // `html body`(0-0-2)여야 한다 — TDS가 나중에 주입하는 `body`(0-0-1) 규칙과 동률이면 순서로 진다.
+    expect(read('./global.css')).toMatch(/html\s+body\s*\{[^}]*background:\s*#F3EEE4/); // 웹 --bg
   });
 
   it('TDS Text를 블록으로 되돌린다 — TDS가 호출부의 display:block을 inline-block으로 덮어써 줄이 붙는다', () => {
@@ -135,7 +152,71 @@ describe('배경·color-scheme', () => {
     expect(css).toMatch(/\.no-scrollbar[^}]*scrollbar-width:\s*none/);
     expect(css).toMatch(/\.no-scrollbar::-webkit-scrollbar[^}]*display:\s*none/);
   });
+});
 
+/**
+ * 웹 브랜드 테마 — TDS는 모든 색을 `--adaptive*` 변수로 소비하고 그 정의를 런타임에 `:root`로 주입한다.
+ * 정적 css가 그 주입을 이기려면 명시도가 더 높은 `html:root`(0-1-1 > 0-1-0)여야 한다 — 여기서 무너지면
+ * 앱 전체가 토스 블루로 되돌아가므로, 선택자와 값 둘 다 못 박는다.
+ */
+describe('웹 브랜드 재테마 (global.css)', () => {
+  const css = readFileSync(new URL('./global.css', import.meta.url), 'utf8');
+  const override = css.match(/html:root\s*\{[^}]*\}/)?.[0] ?? '';
+
+  it('TDS 변수 오버라이드를 html:root로 건다 — :root로 걸면 TDS 런타임 주입에 순서로 진다', () => {
+    expect(override).not.toBe('');
+  });
+
+  it('블루 계열을 웹 세이지로 갈아끼운다 — 버튼·선택 탭이 여기서 결정된다', () => {
+    expect(override).toMatch(/--adaptiveBlue500:\s*#6E8A6A/); // 웹 --accent
+    expect(override).toMatch(/--adaptiveBlue700:\s*#4F6B4C/); // 웹 --accent-hover
+  });
+
+  it('표면·잉크를 웹 종이톤으로 갈아끼운다', () => {
+    expect(override).toMatch(/--adaptiveBackground:\s*#FCFAF5/); // 웹 --card-bg
+    expect(override).toMatch(/--adaptiveGrey100:\s*#FCFAF5/);
+    expect(override).toMatch(/--adaptiveGrey600:\s*#6F6A5E/); // 웹 --muted
+  });
+
+  it('본문 폰트를 웹 고운돋움으로 바꾸고 실제로 받아온다 — 스택만 바꾸면 폰트가 없어 시스템 폰트로 떨어진다', () => {
+    // TDS도 `body`에 폰트 스택을 주입하므로 여기도 `html body`(0-0-2)로 눌러야 한다.
+    expect(css).toMatch(/html\s+body\s*\{[^}]*font-family:[^;]*'Gowun Dodum'/);
+    expect(css).toContain('Gowun+Dodum');
+  });
+});
+
+/**
+ * TDS Button 재색칠 — Button만은 색을 CSS 변수로 안 읽는다. TDS가 JS 팔레트의 리터럴 hex를 렌더 시
+ * **인라인 커스텀 프로퍼티**(`--button-background-color: #3182f6`)로 박아 넣어, `--adaptive*` 오버라이드가
+ * 닿지 않는다(실측). 인라인을 이기려면 저자 규칙 + `!important`뿐이고, variant를 가릴 속성·클래스가 없어
+ * (primary·danger·weak 전부 같은 class·data 속성) **인라인에 박힌 토스 블루 값 자체를 선택자 키로** 쓴다.
+ * 이 방식의 부수 효과가 곧 안전장치다 — danger(빨강) 버튼은 값이 달라 애초에 매칭되지 않는다.
+ */
+describe('TDS Button 재색칠 (global.css)', () => {
+  const css = readFileSync(new URL('./global.css', import.meta.url), 'utf8');
+
+  it('primary 버튼 채움을 세이지로 덮는다 — 인라인 커스텀 프로퍼티라 !important가 필요하다', () => {
+    expect(css).toMatch(/--button-background-color:\s*#3182f6/); // 선택자 키(토스 블루 인라인 값)
+    expect(css).toMatch(/--button-background-color:\s*#6E8A6A\s*!important/); // 웹 --accent
+  });
+
+  it('weak 버튼도 연세이지로 덮는다 — 앱 버튼 대부분이 weak다', () => {
+    expect(css).toMatch(/--button-background-color:\s*#E7EEE2\s*!important/);
+    expect(css).toMatch(/--button-color:\s*#4F6B4C\s*!important/); // 웹 --accent-hover
+  });
+
+  it('눌림·그라디언트·로더까지 같이 옮긴다 — 채움만 바꾸면 누를 때 파랑이 번쩍인다', () => {
+    expect(css).toMatch(/--button-gradient-color:[^;]*!important/);
+    expect(css).toMatch(/--button-loader-color:[^;]*!important/);
+  });
+
+  it('danger 버튼은 건드리지 않는다 — 세이지로 물들면 "빨강=위험" 신호가 죽는다', () => {
+    // TDS danger 팔레트(solid #f04452 / weak fill rgba(251,136,144,.15) · 글자 #e42939)를
+    // 선택자로도 값으로도 언급하지 않아야 한다 — 언급하는 순간 위험 버튼이 사정권에 든다.
+    for (const dangerHex of ['#f04452', '#e42939', '251, 136, 144']) {
+      expect(css).not.toContain(dangerHex);
+    }
+  });
 });
 
 /**

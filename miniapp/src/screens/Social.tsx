@@ -257,7 +257,7 @@ export function UserList({
             marginBottom: 8,
             border: 'none',
             borderRadius: 12,
-            background: 'var(--adaptiveGrey100, #f2f4f6)',
+            background: 'var(--adaptiveGrey100, #FCFAF5)',
             textAlign: 'left',
             cursor: 'pointer',
           }}

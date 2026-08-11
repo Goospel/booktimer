@@ -107,6 +107,11 @@ describe('홈 렌더 배선', () => {
   it('버튼 문구에 "광고"를 명시한다 — 광고 위장 금지 조항', () => {
     expect(renderHome()).toContain('광고');
   });
+
+  it('진행률 게이지가 웹 달성색(--ok)으로 찬다 — 세이지와 변별되는 초록', () => {
+    expect(renderHome()).toContain('#2F8F6B');
+    expect(renderHome()).not.toContain('#4caf50');
+  });
 });
 
 describe('지급 흐름 (claimDebtWaiver)', () => {
