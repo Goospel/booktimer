@@ -36,6 +36,7 @@ import {
   token,
   unblockUser,
   unfollow,
+  waiveDebt,
 } from './api';
 import { tossLogin } from './toss';
 
@@ -183,6 +184,39 @@ describe('Bearer 호출·에러 계약', () => {
 
     await expect(setGoal(3600)).resolves.toBeUndefined();
     expect(JSON.parse(lastRequest()[1].body as string)).toEqual({ dailyIncrementSeconds: 3600 });
+  });
+});
+
+describe('리워드 광고 보상 (waiveDebt)', () => {
+  beforeEach(() => {
+    token.set('tok');
+  });
+
+  it('POST /api/miniapp/debt-waiver — 지울 날짜를 보내지 않는다(서버가 고른다)', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(200, '{"waivedDate":"2026-08-09","waivedSeconds":1800,"timer":{}}') as never,
+    );
+
+    const result = await waiveDebt();
+
+    const [url, init] = lastRequest();
+    expect(url).toContain('/api/miniapp/debt-waiver');
+    expect(init.method).toBe('POST');
+    // 요청 본문에 날짜가 없다는 것이 이 API의 계약이다 — 조작 표면 제거(설계 §4).
+    expect(JSON.parse(init.body as string)).toEqual({});
+    expect(result.waivedSeconds).toBe(1800);
+    expect(result.waivedDate).toBe('2026-08-09');
+  });
+
+  it('오늘 이미 사용(409)은 서버 평문 메시지를 그대로 올린다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(409, '오늘은 이미 사용했어요. 내일 다시 지울 수 있어요.') as never,
+    );
+
+    const error = await waiveDebt().catch((e: unknown) => e);
+
+    expect((error as ApiError).status).toBe(409);
+    expect((error as ApiError).message).toBe('오늘은 이미 사용했어요. 내일 다시 지울 수 있어요.');
   });
 });
 

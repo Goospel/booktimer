@@ -1,13 +1,48 @@
 import { Button, ProgressBar, Text } from '@toss/tds-mobile';
 import { useEffect, useState } from 'react';
 
-import type { BookOption, DashboardResponse, QuoteDto, TimerState } from '../api';
-import { startSession, stopSession, tagBook } from '../api';
+import type { BookOption, DashboardResponse, QuoteDto, TimerState, WaiveResponse } from '../api';
+import { ApiError, startSession, stopSession, tagBook, waiveDebt } from '../api';
 import { elapsedSeconds, formatDuration } from '../format';
+import { REWARD_AD_GROUP_ID, watchRewardAd } from '../toss';
 import { ErrorMessage, GrassGrid, Screen, sectionStyle } from '../ui';
 
 /** 홈 잔디 미리보기 폭 — 최근 5주만 축약해 보여주고 전체는 기록 화면이 맡는다. */
 const PREVIEW_WEEKS = 5;
+
+/**
+ * 리워드 광고 버튼을 노출할지 — 셋 다 참이어야 한다.
+ *
+ * <p>① 밀린 시간이 있다(=죄책감이 화면에 뜬 순간, 보상이 필요한 바로 그 지점) ② 서버가 오늘 지급
+ * 가능하다고 했다 ③ 광고 그룹 ID가 설정됐다(config-gate). **부채가 없으면 광고의 존재 자체가 안 보인다** —
+ * 입문자에게 "광고 보는 앱" 인상을 주지 않으려는 배치다(설계 §3).
+ */
+export function showWaiverButton(
+  carriedDebtSeconds: number,
+  debtWaiverAvailable: boolean,
+  adGroupId: string,
+): boolean {
+  return carriedDebtSeconds > 0 && debtWaiverAvailable && adGroupId !== '';
+}
+
+/**
+ * 광고 시청 → 지급. 끝까지 안 봤으면 **지급 API를 부르지 않고** `null`(조용히 원상태).
+ *
+ * <p>클릭 흐름을 화면에서 꺼내 둔 이유: 테스트 하니스가 정적 렌더라 클릭이 안 돌아,
+ * "보상 없이 지급 요청을 보내지 않는다"는 이 기능의 신뢰 경계를 함수로만 계측할 수 있다.
+ */
+export async function claimDebtWaiver(adGroupId: string): Promise<WaiveResponse | null> {
+  const rewarded = await watchRewardAd(adGroupId);
+  return rewarded ? waiveDebt() : null;
+}
+
+/**
+ * 실패 문구 — 서버가 준 평문(409 "오늘은 이미 사용했어요" 등)은 그대로 쓰고, SDK가 준 광고 에러는
+ * 영문·기술 문구라 그대로 띄우면 안 되므로 안내로 바꾼다.
+ */
+export function waiverErrorMessage(error: Error): string {
+  return error instanceof ApiError ? error.message : '광고를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.';
+}
 
 /** 종료 직후 태깅 대상 — 책 없이 측정한 세션에 나중에 책을 붙인다. */
 interface Untagged {
@@ -37,6 +72,8 @@ export function Home({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  /** 방금 지운 부채(초) — 성공 직후 한 줄 안내용. */
+  const [waived, setWaived] = useState<number | null>(null);
 
   useEffect(() => {
     if (!dashboard.hasActiveSession) return;
@@ -70,6 +107,20 @@ export function Home({
   const tag = (book: BookOption) => {
     if (untagged === null) return;
     run(tagBook(untagged.sessionId, book.id).then(() => setUntagged(null)));
+  };
+
+  /** 광고 보고 밀린 하루 지우기 — 중간 이탈(null)이면 아무 일도 없었던 것처럼 둔다. */
+  const claimWaiver = () => {
+    setBusy(true);
+    setError(null);
+    claimDebtWaiver(REWARD_AD_GROUP_ID)
+      .then((result) => {
+        if (result === null) return;
+        onTimerChange(result.timer); // 부채·버튼 노출이 재조회 없이 갱신된다
+        setWaived(result.waivedSeconds);
+      })
+      .catch((e: Error) => setError(waiverErrorMessage(e)))
+      .finally(() => setBusy(false));
   };
 
   const remaining = dashboard.remainingSeconds;
@@ -114,6 +165,23 @@ export function Home({
         {dashboard.carriedDebtSeconds > 0 && (
           <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
             어제까지 밀린 시간 {formatDuration(dashboard.carriedDebtSeconds)} 포함
+          </Text>
+        )}
+        {/* 광고는 죄책감이 뜬 이 자리에만 나타난다. 문구에 "광고"를 명시해 광고 위장 금지 조항을 지킨다. */}
+        {showWaiverButton(dashboard.carriedDebtSeconds, dashboard.debtWaiverAvailable, REWARD_AD_GROUP_ID) && (
+          <Button
+            variant="weak"
+            size="small"
+            style={{ marginTop: 10 }}
+            disabled={busy}
+            onClick={claimWaiver}
+          >
+            광고 보고 밀린 하루 지우기
+          </Button>
+        )}
+        {waived !== null && (
+          <Text typography="st12" color="blue500" style={{ display: 'block', marginTop: 8 }}>
+            밀린 {formatDuration(waived)}을 지웠어요. 잔디는 그대로예요.
           </Text>
         )}
         {dashboard.hasActiveSession && (

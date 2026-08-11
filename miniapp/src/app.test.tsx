@@ -28,6 +28,7 @@ const dashboard: DashboardResponse = {
   finishedBooks: [],
   wantToReadBooks: [],
   recentBookId: null,
+  debtWaiverAvailable: false,
   graph,
   quotes: [],
   emailVerified: true,
