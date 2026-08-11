@@ -115,6 +115,11 @@ describe('하단 탭바', () => {
     for (const h of heights) expect(Number(h.match(/\d+/)![0])).toBeGreaterThanOrEqual(44);
   });
 
+  it('선택 탭 색 폴백이 웹 세이지다 — 변수가 안 잡히는 순간 토스 블루로 되돌아가는 걸 막는다', () => {
+    expect(bar('home')).toContain('var(--adaptiveBlue500, #6E8A6A)');
+    expect(bar('home')).not.toContain('#3182f6');
+  });
+
   it('홈 인디케이터만큼 아래 여백을 둔다 — safe-area가 없으면 마지막 탭이 인디케이터에 깔린다', () => {
     expect(bar('home')).toContain('padding-bottom:env(safe-area-inset-bottom)');
   });

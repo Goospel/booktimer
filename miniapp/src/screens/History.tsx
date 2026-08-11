@@ -37,7 +37,7 @@ function Stat({ label, value }: { label: string; value: string }) {
         flex: 1,
         padding: '16px 12px',
         borderRadius: 12,
-        background: 'var(--adaptiveGrey100, #f2f4f6)',
+        background: 'var(--adaptiveGrey100, #FCFAF5)',
         textAlign: 'center',
       }}
     >

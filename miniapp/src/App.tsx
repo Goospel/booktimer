@@ -234,7 +234,7 @@ export function BottomTabBar({ tab, onTabChange }: { tab: TabKey; onTabChange: (
         bottom: 0,
         zIndex: 100,
         display: 'flex',
-        background: 'var(--adaptiveBackground, #ffffff)',
+        background: 'var(--adaptiveBackground, #FCFAF5)',
         borderTop: '1px solid rgba(0, 0, 0, 0.06)',
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}
@@ -260,7 +260,7 @@ export function BottomTabBar({ tab, onTabChange }: { tab: TabKey; onTabChange: (
               padding: 0,
               border: 'none',
               background: 'transparent',
-              color: selected ? 'var(--adaptiveBlue500, #3182f6)' : 'var(--adaptiveGrey600, #8b95a1)',
+              color: selected ? 'var(--adaptiveBlue500, #6E8A6A)' : 'var(--adaptiveGrey600, #6F6A5E)',
               cursor: 'pointer',
             }}
           >

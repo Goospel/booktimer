@@ -96,15 +96,15 @@ function Ring({ label, fresh, onClick }: { label: string; fresh: boolean; onClic
       style={{
         flex: '0 0 auto',
         padding: '10px 14px',
-        border: fresh ? '2px solid var(--adaptiveBlue500, #3182f6)' : '1px solid var(--adaptiveGrey200, #e5e8eb)',
+        border: fresh ? '2px solid var(--adaptiveBlue500, #6E8A6A)' : '1px solid var(--adaptiveGrey200, #E4DDD0)',
         borderRadius: 999,
-        background: 'var(--adaptiveGrey100, #f2f4f6)',
+        background: 'var(--adaptiveGrey100, #FCFAF5)',
         fontSize: 13,
         cursor: 'pointer',
       }}
     >
       {label}
-      {fresh && <span style={{ marginLeft: 4, fontSize: 11, color: 'var(--adaptiveBlue500, #3182f6)' }}>새 스토리</span>}
+      {fresh && <span style={{ marginLeft: 4, fontSize: 11, color: 'var(--adaptiveBlue500, #6E8A6A)' }}>새 스토리</span>}
     </button>
   );
 }
@@ -383,7 +383,7 @@ export function StoryComposer({ onDone, onCancel, onError }: { onDone: () => voi
               height: 32,
               borderRadius: 999,
               background: option.background,
-              border: option.code === bgCode ? '2px solid var(--adaptiveBlue500, #3182f6)' : '1px solid #d1d6db',
+              border: option.code === bgCode ? '2px solid var(--adaptiveBlue500, #6E8A6A)' : '1px solid #E4DDD0',
               cursor: 'pointer',
             }}
           />
@@ -399,7 +399,7 @@ export function StoryComposer({ onDone, onCancel, onError }: { onDone: () => voi
             value={bookId}
             disabled={busy}
             onChange={(e) => setBookId(e.target.value)}
-            style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #d1d6db' }}
+            style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #E4DDD0' }}
           >
             <option value="">첨부 안 함</option>
             {books.map((b) => (

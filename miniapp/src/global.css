@@ -1,15 +1,96 @@
 /*
- * 미니앱 전역 스타일 — TDS가 컴포넌트 단위로만 칠하는 두 자리를 메운다.
+ * 미니앱 전역 스타일 — TDS가 컴포넌트 단위로만 칠하는 자리를 메우고, 웹 브랜드(종이톤+세이지)를 입힌다.
  *
  * 1) 캔버스: 앱이 배경을 아예 안 칠하면(html/body/main 전부 투명) 다크 모드 WebView에서 캔버스가 검정이
  *    되는데 본문 글자는 어두운 색 그대로라 제목·섹션 헤더가 사라진다. v2는 라이트 고정이므로(다크 대응은
- *    범위 밖) 흰 캔버스를 강제한다. index.html의 `color-scheme: light` 메타와 한 쌍이다.
+ *    범위 밖) 캔버스를 강제한다. index.html의 `color-scheme: light` 메타와 한 쌍이다.
  * 2) 본문 줄바꿈: 아래 Paragraph.Text 규칙 주석 참고.
+ * 3) 브랜드 색·폰트: 아래 html:root 블록 주석 참고.
  */
+
+/* 웹폰트 — 웹 app.css와 같은 패밀리(감성 동기화의 절반은 폰트다). */
+@import url('https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap');
+
 html,
 body {
   margin: 0;
-  background: #fff;
+}
+
+/*
+ * 캔버스와 본문 폰트 — 둘 다 TDS 전역 스타일(`body { background-color: var(--adaptiveBackground);
+ * font-family: 'Toss Product Sans' … }`)과 정면으로 다툰다. TDS는 이 스타일을 **런타임에, 우리 css보다
+ * 뒤에** 주입하므로 같은 명시도(`body`, 0-0-1)로는 순서에서 진다 — 그래서 `html body`(0-0-2)로 올린다.
+ *
+ * 캔버스만 크림이고 `--adaptiveBackground`는 카드지(#FCFAF5)로 남는 게 의도다 — 탭바·시트·섹션 카드가
+ * 캔버스 위에 한 톤 밝게 떠야 웹과 같은 위계가 나온다.
+ *
+ * 폰트는 여기 한 곳이면 화면 전체에 흐른다 — TDS Text는 family를 따로 안 잡고, 폼 요소는 TDS의
+ * `input, select, textarea, button { font-family: inherit }`이 body 값을 그대로 물려준다.
+ */
+html body {
+  background: #F3EEE4; /* 웹 --bg (종이톤 크림) */
+  font-family: 'Gowun Dodum', 'Toss Product Sans', -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+}
+
+/*
+ * TDS 재테마 — TDS는 모든 색을 `--adaptive*` 변수로 소비하고, 그 정의를 런타임에 `:root`로 주입한다.
+ * 정적 css의 `:root`는 주입 순서에 질 수 있지만 `html:root`(명시도 0-1-1 > 0-1-0)는 순서와 무관하게
+ * 이긴다 — 이 선택자가 재테마 전체를 떠받치는 유일한 메커니즘이다. 값의 출처는 웹 app.css :root 토큰.
+ *
+ * danger 계열(red)은 웹 --danger(#dc2626)와 TDS red가 사실상 같아 건드리지 않는다.
+ */
+html:root {
+  /* 블루 → 세이지 (웹 --accent 계열) */
+  --adaptiveBlue50: #E7EEE2;
+  --adaptiveBlue100: #D8E2D4;
+  --adaptiveBlue200: #B6C9AE;
+  --adaptiveBlue300: #A9C0A2;
+  --adaptiveBlue400: #8FAE86;
+  --adaptiveBlue500: #6E8A6A; /* = 웹 --accent */
+  --adaptiveBlue600: #5F7B5B;
+  --adaptiveBlue700: #4F6B4C; /* = 웹 --accent-hover */
+  --adaptiveBlue800: #40573E;
+  --adaptiveBlue900: #324430;
+  --adaptiveDisabledBlue500: #B6C9AE;
+  /* 표면 → 종이톤 (웹 --card-bg/--border/--muted/--text) */
+  --adaptiveBackground: #FCFAF5; /* 탭바·시트 표면 = 카드지 */
+  --adaptiveGrey100: #FCFAF5; /* 섹션·행 fill — 크림 캔버스 위 카드지 */
+  --adaptiveGrey200: #E4DDD0; /* 표지 placeholder·연보더 */
+  --adaptiveGrey600: #6F6A5E; /* 흐린 글자 = 웹 --muted */
+  --adaptiveGrey700: #57534A;
+  --adaptiveGrey800: #2C2A24; /* 본문 잉크 = 웹 --text */
+}
+
+/*
+ * TDS Button 재색칠 — Button만은 위 변수 오버라이드가 닿지 않는다. TDS가 JS 팔레트의 리터럴 hex를
+ * 렌더 시 **인라인 커스텀 프로퍼티**로 박기 때문이다(`style="--button-background-color: #3182f6; …"`).
+ * 인라인 선언을 이기는 건 저자 규칙 + `!important`뿐이다.
+ *
+ * variant를 가려낼 표지가 없다 — primary·weak·danger가 class(`css-…`)도 `data-tds-mobile-component`도
+ * 전부 같고, 다른 건 인라인 값뿐이다. 그래서 **그 값 자체를 선택자 키로** 쓴다. 이 방식의 부수 효과가
+ * 곧 안전장치다: danger 버튼(타이머 중지·책 삭제·차단)은 인라인 값이 TDS red 팔레트라 매칭되지 않아
+ * 빨강으로 남는다. "빨강 = 위험" 신호를 세이지가 삼키지 않는다. 그 red 값은 여기 적지도 않는다 —
+ * 적는 순간 위험 버튼이 사정권에 들고, 테스트가 그 언급 자체를 실패로 잡는다.
+ *
+ * 선택자를 두 벌 쓰는 이유: 콜론 뒤 공백이 직렬화 경로마다 다르다(브라우저 CSSOM은 `: #3182f6`,
+ * 서버 렌더 마크업은 `:#3182f6`). 한쪽만 적으면 다른 경로에서 조용히 안 걸린다.
+ */
+.tds-mobile-button[style*='--button-background-color:#3182f6'],
+.tds-mobile-button[style*='--button-background-color: #3182f6'] {
+  --button-background-color: #6E8A6A !important; /* 웹 --accent */
+  --button-gradient-color: #4F6B4C !important; /* 웹 --accent-hover (누를 때 겹치는 층) */
+  --button-loader-color: #fff !important;
+}
+
+/* weak — 앱 버튼 대부분이 이 variant다(연한 채움 + 색 글자 한 세트로 움직인다). */
+.tds-mobile-button[style*='--button-background-color:rgba(100, 168, 255, 0.15)'],
+.tds-mobile-button[style*='--button-background-color: rgba(100, 168, 255, 0.15)'] {
+  --button-background-color: #E7EEE2 !important; /* 연세이지 */
+  --button-color: #4F6B4C !important; /* 웹 --accent-hover */
+  --button-dimmer-pressed-background-color: #6E8A6A !important;
+  --button-dimmer-loading-background-color: rgba(110, 138, 106, 0.26) !important;
+  --button-gradient-color: #6E8A6A !important;
+  --button-loader-color: #6E8A6A !important;
 }
 
 /*

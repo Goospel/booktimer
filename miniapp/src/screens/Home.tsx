@@ -139,7 +139,7 @@ export function Home({
         style={{
           padding: '28px 20px',
           borderRadius: 16,
-          background: 'var(--adaptiveGrey100, #f2f4f6)',
+          background: 'var(--adaptiveGrey100, #FCFAF5)',
           textAlign: 'center',
         }}
       >
@@ -156,7 +156,7 @@ export function Home({
         </div>
         {progress !== null && (
           <div style={{ marginTop: 16 }}>
-            <ProgressBar progress={progress} size="normal" color="#4caf50" />
+            <ProgressBar progress={progress} size="normal" color="#2F8F6B" />
             <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
               오늘 목표 {formatDuration(goal)} 중 {Math.round(progress * 100)}%
             </Text>
@@ -312,7 +312,7 @@ const cardStyle = {
   padding: 16,
   border: 'none',
   borderRadius: 12,
-  background: 'var(--adaptiveGrey100, #f2f4f6)',
+  background: 'var(--adaptiveGrey100, #FCFAF5)',
   textAlign: 'left',
   cursor: 'pointer',
 } as const;
