@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -44,6 +45,8 @@ class ReadingDebtServiceTest {
     private ReadingTimerRepository timerRepository;
     @Mock
     private ReadingGoalChangeRepository goalChangeRepository;
+    @Mock
+    private ReadingGoalWaiverRepository waiverRepository;
 
     private ReadingDebtService service;
     private User user;
@@ -52,7 +55,7 @@ class ReadingDebtServiceTest {
     void setUp() {
         user = User.of("reader@booktimer.com", "$2a$10$abcdefghijklmnopqrstuv", "책벌레", "Asia/Seoul", Role.USER);
         service = new ReadingDebtService(historyService, timerRepository, goalChangeRepository,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                waiverRepository, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -212,6 +215,42 @@ class ReadingDebtServiceTest {
         when(historyService.dailyHistory(user)).thenReturn(List.of());
 
         assertThat(service.weeklyDebt(user).todayGoalSeconds()).isEqualTo(3660L);
+    }
+
+    // --- waiver 배선 (리워드 광고 용서) ---
+
+    @Test
+    @DisplayName("waiver가 있는 날은 빠뜨린 날에서 빠지고 총 부채가 그만큼 줄어든다 — 리포지토리 배선")
+    void weeklyDebt_appliesWaiver() {
+        LocalDate missed = TODAY_KST.minusDays(3);
+        when(timerRepository.findByUser(user)).thenReturn(Optional.of(ReadingTimer.of(GOAL)));
+        when(goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of());
+        when(historyService.dailyHistory(user)).thenReturn(List.of(
+                new DailyReadingRecord(missed, 600L, List.of()))); // 3일 전 10분 → 부채 3000
+        when(waiverRepository.findByUserAndWaivedDateGreaterThanEqual(
+                user, TODAY_KST.minusDays(WeeklyDebtCalculator.WINDOW_DAYS - 1)))
+                .thenReturn(List.of(ReadingGoalWaiver.create(user, missed, TODAY_KST)));
+
+        WeeklyDebt debt = service.weeklyDebt(user);
+
+        assertThat(debt.missedDays()).extracting(DayDebt::date).doesNotContain(missed);
+    }
+
+    @Test
+    @DisplayName("waiver 조회 윈도우는 asOf-6일 이후 — 그보다 오래된 waiver는 애초에 안 읽는다")
+    void weeklyDebtTrace_queriesWaiverFromWindowStart() {
+        LocalDate asOf = TODAY_KST.minusDays(2);
+        when(timerRepository.findByUser(user)).thenReturn(Optional.of(ReadingTimer.of(GOAL)));
+        when(goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of());
+        when(historyService.dailyHistory(user)).thenReturn(List.of());
+        when(waiverRepository.findByUserAndWaivedDateGreaterThanEqual(
+                user, asOf.minusDays(WeeklyDebtCalculator.WINDOW_DAYS - 1)))
+                .thenReturn(List.of());
+
+        service.weeklyDebtTrace(user, asOf);
+
+        verify(waiverRepository).findByUserAndWaivedDateGreaterThanEqual(
+                user, asOf.minusDays(WeeklyDebtCalculator.WINDOW_DAYS - 1));
     }
 
     @Test

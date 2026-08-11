@@ -15,6 +15,8 @@ import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 독서 부채(7일 윈도우 per-day) 조회 유스케이스.
@@ -41,15 +43,18 @@ public class ReadingDebtService {
     private final ReadingHistoryService historyService;
     private final ReadingTimerRepository timerRepository;
     private final ReadingGoalChangeRepository goalChangeRepository;
+    private final ReadingGoalWaiverRepository waiverRepository;
     private final Clock clock;
 
     public ReadingDebtService(ReadingHistoryService historyService,
                               ReadingTimerRepository timerRepository,
                               ReadingGoalChangeRepository goalChangeRepository,
+                              ReadingGoalWaiverRepository waiverRepository,
                               Clock clock) {
         this.historyService = historyService;
         this.timerRepository = timerRepository;
         this.goalChangeRepository = goalChangeRepository;
+        this.waiverRepository = waiverRepository;
         this.clock = clock;
     }
 
@@ -99,7 +104,22 @@ public class ReadingDebtService {
             secondsByDate.put(record.date(), record.totalSeconds());
         }
 
-        return WeeklyDebtCalculator.computeTrace(secondsByDate, goalByDate, effectiveAsOf);
+        return WeeklyDebtCalculator.computeTrace(secondsByDate, goalByDate, waivedDates(user, effectiveAsOf), effectiveAsOf);
+    }
+
+    /**
+     * 윈도우 내 용서된 날짜 — 리워드 광고 보상({@link ReadingGoalWaiver})의 유일한 배선점이다.
+     *
+     * <p>여기 한 곳에 넣으면 {@code DashboardModel.computeLive}를 경유하는 모든 소비처(웹 SSR·미니앱
+     * {@code /api/dashboard}·start/stop 응답)가 자동으로 같은 값을 본다 — 채널별 동기화 코드가 필요 없다.
+     * 윈도우 밖(7일 초과) 용서는 부채 자체가 자동 소멸해 의미가 없으므로 쿼리에서 잘라낸다.
+     */
+    private Set<LocalDate> waivedDates(User user, LocalDate asOf) {
+        return waiverRepository
+                .findByUserAndWaivedDateGreaterThanEqual(user, asOf.minusDays(WeeklyDebtCalculator.WINDOW_DAYS - 1))
+                .stream()
+                .map(ReadingGoalWaiver::getWaivedDate)
+                .collect(Collectors.toSet());
     }
 
     /** 유저 타임존 기준 오늘. */

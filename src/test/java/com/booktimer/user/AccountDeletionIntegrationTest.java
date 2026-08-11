@@ -5,6 +5,8 @@ import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.report.ReportReason;
 import com.booktimer.report.ReportService;
+import com.booktimer.session.ReadingGoalWaiver;
+import com.booktimer.session.ReadingGoalWaiverRepository;
 import com.booktimer.timer.ReadingGoalService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,6 +14,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -36,6 +40,8 @@ class AccountDeletionIntegrationTest {
     private ReportService reportService;
     @Autowired
     private ReadingGoalService goalService;
+    @Autowired
+    private ReadingGoalWaiverRepository waiverRepository;
     @Autowired
     private PasswordEncoder passwordEncoder;
 
@@ -82,6 +88,22 @@ class AccountDeletionIntegrationTest {
         goalService.record(user, 1800L);   // 실유저가 온보딩/설정에서 행을 만드는 바로 그 진입점 (N-055 정신)
 
         // reading_goal_change FK가 정리되지 않으면 flush 시 제약 위반 → findByEmail 쿼리가 flush를 강제한다.
+        assertThatCode(() -> {
+            accountService.deleteAccount(email, "rawpw1234");
+            assertThat(userRepository.findByEmail(email)).isEmpty();
+        }).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("밀린 하루 용서권(reading_goal_waiver)을 가진 사용자도 FK 위반 없이 탈퇴된다")
+    void deleteAccount_withGoalWaiver_succeeds() {
+        String email = "waiver@booktimer.com";
+        User user = userRepository.saveAndFlush(
+                User.of(email, passwordEncoder.encode("rawpw1234"), "용서받은이", "Asia/Seoul", Role.USER));
+        waiverRepository.saveAndFlush(ReadingGoalWaiver.create(
+                user, LocalDate.now().minusDays(2), LocalDate.now()));
+
+        // reading_goal_waiver.user_id FK가 정리되지 않으면 flush 시 제약 위반(T-029 계열).
         assertThatCode(() -> {
             accountService.deleteAccount(email, "rawpw1234");
             assertThat(userRepository.findByEmail(email)).isEmpty();

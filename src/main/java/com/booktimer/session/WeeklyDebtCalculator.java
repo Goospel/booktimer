@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.ToLongFunction;
 
 /**
@@ -80,14 +81,30 @@ public final class WeeklyDebtCalculator {
     public static WeeklyDebtTrace computeTrace(Map<LocalDate, Long> secondsByDate,
                                                Map<LocalDate, Long> goalByDate,
                                                LocalDate today) {
-        return computeTraceInternal(secondsByDate, date -> goalByDate.getOrDefault(date, 0L), today);
+        return computeTrace(secondsByDate, goalByDate, Set.of(), today);
+    }
+
+    /**
+     * 용서된 날짜({@code waivedDates})까지 반영해 {@link WeeklyDebtTrace}를 만든다 — 리워드 광고 보상 경로.
+     *
+     * <p>용서는 그 날의 <b>잔여 부채만</b> 0으로 만든다(기존 1분 미만 용서와 같은 자리·같은 결).
+     * 그날의 초과분({@code rawSurplus})은 건드리지 않아 backward 뱅킹은 불변이고, 오늘은 대상이 아니다
+     * — 진행 중인 오늘을 광고로 지우는 건 습관 형성과 정면 충돌하므로 set에 오늘이 섞여 와도 무시한다.
+     *
+     * @param waivedDates 용서된 날짜 집합({@link ReadingGoalWaiver}). 윈도우 밖·오늘은 무해하게 무시된다
+     */
+    public static WeeklyDebtTrace computeTrace(Map<LocalDate, Long> secondsByDate,
+                                               Map<LocalDate, Long> goalByDate,
+                                               Set<LocalDate> waivedDates,
+                                               LocalDate today) {
+        return computeTraceInternal(secondsByDate, date -> goalByDate.getOrDefault(date, 0L), waivedDates, today);
     }
 
     /**
      * 공통 코어 — backward-only catch-up 재분배 포함. trace.toWeeklyDebt()로 결과를 유도한다.
      */
     private static WeeklyDebt compute(Map<LocalDate, Long> secondsByDate, ToLongFunction<LocalDate> goalForDate, LocalDate today) {
-        return computeTraceInternal(secondsByDate, goalForDate, today).toWeeklyDebt();
+        return computeTraceInternal(secondsByDate, goalForDate, Set.of(), today).toWeeklyDebt();
     }
 
     /**
@@ -99,6 +116,7 @@ public final class WeeklyDebtCalculator {
      */
     private static WeeklyDebtTrace computeTraceInternal(Map<LocalDate, Long> secondsByDate,
                                                         ToLongFunction<LocalDate> goalForDate,
+                                                        Set<LocalDate> waivedDates,
                                                         LocalDate today) {
         // window[0] = 가장 오래된 날(today-6), window[WINDOW_DAYS-1] = today
         LocalDate[] window = new LocalDate[WINDOW_DAYS];
@@ -109,6 +127,7 @@ public final class WeeklyDebtCalculator {
         long[] goalArr = new long[WINDOW_DAYS];
         long[] readArr = new long[WINDOW_DAYS];
         boolean[] forgiven = new boolean[WINDOW_DAYS];
+        boolean[] waived = new boolean[WINDOW_DAYS];
         int todayIdx = WINDOW_DAYS - 1;
 
         // 1) 날짜별 원시 부채·초과분. goal<=0(가입 전)이면 둘 다 0(가입 전 독서가 뱅킹에 안 낌).
@@ -130,6 +149,12 @@ public final class WeeklyDebtCalculator {
             // 오늘 제외 과거 날의 1분 미만 부채는 목표 인상 반올림 잔재라 0 처리 — 초과분 낭비 방지.
             if (i < todayIdx && remaining[i] > 0 && remaining[i] < MIN_MISSED_DEBT_SECONDS) {
                 forgiven[i] = true;
+                remaining[i] = 0;
+            }
+            // 리워드 광고 보상으로 용서된 과거 날 — 부채만 소거하고 rawSurplus는 그대로 둔다(뱅킹 불변).
+            // 오늘(i == todayIdx)은 제외: 진행 중인 오늘을 광고로 지우지 않는다.
+            if (i < todayIdx && waivedDates.contains(d)) {
+                waived[i] = true;
                 remaining[i] = 0;
             }
         }
@@ -156,6 +181,7 @@ public final class WeeklyDebtCalculator {
                     rawDeficit[i],
                     rawSurplus[i],
                     forgiven[i],
+                    waived[i],
                     remaining[i],
                     rawSurplus[i] - surplusLeft[i]
             ));

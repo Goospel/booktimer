@@ -7,6 +7,7 @@ import com.booktimer.quote.QuoteService;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.ContributionDay;
 import com.booktimer.session.ContributionGraph;
+import com.booktimer.session.GoalWaiverService;
 import com.booktimer.session.ReadingContributionService;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionService;
@@ -49,6 +50,7 @@ public class DashboardApiController {
     private final QuoteService quoteService;
     private final ReadingSessionService sessionService;
     private final BookRepository bookRepository;
+    private final GoalWaiverService goalWaiverService;
     private final Clock clock;
 
     public DashboardApiController(CurrentUserService currentUserService,
@@ -58,6 +60,7 @@ public class DashboardApiController {
                                   QuoteService quoteService,
                                   ReadingSessionService sessionService,
                                   BookRepository bookRepository,
+                                  GoalWaiverService goalWaiverService,
                                   Clock clock) {
         this.currentUserService = currentUserService;
         this.dashboardModel = dashboardModel;
@@ -66,6 +69,7 @@ public class DashboardApiController {
         this.quoteService = quoteService;
         this.sessionService = sessionService;
         this.bookRepository = bookRepository;
+        this.goalWaiverService = goalWaiverService;
         this.clock = clock;
     }
 
@@ -92,7 +96,8 @@ public class DashboardApiController {
                 toGraphDto(graph),
                 garden,
                 quotes,
-                user.isEmailVerified());
+                user.isEmailVerified(),
+                goalWaiverService.availableFor(user));
     }
 
     @PostMapping("/api/sessions/start")
@@ -156,14 +161,7 @@ public class DashboardApiController {
     }
 
     private TimerState buildTimerState(User user) {
-        DashboardModel.LiveState live = dashboardModel.computeLive(user);
-        return new TimerState(
-                live.remainingSeconds(), live.carriedDebtSeconds(),
-                live.todayGoalSeconds(), live.carryover(),
-                live.hasActiveSession(), live.activeStartedAt(),
-                live.activeBookTitle(), live.activeBookTotalSeconds(),
-                toOptions(live.readingBooks()), toOptions(live.finishedBooks()),
-                live.recentBookId());
+        return TimerState.of(dashboardModel.computeLive(user), goalWaiverService.availableFor(user));
     }
 
     private static List<BookOption> toOptions(List<Book> books) {
@@ -198,7 +196,9 @@ public class DashboardApiController {
             ContributionGraphDto graph,
             GardenApiResponse.CatalogDto garden,
             List<QuoteDto> quotes,
-            boolean emailVerified
+            boolean emailVerified,
+            /** 리워드 광고로 밀린 하루를 지울 수 있는지 — 미니앱 홈 버튼 노출 조건(웹에는 버튼이 없다). */
+            boolean debtWaiverAvailable
     ) {}
 
     /**
@@ -212,7 +212,12 @@ public class DashboardApiController {
     /** tag-book 응답 — 어느 세션에 어떤 책을 붙였는지 확인용. */
     public record TagBookResponse(Long sessionId, String bookTitle) {}
 
-    /** start 응답 — 라이브 부분집합(graph/garden/quote/emailVerified 제외). 잔디는 stop 때만 변함. */
+    /**
+     * start 응답 — 라이브 부분집합(graph/garden/quote/emailVerified 제외). 잔디는 stop 때만 변함.
+     *
+     * @param debtWaiverAvailable 리워드 광고로 밀린 하루를 지울 수 있는지(미니앱 버튼 노출 조건).
+     *                            start/stop/waive 응답에 함께 실려 버튼 노출·숨김이 재조회 없이 갱신된다
+     */
     public record TimerState(
             long remainingSeconds,
             long carriedDebtSeconds,
@@ -224,8 +229,20 @@ public class DashboardApiController {
             long activeBookTotalSeconds,
             List<BookOption> readingBooks,
             List<BookOption> finishedBooks,
-            Long recentBookId
-    ) {}
+            Long recentBookId,
+            boolean debtWaiverAvailable
+    ) {
+        /** 라이브 상태 → DTO. 용서권 가용 여부만 따로 받는다(부채 계산과 다른 출처라 합칠 수 없다). */
+        public static TimerState of(DashboardModel.LiveState live, boolean debtWaiverAvailable) {
+            return new TimerState(
+                    live.remainingSeconds(), live.carriedDebtSeconds(),
+                    live.todayGoalSeconds(), live.carryover(),
+                    live.hasActiveSession(), live.activeStartedAt(),
+                    live.activeBookTitle(), live.activeBookTotalSeconds(),
+                    toOptions(live.readingBooks()), toOptions(live.finishedBooks()),
+                    live.recentBookId(), debtWaiverAvailable);
+        }
+    }
 
     public record BookOption(Long id, String title) {}
 
