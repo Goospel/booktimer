@@ -42,7 +42,8 @@ case "\$*" in
                  COUPANG_SEARCH_URL_TEMPLATE YES24_TRACKING_CODE YES24_SEARCH_URL_TEMPLATE \\
                  KYOBO_TRACKING_CODE KYOBO_SEARCH_URL_TEMPLATE KYOBO_MOBILE_SEARCH_URL_TEMPLATE \\
                  ADMIN_LOGIN_IDS LLM_API_KEY SPRING_MAIL_USERNAME SPRING_MAIL_PASSWORD \\
-                 MYSQL_ROOT_PASSWORD MINIAPP_ALLOWED_ORIGINS; do
+                 MYSQL_ROOT_PASSWORD MINIAPP_ALLOWED_ORIGINS \\
+                 TOSS_MESSENGER_ENABLED TOSS_FINISH_TEMPLATE_CODE; do
             printf '/booktimer/%s\tvalue-of-%s\n' "\$n" "\$n"
         done
         # 여러 줄 SecureString(PEM)도 같은 /booktimer 경로에 살아 이 목록에 함께 나온다.
@@ -107,6 +108,10 @@ assert_eq "  PEM 본문은 .env 에 안 들어간다" "$(printf '%s' "$env_out" 
 # 미니앱 CORS 허용 오리진 — 매핑이 없으면 render-env가 조용히 건너뛰어(.env에 빠짐) 앱이 빈 기본값으로 뜨고,
 # 토스 WebView 프리플라이트만 막히는 무성 장애가 된다.
 assert_has "  .env 에 미니앱 허용 오리진" "$env_out" "BOOKTIMER_MINIAPP_ALLOWED_ORIGINS=value-of-MINIAPP_ALLOWED_ORIGINS"
+# 토스 완독 축하 푸시 — 매핑이 없으면 render-env가 조용히 건너뛰어 앱이 기본값(게이트 OFF·템플릿 없음)으로 뜬다.
+# 즉 SSM을 true로 켜도 푸시가 안 나가는데 로그에는 아무 흔적이 없는 무성 장애가 된다.
+assert_has "  .env 에 메신저 게이트" "$env_out" "BOOKTIMER_TOSS_MESSENGER_ENABLED=value-of-TOSS_MESSENGER_ENABLED"
+assert_has "  .env 에 완독 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_FINISH_TEMPLATE_CODE=value-of-TOSS_FINISH_TEMPLATE_CODE"
 
 # ── Case 2: 인증서 누락 → 배포 실패, 파일도 안 남는다 ──
 r="$(run TOSS_MTLS_CERT)"; rc="${r%%$'\n'*}"; out="${r#*$'\n'}"
