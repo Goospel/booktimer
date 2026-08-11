@@ -7,19 +7,34 @@ import type { ContributionDay } from './api';
 /** 잔디 색 농도 0~4 — 웹 app.css `--grass-0..4`와 같은 값(서버가 level을 계산해 준다). */
 const LEVEL_COLORS = ['#EAE4D7', '#C3D9B0', '#94BE7F', '#5E9250', '#35662F'];
 
-/** 잔디 그리드 — 기록 화면(전체)과 홈 미리보기(최근 몇 주)가 같은 렌더를 쓴다. */
-export function GrassGrid({ weeks, cellSize = 11 }: { weeks: ContributionDay[][]; cellSize?: number }) {
+/**
+ * 잔디 그리드 — 기록 화면(전체)과 홈 미리보기(최근 몇 주)가 같은 렌더를 쓴다.
+ *
+ * <p>`fill`이면 칸 크기를 컨테이너가 정한다 — 주 컬럼이 폭을 나눠 갖고(`flex:1`) 칸은 정사각 비율로
+ * 따라온다. 홈 카드처럼 **폭이 정해진 자리**용이다. 기록 화면은 가로 스크롤이 전제라 고정 px가 맞다
+ * (폭을 나눠 가지면 주 수가 늘수록 칸이 무한히 작아진다).
+ */
+export function GrassGrid({
+  weeks,
+  cellSize = 11,
+  fill = false,
+}: {
+  weeks: ContributionDay[][];
+  cellSize?: number;
+  fill?: boolean;
+}) {
   return (
-    <div style={{ display: 'flex', gap: 3 }}>
+    <div style={{ display: 'flex', gap: 3, width: fill ? '100%' : undefined }}>
       {weeks.map((week, weekIndex) => (
-        <div key={weekIndex} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <div key={weekIndex} style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: fill ? 1 : undefined }}>
           {week.map((day, dayIndex) => (
             <div
               key={dayIndex}
               title={day.date ?? ''}
               style={{
-                width: cellSize,
-                height: cellSize,
+                width: fill ? '100%' : cellSize,
+                height: fill ? undefined : cellSize,
+                aspectRatio: fill ? '1 / 1' : undefined,
                 borderRadius: 2,
                 // 날짜 없는 칸은 그리드 가장자리 placeholder라 빈 칸으로 둔다.
                 background: day.date === null ? 'transparent' : LEVEL_COLORS[day.level],

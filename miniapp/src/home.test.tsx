@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DashboardResponse } from './api';
 import { ApiError, waiveDebt } from './api';
-import { Home, claimDebtWaiver, showWaiverButton, waiverErrorMessage } from './screens/Home';
+import { Home, claimDebtWaiver, defaultBookId, showWaiverButton, waiverErrorMessage } from './screens/Home';
 import { graph, userAgent } from './test-fixtures';
 import { REWARD_AD_GROUP_ID, watchRewardAd } from './toss';
 
@@ -149,6 +149,112 @@ describe('지급 흐름 (claimDebtWaiver)', () => {
     await claimDebtWaiver(REWARD_AD_GROUP_ID);
 
     expect(watchRewardAdMock).toHaveBeenCalledWith('test-ad-group');
+  });
+});
+
+/**
+ * 책 선택 — 책 버튼은 "고르기"이고 시작은 아래 버튼이 맡는다(웹 BookPickForm과 같은 의미론).
+ *
+ * <p>정적 렌더라 클릭은 못 잡으므로, 기본값 계산은 순수 함수 {@link defaultBookId}로 꺼내 계측하고
+ * "탭 = 시작이 아니다"는 **선택 상태가 화면에 남는가**로 잡는다 — 탭이 곧 시작이던 시절엔 선택이라는
+ * 상태 자체가 없어서 강조된 책도, 별도 "측정 시작" 버튼도 존재할 수 없었다.
+ *
+ * <p>⚠️ 남는 사각지대(실측): `onClick`은 마크업에 안 남아, 책 버튼을 `start(book.id)`로 되돌리거나
+ * 주 버튼을 `start(null)`로 바꿔도 여기 테스트는 전부 통과한다. jsdom을 안 들이는 한(설계상 미도입)
+ * 이 두 배선은 계측 밖이므로, 손댈 땐 실기기·프리뷰로 눈으로 확인한다.
+ */
+
+/** TDS Button이 인라인으로 박는 채움색 — variant를 가릴 class·속성이 없어 이 값이 유일한 표지다. */
+const FILL_PRIMARY = '#3182f6';
+const FILL_WEAK = 'rgba(100, 168, 255, 0.15)';
+
+function tdsButtons(markup: string): { label: string; fill: string }[] {
+  return markup
+    .split('<button')
+    .slice(1)
+    .flatMap((chunk) => {
+      const fill = chunk.match(/--button-background-color:([^;"]*)/)?.[1];
+      const label = chunk.match(/tds-mobile-button__content[^>]*>([^<]*)</)?.[1];
+      return fill === undefined || label === undefined ? [] : [{ label, fill }];
+    });
+}
+
+const labelsOf = (markup: string) => tdsButtons(markup).map((b) => b.label);
+const fillOf = (markup: string, label: string) => tdsButtons(markup).find((b) => b.label === label)?.fill;
+
+describe('측정할 책 기본값 (defaultBookId)', () => {
+  const books = [
+    { id: 1, title: '데미안' },
+    { id: 2, title: '노인과 바다' },
+  ];
+
+  it('최근 읽은 책이 목록에 있으면 그 책 — 이어 읽기가 기본값이다', () => {
+    expect(defaultBookId(books, 2)).toBe(2);
+  });
+
+  it('최근 읽은 책이 없으면 첫 책', () => {
+    expect(defaultBookId(books, null)).toBe(1);
+  });
+
+  it('최근 읽은 책이 읽는 중 목록에 없으면 첫 책 — 다 읽은 책이 recentBookId로 남는다', () => {
+    expect(defaultBookId(books, 99)).toBe(1);
+  });
+
+  it('읽는 중인 책이 0권이면 null — 고를 게 없다', () => {
+    expect(defaultBookId([], 7)).toBeNull();
+  });
+});
+
+describe('책 선택 · 시작 배선', () => {
+  const books = [
+    { id: 1, title: '데미안' },
+    { id: 2, title: '노인과 바다' },
+  ];
+
+  it('섹션 라벨이 "고르는 자리"라고 말한다 — 탭이 곧 시작이 아니다', () => {
+    const markup = renderHome({ readingBooks: books });
+
+    expect(markup).toContain('측정할 책을 골라요');
+    expect(markup).not.toContain('탭하면 바로 측정을 시작해요');
+  });
+
+  it('최근 읽은 책이 골라진 채로 뜨고 나머지는 흐리다 — 선택 상태의 유일한 시각 표지', () => {
+    const markup = renderHome({ readingBooks: books, recentBookId: 2 });
+
+    expect(fillOf(markup, '노인과 바다')).toBe(FILL_PRIMARY);
+    expect(fillOf(markup, '데미안')).toBe(FILL_WEAK);
+  });
+
+  it('최근 읽은 책이 없으면 첫 책이 골라진 채로 뜬다', () => {
+    const markup = renderHome({ readingBooks: books, recentBookId: null });
+
+    expect(fillOf(markup, '데미안')).toBe(FILL_PRIMARY);
+    expect(fillOf(markup, '노인과 바다')).toBe(FILL_WEAK);
+  });
+
+  it('책이 있으면 "측정 시작"(주) + "책 없이 측정 시작"(보조) 두 갈래로 나뉜다', () => {
+    const markup = renderHome({ readingBooks: books });
+
+    expect(labelsOf(markup)).toContain('측정 시작');
+    expect(fillOf(markup, '측정 시작')).toBe(FILL_PRIMARY);
+    expect(fillOf(markup, '책 없이 측정 시작')).toBe(FILL_WEAK);
+  });
+
+  it('책이 0권이면 "측정 시작" 하나뿐 — 고를 책이 없는데 "책 없이"를 되묻는 건 군더더기다', () => {
+    const found = labelsOf(renderHome({ readingBooks: [] }));
+
+    expect(found).toContain('측정 시작');
+    expect(found).not.toContain('책 없이 측정 시작');
+  });
+
+  it('측정 중이면 끝내기만 남는다 — 시작 갈래는 사라진다', () => {
+    const found = labelsOf(
+      renderHome({ readingBooks: books, hasActiveSession: true, activeStartedAt: '2026-08-11T09:00:00' }),
+    );
+
+    expect(found).toContain('측정 끝내기');
+    expect(found).not.toContain('측정 시작');
+    expect(found).not.toContain('책 없이 측정 시작');
   });
 });
 

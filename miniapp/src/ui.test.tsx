@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { DashboardResponse } from './api';
 import { History } from './screens/History';
 import { Home } from './screens/Home';
-import { coverSource } from './ui';
+import { GrassGrid, coverSource } from './ui';
 import { graph, userAgent } from './test-fixtures';
 
 /**
@@ -41,6 +41,32 @@ describe('잔디 렌더', () => {
 
   it('가로 스크롤 컨테이너가 스크롤바 숨김 클래스를 쓴다 — 규칙만 있고 안 붙이면 아무 일도 안 난다', () => {
     expect(markup).toContain('class="no-scrollbar"');
+  });
+});
+
+/**
+ * 잔디 가로 채움 — 홈 미리보기는 고정 칸(px)이라 카드 왼쪽에 좁게 붙어 있었다. `fill`이면 칸 크기를
+ * 카드 폭이 정하도록 뒤집는다(주 컬럼이 폭을 나눠 갖고, 칸은 정사각 비율로 따라온다).
+ * 기록 화면은 가로 스크롤이 전제라 이 모드를 안 쓴다 — 그래서 **기본 모드 무변경**도 함께 못 박는다.
+ */
+describe('잔디 가로 채움 (GrassGrid fill)', () => {
+  const render = (fill: boolean) => renderToStaticMarkup(<GrassGrid weeks={graph.weeks} fill={fill} />);
+
+  it('fill이면 주 컬럼이 폭을 나눠 갖고 칸은 정사각 비율로 따라온다', () => {
+    const markup = render(true);
+
+    expect(markup).toContain('gap:3px;width:100%'); // 컨테이너가 폭을 다 쓴다
+    expect(markup).toContain('flex:1'); // 주 컬럼이 그 폭을 나눠 갖는다
+    expect(markup).toContain('width:100%;aspect-ratio:1 / 1'); // 칸은 컬럼 폭 = 정사각
+    expect(markup).not.toMatch(/width:\d+px/); // 고정 px가 남아 있으면 폭을 다 못 채운다
+  });
+
+  it('fill이 아니면 고정 칸 그대로 — 기록 화면(가로 스크롤)은 무변경이다', () => {
+    const markup = render(false);
+
+    expect(markup).toContain('width:11px');
+    expect(markup).not.toContain('aspect-ratio');
+    expect(markup).not.toContain('flex:1');
   });
 });
 
@@ -123,6 +149,11 @@ describe('섹션 카드·화면 제목', () => {
 
   it('화면 제목은 웹 브랜드와 같은 세리프(고운바탕)로 쓴다', () => {
     expect(markup).toMatch(/font-family:[^"]*Gowun Batang/);
+  });
+
+  it('홈 잔디 미리보기는 카드 폭을 채운다 — 고정 칸이면 카드 왼쪽에 좁게 붙는다', () => {
+    // `border-radius:2px`까지 함께 봐야 잔디 칸이다 — TDS 버튼의 물결 효과도 `aspect-ratio:1/1`을 쓴다.
+    expect(markup).toContain('width:100%;aspect-ratio:1 / 1;border-radius:2px');
   });
 });
 

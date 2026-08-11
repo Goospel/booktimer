@@ -7,8 +7,18 @@ import { elapsedSeconds, formatDuration } from '../format';
 import { REWARD_AD_GROUP_ID, watchRewardAd } from '../toss';
 import { ErrorMessage, GrassGrid, Screen, sectionStyle } from '../ui';
 
-/** 홈 잔디 미리보기 폭 — 최근 5주만 축약해 보여주고 전체는 기록 화면이 맡는다. */
-const PREVIEW_WEEKS = 5;
+/** 홈 잔디 미리보기 폭 — 최근 15주만 축약해 보여주고 전체는 기록 화면이 맡는다(카드 폭을 채우는 주 수). */
+const PREVIEW_WEEKS = 15;
+
+/**
+ * 처음 골라 둘 책 — 최근 읽은 책(=이어 읽기)이 읽는 중 목록에 있으면 그 책, 아니면 첫 책, 없으면 `null`.
+ *
+ * <p>웹 `BookPickForm`의 `defaultBook`과 같은 규칙이다. `recentBookId`가 목록 밖일 수 있는 건 그 책을
+ * 다 읽었거나 뺐기 때문이다 — 그때 아무것도 안 고른 채로 두면 "측정 시작"이 죽은 버튼이 된다.
+ */
+export function defaultBookId(readingBooks: BookOption[], recentBookId: number | null): number | null {
+  return readingBooks.find((b) => b.id === recentBookId)?.id ?? readingBooks[0]?.id ?? null;
+}
 
 /**
  * 리워드 광고 버튼을 노출할지 — 셋 다 참이어야 한다.
@@ -69,6 +79,10 @@ export function Home({
   onError: (error: Error) => void;
 }) {
   const [untagged, setUntagged] = useState<Untagged | null>(null);
+  /** 측정할 책 — 책 버튼 탭은 "고르기"일 뿐이고 시작은 아래 주 버튼이 맡는다(여러 책을 번갈아 읽는 사람). */
+  const [selectedBookId, setSelectedBookId] = useState(() =>
+    defaultBookId(dashboard.readingBooks, dashboard.recentBookId),
+  );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -195,17 +209,18 @@ export function Home({
       {!dashboard.hasActiveSession && dashboard.readingBooks.length > 0 && (
         <section style={sectionStyle}>
           <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
-            읽는 중인 책 — 탭하면 바로 측정을 시작해요
+            읽는 중인 책 — 측정할 책을 골라요
           </Text>
           {dashboard.readingBooks.map((book) => (
             <Button
               key={book.id}
               display="block"
-              variant="weak"
+              // 고른 책만 채움(fill) — variant를 가릴 class·속성이 없어 이 채움색이 선택의 유일한 표지다.
+              variant={book.id === selectedBookId ? 'fill' : 'weak'}
               size="medium"
               style={{ marginBottom: 8 }}
               disabled={busy}
-              onClick={() => start(book.id)}
+              onClick={() => setSelectedBookId(book.id)}
             >
               {book.title}
             </Button>
@@ -239,19 +254,30 @@ export function Home({
 
       <ErrorMessage message={error} />
 
+      {/* 주 버튼은 "고른 책으로 시작" 하나 — 고른 책이 없으면(책 0권) selectedBookId가 null이라 그대로 책 없이 시작이다. */}
       <Button
         display="block"
         color={dashboard.hasActiveSession ? 'danger' : 'primary'}
         style={{ marginTop: 24 }}
         loading={busy}
-        onClick={dashboard.hasActiveSession ? stop : () => start(null)}
+        onClick={dashboard.hasActiveSession ? stop : () => start(selectedBookId)}
       >
-        {dashboard.hasActiveSession
-          ? '측정 끝내기'
-          : dashboard.readingBooks.length > 0
-            ? '책 없이 측정 시작'
-            : '측정 시작'}
+        {dashboard.hasActiveSession ? '측정 끝내기' : '측정 시작'}
       </Button>
+
+      {/* 고른 책이 있을 때만 탈출구를 둔다 — 고를 책이 없는데 "책 없이"를 되묻는 건 군더더기다. */}
+      {!dashboard.hasActiveSession && selectedBookId !== null && (
+        <Button
+          display="block"
+          variant="weak"
+          size="medium"
+          style={{ marginTop: 8 }}
+          disabled={busy}
+          onClick={() => start(null)}
+        >
+          책 없이 측정 시작
+        </Button>
+      )}
 
       <GrassPreview graph={dashboard.graph} onGoHistory={onGoHistory} />
 
@@ -264,7 +290,7 @@ export function Home({
   );
 }
 
-/** 잔디 미리보기 — 최근 5주만. 카드 전체가 기록 화면 진입점이다. */
+/** 잔디 미리보기 — 최근 15주만, 카드 폭을 꽉 채워서. 카드 전체가 기록 화면 진입점이다. */
 function GrassPreview({
   graph,
   onGoHistory,
@@ -282,7 +308,7 @@ function GrassPreview({
           기록 보기 ›
         </Text>
       </div>
-      <GrassGrid weeks={graph.weeks.slice(-PREVIEW_WEEKS)} cellSize={14} />
+      <GrassGrid weeks={graph.weeks.slice(-PREVIEW_WEEKS)} fill />
     </button>
   );
 }
