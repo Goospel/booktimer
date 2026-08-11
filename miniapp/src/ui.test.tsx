@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { DashboardResponse } from './api';
 import { History } from './screens/History';
 import { Home } from './screens/Home';
-import { coverSource } from './ui';
+import { COVER_PALETTE, GrassGrid, coverColor, coverSource, initialOf } from './ui';
 import { graph, userAgent } from './test-fixtures';
 
 /**
@@ -41,6 +41,32 @@ describe('잔디 렌더', () => {
 
   it('가로 스크롤 컨테이너가 스크롤바 숨김 클래스를 쓴다 — 규칙만 있고 안 붙이면 아무 일도 안 난다', () => {
     expect(markup).toContain('class="no-scrollbar"');
+  });
+});
+
+/**
+ * 잔디 가로 채움 — 홈 미리보기는 고정 칸(px)이라 카드 왼쪽에 좁게 붙어 있었다. `fill`이면 칸 크기를
+ * 카드 폭이 정하도록 뒤집는다(주 컬럼이 폭을 나눠 갖고, 칸은 정사각 비율로 따라온다).
+ * 기록 화면은 가로 스크롤이 전제라 이 모드를 안 쓴다 — 그래서 **기본 모드 무변경**도 함께 못 박는다.
+ */
+describe('잔디 가로 채움 (GrassGrid fill)', () => {
+  const render = (fill: boolean) => renderToStaticMarkup(<GrassGrid weeks={graph.weeks} fill={fill} />);
+
+  it('fill이면 주 컬럼이 폭을 나눠 갖고 칸은 정사각 비율로 따라온다', () => {
+    const markup = render(true);
+
+    expect(markup).toContain('gap:3px;width:100%'); // 컨테이너가 폭을 다 쓴다
+    expect(markup).toContain('flex:1'); // 주 컬럼이 그 폭을 나눠 갖는다
+    expect(markup).toContain('width:100%;aspect-ratio:1 / 1'); // 칸은 컬럼 폭 = 정사각
+    expect(markup).not.toMatch(/width:\d+px/); // 고정 px가 남아 있으면 폭을 다 못 채운다
+  });
+
+  it('fill이 아니면 고정 칸 그대로 — 기록 화면(가로 스크롤)은 무변경이다', () => {
+    const markup = render(false);
+
+    expect(markup).toContain('width:11px');
+    expect(markup).not.toContain('aspect-ratio');
+    expect(markup).not.toContain('flex:1');
   });
 });
 
@@ -123,6 +149,11 @@ describe('섹션 카드·화면 제목', () => {
 
   it('화면 제목은 웹 브랜드와 같은 세리프(고운바탕)로 쓴다', () => {
     expect(markup).toMatch(/font-family:[^"]*Gowun Batang/);
+  });
+
+  it('홈 잔디 미리보기는 카드 폭을 채운다 — 고정 칸이면 카드 왼쪽에 좁게 붙는다', () => {
+    // `border-radius:2px`까지 함께 봐야 잔디 칸이다 — TDS 버튼의 물결 효과도 `aspect-ratio:1/1`을 쓴다.
+    expect(markup).toContain('width:100%;aspect-ratio:1 / 1;border-radius:2px');
   });
 });
 
@@ -226,6 +257,40 @@ describe('TDS Button 재색칠 (global.css)', () => {
  * <p>정적 렌더 하니스로는 `onError`가 돌지 않으므로 판단만 순수 함수로 꺼내 계측한다 —
  * `nextStoryIndex`·`tabChangeHandler`와 같은 방식.
  */
+/**
+ * 무표지 자리 표지 — `BookOption`엔 표지 주소가 없어 첫 글자 + 제목색 상자로 대신한다.
+ * 웹 `books/pure.ts`의 `initialOf`·`coverColor`를 옮긴 것이라 같은 책이 웹·미니앱에서 같은 색이 된다.
+ */
+describe('제목 이니셜·표지색', () => {
+  it('제목 첫 글자를 쓴다', () => {
+    expect(initialOf('데미안')).toBe('데');
+  });
+
+  it('앞뒤 공백은 버린다 — 공백이 첫 글자로 뽑히면 빈 상자가 된다', () => {
+    expect(initialOf('  노인과 바다 ')).toBe('노');
+  });
+
+  it('제목이 비었으면 물음표 — 상자는 남아야 줄 높이가 안 무너진다', () => {
+    expect(initialOf('   ')).toBe('?');
+  });
+
+  it('같은 제목은 항상 같은 색 — 다시 그릴 때 색이 튀면 "다른 책"으로 읽힌다', () => {
+    expect(coverColor('데미안')).toBe(coverColor('데미안'));
+  });
+
+  it('제목마다 갈리게 흩뿌린다 — 상수로 굳으면 모든 책이 한 색이 된다', () => {
+    const colors = new Set(['데미안', '노인과 바다', '토지', '1984', '호밀밭의 파수꾼'].map(coverColor));
+
+    expect(colors.size).toBeGreaterThan(1);
+  });
+
+  it('팔레트 밖 색은 안 나온다 — 해시가 범위를 넘으면 배경이 undefined로 샌다', () => {
+    for (const title of ['', '데미안', '아주 긴 제목의 어떤 책 제목입니다']) {
+      expect(COVER_PALETTE).toContain(coverColor(title));
+    }
+  });
+});
+
 describe('표지 출처 결정', () => {
   it('표지가 없으면 자리 채움', () => {
     expect(coverSource(null, null)).toBeNull();
