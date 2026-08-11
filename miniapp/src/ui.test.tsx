@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { DashboardResponse } from './api';
 import { History } from './screens/History';
 import { Home } from './screens/Home';
-import { GrassGrid, coverSource } from './ui';
+import { COVER_PALETTE, GrassGrid, coverColor, coverSource, initialOf } from './ui';
 import { graph, userAgent } from './test-fixtures';
 
 /**
@@ -257,6 +257,40 @@ describe('TDS Button 재색칠 (global.css)', () => {
  * <p>정적 렌더 하니스로는 `onError`가 돌지 않으므로 판단만 순수 함수로 꺼내 계측한다 —
  * `nextStoryIndex`·`tabChangeHandler`와 같은 방식.
  */
+/**
+ * 무표지 자리 표지 — `BookOption`엔 표지 주소가 없어 첫 글자 + 제목색 상자로 대신한다.
+ * 웹 `books/pure.ts`의 `initialOf`·`coverColor`를 옮긴 것이라 같은 책이 웹·미니앱에서 같은 색이 된다.
+ */
+describe('제목 이니셜·표지색', () => {
+  it('제목 첫 글자를 쓴다', () => {
+    expect(initialOf('데미안')).toBe('데');
+  });
+
+  it('앞뒤 공백은 버린다 — 공백이 첫 글자로 뽑히면 빈 상자가 된다', () => {
+    expect(initialOf('  노인과 바다 ')).toBe('노');
+  });
+
+  it('제목이 비었으면 물음표 — 상자는 남아야 줄 높이가 안 무너진다', () => {
+    expect(initialOf('   ')).toBe('?');
+  });
+
+  it('같은 제목은 항상 같은 색 — 다시 그릴 때 색이 튀면 "다른 책"으로 읽힌다', () => {
+    expect(coverColor('데미안')).toBe(coverColor('데미안'));
+  });
+
+  it('제목마다 갈리게 흩뿌린다 — 상수로 굳으면 모든 책이 한 색이 된다', () => {
+    const colors = new Set(['데미안', '노인과 바다', '토지', '1984', '호밀밭의 파수꾼'].map(coverColor));
+
+    expect(colors.size).toBeGreaterThan(1);
+  });
+
+  it('팔레트 밖 색은 안 나온다 — 해시가 범위를 넘으면 배경이 undefined로 샌다', () => {
+    for (const title of ['', '데미안', '아주 긴 제목의 어떤 책 제목입니다']) {
+      expect(COVER_PALETTE).toContain(coverColor(title));
+    }
+  });
+});
+
 describe('표지 출처 결정', () => {
   it('표지가 없으면 자리 채움', () => {
     expect(coverSource(null, null)).toBeNull();

@@ -5,7 +5,7 @@ import type { BookOption, DashboardResponse, QuoteDto, TimerState, WaiveResponse
 import { ApiError, startSession, stopSession, tagBook, waiveDebt } from '../api';
 import { elapsedSeconds, formatDuration } from '../format';
 import { REWARD_AD_GROUP_ID, watchRewardAd } from '../toss';
-import { ErrorMessage, GrassGrid, Screen, sectionStyle } from '../ui';
+import { CoverInitial, ErrorMessage, GrassGrid, Screen, sectionStyle } from '../ui';
 
 /** 홈 잔디 미리보기 폭 — 최근 15주만 축약해 보여주고 전체는 기록 화면이 맡는다(카드 폭을 채우는 주 수). */
 const PREVIEW_WEEKS = 15;
@@ -54,6 +54,45 @@ export function waiverErrorMessage(error: Error): string {
   return error instanceof ApiError ? error.message : '광고를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.';
 }
 
+/**
+ * 책 버튼 목록 — 「바꾸기」로 편 고르기 목록과 종료 후 태깅 목록이 같은 렌더를 쓴다.
+ *
+ * <p>`selectedId`가 있으면 그 책만 채움(fill)으로 구분한다 — variant를 가릴 class·속성이 없어
+ * 이 채움색이 선택의 유일한 표지다. 태깅엔 "고른 책"이 없어 `null`(전부 weak)로 쓴다.
+ *
+ * <p>화면에서 꺼내 둔 이유는 늘 같다: 하니스가 정적 렌더라 「바꾸기」를 눌러 편 상태에 도달할 수 없어,
+ * 목록 자체는 여기서 직접 렌더해야 계측된다.
+ */
+export function BookList({
+  books,
+  selectedId = null,
+  disabled,
+  onPick,
+}: {
+  books: BookOption[];
+  selectedId?: number | null;
+  disabled: boolean;
+  onPick: (book: BookOption) => void;
+}) {
+  return (
+    <>
+      {books.map((book) => (
+        <Button
+          key={book.id}
+          display="block"
+          variant={book.id === selectedId ? 'fill' : 'weak'}
+          size="medium"
+          style={{ marginBottom: 8 }}
+          disabled={disabled}
+          onClick={() => onPick(book)}
+        >
+          {book.title}
+        </Button>
+      ))}
+    </>
+  );
+}
+
 /** 종료 직후 태깅 대상 — 책 없이 측정한 세션에 나중에 책을 붙인다. */
 interface Untagged {
   sessionId: number;
@@ -79,10 +118,12 @@ export function Home({
   onError: (error: Error) => void;
 }) {
   const [untagged, setUntagged] = useState<Untagged | null>(null);
-  /** 측정할 책 — 책 버튼 탭은 "고르기"일 뿐이고 시작은 아래 주 버튼이 맡는다(여러 책을 번갈아 읽는 사람). */
+  /** 측정할 책 — 칩에 뜨는 그 책이고, 시작은 아래 주 버튼이 맡는다(여러 책을 번갈아 읽는 사람). */
   const [selectedBookId, setSelectedBookId] = useState(() =>
     defaultBookId(dashboard.readingBooks, dashboard.recentBookId),
   );
+  /** 「바꾸기」로 목록을 펼쳤는지 — 시트를 따로 띄우지 않고 칩 아래에 인라인으로 편다(화면 다섯 개짜리 앱). */
+  const [picking, setPicking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -146,6 +187,8 @@ export function Home({
       ? elapsedSeconds(dashboard.activeStartedAt, now)
       : 0;
   const quotes = dashboard.quotes ?? [];
+  // 칩에 띄울 책 — 시작 버튼도 이 값을 그대로 쓴다(칩과 시작 대상이 어긋날 자리를 없앤다).
+  const selectedBook = dashboard.readingBooks.find((b) => b.id === selectedBookId) ?? null;
 
   return (
     <Screen title={`${dashboard.nickname}님의 오늘`}>
@@ -206,25 +249,34 @@ export function Home({
         )}
       </div>
 
-      {!dashboard.hasActiveSession && dashboard.readingBooks.length > 0 && (
+      {!dashboard.hasActiveSession && selectedBook !== null && (
         <section style={sectionStyle}>
           <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
-            읽는 중인 책 — 측정할 책을 골라요
+            이 책으로 측정할까요?
           </Text>
-          {dashboard.readingBooks.map((book) => (
-            <Button
-              key={book.id}
-              display="block"
-              // 고른 책만 채움(fill) — variant를 가릴 class·속성이 없어 이 채움색이 선택의 유일한 표지다.
-              variant={book.id === selectedBookId ? 'fill' : 'weak'}
-              size="medium"
-              style={{ marginBottom: 8 }}
-              disabled={busy}
-              onClick={() => setSelectedBookId(book.id)}
-            >
-              {book.title}
+          {/* 칩 = 지금 고른 책 하나. 목록을 상시 펼쳐 두면 책이 늘수록 홈이 목록 화면이 된다(웹과 같은 접근). */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <CoverInitial title={selectedBook.title} />
+            <Text typography="st11" style={{ flex: 1, textAlign: 'left' }}>
+              {selectedBook.title}
+            </Text>
+            <Button variant="weak" size="small" disabled={busy} onClick={() => setPicking((p) => !p)}>
+              바꾸기
             </Button>
-          ))}
+          </div>
+          {picking && (
+            <div style={{ marginTop: 10 }}>
+              <BookList
+                books={dashboard.readingBooks}
+                selectedId={selectedBook.id}
+                disabled={busy}
+                onPick={(book) => {
+                  setSelectedBookId(book.id);
+                  setPicking(false); // 고르면 곧바로 칩으로 되돌아간다(같은 책을 다시 골라도 접힌다).
+                }}
+              />
+            </div>
+          )}
         </section>
       )}
 
@@ -233,19 +285,8 @@ export function Home({
           <Text typography="st11" style={{ display: 'block', marginBottom: 10 }}>
             방금 측정, 무슨 책이었나요?
           </Text>
-          {dashboard.readingBooks.map((book) => (
-            <Button
-              key={book.id}
-              display="block"
-              variant="weak"
-              size="medium"
-              style={{ marginBottom: 8 }}
-              disabled={busy}
-              onClick={() => tag(book)}
-            >
-              {book.title}
-            </Button>
-          ))}
+          {/* 태깅은 "고른 책"이 없다 — selectedId를 안 주면 전부 weak로 나열된다. */}
+          <BookList books={dashboard.readingBooks} disabled={busy} onPick={tag} />
           <Button display="block" variant="weak" size="medium" onClick={() => setUntagged(null)}>
             나중에
           </Button>
@@ -254,19 +295,19 @@ export function Home({
 
       <ErrorMessage message={error} />
 
-      {/* 주 버튼은 "고른 책으로 시작" 하나 — 고른 책이 없으면(책 0권) selectedBookId가 null이라 그대로 책 없이 시작이다. */}
+      {/* 주 버튼은 "칩에 뜬 책으로 시작" 하나 — 칩이 없으면(책 0권) 그대로 책 없이 시작이다. */}
       <Button
         display="block"
         color={dashboard.hasActiveSession ? 'danger' : 'primary'}
         style={{ marginTop: 24 }}
         loading={busy}
-        onClick={dashboard.hasActiveSession ? stop : () => start(selectedBookId)}
+        onClick={dashboard.hasActiveSession ? stop : () => start(selectedBook?.id ?? null)}
       >
         {dashboard.hasActiveSession ? '측정 끝내기' : '측정 시작'}
       </Button>
 
       {/* 고른 책이 있을 때만 탈출구를 둔다 — 고를 책이 없는데 "책 없이"를 되묻는 건 군더더기다. */}
-      {!dashboard.hasActiveSession && selectedBookId !== null && (
+      {!dashboard.hasActiveSession && selectedBook !== null && (
         <Button
           display="block"
           variant="weak"
@@ -275,7 +316,7 @@ export function Home({
           disabled={busy}
           onClick={() => start(null)}
         >
-          책 없이 측정 시작
+          책 없이 시작
         </Button>
       )}
 

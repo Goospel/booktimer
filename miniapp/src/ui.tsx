@@ -49,6 +49,57 @@ export function GrassGrid({
 }
 
 /**
+ * 무표지 자리 표지의 배경색 팔레트 — 웹 `books/pure.ts` `COVER_PALETTE`와 같은 12색(종이톤).
+ * 웹은 `{bg, fg}`를 돌려주지만 fg가 상수라 미니앱은 색 문자열 하나로 줄였다.
+ */
+export const COVER_PALETTE = [
+  '#B8C2A6', '#D6C3B0', '#C7B89B', '#A9B9A0', '#B0B7A8', '#CBB9A3',
+  '#C3CBC0', '#BFC8B4', '#CFC0AE', '#D9C8A9', '#C2BBA8', '#B5A98F',
+] as const;
+
+export const COVER_FG = 'rgba(44,42,36,0.5)';
+
+/** 표지 대신 세울 첫 글자 — 앞뒤 공백은 버리고, 빈 제목은 `?`로(빈 상자가 되면 표지 자리가 무너진다). */
+export function initialOf(title: string): string {
+  const t = (title ?? '').trim();
+  return t === '' ? '?' : t.charAt(0);
+}
+
+/**
+ * 제목에서 결정적으로 고른 배경색 — **같은 책은 언제 그려도 같은 색**이어야 다시 그릴 때 색이 튀지 않는다.
+ * 웹과 같은 해시(부호 없는 32bit `h*31 + charCode`)·같은 팔레트라 웹/미니앱의 같은 책이 같은 색이 된다.
+ */
+export function coverColor(seed: string): string {
+  const key = seed ?? '';
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return COVER_PALETTE[h % COVER_PALETTE.length];
+}
+
+/** 무표지 책의 자리 표지 — `BookOption`엔 표지 주소가 없어 첫 글자 + 제목색 상자로 대신한다. */
+export function CoverInitial({ title, width = 32 }: { title: string; width?: number }) {
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        width,
+        height: Math.round(width * 1.4),
+        borderRadius: 4,
+        flex: '0 0 auto',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: Math.round(width * 0.5),
+        background: coverColor(title),
+        color: COVER_FG,
+      }}
+    >
+      {initialOf(title)}
+    </div>
+  );
+}
+
+/**
  * 그릴 표지 주소 — 없거나(`null`) **그 주소가 방금 로드에 실패했으면** 자리 채움으로 떨어뜨린다.
  *
  * <p>실패를 boolean으로 들면 목록 재사용(같은 자리에 다른 책이 오는 경우)에서 앞 책의 실패가 뒤 책으로

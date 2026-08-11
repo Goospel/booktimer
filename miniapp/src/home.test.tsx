@@ -4,8 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DashboardResponse } from './api';
 import { ApiError, waiveDebt } from './api';
-import { Home, claimDebtWaiver, defaultBookId, showWaiverButton, waiverErrorMessage } from './screens/Home';
+import { BookList, Home, claimDebtWaiver, defaultBookId, showWaiverButton, waiverErrorMessage } from './screens/Home';
 import { graph, userAgent } from './test-fixtures';
+import { coverColor } from './ui';
 import { REWARD_AD_GROUP_ID, watchRewardAd } from './toss';
 
 /**
@@ -153,15 +154,16 @@ describe('지급 흐름 (claimDebtWaiver)', () => {
 });
 
 /**
- * 책 선택 — 책 버튼은 "고르기"이고 시작은 아래 버튼이 맡는다(웹 BookPickForm과 같은 의미론).
+ * 책 고르기 — 웹 `BookPickForm`의 의미론을 옮겼다. 홈엔 **고른 책 칩 하나**만 두고(목록 상시 노출 아님),
+ * 「바꾸기」로 그 아래 목록을 펴서 바꾼다. 시작은 아래 주 버튼이 맡는다.
  *
- * <p>정적 렌더라 클릭은 못 잡으므로, 기본값 계산은 순수 함수 {@link defaultBookId}로 꺼내 계측하고
- * "탭 = 시작이 아니다"는 **선택 상태가 화면에 남는가**로 잡는다 — 탭이 곧 시작이던 시절엔 선택이라는
- * 상태 자체가 없어서 강조된 책도, 별도 "측정 시작" 버튼도 존재할 수 없었다.
+ * <p>계측은 세 겹이다: ① 기본값은 순수 함수 {@link defaultBookId} ② **접힌 상태**는 홈 마크업
+ * (칩의 책만 보이고 나머지 책 제목은 아예 없다) ③ **편 목록**은 하니스로 「바꾸기」를 누를 수 없으니
+ * {@link BookList}를 직접 렌더해서.
  *
- * <p>⚠️ 남는 사각지대(실측): `onClick`은 마크업에 안 남아, 책 버튼을 `start(book.id)`로 되돌리거나
- * 주 버튼을 `start(null)`로 바꿔도 여기 테스트는 전부 통과한다. jsdom을 안 들이는 한(설계상 미도입)
- * 이 두 배선은 계측 밖이므로, 손댈 땐 실기기·프리뷰로 눈으로 확인한다.
+ * <p>⚠️ 남는 사각지대(실측): `onClick`은 마크업에 안 남는다 — 「바꾸기」가 목록을 펴는지, 목록에서 고르면
+ * 접히는지, 주 버튼이 정말 고른 책으로 시작하는지는 여기서 못 잡는다(핸들러를 통째로 바꿔도 통과).
+ * jsdom 미도입은 이 저장소의 기존 결정이라, 이 배선들은 실기기·프리뷰 확인을 게이트로 둔다.
  */
 
 /** TDS Button이 인라인으로 박는 채움색 — variant를 가릴 class·속성이 없어 이 값이 유일한 표지다. */
@@ -205,46 +207,102 @@ describe('측정할 책 기본값 (defaultBookId)', () => {
   });
 });
 
-describe('책 선택 · 시작 배선', () => {
+describe('책 칩 (접힌 상태)', () => {
   const books = [
     { id: 1, title: '데미안' },
     { id: 2, title: '노인과 바다' },
   ];
 
-  it('섹션 라벨이 "고르는 자리"라고 말한다 — 탭이 곧 시작이 아니다', () => {
-    const markup = renderHome({ readingBooks: books });
-
-    expect(markup).toContain('측정할 책을 골라요');
-    expect(markup).not.toContain('탭하면 바로 측정을 시작해요');
-  });
-
-  it('최근 읽은 책이 골라진 채로 뜨고 나머지는 흐리다 — 선택 상태의 유일한 시각 표지', () => {
+  it('고른 책 하나만 칩으로 띄우고 목록은 접어 둔다 — 상시 노출하면 책이 늘수록 홈이 목록 화면이 된다', () => {
     const markup = renderHome({ readingBooks: books, recentBookId: 2 });
 
+    expect(markup).toContain('이 책으로 측정할까요?');
+    expect(markup).toContain('노인과 바다');
+    expect(markup).not.toContain('데미안'); // 접혀 있으니 다른 책은 자취가 없어야 한다
+    expect(labelsOf(markup)).toContain('바꾸기');
+  });
+
+  it('최근 읽은 책이 없으면 첫 책이 칩에 뜬다', () => {
+    const markup = renderHome({ readingBooks: books, recentBookId: null });
+
+    expect(markup).toContain('데미안');
+    expect(markup).not.toContain('노인과 바다');
+  });
+
+  it('칩은 제목 첫 글자를 자리 표지로 세운다 — BookOption엔 표지 주소가 없다', () => {
+    const markup = renderHome({ readingBooks: books, recentBookId: 2 });
+
+    expect(markup).toContain(`background:${coverColor('노인과 바다')}`);
+    expect(markup).toContain('>노</div>');
+  });
+
+  it('책이 0권이면 라벨·칩·바꾸기가 통째로 없다', () => {
+    const markup = renderHome({ readingBooks: [] });
+
+    expect(markup).not.toContain('이 책으로 측정할까요?');
+    expect(labelsOf(markup)).not.toContain('바꾸기');
+  });
+
+  it('측정 중이면 고르는 자리가 사라진다 — 이미 시작한 뒤엔 바꿀 게 없다', () => {
+    const markup = renderHome({
+      readingBooks: books,
+      hasActiveSession: true,
+      activeStartedAt: '2026-08-11T09:00:00',
+    });
+
+    expect(markup).not.toContain('이 책으로 측정할까요?');
+    expect(labelsOf(markup)).not.toContain('바꾸기');
+  });
+});
+
+/** 「바꾸기」로 펴는 목록 — 정적 렌더로는 편 상태에 못 가므로 직접 렌더해 계측한다. */
+describe('고르기 목록 (BookList)', () => {
+  const books = [
+    { id: 1, title: '데미안' },
+    { id: 2, title: '노인과 바다' },
+  ];
+
+  const renderList = (selectedId: number | null) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <BookList books={books} selectedId={selectedId} disabled={false} onPick={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  it('책을 전부 나열하고 고른 책만 채움으로 구분한다', () => {
+    const markup = renderList(2);
+
+    expect(labelsOf(markup)).toEqual(['데미안', '노인과 바다']);
     expect(fillOf(markup, '노인과 바다')).toBe(FILL_PRIMARY);
     expect(fillOf(markup, '데미안')).toBe(FILL_WEAK);
   });
 
-  it('최근 읽은 책이 없으면 첫 책이 골라진 채로 뜬다', () => {
-    const markup = renderHome({ readingBooks: books, recentBookId: null });
+  it('고른 책이 없으면 전부 흐리다 — 종료 후 태깅 목록이 이 모드다', () => {
+    const markup = renderList(null);
 
-    expect(fillOf(markup, '데미안')).toBe(FILL_PRIMARY);
+    expect(fillOf(markup, '데미안')).toBe(FILL_WEAK);
     expect(fillOf(markup, '노인과 바다')).toBe(FILL_WEAK);
   });
+});
 
-  it('책이 있으면 "측정 시작"(주) + "책 없이 측정 시작"(보조) 두 갈래로 나뉜다', () => {
+describe('시작 갈래', () => {
+  const books = [
+    { id: 1, title: '데미안' },
+    { id: 2, title: '노인과 바다' },
+  ];
+
+  it('책이 있으면 "측정 시작"(주) + "책 없이 시작"(보조) 두 갈래로 나뉜다', () => {
     const markup = renderHome({ readingBooks: books });
 
-    expect(labelsOf(markup)).toContain('측정 시작');
     expect(fillOf(markup, '측정 시작')).toBe(FILL_PRIMARY);
-    expect(fillOf(markup, '책 없이 측정 시작')).toBe(FILL_WEAK);
+    expect(fillOf(markup, '책 없이 시작')).toBe(FILL_WEAK);
   });
 
   it('책이 0권이면 "측정 시작" 하나뿐 — 고를 책이 없는데 "책 없이"를 되묻는 건 군더더기다', () => {
     const found = labelsOf(renderHome({ readingBooks: [] }));
 
     expect(found).toContain('측정 시작');
-    expect(found).not.toContain('책 없이 측정 시작');
+    expect(found).not.toContain('책 없이 시작');
   });
 
   it('측정 중이면 끝내기만 남는다 — 시작 갈래는 사라진다', () => {
@@ -254,7 +312,7 @@ describe('책 선택 · 시작 배선', () => {
 
     expect(found).toContain('측정 끝내기');
     expect(found).not.toContain('측정 시작');
-    expect(found).not.toContain('책 없이 측정 시작');
+    expect(found).not.toContain('책 없이 시작');
   });
 });
 
