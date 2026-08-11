@@ -166,6 +166,15 @@ public class User extends BaseTimeEntity {
     @Column(name = "last_nudge_sent_at")
     private java.time.Instant lastNudgeSentAt;
 
+    /**
+     * "오늘 목표 달성" 푸시를 마지막으로 보낸 날(유저 타임존 일자). <b>하루 1회</b>를 멱등하게 보장하는 상태다 —
+     * 감지가 분당 폴링이라 이 마킹이 없으면 목표를 넘긴 뒤 매분 같은 알림이 나간다.
+     *
+     * <p>시각이 아니라 날짜인 이유: 멱등 단위가 유저 타임존의 하루라서다. {@code null}이면 아직 한 번도 안 보냄.
+     */
+    @Column(name = "goal_met_pushed_on")
+    private java.time.LocalDate goalMetPushedOn;
+
     protected User() {
         // JPA
     }
@@ -375,6 +384,20 @@ public class User extends BaseTimeEntity {
     /** 마지막 재참여 넛지 발송 시각. 한 번도 안 보냈으면 {@code null}. */
     public java.time.Instant getLastNudgeSentAt() {
         return lastNudgeSentAt;
+    }
+
+    /**
+     * "오늘 목표 달성" 푸시를 보낸 날을 기록한다 — <b>발송 성공 직후에만</b> 호출해 그날 재발송을 막는다(하루 1회 멱등).
+     *
+     * @param date 발송한 날(유저 타임존 오늘)
+     */
+    public void markGoalMetPushed(java.time.LocalDate date) {
+        this.goalMetPushedOn = date;
+    }
+
+    /** 목표 달성 푸시를 마지막으로 보낸 날(유저 TZ). 한 번도 안 보냈으면 {@code null}. */
+    public java.time.LocalDate getGoalMetPushedOn() {
+        return goalMetPushedOn;
     }
 
     /** 책BTI "다시 분석"의 하루 허용 횟수(악의적 반복 클릭 → LLM 남용 방어). */
