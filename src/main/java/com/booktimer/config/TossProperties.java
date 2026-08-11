@@ -26,6 +26,44 @@ public class TossProperties {
     /** mTLS 클라이언트 인증서를 담은 SSL 번들 이름({@code spring.ssl.bundle.pem.<이 이름>}). */
     private String sslBundle = "toss";
 
+    /** 메신저(푸시) 발송 설정 — {@code booktimer.toss.messenger.*}. */
+    private final Messenger messenger = new Messenger();
+
+    public Messenger getMessenger() {
+        return messenger;
+    }
+
+    /**
+     * 토스 메신저(서버 발송 푸시) 설정.
+     *
+     * <p>앱인토스는 콘솔에서 <b>문구 검수 승인을 받은 템플릿만</b> 발송할 수 있다 — 코드가 검수보다 먼저
+     * 머지·배포되므로 {@link #enabled}는 기본 OFF(다크런치)이고, 승인 후 SSM으로 점등한다.
+     */
+    public static class Messenger {
+
+        /** false면 발송 클라이언트 빈 자체가 등록되지 않는다(다크런치 게이트). */
+        private boolean enabled;
+
+        /** 완독 축하 템플릿의 templateSetCode(콘솔 발급). 비어 있으면 발송하지 않는다. */
+        private String finishTemplateCode;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getFinishTemplateCode() {
+            return finishTemplateCode;
+        }
+
+        public void setFinishTemplateCode(String finishTemplateCode) {
+            this.finishTemplateCode = finishTemplateCode;
+        }
+    }
+
     public String getApiBaseUrl() {
         return apiBaseUrl;
     }

@@ -28,6 +28,7 @@ public class BookService {
     private final CoupangDeeplinkClient coupangDeeplinkClient;
     private final Yes24LinkBuilder yes24LinkBuilder;
     private final KyoboLinkBuilder kyoboLinkBuilder;
+    private final FinishCelebrationService finishCelebrationService;
     private final Clock clock;
 
     public BookService(BookRepository bookRepository, BookSearchClient searchClient,
@@ -37,6 +38,7 @@ public class BookService {
                        CoupangDeeplinkClient coupangDeeplinkClient,
                        Yes24LinkBuilder yes24LinkBuilder,
                        KyoboLinkBuilder kyoboLinkBuilder,
+                       FinishCelebrationService finishCelebrationService,
                        Clock clock) {
         this.bookRepository = bookRepository;
         this.searchClient = searchClient;
@@ -46,6 +48,7 @@ public class BookService {
         this.coupangDeeplinkClient = coupangDeeplinkClient;
         this.yes24LinkBuilder = yes24LinkBuilder;
         this.kyoboLinkBuilder = kyoboLinkBuilder;
+        this.finishCelebrationService = finishCelebrationService;
         this.clock = clock;
     }
 
@@ -160,10 +163,21 @@ public class BookService {
         return bookRepository.findByIdAndUser(bookId, user);
     }
 
+    /**
+     * 내 책의 읽기 상태를 바꾼다. <b>완독으로 전환되는 순간</b>에만 축하 푸시를 띄운다 —
+     * 기준은 {@code finishedAt} 유무가 아니라 <b>전이</b>다(FINISHED→FINISHED 재저장은 no-op이지만
+     * 이미 완독인 책을 다시 저장할 때 축하가 또 나가면 안 된다). 등록-시-완독({@link #stampIfFinished})은
+     * 제외 — 과거에 읽은 책을 아카이빙할 때 푸시가 쏟아지는 것을 막는다.
+     */
     public Book changeStatus(User user, Long bookId, BookStatus status) {
         Book book = ownedBook(user, bookId);
+        boolean becameFinished = book.getStatus() != BookStatus.FINISHED && status == BookStatus.FINISHED;
         book.changeStatus(status, clock.instant());
-        return bookRepository.save(book);
+        Book saved = bookRepository.save(book);
+        if (becameFinished) {
+            finishCelebrationService.celebrate(user, saved); // 절대 던지지 않는다 — 완독 처리를 막지 않게
+        }
+        return saved;
     }
 
     /**
