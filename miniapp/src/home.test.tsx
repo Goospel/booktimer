@@ -22,8 +22,8 @@ import {
   todayProgress,
   waiverErrorMessage,
 } from './screens/Home';
-import { graph, stubLocalStorage, userAgent } from './test-fixtures';
-import { coverColor } from './ui';
+import { day, graph, stubLocalStorage, userAgent } from './test-fixtures';
+import { LEVEL_COLORS, coverColor } from './ui';
 import { REWARD_AD_GROUP_ID, notificationAgreementSupported, requestNotificationAgreement, watchRewardAd } from './toss';
 
 /**
@@ -148,6 +148,29 @@ describe('홈 렌더 배선', () => {
   it('진행률 게이지가 브랜드 세이지로 찬다 — 다른 초록이 섞이면 화면에 색이 둘이 된다', () => {
     expect(renderHome()).toContain('#6E8A6A');
     expect(renderHome()).not.toContain('#2F8F6B');
+  });
+});
+
+/**
+ * 잔디 미리보기 방향 — 서버는 **weeks[0]이 최신 주**가 되도록 열을 뒤집어 보낸다
+ * (`ContributionGraphBuilder.build`). oldest-first로 착각해 뒤에서 자르면 미리보기가 1년 전
+ * 빈 구간만 보여준다 — 실기기에서 기록이 있는데도 홈 잔디가 늘 빈 칸이었다.
+ */
+describe('잔디 미리보기 방향', () => {
+  const week = (level: number) => Array.from({ length: 7 }, () => day(level));
+  // 미리보기 15주보다 길어야 어느 쪽을 잘랐는지가 드러난다 — 최신 주만 초록, 나머지 과거는 전부 0.
+  const directional: DashboardResponse['graph'] = {
+    ...graph,
+    weeks: [week(4), ...Array.from({ length: 15 }, () => week(0))],
+  };
+  const CELL = 'width:100%;aspect-ratio:1 / 1;border-radius:2px'; // 잔디 칸 서명(ui.test와 같은 값)
+
+  it('최신 주(weeks[0])를 보여준다 — 뒤에서 자르면 가장 옛날 15주가 잡혀 늘 빈 칸이었다', () => {
+    expect(renderHome({ graph: directional })).toContain(`${CELL};background:${LEVEL_COLORS[4]}`);
+  });
+
+  it('15주까지만 자른다 — 카드 폭이 정해진 자리라 주 수가 늘면 칸이 무한히 작아진다', () => {
+    expect(renderHome({ graph: directional }).split(CELL).length - 1).toBe(15 * 7);
   });
 });
 

@@ -1,4 +1,5 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
@@ -55,5 +56,10 @@ describe('기록 화면', () => {
 
   it('수동 기록(테두리 칸) 설명도 함께 둔다 — 범례 없이는 테두리가 오류처럼 보인다', () => {
     expect(markup).toContain('직접 채움');
+  });
+
+  it('가로 스크롤을 손대지 않는다 — weeks[0]이 최신이라 초기 위치(왼쪽 끝)가 이미 오늘이다', () => {
+    // 마운트 이펙트는 정적 렌더에 안 잡히니 소스로 계측한다. 오른쪽 끝으로 밀면 1년 전 빈 잔디가 뜬다.
+    expect(readFileSync(new URL('./screens/History.tsx', import.meta.url), 'utf8')).not.toContain('scrollLeft');
   });
 });

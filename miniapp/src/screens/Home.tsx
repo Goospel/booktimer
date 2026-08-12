@@ -646,7 +646,8 @@ function GrassPreview({
           기록 보기 ›
         </Text>
       </div>
-      <GrassGrid weeks={graph.weeks.slice(-PREVIEW_WEEKS)} fill />
+      {/* 앞에서 자른다 — 서버가 weeks[0]을 최신 주로 뒤집어 준다(api.ts `weeks` 주석). */}
+      <GrassGrid weeks={graph.weeks.slice(0, PREVIEW_WEEKS)} fill />
     </button>
   );
 }

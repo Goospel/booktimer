@@ -1,5 +1,4 @@
 import { Text } from '@toss/tds-mobile';
-import { useEffect, useRef } from 'react';
 
 import type { ContributionGraph } from '../api';
 import { formatDuration } from '../format';
@@ -15,14 +14,7 @@ const CELL_SIZE = 11;
  * <p>탭 재편(PR-5) 전까지 있던 "돌아가기" 버튼은 탭 전환이 대신하므로 없앴다.
  */
 export function History({ graph }: { graph: ContributionGraph }) {
-  const scroller = useRef<HTMLDivElement>(null);
-
-  // 오늘이 맨 오른쪽 열이다 — 왼쪽(1년 전)에서 시작하면 오늘을 보려고 매번 끝까지 스와이프해야 했다.
-  useEffect(() => {
-    const el = scroller.current;
-    if (el !== null) el.scrollLeft = el.scrollWidth;
-  }, [graph]);
-
+  // 스크롤 위치는 손대지 않는다 — weeks[0]이 최신 주라 초기 위치(왼쪽 끝)가 이미 오늘이다(api.ts `weeks`).
   const months = monthLabelPositions(graph.monthLabels, CELL_SIZE);
 
   return (
@@ -37,7 +29,7 @@ export function History({ graph }: { graph: ContributionGraph }) {
         {graph.growthStageEmoji} {graph.growthStageLabel}
       </Text>
 
-      <div className="no-scrollbar" ref={scroller} style={{ overflowX: 'auto', paddingBottom: 8 }}>
+      <div className="no-scrollbar" style={{ overflowX: 'auto', paddingBottom: 8 }}>
         {/* 라벨은 격자 폭 안에서 절대 배치된다 — inline-block이라 이 상자가 격자만큼만 넓어진다. */}
         <div style={{ position: 'relative', display: 'inline-block', paddingTop: 16 }}>
           <div aria-hidden="true" style={{ position: 'absolute', top: 0, left: 0, height: 14 }}>
