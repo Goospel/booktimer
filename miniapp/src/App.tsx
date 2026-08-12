@@ -203,6 +203,7 @@ export function MainTabs({
             onTimerChange={onTimerChange}
             onGraphChange={onGraphChange}
             onGoHistory={() => onTabChange('history')}
+            onGoLibrary={() => onTabChange('library')}
             onGoGoal={onGoGoal}
             onError={onError}
           />

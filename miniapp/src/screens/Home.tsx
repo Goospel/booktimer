@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 
 import type { BookOption, DashboardResponse, QuoteDto, TimerState, WaiveResponse } from '../api';
 import { ApiError, startSession, stopSession, tagBook, waiveDebt } from '../api';
-import { elapsedSeconds, formatDuration } from '../format';
+import { elapsedSeconds, formatClock, formatDuration } from '../format';
 import {
   GOAL_MET_TEMPLATE_CODE,
   REWARD_AD_GROUP_ID,
@@ -20,6 +20,12 @@ const PREVIEW_WEEKS = 15;
 const AGREEMENT_KEY = 'booktimer.notificationAgreement';
 
 /**
+ * 진행바 색 — `global.css`가 TDS `--adaptiveBlue500`을 이 세이지로 재테마한다. TDS ProgressBar는
+ * 색을 prop으로만 받아 CSS 변수가 안 닿으므로 값을 직접 준다(다른 초록을 쓰면 화면에 초록이 둘이 된다).
+ */
+const SAGE = '#6E8A6A';
+
+/**
  * 처음 골라 둘 책 — 최근 읽은 책(=이어 읽기)이 읽는 중 목록에 있으면 그 책, 아니면 첫 책, 없으면 `null`.
  *
  * <p>웹 `BookPickForm`의 `defaultBook`과 같은 규칙이다. `recentBookId`가 목록 밖일 수 있는 건 그 책을
@@ -27,6 +33,47 @@ const AGREEMENT_KEY = 'booktimer.notificationAgreement';
  */
 export function defaultBookId(readingBooks: BookOption[], recentBookId: number | null): number | null {
   return readingBooks.find((b) => b.id === recentBookId)?.id ?? readingBooks[0]?.id ?? null;
+}
+
+/**
+ * 히어로 파생값 — 웹 `frontend/src/dashboard/timerProgress.ts`의 `computeProgress`를 옮겼다.
+ *
+ * <p>웹은 UX 리뷰로 "오늘 남은 시간" 카운트다운을 **"오늘 읽은 시간" 카운트업**으로 뒤집었다(성취를
+ * 세지, 빚을 세지 않는다). 남은 시간은 보조 메타로 강등된다. 미니앱도 같은 프레이밍을 쓴다.
+ *
+ * <p>서버는 스냅샷만 주므로 측정 중 라이브 값은 `remainingSeconds - elapsed`로 만든다 — 기존 elapsed
+ * 인터벌이 그대로 카운트업의 동력이 되어 tick을 따로 두지 않는다. `carryover`면 밀린 시간은 오늘 몫이
+ * 아니라 바닥(floor)이라 빼고 센다(그래야 어제 빚이 오늘 성취를 갉아먹지 않는다).
+ *
+ * <p>목표 미설정(0)이면 나눌 게 없어 `progress`는 `null`(게이지를 안 그린다)이고 달성이라 우기지도
+ * 않는다 — 웹은 이 경우를 100% 달성으로 치지만, 미니앱은 목표 설정으로 유도하는 자리라 그대로 둔다.
+ */
+export function todayProgress(
+  timer: Pick<TimerState, 'remainingSeconds' | 'carriedDebtSeconds' | 'todayGoalSeconds' | 'carryover'>,
+  elapsed: number,
+): { todayRead: number; remainingToGoal: number; overflow: number; progress: number | null; achieved: boolean } {
+  const { carriedDebtSeconds: floor, todayGoalSeconds: goal, carryover } = timer;
+  const remainingNow = timer.remainingSeconds - elapsed;
+  const todayDebt = carryover ? remainingNow - floor : remainingNow;
+  // 스냅샷이 어긋나도 음수 시간이 화면에 뜨지 않게 바닥을 친다(표시용 값이라 여기서 자른다).
+  const todayRead = Math.max(0, goal - todayDebt);
+  return {
+    todayRead,
+    remainingToGoal: Math.max(0, todayDebt),
+    overflow: Math.max(0, todayRead - goal),
+    progress: goal > 0 ? Math.min(1, todayRead / goal) : null,
+    achieved: goal > 0 && todayDebt <= 0,
+  };
+}
+
+/**
+ * 용서 문구가 말하는 밀린 분 — 웹 `TimerCard.forgiveMinutes`와 같은 규칙(항상 분, 최소 1분).
+ *
+ * <p>`formatDuration`을 쓰면 1분 미만 부채가 "45초"로 나와 뒤에 붙는 조사가 "45초은"으로 깨진다.
+ * 분으로 고정하면 조사가 언제나 "분은"이라 문장이 성립한다.
+ */
+export function forgiveMinutes(debtSeconds: number): number {
+  return Math.max(1, Math.round(debtSeconds / 60));
 }
 
 /**
@@ -139,6 +186,7 @@ export function Home({
   onTimerChange,
   onGraphChange,
   onGoHistory,
+  onGoLibrary,
   onGoGoal,
   onError,
 }: {
@@ -146,6 +194,7 @@ export function Home({
   onTimerChange: (timer: TimerState) => void;
   onGraphChange: (graph: DashboardResponse['graph']) => void;
   onGoHistory: () => void;
+  onGoLibrary: () => void;
   onGoGoal: () => void;
   onError: (error: Error) => void;
 }) {
@@ -223,14 +272,13 @@ export function Home({
       .finally(() => setBusy(false));
   };
 
-  const remaining = dashboard.remainingSeconds;
   const goal = dashboard.todayGoalSeconds;
-  // 목표 미설정(0)이면 나눌 게 없다 — 게이지를 아예 안 그리고 목표 설정으로 유도한다.
-  const progress = goal > 0 ? Math.min(1, Math.max(0, (goal - remaining) / goal)) : null;
   const elapsed =
     dashboard.hasActiveSession && dashboard.activeStartedAt !== null
       ? elapsedSeconds(dashboard.activeStartedAt, now)
       : 0;
+  // 측정 중이면 elapsed가 매초 늘어 todayRead도 매초 늘어난다 — 카운트업의 동력이 이 한 줄이다.
+  const { todayRead, remainingToGoal, overflow, progress, achieved } = todayProgress(dashboard, elapsed);
   const quotes = dashboard.quotes ?? [];
   // 칩에 띄울 책 — 시작 버튼도 이 값을 그대로 쓴다(칩과 시작 대상이 어긋날 자리를 없앤다).
   const selectedBook = dashboard.readingBooks.find((b) => b.id === selectedBookId) ?? null;
@@ -245,28 +293,30 @@ export function Home({
           textAlign: 'center',
         }}
       >
-        {/* 라벨과 값은 각자 블록이어야 세로로 쌓인다 — 같은 줄에 붙으면 "오늘 남은 시간15분"으로 읽힌다. */}
+        {/* 라벨과 값은 각자 블록이어야 세로로 쌓인다 — 같은 줄에 붙으면 "오늘 읽은 시간45:00"으로 읽힌다. */}
         <div>
           <Text typography="st11" color="grey600">
-            {remaining > 0 ? '오늘 남은 시간' : '오늘 목표를 채웠어요'}
+            {achieved ? '🌿 오늘 목표 달성' : '오늘 읽은 시간'}
           </Text>
         </div>
         <div style={{ marginTop: 6 }}>
           <Text typography="t2" fontWeight="bold">
-            {remaining > 0 ? formatDuration(remaining) : `+${formatDuration(-remaining)}`}
+            {formatClock(todayRead)}
           </Text>
         </div>
         {progress !== null && (
           <div style={{ marginTop: 16 }}>
-            <ProgressBar progress={progress} size="normal" color="#2F8F6B" />
+            <ProgressBar progress={progress} size="normal" color={SAGE} />
             <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
-              오늘 목표 {formatDuration(goal)} 중 {Math.round(progress * 100)}%
+              오늘 목표 {formatDuration(goal)} ·{' '}
+              {achieved ? `달성${overflow > 0 ? ` +${formatDuration(overflow)}` : ''}` : `목표까지 ${formatClock(remainingToGoal)}`}
             </Text>
           </div>
         )}
+        {/* 빚을 위협이 아니라 "괜찮다"로 말한다 — 웹 대시보드 TimerCard의 용서 문구와 같은 말. */}
         {dashboard.carriedDebtSeconds > 0 && (
           <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
-            어제까지 밀린 시간 {formatDuration(dashboard.carriedDebtSeconds)} 포함
+            밀린 {forgiveMinutes(dashboard.carriedDebtSeconds)}분은 최근 7일이 지나면 자동으로 사라져요 — 뒤처져도 괜찮아요.
           </Text>
         )}
         {/* 광고는 죄책감이 뜬 이 자리에만 나타난다. 문구에 "광고"를 명시해 광고 위장 금지 조항을 지킨다. */}
@@ -334,6 +384,18 @@ export function Home({
               />
             </div>
           )}
+        </section>
+      )}
+
+      {/* 책이 없으면 칩 자리가 통째로 비어 막다른 길이었다 — 여기서 서재로 건네준다(측정 자체는 책 없이도 된다). */}
+      {!dashboard.hasActiveSession && selectedBook === null && (
+        <section style={sectionStyle}>
+          <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
+            아직 책이 없어요. 읽고 있는 책을 추가하면 측정할 때 고를 수 있어요.
+          </Text>
+          <Button display="block" variant="weak" size="medium" disabled={busy} onClick={onGoLibrary}>
+            첫 책 추가하기
+          </Button>
         </section>
       )}
 

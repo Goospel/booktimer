@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { elapsedSeconds, formatDuration } from './format';
+import { elapsedSeconds, formatClock, formatDuration } from './format';
 
 describe('formatDuration', () => {
   it('시·분을 함께 쓰되 0분이면 시간만 쓴다', () => {
@@ -16,6 +16,24 @@ describe('formatDuration', () => {
 
   it('음수(밀린 시간)는 절댓값으로 표시한다 — 부호는 호출부 문구가 맡는다', () => {
     expect(formatDuration(-4800)).toBe('1시간 20분');
+  });
+});
+
+describe('formatClock', () => {
+  it('MM:SS로 센다 — 매초 자리가 바뀌어야 카운트업이 움직여 보인다', () => {
+    expect(formatClock(0)).toBe('00:00');
+    expect(formatClock(65)).toBe('01:05');
+    expect(formatClock(3599)).toBe('59:59');
+  });
+
+  it('1시간부터는 HH:MM:SS로 넘어간다', () => {
+    expect(formatClock(3600)).toBe('01:00:00');
+    expect(formatClock(4805)).toBe('01:20:05');
+  });
+
+  it('음수·NaN은 00:00 — 계산이 어긋나도 화면에 "-1:-5"가 뜨지 않는다', () => {
+    expect(formatClock(-30)).toBe('00:00');
+    expect(formatClock(NaN)).toBe('00:00');
   });
 });
 

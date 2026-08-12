@@ -10,8 +10,10 @@ import {
   askNotificationAgreement,
   claimDebtWaiver,
   defaultBookId,
+  forgiveMinutes,
   shouldShowNotificationCard,
   showWaiverButton,
+  todayProgress,
   waiverErrorMessage,
 } from './screens/Home';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
@@ -81,6 +83,7 @@ function renderHome(overrides: Partial<DashboardResponse> = {}) {
         onTimerChange={() => {}}
         onGraphChange={() => {}}
         onGoHistory={() => {}}
+        onGoLibrary={() => {}}
         onGoGoal={() => {}}
         onError={() => {}}
       />
@@ -132,9 +135,154 @@ describe('홈 렌더 배선', () => {
     expect(renderHome()).toContain('광고');
   });
 
-  it('진행률 게이지가 웹 달성색(--ok)으로 찬다 — 세이지와 변별되는 초록', () => {
-    expect(renderHome()).toContain('#2F8F6B');
-    expect(renderHome()).not.toContain('#4caf50');
+  it('진행률 게이지가 브랜드 세이지로 찬다 — 다른 초록이 섞이면 화면에 색이 둘이 된다', () => {
+    expect(renderHome()).toContain('#6E8A6A');
+    expect(renderHome()).not.toContain('#2F8F6B');
+  });
+});
+
+/**
+ * 히어로 파생값 — 웹 대시보드가 UX 리뷰로 뒤집은 **카운트업 프레이밍**을 그대로 옮겼다
+ * (`frontend/src/dashboard/timerProgress.ts`의 `computeProgress`). 대형 숫자는 "오늘 남은 시간"이
+ * 아니라 **오늘 읽은 시간**이고, 남은 시간은 보조 메타로 강등된다.
+ *
+ * <p>서버는 스냅샷만 주므로 측정 중 라이브 값은 `remainingSeconds - elapsed`로 만든다 —
+ * 그래서 별도 tick 없이 기존 elapsed 인터벌만으로 읽은 시간이 매초 늘어난다.
+ */
+describe('오늘 읽은 시간 (todayProgress)', () => {
+  const timer = { remainingSeconds: 3600, carriedDebtSeconds: 0, todayGoalSeconds: 3600, carryover: false };
+
+  it('아직 0초 읽었으면 0 — 진행바도 0이고 목표까지는 목표 전부다', () => {
+    expect(todayProgress(timer, 0)).toEqual({
+      todayRead: 0,
+      remainingToGoal: 3600,
+      overflow: 0,
+      progress: 0,
+      achieved: false,
+    });
+  });
+
+  it('1초 남았으면 아직 달성이 아니다 — 경계에서 축하가 먼저 뜨면 거짓말이 된다', () => {
+    const result = todayProgress({ ...timer, remainingSeconds: 1 }, 0);
+
+    expect(result.todayRead).toBe(3599);
+    expect(result.remainingToGoal).toBe(1);
+    expect(result.achieved).toBe(false);
+  });
+
+  it('딱 0이 되는 순간 달성 — 초과분은 아직 0이다', () => {
+    expect(todayProgress({ ...timer, remainingSeconds: 0 }, 0)).toEqual({
+      todayRead: 3600,
+      remainingToGoal: 0,
+      overflow: 0,
+      progress: 1,
+      achieved: true,
+    });
+  });
+
+  it('목표를 넘겨도 계속 센다 — 초과분이 따로 잡히고 진행바는 1에서 멈춘다', () => {
+    expect(todayProgress({ ...timer, remainingSeconds: -600 }, 0)).toEqual({
+      todayRead: 4200,
+      remainingToGoal: 0,
+      overflow: 600,
+      progress: 1,
+      achieved: true,
+    });
+  });
+
+  it('측정 중이면 경과한 만큼 더 읽은 것으로 센다 — 매초 tick이 그대로 카운트업이 된다', () => {
+    const before = todayProgress({ ...timer, remainingSeconds: 900 }, 300);
+    const oneSecondLater = todayProgress({ ...timer, remainingSeconds: 900 }, 301);
+
+    expect(before.todayRead).toBe(3000); // 목표 3600 − (남은 900 − 경과 300)
+    expect(oneSecondLater.todayRead).toBe(3001);
+    expect(before.remainingToGoal).toBe(600);
+  });
+
+  it('이월 모드면 밀린 시간은 오늘 몫에서 뺀다 — 어제 빚이 오늘 성취를 갉아먹지 않는다', () => {
+    const carried = { remainingSeconds: 5400, carriedDebtSeconds: 1800, todayGoalSeconds: 3600, carryover: true };
+
+    expect(todayProgress(carried, 0).todayRead).toBe(0); // 남은 5400 − 밀린 1800 = 오늘 몫 3600
+    expect(todayProgress({ ...carried, remainingSeconds: 4200 }, 0).todayRead).toBe(1200);
+  });
+
+  it('읽은 시간은 음수로 내려가지 않는다 — 서버 스냅샷이 어긋나도 "-30분"이 뜨지 않는다', () => {
+    expect(todayProgress({ ...timer, remainingSeconds: 7200 }, 0).todayRead).toBe(0);
+  });
+
+  it('목표 미설정(0)이면 진행바가 없다 — 나눌 게 없고 달성이라 우길 수도 없다', () => {
+    const result = todayProgress({ ...timer, todayGoalSeconds: 0, remainingSeconds: 0 }, 120);
+
+    expect(result.progress).toBeNull();
+    expect(result.achieved).toBe(false);
+    expect(result.todayRead).toBe(120); // 목표가 없어도 측정한 만큼은 센다
+  });
+});
+
+/** 히어로 문구 — 프레이밍이 뒤집혔는지는 결국 화면에 뜬 말이 정한다. */
+describe('히어로 프레이밍 (렌더)', () => {
+  it('대형 숫자를 "오늘 읽은 시간"으로 세운다 — 남은 시간 카운트다운은 사라진다', () => {
+    const markup = renderHome({ remainingSeconds: 900, todayGoalSeconds: 3600 });
+
+    expect(markup).toContain('오늘 읽은 시간');
+    expect(markup).not.toContain('오늘 남은 시간');
+    expect(markup).toContain('45:00'); // 3600 − 900
+  });
+
+  it('남은 시간은 목표와 함께 보조 메타로 내려간다', () => {
+    const markup = renderHome({ remainingSeconds: 900, todayGoalSeconds: 3600 });
+
+    expect(markup).toContain('오늘 목표 1시간');
+    expect(markup).toContain('목표까지 15:00');
+  });
+
+  it('달성하면 축하와 초과분을 보여준다 — 목표를 넘겨도 계속 센다', () => {
+    // 알림 동의 카드 문구에도 "목표 달성"이 들어 있어 그것만으로는 판별이 안 된다 — 히어로 문구로 좁힌다.
+    const markup = renderHome({ remainingSeconds: -600, todayGoalSeconds: 3600 });
+
+    expect(markup).toContain('오늘 목표 달성');
+    expect(markup).toContain('+10분');
+    expect(markup).not.toContain('목표까지');
+  });
+
+  it('밀린 시간이 있으면 7일 자동 용서를 안내한다 — 빚을 위협이 아니라 "괜찮다"로 말한다', () => {
+    expect(renderHome({ carriedDebtSeconds: 1800 })).toContain('밀린 30분은 최근 7일이 지나면 자동으로 사라져요');
+  });
+
+  it('1분 미만 부채도 "1분"으로 말한다 — "45초은"처럼 조사가 깨지지 않게 분으로 고정한다', () => {
+    expect(forgiveMinutes(45)).toBe(1);
+    expect(forgiveMinutes(1800)).toBe(30);
+    expect(renderHome({ carriedDebtSeconds: 45 })).toContain('밀린 1분은');
+  });
+
+  it('밀린 시간이 없으면 용서 문구도 없다 — 없는 빚을 상기시키지 않는다', () => {
+    expect(renderHome({ carriedDebtSeconds: 0 })).not.toContain('자동으로 사라져요');
+  });
+});
+
+describe('책 0권 빈 상태', () => {
+  it('책이 없으면 안내와 서재 진입 버튼을 그린다 — 칩 자리가 통째로 비어 막다른 길이었다', () => {
+    const markup = renderHome({ readingBooks: [] });
+
+    expect(markup).toContain('아직 책이 없어요');
+    expect(labelsOf(markup)).toContain('첫 책 추가하기');
+  });
+
+  it('책이 있으면 빈 상태를 그리지 않는다', () => {
+    const markup = renderHome({ readingBooks: [{ id: 1, title: '데미안' }] });
+
+    expect(markup).not.toContain('아직 책이 없어요');
+    expect(labelsOf(markup)).not.toContain('첫 책 추가하기');
+  });
+
+  it('측정 중이면 빈 상태도 사라진다 — 이미 시작한 사람에게 책 추가를 조르지 않는다', () => {
+    const markup = renderHome({
+      readingBooks: [],
+      hasActiveSession: true,
+      activeStartedAt: '2026-08-11T09:00:00',
+    });
+
+    expect(markup).not.toContain('아직 책이 없어요');
   });
 });
 

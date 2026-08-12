@@ -104,6 +104,7 @@ function home(overrides: Partial<DashboardResponse>) {
         onTimerChange={() => {}}
         onGraphChange={() => {}}
         onGoHistory={() => {}}
+        onGoLibrary={() => {}}
         onGoGoal={() => {}}
         onError={() => {}}
       />
@@ -112,18 +113,22 @@ function home(overrides: Partial<DashboardResponse>) {
 }
 
 describe('홈 오늘 진행률', () => {
-  it('목표의 남은 시간만큼을 진행률로 환산한다', () => {
-    expect(home({ todayGoalSeconds: 3600, remainingSeconds: 900 })).toMatch(/중 75%/);
+  it('오늘 읽은 만큼 차오른다 — 게이지도 카운트업과 같은 방향을 본다', () => {
+    // 목표 1시간에 15분이 남았으면 45분을 읽은 것 = 75%. TDS ProgressBar는 이 값을 aria-valuetext로 적는다.
+    expect(home({ todayGoalSeconds: 3600, remainingSeconds: 900 })).toContain('aria-valuetext="75%"');
   });
 
-  it('목표를 초과해도 100%를 넘기지 않는다 — 남은 시간이 음수인 날', () => {
-    expect(home({ todayGoalSeconds: 3600, remainingSeconds: -600 })).toMatch(/중 100%/);
+  it('목표를 초과해도 게이지는 가득 찬 채로 멈춘다 — TDS는 100%를 안 잘라 준다(실측: 116%가 그대로 샌다)', () => {
+    const markup = home({ todayGoalSeconds: 3600, remainingSeconds: -600 });
+
+    expect(markup).toContain('오늘 목표 달성');
+    expect(markup).toContain('aria-valuetext="100%"');
   });
 
   it('목표가 0이면 게이지를 그리지 않는다 — 0으로 나누면 NaN·Infinity가 새어나온다', () => {
     const markup = home({ todayGoalSeconds: 0, remainingSeconds: 0 });
 
-    expect(markup).not.toMatch(/중 \d+%/); // 게이지 라벨("오늘 목표 … 중 n%")이 아예 없어야 한다
+    expect(markup).not.toContain('오늘 목표'); // 게이지 라벨("오늘 목표 … · 목표까지 …")이 아예 없어야 한다
     expect(markup).not.toMatch(/NaN|Infinity/);
   });
 
@@ -132,9 +137,9 @@ describe('홈 오늘 진행률', () => {
     expect(home({ quotes: [{ text: '책은 도끼다', author: '카프카' }] })).toContain('카프카');
   });
 
-  it('게이지 라벨과 값을 각자 다른 블록에 둔다 — "오늘 남은 시간15분"으로 붙어 보였다', () => {
+  it('게이지 라벨과 값을 각자 다른 블록에 둔다 — "오늘 읽은 시간45:00"으로 붙어 보였다', () => {
     const markup = home({ remainingSeconds: 900 });
-    const between = markup.slice(markup.indexOf('오늘 남은 시간') + 8, markup.indexOf('15분'));
+    const between = markup.slice(markup.indexOf('오늘 읽은 시간') + 8, markup.indexOf('45:00'));
 
     expect(between).toContain('</div>');
   });
