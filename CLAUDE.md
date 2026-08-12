@@ -417,3 +417,14 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
 - toolchain: Java 21 (로컬에 없어도 foojay-resolver 가 자동 다운로드 — 노트 N-002)
 - **프론트 번들 (정원 편집)**: `npm --prefix frontend run build` — `src/main/resources/static/garden/garden.js` 재생성. 정원 관련 TS 수정 후 `bootRun` 전에 반드시 재실행 (T-063). 산출물은 git add·commit까지 해야 반영.
   **(훅 `require-bundle-build.ps1`이 하드 강제 — `frontend/**` 스테이징 커밋 전 재빌드·diff 검사. 10섬 전수 커버(CI의 garden-only 사각 보완). 우회: `SKIP_BUNDLE_CHECK` 토큰.)**
+
+### 미니앱 에뮬레이터 개발 루프 (2026-08-12)
+
+미니앱 화면 작업 시 **에뮬레이터는 Claude가 직접 띄운다 — 사용자에게 명령어를 요구하지 않는다**(사용자 지정).
+
+1. `powershell -File .claude/scripts/miniapp-emulator.ps1` — 에뮬레이터 부팅 + 샌드박스 앱 설치 + `adb reverse`까지 멱등 처리(이미 떠 있으면 건너뜀).
+2. `npm --prefix miniapp run dev` — 이 스크립트가 하지 않는다. Claude가 **백그라운드**로 띄워 HMR 로그를 본다.
+3. 사용자 GUI 조작은 **최초 1회**뿐(자동화 불가): 샌드박스 앱에서 토스 비즈니스 계정 로그인 → booktimer 선택 → 스킴 `intoss://booktimer`.
+
+⚠️ vite dev는 **5174**인데 샌드박스 앱은 **5173**을 본다 — `adb reverse tcp:5173 tcp:5174` 매핑이 그래서 필요하다.
+⚠️ 부팅이 5분+ 걸리면 Quick Boot 스냅샷 꼬임(T-151) — 프로세스 강제 종료 후 `-ColdBoot`로 재시도. 스크립트가 타임아웃 시 이 안내를 직접 출력한다.
