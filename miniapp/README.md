@@ -26,13 +26,24 @@
 ```bash
 npm install
 cp .env.example .env.local     # VITE_API_BASE_URL — 개발은 로컬 백엔드(:8080), 운영은 https://booktimer.app
-npm run dev                    # http://localhost:5174
+npm run dev                    # http://localhost:5174 — 실서버(:8080 또는 운영)에 붙는다
+npm run dev:mock               # 목 모드: 서버·토스 SDK 없이 브라우저에서 전 화면 + HMR
 npm test                       # vitest — API 클라이언트 분기 로직
 npm run build                  # tsc -b && vite build → dist/
 ```
 
-서버는 별도로 `./gradlew bootRun`으로 띄운다. 브라우저에서 열면 토스 SDK(`TossAuth.login`)가 없어
-로그인 단계에서 멈춘다 — **로그인 이후 화면의 실검증은 토스 샌드박스 실기기가 필요하다.**
+`npm run dev`는 서버를 별도로(`./gradlew bootRun`) 띄워야 하고, 브라우저에서는 토스 SDK(`TossAuth.login`)가
+없어 로그인 단계에서 멈춘다.
+
+**화면 작업은 `npm run dev:mock`으로 한다** — `.env.mock`의 `VITE_DEV_MOCK=1`이 켜지면 `api.ts`가 서버 대신
+`src/dev-mock.ts`의 픽스처를 돌려주고 토큰을 더미로 둬, 로그인을 건너뛰고 홈·서재(검색·추가)·소셜(검색·팔로우·
+책방)·스토리(피드·작성·뷰어)·기록·목표가 브라우저에서 바로 뜬다. 픽스처 수정은 그 파일 한 곳이고, 상태는 모듈
+메모리라 새로고침이 초기화다. 목에 없는 경로는 404로 던진다(빠진 목을 조용히 넘기지 않는다).
+목 코드는 `import.meta.env.DEV` 게이트 + dynamic import로 프로드 번들에서 잘리고, `deploy.sh`가 `__DEV_MOCK__`
+부재를 배포 전에 재확인한다.
+
+> ⚠️ **실검증(실로그인·리워드 광고·알림 동의 등 SDK 연동)은 목 모드로 대체되지 않는다** — 아래 `deploy.sh` +
+> 실기기가 유일한 경로다. 샌드박스 앱의 dev(핫 리로드) 연결은 granite(RN) 전용이라 웹 미니앱엔 없다(T-152).
 
 ## 배포 (앱인토스 CLI — 우리 CI에 얹지 않는다)
 

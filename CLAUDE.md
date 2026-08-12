@@ -418,13 +418,12 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
 - **프론트 번들 (정원 편집)**: `npm --prefix frontend run build` — `src/main/resources/static/garden/garden.js` 재생성. 정원 관련 TS 수정 후 `bootRun` 전에 반드시 재실행 (T-063). 산출물은 git add·commit까지 해야 반영.
   **(훅 `require-bundle-build.ps1`이 하드 강제 — `frontend/**` 스테이징 커밋 전 재빌드·diff 검사. 10섬 전수 커버(CI의 garden-only 사각 보완). 우회: `SKIP_BUNDLE_CHECK` 토큰.)**
 
-### 미니앱 에뮬레이터 개발 루프 (2026-08-12)
+### 미니앱 개발 루프 — 기본은 브라우저 목 모드 (2026-08-12 실측 갱신)
 
-미니앱 화면 작업 시 **에뮬레이터는 Claude가 직접 띄운다 — 사용자에게 명령어를 요구하지 않는다**(사용자 지정).
+미니앱 화면 작업 시 **Claude가 직접 `npm --prefix miniapp run dev:mock`을 백그라운드로 띄워 브라우저(vite HMR)로 확인한다** — 사용자에게 명령어를 요구하지 않는다(사용자 지정). 목 모드는 `api.ts`가 서버 대신 `src/dev-mock.ts`의 픽스처를 돌려주고 토큰을 더미로 두므로, 서버·토스 SDK·에뮬레이터 없이 홈·서재·소셜·스토리·기록·목표가 전부 뜬다. 목에 없는 경로는 404로 던져 조용히 빈 화면이 되지 않는다.
 
-1. `powershell -File .claude/scripts/miniapp-emulator.ps1` — 에뮬레이터 부팅 + 샌드박스 앱 설치 + `adb reverse`까지 멱등 처리(이미 떠 있으면 건너뜀).
-2. `npm --prefix miniapp run dev` — 이 스크립트가 하지 않는다. Claude가 **백그라운드**로 띄워 HMR 로그를 본다.
-3. 사용자 GUI 조작은 **최초 1회**뿐(자동화 불가): 샌드박스 앱에서 토스 비즈니스 계정 로그인 → booktimer 선택 → 스킴 `intoss://booktimer`.
+- 픽스처를 고치려면 `miniapp/src/dev-mock.ts` 한 곳(모듈 메모리 상태라 새로고침이 초기화다).
+- 목 코드는 프로드 번들에서 통째로 잘린다(`import.meta.env.DEV` 게이트 + dynamic import). `deploy.sh`가 `__DEV_MOCK__` 부재를 배포 전에 재확인한다.
+- **실기기·SDK 연동(실로그인·광고·알림 동의)만** `bash miniapp/deploy.sh --expect "<이번 변경 문구>"` + 실기기다 — 목 모드로는 원리상 확인되지 않는다.
 
-⚠️ vite dev는 **5174**인데 샌드박스 앱은 **5173**을 본다 — `adb reverse tcp:5173 tcp:5174` 매핑이 그래서 필요하다.
-⚠️ 부팅이 5분+ 걸리면 Quick Boot 스냅샷 꼬임(T-151) — 프로세스 강제 종료 후 `-ColdBoot`로 재시도. 스크립트가 타임아웃 시 이 안내를 직접 출력한다.
+⚠️ **샌드박스 앱의 dev(핫 리로드) 연결은 웹 미니앱에서 불가능하다** — 샌드박스의 dev 프로토콜은 granite(RN) 전용이고 `@apps-in-toss/web-framework`엔 dev 서버·vite 플러그인 자체가 없다(2026-08-12 실측, T-152). 그래서 `.claude/scripts/miniapp-emulator.ps1`은 **개발 루프의 기본 경로가 아니다** — 향후 지원 대비 + 샌드박스 앱 설치·`adb reverse` 자동화용으로 보존한다(사용법은 스크립트 헤더 주석). 부팅이 5분+ 걸리면 Quick Boot 스냅샷 꼬임(T-151) — `-ColdBoot`로 재시도.
