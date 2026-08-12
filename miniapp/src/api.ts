@@ -35,6 +35,18 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * 요청이 서버에 닿지도 못함 — 비행기모드·터널·서버 다운. `fetch`가 던지는 건 영문 `TypeError`
+ * ("Failed to fetch")라, 화면들이 `e.message`를 그대로 띄우는 계약상 그게 사용자에게 노출됐다.
+ * 이름을 따로 둬 401(`UnauthorizedError`) 재로그인 분기와 섞이지 않게 한다.
+ */
+export class NetworkError extends Error {
+  constructor() {
+    super('네트워크 연결을 확인해 주세요');
+    this.name = 'NetworkError';
+  }
+}
+
 /** 호출 옵션 — 셋 다 선택. method 생략 시 body 유무로 GET/POST를 정한다(기존 호출부 계약). */
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'DELETE';
@@ -56,11 +68,17 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   }
   const search = params.toString();
 
-  const response = await fetch(`${BASE_URL}${path}${search === '' ? '' : `?${search}`}`, {
-    method: options.method ?? (body === undefined ? 'GET' : 'POST'),
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  // 연결 실패는 여기서만 잡는다 — 응답을 받은 뒤의 실패(상태코드)는 아래 계약이 그대로 처리한다.
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}${path}${search === '' ? '' : `?${search}`}`, {
+      method: options.method ?? (body === undefined ? 'GET' : 'POST'),
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    throw new NetworkError();
+  }
 
   if (response.status === 401) {
     token.clear();

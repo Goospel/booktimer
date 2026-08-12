@@ -13,6 +13,27 @@ const SECTIONS: { status: BookStatus; title: string }[] = [
   { status: 'WANT_TO_READ', title: '읽고 싶어요' },
 ];
 
+/**
+ * 펼쳐진 행 하나 — 열림과 삭제 확인이 **한 덩어리**다.
+ *
+ * <p>확인을 행 안의 독립 state로 두면 열림과 수명이 어긋난다: 확인을 띄운 채 다른 행이나 액션을
+ * 건드려도 그 확인이 살아남아, 그 행을 다시 열었을 때 「정말 삭제」가 곧바로 노출됐다(오삭제가 한 탭 거리).
+ * 같은 객체에 묶어 두면 행을 여는 순간 확인이 언제나 `false`로 새로 만들어져 그 자리가 사라진다.
+ */
+export interface OpenRow {
+  id: number;
+  confirmDelete: boolean;
+}
+
+/**
+ * 행을 눌렀을 때의 다음 열림 상태 — 같은 행이면 접고, 아니면 그 행을 편다.
+ * 어느 쪽이든 **삭제 확인은 풀린 채로 시작한다**(위 불변식). 하니스가 정적 렌더라 클릭을 못 잡으므로
+ * 이 전이만 따로 꺼내 계측한다(`App.tabChangeHandler`와 같은 방식).
+ */
+export function toggleOpen(open: OpenRow | null, id: number): OpenRow | null {
+  return open?.id === id ? null : { id, confirmDelete: false };
+}
+
 /** 책 한 권에 걸 수 있는 액션 — 상태 변경·공개 토글·삭제. 실행은 Library가 맡고 Shelf는 알림만 한다. */
 export type BookAction =
   | { kind: 'status'; book: MyBookSummary; status: BookStatus }
@@ -29,7 +50,7 @@ export function Library({ onError }: { onError: (error: Error) => void }) {
   const [books, setBooks] = useState<MyBookSummary[] | null>(null);
   const [searchEnabled, setSearchEnabled] = useState(false);
   const [mode, setMode] = useState<'shelf' | 'search'>('shelf');
-  const [openId, setOpenId] = useState<number | null>(null);
+  const [open, setOpen] = useState<OpenRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -59,7 +80,7 @@ export function Library({ onError }: { onError: (error: Error) => void }) {
     setError(null);
     action
       .then(() => {
-        setOpenId(null);
+        setOpen(null);
         load();
       })
       .catch(fail)
@@ -101,7 +122,7 @@ export function Library({ onError }: { onError: (error: Error) => void }) {
       {books === null ? (
         error === null && <Loading />
       ) : (
-        <Shelf books={books} busy={busy} openId={openId} onOpen={setOpenId} onAction={act} />
+        <Shelf books={books} busy={busy} open={open} onOpen={setOpen} onAction={act} />
       )}
     </Screen>
   );
@@ -111,14 +132,14 @@ export function Library({ onError }: { onError: (error: Error) => void }) {
 export function Shelf({
   books,
   busy,
-  openId,
+  open,
   onOpen,
   onAction,
 }: {
   books: MyBookSummary[];
   busy: boolean;
-  openId: number | null;
-  onOpen: (id: number | null) => void;
+  open: OpenRow | null;
+  onOpen: (row: OpenRow | null) => void;
   onAction: (action: BookAction) => void;
 }) {
   if (books.length === 0) {
@@ -144,8 +165,10 @@ export function Shelf({
                 key={book.id}
                 book={book}
                 busy={busy}
-                open={openId === book.id}
-                onToggle={() => onOpen(openId === book.id ? null : book.id)}
+                open={open?.id === book.id}
+                confirmDelete={open?.id === book.id && open.confirmDelete}
+                onToggle={() => onOpen(toggleOpen(open, book.id))}
+                onConfirmDelete={(confirm) => onOpen({ id: book.id, confirmDelete: confirm })}
                 onAction={onAction}
               />
             ))}
@@ -161,17 +184,19 @@ function BookRow({
   book,
   busy,
   open,
+  confirmDelete,
   onToggle,
+  onConfirmDelete,
   onAction,
 }: {
   book: MyBookSummary;
   busy: boolean;
   open: boolean;
+  confirmDelete: boolean;
   onToggle: () => void;
+  onConfirmDelete: (confirm: boolean) => void;
   onAction: (action: BookAction) => void;
 }) {
-  const [confirmDelete, setConfirmDelete] = useState(false);
-
   return (
     <div style={{ marginBottom: 8, borderRadius: 12, background: 'var(--adaptiveGrey100, #FCFAF5)' }}>
       <button type="button" onClick={onToggle} style={rowStyle}>
@@ -216,12 +241,12 @@ function BookRow({
               >
                 정말 삭제
               </Button>
-              <Button variant="weak" size="small" disabled={busy} onClick={() => setConfirmDelete(false)}>
+              <Button variant="weak" size="small" disabled={busy} onClick={() => onConfirmDelete(false)}>
                 취소
               </Button>
             </>
           ) : (
-            <Button variant="weak" size="small" disabled={busy} onClick={() => setConfirmDelete(true)}>
+            <Button variant="weak" size="small" disabled={busy} onClick={() => onConfirmDelete(true)}>
               삭제
             </Button>
           )}

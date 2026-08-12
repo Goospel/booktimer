@@ -235,7 +235,8 @@ export function StoryCardView({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 10,
+        // 플로팅 탭바(App.BottomTabBar, zIndex 100)보다 위 — 낮으면 전체화면 뷰어 위로 탭바가 뚫고 올라온다.
+        zIndex: 200,
         display: 'flex',
         flexDirection: 'column',
         padding: '24px 20px',
