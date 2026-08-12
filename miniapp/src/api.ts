@@ -9,9 +9,19 @@ import { tossLogin } from './toss';
 const BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080';
 const TOKEN_KEY = 'booktimer.token';
 
+/**
+ * 브라우저 dev 목 모드 — `npm run dev:mock`(`.env.mock`의 `VITE_DEV_MOCK=1`)에서만 켜진다.
+ *
+ * <p>`import.meta.env.DEV`가 프로드 빌드에서 리터럴 `false`로 치환되므로 이 플래그를 쓰는 분기와
+ * 그 안의 dynamic import가 통째로 잘려 나간다 — 목 픽스처는 배포 번들에 실리지 않는다.
+ * 검증은 `deploy.sh`의 `__DEV_MOCK__` 부재 검사(음성 체크)가 맡는다.
+ */
+const DEV_MOCK = import.meta.env.DEV && import.meta.env.VITE_DEV_MOCK === '1';
+
 /** 토큰 보관 — WebView의 localStorage. 401을 만나면 폐기하고 재로그인한다. */
 export const token = {
-  get: (): string | null => localStorage.getItem(TOKEN_KEY),
+  // 목 모드는 더미 토큰이 항상 있는 것으로 둔다 — 토스 SDK 없는 브라우저에서 로그인 브릿지를 건너뛴다.
+  get: (): string | null => (DEV_MOCK ? 'dev-mock-token' : localStorage.getItem(TOKEN_KEY)),
   set: (value: string): void => localStorage.setItem(TOKEN_KEY, value),
   clear: (): void => localStorage.removeItem(TOKEN_KEY),
 };
@@ -55,6 +65,9 @@ export interface RequestOptions {
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  // 목 모드에서는 서버에 나가지 않는다 — dynamic import라 프로드 번들엔 이 모듈이 들어가지 않는다.
+  if (DEV_MOCK) return (await import('./dev-mock')).mockRequest<T>(path, options);
+
   const { body, query } = options;
   const saved = token.get();
   const headers: Record<string, string> = {};

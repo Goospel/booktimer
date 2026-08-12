@@ -1005,6 +1005,9 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
   계정 연결·타이머 홈·기록·목표) 구현. `src/api.ts`가 서버 계약 단일 창구(Bearer 헤더·401 재로그인·`registered:false`
   분기). 배포는 앱인토스 CLI(`ait build`/`ait deploy` — 우리 CI 밖, 커맨드는 `miniapp/README.md`).
   ⚠️ **실기기 검증은 PR-0 완료가 전제** — 샌드박스 없이는 `TossAuth.login()` 이후 화면을 확인할 수 없다.
+  (2026-08-13 보정: **화면/UI 확인은** `npm --prefix miniapp run dev:mock`으로 브라우저에서 된다 — 목이 서버·SDK를
+  대신한다. 실기기가 필요한 건 **SDK 연동 자체**(실로그인·광고·알림 동의)로 좁혀졌다. 샌드박스 핫 리로드는 웹
+  미니앱에서 원리상 불가 — T-152.)
 - **PR-0 잔여 전부 완료** ✅ (2026-08-10) — 사업자·정산 승인, 토스 로그인 검토 통과, WebView 오리진 실측
   (`https://booktimer.private-web.tossmini.com` → SSM `MINIAPP_ALLOWED_ORIGINS` 배선 #708), Bearer LazyInit 500
   수정(#709, T-142). **실기기 1사이클(로그인→계정연결→대시보드) 통과.**
