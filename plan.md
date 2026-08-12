@@ -1110,7 +1110,16 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
   알약(`border-radius:28px` + 그림자, 하단 `calc(12px + safe-area)`)으로 스타일만 교체하고 `TABS`·`role=tablist`·
   접근성 계약은 불변. 홈 인디케이터 회피는 `padding-bottom`이 아니라 띄운 높이가 맡는다(둘 다 두면 safe-area 이중
   가산). 서버 무접점 — 미니앱 파일 2개.
-  🔜 **재심사 대기**: 머지 후 `npm run build` → `ait deploy` → 재심사 신청.
+  🔜 **재심사 대기**: 머지 후 `bash miniapp/deploy.sh --expect "토스로 시작하기" --expect "borderRadius:28"` → 재심사 신청.
+
+- **배포 검증 게이트 `deploy.sh`** ✅ (2026-08-12) — 위 반려 대응 배포가 **스테일 번들로 나가 동일 사유 재반려**된 뒤
+  만든 하드픽스. `npm run build`가 완료 로그 없이 조용히 끝나도 exit 0이라 체인이 계속됐고, `dist/`에 남은 직전 릴리스
+  산출물이 그대로 패키징·업로드됐다 — 배포 전 확인이 운영 env 값만 봤는데 **그 값은 직전 번들에도 있어 신·구를 구별하지
+  못했다**(T-150). 이제 배포 표준 경로는 `miniapp/deploy.sh` 하나다: 클린 빌드(`rm -rf dist`) → dist 검증(참조 js 실존 ·
+  `booktimer.app` 있음 · `localhost:8080` 없음 · 각 `--expect` 마커 포함) → `ait build` → **.ait 속 js가 dist의 js와
+  바이트 동일**(패키징 스테일 차단) → 배포 → deploymentId. 어느 검증이든 실패하면 배포 전에 exit 1.
+  원칙 두 가지: **빌드 성공은 exit code가 아니라 산출물 내용으로 판정**하고, **마커는 직전 번들과 구별되는 것**이어야 한다.
+  게이트 자체는 `miniapp/tests/test-deploy-gate.sh`(npm/npx 스텁 · 6케이스 19단언 · 돌연변이 6종 사살)가 지킨다.
 
 **⏸ v2 이후로 미룬 것**: 연결 해제 UX(문의 처리) · 역방향 연결(토스에서 시작한 유저의 웹 로그인 수단 — login_id·비밀번호가
 없어 범위가 큼, 우회로는 "웹에서 가입 후 연결") · 슬라이딩 토큰 연장 · 통계·책BTI 결과 뷰 · 서재 마을(Phaser 성능·TDS
