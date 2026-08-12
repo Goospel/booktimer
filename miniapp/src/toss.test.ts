@@ -1,7 +1,7 @@
 import { Notification, loadFullScreenAd, showFullScreenAd } from '@apps-in-toss/web-framework';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { requestNotificationAgreement, watchRewardAd } from './toss';
+import { notificationAgreementSupported, requestNotificationAgreement, watchRewardAd } from './toss';
 
 /**
  * 리워드 광고 래퍼 — SDK 이벤트 시퀀스를 "보상을 받았나"라는 boolean 하나로 접는다.
@@ -184,5 +184,21 @@ describe('requestNotificationAgreement', () => {
 
     await expect(requestNotificationAgreement('t')).resolves.toBeNull();
     expect(supportedMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('notificationAgreementSupported — 브라우저(SDK 부재) 가드', () => {
+  /**
+   * 실물 `isSupported()`는 `window.__appsInTossConstants[...]`를 읽는다 — 토스앱 **밖**(브라우저 dev 목
+   * 모드)에는 그 주입 상수가 없어 TypeError다. `window`는 있으니 기존 `typeof window` 가드로는 안 막힌다.
+   * 홈이 **렌더 중에**(`useState(notificationAgreementSupported)`) 이걸 부르므로, 던지면 미니앱 화면이
+   * 통째로 하얘진다 = 브라우저 확인 루프가 첫 화면부터 죽는다.
+   */
+  it('SDK 주입 상수가 없어 던져도 미지원으로 접는다 — 렌더가 죽지 않게', () => {
+    supportedMock.mockImplementation(() => {
+      throw new TypeError("Cannot read properties of undefined (reading 'isNotificationRequestAgreementSupported')");
+    });
+
+    expect(notificationAgreementSupported()).toBe(false);
   });
 });

@@ -21,9 +21,18 @@ export type AgreementResult = 'newAgreement' | 'alreadyAgreed' | 'agreementRejec
  *
  * <p>`window` 확인이 앞에 있는 이유: SDK가 앱 버전을 `window`에서 읽어 브라우저 밖(테스트의 정적 렌더)에선
  * 던진다. 홈이 렌더 중에 이걸 부르므로, 없으면 "미지원"으로 접어 화면이 통째로 깨지지 않게 한다.
+ *
+ * <p>`try`가 필요한 이유는 한 겹 더 있다: 실물 `isSupported()`는 호스트가 주입하는
+ * `window.__appsInTossConstants`를 읽는데, **일반 브라우저에는 `window`는 있고 그 상수만 없다**(dev 목
+ * 모드가 정확히 이 상황) — `typeof window` 가드를 통과한 뒤 TypeError로 렌더가 죽는다. 미지원으로 접는다.
  */
 export function notificationAgreementSupported(): boolean {
-  return typeof window !== 'undefined' && Notification.requestAgreement.isSupported();
+  if (typeof window === 'undefined') return false;
+  try {
+    return Notification.requestAgreement.isSupported();
+  } catch {
+    return false;
+  }
 }
 
 /**

@@ -34,6 +34,9 @@ case "${MODE:-ok}" in
   # localhost 케이스는 **다른 검사는 전부 통과**해야 한다 — 안 그러면 booktimer.app 부재로 먼저 죽어
   # "localhost를 잡았다"가 아니라 "다른 이유로 죽었다"를 재는 공허한 테스트가 된다.
   localhost) printf '%s\n' 'var API="http://localhost:8080";/*booktimer.app 토스로 시작하기 borderRadius:28*/' > "$JS" ;;
+  # 브라우저 dev 목 코드가 프로드 번들에 섞인 경우 — localhost 케이스와 같은 이유로 **다른 검사는 전부
+  # 통과**해야 한다(안 그러면 "목 코드를 잡았다"가 아니라 "다른 이유로 죽었다"를 재는 공허한 테스트다).
+  dev-mock-leak) printf '%s\n' 'var API="https://booktimer.app";/*토스로 시작하기 borderRadius:28 __DEV_MOCK__ 목에 없는 경로*/' > "$JS" ;;
   *)         printf '%s\n' 'var API="https://booktimer.app";/*토스로 시작하기 borderRadius:28*/' > "$JS" ;;
 esac
 if [ "${MODE:-ok}" = missing-js ]; then rm -f "$JS"; fi
@@ -156,6 +159,14 @@ r="$(run silent-noop --expect "$MARKER")"; rc="${r%%$'\n'*}"; out="${r#*$'\n'}"
 assert_exit "빌드 무성 미완료 + 옛 dist 잔존 → 차단" "$rc" "1"
 assert_not_deployed "  스테일 번들이 배포되지 않는다"
 assert_has "  산출물이 없음을 알린다" "$out" "dist/index.html"
+
+# ── Case 7: 브라우저 dev 목 코드가 번들에 섞였다 → 차단 ──
+# 목(`src/dev-mock.ts`)은 dynamic import + DEV 게이트로 잘려 나가는 게 계약인데, 정적 import 한 줄이면
+# 조용히 실린다(단위테스트는 소스 형태만 보므로 산출물은 여기서만 잡힌다).
+r="$(run dev-mock-leak --expect "$MARKER")"; rc="${r%%$'\n'*}"; out="${r#*$'\n'}"
+assert_exit "dev 목 코드 잔존 → 차단" "$rc" "1"
+assert_not_deployed "  배포 전에 멈춘다"
+assert_has "  무엇이 남았는지 알린다" "$out" "__DEV_MOCK__"
 
 echo
 if [ "$FAILED" = 0 ]; then echo "ALL PASS"; else echo "SOME FAILED"; fi
