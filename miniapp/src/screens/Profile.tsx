@@ -47,11 +47,14 @@ export function Profile({
     [onError],
   );
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError(null); // 재시도가 성공했는데 지난 실패 문구가 남지 않게
     fetchProfile(loginId).then(setProfile).catch(fail);
     // 헤더와 책 목록을 따로 받는다 — 태그 드릴다운이 책 목록만 갈아끼우므로 목록의 출처를 하나로 둔다.
     fetchProfileBooks(loginId).then((page) => setBooks(page.books)).catch(fail);
   }, [loginId, fail]);
+
+  useEffect(load, [load]);
 
   const run = (action: Promise<unknown>, after: () => void) => {
     setBusy(true);
@@ -87,7 +90,8 @@ export function Profile({
   if (profile === null) {
     return (
       <Screen title="책방">
-        <ErrorMessage message={error} />
+        {/* 못 받았을 때 나갈 길만 있으면 실패가 곧 막다른 길이다 — 그 자리에서 다시 받을 길도 함께 준다. */}
+        <ErrorMessage message={error} onRetry={load} />
         {error === null ? (
           <Loading />
         ) : (

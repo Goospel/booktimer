@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { DashboardResponse } from './api';
 import { History } from './screens/History';
 import { Home } from './screens/Home';
-import { COVER_PALETTE, GrassGrid, coverColor, coverSource, initialOf } from './ui';
+import { COVER_PALETTE, ErrorMessage, GrassGrid, coverColor, coverSource, initialOf } from './ui';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
 // 홈이 렌더 중에 알림 동의 캐시를 읽는다. 여기선 describe 본문에서도 홈을 그리므로(수집 시점) 모듈 최상단에서 심는다.
@@ -314,5 +314,38 @@ describe('표지 출처 결정', () => {
 
   it('다른 책이 실패한 것은 이 책에 옮지 않는다 — 목록 재사용으로 실패가 번지면 멀쩡한 표지가 사라진다', () => {
     expect(coverSource('https://img/a.jpg', 'https://img/b.jpg')).toBe('https://img/a.jpg');
+  });
+});
+
+/**
+ * 실패 안내 — 초기 로드가 실패하면 빨간 글자만 남아 **막다른 길**이 됐다(다시 시도하려면 미니앱을 껐다 켜야 했다).
+ * 재시도가 필요한 화면만 `onRetry`를 건네고, 액션 실패처럼 되돌릴 게 없는 자리는 문구만 그대로 둔다.
+ */
+describe('실패 안내', () => {
+  const errorBox = (message: string | null, onRetry?: () => void) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <ErrorMessage message={message} onRetry={onRetry} />
+      </TDSMobileProvider>,
+    );
+
+  it('실패하면 그 자리에서 다시 받을 길을 준다', () => {
+    const markup = errorBox('네트워크 연결을 확인해 주세요', () => {});
+
+    expect(markup).toContain('네트워크 연결을 확인해 주세요');
+    expect(markup).toContain('다시 시도');
+    expect(markup).toContain('<button');
+  });
+
+  it('재시도할 게 없으면 문구만 — 아무 데도 안 가는 버튼을 내놓지 않는다', () => {
+    const markup = errorBox('스토리를 너무 자주 올렸어요.');
+
+    expect(markup).toContain('스토리를 너무 자주 올렸어요.');
+    expect(markup).not.toContain('다시 시도');
+  });
+
+  it('실패가 없으면 아무것도 그리지 않는다', () => {
+    // 프로바이더는 전역 스타일을 뱉으므로 이 단언만 맨몸으로 그린다.
+    expect(renderToStaticMarkup(<ErrorMessage message={null} onRetry={() => {}} />)).toBe('');
   });
 });

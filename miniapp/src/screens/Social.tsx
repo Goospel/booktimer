@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import type { AuthorStories, FollowListType, StoryFeedResponse, UserRow } from '../api';
 import { fetchBlocks, fetchFollowList, fetchStoryFeed, searchUsers, unblockUser } from '../api';
+import { useBackClose } from '../back';
 import { ErrorMessage, Loading, Screen, sectionStyle } from '../ui';
 import { Profile } from './Profile';
 import { StoryComposer, StoryStrip, StoryViewer } from './Story';
@@ -36,6 +37,7 @@ export function Social({ myLoginId, onError }: { myLoginId: string | null; onErr
   );
 
   const load = useCallback(() => {
+    setError(null); // 다시 받는 김에 지난 실패 문구도 지운다 — 안 그러면 재시도가 성공해도 빨간 줄이 남는다
     fetchFollowList(listType)
       .then((page) => setUsers(page.users))
       .catch(fail);
@@ -49,6 +51,14 @@ export function Social({ myLoginId, onError }: { myLoginId: string | null; onErr
   useEffect(() => {
     if (open === null) load();
   }, [open, load]);
+
+  /*
+   * 하드웨어 뒤로가기 — 열린 서브뷰를 하나씩 닫는다(중첩이면 최상단만). 이게 없으면 스토리 뷰어에서
+   * 누른 back이 미니앱 자체를 종료시킨다. 스토리 뷰어·작성기의 열림 상태가 여기 있으므로 배선도 여기서 한다.
+   */
+  useBackClose(composing, () => setComposing(false));
+  useBackClose(viewing !== null, () => setViewing(null));
+  useBackClose(open !== null, () => setOpen(null));
 
   if (composing) {
     return (
@@ -135,7 +145,8 @@ export function Social({ myLoginId, onError }: { myLoginId: string | null; onErr
         )}
       </div>
 
-      <ErrorMessage message={error} />
+      {/* 목록·피드를 아예 못 받았으면 그 자리에서 다시 받는다 — 검색·차단해제 실패는 되받을 게 없다. */}
+      <ErrorMessage message={error} onRetry={users === null || feed === null ? load : undefined} />
 
       {results !== null ? (
         <div style={{ marginTop: 20 }}>

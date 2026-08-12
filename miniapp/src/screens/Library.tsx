@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import type { BookStatus, MyBookSummary, SearchRow } from '../api';
 import { addBook, changeBookStatus, deleteBook, fetchShelf, searchBooks, setBookVisibility } from '../api';
+import { useBackClose } from '../back';
 import { formatDuration } from '../format';
 import { BookCover, ErrorMessage, Loading, Screen } from '../ui';
 
@@ -64,6 +65,7 @@ export function Library({ onError }: { onError: (error: Error) => void }) {
   );
 
   const load = useCallback(() => {
+    setError(null); // 다시 받는 김에 지난 실패 문구도 지운다 — 안 그러면 재시도가 성공해도 빨간 줄이 남는다
     fetchShelf()
       .then((shelf) => {
         setBooks(shelf.books);
@@ -73,6 +75,9 @@ export function Library({ onError }: { onError: (error: Error) => void }) {
   }, [fail]);
 
   useEffect(load, [load]);
+
+  // 검색은 서재를 덮는 별도 화면이다 — 뒤로가기를 「돌아가기」와 같은 자리로 돌린다.
+  useBackClose(mode === 'search', () => setMode('shelf'));
 
   /** 뮤테이션 공통 — 실행 → 책장 재조회 → 열린 액션 접기. */
   const run = (action: Promise<unknown>) => {
@@ -118,7 +123,8 @@ export function Library({ onError }: { onError: (error: Error) => void }) {
           책 추가하기
         </Button>
       )}
-      <ErrorMessage message={error} />
+      {/* 책장을 아예 못 받았을 때만 재시도 — 액션 실패(삭제 거절 등)는 다시 받을 게 아니라 문구만 남긴다. */}
+      <ErrorMessage message={error} onRetry={books === null ? load : undefined} />
       {books === null ? (
         error === null && <Loading />
       ) : (

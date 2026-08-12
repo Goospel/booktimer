@@ -1,4 +1,4 @@
-import { Text } from '@toss/tds-mobile';
+import { Button, Text } from '@toss/tds-mobile';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -176,13 +176,25 @@ export function Screen({ title, children }: { title: string; children: ReactNode
   );
 }
 
-/** 서버가 준 실패 메시지를 그대로 보여준다(연결 코드 오류·409 등은 문구 자체가 안내다). */
-export function ErrorMessage({ message }: { message: string | null }) {
+/**
+ * 서버가 준 실패 메시지를 그대로 보여준다(연결 코드 오류·409 등은 문구 자체가 안내다).
+ *
+ * <p>`onRetry`를 주면 그 자리에서 다시 받을 수 있다 — 초기 로드가 실패하면 빨간 글자만 남아
+ * 미니앱을 껐다 켜야 하는 막다른 길이었다. 되돌릴 게 없는 실패(액션 거절 등)엔 주지 않는다.
+ */
+export function ErrorMessage({ message, onRetry }: { message: string | null; onRetry?: () => void }) {
   if (message === null) return null;
   return (
-    <Text typography="st11" color="red500" style={{ display: 'block', marginTop: 12 }}>
-      {message}
-    </Text>
+    <>
+      <Text typography="st11" color="red500" style={{ display: 'block', marginTop: 12 }}>
+        {message}
+      </Text>
+      {onRetry !== undefined && (
+        <Button size="small" variant="weak" style={{ marginTop: 12 }} onClick={onRetry}>
+          다시 시도
+        </Button>
+      )}
+    </>
   );
 }
 
