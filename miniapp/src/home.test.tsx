@@ -3,15 +3,23 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DashboardResponse } from './api';
-import { ApiError, waiveDebt } from './api';
+import { TAB_BAR_Z_INDEX } from './App';
+import { ApiError, logout, waiveDebt } from './api';
 import {
-  BookList,
+  AccountSection,
+  BookSheet,
   Home,
+  SHEET_COPY,
   askNotificationAgreement,
   claimDebtWaiver,
   defaultBookId,
+  forgiveMinutes,
+  logoutAndLeave,
+  openSheetMode,
+  pickHandler,
   shouldShowNotificationCard,
   showWaiverButton,
+  todayProgress,
   waiverErrorMessage,
 } from './screens/Home';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
@@ -29,6 +37,7 @@ import { REWARD_AD_GROUP_ID, notificationAgreementSupported, requestNotification
 
 vi.mock('./api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api')>()),
+  logout: vi.fn(),
   waiveDebt: vi.fn(),
 }));
 vi.mock('./toss', () => ({
@@ -39,6 +48,7 @@ vi.mock('./toss', () => ({
   requestNotificationAgreement: vi.fn(),
 }));
 
+const logoutMock = vi.mocked(logout);
 const waiveDebtMock = vi.mocked(waiveDebt);
 const watchRewardAdMock = vi.mocked(watchRewardAd);
 const supportedMock = vi.mocked(notificationAgreementSupported);
@@ -81,7 +91,9 @@ function renderHome(overrides: Partial<DashboardResponse> = {}) {
         onTimerChange={() => {}}
         onGraphChange={() => {}}
         onGoHistory={() => {}}
+        onGoLibrary={() => {}}
         onGoGoal={() => {}}
+        onLogout={() => {}}
         onError={() => {}}
       />
     </TDSMobileProvider>,
@@ -89,6 +101,7 @@ function renderHome(overrides: Partial<DashboardResponse> = {}) {
 }
 
 beforeEach(() => {
+  logoutMock.mockReset();
   waiveDebtMock.mockReset();
   watchRewardAdMock.mockReset();
   supportedMock.mockReset();
@@ -132,9 +145,154 @@ describe('홈 렌더 배선', () => {
     expect(renderHome()).toContain('광고');
   });
 
-  it('진행률 게이지가 웹 달성색(--ok)으로 찬다 — 세이지와 변별되는 초록', () => {
-    expect(renderHome()).toContain('#2F8F6B');
-    expect(renderHome()).not.toContain('#4caf50');
+  it('진행률 게이지가 브랜드 세이지로 찬다 — 다른 초록이 섞이면 화면에 색이 둘이 된다', () => {
+    expect(renderHome()).toContain('#6E8A6A');
+    expect(renderHome()).not.toContain('#2F8F6B');
+  });
+});
+
+/**
+ * 히어로 파생값 — 웹 대시보드가 UX 리뷰로 뒤집은 **카운트업 프레이밍**을 그대로 옮겼다
+ * (`frontend/src/dashboard/timerProgress.ts`의 `computeProgress`). 대형 숫자는 "오늘 남은 시간"이
+ * 아니라 **오늘 읽은 시간**이고, 남은 시간은 보조 메타로 강등된다.
+ *
+ * <p>서버는 스냅샷만 주므로 측정 중 라이브 값은 `remainingSeconds - elapsed`로 만든다 —
+ * 그래서 별도 tick 없이 기존 elapsed 인터벌만으로 읽은 시간이 매초 늘어난다.
+ */
+describe('오늘 읽은 시간 (todayProgress)', () => {
+  const timer = { remainingSeconds: 3600, carriedDebtSeconds: 0, todayGoalSeconds: 3600, carryover: false };
+
+  it('아직 0초 읽었으면 0 — 진행바도 0이고 목표까지는 목표 전부다', () => {
+    expect(todayProgress(timer, 0)).toEqual({
+      todayRead: 0,
+      remainingToGoal: 3600,
+      overflow: 0,
+      progress: 0,
+      achieved: false,
+    });
+  });
+
+  it('1초 남았으면 아직 달성이 아니다 — 경계에서 축하가 먼저 뜨면 거짓말이 된다', () => {
+    const result = todayProgress({ ...timer, remainingSeconds: 1 }, 0);
+
+    expect(result.todayRead).toBe(3599);
+    expect(result.remainingToGoal).toBe(1);
+    expect(result.achieved).toBe(false);
+  });
+
+  it('딱 0이 되는 순간 달성 — 초과분은 아직 0이다', () => {
+    expect(todayProgress({ ...timer, remainingSeconds: 0 }, 0)).toEqual({
+      todayRead: 3600,
+      remainingToGoal: 0,
+      overflow: 0,
+      progress: 1,
+      achieved: true,
+    });
+  });
+
+  it('목표를 넘겨도 계속 센다 — 초과분이 따로 잡히고 진행바는 1에서 멈춘다', () => {
+    expect(todayProgress({ ...timer, remainingSeconds: -600 }, 0)).toEqual({
+      todayRead: 4200,
+      remainingToGoal: 0,
+      overflow: 600,
+      progress: 1,
+      achieved: true,
+    });
+  });
+
+  it('측정 중이면 경과한 만큼 더 읽은 것으로 센다 — 매초 tick이 그대로 카운트업이 된다', () => {
+    const before = todayProgress({ ...timer, remainingSeconds: 900 }, 300);
+    const oneSecondLater = todayProgress({ ...timer, remainingSeconds: 900 }, 301);
+
+    expect(before.todayRead).toBe(3000); // 목표 3600 − (남은 900 − 경과 300)
+    expect(oneSecondLater.todayRead).toBe(3001);
+    expect(before.remainingToGoal).toBe(600);
+  });
+
+  it('이월 모드면 밀린 시간은 오늘 몫에서 뺀다 — 어제 빚이 오늘 성취를 갉아먹지 않는다', () => {
+    const carried = { remainingSeconds: 5400, carriedDebtSeconds: 1800, todayGoalSeconds: 3600, carryover: true };
+
+    expect(todayProgress(carried, 0).todayRead).toBe(0); // 남은 5400 − 밀린 1800 = 오늘 몫 3600
+    expect(todayProgress({ ...carried, remainingSeconds: 4200 }, 0).todayRead).toBe(1200);
+  });
+
+  it('읽은 시간은 음수로 내려가지 않는다 — 서버 스냅샷이 어긋나도 "-30분"이 뜨지 않는다', () => {
+    expect(todayProgress({ ...timer, remainingSeconds: 7200 }, 0).todayRead).toBe(0);
+  });
+
+  it('목표 미설정(0)이면 진행바가 없다 — 나눌 게 없고 달성이라 우길 수도 없다', () => {
+    const result = todayProgress({ ...timer, todayGoalSeconds: 0, remainingSeconds: 0 }, 120);
+
+    expect(result.progress).toBeNull();
+    expect(result.achieved).toBe(false);
+    expect(result.todayRead).toBe(120); // 목표가 없어도 측정한 만큼은 센다
+  });
+});
+
+/** 히어로 문구 — 프레이밍이 뒤집혔는지는 결국 화면에 뜬 말이 정한다. */
+describe('히어로 프레이밍 (렌더)', () => {
+  it('대형 숫자를 "오늘 읽은 시간"으로 세운다 — 남은 시간 카운트다운은 사라진다', () => {
+    const markup = renderHome({ remainingSeconds: 900, todayGoalSeconds: 3600 });
+
+    expect(markup).toContain('오늘 읽은 시간');
+    expect(markup).not.toContain('오늘 남은 시간');
+    expect(markup).toContain('45:00'); // 3600 − 900
+  });
+
+  it('남은 시간은 목표와 함께 보조 메타로 내려간다', () => {
+    const markup = renderHome({ remainingSeconds: 900, todayGoalSeconds: 3600 });
+
+    expect(markup).toContain('오늘 목표 1시간');
+    expect(markup).toContain('목표까지 15:00');
+  });
+
+  it('달성하면 축하와 초과분을 보여준다 — 목표를 넘겨도 계속 센다', () => {
+    // 알림 동의 카드 문구에도 "목표 달성"이 들어 있어 그것만으로는 판별이 안 된다 — 히어로 문구로 좁힌다.
+    const markup = renderHome({ remainingSeconds: -600, todayGoalSeconds: 3600 });
+
+    expect(markup).toContain('오늘 목표 달성');
+    expect(markup).toContain('+10분');
+    expect(markup).not.toContain('목표까지');
+  });
+
+  it('밀린 시간이 있으면 7일 자동 용서를 안내한다 — 빚을 위협이 아니라 "괜찮다"로 말한다', () => {
+    expect(renderHome({ carriedDebtSeconds: 1800 })).toContain('밀린 30분은 최근 7일이 지나면 자동으로 사라져요');
+  });
+
+  it('1분 미만 부채도 "1분"으로 말한다 — "45초은"처럼 조사가 깨지지 않게 분으로 고정한다', () => {
+    expect(forgiveMinutes(45)).toBe(1);
+    expect(forgiveMinutes(1800)).toBe(30);
+    expect(renderHome({ carriedDebtSeconds: 45 })).toContain('밀린 1분은');
+  });
+
+  it('밀린 시간이 없으면 용서 문구도 없다 — 없는 빚을 상기시키지 않는다', () => {
+    expect(renderHome({ carriedDebtSeconds: 0 })).not.toContain('자동으로 사라져요');
+  });
+});
+
+describe('책 0권 빈 상태', () => {
+  it('책이 없으면 안내와 서재 진입 버튼을 그린다 — 칩 자리가 통째로 비어 막다른 길이었다', () => {
+    const markup = renderHome({ readingBooks: [] });
+
+    expect(markup).toContain('아직 책이 없어요');
+    expect(labelsOf(markup)).toContain('첫 책 추가하기');
+  });
+
+  it('책이 있으면 빈 상태를 그리지 않는다', () => {
+    const markup = renderHome({ readingBooks: [{ id: 1, title: '데미안' }] });
+
+    expect(markup).not.toContain('아직 책이 없어요');
+    expect(labelsOf(markup)).not.toContain('첫 책 추가하기');
+  });
+
+  it('측정 중이면 빈 상태도 사라진다 — 이미 시작한 사람에게 책 추가를 조르지 않는다', () => {
+    const markup = renderHome({
+      readingBooks: [],
+      hasActiveSession: true,
+      activeStartedAt: '2026-08-11T09:00:00',
+    });
+
+    expect(markup).not.toContain('아직 책이 없어요');
   });
 });
 
@@ -255,15 +413,15 @@ describe('지급 흐름 (claimDebtWaiver)', () => {
 });
 
 /**
- * 책 고르기 — 웹 `BookPickForm`의 의미론을 옮겼다. 홈엔 **고른 책 칩 하나**만 두고(목록 상시 노출 아님),
- * 「바꾸기」로 그 아래 목록을 펴서 바꾼다. 시작은 아래 주 버튼이 맡는다.
+ * 책 고르기 — 웹 `BookPickSheet`의 의미론을 옮겼다. 홈엔 **고른 책 칩 하나**만 두고(목록 상시 노출 아님),
+ * 「바꾸기」로 **바텀시트**를 연다. 같은 시트가 종료 후 태깅(`tag`)도 겸한다. 시작은 아래 주 버튼이 맡는다.
  *
- * <p>계측은 세 겹이다: ① 기본값은 순수 함수 {@link defaultBookId} ② **접힌 상태**는 홈 마크업
- * (칩의 책만 보이고 나머지 책 제목은 아예 없다) ③ **편 목록**은 하니스로 「바꾸기」를 누를 수 없으니
- * {@link BookList}를 직접 렌더해서.
+ * <p>계측은 네 겹이다: ① 기본값은 순수 함수 {@link defaultBookId} ② 열림 가드는 {@link openSheetMode}
+ * ③ 고른 책의 행선지는 {@link pickHandler} ④ **접힌 상태**는 홈 마크업, **열린 시트**는 하니스로
+ * 「바꾸기」를 누를 수 없으니 {@link BookSheet}를 직접 렌더해서.
  *
- * <p>⚠️ 남는 사각지대(실측): `onClick`은 마크업에 안 남는다 — 「바꾸기」가 목록을 펴는지, 목록에서 고르면
- * 접히는지, 주 버튼이 정말 고른 책으로 시작하는지는 여기서 못 잡는다(핸들러를 통째로 바꿔도 통과).
+ * <p>⚠️ 남는 사각지대(실측): `onClick`은 마크업에 안 남는다 — 「바꾸기」가 시트를 여는지, 고르면
+ * 닫히는지, 주 버튼이 정말 고른 책으로 시작하는지는 여기서 못 잡는다(핸들러를 통째로 바꿔도 통과).
  * jsdom 미도입은 이 저장소의 기존 결정이라, 이 배선들은 실기기·프리뷰 확인을 게이트로 둔다.
  */
 
@@ -323,6 +481,14 @@ describe('책 칩 (접힌 상태)', () => {
     expect(labelsOf(markup)).toContain('바꾸기');
   });
 
+  it('시트는 닫힌 채로 그려진다 — 인라인으로 펴 두면 홈이 목록 화면이 된다', () => {
+    const markup = renderHome({ readingBooks: books, recentBookId: 2 });
+
+    expect(markup).not.toContain('어떤 책을 읽을까요?');
+    expect(markup).not.toContain('무슨 책을 읽으셨나요?');
+    expect(labelsOf(markup)).not.toContain('건너뛰기');
+  });
+
   it('최근 읽은 책이 없으면 첫 책이 칩에 뜬다', () => {
     const markup = renderHome({ readingBooks: books, recentBookId: null });
 
@@ -356,33 +522,108 @@ describe('책 칩 (접힌 상태)', () => {
   });
 });
 
-/** 「바꾸기」로 펴는 목록 — 정적 렌더로는 편 상태에 못 가므로 직접 렌더해 계측한다. */
-describe('고르기 목록 (BookList)', () => {
+describe('시트 열림 가드 (openSheetMode)', () => {
+  it('책이 있으면 요청한 모드로 연다', () => {
+    expect(openSheetMode('start', [{ id: 1, title: '데미안' }])).toBe('start');
+    expect(openSheetMode('tag', [{ id: 1, title: '데미안' }])).toBe('tag');
+  });
+
+  it('책이 0권이면 열지 않는다 — 빈 시트는 막다른 길이고 홈의 「첫 책 추가하기」가 그 자리를 맡는다', () => {
+    expect(openSheetMode('start', [])).toBeNull();
+    expect(openSheetMode('tag', [])).toBeNull();
+  });
+});
+
+describe('고른 책의 행선지 (pickHandler)', () => {
+  const select = vi.fn();
+  const tag = vi.fn();
+  const book = { id: 1, title: '데미안' };
+
+  beforeEach(() => {
+    select.mockReset();
+    tag.mockReset();
+  });
+
+  it('start면 칩을 갈아끼운다 — 측정 전이라 붙일 세션이 없다', () => {
+    pickHandler('start', { select, tag })(book);
+
+    expect(select).toHaveBeenCalledWith(book);
+    expect(tag).not.toHaveBeenCalled();
+  });
+
+  it('tag면 방금 세션에 붙인다 — 여기서 칩을 갈아끼우면 기록이 영영 안 붙는다', () => {
+    pickHandler('tag', { select, tag })(book);
+
+    expect(tag).toHaveBeenCalledWith(book);
+    expect(select).not.toHaveBeenCalled();
+  });
+});
+
+/** 「바꾸기」·측정 종료로 열리는 시트 — 정적 렌더로는 열린 상태에 못 가므로 직접 렌더해 계측한다. */
+describe('책 고르기 시트 (BookSheet)', () => {
   const books = [
     { id: 1, title: '데미안' },
     { id: 2, title: '노인과 바다' },
   ];
 
-  const renderList = (selectedId: number | null) =>
+  const renderSheet = (mode: 'start' | 'tag', selectedId: number | null = null) =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BookList books={books} selectedId={selectedId} disabled={false} onPick={() => {}} />
+        <BookSheet
+          mode={mode}
+          books={books}
+          selectedId={selectedId}
+          disabled={false}
+          onPick={() => {}}
+          onSkip={() => {}}
+          onClose={() => {}}
+        />
       </TDSMobileProvider>,
     );
 
-  it('책을 전부 나열하고 고른 책만 채움으로 구분한다', () => {
-    const markup = renderList(2);
+  /** 시트의 책 행 — TDS Button이 아니라 표지+제목 한 줄이라 제목만 뽑는다. */
+  const rowTitlesOf = (markup: string) => [...markup.matchAll(/data-book-title="([^"]*)"/g)].map((m) => m[1]);
 
-    expect(labelsOf(markup)).toEqual(['데미안', '노인과 바다']);
-    expect(fillOf(markup, '노인과 바다')).toBe(FILL_PRIMARY);
-    expect(fillOf(markup, '데미안')).toBe(FILL_WEAK);
+  it('start면 측정 전 문구와 "책 없이 시작" CTA — 시작 자리의 시트다', () => {
+    const markup = renderSheet('start');
+
+    expect(markup).toContain(SHEET_COPY.start.title);
+    expect(markup).toContain('어떤 책을 읽을까요?');
+    expect(labelsOf(markup)).toContain('책 없이 시작');
+    expect(markup).not.toContain('무슨 책을 읽으셨나요?');
   });
 
-  it('고른 책이 없으면 전부 흐리다 — 종료 후 태깅 목록이 이 모드다', () => {
-    const markup = renderList(null);
+  it('tag면 종료 후 문구와 "건너뛰기" CTA — 같은 시트가 두 자리를 겸한다', () => {
+    const markup = renderSheet('tag');
 
-    expect(fillOf(markup, '데미안')).toBe(FILL_WEAK);
-    expect(fillOf(markup, '노인과 바다')).toBe(FILL_WEAK);
+    expect(markup).toContain('무슨 책을 읽으셨나요?');
+    expect(labelsOf(markup)).toContain('건너뛰기');
+    expect(labelsOf(markup)).not.toContain('책 없이 시작');
+  });
+
+  it('책을 전부 한 행씩 나열하고 표지 자리를 세운다 — 버튼 나열엔 없던 시각 위계다', () => {
+    const markup = renderSheet('start');
+
+    expect(rowTitlesOf(markup)).toEqual(['데미안', '노인과 바다']);
+    expect(markup).toContain(`background:${coverColor('데미안')}`);
+    expect(markup).toContain('>데</div>');
+  });
+
+  it('고른 책만 표시가 남는다 — 태깅(선택 없음)엔 아무 행도 강조되지 않는다', () => {
+    expect(renderSheet('start', 2)).toContain('aria-current="true"');
+    expect(renderSheet('tag', null)).not.toContain('aria-current="true"');
+  });
+
+  it('딤·패널이 탭바(zIndex 100) 위에 뜬다 — 시트 아래로 탭바가 비치면 시트가 아니다', () => {
+    const layers = [...renderSheet('start').matchAll(/z-index:(\d+)/g)].map((m) => Number(m[1]));
+
+    expect(layers.length).toBe(2); // 딤 + 패널
+    expect(Math.min(...layers)).toBeGreaterThan(TAB_BAR_Z_INDEX);
+    expect(layers[1]).toBeGreaterThan(layers[0]); // 패널이 자기 딤에 가리지 않는다
+  });
+
+  it('홈 인디케이터를 피해 하단 여백을 둔다', () => {
+    expect(renderSheet('start')).toContain('env(safe-area-inset-bottom)');
   });
 });
 
@@ -427,5 +668,63 @@ describe('실패 문구 (waiverErrorMessage)', () => {
   it('SDK 광고 에러는 영문·기술 문구라 안내로 바꾼다', () => {
     expect(waiverErrorMessage(new Error('no fill'))).not.toContain('no fill');
     expect(waiverErrorMessage(new Error('no fill'))).toContain('광고를 불러오지 못했어요');
+  });
+});
+
+/**
+ * 계정 진입점 — 미니앱엔 설정 화면이 없어 로그아웃도 계정 관리도 길이 없었다(api의 `logout()`은
+ * 구현돼 있는데 부르는 UI가 없었다). 상세 설정은 웹이 본진이라 여기서는 안내 한 줄 + 로그아웃만 둔다.
+ */
+describe('계정 진입점', () => {
+  const account = (confirm: boolean) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <AccountSection confirm={confirm} onConfirm={() => {}} onLogout={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  it('계정 관리는 웹이 본진임을 한 줄로 알린다 — 미니앱만 쓰는 사람에게는 길이 아예 안 보였다', () => {
+    expect(account(false)).toContain('booktimer.app');
+  });
+
+  it('처음엔 「로그아웃」만 — 실수 한 탭에 세션이 날아가지 않게', () => {
+    expect(account(false)).toContain('로그아웃');
+    expect(account(false)).not.toContain('정말 로그아웃');
+  });
+
+  it('한 번 더 물어본 뒤 실행한다 — 물러설 길(취소)도 함께 준다', () => {
+    expect(account(true)).toContain('정말 로그아웃');
+    expect(account(true)).toContain('취소');
+  });
+
+  it('홈 맨 아래에 둔다 — 「목표 바꾸기」보다 뒤여야 자주 쓰는 것이 위로 온다', () => {
+    const markup = renderHome();
+
+    expect(markup.indexOf('목표 바꾸기')).toBeGreaterThan(0);
+    expect(markup.indexOf('목표 바꾸기')).toBeLessThan(markup.indexOf('로그아웃'));
+  });
+});
+
+/**
+ * 로그아웃 흐름 — 서버 폐기가 실패해도 **반드시** 로그인 화면으로 넘긴다. 안 넘기면 토큰은 이미
+ * 버려졌는데(api.logout의 finally) 화면은 홈에 남아, 무엇을 눌러도 401만 나는 막다른 길이 된다.
+ */
+describe('로그아웃 — logoutAndLeave', () => {
+  it('서버 폐기가 성공하면 로그인 화면으로 넘긴다', async () => {
+    logoutMock.mockResolvedValue(undefined);
+    const onDone = vi.fn();
+
+    await logoutAndLeave(onDone);
+
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it('서버 폐기가 실패해도 로그인 화면으로 넘긴다 — 안 넘기면 401만 나는 화면에 갇힌다', async () => {
+    logoutMock.mockRejectedValue(new Error('Failed to fetch'));
+    const onDone = vi.fn();
+
+    await logoutAndLeave(onDone);
+
+    expect(onDone).toHaveBeenCalledTimes(1);
   });
 });

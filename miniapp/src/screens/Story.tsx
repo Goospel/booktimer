@@ -11,7 +11,7 @@ import {
   fetchStoryViewers,
   markStoryViewed,
 } from '../api';
-import { BookCover, ErrorMessage, Screen } from '../ui';
+import { BookCover, COVER_FG, ErrorMessage, Screen, coverColor, initialOf } from '../ui';
 
 /**
  * 독서 스토리 — 소셜 탭 상단 스트립 · 전체화면 열람 · 작성 (설계 §4 PR-7).
@@ -74,37 +74,101 @@ export function StoryStrip({
 
   return (
     <div className="no-scrollbar" style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '4px 0 12px' }}>
-      {feed.mine !== null && <Ring label="내 스토리" fresh={false} onClick={() => onOpen(feed.mine!, true)} />}
+      {feed.mine !== null && (
+        <Ring seed={feed.mine.nickname} caption="내 스토리" onClick={() => onOpen(feed.mine!, true)} />
+      )}
       {feed.groups.map((group) => (
         <Ring
           key={group.loginId ?? group.nickname}
-          label={group.nickname}
+          seed={group.nickname}
+          caption={group.nickname}
           fresh={!group.allViewed}
           onClick={() => onOpen(group, false)}
         />
       ))}
-      <Ring label="+ 스토리 쓰기" fresh={false} onClick={onCompose} />
+      <Ring seed={null} caption="스토리 쓰기" onClick={onCompose} />
     </div>
   );
 }
 
-function Ring({ label, fresh, onClick }: { label: string; fresh: boolean; onClick: () => void }) {
+/** 링 하나의 지름 — 손가락 최소치(44px)를 넘기고, 캡션까지 합쳐도 스트립이 한 줄에 들어간다. */
+const RING_SIZE = 56;
+
+/**
+ * 스토리 링 — 원형 이니셜 아바타 + 바깥 링 + 닉네임 캡션(인스타 관습).
+ *
+ * <p>텍스트 알약이던 시절엔 "스토리"라는 어휘가 화면에 서지 않아 그냥 버튼 줄로 읽혔다. 아바타 색은
+ * 무표지 책과 같은 `coverColor`라 **같은 사람은 언제 그려도 같은 색**이다(닉네임이 곧 씨앗).
+ *
+ * <p>`seed`가 `null`이면 작성 타일(+ 아이콘) — 사람 링과 같은 크기·자리를 쓰되 이니셜을 세우지 않는다.
+ * 미열람 표식은 링 색이 맡지만 **색만으로는 구분 못 하는 사람이 있어** 이름에도 남긴다(aria-label).
+ */
+function Ring({
+  seed,
+  caption,
+  fresh = false,
+  onClick,
+}: {
+  seed: string | null;
+  caption: string;
+  fresh?: boolean;
+  onClick: () => void;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-label={fresh ? `${caption} 새 스토리` : caption}
       style={{
         flex: '0 0 auto',
-        padding: '10px 14px',
-        border: fresh ? '2px solid var(--adaptiveBlue500, #6E8A6A)' : '1px solid var(--adaptiveGrey200, #E4DDD0)',
-        borderRadius: 999,
-        background: 'var(--adaptiveGrey100, #FCFAF5)',
-        fontSize: 13,
+        width: RING_SIZE + 12,
+        padding: 0,
+        border: 'none',
+        background: 'transparent',
         cursor: 'pointer',
       }}
     >
-      {label}
-      {fresh && <span style={{ marginLeft: 4, fontSize: 11, color: 'var(--adaptiveBlue500, #6E8A6A)' }}>새 스토리</span>}
+      <div
+        style={{
+          width: RING_SIZE,
+          height: RING_SIZE,
+          margin: '0 auto',
+          padding: 2,
+          borderRadius: '50%',
+          background: fresh ? 'var(--adaptiveBlue500, #6E8A6A)' : 'var(--adaptiveGrey200, #E4DDD0)',
+        }}
+      >
+        <div
+          style={{
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '50%',
+            // 링과 아바타 사이 종이색 틈 — 없으면 링이 아니라 그냥 두꺼운 테두리로 읽힌다.
+            border: '2px solid #FCFAF5',
+            fontSize: 22,
+            background: seed === null ? 'var(--adaptiveGrey100, #FCFAF5)' : coverColor(seed),
+            color: seed === null ? 'var(--adaptiveBlue500, #6E8A6A)' : COVER_FG,
+          }}
+        >
+          {seed === null ? '+' : initialOf(seed)}
+        </div>
+      </div>
+      <span
+        style={{
+          display: 'block',
+          marginTop: 6,
+          fontSize: 11,
+          color: 'var(--adaptiveGrey600, #6F6A5E)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {caption}
+      </span>
     </button>
   );
 }
@@ -235,18 +299,35 @@ export function StoryCardView({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 10,
+        // 플로팅 탭바(App.BottomTabBar, zIndex 100)보다 위 — 낮으면 전체화면 뷰어 위로 탭바가 뚫고 올라온다.
+        zIndex: 200,
         display: 'flex',
         flexDirection: 'column',
-        padding: '24px 20px',
+        // 노치 아래로 세그먼트가 깔리지 않게 — 전체화면이라 상태바를 앱이 직접 피해야 한다.
+        padding: 'calc(24px + env(safe-area-inset-top)) 20px 24px',
         background: bg.background,
         color: bg.color,
       }}
     >
+      {/* 인스타식 진행 세그먼트 — 카드 수만큼 나누고 현재 인덱스까지 채운다. 수치는 aria로 남긴다. */}
+      <div
+        role="progressbar"
+        aria-label="스토리 진행"
+        aria-valuemin={1}
+        aria-valuenow={index + 1}
+        aria-valuemax={total}
+        style={{ display: 'flex', gap: 3, marginBottom: 12 }}
+      >
+        {author.stories.map((story, i) => (
+          <span
+            key={story.id}
+            style={{ flex: 1, height: 2, borderRadius: 1, background: bg.color, opacity: i <= index ? 1 : 0.3 }}
+          />
+        ))}
+      </div>
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>
-          {mine ? '내 스토리' : author.nickname} · {index + 1}/{total}
-        </span>
+        <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{mine ? '내 스토리' : author.nickname}</span>
         <button type="button" onClick={onClose} style={ghost(bg.color)}>
           닫기
         </button>

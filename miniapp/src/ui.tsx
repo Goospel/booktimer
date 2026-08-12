@@ -1,11 +1,39 @@
-import { Text } from '@toss/tds-mobile';
+import { Button, Text } from '@toss/tds-mobile';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
 import type { ContributionDay } from './api';
 
 /** 잔디 색 농도 0~4 — 웹 app.css `--grass-0..4`와 같은 값(서버가 level을 계산해 준다). */
-const LEVEL_COLORS = ['#EAE4D7', '#C3D9B0', '#94BE7F', '#5E9250', '#35662F'];
+export const LEVEL_COLORS = ['#EAE4D7', '#C3D9B0', '#94BE7F', '#5E9250', '#35662F'];
+
+/** 수동 기록 칸의 테두리 — 웹 `--neutral-3`. 격자와 범례가 같은 값을 봐야 범례가 거짓말을 안 한다. */
+export const MANUAL_OUTLINE = '1px solid #9A9486';
+
+/** 주 컬럼 사이 간격 — 격자와 월 라벨 배치가 이 값을 공유해야 라벨이 그 열 위에 선다. */
+export const GRASS_GAP = 3;
+
+/**
+ * 서버 `monthLabels`(주 인덱스 + "M월")를 격자 위 픽셀 자리로 옮긴다. 웹은 CSS 그리드의
+ * `gridColumnStart`가 열을 맞춰 주지만 미니앱 격자는 flex + 고정 칸이라 자리를 직접 센다.
+ *
+ * <p>직전에 **남긴** 라벨과 `minGapPx`보다 가까운 라벨은 버린다 — 그래프가 월말에서 시작하면 0주·1주에
+ * 라벨이 연달아 붙어 글자가 겹쳐 읽힌다. 버린 라벨이 아니라 남긴 라벨을 기준으로 재야, 촘촘한 구간에서
+ * 기준점이 끌려가며 뒤 라벨까지 줄줄이 사라지지 않는다.
+ */
+export function monthLabelPositions(
+  labels: { weekIndex: number; label: string }[],
+  cellSize: number,
+  minGapPx = 28,
+): { label: string; left: number }[] {
+  const kept: { label: string; left: number }[] = [];
+  for (const { weekIndex, label } of labels) {
+    const left = weekIndex * (cellSize + GRASS_GAP);
+    if (kept.length > 0 && left - kept[kept.length - 1].left < minGapPx) continue;
+    kept.push({ label, left });
+  }
+  return kept;
+}
 
 /**
  * 잔디 그리드 — 기록 화면(전체)과 홈 미리보기(최근 몇 주)가 같은 렌더를 쓴다.
@@ -24,9 +52,12 @@ export function GrassGrid({
   fill?: boolean;
 }) {
   return (
-    <div style={{ display: 'flex', gap: 3, width: fill ? '100%' : undefined }}>
+    <div style={{ display: 'flex', gap: GRASS_GAP, width: fill ? '100%' : undefined }}>
       {weeks.map((week, weekIndex) => (
-        <div key={weekIndex} style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: fill ? 1 : undefined }}>
+        <div
+          key={weekIndex}
+          style={{ display: 'flex', flexDirection: 'column', gap: GRASS_GAP, flex: fill ? 1 : undefined }}
+        >
           {week.map((day, dayIndex) => (
             <div
               key={dayIndex}
@@ -38,7 +69,7 @@ export function GrassGrid({
                 borderRadius: 2,
                 // 날짜 없는 칸은 그리드 가장자리 placeholder라 빈 칸으로 둔다.
                 background: day.date === null ? 'transparent' : LEVEL_COLORS[day.level],
-                outline: day.manual ? '1px solid #9A9486' : undefined, // 웹 --neutral-3
+                outline: day.manual ? MANUAL_OUTLINE : undefined,
               }}
             />
           ))}
@@ -163,26 +194,72 @@ export const sectionStyle = {
   border: '1px solid #E4DDD0',
 } as const;
 
-/** 화면 공통 껍데기 — 제목 + 본문 여백. 미니앱은 화면이 다섯 뿐이라 레이아웃도 이 하나면 된다. */
-export function Screen({ title, children }: { title: string; children: ReactNode }) {
+/**
+ * 화면 공통 껍데기 — 제목 + 본문 여백. 미니앱은 화면이 다섯 뿐이라 레이아웃도 이 하나면 된다.
+ *
+ * <p>`onBack`을 주면 제목 왼쪽에 ← 를 세운다. 나갈 길이 화면 맨 아래에만 있으면 목록이 긴 화면에서
+ * 나가려고 끝까지 스크롤해야 한다 — 헤더가 제목을 그리는 자리라 뒤로가기도 여기가 맡는다.
+ */
+export function Screen({ title, onBack, children }: { title: string; onBack?: () => void; children: ReactNode }) {
   return (
     <main style={{ padding: '24px 20px 40px', maxWidth: 480, margin: '0 auto' }}>
-      {/* 제목만 세리프(고운바탕) — 웹 `.brand h1`과 같은 위계다. 본문은 전역 고운돋움 그대로. */}
-      <Text typography="t3" fontWeight="bold" style={{ marginBottom: 20, fontFamily: "'Gowun Batang', serif" }}>
-        {title}
-      </Text>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+        {onBack !== undefined && (
+          <button
+            type="button"
+            aria-label="뒤로"
+            onClick={onBack}
+            style={{
+              flex: '0 0 auto',
+              width: 32,
+              height: 32,
+              padding: 0,
+              border: 'none',
+              borderRadius: 999,
+              fontSize: 20,
+              lineHeight: 1,
+              background: 'transparent',
+              color: 'var(--adaptiveGrey700, #57534A)',
+              cursor: 'pointer',
+            }}
+          >
+            ←
+          </button>
+        )}
+        {/* 제목만 세리프(고운바탕) — 웹 `.brand h1`과 같은 위계다. 본문은 전역 고운돋움 그대로. */}
+        {/* 한글 제목이 flex 자식이라 minWidth:0이 없으면 줄바꿈 대신 ← 를 밀어낸다. */}
+        <Text
+          typography="t3"
+          fontWeight="bold"
+          style={{ flex: 1, minWidth: 0, fontFamily: "'Gowun Batang', serif", wordBreak: 'keep-all' }}
+        >
+          {title}
+        </Text>
+      </div>
       {children}
     </main>
   );
 }
 
-/** 서버가 준 실패 메시지를 그대로 보여준다(연결 코드 오류·409 등은 문구 자체가 안내다). */
-export function ErrorMessage({ message }: { message: string | null }) {
+/**
+ * 서버가 준 실패 메시지를 그대로 보여준다(연결 코드 오류·409 등은 문구 자체가 안내다).
+ *
+ * <p>`onRetry`를 주면 그 자리에서 다시 받을 수 있다 — 초기 로드가 실패하면 빨간 글자만 남아
+ * 미니앱을 껐다 켜야 하는 막다른 길이었다. 되돌릴 게 없는 실패(액션 거절 등)엔 주지 않는다.
+ */
+export function ErrorMessage({ message, onRetry }: { message: string | null; onRetry?: () => void }) {
   if (message === null) return null;
   return (
-    <Text typography="st11" color="red500" style={{ display: 'block', marginTop: 12 }}>
-      {message}
-    </Text>
+    <>
+      <Text typography="st11" color="red500" style={{ display: 'block', marginTop: 12 }}>
+        {message}
+      </Text>
+      {onRetry !== undefined && (
+        <Button size="small" variant="weak" style={{ marginTop: 12 }} onClick={onRetry}>
+          다시 시도
+        </Button>
+      )}
+    </>
   );
 }
 

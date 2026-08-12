@@ -2,8 +2,9 @@ import { Button, ProgressBar, Text } from '@toss/tds-mobile';
 import { useEffect, useState } from 'react';
 
 import type { BookOption, DashboardResponse, QuoteDto, TimerState, WaiveResponse } from '../api';
-import { ApiError, startSession, stopSession, tagBook, waiveDebt } from '../api';
-import { elapsedSeconds, formatDuration } from '../format';
+import { ApiError, logout, startSession, stopSession, tagBook, waiveDebt } from '../api';
+import { useBackClose } from '../back';
+import { elapsedSeconds, formatClock, formatDuration } from '../format';
 import {
   GOAL_MET_TEMPLATE_CODE,
   REWARD_AD_GROUP_ID,
@@ -20,6 +21,12 @@ const PREVIEW_WEEKS = 15;
 const AGREEMENT_KEY = 'booktimer.notificationAgreement';
 
 /**
+ * 진행바 색 — `global.css`가 TDS `--adaptiveBlue500`을 이 세이지로 재테마한다. TDS ProgressBar는
+ * 색을 prop으로만 받아 CSS 변수가 안 닿으므로 값을 직접 준다(다른 초록을 쓰면 화면에 초록이 둘이 된다).
+ */
+const SAGE = '#6E8A6A';
+
+/**
  * 처음 골라 둘 책 — 최근 읽은 책(=이어 읽기)이 읽는 중 목록에 있으면 그 책, 아니면 첫 책, 없으면 `null`.
  *
  * <p>웹 `BookPickForm`의 `defaultBook`과 같은 규칙이다. `recentBookId`가 목록 밖일 수 있는 건 그 책을
@@ -27,6 +34,47 @@ const AGREEMENT_KEY = 'booktimer.notificationAgreement';
  */
 export function defaultBookId(readingBooks: BookOption[], recentBookId: number | null): number | null {
   return readingBooks.find((b) => b.id === recentBookId)?.id ?? readingBooks[0]?.id ?? null;
+}
+
+/**
+ * 히어로 파생값 — 웹 `frontend/src/dashboard/timerProgress.ts`의 `computeProgress`를 옮겼다.
+ *
+ * <p>웹은 UX 리뷰로 "오늘 남은 시간" 카운트다운을 **"오늘 읽은 시간" 카운트업**으로 뒤집었다(성취를
+ * 세지, 빚을 세지 않는다). 남은 시간은 보조 메타로 강등된다. 미니앱도 같은 프레이밍을 쓴다.
+ *
+ * <p>서버는 스냅샷만 주므로 측정 중 라이브 값은 `remainingSeconds - elapsed`로 만든다 — 기존 elapsed
+ * 인터벌이 그대로 카운트업의 동력이 되어 tick을 따로 두지 않는다. `carryover`면 밀린 시간은 오늘 몫이
+ * 아니라 바닥(floor)이라 빼고 센다(그래야 어제 빚이 오늘 성취를 갉아먹지 않는다).
+ *
+ * <p>목표 미설정(0)이면 나눌 게 없어 `progress`는 `null`(게이지를 안 그린다)이고 달성이라 우기지도
+ * 않는다 — 웹은 이 경우를 100% 달성으로 치지만, 미니앱은 목표 설정으로 유도하는 자리라 그대로 둔다.
+ */
+export function todayProgress(
+  timer: Pick<TimerState, 'remainingSeconds' | 'carriedDebtSeconds' | 'todayGoalSeconds' | 'carryover'>,
+  elapsed: number,
+): { todayRead: number; remainingToGoal: number; overflow: number; progress: number | null; achieved: boolean } {
+  const { carriedDebtSeconds: floor, todayGoalSeconds: goal, carryover } = timer;
+  const remainingNow = timer.remainingSeconds - elapsed;
+  const todayDebt = carryover ? remainingNow - floor : remainingNow;
+  // 스냅샷이 어긋나도 음수 시간이 화면에 뜨지 않게 바닥을 친다(표시용 값이라 여기서 자른다).
+  const todayRead = Math.max(0, goal - todayDebt);
+  return {
+    todayRead,
+    remainingToGoal: Math.max(0, todayDebt),
+    overflow: Math.max(0, todayRead - goal),
+    progress: goal > 0 ? Math.min(1, todayRead / goal) : null,
+    achieved: goal > 0 && todayDebt <= 0,
+  };
+}
+
+/**
+ * 용서 문구가 말하는 밀린 분 — 웹 `TimerCard.forgiveMinutes`와 같은 규칙(항상 분, 최소 1분).
+ *
+ * <p>`formatDuration`을 쓰면 1분 미만 부채가 "45초"로 나와 뒤에 붙는 조사가 "45초은"으로 깨진다.
+ * 분으로 고정하면 조사가 언제나 "분은"이라 문장이 성립한다.
+ */
+export function forgiveMinutes(debtSeconds: number): number {
+  return Math.max(1, Math.round(debtSeconds / 60));
 }
 
 /**
@@ -87,41 +135,191 @@ export function waiverErrorMessage(error: Error): string {
 }
 
 /**
- * 책 버튼 목록 — 「바꾸기」로 편 고르기 목록과 종료 후 태깅 목록이 같은 렌더를 쓴다.
- *
- * <p>`selectedId`가 있으면 그 책만 채움(fill)으로 구분한다 — variant를 가릴 class·속성이 없어
- * 이 채움색이 선택의 유일한 표지다. 태깅엔 "고른 책"이 없어 `null`(전부 weak)로 쓴다.
- *
- * <p>화면에서 꺼내 둔 이유는 늘 같다: 하니스가 정적 렌더라 「바꾸기」를 눌러 편 상태에 도달할 수 없어,
- * 목록 자체는 여기서 직접 렌더해야 계측된다.
+ * 시트가 서 있는 자리 — 웹 `BookPickSheet`와 같은 겸용 구조다. 하나의 시트가 두 자리를 맡는다:
+ * `start`(측정 전 무슨 책을 읽을지) / `tag`(측정 종료 후 무슨 책이었는지).
  */
-export function BookList({
+export type BookSheetMode = 'start' | 'tag';
+
+/** 모드별 문구·보조 CTA — 겸용 시트에서 두 자리가 갈리는 지점은 결국 이 두 줄이 전부다. */
+export const SHEET_COPY: Record<BookSheetMode, { title: string; cta: string }> = {
+  start: { title: '어떤 책을 읽을까요?', cta: '책 없이 시작' },
+  tag: { title: '무슨 책을 읽으셨나요?', cta: '건너뛰기' },
+};
+
+/**
+ * 시트를 열까 — 고를 책이 0권이면 열지 않는다(`null`).
+ *
+ * <p>빈 시트는 막다른 길이라 그 자리는 홈의 「첫 책 추가하기」 빈 상태가 계속 맡는다. 태깅도 같다 —
+ * 붙일 책이 없는데 "무슨 책이었나요?"를 띄우면 닫는 것 말고 할 수 있는 게 없다.
+ */
+export function openSheetMode(mode: BookSheetMode, books: BookOption[]): BookSheetMode | null {
+  return books.length > 0 ? mode : null;
+}
+
+/**
+ * 시트에서 고른 책의 행선지 — `start`면 칩을 갈아끼우고, `tag`면 방금 세션에 붙인다.
+ *
+ * <p>같은 목록이 두 일을 하므로 여기가 어긋나면 조용히 틀린다: 태깅 자리에서 칩만 갈아끼우면 기록은
+ * 영영 책 없이 남고, 시작 자리에서 태깅 API를 부르면 없는 세션에 붙이려 든다.
+ */
+export function pickHandler(
+  mode: BookSheetMode,
+  handlers: { select: (book: BookOption) => void; tag: (book: BookOption) => void },
+): (book: BookOption) => void {
+  return mode === 'start' ? handlers.select : handlers.tag;
+}
+
+/**
+ * 책 고르기 바텀시트 — 딤 + 하단 패널. 행은 표지 자리 + 제목이라 버튼 나열에 없던 시각 위계가 생긴다.
+ *
+ * <p>TDS `BottomSheet`을 쓰지 않은 이유: 그건 포털(`tds-mobile-portal-container`)로 그려져
+ * `renderToStaticMarkup` 하니스에서 **마크업이 통째로 비어 나온다**(실측) — 이 저장소는 jsdom을 두지
+ * 않기로 했으므로 시트 내용이 영영 계측 불가가 된다. 딤·safe-area·zIndex는 이 30줄로 충분하다.
+ *
+ * <p>화면에서 꺼내 둔 이유는 늘 같다: 하니스가 정적 렌더라 「바꾸기」를 눌러 열린 상태에 도달할 수 없어,
+ * 시트 자체는 여기서 직접 렌더해야 계측된다.
+ */
+export function BookSheet({
+  mode,
   books,
   selectedId = null,
   disabled,
   onPick,
+  onSkip,
+  onClose,
 }: {
+  mode: BookSheetMode;
   books: BookOption[];
   selectedId?: number | null;
   disabled: boolean;
   onPick: (book: BookOption) => void;
+  onSkip: () => void;
+  onClose: () => void;
 }) {
+  const { title, cta } = SHEET_COPY[mode];
+
   return (
     <>
-      {books.map((book) => (
-        <Button
-          key={book.id}
-          display="block"
-          variant={book.id === selectedId ? 'fill' : 'weak'}
-          size="medium"
-          style={{ marginBottom: 8 }}
-          disabled={disabled}
-          onClick={() => onPick(book)}
-        >
-          {book.title}
+      {/* 딤 — 탭바(zIndex 100) 위를 덮어야 시트 아래로 탭바가 비치지 않는다. */}
+      <div
+        onClick={onClose}
+        style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0, 0, 0, 0.45)' }}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        style={{
+          position: 'fixed',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 201,
+          maxHeight: '72vh',
+          overflowY: 'auto',
+          // 홈 인디케이터 위로 CTA가 올라오게 — 바닥 여백만 safe-area를 탄다.
+          padding: '20px 20px calc(20px + env(safe-area-inset-bottom))',
+          borderRadius: '16px 16px 0 0',
+          background: '#FCFAF5',
+          boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.14)',
+        }}
+      >
+        <Text typography="t6" fontWeight="bold" style={{ display: 'block', marginBottom: 12 }}>
+          {title}
+        </Text>
+        {books.map((book) => (
+          <button
+            key={book.id}
+            type="button"
+            // 고른 책의 표지는 이 한 속성 — 배경 틴트만으로는 마크업에서 선택을 가릴 수 없다.
+            aria-current={book.id === selectedId ? 'true' : undefined}
+            // 계측용 표지 — TDS가 뿜는 emotion 클래스 사이에서 "행이 몇 개고 어떤 책인가"를 집을 손잡이가 없다.
+            data-book-title={book.title}
+            disabled={disabled}
+            onClick={() => onPick(book)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              width: '100%',
+              marginBottom: 8,
+              padding: 10,
+              border: 'none',
+              borderRadius: 10,
+              background: book.id === selectedId ? '#EFEADD' : 'transparent',
+              cursor: 'pointer',
+            }}
+          >
+            <CoverInitial title={book.title} width={28} />
+            {/* 한글 제목이 flex 자식이라 minWidth:0이 없으면 줄바꿈 대신 행을 밀어낸다. */}
+            <Text typography="st11" style={{ flex: 1, minWidth: 0, textAlign: 'left', wordBreak: 'keep-all' }}>
+              {book.title}
+            </Text>
+          </button>
+        ))}
+        <Button display="block" variant="weak" size="medium" style={{ marginTop: 8 }} disabled={disabled} onClick={onSkip}>
+          {cta}
         </Button>
-      ))}
+      </div>
     </>
+  );
+}
+
+/**
+ * 로그아웃 → 로그인 화면. **무슨 일이 있어도 화면을 넘긴다.**
+ *
+ * <p>`api.logout()`이 이미 실패를 삼키고 `finally`로 토큰을 버리므로, 여기서 넘기지 않으면 토큰 없는
+ * 홈에 남아 무엇을 눌러도 401만 나는 막다른 길이 된다. 그래서 `finally`로 이동을 못 박는다.
+ */
+export async function logoutAndLeave(onDone: () => void): Promise<void> {
+  try {
+    await logout();
+  } catch {
+    // 폐기 실패는 삼킨다 — 되던지면 호출부의 `void`가 unhandled rejection이 된다. 토큰은 이미 버려졌다.
+  }
+  onDone();
+}
+
+/**
+ * 계정 진입점 — 홈 맨 아래 muted 한 줄 + 로그아웃.
+ *
+ * <p>미니앱엔 설정 화면이 없어 `api.logout()`은 구현돼 있는데 부르는 UI가 없었다. 계정 관리·상세 설정은
+ * 웹이 본진이라(설계 §2.5) 여기서 흉내내지 않고 어디로 가면 되는지만 말한다.
+ *
+ * <p>확인 단계를 밖에서 받는 이유는 늘 같다 — 정적 렌더 하니스가 클릭을 못 잡아, 프롭이 아니면
+ * 「정말 로그아웃」 가지에 영영 닿지 못한다(서재 `confirmDelete`·책방 `confirmBlock`과 같다).
+ */
+export function AccountSection({
+  confirm,
+  onConfirm,
+  onLogout,
+}: {
+  confirm: boolean;
+  onConfirm: (confirm: boolean) => void;
+  onLogout: () => void;
+}) {
+  return (
+    <div style={{ marginTop: 32, textAlign: 'center' }}>
+      <Text typography="st12" color="grey600" style={{ display: 'block', wordBreak: 'keep-all' }}>
+        계정 관리·상세 설정은 booktimer.app에서 할 수 있어요
+      </Text>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 10 }}>
+        {confirm ? (
+          <>
+            <Button size="small" color="danger" onClick={onLogout}>
+              정말 로그아웃
+            </Button>
+            <Button size="small" variant="weak" onClick={() => onConfirm(false)}>
+              취소
+            </Button>
+          </>
+        ) : (
+          <Button size="small" variant="weak" onClick={() => onConfirm(true)}>
+            로그아웃
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -139,23 +337,29 @@ export function Home({
   onTimerChange,
   onGraphChange,
   onGoHistory,
+  onGoLibrary,
   onGoGoal,
+  onLogout,
   onError,
 }: {
   dashboard: DashboardResponse;
   onTimerChange: (timer: TimerState) => void;
   onGraphChange: (graph: DashboardResponse['graph']) => void;
   onGoHistory: () => void;
+  onGoLibrary: () => void;
   onGoGoal: () => void;
+  onLogout: () => void;
   onError: (error: Error) => void;
 }) {
   const [untagged, setUntagged] = useState<Untagged | null>(null);
+  /** 로그아웃 확인 단계 — 실수 한 탭에 세션이 날아가지 않게 한 번 더 받는다. */
+  const [confirmLogout, setConfirmLogout] = useState(false);
   /** 측정할 책 — 칩에 뜨는 그 책이고, 시작은 아래 주 버튼이 맡는다(여러 책을 번갈아 읽는 사람). */
   const [selectedBookId, setSelectedBookId] = useState(() =>
     defaultBookId(dashboard.readingBooks, dashboard.recentBookId),
   );
-  /** 「바꾸기」로 목록을 펼쳤는지 — 시트를 따로 띄우지 않고 칩 아래에 인라인으로 편다(화면 다섯 개짜리 앱). */
-  const [picking, setPicking] = useState(false);
+  /** 열린 시트의 모드 — `null`이면 닫힘. 고르기와 태깅이 같은 시트를 쓴다(웹 `BookPickSheet`와 같다). */
+  const [sheet, setSheet] = useState<BookSheetMode | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -190,14 +394,33 @@ export function Home({
       stopSession().then((result) => {
         onTimerChange(result.timer);
         onGraphChange(result.graph); // stop 응답에 잔디가 동봉돼 새로고침 없이 즉시 갱신된다.
-        if (result.untagged) setUntagged({ sessionId: result.sessionId });
+        // 웹처럼 종료 직후 시트를 저절로 연다 — 태깅은 지금 기억이 가장 선명하다.
+        const mode = openSheetMode('tag', dashboard.readingBooks);
+        if (result.untagged && mode !== null) {
+          setUntagged({ sessionId: result.sessionId });
+          setSheet(mode);
+        }
       }),
     );
 
   const tag = (book: BookOption) => {
     if (untagged === null) return;
-    run(tagBook(untagged.sessionId, book.id).then(() => setUntagged(null)));
+    run(
+      tagBook(untagged.sessionId, book.id).then(() => {
+        setUntagged(null);
+        setSheet(null);
+      }),
+    );
   };
+
+  /** 시트 닫기 — 태깅 시트를 닫는 건 곧 「건너뛰기」다(다시 들어갈 자리를 만들지 않는다). */
+  const closeSheet = () => {
+    if (sheet === 'tag') setUntagged(null);
+    setSheet(null);
+  };
+
+  // 안드로이드 뒤로가기는 시트만 닫는다 — 시트가 열린 채로 미니앱이 꺼지지 않게.
+  useBackClose(sheet !== null, closeSheet);
 
   /** 광고 보고 밀린 하루 지우기 — 중간 이탈(null)이면 아무 일도 없었던 것처럼 둔다. */
   const claimWaiver = () => {
@@ -223,14 +446,13 @@ export function Home({
       .finally(() => setBusy(false));
   };
 
-  const remaining = dashboard.remainingSeconds;
   const goal = dashboard.todayGoalSeconds;
-  // 목표 미설정(0)이면 나눌 게 없다 — 게이지를 아예 안 그리고 목표 설정으로 유도한다.
-  const progress = goal > 0 ? Math.min(1, Math.max(0, (goal - remaining) / goal)) : null;
   const elapsed =
     dashboard.hasActiveSession && dashboard.activeStartedAt !== null
       ? elapsedSeconds(dashboard.activeStartedAt, now)
       : 0;
+  // 측정 중이면 elapsed가 매초 늘어 todayRead도 매초 늘어난다 — 카운트업의 동력이 이 한 줄이다.
+  const { todayRead, remainingToGoal, overflow, progress, achieved } = todayProgress(dashboard, elapsed);
   const quotes = dashboard.quotes ?? [];
   // 칩에 띄울 책 — 시작 버튼도 이 값을 그대로 쓴다(칩과 시작 대상이 어긋날 자리를 없앤다).
   const selectedBook = dashboard.readingBooks.find((b) => b.id === selectedBookId) ?? null;
@@ -245,28 +467,30 @@ export function Home({
           textAlign: 'center',
         }}
       >
-        {/* 라벨과 값은 각자 블록이어야 세로로 쌓인다 — 같은 줄에 붙으면 "오늘 남은 시간15분"으로 읽힌다. */}
+        {/* 라벨과 값은 각자 블록이어야 세로로 쌓인다 — 같은 줄에 붙으면 "오늘 읽은 시간45:00"으로 읽힌다. */}
         <div>
           <Text typography="st11" color="grey600">
-            {remaining > 0 ? '오늘 남은 시간' : '오늘 목표를 채웠어요'}
+            {achieved ? '🌿 오늘 목표 달성' : '오늘 읽은 시간'}
           </Text>
         </div>
         <div style={{ marginTop: 6 }}>
           <Text typography="t2" fontWeight="bold">
-            {remaining > 0 ? formatDuration(remaining) : `+${formatDuration(-remaining)}`}
+            {formatClock(todayRead)}
           </Text>
         </div>
         {progress !== null && (
           <div style={{ marginTop: 16 }}>
-            <ProgressBar progress={progress} size="normal" color="#2F8F6B" />
+            <ProgressBar progress={progress} size="normal" color={SAGE} />
             <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
-              오늘 목표 {formatDuration(goal)} 중 {Math.round(progress * 100)}%
+              오늘 목표 {formatDuration(goal)} ·{' '}
+              {achieved ? `달성${overflow > 0 ? ` +${formatDuration(overflow)}` : ''}` : `목표까지 ${formatClock(remainingToGoal)}`}
             </Text>
           </div>
         )}
+        {/* 빚을 위협이 아니라 "괜찮다"로 말한다 — 웹 대시보드 TimerCard의 용서 문구와 같은 말. */}
         {dashboard.carriedDebtSeconds > 0 && (
           <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
-            어제까지 밀린 시간 {formatDuration(dashboard.carriedDebtSeconds)} 포함
+            밀린 {forgiveMinutes(dashboard.carriedDebtSeconds)}분은 최근 7일이 지나면 자동으로 사라져요 — 뒤처져도 괜찮아요.
           </Text>
         )}
         {/* 광고는 죄책감이 뜬 이 자리에만 나타난다. 문구에 "광고"를 명시해 광고 위장 금지 조항을 지킨다. */}
@@ -317,35 +541,26 @@ export function Home({
             <Text typography="st11" style={{ flex: 1, textAlign: 'left' }}>
               {selectedBook.title}
             </Text>
-            <Button variant="weak" size="small" disabled={busy} onClick={() => setPicking((p) => !p)}>
+            <Button
+              variant="weak"
+              size="small"
+              disabled={busy}
+              onClick={() => setSheet(openSheetMode('start', dashboard.readingBooks))}
+            >
               바꾸기
             </Button>
           </div>
-          {picking && (
-            <div style={{ marginTop: 10 }}>
-              <BookList
-                books={dashboard.readingBooks}
-                selectedId={selectedBook.id}
-                disabled={busy}
-                onPick={(book) => {
-                  setSelectedBookId(book.id);
-                  setPicking(false); // 고르면 곧바로 칩으로 되돌아간다(같은 책을 다시 골라도 접힌다).
-                }}
-              />
-            </div>
-          )}
         </section>
       )}
 
-      {untagged !== null && (
+      {/* 책이 없으면 칩 자리가 통째로 비어 막다른 길이었다 — 여기서 서재로 건네준다(측정 자체는 책 없이도 된다). */}
+      {!dashboard.hasActiveSession && selectedBook === null && (
         <section style={sectionStyle}>
-          <Text typography="st11" style={{ display: 'block', marginBottom: 10 }}>
-            방금 측정, 무슨 책이었나요?
+          <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
+            아직 책이 없어요. 읽고 있는 책을 추가하면 측정할 때 고를 수 있어요.
           </Text>
-          {/* 태깅은 "고른 책"이 없다 — selectedId를 안 주면 전부 weak로 나열된다. */}
-          <BookList books={dashboard.readingBooks} disabled={busy} onPick={tag} />
-          <Button display="block" variant="weak" size="medium" onClick={() => setUntagged(null)}>
-            나중에
+          <Button display="block" variant="weak" size="medium" disabled={busy} onClick={onGoLibrary}>
+            첫 책 추가하기
           </Button>
         </section>
       )}
@@ -384,6 +599,31 @@ export function Home({
       <Button display="block" variant="weak" size="medium" style={{ marginTop: 12 }} onClick={onGoGoal}>
         목표 바꾸기
       </Button>
+
+      <AccountSection
+        confirm={confirmLogout}
+        onConfirm={setConfirmLogout}
+        onLogout={() => void logoutAndLeave(onLogout)}
+      />
+
+      {/* 태깅 시트는 "고른 책"이 없다 — selectedId를 안 주면 아무 행도 강조되지 않는다. */}
+      {sheet !== null && (
+        <BookSheet
+          mode={sheet}
+          books={dashboard.readingBooks}
+          selectedId={sheet === 'start' ? selectedBookId : null}
+          disabled={busy}
+          onPick={pickHandler(sheet, {
+            select: (book) => {
+              setSelectedBookId(book.id);
+              setSheet(null); // 고르면 곧바로 칩으로 되돌아간다(같은 책을 다시 골라도 닫힌다).
+            },
+            tag,
+          })}
+          onSkip={sheet === 'start' ? () => { setSheet(null); start(null); } : closeSheet}
+          onClose={closeSheet}
+        />
+      )}
     </Screen>
   );
 }

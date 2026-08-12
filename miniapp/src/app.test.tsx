@@ -2,7 +2,17 @@ import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { App, BottomTabBar, MainTabs, TAB_BAR_HEIGHT, TAB_BAR_MARGIN, TABS, tabChangeHandler } from './App';
+import {
+  App,
+  BottomTabBar,
+  MainTabs,
+  REFRESH_THROTTLE_MS,
+  TAB_BAR_HEIGHT,
+  TAB_BAR_MARGIN,
+  TABS,
+  shouldRefresh,
+  tabChangeHandler,
+} from './App';
 import type { DashboardResponse } from './api';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
@@ -46,6 +56,7 @@ function renderTab(tab: (typeof TABS)[number]['key']) {
         onTimerChange={() => {}}
         onGraphChange={() => {}}
         onGoGoal={() => {}}
+        onLogout={() => {}}
         onError={() => {}}
       />
     </TDSMobileProvider>,
@@ -169,5 +180,25 @@ describe('탭 밖 오케스트레이션 (재편 전 동작 보존)', () => {
     localStorage.setItem('booktimer.token', 'tok');
 
     expect(renderApp()).toContain('불러오는 중');
+  });
+});
+
+/**
+ * 포커스 복귀 재조회 스로틀 — 웹·다른 기기에서 바꾼 값이 재진입 전까지 안 보이던 문제를 고치되,
+ * 앱 전환이 잦은 미니앱에서 서버를 두들기지 않게 최소 간격을 둔다. 배선(visibilitychange)은
+ * 하니스가 effect를 안 돌려 못 잡으므로 판정만 순수 함수로 계측한다.
+ */
+describe('포커스 복귀 재조회 (shouldRefresh)', () => {
+  it('마지막 재조회에서 60초가 안 지났으면 건너뛴다', () => {
+    expect(shouldRefresh(1_000, 1_000 + REFRESH_THROTTLE_MS - 1)).toBe(false);
+  });
+
+  it('60초가 지났으면 다시 받는다 — 경계에서도 받는다', () => {
+    expect(shouldRefresh(1_000, 1_000 + REFRESH_THROTTLE_MS)).toBe(true);
+    expect(shouldRefresh(1_000, 1_000 + REFRESH_THROTTLE_MS * 10)).toBe(true);
+  });
+
+  it('간격이 1분이다 — 값이 0이 되면 스로틀 자체가 사라진다', () => {
+    expect(REFRESH_THROTTLE_MS).toBe(60_000);
   });
 });

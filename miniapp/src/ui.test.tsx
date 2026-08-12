@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { DashboardResponse } from './api';
 import { History } from './screens/History';
 import { Home } from './screens/Home';
-import { COVER_PALETTE, GrassGrid, coverColor, coverSource, initialOf } from './ui';
+import { COVER_PALETTE, ErrorMessage, GrassGrid, coverColor, coverSource, initialOf } from './ui';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
 // 홈이 렌더 중에 알림 동의 캐시를 읽는다. 여기선 describe 본문에서도 홈을 그리므로(수집 시점) 모듈 최상단에서 심는다.
@@ -39,7 +39,8 @@ describe('잔디 렌더', () => {
   });
 
   it('주 × 일 수만큼 칸을 그린다', () => {
-    expect(markup.match(/border-radius:2px/g)).toHaveLength(6);
+    // 칸 크기(11px)까지 함께 봐야 잔디 칸이다 — 범례 스와치도 같은 2px 라운드를 쓴다.
+    expect(markup.match(/width:11px;height:11px/g)).toHaveLength(6);
   });
 
   it('가로 스크롤 컨테이너가 스크롤바 숨김 클래스를 쓴다 — 규칙만 있고 안 붙이면 아무 일도 안 난다', () => {
@@ -104,7 +105,9 @@ function home(overrides: Partial<DashboardResponse>) {
         onTimerChange={() => {}}
         onGraphChange={() => {}}
         onGoHistory={() => {}}
+        onGoLibrary={() => {}}
         onGoGoal={() => {}}
+        onLogout={() => {}}
         onError={() => {}}
       />
     </TDSMobileProvider>,
@@ -112,18 +115,22 @@ function home(overrides: Partial<DashboardResponse>) {
 }
 
 describe('홈 오늘 진행률', () => {
-  it('목표의 남은 시간만큼을 진행률로 환산한다', () => {
-    expect(home({ todayGoalSeconds: 3600, remainingSeconds: 900 })).toMatch(/중 75%/);
+  it('오늘 읽은 만큼 차오른다 — 게이지도 카운트업과 같은 방향을 본다', () => {
+    // 목표 1시간에 15분이 남았으면 45분을 읽은 것 = 75%. TDS ProgressBar는 이 값을 aria-valuetext로 적는다.
+    expect(home({ todayGoalSeconds: 3600, remainingSeconds: 900 })).toContain('aria-valuetext="75%"');
   });
 
-  it('목표를 초과해도 100%를 넘기지 않는다 — 남은 시간이 음수인 날', () => {
-    expect(home({ todayGoalSeconds: 3600, remainingSeconds: -600 })).toMatch(/중 100%/);
+  it('목표를 초과해도 게이지는 가득 찬 채로 멈춘다 — TDS는 100%를 안 잘라 준다(실측: 116%가 그대로 샌다)', () => {
+    const markup = home({ todayGoalSeconds: 3600, remainingSeconds: -600 });
+
+    expect(markup).toContain('오늘 목표 달성');
+    expect(markup).toContain('aria-valuetext="100%"');
   });
 
   it('목표가 0이면 게이지를 그리지 않는다 — 0으로 나누면 NaN·Infinity가 새어나온다', () => {
     const markup = home({ todayGoalSeconds: 0, remainingSeconds: 0 });
 
-    expect(markup).not.toMatch(/중 \d+%/); // 게이지 라벨("오늘 목표 … 중 n%")이 아예 없어야 한다
+    expect(markup).not.toContain('오늘 목표'); // 게이지 라벨("오늘 목표 … · 목표까지 …")이 아예 없어야 한다
     expect(markup).not.toMatch(/NaN|Infinity/);
   });
 
@@ -132,9 +139,9 @@ describe('홈 오늘 진행률', () => {
     expect(home({ quotes: [{ text: '책은 도끼다', author: '카프카' }] })).toContain('카프카');
   });
 
-  it('게이지 라벨과 값을 각자 다른 블록에 둔다 — "오늘 남은 시간15분"으로 붙어 보였다', () => {
+  it('게이지 라벨과 값을 각자 다른 블록에 둔다 — "오늘 읽은 시간45:00"으로 붙어 보였다', () => {
     const markup = home({ remainingSeconds: 900 });
-    const between = markup.slice(markup.indexOf('오늘 남은 시간') + 8, markup.indexOf('15분'));
+    const between = markup.slice(markup.indexOf('오늘 읽은 시간') + 8, markup.indexOf('45:00'));
 
     expect(between).toContain('</div>');
   });
@@ -309,5 +316,38 @@ describe('표지 출처 결정', () => {
 
   it('다른 책이 실패한 것은 이 책에 옮지 않는다 — 목록 재사용으로 실패가 번지면 멀쩡한 표지가 사라진다', () => {
     expect(coverSource('https://img/a.jpg', 'https://img/b.jpg')).toBe('https://img/a.jpg');
+  });
+});
+
+/**
+ * 실패 안내 — 초기 로드가 실패하면 빨간 글자만 남아 **막다른 길**이 됐다(다시 시도하려면 미니앱을 껐다 켜야 했다).
+ * 재시도가 필요한 화면만 `onRetry`를 건네고, 액션 실패처럼 되돌릴 게 없는 자리는 문구만 그대로 둔다.
+ */
+describe('실패 안내', () => {
+  const errorBox = (message: string | null, onRetry?: () => void) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <ErrorMessage message={message} onRetry={onRetry} />
+      </TDSMobileProvider>,
+    );
+
+  it('실패하면 그 자리에서 다시 받을 길을 준다', () => {
+    const markup = errorBox('네트워크 연결을 확인해 주세요', () => {});
+
+    expect(markup).toContain('네트워크 연결을 확인해 주세요');
+    expect(markup).toContain('다시 시도');
+    expect(markup).toContain('<button');
+  });
+
+  it('재시도할 게 없으면 문구만 — 아무 데도 안 가는 버튼을 내놓지 않는다', () => {
+    const markup = errorBox('스토리를 너무 자주 올렸어요.');
+
+    expect(markup).toContain('스토리를 너무 자주 올렸어요.');
+    expect(markup).not.toContain('다시 시도');
+  });
+
+  it('실패가 없으면 아무것도 그리지 않는다', () => {
+    // 프로바이더는 전역 스타일을 뱉으므로 이 단언만 맨몸으로 그린다.
+    expect(renderToStaticMarkup(<ErrorMessage message={null} onRetry={() => {}} />)).toBe('');
   });
 });

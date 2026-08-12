@@ -178,6 +178,19 @@ describe('Bearer 호출·에러 계약', () => {
     expect(token.get()).toBeNull();
   });
 
+  it('fetch 자체가 실패하면 한국어 안내로 바꿔 던진다 — 영문 "Failed to fetch"가 그대로 노출됐다', async () => {
+    token.set('tok');
+    vi.mocked(globalThis.fetch).mockRejectedValue(new TypeError('Failed to fetch'));
+
+    const error = (await fetchDashboard().catch((e: unknown) => e)) as Error;
+
+    expect(error.message).toBe('네트워크 연결을 확인해 주세요');
+    expect(error.message).not.toContain('Failed to fetch');
+    // 401 재로그인 분기와 섞이면 안 된다 — 끊긴 네트워크로 토큰을 버리면 복구가 재로그인이 된다.
+    expect(error.name).not.toBe('UnauthorizedError');
+    expect(token.get()).toBe('tok');
+  });
+
   it('본문 없는 200도 성공으로 처리한다 — /api/miniapp/goal은 빈 본문을 준다', async () => {
     token.set('tok');
     vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '') as never);

@@ -1,8 +1,9 @@
 import { Button } from '@toss/tds-mobile';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { DashboardResponse, TimerState } from './api';
 import { fetchDashboard, token } from './api';
+import { useBackClose } from './back';
 import { Goal } from './screens/Goal';
 import { History } from './screens/History';
 import { Home } from './screens/Home';
@@ -39,6 +40,9 @@ export const TAB_BAR_HEIGHT = 56;
 /** 떠 있는 탭바의 좌우 여백 — 화면 가장자리에서 이만큼 떨어져야 "부착"이 아니라 "플로팅"으로 읽힌다. */
 export const TAB_BAR_MARGIN = 16;
 
+/** 떠 있는 탭바의 층 — 시트·딤은 이 위로 올라가야 한다(홈의 책 고르기 시트가 이 값을 넘겨 쓴다). */
+export const TAB_BAR_Z_INDEX = 100;
+
 export type TabKey = (typeof TABS)[number]['key'];
 
 /**
@@ -52,6 +56,14 @@ export const tabChangeHandler =
 
 /** 탭 밖 전역 상태 — 인증·연결·목표·에러는 탭바 없이 화면 전체를 차지한다. */
 type View = 'auth' | 'link' | 'loading' | 'main' | 'goal' | 'error';
+
+/** 포커스 복귀 재조회의 최소 간격 — 미니앱은 앱 전환이 잦아 복귀마다 받으면 서버를 두들긴다. */
+export const REFRESH_THROTTLE_MS = 60_000;
+
+/** 지금 다시 받을 때인가. 판정만 순수하게 빼 계측한다(배선은 effect라 하니스가 못 잡는다). */
+export function shouldRefresh(lastAt: number, now: number): boolean {
+  return now - lastAt >= REFRESH_THROTTLE_MS;
+}
 
 /**
  * 라우터 없이 상태 두 개로 화면을 정한다 — `view`(탭 밖 오케스트레이션) × `tab`(메인 탭).
@@ -71,9 +83,12 @@ export function App() {
     setView('auth');
   }, []);
 
+  const lastFetchedAt = useRef(0);
+
   const load = useCallback(
     (next: View = 'main') => {
       setView('loading');
+      lastFetchedAt.current = Date.now();
       fetchDashboard()
         .then((data) => {
           setDashboard(data);
@@ -94,6 +109,33 @@ export function App() {
     // 저장된 토큰이 있으면 로그인 화면을 건너뛰고 바로 대시보드를 받는다(재방문 경로).
     if (view === 'loading' && dashboard === null) load();
   }, [view, dashboard, load]);
+
+  /**
+   * 앱으로 돌아오면 조용히 다시 받는다 — 웹·다른 기기에서 바꾼 값(목표·책장·측정)이 재진입 전까지
+   * 안 보이던 문제. 화면은 그대로 두고 **성공했을 때만** 갈아끼운다: 실패로 멀쩡한 화면을 에러로
+   * 바꾸지 않는다. 측정 중이어도 서버 응답이 진실이라 그대로 덮는다.
+   */
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== 'visible' || token.get() === null) return;
+      if (!shouldRefresh(lastFetchedAt.current, Date.now())) return;
+      lastFetchedAt.current = Date.now(); // 응답 전에 찍는다 — 연속 복귀가 요청을 겹쳐 쌓지 않게
+      fetchDashboard()
+        .then(setDashboard)
+        .catch((e: Error) => {
+          if (e.name === 'UnauthorizedError') toLogin(); // 토큰이 폐기됐으면 조용히 넘어갈 수 없다
+        });
+    };
+    document.addEventListener('visibilitychange', refresh);
+    return () => document.removeEventListener('visibilitychange', refresh);
+  }, [toLogin]);
+
+  // 탭 밖 전체 화면도 뒤로가기로 나갈 수 있다 — 각 화면의 「돌아가기」와 같은 자리로 돌려보낸다.
+  useBackClose(view === 'link', () => setView('auth'));
+  useBackClose(view === 'goal', () => {
+    setFirstRun(false);
+    setView('main');
+  });
 
   const handleError = useCallback(
     (e: Error) => {
@@ -167,6 +209,7 @@ export function App() {
       onTimerChange={applyTimer}
       onGraphChange={applyGraph}
       onGoGoal={() => setView('goal')}
+      onLogout={toLogin}
       onError={handleError}
     />
   );
@@ -183,6 +226,7 @@ export function MainTabs({
   onTimerChange,
   onGraphChange,
   onGoGoal,
+  onLogout,
   onError,
 }: {
   tab: TabKey;
@@ -191,6 +235,7 @@ export function MainTabs({
   onTimerChange: (timer: TimerState) => void;
   onGraphChange: (graph: DashboardResponse['graph']) => void;
   onGoGoal: () => void;
+  onLogout: () => void;
   onError: (error: Error) => void;
 }) {
   return (
@@ -203,7 +248,9 @@ export function MainTabs({
             onTimerChange={onTimerChange}
             onGraphChange={onGraphChange}
             onGoHistory={() => onTabChange('history')}
+            onGoLibrary={() => onTabChange('library')}
             onGoGoal={onGoGoal}
+            onLogout={onLogout}
             onError={onError}
           />
         )}
@@ -236,7 +283,7 @@ export function BottomTabBar({ tab, onTabChange }: { tab: TabKey; onTabChange: (
         left: TAB_BAR_MARGIN,
         right: TAB_BAR_MARGIN,
         bottom: 'calc(12px + env(safe-area-inset-bottom))',
-        zIndex: 100,
+        zIndex: TAB_BAR_Z_INDEX,
         display: 'flex',
         overflow: 'hidden', // 모서리 밖으로 새는 탭 눌림 효과를 알약 안에 가둔다
         background: 'var(--adaptiveBackground, #FCFAF5)',

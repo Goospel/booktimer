@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { login } from './api';
+import { LinkAccount } from './screens/LinkAccount';
 import { LoginBridge, beginLogin } from './screens/LoginBridge';
 import { userAgent } from './test-fixtures';
 
@@ -70,5 +71,18 @@ describe('로그인 시작 (beginLogin)', () => {
     loginMock.mockRejectedValue(new Error('인가 취소'));
 
     await expect(beginLogin()).rejects.toThrow('인가 취소');
+  });
+});
+
+/** 엔터 제출 — 연결 코드는 짧아서 입력 직후 곧바로 완료를 누른다. */
+describe('계정 연결 엔터 제출', () => {
+  it('연결 코드 입력을 form으로 감싼다', () => {
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <LinkAccount onLinked={() => {}} onBack={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+    expect(markup).toContain('<form');
   });
 });

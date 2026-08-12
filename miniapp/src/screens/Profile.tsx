@@ -22,6 +22,19 @@ import { BookCover, ErrorMessage, Loading, Screen } from '../ui';
  * <p>대상은 loginId로만 식별된다(서버 소셜 API 공통). 차단·ADMIN·없는 아이디는 모두 404로 오므로
  * 화면은 "찾을 수 없어요"를 그대로 보여준다 — 존재 여부를 추측해 다르게 말하지 않는다.
  */
+/**
+ * 열린 안전 패널 — 열림과 차단 확인이 **한 덩어리**다(서재 `OpenRow`와 같은 이유).
+ * 확인을 따로 두면 확인을 띄운 채 패널을 접었다 다시 폈을 때 「정말 차단」이 곧바로 노출된다.
+ */
+export interface SafetyState {
+  confirmBlock: boolean;
+}
+
+/** 더보기 여닫기 — 어느 쪽이든 **차단 확인은 풀린 채로 시작한다**(위 불변식). */
+export function toggleSafety(open: SafetyState | null): SafetyState | null {
+  return open === null ? { confirmBlock: false } : null;
+}
+
 export function Profile({
   loginId,
   onBack,
@@ -34,7 +47,7 @@ export function Profile({
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [books, setBooks] = useState<ProfileBook[]>([]);
   const [activeTag, setActiveTag] = useState<string | null>(null);
-  const [more, setMore] = useState(false);
+  const [more, setMore] = useState<SafetyState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -47,11 +60,14 @@ export function Profile({
     [onError],
   );
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError(null); // 재시도가 성공했는데 지난 실패 문구가 남지 않게
     fetchProfile(loginId).then(setProfile).catch(fail);
     // 헤더와 책 목록을 따로 받는다 — 태그 드릴다운이 책 목록만 갈아끼우므로 목록의 출처를 하나로 둔다.
     fetchProfileBooks(loginId).then((page) => setBooks(page.books)).catch(fail);
   }, [loginId, fail]);
+
+  useEffect(load, [load]);
 
   const run = (action: Promise<unknown>, after: () => void) => {
     setBusy(true);
@@ -80,14 +96,15 @@ export function Profile({
 
   const report = (reason: ReportReason, detail: string) =>
     run(reportUser(loginId, reason, detail), () => {
-      setMore(false);
+      setMore(null);
       setNotice('신고가 접수됐어요. 검토 후 조치할게요.');
     });
 
   if (profile === null) {
     return (
-      <Screen title="책방">
-        <ErrorMessage message={error} />
+      <Screen title="책방" onBack={onBack}>
+        {/* 못 받았을 때 나갈 길만 있으면 실패가 곧 막다른 길이다 — 그 자리에서 다시 받을 길도 함께 준다. */}
+        <ErrorMessage message={error} onRetry={load} />
         {error === null ? (
           <Loading />
         ) : (
@@ -108,8 +125,18 @@ export function Profile({
         busy={busy}
         onFollowToggle={toggleFollow}
         onSelectTag={selectTag}
-        onMore={() => setMore((v) => !v)}
-        safety={more ? <SafetyPanel busy={busy} onBlock={block} onReport={report} /> : null}
+        onMore={() => setMore(toggleSafety)}
+        safety={
+          more === null ? null : (
+            <SafetyPanel
+              busy={busy}
+              confirmBlock={more.confirmBlock}
+              onConfirmBlock={(confirmBlock) => setMore({ confirmBlock })}
+              onBlock={block}
+              onReport={report}
+            />
+          )
+        }
         onBack={onBack}
       />
       <div style={{ padding: '0 20px 40px' }}>
@@ -147,7 +174,7 @@ export function ProfileCard({
   onBack: () => void;
 }) {
   return (
-    <Screen title={`${profile.nickname}님의 책방`}>
+    <Screen title={`${profile.nickname}님의 책방`} onBack={onBack}>
       <Text typography="st12" color="grey600" style={{ display: 'block' }}>
         @{profile.loginId} · 팔로워 {profile.followerCount} · 팔로잉 {profile.followingCount}
       </Text>
@@ -236,13 +263,22 @@ export function ProfileCard({
   );
 }
 
-/** 차단·신고 — 소셜 노출과 짝인 안전장치(설계 §4·§5-5). 사유는 서버 enum 값 그대로 보낸다. */
-function SafetyPanel({
+/**
+ * 차단·신고 — 소셜 노출과 짝인 안전장치(설계 §4·§5-5). 사유는 서버 enum 값 그대로 보낸다.
+ *
+ * <p>차단 확인은 이 안의 state가 아니라 **밖에서 받는다** — 패널을 접을 때 함께 풀려야 하고(위
+ * `toggleSafety`), 정적 렌더 하니스가 확인 단계에 도달할 길도 그 프롭뿐이다(서재 `confirmDelete`와 같다).
+ */
+export function SafetyPanel({
   busy,
+  confirmBlock,
+  onConfirmBlock,
   onBlock,
   onReport,
 }: {
   busy: boolean;
+  confirmBlock: boolean;
+  onConfirmBlock: (confirm: boolean) => void;
   onBlock: () => void;
   onReport: (reason: ReportReason, detail: string) => void;
 }) {
@@ -276,13 +312,25 @@ function SafetyPanel({
           onChange={(e) => setDetail(e.target.value)}
         />
       </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
         <Button style={{ flex: 1 }} size="small" disabled={busy} onClick={() => onReport(reason, detail.trim())}>
           신고하기
         </Button>
-        <Button size="small" color="danger" disabled={busy} onClick={onBlock}>
-          차단하기
-        </Button>
+        {/* 차단은 되돌리기 비싸다 — 그 순간 상대 책방이 404가 되고 이 화면도 닫힌다. 한 탭 더 받는다. */}
+        {confirmBlock ? (
+          <>
+            <Button size="small" color="danger" disabled={busy} onClick={onBlock}>
+              정말 차단
+            </Button>
+            <Button size="small" variant="weak" disabled={busy} onClick={() => onConfirmBlock(false)}>
+              취소
+            </Button>
+          </>
+        ) : (
+          <Button size="small" color="danger" disabled={busy} onClick={() => onConfirmBlock(true)}>
+            차단하기
+          </Button>
+        )}
       </div>
     </div>
   );

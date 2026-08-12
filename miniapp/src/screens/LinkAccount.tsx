@@ -30,14 +30,22 @@ export function LinkAccount({ onLinked, onBack }: { onLinked: () => void; onBack
         PC 웹에서 booktimer.app에 로그인한 뒤 <b>설정 → 토스 앱 연결</b>에서 연결 코드를 받아 입력해 주세요.
         코드는 5분 뒤 만료돼요.
       </Text>
-      <TextField
-        variant="box"
-        label="연결 코드"
-        placeholder="예: A1B2C3"
-        value={code}
-        disabled={busy}
-        onChange={(e) => setCode(e.target.value)}
-      />
+      {/* 입력 하나짜리 form이라 엔터(키보드 「완료」)가 곧 제출이다 — 버튼은 밖에 둔다(Social과 같은 배선). */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault(); // 막지 않으면 페이지가 새로고침돼 로그인 화면으로 되돌아간다
+          if (!busy && code.trim() !== '') submit();
+        }}
+      >
+        <TextField
+          variant="box"
+          label="연결 코드"
+          placeholder="예: A1B2C3"
+          value={code}
+          disabled={busy}
+          onChange={(e) => setCode(e.target.value)}
+        />
+      </form>
       <ErrorMessage message={error} />
       <Button
         display="block"
