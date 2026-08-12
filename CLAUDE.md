@@ -420,10 +420,13 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
 
 ### 미니앱 개발 루프 — 기본은 브라우저 목 모드 (2026-08-12 실측 갱신)
 
-미니앱 화면 작업 시 **Claude가 직접 `npm --prefix miniapp run dev:mock`을 백그라운드로 띄워 브라우저(vite HMR)로 확인한다** — 사용자에게 명령어를 요구하지 않는다(사용자 지정). 목 모드는 `api.ts`가 서버 대신 `src/dev-mock.ts`의 픽스처를 돌려주고 토큰을 더미로 두므로, 서버·토스 SDK·에뮬레이터 없이 홈·서재·소셜·스토리·기록·목표가 전부 뜬다. 목에 없는 경로는 404로 던져 조용히 빈 화면이 되지 않는다.
+미니앱 화면 작업 시 **Claude가 직접 `npm --prefix miniapp run dev:mock`을 백그라운드로 띄워 브라우저(vite HMR, 포트 5174)로 확인한다** — 사용자에게 명령어를 요구하지 않는다(사용자 지정). 목 모드는 `api.ts`가 서버 대신 `src/dev-mock.ts`의 픽스처를 돌려주고 토큰을 더미로 두므로, 서버·토스 SDK·에뮬레이터 없이 홈·서재·소셜·스토리·기록·목표가 전부 뜬다. 목에 없는 경로는 404로 던져 조용히 빈 화면이 되지 않는다.
 
 - 픽스처를 고치려면 `miniapp/src/dev-mock.ts` 한 곳(모듈 메모리 상태라 새로고침이 초기화다).
 - 목 코드는 프로드 번들에서 통째로 잘린다(`import.meta.env.DEV` 게이트 + dynamic import). `deploy.sh`가 `__DEV_MOCK__` 부재를 배포 전에 재확인한다.
-- **실기기·SDK 연동(실로그인·광고·알림 동의)만** `bash miniapp/deploy.sh --expect "<이번 변경 문구>"` + 실기기다 — 목 모드로는 원리상 확인되지 않는다.
+- **실기기·SDK 연동(실로그인·광고·알림 동의)만** `bash miniapp/deploy.sh --expect "<이번 변경 문구>"` + 실기기다 — 목 모드로는 원리상 확인되지 않는다. ⚠️ **`--expect` 마커는 압축에 살아남는 UI 한글 문자열로 고른다** — `slice(0,15)` 같은 코드 조각은 minify가 `slice(0,EGe)`로 변형해 검증이 헛돈다(T-153).
+- **배포 권한 경계**: Claude는 `deploy.sh` 업로드(deploymentId 확보)까지다 — **앱인토스 콘솔(심사 제출·[출시하기])은 Claude 접근이 차단**돼 있어 사용자 몫. 배포 보고 시 "업로드 완료, 심사 제출은 콘솔에서"로 경계를 명시하고 출시 완료로 오보고하지 않는다.
+- ⚠️ **잔디 방향 규약**: 서버 `ContributionGraphBuilder`가 weeks를 뒤집어 보낸다 — **`weeks[0]` = 최신 주 = 왼쪽**, `monthLabels`도 그 순서 기준. 최근 N주는 `slice(0, N)`. oldest-first로 가정하면 안 된다 — 두 화면이 같은 오가정으로 깨졌고 조사 서브에이전트도 오독했다(2026-08-12 핫픽스). 규약 테스트는 `api.ts` 주석 + 최신 주만 초록인 픽스처 단언.
+- **테스트 하니스**(`npm --prefix miniapp test` = vitest): **jsdom 없음** — `renderToStaticMarkup` 정적 렌더라 effect·클릭이 안 돈다. 로직은 순수 함수로 꺼내 계측하고, effect·핸들러에 대한 부정 단언("호출 안 한다")은 항상 통과라 금지(T-149). TDS `BottomSheet` 등 **포털 컴포넌트는 정적 렌더에서 마크업이 통째로 빈다**(그래서 시트는 자체 구현). `miniapp/.env.test`가 `.env.local` 누수를 차단한다 — 머신 로컬 env로 테스트가 깨지면 이걸 의심.
 
 ⚠️ **샌드박스 앱의 dev(핫 리로드) 연결은 웹 미니앱에서 불가능하다** — 샌드박스의 dev 프로토콜은 granite(RN) 전용이고 `@apps-in-toss/web-framework`엔 dev 서버·vite 플러그인 자체가 없다(2026-08-12 실측, T-152). 그래서 `.claude/scripts/miniapp-emulator.ps1`은 **개발 루프의 기본 경로가 아니다** — 향후 지원 대비 + 샌드박스 앱 설치·`adb reverse` 자동화용으로 보존한다(사용법은 스크립트 헤더 주석). 부팅이 5분+ 걸리면 Quick Boot 스냅샷 꼬임(T-151) — `-ColdBoot`로 재시도.
