@@ -16,7 +16,9 @@ jobs:
         with:
           node-version: '20'
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: |
+            frontend/package-lock.json
+            miniapp/package-lock.json
       - name: Install frontend deps
         run: npm --prefix frontend ci
       - name: Run frontend tests
@@ -27,6 +29,12 @@ jobs:
       # CI를 통과해 새어나간다(T-082). build 스텝이 이미 전 섬을 빌드하므로 검사만 넓힌다.
       - name: Verify bundle is not stale
         run: git diff --exit-code src/main/resources/static
+      # 미니앱은 백엔드 API 타입(record)을 단일 출처로 쓰므로 백엔드 변경이 miniapp 테스트를
+      # 깰 수 있다 — 배포(miniapp/deploy.sh) 때만 돌면 너무 늦어 PR 단계에서 막는다.
+      - name: Install miniapp deps
+        run: npm --prefix miniapp ci
+      - name: Run miniapp tests
+        run: npm --prefix miniapp test
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
