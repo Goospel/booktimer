@@ -107,6 +107,7 @@ function home(overrides: Partial<DashboardResponse>) {
         onGoHistory={() => {}}
         onGoLibrary={() => {}}
         onGoGoal={() => {}}
+        onLogout={() => {}}
         onError={() => {}}
       />
     </TDSMobileProvider>,

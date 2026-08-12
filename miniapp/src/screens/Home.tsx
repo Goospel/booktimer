@@ -2,7 +2,7 @@ import { Button, ProgressBar, Text } from '@toss/tds-mobile';
 import { useEffect, useState } from 'react';
 
 import type { BookOption, DashboardResponse, QuoteDto, TimerState, WaiveResponse } from '../api';
-import { ApiError, startSession, stopSession, tagBook, waiveDebt } from '../api';
+import { ApiError, logout, startSession, stopSession, tagBook, waiveDebt } from '../api';
 import { useBackClose } from '../back';
 import { elapsedSeconds, formatClock, formatDuration } from '../format';
 import {
@@ -265,6 +265,64 @@ export function BookSheet({
   );
 }
 
+/**
+ * 로그아웃 → 로그인 화면. **무슨 일이 있어도 화면을 넘긴다.**
+ *
+ * <p>`api.logout()`이 이미 실패를 삼키고 `finally`로 토큰을 버리므로, 여기서 넘기지 않으면 토큰 없는
+ * 홈에 남아 무엇을 눌러도 401만 나는 막다른 길이 된다. 그래서 `finally`로 이동을 못 박는다.
+ */
+export async function logoutAndLeave(onDone: () => void): Promise<void> {
+  try {
+    await logout();
+  } catch {
+    // 폐기 실패는 삼킨다 — 되던지면 호출부의 `void`가 unhandled rejection이 된다. 토큰은 이미 버려졌다.
+  }
+  onDone();
+}
+
+/**
+ * 계정 진입점 — 홈 맨 아래 muted 한 줄 + 로그아웃.
+ *
+ * <p>미니앱엔 설정 화면이 없어 `api.logout()`은 구현돼 있는데 부르는 UI가 없었다. 계정 관리·상세 설정은
+ * 웹이 본진이라(설계 §2.5) 여기서 흉내내지 않고 어디로 가면 되는지만 말한다.
+ *
+ * <p>확인 단계를 밖에서 받는 이유는 늘 같다 — 정적 렌더 하니스가 클릭을 못 잡아, 프롭이 아니면
+ * 「정말 로그아웃」 가지에 영영 닿지 못한다(서재 `confirmDelete`·책방 `confirmBlock`과 같다).
+ */
+export function AccountSection({
+  confirm,
+  onConfirm,
+  onLogout,
+}: {
+  confirm: boolean;
+  onConfirm: (confirm: boolean) => void;
+  onLogout: () => void;
+}) {
+  return (
+    <div style={{ marginTop: 32, textAlign: 'center' }}>
+      <Text typography="st12" color="grey600" style={{ display: 'block', wordBreak: 'keep-all' }}>
+        계정 관리·상세 설정은 booktimer.app에서 할 수 있어요
+      </Text>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 10 }}>
+        {confirm ? (
+          <>
+            <Button size="small" color="danger" onClick={onLogout}>
+              정말 로그아웃
+            </Button>
+            <Button size="small" variant="weak" onClick={() => onConfirm(false)}>
+              취소
+            </Button>
+          </>
+        ) : (
+          <Button size="small" variant="weak" onClick={() => onConfirm(true)}>
+            로그아웃
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** 종료 직후 태깅 대상 — 책 없이 측정한 세션에 나중에 책을 붙인다. */
 interface Untagged {
   sessionId: number;
@@ -281,6 +339,7 @@ export function Home({
   onGoHistory,
   onGoLibrary,
   onGoGoal,
+  onLogout,
   onError,
 }: {
   dashboard: DashboardResponse;
@@ -289,9 +348,12 @@ export function Home({
   onGoHistory: () => void;
   onGoLibrary: () => void;
   onGoGoal: () => void;
+  onLogout: () => void;
   onError: (error: Error) => void;
 }) {
   const [untagged, setUntagged] = useState<Untagged | null>(null);
+  /** 로그아웃 확인 단계 — 실수 한 탭에 세션이 날아가지 않게 한 번 더 받는다. */
+  const [confirmLogout, setConfirmLogout] = useState(false);
   /** 측정할 책 — 칩에 뜨는 그 책이고, 시작은 아래 주 버튼이 맡는다(여러 책을 번갈아 읽는 사람). */
   const [selectedBookId, setSelectedBookId] = useState(() =>
     defaultBookId(dashboard.readingBooks, dashboard.recentBookId),
@@ -537,6 +599,12 @@ export function Home({
       <Button display="block" variant="weak" size="medium" style={{ marginTop: 12 }} onClick={onGoGoal}>
         목표 바꾸기
       </Button>
+
+      <AccountSection
+        confirm={confirmLogout}
+        onConfirm={setConfirmLogout}
+        onLogout={() => void logoutAndLeave(onLogout)}
+      />
 
       {/* 태깅 시트는 "고른 책"이 없다 — selectedId를 안 주면 아무 행도 강조되지 않는다. */}
       {sheet !== null && (

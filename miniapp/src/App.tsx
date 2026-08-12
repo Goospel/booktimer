@@ -209,6 +209,7 @@ export function App() {
       onTimerChange={applyTimer}
       onGraphChange={applyGraph}
       onGoGoal={() => setView('goal')}
+      onLogout={toLogin}
       onError={handleError}
     />
   );
@@ -225,6 +226,7 @@ export function MainTabs({
   onTimerChange,
   onGraphChange,
   onGoGoal,
+  onLogout,
   onError,
 }: {
   tab: TabKey;
@@ -233,6 +235,7 @@ export function MainTabs({
   onTimerChange: (timer: TimerState) => void;
   onGraphChange: (graph: DashboardResponse['graph']) => void;
   onGoGoal: () => void;
+  onLogout: () => void;
   onError: (error: Error) => void;
 }) {
   return (
@@ -247,6 +250,7 @@ export function MainTabs({
             onGoHistory={() => onTabChange('history')}
             onGoLibrary={() => onTabChange('library')}
             onGoGoal={onGoGoal}
+            onLogout={onLogout}
             onError={onError}
           />
         )}
