@@ -39,7 +39,8 @@ describe('잔디 렌더', () => {
   });
 
   it('주 × 일 수만큼 칸을 그린다', () => {
-    expect(markup.match(/border-radius:2px/g)).toHaveLength(6);
+    // 칸 크기(11px)까지 함께 봐야 잔디 칸이다 — 범례 스와치도 같은 2px 라운드를 쓴다.
+    expect(markup.match(/width:11px;height:11px/g)).toHaveLength(6);
   });
 
   it('가로 스크롤 컨테이너가 스크롤바 숨김 클래스를 쓴다 — 규칙만 있고 안 붙이면 아무 일도 안 난다', () => {

@@ -5,7 +5,35 @@ import type { ReactNode } from 'react';
 import type { ContributionDay } from './api';
 
 /** 잔디 색 농도 0~4 — 웹 app.css `--grass-0..4`와 같은 값(서버가 level을 계산해 준다). */
-const LEVEL_COLORS = ['#EAE4D7', '#C3D9B0', '#94BE7F', '#5E9250', '#35662F'];
+export const LEVEL_COLORS = ['#EAE4D7', '#C3D9B0', '#94BE7F', '#5E9250', '#35662F'];
+
+/** 수동 기록 칸의 테두리 — 웹 `--neutral-3`. 격자와 범례가 같은 값을 봐야 범례가 거짓말을 안 한다. */
+export const MANUAL_OUTLINE = '1px solid #9A9486';
+
+/** 주 컬럼 사이 간격 — 격자와 월 라벨 배치가 이 값을 공유해야 라벨이 그 열 위에 선다. */
+export const GRASS_GAP = 3;
+
+/**
+ * 서버 `monthLabels`(주 인덱스 + "M월")를 격자 위 픽셀 자리로 옮긴다. 웹은 CSS 그리드의
+ * `gridColumnStart`가 열을 맞춰 주지만 미니앱 격자는 flex + 고정 칸이라 자리를 직접 센다.
+ *
+ * <p>직전에 **남긴** 라벨과 `minGapPx`보다 가까운 라벨은 버린다 — 그래프가 월말에서 시작하면 0주·1주에
+ * 라벨이 연달아 붙어 글자가 겹쳐 읽힌다. 버린 라벨이 아니라 남긴 라벨을 기준으로 재야, 촘촘한 구간에서
+ * 기준점이 끌려가며 뒤 라벨까지 줄줄이 사라지지 않는다.
+ */
+export function monthLabelPositions(
+  labels: { weekIndex: number; label: string }[],
+  cellSize: number,
+  minGapPx = 28,
+): { label: string; left: number }[] {
+  const kept: { label: string; left: number }[] = [];
+  for (const { weekIndex, label } of labels) {
+    const left = weekIndex * (cellSize + GRASS_GAP);
+    if (kept.length > 0 && left - kept[kept.length - 1].left < minGapPx) continue;
+    kept.push({ label, left });
+  }
+  return kept;
+}
 
 /**
  * 잔디 그리드 — 기록 화면(전체)과 홈 미리보기(최근 몇 주)가 같은 렌더를 쓴다.
@@ -24,9 +52,12 @@ export function GrassGrid({
   fill?: boolean;
 }) {
   return (
-    <div style={{ display: 'flex', gap: 3, width: fill ? '100%' : undefined }}>
+    <div style={{ display: 'flex', gap: GRASS_GAP, width: fill ? '100%' : undefined }}>
       {weeks.map((week, weekIndex) => (
-        <div key={weekIndex} style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: fill ? 1 : undefined }}>
+        <div
+          key={weekIndex}
+          style={{ display: 'flex', flexDirection: 'column', gap: GRASS_GAP, flex: fill ? 1 : undefined }}
+        >
           {week.map((day, dayIndex) => (
             <div
               key={dayIndex}
@@ -38,7 +69,7 @@ export function GrassGrid({
                 borderRadius: 2,
                 // 날짜 없는 칸은 그리드 가장자리 placeholder라 빈 칸으로 둔다.
                 background: day.date === null ? 'transparent' : LEVEL_COLORS[day.level],
-                outline: day.manual ? '1px solid #9A9486' : undefined, // 웹 --neutral-3
+                outline: day.manual ? MANUAL_OUTLINE : undefined,
               }}
             />
           ))}
