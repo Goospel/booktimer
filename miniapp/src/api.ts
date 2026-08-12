@@ -155,6 +155,10 @@ export interface ContributionDay {
 }
 
 export interface ContributionGraph {
+  /**
+   * `weeks[0]` = 최신 주(왼쪽). 서버가 뒤집어 보낸다(`ContributionGraphBuilder` 참조) —
+   * oldest-first로 가정하지 말 것. 최근 N주는 `slice(0, N)`이고 monthLabels도 이 순서 기준이다.
+   */
   weeks: ContributionDay[][];
   monthLabels: { weekIndex: number; label: string }[];
   totalSeconds: number;
