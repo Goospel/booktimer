@@ -40,6 +40,9 @@ export const TAB_BAR_HEIGHT = 56;
 /** 떠 있는 탭바의 좌우 여백 — 화면 가장자리에서 이만큼 떨어져야 "부착"이 아니라 "플로팅"으로 읽힌다. */
 export const TAB_BAR_MARGIN = 16;
 
+/** 떠 있는 탭바의 층 — 시트·딤은 이 위로 올라가야 한다(홈의 책 고르기 시트가 이 값을 넘겨 쓴다). */
+export const TAB_BAR_Z_INDEX = 100;
+
 export type TabKey = (typeof TABS)[number]['key'];
 
 /**
@@ -276,7 +279,7 @@ export function BottomTabBar({ tab, onTabChange }: { tab: TabKey; onTabChange: (
         left: TAB_BAR_MARGIN,
         right: TAB_BAR_MARGIN,
         bottom: 'calc(12px + env(safe-area-inset-bottom))',
-        zIndex: 100,
+        zIndex: TAB_BAR_Z_INDEX,
         display: 'flex',
         overflow: 'hidden', // 모서리 밖으로 새는 탭 눌림 효과를 알약 안에 가둔다
         background: 'var(--adaptiveBackground, #FCFAF5)',

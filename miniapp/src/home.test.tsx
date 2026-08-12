@@ -3,14 +3,18 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DashboardResponse } from './api';
+import { TAB_BAR_Z_INDEX } from './App';
 import { ApiError, waiveDebt } from './api';
 import {
-  BookList,
+  BookSheet,
   Home,
+  SHEET_COPY,
   askNotificationAgreement,
   claimDebtWaiver,
   defaultBookId,
   forgiveMinutes,
+  openSheetMode,
+  pickHandler,
   shouldShowNotificationCard,
   showWaiverButton,
   todayProgress,
@@ -403,15 +407,15 @@ describe('지급 흐름 (claimDebtWaiver)', () => {
 });
 
 /**
- * 책 고르기 — 웹 `BookPickForm`의 의미론을 옮겼다. 홈엔 **고른 책 칩 하나**만 두고(목록 상시 노출 아님),
- * 「바꾸기」로 그 아래 목록을 펴서 바꾼다. 시작은 아래 주 버튼이 맡는다.
+ * 책 고르기 — 웹 `BookPickSheet`의 의미론을 옮겼다. 홈엔 **고른 책 칩 하나**만 두고(목록 상시 노출 아님),
+ * 「바꾸기」로 **바텀시트**를 연다. 같은 시트가 종료 후 태깅(`tag`)도 겸한다. 시작은 아래 주 버튼이 맡는다.
  *
- * <p>계측은 세 겹이다: ① 기본값은 순수 함수 {@link defaultBookId} ② **접힌 상태**는 홈 마크업
- * (칩의 책만 보이고 나머지 책 제목은 아예 없다) ③ **편 목록**은 하니스로 「바꾸기」를 누를 수 없으니
- * {@link BookList}를 직접 렌더해서.
+ * <p>계측은 네 겹이다: ① 기본값은 순수 함수 {@link defaultBookId} ② 열림 가드는 {@link openSheetMode}
+ * ③ 고른 책의 행선지는 {@link pickHandler} ④ **접힌 상태**는 홈 마크업, **열린 시트**는 하니스로
+ * 「바꾸기」를 누를 수 없으니 {@link BookSheet}를 직접 렌더해서.
  *
- * <p>⚠️ 남는 사각지대(실측): `onClick`은 마크업에 안 남는다 — 「바꾸기」가 목록을 펴는지, 목록에서 고르면
- * 접히는지, 주 버튼이 정말 고른 책으로 시작하는지는 여기서 못 잡는다(핸들러를 통째로 바꿔도 통과).
+ * <p>⚠️ 남는 사각지대(실측): `onClick`은 마크업에 안 남는다 — 「바꾸기」가 시트를 여는지, 고르면
+ * 닫히는지, 주 버튼이 정말 고른 책으로 시작하는지는 여기서 못 잡는다(핸들러를 통째로 바꿔도 통과).
  * jsdom 미도입은 이 저장소의 기존 결정이라, 이 배선들은 실기기·프리뷰 확인을 게이트로 둔다.
  */
 
@@ -471,6 +475,14 @@ describe('책 칩 (접힌 상태)', () => {
     expect(labelsOf(markup)).toContain('바꾸기');
   });
 
+  it('시트는 닫힌 채로 그려진다 — 인라인으로 펴 두면 홈이 목록 화면이 된다', () => {
+    const markup = renderHome({ readingBooks: books, recentBookId: 2 });
+
+    expect(markup).not.toContain('어떤 책을 읽을까요?');
+    expect(markup).not.toContain('무슨 책을 읽으셨나요?');
+    expect(labelsOf(markup)).not.toContain('건너뛰기');
+  });
+
   it('최근 읽은 책이 없으면 첫 책이 칩에 뜬다', () => {
     const markup = renderHome({ readingBooks: books, recentBookId: null });
 
@@ -504,33 +516,108 @@ describe('책 칩 (접힌 상태)', () => {
   });
 });
 
-/** 「바꾸기」로 펴는 목록 — 정적 렌더로는 편 상태에 못 가므로 직접 렌더해 계측한다. */
-describe('고르기 목록 (BookList)', () => {
+describe('시트 열림 가드 (openSheetMode)', () => {
+  it('책이 있으면 요청한 모드로 연다', () => {
+    expect(openSheetMode('start', [{ id: 1, title: '데미안' }])).toBe('start');
+    expect(openSheetMode('tag', [{ id: 1, title: '데미안' }])).toBe('tag');
+  });
+
+  it('책이 0권이면 열지 않는다 — 빈 시트는 막다른 길이고 홈의 「첫 책 추가하기」가 그 자리를 맡는다', () => {
+    expect(openSheetMode('start', [])).toBeNull();
+    expect(openSheetMode('tag', [])).toBeNull();
+  });
+});
+
+describe('고른 책의 행선지 (pickHandler)', () => {
+  const select = vi.fn();
+  const tag = vi.fn();
+  const book = { id: 1, title: '데미안' };
+
+  beforeEach(() => {
+    select.mockReset();
+    tag.mockReset();
+  });
+
+  it('start면 칩을 갈아끼운다 — 측정 전이라 붙일 세션이 없다', () => {
+    pickHandler('start', { select, tag })(book);
+
+    expect(select).toHaveBeenCalledWith(book);
+    expect(tag).not.toHaveBeenCalled();
+  });
+
+  it('tag면 방금 세션에 붙인다 — 여기서 칩을 갈아끼우면 기록이 영영 안 붙는다', () => {
+    pickHandler('tag', { select, tag })(book);
+
+    expect(tag).toHaveBeenCalledWith(book);
+    expect(select).not.toHaveBeenCalled();
+  });
+});
+
+/** 「바꾸기」·측정 종료로 열리는 시트 — 정적 렌더로는 열린 상태에 못 가므로 직접 렌더해 계측한다. */
+describe('책 고르기 시트 (BookSheet)', () => {
   const books = [
     { id: 1, title: '데미안' },
     { id: 2, title: '노인과 바다' },
   ];
 
-  const renderList = (selectedId: number | null) =>
+  const renderSheet = (mode: 'start' | 'tag', selectedId: number | null = null) =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BookList books={books} selectedId={selectedId} disabled={false} onPick={() => {}} />
+        <BookSheet
+          mode={mode}
+          books={books}
+          selectedId={selectedId}
+          disabled={false}
+          onPick={() => {}}
+          onSkip={() => {}}
+          onClose={() => {}}
+        />
       </TDSMobileProvider>,
     );
 
-  it('책을 전부 나열하고 고른 책만 채움으로 구분한다', () => {
-    const markup = renderList(2);
+  /** 시트의 책 행 — TDS Button이 아니라 표지+제목 한 줄이라 제목만 뽑는다. */
+  const rowTitlesOf = (markup: string) => [...markup.matchAll(/data-book-title="([^"]*)"/g)].map((m) => m[1]);
 
-    expect(labelsOf(markup)).toEqual(['데미안', '노인과 바다']);
-    expect(fillOf(markup, '노인과 바다')).toBe(FILL_PRIMARY);
-    expect(fillOf(markup, '데미안')).toBe(FILL_WEAK);
+  it('start면 측정 전 문구와 "책 없이 시작" CTA — 시작 자리의 시트다', () => {
+    const markup = renderSheet('start');
+
+    expect(markup).toContain(SHEET_COPY.start.title);
+    expect(markup).toContain('어떤 책을 읽을까요?');
+    expect(labelsOf(markup)).toContain('책 없이 시작');
+    expect(markup).not.toContain('무슨 책을 읽으셨나요?');
   });
 
-  it('고른 책이 없으면 전부 흐리다 — 종료 후 태깅 목록이 이 모드다', () => {
-    const markup = renderList(null);
+  it('tag면 종료 후 문구와 "건너뛰기" CTA — 같은 시트가 두 자리를 겸한다', () => {
+    const markup = renderSheet('tag');
 
-    expect(fillOf(markup, '데미안')).toBe(FILL_WEAK);
-    expect(fillOf(markup, '노인과 바다')).toBe(FILL_WEAK);
+    expect(markup).toContain('무슨 책을 읽으셨나요?');
+    expect(labelsOf(markup)).toContain('건너뛰기');
+    expect(labelsOf(markup)).not.toContain('책 없이 시작');
+  });
+
+  it('책을 전부 한 행씩 나열하고 표지 자리를 세운다 — 버튼 나열엔 없던 시각 위계다', () => {
+    const markup = renderSheet('start');
+
+    expect(rowTitlesOf(markup)).toEqual(['데미안', '노인과 바다']);
+    expect(markup).toContain(`background:${coverColor('데미안')}`);
+    expect(markup).toContain('>데</div>');
+  });
+
+  it('고른 책만 표시가 남는다 — 태깅(선택 없음)엔 아무 행도 강조되지 않는다', () => {
+    expect(renderSheet('start', 2)).toContain('aria-current="true"');
+    expect(renderSheet('tag', null)).not.toContain('aria-current="true"');
+  });
+
+  it('딤·패널이 탭바(zIndex 100) 위에 뜬다 — 시트 아래로 탭바가 비치면 시트가 아니다', () => {
+    const layers = [...renderSheet('start').matchAll(/z-index:(\d+)/g)].map((m) => Number(m[1]));
+
+    expect(layers.length).toBe(2); // 딤 + 패널
+    expect(Math.min(...layers)).toBeGreaterThan(TAB_BAR_Z_INDEX);
+    expect(layers[1]).toBeGreaterThan(layers[0]); // 패널이 자기 딤에 가리지 않는다
+  });
+
+  it('홈 인디케이터를 피해 하단 여백을 둔다', () => {
+    expect(renderSheet('start')).toContain('env(safe-area-inset-bottom)');
   });
 });
 

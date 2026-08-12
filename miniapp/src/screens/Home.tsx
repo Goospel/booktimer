@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 
 import type { BookOption, DashboardResponse, QuoteDto, TimerState, WaiveResponse } from '../api';
 import { ApiError, startSession, stopSession, tagBook, waiveDebt } from '../api';
+import { useBackClose } from '../back';
 import { elapsedSeconds, formatClock, formatDuration } from '../format';
 import {
   GOAL_MET_TEMPLATE_CODE,
@@ -134,40 +135,132 @@ export function waiverErrorMessage(error: Error): string {
 }
 
 /**
- * 책 버튼 목록 — 「바꾸기」로 편 고르기 목록과 종료 후 태깅 목록이 같은 렌더를 쓴다.
- *
- * <p>`selectedId`가 있으면 그 책만 채움(fill)으로 구분한다 — variant를 가릴 class·속성이 없어
- * 이 채움색이 선택의 유일한 표지다. 태깅엔 "고른 책"이 없어 `null`(전부 weak)로 쓴다.
- *
- * <p>화면에서 꺼내 둔 이유는 늘 같다: 하니스가 정적 렌더라 「바꾸기」를 눌러 편 상태에 도달할 수 없어,
- * 목록 자체는 여기서 직접 렌더해야 계측된다.
+ * 시트가 서 있는 자리 — 웹 `BookPickSheet`와 같은 겸용 구조다. 하나의 시트가 두 자리를 맡는다:
+ * `start`(측정 전 무슨 책을 읽을지) / `tag`(측정 종료 후 무슨 책이었는지).
  */
-export function BookList({
+export type BookSheetMode = 'start' | 'tag';
+
+/** 모드별 문구·보조 CTA — 겸용 시트에서 두 자리가 갈리는 지점은 결국 이 두 줄이 전부다. */
+export const SHEET_COPY: Record<BookSheetMode, { title: string; cta: string }> = {
+  start: { title: '어떤 책을 읽을까요?', cta: '책 없이 시작' },
+  tag: { title: '무슨 책을 읽으셨나요?', cta: '건너뛰기' },
+};
+
+/**
+ * 시트를 열까 — 고를 책이 0권이면 열지 않는다(`null`).
+ *
+ * <p>빈 시트는 막다른 길이라 그 자리는 홈의 「첫 책 추가하기」 빈 상태가 계속 맡는다. 태깅도 같다 —
+ * 붙일 책이 없는데 "무슨 책이었나요?"를 띄우면 닫는 것 말고 할 수 있는 게 없다.
+ */
+export function openSheetMode(mode: BookSheetMode, books: BookOption[]): BookSheetMode | null {
+  return books.length > 0 ? mode : null;
+}
+
+/**
+ * 시트에서 고른 책의 행선지 — `start`면 칩을 갈아끼우고, `tag`면 방금 세션에 붙인다.
+ *
+ * <p>같은 목록이 두 일을 하므로 여기가 어긋나면 조용히 틀린다: 태깅 자리에서 칩만 갈아끼우면 기록은
+ * 영영 책 없이 남고, 시작 자리에서 태깅 API를 부르면 없는 세션에 붙이려 든다.
+ */
+export function pickHandler(
+  mode: BookSheetMode,
+  handlers: { select: (book: BookOption) => void; tag: (book: BookOption) => void },
+): (book: BookOption) => void {
+  return mode === 'start' ? handlers.select : handlers.tag;
+}
+
+/**
+ * 책 고르기 바텀시트 — 딤 + 하단 패널. 행은 표지 자리 + 제목이라 버튼 나열에 없던 시각 위계가 생긴다.
+ *
+ * <p>TDS `BottomSheet`을 쓰지 않은 이유: 그건 포털(`tds-mobile-portal-container`)로 그려져
+ * `renderToStaticMarkup` 하니스에서 **마크업이 통째로 비어 나온다**(실측) — 이 저장소는 jsdom을 두지
+ * 않기로 했으므로 시트 내용이 영영 계측 불가가 된다. 딤·safe-area·zIndex는 이 30줄로 충분하다.
+ *
+ * <p>화면에서 꺼내 둔 이유는 늘 같다: 하니스가 정적 렌더라 「바꾸기」를 눌러 열린 상태에 도달할 수 없어,
+ * 시트 자체는 여기서 직접 렌더해야 계측된다.
+ */
+export function BookSheet({
+  mode,
   books,
   selectedId = null,
   disabled,
   onPick,
+  onSkip,
+  onClose,
 }: {
+  mode: BookSheetMode;
   books: BookOption[];
   selectedId?: number | null;
   disabled: boolean;
   onPick: (book: BookOption) => void;
+  onSkip: () => void;
+  onClose: () => void;
 }) {
+  const { title, cta } = SHEET_COPY[mode];
+
   return (
     <>
-      {books.map((book) => (
-        <Button
-          key={book.id}
-          display="block"
-          variant={book.id === selectedId ? 'fill' : 'weak'}
-          size="medium"
-          style={{ marginBottom: 8 }}
-          disabled={disabled}
-          onClick={() => onPick(book)}
-        >
-          {book.title}
+      {/* 딤 — 탭바(zIndex 100) 위를 덮어야 시트 아래로 탭바가 비치지 않는다. */}
+      <div
+        onClick={onClose}
+        style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0, 0, 0, 0.45)' }}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        style={{
+          position: 'fixed',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 201,
+          maxHeight: '72vh',
+          overflowY: 'auto',
+          // 홈 인디케이터 위로 CTA가 올라오게 — 바닥 여백만 safe-area를 탄다.
+          padding: '20px 20px calc(20px + env(safe-area-inset-bottom))',
+          borderRadius: '16px 16px 0 0',
+          background: '#FCFAF5',
+          boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.14)',
+        }}
+      >
+        <Text typography="t6" fontWeight="bold" style={{ display: 'block', marginBottom: 12 }}>
+          {title}
+        </Text>
+        {books.map((book) => (
+          <button
+            key={book.id}
+            type="button"
+            // 고른 책의 표지는 이 한 속성 — 배경 틴트만으로는 마크업에서 선택을 가릴 수 없다.
+            aria-current={book.id === selectedId ? 'true' : undefined}
+            // 계측용 표지 — TDS가 뿜는 emotion 클래스 사이에서 "행이 몇 개고 어떤 책인가"를 집을 손잡이가 없다.
+            data-book-title={book.title}
+            disabled={disabled}
+            onClick={() => onPick(book)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              width: '100%',
+              marginBottom: 8,
+              padding: 10,
+              border: 'none',
+              borderRadius: 10,
+              background: book.id === selectedId ? '#EFEADD' : 'transparent',
+              cursor: 'pointer',
+            }}
+          >
+            <CoverInitial title={book.title} width={28} />
+            {/* 한글 제목이 flex 자식이라 minWidth:0이 없으면 줄바꿈 대신 행을 밀어낸다. */}
+            <Text typography="st11" style={{ flex: 1, minWidth: 0, textAlign: 'left', wordBreak: 'keep-all' }}>
+              {book.title}
+            </Text>
+          </button>
+        ))}
+        <Button display="block" variant="weak" size="medium" style={{ marginTop: 8 }} disabled={disabled} onClick={onSkip}>
+          {cta}
         </Button>
-      ))}
+      </div>
     </>
   );
 }
@@ -203,8 +296,8 @@ export function Home({
   const [selectedBookId, setSelectedBookId] = useState(() =>
     defaultBookId(dashboard.readingBooks, dashboard.recentBookId),
   );
-  /** 「바꾸기」로 목록을 펼쳤는지 — 시트를 따로 띄우지 않고 칩 아래에 인라인으로 편다(화면 다섯 개짜리 앱). */
-  const [picking, setPicking] = useState(false);
+  /** 열린 시트의 모드 — `null`이면 닫힘. 고르기와 태깅이 같은 시트를 쓴다(웹 `BookPickSheet`와 같다). */
+  const [sheet, setSheet] = useState<BookSheetMode | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -239,14 +332,33 @@ export function Home({
       stopSession().then((result) => {
         onTimerChange(result.timer);
         onGraphChange(result.graph); // stop 응답에 잔디가 동봉돼 새로고침 없이 즉시 갱신된다.
-        if (result.untagged) setUntagged({ sessionId: result.sessionId });
+        // 웹처럼 종료 직후 시트를 저절로 연다 — 태깅은 지금 기억이 가장 선명하다.
+        const mode = openSheetMode('tag', dashboard.readingBooks);
+        if (result.untagged && mode !== null) {
+          setUntagged({ sessionId: result.sessionId });
+          setSheet(mode);
+        }
       }),
     );
 
   const tag = (book: BookOption) => {
     if (untagged === null) return;
-    run(tagBook(untagged.sessionId, book.id).then(() => setUntagged(null)));
+    run(
+      tagBook(untagged.sessionId, book.id).then(() => {
+        setUntagged(null);
+        setSheet(null);
+      }),
+    );
   };
+
+  /** 시트 닫기 — 태깅 시트를 닫는 건 곧 「건너뛰기」다(다시 들어갈 자리를 만들지 않는다). */
+  const closeSheet = () => {
+    if (sheet === 'tag') setUntagged(null);
+    setSheet(null);
+  };
+
+  // 안드로이드 뒤로가기는 시트만 닫는다 — 시트가 열린 채로 미니앱이 꺼지지 않게.
+  useBackClose(sheet !== null, closeSheet);
 
   /** 광고 보고 밀린 하루 지우기 — 중간 이탈(null)이면 아무 일도 없었던 것처럼 둔다. */
   const claimWaiver = () => {
@@ -367,23 +479,15 @@ export function Home({
             <Text typography="st11" style={{ flex: 1, textAlign: 'left' }}>
               {selectedBook.title}
             </Text>
-            <Button variant="weak" size="small" disabled={busy} onClick={() => setPicking((p) => !p)}>
+            <Button
+              variant="weak"
+              size="small"
+              disabled={busy}
+              onClick={() => setSheet(openSheetMode('start', dashboard.readingBooks))}
+            >
               바꾸기
             </Button>
           </div>
-          {picking && (
-            <div style={{ marginTop: 10 }}>
-              <BookList
-                books={dashboard.readingBooks}
-                selectedId={selectedBook.id}
-                disabled={busy}
-                onPick={(book) => {
-                  setSelectedBookId(book.id);
-                  setPicking(false); // 고르면 곧바로 칩으로 되돌아간다(같은 책을 다시 골라도 접힌다).
-                }}
-              />
-            </div>
-          )}
         </section>
       )}
 
@@ -395,19 +499,6 @@ export function Home({
           </Text>
           <Button display="block" variant="weak" size="medium" disabled={busy} onClick={onGoLibrary}>
             첫 책 추가하기
-          </Button>
-        </section>
-      )}
-
-      {untagged !== null && (
-        <section style={sectionStyle}>
-          <Text typography="st11" style={{ display: 'block', marginBottom: 10 }}>
-            방금 측정, 무슨 책이었나요?
-          </Text>
-          {/* 태깅은 "고른 책"이 없다 — selectedId를 안 주면 전부 weak로 나열된다. */}
-          <BookList books={dashboard.readingBooks} disabled={busy} onPick={tag} />
-          <Button display="block" variant="weak" size="medium" onClick={() => setUntagged(null)}>
-            나중에
           </Button>
         </section>
       )}
@@ -446,6 +537,25 @@ export function Home({
       <Button display="block" variant="weak" size="medium" style={{ marginTop: 12 }} onClick={onGoGoal}>
         목표 바꾸기
       </Button>
+
+      {/* 태깅 시트는 "고른 책"이 없다 — selectedId를 안 주면 아무 행도 강조되지 않는다. */}
+      {sheet !== null && (
+        <BookSheet
+          mode={sheet}
+          books={dashboard.readingBooks}
+          selectedId={sheet === 'start' ? selectedBookId : null}
+          disabled={busy}
+          onPick={pickHandler(sheet, {
+            select: (book) => {
+              setSelectedBookId(book.id);
+              setSheet(null); // 고르면 곧바로 칩으로 되돌아간다(같은 책을 다시 골라도 닫힌다).
+            },
+            tag,
+          })}
+          onSkip={sheet === 'start' ? () => { setSheet(null); start(null); } : closeSheet}
+          onClose={closeSheet}
+        />
+      )}
     </Screen>
   );
 }
