@@ -194,14 +194,48 @@ export const sectionStyle = {
   border: '1px solid #E4DDD0',
 } as const;
 
-/** 화면 공통 껍데기 — 제목 + 본문 여백. 미니앱은 화면이 다섯 뿐이라 레이아웃도 이 하나면 된다. */
-export function Screen({ title, children }: { title: string; children: ReactNode }) {
+/**
+ * 화면 공통 껍데기 — 제목 + 본문 여백. 미니앱은 화면이 다섯 뿐이라 레이아웃도 이 하나면 된다.
+ *
+ * <p>`onBack`을 주면 제목 왼쪽에 ← 를 세운다. 나갈 길이 화면 맨 아래에만 있으면 목록이 긴 화면에서
+ * 나가려고 끝까지 스크롤해야 한다 — 헤더가 제목을 그리는 자리라 뒤로가기도 여기가 맡는다.
+ */
+export function Screen({ title, onBack, children }: { title: string; onBack?: () => void; children: ReactNode }) {
   return (
     <main style={{ padding: '24px 20px 40px', maxWidth: 480, margin: '0 auto' }}>
-      {/* 제목만 세리프(고운바탕) — 웹 `.brand h1`과 같은 위계다. 본문은 전역 고운돋움 그대로. */}
-      <Text typography="t3" fontWeight="bold" style={{ marginBottom: 20, fontFamily: "'Gowun Batang', serif" }}>
-        {title}
-      </Text>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+        {onBack !== undefined && (
+          <button
+            type="button"
+            aria-label="뒤로"
+            onClick={onBack}
+            style={{
+              flex: '0 0 auto',
+              width: 32,
+              height: 32,
+              padding: 0,
+              border: 'none',
+              borderRadius: 999,
+              fontSize: 20,
+              lineHeight: 1,
+              background: 'transparent',
+              color: 'var(--adaptiveGrey700, #57534A)',
+              cursor: 'pointer',
+            }}
+          >
+            ←
+          </button>
+        )}
+        {/* 제목만 세리프(고운바탕) — 웹 `.brand h1`과 같은 위계다. 본문은 전역 고운돋움 그대로. */}
+        {/* 한글 제목이 flex 자식이라 minWidth:0이 없으면 줄바꿈 대신 ← 를 밀어낸다. */}
+        <Text
+          typography="t3"
+          fontWeight="bold"
+          style={{ flex: 1, minWidth: 0, fontFamily: "'Gowun Batang', serif", wordBreak: 'keep-all' }}
+        >
+          {title}
+        </Text>
+      </div>
       {children}
     </main>
   );

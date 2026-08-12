@@ -6,6 +6,7 @@ import type { AuthorStories, StoryCard, StoryFeedResponse, StoryViewerEntry } fr
 import { ApiError } from './api';
 import { StoryCardView, StoryStrip, createStoryMessage, nextStoryIndex, viewTargetId } from './screens/Story';
 import { userAgent } from './test-fixtures';
+import { coverColor } from './ui';
 
 /**
  * 스토리 화면 계측 — 정적 렌더로는 effect가 안 돌므로, 뷰어의 두 결정(다음/이전 전이 · 열람 기록 대상)은
@@ -93,6 +94,64 @@ describe('스토리 스트립 (소셜 탭 상단)', () => {
 
     expect(markup.indexOf('내 스토리')).toBeGreaterThanOrEqual(0);
     expect(markup.indexOf('내 스토리')).toBeLessThan(markup.indexOf('goospel님'));
+  });
+});
+
+/**
+ * 링을 인스타 관습(원형 이니셜 아바타 + 바깥 링 + 닉네임 캡션)으로 세운다 — 텍스트 알약은
+ * "스토리"라는 어휘를 화면에 만들어 주지 못했다. 링 색 분기의 출처는 서버 `AuthorStories.allViewed`다.
+ */
+describe('스토리 링 — 원형 아바타', () => {
+  it('닉네임 첫 글자를 원형으로 세우고 배경은 닉네임에서 결정적으로 고른다 — 같은 사람은 늘 같은 색', () => {
+    const markup = strip({ mine: null, groups: [author('goospel')] });
+
+    expect(markup).toContain('border-radius:50%');
+    expect(markup).toContain(`background:${coverColor('goospel님')}`);
+  });
+
+  it('미열람이면 링이 세이지로 선다 — 다 본 링은 옅은 테두리로 가라앉는다', () => {
+    const ring = (allViewed: boolean) => strip({ mine: null, groups: [author('goospel', { allViewed })] });
+
+    expect(ring(false)).toContain('background:var(--adaptiveBlue500, #6E8A6A)');
+    expect(ring(true)).not.toContain('background:var(--adaptiveBlue500, #6E8A6A)');
+  });
+
+  it('「스토리 쓰기」는 이니셜이 아니라 + 아이콘 타일로 남는다 — 사람 링과 섞이면 남의 스토리로 오독한다', () => {
+    const markup = strip({ mine: null, groups: [] });
+
+    expect(markup).toContain('스토리 쓰기');
+    expect(markup).toContain('>+<');
+  });
+});
+
+/**
+ * 뷰어 진행 인디케이터 — "1/3" 텍스트는 스토리의 어휘가 아니다. 인스타식 세그먼트 바로 바꾸고,
+ * 수치는 스크린리더가 읽을 수 있게 `progressbar`로 남긴다(텍스트를 지운 자리를 비워두지 않는다).
+ */
+describe('스토리 뷰어 진행 인디케이터', () => {
+  const three = author('goospel', { stories: [card(1), card(2), card(3)] });
+
+  it('카드 수만큼 세그먼트를 나누고 "N/M" 텍스트는 지운다', () => {
+    const markup = viewerCard({ author: three, index: 1 });
+
+    expect(markup).not.toContain('2/3');
+    expect(markup.match(/height:2px/g)).toHaveLength(3);
+  });
+
+  it('현재 인덱스까지만 채운다 — 아직 안 본 카드만 옅게 남는다', () => {
+    expect(viewerCard({ author: three, index: 1 }).match(/opacity:0\.3/g)).toHaveLength(1);
+    expect(viewerCard({ author: three, index: 0 }).match(/opacity:0\.3/g)).toHaveLength(2);
+  });
+
+  it('진행 수치를 스크린리더에 남긴다 — 텍스트를 지운 만큼 여기서 갚는다', () => {
+    const markup = viewerCard({ author: three, index: 1 });
+
+    expect(markup).toContain('aria-valuenow="2"');
+    expect(markup).toContain('aria-valuemax="3"');
+  });
+
+  it('노치를 피해 상단 여백을 준다 — 전체화면이라 세그먼트가 상태바 아래로 깔렸다', () => {
+    expect(viewerCard()).toContain('env(safe-area-inset-top)');
   });
 });
 

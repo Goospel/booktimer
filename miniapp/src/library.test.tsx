@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { MyBookSummary } from './api';
 import type { OpenRow } from './screens/Library';
-import { Shelf, toggleOpen } from './screens/Library';
+import { BookSearch, Shelf, toggleOpen } from './screens/Library';
 import { userAgent } from './test-fixtures';
 
 /**
@@ -125,5 +125,18 @@ describe('행 여닫기 (toggleOpen)', () => {
 
   it('다른 행으로 옮기면 이전 확인이 따라가지 않는다 — 이게 오삭제를 막는 불변식이다', () => {
     expect(toggleOpen({ id: 1, confirmDelete: true }, 2)).toEqual({ id: 2, confirmDelete: false });
+  });
+});
+
+/** 엔터 제출 — 모바일 키보드의 「완료」가 아무 일도 안 해 검색 버튼을 따로 눌러야 했다. */
+describe('책 검색 엔터 제출', () => {
+  it('제목 입력을 form으로 감싼다', () => {
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+    expect(markup).toContain('<form');
   });
 });

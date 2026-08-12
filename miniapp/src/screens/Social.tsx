@@ -119,14 +119,25 @@ export function Social({ myLoginId, onError }: { myLoginId: string | null; onErr
         onCompose={() => setComposing(true)}
       />
 
-      <TextField
-        variant="box"
-        label="아이디로 찾기"
-        placeholder="예: goospel"
-        value={query}
-        disabled={busy}
-        onChange={(e) => setQuery(e.target.value)}
-      />
+      {/*
+       * 입력 하나짜리 form은 브라우저가 엔터(키보드 「완료」)를 곧 제출로 친다 — 제출 버튼이 없어도 된다.
+       * 버튼들을 form 밖에 두는 게 그래서 중요하다: 안에 넣으면 「닫기」까지 제출로 동작한다.
+       */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault(); // 막지 않으면 페이지가 통째로 새로고침돼 미니앱이 처음으로 돌아간다
+          if (!busy && query.trim() !== '') search();
+        }}
+      >
+        <TextField
+          variant="box"
+          label="아이디로 찾기"
+          placeholder="예: goospel"
+          value={query}
+          disabled={busy}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </form>
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
         {/* aria-label을 명시한다 — loading 중에는 라벨이 스피너로 바뀌어 이름 없는 버튼이 된다. */}
         <Button aria-label="검색" style={{ flex: 1 }} loading={busy} disabled={query.trim() === ''} onClick={search}>

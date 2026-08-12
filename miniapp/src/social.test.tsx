@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import type { ProfileBook, ProfileResponse, UserRow } from './api';
-import { ProfileCard } from './screens/Profile';
+import { ProfileCard, SafetyPanel, toggleSafety } from './screens/Profile';
 import { MyShelfEntry, Social, UserList } from './screens/Social';
 import { userAgent } from './test-fixtures';
 
@@ -153,5 +153,55 @@ describe('책방 (프로필)', () => {
 describe('소셜 탭 검색', () => {
   it('검색 버튼에 이름이 붙어 있다 — 스크린리더에 빈 버튼으로 읽히면 안 된다', () => {
     expect(render(<Social myLoginId="goospel" onError={() => {}} />)).toContain('aria-label="검색"');
+  });
+
+  it('아이디 입력을 form으로 감싼다 — 키보드 완료(엔터)가 아무 일도 안 해 버튼을 따로 눌러야 했다', () => {
+    expect(render(<Social myLoginId="goospel" onError={() => {}} />)).toContain('<form');
+  });
+});
+
+/** 책방 상단 뒤로가기 — 나가려면 긴 책 목록 끝까지 스크롤해 「돌아가기」를 찾아야 했다. */
+describe('책방 상단 뒤로가기', () => {
+  it('제목 옆에 ← 를 둔다', () => {
+    const markup = card(profile());
+
+    expect(markup).toContain('aria-label="뒤로"');
+    expect(markup.indexOf('aria-label="뒤로"')).toBeLessThan(markup.indexOf('돌아가기'));
+  });
+
+  it('하단 「돌아가기」는 그대로 둔다 — 목록 끝에서 위로 되돌아가게 만들지 않는다', () => {
+    expect(card(profile())).toContain('돌아가기');
+  });
+});
+
+/**
+ * 차단 2단계 확인 — 「차단하기」가 1탭 즉시 실행이었다. 차단은 되돌리기 비싸다(그 순간 상대 책방이
+ * 404가 되고 이 화면도 닫힌다). 서재 삭제와 같은 패턴으로 한 탭 더 받는다.
+ */
+describe('차단 2단계 확인', () => {
+  const safety = (confirmBlock: boolean) =>
+    render(<SafetyPanel busy={false} confirmBlock={confirmBlock} onConfirmBlock={() => {}} onBlock={() => {}} onReport={() => {}} />);
+
+  it('처음엔 「차단하기」만 — 확인 문구는 아직 없다', () => {
+    const markup = safety(false);
+
+    expect(markup).toContain('차단하기');
+    expect(markup).not.toContain('정말 차단');
+  });
+
+  it('한 번 더 물어본 뒤 실행한다 — 물러설 길(취소)도 함께 준다', () => {
+    const markup = safety(true);
+
+    expect(markup).toContain('정말 차단');
+    expect(markup).toContain('취소');
+  });
+
+  it('닫혀 있으면 열고, 열려 있으면 닫는다', () => {
+    expect(toggleSafety(null)).toEqual({ confirmBlock: false });
+    expect(toggleSafety({ confirmBlock: false })).toBeNull();
+  });
+
+  it('접었다 다시 펴면 확인이 풀려 있다 — 살아남으면 「정말 차단」이 한 탭 거리다(서재 `toggleOpen`과 같은 이유)', () => {
+    expect(toggleSafety(toggleSafety({ confirmBlock: true }))).toEqual({ confirmBlock: false });
   });
 });

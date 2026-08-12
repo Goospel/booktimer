@@ -263,7 +263,7 @@ function BookRow({
 }
 
 /** 책 검색 — 알라딘 1페이지. 탭하면 "읽는 중"으로 추가한다(가장 잦은 의도). */
-function BookSearch({
+export function BookSearch({
   busy,
   error,
   onAdd,
@@ -290,14 +290,22 @@ function BookSearch({
 
   return (
     <Screen title="책 추가">
-      <TextField
-        variant="box"
-        label="책 제목"
-        placeholder="예: 자바 최적화"
-        value={query}
-        disabled={busy || searching}
-        onChange={(e) => setQuery(e.target.value)}
-      />
+      {/* 입력 하나짜리 form이라 엔터(키보드 「완료」)가 곧 제출이다 — 버튼은 밖에 둔다(Social과 같은 배선). */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault(); // 막지 않으면 페이지가 새로고침돼 미니앱이 처음으로 돌아간다
+          if (!busy && !searching && query.trim() !== '') submit();
+        }}
+      >
+        <TextField
+          variant="box"
+          label="책 제목"
+          placeholder="예: 자바 최적화"
+          value={query}
+          disabled={busy || searching}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </form>
       <Button
         display="block"
         style={{ marginTop: 16 }}
