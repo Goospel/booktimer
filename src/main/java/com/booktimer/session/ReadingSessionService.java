@@ -65,7 +65,7 @@ public class ReadingSessionService {
         });
         ReadingSession saved = sessionRepository.save(ReadingSession.start(user, now, book));
         // 책을 지정했고 그 책이 "읽고싶음"이었다면 "읽는중"으로 자동 전환(전환 시에만 저장).
-        if (book != null && book.startReading()) {
+        if (book != null && book.startReading(now)) {
             bookRepository.save(book);
         }
         return saved;
@@ -96,7 +96,8 @@ public class ReadingSessionService {
         ReadingSession session = ReadingSession.manual(user, startedAt, endedAt, book);
         sessionRepository.save(session);
         // 기록한 책이 "읽고싶음"이었다면 "읽는중"으로 자동 전환(전환 시에만 저장) — start와 동일.
-        if (book.startReading()) {
+        // 시작 시각 스탬프는 "적은 시각"인 startedAt으로 — 뒤늦게 적어도 실제 읽기 시작 시점이 남는다.
+        if (book.startReading(startedAt)) {
             bookRepository.save(book);
         }
         return session;
@@ -167,7 +168,8 @@ public class ReadingSessionService {
                 .orElseThrow(() -> new IllegalArgumentException("session not found for user"));
         session.tagBook(book); // 이미 책 있으면 IllegalStateException
         // 태깅한 책이 "읽고싶음"이었다면 "읽는중"으로 자동 전환(측정 시작과 동일).
-        if (book.startReading()) {
+        // 시작 시각은 그 세션이 시작된 시각 — 태깅 시점(지금)이 아니라 실제로 읽기 시작한 때다.
+        if (book.startReading(session.getStartedAt())) {
             bookRepository.save(book);
         }
         return sessionRepository.save(session);

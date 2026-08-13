@@ -15,6 +15,8 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageRequest;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -197,5 +199,135 @@ class BookRepositoryTest {
                 viewer.getId(), List.of("ISBNA"), PageRequest.of(0, 10));
 
         assertThat(rows).extracting(CoReadCount::getUserId).doesNotContain(followed.getId());
+    }
+
+    // --- 홈 소식 피드 (feedFinished / feedStarted) ---
+    // StoryRepository.feedOf 미러: 팔로우 theta 조인 · PUBLIC only · ADMIN 제외 · login_id null 제외(N-055).
+    // 차단 필터는 쿼리에 없다 — "팔로우 존재 ⇒ 차단 없음" write-시점 불변식이 보장하고
+    // BookFeedBlockInvariantTest가 행동으로 못 박는다.
+
+    private static final Instant NOW = Instant.parse("2026-08-14T00:00:00Z");
+    private static final Instant CUTOFF = NOW.minus(Duration.ofDays(14));
+    private static final Instant RECENT = NOW.minus(Duration.ofDays(1));
+    private static final Instant OLDER = NOW.minus(Duration.ofDays(5));
+    private static final Instant STALE = NOW.minus(Duration.ofDays(15)); // 창 밖
+
+    /** 시작·완독 시각을 스탬프한 책. startedAt/finishedAt이 null이면 그 전이를 밟지 않는다. */
+    private Book stampedBook(User owner, String title, BookVisibility visibility,
+                             Instant startedAt, Instant finishedAt) {
+        Book b = Book.register(owner, title, null, null, null, null, null, BookStatus.WANT_TO_READ);
+        b.changeVisibility(visibility);
+        if (startedAt != null) {
+            b.changeStatus(BookStatus.READING, startedAt);
+        }
+        if (finishedAt != null) {
+            b.changeStatus(BookStatus.FINISHED, finishedAt);
+        }
+        return bookRepository.save(b);
+    }
+
+    private User followedBy(User viewer, String email, String loginId) {
+        User followee = user(email, loginId);
+        followRepository.save(Follow.of(viewer, followee));
+        return followee;
+    }
+
+    @Test
+    @DisplayName("feedFinished: 팔로우한 사람의 PRIVATE 완독 책은 피드에 안 실린다 (PUBLIC-only 불변식)")
+    void feedFinished_excludesPrivateBooks() {
+        User viewer = user("v@booktimer.com", "viewer");
+        User followee = followedBy(viewer, "a@booktimer.com", "alpha");
+        stampedBook(followee, "공개완독", BookVisibility.PUBLIC, null, RECENT);
+        stampedBook(followee, "비공개완독", BookVisibility.PRIVATE, null, RECENT);
+
+        assertThat(bookRepository.feedFinished(viewer, CUTOFF))
+                .extracting(Book::getTitle)
+                .containsExactly("공개완독");
+    }
+
+    @Test
+    @DisplayName("feedFinished: 비팔로우·ADMIN·login_id null(N-055) 소유자의 PUBLIC 완독 책은 제외된다")
+    void feedFinished_excludesNonFollowedAdminAndNullLoginId() {
+        User viewer = user("v@booktimer.com", "viewer");
+        User followee = followedBy(viewer, "a@booktimer.com", "alpha");
+        stampedBook(followee, "적격", BookVisibility.PUBLIC, null, RECENT);
+
+        User stranger = user("b@booktimer.com", "bravo"); // 팔로우 안 함
+        stampedBook(stranger, "비팔로우", BookVisibility.PUBLIC, null, RECENT);
+
+        User admin = User.of("admin@booktimer.com", "$2a$10$abcdefghijklmnopqrstuv",
+                "관리자", "Asia/Seoul", Role.ADMIN);
+        admin.assignLoginId("adminuser");
+        admin = userRepository.save(admin);
+        followRepository.save(Follow.of(viewer, admin));
+        stampedBook(admin, "관리자", BookVisibility.PUBLIC, null, RECENT);
+
+        User noHandle = persistedUser("n@booktimer.com"); // login_id null — 온보딩 전
+        followRepository.save(Follow.of(viewer, noHandle));
+        stampedBook(noHandle, "핸들없음", BookVisibility.PUBLIC, null, RECENT);
+
+        assertThat(bookRepository.feedFinished(viewer, CUTOFF))
+                .extracting(Book::getTitle)
+                .containsExactly("적격");
+    }
+
+    @Test
+    @DisplayName("feedFinished: 창(cutoff) 밖 완독은 제외하고, 최신 완독 순(desc)으로 준다")
+    void feedFinished_windowAndOrder() {
+        User viewer = user("v@booktimer.com", "viewer");
+        User followee = followedBy(viewer, "a@booktimer.com", "alpha");
+        stampedBook(followee, "예전", BookVisibility.PUBLIC, null, OLDER);
+        stampedBook(followee, "최근", BookVisibility.PUBLIC, null, RECENT);
+        stampedBook(followee, "창밖", BookVisibility.PUBLIC, null, STALE);
+
+        assertThat(bookRepository.feedFinished(viewer, CUTOFF))
+                .extracting(Book::getTitle)
+                .containsExactly("최근", "예전");
+    }
+
+    @Test
+    @DisplayName("feedStarted: 시작 시각이 없는 기존 책(백필 안 함)은 시작 피드에 안 뜬다")
+    void feedStarted_excludesUnstampedLegacyBooks() {
+        User viewer = user("v@booktimer.com", "viewer");
+        User followee = followedBy(viewer, "a@booktimer.com", "alpha");
+        stampedBook(followee, "스탬프됨", BookVisibility.PUBLIC, RECENT, null);
+        // 시작 시각 없이 READING으로 바로 등록된 레거시 책
+        Book legacy = Book.register(followee, "레거시", null, null, null, null, null, BookStatus.READING);
+        legacy.changeVisibility(BookVisibility.PUBLIC);
+        bookRepository.save(legacy);
+
+        assertThat(bookRepository.feedStarted(viewer, CUTOFF))
+                .extracting(Book::getTitle)
+                .containsExactly("스탬프됨");
+    }
+
+    @Test
+    @DisplayName("feedStarted: PRIVATE 제외 · 창 밖 제외 · 최신 시작 순(desc)")
+    void feedStarted_publicOnlyWindowAndOrder() {
+        User viewer = user("v@booktimer.com", "viewer");
+        User followee = followedBy(viewer, "a@booktimer.com", "alpha");
+        stampedBook(followee, "예전시작", BookVisibility.PUBLIC, OLDER, null);
+        stampedBook(followee, "최근시작", BookVisibility.PUBLIC, RECENT, null);
+        stampedBook(followee, "비공개시작", BookVisibility.PRIVATE, RECENT, null);
+        stampedBook(followee, "창밖시작", BookVisibility.PUBLIC, STALE, null);
+
+        assertThat(bookRepository.feedStarted(viewer, CUTOFF))
+                .extracting(Book::getTitle)
+                .containsExactly("최근시작", "예전시작");
+    }
+
+    @Test
+    @DisplayName("feedStarted: 완독한 책도 시작 이벤트는 남는다 (시작→완독 두 줄이 시간순 공존)")
+    void feedStarted_keepsFinishedBooks() {
+        User viewer = user("v@booktimer.com", "viewer");
+        User followee = followedBy(viewer, "a@booktimer.com", "alpha");
+        stampedBook(followee, "시작후완독", BookVisibility.PUBLIC, OLDER, RECENT);
+
+        assertThat(bookRepository.feedStarted(viewer, CUTOFF))
+                .extracting(Book::getTitle)
+                .containsExactly("시작후완독");
+        assertThat(bookRepository.feedFinished(viewer, CUTOFF))
+                .extracting(Book::getTitle)
+                .containsExactly("시작후완독");
     }
 }
