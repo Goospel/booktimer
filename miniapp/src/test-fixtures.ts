@@ -22,8 +22,18 @@ export const graph: ContributionGraph = {
   growthStageLabel: '새싹',
 };
 
-/** TDS 컴포넌트는 ThemeProvider(=TDSMobileProvider) 없이는 렌더되지 않는다 — main.tsx와 같은 껍데기. */
-export const userAgent = { fontA11y: undefined, fontScale: undefined, isAndroid: false, isIOS: true };
+/**
+ * TDS 컴포넌트는 ThemeProvider(=TDSMobileProvider) 없이는 렌더되지 않는다 — main.tsx와 같은 껍데기.
+ * `colorPreference`도 main.tsx와 맞춘다 — 앱은 라이트 고정인데 하니스만 다른 테마로 그리면
+ * 색을 보는 단언(예: 버튼 채움색)이 프로덕션과 다른 팔레트를 재는 셈이 된다.
+ */
+export const userAgent = {
+  fontA11y: undefined,
+  fontScale: undefined,
+  isAndroid: false,
+  isIOS: true,
+  colorPreference: 'light' as const,
+};
 
 /**
  * 인메모리 localStorage 심기 — 홈이 알림 동의 캐시를 렌더 중에 읽어서, 홈을 그리는 테스트는 전부 필요하다

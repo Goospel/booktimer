@@ -1,15 +1,36 @@
-import { Button, Text } from '@toss/tds-mobile';
+import { Button, Text, Wheel } from '@toss/tds-mobile';
 import { useState } from 'react';
 
 import { setGoal } from '../api';
 import { formatDuration } from '../format';
 import { ErrorMessage, Screen } from '../ui';
 
-/** 하루 목표 후보 — 미니앱은 설정 화면이 없으니 흔한 값만 골라 마찰을 없앤다. */
-const PRESETS = [600, 1200, 1800, 3600, 5400, 7200];
+/** 휠 시간 열의 상한 — 하루 독서 목표로 12시간이면 넘치고, 더 길면 휠만 길어져 고르기 힘들다. */
+const MAX_HOURS = 12;
+const HOUR_OPTIONS = Array.from({ length: MAX_HOURS + 1 }, (_, i) => i);
+const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, i) => i);
 
 /** 첫 실행에서 미리 골라 둘 값(10분) — 첫 세션 안에 「오늘 목표 달성」을 실제로 밟을 수 있는 크기다. */
 export const FIRST_RUN_GOAL_SECONDS = 600;
+
+/**
+ * 초 → 휠 표시값(시/분).
+ *
+ * <p>휠은 분 단위라 자투리 초는 버리고, 휠에 없는 칸을 가리키지 않도록 상한(12시간)을 넘는 값은
+ * 12시간 59분으로 붙인다. 음수 같은 이상값도 0으로 눌러 휠이 빈 칸을 가리키지 않게 한다.
+ */
+export function wheelIndices(seconds: number): { hours: number; minutes: number } {
+  const totalMinutes = Math.max(0, Math.floor(seconds / 60));
+  if (totalMinutes >= (MAX_HOURS + 1) * 60) {
+    return { hours: MAX_HOURS, minutes: 59 };
+  }
+  return { hours: Math.floor(totalMinutes / 60), minutes: totalMinutes % 60 };
+}
+
+/** 휠 표시값(시/분) → 초. */
+export function combineWheel(hours: number, minutes: number): number {
+  return hours * 3600 + minutes * 60;
+}
 
 /**
  * 첫 화면에 미리 골라 둘 목표(초).
@@ -43,6 +64,8 @@ export function Goal({
   onSkip: () => void;
 }) {
   const [selected, setSelected] = useState(() => initialGoalSelection(firstRun, current));
+  /** 휠은 비제어 컴포넌트라 시작 칸만 첫 렌더에서 한 번 읽는다 — 이후 값은 onChange가 selected로 되돌린다. */
+  const [initialWheel] = useState(() => wheelIndices(initialGoalSelection(firstRun, current)));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -61,17 +84,26 @@ export function Goal({
         매일 이만큼씩 쌓여요. 못 채운 시간은 다음 날로 넘어가니 부담 없는 값으로 시작해 보세요.
       </Text>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {PRESETS.map((seconds) => (
-          <Button
-            key={seconds}
-            size="medium"
-            variant={selected === seconds ? 'fill' : 'weak'}
-            onClick={() => setSelected(seconds)}
-          >
-            {formatDuration(seconds)}
-          </Button>
-        ))}
+      {/* 프리셋 칩 대신 휠 2열 — 초는 selected 하나가 단일 소스고, 시/분은 그때그때 풀었다 다시 합친다.
+          높이는 컨테이너가 줘야 한다 — Wheel 루트가 height:100%라(항목 한 칸 = 그 16%) 높이 없는 부모에
+          넣으면 컨테이너가 0이 되어 항목이 전부 한 줄에 겹친다(브라우저 실측 2026-08-13). */}
+      <div className="goal-wheels" style={{ display: 'flex', justifyContent: 'center', gap: 8, height: 180 }}>
+        <Wheel
+          options={HOUR_OPTIONS}
+          formatValue={(n) => `${n}시간`}
+          initialIndex={initialWheel.hours}
+          onChange={(hours) => setSelected((s) => combineWheel(hours, wheelIndices(s).minutes))}
+          width={120}
+          aria-label="시간 선택"
+        />
+        <Wheel
+          options={MINUTE_OPTIONS}
+          formatValue={(n) => `${n}분`}
+          initialIndex={initialWheel.minutes}
+          onChange={(minutes) => setSelected((s) => combineWheel(wheelIndices(s).hours, minutes))}
+          width={120}
+          aria-label="분 선택"
+        />
       </div>
 
       {/* 미리 골라 둔 값이 왜 이렇게 작은지 한 줄로 — 없으면 "이 앱은 나를 얕본다"로 읽히고,
@@ -85,7 +117,14 @@ export function Goal({
 
       <ErrorMessage message={error} />
 
-      <Button display="block" style={{ marginTop: 28 }} loading={busy} onClick={save}>
+      {/* 0시간 0분 저장은 서버가 허용하는 「목표 없음」이지만, 휠을 끝까지 내린 실수일 가능성이 더 높다. */}
+      <Button
+        display="block"
+        style={{ marginTop: 28 }}
+        loading={busy}
+        disabled={selected === 0}
+        onClick={save}
+      >
         {firstRun ? '이걸로 시작하기' : '저장'}
       </Button>
       <Button display="block" variant="weak" style={{ marginTop: 12 }} disabled={busy} onClick={onSkip}>
