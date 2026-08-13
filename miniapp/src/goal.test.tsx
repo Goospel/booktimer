@@ -109,6 +109,15 @@ describe('목표 화면 렌더', () => {
     expect(render(false, 3600)).toContain('height:180px');
   });
 
+  /**
+   * 안개(위아래 그라데이션) 색을 크림 캔버스로 덮는 global.css 규칙이 `.goal-wheels`를 훅으로 잡는다
+   * — 클래스가 빠지면 TDS 기본 흰색 안개가 그대로 나와 흰 박스 두 개로 도드라진다(실측 2026-08-13).
+   * css 적용 결과는 브라우저 소관이라, 훅이 붙어 있다는 사실만 못 박는다.
+   */
+  it('휠 컨테이너에 안개 색을 덮을 훅 클래스가 붙어 있다', () => {
+    expect(render(false, 3600)).toContain('goal-wheels');
+  });
+
   it('첫 실행 휠은 10분에서 시작한다 — 1시간에서 시작하면 첫날 달성이 불가능하다', () => {
     expect(wheelIndices(initialGoalSelection(true, 3600))).toEqual({ hours: 0, minutes: 10 });
   });

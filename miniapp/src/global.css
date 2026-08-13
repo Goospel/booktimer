@@ -114,3 +114,27 @@ html:root {
 .no-scrollbar::-webkit-scrollbar {
   display: none; /* 웹킷 — 토스 WebView가 여기 해당 */
 }
+
+/*
+ * 목표 휠(TDS `Wheel`)의 위아래 안개 — Button과 같은 처지다. TDS가 안개 그라데이션을 렌더 시
+ * **인라인 커스텀 프로퍼티**(`--wheel-top-shadow-gradient` / `--wheel-bottom-shadow-gradient`)로 박는데,
+ * 그 색이 "테마 배경 = 흰색" 가정이라 크림 캔버스 위에선 흰 박스 두 개로 도드라진다(실측 2026-08-13).
+ * 캔버스 크림으로 덮어 경계를 지운다 — 중앙만 또렷하고 위아래로 잦아드는 드럼 룩이 된다.
+ * 인라인 선언을 이기는 건 저자 규칙 + `!important`뿐이다(커스텀 프로퍼티도 캐스케이드를 따른다).
+ *
+ * 선택자에 값을 쓰지 않고 프로퍼티 이름만 보므로(Button과 달리 variant를 가릴 필요가 없다)
+ * 콜론 뒤 공백 차이에 걸리지 않는다.
+ */
+.goal-wheels [style*='--wheel-top-shadow-gradient'] {
+  /* #F3EEE4 = 웹 --bg (종이톤 크림) */
+  --wheel-top-shadow-gradient: linear-gradient(
+    to bottom,
+    rgba(243, 238, 228, 0.95) 0%,
+    rgba(243, 238, 228, 0.45) 100%
+  ) !important;
+  --wheel-bottom-shadow-gradient: linear-gradient(
+    to bottom,
+    rgba(243, 238, 228, 0.45) 0%,
+    rgba(243, 238, 228, 0.95) 100%
+  ) !important;
+}
