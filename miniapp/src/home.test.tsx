@@ -3,18 +3,21 @@ import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { DashboardResponse } from './api';
+import type { BookOption, DashboardResponse } from './api';
 import { TAB_BAR_Z_INDEX } from './App';
 import { ApiError, logout, waiveDebt } from './api';
 import {
   AccountSection,
   BookSheet,
+  COVER_GAP,
+  COVER_WIDTH,
   FirstSessionBanner,
   GrassPreview,
   HIGHLIGHT_BORDER,
   Home,
   SHEET_COPY,
   askNotificationAgreement,
+  centeredIndex,
   claimDebtWaiver,
   defaultBookId,
   forgiveMinutes,
@@ -86,6 +89,11 @@ function dashboard(overrides: Partial<DashboardResponse> = {}): DashboardRespons
     emailVerified: true,
     ...overrides,
   };
+}
+
+/** 읽는 중 책 한 권 — 표지·저자는 안 준 곳에서 `null`(=자리 표지 경로)로 떨어진다. */
+function book(id: number, title: string, extra: Partial<BookOption> = {}): BookOption {
+  return { id, title, coverUrl: null, author: null, ...extra };
 }
 
 function renderHome(overrides: Partial<DashboardResponse> = {}) {
@@ -377,7 +385,7 @@ describe('책 0권 빈 상태', () => {
   });
 
   it('책이 있으면 빈 상태를 그리지 않는다', () => {
-    const markup = renderHome({ readingBooks: [{ id: 1, title: '데미안' }] });
+    const markup = renderHome({ readingBooks: [book(1, '데미안')] });
 
     expect(markup).not.toContain('아직 책이 없어요');
     expect(labelsOf(markup)).not.toContain('첫 책 추가하기');
@@ -542,10 +550,7 @@ const labelsOf = (markup: string) => tdsButtons(markup).map((b) => b.label);
 const fillOf = (markup: string, label: string) => tdsButtons(markup).find((b) => b.label === label)?.fill;
 
 describe('측정할 책 기본값 (defaultBookId)', () => {
-  const books = [
-    { id: 1, title: '데미안' },
-    { id: 2, title: '노인과 바다' },
-  ];
+  const books = [book(1, '데미안'), book(2, '노인과 바다')];
 
   it('최근 읽은 책이 목록에 있으면 그 책 — 이어 읽기가 기본값이다', () => {
     expect(defaultBookId(books, 2)).toBe(2);
@@ -564,48 +569,103 @@ describe('측정할 책 기본값 (defaultBookId)', () => {
   });
 });
 
-describe('책 칩 (접힌 상태)', () => {
+/**
+ * 스크롤 위치 → 가운데 온 책 — 캐러셀의 유일한 계산이다.
+ *
+ * <p>트랙 좌우에 `50% - 표지폭/2` 여백을 둬서 i번째 표지의 중앙 정렬 위치가 정확히
+ * `i * (표지폭 + 간격)`이 된다 — 그래서 화면 폭이 계산에서 빠진다.
+ */
+describe('가운데 온 책 (centeredIndex)', () => {
+  const stride = COVER_WIDTH + COVER_GAP;
+
+  it('맨 앞이면 첫 책', () => {
+    expect(centeredIndex(0, COVER_WIDTH, COVER_GAP, 3)).toBe(0);
+  });
+
+  it('한 칸 다 넘기면 다음 책', () => {
+    expect(centeredIndex(stride, COVER_WIDTH, COVER_GAP, 3)).toBe(1);
+  });
+
+  it('절반을 넘겨야 넘어간다 — 손을 떼면 스냅이 가까운 쪽으로 붙는다', () => {
+    expect(centeredIndex(stride * 0.49, COVER_WIDTH, COVER_GAP, 3)).toBe(0);
+    expect(centeredIndex(stride * 0.51, COVER_WIDTH, COVER_GAP, 3)).toBe(1);
+  });
+
+  it('맨 뒤를 넘어가면 마지막 책으로 클램프 — 스크롤 끝의 관성이 목록 밖을 가리키면 안 된다', () => {
+    expect(centeredIndex(stride * 99, COVER_WIDTH, COVER_GAP, 3)).toBe(2);
+  });
+
+  it('음수(바운스 스크롤)는 첫 책으로 클램프', () => {
+    expect(centeredIndex(-stride, COVER_WIDTH, COVER_GAP, 3)).toBe(0);
+  });
+
+  it('책이 0권이면 0 — 인덱스로 목록을 찌르지 않는다', () => {
+    expect(centeredIndex(0, COVER_WIDTH, COVER_GAP, 0)).toBe(0);
+  });
+});
+
+describe('표지 캐러셀', () => {
   const books = [
-    { id: 1, title: '데미안' },
-    { id: 2, title: '노인과 바다' },
+    book(1, '데미안', { author: '헤르만 헤세', coverUrl: 'https://img.example/demian.jpg' }),
+    book(2, '노인과 바다', { author: '헤밍웨이' }),
   ];
 
-  it('고른 책 하나만 칩으로 띄우고 목록은 접어 둔다 — 상시 노출하면 책이 늘수록 홈이 목록 화면이 된다', () => {
+  /** 캐러셀에 선 책 — 표지 버튼에 계측용 표지를 달아 두었다(TDS emotion 클래스 사이에서 집을 손잡이가 없다). */
+  const coverTitlesOf = (markup: string) => [...markup.matchAll(/data-cover-title="([^"]*)"/g)].map((m) => m[1]);
+
+  it('읽는 중 책을 전부 나열한다 — 접어 두던 칩과 달리 좌우로 넘겨 고른다', () => {
     const markup = renderHome({ readingBooks: books, recentBookId: 2 });
 
-    expect(markup).toContain('이 책으로 측정할까요?');
-    expect(markup).toContain('노인과 바다');
-    expect(markup).not.toContain('데미안'); // 접혀 있으니 다른 책은 자취가 없어야 한다
-    expect(labelsOf(markup)).toContain('바꾸기');
+    expect(coverTitlesOf(markup)).toEqual(['데미안', '노인과 바다']);
   });
 
-  it('시트는 닫힌 채로 그려진다 — 인라인으로 펴 두면 홈이 목록 화면이 된다', () => {
+  it('가운데 온 책의 제목·저자를 캐러셀 아래에 적는다 — 표지만으론 무슨 책인지 확정되지 않는다', () => {
     const markup = renderHome({ readingBooks: books, recentBookId: 2 });
 
-    expect(markup).not.toContain('어떤 책을 읽을까요?');
-    expect(markup).not.toContain('무슨 책을 읽으셨나요?');
-    expect(labelsOf(markup)).not.toContain('건너뛰기');
+    expect(markup).toContain('data-selected-book="노인과 바다"');
+    expect(markup).toContain('헤밍웨이');
   });
 
-  it('최근 읽은 책이 없으면 첫 책이 칩에 뜬다', () => {
-    const markup = renderHome({ readingBooks: books, recentBookId: null });
+  it('최근 읽은 책이 목록 밖이면 첫 책이 가운데 — defaultBookId 규칙 그대로다', () => {
+    const markup = renderHome({ readingBooks: books, recentBookId: 99 });
 
-    expect(markup).toContain('데미안');
-    expect(markup).not.toContain('노인과 바다');
+    expect(markup).toContain('data-selected-book="데미안"');
+    expect(markup).toContain('헤르만 헤세');
   });
 
-  it('칩은 제목 첫 글자를 자리 표지로 세운다 — BookOption엔 표지 주소가 없다', () => {
+  it('표지가 있으면 그 이미지를 건다', () => {
+    const markup = renderHome({ readingBooks: books, recentBookId: 2 });
+
+    expect(markup).toContain('src="https://img.example/demian.jpg"');
+  });
+
+  it('표지가 없으면 첫 글자 + 제목색 상자로 떨어진다 — 빈 자리를 두면 캐러셀에 구멍이 난다', () => {
     const markup = renderHome({ readingBooks: books, recentBookId: 2 });
 
     expect(markup).toContain(`background:${coverColor('노인과 바다')}`);
     expect(markup).toContain('>노</div>');
   });
 
-  it('책이 0권이면 라벨·칩·바꾸기가 통째로 없다', () => {
+  it('현재 위치를 점으로 표시한다 — 몇 권 중 몇 번째인지가 표지만으론 안 보인다', () => {
+    const markup = renderHome({ readingBooks: books, recentBookId: 2 });
+
+    expect([...markup.matchAll(/data-dot="/g)]).toHaveLength(books.length);
+    expect([...markup.matchAll(/data-dot="active"/g)]).toHaveLength(1);
+  });
+
+  it('「바꾸기」와 시트 진입은 사라진다 — 캐러셀 자체가 고르는 자리다', () => {
+    const markup = renderHome({ readingBooks: books, recentBookId: 2 });
+
+    expect(labelsOf(markup)).not.toContain('바꾸기');
+    expect(markup).not.toContain('어떤 책을 읽을까요?');
+    expect(markup).not.toContain('무슨 책을 읽으셨나요?');
+  });
+
+  it('책이 0권이면 캐러셀이 통째로 없다', () => {
     const markup = renderHome({ readingBooks: [] });
 
     expect(markup).not.toContain('이 책으로 측정할까요?');
-    expect(labelsOf(markup)).not.toContain('바꾸기');
+    expect(coverTitlesOf(markup)).toEqual([]);
   });
 
   it('측정 중이면 고르는 자리가 사라진다 — 이미 시작한 뒤엔 바꿀 게 없다', () => {
@@ -616,14 +676,14 @@ describe('책 칩 (접힌 상태)', () => {
     });
 
     expect(markup).not.toContain('이 책으로 측정할까요?');
-    expect(labelsOf(markup)).not.toContain('바꾸기');
+    expect(coverTitlesOf(markup)).toEqual([]);
   });
 });
 
 describe('시트 열림 가드 (openSheetMode)', () => {
   it('책이 있으면 요청한 모드로 연다', () => {
-    expect(openSheetMode('start', [{ id: 1, title: '데미안' }])).toBe('start');
-    expect(openSheetMode('tag', [{ id: 1, title: '데미안' }])).toBe('tag');
+    expect(openSheetMode('start', [book(1, '데미안')])).toBe('start');
+    expect(openSheetMode('tag', [book(1, '데미안')])).toBe('tag');
   });
 
   it('책이 0권이면 열지 않는다 — 빈 시트는 막다른 길이고 홈의 「첫 책 추가하기」가 그 자리를 맡는다', () => {
@@ -635,7 +695,7 @@ describe('시트 열림 가드 (openSheetMode)', () => {
 describe('고른 책의 행선지 (pickHandler)', () => {
   const select = vi.fn();
   const tag = vi.fn();
-  const book = { id: 1, title: '데미안' };
+  const picked = book(1, '데미안');
 
   beforeEach(() => {
     select.mockReset();
@@ -643,26 +703,23 @@ describe('고른 책의 행선지 (pickHandler)', () => {
   });
 
   it('start면 칩을 갈아끼운다 — 측정 전이라 붙일 세션이 없다', () => {
-    pickHandler('start', { select, tag })(book);
+    pickHandler('start', { select, tag })(picked);
 
-    expect(select).toHaveBeenCalledWith(book);
+    expect(select).toHaveBeenCalledWith(picked);
     expect(tag).not.toHaveBeenCalled();
   });
 
   it('tag면 방금 세션에 붙인다 — 여기서 칩을 갈아끼우면 기록이 영영 안 붙는다', () => {
-    pickHandler('tag', { select, tag })(book);
+    pickHandler('tag', { select, tag })(picked);
 
-    expect(tag).toHaveBeenCalledWith(book);
+    expect(tag).toHaveBeenCalledWith(picked);
     expect(select).not.toHaveBeenCalled();
   });
 });
 
-/** 「바꾸기」·측정 종료로 열리는 시트 — 정적 렌더로는 열린 상태에 못 가므로 직접 렌더해 계측한다. */
+/** 측정 종료로 열리는 태깅 시트 — 정적 렌더로는 열린 상태에 못 가므로 직접 렌더해 계측한다. */
 describe('책 고르기 시트 (BookSheet)', () => {
-  const books = [
-    { id: 1, title: '데미안' },
-    { id: 2, title: '노인과 바다' },
-  ];
+  const books = [book(1, '데미안'), book(2, '노인과 바다')];
 
   const renderSheet = (mode: 'start' | 'tag', selectedId: number | null = null) =>
     renderToStaticMarkup(
@@ -726,10 +783,7 @@ describe('책 고르기 시트 (BookSheet)', () => {
 });
 
 describe('시작 갈래', () => {
-  const books = [
-    { id: 1, title: '데미안' },
-    { id: 2, title: '노인과 바다' },
-  ];
+  const books = [book(1, '데미안'), book(2, '노인과 바다')];
 
   it('책이 있으면 "측정 시작"(주) + "책 없이 시작"(보조) 두 갈래로 나뉜다', () => {
     const markup = renderHome({ readingBooks: books });

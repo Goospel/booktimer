@@ -412,6 +412,34 @@ class DashboardApiControllerTest {
                 .andExpect(jsonPath("$.readingBooks.length()").value(1));
     }
 
+    // ── 8f. BookOption 표지·저자 (미니앱 홈 표지 캐러셀용) ────────────────────
+
+    @Test
+    @DisplayName("GET /api/dashboard: readingBooks에 coverUrl·author를 함께 싣는다 — 미니앱 홈 표지 캐러셀의 입력")
+    void get_bookOptionCarriesCoverAndAuthor() throws Exception {
+        User u = register("cover@a.com", "covertest");
+        bookRepository.save(Book.register(u, "데미안", "헤르만 헤세", null,
+                "https://img.example/demian.jpg", null, null, BookStatus.READING));
+
+        mockMvc.perform(get("/api/dashboard").with(user("cover@a.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.readingBooks[0].coverUrl").value("https://img.example/demian.jpg"))
+                .andExpect(jsonPath("$.readingBooks[0].author").value("헤르만 헤세"));
+    }
+
+    @Test
+    @DisplayName("GET /api/dashboard: 표지·저자가 없는 책은 null로 실린다 — 미니앱이 자리 표지로 떨어뜨린다")
+    void get_bookOptionNullCoverAndAuthor() throws Exception {
+        User u = register("nocover@a.com", "nocover");
+        addBook(u, "손으로 넣은 책", BookStatus.READING);
+
+        mockMvc.perform(get("/api/dashboard").with(user("nocover@a.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.readingBooks[0].title").value("손으로 넣은 책"))
+                .andExpect(jsonPath("$.readingBooks[0].coverUrl").doesNotExist())
+                .andExpect(jsonPath("$.readingBooks[0].author").doesNotExist());
+    }
+
     // ── 9. DTO 화이트리스트 ───────────────────────────────────────────────────
 
     @Test

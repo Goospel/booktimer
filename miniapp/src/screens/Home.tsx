@@ -1,5 +1,5 @@
 import { Button, ProgressBar, Text } from '@toss/tds-mobile';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { BookOption, DashboardResponse, QuoteDto, TimerState, WaiveResponse } from '../api';
 import { ApiError, logout, startSession, stopSession, tagBook, waiveDebt } from '../api';
@@ -13,7 +13,7 @@ import {
   trackEvent,
   watchRewardAd,
 } from '../toss';
-import { CoverInitial, ErrorMessage, GrassGrid, Screen, sectionStyle } from '../ui';
+import { BookCover, CoverInitial, ErrorMessage, GrassGrid, Screen, sectionStyle } from '../ui';
 
 /** 홈 잔디 미리보기 폭 — 최근 15주만 축약해 보여주고 전체는 기록 화면이 맡는다(카드 폭을 채우는 주 수). */
 const PREVIEW_WEEKS = 15;
@@ -63,6 +63,146 @@ export function FirstSessionBanner({ show }: { show: boolean }) {
  */
 export function defaultBookId(readingBooks: BookOption[], recentBookId: number | null): number | null {
   return readingBooks.find((b) => b.id === recentBookId)?.id ?? readingBooks[0]?.id ?? null;
+}
+
+/** 캐러셀 표지 한 장의 폭·간격 — 계산(가운데 인덱스)과 스타일이 같은 값을 봐야 스냅과 선택이 어긋나지 않는다. */
+export const COVER_WIDTH = 84;
+export const COVER_GAP = 16;
+
+/**
+ * 스크롤 위치 → 가운데 온 책의 인덱스.
+ *
+ * <p>트랙 좌우에 `50% - 표지폭/2`의 여백을 둬서 i번째 표지가 가운데 오는 위치가 정확히
+ * `i * (표지폭 + 간격)`이 된다 — 그래서 화면 폭이 이 식에서 빠진다(여백이 이미 그 몫을 했다).
+ *
+ * <p>양끝은 클램프한다: iOS 바운스로 음수가, 관성 스크롤로 마지막 칸을 넘긴 값이 들어오는데
+ * 그대로 인덱스로 쓰면 목록 밖(`undefined`)을 찌른다.
+ */
+export function centeredIndex(scrollLeft: number, itemWidth: number, gap: number, count: number): number {
+  const index = Math.round(scrollLeft / (itemWidth + gap));
+  return Math.min(Math.max(index, 0), Math.max(count - 1, 0));
+}
+
+/** 표지 하나를 가운데로 — 가운데 정렬 여백 덕에 목표 위치가 곧 `index * stride`다. */
+function scrollToIndex(track: HTMLDivElement | null, index: number, behavior: ScrollBehavior): void {
+  track?.scrollTo({ left: index * (COVER_WIDTH + COVER_GAP), behavior });
+}
+
+/**
+ * 읽는 중 책 표지 캐러셀 — **가운데 온 책이 곧 측정할 책**이다.
+ *
+ * <p>칩 + 「바꾸기」 시트를 대신한다: 고르는 일이 시트를 여닫는 2단계에서 좌우로 미는 1단계가 되고,
+ * 표지가 그대로 나오니 무슨 책인지 글자보다 빨리 읽힌다. 표지가 없는 책도 같은 크기 자리 표지로
+ * 서서 줄이 무너지지 않는다.
+ *
+ * <p>선택 상태는 밖(홈)이 들고 있다 — 「측정 시작」이 같은 값을 써야 캐러셀과 시작 대상이 어긋나지 않는다.
+ */
+export function BookCarousel({
+  books,
+  selectedId,
+  onSelect,
+}: {
+  books: BookOption[];
+  selectedId: number | null;
+  onSelect: (bookId: number) => void;
+}) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const selected = books.find((b) => b.id === selectedId) ?? null;
+
+  // 첫 진입 — 기본 선택(이어 읽기)이 처음부터 가운데였던 것처럼 즉시 이동한다(애니메이션은 거짓 움직임이다).
+  useEffect(() => {
+    const index = books.findIndex((b) => b.id === selectedId);
+    scrollToIndex(trackRef.current, Math.max(index, 0), 'auto');
+    // 마운트 1회 — 이후 위치는 손가락(스크롤)과 탭이 정한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <>
+      <div
+        ref={trackRef}
+        onScroll={(e) => {
+          const book = books[centeredIndex(e.currentTarget.scrollLeft, COVER_WIDTH, COVER_GAP, books.length)];
+          if (book !== undefined && book.id !== selectedId) onSelect(book.id);
+        }}
+        style={{
+          display: 'flex',
+          gap: COVER_GAP,
+          overflowX: 'auto',
+          scrollSnapType: 'x mandatory',
+          // 좌우 여백이 첫 책·마지막 책까지 가운데로 올려 준다(없으면 양끝 책은 영영 못 고른다).
+          padding: `4px calc(50% - ${COVER_WIDTH / 2}px)`,
+          scrollbarWidth: 'none',
+        }}
+      >
+        {books.map((book) => {
+          const current = book.id === selectedId;
+          return (
+            <button
+              key={book.id}
+              type="button"
+              aria-label={book.title}
+              aria-current={current ? 'true' : undefined}
+              // 계측용 표지 — TDS emotion 클래스 사이에서 "표지가 몇 장이고 어떤 책인가"를 집을 손잡이가 없다.
+              data-cover-title={book.title}
+              onClick={() => {
+                onSelect(book.id);
+                scrollToIndex(trackRef.current, books.indexOf(book), 'smooth');
+              }}
+              style={{
+                flex: '0 0 auto',
+                scrollSnapAlign: 'center',
+                padding: 0,
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                // 가운데 온 책만 또렷하게 — 스냅 위치를 색·크기로도 말해 준다.
+                transform: current ? 'scale(1.1)' : 'scale(1)',
+                opacity: current ? 1 : 0.45,
+                transition: 'transform 0.2s ease, opacity 0.2s ease',
+              }}
+            >
+              {book.coverUrl !== null ? (
+                <BookCover url={book.coverUrl} width={COVER_WIDTH} />
+              ) : (
+                <CoverInitial title={book.title} width={COVER_WIDTH} />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 표지만으론 무슨 책인지 확정되지 않는다(비슷한 표지·자리 표지) — 고른 책만 글자로 못 박는다. */}
+      {selected !== null && (
+        <div data-selected-book={selected.title} style={{ marginTop: 12, textAlign: 'center' }}>
+          <Text typography="st10" fontWeight="bold" style={{ display: 'block', wordBreak: 'keep-all' }}>
+            {selected.title}
+          </Text>
+          {selected.author !== null && (
+            <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
+              {selected.author}
+            </Text>
+          )}
+        </div>
+      )}
+
+      {/* 몇 권 중 몇 번째인지 — 표지가 화면 밖으로 잘려 있으면 목록의 크기가 안 보인다. */}
+      <div aria-hidden="true" style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10 }}>
+        {books.map((book) => (
+          <span
+            key={book.id}
+            data-dot={book.id === selectedId ? 'active' : 'idle'}
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: book.id === selectedId ? SAGE : '#E4DDD0',
+            }}
+          />
+        ))}
+      </div>
+    </>
+  );
 }
 
 /**
@@ -501,7 +641,7 @@ export function Home({
   // 측정 중이면 elapsed가 매초 늘어 todayRead도 매초 늘어난다 — 카운트업의 동력이 이 한 줄이다.
   const { todayRead, remainingToGoal, overflow, progress, achieved } = todayProgress(dashboard, elapsed);
   const quotes = dashboard.quotes ?? [];
-  // 칩에 띄울 책 — 시작 버튼도 이 값을 그대로 쓴다(칩과 시작 대상이 어긋날 자리를 없앤다).
+  // 캐러셀 가운데 온 책 — 시작 버튼도 이 값을 그대로 쓴다(고른 책과 시작 대상이 어긋날 자리를 없앤다).
   const selectedBook = dashboard.readingBooks.find((b) => b.id === selectedBookId) ?? null;
 
   return (
@@ -591,21 +731,8 @@ export function Home({
           <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
             이 책으로 측정할까요?
           </Text>
-          {/* 칩 = 지금 고른 책 하나. 목록을 상시 펼쳐 두면 책이 늘수록 홈이 목록 화면이 된다(웹과 같은 접근). */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <CoverInitial title={selectedBook.title} />
-            <Text typography="st11" style={{ flex: 1, textAlign: 'left' }}>
-              {selectedBook.title}
-            </Text>
-            <Button
-              variant="weak"
-              size="small"
-              disabled={busy}
-              onClick={() => setSheet(openSheetMode('start', dashboard.readingBooks))}
-            >
-              바꾸기
-            </Button>
-          </div>
+          {/* 좌우로 밀어 고른다 — 가운데 온 표지가 곧 측정할 책이다(시트를 여닫던 2단계가 사라진다). */}
+          <BookCarousel books={dashboard.readingBooks} selectedId={selectedBookId} onSelect={setSelectedBookId} />
         </section>
       )}
 
@@ -623,7 +750,7 @@ export function Home({
 
       <ErrorMessage message={error} />
 
-      {/* 주 버튼은 "칩에 뜬 책으로 시작" 하나 — 칩이 없으면(책 0권) 그대로 책 없이 시작이다. */}
+      {/* 주 버튼은 "가운데 온 책으로 시작" 하나 — 고른 책이 없으면(책 0권) 그대로 책 없이 시작이다. */}
       <Button
         display="block"
         color={dashboard.hasActiveSession ? 'danger' : 'primary'}
@@ -662,21 +789,14 @@ export function Home({
         onLogout={() => void logoutAndLeave(onLogout)}
       />
 
-      {/* 태깅 시트는 "고른 책"이 없다 — selectedId를 안 주면 아무 행도 강조되지 않는다. */}
+      {/* 이제 시트는 측정 종료 후 태깅 자리 하나다(고르기는 캐러셀이 맡는다) — "고른 책"이 없어 아무 행도 강조되지 않는다. */}
       {sheet !== null && (
         <BookSheet
           mode={sheet}
           books={dashboard.readingBooks}
-          selectedId={sheet === 'start' ? selectedBookId : null}
           disabled={busy}
-          onPick={pickHandler(sheet, {
-            select: (book) => {
-              setSelectedBookId(book.id);
-              setSheet(null); // 고르면 곧바로 칩으로 되돌아간다(같은 책을 다시 골라도 닫힌다).
-            },
-            tag,
-          })}
-          onSkip={sheet === 'start' ? () => { setSheet(null); start(null); } : closeSheet}
+          onPick={pickHandler(sheet, { select: (book) => setSelectedBookId(book.id), tag })}
+          onSkip={closeSheet}
           onClose={closeSheet}
         />
       )}

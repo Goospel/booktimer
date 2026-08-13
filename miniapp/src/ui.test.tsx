@@ -150,7 +150,7 @@ describe('홈 오늘 진행률', () => {
 /** 카드·제목의 브랜드 문법 — 크림 캔버스 위 카드지(배경+보더)와 세리프 제목이 웹과 같은 위계를 만든다. */
 describe('섹션 카드·화면 제목', () => {
   // 섹션은 "읽는 중인 책"이 있을 때만 그려진다 — 빈 서재로는 카드 자체가 안 나온다.
-  const markup = home({ readingBooks: [{ id: 1, title: '데미안' }] });
+  const markup = home({ readingBooks: [{ id: 1, title: '데미안', coverUrl: null, author: null }] });
 
   it('섹션은 크림 캔버스 위 카드지로 뜬다 — 배경만으로는 종이톤끼리 경계가 안 보인다', () => {
     expect(markup).toContain('background:#FCFAF5'); // 웹 --card-bg

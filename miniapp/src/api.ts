@@ -158,6 +158,9 @@ export async function logout(): Promise<void> {
 export interface BookOption {
   id: number;
   title: string;
+  /** 표지 주소 — 손으로 넣은 책은 `null`이라 첫 글자 자리 표지로 떨어진다(검색 등록만 채운다). */
+  coverUrl: string | null;
+  author: string | null;
 }
 
 export interface ContributionDay {
