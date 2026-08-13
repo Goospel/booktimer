@@ -48,14 +48,20 @@ function New-Fixture {
     $wt = Join-Path $root "$name-wt"
     git worktree add -q $wt -b "$name-br" | Out-Null
   } finally { Pop-Location }
-  $mainNm = Join-Path $main 'frontend\node_modules'
-  New-Item -ItemType Directory $mainNm | Out-Null
-  Set-Content -Path (Join-Path $mainNm 'keep.txt') -Value 'precious-dep'
-  $wtFront = Join-Path $wt 'frontend'
-  New-Item -ItemType Directory $wtFront | Out-Null
-  $wtNm = Join-Path $wtFront 'node_modules'
-  New-Item -ItemType Junction -Path $wtNm -Target $mainNm | Out-Null
-  return @{ Main = $main; Wt = $wt; MainNm = $mainNm; WtNm = $wtNm }
+  # both node_modules dirs (frontend AND miniapp) are junction-linked in a worktree
+  $mainNm   = Join-Path $main 'frontend\node_modules'
+  $mainMini = Join-Path $main 'miniapp\node_modules'
+  $wtNm     = Join-Path $wt   'frontend\node_modules'
+  $wtMini   = Join-Path $wt   'miniapp\node_modules'
+  foreach ($d in 'frontend', 'miniapp') {
+    $tgt = Join-Path $main "$d\node_modules"
+    $lnk = Join-Path $wt   "$d\node_modules"
+    New-Item -ItemType Directory $tgt | Out-Null
+    Set-Content -Path (Join-Path $tgt 'keep.txt') -Value 'precious-dep'
+    New-Item -ItemType Directory (Split-Path -Parent $lnk) | Out-Null
+    New-Item -ItemType Junction -Path $lnk -Target $tgt | Out-Null
+  }
+  return @{ Main = $main; Wt = $wt; MainNm = $mainNm; WtNm = $wtNm; MainMini = $mainMini; WtMini = $wtMini }
 }
 
 # main worktree on 'main' tracking a bare origin/main (clean), plus a feature worktree.
@@ -102,15 +108,26 @@ Write-Host "== test 1: dry-run is non-destructive =="
 $f = New-Fixture 'dry'
 & $target -Path $f.Wt -DryRun | Out-Null
 check (Test-Path $f.Wt) "dry-run: worktree preserved"
-check ((Get-Item $f.WtNm -Force).LinkType -eq 'Junction') "dry-run: junction preserved"
-check (Test-Path (Join-Path $f.MainNm 'keep.txt')) "dry-run: target dep preserved"
+check ((Get-Item $f.WtNm -Force).LinkType -eq 'Junction') "dry-run: frontend junction preserved"
+check ((Get-Item $f.WtMini -Force).LinkType -eq 'Junction') "dry-run: miniapp junction preserved"
+check (Test-Path (Join-Path $f.MainNm 'keep.txt')) "dry-run: frontend target dep preserved"
+check (Test-Path (Join-Path $f.MainMini 'keep.txt')) "dry-run: miniapp target dep preserved"
 
 Write-Host "== test 2: normal remove keeps junction TARGET (T-110) =="
 $f = New-Fixture 'normal'
 & $target -Path $f.Wt | Out-Null
 check (-not (Test-Path $f.Wt)) "worktree removed"
-check (Test-Path (Join-Path $f.MainNm 'keep.txt')) "*** main node_modules target PRESERVED (T-110) ***"
-check (@(Get-ChildItem $f.MainNm -Force).Count -ge 1) "target not emptied"
+check (Test-Path (Join-Path $f.MainNm 'keep.txt')) "*** main frontend/node_modules target PRESERVED (T-110) ***"
+check (Test-Path (Join-Path $f.MainMini 'keep.txt')) "*** main miniapp/node_modules target PRESERVED (T-110) ***"
+check (@(Get-ChildItem $f.MainNm -Force).Count -ge 1) "frontend target not emptied"
+check (@(Get-ChildItem $f.MainMini -Force).Count -ge 1) "miniapp target not emptied"
+
+Write-Host "== test 2b: -Force remove keeps junction TARGETs (the actual T-110 path) =="
+$f = New-Fixture 'forced'
+& $target -Path $f.Wt -Force | Out-Null
+check (-not (Test-Path $f.Wt)) "worktree removed (-Force)"
+check (Test-Path (Join-Path $f.MainNm 'keep.txt')) "*** frontend target PRESERVED under -Force ***"
+check (Test-Path (Join-Path $f.MainMini 'keep.txt')) "*** miniapp target PRESERVED under -Force ***"
 
 Write-Host "== test 3: non-worktree path is rejected =="
 $bogus = Join-Path $root 'bogus-not-a-worktree'
