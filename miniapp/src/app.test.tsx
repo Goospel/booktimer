@@ -145,7 +145,7 @@ describe('하단 탭바', () => {
     expect(bar('home')).toContain('env(safe-area-inset-bottom)');
   });
 
-  it('본문 아래 여백이 떠 있는 바 전체를 덮는다 — 마지막 요소(격언·목표 바꾸기)가 바에 가리지 않는다', () => {
+  it('본문 아래 여백이 떠 있는 바 전체를 덮는다 — 마지막 요소(격언·계정)가 바에 가리지 않는다', () => {
     expect(renderTab('home')).toContain(
       `padding-bottom:calc(${TAB_BAR_HEIGHT}px + 12px + env(safe-area-inset-bottom) + 16px)`,
     );
