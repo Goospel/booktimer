@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type {
   DashboardResponse,
+  HomeFeedResponse,
   MonthlySection,
   MyBookSummary,
   ShelfResponse,
@@ -71,6 +72,15 @@ describe('dev-mock 핸들러', () => {
     expect(first.date > second.date).toBe(true);
     // 월 합계가 일자 합과 어긋나면 화면의 월 머리글이 거짓말을 한다.
     expect(months[0].totalSeconds).toBe(months[0].days.reduce((sum, d) => sum + d.totalSeconds, 0));
+  });
+
+  it('홈 피드 — 뉴스를 켜고 미리보기(3줄)보다 많이 준다. 안 그러면 뉴스 탭·「더 보기」를 브라우저로 볼 길이 없다', async () => {
+    const feed = await mockRequest<HomeFeedResponse>('/api/home-feed', {});
+
+    // 서버는 수집기 점등 전까지 false라, 목까지 꺼 두면 「책 뉴스」 탭 UI가 영영 확인 불가가 된다.
+    expect(feed.newsEnabled).toBe(true);
+    expect(feed.news.length).toBeGreaterThan(0);
+    expect(feed.social.length).toBeGreaterThan(3);
   });
 
   it('목에 없는 경로는 404로 던진다 — 조용히 undefined가 흘러 화면이 빈 채로 뜨지 않게', async () => {

@@ -15,8 +15,6 @@ import {
   COVER_WIDTH,
   EDGE_SPACE,
   FirstSessionBanner,
-  GrassPreview,
-  HIGHLIGHT_BORDER,
   Home,
   RemainingNote,
   TRACK_V_PAD,
@@ -35,8 +33,8 @@ import {
   todayProgress,
   waiverErrorMessage,
 } from './screens/Home';
-import { day, graph, stubLocalStorage, userAgent } from './test-fixtures';
-import { LEVEL_COLORS, coverColor } from './ui';
+import { graph, stubLocalStorage, userAgent } from './test-fixtures';
+import { coverColor } from './ui';
 import { REWARD_AD_GROUP_ID, notificationAgreementSupported, requestNotificationAgreement, watchRewardAd } from './toss';
 
 /**
@@ -60,6 +58,7 @@ vi.mock('./toss', () => ({
   notificationAgreementSupported: vi.fn(),
   requestNotificationAgreement: vi.fn(),
   trackEvent: vi.fn(),
+  openExternal: vi.fn(), // 피드 박스가 뉴스 줄에서 쓴다(홈이 프롭으로 내려 준다)
 }));
 
 const logoutMock = vi.mocked(logout);
@@ -170,25 +169,32 @@ describe('홈 렌더 배선', () => {
 });
 
 /**
- * 잔디 미리보기 방향 — 서버는 **weeks[0]이 최신 주**가 되도록 열을 뒤집어 보낸다
- * (`ContributionGraphBuilder.build`). oldest-first로 착각해 뒤에서 자르면 미리보기가 1년 전
- * 빈 구간만 보여준다 — 실기기에서 기록이 있는데도 홈 잔디가 늘 빈 칸이었다.
+ * 잔디 카드 → 연속일 한 줄. 잔디 전체·연속일·읽은 날·총 시간은 기록 탭이 이미 다 보여 주므로 홈의
+ * 미리보기는 중복이었다 — 그 자리를 피드 박스에 내주고, 매일 여는 동기(연속일)와 기록 탭 진입
+ * 손잡이만 한 줄로 남긴다. 데이터는 이미 `dashboard.graph`에 있어 서버 변경이 0이다.
  */
-describe('잔디 미리보기 방향', () => {
-  const week = (level: number) => Array.from({ length: 7 }, () => day(level));
-  // 미리보기 15주보다 길어야 어느 쪽을 잘랐는지가 드러난다 — 최신 주만 초록, 나머지 과거는 전부 0.
-  const directional: DashboardResponse['graph'] = {
-    ...graph,
-    weeks: [week(4), ...Array.from({ length: 15 }, () => week(0))],
-  };
+describe('연속일 한 줄', () => {
   const CELL = 'width:100%;aspect-ratio:1 / 1;border-radius:2px'; // 잔디 칸 서명(ui.test와 같은 값)
 
-  it('최신 주(weeks[0])를 보여준다 — 뒤에서 자르면 가장 옛날 15주가 잡혀 늘 빈 칸이었다', () => {
-    expect(renderHome({ graph: directional })).toContain(`${CELL};background:${LEVEL_COLORS[4]}`);
+  /** 한 줄 자체를 집는다 — 문구만 찾으면 옛 잔디 카드(같은 말을 머리에 달고 있었다)도 통과한다. */
+  const streakLineOf = (markup: string) =>
+    markup.split('<button').find((chunk) => chunk.includes('data-streak-line')) ?? '';
+
+  it('성장 단계 이모지 + 연속일 + 기록 보기 손잡이를 한 줄에 담는다', () => {
+    const line = streakLineOf(renderHome());
+
+    expect(line).toContain(`${graph.growthStageEmoji} 연속 ${graph.currentStreak}일`);
+    expect(line).toContain('기록 보기 ›');
   });
 
-  it('15주까지만 자른다 — 카드 폭이 정해진 자리라 주 수가 늘면 칸이 무한히 작아진다', () => {
-    expect(renderHome({ graph: directional }).split(CELL).length - 1).toBe(15 * 7);
+  it('잔디 칸은 홈에서 사라진다 — 기록 탭이 이미 전체를 그린다', () => {
+    expect(renderHome()).not.toContain(CELL);
+  });
+
+  it('연속일 줄이 피드 박스보다 앞에 선다 — 잔디 카드가 서 있던 자리 그대로다', () => {
+    const markup = renderHome();
+
+    expect(markup.indexOf('연속')).toBeLessThan(markup.indexOf('data-feed-tab'));
   });
 });
 
@@ -441,12 +447,12 @@ describe('측정 중 안심 문구 (B1)', () => {
 });
 
 /**
- * B2 — 첫 완료 축하 + 잔디 하이라이트. 잔디는 1초만 읽어도 lv1로 점등되는데(`levelFor`) 미리보기가
- * 폴드 아래라 아무도 보지 못했다. 서버 `firstCompletedSession`이 뜬 그 순간에만 시선을 아래로 끈다.
+ * B2 — 첫 완료 축하 배너. 잔디는 1초만 읽어도 lv1로 점등되는데 홈에서 그걸 볼 자리가 없어졌으므로
+ * (잔디 카드 → 피드 박스) 배너가 가리키는 곳도 **기록 탭**으로 옮겨진다. 하이라이트 테두리는 함께
+ * 사라졌다 — 가리킬 카드가 없는데 테두리만 남으면 죽은 배선이다.
  *
  * <p>⚠️ 하니스 사각: 축하 상태는 stop 응답으로만 켜지는데 정적 렌더는 「측정 끝내기」를 누를 수 없다 —
- * `Home` 안의 배선(플래그→배너·하이라이트)은 여기서 못 잡고, 아래는 조각을 직접 렌더해 계측한다
- * (`BookSheet`와 같은 처지). 배선 자체는 목 모드 브라우저 확인이 게이트다.
+ * `Home` 안의 배선(플래그→배너)은 여기서 못 잡고, 조각을 직접 렌더해 계측한다(`BookSheet`와 같은 처지).
  */
 describe('첫 완료 축하 (B2)', () => {
   /** 배너 상자의 배경 — TDSMobileProvider가 늘 전역 style을 뿜어 "빈 마크업"으로는 부재를 가릴 수 없다. */
@@ -459,18 +465,11 @@ describe('첫 완료 축하 (B2)', () => {
       </TDSMobileProvider>,
     );
 
-  const renderPreview = (highlight: boolean) =>
-    renderToStaticMarkup(
-      <TDSMobileProvider userAgent={userAgent}>
-        <GrassPreview graph={graph} highlight={highlight} onGoHistory={() => {}} />
-      </TDSMobileProvider>,
-    );
-
-  it('첫 기록이면 잔디로 시선을 보내는 배너를 띄운다', () => {
+  it('첫 기록이면 기록 탭으로 시선을 보내는 배너를 띄운다', () => {
     const markup = renderBanner(true);
 
     expect(markup).toContain('첫 독서 기록이 심어졌어요');
-    expect(markup).toContain('잔디'); // 어디를 보라는 말이 없으면 배너가 제 일을 못 한다
+    expect(markup).toContain('기록 탭'); // 어디를 보라는 말이 없으면 배너가 제 일을 못 한다
   });
 
   it('첫 기록이 아니면 배너가 통째로 없다 — 매번 뜨면 축하가 잡음이 된다', () => {
@@ -478,14 +477,6 @@ describe('첫 완료 축하 (B2)', () => {
 
     expect(markup).not.toContain('첫 독서 기록이 심어졌어요');
     expect(markup).not.toContain(BANNER_BACKGROUND); // 문구만 지운 빈 상자도 남지 않는다
-  });
-
-  it('축하 중엔 잔디 카드에 테두리가 생긴다 — 폴드 아래 카드로 시선을 끄는 장치다', () => {
-    expect(renderPreview(true)).toContain(HIGHLIGHT_BORDER);
-  });
-
-  it('평상시 잔디 카드엔 테두리가 없다', () => {
-    expect(renderPreview(false)).not.toContain(HIGHLIGHT_BORDER);
   });
 
   it('처음 그려진 홈엔 축하가 없다 — 상태는 stop 응답으로만 켜진다(새로고침하면 사라진다)', () => {

@@ -191,10 +191,8 @@ describe('섹션 카드·화면 제목', () => {
     expect(titled).toMatch(/font-family:[^"]*Gowun Batang/);
   });
 
-  it('홈 잔디 미리보기는 카드 폭을 채운다 — 고정 칸이면 카드 왼쪽에 좁게 붙는다', () => {
-    // `border-radius:2px`까지 함께 봐야 잔디 칸이다 — TDS 버튼의 물결 효과도 `aspect-ratio:1/1`을 쓴다.
-    expect(markup).toContain('width:100%;aspect-ratio:1 / 1;border-radius:2px');
-  });
+  // 「홈 잔디 미리보기는 카드 폭을 채운다」는 홈에서 잔디 카드가 빠지며 함께 사라졌다(그 자리는 피드 박스다).
+  // `GrassGrid`의 fill 변형 자체는 위 「잔디 가로 채움」이 컴포넌트를 직접 렌더해 계속 계측한다.
 });
 
 /**

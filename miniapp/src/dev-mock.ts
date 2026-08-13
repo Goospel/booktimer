@@ -8,11 +8,14 @@ import type {
   ContributionGraph,
   DailyRecord,
   DashboardResponse,
+  HomeFeedResponse,
   MonthlySection,
+  NewsItem,
   MyBookSummary,
   ProfileBook,
   RequestOptions,
   SearchRow,
+  SocialEvent,
   StoryCard,
   TimerState,
   UserRow,
@@ -266,6 +269,45 @@ const storyGroups: AuthorStories[] = [
   },
 ];
 
+/**
+ * 홈 피드 목 — **미리보기 3줄을 넘겨야** 「더 보기」 펼침이 브라우저에서 확인된다. 시각은 방금·시간·
+ * 어제·N일 전이 다 나오게 흩어 둔다(상대 시각 표기가 한 화면에서 전부 눈에 보이도록).
+ */
+const socialEvents: SocialEvent[] = [
+  { loginId: 'nabi', nickname: '나비독서', bookTitle: '데미안', type: 'FINISHED', occurredAt: isoTime(0.2) },
+  { loginId: 'underline', nickname: '밑줄러', bookTitle: '사피엔스', type: 'STARTED', occurredAt: isoTime(3) },
+  { loginId: 'jieun', nickname: '지은의서재', bookTitle: '미움받을 용기', type: 'FINISHED', occurredAt: isoTime(20) },
+  { loginId: 'nabi', nickname: '나비독서', bookTitle: '코스모스', type: 'STARTED', occurredAt: isoTime(30) },
+  { loginId: 'jieun', nickname: '지은의서재', bookTitle: '총, 균, 쇠', type: 'FINISHED', occurredAt: isoTime(96) },
+];
+
+const newsItems: NewsItem[] = [
+  {
+    title: '헤르만 헤세 『데미안』 출간 100년, 다시 읽히는 이유',
+    link: 'https://n.news.naver.com/article/001/0000001',
+    publishedAt: isoTime(5),
+    bookTitle: '데미안',
+  },
+  {
+    title: '“인류는 어떻게 지구를 지배했나” 『사피엔스』 개정판 출간',
+    link: 'https://www.hani.co.kr/arti/culture/book/0000002.html',
+    publishedAt: isoTime(26),
+    bookTitle: '사피엔스',
+  },
+  {
+    title: '아들러 심리학 열풍… 『미움받을 용기』 재조명',
+    link: 'https://www.chosun.com/culture-life/book/0000003/',
+    publishedAt: isoTime(70),
+    bookTitle: '미움받을 용기',
+  },
+  {
+    title: '칼 세이건 탄생 90주년 특별전, 『코스모스』 초판본 공개',
+    link: 'https://www.khan.co.kr/article/0000004',
+    publishedAt: isoTime(400),
+    bookTitle: '코스모스',
+  },
+];
+
 const searchRows: SearchRow[] = [
   {
     title: '불편한 편의점',
@@ -335,6 +377,14 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
 
   // 웹 history 섬이 쓰던 그 엔드포인트 — 미니앱 기록 탭이 잔디 아래 목록에 쓴다(서버 무변경).
   ['GET', /^\/api\/history$/, () => ({ months: buildMonths() })],
+
+  // 홈 피드 박스 — **목에서는 뉴스를 켜 둔다**: 서버는 수집기(후속 PR) 전까지 newsEnabled=false라
+  // 「책 뉴스」 탭이 안 그려져, 목까지 꺼 두면 그 탭 UI를 브라우저로 확인할 길이 아예 없다.
+  ['GET', /^\/api\/home-feed$/, (): HomeFeedResponse => ({
+    social: socialEvents,
+    newsEnabled: true,
+    news: newsItems,
+  })],
 
   // ── 타이머 ──
   ['POST', /^\/api\/sessions\/start$/, ({ body }) => {
