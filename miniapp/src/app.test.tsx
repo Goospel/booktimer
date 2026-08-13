@@ -66,7 +66,8 @@ function renderTab(tab: (typeof TABS)[number]['key']) {
 
 describe('탭 구조', () => {
   it('탭마다 그 탭의 화면을 그린다 — 탭 선택 ↔ 화면 대응', () => {
-    expect(renderTab('home')).toContain('구스펠님의 오늘');
+    // 홈은 제목 행이 없다(첫 카드가 곧 히어로) — 그 카드의 문구로 식별한다.
+    expect(renderTab('home')).toContain('오늘 읽은 시간');
     expect(renderTab('library')).toContain('내 서재');
     expect(renderTab('social')).toContain('책방 둘러보기');
     expect(renderTab('history')).toContain('내 기록');
@@ -74,7 +75,7 @@ describe('탭 구조', () => {
 
   it('다른 탭의 화면은 함께 그리지 않는다 — 한 번에 한 화면', () => {
     expect(renderTab('home')).not.toContain('내 기록');
-    expect(renderTab('library')).not.toContain('구스펠님의 오늘');
+    expect(renderTab('library')).not.toContain('오늘 읽은 시간');
     expect(renderTab('home')).not.toContain('책방 둘러보기');
   });
 

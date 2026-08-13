@@ -746,7 +746,7 @@ export function Home({
   const selectedBook = dashboard.readingBooks.find((b) => b.id === selectedBookId) ?? null;
 
   return (
-    <Screen title={`${dashboard.nickname}님의 오늘`}>
+    <Screen>
       <div
         style={{
           position: 'relative', // 우상단 목표 손잡이의 기준 상자

@@ -271,6 +271,10 @@ describe('오늘 읽은 시간 (todayProgress)', () => {
 
 /** 히어로 문구 — 프레이밍이 뒤집혔는지는 결국 화면에 뜬 말이 정한다. */
 describe('히어로 프레이밍 (렌더)', () => {
+  it('제목 행이 없다 — 「구스펠님의 오늘」은 바로 아래 카드가 이미 하는 말이었다', () => {
+    expect(renderHome()).not.toContain('님의 오늘');
+  });
+
   it('대형 숫자를 "오늘 읽은 시간"으로 세운다 — 남은 시간 카운트다운은 사라진다', () => {
     const markup = renderHome({ remainingSeconds: 900, todayGoalSeconds: 3600 });
 

@@ -6,11 +6,35 @@ import { describe, expect, it } from 'vitest';
 import type { DashboardResponse } from './api';
 import { History } from './screens/History';
 import { Home } from './screens/Home';
-import { BookCover, COVER_PALETTE, ErrorMessage, GrassGrid, coverColor, coverSource, initialOf } from './ui';
+import { BookCover, COVER_PALETTE, ErrorMessage, GrassGrid, Screen, coverColor, coverSource, initialOf } from './ui';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
 // 홈이 렌더 중에 알림 동의 캐시를 읽는다. 여기선 describe 본문에서도 홈을 그리므로(수집 시점) 모듈 최상단에서 심는다.
 stubLocalStorage();
+
+/**
+ * 화면 껍데기 — 제목은 이제 **선택**이다. 홈처럼 첫 카드가 곧 히어로인 화면에서 제목 행은
+ * 정보를 하나도 안 보태면서 자리만 먹는다(「오늘」은 바로 아래 「오늘 읽은 시간」의 중복이었다).
+ */
+describe('화면 껍데기 (Screen)', () => {
+  const screen = (title?: string) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Screen title={title}>본문</Screen>
+      </TDSMobileProvider>,
+    );
+
+  it('제목을 주면 그린다 — 목록형 화면은 여전히 이름을 단다', () => {
+    expect(screen('내 서재')).toContain('내 서재');
+  });
+
+  it('제목이 없으면 헤더 행 자체를 안 그린다 — 빈 행이 남으면 제거한 값이 사라진다', () => {
+    const markup = screen();
+
+    expect(markup).toContain('본문');
+    expect(markup).not.toContain('margin-bottom:20px'); // 제목 행의 서명
+  });
+});
 
 /**
  * 잔디 렌더 안전망 — 잔디 그리기를 History에서 `GrassGrid`(ui.tsx)로 추출하는 리팩터가
@@ -157,7 +181,14 @@ describe('섹션 카드·화면 제목', () => {
   });
 
   it('화면 제목은 웹 브랜드와 같은 세리프(고운바탕)로 쓴다', () => {
-    expect(markup).toMatch(/font-family:[^"]*Gowun Batang/);
+    // 홈은 제목 행이 없으므로(첫 카드가 곧 히어로) 제목을 다는 화면으로 본다.
+    const titled = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Screen title="내 서재">본문</Screen>
+      </TDSMobileProvider>,
+    );
+
+    expect(titled).toMatch(/font-family:[^"]*Gowun Batang/);
   });
 
   it('홈 잔디 미리보기는 카드 폭을 채운다 — 고정 칸이면 카드 왼쪽에 좁게 붙는다', () => {
