@@ -1,5 +1,6 @@
 import {
   Analytics,
+  Device,
   type LogParam,
   Notification,
   TossAuth,
@@ -112,6 +113,23 @@ export interface TossLoginResult {
  */
 export function tossLogin(): Promise<TossLoginResult> {
   return TossAuth.login();
+}
+
+/**
+ * 외부 주소 열기 — 기기의 기본 브라우저·관련 앱으로 넘긴다(홈 피드의 「책 뉴스」 줄).
+ *
+ * <p>최상위 `openURL`은 deprecated라 `Device.openURL`을 쓴다. 실패 두 갈래를 `trackEvent`·
+ * `showInterstitialAd`와 같은 모양으로 처리하되, 여기서는 **삼키는 대신 브라우저로 떨어뜨린다** —
+ * 목 모드(SDK 없음)에서 뉴스 줄이 죽은 링크가 되면 브라우저 확인 자체가 불가능해진다.
+ */
+export function openExternal(url: string): void {
+  const fallback = () => void window.open(url, '_blank', 'noopener');
+  try {
+    // 앱 밖에서는 SDK가 **동기 TypeError**(try가 받는다), 앱 안 브릿지 실패는 **거부된 Promise**(catch가 받는다).
+    void Device.openURL(url).catch(fallback);
+  } catch {
+    fallback();
+  }
 }
 
 /**

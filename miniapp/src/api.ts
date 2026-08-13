@@ -258,6 +258,42 @@ export interface MonthlySection {
  */
 export const fetchHistory = (): Promise<{ months: MonthlySection[] }> => request('/api/history');
 
+// ── 홈 피드 (`web/api/HomeFeedApiController`의 record가 타입 단일 출처) ────────
+
+/** `HomeFeedApiController.SocialEvent` — 팔로우한 사람의 PUBLIC 책 활동 한 줄. */
+export interface SocialEvent {
+  loginId: string;
+  nickname: string;
+  bookTitle: string;
+  type: 'STARTED' | 'FINISHED';
+  occurredAt: string;
+}
+
+/** `HomeFeedApiController.NewsItem` — 출처 라벨은 서버가 안 준다(클라이언트가 `link`에서 파생). */
+export interface NewsItem {
+  title: string;
+  link: string;
+  publishedAt: string;
+  /** 내 어느 책의 기사인지 보여주는 라벨. */
+  bookTitle: string;
+}
+
+/**
+ * 홈 피드 박스 데이터 — 대시보드에 동봉하지 않고 따로 받는다: 히어로(타이머) 렌더가 피드 쿼리에
+ * 인질로 잡히지 않고, 계약이 독립이라 서버·미니앱 배포가 묶이지 않는다(`Social`·`Library`의 자체 fetch 선례).
+ *
+ * <p>`newsEnabled`는 **「책 뉴스」 탭 노출 스위치**다 — 수집기 키가 서버에 없으면 false + `news`가 빈
+ * 배열로 와서 미니앱이 탭 머리 자체를 안 그린다(죽은 탭 금지). 게이트가 서버에 있어 키가 들어오면
+ * 미니앱 재배포 없이 점등된다(`VITE_*` 빌드타임 게이트보다 나은 자리).
+ */
+export interface HomeFeedResponse {
+  social: SocialEvent[];
+  newsEnabled: boolean;
+  news: NewsItem[];
+}
+
+export const fetchHomeFeed = (): Promise<HomeFeedResponse> => request('/api/home-feed');
+
 /** bookId를 안 주면 책 미지정 세션으로 시작한다(종료 후 태깅). */
 export const startSession = (bookId: number | null): Promise<TimerState> =>
   request('/api/sessions/start', { body: { bookId } });

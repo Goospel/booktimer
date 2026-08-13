@@ -13,10 +13,8 @@ import {
   trackEvent,
   watchRewardAd,
 } from '../toss';
-import { BookCover, CoverInitial, ErrorMessage, GrassGrid, Screen, sectionStyle } from '../ui';
-
-/** 홈 잔디 미리보기 폭 — 최근 15주만 축약해 보여주고 전체는 기록 화면이 맡는다(카드 폭을 채우는 주 수). */
-const PREVIEW_WEEKS = 15;
+import { BookCover, CoverInitial, ErrorMessage, Screen, sectionStyle } from '../ui';
+import { HomeFeedBox } from './HomeFeed';
 
 /** 알림 동의 결과 캐시 — 값은 토스가 준 결과 문자열 그대로. 정본은 토스이고 이건 카드 노출 스위치일 뿐이다. */
 const AGREEMENT_KEY = 'booktimer.notificationAgreement';
@@ -33,12 +31,10 @@ const SAGE = '#6E8A6A';
  */
 export const ACTIVE_SESSION_RELIEF = '화면을 꺼도 측정은 계속돼요. 책 읽고 오세요 🌿';
 
-/** 축하 중 잔디 카드에 두르는 테두리 — 폴드 아래 카드로 시선을 끄는 유일한 표지다. */
-export const HIGHLIGHT_BORDER = `2px solid ${SAGE}`;
-
 /**
  * 첫 완료 축하 배너 — 서버 `firstCompletedSession`이 참인 그 한 번만. 잔디는 1초만 읽어도 lv1로
- * 점등되는데(`ContributionGraphBuilder.levelFor`) 미리보기가 폴드 아래라 첫 보상을 아무도 못 봤다.
+ * 점등되는데(`ContributionGraphBuilder.levelFor`) 그걸 보여 줄 자리가 홈에 없다 — 잔디 미리보기가
+ * 피드 박스에 자리를 내줬으므로 **기록 탭**을 가리킨다(하이라이트 테두리는 가리킬 카드와 함께 사라졌다).
  *
  * <p>화면에서 꺼내 둔 이유는 늘 같다 — 하니스가 정적 렌더라 「측정 끝내기」를 눌러 켜진 상태에
  * 도달할 수 없다(`BookSheet`와 같은 처지).
@@ -49,7 +45,7 @@ export function FirstSessionBanner({ show }: { show: boolean }) {
   return (
     <div style={{ marginTop: 12, padding: 14, borderRadius: 12, background: '#EFF3EE', textAlign: 'center' }}>
       <Text typography="st11" style={{ display: 'block', wordBreak: 'keep-all' }}>
-        🌱 첫 독서 기록이 심어졌어요! 아래 잔디에 첫 칸이 생겼어요.
+        🌱 첫 독서 기록이 심어졌어요! 기록 탭에 첫 칸이 생겼어요.
       </Text>
     </div>
   );
@@ -963,7 +959,23 @@ export function Home({
         {dashboard.hasActiveSession ? '측정 끝내기' : '측정 시작'}
       </Button>
 
-      <GrassPreview graph={dashboard.graph} highlight={celebrate} onGoHistory={onGoHistory} />
+      {/* 잔디 미리보기가 서 있던 자리 — 전체 잔디는 기록 탭이 이미 그리므로, 매일 여는 동기(연속일)와
+          기록 탭 진입 손잡이만 한 줄로 남기고 나머지 자리는 피드 박스가 쓴다. */}
+      <button
+        type="button"
+        data-streak-line=""
+        onClick={onGoHistory}
+        style={{ ...cardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 14 }}
+      >
+        <Text typography="st11" color="grey600">
+          {dashboard.graph.growthStageEmoji} 연속 {dashboard.graph.currentStreak}일
+        </Text>
+        <Text typography="st12" color="grey600">
+          기록 보기 ›
+        </Text>
+      </button>
+
+      <HomeFeedBox onError={onError} />
 
       {quotes.length > 0 && <QuoteCard quotes={quotes} />}
 
@@ -984,39 +996,6 @@ export function Home({
         />
       )}
     </Screen>
-  );
-}
-
-/**
- * 잔디 미리보기 — 최근 15주만, 카드 폭을 꽉 채워서. 카드 전체가 기록 화면 진입점이다.
- * `highlight`면 테두리를 둘러 첫 완료 축하가 가리키는 곳을 눈에 띄게 한다.
- */
-export function GrassPreview({
-  graph,
-  highlight = false,
-  onGoHistory,
-}: {
-  graph: DashboardResponse['graph'];
-  highlight?: boolean;
-  onGoHistory: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onGoHistory}
-      style={highlight ? { ...cardStyle, border: HIGHLIGHT_BORDER } : cardStyle}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <Text typography="st11" color="grey600">
-          {graph.growthStageEmoji} 연속 {graph.currentStreak}일
-        </Text>
-        <Text typography="st12" color="grey600">
-          기록 보기 ›
-        </Text>
-      </div>
-      {/* 앞에서 자른다 — 서버가 weeks[0]을 최신 주로 뒤집어 준다(api.ts `weeks` 주석). */}
-      <GrassGrid weeks={graph.weeks.slice(0, PREVIEW_WEEKS)} fill />
-    </button>
   );
 }
 
