@@ -1,11 +1,11 @@
 ---
 name: remove-worktree
-description: 이 repo의 git 워크트리를 안전하게 삭제한다 — frontend/node_modules 정션을 먼저 끊어 메인 워크트리의 node_modules가 함께 지워지는 사고(T-110)를 막고, git worktree remove + 로컬 브랜치 정리까지 한 번에. 워크트리 정리/삭제, worktree 제거, PR 머지 후 작업 폴더 치울 때 사용.
+description: 이 repo의 git 워크트리를 안전하게 삭제한다 — frontend/node_modules·miniapp/node_modules 정션을 먼저 끊어 메인 워크트리의 node_modules가 함께 지워지는 사고(T-110)를 막고, git worktree remove + 로컬 브랜치 정리까지 한 번에. 워크트리 정리/삭제, worktree 제거, PR 머지 후 작업 폴더 치울 때 사용.
 ---
 
 # remove-worktree — 워크트리 안전 삭제
 
-git 워크트리를 지울 때 **`frontend/node_modules` 정션을 먼저 끊어** 메인 워크트리의 node_modules가 함께 삭제되는 사고(T-110)를 막고, `git worktree remove` + 로컬 브랜치 정리 + **메인 워크트리의 main 최신화(`git pull`)** 까지 한 번에 한다.
+git 워크트리를 지울 때 **`frontend/node_modules`·`miniapp/node_modules` 정션을 먼저 끊어** 메인 워크트리의 node_modules가 함께 삭제되는 사고(T-110)를 막고, `git worktree remove` + 로컬 브랜치 정리 + **메인 워크트리의 main 최신화(`git pull`)** 까지 한 번에 한다.
 
 ## 언제 쓰나
 
@@ -14,7 +14,7 @@ git 워크트리를 지울 때 **`frontend/node_modules` 정션을 먼저 끊어
 
 ## 왜 그냥 `git worktree remove`를 쓰면 안 되나
 
-워크트리의 `frontend/node_modules`는 메인 워크트리의 node_modules를 가리키는 **Windows 정션**이다(`link-node-modules.ps1`, 개념 N-132). `git worktree remove`·`rm -rf`는 정션을 "내용 있는 디렉토리"로 보고 따라 들어가 **타깃(메인 node_modules) 내용까지 삭제**한다(T-110: 137→0). 이 스킬은 정션 **링크만** 먼저 끊어(`[IO.Directory]::Delete`, 타깃 보존) 그 함정을 도구로 제거한다.
+워크트리의 `frontend/node_modules`·`miniapp/node_modules`는 메인 워크트리의 node_modules를 가리키는 **Windows 정션**이다(`link-node-modules.ps1`, 개념 N-132). `git worktree remove`·`rm -rf`는 정션을 "내용 있는 디렉토리"로 보고 따라 들어가 **타깃(메인 node_modules) 내용까지 삭제**한다(T-110: 137→0). 이 스킬은 정션 **링크만** 먼저 끊어(`[IO.Directory]::Delete`, 타깃 보존) 그 함정을 도구로 제거한다.
 
 ## 사용
 
@@ -46,7 +46,7 @@ powershell -File .claude/scripts/remove-worktree.ps1 ../BookTimer-foo           
 ## 동작 순서
 
 1. 경로·소속·main·cwd 가드
-2. `frontend/node_modules`가 정션이면 링크만 끊기(타깃 보존). 일반 폴더면 건드리지 않음.
+2. `frontend/node_modules`·`miniapp/node_modules`가 정션이면 링크만 끊기(타깃 보존). 일반 폴더면 건드리지 않음.
 3. `git worktree remove` (`-Force` 시 강제)
 4. 로컬 브랜치 `git branch -d` (미머지면 보존)
 5. **메인 워크트리의 main 최신화** — 베스트-에포트 `git pull --ff-only`. 머지분이 원격 main에 얹혀 로컬 main이 뒤처지므로 따라잡는다. **활성 작업을 절대 방해하지 않게** 4가드를 모두 통과할 때만 실행: ① 메인 워크트리가 `main`(또는 `master`) 브랜치일 때만(브랜치 강제 전환 안 함) ② 추적 파일 미커밋 변경이 없을 때만 ③ upstream이 있을 때만 ④ fast-forward만(diverge 시 경고만). 어느 가드에 걸리거나 pull이 실패해도 **워크트리 삭제 성공은 유지**(fail-open, `-NoPull`로 끔).

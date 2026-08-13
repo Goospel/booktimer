@@ -1,8 +1,8 @@
 #!/usr/bin/env pwsh
 # remove-worktree.ps1 - safely remove a git worktree, cutting the node_modules junction FIRST.
 #
-# Why: a worktree's frontend/node_modules is a Windows JUNCTION pointing at the MAIN
-#   worktree's node_modules (see link-node-modules.ps1, learning-notes N-132). A plain
+# Why: a worktree's frontend/node_modules and miniapp/node_modules are Windows JUNCTIONs
+#   pointing at the MAIN worktree's node_modules (see link-node-modules.ps1, N-132). A plain
 #   `git worktree remove` / rm -rf follows that junction and DELETES THE TARGET's contents
 #   (main node_modules emptied 137 -> 0, troubleshooting T-110). This script cuts the
 #   junction LINK ONLY (target preserved) before removing the worktree, so the main repo
@@ -39,6 +39,9 @@ param(
 # (not PowerShell exceptions) decide control flow. Caller's preference is restored
 # automatically when this child-scope script returns.
 $ErrorActionPreference = 'Continue'
+
+# node_modules dirs that link-node-modules.ps1 junctions into a worktree - all must be cut.
+$NodeModulesDirs = @('frontend', 'miniapp')
 
 function info($m) { Write-Host "[remove-worktree] $m" }
 function fail($m, $code) { Write-Host "[remove-worktree] ERROR: $m"; exit $code }
@@ -81,17 +84,18 @@ if ($cwd -ieq $abs -or $cwd.ToLower().StartsWith(($abs.ToLower() + '\'))) {
 # 6. remember the branch (for optional deletion after removal)
 $branch = (git -C $abs rev-parse --abbrev-ref HEAD 2>$null)
 
-# 7. cut the node_modules junction FIRST (link only -> target preserved)
-$nm = Join-Path $abs 'frontend\node_modules'
-if (Test-Path $nm) {
+# 7. cut every node_modules junction FIRST (link only -> target preserved)
+foreach ($d in $NodeModulesDirs) {
+  $nm = Join-Path $abs "$d\node_modules"
+  if (-not (Test-Path $nm)) { continue }
   $item = Get-Item $nm -Force
   if ($item.LinkType -eq 'Junction') {
-    info "junction at frontend/node_modules -> $($item.Target)"
+    info "junction at $d/node_modules -> $($item.Target)"
     if ($DryRun) { info "(dry-run) would cut junction link (target preserved)" }
     else { [IO.Directory]::Delete($nm); info "junction cut (link only; target preserved)" }
   }
   else {
-    info "frontend/node_modules is a real folder (not a junction) - left for git to handle"
+    info "$d/node_modules is a real folder (not a junction) - left for git to handle"
   }
 }
 

@@ -147,7 +147,7 @@ git worktree list           # 워크트리가 이미 여럿인가?
 
 ```
 git worktree add ../BookTimer-<task> -b <type>/<summary> main
-# → 그 폴더에서 작업(절대경로 편집/커밋). frontend 의존성(node_modules)은 SessionStart 훅
+# → 그 폴더에서 작업(절대경로 편집/커밋). frontend·miniapp 의존성(node_modules)은 SessionStart 훅
 #   (link-node-modules-on-session-start.ps1)이 새 세션마다 자동 정션 연결한다 — 수동 입력 0(N-132).
 #   수동 실행도 가능: powershell -File .claude/scripts/link-node-modules.ps1
 # 머지 후 정리 — remove-worktree 스킬/스크립트가 [정션 끊기 → worktree remove → 로컬 브랜치 정리]를

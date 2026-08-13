@@ -2168,6 +2168,8 @@ git worktree remove ../BookTimer-<task>
 
 **예방**: 정션을 쓰는 워크트리는 정리 순서가 "**정션 끊기 → worktree remove**"로 고정이다(CLAUDE.md 다중 세션 절에 반영). 자동 정리 스크립트도 worktree remove 앞에 정션 제거를 넣는다. 일반화: **링크(정션·심볼릭)를 품은 폴더의 재귀 삭제는 타깃을 건드릴 수 있다**.
 
+**miniapp 정션도 동일 — 스크립트가 두 경로를 모두 끊도록 일반화(2026-08-13)**: `link-node-modules.ps1`이 frontend만 다뤄 미니앱 워크트리에서 `npm --prefix miniapp test`가 vitest를 못 찾던 걸 고치며(두 스크립트 상단 `$NodeModulesDirs = @('frontend','miniapp')`), `remove-worktree.ps1`의 정션 끊기도 `frontend\node_modules` 하드코딩에서 같은 목록 루프로 넓혔다. 넓히기 전 테스트로 **재현 확인**: miniapp 정션을 둔 워크트리를 `-Force`로 지우면 main의 `miniapp/node_modules` 타깃이 그대로 증발했다(정확히 이 T-110). 회귀 테스트는 두 경로 타깃 보존을 각각 단언한다.
+
 **관련**: 정션 워크플로([[N-132]] — node_modules 정션 공유)의 정리측 함정. **1회차(신규, 격리 재현으로 확정)**.
 
 ---
