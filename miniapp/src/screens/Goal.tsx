@@ -8,6 +8,23 @@ import { ErrorMessage, Screen } from '../ui';
 /** 하루 목표 후보 — 미니앱은 설정 화면이 없으니 흔한 값만 골라 마찰을 없앤다. */
 const PRESETS = [600, 1200, 1800, 3600, 5400, 7200];
 
+/** 첫 실행에서 미리 골라 둘 값(10분) — 첫 세션 안에 「오늘 목표 달성」을 실제로 밟을 수 있는 크기다. */
+export const FIRST_RUN_GOAL_SECONDS = 600;
+
+/**
+ * 첫 화면에 미리 골라 둘 목표(초).
+ *
+ * <p>신규 계정의 서버 기본은 1시간(`UserRegistrationService.DEFAULT_DAILY_INCREMENT_SECONDS`)인데,
+ * 첫 실행에서 그 값을 그대로 골라 두면 첫 세션에서 목표 달성(히어로 「🌿 오늘 목표 달성」 + lv4 잔디)을
+ * 경험할 확률이 사실상 0이다(운영 실측 2026-08-13 — 신규 3명 전원 5분+ 독서 0건). 서버 기본값은 웹
+ * 신규 가입과 공유하므로 건드리지 않고 <b>첫 화면의 초기 선택만</b> 내린다.
+ *
+ * <p>목표를 바꾸러 들어온 기존 사용자에겐 지금 값 그대로 — 남의 설정을 몰래 내리지 않는다.
+ */
+export function initialGoalSelection(firstRun: boolean, current: number): number {
+  return firstRun ? FIRST_RUN_GOAL_SECONDS : current;
+}
+
 /**
  * 목표 설정 — 신규 계정 첫 실행 유도 + 이후 변경(같은 엔드포인트).
  *
@@ -25,7 +42,7 @@ export function Goal({
   onSaved: () => void;
   onSkip: () => void;
 }) {
-  const [selected, setSelected] = useState(current);
+  const [selected, setSelected] = useState(() => initialGoalSelection(firstRun, current));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -56,6 +73,15 @@ export function Goal({
           </Button>
         ))}
       </div>
+
+      {/* 미리 골라 둔 값이 왜 이렇게 작은지 한 줄로 — 없으면 "이 앱은 나를 얕본다"로 읽히고,
+          있으면 첫날 달성을 밟게 하려는 배려로 읽힌다. 목표를 바꾸러 온 사람에겐 할 말이 아니다. */}
+      {firstRun && (
+        <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 12 }}>
+          🌱 가볍게 시작 — {formatDuration(FIRST_RUN_GOAL_SECONDS)}이면 오늘 안에 한 번 달성할 수 있어요.
+          언제든 늘릴 수 있어요.
+        </Text>
+      )}
 
       <ErrorMessage message={error} />
 

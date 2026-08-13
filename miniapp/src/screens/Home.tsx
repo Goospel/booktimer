@@ -27,6 +27,34 @@ const AGREEMENT_KEY = 'booktimer.notificationAgreement';
 const SAGE = '#6E8A6A';
 
 /**
+ * 측정 중 안심 문구 — 이 앱의 핵심 계약은 "화면을 꺼도 서버가 센다"인데 측정 중 화면에 그 말이 없었다.
+ * 첫 세션에 한정하지 않는다: 짧고 무해하며, 잊어버리는 건 신규 유저만이 아니다.
+ */
+export const ACTIVE_SESSION_RELIEF = '화면을 꺼도 측정은 계속돼요. 책 읽고 오세요 🌿';
+
+/** 축하 중 잔디 카드에 두르는 테두리 — 폴드 아래 카드로 시선을 끄는 유일한 표지다. */
+export const HIGHLIGHT_BORDER = `2px solid ${SAGE}`;
+
+/**
+ * 첫 완료 축하 배너 — 서버 `firstCompletedSession`이 참인 그 한 번만. 잔디는 1초만 읽어도 lv1로
+ * 점등되는데(`ContributionGraphBuilder.levelFor`) 미리보기가 폴드 아래라 첫 보상을 아무도 못 봤다.
+ *
+ * <p>화면에서 꺼내 둔 이유는 늘 같다 — 하니스가 정적 렌더라 「측정 끝내기」를 눌러 켜진 상태에
+ * 도달할 수 없다(`BookSheet`와 같은 처지).
+ */
+export function FirstSessionBanner({ show }: { show: boolean }) {
+  if (!show) return null;
+
+  return (
+    <div style={{ marginTop: 12, padding: 14, borderRadius: 12, background: '#EFF3EE', textAlign: 'center' }}>
+      <Text typography="st11" style={{ display: 'block', wordBreak: 'keep-all' }}>
+        🌱 첫 독서 기록이 심어졌어요! 아래 잔디에 첫 칸이 생겼어요.
+      </Text>
+    </div>
+  );
+}
+
+/**
  * 처음 골라 둘 책 — 최근 읽은 책(=이어 읽기)이 읽는 중 목록에 있으면 그 책, 아니면 첫 책, 없으면 `null`.
  *
  * <p>웹 `BookPickForm`의 `defaultBook`과 같은 규칙이다. `recentBookId`가 목록 밖일 수 있는 건 그 책을
@@ -365,6 +393,11 @@ export function Home({
   const [now, setNow] = useState(() => Date.now());
   /** 방금 지운 부채(초) — 성공 직후 한 줄 안내용. */
   const [waived, setWaived] = useState<number | null>(null);
+  /**
+   * 첫 완료 축하가 떠 있는지 — 메모리에만 둔다. 새로고침·재조회로 사라지는 게 맞다(축하는 그 순간 1회로 족하고,
+   * 서버는 두 번째 종료부터 `firstCompletedSession=false`를 주므로 다시 켜질 일도 없다).
+   */
+  const [celebrate, setCelebrate] = useState(false);
   /** 알림 동의 캐시·지원 여부 — 렌더마다 다시 묻지 않게 초기값으로 한 번만 읽는다. */
   const [agreement, setAgreement] = useState(() => localStorage.getItem(AGREEMENT_KEY));
   const [agreementSupported] = useState(notificationAgreementSupported);
@@ -387,13 +420,18 @@ export function Home({
     action.catch(fail).finally(() => setBusy(false));
   };
 
-  const start = (bookId: number | null) => run(startSession(bookId).then(onTimerChange));
+  // 다음 측정을 시작하면 축하는 접는다 — 지난 세션의 축하가 새 측정 화면에 남아 있으면 거짓말이 된다.
+  const start = (bookId: number | null) => {
+    setCelebrate(false);
+    return run(startSession(bookId).then(onTimerChange));
+  };
 
   const stop = () =>
     run(
       stopSession().then((result) => {
         onTimerChange(result.timer);
         onGraphChange(result.graph); // stop 응답에 잔디가 동봉돼 새로고침 없이 즉시 갱신된다.
+        setCelebrate(result.firstCompletedSession); // 첫 기록이면 배너 + 잔디 하이라이트로 시선을 아래로 보낸다.
         // 웹처럼 종료 직후 시트를 저절로 연다 — 태깅은 지금 기억이 가장 선명하다.
         const mode = openSheetMode('tag', dashboard.readingBooks);
         if (result.untagged && mode !== null) {
@@ -511,12 +549,21 @@ export function Home({
           </Text>
         )}
         {dashboard.hasActiveSession && (
-          <Text typography="t5" color="blue500" style={{ display: 'block', marginTop: 16 }}>
-            측정 중 {formatDuration(elapsed)}
-            {dashboard.activeBookTitle !== null && ` · ${dashboard.activeBookTitle}`}
-          </Text>
+          <>
+            <Text typography="t5" color="blue500" style={{ display: 'block', marginTop: 16 }}>
+              측정 중 {formatDuration(elapsed)}
+              {dashboard.activeBookTitle !== null && ` · ${dashboard.activeBookTitle}`}
+            </Text>
+            {/* 이 앱의 핵심 계약(측정은 서버 권위)을 측정 중 화면에서 말하지 않으면, 사용자는 화면을 켜 둬야
+                하는 줄 알고 몇 초 만에 끈다 — 운영 실측에서 완료 세션 대부분이 1분 미만이었다. */}
+            <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 6 }}>
+              {ACTIVE_SESSION_RELIEF}
+            </Text>
+          </>
         )}
       </div>
+
+      <FirstSessionBanner show={celebrate} />
 
       {/* 알림 동의 — 발송은 동의한 유저에게만 가능하고, 동의를 받는 주체는 미니앱이다(콘솔 심사 조건). */}
       {shouldShowNotificationCard(agreement, agreementSupported) && (
@@ -592,7 +639,7 @@ export function Home({
         </Button>
       )}
 
-      <GrassPreview graph={dashboard.graph} onGoHistory={onGoHistory} />
+      <GrassPreview graph={dashboard.graph} highlight={celebrate} onGoHistory={onGoHistory} />
 
       {quotes.length > 0 && <QuoteCard quotes={quotes} />}
 
@@ -628,16 +675,25 @@ export function Home({
   );
 }
 
-/** 잔디 미리보기 — 최근 15주만, 카드 폭을 꽉 채워서. 카드 전체가 기록 화면 진입점이다. */
-function GrassPreview({
+/**
+ * 잔디 미리보기 — 최근 15주만, 카드 폭을 꽉 채워서. 카드 전체가 기록 화면 진입점이다.
+ * `highlight`면 테두리를 둘러 첫 완료 축하가 가리키는 곳을 눈에 띄게 한다.
+ */
+export function GrassPreview({
   graph,
+  highlight = false,
   onGoHistory,
 }: {
   graph: DashboardResponse['graph'];
+  highlight?: boolean;
   onGoHistory: () => void;
 }) {
   return (
-    <button type="button" onClick={onGoHistory} style={cardStyle}>
+    <button
+      type="button"
+      onClick={onGoHistory}
+      style={highlight ? { ...cardStyle, border: HIGHLIGHT_BORDER } : cardStyle}
+    >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <Text typography="st11" color="grey600">
           {graph.growthStageEmoji} 연속 {graph.currentStreak}일

@@ -57,6 +57,12 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
     Optional<ReadingSession> findByUserAndEndedAtIsNull(User user);
 
     /**
+     * 이 사용자가 <b>끝낸</b> 세션 수 — stop 직후 "이번이 첫 기록인가"(정확히 1)를 가리는 데 쓴다.
+     * 수동 기록({@code recordManual})도 완료 세션이라 함께 세어진다 — 첫 "기록"의 의미를 지킨다.
+     */
+    long countByUserAndEndedAtIsNotNull(User user);
+
+    /**
      * 특정 시각보다 먼저 시작해 아직 안 끝난 세션 전부 — 방치 세션 자동 종료(스위퍼)용.
      * 사용자 무관 전역 조회다. ended_at 인덱스(V63)가 진행 중 세션만 좁혀준다.
      */

@@ -8,6 +8,9 @@ import { ApiError, logout, waiveDebt } from './api';
 import {
   AccountSection,
   BookSheet,
+  FirstSessionBanner,
+  GrassPreview,
+  HIGHLIGHT_BORDER,
   Home,
   SHEET_COPY,
   askNotificationAgreement,
@@ -290,6 +293,76 @@ describe('히어로 프레이밍 (렌더)', () => {
 
   it('밀린 시간이 없으면 용서 문구도 없다 — 없는 빚을 상기시키지 않는다', () => {
     expect(renderHome({ carriedDebtSeconds: 0 })).not.toContain('자동으로 사라져요');
+  });
+});
+
+/**
+ * B1 — 측정 중 안심 문구. 이 앱의 핵심 계약은 "화면을 꺼도 서버가 센다"인데, 측정 중 화면엔 그 사실을
+ * 알릴 자리가 없었다(운영 실측 2026-08-13: 신규 3명 전원 5분+ 독서 0건, 완료 세션 대부분 1분 미만).
+ */
+describe('측정 중 안심 문구 (B1)', () => {
+  const RELIEF = '화면을 꺼도 측정은 계속돼요';
+  const active = { hasActiveSession: true, activeStartedAt: '2026-08-11T09:00:00' };
+
+  it('측정 중이면 화면을 꺼도 된다고 말한다 — 이 앱의 핵심 계약을 사용자가 알 방법이 없었다', () => {
+    expect(renderHome(active)).toContain(RELIEF);
+  });
+
+  it('측정 중이 아니면 없다 — 시작도 안 한 사람에게 할 말이 아니다', () => {
+    expect(renderHome()).not.toContain(RELIEF);
+  });
+});
+
+/**
+ * B2 — 첫 완료 축하 + 잔디 하이라이트. 잔디는 1초만 읽어도 lv1로 점등되는데(`levelFor`) 미리보기가
+ * 폴드 아래라 아무도 보지 못했다. 서버 `firstCompletedSession`이 뜬 그 순간에만 시선을 아래로 끈다.
+ *
+ * <p>⚠️ 하니스 사각: 축하 상태는 stop 응답으로만 켜지는데 정적 렌더는 「측정 끝내기」를 누를 수 없다 —
+ * `Home` 안의 배선(플래그→배너·하이라이트)은 여기서 못 잡고, 아래는 조각을 직접 렌더해 계측한다
+ * (`BookSheet`와 같은 처지). 배선 자체는 목 모드 브라우저 확인이 게이트다.
+ */
+describe('첫 완료 축하 (B2)', () => {
+  /** 배너 상자의 배경 — TDSMobileProvider가 늘 전역 style을 뿜어 "빈 마크업"으로는 부재를 가릴 수 없다. */
+  const BANNER_BACKGROUND = '#EFF3EE';
+
+  const renderBanner = (show: boolean) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <FirstSessionBanner show={show} />
+      </TDSMobileProvider>,
+    );
+
+  const renderPreview = (highlight: boolean) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <GrassPreview graph={graph} highlight={highlight} onGoHistory={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  it('첫 기록이면 잔디로 시선을 보내는 배너를 띄운다', () => {
+    const markup = renderBanner(true);
+
+    expect(markup).toContain('첫 독서 기록이 심어졌어요');
+    expect(markup).toContain('잔디'); // 어디를 보라는 말이 없으면 배너가 제 일을 못 한다
+  });
+
+  it('첫 기록이 아니면 배너가 통째로 없다 — 매번 뜨면 축하가 잡음이 된다', () => {
+    const markup = renderBanner(false);
+
+    expect(markup).not.toContain('첫 독서 기록이 심어졌어요');
+    expect(markup).not.toContain(BANNER_BACKGROUND); // 문구만 지운 빈 상자도 남지 않는다
+  });
+
+  it('축하 중엔 잔디 카드에 테두리가 생긴다 — 폴드 아래 카드로 시선을 끄는 장치다', () => {
+    expect(renderPreview(true)).toContain(HIGHLIGHT_BORDER);
+  });
+
+  it('평상시 잔디 카드엔 테두리가 없다', () => {
+    expect(renderPreview(false)).not.toContain(HIGHLIGHT_BORDER);
+  });
+
+  it('처음 그려진 홈엔 축하가 없다 — 상태는 stop 응답으로만 켜진다(새로고침하면 사라진다)', () => {
+    expect(renderHome()).not.toContain('첫 독서 기록이 심어졌어요');
   });
 });
 

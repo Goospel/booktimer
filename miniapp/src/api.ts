@@ -217,6 +217,11 @@ export interface DashboardResponse extends TimerState {
 export interface StopResponse {
   sessionId: number;
   untagged: boolean;
+  /**
+   * 이번 종료가 이 사용자의 첫 완료 기록인지 — 홈이 축하 배너 + 잔디 하이라이트를 띄우는 스위치.
+   * 서버가 완료 세션 수가 '정확히 1'이 된 순간에만 참으로 준다(수동 기록도 완료 세션이라 함께 세어진다).
+   */
+  firstCompletedSession: boolean;
   timer: TimerState;
   graph: ContributionGraph;
 }
