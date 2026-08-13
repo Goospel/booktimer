@@ -656,10 +656,17 @@ describe('표지 캐러셀', () => {
     expect(COVER_HEIGHT).toBe(Math.round(COVER_WIDTH * 1.4));
   });
 
-  it('트랙 세로 스크롤을 막는다 — overflow-x:auto만 두면 세로도 auto로 계산돼 표지가 손가락에 들썩인다', () => {
+  it('트랙 세로 스크롤은 touch-action이 막는다 — overflow-y:hidden은 웹뷰에서 가로 터치 스크롤까지 함께 죽인다', () => {
     const markup = renderHome({ readingBooks: books, recentBookId: 2 });
 
-    expect(markup).toContain('overflow-x:auto;overflow-y:hidden');
+    expect(markup).toContain('touch-action:pan-x');
+    expect(markup).not.toContain('overflow-y:hidden');
+  });
+
+  it('가운데로 미끄러지는 애니메이션을 CSS가 맡는다 — 웹뷰가 scrollTo의 behavior 옵션을 무시해도 표지는 움직인다', () => {
+    const markup = renderHome({ readingBooks: books, recentBookId: 2 });
+
+    expect(markup).toContain('scroll-behavior:smooth');
   });
 
   it('세로 여백을 상수 그대로 트랙에 건다 — 상수만 늘리고 스타일이 옛 값이면 계산이 헛돈다', () => {

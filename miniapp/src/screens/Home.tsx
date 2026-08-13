@@ -93,10 +93,29 @@ export function centeredIndex(scrollLeft: number, itemWidth: number, gap: number
   return Math.min(Math.max(index, 0), Math.max(count - 1, 0));
 }
 
-/** 표지 하나를 가운데로 — 가운데 정렬 여백 덕에 목표 위치가 곧 `index * stride`다. */
-function scrollToIndex(track: HTMLDivElement | null, index: number, behavior: ScrollBehavior): void {
-  track?.scrollTo({ left: index * (COVER_WIDTH + COVER_GAP), behavior });
+/**
+ * 미끄러지는 이동을 CSS에 맡긴다 — `scrollTo({behavior})`는 옵션 객체를 통째로 무시하는 웹뷰가 있어
+ * 실기기에서 표지가 제자리에 머물렀다. `scrollLeft` 대입은 어디서나 먹고, 애니메이션은 이 값이 맡는다.
+ */
+const TRACK_SCROLL_BEHAVIOR = 'smooth';
+
+/**
+ * 표지 하나를 가운데로 — 가운데 정렬 여백 덕에 목표 위치가 곧 `index * stride`다.
+ *
+ * <p>`instant`면 CSS 애니메이션을 잠시 꺼서 즉시 옮긴다(첫 진입은 처음부터 거기 있었던 것처럼 보여야 한다).
+ */
+function scrollToIndex(track: HTMLDivElement | null, index: number, instant = false): void {
+  if (track === null) return;
+  if (instant) track.style.scrollBehavior = 'auto';
+  track.scrollLeft = index * (COVER_WIDTH + COVER_GAP);
+  if (instant) track.style.scrollBehavior = TRACK_SCROLL_BEHAVIOR;
 }
+
+/**
+ * 스크롤이 멎었다고 보는 시간 — 미는 도중에 선택을 갱신하면 그 리렌더가 `scroll-snap: mandatory`의
+ * 재스냅을 불러 손가락에서 스크롤을 빼앗는다(실기기에서 좌우로 밀리지 않던 원인). 손을 뗀 뒤 한 번만 고른다.
+ */
+export const SCROLL_SETTLE_MS = 120;
 
 /**
  * 읽는 중 책 표지 캐러셀 — **가운데 온 책이 곧 측정할 책**이다.
@@ -117,12 +136,17 @@ export function BookCarousel({
   onSelect: (bookId: number) => void;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
+  const settleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selected = books.find((b) => b.id === selectedId) ?? null;
 
   // 첫 진입 — 기본 선택(이어 읽기)이 처음부터 가운데였던 것처럼 즉시 이동한다(애니메이션은 거짓 움직임이다).
   useEffect(() => {
     const index = books.findIndex((b) => b.id === selectedId);
-    scrollToIndex(trackRef.current, Math.max(index, 0), 'auto');
+    scrollToIndex(trackRef.current, Math.max(index, 0), true);
+    // 언마운트되며 남은 타이머가 사라진 화면의 선택을 건드리지 않게 한다.
+    return () => {
+      if (settleRef.current !== null) clearTimeout(settleRef.current);
+    };
     // 마운트 1회 — 이후 위치는 손가락(스크롤)과 탭이 정한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -132,16 +156,21 @@ export function BookCarousel({
       <div
         ref={trackRef}
         onScroll={(e) => {
-          const book = books[centeredIndex(e.currentTarget.scrollLeft, COVER_WIDTH, COVER_GAP, books.length)];
-          if (book !== undefined && book.id !== selectedId) onSelect(book.id);
+          const { scrollLeft } = e.currentTarget;
+          if (settleRef.current !== null) clearTimeout(settleRef.current);
+          settleRef.current = setTimeout(() => {
+            const book = books[centeredIndex(scrollLeft, COVER_WIDTH, COVER_GAP, books.length)];
+            if (book !== undefined && book.id !== selectedId) onSelect(book.id);
+          }, SCROLL_SETTLE_MS);
         }}
         style={{
           display: 'flex',
           gap: COVER_GAP,
           overflowX: 'auto',
-          // CSS 스펙상 overflow-x만 auto면 overflow-y도 auto로 계산된다 — 세로로 넘칠 일을 없앤 위에
-          // 벨트로 한 번 더 막는다(안 막으면 확대된 표지를 손가락이 위아래로 끌 수 있다).
-          overflowY: 'hidden',
+          // 세로는 `overflow-y: hidden`이 아니라 여기서 막는다 — 그 값을 만나면 웹뷰가 이 트랙의
+          // 터치 스크롤을 통째로 죽여 좌우로도 밀리지 않았다. 세로로 넘칠 여지는 이미 패딩이 0으로 만들어 뒀다.
+          touchAction: 'pan-x',
+          scrollBehavior: TRACK_SCROLL_BEHAVIOR,
           scrollSnapType: 'x mandatory',
           // 좌우 여백이 첫 책·마지막 책까지 가운데로 올려 준다(없으면 양끝 책은 영영 못 고른다).
           padding: `${TRACK_V_PAD}px calc(50% - ${COVER_WIDTH / 2}px)`,
@@ -160,7 +189,7 @@ export function BookCarousel({
               data-cover-title={book.title}
               onClick={() => {
                 onSelect(book.id);
-                scrollToIndex(trackRef.current, books.indexOf(book), 'smooth');
+                scrollToIndex(trackRef.current, books.indexOf(book));
               }}
               style={{
                 flex: '0 0 auto',
