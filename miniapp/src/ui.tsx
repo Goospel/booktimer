@@ -147,8 +147,11 @@ export function coverSource(url: string | null, failedUrl: string | null): strin
  * `null`이면 아무것도 안 그리는 대신 같은 크기의 자리 채움 상자를 그린다. 원격 표지(알라딘 등)의
  * **로드 실패도 같은 상자로** 떨어뜨린다 — 안 그러면 브라우저의 깨진 이미지 아이콘이 그대로 노출된다.
  * `alt=""`는 의도적이다(제목이 바로 옆 줄에 있어 표지를 다시 읽어 주면 같은 말이 두 번 들린다).
+ *
+ * <p>`eager`는 접힌 위 첫 화면에 서는 표지(홈 캐러셀)만 켠다 — 홈은 탭을 오갈 때마다 재마운트되는데
+ * lazy면 그때마다 표지가 한 박자 늦게 뜬다. 접힌 아래 목록(서재·프로필)은 그대로 lazy가 맞다.
  */
-export function BookCover({ url, width = 40 }: { url: string | null; width?: number }) {
+export function BookCover({ url, width = 40, eager = false }: { url: string | null; width?: number; eager?: boolean }) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const box = { width, height: Math.round(width * 1.4), borderRadius: 4, flex: '0 0 auto' } as const;
   const src = coverSource(url, failedUrl);
@@ -174,7 +177,7 @@ export function BookCover({ url, width = 40 }: { url: string | null; width?: num
     <img
       src={src}
       alt=""
-      loading="lazy"
+      loading={eager ? 'eager' : 'lazy'}
       onError={() => setFailedUrl(src)}
       style={{ ...box, objectFit: 'cover' }}
     />

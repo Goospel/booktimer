@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { DashboardResponse } from './api';
 import { History } from './screens/History';
 import { Home } from './screens/Home';
-import { COVER_PALETTE, ErrorMessage, GrassGrid, coverColor, coverSource, initialOf } from './ui';
+import { BookCover, COVER_PALETTE, ErrorMessage, GrassGrid, coverColor, coverSource, initialOf } from './ui';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
 // 홈이 렌더 중에 알림 동의 캐시를 읽는다. 여기선 describe 본문에서도 홈을 그리므로(수집 시점) 모듈 최상단에서 심는다.
@@ -316,6 +316,22 @@ describe('표지 출처 결정', () => {
 
   it('다른 책이 실패한 것은 이 책에 옮지 않는다 — 목록 재사용으로 실패가 번지면 멀쩡한 표지가 사라진다', () => {
     expect(coverSource('https://img/a.jpg', 'https://img/b.jpg')).toBe('https://img/a.jpg');
+  });
+});
+
+/**
+ * 표지 로드 시점 — 목록(서재·프로필·스토리)은 접힌 아래까지 길어 lazy가 맞지만, 홈 캐러셀은
+ * 첫 화면 한가운데에 있고 탭을 오갈 때마다 재마운트돼 lazy면 표지가 한 박자 늦게 뜬다.
+ */
+describe('표지 로드 시점', () => {
+  const cover = (eager?: boolean) => renderToStaticMarkup(<BookCover url="https://img/a.jpg" eager={eager} />);
+
+  it('기본은 lazy — 접힌 아래 목록의 표지까지 미리 받을 이유가 없다', () => {
+    expect(cover()).toContain('loading="lazy"');
+  });
+
+  it('eager를 켠 자리만 즉시 로드 — 첫 화면 한가운데 표지는 기다리게 두지 않는다', () => {
+    expect(cover(true)).toContain('loading="eager"');
   });
 });
 
