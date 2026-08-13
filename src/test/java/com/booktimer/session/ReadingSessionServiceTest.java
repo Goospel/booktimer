@@ -14,6 +14,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -160,6 +161,134 @@ class ReadingSessionServiceTest {
         assertThatThrownBy(() -> service.stop(user, T0))
                 .isInstanceOf(IllegalStateException.class);
         verify(sessionRepository, never()).save(any(ReadingSession.class));
+    }
+
+    // --- stop 상한 클램프 (한 세션 최대 인정 6시간) ---
+    // 끝내기를 깜빡하면 21시간짜리 세션이 그대로 기록돼 통계·잔디를 왜곡한다(운영 실측).
+    // 정책: 경과가 cap을 초과하면 startedAt + 6h 로 잘라 인정한다.
+
+    @Test
+    @DisplayName("stop: cap 미만(5시간 59분)이면 실제 경과 그대로 기록한다")
+    void stop_justUnderCap_recordsActualElapsed() {
+        ReadingSession active = ReadingSession.start(user, T0);
+        when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(active));
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        Instant now = T0.plusSeconds(6 * 3600 - 60); // 5시간 59분
+        ReadingSession result = service.stop(user, now);
+
+        assertThat(result.getEndedAt()).isEqualTo(now);
+        assertThat(result.getDurationSeconds()).isEqualTo(6 * 3600 - 60);
+    }
+
+    @Test
+    @DisplayName("stop: 정확히 cap(6시간)이면 클램프 없이 그대로 6시간이다(경계 — 초과 아님)")
+    void stop_exactlyCap_recordsSixHours() {
+        ReadingSession active = ReadingSession.start(user, T0);
+        when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(active));
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        Instant now = T0.plus(ReadingSessionService.MAX_SESSION_DURATION);
+        ReadingSession result = service.stop(user, now);
+
+        assertThat(result.getEndedAt()).isEqualTo(now);
+        assertThat(result.getDurationSeconds()).isEqualTo(21600L);
+    }
+
+    @Test
+    @DisplayName("stop: cap 1초 초과면 startedAt+6h 로 클램프한다")
+    void stop_oneSecondOverCap_clampsToCap() {
+        ReadingSession active = ReadingSession.start(user, T0);
+        when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(active));
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        ReadingSession result = service.stop(user, T0.plusSeconds(6 * 3600 + 1));
+
+        assertThat(result.getEndedAt()).isEqualTo(T0.plusSeconds(21600));
+        assertThat(result.getDurationSeconds()).isEqualTo(21600L);
+    }
+
+    @Test
+    @DisplayName("stop: 끝내기를 잊은 21시간 세션도 6시간까지만 인정한다(운영 실측 사례)")
+    void stop_twentyOneHours_clampsToCap() {
+        ReadingSession active = ReadingSession.start(user, T0);
+        when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(active));
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        ReadingSession result = service.stop(user, T0.plusSeconds(21 * 3600));
+
+        assertThat(result.getEndedAt()).isEqualTo(T0.plusSeconds(21600));
+        assertThat(result.getDurationSeconds()).isEqualTo(21600L);
+    }
+
+    // --- closeStaleSessions (방치 세션 자동 종료 — 스위퍼가 얇게 트리거) ---
+
+    @Test
+    @DisplayName("closeStaleSessions: cap 초과로 방치된 세션을 정확히 cap(6시간)으로 닫는다")
+    void closeStaleSessions_staleSession_closedAtCap() {
+        Instant now = T0.plusSeconds(21 * 3600);
+        ReadingSession stale = ReadingSession.start(user, T0);
+        when(sessionRepository.findByEndedAtIsNullAndStartedAtBefore(now.minus(ReadingSessionService.MAX_SESSION_DURATION)))
+                .thenReturn(List.of(stale));
+
+        int closed = service.closeStaleSessions(now);
+
+        assertThat(closed).isEqualTo(1);
+        assertThat(stale.getEndedAt()).isEqualTo(T0.plusSeconds(21600));
+        assertThat(stale.getDurationSeconds()).isEqualTo(21600L);
+        verify(sessionRepository).save(stale);
+    }
+
+    @Test
+    @DisplayName("closeStaleSessions: 조회 경계는 now - 6h — 딱 6시간·5시간 된 세션은 조회에서 빠져 안 닫힌다")
+    void closeStaleSessions_notYetStale_queriesWithCapCutoff() {
+        Instant now = T0.plusSeconds(21 * 3600);
+        when(sessionRepository.findByEndedAtIsNullAndStartedAtBefore(any(Instant.class)))
+                .thenReturn(List.of());
+
+        int closed = service.closeStaleSessions(now);
+
+        assertThat(closed).isZero();
+        // startedAt < now-6h 인 것만 대상 — 경계(정확히 6시간 경과)는 포함되지 않는다
+        verify(sessionRepository).findByEndedAtIsNullAndStartedAtBefore(now.minusSeconds(21600));
+        verify(sessionRepository, never()).save(any(ReadingSession.class));
+    }
+
+    @Test
+    @DisplayName("closeStaleSessions: 방치 세션 여러 건을 한 번에 처리한다")
+    void closeStaleSessions_multiple_allClosed() {
+        Instant now = T0.plusSeconds(21 * 3600);
+        ReadingSession a = ReadingSession.start(user, T0);
+        ReadingSession b = ReadingSession.start(user, T0.plusSeconds(3600));
+        when(sessionRepository.findByEndedAtIsNullAndStartedAtBefore(any(Instant.class)))
+                .thenReturn(List.of(a, b));
+
+        int closed = service.closeStaleSessions(now);
+
+        assertThat(closed).isEqualTo(2);
+        assertThat(a.getDurationSeconds()).isEqualTo(21600L);
+        assertThat(b.getEndedAt()).isEqualTo(T0.plusSeconds(3600 + 21600));
+        verify(sessionRepository).save(a);
+        verify(sessionRepository).save(b);
+    }
+
+    @Test
+    @DisplayName("closeStaleSessions: 경합으로 이미 닫힌 세션이 섞여도 나머지는 정상 처리한다")
+    void closeStaleSessions_alreadyEnded_skippedAndRestProcessed() {
+        Instant now = T0.plusSeconds(21 * 3600);
+        ReadingSession raced = ReadingSession.start(user, T0);
+        raced.end(T0.plusSeconds(600)); // 조회 직후 사용자가 stop을 누른 상황
+        ReadingSession stale = ReadingSession.start(user, T0.plusSeconds(3600));
+        when(sessionRepository.findByEndedAtIsNullAndStartedAtBefore(any(Instant.class)))
+                .thenReturn(List.of(raced, stale));
+
+        int closed = service.closeStaleSessions(now);
+
+        assertThat(closed).isEqualTo(1);
+        assertThat(raced.getDurationSeconds()).isEqualTo(600L); // 사용자 종료값 보존
+        assertThat(stale.getDurationSeconds()).isEqualTo(21600L);
+        verify(sessionRepository, never()).save(raced);
+        verify(sessionRepository).save(stale);
     }
 
     // --- recordManual (사후 수동 입력) ---
