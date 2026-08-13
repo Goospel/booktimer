@@ -18,18 +18,19 @@ import {
   GrassPreview,
   HIGHLIGHT_BORDER,
   Home,
+  RemainingNote,
   TRACK_V_PAD,
   askNotificationAgreement,
   carouselIndexOf,
   centeredIndex,
   claimDebtWaiver,
   defaultBookId,
-  forgiveMinutes,
   goalHandleLabel,
   logoutAndLeave,
   noBookSubtitle,
   selectionAt,
   shouldShowNotificationCard,
+  showRemainingHandle,
   showWaiverButton,
   todayProgress,
   waiverErrorMessage,
@@ -205,7 +206,7 @@ describe('오늘 읽은 시간 (todayProgress)', () => {
   it('아직 0초 읽었으면 0 — 진행바도 0이고 목표까지는 목표 전부다', () => {
     expect(todayProgress(timer, 0)).toEqual({
       todayRead: 0,
-      remainingToGoal: 3600,
+      remaining: 3600,
       overflow: 0,
       progress: 0,
       achieved: false,
@@ -216,14 +217,14 @@ describe('오늘 읽은 시간 (todayProgress)', () => {
     const result = todayProgress({ ...timer, remainingSeconds: 1 }, 0);
 
     expect(result.todayRead).toBe(3599);
-    expect(result.remainingToGoal).toBe(1);
+    expect(result.remaining).toBe(1);
     expect(result.achieved).toBe(false);
   });
 
   it('딱 0이 되는 순간 달성 — 초과분은 아직 0이다', () => {
     expect(todayProgress({ ...timer, remainingSeconds: 0 }, 0)).toEqual({
       todayRead: 3600,
-      remainingToGoal: 0,
+      remaining: 0,
       overflow: 0,
       progress: 1,
       achieved: true,
@@ -233,7 +234,7 @@ describe('오늘 읽은 시간 (todayProgress)', () => {
   it('목표를 넘겨도 계속 센다 — 초과분이 따로 잡히고 진행바는 1에서 멈춘다', () => {
     expect(todayProgress({ ...timer, remainingSeconds: -600 }, 0)).toEqual({
       todayRead: 4200,
-      remainingToGoal: 0,
+      remaining: 0,
       overflow: 600,
       progress: 1,
       achieved: true,
@@ -246,7 +247,7 @@ describe('오늘 읽은 시간 (todayProgress)', () => {
 
     expect(before.todayRead).toBe(3000); // 목표 3600 − (남은 900 − 경과 300)
     expect(oneSecondLater.todayRead).toBe(3001);
-    expect(before.remainingToGoal).toBe(600);
+    expect(before.remaining).toBe(600);
   });
 
   it('이월 모드면 밀린 시간은 오늘 몫에서 뺀다 — 어제 빚이 오늘 성취를 갉아먹지 않는다', () => {
@@ -254,6 +255,35 @@ describe('오늘 읽은 시간 (todayProgress)', () => {
 
     expect(todayProgress(carried, 0).todayRead).toBe(0); // 남은 5400 − 밀린 1800 = 오늘 몫 3600
     expect(todayProgress({ ...carried, remainingSeconds: 4200 }, 0).todayRead).toBe(1200);
+  });
+
+  it('이월 모드면 게이지 최대치가 목표 + 밀린 시간이다 — 오늘 실제로 채워야 할 양이 그거다', () => {
+    // 목표 30분 + 밀린 10분 = 40분 중 25분 읽음.
+    const carried = { remainingSeconds: 900, carriedDebtSeconds: 600, todayGoalSeconds: 1800, carryover: true };
+    const result = todayProgress(carried, 0);
+
+    expect(result.todayRead).toBe(1500);
+    expect(result.remaining).toBe(900); // 남은시간 = 목표까지 5분 + 밀린 10분
+    expect(result.progress).toBe(1500 / 2400);
+  });
+
+  it('이월이 꺼져 있으면 밀린 시간은 최대치에 안 들어간다 — 오늘 갚을 몫이 아니다', () => {
+    const result = todayProgress({ ...timer, carriedDebtSeconds: 1800, remainingSeconds: 900 }, 0);
+
+    expect(result.remaining).toBe(900);
+    expect(result.progress).toBe(2700 / 3600); // 분모는 목표 3600 그대로
+  });
+
+  it('목표를 채웠어도 밀린 시간이 남으면 게이지는 안 찬다 — 달성 축하는 그대로 뜬다(결정 a)', () => {
+    // 목표 30분은 다 채웠고(오늘 몫 0) 밀린 10분만 남은 상태.
+    const result = todayProgress(
+      { remainingSeconds: 600, carriedDebtSeconds: 600, todayGoalSeconds: 1800, carryover: true },
+      0,
+    );
+
+    expect(result.achieved).toBe(true); // 오늘 목표는 달성 — 빚 때문에 축하를 미루지 않는다
+    expect(result.remaining).toBe(600);
+    expect(result.progress).toBe(1800 / 2400);
   });
 
   it('읽은 시간은 음수로 내려가지 않는다 — 서버 스냅샷이 어긋나도 "-30분"이 뜨지 않는다', () => {
@@ -283,11 +313,12 @@ describe('히어로 프레이밍 (렌더)', () => {
     expect(markup).toContain('45:00'); // 3600 − 900
   });
 
-  it('남은 시간만 보조 메타로 내려간다 — 목표 값은 우상단 손잡이가 맡으니 게이지 줄에서 빠진다', () => {
+  it('보조 줄은 「남은시간」이다 — 게이지가 목표+밀린을 재니 라벨도 그 총량을 말해야 한다', () => {
     const markup = renderHome({ remainingSeconds: 900, todayGoalSeconds: 3600 });
 
-    expect(markup).toContain('목표까지 15:00');
-    expect(markup).not.toContain('오늘 목표 1시간'); // 한 카드에 같은 값이 두 번 뜨던 중복
+    expect(markup).toContain('남은시간 : 15:00');
+    expect(markup).not.toContain('목표까지'); // 목표만 재던 옛 라벨
+    expect(markup).not.toContain('오늘 목표 1시간'); // 목표 값은 우상단 손잡이 몫
   });
 
   it('달성하면 축하와 초과분을 보여준다 — 목표를 넘겨도 계속 센다', () => {
@@ -296,8 +327,7 @@ describe('히어로 프레이밍 (렌더)', () => {
 
     expect(markup).toContain('오늘 목표 달성');
     expect(markup).toContain('+10분 더 읽었어요');
-    expect(markup).not.toContain('목표까지');
-    expect(markup).not.toContain('달성 +'); // 히어로가 이미 "달성"이라 말했다
+    expect(markup).not.toContain('남은시간'); // 남은 게 없으면 그 줄도 없다
   });
 
   it('정확히 달성하면 보조 줄을 생략한다 — 히어로 한 줄이면 족하다', () => {
@@ -305,20 +335,55 @@ describe('히어로 프레이밍 (렌더)', () => {
 
     expect(markup).toContain('오늘 목표 달성');
     expect(markup).not.toContain('더 읽었어요');
+    expect(markup).not.toContain('남은시간');
   });
 
-  it('밀린 시간이 있으면 7일 자동 용서를 안내한다 — 빚을 위협이 아니라 "괜찮다"로 말한다', () => {
-    expect(renderHome({ carriedDebtSeconds: 1800 })).toContain('밀린 30분은 최근 7일이 지나면 자동으로 사라져요');
+  it('응원 문구가 사라졌다 — 7일 안내는 「남은시간」을 눌러야 보이는 상자로 들어갔다', () => {
+    const markup = renderHome({ carriedDebtSeconds: 1800, carryover: true });
+
+    expect(markup).not.toContain('뒤처져도 괜찮아요');
+    expect(markup).not.toContain('자동으로 사라져요'); // 상자는 접힌 채로 시작한다
+  });
+});
+
+/**
+ * 남은시간 설명 상자 — 「남은시간」이 목표와 밀린 시간의 합이라는 사실은 숫자만 봐서는 못 읽는다.
+ * 탭하면 그 자리에서 펼쳐지는 상자가 내역을 밝히고, 7일 자동 소멸 안내도 여기로 들어왔다
+ * (히어로 아래 상시 노출은 없는 빚까지 상기시키는 자리였다).
+ *
+ * <p>여는 동작은 정적 렌더 하니스로 못 잡으므로(T-149) 노출 조건은 순수 술어로, 내용은
+ * 컴포넌트를 직접 그려서 계측한다 — `showWaiverButton`·`AccountSection`과 같은 방식.
+ */
+describe('남은시간 설명 상자', () => {
+  const note = (goal: number, debt: number, remaining: number) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <RemainingNote goalSeconds={goal} debtSeconds={debt} remainingSeconds={remaining} />
+      </TDSMobileProvider>,
+    );
+
+  it('이월 중이고 밀린 시간이 있으면 손잡이를 단다', () => {
+    expect(showRemainingHandle(true, 600)).toBe(true);
   });
 
-  it('1분 미만 부채도 "1분"으로 말한다 — "45초은"처럼 조사가 깨지지 않게 분으로 고정한다', () => {
-    expect(forgiveMinutes(45)).toBe(1);
-    expect(forgiveMinutes(1800)).toBe(30);
-    expect(renderHome({ carriedDebtSeconds: 45 })).toContain('밀린 1분은');
+  it('밀린 시간이 0이면 손잡이가 없다 — 설명할 게 없는데 밑줄만 있으면 눌러보고 허탕이다', () => {
+    expect(showRemainingHandle(true, 0)).toBe(false);
   });
 
-  it('밀린 시간이 없으면 용서 문구도 없다 — 없는 빚을 상기시키지 않는다', () => {
-    expect(renderHome({ carriedDebtSeconds: 0 })).not.toContain('자동으로 사라져요');
+  it('이월이 꺼져 있으면 손잡이가 없다 — 밀린 시간이 오늘 몫에 안 들어간다', () => {
+    expect(showRemainingHandle(false, 600)).toBe(false);
+  });
+
+  it('내역 세 줄로 합을 밝힌다 — 목표 + 밀린 = 남은시간', () => {
+    const markup = note(1800, 600, 900);
+
+    expect(markup).toContain('30분'); // 오늘 목표
+    expect(markup).toContain('10분'); // 밀린 시간
+    expect(markup).toContain('15:00'); // 남은시간
+  });
+
+  it('7일 자동 소멸을 함께 알린다 — 히어로 아래 상시 노출이던 안내가 여기로 왔다', () => {
+    expect(note(1800, 600, 900)).toContain('최근 7일이 지나면 자동으로 사라져요');
   });
 });
 
