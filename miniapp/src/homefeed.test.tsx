@@ -110,7 +110,27 @@ describe('뉴스 출처 (sourceOf)', () => {
 describe('소식 문구 (eventLine)', () => {
   it('완독과 읽기 시작을 다른 문장으로 말한다', () => {
     expect(eventLine(event('나비독서', '데미안', 'FINISHED', 1))).toBe('나비독서님이 『데미안』을 완독했어요');
-    expect(eventLine(event('밑줄러', '사피엔스', 'STARTED', 1))).toBe('밑줄러님이 『사피엔스』을 읽기 시작했어요');
+    expect(eventLine(event('밑줄러', '사피엔스', 'STARTED', 1))).toBe('밑줄러님이 『사피엔스』를 읽기 시작했어요');
+  });
+
+  /*
+   * 조사는 제목 마지막 글자의 받침이 정한다 — 「을」로 고정하면 받침 없는 제목이
+   * 전부 「사피엔스을」로 나온다(피드는 남의 책 제목을 그대로 싣는 자리라 자주 걸린다).
+   */
+  it('받침이 있으면 「을」, 없으면 「를」', () => {
+    expect(eventLine(event('ㄱ', '데미안', 'FINISHED', 1))).toContain('『데미안』을');
+    expect(eventLine(event('ㄱ', '총, 균, 쇠', 'FINISHED', 1))).toContain('『총, 균, 쇠』를');
+    expect(eventLine(event('ㄱ', '미움받을 용기', 'FINISHED', 1))).toContain('『미움받을 용기』를');
+  });
+
+  it('숫자로 끝나면 읽는 소리의 받침을 따른다 — 『1984』는 「사」라 「를」', () => {
+    expect(eventLine(event('ㄱ', '1984', 'FINISHED', 1))).toContain('『1984』를');
+    expect(eventLine(event('ㄱ', '드래곤볼 7', 'FINISHED', 1))).toContain('『드래곤볼 7』을');
+  });
+
+  it('한글도 숫자도 아니면 「를」로 떨어진다 — 문장이 깨지지 않는 게 우선', () => {
+    expect(eventLine(event('ㄱ', 'Sapiens', 'FINISHED', 1))).toContain('『Sapiens』를');
+    expect(eventLine(event('ㄱ', '', 'FINISHED', 1))).toContain('『』를');
   });
 });
 
@@ -127,7 +147,7 @@ describe('피드 박스 렌더 — 소식 탭', () => {
 
     expect(markup).toContain('나비독서님이 『데미안』을 완독했어요');
     expect(markup).toContain('1시간 전');
-    expect(markup).toContain('밑줄러님이 『사피엔스』을 읽기 시작했어요');
+    expect(markup).toContain('밑줄러님이 『사피엔스』를 읽기 시작했어요');
   });
 
   it('접힌 상태는 3줄까지 + 「더 보기」', () => {
@@ -141,7 +161,7 @@ describe('피드 박스 렌더 — 소식 탭', () => {
     const markup = renderBox(feed({ social }), 'social', true);
 
     expect(rowCountOf(markup)).toBe(social.length);
-    expect(markup).toContain('나비독서님이 『총, 균, 쇠』을 읽기 시작했어요');
+    expect(markup).toContain('나비독서님이 『총, 균, 쇠』를 읽기 시작했어요');
   });
 
   it('소식이 없으면 소셜 탭으로 유도하는 빈 상태를 띄운다', () => {

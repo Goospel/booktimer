@@ -65,9 +65,33 @@ export function sourceOf(link: string): string {
   }
 }
 
+/**
+ * 목적격 조사 — 받침이 있으면 「을」, 없으면 「를」.
+ *
+ * <p>피드는 남의 책 제목을 그대로 싣는 자리라 조사를 하나로 고정할 수 없다
+ * (「사피엔스을」이 목 픽스처 5건 중 3건에서 나왔다). 한글 음절은 유니코드
+ * 자모 조합이라 `(코드 - 가) % 28`이 곧 종성 인덱스이고, 0이면 받침이 없다.
+ * 숫자는 읽는 소리를 따르고(1984 → "사" → 를), 그 밖(영문·기호·빈 제목)은
+ * 「를」로 떨어뜨린다 — 어느 쪽이든 문장이 깨지지 않는 게 우선이다.
+ */
+function objectParticle(word: string): string {
+  const last = word.at(-1);
+  if (last === undefined) return '를';
+
+  const code = last.charCodeAt(0);
+  if (code >= 0xac00 && code <= 0xd7a3) return (code - 0xac00) % 28 === 0 ? '를' : '을';
+
+  // 영/일/이/삼/사/오/육/칠/팔/구 — 받침 있는 소리만 「을」.
+  const DIGIT_HAS_FINAL = [true, true, false, true, false, false, true, true, true, false];
+  if (last >= '0' && last <= '9') return DIGIT_HAS_FINAL[Number(last)] ? '을' : '를';
+
+  return '를';
+}
+
 /** 소식 한 줄의 문장. 종류에 따라 서술어만 갈린다. */
 export function eventLine(event: SocialEvent): string {
-  return `${event.nickname}님이 『${event.bookTitle}』을 ${event.type === 'FINISHED' ? '완독했어요' : '읽기 시작했어요'}`;
+  const predicate = event.type === 'FINISHED' ? '완독했어요' : '읽기 시작했어요';
+  return `${event.nickname}님이 『${event.bookTitle}』${objectParticle(event.bookTitle)} ${predicate}`;
 }
 
 /** 탭 알약 — 선택된 쪽만 연세이지 배경(홈 우상단 목표 손잡이와 같은 값이라 화면에 색이 늘지 않는다). */
