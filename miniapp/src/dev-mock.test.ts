@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type {
   DashboardResponse,
+  MonthlySection,
   MyBookSummary,
   ShelfResponse,
   StopResponse,
@@ -59,6 +60,17 @@ describe('dev-mock 핸들러', () => {
 
     const feed = await mockRequest<StoryFeedResponse>('/api/stories/feed', {});
     expect(feed.mine!.stories.some((s) => s.id === created.id)).toBe(true);
+  });
+
+  it('날짜별 기록 — 최신 월 먼저, 달 안에서도 최신 일 먼저다(서버 순서를 그대로 흉내낸다)', async () => {
+    const { months } = await mockRequest<{ months: MonthlySection[] }>('/api/history', {});
+
+    expect(months.length).toBeGreaterThan(1);
+    expect(months[0].month > months[1].month).toBe(true);
+    const [first, second] = months[0].days;
+    expect(first.date > second.date).toBe(true);
+    // 월 합계가 일자 합과 어긋나면 화면의 월 머리글이 거짓말을 한다.
+    expect(months[0].totalSeconds).toBe(months[0].days.reduce((sum, d) => sum + d.totalSeconds, 0));
   });
 
   it('목에 없는 경로는 404로 던진다 — 조용히 undefined가 흘러 화면이 빈 채로 뜨지 않게', async () => {
