@@ -1,7 +1,7 @@
-import { Notification, loadFullScreenAd, showFullScreenAd } from '@apps-in-toss/web-framework';
+import { Analytics, Notification, loadFullScreenAd, showFullScreenAd } from '@apps-in-toss/web-framework';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { notificationAgreementSupported, requestNotificationAgreement, watchRewardAd } from './toss';
+import { notificationAgreementSupported, requestNotificationAgreement, trackEvent, watchRewardAd } from './toss';
 
 /**
  * 리워드 광고 래퍼 — SDK 이벤트 시퀀스를 "보상을 받았나"라는 boolean 하나로 접는다.
@@ -18,12 +18,14 @@ vi.mock('@apps-in-toss/web-framework', () => ({
   TossAuth: { login: vi.fn() },
   // requestAgreement는 "함수 + isSupported 프로퍼티"라 실물 모양 그대로 흉내 낸다.
   Notification: { requestAgreement: Object.assign(vi.fn(), { isSupported: vi.fn() }) },
+  Analytics: { log: vi.fn() },
 }));
 
 const loadMock = vi.mocked(loadFullScreenAd);
 const showMock = vi.mocked(showFullScreenAd);
 const agreementMock = vi.mocked(Notification.requestAgreement);
 const supportedMock = vi.mocked(Notification.requestAgreement.isSupported);
+const logMock = vi.mocked(Analytics.log);
 
 type LoadParams = Parameters<typeof loadFullScreenAd>[0];
 type ShowParams = Parameters<typeof showFullScreenAd>[0];
@@ -46,6 +48,8 @@ beforeEach(() => {
   agreementMock.mockReset();
   supportedMock.mockReset();
   supportedMock.mockReturnValue(true);
+  logMock.mockReset();
+  logMock.mockResolvedValue(undefined);
   vi.stubGlobal('window', {}); // 래퍼가 브라우저 밖(window 없음)을 미지원으로 접으므로, 앱 안 상황을 만든다
 });
 
@@ -200,5 +204,53 @@ describe('notificationAgreementSupported — 브라우저(SDK 부재) 가드', (
     });
 
     expect(notificationAgreementSupported()).toBe(false);
+  });
+});
+
+/**
+ * 전환 이벤트 래퍼 — 앱인토스 콘솔 「핵심 지표」가 고를 커스텀 이벤트를 쏜다.
+ *
+ * <p>계측 지점은 둘로 갈린다. ① **와이어 모양**: 콘솔 이벤트 선택기에 뜨는 이름이 `log_name`이고
+ * 파라미터는 `params` 안에 들어가야 한다(SDK `EventLogParams`) — 여기가 어긋나면 에러 없이 조용히
+ * 엉뚱한 이벤트가 쌓인다. ② **절대 던지지 않기**: 이 호출은 측정 시작·종료 성공 경로 한가운데에 있어
+ * 실패가 새면 지표가 기능을 망가뜨린다. SDK는 동기 TypeError(브라우저엔 주입 상수가 없다)로도,
+ * 거부된 Promise로도 실패하므로 둘 다 계측한다.
+ */
+describe('trackEvent', () => {
+  it('log_type=event로 이름과 파라미터를 실어 보낸다 — 콘솔 선택기에 뜨는 이름이 이 값이다', () => {
+    trackEvent('reading_session_completed', { duration_seconds: 1800 });
+
+    expect(logMock).toHaveBeenCalledWith({
+      log_type: 'event',
+      log_name: 'reading_session_completed',
+      params: { duration_seconds: 1800 },
+    });
+  });
+
+  it('파라미터가 없으면 빈 params — params는 SDK가 요구하는 필수 필드다', () => {
+    trackEvent('reading_session_started');
+
+    expect(logMock).toHaveBeenCalledWith({ log_type: 'event', log_name: 'reading_session_started', params: {} });
+  });
+
+  it('SDK가 동기로 던져도 삼킨다 — 브라우저 목 모드엔 주입 상수가 없어 TypeError다', () => {
+    logMock.mockImplementation(() => {
+      throw new TypeError("Cannot read properties of undefined (reading 'log')");
+    });
+
+    expect(() => trackEvent('reading_session_started')).not.toThrow();
+  });
+
+  it('거부된 Promise에도 핸들러를 달아 둔다 — 발사 후 망각이라 아무도 안 받으면 unhandled rejection이 된다', () => {
+    const rejected = Promise.reject(new Error('bridge failed'));
+    // `process.on('unhandledRejection')`으로 재려다 실패했다: 워커 스레드라 그 이벤트가 안 잡혀
+    // 돌연변이(핸들러 제거)가 살아남는 공허한 테스트가 됐다. 핸들러가 붙는지를 직접 본다.
+    const attachHandler = vi.spyOn(rejected, 'catch');
+    logMock.mockReturnValue(rejected);
+
+    expect(() => trackEvent('reading_session_started')).not.toThrow();
+    expect(attachHandler).toHaveBeenCalledTimes(1);
+
+    rejected.catch(() => {}); // 단언이 실패해도 떠도는 거부를 러너에 남기지 않는다
   });
 });

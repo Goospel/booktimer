@@ -1,4 +1,31 @@
-import { Notification, TossAuth, loadFullScreenAd, showFullScreenAd } from '@apps-in-toss/web-framework';
+import {
+  Analytics,
+  type LogParam,
+  Notification,
+  TossAuth,
+  loadFullScreenAd,
+  showFullScreenAd,
+} from '@apps-in-toss/web-framework';
+
+/**
+ * 전환 이벤트 1건 발사 — 앱인토스 콘솔 「핵심 지표」가 고를 커스텀 이벤트를 남긴다(발사 후 망각).
+ *
+ * <p>콘솔의 전환 지표 「직접 조합하기」는 **실제로 발생한 적 있는 이벤트 목록**에서만 고를 수 있어,
+ * 쏘기 시작해야 비로소 선택기에 나타난다. `params`는 SDK가 `anonymous_key`를 얹고 `undefined`를
+ * 걸러 문자열로 정규화하며, 미지원 토스앱 버전(5.208.0 미만)에서는 조용히 무시된다.
+ *
+ * <p>**절대 던지지 않는다.** 이 호출은 측정 시작·종료 성공 경로 한가운데 있어서, 실패가 새면 지표가
+ * 기능을 망가뜨린다. SDK는 두 가지로 실패한다 — 브라우저 dev 목 모드엔 호스트 주입 상수가 없어
+ * **동기 TypeError**(`notificationAgreementSupported`의 가드와 같은 사정), 앱 안에서도 브릿지가 죽으면
+ * **거부된 Promise**(아무도 안 받으니 unhandled rejection). try와 catch가 각각 그 하나씩을 맡는다.
+ */
+export function trackEvent(logName: string, params: Record<string, LogParam> = {}): void {
+  try {
+    void Analytics.log({ log_type: 'event', log_name: logName, params }).catch(() => {});
+  } catch {
+    // 지표 실패는 사용자에게 아무 의미가 없다 — 조용히 버린다.
+  }
+}
 
 /**
  * 콘솔에서 발급받은 리워드 광고 그룹 ID. **빈 값이면 광고 기능 전체가 꺼진다**(config-gate) —

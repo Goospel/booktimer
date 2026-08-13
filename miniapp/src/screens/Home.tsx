@@ -10,6 +10,7 @@ import {
   REWARD_AD_GROUP_ID,
   notificationAgreementSupported,
   requestNotificationAgreement,
+  trackEvent,
   watchRewardAd,
 } from '../toss';
 import { CoverInitial, ErrorMessage, GrassGrid, Screen, sectionStyle } from '../ui';
@@ -423,7 +424,12 @@ export function Home({
   // 다음 측정을 시작하면 축하는 접는다 — 지난 세션의 축하가 새 측정 화면에 남아 있으면 거짓말이 된다.
   const start = (bookId: number | null) => {
     setCelebrate(false);
-    return run(startSession(bookId).then(onTimerChange));
+    return run(
+      startSession(bookId).then((timer) => {
+        onTimerChange(timer);
+        trackEvent('reading_session_started');
+      }),
+    );
   };
 
   const stop = () =>
@@ -432,6 +438,9 @@ export function Home({
         onTimerChange(result.timer);
         onGraphChange(result.graph); // stop 응답에 잔디가 동봉돼 새로고침 없이 즉시 갱신된다.
         setCelebrate(result.firstCompletedSession); // 첫 기록이면 배너 + 잔디 하이라이트로 시선을 아래로 보낸다.
+        // 이 앱의 핵심 전환 — 콘솔 대표 전환을 「토스로그인 완료」에서 여기로 갈아끼우기 위한 신호다.
+        // 서버 응답엔 세션 길이가 없어 화면이 세던 elapsed를 그대로 쓴다(시작 시각도 서버가 준 값이다).
+        trackEvent('reading_session_completed', { duration_seconds: elapsed });
         // 웹처럼 종료 직후 시트를 저절로 연다 — 태깅은 지금 기억이 가장 선명하다.
         const mode = openSheetMode('tag', dashboard.readingBooks);
         if (result.untagged && mode !== null) {
