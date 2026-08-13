@@ -357,6 +357,16 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
 - 목 코드는 프로드 번들에서 통째로 잘린다(`import.meta.env.DEV` 게이트 + dynamic import). `deploy.sh`가 `__DEV_MOCK__` 부재를 배포 전에 재확인한다.
 - **실기기·SDK 연동(실로그인·광고·알림 동의)만** `bash miniapp/deploy.sh --expect "<이번 변경 문구>"` + 실기기다 — 목 모드로는 원리상 확인되지 않는다. ⚠️ **`--expect` 마커는 압축에 살아남는 UI 한글 문자열로 고른다** — `slice(0,15)` 같은 코드 조각은 minify가 `slice(0,EGe)`로 변형해 검증이 헛돈다(T-153).
 - **배포 권한 경계**: Claude는 `deploy.sh` 업로드(deploymentId 확보)까지다 — **앱인토스 콘솔(심사 제출·[출시하기])은 Claude 접근이 차단**돼 있어 사용자 몫. 배포 보고 시 "업로드 완료, 심사 제출은 콘솔에서"로 경계를 명시하고 출시 완료로 오보고하지 않는다.
+- **심사·제출이 언급되면 스토어 스크린샷을 점검한다 (필수)**: 사용자가 심사·[출시하기]를 입에 올리면 그 자리에서
+  `miniapp/screenshots/`(01-home·02-library·03-history·04-goal)가 **지금 배포될 UI와 일치하는지** 확인하고, 어긋나면 갱신한다.
+  화면이 바뀐 채 옛 그림이 콘솔에 남으면 "실제 앱과 다르다"는 반려 사유가 된다.
+  - **Claude가 찍을 수 있는 건 목 모드뿐이다** — `npm --prefix miniapp run dev:mock` + 크롬 기기 뷰포트(390×844@3x), 촬영 전 포커스 링 blur.
+    **실계정 화면은 사용자 폰이 유일 경로**다: API 토큰이 토스 SDK의 `authorizationCode`로만 발급돼(`TossAuthApiController`) 브라우저·curl로 만들 수 없고,
+    운영 CORS에도 localhost가 없다. 그러니 실데이터가 필요하면 **직접 찍지 말고 사용자에게 촬영을 요청**한다(찍은 척 목 화면을 올리지 않는다).
+  - 규격(해상도·장수)은 콘솔 확인값을 `miniapp/screenshots/README.md`에 적어 단일 출처로 둔다 — 아이콘 크기를 규격 확인 없이 1024로 잡았다가
+    600으로 되돌린 전례가 있다(2026-08-14).
+  - 보조 훅: `.claude/hooks/remind-screenshot-on-review.ps1`(UserPromptSubmit)이 프롬프트에서 「심사」·「출시하기」를 만나면 이 규칙을 컨텍스트에 재주입한다.
+    **훅은 리마인드만 한다** — 점검·촬영 판단은 이 규칙(soft)이 맡는다. hookify 룰로는 불가능했다(룰은 bash 명령·파일 경로만 보고 프롬프트 텍스트는 못 본다).
 - ⚠️ **잔디 방향 규약**: 서버 `ContributionGraphBuilder`가 weeks를 뒤집어 보낸다 — **`weeks[0]` = 최신 주 = 왼쪽**, `monthLabels`도 그 순서 기준. 최근 N주는 `slice(0, N)`. oldest-first로 가정하면 안 된다 — 두 화면이 같은 오가정으로 깨졌고 조사 서브에이전트도 오독했다(2026-08-12 핫픽스). 규약 테스트는 `api.ts` 주석 + 최신 주만 초록인 픽스처 단언.
 - **테스트 하니스**(`npm --prefix miniapp test` = vitest): **jsdom 없음** — `renderToStaticMarkup` 정적 렌더라 effect·클릭이 안 돈다. 로직은 순수 함수로 꺼내 계측하고, effect·핸들러에 대한 부정 단언("호출 안 한다")은 항상 통과라 금지(T-149). TDS `BottomSheet` 등 **포털 컴포넌트는 정적 렌더에서 마크업이 통째로 빈다**(그래서 시트는 자체 구현). `miniapp/.env.test`가 `.env.local` 누수를 차단한다 — 머신 로컬 env로 테스트가 깨지면 이걸 의심.
 
