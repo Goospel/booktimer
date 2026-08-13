@@ -6,7 +6,9 @@ import type {
   BookVisibility,
   ContributionDay,
   ContributionGraph,
+  DailyRecord,
   DashboardResponse,
+  MonthlySection,
   MyBookSummary,
   ProfileBook,
   RequestOptions,
@@ -157,6 +159,33 @@ const state = {
 
 const nextId = (): number => (state.nextId += 1);
 
+/**
+ * 날짜별 기록 목 — 잔디와 **같은 패턴·같은 초**에서 만든다. 둘이 어긋나면(잔디는 초록인데 목록은 빔)
+ * 화면 버그가 아니라 목 버그로 시간을 태운다. 서버처럼 최신 월 먼저, 달 안에서도 최신 일 먼저다.
+ */
+function buildMonths(): MonthlySection[] {
+  const byMonth = new Map<string, DailyRecord[]>();
+
+  for (let offset = 0; offset < GRAPH_WEEKS * 7; offset++) {
+    const level = LEVELS[offset % LEVELS.length];
+    if (level === 0) continue; // 안 읽은 날은 행이 없다(잔디는 회색 칸으로만 남는다).
+    const date = isoDate(offset);
+    // 책 미지정 날·두 권 읽은 날을 섞어 둬야 제목 줄 생략과 쉼표 나열이 둘 다 눈에 보인다.
+    const titles =
+      offset % 5 === 0 ? [] : offset % 4 === 1 ? [books[0].title, books[1].title] : [books[offset % books.length].title];
+    const days = byMonth.get(date.slice(0, 7));
+    const record = { date, totalSeconds: level * 900, bookTitles: titles, manuallyFilled: offset % 13 === 5 };
+    if (days === undefined) byMonth.set(date.slice(0, 7), [record]);
+    else days.push(record);
+  }
+
+  return [...byMonth].map(([month, days]) => ({
+    month,
+    totalSeconds: days.reduce((sum, d) => sum + d.totalSeconds, 0),
+    days,
+  }));
+}
+
 const bookOptions = (status: BookStatus): BookOption[] =>
   books
     .filter((b) => b.status === status)
@@ -303,6 +332,9 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     ],
     emailVerified: true,
   })],
+
+  // 웹 history 섬이 쓰던 그 엔드포인트 — 미니앱 기록 탭이 잔디 아래 목록에 쓴다(서버 무변경).
+  ['GET', /^\/api\/history$/, () => ({ months: buildMonths() })],
 
   // ── 타이머 ──
   ['POST', /^\/api\/sessions\/start$/, ({ body }) => {

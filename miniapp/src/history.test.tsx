@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { History } from './screens/History';
+import type { MonthlySection } from './api';
+import { History, MonthlyRecords, formatMonthTitle, formatRecordDate } from './screens/History';
 import { graph, userAgent } from './test-fixtures';
 import { monthLabelPositions } from './ui';
 
@@ -61,5 +62,77 @@ describe('기록 화면', () => {
   it('가로 스크롤을 손대지 않는다 — weeks[0]이 최신이라 초기 위치(왼쪽 끝)가 이미 오늘이다', () => {
     // 마운트 이펙트는 정적 렌더에 안 잡히니 소스로 계측한다. 오른쪽 끝으로 밀면 1년 전 빈 잔디가 뜬다.
     expect(readFileSync(new URL('./screens/History.tsx', import.meta.url), 'utf8')).not.toContain('scrollLeft');
+  });
+});
+
+/**
+ * 날짜·월 머리글 포맷 — 표기 로직만 꺼내 계측한다(요일은 `Date`가 계산하므로 경계에서 틀리기 쉽다).
+ * 웹 `MonthlyRecords.vue`와 같은 말을 쓰되 폭이 좁아 연도는 일자에서 뺀다.
+ */
+describe('기록 목록 포맷', () => {
+  it('일자는 "MM-DD (요일)" — 연도는 월 머리글이 이미 말해 준다', () => {
+    expect(formatRecordDate('2026-08-14')).toBe('08-14 (금)');
+  });
+
+  it('한 자리 월·일도 0을 유지한다 — 자리수가 흔들리면 오른쪽 시간 열이 들쭉날쭉해진다', () => {
+    expect(formatRecordDate('2026-01-05')).toBe('01-05 (월)');
+  });
+
+  it('월 머리글은 "YYYY년 M월" — 월의 앞 0은 뗀다(사람이 읽는 자리)', () => {
+    expect(formatMonthTitle('2026-08')).toBe('2026년 8월');
+    expect(formatMonthTitle('2026-01')).toBe('2026년 1월');
+  });
+});
+
+/** 잔디 아래 월별 기록 — 화면 조립부. 마운트 이펙트가 안 도는 하니스라 순수 컴포넌트로 꺼내 렌더한다. */
+describe('월별 기록 목록', () => {
+  const months: MonthlySection[] = [
+    {
+      month: '2026-08',
+      totalSeconds: 45_000,
+      days: [
+        { date: '2026-08-14', totalSeconds: 5_400, bookTitles: ['미움받을 용기', '사피엔스'], manuallyFilled: false },
+        { date: '2026-08-09', totalSeconds: 1_200, bookTitles: [], manuallyFilled: true },
+      ],
+    },
+    { month: '2026-07', totalSeconds: 3_600, days: [] },
+  ];
+
+  const markup = renderToStaticMarkup(
+    <TDSMobileProvider userAgent={userAgent}>
+      <MonthlyRecords months={months} />
+    </TDSMobileProvider>,
+  );
+
+  it('월 머리글에 그 달 총 독서 시간을 함께 둔다 — 잔디만으론 "그 달에 얼마나"를 못 읽는다', () => {
+    expect(markup).toContain('2026년 8월');
+    expect(markup).toContain('12시간 30분');
+  });
+
+  it('일자마다 날짜·읽은 시간을 그린다 — 사용자가 요청한 "언제 얼마나"', () => {
+    expect(markup).toContain('08-14 (금)');
+    expect(markup).toContain('1시간 30분');
+  });
+
+  it('그날 읽은 책 제목을 쉼표로 잇는다 — "무슨 책"이 이 화면의 나머지 절반이다', () => {
+    expect(markup).toContain('미움받을 용기, 사피엔스');
+  });
+
+  it('책 미지정 세션만 있는 날도 행을 남긴다 — 읽은 시간은 있는데 행이 사라지면 합계가 안 맞아 보인다', () => {
+    expect(markup).toContain('08-09 (일)');
+    expect(markup).toContain('20분');
+  });
+
+  it('여러 달을 한 화면에 이어 붙인다 — 월 넘기기 버튼 없이 스크롤로 과거를 본다(A안)', () => {
+    expect(markup).toContain('2026년 7월');
+  });
+
+  it('기록이 없으면 안내를 대신 둔다 — 가입 직후 잔디 아래가 통째로 비어 고장처럼 보였다', () => {
+    const empty = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <MonthlyRecords months={[]} />
+      </TDSMobileProvider>,
+    );
+    expect(empty).toContain('아직 독서 기록이 없어요');
   });
 });

@@ -231,6 +231,33 @@ export interface StopResponse {
 
 export const fetchDashboard = (): Promise<DashboardResponse> => request('/api/dashboard');
 
+/** `session.DailyReadingRecord` — 세션 "횟수"는 서버가 일부러 안 준다(1분짜리 측정까지 세어 숫자만 부푼다). */
+export interface DailyRecord {
+  /** `YYYY-MM-DD`(유저 타임존 기준). */
+  date: string;
+  totalSeconds: number;
+  /** 그날 읽은 책 제목(중복 제거). 책 미지정 세션만 있으면 빈 목록이다. */
+  bookTitles: string[];
+  manuallyFilled: boolean;
+}
+
+/** `session.MonthlyReadingSection` — 최신 월 먼저, 각 달 안에서도 최신 일 먼저(서버가 그 순서로 준다). */
+export interface MonthlySection {
+  /** `YYYY-MM` — Jackson이 `YearMonth`를 이 모양으로 직렬화한다. */
+  month: string;
+  totalSeconds: number;
+  days: DailyRecord[];
+}
+
+/**
+ * 날짜별 독서 기록 — 기록 탭이 잔디 아래에 그린다.
+ *
+ * <p>`/api/history`는 웹 history 섬이 쓰던 그 엔드포인트다(`HistoryApiController`). Bearer 토큰이 붙으면
+ * 미니앱 시큐리티 체인으로 라우팅되므로 서버는 한 줄도 고치지 않는다(`SecurityConfig.isMiniappApiRequest`).
+ * 같이 오는 `nickname`·`graph`·`weeklyShortfall`은 미니앱이 안 써서 타입에 옮기지 않는다.
+ */
+export const fetchHistory = (): Promise<{ months: MonthlySection[] }> => request('/api/history');
+
 /** bookId를 안 주면 책 미지정 세션으로 시작한다(종료 후 태깅). */
 export const startSession = (bookId: number | null): Promise<TimerState> =>
   request('/api/sessions/start', { body: { bookId } });

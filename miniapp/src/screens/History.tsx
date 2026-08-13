@@ -1,8 +1,10 @@
 import { Text } from '@toss/tds-mobile';
+import { useEffect, useState } from 'react';
 
-import type { ContributionGraph } from '../api';
+import type { ContributionGraph, MonthlySection } from '../api';
+import { fetchHistory } from '../api';
 import { formatDuration } from '../format';
-import { GrassGrid, LEVEL_COLORS, MANUAL_OUTLINE, Screen, monthLabelPositions } from '../ui';
+import { ErrorMessage, GrassGrid, LEVEL_COLORS, MANUAL_OUTLINE, Screen, monthLabelPositions } from '../ui';
 
 /** 기록 화면 잔디 칸 — `GrassGrid`의 기본값과 같아야 월 라벨이 그 열 위에 선다. */
 const CELL_SIZE = 11;
@@ -16,6 +18,21 @@ const CELL_SIZE = 11;
 export function History({ graph }: { graph: ContributionGraph }) {
   // 스크롤 위치는 손대지 않는다 — weeks[0]이 최신 주라 초기 위치(왼쪽 끝)가 이미 오늘이다(api.ts `weeks`).
   const months = monthLabelPositions(graph.monthLabels, CELL_SIZE);
+
+  // 날짜별 기록은 대시보드에 안 실려 오므로 이 탭에서 따로 받는다. 실패해도 위쪽 잔디는 그대로 두고
+  // 아래에만 사유를 남긴다 — 목록 하나 때문에 화면 전체를 에러로 덮으면 손해가 크다.
+  const [sections, setSections] = useState<MonthlySection[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetchHistory()
+      .then((r) => alive && setSections(r.months))
+      .catch((e: Error) => alive && setError(e.message));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   return (
     <Screen title="내 기록">
@@ -47,7 +64,87 @@ export function History({ graph }: { graph: ContributionGraph }) {
       </div>
 
       <Legend />
+
+      {sections !== null && <MonthlyRecords months={sections} />}
+      <ErrorMessage message={error} />
     </Screen>
+  );
+}
+
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
+/** `2026-08-14` → `08-14 (금)`. 연도는 월 머리글이 이미 말해 주고, 폭이 좁아 일자에선 뺀다. */
+export function formatRecordDate(date: string): string {
+  const [year, month, day] = date.split('-').map(Number);
+  return `${date.slice(5)} (${WEEKDAYS[new Date(year, month - 1, day).getDay()]})`;
+}
+
+/** `2026-08` → `2026년 8월`. */
+export function formatMonthTitle(month: string): string {
+  const [year, m] = month.split('-').map(Number);
+  return `${year}년 ${m}월`;
+}
+
+/**
+ * 잔디 아래 날짜별 기록 — 언제·무슨 책을·얼마나 읽었는지. 웹 `MonthlyRecords.vue`와 같은 정보를 담되
+ * 월 ◀▶ 이동은 두지 않는다(A안): 폰은 세로 스크롤이 자연스럽고, 한 달만 담으면 잔디 아래가 다시 빈다.
+ */
+export function MonthlyRecords({ months }: { months: MonthlySection[] }) {
+  if (months.length === 0) {
+    return (
+      <Text typography="st11" color="grey600" style={{ display: 'block', marginTop: 28 }}>
+        아직 독서 기록이 없어요. 홈에서 측정을 시작해 보세요.
+      </Text>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 28, borderTop: '1px solid var(--adaptiveGrey200, #E4DDD0)' }}>
+      {months.map((section) => (
+        <section key={section.month}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: '20px 0 4px' }}>
+            <Text typography="st10" fontWeight="bold">
+              {formatMonthTitle(section.month)}
+            </Text>
+            <Text typography="st12" color="grey600">
+              {formatDuration(section.totalSeconds)}
+            </Text>
+          </div>
+          {section.days.map((day) => (
+            <div
+              key={day.date}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'baseline',
+                gap: 10,
+                padding: '8px 0',
+                borderBottom: '1px solid var(--adaptiveGrey100, #EFEAE0)',
+              }}
+            >
+              {/* minWidth:0 이 없으면 긴 제목이 줄임표 대신 시간 열을 밀어낸다(flex 기본 min-content). */}
+              <div style={{ minWidth: 0 }}>
+                <Text typography="st11" style={{ display: 'block' }}>
+                  {formatRecordDate(day.date)}
+                </Text>
+                {day.bookTitles.length > 0 && (
+                  <Text
+                    typography="st12"
+                    color="grey600"
+                    style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  >
+                    {day.bookTitles.join(', ')}
+                  </Text>
+                )}
+              </div>
+              <Text typography="st11" color="grey700" style={{ flex: '0 0 auto' }}>
+                {formatDuration(day.totalSeconds)}
+              </Text>
+            </div>
+          ))}
+        </section>
+      ))}
+    </div>
   );
 }
 
