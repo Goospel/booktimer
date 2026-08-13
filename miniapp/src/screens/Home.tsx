@@ -370,6 +370,20 @@ export function todayProgress(
 }
 
 /**
+ * 목표 손잡이의 라벨 — 목표 화면으로 가는 유일한 진입점이 달고 있는 말.
+ *
+ * <p>아이콘 팩이 없어(의존성은 `@toss/tds-mobile` 하나) 뜻은 그림이 아니라 **목표 값 자체**가 말한다.
+ * 「목표 30분 ›」은 무엇을 바꾸는 버튼인지 스스로 밝히므로 아이콘 한 개짜리 손잡이의 모호함이
+ * 아예 성립하지 않는다 — 덤으로 게이지 줄에서 목표 값을 빼 같은 카드의 중복도 없앴다.
+ *
+ * <p>목표 0이면 게이지 줄이 통째로 안 그려지므로(`todayProgress`의 `progress === null`) 이 칩이
+ * 목표를 정하러 가는 화면 유일의 길이다 — 그래서 그때는 라벨이 권유가 된다.
+ */
+export function goalHandleLabel(goalSeconds: number): string {
+  return goalSeconds > 0 ? `목표 ${formatDuration(goalSeconds)} ›` : '목표 정하기 ›';
+}
+
+/**
  * 용서 문구가 말하는 밀린 분 — 웹 `TimerCard.forgiveMinutes`와 같은 규칙(항상 분, 최소 1분).
  *
  * <p>`formatDuration`을 쓰면 1분 미만 부채가 "45초"로 나와 뒤에 붙는 조사가 "45초은"으로 깨진다.
@@ -721,6 +735,12 @@ export function Home({
       : 0;
   // 측정 중이면 elapsed가 매초 늘어 todayRead도 매초 늘어난다 — 카운트업의 동력이 이 한 줄이다.
   const { todayRead, remainingToGoal, overflow, progress, achieved } = todayProgress(dashboard, elapsed);
+  // 게이지 아래 한 줄 — 미달성이면 남은 시간, 넘겼으면 초과분, 정확히 달성이면 없음(히어로와 중복).
+  const gaugeNote = !achieved
+    ? `목표까지 ${formatClock(remainingToGoal)}`
+    : overflow > 0
+      ? `+${formatDuration(overflow)} 더 읽었어요`
+      : null;
   const quotes = dashboard.quotes ?? [];
   // 캐러셀 가운데 온 책 — 시작 버튼도 이 값을 그대로 쓴다(고른 책과 시작 대상이 어긋날 자리를 없앤다).
   const selectedBook = dashboard.readingBooks.find((b) => b.id === selectedBookId) ?? null;
@@ -729,12 +749,33 @@ export function Home({
     <Screen title={`${dashboard.nickname}님의 오늘`}>
       <div
         style={{
+          position: 'relative', // 우상단 목표 손잡이의 기준 상자
           padding: '28px 20px',
           borderRadius: 16,
           background: 'var(--adaptiveGrey100, #FCFAF5)',
           textAlign: 'center',
         }}
       >
+        {/* 목표 화면으로 가는 유일한 길 — 하단 풀폭 버튼이던 것을 여기로 흡수했다(「측정 시작」과 폭이
+            같아 무게가 같아 보이던 문제). 시각적 칩은 작아도 padding으로 손가락 몫은 확보한다. */}
+        <button
+          type="button"
+          onClick={onGoGoal}
+          style={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            padding: '7px 11px',
+            border: 0,
+            borderRadius: 20,
+            background: 'var(--adaptiveBlue50, #E7EEE2)',
+            color: 'var(--adaptiveBlue700, #4F6B4C)',
+            fontSize: 12,
+            cursor: 'pointer',
+          }}
+        >
+          {goalHandleLabel(goal)}
+        </button>
         {/* 라벨과 값은 각자 블록이어야 세로로 쌓인다 — 같은 줄에 붙으면 "오늘 읽은 시간45:00"으로 읽힌다. */}
         <div>
           <Text typography="st11" color="grey600">
@@ -749,10 +790,13 @@ export function Home({
         {progress !== null && (
           <div style={{ marginTop: 16 }}>
             <ProgressBar progress={progress} size="normal" color={SAGE} />
-            <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
-              오늘 목표 {formatDuration(goal)} ·{' '}
-              {achieved ? `달성${overflow > 0 ? ` +${formatDuration(overflow)}` : ''}` : `목표까지 ${formatClock(remainingToGoal)}`}
-            </Text>
+            {/* 목표 값은 우상단 손잡이가 말하므로 여기선 "그래서 지금 어떤가"만 남는다. 정확히 달성한
+                순간엔 히어로가 이미 「🌿 오늘 목표 달성」이라 말했으니 이 줄을 통째로 생략한다. */}
+            {gaugeNote !== null && (
+              <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
+                {gaugeNote}
+              </Text>
+            )}
           </div>
         )}
         {/* 빚을 위협이 아니라 "괜찮다"로 말한다 — 웹 대시보드 TimerCard의 용서 문구와 같은 말. */}
@@ -836,10 +880,6 @@ export function Home({
       <GrassPreview graph={dashboard.graph} highlight={celebrate} onGoHistory={onGoHistory} />
 
       {quotes.length > 0 && <QuoteCard quotes={quotes} />}
-
-      <Button display="block" variant="weak" size="medium" style={{ marginTop: 12 }} onClick={onGoGoal}>
-        목표 바꾸기
-      </Button>
 
       <AccountSection
         confirm={confirmLogout}

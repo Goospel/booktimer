@@ -25,6 +25,7 @@ import {
   claimDebtWaiver,
   defaultBookId,
   forgiveMinutes,
+  goalHandleLabel,
   logoutAndLeave,
   noBookSubtitle,
   selectionAt,
@@ -278,11 +279,11 @@ describe('히어로 프레이밍 (렌더)', () => {
     expect(markup).toContain('45:00'); // 3600 − 900
   });
 
-  it('남은 시간은 목표와 함께 보조 메타로 내려간다', () => {
+  it('남은 시간만 보조 메타로 내려간다 — 목표 값은 우상단 손잡이가 맡으니 게이지 줄에서 빠진다', () => {
     const markup = renderHome({ remainingSeconds: 900, todayGoalSeconds: 3600 });
 
-    expect(markup).toContain('오늘 목표 1시간');
     expect(markup).toContain('목표까지 15:00');
+    expect(markup).not.toContain('오늘 목표 1시간'); // 한 카드에 같은 값이 두 번 뜨던 중복
   });
 
   it('달성하면 축하와 초과분을 보여준다 — 목표를 넘겨도 계속 센다', () => {
@@ -290,8 +291,16 @@ describe('히어로 프레이밍 (렌더)', () => {
     const markup = renderHome({ remainingSeconds: -600, todayGoalSeconds: 3600 });
 
     expect(markup).toContain('오늘 목표 달성');
-    expect(markup).toContain('+10분');
+    expect(markup).toContain('+10분 더 읽었어요');
     expect(markup).not.toContain('목표까지');
+    expect(markup).not.toContain('달성 +'); // 히어로가 이미 "달성"이라 말했다
+  });
+
+  it('정확히 달성하면 보조 줄을 생략한다 — 히어로 한 줄이면 족하다', () => {
+    const markup = renderHome({ remainingSeconds: 0, todayGoalSeconds: 3600 });
+
+    expect(markup).toContain('오늘 목표 달성');
+    expect(markup).not.toContain('더 읽었어요');
   });
 
   it('밀린 시간이 있으면 7일 자동 용서를 안내한다 — 빚을 위협이 아니라 "괜찮다"로 말한다', () => {
@@ -306,6 +315,42 @@ describe('히어로 프레이밍 (렌더)', () => {
 
   it('밀린 시간이 없으면 용서 문구도 없다 — 없는 빚을 상기시키지 않는다', () => {
     expect(renderHome({ carriedDebtSeconds: 0 })).not.toContain('자동으로 사라져요');
+  });
+});
+
+/**
+ * 목표 손잡이 — 하단 풀폭 「목표 바꾸기」를 타이머 카드 우상단 칩으로 흡수했다. 아이콘 팩이 없어
+ * (의존성은 `@toss/tds-mobile` 하나) 손잡이의 뜻은 그림이 아니라 **목표 값 자체**가 말한다 —
+ * 「목표 30분 ›」은 무엇을 바꾸는 버튼인지 스스로 밝히므로 아이콘의 모호함이 성립하지 않는다.
+ *
+ * <p>라벨을 순수 함수로 꺼낸 건 늘 같은 이유다 — 정적 렌더 하니스라 클릭을 못 잡는다(T-149).
+ */
+describe('목표 손잡이 (goalHandleLabel · 렌더)', () => {
+  it('목표가 있으면 그 값이 곧 라벨이다 — 손잡이가 자기가 무엇을 바꾸는지 말한다', () => {
+    expect(goalHandleLabel(1800)).toBe('목표 30분 ›');
+    expect(goalHandleLabel(3600)).toBe('목표 1시간 ›');
+  });
+
+  it('목표가 0이면 「목표 정하기」— 게이지 줄이 아예 안 뜨는 그 상태의 유일한 진입점이다', () => {
+    expect(goalHandleLabel(0)).toBe('목표 정하기 ›');
+  });
+
+  it('손잡이가 타이머 카드 안에 있다 — 「측정 시작」보다 앞', () => {
+    const markup = renderHome({ todayGoalSeconds: 1800 });
+
+    expect(markup).toContain('목표 30분');
+    expect(markup.indexOf('목표 30분')).toBeLessThan(markup.indexOf('측정 시작'));
+  });
+
+  it('하단 풀폭 「목표 바꾸기」는 사라진다 — 흡수가 이번 변경의 요구다', () => {
+    expect(renderHome()).not.toContain('목표 바꾸기');
+  });
+
+  it('목표 0이어도 손잡이는 남는다 — 게이지 라벨은 여전히 없다', () => {
+    const markup = renderHome({ todayGoalSeconds: 0, remainingSeconds: 0 });
+
+    expect(markup).toContain('목표 정하기');
+    expect(markup).not.toContain('오늘 목표'); // 게이지 라벨은 목표 0이면 그리지 않는다
   });
 });
 
@@ -1002,11 +1047,11 @@ describe('계정 진입점', () => {
     expect(account(true)).toContain('취소');
   });
 
-  it('홈 맨 아래에 둔다 — 「목표 바꾸기」보다 뒤여야 자주 쓰는 것이 위로 온다', () => {
-    const markup = renderHome();
+  it('홈 맨 아래에 둔다 — 잔디·격언보다 뒤여야 자주 쓰는 것이 위로 온다', () => {
+    const markup = renderHome({ quotes: [{ text: '읽는 자가 산다', author: '아무개' }] });
 
-    expect(markup.indexOf('목표 바꾸기')).toBeGreaterThan(0);
-    expect(markup.indexOf('목표 바꾸기')).toBeLessThan(markup.indexOf('로그아웃'));
+    expect(markup.indexOf('아무개')).toBeGreaterThan(0);
+    expect(markup.indexOf('아무개')).toBeLessThan(markup.indexOf('로그아웃'));
   });
 });
 
