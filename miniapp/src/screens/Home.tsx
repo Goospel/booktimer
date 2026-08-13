@@ -80,6 +80,17 @@ export const COVER_HEIGHT = Math.round(COVER_WIDTH * 1.4);
 export const TRACK_V_PAD = Math.ceil(COVER_HEIGHT * 0.05) + 2;
 
 /**
+ * 첫·마지막 표지를 가운데까지 올려 주는 여백 — **트랙의 padding이 아니라 양끝 표지의 margin으로 준다.**
+ *
+ * <p>WebKit(iOS 웹뷰)은 스크롤 컨테이너의 **끝쪽 padding을 스크롤 영역에서 뺀다**. 그래서 padding으로 주면
+ * 표지가 적을수록 밀 여지가 통째로 사라진다 — 폭 390 화면에서 2권이면 여지가 0이라 아예 안 밀렸고(실기기
+ * 실측) 4권이면 절반만 밀렸다. flex 아이템의 margin은 어느 엔진에서나 스크롤 영역에 들어간다.
+ *
+ * <p>값이 같으니 i번째 표지가 가운데 오는 위치는 그대로 `i * (표지폭 + 간격)`이다.
+ */
+export const EDGE_SPACE = `calc(50% - ${COVER_WIDTH / 2}px)`;
+
+/**
  * 스크롤 위치 → 가운데 온 책의 인덱스.
  *
  * <p>트랙 좌우에 `50% - 표지폭/2`의 여백을 둬서 i번째 표지가 가운데 오는 위치가 정확히
@@ -172,12 +183,12 @@ export function BookCarousel({
           touchAction: 'pan-x',
           scrollBehavior: TRACK_SCROLL_BEHAVIOR,
           scrollSnapType: 'x mandatory',
-          // 좌우 여백이 첫 책·마지막 책까지 가운데로 올려 준다(없으면 양끝 책은 영영 못 고른다).
-          padding: `${TRACK_V_PAD}px calc(50% - ${COVER_WIDTH / 2}px)`,
+          // 세로 여백만 여기서 — 좌우(가운데 정렬) 여백은 양끝 표지의 margin이 맡는다(EDGE_SPACE 주석).
+          padding: `${TRACK_V_PAD}px 0`,
           scrollbarWidth: 'none',
         }}
       >
-        {books.map((book) => {
+        {books.map((book, index) => {
           const current = book.id === selectedId;
           return (
             <button
@@ -194,6 +205,9 @@ export function BookCarousel({
               style={{
                 flex: '0 0 auto',
                 scrollSnapAlign: 'center',
+                // 양끝 표지만 화면 절반만큼 밀어 둔다 — 이 여백이 첫·마지막 책을 가운데까지 데려온다.
+                marginLeft: index === 0 ? EDGE_SPACE : undefined,
+                marginRight: index === books.length - 1 ? EDGE_SPACE : undefined,
                 padding: 0,
                 border: 'none',
                 background: 'transparent',

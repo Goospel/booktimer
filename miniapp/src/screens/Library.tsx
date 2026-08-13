@@ -47,7 +47,17 @@ export type BookAction =
  * <p>화면 전환은 `mode` 하나로 한다(라우터 없음, 설계 §2). 뮤테이션 뒤에는 서버 응답으로 그 책만
  * 갈아끼우지 않고 책장을 다시 받는다 — 상태 변경은 섹션 이동이라 목록 전체가 흔들리기 때문.
  */
-export function Library({ onError }: { onError: (error: Error) => void }) {
+export function Library({
+  onError,
+  onShelfChanged,
+}: {
+  onError: (error: Error) => void;
+  /**
+   * 책장을 바꾼 직후 부른다 — 홈이 쓰는 대시보드는 App이 들고 있어, 여기서 자기 책장만 다시 받으면
+   * 홈 캐러셀은 옛 「읽는 중」 목록 그대로다(앱을 나갔다 와야 반영되던 문제).
+   */
+  onShelfChanged: () => void;
+}) {
   const [books, setBooks] = useState<MyBookSummary[] | null>(null);
   const [searchEnabled, setSearchEnabled] = useState(false);
   const [mode, setMode] = useState<'shelf' | 'search'>('shelf');
@@ -79,7 +89,7 @@ export function Library({ onError }: { onError: (error: Error) => void }) {
   // 검색은 서재를 덮는 별도 화면이다 — 뒤로가기를 「돌아가기」와 같은 자리로 돌린다.
   useBackClose(mode === 'search', () => setMode('shelf'));
 
-  /** 뮤테이션 공통 — 실행 → 책장 재조회 → 열린 액션 접기. */
+  /** 뮤테이션 공통 — 실행 → 책장 재조회 → 홈 대시보드 갱신 → 열린 액션 접기. */
   const run = (action: Promise<unknown>) => {
     setBusy(true);
     setError(null);
@@ -87,6 +97,7 @@ export function Library({ onError }: { onError: (error: Error) => void }) {
       .then(() => {
         setOpen(null);
         load();
+        onShelfChanged();
       })
       .catch(fail)
       .finally(() => setBusy(false));
@@ -106,6 +117,7 @@ export function Library({ onError }: { onError: (error: Error) => void }) {
       .then(() => {
         setMode('shelf');
         load();
+        onShelfChanged();
       })
       .catch(fail)
       .finally(() => setBusy(false));
