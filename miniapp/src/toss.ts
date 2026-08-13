@@ -35,6 +35,12 @@ export function trackEvent(logName: string, params: Record<string, LogParam> = {
 export const REWARD_AD_GROUP_ID: string = import.meta.env.VITE_REWARD_AD_GROUP_ID ?? '';
 
 /**
+ * 「목표 바꾸기」 진입에 띄우는 **전면형** 광고 그룹 ID — 리워드와 다른 그룹이라 성과·정산이 분리된다.
+ * 리워드와 같은 config-gate: 빈 값이면 안 뜬다(구글 반영 대기 중인 빌드·브라우저 목 모드).
+ */
+export const INTERSTITIAL_AD_GROUP_ID: string = import.meta.env.VITE_INTERSTITIAL_AD_GROUP_ID ?? '';
+
+/**
  * 알림 동의문의 콘솔 발송(템플릿) 코드. 캠페인 2종(완독 축하·하루 목표 달성)이 **같은 동의문 한 장**을
  * 쓰므로 한 번만 물어보면 둘 다 커버된다 — 동의 단위는 캠페인이 아니라 동의문이다.
  */
@@ -138,4 +144,20 @@ export function watchRewardAd(adGroupId: string): Promise<boolean> {
       },
     });
   });
+}
+
+/**
+ * 전면 광고 1회 — **발사 후 망각**(결과도 보상도 없다). 부르는 쪽은 기다리지 않고 화면을 전환한다:
+ * 로드에 1~2초가 걸려서, 기다리면 탭이 먹통으로 느껴지고 로드가 막히면 진입 자체가 막힌다.
+ */
+export function showInterstitialAd(adGroupId: string = INTERSTITIAL_AD_GROUP_ID): void {
+  if (adGroupId === '') return;
+  try {
+    // 전면형은 `userEarnedReward`를 안 쏘므로 리워드 래퍼를 그대로 쓰고 결과(false)만 버린다.
+    // 실패 두 갈래를 둘 다 삼킨다 — 앱 밖에서는 SDK가 **동기 TypeError**(try가 받는다),
+    // 앱 안에서는 노 필·미등록 그룹이 **거부된 Promise**(catch가 받는다. 안 붙이면 unhandled rejection).
+    void watchRewardAd(adGroupId).catch(() => {});
+  } catch {
+    // 광고가 안 뜬 걸 사용자에게 알릴 이유가 없다 — 조용히 넘어가고 화면은 그대로 전환된다.
+  }
 }

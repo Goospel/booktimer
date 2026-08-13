@@ -47,7 +47,7 @@ npm run build                  # tsc -b && vite build → dist/
 
 ## 배포 (앱인토스 CLI — 우리 CI에 얹지 않는다)
 
-> 운영값(`VITE_API_BASE_URL` · `VITE_REWARD_AD_GROUP_ID`)은 **`.env.production`에 커밋돼 있어** 별도 env 주입 없이
+> 운영값(`VITE_API_BASE_URL` · `VITE_REWARD_AD_GROUP_ID` · `VITE_INTERSTITIAL_AD_GROUP_ID`)은 **`.env.production`에 커밋돼 있어** 별도 env 주입 없이
 > `npm run build`만으로 운영 번들이 나온다(비밀값이 아니라 커밋 — 없이 빌드하면 vite 기본값인 localhost API·광고 OFF로
 > 조용히 구워진다, T-148). 로컬 개발은 `.env.local`이 이 파일을 덮는다.
 
