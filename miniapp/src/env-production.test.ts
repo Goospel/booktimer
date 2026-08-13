@@ -19,4 +19,8 @@ describe('.env.production', () => {
   it('리워드 광고 그룹 ID를 굽는다 — 비면 광고 기능이 통째로 꺼진다', () => {
     expect(envProduction).toContain('VITE_REWARD_AD_GROUP_ID=ait.v2.live.b6bbeff2c57e4777');
   });
+
+  it('전면 광고 그룹 ID를 굽는다 — 리워드와 다른 그룹이라 섞이면 정산·성과가 어긋난다', () => {
+    expect(envProduction).toContain('VITE_INTERSTITIAL_AD_GROUP_ID=ait.v2.live.32f30171507d4dd1');
+  });
 });

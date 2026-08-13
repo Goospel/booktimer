@@ -1,7 +1,13 @@
 import { Analytics, Notification, loadFullScreenAd, showFullScreenAd } from '@apps-in-toss/web-framework';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { notificationAgreementSupported, requestNotificationAgreement, trackEvent, watchRewardAd } from './toss';
+import {
+  notificationAgreementSupported,
+  requestNotificationAgreement,
+  showInterstitialAd,
+  trackEvent,
+  watchRewardAd,
+} from './toss';
 
 /**
  * 리워드 광고 래퍼 — SDK 이벤트 시퀀스를 "보상을 받았나"라는 boolean 하나로 접는다.
@@ -103,6 +109,50 @@ describe('watchRewardAd', () => {
     void watchRewardAd('ad-group-1');
 
     expect(showMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 전면 광고 래퍼 — 「목표 바꾸기」 진입에 한 장. 리워드와 달리 **보상도 결과도 없다**(발사 후 망각).
+ *
+ * <p>계측 지점 셋: ① config-gate(그룹 ID가 비면 SDK를 아예 안 건드린다 — 구글 반영 전·브라우저 목 모드)
+ * ② 넘긴 그룹으로 load·show가 나가는가(다른 그룹이면 정산이 어긋난다) ③ **어떤 실패에도 던지지 않는가** —
+ * 이 호출은 화면 전환 핸들러 한가운데 있어서, 새면 광고 실패가 목표 화면 진입 자체를 막는다.
+ */
+describe('showInterstitialAd', () => {
+  it('그룹 ID가 비면 SDK를 건드리지 않는다 — 구글 반영 전 빌드·브라우저 목 모드가 여기 걸린다', () => {
+    showInterstitialAd('');
+
+    expect(loadMock).not.toHaveBeenCalled();
+  });
+
+  it('그룹 ID가 있으면 그 그룹으로 load·show를 부른다', () => {
+    stubAd([{ type: 'show' }, { type: 'dismissed' }]);
+
+    showInterstitialAd('interstitial-group-7');
+
+    expect(loadMock.mock.calls[0][0].options).toEqual({ adGroupId: 'interstitial-group-7' });
+    expect(showMock.mock.calls[0][0].options).toEqual({ adGroupId: 'interstitial-group-7' });
+  });
+
+  // 노 필·미등록 그룹은 흔한 정상 경로다. 여기가 새면 광고가 안 붙는 날 목표 화면에 못 들어간다.
+  // (거부된 Promise에 핸들러가 붙는지는 이 하니스로 못 잰다 — 워커 스레드라 unhandledRejection이
+  //  안 잡힌다. trackEvent 쪽에서 실측한 함정이라 같은 공허한 단언을 다시 쓰지 않는다.)
+  it('로드가 실패해도(onError) 던지지 않는다 — 광고 실패가 화면 전환을 막으면 안 된다', () => {
+    loadMock.mockImplementation((params: LoadParams) => {
+      params.onError(new Error('no fill'));
+      return () => {};
+    });
+
+    expect(() => showInterstitialAd('interstitial-group-7')).not.toThrow();
+  });
+
+  it('SDK가 동기로 던져도 삼킨다 — 토스앱 밖엔 주입 상수가 없어 TypeError다', () => {
+    loadMock.mockImplementation(() => {
+      throw new TypeError("Cannot read properties of undefined (reading 'loadFullScreenAd')");
+    });
+
+    expect(() => showInterstitialAd('interstitial-group-7')).not.toThrow();
   });
 });
 

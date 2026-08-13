@@ -11,6 +11,7 @@ import { Library } from './screens/Library';
 import { LinkAccount } from './screens/LinkAccount';
 import { LoginBridge } from './screens/LoginBridge';
 import { Social } from './screens/Social';
+import { showInterstitialAd } from './toss';
 import { ErrorMessage, Loading, Screen } from './ui';
 
 /**
@@ -222,7 +223,13 @@ export function App() {
       dashboard={dashboard}
       onTimerChange={applyTimer}
       onGraphChange={applyGraph}
-      onGoGoal={() => setView('goal')}
+      onGoGoal={() => {
+        // 전면 광고는 **이 경로에만** 붙는다 — 신규 계정의 첫 목표 설정은 로그인 브릿지에서
+        // 곧장 load('goal')로 들어와 여기를 거치지 않으므로, 첫 인상이 광고가 되는 일은 없다.
+        // 기다리지 않고 바로 전환한다: 광고는 목표 화면 위로 덮이고, 안 뜨면 그냥 목표 화면이다.
+        showInterstitialAd();
+        setView('goal');
+      }}
       onLogout={toLogin}
       onError={handleError}
       onShelfChanged={() => silentRefresh(true)}
