@@ -60,9 +60,14 @@ type View = 'auth' | 'link' | 'loading' | 'main' | 'goal' | 'error';
 /** 포커스 복귀 재조회의 최소 간격 — 미니앱은 앱 전환이 잦아 복귀마다 받으면 서버를 두들긴다. */
 export const REFRESH_THROTTLE_MS = 60_000;
 
-/** 지금 다시 받을 때인가. 판정만 순수하게 빼 계측한다(배선은 effect라 하니스가 못 잡는다). */
-export function shouldRefresh(lastAt: number, now: number): boolean {
-  return now - lastAt >= REFRESH_THROTTLE_MS;
+/**
+ * 지금 다시 받을 때인가. 판정만 순수하게 빼 계측한다(배선은 effect라 하니스가 못 잡는다).
+ *
+ * <p>`force`는 **이 앱 안에서 방금 무언가를 바꾼 경우**다(서재에서 책 상태 변경 등) — 스로틀은 잦은
+ * 포커스 복귀를 누르려는 것이지 내가 만든 변화를 1분간 감추라는 뜻이 아니다.
+ */
+export function shouldRefresh(lastAt: number, now: number, force = false): boolean {
+  return force || now - lastAt >= REFRESH_THROTTLE_MS;
 }
 
 /**
@@ -111,24 +116,33 @@ export function App() {
   }, [view, dashboard, load]);
 
   /**
-   * 앱으로 돌아오면 조용히 다시 받는다 — 웹·다른 기기에서 바꾼 값(목표·책장·측정)이 재진입 전까지
-   * 안 보이던 문제. 화면은 그대로 두고 **성공했을 때만** 갈아끼운다: 실패로 멀쩡한 화면을 에러로
+   * 조용히 다시 받는다 — 화면은 그대로 두고 **성공했을 때만** 갈아끼운다: 실패로 멀쩡한 화면을 에러로
    * 바꾸지 않는다. 측정 중이어도 서버 응답이 진실이라 그대로 덮는다.
+   *
+   * <p>부르는 자리는 둘이다. ① 앱 복귀(웹·다른 기기에서 바꾼 값이 재진입 전까지 안 보이던 문제 — 잦아서
+   * 스로틀) ② **서재에서 책을 바꾼 직후**(`force`) — 대시보드는 여기 App이 들고 있어 서재가 자기 책장만
+   * 다시 받으면 홈 캐러셀은 옛 목록 그대로다. 앱을 나갔다 와야 반영되던 게 이것이다.
    */
-  useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState !== 'visible' || token.get() === null) return;
-      if (!shouldRefresh(lastFetchedAt.current, Date.now())) return;
+  const silentRefresh = useCallback(
+    (force = false) => {
+      if (token.get() === null) return;
+      if (!force && document.visibilityState !== 'visible') return;
+      if (!shouldRefresh(lastFetchedAt.current, Date.now(), force)) return;
       lastFetchedAt.current = Date.now(); // 응답 전에 찍는다 — 연속 복귀가 요청을 겹쳐 쌓지 않게
       fetchDashboard()
         .then(setDashboard)
         .catch((e: Error) => {
           if (e.name === 'UnauthorizedError') toLogin(); // 토큰이 폐기됐으면 조용히 넘어갈 수 없다
         });
-    };
-    document.addEventListener('visibilitychange', refresh);
-    return () => document.removeEventListener('visibilitychange', refresh);
-  }, [toLogin]);
+    },
+    [toLogin],
+  );
+
+  useEffect(() => {
+    const onVisible = () => silentRefresh();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [silentRefresh]);
 
   // 탭 밖 전체 화면도 뒤로가기로 나갈 수 있다 — 각 화면의 「돌아가기」와 같은 자리로 돌려보낸다.
   useBackClose(view === 'link', () => setView('auth'));
@@ -211,6 +225,7 @@ export function App() {
       onGoGoal={() => setView('goal')}
       onLogout={toLogin}
       onError={handleError}
+      onShelfChanged={() => silentRefresh(true)}
     />
   );
 }
@@ -228,6 +243,7 @@ export function MainTabs({
   onGoGoal,
   onLogout,
   onError,
+  onShelfChanged,
 }: {
   tab: TabKey;
   onTabChange: (tab: TabKey) => void;
@@ -237,6 +253,8 @@ export function MainTabs({
   onGoGoal: () => void;
   onLogout: () => void;
   onError: (error: Error) => void;
+  /** 서재에서 책이 바뀌면 홈이 보는 대시보드도 같이 갱신해야 한다 — 안 그러면 캐러셀이 옛 목록 그대로다. */
+  onShelfChanged: () => void;
 }) {
   return (
     <>
@@ -254,7 +272,7 @@ export function MainTabs({
             onError={onError}
           />
         )}
-        {tab === 'library' && <Library onError={onError} />}
+        {tab === 'library' && <Library onError={onError} onShelfChanged={onShelfChanged} />}
         {tab === 'social' && <Social myLoginId={dashboard.loginId} onError={onError} />}
         {tab === 'history' && <History graph={dashboard.graph} />}
       </div>

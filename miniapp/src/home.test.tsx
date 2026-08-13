@@ -12,6 +12,7 @@ import {
   COVER_GAP,
   COVER_HEIGHT,
   COVER_WIDTH,
+  EDGE_SPACE,
   FirstSessionBanner,
   GrassPreview,
   HIGHLIGHT_BORDER,
@@ -672,7 +673,23 @@ describe('표지 캐러셀', () => {
   it('세로 여백을 상수 그대로 트랙에 건다 — 상수만 늘리고 스타일이 옛 값이면 계산이 헛돈다', () => {
     const markup = renderHome({ readingBooks: books, recentBookId: 2 });
 
-    expect(markup).toContain(`padding:${TRACK_V_PAD}px calc(50% - ${COVER_WIDTH / 2}px)`);
+    expect(markup).toContain(`padding:${TRACK_V_PAD}px 0`);
+  });
+
+  it('가운데 정렬 여백은 트랙 padding이 아니라 양끝 표지의 margin — WebKit은 스크롤 컨테이너의 끝 padding을 스크롤 영역에서 뺀다', () => {
+    const markup = renderHome({ readingBooks: books, recentBookId: 2 });
+
+    expect(markup).toContain(`margin-left:${EDGE_SPACE}`);
+    expect(markup).toContain(`margin-right:${EDGE_SPACE}`);
+    // 표지 2장뿐이면 여지가 통째로 사라져 아예 안 밀렸다(실기기 실측) — 여백이 padding으로 돌아가면 안 된다.
+    expect(markup).not.toContain(`padding:${TRACK_V_PAD}px calc(`);
+  });
+
+  it('양끝 여백은 첫·마지막 표지에만 — 표지마다 붙으면 사이 간격이 화면 폭만큼 벌어진다', () => {
+    const markup = renderHome({ readingBooks: books, recentBookId: 2 });
+
+    expect([...markup.matchAll(/margin-left:calc\(50%/g)]).toHaveLength(1);
+    expect([...markup.matchAll(/margin-right:calc\(50%/g)]).toHaveLength(1);
   });
 
   it('캐러셀 표지는 즉시 로드 — 탭을 오갈 때마다 재마운트돼 lazy면 한 박자 늦게 뜬다', () => {

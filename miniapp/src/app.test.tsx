@@ -56,6 +56,7 @@ function renderTab(tab: (typeof TABS)[number]['key']) {
         onTimerChange={() => {}}
         onGraphChange={() => {}}
         onGoGoal={() => {}}
+        onShelfChanged={() => {}}
         onLogout={() => {}}
         onError={() => {}}
       />
@@ -200,5 +201,10 @@ describe('포커스 복귀 재조회 (shouldRefresh)', () => {
 
   it('간격이 1분이다 — 값이 0이 되면 스로틀 자체가 사라진다', () => {
     expect(REFRESH_THROTTLE_MS).toBe(60_000);
+  });
+
+  it('force면 스로틀을 무시한다 — 서재에서 방금 바꾼 책이 홈에 1분 뒤에 뜨면 안 반영된 것과 같다', () => {
+    expect(shouldRefresh(1_000, 1_000, true)).toBe(true);
+    expect(shouldRefresh(1_000, 1_000 + REFRESH_THROTTLE_MS - 1, true)).toBe(true);
   });
 });
