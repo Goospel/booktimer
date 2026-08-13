@@ -350,23 +350,43 @@ export function BookCarousel({
  *
  * <p>목표 미설정(0)이면 나눌 게 없어 `progress`는 `null`(게이지를 안 그린다)이고 달성이라 우기지도
  * 않는다 — 웹은 이 경우를 100% 달성으로 치지만, 미니앱은 목표 설정으로 유도하는 자리라 그대로 둔다.
+ *
+ * <p>**게이지의 최대치는 목표가 아니라 「목표 + 밀린 시간」**이다 — 이월 중이라면 오늘 실제로 채워야
+ * 하는 양이 그거고, 목표만 분모로 쓰면 게이지가 꽉 찼는데도 남은 시간이 있는 상태가 생긴다.
+ * 그래서 `remaining`은 곧 서버가 준 총 남은 시간(`remainingSeconds - elapsed`)이다 —
+ * `목표 + 밀린 − 읽은` 을 다시 계산할 필요가 없다(항등식이라 값이 어긋날 자리도 없다).
+ *
+ * <p>반면 **`achieved`는 여전히 목표만 본다**(결정 2026-08-14). 밀린 시간은 벌이 아니라 이월이라,
+ * 빚이 남았다고 오늘 목표 달성 축하를 미루면 톤이 차가워진다 — 그래서 「목표는 달성, 게이지는 아직」인
+ * 구간이 의도적으로 존재한다. 그 구간에서 남은 몫은 아래 「남은시간」 줄이 말한다.
  */
 export function todayProgress(
   timer: Pick<TimerState, 'remainingSeconds' | 'carriedDebtSeconds' | 'todayGoalSeconds' | 'carryover'>,
   elapsed: number,
-): { todayRead: number; remainingToGoal: number; overflow: number; progress: number | null; achieved: boolean } {
+): { todayRead: number; remaining: number; overflow: number; progress: number | null; achieved: boolean } {
   const { carriedDebtSeconds: floor, todayGoalSeconds: goal, carryover } = timer;
   const remainingNow = timer.remainingSeconds - elapsed;
   const todayDebt = carryover ? remainingNow - floor : remainingNow;
   // 스냅샷이 어긋나도 음수 시간이 화면에 뜨지 않게 바닥을 친다(표시용 값이라 여기서 자른다).
   const todayRead = Math.max(0, goal - todayDebt);
+  const target = goal + (carryover ? floor : 0); // 오늘 채워야 할 총량 = 게이지 최대치
   return {
     todayRead,
-    remainingToGoal: Math.max(0, todayDebt),
+    remaining: Math.max(0, remainingNow),
     overflow: Math.max(0, todayRead - goal),
-    progress: goal > 0 ? Math.min(1, todayRead / goal) : null,
+    progress: target > 0 ? Math.min(1, todayRead / target) : null,
     achieved: goal > 0 && todayDebt <= 0,
   };
+}
+
+/**
+ * 「남은시간」에 설명 손잡이를 달지 — 남은시간이 **목표와 밀린 시간의 합**일 때만 설명할 게 있다.
+ *
+ * <p>밀린 게 없거나 이월이 꺼져 있으면 남은시간은 그냥 목표까지 남은 시간이라 밝힐 내역이 없다.
+ * 그때도 밑줄을 그어 두면 눌러보고 허탕 치는 손잡이가 된다.
+ */
+export function showRemainingHandle(carryover: boolean, carriedDebtSeconds: number): boolean {
+  return carryover && carriedDebtSeconds > 0;
 }
 
 /**
@@ -384,13 +404,54 @@ export function goalHandleLabel(goalSeconds: number): string {
 }
 
 /**
- * 용서 문구가 말하는 밀린 분 — 웹 `TimerCard.forgiveMinutes`와 같은 규칙(항상 분, 최소 1분).
+ * 남은시간 설명 상자 — 「남은시간」을 탭하면 그 자리에서 펼쳐진다.
  *
- * <p>`formatDuration`을 쓰면 1분 미만 부채가 "45초"로 나와 뒤에 붙는 조사가 "45초은"으로 깨진다.
- * 분으로 고정하면 조사가 언제나 "분은"이라 문장이 성립한다.
+ * <p>남은시간이 **목표 + 밀린 시간**이라는 사실은 숫자 하나만 봐서는 못 읽는다. 내역 세 줄로 합을
+ * 밝히고, 예전에 히어로 아래 상시 노출이던 7일 자동 소멸 안내도 여기로 들여왔다 — 그 자리는 밀린
+ * 시간이 있을 때마다 빚을 상기시켰고, 정작 "왜 남은시간이 이 값인가"에는 답하지 않았다.
+ *
+ * <p>화면에서 꺼내 둔 이유는 늘 같다 — 하니스가 정적 렌더라 탭해서 펼친 상태에 도달할 수 없다(T-149).
  */
-export function forgiveMinutes(debtSeconds: number): number {
-  return Math.max(1, Math.round(debtSeconds / 60));
+export function RemainingNote({
+  goalSeconds,
+  debtSeconds,
+  remainingSeconds,
+}: {
+  goalSeconds: number;
+  debtSeconds: number;
+  remainingSeconds: number;
+}) {
+  const row = (label: string, value: string, strong = false) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+      <Text typography="st12" color={strong ? undefined : 'grey600'}>
+        {label}
+      </Text>
+      <Text typography="st12" color={strong ? undefined : 'grey600'}>
+        {value}
+      </Text>
+    </div>
+  );
+
+  return (
+    <div
+      style={{
+        marginTop: 10,
+        padding: '10px 12px',
+        borderRadius: 10,
+        background: 'var(--adaptiveGrey200, #E4DDD0)',
+        textAlign: 'left',
+      }}
+    >
+      {row('오늘 목표', formatDuration(goalSeconds))}
+      {row('밀린 시간', formatDuration(debtSeconds))}
+      <div style={{ marginTop: 4, paddingTop: 4, borderTop: '0.5px solid var(--adaptiveGrey600, #6F6A5E)' }}>
+        {row('남은시간', formatClock(remainingSeconds), true)}
+      </div>
+      <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8, wordBreak: 'keep-all' }}>
+        밀린 시간은 최근 7일이 지나면 자동으로 사라져요.
+      </Text>
+    </div>
+  );
 }
 
 /**
@@ -640,6 +701,8 @@ export function Home({
   const [now, setNow] = useState(() => Date.now());
   /** 방금 지운 부채(초) — 성공 직후 한 줄 안내용. */
   const [waived, setWaived] = useState<number | null>(null);
+  /** 남은시간 설명 상자 — 접힌 채로 시작한다(궁금한 사람만 편다). */
+  const [showNote, setShowNote] = useState(false);
   /**
    * 첫 완료 축하가 떠 있는지 — 메모리에만 둔다. 새로고침·재조회로 사라지는 게 맞다(축하는 그 순간 1회로 족하고,
    * 서버는 두 번째 종료부터 `firstCompletedSession=false`를 주므로 다시 켜질 일도 없다).
@@ -734,13 +797,9 @@ export function Home({
       ? elapsedSeconds(dashboard.activeStartedAt, now)
       : 0;
   // 측정 중이면 elapsed가 매초 늘어 todayRead도 매초 늘어난다 — 카운트업의 동력이 이 한 줄이다.
-  const { todayRead, remainingToGoal, overflow, progress, achieved } = todayProgress(dashboard, elapsed);
-  // 게이지 아래 한 줄 — 미달성이면 남은 시간, 넘겼으면 초과분, 정확히 달성이면 없음(히어로와 중복).
-  const gaugeNote = !achieved
-    ? `목표까지 ${formatClock(remainingToGoal)}`
-    : overflow > 0
-      ? `+${formatDuration(overflow)} 더 읽었어요`
-      : null;
+  const { todayRead, remaining, overflow, progress, achieved } = todayProgress(dashboard, elapsed);
+  // 남은시간에 설명 손잡이를 달지 — 목표와 밀린 시간의 합일 때만 밝힐 내역이 있다.
+  const hasNote = showRemainingHandle(dashboard.carryover, dashboard.carriedDebtSeconds);
   const quotes = dashboard.quotes ?? [];
   // 캐러셀 가운데 온 책 — 시작 버튼도 이 값을 그대로 쓴다(고른 책과 시작 대상이 어긋날 자리를 없앤다).
   const selectedBook = dashboard.readingBooks.find((b) => b.id === selectedBookId) ?? null;
@@ -790,20 +849,47 @@ export function Home({
         {progress !== null && (
           <div style={{ marginTop: 16 }}>
             <ProgressBar progress={progress} size="normal" color={SAGE} />
-            {/* 목표 값은 우상단 손잡이가 말하므로 여기선 "그래서 지금 어떤가"만 남는다. 정확히 달성한
-                순간엔 히어로가 이미 「🌿 오늘 목표 달성」이라 말했으니 이 줄을 통째로 생략한다. */}
-            {gaugeNote !== null && (
-              <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
-                {gaugeNote}
-              </Text>
+            {/* 남은 게 있으면 그 값이, 다 채웠으면 초과분이 온다. 정확히 다 채운 순간엔 히어로가 이미
+                「🌿 오늘 목표 달성」이라 말했으니 이 줄을 통째로 생략한다. */}
+            {remaining > 0 ? (
+              // 설명할 내역이 있을 때만 버튼이다 — 없으면 눌러도 아무 일 없는 밑줄이 된다.
+              hasNote ? (
+                <button
+                  type="button"
+                  onClick={() => setShowNote((open) => !open)}
+                  style={{
+                    marginTop: 8,
+                    padding: 0,
+                    border: 0,
+                    background: 'transparent',
+                    borderBottom: '1px dashed var(--adaptiveGrey600, #6F6A5E)',
+                    color: 'var(--adaptiveGrey600, #6F6A5E)',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  남은시간 : {formatClock(remaining)} ⓘ
+                </button>
+              ) : (
+                <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
+                  남은시간 : {formatClock(remaining)}
+                </Text>
+              )
+            ) : (
+              overflow > 0 && (
+                <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
+                  +{formatDuration(overflow)} 더 읽었어요
+                </Text>
+              )
+            )}
+            {hasNote && showNote && (
+              <RemainingNote
+                goalSeconds={goal}
+                debtSeconds={dashboard.carriedDebtSeconds}
+                remainingSeconds={remaining}
+              />
             )}
           </div>
-        )}
-        {/* 빚을 위협이 아니라 "괜찮다"로 말한다 — 웹 대시보드 TimerCard의 용서 문구와 같은 말. */}
-        {dashboard.carriedDebtSeconds > 0 && (
-          <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
-            밀린 {forgiveMinutes(dashboard.carriedDebtSeconds)}분은 최근 7일이 지나면 자동으로 사라져요 — 뒤처져도 괜찮아요.
-          </Text>
         )}
         {/* 광고는 죄책감이 뜬 이 자리에만 나타난다. 문구에 "광고"를 명시해 광고 위장 금지 조항을 지킨다. */}
         {showWaiverButton(dashboard.carriedDebtSeconds, dashboard.debtWaiverAvailable, REWARD_AD_GROUP_ID) && (
