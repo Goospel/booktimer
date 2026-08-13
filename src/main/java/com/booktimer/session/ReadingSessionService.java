@@ -3,9 +3,12 @@ package com.booktimer.session;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.user.User;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
 
 /**
@@ -27,6 +30,14 @@ import java.time.Instant;
 @Service
 @Transactional
 public class ReadingSessionService {
+
+    private static final Logger log = LoggerFactory.getLogger(ReadingSessionService.class);
+
+    /**
+     * 한 세션에서 인정하는 최대 시간(6시간). 실시간 측정의 상한이자, 방치 세션을 닫는 기준이다
+     * ({@link StaleSessionSweeper}). 수동 입력 경로의 24시간 cap과 별개 — 그쪽은 사용자의 명시적 주장이다.
+     */
+    public static final Duration MAX_SESSION_DURATION = Duration.ofHours(6);
 
     private final ReadingSessionRepository sessionRepository;
     private final BookRepository bookRepository;
@@ -94,13 +105,47 @@ public class ReadingSessionService {
     /**
      * 진행 중 세션을 종료하고 저장한다. 부채 차감은 없다 — 종료된 세션이 그날 부채에 자동 반영된다.
      *
+     * <p><b>상한 클램프</b>: 경과가 {@link #MAX_SESSION_DURATION}을 넘으면 {@code startedAt + cap}으로
+     * 잘라 인정한다 — 끝내기를 깜빡한 21시간짜리 세션이 통계·잔디를 왜곡한 실측 사례 때문(2026-08-13).
+     * 클램프는 <b>서비스 정책</b>이라 엔티티 불변식({@code durationSeconds = endedAt - startedAt})은 그대로다.
+     *
      * @throws IllegalStateException 진행 중 세션이 없는 경우
      */
     public ReadingSession stop(User user, Instant now) {
         ReadingSession active = sessionRepository.findByUserAndEndedAtIsNull(user)
                 .orElseThrow(() -> new IllegalStateException("no active session to stop"));
-        active.end(now);
+        active.end(clampToCap(active.getStartedAt(), now));
         return sessionRepository.save(active);
+    }
+
+    /**
+     * <b>방치 세션 자동 종료</b> — cap을 넘겨 열려 있는 세션들을 정확히 cap 길이로 닫는다.
+     * {@link StaleSessionSweeper}가 주기적으로 부른다(트랜잭션 경계는 여기).
+     *
+     * <p>경합 방어: 조회와 종료 사이에 사용자가 stop을 눌러 이미 닫힌 세션은 {@code end()}가
+     * {@link IllegalStateException}을 던진다 — 한 건 실패가 나머지를 막지 않게 건별로 스킵한다.
+     *
+     * @return 실제로 닫은 세션 수
+     */
+    public int closeStaleSessions(Instant now) {
+        int closed = 0;
+        for (ReadingSession session : sessionRepository.findByEndedAtIsNullAndStartedAtBefore(now.minus(MAX_SESSION_DURATION))) {
+            try {
+                session.end(session.getStartedAt().plus(MAX_SESSION_DURATION));
+            } catch (IllegalStateException alreadyEnded) {
+                log.info("stale session {} already ended, skipping: {}", session.getId(), alreadyEnded.getMessage());
+                continue;
+            }
+            sessionRepository.save(session);
+            closed++;
+        }
+        return closed;
+    }
+
+    /** 경과가 cap을 초과하면 {@code startedAt + cap}, 아니면 {@code now} 그대로. */
+    private static Instant clampToCap(Instant startedAt, Instant now) {
+        Instant cap = startedAt.plus(MAX_SESSION_DURATION);
+        return now.isAfter(cap) ? cap : now;
     }
 
     /**

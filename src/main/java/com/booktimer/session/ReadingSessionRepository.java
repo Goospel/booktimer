@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -54,6 +55,12 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
 
     /** 진행 중(endedAt == null) 세션. 서비스의 중복 start 방지에 쓰인다. */
     Optional<ReadingSession> findByUserAndEndedAtIsNull(User user);
+
+    /**
+     * 특정 시각보다 먼저 시작해 아직 안 끝난 세션 전부 — 방치 세션 자동 종료(스위퍼)용.
+     * 사용자 무관 전역 조회다. ended_at 인덱스(V63)가 진행 중 세션만 좁혀준다.
+     */
+    List<ReadingSession> findByEndedAtIsNullAndStartedAtBefore(Instant startedAt);
 
     /**
      * id + 소유자(user)로 세션을 조회 — 종료 후 태깅의 IDOR-안전 경계.
