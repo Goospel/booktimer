@@ -84,8 +84,10 @@ export function Goal({
         매일 이만큼씩 쌓여요. 못 채운 시간은 다음 날로 넘어가니 부담 없는 값으로 시작해 보세요.
       </Text>
 
-      {/* 프리셋 칩 대신 휠 2열 — 초는 selected 하나가 단일 소스고, 시/분은 그때그때 풀었다 다시 합친다. */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
+      {/* 프리셋 칩 대신 휠 2열 — 초는 selected 하나가 단일 소스고, 시/분은 그때그때 풀었다 다시 합친다.
+          높이는 컨테이너가 줘야 한다 — Wheel 루트가 height:100%라(항목 한 칸 = 그 16%) 높이 없는 부모에
+          넣으면 컨테이너가 0이 되어 항목이 전부 한 줄에 겹친다(브라우저 실측 2026-08-13). */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 8, height: 180 }}>
         <Wheel
           options={HOUR_OPTIONS}
           formatValue={(n) => `${n}시간`}

@@ -100,6 +100,15 @@ describe('목표 화면 렌더', () => {
     expect(markup).toContain('aria-label="분 선택"');
   });
 
+  /**
+   * Wheel은 스스로 높이를 만들지 않는다 — 루트가 `height:100%`(항목 한 칸은 그 16%)라 부모 높이의
+   * %로만 산다. 높이 없는 flex 컨테이너에 넣었더니 컨테이너가 0이 되어 항목이 전부 한 줄에 겹쳤다
+   * (브라우저 실측 2026-08-13). 레이아웃 결과는 정적 렌더로 못 보므로 높이를 준 사실만 못 박는다.
+   */
+  it('휠 컨테이너에 높이가 박혀 있다 — 높이가 없으면 항목이 한 줄에 겹친다', () => {
+    expect(render(false, 3600)).toContain('height:180px');
+  });
+
   it('첫 실행 휠은 10분에서 시작한다 — 1시간에서 시작하면 첫날 달성이 불가능하다', () => {
     expect(wheelIndices(initialGoalSelection(true, 3600))).toEqual({ hours: 0, minutes: 10 });
   });
