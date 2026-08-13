@@ -1,4 +1,5 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -49,6 +50,7 @@ vi.mock('./toss', () => ({
   GOAL_MET_TEMPLATE_CODE: 'test-template',
   notificationAgreementSupported: vi.fn(),
   requestNotificationAgreement: vi.fn(),
+  trackEvent: vi.fn(),
 }));
 
 const logoutMock = vi.mocked(logout);
@@ -822,5 +824,25 @@ describe('로그아웃 — logoutAndLeave', () => {
     await logoutAndLeave(onDone);
 
     expect(onDone).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * 전환 이벤트 배선 — 콘솔 「핵심 지표」의 대표 전환을 `reading_session_completed`로 갈아끼우려면
+ * 그 이벤트가 **실제로 발생한 적**이 있어야 선택기에 뜬다. 즉 이 두 호출이 없으면 지표 교체 자체가 막힌다.
+ *
+ * <p>소스로 계측하는 이유는 잔디 `scrollLeft`와 같다 — 정적 렌더 하니스라 「측정 시작」·「측정 끝내기」를
+ * 눌러 성공 콜백에 도달할 수 없다. 래퍼 자체의 행동은 `toss.test.ts`가 맡는다.
+ */
+describe('전환 이벤트 — Home 배선', () => {
+  const source = readFileSync(new URL('./screens/Home.tsx', import.meta.url), 'utf8');
+
+  it('측정 시작 성공 경로에서 reading_session_started를 쏜다', () => {
+    expect(source).toContain("trackEvent('reading_session_started'");
+  });
+
+  it('측정 종료 성공 경로에서 reading_session_completed를 읽은 초와 함께 쏜다', () => {
+    expect(source).toContain("trackEvent('reading_session_completed'");
+    expect(source).toContain('duration_seconds');
   });
 });
