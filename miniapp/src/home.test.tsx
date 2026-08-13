@@ -10,12 +10,14 @@ import {
   AccountSection,
   BookSheet,
   COVER_GAP,
+  COVER_HEIGHT,
   COVER_WIDTH,
   FirstSessionBanner,
   GrassPreview,
   HIGHLIGHT_BORDER,
   Home,
   SHEET_COPY,
+  TRACK_V_PAD,
   askNotificationAgreement,
   centeredIndex,
   claimDebtWaiver,
@@ -644,6 +646,32 @@ describe('표지 캐러셀', () => {
 
     expect(markup).toContain(`background:${coverColor('노인과 바다')}`);
     expect(markup).toContain('>노</div>');
+  });
+
+  it('트랙 세로 여백이 선택 표지의 확대분을 담는다 — 안 담으면 커진 표지가 트랙 밖으로 삐져나간다', () => {
+    expect(TRACK_V_PAD).toBeGreaterThanOrEqual((COVER_HEIGHT * 1.1 - COVER_HEIGHT) / 2);
+  });
+
+  it('표지 높이는 표지 컴포넌트와 같은 식 — 어긋나면 여백 계산이 실제 표지를 못 따라간다', () => {
+    expect(COVER_HEIGHT).toBe(Math.round(COVER_WIDTH * 1.4));
+  });
+
+  it('트랙 세로 스크롤을 막는다 — overflow-x:auto만 두면 세로도 auto로 계산돼 표지가 손가락에 들썩인다', () => {
+    const markup = renderHome({ readingBooks: books, recentBookId: 2 });
+
+    expect(markup).toContain('overflow-x:auto;overflow-y:hidden');
+  });
+
+  it('세로 여백을 상수 그대로 트랙에 건다 — 상수만 늘리고 스타일이 옛 값이면 계산이 헛돈다', () => {
+    const markup = renderHome({ readingBooks: books, recentBookId: 2 });
+
+    expect(markup).toContain(`padding:${TRACK_V_PAD}px calc(50% - ${COVER_WIDTH / 2}px)`);
+  });
+
+  it('캐러셀 표지는 즉시 로드 — 탭을 오갈 때마다 재마운트돼 lazy면 한 박자 늦게 뜬다', () => {
+    const markup = renderHome({ readingBooks: books, recentBookId: 2 });
+
+    expect(markup).toContain('loading="eager"');
   });
 
   it('현재 위치를 점으로 표시한다 — 몇 권 중 몇 번째인지가 표지만으론 안 보인다', () => {

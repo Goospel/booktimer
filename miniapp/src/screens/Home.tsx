@@ -69,6 +69,16 @@ export function defaultBookId(readingBooks: BookOption[], recentBookId: number |
 export const COVER_WIDTH = 84;
 export const COVER_GAP = 16;
 
+/** 표지 한 장의 높이 — `BookCover`·`CoverInitial`이 쓰는 식(폭 × 1.4) 그대로여야 여백 계산이 실제 표지를 따라간다. */
+export const COVER_HEIGHT = Math.round(COVER_WIDTH * 1.4);
+
+/**
+ * 트랙 세로 여백 — 아래 선택 표지의 `scale(1.1)`이 위아래로 각각 높이의 **0.05**만큼 삐져나가므로
+ * 그 몫(+ 그림자 여유 2px)을 여백으로 미리 확보한다. 여기가 모자라면 커진 표지가 트랙을 세로로 넘쳐
+ * 손가락에 위아래로 들썩인다(그래서 아래 `overflowY: 'hidden'`과 한 쌍이다).
+ */
+export const TRACK_V_PAD = Math.ceil(COVER_HEIGHT * 0.05) + 2;
+
 /**
  * 스크롤 위치 → 가운데 온 책의 인덱스.
  *
@@ -129,9 +139,12 @@ export function BookCarousel({
           display: 'flex',
           gap: COVER_GAP,
           overflowX: 'auto',
+          // CSS 스펙상 overflow-x만 auto면 overflow-y도 auto로 계산된다 — 세로로 넘칠 일을 없앤 위에
+          // 벨트로 한 번 더 막는다(안 막으면 확대된 표지를 손가락이 위아래로 끌 수 있다).
+          overflowY: 'hidden',
           scrollSnapType: 'x mandatory',
           // 좌우 여백이 첫 책·마지막 책까지 가운데로 올려 준다(없으면 양끝 책은 영영 못 고른다).
-          padding: `4px calc(50% - ${COVER_WIDTH / 2}px)`,
+          padding: `${TRACK_V_PAD}px calc(50% - ${COVER_WIDTH / 2}px)`,
           scrollbarWidth: 'none',
         }}
       >
@@ -163,7 +176,7 @@ export function BookCarousel({
               }}
             >
               {book.coverUrl !== null ? (
-                <BookCover url={book.coverUrl} width={COVER_WIDTH} />
+                <BookCover url={book.coverUrl} width={COVER_WIDTH} eager />
               ) : (
                 <CoverInitial title={book.title} width={COVER_WIDTH} />
               )}
