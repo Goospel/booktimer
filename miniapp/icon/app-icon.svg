@@ -1,0 +1,18 @@
+<!-- BookTimer 토스 미니앱 앱 아이콘 원본.
+     PNG 재생성: node miniapp/icon/gen-icon.mjs  (frontend의 sharp 사용)
+     업로드는 앱인토스 콘솔에서 수동. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <rect width="1024" height="1024" fill="#5F7B5C"/>
+
+  <!-- 펼친 책 + 그 접힘선에서 그대로 이어지는 새싹 (굵기 하나로 통일한 선그림) -->
+  <g fill="none" stroke="#FCFAF5" stroke-width="34" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M224 620 C 356 614 456 636 512 678 C 568 636 668 614 800 620"/>
+    <path d="M224 620 V 792"/>
+    <path d="M800 620 V 792"/>
+    <path d="M224 792 C 356 786 456 808 512 850 C 568 808 668 786 800 792"/>
+
+    <path d="M512 850 V 678 V 464"/>
+    <path d="M512 470 C 412 486 322 442 292 360 C 392 322 486 386 512 458"/>
+    <path d="M512 470 C 612 486 702 442 732 360 C 632 322 538 386 512 458"/>
+  </g>
+</svg>
