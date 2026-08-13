@@ -10,6 +10,7 @@ import com.booktimer.session.ContributionGraph;
 import com.booktimer.session.GoalWaiverService;
 import com.booktimer.session.ReadingContributionService;
 import com.booktimer.session.ReadingSession;
+import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.session.ReadingSessionService;
 import com.booktimer.user.User;
 import com.booktimer.web.DashboardModel;
@@ -49,6 +50,7 @@ public class DashboardApiController {
     private final GardenService gardenService;
     private final QuoteService quoteService;
     private final ReadingSessionService sessionService;
+    private final ReadingSessionRepository sessionRepository;
     private final BookRepository bookRepository;
     private final GoalWaiverService goalWaiverService;
     private final Clock clock;
@@ -59,6 +61,7 @@ public class DashboardApiController {
                                   GardenService gardenService,
                                   QuoteService quoteService,
                                   ReadingSessionService sessionService,
+                                  ReadingSessionRepository sessionRepository,
                                   BookRepository bookRepository,
                                   GoalWaiverService goalWaiverService,
                                   Clock clock) {
@@ -68,6 +71,7 @@ public class DashboardApiController {
         this.gardenService = gardenService;
         this.quoteService = quoteService;
         this.sessionService = sessionService;
+        this.sessionRepository = sessionRepository;
         this.bookRepository = bookRepository;
         this.goalWaiverService = goalWaiverService;
         this.clock = clock;
@@ -134,7 +138,10 @@ public class DashboardApiController {
         // sessionId + untagged: 책 없이 시작한 세션(book==null)이면 종료 후 "무슨 책?" 태깅 시트를 띄운다(발견 1).
         // getBook()==null은 lazy 프록시를 초기화하지 않는 참조 비교라 트랜잭션 밖에서도 안전(null 연관=실제 null).
         boolean untagged = stopped.getBook() == null;
-        return ResponseEntity.ok(new StopResponse(stopped.getId(), untagged, timer, graph));
+        // 첫 완료 축하 — 방금 종료로 완료 세션 수가 '정확히 1'이 된 순간에만 참(2번째부터는 거짓).
+        // 소유자 스코프 count라 남의 기록은 섞이지 않고, 수동 기록이 선행돼 있으면 자연히 2 이상이 된다.
+        boolean firstCompletedSession = sessionRepository.countByUserAndEndedAtIsNotNull(user) == 1;
+        return ResponseEntity.ok(new StopResponse(stopped.getId(), untagged, firstCompletedSession, timer, graph));
     }
 
     /**
@@ -204,8 +211,13 @@ public class DashboardApiController {
     /**
      * stop 응답 — 방금 종료된 세션의 id·미태깅 여부 + 타이머 + 잔디(측정 종료 즉시 잔디 갱신용).
      * {@code untagged}이면 클라이언트가 "무슨 책?" 태깅 시트를 띄우고 {@code sessionId}로 태깅 요청한다(발견 1).
+     *
+     * @param firstCompletedSession 이번 종료가 이 사용자의 <b>첫 완료 기록</b>인지 — 미니앱이 축하 배너와
+     *                              잔디 하이라이트를 띄우는 스위치다. 잔디는 1초만 읽어도 점등되는데
+     *                              미리보기가 폴드 아래라 첫 보상을 아무도 보지 못했다(운영 실측 2026-08-13)
      */
-    public record StopResponse(Long sessionId, boolean untagged, TimerState timer, ContributionGraphDto graph) {}
+    public record StopResponse(Long sessionId, boolean untagged, boolean firstCompletedSession,
+                               TimerState timer, ContributionGraphDto graph) {}
 
     public record TagBookRequest(Long bookId) {}
 

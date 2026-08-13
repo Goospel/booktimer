@@ -266,6 +266,63 @@ class DashboardApiControllerTest {
                 .andExpect(jsonPath("$.untagged").value(false));
     }
 
+    // ── 8e. stop 응답 firstCompletedSession (첫 완료 축하 트리거) ───────────────
+    // 신규 유저가 첫 기록을 남긴 바로 그 순간에만 true — 클라이언트가 축하 배너 + 잔디 하이라이트를 띄운다.
+    // "정확히 1이 되는 순간"이 경계다: 2번째부터는 false여야 축하가 매번 뜨는 잡음이 되지 않는다.
+
+    @Test
+    @DisplayName("POST /api/sessions/stop: 완료 기록 0건이던 유저의 첫 종료 → firstCompletedSession=true")
+    void stop_firstEverCompletion_flagsTrue() throws Exception {
+        User u = register("firstsess@a.com", "firstsess");
+        sessionService.start(u, clock.instant(), null);
+
+        mockMvc.perform(post("/api/sessions/stop").with(user("firstsess@a.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.firstCompletedSession").value(true));
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/stop: 이미 완료 1건이 있던 유저의 두 번째 종료 → false (축하는 한 번뿐)")
+    void stop_secondCompletion_flagsFalse() throws Exception {
+        User u = register("secondsess@a.com", "secondsess");
+        sessionService.start(u, clock.instant(), null);
+        sessionService.stop(u, clock.instant());
+        sessionService.start(u, clock.instant(), null);
+
+        mockMvc.perform(post("/api/sessions/stop").with(user("secondsess@a.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.firstCompletedSession").value(false));
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/stop: 수동 기록이 선행돼 있으면 첫 실시간 종료도 false — 첫 '기록'의 의미를 지킨다")
+    void stop_afterManualRecord_flagsFalse() throws Exception {
+        User u = register("manualfirst@a.com", "manualfirst");
+        Book book = addBook(u, "손으로 적은 책", BookStatus.READING);
+        Instant now = clock.instant();
+        sessionService.recordManual(u, now.minusSeconds(3600), now.minusSeconds(1800), book);
+        sessionService.start(u, now, null);
+
+        mockMvc.perform(post("/api/sessions/stop").with(user("manualfirst@a.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.firstCompletedSession").value(false));
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/stop: 남의 완료 세션은 내 count에 안 섞인다 — 남이 읽었다고 내 첫 기록이 사라지지 않는다")
+    void stop_othersCompletionsDoNotCount() throws Exception {
+        User other = register("othersess@a.com", "othersess");
+        sessionService.start(other, clock.instant(), null);
+        sessionService.stop(other, clock.instant()); // 남의 완료 세션 1건
+
+        User me = register("minesess@a.com", "minesess");
+        sessionService.start(me, clock.instant(), null);
+
+        mockMvc.perform(post("/api/sessions/stop").with(user("minesess@a.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.firstCompletedSession").value(true));
+    }
+
     // ── 8d. 종료 후 태깅 엔드포인트 (IDOR·재태깅 경계) ─────────────────────────
 
     @Test

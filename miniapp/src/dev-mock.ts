@@ -138,6 +138,8 @@ const state = {
   carriedDebtSeconds: 600,
   activeStartedAt: null as string | null,
   activeBookId: null as number | null,
+  /** 이 세션에서 끝낸 측정 수 — 첫 종료(=1)에만 축하 배너가 뜬다. 새로고침하면 0으로 돌아가 다시 볼 수 있다. */
+  completedSessions: 0,
   nextId: 500,
 };
 
@@ -302,8 +304,15 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     if (book !== undefined) book.seconds += elapsed;
     state.activeStartedAt = null;
     state.activeBookId = null;
+    state.completedSessions += 1;
     // graph를 동봉해야 홈이 재조회 없이 잔디를 갱신한다(`StopResponse` 계약).
-    return { sessionId: nextId(), untagged, timer: timerState(), graph: buildGraph() };
+    return {
+      sessionId: nextId(),
+      untagged,
+      firstCompletedSession: state.completedSessions === 1,
+      timer: timerState(),
+      graph: buildGraph(),
+    };
   }],
   ['POST', /^\/api\/sessions\/(\d+)\/tag-book$/, ({ id, body }) => {
     const book = books.find((b) => b.id === body.bookId);
