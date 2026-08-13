@@ -102,18 +102,30 @@ function buildGraph(): ContributionGraph {
 
 // ── 상태 (모듈 메모리) ───────────────────────────────────────────────────────
 
+/**
+ * 표지 목 — 외부 이미지에 의존하지 않게 인라인 SVG data URI로 만든다(목은 오프라인에서도 떠야 한다).
+ * 표지가 붙은 책과 안 붙은 책을 섞어 둬야 캐러셀에서 자리 표지 폴백까지 눈으로 확인된다.
+ */
+const mockCover = (label: string, bg: string): string =>
+  'data:image/svg+xml;utf8,' +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 84"><rect width="60" height="84" fill="${bg}"/>` +
+      `<text x="30" y="48" font-size="28" text-anchor="middle" fill="rgba(44,42,36,0.6)">${label}</text></svg>`,
+  );
+
 function shelfBook(
   id: number,
   title: string,
   author: string,
   status: BookStatus,
   seconds: number,
+  coverUrl: string | null = null,
 ): MyBookSummary {
   return {
     id,
     title,
     author,
-    coverUrl: null, // 표지는 CoverInitial 자리표지로 그려진다 — 목이 외부 이미지에 의존하지 않게
+    coverUrl,
     isbn13: `978895460${1000 + id}`,
     status,
     statusLabel: STATUS_LABEL[status],
@@ -126,9 +138,9 @@ function shelfBook(
 }
 
 const books: MyBookSummary[] = [
-  shelfBook(1, '미움받을 용기', '기시미 이치로', 'READING', 7_200),
-  shelfBook(2, '사피엔스', '유발 하라리', 'READING', 3_600),
-  shelfBook(3, '데미안', '헤르만 헤세', 'FINISHED', 18_000),
+  shelfBook(1, '미움받을 용기', '기시미 이치로', 'READING', 7_200, mockCover('용', '#D8CBB4')),
+  shelfBook(2, '사피엔스', '유발 하라리', 'READING', 3_600), // 표지 없는 책 — 캐러셀의 자리 표지 경로
+  shelfBook(3, '데미안', '헤르만 헤세', 'FINISHED', 18_000, mockCover('데', '#C7D3C0')),
   shelfBook(4, '코스모스', '칼 세이건', 'WANT_TO_READ', 0),
 ];
 
@@ -146,7 +158,9 @@ const state = {
 const nextId = (): number => (state.nextId += 1);
 
 const bookOptions = (status: BookStatus): BookOption[] =>
-  books.filter((b) => b.status === status).map(({ id, title }) => ({ id, title }));
+  books
+    .filter((b) => b.status === status)
+    .map(({ id, title, coverUrl, author }) => ({ id, title, coverUrl, author }));
 
 function timerState(): TimerState {
   const active = books.find((b) => b.id === state.activeBookId) ?? null;

@@ -172,7 +172,9 @@ public class DashboardApiController {
     }
 
     private static List<BookOption> toOptions(List<Book> books) {
-        return books.stream().map(b -> new BookOption(b.getId(), b.getTitle())).toList();
+        return books.stream()
+                .map(b -> new BookOption(b.getId(), b.getTitle(), b.getCoverUrl(), b.getAuthor()))
+                .toList();
     }
 
     private static ContributionGraphDto toGraphDto(ContributionGraph g) {
@@ -256,7 +258,13 @@ public class DashboardApiController {
         }
     }
 
-    public record BookOption(Long id, String title) {}
+    /**
+     * 고를 수 있는 책 한 권 — 미니앱 홈의 표지 캐러셀·태깅 시트가 그리는 최소 정보.
+     *
+     * <p>{@code coverUrl}·{@code author}는 손으로 넣은 책이면 {@code null}이다(검색 등록만 채운다) —
+     * 클라이언트는 그때 첫 글자 자리 표지로 떨어뜨린다. 필드 추가는 하위호환(옛 클라이언트는 무시).
+     */
+    public record BookOption(Long id, String title, String coverUrl, String author) {}
 
     public record QuoteDto(String text, String author) {}
 
