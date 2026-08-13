@@ -32,7 +32,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <p>노출 게이트(PUBLIC·팔로우·ADMIN·핸들 null)는 {@code BookRepositoryTest}가 쿼리 레벨에서 못 박으므로
  * 여기선 <b>컨트롤러의 몫</b>만 본다: 시작·완독 두 쿼리를 하나로 합쳐 최신순 정렬 + 상한 30건,
- * 그리고 뉴스 게이트가 이 PR에선 꺼져 있음(PR-3에서 점등).
+ * 그리고 네이버 키가 없는 기본 컨텍스트에서 뉴스가 꺼져 있음(켜졌을 때의 조인은
+ * {@code HomeFeedNewsApiControllerTest}).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -123,7 +124,7 @@ class HomeFeedApiControllerTest {
     }
 
     @Test
-    @DisplayName("뉴스는 이 PR에선 꺼져 있다 — newsEnabled=false, news=[] (PR-3에서 점등)")
+    @DisplayName("네이버 키가 없으면 뉴스는 꺼진다 — newsEnabled=false, news=[] (키 없이 배포해도 안전)")
     void newsIsGatedOff() throws Exception {
         saveUser("hf-news@booktimer.com", "hfnews", "나");
 

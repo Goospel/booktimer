@@ -207,4 +207,35 @@ public interface BookRepository extends JpaRepository<Book, Long> {
             order by b.startedReadingAt desc
             """)
     List<Book> feedStarted(@Param("viewer") User viewer, @Param("cutoff") Instant cutoff);
+
+    /**
+     * 뉴스 수집 대상 — <b>완독</b>했고 isbn13·저자가 모두 있는 책을 <b>isbn당 한 행</b>으로 모은다.
+     *
+     * <p>사용자별이 아니라 isbn별인 이유: 같은 책을 여러 사람이 완독해도 기사는 하나면 되므로 외부 호출을
+     * 1회로 줄인다(쿼터·중복 절약). 제목·저자 표기가 사용자마다 미세하게 달라도 {@code group by isbn13} +
+     * 대표값({@code min})으로 한 행이 되게 해, delete-then-insert가 같은 isbn을 두 번 갈아엎지 않는다.
+     * 저자 null은 매칭 AND를 못 만들어(오탐 무방비), isbn null은 캐시 키가 없어 제외한다.
+     * PRIVATE 완독 책도 포함 — 뉴스는 책 자체에 대한 공개 정보고 노출은 완독한 본인에게만 된다.
+     */
+    @Query("""
+            select b.isbn13 as isbn13, min(b.title) as title, min(b.author) as author
+            from Book b
+            where b.status = com.booktimer.book.BookStatus.FINISHED
+              and b.isbn13 is not null
+              and b.author is not null
+            group by b.isbn13
+            """)
+    List<BookNewsTarget> findNewsCollectionTargets();
+
+    /**
+     * 내가 완독한 책 중 isbn13이 있는 것 — 홈 「책 뉴스」의 조인 키이자 "내 어느 책의 기사인가" 라벨 출처.
+     * isbn이 없는 책은 뉴스 캐시와 이을 키가 없어 제외된다.
+     */
+    @Query("""
+            select b from Book b
+            where b.user = :user
+              and b.status = com.booktimer.book.BookStatus.FINISHED
+              and b.isbn13 is not null
+            """)
+    List<Book> findFinishedWithIsbn(@Param("user") User user);
 }

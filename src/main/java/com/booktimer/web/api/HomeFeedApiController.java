@@ -1,9 +1,13 @@
 package com.booktimer.web.api;
 
 import com.booktimer.book.Book;
+import com.booktimer.book.BookNews;
+import com.booktimer.book.BookNewsRepository;
 import com.booktimer.book.BookRepository;
+import com.booktimer.book.NaverNewsClient;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.user.User;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -13,7 +17,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 미니앱 홈 피드 박스용 JSON API — GET /api/home-feed.
@@ -26,8 +32,10 @@ import java.util.List;
  * 합쳐 상한까지 자르기만 한다 — JPQL에 union이 없어 쿼리 2개 + 인메모리 병합이 가장 단순하고
  * 충분하다(창 14일 · 팔로우 규모 소형).
  *
- * <p>「책 뉴스」는 아직 꺼져 있다 — 수집기(네이버 뉴스 API)는 후속 PR이고, 그때까지
- * {@code newsEnabled=false}·{@code news=[]}로 미니앱이 탭 자체를 안 그린다(죽은 탭 금지).
+ * <p>「책 뉴스」 = 내가 완독한 책(isbn13)의 기사. 실제 수집은 새벽 배치({@code BookNewsCollector})가 하고
+ * 여기선 캐시를 읽기만 한다 — 요청 경로에서 외부 API를 부르지 않는다. 노출 게이트는 <b>서버의
+ * {@code newsEnabled}</b>: 네이버 키가 없으면 false + 빈 목록이라 미니앱이 탭 자체를 안 그리고
+ * (죽은 탭 금지), 키가 SSM으로 들어오면 미니앱 재배포 없이 점등된다.
  * SecurityConfig default-deny로 자동 인증.
  */
 @RestController
@@ -39,15 +47,24 @@ public class HomeFeedApiController {
     /** 응답 상한. 미니앱은 미리보기 3줄 + 「더 보기」로 이 안에서 펼친다(페이지네이션 없음). */
     private static final int MAX_EVENTS = 30;
 
+    /** 뉴스 응답 상한. 소식과 같은 이유(미리보기 + 「더 보기」로 이 안에서 펼친다). */
+    private static final int MAX_NEWS = 30;
+
     private final CurrentUserService currentUserService;
     private final BookRepository bookRepository;
+    private final BookNewsRepository bookNewsRepository;
+    private final NaverNewsClient newsClient;
     private final Clock clock;
 
     public HomeFeedApiController(CurrentUserService currentUserService,
                                  BookRepository bookRepository,
+                                 BookNewsRepository bookNewsRepository,
+                                 NaverNewsClient newsClient,
                                  Clock clock) {
         this.currentUserService = currentUserService;
         this.bookRepository = bookRepository;
+        this.bookNewsRepository = bookNewsRepository;
+        this.newsClient = newsClient;
         this.clock = clock;
     }
 
@@ -67,7 +84,33 @@ public class HomeFeedApiController {
 
         return new HomeFeedResponse(
                 events.size() > MAX_EVENTS ? List.copyOf(events.subList(0, MAX_EVENTS)) : events,
-                false, List.of());
+                newsClient.isEnabled(), newsFor(viewer));
+    }
+
+    /**
+     * 내 완독 책(isbn13)의 캐시된 기사 — 발행 최신순, 상한 {@value #MAX_NEWS}건.
+     *
+     * <p>게이트가 꺼져 있거나 완독 책이 없으면 쿼리 없이 빈 목록. isbn → 내 책 제목 맵이
+     * {@code bookTitle} 라벨("내 어느 책의 기사인가")을 만든다 — 같은 isbn을 여러 번 완독 등록했으면
+     * 먼저 만난 제목 하나를 쓴다(라벨일 뿐이라 어느 쪽이든 같은 책이다).
+     */
+    private List<NewsItem> newsFor(User viewer) {
+        if (!newsClient.isEnabled()) {
+            return List.of();
+        }
+        Map<String, String> titleByIsbn = new HashMap<>();
+        for (Book book : bookRepository.findFinishedWithIsbn(viewer)) {
+            titleByIsbn.putIfAbsent(book.getIsbn13(), book.getTitle());
+        }
+        if (titleByIsbn.isEmpty()) {
+            return List.of();
+        }
+        List<BookNews> cached = bookNewsRepository.findByIsbn13InOrderByPublishedAtDesc(
+                titleByIsbn.keySet(), PageRequest.of(0, MAX_NEWS));
+        return cached.stream()
+                .map(n -> new NewsItem(n.getTitle(), n.getLink(), n.getPublishedAt(),
+                        titleByIsbn.get(n.getIsbn13())))
+                .toList();
     }
 
     private static SocialEvent event(Book book, String type, Instant occurredAt) {
@@ -83,7 +126,7 @@ public class HomeFeedApiController {
                               String type, Instant occurredAt) {
     }
 
-    /** @param bookTitle 내 어느 책의 기사인지 보여주는 라벨. 뉴스 점등 전까지 이 목록은 항상 빈다. */
+    /** @param bookTitle 내 어느 책의 기사인지 보여주는 라벨. 네이버 키가 없으면 이 목록은 항상 빈다. */
     public record NewsItem(String title, String link, Instant publishedAt, String bookTitle) {
     }
 }
