@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -167,4 +168,43 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     List<CoReadCount> findCoReadCandidates(@Param("viewerId") Long viewerId,
                                            @Param("myIsbns") Collection<String> myIsbns,
                                            Pageable pageable);
+
+    /**
+     * 홈 소식 피드 — <b>완독</b> 이벤트: {@code viewer}가 팔로우한 사람의 PUBLIC 완독 책(최근 창).
+     *
+     * <p>{@code StoryRepository.feedOf} 미러. Follow와는 매핑된 연관이 없어 theta 조인
+     * ({@code f.followee = u})으로 묶고, ADMIN·공개핸들(login_id) 미설정 소유자는 노출 불변식대로
+     * 제외한다(N-055). <b>차단 필터는 쿼리에 불필요</b> — "팔로우 존재 → 차단 없음" write-시점 불변식
+     * (차단 시 팔로우 양방향 해제)이 보장하고 {@code BookFeedBlockInvariantTest}가 행동으로 못 박는다.
+     * 비공개 전환·삭제된 책은 조회 시점 상태로 자연 소멸한다(이벤트를 따로 적재하지 않는 방식의 이점).
+     * 소유자는 fetch로 즉시 초기화 — 이벤트 줄이 닉네임·핸들을 읽으므로 N+1을 막는다.
+     */
+    @Query("""
+            select b from Book b join fetch b.user u, com.booktimer.follow.Follow f
+            where f.followee = u and f.follower = :viewer
+              and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
+              and b.finishedAt > :cutoff
+              and u.role <> com.booktimer.user.Role.ADMIN
+              and u.loginId is not null
+            order by b.finishedAt desc
+            """)
+    List<Book> feedFinished(@Param("viewer") User viewer, @Param("cutoff") Instant cutoff);
+
+    /**
+     * 홈 소식 피드 — <b>읽기 시작</b> 이벤트: 같은 게이트({@link #feedFinished})에 시작 시각 기준.
+     *
+     * <p>{@code status = READING} 조건은 걸지 않는다 — 시작 후 곧 완독했어도 "읽기 시작했어요"는
+     * 사실이었고, 두 줄이 시간순으로 나란히 서는 게 자연스럽다. 시작 시각이 없는 기존 책(V64 백필 안 함)은
+     * {@code >} 비교에서 자연 제외된다.
+     */
+    @Query("""
+            select b from Book b join fetch b.user u, com.booktimer.follow.Follow f
+            where f.followee = u and f.follower = :viewer
+              and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
+              and b.startedReadingAt > :cutoff
+              and u.role <> com.booktimer.user.Role.ADMIN
+              and u.loginId is not null
+            order by b.startedReadingAt desc
+            """)
+    List<Book> feedStarted(@Param("viewer") User viewer, @Param("cutoff") Instant cutoff);
 }

@@ -85,6 +85,16 @@ public class Book extends BaseTimeEntity {
     private Instant finishedAt;
 
     /**
+     * 읽기 시작 시각 — 홈 소식 피드 "읽기 시작했어요" 이벤트의 데이터 소스.
+     * {@link #finishedAt}의 미러이되 <b>한 곳이 다르다</b>: 완독으로 넘어가도 지우지 않는다 —
+     * 시작·완독 두 이벤트가 시간순으로 공존하는 게 피드에선 맞다. 재독(완독→읽는중)은 새 시각으로 재스탬프.
+     * 기록은 {@link #changeStatus(BookStatus, Instant)}·{@link #startReading(Instant)}가 담당하고
+     * 시각(Clock)은 서비스가 넘긴다. V64 이전의 기존 책은 백필하지 않아 null이다(피드 창 14일 밖이라 무해).
+     */
+    @Column
+    private Instant startedReadingAt;
+
+    /**
      * 알라딘 "구매"(제휴 링크) 클릭 누적 수. 어떤 책이 구매 의향을 내는지 보는 제휴 수익 데이터.
      * (이름은 하위호환으로 유지 — 쿠팡 도입 후 의미상 "알라딘 클릭"으로 굳었다. 쿠팡은 {@link #coupangClickCount}.)
      */
@@ -182,11 +192,12 @@ public class Book extends BaseTimeEntity {
      * <p>멱등하다: 이미 "읽는중"이거나 "완독"인 책은 건드리지 않는다(완독을 읽는중으로 되돌리지 않음).
      * 타이머로 이 책을 처음 읽기 시작할 때 호출해, 사용자가 손으로 상태를 바꾸는 수고를 던다.
      *
+     * @param now 현재 시각(필수) — 전환이 일어날 때만 {@link #startedReadingAt}에 스탬프한다
      * @return 실제로 전환이 일어났으면 true(=영속 저장이 필요), 그대로면 false
      */
-    public boolean startReading() {
+    public boolean startReading(Instant now) {
         if (status == BookStatus.WANT_TO_READ) {
-            status = BookStatus.READING;
+            changeStatus(BookStatus.READING, now);
             return true;
         }
         return false;
@@ -278,6 +289,11 @@ public class Book extends BaseTimeEntity {
         } else {
             this.finishedAt = null;
         }
+        // 읽는중 "진입"에만 스탬프 — 읽는중→읽는중 재저장은 기존 값 보존(멱등), 재독(완독→읽는중)은 재스탬프.
+        // 완독으로 넘어갈 땐 손대지 않는다(시작·완독 두 이벤트 공존).
+        if (newStatus == BookStatus.READING && this.status != BookStatus.READING) {
+            this.startedReadingAt = now;
+        }
         this.status = newStatus;
     }
 
@@ -327,6 +343,10 @@ public class Book extends BaseTimeEntity {
 
     public Instant getFinishedAt() {
         return finishedAt;
+    }
+
+    public Instant getStartedReadingAt() {
+        return startedReadingAt;
     }
 
     public long getClickCount() {

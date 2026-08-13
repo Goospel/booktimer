@@ -30,7 +30,7 @@ class BookTest {
     void startReading_fromWantToRead_transitions() {
         Book book = bookWith(BookStatus.WANT_TO_READ);
 
-        boolean changed = book.startReading();
+        boolean changed = book.startReading(T1);
 
         assertThat(changed).isTrue();
         assertThat(book.getStatus()).isEqualTo(BookStatus.READING);
@@ -41,7 +41,7 @@ class BookTest {
     void startReading_fromReading_noop() {
         Book book = bookWith(BookStatus.READING);
 
-        boolean changed = book.startReading();
+        boolean changed = book.startReading(T1);
 
         assertThat(changed).isFalse();
         assertThat(book.getStatus()).isEqualTo(BookStatus.READING);
@@ -52,7 +52,7 @@ class BookTest {
     void startReading_fromFinished_noop() {
         Book book = bookWith(BookStatus.FINISHED);
 
-        boolean changed = book.startReading();
+        boolean changed = book.startReading(T1);
 
         assertThat(changed).isFalse();
         assertThat(book.getStatus()).isEqualTo(BookStatus.FINISHED);
@@ -217,5 +217,72 @@ class BookTest {
     void register_leavesFinishedAtNull() {
         assertThat(bookWith(BookStatus.FINISHED).getFinishedAt()).isNull();
         assertThat(bookWith(BookStatus.READING).getFinishedAt()).isNull();
+    }
+
+    // ── 읽기 시작 시각(startedReadingAt) — 홈 소식 피드 "읽기 시작했어요" 이벤트의 데이터 소스 ──
+    // finishedAt의 미러이되 한 곳이 다르다: 완독으로 넘어가도 지우지 않는다(시작·완독 두 이벤트 공존).
+
+    @Test
+    @DisplayName("changeStatus: 읽는중으로 진입하면 읽기 시작 시각을 기록한다")
+    void changeStatus_toReading_stampsStartedReadingAt() {
+        Book book = bookWith(BookStatus.WANT_TO_READ);
+
+        book.changeStatus(BookStatus.READING, T1);
+
+        assertThat(book.getStartedReadingAt()).isEqualTo(T1);
+    }
+
+    @Test
+    @DisplayName("changeStatus: 읽는중→읽는중 재저장은 기존 시작 시각을 유지한다(멱등 — 시각이 밀리지 않음)")
+    void changeStatus_readingToReading_keepsStamp() {
+        Book book = bookWith(BookStatus.WANT_TO_READ);
+        book.changeStatus(BookStatus.READING, T1);
+
+        book.changeStatus(BookStatus.READING, T2);
+
+        assertThat(book.getStartedReadingAt()).isEqualTo(T1);
+    }
+
+    @Test
+    @DisplayName("changeStatus: 완독으로 넘어가도 시작 시각은 지우지 않는다(시작·완독 두 이벤트가 시간순 공존)")
+    void changeStatus_toFinished_keepsStartedReadingAt() {
+        Book book = bookWith(BookStatus.WANT_TO_READ);
+        book.changeStatus(BookStatus.READING, T1);
+
+        book.changeStatus(BookStatus.FINISHED, T2);
+
+        assertThat(book.getStartedReadingAt()).isEqualTo(T1);
+        assertThat(book.getFinishedAt()).isEqualTo(T2);
+    }
+
+    @Test
+    @DisplayName("changeStatus: 재독(완독→읽는중)은 새 시각으로 다시 스탬프한다")
+    void changeStatus_reread_restamps() {
+        Book book = bookWith(BookStatus.WANT_TO_READ);
+        book.changeStatus(BookStatus.READING, T1);
+        book.changeStatus(BookStatus.FINISHED, T1);
+
+        book.changeStatus(BookStatus.READING, T2);
+
+        assertThat(book.getStartedReadingAt()).isEqualTo(T2);
+    }
+
+    @Test
+    @DisplayName("startReading(now): 전환이 일어나면 시작 시각을 스탬프하고, no-op이면 건드리지 않는다")
+    void startReading_stampsOnlyOnTransition() {
+        Book transitioned = bookWith(BookStatus.WANT_TO_READ);
+        assertThat(transitioned.startReading(T1)).isTrue();
+        assertThat(transitioned.getStartedReadingAt()).isEqualTo(T1);
+
+        // 이미 읽는중/완독인 책은 전환이 없으므로 스탬프도 없다(기존 값을 밀지 않음)
+        Book alreadyReading = bookWith(BookStatus.READING);
+        assertThat(alreadyReading.startReading(T2)).isFalse();
+        assertThat(alreadyReading.getStartedReadingAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("register: 엔티티 단독 등록은 시작 시각이 null이다 — 백필 안 한 기존 책과 같은 상태")
+    void register_leavesStartedReadingAtNull() {
+        assertThat(bookWith(BookStatus.READING).getStartedReadingAt()).isNull();
     }
 }
