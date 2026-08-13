@@ -202,10 +202,15 @@ export const sectionStyle = {
  *
  * <p>`onBack`을 주면 제목 왼쪽에 ← 를 세운다. 나갈 길이 화면 맨 아래에만 있으면 목록이 긴 화면에서
  * 나가려고 끝까지 스크롤해야 한다 — 헤더가 제목을 그리는 자리라 뒤로가기도 여기가 맡는다.
+ *
+ * <p>제목은 **선택**이다. 홈처럼 첫 카드가 곧 히어로인 화면에서는 제목이 정보를 하나도 안 보태면서
+ * 자리만 먹었다(「구스펠님의 오늘」은 바로 아래 「오늘 읽은 시간」의 중복이고, 그 화면 이름은 탭바가
+ * 이미 말한다). 없으면 빈 행을 남기지 않고 **헤더를 통째로 생략**한다 — 자리만 비우면 지운 값이 없다.
  */
-export function Screen({ title, onBack, children }: { title: string; onBack?: () => void; children: ReactNode }) {
+export function Screen({ title, onBack, children }: { title?: string; onBack?: () => void; children: ReactNode }) {
   return (
     <main style={{ padding: '24px 20px 40px', maxWidth: 480, margin: '0 auto' }}>
+      {title !== undefined && (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
         {onBack !== undefined && (
           <button
@@ -239,6 +244,7 @@ export function Screen({ title, onBack, children }: { title: string; onBack?: ()
           {title}
         </Text>
       </div>
+      )}
       {children}
     </main>
   );
