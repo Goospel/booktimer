@@ -105,7 +105,6 @@ function home(overrides: Partial<DashboardResponse>) {
         onTimerChange={() => {}}
         onGraphChange={() => {}}
         onGoHistory={() => {}}
-        onGoLibrary={() => {}}
         onGoGoal={() => {}}
         onLogout={() => {}}
         onError={() => {}}
