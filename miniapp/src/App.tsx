@@ -83,6 +83,8 @@ export function App() {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [firstRun, setFirstRun] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** 목표 바꾸기 전면광고를 기다리는 중 — 버튼을 "준비 중"으로 바꾸고 중복 진입을 막는다. */
+  const [goalAdPending, setGoalAdPending] = useState(false);
 
   const toLogin = useCallback(() => {
     token.clear();
@@ -173,13 +175,23 @@ export function App() {
    * 목표 바꾸기 진입 — 홈 손잡이와 설정 화면이 **같은 경로**를 탄다(둘이 갈라지면 광고 규칙도 갈라진다).
    *
    * <p>전면 광고는 이 경로에만 붙는다 — 신규 계정의 첫 목표 설정은 로그인 브릿지에서 곧장 `load('goal')`로
-   * 들어와 여기를 거치지 않으므로, 첫 인상이 광고가 되는 일은 없다. 기다리지 않고 바로 전환한다:
-   * 광고는 목표 화면 위로 덮이고, 안 뜨면 그냥 목표 화면이다.
+   * 들어와 여기를 거치지 않으므로, 첫 인상이 광고가 되는 일은 없다.
+   *
+   * <p><b>광고가 끝난 뒤에 전환한다</b>(2026-08-14 수정). 예전엔 기다리지 않고 바로 전환해서, 1~2초 뒤
+   * 로드가 끝난 광고가 목표 화면이 아니라 **그때 떠 있는 아무 화면 위에** 덮였다(실기기 실측: 목표 화면을
+   * 지나 메인으로 돌아온 뒤 노출). `showInterstitialAd`는 못 뜨거나 무응답이어도 반드시 resolve하므로
+   * 여기서 진입이 막힐 일은 없다.
+   *
+   * <p>기다리는 1~2초 동안 `goalAdPending`으로 버튼을 "준비 중"으로 바꾼다 — 겉보기 무반응이면 사용자가
+   * 다시 누른다. 중복 호출 자체는 이 플래그가 먼저 막아 광고가 두 장 쌓이지 않는다.
    */
-  const goToGoal = useCallback(() => {
-    showInterstitialAd();
+  const goToGoal = useCallback(async () => {
+    if (goalAdPending) return;
+    setGoalAdPending(true);
+    await showInterstitialAd();
+    setGoalAdPending(false);
     setView('goal');
-  }, []);
+  }, [goalAdPending]);
 
   switch (view) {
     case 'auth':
@@ -238,6 +250,7 @@ export function App() {
         // 닉네임·핸들이 바뀌면 대시보드가 옛 값을 들고 있다 — 홈 인사말·소셜이 같은 값을 봐야 한다.
         onProfileChanged={() => silentRefresh(true)}
         onGoGoal={goToGoal}
+        goalAdPending={goalAdPending}
         onLogout={toLogin}
         onError={handleError}
       />
@@ -252,6 +265,7 @@ export function App() {
       onTimerChange={applyTimer}
       onGraphChange={applyGraph}
       onGoGoal={goToGoal}
+      goalAdPending={goalAdPending}
       onGoSettings={() => setView('settings')}
       onError={handleError}
       onShelfChanged={() => silentRefresh(true)}
@@ -271,6 +285,7 @@ export function MainTabs({
   onTimerChange,
   onGraphChange,
   onGoGoal,
+  goalAdPending,
   onGoSettings,
   onError,
   onShelfChanged,
@@ -282,6 +297,8 @@ export function MainTabs({
   onTimerChange: (timer: TimerState) => void;
   onGraphChange: (graph: DashboardResponse['graph']) => void;
   onGoGoal: () => void;
+  /** 전면광고를 기다리는 중 — 목표 손잡이를 "준비 중"으로 바꿔 탭이 먹통으로 보이지 않게 한다. */
+  goalAdPending: boolean;
   /** 홈 하단의 계정 진입 — 프로필·설정 화면(닉네임·@아이디·목표·로그아웃)으로 나간다. */
   onGoSettings: () => void;
   onError: (error: Error) => void;
@@ -300,6 +317,7 @@ export function MainTabs({
             onTimerChange={onTimerChange}
             onGraphChange={onGraphChange}
             onGoGoal={onGoGoal}
+            goalAdPending={goalAdPending}
             onGoSettings={onGoSettings}
             onError={onError}
           />

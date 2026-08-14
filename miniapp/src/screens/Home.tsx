@@ -413,7 +413,10 @@ export function showRemainingHandle(carryover: boolean, carriedDebtSeconds: numb
  * <p>목표 0이면 게이지 줄이 통째로 안 그려지므로(`todayProgress`의 `progress === null`) 이 칩이
  * 목표를 정하러 가는 화면 유일의 길이다 — 그래서 그때는 라벨이 권유가 된다.
  */
-export function goalHandleLabel(goalSeconds: number): string {
+export function goalHandleLabel(goalSeconds: number, adPending = false): string {
+  // 전면광고 로드에 1~2초가 걸린다(광고를 먼저 띄우고 전환하도록 바꾼 뒤 생긴 대기). 그동안 라벨이
+  // 그대로면 눌러도 아무 일 없는 것처럼 보여 사용자가 다시 누른다 — 목표값보다 대기 사실이 우선이다.
+  if (adPending) return '준비 중…';
   return goalSeconds > 0 ? `목표 ${formatDuration(goalSeconds)} ›` : '목표 정하기 ›';
 }
 
@@ -619,6 +622,7 @@ export function Home({
   onTimerChange,
   onGraphChange,
   onGoGoal,
+  goalAdPending,
   onGoSettings,
   onError,
 }: {
@@ -626,6 +630,8 @@ export function Home({
   onTimerChange: (timer: TimerState) => void;
   onGraphChange: (graph: DashboardResponse['graph']) => void;
   onGoGoal: () => void;
+  /** 전면광고를 기다리는 중 — 손잡이를 「준비 중」으로 바꾸고 비활성화한다(연타 방지는 App도 함께 한다). */
+  goalAdPending: boolean;
   /** 홈 하단의 계정 진입 — 닉네임·@아이디·목표·로그아웃은 전부 설정 화면이 맡는다. */
   onGoSettings: () => void;
   onError: (error: Error) => void;
@@ -760,6 +766,7 @@ export function Home({
         <button
           type="button"
           onClick={onGoGoal}
+          disabled={goalAdPending}
           style={{
             position: 'absolute',
             top: 8,
@@ -770,10 +777,12 @@ export function Home({
             background: 'var(--adaptiveBlue50, #E7EEE2)',
             color: 'var(--adaptiveBlue700, #4F6B4C)',
             fontSize: 12,
-            cursor: 'pointer',
+            // 대기 중엔 흐려서 "누른 건 먹혔고 준비 중"임을 색으로도 말한다(라벨과 이중 신호).
+            opacity: goalAdPending ? 0.6 : 1,
+            cursor: goalAdPending ? 'default' : 'pointer',
           }}
         >
-          {goalHandleLabel(goal)}
+          {goalHandleLabel(goal, goalAdPending)}
         </button>
         {/* 라벨과 값은 각자 블록이어야 세로로 쌓인다 — 같은 줄에 붙으면 "오늘 읽은 시간45:00"으로 읽힌다. */}
         <div>

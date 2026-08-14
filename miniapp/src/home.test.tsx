@@ -97,7 +97,10 @@ function book(id: number, title: string, extra: Partial<BookOption> = {}): BookO
   return { id, title, coverUrl: null, author: null, ...extra };
 }
 
-function renderHome(overrides: Partial<DashboardResponse> = {}) {
+function renderHome(
+  overrides: Partial<DashboardResponse> = {},
+  props: { goalAdPending?: boolean } = {},
+) {
   return renderToStaticMarkup(
     <TDSMobileProvider userAgent={userAgent}>
       <Home
@@ -105,6 +108,7 @@ function renderHome(overrides: Partial<DashboardResponse> = {}) {
         onTimerChange={() => {}}
         onGraphChange={() => {}}
         onGoGoal={() => {}}
+        goalAdPending={props.goalAdPending ?? false}
         onGoSettings={() => {}}
         onError={() => {}}
       />
@@ -403,6 +407,33 @@ describe('목표 손잡이 (goalHandleLabel · 렌더)', () => {
 
   it('목표가 0이면 「목표 정하기」— 게이지 줄이 아예 안 뜨는 그 상태의 유일한 진입점이다', () => {
     expect(goalHandleLabel(0)).toBe('목표 정하기 ›');
+  });
+
+  // 전면광고 로드에 1~2초가 걸린다(2026-08-14: 광고를 먼저 띄우고 전환하도록 바꾼 뒤 생긴 대기).
+  // 그동안 라벨이 그대로면 눌러도 아무 일 없는 것처럼 보여 사용자가 다시 누른다.
+  it('광고를 기다리는 동안엔 「준비 중」— 목표값과 무관하게 대기 상태를 말한다', () => {
+    expect(goalHandleLabel(1800, true)).toBe('준비 중…');
+    expect(goalHandleLabel(0, true)).toBe('준비 중…');
+  });
+
+  it('기다리지 않을 때는 옛 라벨 그대로 — 대기 표시가 평상시를 건드리지 않는다', () => {
+    expect(goalHandleLabel(1800, false)).toBe('목표 30분 ›');
+  });
+
+  // ⚠️ 전체 마크업에 'disabled'가 있나로 재면 안 된다 — TDS 전역 CSS에 `:disabled` 셀렉터가 실려
+  // 있어 그 단언은 항상 참이고, 반대 단언은 항상 거짓이다(공허한 테스트). 손잡이 버튼만 겨눈다.
+  const goalHandleTag = (markup: string, label: string) => {
+    const at = markup.indexOf(label);
+    expect(at).toBeGreaterThan(-1); // 라벨을 못 찾으면 아래 단언이 빈 문자열을 검사하게 된다
+    return markup.slice(markup.lastIndexOf('<button', at), at);
+  };
+
+  it('대기 중이면 손잡이가 비활성이다 — 연타로 광고가 두 장 쌓이지 않게', () => {
+    expect(goalHandleTag(renderHome({}, { goalAdPending: true }), '준비 중')).toContain('disabled=""');
+  });
+
+  it('평상시 손잡이는 눌린다 — 대기 표시가 평상시를 잠그지 않는다', () => {
+    expect(goalHandleTag(renderHome({ todayGoalSeconds: 1800 }), '목표 30분')).not.toContain('disabled=""');
   });
 
   it('손잡이가 타이머 카드 안에 있다 — 「측정 시작」보다 앞', () => {

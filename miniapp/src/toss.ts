@@ -165,17 +165,42 @@ export function watchRewardAd(adGroupId: string): Promise<boolean> {
 }
 
 /**
- * 전면 광고 1회 — **발사 후 망각**(결과도 보상도 없다). 부르는 쪽은 기다리지 않고 화면을 전환한다:
- * 로드에 1~2초가 걸려서, 기다리면 탭이 먹통으로 느껴지고 로드가 막히면 진입 자체가 막힌다.
+ * 광고를 포기하고 진행하는 상한(ms). SDK가 `onEvent`도 `onError`도 안 부르고 멈추는 경우가
+ * 유일한 대비 대상이다 — 그때 기다리기만 하면 「목표 바꾸기」가 **영구 먹통**이 된다.
+ * 정상 로드는 1~2초라 넉넉하되, 사용자가 버튼을 부순 줄 알기 전에 끊는 값으로 잡았다.
  */
-export function showInterstitialAd(adGroupId: string = INTERSTITIAL_AD_GROUP_ID): void {
-  if (adGroupId === '') return;
-  try {
-    // 전면형은 `userEarnedReward`를 안 쏘므로 리워드 래퍼를 그대로 쓰고 결과(false)만 버린다.
-    // 실패 두 갈래를 둘 다 삼킨다 — 앱 밖에서는 SDK가 **동기 TypeError**(try가 받는다),
-    // 앱 안에서는 노 필·미등록 그룹이 **거부된 Promise**(catch가 받는다. 안 붙이면 unhandled rejection).
-    void watchRewardAd(adGroupId).catch(() => {});
-  } catch {
-    // 광고가 안 뜬 걸 사용자에게 알릴 이유가 없다 — 조용히 넘어가고 화면은 그대로 전환된다.
-  }
+export const INTERSTITIAL_TIMEOUT_MS = 5000;
+
+/**
+ * 전면 광고 1회 — 보상은 없지만 **끝을 알린다**. 광고가 닫히면(또는 못 뜨면) resolve하므로
+ * 부르는 쪽은 `await` 후에 화면을 전환한다: **광고 먼저, 그다음 화면**.
+ *
+ * <p>2026-08-14 이전엔 발사 후 망각이라 부르는 쪽이 즉시 화면을 전환했고, 1~2초 뒤 로드가 끝난
+ * 광고가 **그때 떠 있는 아무 화면 위에** 덮였다(실기기 실측: 목표 화면을 지나 메인으로 돌아온 뒤 노출).
+ * 노출 시점이 로드 속도에 좌우되는 경주 상태였다 — Promise로 바꿔 순서를 확정한다.
+ *
+ * <p><b>절대 reject하지 않는다.</b> 이 호출이 화면 전환 앞을 막고 있어서, 안 끝나면 진입 자체가
+ * 막힌다 — 그룹 미설정·노 필·SDK 부재·무응답(타임아웃) 전부 조용히 resolve한다.
+ *
+ * <p>ponytail: 사전 로드(preload)는 안 한다 — 탭 즉시 노출이 되지만 "로드해 놓고 안 쓴 광고"가
+ * 노출 지표·유효기간에 어떻게 잡히는지 문서에 없다. 대기 1~2초가 실측으로 거슬리면 그때 옮긴다.
+ */
+export function showInterstitialAd(adGroupId: string = INTERSTITIAL_AD_GROUP_ID): Promise<void> {
+  if (adGroupId === '') return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    // 어느 경로로 끝나든 한 번만 통과시킨다(타임아웃과 dismissed가 겹쳐도 안전).
+    const timer = setTimeout(resolve, INTERSTITIAL_TIMEOUT_MS);
+    const done = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    try {
+      // 전면형은 `userEarnedReward`를 안 쏘므로 리워드 래퍼를 그대로 쓰고 결과(false)만 버린다.
+      // 실패 두 갈래를 둘 다 삼킨다 — 앱 밖에서는 SDK가 **동기 TypeError**(try가 받는다),
+      // 앱 안에서는 노 필·미등록 그룹이 **거부된 Promise**(catch가 받는다. 안 붙이면 unhandled rejection).
+      void watchRewardAd(adGroupId).then(done, done);
+    } catch {
+      done();
+    }
+  });
 }

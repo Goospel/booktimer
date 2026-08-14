@@ -2,6 +2,7 @@ import { Analytics, Notification, loadFullScreenAd, showFullScreenAd } from '@ap
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  INTERSTITIAL_TIMEOUT_MS,
   notificationAgreementSupported,
   requestNotificationAgreement,
   showInterstitialAd,
@@ -113,11 +114,15 @@ describe('watchRewardAd', () => {
 });
 
 /**
- * 전면 광고 래퍼 — 「목표 바꾸기」 진입에 한 장. 리워드와 달리 **보상도 결과도 없다**(발사 후 망각).
+ * 전면 광고 래퍼 — 「목표 바꾸기」 진입에 한 장. 보상은 없지만 **끝을 알려 준다**(Promise).
  *
- * <p>계측 지점 셋: ① config-gate(그룹 ID가 비면 SDK를 아예 안 건드린다 — 구글 반영 전·브라우저 목 모드)
- * ② 넘긴 그룹으로 load·show가 나가는가(다른 그룹이면 정산이 어긋난다) ③ **어떤 실패에도 던지지 않는가** —
- * 이 호출은 화면 전환 핸들러 한가운데 있어서, 새면 광고 실패가 목표 화면 진입 자체를 막는다.
+ * <p>발사 후 망각이던 것을 2026-08-14에 바꿨다: 부르는 쪽이 기다리지 않으면 화면이 먼저 전환돼,
+ * 1~2초 뒤 로드가 끝난 광고가 **그때 떠 있는 아무 화면 위에** 덮였다(실기기 실측 — 목표 화면에서
+ * 빠져나온 뒤 메인에서 터졌다). 노출 시점이 로드 속도에 좌우되는 경주 상태였다.
+ *
+ * <p>계측 지점: ① config-gate(그룹 ID가 비면 SDK를 아예 안 건드린다 — 구글 반영 전·브라우저 목 모드)
+ * ② 넘긴 그룹으로 load·show가 나가는가(다른 그룹이면 정산이 어긋난다) ③ **어떤 실패에도 resolve하는가** —
+ * 이 호출은 화면 전환 앞을 막고 있어서, 안 끝나면 목표 화면 진입 자체가 영영 막힌다.
  */
 describe('showInterstitialAd', () => {
   it('그룹 ID가 비면 SDK를 건드리지 않는다 — 구글 반영 전 빌드·브라우저 목 모드가 여기 걸린다', () => {
@@ -153,6 +158,76 @@ describe('showInterstitialAd', () => {
     });
 
     expect(() => showInterstitialAd('interstitial-group-7')).not.toThrow();
+  });
+
+  // --- 끝을 알린다 (2026-08-14) — 부르는 쪽이 광고가 닫힌 뒤에 화면을 전환할 수 있어야 한다 ---
+
+  it('광고가 닫히면(dismissed) resolve한다 — 이 시점이 곧 "이제 화면 전환해도 된다"', async () => {
+    stubAd([{ type: 'show' }, { type: 'dismissed' }]);
+
+    await expect(showInterstitialAd('interstitial-group-7')).resolves.toBeUndefined();
+  });
+
+  it('닫히기 전에는 resolve하지 않는다 — 이게 깨지면 광고가 화면 위로 덮이던 옛 버그로 되돌아간다', async () => {
+    // show까지 갔지만 dismissed는 아직 안 왔다(사용자가 광고를 보는 중).
+    loadMock.mockImplementation((params: LoadParams) => {
+      params.onEvent({ type: 'loaded' });
+      return () => {};
+    });
+    showMock.mockImplementation((params: ShowParams) => {
+      params.onEvent({ type: 'show' } as never);
+      return () => {};
+    });
+
+    let settled = false;
+    void showInterstitialAd('interstitial-group-7').then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(settled).toBe(false);
+  });
+
+  it('그룹 ID가 비면 즉시 resolve — 광고가 없는 빌드에서 진입이 막히면 안 된다', async () => {
+    await expect(showInterstitialAd('')).resolves.toBeUndefined();
+  });
+
+  it('로드 실패(onError)에도 resolve — 노 필인 날 목표 화면에 못 들어가면 안 된다', async () => {
+    loadMock.mockImplementation((params: LoadParams) => {
+      params.onError(new Error('no fill'));
+      return () => {};
+    });
+
+    await expect(showInterstitialAd('interstitial-group-7')).resolves.toBeUndefined();
+  });
+
+  it('SDK가 동기로 던져도 resolve — 토스앱 밖(브라우저)에서도 진입은 살아 있어야 한다', async () => {
+    loadMock.mockImplementation(() => {
+      throw new TypeError("Cannot read properties of undefined (reading 'loadFullScreenAd')");
+    });
+
+    await expect(showInterstitialAd('interstitial-group-7')).resolves.toBeUndefined();
+  });
+
+  it('SDK가 아무 콜백도 안 부르면 타임아웃으로 resolve — 진입이 영구히 막히는 것이 최악이다', async () => {
+    vi.useFakeTimers();
+    try {
+      loadMock.mockImplementation(() => () => {}); // 로드가 영영 끝나지 않는다
+
+      let settled = false;
+      void showInterstitialAd('interstitial-group-7').then(() => {
+        settled = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(INTERSTITIAL_TIMEOUT_MS - 1);
+      expect(settled).toBe(false); // 아직은 광고를 기다린다
+      await vi.advanceTimersByTimeAsync(2);
+      expect(settled).toBe(true);
+    } finally {
+      // 실패해도 반드시 되돌린다 — 가짜 타이머가 새면 뒤따르는 테스트가 통째로 타임아웃 난다.
+      vi.useRealTimers();
+    }
   });
 });
 
