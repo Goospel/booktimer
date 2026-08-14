@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { ProfileBook, ProfileResponse, UserRow } from './api';
 import { ProfileCard, SafetyPanel, toggleSafety } from './screens/Profile';
-import { MyShelfEntry, Social, UserList } from './screens/Social';
+import { HandleSheet, MyShelfEntry, Social, UserList } from './screens/Social';
 import { userAgent } from './test-fixtures';
 
 /**
@@ -78,18 +78,35 @@ describe('사용자 목록', () => {
 
 describe('내 책방 진입 — login_id=null 경계 (설계 §5-1)', () => {
   it('핸들이 있으면 내 책방으로 들어갈 수 있다', () => {
-    const markup = render(<MyShelfEntry myLoginId="goospel" onOpen={() => {}} />);
+    const markup = render(<MyShelfEntry myLoginId="goospel" onOpen={() => {}} onCreateHandle={() => {}} />);
 
     expect(markup).toContain('내 책방');
     expect(markup).toContain('<button');
   });
 
-  it('핸들이 없으면(미니앱 신규 가입) 버튼 대신 웹 안내를 그린다 — 서버가 loginId로만 책방을 찾는다', () => {
-    const markup = render(<MyShelfEntry myLoginId={null} onOpen={() => {}} />);
+  it('핸들이 없으면 여기서 만들 길을 준다 — 옛 웹 안내는 토스 계정에게 실행 불가능한 죽은 안내였다', () => {
+    const markup = render(<MyShelfEntry myLoginId={null} onOpen={() => {}} onCreateHandle={() => {}} />);
 
-    expect(markup).toContain('아이디');
-    expect(markup).toContain('웹');
-    expect(markup).not.toContain('<button'); // 눌러도 404가 나는 버튼을 내놓지 않는다
+    expect(markup).toContain('아이디 만들기');
+    expect(markup).toContain('<button'); // 눌러 만들 수 있다 — 안내만 하고 끝내지 않는다
+    // 토스로 가입한 계정은 비밀번호가 없어 웹 로그인 자체가 불가능하다 — 그 안내로 되돌아가면 회귀다.
+    expect(markup).not.toContain('booktimer.app');
+  });
+});
+
+/** 핸들 시트 — 불변 경고가 여기 없으면 사용자가 되돌릴 수 없는 선택을 모르고 한다. */
+describe('핸들 만들기 시트', () => {
+  const sheet = () => render(<HandleSheet onClose={() => {}} onCreated={() => {}} onFail={() => {}} />);
+
+  it('한 번 정하면 못 바꾼다고 미리 알린다', () => {
+    expect(sheet()).toContain('바꿀 수 없어요');
+  });
+
+  it('입력과 만들기 버튼을 준다 — 시트 안에서 끝난다', () => {
+    const markup = sheet();
+
+    expect(markup).toContain('<input');
+    expect(markup).toContain('만들기');
   });
 });
 
@@ -152,11 +169,11 @@ describe('책방 (프로필)', () => {
 
 describe('소셜 탭 검색', () => {
   it('검색 버튼에 이름이 붙어 있다 — 스크린리더에 빈 버튼으로 읽히면 안 된다', () => {
-    expect(render(<Social myLoginId="goospel" onError={() => {}} />)).toContain('aria-label="검색"');
+    expect(render(<Social myLoginId="goospel" onHandleCreated={() => {}} onError={() => {}} />)).toContain('aria-label="검색"');
   });
 
   it('아이디 입력을 form으로 감싼다 — 키보드 완료(엔터)가 아무 일도 안 해 버튼을 따로 눌러야 했다', () => {
-    expect(render(<Social myLoginId="goospel" onError={() => {}} />)).toContain('<form');
+    expect(render(<Social myLoginId="goospel" onHandleCreated={() => {}} onError={() => {}} />)).toContain('<form');
   });
 });
 

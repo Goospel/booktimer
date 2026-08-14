@@ -2,9 +2,17 @@ import { Button, Text, TextField } from '@toss/tds-mobile';
 import { useCallback, useEffect, useState } from 'react';
 
 import type { AuthorStories, FollowListType, StoryFeedResponse, UserRow } from '../api';
-import { fetchBlocks, fetchFollowList, fetchStoryFeed, searchUsers, unblockUser } from '../api';
+import {
+  createHandle,
+  fetchBlocks,
+  fetchFollowList,
+  fetchStoryFeed,
+  searchUsers,
+  unblockUser,
+  validateHandleFormat,
+} from '../api';
 import { useBackClose } from '../back';
-import { ErrorMessage, Loading, Screen, sectionStyle } from '../ui';
+import { ErrorMessage, Loading, Screen, Sheet, sectionStyle } from '../ui';
 import { Profile } from './Profile';
 import { StoryComposer, StoryStrip, StoryViewer } from './Story';
 
@@ -15,7 +23,19 @@ import { StoryComposer, StoryStrip, StoryViewer } from './Story';
  * 차단한 사람은 검색·목록에서 사라져야 하는데 캐시가 남으면 이미 없는 사람이 계속 보인다.
  * 스토리 피드도 같이 받는다(팔로우가 곧 피드 대상이라 한 쪽만 갱신하면 어긋난다).
  */
-export function Social({ myLoginId, onError }: { myLoginId: string | null; onError: (error: Error) => void }) {
+export function Social({
+  myLoginId,
+  onHandleCreated,
+  onError,
+}: {
+  myLoginId: string | null;
+  /** 핸들을 만들면 대시보드를 다시 받아야 한다 — 서버가 준 값이 진실이고, 다른 탭도 그 값을 본다. */
+  onHandleCreated: () => void;
+  onError: (error: Error) => void;
+}) {
+  // 서버가 준 정규화 핸들을 즉시 반영해 배너를 「내 책방 보기」로 바꾼다(대시보드 재조회를 기다리지 않는다).
+  const [handle, setHandle] = useState(myLoginId);
+  const [creatingHandle, setCreatingHandle] = useState(false);
   const [listType, setListType] = useState<FollowListType>('following');
   const [users, setUsers] = useState<UserRow[] | null>(null);
   const [blocked, setBlocked] = useState<UserRow[]>([]);
@@ -56,6 +76,7 @@ export function Social({ myLoginId, onError }: { myLoginId: string | null; onErr
    * 하드웨어 뒤로가기 — 열린 서브뷰를 하나씩 닫는다(중첩이면 최상단만). 이게 없으면 스토리 뷰어에서
    * 누른 back이 미니앱 자체를 종료시킨다. 스토리 뷰어·작성기의 열림 상태가 여기 있으므로 배선도 여기서 한다.
    */
+  useBackClose(creatingHandle, () => setCreatingHandle(false));
   useBackClose(composing, () => setComposing(false));
   useBackClose(viewing !== null, () => setViewing(null));
   useBackClose(open !== null, () => setOpen(null));
@@ -169,7 +190,7 @@ export function Social({ myLoginId, onError }: { myLoginId: string | null; onErr
         </div>
       ) : (
         <>
-          <MyShelfEntry myLoginId={myLoginId} onOpen={setOpen} />
+          <MyShelfEntry myLoginId={handle} onOpen={setOpen} onCreateHandle={() => setCreatingHandle(true)} />
 
           <section style={sectionStyle}>
             <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
@@ -222,6 +243,18 @@ export function Social({ myLoginId, onError }: { myLoginId: string | null; onErr
           )}
         </>
       )}
+
+      {creatingHandle && (
+        <HandleSheet
+          onClose={() => setCreatingHandle(false)}
+          onCreated={(loginId) => {
+            setHandle(loginId); // 서버가 정규화한 값 — 배너가 그 자리에서 「내 책방 보기」로 바뀐다
+            setCreatingHandle(false);
+            onHandleCreated(); // 대시보드 재조회로 진실을 서버와 맞춘다
+          }}
+          onFail={fail}
+        />
+      )}
     </Screen>
   );
 }
@@ -229,21 +262,109 @@ export function Social({ myLoginId, onError }: { myLoginId: string | null; onErr
 /**
  * 내 책방 진입 — 핸들(login_id)이 있어야만 열 수 있다(설계 §5-1).
  *
- * <p>서버 소셜 API는 대상을 loginId로만 찾으므로, 토스로 새로 가입한 계정(login_id=null)은
- * 자기 책방조차 열 수 없다(파라미터 없는 요청 → 400). 눌러도 실패할 버튼 대신 웹 안내를 그린다.
+ * <p>서버 소셜 API는 대상을 loginId로만 찾으므로, 토스로 새로 가입한 계정(login_id=null)은 자기 책방조차
+ * 열 수 없고 남의 검색·팔로우 목록·스토리 피드에도 뜨지 않는다. 예전엔 "웹에서 아이디를 정하라"고 안내했지만
+ * <b>토스로 시작한 계정은 비밀번호가 없어 웹 로그인 자체가 불가능</b>했다 — 실행 불가능한 죽은 안내였다.
+ * 그래서 여기서 바로 만들게 한다.
  */
-export function MyShelfEntry({ myLoginId, onOpen }: { myLoginId: string | null; onOpen: (loginId: string) => void }) {
+export function MyShelfEntry({
+  myLoginId,
+  onOpen,
+  onCreateHandle,
+}: {
+  myLoginId: string | null;
+  onOpen: (loginId: string) => void;
+  onCreateHandle: () => void;
+}) {
   if (myLoginId === null) {
     return (
-      <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 20 }}>
-        웹(booktimer.app)에서 아이디를 정하면 내 책방이 생기고, 다른 사람이 나를 찾을 수 있어요.
-      </Text>
+      <div style={{ marginTop: 20 }}>
+        <Text typography="st12" color="grey600" style={{ display: 'block' }}>
+          @아이디를 만들면 친구가 나를 찾을 수 있고, 내 책방이 생겨요.
+        </Text>
+        <Button display="block" variant="weak" style={{ marginTop: 12 }} onClick={onCreateHandle}>
+          아이디 만들기
+        </Button>
+      </div>
     );
   }
   return (
     <Button display="block" variant="weak" style={{ marginTop: 20 }} onClick={() => onOpen(myLoginId)}>
       내 책방 보기
     </Button>
+  );
+}
+
+/**
+ * 핸들(@아이디) 만들기 시트 — 토스로 가입한 계정이 소셜에 발견되게 하는 유일한 경로.
+ *
+ * <p>형식만 그 자리에서 검사해 즉시 피드백하고({@link validateHandleFormat}), <b>예약어·중복은 서버가
+ * 판정</b>한다 — 서버가 준 평문 메시지를 그대로 띄운다. 핸들은 한 번 정하면 못 바꾸므로 만들기 전에
+ * 그 사실을 알린다(되돌릴 수 없는 선택을 모르고 하지 않게).
+ */
+export function HandleSheet({
+  onClose,
+  onCreated,
+  onFail,
+}: {
+  onClose: () => void;
+  /** 서버가 정규화한(소문자) 핸들 — 클라이언트가 입력값을 그대로 믿지 않는다. */
+  onCreated: (loginId: string) => void;
+  onFail: (error: Error) => void;
+}) {
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // 빈 입력에까지 빨간 문구를 띄우진 않는다 — 아직 아무것도 안 쳤는데 혼내는 꼴이 된다.
+  const formatError = value.trim() === '' ? null : validateHandleFormat(value);
+  const submit = () => {
+    setBusy(true);
+    setError(null);
+    createHandle(value.trim())
+      .then((result) => onCreated(result.loginId))
+      .catch((e: Error) => {
+        if (e.name === 'UnauthorizedError') onFail(e);
+        else setError(e.message); // 400/409 평문 — 문구가 곧 안내다
+      })
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <Sheet title="@아이디 만들기" onClose={onClose}>
+      <Text typography="st12" color="grey600" style={{ display: 'block', marginBottom: 12 }}>
+        영문·숫자·밑줄(_) 3~20자. 대문자는 소문자로 저장돼요. <b>한 번 정하면 바꿀 수 없어요.</b>
+      </Text>
+
+      {/* 입력 하나짜리 form — 키보드 「완료」가 곧 제출이다(검색 입력과 같은 이유로 버튼은 밖에 둔다). */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!busy && value.trim() !== '' && formatError === null) submit();
+        }}
+      >
+        <TextField
+          variant="box"
+          label="아이디"
+          placeholder="예: goospel"
+          value={value}
+          disabled={busy}
+          onChange={(e) => setValue(e.target.value)}
+        />
+      </form>
+
+      <ErrorMessage message={formatError ?? error} />
+
+      <Button
+        display="block"
+        style={{ marginTop: 16 }}
+        loading={busy}
+        disabled={value.trim() === '' || formatError !== null}
+        onClick={submit}
+      >
+        만들기
+      </Button>
+    </Sheet>
   );
 }
 

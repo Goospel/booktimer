@@ -9,6 +9,7 @@ import {
   addBook,
   blockUser,
   changeBookStatus,
+  createHandle,
   createStory,
   deleteBook,
   deleteStory,
@@ -36,6 +37,7 @@ import {
   token,
   unblockUser,
   unfollow,
+  validateHandleFormat,
   waiveDebt,
 } from './api';
 import { tossLogin } from './toss';
@@ -552,6 +554,74 @@ describe('소셜 API — 검색·팔로우·책방·차단·신고', () => {
     });
     // 서버 ReportReason enum(SPAM·HARASSMENT·INAPPROPRIATE·OTHER)과 값이 어긋나면 전부 OTHER로 접수된다.
     expect(REPORT_REASONS.map((r) => r.value)).toEqual(['SPAM', 'HARASSMENT', 'INAPPROPRIATE', 'OTHER']);
+  });
+});
+
+/**
+ * 핸들(@아이디) 만들기 — 토스로 가입한 계정(login_id=null)이 소셜에 발견되게 하는 유일한 경로.
+ *
+ * <p>클라이언트는 **형식만** 프리검증한다(즉시 피드백). 예약어·중복은 흉내내지 않는다 — 서버가 유일한
+ * 권위이고(400/409 평문), 클라이언트가 규칙을 복제하면 서버와 어긋난 순간 조용히 거짓말을 한다.
+ */
+describe('핸들 형식 프리검증 (validateHandleFormat)', () => {
+  it('3~20자 [a-z0-9_]는 통과한다 — 경계(3자·20자) 포함', () => {
+    expect(validateHandleFormat('abc')).toBeNull();
+    expect(validateHandleFormat('a'.repeat(20))).toBeNull();
+    expect(validateHandleFormat('book_worm_1')).toBeNull();
+  });
+
+  it('대문자는 오류가 아니다 — 서버가 소문자로 정규화해 저장한다', () => {
+    expect(validateHandleFormat('Valid_1')).toBeNull();
+  });
+
+  it('짧거나 길면 안내 문구를 준다 — 2자·21자 경계', () => {
+    expect(validateHandleFormat('ab')).not.toBeNull();
+    expect(validateHandleFormat('a'.repeat(21))).not.toBeNull();
+  });
+
+  it('빈 입력·공백뿐인 입력은 안내 문구를 준다', () => {
+    expect(validateHandleFormat('')).not.toBeNull();
+    expect(validateHandleFormat('   ')).not.toBeNull();
+  });
+
+  it('한글·공백·기호가 섞이면 안내 문구를 준다 — 서버 LOGIN_ID_PATTERN과 같은 규칙', () => {
+    expect(validateHandleFormat('한글아이디')).not.toBeNull();
+    expect(validateHandleFormat('has space')).not.toBeNull();
+    expect(validateHandleFormat('dot.name')).not.toBeNull();
+  });
+
+  it('앞뒤 공백은 서버처럼 떼고 본다 — 키보드가 붙인 공백으로 막히지 않게', () => {
+    expect(validateHandleFormat('  goospel  ')).toBeNull();
+  });
+});
+
+describe('핸들 만들기 API (createHandle)', () => {
+  beforeEach(() => {
+    token.set('tok');
+  });
+
+  it('POST /api/miniapp/handle — 입력을 그대로 보내고 서버가 정규화한 값을 돌려받는다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '{"loginId":"bookworm_1"}') as never);
+
+    const result = await createHandle('BookWorm_1');
+
+    const [url, init] = lastRequest();
+    expect(url).toBe('http://localhost:8080/api/miniapp/handle');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ loginId: 'BookWorm_1' });
+    // 정규화는 서버 몫 — 클라이언트가 소문자로 미리 바꿔 보내면 정규화 규칙이 두 곳으로 갈라진다.
+    expect(result.loginId).toBe('bookworm_1');
+  });
+
+  it('중복(409)은 서버 평문 메시지를 그대로 올린다 — 시트가 그 문구를 띄운다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(409, '이미 사용 중인 아이디예요. 다른 아이디를 지어 주세요.') as never,
+    );
+
+    const error = (await createHandle('bookclub').catch((e: unknown) => e)) as ApiError;
+
+    expect(error.status).toBe(409);
+    expect(error.message).toBe('이미 사용 중인 아이디예요. 다른 아이디를 지어 주세요.');
   });
 });
 

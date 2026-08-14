@@ -40,6 +40,15 @@ const MARKER = '__DEV_MOCK__';
 const MY_LOGIN_ID = 'testid';
 const MY_NICKNAME = '목독서가';
 
+/**
+ * 내 공개 핸들(=서버가 대시보드·검색에 실어 주는 `myLoginId`). 핸들 만들기(`POST /api/miniapp/handle`)로
+ * 바뀌므로 상수가 아니라 모듈 상태다.
+ *
+ * <p>**핸들 없는 신규 가입 플로우(배너 → 시트)를 브라우저로 보려면 초기값을 임시로 `null`로 바꾼다.**
+ * 기본값은 기존 화면·스토어 스크린샷 호환을 위해 유지한다(핸들 있는 상태가 정상 사용 흐름).
+ */
+let myHandle: string | null = MY_LOGIN_ID;
+
 const STATUS_LABEL: Record<BookStatus, string> = {
   READING: '읽는 중',
   FINISHED: '다 읽음',
@@ -368,7 +377,7 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
   ['GET', /^\/api\/dashboard$/, (): DashboardResponse => ({
     ...timerState(),
     nickname: MY_NICKNAME,
-    loginId: MY_LOGIN_ID,
+    loginId: myHandle,
     profileCharacterCode: null,
     wantToReadBooks: bookOptions('WANT_TO_READ'),
     graph: buildGraph(),
@@ -425,6 +434,23 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     state.goalSeconds = body.dailyIncrementSeconds as number;
     return undefined;
   }],
+  // 핸들 만들기 — 서버처럼 소문자로 정규화해 돌려준다(클라이언트가 입력값을 그대로 믿지 않는지 눈으로 확인).
+  // 중복(409)도 실물처럼 재현한다: 목 사용자(nabi 등)의 아이디를 넣어 보면 시트가 서버 문구를 띄운다.
+  ['POST', /^\/api\/miniapp\/handle$/, ({ body }) => {
+    if (myHandle !== null) throw new ApiError(409, '아이디는 한 번 정하면 바꿀 수 없어요.');
+    const normalized = String(body.loginId ?? '').trim().toLowerCase();
+    if (!/^[a-z0-9_]{3,20}$/.test(normalized)) {
+      throw new ApiError(400, '사용할 수 없는 아이디예요. 영문 소문자·숫자·밑줄(_) 3~20자로 지어 주세요.');
+    }
+    if (users.some((u) => u.loginId === normalized)) {
+      throw new ApiError(409, '이미 사용 중인 아이디예요. 다른 아이디를 지어 주세요.');
+    }
+    myHandle = normalized;
+    // 내 행의 핸들도 같이 바꾼다 — 안 그러면 방금 만든 핸들로 「내 책방 보기」가 404가 난다(목만의 함정).
+    const me = users.find((u) => u.self);
+    if (me !== undefined) me.loginId = normalized;
+    return { loginId: normalized };
+  }],
   // 리워드 광고는 브라우저에 SDK가 없어 애초에 도달하지 않는다 — 혹시 눌러도 무해하게 실패시킨다.
   ['POST', /^\/api\/miniapp\/debt-waiver$/, () => {
     throw new ApiError(400, '목 모드에서는 광고 보상을 쓸 수 없어요');
@@ -469,12 +495,12 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     const q = String(query.q ?? '').trim();
     // 서버는 2글자 미만이면 빈 결과다(열거 방지) — 실패가 아니라 0건이라는 계약을 그대로 흉내낸다.
     const results = q.length < 2 ? [] : users.filter((u) => u.nickname.includes(q) || u.loginId.includes(q));
-    return { q, results, myLoginId: MY_LOGIN_ID, rateLimited: false };
+    return { q, results, myLoginId: myHandle, rateLimited: false };
   }],
   ['GET', /^\/api\/follow-list$/, ({ query }) => ({
     type: query.type,
     users: query.type === 'following' ? users.filter((u) => u.following) : users.filter((u) => !u.self),
-    myLoginId: MY_LOGIN_ID,
+    myLoginId: myHandle,
   })],
   ['POST', /^\/api\/follow$/, ({ body }) => ({ following: setFollowing(body.loginId as string, true) })],
   ['POST', /^\/api\/unfollow$/, ({ body }) => ({ following: setFollowing(body.loginId as string, false) })],
@@ -503,7 +529,7 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
   })],
   ['GET', /^\/api\/profile\/personality-tag$/, () => ({ books: profileBooks.slice(0, 2) })],
 
-  ['GET', /^\/api\/blocks$/, () => ({ blocked: [...blocked], myLoginId: MY_LOGIN_ID })],
+  ['GET', /^\/api\/blocks$/, () => ({ blocked: [...blocked], myLoginId: myHandle })],
   ['POST', /^\/api\/block$/, ({ body }) => {
     const user = mustFindUser(body.loginId as string);
     if (!blocked.some((b) => b.loginId === user.loginId)) blocked.push({ ...user, following: false });

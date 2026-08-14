@@ -233,6 +233,7 @@ export function App() {
       onLogout={toLogin}
       onError={handleError}
       onShelfChanged={() => silentRefresh(true)}
+      onHandleCreated={() => silentRefresh(true)}
     />
   );
 }
@@ -251,6 +252,7 @@ export function MainTabs({
   onLogout,
   onError,
   onShelfChanged,
+  onHandleCreated,
 }: {
   tab: TabKey;
   onTabChange: (tab: TabKey) => void;
@@ -262,6 +264,8 @@ export function MainTabs({
   onError: (error: Error) => void;
   /** 서재에서 책이 바뀌면 홈이 보는 대시보드도 같이 갱신해야 한다 — 안 그러면 캐러셀이 옛 목록 그대로다. */
   onShelfChanged: () => void;
+  /** 소셜에서 핸들(@아이디)을 만들면 대시보드의 loginId가 바뀐다 — 다시 받아야 다른 화면도 같은 값을 본다. */
+  onHandleCreated: () => void;
 }) {
   return (
     <>
@@ -278,7 +282,9 @@ export function MainTabs({
           />
         )}
         {tab === 'library' && <Library onError={onError} onShelfChanged={onShelfChanged} />}
-        {tab === 'social' && <Social myLoginId={dashboard.loginId} onError={onError} />}
+        {tab === 'social' && (
+          <Social myLoginId={dashboard.loginId} onHandleCreated={onHandleCreated} onError={onError} />
+        )}
         {tab === 'history' && <History graph={dashboard.graph} />}
       </div>
 

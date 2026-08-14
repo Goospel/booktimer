@@ -80,8 +80,8 @@ public class OnboardingService {
      *
      * <p>{@link #complete}에서 <b>login_id 확정과 {@code completeOnboarding()}을 뺀 것</b>이다. 미니앱 계정은
      * 핸들이 없으므로 여기서 온보딩 완료로 표시하면 DB CHECK({@code onboarded ⟹ login_id IS NOT NULL})를
-     * 위반한다 — 그래서 이 경로는 온보딩 플래그를 <b>건드리지 않는다</b>. 핸들 만들기는 미니앱이 소셜 기능을
-     * 여는 v2에서 {@link #complete}를 재사용한다.
+     * 위반한다 — 그래서 이 경로는 온보딩 플래그를 <b>건드리지 않는다</b>. 핸들 만들기는 나중에 사용자가 스스로
+     * {@link #assignHandle}로 한다({@code POST /api/miniapp/handle}).
      *
      * @throws IllegalStateException    타이머가 없는 경우
      * @throws IllegalArgumentException 목표가 음수인 경우(도메인 위임)
@@ -93,5 +93,38 @@ public class OnboardingService {
         timer.updateSettings(dailyIncrementSeconds);
         goalService.record(user, dailyIncrementSeconds); // 그날 목표로 과거를 판정하기 위한 시점 기록
         timerRepository.save(timer);
+    }
+
+    /**
+     * 미니앱 핸들 설정 — login_id(공개 @핸들)를 확정하고 온보딩 완료로 표시한다.
+     *
+     * <p>{@link #complete}에서 <b>닉네임·하루 목표를 뺀 것</b>이다 — 목표는 미니앱이 이미
+     * {@link #setDailyGoal}로 정했으므로 여기서 다시 기록하면 목표 이력이 중복된다. 핸들이 없으면
+     * 소셜 전 경로의 노출 필터({@code login_id is not null})에 걸려 영영 발견되지 않으므로, 이 메서드가
+     * 토스로 시작한 계정의 유일한 탈출구다.
+     *
+     * <p>{@code completeOnboarding()}을 함께 부르는 것은 안전하다 — CHECK 불변식이
+     * {@code onboarded ⟹ login_id IS NOT NULL} 방향이라 핸들을 먼저 확정한 뒤이기 때문이다.
+     *
+     * @param user        대상 사용자(인증된 principal에서 해석된 엔티티)
+     * @param rawLoginId  사용자가 정한 공개 핸들(정규화 전 — 형식·예약어·유니크 검증)
+     * @throws IllegalStateException         이미 핸들이 있는 경우(once-set 불변)
+     * @throws IllegalArgumentException      형식·예약어 위반(도메인 위임)
+     * @throws LoginIdAlreadyExistsException 남이 이미 쓰는 핸들인 경우
+     */
+    public void assignHandle(User user, String rawLoginId) {
+        // 정규화·중복조회 전에 끊는다 — already-set을 도메인 예외가 아닌 명시 경로로 409에 매핑하기 위함
+        // (complete()의 `if (user.getLoginId() == null)` 분기와 대칭).
+        if (user.getLoginId() != null) {
+            throw new IllegalStateException("login_id already set: " + user.getLoginId());
+        }
+        // 유니크는 정규화값으로 사전 확인한다 — assign 전에 봐야 (아직 미영속인) 자기 자신과 오탐하지 않는다.
+        String normalized = User.normalizeLoginId(rawLoginId);
+        if (userRepository.existsByLoginId(normalized)) {
+            throw new LoginIdAlreadyExistsException(normalized);
+        }
+        user.assignLoginId(rawLoginId);
+        user.completeOnboarding();
+        userRepository.save(user);
     }
 }
