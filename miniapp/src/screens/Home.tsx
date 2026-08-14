@@ -13,7 +13,7 @@ import {
   trackEvent,
   watchRewardAd,
 } from '../toss';
-import { BookCover, CoverInitial, ErrorMessage, Screen, sectionStyle } from '../ui';
+import { BookCover, CoverInitial, ErrorMessage, Screen, Sheet, sectionStyle } from '../ui';
 import { HomeFeedBox } from './HomeFeed';
 
 /** 알림 동의 결과 캐시 — 값은 토스가 준 결과 문자열 그대로. 정본은 토스이고 이건 카드 노출 스위치일 뿐이다. */
@@ -124,15 +124,19 @@ function scrollToIndex(track: HTMLDivElement | null, index: number, instant = fa
  * <p>목록 밖 id(다 읽었거나 뺀 책이 stale하게 남는 경우)는 0번으로 떨어진다 — 화면 밖을 찌르느니
  * 「책 없이」가 가운데 온 상태가 정직하다(주 버튼도 그때 `start(null)`을 보낸다).
  */
-export function carouselIndexOf(selectedId: number | null, books: BookOption[]): number {
+export function carouselIndexOf(selectedId: number | null, books: BookOption[], offset = 1): number {
   if (selectedId === null) return 0;
   const index = books.findIndex((b) => b.id === selectedId);
-  return index >= 0 ? index + 1 : 0;
+  return index >= 0 ? index + offset : 0;
 }
 
-/** 캐러셀 칸 인덱스 → 선택값. 0번(또는 범위 밖 방어)이면 `null` = 책 없이. */
-export function selectionAt(index: number, books: BookOption[]): number | null {
-  return books[index - 1]?.id ?? null;
+/**
+ * 캐러셀 칸 인덱스 → 선택값. 0번(또는 범위 밖 방어)이면 `null` = 책 없이.
+ *
+ * <p>`offset`은 책 앞에 붙는 칸 수다 — 홈은 「책 없이」가 0번이라 1, 「책 없이」가 없는 서재는 0.
+ */
+export function selectionAt(index: number, books: BookOption[], offset = 1): number | null {
+  return books[index - offset]?.id ?? null;
 }
 
 /**
@@ -193,25 +197,35 @@ function NoBookCard() {
  * 캐러셀 자리가 통째로 다른 화면(빈 상태)이 됐다.
  *
  * <p>선택 상태는 밖(홈)이 들고 있다 — 「측정 시작」이 같은 값을 써야 캐러셀과 시작 대상이 어긋나지 않는다.
+ *
+ * <p>서재도 같은 캐러셀을 쓴다(세로로 길던 3섹션 목록을 대체) — 다만 거기선 고를 대상이 책뿐이라
+ * `noBookCard`가 꺼지고, 아래 한 줄에 읽은 시간·공개 여부까지 실으므로 `metaOf`로 그 줄을 바꿔 끼운다.
  */
-export function BookCarousel({
+export function BookCarousel<T extends BookOption>({
   books,
   selectedId,
   onSelect,
+  noBookCard = true,
+  metaOf,
 }: {
-  books: BookOption[];
+  books: T[];
   selectedId: number | null;
   onSelect: (bookId: number | null) => void;
+  /** 0번 「책 없이」 칸을 세울지 — 측정 대상을 고르는 홈만 켠다. */
+  noBookCard?: boolean;
+  /** 제목 아래 한 줄 — 기본은 저자. */
+  metaOf?: (book: T) => string;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const settleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selected = books.find((b) => b.id === selectedId) ?? null;
-  /** 0번은 「책 없이」(`null`), 그 뒤가 책 — 인덱스 산식은 전부 이 목록 기준이다. */
-  const items: (BookOption | null)[] = [null, ...books];
+  /** 홈은 0번이 「책 없이」(`null`)라 책이 한 칸 밀리고, 서재는 책이 곧 0번이다. */
+  const offset = noBookCard ? 1 : 0;
+  const items: (T | null)[] = noBookCard ? [null, ...books] : books;
 
   // 첫 진입 — 기본 선택(이어 읽기)이 처음부터 가운데였던 것처럼 즉시 이동한다(애니메이션은 거짓 움직임이다).
   useEffect(() => {
-    scrollToIndex(trackRef.current, carouselIndexOf(selectedId, books), true);
+    scrollToIndex(trackRef.current, carouselIndexOf(selectedId, books, offset), true);
     // 언마운트되며 남은 타이머가 사라진 화면의 선택을 건드리지 않게 한다.
     return () => {
       if (settleRef.current !== null) clearTimeout(settleRef.current);
@@ -228,7 +242,11 @@ export function BookCarousel({
           const { scrollLeft } = e.currentTarget;
           if (settleRef.current !== null) clearTimeout(settleRef.current);
           settleRef.current = setTimeout(() => {
-            const picked = selectionAt(centeredIndex(scrollLeft, COVER_WIDTH, COVER_GAP, items.length), books);
+            const picked = selectionAt(
+              centeredIndex(scrollLeft, COVER_WIDTH, COVER_GAP, items.length),
+              books,
+              offset,
+            );
             if (picked !== selectedId) onSelect(picked);
           }, SCROLL_SETTLE_MS);
         }}
@@ -304,9 +322,9 @@ export function BookCarousel({
             {noBookSubtitle(books.length)}
           </Text>
         ) : (
-          selected.author !== null && (
+          (metaOf?.(selected) ?? selected.author) !== null && (
             <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
-              {selected.author}
+              {metaOf?.(selected) ?? selected.author}
             </Text>
           )
         )}
@@ -513,9 +531,7 @@ export function waiverErrorMessage(error: Error): string {
  * <p>한때 시작 자리(`start` 모드)를 겸했지만 고르기는 캐러셀이 가져갔다 — 지금 이 시트가 서는 자리는
  * "방금 끝낸 세션에 무슨 책이었는지 붙이기" 하나뿐이라 문구도 하나다.
  *
- * <p>TDS `BottomSheet`을 쓰지 않은 이유: 그건 포털(`tds-mobile-portal-container`)로 그려져
- * `renderToStaticMarkup` 하니스에서 **마크업이 통째로 비어 나온다**(실측) — 이 저장소는 jsdom을 두지
- * 않기로 했으므로 시트 내용이 영영 계측 불가가 된다. 딤·safe-area·zIndex는 이 30줄로 충분하다.
+ * <p>딤·패널 껍데기는 `ui.Sheet`이 맡는다(서재의 「펼쳐보기」·「관리」와 같은 것) — 여기 남은 건 내용뿐이다.
  *
  * <p>화면에서 꺼내 둔 이유는 늘 같다: 하니스가 정적 렌더라 「바꾸기」를 눌러 열린 상태에 도달할 수 없어,
  * 시트 자체는 여기서 직접 렌더해야 계측된다.
@@ -533,38 +549,9 @@ export function BookSheet({
   onSkip: () => void;
   onClose: () => void;
 }) {
-  const title = '무슨 책을 읽으셨나요?';
-
   return (
-    <>
-      {/* 딤 — 탭바(zIndex 100) 위를 덮어야 시트 아래로 탭바가 비치지 않는다. */}
-      <div
-        onClick={onClose}
-        style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0, 0, 0, 0.45)' }}
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        style={{
-          position: 'fixed',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 201,
-          maxHeight: '72vh',
-          overflowY: 'auto',
-          // 홈 인디케이터 위로 CTA가 올라오게 — 바닥 여백만 safe-area를 탄다.
-          padding: '20px 20px calc(20px + env(safe-area-inset-bottom))',
-          borderRadius: '16px 16px 0 0',
-          background: '#FCFAF5',
-          boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.14)',
-        }}
-      >
-        <Text typography="t6" fontWeight="bold" style={{ display: 'block', marginBottom: 12 }}>
-          {title}
-        </Text>
-        {books.map((book) => (
+    <Sheet title="무슨 책을 읽으셨나요?" onClose={onClose}>
+      {books.map((book) => (
           <button
             key={book.id}
             type="button"
@@ -592,11 +579,10 @@ export function BookSheet({
             </Text>
           </button>
         ))}
-        <Button display="block" variant="weak" size="medium" style={{ marginTop: 8 }} disabled={disabled} onClick={onSkip}>
-          건너뛰기
-        </Button>
-      </div>
-    </>
+      <Button display="block" variant="weak" size="medium" style={{ marginTop: 8 }} disabled={disabled} onClick={onSkip}>
+        건너뛰기
+      </Button>
+    </Sheet>
   );
 }
 

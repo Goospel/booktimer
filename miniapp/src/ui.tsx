@@ -198,6 +198,71 @@ export const sectionStyle = {
 } as const;
 
 /**
+ * 바텀시트 공통 껍데기 — 딤 + 하단 패널 + 제목 줄(닫기 ✕).
+ *
+ * <p>TDS `BottomSheet`을 쓰지 않는다: 포털(`tds-mobile-portal-container`)로 그려져
+ * `renderToStaticMarkup` 하니스에서 **마크업이 통째로 비어 나온다**(실측) — 이 저장소는 jsdom을 두지
+ * 않기로 했으므로 시트 내용이 영영 계측 불가가 된다. 딤·safe-area·zIndex는 이 30줄로 충분하다.
+ *
+ * <p>홈의 태깅 시트와 서재의 「펼쳐보기」·「관리」가 같은 껍데기를 쓴다 — 셋이 각자 딤과 zIndex를
+ * 들고 있으면 탭바(zIndex 100) 위를 덮는 규칙이 한 군데만 어긋나도 시트 아래로 탭바가 비친다.
+ */
+export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  return (
+    <>
+      {/* 딤 — 탭바(zIndex 100) 위를 덮어야 시트 아래로 탭바가 비치지 않는다. */}
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0, 0, 0, 0.45)' }} />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        style={{
+          position: 'fixed',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 201,
+          maxHeight: '78vh',
+          overflowY: 'auto',
+          // 홈 인디케이터 위로 마지막 줄이 올라오게 — 바닥 여백만 safe-area를 탄다.
+          padding: '20px 20px calc(20px + env(safe-area-inset-bottom))',
+          borderRadius: '16px 16px 0 0',
+          background: '#FCFAF5',
+          boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.14)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <Text typography="t6" fontWeight="bold" style={{ flex: 1, minWidth: 0, wordBreak: 'keep-all' }}>
+            {title}
+          </Text>
+          <button
+            type="button"
+            aria-label="닫기"
+            onClick={onClose}
+            style={{
+              flex: '0 0 auto',
+              width: 32,
+              height: 32,
+              padding: 0,
+              border: 'none',
+              borderRadius: 999,
+              fontSize: 16,
+              lineHeight: 1,
+              background: 'transparent',
+              color: 'var(--adaptiveGrey700, #57534A)',
+              cursor: 'pointer',
+            }}
+          >
+            ✕
+          </button>
+        </div>
+        {children}
+      </div>
+    </>
+  );
+}
+
+/**
  * 화면 공통 껍데기 — 제목 + 본문 여백. 미니앱은 화면이 다섯 뿐이라 레이아웃도 이 하나면 된다.
  *
  * <p>`onBack`을 주면 제목 왼쪽에 ← 를 세운다. 나갈 길이 화면 맨 아래에만 있으면 목록이 긴 화면에서
@@ -207,7 +272,18 @@ export const sectionStyle = {
  * 자리만 먹었다(「구스펠님의 오늘」은 바로 아래 「오늘 읽은 시간」의 중복이고, 그 화면 이름은 탭바가
  * 이미 말한다). 없으면 빈 행을 남기지 않고 **헤더를 통째로 생략**한다 — 자리만 비우면 지운 값이 없다.
  */
-export function Screen({ title, onBack, children }: { title?: string; onBack?: () => void; children: ReactNode }) {
+export function Screen({
+  title,
+  onBack,
+  right,
+  children,
+}: {
+  title?: string;
+  onBack?: () => void;
+  /** 제목 줄 오른쪽 끝 손잡이(서재의 「펼쳐보기」) — 제목이 없으면 그릴 줄 자체가 없다. */
+  right?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <main style={{ padding: '24px 20px 40px', maxWidth: 480, margin: '0 auto' }}>
       {title !== undefined && (
@@ -243,6 +319,7 @@ export function Screen({ title, onBack, children }: { title?: string; onBack?: (
         >
           {title}
         </Text>
+        {right}
       </div>
       )}
       {children}

@@ -5,41 +5,50 @@ import type { BookStatus, MyBookSummary, SearchRow } from '../api';
 import { addBook, changeBookStatus, deleteBook, fetchShelf, searchBooks, setBookVisibility } from '../api';
 import { useBackClose } from '../back';
 import { formatDuration } from '../format';
-import { BookCover, ErrorMessage, Loading, Screen } from '../ui';
+import { BookCover, CoverInitial, ErrorMessage, Loading, Screen, Sheet } from '../ui';
+import { BookCarousel } from './Home';
 
-/** 섹션 순서 = 읽는 흐름 순서(읽는 중 → 다 읽음 → 읽고 싶어요). 빈 섹션은 아예 그리지 않는다. */
-const SECTIONS: { status: BookStatus; title: string }[] = [
-  { status: 'READING', title: '읽는 중' },
-  { status: 'FINISHED', title: '다 읽음' },
-  { status: 'WANT_TO_READ', title: '읽고 싶어요' },
+/** 탭 순서 = 읽는 흐름 순서(읽는 중 → 다 읽음 → 읽고 싶어요). 빈 탭도 라벨은 남는다(자리가 흔들리지 않게). */
+const SECTIONS: { status: BookStatus; title: string; empty: string }[] = [
+  { status: 'READING', title: '읽는 중', empty: '읽는 중인 책이 없어요' },
+  { status: 'FINISHED', title: '다 읽음', empty: '다 읽은 책이 없어요' },
+  { status: 'WANT_TO_READ', title: '읽고 싶어요', empty: '읽고 싶은 책이 없어요' },
 ];
 
 /**
- * 펼쳐진 행 하나 — 열림과 삭제 확인이 **한 덩어리**다.
+ * 열린 시트 — 「펼쳐보기」(격자)와 「관리」(액션) 둘뿐이고 **동시에 열리지 않는다**.
  *
- * <p>확인을 행 안의 독립 state로 두면 열림과 수명이 어긋난다: 확인을 띄운 채 다른 행이나 액션을
- * 건드려도 그 확인이 살아남아, 그 행을 다시 열었을 때 「정말 삭제」가 곧바로 노출됐다(오삭제가 한 탭 거리).
- * 같은 객체에 묶어 두면 행을 여는 순간 확인이 언제나 `false`로 새로 만들어져 그 자리가 사라진다.
+ * <p>삭제 확인을 시트 밖 독립 state로 두면 열림과 수명이 어긋난다: 확인을 띄운 채 시트를 닫아도
+ * 그 확인이 살아남아, 다시 열었을 때 「정말 삭제」가 곧바로 노출됐다(오삭제가 한 탭 거리).
+ * 같은 객체에 묶어 두면 시트를 여는 순간 확인이 언제나 `false`로 새로 만들어진다.
  */
-export interface OpenRow {
-  id: number;
-  confirmDelete: boolean;
-}
-
-/**
- * 행을 눌렀을 때의 다음 열림 상태 — 같은 행이면 접고, 아니면 그 행을 편다.
- * 어느 쪽이든 **삭제 확인은 풀린 채로 시작한다**(위 불변식). 하니스가 정적 렌더라 클릭을 못 잡으므로
- * 이 전이만 따로 꺼내 계측한다(`App.tabChangeHandler`와 같은 방식).
- */
-export function toggleOpen(open: OpenRow | null, id: number): OpenRow | null {
-  return open?.id === id ? null : { id, confirmDelete: false };
-}
+export type LibrarySheet = { kind: 'grid' } | { kind: 'actions'; confirmDelete: boolean } | null;
 
 /** 책 한 권에 걸 수 있는 액션 — 상태 변경·공개 토글·삭제. 실행은 Library가 맡고 Shelf는 알림만 한다. */
 export type BookAction =
   | { kind: 'status'; book: MyBookSummary; status: BookStatus }
   | { kind: 'visibility'; book: MyBookSummary }
   | { kind: 'delete'; book: MyBookSummary };
+
+/**
+ * 캐러셀 아래 한 줄 — 표지와 제목만으론 안 보이는 것들. 읽은 시간이 0이면 적지 않는다(「0분」은 정보가 아니다).
+ */
+export function metaLine(book: MyBookSummary): string {
+  const parts = [book.author ?? '저자 미상'];
+  if (book.seconds > 0) parts.push(formatDuration(book.seconds));
+  parts.push(book.isPublic ? '공개' : '비공개');
+  return parts.join(' · ');
+}
+
+/**
+ * 지금 탭에서 실제로 고른 책 — 고른 id가 그 탭에 없으면 **첫 책으로 떨어진다**.
+ *
+ * <p>탭을 옮기거나(다른 상태로 이동) 지우면 id가 그 탭에서 사라지는데, 그대로 두면 캐러셀이
+ * 아무것도 안 가리킨 채 「관리」만 서 있게 된다. 선택 state를 탭마다 따로 두는 대신 여기서 푼다.
+ */
+export function resolveSelected(rows: MyBookSummary[], selectedId: number | null): MyBookSummary | null {
+  return rows.find((b) => b.id === selectedId) ?? rows[0] ?? null;
+}
 
 /**
  * 서재 탭 — 내 책장 조회·관리와 검색 추가.
@@ -61,7 +70,10 @@ export function Library({
   const [books, setBooks] = useState<MyBookSummary[] | null>(null);
   const [searchEnabled, setSearchEnabled] = useState(false);
   const [mode, setMode] = useState<'shelf' | 'search'>('shelf');
-  const [open, setOpen] = useState<OpenRow | null>(null);
+  const [tab, setTab] = useState<BookStatus>('READING');
+  /** 캐러셀에서 가운데 온 책 — 그 탭에 없어지면 `resolveSelected`가 첫 책으로 되돌린다. */
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [sheet, setSheet] = useState<LibrarySheet>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -88,14 +100,16 @@ export function Library({
 
   // 검색은 서재를 덮는 별도 화면이다 — 뒤로가기를 「돌아가기」와 같은 자리로 돌린다.
   useBackClose(mode === 'search', () => setMode('shelf'));
+  // 열린 시트는 뒤로가기가 먼저 먹는다 — 시트가 열린 채로 미니앱이 꺼지지 않게(홈 태깅 시트와 같다).
+  useBackClose(sheet !== null, () => setSheet(null));
 
-  /** 뮤테이션 공통 — 실행 → 책장 재조회 → 홈 대시보드 갱신 → 열린 액션 접기. */
+  /** 뮤테이션 공통 — 실행 → 책장 재조회 → 홈 대시보드 갱신 → 열린 시트 닫기. */
   const run = (action: Promise<unknown>) => {
     setBusy(true);
     setError(null);
     action
       .then(() => {
-        setOpen(null);
+        setSheet(null);
         load();
         onShelfChanged();
       })
@@ -116,6 +130,7 @@ export function Library({
     addBook(row, status)
       .then(() => {
         setMode('shelf');
+        setTab(status); // 방금 넣은 책이 있는 탭으로 — 다른 탭에 서 있으면 추가가 아무 일도 안 한 것처럼 보인다
         load();
         onShelfChanged();
       })
@@ -127,37 +142,75 @@ export function Library({
     return <BookSearch busy={busy} error={error} onAdd={add} onFail={fail} onBack={() => setMode('shelf')} />;
   }
 
+  const rows = books?.filter((b) => b.status === tab) ?? [];
+
   // 로딩 중에도 제목은 남긴다 — 탭을 옮길 때 화면이 통째로 비었다 다시 차는 깜빡임을 줄인다.
   return (
-    <Screen title="내 서재">
-      {searchEnabled && (
-        <Button display="block" size="medium" style={{ marginBottom: 20 }} onClick={() => setMode('search')}>
-          책 추가하기
-        </Button>
-      )}
+    <Screen
+      title="내 서재"
+      right={
+        // 캐러셀은 한 번에 한 권이라 권수가 늘면 훑기 답답하다 — 격자로 한 번에 보는 길을 제목 줄에 둔다.
+        rows.length > 1 ? (
+          <button type="button" onClick={() => setSheet({ kind: 'grid' })} style={handleStyle}>
+            펼쳐보기
+          </button>
+        ) : undefined
+      }
+    >
       {/* 책장을 아예 못 받았을 때만 재시도 — 액션 실패(삭제 거절 등)는 다시 받을 게 아니라 문구만 남긴다. */}
       <ErrorMessage message={error} onRetry={books === null ? load : undefined} />
       {books === null ? (
         error === null && <Loading />
       ) : (
-        <Shelf books={books} busy={busy} open={open} onOpen={setOpen} onAction={act} />
+        <>
+          <Shelf
+            books={books}
+            tab={tab}
+            selectedId={selectedId}
+            sheet={sheet}
+            busy={busy}
+            onTab={setTab}
+            onSelect={setSelectedId}
+            onSheet={setSheet}
+            onAction={act}
+          />
+          {searchEnabled && (
+            <Button display="block" size="medium" style={{ marginTop: 24 }} onClick={() => setMode('search')}>
+              책 추가하기
+            </Button>
+          )}
+        </>
       )}
     </Screen>
   );
 }
 
-/** 책장 목록 — 순수 표시. 상태를 안 들고 있어 정적 렌더로 섹션 분류를 계측할 수 있다. */
+/**
+ * 책장 — 상태 탭 + 표지 캐러셀 + 「관리」. 순수 표시라 정적 렌더로 분류·시트를 계측할 수 있다.
+ *
+ * <p>세로로 3섹션을 전부 나열하던 목록을 대체한다: 세 상태를 **탭으로 접어** 한 판에 담고, 고르기는
+ * 홈과 같은 캐러셀 문법(가운데 온 것이 대상)을 그대로 쓴다. 액션 넷은 상시 노출하지 않고 시트 뒤로 접었다 —
+ * 늘 보이던 「삭제」가 손가락 한 탭 거리에 있던 것도 이 참에 사라진다.
+ */
 export function Shelf({
   books,
+  tab,
+  selectedId,
+  sheet,
   busy,
-  open,
-  onOpen,
+  onTab,
+  onSelect,
+  onSheet,
   onAction,
 }: {
   books: MyBookSummary[];
+  tab: BookStatus;
+  selectedId: number | null;
+  sheet: LibrarySheet;
   busy: boolean;
-  open: OpenRow | null;
-  onOpen: (row: OpenRow | null) => void;
+  onTab: (status: BookStatus) => void;
+  onSelect: (bookId: number | null) => void;
+  onSheet: (sheet: LibrarySheet) => void;
   onAction: (action: BookAction) => void;
 }) {
   if (books.length === 0) {
@@ -168,111 +221,258 @@ export function Shelf({
     );
   }
 
+  const section = SECTIONS.find((s) => s.status === tab) ?? SECTIONS[0];
+  const rows = books.filter((b) => b.status === tab);
+  const selected = resolveSelected(rows, selectedId);
+
   return (
     <>
-      {SECTIONS.map(({ status, title }) => {
-        const rows = books.filter((b) => b.status === status);
-        if (rows.length === 0) return null; // 빈 섹션은 제목도 그리지 않는다
-        return (
-          <section key={status} style={{ marginBottom: 24 }}>
-            <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
-              {title} {rows.length}
-            </Text>
-            {rows.map((book) => (
-              <BookRow
-                key={book.id}
-                book={book}
-                busy={busy}
-                open={open?.id === book.id}
-                confirmDelete={open?.id === book.id && open.confirmDelete}
-                onToggle={() => onOpen(toggleOpen(open, book.id))}
-                onConfirmDelete={(confirm) => onOpen({ id: book.id, confirmDelete: confirm })}
-                onAction={onAction}
-              />
-            ))}
-          </section>
-        );
-      })}
+      {/* 세 탭은 늘 서 있다(권수 0이어도) — 나타났다 사라지면 누르려던 자리가 옮겨 다닌다. */}
+      <div style={{ display: 'flex', gap: 6, padding: 3, borderRadius: 10, background: 'var(--adaptiveGrey200, #E4DDD0)' }}>
+        {SECTIONS.map(({ status, title }) => {
+          const current = status === tab;
+          return (
+            <button
+              key={status}
+              type="button"
+              aria-current={current ? 'true' : undefined}
+              onClick={() => onTab(status)}
+              style={{
+                flex: 1,
+                padding: '9px 0',
+                border: 'none',
+                borderRadius: 8,
+                fontSize: 13,
+                cursor: 'pointer',
+                background: current ? '#FCFAF5' : 'transparent',
+                color: current ? '#2C2C2A' : 'var(--adaptiveGrey700, #57534A)',
+              }}
+            >
+              {title} {books.filter((b) => b.status === status).length}
+            </button>
+          );
+        })}
+      </div>
+
+      {selected === null ? (
+        <Text typography="st11" color="grey600" style={{ display: 'block', marginTop: 28, textAlign: 'center' }}>
+          {section.empty}
+        </Text>
+      ) : (
+        <div style={{ marginTop: 20 }}>
+          {/* 탭이 바뀌면 목록이 통째로 갈리므로 다시 마운트한다 — 안 그러면 트랙이 옛 탭의 스크롤 자리에 머문다. */}
+          <BookCarousel
+            key={tab}
+            books={rows}
+            selectedId={selected.id}
+            onSelect={onSelect}
+            noBookCard={false}
+            metaOf={metaLine}
+          />
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onSheet({ kind: 'actions', confirmDelete: false })}
+              style={handleStyle}
+            >
+              관리
+            </button>
+          </div>
+        </div>
+      )}
+
+      {sheet?.kind === 'grid' && (
+        <GridSheet
+          title={`${section.title} ${rows.length}권`}
+          rows={rows}
+          selectedId={selected?.id ?? null}
+          onPick={(id) => {
+            onSelect(id);
+            onSheet(null);
+          }}
+          onClose={() => onSheet(null)}
+        />
+      )}
+      {sheet?.kind === 'actions' && selected !== null && (
+        <ActionSheet
+          book={selected}
+          busy={busy}
+          confirmDelete={sheet.confirmDelete}
+          onConfirmDelete={(confirm) => onSheet({ kind: 'actions', confirmDelete: confirm })}
+          onAction={onAction}
+          onClose={() => onSheet(null)}
+        />
+      )}
     </>
   );
 }
 
-/** 책 한 줄 — 탭하면 액션이 아래로 펼쳐진다(BottomSheet 대신 인라인 — 화면 하나에 상태 하나). */
-function BookRow({
+/** 펼쳐보기 — 그 탭의 책을 3열 격자로 한 번에. 고르면 캐러셀이 그 책으로 옮겨가고 시트는 닫힌다. */
+function GridSheet({
+  title,
+  rows,
+  selectedId,
+  onPick,
+  onClose,
+}: {
+  title: string;
+  rows: MyBookSummary[];
+  selectedId: number | null;
+  onPick: (bookId: number) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Sheet title={title} onClose={onClose}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 12 }}>
+        {rows.map((book) => (
+          <button
+            key={book.id}
+            type="button"
+            data-grid-title={book.title}
+            onClick={() => onPick(book.id)}
+            style={{ padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'center' }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
+                // 지금 고른 책만 테두리로 — 격자에서 "내가 보던 그 책"을 잃지 않게.
+                outline: book.id === selectedId ? '2px solid #6E8A6A' : undefined,
+                outlineOffset: 2,
+                borderRadius: 4,
+              }}
+            >
+              {book.coverUrl !== null ? (
+                <BookCover url={book.coverUrl} width={80} />
+              ) : (
+                <CoverInitial title={book.title} width={80} />
+              )}
+            </div>
+            <Text
+              typography="st12"
+              style={{ display: 'block', marginTop: 6, wordBreak: 'keep-all', textAlign: 'center' }}
+            >
+              {book.title}
+            </Text>
+          </button>
+        ))}
+      </div>
+    </Sheet>
+  );
+}
+
+/**
+ * 관리 시트 — 상태 이동 둘 · 공개 전환 · 삭제. 삭제는 이 시트 안에서 한 번 더 확인한다.
+ *
+ * <p>확인 단계에서는 나머지 길을 **감춘다** — 확인 문구 옆에 다른 버튼이 남아 있으면 무엇을 확인하는
+ * 중인지 흐려지고, 손가락이 옆 버튼으로 미끄러질 자리도 생긴다.
+ */
+function ActionSheet({
   book,
   busy,
-  open,
   confirmDelete,
-  onToggle,
   onConfirmDelete,
   onAction,
+  onClose,
 }: {
   book: MyBookSummary;
   busy: boolean;
-  open: boolean;
   confirmDelete: boolean;
-  onToggle: () => void;
   onConfirmDelete: (confirm: boolean) => void;
   onAction: (action: BookAction) => void;
+  onClose: () => void;
 }) {
-  return (
-    <div style={{ marginBottom: 8, borderRadius: 12, background: 'var(--adaptiveGrey100, #FCFAF5)' }}>
-      <button type="button" onClick={onToggle} style={rowStyle}>
-        <BookCover url={book.coverUrl} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div>
-            <Text typography="st11">{book.title}</Text>
-          </div>
-          <div style={{ marginTop: 4 }}>
-            <Text typography="st12" color="grey600">
-              {book.author ?? '저자 미상'}
-              {book.seconds > 0 && ` · ${formatDuration(book.seconds)}`}
-              {book.isPublic && ' · 공개'}
-            </Text>
-          </div>
-        </div>
-      </button>
+  if (confirmDelete) {
+    return (
+      <Sheet title={book.title} onClose={onClose}>
+        <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 12, wordBreak: 'keep-all' }}>
+          서재에서 빼면 이 책에 쌓인 기록도 함께 사라져요.
+        </Text>
+        <Button display="block" color="danger" disabled={busy} onClick={() => onAction({ kind: 'delete', book })}>
+          정말 삭제
+        </Button>
+        <Button
+          display="block"
+          variant="weak"
+          style={{ marginTop: 8 }}
+          disabled={busy}
+          onClick={() => onConfirmDelete(false)}
+        >
+          취소
+        </Button>
+      </Sheet>
+    );
+  }
 
-      {open && (
-        <div style={{ padding: '0 16px 16px', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {SECTIONS.filter(({ status }) => status !== book.status).map(({ status, title }) => (
-            <Button
-              key={status}
-              variant="weak"
-              size="small"
-              disabled={busy}
-              onClick={() => onAction({ kind: 'status', book, status })}
-            >
-              {title}(으)로
-            </Button>
-          ))}
-          <Button variant="weak" size="small" disabled={busy} onClick={() => onAction({ kind: 'visibility', book })}>
-            {book.isPublic ? '비공개로' : '공개로'}
-          </Button>
-          {confirmDelete ? (
-            <>
-              <Button
-                color="danger"
-                size="small"
-                disabled={busy}
-                onClick={() => onAction({ kind: 'delete', book })}
-              >
-                정말 삭제
-              </Button>
-              <Button variant="weak" size="small" disabled={busy} onClick={() => onConfirmDelete(false)}>
-                취소
-              </Button>
-            </>
-          ) : (
-            <Button variant="weak" size="small" disabled={busy} onClick={() => onConfirmDelete(true)}>
-              삭제
-            </Button>
-          )}
-        </div>
-      )}
-    </div>
+  return (
+    <Sheet title={book.title} onClose={onClose}>
+      {SECTIONS.filter(({ status }) => status !== book.status).map(({ status, title }) => (
+        <SheetRow
+          key={status}
+          label={`${title}(으)로 옮기기`}
+          busy={busy}
+          onClick={() => onAction({ kind: 'status', book, status })}
+        />
+      ))}
+      <SheetRow
+        label={book.isPublic ? '비공개로 바꾸기' : '공개로 바꾸기'}
+        busy={busy}
+        onClick={() => onAction({ kind: 'visibility', book })}
+      />
+      <SheetRow label="서재에서 삭제" busy={busy} danger onClick={() => onConfirmDelete(true)} />
+    </Sheet>
   );
 }
+
+/** 시트 안 액션 한 줄 — 손가락 몫(48px)을 확보한 넓은 버튼. 위험한 것만 색으로 구분한다. */
+function SheetRow({
+  label,
+  busy,
+  danger = false,
+  onClick,
+}: {
+  label: string;
+  busy: boolean;
+  danger?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={onClick}
+      style={{
+        display: 'block',
+        width: '100%',
+        marginBottom: 8,
+        padding: '15px 14px',
+        // 시트 바닥과 같은 크림색이라 배경만으론 경계가 안 보인다 — 테두리가 있어야 줄이 버튼으로 읽힌다.
+        border: '1px solid #E4DDD0',
+        borderRadius: 10,
+        background: '#FFFDF8',
+        color: danger ? '#A32D2D' : '#2C2C2A',
+        fontSize: 14,
+        textAlign: 'left',
+        cursor: 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+/** 테두리만 있는 작은 손잡이 — 「펼쳐보기」·「관리」가 같은 무게로 보여야 둘 다 보조 동작으로 읽힌다. */
+const handleStyle = {
+  flex: '0 0 auto',
+  padding: '8px 14px',
+  border: '1px solid #D8D2C4',
+  borderRadius: 10,
+  background: '#FCFAF5',
+  color: '#2C2C2A',
+  fontSize: 13,
+  cursor: 'pointer',
+} as const;
 
 /** 책 검색 — 알라딘 1페이지. 탭하면 "읽는 중"으로 추가한다(가장 잦은 의도). */
 export function BookSearch({
