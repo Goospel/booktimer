@@ -153,7 +153,7 @@ export function Social({
         <TextField
           variant="box"
           label="아이디로 찾기"
-          placeholder="예: goospel"
+          placeholder="아이디 입력"
           value={query}
           disabled={busy}
           onChange={(e) => setQuery(e.target.value)}
@@ -346,7 +346,7 @@ export function HandleSheet({
         <TextField
           variant="box"
           label="아이디"
-          placeholder="예: goospel"
+          placeholder="아이디 입력"
           value={value}
           disabled={busy}
           onChange={(e) => setValue(e.target.value)}
