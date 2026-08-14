@@ -12,6 +12,9 @@ import type {
   MonthlySection,
   NewsItem,
   MyBookSummary,
+  PersonalityEntry,
+  PersonalityMutation,
+  PersonalityStatus,
   ProfileBook,
   RequestOptions,
   SearchRow,
@@ -245,6 +248,12 @@ const profileBook = (id: number, title: string, author: string, status: BookStat
   seconds,
   purchaseLink: null,
 });
+
+/** 성향 분석 하루 총량(서버 `User.DAILY_PERSONALITY_TOTAL_LIMIT`) — 잔여 차감·소진 429를 흉내내는 기준. */
+const PERSONALITY_LIMIT = 10;
+let personalityRemaining = PERSONALITY_LIMIT;
+/** 분석 히스토리 — 최신이 앞. 대표(selected)는 select 체이닝이 옮긴다(서버와 같은 계약). */
+const personalityEntries: PersonalityEntry[] = [];
 
 const profileBooks: ProfileBook[] = [
   profileBook(11, '아무튼, 서재', '김민지', 'READING', 5_400),
@@ -542,6 +551,38 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     books: query.status === undefined ? profileBooks : profileBooks.filter((b) => b.status === STATUS_LABEL[query.status as BookStatus]),
   })],
   ['GET', /^\/api\/profile\/personality-tag$/, () => ({ books: profileBooks.slice(0, 2) })],
+
+  // ── 성향 추출 광고 관문 ──
+  // 광고 자체는 브라우저에 SDK가 없어 못 뜨지만, 그 뒤 흐름(잔여 차감 → 소진 안내)은 여기서 눈으로 확인한다.
+  // 콜드스타트·소진 화면은 personalityRemaining 초기값을 임시로 0으로 바꿔 본다(myHandle=null 스위치와 같은 방식).
+  ['GET', /^\/api\/personality\/status$/, (): PersonalityStatus => ({
+    coldStart: false,
+    hasSelected: personalityEntries.some((e) => e.selected),
+    adRefreshRemaining: personalityRemaining,
+    adRefreshLimit: PERSONALITY_LIMIT,
+  })],
+  ['POST', /^\/api\/personality\/ad-refresh$/, (): PersonalityMutation => {
+    if (personalityRemaining <= 0) {
+      throw new ApiError(429, '오늘 분석 횟수를 모두 썼어요.');
+    }
+    personalityRemaining -= 1;
+    // 서버 `reanalyze`는 새 행을 **후보로만** 추가한다(첫 분석만 자동 대표) — 그 계약을 그대로 흉내낸다.
+    const first = personalityEntries.length === 0;
+    personalityEntries.unshift({ id: nextId(), generatedAt: new Date().toISOString(), selected: first });
+    return {
+      view: { state: 'READY', narrative: '밑줄을 아끼지 않는 완독형', entries: [...personalityEntries] },
+      refreshRemaining: personalityRemaining,
+      refreshLimit: PERSONALITY_LIMIT,
+    };
+  }],
+  ['POST', /^\/api\/personality\/select\/(\d+)$/, ({ id }) => {
+    personalityEntries.forEach((e) => { e.selected = e.id === id; });
+    return {
+      view: { state: 'READY', narrative: '밑줄을 아끼지 않는 완독형', entries: [...personalityEntries] },
+      refreshRemaining: personalityRemaining,
+      refreshLimit: PERSONALITY_LIMIT,
+    };
+  }],
 
   ['GET', /^\/api\/blocks$/, () => ({ blocked: [...blocked], myLoginId: myHandle })],
   ['POST', /^\/api\/block$/, ({ body }) => {

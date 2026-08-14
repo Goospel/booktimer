@@ -389,6 +389,70 @@ class UserTest {
         assertThat(user.remainingPersonalityRefreshes(D2)).isEqualTo(User.DAILY_PERSONALITY_REFRESH_LIMIT); // 다음 날 가득
     }
 
+    // --- 광고 경로 총량 상한: 카운터 하나에 천장 둘 (미니앱 리워드 광고 관문, 설계 §3.2) ---
+
+    @Test
+    @DisplayName("천장 파라미터: 웹(3)이 소진돼도 총량(10)까지는 계속 허용하고 11회째에 거부한다")
+    void tryConsumeRefresh_totalLimit_continuesAfterWebLimitExhausted() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+        for (int i = 0; i < User.DAILY_PERSONALITY_REFRESH_LIMIT; i++) {
+            assertThat(user.tryConsumePersonalityRefresh(D1)).isTrue();
+        }
+        assertThat(user.tryConsumePersonalityRefresh(D1)).isFalse(); // 웹 천장 소진
+
+        // 같은 카운터인데 천장만 총량 — 4~10회째는 통과
+        for (int i = User.DAILY_PERSONALITY_REFRESH_LIMIT; i < User.DAILY_PERSONALITY_TOTAL_LIMIT; i++) {
+            assertThat(user.tryConsumePersonalityRefresh(D1, User.DAILY_PERSONALITY_TOTAL_LIMIT)).isTrue();
+        }
+        assertThat(user.tryConsumePersonalityRefresh(D1, User.DAILY_PERSONALITY_TOTAL_LIMIT)).isFalse(); // 11회째
+        assertThat(user.remainingPersonalityRefreshes(D1, User.DAILY_PERSONALITY_TOTAL_LIMIT)).isZero();
+    }
+
+    @Test
+    @DisplayName("카운터 공유(의도된 비대칭): 광고 경로 2회 소비가 웹 무광고 칸도 함께 깎는다")
+    void tryConsumeRefresh_adPathConsumesWebQuotaToo() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        user.tryConsumePersonalityRefresh(D1, User.DAILY_PERSONALITY_TOTAL_LIMIT);
+        user.tryConsumePersonalityRefresh(D1, User.DAILY_PERSONALITY_TOTAL_LIMIT);
+
+        assertThat(user.remainingPersonalityRefreshes(D1)).isEqualTo(1); // 웹 기준 잔여도 깎였다
+        assertThat(user.tryConsumePersonalityRefresh(D1)).isTrue();      // 웹 마지막 칸
+        assertThat(user.tryConsumePersonalityRefresh(D1)).isFalse();     // 웹은 여기서 끝
+        assertThat(user.remainingPersonalityRefreshes(D1, User.DAILY_PERSONALITY_TOTAL_LIMIT)).isEqualTo(7);
+    }
+
+    @Test
+    @DisplayName("천장 파라미터: 날짜가 바뀌면 총량도 함께 리셋된다 (자정 경계)")
+    void tryConsumeRefresh_totalLimit_resetsOnNewDay() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+        for (int i = 0; i < User.DAILY_PERSONALITY_TOTAL_LIMIT; i++) {
+            user.tryConsumePersonalityRefresh(D1, User.DAILY_PERSONALITY_TOTAL_LIMIT);
+        }
+        assertThat(user.tryConsumePersonalityRefresh(D1, User.DAILY_PERSONALITY_TOTAL_LIMIT)).isFalse();
+
+        assertThat(user.tryConsumePersonalityRefresh(D2, User.DAILY_PERSONALITY_TOTAL_LIMIT)).isTrue();
+        assertThat(user.remainingPersonalityRefreshes(D2)).isEqualTo(User.DAILY_PERSONALITY_REFRESH_LIMIT - 1);
+    }
+
+    @Test
+    @DisplayName("remainingPersonalityRefreshes(today, limit): 미소비=총량, 읽기는 상태 불변, 다음 날은 가득")
+    void remainingRefreshes_withLimit_isPureRead() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        assertThat(user.remainingPersonalityRefreshes(D1, User.DAILY_PERSONALITY_TOTAL_LIMIT))
+                .isEqualTo(User.DAILY_PERSONALITY_TOTAL_LIMIT);
+        // 읽기가 소비하지 않는다 — 두 번 읽어도 같은 값
+        assertThat(user.remainingPersonalityRefreshes(D1, User.DAILY_PERSONALITY_TOTAL_LIMIT))
+                .isEqualTo(User.DAILY_PERSONALITY_TOTAL_LIMIT);
+
+        user.tryConsumePersonalityRefresh(D1, User.DAILY_PERSONALITY_TOTAL_LIMIT);
+        assertThat(user.remainingPersonalityRefreshes(D1, User.DAILY_PERSONALITY_TOTAL_LIMIT))
+                .isEqualTo(User.DAILY_PERSONALITY_TOTAL_LIMIT - 1);
+        assertThat(user.remainingPersonalityRefreshes(D2, User.DAILY_PERSONALITY_TOTAL_LIMIT))
+                .isEqualTo(User.DAILY_PERSONALITY_TOTAL_LIMIT);
+    }
+
     // --- promoteToAdmin: 운영자(ADMIN) 승격 (멱등) ---
 
     @Test

@@ -1,8 +1,10 @@
 package com.booktimer.web.api;
 
+import com.booktimer.auth.ApiTokenService;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
+import com.booktimer.user.AuthProvider;
 import com.booktimer.personality.PersonalityNarration;
 import com.booktimer.personality.ReadingPersonalityCache;
 import com.booktimer.personality.ReadingPersonalityCacheRepository;
@@ -29,6 +31,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -57,6 +60,7 @@ class PersonalityApiControllerTest {
     @Autowired Clock clock;
     @Autowired ReadingPersonalityService personalityService;
     @Autowired ReadingPersonalityCacheRepository cacheRepository;
+    @Autowired ApiTokenService apiTokenService;
 
     @MockitoBean ReadingPersonalityNarrator narrator;
 
@@ -66,6 +70,11 @@ class PersonalityApiControllerTest {
 
     private User register(String email) {
         return registrationService.register(email, "rawpw1234", "독자", SEOUL, Role.USER, today());
+    }
+
+    /** 미니앱 유입 계정 — Bearer 토큰 경로(=미니앱 stateless 체인)를 타는 쪽. */
+    private User tossUser(String email) {
+        return registrationService.registerOAuth(email, "토스유저", SEOUL, AuthProvider.TOSS, today(), false);
     }
 
     private void saveBooks(User u, int n) {
@@ -288,5 +297,218 @@ class PersonalityApiControllerTest {
                 .get()
                 .extracting(ReadingPersonalityCache::getNarrative)
                 .isEqualTo("u1서술.");
+    }
+
+    // ── GET /status + POST /ad-refresh (미니앱 광고 관문, 설계 §3.1) ────────────
+
+    @Test
+    @DisplayName("GET /api/personality/status 미인증 → 302 (Bearer 없으면 웹 체인의 default-deny)")
+    void status_unauthenticated_redirects() throws Exception {
+        mockMvc.perform(get("/api/personality/status"))
+                .andExpect(status().is3xxRedirection());
+    }
+
+    @Test
+    @DisplayName("GET /api/personality/status: {coldStart,hasSelected,adRefreshRemaining=10,adRefreshLimit=10} — 총량 기준 잔여")
+    void status_returnsGateAndTotalLimit() throws Exception {
+        User u = register("papi-st@booktimer.com");
+        saveBooks(u, 5);
+
+        mockMvc.perform(get("/api/personality/status")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("papi-st@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.coldStart").value(false))
+                .andExpect(jsonPath("$.hasSelected").value(false))
+                .andExpect(jsonPath("$.adRefreshRemaining").value(User.DAILY_PERSONALITY_TOTAL_LIMIT))
+                .andExpect(jsonPath("$.adRefreshLimit").value(User.DAILY_PERSONALITY_TOTAL_LIMIT));
+    }
+
+    @Test
+    @DisplayName("GET /api/personality/status: 완독 0권이면 coldStart=true — 클라가 광고 버튼을 안 그린다")
+    void status_coldStart() throws Exception {
+        register("papi-st-cold@booktimer.com");
+
+        mockMvc.perform(get("/api/personality/status")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("papi-st-cold@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.coldStart").value(true));
+    }
+
+    @Test
+    @DisplayName("GET /api/personality/status는 분석을 만들지 않는다 — LLM 미호출 + 히스토리 0행 (관문이 무력화되지 않는 근거)")
+    void status_hasNoBootstrapSideEffect() throws Exception {
+        User u = register("papi-st-pure@booktimer.com");
+        saveBooks(u, 5); // 부트스트랩 조건(책 충분 + 히스토리 빔)을 일부러 만든다
+
+        mockMvc.perform(get("/api/personality/status")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("papi-st-pure@booktimer.com")))
+                .andExpect(status().isOk());
+
+        assertThat(cacheRepository.findByUserOrderByGeneratedAtDescIdDesc(u)).isEmpty();
+        verifyNoInteractions(narrator);
+    }
+
+    @Test
+    @DisplayName("GET /api/personality/status: ad-refresh 소비 후 adRefreshRemaining이 줄어든다")
+    void status_reflectsAdRefreshConsumption() throws Exception {
+        User u = register("papi-st-dec@booktimer.com");
+        saveBooks(u, 5);
+        when(narrator.narrate(any())).thenReturn(
+                Optional.of(new PersonalityNarration("서술.", List.of("태그"))));
+
+        mockMvc.perform(post("/api/personality/ad-refresh")
+                        .with(user("papi-st-dec@booktimer.com")).with(csrf()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/personality/status")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("papi-st-dec@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.adRefreshRemaining").value(User.DAILY_PERSONALITY_TOTAL_LIMIT - 1))
+                .andExpect(jsonPath("$.hasSelected").value(true)); // 첫 분석은 자동 대표
+    }
+
+    @Test
+    @DisplayName("POST /ad-refresh: 웹 천장(3)을 다 쓴 뒤에도 200 — 광고 경로는 총량까지 이어진다")
+    void adRefresh_continuesAfterWebLimitExhausted() throws Exception {
+        User u = register("papi-ad-after@booktimer.com");
+        saveBooks(u, 5);
+        when(narrator.narrate(any())).thenReturn(
+                Optional.of(new PersonalityNarration("서술.", List.of("태그"))));
+
+        for (int i = 0; i < User.DAILY_PERSONALITY_REFRESH_LIMIT; i++) {
+            mockMvc.perform(post("/api/personality/refresh")
+                            .with(user("papi-ad-after@booktimer.com")).with(csrf()))
+                    .andExpect(status().isOk());
+        }
+        mockMvc.perform(post("/api/personality/refresh")
+                        .with(user("papi-ad-after@booktimer.com")).with(csrf()))
+                .andExpect(status().is(429)); // 웹은 여기서 막힌다
+
+        mockMvc.perform(post("/api/personality/ad-refresh")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("papi-ad-after@booktimer.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.refreshLimit").value(User.DAILY_PERSONALITY_TOTAL_LIMIT))
+                .andExpect(jsonPath("$.refreshRemaining").value(User.DAILY_PERSONALITY_TOTAL_LIMIT - 4));
+    }
+
+    @Test
+    @DisplayName("POST /ad-refresh: 총량 10회를 채우면 11회째 429 + refreshLimit=10 + 잔여 0(상태 불변)")
+    void adRefresh_totalLimitExceeded_429() throws Exception {
+        User u = register("papi-ad-lim@booktimer.com");
+        saveBooks(u, 5);
+        when(narrator.narrate(any())).thenReturn(
+                Optional.of(new PersonalityNarration("서술.", List.of("태그"))));
+
+        for (int i = 0; i < User.DAILY_PERSONALITY_TOTAL_LIMIT; i++) {
+            mockMvc.perform(post("/api/personality/ad-refresh")
+                            .with(user("papi-ad-lim@booktimer.com")).with(csrf()))
+                    .andExpect(status().isOk());
+        }
+
+        mockMvc.perform(post("/api/personality/ad-refresh")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("papi-ad-lim@booktimer.com")).with(csrf()))
+                .andExpect(status().is(429))
+                .andExpect(jsonPath("$.error").value("REFRESH_LIMIT_EXCEEDED"))
+                .andExpect(jsonPath("$.refreshRemaining").value(0))
+                .andExpect(jsonPath("$.refreshLimit").value(User.DAILY_PERSONALITY_TOTAL_LIMIT));
+
+        mockMvc.perform(post("/api/personality/ad-refresh")
+                        .with(user("papi-ad-lim@booktimer.com")).with(csrf()))
+                .andExpect(status().is(429)); // 반복 거부(상태 안정)
+    }
+
+    @Test
+    @DisplayName("POST /ad-refresh 2회가 웹 무광고 칸도 소진한다 — 카운터는 하나다(설계 §3.2 ①)")
+    void adRefresh_sharesCounterWithWebPath() throws Exception {
+        User u = register("papi-ad-share@booktimer.com");
+        saveBooks(u, 5);
+        when(narrator.narrate(any())).thenReturn(
+                Optional.of(new PersonalityNarration("서술.", List.of("태그"))));
+
+        for (int i = 0; i < 2; i++) {
+            mockMvc.perform(post("/api/personality/ad-refresh")
+                            .with(user("papi-ad-share@booktimer.com")).with(csrf()))
+                    .andExpect(status().isOk());
+        }
+
+        // 웹 GET이 주는 잔여는 천장 3 기준 — 광고 2회를 썼으니 1칸 남았다
+        mockMvc.perform(get("/api/personality")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("papi-ad-share@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.refreshRemaining").value(1))
+                .andExpect(jsonPath("$.refreshLimit").value(User.DAILY_PERSONALITY_REFRESH_LIMIT));
+
+        mockMvc.perform(post("/api/personality/refresh")
+                        .with(user("papi-ad-share@booktimer.com")).with(csrf()))
+                .andExpect(status().isOk()); // 마지막 웹 칸
+        mockMvc.perform(post("/api/personality/refresh")
+                        .with(user("papi-ad-share@booktimer.com")).with(csrf()))
+                .andExpect(status().is(429)); // 웹은 소진
+    }
+
+    // ── Bearer(미니앱 stateless 체인) 회귀 가드 — 설계 §2 실측을 테스트로 고정 ──
+
+    @Test
+    @DisplayName("Bearer: GET /status 200 — /api/personality/**도 미니앱 체인이 잡는다")
+    void status_withBearerToken_ok() throws Exception {
+        User u = tossUser("papi-bearer-st@noreply.booktimer.app");
+        String token = apiTokenService.issue(u);
+
+        mockMvc.perform(get("/api/personality/status").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.adRefreshLimit").value(User.DAILY_PERSONALITY_TOTAL_LIMIT));
+    }
+
+    @Test
+    @DisplayName("Bearer: POST /ad-refresh는 CSRF 토큰 없이 200 — stateless 체인은 CSRF가 꺼져 있다")
+    void adRefresh_withBearerToken_noCsrf_ok() throws Exception {
+        User u = tossUser("papi-bearer-ad@noreply.booktimer.app");
+        saveBooks(u, 5);
+        when(narrator.narrate(any())).thenReturn(
+                Optional.of(new PersonalityNarration("서술.", List.of("태그"))));
+        String token = apiTokenService.issue(u);
+
+        mockMvc.perform(post("/api/personality/ad-refresh").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.view.state").value("READY"))
+                .andExpect(jsonPath("$.view.entries").isArray());
+    }
+
+    @Test
+    @DisplayName("Bearer: POST /select/{id}도 CSRF 없이 동작 — 미니앱의 대표 승격 체이닝 경로")
+    void select_withBearerToken_ok() throws Exception {
+        User u = tossUser("papi-bearer-sel@noreply.booktimer.app");
+        saveBooks(u, 5);
+        when(narrator.narrate(any())).thenReturn(
+                Optional.of(new PersonalityNarration("서술1.", List.of())));
+        personalityService.reanalyze(u);
+        when(narrator.narrate(any())).thenReturn(
+                Optional.of(new PersonalityNarration("서술2.", List.of())));
+        personalityService.reanalyze(u);
+        Long candidateId = cacheRepository.findByUserOrderByGeneratedAtDescIdDesc(u).get(0).getId();
+        String token = apiTokenService.issue(u);
+
+        mockMvc.perform(post("/api/personality/select/{id}", candidateId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        assertThat(cacheRepository.findByUserAndSelectedTrue(u))
+                .get()
+                .extracting(ReadingPersonalityCache::getNarrative)
+                .isEqualTo("서술2.");
+    }
+
+    @Test
+    @DisplayName("Bearer 토큰이 무효면 401 — 미니앱 체인의 인증이 이 경로에도 걸린다")
+    void status_invalidBearerToken_401() throws Exception {
+        mockMvc.perform(get("/api/personality/status").header("Authorization", "Bearer 지어낸토큰"))
+                .andExpect(status().isUnauthorized());
     }
 }

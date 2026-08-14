@@ -148,6 +148,29 @@ public class ReadingPersonalityService {
     }
 
     /**
+     * 광고 관문의 사전 판정 결과 — 광고를 <b>보여주기 전에</b> 알아야 하는 둘.
+     *
+     * @param coldStart   공개 완독 책이 {@link #COLD_START_MIN_BOOKS} 미만이라 분석이 보류되는 상태
+     * @param hasSelected 대표(selected) 분석 보유 — 첫 분석인지 재분석인지가 여기서 갈린다
+     */
+    public record AnalysisGate(boolean coldStart, boolean hasSelected) {}
+
+    /**
+     * 미니앱 광고 관문 사전 판정 — <b>LLM 호출·저장이 없는 읽기 전용</b>.
+     *
+     * <p>{@link #currentPersonality}는 히스토리가 비면 첫 분석을 부트스트랩 생성(LLM+저장)하므로 관문 판정에
+     * 쓸 수 없다 — 그걸로 물으면 광고 없이 첫 분석이 공짜로 만들어져 관문 자체가 무력화된다. 이 메서드가
+     * 따로 있는 이유가 그것이다(설계 §3.4).
+     */
+    @Transactional(readOnly = true)
+    public AnalysisGate gate(User user) {
+        ReadingProfile profile = profileService.publicProfileOf(user);
+        return new AnalysisGate(
+                profile.finishedBooks() < COLD_START_MIN_BOOKS,
+                cacheRepository.findByUserAndSelectedTrue(user).isPresent());
+    }
+
+    /**
      * 사용자가 대표를 직접 바꾼다 — 지정한 행을 대표로, 기존 대표는 후보로 강등한다. LLM 호출 없음.
      * <b>본인 행만</b> 바꿀 수 있다(IDOR 차단) — 없는 id거나 남의 행이면 조용히 무시한다.
      */

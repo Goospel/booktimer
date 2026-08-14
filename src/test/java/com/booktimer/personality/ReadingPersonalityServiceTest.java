@@ -18,6 +18,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -38,6 +39,8 @@ class ReadingPersonalityServiceTest {
     private UserRepository userRepository;
     @Autowired
     private BookRepository bookRepository;
+    @Autowired
+    private ReadingPersonalityCacheRepository cacheRepository;
 
     @MockitoBean
     private ReadingPersonalityNarrator narrator;
@@ -81,5 +84,52 @@ class ReadingPersonalityServiceTest {
         assertThat(result.profile().totalBooks()).isEqualTo(1); // 사실은 항상 존재
         assertThat(result.hasNarration()).isFalse();            // 폴백
         assertThat(result.narration()).isNull();
+    }
+
+    // --- gate(): 미니앱 광고 관문 사전 판정 (설계 §3.4 — 광고를 보여주기 *전에* 알아야 하는 둘) ---
+
+    @Test
+    @DisplayName("gate: 공개 완독 0권이면 coldStart=true — 보상 없는 광고 시청을 원천 차단하는 값")
+    void gate_noFinishedBooks_coldStart() {
+        User u = newUser("gate-cold@booktimer.com");
+
+        assertThat(service.gate(u).coldStart()).isTrue();
+    }
+
+    @Test
+    @DisplayName("gate: 공개 완독 1권 + 대표 없음 → (coldStart=false, hasSelected=false)")
+    void gate_enoughBooksNoSelection() {
+        User u = newUser("gate-ready@booktimer.com");
+        savePublicFinished(u, "책A");
+
+        ReadingPersonalityService.AnalysisGate gate = service.gate(u);
+
+        assertThat(gate.coldStart()).isFalse();
+        assertThat(gate.hasSelected()).isFalse();
+    }
+
+    @Test
+    @DisplayName("gate: 대표 분석이 있으면 hasSelected=true — 버튼 문구가 「다시 분석」으로 갈린다")
+    void gate_withSelectedEntry() {
+        User u = newUser("gate-sel@booktimer.com");
+        savePublicFinished(u, "책A");
+        when(narrator.narrate(any())).thenReturn(
+                Optional.of(new PersonalityNarration("서술.", List.of("태그"))));
+        service.reanalyze(u); // 첫 분석은 자동 대표
+
+        assertThat(service.gate(u).hasSelected()).isTrue();
+    }
+
+    @Test
+    @DisplayName("gate는 부작용이 없다 — LLM을 부르지 않고 히스토리 행도 안 만든다 (이 메서드의 존재 이유)")
+    void gate_hasNoSideEffects() {
+        User u = newUser("gate-pure@booktimer.com");
+        savePublicFinished(u, "책A"); // 부트스트랩 조건(책 충분 + 히스토리 빔)을 일부러 만든다
+        long before = cacheRepository.count();
+
+        service.gate(u);
+
+        assertThat(cacheRepository.count()).isEqualTo(before); // 행이 늘지 않았다
+        verifyNoInteractions(narrator);                        // LLM 호출 0
     }
 }
