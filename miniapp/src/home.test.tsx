@@ -87,7 +87,6 @@ function dashboard(overrides: Partial<DashboardResponse> = {}): DashboardRespons
     recentBookId: null,
     debtWaiverAvailable: true,
     graph,
-    quotes: [],
     emailVerified: true,
     ...overrides,
   };
@@ -1169,11 +1168,11 @@ describe('계정 진입점', () => {
     expect(renderHome()).not.toContain('로그아웃');
   });
 
-  it('홈 맨 아래에 둔다 — 잔디·격언보다 뒤여야 자주 쓰는 것이 위로 온다', () => {
-    const markup = renderHome({ quotes: [{ text: '읽는 자가 산다', author: '아무개' }] });
+  it('홈 맨 아래에 둔다 — 피드 박스보다 뒤여야 자주 쓰는 것이 위로 온다', () => {
+    const markup = renderHome();
 
-    expect(markup.indexOf('아무개')).toBeGreaterThan(0);
-    expect(markup.indexOf('아무개')).toBeLessThan(markup.indexOf('프로필·설정'));
+    expect(markup.indexOf('측정 시작')).toBeGreaterThan(0);
+    expect(markup.indexOf('측정 시작')).toBeLessThan(markup.indexOf('프로필·설정'));
   });
 });
 

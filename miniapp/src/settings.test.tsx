@@ -46,7 +46,6 @@ const dashboard: DashboardResponse = {
   recentBookId: null,
   debtWaiverAvailable: false,
   graph,
-  quotes: [],
   emailVerified: true,
 };
 
