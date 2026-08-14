@@ -57,6 +57,7 @@ function renderTab(tab: (typeof TABS)[number]['key']) {
         onGraphChange={() => {}}
         onGoGoal={() => {}}
         onShelfChanged={() => {}}
+        onHandleCreated={() => {}}
         onLogout={() => {}}
         onError={() => {}}
       />

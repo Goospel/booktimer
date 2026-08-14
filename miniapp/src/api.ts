@@ -426,6 +426,25 @@ export interface UserSearchResponse {
 /** 서버는 2글자 미만이면 빈 결과를 준다(열거 방지) — 실패가 아니라 0건이다. */
 export const searchUsers = (q: string): Promise<UserSearchResponse> => request('/api/search', { query: { q } });
 
+/** 서버 `User.LOGIN_ID_PATTERN`과 같은 규칙 — 정규화(소문자) 후 3~20자 [a-z0-9_]. */
+const HANDLE_PATTERN = /^[a-z0-9_]{3,20}$/;
+
+/**
+ * 핸들 형식 프리검증 — 통과면 `null`, 아니면 사용자에게 보여줄 안내 문구(순수 함수).
+ *
+ * <p>**형식만** 본다. 예약어·중복은 서버(400/409 평문)가 유일한 권위다 — 클라이언트가 규칙을 복제하면
+ * 서버와 어긋난 순간 조용히 거짓말을 한다. 대문자는 오류가 아니다(서버가 소문자로 정규화해 저장).
+ */
+export function validateHandleFormat(raw: string): string | null {
+  return HANDLE_PATTERN.test(raw.trim().toLowerCase())
+    ? null
+    : '영문·숫자·밑줄(_) 3~20자로 지어 주세요.';
+}
+
+/** `POST /api/miniapp/handle` — 성공하면 서버가 정규화한 핸들. 400(형식·예약어)·409(중복·이미 있음)는 ApiError. */
+export const createHandle = (loginId: string): Promise<{ loginId: string }> =>
+  request('/api/miniapp/handle', { body: { loginId } });
+
 export type FollowListType = 'followers' | 'following';
 
 export interface FollowListResponse {

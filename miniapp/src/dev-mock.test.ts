@@ -83,6 +83,14 @@ describe('dev-mock 핸들러', () => {
     expect(feed.social.length).toBeGreaterThan(3);
   });
 
+  it('핸들 만들기 — 이미 핸들이 있는 기본 픽스처에선 409다(핸들 불변 규칙을 목도 지킨다)', async () => {
+    // 핸들 없는 플로우(배너→시트)는 `myHandle` 초기값을 임시로 null로 바꿔 브라우저에서 확인한다 —
+    // 여기서 계측할 수 있는 건 "핸들이 있으면 못 바꾼다"뿐이다(목이 서버보다 무르면 회귀를 못 잡는다).
+    await expect(mockRequest('/api/miniapp/handle', { body: { loginId: 'newhandle' } })).rejects.toMatchObject({
+      status: 409,
+    });
+  });
+
   it('목에 없는 경로는 404로 던진다 — 조용히 undefined가 흘러 화면이 빈 채로 뜨지 않게', async () => {
     await expect(mockRequest('/api/does-not-exist', {})).rejects.toBeInstanceOf(ApiError);
     await expect(mockRequest('/api/does-not-exist', {})).rejects.toMatchObject({ status: 404 });
