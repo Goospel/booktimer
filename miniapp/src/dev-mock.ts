@@ -376,6 +376,9 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
   // 인증 — 목 모드는 토큰이 항상 있어 여기까지 오지 않지만, 로그아웃 후 로그인 화면을 눌러 볼 수 있게 둔다.
   ['POST', /^\/api\/toss\/(login|register|link)$/, () => ({ registered: true, token: 'dev-mock-token', loginId: MY_LOGIN_ID })],
   ['POST', /^\/api\/toss\/logout$/, () => undefined],
+  // 회원 탈퇴 — 서버는 토스 재인증으로 신원을 확인하지만, 브라우저엔 토스 SDK가 없어 그 확인을 흉내낼 수
+  // 없다. 여기서는 204(빈 응답)만 돌려주고 시트 문구·개폐·성공 후 화면 전이만 눈으로 확인한다.
+  ['POST', /^\/api\/miniapp\/delete-account$/, () => undefined],
 
   ['GET', /^\/api\/dashboard$/, (): DashboardResponse => ({
     ...timerState(),

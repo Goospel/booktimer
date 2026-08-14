@@ -12,6 +12,7 @@ import {
   changeBookStatus,
   createHandle,
   createStory,
+  deleteAccount,
   deleteBook,
   deleteStory,
   fetchBlocks,
@@ -139,6 +140,56 @@ describe('토스 인증 플로우', () => {
     await logout();
 
     expect(token.get()).toBeNull();
+  });
+});
+
+/**
+ * 회원 탈퇴 — 미니앱 전용 계정(비밀번호 없음·핸들 null 가능)의 <b>유일한</b> 탈퇴 경로.
+ *
+ * <p>로그아웃과 토큰 계약이 **반대 방향**이다: 로그아웃은 서버가 실패해도 토큰을 버리지만(죽은 토큰으로
+ * 401을 계속 맞느니 재로그인), 탈퇴는 <b>성공했을 때만</b> 버린다 — 400/403이면 계정이 멀쩡히 살아 있는데
+ * 토큰만 사라져 로그인 화면으로 쫓겨나는 꼴이 된다(지우려다 잠기는 최악의 실패).
+ */
+describe('회원 탈퇴 (deleteAccount)', () => {
+  it('fresh 인가코드를 실어 POST하고, 성공(204)하면 토큰을 버린다 — 계정이 사라졌으니 세션도 없다', async () => {
+    token.set('tok');
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(204, '') as never);
+
+    await deleteAccount();
+
+    const [url, init] = lastRequest();
+    expect(url).toBe('http://localhost:8080/api/miniapp/delete-account');
+    expect(init.method).toBe('POST');
+    // 인가코드는 10분·일회성이라 탈퇴 시점에 새로 받는다 — 저장해 둔 코드를 재사용하지 않는다.
+    expect(tossLoginMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(init.body as string)).toEqual({ authorizationCode: 'code-1', referrer: 'SANDBOX' });
+    expect(token.get()).toBeNull();
+  });
+
+  it('실패(400)면 토큰을 유지한다 — 계정이 살아 있는데 로그아웃당하면 안 된다', async () => {
+    token.set('tok');
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(400, '토스 인증에 실패했어요. 다시 시도해 주세요.') as never,
+    );
+
+    const error = (await deleteAccount().catch((e: unknown) => e)) as ApiError;
+
+    expect(error.status).toBe(400);
+    expect(error.message).toBe('토스 인증에 실패했어요. 다시 시도해 주세요.');
+    expect(token.get()).toBe('tok');
+  });
+
+  it('본인 확인 실패(403)도 토큰을 유지하고 서버 평문을 그대로 올린다 — 시트가 그 문구를 띄운다', async () => {
+    token.set('tok');
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(403, '본인 확인에 실패해 탈퇴를 진행하지 않았어요.') as never,
+    );
+
+    const error = (await deleteAccount().catch((e: unknown) => e)) as ApiError;
+
+    expect(error.status).toBe(403);
+    expect(error.message).toBe('본인 확인에 실패해 탈퇴를 진행하지 않았어요.');
+    expect(token.get()).toBe('tok');
   });
 });
 

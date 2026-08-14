@@ -91,6 +91,11 @@ describe('dev-mock 핸들러', () => {
     });
   });
 
+  it('회원 탈퇴 — 경로가 목에 있다(없으면 404로 죽어 시트를 브라우저로 확인할 수 없다)', async () => {
+    await expect(mockRequest('/api/miniapp/delete-account', { body: { authorizationCode: 'c', referrer: 'r' } }))
+      .resolves.toBeUndefined();
+  });
+
   it('목에 없는 경로는 404로 던진다 — 조용히 undefined가 흘러 화면이 빈 채로 뜨지 않게', async () => {
     await expect(mockRequest('/api/does-not-exist', {})).rejects.toBeInstanceOf(ApiError);
     await expect(mockRequest('/api/does-not-exist', {})).rejects.toMatchObject({ status: 404 });

@@ -142,6 +142,23 @@ export const register = (): Promise<TossAuthResponse> => authenticate('/api/toss
 export const linkAccount = (linkCode: string): Promise<TossAuthResponse> =>
   authenticate('/api/toss/link', { linkCode });
 
+/**
+ * 회원 탈퇴 — fresh 인가코드로 신원을 다시 증명한 뒤, 서버가 계정과 전 기록을 지운다.
+ *
+ * <p>미니앱 전용 계정에는 이 경로밖에 없다: 비밀번호가 없어 웹 로그인이 불가하고, 핸들(login_id)이
+ * null일 수 있어 웹 소셜 탈퇴의 @핸들 재입력도 성립하지 않는다. 확인 수단이 인증 3종과 같은
+ * {@link tossLogin}인 이유가 그것이다 — 토스 앱 본인 인증을 통과한 사람만 자기 계정을 지운다.
+ *
+ * <p><b>성공했을 때만 토큰을 버린다</b> — 로그아웃과 반대 방향이다. 400(인가코드 만료)·403(신원 불일치)이면
+ * 계정이 그대로 살아 있으므로, 여기서 토큰까지 버리면 지우지도 못한 채 로그인 화면으로 쫓겨난다.
+ * 서버가 이 두 실패에 401을 쓰지 않는 것도 같은 이유다(401은 {@link request}가 토큰을 지우는 신호다).
+ */
+export async function deleteAccount(): Promise<void> {
+  const { authorizationCode, referrer } = await tossLogin();
+  await request<void>('/api/miniapp/delete-account', { body: { authorizationCode, referrer } });
+  token.clear(); // 계정이 사라진 뒤에만 — 실패는 위에서 던져 여기 오지 않는다
+}
+
 /** 서버 폐기가 실패해도 로컬 토큰은 반드시 버린다 — 안 그러면 죽은 토큰으로 계속 401을 맞는다. */
 export async function logout(): Promise<void> {
   try {

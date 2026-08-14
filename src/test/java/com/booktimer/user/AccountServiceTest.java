@@ -237,4 +237,65 @@ class AccountServiceTest {
         verify(timerRepository, never()).deleteByUser(any());
         verify(userRepository, never()).delete(any());
     }
+
+    // --- 미니앱 탈퇴 (토스 재인증으로 신원 확인) ---
+    //
+    // 미니앱 전용 계정은 비밀번호도 없고 login_id도 null일 수 있어(핸들 미작성) 위 두 경로의 확인 수단이
+    // 둘 다 성립하지 않는다. 대신 컨트롤러가 fresh 인가코드를 토스에 물어 얻은 userKey를 넘기고,
+    // 이 게이트가 본인 toss_user_key와 대조한다. **급소는 "불일치면 아무것도 지우지 않는다"**다 —
+    // 탈퇴는 되돌릴 수 없어서, 게이트가 새면 남의 계정이 사라진다.
+
+    private User tossUser(String userKey) {
+        User toss = User.ofOAuth(EMAIL, "토스유저", "Asia/Seoul", Role.USER, AuthProvider.TOSS);
+        toss.linkTossUserKey(userKey);
+        return toss;
+    }
+
+    @Test
+    @DisplayName("deleteTossVerifiedAccount: userKey가 일치하면 세션→…→유저 순으로 삭제한다")
+    void deleteTossVerifiedAccount_match_deletesInFkOrder() {
+        User toss = tossUser("uk-mine");
+
+        service.deleteTossVerifiedAccount(toss, "uk-mine");
+
+        var ordered = inOrder(sessionRepository, timerRepository, goalChangeRepository, goalWaiverRepository,
+                followRepository, blockRepository, reportRepository, storyViewRepository, storyRepository,
+                bookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository,
+                apiTokenRepository, tossLinkCodeRepository, userRepository);
+        ordered.verify(sessionRepository).deleteByUser(toss);
+        ordered.verify(timerRepository).deleteByUser(toss);
+        ordered.verify(storyViewRepository).deleteByViewer(toss);
+        ordered.verify(storyRepository).deleteByUser(toss);
+        ordered.verify(bookRepository).deleteByUser(toss);
+        // 미니앱 Bearer 토큰까지 지워야 탈퇴 즉시 그 토큰이 죽는다(계정만 지우면 토큰이 유령으로 남는다).
+        ordered.verify(apiTokenRepository).deleteByUser(toss);
+        ordered.verify(userRepository).delete(toss);
+        verify(passwordEncoder, never()).matches(any(), any()); // 비밀번호가 없는 계정이다
+    }
+
+    @Test
+    @DisplayName("deleteTossVerifiedAccount: userKey가 다르면 확인 예외, 아무것도 삭제하지 않는다")
+    void deleteTossVerifiedAccount_mismatch_throwsAndDeletesNothing() {
+        User toss = tossUser("uk-mine");
+
+        assertThatThrownBy(() -> service.deleteTossVerifiedAccount(toss, "uk-someone-else"))
+                .isInstanceOf(AccountDeletionConfirmationException.class);
+
+        verify(sessionRepository, never()).deleteByUser(any());
+        verify(bookRepository, never()).deleteByUser(any());
+        verify(apiTokenRepository, never()).deleteByUser(any());
+        verify(userRepository, never()).delete(any());
+    }
+
+    @Test
+    @DisplayName("deleteTossVerifiedAccount: toss_user_key 없는 계정은 예외, 삭제 없음 (null == null 통과 금지)")
+    void deleteTossVerifiedAccount_noTossUserKey_throwsAndDeletesNothing() {
+        User webOnly = userWithHash(); // toss_user_key = null
+
+        assertThatThrownBy(() -> service.deleteTossVerifiedAccount(webOnly, null))
+                .isInstanceOf(AccountDeletionConfirmationException.class);
+
+        verify(sessionRepository, never()).deleteByUser(any());
+        verify(userRepository, never()).delete(any());
+    }
 }
