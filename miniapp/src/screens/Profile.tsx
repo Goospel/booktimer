@@ -27,7 +27,7 @@ import {
 import { useBackClose } from '../back';
 import { formatDuration } from '../format';
 import { REWARD_AD_GROUP_ID, watchRewardAd } from '../toss';
-import { ErrorMessage, Loading, Screen } from '../ui';
+import { ErrorMessage, Loading, Screen, Sheet } from '../ui';
 import { BookCarousel, waiverErrorMessage } from './Home';
 import { GridSheet, handleStyle, resolveSelected } from './Library';
 
@@ -73,6 +73,31 @@ export function showPersonalityAdButton(
   adGroupId: string,
 ): boolean {
   return self && status !== null && !status.coldStart && status.adRefreshRemaining > 0 && adGroupId !== '';
+}
+
+/**
+ * 보관함 손잡이를 노출할지 — <b>비교 대상이 2건 이상</b>일 때만 선다.
+ *
+ * <p>1건은 책방에 이미 걸려 있는 그 문구 하나뿐이라 보관함을 열어도 새 정보가 없다(빈 보관함과 같다).
+ * 0건·`entries` 부재(필드 추가 전 옛 서버)·status 미수신도 자연히 숨는다 — 광고 버튼과 같은 fail-closed.
+ */
+export function showArchiveHandle(self: boolean, status: PersonalityStatus | null): boolean {
+  return self && status !== null && (status.entries ?? []).length >= 2;
+}
+
+/**
+ * 분석 뒤 안내 문구 — 성공했는데 <b>비교 대상이 생겼으면</b> 보관함까지 안내한다.
+ *
+ * <p>이 기능의 성패는 "바뀐 걸 확인했는가"이고, 서술은 책이 크게 안 바뀌면 미묘하게만 달라진다.
+ * 손잡이만 두면 그 자리를 안 보므로, 새 결과가 도착한 그 순간에 비교할 길을 말해 준다.
+ */
+export function personalityNoticeText(failed: boolean, entryCount: number): string {
+  if (failed) {
+    return '지금은 분석이 어려워요. 잠시 후 다시 시도해 주세요.';
+  }
+  return entryCount >= 2
+    ? '새 성향이 도착했어요. 보관함에서 이전 성향과 비교해 보세요.'
+    : '새 성향이 도착했어요.';
 }
 
 /**
@@ -142,6 +167,7 @@ export function Profile({
   /** 캐러셀에서 가운데 온 책 — 목록이 갈려 사라지면 `resolveSelected`가 첫 책으로 되돌린다. */
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [gridOpen, setGridOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const [more, setMore] = useState<SafetyState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -185,6 +211,7 @@ export function Profile({
 
   // 열린 시트는 뒤로가기가 먼저 먹는다 — 시트가 열린 채로 책방이 통째로 닫히지 않게(서재와 같다).
   useBackClose(gridOpen, () => setGridOpen(false));
+  useBackClose(archiveOpen, () => setArchiveOpen(false));
 
   const run = (action: Promise<unknown>, after: () => void) => {
     setBusy(true);
@@ -224,11 +251,26 @@ export function Profile({
         if (result === null) return;
         const failed = analysisFailed(result);
         setEarnedRetry(failed); // 광고는 이미 소비됐다 — 재시도는 광고 없이
-        setPersonalityNotice(
-          failed ? '지금은 분석이 어려워요. 잠시 후 다시 시도해 주세요.' : '새 성향이 도착했어요.',
-        );
+        setPersonalityNotice(personalityNoticeText(failed, result.view.entries.length));
         if (!failed) fetchProfile(loginId).then(setProfile).catch(fail);
         loadPersonalityStatus(); // 잔여가 줄었다(실패해도 카운트는 선소비된다)
+      })
+      .catch((e: Error) => setError(personalityErrorMessage(e)))
+      .finally(() => setAdBusy(false));
+  };
+
+  /**
+   * 보관함에서 대표를 바꾼다 — 광고도 카운트도 쓰지 않는 순수 되돌리기(기존 select 엔드포인트 그대로).
+   * 시트는 열어 둔 채 책방·관문 상태만 다시 받는다: 배지가 옮겨가는 걸 보는 게 곧 "바뀌었다"의 확인이다.
+   */
+  const selectArchived = (id: number) => {
+    setAdBusy(true);
+    setError(null);
+    setPersonalityNotice(null);
+    selectPersonality(id)
+      .then(() => {
+        fetchProfile(loginId).then(setProfile).catch(fail);
+        loadPersonalityStatus();
       })
       .catch((e: Error) => setError(personalityErrorMessage(e)))
       .finally(() => setAdBusy(false));
@@ -269,6 +311,9 @@ export function Profile({
         adBusy={adBusy}
         earnedRetry={earnedRetry}
         personalityNotice={personalityNotice}
+        archiveOpen={archiveOpen}
+        onArchive={setArchiveOpen}
+        onSelectPersonality={selectArchived}
         onClaimPersonality={() => runPersonality(() => claimPersonality(REWARD_AD_GROUP_ID))}
         onRetryPersonality={() => runPersonality(runPersonalityRefresh)}
         onFollowToggle={toggleFollow}
@@ -313,6 +358,9 @@ export function ProfileCard({
   adBusy,
   earnedRetry,
   personalityNotice,
+  archiveOpen,
+  onArchive,
+  onSelectPersonality,
   onClaimPersonality,
   onRetryPersonality,
   onFollowToggle,
@@ -333,6 +381,9 @@ export function ProfileCard({
   adBusy: boolean;
   earnedRetry: boolean;
   personalityNotice: string | null;
+  archiveOpen: boolean;
+  onArchive: (open: boolean) => void;
+  onSelectPersonality: (id: number) => void;
   onClaimPersonality: () => void;
   onRetryPersonality: () => void;
   onFollowToggle: () => void;
@@ -405,7 +456,25 @@ export function ProfileCard({
               {personalityNotice}
             </Text>
           )}
+          {/* 보관함 — 비교 대상이 둘 이상일 때만. 「문구가 바뀌었나」를 확인할 수 있는 유일한 자리다. */}
+          {showArchiveHandle(profile.self, personalityStatus) && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+              <button type="button" onClick={() => onArchive(true)} style={handleStyle}>
+                보관함에서 비교하기
+              </button>
+            </div>
+          )}
         </div>
+      )}
+
+      {archiveOpen && (
+        <ArchiveSheet
+          entries={personalityStatus?.entries ?? []}
+          busy={adBusy}
+          onSelect={onSelectPersonality}
+          // 고른 뒤에도 시트를 닫지 않는다 — 배지가 옮겨가는 걸 그 자리에서 보는 게 "바뀌었다"의 확인이다.
+          onClose={() => onArchive(false)}
+        />
       )}
 
       {!profile.self && (
@@ -472,6 +541,90 @@ export function ProfileCard({
         돌아가기
       </Button>
     </Screen>
+  );
+}
+
+/**
+ * 독서 성향 보관함 — 최근 분석(최대 3)을 <b>세로로 나란히</b> 놓아 서술의 차이를 눈으로 보게 한다.
+ *
+ * <p>이 화면이 있는 이유: 책방은 대표 서술 하나만 보여주므로, 분석을 새로 해도 문구가 미묘하게만 바뀌면
+ * "바뀐 건지 아닌지" 알 수가 없다. 그래서 <b>서술을 요약하지 않고 전문 그대로</b> 싣는다 — 줄여 놓으면
+ * 정작 달라진 대목이 잘려 비교라는 목적이 사라진다. 가로 캐러셀도 같은 이유로 안 쓴다(한 번에 한 장).
+ *
+ * <p>순수 표시다 — 선택 실행·닫기는 프롭. 시트 껍데기는 서재·홈과 같은 자체 구현 `Sheet`(TDS `BottomSheet`는
+ * 포털이라 정적 렌더 하니스에서 마크업이 통째로 빈다).
+ */
+export function ArchiveSheet({
+  entries,
+  busy,
+  onSelect,
+  onClose,
+}: {
+  entries: PersonalityEntry[];
+  busy: boolean;
+  onSelect: (id: number) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Sheet title="독서 성향 보관함" onClose={onClose}>
+      <Text typography="st12" color="grey600" style={{ display: 'block', marginBottom: 12, wordBreak: 'keep-all' }}>
+        분석할 때마다 문구가 조금씩 달라져요. 마음에 드는 성향을 책방에 걸어 둘 수 있어요.
+      </Text>
+      {entries.map((e) => (
+        <div
+          key={e.id}
+          style={{
+            marginBottom: 10,
+            padding: 14,
+            borderRadius: 12,
+            // 대표 카드만 테두리 색으로 — 여러 장을 훑을 때 "지금 걸린 것"을 잃지 않게(격자 시트와 같은 문법).
+            border: `1px solid ${e.selected ? '#6E8A6A' : '#E4DDD0'}`,
+            background: '#FFFDF8',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Text typography="st12" color="grey600" style={{ flex: 1, minWidth: 0 }}>
+              {e.generatedAtLabel}
+            </Text>
+            {e.selected && (
+              <span
+                style={{
+                  flex: '0 0 auto',
+                  padding: '3px 8px',
+                  borderRadius: 999,
+                  fontSize: 11,
+                  background: '#6E8A6A',
+                  color: '#FFFDF8',
+                }}
+              >
+                지금 대표
+              </span>
+            )}
+          </div>
+          <Text typography="st11" style={{ display: 'block', marginTop: 8, wordBreak: 'keep-all' }}>
+            {e.narrative}
+          </Text>
+          {e.stale && (
+            <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 6 }}>
+              지난 책장 기준 분석이에요.
+            </Text>
+          )}
+          {/* 대표 카드엔 버튼을 안 둔다 — 이미 걸린 문구를 다시 고를 일이 없고, 버튼이 둘이면 대표가 흐려진다. */}
+          {!e.selected && (
+            <Button
+              display="block"
+              variant="weak"
+              size="small"
+              style={{ marginTop: 10 }}
+              disabled={busy}
+              onClick={() => onSelect(e.id)}
+            >
+              이 성향으로 바꾸기
+            </Button>
+          )}
+        </div>
+      ))}
+    </Sheet>
   );
 }
 

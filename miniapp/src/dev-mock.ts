@@ -251,9 +251,47 @@ const profileBook = (id: number, title: string, author: string, status: BookStat
 
 /** 성향 분석 하루 총량(서버 `User.DAILY_PERSONALITY_TOTAL_LIMIT`) — 잔여 차감·소진 429를 흉내내는 기준. */
 const PERSONALITY_LIMIT = 10;
+/** 서버 `ReadingPersonalityService.MAX_HISTORY` — 넘치면 대표를 뺀 가장 오래된 후보부터 버린다. */
+const PERSONALITY_MAX_HISTORY = 3;
 let personalityRemaining = PERSONALITY_LIMIT;
-/** 분석 히스토리 — 최신이 앞. 대표(selected)는 select 체이닝이 옮긴다(서버와 같은 계약). */
-const personalityEntries: PersonalityEntry[] = [];
+
+/**
+ * 재분석이 낳는 서술들 — <b>서로 뚜렷이 다르게</b> 써 둔다. 보관함의 존재 이유가 "문구가 바뀌었는지 눈으로
+ * 확인"이라, 목이 같은 문구만 돌려주면 브라우저 검증이 원래 문제(구별 불가)를 그대로 재현한다.
+ */
+const PERSONALITY_NARRATIVES = [
+  '밑줄을 아끼지 않는 완독형이에요. 한 권을 붙잡으면 끝까지 가고, 마음에 닿은 문장은 그냥 지나치지 않아요.',
+  '밤에 소설만 파는 몰입형이에요. 이야기 속에 오래 머무는 걸 좋아하고, 하루의 끝을 책으로 닫아요.',
+  '분야를 넓게 오가는 탐험형이에요. 한 주제에 오래 머물기보다 새 영역을 자꾸 기웃거려요.',
+  '짧게 자주 읽는 습관형이에요. 한 번에 길게 읽진 않지만 하루도 거르지 않아요.',
+];
+/** 시드가 앞의 둘을 이미 썼다 — 재분석은 그 다음부터 돈다(첫 재분석이 시드와 같은 문구면 변화가 안 보인다). */
+let narrativeCursor = 1;
+
+/** 목의 라벨 — 서버는 사용자 타임존으로 "yyyy-MM-dd HH:mm"을 만들어 준다. 목은 ISO를 잘라 흉내만 낸다. */
+const personalityLabel = (iso: string) => iso.slice(0, 16).replace('T', ' ');
+
+function personalityEntry(narrative: string, hoursAgo: number, selected: boolean, stale = false): PersonalityEntry {
+  const generatedAt = isoTime(hoursAgo);
+  return { id: nextId(), narrative, generatedAt, generatedAtLabel: personalityLabel(generatedAt), selected, stale };
+}
+
+/**
+ * 분석 히스토리 — 최신이 앞. **시드 2건**이라 목 모드를 열면 보관함 손잡이가 곧바로 서고, 두 서술을 나란히
+ * 비교하는 화면에 광고 없이 도달할 수 있다(0건으로 두면 그 화면은 브라우저에서 영영 못 본다).
+ * 손잡이 숨김(1건 이하)을 보려면 이 배열을 임시로 줄인다 — `myHandle=null` 스위치와 같은 방식.
+ */
+const personalityEntries: PersonalityEntry[] = [
+  personalityEntry(PERSONALITY_NARRATIVES[0], 5, true),
+  personalityEntry(PERSONALITY_NARRATIVES[1], 72, false, true), // 그 뒤 책장이 바뀐 옛 분석
+];
+
+/**
+ * 책방에 걸리는 문구 = 대표 entry의 서술. 고정 문자열로 두면 보관함에서 성향을 바꿔도 책방이 안 변해
+ * "대표가 옮겨갔다"를 브라우저로 확인할 수 없다 — 검증 경로가 목뿐이라 이 연결이 필요하다.
+ */
+const selectedNarrative = (): string =>
+  personalityEntries.find((e) => e.selected)?.narrative ?? PERSONALITY_NARRATIVES[0];
 
 const profileBooks: ProfileBook[] = [
   profileBook(11, '아무튼, 서재', '김민지', 'READING', 5_400),
@@ -538,7 +576,7 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
       followingCount: 17,
       following: user.following,
       self: user.self,
-      personality: '밑줄을 아끼지 않는 완독형',
+      personality: selectedNarrative(),
       personalityTags: [
         { label: '소설', clickable: true },
         { label: '인문', clickable: true },
@@ -560,6 +598,8 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     hasSelected: personalityEntries.some((e) => e.selected),
     adRefreshRemaining: personalityRemaining,
     adRefreshLimit: PERSONALITY_LIMIT,
+    // 보관함의 재료 — 서버 status가 최신순으로 실어 주는 그 배열이다.
+    entries: [...personalityEntries],
   })],
   ['POST', /^\/api\/personality\/ad-refresh$/, (): PersonalityMutation => {
     if (personalityRemaining <= 0) {
@@ -568,9 +608,15 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     personalityRemaining -= 1;
     // 서버 `reanalyze`는 새 행을 **후보로만** 추가한다(첫 분석만 자동 대표) — 그 계약을 그대로 흉내낸다.
     const first = personalityEntries.length === 0;
-    personalityEntries.unshift({ id: nextId(), generatedAt: new Date().toISOString(), selected: first });
+    narrativeCursor = (narrativeCursor + 1) % PERSONALITY_NARRATIVES.length;
+    personalityEntries.unshift(personalityEntry(PERSONALITY_NARRATIVES[narrativeCursor], 0, first));
+    // 서버 `evictOldestNonSelected` — 상한을 넘으면 대표를 뺀 가장 오래된 후보를 버린다(대표는 보호).
+    if (personalityEntries.length > PERSONALITY_MAX_HISTORY) {
+      const victim = personalityEntries.map((e, i) => [e, i] as const).reverse().find(([e]) => !e.selected);
+      if (victim !== undefined) personalityEntries.splice(victim[1], 1);
+    }
     return {
-      view: { state: 'READY', narrative: '밑줄을 아끼지 않는 완독형', entries: [...personalityEntries] },
+      view: { state: 'READY', narrative: personalityEntries[0].narrative, entries: [...personalityEntries] },
       refreshRemaining: personalityRemaining,
       refreshLimit: PERSONALITY_LIMIT,
     };
@@ -578,7 +624,7 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
   ['POST', /^\/api\/personality\/select\/(\d+)$/, ({ id }) => {
     personalityEntries.forEach((e) => { e.selected = e.id === id; });
     return {
-      view: { state: 'READY', narrative: '밑줄을 아끼지 않는 완독형', entries: [...personalityEntries] },
+      view: { state: 'READY', narrative: selectedNarrative(), entries: [...personalityEntries] },
       refreshRemaining: personalityRemaining,
       refreshLimit: PERSONALITY_LIMIT,
     };

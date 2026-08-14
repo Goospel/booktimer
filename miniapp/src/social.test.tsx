@@ -5,13 +5,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PersonalityEntry, PersonalityMutation, PersonalityStatus, ProfileBook, ProfileResponse, UserRow } from './api';
 import { ApiError, adRefreshPersonality, selectPersonality } from './api';
 import {
+  ArchiveSheet,
   ProfileCard,
   SafetyPanel,
   analysisFailed,
   claimPersonality,
   newestEntry,
   personalityErrorMessage,
+  personalityNoticeText,
   runPersonalityRefresh,
+  showArchiveHandle,
   showPersonalityAdButton,
   toggleSafety,
 } from './screens/Profile';
@@ -94,6 +97,7 @@ function card(
     personalityStatus?: PersonalityStatus | null;
     earnedRetry?: boolean;
     personalityNotice?: string | null;
+    archiveOpen?: boolean;
   } = {},
 ) {
   return render(
@@ -108,6 +112,9 @@ function card(
       adBusy={false}
       earnedRetry={view.earnedRetry ?? false}
       personalityNotice={view.personalityNotice ?? null}
+      archiveOpen={view.archiveOpen ?? false}
+      onArchive={() => {}}
+      onSelectPersonality={() => {}}
       onClaimPersonality={() => {}}
       onRetryPersonality={() => {}}
       onFollowToggle={() => {}}
@@ -126,8 +133,21 @@ function status(extra: Partial<PersonalityStatus> = {}): PersonalityStatus {
   return { coldStart: false, hasSelected: false, adRefreshRemaining: 10, adRefreshLimit: 10, ...extra };
 }
 
-function entry(id: number, generatedAt: string | null, selected = false): PersonalityEntry {
-  return { id, generatedAt, selected };
+function entry(
+  id: number,
+  generatedAt: string | null,
+  selected = false,
+  extra: Partial<PersonalityEntry> = {},
+): PersonalityEntry {
+  return {
+    id,
+    narrative: `${id}번 서술`,
+    generatedAt,
+    generatedAtLabel: '2026-08-15 10:00',
+    selected,
+    stale: false,
+    ...extra,
+  };
 }
 
 function mutation(entries: PersonalityEntry[], narrative: string | null = '새 성향'): PersonalityMutation {
@@ -383,6 +403,101 @@ describe('성향 광고 버튼 노출 (showPersonalityAdButton)', () => {
   });
 });
 
+/**
+ * 보관함 — 이 기능의 존재 이유는 "문구가 바뀌었는지 눈으로 확인"이다. 그래서 손잡이는 **비교 대상이 둘 이상일
+ * 때만** 서고(1건이면 인라인 서술과 같은 정보라 열 이유가 없다), 시트는 서술을 **전문 그대로 나란히** 싣는다.
+ */
+describe('보관함 손잡이 노출 (showArchiveHandle)', () => {
+  it('저장된 분석이 2건이면 보인다 — 비교할 짝이 생긴 시점', () => {
+    expect(showArchiveHandle(true, status({ entries: [entry(1, '2026-08-15T10:00:00Z'), entry(2, '2026-08-14T10:00:00Z')] }))).toBe(true);
+  });
+
+  it('1건뿐이면 숨는다 — 열어도 책방에 이미 걸린 그 문구 하나뿐이라 빈 보관함과 같다', () => {
+    expect(showArchiveHandle(true, status({ entries: [entry(1, '2026-08-15T10:00:00Z', true)] }))).toBe(false);
+  });
+
+  it('0건이면 숨는다 — 콜드스타트·첫 분석 전', () => {
+    expect(showArchiveHandle(true, status({ entries: [] }))).toBe(false);
+  });
+
+  it('entries가 아예 없으면(옛 서버) 숨는다 — 필드 추가 전 서버와 새 번들이 만나는 구간의 fail-closed', () => {
+    expect(showArchiveHandle(true, status())).toBe(false);
+  });
+
+  it('status를 못 받았으면 숨는다', () => {
+    expect(showArchiveHandle(true, null)).toBe(false);
+  });
+
+  it('남의 책방에는 안 보인다 — 보관함은 내 분석 히스토리다', () => {
+    expect(showArchiveHandle(false, status({ entries: [entry(1, '2026-08-15T10:00:00Z'), entry(2, '2026-08-14T10:00:00Z')] }))).toBe(false);
+  });
+});
+
+/**
+ * 시트 렌더 — "두 서술이 한 화면에 함께 있는가"가 이 기능의 성패다. 하나만 보이면 기능이 동작해도 실패다.
+ */
+describe('보관함 시트 (ArchiveSheet)', () => {
+  const two = [
+    entry(9, '2026-08-15T10:00:00Z', true, { narrative: '밑줄을 아끼지 않는 완독형', generatedAtLabel: '2026-08-15 19:00' }),
+    entry(4, '2026-08-01T10:00:00Z', false, { narrative: '밤에 소설만 파는 몰입형', generatedAtLabel: '2026-08-01 19:00', stale: true }),
+  ];
+
+  function sheet(entries: PersonalityEntry[]) {
+    return render(<ArchiveSheet entries={entries} busy={false} onSelect={() => {}} onClose={() => {}} />);
+  }
+
+  it('서술 전문을 둘 다 싣는다 — 나란히 놓고 차이를 보는 것이 이 화면의 목적', () => {
+    const markup = sheet(two);
+
+    expect(markup).toContain('밑줄을 아끼지 않는 완독형');
+    expect(markup).toContain('밤에 소설만 파는 몰입형');
+  });
+
+  it('생성 시각 라벨로 어느 게 방금 것인지 가른다 — 비교의 축', () => {
+    const markup = sheet(two);
+
+    expect(markup).toContain('2026-08-15 19:00');
+    expect(markup).toContain('2026-08-01 19:00');
+  });
+
+  it('대표 카드에는 배지가 서고 바꾸기 버튼이 없다 — 지금 걸린 문구를 다시 고를 일은 없다', () => {
+    const markup = sheet(two);
+
+    expect(markup).toContain('지금 대표');
+    // 미대표 카드 하나에만 버튼 — 둘 다 그리면 대표가 어느 쪽인지 화면에서 안 갈린다.
+    expect(markup.match(/이 성향으로 바꾸기/g)).toHaveLength(1);
+  });
+
+  it('stale 카드에 「지난 책장」 캡션 — 책이 안 바뀌면 문구도 안 바뀐다는 정신 모델에 직결', () => {
+    expect(sheet(two)).toContain('지난 책장');
+  });
+
+  it('stale이 아닌 카드에는 그 캡션이 없다', () => {
+    expect(sheet([two[0]])).not.toContain('지난 책장');
+  });
+});
+
+/** 성공 안내 — 보관함이 생긴 뒤에는 "비교해 보라"까지 알려야 발견된다(손잡이만으론 안 보인다). */
+describe('분석 성공 안내 문구 (personalityNoticeText)', () => {
+  it('비교 대상이 2건 이상이면 보관함으로 안내한다', () => {
+    expect(personalityNoticeText(false, 2)).toContain('보관함');
+  });
+
+  it('첫 분석(1건)이면 비교할 게 없으니 보관함을 말하지 않는다', () => {
+    const text = personalityNoticeText(false, 1);
+
+    expect(text).toContain('새 성향');
+    expect(text).not.toContain('보관함');
+  });
+
+  it('실패면 실패 안내 — 보관함 이야기를 섞지 않는다', () => {
+    const text = personalityNoticeText(true, 3);
+
+    expect(text).toContain('다시 시도');
+    expect(text).not.toContain('보관함');
+  });
+});
+
 describe('최신 분석 찾기 (newestEntry)', () => {
   it('generatedAt이 가장 늦은 행을 고른다 — 대표 승격 대상', () => {
     const rows = [entry(3, '2026-08-15T10:00:00Z'), entry(1, '2026-08-13T10:00:00Z'), entry(2, '2026-08-14T10:00:00Z')];
@@ -543,5 +658,72 @@ describe('내 책방의 성향 관문 렌더', () => {
     const markup = card(me(), [], null, { personalityStatus: status(), personalityNotice: '새 성향이 도착했어요' });
 
     expect(markup).toContain('새 성향이 도착했어요');
+  });
+
+  it('분석이 2건 쌓이면 보관함 손잡이가 선다 — 술어가 실제로 마크업에 연결됐는지', () => {
+    const entries = [entry(2, '2026-08-15T10:00:00Z', true), entry(1, '2026-08-01T10:00:00Z')];
+
+    expect(card(me(), [], null, { personalityStatus: status({ entries }) })).toContain('보관함');
+  });
+
+  it('1건뿐이면 손잡이가 없다', () => {
+    const entries = [entry(1, '2026-08-15T10:00:00Z', true)];
+
+    expect(card(me(), [], null, { personalityStatus: status({ entries }) })).not.toContain('보관함');
+  });
+
+  it('손잡이를 누른 상태(archiveOpen)면 시트가 서술들과 함께 열린다', () => {
+    const entries = [
+      entry(2, '2026-08-15T10:00:00Z', true, { narrative: '새 문구다' }),
+      entry(1, '2026-08-01T10:00:00Z', false, { narrative: '옛 문구다' }),
+    ];
+
+    const markup = card(me(), [], null, { personalityStatus: status({ entries }), archiveOpen: true });
+
+    expect(markup).toContain('새 문구다');
+    expect(markup).toContain('옛 문구다');
+  });
+
+  it('닫힌 상태면 시트 내용이 마크업에 없다 — 열림이 프롭으로만 결정된다', () => {
+    const entries = [
+      entry(2, '2026-08-15T10:00:00Z', true, { narrative: '새 문구다' }),
+      entry(1, '2026-08-01T10:00:00Z', false, { narrative: '옛 문구다' }),
+    ];
+
+    expect(card(me(), [], null, { personalityStatus: status({ entries }) })).not.toContain('옛 문구다');
+  });
+});
+
+/**
+ * 목 픽스처 계약 — 목 모드(`npm run dev:mock`)는 이 기능의 **유일한 수동 검증 경로**다(광고 SDK와 무관한
+ * 기능이라 실기기가 필요 없다). 그래서 "브라우저로 열면 비교 화면이 실제로 보이는가"를 여기서 못 박는다:
+ * 시드가 2건 이상이고 서술이 서로 다르며, 재분석이 또 다른 서술을 낳아야 변화가 눈에 보인다.
+ */
+describe('dev-mock 보관함 계약', () => {
+  it('status → ad-refresh → select 흐름에서 서로 다른 서술이 쌓이고 대표가 옮겨간다', async () => {
+    const { mockRequest } = await import('./dev-mock');
+
+    const before = await mockRequest<PersonalityStatus>('/api/personality/status');
+    const seeded = before.entries ?? [];
+    // 시드가 2건 미만이면 브라우저를 열어도 손잡이가 안 서서 비교 화면에 도달할 수 없다.
+    expect(seeded.length).toBeGreaterThanOrEqual(2);
+    // 문구가 같으면 "바뀐지 모르겠다"는 원래 문제를 목이 그대로 재현한다 — 시드부터 달라야 한다.
+    expect(new Set(seeded.map((e) => e.narrative)).size).toBe(seeded.length);
+    expect(seeded.every((e) => e.generatedAtLabel !== '')).toBe(true);
+
+    const refreshed = await mockRequest<PersonalityMutation>('/api/personality/ad-refresh', { method: 'POST' });
+    const after = await mockRequest<PersonalityStatus>('/api/personality/status');
+    const entries = after.entries ?? [];
+    // 새 분석의 서술이 직전 대표와 달라야 "광고를 봤더니 바뀌었다"가 눈에 보인다(순환 픽스처).
+    expect(entries[0].narrative).not.toBe(seeded[0].narrative);
+    expect(entries[0].id).toBe(newestEntry(refreshed.view.entries)?.id);
+    // 서버 MAX_HISTORY=3 — 목이 무한히 쌓이면 화면이 서버와 다른 모양이 된다.
+    expect(entries.length).toBeLessThanOrEqual(3);
+
+    const target = entries.find((e) => !e.selected)!;
+    await mockRequest('/api/personality/select/' + target.id, { method: 'POST' });
+    const selected = (await mockRequest<PersonalityStatus>('/api/personality/status')).entries ?? [];
+
+    expect(selected.filter((e) => e.selected).map((e) => e.id)).toEqual([target.id]);
   });
 });
