@@ -96,7 +96,12 @@ set -e
 printf '%s\n' "$OUT"
 [ "$RC" = 0 ] || { echo "❌ 배포 실패 (exit $RC)" >&2; exit 1; }
 
+# deploymentId는 **ANSI 색이 붙은 박스 안의 URL**로 나오고 박스 폭에서 줄이 끊긴다
+# (`...3dd7c4baf` + 다음 줄 `3ea`). 원문 그대로 grep하면 잘린 앞부분만 잡혀, 콘솔에서 찾을 수 없는
+# 반쪽 ID를 알리게 된다 → ANSI·박스선·공백·줄바꿈을 걷어내 한 줄로 이은 뒤 UUID 모양으로 뽑는다.
 DEPLOY_ID="$(printf '%s\n' "$OUT" \
-    | grep -Eio 'deployment[ _-]?id[^A-Za-z0-9]+[A-Za-z0-9_-]+' \
-    | tail -1 | grep -Eo '[A-Za-z0-9_-]+$' || true)"
+    | sed -e 's/\x1b\[[0-9;?]*[a-zA-Z]//g' \
+    | tr -d '\n│ ' \
+    | grep -Eio 'deploymentid[=:][0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' \
+    | tail -1 | sed 's/.*[=:]//' || true)"
 echo "✅ 배포 완료 — deploymentId: ${DEPLOY_ID:-'(출력에서 못 찾음 — 위 로그 확인)'}"
