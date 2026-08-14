@@ -31,13 +31,18 @@ export type BookAction =
   | { kind: 'delete'; book: MyBookSummary };
 
 /**
- * 캐러셀 아래 한 줄 — 표지와 제목만으론 안 보이는 것들. 읽은 시간이 0이면 적지 않는다(「0분」은 정보가 아니다).
+ * 캐러셀 아래 메타 — 표지와 제목만으론 안 보이는 것들. 읽은 시간이 0이면 적지 않는다(「0분」은 정보가 아니다).
+ *
+ * <p>**저자는 첫 줄, 읽은 시간·공개는 다음 줄**로 나눈다. 알라딘 저자 문자열은 「레프 니콜라예비치 톨스토이
+ * (지은이), 연진희 (옮긴이)」처럼 길어서 한 줄로 이으면 폰 폭에서 되접히고, 그때 읽은 시간과 공개 여부가
+ * 저자 이름 사이에 끼어 든다(실기기 실측). 줄을 나누면 「누가 썼나」와 「얼마나 읽었나」가 섞이지 않는다.
+ * 줄바꿈을 실제로 살리는 건 렌더 쪽 `white-space: pre-line`이다 — 한 쌍으로 움직인다.
  */
 export function metaLine(book: MyBookSummary): string {
-  const parts = [book.author ?? '저자 미상'];
-  if (book.seconds > 0) parts.push(formatDuration(book.seconds));
-  parts.push(book.isPublic ? '공개' : '비공개');
-  return parts.join(' · ');
+  const stats = [];
+  if (book.seconds > 0) stats.push(formatDuration(book.seconds));
+  stats.push(book.isPublic ? '공개' : '비공개');
+  return `${book.author ?? '저자 미상'}\n${stats.join(' · ')}`;
 }
 
 /**
