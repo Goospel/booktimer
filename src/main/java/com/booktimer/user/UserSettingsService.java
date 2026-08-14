@@ -74,6 +74,22 @@ public class UserSettingsService {
     }
 
     /**
+     * 닉네임만 갱신한다 — 미니앱 설정 경로. 웹 설정은 타임존·하루 목표와 한 트랜잭션인
+     * {@link #updateSettings}를 타지만, 미니앱은 타임존을 노출하지 않아(한국 전용 채널) 바꿀 값이 이것뿐이다.
+     *
+     * <p>검증은 도메인({@link User#updateProfile})이 단일 출처다 — 타임존은 현재 값을 그대로 재전달해
+     * "닉네임만 바뀐다"를 만든다.
+     *
+     * @param user     대상 사용자(이미 해석된 영속 엔티티)
+     * @param nickname 새 닉네임
+     * @throws IllegalArgumentException 공백이거나 {@link User#NICKNAME_MAX_LENGTH}자를 넘는 경우(도메인 위임)
+     */
+    public void updateNickname(User user, String nickname) {
+        user.updateProfile(nickname, user.getTimezone());
+        userRepository.save(user);
+    }
+
+    /**
      * 마케팅(재참여 넛지) 수신 동의를 켜거나 끈다 — 설정의 "소식·알림" 토글이 타는 경로(철회 보장).
      * 동의면 {@link User#consentToMarketing(Clock)}로 동의 시각을 기록하고, 미동의면
      * {@link User#withdrawMarketingConsent()}로 끈다(동의 시각은 감사용 보존). 동의 시각은 주입된 {@link Clock}이

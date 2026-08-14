@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SearchRow } from './api';
 import {
   ApiError,
+  NICKNAME_MAX_LENGTH,
   REPORT_REASONS,
   STORY_BG_CODES,
   UnauthorizedError,
@@ -37,7 +38,9 @@ import {
   token,
   unblockUser,
   unfollow,
+  updateNickname,
   validateHandleFormat,
+  validateNicknameFormat,
   waiveDebt,
 } from './api';
 import { tossLogin } from './toss';
@@ -622,6 +625,67 @@ describe('핸들 만들기 API (createHandle)', () => {
 
     expect(error.status).toBe(409);
     expect(error.message).toBe('이미 사용 중인 아이디예요. 다른 아이디를 지어 주세요.');
+  });
+});
+
+/**
+ * 닉네임 변경 — 토스로 가입한 계정(전원 기본값 "토스유저")이 표시 이름을 바꾸는 유일한 경로.
+ *
+ * <p>핸들과 달리 **바꿀 수 있고**, 규칙은 길이뿐이다. 상한은 서버 `User.NICKNAME_MAX_LENGTH`와 같은 값이어야
+ * 한다 — 어긋나면 프리검증이 거짓말을 한다(클라이언트는 통과시켰는데 서버가 400).
+ */
+describe('닉네임 형식 프리검증 (validateNicknameFormat)', () => {
+  it('1자~상한까지는 통과한다 — 경계 포함', () => {
+    expect(validateNicknameFormat('나')).toBeNull();
+    expect(validateNicknameFormat('독서왕')).toBeNull();
+    expect(validateNicknameFormat('가'.repeat(NICKNAME_MAX_LENGTH))).toBeNull();
+  });
+
+  it('상한을 1자라도 넘으면 안내 문구를 준다', () => {
+    expect(validateNicknameFormat('가'.repeat(NICKNAME_MAX_LENGTH + 1))).not.toBeNull();
+  });
+
+  it('빈 입력·공백뿐인 입력은 안내 문구를 준다 — 서버가 blank로 거부하는 값이다', () => {
+    expect(validateNicknameFormat('')).not.toBeNull();
+    expect(validateNicknameFormat('   ')).not.toBeNull();
+  });
+
+  it('앞뒤 공백은 서버처럼 떼고 본다 — 공백 포함 32자라도 알맹이가 30자면 통과', () => {
+    expect(validateNicknameFormat('  독서왕  ')).toBeNull();
+    expect(validateNicknameFormat(` ${'가'.repeat(NICKNAME_MAX_LENGTH)} `)).toBeNull();
+  });
+
+  it('상한이 서버와 같은 30이다 — 값이 갈라지면 프리검증이 조용히 거짓말한다', () => {
+    expect(NICKNAME_MAX_LENGTH).toBe(30);
+  });
+});
+
+describe('닉네임 변경 API (updateNickname)', () => {
+  beforeEach(() => {
+    token.set('tok');
+  });
+
+  it('POST /api/miniapp/nickname — 새 닉네임을 보내고 서버가 저장한 값을 돌려받는다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '{"nickname":"독서왕"}') as never);
+
+    const result = await updateNickname('독서왕');
+
+    const [url, init] = lastRequest();
+    expect(url).toBe('http://localhost:8080/api/miniapp/nickname');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ nickname: '독서왕' });
+    expect(result.nickname).toBe('독서왕');
+  });
+
+  it('400은 서버 평문 메시지를 그대로 올린다 — 화면이 그 문구를 띄운다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(400, '닉네임은 공백 없이 30자 이내로 입력해 주세요.') as never,
+    );
+
+    const error = (await updateNickname('가'.repeat(31)).catch((e: unknown) => e)) as ApiError;
+
+    expect(error.status).toBe(400);
+    expect(error.message).toBe('닉네임은 공백 없이 30자 이내로 입력해 주세요.');
   });
 });
 

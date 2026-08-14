@@ -49,6 +49,9 @@ const MY_NICKNAME = '목독서가';
  */
 let myHandle: string | null = MY_LOGIN_ID;
 
+/** 내 표시 이름 — 닉네임 변경(`POST /api/miniapp/nickname`)으로 바뀌므로 상수가 아니라 모듈 상태다. */
+let myNickname: string = MY_NICKNAME;
+
 const STATUS_LABEL: Record<BookStatus, string> = {
   READING: '읽는 중',
   FINISHED: '다 읽음',
@@ -376,7 +379,7 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
 
   ['GET', /^\/api\/dashboard$/, (): DashboardResponse => ({
     ...timerState(),
-    nickname: MY_NICKNAME,
+    nickname: myNickname,
     loginId: myHandle,
     profileCharacterCode: null,
     wantToReadBooks: bookOptions('WANT_TO_READ'),
@@ -450,6 +453,18 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     const me = users.find((u) => u.self);
     if (me !== undefined) me.loginId = normalized;
     return { loginId: normalized };
+  }],
+  // 닉네임 변경 — 서버처럼 trim한 값을 저장하고 그대로 에코한다(대시보드 인사말이 바뀌는지 눈으로 확인).
+  ['POST', /^\/api\/miniapp\/nickname$/, ({ body }) => {
+    const trimmed = String(body.nickname ?? '').trim();
+    if (trimmed === '' || trimmed.length > 30) {
+      throw new ApiError(400, '닉네임은 공백 없이 30자 이내로 입력해 주세요.');
+    }
+    myNickname = trimmed;
+    // 내 행의 닉네임도 같이 바꾼다 — 안 그러면 검색·팔로우 목록의 내 이름만 옛것으로 남는다(목만의 함정).
+    const me = users.find((u) => u.self);
+    if (me !== undefined) me.nickname = trimmed;
+    return { nickname: trimmed };
   }],
   // 리워드 광고는 브라우저에 SDK가 없어 애초에 도달하지 않는다 — 혹시 눌러도 무해하게 실패시킨다.
   ['POST', /^\/api\/miniapp\/debt-waiver$/, () => {
@@ -549,7 +564,7 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
         ? null
         : {
             loginId: MY_LOGIN_ID,
-            nickname: MY_NICKNAME,
+            nickname: myNickname,
             profileCharacterCode: null,
             allViewed: myStories.every((s) => s.viewed),
             stories: [...myStories],

@@ -58,7 +58,7 @@ function renderTab(tab: (typeof TABS)[number]['key']) {
         onGoGoal={() => {}}
         onShelfChanged={() => {}}
         onHandleCreated={() => {}}
-        onLogout={() => {}}
+        onGoSettings={() => {}}
         onError={() => {}}
       />
     </TDSMobileProvider>,

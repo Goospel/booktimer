@@ -129,7 +129,7 @@ function home(overrides: Partial<DashboardResponse>) {
         onTimerChange={() => {}}
         onGraphChange={() => {}}
         onGoGoal={() => {}}
-        onLogout={() => {}}
+        onGoSettings={() => {}}
         onError={() => {}}
       />
     </TDSMobileProvider>,

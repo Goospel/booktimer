@@ -40,6 +40,14 @@ public class User extends BaseTimeEntity {
     /** login_id 형식: 영소문자/숫자/언더스코어, 3~20자. 입력은 소문자로 정규화한 뒤 검증한다. */
     private static final Pattern LOGIN_ID_PATTERN = Pattern.compile("^[a-z0-9_]{3,20}$");
 
+    /**
+     * 닉네임 최대 길이 — 웹 폼({@code @Size})·미니앱 API가 공유하는 <b>단일 출처</b>.
+     *
+     * <p>예전엔 규칙이 채널마다 달랐다(설정 30 / 온보딩 50 / 도메인 무제한): 40자로 온보딩한 사람은
+     * 설정 화면에서 영영 닉네임을 바꿀 수 없었다. 검사를 도메인으로 내려 그 어긋남을 없앤다.
+     */
+    public static final int NICKNAME_MAX_LENGTH = 30;
+
     /** 로그인 아이디로 쓸 수 없는 예약어(혼동·사칭·경로 충돌 방지). 정규화(소문자) 후 비교한다. */
     private static final Set<String> RESERVED_LOGIN_IDS = Set.of(
             "admin", "administrator", "root", "me", "api", "system", "support", "help", "booktimer");
@@ -249,13 +257,17 @@ public class User extends BaseTimeEntity {
      * 사용자가 변경 가능한 프로필 속성(닉네임, 타임존)을 갱신한다.
      * 식별/인증 속성(email, passwordHash, role)은 여기서 바꾸지 않는다.
      *
-     * @param nickname 새 표시 닉네임(공백 불가)
+     * @param nickname 새 표시 닉네임(공백 불가, {@value #NICKNAME_MAX_LENGTH}자 이내)
      * @param timezone 새 IANA 타임존 ID(예: "Asia/Seoul")
-     * @throws IllegalArgumentException 닉네임이 공백이거나 타임존이 유효한 IANA ID가 아닌 경우
+     * @throws IllegalArgumentException 닉네임이 공백·상한 초과이거나 타임존이 유효한 IANA ID가 아닌 경우
      */
     public void updateProfile(String nickname, String timezone) {
         if (nickname == null || nickname.isBlank()) {
             throw new IllegalArgumentException("nickname must not be blank");
+        }
+        if (nickname.length() > NICKNAME_MAX_LENGTH) {
+            throw new IllegalArgumentException(
+                    "nickname must be at most " + NICKNAME_MAX_LENGTH + " chars");
         }
         if (timezone == null || timezone.isBlank()) {
             throw new IllegalArgumentException("timezone must not be blank");
