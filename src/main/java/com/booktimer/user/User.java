@@ -412,8 +412,18 @@ public class User extends BaseTimeEntity {
         return goalMetPushedOn;
     }
 
-    /** 책BTI "다시 분석"의 하루 허용 횟수(악의적 반복 클릭 → LLM 남용 방어). */
+    /** 책BTI "다시 분석"의 하루 허용 횟수(악의적 반복 클릭 → LLM 남용 방어). 무광고(웹) 경로의 천장이다. */
     public static final int DAILY_PERSONALITY_REFRESH_LIMIT = 3;
+
+    /**
+     * 광고 경로를 포함한 하루 분석 <b>총량</b> 상한 — 남용 시 최대 손실을 계정당 하루 ≈20원(10회 × LLM ≈2원)으로 유계.
+     * 리워드 광고 보상 검증이 클라 신호뿐이라(토스 SDK에 서버사이드 검증 없음) 이 총량이 유일한 실질 방어다.
+     *
+     * <p>천장은 둘이지만 <b>카운터는 하나</b>다 — 웹 3회는 "총량 10의 앞 3칸"이라, 미니앱 광고 분석이 그날 웹
+     * 무광고 칸도 함께 소진한다("하루 분석 총량은 하나"라는 정신 모델. 사용자 확정 2026-08-15).
+     * 값 조정은 이 상수 한 곳(운영하며 조정할 값).
+     */
+    public static final int DAILY_PERSONALITY_TOTAL_LIMIT = 10;
 
     /**
      * 책BTI "다시 분석" 한도를 한 번 소비하려 시도한다. 허용되면 카운트를 1 올리고 {@code true},
@@ -428,11 +438,21 @@ public class User extends BaseTimeEntity {
      * @return 소비에 성공(아직 한도 내)했으면 true, 한도 초과면 false(상태 불변)
      */
     public boolean tryConsumePersonalityRefresh(java.time.LocalDate today) {
+        return tryConsumePersonalityRefresh(today, DAILY_PERSONALITY_REFRESH_LIMIT);
+    }
+
+    /**
+     * 같은 카운터에 <b>호출자가 준 천장</b>을 적용해 한 번 소비한다 — 웹(3)·광고 경로(10)가 하루 총량 하나를
+     * 공유하는 구조다({@link #DAILY_PERSONALITY_TOTAL_LIMIT}). 자정 리셋 규칙은 위와 같다.
+     *
+     * @param limit 이 호출 경로의 천장(웹 {@value #DAILY_PERSONALITY_REFRESH_LIMIT} / 광고 {@value #DAILY_PERSONALITY_TOTAL_LIMIT})
+     */
+    public boolean tryConsumePersonalityRefresh(java.time.LocalDate today, int limit) {
         if (!today.equals(personalityRefreshDate)) {
             personalityRefreshDate = today;
             personalityRefreshCount = 0;
         }
-        if (personalityRefreshCount >= DAILY_PERSONALITY_REFRESH_LIMIT) {
+        if (personalityRefreshCount >= limit) {
             return false;
         }
         personalityRefreshCount++;
@@ -444,10 +464,15 @@ public class User extends BaseTimeEntity {
      * 기록된 날짜가 오늘과 다르면(자정 넘김) 아직 안 쓴 것이므로 한도 전부를 반환한다.
      */
     public int remainingPersonalityRefreshes(java.time.LocalDate today) {
+        return remainingPersonalityRefreshes(today, DAILY_PERSONALITY_REFRESH_LIMIT);
+    }
+
+    /** 호출자가 준 천장 기준 잔여 — 같은 카운터를 보되 채널마다 자기 천장으로 읽는다(읽기 전용). */
+    public int remainingPersonalityRefreshes(java.time.LocalDate today, int limit) {
         if (!today.equals(personalityRefreshDate)) {
-            return DAILY_PERSONALITY_REFRESH_LIMIT;
+            return limit;
         }
-        return Math.max(0, DAILY_PERSONALITY_REFRESH_LIMIT - personalityRefreshCount);
+        return Math.max(0, limit - personalityRefreshCount);
     }
 
     /**

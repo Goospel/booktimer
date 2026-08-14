@@ -63,11 +63,46 @@ public class PersonalityApiController {
 
     @PostMapping("/refresh")
     public ResponseEntity<?> refresh(Principal principal) {
+        return doRefresh(currentUserService.resolve(principal), User.DAILY_PERSONALITY_REFRESH_LIMIT);
+    }
+
+    /**
+     * 미니앱 광고 관문의 사전 판정 — <b>부트스트랩(LLM·저장) 부작용이 없는 유일한 성향 GET</b>이다.
+     * {@code GET /api/personality}는 히스토리가 비면 첫 분석을 공짜로 만들어 관문을 무력화하므로 쓸 수 없다(설계 §3.4).
+     *
+     * <p>잔여는 <b>총량({@link User#DAILY_PERSONALITY_TOTAL_LIMIT}) 기준</b> 하나만 준다 — 미니앱은 광고 경로만
+     * 쓰고, 웹은 자기 천장(3) 기준 잔여를 {@code GET /api/personality}에서 이미 받는다(필드가 겹치지 않는다).
+     */
+    @GetMapping("/status")
+    public StatusResponse status(Principal principal) {
         User user = currentUserService.resolve(principal);
-        if (!user.tryConsumePersonalityRefresh(todayFor(user))) {
+        ReadingPersonalityService.AnalysisGate gate = personalityService.gate(user);
+        return new StatusResponse(
+                gate.coldStart(),
+                gate.hasSelected(),
+                user.remainingPersonalityRefreshes(todayFor(user), User.DAILY_PERSONALITY_TOTAL_LIMIT),
+                User.DAILY_PERSONALITY_TOTAL_LIMIT);
+    }
+
+    /**
+     * 광고 경로 refresh — 천장만 총량({@link User#DAILY_PERSONALITY_TOTAL_LIMIT})이고 나머지는 웹 refresh와 같다.
+     *
+     * <p>⚠️ 이름과 달리 <b>서버는 광고 시청을 검증할 수 없다</b>("광고를 봤다"는 클라 주장 — 토스 SDK에 서버사이드
+     * 보상 검증이 없다). 이 경로의 실질 계약은 "천장이 하루 총량인 refresh"이고, 남용 방어는 그 총량이 전부다(설계 §3.1).
+     */
+    @PostMapping("/ad-refresh")
+    public ResponseEntity<?> adRefresh(Principal principal) {
+        return doRefresh(currentUserService.resolve(principal), User.DAILY_PERSONALITY_TOTAL_LIMIT);
+    }
+
+    /**
+     * 두 refresh 경로의 공통 골격 — 천장만 다르다. <b>카운트는 선소비</b>라 LLM이 실패해도 소비된다
+     * (기존 웹 동작 그대로 — 환불은 만들지 않는다).
+     */
+    private ResponseEntity<?> doRefresh(User user, int limit) {
+        if (!user.tryConsumePersonalityRefresh(todayFor(user), limit)) {
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                    .body(new RefreshLimitResponse(
-                            "REFRESH_LIMIT_EXCEEDED", 0, User.DAILY_PERSONALITY_REFRESH_LIMIT));
+                    .body(new RefreshLimitResponse("REFRESH_LIMIT_EXCEEDED", 0, limit));
         }
         userRepository.save(user);
         ReadingPersonality result = personalityService.reanalyze(user);
@@ -76,8 +111,8 @@ public class PersonalityApiController {
                 ReadingPersonalityService.COLD_START_MIN_BOOKS, ZoneId.of(user.getTimezone()));
         return ResponseEntity.ok(new MutationResponse(
                 toViewDto(view),
-                user.remainingPersonalityRefreshes(todayFor(user)),
-                User.DAILY_PERSONALITY_REFRESH_LIMIT));
+                user.remainingPersonalityRefreshes(todayFor(user), limit),
+                limit));
     }
 
     @PostMapping("/select/{id}")
@@ -108,6 +143,19 @@ public class PersonalityApiController {
             ViewDto view,
             int refreshRemaining,
             int refreshLimit) {
+    }
+
+    /**
+     * 광고 관문 사전 판정 응답 — 클라는 이 넷으로 광고 버튼을 그릴지 정한다.
+     *
+     * @param adRefreshRemaining 총량 천장 기준 오늘 남은 분석 횟수(0이면 버튼 대신 "내일 다시" 안내)
+     * @param adRefreshLimit     그 천장 값 자체
+     */
+    public record StatusResponse(
+            boolean coldStart,
+            boolean hasSelected,
+            int adRefreshRemaining,
+            int adRefreshLimit) {
     }
 
     public record RefreshLimitResponse(
