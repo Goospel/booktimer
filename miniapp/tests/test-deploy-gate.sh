@@ -71,8 +71,19 @@ PYEOF
     ;;
   deploy)
     : > "$DEPLOY_MARK"
+    # 실 `ait deploy` 출력 실측 재현 — deploymentId는 평문 줄이 아니라 **ANSI 색이 붙은 박스 안의
+    # URL**로 나오고, 박스 폭에 맞춰 **줄 중간에서 끊긴다**(`...baf` + 다음 줄 `3ea`).
+    # 예전 스텁은 `deploymentId: <값>` 평문 한 줄이라 이 모양을 못 재현했고, 그래서 추출이
+    # 잘린 앞부분만 잡는 버그가 테스트를 통과했다(2026-08-14 실배포에서 발견).
     echo "Uploading bundle..."
-    echo "deploymentId: 019ff48e-stub"
+    printf '\033[?25l│\n'
+    printf '◇  \033[4m\033[36mbooktimer\033[39m\033[24m 배포가 완료되었어요\n'
+    printf '\033[?25h│\n'
+    printf '◇   ────────────────────────────╮\n'
+    printf '│                               │\n'
+    printf '│  \033[4m\033[32mintoss-private://booktimer?_deploymentId=019fff18-0cce-7e44-9fcf-3dd7c4baf\033[39m  │\n'
+    printf '│  \033[32m3ea\033[24m                          │\n'
+    printf '├───────────────────────────────╯\n'
     ;;
   *) echo "STUB-NPX unexpected: $*" >&2; exit 9 ;;
 esac
@@ -124,7 +135,9 @@ MARKER='토스로 시작하기'
 r="$(run ok --expect "$MARKER")"; rc="${r%%$'\n'*}"; out="${r#*$'\n'}"
 assert_exit "정상 경로" "$rc" "0"
 assert_deployed "  배포까지 실행된다"
-assert_has "  deploymentId를 마지막에 알린다" "$out" "019ff48e-stub"
+# 끝 세 글자(`3ea`)까지 포함한 **온전한** UUID여야 한다 — 잘린 ID는 콘솔에서 그 배포를 못 찾는다.
+assert_has "  deploymentId를 온전히 알린다(박스 줄바꿈 복원)" "$out" \
+    "deploymentId: 019fff18-0cce-7e44-9fcf-3dd7c4baf3ea"
 
 # ── Case 2: 이번 릴리스 마커가 번들에 없다 → 배포 전 차단 (T-150 본체) ──
 r="$(run no-marker --expect "$MARKER")"; rc="${r%%$'\n'*}"; out="${r#*$'\n'}"
