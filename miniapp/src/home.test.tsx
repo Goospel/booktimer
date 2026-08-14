@@ -108,7 +108,6 @@ function renderHome(overrides: Partial<DashboardResponse> = {}) {
         dashboard={dashboard(overrides)}
         onTimerChange={() => {}}
         onGraphChange={() => {}}
-        onGoHistory={() => {}}
         onGoGoal={() => {}}
         onLogout={() => {}}
         onError={() => {}}
@@ -169,32 +168,29 @@ describe('홈 렌더 배선', () => {
 });
 
 /**
- * 잔디 카드 → 연속일 한 줄. 잔디 전체·연속일·읽은 날·총 시간은 기록 탭이 이미 다 보여 주므로 홈의
- * 미리보기는 중복이었다 — 그 자리를 피드 박스에 내주고, 매일 여는 동기(연속일)와 기록 탭 진입
- * 손잡이만 한 줄로 남긴다. 데이터는 이미 `dashboard.graph`에 있어 서버 변경이 0이다.
+ * 홈에서 기록(잔디)은 통째로 빠진다. 잔디 전체·연속일·읽은 날·총 시간을 기록 탭이 이미 다 보여 주고,
+ * 그 탭은 하단 탭바에서 한 번에 닿는다 — 홈에 진입 손잡이를 또 두는 건 자리만 먹는 중복이었다
+ * (사용자 결정 2026-08-14). 그 자리는 피드 박스가 통째로 쓴다.
  */
-describe('연속일 한 줄', () => {
+describe('홈에서 빠진 기록 흔적', () => {
   const CELL = 'width:100%;aspect-ratio:1 / 1;border-radius:2px'; // 잔디 칸 서명(ui.test와 같은 값)
 
-  /** 한 줄 자체를 집는다 — 문구만 찾으면 옛 잔디 카드(같은 말을 머리에 달고 있었다)도 통과한다. */
-  const streakLineOf = (markup: string) =>
-    markup.split('<button').find((chunk) => chunk.includes('data-streak-line')) ?? '';
-
-  it('성장 단계 이모지 + 연속일 + 기록 보기 손잡이를 한 줄에 담는다', () => {
-    const line = streakLineOf(renderHome());
-
-    expect(line).toContain(`${graph.growthStageEmoji} 연속 ${graph.currentStreak}일`);
-    expect(line).toContain('기록 보기 ›');
-  });
-
-  it('잔디 칸은 홈에서 사라진다 — 기록 탭이 이미 전체를 그린다', () => {
+  it('잔디 칸이 없다 — 기록 탭이 이미 전체를 그린다', () => {
     expect(renderHome()).not.toContain(CELL);
   });
 
-  it('연속일 줄이 피드 박스보다 앞에 선다 — 잔디 카드가 서 있던 자리 그대로다', () => {
+  it('연속일 줄도 없다 — 기록 진입은 하단 탭바가 맡는다', () => {
     const markup = renderHome();
 
-    expect(markup.indexOf('연속')).toBeLessThan(markup.indexOf('data-feed-tab'));
+    expect(markup).not.toContain('data-streak-line');
+    expect(markup).not.toContain('연속');
+    expect(markup).not.toContain('기록 보기');
+  });
+
+  it('측정 시작 버튼 다음이 곧 피드 박스다 — 사이에 낀 카드가 없다', () => {
+    const markup = renderHome();
+
+    expect(markup.indexOf('측정 시작')).toBeLessThan(markup.indexOf('data-feed-tab'));
   });
 });
 

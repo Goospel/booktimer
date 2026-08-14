@@ -671,7 +671,6 @@ export function Home({
   dashboard,
   onTimerChange,
   onGraphChange,
-  onGoHistory,
   onGoGoal,
   onLogout,
   onError,
@@ -679,7 +678,6 @@ export function Home({
   dashboard: DashboardResponse;
   onTimerChange: (timer: TimerState) => void;
   onGraphChange: (graph: DashboardResponse['graph']) => void;
-  onGoHistory: () => void;
   onGoGoal: () => void;
   onLogout: () => void;
   onError: (error: Error) => void;
@@ -959,22 +957,8 @@ export function Home({
         {dashboard.hasActiveSession ? '측정 끝내기' : '측정 시작'}
       </Button>
 
-      {/* 잔디 미리보기가 서 있던 자리 — 전체 잔디는 기록 탭이 이미 그리므로, 매일 여는 동기(연속일)와
-          기록 탭 진입 손잡이만 한 줄로 남기고 나머지 자리는 피드 박스가 쓴다. */}
-      <button
-        type="button"
-        data-streak-line=""
-        onClick={onGoHistory}
-        style={{ ...cardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 14 }}
-      >
-        <Text typography="st11" color="grey600">
-          {dashboard.graph.growthStageEmoji} 연속 {dashboard.graph.currentStreak}일
-        </Text>
-        <Text typography="st12" color="grey600">
-          기록 보기 ›
-        </Text>
-      </button>
-
+      {/* 잔디 미리보기가 서 있던 자리는 피드 박스가 통째로 쓴다 — 기록(잔디·연속일·총 시간)은 기록 탭이
+          이미 전부 그리고 그 탭은 하단 탭바에서 한 번에 닿으므로, 홈에 진입 손잡이를 또 두지 않는다. */}
       <HomeFeedBox onError={onError} />
 
       {quotes.length > 0 && <QuoteCard quotes={quotes} />}

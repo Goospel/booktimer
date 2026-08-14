@@ -128,7 +128,6 @@ function home(overrides: Partial<DashboardResponse>) {
         dashboard={dashboard}
         onTimerChange={() => {}}
         onGraphChange={() => {}}
-        onGoHistory={() => {}}
         onGoGoal={() => {}}
         onLogout={() => {}}
         onError={() => {}}

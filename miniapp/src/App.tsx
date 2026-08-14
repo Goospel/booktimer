@@ -272,7 +272,6 @@ export function MainTabs({
             dashboard={dashboard}
             onTimerChange={onTimerChange}
             onGraphChange={onGraphChange}
-            onGoHistory={() => onTabChange('history')}
             onGoGoal={onGoGoal}
             onLogout={onLogout}
             onError={onError}
