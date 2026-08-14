@@ -432,26 +432,31 @@ export function todayProgress(
 }
 
 /**
- * 목표 손잡이의 라벨 — 목표 화면으로 가는 유일한 진입점이 달고 있는 말.
+ * 목표 손잡이의 라벨 — 목표 화면으로 가는 진입점이 달고 있는 말.
  *
- * <p>아이콘 팩이 없어(의존성은 `@toss/tds-mobile` 하나) 뜻은 그림이 아니라 **목표 값 자체**가 말한다.
- * 「목표 30분 ›」은 무엇을 바꾸는 버튼인지 스스로 밝히므로 아이콘 한 개짜리 손잡이의 모호함이
- * 아예 성립하지 않는다 — 덤으로 게이지 줄에서 목표 값을 빼 같은 카드의 중복도 없앴다.
+ * <p>**라벨은 값이 아니라 동작을 말한다**(2026-08-14 실기기 제보로 수정). 한때 「목표 30분 ›」처럼 값을
+ * 실어 무엇을 바꾸는 버튼인지 스스로 밝히게 했지만, 손잡이가 「남은시간」 상자 안으로 들어오면서 **바로
+ * 위 「오늘 목표 30분」 줄이 같은 값을 이미 말하게 됐다** — 그 자리에서 값을 되풀이하면 중복이고,
+ * 정작 "눌러서 바꾸는 것"이라는 사실은 아무도 말하지 않는다. 설정 화면의 같은 버튼과도 말이 맞는다.
  *
- * <p>목표 0이면 게이지 줄이 통째로 안 그려지므로(`todayProgress`의 `progress === null`) 이 칩이
- * 목표를 정하러 가는 화면 유일의 길이다 — 그래서 그때는 라벨이 권유가 된다.
+ * <p>목표 0이면 바꿀 값이 없으니 정하러 가는 말이 맞다 — 그 상태에선 게이지 줄이 통째로 안 그려져
+ * (`todayProgress`의 `progress === null`) 이 버튼이 목표를 정하러 가는 화면 유일의 길이다.
  */
 export function goalHandleLabel(goalSeconds: number, adPending = false): string {
   // 전면광고 로드에 1~2초가 걸린다(광고를 먼저 띄우고 전환하도록 바꾼 뒤 생긴 대기). 그동안 라벨이
   // 그대로면 눌러도 아무 일 없는 것처럼 보여 사용자가 다시 누른다 — 목표값보다 대기 사실이 우선이다.
   if (adPending) return '준비 중…';
-  return goalSeconds > 0 ? `목표 ${formatDuration(goalSeconds)} ›` : '목표 정하기 ›';
+  return goalSeconds > 0 ? '하루 목표 바꾸기' : '목표 정하기';
 }
 
 /**
  * 목표 손잡이 — 서는 자리가 둘이라 컴포넌트로 뽑았다: 평상시엔 **「남은시간」 상자 안**, 목표가 0이라
- * 그 상자로 갈 길이 없을 때만 **히어로 카드 안**. 두 자리가 같은 칩이어야 사용자가 한 번 배운 손잡이가
+ * 그 상자로 갈 길이 없을 때만 **히어로 카드 안**. 두 자리가 같은 모양이어야 사용자가 한 번 배운 손잡이가
  * 상태에 따라 다른 물건으로 보이지 않는다.
+ *
+ * <p>**자작 칩이 아니라 TDS `Button`이다**(2026-08-14 실기기 제보). 작고 테두리 없는 인라인 칩이라
+ * 같은 상자에 선 「광고 보고 밀린 하루 지우기」와 나란히 놓였을 때 **버튼으로 읽히지 않았다** — 광고 쪽과
+ * 같은 꼴(풀폭 `weak`)로 맞춰 "눌러서 바꾸는 것"임을 모양이 말하게 한다.
  */
 function GoalHandle({
   goalSeconds,
@@ -459,29 +464,14 @@ function GoalHandle({
   onGoGoal,
 }: {
   goalSeconds: number;
-  /** 전면광고 로드 대기 — 라벨과 색 둘 다로 "누른 건 먹혔다"를 말한다. */
+  /** 전면광고 로드 대기 — 라벨과 비활성 둘 다로 "누른 건 먹혔다"를 말한다. */
   pending: boolean;
   onGoGoal: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onGoGoal}
-      disabled={pending}
-      style={{
-        marginTop: 10,
-        padding: '7px 11px',
-        border: 0,
-        borderRadius: 20,
-        background: 'var(--adaptiveBlue50, #E7EEE2)',
-        color: 'var(--adaptiveBlue700, #4F6B4C)',
-        fontSize: 12,
-        opacity: pending ? 0.6 : 1,
-        cursor: pending ? 'default' : 'pointer',
-      }}
-    >
+    <Button display="block" variant="weak" size="small" style={{ marginTop: 10 }} disabled={pending} onClick={onGoGoal}>
       {goalHandleLabel(goalSeconds, pending)}
-    </button>
+    </Button>
   );
 }
 
@@ -678,11 +668,23 @@ export function BookSheet({
  *
  * <p>자리가 맨 아래에서 맨 위로 올라왔다(사용자 결정 2026-08-14) — 피드 박스는 세로로 자라는 상자라
  * 그 뒤에 두면 스크롤 끝에 묻히는데, 소셜 기능이 늘수록 프로필의 무게는 반대로 커진다.
+ *
+ * <p>모양은 **흰 채움 + 테두리**다(같은 날 실기기 제보). 연한 `weak` 알약은 배경과 대비가 약해 버튼으로
+ * 안 읽혔다 — TDS에 outline 변형이 없어(`fill | weak`뿐) `light` 채움에 테두리를 얹어 윤곽을 만든다.
+ * 주 CTA(「측정 시작」)와 무게가 겹치면 안 되므로 풀폭·강조색은 쓰지 않는다.
  */
 export function AccountSection({ onGoSettings }: { onGoSettings: () => void }) {
   return (
     <div style={{ marginBottom: 12, textAlign: 'right' }}>
-      <Button size="small" variant="weak" onClick={onGoSettings}>
+      <Button
+        size="medium"
+        variant="fill"
+        color="light"
+        // TDS가 `light` 채움에 얹는 글자색은 브랜드 파랑(#3182f6)이고, 이 앱 팔레트는 세이지다 —
+        // Button은 색을 CSS 변수가 아니라 인라인 리터럴로 박아 전역 재테마가 안 닿으므로 여기서 직접 준다.
+        style={{ color: 'var(--adaptiveBlue700, #4F6B4C)', border: '1px solid var(--adaptiveGrey200, #E4DDD0)' }}
+        onClick={onGoSettings}
+      >
         프로필·설정
       </Button>
     </div>

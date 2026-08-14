@@ -8,6 +8,7 @@ import type { BookOption, DashboardResponse } from './api';
 import { TAB_BAR_Z_INDEX } from './App';
 import { ApiError, waiveDebt } from './api';
 import {
+  AccountSection,
   BookCarousel,
   BookSheet,
   COVER_GAP,
@@ -399,13 +400,13 @@ describe('남은시간 설명 상자', () => {
  * <p>라벨을 순수 함수로 꺼낸 건 늘 같은 이유다 — 정적 렌더 하니스라 클릭을 못 잡는다(T-149).
  */
 describe('목표 손잡이 (goalHandleLabel · 렌더)', () => {
-  it('목표가 있으면 그 값이 곧 라벨이다 — 손잡이가 자기가 무엇을 바꾸는지 말한다', () => {
-    expect(goalHandleLabel(1800)).toBe('목표 30분 ›');
-    expect(goalHandleLabel(3600)).toBe('목표 1시간 ›');
+  it('라벨이 동작을 말한다 — 값은 바로 위 「오늘 목표」 줄이 이미 말하므로 되풀이하지 않는다', () => {
+    expect(goalHandleLabel(1800)).toBe('하루 목표 바꾸기');
+    expect(goalHandleLabel(3600)).toBe('하루 목표 바꾸기');
   });
 
-  it('목표가 0이면 「목표 정하기」— 게이지 줄이 아예 안 뜨는 그 상태의 유일한 진입점이다', () => {
-    expect(goalHandleLabel(0)).toBe('목표 정하기 ›');
+  it('목표가 0이면 「목표 정하기」— 바꿀 값이 없으니 정하러 가는 말이 맞다', () => {
+    expect(goalHandleLabel(0)).toBe('목표 정하기');
   });
 
   // 전면광고 로드에 1~2초가 걸린다(2026-08-14: 광고를 먼저 띄우고 전환하도록 바꾼 뒤 생긴 대기).
@@ -415,8 +416,8 @@ describe('목표 손잡이 (goalHandleLabel · 렌더)', () => {
     expect(goalHandleLabel(0, true)).toBe('준비 중…');
   });
 
-  it('기다리지 않을 때는 옛 라벨 그대로 — 대기 표시가 평상시를 건드리지 않는다', () => {
-    expect(goalHandleLabel(1800, false)).toBe('목표 30분 ›');
+  it('기다리지 않을 때는 평소 라벨 그대로 — 대기 표시가 평상시를 건드리지 않는다', () => {
+    expect(goalHandleLabel(1800, false)).toBe('하루 목표 바꾸기');
   });
 
   // ⚠️ 전체 마크업에 'disabled'가 있나로 재면 안 된다 — TDS 전역 CSS에 `:disabled` 셀렉터가 실려
@@ -442,11 +443,15 @@ describe('목표 손잡이 (goalHandleLabel · 렌더)', () => {
     const markup = renderHome({ todayGoalSeconds: 1800 });
 
     // 접힌 상자 안이라 첫 렌더에는 라벨 자체가 없다 — 카드에 남아 있으면 여기서 잡힌다.
-    expect(markup).not.toContain('목표 30분');
+    expect(markup).not.toContain('하루 목표 바꾸기');
   });
 
-  it('하단 풀폭 「목표 바꾸기」는 사라진다 — 흡수가 이번 변경의 요구다', () => {
-    expect(renderHome()).not.toContain('목표 바꾸기');
+  // 실기기 제보(2026-08-14): 작은 칩이라 「딱 봐도 버튼」으로 안 읽혔다 — 같은 상자에 선 광고 버튼과
+  // 같은 꼴(TDS Button · 풀폭 · weak)로 맞춘다. 인라인 칩 스타일이 되살아나면 여기서 잡힌다.
+  it('광고 버튼과 같은 TDS 버튼이다 — 자작 칩이 아니라 버튼으로 읽혀야 한다', () => {
+    const found = labelsOf(renderHome(noGoal));
+
+    expect(found).toContain('목표 정하기');
   });
 
   it('목표 0이면 카드에 손잡이가 남는다 — 게이지 줄이 없어 상자로 갈 길이 없는 유일한 상태다', () => {
@@ -1169,6 +1174,19 @@ describe('계정 진입점', () => {
 
   it('로그아웃은 홈에서 사라졌다 — 두 자리에 두면 확인 단계가 갈라진다', () => {
     expect(renderHome()).not.toContain('로그아웃');
+  });
+
+  // 실기기 제보(2026-08-14): 연한 weak 알약이라 「버튼」으로 안 읽혔다 → 흰 채움 + 테두리로 윤곽을 준다.
+  // TDS는 `light` 채움의 글자색을 브랜드 파랑 리터럴로 인라인에 박아 전역 재테마가 안 닿으므로(plan §미니앱 v2
+  // 실측) 세이지를 직접 준다 — 그 오버라이드가 조용히 빠지면 화면에 초록·파랑이 섞인다.
+  it('브랜드 세이지 글씨다 — TDS 기본 파랑이 그대로 나오면 앱에 색이 둘이 된다', () => {
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <AccountSection onGoSettings={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+    expect(markup).toContain('#4F6B4C');
   });
 
   it('홈 맨 위에 둔다 — 피드 박스 뒤에 두면 스크롤 끝이라 눈에 안 띈다(사용자 결정 2026-08-14)', () => {
