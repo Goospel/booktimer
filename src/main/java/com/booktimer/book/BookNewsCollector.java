@@ -51,9 +51,9 @@ public class BookNewsCollector {
      * 저자가 없으면 매칭 AND를 만들 수 없어 오탐을 못 막고, isbn이 없으면 캐시 키가 없다.
      * PRIVATE 완독 책도 대상이다(뉴스는 책 자체에 대한 공개 정보고, 노출은 그 책을 완독한 본인에게만 된다).
      */
-    public void collect() {
+    public NewsCollectionResult collect() {
         if (!newsClient.isEnabled()) {
-            return;
+            return NewsCollectionResult.disabled();
         }
         List<BookNewsTarget> targets = bookRepository.findNewsCollectionTargets();
         int saved = 0;
@@ -66,6 +66,7 @@ public class BookNewsCollector {
             }
         }
         log.info("책 뉴스 수집 — 대상 {}종, 저장 {}건", targets.size(), saved);
+        return new NewsCollectionResult(true, targets.size(), saved);
     }
 
     /**

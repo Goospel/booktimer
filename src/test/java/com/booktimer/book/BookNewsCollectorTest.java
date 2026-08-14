@@ -84,6 +84,37 @@ class BookNewsCollectorTest {
         assertThat(bookNewsRepository.count()).isZero();
     }
 
+    /*
+     * 결과를 돌려주는 이유는 관리자 수동 실행(POST /admin/books/collect-news) 때문이다 — 새벽 배치를
+     * 기다리지 않고 손으로 돌릴 때 "몇 종을 훑어 몇 건 저장했는지"가 안 보이면 눌러도 됐는지 알 수 없다.
+     * enabled를 따로 싣는 건 킬스위치가 내려간 상태의 0종 0건이 "완독한 책이 없음"과 구분되지 않아서다.
+     */
+    @Test
+    @DisplayName("결과로 대상 종수·저장 건수를 돌려준다 — 관리자 수동 실행의 보고용")
+    void collect_reportsCounts() {
+        User me = saveUser("news-count@booktimer.com");
+        saveBook(me, "총, 균, 쇠", "재레드 다이아몬드", "9788970127248", BookStatus.FINISHED);
+        StubClient client = new StubClient(true, List.of(article("총, 균, 쇠 재레드 다이아몬드 특강", 1)));
+
+        NewsCollectionResult result = new BookNewsCollector(bookRepository, bookNewsRepository, client).collect();
+
+        assertThat(result.enabled()).isTrue();
+        assertThat(result.targets()).isEqualTo(1);
+        assertThat(result.saved()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("킬스위치가 꺼져 있으면 결과가 그 사실을 말한다 — 0종 0건과 구분돼야 한다")
+    void collect_reportsDisabled() {
+        User me = saveUser("news-count-off@booktimer.com");
+        saveBook(me, "총, 균, 쇠", "재레드 다이아몬드", "9788970127248", BookStatus.FINISHED);
+        StubClient client = new StubClient(false, List.of(article("a", 1)));
+
+        NewsCollectionResult result = new BookNewsCollector(bookRepository, bookNewsRepository, client).collect();
+
+        assertThat(result.enabled()).isFalse();
+    }
+
     @Test
     @DisplayName("완독 + isbn·저자가 모두 있는 책만 수집 대상 — 읽는중·저자null·isbn null은 제외")
     void collectsOnlyEligibleBooks() {
