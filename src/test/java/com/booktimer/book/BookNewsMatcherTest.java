@@ -83,4 +83,119 @@ class BookNewsMatcherTest {
         assertThat(BookNewsMatcher.clean("&quot;Sapiens&quot; &amp; 인류")).isEqualTo("\"Sapiens\" & 인류");
         assertThat(BookNewsMatcher.clean(null)).isNull();
     }
+
+    /*
+     * ─── 정규화 (운영 사고 2026-08-14: 대상 29종 · 저장 0건) ───────────────────────
+     * 책의 title·author는 알라딘 API 원문이라 부제("코스모스 - 특별판")·역할표기
+     * ("칼 세이건 (지은이), 홍승수 (옮긴이)")가 붙어 있다. 그 원문을 그대로 AND 매칭에 쓰면
+     * 기사 제목에 있을 리 없는 문자열을 찾게 돼 전 종목이 기각된다.
+     *
+     * 아래 픽스처는 전부 <b>운영 DB의 실제 값</b>이다 — 이번 버그의 근본 원인이 이상적인 입력
+     * (「데미안」/「헤르만 헤세」)으로만 검증한 것이라, 같은 실수를 막으려고 원문을 그대로 쓴다.
+     */
+
+    private static final String RAW_COSMOS_TITLE = "코스모스 - 특별판";
+    private static final String RAW_COSMOS_AUTHOR = "칼 세이건 (지은이), 홍승수 (옮긴이)";
+    private static final String RAW_1984_AUTHOR = "조지 오웰 (지은이), 정회성 (옮긴이)";
+    private static final String RAW_STRANGER_AUTHOR = "알베르 카뮈 (지은이), 김화영 (옮긴이)";
+    private static final String RAW_ODYSSEY_TITLE = "오뒷세이아 - 그리스어 원전 번역";
+    private static final String RAW_ODYSSEY_AUTHOR = "호메로스 (지은이), 천병희 (옮긴이)";
+    private static final String RAW_ANNA_TITLE = "안나 카레니나 세트 - 전3권";
+    private static final String RAW_ANNA_AUTHOR = "레프 니콜라예비치 톨스토이 (지은이), 연진희 (옮긴이)";
+    private static final String RAW_DEMIAN_AUTHOR = "헤르만 헤세 (지은이), 전영애 (옮긴이)";
+
+    @Test
+    @DisplayName("normalizeTitle(): ' - ' 뒤 부제를 잘라낸다 (운영 실값)")
+    void normalizeTitle_cutsSubtitle() {
+        assertThat(BookNewsMatcher.normalizeTitle(RAW_COSMOS_TITLE)).isEqualTo("코스모스");
+        assertThat(BookNewsMatcher.normalizeTitle(RAW_ODYSSEY_TITLE)).isEqualTo("오뒷세이아");
+        // en dash·em dash 도 부제 구분자로 쓰인다
+        assertThat(BookNewsMatcher.normalizeTitle("코스모스 – 특별판")).isEqualTo("코스모스");
+        assertThat(BookNewsMatcher.normalizeTitle("코스모스 — 특별판")).isEqualTo("코스모스");
+    }
+
+    @Test
+    @DisplayName("normalizeTitle(): 괄호 블록을 제거한다")
+    void normalizeTitle_removesParenBlocks() {
+        assertThat(BookNewsMatcher.normalizeTitle("이기적 유전자 (개정판)")).isEqualTo("이기적 유전자");
+        assertThat(BookNewsMatcher.normalizeTitle("데미안 (양장본 HardCover)")).isEqualTo("데미안");
+    }
+
+    @Test
+    @DisplayName("normalizeTitle(): 끝에 붙은 판매단위 꼬리(세트·전3권·상·하·N권)를 뗀다")
+    void normalizeTitle_stripsVolumeTail() {
+        assertThat(BookNewsMatcher.normalizeTitle(RAW_ANNA_TITLE)).isEqualTo("안나 카레니나");
+        assertThat(BookNewsMatcher.normalizeTitle("안나 카레니나 전3권")).isEqualTo("안나 카레니나");
+        assertThat(BookNewsMatcher.normalizeTitle("토지 1권")).isEqualTo("토지");
+        assertThat(BookNewsMatcher.normalizeTitle("장미의 이름 상")).isEqualTo("장미의 이름");
+        assertThat(BookNewsMatcher.normalizeTitle("장미의 이름 하")).isEqualTo("장미의 이름");
+    }
+
+    @Test
+    @DisplayName("normalizeTitle(): 이미 깨끗한 제목·제목 안의 하이픈은 그대로 둔다 (「1984」·「e-book」)")
+    void normalizeTitle_keepsCleanTitles() {
+        assertThat(BookNewsMatcher.normalizeTitle("1984")).isEqualTo("1984");
+        assertThat(BookNewsMatcher.normalizeTitle("데미안")).isEqualTo("데미안");
+        assertThat(BookNewsMatcher.normalizeTitle("총, 균, 쇠")).isEqualTo("총, 균, 쇠");
+        // 부제 구분자는 '공백 하이픈 공백' 뿐 — 단어에 붙은 하이픈은 제목의 일부다
+        assertThat(BookNewsMatcher.normalizeTitle("e-book 혁명")).isEqualTo("e-book 혁명");
+    }
+
+    @Test
+    @DisplayName("normalizeTitle(): null·괄호뿐인 병리적 제목은 빈 문자열")
+    void normalizeTitle_pathological() {
+        assertThat(BookNewsMatcher.normalizeTitle(null)).isEmpty();
+        assertThat(BookNewsMatcher.normalizeTitle("(전2권)")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("normalizeAuthor(): 역할표기를 떼고 첫 저자만 남긴다 (운영 실값 6종)")
+    void normalizeAuthor_keepsFirstWriterOnly() {
+        assertThat(BookNewsMatcher.normalizeAuthor(RAW_COSMOS_AUTHOR)).isEqualTo("칼 세이건");
+        assertThat(BookNewsMatcher.normalizeAuthor(RAW_1984_AUTHOR)).isEqualTo("조지 오웰");
+        assertThat(BookNewsMatcher.normalizeAuthor(RAW_STRANGER_AUTHOR)).isEqualTo("알베르 카뮈");
+        assertThat(BookNewsMatcher.normalizeAuthor(RAW_ODYSSEY_AUTHOR)).isEqualTo("호메로스");
+        assertThat(BookNewsMatcher.normalizeAuthor(RAW_ANNA_AUTHOR)).isEqualTo("레프 니콜라예비치 톨스토이");
+        assertThat(BookNewsMatcher.normalizeAuthor(RAW_DEMIAN_AUTHOR)).isEqualTo("헤르만 헤세");
+    }
+
+    @Test
+    @DisplayName("normalizeAuthor(): 이미 깨끗한 값은 불변, null·역자뿐인 값은 빈 문자열")
+    void normalizeAuthor_edgeCases() {
+        assertThat(BookNewsMatcher.normalizeAuthor("헤르만 헤세")).isEqualTo("헤르만 헤세");
+        assertThat(BookNewsMatcher.normalizeAuthor("유발 하라리 (지은이)")).isEqualTo("유발 하라리");
+        assertThat(BookNewsMatcher.normalizeAuthor(null)).isEmpty();
+        assertThat(BookNewsMatcher.normalizeAuthor("홍승수 (옮긴이)")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("운영 원문(부제·역할표기 그대로)으로도 기사가 채택된다 — 29종 0건의 원인 회귀")
+    void acceptsWithRawAladinMetadata() {
+        assertThat(BookNewsMatcher.matches(
+                "칼 세이건 「코스모스」 특별전 개막", RAW_COSMOS_TITLE, RAW_COSMOS_AUTHOR)).isTrue();
+        assertThat(BookNewsMatcher.matches(
+                "조지 오웰의 1984, 40년 만에 다시 읽는다", "1984", RAW_1984_AUTHOR)).isTrue();
+        assertThat(BookNewsMatcher.matches(
+                "알베르 카뮈 이방인 출간 80주년 기획전", "이방인", RAW_STRANGER_AUTHOR)).isTrue();
+        assertThat(BookNewsMatcher.matches(
+                "호메로스 오뒷세이아 완역본 화제", RAW_ODYSSEY_TITLE, RAW_ODYSSEY_AUTHOR)).isTrue();
+        assertThat(BookNewsMatcher.matches(
+                "레프 니콜라예비치 톨스토이 안나 카레니나 새 번역본", RAW_ANNA_TITLE, RAW_ANNA_AUTHOR)).isTrue();
+        assertThat(BookNewsMatcher.matches(
+                "헤르만 헤세 데미안 100주년 기념판 출간", "데미안", RAW_DEMIAN_AUTHOR)).isTrue();
+    }
+
+    @Test
+    @DisplayName("정규화해도 오탐은 여전히 기각한다 — 원문 저자로도 「데미안 월튼」은 안 문다")
+    void stillRejectsFalsePositivesWithRawMetadata() {
+        assertThat(BookNewsMatcher.matches(
+                "웨이코 그룹 데미안 월튼 사장 주식 매각", "데미안", RAW_DEMIAN_AUTHOR)).isFalse();
+    }
+
+    @Test
+    @DisplayName("정규화 결과가 비면(괄호뿐인 제목·역자뿐인 저자) 기각 — AND를 만들 수 없다")
+    void rejectsWhenNormalizedMetadataEmpty() {
+        assertThat(BookNewsMatcher.matches("(전2권) 홍승수 특별판", "(전2권)", RAW_COSMOS_AUTHOR)).isFalse();
+        assertThat(BookNewsMatcher.matches("코스모스 홍승수 번역 특별판", "코스모스", "홍승수 (옮긴이)")).isFalse();
+    }
 }

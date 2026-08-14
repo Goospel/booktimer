@@ -75,14 +75,18 @@ public class GoogleNewsRssClient {
     }
 
     /**
-     * 검색 쿼리를 만든다 — <b>제목 + 저자</b>.
+     * 검색 쿼리를 만든다 — <b>정규화한 제목 + 저자</b>.
      *
      * <p>제목만 던지면 오탐이 급증한다(실측 2026-08-14: 『데미안』 최종 채택 6건 → 제목+저자 28건).
      * 따옴표 구절 검색은 쓰지 않는다 — 구글은 구절을 엄격히 적용해 재현율만 깎였다.
      * 정밀도의 2차 방어(사후 필터)는 {@link BookNewsMatcher}가 한다.
+     *
+     * <p>알라딘 원문("코스모스 - 특별판" / "칼 세이건 (지은이), 홍승수 (옮긴이)")을 그대로 던지면 검색
+     * 결과부터 나빠지므로 {@link BookNewsMatcher#normalizeTitle}·{@link BookNewsMatcher#normalizeAuthor}를
+     * 거친다 — 사후 필터와 <b>같은 값</b>을 쓰는 게 핵심이다(질의와 판정이 어긋나면 또 0건이 된다).
      */
     static String buildQuery(String title, String author) {
-        return title.strip() + " " + author.strip();
+        return BookNewsMatcher.normalizeTitle(title) + " " + BookNewsMatcher.normalizeAuthor(author);
     }
 
     /** 검색 URL — 한글 질의를 퍼센트 인코딩하고 한국어 로케일 파라미터를 붙인다. */

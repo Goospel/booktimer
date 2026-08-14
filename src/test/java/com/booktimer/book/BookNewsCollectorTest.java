@@ -89,11 +89,20 @@ class BookNewsCollectorTest {
      * 기다리지 않고 손으로 돌릴 때 "몇 종을 훑어 몇 건 저장했는지"가 안 보이면 눌러도 됐는지 알 수 없다.
      * enabled를 따로 싣는 건 킬스위치가 내려간 상태의 0종 0건이 "완독한 책이 없음"과 구분되지 않아서다.
      */
+    /*
+     * 아래 두 상수는 알라딘 API 원문 형식이다(운영 DB 실값과 같은 꼴) — 부제·역할표기가 붙어 있다.
+     * 2026-08-14 사고: 이 원문을 그대로 질의·매칭에 써서 운영에서 29종 전부 0건이었다. 수집기 테스트가
+     * 이상적인 값("총, 균, 쇠"/"재레드 다이아몬드")만 써서 못 잡았으므로, 최소 두 경로(질의 생성·저장)를
+     * 원문으로 못 박는다.
+     */
+    private static final String RAW_TITLE = "총, 균, 쇠 - 무기·병균·금속은 인류의 운명을 어떻게 바꿨는가";
+    private static final String RAW_AUTHOR = "재레드 다이아몬드 (지은이), 김진준 (옮긴이)";
+
     @Test
-    @DisplayName("결과로 대상 종수·저장 건수를 돌려준다 — 관리자 수동 실행의 보고용")
+    @DisplayName("결과로 대상 종수·저장 건수를 돌려준다 — 관리자 수동 실행의 보고용 (알라딘 원문 메타)")
     void collect_reportsCounts() {
         User me = saveUser("news-count@booktimer.com");
-        saveBook(me, "총, 균, 쇠", "재레드 다이아몬드", "9788970127248", BookStatus.FINISHED);
+        saveBook(me, RAW_TITLE, RAW_AUTHOR, "9788970127248", BookStatus.FINISHED);
         StubClient client = new StubClient(true, List.of(article("총, 균, 쇠 재레드 다이아몬드 특강", 1)));
 
         NewsCollectionResult result = new BookNewsCollector(bookRepository, bookNewsRepository, client).collect();
@@ -128,6 +137,33 @@ class BookNewsCollectorTest {
         new BookNewsCollector(bookRepository, bookNewsRepository, client).collect();
 
         assertThat(client.queries).containsExactly("총, 균, 쇠 재레드 다이아몬드");
+    }
+
+    @Test
+    @DisplayName("질의는 알라딘 원문이 아니라 정규화한 제목·저자로 만든다 — 부제·역할표기가 검색을 망친다")
+    void buildsQueryFromNormalizedMetadata() {
+        User me = saveUser("news-raw-query@booktimer.com");
+        saveBook(me, RAW_TITLE, RAW_AUTHOR, "9788970127248", BookStatus.FINISHED);
+        StubClient client = new StubClient(true, List.of(article("a", 1)));
+
+        new BookNewsCollector(bookRepository, bookNewsRepository, client).collect();
+
+        assertThat(client.queries).containsExactly("총, 균, 쇠 재레드 다이아몬드");
+    }
+
+    @Test
+    @DisplayName("정규화 결과가 빈 책(제목이 통째로 괄호·역자뿐인 저자)은 수집 대상에서 제외 — 호출 0")
+    void excludesBooksWithEmptyNormalizedMetadata() {
+        User me = saveUser("news-pathological@booktimer.com");
+        saveBook(me, "(전2권)", "재레드 다이아몬드 (지은이)", "9793333333333", BookStatus.FINISHED);
+        saveBook(me, "총, 균, 쇠", "김진준 (옮긴이)", "9794444444444", BookStatus.FINISHED);
+        StubClient client = new StubClient(true, List.of(article("a", 1)));
+
+        NewsCollectionResult result =
+                new BookNewsCollector(bookRepository, bookNewsRepository, client).collect();
+
+        assertThat(client.queries).isEmpty();
+        assertThat(result.targets()).isZero();
     }
 
     @Test
