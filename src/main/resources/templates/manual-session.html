@@ -25,7 +25,7 @@
         <h2>읽었는데 측정을 깜빡했나요?</h2>
         <p class="status-line muted">
             측정 버튼을 안 눌렀어도, 읽은 <strong>책·날짜·시간</strong>을 직접 적으면 독서 기록·잔디에 그대로 반영돼요.
-            적은 시간만큼 <strong>그 날짜의 부채</strong>가 채워집니다(최근 7일까지 — 그 이전은 자동으로 넘어가요).
+            적은 시간만큼 <strong>그 날짜의 부채</strong>가 채워집니다.
         </p>
 
         <!-- 책 미지정 기록은 금지 — 고를 책이 없으면 폼 대신 추가 안내. -->
@@ -41,7 +41,9 @@
                 <label for="date">읽은 날짜</label>
                 <input type="date" id="date" name="date"
                        th:value="${selectedDate}" th:min="${minDate}" th:max="${today}" required>
-                <span class="field-hint muted">최근 7일 이내의 빠뜨린 날을 채울 수 있어요(미래·7일 이전은 불가).</span>
+                <span class="field-hint muted">
+                    <span th:text="${minDate}">2026-08-07</span> 이후의 빠뜨린 날을 채울 수 있어요(미래 날짜는 불가).
+                </span>
             </div>
             <div class="field">
                 <label for="hours">읽은 시간 (시간)</label>

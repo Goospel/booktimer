@@ -15,7 +15,7 @@ function formatDebt(debtSeconds: number): string {
 
 <template>
     <div v-if="weeklyShortfall.length > 0">
-        <p class="muted">최근 7일 중 목표를 못 채운 날이에요. 그날 읽고 기록을 깜빡했다면 채워 넣어요.</p>
+        <p class="muted">목표를 못 채운 날이에요. 그날 읽고 기록을 깜빡했다면 채워 넣어요.</p>
         <ul class="missed-list">
             <li v-for="d in weeklyShortfall" :key="d.date">
                 <div class="missed-main">
@@ -26,5 +26,5 @@ function formatDebt(debtSeconds: number): string {
             </li>
         </ul>
     </div>
-    <p class="status-line" v-else>이번 주는 빠뜨린 날이 없어요. 잘하고 있어요! 🎉</p>
+    <p class="status-line" v-else>빠뜨린 날이 없어요. 잘하고 있어요! 🎉</p>
 </template>

@@ -197,7 +197,7 @@ export interface TimerState {
   readingBooks: BookOption[];
   finishedBooks: BookOption[];
   recentBookId: number | null;
-  /** 리워드 광고로 밀린 하루를 지울 수 있는지 — 빠뜨린 날 존재 + 오늘 미사용을 서버가 판정해 준다. */
+  /** 리워드 광고로 밀린 하루를 지울 수 있는지 — 지울 빠뜨린 날이 남았는지를 서버가 판정해 준다(횟수 제한 없음). */
   debtWaiverAvailable: boolean;
 }
 

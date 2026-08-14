@@ -26,14 +26,15 @@ import java.time.LocalDate;
  * 따로 유도되므로 이 행이 생겨도 불변이다 — 광고로 재화를 파밍할 수 없다는 뜻이고, 그게 이 설계가
  * 먹이 지급 대신 부채 용서를 보상으로 고른 이유다.
  *
- * <p>제약 두 개가 어뷰징 상한을 든다(SDK에 서버사이드 보상 검증이 없어 지급 요청은 클라 주장일 뿐이므로,
- * 신뢰가 아니라 상한으로 캡한다): {@code (user, granted_on)} 유니크 = 하루 1회,
- * {@code (user, waived_date)} 유니크 = 같은 날 중복 용서 불가. 동시 요청 race도 제약이 잡는다.
+ * <p>제약은 {@code (user, waived_date)} 유니크 하나다 — 같은 날을 두 번 지우는 건 무의미하고, 동시 요청
+ * race도 이 제약이 잡는다. 하루 1회 상한이던 {@code (user, granted_on)} 유니크는 2026-08-14에 제거했다
+ * (V67): 부채 7일 자동 소멸을 폐지해 빚이 계속 누적되므로 갚을 수단도 계속 열려 있어야 한다. 어뷰징
+ * 상한은 이제 <b>부채 자체</b>가 든다 — 지울 과거 날이 없으면 거부되고, 오늘 몫은 애초에 대상이 아니다.
+ * {@code granted_on} 컬럼은 "언제 지급됐나"를 남기는 기록으로 유지한다(유니크만 빠졌다).
  */
 @Entity
 @Table(name = "reading_goal_waiver", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_goal_waiver_date", columnNames = {"user_id", "waived_date"}),
-        @UniqueConstraint(name = "uk_goal_waiver_grant", columnNames = {"user_id", "granted_on"})
+        @UniqueConstraint(name = "uk_goal_waiver_date", columnNames = {"user_id", "waived_date"})
 })
 public class ReadingGoalWaiver extends BaseTimeEntity {
 
@@ -50,7 +51,7 @@ public class ReadingGoalWaiver extends BaseTimeEntity {
     @Column(name = "waived_date", nullable = false)
     private LocalDate waivedDate;
 
-    /** 용서권이 지급된 날(유저 타임존 오늘) — 일일 1회 상한의 키. */
+    /** 용서권이 지급된 날(유저 타임존 오늘) — 지급 시점 기록(옛 일일 상한의 키였다). */
     @Column(name = "granted_on", nullable = false)
     private LocalDate grantedOn;
 

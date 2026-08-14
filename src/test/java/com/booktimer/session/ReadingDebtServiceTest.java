@@ -35,9 +35,10 @@ import static org.mockito.Mockito.when;
 class ReadingDebtServiceTest {
 
     private static final long GOAL = 3600L;
-    // UTC로는 06-06 저녁이지만 KST로는 06-07 새벽 → "오늘"이 유저 TZ(KST)로 정해지는지 구분되는 시각.
-    private static final Instant NOW = Instant.parse("2026-06-06T20:00:00Z");
-    private static final LocalDate TODAY_KST = LocalDate.of(2026, 6, 7);
+    // UTC로는 09-06 저녁이지만 KST로는 09-07 새벽 → "오늘"이 유저 TZ(KST)로 정해지는지 구분되는 시각.
+    // 날짜를 DEBT_EPOCH(2026-08-07) 이후로 잡는다 — 그 이전이면 창이 epoch에 걸려 한 날로 좁혀진다.
+    private static final Instant NOW = Instant.parse("2026-09-06T20:00:00Z");
+    private static final LocalDate TODAY_KST = LocalDate.of(2026, 9, 7);
 
     @Mock
     private ReadingHistoryService historyService;
@@ -48,6 +49,9 @@ class ReadingDebtServiceTest {
     @Mock
     private ReadingGoalWaiverRepository waiverRepository;
 
+    /** 부채 누적 시작일 — 운영값과 같은 형태로 주입해 하한 동작까지 이 테스트가 직접 본다. */
+    private static final LocalDate EPOCH = LocalDate.of(2026, 8, 7);
+
     private ReadingDebtService service;
     private User user;
 
@@ -55,7 +59,7 @@ class ReadingDebtServiceTest {
     void setUp() {
         user = User.of("reader@booktimer.com", "$2a$10$abcdefghijklmnopqrstuv", "책벌레", "Asia/Seoul", Role.USER);
         service = new ReadingDebtService(historyService, timerRepository, goalChangeRepository,
-                waiverRepository, Clock.fixed(NOW, ZoneOffset.UTC));
+                waiverRepository, Clock.fixed(NOW, ZoneOffset.UTC), EPOCH.toString());
     }
 
     @Test
@@ -152,8 +156,8 @@ class ReadingDebtServiceTest {
     }
 
     @Test
-    @DisplayName("weeklyDebtTrace: baseline 이전 날은 goal=0으로 구성(빠뜨린 날 제외)")
-    void weeklyDebtTrace_daysBeforeBaseline_goalZero() {
+    @DisplayName("weeklyDebtTrace: 창이 baseline(첫 목표일)에서 시작한다 — 그 이전 날은 trace에 없다")
+    void weeklyDebtTrace_startsAtBaseline() {
         LocalDate asOf = TODAY_KST;
         ReadingTimer timer = ReadingTimer.of(GOAL);
         when(timerRepository.findByUser(user)).thenReturn(Optional.of(timer));
@@ -163,14 +167,62 @@ class ReadingDebtServiceTest {
 
         WeeklyDebtTrace trace = service.weeklyDebtTrace(user, asOf);
 
-        // baseline 이전(today-3..today-6)은 goal=0이라 deficit 없음
-        for (int i = 3; i <= 6; i++) {
-            int idx = WeeklyDebtCalculator.WINDOW_DAYS - 1 - i;
-            assertThat(trace.days().get(idx).goalSeconds()).isZero();
-            assertThat(trace.days().get(idx).rawDeficitSeconds()).isZero();
-        }
-        // baseline 이후(today-2, today-1, today)는 goal=GOAL
-        assertThat(trace.days().get(WeeklyDebtCalculator.WINDOW_DAYS - 3).goalSeconds()).isEqualTo(GOAL);
+        assertThat(trace.days()).hasSize(3); // today-2 .. today
+        assertThat(trace.days().get(0).date()).isEqualTo(TODAY_KST.minusDays(2));
+        assertThat(trace.days()).allSatisfy(d -> assertThat(d.goalSeconds()).isEqualTo(GOAL));
+    }
+
+    // --- 무제한 누적 + DEBT_EPOCH 하한 ---
+
+    @Test
+    @DisplayName("baseline이 오래됐으면 7일을 넘겨 계속 누적된다 — 30일 전 부채가 살아있다")
+    void weeklyDebt_accumulatesBeyondSevenDays() {
+        LocalDate baseline = TODAY_KST.minusDays(29);
+        when(timerRepository.findByUser(user)).thenReturn(Optional.of(ReadingTimer.of(GOAL)));
+        when(goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of(
+                ReadingGoalChange.of(user, baseline, GOAL)));
+        when(historyService.dailyHistory(user)).thenReturn(List.of());
+
+        WeeklyDebt debt = service.weeklyDebt(user);
+
+        assertThat(debt.missedDays()).hasSize(29); // today 제외 29일 전부 빠뜨린 날
+        assertThat(debt.missedDays()).extracting(DayDebt::date).contains(baseline, TODAY_KST.minusDays(10));
+        assertThat(debt.totalDebtSeconds()).isEqualTo(30 * GOAL);
+    }
+
+    @Test
+    @DisplayName("DEBT_EPOCH 하한: baseline이 epoch보다 이르면 epoch부터만 부채로 센다 — 기존 사용자 소급 충격 차단")
+    void debtWindowStart_flooredAtEpoch() {
+        when(timerRepository.findByUser(user)).thenReturn(Optional.of(ReadingTimer.of(GOAL)));
+        when(goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of(
+                ReadingGoalChange.of(user, LocalDate.of(2026, 1, 1), GOAL))); // epoch보다 한참 이른 가입
+        when(historyService.dailyHistory(user)).thenReturn(List.of());
+
+        assertThat(service.debtWindowStart(user)).isEqualTo(EPOCH);
+        assertThat(service.weeklyDebtTrace(user, TODAY_KST).days().get(0).date())
+                .isEqualTo(EPOCH);
+    }
+
+    @Test
+    @DisplayName("목표 이력이 없으면(레거시) 옛 7일 창으로 폴백한다 — 폴백 목표를 무한 과거에 적용하지 않는다")
+    void debtWindowStart_noGoalHistory_fallsBackToLegacyWindow() {
+        when(timerRepository.findByUser(user)).thenReturn(Optional.of(ReadingTimer.of(GOAL)));
+        when(goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of());
+
+        assertThat(service.debtWindowStart(user))
+                .isEqualTo(TODAY_KST.minusDays(WeeklyDebtCalculator.WINDOW_DAYS - 1L));
+    }
+
+    @Test
+    @DisplayName("가입 당일: baseline=오늘이면 창은 오늘 하루 — 가입 전 날이 부채로 잡히지 않는다")
+    void debtWindowStart_baselineToday_singleDay() {
+        when(timerRepository.findByUser(user)).thenReturn(Optional.of(ReadingTimer.of(GOAL)));
+        when(goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of(
+                ReadingGoalChange.of(user, TODAY_KST, GOAL)));
+        when(historyService.dailyHistory(user)).thenReturn(List.of());
+
+        assertThat(service.debtWindowStart(user)).isEqualTo(TODAY_KST);
+        assertThat(service.weeklyDebt(user).missedDays()).isEmpty();
     }
 
     @Test

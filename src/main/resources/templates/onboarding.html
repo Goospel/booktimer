@@ -20,13 +20,13 @@
     </div>
 
     <section class="card">
-        <!-- 부채 규칙(7일 윈도우·자동 용서)은 신규 사용자에게 부담이므로 기본 접힘 아코디언으로 숨긴다(발견 9).
+        <!-- 부채 규칙은 신규 사용자에게 부담이므로 기본 접힘 아코디언으로 숨긴다(발견 9).
              궁금한 사람만 펼쳐 보고, 시작 자체는 가로막지 않는다. -->
         <details class="entry-accordion">
             <summary>📖 목표를 못 채운 날은 어떻게 되나요?</summary>
             <p class="entry-accordion-body">
-                매일 <strong>하루 목표</strong>만큼 읽는 게 목표예요. 못 채운 날은 <strong>최근 7일까지</strong> 빠뜨린 기록으로
-                채울 수 있고, 그보다 오래된 날은 부담 없이 자동으로 넘어가요. 목표는 나중에 설정에서 바꿀 수 있어요.
+                매일 <strong>하루 목표</strong>만큼 읽는 게 목표예요. 못 채운 날은 <strong>밀린 시간</strong>으로 남는데,
+                빠뜨린 기록을 나중에 채우거나 목표보다 더 읽으면 줄어들어요. 목표는 나중에 설정에서 바꿀 수 있어요.
             </p>
         </details>
         <form th:action="@{/onboarding}" th:object="${onboardingForm}" method="post">

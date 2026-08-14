@@ -41,7 +41,7 @@ public class RetentionNudgeService {
 
     private static final Logger log = LoggerFactory.getLogger(RetentionNudgeService.class);
 
-    /** 비활동 판정 창 — 마지막 활동이 이보다 오래면 넛지 대상(7일 윈도우 모델과 정합). */
+    /** 비활동 판정 창 — 마지막 활동이 이보다 오래면 넛지 대상(부채 모델과 무관한 독립 상수). */
     static final Duration INACTIVITY_WINDOW = Duration.ofDays(7);
 
     /** (광고) 접두는 정보통신망법 §50 의무 — 제목 맨 앞에 둔다. */

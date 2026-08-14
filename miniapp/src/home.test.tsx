@@ -335,11 +335,11 @@ describe('히어로 프레이밍 (렌더)', () => {
     expect(markup).not.toContain('남은시간');
   });
 
-  it('응원 문구가 사라졌다 — 7일 안내는 「남은시간」을 눌러야 보이는 상자로 들어갔다', () => {
+  it('응원 문구가 사라졌다 — 밀린 시간 안내는 「남은시간」을 눌러야 보이는 상자로 들어갔다', () => {
     const markup = renderHome({ carriedDebtSeconds: 1800, carryover: true });
 
     expect(markup).not.toContain('뒤처져도 괜찮아요');
-    expect(markup).not.toContain('자동으로 사라져요'); // 상자는 접힌 채로 시작한다
+    expect(markup).not.toContain('광고를 보고 하루씩'); // 상자는 접힌 채로 시작한다
   });
 });
 
@@ -379,8 +379,12 @@ describe('남은시간 설명 상자', () => {
     expect(markup).toContain('15:00'); // 남은시간
   });
 
-  it('7일 자동 소멸을 함께 알린다 — 히어로 아래 상시 노출이던 안내가 여기로 왔다', () => {
-    expect(note(1800, 600, 900)).toContain('최근 7일이 지나면 자동으로 사라져요');
+  it('지우는 수단을 함께 알린다 — 7일 자동 소멸이 폐지돼 "기다리면 사라진다"는 더 이상 사실이 아니다', () => {
+    const markup = note(1800, 600, 900);
+
+    expect(markup).toContain('더 읽거나');
+    expect(markup).toContain('광고');
+    expect(markup).not.toContain('자동으로 사라져요');
   });
 });
 

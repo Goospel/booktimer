@@ -44,7 +44,7 @@ public class DebtWaiverApiController {
         this.dashboardModel = dashboardModel;
     }
 
-    /** @return 200 {waivedDate, waivedSeconds, timer} / 400 지울 날 없음 / 401 미인증(체인) / 409 오늘 이미 사용 */
+    /** @return 200 {waivedDate, waivedSeconds, timer} / 400 지울 날 없음 / 401 미인증(체인) / 409 중복 소거 race */
     @PostMapping("/api/miniapp/debt-waiver")
     public WaiveResponse waiveDebt(Principal principal) {
         User user = currentUserService.resolve(principal);
@@ -54,10 +54,16 @@ public class DebtWaiverApiController {
                         goalWaiverService.availableFor(user)));
     }
 
-    /** 오늘 이미 사용 → 409. 동시 요청(두 탭)이 애플리케이션 검사를 통과하면 DB 유니크 제약이 같은 곳에 도착한다. */
-    @ExceptionHandler({IllegalStateException.class, DataIntegrityViolationException.class})
-    public ResponseEntity<String> handleAlreadyUsed(Exception e) {
-        return ResponseEntity.status(HttpStatus.CONFLICT).body("오늘은 이미 사용했어요. 내일 다시 지울 수 있어요.");
+    /**
+     * 같은 날을 중복 소거 → 409. 두 탭이 동시에 같은 날을 집으면 {@code (user, waived_date)} 유니크가 잡는다.
+     *
+     * <p>{@code IllegalStateException}은 여기서 다루지 않는다 — 일일 상한이 없어진 뒤 이 경로에서 그 예외를
+     * 던지는 곳은 {@code CurrentUserService.resolve}("인증 주체는 있으나 도메인 유저 없음" = 진짜 500)뿐이라,
+     * 409로 뒤바꾸면 그 진단성이 사라진다.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<String> handleDuplicateWaive(DataIntegrityViolationException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body("방금 지워진 날이에요. 다시 시도해 주세요.");
     }
 
     /** 지울 밀린 날이 없음 → 400. */

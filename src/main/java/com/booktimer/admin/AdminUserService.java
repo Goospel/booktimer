@@ -95,7 +95,7 @@ public class AdminUserService {
     }
 
     private AdminUserDetail assemble(User u) {
-        // 타이머가 있으면 하루 목표 + 7일 윈도우 부채(오늘·이번 주)를 함께 싣는다(부채는 세션에서 유도).
+        // 타이머가 있으면 하루 목표 + 누적 부채(오늘·총합)를 함께 싣는다(부채는 세션에서 유도).
         AdminUserDetail.TimerInfo timer = timerRepository.findByUser(u)
                 .map(t -> {
                     WeeklyDebt debt = debtService.weeklyDebt(u);

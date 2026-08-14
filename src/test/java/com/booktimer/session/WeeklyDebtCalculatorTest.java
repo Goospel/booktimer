@@ -12,11 +12,12 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 7일 윈도우 per-day 부채 순수 계산 검증 (DB/시간 무관).
+ * per-day 부채 순수 계산 검증 (DB/시간 무관).
  *
- * <p>부채 = 날짜별 독립. 하루 부채 = max(0, 하루목표 − 그날 읽은 초). 활성 범위는 최근 7일(오늘 포함)이고,
- * 그보다 오래된 날은 표시·집계 대상이 아니다(= cap을 대체하는 자동 용서). "오늘"은 호출자가 유저 타임존으로
- * 정해 넘긴다(N-010) — 여기선 순수 계산만 본다.
+ * <p>부채 = 날짜별 독립. 하루 부채 = max(0, 하루목표 − 그날 읽은 초). <b>창(계산 범위)은 넘겨받은
+ * {@code goalByDate} 맵이 정한다</b> — 최소 날짜부터 기준일까지. 7일 자동 소멸은 폐지됐고, 평면 목표
+ * 편의 오버로드({@code compute(reads, goal, today)})만 {@link WeeklyDebtCalculator#WINDOW_DAYS} 창을 쓴다.
+ * "오늘"은 호출자가 유저 타임존으로 정해 넘긴다(N-010) — 여기선 순수 계산만 본다.
  */
 class WeeklyDebtCalculatorTest {
 
@@ -104,7 +105,7 @@ class WeeklyDebtCalculatorTest {
     }
 
     @Test
-    @DisplayName("윈도우 경계: 정확히 6일 전(today-6)은 포함, 7일 전(today-7)은 자동 용서로 제외")
+    @DisplayName("평면 목표 오버로드의 창 경계: 6일 전은 포함, 7일 전은 창 밖(맵 오버로드는 창이 다르다)")
     void missedDays_windowBoundary() {
         WeeklyDebt debt = WeeklyDebtCalculator.compute(reads(), GOAL, TODAY);
         assertThat(debt.missedDays()).extracting(DayDebt::date)
@@ -415,8 +416,8 @@ class WeeklyDebtCalculatorTest {
         }
 
         @Test
-        @DisplayName("윈도우 슬라이드: today=D+1이면 D-6 날이 trace에 없고 D+1이 오늘로 들어간다")
-        void windowSlide_dayMovesOutWhenTodayAdvances() {
+        @DisplayName("창은 슬라이드하지 않는다: today가 하루 지나도 맵 최소 날짜는 trace에 그대로 남는다(누적)")
+        void windowDoesNotSlide_oldestDayStaysWhenTodayAdvances() {
             LocalDate d = TODAY;
             LocalDate dPlus1 = TODAY.plusDays(1);
             Map<LocalDate, Long> reads = reads();
@@ -424,14 +425,14 @@ class WeeklyDebtCalculatorTest {
             for (int i = 0; i < WeeklyDebtCalculator.WINDOW_DAYS + 2; i++) {
                 goalMap.put(dPlus1.minusDays(i), GOAL);
             }
+            LocalDate oldest = dPlus1.minusDays(WeeklyDebtCalculator.WINDOW_DAYS + 1); // 맵의 최소 날짜
 
             WeeklyDebtTrace traceD = WeeklyDebtCalculator.computeTrace(reads, goalMap, d);
             WeeklyDebtTrace traceDPlus1 = WeeklyDebtCalculator.computeTrace(reads, goalMap, dPlus1);
 
-            LocalDate oldestInD = d.minusDays(WeeklyDebtCalculator.WINDOW_DAYS - 1); // D-6
-            assertThat(traceD.days()).extracting(DayDebtTrace::date).contains(oldestInD);
-            assertThat(traceDPlus1.days()).extracting(DayDebtTrace::date).doesNotContain(oldestInD);
-            assertThat(traceDPlus1.days()).extracting(DayDebtTrace::date).contains(dPlus1);
+            // 옛 모델이라면 하루 지나며 빠져나갔을 날이 이제는 양쪽 trace에 모두 남는다
+            assertThat(traceD.days()).extracting(DayDebtTrace::date).contains(oldest);
+            assertThat(traceDPlus1.days()).extracting(DayDebtTrace::date).contains(oldest, dPlus1);
         }
 
         @Test
@@ -582,6 +583,75 @@ class WeeklyDebtCalculatorTest {
             assertThat(trace.days()).extracting(DayDebtTrace::waived).containsOnly(false);
             // compute() 경로와도 동치 — 오버로드 위임이 결과를 바꾸지 않는다
             assertThat(trace.toWeeklyDebt()).isEqualTo(WeeklyDebtCalculator.compute(reads, flatGoalMap(), TODAY));
+        }
+    }
+
+    @Nested
+    @DisplayName("무제한 누적 — 창은 goalByDate 맵이 정한다(7일 자동 소멸 폐지)")
+    class UnboundedWindowTests {
+
+        /** {@code daysBack}일 전부터 today까지 GOAL 목표를 채운 맵 */
+        private Map<LocalDate, Long> goalMapSince(int daysBack) {
+            Map<LocalDate, Long> m = new HashMap<>();
+            for (int i = 0; i <= daysBack; i++) {
+                m.put(TODAY.minusDays(i), GOAL);
+            }
+            return m;
+        }
+
+        @Test
+        @DisplayName("30일 맵 → trace가 30일을 덮고 옛 7일 창 밖 부채도 살아남는다")
+        void goalMapSpanning30Days_oldDebtSurvives() {
+            WeeklyDebtTrace trace = WeeklyDebtCalculator.computeTrace(reads(), goalMapSince(29), TODAY);
+
+            assertThat(trace.days()).hasSize(30);
+            assertThat(trace.days().get(0).date()).isEqualTo(TODAY.minusDays(29));
+            assertThat(trace.toWeeklyDebt().missedDays()).extracting(DayDebt::date)
+                    .contains(TODAY.minusDays(7), TODAY.minusDays(29)); // 옛 모델이면 소멸했을 날
+            assertThat(trace.totalDebtSeconds()).isEqualTo(30 * GOAL);
+        }
+
+        @Test
+        @DisplayName("오늘 초과분이 20일 전 부채를 갚는다 — backward 재분배가 창 전체로 넓어졌다")
+        void todaySurplus_paysDebt20DaysAgo() {
+            Map<LocalDate, Long> reads = reads();
+            for (int i = 0; i <= 29; i++) {
+                reads.put(TODAY.minusDays(i), GOAL);
+            }
+            reads.put(TODAY.minusDays(20), 0L);  // 20일 전 부채 3600
+            reads.put(TODAY, GOAL + GOAL);        // 오늘 초과분 3600
+
+            WeeklyDebtTrace trace = WeeklyDebtCalculator.computeTrace(reads, goalMapSince(29), TODAY);
+            DayDebtTrace day20 = trace.days().stream()
+                    .filter(d -> d.date().equals(TODAY.minusDays(20)))
+                    .findFirst().orElseThrow(); // 옛 7일 창이면 이 날이 trace에 없어 여기서 터진다
+
+            assertThat(day20.rawDeficitSeconds()).isEqualTo(GOAL); // 빚이 있었고
+            assertThat(day20.remainingSeconds()).isZero();          // 오늘 초과분으로 갚혔다
+            assertThat(trace.days().get(trace.days().size() - 1).surplusConsumedSeconds()).isEqualTo(GOAL);
+            assertThat(trace.toWeeklyDebt().missedDays()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("경계: 맵 최소 날짜가 기준일보다 미래면(가입 당일) 창은 그날 하루로 좁혀진다")
+        void mapStartsAfterToday_windowIsSingleDay() {
+            Map<LocalDate, Long> goals = new HashMap<>();
+            goals.put(TODAY.plusDays(3), GOAL);
+
+            WeeklyDebtTrace trace = WeeklyDebtCalculator.computeTrace(reads(), goals, TODAY);
+
+            assertThat(trace.days()).hasSize(1);
+            assertThat(trace.days().get(0).date()).isEqualTo(TODAY);
+            assertThat(trace.days().get(0).isToday()).isTrue();
+        }
+
+        @Test
+        @DisplayName("경계: 빈 목표 맵이면 오늘 하루 창 — toWeeklyDebt()가 터지지 않는다")
+        void emptyGoalMap_windowIsSingleDay() {
+            WeeklyDebtTrace trace = WeeklyDebtCalculator.computeTrace(reads(), Map.of(), TODAY);
+
+            assertThat(trace.days()).hasSize(1);
+            assertThat(trace.toWeeklyDebt().todayDebtSeconds()).isZero(); // goal 0 → 부채 없음
         }
     }
 }

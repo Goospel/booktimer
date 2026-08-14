@@ -88,7 +88,7 @@
             <div class="set-field">
                 <label class="set-label" for="incrementMinutes">하루 목표 (분)</label>
                 <input class="set-input" type="number" id="incrementMinutes" min="0" th:field="*{incrementMinutes}">
-                <span class="set-hint">매일 이만큼 읽는 게 목표예요. 최근 7일까지 빠뜨린 날을 채울 수 있어요.</span>
+                <span class="set-hint">매일 이만큼 읽는 게 목표예요. 빠뜨린 날은 나중에 채워 넣을 수 있어요.</span>
                 <span class="set-field-error" th:if="${#fields.hasErrors('incrementMinutes')}" th:errors="*{incrementMinutes}">목표 오류</span>
             </div>
 
@@ -98,7 +98,7 @@
                 <span class="set-check-box" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
                 <span class="set-check-body">
                     <span class="set-check-title">밀린 독서 시간을 타이머에 합쳐 표시</span>
-                    <span class="set-check-desc">켜면 최근 7일 중 못 채운 시간이 오늘 타이머에 더해져 "갚을 시간"으로 쌓여 보여요. 끄면 오늘 몫만 보여요.</span>
+                    <span class="set-check-desc">켜면 지금까지 못 채운 시간이 오늘 타이머에 더해져 "갚을 시간"으로 쌓여 보여요. 끄면 오늘 몫만 보여요.</span>
                 </span>
             </label>
 

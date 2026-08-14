@@ -3,8 +3,8 @@ package com.booktimer.web;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.security.CurrentUserService;
+import com.booktimer.session.ReadingDebtService;
 import com.booktimer.session.ReadingSessionService;
-import com.booktimer.session.WeeklyDebtCalculator;
 import com.booktimer.user.User;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -38,15 +38,18 @@ public class ReadingSessionController {
     private final CurrentUserService currentUserService;
     private final ReadingSessionService sessionService;
     private final BookRepository bookRepository;
+    private final ReadingDebtService debtService;
     private final Clock clock;
 
     public ReadingSessionController(CurrentUserService currentUserService,
                                     ReadingSessionService sessionService,
                                     BookRepository bookRepository,
+                                    ReadingDebtService debtService,
                                     Clock clock) {
         this.currentUserService = currentUserService;
         this.sessionService = sessionService;
         this.bookRepository = bookRepository;
+        this.debtService = debtService;
         this.clock = clock;
     }
 
@@ -97,7 +100,7 @@ public class ReadingSessionController {
         User user = currentUser(principal);
         ZoneId zone = ZoneId.of(user.getTimezone());
         LocalDate today = LocalDate.ofInstant(clock.instant(), zone);
-        LocalDate windowStart = today.minusDays(WeeklyDebtCalculator.WINDOW_DAYS - 1L);
+        LocalDate windowStart = debtService.debtWindowStart(user);
 
         model.addAttribute("books", bookRepository.findByUserOrderByCreatedAtDesc(user));
         model.addAttribute("today", today.toString());
@@ -126,7 +129,7 @@ public class ReadingSessionController {
         LocalDate readDate = parseDate(date);
         long durationSeconds = hours * 3600L + minutes * 60L;
 
-        String error = validateManual(book, readDate, durationSeconds, today);
+        String error = validateManual(book, readDate, durationSeconds, today, debtService.debtWindowStart(user));
         if (error != null) {
             redirectAttributes.addFlashAttribute("error", error);
             return "redirect:/sessions/manual";
@@ -151,12 +154,17 @@ public class ReadingSessionController {
         }
     }
 
-    private static String validateManual(Book book, LocalDate readDate, long durationSeconds, LocalDate today) {
+    /**
+     * @param windowStart 부채 계산 창의 시작일({@link ReadingDebtService#debtWindowStart}) — 입력 가능 하한을
+     *                    부채 대상 구간과 같게 맞춘다. 어긋나면 "부채는 있는데 채울 수 없는 날"이 생긴다.
+     */
+    private static String validateManual(Book book, LocalDate readDate, long durationSeconds,
+                                         LocalDate today, LocalDate windowStart) {
         if (book == null) return "기록할 책을 선택하세요.";
         if (readDate == null) return "읽은 날짜를 올바르게 입력하세요.";
         if (readDate.isAfter(today)) return "미래 날짜는 기록할 수 없어요.";
-        if (readDate.isBefore(today.minusDays(WeeklyDebtCalculator.WINDOW_DAYS - 1L)))
-            return "최근 7일 이내의 날짜만 기록할 수 있어요(그 이전은 자동으로 넘어가요).";
+        if (readDate.isBefore(windowStart))
+            return "밀린 기록을 채울 수 있는 기간(" + windowStart + " 이후)을 벗어난 날짜예요.";
         if (durationSeconds <= 0) return "읽은 시간을 입력하세요.";
         if (durationSeconds > MAX_MANUAL_SECONDS) return "하루(24시간)를 넘는 기록은 할 수 없어요.";
         return null;

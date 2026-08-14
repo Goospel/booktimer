@@ -106,7 +106,7 @@ onUnmounted(() => {
                 <MonthlyRecords :months="data.months" />
             </section>
             <section class="card hist-pane">
-                <h2>이번 주 빠뜨린 날</h2>
+                <h2>빠뜨린 날</h2>
                 <WeeklyShortfall :weeklyShortfall="data.weeklyShortfall" />
             </section>
         </div>
@@ -118,7 +118,7 @@ onUnmounted(() => {
                         @click="activeTab = 'records'">일자별 독서 시간</button>
                 <button type="button" class="hist-tab" :class="{ active: activeTab === 'missed' }"
                         role="tab" :aria-selected="activeTab === 'missed'"
-                        @click="activeTab = 'missed'">이번 주 빠뜨린 날</button>
+                        @click="activeTab = 'missed'">빠뜨린 날</button>
             </div>
             <div v-show="activeTab === 'records'" class="hist-panel">
                 <MonthlyRecords :months="data.months" />
