@@ -218,19 +218,13 @@ export interface TimerState {
   debtWaiverAvailable: boolean;
 }
 
-/** 작가 격언 — 서버가 셔플해 최대 10개를 실어 준다(`DashboardApiController.QuoteDto`). */
-export interface QuoteDto {
-  text: string;
-  author: string;
-}
-
+// 서버는 작가 격언(`quotes`)도 실어 보내지만 미니앱은 쓰지 않는다 — 웹 대시보드 전용이라 필드를 받지 않는다.
 export interface DashboardResponse extends TimerState {
   nickname: string;
   loginId: string | null;
   profileCharacterCode: string | null;
   wantToReadBooks: BookOption[];
   graph: ContributionGraph;
-  quotes: QuoteDto[];
   emailVerified: boolean;
 }
 

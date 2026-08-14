@@ -22,11 +22,10 @@ import { mockRequest } from './dev-mock';
  * 계약(잔디 방향·stop의 graph 동봉·뮤테이션 반영)을 지키는지만 본다. 픽스처 문구는 재지 않는다.
  */
 describe('dev-mock 핸들러', () => {
-  it('대시보드 — 책·격언과 함께 잔디를 준다. weeks[0]이 최신 주다(#730 규약)', async () => {
+  it('대시보드 — 책과 함께 잔디를 준다. weeks[0]이 최신 주다(#730 규약)', async () => {
     const data = await mockRequest<DashboardResponse>('/api/dashboard', {});
 
     expect(data.readingBooks.length).toBeGreaterThan(0);
-    expect(data.quotes.length).toBeGreaterThan(0);
     // weeks[0]이 과거 주면 잔디가 좌우로 뒤집혀 그려진다 — 미니앱이 실제로 한 번 겪은 버그(#730).
     const latest = data.graph.weeks[0].at(-1)!.date!;
     const older = data.graph.weeks[1].at(-1)!.date!;

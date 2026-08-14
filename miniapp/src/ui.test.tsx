@@ -118,7 +118,6 @@ function home(overrides: Partial<DashboardResponse>) {
     recentBookId: null,
     debtWaiverAvailable: false,
     graph,
-    quotes: [],
     emailVerified: true,
     ...overrides,
   };
@@ -157,9 +156,8 @@ describe('홈 오늘 진행률', () => {
     expect(markup).not.toMatch(/NaN|Infinity/);
   });
 
-  it('격언이 없으면 카드를 띄우지 않는다 — 빈 인용부호만 남는 걸 막는다', () => {
-    expect(home({ quotes: [] })).not.toContain('“');
-    expect(home({ quotes: [{ text: '책은 도끼다', author: '카프카' }] })).toContain('카프카');
+  it('격언 카드는 홈에서 사라졌다 — 인용부호가 남으면 빈 카드가 되살아난 것이다', () => {
+    expect(home({})).not.toContain('“');
   });
 
   it('게이지 라벨과 값을 각자 다른 블록에 둔다 — "오늘 읽은 시간45:00"으로 붙어 보였다', () => {

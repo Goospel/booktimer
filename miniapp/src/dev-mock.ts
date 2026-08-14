@@ -387,10 +387,6 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     profileCharacterCode: null,
     wantToReadBooks: bookOptions('WANT_TO_READ'),
     graph: buildGraph(),
-    quotes: [
-      { text: '독서는 완성된 사람을 만들고, 사색은 사려 깊은 사람을 만든다.', author: '벤저민 프랭클린' },
-      { text: '오늘의 독서가 내일의 나를 만든다.', author: '목 모드' },
-    ],
     emailVerified: true,
   })],
 

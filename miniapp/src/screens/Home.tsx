@@ -1,7 +1,7 @@
 import { Button, ProgressBar, Text } from '@toss/tds-mobile';
 import { useEffect, useRef, useState } from 'react';
 
-import type { BookOption, DashboardResponse, QuoteDto, TimerState, WaiveResponse } from '../api';
+import type { BookOption, DashboardResponse, TimerState, WaiveResponse } from '../api';
 import { ApiError, startSession, stopSession, tagBook, waiveDebt } from '../api';
 import { useBackClose } from '../back';
 import { elapsedSeconds, formatClock, formatDuration } from '../format';
@@ -783,7 +783,6 @@ export function Home({
   const { todayRead, remaining, overflow, progress, achieved } = todayProgress(dashboard, elapsed);
   // 남은시간에 설명 손잡이를 달지 — 목표와 밀린 시간의 합일 때만 밝힐 내역이 있다.
   const hasNote = showRemainingHandle(dashboard.carryover, dashboard.carriedDebtSeconds);
-  const quotes = dashboard.quotes ?? [];
   // 캐러셀 가운데 온 책 — 시작 버튼도 이 값을 그대로 쓴다(고른 책과 시작 대상이 어긋날 자리를 없앤다).
   const selectedBook = dashboard.readingBooks.find((b) => b.id === selectedBookId) ?? null;
 
@@ -953,8 +952,6 @@ export function Home({
           이미 전부 그리고 그 탭은 하단 탭바에서 한 번에 닿으므로, 홈에 진입 손잡이를 또 두지 않는다. */}
       <HomeFeedBox onError={onError} />
 
-      {quotes.length > 0 && <QuoteCard quotes={quotes} />}
-
       <AccountSection onGoSettings={onGoSettings} />
 
       {/* 시트는 측정 종료 후 태깅 자리 하나다 — 고르기는 캐러셀이 맡는다. */}
@@ -971,32 +968,3 @@ export function Home({
   );
 }
 
-/** 작가 격언 — 서버가 셔플해 준 목록에서 하나. 탭하면 다음 격언으로 넘어간다. */
-function QuoteCard({ quotes }: { quotes: QuoteDto[] }) {
-  const [index, setIndex] = useState(() => Math.floor(Math.random() * quotes.length));
-  const quote = quotes[index % quotes.length];
-
-  return (
-    <button type="button" onClick={() => setIndex((i) => (i + 1) % quotes.length)} style={cardStyle}>
-      <Text typography="st11" style={{ display: 'block', textAlign: 'left' }}>
-        “{quote.text}”
-      </Text>
-      <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8, textAlign: 'left' }}>
-        — {quote.author}
-      </Text>
-    </button>
-  );
-}
-
-/** 탭 가능한 카드 공통 — button 기본 스타일을 지워 div처럼 보이게 한다(접근성은 button이 맡는다). */
-const cardStyle = {
-  display: 'block',
-  width: '100%',
-  marginTop: 12,
-  padding: 16,
-  border: 'none',
-  borderRadius: 12,
-  background: 'var(--adaptiveGrey100, #FCFAF5)',
-  textAlign: 'left',
-  cursor: 'pointer',
-} as const;
