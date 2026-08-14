@@ -5,9 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { BookOption, DashboardResponse } from './api';
 import { TAB_BAR_Z_INDEX } from './App';
-import { ApiError, logout, waiveDebt } from './api';
+import { ApiError, waiveDebt } from './api';
 import {
-  AccountSection,
   BookCarousel,
   BookSheet,
   COVER_GAP,
@@ -24,7 +23,6 @@ import {
   claimDebtWaiver,
   defaultBookId,
   goalHandleLabel,
-  logoutAndLeave,
   noBookSubtitle,
   selectionAt,
   shouldShowNotificationCard,
@@ -48,7 +46,6 @@ import { REWARD_AD_GROUP_ID, notificationAgreementSupported, requestNotification
 
 vi.mock('./api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api')>()),
-  logout: vi.fn(),
   waiveDebt: vi.fn(),
 }));
 vi.mock('./toss', () => ({
@@ -61,7 +58,6 @@ vi.mock('./toss', () => ({
   openExternal: vi.fn(), // 피드 박스가 뉴스 줄에서 쓴다(홈이 프롭으로 내려 준다)
 }));
 
-const logoutMock = vi.mocked(logout);
 const waiveDebtMock = vi.mocked(waiveDebt);
 const watchRewardAdMock = vi.mocked(watchRewardAd);
 const supportedMock = vi.mocked(notificationAgreementSupported);
@@ -109,7 +105,7 @@ function renderHome(overrides: Partial<DashboardResponse> = {}) {
         onTimerChange={() => {}}
         onGraphChange={() => {}}
         onGoGoal={() => {}}
-        onLogout={() => {}}
+        onGoSettings={() => {}}
         onError={() => {}}
       />
     </TDSMobileProvider>,
@@ -117,7 +113,6 @@ function renderHome(overrides: Partial<DashboardResponse> = {}) {
 }
 
 beforeEach(() => {
-  logoutMock.mockReset();
   waiveDebtMock.mockReset();
   watchRewardAdMock.mockReset();
   supportedMock.mockReset();
@@ -1078,60 +1073,30 @@ describe('실패 문구 (waiverErrorMessage)', () => {
 });
 
 /**
- * 계정 진입점 — 미니앱엔 설정 화면이 없어 로그아웃도 계정 관리도 길이 없었다(api의 `logout()`은
- * 구현돼 있는데 부르는 UI가 없었다). 상세 설정은 웹이 본진이라 여기서는 안내 한 줄 + 로그아웃만 둔다.
+ * 계정 진입점 — 홈 하단은 이제 **설정 화면으로 가는 손잡이**다.
+ *
+ * <p>예전엔 "계정 관리·상세 설정은 booktimer.app에서" + 로그아웃이었는데, 토스로 가입한 계정은 비밀번호가
+ * 없어 그 웹에 로그인 자체가 불가능하다 — 실행할 수 없는 죽은 안내였다(핸들 배너가 앓던 것과 같은 병).
+ * 로그아웃 2단 확인은 설정 화면으로 이사했고(`settings.test.tsx`), 여기엔 진입만 남는다.
  */
 describe('계정 진입점', () => {
-  const account = (confirm: boolean) =>
-    renderToStaticMarkup(
-      <TDSMobileProvider userAgent={userAgent}>
-        <AccountSection confirm={confirm} onConfirm={() => {}} onLogout={() => {}} />
-      </TDSMobileProvider>,
-    );
-
-  it('계정 관리는 웹이 본진임을 한 줄로 알린다 — 미니앱만 쓰는 사람에게는 길이 아예 안 보였다', () => {
-    expect(account(false)).toContain('booktimer.app');
+  it('설정 화면으로 가는 손잡이를 그린다', () => {
+    expect(renderHome()).toContain('프로필·설정');
   });
 
-  it('처음엔 「로그아웃」만 — 실수 한 탭에 세션이 날아가지 않게', () => {
-    expect(account(false)).toContain('로그아웃');
-    expect(account(false)).not.toContain('정말 로그아웃');
+  it('실행할 수 없는 안내는 지웠다 — 토스로 가입한 계정은 booktimer.app에 로그인할 수 없다', () => {
+    expect(renderHome()).not.toContain('booktimer.app');
   });
 
-  it('한 번 더 물어본 뒤 실행한다 — 물러설 길(취소)도 함께 준다', () => {
-    expect(account(true)).toContain('정말 로그아웃');
-    expect(account(true)).toContain('취소');
+  it('로그아웃은 홈에서 사라졌다 — 두 자리에 두면 확인 단계가 갈라진다', () => {
+    expect(renderHome()).not.toContain('로그아웃');
   });
 
   it('홈 맨 아래에 둔다 — 잔디·격언보다 뒤여야 자주 쓰는 것이 위로 온다', () => {
     const markup = renderHome({ quotes: [{ text: '읽는 자가 산다', author: '아무개' }] });
 
     expect(markup.indexOf('아무개')).toBeGreaterThan(0);
-    expect(markup.indexOf('아무개')).toBeLessThan(markup.indexOf('로그아웃'));
-  });
-});
-
-/**
- * 로그아웃 흐름 — 서버 폐기가 실패해도 **반드시** 로그인 화면으로 넘긴다. 안 넘기면 토큰은 이미
- * 버려졌는데(api.logout의 finally) 화면은 홈에 남아, 무엇을 눌러도 401만 나는 막다른 길이 된다.
- */
-describe('로그아웃 — logoutAndLeave', () => {
-  it('서버 폐기가 성공하면 로그인 화면으로 넘긴다', async () => {
-    logoutMock.mockResolvedValue(undefined);
-    const onDone = vi.fn();
-
-    await logoutAndLeave(onDone);
-
-    expect(onDone).toHaveBeenCalledTimes(1);
-  });
-
-  it('서버 폐기가 실패해도 로그인 화면으로 넘긴다 — 안 넘기면 401만 나는 화면에 갇힌다', async () => {
-    logoutMock.mockRejectedValue(new Error('Failed to fetch'));
-    const onDone = vi.fn();
-
-    await logoutAndLeave(onDone);
-
-    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(markup.indexOf('아무개')).toBeLessThan(markup.indexOf('프로필·설정'));
   });
 });
 

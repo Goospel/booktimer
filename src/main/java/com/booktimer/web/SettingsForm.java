@@ -1,5 +1,6 @@
 package com.booktimer.web;
 
+import com.booktimer.user.User;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -18,7 +19,7 @@ import jakarta.validation.constraints.Size;
 public class SettingsForm {
 
     @NotBlank
-    @Size(max = 30)
+    @Size(max = User.NICKNAME_MAX_LENGTH)
     private String nickname;
 
     @NotBlank

@@ -41,7 +41,7 @@
             </div>
             <div class="field">
                 <label for="nickname">닉네임 — 다른 사용자에게 보이는 표시 이름 (언제든 변경 가능)</label>
-                <input type="text" id="nickname" maxlength="50" th:field="*{nickname}">
+                <input type="text" id="nickname" maxlength="30" th:field="*{nickname}">
                 <span class="field-error" th:if="${#fields.hasErrors('nickname')}" th:errors="*{nickname}">닉네임 오류</span>
             </div>
             <!-- 실시간 미리보기 마운트(발견 12) — Vue 아일랜드가 아이디·닉네임을 "이렇게 보여요" 카드로 렌더. -->

@@ -1,5 +1,6 @@
 package com.booktimer.web;
 
+import com.booktimer.user.User;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -33,9 +34,14 @@ public class OnboardingForm {
             message = "아이디는 영문/숫자/_ 3~20자여야 합니다")
     private String loginId;
 
-    /** 표시 닉네임(중복 허용·수정 가능). 공백 불가. */
+    /**
+     * 표시 닉네임(중복 허용·수정 가능). 공백 불가.
+     *
+     * <p>상한은 도메인({@link User#NICKNAME_MAX_LENGTH})이 단일 출처다 — 예전엔 여기만 50이라
+     * 31~50자로 온보딩하면 설정(30)에서 영영 못 바꾸는 계정이 만들어졌다.
+     */
     @NotBlank
-    @Size(max = 50)
+    @Size(max = User.NICKNAME_MAX_LENGTH)
     private String nickname;
 
     /** 하루 목표(분). 최소 1분 — 0분은 "안 읽어도 됨"이라 목표의 의미가 사라진다(발견 10). */

@@ -10,6 +10,7 @@ import { Home } from './screens/Home';
 import { Library } from './screens/Library';
 import { LinkAccount } from './screens/LinkAccount';
 import { LoginBridge } from './screens/LoginBridge';
+import { Settings } from './screens/Settings';
 import { Social } from './screens/Social';
 import { showInterstitialAd } from './toss';
 import { ErrorMessage, Loading, Screen } from './ui';
@@ -56,7 +57,7 @@ export const tabChangeHandler =
     onTabChange(TABS[index].key);
 
 /** 탭 밖 전역 상태 — 인증·연결·목표·에러는 탭바 없이 화면 전체를 차지한다. */
-type View = 'auth' | 'link' | 'loading' | 'main' | 'goal' | 'error';
+type View = 'auth' | 'link' | 'loading' | 'main' | 'goal' | 'settings' | 'error';
 
 /** 포커스 복귀 재조회의 최소 간격 — 미니앱은 앱 전환이 잦아 복귀마다 받으면 서버를 두들긴다. */
 export const REFRESH_THROTTLE_MS = 60_000;
@@ -151,6 +152,7 @@ export function App() {
     setFirstRun(false);
     setView('main');
   });
+  useBackClose(view === 'settings', () => setView('main'));
 
   const handleError = useCallback(
     (e: Error) => {
@@ -165,6 +167,18 @@ export function App() {
 
   const applyGraph = useCallback((graph: DashboardResponse['graph']) => {
     setDashboard((prev) => (prev === null ? prev : { ...prev, graph }));
+  }, []);
+
+  /**
+   * 목표 바꾸기 진입 — 홈 손잡이와 설정 화면이 **같은 경로**를 탄다(둘이 갈라지면 광고 규칙도 갈라진다).
+   *
+   * <p>전면 광고는 이 경로에만 붙는다 — 신규 계정의 첫 목표 설정은 로그인 브릿지에서 곧장 `load('goal')`로
+   * 들어와 여기를 거치지 않으므로, 첫 인상이 광고가 되는 일은 없다. 기다리지 않고 바로 전환한다:
+   * 광고는 목표 화면 위로 덮이고, 안 뜨면 그냥 목표 화면이다.
+   */
+  const goToGoal = useCallback(() => {
+    showInterstitialAd();
+    setView('goal');
   }, []);
 
   switch (view) {
@@ -216,6 +230,20 @@ export function App() {
     );
   }
 
+  if (view === 'settings') {
+    return (
+      <Settings
+        dashboard={dashboard}
+        onBack={() => setView('main')}
+        // 닉네임·핸들이 바뀌면 대시보드가 옛 값을 들고 있다 — 홈 인사말·소셜이 같은 값을 봐야 한다.
+        onProfileChanged={() => silentRefresh(true)}
+        onGoGoal={goToGoal}
+        onLogout={toLogin}
+        onError={handleError}
+      />
+    );
+  }
+
   return (
     <MainTabs
       tab={tab}
@@ -223,14 +251,8 @@ export function App() {
       dashboard={dashboard}
       onTimerChange={applyTimer}
       onGraphChange={applyGraph}
-      onGoGoal={() => {
-        // 전면 광고는 **이 경로에만** 붙는다 — 신규 계정의 첫 목표 설정은 로그인 브릿지에서
-        // 곧장 load('goal')로 들어와 여기를 거치지 않으므로, 첫 인상이 광고가 되는 일은 없다.
-        // 기다리지 않고 바로 전환한다: 광고는 목표 화면 위로 덮이고, 안 뜨면 그냥 목표 화면이다.
-        showInterstitialAd();
-        setView('goal');
-      }}
-      onLogout={toLogin}
+      onGoGoal={goToGoal}
+      onGoSettings={() => setView('settings')}
       onError={handleError}
       onShelfChanged={() => silentRefresh(true)}
       onHandleCreated={() => silentRefresh(true)}
@@ -249,7 +271,7 @@ export function MainTabs({
   onTimerChange,
   onGraphChange,
   onGoGoal,
-  onLogout,
+  onGoSettings,
   onError,
   onShelfChanged,
   onHandleCreated,
@@ -260,7 +282,8 @@ export function MainTabs({
   onTimerChange: (timer: TimerState) => void;
   onGraphChange: (graph: DashboardResponse['graph']) => void;
   onGoGoal: () => void;
-  onLogout: () => void;
+  /** 홈 하단의 계정 진입 — 프로필·설정 화면(닉네임·@아이디·목표·로그아웃)으로 나간다. */
+  onGoSettings: () => void;
   onError: (error: Error) => void;
   /** 서재에서 책이 바뀌면 홈이 보는 대시보드도 같이 갱신해야 한다 — 안 그러면 캐러셀이 옛 목록 그대로다. */
   onShelfChanged: () => void;
@@ -277,7 +300,7 @@ export function MainTabs({
             onTimerChange={onTimerChange}
             onGraphChange={onGraphChange}
             onGoGoal={onGoGoal}
-            onLogout={onLogout}
+            onGoSettings={onGoSettings}
             onError={onError}
           />
         )}

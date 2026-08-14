@@ -445,6 +445,26 @@ export function validateHandleFormat(raw: string): string | null {
 export const createHandle = (loginId: string): Promise<{ loginId: string }> =>
   request('/api/miniapp/handle', { body: { loginId } });
 
+/** 서버 `User.NICKNAME_MAX_LENGTH`와 같은 값 — 갈라지면 프리검증이 조용히 거짓말한다(통과시켰는데 서버가 400). */
+export const NICKNAME_MAX_LENGTH = 30;
+
+/**
+ * 닉네임 형식 프리검증 — 통과면 `null`, 아니면 사용자에게 보여줄 안내 문구(순수 함수).
+ *
+ * <p>규칙은 길이뿐이다(공백만 불가 + 상한). 핸들과 달리 문자 종류 제한이 없어 이모지·공백 섞인 이름도
+ * 정상이다 — 서버가 그렇게 저장한다. 앞뒤 공백은 서버처럼 떼고 센다(전송도 trim한 값으로 한다).
+ */
+export function validateNicknameFormat(raw: string): string | null {
+  const trimmed = raw.trim();
+  return trimmed === '' || trimmed.length > NICKNAME_MAX_LENGTH
+    ? `1~${NICKNAME_MAX_LENGTH}자로 입력해 주세요.`
+    : null;
+}
+
+/** `POST /api/miniapp/nickname` — 성공하면 서버가 저장한 닉네임. 400(공백·상한 초과)은 ApiError 평문. */
+export const updateNickname = (nickname: string): Promise<{ nickname: string }> =>
+  request('/api/miniapp/nickname', { body: { nickname } });
+
 export type FollowListType = 'followers' | 'following';
 
 export interface FollowListResponse {

@@ -114,6 +114,27 @@ class UserTest {
     }
 
     @Test
+    @DisplayName("updateProfile: 닉네임이 상한(30자)을 넘으면 예외 — 웹 폼·미니앱 API가 공유하는 단일 출처")
+    void updateProfile_tooLongNickname_throws() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        assertThatThrownBy(() -> user.updateProfile("가".repeat(User.NICKNAME_MAX_LENGTH + 1), TZ))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(user.getNickname()).isEqualTo(NICK); // 거부됐으면 옛 값 그대로다
+    }
+
+    @Test
+    @DisplayName("updateProfile: 정확히 상한 길이(30자)는 통과한다 — 경계에서 1자 어긋나면 못 바꾸는 사람이 생긴다")
+    void updateProfile_maxLengthNickname_ok() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+        String exactly = "가".repeat(User.NICKNAME_MAX_LENGTH);
+
+        user.updateProfile(exactly, TZ);
+
+        assertThat(user.getNickname()).isEqualTo(exactly);
+    }
+
+    @Test
     @DisplayName("updateProfile: 타임존이 유효한 IANA ID가 아니면 예외")
     void updateProfile_invalidTimezone_throws() {
         User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
