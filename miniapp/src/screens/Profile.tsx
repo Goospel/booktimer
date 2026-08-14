@@ -13,8 +13,11 @@ import {
   reportUser,
   unfollow,
 } from '../api';
+import { useBackClose } from '../back';
 import { formatDuration } from '../format';
-import { BookCover, ErrorMessage, Loading, Screen } from '../ui';
+import { ErrorMessage, Loading, Screen } from '../ui';
+import { BookCarousel } from './Home';
+import { GridSheet, handleStyle, resolveSelected } from './Library';
 
 /**
  * 책방(프로필) 뷰 — 닉네임·책BTI·공개 책 목록 + 팔로우/언팔로우 + 차단·신고.
@@ -35,6 +38,16 @@ export function toggleSafety(open: SafetyState | null): SafetyState | null {
   return open === null ? { confirmBlock: false } : null;
 }
 
+/**
+ * 캐러셀 아래 메타 — 저자 한 줄, 「상태 · 읽은 시간」 한 줄(서재 `metaLine`과 같은 문법).
+ * 읽은 시간이 0이면 적지 않는다 — 「0초」는 정보가 아니다. 줄바꿈은 캐러셀의 `pre-line`이 살린다.
+ */
+export function profileMetaLine(book: ProfileBook): string {
+  const stats = [book.status];
+  if (book.seconds > 0) stats.push(formatDuration(book.seconds));
+  return `${book.author ?? '저자 미상'}\n${stats.join(' · ')}`;
+}
+
 export function Profile({
   loginId,
   onBack,
@@ -47,6 +60,9 @@ export function Profile({
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [books, setBooks] = useState<ProfileBook[]>([]);
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  /** 캐러셀에서 가운데 온 책 — 목록이 갈려 사라지면 `resolveSelected`가 첫 책으로 되돌린다. */
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [gridOpen, setGridOpen] = useState(false);
   const [more, setMore] = useState<SafetyState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +84,9 @@ export function Profile({
   }, [loginId, fail]);
 
   useEffect(load, [load]);
+
+  // 열린 시트는 뒤로가기가 먼저 먹는다 — 시트가 열린 채로 책방이 통째로 닫히지 않게(서재와 같다).
+  useBackClose(gridOpen, () => setGridOpen(false));
 
   const run = (action: Promise<unknown>, after: () => void) => {
     setBusy(true);
@@ -122,9 +141,13 @@ export function Profile({
         profile={profile}
         books={books}
         activeTag={activeTag}
+        selectedId={selectedId}
+        gridOpen={gridOpen}
         busy={busy}
         onFollowToggle={toggleFollow}
         onSelectTag={selectTag}
+        onSelect={setSelectedId}
+        onGrid={setGridOpen}
         onMore={() => setMore(toggleSafety)}
         safety={
           more === null ? null : (
@@ -156,9 +179,13 @@ export function ProfileCard({
   profile,
   books,
   activeTag,
+  selectedId,
+  gridOpen,
   busy,
   onFollowToggle,
   onSelectTag,
+  onSelect,
+  onGrid,
   onMore,
   safety,
   onBack,
@@ -166,15 +193,33 @@ export function ProfileCard({
   profile: ProfileResponse;
   books: ProfileBook[];
   activeTag: string | null;
+  selectedId: number | null;
+  gridOpen: boolean;
   busy: boolean;
   onFollowToggle: () => void;
   onSelectTag: (tag: string | null) => void;
+  onSelect: (bookId: number | null) => void;
+  onGrid: (open: boolean) => void;
   onMore: () => void;
   safety: ReactNode;
   onBack: () => void;
 }) {
+  const selected = resolveSelected(books, selectedId);
+  const sectionTitle = activeTag === null ? `공개한 책 ${books.length}` : `${activeTag} 근거 책 ${books.length}`;
+
   return (
-    <Screen title={`${profile.nickname}님의 책방`} onBack={onBack}>
+    <Screen
+      title={`${profile.nickname}님의 책방`}
+      onBack={onBack}
+      right={
+        // 캐러셀은 한 번에 한 권이라 권수가 늘면 훑기 답답하다 — 격자로 한 번에 보는 길을 제목 줄에 둔다(서재와 같다).
+        books.length > 1 ? (
+          <button type="button" onClick={() => onGrid(true)} style={handleStyle}>
+            펼쳐보기
+          </button>
+        ) : undefined
+      }
+    >
       <Text typography="st12" color="grey600" style={{ display: 'block' }}>
         @{profile.loginId} · 팔로워 {profile.followerCount} · 팔로잉 {profile.followingCount}
       </Text>
@@ -214,47 +259,42 @@ export function ProfileCard({
 
       <section style={{ marginTop: 28 }}>
         <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
-          {activeTag === null ? `공개한 책 ${books.length}` : `${activeTag} 근거 책 ${books.length}`}
+          {sectionTitle}
         </Text>
         {activeTag !== null && (
           <Button size="small" variant="weak" style={{ marginBottom: 10 }} onClick={() => onSelectTag(null)}>
             전체 보기
           </Button>
         )}
-        {books.length === 0 ? (
+        {selected === null ? (
           <Text typography="st11" color="grey600" style={{ display: 'block' }}>
             공개한 책이 없어요.
           </Text>
         ) : (
-          books.map((book) => (
-            <div
-              key={book.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: 16,
-                marginBottom: 8,
-                borderRadius: 12,
-                background: 'var(--adaptiveGrey100, #FCFAF5)',
-              }}
-            >
-              <BookCover url={book.coverUrl} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div>
-                  <Text typography="st11">{book.title}</Text>
-                </div>
-                <div style={{ marginTop: 4 }}>
-                  <Text typography="st12" color="grey600">
-                    {book.author ?? '저자 미상'} · {book.status}
-                    {book.seconds > 0 && ` · ${formatDuration(book.seconds)}`}
-                  </Text>
-                </div>
-              </div>
-            </div>
-          ))
+          // 태그를 고르면 목록이 통째로 갈리므로 다시 마운트한다 — 안 그러면 트랙이 옛 목록의 스크롤 자리에 머문다.
+          <BookCarousel
+            key={activeTag ?? 'all'}
+            books={books}
+            selectedId={selected.id}
+            onSelect={onSelect}
+            noBookCard={false}
+            metaOf={profileMetaLine}
+          />
         )}
       </section>
+
+      {gridOpen && (
+        <GridSheet
+          title={sectionTitle}
+          rows={books}
+          selectedId={selected?.id ?? null}
+          onPick={(id) => {
+            onSelect(id);
+            onGrid(false);
+          }}
+          onClose={() => onGrid(false)}
+        />
+      )}
 
       <Button display="block" variant="weak" style={{ marginTop: 24 }} onClick={onBack}>
         돌아가기
