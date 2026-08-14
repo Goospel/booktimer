@@ -202,6 +202,17 @@ describe('책방 책 목록 — 서재와 같은 캐러셀', () => {
     expect(card(profile(), [book(1, '자바 최적화')])).not.toContain('펼쳐보기');
   });
 
+  /**
+   * 「펼쳐보기」는 목록 바로 위 줄에 선다 — 서재는 제목 줄에 뒀지만 책방은 제목과 캐러셀 사이에
+   * 핸들·성향·태그·팔로우가 깔려 손잡이와 그 대상(책)이 화면 절반쯤 떨어져 보였다(사용자 제보).
+   */
+  it('「펼쳐보기」를 화면 제목이 아니라 「공개한 책 N」 줄에 둔다', () => {
+    const markup = card(profile(), books);
+
+    expect(markup.indexOf('공개한 책')).toBeLessThan(markup.indexOf('펼쳐보기'));
+    expect(markup.indexOf('펼쳐보기')).toBeLessThan(markup.indexOf('data-cover-title'));
+  });
+
   it('펼쳐보기를 열면 그 책들을 격자로 한 번에 그린다', () => {
     const markup = card(profile(), books, null, { gridOpen: true });
 

@@ -208,18 +208,7 @@ export function ProfileCard({
   const sectionTitle = activeTag === null ? `공개한 책 ${books.length}` : `${activeTag} 근거 책 ${books.length}`;
 
   return (
-    <Screen
-      title={`${profile.nickname}님의 책방`}
-      onBack={onBack}
-      right={
-        // 캐러셀은 한 번에 한 권이라 권수가 늘면 훑기 답답하다 — 격자로 한 번에 보는 길을 제목 줄에 둔다(서재와 같다).
-        books.length > 1 ? (
-          <button type="button" onClick={() => onGrid(true)} style={handleStyle}>
-            펼쳐보기
-          </button>
-        ) : undefined
-      }
-    >
+    <Screen title={`${profile.nickname}님의 책방`} onBack={onBack}>
       <Text typography="st12" color="grey600" style={{ display: 'block' }}>
         @{profile.loginId} · 팔로워 {profile.followerCount} · 팔로잉 {profile.followingCount}
       </Text>
@@ -258,9 +247,18 @@ export function ProfileCard({
       {safety}
 
       <section style={{ marginTop: 28 }}>
-        <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
-          {sectionTitle}
-        </Text>
+        {/* 손잡이는 목록 바로 위 줄에 — 서재는 제목 줄에 뒀지만 책방은 제목과 캐러셀 사이에 핸들·성향·태그·
+            팔로우가 깔려, 제목 줄에 두면 손잡이와 그 대상(책)이 화면 절반쯤 떨어진다. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <Text typography="st11" color="grey600" style={{ flex: 1, minWidth: 0 }}>
+            {sectionTitle}
+          </Text>
+          {books.length > 1 && (
+            <button type="button" onClick={() => onGrid(true)} style={handleStyle}>
+              펼쳐보기
+            </button>
+          )}
+        </div>
         {activeTag !== null && (
           <Button size="small" variant="weak" style={{ marginBottom: 10 }} onClick={() => onSelectTag(null)}>
             전체 보기
