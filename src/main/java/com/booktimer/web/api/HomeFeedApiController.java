@@ -4,7 +4,7 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookNews;
 import com.booktimer.book.BookNewsRepository;
 import com.booktimer.book.BookRepository;
-import com.booktimer.book.NaverNewsClient;
+import com.booktimer.book.GoogleNewsRssClient;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.user.User;
 import org.springframework.data.domain.PageRequest;
@@ -34,8 +34,8 @@ import java.util.Map;
  *
  * <p>「책 뉴스」 = 내가 완독한 책(isbn13)의 기사. 실제 수집은 새벽 배치({@code BookNewsCollector})가 하고
  * 여기선 캐시를 읽기만 한다 — 요청 경로에서 외부 API를 부르지 않는다. 노출 게이트는 <b>서버의
- * {@code newsEnabled}</b>: 네이버 키가 없으면 false + 빈 목록이라 미니앱이 탭 자체를 안 그리고
- * (죽은 탭 금지), 키가 SSM으로 들어오면 미니앱 재배포 없이 점등된다.
+ * {@code newsEnabled}</b>(킬스위치 {@code booktimer.news.enabled}, 기본 켜짐): 끄면 false + 빈 목록이라
+ * 미니앱이 탭 자체를 안 그린다(죽은 탭 금지) — 구글 RSS 형식이 바뀌어도 미니앱 재배포 없이 끌 수 있다.
  * SecurityConfig default-deny로 자동 인증.
  */
 @RestController
@@ -53,13 +53,13 @@ public class HomeFeedApiController {
     private final CurrentUserService currentUserService;
     private final BookRepository bookRepository;
     private final BookNewsRepository bookNewsRepository;
-    private final NaverNewsClient newsClient;
+    private final GoogleNewsRssClient newsClient;
     private final Clock clock;
 
     public HomeFeedApiController(CurrentUserService currentUserService,
                                  BookRepository bookRepository,
                                  BookNewsRepository bookNewsRepository,
-                                 NaverNewsClient newsClient,
+                                 GoogleNewsRssClient newsClient,
                                  Clock clock) {
         this.currentUserService = currentUserService;
         this.bookRepository = bookRepository;
@@ -109,7 +109,7 @@ public class HomeFeedApiController {
                 titleByIsbn.keySet(), PageRequest.of(0, MAX_NEWS));
         return cached.stream()
                 .map(n -> new NewsItem(n.getTitle(), n.getLink(), n.getPublishedAt(),
-                        titleByIsbn.get(n.getIsbn13())))
+                        titleByIsbn.get(n.getIsbn13()), n.getSource()))
                 .toList();
     }
 
@@ -126,7 +126,11 @@ public class HomeFeedApiController {
                               String type, Instant occurredAt) {
     }
 
-    /** @param bookTitle 내 어느 책의 기사인지 보여주는 라벨. 네이버 키가 없으면 이 목록은 항상 빈다. */
-    public record NewsItem(String title, String link, Instant publishedAt, String bookTitle) {
+    /**
+     * @param bookTitle 내 어느 책의 기사인지 보여주는 라벨
+     * @param source    매체명(구글 뉴스 {@code <source>}). 응답에 없었으면 null — 미니앱이 라벨을 생략한다
+     */
+    public record NewsItem(String title, String link, Instant publishedAt, String bookTitle,
+                           String source) {
     }
 }

@@ -54,9 +54,18 @@ export function previewOf<T>(items: T[], expanded: boolean): { items: T[]; hasMo
 }
 
 /**
- * 기사 출처 — 서버가 저장하지 않고 링크에서 파생한다(저장하면 같은 사실이 두 곳에 남는다).
- * 주소로 못 읽으면 빈 문자열: 출처만 빠지고 기사 줄 자체는 살아 있어야 한다.
+ * 기사 줄에 적을 출처 — **서버가 준 매체명이 먼저다.**
+ *
+ * <p>수집원이 구글 뉴스 RSS라 `link`가 전부 구글 리다이렉트(`news.google.com/rss/articles/...`)다.
+ * 링크에서 파생하면 모든 기사의 출처가 「news.google.com」이 되어 버리므로, 서버가 RSS의
+ * `<source>` 엘리먼트에서 뽑아 준 값을 쓴다. 값이 없는 옛 행·다른 수집원을 위해 호스트명 폴백을
+ * 남긴다 — 둘 다 못 읽으면 출처만 비고 기사 줄 자체는 살아 있어야 한다.
  */
+export function sourceLabel(item: NewsItem): string {
+  return item.source?.trim() || sourceOf(item.link);
+}
+
+/** 링크에서 파생하는 폴백 출처. 주소로 못 읽으면 빈 문자열. */
 export function sourceOf(link: string): string {
   try {
     return new URL(link).hostname;
@@ -247,7 +256,7 @@ export function FeedBox({
                 {item.title}
               </Text>
               <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
-                {[sourceOf(item.link), relativeTime(item.publishedAt, now)].filter((s) => s !== '').join(' · ')}
+                {[sourceLabel(item), relativeTime(item.publishedAt, now)].filter((s) => s !== '').join(' · ')}
               </Text>
               <span
                 style={{

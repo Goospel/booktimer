@@ -9,6 +9,7 @@ import {
   PREVIEW_COUNT,
   eventLine,
   previewOf,
+  sourceLabel,
   sourceOf,
   visibleTabs,
 } from './screens/HomeFeed';
@@ -35,8 +36,14 @@ function event(nickname: string, bookTitle: string, type: SocialEvent['type'], h
   };
 }
 
-function news(title: string, link: string, hoursAgo: number, bookTitle = '데미안'): NewsItem {
-  return { title, link, publishedAt: new Date(NOW - hoursAgo * HOUR).toISOString(), bookTitle };
+function news(
+  title: string,
+  link: string,
+  hoursAgo: number,
+  bookTitle = '데미안',
+  source: string | null = '불교신문',
+): NewsItem {
+  return { title, link, publishedAt: new Date(NOW - hoursAgo * HOUR).toISOString(), bookTitle, source };
 }
 
 function feed(overrides: Partial<HomeFeedResponse> = {}): HomeFeedResponse {
@@ -96,12 +103,38 @@ describe('미리보기 (previewOf)', () => {
   });
 });
 
-describe('뉴스 출처 (sourceOf)', () => {
-  it('링크의 호스트명이 곧 출처다 — 저장하지 않고 파생한다', () => {
+describe('뉴스 출처 (sourceLabel)', () => {
+  const GOOGLE_LINK = 'https://news.google.com/rss/articles/CBMiW0FVX3lxTFBP?oc=5';
+
+  /*
+   * 수집원이 구글 뉴스 RSS라 링크가 전부 구글 리다이렉트다 — 호스트명으로 파생하면 모든 기사의
+   * 출처가 「news.google.com」이 된다. 그래서 서버가 RSS의 <source> 엘리먼트에서 뽑은 매체명을 준다.
+   */
+  it('서버가 준 매체명을 쓴다 — 구글 리다이렉트 링크라 호스트명은 쓸모가 없다', () => {
+    expect(sourceLabel(news('제목', GOOGLE_LINK, 1, '데미안', '불교신문'))).toBe('불교신문');
+  });
+
+  it('서버 값이 없으면 링크 호스트명으로 떨어진다 — 수집원이 또 바뀌어도 줄이 안 깨진다', () => {
+    expect(sourceLabel(news('제목', 'https://n.news.naver.com/article/001/1', 1, '데미안', null))).toBe(
+      'n.news.naver.com',
+    );
+  });
+
+  it('서버 값이 공백뿐이면 없는 것으로 본다', () => {
+    expect(sourceLabel(news('제목', 'https://www.hani.co.kr/arti/1', 1, '데미안', '   '))).toBe('www.hani.co.kr');
+  });
+
+  it('둘 다 못 읽으면 빈 문자열 — 출처만 비고 기사 줄은 살아 있어야 한다', () => {
+    expect(sourceLabel(news('제목', '그냥 문자열', 1, '데미안', null))).toBe('');
+  });
+});
+
+describe('링크 호스트명 파생 (sourceOf — 폴백)', () => {
+  it('주소면 호스트명', () => {
     expect(sourceOf('https://n.news.naver.com/article/001/0012345')).toBe('n.news.naver.com');
   });
 
-  it('주소가 아니면 빈 문자열 — 출처만 비고 기사 줄은 살아 있어야 한다', () => {
+  it('주소가 아니면 빈 문자열', () => {
     expect(sourceOf('그냥 문자열')).toBe('');
     expect(sourceOf('')).toBe('');
   });
@@ -176,7 +209,7 @@ describe('피드 박스 렌더 — 책 뉴스 탭', () => {
     const markup = renderBox(feed({ news: items }), 'news');
 
     expect(markup).toContain('『데미안』 100년, 다시 읽는 성장소설');
-    expect(markup).toContain('n.news.naver.com');
+    expect(markup).toContain('불교신문'); // 서버가 준 매체명 — 링크 호스트명이 아니다
     expect(markup).toContain('3시간 전');
     expect(markup).toContain('내 책');
     expect(markup).toContain('데미안');

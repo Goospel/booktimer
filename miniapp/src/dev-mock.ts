@@ -284,27 +284,31 @@ const socialEvents: SocialEvent[] = [
 const newsItems: NewsItem[] = [
   {
     title: '헤르만 헤세 『데미안』 출간 100년, 다시 읽히는 이유',
-    link: 'https://n.news.naver.com/article/001/0000001',
+    link: 'https://news.google.com/rss/articles/CBMiW0FVX3lxTFBPUWlJU3V5OEowTDhVUFp5VUhy?oc=5',
     publishedAt: isoTime(5),
     bookTitle: '데미안',
+    source: '한국일보',
   },
   {
     title: '“인류는 어떻게 지구를 지배했나” 『사피엔스』 개정판 출간',
-    link: 'https://www.hani.co.kr/arti/culture/book/0000002.html',
+    link: 'https://news.google.com/rss/articles/CBMiX0FVX3lxTE5oZV9XWEM3UlpvekcwVXA0Qkh4?oc=5',
     publishedAt: isoTime(26),
     bookTitle: '사피엔스',
+    source: '한겨레',
   },
   {
     title: '아들러 심리학 열풍… 『미움받을 용기』 재조명',
-    link: 'https://www.chosun.com/culture-life/book/0000003/',
+    link: 'https://news.google.com/rss/articles/CBMibEFVX3lxTE5vWTZMWWFBVVdGaVhuN0NnVEFP?oc=5',
     publishedAt: isoTime(70),
     bookTitle: '미움받을 용기',
+    source: '매일경제',
   },
   {
     title: '칼 세이건 탄생 90주년 특별전, 『코스모스』 초판본 공개',
-    link: 'https://www.khan.co.kr/article/0000004',
+    link: 'https://news.google.com/rss/articles/CBMiQ0FVX3lxTFBPUWlJU3V5OEowTDhVUFp5?oc=5',
     publishedAt: isoTime(400),
     bookTitle: '코스모스',
+    source: '경향신문',
   },
 ];
 
@@ -378,8 +382,10 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
   // 웹 history 섬이 쓰던 그 엔드포인트 — 미니앱 기록 탭이 잔디 아래 목록에 쓴다(서버 무변경).
   ['GET', /^\/api\/history$/, () => ({ months: buildMonths() })],
 
-  // 홈 피드 박스 — **목에서는 뉴스를 켜 둔다**: 서버는 수집기(후속 PR) 전까지 newsEnabled=false라
-  // 「책 뉴스」 탭이 안 그려져, 목까지 꺼 두면 그 탭 UI를 브라우저로 확인할 길이 아예 없다.
+  // 홈 피드 박스 — **목에서는 뉴스를 켜 둔다**: 서버 킬스위치를 내리면 「책 뉴스」 탭이 안 그려져,
+  // 목까지 꺼 두면 그 탭 UI를 브라우저로 확인할 길이 아예 없다.
+  // 링크가 구글 리다이렉트인 것도 실제와 같게 뒀다 — 출처를 링크에서 파생하면 전부 news.google.com이
+  // 되는 걸 목 모드에서 그대로 재현해야 회귀를 눈으로 잡을 수 있다.
   ['GET', /^\/api\/home-feed$/, (): HomeFeedResponse => ({
     social: socialEvents,
     newsEnabled: true,
