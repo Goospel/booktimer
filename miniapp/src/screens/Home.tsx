@@ -668,11 +668,23 @@ export function BookSheet({
  *
  * <p>자리가 맨 아래에서 맨 위로 올라왔다(사용자 결정 2026-08-14) — 피드 박스는 세로로 자라는 상자라
  * 그 뒤에 두면 스크롤 끝에 묻히는데, 소셜 기능이 늘수록 프로필의 무게는 반대로 커진다.
+ *
+ * <p>모양은 **흰 채움 + 테두리**다(같은 날 실기기 제보). 연한 `weak` 알약은 배경과 대비가 약해 버튼으로
+ * 안 읽혔다 — TDS에 outline 변형이 없어(`fill | weak`뿐) `light` 채움에 테두리를 얹어 윤곽을 만든다.
+ * 주 CTA(「측정 시작」)와 무게가 겹치면 안 되므로 풀폭·강조색은 쓰지 않는다.
  */
 export function AccountSection({ onGoSettings }: { onGoSettings: () => void }) {
   return (
     <div style={{ marginBottom: 12, textAlign: 'right' }}>
-      <Button size="small" variant="weak" onClick={onGoSettings}>
+      <Button
+        size="medium"
+        variant="fill"
+        color="light"
+        // TDS가 `light` 채움에 얹는 글자색은 브랜드 파랑(#3182f6)이고, 이 앱 팔레트는 세이지다 —
+        // Button은 색을 CSS 변수가 아니라 인라인 리터럴로 박아 전역 재테마가 안 닿으므로 여기서 직접 준다.
+        style={{ color: 'var(--adaptiveBlue700, #4F6B4C)', border: '1px solid var(--adaptiveGrey200, #E4DDD0)' }}
+        onClick={onGoSettings}
+      >
         프로필·설정
       </Button>
     </div>

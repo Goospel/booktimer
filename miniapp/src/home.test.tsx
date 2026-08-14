@@ -8,6 +8,7 @@ import type { BookOption, DashboardResponse } from './api';
 import { TAB_BAR_Z_INDEX } from './App';
 import { ApiError, waiveDebt } from './api';
 import {
+  AccountSection,
   BookCarousel,
   BookSheet,
   COVER_GAP,
@@ -1173,6 +1174,19 @@ describe('계정 진입점', () => {
 
   it('로그아웃은 홈에서 사라졌다 — 두 자리에 두면 확인 단계가 갈라진다', () => {
     expect(renderHome()).not.toContain('로그아웃');
+  });
+
+  // 실기기 제보(2026-08-14): 연한 weak 알약이라 「버튼」으로 안 읽혔다 → 흰 채움 + 테두리로 윤곽을 준다.
+  // TDS는 `light` 채움의 글자색을 브랜드 파랑 리터럴로 인라인에 박아 전역 재테마가 안 닿으므로(plan §미니앱 v2
+  // 실측) 세이지를 직접 준다 — 그 오버라이드가 조용히 빠지면 화면에 초록·파랑이 섞인다.
+  it('브랜드 세이지 글씨다 — TDS 기본 파랑이 그대로 나오면 앱에 색이 둘이 된다', () => {
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <AccountSection onGoSettings={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+    expect(markup).toContain('#4F6B4C');
   });
 
   it('홈 맨 위에 둔다 — 피드 박스 뒤에 두면 스크롤 끝이라 눈에 안 띈다(사용자 결정 2026-08-14)', () => {
