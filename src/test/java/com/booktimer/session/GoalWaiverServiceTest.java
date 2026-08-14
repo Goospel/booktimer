@@ -24,12 +24,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 밀린 하루 용서권 지급 유스케이스 — 리워드 광고 보상(실제 빈 + H2).
  *
  * <p>핵심 경계 셋: ① <b>대상 날짜를 서버가 고른다</b>(잔여 부채 최대, 동률이면 최신 — 클라는 날짜를 못 보낸다)
- * ② <b>일일 1회 상한</b>이 애플리케이션 검사와 <b>DB unique 제약</b>으로 이중화됐다(SSV가 없어 지급 요청은
- * 클라 주장일 뿐이므로 신뢰가 아니라 상한으로 캡한다) ③ <b>파밍 차단</b> — 용서는 부채 표시에만 작용하고
- * 먹이·잔디는 불변이다.
+ * ② <b>횟수 제한은 없고 부채 자체가 상한</b>이다(일일 1회 폐지) — 지울 날이 없으면 400이고, 오늘은 애초에
+ * 대상이 아니다 ③ <b>파밍 차단</b> — 용서는 부채 표시에만 작용하고 먹이·잔디는 불변이다.
  *
- * <p>제약 검증은 애플리케이션 검사를 <b>우회해</b> 직접 2행을 저장하고 flush를 강제한다 — 검사 코드를
- * 지워도 DB가 막는지 보는 계측기다(mock 단위테스트는 unique 제약을 검증하지 못한다).
+ * <p>{@code (user, waived_date)} 유니크는 남겼다 — 같은 날을 두 번 지우는 것(동시 요청 race 포함)은 여전히
+ * 무의미하다. 그 검증은 애플리케이션 검사를 <b>우회해</b> 직접 2행을 저장하고 flush를 강제한다(mock 단위
+ * 테스트는 unique 제약을 검증하지 못한다).
  */
 @SpringBootTest
 @Transactional
@@ -93,7 +93,7 @@ class GoalWaiverServiceTest {
     }
 
     @Test
-    @DisplayName("부채가 동률이면 최신 날을 고른다 — 오래된 날은 어차피 곧 윈도우 밖으로 소멸")
+    @DisplayName("부채가 동률이면 최신 날을 고른다 — 결정적 선택(어느 쪽이든 상관없지만 고정한다)")
     void waive_tieBreaksToMostRecent() {
         User u = user("waive-tie@booktimer.com");
         readMetExcept(u, 2, 5);
@@ -137,28 +137,33 @@ class GoalWaiverServiceTest {
     }
 
     @Test
-    @DisplayName("일일 상한: 같은 날 2회째 지급은 거부된다 → IllegalStateException (409)")
-    void waive_secondTimeSameDay_rejected() {
-        User u = user("waive-cap@booktimer.com");
+    @DisplayName("일일 상한 폐지: 같은 날 연달아 지급받을 수 있고, 매번 다른 날이 지워진다")
+    void waive_repeatableSameDay() {
+        User u = user("waive-repeat@booktimer.com");
         readMetExcept(u, 2, 4);
+        long before = debtService.weeklyDebt(u).totalDebtSeconds();
 
-        goalWaiverService.waive(u); // 1회차 OK
+        LocalDate first = goalWaiverService.waive(u).waivedDate();
+        LocalDate second = goalWaiverService.waive(u).waivedDate();
 
-        assertThatThrownBy(() -> goalWaiverService.waive(u))
-                .isInstanceOf(IllegalStateException.class);
+        assertThat(second).isNotEqualTo(first);
+        assertThat(first).isIn(today().minusDays(2), today().minusDays(4));
+        assertThat(second).isIn(today().minusDays(2), today().minusDays(4));
+        // 두 날 모두 소거 → 남은 빠뜨린 날이 없고 총 부채가 2일치 줄었다
+        assertThat(debtService.weeklyDebt(u).missedDays()).isEmpty();
+        assertThat(debtService.weeklyDebt(u).totalDebtSeconds()).isEqualTo(before - 2 * GOAL);
     }
 
     @Test
-    @DisplayName("일일 상한은 DB 제약이 최종 방어 — 애플리케이션 검사를 우회해도 (user, granted_on) 유니크가 막는다")
-    void dailyCap_enforcedByDbConstraint() {
-        User u = user("waive-dbcap@booktimer.com");
-        waiverRepository.saveAndFlush(ReadingGoalWaiver.create(u, today().minusDays(2), today()));
+    @DisplayName("지울 날을 다 지운 뒤엔 더 못 받는다 → IllegalArgumentException (400) — 무제한이어도 부채가 상한")
+    void waive_repeatedUntilExhausted_thenRejected() {
+        User u = user("waive-exhaust@booktimer.com");
+        readMetExcept(u, 3);
 
-        // IDENTITY 생성이라 INSERT가 save 시점에 실행된다 — save·flush를 함께 감싸 어느 쪽에서 터져도 잡는다.
-        assertThatThrownBy(() -> {
-            waiverRepository.save(ReadingGoalWaiver.create(u, today().minusDays(3), today())); // 같은 granted_on
-            waiverRepository.flush();
-        }).isInstanceOf(DataIntegrityViolationException.class);
+        goalWaiverService.waive(u);
+
+        assertThatThrownBy(() -> goalWaiverService.waive(u))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -191,7 +196,7 @@ class GoalWaiverServiceTest {
     // --- availableFor (미니앱 버튼 노출 조건) ---
 
     @Test
-    @DisplayName("availableFor: 빠뜨린 날 있음 + 오늘 미사용 → true")
+    @DisplayName("availableFor: 빠뜨린 날 있음 → true")
     void availableFor_missedDayAndUnused_true() {
         User u = user("avail-yes@booktimer.com");
         readMetExcept(u, 2);
@@ -209,14 +214,14 @@ class GoalWaiverServiceTest {
     }
 
     @Test
-    @DisplayName("availableFor: 오늘 이미 지급받았으면 false (남은 빠뜨린 날이 있어도)")
-    void availableFor_alreadyGrantedToday_false() {
+    @DisplayName("availableFor: 오늘 이미 지급받았어도 남은 빠뜨린 날이 있으면 true (무제한)")
+    void availableFor_alreadyGrantedToday_stillTrue() {
         User u = user("avail-used@booktimer.com");
         readMetExcept(u, 2, 4);
 
         goalWaiverService.waive(u);
 
         assertThat(debtService.weeklyDebt(u).missedDays()).isNotEmpty(); // 아직 빠뜨린 날은 남았다
-        assertThat(goalWaiverService.availableFor(u)).isFalse();
+        assertThat(goalWaiverService.availableFor(u)).isTrue();
     }
 }

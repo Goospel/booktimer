@@ -226,15 +226,15 @@ describe('리워드 광고 보상 (waiveDebt)', () => {
     expect(result.waivedDate).toBe('2026-08-09');
   });
 
-  it('오늘 이미 사용(409)은 서버 평문 메시지를 그대로 올린다', async () => {
+  it('중복 소거(409)는 서버 평문 메시지를 그대로 올린다', async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
-      response(409, '오늘은 이미 사용했어요. 내일 다시 지울 수 있어요.') as never,
+      response(409, '방금 지워진 날이에요. 다시 시도해 주세요.') as never,
     );
 
     const error = await waiveDebt().catch((e: unknown) => e);
 
     expect((error as ApiError).status).toBe(409);
-    expect((error as ApiError).message).toBe('오늘은 이미 사용했어요. 내일 다시 지울 수 있어요.');
+    expect((error as ApiError).message).toBe('방금 지워진 날이에요. 다시 시도해 주세요.');
   });
 });
 

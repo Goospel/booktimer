@@ -8,6 +8,8 @@ import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.session.ReadingSessionService;
 import com.booktimer.session.WeeklyDebt;
+import com.booktimer.timer.ReadingGoalChange;
+import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
@@ -78,6 +80,9 @@ class ReadingSessionControllerTest {
 
     @Autowired
     private ReadingDebtService debtService;
+
+    @Autowired
+    private ReadingGoalChangeRepository goalChangeRepository;
 
     @Autowired
     private Clock clock;
@@ -296,16 +301,55 @@ class ReadingSessionControllerTest {
     }
 
     @Test
-    @DisplayName("POST /sessions/manual: 윈도우(최근 7일) 밖 날짜는 거부(에러 안내 + 세션 없음) — 자동 용서")
+    @DisplayName("POST /sessions/manual: 부채 창 밖 날짜는 거부(에러 안내 + 세션 없음) — 목표 이력 없으면 창은 7일 폴백")
     void manualSubmit_outsideWindow_flashesError_noSession() throws Exception {
         User user = register("moutwin@booktimer.com");
         Book book = book(user);
 
         mockMvc.perform(post("/sessions/manual")
                         .param("bookId", String.valueOf(book.getId()))
-                        .param("date", today().minusDays(8).toString()) // 7일 윈도우 밖
+                        .param("date", today().minusDays(8).toString()) // 폴백 창(7일) 밖
                         .param("hours", "1")
                         .with(user("moutwin@booktimer.com")).with(csrf()))
+                .andExpect(redirectedUrl("/sessions/manual"))
+                .andExpect(flash().attributeExists("error"));
+
+        assertThat(sessionRepository.findByUser(user)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("POST /sessions/manual: 부채 창이 넓으면 8일 전도 기록된다 — 입력 하한 = 부채 창(7일 고정 폐지)")
+    void manualSubmit_eightDaysAgo_allowedWhenDebtWindowIsWider() throws Exception {
+        User user = register("mwidewin@booktimer.com");
+        Book book = book(user);
+        // 첫 목표를 30일 전으로 두면 그날부터가 부채 대상 구간 → 그 안의 8일 전은 채울 수 있어야 한다.
+        goalChangeRepository.save(ReadingGoalChange.of(user, today().minusDays(30), 3600L));
+        long totalBefore = debtService.weeklyDebt(user).totalDebtSeconds();
+
+        mockMvc.perform(post("/sessions/manual")
+                        .param("bookId", String.valueOf(book.getId()))
+                        .param("date", today().minusDays(8).toString())
+                        .param("hours", "0").param("minutes", "30")
+                        .with(user("mwidewin@booktimer.com")).with(csrf()))
+                .andExpect(redirectedUrl("/sessions/manual"))
+                .andExpect(flash().attributeExists("message"));
+
+        assertThat(sessionRepository.findByUser(user)).hasSize(1);
+        assertThat(debtService.weeklyDebt(user).totalDebtSeconds()).isEqualTo(totalBefore - 30 * 60L);
+    }
+
+    @Test
+    @DisplayName("POST /sessions/manual: 부채 창(첫 목표일) 이전 날짜는 여전히 거부 — 시작 전은 채울 대상이 아니다")
+    void manualSubmit_beforeDebtWindowStart_rejected() throws Exception {
+        User user = register("mbeforewin@booktimer.com");
+        Book book = book(user);
+        goalChangeRepository.save(ReadingGoalChange.of(user, today().minusDays(30), 3600L));
+
+        mockMvc.perform(post("/sessions/manual")
+                        .param("bookId", String.valueOf(book.getId()))
+                        .param("date", today().minusDays(31).toString()) // 첫 목표일 하루 전
+                        .param("hours", "1")
+                        .with(user("mbeforewin@booktimer.com")).with(csrf()))
                 .andExpect(redirectedUrl("/sessions/manual"))
                 .andExpect(flash().attributeExists("error"));
 

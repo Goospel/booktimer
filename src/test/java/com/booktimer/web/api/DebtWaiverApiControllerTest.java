@@ -35,7 +35,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>요청 body가 없다는 것이 계약의 핵심이다 — 대상 날짜를 서버가 고르므로 클라이언트에 조작 표면이 없다.
  * 응답에 갱신된 {@code timer}를 실어 버튼 노출/숨김이 재조회 없이 갱신된다.
  *
- * <p>상태코드: 200 성공 / 400 지울 날 없음 / 409 오늘 이미 사용 / 401 미인증(미니앱 Bearer 체인이 처리).
+ * <p>상태코드: 200 성공(횟수 제한 없음) / 400 지울 날 없음 / 409 같은 날 중복 소거 race / 401 미인증(미니앱
+ * Bearer 체인이 처리).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -104,14 +105,28 @@ class DebtWaiverApiControllerTest {
     }
 
     @Test
-    @DisplayName("오늘 이미 사용했으면 409")
-    void waive_alreadyUsedToday_409() throws Exception {
-        User u = tossUser("waiver-dup@noreply.booktimer.app");
+    @DisplayName("같은 날 2회째도 200 — 일일 1회 상한 폐지, 남은 밀린 날이 이어서 지워진다")
+    void waive_secondTimeSameDay_ok() throws Exception {
+        User u = tossUser("waiver-repeat@noreply.booktimer.app");
         readMetExcept(u, 2, 4);
+        String token = apiTokenService.issue(u);
+
+        waive(token).andExpect(status().isOk())
+                .andExpect(jsonPath("$.waivedDate").value(today().minusDays(2).toString()));
+        waive(token).andExpect(status().isOk())
+                .andExpect(jsonPath("$.waivedDate").value(today().minusDays(4).toString()))
+                .andExpect(jsonPath("$.timer.carriedDebtSeconds").value(0)); // 두 날 모두 소거
+    }
+
+    @Test
+    @DisplayName("이미 지워진 날뿐이면 400 — 소거된 날은 다시 후보가 되지 않는다(무제한이어도 부채가 상한)")
+    void waive_onlyAlreadyWaivedDayLeft_400() throws Exception {
+        User u = tossUser("waiver-dup@noreply.booktimer.app");
+        readMetExcept(u, 2);
         waiverRepository.saveAndFlush(ReadingGoalWaiver.create(u, today().minusDays(2), today()));
         String token = apiTokenService.issue(u);
 
-        waive(token).andExpect(status().isConflict());
+        waive(token).andExpect(status().isBadRequest());
     }
 
     @Test
@@ -148,8 +163,8 @@ class DebtWaiverApiControllerTest {
     }
 
     @Test
-    @DisplayName("대시보드: 오늘 이미 사용했으면 debtWaiverAvailable=false")
-    void dashboard_usedToday_false() throws Exception {
+    @DisplayName("대시보드: 오늘 이미 사용했어도 남은 밀린 날이 있으면 debtWaiverAvailable=true (무제한)")
+    void dashboard_usedToday_stillTrue() throws Exception {
         User u = tossUser("dash-used@noreply.booktimer.app");
         readMetExcept(u, 2, 4);
         waiverRepository.saveAndFlush(ReadingGoalWaiver.create(u, today().minusDays(2), today()));
@@ -157,6 +172,6 @@ class DebtWaiverApiControllerTest {
 
         mockMvc.perform(get("/api/dashboard").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.debtWaiverAvailable").value(false));
+                .andExpect(jsonPath("$.debtWaiverAvailable").value(true));
     }
 }

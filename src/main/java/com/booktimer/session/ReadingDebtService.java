@@ -6,6 +6,7 @@ import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.User;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,16 +15,19 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 독서 부채(7일 윈도우 per-day) 조회 유스케이스.
+ * 독서 부채(누적 per-day) 조회 유스케이스.
  *
  * <p>부채는 더 이상 저장하지 않고 완료 세션에서 <b>유도</b>한다(N-001의 단일 누적 카운터를 대체).
  * 일자별 읽은 양({@link ReadingHistoryService})과 <b>그날 유효했던 하루 목표</b>를 받아
- * 순수 계산기({@link WeeklyDebtCalculator})로 오늘 부채 + 이번 주 빠뜨린 날을 만든다.
+ * 순수 계산기({@link WeeklyDebtCalculator})로 오늘 부채 + 빠뜨린 날을 만든다.
+ *
+ * <p><b>창(계산 범위)을 정하는 곳이 여기다</b> — {@link #debtWindowStart(User)}. 7일 자동 소멸은 폐지됐고
+ * (2026-08-14) 부채는 계속 누적된다. 지우는 수단은 더 읽어서 갚기(backward 재분배)와 리워드 광고
+ * 용서({@link ReadingGoalWaiver})뿐이며, <b>오늘 몫은 광고로 지울 수 없다</b>(계산기가 오늘을 제외).
  *
  * <p>그날 목표는 목표 변경 이력({@link ReadingGoalChange})을 {@link GoalSchedule}로 풀어 날짜별로 정한다 —
  * 사용자가 목표를 올려도 옛 목표를 채운 과거 날이 빠뜨린 날로 둔갑하지 않게(소급 함정 차단, N-059). 이력이
@@ -45,21 +49,38 @@ public class ReadingDebtService {
     private final ReadingGoalChangeRepository goalChangeRepository;
     private final ReadingGoalWaiverRepository waiverRepository;
     private final Clock clock;
+    private final LocalDate debtEpoch;
 
     public ReadingDebtService(ReadingHistoryService historyService,
                               ReadingTimerRepository timerRepository,
                               ReadingGoalChangeRepository goalChangeRepository,
                               ReadingGoalWaiverRepository waiverRepository,
-                              Clock clock) {
+                              Clock clock,
+                              @Value("${booktimer.debt.epoch}") String debtEpoch) {
         this.historyService = historyService;
         this.timerRepository = timerRepository;
         this.goalChangeRepository = goalChangeRepository;
         this.waiverRepository = waiverRepository;
         this.clock = clock;
+        this.debtEpoch = LocalDate.parse(debtEpoch);
     }
 
     /**
-     * 유저의 7일 윈도우 부채(오늘 부채 + 빠뜨린 날)를 계산해 반환한다.
+     * 부채 누적 시작일(하한) — 이 날 이전은 부채로 세지 않는다.
+     *
+     * <p>7일 자동 소멸을 폐지하며 둔 전환 장치다. 이 하한이 없으면 전환 순간 옛 사용자에게 가입 이후
+     * 수백 시간의 부채가 한꺼번에 살아나 화면이 무의미해진다. 운영값은 전환 배포일보다 <b>7일 이른</b>
+     * 날짜라, 전환 직후 보이는 부채가 옛 7일 창과 같고 그 뒤로 하루씩 누적된다(체감 급변 0).
+     *
+     * <p>프로퍼티인 이유: 테스트는 고정 Clock을 각기 다른 날짜로 쓰므로 절대 상수를 박으면 창이 하루로
+     * 좁혀져 무관한 테스트가 줄줄이 깨진다. 테스트는 아주 이른 날짜로 덮어써 하한을 무력화한다.
+     */
+    public LocalDate debtEpoch() {
+        return debtEpoch;
+    }
+
+    /**
+     * 유저의 누적 부채(오늘 부채 + 빠뜨린 날)를 계산해 반환한다.
      *
      * @param user 조회 주체
      */
@@ -88,14 +109,10 @@ public class ReadingDebtService {
     public WeeklyDebtTrace weeklyDebtTrace(User user, LocalDate asOf) {
         LocalDate effectiveAsOf = asOf != null ? asOf : today(user);
         GoalSchedule schedule = buildGoalSchedule(user);
+        LocalDate windowStart = windowStart(schedule, effectiveAsOf);
 
-        Optional<LocalDate> baseline = schedule.earliestEffectiveDate();
         Map<LocalDate, Long> goalByDate = new LinkedHashMap<>();
-        for (int offset = 0; offset < WeeklyDebtCalculator.WINDOW_DAYS; offset++) {
-            LocalDate date = effectiveAsOf.minusDays(offset);
-            if (baseline.isPresent() && date.isBefore(baseline.get())) {
-                continue; // 가입(첫 목표) 이전 날 — 판정에서 제외(goal=0으로 내려가 deficit 없음)
-            }
+        for (LocalDate date = windowStart; !date.isAfter(effectiveAsOf); date = date.plusDays(1)) {
             goalByDate.put(date, schedule.goalFor(date));
         }
 
@@ -104,19 +121,44 @@ public class ReadingDebtService {
             secondsByDate.put(record.date(), record.totalSeconds());
         }
 
-        return WeeklyDebtCalculator.computeTrace(secondsByDate, goalByDate, waivedDates(user, effectiveAsOf), effectiveAsOf);
+        return WeeklyDebtCalculator.computeTrace(secondsByDate, goalByDate, waivedDates(user, windowStart), effectiveAsOf);
     }
 
     /**
-     * 윈도우 내 용서된 날짜 — 리워드 광고 보상({@link ReadingGoalWaiver})의 유일한 배선점이다.
+     * 부채 계산 창의 시작일(유저 TZ) — 이 날부터 오늘까지가 부채 대상 구간이다.
+     *
+     * <p>사후 수동 입력의 하한도 이 값이다({@code ReadingSessionController}) — 부채로 세는 날은 채울 수
+     * 있어야 하고, 세지 않는 날은 채울 이유가 없다. 두 규칙이 갈리면 "부채는 있는데 채울 수 없는 날"이 생긴다.
+     */
+    public LocalDate debtWindowStart(User user) {
+        return windowStart(buildGoalSchedule(user), today(user));
+    }
+
+    /**
+     * 창 시작일 = {@code max(부채 누적 시작일, 첫 목표일)}, 단 기준일을 넘지 않는다.
+     *
+     * <p>첫 목표일(baseline) 이전은 "사용자가 아직 시작하기 전"이라 부채로 칠 수 없다(N-059). 목표 이력이
+     * 아예 없으면(레거시·미온보딩) 옛 7일 창으로 폴백한다 — 그 사용자에게는 폴백 목표(현재 값)를 무한한
+     * 과거에 소급 적용하는 것이 곧 없던 빚을 만드는 일이라, 근거 있는 시작점이 없으면 창을 넓히지 않는다.
+     * 마지막 클램프는 가입 당일과 epoch 이전 as-of 진단(관리자)에서 창이 비지 않게 한다.
+     */
+    private LocalDate windowStart(GoalSchedule schedule, LocalDate asOf) {
+        LocalDate base = schedule.earliestEffectiveDate()
+                .orElseGet(() -> asOf.minusDays(WeeklyDebtCalculator.WINDOW_DAYS - 1L));
+        LocalDate start = base.isBefore(debtEpoch) ? debtEpoch : base;
+        return start.isAfter(asOf) ? asOf : start;
+    }
+
+    /**
+     * 창 내 용서된 날짜 — 리워드 광고 보상({@link ReadingGoalWaiver})의 유일한 배선점이다.
      *
      * <p>여기 한 곳에 넣으면 {@code DashboardModel.computeLive}를 경유하는 모든 소비처(웹 SSR·미니앱
      * {@code /api/dashboard}·start/stop 응답)가 자동으로 같은 값을 본다 — 채널별 동기화 코드가 필요 없다.
-     * 윈도우 밖(7일 초과) 용서는 부채 자체가 자동 소멸해 의미가 없으므로 쿼리에서 잘라낸다.
+     * 창 밖 용서는 계산에 쓰이지 않으므로 쿼리에서 잘라낸다.
      */
-    private Set<LocalDate> waivedDates(User user, LocalDate asOf) {
+    private Set<LocalDate> waivedDates(User user, LocalDate windowStart) {
         return waiverRepository
-                .findByUserAndWaivedDateGreaterThanEqual(user, asOf.minusDays(WeeklyDebtCalculator.WINDOW_DAYS - 1))
+                .findByUserAndWaivedDateGreaterThanEqual(user, windowStart)
                 .stream()
                 .map(ReadingGoalWaiver::getWaivedDate)
                 .collect(Collectors.toSet());

@@ -60,9 +60,14 @@ public class HistoryApiController {
                         graph.growthStage().emoji(),
                         graph.growthStage().label()
                 ),
-                debtService.weeklyDebt(user).missedDays()
+                // 부채가 무제한 누적되므로 목록도 무한히 자란다 — 화면에 쓰이는 최근 분량만 잘라 보낸다.
+                // 합계(carriedDebtSeconds)는 대시보드가 전량으로 따로 계산하니 여기 상한은 표시에만 영향한다.
+                debtService.weeklyDebt(user).missedDays().stream().limit(MAX_SHORTFALL_DAYS).toList()
         );
     }
+
+    /** 「빠뜨린 날」 응답 상한(최근 먼저) — 그 이상은 화면에서도 의미가 없고 응답만 커진다. */
+    private static final int MAX_SHORTFALL_DAYS = 30;
 
     public record HistoryApiResponse(
             String nickname,

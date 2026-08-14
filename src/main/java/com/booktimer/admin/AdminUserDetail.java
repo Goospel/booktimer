@@ -32,11 +32,11 @@ public record AdminUserDetail(
         BookshelfSummary bookshelf) {
 
     /**
-     * 타이머 설정/부채 스냅샷 — 7일 윈도우 부채 모델 기준.
+     * 타이머 설정/부채 스냅샷 — 누적 per-day 부채 모델 기준.
      *
      * @param dailyGoalSeconds   하루 목표(초)
      * @param todayDebtSeconds   오늘 부채(초) = max(0, 목표 − 오늘 읽은 양)
-     * @param weeklyDebtSeconds  이번 주 총 부채(초) = 오늘 + 윈도우 내 빠뜨린 날 합
+     * @param weeklyDebtSeconds  총 부채(초) = 오늘 + 창 내 빠뜨린 날 합(이름은 옛 모델 잔재)
      */
     public record TimerInfo(
             long dailyGoalSeconds,

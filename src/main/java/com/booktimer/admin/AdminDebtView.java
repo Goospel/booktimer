@@ -5,7 +5,7 @@ import com.booktimer.session.WeeklyDebtTrace;
 import java.time.LocalDate;
 
 /**
- * 관리자 부채 진단 뷰 DTO — 임의 기준일(asOf)의 7일 윈도우 계산 추적.
+ * 관리자 부채 진단 뷰 DTO — 임의 기준일(asOf)까지의 누적 창 계산 추적.
  *
  * @param loginId  조회 대상 사용자 로그인 아이디
  * @param nickname 닉네임(화면 표시용)
