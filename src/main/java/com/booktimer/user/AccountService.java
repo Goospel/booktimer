@@ -131,6 +131,29 @@ public class AccountService {
         purge(user);
     }
 
+    /**
+     * 토스 재인증으로 신원이 확인된 계정을 삭제한다 — 미니앱(앱인토스) 탈퇴 경로.
+     *
+     * <p>미니앱 전용 계정은 <b>확인 수단이 둘 다 없다</b>: 비밀번호가 없어 {@link #deleteAccount}를 못 쓰고,
+     * {@code login_id}가 null일 수 있어(핸들 미작성) {@link #deleteSocialAccount}의 @핸들 재입력도 성립하지
+     * 않는다. 대신 컨트롤러가 <b>fresh 인가코드</b>를 토스에 물어 받은 userKey를 넘기고, 여기서 본인
+     * {@code toss_user_key}와 대조한다 — 토큰을 훔친 쪽은 토스 앱 본인 인증을 통과할 수 없다.
+     *
+     * <p>삭제 본체는 웹이 이미 운영 중인 {@link #purge}를 그대로 쓴다(FK 순서·자식 정리를 두 번 짜지 않는다).
+     * 이 메서드가 더하는 것은 확인 게이트 하나뿐이다.
+     *
+     * @param verifiedUserKey 토스가 방금 확인해 준 userKey(컨트롤러가 인가코드에서 얻는다)
+     * @throws AccountDeletionConfirmationException userKey 불일치 또는 {@code toss_user_key} 미보유
+     *                                             — <b>이때 아무것도 삭제하지 않는다</b>
+     */
+    public void deleteTossVerifiedAccount(User user, String verifiedUserKey) {
+        // toss_user_key가 없으면 무조건 불일치다 — null끼리 같다고 보면 웹 전용 계정이 빈 키로 지워진다.
+        if (user.getTossUserKey() == null || !user.getTossUserKey().equals(verifiedUserKey)) {
+            throw new AccountDeletionConfirmationException();
+        }
+        purge(user);
+    }
+
     /** 입력 핸들을 정규화(공백 제거·선행 @ 제거·소문자)해 본인 login_id와 같은지 본다. login_id 미설정/입력 null이면 불일치. */
     private boolean handleMatches(User user, String confirmHandle) {
         String actual = user.getLoginId();

@@ -2,9 +2,14 @@ import { Button, Text, TextField } from '@toss/tds-mobile';
 import { useState } from 'react';
 
 import type { DashboardResponse } from '../api';
-import { logout, updateNickname, validateNicknameFormat } from '../api';
-import { ErrorMessage, Screen, sectionStyle } from '../ui';
+import { deleteAccount, logout, updateNickname, validateNicknameFormat } from '../api';
+import { openExternal } from '../toss';
+import { ErrorMessage, Screen, Sheet, sectionStyle } from '../ui';
 import { HandleSheet } from './Social';
+
+/** 웹에 공개된 문서들 — 둘 다 `permitAll`이라 로그인 없이 열린다(미니앱 계정은 웹 로그인 자체가 불가). */
+const PRIVACY_URL = 'https://booktimer.app/privacy';
+const TERMS_URL = 'https://booktimer.app/terms';
 
 /**
  * 로그아웃 → 로그인 화면. **무슨 일이 있어도 화면을 넘긴다.**
@@ -57,6 +62,68 @@ export function LogoutSection({
 }
 
 /**
+ * 회원 탈퇴 2단 확인 — 진입 버튼 → 시트(경고 + danger 버튼).
+ *
+ * <p>미니앱 전용 계정에는 **여기 말고 탈퇴할 자리가 없다**: 비밀번호가 없어 웹 `/settings/delete`에 로그인조차
+ * 못 하고, @아이디가 없으면 웹 소셜 탈퇴의 핸들 재입력도 성립하지 않는다.
+ *
+ * <p>되돌릴 수 없는 동작이라 게이트가 셋이다 — ① 이 진입 버튼, ② 시트의 danger 버튼, ③ 서버가 요구하는
+ * 토스 재인증({@link deleteAccount}). 시트 상태를 프롭으로 받는 이유는 로그아웃과 같다: 정적 렌더
+ * 하니스가 클릭을 못 잡아, 프롭이 아니면 열린 시트 가지에 영영 닿지 못한다. TDS `BottomSheet`이 아니라
+ * 자체 {@link Sheet}인 것도 같은 사정이다(포털은 정적 렌더에서 마크업이 통째로 빈다).
+ */
+export function DeleteAccountSection({
+  open,
+  busy,
+  error,
+  onOpen,
+  onClose,
+  onDelete,
+}: {
+  open: boolean;
+  busy: boolean;
+  /** 서버가 준 평문(400 인가코드 만료 · 403 본인 확인 실패) — 시트 안에 띄운다. */
+  error: string | null;
+  onOpen: () => void;
+  onClose: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+        <Button size="small" variant="weak" color="danger" onClick={onOpen}>
+          회원 탈퇴
+        </Button>
+      </div>
+
+      {open && (
+        <Sheet title="회원 탈퇴" onClose={onClose}>
+          <Text typography="st11" style={{ display: 'block' }}>
+            탈퇴하면 독서 기록·책장·스토리·친구 관계가 <b>영구히 삭제</b>되고, <b>되돌릴 수 없어요.</b>
+          </Text>
+          {/* 클라이언트는 이 계정이 웹 계정과 연결됐는지 모른다 — 조건 노출 대신 상시 고지가 정직하다. */}
+          <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
+            웹(booktimer.app)에서 쓰던 계정이라면 웹 기록까지 모두 삭제됩니다.
+          </Text>
+          <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
+            본인 확인을 위해 토스 로그인을 한 번 더 거쳐요.
+          </Text>
+
+          <ErrorMessage message={error} />
+
+          <Button display="block" color="danger" style={{ marginTop: 16 }} loading={busy} onClick={onDelete}>
+            모두 삭제하고 탈퇴
+          </Button>
+          <Button display="block" variant="weak" style={{ marginTop: 8 }} disabled={busy} onClick={onClose}>
+            취소
+          </Button>
+        </Sheet>
+      )}
+    </>
+  );
+}
+
+/**
  * 프로필·설정 — 미니앱에서 내 계정에 손대는 유일한 화면.
  *
  * <p>있는 것은 넷뿐이다: 닉네임 · @아이디 · 하루 목표 · 로그아웃. **미니앱 채널에서 실제로 작동하는 것이
@@ -88,6 +155,9 @@ export function Settings({
   const [handle, setHandle] = useState(dashboard.loginId);
   const [creatingHandle, setCreatingHandle] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const [quitting, setQuitting] = useState(false);
+  const [quitBusy, setQuitBusy] = useState(false);
+  const [quitError, setQuitError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -185,10 +255,41 @@ export function Settings({
         </Button>
       </section>
 
+      {/* 약관·처리방침 — 기기 기본 브라우저로 넘긴다. 인앱 렌더는 같은 문서를 두 곳에 두는 일이라 안 한다. */}
+      <section style={sectionStyle}>
+        <Button display="block" variant="weak" onClick={() => openExternal(PRIVACY_URL)}>
+          개인정보 처리방침
+        </Button>
+        <Button display="block" variant="weak" style={{ marginTop: 8 }} onClick={() => openExternal(TERMS_URL)}>
+          이용약관
+        </Button>
+      </section>
+
       <LogoutSection
         confirm={confirmLogout}
         onConfirm={setConfirmLogout}
         onLogout={() => void logoutAndLeave(onLogout)}
+      />
+
+      <DeleteAccountSection
+        open={quitting}
+        busy={quitBusy}
+        error={quitError}
+        onOpen={() => {
+          setQuitError(null);
+          setQuitting(true);
+        }}
+        onClose={() => setQuitting(false)}
+        onDelete={() => {
+          setQuitBusy(true);
+          setQuitError(null);
+          deleteAccount()
+            // 계정이 사라졌으니 로그인 브릿지로 — 거기서 `registered:false`를 받아 "새로 시작" 화면이 뜬다.
+            .then(onLogout)
+            // 실패는 시트를 닫지 않는다 — 닫으면 왜 안 됐는지(만료된 인가코드인지) 알 길이 없다.
+            .catch((e: Error) => setQuitError(e.message))
+            .finally(() => setQuitBusy(false));
+        }}
       />
 
       {creatingHandle && (

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DashboardResponse } from './api';
 import { logout } from './api';
-import { LogoutSection, Settings, logoutAndLeave } from './screens/Settings';
+import { DeleteAccountSection, LogoutSection, Settings, logoutAndLeave } from './screens/Settings';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
 vi.mock('./api', async (importOriginal) => ({
@@ -126,6 +126,69 @@ describe('로그아웃 섹션', () => {
 
   it('죽은 안내는 없다 — 토스로 가입한 계정은 booktimer.app에 로그인할 수 없다', () => {
     expect(renderSettings()).not.toContain('booktimer.app');
+  });
+});
+
+/**
+ * 약관·처리방침 — 개인정보 고지 의무이자 심사 요건. 미니앱 안에는 이 링크가 **하나도 없었다**:
+ * 토스로 가입한 계정은 웹에 로그인할 수 없어 웹 푸터로도 닿지 못한다.
+ */
+describe('약관·처리방침 링크', () => {
+  it('개인정보 처리방침과 이용약관에 닿는 손잡이가 있다', () => {
+    const markup = renderSettings();
+
+    expect(markup).toContain('개인정보 처리방침');
+    expect(markup).toContain('이용약관');
+  });
+});
+
+/**
+ * 회원 탈퇴 — 미니앱 전용 계정의 **유일한** 탈퇴 경로(웹 `/settings/delete`는 비밀번호가 없어 못 닿는다).
+ *
+ * <p>되돌릴 수 없는 동작이라 UI가 2단이다: 진입 버튼 → 시트(경고 + danger 버튼). 시트 상태를 프롭으로
+ * 받는 이유는 로그아웃과 같다 — 정적 렌더 하니스(T-149)가 클릭을 못 잡아, 프롭이 아니면 열린 시트에
+ * 영영 닿지 못한다. TDS `BottomSheet`이 아니라 자체 `Sheet`를 쓰는 것도 그래서다(포털은 마크업이 통째로 빈다).
+ */
+describe('회원 탈퇴 섹션', () => {
+  const section = (open: boolean, error: string | null = null) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <DeleteAccountSection
+          open={open}
+          busy={false}
+          error={error}
+          onOpen={() => {}}
+          onClose={() => {}}
+          onDelete={() => {}}
+        />
+      </TDSMobileProvider>,
+    );
+
+  it('닫힌 상태에선 진입 버튼만 — 경고도 실행 버튼도 아직 없다', () => {
+    const markup = section(false);
+
+    expect(markup).toContain('회원 탈퇴');
+    expect(markup).not.toContain('모두 삭제하고 탈퇴');
+  });
+
+  it('열면 무엇이 사라지는지 먼저 말한다 — 영구 삭제·복구 불가를 읽고 나서 누르게', () => {
+    const markup = section(true);
+
+    expect(markup).toContain('영구히 삭제');
+    expect(markup).toContain('되돌릴 수 없어요');
+    expect(markup).toContain('모두 삭제하고 탈퇴');
+    expect(markup).toContain('취소');
+  });
+
+  it('웹 계정과 연결된 사람에게 웹 기록까지 지워진다고 상시 고지한다 — 반쪽 탈퇴는 존재하지 않는다', () => {
+    // 클라이언트는 authProvider를 모르므로 조건 노출이 아니라 상시 문구다(서버에 필드를 새로 파지 않는다).
+    expect(section(true)).toContain('웹(booktimer.app)에서 쓰던 계정이라면 웹 기록까지 모두 삭제됩니다');
+  });
+
+  it('실패하면 서버 평문을 시트 안에 띄운다 — 화면을 닫아 버리면 왜 안 됐는지 알 길이 없다', () => {
+    expect(section(true, '본인 확인에 실패해 탈퇴를 진행하지 않았어요.')).toContain(
+      '본인 확인에 실패해 탈퇴를 진행하지 않았어요.',
+    );
   });
 });
 
