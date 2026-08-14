@@ -269,22 +269,28 @@ export interface SocialEvent {
   occurredAt: string;
 }
 
-/** `HomeFeedApiController.NewsItem` — 출처 라벨은 서버가 안 준다(클라이언트가 `link`에서 파생). */
+/** `HomeFeedApiController.NewsItem` */
 export interface NewsItem {
   title: string;
   link: string;
   publishedAt: string;
   /** 내 어느 책의 기사인지 보여주는 라벨. */
   bookTitle: string;
+  /**
+   * 매체명. 수집원이 구글 뉴스 RSS라 `link`가 전부 구글 리다이렉트라서 호스트명으로는 파생할 수 없다
+   * — 서버가 RSS의 `<source>` 엘리먼트에서 뽑아 준다. 옛 행은 null일 수 있어 클라이언트가 폴백을 둔다.
+   */
+  source: string | null;
 }
 
 /**
  * 홈 피드 박스 데이터 — 대시보드에 동봉하지 않고 따로 받는다: 히어로(타이머) 렌더가 피드 쿼리에
  * 인질로 잡히지 않고, 계약이 독립이라 서버·미니앱 배포가 묶이지 않는다(`Social`·`Library`의 자체 fetch 선례).
  *
- * <p>`newsEnabled`는 **「책 뉴스」 탭 노출 스위치**다 — 수집기 키가 서버에 없으면 false + `news`가 빈
- * 배열로 와서 미니앱이 탭 머리 자체를 안 그린다(죽은 탭 금지). 게이트가 서버에 있어 키가 들어오면
- * 미니앱 재배포 없이 점등된다(`VITE_*` 빌드타임 게이트보다 나은 자리).
+ * <p>`newsEnabled`는 **「책 뉴스」 탭 노출 스위치**다 — 꺼져 있으면 false + `news`가 빈 배열로 와서
+ * 미니앱이 탭 머리 자체를 안 그린다(죽은 탭 금지). 구글 뉴스 RSS는 공식 API가 아니라 형식이 바뀔 수
+ * 있어 서버 `booktimer.news.enabled`가 킬스위치로 남아 있고, **게이트가 서버에 있어 껐다 켜는 데
+ * 미니앱 재배포가 필요 없다**(`VITE_*` 빌드타임 게이트보다 나은 자리).
  */
 export interface HomeFeedResponse {
   social: SocialEvent[];
