@@ -5,6 +5,8 @@ import type {
   HomeFeedResponse,
   MonthlySection,
   MyBookSummary,
+  PersonalityMutation,
+  PersonalityStatus,
   ShelfResponse,
   StopResponse,
   StoryCard,
@@ -159,5 +161,37 @@ describe('프로드 번들 격리 배선', () => {
   it('목 라우팅은 dynamic import이고 import.meta.env.DEV 게이트 뒤에 있다 — 프로드에서 통째로 잘린다', () => {
     expect(apiSource).toContain("await import('./dev-mock')");
     expect(apiSource).toMatch(/import\.meta\.env\.DEV && import\.meta\.env\.VITE_DEV_MOCK === '1'/);
+  });
+});
+
+/**
+ * 성향 추출 관문 — 브라우저엔 광고 SDK가 없어 광고 자체는 못 보지만, 그 뒤 흐름(잔여 차감 → 소진 429)은
+ * 목이 흉내내야 「내일 다시」 화면을 눈으로 확인할 수 있다. 잔여는 모듈 상태라 새로고침이 초기화다.
+ */
+describe('dev-mock 성향 관문', () => {
+  it('status → ad-refresh → status 에서 잔여가 줄어든다', async () => {
+    const before = await mockRequest<PersonalityStatus>('/api/personality/status', {});
+    await mockRequest<PersonalityMutation>('/api/personality/ad-refresh', { method: 'POST' });
+    const after = await mockRequest<PersonalityStatus>('/api/personality/status', {});
+
+    expect(after.adRefreshRemaining).toBe(before.adRefreshRemaining - 1);
+  });
+
+  it('ad-refresh 응답에 미선택 최신 행이 실려 select 체이닝이 목에서도 돈다', async () => {
+    const result = await mockRequest<PersonalityMutation>('/api/personality/ad-refresh', { method: 'POST' });
+    const newest = result.view.entries[0];
+
+    expect(newest).toBeDefined();
+    await expect(mockRequest(`/api/personality/select/${newest.id}`, { method: 'POST' })).resolves.toBeDefined();
+  });
+
+  it('잔여를 다 쓰면 429로 던진다 — 서버의 소진 응답을 흉내낸다', async () => {
+    let remaining = (await mockRequest<PersonalityStatus>('/api/personality/status', {})).adRefreshRemaining;
+    while (remaining > 0) {
+      await mockRequest('/api/personality/ad-refresh', { method: 'POST' });
+      remaining -= 1;
+    }
+
+    await expect(mockRequest('/api/personality/ad-refresh', { method: 'POST' })).rejects.toMatchObject({ status: 429 });
   });
 });

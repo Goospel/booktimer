@@ -535,6 +535,49 @@ export const fetchProfileBooks = (loginId: string, status?: BookStatus): Promise
 export const fetchPersonalityTagBooks = (loginId: string, tag: string): Promise<{ books: ProfileBook[] }> =>
   request('/api/profile/personality-tag', { query: { loginId, tag } });
 
+// ── 성향(책BTI) 추출 — 광고 관문 (`web/api/PersonalityApiController`의 record가 타입 단일 출처) ──
+
+/**
+ * 광고를 <b>보여주기 전에</b> 알아야 하는 것들. 잔여는 광고 경로 천장(하루 총량) 기준이다 —
+ * 웹의 무광고 3회 잔여와는 다른 값이고, 미니앱은 광고 경로만 쓰므로 이것 하나만 받는다.
+ */
+export interface PersonalityStatus {
+  coldStart: boolean;
+  hasSelected: boolean;
+  adRefreshRemaining: number;
+  adRefreshLimit: number;
+}
+
+export interface PersonalityEntry {
+  id: number;
+  generatedAt: string | null;
+  selected: boolean;
+}
+
+export interface PersonalityMutation {
+  view: {
+    state: 'READY' | 'COLD_START' | 'FALLBACK';
+    narrative: string | null;
+    entries: PersonalityEntry[];
+  };
+  refreshRemaining: number;
+  refreshLimit: number;
+}
+
+/**
+ * 관문 사전 판정 — <b>부작용이 없는 유일한 성향 GET</b>이다. 웹이 쓰는 `GET /api/personality`는
+ * 히스토리가 비면 첫 분석을 LLM으로 만들어 버려(=광고 없이 공짜 분석) 관문을 무력화한다.
+ */
+export const fetchPersonalityStatus = (): Promise<PersonalityStatus> => request('/api/personality/status');
+
+/** 광고 경로 전용 — 웹 `/refresh`(천장 3)가 아니라 `/ad-refresh`(천장 = 하루 총량)를 부른다. */
+export const adRefreshPersonality = (): Promise<PersonalityMutation> =>
+  request('/api/personality/ad-refresh', { method: 'POST' });
+
+/** 대표 승격 — 서버 재분석은 후보만 추가하므로, 미니앱은 최신 행을 이걸로 대표에 올린다. */
+export const selectPersonality = (id: number): Promise<PersonalityMutation> =>
+  request(`/api/personality/select/${id}`, { method: 'POST' });
+
 /** 차단하면 상대가 검색·목록에서 사라진다 — 이 목록이 미니앱의 유일한 차단 해제 경로다. */
 export const fetchBlocks = (): Promise<{ blocked: UserRow[]; myLoginId: string | null }> => request('/api/blocks');
 

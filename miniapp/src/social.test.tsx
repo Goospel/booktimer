@@ -1,17 +1,57 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ProfileBook, ProfileResponse, UserRow } from './api';
-import { ProfileCard, SafetyPanel, toggleSafety } from './screens/Profile';
+import type { PersonalityEntry, PersonalityMutation, PersonalityStatus, ProfileBook, ProfileResponse, UserRow } from './api';
+import { ApiError, adRefreshPersonality, selectPersonality } from './api';
+import {
+  ProfileCard,
+  SafetyPanel,
+  analysisFailed,
+  claimPersonality,
+  newestEntry,
+  personalityErrorMessage,
+  runPersonalityRefresh,
+  showPersonalityAdButton,
+  toggleSafety,
+} from './screens/Profile';
 import { HandleSheet, MyShelfEntry, Social, UserList } from './screens/Social';
 import { userAgent } from './test-fixtures';
+import { watchRewardAd } from './toss';
 
 /**
  * 소셜 화면의 분기를 정적 렌더로 계측한다 — 뮤테이션(팔로우·차단·신고) 자체는 api 계층에서 이미 계측했고,
  * 여기서는 "서버가 준 플래그(self·following)가 화면의 무엇을 켜고 끄는가"를 본다.
  * 특히 self 분기는 서버가 400으로 거절하는 동작(자기 팔로우·자기 차단)이라 화면에서 애초에 막아야 한다.
+ *
+ * <p>성향 광고 관문도 같은 방식이다: 노출 조건은 순수 술어 {@link showPersonalityAdButton}, 클릭 흐름은
+ * {@link claimPersonality}로 꺼내 계측하고(하니스가 정적 렌더라 클릭이 안 돈다 — 홈의 `claimDebtWaiver` 선례),
+ * 렌더 테스트는 그 술어가 실제로 마크업에 연결됐는지만 본다.
  */
+
+vi.mock('./api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./api')>()),
+  adRefreshPersonality: vi.fn(),
+  selectPersonality: vi.fn(),
+}));
+vi.mock('./toss', () => ({
+  REWARD_AD_GROUP_ID: 'test-ad-group',
+  watchRewardAd: vi.fn(),
+  GOAL_MET_TEMPLATE_CODE: 'test-template',
+  notificationAgreementSupported: vi.fn(),
+  requestNotificationAgreement: vi.fn(),
+  trackEvent: vi.fn(),
+  openExternal: vi.fn(),
+  tossLogin: vi.fn(),
+}));
+
+const adRefreshMock = vi.mocked(adRefreshPersonality);
+const selectMock = vi.mocked(selectPersonality);
+const watchRewardAdMock = vi.mocked(watchRewardAd);
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 function render(node: React.ReactNode) {
   return renderToStaticMarkup(<TDSMobileProvider userAgent={userAgent}>{node}</TDSMobileProvider>);
@@ -48,7 +88,13 @@ function card(
   p: ProfileResponse,
   books: ProfileBook[] = [],
   activeTag: string | null = null,
-  view: { selectedId?: number | null; gridOpen?: boolean } = {},
+  view: {
+    selectedId?: number | null;
+    gridOpen?: boolean;
+    personalityStatus?: PersonalityStatus | null;
+    earnedRetry?: boolean;
+    personalityNotice?: string | null;
+  } = {},
 ) {
   return render(
     <ProfileCard
@@ -58,6 +104,12 @@ function card(
       selectedId={view.selectedId ?? null}
       gridOpen={view.gridOpen ?? false}
       busy={false}
+      personalityStatus={view.personalityStatus ?? null}
+      adBusy={false}
+      earnedRetry={view.earnedRetry ?? false}
+      personalityNotice={view.personalityNotice ?? null}
+      onClaimPersonality={() => {}}
+      onRetryPersonality={() => {}}
       onFollowToggle={() => {}}
       onSelectTag={() => {}}
       onSelect={() => {}}
@@ -67,6 +119,23 @@ function card(
       onBack={() => {}}
     />,
   );
+}
+
+/** 관문 통과 상태(첫 분석) — 각 테스트는 여기서 한 필드만 어긋내 그 필드의 책임을 잰다. */
+function status(extra: Partial<PersonalityStatus> = {}): PersonalityStatus {
+  return { coldStart: false, hasSelected: false, adRefreshRemaining: 10, adRefreshLimit: 10, ...extra };
+}
+
+function entry(id: number, generatedAt: string | null, selected = false): PersonalityEntry {
+  return { id, generatedAt, selected };
+}
+
+function mutation(entries: PersonalityEntry[], narrative: string | null = '새 성향'): PersonalityMutation {
+  return {
+    view: { state: narrative === null ? 'FALLBACK' : 'READY', narrative, entries },
+    refreshRemaining: 9,
+    refreshLimit: 10,
+  };
 }
 
 describe('사용자 목록', () => {
@@ -281,5 +350,198 @@ describe('차단 2단계 확인', () => {
 
   it('접었다 다시 펴면 확인이 풀려 있다 — 살아남으면 「정말 차단」이 한 탭 거리다(서재 `toggleOpen`과 같은 이유)', () => {
     expect(toggleSafety(toggleSafety({ confirmBlock: true }))).toEqual({ confirmBlock: false });
+  });
+});
+
+/**
+ * 성향 추출 광고 관문 — 내 책방에만 선다. 노출 조건은 넷의 AND라, 하나라도 어긋나면 광고가 안 보여야 한다.
+ * 특히 `status === null`(조회 실패·서버 미배포)에서 숨는 것이 fail-closed의 핵심이다.
+ */
+describe('성향 광고 버튼 노출 (showPersonalityAdButton)', () => {
+  it('내 책방 + 콜드스타트 아님 + 잔여 있음 + 광고 그룹 설정됨 → 보인다', () => {
+    expect(showPersonalityAdButton(true, status(), 'ad-1')).toBe(true);
+  });
+
+  it('남의 책방에는 안 보인다 — 남의 성향을 내가 뽑을 수는 없다', () => {
+    expect(showPersonalityAdButton(false, status(), 'ad-1')).toBe(false);
+  });
+
+  it('status를 못 받았으면 숨는다 — 조회 실패·서버 미배포에서 광고만 보고 보상 없는 사고를 막는다', () => {
+    expect(showPersonalityAdButton(true, null, 'ad-1')).toBe(false);
+  });
+
+  it('콜드스타트(완독 0권)면 숨는다 — 분석이 보류되는 상태라 광고가 헛수고가 된다', () => {
+    expect(showPersonalityAdButton(true, status({ coldStart: true }), 'ad-1')).toBe(false);
+  });
+
+  it('오늘 총량을 다 썼으면 숨는다 — 광고를 봐도 429가 돌아온다', () => {
+    expect(showPersonalityAdButton(true, status({ adRefreshRemaining: 0 }), 'ad-1')).toBe(false);
+  });
+
+  it('광고 그룹 ID가 비면 숨는다 — 구글 등록 대기 중 빌드의 config-gate', () => {
+    expect(showPersonalityAdButton(true, status(), '')).toBe(false);
+  });
+});
+
+describe('최신 분석 찾기 (newestEntry)', () => {
+  it('generatedAt이 가장 늦은 행을 고른다 — 대표 승격 대상', () => {
+    const rows = [entry(3, '2026-08-15T10:00:00Z'), entry(1, '2026-08-13T10:00:00Z'), entry(2, '2026-08-14T10:00:00Z')];
+
+    expect(newestEntry(rows)?.id).toBe(3);
+  });
+
+  it('히스토리가 비면 null — 승격할 대상이 없다', () => {
+    expect(newestEntry([])).toBeNull();
+  });
+
+  it('generatedAt이 없는 행은 후보가 아니다 — 시각을 모르는 행을 대표로 올리면 엉뚱한 분석이 책방에 걸린다', () => {
+    expect(newestEntry([entry(1, null), entry(2, '2026-08-10T00:00:00Z')])?.id).toBe(2);
+    // 전부 시각이 없으면 고를 수 있는 행이 없다 — null을 빈 문자열로 눙치면 여기서 엉뚱한 행이 뽑힌다.
+    expect(newestEntry([entry(1, null), entry(2, null)])).toBeNull();
+  });
+});
+
+/**
+ * 신뢰 경계 — "광고를 끝까지 봤다"는 신호 없이는 분석 API를 부르지 않는다. 서버가 광고 시청을
+ * 검증할 수 없으므로(SDK에 서버사이드 검증 없음) 이 클라 측 규율이 관문의 실체다.
+ */
+describe('성향 추출 흐름 (claimPersonality)', () => {
+  it('시청 완료면 ad-refresh를 부르고 결과를 돌려준다', async () => {
+    watchRewardAdMock.mockResolvedValue(true);
+    const result = mutation([entry(1, '2026-08-15T10:00:00Z', true)]);
+    adRefreshMock.mockResolvedValue(result);
+
+    await expect(claimPersonality('ad-1')).resolves.toEqual(result);
+    expect(adRefreshMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('중간 이탈이면 분석 API를 부르지 않고 null — 조용히 원상태', async () => {
+    watchRewardAdMock.mockResolvedValue(false);
+
+    await expect(claimPersonality('ad-1')).resolves.toBeNull();
+    expect(adRefreshMock).not.toHaveBeenCalled();
+  });
+
+  it('광고 로드 실패면 분석 API를 부르지 않고 에러가 올라간다', async () => {
+    watchRewardAdMock.mockRejectedValue(new Error('no fill'));
+
+    await expect(claimPersonality('ad-1')).rejects.toThrow('no fill');
+    expect(adRefreshMock).not.toHaveBeenCalled();
+  });
+
+  it('건네받은 adGroupId를 그대로 광고에 넘긴다', async () => {
+    watchRewardAdMock.mockResolvedValue(false);
+
+    await claimPersonality('ad-9');
+
+    expect(watchRewardAdMock).toHaveBeenCalledWith('ad-9');
+  });
+});
+
+/**
+ * 대표 승격 체이닝 — 서버 `reanalyze`는 새 분석을 **후보로만** 추가한다(대표 불변). 미니앱엔 히스토리·선택
+ * UI가 없어 그대로 두면 광고를 보고도 책방 표시가 안 바뀐다. 그래서 최신 행이 미선택이면 select를 잇는다.
+ */
+describe('대표 승격 체이닝 (runPersonalityRefresh)', () => {
+  it('새 행이 미선택이면 그 id로 select를 잇는다 — 안 그러면 책방이 옛 성향 그대로다', async () => {
+    adRefreshMock.mockResolvedValue(
+      mutation([entry(7, '2026-08-15T10:00:00Z', false), entry(3, '2026-08-01T10:00:00Z', true)]),
+    );
+
+    await runPersonalityRefresh();
+
+    expect(selectMock).toHaveBeenCalledWith(7);
+  });
+
+  it('첫 분석(새 행이 이미 대표)이면 select를 부르지 않는다 — 서버가 이미 대표로 뒀다', async () => {
+    adRefreshMock.mockResolvedValue(mutation([entry(7, '2026-08-15T10:00:00Z', true)]));
+
+    await runPersonalityRefresh();
+
+    expect(selectMock).not.toHaveBeenCalled();
+  });
+
+  it('히스토리가 비어 오면 select 없이 결과만 돌려준다 (LLM 실패로 새 행이 안 생긴 경우)', async () => {
+    const result = mutation([], null);
+    adRefreshMock.mockResolvedValue(result);
+
+    await expect(runPersonalityRefresh()).resolves.toEqual(result);
+    expect(selectMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('분석 실패 판정과 문구', () => {
+  it('narrative가 없으면 실패로 본다 — 광고는 이미 소비됐으니 화면이 무광고 재시도를 열어야 한다', () => {
+    expect(analysisFailed(mutation([], null))).toBe(true);
+  });
+
+  it('서술이 오면 성공', () => {
+    expect(analysisFailed(mutation([entry(1, '2026-08-15T10:00:00Z', true)]))).toBe(false);
+  });
+
+  it('429는 JSON 본문 대신 한글 안내로 바꾼다 — 서버가 준 평문이 아니라 구조체라 그대로 띄우면 안 된다', () => {
+    expect(personalityErrorMessage(new ApiError(429, '{"error":"REFRESH_LIMIT_EXCEEDED"}'))).toContain('내일');
+  });
+
+  it('그 밖의 서버 에러는 서버 문구를 그대로 쓴다 (홈의 waiverErrorMessage 재사용)', () => {
+    expect(personalityErrorMessage(new ApiError(400, '지금은 어려워요'))).toBe('지금은 어려워요');
+  });
+
+  it('SDK 광고 에러는 영문 기술 문구라 안내로 바꾼다', () => {
+    expect(personalityErrorMessage(new Error('AdLoadFailed'))).toContain('광고');
+  });
+});
+
+/** 술어가 실제로 마크업에 연결됐는지 — 순수 함수만 맞고 배선이 빠지면 화면엔 아무 일도 안 일어난다. */
+describe('내 책방의 성향 관문 렌더', () => {
+  const me = (extra: Partial<ProfileResponse> = {}) => profile({ self: true, ...extra });
+
+  it('첫 분석이면 「광고 보고 성향 분석 받기」 — 문구에 광고를 명시한다(광고 위장 금지)', () => {
+    const markup = card(me({ personality: null }), [], null, { personalityStatus: status() });
+
+    expect(markup).toContain('광고 보고 성향 분석 받기');
+  });
+
+  it('대표가 이미 있으면 「광고 보고 다시 분석하기」로 갈린다', () => {
+    const markup = card(me(), [], null, { personalityStatus: status({ hasSelected: true }) });
+
+    expect(markup).toContain('광고 보고 다시 분석하기');
+  });
+
+  it('콜드스타트면 버튼 대신 안내만 — 보상 없는 광고 시청을 원천 차단한다', () => {
+    const markup = card(me({ personality: null }), [], null, { personalityStatus: status({ coldStart: true }) });
+
+    expect(markup).toContain('완독');
+    expect(markup).not.toContain('광고 보고');
+  });
+
+  it('오늘 총량을 다 썼으면 버튼 대신 「내일」 안내', () => {
+    const markup = card(me(), [], null, { personalityStatus: status({ adRefreshRemaining: 0 }) });
+
+    expect(markup).toContain('내일');
+    expect(markup).not.toContain('광고 보고');
+  });
+
+  it('status를 못 받았으면 관문 자리가 통째로 비어 있다 (fail-closed)', () => {
+    const markup = card(me(), [], null, { personalityStatus: null });
+
+    expect(markup).not.toContain('광고 보고');
+    expect(markup).not.toContain('완독하면');
+  });
+
+  it('남의 책방에는 성향 관문이 없다', () => {
+    expect(card(profile({ self: false }), [], null, { personalityStatus: status() })).not.toContain('광고 보고');
+  });
+
+  it('광고를 이미 본 뒤 실패했으면 광고 없는 재시도 손잡이를 준다 — 광고를 두 번 보게 하지 않는다', () => {
+    const markup = card(me(), [], null, { personalityStatus: status(), earnedRetry: true });
+
+    expect(markup).toContain('다시 시도');
+  });
+
+  it('결과 안내 문구를 그 자리에 띄운다', () => {
+    const markup = card(me(), [], null, { personalityStatus: status(), personalityNotice: '새 성향이 도착했어요' });
+
+    expect(markup).toContain('새 성향이 도착했어요');
   });
 });
