@@ -50,6 +50,15 @@ public record PersonalityView(State state, String narrative, List<String> tags,
      * 사용자 타임존을 명시적으로 적용한다.
      */
     public String formatTime(Instant instant) {
+        return format(instant, zone);
+    }
+
+    /**
+     * 뷰 인스턴스 없이 시각만 포맷하는 진입 — {@code GET /api/personality/status}처럼 <b>히스토리만</b> 싣는
+     * 응답이 쓴다(그 GET은 분석 결과를 만들지 않으므로 뷰를 세울 수 없다). 인스턴스 {@link #formatTime}이
+     * 이걸 위임하므로 두 경로의 표기는 구조적으로 갈릴 수 없다.
+     */
+    public static String format(Instant instant, ZoneId zone) {
         if (instant == null) {
             return "";
         }

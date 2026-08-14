@@ -120,6 +120,18 @@ class PersonalityViewTest {
     }
 
     @Test
+    @DisplayName("정적 format — 뷰 인스턴스 없이도 같은 포맷·같은 타임존 규칙(status가 히스토리만 포맷할 때 쓴다)")
+    void staticFormat_sameAsInstance() {
+        Instant at = Instant.parse("2026-06-08T08:43:00Z");
+
+        // 인스턴스 메서드와 한 글자도 다르지 않아야 한다 — 두 포맷이 갈리면 화면마다 시각 표기가 달라진다.
+        assertThat(PersonalityView.format(at, KST)).isEqualTo("2026-06-08 17:43");
+        // 타임존을 실제로 쓰는지 — 같은 Instant가 존마다 다르게 찍혀야 한다(UTC 하드코딩 회귀 가드).
+        assertThat(PersonalityView.format(at, ZoneId.of("UTC"))).isEqualTo("2026-06-08 08:43");
+        assertThat(PersonalityView.format(null, KST)).isEmpty();
+    }
+
+    @Test
     @DisplayName("formatTime은 null 시각에 빈 문자열을 돌려준다(방어)")
     void formatTime_nullSafe() {
         ReadingPersonality result = new ReadingPersonality(profileWith(10),

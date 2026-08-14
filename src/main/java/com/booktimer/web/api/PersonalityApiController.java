@@ -77,11 +77,24 @@ public class PersonalityApiController {
     public StatusResponse status(Principal principal) {
         User user = currentUserService.resolve(principal);
         ReadingPersonalityService.AnalysisGate gate = personalityService.gate(user);
+        ZoneId zone = ZoneId.of(user.getTimezone());
+        // history()는 읽기 전용이다(LLM·저장 없음) — 이 GET의 무부작용 계약은 entries를 실어도 그대로다.
+        List<EntryDto> entries = personalityService.history(user).stream()
+                .map(e -> new EntryDto(
+                        e.id(),
+                        e.narrative(),
+                        e.tags(),
+                        e.generatedAt() != null ? e.generatedAt().toString() : null,
+                        PersonalityView.format(e.generatedAt(), zone),
+                        e.selected(),
+                        e.stale()))
+                .toList();
         return new StatusResponse(
                 gate.coldStart(),
                 gate.hasSelected(),
                 user.remainingPersonalityRefreshes(todayFor(user), User.DAILY_PERSONALITY_TOTAL_LIMIT),
-                User.DAILY_PERSONALITY_TOTAL_LIMIT);
+                User.DAILY_PERSONALITY_TOTAL_LIMIT,
+                entries);
     }
 
     /**
@@ -150,12 +163,15 @@ public class PersonalityApiController {
      *
      * @param adRefreshRemaining 총량 천장 기준 오늘 남은 분석 횟수(0이면 버튼 대신 "내일 다시" 안내)
      * @param adRefreshLimit     그 천장 값 자체
+     * @param entries            분석 히스토리(최신순, 최대 3) — 미니앱 보관함이 옛 서술과 새 서술을 나란히 비교하는 재료.
+     *                           additive 필드라 옛 번들은 무시하고, 웹은 이 GET을 쓰지 않는다(회귀 0)
      */
     public record StatusResponse(
             boolean coldStart,
             boolean hasSelected,
             int adRefreshRemaining,
-            int adRefreshLimit) {
+            int adRefreshLimit,
+            List<EntryDto> entries) {
     }
 
     public record RefreshLimitResponse(

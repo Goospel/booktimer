@@ -24,8 +24,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 
@@ -369,6 +371,57 @@ class PersonalityApiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.adRefreshRemaining").value(User.DAILY_PERSONALITY_TOTAL_LIMIT - 1))
                 .andExpect(jsonPath("$.hasSelected").value(true)); // 첫 분석은 자동 대표
+    }
+
+    @Test
+    @DisplayName("GET /status: 히스토리를 최신순 entries로 싣는다 — 미니앱 보관함이 두 서술을 나란히 비교하는 유일한 재료")
+    void status_carriesHistoryEntries() throws Exception {
+        // 사용자 타임존을 서울도 UTC도 아닌 곳으로 둔다 — 라벨을 서버 존으로 찍는 회귀가 이 테스트에 걸리게.
+        User u = registrationService.register("papi-st-hist@booktimer.com", "rawpw1234", "독자",
+                "America/New_York", Role.USER, today());
+        saveBooks(u, 5);
+
+        when(narrator.narrate(any())).thenReturn(
+                Optional.of(new PersonalityNarration("첫번째 서술.", List.of("태그1"))));
+        personalityService.reanalyze(u); // 첫 분석 = 자동 대표
+        saveBooks(u, 1); // 책장이 바뀌었다 → 첫 분석은 stale이 된다
+        when(narrator.narrate(any())).thenReturn(
+                Optional.of(new PersonalityNarration("두번째 서술.", List.of("태그2"))));
+        personalityService.reanalyze(u); // 두번째 = 후보(대표 불변)
+
+        Instant newestAt = personalityService.history(u).get(0).generatedAt();
+        String expectedLabel = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+                .format(newestAt.atZone(ZoneId.of("America/New_York")));
+
+        mockMvc.perform(get("/api/personality/status")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("papi-st-hist@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.entries.length()").value(2))
+                // 최신이 앞 — history()의 순서 그대로다(대표 먼저인 웹 displayEntries 재정렬을 가져오지 않는다)
+                .andExpect(jsonPath("$.entries[0].narrative").value("두번째 서술."))
+                .andExpect(jsonPath("$.entries[0].selected").value(false))
+                .andExpect(jsonPath("$.entries[0].stale").value(false))
+                .andExpect(jsonPath("$.entries[0].id").isNumber())
+                .andExpect(jsonPath("$.entries[0].generatedAt").isString())
+                .andExpect(jsonPath("$.entries[0].generatedAtLabel").value(expectedLabel))
+                .andExpect(jsonPath("$.entries[1].narrative").value("첫번째 서술."))
+                .andExpect(jsonPath("$.entries[1].selected").value(true))
+                .andExpect(jsonPath("$.entries[1].stale").value(true));
+    }
+
+    @Test
+    @DisplayName("GET /status: 분석이 없으면 entries는 빈 배열 — 보관함 손잡이가 숨는 근거")
+    void status_emptyHistory_entriesEmpty() throws Exception {
+        User u = register("papi-st-empty@booktimer.com");
+        saveBooks(u, 5);
+
+        mockMvc.perform(get("/api/personality/status")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("papi-st-empty@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.entries").isArray())
+                .andExpect(jsonPath("$.entries.length()").value(0));
     }
 
     @Test

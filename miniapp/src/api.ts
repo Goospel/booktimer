@@ -546,12 +546,23 @@ export interface PersonalityStatus {
   hasSelected: boolean;
   adRefreshRemaining: number;
   adRefreshLimit: number;
+  /**
+   * 분석 히스토리(최신순, 최대 3) — 보관함이 옛 서술과 새 서술을 나란히 놓는 재료.
+   * 옛 서버(필드 추가 전)는 이걸 안 주므로 화면이 `?? []`로 접는다(손잡이 숨김 = fail-closed).
+   */
+  entries?: PersonalityEntry[];
 }
 
+/** 서버 `EntryDto` 전체 — 보관함이 서술·시각 라벨·stale까지 그린다(관문만 있던 시절의 3필드 축소를 해제). */
 export interface PersonalityEntry {
   id: number;
+  narrative: string;
   generatedAt: string | null;
+  /** 서버가 **사용자 타임존으로** 포맷한 "yyyy-MM-dd HH:mm" — 클라가 포맷을 복제하지 않는다. */
+  generatedAtLabel: string;
   selected: boolean;
+  /** 이 분석 이후 책장이 바뀌었는가 — "책이 안 바뀌면 문구도 안 바뀐다"를 카드에서 설명해 준다. */
+  stale: boolean;
 }
 
 export interface PersonalityMutation {
