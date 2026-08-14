@@ -1,4 +1,5 @@
 import { Button, ProgressBar, Text } from '@toss/tds-mobile';
+import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
 import type { BookOption, DashboardResponse, TimerState, WaiveResponse } from '../api';
@@ -431,16 +432,6 @@ export function todayProgress(
 }
 
 /**
- * 「남은시간」에 설명 손잡이를 달지 — 남은시간이 **목표와 밀린 시간의 합**일 때만 설명할 게 있다.
- *
- * <p>밀린 게 없거나 이월이 꺼져 있으면 남은시간은 그냥 목표까지 남은 시간이라 밝힐 내역이 없다.
- * 그때도 밑줄을 그어 두면 눌러보고 허탕 치는 손잡이가 된다.
- */
-export function showRemainingHandle(carryover: boolean, carriedDebtSeconds: number): boolean {
-  return carryover && carriedDebtSeconds > 0;
-}
-
-/**
  * 목표 손잡이의 라벨 — 목표 화면으로 가는 유일한 진입점이 달고 있는 말.
  *
  * <p>아이콘 팩이 없어(의존성은 `@toss/tds-mobile` 하나) 뜻은 그림이 아니라 **목표 값 자체**가 말한다.
@@ -458,11 +449,55 @@ export function goalHandleLabel(goalSeconds: number, adPending = false): string 
 }
 
 /**
+ * 목표 손잡이 — 서는 자리가 둘이라 컴포넌트로 뽑았다: 평상시엔 **「남은시간」 상자 안**, 목표가 0이라
+ * 그 상자로 갈 길이 없을 때만 **히어로 카드 안**. 두 자리가 같은 칩이어야 사용자가 한 번 배운 손잡이가
+ * 상태에 따라 다른 물건으로 보이지 않는다.
+ */
+function GoalHandle({
+  goalSeconds,
+  pending,
+  onGoGoal,
+}: {
+  goalSeconds: number;
+  /** 전면광고 로드 대기 — 라벨과 색 둘 다로 "누른 건 먹혔다"를 말한다. */
+  pending: boolean;
+  onGoGoal: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onGoGoal}
+      disabled={pending}
+      style={{
+        marginTop: 10,
+        padding: '7px 11px',
+        border: 0,
+        borderRadius: 20,
+        background: 'var(--adaptiveBlue50, #E7EEE2)',
+        color: 'var(--adaptiveBlue700, #4F6B4C)',
+        fontSize: 12,
+        opacity: pending ? 0.6 : 1,
+        cursor: pending ? 'default' : 'pointer',
+      }}
+    >
+      {goalHandleLabel(goalSeconds, pending)}
+    </button>
+  );
+}
+
+/**
  * 남은시간 설명 상자 — 「남은시간」을 탭하면 그 자리에서 펼쳐진다.
  *
- * <p>남은시간이 **목표 + 밀린 시간**이라는 사실은 숫자 하나만 봐서는 못 읽는다. 내역 세 줄로 합을
+ * <p>남은시간이 **목표 + 밀린 시간**이라는 사실은 숫자 하나만 봐서는 못 읽는다. 내역으로 합을
  * 밝히고, 밀린 시간을 어떻게 없애는지도 여기서 알린다 — 7일 자동 소멸이 폐지돼(2026-08-14) "기다리면
  * 사라진다"가 더 이상 사실이 아니므로, 지우는 두 수단(더 읽기·광고)으로 문구를 바꿨다.
+ *
+ * <p>**손잡이(목표 바꾸기·광고 보기)도 여기 담긴다** — 히어로 카드에 칩으로 얹혀 있던 것들이
+ * 카드를 어지럽혀 이 상자로 들어왔다(사용자 결정 2026-08-14). 상자는 표시만 맡고 배선은 `children`으로
+ * 받는다: 광고의 busy·전면광고 대기 같은 상태를 상자가 알기 시작하면 표시와 배선이 한 덩어리가 된다.
+ *
+ * <p>밀린 게 0이면 그 줄과 안내 문구를 통째로 접는다 — 「밀린 시간 0분」은 없는 빚을 상기시키는 줄이고,
+ * 지우는 방법 안내도 지울 게 없는 사람에겐 잡음이다.
  *
  * <p>화면에서 꺼내 둔 이유는 늘 같다 — 하니스가 정적 렌더라 탭해서 펼친 상태에 도달할 수 없다(T-149).
  */
@@ -470,10 +505,13 @@ export function RemainingNote({
   goalSeconds,
   debtSeconds,
   remainingSeconds,
+  children,
 }: {
   goalSeconds: number;
   debtSeconds: number;
   remainingSeconds: number;
+  /** 내역 아래 손잡이 자리 — 목표 바꾸기·광고 버튼이 여기 선다. */
+  children?: ReactNode;
 }) {
   const row = (label: string, value: string, strong = false) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
@@ -497,13 +535,16 @@ export function RemainingNote({
       }}
     >
       {row('오늘 목표', formatDuration(goalSeconds))}
-      {row('밀린 시간', formatDuration(debtSeconds))}
+      {debtSeconds > 0 && row('밀린 시간', formatDuration(debtSeconds))}
       <div style={{ marginTop: 4, paddingTop: 4, borderTop: '0.5px solid var(--adaptiveGrey600, #6F6A5E)' }}>
         {row('남은시간', formatClock(remainingSeconds), true)}
       </div>
-      <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8, wordBreak: 'keep-all' }}>
-        밀린 시간은 목표보다 더 읽거나, 광고를 보고 하루씩 지울 수 있어요.
-      </Text>
+      {debtSeconds > 0 && (
+        <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8, wordBreak: 'keep-all' }}>
+          밀린 시간은 목표보다 더 읽거나, 광고를 보고 하루씩 지울 수 있어요.
+        </Text>
+      )}
+      {children}
     </div>
   );
 }
@@ -628,16 +669,19 @@ export function BookSheet({
 }
 
 /**
- * 계정 진입점 — 홈 맨 아래에서 프로필·설정 화면으로 간다.
+ * 계정 진입점 — **홈 맨 위**에서 프로필·설정 화면으로 간다.
  *
  * <p>예전엔 여기가 "계정 관리·상세 설정은 booktimer.app에서" + 로그아웃이었다. 그런데 <b>토스로 가입한
  * 계정은 비밀번호가 없어 그 웹에 로그인 자체가 불가능</b>하다 — 실행할 수 없는 죽은 안내였다(핸들 배너가
  * 앓던 것과 같은 병). 이제 그 자리에서 실제로 닿을 수 있는 곳(설정 화면)으로 보낸다. 로그아웃 2단 확인도
  * 거기로 이사했다 — 두 자리에 두면 확인 단계가 갈라진다.
+ *
+ * <p>자리가 맨 아래에서 맨 위로 올라왔다(사용자 결정 2026-08-14) — 피드 박스는 세로로 자라는 상자라
+ * 그 뒤에 두면 스크롤 끝에 묻히는데, 소셜 기능이 늘수록 프로필의 무게는 반대로 커진다.
  */
 export function AccountSection({ onGoSettings }: { onGoSettings: () => void }) {
   return (
-    <div style={{ marginTop: 32, textAlign: 'center' }}>
+    <div style={{ marginBottom: 12, textAlign: 'right' }}>
       <Button size="small" variant="weak" onClick={onGoSettings}>
         프로필·설정
       </Button>
@@ -651,7 +695,7 @@ interface Untagged {
 }
 
 /**
- * 타이머 홈 — `/api/dashboard` 렌더(오늘 진행률 · 시작/정지 · 읽는 중 책 · 잔디 미리보기 · 격언).
+ * 타이머 홈 — `/api/dashboard` 렌더(계정 진입 · 오늘 진행률 · 시작/정지 · 읽는 중 책 · 피드 박스).
  * 서재 관리·검색·정원은 웹이 본진이라 미니앱에 두지 않는다(설계 §2.5).
  */
 export function Home({
@@ -669,7 +713,7 @@ export function Home({
   onGoGoal: () => void;
   /** 전면광고를 기다리는 중 — 손잡이를 「준비 중」으로 바꾸고 비활성화한다(연타 방지는 App도 함께 한다). */
   goalAdPending: boolean;
-  /** 홈 하단의 계정 진입 — 닉네임·@아이디·목표·로그아웃은 전부 설정 화면이 맡는다. */
+  /** 홈 맨 위의 계정 진입 — 닉네임·@아이디·목표·로그아웃은 전부 설정 화면이 맡는다. */
   onGoSettings: () => void;
   onError: (error: Error) => void;
 }) {
@@ -781,45 +825,22 @@ export function Home({
       : 0;
   // 측정 중이면 elapsed가 매초 늘어 todayRead도 매초 늘어난다 — 카운트업의 동력이 이 한 줄이다.
   const { todayRead, remaining, overflow, progress, achieved } = todayProgress(dashboard, elapsed);
-  // 남은시간에 설명 손잡이를 달지 — 목표와 밀린 시간의 합일 때만 밝힐 내역이 있다.
-  const hasNote = showRemainingHandle(dashboard.carryover, dashboard.carriedDebtSeconds);
   // 캐러셀 가운데 온 책 — 시작 버튼도 이 값을 그대로 쓴다(고른 책과 시작 대상이 어긋날 자리를 없앤다).
   const selectedBook = dashboard.readingBooks.find((b) => b.id === selectedBookId) ?? null;
 
   return (
     <Screen>
+      {/* 계정 진입은 화면 맨 위 — 카드 위 한 줄이다(피드 박스 뒤 스크롤 끝에서 올라왔다). */}
+      <AccountSection onGoSettings={onGoSettings} />
+
       <div
         style={{
-          position: 'relative', // 우상단 목표 손잡이의 기준 상자
           padding: '28px 20px',
           borderRadius: 16,
           background: 'var(--adaptiveGrey100, #FCFAF5)',
           textAlign: 'center',
         }}
       >
-        {/* 목표 화면으로 가는 유일한 길 — 하단 풀폭 버튼이던 것을 여기로 흡수했다(「측정 시작」과 폭이
-            같아 무게가 같아 보이던 문제). 시각적 칩은 작아도 padding으로 손가락 몫은 확보한다. */}
-        <button
-          type="button"
-          onClick={onGoGoal}
-          disabled={goalAdPending}
-          style={{
-            position: 'absolute',
-            top: 8,
-            right: 8,
-            padding: '7px 11px',
-            border: 0,
-            borderRadius: 20,
-            background: 'var(--adaptiveBlue50, #E7EEE2)',
-            color: 'var(--adaptiveBlue700, #4F6B4C)',
-            fontSize: 12,
-            // 대기 중엔 흐려서 "누른 건 먹혔고 준비 중"임을 색으로도 말한다(라벨과 이중 신호).
-            opacity: goalAdPending ? 0.6 : 1,
-            cursor: goalAdPending ? 'default' : 'pointer',
-          }}
-        >
-          {goalHandleLabel(goal, goalAdPending)}
-        </button>
         {/* 라벨과 값은 각자 블록이어야 세로로 쌓인다 — 같은 줄에 붙으면 "오늘 읽은 시간45:00"으로 읽힌다. */}
         <div>
           <Text typography="st11" color="grey600">
@@ -831,35 +852,30 @@ export function Home({
             {formatClock(todayRead)}
           </Text>
         </div>
-        {progress !== null && (
+        {progress !== null ? (
           <div style={{ marginTop: 16 }}>
             <ProgressBar progress={progress} size="normal" color={SAGE} />
             {/* 남은 게 있으면 그 값이, 다 채웠으면 초과분이 온다. 정확히 다 채운 순간엔 히어로가 이미
                 「🌿 오늘 목표 달성」이라 말했으니 이 줄을 통째로 생략한다. */}
             {remaining > 0 ? (
-              // 설명할 내역이 있을 때만 버튼이다 — 없으면 눌러도 아무 일 없는 밑줄이 된다.
-              hasNote ? (
-                <button
-                  type="button"
-                  onClick={() => setShowNote((open) => !open)}
-                  style={{
-                    marginTop: 8,
-                    padding: 0,
-                    border: 0,
-                    background: 'transparent',
-                    borderBottom: '1px dashed var(--adaptiveGrey600, #6F6A5E)',
-                    color: 'var(--adaptiveGrey600, #6F6A5E)',
-                    fontSize: 13,
-                    cursor: 'pointer',
-                  }}
-                >
-                  남은시간 : {formatClock(remaining)} ⓘ
-                </button>
-              ) : (
-                <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
-                  남은시간 : {formatClock(remaining)}
-                </Text>
-              )
+              // 남은 게 있으면 언제나 손잡이다 — 밝힐 내역(오늘 목표)이 늘 있고, 목표·광고 손잡이가
+              // 이 상자 안으로 들어와 조건부로 잠그면 그 둘에 닿을 길까지 함께 사라진다.
+              <button
+                type="button"
+                onClick={() => setShowNote((open) => !open)}
+                style={{
+                  marginTop: 8,
+                  padding: 0,
+                  border: 0,
+                  background: 'transparent',
+                  borderBottom: '1px dashed var(--adaptiveGrey600, #6F6A5E)',
+                  color: 'var(--adaptiveGrey600, #6F6A5E)',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                }}
+              >
+                남은시간 : {formatClock(remaining)} ⓘ
+              </button>
             ) : (
               overflow > 0 && (
                 <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
@@ -867,31 +883,40 @@ export function Home({
                 </Text>
               )
             )}
-            {hasNote && showNote && (
+            {remaining > 0 && showNote && (
               <RemainingNote
                 goalSeconds={goal}
-                debtSeconds={dashboard.carriedDebtSeconds}
+                // 이월이 꺼져 있으면 밀린 시간은 남은시간 합계에 안 들어간다 — 그때 이 줄을 그리면 합이 어긋난다.
+                debtSeconds={dashboard.carryover ? dashboard.carriedDebtSeconds : 0}
                 remainingSeconds={remaining}
-              />
+              >
+                <GoalHandle goalSeconds={goal} pending={goalAdPending} onGoGoal={onGoGoal} />
+                {/* 광고는 죄책감이 뜬 이 자리에만 나타난다. 문구에 "광고"를 명시해 광고 위장 금지 조항을 지킨다. */}
+                {showWaiverButton(dashboard.carriedDebtSeconds, dashboard.debtWaiverAvailable, REWARD_AD_GROUP_ID) && (
+                  <Button
+                    display="block"
+                    variant="weak"
+                    size="small"
+                    style={{ marginTop: 8 }}
+                    disabled={busy}
+                    onClick={claimWaiver}
+                  >
+                    광고 보고 밀린 하루 지우기
+                  </Button>
+                )}
+                {waived !== null && (
+                  <Text typography="st12" color="blue500" style={{ display: 'block', marginTop: 8 }}>
+                    밀린 {formatDuration(waived)}을 지웠어요. 잔디는 그대로예요.
+                  </Text>
+                )}
+              </RemainingNote>
             )}
           </div>
-        )}
-        {/* 광고는 죄책감이 뜬 이 자리에만 나타난다. 문구에 "광고"를 명시해 광고 위장 금지 조항을 지킨다. */}
-        {showWaiverButton(dashboard.carriedDebtSeconds, dashboard.debtWaiverAvailable, REWARD_AD_GROUP_ID) && (
-          <Button
-            variant="weak"
-            size="small"
-            style={{ marginTop: 10 }}
-            disabled={busy}
-            onClick={claimWaiver}
-          >
-            광고 보고 밀린 하루 지우기
-          </Button>
-        )}
-        {waived !== null && (
-          <Text typography="st12" color="blue500" style={{ display: 'block', marginTop: 8 }}>
-            밀린 {formatDuration(waived)}을 지웠어요. 잔디는 그대로예요.
-          </Text>
+        ) : (
+          // 목표 0 — 게이지 줄이 통째로 없어 상자로 갈 길이 없다. 목표를 정하러 가는 유일한 손잡이가 여기 남는다.
+          <div style={{ marginTop: 16 }}>
+            <GoalHandle goalSeconds={goal} pending={goalAdPending} onGoGoal={onGoGoal} />
+          </div>
         )}
         {dashboard.hasActiveSession && (
           <>
@@ -951,8 +976,6 @@ export function Home({
       {/* 잔디 미리보기가 서 있던 자리는 피드 박스가 통째로 쓴다 — 기록(잔디·연속일·총 시간)은 기록 탭이
           이미 전부 그리고 그 탭은 하단 탭바에서 한 번에 닿으므로, 홈에 진입 손잡이를 또 두지 않는다. */}
       <HomeFeedBox onError={onError} />
-
-      <AccountSection onGoSettings={onGoSettings} />
 
       {/* 시트는 측정 종료 후 태깅 자리 하나다 — 고르기는 캐러셀이 맡는다. */}
       {tagging !== null && (

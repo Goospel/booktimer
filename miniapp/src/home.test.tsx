@@ -1,5 +1,6 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import { readFileSync } from 'node:fs';
+import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -27,7 +28,6 @@ import {
   recenterIndex,
   selectionAt,
   shouldShowNotificationCard,
-  showRemainingHandle,
   showWaiverButton,
   todayProgress,
   waiverErrorMessage,
@@ -144,20 +144,8 @@ describe('버튼 노출 조건 (showWaiverButton)', () => {
 });
 
 describe('홈 렌더 배선', () => {
-  it('조건이 맞으면 버튼이 그려진다', () => {
-    expect(renderHome()).toContain(BUTTON_LABEL);
-  });
-
-  it('서버가 가용하지 않다고 하면 버튼이 없다', () => {
-    expect(renderHome({ debtWaiverAvailable: false })).not.toContain(BUTTON_LABEL);
-  });
-
-  it('부채가 0이면 버튼이 없다 — 밀린 시간 문구 자체가 없는 자리다', () => {
-    expect(renderHome({ carriedDebtSeconds: 0 })).not.toContain(BUTTON_LABEL);
-  });
-
-  it('버튼 문구에 "광고"를 명시한다 — 광고 위장 금지 조항', () => {
-    expect(renderHome()).toContain('광고');
+  it('첫 렌더에는 버튼이 없다 — 상자가 접힌 채로 시작하므로 「남은시간」을 눌러야 나온다', () => {
+    expect(renderHome()).not.toContain(BUTTON_LABEL);
   });
 
   it('진행률 게이지가 브랜드 세이지로 찬다 — 다른 초록이 섞이면 화면에 색이 둘이 된다', () => {
@@ -349,31 +337,23 @@ describe('히어로 프레이밍 (렌더)', () => {
 
 /**
  * 남은시간 설명 상자 — 「남은시간」이 목표와 밀린 시간의 합이라는 사실은 숫자만 봐서는 못 읽는다.
- * 탭하면 그 자리에서 펼쳐지는 상자가 내역을 밝히고, 7일 자동 소멸 안내도 여기로 들어왔다
- * (히어로 아래 상시 노출은 없는 빚까지 상기시키는 자리였다).
+ * 탭하면 그 자리에서 펼쳐지는 상자가 내역을 밝히고, **목표 바꾸기·광고 버튼도 여기로 들어왔다**
+ * (히어로 카드에 얹혀 있던 손잡이들 — 카드는 숫자와 게이지만 남는다, 사용자 결정 2026-08-14).
  *
- * <p>여는 동작은 정적 렌더 하니스로 못 잡으므로(T-149) 노출 조건은 순수 술어로, 내용은
- * 컴포넌트를 직접 그려서 계측한다 — `showWaiverButton`·`AccountSection`과 같은 방식.
+ * <p>손잡이들은 `children`으로 받는다 — 상자는 표시만 하고 배선(광고·busy·전면광고 대기)은 홈이
+ * 그대로 들고 있어야 조건 술어(`showWaiverButton`)와 상자가 서로를 모른 채 각자 계측된다.
+ *
+ * <p>여는 동작은 정적 렌더 하니스로 못 잡으므로(T-149) 내용은 컴포넌트를 직접 그려서 계측한다.
  */
 describe('남은시간 설명 상자', () => {
-  const note = (goal: number, debt: number, remaining: number) =>
+  const note = (goal: number, debt: number, remaining: number, children?: ReactNode) =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <RemainingNote goalSeconds={goal} debtSeconds={debt} remainingSeconds={remaining} />
+        <RemainingNote goalSeconds={goal} debtSeconds={debt} remainingSeconds={remaining}>
+          {children}
+        </RemainingNote>
       </TDSMobileProvider>,
     );
-
-  it('이월 중이고 밀린 시간이 있으면 손잡이를 단다', () => {
-    expect(showRemainingHandle(true, 600)).toBe(true);
-  });
-
-  it('밀린 시간이 0이면 손잡이가 없다 — 설명할 게 없는데 밑줄만 있으면 눌러보고 허탕이다', () => {
-    expect(showRemainingHandle(true, 0)).toBe(false);
-  });
-
-  it('이월이 꺼져 있으면 손잡이가 없다 — 밀린 시간이 오늘 몫에 안 들어간다', () => {
-    expect(showRemainingHandle(false, 600)).toBe(false);
-  });
 
   it('내역 세 줄로 합을 밝힌다 — 목표 + 밀린 = 남은시간', () => {
     const markup = note(1800, 600, 900);
@@ -383,6 +363,14 @@ describe('남은시간 설명 상자', () => {
     expect(markup).toContain('15:00'); // 남은시간
   });
 
+  it('밀린 게 없으면 그 줄도 안내 문구도 없다 — 「밀린 시간 0분」은 없는 빚을 상기시키는 줄이다', () => {
+    const markup = note(1800, 0, 900);
+
+    expect(markup).not.toContain('밀린 시간');
+    expect(markup).not.toContain('더 읽거나');
+    expect(markup).toContain('15:00'); // 남은시간 합계는 그대로 밝힌다
+  });
+
   it('지우는 수단을 함께 알린다 — 7일 자동 소멸이 폐지돼 "기다리면 사라진다"는 더 이상 사실이 아니다', () => {
     const markup = note(1800, 600, 900);
 
@@ -390,12 +378,23 @@ describe('남은시간 설명 상자', () => {
     expect(markup).toContain('광고');
     expect(markup).not.toContain('자동으로 사라져요');
   });
+
+  it('손잡이를 내역 아래에 담는다 — 목표 바꾸기·광고가 서는 자리가 이 상자다', () => {
+    const markup = note(1800, 600, 900, <button type="button">목표 30분 ›</button>);
+
+    expect(markup).toContain('목표 30분 ›');
+    expect(markup.indexOf('남은시간')).toBeLessThan(markup.indexOf('목표 30분'));
+  });
 });
 
 /**
- * 목표 손잡이 — 하단 풀폭 「목표 바꾸기」를 타이머 카드 우상단 칩으로 흡수했다. 아이콘 팩이 없어
+ * 목표 손잡이 — 타이머 카드 우상단 칩이던 것이 **「남은시간」 확장 상자 안**으로 들어갔다
+ * (카드에 손잡이가 얹혀 있는 게 지저분하다는 사용자 결정 2026-08-14). 아이콘 팩이 없어
  * (의존성은 `@toss/tds-mobile` 하나) 손잡이의 뜻은 그림이 아니라 **목표 값 자체**가 말한다 —
  * 「목표 30분 ›」은 무엇을 바꾸는 버튼인지 스스로 밝히므로 아이콘의 모호함이 성립하지 않는다.
+ *
+ * <p>단 **목표가 0이면 게이지 줄이 통째로 안 그려져** 상자로 갈 길도 없다 — 그 상태에서만
+ * 카드 안에 「목표 정하기 ›」가 남는다(신규 사용자가 목표를 정하러 갈 유일한 길).
  *
  * <p>라벨을 순수 함수로 꺼낸 건 늘 같은 이유다 — 정적 렌더 하니스라 클릭을 못 잡는다(T-149).
  */
@@ -428,29 +427,33 @@ describe('목표 손잡이 (goalHandleLabel · 렌더)', () => {
     return markup.slice(markup.lastIndexOf('<button', at), at);
   };
 
+  // 목표 0일 때만 손잡이가 카드에 남으므로(그 외엔 접힌 상자 안) 비활성 검사도 그 상태에서 한다.
+  const noGoal = { todayGoalSeconds: 0, remainingSeconds: 0 };
+
   it('대기 중이면 손잡이가 비활성이다 — 연타로 광고가 두 장 쌓이지 않게', () => {
-    expect(goalHandleTag(renderHome({}, { goalAdPending: true }), '준비 중')).toContain('disabled=""');
+    expect(goalHandleTag(renderHome(noGoal, { goalAdPending: true }), '준비 중')).toContain('disabled=""');
   });
 
   it('평상시 손잡이는 눌린다 — 대기 표시가 평상시를 잠그지 않는다', () => {
-    expect(goalHandleTag(renderHome({ todayGoalSeconds: 1800 }), '목표 30분')).not.toContain('disabled=""');
+    expect(goalHandleTag(renderHome(noGoal), '목표 정하기')).not.toContain('disabled=""');
   });
 
-  it('손잡이가 타이머 카드 안에 있다 — 「측정 시작」보다 앞', () => {
+  it('타이머 카드에서 손잡이가 빠졌다 — 카드는 숫자와 게이지만 남는다', () => {
     const markup = renderHome({ todayGoalSeconds: 1800 });
 
-    expect(markup).toContain('목표 30분');
-    expect(markup.indexOf('목표 30분')).toBeLessThan(markup.indexOf('측정 시작'));
+    // 접힌 상자 안이라 첫 렌더에는 라벨 자체가 없다 — 카드에 남아 있으면 여기서 잡힌다.
+    expect(markup).not.toContain('목표 30분');
   });
 
   it('하단 풀폭 「목표 바꾸기」는 사라진다 — 흡수가 이번 변경의 요구다', () => {
     expect(renderHome()).not.toContain('목표 바꾸기');
   });
 
-  it('목표 0이어도 손잡이는 남는다 — 게이지 라벨은 여전히 없다', () => {
-    const markup = renderHome({ todayGoalSeconds: 0, remainingSeconds: 0 });
+  it('목표 0이면 카드에 손잡이가 남는다 — 게이지 줄이 없어 상자로 갈 길이 없는 유일한 상태다', () => {
+    const markup = renderHome(noGoal);
 
     expect(markup).toContain('목표 정하기');
+    expect(markup.indexOf('목표 정하기')).toBeLessThan(markup.indexOf('측정 시작'));
     expect(markup).not.toContain('오늘 목표'); // 게이지 라벨은 목표 0이면 그리지 않는다
   });
 });
@@ -1168,11 +1171,12 @@ describe('계정 진입점', () => {
     expect(renderHome()).not.toContain('로그아웃');
   });
 
-  it('홈 맨 아래에 둔다 — 피드 박스보다 뒤여야 자주 쓰는 것이 위로 온다', () => {
+  it('홈 맨 위에 둔다 — 피드 박스 뒤에 두면 스크롤 끝이라 눈에 안 띈다(사용자 결정 2026-08-14)', () => {
     const markup = renderHome();
 
-    expect(markup.indexOf('측정 시작')).toBeGreaterThan(0);
-    expect(markup.indexOf('측정 시작')).toBeLessThan(markup.indexOf('프로필·설정'));
+    expect(markup.indexOf('프로필·설정')).toBeGreaterThan(0);
+    // 히어로 카드보다도 앞 — 카드 위 한 줄이 이 손잡이의 자리다.
+    expect(markup.indexOf('프로필·설정')).toBeLessThan(markup.indexOf('오늘 읽은 시간'));
   });
 });
 
