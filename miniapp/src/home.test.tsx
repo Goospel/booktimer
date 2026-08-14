@@ -24,6 +24,7 @@ import {
   defaultBookId,
   goalHandleLabel,
   noBookSubtitle,
+  recenterIndex,
   selectionAt,
   shouldShowNotificationCard,
   showRemainingHandle,
@@ -789,6 +790,47 @@ describe('가운데 온 책 (centeredIndex)', () => {
 
   it('책이 0권이면 0 — 인덱스로 목록을 찌르지 않는다', () => {
     expect(centeredIndex(0, COVER_WIDTH, COVER_GAP, 0)).toBe(0);
+  });
+});
+
+/**
+ * 밖에서 바뀐 선택을 트랙이 따라가는가 — 「펼쳐보기」 격자에서 고르면 선택 state만 바뀌어
+ * 제목 줄은 그 책인데 표지는 옛 자리에 서 있었다(트랙을 옮기는 길이 마운트·표지 탭 둘뿐이었다).
+ *
+ * <p>손가락으로 밀어 바뀐 경우엔 이미 그 칸이 가운데라 `null`(재스크롤 없음)이어야 한다 —
+ * 안 그러면 스냅이 끝난 자리에 또 스크롤을 걸어 손가락에서 트랙을 빼앗는다(SCROLL_SETTLE_MS 주석).
+ */
+describe('밖에서 바뀐 선택 따라가기 (recenterIndex)', () => {
+  const stride = COVER_WIDTH + COVER_GAP;
+  const books = [book(1, '데미안'), book(2, '노인과 바다'), book(3, '토지')];
+
+  it('이미 그 책이 가운데면 null — 손가락으로 민 결과에 또 스크롤을 걸지 않는다', () => {
+    expect(recenterIndex(stride, 1, books)).toBeNull();
+  });
+
+  it('격자에서 다른 책을 고르면 그 칸으로 — 이번 개선의 본체다', () => {
+    expect(recenterIndex(0, 3, books, 0)).toBe(2);
+  });
+
+  it('홈은 0번이 「책 없이」라 책이 한 칸 밀린다 — offset이 어긋나면 옆 책으로 간다', () => {
+    expect(recenterIndex(0, 1, books)).toBe(1);
+  });
+
+  it('책 없이(null)를 고르면 0번 칸으로 돌아온다', () => {
+    expect(recenterIndex(stride * 2, null, books)).toBe(0);
+  });
+
+  it('목록 밖 id는 0번 칸 — 이미 0번이면 움직일 것이 없다', () => {
+    expect(recenterIndex(stride * 2, 99, books)).toBe(0);
+    expect(recenterIndex(0, 99, books)).toBeNull();
+  });
+
+  it('스크롤이 끝을 넘겨도 마지막 칸으로 클램프해 비교한다 — 관성 오버슈트가 헛스크롤을 부르지 않게', () => {
+    expect(recenterIndex(stride * 99, 3, books, 0)).toBeNull();
+  });
+
+  it('책이 0권이면 언제나 0번뿐이라 null', () => {
+    expect(recenterIndex(0, null, [])).toBeNull();
   });
 });
 
