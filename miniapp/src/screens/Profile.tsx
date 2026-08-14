@@ -207,8 +207,9 @@ export function ProfileCard({
   const selected = resolveSelected(books, selectedId);
   const sectionTitle = activeTag === null ? `공개한 책 ${books.length}` : `${activeTag} 근거 책 ${books.length}`;
 
+  // 제목 옆 ← 는 안 둔다 — 배경 없는 화살표 글자라 버튼으로 안 읽혔다. 출구는 아래 「돌아가기」와 탭바.
   return (
-    <Screen title={`${profile.nickname}님의 책방`} onBack={onBack}>
+    <Screen title={`${profile.nickname}님의 책방`}>
       <Text typography="st12" color="grey600" style={{ display: 'block' }}>
         @{profile.loginId} · 팔로워 {profile.followerCount} · 팔로잉 {profile.followingCount}
       </Text>

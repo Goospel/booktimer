@@ -237,16 +237,17 @@ describe('소셜 탭 검색', () => {
   });
 });
 
-/** 책방 상단 뒤로가기 — 나가려면 긴 책 목록 끝까지 스크롤해 「돌아가기」를 찾아야 했다. */
+/**
+ * 책방 상단 ← 제거 — 배경 없는 화살표 글자라 「버튼」으로 안 읽혔다. 원래 이유(긴 목록 끝까지
+ * 스크롤해야 출구를 만난다)도 책 목록이 캐러셀로 바뀌며 사라졌다. 나갈 길은 하단 「돌아가기」와
+ * 플로팅 탭바가 맡는다.
+ */
 describe('책방 상단 뒤로가기', () => {
-  it('제목 옆에 ← 를 둔다', () => {
-    const markup = card(profile());
-
-    expect(markup).toContain('aria-label="뒤로"');
-    expect(markup.indexOf('aria-label="뒤로"')).toBeLessThan(markup.indexOf('돌아가기'));
+  it('제목 옆에 ← 를 두지 않는다', () => {
+    expect(card(profile())).not.toContain('aria-label="뒤로"');
   });
 
-  it('하단 「돌아가기」는 그대로 둔다 — 목록 끝에서 위로 되돌아가게 만들지 않는다', () => {
+  it('하단 「돌아가기」는 남긴다 — ← 를 없앤 뒤 이게 화면 안의 유일한 출구다', () => {
     expect(card(profile())).toContain('돌아가기');
   });
 });
