@@ -44,15 +44,24 @@ function book(id: number, title: string): ProfileBook {
   return { id, title, author: '저자', coverUrl: null, status: '다 읽음', seconds: 600, purchaseLink: null };
 }
 
-function card(p: ProfileResponse, books: ProfileBook[] = [], activeTag: string | null = null) {
+function card(
+  p: ProfileResponse,
+  books: ProfileBook[] = [],
+  activeTag: string | null = null,
+  view: { selectedId?: number | null; gridOpen?: boolean } = {},
+) {
   return render(
     <ProfileCard
       profile={p}
       books={books}
       activeTag={activeTag}
+      selectedId={view.selectedId ?? null}
+      gridOpen={view.gridOpen ?? false}
       busy={false}
       onFollowToggle={() => {}}
       onSelectTag={() => {}}
+      onSelect={() => {}}
+      onGrid={() => {}}
       onMore={() => {}}
       safety={null}
       onBack={() => {}}
@@ -152,18 +161,58 @@ describe('책방 (프로필)', () => {
     expect(markup).toContain('다 읽음');
   });
 
-  it('공개 책도 표지를 그린다 — 없으면 자리 채움 상자로 대신한다', () => {
+  it('공개 책도 표지를 그린다 — 없으면 제목 첫 글자 자리 표지로 대신한다', () => {
     expect(card(profile(), [{ ...book(1, '자바 최적화'), coverUrl: 'https://img/java.jpg' }])).toContain(
       'src="https://img/java.jpg"',
     );
-    expect(card(profile(), [book(1, '자바 최적화')])).toContain('📚');
+    expect(card(profile(), [book(1, '자바 최적화')])).not.toContain('<img');
+  });
+});
+
+/**
+ * 책방 책 목록 — 세로로 쭈루룩 나열하던 카드를 서재와 같은 표지 캐러셀로 바꿨다.
+ * 책이 많으면 아래 「돌아가기」까지 한참 스크롤해야 했고, 한 화면에 몇 권인지도 안 보였다.
+ */
+describe('책방 책 목록 — 서재와 같은 캐러셀', () => {
+  const books = [book(1, '자바 최적화'), book(2, '데미안')];
+
+  it('세로 나열 대신 표지 캐러셀로 그린다 — 가운데 온 책을 글자로 못 박는다', () => {
+    const markup = card(profile(), books, null, { selectedId: 2 });
+
+    expect(markup).toContain('data-cover-title="자바 최적화"');
+    expect(markup).toContain('data-cover-title="데미안"');
+    expect(markup).toContain('data-selected-book="데미안"');
   });
 
-  it('제목과 메타를 각자 다른 블록에 둔다 — 짧은 제목이면 "데미안저자"처럼 붙어 보였다', () => {
-    const markup = card(profile(), [book(1, '데미안')]);
-    const between = markup.slice(markup.indexOf('데미안') + 3, markup.indexOf('저자'));
+  it('고른 책 아래에 저자 한 줄, 상태·읽은 시간 한 줄을 적는다', () => {
+    const markup = card(profile(), [book(1, '자바 최적화')]);
 
-    expect(between).toContain('</div>');
+    expect(markup).toContain('저자\n다 읽음 · 10분');
+  });
+
+  it('읽은 시간이 0이면 적지 않는다 — 「0초」는 정보가 아니다', () => {
+    const markup = card(profile(), [{ ...book(1, '자바 최적화'), seconds: 0 }]);
+
+    expect(markup).toContain('저자\n다 읽음');
+    expect(markup).not.toContain('0초');
+  });
+
+  it('책이 두 권 이상일 때만 「펼쳐보기」를 준다 — 한 권은 캐러셀이 이미 다 보여 준다', () => {
+    expect(card(profile(), books)).toContain('펼쳐보기');
+    expect(card(profile(), [book(1, '자바 최적화')])).not.toContain('펼쳐보기');
+  });
+
+  it('펼쳐보기를 열면 그 책들을 격자로 한 번에 그린다', () => {
+    const markup = card(profile(), books, null, { gridOpen: true });
+
+    expect(markup).toContain('data-grid-title="자바 최적화"');
+    expect(markup).toContain('data-grid-title="데미안"');
+  });
+
+  it('고른 책이 목록에서 사라지면 첫 책으로 떨어진다 — 태그 드릴다운이 목록을 통째로 간다', () => {
+    const markup = card(profile(), books, '한우물형', { selectedId: 999 });
+
+    expect(markup).toContain('data-selected-book="자바 최적화"');
   });
 });
 

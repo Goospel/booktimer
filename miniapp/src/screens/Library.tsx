@@ -50,8 +50,9 @@ export function metaLine(book: MyBookSummary): string {
  *
  * <p>탭을 옮기거나(다른 상태로 이동) 지우면 id가 그 탭에서 사라지는데, 그대로 두면 캐러셀이
  * 아무것도 안 가리킨 채 「관리」만 서 있게 된다. 선택 state를 탭마다 따로 두는 대신 여기서 푼다.
+ * 책방(태그 드릴다운으로 목록이 통째로 갈리는 자리)도 같은 이유로 이 함수를 쓴다.
  */
-export function resolveSelected(rows: MyBookSummary[], selectedId: number | null): MyBookSummary | null {
+export function resolveSelected<T extends { id: number }>(rows: T[], selectedId: number | null): T | null {
   return rows.find((b) => b.id === selectedId) ?? rows[0] ?? null;
 }
 
@@ -313,8 +314,11 @@ export function Shelf({
   );
 }
 
-/** 펼쳐보기 — 그 탭의 책을 3열 격자로 한 번에. 고르면 캐러셀이 그 책으로 옮겨가고 시트는 닫힌다. */
-function GridSheet({
+/**
+ * 펼쳐보기 — 목록의 책을 3열 격자로 한 번에. 고르면 캐러셀이 그 책으로 옮겨가고 시트는 닫힌다.
+ * 서재(내 책장)와 책방(남의 공개 책)이 같은 시트를 쓴다 — 표지·제목만 필요해 타입도 그만큼만 받는다.
+ */
+export function GridSheet({
   title,
   rows,
   selectedId,
@@ -322,7 +326,7 @@ function GridSheet({
   onClose,
 }: {
   title: string;
-  rows: MyBookSummary[];
+  rows: { id: number; title: string; coverUrl: string | null }[];
   selectedId: number | null;
   onPick: (bookId: number) => void;
   onClose: () => void;
@@ -468,7 +472,7 @@ function SheetRow({
 }
 
 /** 테두리만 있는 작은 손잡이 — 「펼쳐보기」·「관리」가 같은 무게로 보여야 둘 다 보조 동작으로 읽힌다. */
-const handleStyle = {
+export const handleStyle = {
   flex: '0 0 auto',
   padding: '8px 14px',
   border: '1px solid #D8D2C4',
