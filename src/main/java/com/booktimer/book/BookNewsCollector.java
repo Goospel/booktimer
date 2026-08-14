@@ -50,12 +50,18 @@ public class BookNewsCollector {
      * 수집 1회분. 대상은 <b>완독 + isbn13·저자가 모두 있는 책의 isbn 합집합</b>이다 —
      * 저자가 없으면 매칭 AND를 만들 수 없어 오탐을 못 막고, isbn이 없으면 캐시 키가 없다.
      * PRIVATE 완독 책도 대상이다(뉴스는 책 자체에 대한 공개 정보고, 노출은 그 책을 완독한 본인에게만 된다).
+     *
+     * <p>DB 조건(not null)을 통과해도 <b>정규화 결과가 비면</b> 제외한다 — 제목이 통째로 괄호이거나
+     * 저자가 옮긴이뿐인 병리적 원문이다. AND를 만들 수 없으니 불러 봐야 외부 호출만 낭비한다.
      */
     public NewsCollectionResult collect() {
         if (!newsClient.isEnabled()) {
             return NewsCollectionResult.disabled();
         }
-        List<BookNewsTarget> targets = bookRepository.findNewsCollectionTargets();
+        List<BookNewsTarget> targets = bookRepository.findNewsCollectionTargets().stream()
+                .filter(t -> !BookNewsMatcher.normalizeTitle(t.getTitle()).isEmpty()
+                        && !BookNewsMatcher.normalizeAuthor(t.getAuthor()).isEmpty())
+                .toList();
         int saved = 0;
         for (BookNewsTarget target : targets) {
             try {
