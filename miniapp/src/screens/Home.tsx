@@ -140,6 +140,26 @@ export function selectionAt(index: number, books: BookOption[], offset = 1): num
 }
 
 /**
+ * 밖에서 바뀐 선택을 따라갈 칸 — 옮길 필요가 없으면 `null`.
+ *
+ * <p>트랙을 옮기는 길이 마운트 1회와 표지 탭뿐이라, 「펼쳐보기」 격자처럼 **밖에서** 선택이 바뀌면
+ * 제목 줄만 그 책으로 갈리고 표지는 옛 자리에 남았다. 그 갈림을 여기서 메운다.
+ *
+ * <p>이미 그 칸이 가운데면 `null`이다 — 손가락으로 민 결과(스냅이 끝난 자리)에 또 스크롤을 걸면
+ * 재스냅이 손가락에서 트랙을 빼앗는다(`SCROLL_SETTLE_MS` 주석과 같은 사고).
+ */
+export function recenterIndex(
+  scrollLeft: number,
+  selectedId: number | null,
+  books: BookOption[],
+  offset = 1,
+): number | null {
+  const target = carouselIndexOf(selectedId, books, offset);
+  const current = centeredIndex(scrollLeft, COVER_WIDTH, COVER_GAP, books.length + offset);
+  return current === target ? null : target;
+}
+
+/**
  * 「책 없이」 카드 아래 부제 — 0권 사용자에게는 이 한 줄이 서재로 가는 유일한 안내다
  * (「첫 책 추가하기」 빈 상태가 캐러셀에 흡수되며 사라졌고, 진입은 하단 탭바가 맡는다).
  */
@@ -230,9 +250,20 @@ export function BookCarousel<T extends BookOption>({
     return () => {
       if (settleRef.current !== null) clearTimeout(settleRef.current);
     };
-    // 마운트 1회 — 이후 위치는 손가락(스크롤)과 탭이 정한다.
+    // 마운트 1회 — 이후 위치는 손가락(스크롤)과 탭, 그리고 아래 동기화가 정한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 밖에서 선택이 바뀌면(「펼쳐보기」 격자에서 고르기 등) 트랙도 그 책으로 옮긴다 —
+  // 손가락으로 민 결과라면 이미 그 자리라 `recenterIndex`가 null을 줘 아무 일도 하지 않는다.
+  useEffect(() => {
+    const track = trackRef.current;
+    if (track === null) return;
+    const index = recenterIndex(track.scrollLeft, selectedId, books, offset);
+    if (index !== null) scrollToIndex(track, index);
+    // 위치를 정하는 건 선택값이다 — books 변동은 선택이 따라 바뀌며 함께 들어온다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
 
   return (
     <>
