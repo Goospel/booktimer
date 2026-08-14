@@ -135,6 +135,17 @@
         </form>
     </section>
 
+    <section class="card">
+        <h2>책 뉴스 수집</h2>
+        <p class="status-line muted">
+            완독한 책(ISBN·저자가 모두 있는 것)의 관련 기사를 구글 뉴스에서 모아 홈 피드 「책 뉴스」 탭에 채운다.
+            평소엔 매일 새벽 4시 30분에 자동으로 돌고, 지금 바로 반영하고 싶을 때 누르세요.
+        </p>
+        <form method="post" th:action="@{/admin/books/collect-news}">
+            <button type="submit" class="btn-primary">📰 책 뉴스 수집 실행</button>
+        </form>
+    </section>
+
     <!-- 로그아웃은 일반 대시보드와 동일하게 화면 최하단에 둔다(상단 노출 방지). -->
     <form th:action="@{/logout}" method="post">
         <button type="submit" class="btn-ghost">로그아웃</button>
