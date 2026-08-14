@@ -56,6 +56,7 @@ function renderTab(tab: (typeof TABS)[number]['key']) {
         onTimerChange={() => {}}
         onGraphChange={() => {}}
         onGoGoal={() => {}}
+        goalAdPending={false}
         onShelfChanged={() => {}}
         onHandleCreated={() => {}}
         onGoSettings={() => {}}

@@ -138,6 +138,7 @@ export function Settings({
   onBack,
   onProfileChanged,
   onGoGoal,
+  goalAdPending,
   onLogout,
   onError,
 }: {
@@ -146,6 +147,8 @@ export function Settings({
   /** 닉네임·핸들이 바뀌면 대시보드를 다시 받는다 — 홈 인사말·소셜이 같은 값을 봐야 한다. */
   onProfileChanged: () => void;
   onGoGoal: () => void;
+  /** 전면광고를 기다리는 중 — 홈 손잡이와 같은 신호를 준다(두 진입점이 같은 경로를 타므로 표시도 같다). */
+  goalAdPending: boolean;
   onLogout: () => void;
   onError: (error: Error) => void;
 }) {
@@ -250,8 +253,8 @@ export function Settings({
       </section>
 
       <section style={sectionStyle}>
-        <Button display="block" variant="weak" onClick={onGoGoal}>
-          하루 목표 바꾸기
+        <Button display="block" variant="weak" onClick={onGoGoal} disabled={goalAdPending}>
+          {goalAdPending ? '준비 중…' : '하루 목표 바꾸기'}
         </Button>
       </section>
 

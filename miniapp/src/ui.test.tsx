@@ -129,6 +129,7 @@ function home(overrides: Partial<DashboardResponse>) {
         onTimerChange={() => {}}
         onGraphChange={() => {}}
         onGoGoal={() => {}}
+        goalAdPending={false}
         onGoSettings={() => {}}
         onError={() => {}}
       />
