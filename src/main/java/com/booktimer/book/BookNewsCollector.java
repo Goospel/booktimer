@@ -10,12 +10,11 @@ import java.util.List;
 /**
  * 완독한 책의 관련 뉴스를 새벽에 1회 모아 캐시({@link BookNews})에 채우는 배치.
  *
- * <p><b>왜 배치·캐시인가</b>: 홈 진입마다 외부 API를 부르면 피드 응답이 네이버에 인질로 잡힌다. 뉴스는
+ * <p><b>왜 배치·캐시인가</b>: 홈 진입마다 외부 API를 부르면 피드 응답이 구글에 인질로 잡힌다. 뉴스는
  * 신선도 요구가 낮아 하루 1회면 충분하다 — 대신 새로 완독한 책의 기사는 다음 새벽부터 뜬다(의도된 지연).
  *
- * <p><b>가드</b>: {@code @ConditionalOnProperty}가 아니라 메서드 첫 줄의 {@code isEnabled()} 체크다.
- * 빈이 항상 등록되므로 테스트에서 끄고 켜기가 쉽고, 키가 SSM으로 들어오면 그 값으로 뜬 프로세스에서
- * 코드 변경 없이 켜진다.
+ * <p><b>가드</b>: {@code @ConditionalOnProperty}가 아니라 메서드 첫 줄의 {@code isEnabled()} 체크다
+ * (킬스위치 {@code booktimer.news.enabled}). 빈이 항상 등록되므로 테스트에서 끄고 켜기가 쉽다.
  *
  * <p>{@code @Transactional}로 감싸지 않는다 — 후보마다 외부 HTTP를 부르는데 트랜잭션을 연 채 네트워크를
  * 기다리면 DB 커넥션을 오래 점유한다({@link BookCatalogBackfillService}와 동일 사유). 쓰기는 짧은
@@ -31,11 +30,11 @@ public class BookNewsCollector {
 
     private final BookRepository bookRepository;
     private final BookNewsRepository bookNewsRepository;
-    private final NaverNewsClient newsClient;
+    private final GoogleNewsRssClient newsClient;
 
     public BookNewsCollector(BookRepository bookRepository,
                              BookNewsRepository bookNewsRepository,
-                             NaverNewsClient newsClient) {
+                             GoogleNewsRssClient newsClient) {
         this.bookRepository = bookRepository;
         this.bookNewsRepository = bookNewsRepository;
         this.newsClient = newsClient;
@@ -73,15 +72,15 @@ public class BookNewsCollector {
      * isbn 하나: API 1회 → 매처 필터 → 상위 {@value #MAX_PER_ISBN}건을 delete-then-insert로 교체.
      * 교체라서 무한 증식이 없고 갱신이 한 동작이다.
      *
-     * <p>ponytail: 네이버가 일시 장애면 {@code search}가 빈 목록을 주고 그날의 캐시가 비워진다(다음
+     * <p>ponytail: 구글이 일시 장애면 {@code search}가 빈 목록을 주고 그날의 캐시가 비워진다(다음
      * 새벽에 복구). 장애와 "기사 없음"을 구분하려면 반환 타입을 Optional로 바꿔야 하는데, 하루치
      * 캐시 공백에 그 값어치가 없다 — 오래 비어 보이면 그때 구분한다.
      */
     private int collectOne(BookNewsTarget target) {
-        List<NaverNewsClient.NewsArticle> matched =
-                newsClient.search(NaverNewsClient.buildQuery(target.getTitle(), target.getAuthor()))
+        List<GoogleNewsRssClient.NewsArticle> matched =
+                newsClient.search(GoogleNewsRssClient.buildQuery(target.getTitle(), target.getAuthor()))
                         .stream()
-                        .filter(a -> BookNewsMatcher.matches(a.title(), a.description(),
+                        .filter(a -> BookNewsMatcher.matches(a.title(),
                                 target.getTitle(), target.getAuthor()))
                         .limit(MAX_PER_ISBN)
                         .toList();
@@ -91,7 +90,7 @@ public class BookNewsCollector {
             return 0;
         }
         bookNewsRepository.saveAll(matched.stream()
-                .map(a -> BookNews.of(target.getIsbn13(), a.title(), a.link(), a.publishedAt()))
+                .map(a -> BookNews.of(target.getIsbn13(), a.title(), a.link(), a.publishedAt(), a.source()))
                 .toList());
         return matched.size();
     }

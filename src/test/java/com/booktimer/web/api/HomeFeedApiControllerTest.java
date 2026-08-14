@@ -31,9 +31,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * GET /api/home-feed — 미니앱 홈 「소식」 박스용 피드 API.
  *
  * <p>노출 게이트(PUBLIC·팔로우·ADMIN·핸들 null)는 {@code BookRepositoryTest}가 쿼리 레벨에서 못 박으므로
- * 여기선 <b>컨트롤러의 몫</b>만 본다: 시작·완독 두 쿼리를 하나로 합쳐 최신순 정렬 + 상한 30건,
- * 그리고 네이버 키가 없는 기본 컨텍스트에서 뉴스가 꺼져 있음(켜졌을 때의 조인은
- * {@code HomeFeedNewsApiControllerTest}).
+ * 여기선 <b>컨트롤러의 몫</b>만 본다: 시작·완독 두 쿼리를 하나로 합쳐 최신순 정렬 + 상한 30건.
+ * 「책 뉴스」는 {@code HomeFeedNewsApiControllerTest}(기본 ON의 조인)와
+ * {@code HomeFeedNewsDisabledApiControllerTest}(킬스위치 OFF)가 본다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -121,17 +121,5 @@ class HomeFeedApiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.social.length()").value(30))
                 .andExpect(jsonPath("$.social[0].type").value("FINISHED")); // 가장 최근 = 완독
-    }
-
-    @Test
-    @DisplayName("네이버 키가 없으면 뉴스는 꺼진다 — newsEnabled=false, news=[] (키 없이 배포해도 안전)")
-    void newsIsGatedOff() throws Exception {
-        saveUser("hf-news@booktimer.com", "hfnews", "나");
-
-        mockMvc.perform(get("/api/home-feed").with(user("hfnews")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.newsEnabled").value(false))
-                .andExpect(jsonPath("$.news.length()").value(0))
-                .andExpect(jsonPath("$.social.length()").value(0));
     }
 }

@@ -31,8 +31,11 @@ import java.time.Instant;
 @EntityListeners(AuditingEntityListener.class)
 public class BookNews {
 
-    /** 저장 상한 — 네이버 제목은 짧지만 외부 데이터라 방어적으로 자른다(길이 초과로 배치가 죽지 않게). */
+    /** 저장 상한 — 기사 제목은 대개 짧지만 외부 데이터라 방어적으로 자른다(길이 초과로 배치가 죽지 않게). */
     private static final int MAX_TITLE_LENGTH = 300;
+
+    /** 출처명 상한 — 같은 이유로 방어적으로 자른다. */
+    private static final int MAX_SOURCE_LENGTH = 100;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -49,9 +52,13 @@ public class BookNews {
     @Column(nullable = false, length = 500)
     private String link;
 
-    /** 발행 시각. 네이버 pubDate를 못 읽으면 null(정렬에서 뒤로 밀릴 뿐 줄은 산다). */
+    /** 발행 시각. RSS pubDate를 못 읽으면 null(정렬에서 뒤로 밀릴 뿐 줄은 산다). */
     @Column
     private Instant publishedAt;
+
+    /** 매체명(구글 뉴스 RSS의 {@code <source>}). 응답에 없으면 null — 미니앱이 라벨을 생략한다. */
+    @Column(length = MAX_SOURCE_LENGTH)
+    private String source;
 
     @CreatedDate
     @Column(nullable = false, updatable = false)
@@ -61,15 +68,23 @@ public class BookNews {
         // JPA
     }
 
-    private BookNews(String isbn13, String title, String link, Instant publishedAt) {
+    private BookNews(String isbn13, String title, String link, Instant publishedAt, String source) {
         this.isbn13 = isbn13;
-        this.title = title.length() > MAX_TITLE_LENGTH ? title.substring(0, MAX_TITLE_LENGTH) : title;
+        this.title = truncate(title, MAX_TITLE_LENGTH);
         this.link = link;
         this.publishedAt = publishedAt;
+        this.source = truncate(source, MAX_SOURCE_LENGTH);
     }
 
-    /** 수집된 기사 한 건을 만든다. isbn13·제목·링크는 필수(수집기가 빈 항목을 걸러 넘긴다). */
-    public static BookNews of(String isbn13, String title, String link, Instant publishedAt) {
+    private static String truncate(String value, int max) {
+        if (value == null) {
+            return null;
+        }
+        return value.length() > max ? value.substring(0, max) : value;
+    }
+
+    /** 수집된 기사 한 건을 만든다. isbn13·제목·링크는 필수(수집기가 빈 항목을 걸러 넘긴다), 출처는 선택. */
+    public static BookNews of(String isbn13, String title, String link, Instant publishedAt, String source) {
         if (isbn13 == null || isbn13.isBlank()) {
             throw new IllegalArgumentException("isbn13 must not be blank");
         }
@@ -79,7 +94,7 @@ public class BookNews {
         if (link == null || link.isBlank()) {
             throw new IllegalArgumentException("link must not be blank");
         }
-        return new BookNews(isbn13, title, link, publishedAt);
+        return new BookNews(isbn13, title, link, publishedAt, source);
     }
 
     public Long getId() {
@@ -100,6 +115,10 @@ public class BookNews {
 
     public Instant getPublishedAt() {
         return publishedAt;
+    }
+
+    public String getSource() {
+        return source;
     }
 
     public Instant getCreatedAt() {
