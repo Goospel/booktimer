@@ -354,7 +354,13 @@ export function BookCarousel<T extends BookOption>({
           </Text>
         ) : (
           (metaOf?.(selected) ?? selected.author) !== null && (
-            <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
+            // `pre-line` — 서재는 저자와 「읽은 시간 · 공개」를 줄로 나눠 보낸다(긴 저자 문자열이 되접히며
+            // 그 둘이 이름 사이에 끼어 들던 자리). 홈의 저자 한 줄은 줄바꿈이 없어 영향받지 않는다.
+            <Text
+              typography="st12"
+              color="grey600"
+              style={{ display: 'block', marginTop: 2, whiteSpace: 'pre-line' }}
+            >
               {metaOf?.(selected) ?? selected.author}
             </Text>
           )
