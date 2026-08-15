@@ -570,6 +570,19 @@ class SettingsControllerTest {
     }
 
     @Test
+    @DisplayName("GET /settings: 온보딩 전(아이디 미설정) 계정엔 아이디 변경 카드를 아예 그리지 않는다")
+    void getSettings_noLoginId_hidesChangeCard() throws Exception {
+        // 아이디가 없으면 안내가 '@null'로 렌더되고, 제출하면 도메인 ISE가 '이미 사용했어요'라는
+        // 거짓 안내로 흡수된다. 아예 안 그려서 그 경로 자체를 없앤다.
+        registerSocial("lid-none@booktimer.com");
+
+        mockMvc.perform(get("/settings").with(user("lid-none@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(content().string(not(containsString("/settings/login-id"))))
+                .andExpect(content().string(not(containsString("아이디 변경"))));
+    }
+
+    @Test
     @DisplayName("GET /settings: 아직 안 바꾼 계정은 아이디 변경 폼을 보여준다")
     void getSettings_notChangedYet_showsChangeForm() throws Exception {
         registerWithHandle("lid-form@booktimer.com", "lidformuser");

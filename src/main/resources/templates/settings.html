@@ -146,8 +146,10 @@
         </form>
     </section>
 
-    <!--/* 아이디 변경 카드: 평생 1번. 소진했으면 폼 대신 정적 표기만 남긴다(옛 아이디는 영구히 잠긴다). */-->
-    <section class="set-card">
+    <!--/* 아이디 변경 카드: 평생 1번. 소진했으면 폼 대신 정적 표기만 남긴다(옛 아이디는 영구히 잠긴다).
+           아이디를 아직 안 정한 계정(온보딩 전)엔 카드를 아예 그리지 않는다 — 그리면 안내가 '@null'이 되고,
+           제출해 봐야 도메인이 ISE로 막는 걸 컨트롤러가 '이미 사용했어요'라는 거짓 안내로 흡수한다. */-->
+    <section class="set-card" th:if="${loginId != null}">
         <h2 class="set-card-title">아이디 변경</h2>
         <p class="set-card-desc">
             지금 아이디는 <strong th:text="'@' + ${loginId}">@handle</strong> 이에요.
