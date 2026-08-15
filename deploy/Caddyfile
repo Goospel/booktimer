@@ -39,6 +39,18 @@ booktimer.app {
 		#   · server.servlet.session.cookie.secure=true — 아니면 로그인 쿠키가 안 실린다
 		#   · ForwardedHeaderFilter 가 OAuth redirect_uri 를 동적 생성한다
 		# Caddy는 X-Forwarded-{For,Proto,Host} 를 기본 주입하므로 별도 설정이 필요 없다.
+		# (trusted_proxies 를 안 켰으므로 클라이언트가 심어 보낸 X-Forwarded-* 는 Caddy가 리셋한다.)
+
+		# ⚠️ 그런데 `Forwarded`(RFC 7239) 는 Caddy가 세팅하지도, 지우지도 않는다 — 들어온 값이
+		#    그대로 앱까지 간다. 그리고 Spring 의 ForwardedHeaderFilter 는 이 헤더를
+		#    X-Forwarded-* 보다 **우선**한다. 즉 아무나 아래 한 줄로 신원을 위조할 수 있었다:
+		#      Forwarded: for=1.2.3.4;host=evil.example;proto=https
+		#    · getRemoteAddr() 가 매 요청 달라져 LoginAttemptFilter 의 IP 잠금(5회)이 무력화된다.
+		#      앞단에 WAF·rate limit 이 없어 이게 온라인 비밀번호 추측의 유일한 통제다.
+		#    · host/proto 까지 실려 OAuth redirect_uri 와 쿠키 secure 판정도 공격자 값이 된다.
+		#    Caddy 가 절대 만들지 않는 헤더이므로 통째로 버리는 게 정답이다.
+		#    회귀 가드: deploy/tests/test-caddy-forwarded.sh (CI 가 매 PR 에서 돌린다)
+		header_up -Forwarded
 	}
 
 	encode gzip zstd
