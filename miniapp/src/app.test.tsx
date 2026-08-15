@@ -70,18 +70,19 @@ describe('탭 구조', () => {
     // 홈은 제목 행이 없다(첫 카드가 곧 히어로) — 그 카드의 문구로 식별한다.
     expect(renderTab('home')).toContain('오늘 읽은 시간');
     expect(renderTab('library')).toContain('내 서재');
-    expect(renderTab('social')).toContain('책방 둘러보기');
+    // 책방 탭은 중간 화면 없이 곧장 내 책방이다 — 그 상단의 검색 진입바로 식별한다.
+    expect(renderTab('bookshop')).toContain('아이디로 친구 찾기');
     expect(renderTab('history')).toContain('내 기록');
   });
 
   it('다른 탭의 화면은 함께 그리지 않는다 — 한 번에 한 화면', () => {
     expect(renderTab('home')).not.toContain('내 기록');
     expect(renderTab('library')).not.toContain('오늘 읽은 시간');
-    expect(renderTab('home')).not.toContain('책방 둘러보기');
+    expect(renderTab('home')).not.toContain('아이디로 친구 찾기');
   });
 
   it('탭바에서 선택 표시되는 항목은 지금 그려진 탭 자신이다 — index 어긋남 방지', () => {
-    expect(TABS.map((t) => t.label)).toEqual(['홈', '서재', '소셜', '기록']);
+    expect(TABS.map((t) => t.label)).toEqual(['홈', '서재', '책방', '기록']);
 
     for (const { key, label } of TABS) {
       const markup = renderTab(key);
@@ -97,11 +98,11 @@ describe('탭 구조', () => {
 
     TABS.forEach((_, index) => change(index));
 
-    expect(picked).toEqual(['home', 'library', 'social', 'history']);
+    expect(picked).toEqual(['home', 'library', 'bookshop', 'history']);
   });
 
-  it('소셜 탭은 서재와 기록 사이에 온다 — 탭바 순서가 곧 TABS 순서다', () => {
-    expect(TABS.map((t) => t.key)).toEqual(['home', 'library', 'social', 'history']);
+  it('책방 탭은 서재와 기록 사이에 온다 — 탭바 순서가 곧 TABS 순서다', () => {
+    expect(TABS.map((t) => t.key)).toEqual(['home', 'library', 'bookshop', 'history']);
   });
 });
 

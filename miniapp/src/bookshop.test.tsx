@@ -2,14 +2,24 @@ import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { PersonalityEntry, PersonalityMutation, PersonalityStatus, ProfileBook, ProfileResponse, UserRow } from './api';
+import type {
+  FollowListType,
+  PersonalityEntry,
+  PersonalityMutation,
+  PersonalityStatus,
+  ProfileBook,
+  ProfileResponse,
+  UserRow,
+} from './api';
 import { ApiError, adRefreshPersonality, selectPersonality } from './api';
+import { Bookshop, FollowListSheet, HandleSheet, SearchSheet, UserList } from './screens/Bookshop';
 import {
   ArchiveSheet,
   ProfileCard,
   SafetyPanel,
   analysisFailed,
   claimPersonality,
+  followCountsOpenable,
   newestEntry,
   personalityErrorMessage,
   personalityNoticeText,
@@ -18,7 +28,6 @@ import {
   showPersonalityAdButton,
   toggleSafety,
 } from './screens/Profile';
-import { HandleSheet, MyShelfEntry, Social, UserList } from './screens/Social';
 import { userAgent } from './test-fixtures';
 import { watchRewardAd } from './toss';
 
@@ -98,6 +107,11 @@ function card(
     earnedRetry?: boolean;
     personalityNotice?: string | null;
     archiveOpen?: boolean;
+    /** 카운트 클릭 핸들러를 건넸는가 — 내 책방(탭 루트)에서만 셸이 준다. */
+    openFollowList?: boolean;
+    /** 「돌아가기」의 대상 — 탭 루트에는 없다(출구가 탭바다). */
+    back?: boolean;
+    header?: React.ReactNode;
   } = {},
 ) {
   return render(
@@ -123,7 +137,9 @@ function card(
       onGrid={() => {}}
       onMore={() => {}}
       safety={null}
-      onBack={() => {}}
+      header={view.header}
+      onOpenFollowList={view.openFollowList === true ? () => {} : undefined}
+      onBack={view.back === false ? undefined : () => {}}
     />,
   );
 }
@@ -174,21 +190,117 @@ describe('사용자 목록', () => {
   });
 });
 
-describe('내 책방 진입 — login_id=null 경계 (설계 §5-1)', () => {
-  it('핸들이 있으면 내 책방으로 들어갈 수 있다', () => {
-    const markup = render(<MyShelfEntry myLoginId="goospel" onOpen={() => {}} onCreateHandle={() => {}} />);
+/**
+ * 책방 탭 루트 — 탭을 누르면 곧장 내 책방이다(옛 소셜 중간 화면은 사라졌다).
+ * `login_id=null` 경계(설계 §5-1)는 여기가 물려받았다: 그 계정은 자기 책방 자체가 없어 만들 길이 있어야 한다.
+ */
+describe('책방 탭 루트', () => {
+  const shop = (myLoginId: string | null) =>
+    render(<Bookshop myLoginId={myLoginId} onHandleCreated={() => {}} onError={() => {}} />);
 
-    expect(markup).toContain('내 책방');
+  it('핸들이 있으면 내 책방(Profile)을 그리고 상단에 검색 진입바를 얹는다', () => {
+    const markup = shop('goospel');
+
+    // Profile은 아직 로딩 분기다(정적 렌더라 fetch가 안 돈다) — 그 분기에서도 header가 서야
+    // 탭 진입 직후 상단이 텅 비지 않는다.
+    expect(markup).toContain('아이디로 친구 찾기');
+  });
+
+  it('핸들이 없으면 만들 길과 검색 진입바를 함께 준다 — 남의 책방 구경은 핸들 없이도 된다', () => {
+    const markup = shop(null);
+
+    expect(markup).toContain('아이디 만들기');
+    expect(markup).toContain('아이디로 친구 찾기');
+    // 토스로 가입한 계정은 비밀번호가 없어 웹 로그인 자체가 불가능하다 — 그 안내로 되돌아가면 회귀다.
+    expect(markup).not.toContain('booktimer.app');
+  });
+});
+
+/**
+ * 팔로워/팔로잉 시트 — 카운트를 누르면 열린다. 데이터는 프롭이다(셸이 받는다): 내부 fetch면 정적 렌더
+ * 하니스가 0명/N명 분기에 영영 못 닿는다(`ArchiveSheet`와 같은 이유).
+ */
+describe('팔로우 목록 시트 (FollowListSheet)', () => {
+  const sheet = (type: FollowListType, users: UserRow[] | null) =>
+    render(
+      <FollowListSheet
+        type={type}
+        users={users}
+        error={null}
+        onSelect={() => {}}
+        onClose={() => {}}
+        onRetry={() => {}}
+      />,
+    );
+
+  it('팔로워 0명이면 그 타입의 빈 문구를 준다 — 흰 화면이 막다른 길이 되지 않게', () => {
+    const markup = sheet('followers', []);
+
+    expect(markup).toContain('아직 나를 팔로우한 사람이 없어요.');
+  });
+
+  it('팔로잉 0명이면 찾아보라는 문구로 갈린다 — 타입별 문구가 뒤바뀌면 안내가 거짓말이 된다', () => {
+    const markup = sheet('following', []);
+
+    expect(markup).toContain('아직 팔로우한 사람이 없어요');
+    expect(markup).not.toContain('아직 나를 팔로우한 사람이 없어요.');
+  });
+
+  /**
+   * 지시어는 지금 화면에 있는 것을 가리켜야 한다 — 검색이 별도 시트로 빠지면서 옛 문구의 「위에서」가
+   * 가리키던 인라인 검색바는 이 시트에 덮여 보이지 않는다. 갈 곳을 이름으로 부른다.
+   */
+  it('찾는 길을 「친구 찾기」라는 이름으로 알려준다 — 시트에 덮인 「위에서」는 가리킬 대상이 없다', () => {
+    const markup = sheet('following', []);
+
+    expect(markup).toContain('「친구 찾기」');
+    expect(markup).not.toContain('위에서');
+  });
+
+  it('사람이 있으면 목록 줄로 그린다 — 눌러서 그 책방으로 들어간다', () => {
+    const markup = sheet('followers', [user('goospel')]);
+
+    expect(markup).toContain('@goospel');
     expect(markup).toContain('<button');
   });
 
-  it('핸들이 없으면 여기서 만들 길을 준다 — 옛 웹 안내는 토스 계정에게 실행 불가능한 죽은 안내였다', () => {
-    const markup = render(<MyShelfEntry myLoginId={null} onOpen={() => {}} onCreateHandle={() => {}} />);
+  it('아직 못 받았으면 로딩 — 빈 목록 문구를 먼저 깜빡이지 않는다', () => {
+    expect(sheet('followers', null)).toContain('불러오는 중');
+  });
+});
 
-    expect(markup).toContain('아이디 만들기');
-    expect(markup).toContain('<button'); // 눌러 만들 수 있다 — 안내만 하고 끝내지 않는다
-    // 토스로 가입한 계정은 비밀번호가 없어 웹 로그인 자체가 불가능하다 — 그 안내로 되돌아가면 회귀다.
-    expect(markup).not.toContain('booktimer.app');
+/**
+ * 친구 찾기 시트 — 옛 소셜 화면의 인라인 검색 form을 그대로 옮겼다. 상태(query·results)는 셸이 든다.
+ */
+describe('친구 찾기 시트 (SearchSheet)', () => {
+  const sheet = (results: UserRow[] | null, query = 'goo') =>
+    render(
+      <SearchSheet
+        query={query}
+        results={results}
+        busy={false}
+        error={null}
+        onQueryChange={() => {}}
+        onSearch={() => {}}
+        onSelect={() => {}}
+        onClose={() => {}}
+      />,
+    );
+
+  it('아이디 입력을 form으로 감싼다 — 키보드 완료(엔터)가 아무 일도 안 하면 버튼을 따로 눌러야 한다', () => {
+    expect(sheet(null)).toContain('<form');
+  });
+
+  it('검색 버튼에 이름이 붙어 있다 — 로딩 중엔 라벨이 스피너로 바뀌어 이름 없는 버튼이 된다', () => {
+    expect(sheet(null)).toContain('aria-label="검색"');
+  });
+
+  it('0건이면 두 글자 이상으로 다시 찾으라고 알린다 — 서버가 1글자를 빈 결과로 주므로 문구가 유일한 안내다', () => {
+    expect(sheet([])).toContain('두 글자 이상');
+  });
+
+  it('결과가 있으면 목록으로 그린다', () => {
+    expect(sheet([user('goospel')])).toContain('@goospel');
   });
 });
 
@@ -316,13 +428,66 @@ describe('책방 책 목록 — 서재와 같은 캐러셀', () => {
   });
 });
 
-describe('소셜 탭 검색', () => {
-  it('검색 버튼에 이름이 붙어 있다 — 스크린리더에 빈 버튼으로 읽히면 안 된다', () => {
-    expect(render(<Social myLoginId="goospel" onHandleCreated={() => {}} onError={() => {}} />)).toContain('aria-label="검색"');
+/**
+ * 팔로워/팔로잉 카운트 클릭 — 서버 `GET /api/follow-list`는 `Principal` 본인 목록만 준다.
+ * 남의 책방에서 카운트를 버튼으로 만들면 눌러도 (서버가 안 주는) 목록을 못 여는 죽은 UI가 된다.
+ */
+describe('카운트 클릭 가능 판정 (followCountsOpenable)', () => {
+  it('내 책방 + 열어 줄 핸들러가 있으면 누를 수 있다', () => {
+    expect(followCountsOpenable(true, true)).toBe(true);
   });
 
-  it('아이디 입력을 form으로 감싼다 — 키보드 완료(엔터)가 아무 일도 안 해 버튼을 따로 눌러야 했다', () => {
-    expect(render(<Social myLoginId="goospel" onHandleCreated={() => {}} onError={() => {}} />)).toContain('<form');
+  it('남의 책방이면 못 누른다 — 서버가 남의 팔로우 목록을 주지 않는다', () => {
+    expect(followCountsOpenable(false, true)).toBe(false);
+  });
+
+  it('핸들러가 없으면 못 누른다 — 열 곳이 없는 버튼은 죽은 UI다', () => {
+    expect(followCountsOpenable(true, false)).toBe(false);
+  });
+});
+
+/** 술어가 마크업에 실제로 배선됐는지 — 함수만 맞고 배선이 빠지면 화면엔 아무 일도 안 일어난다. */
+describe('책방 헤더 — 카운트 줄', () => {
+  it('내 책방(핸들러 있음)이면 팔로워·팔로잉이 버튼이다', () => {
+    const markup = card(profile({ self: true }), [], null, { openFollowList: true });
+
+    expect(markup).toMatch(/<button[^>]*>팔로워 3/);
+    expect(markup).toMatch(/<button[^>]*>팔로잉 5/);
+  });
+
+  it('남의 책방이면 숫자 텍스트로 남는다 — 눌러도 열 목록이 없다', () => {
+    const markup = card(profile({ self: false }), [], null, { openFollowList: true });
+
+    expect(markup).toContain('팔로워 3 · 팔로잉 5');
+    expect(markup).not.toMatch(/<button[^>]*>팔로워 3/);
+  });
+
+  it('내 책방이어도 핸들러를 안 받았으면 텍스트다 — 남의 책방 렌더 경로가 그대로 살아 있다', () => {
+    const markup = card(profile({ self: true }), [], null, { openFollowList: false });
+
+    expect(markup).toContain('팔로워 3 · 팔로잉 5');
+    expect(markup).not.toMatch(/<button[^>]*>팔로워 3/);
+  });
+
+  it('셸이 준 header(스토리·검색)를 제목 아래 카운트 줄 위에 끼운다', () => {
+    const markup = card(profile(), [], null, { header: <i>헤더슬롯</i> });
+
+    expect(markup).toContain('헤더슬롯');
+    expect(markup.indexOf('헤더슬롯')).toBeLessThan(markup.indexOf('@goospel'));
+  });
+});
+
+/**
+ * 탭 루트가 된 내 책방에는 「돌아가기」가 없다 — 돌아갈 곳이 없는 버튼은 아무 데도 안 가는 막다른 손잡이다.
+ * 출구는 플로팅 탭바가 맡는다.
+ */
+describe('돌아가기 — onBack이 있을 때만', () => {
+  it('onBack을 받으면 하단에 「돌아가기」가 선다 (남의 책방)', () => {
+    expect(card(profile())).toContain('돌아가기');
+  });
+
+  it('onBack이 없으면 「돌아가기」를 그리지 않는다 (탭 루트)', () => {
+    expect(card(profile({ self: true }), [], null, { back: false })).not.toContain('돌아가기');
   });
 });
 

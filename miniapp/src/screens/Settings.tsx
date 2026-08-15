@@ -1,11 +1,18 @@
 import { Button, Text, TextField } from '@toss/tds-mobile';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
-import type { DashboardResponse } from '../api';
-import { deleteAccount, logout, updateNickname, validateNicknameFormat } from '../api';
+import type { DashboardResponse, UserRow } from '../api';
+import {
+  deleteAccount,
+  fetchBlocks,
+  logout,
+  unblockUser,
+  updateNickname,
+  validateNicknameFormat,
+} from '../api';
 import { openExternal } from '../toss';
 import { ErrorMessage, Screen, Sheet, sectionStyle } from '../ui';
-import { HandleSheet } from './Social';
+import { HandleSheet } from './Bookshop';
 
 /** 웹에 공개된 문서들 — 둘 다 `permitAll`이라 로그인 없이 열린다(미니앱 계정은 웹 로그인 자체가 불가). */
 const PRIVACY_URL = 'https://booktimer.app/privacy';
@@ -124,6 +131,43 @@ export function DeleteAccountSection({
 }
 
 /**
+ * 차단 목록 — 미니앱에서 차단을 푸는 <b>유일한 자리</b>. 소셜 탭이 책방 탭으로 바뀌며 여기로 왔다
+ * (책방 탭은 이제 곧장 내 책방이라 관리 목록이 설 자리가 아니다).
+ *
+ * <p>0명이면 섹션을 아예 안 그린다 — 빈 관리 UI는 설정 화면의 소음이고, 차단은 대부분의 계정에 0건이다.
+ * 순수 표시인 이유는 이 파일의 다른 섹션들과 같다: 정적 렌더 하니스가 fetch·클릭을 못 돌린다.
+ */
+export function BlockedSection({
+  blocked,
+  busy,
+  onUnblock,
+}: {
+  blocked: UserRow[];
+  busy: boolean;
+  onUnblock: (loginId: string) => void;
+}) {
+  if (blocked.length === 0) return null;
+
+  return (
+    <section style={sectionStyle}>
+      <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
+        차단한 사람 {blocked.length}
+      </Text>
+      {blocked.map((u) => (
+        <div key={u.loginId} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <Text typography="st11" style={{ flex: 1 }}>
+            {u.nickname} @{u.loginId}
+          </Text>
+          <Button size="small" variant="weak" disabled={busy} onClick={() => onUnblock(u.loginId)}>
+            차단 해제
+          </Button>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+/**
  * 프로필·설정 — 미니앱에서 내 계정에 손대는 유일한 화면.
  *
  * <p>있는 것은 넷뿐이다: 닉네임 · @아이디 · 하루 목표 · 로그아웃. **미니앱 채널에서 실제로 작동하는 것이
@@ -164,6 +208,33 @@ export function Settings({
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [blocked, setBlocked] = useState<UserRow[]>([]);
+  const [blockBusy, setBlockBusy] = useState(false);
+
+  /**
+   * 차단 목록은 마운트 때 받는다. 401만 밖으로 올리고 나머지 실패는 <b>조용히 빈 목록</b>으로 둔다 —
+   * 차단 조회가 실패했다고 설정 화면 전체에 빨간 줄을 띄울 일이 아니고, 0건이면 섹션 자체가 안 선다.
+   */
+  const loadBlocks = useCallback(() => {
+    fetchBlocks()
+      .then((page) => setBlocked(page.blocked))
+      .catch((e: Error) => {
+        if (e.name === 'UnauthorizedError') onError(e);
+      });
+  }, [onError]);
+
+  useEffect(loadBlocks, [loadBlocks]);
+
+  const unblock = (loginId: string) => {
+    setBlockBusy(true);
+    // 서버가 준 목록이 진실 — 낙관 제거 대신 다시 받는다(해제 실패면 그 사람이 그대로 남아야 한다).
+    unblockUser(loginId)
+      .then(loadBlocks)
+      .catch((e: Error) => {
+        if (e.name === 'UnauthorizedError') onError(e);
+      })
+      .finally(() => setBlockBusy(false));
+  };
 
   const fail = (e: Error) => {
     if (e.name === 'UnauthorizedError') onError(e);
@@ -257,6 +328,8 @@ export function Settings({
           {goalAdPending ? '준비 중…' : '하루 목표 바꾸기'}
         </Button>
       </section>
+
+      <BlockedSection blocked={blocked} busy={blockBusy} onUnblock={unblock} />
 
       {/* 약관·처리방침 — 기기 기본 브라우저로 넘긴다. 인앱 렌더는 같은 문서를 두 곳에 두는 일이라 안 한다. */}
       <section style={sectionStyle}>

@@ -2,9 +2,9 @@ import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { DashboardResponse } from './api';
+import type { DashboardResponse, UserRow } from './api';
 import { logout } from './api';
-import { DeleteAccountSection, LogoutSection, Settings, logoutAndLeave } from './screens/Settings';
+import { BlockedSection, DeleteAccountSection, LogoutSection, Settings, logoutAndLeave } from './screens/Settings';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
 vi.mock('./api', async (importOriginal) => ({
@@ -189,6 +189,40 @@ describe('회원 탈퇴 섹션', () => {
     expect(section(true, '본인 확인에 실패해 탈퇴를 진행하지 않았어요.')).toContain(
       '본인 확인에 실패해 탈퇴를 진행하지 않았어요.',
     );
+  });
+});
+
+/**
+ * 차단 목록 — 소셜 탭이 책방 탭으로 바뀌며 여기로 옮겨 왔다. **미니앱에서 차단을 푸는 유일한 자리**라,
+ * 이설 중에 증발하면 차단한 사람을 영영 되돌릴 수 없다(웹은 로그인 자체가 불가능한 계정들이다).
+ */
+describe('차단 목록 섹션', () => {
+  const blockedUser = (loginId: string): UserRow => ({
+    loginId,
+    nickname: `${loginId}님`,
+    publicBookCount: 0,
+    following: false,
+    self: false,
+  });
+
+  const section = (blocked: UserRow[]) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <BlockedSection blocked={blocked} busy={false} onUnblock={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  it('차단한 사람이 있으면 누구인지와 풀 손잡이를 함께 준다', () => {
+    const markup = section([blockedUser('spammer')]);
+
+    expect(markup).toContain('@spammer');
+    expect(markup).toContain('차단 해제');
+  });
+
+  it('0명이면 섹션 자체를 안 그린다 — 빈 관리 UI는 설정 화면의 소음일 뿐이다', () => {
+    const markup = section([]);
+
+    expect(markup).not.toContain('차단');
   });
 });
 
