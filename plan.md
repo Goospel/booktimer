@@ -1938,7 +1938,18 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
       **회귀 가드는 `FlywayMigrationTest`에 뒀다** — "users를 FK 참조하는 테이블 집합 == `purge()`가 지우는 집합"을
       **양방향** 단언한다. 메인 스위트는 Hibernate가 엔티티 매핑에서 스키마를 만들어 **JPA 미매핑 테이블이 아예
       존재하지 않으므로**, 이번 결함(Flyway 전용 테이블)을 잡을 수 있는 곳은 실 마이그레이션을 도는 그 테스트뿐이다.
-      ⏸ 남은 것: `decoration`(소품 카탈로그) 등 users FK가 없어 탈퇴를 막지 않는 은퇴 정원 테이블 — 좀비 정리에서 함께.
+      ✅ 남았던 은퇴 정원 테이블(`decoration` 등)은 아래 좀비 정리에서 `V70`으로 걷어냈다.
+- [x] **좀비 코드 정리 8건** (완료 ✅ 2026-08-15) — 전체 코드리뷰의 좀비 축 후속. **지우기 전에 10건을 현재 코드로
+      재검증했고, 그중 1건은 오판이라 제외했다** — `POST /api/sessions/start|stop`은 `dashboard.js`가 실제로 호출하는
+      측정 시작/종료의 유일한 경로다(`/api` 없는 SSR 변종은 존재하지 않는다).
+      지운 것: ① `GardenApiResponse.world` + top-level `characters`(프론트 3곳 전부 `catalog.*`만 읽고,
+      `characters`는 `catalog.ownedCharacters`와 **같은 리스트**였다) → `GardenWorld` 클래스도 사망 ②
+      은퇴 정원 테이블 8개 `V70` DROP(`plant` 4축·`building`·`publisher_building`·`decoration`·`user_discovered_plant`)
+      ③ Lombok 의존 4줄(`src/` 전체 import 0) ④ `BookSearchPage.prevPage()/nextPage()`(호출처가 자기 테스트뿐)
+      ⑤ `ReadingDebtService.debtEpoch()` ⑥ `FollowScopePopularity.hasAny()` ⑦ `AuthorCharacter.getDisplayOrder()`.
+      ⏸ **app.css는 별건** — 리뷰가 지목한 1061~1295 범위에 **살아있는 규칙이 섞여 있다**(`GardenDex`·`DexCell`이
+      `.garden-axis`·`.garden-grid`·`.plant-emoji`·`.plant-svg`·`.garden-progress`·`.garden-next`를 지금도 쓴다).
+      범위 삭제가 아니라 규칙 단위 수술이 필요하고, CSS 회귀는 단위테스트로 안 잡혀 **실 브라우저 도감 화면 확인**이 게이트다.
 - [ ] (후속) 무차별 대입 방어 보강 — 지수 백오프, 다중 인스턴스 대비 공유 저장소(현재 인메모리=인스턴스별), 앞단 WAF 레이트리밋
       (③ 갈래 — 트래픽/세션 쓰기 신호 오면. Redis는 예산 충돌, WAF는 인프라라 코드 가치 낮아 보류.)
 
