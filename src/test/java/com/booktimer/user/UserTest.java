@@ -615,4 +615,83 @@ class UserTest {
         assertThatThrownBy(() -> user.linkTossUserKey("  ")).isInstanceOf(IllegalArgumentException.class);
         assertThat(user.getTossUserKey()).isNull();
     }
+
+    // --- changeLoginId: 아이디 평생 1회 변경 (옛 아이디는 previous_login_id로 영구 잠금) ---
+
+    private User userWithHandle(String loginId) {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+        user.assignLoginId(loginId);
+        return user;
+    }
+
+    @Test
+    @DisplayName("changeLoginId: 새 아이디로 바꾸고 옛 아이디를 previousLoginId에 보존한다")
+    void changeLoginId_movesOldHandleToPrevious() {
+        User user = userWithHandle("oldhandle");
+
+        user.changeLoginId("newhandle");
+
+        assertThat(user.getLoginId()).isEqualTo("newhandle");
+        assertThat(user.getPreviousLoginId()).isEqualTo("oldhandle");
+    }
+
+    @Test
+    @DisplayName("changeLoginId: 대문자·공백 입력도 정규화해 저장한다(normalizeLoginId 단일 출처 재사용)")
+    void changeLoginId_normalizesInput() {
+        User user = userWithHandle("oldhandle");
+
+        user.changeLoginId("  NewID  ");
+
+        assertThat(user.getLoginId()).isEqualTo("newid");
+    }
+
+    @Test
+    @DisplayName("changeLoginId: login_id가 아직 없는 계정(OAuth 온보딩 전)은 변경할 수 없다 — ISE")
+    void changeLoginId_beforeAssigned_throws() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER); // login_id=null (null-state 경계)
+
+        assertThatThrownBy(() -> user.changeLoginId("newhandle"))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(user.getLoginId()).isNull();
+        assertThat(user.getPreviousLoginId()).isNull();
+    }
+
+    @Test
+    @DisplayName("changeLoginId: 평생 1회 — 이미 바꿨으면 다른 값으로도, 옛 아이디로 되돌리기도 ISE")
+    void changeLoginId_alreadyUsed_throws() {
+        User user = userWithHandle("oldhandle");
+        user.changeLoginId("newhandle");
+
+        assertThatThrownBy(() -> user.changeLoginId("thirdhandle"))
+                .isInstanceOf(IllegalStateException.class);
+        // 되돌리기 특례 없음 — 열어주면 A↔B 왕복(핸들 세탁)으로 1회 제한이 무의미해진다.
+        assertThatThrownBy(() -> user.changeLoginId("oldhandle"))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(user.getLoginId()).isEqualTo("newhandle");
+        assertThat(user.getPreviousLoginId()).isEqualTo("oldhandle");
+    }
+
+    @Test
+    @DisplayName("changeLoginId: 형식 위반·예약어는 IAE — 상태는 그대로(변경권도 소진되지 않는다)")
+    void changeLoginId_invalidFormat_throws() {
+        User user = userWithHandle("oldhandle");
+
+        assertThatThrownBy(() -> user.changeLoginId("ab")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> user.changeLoginId("new-handle")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> user.changeLoginId("admin")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> user.changeLoginId(null)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(user.getLoginId()).isEqualTo("oldhandle");
+        assertThat(user.getPreviousLoginId()).isNull();
+    }
+
+    @Test
+    @DisplayName("changeLoginId: 현재 아이디와 같으면(대소문자만 다른 입력 포함) IAE — 상태 불변")
+    void changeLoginId_sameAsCurrent_throws() {
+        User user = userWithHandle("oldhandle");
+
+        assertThatThrownBy(() -> user.changeLoginId("oldhandle")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> user.changeLoginId("OldHandle")).isInstanceOf(IllegalArgumentException.class);
+        assertThat(user.getLoginId()).isEqualTo("oldhandle");
+        assertThat(user.getPreviousLoginId()).isNull();
+    }
 }
