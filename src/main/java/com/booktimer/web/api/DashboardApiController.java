@@ -88,7 +88,7 @@ public class DashboardApiController {
                 .toList();
 
         return new DashboardResponse(
-                live.nickname(), live.loginId(),
+                live.nickname(), live.loginId(), user.getPreviousLoginId(),
                 user.getProfileCharacterCode(),
                 live.remainingSeconds(), live.carriedDebtSeconds(),
                 live.todayGoalSeconds(), live.carryover(),
@@ -189,6 +189,12 @@ public class DashboardApiController {
     public record DashboardResponse(
             String nickname,
             String loginId,
+            /**
+             * 버리고 간 옛 @아이디 — {@code null}이면 평생 1회 변경권이 아직 남아 있다는 뜻이다.
+             * 미니앱 설정 화면이 이 한 필드로 「아이디 바꾸기」 버튼을 켜고 끄고, 소진 표시에 옛 값을 적는다.
+             * <b>본인 응답에만</b> 싣는다 — 프로필·검색에 넣으면 "저 사람이 아이디를 바꿨구나"가 새어 나간다.
+             */
+            String previousLoginId,
             String profileCharacterCode,
             long remainingSeconds,
             long carriedDebtSeconds,
