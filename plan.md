@@ -1914,13 +1914,19 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
       삭제는 손으로 쓴 DELETE가 아니라 **앱 자신의 탈퇴 경로**(`POST /settings/delete`)로 했다 — `purge()`가
       FK 순서를 알고 `@Transactional`로 원자적이다. 잔여 세션 616건은 별도 정리(아래 `purge()` 결함 참조).
       로컬 시드 계정(`LocalTestAccountSeeder`, `testid@local.test`)은 그대로 — 하드코딩된 로컬 픽스처라 무해하다.
-- [ ] **`AccountService.purge()`가 안 지우는 FK 4개 — 탈퇴가 실패한다** (실측 2026-08-15) — users를 FK 참조하는
-      테이블 22개 중 `author_affection`·`garden_placement`·`garden_decoration_placement`·`push_subscriptions`가
-      `purge()`에 없고, **전 FK가 `NO ACTION`**(cascade 없음)이다. 운영 실측: `author_affection` 7행/2명,
-      `garden_placement` 2행/2명 → **27명 중 2명은 지금 탈퇴를 누르면 FK 제약 위반으로 실패**한다.
-      곁들여 `purge()`는 **세션을 안 지운다** — 계정이 사라져도 `SPRING_SESSION` 행이 남아 유령 세션이 된다
-      (testid 삭제 시 616건 잔존을 실측하고 수동 정리했다). `SessionInvalidator`가 이미 있으니 호출만 얹으면 된다.
-      회귀 가드 후보: `AccountDeletionIntegrationTest`가 **모든 FK 자식을 가진 사용자**로 탈퇴를 단언하게 확장.
+- [x] **`AccountService.purge()`가 안 지우는 FK 4개 — 탈퇴가 실패하던 것** (완료 ✅ 2026-08-15) — users를 FK 참조하는
+      테이블 중 `author_affection`·`garden_placement`·`garden_decoration_placement`·`push_subscriptions`가
+      `purge()`에 없고 **전 FK가 `NO ACTION`**(cascade 없음)이라, 운영 27명 중 **2명이 탈퇴 불가**였다
+      (`author_affection` 7행/2명, `garden_placement` 2행/2명 — 실측).
+      **처리를 둘로 갈랐다**: `author_affection`은 살아있는 기능이라 `purge()`에 삭제를 추가했고,
+      나머지 셋은 **자바 코드가 한 번도 참조하지 않는 죽은 테이블**이라 `V68`로 DROP했다(죽은 것을 위해
+      코드를 새로 쓰지 않는다 — 은퇴 경위는 마이그레이션 주석).
+      곁들여 `purge()`가 **세션을 안 지우던 것**도 고쳤다 — 계정이 사라져도 `SPRING_SESSION` 행이 남아
+      유령 세션이 됐다(testid 삭제 시 616건 잔존 실측·수동 정리). `SessionInvalidator` 호출을 얹었다.
+      **회귀 가드는 `FlywayMigrationTest`에 뒀다** — "users를 FK 참조하는 테이블 집합 == `purge()`가 지우는 집합"을
+      **양방향** 단언한다. 메인 스위트는 Hibernate가 엔티티 매핑에서 스키마를 만들어 **JPA 미매핑 테이블이 아예
+      존재하지 않으므로**, 이번 결함(Flyway 전용 테이블)을 잡을 수 있는 곳은 실 마이그레이션을 도는 그 테스트뿐이다.
+      ⏸ 남은 것: `decoration`(소품 카탈로그) 등 users FK가 없어 탈퇴를 막지 않는 은퇴 정원 테이블 — 좀비 정리에서 함께.
 - [ ] (후속) 무차별 대입 방어 보강 — 지수 백오프, 다중 인스턴스 대비 공유 저장소(현재 인메모리=인스턴스별), 앞단 WAF 레이트리밋
       (③ 갈래 — 트래픽/세션 쓰기 신호 오면. Redis는 예산 충돌, WAF는 인프라라 코드 가치 낮아 보류.)
 

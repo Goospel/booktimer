@@ -5,6 +5,8 @@ import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.follow.Follow;
 import com.booktimer.follow.FollowRepository;
+import com.booktimer.garden.AuthorAffection;
+import com.booktimer.garden.AuthorAffectionRepository;
 import com.booktimer.report.ReportReason;
 import com.booktimer.report.ReportService;
 import com.booktimer.session.ReadingGoalWaiver;
@@ -21,6 +23,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.session.FindByIndexNameSessionRepository;
+import org.springframework.session.Session;
+import org.springframework.session.SessionRepository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -61,6 +66,10 @@ class AccountDeletionIntegrationTest {
     private FollowRepository followRepository;
     @Autowired
     private PasswordEncoder passwordEncoder;
+    @Autowired
+    private AuthorAffectionRepository affectionRepository;
+    @Autowired
+    private FindByIndexNameSessionRepository<? extends Session> sessions;
 
     @Test
     @DisplayName("책을 가진 사용자가 탈퇴해도 FK 위반 없이 계정·책이 삭제된다")
@@ -168,5 +177,45 @@ class AccountDeletionIntegrationTest {
             accountService.deleteAccount(email, "rawpw1234");
             assertThat(userRepository.findByEmail(email)).isEmpty();
         }).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("작가에게 먹이를 준 사용자(author_affection)도 FK 위반 없이 탈퇴된다")
+    void deleteAccount_withAuthorAffection_succeeds() {
+        String email = "feeder@booktimer.com";
+        User user = userRepository.saveAndFlush(
+                User.of(email, passwordEncoder.encode("rawpw1234"), "사육사", "Asia/Seoul", Role.USER));
+        affectionRepository.saveAndFlush(AuthorAffection.create(user, "author-001"));
+
+        // author_affection.user_id FK가 정리되지 않으면 flush 시 제약 위반.
+        // 운영 실측(2026-08-15)에서 실제로 이 테이블 때문에 27명 중 2명이 탈퇴 불가였다.
+        assertThatCode(() -> {
+            accountService.deleteAccount(email, "rawpw1234");
+            assertThat(userRepository.findByEmail(email)).isEmpty();
+        }).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("탈퇴하면 그 사용자의 로그인 세션도 사라진다 — 계정 없는 유령 세션을 남기지 않는다")
+    void deleteAccount_removesLoginSessions() {
+        String email = "ghost@booktimer.com";
+        User user = User.of(email, passwordEncoder.encode("rawpw1234"), "유령", "Asia/Seoul", Role.USER);
+        user.assignLoginId("ghostid");
+        userRepository.saveAndFlush(user);
+        String sessionId = createSession(sessions, "ghostid");
+
+        accountService.deleteAccount(email, "rawpw1234");
+
+        // 세션은 users와 FK로 묶여 있지 않아 계정을 지워도 남는다 — 남으면 계정 없는 principal이
+        // 인증된 채로 떠다닌다(운영 실측: testid 삭제 후 616건 잔존).
+        assertThat(sessions.findById(sessionId)).isNull();
+    }
+
+    /** principal 이름으로 인덱싱된 세션을 실 저장소에 하나 만든다. */
+    private static <S extends Session> String createSession(SessionRepository<S> repo, String principalName) {
+        S session = repo.createSession();
+        session.setAttribute(FindByIndexNameSessionRepository.PRINCIPAL_NAME_INDEX_NAME, principalName);
+        repo.save(session);
+        return session.getId();
     }
 }
