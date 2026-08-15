@@ -1950,9 +1950,18 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
       은퇴 정원 테이블 8개 `V70` DROP(`plant` 4축·`building`·`publisher_building`·`decoration`·`user_discovered_plant`)
       ③ Lombok 의존 4줄(`src/` 전체 import 0) ④ `BookSearchPage.prevPage()/nextPage()`(호출처가 자기 테스트뿐)
       ⑤ `ReadingDebtService.debtEpoch()` ⑥ `FollowScopePopularity.hasAny()` ⑦ `AuthorCharacter.getDisplayOrder()`.
-      ⏸ **app.css는 별건** — 리뷰가 지목한 1061~1295 범위에 **살아있는 규칙이 섞여 있다**(`GardenDex`·`DexCell`이
-      `.garden-axis`·`.garden-grid`·`.plant-emoji`·`.plant-svg`·`.garden-progress`·`.garden-next`를 지금도 쓴다).
-      범위 삭제가 아니라 규칙 단위 수술이 필요하고, CSS 회귀는 단위테스트로 안 잡혀 **실 브라우저 도감 화면 확인**이 게이트다.
+      app.css는 아래 항목에서 별도로 처리했다.
+- [x] **은퇴 정원 CSS 251줄 제거** (완료 ✅ 2026-08-15) — 위 좀비 정리의 남은 한 축.
+      ⚠️ **직전 기록의 「리뷰가 틀렸다」는 판정은 내가 틀린 것이었다** — `GardenDex`·`DexCell`이 쓰는
+      `.garden-axis`·`.garden-grid`·`.plant-emoji`·`.garden-progress`·`.garden-next`는 전부 **1061 이전**에
+      정의돼 있어 삭제 범위 밖이다. "클래스가 쓰인다"와 "그 규칙이 지울 범위 안에 있다"를 혼동했다.
+      리뷰의 「1061~1295 삭제, 1183·1185만 유지」가 정확했다.
+      지운 것: 꾸미기·편집 UI 전체(`.my-garden-*`·`.garden-edit-btn`·`.garden-stage`·`.garden-view*`·
+      `.garden-phaser`·`.canvas-plant`·`.canvas-decor`·`.garden-palette`·`.palette-plant`·`.garden-toolbar`)
+      + `@keyframes garden-sway/rise` + `.garden-wide` 미디어쿼리(어디에도 안 쓰임) + `.garden-back`
+      + 고아가 된 `.village-edit-topbar` 블록 + 죽은 변수 `--garden-grass`·`--garden-fence`
+      (`--garden-sky`는 다른 곳에서 살아 있어 **유지** — 하마터면 같이 지울 뻔했다).
+      게이트: 실 브라우저(로컬 bootRun + 시드 계정)로 도감·서재·홈 확인, 콘솔 에러 0.
 - [ ] (후속) 무차별 대입 방어 보강 — 지수 백오프, 다중 인스턴스 대비 공유 저장소(현재 인메모리=인스턴스별), 앞단 WAF 레이트리밋
       (③ 갈래 — 트래픽/세션 쓰기 신호 오면. Redis는 예산 충돌, WAF는 인프라라 코드 가치 낮아 보류.)
 
