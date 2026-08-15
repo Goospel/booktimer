@@ -367,7 +367,7 @@ export function FollowListSheet({
           users={users}
           emptyMessage={
             type === 'following'
-              ? '아직 팔로우한 사람이 없어요. 위에서 아이디로 찾아 책방을 구경해 보세요.'
+              ? '아직 팔로우한 사람이 없어요. 「친구 찾기」로 아이디를 검색해 책방을 구경해 보세요.'
               : '아직 나를 팔로우한 사람이 없어요.'
           }
           onSelect={onSelect}

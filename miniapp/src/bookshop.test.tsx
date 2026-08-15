@@ -246,6 +246,17 @@ describe('팔로우 목록 시트 (FollowListSheet)', () => {
     expect(markup).not.toContain('아직 나를 팔로우한 사람이 없어요.');
   });
 
+  /**
+   * 지시어는 지금 화면에 있는 것을 가리켜야 한다 — 검색이 별도 시트로 빠지면서 옛 문구의 「위에서」가
+   * 가리키던 인라인 검색바는 이 시트에 덮여 보이지 않는다. 갈 곳을 이름으로 부른다.
+   */
+  it('찾는 길을 「친구 찾기」라는 이름으로 알려준다 — 시트에 덮인 「위에서」는 가리킬 대상이 없다', () => {
+    const markup = sheet('following', []);
+
+    expect(markup).toContain('「친구 찾기」');
+    expect(markup).not.toContain('위에서');
+  });
+
   it('사람이 있으면 목록 줄로 그린다 — 눌러서 그 책방으로 들어간다', () => {
     const markup = sheet('followers', [user('goospel')]);
 
