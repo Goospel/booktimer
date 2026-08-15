@@ -2,7 +2,15 @@ import { Button, Text, TextField } from '@toss/tds-mobile';
 import { useCallback, useEffect, useState } from 'react';
 
 import type { AuthorStories, FollowListType, StoryFeedResponse, UserRow } from '../api';
-import { createHandle, fetchFollowList, fetchStoryFeed, searchUsers, validateHandleFormat } from '../api';
+import {
+  changeHandle,
+  createHandle,
+  fetchFollowList,
+  fetchStoryFeed,
+  searchUsers,
+  validateHandleChange,
+  validateHandleFormat,
+} from '../api';
 import { useBackClose } from '../back';
 import { ErrorMessage, Loading, Screen, Sheet } from '../ui';
 import { Profile } from './Profile';
@@ -402,32 +410,44 @@ export function FollowListSheet({
 }
 
 /**
- * 핸들(@아이디) 만들기 시트 — 토스로 가입한 계정이 소셜에 발견되게 하는 유일한 경로.
+ * 핸들(@아이디) 만들기·바꾸기 시트 — 토스로 가입한 계정이 소셜에 발견되게 하는 유일한 경로이자,
+ * 웹에 로그인할 수 없는 그 계정이 아이디를 바꾸는 유일한 경로.
  *
  * <p>형식만 그 자리에서 검사해 즉시 피드백하고({@link validateHandleFormat}), <b>예약어·중복은 서버가
- * 판정</b>한다 — 서버가 준 평문 메시지를 그대로 띄운다. 핸들은 한 번 정하면 못 바꾸므로 만들기 전에
- * 그 사실을 알린다(되돌릴 수 없는 선택을 모르고 하지 않게).
+ * 판정</b>한다 — 서버가 준 평문 메시지를 그대로 띄운다. 변경은 평생 1번뿐이라 누르기 전에 그 사실을 알린다
+ * (되돌릴 수 없는 선택을 모르고 하지 않게).
+ *
+ * <p>변경을 별도 컴포넌트로 쪼개지 않은 이유: 입력·프리검증·에러 에코·제출 구조가 같아 60줄이 그대로
+ * 복제된다. 다른 것은 문구·프리검증 기준·호출할 API 넷뿐이라 {@code change} 하나로 가른다.
  */
 export function HandleSheet({
   onClose,
   onCreated,
   onFail,
+  change = null,
 }: {
   onClose: () => void;
   /** 서버가 정규화한(소문자) 핸들 — 클라이언트가 입력값을 그대로 믿지 않는다. */
   onCreated: (loginId: string) => void;
   onFail: (error: Error) => void;
+  /** 지금 핸들을 주면 「바꾸기」 시트가 된다(제목·경고·프리검증·API가 함께 전환). `null`이면 만들기. */
+  change?: string | null;
 }) {
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // 빈 입력에까지 빨간 문구를 띄우진 않는다 — 아직 아무것도 안 쳤는데 혼내는 꼴이 된다.
-  const formatError = value.trim() === '' ? null : validateHandleFormat(value);
+  const formatError =
+    value.trim() === ''
+      ? null
+      : change !== null
+        ? validateHandleChange(value, change)
+        : validateHandleFormat(value);
   const submit = () => {
     setBusy(true);
     setError(null);
-    createHandle(value.trim())
+    (change !== null ? changeHandle(value.trim()) : createHandle(value.trim()))
       .then((result) => onCreated(result.loginId))
       .catch((e: Error) => {
         if (e.name === 'UnauthorizedError') onFail(e);
@@ -437,9 +457,14 @@ export function HandleSheet({
   };
 
   return (
-    <Sheet title="@아이디 만들기" onClose={onClose}>
+    <Sheet title={change !== null ? '@아이디 바꾸기' : '@아이디 만들기'} onClose={onClose}>
       <Text typography="st12" color="grey600" style={{ display: 'block', marginBottom: 12 }}>
-        영문·숫자·밑줄(_) 3~20자. 대문자는 소문자로 저장돼요. <b>한 번 정하면 바꿀 수 없어요.</b>
+        영문·숫자·밑줄(_) 3~20자. 대문자는 소문자로 저장돼요.{' '}
+        {change !== null ? (
+          <b>아이디 변경은 평생 1번뿐이에요. 바꾸면 되돌릴 수 없고, 지금 아이디는 다시 쓸 수 없어요.</b>
+        ) : (
+          <b>바꾸는 건 평생 1번만 할 수 있어요.</b>
+        )}
       </Text>
 
       {/* 입력 하나짜리 form — 키보드 「완료」가 곧 제출이다(검색 입력과 같은 이유로 버튼은 밖에 둔다). */}
@@ -468,7 +493,7 @@ export function HandleSheet({
         disabled={value.trim() === '' || formatError !== null}
         onClick={submit}
       >
-        만들기
+        {change !== null ? '평생 1번, 바꾸기' : '만들기'}
       </Button>
     </Sheet>
   );

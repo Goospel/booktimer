@@ -52,6 +52,14 @@ const MY_NICKNAME = '목독서가';
  */
 let myHandle: string | null = MY_LOGIN_ID;
 
+/**
+ * 버리고 간 옛 핸들 = 아이디 변경권 소진 표식(`null`이면 평생 1번이 아직 남아 있다).
+ *
+ * <p>**소진 화면(버튼 없이 「이미 사용했어요 (이전: @…)」)을 브라우저로 보려면 초기값을 임시로
+ * `'oldname'`으로 바꾼다** — `myHandle=null` 스위치와 같은 방식. 기본값은 미소진(정상 사용 흐름).
+ */
+let myPreviousHandle: string | null = null;
+
 /** 내 표시 이름 — 닉네임 변경(`POST /api/miniapp/nickname`)으로 바뀌므로 상수가 아니라 모듈 상태다. */
 let myNickname: string = MY_NICKNAME;
 
@@ -431,6 +439,7 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     ...timerState(),
     nickname: myNickname,
     loginId: myHandle,
+    previousLoginId: myPreviousHandle,
     profileCharacterCode: null,
     wantToReadBooks: bookOptions('WANT_TO_READ'),
     graph: buildGraph(),
@@ -486,7 +495,7 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
   // 핸들 만들기 — 서버처럼 소문자로 정규화해 돌려준다(클라이언트가 입력값을 그대로 믿지 않는지 눈으로 확인).
   // 중복(409)도 실물처럼 재현한다: 목 사용자(nabi 등)의 아이디를 넣어 보면 시트가 서버 문구를 띄운다.
   ['POST', /^\/api\/miniapp\/handle$/, ({ body }) => {
-    if (myHandle !== null) throw new ApiError(409, '아이디는 한 번 정하면 바꿀 수 없어요.');
+    if (myHandle !== null) throw new ApiError(409, '이미 아이디가 있어요.');
     const normalized = String(body.loginId ?? '').trim().toLowerCase();
     if (!/^[a-z0-9_]{3,20}$/.test(normalized)) {
       throw new ApiError(400, '사용할 수 없는 아이디예요. 영문 소문자·숫자·밑줄(_) 3~20자로 지어 주세요.');
@@ -496,6 +505,26 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     }
     myHandle = normalized;
     // 내 행의 핸들도 같이 바꾼다 — 안 그러면 방금 만든 핸들로 「내 책방 보기」가 404가 난다(목만의 함정).
+    const me = users.find((u) => u.self);
+    if (me !== undefined) me.loginId = normalized;
+    return { loginId: normalized };
+  }],
+  // 아이디 바꾸기 — 서버 가드 순서를 그대로 재현한다(소진 → 형식 → 지금과 동일 → 중복).
+  // 소진 화면은 `myPreviousHandle` 초기값을 임시로 바꿔 본다(위 스위치 주석).
+  ['POST', /^\/api\/miniapp\/handle\/change$/, ({ body }) => {
+    if (myHandle === null || myPreviousHandle !== null) {
+      throw new ApiError(409, '아이디 변경은 평생 1번이에요. 이미 사용했어요.');
+    }
+    const normalized = String(body.loginId ?? '').trim().toLowerCase();
+    if (!/^[a-z0-9_]{3,20}$/.test(normalized) || normalized === myHandle) {
+      throw new ApiError(400, '사용할 수 없는 아이디예요. 영문 소문자·숫자·밑줄(_) 3~20자, 지금 아이디와 달라야 해요.');
+    }
+    if (users.some((u) => u.loginId === normalized)) {
+      throw new ApiError(409, '이미 사용 중인 아이디예요. 다른 아이디를 지어 주세요.');
+    }
+    myPreviousHandle = myHandle;
+    myHandle = normalized;
+    // 생성 핸들러와 같은 이유로 내 행도 동기화한다 — 안 그러면 「내 책방」이 옛 아이디로 404가 난다.
     const me = users.find((u) => u.self);
     if (me !== undefined) me.loginId = normalized;
     return { loginId: normalized };

@@ -10,6 +10,7 @@ import {
   addBook,
   blockUser,
   changeBookStatus,
+  changeHandle,
   createHandle,
   createStory,
   deleteAccount,
@@ -40,6 +41,7 @@ import {
   unblockUser,
   unfollow,
   updateNickname,
+  validateHandleChange,
   validateHandleFormat,
   validateNicknameFormat,
   waiveDebt,
@@ -676,6 +678,56 @@ describe('핸들 만들기 API (createHandle)', () => {
 
     expect(error.status).toBe(409);
     expect(error.message).toBe('이미 사용 중인 아이디예요. 다른 아이디를 지어 주세요.');
+  });
+});
+
+/**
+ * 아이디 바꾸기 프리검증 — 형식에 더해 **지금 아이디와 같은가**를 본다. 평생 1번뿐인 변경권을
+ * "같은 값"으로 헛되이 태우지 않도록, 서버 400을 왕복해 오기 전에 그 자리에서 막는 것이 목적이다.
+ */
+describe('아이디 바꾸기 프리검증 (validateHandleChange)', () => {
+  it('형식이 틀리면 만들기와 같은 형식 문구를 준다 — 규칙이 갈라지면 안내가 두 갈래로 거짓말한다', () => {
+    expect(validateHandleChange('ab', 'goospel')).toBe(validateHandleFormat('ab'));
+    expect(validateHandleChange('한글아이디', 'goospel')).toBe(validateHandleFormat('한글아이디'));
+  });
+
+  it('지금 아이디와 같으면 그 사실을 알린다 — 대소문자·앞뒤 공백만 다른 입력도 같은 값이다', () => {
+    expect(validateHandleChange('goospel', 'goospel')).toContain('지금 아이디와 같아요');
+    expect(validateHandleChange('  Goospel  ', 'goospel')).toContain('지금 아이디와 같아요');
+  });
+
+  it('형식이 맞고 지금과 다른 값이면 통과한다 — 예약어·중복은 서버가 유일한 권위다', () => {
+    expect(validateHandleChange('newname_1', 'goospel')).toBeNull();
+    expect(validateHandleChange('admin', 'goospel')).toBeNull(); // 예약어는 흉내내지 않는다(서버 400)
+  });
+});
+
+describe('아이디 바꾸기 API (changeHandle)', () => {
+  beforeEach(() => {
+    token.set('tok');
+  });
+
+  it('POST /api/miniapp/handle/change — 만들기와 다른 경로다(같은 경로면 서버가 생성으로 읽는다)', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '{"loginId":"newworm_2"}') as never);
+
+    const result = await changeHandle('NewWorm_2');
+
+    const [url, init] = lastRequest();
+    expect(url).toBe('http://localhost:8080/api/miniapp/handle/change');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ loginId: 'NewWorm_2' });
+    expect(result.loginId).toBe('newworm_2');
+  });
+
+  it('소진(409)은 서버 평문을 그대로 올린다 — 시트가 그 문구를 띄운다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(409, '아이디 변경은 평생 1번이에요. 이미 사용했어요.') as never,
+    );
+
+    const error = (await changeHandle('again').catch((e: unknown) => e)) as ApiError;
+
+    expect(error.status).toBe(409);
+    expect(error.message).toBe('아이디 변경은 평생 1번이에요. 이미 사용했어요.');
   });
 });
 

@@ -201,6 +201,9 @@ export function Settings({
   const [draft, setDraft] = useState(dashboard.nickname);
   const [handle, setHandle] = useState(dashboard.loginId);
   const [creatingHandle, setCreatingHandle] = useState(false);
+  const [changingHandle, setChangingHandle] = useState(false);
+  /** 버리고 간 옛 아이디 = 변경권 소진 표식. `null`이면 아직 1번이 남아 있다(서버 응답이 유일한 출처). */
+  const [prevHandle, setPrevHandle] = useState(dashboard.previousLoginId ?? null);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [quitting, setQuitting] = useState(false);
   const [quitBusy, setQuitBusy] = useState(false);
@@ -316,9 +319,26 @@ export function Settings({
             <Text typography="st11" style={{ display: 'block' }}>
               @{handle}
             </Text>
-            <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 4 }}>
-              아이디는 한 번 정하면 바꿀 수 없어요.
-            </Text>
+            {prevHandle === null ? (
+              <>
+                <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 4 }}>
+                  아이디는 평생 1번만 바꿀 수 있어요.
+                </Text>
+                <Button
+                  display="block"
+                  variant="weak"
+                  style={{ marginTop: 12 }}
+                  onClick={() => setChangingHandle(true)}
+                >
+                  아이디 바꾸기
+                </Button>
+              </>
+            ) : (
+              // 소진 — 버튼을 지우는 것으로 끝내지 않고 옛 아이디를 함께 적는다(본인만 보는 응답이다).
+              <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 4 }}>
+                아이디 변경을 이미 사용했어요. (이전: @{prevHandle})
+              </Text>
+            )}
           </>
         )}
       </section>
@@ -375,6 +395,20 @@ export function Settings({
             setHandle(loginId); // 서버가 정규화한 값 — 이 화면이 그 자리에서 @표시로 바뀐다
             setCreatingHandle(false);
             onProfileChanged(); // 대시보드 재조회로 진실을 서버와 맞춘다
+          }}
+          onFail={fail}
+        />
+      )}
+
+      {changingHandle && handle !== null && (
+        <HandleSheet
+          change={handle}
+          onClose={() => setChangingHandle(false)}
+          onCreated={(loginId) => {
+            setPrevHandle(handle); // 방금 버린 아이디 — 섹션이 즉시 소진 표시로 바뀐다
+            setHandle(loginId);
+            setChangingHandle(false);
+            onProfileChanged();
           }}
           onFail={fail}
         />

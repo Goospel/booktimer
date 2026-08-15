@@ -195,3 +195,24 @@ describe('dev-mock 성향 관문', () => {
     await expect(mockRequest('/api/personality/ad-refresh', { method: 'POST' })).rejects.toMatchObject({ status: 429 });
   });
 });
+
+/**
+ * 아이디 바꾸기 — 목이 소진 상태까지 재현해야 「이미 사용했어요」 화면을 브라우저로 볼 수 있다.
+ * 모듈 상태를 영구히 바꾸므로(새로고침이 초기화) 이 파일 맨 끝에 둔다.
+ */
+describe('dev-mock 아이디 바꾸기', () => {
+  it('바꾸면 대시보드가 새 아이디와 옛 아이디를 함께 주고, 두 번째는 소진 409다', async () => {
+    const before = await mockRequest<DashboardResponse>('/api/dashboard', {});
+    expect(before.previousLoginId).toBeNull(); // 기본 픽스처는 미소진 — 버튼이 뜨는 상태
+
+    await mockRequest('/api/miniapp/handle/change', { body: { loginId: 'NewName_1' } });
+
+    const after = await mockRequest<DashboardResponse>('/api/dashboard', {});
+    expect(after.loginId).toBe('newname_1'); // 서버처럼 소문자로 정규화한다
+    expect(after.previousLoginId).toBe(before.loginId);
+
+    await expect(
+      mockRequest('/api/miniapp/handle/change', { body: { loginId: 'againagain' } }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+});

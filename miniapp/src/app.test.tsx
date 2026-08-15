@@ -27,6 +27,7 @@ beforeEach(stubLocalStorage); // 홈 탭이 렌더 중에 알림 동의 캐시�
 const dashboard: DashboardResponse = {
   nickname: '구스펠',
   loginId: 'goospel',
+  previousLoginId: null,
   profileCharacterCode: null,
   remainingSeconds: 900,
   carriedDebtSeconds: 0,
