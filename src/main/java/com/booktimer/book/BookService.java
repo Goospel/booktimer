@@ -207,16 +207,27 @@ public class BookService {
     /**
      * 내 책의 "구매" 클릭을 집계하고 이동할 제휴 구매링크를 돌려준다.
      *
-     * <p>소유권을 강제한다(IDOR 방지) — 남의 책이면 거부. 구매링크가 없는 책(수동 등록 등)은
-     * 갈 곳이 없으므로 집계하지 않고 null을 돌려준다(호출자는 책장으로 돌려보낸다).
+     * <p>소유권을 강제한다(IDOR 방지) — 남의 책이면 거부. 구매링크가 없는 책(수동 등록 등)이나
+     * 알라딘이 아닌 링크는 갈 곳이 없으므로 집계하지 않고 null을 돌려준다(호출자는 책장으로 돌려보낸다).
      *
-     * @return 이동할 구매링크. 링크가 없으면 null.
+     * @return 이동할 구매링크. 링크가 없거나 신뢰할 수 없으면 null({@link #purchaseClickThrough}).
      * @throws IllegalArgumentException 내 책이 아니거나 존재하지 않는 경우
      */
     public String recordPurchaseClick(User user, Long bookId) {
-        Book book = ownedBook(user, bookId);
+        return purchaseClickThrough(ownedBook(user, bookId));
+    }
+
+    /**
+     * 구매 클릭의 공통 꼬리 — <b>신뢰할 수 있는 알라딘 링크일 때만</b> 집계하고 그 링크를 돌려준다.
+     *
+     * <p>{@code purchase_link}는 사용자 입력이고({@code POST /api/books}) 이 반환값이 그대로
+     * {@code "redirect:"}에 실리므로, 여기가 <b>오픈 리다이렉트를 막는 유일한 관문</b>이다({@link AladinLink}).
+     * 입력 시점이 아니라 출구에서 막는 이유: 이미 저장된 행까지 마이그레이션 없이 즉시 중화된다.
+     * 갈 곳이 없으면 집계도 하지 않는다 — 링크 없는 책과 같은 취급이다.
+     */
+    private String purchaseClickThrough(Book book) {
         String link = book.getPurchaseLink();
-        if (link == null || link.isBlank()) {
+        if (!AladinLink.isTrusted(link)) {
             return null;
         }
         book.recordPurchaseClick();
@@ -240,20 +251,17 @@ public class BookService {
      * 수수료를 정산하는 보상 모델을 들이면 그때 viewer/owner 귀속을 분리해야 한다(클릭이 곧 돈이 되므로).
      * 현 시점엔 이 카운트를 <b>읽는 소비처가 아직 없다</b>(write-only로 적립만) — 결정의 실효 위험이 낮은 이유.
      *
-     * @return 이동할 구매링크. 비공개·존재하지 않음·링크 없음이면 null.
+     * <p><b>오픈 리다이렉트 주의</b>: 이 경로는 소유자가 아닌 사람이 클릭한다 — 공개 책 하나로 임의 사이트에
+     * 착지시킬 수 있으므로 반환 전에 링크 신뢰성을 반드시 본다({@link #purchaseClickThrough}).
+     *
+     * @return 이동할 구매링크. 비공개·존재하지 않음·링크 없음·알라딘이 아닌 링크면 null.
      */
     public String recordPublicPurchaseClick(Long bookId) {
         Book book = bookRepository.findById(bookId).orElse(null);
         if (book == null || !book.isPublic()) {
             return null; // 없거나 비공개 — 존재/링크 누설 없이 거부
         }
-        String link = book.getPurchaseLink();
-        if (link == null || link.isBlank()) {
-            return null;
-        }
-        book.recordPurchaseClick();
-        bookRepository.save(book);
-        return link;
+        return purchaseClickThrough(book);
     }
 
     /**

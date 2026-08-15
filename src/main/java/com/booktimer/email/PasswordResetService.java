@@ -1,5 +1,6 @@
 package com.booktimer.email;
 
+import com.booktimer.security.SessionInvalidator;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,8 +20,10 @@ import java.util.Optional;
  * 발급해 재설정 링크({@code /password/reset?token=})를 메일로 보낸다. 소셜 계정은 재설정할 비밀번호가 없어
  * 보내지 않고, 부재 계정도 보내지 않는다.
  *
- * <p><b>교체({@link #reset})</b>: 링크의 토큰을 소비해 유효하면 새 비밀번호를 해싱해 교체·저장한다. 토큰이
- * 무효/만료/이미 사용/type 불일치면 아무 것도 바꾸지 않는다(일회용 — {@link EmailTokenService}).
+ * <p><b>교체({@link #reset})</b>: 링크의 토큰을 소비해 유효하면 새 비밀번호를 해싱해 교체·저장하고,
+ * <b>그 사용자의 세션을 전부 끊는다</b>({@link SessionInvalidator}) — 비번이 샜다고 보고 재설정하는 사람에게
+ * 정작 필요한 건 옛 비번으로 이미 들어와 있는 세션의 축출이다. 토큰이 무효/만료/이미 사용/type 불일치면
+ * 아무 것도 바꾸지 않는다(일회용 — {@link EmailTokenService}).
  */
 @Service
 public class PasswordResetService {
@@ -29,17 +32,20 @@ public class PasswordResetService {
     private final EmailTokenService tokenService;
     private final EmailDispatcher emailDispatcher;
     private final PasswordEncoder passwordEncoder;
+    private final SessionInvalidator sessionInvalidator;
     private final String baseUrl;
 
     public PasswordResetService(UserRepository userRepository,
                                 EmailTokenService tokenService,
                                 EmailDispatcher emailDispatcher,
                                 PasswordEncoder passwordEncoder,
+                                SessionInvalidator sessionInvalidator,
                                 @Value("${booktimer.base-url:http://localhost:8080}") String baseUrl) {
         this.userRepository = userRepository;
         this.tokenService = tokenService;
         this.emailDispatcher = emailDispatcher;
         this.passwordEncoder = passwordEncoder;
+        this.sessionInvalidator = sessionInvalidator;
         this.baseUrl = baseUrl;
     }
 
@@ -74,6 +80,9 @@ public class PasswordResetService {
         User user = consumed.get();
         user.changePassword(passwordEncoder.encode(newRawPassword));
         userRepository.save(user);
+        // 비번을 잊어 재설정하는 사람에게 가장 필요한 효과가 이것이다 — 옛 비번으로 이미 들어와 있는 세션 축출.
+        // 이 흐름은 비로그인(메일 링크)이라 남길 "내 창"이 없다.
+        sessionInvalidator.invalidate(user, null);
         return true;
     }
 

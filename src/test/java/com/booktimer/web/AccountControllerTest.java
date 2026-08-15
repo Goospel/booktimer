@@ -9,6 +9,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.session.FindByIndexNameSessionRepository;
+import org.springframework.session.Session;
+import org.springframework.session.SessionRepository;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,6 +53,8 @@ class AccountControllerTest {
     private PasswordEncoder passwordEncoder;
     @Autowired
     private Clock clock;
+    @Autowired
+    private FindByIndexNameSessionRepository<? extends Session> sessions;
 
     private LocalDate today() {
         return LocalDate.ofInstant(clock.instant(), ZoneId.of(SEOUL));
@@ -98,6 +103,49 @@ class AccountControllerTest {
 
         String hash = userRepository.findByEmail("pwbad@booktimer.com").orElseThrow().getPasswordHash();
         assertThat(passwordEncoder.matches("oldpw1234", hash)).isTrue(); // 그대로
+    }
+
+    @Test
+    @DisplayName("POST /settings/password: 성공하면 그 사용자의 다른 세션을 끊는다 — 옛 비번으로 들어온 세션이 살아남지 않게")
+    void changePassword_valid_killsOtherSessions() throws Exception {
+        register("pwsess@booktimer.com");
+        String elsewhere = newSession("pwsess@booktimer.com");
+
+        mockMvc.perform(post("/settings/password").with(user("pwsess@booktimer.com")).with(csrf())
+                        .param("currentPassword", "oldpw1234")
+                        .param("newPassword", "newpw5678")
+                        .param("confirmPassword", "newpw5678"))
+                .andExpect(status().is3xxRedirection());
+
+        assertThat(sessions.findById(elsewhere)).isNull();
+    }
+
+    @Test
+    @DisplayName("POST /settings/password: 현재 비밀번호가 틀리면 세션을 끊지 않는다 — 실패한 시도가 로그아웃을 일으키면 안 된다")
+    void changePassword_wrongCurrent_keepsSessions() throws Exception {
+        register("pwkeep@booktimer.com");
+        String elsewhere = newSession("pwkeep@booktimer.com");
+
+        mockMvc.perform(post("/settings/password").with(user("pwkeep@booktimer.com")).with(csrf())
+                        .param("currentPassword", "WRONGpw")
+                        .param("newPassword", "newpw5678")
+                        .param("confirmPassword", "newpw5678"))
+                .andExpect(status().is3xxRedirection());
+
+        assertThat(sessions.findById(elsewhere)).isNotNull();
+    }
+
+    /** principal 이름으로 인덱싱된 세션을 실 저장소에 하나 만든다(세션 강제 만료 검증용). */
+    private String newSession(String principalName) {
+        return create(sessions, principalName);
+    }
+
+    // 와일드카드를 타입변수로 캡처해야 save(S)가 컴파일된다.
+    private static <S extends Session> String create(SessionRepository<S> repo, String principalName) {
+        S session = repo.createSession();
+        session.setAttribute(FindByIndexNameSessionRepository.PRINCIPAL_NAME_INDEX_NAME, principalName);
+        repo.save(session);
+        return session.getId();
     }
 
     @Test
