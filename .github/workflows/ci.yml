@@ -12,6 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # forwarded 헤더 신뢰 경계. 앱 테스트로는 원리상 못 잡는다(경계가 Caddy에 있다) —
+      # 여기가 뚫리면 로그인 IP 잠금이 통째로 무력화되므로 PR 게이트에 둔다. 러너에 Docker 내장.
+      - name: Verify Caddy forwarded-header trust boundary
+        run: bash deploy/tests/test-caddy-forwarded.sh
       - uses: actions/setup-node@v6
         with:
           node-version: '20'

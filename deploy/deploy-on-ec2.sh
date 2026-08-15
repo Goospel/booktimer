@@ -3,8 +3,10 @@
 #
 # GitHub Actions가 SSM Send-Command로 EC2에서 이 스크립트를 실행한다.
 # 앞단 Caddy가 app-blue·app-green 두 upstream을 active health check로 지켜보므로,
-# **이 스크립트는 Caddy 설정을 건드리지 않는다** — 새 쪽이 healthy가 되면 Caddy가 알아서 붙이고,
-# 옛 쪽이 사라지면 알아서 뗀다. 그래서 하는 일은 "반대 색을 띄우고 → 확인되면 옛 색을 지운다" 뿐이다.
+# **blue-green 전환 자체는 Caddy 설정을 건드릴 필요가 없다** — 새 쪽이 healthy가 되면 Caddy가
+# 알아서 붙이고, 옛 쪽이 사라지면 알아서 뗀다. 그래서 본체는 "반대 색을 띄우고 → 확인되면 옛 색을 지운다" 뿐이다.
+# 다만 **Caddyfile 자체가 바뀐 배포**는 다르다 — 워크플로가 파일을 S3로 내려주지만 Caddy는 그걸
+# 스스로 다시 읽지 않으므로, 2.5)에서 reload를 쳐 준다(안 그러면 프록시 설정 변경이 조용히 무반영).
 #
 # 실패 원칙: 새 컨테이너가 헬스체크를 통과하지 못하면 **옛 컨테이너를 절대 건드리지 않고** 종료한다.
 # (옛 것을 먼저 내리면 배포 실패 = 서비스 전면 중단이 된다.)
@@ -54,6 +56,19 @@ if [ "$DRYRUN" != 1 ]; then
         | docker login --username AWS --password-stdin "$registry"
 fi
 dc pull "$NEW"
+
+# ── 2.5) Caddyfile 반영 ──
+# 워크플로의 S3 sync가 /opt/booktimer/Caddyfile을 갱신하지만 **Caddy는 파일을 다시 읽지 않는다**
+# (컨테이너에 :ro로 마운트돼 있을 뿐, 감시하지 않는다). reload를 안 치면 프록시 설정 변경이
+# 조용히 무반영으로 남는다 — 배포는 성공으로 끝나는데 바뀐 건 없는 무성 실패다.
+# 무중단이다(실측: active health check가 붙은 상태에서 reload 2회 × 부하 400건, 실패 0건).
+# 설정이 잘못되면 Caddy가 **옛 설정을 유지한 채** 논제로로 끝나므로, 앱 전환 전인 여기서 멈추는 게 맞다.
+if running_services | grep -qx caddy; then
+    echo "[deploy] Caddyfile 반영 (caddy reload)"
+    dc exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+else
+    echo "[deploy] caddy 미실행 — reload 생략(콜드 스타트: bootstrap-ec2.sh가 새 설정으로 띄운다)"
+fi
 
 # ── 3) 새 컨테이너 기동 (옛 컨테이너는 계속 트래픽을 받는 중) ──
 dc up -d "$NEW"

@@ -64,6 +64,18 @@ assert_not  "  KEEPS old blue (not stopped)"    "$out" "stop -t 30 app-blue"
 assert_not  "  KEEPS old blue (not removed)"    "$out" "rm -f app-blue"
 assert_not  "  no image prune on failure"       "$out" "image prune"
 
+# ── Case 5: Caddyfile 반영 — Caddy는 파일을 스스로 다시 읽지 않으므로 reload를 쳐야 한다 ──
+# 이게 빠지면 프록시 설정 변경(예: forwarded 헤더 신뢰 경계)이 배포 성공 뒤에도 무반영으로 남는다.
+r="$(run "app-blue caddy" ok)"; rc="${r%%$'\n'*}"; out="${r#*$'\n'}"
+assert_exit "caddy running + healthy" "$rc" "0"
+assert_has  "  reloads Caddy config"  "$out" "exec -T caddy caddy reload"
+# 앱 전환 전에 쳐야 한다 — 설정이 잘못되면 앱을 건드리기 전에 멈추는 게 맞다.
+assert_has  "  reloads before app switch" "$(printf '%s' "$out" | grep -oE 'caddy reload|up -d app-' | head -1)" "caddy reload"
+
+# 콜드 스타트(caddy 미실행)에는 exec가 실패하므로 건너뛴다.
+r="$(run "app-blue" ok)"; out="${r#*$'\n'}"
+assert_not  "  skips reload when caddy is down" "$out" "caddy reload"
+
 echo
 if [ "$FAILED" = 0 ]; then echo "ALL PASS"; else echo "SOME FAILED"; fi
 exit "$FAILED"
