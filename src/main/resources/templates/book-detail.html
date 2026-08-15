@@ -131,7 +131,7 @@
 
 <!-- 일자별 독서 기록: 한 번에 한 달만 보이고 ◀(과거)/▶(최신)로 이동. 월 섹션은 최신이 인덱스 0(서버가 최신만 렌더).
      JS가 없어도 최신 달은 보이는 폴백. 외부 의존(Alpine/htmx) 없이 바닐라로 hidden만 토글한다(history 화면과 동일). -->
-<script>
+<script th:attr="nonce=${cspNonce}">
   (function () {
     var sections = Array.prototype.slice.call(document.querySelectorAll('.month-section'));
     if (sections.length < 1) return;

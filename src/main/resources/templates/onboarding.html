@@ -58,6 +58,6 @@
         </form>
     </section>
 </div>
-<script type="module" th:src="@{/onboarding/onboarding.js}"></script>
+<script type="module" th:attr="nonce=${cspNonce}" th:src="@{/onboarding/onboarding.js}"></script>
 </body>
 </html>

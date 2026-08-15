@@ -10,7 +10,9 @@
 
 <!-- head용: 광고 켜진 페이지에서만 로더를 1회 로드 -->
 <th:block th:fragment="loader" th:if="${ads != null and ads.enabled}">
-    <script async crossorigin="anonymous"
+    <!-- nonce 필수: CSP가 strict-dynamic이라 호스트 허용목록이 무시된다. 이 로더가 nonce를 받아야
+         AdSense가 런타임에 심는 크리에이티브 스크립트들까지 신뢰가 전파된다(그게 광고가 뜨는 조건). -->
+    <script async crossorigin="anonymous" th:attr="nonce=${cspNonce}"
             th:src="'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + ${ads.clientId}"></script>
 </th:block>
 
@@ -20,7 +22,7 @@
     <ins class="adsbygoogle" style="display:block"
          th:attr="data-ad-client=${ads.clientId},data-ad-slot=${ads.slot}"
          data-ad-format="auto" data-full-width-responsive="true"></ins>
-    <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+    <script th:attr="nonce=${cspNonce}">(adsbygoogle = window.adsbygoogle || []).push({});</script>
 </aside>
 
 </body>

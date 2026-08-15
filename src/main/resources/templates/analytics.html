@@ -8,8 +8,8 @@
 -->
 <head>
 <th:block th:fragment="gtag" th:if="${analytics != null and analytics.enabled}">
-    <script async th:src="'https://www.googletagmanager.com/gtag/js?id=' + ${analytics.gaId}"></script>
-    <script th:inline="javascript">
+    <script async th:attr="nonce=${cspNonce}" th:src="'https://www.googletagmanager.com/gtag/js?id=' + ${analytics.gaId}"></script>
+    <script th:inline="javascript" th:attr="nonce=${cspNonce}">
         window.dataLayer = window.dataLayer || [];
         function gtag(){dataLayer.push(arguments);}
         gtag('js', new Date());
