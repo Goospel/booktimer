@@ -27,7 +27,7 @@
 | 파일 | 역할 |
 |---|---|
 | `deploy/compose.prod.yaml` | 운영 스택 전체 (루트 `compose.yaml`은 로컬 개발용) |
-| `deploy/Caddyfile` | TLS·라우팅·301 |
+| `deploy/caddy/Caddyfile` | TLS·라우팅·301·forwarded 헤더 신뢰 경계 (테스트: `deploy/tests/test-caddy-forwarded.sh`). ⚠️ **디렉터리(`deploy/caddy/`)째 마운트한다** — 파일 하나를 마운트하면 배포의 rename 교체가 컨테이너에 반영되지 않아 설정 변경이 조용히 죽는다(T-167) |
 | `deploy/deploy-on-ec2.sh` | blue-green 전환 (테스트: `deploy/tests/test-deploy-bluegreen.sh`) |
 | `deploy/render-env.sh` | SSM → `.env`. **SSM 이름 ↔ 앱 환경변수 매핑의 단일 출처** |
 | `deploy/bootstrap-ec2.sh` | 최초 1회 셋업 (docker·스왑·로그로테이션·cron) |

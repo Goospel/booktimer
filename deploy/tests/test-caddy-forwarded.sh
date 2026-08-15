@@ -20,7 +20,8 @@
 #
 # 실행: 레포 루트에서 `bash deploy/tests/test-caddy-forwarded.sh` (Docker 필요)
 
-CADDYFILE="deploy/Caddyfile"
+CADDYFILE="deploy/caddy/Caddyfile"
+COMPOSE="deploy/compose.prod.yaml"
 IMG="caddy:2-alpine"
 NET="bt-fwdtest-net"
 UP="bt-fwdtest-upstream"
@@ -114,6 +115,16 @@ assert_not "X-Forwarded-Proto가 스푸핑되지 않는다" "$OUT" "XFP=[https]"
 # ⑤ 방어가 헤더를 통째로 지워버린 게 아니라 **진짜 값으로 대체**했는지 — 이게 없으면
 #    "reverse_proxy 자체가 깨져서 다 빈 값"인 상태가 위 단언들을 전부 통과한다.
 assert_has "X-Forwarded-For에 실제 클라이언트 IP가 실린다" "$OUT" "XFF=[172."
+
+# ⑥ 이 경계는 **운영 Caddy에 실제로 도달할 때만** 방어다. 파일 하나를 bind mount 하면 리눅스가
+#    기동 시점 inode에 고정하는데 배포의 `aws s3 sync`는 rename으로 교체해서, 컨테이너가 옛 설정을
+#    영원히 보고 `caddy reload`마저 성공해 버린다(T-167 — 실제로 이 함정을 밟아 첫 수정이 무효였다).
+#    디렉터리 마운트여야 한다. 위 5단언이 전부 통과해도 여기가 깨지면 운영엔 무반영이다.
+if grep -qE '^\s*-\s*\./caddy:/etc/caddy(:ro)?\s*$' "$COMPOSE"; then
+    echo "PASS: compose가 Caddyfile을 디렉터리로 마운트한다(파일 마운트면 배포가 무반영)"
+else
+    echo "FAIL: compose의 caddy 마운트가 디렉터리(./caddy:/etc/caddy)가 아니다 — T-167 재발"; FAILED=1
+fi
 
 echo
 if [ "$FAILED" = 0 ]; then echo "ALL PASS"; else echo "SOME FAILED"; fi
