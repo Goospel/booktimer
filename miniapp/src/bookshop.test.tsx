@@ -24,6 +24,7 @@ import {
   followCountsOpenable,
   needsBioToggle,
   newestEntry,
+  personalityActions,
   personalityErrorMessage,
   personalityNoticeText,
   runPersonalityRefresh,
@@ -933,6 +934,38 @@ describe('분석 실패 판정과 문구', () => {
   });
 });
 
+/**
+ * 한 줄에 무엇이 서는가 — 광고 버튼(전폭)과 보관함(오른쪽 끝 알약)이 서로 다른 물건처럼 흩어져
+ * 있던 것을 한 줄에 나란히 세운다(사용자 지적). 행의 유무와 칸 수가 한 곳에서 나와야 어긋나지 않는다.
+ */
+describe('성향 관문 손잡이 줄 (personalityActions)', () => {
+  const both = status({
+    hasSelected: true,
+    entries: [entry(1, '2026-08-16T10:00:00Z', true), entry(2, '2026-08-15T10:00:00Z')],
+  });
+
+  it('둘 다 자격이 되면 광고 → 보관함 순으로 두 칸', () => {
+    expect(personalityActions(true, both, 'g')).toEqual(['ad', 'archive']);
+  });
+
+  it('비교 대상이 1건이면 광고만 — 그 칸이 전폭을 가진다', () => {
+    expect(personalityActions(true, status({ hasSelected: true, entries: [entry(1, '2026-08-16T10:00:00Z', true)] }), 'g')).toEqual(['ad']);
+  });
+
+  it('오늘 총량을 다 썼으면 보관함만 남는다', () => {
+    expect(personalityActions(true, { ...both, adRefreshRemaining: 0 }, 'g')).toEqual(['archive']);
+  });
+
+  it('광고 그룹 ID가 없으면(config-gate) 광고 칸이 빠진다 — 목 모드가 이 경로다', () => {
+    expect(personalityActions(true, both, '')).toEqual(['archive']);
+  });
+
+  it('둘 다 아니면 빈 줄을 그리지 않는다 — 여백만 남는 유령 줄 방지', () => {
+    expect(personalityActions(true, status({ coldStart: true }), 'g')).toEqual([]);
+    expect(personalityActions(false, both, 'g')).toEqual([]); // 남의 책방
+  });
+});
+
 /** 술어가 실제로 마크업에 연결됐는지 — 순수 함수만 맞고 배선이 빠지면 화면엔 아무 일도 안 일어난다. */
 describe('내 책방의 성향 관문 렌더', () => {
   const me = (extra: Partial<ProfileResponse> = {}) => profile({ self: true, ...extra });
@@ -947,6 +980,24 @@ describe('내 책방의 성향 관문 렌더', () => {
     const markup = card(me(), [], null, { personalityStatus: status({ hasSelected: true }) });
 
     expect(markup).toContain('광고 보고 다시 분석하기');
+  });
+
+  /**
+   * 관문 손잡이 둘은 <b>한 줄에 나란히</b> — 광고 버튼이 전폭, 보관함이 그 아래 오른쪽 끝 알약이라
+   * 서로 다른 물건처럼 흩어져 있었다(사용자 지적). 둘 다 "성향을 다루는" 같은 층위의 동작이다.
+   */
+  it('광고와 보관함이 한 줄에 나란히 — 광고가 왼쪽이다', () => {
+    const markup = card(me(), [], null, {
+      personalityStatus: status({
+        hasSelected: true,
+        entries: [entry(1, '2026-08-16T10:00:00Z', true), entry(2, '2026-08-15T10:00:00Z')],
+      }),
+    });
+
+    const ad = markup.indexOf('광고 보고 다시 분석하기');
+    const archive = markup.indexOf('보관함에서 비교하기');
+    expect(ad).toBeGreaterThan(-1);
+    expect(archive).toBeGreaterThan(ad);
   });
 
   it('콜드스타트면 버튼 대신 안내만 — 보상 없는 광고 시청을 원천 차단한다', () => {
