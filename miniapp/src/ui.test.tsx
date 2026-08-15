@@ -170,6 +170,7 @@ function home(overrides: Partial<DashboardResponse>) {
   const dashboard: DashboardResponse = {
     nickname: '구스펠',
     loginId: 'goospel',
+    previousLoginId: null,
     profileCharacterCode: null,
     remainingSeconds: 900,
     carriedDebtSeconds: 0,

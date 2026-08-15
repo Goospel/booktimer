@@ -222,6 +222,11 @@ export interface TimerState {
 export interface DashboardResponse extends TimerState {
   nickname: string;
   loginId: string | null;
+  /**
+   * 버리고 간 옛 @아이디 — `null`이면 평생 1회 변경권이 아직 남아 있다. 설정 화면이 이 한 필드로
+   * 「아이디 바꾸기」 버튼을 켜고 끄고, 소진 표시에 옛 값을 적는다(옛 서버가 주는 `undefined`도 미소진).
+   */
+  previousLoginId: string | null;
   profileCharacterCode: string | null;
   wantToReadBooks: BookOption[];
   graph: ContributionGraph;
@@ -452,9 +457,31 @@ export function validateHandleFormat(raw: string): string | null {
     : '영문·숫자·밑줄(_) 3~20자로 지어 주세요.';
 }
 
+/**
+ * 아이디 바꾸기 프리검증 — 형식에 더해 <b>지금 아이디와 같은지</b>까지 본다(순수 함수).
+ *
+ * <p>변경은 평생 1번뿐이라 "같은 값"으로 왕복하는 것 자체가 손해다 — 서버 400을 기다리지 않고
+ * 그 자리에서 막는다. 예약어·중복은 여전히 서버가 유일한 권위다({@link validateHandleFormat}과 같은 이유).
+ *
+ * @param current 지금 쓰는 핸들(서버가 정규화해 준 소문자 값)
+ */
+export function validateHandleChange(raw: string, current: string): string | null {
+  const format = validateHandleFormat(raw);
+  if (format !== null) return format;
+  return raw.trim().toLowerCase() === current ? '지금 아이디와 같아요. 다른 아이디를 지어 주세요.' : null;
+}
+
 /** `POST /api/miniapp/handle` — 성공하면 서버가 정규화한 핸들. 400(형식·예약어)·409(중복·이미 있음)는 ApiError. */
 export const createHandle = (loginId: string): Promise<{ loginId: string }> =>
   request('/api/miniapp/handle', { body: { loginId } });
+
+/**
+ * `POST /api/miniapp/handle/change` — 아이디를 평생 1번 바꾼다. 성공하면 서버가 정규화한 새 핸들.
+ * 400(형식·예약어·지금과 동일)·409(소진·중복)는 ApiError의 평문 그대로 시트에 띄운다.
+ * 만들기와 <b>경로가 다르다</b> — 같은 경로면 서버가 생성 의미로 읽어 문구가 뭉개진다.
+ */
+export const changeHandle = (loginId: string): Promise<{ loginId: string }> =>
+  request('/api/miniapp/handle/change', { body: { loginId } });
 
 /** 서버 `User.NICKNAME_MAX_LENGTH`와 같은 값 — 갈라지면 프리검증이 조용히 거짓말한다(통과시켰는데 서버가 400). */
 export const NICKNAME_MAX_LENGTH = 30;

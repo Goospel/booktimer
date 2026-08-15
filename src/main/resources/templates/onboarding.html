@@ -36,7 +36,7 @@
                 <input type="text" id="loginId" maxlength="20" th:field="*{loginId}"
                        autocapitalize="none" autocomplete="username" placeholder="영문/숫자/_ 3~20자">
                 <!-- 불변 경고는 흐린 힌트가 아니라 앰버 경고 박스로 격상 — 되돌릴 수 없는 결정임을 분명히(발견 11). -->
-                <p class="warn-box">⚠️ <strong>한번 정하면 바꿀 수 없어요.</strong> 영소문자·숫자·언더스코어(_)만, 3~20자.</p>
+                <p class="warn-box">⚠️ <strong>바꾸는 건 평생 한 번뿐이에요.</strong> 영소문자·숫자·언더스코어(_)만, 3~20자.</p>
                 <span class="field-error" th:if="${#fields.hasErrors('loginId')}" th:errors="*{loginId}">아이디 오류</span>
             </div>
             <div class="field">

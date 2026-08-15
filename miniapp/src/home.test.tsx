@@ -73,6 +73,7 @@ function dashboard(overrides: Partial<DashboardResponse> = {}): DashboardRespons
   return {
     nickname: '구스펠',
     loginId: 'goospel',
+    previousLoginId: null,
     profileCharacterCode: null,
     remainingSeconds: 900,
     carriedDebtSeconds: 1800,

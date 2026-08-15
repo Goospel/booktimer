@@ -31,6 +31,7 @@ beforeEach(() => {
 const dashboard: DashboardResponse = {
   nickname: '구스펠',
   loginId: 'goospel',
+  previousLoginId: null,
   profileCharacterCode: null,
   remainingSeconds: 900,
   carriedDebtSeconds: 0,
@@ -76,8 +77,9 @@ describe('닉네임 섹션', () => {
 });
 
 /**
- * @아이디 섹션 — **null-state 경계**(N-055 계열). 핸들 없는 계정은 소셜 전 경로에서 안 보이므로
- * 「만들기」가 떠야 하고, 있는 계정에는 바꿀 수 없다는 사실만 알려야 한다(만들기 버튼이 또 뜨면 409를 부른다).
+ * @아이디 섹션 — **null-state 경계**(N-055 계열)에 **소진 경계**가 하나 더 붙는다. 핸들 없는 계정은
+ * 소셜 전 경로에서 안 보이므로 「만들기」가 떠야 하고, 핸들이 있으면 평생 1번뿐인 변경권이 남았는지가
+ * 화면을 가른다(`previousLoginId`가 그 유일한 출처 — 소진했는데 버튼이 또 뜨면 409를 부른다).
  */
 describe('@아이디 섹션', () => {
   it('핸들이 없으면 「아이디 만들기」를 띄우고 @표시는 하지 않는다', () => {
@@ -87,12 +89,23 @@ describe('@아이디 섹션', () => {
     expect(markup).not.toContain('@goospel');
   });
 
-  it('핸들이 있으면 @핸들과 불변 안내만 — 만들기 버튼은 사라진다', () => {
-    const markup = renderSettings({ loginId: 'goospel' });
+  it('변경권이 남았으면 @핸들 + 「평생 1번」 안내 + 바꾸기 버튼 — 만들기 버튼은 사라진다', () => {
+    const markup = renderSettings({ loginId: 'goospel', previousLoginId: null });
 
     expect(markup).toContain('@goospel');
-    expect(markup).toContain('한 번 정하면 바꿀 수 없어요');
+    expect(markup).toContain('평생 1번');
+    expect(markup).toContain('아이디 바꾸기');
     expect(markup).not.toContain('아이디 만들기');
+  });
+
+  it('이미 썼으면 옛 아이디와 함께 소진을 알린다 — 미소진에 있던 바꾸기 버튼이 사라진다', () => {
+    const markup = renderSettings({ loginId: 'goospel', previousLoginId: 'oldname' });
+
+    expect(markup).toContain('@goospel');
+    expect(markup).toContain('이미 사용했어요');
+    expect(markup).toContain('@oldname'); // 뭘로 시작했는지는 본인만 알 수 있어야 한다
+    // 위 미소진 케이스가 버튼 존재를 먼저 못 박았으므로, 이 부재 단언은 공허하지 않다(T-149).
+    expect(markup).not.toContain('아이디 바꾸기');
   });
 });
 

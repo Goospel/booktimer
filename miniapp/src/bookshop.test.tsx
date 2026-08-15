@@ -305,12 +305,12 @@ describe('친구 찾기 시트 (SearchSheet)', () => {
   });
 });
 
-/** 핸들 시트 — 불변 경고가 여기 없으면 사용자가 되돌릴 수 없는 선택을 모르고 한다. */
+/** 핸들 시트 — 경고가 여기 없으면 사용자가 평생 1번뿐인 선택을 모르고 한다. */
 describe('핸들 만들기 시트', () => {
   const sheet = () => render(<HandleSheet onClose={() => {}} onCreated={() => {}} onFail={() => {}} />);
 
-  it('한 번 정하면 못 바꾼다고 미리 알린다', () => {
-    expect(sheet()).toContain('바꿀 수 없어요');
+  it('평생 1번만 바꿀 수 있다고 미리 알린다', () => {
+    expect(sheet()).toContain('평생 1번');
   });
 
   it('입력과 만들기 버튼을 준다 — 시트 안에서 끝난다', () => {
@@ -318,6 +318,29 @@ describe('핸들 만들기 시트', () => {
 
     expect(markup).toContain('<input');
     expect(markup).toContain('만들기');
+  });
+});
+
+/**
+ * 핸들 바꾸기 시트 — 같은 컴포넌트의 변형(`change`에 지금 핸들을 주면 전환된다). 시트 열림 가지에
+ * 프롭으로 닿는 이유는 이 파일의 다른 시트들과 같다: 정적 렌더 하니스가 클릭을 못 잡는다(T-149).
+ */
+describe('핸들 바꾸기 시트', () => {
+  const sheet = () =>
+    render(<HandleSheet change="goospel" onClose={() => {}} onCreated={() => {}} onFail={() => {}} />);
+
+  it('만들기가 아니라 바꾸기라고 말한다 — 제목·버튼이 함께 전환된다', () => {
+    const markup = sheet();
+
+    expect(markup).toContain('@아이디 바꾸기');
+    expect(markup).toContain('평생 1번, 바꾸기');
+  });
+
+  it('되돌릴 수 없다는 것과 옛 아이디를 다시 못 쓴다는 것을 먼저 말한다', () => {
+    const markup = sheet();
+
+    expect(markup).toContain('되돌릴 수 없');
+    expect(markup).toContain('다시 쓸 수 없');
   });
 });
 
