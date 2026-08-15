@@ -302,4 +302,80 @@ class AccountServiceTest {
         verify(sessionRepository, never()).deleteByUser(any());
         verify(userRepository, never()).delete(any());
     }
+
+    // --- 아이디 평생 1회 변경 (previous_login_id로 옛 핸들 잠금) ---
+
+    private User userWithHandle(String loginId) {
+        User user = userWithHash();
+        user.assignLoginId(loginId);
+        return user;
+    }
+
+    @Test
+    @DisplayName("changeLoginId: 성공하면 새 아이디로 바뀌고 옛 아이디가 previous로 남은 채 저장된다")
+    void changeLoginId_success_savesTransition() {
+        User user = userWithHandle("oldhandle");
+        when(userRepository.existsByLoginId("newhandle")).thenReturn(false);
+        when(userRepository.existsByPreviousLoginId("newhandle")).thenReturn(false);
+
+        service.changeLoginId(user, "NewHandle"); // 정규화도 함께 확인
+
+        assertThat(user.getLoginId()).isEqualTo("newhandle");
+        assertThat(user.getPreviousLoginId()).isEqualTo("oldhandle");
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    @DisplayName("changeLoginId: 남이 현재 쓰는 아이디면 LoginIdAlreadyExistsException — 저장하지 않는다")
+    void changeLoginId_takenByCurrentHandle_throws() {
+        User user = userWithHandle("oldhandle");
+        when(userRepository.existsByLoginId("taken")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.changeLoginId(user, "taken"))
+                .isInstanceOf(LoginIdAlreadyExistsException.class);
+
+        assertThat(user.getLoginId()).isEqualTo("oldhandle");
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("changeLoginId: 남이 버린 옛 아이디(previous_login_id)도 막는다 — 예약의 본체(사칭 차단)")
+    void changeLoginId_takenByPreviousHandle_throws() {
+        User user = userWithHandle("oldhandle");
+        when(userRepository.existsByLoginId("abandoned")).thenReturn(false);
+        when(userRepository.existsByPreviousLoginId("abandoned")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.changeLoginId(user, "abandoned"))
+                .isInstanceOf(LoginIdAlreadyExistsException.class);
+
+        assertThat(user.getLoginId()).isEqualTo("oldhandle");
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("changeLoginId: 소진 계정은 중복 검사보다 먼저 소진(ISE)으로 끊긴다 — 가드 순서")
+    void changeLoginId_alreadyUsed_beatsDuplicateCheck() {
+        User user = userWithHandle("oldhandle");
+        user.changeLoginId("newhandle"); // 변경권 소진
+
+        // 입력값이 이미 쓰이는 아이디여도, 사용자에게는 "이미 사용 중"이 아니라 "평생 1번"이 나가야 한다.
+        assertThatThrownBy(() -> service.changeLoginId(user, "taken"))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(userRepository, never()).existsByLoginId(any());
+        verify(userRepository, never()).existsByPreviousLoginId(any());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("changeLoginId: 현재 아이디와 같으면 중복 검사 전에 IAE — 자기 자신이 '이미 사용 중'으로 오해석되지 않는다")
+    void changeLoginId_sameAsCurrent_beatsDuplicateCheck() {
+        User user = userWithHandle("oldhandle");
+
+        assertThatThrownBy(() -> service.changeLoginId(user, "OldHandle"))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(userRepository, never()).existsByLoginId(any());
+        verify(userRepository, never()).save(any());
+    }
 }

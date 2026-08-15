@@ -44,6 +44,20 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByLoginId(String loginId);
 
     /**
+     * 그 아이디를 누군가 <b>버리고 간 옛 핸들</b>로 예약하고 있는지(uk_users_previous_login_id, V68).
+     * 아이디 변경의 중복 검사는 {@code existsByLoginId}와 <b>둘 다</b> 봐야 한다 — 옛 핸들도 잠겨 있어야
+     * 그 핸들로 갈아타는 사칭이 막힌다.
+     */
+    boolean existsByPreviousLoginId(String previousLoginId);
+
+    /**
+     * 옛 login_id로 사용자 조회 — 아이디 변경 <b>전에 열린 세션</b>의 principal을 해석하는 브리지 전용이다
+     * ({@code CurrentUserService}). 로그인 경로는 이 조회를 쓰지 않는다 — 옛 아이디로 새로 로그인하는 것은
+     * 막혀야 하기 때문(크리덴셜은 즉시 새 아이디로 넘어간다).
+     */
+    Optional<User> findByPreviousLoginId(String previousLoginId);
+
+    /**
      * 친구 추천 후보 — ADMIN·본인·공개핸들(login_id) 미설정·차단(양방향) 제외, 무작위 순서로 Pageable 상한만큼.
      * 필터·상한·랜덤을 모두 DB에서 처리(메모리 findAll + 후보당 차단 COUNT N+1 제거).
      */
