@@ -192,7 +192,7 @@ export function Bookshop({
           error={error}
           onQueryChange={setQuery}
           onSearch={search}
-          // 닫으면서 여는 교체 경로 — `back.ts`의 selfPops 규칙이 죽은 back 탭을 남기지 않는다.
+          // 닫으면서 여는 교체 경로 — `back.ts`의 엔트리 물려주기(규칙 ③)가 히스토리 깊이를 보존한다(T-166).
           onSelect={(loginId) => {
             closeSearch();
             setOpen(loginId);
