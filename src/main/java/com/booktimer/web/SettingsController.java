@@ -3,6 +3,7 @@ package com.booktimer.web;
 import com.booktimer.garden.GardenService;
 import com.booktimer.garden.ProfileCharacterService;
 import com.booktimer.security.CurrentUserService;
+import com.booktimer.security.SessionInvalidator;
 import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.AccountDeletionConfirmationException;
@@ -14,6 +15,7 @@ import com.booktimer.user.User;
 import com.booktimer.user.UserSettingsService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
@@ -51,6 +53,7 @@ public class SettingsController {
     private final GardenService gardenService;
     private final ProfileCharacterService profileCharacterService;
     private final TossLinkCodeService linkCodeService;
+    private final SessionInvalidator sessionInvalidator;
 
     public SettingsController(CurrentUserService currentUserService,
                               ReadingTimerRepository timerRepository,
@@ -58,7 +61,8 @@ public class SettingsController {
                               AccountService accountService,
                               GardenService gardenService,
                               ProfileCharacterService profileCharacterService,
-                              TossLinkCodeService linkCodeService) {
+                              TossLinkCodeService linkCodeService,
+                              SessionInvalidator sessionInvalidator) {
         this.currentUserService = currentUserService;
         this.timerRepository = timerRepository;
         this.settingsService = settingsService;
@@ -66,6 +70,7 @@ public class SettingsController {
         this.gardenService = gardenService;
         this.profileCharacterService = profileCharacterService;
         this.linkCodeService = linkCodeService;
+        this.sessionInvalidator = sessionInvalidator;
     }
 
     /** 타임존 드롭다운 후보 — GET 폼과 POST 검증 실패 재렌더 모두에 자동으로 실린다. */
@@ -151,12 +156,17 @@ public class SettingsController {
     /**
      * 비밀번호 변경. 같은 설정 페이지에 여러 폼이 공존하므로 검증 실패는 필드 에러 대신
      * 플래시 메시지 + 리다이렉트(PRG)로 처리한다. 현재 비밀번호 확인은 {@link AccountService}가 담당.
+     *
+     * <p>성공하면 <b>이 창을 뺀 나머지 세션을 끊는다</b>({@link SessionInvalidator}) — 비번을 바꾸는 이유가
+     * 대개 "샜을지도 모른다"인데, 세션은 DB에 따로 살아 있어 해시만 바꿔서는 침입자가 안 쫓겨난다.
+     * 세션 id는 서비스 계층이 알 수 없어(웹 개념) 이 호출만 컨트롤러에 둔다.
      */
     @PostMapping("/settings/password")
     public String changePassword(@RequestParam String currentPassword,
                                  @RequestParam String newPassword,
                                  @RequestParam String confirmPassword,
-                                 Principal principal, RedirectAttributes redirectAttributes) {
+                                 Principal principal, HttpServletRequest request,
+                                 RedirectAttributes redirectAttributes) {
         if (newPassword == null || newPassword.length() < MIN_PASSWORD_LENGTH) {
             redirectAttributes.addFlashAttribute("error", "새 비밀번호는 " + MIN_PASSWORD_LENGTH + "자 이상이어야 합니다.");
             return "redirect:/settings";
@@ -165,13 +175,18 @@ public class SettingsController {
             redirectAttributes.addFlashAttribute("error", "새 비밀번호 확인이 일치하지 않습니다.");
             return "redirect:/settings";
         }
+        User user = currentUser(principal);
         try {
-            accountService.changePassword(currentUser(principal).getEmail(), currentPassword, newPassword);
+            accountService.changePassword(user.getEmail(), currentPassword, newPassword);
         } catch (InvalidPasswordException e) {
+            // 실패한 시도로는 아무 세션도 끊지 않는다(비번을 모르는 쪽이 남을 로그아웃시킬 수 없게).
             redirectAttributes.addFlashAttribute("error", "현재 비밀번호가 올바르지 않습니다.");
             return "redirect:/settings";
         }
-        redirectAttributes.addFlashAttribute("message", "비밀번호를 변경했습니다.");
+        // 지금 이 창은 남긴다 — 방금 현재 비번을 증명한 본인이고, 아래 플래시 메시지도 이 세션에 실린다.
+        HttpSession current = request.getSession(false);
+        sessionInvalidator.invalidate(user, current == null ? null : current.getId());
+        redirectAttributes.addFlashAttribute("message", "비밀번호를 변경했습니다. 다른 기기의 로그인은 해제됩니다.");
         return "redirect:/settings";
     }
 
