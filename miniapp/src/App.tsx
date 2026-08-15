@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DashboardResponse, TimerState } from './api';
 import { fetchDashboard, token } from './api';
 import { useBackClose } from './back';
+import { Bookshop } from './screens/Bookshop';
 import { Goal } from './screens/Goal';
 import { History } from './screens/History';
 import { Home } from './screens/Home';
@@ -11,7 +12,6 @@ import { Library } from './screens/Library';
 import { LinkAccount } from './screens/LinkAccount';
 import { LoginBridge } from './screens/LoginBridge';
 import { Settings } from './screens/Settings';
-import { Social } from './screens/Social';
 import { showInterstitialAd } from './toss';
 import { ErrorMessage, Loading, Screen } from './ui';
 
@@ -29,9 +29,11 @@ export const TABS = [
     icon: 'M12 6.5C9.6 4.9 6.9 4.2 4 4.2v14c2.9 0 5.6.7 8 2.3 2.4-1.6 5.1-2.3 8-2.3v-14c-2.9 0-5.6.7-8 2.3Zm0 0v14',
   },
   {
-    key: 'social',
-    label: '소셜',
-    icon: 'M9.5 11.5a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2ZM3 20.2c0-3.1 2.9-5.3 6.5-5.3s6.5 2.2 6.5 5.3M17 5a3.4 3.4 0 0 1 0 6.6M18.6 15.4c1.7.7 2.9 2 2.9 4.1',
+    // 사람 아이콘을 버리고 차양 달린 가게(storefront)로 — 이 탭의 정체성이 "소셜"이 아니라 "내 책방"이다.
+    // 지붕 물결 3칸 + 문. 서재(펼친 책)와 실루엣이 확실히 갈린다.
+    key: 'bookshop',
+    label: '책방',
+    icon: 'M4 10.5 5.2 4h13.6L20 10.5M4 10.5c0 1.4 1.2 2.5 2.7 2.5S9.3 11.9 9.3 10.5c0 1.4 1.2 2.5 2.7 2.5s2.7-1.1 2.7-2.5c0 1.4 1.2 2.5 2.7 2.5S20 11.9 20 10.5M5.5 13v7h13v-7M10 20v-4.5h4V20',
   },
   { key: 'history', label: '기록', icon: 'M4 20.5V12M9.3 20.5V5M14.7 20.5v-6M20 20.5V9' },
 ] as const;
@@ -304,7 +306,7 @@ export function MainTabs({
   onError: (error: Error) => void;
   /** 서재에서 책이 바뀌면 홈이 보는 대시보드도 같이 갱신해야 한다 — 안 그러면 캐러셀이 옛 목록 그대로다. */
   onShelfChanged: () => void;
-  /** 소셜에서 핸들(@아이디)을 만들면 대시보드의 loginId가 바뀐다 — 다시 받아야 다른 화면도 같은 값을 본다. */
+  /** 책방에서 핸들(@아이디)을 만들면 대시보드의 loginId가 바뀐다 — 다시 받아야 다른 화면도 같은 값을 본다. */
   onHandleCreated: () => void;
 }) {
   return (
@@ -323,8 +325,8 @@ export function MainTabs({
           />
         )}
         {tab === 'library' && <Library onError={onError} onShelfChanged={onShelfChanged} />}
-        {tab === 'social' && (
-          <Social myLoginId={dashboard.loginId} onHandleCreated={onHandleCreated} onError={onError} />
+        {tab === 'bookshop' && (
+          <Bookshop myLoginId={dashboard.loginId} onHandleCreated={onHandleCreated} onError={onError} />
         )}
         {tab === 'history' && <History graph={dashboard.graph} />}
       </div>
