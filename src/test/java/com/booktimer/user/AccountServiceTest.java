@@ -76,6 +76,10 @@ class AccountServiceTest {
     @Mock
     private TossLinkCodeRepository tossLinkCodeRepository;
     @Mock
+    private com.booktimer.garden.AuthorAffectionRepository affectionRepository;
+    @Mock
+    private com.booktimer.security.SessionInvalidator sessionInvalidator;
+    @Mock
     private PasswordEncoder passwordEncoder;
 
     @InjectMocks

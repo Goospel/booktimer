@@ -23,6 +23,12 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.TestPropertySource;
 
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -50,6 +56,9 @@ class FlywayMigrationTest {
 
     @Autowired
     Flyway flyway;
+
+    @Autowired
+    JdbcTemplate jdbcTemplate;
 
     @Autowired
     UserRepository userRepository;
@@ -267,5 +276,49 @@ class FlywayMigrationTest {
         assertThat(saved.getId()).isNotNull();
         assertThat(saved.getLoginId()).isEqualTo("realhandle");
         assertThat(saved.isOnboarded()).isTrue();
+    }
+
+    /**
+     * {@code AccountService.purge()}가 정리하는 테이블 목록 — users를 FK 참조하는 <b>모든</b> 테이블이어야 한다.
+     *
+     * <p>순서는 purge()의 삭제 순서와 무관하다(여기선 집합만 본다). 항목을 늘릴 땐 purge()에도 같이 넣어야 한다.
+     */
+    private static final Set<String> TABLES_PURGE_CLEARS = Set.of(
+            "API_TOKEN", "AUTHOR_AFFECTION", "BLOCK", "BOOK", "EMAIL_TOKEN", "FEEDBACK", "FOLLOW",
+            "READING_GOAL_CHANGE", "READING_GOAL_WAIVER", "READING_PERSONALITY", "READING_SESSION",
+            "READING_TIMER", "REPORT", "STORY", "STORY_VIEW", "TOSS_LINK_CODE");
+
+    /**
+     * <b>users를 FK 참조하는 테이블 집합 == purge()가 지우는 집합</b>을 못 박는다.
+     *
+     * <p>왜 여기(마이그레이션 테스트)인가: 메인 스위트는 Hibernate가 <b>엔티티 매핑에서</b> 스키마를 만들어서
+     * <b>JPA에 매핑되지 않은 테이블은 아예 존재하지 않는다</b>. 그런데 이 결함이 생긴 경로가 정확히 그것이었다 —
+     * {@code garden_placement}·{@code garden_decoration_placement}·{@code push_subscriptions}는 Flyway에만
+     * 있고 자바 코드가 한 번도 참조하지 않는 테이블인데, FK({@code NO ACTION})만 살아서 <b>탈퇴를 막고
+     * 있었다</b>(운영 실측 2026-08-15: 27명 중 2명이 탈퇴 불가). 실제 마이그레이션 스키마를 보는 이 테스트만이
+     * 그 부류를 잡는다.
+     *
+     * <p>그래서 이 단언은 <b>양방향</b>이다: FK가 새로 생겼는데 purge()에 없으면(=탈퇴가 깨진다) 실패하고,
+     * 반대로 목록에만 있고 스키마에 없으면(=죽은 항목) 그것도 실패한다.
+     */
+    @Test
+    void everyTableWithForeignKeyToUsersIsClearedByPurge() {
+        Set<String> referencing = new HashSet<>(jdbcTemplate.queryForList("""
+                SELECT DISTINCT fk.TABLE_NAME
+                FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
+                JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE fk
+                  ON fk.CONSTRAINT_NAME = rc.CONSTRAINT_NAME
+                 AND fk.CONSTRAINT_SCHEMA = rc.CONSTRAINT_SCHEMA
+                JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE pk
+                  ON pk.CONSTRAINT_NAME = rc.UNIQUE_CONSTRAINT_NAME
+                 AND pk.CONSTRAINT_SCHEMA = rc.UNIQUE_CONSTRAINT_SCHEMA
+                WHERE UPPER(pk.TABLE_NAME) = 'USERS'
+                """, String.class)).stream().map(t -> t.toUpperCase(Locale.ROOT))
+                .collect(Collectors.toCollection(HashSet::new));
+
+        assertThat(referencing)
+                .as("users를 FK 참조하는 테이블은 전부 AccountService.purge()가 지워야 한다 "
+                        + "(빠지면 그 자식을 가진 사용자의 탈퇴가 FK 위반으로 실패한다)")
+                .containsExactlyInAnyOrderElementsOf(TABLES_PURGE_CLEARS);
     }
 }
