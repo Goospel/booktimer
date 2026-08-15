@@ -101,6 +101,9 @@ public class SettingsController {
         model.addAttribute("loginId", user.getLoginId());
         // 아이디 변경은 평생 1회 — 소진했으면 폼 대신 "이미 사용했어요" 정적 표기를 낸다.
         model.addAttribute("loginIdChangeUsed", user.getPreviousLoginId() != null);
+        // 소셜 탈퇴 재확인에 입력할 값 — 아직 핸들이 없으면(온보딩 전) 이메일로 확인한다(AccountService와 같은 규칙).
+        model.addAttribute("deleteConfirmValue",
+                user.getLoginId() != null ? "@" + user.getLoginId() : user.getEmail());
         // 미검증이면 인증 유도 배너를 띄운다(정책 ③). 재발송 버튼은 POST /verify-email/resend로 이 화면에 결과를 남긴다.
         model.addAttribute("emailVerified", user.isEmailVerified());
         model.addAttribute("marketingEmailConsent", user.isMarketingEmailConsent());
