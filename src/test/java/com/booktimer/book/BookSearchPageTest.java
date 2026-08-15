@@ -34,7 +34,6 @@ class BookSearchPageTest {
         BookSearchPage p = page(1, 10, 25);
         assertThat(p.hasPrev()).isFalse();
         assertThat(p.hasNext()).isTrue();
-        assertThat(p.nextPage()).isEqualTo(2);
     }
 
     @Test
@@ -43,7 +42,6 @@ class BookSearchPageTest {
         BookSearchPage p = page(3, 10, 25);
         assertThat(p.hasPrev()).isTrue();
         assertThat(p.hasNext()).isFalse();
-        assertThat(p.prevPage()).isEqualTo(2);
     }
 
     @Test

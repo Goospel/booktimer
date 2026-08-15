@@ -88,5 +88,6 @@ public class AuthorCharacter {
     public String getName() { return name; }
     public String getEmoji() { return emoji; }
     public String getSpriteId() { return spriteId; }
-    public int getDisplayOrder() { return displayOrder; }
+    // displayOrder 게터는 없다 — 이 필드는 정렬 파생 쿼리(findAllByOrderByDisplayOrderAsc)가
+    // 이름으로만 쓰고, 값을 읽는 소비처가 없다.
 }
