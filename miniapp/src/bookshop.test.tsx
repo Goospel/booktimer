@@ -15,12 +15,14 @@ import { ApiError, adRefreshPersonality, selectPersonality } from './api';
 import { Bookshop, BookshopHeader, FollowListSheet, HandleSheet, SearchSheet, UserList } from './screens/Bookshop';
 import {
   ArchiveSheet,
+  BIO_CLAMP_CHARS,
   FollowCountButton,
   ProfileCard,
   SafetyPanel,
   analysisFailed,
   claimPersonality,
   followCountsOpenable,
+  needsBioToggle,
   newestEntry,
   personalityErrorMessage,
   personalityNoticeText,
@@ -355,7 +357,7 @@ describe('책방 (프로필)', () => {
     const markup = card(profile({ self: true }));
 
     expect(markup).not.toContain('팔로우');
-    expect(markup).not.toContain('더보기');
+    expect(markup).not.toContain('신고·차단');
     expect(markup).toContain('구스펠'); // 헤더 자체는 그대로 보인다
   });
 
@@ -480,17 +482,17 @@ describe('책방 헤더 — 카운트 줄', () => {
     expect(markup).toContain('aria-label="팔로잉 5명 보기"');
   });
 
-  it('남의 책방이면 숫자 텍스트로 남는다 — 눌러도 열 목록이 없다', () => {
+  it('남의 책방이면 누를 수 없는 숫자로 남는다 — 눌러도 열 목록이 없다', () => {
     const markup = card(profile({ self: false }), [], null, { openFollowList: true });
 
-    expect(markup).toContain('팔로워 3 · 팔로잉 5');
+    expect(markup).toContain('data-stat="팔로워">3<');
     expect(markup).not.toContain('명 보기');
   });
 
-  it('내 책방이어도 핸들러를 안 받았으면 텍스트다 — 남의 책방 렌더 경로가 그대로 살아 있다', () => {
+  it('내 책방이어도 핸들러를 안 받았으면 못 누른다 — 남의 책방 렌더 경로가 그대로 살아 있다', () => {
     const markup = card(profile({ self: true }), [], null, { openFollowList: false });
 
-    expect(markup).toContain('팔로워 3 · 팔로잉 5');
+    expect(markup).toContain('data-stat="팔로워">3<');
     expect(markup).not.toContain('명 보기');
   });
 
@@ -521,21 +523,77 @@ describe('팔로우 카운트 버튼 (FollowCountButton)', () => {
  * 셋이 한 줄에 섞여 있으면 @아이디가 카운트의 일부처럼 읽힌다(사용자 제보).
  */
 describe('책방 헤더 — @아이디와 카운트 버튼', () => {
-  it('내 책방이면 @아이디가 카운트 버튼보다 위에 따로 선다', () => {
+  it('내 책방이면 @아이디가 카운트 줄 아래 이름 옆에 따로 선다(인스타 배치)', () => {
     const markup = card(profile({ self: true }), [], null, { openFollowList: true });
 
     expect(markup).toContain('aria-label="팔로워 3명 보기"');
     expect(markup).toContain('aria-label="팔로잉 5명 보기"');
-    expect(markup.indexOf('@goospel')).toBeLessThan(markup.indexOf('팔로워 3명 보기'));
+    expect(markup.indexOf('팔로워 3명 보기')).toBeLessThan(markup.indexOf('@goospel'));
     // 「@goospel ·」로 이어 붙던 옛 한 줄 — 되살아나면 아이디가 카운트에 섞여 다시 안 보인다.
     expect(markup).not.toContain('@goospel ·');
   });
 
-  it('남의 책방은 텍스트 그대로 — 서버가 남의 목록을 안 주므로 버튼처럼 보이게 하지 않는다(#788)', () => {
+  it('남의 책방은 같은 줄을 쓰되 버튼이 아니다 — 서버가 남의 목록을 안 주므로 누를 수 없다(#788)', () => {
     const markup = card(profile({ self: false }), [], null, { openFollowList: true });
 
-    expect(markup).toContain('팔로워 3 · 팔로잉 5');
+    expect(markup).toContain('data-stat="팔로워">3<');
+    expect(markup).toContain('data-stat="팔로잉">5<');
     expect(markup).not.toContain('명 보기');
+  });
+});
+
+/**
+ * 인스타식 상단(사용자 시안) — 큰 제목 「…님의 책방」을 지우고 <b>아바타 + 카운트 3개를 한 줄</b>에,
+ * 그 아래 닉네임·@아이디·성향(bio)을 놓는다.
+ *
+ * <p>이유는 자리다: 제목·검색바·스토리·카운트 버튼·10줄 성향 문단이 화면 위를 다 먹어, 정작 이 화면의
+ * 본체인 「공개한 책」이 탭바 아래로 밀려 잘렸다(사용자 스크린샷). 위를 눌러 책을 첫 화면으로 끌어올린다.
+ */
+describe('책방 신원 블록 — 인스타식 상단', () => {
+  it('큰 제목을 그리지 않는다 — 닉네임은 이름 줄로 내려온다', () => {
+    const markup = card(profile());
+
+    expect(markup).not.toContain('님의 책방');
+    expect(markup).toContain('구스펠');
+  });
+
+  it('공개 책 수는 태그로 걸러진 목록이 아니라 profile.books를 센다', () => {
+    // 태그를 고르면 `books`는 근거 책만 남는다 — 그걸 세면 상단 카운트가 필터마다 요동친다.
+    const markup = card(profile({ books: [book(1, '가'), book(2, '나'), book(3, '다')] }), [book(1, '가')], '한우물형');
+
+    expect(markup).toContain('data-stat="공개 책">3<');
+  });
+
+  it('공개 책 카운트는 버튼이 아니다 — 눌러도 열 목록이 없다', () => {
+    const markup = card(profile({ self: true, books: [book(1, '가')] }), [], null, { openFollowList: true });
+
+    expect(markup).toContain('data-stat="공개 책">1<');
+    expect(markup).not.toContain('공개 책 1명 보기');
+  });
+
+  it('긴 성향에는 「더보기」를 단다 — 3줄만 남기고 접어야 책이 첫 화면에 남는다', () => {
+    const markup = card(profile({ personality: '가'.repeat(BIO_CLAMP_CHARS + 1) }));
+
+    expect(markup).toContain('더보기');
+  });
+
+  it('짧은 성향에는 안 단다 — 눌러도 아무것도 안 펼쳐지는 죽은 버튼이 된다', () => {
+    expect(card(profile({ personality: '한 작가를 깊게 파는 독자' }))).not.toContain('더보기');
+  });
+});
+
+/** 「더보기」 노출 판정 — CSS clamp는 넘칠 때만 자르므로, 손잡이도 넘칠 때만 서야 짝이 맞는다. */
+describe('성향 접기 판정 (needsBioToggle)', () => {
+  it('성향이 없으면 손잡이도 없다', () => {
+    expect(needsBioToggle(null)).toBe(false);
+  });
+
+  it('임계 길이 딱 맞으면 안 단다 — 3줄에 들어간다', () => {
+    expect(needsBioToggle('가'.repeat(BIO_CLAMP_CHARS))).toBe(false);
+  });
+
+  it('임계를 한 글자라도 넘기면 단다', () => {
+    expect(needsBioToggle('가'.repeat(BIO_CLAMP_CHARS + 1))).toBe(true);
   });
 });
 
