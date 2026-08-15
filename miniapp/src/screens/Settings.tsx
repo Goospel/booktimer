@@ -106,7 +106,7 @@ export function DeleteAccountSection({
       {open && (
         <Sheet title="회원 탈퇴" onClose={onClose}>
           <Text typography="st11" style={{ display: 'block' }}>
-            탈퇴하면 독서 기록·책장·스토리·친구 관계가 <b>영구히 삭제</b>되고, <b>되돌릴 수 없어요.</b>
+            탈퇴하면 독서 기록·책장·여백·친구 관계가 <b>영구히 삭제</b>되고, <b>되돌릴 수 없어요.</b>
           </Text>
           {/* 클라이언트는 이 계정이 웹 계정과 연결됐는지 모른다 — 조건 노출 대신 상시 고지가 정직하다. */}
           <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>

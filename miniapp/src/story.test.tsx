@@ -9,7 +9,7 @@ import { userAgent } from './test-fixtures';
 import { coverColor } from './ui';
 
 /**
- * 스토리 화면 계측 — 정적 렌더로는 effect가 안 돌므로, 뷰어의 두 결정(다음/이전 전이 · 열람 기록 대상)은
+ * 여백 화면 계측 — 정적 렌더로는 effect가 안 돌므로, 뷰어의 두 결정(다음/이전 전이 · 열람 기록 대상)은
  * 순수 함수로 뽑아 경계까지 단위로 본다. 24h 만료·작성 자격은 서버 몫이라 여기서 재검증하지 않는다(설계 §4).
  */
 
@@ -64,19 +64,19 @@ function viewerCard(props: Partial<Parameters<typeof StoryCardView>[0]> = {}) {
   );
 }
 
-describe('스토리 스트립 (소셜 탭 상단)', () => {
-  it('미열람 링에만 "새 스토리" 표식을 단다 — 링 테두리 색만으로는 구분이 안 되는 사람이 있다', () => {
+describe('여백 스트립 (소셜 탭 상단)', () => {
+  it('미열람 링에만 "새 여백" 표식을 단다 — 링 테두리 색만으로는 구분이 안 되는 사람이 있다', () => {
     const markup = strip({ mine: null, groups: [author('goospel'), author('reader', { allViewed: true })] });
 
     expect(markup).toContain('goospel님');
     expect(markup).toContain('reader님');
-    expect(markup.match(/새 스토리/g)).toHaveLength(1); // 전부 열람한 reader에는 안 붙는다
+    expect(markup.match(/새 여백/g)).toHaveLength(1); // 전부 열람한 reader에는 안 붙는다
   });
 
   it('피드가 비어도 작성 진입은 남기되, 팔로우 유도 문구는 스트립이 말하지 않는다(소셜 탭 빈 상태와 중복)', () => {
     const markup = strip({ mine: null, groups: [] });
 
-    expect(markup).toContain('스토리');
+    expect(markup).toContain('여백');
     expect(markup).not.toContain('팔로우한 사람이 없');
     expect(markup).not.toContain('찾아');
   });
@@ -89,19 +89,19 @@ describe('스토리 스트립 (소셜 탭 상단)', () => {
     expect(strip({ mine: null, groups: [author('goospel')] })).toContain('class="no-scrollbar"');
   });
 
-  it('내 스토리가 있으면 맨 앞에 내 링을 둔다 — 핸들 없는 계정(loginId=null)도 포함(설계 §5-1)', () => {
+  it('내 여백이 있으면 맨 앞에 내 링을 둔다 — 핸들 없는 계정(loginId=null)도 포함(설계 §5-1)', () => {
     const markup = strip({ mine: author(null, { stories: [card(9)] }), groups: [author('goospel')] });
 
-    expect(markup.indexOf('내 스토리')).toBeGreaterThanOrEqual(0);
-    expect(markup.indexOf('내 스토리')).toBeLessThan(markup.indexOf('goospel님'));
+    expect(markup.indexOf('내 여백')).toBeGreaterThanOrEqual(0);
+    expect(markup.indexOf('내 여백')).toBeLessThan(markup.indexOf('goospel님'));
   });
 });
 
 /**
  * 링을 인스타 관습(원형 이니셜 아바타 + 바깥 링 + 닉네임 캡션)으로 세운다 — 텍스트 알약은
- * "스토리"라는 어휘를 화면에 만들어 주지 못했다. 링 색 분기의 출처는 서버 `AuthorStories.allViewed`다.
+ * 그 어휘를 화면에 만들어 주지 못했다. 링 색 분기의 출처는 서버 `AuthorStories.allViewed`다.
  */
-describe('스토리 링 — 원형 아바타', () => {
+describe('여백 링 — 원형 아바타', () => {
   it('닉네임 첫 글자를 원형으로 세우고 배경은 닉네임에서 결정적으로 고른다 — 같은 사람은 늘 같은 색', () => {
     const markup = strip({ mine: null, groups: [author('goospel')] });
 
@@ -116,19 +116,19 @@ describe('스토리 링 — 원형 아바타', () => {
     expect(ring(true)).not.toContain('background:var(--adaptiveBlue500, #6E8A6A)');
   });
 
-  it('「스토리 쓰기」는 이니셜이 아니라 + 아이콘 타일로 남는다 — 사람 링과 섞이면 남의 스토리로 오독한다', () => {
+  it('「여백 적기」는 이니셜이 아니라 + 아이콘 타일로 남는다 — 사람 링과 섞이면 남의 여백으로 오독한다', () => {
     const markup = strip({ mine: null, groups: [] });
 
-    expect(markup).toContain('스토리 쓰기');
+    expect(markup).toContain('여백 적기');
     expect(markup).toContain('>+<');
   });
 });
 
 /**
- * 뷰어 진행 인디케이터 — "1/3" 텍스트는 스토리의 어휘가 아니다. 인스타식 세그먼트 바로 바꾸고,
+ * 뷰어 진행 인디케이터 — "1/3" 텍스트는 이 화면의 어휘가 아니다. 인스타식 세그먼트 바로 바꾸고,
  * 수치는 스크린리더가 읽을 수 있게 `progressbar`로 남긴다(텍스트를 지운 자리를 비워두지 않는다).
  */
-describe('스토리 뷰어 진행 인디케이터', () => {
+describe('여백 뷰어 진행 인디케이터', () => {
   const three = author('goospel', { stories: [card(1), card(2), card(3)] });
 
   it('카드 수만큼 세그먼트를 나누고 "N/M" 텍스트는 지운다', () => {
@@ -155,7 +155,7 @@ describe('스토리 뷰어 진행 인디케이터', () => {
   });
 });
 
-describe('스토리 열람 카드', () => {
+describe('여백 열람 카드', () => {
   it('문장·작성자·첨부 책 제목을 함께 그린다', () => {
     const markup = viewerCard({ card: card(1, { bookTitle: '자바 최적화' }) });
 
@@ -171,7 +171,7 @@ describe('스토리 열람 카드', () => {
     expect(viewerCard({ card: card(1, { bookTitle: '자바 최적화' }) })).not.toContain('<img');
   });
 
-  it('남의 스토리에는 삭제·본 사람이 없고 책방 진입이 있다 — 서버가 404로 거절하는 동작이라 화면에서 먼저 막는다', () => {
+  it('남의 여백에는 삭제·본 사람이 없고 책방 진입이 있다 — 서버가 404로 거절하는 동작이라 화면에서 먼저 막는다', () => {
     const markup = viewerCard({ mine: false });
 
     expect(markup).not.toContain('삭제');
@@ -179,7 +179,7 @@ describe('스토리 열람 카드', () => {
     expect(markup).toContain('책방');
   });
 
-  it('내 스토리에는 삭제·본 사람이 있고 책방 진입은 없다', () => {
+  it('내 여백에는 삭제·본 사람이 있고 책방 진입은 없다', () => {
     const markup = viewerCard({ mine: true, author: author(null) });
 
     expect(markup).toContain('삭제');
@@ -223,28 +223,32 @@ describe('뷰어 전이 — nextStoryIndex (경계)', () => {
 });
 
 describe('열람 기록 대상 — viewTargetId', () => {
-  it('남의 미열람 스토리는 그 id를 기록한다', () => {
+  it('남의 미열람 여백은 그 id를 기록한다', () => {
     expect(viewTargetId(card(5), false)).toBe(5);
   });
 
-  it('내 스토리는 기록하지 않는다 — 서버가 no-op이라 요청이 낭비다', () => {
+  it('내 여백은 기록하지 않는다 — 서버가 no-op이라 요청이 낭비다', () => {
     expect(viewTargetId(card(5), true)).toBeNull();
   });
 
-  it('이미 열람한 스토리는 다시 기록하지 않는다 — 서버 멱등에 기대지 않고 요청을 아낀다', () => {
+  it('이미 열람한 여백은 다시 기록하지 않는다 — 서버 멱등에 기대지 않고 요청을 아낀다', () => {
     expect(viewTargetId(card(5, { viewed: true }), false)).toBeNull();
   });
 });
 
 describe('작성 실패 안내 — createStoryMessage', () => {
-  it('레이트리밋(429)·상한(400)·책 없음(404)을 각각 다르게 안내한다', () => {
+  it('레이트리밋(429)·검증 실패(400)·책 없음(404)을 각각 다르게 안내한다', () => {
     expect(createStoryMessage(new ApiError(429, '요청에 실패했어요 (429)'))).toContain('잠시');
     expect(createStoryMessage(new ApiError(400, '요청에 실패했어요 (400)'))).toContain('500자');
     expect(createStoryMessage(new ApiError(404, '요청에 실패했어요 (404)'))).toContain('책');
   });
 
+  it('안내에 개수 상한을 말하지 않는다 — 만료가 사라지며 20장 게이트도 함께 없앴다', () => {
+    expect(createStoryMessage(new ApiError(400, '요청에 실패했어요 (400)'))).not.toContain('20장');
+  });
+
   it('서버가 평문 메시지를 주면 그대로 쓴다 — 상태코드 추측보다 서버 문구가 정확하다', () => {
-    expect(createStoryMessage(new ApiError(400, '활성 스토리는 최대 20장입니다'))).toBe('활성 스토리는 최대 20장입니다');
+    expect(createStoryMessage(new ApiError(400, '여백을 남길 수 없습니다'))).toBe('여백을 남길 수 없습니다');
   });
 
   it('네트워크 실패 등 상태코드 없는 오류는 그 메시지를 그대로 쓴다', () => {

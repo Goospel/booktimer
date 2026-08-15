@@ -18,14 +18,14 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -44,7 +44,8 @@ import static org.mockito.Mockito.when;
 class StoryServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-07-02T12:00:00Z");
-    private static final Instant CUTOFF = NOW.minus(Duration.ofHours(24));
+    /** 예전 만료선(24h)보다 훨씬 오래된 시각 — 이제는 이것도 살아 있어야 한다. */
+    private static final Instant LONG_AGO = NOW.minus(Duration.ofDays(30));
 
     @Mock
     private StoryRepository storyRepository;
@@ -67,7 +68,7 @@ class StoryServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new StoryService(Clock.fixed(NOW, ZoneOffset.UTC), storyRepository, storyViewRepository,
+        service = new StoryService(storyRepository, storyViewRepository,
                 bookRepository, followService, blockRepository, rateLimitService, profileService);
         me = userWithId(1L, "meuser", "나");
     }
@@ -110,22 +111,9 @@ class StoryServiceTest {
     }
 
     @Test
-    @DisplayName("create: 활성 20장 도달 → 400")
-    void create_activeCapReached_throws400() {
-        when(rateLimitService.allow(RateLimitAction.STORY_CREATE, 1L)).thenReturn(true);
-        when(storyRepository.countByUserAndCreatedAtAfter(me, CUTOFF)).thenReturn(20L);
-
-        assertThatThrownBy(() -> service.create(me, "문장", null, null))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.BAD_REQUEST));
-        verify(storyRepository, never()).save(any());
-    }
-
-    @Test
     @DisplayName("create: 없는 책·남의 책 → 404 (존재 누설 방지)")
     void create_missingOrOthersBook_throws404() {
         when(rateLimitService.allow(RateLimitAction.STORY_CREATE, 1L)).thenReturn(true);
-        when(storyRepository.countByUserAndCreatedAtAfter(me, CUTOFF)).thenReturn(0L);
         when(bookRepository.findByIdAndUser(5L, me)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.create(me, "문장", 5L, null))
@@ -137,7 +125,6 @@ class StoryServiceTest {
     @DisplayName("create: 내 책인데 PRIVATE → 400 (공개 책만 첨부)")
     void create_privateOwnBook_throws400() {
         when(rateLimitService.allow(RateLimitAction.STORY_CREATE, 1L)).thenReturn(true);
-        when(storyRepository.countByUserAndCreatedAtAfter(me, CUTOFF)).thenReturn(0L);
         Book privateBook = Book.register(me, "비공개", null, null, null, null, null, BookStatus.READING);
         when(bookRepository.findByIdAndUser(5L, me)).thenReturn(Optional.of(privateBook));
 
@@ -150,7 +137,6 @@ class StoryServiceTest {
     @DisplayName("create: 정상 — 공개 자기 책 첨부 저장")
     void create_valid_saves() {
         when(rateLimitService.allow(RateLimitAction.STORY_CREATE, 1L)).thenReturn(true);
-        when(storyRepository.countByUserAndCreatedAtAfter(me, CUTOFF)).thenReturn(19L);
         Book mine = publicBookOf(me, "내 공개 책");
         when(bookRepository.findByIdAndUser(5L, me)).thenReturn(Optional.of(mine));
         when(storyRepository.save(any(Story.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -174,9 +160,11 @@ class StoryServiceTest {
         Story a2 = storyWithId(11L, allRead, "a-2", NOW.minusSeconds(3600), null, null);
         Story b1 = storyWithId(12L, freshNew, "b-1", NOW.minusSeconds(60), null, null);
         Story c1 = storyWithId(13L, freshOld, "c-1", NOW.minusSeconds(600), null, null);
-        when(storyRepository.feedOf(me, CUTOFF)).thenReturn(List.of(a1, a2, b1, c1));
+        // 레포는 이제 전체 최신순으로 준다 — 작성자별 묶기·재생순 복원은 서비스 몫
+        when(storyRepository.feedOf(eq(me), any(Pageable.class))).thenReturn(List.of(b1, c1, a2, a1));
         Story m1 = storyWithId(20L, me, "내 문장", NOW.minusSeconds(30), null, null);
-        when(storyRepository.findByUserAndCreatedAtAfterOrderByCreatedAtAsc(me, CUTOFF)).thenReturn(List.of(m1));
+        when(storyRepository.findByUserOrderByCreatedAtDescIdDesc(eq(me), any(Pageable.class)))
+                .thenReturn(List.of(m1));
         when(storyViewRepository.findViewedStoryIds(eq(me), anyCollection())).thenReturn(List.of(10L, 11L));
 
         StoryFeedResponse feed = service.feed(me);
@@ -198,16 +186,55 @@ class StoryServiceTest {
     }
 
     @Test
-    @DisplayName("feed: 스토리가 하나도 없으면 mine=null, groups=[] — 열람 배치 조회도 안 탄다")
+    @DisplayName("feed: 여백이 하나도 없으면 mine=null, groups=[] — 열람 배치 조회도 안 탄다")
     void feed_empty_returnsNullMineAndEmptyGroups() {
-        when(storyRepository.feedOf(me, CUTOFF)).thenReturn(List.of());
-        when(storyRepository.findByUserAndCreatedAtAfterOrderByCreatedAtAsc(me, CUTOFF)).thenReturn(List.of());
+        when(storyRepository.feedOf(eq(me), any(Pageable.class))).thenReturn(List.of());
+        when(storyRepository.findByUserOrderByCreatedAtDescIdDesc(eq(me), any(Pageable.class)))
+                .thenReturn(List.of());
 
         StoryFeedResponse feed = service.feed(me);
 
         assertThat(feed.mine()).isNull();
         assertThat(feed.groups()).isEmpty();
         verify(storyViewRepository, never()).findViewedStoryIds(any(), anyCollection());
+    }
+
+    @Test
+    @DisplayName("feed: 한 작성자가 25장이어도 그룹엔 최근 20장만 — 진행바가 감당하는 상한 (경계)")
+    void feed_capsEachAuthorGroup() {
+        User author = userWithId(2L, "author", "작가");
+        List<Story> newestFirst = new ArrayList<>();
+        for (int i = 0; i < 25; i++) { // 0 = 가장 최신
+            newestFirst.add(storyWithId(100 + i, author, "문장-" + i, NOW.minusSeconds(60L * (i + 1)), null, null));
+        }
+        when(storyRepository.feedOf(eq(me), any(Pageable.class))).thenReturn(newestFirst);
+        when(storyRepository.findByUserOrderByCreatedAtDescIdDesc(eq(me), any(Pageable.class)))
+                .thenReturn(List.of());
+        when(storyViewRepository.findViewedStoryIds(eq(me), anyCollection())).thenReturn(List.of());
+
+        StoryFeedResponse feed = service.feed(me);
+
+        List<StoryCard> cards = feed.groups().get(0).stories();
+        assertThat(cards).hasSize(StoryService.MAX_VISIBLE_STORIES);
+        // 잘린 뒤에도 재생 순서는 오래된 것 → 최신 (인덱스 19가 가장 오래됨)
+        assertThat(cards).extracting(StoryCard::text).startsWith("문장-19").endsWith("문장-0");
+    }
+
+    @Test
+    @DisplayName("feed: 30일 전 여백도 그대로 실린다 — 시간 만료가 없다")
+    void feed_keepsOldEntries() {
+        User author = userWithId(2L, "author", "작가");
+        Story old = storyWithId(10L, author, "옛 여백", LONG_AGO, null, null);
+        when(storyRepository.feedOf(eq(me), any(Pageable.class))).thenReturn(List.of(old));
+        Story myOld = storyWithId(20L, me, "내 옛 여백", LONG_AGO, null, null);
+        when(storyRepository.findByUserOrderByCreatedAtDescIdDesc(eq(me), any(Pageable.class)))
+                .thenReturn(List.of(myOld));
+        when(storyViewRepository.findViewedStoryIds(eq(me), anyCollection())).thenReturn(List.of());
+
+        StoryFeedResponse feed = service.feed(me);
+
+        assertThat(feed.groups().get(0).stories()).extracting(StoryCard::text).containsExactly("옛 여백");
+        assertThat(feed.mine().stories()).extracting(StoryCard::text).containsExactly("내 옛 여백");
     }
 
     @Test
@@ -219,8 +246,9 @@ class StoryServiceTest {
         turnedPrivate.makePrivate(); // 첨부 후 비공개 전환
         Book stillPublic = publicBookOf(author, "여전히 공개");
         Story withLabel = storyWithId(11L, author, "라벨 보일 문장", NOW.minusSeconds(60), stillPublic, null);
-        when(storyRepository.feedOf(me, CUTOFF)).thenReturn(List.of(withHidden, withLabel));
-        when(storyRepository.findByUserAndCreatedAtAfterOrderByCreatedAtAsc(me, CUTOFF)).thenReturn(List.of());
+        when(storyRepository.feedOf(eq(me), any(Pageable.class))).thenReturn(List.of(withLabel, withHidden));
+        when(storyRepository.findByUserOrderByCreatedAtDescIdDesc(eq(me), any(Pageable.class)))
+                .thenReturn(List.of());
         when(storyViewRepository.findViewedStoryIds(eq(me), anyCollection())).thenReturn(List.of());
 
         StoryFeedResponse feed = service.feed(me);
@@ -246,7 +274,7 @@ class StoryServiceTest {
     }
 
     @Test
-    @DisplayName("storiesOf: 비팔로워 → 200 + 빈 배열 (404 아님 — 스토리 유무 정보도 안 샘)")
+    @DisplayName("storiesOf: 비팔로워 → 200 + 빈 배열 (404 아님 — 여백 유무 정보도 안 샘)")
     void storiesOf_nonFollower_returnsEmpty() {
         User target = userWithId(2L, "target", "대상");
         when(profileService.resolveVisibleTarget(me, "target")).thenReturn(Optional.of(target));
@@ -255,18 +283,19 @@ class StoryServiceTest {
         List<StoryCard> cards = service.storiesOf(me, "target");
 
         assertThat(cards).isEmpty();
-        verify(storyRepository, never()).findByUserAndCreatedAtAfterOrderByCreatedAtAsc(any(), any());
+        verify(storyRepository, never()).findByUserOrderByCreatedAtDescIdDesc(any(), any());
     }
 
     @Test
-    @DisplayName("storiesOf: 팔로워 → 활성 목록 + viewed 플래그")
-    void storiesOf_follower_returnsActiveCards() {
+    @DisplayName("storiesOf: 팔로워 → 최근 목록을 재생순(오래된 것 먼저)으로 + viewed 플래그")
+    void storiesOf_follower_returnsRecentCards() {
         User target = userWithId(2L, "target", "대상");
         when(profileService.resolveVisibleTarget(me, "target")).thenReturn(Optional.of(target));
         when(followService.isFollowing(me, target)).thenReturn(true);
-        Story s1 = storyWithId(10L, target, "첫째", NOW.minusSeconds(600), null, null);
+        Story s1 = storyWithId(10L, target, "첫째", LONG_AGO, null, null);
         Story s2 = storyWithId(11L, target, "둘째", NOW.minusSeconds(60), null, null);
-        when(storyRepository.findByUserAndCreatedAtAfterOrderByCreatedAtAsc(target, CUTOFF)).thenReturn(List.of(s1, s2));
+        when(storyRepository.findByUserOrderByCreatedAtDescIdDesc(eq(target), any(Pageable.class)))
+                .thenReturn(List.of(s2, s1)); // 레포는 최신순
         when(storyViewRepository.findViewedStoryIds(eq(me), anyCollection())).thenReturn(List.of(10L));
 
         List<StoryCard> cards = service.storiesOf(me, "target");
@@ -277,11 +306,12 @@ class StoryServiceTest {
     }
 
     @Test
-    @DisplayName("storiesOf: 본인 → 활성 목록 (팔로우 검사 없이, viewed=true)")
-    void storiesOf_self_returnsOwnActive() {
+    @DisplayName("storiesOf: 본인 → 최근 목록 (팔로우 검사 없이, viewed=true)")
+    void storiesOf_self_returnsOwnRecent() {
         when(profileService.resolveVisibleTarget(me, "meuser")).thenReturn(Optional.of(me));
         Story s1 = storyWithId(10L, me, "내 문장", NOW.minusSeconds(60), null, null);
-        when(storyRepository.findByUserAndCreatedAtAfterOrderByCreatedAtAsc(me, CUTOFF)).thenReturn(List.of(s1));
+        when(storyRepository.findByUserOrderByCreatedAtDescIdDesc(eq(me), any(Pageable.class)))
+                .thenReturn(List.of(s1));
 
         List<StoryCard> cards = service.storiesOf(me, "meuser");
 
@@ -380,17 +410,18 @@ class StoryServiceTest {
     }
 
     @Test
-    @DisplayName("markViewed: 만료(정확히 24h) → 404 — stale id 재검사")
-    void markViewed_expired_throws404() {
+    @DisplayName("markViewed: 30일 전 여백도 팔로워면 열람 기록된다 — 나이는 더 이상 게이트가 아니다")
+    void markViewed_oldEntry_stillRecords() {
         User author = userWithId(2L, "author", "작가");
-        Story expired = storyWithId(10L, author, "문장", CUTOFF, null, null); // 나이 = 정확히 24h → 만료
-        when(storyRepository.findById(10L)).thenReturn(Optional.of(expired));
+        Story old = storyWithId(10L, author, "문장", LONG_AGO, null, null);
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(old));
         when(blockRepository.existsBetween(me, author)).thenReturn(false);
         when(followService.isFollowing(me, author)).thenReturn(true);
+        when(storyViewRepository.existsByStoryAndViewer(old, me)).thenReturn(false);
 
-        assertThatThrownBy(() -> service.markViewed(me, 10L))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+        service.markViewed(me, 10L);
+
+        verify(storyViewRepository).save(any(StoryView.class));
     }
 
     @Test

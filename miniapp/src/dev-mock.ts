@@ -675,7 +675,7 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
   }],
   ['POST', /^\/api\/report$/, () => ({ reported: true })],
 
-  // ── 스토리 ──
+  // ── 여백 ──
   ['GET', /^\/api\/stories\/feed$/, () => ({
     mine:
       myStories.length === 0
@@ -704,7 +704,7 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
   }],
   ['DELETE', /^\/api\/stories\/(\d+)$/, ({ id }) => {
     const index = myStories.findIndex((s) => s.id === id);
-    if (index < 0) throw new ApiError(404, '없는 스토리예요');
+    if (index < 0) throw new ApiError(404, '없는 여백이에요');
     myStories.splice(index, 1);
     return undefined;
   }],
