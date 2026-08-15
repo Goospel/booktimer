@@ -1909,6 +1909,18 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
       `AladinLink.isTrusted`(URL 파싱 후 스킴+host 완전일치)를 두 구매 클릭의 공통 꼬리 한 곳에 건다. **입력이 아니라
       출구에서** 막아 이미 저장된 행까지 마이그레이션 없이 중화한다. 문자열 접두·포함 비교는
       `www.aladin.co.kr.evil.example`·쿼리스트링 미끼에 뚫려 쓰지 않는다.
+- [x] **운영 테스트 계정 폐기** (완료 ✅ 2026-08-15) — 이메일 발송 검증용으로 만든 운영 계정(`testid`)의 비밀번호가
+      **공개 레포(CLAUDE.md)에 평문으로** 적혀 있었다. 이메일 작업이 끝나 계정을 지우고 기술도 걷어냈다.
+      삭제는 손으로 쓴 DELETE가 아니라 **앱 자신의 탈퇴 경로**(`POST /settings/delete`)로 했다 — `purge()`가
+      FK 순서를 알고 `@Transactional`로 원자적이다. 잔여 세션 616건은 별도 정리(아래 `purge()` 결함 참조).
+      로컬 시드 계정(`LocalTestAccountSeeder`, `testid@local.test`)은 그대로 — 하드코딩된 로컬 픽스처라 무해하다.
+- [ ] **`AccountService.purge()`가 안 지우는 FK 4개 — 탈퇴가 실패한다** (실측 2026-08-15) — users를 FK 참조하는
+      테이블 22개 중 `author_affection`·`garden_placement`·`garden_decoration_placement`·`push_subscriptions`가
+      `purge()`에 없고, **전 FK가 `NO ACTION`**(cascade 없음)이다. 운영 실측: `author_affection` 7행/2명,
+      `garden_placement` 2행/2명 → **27명 중 2명은 지금 탈퇴를 누르면 FK 제약 위반으로 실패**한다.
+      곁들여 `purge()`는 **세션을 안 지운다** — 계정이 사라져도 `SPRING_SESSION` 행이 남아 유령 세션이 된다
+      (testid 삭제 시 616건 잔존을 실측하고 수동 정리했다). `SessionInvalidator`가 이미 있으니 호출만 얹으면 된다.
+      회귀 가드 후보: `AccountDeletionIntegrationTest`가 **모든 FK 자식을 가진 사용자**로 탈퇴를 단언하게 확장.
 - [ ] (후속) 무차별 대입 방어 보강 — 지수 백오프, 다중 인스턴스 대비 공유 저장소(현재 인메모리=인스턴스별), 앞단 WAF 레이트리밋
       (③ 갈래 — 트래픽/세션 쓰기 신호 오면. Redis는 예산 충돌, WAF는 인프라라 코드 가치 낮아 보류.)
 
