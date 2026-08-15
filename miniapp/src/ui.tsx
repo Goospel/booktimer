@@ -271,23 +271,36 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
  * <p>제목은 **선택**이다. 홈처럼 첫 카드가 곧 히어로인 화면에서는 제목이 정보를 하나도 안 보태면서
  * 자리만 먹었다(「구스펠님의 오늘」은 바로 아래 「오늘 읽은 시간」의 중복이고, 그 화면 이름은 탭바가
  * 이미 말한다). 없으면 빈 행을 남기지 않고 **헤더를 통째로 생략**한다 — 자리만 비우면 지운 값이 없다.
+ *
+ * <p>제목 위아래로 슬롯이 하나씩 있다. `above`는 <b>화면 소속이 아니라 그 위에 얹히는 도구</b> 자리다
+ * (책방의 검색 진입바·스토리 스트립) — 본문에 끼우면 「…님의 책방」 아래에 검색창이 오는 어색한 순서가
+ * 된다. `subtitle`은 반대로 <b>제목에 딸린 식별자</b>(@핸들)라 제목과 떨어지면 다른 정보처럼 읽힌다 —
+ * 그래서 있으면 제목 행의 아래 여백을 좁혀 밀착시킨다.
  */
 export function Screen({
   title,
   onBack,
   right,
+  above,
+  subtitle,
   children,
 }: {
   title?: string;
   onBack?: () => void;
   /** 제목 줄 오른쪽 끝 손잡이(서재의 「펼쳐보기」) — 제목이 없으면 그릴 줄 자체가 없다. */
   right?: ReactNode;
+  /** 제목보다 **위**에 얹히는 도구 줄 — 제목이 없는 화면에서도 그린다. */
+  above?: ReactNode;
+  /** 제목 **바로 아래**에 밀착하는 부제(@핸들) — 있으면 제목 행 여백이 20 → 3으로 좁아진다. */
+  subtitle?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <main style={{ padding: '24px 20px 40px', maxWidth: 480, margin: '0 auto' }}>
+      {above}
       {title !== undefined && (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+      <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: subtitle === undefined ? 20 : 3 }}>
         {onBack !== undefined && (
           <button
             type="button"
@@ -321,6 +334,8 @@ export function Screen({
         </Text>
         {right}
       </div>
+      {subtitle}
+      </>
       )}
       {children}
     </main>

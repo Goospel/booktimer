@@ -173,7 +173,7 @@ export function Profile({
   /** 없으면 「돌아가기」를 그리지 않는다 — 탭 루트(내 책방)에는 돌아갈 곳이 없고 출구가 탭바다. */
   onBack?: () => void;
   onError: (error: Error) => void;
-  /** 제목과 카운트 줄 사이 슬롯 — 책방 셸이 스토리 스트립·검색 진입바를 여기 끼운다. */
+  /** 제목보다 **위**에 얹히는 슬롯 — 책방 셸이 검색 진입바·스토리 스트립을 여기 끼운다. */
   header?: ReactNode;
   /** 카운트를 눌렀을 때 — 목록 시트는 셸이 연다(이 화면은 목록 상태를 들지 않는다). */
   onOpenFollowList?: (type: FollowListType) => void;
@@ -301,11 +301,10 @@ export function Profile({
     });
 
   if (profile === null) {
+    // 로딩 중에도 header를 그린다 — 스토리·검색은 프로필 조회와 독립이라, 이 분기에서 빼면
+    // 탭 진입 직후(응답 전) 상단이 통째로 비어 화면이 죽은 것처럼 보인다.
     return (
-      <Screen title="책방" onBack={onBack}>
-        {/* 로딩 중에도 header를 그린다 — 스토리·검색은 프로필 조회와 독립이라, 이 분기에서 빼면
-            탭 진입 직후(응답 전) 상단이 통째로 비어 화면이 죽은 것처럼 보인다. */}
-        {header}
+      <Screen title="책방" onBack={onBack} above={header}>
         {/* 못 받았을 때 나갈 길만 있으면 실패가 곧 막다른 길이다 — 그 자리에서 다시 받을 길도 함께 준다. */}
         <ErrorMessage message={error} onRetry={load} />
         {error === null ? (
@@ -419,7 +418,7 @@ export function ProfileCard({
   onGrid: (open: boolean) => void;
   onMore: () => void;
   safety: ReactNode;
-  /** 제목과 카운트 줄 사이 슬롯 — 셸이 스토리 스트립·검색 진입바를 끼운다. */
+  /** 제목보다 **위**에 얹히는 슬롯 — 셸이 검색 진입바·스토리 스트립을 끼운다. */
   header?: ReactNode;
   onOpenFollowList?: (type: FollowListType) => void;
   onBack?: () => void;
@@ -430,30 +429,36 @@ export function ProfileCard({
 
   // 제목 옆 ← 는 안 둔다 — 배경 없는 화살표 글자라 버튼으로 안 읽혔다. 출구는 아래 「돌아가기」와 탭바.
   return (
-    <Screen title={`${profile.nickname}님의 책방`}>
-      {header}
-      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
-        <Text typography="st12" color="grey600">
-          @{profile.loginId} ·
+    <Screen
+      title={`${profile.nickname}님의 책방`}
+      // 검색·스토리는 화면 소속이 아니라 그 위에 얹히는 도구다 — 제목보다 위로 올린다.
+      above={header}
+      // @아이디는 닉네임에 딸린 식별자라 제목에 밀착시킨다(카운트와 한 줄로 섞이면 카운트의 일부로 읽힌다).
+      subtitle={
+        <Text typography="st12" color="grey600" style={{ display: 'block' }}>
+          @{profile.loginId}
         </Text>
-        {openable ? (
-          <>
-            <button type="button" onClick={() => onOpenFollowList!('followers')} style={countButtonStyle}>
-              팔로워 {profile.followerCount}
-            </button>
-            <Text typography="st12" color="grey600">
-              ·
-            </Text>
-            <button type="button" onClick={() => onOpenFollowList!('following')} style={countButtonStyle}>
-              팔로잉 {profile.followingCount}
-            </button>
-          </>
-        ) : (
-          <Text typography="st12" color="grey600">
-            팔로워 {profile.followerCount} · 팔로잉 {profile.followingCount}
-          </Text>
-        )}
-      </div>
+      }
+    >
+      {openable ? (
+        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+          <FollowCountButton
+            label="팔로워"
+            count={profile.followerCount}
+            onClick={() => onOpenFollowList!('followers')}
+          />
+          <FollowCountButton
+            label="팔로잉"
+            count={profile.followingCount}
+            onClick={() => onOpenFollowList!('following')}
+          />
+        </div>
+      ) : (
+        // 남의 책방 — 서버가 남의 목록을 안 주므로 누를 수 없다. 누를 수 없는 것을 버튼처럼 보이게 하지 않는다(#788).
+        <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 10 }}>
+          팔로워 {profile.followerCount} · 팔로잉 {profile.followingCount}
+        </Text>
+      )}
 
       {profile.personality !== null && (
         <Text typography="st11" style={{ display: 'block', marginTop: 12 }}>
@@ -599,18 +604,47 @@ export function ProfileCard({
 }
 
 /**
- * 카운트 텍스트 버튼 — 배경·보더 없이 글자만 두되 <b>밑줄</b>을 남긴다.
- * 배경 없는 글자는 버튼으로 안 읽힌다(#788에서 제목 옆 ← 를 없앤 이유)이고, 밑줄이 최소한의 어포던스다.
+ * 팔로워·팔로잉 손잡이 — 밑줄 친 작은 글자였던 것을 <b>테두리 있는 큰 버튼</b>으로 세운다.
+ * 배경 없는 글자는 눌리는 것으로 안 읽혔고(#788), 손가락 표적도 작았다. 전폭을 반씩 나눠 둘 다 해결한다.
  */
-const countButtonStyle = {
-  padding: 0,
-  border: 'none',
-  background: 'transparent',
-  color: 'var(--adaptiveGrey600, #6F6A5E)',
-  fontSize: 13,
-  textDecoration: 'underline',
-  cursor: 'pointer',
-} as const;
+export function FollowCountButton({
+  label,
+  count,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={`${label} ${count}명 보기`}
+      onClick={onClick}
+      style={{
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 6,
+        padding: '11px 13px',
+        border: '1px solid #DDD6C8',
+        borderRadius: 12,
+        background: 'var(--adaptiveGrey100, #FCFAF5)',
+        cursor: 'pointer',
+      }}
+    >
+      <span style={{ fontSize: 13, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>{label}</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+        <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--adaptiveGrey900, #3A362E)' }}>{count}</span>
+        {/* 테두리 안의 장식이라 이 화살표는 어포던스를 혼자 지지 않는다 — 버튼임은 테두리가 말한다. */}
+        <span aria-hidden="true" style={{ fontSize: 13, color: '#A8A296' }}>
+          ›
+        </span>
+      </span>
+    </button>
+  );
+}
 
 /**
  * 독서 성향 보관함 — 최근 분석(최대 3)을 <b>세로로 나란히</b> 놓아 서술의 차이를 눈으로 보게 한다.

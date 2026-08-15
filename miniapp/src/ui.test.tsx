@@ -1,5 +1,6 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import { readFileSync } from 'node:fs';
+import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
@@ -33,6 +34,72 @@ describe('화면 껍데기 (Screen)', () => {
 
     expect(markup).toContain('본문');
     expect(markup).not.toContain('margin-bottom:20px'); // 제목 행의 서명
+  });
+});
+
+/**
+ * 제목 위 슬롯(`above`) — 화면 소속이 아니라 그 위에 얹히는 도구(책방의 검색·스토리) 자리다.
+ * 본문에 끼우면 「…님의 책방」 아래에 검색창이 오는 어색한 순서가 된다(사용자 제보).
+ */
+describe('화면 껍데기 — 제목 위 슬롯 (above)', () => {
+  const withAbove = (title?: string) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Screen title={title} above={<i>도구줄</i>}>
+          본문
+        </Screen>
+      </TDSMobileProvider>,
+    );
+
+  it('제목보다 위에 그린다 — 슬롯만 만들고 자리를 안 옮기면 아무것도 안 바뀐다', () => {
+    const markup = withAbove('내 책방');
+
+    expect(markup).toContain('도구줄');
+    expect(markup).toContain('내 책방');
+    expect(markup.indexOf('도구줄')).toBeLessThan(markup.indexOf('내 책방'));
+  });
+
+  it('제목이 없는 화면에서도 그린다 — 제목 유무는 위에 얹힌 도구와 무관하다', () => {
+    const markup = withAbove();
+
+    expect(markup).toContain('도구줄');
+    expect(markup.indexOf('도구줄')).toBeLessThan(markup.indexOf('본문'));
+  });
+});
+
+/**
+ * 제목 밑줄 슬롯(`subtitle`) — 제목에 딸린 식별자(@핸들)라 제목과 떨어지면 다른 정보처럼 읽힌다.
+ * 그래서 있으면 제목 행의 아래 여백을 20 → 3으로 좁혀 밀착시킨다.
+ */
+describe('화면 껍데기 — 제목 밑줄 슬롯 (subtitle)', () => {
+  const withSubtitle = (subtitle?: ReactNode) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Screen title="내 책방" subtitle={subtitle}>
+          본문
+        </Screen>
+      </TDSMobileProvider>,
+    );
+
+  it('제목 다음·본문보다 앞에 온다', () => {
+    const markup = withSubtitle(<i>@goospel</i>);
+
+    expect(markup.indexOf('내 책방')).toBeLessThan(markup.indexOf('@goospel'));
+    expect(markup.indexOf('@goospel')).toBeLessThan(markup.indexOf('본문'));
+  });
+
+  it('있으면 제목 행에 밀착시킨다 — 20px이 그대로면 @핸들이 제목과 떨어져 다른 정보로 읽힌다', () => {
+    const markup = withSubtitle(<i>@goospel</i>);
+
+    expect(markup).toContain('margin-bottom:3px');
+    expect(markup).not.toContain('margin-bottom:20px');
+  });
+
+  it('없으면 지금 그대로 — subtitle 도입이 다른 화면의 제목 간격을 건드리면 안 된다', () => {
+    const markup = withSubtitle();
+
+    expect(markup).toContain('margin-bottom:20px');
+    expect(markup).not.toContain('margin-bottom:3px');
   });
 });
 

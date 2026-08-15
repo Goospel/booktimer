@@ -12,9 +12,10 @@ import type {
   UserRow,
 } from './api';
 import { ApiError, adRefreshPersonality, selectPersonality } from './api';
-import { Bookshop, FollowListSheet, HandleSheet, SearchSheet, UserList } from './screens/Bookshop';
+import { Bookshop, BookshopHeader, FollowListSheet, HandleSheet, SearchSheet, UserList } from './screens/Bookshop';
 import {
   ArchiveSheet,
+  FollowCountButton,
   ProfileCard,
   SafetyPanel,
   analysisFailed,
@@ -448,25 +449,26 @@ describe('카운트 클릭 가능 판정 (followCountsOpenable)', () => {
 
 /** 술어가 마크업에 실제로 배선됐는지 — 함수만 맞고 배선이 빠지면 화면엔 아무 일도 안 일어난다. */
 describe('책방 헤더 — 카운트 줄', () => {
+  // 버튼임의 표식은 이제 `aria-label`이다 — 라벨과 숫자가 각자 span으로 갈려(테두리 버튼) 글자가 이어 붙지 않는다.
   it('내 책방(핸들러 있음)이면 팔로워·팔로잉이 버튼이다', () => {
     const markup = card(profile({ self: true }), [], null, { openFollowList: true });
 
-    expect(markup).toMatch(/<button[^>]*>팔로워 3/);
-    expect(markup).toMatch(/<button[^>]*>팔로잉 5/);
+    expect(markup).toContain('aria-label="팔로워 3명 보기"');
+    expect(markup).toContain('aria-label="팔로잉 5명 보기"');
   });
 
   it('남의 책방이면 숫자 텍스트로 남는다 — 눌러도 열 목록이 없다', () => {
     const markup = card(profile({ self: false }), [], null, { openFollowList: true });
 
     expect(markup).toContain('팔로워 3 · 팔로잉 5');
-    expect(markup).not.toMatch(/<button[^>]*>팔로워 3/);
+    expect(markup).not.toContain('명 보기');
   });
 
   it('내 책방이어도 핸들러를 안 받았으면 텍스트다 — 남의 책방 렌더 경로가 그대로 살아 있다', () => {
     const markup = card(profile({ self: true }), [], null, { openFollowList: false });
 
     expect(markup).toContain('팔로워 3 · 팔로잉 5');
-    expect(markup).not.toMatch(/<button[^>]*>팔로워 3/);
+    expect(markup).not.toContain('명 보기');
   });
 
   it('셸이 준 header(스토리·검색)를 제목 아래 카운트 줄 위에 끼운다', () => {
@@ -474,6 +476,84 @@ describe('책방 헤더 — 카운트 줄', () => {
 
     expect(markup).toContain('헤더슬롯');
     expect(markup.indexOf('헤더슬롯')).toBeLessThan(markup.indexOf('@goospel'));
+  });
+});
+
+/**
+ * 팔로워·팔로잉 손잡이 — 밑줄 친 작은 글자라 눌리는 것으로 안 읽혔고(#788에서 지운 ← 와 같은 종류),
+ * 손가락 표적도 작았다. 테두리 있는 큰 버튼으로 세운다.
+ */
+describe('팔로우 카운트 버튼 (FollowCountButton)', () => {
+  it('스크린리더가 읽을 이름을 단다 — 「팔로워」와 숫자가 따로 놓여 이름 없는 버튼이 되기 쉽다', () => {
+    const markup = render(<FollowCountButton label="팔로워" count={4} onClick={() => {}} />);
+
+    expect(markup).toContain('<button');
+    expect(markup).toContain('aria-label="팔로워 4명 보기"');
+    expect(markup).toContain('4');
+  });
+});
+
+/**
+ * 상단 재배치 — @아이디는 <b>제목 바로 아래</b>로 내려 닉네임에 붙이고, 카운트는 그 아래 버튼 두 개다.
+ * 셋이 한 줄에 섞여 있으면 @아이디가 카운트의 일부처럼 읽힌다(사용자 제보).
+ */
+describe('책방 헤더 — @아이디와 카운트 버튼', () => {
+  it('내 책방이면 @아이디가 카운트 버튼보다 위에 따로 선다', () => {
+    const markup = card(profile({ self: true }), [], null, { openFollowList: true });
+
+    expect(markup).toContain('aria-label="팔로워 3명 보기"');
+    expect(markup).toContain('aria-label="팔로잉 5명 보기"');
+    expect(markup.indexOf('@goospel')).toBeLessThan(markup.indexOf('팔로워 3명 보기'));
+    // 「@goospel ·」로 이어 붙던 옛 한 줄 — 되살아나면 아이디가 카운트에 섞여 다시 안 보인다.
+    expect(markup).not.toContain('@goospel ·');
+  });
+
+  it('남의 책방은 텍스트 그대로 — 서버가 남의 목록을 안 주므로 버튼처럼 보이게 하지 않는다(#788)', () => {
+    const markup = card(profile({ self: false }), [], null, { openFollowList: true });
+
+    expect(markup).toContain('팔로워 3 · 팔로잉 5');
+    expect(markup).not.toContain('명 보기');
+  });
+});
+
+/**
+ * 상단 도구 순서 — 검색이 최상단이고 스토리가 그 아래다. 셸의 지역 변수로 두면 첫 렌더(feed=null)에서
+ * 스트립이 통째로 빠져 두 줄의 앞뒤를 잴 수 없어, 순서를 계측하려고 컴포넌트로 꺼냈다.
+ */
+describe('책방 상단 도구 (BookshopHeader)', () => {
+  it('검색 진입바가 스토리 스트립보다 위에 선다', () => {
+    const markup = render(
+      <BookshopHeader
+        feed={{ mine: null, groups: [] }}
+        onOpenStory={() => {}}
+        onCompose={() => {}}
+        onSearch={() => {}}
+      />,
+    );
+
+    expect(markup).toContain('아이디로 친구 찾기');
+    expect(markup).toContain('스토리 쓰기');
+    expect(markup.indexOf('아이디로 친구 찾기')).toBeLessThan(markup.indexOf('스토리 쓰기'));
+  });
+});
+
+/** 상단 도구는 화면 제목보다 위다 — 「…님의 책방」 아래에 검색창이 오는 순서가 어색했다. */
+describe('책방 탭 루트 — 상단 도구가 제목보다 위', () => {
+  const shop = (myLoginId: string | null) =>
+    render(<Bookshop myLoginId={myLoginId} onHandleCreated={() => {}} onError={() => {}} />);
+
+  it('내 책방(로딩 분기)에서도 검색 진입바가 「책방」 제목보다 앞에 온다', () => {
+    const markup = shop('me');
+
+    expect(markup).toContain('아이디로 친구 찾기');
+    expect(markup.indexOf('아이디로 친구 찾기')).toBeLessThan(markup.indexOf('책방'));
+  });
+
+  it('핸들 없는 계정 화면도 같은 순서다 — 여기만 옛 배치로 남기 쉽다', () => {
+    const markup = shop(null);
+
+    expect(markup).toContain('아이디 만들기');
+    expect(markup.indexOf('아이디로 친구 찾기')).toBeLessThan(markup.indexOf('책방'));
   });
 });
 
