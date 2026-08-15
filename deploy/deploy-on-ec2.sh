@@ -37,6 +37,17 @@ health_ok() {  # $1 = 서비스명. 전체 /actuator/health가 아니라 readine
         curl -sf --max-time 5 http://localhost:8080/actuator/health/readiness >/dev/null 2>&1
 }
 
+pem_readable() {  # $1 = 서비스명. 컨테이너가 토스 mTLS 인증서를 **실제로 읽을 수 있는지** 본다.
+                  # 컨테이너는 비root(Dockerfile USER)로 돌고 PEM은 600이라, render-env.sh 의 chown 과
+                  # uid가 어긋나면 못 읽는다. 그런데 Spring SSL 번들은 **지연 생성**이라 앱은 멀쩡히 뜨고
+                  # 위 헬스체크도 통과한다 — 토스 로그인만 죽어 미니앱이 시작조차 못 하는 무성 장애가 된다.
+                  # 그래서 uid 산수를 믿지 않고 전환 전에 직접 읽어 본다(권한 비트가 아니라 실제 read).
+    if [ "$DRYRUN" = 1 ]; then [ "${DEPLOY_FAKE_PEM:-ok}" = ok ]; return $?; fi
+    docker compose -f "$COMPOSE_FILE" exec -T "$1" sh -c \
+        'head -c1 /etc/booktimer/toss/client-cert.pem >/dev/null && head -c1 /etc/booktimer/toss/client-key.pem >/dev/null' \
+        >/dev/null 2>&1
+}
+
 # ── 1) 전환 방향 결정 (blue ↔ green 대칭) ──
 if running_services | grep -qx app-blue; then
     NEW=app-green; OLD=app-blue
@@ -98,9 +109,18 @@ for _ in $(seq 1 "$HEALTH_RETRIES"); do
     sleep "$HEALTH_SLEEP"
 done
 
+# ── 4.5) 토스 mTLS 인증서 가독성 게이트 ──
+# 헬스 통과 ≠ 토스 로그인 가능. 위 pem_readable 주석대로 SSL 번들이 지연 생성이라 인증서를 못 읽어도
+# 헬스는 초록이다. 여기서 걸러 **아래 5)의 롤백 경로로 합류**시킨다 — 옛 컨테이너는 안 건드린다.
+if [ "$ok" = 1 ] && ! pem_readable "$NEW"; then
+    echo "[deploy] $NEW 가 토스 mTLS 인증서를 못 읽습니다 — 컨테이너 uid(Dockerfile USER)와" >&2
+    echo "         PEM 소유자(render-env.sh APP_UID)가 어긋났을 수 있습니다." >&2
+    ok=0
+fi
+
 # ── 5) 실패: 새 것만 버리고 옛 것은 그대로 살려둔다 ──
 if [ "$ok" != 1 ]; then
-    echo "[deploy] $NEW 헬스체크 실패 — $OLD 를 유지한 채 롤백합니다" >&2
+    echo "[deploy] $NEW 기동 검증 실패 — $OLD 를 유지한 채 롤백합니다" >&2
     dc rm -sf "$NEW" || true
     exit 1
 fi

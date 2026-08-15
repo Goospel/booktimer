@@ -91,6 +91,12 @@ echo "[render-env] $OUT 생성 완료 ($(grep -c '=' "$OUT") 개 변수)"
 TOSS_DIR="${TOSS_DIR:-./toss}"
 mkdir -p "$TOSS_DIR"
 
+# 앱 컨테이너가 도는 uid — Dockerfile 의 `USER 10001:10001` 과 **한 쌍**이다.
+# PEM 은 600 이라 소유자만 읽을 수 있는데, 이 배포는 root 로 돈다(SSM Run Command — 실측 uid=0).
+# 그대로 두면 root:root 600 이 되어 비root 컨테이너가 못 읽고, Spring SSL 번들은 지연 생성이라
+# **앱은 뜨고 토스 로그인만 조용히 죽는다**. 그래서 권한은 600 그대로 두고 소유자만 넘긴다.
+APP_UID="${APP_UID:-10001}"
+
 render_pem() {  # $1=SSM 파라미터 이름  $2=출력 파일
     local value
     # 누락은 조용히 넘기지 않는다 — 빈 PEM으로 앱이 뜨면 토스 로그인만 죽는 무성 장애가 된다.
@@ -101,6 +107,13 @@ render_pem() {  # $1=SSM 파라미터 이름  $2=출력 파일
     }
     printf '%s\n' "$value" > "$2"
     chmod 600 "$2"
+    # root 일 때만 넘길 수 있다. 실 배포는 root 이므로 항상 실행되고, 실패하면 set -e 가 배포를 죽인다.
+    # root 가 아닌 실행(로컬 스모크 테스트)은 건너뛰되 조용히 넘어가지 않는다.
+    if [ "$(id -u)" = 0 ]; then
+        chown "$APP_UID:$APP_UID" "$2"
+    else
+        printf '[render-env] root가 아니라 %s 소유권 이전을 건너뛴다(실 배포는 root)\n' "$2" >&2
+    fi
 }
 
 render_pem /booktimer/TOSS_MTLS_CERT "$TOSS_DIR/client-cert.pem"
