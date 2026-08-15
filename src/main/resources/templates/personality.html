@@ -24,6 +24,6 @@
         <p class="status-line">JavaScript가 비활성화되어 있습니다. 책BTI를 보려면 JavaScript를 활성화해 주세요.</p>
     </noscript>
 </div>
-<script type="module" th:src="@{/personality/personality.js}"></script>
+<script type="module" th:attr="nonce=${cspNonce}" th:src="@{/personality/personality.js}"></script>
 </body>
 </html>

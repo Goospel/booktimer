@@ -57,7 +57,7 @@
                     <p th:text="${f.reply}">답장</p>
                 </div>
                 <form th:action="@{/feedback/{id}/delete(id=${f.id})}" method="post"
-                      onsubmit="return confirm('이 문의를 삭제할까요?');">
+                      data-confirm="이 문의를 삭제할까요?">
                     <button type="submit" class="btn-ghost btn-small">삭제</button>
                 </form>
             </li>
@@ -68,5 +68,7 @@
         <th:block th:replace="~{fragments/nav-links :: navLink(@{/}, 'home', '홈')}"></th:block>
     </nav>
 </div>
+<!-- data-confirm 위임 리스너 — 인라인 onsubmit은 CSP에서 실행되지 않는다 -->
+<script th:attr="nonce=${cspNonce}" th:src="@{/js/confirm-submit.js}"></script>
 </body>
 </html>

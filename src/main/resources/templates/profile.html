@@ -34,6 +34,6 @@
     <!-- 광고 (하단, 게시자 ID 설정 시에만) -->
     <div th:replace="~{ads :: unit}"></div>
 </div>
-<script type="module" th:src="@{/profile/profile.js}"></script>
+<script type="module" th:attr="nonce=${cspNonce}" th:src="@{/profile/profile.js}"></script>
 </body>
 </html>

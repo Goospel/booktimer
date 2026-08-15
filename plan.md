@@ -1995,10 +1995,27 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
       교차 단언한다(두 값은 다른 파일에 있고 어긋나도 빌드·기동·헬스가 전부 초록이라, 드리프트는 사용자 제보로만
       드러난다 — 그 결합이 이 함정의 유일한 재발 경로다). `test-deploy-bluegreen.sh`는 「헬스는 OK인데 인증서를
       못 읽는」 경우를 케이스로 둔다(게이트가 헬스와 **독립**임을 못 박고, 반대 케이스로 공허함도 막는다).
-- [ ] (후속) 리뷰 Low 잔여 1건 — **CSP 없음**(⚠️ AdSense·GA가 걸려 있어 `nonce`+`strict-dynamic`이 필요하고,
-      광고는 localhost에서 안 떠 **배포 후 확인이 유일한 게이트**다). 인벤토리는 좋다 — 외부 스크립트 2개뿐,
-      Alpine/htmx/Phaser 전멸로 `eval` 0건, 인라인 핸들러 5개가 전부 같은 `onsubmit="return confirm()"` 패턴이라
-      위임 리스너 하나로 없앨 수 있다.
+- [x] **CSP 도입 — nonce + strict-dynamic** (완료 ✅ 2026-08-15) — 리뷰 Low 4번, 전체 리뷰의 마지막 항목.
+      `SecurityConfig`에 `headers()` 설정이 아예 없어 CSP가 없었다(Spring 기본은 CSP를 안 붙인다).
+      **인벤토리가 좋아서 strict가 가능했다**: 외부 스크립트는 AdSense·GA 2개뿐이고 나머지는 전부 자체 호스팅,
+      Alpine/htmx/Phaser가 전부 은퇴해 `eval` 0건(→ `unsafe-eval` 불필요), Vue 번들이 런타임에 `<style>`을
+      주입하지 않으며(SFC `<style>` 0건·CSS import 0건), 인라인 핸들러 5개가 전부 같은
+      `onsubmit="return confirm()"` 패턴이라 위임 리스너 하나로 없앴다(`js/confirm-submit.js` + `data-confirm`).
+      정적 문자열 정책으로는 인라인을 허용하려면 `'unsafe-inline'`이 필요한데 그러면 XSS 방어가 사라지므로,
+      **요청마다 nonce를 뽑는 서블릿 필터**(`CspNonceFilter`)로 갔다 — Spring Security의 `contentSecurityPolicy()`는
+      정적 문자열만 받아 이걸 못 한다. 템플릿은 `${cspNonce}`로 읽는다(Thymeleaf가 요청 속성을 변수로 노출하는
+      `${_csrf}`와 같은 경로).
+      ⚠️ **`'strict-dynamic'`의 대가**: 호스트 허용목록(`'self'` 포함)이 **무시**되므로 외부든 우리 번들이든
+      **모든 `<script>`에 nonce가 있어야** 실행된다(총 18개 + 신규 5개). 빠뜨리면 에러 없이 그 스크립트만
+      조용히 안 돈다 — 화면은 멀쩡한데 기능 하나가 죽는, CSP가 새로 만드는 실패 모드다. 그래서 회귀 가드를
+      런타임(헤더 nonce == 렌더된 태그 nonce)과 **템플릿 소스 스캔** 둘로 뒀다 — 소스 스캔이 있어야
+      테스트가 렌더해 보지 않은 나머지 화면까지 커버된다.
+      strict-dynamic을 쓴 이유는 AdSense다 — 로더가 런타임에 여러 호스트에서 스크립트를 심어 허용목록으로는
+      적을 수 없다. 뒤의 `https: 'unsafe-inline'`은 구형 브라우저 폴백이고 최신 브라우저는 무시한다.
+      `style-src`는 `'unsafe-inline'`을 유지했다 — 관리자 `<style>` 5개 + 인라인 `style=` 18곳을 다 뜯는
+      회귀 위험이 CSS 주입의 위력보다 크다(스크립트는 절대 이렇게 하지 않는다).
+      ⚠️ **남은 확인 1건**: 광고는 localhost에서 서빙되지 않아 **AdSense 실제 노출은 배포 후 육안 확인**이 유일한
+      게이트다. 깨지면 `script-src`에서 `'strict-dynamic'`만 빼고 호스트 허용목록으로 되돌리는 게 최소 롤백이다.
 
 #### 이메일 발송 인프라 — 가입 이메일 인증 + 열거 통지 + 비번 재설정 + 재참여 넛지 (우선순위: 중→상 승격 검토 / 언젠가 필수)
 > ⬆️ **우선순위 상향 신호 (2026-06-06)**: §전략 「retention 레버 ①」(재참여 넛지)이 **이메일로 확정**되면서, 이 인프라가

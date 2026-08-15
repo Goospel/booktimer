@@ -34,6 +34,6 @@
     <div th:replace="~{ads :: unit}"></div>
 </div>
 <!-- Spring resource chain이 런타임에 follow-list-<hash>.js 로 변환 -->
-<script type="module" th:src="@{/follow-list/follow-list.js}"></script>
+<script type="module" th:attr="nonce=${cspNonce}" th:src="@{/follow-list/follow-list.js}"></script>
 </body>
 </html>

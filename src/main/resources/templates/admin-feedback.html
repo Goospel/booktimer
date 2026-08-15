@@ -45,7 +45,7 @@
                 <button type="submit" class="btn-primary btn-small">처리완료</button>
             </form>
             <form th:action="@{/admin/feedback/{id}/delete(id=${row.id})}" method="post"
-                  onsubmit="return confirm('이 문의를 삭제할까요?');">
+                  data-confirm="이 문의를 삭제할까요?">
                 <button type="submit" class="btn-danger btn-small">삭제</button>
             </form>
         </div>
@@ -62,5 +62,7 @@
         <th:block th:replace="~{fragments/nav-links :: navLink(@{/admin}, 'back', '관리자 홈')}"></th:block>
     </nav>
 </div>
+<!-- data-confirm 위임 리스너 — 인라인 onsubmit은 CSP에서 실행되지 않는다 -->
+<script th:attr="nonce=${cspNonce}" th:src="@{/js/confirm-submit.js}"></script>
 </body>
 </html>

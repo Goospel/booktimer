@@ -1,5 +1,6 @@
 package com.booktimer.config;
 
+import com.booktimer.security.CspNonceFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -65,6 +66,24 @@ public class WebConfig {
                 new FilterRegistrationBean<>(new ForwardedHeaderFilter());
         // 보안 필터 체인보다 먼저 실행돼 요청 스킴/호스트를 먼저 바로잡아야 한다.
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
+        return registration;
+    }
+
+    /**
+     * CSP nonce 발급 + {@code Content-Security-Policy} 헤더 (근거·정책은 {@link CspNonceFilter} 주석).
+     *
+     * <p>Spring Security의 {@code headers().contentSecurityPolicy(...)}가 아니라 서블릿 필터로 두는 이유:
+     * 그쪽은 <b>정적 문자열</b>만 받아 요청별 nonce를 낼 수 없다. 또 보안 체인이 두 개(세션·미니앱 Bearer)라
+     * 필터로 두면 어느 체인을 타든, 로그인 리다이렉트·에러 응답이든 빠짐없이 붙는다.
+     *
+     * <p>순서는 {@code ForwardedHeaderFilter} 바로 뒤 — 뷰가 렌더되기 훨씬 전에 요청 속성을 심어야
+     * 템플릿이 {@code ${cspNonce}}로 읽을 수 있다.
+     */
+    @Bean
+    public FilterRegistrationBean<CspNonceFilter> cspNonceFilter() {
+        FilterRegistrationBean<CspNonceFilter> registration =
+                new FilterRegistrationBean<>(new CspNonceFilter());
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);
         return registration;
     }
 

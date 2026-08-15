@@ -34,6 +34,6 @@
     <div th:replace="~{ads :: unit}"></div>
 </div>
 <!-- Spring resource chain이 런타임에 book-readers-<hash>.js 로 변환 -->
-<script type="module" th:src="@{/book-readers/book-readers.js}"></script>
+<script type="module" th:attr="nonce=${cspNonce}" th:src="@{/book-readers/book-readers.js}"></script>
 </body>
 </html>

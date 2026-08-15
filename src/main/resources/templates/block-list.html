@@ -21,6 +21,6 @@
     <div id="block-list-app" th:attr="data-my-login-id=${myLoginId}">불러오는 중…</div>
     <noscript><p>JavaScript가 필요합니다.</p></noscript>
 </div>
-<script type="module" th:src="@{/block-list/block-list.js}"></script>
+<script type="module" th:attr="nonce=${cspNonce}" th:src="@{/block-list/block-list.js}"></script>
 </body>
 </html>
