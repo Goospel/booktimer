@@ -155,9 +155,12 @@ public class AccountService {
      * 입력 핸들은 앞뒤 공백·선행 {@code @}·대소문자만 다른 건 같은 것으로 본다. LOCAL 계정에는 쓸 수 없다 —
      * LOCAL은 반드시 비밀번호 확인 경로({@link #deleteAccount})를 거쳐야 한다.
      *
-     * @param confirmHandle 사용자가 재확인용으로 입력한 @핸들(본인 login_id와 일치해야 함)
+     * <p><b>아직 핸들이 없는 계정</b>(온보딩 전 소셜 가입)은 <b>이메일</b>을 확인 값으로 받는다 — @핸들만
+     * 인정하면 입력할 값이 없어 화면으로 탈퇴할 방법이 사라진다(화면 안내도 같은 값을 보여준다).
+     *
+     * @param confirmHandle 사용자가 재확인용으로 입력한 값(본인 login_id, 핸들이 없으면 이메일과 일치해야 함)
      * @throws IllegalStateException                 사용자가 없거나, 대상이 LOCAL 계정인 경우
-     * @throws AccountDeletionConfirmationException   입력 핸들이 본인 login_id와 일치하지 않는 경우(삭제 안 함)
+     * @throws AccountDeletionConfirmationException   입력값이 본인 확인 값과 일치하지 않는 경우(삭제 안 함)
      */
     public void deleteSocialAccount(String email, String confirmHandle) {
         User user = load(email);
@@ -193,9 +196,13 @@ public class AccountService {
         purge(user);
     }
 
-    /** 입력 핸들을 정규화(공백 제거·선행 @ 제거·소문자)해 본인 login_id와 같은지 본다. login_id 미설정/입력 null이면 불일치. */
+    /**
+     * 입력값을 정규화(앞뒤 공백 제거·선행 {@code @} 제거·대소문자 무시)해 본인 확인 값과 같은지 본다.
+     * 확인 값은 <b>@핸들(login_id)</b>이되, 아직 핸들이 없으면(온보딩 전 소셜 계정) <b>이메일</b>이다 —
+     * 핸들에만 매달리면 그 계정은 입력할 값이 없어 탈퇴 자체가 불가능해진다. 입력이 null이면 불일치.
+     */
     private boolean handleMatches(User user, String confirmHandle) {
-        String actual = user.getLoginId();
+        String actual = user.getLoginId() != null ? user.getLoginId() : user.getEmail();
         if (actual == null || confirmHandle == null) {
             return false;
         }
@@ -203,7 +210,7 @@ public class AccountService {
         if (typed.startsWith("@")) {
             typed = typed.substring(1);
         }
-        return actual.equals(typed.toLowerCase(java.util.Locale.ROOT));
+        return actual.equalsIgnoreCase(typed);
     }
 
     /**
