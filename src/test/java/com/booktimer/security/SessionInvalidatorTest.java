@@ -119,6 +119,20 @@ class SessionInvalidatorTest {
     }
 
     @Test
+    @DisplayName("아이디를 바꾼 계정은 옛 아이디로 인덱싱된 세션까지 지운다 — 비번을 바꿔도 침입자가 안 쫓겨나면 안 된다")
+    void removesSessionsIndexedByPreviousLoginId() {
+        // 아이디 변경 전에 열린 세션의 principal은 옛 핸들이고, 브리지 조회 덕에 그 세션은 계속 잘 동작한다.
+        // 그래서 여기서 안 지우면 비밀번호 재설정이 정확히 그 세션을 남긴다.
+        String byOldHandle = newSession("prevold01");
+        User u = user("prev@booktimer.com", "prevold01");
+        u.changeLoginId("prevnew01");
+
+        invalidator.invalidate(u, null);
+
+        assertThat(alive(byOldHandle)).isFalse();
+    }
+
+    @Test
     @DisplayName("지울 세션이 없어도 조용히 끝난다")
     void noSessionsIsNotAnError() {
         invalidator.invalidate(user("nobody@booktimer.com", "nobody01"), null);
