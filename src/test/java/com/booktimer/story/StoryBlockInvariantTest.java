@@ -9,11 +9,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Clock;
-import java.time.Duration;
-import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -28,6 +26,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Transactional
 class StoryBlockInvariantTest {
 
+    private static final Pageable ALL = PageRequest.of(0, 200);
+
     @Autowired
     private StoryRepository storyRepository;
 
@@ -40,44 +40,37 @@ class StoryBlockInvariantTest {
     @Autowired
     private BlockService blockService;
 
-    @Autowired
-    private Clock clock;
-
     private User user(String email, String loginId) {
         User u = User.of(email, "$2a$10$abcdefghijklmnopqrstuv", "책벌레", "Asia/Seoul", Role.USER);
         u.assignLoginId(loginId);
         return userRepository.save(u);
     }
 
-    private Instant cutoff() {
-        return clock.instant().minus(Duration.ofHours(24));
-    }
-
     @Test
-    @DisplayName("작성자가 열람자를 차단하면 팔로우가 끊겨 피드에서 스토리가 사라진다")
+    @DisplayName("작성자가 열람자를 차단하면 팔로우가 끊겨 피드에서 여백이 사라진다")
     void authorBlockingViewer_removesStoriesFromFeed() {
         User viewer = user("viewer@booktimer.com", "viewer");
         User author = user("author@booktimer.com", "author");
         followService.follow(viewer, author);
         storyRepository.save(Story.of(author, "차단 전 문장", null, null));
-        assertThat(storyRepository.feedOf(viewer, cutoff())).hasSize(1);
+        assertThat(storyRepository.feedOf(viewer, ALL)).hasSize(1);
 
         blockService.block(author, viewer);
 
-        assertThat(storyRepository.feedOf(viewer, cutoff())).isEmpty();
+        assertThat(storyRepository.feedOf(viewer, ALL)).isEmpty();
     }
 
     @Test
-    @DisplayName("열람자가 작성자를 차단해도 팔로우가 끊겨 피드에서 스토리가 사라진다")
+    @DisplayName("열람자가 작성자를 차단해도 팔로우가 끊겨 피드에서 여백이 사라진다")
     void viewerBlockingAuthor_removesStoriesFromFeed() {
         User viewer = user("viewer@booktimer.com", "viewer");
         User author = user("author@booktimer.com", "author");
         followService.follow(viewer, author);
         storyRepository.save(Story.of(author, "차단 전 문장", null, null));
-        assertThat(storyRepository.feedOf(viewer, cutoff())).hasSize(1);
+        assertThat(storyRepository.feedOf(viewer, ALL)).hasSize(1);
 
         blockService.block(viewer, author);
 
-        assertThat(storyRepository.feedOf(viewer, cutoff())).isEmpty();
+        assertThat(storyRepository.feedOf(viewer, ALL)).isEmpty();
     }
 }

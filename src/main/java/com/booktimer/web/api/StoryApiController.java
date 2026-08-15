@@ -22,10 +22,13 @@ import java.security.Principal;
 import java.util.List;
 
 /**
- * 독서 스토리 JSON API (sns-design §13.4) — 홈 스트립·풀스크린 뷰어·작성 모달용.
+ * 여백 JSON API (sns-design §13.4) — 홈 스트립·풀스크린 뷰어·작성 모달용.
  *
- * <p>개별 스토리 GET은 없다 — 본문(≤500자)이 피드 응답에 통째로 실리므로 상세 조회가 불필요하고,
- * 노출 경계 진입점을 최소화한다. 게이트·상태코드(레이트리밋 429·상한 400·미노출 404)는
+ * <p>URL·타입 이름은 {@code story}로 남는다 — 사용자에게 보이는 어휘만 「여백」으로 바꿨고,
+ * 경로·테이블까지 개명하면 마이그레이션이 딸려 오는데 그건 사용자가 보지 않는 값이다(2026-08-16).
+ *
+ * <p>개별 여백 GET은 없다 — 본문(≤500자)이 피드 응답에 통째로 실리므로 상세 조회가 불필요하고,
+ * 노출 경계 진입점을 최소화한다. 게이트·상태코드(레이트리밋 429·미노출 404)는
  * {@link StoryService}가 담당하고, 여기서는 도메인 검증 실패(IAE)만 400으로 변환한다.
  * SecurityConfig default-deny로 자동 인증·CSRF 보호.
  */
@@ -58,7 +61,7 @@ public class StoryApiController {
             return StoryCard.of(story, true); // 본인 카드는 항상 viewed 취급 (피드 mine과 동일)
         } catch (IllegalArgumentException e) {
             // 도메인 검증(문장 길이·팔레트 등) 실패 — 프론트는 상태코드로 분기해 안내한다
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "스토리를 작성할 수 없습니다");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "여백을 남길 수 없습니다");
         }
     }
 

@@ -57,8 +57,8 @@ describe('dev-mock 핸들러', () => {
     expect(after.books.some((b) => b.id === added.id)).toBe(false);
   });
 
-  it('스토리 작성 — 내 스토리 그룹(mine)에 붙는다', async () => {
-    const created = await mockRequest<StoryCard>('/api/stories', { body: { text: '목 스토리', bookId: null, bgCode: 'sea' } });
+  it('여백 작성 — 내 여백 그룹(mine)에 붙는다', async () => {
+    const created = await mockRequest<StoryCard>('/api/stories', { body: { text: '목 여백', bookId: null, bgCode: 'sea' } });
 
     const feed = await mockRequest<StoryFeedResponse>('/api/stories/feed', {});
     expect(feed.mine!.stories.some((s) => s.id === created.id)).toBe(true);

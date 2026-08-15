@@ -17,6 +17,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -29,7 +31,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class StoryRepositoryTest {
 
     private static final Instant NOW = Instant.parse("2026-07-02T12:00:00Z");
-    private static final Instant CUTOFF = NOW.minus(Duration.ofHours(24));
+    /** 만료가 사라진 뒤 "옛 여백"의 기준 — 예전 cutoff(24h)보다 더 오래된 것도 그대로 실려야 한다. */
+    private static final Instant LONG_AGO = NOW.minus(Duration.ofDays(30));
+    private static final Pageable ALL = PageRequest.of(0, 200);
 
     @PersistenceContext
     private EntityManager em;
@@ -90,23 +94,38 @@ class StoryRepositoryTest {
         storyAt(stranger, "남 문장", NOW.minusSeconds(60));
         storyAt(viewer, "내 문장", NOW.minusSeconds(60));
 
-        List<Story> feed = storyRepository.feedOf(viewer, CUTOFF);
+        List<Story> feed = storyRepository.feedOf(viewer, ALL);
 
         assertThat(feed).extracting(Story::getText).containsExactly("팔로잉 문장");
     }
 
     @Test
-    @DisplayName("feedOf 24h 경계: 정확히 24h 지난 스토리는 제외, 24h−1s는 포함")
-    void feedOf_expiryBoundary() {
+    @DisplayName("feedOf: 30일 전 여백도 피드에 남는다 — 시간 만료가 없다")
+    void feedOf_keepsOldEntries() {
         User viewer = user("viewer@booktimer.com", "viewer");
         User author = user("author@booktimer.com", "author");
         follow(viewer, author);
-        storyAt(author, "정확히 24h", CUTOFF);                  // 나이 = 정확히 24h → 만료
-        storyAt(author, "24h-1s", CUTOFF.plusSeconds(1));       // 나이 = 24h−1s → 활성
+        storyAt(author, "옛 여백", LONG_AGO);
+        storyAt(author, "새 여백", NOW.minusSeconds(60));
 
-        List<Story> feed = storyRepository.feedOf(viewer, CUTOFF);
+        List<Story> feed = storyRepository.feedOf(viewer, ALL);
 
-        assertThat(feed).extracting(Story::getText).containsExactly("24h-1s");
+        assertThat(feed).extracting(Story::getText).containsExactly("새 여백", "옛 여백"); // 최신순
+    }
+
+    @Test
+    @DisplayName("feedOf: Pageable 상한이 최신부터 자른다 — 무한 성장 차단")
+    void feedOf_limitTakesNewest() {
+        User viewer = user("viewer@booktimer.com", "viewer");
+        User author = user("author@booktimer.com", "author");
+        follow(viewer, author);
+        storyAt(author, "오래된", NOW.minusSeconds(300));
+        storyAt(author, "중간", NOW.minusSeconds(200));
+        storyAt(author, "최신", NOW.minusSeconds(100));
+
+        List<Story> feed = storyRepository.feedOf(viewer, PageRequest.of(0, 2));
+
+        assertThat(feed).extracting(Story::getText).containsExactly("최신", "중간");
     }
 
     @Test
@@ -120,16 +139,16 @@ class StoryRepositoryTest {
         storyAt(adminAuthor, "운영자 문장", NOW.minusSeconds(60));
         storyAt(nullHandle, "온보딩전 문장", NOW.minusSeconds(60));
 
-        List<Story> feed = storyRepository.feedOf(viewer, CUTOFF);
+        List<Story> feed = storyRepository.feedOf(viewer, ALL);
 
         assertThat(feed).isEmpty();
     }
 
     @Test
-    @DisplayName("feedOf 정렬: 작성자 id asc → 그 안에서 작성순 asc")
-    void feedOf_ordersByAuthorIdThenCreatedAtAsc() {
+    @DisplayName("feedOf 정렬: 작성자를 가리지 않고 최신순 — Pageable 상한이 최신을 취하려면 이 순서여야 한다")
+    void feedOf_ordersByCreatedAtDesc() {
         User viewer = user("viewer@booktimer.com", "viewer");
-        User first = user("first@booktimer.com", "first");   // 먼저 저장 → 더 작은 id
+        User first = user("first@booktimer.com", "first");
         User second = user("second@booktimer.com", "second");
         follow(viewer, first);
         follow(viewer, second);
@@ -138,10 +157,10 @@ class StoryRepositoryTest {
         storyAt(first, "a-이름", NOW.minusSeconds(300));
         storyAt(second, "b-이름", NOW.minusSeconds(400));
 
-        List<Story> feed = storyRepository.feedOf(viewer, CUTOFF);
+        List<Story> feed = storyRepository.feedOf(viewer, ALL);
 
         assertThat(feed).extracting(Story::getText)
-                .containsExactly("a-이름", "a-늦음", "b-이름", "b-늦음");
+                .containsExactly("b-늦음", "a-늦음", "a-이름", "b-이름");
     }
 
     // --- fetch 초기화 검증 (flush/clear 필수 — 1차 캐시가 살아있으면 가짜 GREEN) ---
@@ -162,7 +181,7 @@ class StoryRepositoryTest {
         em.flush();
         em.clear();
 
-        List<Story> feed = storyRepository.feedOf(viewer, CUTOFF);
+        List<Story> feed = storyRepository.feedOf(viewer, ALL);
 
         assertThat(feed).hasSize(1);
         assertThat(Hibernate.isInitialized(feed.get(0).getUser())).isTrue();
@@ -170,8 +189,8 @@ class StoryRepositoryTest {
     }
 
     @Test
-    @DisplayName("findByUserAndCreatedAtAfterOrderByCreatedAtAsc: 첨부 책이 즉시 초기화된다 (N+1 없음)")
-    void myActiveStories_initializesBook() {
+    @DisplayName("findByUserOrderByCreatedAtDescIdDesc: 첨부 책이 즉시 초기화된다 (N+1 없음)")
+    void myRecentStories_initializesBook() {
         User me = user("me@booktimer.com", "meuser");
         Book book = Book.register(me, "내 책", null, null, null, null, null, BookStatus.READING);
         book.makePublic();
@@ -181,35 +200,34 @@ class StoryRepositoryTest {
         em.flush();
         em.clear();
 
-        List<Story> mine = storyRepository.findByUserAndCreatedAtAfterOrderByCreatedAtAsc(me, CUTOFF);
+        List<Story> mine = storyRepository.findByUserOrderByCreatedAtDescIdDesc(me, ALL);
 
         assertThat(mine).hasSize(1);
         assertThat(Hibernate.isInitialized(mine.get(0).getBook())).isTrue();
     }
 
     @Test
-    @DisplayName("findByUserAndCreatedAtAfterOrderByCreatedAtAsc: 내 활성 스토리만 작성순으로 — 만료 제외")
-    void myActiveStories_excludesExpired_ordersAsc() {
+    @DisplayName("findByUserOrderByCreatedAtDescIdDesc: 30일 전 내 여백도 남는다 — 최신순")
+    void myRecentStories_keepsOldEntries() {
         User me = user("me@booktimer.com", "meuser");
-        storyAt(me, "만료됨", CUTOFF.minusSeconds(1));
+        storyAt(me, "옛것", LONG_AGO);
         storyAt(me, "둘째", NOW.minusSeconds(10));
         storyAt(me, "첫째", NOW.minusSeconds(600));
 
-        List<Story> mine = storyRepository.findByUserAndCreatedAtAfterOrderByCreatedAtAsc(me, CUTOFF);
+        List<Story> mine = storyRepository.findByUserOrderByCreatedAtDescIdDesc(me, ALL);
 
-        assertThat(mine).extracting(Story::getText).containsExactly("첫째", "둘째");
+        assertThat(mine).extracting(Story::getText).containsExactly("둘째", "첫째", "옛것");
     }
 
     @Test
-    @DisplayName("countByUserAndCreatedAtAfter: 활성분만 센다 — 활성 상한 20 게이트용")
-    void activeCount_excludesExpired() {
+    @DisplayName("findByUserOrderByCreatedAtDescIdDesc: 같은 시각이면 id 내림차순으로 갈린다 — 상한이 흔들리지 않게")
+    void myRecentStories_tieBreaksById() {
         User me = user("me@booktimer.com", "meuser");
-        storyAt(me, "만료됨", CUTOFF.minusSeconds(1));
-        storyAt(me, "활성1", NOW.minusSeconds(10));
-        storyAt(me, "활성2", NOW.minusSeconds(20));
+        Story older = storyAt(me, "먼저 저장", NOW.minusSeconds(60));
+        Story newer = storyAt(me, "나중 저장", NOW.minusSeconds(60)); // 같은 createdAt
 
-        long count = storyRepository.countByUserAndCreatedAtAfter(me, CUTOFF);
+        List<Story> mine = storyRepository.findByUserOrderByCreatedAtDescIdDesc(me, ALL);
 
-        assertThat(count).isEqualTo(2);
+        assertThat(mine).extracting(Story::getId).containsExactly(newer.getId(), older.getId());
     }
 }

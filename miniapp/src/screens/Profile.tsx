@@ -198,7 +198,7 @@ export function Profile({
   /** 없으면 「돌아가기」를 그리지 않는다 — 탭 루트(내 책방)에는 돌아갈 곳이 없고 출구가 탭바다. */
   onBack?: () => void;
   onError: (error: Error) => void;
-  /** 제목보다 **위**에 얹히는 슬롯 — 책방 셸이 검색 진입바·스토리 스트립을 여기 끼운다. */
+  /** 제목보다 **위**에 얹히는 슬롯 — 책방 셸이 검색 진입바·여백 스트립을 여기 끼운다. */
   header?: ReactNode;
   /** 카운트를 눌렀을 때 — 목록 시트는 셸이 연다(이 화면은 목록 상태를 들지 않는다). */
   onOpenFollowList?: (type: FollowListType) => void;
@@ -322,7 +322,7 @@ export function Profile({
     });
 
   if (profile === null) {
-    // 로딩 중에도 header를 그린다 — 스토리·검색은 프로필 조회와 독립이라, 이 분기에서 빼면
+    // 로딩 중에도 header를 그린다 — 여백·검색은 프로필 조회와 독립이라, 이 분기에서 빼면
     // 탭 진입 직후(응답 전) 상단이 통째로 비어 화면이 죽은 것처럼 보인다.
     return (
       <Screen title="책방" onBack={onBack} above={header}>
@@ -427,7 +427,7 @@ export function ProfileCard({
   onSelectTag: (tag: string | null) => void;
   onMore: () => void;
   safety: ReactNode;
-  /** 제목보다 **위**에 얹히는 슬롯 — 셸이 검색 진입바·스토리 스트립을 끼운다. */
+  /** 제목보다 **위**에 얹히는 슬롯 — 셸이 검색 진입바·여백 스트립을 끼운다. */
   header?: ReactNode;
   onOpenFollowList?: (type: FollowListType) => void;
   onBack?: () => void;
@@ -438,7 +438,7 @@ export function ProfileCard({
 
   // 제목 옆 ← 는 안 둔다 — 배경 없는 화살표 글자라 버튼으로 안 읽혔다. 출구는 아래 「돌아가기」와 탭바.
   return (
-    // 검색·스토리는 화면 소속이 아니라 그 위에 얹히는 도구다 — 신원 블록보다 위로 올린다.
+    // 검색·여백는 화면 소속이 아니라 그 위에 얹히는 도구다 — 신원 블록보다 위로 올린다.
     <Screen above={header}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         <Avatar nickname={profile.nickname} />
@@ -611,8 +611,8 @@ export function ProfileCard({
 }
 
 /**
- * 책방 주인 아바타 — 스토리 링과 같은 이니셜 원(같은 사람은 언제 그려도 같은 색). 링은 안 두른다:
- * 이 화면 위 스트립에서 링은 "새 스토리 있음"을 뜻하므로, 신원 아바타에 두르면 그 뜻이 흐려진다.
+ * 책방 주인 아바타 — 여백 링과 같은 이니셜 원(같은 사람은 언제 그려도 같은 색). 링은 안 두른다:
+ * 이 화면 위 스트립에서 링은 "새 여백 있음"을 뜻하므로, 신원 아바타에 두르면 그 뜻이 흐려진다.
  */
 function Avatar({ nickname }: { nickname: string }) {
   return (

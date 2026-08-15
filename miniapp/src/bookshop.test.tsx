@@ -477,7 +477,7 @@ describe('책방 헤더 — 카운트 줄', () => {
     expect(markup).not.toContain('명 보기');
   });
 
-  it('셸이 준 header(스토리·검색)를 제목 아래 카운트 줄 위에 끼운다', () => {
+  it('셸이 준 header(여백·검색)를 제목 아래 카운트 줄 위에 끼운다', () => {
     const markup = card(profile(), [], null, { header: <i>헤더슬롯</i> });
 
     expect(markup).toContain('헤더슬롯');
@@ -527,7 +527,7 @@ describe('책방 헤더 — @아이디와 카운트 버튼', () => {
  * 인스타식 상단(사용자 시안) — 큰 제목 「…님의 책방」을 지우고 <b>아바타 + 카운트 3개를 한 줄</b>에,
  * 그 아래 닉네임·@아이디·성향(bio)을 놓는다.
  *
- * <p>이유는 자리다: 제목·검색바·스토리·카운트 버튼·10줄 성향 문단이 화면 위를 다 먹어, 정작 이 화면의
+ * <p>이유는 자리다: 제목·검색바·여백·카운트 버튼·10줄 성향 문단이 화면 위를 다 먹어, 정작 이 화면의
  * 본체인 「공개한 책」이 탭바 아래로 밀려 잘렸다(사용자 스크린샷). 위를 눌러 책을 첫 화면으로 끌어올린다.
  */
 describe('책방 신원 블록 — 인스타식 상단', () => {
@@ -579,7 +579,7 @@ describe('성향 접기 판정 (needsBioToggle)', () => {
 });
 
 /**
- * 상단 도구 — 검색은 <b>전폭 알약에서 스토리 줄 오른쪽 끝 아이콘</b>으로 접혔다(사용자 승인 A안).
+ * 상단 도구 — 검색은 <b>전폭 알약에서 여백 줄 오른쪽 끝 아이콘</b>으로 접혔다(사용자 승인 A안).
  * 한 줄을 통째로 먹던 진입바가 사라져 그만큼 책이 첫 화면으로 올라온다. 셸의 지역 변수가 아니라
  * 컴포넌트인 이유는 그대로다 — 첫 렌더(feed=null)엔 스트립이 통째로 빠져 셸만으론 순서를 잴 수 없다.
  */
@@ -587,12 +587,12 @@ describe('책방 상단 도구 (BookshopHeader)', () => {
   const header = (feed: StoryFeedResponse | null) =>
     render(<BookshopHeader feed={feed} onOpenStory={() => {}} onCompose={() => {}} onSearch={() => {}} />);
 
-  it('검색은 스토리 줄 오른쪽 끝이다 — 스트립보다 뒤에 온다', () => {
+  it('검색은 여백 줄 오른쪽 끝이다 — 스트립보다 뒤에 온다', () => {
     const markup = header({ mine: null, groups: [] });
 
-    expect(markup).toContain('스토리 쓰기');
+    expect(markup).toContain('여백 적기');
     expect(markup).toContain('aria-label="아이디로 친구 찾기"');
-    expect(markup.indexOf('스토리 쓰기')).toBeLessThan(markup.indexOf('아이디로 친구 찾기'));
+    expect(markup.indexOf('여백 적기')).toBeLessThan(markup.indexOf('아이디로 친구 찾기'));
   });
 
   it('전폭 진입바는 사라졌다 — 옛 알약이 되살아나면 그 줄만큼 책이 다시 밀린다', () => {

@@ -14,9 +14,13 @@ import {
 import { BookCover, COVER_FG, ErrorMessage, Screen, coverColor, initialOf } from '../ui';
 
 /**
- * 독서 스토리 — 소셜 탭 상단 스트립 · 전체화면 열람 · 작성 (설계 §4 PR-7).
+ * 여백 — 소셜 탭 상단 스트립 · 전체화면 열람 · 작성 (설계 §4 PR-7).
  *
- * <p>24h 만료·작성 자격·열람 권한은 전부 서버가 판정한다(웹과 같은 `StoryService` 게이트) — 미니앱은
+ * <p>인스타를 베껴 「스토리」로 시작했지만 24시간 뒤 사라지는 게 의도와 어긋나 2026-08-16에 어휘와
+ * 수명을 함께 바꿨다 — **여백은 지우기 전까지 남는다**. 파일·타입 이름은 `Story`로 남아 있다(서버 API가
+ * `/api/stories`라 맞춰 둔 것).
+ *
+ * <p>작성 자격·열람 권한은 전부 서버가 판정한다(웹과 같은 `StoryService` 게이트) — 미니앱은
  * 표시와 액션 배선만 한다. 정적 렌더 하니스로는 effect가 안 도므로 뷰어의 두 결정(전이·열람 기록 대상)은
  * {@link nextStoryIndex}·{@link viewTargetId} 순수 함수로 뽑아 따로 계측한다.
  */
@@ -37,7 +41,7 @@ export function nextStoryIndex(current: number, direction: 1 | -1, total: number
 
 /**
  * 이 카드를 보여줄 때 열람 기록(POST view)할 id — 없으면 `null`.
- * 내 스토리는 서버가 no-op이고 이미 열람한 카드는 멱등이라, 둘 다 요청 자체를 아낀다.
+ * 내 여백은 서버가 no-op이고 이미 열람한 카드는 멱등이라, 둘 다 요청 자체를 아낀다.
  */
 export function viewTargetId(card: StoryCard, mine: boolean): number | null {
   return mine || card.viewed ? null : card.id;
@@ -50,9 +54,9 @@ export function viewTargetId(card: StoryCard, mine: boolean): number | null {
  */
 export function createStoryMessage(error: Error): string {
   if (!(error instanceof ApiError) || error.message !== `요청에 실패했어요 (${error.status})`) return error.message;
-  if (error.status === 429) return '스토리를 너무 자주 올렸어요. 잠시 후 다시 시도해 주세요.';
+  if (error.status === 429) return '여백을 너무 자주 남겼어요. 잠시 후 다시 시도해 주세요.';
   if (error.status === 404) return '첨부한 책을 찾을 수 없어요. 다시 골라 주세요.';
-  return '스토리를 올리지 못했어요. 문장은 1~500자, 활성 스토리는 최대 20장이에요.';
+  return '여백을 남기지 못했어요. 문장은 1~500자까지 쓸 수 있어요.';
 }
 
 /**
@@ -75,7 +79,7 @@ export function StoryStrip({
   return (
     <div className="no-scrollbar" style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '4px 0 12px' }}>
       {feed.mine !== null && (
-        <Ring seed={feed.mine.nickname} caption="내 스토리" onClick={() => onOpen(feed.mine!, true)} />
+        <Ring seed={feed.mine.nickname} caption="내 여백" onClick={() => onOpen(feed.mine!, true)} />
       )}
       {feed.groups.map((group) => (
         <Ring
@@ -86,7 +90,7 @@ export function StoryStrip({
           onClick={() => onOpen(group, false)}
         />
       ))}
-      <Ring seed={null} caption="스토리 쓰기" onClick={onCompose} />
+      <Ring seed={null} caption="여백 적기" onClick={onCompose} />
     </div>
   );
 }
@@ -95,9 +99,9 @@ export function StoryStrip({
 const RING_SIZE = 56;
 
 /**
- * 스토리 링 — 원형 이니셜 아바타 + 바깥 링 + 닉네임 캡션(인스타 관습).
+ * 여백 링 — 원형 이니셜 아바타 + 바깥 링 + 닉네임 캡션(인스타 관습).
  *
- * <p>텍스트 알약이던 시절엔 "스토리"라는 어휘가 화면에 서지 않아 그냥 버튼 줄로 읽혔다. 아바타 색은
+ * <p>텍스트 알약이던 시절엔 그 어휘가 화면에 서지 않아 그냥 버튼 줄로 읽혔다. 아바타 색은
  * 무표지 책과 같은 `coverColor`라 **같은 사람은 언제 그려도 같은 색**이다(닉네임이 곧 씨앗).
  *
  * <p>`seed`가 `null`이면 작성 타일(+ 아이콘) — 사람 링과 같은 크기·자리를 쓰되 이니셜을 세우지 않는다.
@@ -118,7 +122,7 @@ function Ring({
     <button
       type="button"
       onClick={onClick}
-      aria-label={fresh ? `${caption} 새 스토리` : caption}
+      aria-label={fresh ? `${caption} 새 여백` : caption}
       style={{
         flex: '0 0 auto',
         width: RING_SIZE + 12,
@@ -174,10 +178,10 @@ function Ring({
 }
 
 /**
- * 전체화면 열람 — 한 작성자의 활성 스토리를 작성순으로 넘겨 본다.
+ * 전체화면 열람 — 한 작성자의 여백을 작성순으로 넘겨 본다.
  *
  * <p>카드가 바뀔 때마다 열람을 기록한다. 실패는 삼킨다 — 기록이 안 됐다고 읽던 사람을 막을 이유가 없고,
- * 만료·차단으로 404가 나는 정상 경로가 있다(그건 다음 새로고침에서 목록으로 드러난다).
+ * 삭제·차단으로 404가 나는 정상 경로가 있다(그건 다음 새로고침에서 목록으로 드러난다).
  */
 export function StoryViewer({
   author,
@@ -312,7 +316,7 @@ export function StoryCardView({
       {/* 인스타식 진행 세그먼트 — 카드 수만큼 나누고 현재 인덱스까지 채운다. 수치는 aria로 남긴다. */}
       <div
         role="progressbar"
-        aria-label="스토리 진행"
+        aria-label="여백 진행"
         aria-valuemin={1}
         aria-valuenow={index + 1}
         aria-valuemax={total}
@@ -327,7 +331,7 @@ export function StoryCardView({
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{mine ? '내 스토리' : author.nickname}</span>
+        <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{mine ? '내 여백' : author.nickname}</span>
         <button type="button" onClick={onClose} style={ghost(bg.color)}>
           닫기
         </button>
@@ -428,12 +432,12 @@ export function StoryComposer({ onDone, onCancel, onError }: { onDone: () => voi
   const bg = palette(bgCode);
 
   return (
-    <Screen title="스토리 쓰기">
+    <Screen title="여백 적기">
       <textarea
         value={text}
         disabled={busy}
         maxLength={500}
-        placeholder="오늘 읽은 문장을 남겨 보세요. 팔로워에게 24시간 동안 보여요."
+        placeholder="읽다가 마음에 걸린 문장이나 생각을 적어 보세요. 팔로워에게 보여요."
         onChange={(e) => setText(e.target.value)}
         style={{
           width: '100%',

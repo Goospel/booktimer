@@ -21,7 +21,7 @@ import { StoryComposer, StoryStrip, StoryViewer } from './Story';
  * 토글 목록 · 차단 목록)은 사라졌다: 내 책방까지 두 탭이었고, 책방에 이미 있던 팔로워/팔로잉 카운트는
  * 눌러도 아무 일이 없어 "누가 팔로우하는지" 보려면 다시 이 화면으로 돌아와야 했다.
  *
- * <p>그래서 이건 <b>얇은 셸</b>이다 — 본문은 {@link Profile}이 그리고, 여기서는 전체 화면 전환(스토리
+ * <p>그래서 이건 <b>얇은 셸</b>이다 — 본문은 {@link Profile}이 그리고, 여기서는 전체 화면 전환(여백
  * 뷰어·작성기·남의 책방)과 시트 셋(친구 찾기·팔로우 목록·핸들 만들기)의 열림만 든다. 시트가 스스로
  * fetch하지 않고 상태를 셸이 드는 것은 하니스 사정이기도 하다: 정적 렌더가 시트 안 분기에 못 닿는다.
  */
@@ -38,7 +38,7 @@ export function Bookshop({
   // 서버가 준 정규화 핸들을 즉시 반영해 이 탭을 그 자리에서 내 책방으로 바꾼다(대시보드 재조회를 안 기다린다).
   const [handle, setHandle] = useState(myLoginId);
   const [creatingHandle, setCreatingHandle] = useState(false);
-  /** 열린 남의 책방 — 검색 결과·팔로우 목록·스토리 뷰어에서 사람을 고르면 여기로 온다. */
+  /** 열린 남의 책방 — 검색 결과·팔로우 목록·여백 뷰어에서 사람을 고르면 여기로 온다. */
   const [open, setOpen] = useState<string | null>(null);
   const [feed, setFeed] = useState<StoryFeedResponse | null>(null);
   const [viewing, setViewing] = useState<{ author: AuthorStories; mine: boolean } | null>(null);
@@ -60,9 +60,9 @@ export function Bookshop({
   );
 
   /*
-   * 셸이 받는 건 스토리 피드뿐이다 — 팔로우 목록은 시트가 열릴 때, 차단 목록은 설정으로 갔다.
+   * 셸이 받는 건 여백 피드뿐이다 — 팔로우 목록은 시트가 열릴 때, 차단 목록은 설정으로 갔다.
    * 책방이 닫힐 때(open → null) 다시 받는 건 남긴다: 거기서 한 팔로우가 곧 피드 대상을 바꾼다.
-   * 피드 실패는 스트립을 안 그리는 것으로 접는다(`StoryStrip`은 feed=null이면 null) — 스토리 하나 때문에
+   * 피드 실패는 스트립을 안 그리는 것으로 접는다(`StoryStrip`은 feed=null이면 null) — 여백 하나 때문에
    * 책방 본문을 빨간 줄로 덮을 일이 아니다.
    */
   const loadFeed = useCallback(() => {
@@ -102,7 +102,7 @@ export function Bookshop({
   };
 
   /*
-   * 하드웨어 뒤로가기 — 열린 서브뷰를 하나씩 닫는다(중첩이면 최상단만). 이게 없으면 스토리 뷰어에서
+   * 하드웨어 뒤로가기 — 열린 서브뷰를 하나씩 닫는다(중첩이면 최상단만). 이게 없으면 여백 뷰어에서
    * 누른 back이 미니앱 자체를 종료시킨다. 스택은 등록 순서가 아니라 **열린 순서**로 쌓이므로, 여섯 개로
    * 늘어도 중첩 규칙은 그대로다.
    */
@@ -118,7 +118,7 @@ export function Bookshop({
       <StoryComposer
         onDone={() => {
           setComposing(false);
-          loadFeed(); // 방금 올린 스토리가 내 링에 바로 보여야 한다
+          loadFeed(); // 방금 올린 여백가 내 링에 바로 보여야 한다
         }}
         onCancel={() => setComposing(false)}
         onError={onError}
@@ -156,7 +156,7 @@ export function Bookshop({
       .finally(() => setBusy(false));
   };
 
-  // 검색·스토리는 화면 제목보다 위에 얹힌다 — 책방을 그리는 건 Profile이라 `above` 슬롯으로 건넨다.
+  // 검색·여백는 화면 제목보다 위에 얹힌다 — 책방을 그리는 건 Profile이라 `above` 슬롯으로 건넨다.
   const header = (
     <BookshopHeader
       feed={feed}
@@ -173,7 +173,7 @@ export function Bookshop({
          * 핸들이 없으면 내 책방 자체가 없다 — 서버 소셜 API가 대상을 loginId로만 찾으므로 자기 책방조차
          * 열리지 않는다(설계 §5-1). 예전엔 "웹에서 아이디를 정하라"고 했지만 토스로 시작한 계정은
          * 비밀번호가 없어 웹 로그인 자체가 불가능했다 — 실행 불가능한 죽은 안내였다. 그래서 여기서 만든다.
-         * 검색·스토리는 그대로 준다: 남의 책방 구경은 핸들 없이도 된다.
+         * 검색·여백는 그대로 준다: 남의 책방 구경은 핸들 없이도 된다.
          */
         <Screen title="책방" above={header}>
           <Text typography="st12" color="grey600" style={{ display: 'block' }}>
@@ -236,8 +236,8 @@ export function Bookshop({
 }
 
 /**
- * 책방 상단 도구 — <b>스토리 스트립 한 줄</b>이고, 그 오른쪽 끝에 검색 아이콘이 고정된다.
- * 스토리도 검색도 "사람"을 다루니 한 줄에 이웃해도 층위가 어긋나지 않는다.
+ * 책방 상단 도구 — <b>여백 스트립 한 줄</b>이고, 그 오른쪽 끝에 검색 아이콘이 고정된다.
+ * 여백도 검색도 "사람"을 다루니 한 줄에 이웃해도 층위가 어긋나지 않는다.
  *
  * <p>전에는 검색이 <b>전폭 알약</b>으로 최상단 한 줄을 통째로 먹었다 — 그만큼 이 화면의 본체인 공개 책이
  * 아래로 밀렸다(인스타 배치로 상단을 접은 흐름의 마지막 조각). 토스 셸 헤더는 앱 소유라 인스타처럼
@@ -269,11 +269,11 @@ export function BookshopHeader({
   );
 }
 
-/** 스토리 링(`Story.tsx`의 `RING_SIZE`)과 같은 지름 — 두 원의 크기가 어긋나면 한 줄이 들쭉날쭉해진다. */
+/** 여백 링(`Story.tsx`의 `RING_SIZE`)과 같은 지름 — 두 원의 크기가 어긋나면 한 줄이 들쭉날쭉해진다. */
 const SEARCH_ICON_SIZE = 56;
 
 /**
- * 검색 진입 아이콘 — 스토리 링과 <b>같은 지름·같은 캡션 문법</b>의 원형 버튼. 실제 입력·결과는
+ * 검색 진입 아이콘 — 여백 링과 <b>같은 지름·같은 캡션 문법</b>의 원형 버튼. 실제 입력·결과는
  * 「친구 찾기」 시트가 맡는다(인라인 form이면 결과 패널이 내 책방 본문을 통째로 갈아끼워야 했다).
  *
  * <p>캡션 「친구 찾기」를 지우지 않는다 — 돋보기 하나만으로는 "무엇을 찾는지"가 안 서고, 옆이 사람 링이라
