@@ -790,7 +790,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
   - ④ 한 일: **인증 식별자 email→login_id 전면 컷오버.** `loadUserByUsername`=`findByLoginId`만(email 폴백 없음 → 이메일 로그인 차단), principal=login_id. **로컬 가입에서 login_id 캡처**(`SignupForm.loginId`·`register` 7-arg) — 로그인이 login_id 기준이라 가입 시 있어야 함(온보딩 캡처는 OAuth 전용으로 이동, `OnboardingService.complete`가 `loginId==null`일 때만 확정). **OAuth**: `BookTimerOidcUser`로 principal=login_id(온보딩 전 첫 세션만 email). **`CurrentUserService` 공유 리졸버**(login_id 우선 → OAuth 첫 세션만 email 브리지)로 13개 컨트롤러 통일. `SettingsController` 4곳은 principal→User→`getEmail()`로 서비스(findByEmail) 시그니처 보존. **admin 시드 `BOOKTIMER_ADMIN_EMAILS`→`BOOKTIMER_ADMIN_LOGIN_IDS`**(findByLoginId). 로그인폼 라벨 이메일→아이디. **wipe 선행 완료.** Flyway 없음(스키마 무변경). TDD(login_id 로그인·이메일 차단·리졸버·login_id principal 컨트롤러 경로 Red→Green) + 전체 그린. **✅ 운영 적용 완료(2026-06-05): prod 배포 + ENV `BOOKTIMER_ADMIN_LOGIN_IDS` 교체 완료(admin 시드 정상 동작 확인).**
   - ⑤ 한 일: **login_id 무결성을 DB 제약으로 강화.** 단순 NOT NULL은 불가 — OAuth 사용자는 프로비저닝(INSERT) 시점엔 login_id가 없고 온보딩에서 정하므로 그 창에선 null이 정상. 그래서 **조건부 불변식 `onboarded ⟹ login_id IS NOT NULL`을 CHECK로** 좁힘(`V15__user_login_id_when_onboarded_check.sql`, `ck_users_login_id_when_onboarded`). 메인 스위트는 Hibernate 생성이라 무영향(V14와 동일) — `FlywayMigrationTest`가 Flyway 스키마에 적용해 검증(온보딩+login_id없음 거부·온보딩전 null 허용·정상 허용). 엔티티 Javadoc을 조건부 CHECK 현실로 정정. **email 로그인 잔재 없음 재확인**(`loadUserByUsername`=findByLoginId만, 남은 findByEmail은 설정 조회·OAuth 첫 세션 브리지 등 정당). TDD(Red→Green) + 전체 그린. (PR #156)
 
-### 🪪 아이디 평생 1회 변경 — 옛 핸들은 영구 잠금 (완료 ✅ 2026-08-15, 웹 설정 화면)
+### 🪪 아이디 평생 1회 변경 — 옛 핸들은 영구 잠금 (완료 ✅ 2026-08-15, 웹 설정 화면 + 미니앱 설정 화면)
 
 **왜**: 위 도입 때 login_id를 **완전 불변**으로 못 박았는데, 실제로는 오타·개명·유치한 첫 아이디를 안고 갈 수밖에 없는 마찰이 남았다. 그렇다고 자유 변경을 열면 공개 @핸들이 식별자 구실을 못 한다(팔로우·프로필 URL이 매번 흔들리고, 핸들 세탁으로 평판을 리셋할 수 있다). **평생 1회**가 그 사이의 답이다.
 
@@ -799,7 +799,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 - **세션은 안 끊는다** — `CurrentUserService.resolve`에 3단째 폴백(`findByPreviousLoginId`)을 달아 **전 기기의 열린 세션**이 그대로 산다. 현재 요청의 SecurityContext만 갈아끼우는 방법은 더 비싸면서 다른 기기 세션을 못 살린다. 폴백은 *해석*에만 붙고 *로그인*에는 안 붙어, 옛 아이디로 새로 로그인하는 것은 자동으로 불가(크리덴셜은 즉시 새 아이디로 넘어간다).
 - **가드 순서 = 메시지 정확성**: 소진(ISE) → 형식·예약어(IAE) → 현재와 동일(IAE) → 두 컬럼 중복(`LoginIdAlreadyExistsException`) → 교체. 특히 "현재와 동일"이 중복 검사보다 앞서야 본인에게 "이미 사용 중"이라는 오해성 안내가 안 나간다. 중복은 현행·옛 핸들 **양쪽**을 보되 어느 쪽인지는 사용자에게 구분해 알리지 않는다(부수 정보 누출).
 - **한 일**: `V69__user_previous_login_id.sql`(컬럼 + `uk_users_previous_login_id`), `User.changeLoginId`(`assignLoginId`의 once-set 규약은 무변경 — 가입·온보딩 3곳이 의존), `AccountService.changeLoginId`, 리포지토리 2메서드, `CurrentUserService` 3단 폴백, `POST /settings/login-id` + 설정 화면 「아이디 변경」 카드(새 아이디 + 되돌릴 수 없음 확인 체크박스, 소진 후엔 정적 표기). TDD RED→GREEN 5단계. UNIQUE·V15 CHECK 단언은 실제 DDL이 도는 `FlywayMigrationTest`에 뒀다(메인 스위트는 Hibernate 생성이라 그 제약이 없어 슬라이스에선 공허해진다).
-- ⏸ **미니앱 변경 UI는 후속** — 서비스·엔티티·마이그레이션은 채널 중립이라 이미 재사용 준비가 끝났고, 얹을 것은 API 컨트롤러 + 화면뿐이다. 토스 전용 계정(웹 로그인 불가)은 그때까지 변경 수단이 없다 — 핸들 자체가 opt-in인 집단이라 긴급하지 않다고 보고 미뤘다. 요구가 실측되면 착수.
+- ✅ **미니앱 변경 UI (2026-08-15, 같은 날 후속)** — 예고대로 서비스·엔티티·마이그레이션은 한 줄도 안 건드리고 **API 컨트롤러 메서드 1개 + 화면**만 얹었다. `POST /api/miniapp/handle/change`는 소진 409·형식/동일 400을 **메서드 안 try/catch**로 잡고 중복 409만 클래스 핸들러에 떨어뜨린다(클래스 핸들러가 이미 *생성* 의미로 점유돼 있어 그대로 두면 변경 실패 문구가 뭉개진다). 소진 여부의 출처는 `GET /api/dashboard`의 신규 `previousLoginId` 한 필드 — 전용 조회 API를 새로 파지 않았고, **본인 응답에만** 싣는다(프로필·검색에 넣으면 "저 사람이 아이디를 바꿨구나"가 샌다). 미니앱 설정 @아이디 섹션은 핸들 없음/미소진/소진 3분기가 되고, 기존 `HandleSheet`에 `change` 프롭 하나로 바꾸기 변형을 붙였다(구조가 같아 별도 컴포넌트는 중복 60줄). 웹의 `confirmOnce` 체크박스는 **안 옮겼다** — 그건 웹 컨트롤러 로컬의 폼 검증이지 서비스 계약이 아니고, API 파라미터로 만들면 클라가 항상 true로 보내는 죽은 값이 된다(서버 불변식은 소진 가드가 이미 지킨다). 확인은 「진입 버튼 → 경고 시트 + 새 아이디 타이핑」 2단으로 둔다. 곁들여 **이번 변경으로 거짓이 된 문구를 전수 교정**했다(생성 시트·설정 안내·서버 생성 409·목 픽스처).
 - ⏸ **탈퇴 계정의 옛 핸들 재사용**은 별개 정책 판단으로 남긴다 — 탈퇴는 users 행을 물리 삭제하므로 잠금도 함께 사라진다(기존 동작 그대로). 막으려면 tombstone 테이블이 필요해 현시점 YAGNI.
 
 ### 프론트엔드 전환 (SSR → SPA) · 앱 프론트 — 선후 의존 정리
@@ -1134,7 +1134,8 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
   사용자 승인. 기존 값은 `updateProfile`이 새 값만 검사해 그대로 산다).
   미니앱 진입점은 **`AccountSection` 교체** — 그 자리의 "계정 관리·상세 설정은 booktimer.app에서"가 바로 그
   죽은 안내였다(당시엔 홈 하단. 2026-08-14에 히어로 카드 위 최상단으로 올라갔다 — 위 후속 fix). **탭바는 한 줄도 안 건드렸다**(플로팅 탭바는 2026-08-12 심사 반려 대응 산물 — 5칸 확장은 재심사 노출면).
-  설정 화면에 든 것은 닉네임 · @아이디(없으면 기존 `HandleSheet` 재사용, 있으면 불변 안내만) · 하루 목표 진입 ·
+  설정 화면에 든 것은 닉네임 · @아이디(없으면 기존 `HandleSheet` 재사용 — *2026-08-15부터는 있으면 평생 1회
+  「바꾸기」, 이미 썼으면 소진 표기*. 위 「아이디 평생 1회 변경」 절) · 하루 목표 진입 ·
   로그아웃 2단 확인 넷이다 — **미니앱 채널에서 실제로 작동하는 것이 이 넷 전부**라서다.
   **비목표(의도)**: 타임존(전원 `Asia/Seoul` — 잘못 바꾸면 자정 경계가 깨진다) · 이메일 인증/마케팅 수신(토스 계정 email은
   발송하지 않는 synthetic 자리표시) · 비밀번호 변경(없다) · 토스 연결 코드(미니앱 안에서는 이미 그 신원) · 회원 탈퇴 ·
