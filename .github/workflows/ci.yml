@@ -16,7 +16,7 @@ jobs:
       # 여기가 뚫리면 로그인 IP 잠금이 통째로 무력화되므로 PR 게이트에 둔다. 러너에 Docker 내장.
       - name: Verify Caddy forwarded-header trust boundary
         run: bash deploy/tests/test-caddy-forwarded.sh
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: npm
