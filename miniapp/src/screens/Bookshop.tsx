@@ -148,16 +148,14 @@ export function Bookshop({
       .finally(() => setBusy(false));
   };
 
-  // 스토리와 검색 진입은 내 책방 화면 위쪽에 얹힌다 — 책방을 그리는 건 Profile이라 슬롯으로 건넨다.
+  // 검색·스토리는 화면 제목보다 위에 얹힌다 — 책방을 그리는 건 Profile이라 `above` 슬롯으로 건넨다.
   const header = (
-    <>
-      <StoryStrip
-        feed={feed}
-        onOpen={(author, mine) => setViewing({ author, mine })}
-        onCompose={() => setComposing(true)}
-      />
-      <SearchEntryBar onOpen={() => setSearchOpen(true)} />
-    </>
+    <BookshopHeader
+      feed={feed}
+      onOpenStory={(author, mine) => setViewing({ author, mine })}
+      onCompose={() => setComposing(true)}
+      onSearch={() => setSearchOpen(true)}
+    />
   );
 
   return (
@@ -169,8 +167,7 @@ export function Bookshop({
          * 비밀번호가 없어 웹 로그인 자체가 불가능했다 — 실행 불가능한 죽은 안내였다. 그래서 여기서 만든다.
          * 검색·스토리는 그대로 준다: 남의 책방 구경은 핸들 없이도 된다.
          */
-        <Screen title="책방">
-          {header}
+        <Screen title="책방" above={header}>
           <Text typography="st12" color="grey600" style={{ display: 'block' }}>
             @아이디를 만들면 친구가 나를 찾을 수 있고, 내 책방이 생겨요.
           </Text>
@@ -226,6 +223,33 @@ export function Bookshop({
           onFail={fail}
         />
       )}
+    </>
+  );
+}
+
+/**
+ * 책방 상단 도구 — <b>검색 진입바가 최상단, 스토리 스트립이 그 아래</b>이고 둘 다 화면 제목보다 위다.
+ * 검색은 책방 어디로든 가는 입구라 맨 위가 제자리고, 스토리는 그 아래에서 오늘의 사람들을 보여 준다.
+ *
+ * <p>셸의 지역 변수가 아니라 컴포넌트로 꺼낸 것은 <b>순서를 계측하기 위해서</b>다 — 스트립은 피드를
+ * 받기 전(`feed === null`)에 아무것도 안 그리므로, 정적 렌더 하니스에서 셸을 그대로 렌더하면 두 줄의
+ * 앞뒤를 잴 방법이 없다(잰다고 착각하는 공허한 테스트만 남는다).
+ */
+export function BookshopHeader({
+  feed,
+  onOpenStory,
+  onCompose,
+  onSearch,
+}: {
+  feed: StoryFeedResponse | null;
+  onOpenStory: (author: AuthorStories, mine: boolean) => void;
+  onCompose: () => void;
+  onSearch: () => void;
+}) {
+  return (
+    <>
+      <SearchEntryBar onOpen={onSearch} />
+      <StoryStrip feed={feed} onOpen={onOpenStory} onCompose={onCompose} />
     </>
   );
 }
