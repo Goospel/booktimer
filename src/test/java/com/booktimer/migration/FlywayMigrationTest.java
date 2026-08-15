@@ -322,7 +322,7 @@ class FlywayMigrationTest {
                 .containsExactlyInAnyOrderElementsOf(TABLES_PURGE_CLEARS);
     }
 
-    // ── 옛 핸들 영구 예약 (V68 uk_users_previous_login_id) ──
+    // ── 옛 핸들 영구 예약 (V69 uk_users_previous_login_id) ──
     // 이 두 테스트가 여기 있는 이유: 메인 스위트는 Hibernate가 스키마를 만들어 이 UNIQUE가 아예 없다
     // (login_id의 uk_users_login_id와 마찬가지로 엔티티 매핑에 선언하지 않는다 — DB가 단일 출처).
     // 슬라이스(@DataJpaTest)에 두면 제약이 없어 영영 초록이 안 되거나 공허해진다.

@@ -44,7 +44,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByLoginId(String loginId);
 
     /**
-     * 그 아이디를 누군가 <b>버리고 간 옛 핸들</b>로 예약하고 있는지(uk_users_previous_login_id, V68).
+     * 그 아이디를 누군가 <b>버리고 간 옛 핸들</b>로 예약하고 있는지(uk_users_previous_login_id, V69).
      * 직접 쓰지 말고 {@link #isLoginIdTaken}을 쓴다 — 두 컬럼을 따로 보면 한쪽을 빠뜨리기 쉽다.
      */
     boolean existsByPreviousLoginId(String previousLoginId);

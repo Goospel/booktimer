@@ -798,7 +798,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 - **되돌리기 특례 없음** — 자기 옛 아이디로 돌아가는 것도 소진 가드에 먼저 걸린다. 열어주면 A↔B 왕복으로 1회 제한이 무의미해진다.
 - **세션은 안 끊는다** — `CurrentUserService.resolve`에 3단째 폴백(`findByPreviousLoginId`)을 달아 **전 기기의 열린 세션**이 그대로 산다. 현재 요청의 SecurityContext만 갈아끼우는 방법은 더 비싸면서 다른 기기 세션을 못 살린다. 폴백은 *해석*에만 붙고 *로그인*에는 안 붙어, 옛 아이디로 새로 로그인하는 것은 자동으로 불가(크리덴셜은 즉시 새 아이디로 넘어간다).
 - **가드 순서 = 메시지 정확성**: 소진(ISE) → 형식·예약어(IAE) → 현재와 동일(IAE) → 두 컬럼 중복(`LoginIdAlreadyExistsException`) → 교체. 특히 "현재와 동일"이 중복 검사보다 앞서야 본인에게 "이미 사용 중"이라는 오해성 안내가 안 나간다. 중복은 현행·옛 핸들 **양쪽**을 보되 어느 쪽인지는 사용자에게 구분해 알리지 않는다(부수 정보 누출).
-- **한 일**: `V68__user_previous_login_id.sql`(컬럼 + `uk_users_previous_login_id`), `User.changeLoginId`(`assignLoginId`의 once-set 규약은 무변경 — 가입·온보딩 3곳이 의존), `AccountService.changeLoginId`, 리포지토리 2메서드, `CurrentUserService` 3단 폴백, `POST /settings/login-id` + 설정 화면 「아이디 변경」 카드(새 아이디 + 되돌릴 수 없음 확인 체크박스, 소진 후엔 정적 표기). TDD RED→GREEN 5단계. UNIQUE·V15 CHECK 단언은 실제 DDL이 도는 `FlywayMigrationTest`에 뒀다(메인 스위트는 Hibernate 생성이라 그 제약이 없어 슬라이스에선 공허해진다).
+- **한 일**: `V69__user_previous_login_id.sql`(컬럼 + `uk_users_previous_login_id`), `User.changeLoginId`(`assignLoginId`의 once-set 규약은 무변경 — 가입·온보딩 3곳이 의존), `AccountService.changeLoginId`, 리포지토리 2메서드, `CurrentUserService` 3단 폴백, `POST /settings/login-id` + 설정 화면 「아이디 변경」 카드(새 아이디 + 되돌릴 수 없음 확인 체크박스, 소진 후엔 정적 표기). TDD RED→GREEN 5단계. UNIQUE·V15 CHECK 단언은 실제 DDL이 도는 `FlywayMigrationTest`에 뒀다(메인 스위트는 Hibernate 생성이라 그 제약이 없어 슬라이스에선 공허해진다).
 - ⏸ **미니앱 변경 UI는 후속** — 서비스·엔티티·마이그레이션은 채널 중립이라 이미 재사용 준비가 끝났고, 얹을 것은 API 컨트롤러 + 화면뿐이다. 토스 전용 계정(웹 로그인 불가)은 그때까지 변경 수단이 없다 — 핸들 자체가 opt-in인 집단이라 긴급하지 않다고 보고 미뤘다. 요구가 실측되면 착수.
 - ⏸ **탈퇴 계정의 옛 핸들 재사용**은 별개 정책 판단으로 남긴다 — 탈퇴는 users 행을 물리 삭제하므로 잠금도 함께 사라진다(기존 동작 그대로). 막으려면 tombstone 테이블이 필요해 현시점 YAGNI.
 

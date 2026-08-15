@@ -128,7 +128,7 @@ public class User extends BaseTimeEntity {
     /**
      * 아이디를 <b>평생 1회</b> 바꿨을 때 넘겨둔 옛 login_id. 아직 안 바꿨으면 {@code null}이다.
      *
-     * <p>이 컬럼 하나가 두 몫을 한다: ① 옛 핸들을 <b>영구 예약</b>해(UNIQUE — uk_users_previous_login_id, V68)
+     * <p>이 컬럼 하나가 두 몫을 한다: ① 옛 핸들을 <b>영구 예약</b>해(UNIQUE — uk_users_previous_login_id, V69)
      * 제3자가 그 아이디로 갈아타는 사칭을 막고, ② 값이 있다는 사실 자체가 <b>변경권 소진</b> 판정이라
      * 별도 카운터·이력 테이블이 필요 없다({@link #changeLoginId}).
      *
