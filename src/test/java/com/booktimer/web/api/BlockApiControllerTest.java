@@ -158,6 +158,47 @@ class BlockApiControllerTest {
                 .andExpect(status().isNotFound());
     }
 
+    // ── 운영자(ADMIN) 노출 불변식 ─────────────────────────────────────────────
+    // 만드는 쪽(block)에만 건다. 푸는 쪽(unblock)에 걸면 상대가 나중에 ADMIN이 됐을 때
+    // 이미 걸린 차단을 영영 못 푼다 — 이 비대칭을 아래 두 테스트가 못 박는다.
+
+    @Test
+    @DisplayName("POST /api/block 대상이 운영자 → 404 (핸들을 알아도 존재가 새지 않는다)")
+    void block_adminTarget_returns404() throws Exception {
+        registrationService.register("blk-adm-actor@booktimer.com", "pw1234qwer!!", "blkadmactor", "일반사용자", SEOUL, Role.USER, today());
+        registrationService.register("blk-adm-target@booktimer.com", "pw1234qwer!!", "blkadmtarget", "운영자", SEOUL, Role.ADMIN, today());
+
+        mockMvc.perform(post("/api/block")
+                        .with(user("blk-adm-actor@booktimer.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginId\":\"blkadmtarget\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("POST /api/unblock 대상이 나중에 운영자가 돼도 차단 해제는 된다 (비대칭 가드)")
+    void unblock_targetPromotedToAdmin_stillWorks() throws Exception {
+        registrationService.register("unblk-adm-a@booktimer.com", "pw1234qwer!!", "unblkadma", "차단자", SEOUL, Role.USER, today());
+        registrationService.register("unblk-adm-b@booktimer.com", "pw1234qwer!!", "unblkadmb", "나중운영자", SEOUL, Role.USER, today());
+
+        mockMvc.perform(post("/api/block")
+                        .with(user("unblk-adm-a@booktimer.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginId\":\"unblkadmb\"}"))
+                .andExpect(jsonPath("$.blocked").value(true));
+
+        User target = userRepository.findByLoginId("unblkadmb").orElseThrow();
+        target.promoteToAdmin();
+        userRepository.save(target);
+
+        mockMvc.perform(post("/api/unblock")
+                        .with(user("unblk-adm-a@booktimer.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginId\":\"unblkadmb\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.blocked").value(false));
+    }
+
     @Test
     @DisplayName("상대가 나를 차단해도 내 GET /api/blocks에는 나타나지 않는다(단방향 비노출)")
     void blocks_onlyShowsMyBlocks_notCounterpartBlocks() throws Exception {
