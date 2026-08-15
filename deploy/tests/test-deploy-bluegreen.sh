@@ -15,9 +15,11 @@
 S="deploy/deploy-on-ec2.sh"
 FAILED=0
 
-run() {  # $1=running services(공백구분, 빈문자열 가능)  $2=health(ok|fail) ; echoes "<exit>\n<output>"
+run() {  # $1=running services(공백구분, 빈문자열 가능)  $2=health(ok|fail)  $3=pem(ok|bad, 기본 ok)
+         # echoes "<exit>\n<output>"
     local out rc
     out="$(DEPLOY_DRYRUN=1 DEPLOY_FAKE_RUNNING="$1" DEPLOY_FAKE_HEALTH="$2" \
+           DEPLOY_FAKE_PEM="${3:-ok}" \
            HEALTH_RETRIES=3 HEALTH_SLEEP=0 bash "$S" 2>&1)"; rc=$?
     printf '%s\n' "$rc"
     printf '%s' "$out"
@@ -76,6 +78,24 @@ assert_has  "  runs before app switch" "$(printf '%s' "$out" | grep -oE 'caddy v
 assert_has  "  reloads before app switch" "$(printf '%s' "$out" | grep -oE 'caddy reload|up -d app-' | head -1)" "caddy reload"
 # 검증은 **운영과 동일한 마운트**로 해야 마운트 경로 오타까지 잡는다(유일한 입구라 잘못 뜨면 전면 장애).
 assert_has  "  validates through the same mount" "$out" "./caddy:/etc/caddy:ro"
+
+# ── Case 6: 헬스는 통과하는데 토스 mTLS 인증서를 못 읽으면 → 전환하지 않는다 ──
+# 컨테이너가 비root로 돌고 PEM은 600이라, 소유자가 어긋나면 못 읽는다. 그런데 Spring SSL 번들은
+# **지연 생성**이라 앱은 멀쩡히 뜨고 헬스도 초록이다 — 그대로 전환하면 미니앱 로그인만 죽는
+# 무성 장애로 서비스된다. 헬스와 **독립된** 게이트가 필요한 이유다(헬스는 ok로 두고 검증).
+r="$(run "app-blue" ok bad)"; rc="${r%%$'\n'*}"; out="${r#*$'\n'}"
+assert_exit "헬스 OK + 인증서 못 읽음 → 배포 실패" "$rc" "1"
+assert_has  "  왜 실패했는지 uid 불일치를 지목한다" "$out" "토스 mTLS 인증서를 못 읽습니다"
+assert_has  "  새(실패한) green 만 버린다"          "$out" "rm -sf app-green"
+# 여기서도 옛 컨테이너는 무사해야 한다 — 헬스 실패와 같은 롤백 경로로 합류하는지 확인.
+assert_not  "  옛 blue 를 내리지 않는다"            "$out" "stop -t 30 app-blue"
+assert_not  "  옛 blue 를 지우지 않는다"            "$out" "rm -f app-blue"
+
+# ── Case 7: 인증서를 읽을 수 있으면 평소대로 전환한다(게이트가 항상 막지는 않는다) ──
+# Case 6만 있으면 "pem_readable 이 늘 false"인 구현도 통과한다 — 그 공허를 이 케이스가 막는다.
+r="$(run "app-blue" ok ok)"; rc="${r%%$'\n'*}"; out="${r#*$'\n'}"
+assert_exit "헬스 OK + 인증서 읽힘 → 정상 전환" "$rc" "0"
+assert_has  "  옛 blue 를 내린다"                "$out" "stop -t 30 app-blue"
 
 echo
 if [ "$FAILED" = 0 ]; then echo "ALL PASS"; else echo "SOME FAILED"; fi
