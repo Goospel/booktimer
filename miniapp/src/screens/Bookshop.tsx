@@ -236,12 +236,16 @@ export function Bookshop({
 }
 
 /**
- * 책방 상단 도구 — <b>검색 진입바가 최상단, 스토리 스트립이 그 아래</b>이고 둘 다 화면 제목보다 위다.
- * 검색은 책방 어디로든 가는 입구라 맨 위가 제자리고, 스토리는 그 아래에서 오늘의 사람들을 보여 준다.
+ * 책방 상단 도구 — <b>스토리 스트립 한 줄</b>이고, 그 오른쪽 끝에 검색 아이콘이 고정된다.
+ * 스토리도 검색도 "사람"을 다루니 한 줄에 이웃해도 층위가 어긋나지 않는다.
  *
- * <p>셸의 지역 변수가 아니라 컴포넌트로 꺼낸 것은 <b>순서를 계측하기 위해서</b>다 — 스트립은 피드를
- * 받기 전(`feed === null`)에 아무것도 안 그리므로, 정적 렌더 하니스에서 셸을 그대로 렌더하면 두 줄의
- * 앞뒤를 잴 방법이 없다(잰다고 착각하는 공허한 테스트만 남는다).
+ * <p>전에는 검색이 <b>전폭 알약</b>으로 최상단 한 줄을 통째로 먹었다 — 그만큼 이 화면의 본체인 공개 책이
+ * 아래로 밀렸다(인스타 배치로 상단을 접은 흐름의 마지막 조각). 토스 셸 헤더는 앱 소유라 인스타처럼
+ * 헤더 우측에 얹을 수 없어, 화면 안에서 가장 가까운 줄을 그 자리로 삼았다.
+ *
+ * <p>스트립만 스크롤하고 아이콘은 자리를 지킨다 — 친구가 많아 스트립이 길어져도 검색이 밀려 나가지 않게.
+ * 셸의 지역 변수가 아니라 컴포넌트로 꺼낸 것은 <b>순서를 계측하기 위해서</b>다: 스트립은 피드를 받기
+ * 전(`feed === null`)에 아무것도 안 그리므로, 셸을 그대로 렌더하면 앞뒤를 잴 방법이 없다.
  */
 export function BookshopHeader({
   feed,
@@ -255,41 +259,65 @@ export function BookshopHeader({
   onSearch: () => void;
 }) {
   return (
-    <>
-      <SearchEntryBar onOpen={onSearch} />
-      <StoryStrip feed={feed} onOpen={onOpenStory} onCompose={onCompose} />
-    </>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+      {/* 스트립이 없는 첫 렌더에도 이 칸이 폭을 지켜 아이콘이 왼쪽으로 흘러내리지 않는다. */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <StoryStrip feed={feed} onOpen={onOpenStory} onCompose={onCompose} />
+      </div>
+      <SearchEntryButton onOpen={onSearch} />
+    </div>
   );
 }
 
+/** 스토리 링(`Story.tsx`의 `RING_SIZE`)과 같은 지름 — 두 원의 크기가 어긋나면 한 줄이 들쭉날쭉해진다. */
+const SEARCH_ICON_SIZE = 56;
+
 /**
- * 검색 진입바 — 입력처럼 생긴 슬림 버튼 한 줄. 실제 입력·결과는 「친구 찾기」 시트가 맡는다.
+ * 검색 진입 아이콘 — 스토리 링과 <b>같은 지름·같은 캡션 문법</b>의 원형 버튼. 실제 입력·결과는
+ * 「친구 찾기」 시트가 맡는다(인라인 form이면 결과 패널이 내 책방 본문을 통째로 갈아끼워야 했다).
  *
- * <p>인라인 검색 form을 그대로 뒀다면 결과 패널이 내 책방 본문을 통째로 갈아끼워야 했다(옛 소셜 화면의
- * `results !== null` 분기). 시트로 빼면 내 책방이 밑에 계속 살아 있고, 닫기는 `useBackClose`가 공짜다.
+ * <p>캡션 「친구 찾기」를 지우지 않는다 — 돋보기 하나만으로는 "무엇을 찾는지"가 안 서고, 옆이 사람 링이라
+ * 책 검색으로도 읽힌다. 스크린리더용 이름은 옛 진입바 문구를 그대로 물려받아(`아이디로 친구 찾기`)
+ * "아이디로 찾는다"는 유일한 사용법을 잃지 않는다.
  */
-function SearchEntryBar({ onOpen }: { onOpen: () => void }) {
+function SearchEntryButton({ onOpen }: { onOpen: () => void }) {
   return (
     <button
       type="button"
+      aria-label="아이디로 친구 찾기"
       onClick={onOpen}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        width: '100%',
-        padding: '9px 14px',
-        marginBottom: 16,
-        border: '1px solid #E4DDD0',
-        borderRadius: 999,
-        background: '#FCFAF5',
-        color: 'var(--adaptiveGrey600, #6F6A5E)',
-        fontSize: 13,
-        textAlign: 'left',
+        flex: '0 0 auto',
+        // 스트립 링의 위쪽 여백(4)과 맞춰야 두 원이 한 줄에 나란히 선다.
+        marginTop: 4,
+        padding: '0 0 0 10px',
+        // 스크롤되는 스트립과 고정된 이 칸의 경계 — 없으면 스트립의 마지막 링처럼 읽힌다.
+        borderLeft: '1px solid var(--adaptiveGrey200, #E4DDD0)',
+        borderTop: 'none',
+        borderRight: 'none',
+        borderBottom: 'none',
+        background: 'transparent',
         cursor: 'pointer',
       }}
     >
-      🔍 아이디로 친구 찾기
+      <span
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: SEARCH_ICON_SIZE,
+          height: SEARCH_ICON_SIZE,
+          borderRadius: '50%',
+          fontSize: 20,
+          background: 'var(--adaptiveGrey100, #FCFAF5)',
+          border: '1px solid var(--adaptiveGrey200, #E4DDD0)',
+        }}
+      >
+        🔍
+      </span>
+      <span style={{ display: 'block', marginTop: 6, fontSize: 11, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>
+        친구 찾기
+      </span>
     </button>
   );
 }

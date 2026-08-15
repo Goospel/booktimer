@@ -9,6 +9,7 @@ import type {
   PersonalityStatus,
   ProfileBook,
   ProfileResponse,
+  StoryFeedResponse,
   UserRow,
 } from './api';
 import { ApiError, adRefreshPersonality, selectPersonality } from './api';
@@ -599,23 +600,31 @@ describe('성향 접기 판정 (needsBioToggle)', () => {
 });
 
 /**
- * 상단 도구 순서 — 검색이 최상단이고 스토리가 그 아래다. 셸의 지역 변수로 두면 첫 렌더(feed=null)에서
- * 스트립이 통째로 빠져 두 줄의 앞뒤를 잴 수 없어, 순서를 계측하려고 컴포넌트로 꺼냈다.
+ * 상단 도구 — 검색은 <b>전폭 알약에서 스토리 줄 오른쪽 끝 아이콘</b>으로 접혔다(사용자 승인 A안).
+ * 한 줄을 통째로 먹던 진입바가 사라져 그만큼 책이 첫 화면으로 올라온다. 셸의 지역 변수가 아니라
+ * 컴포넌트인 이유는 그대로다 — 첫 렌더(feed=null)엔 스트립이 통째로 빠져 셸만으론 순서를 잴 수 없다.
  */
 describe('책방 상단 도구 (BookshopHeader)', () => {
-  it('검색 진입바가 스토리 스트립보다 위에 선다', () => {
-    const markup = render(
-      <BookshopHeader
-        feed={{ mine: null, groups: [] }}
-        onOpenStory={() => {}}
-        onCompose={() => {}}
-        onSearch={() => {}}
-      />,
-    );
+  const header = (feed: StoryFeedResponse | null) =>
+    render(<BookshopHeader feed={feed} onOpenStory={() => {}} onCompose={() => {}} onSearch={() => {}} />);
 
-    expect(markup).toContain('아이디로 친구 찾기');
+  it('검색은 스토리 줄 오른쪽 끝이다 — 스트립보다 뒤에 온다', () => {
+    const markup = header({ mine: null, groups: [] });
+
     expect(markup).toContain('스토리 쓰기');
-    expect(markup.indexOf('아이디로 친구 찾기')).toBeLessThan(markup.indexOf('스토리 쓰기'));
+    expect(markup).toContain('aria-label="아이디로 친구 찾기"');
+    expect(markup.indexOf('스토리 쓰기')).toBeLessThan(markup.indexOf('아이디로 친구 찾기'));
+  });
+
+  it('전폭 진입바는 사라졌다 — 옛 알약이 되살아나면 그 줄만큼 책이 다시 밀린다', () => {
+    // 옛 진입바는 버튼 **본문**에 문구를 그렸다. 지금 그 문구는 aria-label 안에만 산다.
+    expect(header({ mine: null, groups: [] })).not.toContain('>🔍 아이디로 친구 찾기<');
+  });
+
+  it('피드를 아직 못 받아 스트립이 통째로 빠져도 검색은 선다', () => {
+    // StoryStrip은 feed=null이면 null을 반환한다 — 같은 줄에 얹으면서 함께 사라지면 탭 진입 직후
+    // 상단에 아무 진입점도 없다(옛 구조에선 검색이 별도 줄이라 이 위험이 없었다).
+    expect(header(null)).toContain('aria-label="아이디로 친구 찾기"');
   });
 });
 
