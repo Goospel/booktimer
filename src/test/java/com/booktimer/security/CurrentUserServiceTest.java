@@ -63,10 +63,33 @@ class CurrentUserServiceTest {
     }
 
     @Test
-    @DisplayName("둘 다 없으면 IllegalStateException (인증됐는데 매핑 실패 — 일관성 위반)")
+    @DisplayName("아이디 변경 브리지: principal이 옛 아이디면 previous_login_id로 찾아 세션을 살린다")
+    void resolve_afterLoginIdChange_byPreviousLoginId() {
+        User u = user("reader@booktimer.com", "oldhandle");
+        u.changeLoginId("newhandle"); // 이 세션의 principal은 아직 oldhandle이다
+        when(userRepository.findByLoginId("oldhandle")).thenReturn(Optional.empty());
+        when(userRepository.findByEmail("oldhandle")).thenReturn(Optional.empty());
+        when(userRepository.findByPreviousLoginId("oldhandle")).thenReturn(Optional.of(u));
+
+        assertThat(service.resolve("oldhandle")).isSameAs(u);
+    }
+
+    @Test
+    @DisplayName("정상 경로는 폴백을 건드리지 않는다 — login_id로 찾으면 previous 조회는 하지 않는다")
+    void resolve_byLoginId_skipsPreviousFallback() {
+        User u = user("reader@booktimer.com", "reader1");
+        when(userRepository.findByLoginId("reader1")).thenReturn(Optional.of(u));
+
+        assertThat(service.resolve("reader1")).isSameAs(u);
+        verify(userRepository, never()).findByPreviousLoginId("reader1");
+    }
+
+    @Test
+    @DisplayName("셋 다 없으면 IllegalStateException (인증됐는데 매핑 실패 — 폴백이 해석 실패를 삼키지 않는다)")
     void resolve_absent_throws() {
         lenient().when(userRepository.findByLoginId("ghost")).thenReturn(Optional.empty());
         lenient().when(userRepository.findByEmail("ghost")).thenReturn(Optional.empty());
+        lenient().when(userRepository.findByPreviousLoginId("ghost")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.resolve("ghost"))
                 .isInstanceOf(IllegalStateException.class);

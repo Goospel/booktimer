@@ -302,4 +302,70 @@ class AccountServiceTest {
         verify(sessionRepository, never()).deleteByUser(any());
         verify(userRepository, never()).delete(any());
     }
+
+    // --- 아이디 평생 1회 변경 (previous_login_id로 옛 핸들 잠금) ---
+
+    private User userWithHandle(String loginId) {
+        User user = userWithHash();
+        user.assignLoginId(loginId);
+        return user;
+    }
+
+    @Test
+    @DisplayName("changeLoginId: 성공하면 새 아이디로 바뀌고 옛 아이디가 previous로 남은 채 저장된다")
+    void changeLoginId_success_savesTransition() {
+        User user = userWithHandle("oldhandle");
+        when(userRepository.isLoginIdTaken("newhandle")).thenReturn(false);
+
+        service.changeLoginId(user, "NewHandle"); // 정규화도 함께 확인
+
+        assertThat(user.getLoginId()).isEqualTo("newhandle");
+        assertThat(user.getPreviousLoginId()).isEqualTo("oldhandle");
+        verify(userRepository).save(user);
+    }
+
+    /**
+     * 점유 판정 자체는 {@link UserRepository#isLoginIdTaken}가 한 곳에서 한다 — 현행 핸들이든 남이 버린 옛
+     * 핸들이든 서비스는 그 한 답만 본다. 그래서 "어느 컬럼에 걸렸나"는 mock으로 구분할 수 없고, 두 컬럼을
+     * 모두 보는지는 실제 스키마 테스트가 못 박는다(LoginIdReservationIntegrationTest ·
+     * SettingsControllerTest#changeLoginId_takenPreviousHandle_flashError).
+     */
+    @Test
+    @DisplayName("changeLoginId: 이미 점유된 아이디면 LoginIdAlreadyExistsException — 저장하지 않는다")
+    void changeLoginId_taken_throws() {
+        User user = userWithHandle("oldhandle");
+        when(userRepository.isLoginIdTaken("taken")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.changeLoginId(user, "taken"))
+                .isInstanceOf(LoginIdAlreadyExistsException.class);
+
+        assertThat(user.getLoginId()).isEqualTo("oldhandle");
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("changeLoginId: 소진 계정은 중복 검사보다 먼저 소진(ISE)으로 끊긴다 — 가드 순서")
+    void changeLoginId_alreadyUsed_beatsDuplicateCheck() {
+        User user = userWithHandle("oldhandle");
+        user.changeLoginId("newhandle"); // 변경권 소진
+
+        // 입력값이 이미 쓰이는 아이디여도, 사용자에게는 "이미 사용 중"이 아니라 "평생 1번"이 나가야 한다.
+        assertThatThrownBy(() -> service.changeLoginId(user, "taken"))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(userRepository, never()).isLoginIdTaken(any());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("changeLoginId: 현재 아이디와 같으면 중복 검사 전에 IAE — 자기 자신이 '이미 사용 중'으로 오해석되지 않는다")
+    void changeLoginId_sameAsCurrent_beatsDuplicateCheck() {
+        User user = userWithHandle("oldhandle");
+
+        assertThatThrownBy(() -> service.changeLoginId(user, "OldHandle"))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(userRepository, never()).isLoginIdTaken(any());
+        verify(userRepository, never()).save(any());
+    }
 }

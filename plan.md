@@ -775,7 +775,7 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
 **왜**: 현재 로그인·식별 핸들이 **email**인데 운영자 이메일이 홈페이지에 공개돼 있다. *이메일 공개 자체가 admin 시드를 뚫진 않지만*(시드는 ENV 조작+계정 로그인 둘 다 필요), email이 **로그인 식별자**라 공개 = 로그인 표적 노출 → 표적형 무차별 대입에 약하다. 이메일을 로그인·식별에서 빼고 **비공개 `login_id`(아이디)**로 로그인·식별한다.
 
 **합의된 방향** (사용자 결정 2026-06-05, 🔁 모델 전환 포함):
-- **🔁 login_id = 공개 @핸들 (인스타/X 모델)** — 검색·프로필 URL·로그인 식별자가 모두 login_id. **불변**(한번 정하면 영원히). email은 계속 비공개(연락/복구). 원목표(공개 이메일을 로그인 식별자에서 분리)는 그대로 달성 — 공개 핸들만 nickname→login_id로 옮김.
+- **🔁 login_id = 공개 @핸들 (인스타/X 모델)** — 검색·프로필 URL·로그인 식별자가 모두 login_id. ~~**불변**(한번 정하면 영원히).~~ → **평생 1회 변경 가능**으로 완화(2026-08-15, 아래 「아이디 평생 1회 변경」 절). email은 계속 비공개(연락/복구). 원목표(공개 이메일을 로그인 식별자에서 분리)는 그대로 달성 — 공개 핸들만 nickname→login_id로 옮김.
 - **nickname = 표시 이름** — 중복 허용·자유 변경, 더 이상 핸들/유니크 아님(uk_users_nickname 제거).
 - **principal = login_id 전면 전환(B안)** — email은 연락/복구/OAuth 연결용 **속성**으로 강등.
 - **기존 사용자 전부 wipe**(출시 전·친구뿐, 스냅샷 생략) → 백필·dual-lookup·임시값·전환 게이트 **전부 제거**(그린필드).
@@ -789,6 +789,18 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
   - ③ 한 일: **검색·프로필·관계 식별을 nickname→login_id로 컷오버.** `UserRepository`: `findByLoginId`·`findTop20ByLoginIdContainingIgnoreCaseOrderByLoginIdAsc` 추가, `findByNickname`·`findTop20ByNickname...` 제거. 검색(`UserSearchService`)이 login_id 부분일치, `UserSearchResult`·`ProfileView`에 `loginId` 추가(닉네임은 표시용 유지 — 핸들/표시 분리). 프로필 `/u/{loginId}`(`ProfileController`·`ProfileService.findByLoginId`). 팔로우/차단/신고 컨트롤러 대상 식별 `@RequestParam loginId`+`findByLoginId`(닉네임 중복 시 오식별 정합성 버그 동시 해소). self-프로필 링크용 `loginId` 모델 속성(Dashboard/FollowList/Block). 템플릿 6종 `/u/{loginId}`+`name="loginId"`+`@핸들` 표시. 인증은 아직 email(PR-4). TDD(검색=login_id·닉네임중복→login_id 정확식별 Red→Green) + 전체 그린.
   - ④ 한 일: **인증 식별자 email→login_id 전면 컷오버.** `loadUserByUsername`=`findByLoginId`만(email 폴백 없음 → 이메일 로그인 차단), principal=login_id. **로컬 가입에서 login_id 캡처**(`SignupForm.loginId`·`register` 7-arg) — 로그인이 login_id 기준이라 가입 시 있어야 함(온보딩 캡처는 OAuth 전용으로 이동, `OnboardingService.complete`가 `loginId==null`일 때만 확정). **OAuth**: `BookTimerOidcUser`로 principal=login_id(온보딩 전 첫 세션만 email). **`CurrentUserService` 공유 리졸버**(login_id 우선 → OAuth 첫 세션만 email 브리지)로 13개 컨트롤러 통일. `SettingsController` 4곳은 principal→User→`getEmail()`로 서비스(findByEmail) 시그니처 보존. **admin 시드 `BOOKTIMER_ADMIN_EMAILS`→`BOOKTIMER_ADMIN_LOGIN_IDS`**(findByLoginId). 로그인폼 라벨 이메일→아이디. **wipe 선행 완료.** Flyway 없음(스키마 무변경). TDD(login_id 로그인·이메일 차단·리졸버·login_id principal 컨트롤러 경로 Red→Green) + 전체 그린. **✅ 운영 적용 완료(2026-06-05): prod 배포 + ENV `BOOKTIMER_ADMIN_LOGIN_IDS` 교체 완료(admin 시드 정상 동작 확인).**
   - ⑤ 한 일: **login_id 무결성을 DB 제약으로 강화.** 단순 NOT NULL은 불가 — OAuth 사용자는 프로비저닝(INSERT) 시점엔 login_id가 없고 온보딩에서 정하므로 그 창에선 null이 정상. 그래서 **조건부 불변식 `onboarded ⟹ login_id IS NOT NULL`을 CHECK로** 좁힘(`V15__user_login_id_when_onboarded_check.sql`, `ck_users_login_id_when_onboarded`). 메인 스위트는 Hibernate 생성이라 무영향(V14와 동일) — `FlywayMigrationTest`가 Flyway 스키마에 적용해 검증(온보딩+login_id없음 거부·온보딩전 null 허용·정상 허용). 엔티티 Javadoc을 조건부 CHECK 현실로 정정. **email 로그인 잔재 없음 재확인**(`loadUserByUsername`=findByLoginId만, 남은 findByEmail은 설정 조회·OAuth 첫 세션 브리지 등 정당). TDD(Red→Green) + 전체 그린. (PR #156)
+
+### 🪪 아이디 평생 1회 변경 — 옛 핸들은 영구 잠금 (완료 ✅ 2026-08-15, 웹 설정 화면)
+
+**왜**: 위 도입 때 login_id를 **완전 불변**으로 못 박았는데, 실제로는 오타·개명·유치한 첫 아이디를 안고 갈 수밖에 없는 마찰이 남았다. 그렇다고 자유 변경을 열면 공개 @핸들이 식별자 구실을 못 한다(팔로우·프로필 URL이 매번 흔들리고, 핸들 세탁으로 평판을 리셋할 수 있다). **평생 1회**가 그 사이의 답이다.
+
+- **옛 핸들은 `previous_login_id`로 옮겨 UNIQUE로 영구 잠금** — 남이 그 아이디로 갈아타는 사칭을 막는다. **컬럼 하나가 잠금과 소진 판정을 겸한다**(값이 있으면 이미 썼다는 뜻) → 카운터·이력 테이블·만료 스케줄러 전부 불필요.
+- **되돌리기 특례 없음** — 자기 옛 아이디로 돌아가는 것도 소진 가드에 먼저 걸린다. 열어주면 A↔B 왕복으로 1회 제한이 무의미해진다.
+- **세션은 안 끊는다** — `CurrentUserService.resolve`에 3단째 폴백(`findByPreviousLoginId`)을 달아 **전 기기의 열린 세션**이 그대로 산다. 현재 요청의 SecurityContext만 갈아끼우는 방법은 더 비싸면서 다른 기기 세션을 못 살린다. 폴백은 *해석*에만 붙고 *로그인*에는 안 붙어, 옛 아이디로 새로 로그인하는 것은 자동으로 불가(크리덴셜은 즉시 새 아이디로 넘어간다).
+- **가드 순서 = 메시지 정확성**: 소진(ISE) → 형식·예약어(IAE) → 현재와 동일(IAE) → 두 컬럼 중복(`LoginIdAlreadyExistsException`) → 교체. 특히 "현재와 동일"이 중복 검사보다 앞서야 본인에게 "이미 사용 중"이라는 오해성 안내가 안 나간다. 중복은 현행·옛 핸들 **양쪽**을 보되 어느 쪽인지는 사용자에게 구분해 알리지 않는다(부수 정보 누출).
+- **한 일**: `V69__user_previous_login_id.sql`(컬럼 + `uk_users_previous_login_id`), `User.changeLoginId`(`assignLoginId`의 once-set 규약은 무변경 — 가입·온보딩 3곳이 의존), `AccountService.changeLoginId`, 리포지토리 2메서드, `CurrentUserService` 3단 폴백, `POST /settings/login-id` + 설정 화면 「아이디 변경」 카드(새 아이디 + 되돌릴 수 없음 확인 체크박스, 소진 후엔 정적 표기). TDD RED→GREEN 5단계. UNIQUE·V15 CHECK 단언은 실제 DDL이 도는 `FlywayMigrationTest`에 뒀다(메인 스위트는 Hibernate 생성이라 그 제약이 없어 슬라이스에선 공허해진다).
+- ⏸ **미니앱 변경 UI는 후속** — 서비스·엔티티·마이그레이션은 채널 중립이라 이미 재사용 준비가 끝났고, 얹을 것은 API 컨트롤러 + 화면뿐이다. 토스 전용 계정(웹 로그인 불가)은 그때까지 변경 수단이 없다 — 핸들 자체가 opt-in인 집단이라 긴급하지 않다고 보고 미뤘다. 요구가 실측되면 착수.
+- ⏸ **탈퇴 계정의 옛 핸들 재사용**은 별개 정책 판단으로 남긴다 — 탈퇴는 users 행을 물리 삭제하므로 잠금도 함께 사라진다(기존 동작 그대로). 막으려면 tombstone 테이블이 필요해 현시점 YAGNI.
 
 ### 프론트엔드 전환 (SSR → SPA) · 앱 프론트 — 선후 의존 정리
 - 현재 Thymeleaf SSR. API 계약 안정성 + 인터랙션 요구가 커지면 전환 (N-017)

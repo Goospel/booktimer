@@ -107,6 +107,37 @@ public class AccountService {
     }
 
     /**
+     * 아이디(공개 @핸들)를 <b>평생 1회</b> 바꾼다. 옛 아이디는 {@code previous_login_id}로 옮겨 영구히 잠긴다.
+     *
+     * <p><b>가드 순서가 곧 사용자 메시지의 정확성</b>이다: ① 변경권 소진(ISE) → ② 정규화·형식(IAE)
+     * → ③ 현재 아이디와 동일(IAE) → ④ 두 컬럼 중복({@link LoginIdAlreadyExistsException}) → ⑤ 도메인 교체·저장.
+     * ③이 ④보다 앞서야 한다 — 자기 login_id도 {@code existsByLoginId}에 걸리므로, 순서가 뒤집히면
+     * 본인에게 "이미 사용 중"이라는 엉뚱한 안내가 나간다.
+     *
+     * <p>중복은 <b>현행 핸들과 옛 핸들 양쪽</b>을 본다. 어느 쪽에 걸렸는지는 사용자에게 구분해 알리지 않는다 —
+     * "저 사람이 아이디를 바꿨구나"라는 부수 정보가 새기 때문. 경합 시 최종 방어선은 DB UNIQUE고,
+     * 그때의 {@code DataIntegrityViolationException}은 컨트롤러가 같은 문구로 흡수한다.
+     *
+     * @throws IllegalStateException          이미 변경권을 쓴 계정(또는 login_id 미설정)
+     * @throws IllegalArgumentException       형식·예약어 위반이거나 현재 아이디와 같은 경우
+     * @throws LoginIdAlreadyExistsException  현행·옛 핸들 어느 쪽으로든 이미 쓰이는 아이디인 경우
+     */
+    public void changeLoginId(User user, String rawNewLoginId) {
+        if (user.getPreviousLoginId() != null) {
+            throw new IllegalStateException("login_id change already used: " + user.getEmail());
+        }
+        String normalized = User.normalizeLoginId(rawNewLoginId);
+        if (normalized.equals(user.getLoginId())) {
+            throw new IllegalArgumentException("new login_id equals current: " + normalized);
+        }
+        if (userRepository.isLoginIdTaken(normalized)) {
+            throw new LoginIdAlreadyExistsException(normalized);
+        }
+        user.changeLoginId(rawNewLoginId);
+        userRepository.save(user);
+    }
+
+    /**
      * 비밀번호를 확인한 뒤 계정과 연관 데이터(세션·타이머)를 모두 삭제한다.
      *
      * @throws InvalidPasswordException 비밀번호가 일치하지 않는 경우

@@ -126,6 +126,19 @@ public class User extends BaseTimeEntity {
     private String loginId;
 
     /**
+     * 아이디를 <b>평생 1회</b> 바꿨을 때 넘겨둔 옛 login_id. 아직 안 바꿨으면 {@code null}이다.
+     *
+     * <p>이 컬럼 하나가 두 몫을 한다: ① 옛 핸들을 <b>영구 예약</b>해(UNIQUE — uk_users_previous_login_id, V69)
+     * 제3자가 그 아이디로 갈아타는 사칭을 막고, ② 값이 있다는 사실 자체가 <b>변경권 소진</b> 판정이라
+     * 별도 카운터·이력 테이블이 필요 없다({@link #changeLoginId}).
+     *
+     * <p>옛 아이디로 <b>로그인은 즉시 불가</b>하다({@code BookTimerUserDetailsService}는 login_id만 본다) —
+     * 다만 변경 전에 이미 열려 있던 세션은 {@code CurrentUserService}가 이 값으로 브리지해 살려 준다.
+     */
+    @Column(name = "previous_login_id", length = 50)
+    private String previousLoginId;
+
+    /**
      * 토스 앱인토스(미니앱)의 사용자 식별자({@code userKey} — 앱 단위). 이 계정으로 토스 로그인이 가능함을 뜻한다.
      * {@code null}이면 미연결(웹 전용 계정)이라 정상이고, 토스에서 시작했거나 웹 계정을 연결한 계정만 값을 가진다.
      *
@@ -513,6 +526,40 @@ public class User extends BaseTimeEntity {
                     "login_id is immutable and already set: " + this.loginId);
         }
         this.loginId = normalizeLoginId(rawLoginId);
+    }
+
+    /**
+     * 아이디를 <b>평생 1회</b> 교체한다 — 옛 아이디는 {@link #previousLoginId}로 옮겨 영구히 잠근다.
+     *
+     * <p>{@link #assignLoginId}(once-set: 없는 값을 처음 정한다)와 별개 규칙이다: 이쪽은 <b>이미 있는 값을
+     * 1회만 갈아끼운다</b>. 옛 아이디를 지우지 않고 보관하는 이유는 남이 그 핸들로 갈아타는 사칭을 막기
+     * 위해서다(유니크는 여기 책임이 아니라 서비스의 사전 확인 + DB UNIQUE 분업 — {@code assignLoginId}와 동일).
+     *
+     * <p>되돌리기 특례는 없다 — 자기 옛 아이디로 돌아가는 것도 소진 검사에 먼저 걸린다. 특례를 열면
+     * A↔B 왕복(핸들 세탁)이 가능해져 1회 제한의 목적이 무너진다.
+     *
+     * @param rawNewLoginId 사용자가 입력한 새 아이디(정규화 전)
+     * @throws IllegalStateException    login_id가 아직 없거나(온보딩 전) 변경권을 이미 쓴 경우
+     * @throws IllegalArgumentException 공백/형식 불일치/예약어이거나, 현재 아이디와 같은 경우
+     */
+    public void changeLoginId(String rawNewLoginId) {
+        if (this.loginId == null) {
+            throw new IllegalStateException("cannot change login_id before it is set");
+        }
+        if (this.previousLoginId != null) {
+            throw new IllegalStateException("login_id change already used: " + this.previousLoginId);
+        }
+        String normalized = normalizeLoginId(rawNewLoginId);
+        if (normalized.equals(this.loginId)) {
+            throw new IllegalArgumentException("new login_id equals current: " + normalized);
+        }
+        this.previousLoginId = this.loginId;
+        this.loginId = normalized;
+    }
+
+    /** 아이디를 1회 바꿨다면 그 <b>옛 login_id</b>, 아직 안 바꿨으면 {@code null}(= 변경권 미사용). */
+    public String getPreviousLoginId() {
+        return previousLoginId;
     }
 
     /**

@@ -146,6 +146,39 @@
         </form>
     </section>
 
+    <!--/* 아이디 변경 카드: 평생 1번. 소진했으면 폼 대신 정적 표기만 남긴다(옛 아이디는 영구히 잠긴다).
+           아이디를 아직 안 정한 계정(온보딩 전)엔 카드를 아예 그리지 않는다 — 그리면 안내가 '@null'이 되고,
+           제출해 봐야 도메인이 ISE로 막는 걸 컨트롤러가 '이미 사용했어요'라는 거짓 안내로 흡수한다. */-->
+    <section class="set-card" th:if="${loginId != null}">
+        <h2 class="set-card-title">아이디 변경</h2>
+        <p class="set-card-desc">
+            지금 아이디는 <strong th:text="'@' + ${loginId}">@handle</strong> 이에요.
+            <span th:unless="${loginIdChangeUsed}">아이디는 <strong>평생 한 번만</strong> 바꿀 수 있고, 바꾼 뒤에는 되돌릴 수 없어요. 옛 아이디는 다른 사람이 쓸 수 없게 잠겨요.</span>
+        </p>
+
+        <p th:if="${loginIdChangeUsed}" class="set-card-desc">
+            <strong>아이디 변경을 이미 사용했어요</strong> — 평생 한 번뿐이라 더는 바꿀 수 없어요.
+        </p>
+
+        <form th:unless="${loginIdChangeUsed}" th:action="@{/settings/login-id}" method="post">
+            <div class="set-field">
+                <label class="set-label" for="newLoginId">새 아이디 (영문 소문자·숫자·밑줄 3~20자)</label>
+                <input class="set-input" type="text" id="newLoginId" name="newLoginId" placeholder="새 아이디"
+                       autocomplete="off" autocapitalize="none" autocorrect="off">
+            </div>
+            <label class="set-check" for="confirmOnce">
+                <input type="checkbox" id="confirmOnce" name="confirmOnce" value="true">
+                <span class="set-check-box" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
+                <span class="set-check-body">
+                    <span class="set-check-title">아이디 변경은 평생 1번뿐이며 되돌릴 수 없음을 이해했어요</span>
+                </span>
+            </label>
+            <div class="set-actions">
+                <button type="submit" class="set-btn-save">아이디 변경</button>
+            </div>
+        </form>
+    </section>
+
     <!--/* 비밀번호 카드: LOCAL 계정만 노출 — 소셜 계정은 비밀번호가 없다. Thymeleaf 파서 주석이라 출력에 남지 않는다. */-->
     <section class="set-card" th:if="${localAccount}">
         <h2 class="set-card-title">비밀번호 변경</h2>

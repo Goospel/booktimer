@@ -44,6 +44,38 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByLoginId(String loginId);
 
     /**
+     * 그 아이디를 누군가 <b>버리고 간 옛 핸들</b>로 예약하고 있는지(uk_users_previous_login_id, V69).
+     * 직접 쓰지 말고 {@link #isLoginIdTaken}을 쓴다 — 두 컬럼을 따로 보면 한쪽을 빠뜨리기 쉽다.
+     */
+    boolean existsByPreviousLoginId(String previousLoginId);
+
+    /**
+     * 이 아이디를 쓸 수 있는가 — 현행 {@code login_id}뿐 아니라 <b>예약된 옛 핸들</b>({@code previous_login_id})도
+     * 점유로 본다. login_id를 정하는 <b>모든 경로</b>(가입·온보딩·핸들 생성·아이디 변경)가 이 한 메서드로 수렴한다.
+     *
+     * <p><b>왜 한 곳인가</b>: {@code login_id} UNIQUE는 아이디 변경 순간 옛 값을 비워 주므로 <b>DB가 예약을
+     * 지켜 주지 못한다</b>. 한 경로라도 {@code existsByLoginId}만 보면 제3자가 남이 놓아준 핸들을 주워 가고,
+     * 아이디를 바꾼 사용자의 열린 세션(principal = 옛 핸들)이 브리지 조회로 그 남의 계정에 붙는다 —
+     * 곧 계정 탈취다. 호출처에 가드를 흩뿌리지 않고 여기로 모아, 새 경로가 생겨도 예약이 자동으로 지켜지게 한다.
+     *
+     * <p>자기 자신과의 오탐은 없다: 가입·온보딩 경로는 아직 자기 login_id가 없고(그리고 {@code login_id}가
+     * null이면 {@code previous_login_id}도 반드시 null이다 — 옛 핸들은 {@link User#changeLoginId}로만 생기고
+     * 그건 login_id를 요구한다), 아이디 변경은 서비스가 "현재 아이디와 동일"을 이 검사보다 먼저 끊는다.
+     *
+     * @param normalizedLoginId {@link User#normalizeLoginId}로 정규화한 값
+     */
+    default boolean isLoginIdTaken(String normalizedLoginId) {
+        return existsByLoginId(normalizedLoginId) || existsByPreviousLoginId(normalizedLoginId);
+    }
+
+    /**
+     * 옛 login_id로 사용자 조회 — 아이디 변경 <b>전에 열린 세션</b>의 principal을 해석하는 브리지 전용이다
+     * ({@code CurrentUserService}). 로그인 경로는 이 조회를 쓰지 않는다 — 옛 아이디로 새로 로그인하는 것은
+     * 막혀야 하기 때문(크리덴셜은 즉시 새 아이디로 넘어간다).
+     */
+    Optional<User> findByPreviousLoginId(String previousLoginId);
+
+    /**
      * 친구 추천 후보 — ADMIN·본인·공개핸들(login_id) 미설정·차단(양방향) 제외, 무작위 순서로 Pageable 상한만큼.
      * 필터·상한·랜덤을 모두 DB에서 처리(메모리 findAll + 후보당 차단 COUNT N+1 제거).
      */
