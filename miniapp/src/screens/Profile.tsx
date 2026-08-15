@@ -162,6 +162,28 @@ export function followCountsOpenable(self: boolean, hasHandler: boolean): boolea
   return self && hasHandler;
 }
 
+/** 성향 관문 손잡이 — 한 줄에 나란히 설 것들. 순서가 곧 화면의 왼→오른쪽이다. */
+export type PersonalityAction = 'ad' | 'archive';
+
+/**
+ * 그 줄에 무엇이 서는가 — 광고 버튼은 전폭, 보관함은 그 아래 오른쪽 끝 알약이라 <b>같은 층위의 동작
+ * 둘이 서로 다른 물건처럼</b> 흩어져 있었다(사용자 지적). 한 줄에 나란히 세우려면 "무엇이 설 자격이
+ * 되는가"가 한 곳에서 나와야 한다 — 두 술어를 화면에서 각각 부르면 행의 유무와 칸 수가 어긋난다.
+ *
+ * <p>빈 배열이면 행 자체를 그리지 않는다(빈 여백만 남는 유령 줄 방지). 조건은 각 술어가 그대로 지고
+ * 여기서는 순서와 동석만 정한다.
+ */
+export function personalityActions(
+  self: boolean,
+  status: PersonalityStatus | null,
+  adGroupId: string,
+): PersonalityAction[] {
+  const actions: PersonalityAction[] = [];
+  if (showPersonalityAdButton(self, status, adGroupId)) actions.push('ad');
+  if (showArchiveHandle(self, status)) actions.push('archive');
+  return actions;
+}
+
 /**
  * 성향(bio)을 접기 시작하는 길이 — 3줄 ≈ 90자(13px·폭 350 기준). CSS `line-clamp`가 실제로 자르고,
  * 이 값은 <b>손잡이를 세울지</b>만 정한다. 정확한 줄 수는 폰트·폭에 달려 JS로는 못 재므로 근사치다.
@@ -440,6 +462,7 @@ export function ProfileCard({
   const selected = resolveSelected(books, selectedId);
   const sectionTitle = activeTag === null ? `공개한 책 ${books.length}` : `${activeTag} 근거 책 ${books.length}`;
   const openable = followCountsOpenable(profile.self, onOpenFollowList !== undefined);
+  const actions = personalityActions(profile.self, personalityStatus, REWARD_AD_GROUP_ID);
 
   // 제목 옆 ← 는 안 둔다 — 배경 없는 화살표 글자라 버튼으로 안 읽혔다. 출구는 아래 「돌아가기」와 탭바.
   return (
@@ -502,11 +525,37 @@ export function ProfileCard({
           아무것도 그리지 않는다(fail-closed): 서버 미배포 구간에도 번들이 먼저 나갈 수 있는 근거다. */}
       {profile.self && personalityStatus !== null && (
         <div style={{ marginTop: 16 }}>
-          {showPersonalityAdButton(profile.self, personalityStatus, REWARD_AD_GROUP_ID) && (
-            // 문구에 "광고"를 명시해 광고 위장 금지 조항을 지킨다(홈의 부채 버튼과 같은 규율).
-            <Button display="block" variant="weak" size="small" disabled={adBusy} onClick={onClaimPersonality}>
-              {personalityStatus.hasSelected ? '광고 보고 다시 분석하기' : '광고 보고 성향 분석 받기'}
-            </Button>
+          {/* 손잡이들은 한 줄에 나란히 — 폭을 반씩 나눠 쓰고, 하나만 설 자격이 되면 그게 전폭이다. */}
+          {actions.length > 0 && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              {actions.map((action) =>
+                action === 'ad' ? (
+                  // 문구에 "광고"를 명시해 광고 위장 금지 조항을 지킨다(홈의 부채 버튼과 같은 규율).
+                  <Button
+                    key="ad"
+                    style={{ flex: 1 }}
+                    variant="weak"
+                    size="small"
+                    disabled={adBusy}
+                    onClick={onClaimPersonality}
+                  >
+                    {personalityStatus.hasSelected ? '광고 보고 다시 분석하기' : '광고 보고 성향 분석 받기'}
+                  </Button>
+                ) : (
+                  // 보관함 — 비교 대상이 둘 이상일 때만. 「문구가 바뀌었나」를 확인할 유일한 자리다.
+                  <Button
+                    key="archive"
+                    style={{ flex: 1 }}
+                    variant="weak"
+                    size="small"
+                    disabled={adBusy}
+                    onClick={() => onArchive(true)}
+                  >
+                    보관함에서 비교하기
+                  </Button>
+                ),
+              )}
+            </div>
           )}
           {personalityStatus.coldStart && (
             <Text typography="st12" color="grey600" style={{ display: 'block' }}>
@@ -528,14 +577,6 @@ export function ProfileCard({
             <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
               {personalityNotice}
             </Text>
-          )}
-          {/* 보관함 — 비교 대상이 둘 이상일 때만. 「문구가 바뀌었나」를 확인할 수 있는 유일한 자리다. */}
-          {showArchiveHandle(profile.self, personalityStatus) && (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
-              <button type="button" onClick={() => onArchive(true)} style={handleStyle}>
-                보관함에서 비교하기
-              </button>
-            </div>
           )}
         </div>
       )}
