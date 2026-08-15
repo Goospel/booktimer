@@ -9,6 +9,7 @@ import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.AccountDeletionConfirmationException;
 import com.booktimer.user.AccountService;
 import com.booktimer.user.InvalidPasswordException;
+import com.booktimer.user.LoginIdAlreadyExistsException;
 import com.booktimer.user.TossLinkCodeService;
 import com.booktimer.user.TossLinkConflictException;
 import com.booktimer.user.User;
@@ -17,6 +18,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import org.springframework.stereotype.Controller;
@@ -97,6 +99,8 @@ public class SettingsController {
         // 소셜 계정은 비밀번호가 없다 → 비밀번호 변경 카드를 숨기고, 탈퇴는 본인 @핸들(login_id) 재입력으로 확인한다.
         model.addAttribute("localAccount", user.isLocalAccount());
         model.addAttribute("loginId", user.getLoginId());
+        // 아이디 변경은 평생 1회 — 소진했으면 폼 대신 "이미 사용했어요" 정적 표기를 낸다.
+        model.addAttribute("loginIdChangeUsed", user.getPreviousLoginId() != null);
         // 미검증이면 인증 유도 배너를 띄운다(정책 ③). 재발송 버튼은 POST /verify-email/resend로 이 화면에 결과를 남긴다.
         model.addAttribute("emailVerified", user.isEmailVerified());
         model.addAttribute("marketingEmailConsent", user.isMarketingEmailConsent());
@@ -187,6 +191,42 @@ public class SettingsController {
         HttpSession current = request.getSession(false);
         sessionInvalidator.invalidate(user, current == null ? null : current.getId());
         redirectAttributes.addFlashAttribute("message", "비밀번호를 변경했습니다. 다른 기기의 로그인은 해제됩니다.");
+        return "redirect:/settings";
+    }
+
+    /**
+     * 아이디(공개 @핸들) 변경 — <b>평생 1회</b>. 되돌릴 수 없으므로 새 아이디 입력에 더해 확인 체크박스를
+     * 서버에서 다시 검증한다(비밀번호 재확인은 두지 않는다 — 공개 핸들이지 비밀이 아니고, 소셜 계정은
+     * 비밀번호가 없어 경로가 갈라진다). 세션은 끊지 않는다 — {@code CurrentUserService}가 옛 아이디로
+     * 브리지하므로 전 기기의 열린 세션이 그대로 살아 있다.
+     *
+     * <p>실패는 모두 같은 화면으로 되돌리되 문구를 갈라 안내한다: 소진(ISE) / 이미 사용 중(사전 검사 또는
+     * 경합 시 DB UNIQUE) / 형식·현재와 동일(IAE). {@code IllegalStateException}에는 login_id 미설정도
+     * 포함되지만, 웹에 들어온 계정은 가입·온보딩에서 아이디가 확정돼 있어 실무상 도달하지 않는다.
+     */
+    @PostMapping("/settings/login-id")
+    public String changeLoginId(@RequestParam String newLoginId,
+                                @RequestParam(name = "confirmOnce", defaultValue = "false") boolean confirmOnce,
+                                Principal principal, RedirectAttributes redirectAttributes) {
+        if (!confirmOnce) {
+            redirectAttributes.addFlashAttribute("error", "되돌릴 수 없음 확인에 체크해야 아이디를 바꿀 수 있어요.");
+            return "redirect:/settings";
+        }
+        User user = currentUser(principal);
+        try {
+            accountService.changeLoginId(user, newLoginId);
+            redirectAttributes.addFlashAttribute("message",
+                    "아이디를 @" + user.getLoginId() + "(으)로 바꿨어요. 다음 로그인부터 새 아이디를 쓰세요.");
+        } catch (IllegalStateException e) {
+            redirectAttributes.addFlashAttribute("error", "아이디 변경은 평생 1번이에요. 이미 사용했어요.");
+        } catch (LoginIdAlreadyExistsException | DataIntegrityViolationException e) {
+            // 현행 핸들인지 남이 버린 옛 핸들인지는 구분해 알리지 않는다 — 구분하면 "저 사람이 아이디를
+            // 바꿨구나"라는 부수 정보가 샌다.
+            redirectAttributes.addFlashAttribute("error", "이미 사용 중인 아이디예요. 다른 아이디를 입력해 주세요.");
+        } catch (IllegalArgumentException e) {
+            redirectAttributes.addFlashAttribute("error",
+                    "사용할 수 없는 아이디예요. 영문 소문자·숫자·밑줄(_) 3~20자, 현재 아이디와 달라야 해요.");
+        }
         return "redirect:/settings";
     }
 

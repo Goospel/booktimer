@@ -475,4 +475,108 @@ class SettingsControllerTest {
 
         assertThat(linkCodeRepository.findByUserAndUsedAtIsNull(u)).isEmpty();
     }
+
+    // --- 아이디 변경 (평생 1회) ---
+
+    /** 아이디가 확정된 계정 — principal이 login_id인 실제 로그인 상태를 재현하려면 핸들이 있어야 한다. */
+    private User registerWithHandle(String email, String handle) {
+        return registrationService.register(email, "rawpw1234", handle, "독서가", SEOUL, Role.USER, today());
+    }
+
+    @Test
+    @DisplayName("POST /settings/login-id: 확인 체크박스를 안 누르면 바꾸지 않고 error 플래시로 되돌린다")
+    void changeLoginId_withoutConfirm_doesNothing() throws Exception {
+        User u = registerWithHandle("lid-noconfirm@booktimer.com", "lidnoconfirm");
+
+        mockMvc.perform(post("/settings/login-id").with(user("lidnoconfirm")).with(csrf())
+                        .param("newLoginId", "lidbrandnew"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/settings"))
+                .andExpect(flash().attributeExists("error"));
+
+        assertThat(userRepository.findById(u.getId()).orElseThrow().getLoginId()).isEqualTo("lidnoconfirm");
+    }
+
+    @Test
+    @DisplayName("POST /settings/login-id: 정상 변경 후에도 옛 아이디 principal의 세션이 살아 있다(브리지)")
+    void changeLoginId_success_oldSessionStillResolves() throws Exception {
+        User u = registerWithHandle("lid-ok@booktimer.com", "lidoldhandle");
+
+        mockMvc.perform(post("/settings/login-id").with(user("lidoldhandle")).with(csrf())
+                        .param("newLoginId", "lidnewhandle")
+                        .param("confirmOnce", "true"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/settings"))
+                .andExpect(flash().attributeExists("message"));
+
+        User reloaded = userRepository.findById(u.getId()).orElseThrow();
+        assertThat(reloaded.getLoginId()).isEqualTo("lidnewhandle");
+        assertThat(reloaded.getPreviousLoginId()).isEqualTo("lidoldhandle");
+
+        // 이미 열려 있던 세션의 principal은 아직 옛 아이디다 — 여기서 500이 나면 전 기기가 터진 것이다.
+        mockMvc.perform(get("/settings").with(user("lidoldhandle")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("loginIdChangeUsed", true));
+    }
+
+    @Test
+    @DisplayName("POST /settings/login-id: 이미 변경권을 쓴 계정은 '평생 1번' 안내로 거부한다")
+    void changeLoginId_alreadyUsed_flashError() throws Exception {
+        User u = registerWithHandle("lid-used@booktimer.com", "lidusedold");
+        u.changeLoginId("lidusednew");
+        userRepository.save(u);
+
+        mockMvc.perform(post("/settings/login-id").with(user("lidusednew")).with(csrf())
+                        .param("newLoginId", "lidusedthird")
+                        .param("confirmOnce", "true"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(flash().attribute("error", containsString("평생 1번")));
+
+        assertThat(userRepository.findById(u.getId()).orElseThrow().getLoginId()).isEqualTo("lidusednew");
+    }
+
+    @Test
+    @DisplayName("POST /settings/login-id: 남이 버린 옛 아이디도 '이미 사용 중'으로 거부한다(어느 컬럼인지는 알리지 않는다)")
+    void changeLoginId_takenPreviousHandle_flashError() throws Exception {
+        User other = registerWithHandle("lid-other@booktimer.com", "lidabandoned");
+        other.changeLoginId("lidothernew");
+        userRepository.save(other);
+        User me = registerWithHandle("lid-taker@booktimer.com", "lidtaker");
+
+        mockMvc.perform(post("/settings/login-id").with(user("lidtaker")).with(csrf())
+                        .param("newLoginId", "lidabandoned")
+                        .param("confirmOnce", "true"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(flash().attribute("error", containsString("이미 사용 중")));
+
+        assertThat(userRepository.findById(me.getId()).orElseThrow().getLoginId()).isEqualTo("lidtaker");
+        assertThat(userRepository.findById(me.getId()).orElseThrow().getPreviousLoginId()).isNull();
+    }
+
+    @Test
+    @DisplayName("POST /settings/login-id: 형식 위반은 규칙 안내로 거부하고 변경권도 소진하지 않는다")
+    void changeLoginId_invalidFormat_flashError() throws Exception {
+        User u = registerWithHandle("lid-bad@booktimer.com", "lidbadinput");
+
+        mockMvc.perform(post("/settings/login-id").with(user("lidbadinput")).with(csrf())
+                        .param("newLoginId", "bad-handle!")
+                        .param("confirmOnce", "true"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(flash().attribute("error", containsString("사용할 수 없는")));
+
+        User reloaded = userRepository.findById(u.getId()).orElseThrow();
+        assertThat(reloaded.getLoginId()).isEqualTo("lidbadinput");
+        assertThat(reloaded.getPreviousLoginId()).isNull();
+    }
+
+    @Test
+    @DisplayName("GET /settings: 아직 안 바꾼 계정은 아이디 변경 폼을 보여준다")
+    void getSettings_notChangedYet_showsChangeForm() throws Exception {
+        registerWithHandle("lid-form@booktimer.com", "lidformuser");
+
+        mockMvc.perform(get("/settings").with(user("lidformuser")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("loginIdChangeUsed", false))
+                .andExpect(content().string(containsString("/settings/login-id")));
+    }
 }
