@@ -60,5 +60,5 @@ cat > /etc/cron.d/booktimer-backup <<'CRON'
 CRON
 chmod 644 /etc/cron.d/booktimer-backup
 
-echo "[bootstrap] 완료. /opt/booktimer 에 compose.prod.yaml·Caddyfile·*.sh 를 배치한 뒤"
+echo "[bootstrap] 완료. /opt/booktimer 에 compose.prod.yaml·caddy/Caddyfile·*.sh 를 배치한 뒤"
 echo "[bootstrap]   cd /opt/booktimer && ./render-env.sh && docker compose -f compose.prod.yaml up -d caddy mysql app-blue"

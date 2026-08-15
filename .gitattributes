@@ -12,7 +12,7 @@ src/main/resources/static/**/*.js text eol=lf
 # "/usr/bin/env: 'bash\r': No such file or directory"로 실행 자체가 안 된다.
 # 저장소 blob은 LF지만 autocrlf=true인 Windows 워킹 카피를 EC2로 직접 올리면 그대로 깨지므로 고정한다.
 *.sh text eol=lf
-deploy/Caddyfile text eol=lf
+deploy/caddy/Caddyfile text eol=lf
 
 # append-only 변경 일지 — 멀티세션이 각자 맨 아래에 행을 추가해 항상 같은 위치 충돌 →
 # union merge 드라이버로 양쪽 새 행을 마커 없이 둘 다 자동 병합(merge/rebase 충돌 제거). T-098.

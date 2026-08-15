@@ -1890,8 +1890,12 @@ SNS 토대(팔로우·공개범위·프로필)가 깔려 있어 ②의 사용자
       클라이언트가 지정할 수 있었다.** 앱은 `ForwardedHeaderFilter`(WebConfig)로 `getRemoteAddr()`를 forwarded 헤더에서
       다시 읽는데, 앞단 Caddy가 `Forwarded`(RFC 7239)는 세팅도 삭제도 안 해 들어온 값이 그대로 통과했고 **Spring은 이
       헤더를 `X-Forwarded-*`보다 우선**한다. `deploy/Caddyfile`에 `header_up -Forwarded` 한 줄로 입구에서 버린다.
-      곁들여 **배포 반영 경로도 없었다** — Caddy는 파일을 다시 읽지 않는데 `deploy-on-ec2.sh`가 reload를 안 쳐,
-      Caddyfile 변경이 배포 성공 뒤에도 무반영으로 남는 구조였다(무중단 실측 후 2.5단계 추가). **T-167**.
+      곁들여 **배포 반영 경로가 아예 없었다** — Caddyfile 변경이 배포 성공 뒤에도 무반영으로 남는 구조였다. **T-167**.
+      원인이 **두 겹**이라 1차 수정(reload 추가)만으로는 안 뚫렸다: ① Caddy는 설정을 스스로 다시 안 읽고
+      ② `compose.prod.yaml`이 **파일 하나**를 bind mount 해서, 배포의 `aws s3 sync`가 rename으로 교체하면
+      컨테이너가 기동 시점 inode에 고정된 **옛 내용을 영원히** 본다(그 상태의 `caddy reload`는 낡은 설정을
+      다시 읽고 exit 0으로 성공한다 — 운영 실측으로 잡았다). 디렉터리 마운트(`./caddy:/etc/caddy:ro`)로 전환하고,
+      배포에 validate → `up -d caddy` → reload 3단계를 넣었다.
       회귀 가드: `deploy/tests/test-caddy-forwarded.sh`(실 Caddy 컨테이너로 스푸핑 요청, CI 매 PR).
       ⚠️ `X-Forwarded-For`는 Caddy가 이미 리셋하고 있었다(실측) — 그쪽은 이 테스트가 회귀만 지킨다.
 - [ ] (후속) 무차별 대입 방어 보강 — 지수 백오프, 다중 인스턴스 대비 공유 저장소(현재 인메모리=인스턴스별), 앞단 WAF 레이트리밋
