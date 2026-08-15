@@ -28,7 +28,7 @@ import {
 import { useBackClose } from '../back';
 import { formatDuration } from '../format';
 import { REWARD_AD_GROUP_ID, watchRewardAd } from '../toss';
-import { ErrorMessage, Loading, Screen, Sheet } from '../ui';
+import { COVER_FG, ErrorMessage, Loading, Screen, Sheet, coverColor, initialOf } from '../ui';
 import { BookCarousel, waiverErrorMessage } from './Home';
 import { GridSheet, handleStyle, resolveSelected } from './Library';
 
@@ -160,6 +160,20 @@ export async function claimPersonality(adGroupId: string): Promise<PersonalityMu
  */
 export function followCountsOpenable(self: boolean, hasHandler: boolean): boolean {
   return self && hasHandler;
+}
+
+/**
+ * 성향(bio)을 접기 시작하는 길이 — 3줄 ≈ 90자(13px·폭 350 기준). CSS `line-clamp`가 실제로 자르고,
+ * 이 값은 <b>손잡이를 세울지</b>만 정한다. 정확한 줄 수는 폰트·폭에 달려 JS로는 못 재므로 근사치다.
+ */
+export const BIO_CLAMP_CHARS = 90;
+
+/**
+ * 「더보기」를 달지 — 접힐 만큼 길 때만. clamp는 넘칠 때만 자르므로, 짧은 서술에까지 손잡이를 달면
+ * 눌러도 아무것도 안 펼쳐지는 죽은 버튼이 된다.
+ */
+export function needsBioToggle(personality: string | null): boolean {
+  return personality !== null && personality.length > BIO_CLAMP_CHARS;
 }
 
 export function Profile({
@@ -429,44 +443,47 @@ export function ProfileCard({
 
   // 제목 옆 ← 는 안 둔다 — 배경 없는 화살표 글자라 버튼으로 안 읽혔다. 출구는 아래 「돌아가기」와 탭바.
   return (
-    <Screen
-      title={`${profile.nickname}님의 책방`}
-      // 검색·스토리는 화면 소속이 아니라 그 위에 얹히는 도구다 — 제목보다 위로 올린다.
-      above={header}
-      // @아이디는 닉네임에 딸린 식별자라 제목에 밀착시킨다(카운트와 한 줄로 섞이면 카운트의 일부로 읽힌다).
-      subtitle={
-        <Text typography="st12" color="grey600" style={{ display: 'block' }}>
-          @{profile.loginId}
-        </Text>
-      }
-    >
-      {openable ? (
-        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-          <FollowCountButton
-            label="팔로워"
-            count={profile.followerCount}
-            onClick={() => onOpenFollowList!('followers')}
-          />
-          <FollowCountButton
-            label="팔로잉"
-            count={profile.followingCount}
-            onClick={() => onOpenFollowList!('following')}
-          />
+    // 검색·스토리는 화면 소속이 아니라 그 위에 얹히는 도구다 — 신원 블록보다 위로 올린다.
+    <Screen above={header}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <Avatar nickname={profile.nickname} />
+        <div style={{ flex: 1, display: 'flex', minWidth: 0 }}>
+          {/* 공개 책은 손잡이가 아니다 — 목록은 바로 아래 이 화면 안에 이미 있다. */}
+          <StatItem label="공개 책" count={profile.books.length} />
+          {openable ? (
+            <>
+              <FollowCountButton
+                label="팔로워"
+                count={profile.followerCount}
+                onClick={() => onOpenFollowList!('followers')}
+              />
+              <FollowCountButton
+                label="팔로잉"
+                count={profile.followingCount}
+                onClick={() => onOpenFollowList!('following')}
+              />
+            </>
+          ) : (
+            // 남의 책방 — 서버가 남의 목록을 안 주므로 누를 수 없다. 누를 수 없는 것을 버튼처럼 보이게 하지 않는다(#788).
+            <>
+              <StatItem label="팔로워" count={profile.followerCount} />
+              <StatItem label="팔로잉" count={profile.followingCount} />
+            </>
+          )}
         </div>
-      ) : (
-        // 남의 책방 — 서버가 남의 목록을 안 주므로 누를 수 없다. 누를 수 없는 것을 버튼처럼 보이게 하지 않는다(#788).
-        <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 10 }}>
-          팔로워 {profile.followerCount} · 팔로잉 {profile.followingCount}
-        </Text>
-      )}
+      </div>
 
-      {profile.personality !== null && (
-        <Text typography="st11" style={{ display: 'block', marginTop: 12 }}>
-          {profile.personality}
-        </Text>
-      )}
+      <div style={{ marginTop: 14, fontSize: 15, fontWeight: 500, color: 'var(--adaptiveGrey900, #3A362E)' }}>
+        {profile.nickname}
+      </div>
+      {/* @아이디는 닉네임에 딸린 식별자라 이름에 밀착시킨다(카운트와 한 줄로 섞이면 카운트의 일부로 읽힌다). */}
+      <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 1 }}>
+        @{profile.loginId}
+      </Text>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
+      {profile.personality !== null && <Bio text={profile.personality} />}
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
         {profile.personalityTags.map((tag) =>
           // 클릭 가능한 태그만 버튼 — 서버가 근거 책을 주지 않는 태그는 눌러도 빈 목록이라 안 누르게 한다.
           tag.clickable ? (
@@ -538,8 +555,9 @@ export function ProfileCard({
           <Button style={{ flex: 1 }} variant={profile.following ? 'weak' : 'fill'} disabled={busy} onClick={onFollowToggle}>
             {profile.following ? '팔로우 취소' : '팔로우'}
           </Button>
+          {/* 「더보기」였다 — 성향 bio의 접기 손잡이와 같은 이름이라 한 화면에 둘이 섰다. 하는 일로 부른다. */}
           <Button variant="weak" disabled={busy} onClick={onMore}>
-            더보기
+            신고·차단
           </Button>
         </div>
       )}
@@ -604,8 +622,61 @@ export function ProfileCard({
 }
 
 /**
- * 팔로워·팔로잉 손잡이 — 밑줄 친 작은 글자였던 것을 <b>테두리 있는 큰 버튼</b>으로 세운다.
- * 배경 없는 글자는 눌리는 것으로 안 읽혔고(#788), 손가락 표적도 작았다. 전폭을 반씩 나눠 둘 다 해결한다.
+ * 책방 주인 아바타 — 스토리 링과 같은 이니셜 원(같은 사람은 언제 그려도 같은 색). 링은 안 두른다:
+ * 이 화면 위 스트립에서 링은 "새 스토리 있음"을 뜻하므로, 신원 아바타에 두르면 그 뜻이 흐려진다.
+ */
+function Avatar({ nickname }: { nickname: string }) {
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        flex: '0 0 auto',
+        width: 72,
+        height: 72,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: '50%',
+        fontSize: 27,
+        background: coverColor(nickname),
+        color: COVER_FG,
+      }}
+    >
+      {initialOf(nickname)}
+    </div>
+  );
+}
+
+/** 카운트 한 칸의 알맹이 — 숫자 위, 라벨 아래(인스타 문법). 버튼이든 아니든 같은 모양이어야 줄이 안 흔들린다. */
+function StatBody({ label, count }: { label: string; count: number }) {
+  return (
+    <>
+      {/* data-stat은 계측 손잡이 — 숫자와 라벨이 각자 span이라 마크업에서 「팔로워 3」이 이어 붙지 않는다. */}
+      <span
+        style={{ display: 'block', fontSize: 17, fontWeight: 500, color: 'var(--adaptiveGrey900, #3A362E)' }}
+        data-stat={label}
+      >
+        {count}
+      </span>
+      <span style={{ display: 'block', marginTop: 2, fontSize: 12, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>
+        {label}
+      </span>
+    </>
+  );
+}
+
+/** 누를 수 없는 카운트 — 공개 책, 그리고 남의 책방의 팔로워·팔로잉(서버가 남의 목록을 안 준다). */
+export function StatItem({ label, count }: { label: string; count: number }) {
+  return (
+    <div style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>
+      <StatBody label={label} count={count} />
+    </div>
+  );
+}
+
+/**
+ * 팔로워·팔로잉 손잡이 — 아바타 오른쪽 카운트 줄의 한 칸(인스타 배치). 테두리 버튼 두 개가 전폭을
+ * 차지하던 것을 접어 그 자리를 책에 돌려준다. 눌리는 것임은 이제 테두리가 아니라 <b>자리</b>가 말한다.
  */
 export function FollowCountButton({
   label,
@@ -623,26 +694,63 @@ export function FollowCountButton({
       onClick={onClick}
       style={{
         flex: 1,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 6,
-        padding: '11px 13px',
-        border: '1px solid #DDD6C8',
-        borderRadius: 12,
-        background: 'var(--adaptiveGrey100, #FCFAF5)',
+        minWidth: 0,
+        padding: 0,
+        border: 'none',
+        background: 'transparent',
+        textAlign: 'center',
         cursor: 'pointer',
       }}
     >
-      <span style={{ fontSize: 13, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>{label}</span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-        <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--adaptiveGrey900, #3A362E)' }}>{count}</span>
-        {/* 테두리 안의 장식이라 이 화살표는 어포던스를 혼자 지지 않는다 — 버튼임은 테두리가 말한다. */}
-        <span aria-hidden="true" style={{ fontSize: 13, color: '#A8A296' }}>
-          ›
-        </span>
-      </span>
+      <StatBody label={label} count={count} />
     </button>
+  );
+}
+
+/**
+ * 성향 서술 = 인스타 bio — 3줄만 보이고 나머지는 「더보기」. 10줄 문단이 통째로 펼쳐져 있으면 그 아래
+ * 책이 첫 화면 밖으로 밀린다(사용자 스크린샷에서 「공개한 책」이 탭바에 잘려 있었다).
+ */
+function Bio({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const clamped = !expanded && needsBioToggle(text);
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <span
+        style={{
+          fontSize: 13,
+          lineHeight: 1.55,
+          color: 'var(--adaptiveGrey900, #3A362E)',
+          wordBreak: 'keep-all',
+          // clamp는 넘칠 때만 자른다 — 짧은 서술엔 이 블록이 걸려도 아무 일도 일어나지 않는다.
+          ...(clamped
+            ? ({ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as const)
+            : { display: 'block' }),
+        }}
+      >
+        {text}
+      </span>
+      {/* 알약 손잡이가 아니라 회색 글자 — 서술의 꼬리로 읽혀야지, 성향과 나란한 또 하나의 버튼이 되면 안 된다. */}
+      {needsBioToggle(text) && (
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          style={{
+            display: 'block',
+            marginTop: 2,
+            padding: 0,
+            border: 'none',
+            background: 'transparent',
+            fontSize: 13,
+            color: 'var(--adaptiveGrey600, #6F6A5E)',
+            cursor: 'pointer',
+          }}
+        >
+          {expanded ? '접기' : '더보기'}
+        </button>
+      )}
+    </div>
   );
 }
 
