@@ -321,4 +321,51 @@ class FlywayMigrationTest {
                         + "(빠지면 그 자식을 가진 사용자의 탈퇴가 FK 위반으로 실패한다)")
                 .containsExactlyInAnyOrderElementsOf(TABLES_PURGE_CLEARS);
     }
+
+    // ── 옛 핸들 영구 예약 (V68 uk_users_previous_login_id) ──
+    // 이 두 테스트가 여기 있는 이유: 메인 스위트는 Hibernate가 스키마를 만들어 이 UNIQUE가 아예 없다
+    // (login_id의 uk_users_login_id와 마찬가지로 엔티티 매핑에 선언하지 않는다 — DB가 단일 출처).
+    // 슬라이스(@DataJpaTest)에 두면 제약이 없어 영영 초록이 안 되거나 공허해진다.
+
+    @Test
+    void previous_login_id_unique_constraint_is_enforced() {
+        // 서비스의 사전 중복 검사를 우회해 DB 최종 방어선만 본다(경합 시 늦은 커밋이 여기서 막혀야 한다).
+        User first = userWithHandle("prev-first@example.com", "sharedold");
+        first.changeLoginId("prevfirstnew");
+        userRepository.saveAndFlush(first);
+
+        // 이제 sharedold는 비어 보이지만 예약돼 있다 — 남이 집어 다시 버리면 예약이 겹친다.
+        User second = userWithHandle("prev-second@example.com", "sharedold");
+        second.changeLoginId("prevsecondnew");
+
+        assertThatThrownBy(() -> userRepository.saveAndFlush(second))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void onboarded_user_can_change_login_id() {
+        // 아이디 변경은 login_id를 null로 만들지 않으므로 V15 CHECK(onboarded ⟹ login_id IS NOT NULL)를
+        // 위반할 수 없다 — 정식 계정(온보딩 완료)에서 실제로 한 번 못 박는다.
+        User u = userWithHandle("change-onboarded@example.com", "beforehandle");
+        u.completeOnboarding();
+        userRepository.saveAndFlush(u);
+
+        u.changeLoginId("afterhandle");
+        User saved = userRepository.saveAndFlush(u);
+
+        assertThat(saved.getLoginId()).isEqualTo("afterhandle");
+        assertThat(saved.getPreviousLoginId()).isEqualTo("beforehandle");
+        assertThat(saved.isOnboarded()).isTrue();
+    }
+
+    @Test
+    void unchanged_accounts_keep_null_previous_login_id() {
+        // 미변경 계정은 previous_login_id가 NULL이다 — nullable+unique라 NULL은 여럿 허용된다
+        // (전원 NULL이어도 무충돌). 두 계정을 나란히 저장해 그 사실을 못 박는다(null-state 경계).
+        User a = userRepository.saveAndFlush(userWithHandle("nullprev-a@example.com", "nullpreva"));
+        User b = userRepository.saveAndFlush(userWithHandle("nullprev-b@example.com", "nullprevb"));
+
+        assertThat(a.getPreviousLoginId()).isNull();
+        assertThat(b.getPreviousLoginId()).isNull();
+    }
 }
