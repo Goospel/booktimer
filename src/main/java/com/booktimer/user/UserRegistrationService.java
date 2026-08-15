@@ -81,7 +81,7 @@ public class UserRegistrationService {
         // 곧 계정 열거가 된다. 그래서 email 중복은 가장 마지막에 던지고, 컨트롤러가 이를 가입 성공과 동일한
         // 응답으로 흡수한다(존재 여부 미노출). login_id 충돌은 그 전에 잡혀 정상적으로 필드 에러로 안내된다.
         String normalizedLoginId = User.normalizeLoginId(loginId);
-        if (userRepository.existsByLoginId(normalizedLoginId)) {
+        if (userRepository.isLoginIdTaken(normalizedLoginId)) {
             throw new LoginIdAlreadyExistsException(normalizedLoginId);
         }
         if (userRepository.existsByEmail(email)) {

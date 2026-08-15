@@ -130,7 +130,7 @@ public class AccountService {
         if (normalized.equals(user.getLoginId())) {
             throw new IllegalArgumentException("new login_id equals current: " + normalized);
         }
-        if (userRepository.existsByLoginId(normalized) || userRepository.existsByPreviousLoginId(normalized)) {
+        if (userRepository.isLoginIdTaken(normalized)) {
             throw new LoginIdAlreadyExistsException(normalized);
         }
         user.changeLoginId(rawNewLoginId);

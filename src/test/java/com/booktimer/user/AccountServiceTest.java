@@ -315,8 +315,7 @@ class AccountServiceTest {
     @DisplayName("changeLoginId: 성공하면 새 아이디로 바뀌고 옛 아이디가 previous로 남은 채 저장된다")
     void changeLoginId_success_savesTransition() {
         User user = userWithHandle("oldhandle");
-        when(userRepository.existsByLoginId("newhandle")).thenReturn(false);
-        when(userRepository.existsByPreviousLoginId("newhandle")).thenReturn(false);
+        when(userRepository.isLoginIdTaken("newhandle")).thenReturn(false);
 
         service.changeLoginId(user, "NewHandle"); // 정규화도 함께 확인
 
@@ -325,27 +324,19 @@ class AccountServiceTest {
         verify(userRepository).save(user);
     }
 
+    /**
+     * 점유 판정 자체는 {@link UserRepository#isLoginIdTaken}가 한 곳에서 한다 — 현행 핸들이든 남이 버린 옛
+     * 핸들이든 서비스는 그 한 답만 본다. 그래서 "어느 컬럼에 걸렸나"는 mock으로 구분할 수 없고, 두 컬럼을
+     * 모두 보는지는 실제 스키마 테스트가 못 박는다(LoginIdReservationIntegrationTest ·
+     * SettingsControllerTest#changeLoginId_takenPreviousHandle_flashError).
+     */
     @Test
-    @DisplayName("changeLoginId: 남이 현재 쓰는 아이디면 LoginIdAlreadyExistsException — 저장하지 않는다")
-    void changeLoginId_takenByCurrentHandle_throws() {
+    @DisplayName("changeLoginId: 이미 점유된 아이디면 LoginIdAlreadyExistsException — 저장하지 않는다")
+    void changeLoginId_taken_throws() {
         User user = userWithHandle("oldhandle");
-        when(userRepository.existsByLoginId("taken")).thenReturn(true);
+        when(userRepository.isLoginIdTaken("taken")).thenReturn(true);
 
         assertThatThrownBy(() -> service.changeLoginId(user, "taken"))
-                .isInstanceOf(LoginIdAlreadyExistsException.class);
-
-        assertThat(user.getLoginId()).isEqualTo("oldhandle");
-        verify(userRepository, never()).save(any());
-    }
-
-    @Test
-    @DisplayName("changeLoginId: 남이 버린 옛 아이디(previous_login_id)도 막는다 — 예약의 본체(사칭 차단)")
-    void changeLoginId_takenByPreviousHandle_throws() {
-        User user = userWithHandle("oldhandle");
-        when(userRepository.existsByLoginId("abandoned")).thenReturn(false);
-        when(userRepository.existsByPreviousLoginId("abandoned")).thenReturn(true);
-
-        assertThatThrownBy(() -> service.changeLoginId(user, "abandoned"))
                 .isInstanceOf(LoginIdAlreadyExistsException.class);
 
         assertThat(user.getLoginId()).isEqualTo("oldhandle");
@@ -362,8 +353,7 @@ class AccountServiceTest {
         assertThatThrownBy(() -> service.changeLoginId(user, "taken"))
                 .isInstanceOf(IllegalStateException.class);
 
-        verify(userRepository, never()).existsByLoginId(any());
-        verify(userRepository, never()).existsByPreviousLoginId(any());
+        verify(userRepository, never()).isLoginIdTaken(any());
         verify(userRepository, never()).save(any());
     }
 
@@ -375,7 +365,7 @@ class AccountServiceTest {
         assertThatThrownBy(() -> service.changeLoginId(user, "OldHandle"))
                 .isInstanceOf(IllegalArgumentException.class);
 
-        verify(userRepository, never()).existsByLoginId(any());
+        verify(userRepository, never()).isLoginIdTaken(any());
         verify(userRepository, never()).save(any());
     }
 }
