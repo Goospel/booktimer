@@ -333,15 +333,33 @@ export function GridSheet({
 }) {
   return (
     <Sheet title={title} onClose={onClose}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 12 }}>
-        {rows.map((book) => (
-          <button
-            key={book.id}
-            type="button"
-            data-grid-title={book.title}
-            onClick={() => onPick(book.id)}
-            style={{ padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'center' }}
-          >
+      <BookGrid rows={rows} selectedId={selectedId} onPick={onPick} />
+    </Sheet>
+  );
+}
+
+/**
+ * 격자 본체 — 시트 껍데기에서 꺼냈다. 책방은 이 격자를 <b>본문에 그대로</b> 펼쳐 공개 책 목록으로 쓴다
+ * (캐러셀 + 「펼쳐보기」 왕복을 없앤 자리). 서재는 여전히 시트 안에서 쓴다.
+ *
+ * <p>{@code onPick}이 없으면 각 칸을 <b>버튼으로 만들지 않는다</b> — 책방 격자는 보기만 하는 목록이라,
+ * 버튼처럼 생겼는데 눌러도 아무 일이 없으면 그게 곧 죽은 UI다(카운트 손잡이 #788과 같은 규율).
+ */
+export function BookGrid({
+  rows,
+  selectedId,
+  onPick,
+}: {
+  rows: { id: number; title: string; coverUrl: string | null }[];
+  /** 테두리로 표시할 책 — 고르는 격자에서만 의미가 있다. */
+  selectedId: number | null;
+  onPick?: (bookId: number) => void;
+}) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 12 }}>
+      {rows.map((book) => {
+        const cell = (
+          <>
             <div
               style={{
                 display: 'flex',
@@ -364,10 +382,26 @@ export function GridSheet({
             >
               {book.title}
             </Text>
+          </>
+        );
+
+        return onPick === undefined ? (
+          <div key={book.id} data-grid-title={book.title} style={{ textAlign: 'center' }}>
+            {cell}
+          </div>
+        ) : (
+          <button
+            key={book.id}
+            type="button"
+            data-grid-title={book.title}
+            onClick={() => onPick(book.id)}
+            style={{ padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'center' }}
+          >
+            {cell}
           </button>
-        ))}
-      </div>
-    </Sheet>
+        );
+      })}
+    </div>
   );
 }
 

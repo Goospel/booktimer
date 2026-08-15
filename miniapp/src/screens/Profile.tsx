@@ -26,11 +26,10 @@ import {
   unfollow,
 } from '../api';
 import { useBackClose } from '../back';
-import { formatDuration } from '../format';
 import { REWARD_AD_GROUP_ID, watchRewardAd } from '../toss';
 import { COVER_FG, ErrorMessage, Loading, Screen, Sheet, coverColor, initialOf } from '../ui';
-import { BookCarousel, waiverErrorMessage } from './Home';
-import { GridSheet, handleStyle, resolveSelected } from './Library';
+import { waiverErrorMessage } from './Home';
+import { BookGrid } from './Library';
 
 /**
  * 책방(프로필) 뷰 — 닉네임·책BTI·공개 책 목록 + 팔로우/언팔로우 + 차단·신고.
@@ -49,16 +48,6 @@ export interface SafetyState {
 /** 더보기 여닫기 — 어느 쪽이든 **차단 확인은 풀린 채로 시작한다**(위 불변식). */
 export function toggleSafety(open: SafetyState | null): SafetyState | null {
   return open === null ? { confirmBlock: false } : null;
-}
-
-/**
- * 캐러셀 아래 메타 — 저자 한 줄, 「상태 · 읽은 시간」 한 줄(서재 `metaLine`과 같은 문법).
- * 읽은 시간이 0이면 적지 않는다 — 「0초」는 정보가 아니다. 줄바꿈은 캐러셀의 `pre-line`이 살린다.
- */
-export function profileMetaLine(book: ProfileBook): string {
-  const stats = [book.status];
-  if (book.seconds > 0) stats.push(formatDuration(book.seconds));
-  return `${book.author ?? '저자 미상'}\n${stats.join(' · ')}`;
 }
 
 /**
@@ -217,9 +206,6 @@ export function Profile({
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [books, setBooks] = useState<ProfileBook[]>([]);
   const [activeTag, setActiveTag] = useState<string | null>(null);
-  /** 캐러셀에서 가운데 온 책 — 목록이 갈려 사라지면 `resolveSelected`가 첫 책으로 되돌린다. */
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [gridOpen, setGridOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [more, setMore] = useState<SafetyState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -263,7 +249,6 @@ export function Profile({
   useEffect(load, [load]);
 
   // 열린 시트는 뒤로가기가 먼저 먹는다 — 시트가 열린 채로 책방이 통째로 닫히지 않게(서재와 같다).
-  useBackClose(gridOpen, () => setGridOpen(false));
   useBackClose(archiveOpen, () => setArchiveOpen(false));
 
   const run = (action: Promise<unknown>, after: () => void) => {
@@ -362,8 +347,6 @@ export function Profile({
         profile={profile}
         books={books}
         activeTag={activeTag}
-        selectedId={selectedId}
-        gridOpen={gridOpen}
         busy={busy}
         personalityStatus={personalityStatus}
         adBusy={adBusy}
@@ -376,8 +359,6 @@ export function Profile({
         onRetryPersonality={() => runPersonality(runPersonalityRefresh)}
         onFollowToggle={toggleFollow}
         onSelectTag={selectTag}
-        onSelect={setSelectedId}
-        onGrid={setGridOpen}
         onMore={() => setMore(toggleSafety)}
         header={header}
         onOpenFollowList={onOpenFollowList}
@@ -411,8 +392,6 @@ export function ProfileCard({
   profile,
   books,
   activeTag,
-  selectedId,
-  gridOpen,
   busy,
   personalityStatus,
   adBusy,
@@ -425,8 +404,6 @@ export function ProfileCard({
   onRetryPersonality,
   onFollowToggle,
   onSelectTag,
-  onSelect,
-  onGrid,
   onMore,
   safety,
   header,
@@ -436,8 +413,6 @@ export function ProfileCard({
   profile: ProfileResponse;
   books: ProfileBook[];
   activeTag: string | null;
-  selectedId: number | null;
-  gridOpen: boolean;
   busy: boolean;
   personalityStatus: PersonalityStatus | null;
   adBusy: boolean;
@@ -450,8 +425,6 @@ export function ProfileCard({
   onRetryPersonality: () => void;
   onFollowToggle: () => void;
   onSelectTag: (tag: string | null) => void;
-  onSelect: (bookId: number | null) => void;
-  onGrid: (open: boolean) => void;
   onMore: () => void;
   safety: ReactNode;
   /** 제목보다 **위**에 얹히는 슬롯 — 셸이 검색 진입바·스토리 스트립을 끼운다. */
@@ -459,7 +432,6 @@ export function ProfileCard({
   onOpenFollowList?: (type: FollowListType) => void;
   onBack?: () => void;
 }) {
-  const selected = resolveSelected(books, selectedId);
   const sectionTitle = activeTag === null ? `공개한 책 ${books.length}` : `${activeTag} 근거 책 ${books.length}`;
   const openable = followCountsOpenable(profile.self, onOpenFollowList !== undefined);
   const actions = personalityActions(profile.self, personalityStatus, REWARD_AD_GROUP_ID);
@@ -604,53 +576,29 @@ export function ProfileCard({
       )}
       {safety}
 
+      {/*
+       * 공개 책 = 3열 격자(사용자 승인 B안). 캐러셀은 한 번에 한 권만 보여 주고 나머지는 「펼쳐보기」를
+       * 눌러야 했다 — 책장을 훑는 화면인데 왕복이 끼어 있었다. 격자는 그 시트를 본문에 펼친 것이라
+       * 새로 만든 물건이 없다. ⚠️ 대신 캐러셀 아래 있던 메타(상태·읽은 시간)는 사라진다(알고 한 교환).
+       */}
       <section style={{ marginTop: 28 }}>
-        {/* 손잡이는 목록 바로 위 줄에 — 서재는 제목 줄에 뒀지만 책방은 제목과 캐러셀 사이에 핸들·성향·태그·
-            팔로우가 깔려, 제목 줄에 두면 손잡이와 그 대상(책)이 화면 절반쯤 떨어진다. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-          <Text typography="st11" color="grey600" style={{ flex: 1, minWidth: 0 }}>
-            {sectionTitle}
-          </Text>
-          {books.length > 1 && (
-            <button type="button" onClick={() => onGrid(true)} style={handleStyle}>
-              펼쳐보기
-            </button>
-          )}
-        </div>
+        <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
+          {sectionTitle}
+        </Text>
         {activeTag !== null && (
           <Button size="small" variant="weak" style={{ marginBottom: 10 }} onClick={() => onSelectTag(null)}>
             전체 보기
           </Button>
         )}
-        {selected === null ? (
+        {books.length === 0 ? (
           <Text typography="st11" color="grey600" style={{ display: 'block' }}>
             공개한 책이 없어요.
           </Text>
         ) : (
-          // 태그를 고르면 목록이 통째로 갈리므로 다시 마운트한다 — 안 그러면 트랙이 옛 목록의 스크롤 자리에 머문다.
-          <BookCarousel
-            key={activeTag ?? 'all'}
-            books={books}
-            selectedId={selected.id}
-            onSelect={onSelect}
-            noBookCard={false}
-            metaOf={profileMetaLine}
-          />
+          // onPick을 주지 않는다 — 여기 격자는 보기만 하는 목록이다(고를 대상도, 열 상세도 아직 없다).
+          <BookGrid rows={books} selectedId={null} />
         )}
       </section>
-
-      {gridOpen && (
-        <GridSheet
-          title={sectionTitle}
-          rows={books}
-          selectedId={selected?.id ?? null}
-          onPick={(id) => {
-            onSelect(id);
-            onGrid(false);
-          }}
-          onClose={() => onGrid(false)}
-        />
-      )}
 
       {/* 탭 루트(내 책방)에는 돌아갈 곳이 없다 — 아무 데도 안 가는 손잡이를 남기지 않는다. */}
       {onBack !== undefined && (

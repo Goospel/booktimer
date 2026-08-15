@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { BookStatus, MyBookSummary } from './api';
 import type { LibrarySheet } from './screens/Library';
-import { BookSearch, Shelf, metaLine, resolveSelected } from './screens/Library';
+import { BookGrid, BookSearch, Shelf, metaLine, resolveSelected } from './screens/Library';
 import { userAgent } from './test-fixtures';
 
 /**
@@ -194,6 +194,37 @@ describe('펼쳐보기 시트', () => {
     expect(markup).toContain('읽는 중 3권');
     expect(markup).toContain('repeat(3,minmax(0,1fr))');
     expect(markup).not.toContain('라');
+  });
+});
+
+/**
+ * 격자 본체(`BookGrid`) — 시트 껍데기에서 꺼내 <b>책방이 본문에 그대로 인라인</b>할 수 있게 했다.
+ * 서재는 고르는 격자(시트), 책방은 보기만 하는 격자다 — 그 차이를 `onPick`의 유무가 진다.
+ */
+describe('책 격자 (BookGrid)', () => {
+  const rows = [
+    { id: 1, title: '자바 최적화', coverUrl: null },
+    { id: 2, title: '데미안', coverUrl: null },
+  ];
+  const grid = (onPick?: (id: number) => void) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <BookGrid rows={rows} selectedId={1} onPick={onPick} />
+      </TDSMobileProvider>,
+    );
+
+  it('고를 수 있으면 각 칸이 버튼이다 — 서재의 「펼쳐보기」 시트가 이 경로다', () => {
+    const markup = grid(() => {});
+
+    expect(markup).toContain('data-grid-title="자바 최적화"');
+    expect(markup).toContain('<button');
+  });
+
+  it('고를 수 없으면 버튼이 아니다 — 눌러도 아무 일 없는 칸을 버튼처럼 보이게 하지 않는다(#788과 같은 규율)', () => {
+    const markup = grid();
+
+    expect(markup).toContain('data-grid-title="자바 최적화"');
+    expect(markup).not.toContain('<button');
   });
 });
 
