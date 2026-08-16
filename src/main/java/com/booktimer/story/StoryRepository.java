@@ -4,10 +4,38 @@ import com.booktimer.book.Book;
 import com.booktimer.user.User;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 
 public interface StoryRepository extends JpaRepository<Story, Long> {
+
+    /** 책 한 권 → 그 여백의 최근 글 시각. {@link #recencyByBook} 투영. */
+    interface BookStoryRecency {
+        Long getBookId();
+
+        Instant getLastAt();
+    }
+
+    /**
+     * 책방 격자 발광용 배치 집계 — 책 여럿의 「마지막 글 시각」을 한 쿼리로 (N+1 금지).
+     *
+     * <p>작성자가 아니라 <b>책 id 목록</b>으로 좁힌다: 화면이 그리는 책만 물어보게 되고, 호출부
+     * ({@code ProfileApiController})가 손에 쥔 것도 {@code ProfileView.books()}뿐이라 그게 가장 곧다.
+     * 책의 주인과 글 작성자는 언제나 같으므로({@code Story.of} 불변식) 작성자 기준 집계와 결과가 같다.
+     *
+     * <p>빈 목록이면 호출하지 않는다 — {@code in ()}은 DB마다 취급이 다르고, 물어볼 것도 없다.
+     */
+    @Query("""
+            select s.book.id as bookId, max(s.createdAt) as lastAt
+            from Story s
+            where s.book.id in :bookIds
+            group by s.book.id
+            """)
+    List<BookStoryRecency> recencyByBook(@Param("bookIds") Collection<Long> bookIds);
 
     /**
      * 한 책의 여백에 쌓인 글 — <b>최신순</b>이라 {@code pageable} 상한이 최근 것을 남긴다.

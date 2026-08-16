@@ -6,9 +6,13 @@ import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.book.CoupangLinkBuilder;
 import com.booktimer.book.Yes24LinkBuilder;
+import com.booktimer.follow.Follow;
+import com.booktimer.follow.FollowRepository;
 import com.booktimer.personality.ReadingPersonalityCache;
 import com.booktimer.personality.ReadingPersonalityCacheRepository;
 import com.booktimer.report.ReportReason;
+import com.booktimer.story.Story;
+import com.booktimer.story.StoryRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
@@ -62,6 +66,15 @@ class ProfileApiControllerTest {
     private BlockService blockService;
 
     @Autowired
+    private FollowRepository followRepository;
+
+    @Autowired
+    private StoryRepository storyRepository;
+
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
+
+    @Autowired
     private ReadingPersonalityCacheRepository personalityCacheRepository;
 
     @Autowired
@@ -97,6 +110,23 @@ class ProfileApiControllerTest {
         Book b = Book.register(owner, title, null, null, null, null, null, status);
         b.makePublic();
         bookRepository.save(b);
+    }
+
+    /** 공개 책 하나를 돌려준다 — 여백에 글을 달려면 책 인스턴스가 필요하다. */
+    private Book publicBookOf(User owner, String title) {
+        Book b = Book.register(owner, title, null, null, null, null, null, BookStatus.READING);
+        b.makePublic();
+        return bookRepository.save(b);
+    }
+
+    /** 그 책의 여백에 글을 남기고 생성 시각을 원하는 값으로 되돌린다(@CreatedDate 우회). */
+    private void storyAt(User owner, Book book, String text, Instant createdAt) {
+        Story story = storyRepository.save(Story.of(owner, text, book, null));
+        entityManager.createQuery("update Story s set s.createdAt = :t where s.id = :id")
+                .setParameter("t", createdAt)
+                .setParameter("id", story.getId())
+                .executeUpdate();
+        entityManager.clear();
     }
 
     private void privateBook(User owner, String title) {
@@ -667,5 +697,88 @@ class ProfileApiControllerTest {
                         .param("loginId", "zz_no_login_id_xyz")
                         .with(user("pa-qvw@booktimer.com")))
                 .andExpect(status().isNotFound());
+    }
+
+    // ── 13. 격자 발광용 recency (lastStoryAt) ──────────────────
+    // 서버는 「그 책 여백의 최근 글 시각」이라는 원시 사실만 준다 — 24시간 판정은 클라 순수 함수의 몴.
+    // 프라이버시: 여백은 팔로워 전용 콘텐츠라, 비팔로워엔 전부 null이어야 한다(격자가 오늘과 동일).
+
+    @Test
+    @DisplayName("GET /api/profile 팔로워 → 글 있는 책만 lastStoryAt(최신 글 시각), 글 없는 책은 null")
+    void profile_follower_getsLastStoryAtOnlyForBooksWithEntries() throws Exception {
+        User viewer = register("rc-viewer@booktimer.com", "rcviewer", "열람자");
+        User owner = register("rc-owner@booktimer.com", "rcowner", "주인");
+        followRepository.save(Follow.of(viewer, owner));
+        Book withEntries = publicBookOf(owner, "가 글 있는 책");
+        publicBookOf(owner, "나 핑 빈 책");
+        storyAt(owner, withEntries, "예전 글", Instant.parse("2026-08-01T00:00:00Z"));
+        storyAt(owner, withEntries, "최신 글", Instant.parse("2026-08-10T09:00:00Z"));
+
+        mockMvc.perform(get("/api/profile").param("loginId", "rcowner")
+                        .with(user("rc-viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                // 이름순 공급 — 「가 …」이 먼저
+                .andExpect(jsonPath("$.books[0].title").value("가 글 있는 책"))
+                .andExpect(jsonPath("$.books[0].lastStoryAt").value("2026-08-10T09:00:00Z"))
+                .andExpect(jsonPath("$.books[1].title").value("나 핑 빈 책"))
+                .andExpect(jsonPath("$.books[1].lastStoryAt").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("GET /api/profile 비팔로워 → 글이 있어도 lastStoryAt 전부 null (여백은 팔로워 전용)")
+    void profile_nonFollower_getsNoRecency() throws Exception {
+        register("rc-nfviewer@booktimer.com", "rcnfviewer", "비팔로워");
+        User owner = register("rc-nfowner@booktimer.com", "rcnfowner", "주인");
+        Book book = publicBookOf(owner, "글 있는 책");
+        storyAt(owner, book, "비팔로워에겐 안 보일 시각", Instant.parse("2026-08-10T09:00:00Z"));
+
+        mockMvc.perform(get("/api/profile").param("loginId", "rcnfowner")
+                        .with(user("rc-nfviewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.books[0].title").value("글 있는 책"))
+                .andExpect(jsonPath("$.books[0].lastStoryAt").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("GET /api/profile 본인 → 팔로우 없이도 lastStoryAt이 실린다")
+    void profile_self_getsRecency() throws Exception {
+        User me = register("rc-self@booktimer.com", "rcself", "나");
+        Book book = publicBookOf(me, "내 책");
+        storyAt(me, book, "내 글", Instant.parse("2026-08-10T09:00:00Z"));
+
+        mockMvc.perform(get("/api/profile").param("loginId", "rcself")
+                        .with(user("rc-self@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.books[0].lastStoryAt").value("2026-08-10T09:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("GET /api/profile/books 팔로워 → 목록 필터 경로에도 lastStoryAt이 실린다")
+    void books_follower_getsRecency() throws Exception {
+        User viewer = register("rc-bviewer@booktimer.com", "rcbviewer", "열람자");
+        User owner = register("rc-bowner@booktimer.com", "rcbowner", "주인");
+        followRepository.save(Follow.of(viewer, owner));
+        Book book = publicBookOf(owner, "글 있는 책");
+        storyAt(owner, book, "글", Instant.parse("2026-08-10T09:00:00Z"));
+
+        mockMvc.perform(get("/api/profile/books").param("loginId", "rcbowner")
+                        .with(user("rc-bviewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.books[0].lastStoryAt").value("2026-08-10T09:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("GET /api/profile 글이 한 장도 없는 사용자 → 전 책 null, 쿼리도 안 터진다 (null-state 경계)")
+    void profile_userWithoutAnyStory_getsAllNull() throws Exception {
+        User viewer = register("rc-emptyv@booktimer.com", "rcemptyv", "열람자");
+        User owner = register("rc-empty@booktimer.com", "rcempty", "글 없는 사람");
+        followRepository.save(Follow.of(viewer, owner));
+        publicBookOf(owner, "책 하나");
+
+        mockMvc.perform(get("/api/profile").param("loginId", "rcempty")
+                        .with(user("rc-emptyv@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.books", hasSize(1)))
+                .andExpect(jsonPath("$.books[0].lastStoryAt").doesNotExist());
     }
 }
