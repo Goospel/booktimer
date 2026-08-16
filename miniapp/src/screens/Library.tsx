@@ -1,12 +1,21 @@
 import { Button, Text, TextField } from '@toss/tds-mobile';
 import { useCallback, useEffect, useState } from 'react';
 
-import type { BookStatus, MyBookSummary, SearchRow } from '../api';
-import { addBook, changeBookStatus, deleteBook, fetchShelf, searchBooks, setBookVisibility } from '../api';
+import type { BookStatus, MarginResponse, MyBookSummary, SearchRow } from '../api';
+import {
+  addBook,
+  changeBookStatus,
+  deleteBook,
+  fetchBookMargin,
+  fetchShelf,
+  searchBooks,
+  setBookVisibility,
+} from '../api';
 import { useBackClose } from '../back';
 import { formatDuration } from '../format';
 import { BookCover, CoverInitial, ErrorMessage, Loading, Screen, Sheet } from '../ui';
 import { BookCarousel } from './Home';
+import { MarginCard } from './Story';
 
 /**
  * 탭 순서 = 읽는 흐름 순서(읽는 중 → 다 읽음 → 읽고 싶어요). 빈 탭도 라벨은 남는다(자리가 흔들리지 않게).
@@ -77,6 +86,152 @@ export function resolveSelected<T extends { id: number }>(rows: T[], selectedId:
   return rows.find((b) => b.id === selectedId) ?? rows[0] ?? null;
 }
 
+/** 박스가 든 스냅 — 어느 책의 응답인지 태그를 함께 든다. `margin: null` = 그 책 조회 실패. */
+export interface MarginSnap {
+  bookId: number;
+  margin: MarginResponse | null;
+}
+
+/** 지연 fetch 간격 — 캐러셀을 한 칸씩 여러 번 멈추며 훑을 때 요청을 합친다(캐러셀 settle 뒤에 얹힌다). */
+export const MARGIN_FETCH_DEBOUNCE_MS = 300;
+
+/** 박스 미리보기 장수 — 나머지는 「전체 보기 ›」가 맡는다. */
+export const MARGIN_PREVIEW_COUNT = 2;
+
+/**
+ * 지금 책에 대해 박스가 그릴 것 — 스냅이 없거나 <b>다른 책 것이면 로딩</b>이다(경합 렌더 가드).
+ *
+ * <p>책 B가 화면인데 책 A의 늦은 응답이 스냅에 남아 있어도 A의 글이 B 아래 그려질 수 없다.
+ * 쓰기 가드(effect cleanup)와 한 쌍이다 — 쓰기 가드 단독은 "응답 도착 전까지 옛 글이 보이는" 구간을
+ * 못 막고, 렌더 가드 단독은 늦은 응답이 마지막에 덮으면 재요청 트리거가 없어 로딩에 교착한다.
+ */
+export function marginBoxView(snap: MarginSnap | null, bookId: number): MarginResponse | 'loading' | 'error' {
+  if (snap === null || snap.bookId !== bookId) return 'loading';
+  return snap.margin ?? 'error';
+}
+
+/**
+ * 인라인 여백 박스 — 고른 책의 글을 그 자리에서 몇 장 보여 준다(컨테이너: 조회·경합 가드).
+ *
+ * <p>지연 fetch({@link MARGIN_FETCH_DEBOUNCE_MS})가 캐러셀 훑기의 요청 폭주를 누른다 — 그 안에 다음
+ * 책으로 넘어가면 cleanup이 타이머를 지워 <b>요청이 아예 안 나간다</b>. 늦게 도착한 응답은 쓰기 가드
+ * (`stale`)가 막고, 그래도 남은 옛 스냅은 렌더 가드({@link marginBoxView})가 로딩으로 떨어뜨린다.
+ *
+ * <p>`key`를 주지 않는다 — `bookId`가 바뀌면 effect가 다시 돌고 렌더 가드가 로딩을 보장하므로
+ * 리마운트할 이유가 없다.
+ */
+function MarginBox({
+  loginId,
+  bookId,
+  onError,
+  onOpenAll,
+}: {
+  loginId: string;
+  bookId: number;
+  /** 401만 App으로 올린다 — 그 외 실패는 박스 안 문구에 머문다(화면의 다른 fetch와 같은 규율). */
+  onError: (error: Error) => void;
+  onOpenAll: () => void;
+}) {
+  const [snap, setSnap] = useState<MarginSnap | null>(null);
+
+  useEffect(() => {
+    let stale = false; // cleanup 뒤 도착한 응답은 스냅을 건드리지 못한다
+    const timer = setTimeout(() => {
+      fetchBookMargin(loginId, bookId)
+        .then((margin) => {
+          if (!stale) setSnap({ bookId, margin });
+        })
+        .catch((e: Error) => {
+          if (stale) return;
+          if (e.name === 'UnauthorizedError') onError(e);
+          else setSnap({ bookId, margin: null });
+        });
+    }, MARGIN_FETCH_DEBOUNCE_MS);
+    return () => {
+      stale = true;
+      clearTimeout(timer);
+    };
+  }, [loginId, bookId, onError]);
+
+  return <MarginBoxView view={marginBoxView(snap, bookId)} now={Date.now()} onOpenAll={onOpenAll} />;
+}
+
+/**
+ * 인라인 여백 박스 — 순수 표시. 정적 렌더 하니스가 세 상태(로딩·실패·내용)에 닿는 유일한 길이다.
+ *
+ * <p>헤더는 세 상태 모두 서 있다 — 박스 뼈대가 고정이라야 캐러셀을 밀 때 화면이 들썩이지 않는다.
+ * 실패에 재시도 버튼을 두지 않는 것은 의도다: 헤더 「전체 보기 ›」가 살아 있어 전체 화면(자체 재시도가
+ * 있다)으로 갈 수 있고, 책을 옮기거나 돌아오면 그 자체가 재조회다.
+ */
+export function MarginBoxView({
+  view,
+  now,
+  onOpenAll,
+}: {
+  view: MarginResponse | 'loading' | 'error';
+  /** 상대 시각의 기준 — 밖에서 받아야 테스트가 결정론이 된다(여백 화면과 같은 규율). */
+  now: number;
+  onOpenAll: () => void;
+}) {
+  const entries = typeof view === 'string' ? [] : view.entries;
+
+  return (
+    <div
+      data-margin-box=""
+      style={{ marginTop: 16, padding: 14, border: '1px solid #E4DDD0', borderRadius: 16, background: '#FFFDF8' }}
+    >
+      <div style={{ display: 'flex', alignItems: 'baseline' }}>
+        <Text typography="st11" style={{ flex: 1 }}>
+          여백{typeof view !== 'string' && <b style={{ color: '#4E6B4A' }}> {entries.length}</b>}
+        </Text>
+        <button
+          type="button"
+          onClick={onOpenAll}
+          style={{
+            padding: 0,
+            border: 'none',
+            background: 'transparent',
+            color: 'var(--adaptiveGrey600, #6F6A5E)',
+            fontSize: 13,
+            cursor: 'pointer',
+          }}
+        >
+          전체 보기 ›
+        </button>
+      </div>
+      {view === 'loading' && (
+        <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 10 }}>
+          불러오는 중…
+        </Text>
+      )}
+      {view === 'error' && (
+        <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 10 }}>
+          여백을 불러오지 못했어요.
+        </Text>
+      )}
+      {typeof view !== 'string' &&
+        (entries.length === 0 ? (
+          <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 10 }}>
+            아직 남긴 글이 없어요
+          </Text>
+        ) : (
+          entries.slice(0, MARGIN_PREVIEW_COUNT).map((e) => (
+            <MarginCard
+              key={e.id}
+              entry={e}
+              now={now}
+              self={false}
+              busy={false}
+              confirming={false}
+              onConfirmDelete={() => {}}
+              onDelete={() => {}}
+            />
+          ))
+        ))}
+    </div>
+  );
+}
+
 /**
  * 서재 탭 — 내 책장 조회·관리와 검색 추가.
  *
@@ -88,6 +243,7 @@ export function Library({
   onError,
   onShelfChanged,
   onOpenMargin,
+  onComposeMargin,
 }: {
   /** 내 @아이디 — 없으면 서버가 여백 대상을 찾지 못하므로 여백 손잡이를 그리지 않는다(설계 결정 A). */
   myLoginId: string | null;
@@ -97,8 +253,13 @@ export function Library({
    * 홈 캐러셀은 옛 「읽는 중」 목록 그대로다(앱을 나갔다 와야 반영되던 문제).
    */
   onShelfChanged: () => void;
-  /** 고른 책의 여백을 전체 화면으로 연다 — 서재는 "뭘 남겼더라"를 들춰보는 자리라 작성 직행이 아니다. */
+  /** 고른 책의 여백을 전체 화면으로 연다 — 인라인 박스의 「전체 보기 ›」가 이 문이다. */
   onOpenMargin: (loginId: string, bookId: number) => void;
+  /**
+   * 「여백에 글쓰기」 — 홈 문과 같은 작성 직행 경로. `MyBookSummary`가 `BookOption`을 구조적으로
+   * 충족해 변환이 없다(오히려 비공개 여부가 실려 작성 화면 캡션이 더 정확하다).
+   */
+  onComposeMargin: (book: MyBookSummary) => void;
 }) {
   const [books, setBooks] = useState<MyBookSummary[] | null>(null);
   const [searchEnabled, setSearchEnabled] = useState(false);
@@ -208,6 +369,8 @@ export function Library({
             onSheet={setSheet}
             onAction={act}
             onOpenMargin={onOpenMargin}
+            onComposeMargin={onComposeMargin}
+            onError={onError}
           />
           {searchEnabled && (
             <Button display="block" size="medium" style={{ marginTop: 24 }} onClick={() => setMode('search')}>
@@ -239,19 +402,23 @@ export function Shelf({
   onSheet,
   onAction,
   onOpenMargin,
+  onComposeMargin,
+  onError,
 }: {
   books: MyBookSummary[];
   tab: BookStatus;
   selectedId: number | null;
   sheet: LibrarySheet;
   busy: boolean;
-  /** 없으면 여백 손잡이를 그리지 않는다 — 눌러도 서버가 대상을 못 찾는다(설계 결정 A). */
+  /** 없으면 여백 손잡이·박스를 그리지 않는다 — 눌러도 서버가 대상을 못 찾는다(설계 결정 A). */
   myLoginId: string | null;
   onTab: (status: BookStatus) => void;
   onSelect: (bookId: number | null) => void;
   onSheet: (sheet: LibrarySheet) => void;
   onAction: (action: BookAction) => void;
   onOpenMargin: (loginId: string, bookId: number) => void;
+  onComposeMargin: (book: MyBookSummary) => void;
+  onError: (error: Error) => void;
 }) {
   if (books.length === 0) {
     return (
@@ -309,22 +476,56 @@ export function Shelf({
             noBookCard={false}
             metaOf={metaLine}
           />
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 16 }}>
-            {/* 내 책의 여백으로 가는 문 — 책방(전시장)까지 가지 않고 개인 공간에서 바로 들춰본다. */}
+          {/* 전폭 손잡이 줄 — 합폭은 「책 추가하기」와 같고, 비율은 2:1(쓰기가 주, 관리가 보조). */}
+          <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+            {/* 들춰보기는 아래 박스가 맡으므로 손잡이는 작성 직행이다 — 홈 여백 문과 같은 경로. */}
             {myLoginId !== null && (
-              <button type="button" disabled={busy} onClick={() => onOpenMargin(myLoginId, selected.id)} style={handleStyle}>
-                여백
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => onComposeMargin(selected)}
+                style={{
+                  flex: 2,
+                  height: HANDLE_ROW_HEIGHT,
+                  border: 'none',
+                  borderRadius: 14,
+                  background: 'rgba(110,138,106,.14)',
+                  color: '#4E6B4A',
+                  fontSize: 15,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                여백에 글쓰기
               </button>
             )}
             <button
               type="button"
               disabled={busy}
               onClick={() => onSheet({ kind: 'actions', confirmDelete: false, confirmPublish: false })}
-              style={handleStyle}
+              style={{
+                flex: 1,
+                height: HANDLE_ROW_HEIGHT,
+                border: '1px solid #D8D2C4',
+                borderRadius: 14,
+                background: '#FCFAF5',
+                color: '#2C2C2A',
+                fontSize: 15,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
             >
               관리
             </button>
           </div>
+          {myLoginId !== null && (
+            <MarginBox
+              loginId={myLoginId}
+              bookId={selected.id}
+              onError={onError}
+              onOpenAll={() => onOpenMargin(myLoginId, selected.id)}
+            />
+          )}
         </div>
       )}
 
@@ -609,7 +810,14 @@ function SheetRow({
   );
 }
 
-/** 테두리만 있는 작은 손잡이 — 「펼쳐보기」·「관리」가 같은 무게로 보여야 둘 다 보조 동작으로 읽힌다. */
+/**
+ * 손잡이 줄 높이 — 아래 「책 추가하기」(TDS `Button size="medium" display="block"`)의 <b>실측</b> 높이다
+ * (목 모드 390px 뷰포트에서 38px). TDS 내부 값이라 코드로 유도할 수 없어 재서 박았다 — 두 줄이 같은
+ * 높이라야 캐러셀 아래가 한 벌의 손잡이로 읽힌다.
+ */
+const HANDLE_ROW_HEIGHT = 38;
+
+/** 테두리만 있는 작은 손잡이 — 제목 줄 「펼쳐보기」가 쓴다(캐러셀 아래 줄은 전폭 손잡이로 갈렸다). */
 export const handleStyle = {
   flex: '0 0 auto',
   padding: '8px 14px',
