@@ -113,6 +113,7 @@ function renderHome(
         goalAdPending={props.goalAdPending ?? false}
         onGoSettings={() => {}}
         onError={() => {}}
+        onOpenMargin={() => {}}
       />
     </TDSMobileProvider>,
   );

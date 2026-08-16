@@ -33,7 +33,15 @@ function event(nickname: string, bookTitle: string, type: SocialEvent['type'], h
     bookTitle,
     type,
     occurredAt: new Date(NOW - hoursAgo * HOUR).toISOString(),
+    bookId: null,
+    excerpt: null,
+    count: 0,
   };
+}
+
+/** 여백 줄 — 사람+책 단위로 묶여 온다(서버가 묶는다). 세 필드는 이 종류에만 실린다. */
+function story(nickname: string, bookTitle: string, hoursAgo: number, count: number, excerpt = '남긴 문장'): SocialEvent {
+  return { ...event(nickname, bookTitle, 'STORY', hoursAgo), bookId: 7, excerpt, count };
 }
 
 function news(
@@ -67,6 +75,7 @@ const renderBox = (
         onTab={() => {}}
         onToggle={() => {}}
         onOpenNews={() => {}}
+        onOpenMargin={() => {}}
       />
     </TDSMobileProvider>,
   );
@@ -74,6 +83,8 @@ const renderBox = (
 /** 그려진 탭 머리 — 죽은 탭이 서지 않는지는 결국 이 목록이 말한다. */
 const tabsOf = (markup: string) => [...markup.matchAll(/data-feed-tab="([^"]*)"/g)].map((m) => m[1]);
 const rowCountOf = (markup: string) => [...markup.matchAll(/data-feed-row/g)].length;
+/** 줄을 그린 태그 — 「눌러서 갈 곳이 있는 줄」과 없는 줄을 마크업으로 가른다. */
+const rowTagsOf = (markup: string) => [...markup.matchAll(/<(\w+)[^>]*data-feed-row/g)].map((m) => m[1]);
 
 describe('탭 노출 (visibleTabs)', () => {
   it('뉴스가 꺼져 있으면 「소식」 하나 — 눌러도 빈 뉴스 탭은 죽은 탭이다', () => {
@@ -165,6 +176,22 @@ describe('소식 문구 (eventLine)', () => {
     expect(eventLine(event('ㄱ', 'Sapiens', 'FINISHED', 1))).toContain('『Sapiens』를');
     expect(eventLine(event('ㄱ', '', 'FINISHED', 1))).toContain('『』를');
   });
+
+  /**
+   * 여백 줄은 「…의 여백에」 구조라 목적격 조사가 필요 없다 — 완독·시작 문장과 문법이 다르다.
+   * 묶음이라 개수가 곧 문구를 가른다: 1장이면 「글을」, 2장 이상이면 「글 N개를」.
+   */
+  it('여백은 사람+책 묶음 한 줄로 말한다 — 1장이면 개수를 세지 않는다', () => {
+    expect(eventLine(story('나비독서', '데미안', 1, 1))).toBe('나비독서님이 『데미안』의 여백에 글을 남겼어요');
+  });
+
+  it('2장 이상이면 개수를 적는다 — 묶은 이유가 문장에 드러나야 한다', () => {
+    expect(eventLine(story('밑줄러', '사피엔스', 1, 3))).toBe('밑줄러님이 『사피엔스』의 여백에 글 3개를 남겼어요');
+  });
+
+  it('여백 문장에는 목적격 조사가 끼지 않는다 — 「『데미안』을의 여백에」가 되면 문장이 깨진다', () => {
+    expect(eventLine(story('ㄱ', '데미안', 1, 2))).not.toContain('『데미안』을');
+  });
 });
 
 describe('피드 박스 렌더 — 소식 탭', () => {
@@ -199,6 +226,27 @@ describe('피드 박스 렌더 — 소식 탭', () => {
 
   it('소식이 없으면 소셜 탭으로 유도하는 빈 상태를 띄운다', () => {
     expect(renderBox(feed())).toContain(EMPTY_MESSAGE.social);
+  });
+
+  /**
+   * 여백 줄만 <b>갈 곳이 있다</b> — 탭하면 책방 탭의 그 책 여백으로 점프한다. 완독·시작은 예전처럼
+   * 비클릭이다(열 화면이 없다). 마크업의 태그가 그 차이를 진다 — 클릭 자체는 정적 하니스로 못 잡는다.
+   */
+  it('여백 줄은 버튼, 완독·시작 줄은 아니다 — 갈 곳 없는 줄을 누를 수 있게 보이지 않는다', () => {
+    const markup = renderBox(feed({ social: [story('나비독서', '데미안', 1, 2), event('밑줄러', '사피엔스', 'STARTED', 2)] }));
+
+    expect(rowTagsOf(markup)).toEqual(['button', 'div']);
+  });
+
+  it('여백 줄에 발췌 한 줄을 함께 싣는다 — 무슨 글인지 보고 들어갈지 정한다', () => {
+    const markup = renderBox(feed({ social: [story('나비독서', '데미안', 1, 1, '오늘은 한 시간을 넘겼다.')] }));
+
+    expect(markup).toContain('오늘은 한 시간을 넘겼다.');
+  });
+
+  it('발췌는 한 줄로 자른다 — 500자 문장이 피드 박스를 통째로 먹지 않게', () => {
+    // 말줄임 자체는 서버가 이미 했다(80자) — 여기서는 폭에 맞춘 CSS clamp만 얹는다.
+    expect(renderBox(feed({ social: [story('나비독서', '데미안', 1, 1)] }))).toContain('-webkit-line-clamp:1');
   });
 });
 

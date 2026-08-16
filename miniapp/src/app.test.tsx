@@ -46,13 +46,19 @@ const dashboard: DashboardResponse = {
   emailVerified: true,
 };
 
-function renderTab(tab: (typeof TABS)[number]['key']) {
+function renderTab(
+  tab: (typeof TABS)[number]['key'],
+  marginTarget: { loginId: string; bookId: number } | null = null,
+) {
   return renderToStaticMarkup(
     <TDSMobileProvider userAgent={userAgent}>
       <MainTabs
         tab={tab}
         onTabChange={() => {}}
         dashboard={dashboard}
+        marginTarget={marginTarget}
+        onMarginConsumed={() => {}}
+        onOpenMargin={() => {}}
         onTimerChange={() => {}}
         onGraphChange={() => {}}
         onGoGoal={() => {}}
@@ -104,6 +110,21 @@ describe('탭 구조', () => {
 
   it('책방 탭은 서재와 기록 사이에 온다 — 탭바 순서가 곧 TABS 순서다', () => {
     expect(TABS.map((t) => t.key)).toEqual(['home', 'library', 'bookshop', 'history']);
+  });
+
+  /**
+   * 홈 소식의 여백 줄 → 책방 탭의 그 책 여백. 탭을 바꾸면 책방이 새로 마운트되므로, 점프 대상은
+   * <b>초기 상태</b>로 전달된다 — 그래서 이 화면이 내 책방이 아니라 곧장 여백으로 열려야 한다.
+   */
+  it('점프 대상이 있으면 책방 탭이 내 책방이 아니라 그 책의 여백으로 열린다', () => {
+    const markup = renderTab('bookshop', { loginId: 'nabi', bookId: 7 });
+
+    expect(markup).toContain('여백');
+    expect(markup).not.toContain('아이디로 친구 찾기'); // 책방 루트가 아니다
+  });
+
+  it('점프 대상이 없으면 예전처럼 내 책방이 열린다', () => {
+    expect(renderTab('bookshop')).toContain('아이디로 친구 찾기');
   });
 });
 

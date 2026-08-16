@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DashboardResponse, TimerState } from './api';
 import { fetchDashboard, token } from './api';
 import { useBackClose } from './back';
+import type { MarginTarget } from './screens/Bookshop';
 import { Bookshop } from './screens/Bookshop';
 import { Goal } from './screens/Goal';
 import { History } from './screens/History';
@@ -87,6 +88,11 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   /** 목표 바꾸기 전면광고를 기다리는 중 — 버튼을 "준비 중"으로 바꾸고 중복 진입을 막는다. */
   const [goalAdPending, setGoalAdPending] = useState(false);
+  /**
+   * 홈 소식에서 누른 여백 — 탭 점프의 전달 수단이다. 탭이 바뀌면 책방이 새로 마운트되므로 이 값이
+   * 그 화면의 <b>초기 상태</b>가 되고, 소비되는 즉시 null로 비운다(다음 수동 탭 진입에 또 열리지 않게).
+   */
+  const [marginTarget, setMarginTarget] = useState<MarginTarget | null>(null);
 
   const toLogin = useCallback(() => {
     token.clear();
@@ -264,6 +270,12 @@ export function App() {
       tab={tab}
       onTabChange={setTab}
       dashboard={dashboard}
+      marginTarget={marginTarget}
+      onMarginConsumed={() => setMarginTarget(null)}
+      onOpenMargin={(loginId, bookId) => {
+        setMarginTarget({ loginId, bookId });
+        setTab('bookshop');
+      }}
       onTimerChange={applyTimer}
       onGraphChange={applyGraph}
       onGoGoal={goToGoal}
@@ -284,6 +296,9 @@ export function MainTabs({
   tab,
   onTabChange,
   dashboard,
+  marginTarget,
+  onMarginConsumed,
+  onOpenMargin,
   onTimerChange,
   onGraphChange,
   onGoGoal,
@@ -296,6 +311,11 @@ export function MainTabs({
   tab: TabKey;
   onTabChange: (tab: TabKey) => void;
   dashboard: DashboardResponse;
+  /** 홈 소식에서 넘어온 여백 점프 대상 — 책방 탭이 마운트될 때 초기 상태로 소비된다. */
+  marginTarget: MarginTarget | null;
+  onMarginConsumed: () => void;
+  /** 소식의 여백 줄을 눌렀다 — 책방 탭으로 옮기고 그 책의 여백을 연다. */
+  onOpenMargin: (loginId: string, bookId: number) => void;
   onTimerChange: (timer: TimerState) => void;
   onGraphChange: (graph: DashboardResponse['graph']) => void;
   onGoGoal: () => void;
@@ -322,11 +342,18 @@ export function MainTabs({
             goalAdPending={goalAdPending}
             onGoSettings={onGoSettings}
             onError={onError}
+            onOpenMargin={onOpenMargin}
           />
         )}
         {tab === 'library' && <Library onError={onError} onShelfChanged={onShelfChanged} />}
         {tab === 'bookshop' && (
-          <Bookshop myLoginId={dashboard.loginId} onHandleCreated={onHandleCreated} onError={onError} />
+          <Bookshop
+            myLoginId={dashboard.loginId}
+            initialMargin={marginTarget}
+            onMarginConsumed={onMarginConsumed}
+            onHandleCreated={onHandleCreated}
+            onError={onError}
+          />
         )}
         {tab === 'history' && <History graph={dashboard.graph} />}
       </div>

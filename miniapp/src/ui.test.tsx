@@ -199,6 +199,7 @@ function home(overrides: Partial<DashboardResponse>) {
         goalAdPending={false}
         onGoSettings={() => {}}
         onError={() => {}}
+        onOpenMargin={() => {}}
       />
     </TDSMobileProvider>,
   );

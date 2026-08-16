@@ -708,6 +708,7 @@ export function Home({
   goalAdPending,
   onGoSettings,
   onError,
+  onOpenMargin,
 }: {
   dashboard: DashboardResponse;
   onTimerChange: (timer: TimerState) => void;
@@ -718,6 +719,8 @@ export function Home({
   /** 홈 맨 위의 계정 진입 — 닉네임·@아이디·목표·로그아웃은 전부 설정 화면이 맡는다. */
   onGoSettings: () => void;
   onError: (error: Error) => void;
+  /** 소식의 여백 줄 탭 — 책방 탭으로 옮겨 그 책의 여백을 연다(탭 전환은 App이 든다). */
+  onOpenMargin: (loginId: string, bookId: number) => void;
 }) {
   /** 태깅 시트 — `null`이면 닫힘. 열림 여부와 대상 세션이 늘 같이 움직여 상태 하나로 족하다. */
   const [tagging, setTagging] = useState<Untagged | null>(null);
@@ -977,7 +980,7 @@ export function Home({
 
       {/* 잔디 미리보기가 서 있던 자리는 피드 박스가 통째로 쓴다 — 기록(잔디·연속일·총 시간)은 기록 탭이
           이미 전부 그리고 그 탭은 하단 탭바에서 한 번에 닿으므로, 홈에 진입 손잡이를 또 두지 않는다. */}
-      <HomeFeedBox onError={onError} />
+      <HomeFeedBox onError={onError} onOpenMargin={onOpenMargin} />
 
       {/* 시트는 측정 종료 후 태깅 자리 하나다 — 고르기는 캐러셀이 맡는다. */}
       {tagging !== null && (
