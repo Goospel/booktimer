@@ -69,7 +69,7 @@ const STATUS_LABEL: Record<BookStatus, string> = {
   WANT_TO_READ: '읽고 싶어요',
 };
 
-/** `offsetDays` 일 전의 `YYYY-MM-DD`. 잔디·스토리 시각이 항상 "오늘 기준"으로 보이게 한다. */
+/** `offsetDays` 일 전의 `YYYY-MM-DD`. 잔디·여백 시각이 항상 "오늘 기준"으로 보이게 한다. */
 function isoDate(offsetDays: number): string {
   const d = new Date();
   d.setDate(d.getDate() - offsetDays);

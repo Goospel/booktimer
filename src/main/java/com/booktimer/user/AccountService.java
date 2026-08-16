@@ -211,10 +211,10 @@ public class AccountService {
 
     /**
      * 연관 데이터까지 FK 순서로 제거: 세션(N) → 타이머(1:1) → 목표 변경 이력(N) → 용서권(N) → 팔로우(양방향) → 차단(양방향)
-     * → 신고(양방향) → 스토리 열람·스토리(N) → 책(N) → 책BTI 캐시(1) → … → 작가 정(N) → 유저 → 로그인 세션.
+     * → 신고(양방향) → 여백 글(N) → 책(N) → 책BTI 캐시(1) → … → 작가 정(N) → 유저 → 로그인 세션.
      * <p>모두 users를 FK 참조하므로 유저 삭제 전에 정리한다. 책은 {@code reading_session.book_id}가
      * book을 FK 참조하므로 <b>세션 이후</b>에 지운다(세션이 책을 가리키는 채로 책을 지우면 위반).
-     * 스토리도 같은 이유로 <b>책보다 앞</b>에 지운다({@code story.book_id}가 book을 참조).
+     * 여백 글도 같은 이유로 <b>책보다 앞</b>에 지운다({@code story.book_id}가 book을 참조).
      *
      * <p><b>여기서 하나라도 빠지면 그 자식을 가진 사용자는 탈퇴 자체가 실패한다</b> — 모든 FK가
      * {@code NO ACTION}(cascade 없음)이라 DB가 대신 지워 주지 않는다. 실제로 {@code author_affection}이

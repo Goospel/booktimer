@@ -71,7 +71,7 @@ public class FollowApiController {
     /**
      * 관계를 <b>만드는</b> 쪽의 대상 조회 — 운영자(ADMIN)는 없는 것으로 본다.
      *
-     * <p>운영자는 소셜 노출 대상이 아니라 프로필·검색·스토리·추천이 모두 {@code role <> ADMIN}으로 거른다
+     * <p>운영자는 소셜 노출 대상이 아니라 프로필·검색·여백·추천이 모두 {@code role <> ADMIN}으로 거른다
      * ({@link com.booktimer.profile.ProfileService#resolveVisibleTarget}과 같은 불변식). 여기만 날것으로
      * 조회하면 운영자 핸들을 아는 사람이 이 API의 200/404 차이로 <b>존재를 확인</b>할 수 있고(그 누설을
      * 막으려고 만든 가드다) 팔로우 엣지까지 만들어진다.
