@@ -73,9 +73,13 @@ await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
 await settle()
 await shot('02-feed')
 
-// 03 서재 — 상태 탭 + 표지 캐러셀
+// 03 서재 — 상태 탭 + 표지 캐러셀 + 인라인 여백 박스
+// ⚠️ 홈과 같은 이유로 최상단에서 찍지 않는다 — 여백 박스가 생기면서 세로가 길어져, 0에서 찍으면
+// 첫 글 카드가 문장 중간에 탭바로 잘린다(잘린 문장은 심사용 그림이 아니다).
+// 60은 눈으로 고른 값이다: 더 내리면 상태 탭 줄이 잘리고, 덜 내리면 첫 카드가 잘린다.
 await tab('서재')
-await page.evaluate(() => window.scrollTo(0, 0))
+await page.evaluate(() => window.scrollTo(0, 60))
+await settle()
 await shot('03-library')
 
 // 04 기록 — 통계 + 잔디 + 날짜별 기록
