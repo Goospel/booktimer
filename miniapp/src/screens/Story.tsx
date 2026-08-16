@@ -303,6 +303,9 @@ export function MarginCard({
 /**
  * 글 남기기 — 진입점이 <b>이미 그 책</b>이라 책을 고를 것이 없다(옛 첨부 select와 `/api/books` 조회는 삭제).
  * 남는 것은 문장·배경·1~500자 카운터뿐이다.
+ *
+ * <p>헤더에 뒤로가기를 두지 않는다 — 아래 「취소」가 이미 출구라 중복이었다(토스 네비바의 `‹`까지 세면
+ * 한 화면에 나가는 화살표가 셋이었다). 안드로이드 하드웨어 뒤로가기는 셸의 `useBackClose`가 맡는다.
  */
 export function StoryComposer({
   book,
@@ -336,7 +339,7 @@ export function StoryComposer({
   const bg = palette(bgCode);
 
   return (
-    <Screen title="여백에 글 남기기" onBack={onCancel}>
+    <Screen title="여백에 글 남기기">
       {/* 가시성 고지는 placeholder가 아니라 캡션이다 — placeholder는 첫 글자에 사라지는데, 정작
           "이게 누구에게 보이나"가 필요한 순간은 쓰는 도중이다. */}
       <Text typography="st12" color="grey600" style={{ display: 'block', marginBottom: 12, wordBreak: 'keep-all' }}>

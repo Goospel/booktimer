@@ -38,6 +38,47 @@ describe('화면 껍데기 (Screen)', () => {
 });
 
 /**
+ * 뒤로가기 손잡이 — <b>글자가 붙은 알약을 제목 위 줄</b>에 세운다.
+ *
+ * <p>옛 모양은 배경 없는 `←` 글리프를 제목 옆에 둔 것이었는데 사용자 제보로 두 번 실패했다: 배경이
+ * 없어 버튼으로 안 보이고, 직선 화살표는 「이전 화면」보다 「왼쪽 이동」으로 읽힌다. 아이콘을 아무리
+ * 다듬어도 뜻은 추론에 맡겨지므로 <b>글자</b>를 붙였다 — 인식률을 아이콘 디자인에 걸지 않는다.
+ */
+describe('화면 껍데기 — 뒤로가기 손잡이', () => {
+  const withBack = (title?: string, onBack?: () => void) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Screen title={title} onBack={onBack}>
+          본문
+        </Screen>
+      </TDSMobileProvider>,
+    );
+
+  it('글자가 붙어 있다 — 아이콘만이면 뜻을 추론해야 한다', () => {
+    expect(withBack('여백', () => {})).toContain('돌아가기');
+  });
+
+  it('제목보다 위에 온다 — 제목 옆에 끼면 제목 행의 장식으로 읽힌다', () => {
+    const markup = withBack('여백', () => {});
+
+    // 둘 다 있는지 먼저 본다 — 없으면 indexOf가 -1이라 순서 단언이 저절로 참이 된다(공허한 계측).
+    expect(markup).toContain('돌아가기');
+    expect(markup.indexOf('돌아가기')).toBeLessThan(markup.indexOf('여백'));
+  });
+
+  it('onBack이 없으면 안 그린다 — 탭 루트는 갈 곳이 없다', () => {
+    const markup = withBack('여백');
+
+    expect(markup).toContain('여백');
+    expect(markup).not.toContain('돌아가기');
+  });
+
+  it('제목이 없어도 그린다 — 나갈 길은 제목 유무와 무관하다', () => {
+    expect(withBack(undefined, () => {})).toContain('돌아가기');
+  });
+});
+
+/**
  * 제목 위 슬롯(`above`) — 화면 소속이 아니라 그 위에 얹히는 도구(책방의 검색) 자리다.
  * 본문에 끼우면 「…님의 책방」 아래에 검색창이 오는 어색한 순서가 된다(사용자 제보).
  */

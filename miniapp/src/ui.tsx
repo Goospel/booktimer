@@ -265,8 +265,12 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
 /**
  * 화면 공통 껍데기 — 제목 + 본문 여백. 미니앱은 화면이 다섯 뿐이라 레이아웃도 이 하나면 된다.
  *
- * <p>`onBack`을 주면 제목 왼쪽에 ← 를 세운다. 나갈 길이 화면 맨 아래에만 있으면 목록이 긴 화면에서
- * 나가려고 끝까지 스크롤해야 한다 — 헤더가 제목을 그리는 자리라 뒤로가기도 여기가 맡는다.
+ * <p>`onBack`을 주면 **제목 위 줄에 「‹ 돌아가기」 알약**을 세운다. 나갈 길이 화면 맨 아래에만 있으면
+ * 목록이 긴 화면에서 나가려고 끝까지 스크롤해야 한다 — 그래서 위다.
+ *
+ * <p>글자를 붙인 것은 취향이 아니라 두 번의 제보다(2026-08-16): 배경 없는 `←` 글리프는 ① 버튼으로
+ * 안 보이고 ② 직선 화살표가 「이전 화면」보다 「왼쪽 이동」으로 읽힌다. 아이콘을 아무리 다듬어도 뜻은
+ * 읽는 사람의 추론에 맡겨지므로, 인식률을 아이콘 디자인에 걸지 않고 글자로 못 박는다.
  *
  * <p>제목은 **선택**이다. 홈처럼 첫 카드가 곧 히어로인 화면에서는 제목이 정보를 하나도 안 보태면서
  * 자리만 먹었다(「구스펠님의 오늘」은 바로 아래 「오늘 읽은 시간」의 중복이고, 그 화면 이름은 탭바가
@@ -297,34 +301,50 @@ export function Screen({
 }) {
   return (
     <main style={{ padding: '24px 20px 40px', maxWidth: 480, margin: '0 auto' }}>
+      {/* 나갈 길이 맨 위다 — 제목·도구줄보다 앞. 제목이 없는 화면에서도 그린다(출구는 제목과 무관). */}
+      {onBack !== undefined && (
+        <div style={{ display: 'flex', marginBottom: 14 }}>
+          <button
+            type="button"
+            onClick={onBack}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 2,
+              height: 34,
+              padding: '0 14px 0 8px',
+              border: 'none',
+              borderRadius: 999,
+              background: 'var(--adaptiveGrey100, #EDE7DA)',
+              color: 'var(--adaptiveGrey700, #57534A)',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            {/* 꺾쇠다 — 직선 화살표는 「이전 화면」이 아니라 「왼쪽 이동」으로 읽힌다. */}
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2.2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M14.5 5 8 12l6.5 7" />
+            </svg>
+            돌아가기
+          </button>
+        </div>
+      )}
       {above}
       {title !== undefined && (
       <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: subtitle === undefined ? 20 : 3 }}>
-        {onBack !== undefined && (
-          <button
-            type="button"
-            aria-label="뒤로"
-            onClick={onBack}
-            style={{
-              flex: '0 0 auto',
-              width: 32,
-              height: 32,
-              padding: 0,
-              border: 'none',
-              borderRadius: 999,
-              fontSize: 20,
-              lineHeight: 1,
-              background: 'transparent',
-              color: 'var(--adaptiveGrey700, #57534A)',
-              cursor: 'pointer',
-            }}
-          >
-            ←
-          </button>
-        )}
         {/* 제목만 세리프(고운바탕) — 웹 `.brand h1`과 같은 위계다. 본문은 전역 고운돋움 그대로. */}
-        {/* 한글 제목이 flex 자식이라 minWidth:0이 없으면 줄바꿈 대신 ← 를 밀어낸다. */}
         <Text
           typography="t3"
           fontWeight="bold"

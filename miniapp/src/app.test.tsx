@@ -11,6 +11,7 @@ import {
   TAB_BAR_HEIGHT,
   TAB_BAR_MARGIN,
   TABS,
+  closeCompose,
   shouldRefresh,
   tabChangeHandler,
 } from './App';
@@ -233,5 +234,28 @@ describe('포커스 복귀 재조회 (shouldRefresh)', () => {
   it('force면 스로틀을 무시한다 — 서재에서 방금 바꾼 책이 홈에 1분 뒤에 뜨면 안 반영된 것과 같다', () => {
     expect(shouldRefresh(1_000, 1_000, true)).toBe(true);
     expect(shouldRefresh(1_000, 1_000 + REFRESH_THROTTLE_MS - 1, true)).toBe(true);
+  });
+});
+
+/**
+ * 작성 화면을 닫으면 어디로 가나 — 출발지로 돌아가야 한다.
+ *
+ * <p>예전엔 작성 직행(홈·서재의 「여백에 글쓰기」)도 여백 상세를 **밑에 깔고** 그 위에 섰다. 그래서
+ * 쓰고 나오면 출발한 탭이 아니라 한 번도 요청한 적 없는 여백 상세에 떨어졌다. 이제 밑에 깔 화면이
+ * 없으면(`bookId === null`) 곧장 탭으로 돌아간다. 배선은 effect·클릭이라 판정만 순수하게 계측한다.
+ */
+describe('작성 화면 닫기 (closeCompose)', () => {
+  const book = { id: 7, title: '데미안', author: '헤르만 헤세', coverUrl: null, isPublic: true };
+
+  it('작성 직행으로 열었으면(bookId=null) 전부 닫아 출발한 탭으로 돌아간다', () => {
+    expect(closeCompose({ loginId: 'goospel', bookId: null, composeBook: book })).toBeNull();
+  });
+
+  it('여백 상세에서 열었으면 그 상세만 남긴다 — 왔던 목록으로 돌아가는 게 맞다', () => {
+    expect(closeCompose({ loginId: 'goospel', bookId: 7, composeBook: book })).toEqual({
+      loginId: 'goospel',
+      bookId: 7,
+      composeBook: null,
+    });
   });
 });

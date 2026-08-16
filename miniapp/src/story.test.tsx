@@ -252,3 +252,30 @@ describe('작성 실패 안내 — createStoryMessage', () => {
     expect(createStoryMessage(new Error('Load failed'))).toBe('Load failed');
   });
 });
+
+/**
+ * 나가는 길 — 두 화면이 다르다.
+ *
+ * <p>작성 화면은 「취소」가 곧 출구라 헤더의 뒤로가기가 중복이었다(토스 네비바의 `‹`까지 세면 화살표가
+ * 셋이었다). 여백 상세는 반대로 헤더 손잡이가 <b>유일한</b> 출구다 — 탭 위에 전체 화면으로 서 탭바가
+ * 가려지고 하단 버튼도 없다. 그래서 한쪽만 지운다. 부정 단언은 짝이 되는 긍정 단언과 함께 둔다(T-149).
+ */
+describe('나가는 길 — 헤더 뒤로가기', () => {
+  it('작성 화면엔 없다 — 「취소」가 출구다', () => {
+    const markup = render(
+      <StoryComposer
+        book={{ id: 7, title: '데미안', author: null, coverUrl: null, isPublic: true }}
+        onDone={() => {}}
+        onCancel={() => {}}
+        onError={() => {}}
+      />,
+    );
+
+    expect(markup).toContain('취소');
+    expect(markup).not.toContain('돌아가기');
+  });
+
+  it('여백 상세엔 있다 — 지우면 나갈 길이 사라진다', () => {
+    expect(view(margin())).toContain('돌아가기');
+  });
+});
