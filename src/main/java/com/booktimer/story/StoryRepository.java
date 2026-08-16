@@ -38,6 +38,32 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
     List<BookStoryRecency> recencyByBook(@Param("bookIds") Collection<Long> bookIds);
 
     /**
+     * 홈 소식용 — viewer가 팔로우한 사람들이 <b>최근에</b> 여백에 남긴 글 (최신순).
+     *
+     * <p>Follow와는 매핑된 연관이 없어 theta 조인({@code f.followee = u})으로 묶는다
+     * ({@code BookRepository.feedStarted} 미러). 차단 필터는 쿼리에 불필요 — "팔로우 존재 → 차단 없음"
+     * write-시점 불변식(차단 시 팔로우 양방향 해제)이 보장하고, 행동 회귀 테스트가 못 박는다.
+     * ADMIN·공개핸들(login_id) 미설정 작성자는 노출 불변식대로 제외(N-055).
+     *
+     * <p><b>책 공개 여부는 표시 시점에 다시 본다</b>({@code b.visibility = PUBLIC}) — PRIVATE 책엔 애초에
+     * 글을 못 남기지만({@code Story.of} 불변식), 남긴 <i>뒤에</i> 비공개로 돌릴 수 있어서 그 창이 유일한
+     * 누출 경로가 된다.
+     *
+     * <p>작성자·책은 fetch로 즉시 초기화 — 소식 한 줄이 닉네임·책 제목을 읽으므로 홈 진입 핫패스의
+     * N+1을 막는다. ToOne fetch만 쓴다.
+     */
+    @Query("""
+            select s from Story s join fetch s.user u join fetch s.book b, com.booktimer.follow.Follow f
+            where f.followee = u and f.follower = :viewer
+              and s.createdAt > :cutoff
+              and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
+              and u.role <> com.booktimer.user.Role.ADMIN
+              and u.loginId is not null
+            order by s.createdAt desc, s.id desc
+            """)
+    List<Story> feedRecent(@Param("viewer") User viewer, @Param("cutoff") Instant cutoff);
+
+    /**
      * 한 책의 여백에 쌓인 글 — <b>최신순</b>이라 {@code pageable} 상한이 최근 것을 남긴다.
      * 동시각 tie는 id로 갈라 상한 경계가 호출마다 흔들리지 않게 한다.
      *
