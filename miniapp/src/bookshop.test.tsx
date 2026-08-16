@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
+  BookStatus,
   FollowListType,
   PersonalityEntry,
   PersonalityMutation,
@@ -28,6 +29,7 @@ import {
   personalityErrorMessage,
   personalityNoticeText,
   runPersonalityRefresh,
+  shelfTitle,
   showArchiveHandle,
   showPersonalityAdButton,
   toggleSafety,
@@ -118,6 +120,8 @@ function card(
     header?: React.ReactNode;
     /** 격자 탭으로 여백을 여는 손잡이 — 책방 셸이 준다. */
     openMargin?: boolean;
+    /** 걸린 상태 필터 — 기본은 「전체」(null). 클릭이 안 도는 하니스라 결과 상태를 밖에서 준다. */
+    statusFilter?: BookStatus | null;
   } = {},
 ) {
   return render(
@@ -139,6 +143,8 @@ function card(
       onRetryPersonality={() => {}}
       onFollowToggle={() => {}}
       onSelectTag={() => {}}
+      statusFilter={view.statusFilter ?? null}
+      onSelectStatus={() => {}}
       onMore={() => {}}
       safety={null}
       header={view.header}
@@ -382,12 +388,17 @@ describe('책방 (프로필)', () => {
     expect(card(profile(), [])).toContain('공개한 책이 없어요');
   });
 
-  // 격자는 표지와 제목만 진다 — 캐러셀 아래 있던 「상태 · 읽은 시간」 자리가 없어졌다(승인된 교환).
-  it('공개 책은 격자에 제목을 그리고, 상태 라벨은 더 이상 싣지 않는다', () => {
-    const markup = card(profile(), [book(1, '자바 최적화')]);
+  /**
+   * 격자 칸은 표지와 제목만 진다 — 캐러셀 아래 있던 「상태 · 읽은 시간」 자리가 없어졌다(승인된 교환).
+   * 상태 구분은 <b>필터 칩이 전담</b>하므로 「다 읽음」이라는 말은 화면에 칩 하나로만 존재해야 한다:
+   * 다 읽은 책을 2권 넣어도 등장이 1회면 칸에는 안 실린 것이고, 칸마다 실렸다면 3회가 된다.
+   */
+  it('공개 책은 격자에 제목만 그린다 — 상태는 칸이 아니라 필터 칩이 진다', () => {
+    const markup = card(profile(), [book(1, '자바 최적화'), book(2, '데미안')]);
 
     expect(markup).toContain('자바 최적화');
-    expect(markup).not.toContain('다 읽음');
+    expect(markup).toContain('데미안');
+    expect(markup.split('다 읽음').length - 1).toBe(1);
   });
 
   it('공개 책도 표지를 그린다 — 없으면 제목 첫 글자 자리 표지로 대신한다', () => {
@@ -456,6 +467,68 @@ describe('책방 책 목록 — 3열 격자', () => {
 
     expect(markup.match(/data-fresh-dot/g)).toHaveLength(1);
     expect(markup).toContain('aria-label="자바 최적화 새 글"');
+  });
+});
+
+/**
+ * 공개 책 상태 필터 — 웹 책장의 <b>필터 축만</b> 이식했다(배지·정렬은 안 온다).
+ *
+ * <p>기본이 「전체」라 지금 화면·발광·여백 문이 그대로 보존되고, 구분이 필요한 순간에만 사용자가 좁힌다.
+ * 어휘는 서재 탭 `SECTIONS`를 그대로 재사용한다 — 같은 앱 안에서 서재와 필터가 다른 말을 쓰면 안 된다.
+ *
+ * <p>필터를 건 뒤의 fetch 배선은 정적 렌더 하니스로 못 잡는다(클릭·effect가 안 돈다 — 태그 드릴다운과 같다).
+ * 여기서는 순수 함수 {@link shelfTitle}과 걸린 상태를 프롭으로 넣었을 때의 마크업만 계측한다.
+ */
+describe('공개 책 상태 필터', () => {
+  describe('소제목 (shelfTitle)', () => {
+    it('아무것도 안 걸렸으면 전체 문구다', () => {
+      expect(shelfTitle(null, null, 3)).toBe('공개한 책 3');
+    });
+
+    it('상태가 걸리면 그 상태의 이름과 권수를 말한다 — 배지가 없으니 소제목이 상태를 진다', () => {
+      expect(shelfTitle(null, 'FINISHED', 2)).toBe('다 읽음 2');
+      expect(shelfTitle(null, 'WANT_TO_READ', 0)).toBe('읽고 싶어요 0');
+    });
+
+    it('태그 드릴다운이면 근거 책 문구다', () => {
+      expect(shelfTitle('한우물형', null, 1)).toBe('한우물형 근거 책 1');
+    });
+
+    // 상태셸이 태그 진입 때 필터를 리셋하므로 실제로는 도달하지 않는다 — 함수 단독 계약을 못 박아 둔다.
+    it('둘 다 걸리면 태그가 이긴다', () => {
+      expect(shelfTitle('한우물형', 'FINISHED', 1)).toBe('한우물형 근거 책 1');
+    });
+  });
+
+  it('칩 넷을 그리고 기본 활성은 「전체」다 — 진입 화면이 지금과 같아야 발광·여백 문이 안 사라진다', () => {
+    const markup = card(profile(), [book(1, '자바 최적화')]);
+
+    expect(markup).toContain('전체');
+    expect(markup).toContain('읽는 중');
+    expect(markup).toContain('다 읽음');
+    expect(markup).toContain('읽고 싶어요');
+    expect(markup.match(/aria-pressed="true"/g)).toHaveLength(1);
+  });
+
+  it('상태를 고르면 그 칩만 눌린 상태다', () => {
+    const markup = card(profile(), [book(1, '자바 최적화')], null, { statusFilter: 'FINISHED' });
+
+    expect(markup.match(/aria-pressed="true"/g)).toHaveLength(1);
+    expect(markup).toContain('다 읽음 1'); // 소제목이 상태를 말한다
+  });
+
+  it('태그 드릴다운 중에는 칩 줄을 숨긴다 — 두 축은 배타다(출구는 「전체 보기」 하나)', () => {
+    const markup = card(profile(), [book(1, '자바 최적화')], '한우물형');
+
+    expect(markup).not.toContain('읽고 싶어요');
+    expect(markup).not.toContain('aria-pressed');
+  });
+
+  it('필터가 걸린 채 비면 상태용 빈 문구다 — 「공개한 책이 없어요」는 거짓말이 된다', () => {
+    const markup = card(profile(), [], null, { statusFilter: 'WANT_TO_READ' });
+
+    expect(markup).toContain('이 상태의 공개 책이 없어요');
+    expect(markup).not.toContain('공개한 책이 없어요');
   });
 });
 

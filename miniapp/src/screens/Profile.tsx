@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import type {
+  BookStatus,
   FollowListType,
   PersonalityEntry,
   PersonalityMutation,
@@ -29,7 +30,7 @@ import { useBackClose } from '../back';
 import { REWARD_AD_GROUP_ID, watchRewardAd } from '../toss';
 import { COVER_FG, ErrorMessage, Loading, Screen, Sheet, coverColor, initialOf } from '../ui';
 import { waiverErrorMessage } from './Home';
-import { BookGrid } from './Library';
+import { BookGrid, SECTIONS } from './Library';
 import { hasFreshStory } from './Story';
 
 /**
@@ -188,6 +189,18 @@ export function needsBioToggle(personality: string | null): boolean {
   return personality !== null && personality.length > BIO_CLAMP_CHARS;
 }
 
+/**
+ * 공개 책 소제목 — 태그 드릴다운 &gt; 상태 필터 &gt; 전체 순으로 이긴다(태그 중엔 필터가 null이라 실제로는 충돌 없음).
+ *
+ * <p>격자 칸에는 상태 배지를 안 붙이므로(표지 80px + 제목뿐이고 발광 점이 이미 그 칸의 신호를 쓴다)
+ * <b>지금 무엇으로 좁혔는지</b>를 말하는 자리는 이 소제목 하나뿐이다.
+ */
+export function shelfTitle(activeTag: string | null, statusFilter: BookStatus | null, count: number): string {
+  if (activeTag !== null) return `${activeTag} 근거 책 ${count}`;
+  if (statusFilter !== null) return `${SECTIONS.find((s) => s.status === statusFilter)!.title} ${count}`;
+  return `공개한 책 ${count}`;
+}
+
 export function Profile({
   loginId,
   onBack,
@@ -210,6 +223,8 @@ export function Profile({
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [books, setBooks] = useState<ProfileBook[]>([]);
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  /** 걸린 상태 필터 — `null`이 「전체」다. 기본이 전체라 진입 화면·발광·여백 문이 지금 그대로다. */
+  const [statusFilter, setStatusFilter] = useState<BookStatus | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [more, setMore] = useState<SafetyState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -273,8 +288,17 @@ export function Profile({
 
   const selectTag = (tag: string | null) => {
     setActiveTag(tag);
+    // 두 축은 배타다 — 태그 근거 책 API에는 status 파라미터가 없어 AND를 하려면 클라가 한글 라벨로
+    // 역필터해야 한다(api.ts가 금한 짓). 태그로 들어가면 필터를 풀고, 나올 땐 이미 전체라 복원도 없다.
+    if (tag !== null) setStatusFilter(null);
     const load = tag === null ? fetchProfileBooks(loginId) : fetchPersonalityTagBooks(loginId, tag);
     load.then((page) => setBooks(page.books)).catch(fail);
+  };
+
+  const selectStatus = (status: BookStatus | null) => {
+    setStatusFilter(status);
+    // 서버가 거르게 둔다 — `GET /api/profile/books`가 이미 status를 받는다(웹 책장과 같은 파라미터).
+    fetchProfileBooks(loginId, status ?? undefined).then((page) => setBooks(page.books)).catch(fail);
   };
 
   // 차단하면 그 순간부터 이 책방이 404다(대칭 숨김) — 머무를 화면이 없으니 목록으로 돌려보낸다.
@@ -365,6 +389,8 @@ export function Profile({
         onRetryPersonality={() => runPersonality(runPersonalityRefresh)}
         onFollowToggle={toggleFollow}
         onSelectTag={selectTag}
+        statusFilter={statusFilter}
+        onSelectStatus={selectStatus}
         onMore={() => setMore(toggleSafety)}
         header={header}
         onOpenFollowList={onOpenFollowList}
@@ -412,6 +438,8 @@ export function ProfileCard({
   onRetryPersonality,
   onFollowToggle,
   onSelectTag,
+  statusFilter,
+  onSelectStatus,
   onMore,
   safety,
   header,
@@ -437,6 +465,9 @@ export function ProfileCard({
   onRetryPersonality: () => void;
   onFollowToggle: () => void;
   onSelectTag: (tag: string | null) => void;
+  /** 걸린 상태 필터 — `null`이 「전체」. */
+  statusFilter: BookStatus | null;
+  onSelectStatus: (status: BookStatus | null) => void;
   onMore: () => void;
   safety: ReactNode;
   /** 제목보다 **위**에 얹히는 슬롯 — 셸이 검색 진입바·여백 스트립을 끼운다. */
@@ -444,7 +475,7 @@ export function ProfileCard({
   onOpenFollowList?: (type: FollowListType) => void;
   onBack?: () => void;
 }) {
-  const sectionTitle = activeTag === null ? `공개한 책 ${books.length}` : `${activeTag} 근거 책 ${books.length}`;
+  const sectionTitle = shelfTitle(activeTag, statusFilter, books.length);
   const openable = followCountsOpenable(profile.self, onOpenFollowList !== undefined);
   const actions = personalityActions(profile.self, personalityStatus, REWARD_AD_GROUP_ID);
 
@@ -605,9 +636,27 @@ export function ProfileCard({
             전체 보기
           </Button>
         )}
+        {/* 상태 필터 — 격자 바로 위(성향 태그 줄과 자리로 구분된다). 드릴다운 중엔 숨긴다: 태그와 배타라
+            눌러 봐야 갈 곳이 없고, 칩이 없으면 "드릴다운 중 상태 클릭"이라는 경로 자체가 안 생긴다. */}
+        {activeTag === null && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+            {[null, ...SECTIONS.map((s) => s.status)].map((status) => (
+              <button
+                key={status ?? 'ALL'}
+                type="button"
+                aria-pressed={statusFilter === status}
+                onClick={() => onSelectStatus(status)}
+                style={filterChipStyle(statusFilter === status)}
+              >
+                {status === null ? '전체' : SECTIONS.find((s) => s.status === status)!.title}
+              </button>
+            ))}
+          </div>
+        )}
         {books.length === 0 ? (
           <Text typography="st11" color="grey600" style={{ display: 'block' }}>
-            공개한 책이 없어요.
+            {/* 좁혀서 빈 것과 애초에 없는 것은 다른 사실이다 — 필터를 건 채 "공개한 책이 없어요"는 거짓말이다. */}
+            {statusFilter === null && activeTag === null ? '공개한 책이 없어요.' : '이 상태의 공개 책이 없어요.'}
           </Text>
         ) : (
           <BookGrid
@@ -917,6 +966,22 @@ export function SafetyPanel({
     </div>
   );
 }
+
+/**
+ * 상태 필터 칩 — 성향 태그 칩과 같은 문법(알약·13px)이되 <b>걸린 것만 배경이 반전</b>된다.
+ * 지금 무엇으로 좁혔는지는 소제목도 말하지만, 줄 안에서 "어느 칩이 눌렸나"는 색이 져야 한 눈에 읽힌다.
+ */
+const filterChipStyle = (active: boolean) =>
+  ({
+    display: 'inline-block',
+    padding: '6px 10px',
+    borderRadius: 999,
+    border: 'none',
+    fontSize: 13,
+    background: active ? 'var(--adaptiveBlue500, #6E8A6A)' : 'var(--adaptiveGrey100, #FCFAF5)',
+    color: active ? '#FFFDF8' : 'var(--adaptiveGrey700, #57534A)',
+    cursor: 'pointer',
+  }) as const;
 
 const chipStyle = (clickable: boolean) =>
   ({
