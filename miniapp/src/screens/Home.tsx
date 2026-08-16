@@ -62,6 +62,28 @@ export function defaultBookId(readingBooks: BookOption[], recentBookId: number |
   return readingBooks.find((b) => b.id === recentBookId)?.id ?? readingBooks[0]?.id ?? null;
 }
 
+/**
+ * 홈 여백 문이 가리키는 책 — 없으면 `null`(문을 그리지 않는다).
+ *
+ * <p>「측정 시작」을 누르듯 <b>1탭에 작성 화면</b>으로 보내려면 지금 이 화면이 어느 책을 뜻하는지가
+ * 먼저 정해져야 한다: 측정 중이면 그 책, 대기 중이면 캐러셀에서 고른 책이다. 활성 책 id는 대시보드에
+ * 따로 없지만 `recentBookId`가 `startedAt desc`(활성 세션 포함)라 책을 걸고 측정 중이면 그게 활성 책이고,
+ * 책 없이 측정 중인 경우는 `activeBookTitle === null`이 걸러 낸다.
+ *
+ * <p><b>공개 여부는 조건이 아니다</b> — 비공개 책의 여백은 나만 보는 메모다(설계 결정 2). 반면
+ * 핸들(@아이디)이 없으면 그린다 해도 열리지 않는다: 서버가 여백 대상을 loginId로만 찾아 자기 여백에도
+ * 닿을 수 없다(결정 A — 핸들 안내는 책방 탭 「아이디 만들기」가 이미 맡는다).
+ */
+export function marginDoorBook(dashboard: DashboardResponse, selectedBookId: number | null): BookOption | null {
+  if (dashboard.loginId === null) return null;
+  // 완독 책까지 보는 이유: 웹에선 다 읽은 책으로도 측정을 시작할 수 있어 활성 책이 그쪽에만 있을 수 있다.
+  const pool = [...dashboard.readingBooks, ...dashboard.finishedBooks];
+  const id = dashboard.hasActiveSession
+    ? (dashboard.activeBookTitle === null ? null : dashboard.recentBookId)
+    : selectedBookId;
+  return pool.find((b) => b.id === id) ?? null;
+}
+
 /** 캐러셀 표지 한 장의 폭·간격 — 계산(가운데 인덱스)과 스타일이 같은 값을 봐야 스냅과 선택이 어긋나지 않는다. */
 export const COVER_WIDTH = 84;
 export const COVER_GAP = 16;
@@ -709,6 +731,7 @@ export function Home({
   onGoSettings,
   onError,
   onOpenMargin,
+  onComposeMargin,
 }: {
   dashboard: DashboardResponse;
   onTimerChange: (timer: TimerState) => void;
@@ -719,8 +742,10 @@ export function Home({
   /** 홈 맨 위의 계정 진입 — 닉네임·@아이디·목표·로그아웃은 전부 설정 화면이 맡는다. */
   onGoSettings: () => void;
   onError: (error: Error) => void;
-  /** 소식의 여백 줄 탭 — 책방 탭으로 옮겨 그 책의 여백을 연다(탭 전환은 App이 든다). */
+  /** 소식의 여백 줄 탭 — 그 사람의 그 책 여백을 전체 화면으로 연다(전이는 App이 든다). */
   onOpenMargin: (loginId: string, bookId: number) => void;
+  /** 여백 문 — 지금 이 화면이 가리키는 책의 **작성 화면으로 직행**한다(측정 시작과 같은 1탭). */
+  onComposeMargin: (book: BookOption) => void;
 }) {
   /** 태깅 시트 — `null`이면 닫힘. 열림 여부와 대상 세션이 늘 같이 움직여 상태 하나로 족하다. */
   const [tagging, setTagging] = useState<Untagged | null>(null);
@@ -832,6 +857,8 @@ export function Home({
   const { todayRead, remaining, overflow, progress, achieved } = todayProgress(dashboard, elapsed);
   // 캐러셀 가운데 온 책 — 시작 버튼도 이 값을 그대로 쓴다(고른 책과 시작 대상이 어긋날 자리를 없앤다).
   const selectedBook = dashboard.readingBooks.find((b) => b.id === selectedBookId) ?? null;
+  // 여백 문이 가리키는 책 — 측정 중이면 그 책, 대기 중이면 캐러셀에서 고른 책(없으면 문을 안 그린다).
+  const doorBook = marginDoorBook(dashboard, selectedBookId);
 
   return (
     <Screen>
@@ -977,6 +1004,20 @@ export function Home({
       >
         {dashboard.hasActiveSession ? '측정 끝내기' : '측정 시작'}
       </Button>
+
+      {/* 여백 문 — 「측정 시작」 바로 아래, 같은 1탭 거리에 둔다. 예전엔 책방 탭을 지나 격자에서 책을
+          찾아 들어가야 했다(3탭+스크롤): 남에게 보여지는 전시장이 개인 글의 유일한 입구였던 자리다. */}
+      {doorBook !== null && (
+        <Button
+          display="block"
+          variant="weak"
+          size="medium"
+          style={{ marginTop: 8 }}
+          onClick={() => onComposeMargin(doorBook)}
+        >
+          여백에 글 남기기
+        </Button>
+      )}
 
       {/* 잔디 미리보기가 서 있던 자리는 피드 박스가 통째로 쓴다 — 기록(잔디·연속일·총 시간)은 기록 탭이
           이미 전부 그리고 그 탭은 하단 탭바에서 한 번에 닿으므로, 홈에 진입 손잡이를 또 두지 않는다. */}

@@ -178,6 +178,11 @@ export interface BookOption {
   /** 표지 주소 — 손으로 넣은 책은 `null`이라 첫 글자 자리 표지로 떨어진다(검색 등록만 채운다). */
   coverUrl: string | null;
   author: string | null;
+  /**
+   * 공개 책인가 — 홈에서 곧장 여는 작성 화면의 가시성 캡션 재료다(게이트가 아니다: 비공개 책에도
+   * 여백을 쓸 수 있다). 옛 서버는 안 보내므로 `undefined`이고, 그때는 공개로 간주한다({@link visibilityNotice}).
+   */
+  isPublic?: boolean;
 }
 
 export interface ContributionDay {
@@ -375,6 +380,8 @@ export interface MyBookSummary {
   isPublic: boolean;
   seconds: number;
   purchaseLink: string | null;
+  /** 이 책 여백에 남긴 글 수 — 공개 전환 확인 시트의 재료다. 옛 서버는 안 보낸다(`undefined` = 0 취급). */
+  storyCount?: number;
 }
 
 /** `BookApiController.SearchRow` — `owned`는 서버가 계산해 주는 UI 표시용이라 추가 요청에 되돌려 보내지 않는다. */
@@ -672,12 +679,14 @@ export interface MarginEntry {
   createdAt: string;
 }
 
-/** `story.MarginBook` — 여백이 열린 책. PUBLIC 재검사를 통과한 책만 온다. */
+/** `story.MarginBook` — 여백이 열린 책. 비공개 책은 **주인에게만** 온다(남에게는 404). */
 export interface MarginBook {
   id: number;
   title: string;
   author: string | null;
   coverUrl: string | null;
+  /** 비공개 책이면 false — 가시성 캡션의 재료다. 옛 서버는 안 보낸다(`undefined` = 공개로 간주). */
+  isPublic?: boolean;
 }
 
 /**

@@ -1,10 +1,9 @@
 import { Button } from '@toss/tds-mobile';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { DashboardResponse, TimerState } from './api';
+import type { BookOption, DashboardResponse, MarginBook, TimerState } from './api';
 import { fetchDashboard, token } from './api';
 import { useBackClose } from './back';
-import type { MarginTarget } from './screens/Bookshop';
 import { Bookshop } from './screens/Bookshop';
 import { Goal } from './screens/Goal';
 import { History } from './screens/History';
@@ -13,6 +12,7 @@ import { Library } from './screens/Library';
 import { LinkAccount } from './screens/LinkAccount';
 import { LoginBridge } from './screens/LoginBridge';
 import { Settings } from './screens/Settings';
+import { BookMargin, StoryComposer } from './screens/Story';
 import { showInterstitialAd } from './toss';
 import { ErrorMessage, Loading, Screen } from './ui';
 
@@ -62,6 +62,20 @@ export const tabChangeHandler =
 /** 탭 밖 전역 상태 — 인증·연결·목표·에러는 탭바 없이 화면 전체를 차지한다. */
 type View = 'auth' | 'link' | 'loading' | 'main' | 'goal' | 'settings' | 'error';
 
+/**
+ * 열린 여백 — 「누구의 + 어느 책」 두 축이 곧 서버 계약이고, `composeBook`이 있으면 그 책의 **작성
+ * 화면**이 여백 화면 위에 선다(홈 문은 이 값을 채워 1탭에 작성으로 직행한다).
+ *
+ * <p>여백을 <b>탭 밖 전역 뷰</b>로 든 이유는 뒤로가기다: 예전엔 책방 탭으로 점프해 열었더니 뒤로 가면
+ * 책방이 나왔다 — 홈에서 들어온 사람에게 그건 남의 전시장으로 밀려나는 것이라 문의 취지가 무너진다.
+ * 여기서 들면 열었던 탭이 그대로 뒤에 남는다(`goal`·`settings`와 같은 자리).
+ */
+interface MarginState {
+  loginId: string;
+  bookId: number;
+  composeBook: MarginBook | null;
+}
+
 /** 포커스 복귀 재조회의 최소 간격 — 미니앱은 앱 전환이 잦아 복귀마다 받으면 서버를 두들긴다. */
 export const REFRESH_THROTTLE_MS = 60_000;
 
@@ -88,11 +102,8 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   /** 목표 바꾸기 전면광고를 기다리는 중 — 버튼을 "준비 중"으로 바꾸고 중복 진입을 막는다. */
   const [goalAdPending, setGoalAdPending] = useState(false);
-  /**
-   * 홈 소식에서 누른 여백 — 탭 점프의 전달 수단이다. 탭이 바뀌면 책방이 새로 마운트되므로 이 값이
-   * 그 화면의 <b>초기 상태</b>가 되고, 소비되는 즉시 null로 비운다(다음 수동 탭 진입에 또 열리지 않게).
-   */
-  const [marginTarget, setMarginTarget] = useState<MarginTarget | null>(null);
+  /** 열린 여백 — 탭 위에 전체 화면으로 선다(홈 문·서재 문·홈 소식이 모두 이 한 자리로 온다). */
+  const [margin, setMargin] = useState<MarginState | null>(null);
 
   const toLogin = useCallback(() => {
     token.clear();
@@ -163,6 +174,9 @@ export function App() {
     setView('main');
   });
   useBackClose(view === 'settings', () => setView('main'));
+  // 작성 화면이 위면 그것만 닫는다(그 아래 여백 화면이 남는다) — goal/settings 중첩과 같은 규칙.
+  useBackClose(margin?.composeBook != null, () => setMargin((m) => (m === null ? null : { ...m, composeBook: null })));
+  useBackClose(margin !== null && margin.composeBook === null, () => setMargin(null));
 
   const handleError = useCallback(
     (e: Error) => {
@@ -265,17 +279,36 @@ export function App() {
     );
   }
 
+  /*
+   * 여백은 탭 위에 전체 화면으로 선다 — 닫으면 열었던 탭이 그대로 남는다.
+   * 작성 화면을 닫으면 `composeBook`만 비워 그 아래 여백 화면이 **새로 마운트**되고, 그 재조회가
+   * 곧 "방금 남긴 글이 보인다"이다(에포크 같은 별도 갱신 표식이 필요 없다).
+   */
+  if (margin !== null) {
+    const closeCompose = () => setMargin({ ...margin, composeBook: null });
+    return margin.composeBook !== null ? (
+      <StoryComposer book={margin.composeBook} onDone={closeCompose} onCancel={closeCompose} onError={handleError} />
+    ) : (
+      <BookMargin
+        loginId={margin.loginId}
+        bookId={margin.bookId}
+        onBack={() => setMargin(null)}
+        onCompose={(book) => setMargin({ ...margin, composeBook: book })}
+        onError={handleError}
+      />
+    );
+  }
+
   return (
     <MainTabs
       tab={tab}
       onTabChange={setTab}
       dashboard={dashboard}
-      marginTarget={marginTarget}
-      onMarginConsumed={() => setMarginTarget(null)}
-      onOpenMargin={(loginId, bookId) => {
-        setMarginTarget({ loginId, bookId });
-        setTab('bookshop');
-      }}
+      onOpenMargin={(loginId, bookId) => setMargin({ loginId, bookId, composeBook: null })}
+      onComposeMargin={(book) =>
+        // 문은 핸들이 있을 때만 그려지므로 여기서 loginId는 언제나 있다(`marginDoorBook`이 앞에서 판정).
+        dashboard.loginId !== null && setMargin({ loginId: dashboard.loginId, bookId: book.id, composeBook: book })
+      }
       onTimerChange={applyTimer}
       onGraphChange={applyGraph}
       onGoGoal={goToGoal}
@@ -296,9 +329,8 @@ export function MainTabs({
   tab,
   onTabChange,
   dashboard,
-  marginTarget,
-  onMarginConsumed,
   onOpenMargin,
+  onComposeMargin,
   onTimerChange,
   onGraphChange,
   onGoGoal,
@@ -311,11 +343,10 @@ export function MainTabs({
   tab: TabKey;
   onTabChange: (tab: TabKey) => void;
   dashboard: DashboardResponse;
-  /** 홈 소식에서 넘어온 여백 점프 대상 — 책방 탭이 마운트될 때 초기 상태로 소비된다. */
-  marginTarget: MarginTarget | null;
-  onMarginConsumed: () => void;
-  /** 소식의 여백 줄을 눌렀다 — 책방 탭으로 옮기고 그 책의 여백을 연다. */
+  /** 그 사람의 그 책 여백을 연다 — 홈 소식과 서재 문이 같은 자리로 온다(App이 전체 화면으로 든다). */
   onOpenMargin: (loginId: string, bookId: number) => void;
+  /** 홈 여백 문 — 그 책의 작성 화면으로 직행한다. */
+  onComposeMargin: (book: BookOption) => void;
   onTimerChange: (timer: TimerState) => void;
   onGraphChange: (graph: DashboardResponse['graph']) => void;
   onGoGoal: () => void;
@@ -343,14 +374,20 @@ export function MainTabs({
             onGoSettings={onGoSettings}
             onError={onError}
             onOpenMargin={onOpenMargin}
+            onComposeMargin={onComposeMargin}
           />
         )}
-        {tab === 'library' && <Library onError={onError} onShelfChanged={onShelfChanged} />}
+        {tab === 'library' && (
+          <Library
+            myLoginId={dashboard.loginId}
+            onError={onError}
+            onShelfChanged={onShelfChanged}
+            onOpenMargin={onOpenMargin}
+          />
+        )}
         {tab === 'bookshop' && (
           <Bookshop
             myLoginId={dashboard.loginId}
-            initialMargin={marginTarget}
-            onMarginConsumed={onMarginConsumed}
             onHandleCreated={onHandleCreated}
             onError={onError}
           />

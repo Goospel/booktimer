@@ -39,6 +39,19 @@ export function hasFreshStory(lastStoryAt: string | null, now: number): boolean 
 }
 
 /**
+ * 작성·여백 화면의 가시성 안내 — <b>쓰는 순간</b>의 고지다(공개 전환 확인 시트는 「공개하는 순간」을 맡는다).
+ *
+ * <p>비공개 책에도 여백을 쓸 수 있게 되면서(설계 결정 2) 「팔로워에게 보여요」가 비공개 책에서는
+ * 거짓말이 됐다. `undefined`(필드를 안 보내는 옛 서버)는 <b>공개로 간주</b>한다 — 보수적인 쪽은
+ * 「나만 본다」가 아니다: 실제로는 새는 글을 안 샌다고 말하는 것이 더 위험한 거짓말이다.
+ */
+export function visibilityNotice(isPublic: boolean | undefined): string {
+  return isPublic === false
+    ? '비공개 책이에요. 이 글은 나만 봐요. 책을 공개로 바꾸면 팔로워에게 보여요.'
+    : '팔로워에게 보여요.';
+}
+
+/**
  * 작성 실패 안내 — 서버의 한글 검증 메시지는 `GlobalExceptionHandler`가 HTML `error` 뷰로 렌더해
  * 미니앱까지 오지 못한다(api.ts의 HTML 가드가 상태코드 문구로 대체). 그래서 상태코드로 안내를 나눈다.
  * 서버가 평문 메시지를 주는 날엔 그게 더 정확하므로 그대로 쓴다.
@@ -179,6 +192,13 @@ export function MarginView({
         </div>
       </div>
 
+      {/* 내 비공개 책이면 무엇이 안 새는지 여기서 말한다 — 공개 책엔 새로 알릴 것이 없어 적지 않는다. */}
+      {self && book.isPublic === false && (
+        <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 12, wordBreak: 'keep-all' }}>
+          {visibilityNotice(book.isPublic)}
+        </Text>
+      )}
+
       <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 20 }}>
         여백에 남긴 글 {entries.length}
       </Text>
@@ -312,14 +332,16 @@ export function StoryComposer({
 
   return (
     <Screen title="여백에 글 남기기" onBack={onCancel}>
+      {/* 가시성 고지는 placeholder가 아니라 캡션이다 — placeholder는 첫 글자에 사라지는데, 정작
+          "이게 누구에게 보이나"가 필요한 순간은 쓰는 도중이다. */}
       <Text typography="st12" color="grey600" style={{ display: 'block', marginBottom: 12, wordBreak: 'keep-all' }}>
-        『{book.title}』의 여백
+        『{book.title}』의 여백 · {visibilityNotice(book.isPublic)}
       </Text>
       <textarea
         value={text}
         disabled={busy}
         maxLength={500}
-        placeholder="읽다가 마음에 걸린 문장이나 생각을 남겨 보세요. 팔로워에게 보여요."
+        placeholder="읽다가 마음에 걸린 문장이나 생각을 남겨 보세요."
         onChange={(e) => setText(e.target.value)}
         style={{
           width: '100%',

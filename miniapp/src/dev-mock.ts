@@ -148,6 +148,7 @@ function shelfBook(
   status: BookStatus,
   seconds: number,
   coverUrl: string | null = null,
+  visibility: BookVisibility = 'PUBLIC',
 ): MyBookSummary {
   return {
     id,
@@ -157,9 +158,9 @@ function shelfBook(
     isbn13: `978895460${1000 + id}`,
     status,
     statusLabel: STATUS_LABEL[status],
-    visibility: 'PUBLIC',
-    visibilityLabel: '공개',
-    isPublic: true,
+    visibility,
+    visibilityLabel: visibility === 'PUBLIC' ? '공개' : '비공개',
+    isPublic: visibility === 'PUBLIC',
     seconds,
     purchaseLink: null,
   };
@@ -170,6 +171,8 @@ const books: MyBookSummary[] = [
   shelfBook(2, '사피엔스', '유발 하라리', 'READING', 3_600), // 표지 없는 책 — 캐러셀의 자리 표지 경로
   shelfBook(3, '데미안', '헤르만 헤세', 'FINISHED', 18_000, mockCover('데', '#C7D3C0')),
   shelfBook(4, '코스모스', '칼 세이건', 'WANT_TO_READ', 0),
+  // 비공개 + 여백 글 1개 — 가시성 캡션(「나만 봐요」)과 공개 전환 확인 시트를 눈으로 보려면 이 조합이 필요하다.
+  shelfBook(5, '아무도 안 보는 노트', '나', 'READING', 1_200, mockCover('노', '#CBBFD8'), 'PRIVATE'),
 ];
 
 const state = {
@@ -215,7 +218,8 @@ function buildMonths(): MonthlySection[] {
 const bookOptions = (status: BookStatus): BookOption[] =>
   books
     .filter((b) => b.status === status)
-    .map(({ id, title, coverUrl, author }) => ({ id, title, coverUrl, author }));
+    // `isPublic`은 홈 문으로 곧장 연 작성 화면의 가시성 캡션 재료다(게이트가 아니다).
+    .map(({ id, title, coverUrl, author, isPublic }) => ({ id, title, coverUrl, author, isPublic }));
 
 function timerState(): TimerState {
   const active = books.find((b) => b.id === state.activeBookId) ?? null;
@@ -230,7 +234,9 @@ function timerState(): TimerState {
     activeBookTotalSeconds: active?.seconds ?? 0,
     readingBooks: bookOptions('READING'),
     finishedBooks: bookOptions('FINISHED'),
-    recentBookId: 1,
+    // 서버는 `startedAt desc`로 고른다 — **활성 세션도 그 정렬에 들어가** 측정 중이면 그 책이 최신이다.
+    // 상수로 두면 홈 여백 문이 측정 중에 엉뚱한 책을 가리켜(브라우저 실측 2026-08-16) 목이 거짓 신호를 준다.
+    recentBookId: state.activeBookId ?? 1,
     // 광고 SDK가 없는 브라우저라 버튼은 뜨지 않는다(`.env.mock`이 광고 그룹 ID를 비운다) — 값은 실제처럼 둔다.
     debtWaiverAvailable: true,
   };
@@ -335,6 +341,8 @@ const marginEntries: Record<number, MarginEntry[]> = {
   ],
   12: [marginEntry(911, '완독. 마지막 장을 아껴 읽었다.', 'forest', 30)],
   13: [],
+  // 내 서재의 비공개 책(id 5) — 공개 전환 확인 시트의 「글 1개가 보여요」가 이 한 장에서 나온다.
+  5: [marginEntry(921, '이건 아무에게도 안 보이는 메모.', 'plum', 5)],
 };
 
 /** 그 책 여백의 최신 글 시각 — 격자 발광의 재료다. 글을 남기면 이 값이 따라 움직인다. */
@@ -576,7 +584,11 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
   }],
 
   // ── 서재 ──
-  ['GET', /^\/api\/books$/, () => ({ searchEnabled: true, books: [...books] })],
+  // `storyCount`는 응답 시점에 센다 — 글을 남기면 공개 전환 확인 시트의 개수도 따라 움직여야 한다.
+  ['GET', /^\/api\/books$/, () => ({
+    searchEnabled: true,
+    books: books.map((b) => ({ ...b, storyCount: marginEntries[b.id]?.length ?? 0 })),
+  })],
   // 픽스처 3권을 제목·저자로 필터한다 — 결과 있는 화면을 보려면 '미움'·'역행' 같은 조각을 넣는다.
   ['GET', /^\/api\/books\/search$/, ({ query }) => {
     const q = String(query.q ?? '').trim();
@@ -710,12 +722,12 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
   ['GET', /^\/api\/stories\/of\/([^/]+)$/, ({ param, query }): MarginResponse => {
     const user = mustFindUser(param);
     const bookId = Number(query.bookId);
-    const book = profileBooks.find((b) => b.id === bookId);
-    // 서버는 남의 책 id(IDOR)·PRIVATE·미존재를 전부 404로 준다 — 목도 존재를 누설하지 않는다.
-    if (book === undefined) throw new ApiError(404, '글을 찾을 수 없습니다');
+    const book = marginBookOf(bookId, user.self);
+    // 서버는 남의 책 id(IDOR)·남의 PRIVATE 책·미존재를 전부 404로 준다 — 목도 존재를 누설하지 않는다.
+    if (book === null) throw new ApiError(404, '글을 찾을 수 없습니다');
     const following = user.self ? false : user.following;
     return {
-      book: { id: book.id, title: book.title, author: book.author, coverUrl: book.coverUrl },
+      book,
       ownerNickname: user.nickname,
       self: user.self,
       following,
@@ -725,7 +737,8 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
   }],
   ['POST', /^\/api\/stories$/, ({ body }) => {
     const bookId = Number(body.bookId);
-    if (profileBooks.every((b) => b.id !== bookId)) throw new ApiError(400, '글을 남길 수 없습니다');
+    // 쓰는 것은 언제나 내 책이다 — 내 서재 책(홈·서재 문)과 내 책방 책(격자)이 둘 다 여기로 온다.
+    if (marginBookOf(bookId, true) === null) throw new ApiError(400, '글을 남길 수 없습니다');
     const entry: MarginEntry = {
       id: nextId(),
       text: body.text as string,
@@ -748,6 +761,25 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     throw new ApiError(404, '글을 찾을 수 없습니다');
   }],
 ];
+
+/**
+ * 여백을 열 수 있는 책 — 없으면 `null`(=404).
+ *
+ * <p>두 갈래를 합친다: 책방 격자의 공개 책(`profileBooks`)과 **내 서재 책**(`books`). 후자가 이번에
+ * 열린 길이다 — 홈 문·서재 문이 서재 책을 가리키므로, 여기서 안 찾으면 문을 눌러도 404가 난다.
+ * 남의 비공개 책은 애초에 이 목에 없다(서버가 존재 자체를 누설하지 않는 것과 같은 자리).
+ */
+function marginBookOf(bookId: number, self: boolean): MarginResponse['book'] | null {
+  const social = profileBooks.find((b) => b.id === bookId);
+  if (social !== undefined) {
+    return { id: social.id, title: social.title, author: social.author, coverUrl: social.coverUrl, isPublic: true };
+  }
+  if (!self) return null;
+  const mine = books.find((b) => b.id === bookId);
+  return mine === undefined
+    ? null
+    : { id: mine.id, title: mine.title, author: mine.author, coverUrl: mine.coverUrl, isPublic: mine.isPublic };
+}
 
 function mustFindBook(id: number): MyBookSummary {
   const book = books.find((b) => b.id === id);

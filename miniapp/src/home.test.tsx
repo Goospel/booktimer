@@ -25,6 +25,7 @@ import {
   claimDebtWaiver,
   defaultBookId,
   goalHandleLabel,
+  marginDoorBook,
   noBookSubtitle,
   recenterIndex,
   selectionAt,
@@ -114,6 +115,7 @@ function renderHome(
         onGoSettings={() => {}}
         onError={() => {}}
         onOpenMargin={() => {}}
+        onComposeMargin={() => {}}
       />
     </TDSMobileProvider>,
   );
@@ -1217,5 +1219,84 @@ describe('전환 이벤트 — Home 배선', () => {
   it('측정 종료 성공 경로에서 reading_session_completed를 읽은 초와 함께 쏜다', () => {
     expect(source).toContain("trackEvent('reading_session_completed'");
     expect(source).toContain('duration_seconds');
+  });
+});
+
+/**
+ * 홈 여백 문이 가리키는 책 — 「측정 시작」을 누르듯 <b>1탭에 작성 화면</b>으로 가려면, 지금 이 화면이
+ * 어느 책을 뜻하는지가 먼저 정해져야 한다. 측정 중이면 활성 책, 대기 중이면 캐러셀에서 고른 책이다.
+ *
+ * <p>공개 여부는 조건이 아니다 — 비공개 책의 여백은 나만 보는 메모다(설계 결정 2).
+ * 핸들(@아이디)이 없으면 서버가 여백 대상을 loginId로만 찾아 자기 여백에도 닿을 수 없어 문을 그리지 않는다(결정 A).
+ */
+describe('홈 여백 문의 대상 책 (marginDoorBook)', () => {
+  const reading = [book(1, '미움받을 용기'), book(2, '사피엔스', { isPublic: false })];
+  const finished = [book(3, '데미안')];
+  const base = { readingBooks: reading, finishedBooks: finished };
+
+  it('핸들이 없으면 문을 그리지 않는다 — loginId 없이는 자기 여백에도 닿지 못한다', () => {
+    expect(marginDoorBook(dashboard({ ...base, loginId: null }), 1)).toBeNull();
+  });
+
+  it('대기 중이면 캐러셀에서 고른 책이다', () => {
+    expect(marginDoorBook(dashboard(base), 1)?.title).toBe('미움받을 용기');
+  });
+
+  it('고른 책이 비공개여도 문은 그 책을 가리킨다 — 비공개 책의 여백은 나만 보는 메모다', () => {
+    expect(marginDoorBook(dashboard(base), 2)?.title).toBe('사피엔스');
+  });
+
+  it('대기 중인데 「책 없이」를 골랐으면 문이 없다 — 책 없는 여백은 존재하지 않는다', () => {
+    expect(marginDoorBook(dashboard(base), null)).toBeNull();
+  });
+
+  it('책 없이 측정 중이면 문이 없다 — 지금 이 화면이 가리키는 책이 없다', () => {
+    expect(
+      marginDoorBook(dashboard({ ...base, hasActiveSession: true, activeBookTitle: null, recentBookId: 1 }), 1),
+    ).toBeNull();
+  });
+
+  it('측정 중이면 고른 값이 아니라 활성 책(=recentBookId)을 가리킨다', () => {
+    const data = dashboard({ ...base, hasActiveSession: true, activeBookTitle: '사피엔스', recentBookId: 2 });
+
+    expect(marginDoorBook(data, 1)?.title).toBe('사피엔스');
+  });
+
+  it('활성 책이 다 읽은 책이어도 찾는다 — 완독 책으로도 측정을 시작할 수 있다', () => {
+    const data = dashboard({ ...base, hasActiveSession: true, activeBookTitle: '데미안', recentBookId: 3 });
+
+    expect(marginDoorBook(data, null)?.title).toBe('데미안');
+  });
+
+  it('활성 책 id가 목록에 없으면 문이 없다 — 화면 밖 책을 가리키느니 그리지 않는다', () => {
+    const data = dashboard({ ...base, hasActiveSession: true, activeBookTitle: '뺀 책', recentBookId: 99 });
+
+    expect(marginDoorBook(data, 1)).toBeNull();
+  });
+
+  /** 판정이 실제로 마크업에 연결됐는지 — 함수만 맞고 화면에 안 걸리면 문은 여전히 없는 것이다. */
+  describe('홈 여백 문 노출', () => {
+    const DOOR = '여백에 글 남기기';
+
+    it('고른 책이 있으면 주 버튼 아래에 문이 선다', () => {
+      const markup = renderHome({ readingBooks: [book(1, '미움받을 용기')], recentBookId: 1 });
+
+      expect(markup).toContain(DOOR);
+      expect(markup.indexOf('측정 시작')).toBeLessThan(markup.indexOf(DOOR));
+    });
+
+    it('비공개 책이어도 문이 선다 — 비공개 책의 여백은 나만 보는 메모다', () => {
+      expect(renderHome({ readingBooks: [book(2, '사피엔스', { isPublic: false })], recentBookId: 2 })).toContain(DOOR);
+    });
+
+    it('핸들이 없으면 문을 그리지 않는다 — 눌러도 열리지 않는 문은 죽은 UI다', () => {
+      expect(renderHome({ readingBooks: [book(1, '미움받을 용기')], recentBookId: 1, loginId: null })).not.toContain(
+        DOOR,
+      );
+    });
+
+    it('책이 한 권도 없으면 문을 그리지 않는다 — 책 없는 여백은 존재하지 않는다', () => {
+      expect(renderHome({ readingBooks: [] })).not.toContain(DOOR);
+    });
   });
 });

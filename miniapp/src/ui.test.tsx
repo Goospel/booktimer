@@ -200,6 +200,7 @@ function home(overrides: Partial<DashboardResponse>) {
         onGoSettings={() => {}}
         onError={() => {}}
         onOpenMargin={() => {}}
+        onComposeMargin={() => {}}
       />
     </TDSMobileProvider>,
   );
