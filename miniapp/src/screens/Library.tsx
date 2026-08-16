@@ -364,7 +364,9 @@ export function BookGrid({
   onPick?: (bookId: number) => void;
 }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 12 }}>
+    // `start`가 없으면 칸이 그 줄 최대 높이로 늘어나는데, 늘어난 `<button>`은 남는 높이만큼 내용을
+    // 세로 가운데로 미는 UA 기본 동작이 있어 **긴 제목 옆 짧은 제목 칸의 표지만 아래로 내려앉는다**.
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 12, alignItems: 'start' }}>
       {rows.map((book) => {
         const fresh = book.fresh === true;
         const cell = (
@@ -405,6 +407,8 @@ export function BookGrid({
                 )}
               </span>
             </div>
+            {/* 긴 제목을 두 줄에서 끊지는 않는다 — TDS `Text`가 인라인 `display`를 자기 값으로 덮어써
+                (`-webkit-box` → `inline-block`) line-clamp가 죽는다. 줄이 벌어져도 제목은 다 보인다. */}
             <Text
               typography="st12"
               style={{ display: 'block', marginTop: 6, wordBreak: 'keep-all', textAlign: 'center' }}
