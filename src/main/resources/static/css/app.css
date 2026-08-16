@@ -3742,50 +3742,39 @@ body.dashboard-page #dashboard-app { gap: 20px; }
     border: none; box-shadow: 0 0 0 3px var(--accent), 0 0 0 5px var(--card-bg);
 }
 
-/* ═══════════════ 독서 스토리 (sns-design §13.7) — .story-* 전용 네임스페이스 ═══════════════
-   전역 공유 클래스 미접촉(기존 페이지 격리 규약). z 층: 도감 50 < 뷰어/작성 150 < 신고 모달 200. */
+/* ═══════════════ 여백 (책에 딸린 자리 — 2026-08-16 책 귀속 재설계) ═══════════════
+   .story-* / .margin-* 전용 네임스페이스 — 전역 공유 클래스 미접촉(기존 페이지 격리 규약).
+   z 층: 도감 50 < 여백 패널/작성 150 < 신고 모달 200 (옛 뷰어의 층을 그대로 계승).
+   옛 인스타 문법(스트립 링·풀스크린 뷰어·진행바·열람자 시트)의 스타일은 함께 폐기했다. */
 
-/* ── 스트립 (홈 상단 아바타 링 가로 스크롤) ── */
-.story-strip {
-    display: flex; gap: 14px; overflow-x: auto;
-    padding: 12px 14px;
-    /* 박스화: 상단 빈 공간 완화 — 테두리·모서리는 .dash-card와 통일, 배경만 세이지 틴트로 구분 */
-    background: #EDF2E9;
-    border: 1px solid #D8CDB9;
-    border-radius: 18px;
-    scrollbar-width: none;
+/* ── 책 리스트 표지 발광 — 24시간 안에 여백에 새 글이 달린 책(.shop-book 안) ── */
+.shop-cover-wrap { position: relative; flex: 0 0 auto; display: block; }
+@keyframes margin-fresh-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(110, 138, 106, .5); }
+    50%      { box-shadow: 0 0 0 5px rgba(110, 138, 106, 0); }
 }
-.story-strip::-webkit-scrollbar { display: none; }
-.story-ring-item {
-    position: relative; /* + 배지 기준 좌표 */
-    display: flex; flex-direction: column; align-items: center; gap: 6px;
-    width: 64px; flex-shrink: 0;
+.shop-cover-wrap.margin-fresh {
+    border-radius: 6px;
+    outline: 2px solid var(--accent); outline-offset: 2px;
+    animation: margin-fresh-pulse 2.2s ease-in-out infinite;
 }
-.story-ring-btn {
-    background: none; border: none; padding: 3px; cursor: pointer; appearance: none;
+.margin-fresh-dot {
+    position: absolute; top: -4px; right: -4px;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 0 2px #FAF7EF;
+}
+/* 움직임에 민감한 사람에겐 맥박을 멈춘다 — 테두리와 점 배지가 남아 표식은 잃지 않는다. */
+@media (prefers-reduced-motion: reduce) {
+    .shop-cover-wrap.margin-fresh { animation: none; }
+}
+/* 「여백」 손잡이 — 상태 배지 줄(.shop-book-foot)의 작은 칩 버튼 */
+.shop-margin-btn {
     width: auto; /* 전역 button width:100% 상쇄 */
+    background: none; border: 1px solid var(--border); border-radius: 999px;
+    color: var(--accent-hover); font-size: 11.5px; font-weight: 600;
+    padding: 3px 10px; cursor: pointer; appearance: none;
 }
-.story-ring { outline: 2px solid var(--border); outline-offset: 2px; }
-.story-ring-unviewed { outline: 3px solid var(--accent); }
-/* + 올리기: 아바타 겹침 배지 대신 맨 앞 독립 타일(발견 8) — 52px 점선 원, 터치 타깃 분리. */
-.story-add-tile {
-    display: flex; flex-direction: column; align-items: center; gap: 6px;
-    width: 64px; flex-shrink: 0;
-}
-.story-add-btn {
-    width: 52px; height: 52px; border-radius: 50%;
-    border: 2px dashed var(--accent); background: transparent;
-    color: var(--accent-hover); font-size: 26px; line-height: 1;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; padding: 0; appearance: none;
-    transition: background .15s ease;
-}
-.story-add-btn:hover { background: #EDF2E9; }
-.story-add-label { font-size: 11px; color: var(--muted); }
-.story-ring-name {
-    font-size: 11px; color: var(--muted); max-width: 64px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
+.shop-margin-btn:hover { background: var(--sage-soft); }
 
 /* ── 배경 팔레트 — 닫힌 코드 6색(백엔드 Story.BG_CODES와 일치) ── */
 .story-bg-paper  { background: #f6f1e7; color: #2c2a24; }
@@ -3795,91 +3784,48 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .story-bg-sea    { background: #2b5d73; color: #eef7fa; }
 .story-bg-plum   { background: #5a3b5e; color: #f7eef8; }
 
-/* ── 풀스크린 뷰어 ── */
-.story-viewer-overlay {
+/* ── 여백 패널 (책 하나의 글 목록 오버레이 — 옛 풀스크린 뷰어 자리) ── */
+.margin-overlay {
     position: fixed; inset: 0; z-index: 150;
-    background: rgba(20, 19, 16, .78);
-    display: flex; align-items: center; justify-content: center;
+    background: rgba(20, 19, 16, .55);
+    display: flex; align-items: center; justify-content: center; padding: 16px;
 }
-.story-viewer-panel {
-    position: relative; width: 100%; max-width: 420px;
-    height: 100dvh; max-height: 100dvh;
-    display: flex; flex-direction: column;
-    padding: 12px 14px max(14px, env(safe-area-inset-bottom));
-    overflow: hidden;
+.margin-panel {
+    width: 100%; max-width: 480px; background: var(--card-bg);
+    border-radius: var(--radius); padding: 20px;
+    display: flex; flex-direction: column; gap: 10px;
+    max-height: 90dvh; overflow-y: auto;
 }
-@media (min-width: 600px) {
-    .story-viewer-panel { max-height: 720px; border-radius: var(--radius); }
-}
-.story-progress { display: flex; gap: 4px; }
-.story-progress-seg {
-    flex: 1; height: 3px; border-radius: 2px; overflow: hidden;
-    background: color-mix(in srgb, currentColor 25%, transparent);
-}
-.story-progress-seg.done { background: currentColor; }
-.story-progress-fill { display: block; height: 100%; background: currentColor; }
-.story-viewer-head {
-    display: flex; align-items: center; gap: 10px; margin-top: 10px;
-    position: relative; z-index: 2;
-}
-.story-viewer-author { display: flex; flex-direction: column; min-width: 0; }
-.story-viewer-nickname { font-weight: 600; font-size: 14px; }
-.story-viewer-age { font-size: 12px; opacity: .75; }
-.story-viewer-close {
+.margin-head { display: flex; align-items: flex-start; gap: 12px; }
+.margin-book-cover { width: 44px; height: 64px; font-size: 18px; }
+.margin-book-meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.margin-book-title { font-size: 15px; font-weight: 700; color: var(--text); line-height: 1.4; }
+.margin-book-sub { font-size: 12.5px; color: var(--muted); }
+.margin-close {
     margin-left: auto; background: none; border: none; cursor: pointer;
-    color: currentColor; font-size: 18px; line-height: 1; padding: 6px;
+    color: var(--text); font-size: 18px; line-height: 1; padding: 6px;
     width: auto; /* 전역 button width:100% 상쇄 — 안 하면 헤더 오른쪽 전체가 투명 닫기 히트존 */
 }
-.story-viewer-text {
-    flex: 1; display: flex; align-items: center; justify-content: center;
-    font-family: 'Gowun Batang', serif; font-size: 20px; line-height: 1.8;
-    text-align: center; white-space: pre-wrap; word-break: break-word;
-    padding: 12px 6px; overflow-y: auto;
+.margin-count { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
+.margin-compose { justify-content: center; }
+.margin-empty { margin: 8px 0 0; font-size: 14px; color: var(--muted); line-height: 1.6; }
+.margin-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.margin-card { border-radius: 12px; padding: 16px; }
+.margin-card-text {
+    margin: 0; font-family: 'Gowun Batang', serif; font-size: 16px; line-height: 1.75;
+    white-space: pre-wrap; word-break: break-word;
 }
-.story-viewer-book {
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-    font-size: 13px; opacity: .9; padding-bottom: 8px;
-    position: relative; z-index: 2;
+.margin-card-foot {
+    display: flex; align-items: center; gap: 8px; margin-top: 12px;
+    font-size: 12px; opacity: .78;
 }
-.story-viewer-book-cover {
-    width: 26px; height: 38px; object-fit: cover; border-radius: 3px;
-}
-.story-tap {
-    /* 가장자리 30%만 — 중앙 40%는 긴 문장(≤500자) 스크롤 영역으로 비워둔다.
-       50%×2로 본문을 다 덮으면 overflow된 후반부를 읽을 방법이 없다(리뷰 파인딩). */
-    position: absolute; top: 76px; bottom: 56px; width: 30%;
-    background: none; border: none; cursor: pointer; padding: 0;
-}
-.story-tap-left { left: 0; }
-.story-tap-right { right: 0; }
-.story-viewer-foot {
-    display: flex; justify-content: space-between; align-items: center;
-    min-height: 32px; position: relative; z-index: 2;
-}
-.story-foot-btn {
+.margin-card-age { flex: 1; min-width: 0; }
+.margin-card-btn {
+    width: auto; /* 전역 button width:100% 상쇄 — 안 하면 카드 하단 전체가 삭제/신고 히트존 */
     background: none; border: 1px solid currentColor; border-radius: 999px;
-    color: currentColor; font-size: 13px; padding: 5px 14px; cursor: pointer; opacity: .85;
-    width: auto; /* 전역 button width:100% 상쇄 — 안 하면 하단 절반이 신고/삭제 히트존 */
+    color: currentColor; font-size: 12px; padding: 3px 10px; cursor: pointer; appearance: none;
 }
-.story-foot-btn:hover { opacity: 1; }
-.story-foot-danger { border-color: transparent; text-decoration: underline; }
-
-/* ── 열람자 목록 시트 (뷰어 안 하단) ── */
-.story-viewers-sheet {
-    position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
-    background: var(--card-bg); color: var(--text);
-    border-radius: var(--radius) var(--radius) 0 0;
-    max-height: 60%; overflow-y: auto; padding: 16px;
-    box-shadow: 0 -4px 32px rgba(44, 42, 36, .25);
-}
-.story-viewers-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.story-viewers-empty { color: var(--muted); font-size: 14px; }
-.story-viewers-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.story-viewers-row { display: flex; align-items: center; gap: 10px; }
-.story-viewers-avatar { width: 34px; height: 34px; font-size: 14px; }
-.story-viewers-name { color: var(--text); text-decoration: none; font-size: 14px; min-width: 0; }
-.story-viewers-handle { color: var(--muted); font-size: 12px; margin-left: 4px; }
-.story-viewers-age { margin-left: auto; color: var(--muted); font-size: 12px; flex-shrink: 0; }
+.margin-card-btn:disabled { opacity: .5; cursor: not-allowed; }
 
 /* ── 작성 모달 ── */
 .story-composer-overlay {
@@ -3894,7 +3840,6 @@ body.dashboard-page #dashboard-app { gap: 20px; }
     max-height: 90dvh; overflow-y: auto;
 }
 .story-composer-head { display: flex; align-items: center; justify-content: space-between; }
-.story-composer-head .story-viewer-close { color: var(--text); }
 .story-composer-title { margin: 0; font-weight: 700; font-size: 16px; }
 .story-composer-preview { border-radius: 12px; padding: 14px; }
 .story-composer-input {
@@ -3912,16 +3857,12 @@ body.dashboard-page #dashboard-app { gap: 20px; }
     border: 2px solid var(--border); padding: 0; appearance: none;
 }
 .story-swatch.selected { box-shadow: 0 0 0 2px var(--card-bg), 0 0 0 4px var(--accent); }
-.story-composer-book { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
-.story-composer-book select {
-    padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px;
-    background: var(--card-bg); color: var(--text); font-size: 14px;
-}
+/* 어느 책의 여백인지 — 진입점이 이미 그 책이라 선택 select 자리는 라벨 한 줄로 대체됐다 */
 .story-composer-hint { margin: 0; font-size: 12px; color: var(--muted); }
 .story-composer-submit { justify-content: center; }
 .story-composer-submit:disabled { opacity: .5; cursor: not-allowed; }
 
-/* 신고 모달의 스토리 발췌 컨텍스트 표시 */
+/* 신고 모달의 글 원문 발췌 컨텍스트 표시 */
 .story-report-context {
     margin: 0; font-size: 12px; color: var(--muted);
     background: var(--bg); border-radius: 8px; padding: 8px 10px;
