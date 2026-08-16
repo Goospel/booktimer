@@ -104,6 +104,14 @@ export function App() {
   const [goalAdPending, setGoalAdPending] = useState(false);
   /** 열린 여백 — 탭 위에 전체 화면으로 선다(홈 문·서재 문·홈 소식이 모두 이 한 자리로 온다). */
   const [margin, setMargin] = useState<MarginState | null>(null);
+  /**
+   * 홈 캐러셀에서 고른 책 — **홈이 아니라 여기서 든다**. 여백·목표·설정은 탭 위에 전체 화면으로 서서
+   * 홈을 언마운트하므로, 홈에 두면 여백에 글 한 편 쓰고 돌아올 때마다 고른 책이 기본 책으로 되돌아갔다.
+   *
+   * <p>`undefined`(아직 안 고름)와 `null`(「책 없이」를 고름)은 다른 값이다 — 하나로 합치면 「책 없이」를
+   * 고른 사람이 돌아올 때마다 이어 읽기 책으로 끌려간다.
+   */
+  const [homeBookId, setHomeBookId] = useState<number | null | undefined>(undefined);
 
   const toLogin = useCallback(() => {
     token.clear();
@@ -304,6 +312,8 @@ export function App() {
       tab={tab}
       onTabChange={setTab}
       dashboard={dashboard}
+      homeBookId={homeBookId}
+      onSelectHomeBook={setHomeBookId}
       onOpenMargin={(loginId, bookId) => setMargin({ loginId, bookId, composeBook: null })}
       onComposeMargin={(book) =>
         // 문은 핸들이 있을 때만 그려지므로 여기서 loginId는 언제나 있다(`marginDoorBook`이 앞에서 판정).
@@ -329,6 +339,8 @@ export function MainTabs({
   tab,
   onTabChange,
   dashboard,
+  homeBookId,
+  onSelectHomeBook,
   onOpenMargin,
   onComposeMargin,
   onTimerChange,
@@ -343,6 +355,9 @@ export function MainTabs({
   tab: TabKey;
   onTabChange: (tab: TabKey) => void;
   dashboard: DashboardResponse;
+  /** 홈 캐러셀에서 고른 책 — 탭 밖 전체 화면이 홈을 언마운트해도 남도록 App이 든다(`undefined`=아직 안 고름). */
+  homeBookId: number | null | undefined;
+  onSelectHomeBook: (bookId: number | null) => void;
   /** 그 사람의 그 책 여백을 연다 — 홈 소식과 서재 문이 같은 자리로 온다(App이 전체 화면으로 든다). */
   onOpenMargin: (loginId: string, bookId: number) => void;
   /** 홈 여백 문 — 그 책의 작성 화면으로 직행한다. */
@@ -367,6 +382,8 @@ export function MainTabs({
         {tab === 'home' && (
           <Home
             dashboard={dashboard}
+            selectedBookId={homeBookId}
+            onSelectBook={onSelectHomeBook}
             onTimerChange={onTimerChange}
             onGraphChange={onGraphChange}
             onGoGoal={onGoGoal}

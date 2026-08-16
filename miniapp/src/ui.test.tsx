@@ -193,6 +193,8 @@ function home(overrides: Partial<DashboardResponse>) {
     <TDSMobileProvider userAgent={userAgent}>
       <Home
         dashboard={dashboard}
+        selectedBookId={undefined}
+        onSelectBook={() => {}}
         onTimerChange={() => {}}
         onGraphChange={() => {}}
         onGoGoal={() => {}}
