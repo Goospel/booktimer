@@ -767,6 +767,31 @@ class ProfileApiControllerTest {
                 .andExpect(jsonPath("$.books[0].lastStoryAt").value("2026-08-10T09:00:00Z"));
     }
 
+    /**
+     * §5-1 ⓕ — 앵커(반전 아님). 비공개 책에도 글을 쓸 수 있게 된 뒤(2026-08-16 결정 2), 격자 발광 경로가
+     * 「비공개 책이 있다」는 사실이 새는 새 통로가 되지 않는지 못 박는다. 방어는 이중이다:
+     * 프로필 응답의 책 목록 자체가 PUBLIC-only라 그 책은 애초에 목록에 없고, recency도 따라서 붙지 않는다.
+     */
+    @Test
+    @DisplayName("GET /api/profile/books 비공개 책에 글이 있어도 그 책·lastStoryAt은 목록에 없다 (발광 경로 재단언)")
+    void books_privateBookWithStories_isAbsentEntirely() throws Exception {
+        User viewer = register("rc-pvviewer@booktimer.com", "rcpvviewer", "열람자");
+        User owner = register("rc-pvowner@booktimer.com", "rcpvowner", "주인");
+        followRepository.save(Follow.of(viewer, owner));
+        Book open = publicBookOf(owner, "가 공개 책");
+        Book secret = bookRepository.save(
+                Book.register(owner, "나 비공개 책", null, null, null, null, null, BookStatus.READING));
+        storyAt(owner, open, "공개 책 글", Instant.parse("2026-08-10T09:00:00Z"));
+        storyAt(owner, secret, "비공개 책 메모", Instant.parse("2026-08-11T09:00:00Z"));
+
+        mockMvc.perform(get("/api/profile/books").param("loginId", "rcpvowner")
+                        .with(user("rc-pvviewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.books", hasSize(1)))
+                .andExpect(jsonPath("$.books[0].title").value("가 공개 책"))
+                .andExpect(jsonPath("$.books[0].lastStoryAt").value("2026-08-10T09:00:00Z"));
+    }
+
     @Test
     @DisplayName("GET /api/profile 글이 한 장도 없는 사용자 → 전 책 null, 쿼리도 안 터진다 (null-state 경계)")
     void profile_userWithoutAnyStory_getsAllNull() throws Exception {

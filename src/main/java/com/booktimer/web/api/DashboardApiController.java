@@ -173,7 +173,7 @@ public class DashboardApiController {
 
     private static List<BookOption> toOptions(List<Book> books) {
         return books.stream()
-                .map(b -> new BookOption(b.getId(), b.getTitle(), b.getCoverUrl(), b.getAuthor()))
+                .map(b -> new BookOption(b.getId(), b.getTitle(), b.getCoverUrl(), b.getAuthor(), b.isPublic()))
                 .toList();
     }
 
@@ -269,8 +269,12 @@ public class DashboardApiController {
      *
      * <p>{@code coverUrl}·{@code author}는 손으로 넣은 책이면 {@code null}이다(검색 등록만 채운다) —
      * 클라이언트는 그때 첫 글자 자리 표지로 떨어뜨린다. 필드 추가는 하위호환(옛 클라이언트는 무시).
+     *
+     * <p>{@code isPublic}은 <b>게이트가 아니라 고지</b>용이다 — 홈에서 여백 작성으로 직행할 때
+     * 「비공개 책이에요, 이 글은 나만 봐요」를 띄우는 근거(2026-08-16 결정 2). 비공개 책이라고
+     * 캐러셀에서 빠지지 않는다.
      */
-    public record BookOption(Long id, String title, String coverUrl, String author) {}
+    public record BookOption(Long id, String title, String coverUrl, String author, boolean isPublic) {}
 
     public record QuoteDto(String text, String author) {}
 

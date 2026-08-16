@@ -25,8 +25,11 @@ import java.util.Set;
  * <p>2026-08-16까지는 사람에게 딸린 24시간짜리 「스토리」였다 — 시간 만료도, 사람 단위 스트립도 함께
  * 폐기됐다. 클래스·테이블 이름은 {@code Story}로 남았다: 어휘만 바꾸고 스키마는 두는 게 싸다.
  *
- * <p>책은 <b>본인 소유 + PUBLIC만</b> — 책 라벨(제목·표지)이 팔로워에게 보이므로, PRIVATE을
- * 허용하면 비공개 책장이 새는 유일 경로가 된다(§13.2, §3.5 불변식 예외 없이 유지).
+ * <p>책은 <b>본인 소유만</b> — 공개 여부는 묻지 않는다(2026-08-16 결정 2). 비공개 책의 여백은
+ * 「나만 보는 메모」라서 쓰기를 막을 이유가 없다. 대신 <b>가시성은 언제나 읽기 시점에 책에서
+ * 파생</b>한다 — 글에 자체 공개 필드가 없으므로 남에게 새지 않게 하는 책임은 전적으로 읽기
+ * 게이트에 있다: {@code StoryService.marginOf}(소유자 아니면 PRIVATE 책은 404) ·
+ * {@code StoryRepository.feedRecent}(쿼리가 PUBLIC만) · 프로필 격자(PUBLIC 책만 목록에 있음).
  */
 @Entity
 @Table(name = "story")
@@ -69,10 +72,10 @@ public class Story extends BaseTimeEntity {
     }
 
     /**
-     * 여백에 글을 남긴다. 문장은 1~500자 비공백, 책은 <b>필수</b>이고 작성자 소유 + PUBLIC만,
+     * 여백에 글을 남긴다. 문장은 1~500자 비공백, 책은 <b>필수</b>이고 작성자 소유만(공개 여부 무관),
      * 배경은 닫힌 팔레트 코드만.
      *
-     * @throws IllegalArgumentException author/문장/책이 없거나, 501자 초과, 남의 책·비공개 책, 팔레트 밖 bgCode
+     * @throws IllegalArgumentException author/문장/책이 없거나, 501자 초과, 남의 책, 팔레트 밖 bgCode
      */
     public static Story of(User author, String text, Book book, String bgCode) {
         if (author == null) {
@@ -90,9 +93,6 @@ public class Story extends BaseTimeEntity {
         }
         if (!isSameUser(book.getUser(), author)) {
             throw new IllegalArgumentException("book must be owned by the author");
-        }
-        if (!book.isPublic()) {
-            throw new IllegalArgumentException("book must be public");
         }
         if (bgCode != null && !BG_CODES.contains(bgCode)) {
             throw new IllegalArgumentException("unknown bgCode: " + bgCode);

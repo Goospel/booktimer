@@ -8,6 +8,8 @@ import com.booktimer.book.BookStatus;
 import com.booktimer.book.CoupangLinkBuilder;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
+import com.booktimer.story.Story;
+import com.booktimer.story.StoryRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
@@ -52,6 +54,7 @@ class BookApiControllerTest {
     @Autowired BookRepository bookRepository;
     @Autowired BookService bookService;
     @Autowired ReadingSessionRepository sessionRepository;
+    @Autowired StoryRepository storyRepository;
     @Autowired Clock clock;
     @MockitoBean CoupangLinkBuilder coupangLinkBuilder;
 
@@ -106,6 +109,45 @@ class BookApiControllerTest {
                 .andExpect(jsonPath("$.searchEnabled", is(false)))
                 .andExpect(jsonPath("$.coupangEnabled", is(false)))
                 .andExpect(jsonPath("$.yes24Enabled", is(false)));
+    }
+
+    /**
+     * §5-1 ⓖ — 서재 관리 시트의 「공개로 바꾸기」 확인 단계가 「글 N개가 팔로워에게 보여요」를 쓰려면
+     * 책마다 여백 글 수가 필요하다. <b>글 없는 책이 0으로 실린다</b>는 것이 핵심 경계다 — 필드가 비면
+     * 클라가 fail-open(확인 없이 즉시 공개)으로 떨어지므로 0과 부재를 구분해야 한다.
+     */
+    @Test
+    @DisplayName("GET /api/books: 책마다 여백 글 수(storyCount) — 글 2개 책은 2, 글 없는 책은 0")
+    void shelf_carriesStoryCountPerBook() throws Exception {
+        User me = register("sc@a.com", "storycount", "북리더");
+        Book withStories = addBook(me, "글 있는 책", "9788900000001", BookStatus.READING);
+        addBook(me, "글 없는 책", "9788900000002", BookStatus.READING);
+        storyRepository.save(Story.of(me, "첫 메모", withStories, null));
+        storyRepository.save(Story.of(me, "둘째 메모", withStories, null));
+
+        mockMvc.perform(get("/api/books").with(user("sc@a.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.books[?(@.title=='글 있는 책')].storyCount", contains(2)))
+                .andExpect(jsonPath("$.books[?(@.title=='글 없는 책')].storyCount", contains(0)));
+    }
+
+    /**
+     * 위 목록 테스트의 짝 — 뮤테이션 응답도 <b>같은 값</b>을 실어야 한다. 클라가 응답 행을 목록에
+     * 되꽂는 구조라, 여기서 0을 내리면 상태 변경 한 번이 그 책의 공개 전환 고지를 조용히 꺼 버린다.
+     */
+    @Test
+    @DisplayName("POST /api/books/{id}/status: 응답에도 실제 storyCount가 실린다 (목록 행과 같은 모양)")
+    void mutation_carriesRealStoryCount() throws Exception {
+        User me = register("scm@a.com", "storycountm", "북리더");
+        Book book = addBook(me, "글 있는 책", "9788900000003", BookStatus.READING);
+        storyRepository.save(Story.of(me, "메모", book, null));
+
+        mockMvc.perform(post("/api/books/{id}/status", book.getId())
+                        .with(user("scm@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"FINISHED\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.storyCount", is(1)));
     }
 
     // ── 3. DTO 화이트리스트 ──────────────────────────────────────────────────
