@@ -511,3 +511,31 @@ describe('실패 안내', () => {
     expect(renderToStaticMarkup(<ErrorMessage message={null} onRetry={() => {}} />)).toBe('');
   });
 });
+
+/**
+ * 뒤로가기 잠금 — 요청이 도는 중에는 나가지 못하게 한다. 하단 「돌아가기」 버튼이 `disabled={busy}`로
+ * 하던 일을, 그 버튼을 걷고 상단 손잡이로 통일하면서 그대로 옮겨 온 것이다(책 추가·계정 연결).
+ * 잠금을 「손잡이를 감추기」로 하면 34px 줄이 사라졌다 나타나 화면이 튄다 — 그래서 disabled다.
+ */
+describe('화면 껍데기 — 뒤로가기 잠금', () => {
+  const backAt = (markup: string) => markup.slice(0, markup.indexOf('돌아가기'));
+  const withBack = (backDisabled?: boolean) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Screen title="책 추가" onBack={() => {}} backDisabled={backDisabled}>
+          본문
+        </Screen>
+      </TDSMobileProvider>,
+    );
+
+  it('잠그면 disabled가 붙는다', () => {
+    expect(backAt(withBack(true))).toContain('disabled');
+  });
+
+  it('기본은 안 잠근다 — 대부분의 화면은 언제든 나갈 수 있어야 한다', () => {
+    const markup = withBack();
+
+    expect(markup).toContain('돌아가기');
+    expect(backAt(markup)).not.toContain('disabled');
+  });
+});

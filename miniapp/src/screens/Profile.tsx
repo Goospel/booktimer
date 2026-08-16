@@ -356,15 +356,7 @@ export function Profile({
       <Screen title="책방" onBack={onBack} above={header}>
         {/* 못 받았을 때 나갈 길만 있으면 실패가 곧 막다른 길이다 — 그 자리에서 다시 받을 길도 함께 준다. */}
         <ErrorMessage message={error} onRetry={load} />
-        {error === null ? (
-          <Loading />
-        ) : (
-          onBack !== undefined && (
-            <Button display="block" variant="weak" style={{ marginTop: 24 }} onClick={onBack}>
-              돌아가기
-            </Button>
-          )
-        )}
+        {error === null && <Loading />}
       </Screen>
     );
   }
@@ -479,10 +471,15 @@ export function ProfileCard({
   const openable = followCountsOpenable(profile.self, onOpenFollowList !== undefined);
   const actions = personalityActions(profile.self, personalityStatus, REWARD_AD_GROUP_ID);
 
-  // 제목 옆 ← 는 안 둔다 — 배경 없는 화살표 글자라 버튼으로 안 읽혔다. 출구는 아래 「돌아가기」와 탭바.
+  /*
+   * 나가는 길은 **상단 「돌아가기」 하나**다. 이 화면은 같은 문제를 두 번 겪었다 — 처음엔 제목 옆 `←`
+   * 글리프였는데 배경이 없어 버튼으로 안 읽혀 지우고 하단 버튼만 남겼고, 여백 화면에서 같은 지적이 또
+   * 나와 **글자가 붙은 알약**이 생겼다(2026-08-16). 회피 이유가 사라졌으므로 위로 되돌리고 하단 버튼을
+   * 걷는다. 탭 루트(내 책방)는 `onBack`이 없어 아무것도 안 그려진다 — 출구는 플로팅 탭바다.
+   */
   return (
     // 검색·여백는 화면 소속이 아니라 그 위에 얹히는 도구다 — 신원 블록보다 위로 올린다.
-    <Screen above={header}>
+    <Screen above={header} onBack={onBack}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         <Avatar nickname={profile.nickname} />
         <div style={{ flex: 1, display: 'flex', minWidth: 0 }}>
@@ -667,12 +664,6 @@ export function ProfileCard({
         )}
       </section>
 
-      {/* 탭 루트(내 책방)에는 돌아갈 곳이 없다 — 아무 데도 안 가는 손잡이를 남기지 않는다. */}
-      {onBack !== undefined && (
-        <Button display="block" variant="weak" style={{ marginTop: 24 }} onClick={onBack}>
-          돌아가기
-        </Button>
-      )}
     </Screen>
   );
 }

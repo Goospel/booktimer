@@ -25,7 +25,7 @@ export function LinkAccount({ onLinked, onBack }: { onLinked: () => void; onBack
   };
 
   return (
-    <Screen title="기존 계정 연결">
+    <Screen title="기존 계정 연결" onBack={onBack} backDisabled={busy}>
       <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 20 }}>
         PC 웹에서 booktimer.app에 로그인한 뒤 <b>설정 → 토스 앱 연결</b>에서 연결 코드를 받아 입력해 주세요.
         코드는 5분 뒤 만료돼요.
@@ -55,9 +55,6 @@ export function LinkAccount({ onLinked, onBack }: { onLinked: () => void; onBack
         onClick={submit}
       >
         연결하기
-      </Button>
-      <Button display="block" variant="weak" style={{ marginTop: 12 }} disabled={busy} onClick={onBack}>
-        돌아가기
       </Button>
     </Screen>
   );

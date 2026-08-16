@@ -284,6 +284,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
 export function Screen({
   title,
   onBack,
+  backDisabled,
   right,
   above,
   subtitle,
@@ -291,6 +292,11 @@ export function Screen({
 }: {
   title?: string;
   onBack?: () => void;
+  /**
+   * 요청이 도는 중엔 못 나가게 잠근다(책 추가·계정 연결). 하단 「돌아가기」 버튼이 `disabled={busy}`로
+   * 하던 일을 그대로 옮겨 온 것 — 잠금을 「감추기」로 하면 34px 줄이 사라졌다 나타나 화면이 튄다.
+   */
+  backDisabled?: boolean;
   /** 제목 줄 오른쪽 끝 손잡이(서재의 「펼쳐보기」) — 제목이 없으면 그릴 줄 자체가 없다. */
   right?: ReactNode;
   /** 제목보다 **위**에 얹히는 도구 줄 — 제목이 없는 화면에서도 그린다. */
@@ -307,6 +313,7 @@ export function Screen({
           <button
             type="button"
             onClick={onBack}
+            disabled={backDisabled}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -319,7 +326,8 @@ export function Screen({
               color: 'var(--adaptiveGrey700, #57534A)',
               fontSize: 14,
               fontWeight: 600,
-              cursor: 'pointer',
+              opacity: backDisabled === true ? 0.5 : 1,
+              cursor: backDisabled === true ? 'default' : 'pointer',
             }}
           >
             {/* 꺾쇠다 — 직선 화살표는 「이전 화면」이 아니라 「왼쪽 이동」으로 읽힌다. */}

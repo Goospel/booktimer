@@ -856,7 +856,7 @@ export function BookSearch({
   };
 
   return (
-    <Screen title="책 추가">
+    <Screen title="책 추가" onBack={onBack} backDisabled={busy}>
       {/* 입력 하나짜리 form이라 엔터(키보드 「완료」)가 곧 제출이다 — 버튼은 밖에 둔다(Social과 같은 배선). */}
       <form
         onSubmit={(e) => {
@@ -914,9 +914,6 @@ export function BookSearch({
         </button>
       ))}
 
-      <Button display="block" variant="weak" style={{ marginTop: 24 }} disabled={busy} onClick={onBack}>
-        돌아가기
-      </Button>
     </Screen>
   );
 }
