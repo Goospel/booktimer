@@ -119,16 +119,19 @@ class StoryServiceTest {
                 .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
     }
 
+    /** <b>기대 반전</b>(2026-08-16, 결정 2) — 옛 단언은 「내 PRIVATE 책 → 400」이었다. */
     @Test
-    @DisplayName("create: 내 책인데 PRIVATE → 400 (공개 책에만 여백이 열린다)")
-    void create_privateOwnBook_throws400() {
+    @DisplayName("create: 내 책이 PRIVATE여도 저장된다 — 비공개 책 여백 = 나만의 메모(결정 2)")
+    void create_privateOwnBook_saves() {
         when(rateLimitService.allow(RateLimitAction.STORY_CREATE, 1L)).thenReturn(true);
         Book privateBook = Book.register(me, "비공개", null, null, null, null, null, BookStatus.READING);
         when(bookRepository.findByIdAndUser(5L, me)).thenReturn(Optional.of(privateBook));
+        when(storyRepository.save(any(Story.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        assertThatThrownBy(() -> service.create(me, "문장", 5L, null))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.BAD_REQUEST));
+        Story saved = service.create(me, "나만 보는 메모", 5L, null);
+
+        assertThat(saved.getText()).isEqualTo("나만 보는 메모");
+        assertThat(saved.getBook()).isSameAs(privateBook);
     }
 
     @Test
@@ -177,7 +180,7 @@ class StoryServiceTest {
     }
 
     @Test
-    @DisplayName("marginOf: target의 PRIVATE 책 → 404 (격자에 안 보이는 책 = 존재 비노출)")
+    @DisplayName("marginOf: 남의 PRIVATE 책 → 404 (격자에 안 보이는 책 = 존재 비노출)")
     void marginOf_privateBook_throws404() {
         User target = visibleTarget("target");
         Book hidden = Book.register(target, "비공개 책", null, null, null, null, null, BookStatus.READING);
@@ -188,16 +191,40 @@ class StoryServiceTest {
                 .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
     }
 
+    /**
+     * §5-1 ⓐ — 완화의 예외는 <b>소유자 하나뿐</b>임을 못 박는다. 팔로워는 공개 책 여백을 볼 수 있는
+     * 사이라서, 「팔로우했으니 비공개 책도」로 새어나가는 것이 가장 그럴듯한 회귀다.
+     */
     @Test
-    @DisplayName("marginOf: 내 PRIVATE 책도 404 — 격자 진입점이 없는 책엔 여백이 열리지 않는다")
-    void marginOf_ownPrivateBook_throws404() {
+    @DisplayName("marginOf: 팔로워여도 남의 PRIVATE 책은 404 — 예외는 소유자뿐(팔로우 검사에 닿지도 않는다)")
+    void marginOf_followerOfPrivateBook_throws404() {
+        User target = visibleTarget("target");
+        Book hidden = Book.register(target, "비공개 책", null, null, null, null, null, BookStatus.READING);
+        when(bookRepository.findByIdAndUser(7L, target)).thenReturn(Optional.of(hidden));
+
+        assertThatThrownBy(() -> service.marginOf(me, "target", 7L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+        verify(followService, never()).isFollowing(any(), any());
+        verify(storyRepository, never()).findByUserAndBookOrderByCreatedAtDescIdDesc(any(), any(), any());
+    }
+
+    /** <b>기대 반전</b>(2026-08-16, 결정 2) — 옛 단언은 「내 PRIVATE 책도 404」였다. */
+    @Test
+    @DisplayName("marginOf: 내 PRIVATE 책은 열린다 — self:true + 내 글 목록(결정 2)")
+    void marginOf_ownPrivateBook_returnsOwnEntries() {
         when(profileService.resolveVisibleTarget(me, "meuser")).thenReturn(Optional.of(me));
         Book hidden = Book.register(me, "내 비공개 책", null, null, null, null, null, BookStatus.READING);
         when(bookRepository.findByIdAndUser(7L, me)).thenReturn(Optional.of(hidden));
+        Story memo = storyWithId(10L, me, "나만 보는 메모", NOW.minusSeconds(60), hidden);
+        when(storyRepository.findByUserAndBookOrderByCreatedAtDescIdDesc(eq(me), eq(hidden), any(Pageable.class)))
+                .thenReturn(List.of(memo));
 
-        assertThatThrownBy(() -> service.marginOf(me, "meuser", 7L))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+        MarginResponse response = service.marginOf(me, "meuser", 7L);
+
+        assertThat(response.self()).isTrue();
+        assertThat(response.entries()).extracting(MarginEntry::text).containsExactly("나만 보는 메모");
+        assertThat(response.book().title()).isEqualTo("내 비공개 책");
     }
 
     @Test

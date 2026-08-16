@@ -4,6 +4,7 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.config.JpaConfig;
+import com.booktimer.follow.Follow;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -103,6 +104,50 @@ class StoryRepositoryTest {
         List<Story> entries = storyRepository.findByUserAndBookOrderByCreatedAtDescIdDesc(me, book, ALL);
 
         assertThat(entries).extracting(Story::getId).containsExactly(newer.getId(), older.getId());
+    }
+
+    // ── feedRecent 가시성 (§5-1 ⓒ) ────────────────────────────────────────────
+    // 앵커(반전 아님): 쿼리가 이미 표시 시점에 b.visibility=PUBLIC을 재검사한다. 비공개 책에도 글을
+    // 쓸 수 있게 된 뒤로는 이 재검사가 「백업」이 아니라 소식 피드의 <b>주 방어</b>다 — 회귀하면 남의
+    // 비공개 메모가 팔로워 홈에 실린다.
+
+    private void follows(User follower, User followee) {
+        em.persist(Follow.of(follower, followee));
+        em.flush();
+    }
+
+    @Test
+    @DisplayName("소식 피드: 글을 남긴 뒤 책을 비공개로 돌리면 빠진다 — 공개 책 글은 남는다(양성 대조군)")
+    void feedRecent_excludesStoriesOnBooksTurnedPrivate() {
+        User viewer = user("viewer@booktimer.com", "viewer");
+        User followee = user("followee@booktimer.com", "followee");
+        follows(viewer, followee);
+        Book stayPublic = publicBookOf(followee, "공개로 남는 책");
+        Book turnedPrivate = publicBookOf(followee, "나중에 비공개가 될 책");
+        storyAt(followee, stayPublic, "보여야 하는 글", NOW.minusSeconds(60));
+        storyAt(followee, turnedPrivate, "새면 안 되는 글", NOW.minusSeconds(30));
+        bookRepository.findById(turnedPrivate.getId()).orElseThrow().makePrivate();
+        em.flush();
+        em.clear();
+
+        List<Story> feed = storyRepository.feedRecent(viewer, NOW.minusSeconds(3600));
+
+        assertThat(feed).extracting(Story::getText).containsExactly("보여야 하는 글");
+    }
+
+    @Test
+    @DisplayName("소식 피드: 처음부터 비공개인 책의 글도 빠진다 — 비공개 책 여백은 소유자 전용 메모")
+    void feedRecent_excludesStoriesBornOnPrivateBooks() {
+        User viewer = user("viewer@booktimer.com", "viewer");
+        User followee = user("followee@booktimer.com", "followee");
+        follows(viewer, followee);
+        Book secret = bookRepository.save(
+                Book.register(followee, "비공개 책", null, null, null, null, null, BookStatus.READING));
+        storyAt(followee, secret, "나만 보는 메모", NOW.minusSeconds(30));
+
+        List<Story> feed = storyRepository.feedRecent(viewer, NOW.minusSeconds(3600));
+
+        assertThat(feed).isEmpty();
     }
 
     @Test

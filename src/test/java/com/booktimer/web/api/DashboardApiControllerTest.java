@@ -440,6 +440,26 @@ class DashboardApiControllerTest {
                 .andExpect(jsonPath("$.readingBooks[0].author").doesNotExist());
     }
 
+    /**
+     * §5-1 ⓖ — 홈에서 여백 작성 화면으로 직행할 때 「비공개 책이에요, 이 글은 나만 봐요」 캡션을
+     * 띄우려면 홈이 쥔 책 옵션에 공개 여부가 있어야 한다(게이트가 아니라 <b>고지</b>용 — 결정 2로
+     * 비공개 책에도 글을 쓸 수 있게 됐기 때문에 옛 placeholder 「팔로워에게 보여요」가 거짓말이 된다).
+     */
+    @Test
+    @DisplayName("GET /api/dashboard: BookOption에 isPublic이 실린다 — 공개 책 true, 비공개 책 false")
+    void get_bookOptionCarriesIsPublic() throws Exception {
+        User u = register("vis@a.com", "vistest");
+        Book open = addBook(u, "공개 책", BookStatus.READING);
+        open.makePublic();
+        bookRepository.save(open);
+        addBook(u, "비공개 책", BookStatus.READING); // 기본 PRIVATE
+
+        mockMvc.perform(get("/api/dashboard").with(user("vis@a.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.readingBooks[?(@.title=='공개 책')].isPublic", contains(true)))
+                .andExpect(jsonPath("$.readingBooks[?(@.title=='비공개 책')].isPublic", contains(false)));
+    }
+
     // ── 9. DTO 화이트리스트 ───────────────────────────────────────────────────
 
     @Test

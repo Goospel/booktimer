@@ -43,7 +43,8 @@ public class StoryApiController {
 
     /**
      * 책 하나의 여백 — 그 자리에 쌓인 글 목록. 경로는 「누구의」(loginId) + 「어느 책」(bookId) 두 축이다.
-     * 노출 게이트는 전부 {@link StoryService#marginOf}에 있다(차단·IDOR·PRIVATE → 404 / 비팔로워 → 빈 목록).
+     * 노출 게이트는 전부 {@link StoryService#marginOf}에 있다(차단·IDOR → 404 / <b>남의</b> PRIVATE 책 →
+     * 404 / 비팔로워 → 빈 목록). 소유자 본인은 자기 PRIVATE 책의 여백을 읽는다(2026-08-16 결정 2).
      */
     @GetMapping("/api/stories/of/{loginId}")
     public MarginResponse marginOf(@PathVariable String loginId,

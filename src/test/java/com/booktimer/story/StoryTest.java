@@ -94,24 +94,34 @@ class StoryTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    /**
+     * <b>기대 반전</b>(2026-08-16, 결정 2) — 옛 단언은 「내 책이라도 PRIVATE면 거부」였다.
+     * 비공개 책의 여백은 나만 보는 메모이므로 <b>쓸 수 있어야</b> 한다. 남에게 안 보이게 막는 것은
+     * 이제 엔티티가 아니라 읽기 게이트의 몫이다({@code StoryService.marginOf} · {@code feedRecent}).
+     */
     @Test
-    @DisplayName("of: 내 책이라도 PRIVATE면 거부한다 — 비공개 책 간접 누출 차단(sns-design §13.2)")
-    void of_rejectsPrivateOwnBook() {
+    @DisplayName("of: 내 PRIVATE 책에도 글을 남길 수 있다 — 비공개 책 여백 = 나만의 메모(결정 2)")
+    void of_allowsPrivateOwnBook() {
         User me = author();
         Book mine = Book.register(me, "비공개 책", null, null, null, null, null, BookStatus.READING); // 기본 PRIVATE
 
-        assertThatThrownBy(() -> Story.of(me, "문장", mine, null))
-                .isInstanceOf(IllegalArgumentException.class);
+        Story story = Story.of(me, "나만 보는 메모", mine, null);
+
+        assertThat(story.getBook()).isSameAs(mine);
+        assertThat(story.getText()).isEqualTo("나만 보는 메모");
     }
 
     @Test
-    @DisplayName("of: 남의 책은 PUBLIC이라도 거부한다")
+    @DisplayName("of: 남의 책은 PUBLIC이든 PRIVATE이든 거부한다 — 소유 불변식은 완화 대상이 아니다")
     void of_rejectsOthersBook() {
         User me = author();
         User other = User.of("other@booktimer.com", "$2a$10$abcdefghijklmnopqrstuv", "타인", "Asia/Seoul", Role.USER);
-        Book others = publicBookOf(other);
+        Book othersPublic = publicBookOf(other);
+        Book othersPrivate = Book.register(other, "남의 비공개 책", null, null, null, null, null, BookStatus.READING);
 
-        assertThatThrownBy(() -> Story.of(me, "문장", others, null))
+        assertThatThrownBy(() -> Story.of(me, "문장", othersPublic, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> Story.of(me, "문장", othersPrivate, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

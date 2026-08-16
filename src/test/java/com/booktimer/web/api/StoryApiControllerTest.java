@@ -253,6 +253,118 @@ class StoryApiControllerTest {
                 .andExpect(jsonPath("$.entries[0].bgCode").value("sea"));
     }
 
+    // ── 비공개 책 여백 (2026-08-16 결정 2) — 주인만 열린다 ─────────────────────
+    // 실 H2 통합으로 간다: 게이트가 「책 가시성 × 소유자 판정」의 조합이라 mock으로는 쿼리 필터와
+    // 소유 조건이 진짜로 걸리는지 검증되지 않는다(T-023 계열).
+
+    private Book privateBookOf(User owner, String title) {
+        return bookRepository.save(
+                Book.register(owner, title, null, null, null, null, null, BookStatus.READING));
+    }
+
+    /** §5-1 ⓔ — 주인은 자기 비공개 책의 여백을 읽고 쓴다. */
+    @Test
+    @DisplayName("비공개 책: 주인은 글을 남기고(200) 자기 여백을 읽는다(self:true, book.isPublic:false)")
+    void privateBook_owner_writesAndReads() throws Exception {
+        User me = register("pb-owner@booktimer.com", "pbowner", "주인");
+        Book secret = privateBookOf(me, "내 비공개 책");
+
+        mockMvc.perform(post("/api/stories")
+                        .with(user("pb-owner@booktimer.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"나만 보는 메모\",\"bookId\":" + secret.getId() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.text").value("나만 보는 메모"));
+
+        mockMvc.perform(get("/api/stories/of/pbowner")
+                        .param("bookId", String.valueOf(secret.getId()))
+                        .with(user("pb-owner@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.self").value(true))
+                .andExpect(jsonPath("$.book.title").value("내 비공개 책"))
+                .andExpect(jsonPath("$.book.isPublic").value(false))
+                .andExpect(jsonPath("$.entries[0].text").value("나만 보는 메모"));
+    }
+
+    /** §5-1 ⓔ 짝 — 공개 책이면 같은 필드가 true다(직렬화 ⓖ의 양성 대조군). */
+    @Test
+    @DisplayName("공개 책: 여백 응답의 book.isPublic은 true — 캡션이 「팔로워에게 보여요」로 갈리는 근거")
+    void marginOf_publicBook_isPublicTrue() throws Exception {
+        User me = register("pb-pub@booktimer.com", "pbpub", "주인");
+        Book open = publicBookOf(me, "내 공개 책");
+
+        mockMvc.perform(get("/api/stories/of/pbpub")
+                        .param("bookId", String.valueOf(open.getId()))
+                        .with(user("pb-pub@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.book.isPublic").value(true));
+    }
+
+    /** §5-1 ⓑ — 완화는 <b>읽기 게이트</b>만 건드렸다. 남이 내 비공개 책에 쓰는 길은 여전히 없다. */
+    @Test
+    @DisplayName("비공개 책: 남이 글을 남기려 하면 404 — 소유 게이트는 완화 대상이 아니다(IDOR)")
+    void privateBook_stranger_cannotWrite() throws Exception {
+        User owner = register("pb-victim@booktimer.com", "pbvictim", "주인");
+        register("pb-intruder@booktimer.com", "pbintruder", "침입자");
+        Book secret = privateBookOf(owner, "남의 비공개 책");
+
+        mockMvc.perform(post("/api/stories")
+                        .with(user("pb-intruder@booktimer.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"남의 여백에 낙서\",\"bookId\":" + secret.getId() + "}"))
+                .andExpect(status().isNotFound());
+    }
+
+    /** §5-1 ⓐ 실데이터판 — 글이 실제로 존재하는 비공개 책이어도 팔로워에겐 404다(빈 entries 200 아님). */
+    @Test
+    @DisplayName("비공개 책: 글이 있어도 팔로워에게는 404 — 존재조차 노출하지 않는다")
+    void privateBook_followerWithEntries_returns404() throws Exception {
+        User viewer = register("pb-fviewer@booktimer.com", "pbfviewer", "팔로워");
+        User owner = register("pb-fowner@booktimer.com", "pbfowner", "주인");
+        followRepository.save(Follow.of(viewer, owner));
+        Book secret = privateBookOf(owner, "글 있는 비공개 책");
+        storyRepository.save(Story.of(owner, "새면 안 되는 메모", secret, null));
+
+        mockMvc.perform(get("/api/stories/of/pbfowner")
+                        .param("bookId", String.valueOf(secret.getId()))
+                        .with(user("pb-fviewer@booktimer.com")))
+                .andExpect(status().isNotFound());
+    }
+
+    /**
+     * §5-1 ⓓ — 가시성 <b>전환</b>. 글에 자체 공개 필드가 없어 동기화 코드가 0줄이므로, 「전환하면
+     * 자동으로 사라진다」는 것 자체가 검증 대상이다. 여백 게이트와 소식 피드 두 경로를 한 흐름에서 본다.
+     */
+    @Test
+    @DisplayName("PUBLIC→PRIVATE 전환: 같은 팔로워가 보던 여백은 404, 소식에서도 사라진다 (동기화 코드 0줄)")
+    void publicToPrivate_hidesMarginAndFeedFromFollower() throws Exception {
+        User viewer = register("tr-viewer@booktimer.com", "trviewer", "팔로워");
+        User owner = register("tr-owner@booktimer.com", "trowner", "주인");
+        followRepository.save(Follow.of(viewer, owner));
+        Book book = publicBookOf(owner, "나중에 비공개가 될 책");
+        storyRepository.save(Story.of(owner, "공개일 때 남긴 글", book, null));
+
+        mockMvc.perform(get("/api/stories/of/trowner")
+                        .param("bookId", String.valueOf(book.getId()))
+                        .with(user("tr-viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.entries[0].text").value("공개일 때 남긴 글"));
+        mockMvc.perform(get("/api/home-feed").with(user("tr-viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.social[0].type").value("STORY"));
+
+        book.makePrivate();
+        bookRepository.save(book);
+
+        mockMvc.perform(get("/api/stories/of/trowner")
+                        .param("bookId", String.valueOf(book.getId()))
+                        .with(user("tr-viewer@booktimer.com")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/home-feed").with(user("tr-viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.social").isEmpty());
+    }
+
     @Test
     @DisplayName("DELETE /api/stories/{id} 타인 글 → 404 (IDOR)")
     void delete_othersStory_returns404() throws Exception {
