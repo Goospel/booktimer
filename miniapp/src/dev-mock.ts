@@ -326,9 +326,12 @@ const marginEntry = (id: number, text: string, bgCode: string, hoursAgo: number)
  * (=발광 없이 글만 있다 — 24시간 경계의 반대편) / **0장**(=빈 상태 문구).
  */
 const marginEntries: Record<number, MarginEntry[]> = {
+  // 3장인 것은 소식의 STORY 묶음(count: 3)과 같은 책이라서다 — 실서버에선 둘이 같은 행에서 나오므로
+  // 「소식은 3개인데 열어 보니 2장」 같은 조합이 나올 수 없다. 목이 그걸 어기면 검증자를 헷갈리게 한다.
   11: [
     marginEntry(901, '오늘은 30분만 읽자고 앉았는데 한 시간을 넘겼다.', 'paper', 3),
     marginEntry(902, '밑줄 그은 문장이 오늘의 나를 설명한다.', 'night', 26),
+    marginEntry(903, '서재라는 말이 이렇게 넓은 줄 몰랐다.', 'sea', 44),
   ],
   12: [marginEntry(911, '완독. 마지막 장을 아껴 읽었다.', 'forest', 30)],
   13: [],
