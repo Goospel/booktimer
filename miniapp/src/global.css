@@ -105,33 +105,26 @@ html:root {
 
 /*
  * 여백 발광 — 24시간 안에 새 글이 달린 책의 표지(책방 격자). 「새 글」 신호가 사람 단위(옛 스트립 링)에서
- * 책 단위로 옮겨온 자리다. 인라인 스타일로는 keyframes를 못 쓰므로 여기 둔다.
+ * 책 단위로 옮겨온 자리다.
  *
- * box-shadow spread를 애니메이션한다 — outline/border 굵기를 흔들면 레이아웃이 재계산돼 격자가 떨린다.
- * 정지 테두리(outline)는 항상 남아 있고 움직이는 건 바깥으로 번지는 그림자뿐이다.
+ * ⚠️ **맥동(pulse) 애니메이션을 폐기했다 (2026-08-16, 실기기 회귀).** 처음엔 `box-shadow` spread를 무한
+ * 반복 애니메이션했다 — outline/border 굵기를 흔들면 레이아웃이 재계산돼 격자가 떨리므로 그림자만 번지게
+ * 한 것이다. 그런데 `box-shadow`는 **GPU 합성이 안 되는 속성**이라 값이 바뀔 때마다 그 영역을 다시
+ * 페인트한다. 하필 이 클래스가 붙는 span이 **표지 이미지를 감싸고 있어**(Library.tsx `BookGrid`),
+ * 초당 60번 표지를 다시 래스터화했다. 발광 책이 여러 권이면 그만큼 배가된다.
+ *
+ * 실기기(iOS WebView) 증상: 앱 전반이 느려지고, 버튼이 보이지 않는데 그 자리를 누르면 눌리고(DOM·히트
+ * 테스트는 멀쩡한데 페인트만 밀린 것), 화면 전환이 백지로 뜨고, 표지가 다 그려질 때까지 다른 화면도
+ * 안 나왔다. 데스크톱·목 모드는 여유가 커서 이 증상이 안 나온다 — 그래서 머지 전 검증을 통과했다.
+ *
+ * 대안으로 의사요소 + transform/opacity(합성 가능) 애니메이션이 있었으나, 사용자가 **맥동을 아예 빼는**
+ * 쪽을 골랐다: 「새 글 있음」은 정지 테두리와 점 배지만으로 충분히 전달되고 성능 위험이 0이 된다.
+ * 애니메이션이 없으니 `prefers-reduced-motion` 분기도 함께 사라졌다(멈출 움직임이 없다).
  */
-@keyframes margin-fresh-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(110, 138, 106, 0.5);
-  }
-  50% {
-    box-shadow: 0 0 0 5px rgba(110, 138, 106, 0);
-  }
-}
-
 .margin-fresh {
   border-radius: 4px;
   outline: 2px solid var(--adaptiveBlue500, #6E8A6A);
   outline-offset: 2px;
-  animation: margin-fresh-pulse 2.2s ease-in-out infinite;
-}
-
-/* 움직임에 민감한 사람에겐 맥박을 멈춘다 — 테두리와 점 배지가 남아 표식은 잃지 않는다. */
-@media (prefers-reduced-motion: reduce) {
-  .margin-fresh {
-    animation: none;
-  }
 }
 
 /*
