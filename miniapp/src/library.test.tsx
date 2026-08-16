@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { BookStatus, MyBookSummary } from './api';
 import type { LibrarySheet } from './screens/Library';
-import { BookGrid, BookSearch, Shelf, metaLine, resolveSelected } from './screens/Library';
+import { BookGrid, BookSearch, Shelf, metaLine, needsPublishConfirm, resolveSelected } from './screens/Library';
 import { userAgent } from './test-fixtures';
 
 /**
@@ -36,7 +36,12 @@ function book(
 
 function shelf(
   books: MyBookSummary[],
-  { tab = 'READING' as BookStatus, selectedId = null as number | null, sheet = null as LibrarySheet } = {},
+  {
+    tab = 'READING' as BookStatus,
+    selectedId = null as number | null,
+    sheet = null as LibrarySheet,
+    myLoginId = 'goospel' as string | null,
+  } = {},
 ) {
   return renderToStaticMarkup(
     <TDSMobileProvider userAgent={userAgent}>
@@ -46,10 +51,12 @@ function shelf(
         selectedId={selectedId}
         sheet={sheet}
         busy={false}
+        myLoginId={myLoginId}
         onTab={() => {}}
         onSelect={() => {}}
         onSheet={() => {}}
         onAction={() => {}}
+        onOpenMargin={() => {}}
       />
     </TDSMobileProvider>,
   );
@@ -149,12 +156,36 @@ describe('선택 해석 (resolveSelected)', () => {
 });
 
 /**
+ * 서재의 여백 문 — 서재는 "내가 뭘 남겼더라"를 들춰보는 자리라 작성 직행이 아니라 여백 화면으로 간다
+ * (홈 문은 반대로 작성 직행이다). 핸들이 없으면 서버가 여백 대상을 찾지 못하므로 그리지 않는다.
+ */
+describe('서재 여백 손잡이', () => {
+  it('고른 책 옆에 「관리」와 나란히 선다', () => {
+    const markup = shelf([book(1, '데미안', 'READING')], { selectedId: 1 });
+
+    expect(markup).toContain('여백');
+    expect(markup).toContain('관리');
+  });
+
+  it('비공개 책에도 선다 — 비공개 책의 여백은 나만 보는 메모다(결정 2)', () => {
+    expect(shelf([book(1, '메모책', 'READING', { isPublic: false })], { selectedId: 1 })).toContain('여백');
+  });
+
+  it('핸들이 없으면 손잡이가 없다 — 「관리」는 그대로 남는다', () => {
+    const markup = shelf([book(1, '데미안', 'READING')], { selectedId: 1, myLoginId: null });
+
+    expect(markup).not.toContain('여백');
+    expect(markup).toContain('관리');
+  });
+});
+
+/**
  * 관리 시트 — 액션 넷을 상시 노출하지 않고 「관리」 뒤로 접었다. 정적 렌더라 탭해서 열 수 없으므로
  * 열린 상태를 프롭으로 받아 계측한다(홈 `BookSheet`와 같은 처지).
  */
 describe('관리 시트', () => {
   const books = [book(1, '데미안', 'READING', { isPublic: true })];
-  const actions: LibrarySheet = { kind: 'actions', confirmDelete: false };
+  const actions: LibrarySheet = { kind: 'actions', confirmDelete: false, confirmPublish: false };
 
   it('지금 상태를 뺀 나머지 두 곳으로 옮기는 길만 준다', () => {
     const markup = shelf(books, { selectedId: 1, sheet: actions });
@@ -175,12 +206,50 @@ describe('관리 시트', () => {
     expect(markup).not.toContain('정말 삭제');
   });
 
+  /**
+   * 공개 전환 확인 단계 — 「공개로 바꾸기」를 누르면 곧바로 전환하지 않고 <b>무엇이 새는지</b>를 먼저 말한다.
+   * 삭제 확인과 같은 골격이되 색은 danger가 아니다: 파괴가 아니라 노출이다.
+   */
+  it('글이 있는 비공개 책의 확인 단계는 새는 글 수를 말하고 다른 길을 감춘다', () => {
+    const memo = [book(1, '메모책', 'READING', { isPublic: false, storyCount: 2 })];
+    const markup = shelf(memo, { selectedId: 1, sheet: { kind: 'actions', confirmDelete: false, confirmPublish: true } });
+
+    expect(markup).toContain('여백에 남긴 글 2개가 팔로워에게 보여요.');
+    expect(markup.match(/공개로 바꾸기/g)).toHaveLength(1); // 행이 아니라 확인 버튼 하나뿐
+    expect(markup).toContain('취소');
+    expect(markup).not.toContain('옮기기');
+    expect(markup).not.toContain('서재에서 삭제');
+  });
+
   it('확인 단계에서는 삭제와 취소만 남는다', () => {
-    const markup = shelf(books, { selectedId: 1, sheet: { kind: 'actions', confirmDelete: true } });
+    const markup = shelf(books, { selectedId: 1, sheet: { kind: 'actions', confirmDelete: true, confirmPublish: false } });
 
     expect(markup).toContain('정말 삭제');
     expect(markup).toContain('취소');
     expect(markup).not.toContain('옮기기');
+  });
+});
+
+/**
+ * 공개 전환 확인 — 비공개 책에 쌓아 둔 여백 글이 <b>공개로 바꾸는 순간</b> 팔로워에게 새는 것을 막는
+ * 두 번째 방어다(첫째는 쓸 때의 캡션). 되돌리는 방향(공개→비공개)이나 글이 없는 책은 묻지 않는다 —
+ * 물어서 얻을 것이 없는 자리에 확인을 두면 확인 자체가 무의미해진다.
+ */
+describe('공개 전환 확인 판정 (needsPublishConfirm)', () => {
+  it('비공개 + 남긴 글이 있으면 묻는다', () => {
+    expect(needsPublishConfirm(book(1, '메모책', 'READING', { isPublic: false, storyCount: 2 }))).toBe(true);
+  });
+
+  it('비공개인데 글이 0개면 묻지 않는다 — 샐 글이 없다', () => {
+    expect(needsPublishConfirm(book(1, '메모책', 'READING', { isPublic: false, storyCount: 0 }))).toBe(false);
+  });
+
+  it('이미 공개된 책이면 묻지 않는다 — 그 행은 비공개로 되돌리는 방향이다', () => {
+    expect(needsPublishConfirm(book(1, '공개책', 'READING', { isPublic: true, storyCount: 5 }))).toBe(false);
+  });
+
+  it('필드가 없는 옛 서버 응답은 0으로 취급해 묻지 않는다 — 보안 게이트가 아니라 고지 UX라 fail-open', () => {
+    expect(needsPublishConfirm(book(1, '메모책', 'READING', { isPublic: false }))).toBe(false);
   });
 });
 

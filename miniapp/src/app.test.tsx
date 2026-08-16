@@ -1,4 +1,5 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -46,19 +47,15 @@ const dashboard: DashboardResponse = {
   emailVerified: true,
 };
 
-function renderTab(
-  tab: (typeof TABS)[number]['key'],
-  marginTarget: { loginId: string; bookId: number } | null = null,
-) {
+function renderTab(tab: (typeof TABS)[number]['key']) {
   return renderToStaticMarkup(
     <TDSMobileProvider userAgent={userAgent}>
       <MainTabs
         tab={tab}
         onTabChange={() => {}}
         dashboard={dashboard}
-        marginTarget={marginTarget}
-        onMarginConsumed={() => {}}
         onOpenMargin={() => {}}
+        onComposeMargin={() => {}}
         onTimerChange={() => {}}
         onGraphChange={() => {}}
         onGoGoal={() => {}}
@@ -113,18 +110,21 @@ describe('탭 구조', () => {
   });
 
   /**
-   * 홈 소식의 여백 줄 → 책방 탭의 그 책 여백. 탭을 바꾸면 책방이 새로 마운트되므로, 점프 대상은
-   * <b>초기 상태</b>로 전달된다 — 그래서 이 화면이 내 책방이 아니라 곧장 여백으로 열려야 한다.
+   * 여백은 더 이상 책방 탭으로 점프해 열리지 않는다 — App이 <b>탭 위 전체 화면</b>으로 든다(설계 §3.1).
+   * 뒤로 가면 열었던 탭이 그대로 남아야 하는데, 탭을 갈아끼우던 옛 배선은 홈에서 들어온 사람을
+   * 책방(남에게 보여지는 전시장)으로 밀어냈다. 그 전달 수단(`marginTarget`)이 통째로 사라졌음을 못 박는다.
    */
-  it('점프 대상이 있으면 책방 탭이 내 책방이 아니라 그 책의 여백으로 열린다', () => {
-    const markup = renderTab('bookshop', { loginId: 'nabi', bookId: 7 });
+  it('책방 탭은 언제나 내 책방으로 열린다 — 여백 점프가 이 탭을 가로채지 않는다', () => {
+    const markup = renderTab('bookshop');
 
-    expect(markup).toContain('여백');
-    expect(markup).not.toContain('아이디로 친구 찾기'); // 책방 루트가 아니다
+    expect(markup).toContain('아이디로 친구 찾기');
   });
 
-  it('점프 대상이 없으면 예전처럼 내 책방이 열린다', () => {
-    expect(renderTab('bookshop')).toContain('아이디로 친구 찾기');
+  it('탭 셸은 여백 점프 대상을 나르지 않는다 — 전이는 App 전역 뷰가 진다', () => {
+    const source = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8');
+
+    expect(source).not.toContain('marginTarget');
+    expect(source).toContain('<BookMargin'); // 대신 App이 직접 든다(부재 단언의 쌍)
   });
 });
 

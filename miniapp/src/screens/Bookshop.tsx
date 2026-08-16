@@ -35,16 +35,10 @@ export interface MarginTarget {
  */
 export function Bookshop({
   myLoginId,
-  initialMargin,
-  onMarginConsumed,
   onHandleCreated,
   onError,
 }: {
   myLoginId: string | null;
-  /** 홈 소식에서 넘어온 점프 대상 — 탭이 바뀌며 이 화면이 마운트될 때 딱 한 번 소비된다. */
-  initialMargin?: MarginTarget | null;
-  /** 소비했음을 알린다 — App이 target을 비워 다음 수동 탭 진입에 같은 여백이 다시 열리지 않게. */
-  onMarginConsumed?: () => void;
   /** 핸들을 만들면 대시보드를 다시 받아야 한다 — 서버가 준 값이 진실이고, 다른 탭도 그 값을 본다. */
   onHandleCreated: () => void;
   onError: (error: Error) => void;
@@ -54,8 +48,8 @@ export function Bookshop({
   const [creatingHandle, setCreatingHandle] = useState(false);
   /** 열린 남의 책방 — 검색 결과·팔로우 목록에서 사람을 고르면 여기로 온다. */
   const [open, setOpen] = useState<string | null>(null);
-  /** 열린 여백. 홈 소식 점프는 **초기값으로만** 들어온다(탭이 바뀌며 이 컴포넌트가 새로 마운트된다). */
-  const [margin, setMargin] = useState<MarginTarget | null>(initialMargin ?? null);
+  /** 열린 여백 — 이 셸 안의 격자에서 연 것만 여기 담긴다(홈·서재에서 여는 여백은 App이 전체 화면으로 든다). */
+  const [margin, setMargin] = useState<MarginTarget | null>(null);
   /** 글을 남기는 중인 책 — 여백 화면이 이미 받아 둔 라벨을 그대로 물려준다(다시 조회하지 않는다). */
   const [composing, setComposing] = useState<MarginBook | null>(null);
   /** 여백을 다시 받게 하는 표식 — 글을 남기거나 지운 뒤 `BookMargin`을 새 key로 재마운트한다. */
@@ -75,16 +69,6 @@ export function Bookshop({
     },
     [onError],
   );
-
-  /*
-   * 점프 대상은 **마운트 때 한 번** 소비한다 — 그대로 두면 다른 탭을 갔다 돌아올 때 그 여백이 또 열린다.
-   * `initialMargin`은 이미 useState 초기값으로 들어갔으므로 여기서는 App에 비우라고 알리기만 한다.
-   */
-  useEffect(() => {
-    if (initialMargin != null) onMarginConsumed?.();
-    // 마운트 1회 — 이후 prop이 바뀌어도 이 화면은 자기 상태(margin)로 산다.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   /** 팔로우 목록은 시트가 열릴 때만 받는다. 실패해도 시트 안에서 다시 받을 길을 준다. */
   const loadFollowList = useCallback(

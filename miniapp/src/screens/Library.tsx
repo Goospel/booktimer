@@ -27,7 +27,10 @@ export const SECTIONS: { status: BookStatus; title: string; empty: string }[] = 
  * 그 확인이 살아남아, 다시 열었을 때 「정말 삭제」가 곧바로 노출됐다(오삭제가 한 탭 거리).
  * 같은 객체에 묶어 두면 시트를 여는 순간 확인이 언제나 `false`로 새로 만들어진다.
  */
-export type LibrarySheet = { kind: 'grid' } | { kind: 'actions'; confirmDelete: boolean } | null;
+export type LibrarySheet =
+  | { kind: 'grid' }
+  | { kind: 'actions'; confirmDelete: boolean; confirmPublish: boolean }
+  | null;
 
 /** 책 한 권에 걸 수 있는 액션 — 상태 변경·공개 토글·삭제. 실행은 Library가 맡고 Shelf는 알림만 한다. */
 export type BookAction =
@@ -51,6 +54,19 @@ export function metaLine(book: MyBookSummary): string {
 }
 
 /**
+ * 공개 전환 확인이 필요한가 — <b>비공개→공개 방향 + 여백에 남긴 글이 있을 때만</b>.
+ *
+ * <p>비공개 책에 쌓아 둔 글은 나만 보는 메모인데, 책을 공개로 바꾸는 순간 팔로워에게 실린다
+ * (글에 자체 공개 필드가 없어 가시성은 언제나 책에서 파생된다). 되돌리는 방향은 `isPublic`이 걸러 낸다.
+ *
+ * <p>`storyCount`가 없는 옛 서버는 0으로 떨어져 오늘과 같이 즉시 전환된다 — 보안 게이트가 아니라
+ * 고지 UX라 fail-open을 택했다(명시적 결정).
+ */
+export function needsPublishConfirm(book: MyBookSummary): boolean {
+  return !book.isPublic && (book.storyCount ?? 0) > 0;
+}
+
+/**
  * 지금 탭에서 실제로 고른 책 — 고른 id가 그 탭에 없으면 **첫 책으로 떨어진다**.
  *
  * <p>탭을 옮기거나(다른 상태로 이동) 지우면 id가 그 탭에서 사라지는데, 그대로 두면 캐러셀이
@@ -68,15 +84,21 @@ export function resolveSelected<T extends { id: number }>(rows: T[], selectedId:
  * 갈아끼우지 않고 책장을 다시 받는다 — 상태 변경은 섹션 이동이라 목록 전체가 흔들리기 때문.
  */
 export function Library({
+  myLoginId,
   onError,
   onShelfChanged,
+  onOpenMargin,
 }: {
+  /** 내 @아이디 — 없으면 서버가 여백 대상을 찾지 못하므로 여백 손잡이를 그리지 않는다(설계 결정 A). */
+  myLoginId: string | null;
   onError: (error: Error) => void;
   /**
    * 책장을 바꾼 직후 부른다 — 홈이 쓰는 대시보드는 App이 들고 있어, 여기서 자기 책장만 다시 받으면
    * 홈 캐러셀은 옛 「읽는 중」 목록 그대로다(앱을 나갔다 와야 반영되던 문제).
    */
   onShelfChanged: () => void;
+  /** 고른 책의 여백을 전체 화면으로 연다 — 서재는 "뭘 남겼더라"를 들춰보는 자리라 작성 직행이 아니다. */
+  onOpenMargin: (loginId: string, bookId: number) => void;
 }) {
   const [books, setBooks] = useState<MyBookSummary[] | null>(null);
   const [searchEnabled, setSearchEnabled] = useState(false);
@@ -180,10 +202,12 @@ export function Library({
             selectedId={selectedId}
             sheet={sheet}
             busy={busy}
+            myLoginId={myLoginId}
             onTab={setTab}
             onSelect={setSelectedId}
             onSheet={setSheet}
             onAction={act}
+            onOpenMargin={onOpenMargin}
           />
           {searchEnabled && (
             <Button display="block" size="medium" style={{ marginTop: 24 }} onClick={() => setMode('search')}>
@@ -209,20 +233,25 @@ export function Shelf({
   selectedId,
   sheet,
   busy,
+  myLoginId,
   onTab,
   onSelect,
   onSheet,
   onAction,
+  onOpenMargin,
 }: {
   books: MyBookSummary[];
   tab: BookStatus;
   selectedId: number | null;
   sheet: LibrarySheet;
   busy: boolean;
+  /** 없으면 여백 손잡이를 그리지 않는다 — 눌러도 서버가 대상을 못 찾는다(설계 결정 A). */
+  myLoginId: string | null;
   onTab: (status: BookStatus) => void;
   onSelect: (bookId: number | null) => void;
   onSheet: (sheet: LibrarySheet) => void;
   onAction: (action: BookAction) => void;
+  onOpenMargin: (loginId: string, bookId: number) => void;
 }) {
   if (books.length === 0) {
     return (
@@ -280,11 +309,17 @@ export function Shelf({
             noBookCard={false}
             metaOf={metaLine}
           />
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 16 }}>
+            {/* 내 책의 여백으로 가는 문 — 책방(전시장)까지 가지 않고 개인 공간에서 바로 들춰본다. */}
+            {myLoginId !== null && (
+              <button type="button" disabled={busy} onClick={() => onOpenMargin(myLoginId, selected.id)} style={handleStyle}>
+                여백
+              </button>
+            )}
             <button
               type="button"
               disabled={busy}
-              onClick={() => onSheet({ kind: 'actions', confirmDelete: false })}
+              onClick={() => onSheet({ kind: 'actions', confirmDelete: false, confirmPublish: false })}
               style={handleStyle}
             >
               관리
@@ -310,7 +345,9 @@ export function Shelf({
           book={selected}
           busy={busy}
           confirmDelete={sheet.confirmDelete}
-          onConfirmDelete={(confirm) => onSheet({ kind: 'actions', confirmDelete: confirm })}
+          confirmPublish={sheet.confirmPublish}
+          onConfirmDelete={(confirm) => onSheet({ kind: 'actions', confirmDelete: confirm, confirmPublish: false })}
+          onConfirmPublish={(confirm) => onSheet({ kind: 'actions', confirmDelete: false, confirmPublish: confirm })}
           onAction={onAction}
           onClose={() => onSheet(null)}
         />
@@ -443,26 +480,56 @@ export function BookGrid({
 }
 
 /**
- * 관리 시트 — 상태 이동 둘 · 공개 전환 · 삭제. 삭제는 이 시트 안에서 한 번 더 확인한다.
+ * 관리 시트 — 상태 이동 둘 · 공개 전환 · 삭제. 삭제와 <b>공개 전환</b>은 이 시트 안에서 한 번 더 확인한다.
  *
  * <p>확인 단계에서는 나머지 길을 **감춘다** — 확인 문구 옆에 다른 버튼이 남아 있으면 무엇을 확인하는
  * 중인지 흐려지고, 손가락이 옆 버튼으로 미끄러질 자리도 생긴다.
+ *
+ * <p>공개 전환 확인은 <b>글이 있는 비공개 책에만</b> 뜬다({@link needsPublishConfirm}) — 되돌리는
+ * 방향이나 샐 글이 없는 책까지 물으면 확인이 습관적 탭이 되어 정작 새는 순간에도 안 읽힌다.
  */
 function ActionSheet({
   book,
   busy,
   confirmDelete,
+  confirmPublish,
   onConfirmDelete,
+  onConfirmPublish,
   onAction,
   onClose,
 }: {
   book: MyBookSummary;
   busy: boolean;
   confirmDelete: boolean;
+  confirmPublish: boolean;
   onConfirmDelete: (confirm: boolean) => void;
+  onConfirmPublish: (confirm: boolean) => void;
   onAction: (action: BookAction) => void;
   onClose: () => void;
 }) {
+  if (confirmPublish) {
+    return (
+      <Sheet title={book.title} onClose={onClose}>
+        <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 12, wordBreak: 'keep-all' }}>
+          여백에 남긴 글 {book.storyCount}개가 팔로워에게 보여요.
+        </Text>
+        {/* 파괴가 아니라 노출이다 — danger 색은 쓰지 않는다. 행 라벨과 같은 말이라 무엇을 확정하는지 분명하다. */}
+        <Button display="block" disabled={busy} onClick={() => onAction({ kind: 'visibility', book })}>
+          공개로 바꾸기
+        </Button>
+        <Button
+          display="block"
+          variant="weak"
+          style={{ marginTop: 8 }}
+          disabled={busy}
+          onClick={() => onConfirmPublish(false)}
+        >
+          취소
+        </Button>
+      </Sheet>
+    );
+  }
+
   if (confirmDelete) {
     return (
       <Sheet title={book.title} onClose={onClose}>
@@ -498,7 +565,7 @@ function ActionSheet({
       <SheetRow
         label={book.isPublic ? '비공개로 바꾸기' : '공개로 바꾸기'}
         busy={busy}
-        onClick={() => onAction({ kind: 'visibility', book })}
+        onClick={() => (needsPublishConfirm(book) ? onConfirmPublish(true) : onAction({ kind: 'visibility', book }))}
       />
       <SheetRow label="서재에서 삭제" busy={busy} danger onClick={() => onConfirmDelete(true)} />
     </Sheet>

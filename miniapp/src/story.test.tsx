@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { MarginEntry, MarginResponse } from './api';
 import { ApiError } from './api';
-import { MarginView, StoryComposer, createStoryMessage, hasFreshStory } from './screens/Story';
+import { MarginView, StoryComposer, createStoryMessage, hasFreshStory, visibilityNotice } from './screens/Story';
 import { userAgent } from './test-fixtures';
 
 /**
@@ -76,6 +76,27 @@ describe('새 글 발광 — hasFreshStory (경계)', () => {
   });
 });
 
+/**
+ * 가시성 고지 — 비공개 책에도 여백을 쓸 수 있게 된 뒤(설계 결정 2), 「팔로워에게 보여요」는 비공개
+ * 책에서 <b>거짓말</b>이 됐다. 쓰는 순간 이 한 줄이 무엇이 새고 무엇이 안 새는지 말한다.
+ */
+describe('가시성 고지 (visibilityNotice)', () => {
+  it('비공개 책이면 나만 본다고 말하고, 공개로 바꾸면 보인다는 것까지 알린다', () => {
+    const notice = visibilityNotice(false);
+
+    expect(notice).toContain('나만 봐요');
+    expect(notice).toContain('공개로 바꾸면');
+  });
+
+  it('공개 책이면 팔로워에게 보인다고 말한다', () => {
+    expect(visibilityNotice(true)).toBe('팔로워에게 보여요.');
+  });
+
+  it('필드가 없는 옛 서버 응답(undefined)은 공개로 간주한다 — 비공개라 단정하는 쪽이 더 위험한 거짓말이다', () => {
+    expect(visibilityNotice(undefined)).toBe('팔로워에게 보여요.');
+  });
+});
+
 describe('책 여백 화면 (MarginView)', () => {
   it('책 라벨과 남긴 글 수를 머리에 세운다 — 홈 소식에서 바로 들어와도 어느 책인지 알아야 한다', () => {
     const markup = view(margin({ entries: [entry(1), entry(2)] }));
@@ -138,6 +159,23 @@ describe('책 여백 화면 (MarginView)', () => {
     );
   });
 
+  /**
+   * 비공개 책의 여백은 나만 보는 메모다 — 그 사실을 화면이 말해 주지 않으면, 남긴 글이 팔로워에게
+   * 보인다고 오해한 채 쌓는다(또는 그 반대로 새는 줄 모른다). 공개 책엔 적지 않는다(잡음).
+   */
+  it('내 비공개 책 여백에는 나만 본다는 한 줄이 붙는다', () => {
+    const markup = view(margin({ self: true, book: { id: 7, title: '메모책', author: null, coverUrl: null, isPublic: false } }));
+
+    expect(markup).toContain('나만 봐요');
+  });
+
+  it('내 공개 책 여백에는 그 줄이 없다 — 책방에 이미 진열된 책이라 새로 알릴 것이 없다', () => {
+    const markup = view(margin({ self: true, book: { id: 7, title: '공개책', author: null, coverUrl: null, isPublic: true } }));
+
+    expect(markup).not.toContain('나만 봐요');
+    expect(markup).toContain('여백에 글 남기기'); // 화면 자체는 그려졌다(부재 단언의 쌍)
+  });
+
   it('실패 문구는 화면 안에서 끝난다 — 목록을 통째로 에러로 갈아치우지 않는다', () => {
     const markup = view(margin(), { error: '요청에 실패했어요 (500)' });
 
@@ -147,10 +185,10 @@ describe('책 여백 화면 (MarginView)', () => {
 });
 
 describe('글 남기기 (StoryComposer)', () => {
-  const composer = () =>
+  const composer = (isPublic?: boolean) =>
     render(
       <StoryComposer
-        book={{ id: 7, title: '데미안', author: '헤르만 헤세', coverUrl: null }}
+        book={{ id: 7, title: '데미안', author: '헤르만 헤세', coverUrl: null, isPublic }}
         onDone={() => {}}
         onCancel={() => {}}
         onError={() => {}}
@@ -173,6 +211,18 @@ describe('글 남기기 (StoryComposer)', () => {
 
     expect(markup).toContain('0/500');
     expect(markup).toContain('aria-label="paper"');
+  });
+
+  /** 쓰는 순간의 고지 — 캡션이라 글을 쓰기 시작해도 남는다(placeholder는 첫 글자에 사라진다). */
+  it('비공개 책이면 나만 본다고 캡션으로 알린다', () => {
+    expect(composer(false)).toContain('나만 봐요');
+  });
+
+  it('공개 책이면 팔로워에게 보인다고 알린다 — placeholder가 아니라 입력 위 캡션이다(써도 남는다)', () => {
+    const markup = composer(true);
+
+    expect(markup.indexOf('팔로워에게 보여요')).toBeLessThan(markup.indexOf('<textarea'));
+    expect(markup).not.toContain('나만 봐요');
   });
 });
 
