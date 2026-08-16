@@ -23,15 +23,16 @@ class StoryTest {
     }
 
     @Test
-    @DisplayName("of: 500자 문장 + 팔레트 배경 + 책 없음 → 생성된다")
-    void of_allowsMaxLengthTextWithoutBook() {
+    @DisplayName("of: 500자 문장 + 팔레트 배경 → 생성된다")
+    void of_allowsMaxLengthText() {
         User me = author();
+        Book mine = publicBookOf(me);
 
-        Story story = Story.of(me, "가".repeat(500), null, "night");
+        Story story = Story.of(me, "가".repeat(500), mine, "night");
 
         assertThat(story.getText()).hasSize(500);
         assertThat(story.getBgCode()).isEqualTo("night");
-        assertThat(story.getBook()).isNull();
+        assertThat(story.getBook()).isSameAs(mine);
         assertThat(story.getUser()).isSameAs(me);
     }
 
@@ -49,31 +50,47 @@ class StoryTest {
     @Test
     @DisplayName("of: bgCode null은 허용한다(기본 배경)")
     void of_allowsNullBgCode() {
-        Story story = Story.of(author(), "문장", null, null);
+        User me = author();
+
+        Story story = Story.of(me, "문장", publicBookOf(me), null);
 
         assertThat(story.getBgCode()).isNull();
     }
 
     @Test
+    @DisplayName("of: 책 없는 글은 거부한다 — 여백은 책에 귀속된다(2026-08-16 재설계)")
+    void of_rejectsNullBook() {
+        User me = author();
+
+        assertThatThrownBy(() -> Story.of(me, "책 없는 문장", null, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     @DisplayName("of: 501자는 거부한다")
     void of_rejects501Chars() {
-        assertThatThrownBy(() -> Story.of(author(), "가".repeat(501), null, null))
+        User me = author();
+
+        assertThatThrownBy(() -> Story.of(me, "가".repeat(501), publicBookOf(me), null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     @DisplayName("of: null·공백만 문장은 거부한다")
     void of_rejectsBlankText() {
-        assertThatThrownBy(() -> Story.of(author(), "   ", null, null))
+        User me = author();
+        Book mine = publicBookOf(me);
+
+        assertThatThrownBy(() -> Story.of(me, "   ", mine, null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> Story.of(author(), null, null, null))
+        assertThatThrownBy(() -> Story.of(me, null, mine, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     @DisplayName("of: author null은 거부한다")
     void of_rejectsNullAuthor() {
-        assertThatThrownBy(() -> Story.of(null, "문장", null, null))
+        assertThatThrownBy(() -> Story.of(null, "문장", publicBookOf(author()), null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -101,9 +118,12 @@ class StoryTest {
     @Test
     @DisplayName("of: 팔레트 밖 bgCode는 거부한다(자유 문자열·hex 주입 차단)")
     void of_rejectsUnknownBgCode() {
-        assertThatThrownBy(() -> Story.of(author(), "문장", null, "#ff0000"))
+        User me = author();
+        Book mine = publicBookOf(me);
+
+        assertThatThrownBy(() -> Story.of(me, "문장", mine, "#ff0000"))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> Story.of(author(), "문장", null, "neon"))
+        assertThatThrownBy(() -> Story.of(me, "문장", mine, "neon"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

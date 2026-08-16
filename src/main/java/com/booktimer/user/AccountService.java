@@ -13,7 +13,6 @@ import com.booktimer.security.SessionInvalidator;
 import com.booktimer.session.ReadingGoalWaiverRepository;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.story.StoryRepository;
-import com.booktimer.story.StoryViewRepository;
 import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.timer.ReadingTimerRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -46,7 +45,6 @@ public class AccountService {
     private final FeedbackRepository feedbackRepository;
     private final EmailTokenRepository emailTokenRepository;
     private final StoryRepository storyRepository;
-    private final StoryViewRepository storyViewRepository;
     private final ApiTokenRepository apiTokenRepository;
     private final TossLinkCodeRepository tossLinkCodeRepository;
     private final AuthorAffectionRepository affectionRepository;
@@ -66,7 +64,6 @@ public class AccountService {
                           FeedbackRepository feedbackRepository,
                           EmailTokenRepository emailTokenRepository,
                           StoryRepository storyRepository,
-                          StoryViewRepository storyViewRepository,
                           ApiTokenRepository apiTokenRepository,
                           TossLinkCodeRepository tossLinkCodeRepository,
                           AuthorAffectionRepository affectionRepository,
@@ -85,7 +82,6 @@ public class AccountService {
         this.feedbackRepository = feedbackRepository;
         this.emailTokenRepository = emailTokenRepository;
         this.storyRepository = storyRepository;
-        this.storyViewRepository = storyViewRepository;
         this.apiTokenRepository = apiTokenRepository;
         this.tossLinkCodeRepository = tossLinkCodeRepository;
         this.affectionRepository = affectionRepository;
@@ -241,9 +237,7 @@ public class AccountService {
         blockRepository.deleteByBlocked(user);
         reportRepository.deleteByReporter(user);
         reportRepository.deleteByReported(user);
-        storyViewRepository.deleteByViewer(user);      // 내가 남긴 열람 기록
-        storyViewRepository.deleteByStoryAuthor(user); // 내 스토리에 달린 열람 기록 (스토리 삭제 전)
-        storyRepository.deleteByUser(user);            // 내 스토리 — story.book_id 때문에 책보다 앞
+        storyRepository.deleteByUser(user);            // 내가 여백에 남긴 글 — story.book_id 때문에 책보다 앞
         bookRepository.deleteByUser(user);
         personalityCacheRepository.deleteByUser(user);       // 책BTI 캐시도 user_id FK 참조 → 유저 전에 정리
         feedbackRepository.deleteByAuthor(user);             // 문의도 author_id FK 참조 → 유저 전에 정리
