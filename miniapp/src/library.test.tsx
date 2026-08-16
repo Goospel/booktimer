@@ -522,3 +522,42 @@ describe('책 검색 엔터 제출', () => {
     expect(markup).toContain('<form');
   });
 });
+
+/**
+ * 책 추가의 나가는 길 — 하단 버튼을 걷고 **상단 「돌아가기」 하나**로 통일했다(2026-08-16).
+ * 앱 전체가 같은 자리·같은 모양으로 나가야 한다. 개수를 세는 것이 핵심이다 — 위아래 둘이 되면
+ * 「통일」이 아니라 중복이고, 존재 단언만으로는 그걸 못 잡는다.
+ */
+describe('책 추가 — 나가는 길', () => {
+  const search = () =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  it('「돌아가기」가 정확히 하나다 — 상단 손잡이와 하단 버튼이 겹치지 않는다', () => {
+    expect(search().match(/돌아가기/g)).toHaveLength(1);
+  });
+
+  it('제목보다 위에 온다 — 목록이 길어도 나갈 길을 찾아 내려가지 않는다', () => {
+    const markup = search();
+
+    expect(markup).toContain('돌아가기');
+    expect(markup.indexOf('돌아가기')).toBeLessThan(markup.indexOf('책 추가'));
+  });
+
+  it('추가 요청 중에는 잠근다 — 응답 전에 나가면 결과를 못 본다', () => {
+    const busy = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <BookSearch busy error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} />
+      </TDSMobileProvider>,
+    );
+    // 손잡이 앞부분만 잘라 본다. 한가할 때도 함께 봐야 의미가 있다 — 손잡이가 화면 아래에 있으면
+    // 이 구간에 입력·검색 버튼의 disabled가 섞여 들어와 busy 단언만으로는 저절로 참이 된다(T-181).
+    const backAt = (m: string) => m.slice(0, m.indexOf('돌아가기'));
+
+    expect(backAt(busy)).toContain('disabled');
+    expect(backAt(search())).not.toContain('disabled');
+  });
+});
