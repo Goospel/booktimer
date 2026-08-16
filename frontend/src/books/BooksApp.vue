@@ -21,6 +21,7 @@ interface MyBookSummary {
     isbn13: string | null; status: string; statusLabel: string
     visibility: string; visibilityLabel: string; isPublic: boolean
     seconds: number; purchaseLink: string | null
+    storyCount?: number  // 여백 글 수 — 옛 응답엔 없다(공개 전환 고지에서 ?? 0 으로 방어).
 }
 interface SearchRow {
     title: string; author: string | null; isbn13: string | null; coverUrl: string | null
@@ -191,6 +192,10 @@ async function changeStatus(book: MyBookSummary, newStatus: string) {
 async function toggleVisibility(book: MyBookSummary) {
     const prev = { isPublic: book.isPublic, visibility: book.visibility, visibilityLabel: book.visibilityLabel }
     const newVis = book.isPublic ? 'PRIVATE' : 'PUBLIC'
+    // 공개로 바꿀 때만, 남긴 글이 있을 때만 고지한다 — 되돌리는 방향엔 묻지 않는다.
+    // 낙관 갱신보다 **앞**에 둔다: confirm 은 동기 블로킹이라 "확인 전에 공개로 보이는 순간"이 생기지 않는다.
+    if (newVis === 'PUBLIC' && (book.storyCount ?? 0) > 0
+        && !confirm(`여백에 남긴 글 ${book.storyCount}개가 팔로워에게 보여요. 공개로 바꿀까요?`)) return
     book.isPublic = !book.isPublic
     book.visibility = newVis
     book.visibilityLabel = book.isPublic ? '공개' : '비공개'
