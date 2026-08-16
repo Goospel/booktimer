@@ -64,16 +64,29 @@ type View = 'auth' | 'link' | 'loading' | 'main' | 'goal' | 'settings' | 'error'
 
 /**
  * 열린 여백 — 「누구의 + 어느 책」 두 축이 곧 서버 계약이고, `composeBook`이 있으면 그 책의 **작성
- * 화면**이 여백 화면 위에 선다(홈 문은 이 값을 채워 1탭에 작성으로 직행한다).
+ * 화면**이 선다(홈·서재 문은 이 값을 채워 1탭에 작성으로 직행한다).
  *
  * <p>여백을 <b>탭 밖 전역 뷰</b>로 든 이유는 뒤로가기다: 예전엔 책방 탭으로 점프해 열었더니 뒤로 가면
  * 책방이 나왔다 — 홈에서 들어온 사람에게 그건 남의 전시장으로 밀려나는 것이라 문의 취지가 무너진다.
  * 여기서 들면 열었던 탭이 그대로 뒤에 남는다(`goal`·`settings`와 같은 자리).
  */
-interface MarginState {
+export interface MarginState {
   loginId: string;
-  bookId: number;
+  /**
+   * 작성 화면 **아래에 깔린** 여백 화면 — `null`이면 깔린 것이 없어, 작성을 닫으면 열었던 탭으로 곧장 돌아간다.
+   *
+   * <p>예전엔 작성 직행(홈·서재의 「여백에 글쓰기」)도 여백 상세를 깔고 그 위에 섰다. 그래서 쓰고 나오면
+   * 출발한 탭이 아니라 <b>한 번도 요청한 적 없는 여백 상세</b>에 떨어졌다.
+   */
+  bookId: number | null;
   composeBook: MarginBook | null;
+}
+
+/**
+ * 작성 화면을 닫으면 남을 상태 — 출발지로 돌려보낸다. 배선은 클릭·뒤로가기라 판정만 순수하게 계측한다.
+ */
+export function closeCompose(margin: MarginState): MarginState | null {
+  return margin.bookId === null ? null : { ...margin, composeBook: null };
 }
 
 /** 포커스 복귀 재조회의 최소 간격 — 미니앱은 앱 전환이 잦아 복귀마다 받으면 서버를 두들긴다. */
@@ -182,8 +195,8 @@ export function App() {
     setView('main');
   });
   useBackClose(view === 'settings', () => setView('main'));
-  // 작성 화면이 위면 그것만 닫는다(그 아래 여백 화면이 남는다) — goal/settings 중첩과 같은 규칙.
-  useBackClose(margin?.composeBook != null, () => setMargin((m) => (m === null ? null : { ...m, composeBook: null })));
+  // 작성 화면이 위면 그것만 닫는다 — 단 밑에 깔린 여백 화면이 없으면 통째로 닫아 출발한 탭으로 돌아간다.
+  useBackClose(margin?.composeBook != null, () => setMargin((m) => (m === null ? null : closeCompose(m))));
   useBackClose(margin !== null && margin.composeBook === null, () => setMargin(null));
 
   const handleError = useCallback(
@@ -292,16 +305,20 @@ export function App() {
    * 작성 화면을 닫으면 `composeBook`만 비워 그 아래 여백 화면이 **새로 마운트**되고, 그 재조회가
    * 곧 "방금 남긴 글이 보인다"이다(에포크 같은 별도 갱신 표식이 필요 없다).
    */
-  if (margin !== null) {
-    const closeCompose = () => setMargin({ ...margin, composeBook: null });
-    return margin.composeBook !== null ? (
-      <StoryComposer book={margin.composeBook} onDone={closeCompose} onCancel={closeCompose} onError={handleError} />
-    ) : (
+  if (margin !== null && margin.composeBook !== null) {
+    const close = () => setMargin(closeCompose(margin));
+    return <StoryComposer book={margin.composeBook} onDone={close} onCancel={close} onError={handleError} />;
+  }
+
+  // 작성도 아니고 깔린 화면도 없는 조합은 만들지 않는다 — 만약 생겨도 탭으로 떨어져 막다른 길이 안 된다.
+  if (margin !== null && margin.bookId !== null) {
+    const under = margin.bookId;
+    return (
       <BookMargin
         loginId={margin.loginId}
-        bookId={margin.bookId}
+        bookId={under}
         onBack={() => setMargin(null)}
-        onCompose={(book) => setMargin({ ...margin, composeBook: book })}
+        onCompose={(book) => setMargin({ ...margin, bookId: under, composeBook: book })}
         onError={handleError}
       />
     );
@@ -317,7 +334,8 @@ export function App() {
       onOpenMargin={(loginId, bookId) => setMargin({ loginId, bookId, composeBook: null })}
       onComposeMargin={(book) =>
         // 문은 핸들이 있을 때만 그려지므로 여기서 loginId는 언제나 있다(`marginDoorBook`이 앞에서 판정).
-        dashboard.loginId !== null && setMargin({ loginId: dashboard.loginId, bookId: book.id, composeBook: book })
+        // `bookId: null` — 작성만 띄운다. 닫으면 여백 상세를 거치지 않고 여기(홈·서재)로 곧장 돌아온다.
+        dashboard.loginId !== null && setMargin({ loginId: dashboard.loginId, bookId: null, composeBook: book })
       }
       onTimerChange={applyTimer}
       onGraphChange={applyGraph}
