@@ -9,6 +9,7 @@ import com.booktimer.profile.ProfileService;
 import com.booktimer.profile.ProfileTag;
 import com.booktimer.profile.ProfileView;
 import com.booktimer.security.CurrentUserService;
+import com.booktimer.story.StoryRepository;
 import com.booktimer.user.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.security.Principal;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -40,17 +42,20 @@ public class ProfileApiController {
     private final CoupangLinkBuilder coupangLinkBuilder;
     private final Yes24LinkBuilder yes24LinkBuilder;
     private final KyoboLinkBuilder kyoboLinkBuilder;
+    private final StoryRepository storyRepository;
 
     public ProfileApiController(ProfileService profileService,
                                 CurrentUserService currentUserService,
                                 CoupangLinkBuilder coupangLinkBuilder,
                                 Yes24LinkBuilder yes24LinkBuilder,
-                                KyoboLinkBuilder kyoboLinkBuilder) {
+                                KyoboLinkBuilder kyoboLinkBuilder,
+                                StoryRepository storyRepository) {
         this.profileService = profileService;
         this.currentUserService = currentUserService;
         this.coupangLinkBuilder = coupangLinkBuilder;
         this.yes24LinkBuilder = yes24LinkBuilder;
         this.kyoboLinkBuilder = kyoboLinkBuilder;
+        this.storyRepository = storyRepository;
     }
 
     /** 프로필 헤더 + 책BTI 서술/태그칩 + 전체 PUBLIC 책 목록(상태필터 없음). */
@@ -62,7 +67,7 @@ public class ProfileApiController {
         boolean coupangEnabled = coupangLinkBuilder.isEnabled();
         boolean yes24Enabled = yes24LinkBuilder.isEnabled();
         boolean kyoboEnabled = kyoboLinkBuilder.isEnabled();
-        return ProfileResponse.from(v, coupangEnabled, yes24Enabled, kyoboEnabled);
+        return ProfileResponse.from(v, recencyOf(v), coupangEnabled, yes24Enabled, kyoboEnabled);
     }
 
     /**
@@ -86,8 +91,9 @@ public class ProfileApiController {
         if (order != null) {
             books = books.sorted(order);
         }
+        Map<Long, Instant> recency = recencyOf(v);
         List<BookSummary> rows = books
-                .map(b -> BookSummary.from(b, v.bookTimes()))
+                .map(b -> BookSummary.from(b, v.bookTimes(), recency))
                 .toList();
         return new BooksResponse(rows);
     }
@@ -100,10 +106,33 @@ public class ProfileApiController {
         User viewer = currentUserService.resolve(principal);
         List<Book> books = profileService.booksForPersonalityTag(viewer, loginId, tag)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "프로필을 찾을 수 없습니다"));
+        // 드릴다운 패널은 성향 근거 확인용 임시 목록이라 발광을 얹지 않는다(YAGNI) — recency 빈 맵.
         List<BookSummary> rows = books.stream()
-                .map(b -> BookSummary.from(b, Map.of()))
+                .map(b -> BookSummary.from(b, Map.of(), Map.of()))
                 .toList();
         return new BooksResponse(rows);
+    }
+
+    /**
+     * 책 id → 그 책 여백의 마지막 글 시각. <b>본인이거나 팔로워일 때만</b> 채우고 아니면 빈 맵이다 —
+     * 여백은 팔로워 전용 콘텐츠라(§13.2) 비팔로워의 격자는 오늘과 똑같이(발광 없이) 그려져야 한다.
+     *
+     * <p>프로필은 비팔로워에게도 열리므로 이 게이트가 없으면 「누가 언제 글을 남겼는가」가 새는
+     * 유일 경로가 된다 — 목록(marginOf)을 막아 놔도 시각만으로 활동이 드러난다.
+     */
+    private Map<Long, Instant> recencyOf(ProfileView v) {
+        if (!v.self() && !v.following()) {
+            return Map.of();
+        }
+        List<Long> bookIds = v.books().stream().map(Book::getId).toList();
+        if (bookIds.isEmpty()) {
+            return Map.of(); // 공개 책이 없으면 물어볼 것도 없다 (null-state — 빈 in 절 회피)
+        }
+        Map<Long, Instant> recency = new LinkedHashMap<>();
+        for (StoryRepository.BookStoryRecency row : storyRepository.recencyByBook(bookIds)) {
+            recency.put(row.getBookId(), row.getLastAt());
+        }
+        return recency;
     }
 
     /**
@@ -137,11 +166,18 @@ public class ProfileApiController {
 
     // ── DTO (Book 엔티티 직렬화 금지 — 평탄 record로 화이트리스트) ──────────
 
+    /**
+     * @param lastStoryAt 그 책 여백의 <b>마지막 글 시각</b> — 격자·리스트 발광용. 글이 없거나
+     *                    볼 자격이 없으면(비팔로워) {@code null}. 24시간 판정은 클라 순수 함수의 몫이다:
+     *                    서버 Clock과 클라 표시가 이중으로 시간을 갖지 않고, 판정이 테스트 가능해진다.
+     */
     public record BookSummary(Long id, String title, String author, String coverUrl,
-                              String status, long seconds, String purchaseLink) {
-        static BookSummary from(Book b, Map<Long, Long> times) {
+                              String status, long seconds, String purchaseLink,
+                              Instant lastStoryAt) {
+        static BookSummary from(Book b, Map<Long, Long> times, Map<Long, Instant> recency) {
             return new BookSummary(b.getId(), b.getTitle(), b.getAuthor(), b.getCoverUrl(),
-                    b.getStatus().getLabel(), times.getOrDefault(b.getId(), 0L), b.getPurchaseLink());
+                    b.getStatus().getLabel(), times.getOrDefault(b.getId(), 0L), b.getPurchaseLink(),
+                    recency.get(b.getId()));
         }
     }
 
@@ -157,9 +193,10 @@ public class ProfileApiController {
             List<BookSummary> books, boolean coupangEnabled, boolean yes24Enabled, boolean kyoboEnabled) {
 
         /** ⚠️ coupangEnabled·yes24Enabled·kyoboEnabled는 각 빌더의 isEnabled()로 계산해 전달 — 여기서 false 하드코딩 금지. */
-        static ProfileResponse from(ProfileView v, boolean coupangEnabled, boolean yes24Enabled, boolean kyoboEnabled) {
+        static ProfileResponse from(ProfileView v, Map<Long, Instant> recency,
+                                    boolean coupangEnabled, boolean yes24Enabled, boolean kyoboEnabled) {
             List<BookSummary> books = v.books().stream()
-                    .map(b -> BookSummary.from(b, v.bookTimes()))
+                    .map(b -> BookSummary.from(b, v.bookTimes(), recency))
                     .toList();
             List<TagChip> tags = v.personalityTags().stream()
                     .map(t -> new TagChip(t.label(), t.clickable()))

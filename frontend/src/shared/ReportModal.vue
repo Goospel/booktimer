@@ -4,9 +4,9 @@ import ShopIcon from '../profile/ShopIcon.vue'
 import { report as doReport } from './report'
 import { composeReportDetail } from './story/storyFeed'
 
-// 사용자 신고 모달 — 책방(profile)·스토리 뷰어(dashboard/profile) 공용이라 shared/ 소속.
-// detailPrefix: 스토리 신고 시 `[스토리#id] 원문 발췌`를 detail 앞에 자동 첨부(§13.5 — 만료 후에도
-// 운영자가 관리자 신고함에서 id로 원문 대조). 전체 500자 절삭.
+// 사용자 신고 모달 — 책방 헤더·여백 패널 공용이라 shared/ 소속.
+// detailPrefix: 여백의 글 신고 시 `[글#id] 원문 발췌`를 detail 앞에 자동 첨부(§13.5 — 글이 지워진
+// 뒤에도 운영자가 관리자 신고함에서 id로 원문 대조). 전체 500자 절삭.
 const props = defineProps<{ loginId: string; detailPrefix?: string }>()
 defineEmits<{ (e: 'close'): void }>()
 

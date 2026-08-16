@@ -32,8 +32,8 @@ export const EMPTY_MESSAGE: Record<FeedTab, string> = {
 /** 접힌 상태의 줄 수 — 폴드 아래 카드라 이보다 길면 홈이 피드에 잡아먹힌다. */
 export const PREVIEW_COUNT = 3;
 
-/** 완독·시작을 한눈에 가르는 표지 — 문장을 읽기 전에 종류가 보인다. */
-const EVENT_ICON: Record<SocialEvent['type'], string> = { FINISHED: '✅', STARTED: '📖' };
+/** 소식 종류를 한눈에 가르는 표지 — 문장을 읽기 전에 무슨 일인지 보인다. */
+const EVENT_ICON: Record<SocialEvent['type'], string> = { FINISHED: '✅', STARTED: '📖', STORY: '✍️' };
 
 /**
  * 그릴 탭 머리 — 뉴스가 꺼져 있으면(수집기 키 미설정) **「책 뉴스」 머리 자체를 안 그린다.**
@@ -97,8 +97,18 @@ function objectParticle(word: string): string {
   return '를';
 }
 
-/** 소식 한 줄의 문장. 종류에 따라 서술어만 갈린다. */
+/**
+ * 소식 한 줄의 문장.
+ *
+ * <p>완독·시작은 책이 목적어라 조사가 필요하지만, 여백은 「…의 여백에」라 조사가 끼면 문장이 깨진다
+ * (「『데미안』을의 여백에」) — 그래서 문장 골격 자체가 갈린다. 여백은 사람+책 단위로 **묶여** 오므로
+ * 개수도 문구를 가른다: 1장이면 세지 않고, 2장 이상이면 묶은 이유가 문장에 드러나야 한다.
+ */
 export function eventLine(event: SocialEvent): string {
+  if (event.type === 'STORY') {
+    const what = event.count > 1 ? `글 ${event.count}개를` : '글을';
+    return `${event.nickname}님이 『${event.bookTitle}』의 여백에 ${what} 남겼어요`;
+  }
   const predicate = event.type === 'FINISHED' ? '완독했어요' : '읽기 시작했어요';
   return `${event.nickname}님이 『${event.bookTitle}』${objectParticle(event.bookTitle)} ${predicate}`;
 }
@@ -195,6 +205,7 @@ export function FeedBox({
   onTab,
   onToggle,
   onOpenNews,
+  onOpenMargin,
 }: {
   /** `null`이면 아직 못 받은 상태(실패는 `error`가 따로 말한다). */
   feed: HomeFeedResponse | null;
@@ -207,6 +218,8 @@ export function FeedBox({
   onToggle: () => void;
   /** 기사 열기 — 실제 동작(토스 SDK)은 밖이 정하고, 여기는 "무엇을 열지"만 넘긴다. */
   onOpenNews: (link: string) => void;
+  /** 여백 줄 탭 — 책방 탭으로 옮겨 그 책의 여백을 여는 일은 App이 한다(탭 전환의 주인은 하나다). */
+  onOpenMargin: (loginId: string, bookId: number) => void;
 }) {
   return (
     <section style={sectionStyle}>
@@ -280,39 +293,73 @@ export function FeedBox({
           expanded={expanded}
           empty={EMPTY_MESSAGE.social}
           onToggle={onToggle}
-          row={(event: SocialEvent, index) => (
-            <div
-              key={`${event.loginId}-${event.type}-${event.occurredAt}`}
-              data-feed-row=""
-              style={{ ...rowStyle(index), display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'default' }}
-            >
-              <span
-                aria-hidden="true"
-                style={{
-                  flex: '0 0 auto',
-                  width: 28,
-                  height: 28,
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 14,
-                  background: 'var(--adaptiveGrey200, #E4DDD0)',
-                }}
+          row={(event: SocialEvent, index) => {
+            const body = (
+              <>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    flex: '0 0 auto',
+                    width: 28,
+                    height: 28,
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 14,
+                    background: 'var(--adaptiveGrey200, #E4DDD0)',
+                  }}
+                >
+                  {EVENT_ICON[event.type]}
+                </span>
+                {/* 한글 문장이 flex 자식이라 minWidth:0이 없으면 줄바꿈 대신 아이콘을 밀어낸다. */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Text typography="st11" style={{ display: 'block', wordBreak: 'keep-all' }}>
+                    {eventLine(event)}
+                  </Text>
+                  {/* 말줄임은 서버가 이미 했다(80자) — 여기 clamp는 폭에 맞춘 마지막 한 겹이다. */}
+                  {event.excerpt !== null && (
+                    <Text
+                      typography="st12"
+                      color="grey600"
+                      style={{
+                        display: '-webkit-box',
+                        WebkitLineClamp: 1,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        marginTop: 2,
+                        wordBreak: 'keep-all',
+                      }}
+                    >
+                      {event.excerpt}
+                    </Text>
+                  )}
+                  <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
+                    {relativeTime(event.occurredAt, now)}
+                  </Text>
+                </div>
+              </>
+            );
+            const key = `${event.loginId}-${event.type}-${event.occurredAt}`;
+            const rowLayout = { display: 'flex', gap: 10, alignItems: 'flex-start' } as const;
+
+            // 여백 줄만 갈 곳이 있다 — 완독·시작은 열 화면이 없어 예전처럼 비클릭으로 남는다(죽은 UI 금지).
+            return event.type === 'STORY' && event.bookId !== null ? (
+              <button
+                key={key}
+                type="button"
+                data-feed-row=""
+                onClick={() => onOpenMargin(event.loginId, event.bookId!)}
+                style={{ ...rowStyle(index), ...rowLayout }}
               >
-                {EVENT_ICON[event.type]}
-              </span>
-              {/* 한글 문장이 flex 자식이라 minWidth:0이 없으면 줄바꿈 대신 아이콘을 밀어낸다. */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <Text typography="st11" style={{ display: 'block', wordBreak: 'keep-all' }}>
-                  {eventLine(event)}
-                </Text>
-                <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
-                  {relativeTime(event.occurredAt, now)}
-                </Text>
+                {body}
+              </button>
+            ) : (
+              <div key={key} data-feed-row="" style={{ ...rowStyle(index), ...rowLayout, cursor: 'default' }}>
+                {body}
               </div>
-            </div>
-          )}
+            );
+          }}
         />
       )}
     </section>
@@ -325,7 +372,13 @@ export function FeedBox({
  * <p>실패는 박스 안 한 줄로 끝내고 **401만 밖으로 올린다**(`Social`의 `fail` 패턴) — 토큰이 폐기됐으면
  * 조용히 넘어갈 수 없고, 그 외 실패로 홈 전체를 깨뜨릴 이유도 없다.
  */
-export function HomeFeedBox({ onError }: { onError: (error: Error) => void }) {
+export function HomeFeedBox({
+  onError,
+  onOpenMargin,
+}: {
+  onError: (error: Error) => void;
+  onOpenMargin: (loginId: string, bookId: number) => void;
+}) {
   const [feed, setFeed] = useState<HomeFeedResponse | null>(null);
   const [tab, setTab] = useState<FeedTab>('social');
   const [expanded, setExpanded] = useState(false);
@@ -355,6 +408,7 @@ export function HomeFeedBox({ onError }: { onError: (error: Error) => void }) {
       }}
       onToggle={() => setExpanded(true)}
       onOpenNews={openExternal}
+      onOpenMargin={onOpenMargin}
     />
   );
 }

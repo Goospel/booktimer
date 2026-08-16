@@ -2,6 +2,7 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import ShopIcon from './ShopIcon.vue'
 import { hasCover, coverInitial, statusBadgeClass, formatReadingTime } from './format'
+import { hasFreshStory, showMarginHandle } from '../shared/story/storyFeed'
 
 // 공개한 책 패널 — 상태필터칩 + 책 리스트 + 구매 + 제휴 고지. 모바일 탭·와이드 메인 공유.
 // 데이터/액션 로직은 ProfileApp이 소유(필터는 selectStatus emit). showTitle은 와이드에서만
@@ -9,6 +10,8 @@ import { hasCover, coverInitial, statusBadgeClass, formatReadingTime } from './f
 interface BookSummary {
     id: number; title: string; author: string | null; coverUrl: string | null;
     status: string; seconds: number; purchaseLink: string | null;
+    /** 그 책 여백의 최신 글 시각 — 비팔로워·글 없는 책은 null(서버가 가린다, 설계 §D3ⓐ). */
+    lastStoryAt: string | null;
 }
 
 const STATUS_OPTIONS = [
@@ -38,7 +41,11 @@ const props = defineProps<{
 defineEmits<{
     (e: 'selectStatus', value: string | null): void
     (e: 'selectSort', value: string | null): void
+    (e: 'openMargin', book: BookSummary): void
 }>()
+
+// 발광 기준 시각 — 마운트 때 한 번. 초 단위로 살아 움직일 필요가 없는 하루 창 판정이다.
+const now = Date.now()
 
 // 구매 옵션 리스트 — 활성 제공자만(알라딘=구매링크 유무 / 쿠팡·Yes24=활성 플래그). 남의 책방 경로 prefix.
 // 조합 분기(purchaseLink×coupang×yes24) 폭발을 없애는 리팩터: 2개↑면 드롭다운, 1개면 제공자명 단일 버튼.
@@ -102,9 +109,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onNoteKeydown))
         <p v-else-if="books.length === 0" class="shop-empty">이 상태의 공개 책이 없습니다.</p>
         <ul v-else class="shop-books">
             <li v-for="b in books" :key="b.id" class="shop-book">
-                <img v-if="hasCover(b.coverUrl)" class="shop-cover" :src="b.coverUrl!"
-                     alt="" loading="lazy" referrerpolicy="no-referrer">
-                <div v-else class="shop-cover shop-cover-ph" aria-hidden="true">{{ coverInitial(b.title) }}</div>
+                <!-- 표지 발광 — 24시간 안에 여백에 새 글이 달린 책. 색만으로 구분 못 하는 사람을 위해
+                     점 배지에 텍스트 라벨을 병기한다(움직임 정지 시에도 배지는 남는다 — app.css). -->
+                <span class="shop-cover-wrap" :class="{ 'margin-fresh': hasFreshStory(b.lastStoryAt, now) }">
+                    <img v-if="hasCover(b.coverUrl)" class="shop-cover" :src="b.coverUrl!"
+                         alt="" loading="lazy" referrerpolicy="no-referrer">
+                    <div v-else class="shop-cover shop-cover-ph" aria-hidden="true">{{ coverInitial(b.title) }}</div>
+                    <span v-if="hasFreshStory(b.lastStoryAt, now)" class="margin-fresh-dot">
+                        <span class="sr-only">새 글</span>
+                    </span>
+                </span>
                 <div class="shop-book-meta">
                     <span class="shop-book-title">{{ b.title }}</span>
                     <span v-if="b.author" class="shop-book-author">{{ b.author }}</span>
@@ -113,6 +127,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onNoteKeydown))
                         <span v-if="formatReadingTime(b.seconds)" class="shop-time">
                             <ShopIcon name="clock" :size="13" />{{ formatReadingTime(b.seconds) }}
                         </span>
+                        <!-- 「여백」 진입 — 본인은 전 책(작성 진입), 남의 책방은 글이 있는 책만.
+                             프라이버시 게이트는 서버가 이미 했다(비팔로워는 lastStoryAt 전부 null). -->
+                        <button v-if="showMarginHandle(self, b.lastStoryAt)" type="button" class="shop-margin-btn"
+                                :aria-label="b.title + ' 여백 보기'" @click="$emit('openMargin', b)">여백</button>
                     </div>
                     <!-- 구매 — 활성 제공자 리스트(알라딘/쿠팡/Yes24). 2개↑면 드롭다운, 1개면 제공자명 단일 버튼.
                          리다이렉트 경유, 외부링크 nofollow(§4). -->

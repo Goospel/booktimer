@@ -11,7 +11,6 @@ import EmailVerifyBanner from './EmailVerifyBanner.vue'
 import WelcomeBanner from './WelcomeBanner.vue'
 import QuickNav from './QuickNav.vue'
 import DashHeader from './DashHeader.vue'
-import StoryStrip from '../shared/story/StoryStrip.vue'
 
 // justOnboarded: 온보딩 직후 셸 data 속성 → main.ts가 읽어 주입. 1회 환영 배너 트리거(§6.4).
 const props = defineProps<{ justOnboarded?: boolean }>()
@@ -175,7 +174,7 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
     </div>
 
     <template v-else-if="data">
-        <!-- 발견 2(상단 정리): 헤더 → 타이머 → 잔디 → 스토리 → 바로가기 → 격언(발밑).
+        <!-- 발견 2(상단 정리): 헤더 → 타이머 → 잔디 → 바로가기 → 격언(발밑).
              격언(BrandQuote)은 Teleport로 #brand-quote-slot(대시보드 발밑)에 렌더되므로 여기 순서상 위치는 무관. -->
         <DashHeader :login-id="data.loginId" :profile-character-code="data.profileCharacterCode" />
 
@@ -208,9 +207,8 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
 
         <ContributionGraph :graph="data.graph" />
 
-        <!-- 독서 스토리 스트립 (sns-design §13.7) — 타이머 아래로 강등(발견 2). 로드 실패·스토리 0이어도 홈을 막지 않는다 -->
-        <StoryStrip :my-login-id="data.loginId" :my-nickname="data.nickname"
-                    :my-profile-character-code="data.profileCharacterCode" />
+        <!-- 옛 스토리 스트립 자리 — 여백은 책에 귀속되므로 진입은 내 책방(/u/{me})의 책 리스트 하나뿐이다.
+             대시보드에 대체 진입을 새로 만들지 않는다(2026-08-16 재설계 §D5-1). -->
 
         <div class="dash-grid-2col">
             <QuickNav :login-id="data.loginId" />

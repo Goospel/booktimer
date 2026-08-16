@@ -226,6 +226,44 @@ describe('책 격자 (BookGrid)', () => {
     expect(markup).toContain('data-grid-title="자바 최적화"');
     expect(markup).not.toContain('<button');
   });
+
+  /**
+   * 24시간 안에 새 글이 달린 책 — 표지가 발광한다(책방 격자 전용 선택 필드).
+   * 서재는 `fresh`를 안 넘기므로 아무것도 달라지지 않아야 한다 — 그 회귀를 여기서 못 박는다.
+   */
+  describe('새 글 발광 (fresh)', () => {
+    const fresh = () =>
+      renderToStaticMarkup(
+        <TDSMobileProvider userAgent={userAgent}>
+          <BookGrid
+            rows={[
+              { id: 1, title: '자바 최적화', coverUrl: null, fresh: true },
+              { id: 2, title: '데미안', coverUrl: null },
+            ]}
+            selectedId={null}
+            onPick={() => {}}
+          />
+        </TDSMobileProvider>,
+      );
+
+    it('새 글이 달린 책에만 점 배지와 pulse 클래스를 단다', () => {
+      const markup = fresh();
+
+      expect(markup.match(/data-fresh-dot/g)).toHaveLength(1);
+      expect(markup.match(/margin-fresh/g)).toHaveLength(1);
+    });
+
+    it('색·움직임만으로 구분 못 하는 사람을 위해 이름에도 「새 글」을 남긴다', () => {
+      expect(fresh()).toContain('aria-label="자바 최적화 새 글"');
+    });
+
+    it('fresh를 안 넘기는 서재 격자는 배지도 pulse도 없다 — 책방 전용 표식이 새어 나가지 않게', () => {
+      const markup = grid(() => {});
+
+      expect(markup).not.toContain('data-fresh-dot');
+      expect(markup).not.toContain('margin-fresh');
+    });
+  });
 });
 
 /** 엔터 제출 — 모바일 키보드의 「완료」가 아무 일도 안 해 검색 버튼을 따로 눌러야 했다. */

@@ -276,13 +276,24 @@ export const fetchHistory = (): Promise<{ months: MonthlySection[] }> => request
 
 // ── 홈 피드 (`web/api/HomeFeedApiController`의 record가 타입 단일 출처) ────────
 
-/** `HomeFeedApiController.SocialEvent` — 팔로우한 사람의 PUBLIC 책 활동 한 줄. */
+/**
+ * `HomeFeedApiController.SocialEvent` — 팔로우한 사람의 PUBLIC 책 활동 한 줄.
+ *
+ * <p>`STORY`는 **사람+책 단위로 묶인** 여백 이벤트다(서버가 묶는다) — 세 필드는 그 행에만 실린다.
+ * `STARTED`·`FINISHED`는 bookId·excerpt가 null이고 count가 0이다.
+ */
 export interface SocialEvent {
   loginId: string;
   nickname: string;
   bookTitle: string;
-  type: 'STARTED' | 'FINISHED';
+  type: 'STARTED' | 'FINISHED' | 'STORY';
   occurredAt: string;
+  /** STORY 행만 — 탭하면 그 책의 여백으로 점프한다. */
+  bookId: number | null;
+  /** STORY 행만 — 그 묶음 **최신** 글의 발췌(서버가 80자로 잘라 준다). */
+  excerpt: string | null;
+  /** 그 묶음의 글 수(1이면 단수 문구, 2 이상이면 「글 N개」). STORY가 아니면 0. */
+  count: number;
 }
 
 /** `HomeFeedApiController.NewsItem` */
@@ -535,6 +546,14 @@ export interface ProfileBook {
   status: string;
   seconds: number;
   purchaseLink: string | null;
+  /**
+   * 이 책의 여백에 마지막으로 글이 달린 시각 — 격자 발광의 재료다.
+   *
+   * <p>**비팔로워에게는 전부 null**이다(여백은 팔로워 전용 콘텐츠라 서버가 가린다). 글이 없는 책도 null.
+   * 24시간 창 판정은 클라가 한다({@link import('./screens/Story').hasFreshStory}) — 서버는 원시 사실만 준다.
+   * 성향 태그 드릴다운(`/api/profile/personality-tag`)은 항상 null이다(그 임시 목록엔 발광이 없다).
+   */
+  lastStoryAt: string | null;
 }
 
 /** `ProfileApiController.ProfileResponse` — 제휴 서점 플래그는 미니앱이 안 써서 옮기지 않는다. */
@@ -638,42 +657,42 @@ export type ReportReason = (typeof REPORT_REASONS)[number]['value'];
 export const reportUser = (loginId: string, reason: ReportReason, detail: string): Promise<{ reported: boolean }> =>
   request('/api/report', { body: { loginId, reason, detail } });
 
-// ── 독서 스토리 (`web/api/StoryApiController` + `story` record가 타입 단일 출처) ──
+// ── 여백 (`web/api/StoryApiController` + `story` record가 타입 단일 출처) ──
 //
-// 소셜 API와 달리 스토리는 loginId에 묶이지 않는다 — 피드가 **내 활성 스토리를 `mine` 필드로 따로**
-// 실어 주므로, 핸들 없는 계정(미니앱 신규 가입)도 자기 스토리를 보고·삭제할 수 있다.
-// 그래서 미니앱은 `/api/stories/of/{loginId}`를 쓰지 않는다(설계 §5-1 재확인).
+// 여백은 **책에 딸린 자리**다(2026-08-16 재설계) — 글은 책 하나에 귀속되고, 목록은
+// 「누구의(loginId) + 어느 책(bookId)」 두 축으로만 열린다. 그래서 소셜 API처럼 loginId가 필요하고,
+// 핸들 없는 계정에는 작성 진입점이 없다(그들의 글은 예전에도 아무에게도 안 보였다 — 설계 §0 비목표).
+// URL·타입 이름이 `story`로 남은 것은 서버 경로가 `/api/stories`이기 때문(#814 결정).
 
-/** `story.StoryCard` — 책 라벨은 표시 시점에 공개 책만 실린다(비공개 전환 시 문장만 남는다). */
-export interface StoryCard {
+/** `story.MarginEntry` — 여백에 남긴 글 한 장. 책 라벨은 응답 헤더에 한 번만 실린다. */
+export interface MarginEntry {
   id: number;
   text: string;
   bgCode: string | null;
-  bookTitle: string | null;
-  bookCoverUrl: string | null;
   createdAt: string;
-  viewed: boolean;
 }
 
-/** `story.AuthorStories` — 스트립의 링 하나. loginId는 내 그룹(mine)에서 null일 수 있다. */
-export interface AuthorStories {
-  loginId: string | null;
-  nickname: string;
-  profileCharacterCode: string | null;
-  allViewed: boolean;
-  stories: StoryCard[];
+/** `story.MarginBook` — 여백이 열린 책. PUBLIC 재검사를 통과한 책만 온다. */
+export interface MarginBook {
+  id: number;
+  title: string;
+  author: string | null;
+  coverUrl: string | null;
 }
 
-export interface StoryFeedResponse {
-  mine: AuthorStories | null;
-  groups: AuthorStories[];
-}
-
-export interface StoryViewerEntry {
-  loginId: string;
-  nickname: string;
-  profileCharacterCode: string | null;
-  viewedAt: string;
+/**
+ * `story.MarginResponse` — **자기완결**이다: 책 라벨·주인·관계가 함께 실려 화면이 다른 요청 없이 그려진다
+ * (진입로가 둘이라 그렇다 — 책방 격자에서 오면 클라가 책을 알지만, 홈 소식에서 점프하면 모른다).
+ *
+ * <p>`entries`는 **비팔로워면 빈 배열**이다 — 글 유무 정보도 새지 않게 서버가 가린다. `self`일 때
+ * `following`은 항상 false(자기 자신은 팔로우 대상이 아니다).
+ */
+export interface MarginResponse {
+  book: MarginBook;
+  ownerNickname: string;
+  self: boolean;
+  following: boolean;
+  entries: MarginEntry[];
 }
 
 /**
@@ -689,17 +708,16 @@ export const STORY_BG_CODES = [
   { code: 'plum', background: '#5a3b5e', color: '#f7eef8' },
 ] as const;
 
-export const fetchStoryFeed = (): Promise<StoryFeedResponse> => request('/api/stories/feed');
+/**
+ * 책 하나의 여백 — 차단·ADMIN·미존재·남의 책 id(IDOR)·PRIVATE 책은 모두 404다(존재 비노출).
+ * 비팔로워는 404가 아니라 200 + 빈 `entries`로 온다(격자에 이미 보이는 공개 책이라 라벨은 숨길 게 없다).
+ */
+export const fetchBookMargin = (loginId: string, bookId: number): Promise<MarginResponse> =>
+  request(`/api/stories/of/${loginId}`, { query: { bookId } });
 
-/** bookId·bgCode는 선택이지만 null을 명시해 보낸다 — 서버 record가 세 필드를 다 받는다. */
-export const createStory = (text: string, bookId: number | null, bgCode: string | null): Promise<StoryCard> =>
+/** bookId는 **필수**다 — 여백은 책에 딸린 자리라 책 없는 글은 서버가 400으로 거절한다. */
+export const createStory = (text: string, bookId: number, bgCode: string | null): Promise<MarginEntry> =>
   request('/api/stories', { body: { text, bookId, bgCode } });
 
 /** 없거나 남의 것이면 404 — 존재를 누설하지 않는 서버 계약(IDOR)을 그대로 받는다. */
 export const deleteStory = (id: number): Promise<void> => request(`/api/stories/${id}`, { method: 'DELETE' });
-
-/** 서버가 `@RequestBody`를 안 받으므로 본문 없이 POST한다. 멱등(중복 열람은 서버가 no-op). */
-export const markStoryViewed = (id: number): Promise<void> => request(`/api/stories/${id}/view`, { method: 'POST' });
-
-/** 작성자 본인만 — 남의 스토리면 404. 차단 관계 열람자는 서버가 이미 걸러 준다. */
-export const fetchStoryViewers = (id: number): Promise<StoryViewerEntry[]> => request(`/api/stories/${id}/viewers`);

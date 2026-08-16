@@ -16,14 +16,16 @@ import jakarta.persistence.Table;
 import java.util.Set;
 
 /**
- * 여백 — 읽다가 인상 깊은 문장·생각을 남기는 텍스트 카드, 팔로워에게 보인다 (sns-design §13).
+ * 여백에 남긴 글 한 장 — 읽다가 인상 깊은 문장·생각을 적어 두는 텍스트 카드 (sns-design §13).
  *
- * <p>2026-08-16까지는 24시간 뒤 사라지는 「스토리」였다. 남기는 글이 하루 만에 지워지는 게 의도와
- * 어긋나 시간 만료를 걷어냈다 — 이제 여백은 지우기 전까지 남는다(표시 상한은
- * {@link StoryService#MAX_VISIBLE_STORIES}). 클래스·테이블 이름은 {@code Story}로 남았다: 어휘만
- * 바꾸고 스키마는 두는 게 싸다.
+ * <p>「여백」은 <b>책에 딸린 자리</b>고, 이 클래스는 거기 쌓이는 <b>글</b>이다. 그래서 {@code book}은
+ * 선택이 아니라 <b>필수</b>다(2026-08-16 재설계 — V71이 DB에도 NOT NULL로 못 박았다). 도달 경로가
+ * 「책방 격자 → 책 → 그 책의 글」뿐이라, 책 없는 글은 표시 표면이 0인 유령 행이 된다.
  *
- * <p>책 첨부는 <b>본인 소유 + PUBLIC만</b> — 책 라벨(제목·표지)이 팔로워에게 보이므로, PRIVATE 첨부를
+ * <p>2026-08-16까지는 사람에게 딸린 24시간짜리 「스토리」였다 — 시간 만료도, 사람 단위 스트립도 함께
+ * 폐기됐다. 클래스·테이블 이름은 {@code Story}로 남았다: 어휘만 바꾸고 스키마는 두는 게 싸다.
+ *
+ * <p>책은 <b>본인 소유 + PUBLIC만</b> — 책 라벨(제목·표지)이 팔로워에게 보이므로, PRIVATE을
  * 허용하면 비공개 책장이 새는 유일 경로가 된다(§13.2, §3.5 불변식 예외 없이 유지).
  */
 @Entity
@@ -44,9 +46,9 @@ public class Story extends BaseTimeEntity {
     @JoinColumn(name = "user_id")
     private User user;
 
-    /** 선택 첨부 책 — 책 삭제 시 첨부만 풀린다(book_id = null, 문장은 보존). */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "book_id")
+    /** 글이 놓인 여백의 책 (필수) — 책이 사라지면 그 자리도 사라진다({@code BookService.delete}가 함께 지운다). */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "book_id", nullable = false)
     private Book book;
 
     @Column(nullable = false, length = 500)
@@ -67,9 +69,10 @@ public class Story extends BaseTimeEntity {
     }
 
     /**
-     * 스토리를 만든다. 문장은 1~500자 비공백, 책은 작성자 소유 + PUBLIC만, 배경은 닫힌 팔레트 코드만.
+     * 여백에 글을 남긴다. 문장은 1~500자 비공백, 책은 <b>필수</b>이고 작성자 소유 + PUBLIC만,
+     * 배경은 닫힌 팔레트 코드만.
      *
-     * @throws IllegalArgumentException author/문장이 없거나, 501자 초과, 남의 책·비공개 책, 팔레트 밖 bgCode
+     * @throws IllegalArgumentException author/문장/책이 없거나, 501자 초과, 남의 책·비공개 책, 팔레트 밖 bgCode
      */
     public static Story of(User author, String text, Book book, String bgCode) {
         if (author == null) {
@@ -82,13 +85,14 @@ public class Story extends BaseTimeEntity {
         if (stripped.length() > MAX_TEXT_LENGTH) {
             throw new IllegalArgumentException("text must be at most " + MAX_TEXT_LENGTH + " chars");
         }
-        if (book != null) {
-            if (!isSameUser(book.getUser(), author)) {
-                throw new IllegalArgumentException("book must be owned by the author");
-            }
-            if (!book.isPublic()) {
-                throw new IllegalArgumentException("book must be public");
-            }
+        if (book == null) {
+            throw new IllegalArgumentException("book must not be null"); // 여백은 책에 귀속된다
+        }
+        if (!isSameUser(book.getUser(), author)) {
+            throw new IllegalArgumentException("book must be owned by the author");
+        }
+        if (!book.isPublic()) {
+            throw new IllegalArgumentException("book must be public");
         }
         if (bgCode != null && !BG_CODES.contains(bgCode)) {
             throw new IllegalArgumentException("unknown bgCode: " + bgCode);

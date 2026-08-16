@@ -2,6 +2,9 @@ package com.booktimer.web.api;
 
 import com.booktimer.block.Block;
 import com.booktimer.block.BlockRepository;
+import com.booktimer.book.Book;
+import com.booktimer.book.BookRepository;
+import com.booktimer.book.BookStatus;
 import com.booktimer.follow.Follow;
 import com.booktimer.follow.FollowRepository;
 import com.booktimer.security.RateLimitService;
@@ -54,6 +57,9 @@ class StoryApiControllerTest {
     private StoryRepository storyRepository;
 
     @Autowired
+    private BookRepository bookRepository;
+
+    @Autowired
     private FollowRepository followRepository;
 
     @Autowired
@@ -79,12 +85,18 @@ class StoryApiControllerTest {
         return userRepository.findByEmail(email).orElseThrow();
     }
 
+    private Book publicBookOf(User owner, String title) {
+        Book book = Book.register(owner, title, null, null, null, null, null, BookStatus.READING);
+        book.makePublic();
+        return bookRepository.save(book);
+    }
+
     @Test
     @DisplayName("POST /api/stories 미인증 → 302 로그인 리다이렉트 (기본 잠김)")
     void create_unauthenticated_redirectsToLogin() throws Exception {
         mockMvc.perform(post("/api/stories").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"text\":\"문장\"}"))
+                        .content("{\"text\":\"문장\",\"bookId\":1}"))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/login"));
     }
@@ -97,19 +109,20 @@ class StoryApiControllerTest {
         mockMvc.perform(post("/api/stories")
                         .with(user("story-csrf@booktimer.com"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"text\":\"문장\"}"))
+                        .content("{\"text\":\"문장\",\"bookId\":1}"))
                 .andExpect(status().isForbidden());
     }
 
     @Test
-    @DisplayName("POST /api/stories 인증+csrf → 200, 작성된 카드 반환")
-    void create_authenticated_returnsCard() throws Exception {
-        register("story-author@booktimer.com", "storyauthor", "작성자");
+    @DisplayName("POST /api/stories 인증+csrf → 200, 남긴 글 반환")
+    void create_authenticated_returnsEntry() throws Exception {
+        User me = register("story-author@booktimer.com", "storyauthor", "작성자");
+        Book book = publicBookOf(me, "여백이 열린 책");
 
         mockMvc.perform(post("/api/stories")
                         .with(user("story-author@booktimer.com")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"text\":\"인상 깊은 문장\",\"bgCode\":\"night\"}"))
+                        .content("{\"text\":\"인상 깊은 문장\",\"bookId\":" + book.getId() + ",\"bgCode\":\"night\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.text").value("인상 깊은 문장"))
                 .andExpect(jsonPath("$.bgCode").value("night"))
@@ -117,84 +130,138 @@ class StoryApiControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/stories 도메인 검증 실패(팔레트 밖 bgCode) → 400")
-    void create_invalidBgCode_returns400() throws Exception {
-        register("story-bad@booktimer.com", "storybad", "작성자");
+    @DisplayName("POST /api/stories bookId 없음 → 400 (여백은 책에 귀속)")
+    void create_withoutBookId_returns400() throws Exception {
+        register("story-nobook@booktimer.com", "storynobook", "작성자");
 
         mockMvc.perform(post("/api/stories")
-                        .with(user("story-bad@booktimer.com")).with(csrf())
+                        .with(user("story-nobook@booktimer.com")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"text\":\"문장\",\"bgCode\":\"#ff0000\"}"))
+                        .content("{\"text\":\"책 없는 문장\"}"))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
-    @DisplayName("DELETE /api/stories/{id} 타인 스토리 → 404 (IDOR)")
+    @DisplayName("POST /api/stories 남의 책에 글 남기기 → 404 (IDOR — 존재 누설 금지)")
+    void create_othersBook_returns404() throws Exception {
+        User owner = register("story-owner@booktimer.com", "storyowner", "주인");
+        register("story-intruder@booktimer.com", "storyintruder", "침입자");
+        Book book = publicBookOf(owner, "남의 책");
+
+        mockMvc.perform(post("/api/stories")
+                        .with(user("story-intruder@booktimer.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"남의 여백에 낙서\",\"bookId\":" + book.getId() + "}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("POST /api/stories 도메인 검증 실패(팔레트 밖 bgCode) → 400")
+    void create_invalidBgCode_returns400() throws Exception {
+        User me = register("story-bad@booktimer.com", "storybad", "작성자");
+        Book book = publicBookOf(me, "책");
+
+        mockMvc.perform(post("/api/stories")
+                        .with(user("story-bad@booktimer.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"문장\",\"bookId\":" + book.getId() + ",\"bgCode\":\"#ff0000\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // --- GET /api/stories/of/{loginId}?bookId= (책 하나의 여백) ---
+
+    @Test
+    @DisplayName("GET /api/stories/of 차단 관계 → 404 (존재 누설 금지)")
+    void marginOf_blocked_returns404() throws Exception {
+        register("of-viewer@booktimer.com", "ofviewer", "열람자");
+        User target = register("of-target@booktimer.com", "oftarget", "대상");
+        User viewer = userRepository.findByEmail("of-viewer@booktimer.com").orElseThrow();
+        Book book = publicBookOf(target, "가려질 책");
+        blockRepository.save(Block.of(target, viewer));
+
+        mockMvc.perform(get("/api/stories/of/oftarget")
+                        .param("bookId", String.valueOf(book.getId()))
+                        .with(user("of-viewer@booktimer.com")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("GET /api/stories/of 남의 책 id를 다른 핸들에 끼워 넣으면 → 404 (IDOR)")
+    void marginOf_bookOfAnotherOwner_returns404() throws Exception {
+        register("idor-viewer@booktimer.com", "idorviewer", "열람자");
+        User target = register("idor-target@booktimer.com", "idortarget", "대상");
+        User stranger = register("idor-other@booktimer.com", "idorother", "제3자");
+        Book strangersBook = publicBookOf(stranger, "제3자의 책");
+        followRepository.save(Follow.of(
+                userRepository.findByEmail("idor-viewer@booktimer.com").orElseThrow(), target));
+
+        mockMvc.perform(get("/api/stories/of/idortarget")
+                        .param("bookId", String.valueOf(strangersBook.getId()))
+                        .with(user("idor-viewer@booktimer.com")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("GET /api/stories/of 상대의 PRIVATE 책 → 404 (비공개 책의 글은 새지 않는다)")
+    void marginOf_privateBook_returns404() throws Exception {
+        User viewer = register("pv-viewer@booktimer.com", "pvviewer", "열람자");
+        User target = register("pv-target@booktimer.com", "pvtarget", "대상");
+        followRepository.save(Follow.of(viewer, target));
+        Book secret = bookRepository.save(
+                Book.register(target, "비공개 책", null, null, null, null, null, BookStatus.READING));
+
+        mockMvc.perform(get("/api/stories/of/pvtarget")
+                        .param("bookId", String.valueOf(secret.getId()))
+                        .with(user("pv-viewer@booktimer.com")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("GET /api/stories/of 비팔로워 → 200 + 책 라벨은 주되 entries는 빈 배열")
+    void marginOf_nonFollower_returnsEmptyEntries() throws Exception {
+        register("nf-viewer@booktimer.com", "nfviewer", "열람자");
+        User target = register("nf-target@booktimer.com", "nftarget", "대상");
+        Book book = publicBookOf(target, "공개 책");
+        storyRepository.save(Story.of(target, "비팔로워에겐 안 보일 문장", book, null));
+
+        mockMvc.perform(get("/api/stories/of/nftarget")
+                        .param("bookId", String.valueOf(book.getId()))
+                        .with(user("nf-viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.book.title").value("공개 책"))
+                .andExpect(jsonPath("$.following").value(false))
+                .andExpect(jsonPath("$.self").value(false))
+                .andExpect(jsonPath("$.entries").isEmpty());
+    }
+
+    @Test
+    @DisplayName("GET /api/stories/of 팔로워 → 그 책 여백의 글 목록(최신순)")
+    void marginOf_follower_returnsEntries() throws Exception {
+        User viewer = register("fw-viewer@booktimer.com", "fwviewer", "열람자");
+        User target = register("fw-target@booktimer.com", "fwtarget", "대상");
+        followRepository.save(Follow.of(viewer, target));
+        Book book = publicBookOf(target, "공개 책");
+        storyRepository.save(Story.of(target, "팔로워에겐 보일 문장", book, "sea"));
+
+        mockMvc.perform(get("/api/stories/of/fwtarget")
+                        .param("bookId", String.valueOf(book.getId()))
+                        .with(user("fw-viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ownerNickname").value("대상"))
+                .andExpect(jsonPath("$.following").value(true))
+                .andExpect(jsonPath("$.entries[0].text").value("팔로워에겐 보일 문장"))
+                .andExpect(jsonPath("$.entries[0].bgCode").value("sea"));
+    }
+
+    @Test
+    @DisplayName("DELETE /api/stories/{id} 타인 글 → 404 (IDOR)")
     void delete_othersStory_returns404() throws Exception {
         User author = register("del-author@booktimer.com", "delauthor", "작성자");
         register("del-actor@booktimer.com", "delactor", "삭제시도자");
-        Story story = storyRepository.save(Story.of(author, "남의 문장", null, null));
+        Story story = storyRepository.save(Story.of(author, "남의 문장", publicBookOf(author, "책"), null));
 
         mockMvc.perform(delete("/api/stories/" + story.getId())
                         .with(user("del-actor@booktimer.com")).with(csrf()))
                 .andExpect(status().isNotFound());
-    }
-
-    @Test
-    @DisplayName("GET /api/stories/feed → mine(내 스토리)과 groups(팔로잉 작성자 그룹) 형태")
-    void feed_returnsMineAndGroups() throws Exception {
-        User me = register("feed-me@booktimer.com", "feedme", "나");
-        User followed = register("feed-author@booktimer.com", "feedauthor", "작가");
-        followRepository.save(Follow.of(me, followed));
-        storyRepository.save(Story.of(me, "내 문장", null, null));
-        storyRepository.save(Story.of(followed, "작가 문장", null, "sea"));
-
-        mockMvc.perform(get("/api/stories/feed").with(user("feed-me@booktimer.com")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.mine.loginId").value("feedme"))
-                .andExpect(jsonPath("$.mine.stories[0].text").value("내 문장"))
-                .andExpect(jsonPath("$.groups[0].loginId").value("feedauthor"))
-                .andExpect(jsonPath("$.groups[0].allViewed").value(false))
-                .andExpect(jsonPath("$.groups[0].stories[0].text").value("작가 문장"))
-                .andExpect(jsonPath("$.groups[0].stories[0].bgCode").value("sea"));
-    }
-
-    @Test
-    @DisplayName("GET /api/stories/of/{loginId} 차단 관계 → 404 (존재 누설 금지)")
-    void storiesOf_blocked_returns404() throws Exception {
-        register("of-viewer@booktimer.com", "ofviewer", "열람자");
-        User target = register("of-target@booktimer.com", "oftarget", "대상");
-        User viewer = userRepository.findByEmail("of-viewer@booktimer.com").orElseThrow();
-        blockRepository.save(Block.of(target, viewer));
-
-        mockMvc.perform(get("/api/stories/of/oftarget").with(user("of-viewer@booktimer.com")))
-                .andExpect(status().isNotFound());
-    }
-
-    @Test
-    @DisplayName("GET /api/stories/of/{loginId} 비팔로워 → 200 + 빈 배열 (스토리 유무도 안 샘)")
-    void storiesOf_nonFollower_returnsEmptyArray() throws Exception {
-        register("nf-viewer@booktimer.com", "nfviewer", "열람자");
-        User target = register("nf-target@booktimer.com", "nftarget", "대상");
-        storyRepository.save(Story.of(target, "비팔로워에겐 안 보일 문장", null, null));
-
-        mockMvc.perform(get("/api/stories/of/nftarget").with(user("nf-viewer@booktimer.com")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$").isEmpty());
-    }
-
-    @Test
-    @DisplayName("GET /api/stories/of/{loginId} 팔로워 → 활성 스토리 배열")
-    void storiesOf_follower_returnsStories() throws Exception {
-        User viewer = register("fw-viewer@booktimer.com", "fwviewer", "열람자");
-        User target = register("fw-target@booktimer.com", "fwtarget", "대상");
-        followRepository.save(Follow.of(viewer, target));
-        storyRepository.save(Story.of(target, "팔로워에겐 보일 문장", null, null));
-
-        mockMvc.perform(get("/api/stories/of/fwtarget").with(user("fw-viewer@booktimer.com")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].text").value("팔로워에겐 보일 문장"))
-                .andExpect(jsonPath("$[0].viewed").value(false));
     }
 }

@@ -196,11 +196,15 @@ public class BookService {
      * 내 책을 책장에서 삭제한다. 그 책을 가리키던 측정 세션은 "책 미지정"으로 풀어(book_id = null)
      * 독서 기록(잔디·누적 시간)을 보존한다 — {@code reading_session.book_id} FK 때문에 이 정리 없이는
      * 삭제가 제약 위반으로 실패한다(AccountService가 탈퇴 시 FK 순서로 정리하는 것과 같은 이유).
+     *
+     * <p>여백의 글은 세션과 달리 <b>함께 지운다</b> — 여백은 책에 딸린 자리라(2026-08-16 재설계,
+     * {@code story.book_id} NOT NULL) 풀어 둘 자리가 없고, 의미상으로도 책이 사라지면 자리도 사라진다.
+     * 삭제 확인 문구 "이 책에 쌓인 기록도 함께 사라져요"가 이미 이 의미를 커버한다.
      */
     public void delete(User user, Long bookId) {
         Book book = ownedBook(user, bookId);
         sessionRepository.unlinkBook(book);
-        storyRepository.unlinkBook(book); // 스토리도 첨부만 풀어 문장 보존 (story.book_id FK — 같은 이유)
+        storyRepository.deleteByBook(book); // 여백의 글은 책과 함께 사라진다 (story.book_id FK)
         bookRepository.delete(book);
     }
 

@@ -9,7 +9,6 @@ import type {
   PersonalityStatus,
   ProfileBook,
   ProfileResponse,
-  StoryFeedResponse,
   UserRow,
 } from './api';
 import { ApiError, adRefreshPersonality, selectPersonality } from './api';
@@ -97,8 +96,10 @@ function profile(extra: Partial<ProfileResponse> = {}): ProfileResponse {
   };
 }
 
-function book(id: number, title: string): ProfileBook {
-  return { id, title, author: '저자', coverUrl: null, status: '다 읽음', seconds: 600, purchaseLink: null };
+const NOW = Date.parse('2026-08-16T12:00:00Z');
+
+function book(id: number, title: string, lastStoryAt: string | null = null): ProfileBook {
+  return { id, title, author: '저자', coverUrl: null, status: '다 읽음', seconds: 600, purchaseLink: null, lastStoryAt };
 }
 
 function card(
@@ -115,6 +116,8 @@ function card(
     /** 「돌아가기」의 대상 — 탭 루트에는 없다(출구가 탭바다). */
     back?: boolean;
     header?: React.ReactNode;
+    /** 격자 탭으로 여백을 여는 손잡이 — 책방 셸이 준다. */
+    openMargin?: boolean;
   } = {},
 ) {
   return render(
@@ -122,6 +125,8 @@ function card(
       profile={p}
       books={books}
       activeTag={activeTag}
+      now={NOW}
+      onOpenMargin={view.openMargin === false ? undefined : () => {}}
       busy={false}
       personalityStatus={view.personalityStatus ?? null}
       adBusy={false}
@@ -433,6 +438,25 @@ describe('책방 책 목록 — 3열 격자', () => {
     expect(markup).toContain('data-grid-title="자바 최적화"');
     expect(markup).not.toContain('data-grid-title="데미안"');
   });
+
+  /**
+   * 격자 칸이 <b>그 책의 여백</b>으로 들어가는 문이 됐다 — 「보기만 하는 목록」이던 시절의 규율은
+   * 그대로다: 열어 줄 손잡이가 없으면 버튼으로도 만들지 않는다.
+   */
+  it('여백을 열 손잡이를 받으면 칸이 버튼이 된다', () => {
+    expect(card(profile(), [book(1, '자바 최적화')])).toContain('<button');
+  });
+
+  it('24시간 안에 새 글이 달린 책만 발광한다 — 판정은 서버가 준 시각으로 클라가 잰다', () => {
+    const markup = card(profile(), [
+      book(1, '자바 최적화', new Date(NOW - 3_600_000).toISOString()),
+      book(2, '데미안', new Date(NOW - 30 * 3_600_000).toISOString()),
+      book(3, '코스모스'),
+    ]);
+
+    expect(markup.match(/data-fresh-dot/g)).toHaveLength(1);
+    expect(markup).toContain('aria-label="자바 최적화 새 글"');
+  });
 });
 
 /**
@@ -579,31 +603,25 @@ describe('성향 접기 판정 (needsBioToggle)', () => {
 });
 
 /**
- * 상단 도구 — 검색은 <b>전폭 알약에서 여백 줄 오른쪽 끝 아이콘</b>으로 접혔다(사용자 승인 A안).
- * 한 줄을 통째로 먹던 진입바가 사라져 그만큼 책이 첫 화면으로 올라온다. 셸의 지역 변수가 아니라
- * 컴포넌트인 이유는 그대로다 — 첫 렌더(feed=null)엔 스트립이 통째로 빠져 셸만으론 순서를 잴 수 없다.
+ * 상단 도구 — 이제 <b>검색 진입 하나</b>다. 여백 스트립이 서 있던 왼쪽 자리는 사라졌다:
+ * 「새 글」 신호가 사람 단위(링)에서 <b>책 단위(격자 발광)</b>로 옮겨갔기 때문(2026-08-16 재설계).
+ * 전폭 알약으로 되돌아가면 그 줄만큼 책이 다시 아래로 밀린다 — 그래서 아이콘 형태는 지킨다.
  */
 describe('책방 상단 도구 (BookshopHeader)', () => {
-  const header = (feed: StoryFeedResponse | null) =>
-    render(<BookshopHeader feed={feed} onOpenStory={() => {}} onCompose={() => {}} onSearch={() => {}} />);
+  const header = () => render(<BookshopHeader onSearch={() => {}} />);
 
-  it('검색은 여백 줄 오른쪽 끝이다 — 스트립보다 뒤에 온다', () => {
-    const markup = header({ mine: null, groups: [] });
-
-    expect(markup).toContain('여백 적기');
-    expect(markup).toContain('aria-label="아이디로 친구 찾기"');
-    expect(markup.indexOf('여백 적기')).toBeLessThan(markup.indexOf('아이디로 친구 찾기'));
+  it('검색 진입 아이콘이 선다', () => {
+    expect(header()).toContain('aria-label="아이디로 친구 찾기"');
   });
 
   it('전폭 진입바는 사라졌다 — 옛 알약이 되살아나면 그 줄만큼 책이 다시 밀린다', () => {
     // 옛 진입바는 버튼 **본문**에 문구를 그렸다. 지금 그 문구는 aria-label 안에만 산다.
-    expect(header({ mine: null, groups: [] })).not.toContain('>🔍 아이디로 친구 찾기<');
+    expect(header()).not.toContain('>🔍 아이디로 친구 찾기<');
   });
 
-  it('피드를 아직 못 받아 스트립이 통째로 빠져도 검색은 선다', () => {
-    // StoryStrip은 feed=null이면 null을 반환한다 — 같은 줄에 얹으면서 함께 사라지면 탭 진입 직후
-    // 상단에 아무 진입점도 없다(옛 구조에선 검색이 별도 줄이라 이 위험이 없었다).
-    expect(header(null)).toContain('aria-label="아이디로 친구 찾기"');
+  it('여백 스트립은 남지 않는다 — 링(사람 단위 새 글)은 격자 발광으로 대체됐다', () => {
+    expect(header()).not.toContain('여백 적기');
+    expect(header()).not.toContain('내 여백');
   });
 });
 

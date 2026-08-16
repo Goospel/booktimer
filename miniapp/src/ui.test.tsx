@@ -38,7 +38,7 @@ describe('화면 껍데기 (Screen)', () => {
 });
 
 /**
- * 제목 위 슬롯(`above`) — 화면 소속이 아니라 그 위에 얹히는 도구(책방의 검색·스토리) 자리다.
+ * 제목 위 슬롯(`above`) — 화면 소속이 아니라 그 위에 얹히는 도구(책방의 검색) 자리다.
  * 본문에 끼우면 「…님의 책방」 아래에 검색창이 오는 어색한 순서가 된다(사용자 제보).
  */
 describe('화면 껍데기 — 제목 위 슬롯 (above)', () => {
@@ -199,6 +199,7 @@ function home(overrides: Partial<DashboardResponse>) {
         goalAdPending={false}
         onGoSettings={() => {}}
         onError={() => {}}
+        onOpenMargin={() => {}}
       />
     </TDSMobileProvider>,
   );
@@ -414,7 +415,7 @@ describe('표지 출처 결정', () => {
 });
 
 /**
- * 표지 로드 시점 — 목록(서재·프로필·스토리)은 접힌 아래까지 길어 lazy가 맞지만, 홈 캐러셀은
+ * 표지 로드 시점 — 목록(서재·프로필·여백)은 접힌 아래까지 길어 lazy가 맞지만, 홈 캐러셀은
  * 첫 화면 한가운데에 있고 탭을 오갈 때마다 재마운트돼 lazy면 표지가 한 박자 늦게 뜬다.
  */
 describe('표지 로드 시점', () => {
@@ -450,9 +451,9 @@ describe('실패 안내', () => {
   });
 
   it('재시도할 게 없으면 문구만 — 아무 데도 안 가는 버튼을 내놓지 않는다', () => {
-    const markup = errorBox('스토리를 너무 자주 올렸어요.');
+    const markup = errorBox('글을 너무 자주 남겼어요.');
 
-    expect(markup).toContain('스토리를 너무 자주 올렸어요.');
+    expect(markup).toContain('글을 너무 자주 남겼어요.');
     expect(markup).not.toContain('다시 시도');
   });
 

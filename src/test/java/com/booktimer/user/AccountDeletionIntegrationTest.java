@@ -15,8 +15,6 @@ import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.story.Story;
 import com.booktimer.story.StoryRepository;
-import com.booktimer.story.StoryView;
-import com.booktimer.story.StoryViewRepository;
 import com.booktimer.timer.ReadingGoalService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -60,8 +58,6 @@ class AccountDeletionIntegrationTest {
     private ReadingSessionRepository sessionRepository;
     @Autowired
     private StoryRepository storyRepository;
-    @Autowired
-    private StoryViewRepository storyViewRepository;
     @Autowired
     private FollowRepository followRepository;
     @Autowired
@@ -128,7 +124,7 @@ class AccountDeletionIntegrationTest {
      * FK 참조하므로, 순서가 하나만 틀려도 flush 시점에 제약 위반으로 터진다. mock은 FK를 모른다(T-023·T-029).
      */
     @Test
-    @DisplayName("미니앱 탈퇴: 세션·책·스토리·팔로우를 가진 토스 계정도 FK 위반 없이 전부 삭제된다")
+    @DisplayName("미니앱 탈퇴: 세션·책·여백 글·팔로우를 가진 토스 계정도 FK 위반 없이 전부 삭제된다")
     void deleteTossVerifiedAccount_withChildren_succeeds() {
         User me = userRepository.saveAndFlush(
                 withTossKey(User.ofOAuth("toss-quit@noreply.booktimer.app", "토스유저", "Asia/Seoul",
@@ -137,13 +133,12 @@ class AccountDeletionIntegrationTest {
                 User.of("friend@booktimer.com", passwordEncoder.encode("rawpw1234"), "친구", "Asia/Seoul", Role.USER));
 
         Book book = Book.register(me, "탈퇴 전에 읽던 책", null, null, null, null, null, BookStatus.READING);
-        book.makePublic(); // 스토리는 공개 책에만 붙는다(Story.of의 불변식)
+        book.makePublic(); // 여백은 공개 책에만 열린다(Story.of의 불변식)
         bookRepository.saveAndFlush(book);
         // 세션은 book을 FK 참조한다 — 책보다 뒤에 지우면 위반이다.
         sessionRepository.saveAndFlush(ReadingSession.start(me, Instant.now().minusSeconds(3600), book));
-        // 스토리도 book 참조 + 열람기록이 스토리를 참조한다(3단 사슬).
-        Story story = storyRepository.saveAndFlush(Story.of(me, "오늘로 마지막 기록.", book, "paper"));
-        storyViewRepository.saveAndFlush(StoryView.of(story, friend));
+        // 여백의 글도 book을 FK 참조한다 — 책보다 먼저 지워야 한다.
+        storyRepository.saveAndFlush(Story.of(me, "오늘로 마지막 기록.", book, "paper"));
         // 팔로우는 양방향 — 내가 건 것과 남이 나에게 건 것 둘 다 정리돼야 한다.
         followRepository.saveAndFlush(Follow.of(me, friend));
         followRepository.saveAndFlush(Follow.of(friend, me));

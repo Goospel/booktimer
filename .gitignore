@@ -67,3 +67,6 @@ playwright-report/
 
 # 토스 mTLS 클라이언트 인증서 — render-env.sh 가 SSM에서 렌더하는 실파일. 레포 커밋 금지(OAuth 키와 동일 정책).
 deploy/toss/
+
+# Claude Code 개인 설정(머신 로컬) — 공개 레포에 권한 규칙이 실리지 않게
+.claude/settings.local.json
