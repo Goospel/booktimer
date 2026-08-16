@@ -400,6 +400,7 @@ export function MainTabs({
             onError={onError}
             onShelfChanged={onShelfChanged}
             onOpenMargin={onOpenMargin}
+            onComposeMargin={onComposeMargin}
           />
         )}
         {tab === 'bookshop' && (

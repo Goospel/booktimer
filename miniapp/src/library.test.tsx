@@ -2,9 +2,18 @@ import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import type { BookStatus, MyBookSummary } from './api';
+import type { BookStatus, MarginEntry, MarginResponse, MyBookSummary } from './api';
 import type { LibrarySheet } from './screens/Library';
-import { BookGrid, BookSearch, Shelf, metaLine, needsPublishConfirm, resolveSelected } from './screens/Library';
+import {
+  BookGrid,
+  BookSearch,
+  MarginBoxView,
+  Shelf,
+  marginBoxView,
+  metaLine,
+  needsPublishConfirm,
+  resolveSelected,
+} from './screens/Library';
 import { userAgent } from './test-fixtures';
 
 /**
@@ -57,6 +66,8 @@ function shelf(
         onSheet={() => {}}
         onAction={() => {}}
         onOpenMargin={() => {}}
+        onComposeMargin={() => {}}
+        onError={() => {}}
       />
     </TDSMobileProvider>,
   );
@@ -156,26 +167,180 @@ describe('선택 해석 (resolveSelected)', () => {
 });
 
 /**
- * 서재의 여백 문 — 서재는 "내가 뭘 남겼더라"를 들춰보는 자리라 작성 직행이 아니라 여백 화면으로 간다
- * (홈 문은 반대로 작성 직행이다). 핸들이 없으면 서버가 여백 대상을 찾지 못하므로 그리지 않는다.
+ * 인라인 여백 박스가 든 스냅 판정 — 캐러셀을 훑으면 요청이 겹쳐 도착하므로, 스냅에 **어느 책의 응답인지**
+ * 태그를 달아 두고 지금 책과 다르면 무조건 로딩으로 떨어뜨린다(경합 렌더 가드).
+ * 이 가드가 없으면 책 B로 넘어간 화면에 책 A의 글이 잠깐 비친다 — 남의 책 아래 내 글이 붙는 셈이다.
  */
-describe('서재 여백 손잡이', () => {
-  it('고른 책 옆에 「관리」와 나란히 선다', () => {
-    const markup = shelf([book(1, '데미안', 'READING')], { selectedId: 1 });
+describe('인라인 여백 스냅 판정 (marginBoxView)', () => {
+  const response = (bookId: number): MarginResponse => ({
+    book: { id: bookId, title: '데미안', author: '헤세', coverUrl: null },
+    ownerNickname: '구스펠',
+    self: true,
+    following: false,
+    entries: [],
+  });
+
+  it('스냅이 아직 없으면 로딩이다', () => {
+    expect(marginBoxView(null, 1)).toBe('loading');
+  });
+
+  it('다른 책의 스냅이면 로딩이다 — 옛 책의 글이 새 책 아래 그려질 수 없다', () => {
+    expect(marginBoxView({ bookId: 2, margin: response(2) }, 1)).toBe('loading');
+  });
+
+  it('같은 책의 응답이면 그대로 그린다', () => {
+    const margin = response(1);
+
+    expect(marginBoxView({ bookId: 1, margin }, 1)).toBe(margin);
+  });
+
+  it('같은 책인데 응답이 null이면 실패다 — 화면 전체가 아니라 박스 안에 머문다', () => {
+    expect(marginBoxView({ bookId: 1, margin: null }, 1)).toBe('error');
+  });
+});
+
+/**
+ * 인라인 박스 표시 — 로딩·실패·내용 세 상태가 <b>같은 뼈대(테두리 + 헤더 줄)</b> 안에 머문다.
+ * 실패도 화면 전체를 빨갛게 만들지 않고 박스 안 한 줄이다(401만 App으로 올라간다).
+ *
+ * <p>미리보기는 최대 {@link MARGIN_PREVIEW_COUNT}장이고 나머지는 「전체 보기 ›」가 맡는다 —
+ * 서재의 박스는 목록이 아니라 <b>들춰보기 + 진입로</b>다.
+ */
+describe('인라인 여백 박스 표시 (MarginBoxView)', () => {
+  const NOW = Date.parse('2026-08-16T12:00:00Z');
+  const HOUR = 3_600_000;
+
+  const entry = (id: number, text: string, bgCode: string, hoursAgo: number): MarginEntry => ({
+    id,
+    text,
+    bgCode,
+    createdAt: new Date(NOW - hoursAgo * HOUR).toISOString(),
+  });
+
+  const margin = (entries: MarginEntry[]): MarginResponse => ({
+    book: { id: 1, title: '데미안', author: '헤세', coverUrl: null, isPublic: true },
+    ownerNickname: '구스펠',
+    self: true,
+    following: false,
+    entries,
+  });
+
+  const three = margin([
+    entry(1, '첫째 문장', 'night', 3),
+    entry(2, '둘째 문장', 'forest', 28),
+    entry(3, '셋째 문장', 'sea', 50),
+  ]);
+
+  const box = (view: MarginResponse | 'loading' | 'error') =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <MarginBoxView view={view} now={NOW} onOpenAll={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  it('헤더가 글 수를 말하고 전체 화면으로 가는 길을 준다', () => {
+    const markup = box(three);
 
     expect(markup).toContain('여백');
+    expect(markup).toContain('3');
+    expect(markup).toContain('전체 보기');
+  });
+
+  it('미리보기는 두 장까지 — 나머지는 「전체 보기」의 몫이다', () => {
+    const markup = box(three);
+
+    expect(markup).toContain('첫째 문장');
+    expect(markup).toContain('둘째 문장');
+    expect(markup).not.toContain('셋째 문장');
+  });
+
+  it('카드는 여백 화면과 같은 팔레트 배경과 상대 시각으로 선다', () => {
+    const markup = box(three);
+
+    expect(markup).toContain('#1f2233'); // night
+    expect(markup).toContain('3시간 전');
+  });
+
+  /** 지우기는 전체 화면의 몫이다 — 박스는 표시 전용이라 `self=false`로 카드를 빌려 쓴다. */
+  it('박스 안에는 지우기 UI가 없다 — 글 본문은 그대로 보인다', () => {
+    const markup = box(three);
+
+    expect(markup).toContain('첫째 문장');
+    expect(markup).not.toContain('지우기');
+  });
+
+  it('글이 0장이어도 박스는 서 있다 — 사라지면 캐러셀을 밀 때마다 화면 높이가 출렁인다', () => {
+    const markup = box(margin([]));
+
+    expect(markup).toContain('data-margin-box');
+    expect(markup).toContain('아직 남긴 글이 없어요');
+  });
+
+  it('로딩도 박스 안에서 말한다', () => {
+    const markup = box('loading');
+
+    expect(markup).toContain('data-margin-box');
+    expect(markup).toContain('불러오는 중');
+  });
+
+  it('실패도 박스 안에 머문다 — 화면 전체가 빨개지지 않는다', () => {
+    const markup = box('error');
+
+    expect(markup).toContain('data-margin-box');
+    expect(markup).toContain('여백을 불러오지 못했어요');
+  });
+});
+
+/**
+ * 서재 손잡이 줄 + 인라인 박스 — 「여백」을 눌러 목록 화면까지 가야 <b>무엇을 남겼는지</b> 보이던 것을
+ * 뒤집었다: 글은 박스가 그 자리에서 보여 주고, 손잡이는 <b>작성 직행</b>이 된다(홈 문과 같은 경로).
+ * 핸들이 없으면 서버가 여백 대상을 찾지 못하므로 글쓰기·박스 둘 다 그리지 않는다.
+ */
+describe('서재 손잡이 줄과 인라인 여백 박스', () => {
+  it('손잡이는 작성 직행과 관리 둘이다 — 목록으로 가던 옛 「여백」 버튼은 없다', () => {
+    const markup = shelf([book(1, '데미안', 'READING')], { selectedId: 1 });
+
+    expect(markup).toContain('여백에 글쓰기');
     expect(markup).toContain('관리');
+    expect(markup).not.toContain('>여백</button>'); // 옛 손잡이(라벨이 「여백」뿐인 버튼)
+  });
+
+  it('두 손잡이는 전폭을 2:1로 나눠 가진다 — 쓰기가 주, 관리가 보조다', () => {
+    const markup = shelf([book(1, '데미안', 'READING')], { selectedId: 1 });
+
+    expect(markup).toContain('flex:2');
+    expect(markup).toContain('flex:1');
+    expect(markup).toContain('rgba(110,138,106,.14)'); // 세이지 채움 = 주 동작
+  });
+
+  it('고른 책 아래 박스가 선다 — effect가 안 도는 정적 렌더에서는 로딩이다', () => {
+    const markup = shelf([book(1, '데미안', 'READING')], { selectedId: 1 });
+
+    expect(markup).toContain('data-margin-box');
+    expect(markup).toContain('불러오는 중');
   });
 
   it('비공개 책에도 선다 — 비공개 책의 여백은 나만 보는 메모다(결정 2)', () => {
-    expect(shelf([book(1, '메모책', 'READING', { isPublic: false })], { selectedId: 1 })).toContain('여백');
+    const markup = shelf([book(1, '메모책', 'READING', { isPublic: false })], { selectedId: 1 });
+
+    expect(markup).toContain('여백에 글쓰기');
+    expect(markup).toContain('data-margin-box');
   });
 
-  it('핸들이 없으면 손잡이가 없다 — 「관리」는 그대로 남는다', () => {
+  it('핸들이 없으면 글쓰기도 박스도 없다 — 「관리」가 홀로 남는다', () => {
     const markup = shelf([book(1, '데미안', 'READING')], { selectedId: 1, myLoginId: null });
 
-    expect(markup).not.toContain('여백');
+    expect(markup).not.toContain('여백에 글쓰기');
+    expect(markup).not.toContain('data-margin-box');
     expect(markup).toContain('관리');
+  });
+
+  it('빈 탭에는 손잡이 줄도 박스도 없다 — 가리킬 책이 없다', () => {
+    const markup = shelf([book(1, '읽는책', 'READING')], { tab: 'FINISHED' });
+
+    expect(markup).toContain('다 읽은 책이 없어요');
+    expect(markup).not.toContain('여백에 글쓰기');
+    expect(markup).not.toContain('data-margin-box');
   });
 });
 
