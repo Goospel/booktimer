@@ -8,8 +8,13 @@ import { formatDuration } from '../format';
 import { BookCover, CoverInitial, ErrorMessage, Loading, Screen, Sheet } from '../ui';
 import { BookCarousel } from './Home';
 
-/** 탭 순서 = 읽는 흐름 순서(읽는 중 → 다 읽음 → 읽고 싶어요). 빈 탭도 라벨은 남는다(자리가 흔들리지 않게). */
-const SECTIONS: { status: BookStatus; title: string; empty: string }[] = [
+/**
+ * 탭 순서 = 읽는 흐름 순서(읽는 중 → 다 읽음 → 읽고 싶어요). 빈 탭도 라벨은 남는다(자리가 흔들리지 않게).
+ *
+ * <p>책방의 공개 책 상태 필터도 이 어휘를 그대로 쓴다(단일 출처) — 같은 앱 안에서 서재 탭과 필터가
+ * 다른 말을 쓰면 같은 상태가 두 이름으로 보인다.
+ */
+export const SECTIONS: { status: BookStatus; title: string; empty: string }[] = [
   { status: 'READING', title: '읽는 중', empty: '읽는 중인 책이 없어요' },
   { status: 'FINISHED', title: '다 읽음', empty: '다 읽은 책이 없어요' },
   { status: 'WANT_TO_READ', title: '읽고 싶어요', empty: '읽고 싶은 책이 없어요' },
