@@ -102,12 +102,14 @@ function book(id: number, title: string, extra: Partial<BookOption> = {}): BookO
 
 function renderHome(
   overrides: Partial<DashboardResponse> = {},
-  props: { goalAdPending?: boolean } = {},
+  props: { goalAdPending?: boolean; selectedBookId?: number | null } = {},
 ) {
   return renderToStaticMarkup(
     <TDSMobileProvider userAgent={userAgent}>
       <Home
         dashboard={dashboard(overrides)}
+        selectedBookId={props.selectedBookId}
+        onSelectBook={() => {}}
         onTimerChange={() => {}}
         onGraphChange={() => {}}
         onGoGoal={() => {}}
@@ -872,6 +874,19 @@ describe('표지 캐러셀', () => {
 
     expect(markup).toContain('data-selected-book="노인과 바다"');
     expect(markup).toContain('헤밍웨이');
+  });
+
+  it('고른 책은 홈이 아니라 밖(App)이 들고 있다 — 여백에 글을 쓰고 돌아와도 기본 책으로 되돌아가지 않는다', () => {
+    const markup = renderHome({ readingBooks: books, recentBookId: 1 }, { selectedBookId: 2 });
+
+    expect(markup).toContain('data-selected-book="노인과 바다"');
+  });
+
+  it('아직 안 골랐으면(undefined) 기본값 규칙을 따른다 — 「책 없이」를 고른 null과 다르다', () => {
+    expect(renderHome({ readingBooks: books, recentBookId: 2 })).toContain('data-selected-book="노인과 바다"');
+    expect(renderHome({ readingBooks: books, recentBookId: 2 }, { selectedBookId: null })).toContain(
+      'data-selected-book="책 없이 측정"',
+    );
   });
 
   it('최근 읽은 책이 목록 밖이면 첫 책이 가운데 — defaultBookId 규칙 그대로다', () => {

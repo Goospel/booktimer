@@ -724,6 +724,8 @@ interface Untagged {
  */
 export function Home({
   dashboard,
+  selectedBookId: picked,
+  onSelectBook,
   onTimerChange,
   onGraphChange,
   onGoGoal,
@@ -734,6 +736,12 @@ export function Home({
   onComposeMargin,
 }: {
   dashboard: DashboardResponse;
+  /**
+   * 캐러셀에서 고른 책 — 상태는 **App이 든다**(홈은 여백·목표·설정이 열리면 언마운트된다).
+   * `undefined`는 아직 고르지 않음(여기서 {@link defaultBookId}로 정한다), `null`은 「책 없이」를 고른 것.
+   */
+  selectedBookId: number | null | undefined;
+  onSelectBook: (bookId: number | null) => void;
   onTimerChange: (timer: TimerState) => void;
   onGraphChange: (graph: DashboardResponse['graph']) => void;
   onGoGoal: () => void;
@@ -749,10 +757,8 @@ export function Home({
 }) {
   /** 태깅 시트 — `null`이면 닫힘. 열림 여부와 대상 세션이 늘 같이 움직여 상태 하나로 족하다. */
   const [tagging, setTagging] = useState<Untagged | null>(null);
-  /** 측정할 책 — 칩에 뜨는 그 책이고, 시작은 아래 주 버튼이 맡는다(여러 책을 번갈아 읽는 사람). */
-  const [selectedBookId, setSelectedBookId] = useState(() =>
-    defaultBookId(dashboard.readingBooks, dashboard.recentBookId),
-  );
+  /** 측정할 책 — 아직 안 골랐으면 기본값(이어 읽기)으로 떨어진다. 고른 값은 App이 들어 화면을 나갔다 와도 남는다. */
+  const selectedBookId = picked === undefined ? defaultBookId(dashboard.readingBooks, dashboard.recentBookId) : picked;
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -987,7 +993,7 @@ export function Home({
             무엇으로 측정할까요?
           </Text>
           {/* 좌우로 밀어 고른다 — 가운데 온 칸이 곧 측정 대상이다(0번은 「책 없이」라 책 0권도 같은 화면). */}
-          <BookCarousel books={dashboard.readingBooks} selectedId={selectedBookId} onSelect={setSelectedBookId} />
+          <BookCarousel books={dashboard.readingBooks} selectedId={selectedBookId} onSelect={onSelectBook} />
         </section>
       )}
 

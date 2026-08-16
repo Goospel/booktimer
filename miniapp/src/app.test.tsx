@@ -54,6 +54,8 @@ function renderTab(tab: (typeof TABS)[number]['key']) {
         tab={tab}
         onTabChange={() => {}}
         dashboard={dashboard}
+        homeBookId={undefined}
+        onSelectHomeBook={() => {}}
         onOpenMargin={() => {}}
         onComposeMargin={() => {}}
         onTimerChange={() => {}}
