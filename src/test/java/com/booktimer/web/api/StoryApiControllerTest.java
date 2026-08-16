@@ -1,8 +1,12 @@
 package com.booktimer.web.api;
 
+import com.booktimer.block.Block;
+import com.booktimer.block.BlockRepository;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
+import com.booktimer.follow.Follow;
+import com.booktimer.follow.FollowRepository;
 import com.booktimer.security.RateLimitService;
 import com.booktimer.story.Story;
 import com.booktimer.story.StoryRepository;
@@ -27,6 +31,7 @@ import java.time.ZoneId;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
@@ -53,6 +58,12 @@ class StoryApiControllerTest {
 
     @Autowired
     private BookRepository bookRepository;
+
+    @Autowired
+    private FollowRepository followRepository;
+
+    @Autowired
+    private BlockRepository blockRepository;
 
     @Autowired
     private RateLimitService rateLimitService;
@@ -155,6 +166,91 @@ class StoryApiControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"text\":\"문장\",\"bookId\":" + book.getId() + ",\"bgCode\":\"#ff0000\"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    // --- GET /api/stories/of/{loginId}?bookId= (책 하나의 여백) ---
+
+    @Test
+    @DisplayName("GET /api/stories/of 차단 관계 → 404 (존재 누설 금지)")
+    void marginOf_blocked_returns404() throws Exception {
+        register("of-viewer@booktimer.com", "ofviewer", "열람자");
+        User target = register("of-target@booktimer.com", "oftarget", "대상");
+        User viewer = userRepository.findByEmail("of-viewer@booktimer.com").orElseThrow();
+        Book book = publicBookOf(target, "가려질 책");
+        blockRepository.save(Block.of(target, viewer));
+
+        mockMvc.perform(get("/api/stories/of/oftarget")
+                        .param("bookId", String.valueOf(book.getId()))
+                        .with(user("of-viewer@booktimer.com")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("GET /api/stories/of 남의 책 id를 다른 핸들에 끼워 넣으면 → 404 (IDOR)")
+    void marginOf_bookOfAnotherOwner_returns404() throws Exception {
+        register("idor-viewer@booktimer.com", "idorviewer", "열람자");
+        User target = register("idor-target@booktimer.com", "idortarget", "대상");
+        User stranger = register("idor-other@booktimer.com", "idorother", "제3자");
+        Book strangersBook = publicBookOf(stranger, "제3자의 책");
+        followRepository.save(Follow.of(
+                userRepository.findByEmail("idor-viewer@booktimer.com").orElseThrow(), target));
+
+        mockMvc.perform(get("/api/stories/of/idortarget")
+                        .param("bookId", String.valueOf(strangersBook.getId()))
+                        .with(user("idor-viewer@booktimer.com")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("GET /api/stories/of 상대의 PRIVATE 책 → 404 (비공개 책의 글은 새지 않는다)")
+    void marginOf_privateBook_returns404() throws Exception {
+        User viewer = register("pv-viewer@booktimer.com", "pvviewer", "열람자");
+        User target = register("pv-target@booktimer.com", "pvtarget", "대상");
+        followRepository.save(Follow.of(viewer, target));
+        Book secret = bookRepository.save(
+                Book.register(target, "비공개 책", null, null, null, null, null, BookStatus.READING));
+
+        mockMvc.perform(get("/api/stories/of/pvtarget")
+                        .param("bookId", String.valueOf(secret.getId()))
+                        .with(user("pv-viewer@booktimer.com")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("GET /api/stories/of 비팔로워 → 200 + 책 라벨은 주되 entries는 빈 배열")
+    void marginOf_nonFollower_returnsEmptyEntries() throws Exception {
+        register("nf-viewer@booktimer.com", "nfviewer", "열람자");
+        User target = register("nf-target@booktimer.com", "nftarget", "대상");
+        Book book = publicBookOf(target, "공개 책");
+        storyRepository.save(Story.of(target, "비팔로워에겐 안 보일 문장", book, null));
+
+        mockMvc.perform(get("/api/stories/of/nftarget")
+                        .param("bookId", String.valueOf(book.getId()))
+                        .with(user("nf-viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.book.title").value("공개 책"))
+                .andExpect(jsonPath("$.following").value(false))
+                .andExpect(jsonPath("$.self").value(false))
+                .andExpect(jsonPath("$.entries").isEmpty());
+    }
+
+    @Test
+    @DisplayName("GET /api/stories/of 팔로워 → 그 책 여백의 글 목록(최신순)")
+    void marginOf_follower_returnsEntries() throws Exception {
+        User viewer = register("fw-viewer@booktimer.com", "fwviewer", "열람자");
+        User target = register("fw-target@booktimer.com", "fwtarget", "대상");
+        followRepository.save(Follow.of(viewer, target));
+        Book book = publicBookOf(target, "공개 책");
+        storyRepository.save(Story.of(target, "팔로워에겐 보일 문장", book, "sea"));
+
+        mockMvc.perform(get("/api/stories/of/fwtarget")
+                        .param("bookId", String.valueOf(book.getId()))
+                        .with(user("fw-viewer@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ownerNickname").value("대상"))
+                .andExpect(jsonPath("$.following").value(true))
+                .andExpect(jsonPath("$.entries[0].text").value("팔로워에겐 보일 문장"))
+                .andExpect(jsonPath("$.entries[0].bgCode").value("sea"));
     }
 
     @Test

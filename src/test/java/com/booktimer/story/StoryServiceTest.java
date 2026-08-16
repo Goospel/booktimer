@@ -3,6 +3,8 @@ package com.booktimer.story;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
+import com.booktimer.follow.FollowService;
+import com.booktimer.profile.ProfileService;
 import com.booktimer.security.RateLimitAction;
 import com.booktimer.security.RateLimitService;
 import com.booktimer.user.Role;
@@ -11,18 +13,22 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -38,6 +44,10 @@ class StoryServiceTest {
     private BookRepository bookRepository;
     @Mock
     private RateLimitService rateLimitService;
+    @Mock
+    private FollowService followService;
+    @Mock
+    private ProfileService profileService;
 
     private StoryService service;
 
@@ -45,7 +55,8 @@ class StoryServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new StoryService(storyRepository, bookRepository, rateLimitService);
+        service = new StoryService(storyRepository, bookRepository, rateLimitService,
+                followService, profileService);
         me = userWithId(1L, "meuser", "나");
     }
 
@@ -133,6 +144,134 @@ class StoryServiceTest {
         assertThat(saved.getText()).isEqualTo("인상 깊은 문장");
         assertThat(saved.getBook()).isSameAs(mine);
         assertThat(saved.getBgCode()).isEqualTo("night");
+    }
+
+    // --- marginOf (책 하나의 글 목록) ---
+
+    /** 대상 사용자를 프로필 가드 통과 상태로 세팅 — 여백 게이트는 프로필과 같은 가드를 공유한다. */
+    private User visibleTarget(String loginId) {
+        User target = userWithId(2L, loginId, "대상");
+        when(profileService.resolveVisibleTarget(me, loginId)).thenReturn(Optional.of(target));
+        return target;
+    }
+
+    @Test
+    @DisplayName("marginOf: 가드 실패(차단·ADMIN·미존재) → 404 (프로필 가드와 동일 경로)")
+    void marginOf_guardFails_throws404() {
+        when(profileService.resolveVisibleTarget(me, "hidden")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.marginOf(me, "hidden", 7L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("marginOf: 남의 책 id를 다른 사람 핸들에 끼워 넣으면 → 404 (IDOR — 존재 비노출)")
+    void marginOf_bookNotOwnedByTarget_throws404() {
+        User target = visibleTarget("target");
+        when(bookRepository.findByIdAndUser(7L, target)).thenReturn(Optional.empty()); // 남의 책·없는 책
+
+        assertThatThrownBy(() -> service.marginOf(me, "target", 7L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("marginOf: target의 PRIVATE 책 → 404 (격자에 안 보이는 책 = 존재 비노출)")
+    void marginOf_privateBook_throws404() {
+        User target = visibleTarget("target");
+        Book hidden = Book.register(target, "비공개 책", null, null, null, null, null, BookStatus.READING);
+        when(bookRepository.findByIdAndUser(7L, target)).thenReturn(Optional.of(hidden));
+
+        assertThatThrownBy(() -> service.marginOf(me, "target", 7L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("marginOf: 내 PRIVATE 책도 404 — 격자 진입점이 없는 책엔 여백이 열리지 않는다")
+    void marginOf_ownPrivateBook_throws404() {
+        when(profileService.resolveVisibleTarget(me, "meuser")).thenReturn(Optional.of(me));
+        Book hidden = Book.register(me, "내 비공개 책", null, null, null, null, null, BookStatus.READING);
+        when(bookRepository.findByIdAndUser(7L, me)).thenReturn(Optional.of(hidden));
+
+        assertThatThrownBy(() -> service.marginOf(me, "meuser", 7L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("marginOf: 비팔로워 → 책 라벨은 주되 entries는 빈 배열 (글 유무 정보도 안 샘)")
+    void marginOf_nonFollower_returnsEmptyEntriesWithBookLabel() {
+        User target = visibleTarget("target");
+        Book book = publicBookOf(target, "남의 공개 책");
+        when(bookRepository.findByIdAndUser(7L, target)).thenReturn(Optional.of(book));
+        when(followService.isFollowing(me, target)).thenReturn(false);
+
+        MarginResponse response = service.marginOf(me, "target", 7L);
+
+        assertThat(response.entries()).isEmpty();
+        assertThat(response.following()).isFalse();
+        assertThat(response.self()).isFalse();
+        assertThat(response.book().title()).isEqualTo("남의 공개 책"); // 화면이 "팔로우하면 볼 수 있어요"를 그린다
+        assertThat(response.ownerNickname()).isEqualTo("대상");
+        verify(storyRepository, never()).findByUserAndBookOrderByCreatedAtDescIdDesc(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("marginOf: 팔로워 → 최신순 글 목록 + following:true")
+    void marginOf_follower_returnsNewestFirst() {
+        User target = visibleTarget("target");
+        Book book = publicBookOf(target, "공개 책");
+        when(bookRepository.findByIdAndUser(7L, target)).thenReturn(Optional.of(book));
+        when(followService.isFollowing(me, target)).thenReturn(true);
+        Story older = storyWithId(10L, target, "먼저 남긴 글", NOW.minusSeconds(600), book);
+        Story newer = storyWithId(11L, target, "나중 남긴 글", NOW.minusSeconds(60), book);
+        when(storyRepository.findByUserAndBookOrderByCreatedAtDescIdDesc(eq(target), eq(book), any(Pageable.class)))
+                .thenReturn(List.of(newer, older));
+
+        MarginResponse response = service.marginOf(me, "target", 7L);
+
+        assertThat(response.following()).isTrue();
+        assertThat(response.self()).isFalse();
+        assertThat(response.entries()).extracting(MarginEntry::text)
+                .containsExactly("나중 남긴 글", "먼저 남긴 글");
+        assertThat(response.entries().get(0).createdAt()).isEqualTo(NOW.minusSeconds(60));
+    }
+
+    @Test
+    @DisplayName("marginOf: 목록 상한 100장을 레포에 그대로 넘긴다 (페이지네이션 대신)")
+    void marginOf_capsAtHundred() {
+        User target = visibleTarget("target");
+        Book book = publicBookOf(target, "공개 책");
+        when(bookRepository.findByIdAndUser(7L, target)).thenReturn(Optional.of(book));
+        when(followService.isFollowing(me, target)).thenReturn(true);
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        when(storyRepository.findByUserAndBookOrderByCreatedAtDescIdDesc(eq(target), eq(book), captor.capture()))
+                .thenReturn(List.of());
+
+        service.marginOf(me, "target", 7L);
+
+        assertThat(captor.getValue().getPageSize()).isEqualTo(100);
+    }
+
+    @Test
+    @DisplayName("marginOf: 본인 → 팔로우 검사 없이 목록 + self:true")
+    void marginOf_self_returnsOwnEntries() {
+        when(profileService.resolveVisibleTarget(me, "meuser")).thenReturn(Optional.of(me));
+        Book book = publicBookOf(me, "내 공개 책");
+        when(bookRepository.findByIdAndUser(7L, me)).thenReturn(Optional.of(book));
+        Story mine = storyWithId(10L, me, "내 글", NOW.minusSeconds(60), book);
+        when(storyRepository.findByUserAndBookOrderByCreatedAtDescIdDesc(eq(me), eq(book), any(Pageable.class)))
+                .thenReturn(List.of(mine));
+
+        MarginResponse response = service.marginOf(me, "meuser", 7L);
+
+        assertThat(response.self()).isTrue();
+        assertThat(response.following()).isFalse(); // 자기 자신은 팔로우 대상이 아니다
+        assertThat(response.entries()).extracting(MarginEntry::text).containsExactly("내 글");
+        assertThat(response.book().coverUrl()).isEqualTo("https://img/cover.jpg");
+        verify(followService, never()).isFollowing(any(), any());
     }
 
     // --- delete ---

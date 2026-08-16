@@ -2,15 +2,18 @@ package com.booktimer.web.api;
 
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.story.MarginEntry;
+import com.booktimer.story.MarginResponse;
 import com.booktimer.story.Story;
 import com.booktimer.story.StoryService;
 import com.booktimer.user.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -36,6 +39,17 @@ public class StoryApiController {
     public StoryApiController(CurrentUserService currentUserService, StoryService storyService) {
         this.currentUserService = currentUserService;
         this.storyService = storyService;
+    }
+
+    /**
+     * 책 하나의 여백 — 그 자리에 쌓인 글 목록. 경로는 「누구의」(loginId) + 「어느 책」(bookId) 두 축이다.
+     * 노출 게이트는 전부 {@link StoryService#marginOf}에 있다(차단·IDOR·PRIVATE → 404 / 비팔로워 → 빈 목록).
+     */
+    @GetMapping("/api/stories/of/{loginId}")
+    public MarginResponse marginOf(@PathVariable String loginId,
+                                   @RequestParam Long bookId,
+                                   Principal principal) {
+        return storyService.marginOf(currentUserService.resolve(principal), loginId, bookId);
     }
 
     @PostMapping("/api/stories")

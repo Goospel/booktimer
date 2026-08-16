@@ -2,13 +2,18 @@ package com.booktimer.story;
 
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
+import com.booktimer.follow.FollowService;
+import com.booktimer.profile.ProfileService;
 import com.booktimer.security.RateLimitAction;
 import com.booktimer.security.RateLimitService;
 import com.booktimer.user.User;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
 
 /**
  * 여백 유스케이스 (sns-design §13) — 글 작성·본인 삭제.
@@ -24,16 +29,28 @@ import org.springframework.web.server.ResponseStatusException;
 @Transactional
 public class StoryService {
 
+    /**
+     * 한 책의 여백에서 한 번에 내려주는 글 수. 레이트리밋이 시간당 10장이라 도달까지 수개월이다.
+     * ponytail: 넘치면 헤더의 N이 100에서 멈춘다 — 페이지네이션은 그때 붙인다.
+     */
+    public static final int MAX_MARGIN_ENTRIES = 100;
+
     private final StoryRepository storyRepository;
     private final BookRepository bookRepository;
     private final RateLimitService rateLimitService;
+    private final FollowService followService;
+    private final ProfileService profileService;
 
     public StoryService(StoryRepository storyRepository,
                         BookRepository bookRepository,
-                        RateLimitService rateLimitService) {
+                        RateLimitService rateLimitService,
+                        FollowService followService,
+                        ProfileService profileService) {
         this.storyRepository = storyRepository;
         this.bookRepository = bookRepository;
         this.rateLimitService = rateLimitService;
+        this.followService = followService;
+        this.profileService = profileService;
     }
 
     /**
@@ -57,6 +74,40 @@ public class StoryService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "공개 책에만 글을 남길 수 있습니다");
         }
         return storyRepository.save(Story.of(author, text, book, bgCode));
+    }
+
+    /**
+     * 책 하나의 여백 — 그 자리에 쌓인 글 목록(최신순). 진입로는 책방 격자와 홈 소식 둘이라
+     * 응답이 자기완결이다({@link MarginResponse}).
+     *
+     * <p>게이트 순서(하나라도 어긋나면 <b>존재를 감춘다</b>):
+     * <ol>
+     *   <li>{@link ProfileService#resolveVisibleTarget} — 차단·ADMIN·미존재 → 404 (프로필과 같은 가드 공유)</li>
+     *   <li>책이 target 소유가 아니거나 없음 → 404. 남의 책 id를 다른 핸들에 끼워 넣는 IDOR를 여기서 막는다</li>
+     *   <li>책이 PRIVATE → 404. <b>본인이어도 마찬가지다</b> — 격자에 안 보이는 책엔 진입점이 없고,
+     *       예외를 두면 "비공개 책의 존재"가 새는 유일 경로가 된다</li>
+     *   <li>비팔로워(본인 아님) → {@code entries} 빈 배열 + {@code following:false}. 404가 아닌 이유:
+     *       공개 책은 격자에 이미 보이므로 감출 것이 책이 아니라 <b>글</b>이다(글 유무 정보도 안 샘)</li>
+     * </ol>
+     */
+    @Transactional(readOnly = true)
+    public MarginResponse marginOf(User viewer, String loginId, Long bookId) {
+        User target = profileService.resolveVisibleTarget(viewer, loginId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다"));
+        Book book = bookRepository.findByIdAndUser(bookId, target)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다"));
+        if (!book.isPublic()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다");
+        }
+        boolean self = isSameUser(target, viewer);
+        boolean following = !self && followService.isFollowing(viewer, target);
+        List<MarginEntry> entries = (self || following)
+                ? storyRepository.findByUserAndBookOrderByCreatedAtDescIdDesc(
+                        target, book, PageRequest.of(0, MAX_MARGIN_ENTRIES)).stream()
+                        .map(MarginEntry::of)
+                        .toList()
+                : List.of();
+        return new MarginResponse(MarginBook.of(book), target.getNickname(), self, following, entries);
     }
 
     /** 본인 글 즉시 삭제(실수 게시 회수 — §13.6). 없거나 타인 것이면 404(IDOR — 존재 비노출). */
