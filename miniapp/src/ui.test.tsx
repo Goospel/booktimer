@@ -288,6 +288,11 @@ describe('배경·color-scheme', () => {
     expect(css).toMatch(/\.no-scrollbar[^}]*scrollbar-width:\s*none/);
     expect(css).toMatch(/\.no-scrollbar::-webkit-scrollbar[^}]*display:\s*none/);
   });
+
+  it('민 버튼이 글자색을 물려받는다 — iOS UA 기본이 시스템 블루라 안 누르면 책 제목이 파랗게 뜬다', () => {
+    // 선택자가 딱 `button`이어야 한다: 클래스를 얹으면(0-0-1 → 0-0-2) TDS Button까지 사정권에 든다.
+    expect(read('./global.css')).toMatch(/(?:^|\n)button\s*\{[^}]*color:\s*inherit/);
+  });
 });
 
 /**
