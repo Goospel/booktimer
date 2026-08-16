@@ -30,6 +30,7 @@ import { REWARD_AD_GROUP_ID, watchRewardAd } from '../toss';
 import { COVER_FG, ErrorMessage, Loading, Screen, Sheet, coverColor, initialOf } from '../ui';
 import { waiverErrorMessage } from './Home';
 import { BookGrid } from './Library';
+import { hasFreshStory } from './Story';
 
 /**
  * 책방(프로필) 뷰 — 닉네임·책BTI·공개 책 목록 + 팔로우/언팔로우 + 차단·신고.
@@ -193,15 +194,18 @@ export function Profile({
   onError,
   header,
   onOpenFollowList,
+  onOpenMargin,
 }: {
   loginId: string;
   /** 없으면 「돌아가기」를 그리지 않는다 — 탭 루트(내 책방)에는 돌아갈 곳이 없고 출구가 탭바다. */
   onBack?: () => void;
   onError: (error: Error) => void;
-  /** 제목보다 **위**에 얹히는 슬롯 — 책방 셸이 검색 진입바·여백 스트립을 여기 끼운다. */
+  /** 제목보다 **위**에 얹히는 슬롯 — 책방 셸이 검색 진입을 여기 끼운다. */
   header?: ReactNode;
   /** 카운트를 눌렀을 때 — 목록 시트는 셸이 연다(이 화면은 목록 상태를 들지 않는다). */
   onOpenFollowList?: (type: FollowListType) => void;
+  /** 격자에서 책을 눌렀을 때 — 그 책의 여백 화면으로 간다(전체 화면 전이는 셸이 든다). */
+  onOpenMargin?: (bookId: number) => void;
 }) {
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [books, setBooks] = useState<ProfileBook[]>([]);
@@ -347,6 +351,8 @@ export function Profile({
         profile={profile}
         books={books}
         activeTag={activeTag}
+        now={Date.now()}
+        onOpenMargin={onOpenMargin}
         busy={busy}
         personalityStatus={personalityStatus}
         adBusy={adBusy}
@@ -392,6 +398,8 @@ export function ProfileCard({
   profile,
   books,
   activeTag,
+  now,
+  onOpenMargin,
   busy,
   personalityStatus,
   adBusy,
@@ -413,6 +421,10 @@ export function ProfileCard({
   profile: ProfileResponse;
   books: ProfileBook[];
   activeTag: string | null;
+  /** 발광 판정의 기준 시각 — 밖에서 받아야 테스트가 결정론이 된다. */
+  now: number;
+  /** 격자 칸을 눌러 여백을 여는 손잡이. 없으면 칸을 버튼으로도 만들지 않는다. */
+  onOpenMargin?: (bookId: number) => void;
   busy: boolean;
   personalityStatus: PersonalityStatus | null;
   adBusy: boolean;
@@ -580,6 +592,9 @@ export function ProfileCard({
        * 공개 책 = 3열 격자(사용자 승인 B안). 캐러셀은 한 번에 한 권만 보여 주고 나머지는 「펼쳐보기」를
        * 눌러야 했다 — 책장을 훑는 화면인데 왕복이 끼어 있었다. 격자는 그 시트를 본문에 펼친 것이라
        * 새로 만든 물건이 없다. ⚠️ 대신 캐러셀 아래 있던 메타(상태·읽은 시간)는 사라진다(알고 한 교환).
+       *
+       * 이제 각 칸이 **그 책의 여백으로 가는 문**이다(2026-08-16 재설계) — 24시간 안에 새 글이 달린 책은
+       * 발광한다. 판정 재료(`lastStoryAt`)는 서버가 주고 창 계산은 `hasFreshStory`가 한다.
        */}
       <section style={{ marginTop: 28 }}>
         <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
@@ -595,8 +610,11 @@ export function ProfileCard({
             공개한 책이 없어요.
           </Text>
         ) : (
-          // onPick을 주지 않는다 — 여기 격자는 보기만 하는 목록이다(고를 대상도, 열 상세도 아직 없다).
-          <BookGrid rows={books} selectedId={null} />
+          <BookGrid
+            rows={books.map((b) => ({ ...b, fresh: hasFreshStory(b.lastStoryAt, now) }))}
+            selectedId={null}
+            onPick={onOpenMargin}
+          />
         )}
       </section>
 
@@ -611,8 +629,8 @@ export function ProfileCard({
 }
 
 /**
- * 책방 주인 아바타 — 여백 링과 같은 이니셜 원(같은 사람은 언제 그려도 같은 색). 링은 안 두른다:
- * 이 화면 위 스트립에서 링은 "새 여백 있음"을 뜻하므로, 신원 아바타에 두르면 그 뜻이 흐려진다.
+ * 책방 주인 아바타 — 무표지 책과 같은 이니셜 원(같은 사람은 언제 그려도 같은 색).
+ * 링은 안 두른다: 이 화면에서 발광은 **책 격자**가 지는 신호라, 신원 아바타까지 두르면 뜻이 흐려진다.
  */
 function Avatar({ nickname }: { nickname: string }) {
   return (

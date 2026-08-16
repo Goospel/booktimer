@@ -1,12 +1,11 @@
 import { Button, Text, TextField } from '@toss/tds-mobile';
 import { useCallback, useEffect, useState } from 'react';
 
-import type { AuthorStories, FollowListType, StoryFeedResponse, UserRow } from '../api';
+import type { FollowListType, MarginBook, UserRow } from '../api';
 import {
   changeHandle,
   createHandle,
   fetchFollowList,
-  fetchStoryFeed,
   searchUsers,
   validateHandleChange,
   validateHandleFormat,
@@ -14,23 +13,38 @@ import {
 import { useBackClose } from '../back';
 import { ErrorMessage, Loading, Screen, Sheet } from '../ui';
 import { Profile } from './Profile';
-import { StoryComposer, StoryStrip, StoryViewer } from './Story';
+import { BookMargin, StoryComposer } from './Story';
+
+/** 열린 여백 — 「누구의 + 어느 책」 두 축이 곧 서버 계약이다(홈 소식 점프도 이 모양으로 온다). */
+export interface MarginTarget {
+  loginId: string;
+  bookId: number;
+}
 
 /**
  * 책방 탭 — 탭을 누르면 곧장 <b>내 책방</b>이다. 옛 소셜 중간 화면(「내 책방 보기」 버튼 · 팔로잉/팔로워
  * 토글 목록 · 차단 목록)은 사라졌다: 내 책방까지 두 탭이었고, 책방에 이미 있던 팔로워/팔로잉 카운트는
  * 눌러도 아무 일이 없어 "누가 팔로우하는지" 보려면 다시 이 화면으로 돌아와야 했다.
  *
- * <p>그래서 이건 <b>얇은 셸</b>이다 — 본문은 {@link Profile}이 그리고, 여기서는 전체 화면 전환(여백
- * 뷰어·작성기·남의 책방)과 시트 셋(친구 찾기·팔로우 목록·핸들 만들기)의 열림만 든다. 시트가 스스로
+ * <p>그래서 이건 <b>얇은 셸</b>이다 — 본문은 {@link Profile}이 그리고, 여기서는 전체 화면 전환(여백·
+ * 글 남기기·남의 책방)과 시트 셋(친구 찾기·팔로우 목록·핸들 만들기)의 열림만 든다. 시트가 스스로
  * fetch하지 않고 상태를 셸이 드는 것은 하니스 사정이기도 하다: 정적 렌더가 시트 안 분기에 못 닿는다.
+ *
+ * <p>여백을 열면 {@link Profile}이 언마운트됐다가 돌아올 때 다시 받는다 — 방금 남긴 글로 격자 발광이
+ * 바뀌는 것이 그 재조회에 그냥 딸려 온다(별도 갱신 배선이 필요 없다).
  */
 export function Bookshop({
   myLoginId,
+  initialMargin,
+  onMarginConsumed,
   onHandleCreated,
   onError,
 }: {
   myLoginId: string | null;
+  /** 홈 소식에서 넘어온 점프 대상 — 탭이 바뀌며 이 화면이 마운트될 때 딱 한 번 소비된다. */
+  initialMargin?: MarginTarget | null;
+  /** 소비했음을 알린다 — App이 target을 비워 다음 수동 탭 진입에 같은 여백이 다시 열리지 않게. */
+  onMarginConsumed?: () => void;
   /** 핸들을 만들면 대시보드를 다시 받아야 한다 — 서버가 준 값이 진실이고, 다른 탭도 그 값을 본다. */
   onHandleCreated: () => void;
   onError: (error: Error) => void;
@@ -38,11 +52,14 @@ export function Bookshop({
   // 서버가 준 정규화 핸들을 즉시 반영해 이 탭을 그 자리에서 내 책방으로 바꾼다(대시보드 재조회를 안 기다린다).
   const [handle, setHandle] = useState(myLoginId);
   const [creatingHandle, setCreatingHandle] = useState(false);
-  /** 열린 남의 책방 — 검색 결과·팔로우 목록·여백 뷰어에서 사람을 고르면 여기로 온다. */
+  /** 열린 남의 책방 — 검색 결과·팔로우 목록에서 사람을 고르면 여기로 온다. */
   const [open, setOpen] = useState<string | null>(null);
-  const [feed, setFeed] = useState<StoryFeedResponse | null>(null);
-  const [viewing, setViewing] = useState<{ author: AuthorStories; mine: boolean } | null>(null);
-  const [composing, setComposing] = useState(false);
+  /** 열린 여백. 홈 소식 점프는 **초기값으로만** 들어온다(탭이 바뀌며 이 컴포넌트가 새로 마운트된다). */
+  const [margin, setMargin] = useState<MarginTarget | null>(initialMargin ?? null);
+  /** 글을 남기는 중인 책 — 여백 화면이 이미 받아 둔 라벨을 그대로 물려준다(다시 조회하지 않는다). */
+  const [composing, setComposing] = useState<MarginBook | null>(null);
+  /** 여백을 다시 받게 하는 표식 — 글을 남기거나 지운 뒤 `BookMargin`을 새 key로 재마운트한다. */
+  const [marginEpoch, setMarginEpoch] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<UserRow[] | null>(null);
@@ -60,18 +77,14 @@ export function Bookshop({
   );
 
   /*
-   * 셸이 받는 건 여백 피드뿐이다 — 팔로우 목록은 시트가 열릴 때, 차단 목록은 설정으로 갔다.
-   * 책방이 닫힐 때(open → null) 다시 받는 건 남긴다: 거기서 한 팔로우가 곧 피드 대상을 바꾼다.
-   * 피드 실패는 스트립을 안 그리는 것으로 접는다(`StoryStrip`은 feed=null이면 null) — 여백 하나 때문에
-   * 책방 본문을 빨간 줄로 덮을 일이 아니다.
+   * 점프 대상은 **마운트 때 한 번** 소비한다 — 그대로 두면 다른 탭을 갔다 돌아올 때 그 여백이 또 열린다.
+   * `initialMargin`은 이미 useState 초기값으로 들어갔으므로 여기서는 App에 비우라고 알리기만 한다.
    */
-  const loadFeed = useCallback(() => {
-    fetchStoryFeed().then(setFeed).catch(fail);
-  }, [fail]);
-
   useEffect(() => {
-    if (open === null) loadFeed();
-  }, [open, loadFeed]);
+    if (initialMargin != null) onMarginConsumed?.();
+    // 마운트 1회 — 이후 prop이 바뀌어도 이 화면은 자기 상태(margin)로 산다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** 팔로우 목록은 시트가 열릴 때만 받는다. 실패해도 시트 안에서 다시 받을 길을 준다. */
   const loadFollowList = useCallback(
@@ -107,36 +120,34 @@ export function Bookshop({
    * 늘어도 중첩 규칙은 그대로다.
    */
   useBackClose(creatingHandle, () => setCreatingHandle(false));
-  useBackClose(composing, () => setComposing(false));
-  useBackClose(viewing !== null, () => setViewing(null));
+  useBackClose(composing !== null, () => setComposing(null));
+  useBackClose(margin !== null, () => setMargin(null));
   useBackClose(searchOpen, closeSearch);
   useBackClose(followList !== null, closeFollowList);
   useBackClose(open !== null, () => setOpen(null));
 
-  if (composing) {
+  if (composing !== null) {
     return (
       <StoryComposer
+        book={composing}
         onDone={() => {
-          setComposing(false);
-          loadFeed(); // 방금 올린 여백가 내 링에 바로 보여야 한다
+          setComposing(null);
+          setMarginEpoch((n) => n + 1); // 방금 남긴 글이 목록 맨 위에 바로 보여야 한다
         }}
-        onCancel={() => setComposing(false)}
+        onCancel={() => setComposing(null)}
         onError={onError}
       />
     );
   }
 
-  if (viewing !== null) {
+  if (margin !== null) {
     return (
-      <StoryViewer
-        author={viewing.author}
-        mine={viewing.mine}
-        onClose={() => setViewing(null)}
-        onOpenProfile={(loginId) => {
-          setViewing(null);
-          setOpen(loginId);
-        }}
-        onDeleted={loadFeed}
+      <BookMargin
+        key={marginEpoch}
+        loginId={margin.loginId}
+        bookId={margin.bookId}
+        onBack={() => setMargin(null)}
+        onCompose={setComposing}
         onError={onError}
       />
     );
@@ -144,7 +155,14 @@ export function Bookshop({
 
   // 남의 책방 — header도 카운트 핸들러도 주지 않는다(서버 follow-list는 본인 것만 준다). 지금과 동일한 화면.
   if (open !== null) {
-    return <Profile loginId={open} onBack={() => setOpen(null)} onError={onError} />;
+    return (
+      <Profile
+        loginId={open}
+        onBack={() => setOpen(null)}
+        onError={onError}
+        onOpenMargin={(bookId) => setMargin({ loginId: open, bookId })}
+      />
+    );
   }
 
   const search = () => {
@@ -156,15 +174,8 @@ export function Bookshop({
       .finally(() => setBusy(false));
   };
 
-  // 검색·여백는 화면 제목보다 위에 얹힌다 — 책방을 그리는 건 Profile이라 `above` 슬롯으로 건넨다.
-  const header = (
-    <BookshopHeader
-      feed={feed}
-      onOpenStory={(author, mine) => setViewing({ author, mine })}
-      onCompose={() => setComposing(true)}
-      onSearch={() => setSearchOpen(true)}
-    />
-  );
+  // 검색은 화면 제목보다 위에 얹힌다 — 책방을 그리는 건 Profile이라 `above` 슬롯으로 건넨다.
+  const header = <BookshopHeader onSearch={() => setSearchOpen(true)} />;
 
   return (
     <>
@@ -173,7 +184,7 @@ export function Bookshop({
          * 핸들이 없으면 내 책방 자체가 없다 — 서버 소셜 API가 대상을 loginId로만 찾으므로 자기 책방조차
          * 열리지 않는다(설계 §5-1). 예전엔 "웹에서 아이디를 정하라"고 했지만 토스로 시작한 계정은
          * 비밀번호가 없어 웹 로그인 자체가 불가능했다 — 실행 불가능한 죽은 안내였다. 그래서 여기서 만든다.
-         * 검색·여백는 그대로 준다: 남의 책방 구경은 핸들 없이도 된다.
+         * 검색은 그대로 준다: 남의 책방 구경은 핸들 없이도 된다.
          */
         <Screen title="책방" above={header}>
           <Text typography="st12" color="grey600" style={{ display: 'block' }}>
@@ -186,7 +197,13 @@ export function Bookshop({
         </Screen>
       ) : (
         // onBack을 주지 않는다 — 탭 루트라 「돌아가기」가 갈 곳이 없다(출구는 플로팅 탭바).
-        <Profile loginId={handle} onError={onError} header={header} onOpenFollowList={setFollowList} />
+        <Profile
+          loginId={handle}
+          onError={onError}
+          header={header}
+          onOpenFollowList={setFollowList}
+          onOpenMargin={(bookId) => setMargin({ loginId: handle, bookId })}
+        />
       )}
 
       {searchOpen && (
@@ -236,49 +253,34 @@ export function Bookshop({
 }
 
 /**
- * 책방 상단 도구 — <b>여백 스트립 한 줄</b>이고, 그 오른쪽 끝에 검색 아이콘이 고정된다.
- * 여백도 검색도 "사람"을 다루니 한 줄에 이웃해도 층위가 어긋나지 않는다.
+ * 책방 상단 도구 — <b>검색 진입 하나</b>다. 왼쪽에 있던 여백 스트립은 사라졌다(2026-08-16 재설계):
+ * 「새 글」 신호가 사람 단위(링)에서 <b>책 단위(격자 발광)</b>로 옮겨가, 상단에 사람 줄을 세울 이유가 없다.
  *
  * <p>전에는 검색이 <b>전폭 알약</b>으로 최상단 한 줄을 통째로 먹었다 — 그만큼 이 화면의 본체인 공개 책이
- * 아래로 밀렸다(인스타 배치로 상단을 접은 흐름의 마지막 조각). 토스 셸 헤더는 앱 소유라 인스타처럼
- * 헤더 우측에 얹을 수 없어, 화면 안에서 가장 가까운 줄을 그 자리로 삼았다.
+ * 아래로 밀렸다. 토스 셸 헤더는 앱 소유라 인스타처럼 헤더 우측에 얹을 수 없어, 화면 안에서 가장 가까운
+ * 줄을 그 자리로 삼았다. 스트립이 사라진 지금도 아이콘 형태를 지키는 이유가 그것이다.
  *
- * <p>스트립만 스크롤하고 아이콘은 자리를 지킨다 — 친구가 많아 스트립이 길어져도 검색이 밀려 나가지 않게.
- * 셸의 지역 변수가 아니라 컴포넌트로 꺼낸 것은 <b>순서를 계측하기 위해서</b>다: 스트립은 피드를 받기
- * 전(`feed === null`)에 아무것도 안 그리므로, 셸을 그대로 렌더하면 앞뒤를 잴 방법이 없다.
+ * <p>셸의 지역 변수가 아니라 컴포넌트로 남긴 것은 계측 때문이다 — 상단 도구의 유무·모양을 셸의 네 분기
+ * (핸들 유무 × 로딩)와 무관하게 한 곳에서 잰다.
  */
-export function BookshopHeader({
-  feed,
-  onOpenStory,
-  onCompose,
-  onSearch,
-}: {
-  feed: StoryFeedResponse | null;
-  onOpenStory: (author: AuthorStories, mine: boolean) => void;
-  onCompose: () => void;
-  onSearch: () => void;
-}) {
+export function BookshopHeader({ onSearch }: { onSearch: () => void }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-      {/* 스트립이 없는 첫 렌더에도 이 칸이 폭을 지켜 아이콘이 왼쪽으로 흘러내리지 않는다. */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <StoryStrip feed={feed} onOpen={onOpenStory} onCompose={onCompose} />
-      </div>
+    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', gap: 10 }}>
       <SearchEntryButton onOpen={onSearch} />
     </div>
   );
 }
 
-/** 여백 링(`Story.tsx`의 `RING_SIZE`)과 같은 지름 — 두 원의 크기가 어긋나면 한 줄이 들쭉날쭉해진다. */
+/** 아이콘 지름 — 손가락 최소치(44px)를 넉넉히 넘긴다. */
 const SEARCH_ICON_SIZE = 56;
 
 /**
- * 검색 진입 아이콘 — 여백 링과 <b>같은 지름·같은 캡션 문법</b>의 원형 버튼. 실제 입력·결과는
+ * 검색 진입 아이콘 — 캡션이 딸린 원형 버튼. 실제 입력·결과는
  * 「친구 찾기」 시트가 맡는다(인라인 form이면 결과 패널이 내 책방 본문을 통째로 갈아끼워야 했다).
  *
- * <p>캡션 「친구 찾기」를 지우지 않는다 — 돋보기 하나만으로는 "무엇을 찾는지"가 안 서고, 옆이 사람 링이라
- * 책 검색으로도 읽힌다. 스크린리더용 이름은 옛 진입바 문구를 그대로 물려받아(`아이디로 친구 찾기`)
- * "아이디로 찾는다"는 유일한 사용법을 잃지 않는다.
+ * <p>캡션 「친구 찾기」를 지우지 않는다 — 돋보기 하나만으로는 "무엇을 찾는지"가 안 서고, 책이 가득한
+ * 화면이라 책 검색으로도 읽힌다. 스크린리더용 이름은 옛 진입바 문구를 그대로 물려받아
+ * (`아이디로 친구 찾기`) "아이디로 찾는다"는 유일한 사용법을 잃지 않는다.
  */
 function SearchEntryButton({ onOpen }: { onOpen: () => void }) {
   return (
@@ -288,14 +290,9 @@ function SearchEntryButton({ onOpen }: { onOpen: () => void }) {
       onClick={onOpen}
       style={{
         flex: '0 0 auto',
-        // 스트립 링의 위쪽 여백(4)과 맞춰야 두 원이 한 줄에 나란히 선다.
         marginTop: 4,
-        padding: '0 0 0 10px',
-        // 스크롤되는 스트립과 고정된 이 칸의 경계 — 없으면 스트립의 마지막 링처럼 읽힌다.
-        borderLeft: '1px solid var(--adaptiveGrey200, #E4DDD0)',
-        borderTop: 'none',
-        borderRight: 'none',
-        borderBottom: 'none',
+        padding: 0,
+        border: 'none',
         background: 'transparent',
         cursor: 'pointer',
       }}

@@ -339,18 +339,21 @@ export function GridSheet({
 }
 
 /**
- * 격자 본체 — 시트 껍데기에서 꺼냈다. 책방은 이 격자를 <b>본문에 그대로</b> 펼쳐 공개 책 목록으로 쓴다
- * (캐러셀 + 「펼쳐보기」 왕복을 없앤 자리). 서재는 여전히 시트 안에서 쓴다.
+ * 격자 본체 — 시트 껍데기에서 꺼냈다. 책방은 이 격자를 <b>본문에 그대로</b> 펼쳐 공개 책 목록으로 쓰고,
+ * 칸을 누르면 그 책의 여백이 열린다. 서재는 여전히 시트 안에서 「고르는 격자」로 쓴다.
  *
- * <p>{@code onPick}이 없으면 각 칸을 <b>버튼으로 만들지 않는다</b> — 책방 격자는 보기만 하는 목록이라,
- * 버튼처럼 생겼는데 눌러도 아무 일이 없으면 그게 곧 죽은 UI다(카운트 손잡이 #788과 같은 규율).
+ * <p>{@code onPick}이 없으면 각 칸을 <b>버튼으로 만들지 않는다</b> — 눌러도 아무 일이 없으면 그게 곧
+ * 죽은 UI다(카운트 손잡이 #788과 같은 규율).
+ *
+ * <p>{@code fresh}는 <b>책방 전용 선택 필드</b>다(24시간 안에 새 글 = 여백 발광). 서재는 안 넘기므로
+ * 그쪽 마크업은 한 글자도 달라지지 않는다.
  */
 export function BookGrid({
   rows,
   selectedId,
   onPick,
 }: {
-  rows: { id: number; title: string; coverUrl: string | null }[];
+  rows: { id: number; title: string; coverUrl: string | null; fresh?: boolean }[];
   /** 테두리로 표시할 책 — 고르는 격자에서만 의미가 있다. */
   selectedId: number | null;
   onPick?: (bookId: number) => void;
@@ -358,6 +361,7 @@ export function BookGrid({
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 12 }}>
       {rows.map((book) => {
+        const fresh = book.fresh === true;
         const cell = (
           <>
             <div
@@ -370,11 +374,31 @@ export function BookGrid({
                 borderRadius: 4,
               }}
             >
-              {book.coverUrl !== null ? (
-                <BookCover url={book.coverUrl} width={80} />
-              ) : (
-                <CoverInitial title={book.title} width={80} />
-              )}
+              {/* 표지를 감싸는 칸 — 발광 테두리·점 배지가 셀 폭이 아니라 표지에 붙어야 한다. */}
+              <span className={fresh ? 'margin-fresh' : undefined} style={{ position: 'relative', display: 'inline-flex' }}>
+                {book.coverUrl !== null ? (
+                  <BookCover url={book.coverUrl} width={80} />
+                ) : (
+                  <CoverInitial title={book.title} width={80} />
+                )}
+                {/* pulse는 움직임이라 `prefers-reduced-motion`에서 멈춘다 — 그때도 이 점은 남는다. */}
+                {fresh && (
+                  <span
+                    data-fresh-dot=""
+                    aria-hidden="true"
+                    style={{
+                      position: 'absolute',
+                      top: -4,
+                      right: -4,
+                      width: 10,
+                      height: 10,
+                      borderRadius: '50%',
+                      background: 'var(--adaptiveBlue500, #6E8A6A)',
+                      border: '2px solid #FCFAF5',
+                    }}
+                  />
+                )}
+              </span>
             </div>
             <Text
               typography="st12"
@@ -385,8 +409,11 @@ export function BookGrid({
           </>
         );
 
+        // 색·움직임만으로는 구분 못 하는 사람이 있다 — 발광을 이름에도 남긴다(옛 여백 링의 관례 계승).
+        const label = fresh ? `${book.title} 새 글` : undefined;
+
         return onPick === undefined ? (
-          <div key={book.id} data-grid-title={book.title} style={{ textAlign: 'center' }}>
+          <div key={book.id} data-grid-title={book.title} aria-label={label} style={{ textAlign: 'center' }}>
             {cell}
           </div>
         ) : (
@@ -394,6 +421,7 @@ export function BookGrid({
             key={book.id}
             type="button"
             data-grid-title={book.title}
+            aria-label={label}
             onClick={() => onPick(book.id)}
             style={{ padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'center' }}
           >

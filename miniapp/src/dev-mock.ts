@@ -1,6 +1,5 @@
 import { ApiError } from './api';
 import type {
-  AuthorStories,
   BookOption,
   BookStatus,
   BookVisibility,
@@ -9,6 +8,8 @@ import type {
   DailyRecord,
   DashboardResponse,
   HomeFeedResponse,
+  MarginEntry,
+  MarginResponse,
   MonthlySection,
   NewsItem,
   MyBookSummary,
@@ -19,7 +20,6 @@ import type {
   RequestOptions,
   SearchRow,
   SocialEvent,
-  StoryCard,
   TimerState,
   UserRow,
 } from './api';
@@ -255,6 +255,8 @@ const profileBook = (id: number, title: string, author: string, status: BookStat
   status: STATUS_LABEL[status],
   seconds,
   purchaseLink: null,
+  // 실제 값은 아래 `booksFor`가 여백 픽스처에서 파생한다 — 두 곳에 적으면 글을 남겨도 발광이 안 바뀐다.
+  lastStoryAt: null,
 });
 
 /** 성향 분석 하루 총량(서버 `User.DAILY_PERSONALITY_TOTAL_LIMIT`) — 잔여 차감·소진 429를 흉내내는 기준. */
@@ -310,45 +312,64 @@ const profileBooks: ProfileBook[] = [
   profileBook(13, '해변의 카프카', '무라카미 하루키', 'WANT_TO_READ', 0),
 ];
 
-const storyCard = (id: number, text: string, bgCode: string, hoursAgo: number, viewed: boolean): StoryCard => ({
+const marginEntry = (id: number, text: string, bgCode: string, hoursAgo: number): MarginEntry => ({
   id,
   text,
   bgCode,
-  bookTitle: '미움받을 용기',
-  bookCoverUrl: null,
   createdAt: isoTime(hoursAgo),
-  viewed,
 });
 
-const myStories: StoryCard[] = [storyCard(901, '오늘은 30분만 읽자고 앉았는데 한 시간을 넘겼다.', 'paper', 3, true)];
+/**
+ * 책별 여백 — 키는 `profileBooks`의 책 id다(여백은 책에 딸린 자리라 사람이 아니라 책이 축이다).
+ *
+ * <p>세 상태를 일부러 다 깔아 둔다: **3시간 전 글**(=발광이 브라우저에 보인다) / **30시간 전 글**
+ * (=발광 없이 글만 있다 — 24시간 경계의 반대편) / **0장**(=빈 상태 문구).
+ */
+const marginEntries: Record<number, MarginEntry[]> = {
+  11: [
+    marginEntry(901, '오늘은 30분만 읽자고 앉았는데 한 시간을 넘겼다.', 'paper', 3),
+    marginEntry(902, '밑줄 그은 문장이 오늘의 나를 설명한다.', 'night', 26),
+  ],
+  12: [marginEntry(911, '완독. 마지막 장을 아껴 읽었다.', 'forest', 30)],
+  13: [],
+};
 
-const storyGroups: AuthorStories[] = [
-  {
-    loginId: 'nabi',
-    nickname: '나비독서',
-    profileCharacterCode: null,
-    allViewed: false,
-    stories: [storyCard(911, '밑줄 그은 문장이 오늘의 나를 설명한다.', 'night', 5, false)],
-  },
-  {
-    loginId: 'jieun',
-    nickname: '지은의서재',
-    profileCharacterCode: null,
-    allViewed: true,
-    stories: [storyCard(921, '완독. 마지막 장을 아껴 읽었다.', 'forest', 20, true)],
-  },
-];
+/** 그 책 여백의 최신 글 시각 — 격자 발광의 재료다. 글을 남기면 이 값이 따라 움직인다. */
+const lastStoryAt = (bookId: number): string | null => marginEntries[bookId]?.[0]?.createdAt ?? null;
+
+/**
+ * 그 사람의 책방 책 — **여백 시각은 본인·팔로워에게만** 실린다(서버 프라이버시 게이트를 그대로 흉내낸다).
+ * 비팔로워(`밑줄러`)로 열면 발광이 통째로 사라지는 것이 브라우저에서 확인된다.
+ */
+function booksFor(loginId: string): ProfileBook[] {
+  const user = mustFindUser(loginId);
+  const visible = user.self || user.following;
+  return profileBooks.map((b) => ({ ...b, lastStoryAt: visible ? lastStoryAt(b.id) : null }));
+}
 
 /**
  * 홈 피드 목 — **미리보기 3줄을 넘겨야** 「더 보기」 펼침이 브라우저에서 확인된다. 시각은 방금·시간·
  * 어제·N일 전이 다 나오게 흩어 둔다(상대 시각 표기가 한 화면에서 전부 눈에 보이도록).
+ *
+ * <p>STORY는 **1장·3장 두 건**을 둔다 — 단수(「글을 남겼어요」)·복수(「글 3개를 남겼어요」) 문구가
+ * 한 화면에 같이 서야 두 갈래를 눈으로 가른다. 탭하면 그 책의 여백으로 점프한다(bookId).
  */
 const socialEvents: SocialEvent[] = [
-  { loginId: 'nabi', nickname: '나비독서', bookTitle: '데미안', type: 'FINISHED', occurredAt: isoTime(0.2) },
-  { loginId: 'underline', nickname: '밑줄러', bookTitle: '사피엔스', type: 'STARTED', occurredAt: isoTime(3) },
-  { loginId: 'jieun', nickname: '지은의서재', bookTitle: '미움받을 용기', type: 'FINISHED', occurredAt: isoTime(20) },
-  { loginId: 'nabi', nickname: '나비독서', bookTitle: '코스모스', type: 'STARTED', occurredAt: isoTime(30) },
-  { loginId: 'jieun', nickname: '지은의서재', bookTitle: '총, 균, 쇠', type: 'FINISHED', occurredAt: isoTime(96) },
+  { loginId: 'nabi', nickname: '나비독서', bookTitle: '데미안', type: 'FINISHED', occurredAt: isoTime(0.2),
+    bookId: null, excerpt: null, count: 0 },
+  { loginId: 'nabi', nickname: '나비독서', bookTitle: '아무튼, 서재', type: 'STORY', occurredAt: isoTime(3),
+    bookId: 11, excerpt: '오늘은 30분만 읽자고 앉았는데 한 시간을 넘겼다.', count: 3 },
+  { loginId: 'underline', nickname: '밑줄러', bookTitle: '사피엔스', type: 'STARTED', occurredAt: isoTime(3.5),
+    bookId: null, excerpt: null, count: 0 },
+  { loginId: 'jieun', nickname: '지은의서재', bookTitle: '밑줄 긋는 사람', type: 'STORY', occurredAt: isoTime(9),
+    // 80자 넘는 원문은 서버가 79자 + … 로 잘라 준다 — 클라의 1줄 clamp가 그 위에 얹히는지 눈으로 본다.
+    bookId: 12, excerpt: '읽다 말고 한참을 창밖만 봤다. 문장 하나가 오래 걸려서, 다음 장으로 넘어가는 게 아까웠고 그렇게 저녁이 다 갔다…', count: 1 },
+  { loginId: 'jieun', nickname: '지은의서재', bookTitle: '미움받을 용기', type: 'FINISHED', occurredAt: isoTime(20),
+    bookId: null, excerpt: null, count: 0 },
+  { loginId: 'nabi', nickname: '나비독서', bookTitle: '코스모스', type: 'STARTED', occurredAt: isoTime(30),
+    bookId: null, excerpt: null, count: 0 },
+  { loginId: 'jieun', nickname: '지은의서재', bookTitle: '총, 균, 쇠', type: 'FINISHED', occurredAt: isoTime(96),
+    bookId: null, excerpt: null, count: 0 },
 ];
 
 const newsItems: NewsItem[] = [
@@ -423,6 +444,8 @@ const searchRows: SearchRow[] = [
 interface Ctx {
   /** 경로 캡처(`/api/books/{id}/...`)의 id. 캡처가 없는 경로에선 `NaN`이다. */
   id: number;
+  /** 같은 캡처의 원문 — 숫자가 아닌 경로 변수(`/api/stories/of/{loginId}`)가 쓴다. */
+  param: string;
   body: Record<string, unknown>;
   query: Record<string, string | number | undefined>;
 }
@@ -614,12 +637,16 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
         { label: '인문', clickable: true },
         { label: '완독형', clickable: false },
       ],
-      books: profileBooks,
+      books: booksFor(user.loginId),
     };
   }],
-  ['GET', /^\/api\/profile\/books$/, ({ query }) => ({
-    books: query.status === undefined ? profileBooks : profileBooks.filter((b) => b.status === STATUS_LABEL[query.status as BookStatus]),
-  })],
+  ['GET', /^\/api\/profile\/books$/, ({ query }) => {
+    const rows = booksFor(String(query.loginId));
+    return {
+      books: query.status === undefined ? rows : rows.filter((b) => b.status === STATUS_LABEL[query.status as BookStatus]),
+    };
+  }],
+  // 드릴다운은 성향 근거 확인용 임시 목록이라 발광이 없다 — 서버도 lastStoryAt을 채우지 않는다.
   ['GET', /^\/api\/profile\/personality-tag$/, () => ({ books: profileBooks.slice(0, 2) })],
 
   // ── 성향 추출 광고 관문 ──
@@ -676,52 +703,47 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
   ['POST', /^\/api\/report$/, () => ({ reported: true })],
 
   // ── 여백 ──
-  ['GET', /^\/api\/stories\/feed$/, () => ({
-    mine:
-      myStories.length === 0
-        ? null
-        : {
-            loginId: MY_LOGIN_ID,
-            nickname: myNickname,
-            profileCharacterCode: null,
-            allViewed: myStories.every((s) => s.viewed),
-            stories: [...myStories],
-          },
-    groups: storyGroups,
-  })],
+  // 「누구의 + 어느 책」 두 축. 응답은 자기완결이라(책 라벨 동봉) 홈 소식에서 곧장 점프해도 화면이 그려진다.
+  ['GET', /^\/api\/stories\/of\/([^/]+)$/, ({ param, query }): MarginResponse => {
+    const user = mustFindUser(param);
+    const bookId = Number(query.bookId);
+    const book = profileBooks.find((b) => b.id === bookId);
+    // 서버는 남의 책 id(IDOR)·PRIVATE·미존재를 전부 404로 준다 — 목도 존재를 누설하지 않는다.
+    if (book === undefined) throw new ApiError(404, '글을 찾을 수 없습니다');
+    const following = user.self ? false : user.following;
+    return {
+      book: { id: book.id, title: book.title, author: book.author, coverUrl: book.coverUrl },
+      ownerNickname: user.nickname,
+      self: user.self,
+      following,
+      // 비팔로워에게는 빈 배열 — 글이 있는지 없는지도 새지 않는다.
+      entries: user.self || following ? [...(marginEntries[bookId] ?? [])] : [],
+    };
+  }],
   ['POST', /^\/api\/stories$/, ({ body }) => {
-    const card: StoryCard = {
+    const bookId = Number(body.bookId);
+    if (profileBooks.every((b) => b.id !== bookId)) throw new ApiError(400, '글을 남길 수 없습니다');
+    const entry: MarginEntry = {
       id: nextId(),
       text: body.text as string,
       bgCode: (body.bgCode as string | null) ?? null,
-      bookTitle: books.find((b) => b.id === body.bookId)?.title ?? null,
-      bookCoverUrl: null,
       createdAt: new Date().toISOString(),
-      viewed: true,
     };
-    myStories.unshift(card);
-    return card;
+    // 맨 앞 = 최신(서버가 최신순으로 준다). 이 한 줄이 곧 격자 발광 갱신이다(`lastStoryAt`이 여기서 파생).
+    marginEntries[bookId] = [entry, ...(marginEntries[bookId] ?? [])];
+    return entry;
   }],
   ['DELETE', /^\/api\/stories\/(\d+)$/, ({ id }) => {
-    const index = myStories.findIndex((s) => s.id === id);
-    if (index < 0) throw new ApiError(404, '없는 여백이에요');
-    myStories.splice(index, 1);
-    return undefined;
-  }],
-  ['POST', /^\/api\/stories\/(\d+)\/view$/, ({ id }) => {
-    for (const group of storyGroups) {
-      const story = group.stories.find((s) => s.id === id);
-      if (story !== undefined) {
-        story.viewed = true;
-        group.allViewed = group.stories.every((s) => s.viewed);
+    for (const bookId of Object.keys(marginEntries)) {
+      const entries = marginEntries[Number(bookId)];
+      const index = entries.findIndex((e) => e.id === id);
+      if (index >= 0) {
+        entries.splice(index, 1);
+        return undefined;
       }
     }
-    return undefined;
+    throw new ApiError(404, '글을 찾을 수 없습니다');
   }],
-  ['GET', /^\/api\/stories\/(\d+)\/viewers$/, () => [
-    { loginId: 'nabi', nickname: '나비독서', profileCharacterCode: null, viewedAt: isoTime(1) },
-    { loginId: 'jieun', nickname: '지은의서재', profileCharacterCode: null, viewedAt: isoTime(2) },
-  ]],
 ];
 
 function mustFindBook(id: number): MyBookSummary {
@@ -756,7 +778,7 @@ export async function mockRequest<T>(path: string, options: RequestOptions = {})
   for (const [routeMethod, pattern, handler] of routes) {
     const match = pattern.exec(path);
     if (match !== null && routeMethod === method) {
-      return handler({ id: Number(match[1]), body, query }) as T;
+      return handler({ id: Number(match[1]), param: match[1], body, query }) as T;
     }
   }
   throw new ApiError(404, `${MARKER} 목에 없는 경로: ${method} ${path}`);

@@ -3,14 +3,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   DashboardResponse,
   HomeFeedResponse,
+  MarginEntry,
+  MarginResponse,
   MonthlySection,
   MyBookSummary,
   PersonalityMutation,
   PersonalityStatus,
+  ProfileBook,
   ShelfResponse,
   StopResponse,
-  StoryCard,
-  StoryFeedResponse,
   TimerState,
 } from './api';
 import { ApiError } from './api';
@@ -57,11 +58,38 @@ describe('dev-mock 핸들러', () => {
     expect(after.books.some((b) => b.id === added.id)).toBe(false);
   });
 
-  it('여백 작성 — 내 여백 그룹(mine)에 붙는다', async () => {
-    const created = await mockRequest<StoryCard>('/api/stories', { body: { text: '목 여백', bookId: null, bgCode: 'sea' } });
+  it('여백 작성 — 그 책의 여백 목록 맨 앞에 붙는다(최신순)', async () => {
+    const created = await mockRequest<MarginEntry>('/api/stories', {
+      body: { text: '목 여백', bookId: 11, bgCode: 'sea' },
+    });
 
-    const feed = await mockRequest<StoryFeedResponse>('/api/stories/feed', {});
-    expect(feed.mine!.stories.some((s) => s.id === created.id)).toBe(true);
+    const margin = await mockRequest<MarginResponse>('/api/stories/of/testid', { query: { bookId: 11 } });
+    expect(margin.self).toBe(true);
+    expect(margin.entries[0].id).toBe(created.id);
+  });
+
+  it('여백 조회 — 책 라벨이 함께 실린다(홈 소식에서 바로 들어와도 화면이 그려진다)', async () => {
+    const margin = await mockRequest<MarginResponse>('/api/stories/of/nabi', { query: { bookId: 11 } });
+
+    expect(margin.book.id).toBe(11);
+    expect(margin.book.title.length).toBeGreaterThan(0);
+    expect(margin.ownerNickname.length).toBeGreaterThan(0);
+  });
+
+  it('책방 책 목록에 lastStoryAt이 실린다 — 없으면 격자 발광을 브라우저로 볼 길이 없다', async () => {
+    const { books } = await mockRequest<{ books: ProfileBook[] }>('/api/profile/books', { query: { loginId: 'nabi' } });
+
+    expect(books.some((b) => b.lastStoryAt !== null)).toBe(true);
+  });
+
+  it('홈 소식에 STORY 묶음이 단수·복수 둘 다 있다 — 문구 두 갈래를 한 화면에서 확인한다', async () => {
+    const feed = await mockRequest<HomeFeedResponse>('/api/home-feed', {});
+    const stories = feed.social.filter((e) => e.type === 'STORY');
+
+    expect(stories.some((e) => e.count === 1)).toBe(true);
+    expect(stories.some((e) => e.count > 1)).toBe(true);
+    // 탭하면 그 책의 여백으로 점프한다 — bookId가 비면 죽은 줄이 된다.
+    expect(stories.every((e) => e.bookId !== null && e.excerpt !== null)).toBe(true);
   });
 
   it('날짜별 기록 — 최신 월 먼저, 달 안에서도 최신 일 먼저다(서버 순서를 그대로 흉내낸다)', async () => {

@@ -17,16 +17,14 @@ import {
   deleteBook,
   deleteStory,
   fetchBlocks,
+  fetchBookMargin,
   fetchDashboard,
   fetchFollowList,
   fetchPersonalityTagBooks,
   fetchProfile,
   fetchProfileBooks,
   fetchShelf,
-  fetchStoryFeed,
-  fetchStoryViewers,
   follow,
-  markStoryViewed,
   linkAccount,
   login,
   logout,
@@ -792,52 +790,73 @@ describe('닉네임 변경 API (updateNickname)', () => {
   });
 });
 
-describe('독서 스토리 API', () => {
-  it('피드는 GET — 팔로우가 없으면 mine·groups가 빈 응답이다(실패가 아니라 0건)', async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
-      response(200, JSON.stringify({ mine: null, groups: [] })) as never,
-    );
-
-    const feed = await fetchStoryFeed();
-
-    expect(lastRequest()[0]).toBe('http://localhost:8080/api/stories/feed');
-    expect(lastRequest()[1].method).toBe('GET');
-    expect(feed.mine).toBeNull();
-    expect(feed.groups).toEqual([]);
-  });
-
-  it('피드는 내 스토리를 groups가 아니라 mine으로 준다 — 핸들 없는 계정도 자기 목록을 본다(설계 §5-1)', async () => {
+describe('여백 API', () => {
+  it('책 하나의 여백은 「누구의 + 어느 책」 두 축으로 받는다 — bookId는 쿼리다', async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
       response(
         200,
         JSON.stringify({
-          mine: { loginId: null, nickname: '나', profileCharacterCode: null, allViewed: true, stories: [{ id: 9 }] },
-          groups: [],
+          book: { id: 7, title: '데미안', author: '헤르만 헤세', coverUrl: null },
+          ownerNickname: '구스펠',
+          self: false,
+          following: true,
+          entries: [{ id: 3, text: '한 문장', bgCode: 'paper', createdAt: '2026-08-16T00:00:00Z' }],
         }),
       ) as never,
     );
 
-    const feed = await fetchStoryFeed();
+    const result = await fetchBookMargin('goospel', 7);
 
-    expect(feed.mine?.loginId).toBeNull(); // 핸들 없이도 mine이 채워진다 = /of/{loginId} 불필요
-    expect(feed.mine?.stories[0].id).toBe(9);
+    expect(lastRequest()[0]).toBe('http://localhost:8080/api/stories/of/goospel?bookId=7');
+    expect(lastRequest()[1].method).toBe('GET');
+    expect(result.book.title).toBe('데미안');
+    expect(result.entries[0].id).toBe(3);
   });
 
-  it('작성은 문장·책·배경을 함께 보낸다 — 책 미첨부는 null(생략이 아니라 명시)', async () => {
+  it('비팔로워에게도 책 라벨은 실리고 글만 빈 배열이다 — 글 유무 자체를 누설하지 않는 서버 계약', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(
+        200,
+        JSON.stringify({
+          book: { id: 7, title: '데미안', author: null, coverUrl: null },
+          ownerNickname: '구스펠',
+          self: false,
+          following: false,
+          entries: [],
+        }),
+      ) as never,
+    );
+
+    const result = await fetchBookMargin('goospel', 7);
+
+    expect(result.book.title).toBe('데미안');
+    expect(result.entries).toEqual([]);
+    expect(result.following).toBe(false);
+  });
+
+  it('차단·PRIVATE·남의 책 id는 모두 404 — 존재를 누설하지 않는 계약을 그대로 올린다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(404, '<html>error</html>') as never);
+
+    const error = (await fetchBookMargin('goospel', 99).catch((e: unknown) => e)) as ApiError;
+
+    expect(error.status).toBe(404);
+  });
+
+  it('작성은 문장·책·배경을 함께 보낸다 — 책은 필수다(여백은 책에 딸린 자리)', async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(response(200, JSON.stringify({ id: 3, text: '한 문장' })) as never);
 
-    await createStory('한 문장', null, 'paper');
+    await createStory('한 문장', 7, 'paper');
 
     expect(lastRequest()[0]).toBe('http://localhost:8080/api/stories');
     expect(lastRequest()[1].method).toBe('POST');
-    expect(JSON.parse(lastRequest()[1].body as string)).toEqual({ text: '한 문장', bookId: null, bgCode: 'paper' });
+    expect(JSON.parse(lastRequest()[1].body as string)).toEqual({ text: '한 문장', bookId: 7, bgCode: 'paper' });
   });
 
   it('배경 코드는 서버 팔레트(Story.BG_CODES)와 같은 값이어야 400이 안 난다', () => {
     expect(STORY_BG_CODES.map((bg) => bg.code)).toEqual(['paper', 'night', 'forest', 'sunset', 'sea', 'plum']);
   });
 
-  it('삭제는 DELETE + 본문 없음, 남의 스토리는 404를 그대로 전달한다(IDOR 비노출 계약)', async () => {
+  it('삭제는 DELETE + 본문 없음, 남의 글은 404를 그대로 전달한다(IDOR 비노출 계약)', async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '') as never);
 
     await deleteStory(7);
@@ -849,27 +868,5 @@ describe('독서 스토리 API', () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(response(404, '<html>error</html>') as never);
     const error = (await deleteStory(8).catch((e: unknown) => e)) as ApiError;
     expect(error.status).toBe(404);
-  });
-
-  it('열람 기록은 POST이고 본문이 없다 — 서버가 @RequestBody를 안 받는다', async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '') as never);
-
-    await markStoryViewed(7);
-
-    expect(lastRequest()[0]).toBe('http://localhost:8080/api/stories/7/view');
-    expect(lastRequest()[1].method).toBe('POST');
-    expect(lastRequest()[1].body).toBeUndefined();
-  });
-
-  it('뷰어 목록은 그 스토리 경로의 GET이다', async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
-      response(200, JSON.stringify([{ loginId: 'a', nickname: 'A', profileCharacterCode: null, viewedAt: 'x' }])) as never,
-    );
-
-    const viewers = await fetchStoryViewers(7);
-
-    expect(lastRequest()[0]).toBe('http://localhost:8080/api/stories/7/viewers');
-    expect(lastRequest()[1].method).toBe('GET');
-    expect(viewers[0].nickname).toBe('A');
   });
 });
