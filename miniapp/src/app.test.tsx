@@ -11,11 +11,14 @@ import {
   TAB_BAR_HEIGHT,
   TAB_BAR_MARGIN,
   TABS,
+  TIMER_ACTION_SLOT,
   closeCompose,
   shouldRefresh,
   tabChangeHandler,
+  timerActionView,
+  timerStartBookId,
 } from './App';
-import type { DashboardResponse } from './api';
+import type { BookOption, DashboardResponse } from './api';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
 beforeEach(stubLocalStorage); // 홈 탭이 렌더 중에 알림 동의 캐시를 읽는다
@@ -48,13 +51,13 @@ const dashboard: DashboardResponse = {
   emailVerified: true,
 };
 
-function renderTab(tab: (typeof TABS)[number]['key']) {
+function renderTab(tab: (typeof TABS)[number]['key'], overrides: Partial<DashboardResponse> = {}) {
   return renderToStaticMarkup(
     <TDSMobileProvider userAgent={userAgent}>
       <MainTabs
         tab={tab}
         onTabChange={() => {}}
-        dashboard={dashboard}
+        dashboard={{ ...dashboard, ...overrides }}
         homeBookId={undefined}
         onSelectHomeBook={() => {}}
         onOpenMargin={() => {}}
@@ -93,9 +96,9 @@ describe('탭 구조', () => {
 
     for (const { key, label } of TABS) {
       const markup = renderTab(key);
-      // TDS Tab.Item은 li에 aria-selected와 라벨 title을 함께 싣는다 — 둘의 짝을 본다.
-      expect(markup.match(/aria-selected="true"/g)).toHaveLength(1);
-      expect(markup).toContain(`aria-selected="true" title="${label}"`);
+      // 탭 role을 버리고 하단 내비게이션 표준(`aria-current`)으로 갔다 — 현재 위치 표식과 라벨의 짝을 본다.
+      expect(markup.match(/aria-current="page"/g)).toHaveLength(1);
+      expect(markup).toContain(`aria-current="page" title="${label}"`);
     }
   });
 
@@ -136,25 +139,80 @@ describe('탭 구조', () => {
  * 색·굵기 같은 순수 시각값은 단언하지 않는다 — 구조와 가림 방지만 회귀 대상이다.
  */
 describe('하단 탭바', () => {
-  const bar = (tab: (typeof TABS)[number]['key']) =>
+  const bar = (
+    tab: (typeof TABS)[number]['key'],
+    action: { active?: boolean; busy?: boolean } = {},
+  ) =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BottomTabBar tab={tab} onTabChange={() => {}} />
+        <BottomTabBar
+          tab={tab}
+          onTabChange={() => {}}
+          action={{ active: action.active ?? false, busy: action.busy ?? false, onPress: () => {} }}
+        />
       </TDSMobileProvider>,
     );
+
+  /** 액션 버튼 한 칸만 — 알약 전체를 보면 탭들의 색·크기가 섞여 단언이 공허해진다. */
+  const actionCell = (markup: string, label: string) => {
+    const at = markup.indexOf(`aria-label="${label}"`);
+    expect(at).toBeGreaterThan(-1); // 라벨을 못 찾으면 아래 단언이 빈 문자열을 검사하게 된다
+    return markup.slice(at, markup.indexOf('</button>', at));
+  };
 
   it('탭마다 아이콘과 라벨을 함께 그린다 — 라벨만 있는 밋밋한 바가 이질감의 주범이었다', () => {
     const markup = bar('home');
 
-    expect(markup.match(/<svg/g)).toHaveLength(TABS.length);
+    // 탭 4개 + 가운데 액션 = 아이콘 5개(액션은 라벨 없이 아이콘만 선다).
+    expect(markup.match(/<svg/g)).toHaveLength(TABS.length + 1);
     for (const { label } of TABS) expect(markup).toContain(label);
   });
 
   it('탭 하나의 터치 영역이 손가락 최소치(44px)를 넘는다', () => {
     const heights = bar('home').match(/min-height:(\d+)px/g) ?? [];
 
-    expect(heights).toHaveLength(TABS.length);
+    expect(heights).toHaveLength(TABS.length + 1); // 액션 칸도 같은 터치 높이를 가진다
     for (const h of heights) expect(Number(h.match(/\d+/)![0])).toBeGreaterThanOrEqual(44);
+  });
+
+  it('5칸이다 — 탭 4개 사이에 측정 액션이 한 칸으로 낀다', () => {
+    expect(bar('home').match(/<button/g)).toHaveLength(TABS.length + 1);
+  });
+
+  it('액션은 서재와 책방 사이 가운데 자리다 — 마크업 순서가 곧 시각 순서다', () => {
+    const markup = bar('home');
+
+    expect(markup.indexOf('title="서재"')).toBeLessThan(markup.indexOf('aria-label="측정 시작"'));
+    expect(markup.indexOf('aria-label="측정 시작"')).toBeLessThan(markup.indexOf('title="책방"'));
+    expect(TIMER_ACTION_SLOT).toBe(2);
+  });
+
+  it('탭 role을 쓰지 않는다 — tabpanel 없는 tablist는 규약 위반이고, 액션은 애초에 탭이 아니다', () => {
+    const markup = bar('home');
+
+    expect(markup).not.toContain('role="tab');
+    expect(markup.match(/aria-current="page"/g)).toHaveLength(1);
+    expect(markup).toContain('aria-current="page" title="홈"');
+  });
+
+  it('액션은 채운 원이다 — 탭 아이콘들 사이에서 동작으로 읽히는 유일한 형태다', () => {
+    const cell = actionCell(bar('home'), '측정 시작');
+
+    expect(cell).toContain('width:44px;height:44px');
+    expect(cell).toContain('border-radius:50%');
+    expect(cell).toContain('#6E8A6A'); // 시작 = 브랜드 세이지
+  });
+
+  it('측정 중이면 빨간 ■로 바뀐다 — 시작과 끝내기가 한 자리에서 갈린다', () => {
+    const markup = bar('home', { active: true });
+
+    expect(markup).toContain('aria-label="측정 끝내기"');
+    expect(markup).not.toContain('aria-label="측정 시작"');
+    expect(actionCell(markup, '측정 끝내기')).toContain('#F04452');
+  });
+
+  it('처리 중이면 원이 흐려진다 — 연타로 세션이 두 번 시작되지 않게', () => {
+    expect(actionCell(bar('home', { busy: true }), '측정 시작')).toContain('opacity:0.6');
   });
 
   it('선택 탭 색 폴백이 웹 세이지다 — 변수가 안 잡히는 순간 토스 블루로 되돌아가는 걸 막는다', () => {
@@ -177,6 +235,100 @@ describe('하단 탭바', () => {
     expect(renderTab('home')).toContain(
       `padding-bottom:calc(${TAB_BAR_HEIGHT}px + 12px + env(safe-area-inset-bottom) + 16px)`,
     );
+  });
+});
+
+/**
+ * 가운데 액션이 시작할 책 — 홈 「측정 시작」이 쓰던 규칙 그대로다(단일 출처).
+ *
+ * <p>어느 탭에서 눌러도 "홈 캐러셀에 지금 가운데 와 있는 그 책"으로 시작한다. 어떤 조합에서도 `null`까지는
+ * 떨어지므로 **죽은 버튼이 될 수 없다**는 것이 이 함수의 핵심 계약이다.
+ */
+describe('액션이 시작할 책 (timerStartBookId)', () => {
+  const book = (id: number): BookOption => ({ id, title: `책${id}`, author: null, coverUrl: null });
+  const books = [book(1), book(2)];
+
+  it('아직 안 골랐으면 이어 읽기 책 — 홈 기본값과 같은 규칙이다', () => {
+    expect(timerStartBookId(books, 2, undefined)).toBe(2);
+  });
+
+  it('이어 읽기가 목록 밖이면 첫 책 — 다 읽었거나 뺀 책으로 시작하지 않는다', () => {
+    expect(timerStartBookId(books, 99, undefined)).toBe(1);
+  });
+
+  it('책이 0권이면 책 없이 시작한다 — 죽은 버튼이 되지 않는 마지막 폴백', () => {
+    expect(timerStartBookId([], null, undefined)).toBeNull();
+  });
+
+  it('「책 없이」를 고른 사람은 그대로 존중한다 — null은 undefined와 다른 값이다', () => {
+    expect(timerStartBookId(books, 1, null)).toBeNull();
+  });
+
+  it('고른 책이 있으면 그 책이다', () => {
+    expect(timerStartBookId(books, 1, 2)).toBe(2);
+  });
+
+  it('고른 책이 서재에서 빠졌으면 책 없이로 강등 — 홈 배선과 같은 처리다', () => {
+    expect(timerStartBookId(books, 1, 99)).toBeNull();
+  });
+});
+
+/** 액션 버튼의 두 얼굴 — 상태에 따라 라벨·색·아이콘이 통째로 갈린다. */
+describe('액션 버튼 시각 (timerActionView)', () => {
+  it('대기 중이면 세이지 ▶ 「측정 시작」', () => {
+    const view = timerActionView(false);
+
+    expect(view.label).toBe('측정 시작');
+    expect(view.background).toContain('#6E8A6A');
+  });
+
+  it('측정 중이면 빨강 ■ 「측정 끝내기」 — 옛 홈 danger 버튼의 색 연속성', () => {
+    const view = timerActionView(true);
+
+    expect(view.label).toBe('측정 끝내기');
+    expect(view.background).toContain('#F04452');
+  });
+
+  it('두 상태의 색과 아이콘이 서로 다르다 — 전환이 눈에 보여야 한다', () => {
+    expect(timerActionView(true).background).not.toBe(timerActionView(false).background);
+    expect(timerActionView(true).icon).not.toBe(timerActionView(false).icon);
+  });
+});
+
+/**
+ * 측정 액션은 `MainTabs`가 든다 — 홈이 언마운트되는 다른 탭에서도 시작·종료할 수 있다는 것이
+ * 이 변경의 존재 이유다. 정적 렌더라 클릭은 못 잡으므로 마크업 손잡이와 소스로 계측한다.
+ */
+describe('어느 탭에서든 측정 (MainTabs)', () => {
+  it('네 탭 어디서든 시작 버튼이 서 있다', () => {
+    for (const { key } of TABS) expect(renderTab(key)).toContain('aria-label="측정 시작"');
+  });
+
+  it('측정 중이면 네 탭 어디서든 끝낼 수 있다 — 홈으로 돌아가지 않아도 된다', () => {
+    for (const { key } of TABS) {
+      const markup = renderTab(key, { hasActiveSession: true, activeStartedAt: '2026-08-17T09:00:00' });
+
+      expect(markup).toContain('aria-label="측정 끝내기"');
+      expect(markup).not.toContain('aria-label="측정 시작"');
+    }
+  });
+
+  /**
+   * 전환 이벤트 — 콘솔 「핵심 지표」의 대표 전환이 `reading_session_completed`라, 이 두 호출이 빠지면
+   * 지표 자체가 죽는다. 소스로 계측하는 이유는 정적 렌더라 성공 콜백에 도달할 수 없기 때문이다
+   * (Home에 있던 같은 단언이 액션과 함께 여기로 이사했다).
+   */
+  describe('전환 이벤트 배선', () => {
+    const source = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8');
+
+    it('측정 시작 성공 경로에서 reading_session_started를 쏜다', () => {
+      expect(source).toContain("trackEvent('reading_session_started'");
+    });
+
+    it('측정 종료 성공 경로에서 reading_session_completed를 읽은 초와 함께 쏜다', () => {
+      expect(source).toContain("trackEvent('reading_session_completed'");
+      expect(source).toContain('duration_seconds');
+    });
   });
 });
 
