@@ -237,7 +237,7 @@ function home(overrides: Partial<DashboardResponse>) {
         selectedBookId={undefined}
         onSelectBook={() => {}}
         onTimerChange={() => {}}
-        onGraphChange={() => {}}
+        celebrate={false}
         onGoGoal={() => {}}
         goalAdPending={false}
         onGoSettings={() => {}}

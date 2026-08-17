@@ -2,18 +2,19 @@ import { Button } from '@toss/tds-mobile';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { BookOption, DashboardResponse, MarginBook, TimerState } from './api';
-import { fetchDashboard, token } from './api';
+import { fetchDashboard, startSession, stopSession, tagBook, token } from './api';
 import { useBackClose } from './back';
+import { elapsedSeconds } from './format';
 import { Bookshop } from './screens/Bookshop';
 import { Goal } from './screens/Goal';
 import { History } from './screens/History';
-import { Home } from './screens/Home';
+import { BookSheet, Home, defaultBookId } from './screens/Home';
 import { Library } from './screens/Library';
 import { LinkAccount } from './screens/LinkAccount';
 import { LoginBridge } from './screens/LoginBridge';
 import { Settings } from './screens/Settings';
 import { BookMargin, StoryComposer } from './screens/Story';
-import { showInterstitialAd } from './toss';
+import { showInterstitialAd, trackEvent } from './toss';
 import { ErrorMessage, Loading, Screen } from './ui';
 
 /**
@@ -58,6 +59,55 @@ export const tabChangeHandler =
   (onTabChange: (tab: TabKey) => void) =>
   (index: number): void =>
     onTabChange(TABS[index].key);
+
+/**
+ * 측정 액션이 서는 시각적 자리 — `TABS` index가 아니라 **렌더 배열의 위치**다.
+ *
+ * <p>액션을 `TABS`에 넣지 않는 이유: 그 목록은 index↔화면 대응의 단일 출처라, 화면이 없는 동작을
+ * 끼우면 `tabChangeHandler`의 계약이 통째로 흔들린다. 여기서는 다 만든 탭 버튼 배열에 끼워 넣기만 한다.
+ */
+export const TIMER_ACTION_SLOT = 2;
+
+/**
+ * 가운데 액션이 시작할 책 — 홈 「측정 시작」이 쓰던 규칙 그대로다(단일 출처).
+ *
+ * <p>캐러셀의 문법은 "가운데 온 것이 곧 측정 대상"이고 그 선택은 App이 든다(`homeBookId`). 다른 탭에서
+ * 눌러도 홈에 지금 가운데 와 있는 그 책으로 시작하는 것이 같은 문법의 연장이다 — 서재에서 보던 책으로
+ * 시작하지 않는 이유도 이것이다(측정 대상의 출처가 둘이 되면 무엇으로 시작될지 예측할 수 없다).
+ *
+ * <p>어떤 조합에서도 최소 `null`(「책 없이」)까지는 떨어져 **죽은 버튼이 될 수 없다**.
+ */
+export function timerStartBookId(
+  readingBooks: BookOption[],
+  recentBookId: number | null,
+  homeBookId: number | null | undefined,
+): number | null {
+  const picked = homeBookId === undefined ? defaultBookId(readingBooks, recentBookId) : homeBookId;
+  // 고른 책이 서재에서 빠졌으면(stale id) 「책 없이」로 강등한다 — 옛 홈 배선과 같은 처리다.
+  return readingBooks.some((b) => b.id === picked) ? picked : null;
+}
+
+/** ▶(채움 삼각형) — 탭 아이콘들(스트로크)과 달리 원 위 흰 채움이 작게도 또렷하다. */
+const PLAY_ICON = 'M9.5 6.8v10.4l8.5-5.2z';
+/** ■(채움 사각형) */
+const STOP_ICON = 'M8 8h8v8H8z';
+
+/**
+ * 액션 버튼의 두 얼굴 — 시작은 브랜드 세이지 ▶, 측정 중은 토스 danger 빨강 ■.
+ *
+ * <p>빨강은 옛 홈 「측정 끝내기」가 쓰던 TDS `color="danger"`와 같은 값이라 색 연속성이 유지된다.
+ * 전환에 애니메이션을 두지 않는다 — 표지를 재래스터화하는 발광·펄스는 실기기에서 실측된 사고 클래스다(T-176).
+ */
+export function timerActionView(active: boolean): { label: string; background: string; icon: string } {
+  return active
+    ? { label: '측정 끝내기', background: 'var(--adaptiveRed500, #F04452)', icon: STOP_ICON }
+    : { label: '측정 시작', background: 'var(--adaptiveBlue500, #6E8A6A)', icon: PLAY_ICON };
+}
+
+/** 종료 직후 태깅 대상 — 책 없이 측정한 세션에 나중에 책을 붙인다. */
+interface Untagged {
+  sessionId: number;
+}
 
 /** 탭 밖 전역 상태 — 인증·연결·목표·에러는 탭바 없이 화면 전체를 차지한다. */
 type View = 'auth' | 'link' | 'loading' | 'main' | 'goal' | 'settings' | 'error';
@@ -352,6 +402,10 @@ export function App() {
 /**
  * 메인 탭 셸 — 탭바와 본문을 같은 `TABS` 목록에서 그려 index와 화면이 어긋날 자리를 없앤다.
  * 탭바가 하단에 떠 있으므로 본문 아래에 그만큼 여백을 둔다.
+ *
+ * <p><b>측정 시작·종료도 여기가 든다</b>(홈에서 승격). 탭바를 그리는 바로 그 컴포넌트가 액션을 들어야
+ * 어느 탭에서든 시작·종료할 수 있다 — 홈이 들고 있으면 다른 탭으로 가는 순간 언마운트돼 사라진다.
+ * 덤으로 태깅 시트·축하 배너가 탭 전환에 살아남는다(종전보다 개선).
  */
 export function MainTabs({
   tab,
@@ -393,6 +447,67 @@ export function MainTabs({
   /** 책방에서 핸들(@아이디)을 만들면 대시보드의 loginId가 바뀐다 — 다시 받아야 다른 화면도 같은 값을 본다. */
   onHandleCreated: () => void;
 }) {
+  /** 액션 처리 중 — 연타로 세션이 두 번 시작·종료되지 않게 원을 흐리고 핸들러를 잠근다. */
+  const [busy, setBusy] = useState(false);
+  /** 태깅 시트 — `null`이면 닫힘. 열림 여부와 대상 세션이 늘 같이 움직여 상태 하나로 족하다. */
+  const [tagging, setTagging] = useState<Untagged | null>(null);
+  /** 첫 완료 축하 — 홈에 prop으로 내린다. 다른 탭에서 끝냈어도 홈에 돌아오면 배너가 보인다. */
+  const [celebrate, setCelebrate] = useState(false);
+  /** 액션 실패 문구 — 다른 탭엔 홈의 ErrorMessage가 없으므로 탭바 위 스트립으로 띄운다. */
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // 401은 App이 재로그인으로 처리하고, 그 외(409 중복 시작 등)만 화면에 남긴다.
+  const fail = (e: Error) => (e.name === 'UnauthorizedError' ? onError(e) : setActionError(e.message));
+
+  /** 탭바 가운데 원 — 측정 중이면 종료, 아니면 시작. 이 앱에서 세션을 여닫는 유일한 자리다. */
+  const timerAction = () => {
+    if (busy) return;
+    setBusy(true);
+    setActionError(null);
+    if (dashboard.hasActiveSession) {
+      // 종료 시각 기준 경과 — 서버 응답엔 세션 길이가 없다. 홈의 매초 tick 없이 이 한 번의 계산으로 족하다.
+      const duration =
+        dashboard.activeStartedAt === null ? 0 : elapsedSeconds(dashboard.activeStartedAt, Date.now());
+      stopSession()
+        .then((result) => {
+          onTimerChange(result.timer);
+          onGraphChange(result.graph); // stop 응답에 잔디가 동봉돼 새로고침 없이 즉시 갱신된다.
+          setCelebrate(result.firstCompletedSession);
+          // 이 앱의 핵심 전환 — 콘솔 대표 전환이 이 이벤트라, 빠지면 지표 자체가 죽는다.
+          trackEvent('reading_session_completed', { duration_seconds: duration });
+          // 종료 직후 시트를 저절로 연다(태깅은 지금 기억이 가장 선명하다). 붙일 책이 0권이면 열지 않는다 —
+          // 빈 시트는 닫는 것 말고 할 수 있는 게 없는 막다른 길이다.
+          if (result.untagged && dashboard.readingBooks.length > 0) setTagging({ sessionId: result.sessionId });
+        })
+        .catch(fail)
+        .finally(() => setBusy(false));
+    } else {
+      setCelebrate(false); // 지난 세션의 축하가 새 측정 화면에 남아 있으면 거짓말이 된다.
+      startSession(timerStartBookId(dashboard.readingBooks, dashboard.recentBookId, homeBookId))
+        .then((timer) => {
+          onTimerChange(timer);
+          trackEvent('reading_session_started');
+        })
+        .catch(fail)
+        .finally(() => setBusy(false));
+    }
+  };
+
+  const tag = (book: BookOption) => {
+    if (tagging === null) return;
+    setBusy(true);
+    tagBook(tagging.sessionId, book.id)
+      .then(() => setTagging(null))
+      .catch(fail)
+      .finally(() => setBusy(false));
+  };
+
+  /** 시트 닫기 — 태깅 시트를 닫는 건 곧 「건너뛰기」다(다시 들어갈 자리를 만들지 않는다). */
+  const closeSheet = () => setTagging(null);
+
+  // 안드로이드 뒤로가기는 시트만 닫는다 — 시트가 열린 채로 미니앱이 꺼지지 않게.
+  useBackClose(tagging !== null, closeSheet);
+
   return (
     <>
       {/* 떠 있는 탭바 아래로 본문 끝이 숨는다 — 바 높이 + 띄운 높이 + 홈 인디케이터 + 숨 쉴 여백만큼 비운다. */}
@@ -403,7 +518,7 @@ export function MainTabs({
             selectedBookId={homeBookId}
             onSelectBook={onSelectHomeBook}
             onTimerChange={onTimerChange}
-            onGraphChange={onGraphChange}
+            celebrate={celebrate}
             onGoGoal={onGoGoal}
             goalAdPending={goalAdPending}
             onGoSettings={onGoSettings}
@@ -431,7 +546,42 @@ export function MainTabs({
         {tab === 'history' && <History graph={dashboard.graph} />}
       </div>
 
-      <BottomTabBar tab={tab} onTabChange={onTabChange} />
+      {/* 액션 실패는 탭바 바로 위 스트립으로 — 다른 탭엔 홈의 ErrorMessage 자리가 없다.
+          다음 액션을 누르면 지워진다(자동 타이머는 두지 않는다). */}
+      {actionError !== null && (
+        <div
+          style={{
+            position: 'fixed',
+            left: TAB_BAR_MARGIN,
+            right: TAB_BAR_MARGIN,
+            bottom: `calc(12px + env(safe-area-inset-bottom) + ${TAB_BAR_HEIGHT}px + 8px)`,
+            zIndex: TAB_BAR_Z_INDEX,
+            padding: '4px 14px',
+            background: 'var(--adaptiveBackground, #FCFAF5)',
+            borderRadius: 12,
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
+          }}
+        >
+          <ErrorMessage message={actionError} />
+        </div>
+      )}
+
+      <BottomTabBar
+        tab={tab}
+        onTabChange={onTabChange}
+        action={{ active: dashboard.hasActiveSession, busy, onPress: timerAction }}
+      />
+
+      {/* 시트는 측정 종료 후 태깅 자리 하나다 — 탭바(zIndex 100) 위에 떠 어느 탭에서 끝내도 보인다. */}
+      {tagging !== null && (
+        <BookSheet
+          books={dashboard.readingBooks}
+          disabled={busy}
+          onPick={tag}
+          onSkip={closeSheet}
+          onClose={closeSheet}
+        />
+      )}
     </>
   );
 }
@@ -443,12 +593,67 @@ export function MainTabs({
  * 홈 인디케이터 회피는 `padding-bottom`이 아니라 **띄운 높이**(`bottom`)가 맡는다 — 둘 다 두면
  * safe-area가 두 번 더해져 바가 붕 뜬다.
  */
-export function BottomTabBar({ tab, onTabChange }: { tab: TabKey; onTabChange: (tab: TabKey) => void }) {
+export function BottomTabBar({
+  tab,
+  onTabChange,
+  action,
+}: {
+  tab: TabKey;
+  onTabChange: (tab: TabKey) => void;
+  /** 가운데 측정 액션 — 탭이 아니라 동작이다(그래서 `TABS` 밖에 산다). */
+  action: { active: boolean; busy: boolean; onPress: () => void };
+}) {
   const change = tabChangeHandler(onTabChange);
+
+  const cells = TABS.map(({ key, label, icon }, index) => {
+    const selected = key === tab;
+    return (
+      <button
+        key={key}
+        type="button"
+        // ARIA tabs 패턴은 `role="tabpanel"`과 짝일 때만 성립하는데 이 앱엔 그 짝이 없다 —
+        // 하단 내비게이션의 표준 마크업(APG)인 `aria-current`로 현재 위치를 말한다.
+        aria-current={selected ? 'page' : undefined}
+        title={label}
+        onClick={() => change(index)}
+        style={{
+          flex: 1,
+          minHeight: TAB_BAR_HEIGHT,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 3,
+          padding: 0,
+          border: 'none',
+          background: 'transparent',
+          color: selected ? 'var(--adaptiveBlue500, #6E8A6A)' : 'var(--adaptiveGrey600, #6F6A5E)',
+          cursor: 'pointer',
+        }}
+      >
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.8}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d={icon} />
+        </svg>
+        <span style={{ fontSize: 11, fontWeight: selected ? 600 : 400, lineHeight: 1.2 }}>{label}</span>
+      </button>
+    );
+  });
+
+  // 각 탭의 onClick이 map 시점의 TABS index를 그대로 닫아 두므로, 액션을 끼워도 index↔화면 대응은 흔들리지 않는다.
+  cells.splice(TIMER_ACTION_SLOT, 0, <TimerActionButton key="timer-action" {...action} />);
 
   return (
     <nav
-      role="tablist"
       aria-label="메인 탭"
       style={{
         position: 'fixed',
@@ -463,48 +668,53 @@ export function BottomTabBar({ tab, onTabChange }: { tab: TabKey; onTabChange: (
         boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
       }}
     >
-      {TABS.map(({ key, label, icon }, index) => {
-        const selected = key === tab;
-        return (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={selected}
-            title={label}
-            onClick={() => change(index)}
-            style={{
-              flex: 1,
-              minHeight: TAB_BAR_HEIGHT,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 3,
-              padding: 0,
-              border: 'none',
-              background: 'transparent',
-              color: selected ? 'var(--adaptiveBlue500, #6E8A6A)' : 'var(--adaptiveGrey600, #6F6A5E)',
-              cursor: 'pointer',
-            }}
-          >
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.8}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d={icon} />
-            </svg>
-            <span style={{ fontSize: 11, fontWeight: selected ? 600 : 400, lineHeight: 1.2 }}>{label}</span>
-          </button>
-        );
-      })}
+      {cells}
     </nav>
+  );
+}
+
+/**
+ * 탭바 가운데의 측정 액션 — 채운 원이라 스트로크 아이콘들 사이에서 **동작**으로 읽힌다.
+ *
+ * <p>라벨 글자는 없다(원 44px과 11px 라벨은 56px 높이에 함께 못 선다) — 상태는 `aria-label`이 말한다.
+ * 원이 셀(69×56) 안에 들어가므로 알약의 `overflow: hidden`에 잘리지 않는다(돌출형 아님).
+ */
+function TimerActionButton({ active, busy, onPress }: { active: boolean; busy: boolean; onPress: () => void }) {
+  const view = timerActionView(active);
+
+  return (
+    <button
+      type="button"
+      aria-label={view.label}
+      onClick={onPress}
+      style={{
+        flex: 1,
+        minHeight: TAB_BAR_HEIGHT,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 0,
+        border: 'none',
+        background: 'transparent',
+        cursor: 'pointer',
+      }}
+    >
+      <span
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: '50%',
+          background: view.background,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          opacity: busy ? 0.6 : 1,
+        }}
+      >
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="#FFFFFF" aria-hidden="true">
+          <path d={view.icon} />
+        </svg>
+      </span>
+    </button>
   );
 }

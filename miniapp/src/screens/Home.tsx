@@ -3,15 +3,13 @@ import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
 import type { BookOption, DashboardResponse, TimerState, WaiveResponse } from '../api';
-import { ApiError, startSession, stopSession, tagBook, waiveDebt } from '../api';
-import { useBackClose } from '../back';
+import { ApiError, waiveDebt } from '../api';
 import { elapsedSeconds, formatClock, formatDuration } from '../format';
 import {
   GOAL_MET_TEMPLATE_CODE,
   REWARD_AD_GROUP_ID,
   notificationAgreementSupported,
   requestNotificationAgreement,
-  trackEvent,
   watchRewardAd,
 } from '../toss';
 import { BookCover, CoverInitial, ErrorMessage, Screen, Sheet, sectionStyle } from '../ui';
@@ -145,7 +143,7 @@ function scrollToIndex(track: HTMLDivElement | null, index: number, instant = fa
  * 선택값 → 캐러셀 칸 인덱스. **0번은 언제나 「책 없이」**라 책은 한 칸씩 밀린다.
  *
  * <p>목록 밖 id(다 읽었거나 뺀 책이 stale하게 남는 경우)는 0번으로 떨어진다 — 화면 밖을 찌르느니
- * 「책 없이」가 가운데 온 상태가 정직하다(주 버튼도 그때 `start(null)`을 보낸다).
+ * 「책 없이」가 가운데 온 상태가 정직하다(탭바 액션도 그때 `startSession(null)`을 보낸다 — `timerStartBookId`).
  */
 export function carouselIndexOf(selectedId: number | null, books: BookOption[], offset = 1): number {
   if (selectedId === null) return 0;
@@ -239,7 +237,7 @@ function NoBookCard() {
  * 버튼 갈래로 두면 "가운데 온 것이 측정 대상"이라는 단일 문법이 깨지고, 책 0권 사용자에게는
  * 캐러셀 자리가 통째로 다른 화면(빈 상태)이 됐다.
  *
- * <p>선택 상태는 밖(홈)이 들고 있다 — 「측정 시작」이 같은 값을 써야 캐러셀과 시작 대상이 어긋나지 않는다.
+ * <p>선택 상태는 밖(App)이 들고 있다 — 탭바의 측정 액션이 같은 값을 써야 캐러셀과 시작 대상이 어긋나지 않는다.
  *
  * <p>서재도 같은 캐러셀을 쓴다(세로로 길던 3섹션 목록을 대체) — 다만 거기선 고를 대상이 책뿐이라
  * `noBookCard`가 꺼지고, 아래 한 줄에 읽은 시간·공개 여부까지 실으므로 `metaOf`로 그 줄을 바꿔 끼운다.
@@ -693,7 +691,7 @@ export function BookSheet({
  *
  * <p>모양은 **흰 채움 + 테두리**다(같은 날 실기기 제보). 연한 `weak` 알약은 배경과 대비가 약해 버튼으로
  * 안 읽혔다 — TDS에 outline 변형이 없어(`fill | weak`뿐) `light` 채움에 테두리를 얹어 윤곽을 만든다.
- * 주 CTA(「측정 시작」)와 무게가 겹치면 안 되므로 풀폭·강조색은 쓰지 않는다.
+ * 주 CTA(탭바 가운데 측정 원)와 무게가 겹치면 안 되므로 풀폭·강조색은 쓰지 않는다.
  */
 export function AccountSection({ onGoSettings }: { onGoSettings: () => void }) {
   return (
@@ -713,21 +711,19 @@ export function AccountSection({ onGoSettings }: { onGoSettings: () => void }) {
   );
 }
 
-/** 종료 직후 태깅 대상 — 책 없이 측정한 세션에 나중에 책을 붙인다. */
-interface Untagged {
-  sessionId: number;
-}
-
 /**
- * 타이머 홈 — `/api/dashboard` 렌더(계정 진입 · 오늘 진행률 · 시작/정지 · 읽는 중 책 · 피드 박스).
+ * 타이머 홈 — `/api/dashboard` 렌더(계정 진입 · 오늘 진행률 · 읽는 중 책 · 피드 박스).
  * 서재 관리·검색·정원은 웹이 본진이라 미니앱에 두지 않는다(설계 §2.5).
+ *
+ * <p><b>시작·종료 버튼은 여기 없다</b> — 하단 탭바 가운데 원이 유일한 자리다(어느 탭에서든 눌러야 하므로
+ * 액션은 `MainTabs`가 든다). 홈이 측정에 대해 말하는 건 히어로의 「측정 중 N분」과 안심 문구까지다.
  */
 export function Home({
   dashboard,
   selectedBookId: picked,
   onSelectBook,
   onTimerChange,
-  onGraphChange,
+  celebrate,
   onGoGoal,
   goalAdPending,
   onGoSettings,
@@ -743,7 +739,8 @@ export function Home({
   selectedBookId: number | null | undefined;
   onSelectBook: (bookId: number | null) => void;
   onTimerChange: (timer: TimerState) => void;
-  onGraphChange: (graph: DashboardResponse['graph']) => void;
+  /** 첫 완료 축하가 떠 있는지 — 상태는 측정 액션과 함께 `MainTabs`가 든다(다른 탭에서 끝내도 여기 뜨도록). */
+  celebrate: boolean;
   onGoGoal: () => void;
   /** 전면광고를 기다리는 중 — 손잡이를 「준비 중」으로 바꾸고 비활성화한다(연타 방지는 App도 함께 한다). */
   goalAdPending: boolean;
@@ -755,8 +752,6 @@ export function Home({
   /** 여백 문 — 지금 이 화면이 가리키는 책의 **작성 화면으로 직행**한다(측정 시작과 같은 1탭). */
   onComposeMargin: (book: BookOption) => void;
 }) {
-  /** 태깅 시트 — `null`이면 닫힘. 열림 여부와 대상 세션이 늘 같이 움직여 상태 하나로 족하다. */
-  const [tagging, setTagging] = useState<Untagged | null>(null);
   /** 측정할 책 — 아직 안 골랐으면 기본값(이어 읽기)으로 떨어진다. 고른 값은 App이 들어 화면을 나갔다 와도 남는다. */
   const selectedBookId = picked === undefined ? defaultBookId(dashboard.readingBooks, dashboard.recentBookId) : picked;
   const [error, setError] = useState<string | null>(null);
@@ -766,11 +761,6 @@ export function Home({
   const [waived, setWaived] = useState<number | null>(null);
   /** 남은시간 설명 상자 — 접힌 채로 시작한다(궁금한 사람만 편다). */
   const [showNote, setShowNote] = useState(false);
-  /**
-   * 첫 완료 축하가 떠 있는지 — 메모리에만 둔다. 새로고침·재조회로 사라지는 게 맞다(축하는 그 순간 1회로 족하고,
-   * 서버는 두 번째 종료부터 `firstCompletedSession=false`를 주므로 다시 켜질 일도 없다).
-   */
-  const [celebrate, setCelebrate] = useState(false);
   /** 알림 동의 캐시·지원 여부 — 렌더마다 다시 묻지 않게 초기값으로 한 번만 읽는다. */
   const [agreement, setAgreement] = useState(() => localStorage.getItem(AGREEMENT_KEY));
   const [agreementSupported] = useState(notificationAgreementSupported);
@@ -780,55 +770,6 @@ export function Home({
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, [dashboard.hasActiveSession]);
-
-  const fail = (e: Error) => {
-    // 401은 App이 재로그인으로 처리하고, 그 외(409 중복 시작 등)만 화면에 남긴다.
-    if (e.name === 'UnauthorizedError') onError(e);
-    else setError(e.message);
-  };
-
-  const run = (action: Promise<void>) => {
-    setBusy(true);
-    setError(null);
-    action.catch(fail).finally(() => setBusy(false));
-  };
-
-  // 다음 측정을 시작하면 축하는 접는다 — 지난 세션의 축하가 새 측정 화면에 남아 있으면 거짓말이 된다.
-  const start = (bookId: number | null) => {
-    setCelebrate(false);
-    return run(
-      startSession(bookId).then((timer) => {
-        onTimerChange(timer);
-        trackEvent('reading_session_started');
-      }),
-    );
-  };
-
-  const stop = () =>
-    run(
-      stopSession().then((result) => {
-        onTimerChange(result.timer);
-        onGraphChange(result.graph); // stop 응답에 잔디가 동봉돼 새로고침 없이 즉시 갱신된다.
-        setCelebrate(result.firstCompletedSession); // 첫 기록이면 배너 + 잔디 하이라이트로 시선을 아래로 보낸다.
-        // 이 앱의 핵심 전환 — 콘솔 대표 전환을 「토스로그인 완료」에서 여기로 갈아끼우기 위한 신호다.
-        // 서버 응답엔 세션 길이가 없어 화면이 세던 elapsed를 그대로 쓴다(시작 시각도 서버가 준 값이다).
-        trackEvent('reading_session_completed', { duration_seconds: elapsed });
-        // 웹처럼 종료 직후 시트를 저절로 연다 — 태깅은 지금 기억이 가장 선명하다.
-        // 붙일 책이 0권이면 열지 않는다 — 빈 시트는 닫는 것 말고 할 수 있는 게 없는 막다른 길이다.
-        if (result.untagged && dashboard.readingBooks.length > 0) setTagging({ sessionId: result.sessionId });
-      }),
-    );
-
-  const tag = (book: BookOption) => {
-    if (tagging === null) return;
-    run(tagBook(tagging.sessionId, book.id).then(() => setTagging(null)));
-  };
-
-  /** 시트 닫기 — 태깅 시트를 닫는 건 곧 「건너뛰기」다(다시 들어갈 자리를 만들지 않는다). */
-  const closeSheet = () => setTagging(null);
-
-  // 안드로이드 뒤로가기는 시트만 닫는다 — 시트가 열린 채로 미니앱이 꺼지지 않게.
-  useBackClose(tagging !== null, closeSheet);
 
   /** 광고 보고 밀린 하루 지우기 — 중간 이탈(null)이면 아무 일도 없었던 것처럼 둔다. */
   const claimWaiver = () => {
@@ -861,8 +802,6 @@ export function Home({
       : 0;
   // 측정 중이면 elapsed가 매초 늘어 todayRead도 매초 늘어난다 — 카운트업의 동력이 이 한 줄이다.
   const { todayRead, remaining, overflow, progress, achieved } = todayProgress(dashboard, elapsed);
-  // 캐러셀 가운데 온 책 — 시작 버튼도 이 값을 그대로 쓴다(고른 책과 시작 대상이 어긋날 자리를 없앤다).
-  const selectedBook = dashboard.readingBooks.find((b) => b.id === selectedBookId) ?? null;
   // 여백 문이 가리키는 책 — 측정 중이면 그 책, 대기 중이면 캐러셀에서 고른 책(없으면 문을 안 그린다).
   const doorBook = marginDoorBook(dashboard, selectedBookId);
 
@@ -999,26 +938,15 @@ export function Home({
 
       <ErrorMessage message={error} />
 
-      {/* 시작은 이 버튼 하나 — 무엇으로 측정할지는 캐러셀이 이미 말했다(「책 없이」 칸이면 selectedBook이
-          null이라 그대로 `start(null)`이 나간다). 보조 갈래를 두면 "가운데 온 것으로 측정한다"는 문법이 깨진다. */}
-      <Button
-        display="block"
-        color={dashboard.hasActiveSession ? 'danger' : 'primary'}
-        style={{ marginTop: 24 }}
-        loading={busy}
-        onClick={dashboard.hasActiveSession ? stop : () => start(selectedBook?.id ?? null)}
-      >
-        {dashboard.hasActiveSession ? '측정 끝내기' : '측정 시작'}
-      </Button>
-
-      {/* 여백 문 — 「측정 시작」 바로 아래, 같은 1탭 거리에 둔다. 예전엔 책방 탭을 지나 격자에서 책을
-          찾아 들어가야 했다(3탭+스크롤): 남에게 보여지는 전시장이 개인 글의 유일한 입구였던 자리다. */}
+      {/* 여백 문 — 주 버튼이 탭바로 떠나며 그 자리(marginTop 24)를 그대로 물려받았다. 예전엔 책방 탭을
+          지나 격자에서 책을 찾아 들어가야 했다(3탭+스크롤): 남에게 보여지는 전시장이 개인 글의 유일한
+          입구였던 자리다. `weak`를 유지한다 — 화면의 주 동작(탭바의 초록 원)보다 낮은 무게가 맞다. */}
       {doorBook !== null && (
         <Button
           display="block"
           variant="weak"
           size="medium"
-          style={{ marginTop: 8 }}
+          style={{ marginTop: 24 }}
           onClick={() => onComposeMargin(doorBook)}
         >
           여백에 글 남기기
@@ -1028,17 +956,6 @@ export function Home({
       {/* 잔디 미리보기가 서 있던 자리는 피드 박스가 통째로 쓴다 — 기록(잔디·연속일·총 시간)은 기록 탭이
           이미 전부 그리고 그 탭은 하단 탭바에서 한 번에 닿으므로, 홈에 진입 손잡이를 또 두지 않는다. */}
       <HomeFeedBox onError={onError} onOpenMargin={onOpenMargin} />
-
-      {/* 시트는 측정 종료 후 태깅 자리 하나다 — 고르기는 캐러셀이 맡는다. */}
-      {tagging !== null && (
-        <BookSheet
-          books={dashboard.readingBooks}
-          disabled={busy}
-          onPick={tag}
-          onSkip={closeSheet}
-          onClose={closeSheet}
-        />
-      )}
     </Screen>
   );
 }
