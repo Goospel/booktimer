@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { BookStatus, MarginEntry, MarginResponse, MyBookSummary } from './api';
-import { dismissCoachmark } from './coachmark';
+import { dismissCoachmark, setCoachmarkWalking } from './coachmark';
 import type { LibrarySheet } from './screens/Library';
 import {
   AddBookButton,
@@ -18,7 +18,10 @@ import {
 } from './screens/Library';
 import { stubLocalStorage, userAgent } from './test-fixtures';
 
-beforeEach(stubLocalStorage); // 「책 추가하기」가 렌더 중에 코치마크를 봤는지 읽는다
+beforeEach(() => {
+  stubLocalStorage(); // 「책 추가하기」가 렌더 중에 코치마크를 봤는지 읽는다
+  setCoachmarkWalking(true); // 인라인 안내는 걷는 중에만 뜬다(잠금 계측은 coachmark.test)
+});
 
 /**
  * 서재 목록 렌더 — 탭 분류(읽는 중/다 읽음/읽고 싶어요)·캐러셀·시트가 계측 대상이다.

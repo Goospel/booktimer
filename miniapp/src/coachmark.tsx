@@ -37,6 +37,26 @@ export function onCoachmarkChange(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
+/**
+ * 지금 안내를 걷고 있나 — <b>인라인 안내가 스스로 뜨지 못하게 하는 잠금</b>이다.
+ *
+ * <p>⚠️ 2026-08-17 심사 반려(「접속 직후 바텀시트」) 대응의 두 번째 구멍이었다. 탭바 걸음의 자동 시작을
+ * 없애도, 인라인 안내는 <b>앞 걸음 키만 있으면</b> 자기 판단으로 떴다 — 배너를 ✕로 거절하면 길 안내 키
+ * 3개가 남으므로, <b>다음 진입 때 홈에서 여백 안내 딤이 즉시 깔렸다</b>(실 브라우저 실측). 거절한 사람에게
+ * 오버레이를 들이대는 것이자 반려 사유 재발이다.
+ *
+ * <p>기기에 남기지 않는다(모듈 지역) — 「걷는 중」은 이 실행 동안의 상태이고, 새로 열면 당연히 걷지 않는다.
+ */
+let walking = false;
+
+export function coachmarkWalking(): boolean {
+  return walking;
+}
+
+export function setCoachmarkWalking(on: boolean): void {
+  walking = on;
+}
+
 /** 봤다고 못 박는다 — 덮개 탭·대상 누름이 모두 이 한 자리로 온다. */
 export function dismissCoachmark(name: string): void {
   localStorage.setItem(storageKey(name), 'seen');
@@ -183,8 +203,12 @@ export function Coachmark({
   /**
    * 뜰 차례인가는 <b>매 렌더 파생</b>이다 — 마운트 때 한 번만 판정하면, 투어를 막 끝낸 그 순간
    * 이미 서 있던 화면(홈)에서는 차례가 온 것을 모른 채 다음 진입까지 침묵한다(실측).
+   *
+   * <p>{@link coachmarkWalking}이 첫 조건인 이유는 심사 반려다 — 걷지 않을 때 스스로 뜨면 그것이
+   * 「진입 직후 오버레이」가 된다. 흐름을 시작·포기할 때 `MainTabs`가 이 잠금을 여닫고, 그 상태 변화가
+   * 곧 이 화면의 리렌더라 별도 구독이 필요 없다.
    */
-  const open = !closed && (after === undefined || coachmarkSeen(after));
+  const open = coachmarkWalking() && !closed && (after === undefined || coachmarkSeen(after));
 
   const close = () => {
     dismissCoachmark(name);

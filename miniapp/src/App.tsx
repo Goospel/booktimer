@@ -4,7 +4,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BookOption, DashboardResponse, MarginBook, TimerState } from './api';
 import { fetchDashboard, startSession, stopSession, tagBook, token } from './api';
 import { useBackClose } from './back';
-import { CoachmarkBubble, coachmarkSeen, dismissCoachmark, onCoachmarkChange } from './coachmark';
+import {
+  CoachmarkBubble,
+  coachmarkSeen,
+  dismissCoachmark,
+  onCoachmarkChange,
+  setCoachmarkWalking,
+} from './coachmark';
 import { elapsedSeconds } from './format';
 import { Bookshop } from './screens/Bookshop';
 import { Goal } from './screens/Goal';
@@ -199,6 +205,26 @@ export function flowTabChange(step: FlowStep | undefined, tab: TabKey): TabKey |
  * <p>사용자가 스스로 탭을 옮겼다면 길은 이미 스스로 찾는 중이니 그 안내는 물러난다. 반면 책 담기·여백은
  * 대상이 있는 화면에 섰을 때가 제 차례라 남겨 둔다(그 화면에 가면 인라인 안내가 스스로 뜬다).
  */
+/**
+ * 안내 배너를 띄울까 — 첫 사용 안내는 <b>사용자가 눌러서</b> 시작한다.
+ *
+ * <p>2026-08-17 토스 심사 반려: 「미니앱 접속 직후 바텀시트가 바로 노출돼요」. 우리가 만든 것은 툴팁이지만
+ * 렌더 결과가 <b>전체 딤 + 하단 와이드 패널</b>이라 시트와 구별되지 않았다(2026-08-12 「서비스 설명 없이 즉시
+ * 로그인 유도」 반려와 같은 계열 — 심사는 <b>진입 직후 들이대는 것</b>을 막는다). 안내 자체는 그대로 두고
+ * <b>시작 트리거만</b> 자동 → 수동으로 뒤집었다.
+ *
+ * <p>기준은 <b>길 안내(탭바 걸음)</b>뿐이다. 「전 걸음 완료」로 판정하면, 책이 0권이라 홈 여백 문이 없는
+ * 신규 사용자는 마지막 걸음 키가 영영 안 남아 배너가 평생 뜬다. 덕분에 #833 안내만 본 옛 사용자에게도
+ * 제대로 뜬다(서재·책방을 아직 모른다).
+ *
+ * <p>⚠️ {@link closed}가 따로 있는 이유(실 브라우저 실측): ✕는 기록(키 3개)을 남기지만 그 기록만으로는
+ * <b>화면이 갱신되지 않는다</b> — 배너만 보고 있을 때 커서는 이미 `-1`이라 `setFlowIndex(-1)`이 같은 값이고
+ * React가 리렌더를 건너뛴다. 그래서 즉시 반영은 이 상태가, 다음 진입의 판정은 키가 맡는다(역할이 다르다).
+ */
+export function shouldShowGuideBanner(running: boolean, closed: boolean): boolean {
+  return !running && !closed && flowStepsOnAbandon().some((name) => !coachmarkSeen(name));
+}
+
 export function flowStepsOnAbandon(): string[] {
   return COACHMARK_FLOW.filter((step) => step.bubble !== undefined).map((step) => step.name);
 }
@@ -554,16 +580,41 @@ export function MainTabs({
   const [celebrate, setCelebrate] = useState(false);
   /** 액션 실패 문구 — 다른 탭엔 홈의 ErrorMessage가 없으므로 탭바 위 스트립으로 띄운다. */
   const [actionError, setActionError] = useState<string | null>(null);
-  /** 지금 걷고 있는 걸음(`-1`=끝) — 렌더 중에 읽는다(정적 렌더 하니스로도 계측된다). */
-  const [flowIndex, setFlowIndex] = useState(nextFlowStep);
+  /**
+   * 지금 걷고 있는 걸음(`-1`=안 걷는 중) — 렌더 중에 읽는다(정적 렌더 하니스로도 계측된다).
+   *
+   * <p>⚠️ <b>마운트 때 시작하지 않는다</b>(심사 반려 대응 — {@link shouldShowGuideBanner}). 옛 배선은
+   * 초기값을 `nextFlowStep()`으로 둬서 「안 본 걸음이 있다」가 곧 「지금 걷는다」였고, 그래서 진입 즉시 딤이 깔렸다.
+   */
+  const [flowIndex, setFlowIndex] = useState(-1);
   /** 걷기를 포기했나 — 포기 후에는 닫힘 알림이 와도 커서를 되살리지 않는다(순서와 무관하게). */
   const abandoned = useRef(false);
+  /** 배너를 ✕로 닫았나 — 이 마운트 동안의 즉시 반영만 맡는다(다음 진입의 판정은 기기 기록이 맡는다). */
+  const [guideClosed, setGuideClosed] = useState(false);
 
   /**
    * 어디서 안내가 닫혀도 커서가 따라온다 — <b>인라인 안내는 화면 안에서 닫히므로</b> 이 구독이
    * 없으면 흐름이 그 자리에서 멈춘다(그게 이 기능의 핵심 배선이다).
+   *
+   * <p>걷는 중이 아니면 아무것도 하지 않는다 — 안 그러면 어딘가의 닫힘 하나가 <b>시작하지도 않은 투어를</b>
+   * 깨워 진입 직후 노출이 되살아난다(수동 시작의 유일한 문은 배너여야 한다).
    */
-  useEffect(() => onCoachmarkChange(() => setFlowIndex(abandoned.current ? -1 : nextFlowStep())), []);
+  useEffect(
+    () =>
+      onCoachmarkChange(() =>
+        setFlowIndex((current) => (current < 0 ? -1 : abandoned.current ? -1 : nextFlowStep())),
+      ),
+    [],
+  );
+
+  /**
+   * 인라인 안내의 잠금을 커서와 동기화한다 — 걷지 않을 때 그것들이 스스로 뜨면 「진입 직후 오버레이」가
+   * 되어 심사 반려가 재발한다(실측). 언마운트(설정·여백 전체 화면)에서도 잠근다.
+   */
+  useEffect(() => {
+    setCoachmarkWalking(flowIndex >= 0);
+    return () => setCoachmarkWalking(false);
+  }, [flowIndex]);
 
   const flowStep = flowIndex < 0 ? undefined : COACHMARK_FLOW[flowIndex];
 
@@ -576,6 +627,12 @@ export function MainTabs({
   /** 한 걸음 봤다고 남긴다 — 커서는 위 구독이 옮긴다(진행 경로가 하나로 모인다). */
   const advanceFlow = () => {
     if (flowStep !== undefined) dismissCoachmark(flowStep.name);
+  };
+
+  /** 배너를 눌러 걷기를 시작한다 — 안내로 들어오는 <b>유일한 문</b>이다(#833 안내만 본 사람은 서재부터). */
+  const startFlow = () => {
+    abandoned.current = false;
+    setFlowIndex(nextFlowStep());
   };
 
   /** 사용자가 스스로 탭을 옮기면 길 안내는 물러난다(인라인 걸음은 그 화면에서 다시 뜬다). */
@@ -652,6 +709,18 @@ export function MainTabs({
         {tab === 'home' && (
           <Home
             dashboard={dashboard}
+            // 안내로 들어오는 문 — 홈은 자리만 정하고(헤더 바로 아래), 만드는 쪽은 흐름을 든 여기다.
+            guide={
+              shouldShowGuideBanner(flowIndex >= 0, guideClosed) ? (
+                <GuideBanner
+                  onStart={startFlow}
+                  onDismiss={() => {
+                    abandonFlow(); // 길 안내만 접고 인라인 걸음은 남긴다(포기 규칙 그대로)
+                    setGuideClosed(true);
+                  }}
+                />
+              ) : null
+            }
             selectedBookId={homeBookId}
             onSelectBook={onSelectHomeBook}
             onTimerChange={onTimerChange}
@@ -740,6 +809,73 @@ export function MainTabs({
  * <p>위치 계산도 없다(ref·`getBoundingClientRect`·리사이즈 관측 0): 가로는 {@link slotCenter}가
  * 순수 CSS로 주고, 세로는 탭바와 같은 식(띄운 높이 + 홈 인디케이터 + 바 높이)에 여백만 더한다.
  */
+/**
+ * 안내 배너 — 첫 사용 안내로 들어오는 문. 홈 헤더 바로 아래 한 줄이다.
+ *
+ * <p>진입 직후 자동으로 뜨던 안내를 <b>사용자가 눌러서</b> 시작하도록 뒤집은 결과다(심사 반려 대응 —
+ * {@link shouldShowGuideBanner}). 배너는 <b>화면 안 요소</b>라 시트가 아니고 배경을 잠그지 않는다.
+ * ✕가 있는 것이 요점이다 — 「들이대지 않는다」가 눈에 보여야 한다.
+ *
+ * <p>닫기는 {@link MainTabs}의 포기 규칙을 그대로 쓴다: 길 안내만 본 것으로 접고 <b>인라인 걸음은 남긴다</b>
+ * (서재·홈에서 그 대상 옆에 뜨는 안내는 시트로 읽힐 자리가 아니고, 그때가 제 차례다).
+ */
+export function GuideBanner({ onStart, onDismiss }: { onStart: () => void; onDismiss: () => void }) {
+  const sage = 'var(--adaptiveBlue700, #4F6B4C)';
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        marginBottom: 12,
+        padding: '12px 14px',
+        borderRadius: 12,
+        background: 'rgba(110, 138, 106, 0.10)',
+      }}
+    >
+      <button
+        type="button"
+        onClick={onStart}
+        style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          minWidth: 0,
+          border: 'none',
+          background: 'transparent',
+          padding: 0,
+          textAlign: 'left',
+          cursor: 'pointer',
+        }}
+      >
+        <span style={{ fontSize: 15, lineHeight: 1 }}>👋</span>
+        <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: sage }}>처음이신가요? 앱 사용법 보기</span>
+        <span style={{ fontSize: 13, color: sage }}>›</span>
+      </button>
+
+      <span style={{ width: 1, height: 14, background: 'rgba(79, 107, 76, 0.25)', margin: '0 2px' }} />
+
+      <button
+        type="button"
+        aria-label="안내 배너 닫기"
+        onClick={onDismiss}
+        style={{
+          border: 'none',
+          background: 'transparent',
+          padding: '0 2px',
+          color: 'var(--adaptiveGrey600, #6F6A5E)',
+          fontSize: 13,
+          cursor: 'pointer',
+        }}
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
 export function TabBarCoachmark({
   bubble,
   index,

@@ -764,6 +764,7 @@ export function AccountSection({
  */
 export function Home({
   dashboard,
+  guide,
   selectedBookId: picked,
   onSelectBook,
   onTimerChange,
@@ -776,6 +777,11 @@ export function Home({
   onComposeMargin,
 }: {
   dashboard: DashboardResponse;
+  /**
+   * 첫 사용 안내로 들어오는 배너 — **자리만 여기가 정한다**(헤더 바로 아래). 만드는 쪽은 흐름을 든
+   * `MainTabs`다: 안 본 길 안내가 있을 때만 노드가 오고, 없으면 `null`이라 빈 줄도 남지 않는다.
+   */
+  guide?: ReactNode;
   /**
    * 캐러셀에서 고른 책 — 상태는 **App이 든다**(홈은 여백·목표·설정이 열리면 언마운트된다).
    * `undefined`는 아직 고르지 않음(여기서 {@link defaultBookId}로 정한다), `null`은 「책 없이」를 고른 것.
@@ -853,6 +859,9 @@ export function Home({
     <Screen>
       {/* 계정 진입은 화면 맨 위 — 카드 위 한 줄이 곧 이 화면의 헤더다(인사말 + 아바타). */}
       <AccountSection nickname={dashboard.nickname} loginId={dashboard.loginId} onGoSettings={onGoSettings} />
+
+      {/* 첫 사용 안내로 들어오는 문 — 처음 온 사람이 히어로 카드보다 먼저 만나야 한다. */}
+      {guide}
 
       <div
         style={{

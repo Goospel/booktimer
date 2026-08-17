@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BookOption, DashboardResponse } from './api';
 import { TAB_BAR_Z_INDEX } from './App';
 import { ApiError, waiveDebt } from './api';
-import { dismissCoachmark } from './coachmark';
+import { dismissCoachmark, setCoachmarkWalking } from './coachmark';
 import {
   AccountSection,
   BookCarousel,
@@ -104,11 +104,17 @@ function book(id: number, title: string, extra: Partial<BookOption> = {}): BookO
 
 function renderHome(
   overrides: Partial<DashboardResponse> = {},
-  props: { goalAdPending?: boolean; selectedBookId?: number | null; celebrate?: boolean } = {},
+  props: {
+    goalAdPending?: boolean;
+    selectedBookId?: number | null;
+    celebrate?: boolean;
+    guide?: ReactNode;
+  } = {},
 ) {
   return renderToStaticMarkup(
     <TDSMobileProvider userAgent={userAgent}>
       <Home
+        guide={props.guide}
         dashboard={dashboard(overrides)}
         selectedBookId={props.selectedBookId}
         onSelectBook={() => {}}
@@ -132,6 +138,7 @@ beforeEach(() => {
   requestAgreementMock.mockReset();
   supportedMock.mockReturnValue(true);
   stubLocalStorage(); // 홈이 렌더 중에 동의 캐시를 읽는다
+  setCoachmarkWalking(true); // 여백 인라인 안내는 걷는 중에만 뜬다(잠금 계측은 coachmark.test)
 });
 
 describe('버튼 노출 조건 (showWaiverButton)', () => {
@@ -1245,6 +1252,18 @@ describe('계정 진입점', () => {
     expect(markup.indexOf(ENTRY)).toBeGreaterThan(0);
     // 히어로 카드보다도 앞 — 카드 위 한 줄이 이 손잡이의 자리다.
     expect(markup.indexOf(ENTRY)).toBeLessThan(markup.indexOf('오늘 읽은 시간'));
+  });
+
+  it('안내 배너는 그 헤더 바로 아래에 선다 — 처음 온 사람이 카드보다 먼저 만나야 한다', () => {
+    // 배너를 만드는 쪽은 흐름을 든 `MainTabs`다(`app.test`) — 홈이 정하는 것은 **자리**뿐이라 슬롯으로 받는다.
+    const markup = renderHome({}, { guide: <div>안내-슬롯</div> });
+
+    expect(markup.indexOf('안내-슬롯')).toBeGreaterThan(markup.indexOf(ENTRY));
+    expect(markup.indexOf('안내-슬롯')).toBeLessThan(markup.indexOf('오늘 읽은 시간'));
+  });
+
+  it('배너를 안 넘기면 그 자리는 비어 있다 — 다 본 사람의 홈에 빈 줄이 남지 않는다', () => {
+    expect(renderHome()).not.toContain('안내-슬롯');
   });
 });
 
