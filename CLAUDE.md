@@ -3,7 +3,8 @@
 > 이 파일은 글로벌 `~/.claude/CLAUDE.md` 와 **합쳐서** 적용된다.
 > 글로벌은 사용자 메타 시스템(PKM 등), 이 파일은 BookTimer 고유 규칙.
 
-프로젝트 개요·도메인 규칙은 [README.md](README.md), 로드맵·설계는 [plan.md](plan.md), 갱신 이력(변경 일지)은 [claude-docs/changelog.md](claude-docs/changelog.md), 학습 노트는 [claude-docs/learning-notes.md](claude-docs/learning-notes.md), 트러블슈팅은 [claude-docs/troubleshooting.md](claude-docs/troubleshooting.md) 참고.
+프로젝트 개요·도메인 규칙은 [README.md](README.md), 로드맵·설계는 [plan.md](plan.md), 갱신 이력(변경 일지)은 [claude-docs/changelog.md](claude-docs/changelog.md), 트러블슈팅은 [claude-docs/troubleshooting.md](claude-docs/troubleshooting.md) 참고.
+옛 학습 노트 [claude-docs/learning-notes.md](claude-docs/learning-notes.md)는 **아카이브**다 — 읽는 건 유용하나 새로 쓰지 않는다(2026-08-18 폐기, 「🧯 트러블슈팅 활용」 절).
 
 ---
 
@@ -86,7 +87,7 @@
 
 1. **브랜치 생성** — `main` 에서 분기
    - 네이밍: `feat/<요약>`, `fix/<요약>`, `docs/<요약>`, `chore/<요약>`
-   - 예: `feat/reading-timer-entity`, `docs/learning-notes-n004`
+   - 예: `feat/reading-timer-entity`, `docs/t183-review-overlay`
 2. **작업 + 커밋** — 의미 단위로 커밋
    - **커밋 제목에 PR 번호(`(#NNN)`)를 직접 넣지 않는다** — squash 머지 시 GitHub가 자동 부착해 중복된다.
      **(훅 `check-commit-message.ps1`이 하드 강제. 우회: `ALLOW_PR_NUM_IN_TITLE` 토큰.)**
@@ -99,7 +100,7 @@
      ```
      🤖 Generated with [Claude Code](https://claude.com/claude-code)
      ```
-   - PR body 작성 시 글로벌 규칙대로 **troubleshooting / learning-notes sweep** 수행
+   - PR body 작성 시 글로벌 규칙대로 **troubleshooting sweep** 수행(학습 노트 sweep은 2026-08-18 폐기)
    - **갱신 이력 항목을 PR 브랜치 안에 포함한다 (필수)** — 그 작업을
      [claude-docs/changelog.md](claude-docs/changelog.md) 표 **맨 아래에 한 줄**로 남긴다(일자 / 한 일).
      **PR 번호는 넣지 않는다**(번호 반영 추가 커밋 = push·CI 2회. 추적은 PR body·git log로 충분).
@@ -184,7 +185,7 @@ powershell -File .claude/scripts/remove-worktree.ps1 ../BookTimer-<task>   # 또
 폴더를 나눠도 repo 전체가 공유하는 것은 여전히 충돌하니 조율한다:
 
 - **Flyway 버전 번호**(`V5__`, `V6__` …) — 세션별 번호 구역 배정 또는 머지 후 부여
-- **공유 문서**(plan.md / changelog / README / 이 파일 / learning-notes / troubleshooting) — 작게·원자적으로, **편집 직전 재읽기**
+- **공유 문서**(plan.md / changelog / README / 이 파일 / troubleshooting) — 작게·원자적으로, **편집 직전 재읽기**
 - **앱 포트 8080** — 두 세션이 `bootRun` 하면 충돌 → 트리별 `server.port` 분리(또는 한 곳에서만 실행).
   **검증용 `bootRun`은 작업 종료 시 반드시 끈다(본인이 띄운 건 본인이 끈다).** 떠도는 잔재 강제 종료:
   ```powershell
@@ -311,20 +312,23 @@ Claude Code 는 그 자식 프로세스 종료를 기다릴 뿐이라 **코어 �
 
 ### 작업 시작 / 디버깅 전 — 먼저 참고
 
-- 빌드·git·PowerShell·테스트 등에서 막히면, **추측하기 전에 먼저** `troubleshooting.md` 와 `learning-notes.md` 를 확인한다.
+- 빌드·git·PowerShell·테스트 등에서 막히면, **추측하기 전에 먼저** `troubleshooting.md` 를 확인한다.
 - 이미 기록된 트랩이면 그 해법을 그대로 적용한다 (두 번 헤매지 않기).
+- 옛 개념 노트 `claude-docs/learning-notes.md` 는 **아카이브**다(아래 폐기 안내) — 검색해서 읽는 건 유용하니 막지 않되, **새로 쓰지 않는다**.
 
-### 디버깅 후 — 자동 sweep (learning-notes 파이프라인과 동일)
+### 디버깅 후 — 자동 sweep
 
-1분 이상 헤맨 문제를 해결했으면 **두 종류의 후보를 점검**한다:
+1분 이상 헤맨 문제를 해결했으면 **`T-###` 후보 하나를 점검**한다 — "이렇게 하지 마라"(재발 방지 절차)와
+"왜 이렇게 동작하는가"(개념)를 **한 항목 안에서** 다룬다. 개념은 `T-###` 의 *원인* 필드가 담는 몫이다.
 
-| 종류 | 위치 | 성격 |
-|---|---|---|
-| **Trap (해결법)** — "이렇게 하지 마라" | `troubleshooting.md` (`T-###`) | 재발 방지 절차 |
-| **개념 (이해)** — "왜 이렇게 동작하는가" | `learning-notes.md` (`N-###`) | 면접 설명 가능 수준 |
+> **⚠️ 학습 노트(`N-###`) 파이프라인은 폐기했다 (2026-08-18 사용자 확정).** 예전엔 개념을
+> `claude-docs/learning-notes.md` 에 따로 쌓고 후보를 별도로 제안했는데, **개념만 있고 함정이 없는 것은
+> 이제 아예 안 남긴다**. 실제 운영도 그렇게 흘러왔다(마지막 항목 N-149 이후 사실상 정지). 파일과 기존
+> `N-###` 상호참조는 **아카이브로 보존**한다 — 가리키는 내용이 실재하고 여전히 읽을 값어치가 있어서다.
+> 그러니 이 문서 다른 절에 남아 있는 `N-###` 링크는 낡은 게 아니라 **의도된 포인터**다(N-032·N-055·N-077 등).
 
-- 해결 직후, 답변 끝에 **"🧯 troubleshooting 추가 후보 — `<한 줄 요약>`. 박을까?"** (또는 learning-notes 후보)를 짧게 제안한다.
-- 사용자가 OK 하면 즉시 해당 파일에 `T-###` / `N-###` 로 추가한다.
+- 해결 직후, 답변 끝에 **"🧯 troubleshooting 추가 후보 — `<한 줄 요약>`. 박을까?"** 를 짧게 제안한다.
+- 사용자가 OK 하면 즉시 `troubleshooting.md` 에 `T-###` 로 추가한다.
 - PR 머지 직전에도 sweep 을 함께 수행한다 (Git 워크플로 4번).
 - **자주 재발(2회 이상)하는 트랩은 `troubleshooting.md`(참조용)에 더해 이 `CLAUDE.md`(항상 로드)의 해당 섹션에도 승격**한다 — 매번 troubleshooting 을 안 펼쳐도 바로 대처하게. (예: git/gradle 무한 hang → 「🧪 TDD → ⚠️ 커밋이 무한 hang 하면」, T-078. 사용자 합의: 2026-06-22.)
 - **재발 카운팅 = `troubleshooting.md` 상단 「🔁 재발·승격 트래커」 표로 한다 (필수).** `T-###` 를 새로 쓸 때 같은 트랩의 재발이면 ① 항목 끝에 `N회차(이전 T-### 재발)` 명시 ② 트래커 표의 회차·승격상태 갱신(신규 1회는 표에 안 올리고 2회째에 군으로). 표에서 **2회+인데 미승격**이 보이면 승격 — **prose 한 줄보다 하드픽스(훅·스크립트) 우선**. 답변에서도 재발이면 "이건 N회차"를 짚는다. (배경은 [참조](claude-docs/claude-md-reference.md).)
