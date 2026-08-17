@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import type { BookOption, DashboardResponse, TimerState, WaiveResponse } from '../api';
 import { ApiError, waiveDebt } from '../api';
+import { Coachmark } from '../coachmark';
 import { elapsedSeconds, formatClock, formatDuration } from '../format';
 import {
   GOAL_MET_TEMPLATE_CODE,
@@ -942,15 +943,24 @@ export function Home({
           지나 격자에서 책을 찾아 들어가야 했다(3탭+스크롤): 남에게 보여지는 전시장이 개인 글의 유일한
           입구였던 자리다. `weak`를 유지한다 — 화면의 주 동작(탭바의 초록 원)보다 낮은 무게가 맞다. */}
       {doorBook !== null && (
-        <Button
-          display="block"
-          variant="weak"
-          size="medium"
-          style={{ marginTop: 24 }}
-          onClick={() => onComposeMargin(doorBook)}
+        // 첫 방문 안내는 문이 실제로 선 자리에서만 뜬다 — 책 0권이면 문 자체가 없으므로, 이 안내는
+        // 책을 담고 측정을 해 본 뒤에야 저절로 차례가 온다(순서를 제어하는 코드가 없다).
+        <Coachmark
+          name="margin"
+          after="bookshop" // 탭바 투어를 마친 뒤에 — 딤 두 장이 겹치지 않게
+          title="읽다가 떠오른 생각을 여백에"
+          detail="문장·감상을 몇 줄 남겨 두는 자리예요"
         >
-          여백에 글 남기기
-        </Button>
+          <Button
+            display="block"
+            variant="weak"
+            size="medium"
+            style={{ marginTop: 24 }}
+            onClick={() => onComposeMargin(doorBook)}
+          >
+            여백에 글 남기기
+          </Button>
+        </Coachmark>
       )}
 
       {/* 잔디 미리보기가 서 있던 자리는 피드 박스가 통째로 쓴다 — 기록(잔디·연속일·총 시간)은 기록 탭이

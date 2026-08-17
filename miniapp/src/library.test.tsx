@@ -1,10 +1,12 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { BookStatus, MarginEntry, MarginResponse, MyBookSummary } from './api';
+import { dismissCoachmark } from './coachmark';
 import type { LibrarySheet } from './screens/Library';
 import {
+  AddBookButton,
   BookGrid,
   BookSearch,
   MarginBoxView,
@@ -14,7 +16,9 @@ import {
   needsPublishConfirm,
   resolveSelected,
 } from './screens/Library';
-import { userAgent } from './test-fixtures';
+import { stubLocalStorage, userAgent } from './test-fixtures';
+
+beforeEach(stubLocalStorage); // 「책 추가하기」가 렌더 중에 코치마크를 봤는지 읽는다
 
 /**
  * 서재 목록 렌더 — 탭 분류(읽는 중/다 읽음/읽고 싶어요)·캐러셀·시트가 계측 대상이다.
@@ -559,5 +563,57 @@ describe('책 추가 — 나가는 길', () => {
 
     expect(backAt(busy)).toContain('disabled');
     expect(backAt(search())).not.toContain('disabled');
+  });
+});
+
+/**
+ * 「책 추가하기」 + 첫 방문 코치마크 — 게이트와 안내가 <b>한 몸</b>이다.
+ *
+ * <p>버튼은 서버 플래그(`searchEnabled`)에 달려 있어, 안내를 따로 두면 플래그가 꺼진 날
+ * 아무것도 없는 자리를 가리키는 안내만 남는다. 그래서 같은 컴포넌트가 둘을 함께 든다.
+ */
+describe('책 추가 손잡이', () => {
+  const GUIDE = '읽을 책은 여기서 찾아 담아요';
+
+  const addBook = (enabled: boolean) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <AddBookButton enabled={enabled} onPress={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  it('투어를 마친 첫 방문자에게 버튼과 안내가 함께 뜬다', () => {
+    dismissCoachmark('bookshop'); // 투어 마지막 걸음
+
+    const markup = addBook(true);
+
+    expect(markup).toContain('책 추가하기');
+    expect(markup).toContain(GUIDE);
+  });
+
+  it('투어 중에는 안내가 뜨지 않는다 — 딤 두 장이 겹치지 않는다', () => {
+    const markup = addBook(true);
+
+    expect(markup).toContain('책 추가하기');
+    expect(markup).not.toContain(GUIDE);
+  });
+
+  it('한 번 본 사람에게는 버튼만 남는다', () => {
+    dismissCoachmark('bookshop');
+    dismissCoachmark('add-book');
+
+    const markup = addBook(true);
+
+    expect(markup).toContain('책 추가하기');
+    expect(markup).not.toContain(GUIDE);
+  });
+
+  it('검색이 꺼져 있으면 버튼도 안내도 없다 — 없는 버튼을 가리키지 않는다', () => {
+    dismissCoachmark('bookshop');
+
+    const markup = addBook(false);
+
+    expect(markup).not.toContain('책 추가하기');
+    expect(markup).not.toContain(GUIDE);
   });
 });

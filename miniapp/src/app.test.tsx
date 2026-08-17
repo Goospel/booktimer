@@ -6,7 +6,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   App,
   BottomTabBar,
-  COACHMARK_KEY,
   MainTabs,
   REFRESH_THROTTLE_MS,
   TAB_BAR_HEIGHT,
@@ -14,14 +13,17 @@ import {
   TAB_BAR_Z_INDEX,
   TABS,
   TIMER_ACTION_SLOT,
+  TOUR_STEPS,
   closeCompose,
-  dismissCoachmark,
   shouldRefresh,
+  slotCenter,
   tabChangeHandler,
+  tabSlot,
   timerActionView,
   timerStartBookId,
 } from './App';
 import type { BookOption, DashboardResponse } from './api';
+import { dismissCoachmark } from './coachmark';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
 beforeEach(stubLocalStorage); // 홈 탭이 렌더 중에 알림 동의 캐시를 읽는다
@@ -336,27 +338,57 @@ describe('어느 탭에서든 측정 (MainTabs)', () => {
 });
 
 /**
- * 첫 진입 코치마크 — 「측정 시작」이 홈에서 탭바 가운데로 옮겨갔음을 1회 알린다.
+ * 첫 진입 투어 — 탭바만 가리키는 세 걸음(측정 원 → 서재 → 책방)으로 <b>지도</b>를 가르친다.
+ * 행동(책 담기·여백)은 그 화면에서 인라인 코치마크가 맡는다(`coachmark.test.tsx`).
  *
  * <p>스포트라이트는 마스크가 아니라 <b>층 순서</b>로 성립한다: 덮개가 탭바보다 한 층 아래라야
- * 탭바만 밝게 남고 원이 그대로 눌린다. 그 부등식이 이 장치의 유일한 성립 조건이라 계측한다
+ * 탭바만 밝게 남고 가리킨 칸이 그대로 눌린다. 그 부등식이 이 장치의 유일한 성립 조건이라 계측한다
  * (덮개를 탭바 위로 올리면 안내가 가리키는 버튼 자체를 가리는 자기모순이 된다).
  */
-describe('첫 진입 코치마크', () => {
-  const GUIDE = '여기를 눌러 독서 시간을 재요';
+describe('첫 진입 투어', () => {
+  const TIMER_GUIDE = '여기를 눌러 독서 시간을 재요';
+  const LIBRARY_GUIDE = '서재는 내가 읽는 책을 담는 곳';
+  const BOOKSHOP_GUIDE = '책방은 남에게 보여주는 곳';
 
-  it('처음 온 사람에게는 안내가 뜬다', () => {
-    expect(renderTab('home')).toContain(GUIDE);
+  it('세 걸음이 측정 → 서재 → 책방 순서다 — 배열 순서가 곧 투어 순서다', () => {
+    expect(TOUR_STEPS.map((s) => s.name)).toEqual(['timer', 'library', 'bookshop']);
   });
 
-  it('한 번 본 사람에게는 다시 뜨지 않는다', () => {
-    localStorage.setItem(COACHMARK_KEY, 'seen');
+  it('처음 온 사람에게는 첫 걸음(측정)이 뜬다', () => {
+    const markup = renderTab('home');
 
-    expect(renderTab('home')).not.toContain(GUIDE);
+    expect(markup).toContain(TIMER_GUIDE);
+    expect(markup).not.toContain(LIBRARY_GUIDE); // 한 번에 한 걸음
+  });
+
+  it('#833로 측정 안내를 이미 본 사람은 서재 걸음부터 본다 — 마이그레이션 없이 이어진다', () => {
+    dismissCoachmark('timer');
+
+    const markup = renderTab('home');
+
+    expect(markup).toContain(LIBRARY_GUIDE);
+    expect(markup).not.toContain(TIMER_GUIDE);
+  });
+
+  it('앞 두 걸음을 봤으면 책방 걸음이 뜬다', () => {
+    dismissCoachmark('timer');
+    dismissCoachmark('library');
+
+    expect(renderTab('home')).toContain(BOOKSHOP_GUIDE);
+  });
+
+  it('세 걸음을 다 본 사람에게는 아무것도 뜨지 않는다', () => {
+    TOUR_STEPS.forEach((step) => dismissCoachmark(step.name));
+
+    const markup = renderTab('home');
+
+    expect(markup).not.toContain(TIMER_GUIDE);
+    expect(markup).not.toContain(LIBRARY_GUIDE);
+    expect(markup).not.toContain(BOOKSHOP_GUIDE);
   });
 
   it('안내는 탭바가 있는 어느 탭에서든 같은 자리에 선다', () => {
-    for (const { key } of TABS) expect(renderTab(key)).toContain(GUIDE);
+    for (const { key } of TABS) expect(renderTab(key)).toContain(TIMER_GUIDE);
   });
 
   it('덮개는 탭바보다 아래, 말풍선은 위 — 탭바만 밝게 남고 원은 그대로 눌린다', () => {
@@ -366,10 +398,33 @@ describe('첫 진입 코치마크', () => {
     expect(markup).toContain(`z-index:${TAB_BAR_Z_INDEX + 1}`); // 말풍선
   });
 
-  it('닫으면 봤다고 기기에 남는다 — 서버 없이 1회성이 성립한다', () => {
-    dismissCoachmark();
+  it('진행 표시는 걸음 수만큼 있다 — 몇 걸음 남았는지 보인다', () => {
+    expect(renderTab('home').match(/data-tour-dot/g)).toHaveLength(TOUR_STEPS.length);
+  });
+});
 
-    expect(localStorage.getItem(COACHMARK_KEY)).toBe('seen');
+/**
+ * 가리킬 칸의 좌표 — 측정 0(ref·`getBoundingClientRect`·리사이즈 관측이 없다). 탭바가 좌우 같은
+ * 여백의 `fixed`고 칸이 균등 분할이라 <b>칸 중앙이 순수 CSS 식</b>으로 떨어진다.
+ */
+describe('탭바 칸 지목', () => {
+  it('가운데 액션이 끼어들어 탭의 슬롯이 TABS index와 어긋난다 — 그 어긋남을 계산이 흡수한다', () => {
+    expect(tabSlot('home')).toBe(0);
+    expect(tabSlot('library')).toBe(1);
+    expect(tabSlot('bookshop')).toBe(3); // 액션이 2번 자리를 먹었다
+    expect(tabSlot('history')).toBe(4);
+  });
+
+  it('칸 중앙은 좌우 여백을 뺀 폭의 균등 분할이다 — 다섯 칸 중 가운데가 화면 정중앙이 된다', () => {
+    expect(slotCenter(TIMER_ACTION_SLOT)).toBe(
+      `calc(${TAB_BAR_MARGIN}px + (100vw - ${TAB_BAR_MARGIN * 2}px) * 0.5)`,
+    );
+  });
+
+  it('서재 걸음의 꼬리가 서재 칸을 가리킨다 — 말풍선만 그리고 엉뚱한 칸을 가리키는 사고를 막는다', () => {
+    dismissCoachmark('timer');
+
+    expect(renderTab('home')).toContain(slotCenter(tabSlot('library')));
   });
 });
 
