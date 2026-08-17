@@ -104,6 +104,20 @@ export function timerActionView(active: boolean): { label: string; background: s
     : { label: '측정 시작', background: 'var(--adaptiveBlue500, #6E8A6A)', icon: PLAY_ICON };
 }
 
+/**
+ * 첫 진입 코치마크를 봤다는 기록 — 기기 로컬로 족하다(서버 컬럼·마이그레이션·API 왕복이 통째로 없다).
+ *
+ * <p>기기를 바꾸면 한 번 더 뜨는 게 유일한 대가인데, 1회성 안내에 그 정도는 손해가 아니다.
+ * 키가 <b>없으면</b> 뜨므로 이미 쓰던 사람도 1회 보게 된다 — 「측정 시작」이 홈에서 이 자리로
+ * 옮겨간 변경(#832)을 모른 채 홈에서 버튼을 찾는 일이 실제 위험이라 그쪽이 오히려 요점이다.
+ */
+export const COACHMARK_KEY = 'booktimer.coachmark.timer';
+
+/** 코치마크를 봤다고 못 박는다 — 덮개 탭·측정 버튼 누름이 모두 이 한 자리로 온다. */
+export function dismissCoachmark(): void {
+  localStorage.setItem(COACHMARK_KEY, 'seen');
+}
+
 /** 종료 직후 태깅 대상 — 책 없이 측정한 세션에 나중에 책을 붙인다. */
 interface Untagged {
   sessionId: number;
@@ -455,12 +469,21 @@ export function MainTabs({
   const [celebrate, setCelebrate] = useState(false);
   /** 액션 실패 문구 — 다른 탭엔 홈의 ErrorMessage가 없으므로 탭바 위 스트립으로 띄운다. */
   const [actionError, setActionError] = useState<string | null>(null);
+  /** 첫 진입 코치마크 — 렌더 중에 읽는다(홈의 알림 동의 캐시와 같은 방식이라 정적 렌더로도 계측된다). */
+  const [coachmark, setCoachmark] = useState(() => localStorage.getItem(COACHMARK_KEY) === null);
+
+  const closeCoachmark = () => {
+    dismissCoachmark();
+    setCoachmark(false);
+  };
 
   // 401은 App이 재로그인으로 처리하고, 그 외(409 중복 시작 등)만 화면에 남긴다.
   const fail = (e: Error) => (e.name === 'UnauthorizedError' ? onError(e) : setActionError(e.message));
 
   /** 탭바 가운데 원 — 측정 중이면 종료, 아니면 시작. 이 앱에서 세션을 여닫는 유일한 자리다. */
   const timerAction = () => {
+    // 안내를 읽고 곧장 이 버튼을 누른 경우 — 덮개가 탭바 아래라 원이 그대로 눌린다. 안내는 역할을 다했다.
+    if (coachmark) closeCoachmark();
     if (busy) return;
     setBusy(true);
     setActionError(null);
@@ -566,6 +589,9 @@ export function MainTabs({
         </div>
       )}
 
+      {/* 코치마크는 탭바보다 먼저 그린다 — 덮개가 탭바 아래 층이라는 것을 코드 순서로도 읽히게 둔다. */}
+      {coachmark && <TimerCoachmark onClose={closeCoachmark} />}
+
       <BottomTabBar
         tab={tab}
         onTabChange={onTabChange}
@@ -582,6 +608,80 @@ export function MainTabs({
           onClose={closeSheet}
         />
       )}
+    </>
+  );
+}
+
+/**
+ * 첫 진입 코치마크 — 탭바 가운데 측정 원을 말풍선으로 가리킨다.
+ *
+ * <p><b>스포트라이트를 마스크 없이 얻는다</b>: 덮개를 탭바(`TAB_BAR_Z_INDEX`)보다 한 층 <b>아래</b>
+ * 깔면 불투명 배경의 탭바만 저절로 덮개 위에 밝게 남는다. SVG 마스크로 구멍을 뚫을 필요가 없고,
+ * 덤으로 원이 그대로 눌려 <b>안내를 보고 곧장 측정을 시작</b>할 수 있다(덮개를 위에 얹으면 가리키는
+ * 대상 자체를 막는 자기모순이 된다 — 그 부등식이 테스트로 박혀 있다).
+ *
+ * <p>위치 계산도 없다(ref·`getBoundingClientRect`·리사이즈 관측 0): 탭바는 좌우 같은 여백의
+ * `fixed`라 <b>다섯 칸 중 가운데 = 화면 가로 정중앙</b>이고, 세로는 탭바와 같은 식에 여백만 더한다.
+ *
+ * <p>애니메이션은 두지 않는다 — 등장 효과 하나가 표지를 재래스터화하던 실측 사고 클래스다(T-176).
+ */
+export function TimerCoachmark({ onClose }: { onClose: () => void }) {
+  return (
+    <>
+      {/* 덮개 자체가 닫기 버튼이다 — 아무 데나 누르면 닫힌다(요소 하나로 접근성 이름까지 얻는다). */}
+      <button
+        type="button"
+        aria-label="안내 닫기"
+        onClick={onClose}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: TAB_BAR_Z_INDEX - 1,
+          border: 'none',
+          padding: 0,
+          background: 'rgba(0, 0, 0, 0.55)',
+          cursor: 'pointer',
+        }}
+      />
+
+      <div
+        style={{
+          position: 'fixed',
+          zIndex: TAB_BAR_Z_INDEX + 1,
+          left: 24,
+          right: 24,
+          // 탭바와 같은 식(띄운 높이 + 홈 인디케이터 + 바 높이)에 말풍선 숨 쉴 여백만 더한다.
+          bottom: `calc(12px + env(safe-area-inset-bottom) + ${TAB_BAR_HEIGHT}px + 12px)`,
+          padding: '14px 16px',
+          borderRadius: 14,
+          background: 'var(--adaptiveBlue500, #6E8A6A)',
+          boxShadow: '0 6px 20px rgba(0, 0, 0, 0.25)',
+          textAlign: 'center',
+          pointerEvents: 'none', // 말풍선은 읽는 것뿐 — 눌린 곳은 덮개(닫기)나 탭바(측정)여야 한다.
+        }}
+      >
+        <div style={{ color: '#FFFFFF', fontSize: 15, fontWeight: 600, lineHeight: 1.45 }}>
+          여기를 눌러 독서 시간을 재요
+        </div>
+        <div style={{ color: '#FFFFFF', fontSize: 13, lineHeight: 1.45, opacity: 0.85 }}>
+          읽던 책은 홈에서 고를 수 있어요
+        </div>
+
+        {/* 꼬리 — 말풍선(fixed)이 담는 블록이라 가운데 정렬만으로 원을 가리킨다. */}
+        <div
+          style={{
+            position: 'absolute',
+            left: '50%',
+            bottom: -9,
+            marginLeft: -9,
+            width: 0,
+            height: 0,
+            borderLeft: '9px solid transparent',
+            borderRight: '9px solid transparent',
+            borderTop: '9px solid var(--adaptiveBlue500, #6E8A6A)',
+          }}
+        />
+      </div>
     </>
   );
 }
