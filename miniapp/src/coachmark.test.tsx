@@ -7,6 +7,7 @@ import {
   coachmarkSeen,
   dismissCoachmark,
   onCoachmarkChange,
+  resetCoachmarks,
 } from './coachmark';
 import { stubLocalStorage } from './test-fixtures';
 
@@ -116,5 +117,39 @@ describe('코치마크 닫힘 알림', () => {
     dismissCoachmark('margin');
 
     expect(calls).toEqual([]);
+  });
+});
+
+/**
+ * 안내 다시 보기 — 기록이 <b>기기</b>에 붙어 있어 로그아웃·탈퇴로도 안 지워진다. 미니앱엔 devtools가
+ * 없으니 앱 안에 지우는 손잡이가 없으면 <b>기기에서 두 번 볼 방법이 영영 없다</b>(실측 — 검증하려던 기기가 막혔다).
+ */
+describe('안내 다시 보기 — resetCoachmarks', () => {
+  it('본 기록을 전부 지운다 — 여러 개가 남아 있어도 하나도 안 남는다', () => {
+    dismissCoachmark('timer');
+    dismissCoachmark('library');
+    dismissCoachmark('margin');
+
+    resetCoachmarks();
+
+    // 셋을 넣고 지우는 이유: 훑는 도중 지우면 인덱스가 밀려 하나씩 살아남는다(그 실수를 잡는다).
+    expect(coachmarkSeen('timer')).toBe(false);
+    expect(coachmarkSeen('library')).toBe(false);
+    expect(coachmarkSeen('margin')).toBe(false);
+  });
+
+  it('코치마크 기록만 지운다 — 토큰까지 지우면 「안내 다시 보기」가 강제 로그아웃이 된다', () => {
+    localStorage.setItem('booktimer.token', 'tok');
+    localStorage.setItem('booktimer.notificationAgreement', 'newAgreement');
+    dismissCoachmark('timer');
+
+    resetCoachmarks();
+
+    expect(localStorage.getItem('booktimer.token')).toBe('tok');
+    expect(localStorage.getItem('booktimer.notificationAgreement')).toBe('newAgreement');
+  });
+
+  it('본 게 없어도 조용히 끝난다 — 갓 깐 기기에서 눌러도 아무 일이 없다', () => {
+    expect(() => resetCoachmarks()).not.toThrow();
   });
 });
