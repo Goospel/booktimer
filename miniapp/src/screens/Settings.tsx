@@ -10,6 +10,7 @@ import {
   updateNickname,
   validateNicknameFormat,
 } from '../api';
+import { resetCoachmarks } from '../coachmark';
 import { openExternal } from '../toss';
 import { ErrorMessage, Screen, Sheet, sectionStyle } from '../ui';
 import { HandleSheet } from './Bookshop';
@@ -31,6 +32,17 @@ export async function logoutAndLeave(onDone: () => void): Promise<void> {
     // 폐기 실패는 삼킨다 — 되던지면 호출부의 `void`가 unhandled rejection이 된다. 토큰은 이미 버려졌다.
   }
   onDone();
+}
+
+/**
+ * 안내 다시 보기 — 기기 기록을 지우고 <b>화면을 넘긴다</b>.
+ *
+ * <p>넘기는 것이 절반이다: 설정 화면에는 홈도 탭바도 없어, 지우고 여기 서 있으면 아무 일도 안 일어난 것처럼
+ * 보인다. 돌아가는 순간 탭 셸이 새로 마운트되며 첫 걸음부터 다시 걷는다 — 커서를 흔드는 배선이 따로 없는 이유다.
+ */
+export function replayGuide(onBack: () => void): void {
+  resetCoachmarks();
+  onBack();
 }
 
 /**
@@ -346,6 +358,10 @@ export function Settings({
       <section style={sectionStyle}>
         <Button display="block" variant="weak" onClick={onGoGoal} disabled={goalAdPending}>
           {goalAdPending ? '준비 중…' : '하루 목표 바꾸기'}
+        </Button>
+        {/* 첫 진입 안내를 다시 부른다 — 누르면 홈으로 돌아가 첫 걸음부터 다시 걷는다. */}
+        <Button display="block" variant="weak" style={{ marginTop: 8 }} onClick={() => replayGuide(onBack)}>
+          처음 안내 다시 보기
         </Button>
       </section>
 

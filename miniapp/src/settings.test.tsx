@@ -4,7 +4,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DashboardResponse, UserRow } from './api';
 import { logout } from './api';
-import { BlockedSection, DeleteAccountSection, LogoutSection, Settings, logoutAndLeave } from './screens/Settings';
+import { coachmarkSeen, dismissCoachmark } from './coachmark';
+import {
+  BlockedSection,
+  DeleteAccountSection,
+  LogoutSection,
+  Settings,
+  logoutAndLeave,
+  replayGuide,
+} from './screens/Settings';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
 vi.mock('./api', async (importOriginal) => ({
@@ -260,5 +268,25 @@ describe('로그아웃 — logoutAndLeave', () => {
     await logoutAndLeave(onDone);
 
     expect(onDone).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * 안내 다시 보기 — 코치마크 기록은 <b>기기</b>에 남아 로그아웃·탈퇴로도 안 지워지고, 미니앱엔 devtools가
+ * 없다. 이 손잡이가 없으면 안내를 두 번 볼 방법이 아예 없다.
+ */
+describe('안내 다시 보기 섹션', () => {
+  it('안내를 다시 보는 손잡이가 있다 — 앱 안에서 기기 기록을 지울 유일한 자리다', () => {
+    expect(renderSettings()).toContain('처음 안내 다시 보기');
+  });
+
+  it('기록을 지우고 화면을 넘긴다 — 설정에 서 있으면 홈·탭바가 없어 안내가 보이지 않는다', () => {
+    dismissCoachmark('timer');
+    const onBack = vi.fn();
+
+    replayGuide(onBack);
+
+    expect(coachmarkSeen('timer')).toBe(false);
+    expect(onBack).toHaveBeenCalledTimes(1);
   });
 });

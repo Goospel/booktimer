@@ -17,6 +17,7 @@ import {
   closeCompose,
   flowStepsOnAbandon,
   flowTabChange,
+  nextFlowStep,
   shouldRefresh,
   slotCenter,
   tabChangeHandler,
@@ -25,7 +26,7 @@ import {
   timerStartBookId,
 } from './App';
 import type { BookOption, DashboardResponse } from './api';
-import { dismissCoachmark } from './coachmark';
+import { dismissCoachmark, resetCoachmarks } from './coachmark';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
 beforeEach(stubLocalStorage); // 홈 탭이 렌더 중에 알림 동의 캐시를 읽는다
@@ -453,6 +454,15 @@ describe('흐름의 자동 이동', () => {
   it('걷는 중 스스로 탭을 옮기면 길 안내만 접고 인라인 걸음은 남긴다', () => {
     // 길 안내(탭바)는 사용자가 이미 스스로 하고 있으니 물러나지만, 책 담기·여백은 그 화면에 갔을 때가 제 차례다.
     expect(flowStepsOnAbandon()).toEqual(['timer', 'library', 'bookshop']);
+  });
+
+  it('안내를 다시 보기로 지우면 첫 걸음부터 다시 걷는다 — 설정에서 돌아올 때 탭 셸이 새로 마운트된다', () => {
+    COACHMARK_FLOW.forEach((step) => dismissCoachmark(step.name));
+    expect(nextFlowStep()).toBe(-1); // 다 걸은 상태 — 이 전제가 없으면 아래 단언이 공허하다
+
+    resetCoachmarks();
+
+    expect(nextFlowStep()).toBe(0);
   });
 });
 

@@ -10,7 +10,8 @@ import { useEffect, useRef, useState } from 'react';
  */
 
 /** 스텝 이름이 곧 키다 — 스텝을 늘려도 저장 스키마가 안 바뀐다. */
-const storageKey = (name: string) => `booktimer.coachmark.${name}`;
+const KEY_PREFIX = 'booktimer.coachmark.';
+const storageKey = (name: string) => `${KEY_PREFIX}${name}`;
 
 /**
  * 그 안내를 봤는가 — 기기 로컬로 족하다(서버 컬럼·마이그레이션·API 왕복이 통째로 없다).
@@ -40,6 +41,28 @@ export function onCoachmarkChange(listener: () => void): () => void {
 export function dismissCoachmark(name: string): void {
   localStorage.setItem(storageKey(name), 'seen');
   listeners.forEach((listener) => listener());
+}
+
+/**
+ * 안내 다시 보기 — 본 기록을 전부 지운다. 설정 화면의 손잡이가 부른다.
+ *
+ * <p>기록이 <b>기기</b>에 붙어 있어 로그아웃·탈퇴로도 안 지워지고, 미니앱엔 devtools가 없다 —
+ * 앱 안에 이 손잡이가 없으면 <b>한 기기에서 안내를 두 번 볼 방법이 아예 없다</b>(검증하려던 기기가 실제로 막혔다).
+ *
+ * <p>이름 목록을 들고 다니지 않고 <b>접두어로 훑는다</b> — 안내를 더 만들어도 여기 손댈 일이 없고,
+ * 토큰·알림 동의 같은 이웃 키는 접두어가 갈라 준다. 지울 키를 <b>먼저 모으는</b> 이유는 훑는 도중
+ * 지우면 인덱스가 밀려 하나씩 살아남기 때문이다.
+ *
+ * <p>구독자에게 알리지 않는다 — 이 손잡이는 설정 화면에만 있고, 그 화면은 탭 셸을 언마운트한다.
+ * 돌아오는 순간 셸이 새로 마운트되며 커서를 처음부터 다시 계산하는 것이 곧 「다시 걷기」다.
+ */
+export function resetCoachmarks(): void {
+  const doomed: string[] = [];
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    if (key !== null && key.startsWith(KEY_PREFIX)) doomed.push(key);
+  }
+  doomed.forEach((key) => localStorage.removeItem(key));
 }
 
 /**
