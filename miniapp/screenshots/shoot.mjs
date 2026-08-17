@@ -47,8 +47,13 @@ async function shot(name) {
     console.log(`${name}.png — ${PORTRAIT.w}x${PORTRAIT.h}`)
 }
 
-/** 탭바는 `title` 속성에 라벨을 그대로 싣는다(App.tsx `TABS`). */
-const tab = async (label) => { await page.click(`button[role="tab"][title="${label}"]`); await settle() }
+/**
+ * 탭바는 `title` 속성에 라벨을 그대로 싣는다(App.tsx `TABS`).
+ *
+ * ⚠️ `role="tab"`으로 잡지 않는다 — 탭바가 5칸이 되며 ARIA tabs 패턴을 버리고 `aria-current="page"`로
+ * 갔다(그 짝인 `tabpanel`이 이 앱에 없어 종전 마크업이 규약 위반이었다). 옛 셀렉터는 여기서 죽는다.
+ */
+const tab = async (label) => { await page.click(`button[title="${label}"]`); await settle() }
 
 /** 문구로 버튼 찾아 누르기 — TDS emotion 클래스라 잡을 손잡이가 문구뿐이다. */
 async function clickText(text) {
@@ -60,12 +65,24 @@ async function clickText(text) {
     await settle()
 }
 
+/*
+ * ⚠️ 첫 사용 안내(코치마크)를 미리 껐다고 못 박는다 — 갓 띄운 브라우저엔 기기 기록이 없어 안내가
+ * 곧바로 뜨고, 그 안내는 **스스로 탭을 옮기며** 다섯 걸음을 걷는다. 안 끄면 전 컷에 딤과 말풍선이
+ * 깔리고 촬영 순서까지 어긋난다. 키를 심는 것이 곧 「이미 다 본 사용자」다(`coachmark.tsx`).
+ */
+await page.addInitScript(() => {
+    for (const name of ['timer', 'library', 'add-book', 'bookshop', 'margin']) {
+        localStorage.setItem(`booktimer.coachmark.${name}`, 'seen')
+    }
+})
+
 await page.goto(URL_APP, { waitUntil: 'networkidle' })
 await settle(1200)
 
-// 01 홈 — 타이머 카드 + 표지 캐러셀 + 주 버튼.
-// ⚠️ 최상단에서 찍으면 「프로필·설정」 줄이 한 칸을 먹어 주 CTA(「측정 시작」)가 탭바 뒤로 거의 다 숨는다.
-await page.evaluate(() => window.scrollTo(0, 80))
+// 01 홈 — 인사말·아바타 헤더 + 타이머 카드 + 표지 캐러셀.
+// 최상단에서 찍는다: 주 CTA가 홈 하단 풀폭 버튼에서 **탭바 가운데 원**으로 옮겨가(항상 화면에 있다)
+// 스크롤로 지켜 줄 것이 없어졌고, 대신 맨 위 헤더가 이 앱에서 내가 누구인지 말하는 자리가 되었다.
+await page.evaluate(() => window.scrollTo(0, 0))
 await shot('01-home')
 
 // 02 홈 아래 — 「소식」·「책 뉴스」 피드 박스. 폴드 아래라 끝까지 내려 찍는다.
@@ -74,11 +91,19 @@ await settle()
 await shot('02-feed')
 
 // 03 서재 — 상태 탭 + 표지 캐러셀 + 인라인 여백 박스
-// ⚠️ 홈과 같은 이유로 최상단에서 찍지 않는다 — 여백 박스가 생기면서 세로가 길어져, 0에서 찍으면
-// 첫 글 카드가 문장 중간에 탭바로 잘린다(잘린 문장은 심사용 그림이 아니다).
-// 60은 눈으로 고른 값이다: 더 내리면 상태 탭 줄이 잘리고, 덜 내리면 첫 카드가 잘린다.
+// ⚠️ 최상단에서 찍지 않는다 — 여백 박스가 생기며 세로가 길어져, 0에서 찍으면 첫 글 카드가 문장
+// 중간에 탭바로 잘린다(잘린 문장은 심사용 그림이 아니다).
+// ⚠️ 눈으로 고른 매직넘버(옛 `60`)를 버리고 **상태 탭 줄을 기준으로 잡는다** — 그 위 「펼쳐보기」
+// 알약의 위치가 바뀌자 60이 그 알약을 반토막 낸 채 화면 맨 위에 남겼다(실측). 기준선을 두면
+// 위쪽 레이아웃이 또 바뀌어도 컷의 첫 줄은 늘 상태 탭이다.
 await tab('서재')
-await page.evaluate(() => window.scrollTo(0, 60))
+await page.evaluate(() => {
+    const label = [...document.querySelectorAll('*')].find(
+        (e) => e.children.length === 0 && (e.textContent ?? '').trim().startsWith('읽는 중'),
+    )
+    if (!label) throw new Error('서재 상태 탭을 못 찾았다') // 문구가 바뀌면 엉뚱한 그림 대신 여기서 죽는다
+    window.scrollTo(0, label.closest('div').getBoundingClientRect().top + window.scrollY - 12)
+})
 await settle()
 await shot('03-library')
 
