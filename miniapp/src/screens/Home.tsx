@@ -13,7 +13,7 @@ import {
   requestNotificationAgreement,
   watchRewardAd,
 } from '../toss';
-import { BookCover, CoverInitial, ErrorMessage, Screen, Sheet, sectionStyle } from '../ui';
+import { Avatar, BookCover, CoverInitial, ErrorMessage, Screen, Sheet, sectionStyle } from '../ui';
 import { HomeFeedBox } from './HomeFeed';
 
 /** 알림 동의 결과 캐시 — 값은 토스가 준 결과 문자열 그대로. 정본은 토스이고 이건 카드 노출 스위치일 뿐이다. */
@@ -690,25 +690,68 @@ export function BookSheet({
  * <p>자리가 맨 아래에서 맨 위로 올라왔다(사용자 결정 2026-08-14) — 피드 박스는 세로로 자라는 상자라
  * 그 뒤에 두면 스크롤 끝에 묻히는데, 소셜 기능이 늘수록 프로필의 무게는 반대로 커진다.
  *
- * <p>모양은 **흰 채움 + 테두리**다(같은 날 실기기 제보). 연한 `weak` 알약은 배경과 대비가 약해 버튼으로
- * 안 읽혔다 — TDS에 outline 변형이 없어(`fill | weak`뿐) `light` 채움에 테두리를 얹어 윤곽을 만든다.
- * 주 CTA(탭바 가운데 측정 원)와 무게가 겹치면 안 되므로 풀폭·강조색은 쓰지 않는다.
+ * <p>모양은 <b>인사말 + 아바타 원</b>이다(사용자 지적 2026-08-17). 앞서 쓰던 「흰 채움 + 테두리」 알약은
+ * 버튼으로는 잘 읽혔지만 <b>화면에서 가장 밝은 것</b>이 되어, 가장 안 중요한 손잡이가 첫 시선을 받았다
+ * (홈에 제목이 없어 그 알약이 사실상 헤더 노릇을 하고 있었다). 그래서 같은 행을 <b>헤더로</b> 만든다 —
+ * 왼쪽에 내가 누구인지 적고, 손잡이는 대비가 낮은 아바타로 줄인다. 행 전체가 탭 대상이라 손가락 표적은 오히려 커졌다.
+ *
+ * <p>덤이 하나 있다: 기본 닉네임(「토스유저」)인 사람이 <b>매일 자기 이름을 보게 되어</b> 바꿀 이유가 생긴다 —
+ * 이 화면이 존재하는 이유와 맞물린다. 아바타는 책방 프로필과 <b>같은 이니셜 원</b>이라 같은 사람이 같은 색으로 선다.
  */
-export function AccountSection({ onGoSettings }: { onGoSettings: () => void }) {
+export function AccountSection({
+  nickname,
+  loginId,
+  onGoSettings,
+}: {
+  nickname: string;
+  /** @아이디 — 온보딩 전이면 `null`이라 그 줄을 아예 그리지 않는다(「@」만 남는 줄이 생기지 않게). */
+  loginId: string | null;
+  onGoSettings: () => void;
+}) {
   return (
-    <div style={{ marginBottom: 12, textAlign: 'right' }}>
-      <Button
-        size="medium"
-        variant="fill"
-        color="light"
-        // TDS가 `light` 채움에 얹는 글자색은 브랜드 파랑(#3182f6)이고, 이 앱 팔레트는 세이지다 —
-        // Button은 색을 CSS 변수가 아니라 인라인 리터럴로 박아 전역 재테마가 안 닿으므로 여기서 직접 준다.
-        style={{ color: 'var(--adaptiveBlue700, #4F6B4C)', border: '1px solid var(--adaptiveGrey200, #E4DDD0)' }}
-        onClick={onGoSettings}
-      >
-        프로필·설정
-      </Button>
-    </div>
+    <button
+      type="button"
+      aria-label="프로필·설정"
+      onClick={onGoSettings}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        width: '100%',
+        marginBottom: 12,
+        padding: '2px 2px 0',
+        border: 'none',
+        background: 'transparent',
+        textAlign: 'left',
+        cursor: 'pointer',
+      }}
+    >
+      <span style={{ flex: 1, minWidth: 0 }}>
+        {/* 긴 닉네임이 아바타를 밀어내지 않도록 한 줄로 자른다(서버는 20자까지 받는다). */}
+        <span
+          style={{
+            display: 'block',
+            fontSize: 17,
+            fontWeight: 600,
+            color: 'var(--adaptiveGrey900, #3A362E)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {nickname}님
+        </span>
+        {loginId !== null && (
+          <span
+            data-handle={loginId}
+            style={{ display: 'block', marginTop: 1, fontSize: 12, color: 'var(--adaptiveGrey600, #6F6A5E)' }}
+          >
+            @{loginId}
+          </span>
+        )}
+      </span>
+      <Avatar nickname={nickname} size={38} />
+    </button>
   );
 }
 
@@ -808,8 +851,8 @@ export function Home({
 
   return (
     <Screen>
-      {/* 계정 진입은 화면 맨 위 — 카드 위 한 줄이다(피드 박스 뒤 스크롤 끝에서 올라왔다). */}
-      <AccountSection onGoSettings={onGoSettings} />
+      {/* 계정 진입은 화면 맨 위 — 카드 위 한 줄이 곧 이 화면의 헤더다(인사말 + 아바타). */}
+      <AccountSection nickname={dashboard.nickname} loginId={dashboard.loginId} onGoSettings={onGoSettings} />
 
       <div
         style={{
