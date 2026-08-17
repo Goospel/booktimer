@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BookOption, DashboardResponse, MarginBook, TimerState } from './api';
 import { fetchDashboard, startSession, stopSession, tagBook, token } from './api';
 import { useBackClose } from './back';
-import { CoachmarkBubble, coachmarkSeen, dismissCoachmark } from './coachmark';
+import { CoachmarkBubble, coachmarkSeen, dismissCoachmark, onCoachmarkChange } from './coachmark';
 import { elapsedSeconds } from './format';
 import { Bookshop } from './screens/Bookshop';
 import { Goal } from './screens/Goal';
@@ -127,38 +127,80 @@ export function slotCenter(slot: number): string {
 }
 
 /**
- * 첫 진입 투어 — 탭바만 가리키는 세 걸음으로 <b>지도</b>(어디에 무엇이 있나)를 가르친다.
+ * 첫 진입 흐름 — 다섯 걸음을 <b>한 줄로 이어</b> 걷는다. 배열 순서가 곧 걸음 순서다.
  *
- * <p>행동(책 담기·여백 쓰기)은 여기 넣지 않는다: 아무것도 안 해본 사람에게 미리 읊으면 넘기기만
- * 연타하게 된다. 그 둘은 해당 화면에서 인라인 코치마크(`Coachmark`)가 그 자리에서 맡는다.
+ * <p><b>걸음마다 그 화면으로 먼저 데려간다</b>(`tab`) — 딤이 반투명이라 「서재는 …」을 읽는 동안
+ * 실제 서재가 뒤에 보인다. 「다음을 누르면 이동」이 아니라 「이동한 뒤 설명」인 이유가 이것이다.
+ * 첫 진입 1회짜리라 이 정도의 강제 흐름은 방해가 아니라 안내다(사용자 결정 2026-08-17).
  *
- * <p>첫 걸음 `timer`는 #833으로 이미 나갔다 — <b>스텝마다 자기 키</b>라 그 키가 그대로 첫 걸음이
- * 되고, 이미 본 사람은 서재 걸음부터 이어 본다(마이그레이션 0).
+ * <p>`bubble`이 있으면 탭바 칸을 가리키는 걸음이고, 없으면 <b>그 화면 안의 인라인 안내</b>가 맡는다
+ * (`Coachmark`가 앞 걸음을 `after`로 물고 스스로 뜬다 — 그래서 여기엔 문구가 없다).
+ *
+ * <p>마지막이 홈인 덕에 걷기가 <b>출발한 자리로 돌아와</b> 끝난다. 신규 사용자는 책이 0권이라
+ * 홈 여백 문 자체가 없어 그 걸음은 조용히 지나가고, 키가 남지 않아 책을 담은 뒤에 뜬다.
+ *
+ * <p>첫 걸음 `timer`는 #833으로 이미 나갔다 — <b>걸음마다 자기 키</b>라 이미 본 사람은 서재 걸음부터
+ * 이어 걷는다(마이그레이션 0).
  */
-export const TOUR_STEPS: { name: string; slot: number; title: string; detail: string }[] = [
+export interface FlowStep {
+  name: string;
+  /** 이 걸음을 설명할 화면 — 걸음에 들어갈 때 여기로 데려간다. */
+  tab: TabKey;
+  /** 탭바 칸을 가리키는 걸음의 말풍선. 없으면 인라인 안내가 맡는다. */
+  bubble?: { slot: number; title: string; detail: string };
+}
+
+export const COACHMARK_FLOW: FlowStep[] = [
   {
     name: 'timer',
-    slot: TIMER_ACTION_SLOT,
-    title: '여기를 눌러 독서 시간을 재요',
-    detail: '읽던 책은 홈에서 고를 수 있어요',
+    tab: 'home',
+    bubble: {
+      slot: TIMER_ACTION_SLOT,
+      title: '여기를 눌러 독서 시간을 재요',
+      detail: '읽던 책은 홈에서 고를 수 있어요',
+    },
   },
   {
     name: 'library',
-    slot: tabSlot('library'),
-    title: '서재는 내가 읽는 책을 담는 곳',
-    detail: '여기에 담아 둔 책으로 시간을 재요',
+    tab: 'library',
+    bubble: {
+      slot: tabSlot('library'),
+      title: '서재는 내가 읽는 책을 담는 곳',
+      detail: '여기에 담아 둔 책으로 시간을 재요',
+    },
   },
+  // 서재를 설명한 그 화면에서 곧바로 「여기서 담아요」로 이어진다 — 한 호흡이라 이동이 없다.
+  { name: 'add-book', tab: 'library' },
   {
     name: 'bookshop',
-    slot: tabSlot('bookshop'),
-    title: '책방은 남에게 보여주는 곳',
-    detail: '내 책과 글이 전시되고, 남의 책방도 구경해요',
+    tab: 'bookshop',
+    bubble: {
+      slot: tabSlot('bookshop'),
+      title: '책방은 남에게 보여주는 곳',
+      detail: '내 책과 글이 전시되고, 남의 책방도 구경해요',
+    },
   },
+  { name: 'margin', tab: 'home' },
 ];
 
-/** 아직 안 본 첫 걸음(`-1`이면 투어 끝) — 시작과 진행이 같은 한 줄을 쓴다. */
-export function nextTourStep(): number {
-  return TOUR_STEPS.findIndex((step) => !coachmarkSeen(step.name));
+/** 아직 안 본 첫 걸음(`-1`이면 흐름 끝) — 시작과 진행이 같은 한 줄을 쓴다. */
+export function nextFlowStep(): number {
+  return COACHMARK_FLOW.findIndex((step) => !coachmarkSeen(step.name));
+}
+
+/** 그 걸음을 설명할 화면으로 옮겨야 하나 — 이미 그 화면이면 `null`(헛 전환을 만들지 않는다). */
+export function flowTabChange(step: FlowStep | undefined, tab: TabKey): TabKey | null {
+  return step === undefined || step.tab === tab ? null : step.tab;
+}
+
+/**
+ * 걷기를 포기할 때 봤다고 남길 걸음 — <b>길 안내(탭바 걸음)만</b>이다.
+ *
+ * <p>사용자가 스스로 탭을 옮겼다면 길은 이미 스스로 찾는 중이니 그 안내는 물러난다. 반면 책 담기·여백은
+ * 대상이 있는 화면에 섰을 때가 제 차례라 남겨 둔다(그 화면에 가면 인라인 안내가 스스로 뜬다).
+ */
+export function flowStepsOnAbandon(): string[] {
+  return COACHMARK_FLOW.filter((step) => step.bubble !== undefined).map((step) => step.name);
 }
 
 /** 종료 직후 태깅 대상 — 책 없이 측정한 세션에 나중에 책을 붙인다. */
@@ -512,26 +554,40 @@ export function MainTabs({
   const [celebrate, setCelebrate] = useState(false);
   /** 액션 실패 문구 — 다른 탭엔 홈의 ErrorMessage가 없으므로 탭바 위 스트립으로 띄운다. */
   const [actionError, setActionError] = useState<string | null>(null);
-  /** 지금 가리키는 투어 걸음(`-1`=끝) — 렌더 중에 읽는다(정적 렌더 하니스로도 계측된다). */
-  const [tourStep, setTourStep] = useState(nextTourStep);
+  /** 지금 걷고 있는 걸음(`-1`=끝) — 렌더 중에 읽는다(정적 렌더 하니스로도 계측된다). */
+  const [flowIndex, setFlowIndex] = useState(nextFlowStep);
+  /** 걷기를 포기했나 — 포기 후에는 닫힘 알림이 와도 커서를 되살리지 않는다(순서와 무관하게). */
+  const abandoned = useRef(false);
 
-  /** 한 걸음 봤다고 남기고 다음으로 — 마지막이었으면 `nextTourStep`이 `-1`을 준다. */
-  const advanceTour = () => {
-    const step = TOUR_STEPS[tourStep];
-    if (step === undefined) return;
-    dismissCoachmark(step.name);
-    setTourStep(nextTourStep());
+  /**
+   * 어디서 안내가 닫혀도 커서가 따라온다 — <b>인라인 안내는 화면 안에서 닫히므로</b> 이 구독이
+   * 없으면 흐름이 그 자리에서 멈춘다(그게 이 기능의 핵심 배선이다).
+   */
+  useEffect(() => onCoachmarkChange(() => setFlowIndex(abandoned.current ? -1 : nextFlowStep())), []);
+
+  const flowStep = flowIndex < 0 ? undefined : COACHMARK_FLOW[flowIndex];
+
+  // 걸음이 설명할 화면으로 데려간다 — 딤 뒤에 그 화면이 보이는 상태로 읽게 하는 것이 이 흐름의 문법이다.
+  useEffect(() => {
+    const next = flowTabChange(flowStep, tab);
+    if (next !== null) onTabChange(next);
+  }, [flowStep, tab, onTabChange]);
+
+  /** 한 걸음 봤다고 남긴다 — 커서는 위 구독이 옮긴다(진행 경로가 하나로 모인다). */
+  const advanceFlow = () => {
+    if (flowStep !== undefined) dismissCoachmark(flowStep.name);
   };
 
-  /** 사용자가 스스로 탭을 옮기면 투어는 물러난다 — 남은 걸음도 다시 띄우지 않는다. */
-  const endTour = () => {
-    TOUR_STEPS.forEach((step) => dismissCoachmark(step.name));
-    setTourStep(-1);
+  /** 사용자가 스스로 탭을 옮기면 길 안내는 물러난다(인라인 걸음은 그 화면에서 다시 뜬다). */
+  const abandonFlow = () => {
+    abandoned.current = true;
+    flowStepsOnAbandon().forEach(dismissCoachmark);
+    setFlowIndex(-1);
   };
 
-  // 안내가 가리키던 칸과 화면이 어긋난 채 남지 않게, 탭 이동은 투어를 끝낸다.
+  // 안내가 가리키던 칸과 화면이 어긋난 채 남지 않게, 사용자 탭 이동은 걷기를 접는다.
   const changeTab = (next: TabKey) => {
-    if (tourStep >= 0) endTour();
+    if (flowIndex >= 0) abandonFlow();
     onTabChange(next);
   };
 
@@ -541,7 +597,7 @@ export function MainTabs({
   /** 탭바 가운데 원 — 측정 중이면 종료, 아니면 시작. 이 앱에서 세션을 여닫는 유일한 자리다. */
   const timerAction = () => {
     // 안내를 읽고 곧장 이 버튼을 누른 경우 — 덮개가 탭바 아래라 원이 그대로 눌린다. 그 걸음은 역할을 다했다.
-    if (tourStep >= 0) advanceTour();
+    advanceFlow();
     if (busy) return;
     setBusy(true);
     setActionError(null);
@@ -647,8 +703,11 @@ export function MainTabs({
         </div>
       )}
 
-      {/* 코치마크는 탭바보다 먼저 그린다 — 덮개가 탭바 아래 층이라는 것을 코드 순서로도 읽히게 둔다. */}
-      {tourStep >= 0 && <TabBarCoachmark step={TOUR_STEPS[tourStep]} index={tourStep} onNext={advanceTour} />}
+      {/* 코치마크는 탭바보다 먼저 그린다 — 덮개가 탭바 아래 층이라는 것을 코드 순서로도 읽히게 둔다.
+          인라인 걸음(말풍선 없음)에는 아무것도 그리지 않는다 — 그 화면의 `Coachmark`가 맡는다. */}
+      {flowStep?.bubble !== undefined && (
+        <TabBarCoachmark bubble={flowStep.bubble} index={flowIndex} onNext={advanceFlow} />
+      )}
 
       <BottomTabBar
         tab={tab}
@@ -682,15 +741,16 @@ export function MainTabs({
  * 순수 CSS로 주고, 세로는 탭바와 같은 식(띄운 높이 + 홈 인디케이터 + 바 높이)에 여백만 더한다.
  */
 export function TabBarCoachmark({
-  step,
+  bubble,
   index,
   onNext,
 }: {
-  step: (typeof TOUR_STEPS)[number];
+  bubble: NonNullable<FlowStep['bubble']>;
+  /** 흐름 안의 자리 — 진행 표시(점)의 위치이자, 마지막 걸음인지 판정하는 근거다. */
   index: number;
   onNext: () => void;
 }) {
-  const last = index === TOUR_STEPS.length - 1;
+  const last = index === COACHMARK_FLOW.length - 1;
 
   return (
     <>
@@ -711,12 +771,12 @@ export function TabBarCoachmark({
       />
 
       <CoachmarkBubble
-        title={step.title}
-        detail={step.detail}
+        title={bubble.title}
+        detail={bubble.detail}
         tail="down"
         // 말풍선이 좌우 24px에 서므로, 화면 기준 칸 중앙에서 그만큼 뺀 자리가 말풍선 안의 꼬리 위치다.
-        tailLeft={`calc(${slotCenter(step.slot)} - 24px)`}
-        dots={{ index, total: TOUR_STEPS.length }}
+        tailLeft={`calc(${slotCenter(bubble.slot)} - 24px)`}
+        dots={{ index, total: COACHMARK_FLOW.length }}
         style={{
           position: 'fixed',
           zIndex: TAB_BAR_Z_INDEX + 1,

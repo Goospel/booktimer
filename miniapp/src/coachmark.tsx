@@ -23,9 +23,23 @@ export function coachmarkSeen(name: string): boolean {
   return localStorage.getItem(storageKey(name)) !== null;
 }
 
+/**
+ * 닫힘 구독 — 인라인 안내는 <b>화면 안에</b> 살아서, 닫혀도 흐름을 이끄는 쪽이 알 길이 없다.
+ *
+ * <p>그 통로를 prop으로 내리면 `MainTabs` → `Home`·`Library` → 그 안쪽까지 콜백을 꿰어야 한다.
+ * 기록이 이미 모듈 지역(기기 저장)이므로 알림도 같은 자리에 두는 것이 싸다. 해지 함수를 돌려준다.
+ */
+const listeners = new Set<() => void>();
+
+export function onCoachmarkChange(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
 /** 봤다고 못 박는다 — 덮개 탭·대상 누름이 모두 이 한 자리로 온다. */
 export function dismissCoachmark(name: string): void {
   localStorage.setItem(storageKey(name), 'seen');
+  listeners.forEach((listener) => listener());
 }
 
 /**

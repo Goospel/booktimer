@@ -1,7 +1,13 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { Coachmark, INLINE_DIM_Z_INDEX, coachmarkSeen, dismissCoachmark } from './coachmark';
+import {
+  Coachmark,
+  INLINE_DIM_Z_INDEX,
+  coachmarkSeen,
+  dismissCoachmark,
+  onCoachmarkChange,
+} from './coachmark';
 import { stubLocalStorage } from './test-fixtures';
 
 beforeEach(stubLocalStorage); // 코치마크는 렌더 중에 「봤는가」를 기기에서 읽는다
@@ -84,5 +90,31 @@ describe('코치마크 기록', () => {
     dismissCoachmark('timer');
 
     expect(localStorage.getItem('booktimer.coachmark.timer')).toBe('seen');
+  });
+});
+
+/**
+ * 닫힘 알림 — 인라인 안내는 <b>화면 안에</b> 살아서, 닫혀도 흐름을 이끄는 쪽(`MainTabs`)이 알 길이 없다.
+ * 이 구독이 그 통로다(prop을 Home·Library까지 내리지 않는 대신).
+ */
+describe('코치마크 닫힘 알림', () => {
+  it('어느 안내를 닫아도 구독자에게 알린다 — 화면 밖의 흐름이 다음 걸음으로 넘어갈 수 있다', () => {
+    const calls: string[] = [];
+    const stop = onCoachmarkChange(() => calls.push('changed'));
+
+    dismissCoachmark('library');
+    dismissCoachmark('add-book');
+    stop();
+
+    expect(calls).toHaveLength(2);
+  });
+
+  it('해지하면 더 오지 않는다 — 언마운트된 화면이 계속 깨어나지 않는다', () => {
+    const calls: string[] = [];
+    onCoachmarkChange(() => calls.push('a'))();
+
+    dismissCoachmark('margin');
+
+    expect(calls).toEqual([]);
   });
 });

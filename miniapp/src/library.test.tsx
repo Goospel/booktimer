@@ -582,8 +582,8 @@ describe('책 추가 손잡이', () => {
       </TDSMobileProvider>,
     );
 
-  it('투어를 마친 첫 방문자에게 버튼과 안내가 함께 뜬다', () => {
-    dismissCoachmark('bookshop'); // 투어 마지막 걸음
+  it('바로 앞 걸음(서재 설명)을 본 뒤에 버튼과 안내가 함께 뜬다 — 흐름이 이 화면으로 데려온 직후다', () => {
+    dismissCoachmark('library');
 
     const markup = addBook(true);
 
@@ -591,7 +591,7 @@ describe('책 추가 손잡이', () => {
     expect(markup).toContain(GUIDE);
   });
 
-  it('투어 중에는 안내가 뜨지 않는다 — 딤 두 장이 겹치지 않는다', () => {
+  it('앞 걸음 전에는 안내가 뜨지 않는다 — 딤 두 장이 겹치지 않는다', () => {
     const markup = addBook(true);
 
     expect(markup).toContain('책 추가하기');
@@ -599,7 +599,7 @@ describe('책 추가 손잡이', () => {
   });
 
   it('한 번 본 사람에게는 버튼만 남는다', () => {
-    dismissCoachmark('bookshop');
+    dismissCoachmark('library');
     dismissCoachmark('add-book');
 
     const markup = addBook(true);
@@ -609,7 +609,7 @@ describe('책 추가 손잡이', () => {
   });
 
   it('검색이 꺼져 있으면 버튼도 안내도 없다 — 없는 버튼을 가리키지 않는다', () => {
-    dismissCoachmark('bookshop');
+    dismissCoachmark('library');
 
     const markup = addBook(false);
 
