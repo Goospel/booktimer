@@ -392,7 +392,7 @@ export function AddBookButton({ enabled, onPress }: { enabled: boolean; onPress:
   return (
     <Coachmark
       name="add-book"
-      after="bookshop" // 탭바 투어를 마친 뒤에 — 딤 두 장이 겹치면 무엇을 가리키는지 알 수 없다
+      after="library" // 바로 앞 걸음(서재 설명)을 본 뒤에 — 흐름이 이 화면으로 데려온 직후가 제 차례다
       title="읽을 책은 여기서 찾아 담아요"
       detail="제목으로 검색하면 서재에 들어와요"
     >

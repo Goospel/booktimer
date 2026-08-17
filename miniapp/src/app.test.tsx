@@ -11,10 +11,12 @@ import {
   TAB_BAR_HEIGHT,
   TAB_BAR_MARGIN,
   TAB_BAR_Z_INDEX,
+  COACHMARK_FLOW,
   TABS,
   TIMER_ACTION_SLOT,
-  TOUR_STEPS,
   closeCompose,
+  flowStepsOnAbandon,
+  flowTabChange,
   shouldRefresh,
   slotCenter,
   tabChangeHandler,
@@ -350,8 +352,30 @@ describe('첫 진입 투어', () => {
   const LIBRARY_GUIDE = '서재는 내가 읽는 책을 담는 곳';
   const BOOKSHOP_GUIDE = '책방은 남에게 보여주는 곳';
 
-  it('세 걸음이 측정 → 서재 → 책방 순서다 — 배열 순서가 곧 투어 순서다', () => {
-    expect(TOUR_STEPS.map((s) => s.name)).toEqual(['timer', 'library', 'bookshop']);
+  it('다섯 걸음이 측정 → 서재 → 책 담기 → 책방 → 여백 순서다 — 배열 순서가 곧 흐름이다', () => {
+    expect(COACHMARK_FLOW.map((s) => s.name)).toEqual(['timer', 'library', 'add-book', 'bookshop', 'margin']);
+  });
+
+  it('걸음마다 설명할 화면이 정해져 있다 — 서재 설명 다음에 그 화면의 책 담기가 이어진다', () => {
+    expect(COACHMARK_FLOW.map((s) => s.tab)).toEqual(['home', 'library', 'library', 'bookshop', 'home']);
+  });
+
+  it('인라인 걸음(책 담기·여백)은 탭바 말풍선을 갖지 않는다 — 그 화면 안의 안내가 맡는다', () => {
+    expect(COACHMARK_FLOW.filter((s) => s.bubble === undefined).map((s) => s.name)).toEqual([
+      'add-book',
+      'margin',
+    ]);
+  });
+
+  it('인라인 걸음 차례에는 탭바 말풍선이 하나도 안 뜬다 — 두 안내가 겹치지 않는다', () => {
+    dismissCoachmark('timer');
+    dismissCoachmark('library'); // 다음은 add-book(인라인)
+
+    const markup = renderTab('library');
+
+    expect(markup).not.toContain(TIMER_GUIDE);
+    expect(markup).not.toContain(LIBRARY_GUIDE);
+    expect(markup).not.toContain(BOOKSHOP_GUIDE);
   });
 
   it('처음 온 사람에게는 첫 걸음(측정)이 뜬다', () => {
@@ -370,15 +394,16 @@ describe('첫 진입 투어', () => {
     expect(markup).not.toContain(TIMER_GUIDE);
   });
 
-  it('앞 두 걸음을 봤으면 책방 걸음이 뜬다', () => {
+  it('앞 세 걸음을 봤으면 책방 걸음이 뜬다 — 인라인 걸음(책 담기)도 순서에 든다', () => {
     dismissCoachmark('timer');
     dismissCoachmark('library');
+    dismissCoachmark('add-book');
 
-    expect(renderTab('home')).toContain(BOOKSHOP_GUIDE);
+    expect(renderTab('bookshop')).toContain(BOOKSHOP_GUIDE);
   });
 
-  it('세 걸음을 다 본 사람에게는 아무것도 뜨지 않는다', () => {
-    TOUR_STEPS.forEach((step) => dismissCoachmark(step.name));
+  it('다 본 사람에게는 아무것도 뜨지 않는다', () => {
+    COACHMARK_FLOW.forEach((step) => dismissCoachmark(step.name));
 
     const markup = renderTab('home');
 
@@ -398,8 +423,36 @@ describe('첫 진입 투어', () => {
     expect(markup).toContain(`z-index:${TAB_BAR_Z_INDEX + 1}`); // 말풍선
   });
 
-  it('진행 표시는 걸음 수만큼 있다 — 몇 걸음 남았는지 보인다', () => {
-    expect(renderTab('home').match(/data-tour-dot/g)).toHaveLength(TOUR_STEPS.length);
+  it('진행 표시는 흐름 전체(인라인 걸음까지) 길이다 — 「3걸음 중 2」로 줄여 세지 않는다', () => {
+    expect(renderTab('home').match(/data-tour-dot/g)).toHaveLength(COACHMARK_FLOW.length);
+  });
+});
+
+/**
+ * 걸음이 스스로 화면을 옮긴다 — 설명하는 화면을 <b>딤 뒤에 보여주면서</b> 읽게 한다(사용자 결정).
+ *
+ * <p>이동 자체는 effect라 정적 렌더로 계측할 수 없으니, 「어느 탭으로 가야 하나」 판정만 순수 함수로
+ * 떼어 여기서 박는다. 실제 연쇄 이동은 실 브라우저 게이트가 맡는다(T-182와 같은 분담).
+ */
+describe('흐름의 자동 이동', () => {
+  it('그 걸음의 화면이 아니면 그 화면으로 데려간다', () => {
+    expect(flowTabChange(COACHMARK_FLOW[1], 'home')).toBe('library'); // 서재 걸음
+    expect(flowTabChange(COACHMARK_FLOW[3], 'library')).toBe('bookshop'); // 책방 걸음
+    expect(flowTabChange(COACHMARK_FLOW[4], 'bookshop')).toBe('home'); // 여백 걸음 = 출발한 자리로 복귀
+  });
+
+  it('이미 그 화면이면 옮기지 않는다 — 같은 탭으로 다시 보내는 헛 전환이 없다', () => {
+    expect(flowTabChange(COACHMARK_FLOW[1], 'library')).toBeNull();
+    expect(flowTabChange(COACHMARK_FLOW[2], 'library')).toBeNull(); // 서재 설명 → 책 담기: 제자리
+  });
+
+  it('흐름이 끝났으면 아무 데도 안 데려간다', () => {
+    expect(flowTabChange(undefined, 'bookshop')).toBeNull();
+  });
+
+  it('걷는 중 스스로 탭을 옮기면 길 안내만 접고 인라인 걸음은 남긴다', () => {
+    // 길 안내(탭바)는 사용자가 이미 스스로 하고 있으니 물러나지만, 책 담기·여백은 그 화면에 갔을 때가 제 차례다.
+    expect(flowStepsOnAbandon()).toEqual(['timer', 'library', 'bookshop']);
   });
 });
 
