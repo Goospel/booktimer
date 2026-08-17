@@ -6,13 +6,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   App,
   BottomTabBar,
+  COACHMARK_KEY,
   MainTabs,
   REFRESH_THROTTLE_MS,
   TAB_BAR_HEIGHT,
   TAB_BAR_MARGIN,
+  TAB_BAR_Z_INDEX,
   TABS,
   TIMER_ACTION_SLOT,
   closeCompose,
+  dismissCoachmark,
   shouldRefresh,
   tabChangeHandler,
   timerActionView,
@@ -329,6 +332,44 @@ describe('어느 탭에서든 측정 (MainTabs)', () => {
       expect(source).toContain("trackEvent('reading_session_completed'");
       expect(source).toContain('duration_seconds');
     });
+  });
+});
+
+/**
+ * 첫 진입 코치마크 — 「측정 시작」이 홈에서 탭바 가운데로 옮겨갔음을 1회 알린다.
+ *
+ * <p>스포트라이트는 마스크가 아니라 <b>층 순서</b>로 성립한다: 덮개가 탭바보다 한 층 아래라야
+ * 탭바만 밝게 남고 원이 그대로 눌린다. 그 부등식이 이 장치의 유일한 성립 조건이라 계측한다
+ * (덮개를 탭바 위로 올리면 안내가 가리키는 버튼 자체를 가리는 자기모순이 된다).
+ */
+describe('첫 진입 코치마크', () => {
+  const GUIDE = '여기를 눌러 독서 시간을 재요';
+
+  it('처음 온 사람에게는 안내가 뜬다', () => {
+    expect(renderTab('home')).toContain(GUIDE);
+  });
+
+  it('한 번 본 사람에게는 다시 뜨지 않는다', () => {
+    localStorage.setItem(COACHMARK_KEY, 'seen');
+
+    expect(renderTab('home')).not.toContain(GUIDE);
+  });
+
+  it('안내는 탭바가 있는 어느 탭에서든 같은 자리에 선다', () => {
+    for (const { key } of TABS) expect(renderTab(key)).toContain(GUIDE);
+  });
+
+  it('덮개는 탭바보다 아래, 말풍선은 위 — 탭바만 밝게 남고 원은 그대로 눌린다', () => {
+    const markup = renderTab('home');
+
+    expect(markup).toContain(`z-index:${TAB_BAR_Z_INDEX - 1}`); // 덮개
+    expect(markup).toContain(`z-index:${TAB_BAR_Z_INDEX + 1}`); // 말풍선
+  });
+
+  it('닫으면 봤다고 기기에 남는다 — 서버 없이 1회성이 성립한다', () => {
+    dismissCoachmark();
+
+    expect(localStorage.getItem(COACHMARK_KEY)).toBe('seen');
   });
 });
 
