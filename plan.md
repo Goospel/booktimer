@@ -219,6 +219,42 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
   교체 *속도* 최적화일 뿐 다운타임 원인은 아님. `elasticloadbalancing:Modify*` 권한이 필요해
   현재 OIDC 역할로는 불가 — 적용 시 deploy-aws.md의 해당 절(IAM 권한 추가 + CloudShell 1회) 참고.
 
+### 관측성(모니터링) — 감시는 켰다 ✅ / 메트릭 대시보드는 보류 ⏸ (2026-08-18)
+
+**발단**: 「Prometheus + Grafana 도입은 어떻게 생각하냐」(성능 측정·모니터링이 백엔드에서 중요하다고 들어서).
+답을 코드에서 찾았고, **감시(alerting)와 대시보드(metrics)를 분리해** 앞엣것만 지금 켰다.
+
+- **✅ 켠 것 — 가동 감시**: `.github/workflows/uptime.yml`(10분 cron) → `deploy/health-probe.sh` →
+  `https://booktimer.app/actuator/health`. 실패하면 Actions 런이 빨개지고 **GitHub이 메일**을 보낸다.
+  서버 메모리 0·요금 0(공개 레포)·새 계정 0. 그 전까지 운영 감시는 **배포 직후 `deploy.yml`이 health를
+  한 번 curl하는 것뿐**이어서, 새벽에 죽으면 직접 열어보기 전까지 알 길이 없었다.
+  - **판정을 HTTP 코드만으로 하지 않는다** — 도메인이 남의 곳을 가리키거나 앞단이 파킹·에러 페이지를
+    200으로 돌려주면 코드만 보는 감시는 장애를 통과시킨다. 본문에 `"status":"UP"`이 있어야 성공이다
+    (T-150에서 배운 「성공은 exit code가 아니라 응답 내용으로 판정」의 재적용).
+  - **재시도 3회가 계약이다** — 오탐이 감시를 죽인다(멀쩡한데 메일이 오면 두 번째부터 안 읽는다).
+    blip 한 번은 침묵, 연속 실패만 쏜다. `deploy/tests/test-health-probe.sh`(7단언·돌연변이 2종 사살)가 지킨다.
+  - ⚠️ **감시기 자체의 사각**(알고 쓴다): 스케줄 정시 보장 없음(수 분~수십 분 지연) · GitHub이 죽으면
+    감시도 죽음(2026-08-17 API 대장애 실측) · **레포 60일 무활동 시 GitHub이 스케줄을 자동 정지**.
+    셋 중 하나가 아파지면 그때가 유료·외부 감시로 올라갈 신호다.
+
+- **⏸ 보류한 것 — Prometheus + Grafana self-host**: 운영은 **EC2 t3.small 1대(2GB)**이고 메모리 예산이
+  이미 다 팔렸다 — 평시 `mysql 450 + app 550 + caddy 30 + OS 200 = 1.23GB`, **배포 순간 app이 2개가 되어
+  1.78GB**이고 스왑 2GB가 그 순간을 흡수하도록 설계돼 있다(`compose.prod.yaml`·`bootstrap-ec2.sh`).
+  Prometheus(200~400MB) + Grafana(150~250MB)를 얹으면 배포 순간에 **OOM killer가 MySQL을 잡는다** —
+  `bootstrap-ec2.sh`가 스왑을 만든 이유가 정확히 그 시나리오다. **모니터링을 붙였다가 DB가 죽는 건 최악의 거래.**
+  - 게다가 지금 병목은 p99 레이턴시가 아니다 — **신규 코호트 실독서(5분+) 0건**이고, 계측 예산은 이미
+    그쪽(전환 이벤트 2종·대표 전환 교체)에 쓰고 있다.
+  - **절반은 이미 있다**: `spring-boot-starter-actuator`가 있어 Micrometer가 앱 안에서 이미 돌고, 운영은
+    `management.endpoints.web.exposure.include=health`로 health만 열어 뒀다. 즉 없는 건 **저장소와 그림**뿐이라
+    나중에 붙일 때 앱 쪽 작업은 사실상 한 줄이다(급할 이유가 하나 더 없다).
+  - **재개 트리거**: 인스턴스가 2대 이상 될 때 · 로그로 답할 수 없는 질문이 실제로 생길 때 · 인스턴스를 키울 때.
+  - **그때의 경로는 self-host가 아니라 Grafana Cloud 무료 티어** — 저장·UI를 남의 메모리로 넘기고 우리 박스엔
+    스크래이프 에이전트(≈50MB)만 둔다. t3.small에서 현실적인 유일한 길이다.
+  - **학습 목적이면 로컬이 낫다**: `load-test/booktimer-load.js`(k6)가 이미 있으니 로컬 compose에
+    Prometheus·Grafana를 붙여 부하를 걸며 꺾이는 지점을 보는 것이, 트래픽 없는 운영의 평평한 그래프보다 배움이 크다.
+  - ⚠️ 곁가지: 그 k6 스크립트의 주석이 **ECS 오토스케일링(태스크 2→3→4) 검증**을 목적으로 적고 있는데
+    지금 운영은 EC2 1대 + docker compose다 — 전제가 낡았다(별건으로 정리 대상).
+
 ---
 
 ## 📖 기능 로드맵

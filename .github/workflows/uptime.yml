@@ -1,0 +1,46 @@
+# 운영 가동 감시 — booktimer.app 이 죽으면 메일이 오게 한다.
+#
+# 왜 여기(Actions)인가: 운영은 EC2 t3.small 1대(2GB)이고 메모리 예산이 평시 1.23GB·배포 순간
+# 1.78GB로 이미 다 팔려 있다(deploy/compose.prod.yaml). Prometheus·Grafana를 그 위에 얹으면
+# 배포 순간 OOM killer가 MySQL을 잡는다 — bootstrap-ec2.sh가 스왑 2GB를 만든 이유가 그 시나리오다.
+# 그래서 감시를 **서버 밖**에 둔다. 공개 레포라 Actions 사용량 요금이 0이고, 새 계정·새 서비스도 없다.
+#
+# 알림 경로: 이 잡이 실패하면 런이 빨개지고 GitHub이 **스케줄 워크플로를 마지막으로 건드린 계정**에게
+# 메일을 보낸다. 즉 이 파일을 커밋한 사람이 받는다.
+#   ⚠️ GitHub 알림 설정에서 Actions 메일이 꺼져 있으면 아무 일도 안 일어난다 — 한 번 확인할 것.
+#
+# ⚠️ 한계를 알고 쓴다(감시기 자체의 사각):
+#   · 스케줄은 정시 보장이 없다. 혼잡하면 수 분~수십 분 밀린다 — 「10분 내 감지」가 아니라 「대략 감지」다.
+#   · GitHub이 죽으면 감시도 죽는다(실제로 2026-08-17 API 대장애를 겪었다). 무료의 대가다.
+#   · **레포에 60일간 활동이 없으면 GitHub이 스케줄을 자동 정지시킨다.** 그때는 Actions 탭에서 다시 켠다.
+#   이 셋이 아파지면 그때가 유료·외부 감시(또는 Grafana Cloud)로 올라갈 신호다.
+
+name: uptime
+
+on:
+  schedule:
+    # 10분마다. 더 촘촘히 해도 GitHub 쪽 지연이 지배적이라 의미가 적다.
+    - cron: '*/10 * * * *'
+  workflow_dispatch:      # 수동 확인용 — 감시기가 살아 있는지 눌러서 볼 수 있다
+
+permissions:
+  contents: read
+
+# 지연으로 런이 겹칠 때 쌓이지 않게 한다(뒤엣것만 남긴다).
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # 판정 로직은 스크립트에 있다(deploy/tests/test-health-probe.sh 가 계약을 지킨다).
+      # 워크플로가 하는 일은 「부르고, 실패를 실패로 남기는 것」뿐이다.
+      - name: Probe live health
+        run: bash deploy/health-probe.sh
+        env:
+          BASE_URL: https://booktimer.app
