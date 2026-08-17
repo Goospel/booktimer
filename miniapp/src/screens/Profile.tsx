@@ -28,7 +28,7 @@ import {
 } from '../api';
 import { useBackClose } from '../back';
 import { REWARD_AD_GROUP_ID, watchRewardAd } from '../toss';
-import { COVER_FG, ErrorMessage, Loading, Screen, Sheet, coverColor, initialOf } from '../ui';
+import { Avatar, ErrorMessage, Loading, Screen, Sheet } from '../ui';
 import { waiverErrorMessage } from './Home';
 import { BookGrid, SECTIONS } from './Library';
 import { hasFreshStory } from './Story';
@@ -665,32 +665,6 @@ export function ProfileCard({
       </section>
 
     </Screen>
-  );
-}
-
-/**
- * 책방 주인 아바타 — 무표지 책과 같은 이니셜 원(같은 사람은 언제 그려도 같은 색).
- * 링은 안 두른다: 이 화면에서 발광은 **책 격자**가 지는 신호라, 신원 아바타까지 두르면 뜻이 흐려진다.
- */
-function Avatar({ nickname }: { nickname: string }) {
-  return (
-    <div
-      aria-hidden="true"
-      style={{
-        flex: '0 0 auto',
-        width: 72,
-        height: 72,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: '50%',
-        fontSize: 27,
-        background: coverColor(nickname),
-        color: COVER_FG,
-      }}
-    >
-      {initialOf(nickname)}
-    </div>
   );
 }
 

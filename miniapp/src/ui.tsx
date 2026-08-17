@@ -107,6 +107,34 @@ export function coverColor(seed: string): string {
   return COVER_PALETTE[h % COVER_PALETTE.length];
 }
 
+/**
+ * 사람 아바타 — 무표지 책과 같은 이니셜 원(<b>같은 사람은 언제 그려도 같은 색</b>).
+ *
+ * <p>책방 프로필과 홈 헤더가 같은 것을 쓴다 — 화면마다 색이 다르면 같은 사람이 다른 사람으로 읽힌다.
+ * 링은 두르지 않는다: 발광은 책 격자가 지는 신호라 신원 아바타까지 두르면 뜻이 흐려진다.
+ */
+export function Avatar({ nickname, size = 72 }: { nickname: string; size?: number }) {
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        flex: '0 0 auto',
+        width: size,
+        height: size,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: '50%',
+        fontSize: Math.round(size * 0.375),
+        background: coverColor(nickname),
+        color: COVER_FG,
+      }}
+    >
+      {initialOf(nickname)}
+    </div>
+  );
+}
+
 /** 무표지 책의 자리 표지 — `BookOption`엔 표지 주소가 없어 첫 글자 + 제목색 상자로 대신한다. */
 export function CoverInitial({ title, width = 32 }: { title: string; width?: number }) {
   return (

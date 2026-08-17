@@ -1187,8 +1187,42 @@ describe('실패 문구 (waiverErrorMessage)', () => {
  * 로그아웃 2단 확인은 설정 화면으로 이사했고(`settings.test.tsx`), 여기엔 진입만 남는다.
  */
 describe('계정 진입점', () => {
-  it('설정 화면으로 가는 손잡이를 그린다', () => {
-    expect(renderHome()).toContain('프로필·설정');
+  const ENTRY = 'aria-label="프로필·설정"';
+
+  const section = (props: { nickname?: string; loginId?: string | null } = {}) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <AccountSection
+          nickname={props.nickname ?? '구스펠'}
+          loginId={props.loginId === undefined ? 'goospel' : props.loginId}
+          onGoSettings={() => {}}
+        />
+      </TDSMobileProvider>,
+    );
+
+  it('설정 화면으로 가는 손잡이를 그린다 — 이름은 접근성 이름으로 남는다(글자는 아바타로 바뀌었다)', () => {
+    expect(renderHome()).toContain(ENTRY);
+  });
+
+  it('내가 누구인지 적는다 — 그 행에 닉네임과 @아이디가 실린다', () => {
+    const markup = renderHome();
+
+    expect(markup).toContain('구스펠님');
+    expect(markup).toContain('@goospel');
+  });
+
+  it('핸들이 없으면 @줄 자체를 그리지 않는다 — 온보딩 전 계정에 「@」만 남는 줄이 생기지 않는다', () => {
+    // 「@」 부재로 단언하면 emotion이 주입하는 `@media`에 걸려 저절로 실패한다 → 그 줄에 손잡이를 심는다.
+    expect(section()).toContain('data-handle');
+    expect(section({ loginId: null })).not.toContain('data-handle');
+    expect(section({ loginId: null })).toContain('구스펠님'); // 이름은 그대로 — 행이 통째로 사라지지 않는다
+  });
+
+  it('아바타는 책방과 같은 이니셜 원이다 — 같은 사람이 화면마다 다른 색이면 다른 사람으로 읽힌다', () => {
+    const markup = section({ nickname: '나비독서' });
+
+    expect(markup).toContain(coverColor('나비독서')); // 닉네임에서 결정적으로 고른 그 색
+    expect(markup).toContain('>나<');
   });
 
   it('실행할 수 없는 안내는 지웠다 — 토스로 가입한 계정은 booktimer.app에 로그인할 수 없다', () => {
@@ -1199,25 +1233,18 @@ describe('계정 진입점', () => {
     expect(renderHome()).not.toContain('로그아웃');
   });
 
-  // 실기기 제보(2026-08-14): 연한 weak 알약이라 「버튼」으로 안 읽혔다 → 흰 채움 + 테두리로 윤곽을 준다.
-  // TDS는 `light` 채움의 글자색을 브랜드 파랑 리터럴로 인라인에 박아 전역 재테마가 안 닿으므로(plan §미니앱 v2
-  // 실측) 세이지를 직접 준다 — 그 오버라이드가 조용히 빠지면 화면에 초록·파랑이 섞인다.
-  it('브랜드 세이지 글씨다 — TDS 기본 파랑이 그대로 나오면 앱에 색이 둘이 된다', () => {
-    const markup = renderToStaticMarkup(
-      <TDSMobileProvider userAgent={userAgent}>
-        <AccountSection onGoSettings={() => {}} />
-      </TDSMobileProvider>,
-    );
-
-    expect(markup).toContain('#4F6B4C');
+  // 알약을 걷어낸 이유(2026-08-17 사용자 지적): 흰 채움 + 테두리라 **화면에서 가장 밝은 것**이 되어, 가장 안
+  // 중요한 손잡이가 첫 시선을 받았다. TDS Button으로 되돌아가면 그 파랑 리터럴도 함께 돌아온다.
+  it('TDS 기본 파랑이 새지 않는다 — 앱 팔레트는 세이지다', () => {
+    expect(section()).not.toContain('#3182f6');
   });
 
   it('홈 맨 위에 둔다 — 피드 박스 뒤에 두면 스크롤 끝이라 눈에 안 띈다(사용자 결정 2026-08-14)', () => {
     const markup = renderHome();
 
-    expect(markup.indexOf('프로필·설정')).toBeGreaterThan(0);
+    expect(markup.indexOf(ENTRY)).toBeGreaterThan(0);
     // 히어로 카드보다도 앞 — 카드 위 한 줄이 이 손잡이의 자리다.
-    expect(markup.indexOf('프로필·설정')).toBeLessThan(markup.indexOf('오늘 읽은 시간'));
+    expect(markup.indexOf(ENTRY)).toBeLessThan(markup.indexOf('오늘 읽은 시간'));
   });
 });
 
