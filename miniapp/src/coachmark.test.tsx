@@ -8,10 +8,15 @@ import {
   dismissCoachmark,
   onCoachmarkChange,
   resetCoachmarks,
+  setCoachmarkWalking,
 } from './coachmark';
 import { stubLocalStorage } from './test-fixtures';
 
-beforeEach(stubLocalStorage); // 코치마크는 렌더 중에 「봤는가」를 기기에서 읽는다
+beforeEach(() => {
+  stubLocalStorage(); // 코치마크는 렌더 중에 「봤는가」를 기기에서 읽는다
+  // 인라인 안내는 **걷는 중에만** 뜬다(심사 반려 대응) — 그 잠금 자체는 아래 describe가 따로 계측한다.
+  setCoachmarkWalking(true);
+});
 
 /**
  * 인라인 코치마크 — 콘텐츠 안의 버튼을 가리킨다. 탭바 코치마크(App)와 뿌리가 같다:
@@ -72,6 +77,42 @@ describe('인라인 코치마크', () => {
     dismissCoachmark('bookshop');
 
     expect(render({ after: 'bookshop' })).toContain(GUIDE);
+  });
+});
+
+/**
+ * 걷는 중 잠금 — 2026-08-17 심사 반려(「접속 직후 바텀시트」) 대응의 <b>두 번째 구멍</b>이었다.
+ *
+ * <p>탭바 걸음의 자동 시작을 없애도 인라인 안내는 <b>앞 걸음 키만 있으면</b> 스스로 떴다: 배너를 ✕로
+ * 거절하면 길 안내 키 3개가 남으므로 <b>다음 진입 때 홈에서 여백 안내 딤이 즉시 깔렸다</b>(실 브라우저 실측).
+ * 거절한 사람에게 오버레이를 들이대는 것이자 반려 사유 재발이다.
+ */
+describe('인라인 안내는 걷는 중에만 뜬다', () => {
+  const GUIDE = '읽다가 떠오른 생각을 여백에';
+
+  const render = () =>
+    renderToStaticMarkup(
+      <Coachmark name="margin" after="bookshop" title={GUIDE} detail="몇 줄 남겨 두는 자리예요">
+        <button type="button">여백에 글 남기기</button>
+      </Coachmark>,
+    );
+
+  it('걷지 않을 때는 앞 걸음을 다 봤어도 안 뜬다 — 진입 직후 오버레이가 되지 않는다', () => {
+    dismissCoachmark('bookshop'); // 게이트는 열렸다(✕로 길 안내를 접은 사람의 상태)
+    setCoachmarkWalking(false);
+
+    const markup = render();
+
+    expect(markup).not.toContain(GUIDE);
+    expect(markup).not.toContain(`z-index:${INLINE_DIM_Z_INDEX}`); // 딤도 없다
+    expect(markup).toContain('여백에 글 남기기'); // 대상은 평소처럼 그려진다
+  });
+
+  it('걷는 중이면 뜬다 — 위 부재 단언이 공허하지 않다는 짝', () => {
+    dismissCoachmark('bookshop');
+    setCoachmarkWalking(true);
+
+    expect(render()).toContain(GUIDE);
   });
 });
 

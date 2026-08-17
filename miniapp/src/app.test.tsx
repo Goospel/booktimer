@@ -14,11 +14,13 @@ import {
   COACHMARK_FLOW,
   TABS,
   TIMER_ACTION_SLOT,
+  TabBarCoachmark,
   closeCompose,
   flowStepsOnAbandon,
   flowTabChange,
   nextFlowStep,
   shouldRefresh,
+  shouldShowGuideBanner,
   slotCenter,
   tabChangeHandler,
   tabSlot,
@@ -26,7 +28,7 @@ import {
   timerStartBookId,
 } from './App';
 import type { BookOption, DashboardResponse } from './api';
-import { dismissCoachmark, resetCoachmarks } from './coachmark';
+import { coachmarkSeen, dismissCoachmark, resetCoachmarks } from './coachmark';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
 beforeEach(stubLocalStorage); // 홈 탭이 렌더 중에 알림 동의 캐시를 읽는다
@@ -368,64 +370,74 @@ describe('첫 진입 투어', () => {
     ]);
   });
 
-  it('인라인 걸음 차례에는 탭바 말풍선이 하나도 안 뜬다 — 두 안내가 겹치지 않는다', () => {
-    dismissCoachmark('timer');
-    dismissCoachmark('library'); // 다음은 add-book(인라인)
+  /*
+   * ⚠️ 말풍선 계측은 `MainTabs` 렌더가 아니라 **`TabBarCoachmark` 직접 렌더**로 한다 — 수동 시작이 된 뒤
+   * 정적 렌더 하니스로는 「걷는 중」 상태를 만들 수 없다(배너 클릭이 안 돈다). 옛 테스트를 그대로 두면
+   * 부재 단언들이 **영영 참**이 되어 공허하게 통과했다(T-149·T-180·T-181 계열). 걸음 선택은 아래
+   * `nextFlowStep()` 단언이 맡고, 생김새는 이 렌더가 맡는다.
+   */
+  function bubbleOf(index: number) {
+    const bubble = COACHMARK_FLOW[index].bubble;
+    if (bubble === undefined) throw new Error(`탭바 걸음이 아니다: ${COACHMARK_FLOW[index].name}`);
+    return bubble;
+  }
 
-    const markup = renderTab('library');
+  const renderStep = (index: number) =>
+    renderToStaticMarkup(<TabBarCoachmark bubble={bubbleOf(index)} index={index} onNext={() => {}} />);
 
-    expect(markup).not.toContain(TIMER_GUIDE);
-    expect(markup).not.toContain(LIBRARY_GUIDE);
-    expect(markup).not.toContain(BOOKSHOP_GUIDE);
-  });
-
-  it('처음 온 사람에게는 첫 걸음(측정)이 뜬다', () => {
-    const markup = renderTab('home');
-
-    expect(markup).toContain(TIMER_GUIDE);
-    expect(markup).not.toContain(LIBRARY_GUIDE); // 한 번에 한 걸음
+  it('처음 온 사람의 커서는 첫 걸음(측정)을 가리킨다', () => {
+    expect(nextFlowStep()).toBe(0);
+    expect(renderStep(0)).toContain(TIMER_GUIDE);
   });
 
   it('#833로 측정 안내를 이미 본 사람은 서재 걸음부터 본다 — 마이그레이션 없이 이어진다', () => {
     dismissCoachmark('timer');
 
-    const markup = renderTab('home');
-
-    expect(markup).toContain(LIBRARY_GUIDE);
-    expect(markup).not.toContain(TIMER_GUIDE);
+    expect(nextFlowStep()).toBe(1);
+    expect(renderStep(1)).toContain(LIBRARY_GUIDE);
   });
 
   it('앞 세 걸음을 봤으면 책방 걸음이 뜬다 — 인라인 걸음(책 담기)도 순서에 든다', () => {
+    ['timer', 'library', 'add-book'].forEach(dismissCoachmark);
+
+    expect(nextFlowStep()).toBe(3);
+    expect(renderStep(3)).toContain(BOOKSHOP_GUIDE);
+  });
+
+  it('인라인 걸음 차례에는 탭바 말풍선을 그릴 것이 없다 — 두 안내가 겹치지 않는다', () => {
     dismissCoachmark('timer');
     dismissCoachmark('library');
-    dismissCoachmark('add-book');
 
-    expect(renderTab('bookshop')).toContain(BOOKSHOP_GUIDE);
+    expect(nextFlowStep()).toBe(2); // add-book
+    expect(() => renderStep(2)).toThrow(); // 그릴 bubble이 없다 = 탭바엔 아무것도 안 뜬다
   });
 
-  it('다 본 사람에게는 아무것도 뜨지 않는다', () => {
+  it('다 본 사람의 커서는 끝을 가리킨다', () => {
     COACHMARK_FLOW.forEach((step) => dismissCoachmark(step.name));
 
-    const markup = renderTab('home');
-
-    expect(markup).not.toContain(TIMER_GUIDE);
-    expect(markup).not.toContain(LIBRARY_GUIDE);
-    expect(markup).not.toContain(BOOKSHOP_GUIDE);
+    expect(nextFlowStep()).toBe(-1);
   });
 
-  it('안내는 탭바가 있는 어느 탭에서든 같은 자리에 선다', () => {
-    for (const { key } of TABS) expect(renderTab(key)).toContain(TIMER_GUIDE);
+  it('안내는 탭바 위에 고정으로 선다 — 어느 탭에서 걷든 자리가 같다', () => {
+    expect(renderStep(0)).toContain('position:fixed');
   });
 
   it('덮개는 탭바보다 아래, 말풍선은 위 — 탭바만 밝게 남고 원은 그대로 눌린다', () => {
-    const markup = renderTab('home');
+    const markup = renderStep(0);
 
     expect(markup).toContain(`z-index:${TAB_BAR_Z_INDEX - 1}`); // 덮개
     expect(markup).toContain(`z-index:${TAB_BAR_Z_INDEX + 1}`); // 말풍선
   });
 
   it('진행 표시는 흐름 전체(인라인 걸음까지) 길이다 — 「3걸음 중 2」로 줄여 세지 않는다', () => {
-    expect(renderTab('home').match(/data-tour-dot/g)).toHaveLength(COACHMARK_FLOW.length);
+    expect(renderStep(0).match(/data-tour-dot/g)).toHaveLength(COACHMARK_FLOW.length);
+  });
+
+  it('마지막 걸음의 덮개는 「닫기」, 그전은 「다음」 — 끝이 어디인지 손잡이가 말한다', () => {
+    expect(renderStep(0)).toContain('다음 안내 보기');
+    expect(renderToStaticMarkup(
+      <TabBarCoachmark bubble={bubbleOf(3)} index={COACHMARK_FLOW.length - 1} onNext={() => {}} />,
+    )).toContain('안내 닫기');
   });
 });
 
@@ -435,6 +447,55 @@ describe('첫 진입 투어', () => {
  * <p>이동 자체는 effect라 정적 렌더로 계측할 수 없으니, 「어느 탭으로 가야 하나」 판정만 순수 함수로
  * 떼어 여기서 박는다. 실제 연쇄 이동은 실 브라우저 게이트가 맡는다(T-182와 같은 분담).
  */
+/**
+ * 안내 배너 — 첫 사용 안내를 <b>사용자가 눌러서</b> 시작한다.
+ *
+ * <p>2026-08-17 토스 심사 반려: 「미니앱 접속 직후 바텀시트가 바로 노출돼요」. 우리가 만든 것은 툴팁이었지만
+ * 렌더 결과가 **전체 딤 + 하단 좌우 24px 와이드 패널**이라 시트와 구별되지 않았다(2026-08-12 「즉시 로그인 유도」
+ * 반려와 같은 계열 — 심사는 진입 직후 들이대는 것을 막는다). 그래서 안내 자체는 그대로 두고 **시작 트리거만**
+ * 자동 → 수동으로 뒤집었다.
+ */
+describe('안내 배너 — 수동 시작', () => {
+  it('안 본 길 안내가 있으면 배너를 띄운다 — 진입 직후 오버레이 대신 이것이 뜬다', () => {
+    expect(shouldShowGuideBanner(false, false)).toBe(true);
+    expect(renderTab('home')).toContain('앱 사용법 보기');
+  });
+
+  it('걷는 중에는 배너를 감춘다 — 딤 아래에 배너가 남아 있으면 두 겹이 된다', () => {
+    expect(shouldShowGuideBanner(true, false)).toBe(false);
+  });
+
+  it('길 안내를 다 본 사람에게는 안 뜬다 — 여백 걸음이 남아 있어도 그렇다', () => {
+    // 신규 사용자는 책이 0권이라 홈 여백 문이 없어 마지막 걸음 키가 영영 안 남는다 —
+    // 「전 걸음 완료」로 판정하면 그 사람에겐 배너가 평생 뜬다. 그래서 기준은 길 안내(탭바 걸음)뿐이다.
+    ['timer', 'library', 'bookshop'].forEach(dismissCoachmark);
+
+    expect(coachmarkSeen('margin')).toBe(false); // 여백은 아직 안 봤다(이 단언이 위 주석의 전제다)
+    expect(shouldShowGuideBanner(false, false)).toBe(false);
+  });
+
+  it('#833 안내만 본 옛 사용자에게는 뜬다 — 서재·책방을 아직 모른다', () => {
+    dismissCoachmark('timer');
+
+    expect(shouldShowGuideBanner(false, false)).toBe(true);
+  });
+
+  it('닫는 손잡이가 있다 — 「들이대지 않는다」가 배너에도 있어야 한다', () => {
+    expect(renderTab('home')).toContain('안내 배너 닫기');
+  });
+
+  it('✕로 닫으면 그 자리에서 사라진다 — 기록만으로는 화면이 안 갱신된다(실 브라우저 실측)', () => {
+    // 배너만 보고 있을 때 커서는 이미 -1이라 `setFlowIndex(-1)`이 같은 값이고, React가 리렌더를 건너뛴다.
+    // 그래서 닫힘을 별도 상태로 들어야 즉시 사라진다 — 기록(키 3개)은 다음 진입의 판정만 맡는다.
+    expect(shouldShowGuideBanner(false, true)).toBe(false);
+    expect(shouldShowGuideBanner(false, false)).toBe(true); // 짝 단언 — 위가 공허하지 않다
+  });
+
+  it('홈에만 둔다 — 진입 화면이 아닌 탭에서는 소음이다', () => {
+    expect(renderTab('library')).not.toContain('앱 사용법 보기');
+  });
+});
+
 describe('흐름의 자동 이동', () => {
   it('그 걸음의 화면이 아니면 그 화면으로 데려간다', () => {
     expect(flowTabChange(COACHMARK_FLOW[1], 'home')).toBe('library'); // 서재 걸음
@@ -454,6 +515,12 @@ describe('흐름의 자동 이동', () => {
   it('걷는 중 스스로 탭을 옮기면 길 안내만 접고 인라인 걸음은 남긴다', () => {
     // 길 안내(탭바)는 사용자가 이미 스스로 하고 있으니 물러나지만, 책 담기·여백은 그 화면에 갔을 때가 제 차례다.
     expect(flowStepsOnAbandon()).toEqual(['timer', 'library', 'bookshop']);
+  });
+
+  it('시작하지 않으면 커서가 아무 걸음도 가리키지 않는다 — 진입 직후 자동 노출이 없다는 뜻이다', () => {
+    // 「안 본 걸음이 있다」와 「지금 걷고 있다」는 다른 것이다 — 옛 배선은 이 둘을 붙여 놓아 진입 즉시 걸었다.
+    expect(nextFlowStep()).toBe(0); // 안 본 걸음은 있다
+    expect(renderTab('home')).not.toContain('data-tour-dot'); // 그런데 화면엔 안내가 없다
   });
 
   it('안내를 다시 보기로 지우면 첫 걸음부터 다시 걷는다 — 설정에서 돌아올 때 탭 셸이 새로 마운트된다', () => {
@@ -485,9 +552,12 @@ describe('탭바 칸 지목', () => {
   });
 
   it('서재 걸음의 꼬리가 서재 칸을 가리킨다 — 말풍선만 그리고 엉뚱한 칸을 가리키는 사고를 막는다', () => {
-    dismissCoachmark('timer');
+    const bubble = COACHMARK_FLOW[1].bubble;
+    if (bubble === undefined) throw new Error('서재 걸음엔 탭바 말풍선이 있어야 한다');
 
-    expect(renderTab('home')).toContain(slotCenter(tabSlot('library')));
+    const markup = renderToStaticMarkup(<TabBarCoachmark bubble={bubble} index={1} onNext={() => {}} />);
+
+    expect(markup).toContain(slotCenter(tabSlot('library')));
   });
 });
 
