@@ -12,6 +12,7 @@ import {
   setBookVisibility,
 } from '../api';
 import { useBackClose } from '../back';
+import { Coachmark } from '../coachmark';
 import { formatDuration } from '../format';
 import { BookCover, CoverInitial, ErrorMessage, Loading, Screen, Sheet } from '../ui';
 import { BookCarousel } from './Home';
@@ -372,14 +373,33 @@ export function Library({
             onComposeMargin={onComposeMargin}
             onError={onError}
           />
-          {searchEnabled && (
-            <Button display="block" size="medium" style={{ marginTop: 24 }} onClick={() => setMode('search')}>
-              책 추가하기
-            </Button>
-          )}
+          <AddBookButton enabled={searchEnabled} onPress={() => setMode('search')} />
         </>
       )}
     </Screen>
+  );
+}
+
+/**
+ * 「책 추가하기」 + 첫 방문 코치마크 — 게이트와 안내가 <b>한 몸</b>이다.
+ *
+ * <p>버튼이 서버 플래그(`searchEnabled`)에 달려 있어, 안내를 따로 두면 플래그가 꺼진 날
+ * 아무것도 없는 자리를 가리키는 안내만 남는다. 둘을 같은 컴포넌트가 들면 그 사고가 원리상 불가능하다.
+ */
+export function AddBookButton({ enabled, onPress }: { enabled: boolean; onPress: () => void }) {
+  if (!enabled) return null;
+
+  return (
+    <Coachmark
+      name="add-book"
+      after="bookshop" // 탭바 투어를 마친 뒤에 — 딤 두 장이 겹치면 무엇을 가리키는지 알 수 없다
+      title="읽을 책은 여기서 찾아 담아요"
+      detail="제목으로 검색하면 서재에 들어와요"
+    >
+      <Button display="block" size="medium" style={{ marginTop: 24 }} onClick={onPress}>
+        책 추가하기
+      </Button>
+    </Coachmark>
   );
 }
 

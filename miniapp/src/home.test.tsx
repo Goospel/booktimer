@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BookOption, DashboardResponse } from './api';
 import { TAB_BAR_Z_INDEX } from './App';
 import { ApiError, waiveDebt } from './api';
+import { dismissCoachmark } from './coachmark';
 import {
   AccountSection,
   BookCarousel,
@@ -1296,6 +1297,46 @@ describe('홈 여백 문의 대상 책 (marginDoorBook)', () => {
 
     it('책이 한 권도 없으면 문을 그리지 않는다 — 책 없는 여백은 존재하지 않는다', () => {
       expect(renderHome({ readingBooks: [] })).not.toContain(DOOR);
+    });
+
+    /**
+     * 여백 안내 — 문이 실제로 선 자리에서만, 투어를 마친 뒤 1회.
+     *
+     * <p>순서 제어 코드가 없다: 신규 사용자는 책이 0권이라 <b>문 자체가 안 그려지므로</b>
+     * 이 안내는 책을 담은 뒤에야 저절로 차례가 온다.
+     */
+    describe('여백 안내 코치마크', () => {
+      const GUIDE = '읽다가 떠오른 생각을 여백에';
+      const withBook = { readingBooks: [book(1, '미움받을 용기')], recentBookId: 1 };
+
+      it('투어를 마친 사람에게 문과 함께 뜬다', () => {
+        dismissCoachmark('bookshop'); // 투어 마지막 걸음
+
+        const markup = renderHome(withBook);
+
+        expect(markup).toContain(DOOR);
+        expect(markup).toContain(GUIDE);
+      });
+
+      it('투어 중에는 뜨지 않는다 — 탭바 안내와 딤이 겹치지 않는다', () => {
+        expect(renderHome(withBook)).not.toContain(GUIDE);
+      });
+
+      it('한 번 보면 다시 뜨지 않고 문만 남는다', () => {
+        dismissCoachmark('bookshop');
+        dismissCoachmark('margin');
+
+        const markup = renderHome(withBook);
+
+        expect(markup).toContain(DOOR);
+        expect(markup).not.toContain(GUIDE);
+      });
+
+      it('문이 없으면 안내도 없다 — 책을 담기 전에는 가리킬 것이 없다', () => {
+        dismissCoachmark('bookshop');
+
+        expect(renderHome({ readingBooks: [] })).not.toContain(GUIDE);
+      });
     });
   });
 });

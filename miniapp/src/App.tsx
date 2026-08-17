@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BookOption, DashboardResponse, MarginBook, TimerState } from './api';
 import { fetchDashboard, startSession, stopSession, tagBook, token } from './api';
 import { useBackClose } from './back';
+import { CoachmarkBubble, coachmarkSeen, dismissCoachmark } from './coachmark';
 import { elapsedSeconds } from './format';
 import { Bookshop } from './screens/Bookshop';
 import { Goal } from './screens/Goal';
@@ -105,17 +106,59 @@ export function timerActionView(active: boolean): { label: string; background: s
 }
 
 /**
- * 첫 진입 코치마크를 봤다는 기록 — 기기 로컬로 족하다(서버 컬럼·마이그레이션·API 왕복이 통째로 없다).
+ * 그 탭이 서는 <b>렌더 슬롯</b> — 가운데 액션이 끼어들어 `TABS` index와 어긋난다.
  *
- * <p>기기를 바꾸면 한 번 더 뜨는 게 유일한 대가인데, 1회성 안내에 그 정도는 손해가 아니다.
- * 키가 <b>없으면</b> 뜨므로 이미 쓰던 사람도 1회 보게 된다 — 「측정 시작」이 홈에서 이 자리로
- * 옮겨간 변경(#832)을 모른 채 홈에서 버튼을 찾는 일이 실제 위험이라 그쪽이 오히려 요점이다.
+ * <p>index를 그대로 쓰면 책방(index 2)을 가리키려다 액션 원(슬롯 2)을 가리킨다.
  */
-export const COACHMARK_KEY = 'booktimer.coachmark.timer';
+export function tabSlot(key: TabKey): number {
+  const index = TABS.findIndex((t) => t.key === key);
+  return index >= TIMER_ACTION_SLOT ? index + 1 : index;
+}
 
-/** 코치마크를 봤다고 못 박는다 — 덮개 탭·측정 버튼 누름이 모두 이 한 자리로 온다. */
-export function dismissCoachmark(): void {
-  localStorage.setItem(COACHMARK_KEY, 'seen');
+/**
+ * 그 슬롯 칸의 가로 중앙 — <b>순수 CSS 식</b>이다(ref·`getBoundingClientRect`·리사이즈 관측 0).
+ *
+ * <p>탭바가 좌우 같은 여백의 `fixed`고 칸이 `flex: 1` 균등 분할이라, 칸 중앙이 화면 폭의
+ * 함수로 떨어진다 — 그래서 코치마크가 무엇을 가리킬지 알기 위해 화면을 재지 않아도 된다.
+ */
+export function slotCenter(slot: number): string {
+  const share = (slot + 0.5) / (TABS.length + 1);
+  return `calc(${TAB_BAR_MARGIN}px + (100vw - ${TAB_BAR_MARGIN * 2}px) * ${share})`;
+}
+
+/**
+ * 첫 진입 투어 — 탭바만 가리키는 세 걸음으로 <b>지도</b>(어디에 무엇이 있나)를 가르친다.
+ *
+ * <p>행동(책 담기·여백 쓰기)은 여기 넣지 않는다: 아무것도 안 해본 사람에게 미리 읊으면 넘기기만
+ * 연타하게 된다. 그 둘은 해당 화면에서 인라인 코치마크(`Coachmark`)가 그 자리에서 맡는다.
+ *
+ * <p>첫 걸음 `timer`는 #833으로 이미 나갔다 — <b>스텝마다 자기 키</b>라 그 키가 그대로 첫 걸음이
+ * 되고, 이미 본 사람은 서재 걸음부터 이어 본다(마이그레이션 0).
+ */
+export const TOUR_STEPS: { name: string; slot: number; title: string; detail: string }[] = [
+  {
+    name: 'timer',
+    slot: TIMER_ACTION_SLOT,
+    title: '여기를 눌러 독서 시간을 재요',
+    detail: '읽던 책은 홈에서 고를 수 있어요',
+  },
+  {
+    name: 'library',
+    slot: tabSlot('library'),
+    title: '서재는 내가 읽는 책을 담는 곳',
+    detail: '여기에 담아 둔 책으로 시간을 재요',
+  },
+  {
+    name: 'bookshop',
+    slot: tabSlot('bookshop'),
+    title: '책방은 남에게 보여주는 곳',
+    detail: '내 책과 글이 전시되고, 남의 책방도 구경해요',
+  },
+];
+
+/** 아직 안 본 첫 걸음(`-1`이면 투어 끝) — 시작과 진행이 같은 한 줄을 쓴다. */
+export function nextTourStep(): number {
+  return TOUR_STEPS.findIndex((step) => !coachmarkSeen(step.name));
 }
 
 /** 종료 직후 태깅 대상 — 책 없이 측정한 세션에 나중에 책을 붙인다. */
@@ -469,12 +512,27 @@ export function MainTabs({
   const [celebrate, setCelebrate] = useState(false);
   /** 액션 실패 문구 — 다른 탭엔 홈의 ErrorMessage가 없으므로 탭바 위 스트립으로 띄운다. */
   const [actionError, setActionError] = useState<string | null>(null);
-  /** 첫 진입 코치마크 — 렌더 중에 읽는다(홈의 알림 동의 캐시와 같은 방식이라 정적 렌더로도 계측된다). */
-  const [coachmark, setCoachmark] = useState(() => localStorage.getItem(COACHMARK_KEY) === null);
+  /** 지금 가리키는 투어 걸음(`-1`=끝) — 렌더 중에 읽는다(정적 렌더 하니스로도 계측된다). */
+  const [tourStep, setTourStep] = useState(nextTourStep);
 
-  const closeCoachmark = () => {
-    dismissCoachmark();
-    setCoachmark(false);
+  /** 한 걸음 봤다고 남기고 다음으로 — 마지막이었으면 `nextTourStep`이 `-1`을 준다. */
+  const advanceTour = () => {
+    const step = TOUR_STEPS[tourStep];
+    if (step === undefined) return;
+    dismissCoachmark(step.name);
+    setTourStep(nextTourStep());
+  };
+
+  /** 사용자가 스스로 탭을 옮기면 투어는 물러난다 — 남은 걸음도 다시 띄우지 않는다. */
+  const endTour = () => {
+    TOUR_STEPS.forEach((step) => dismissCoachmark(step.name));
+    setTourStep(-1);
+  };
+
+  // 안내가 가리키던 칸과 화면이 어긋난 채 남지 않게, 탭 이동은 투어를 끝낸다.
+  const changeTab = (next: TabKey) => {
+    if (tourStep >= 0) endTour();
+    onTabChange(next);
   };
 
   // 401은 App이 재로그인으로 처리하고, 그 외(409 중복 시작 등)만 화면에 남긴다.
@@ -482,8 +540,8 @@ export function MainTabs({
 
   /** 탭바 가운데 원 — 측정 중이면 종료, 아니면 시작. 이 앱에서 세션을 여닫는 유일한 자리다. */
   const timerAction = () => {
-    // 안내를 읽고 곧장 이 버튼을 누른 경우 — 덮개가 탭바 아래라 원이 그대로 눌린다. 안내는 역할을 다했다.
-    if (coachmark) closeCoachmark();
+    // 안내를 읽고 곧장 이 버튼을 누른 경우 — 덮개가 탭바 아래라 원이 그대로 눌린다. 그 걸음은 역할을 다했다.
+    if (tourStep >= 0) advanceTour();
     if (busy) return;
     setBusy(true);
     setActionError(null);
@@ -590,11 +648,11 @@ export function MainTabs({
       )}
 
       {/* 코치마크는 탭바보다 먼저 그린다 — 덮개가 탭바 아래 층이라는 것을 코드 순서로도 읽히게 둔다. */}
-      {coachmark && <TimerCoachmark onClose={closeCoachmark} />}
+      {tourStep >= 0 && <TabBarCoachmark step={TOUR_STEPS[tourStep]} index={tourStep} onNext={advanceTour} />}
 
       <BottomTabBar
         tab={tab}
-        onTabChange={onTabChange}
+        onTabChange={changeTab}
         action={{ active: dashboard.hasActiveSession, busy, onPress: timerAction }}
       />
 
@@ -613,26 +671,34 @@ export function MainTabs({
 }
 
 /**
- * 첫 진입 코치마크 — 탭바 가운데 측정 원을 말풍선으로 가리킨다.
+ * 투어 한 걸음 — 탭바의 그 칸을 말풍선으로 가리킨다.
  *
  * <p><b>스포트라이트를 마스크 없이 얻는다</b>: 덮개를 탭바(`TAB_BAR_Z_INDEX`)보다 한 층 <b>아래</b>
  * 깔면 불투명 배경의 탭바만 저절로 덮개 위에 밝게 남는다. SVG 마스크로 구멍을 뚫을 필요가 없고,
- * 덤으로 원이 그대로 눌려 <b>안내를 보고 곧장 측정을 시작</b>할 수 있다(덮개를 위에 얹으면 가리키는
- * 대상 자체를 막는 자기모순이 된다 — 그 부등식이 테스트로 박혀 있다).
+ * 덤으로 <b>가리킨 칸이 그대로 눌린다</b>(덮개를 위에 얹으면 가리키는 대상 자체를 막는 자기모순이
+ * 된다 — 그 부등식이 테스트로 박혀 있다).
  *
- * <p>위치 계산도 없다(ref·`getBoundingClientRect`·리사이즈 관측 0): 탭바는 좌우 같은 여백의
- * `fixed`라 <b>다섯 칸 중 가운데 = 화면 가로 정중앙</b>이고, 세로는 탭바와 같은 식에 여백만 더한다.
- *
- * <p>애니메이션은 두지 않는다 — 등장 효과 하나가 표지를 재래스터화하던 실측 사고 클래스다(T-176).
+ * <p>위치 계산도 없다(ref·`getBoundingClientRect`·리사이즈 관측 0): 가로는 {@link slotCenter}가
+ * 순수 CSS로 주고, 세로는 탭바와 같은 식(띄운 높이 + 홈 인디케이터 + 바 높이)에 여백만 더한다.
  */
-export function TimerCoachmark({ onClose }: { onClose: () => void }) {
+export function TabBarCoachmark({
+  step,
+  index,
+  onNext,
+}: {
+  step: (typeof TOUR_STEPS)[number];
+  index: number;
+  onNext: () => void;
+}) {
+  const last = index === TOUR_STEPS.length - 1;
+
   return (
     <>
-      {/* 덮개 자체가 닫기 버튼이다 — 아무 데나 누르면 닫힌다(요소 하나로 접근성 이름까지 얻는다). */}
+      {/* 덮개 자체가 진행 버튼이다 — 아무 데나 누르면 다음 걸음으로 간다(닫기 X를 따로 두지 않는다). */}
       <button
         type="button"
-        aria-label="안내 닫기"
-        onClick={onClose}
+        aria-label={last ? '안내 닫기' : '다음 안내 보기'}
+        onClick={onNext}
         style={{
           position: 'fixed',
           inset: 0,
@@ -644,44 +710,21 @@ export function TimerCoachmark({ onClose }: { onClose: () => void }) {
         }}
       />
 
-      <div
+      <CoachmarkBubble
+        title={step.title}
+        detail={step.detail}
+        tail="down"
+        // 말풍선이 좌우 24px에 서므로, 화면 기준 칸 중앙에서 그만큼 뺀 자리가 말풍선 안의 꼬리 위치다.
+        tailLeft={`calc(${slotCenter(step.slot)} - 24px)`}
+        dots={{ index, total: TOUR_STEPS.length }}
         style={{
           position: 'fixed',
           zIndex: TAB_BAR_Z_INDEX + 1,
           left: 24,
           right: 24,
-          // 탭바와 같은 식(띄운 높이 + 홈 인디케이터 + 바 높이)에 말풍선 숨 쉴 여백만 더한다.
           bottom: `calc(12px + env(safe-area-inset-bottom) + ${TAB_BAR_HEIGHT}px + 12px)`,
-          padding: '14px 16px',
-          borderRadius: 14,
-          background: 'var(--adaptiveBlue500, #6E8A6A)',
-          boxShadow: '0 6px 20px rgba(0, 0, 0, 0.25)',
-          textAlign: 'center',
-          pointerEvents: 'none', // 말풍선은 읽는 것뿐 — 눌린 곳은 덮개(닫기)나 탭바(측정)여야 한다.
         }}
-      >
-        <div style={{ color: '#FFFFFF', fontSize: 15, fontWeight: 600, lineHeight: 1.45 }}>
-          여기를 눌러 독서 시간을 재요
-        </div>
-        <div style={{ color: '#FFFFFF', fontSize: 13, lineHeight: 1.45, opacity: 0.85 }}>
-          읽던 책은 홈에서 고를 수 있어요
-        </div>
-
-        {/* 꼬리 — 말풍선(fixed)이 담는 블록이라 가운데 정렬만으로 원을 가리킨다. */}
-        <div
-          style={{
-            position: 'absolute',
-            left: '50%',
-            bottom: -9,
-            marginLeft: -9,
-            width: 0,
-            height: 0,
-            borderLeft: '9px solid transparent',
-            borderRight: '9px solid transparent',
-            borderTop: '9px solid var(--adaptiveBlue500, #6E8A6A)',
-          }}
-        />
-      </div>
+      />
     </>
   );
 }
