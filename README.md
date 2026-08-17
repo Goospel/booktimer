@@ -259,6 +259,6 @@ npm --prefix frontend run test:e2e   # E2E (Playwright; 별도 터미널에서 b
 - [claude-docs/admin-data-lookup-design.md](claude-docs/admin-data-lookup-design.md) — 운영자 데이터 조회 설계
 - [claude-docs/reading-personality-design.md](claude-docs/reading-personality-design.md) — 독서 성향 분석(미구현) 설계
 - [claude-docs/deploy-aws.md](claude-docs/deploy-aws.md) — AWS 배포 가이드
-- [claude-docs/learning-notes.md](claude-docs/learning-notes.md) — 작업 중 배운 개념 정리
+- [claude-docs/learning-notes.md](claude-docs/learning-notes.md) — 작업 중 배운 개념 정리 (**아카이브** — 2026-08-18 폐기, 새 항목 추가 안 함)
 - [claude-docs/troubleshooting.md](claude-docs/troubleshooting.md) — 함정·해결 기록
 - [claude-docs/copyright-registration.md](claude-docs/copyright-registration.md) — 한국 저작권 등록 가이드
