@@ -2,11 +2,12 @@ import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import type { BookStatus, MarginEntry, MarginResponse, MyBookSummary } from './api';
+import type { BookStatus, MarginEntry, MarginResponse, MyBookSummary, SearchRow } from './api';
 import { dismissCoachmark, setCoachmarkWalking } from './coachmark';
 import type { LibrarySheet } from './screens/Library';
 import {
   AddBookButton,
+  AddStatusSheet,
   BookGrid,
   BookSearch,
   MarginBoxView,
@@ -566,6 +567,62 @@ describe('책 추가 — 나가는 길', () => {
 
     expect(backAt(busy)).toContain('disabled');
     expect(backAt(search())).not.toContain('disabled');
+  });
+});
+
+/**
+ * 담을 곳 고르기 — 검색 결과를 탭하면 곧바로 「읽는 중」으로 들어가던 자리다. 읽고 싶어 담은 책까지
+ * 읽는 중이 된 뒤 서재에서 다시 옮겨야 했다(사용자 제보 2026-08-19).
+ *
+ * <p>정적 렌더라 탭해서 열 수 없으므로 <b>시트를 직접 렌더해</b> 계측한다(관리 시트와 같은 처지).
+ */
+describe('책 담을 곳 고르기', () => {
+  const row: SearchRow = {
+    title: '자바 최적화',
+    author: '김한도',
+    isbn13: '9791162242452',
+    coverUrl: null,
+    publisher: null,
+    purchaseLink: null,
+    category: null,
+    pubDate: null,
+    owned: false,
+  };
+
+  const sheet = (busy = false) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <AddStatusSheet row={row} busy={busy} onPick={() => {}} onClose={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  it('세 곳을 서재 탭과 같은 어휘·순서로 준다 — 같은 상태가 두 이름으로 보이지 않게', () => {
+    const markup = sheet();
+
+    expect(markup).toContain('읽는 중(으)로 담기');
+    expect(markup).toContain('다 읽음(으)로 담기');
+    expect(markup).toContain('읽고 싶어요(으)로 담기');
+    expect(markup.indexOf('읽는 중')).toBeLessThan(markup.indexOf('읽고 싶어요'));
+  });
+
+  it('고른 책 제목을 시트 제목으로 세운다 — 어느 책을 담는 중인지가 시트 안에 남는다', () => {
+    expect(sheet()).toContain('자바 최적화');
+  });
+
+  it('추가 요청 중에는 잠근다 — 두 번 눌러 두 권이 들어가지 않게', () => {
+    expect(sheet(true)).toContain('disabled');
+    expect(sheet()).not.toContain('disabled');
+  });
+
+  it('검색 화면 진입 직후에는 시트가 없다 — 화면을 덮는 것은 사용자가 부른 뒤에만(T-183)', () => {
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+    expect(markup).not.toContain('role="dialog"');
+    expect(markup).not.toContain('담기');
   });
 });
 
