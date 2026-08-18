@@ -164,17 +164,24 @@ public class BookService {
     }
 
     /**
-     * 내 책의 읽기 상태를 바꾼다. <b>완독으로 전환되는 순간</b>에만 축하 푸시를 띄운다 —
-     * 기준은 {@code finishedAt} 유무가 아니라 <b>전이</b>다(FINISHED→FINISHED 재저장은 no-op이지만
-     * 이미 완독인 책을 다시 저장할 때 축하가 또 나가면 안 된다). 등록-시-완독({@link #stampIfFinished})은
-     * 제외 — 과거에 읽은 책을 아카이빙할 때 푸시가 쏟아지는 것을 막는다.
+     * 내 책의 읽기 상태를 바꾼다. 축하 푸시는 <b>완독으로 전환되는 순간</b>에, 그 책에 대해
+     * <b>딱 한 번</b>만 나간다 — 전이 판정만으로는 완독↔읽는중 토글을 반복해 축하를 무한 발송시킬 수
+     * 있어서({@code finishedAt}은 완독 이탈 시 지워지므로 멱등 마커가 못 된다),
+     * 지우지 않는 마커 {@link Book#getFinishCelebratedAt()}로 책당 1회를 강제한다.
+     * 진짜 재독에 축하가 안 오는 손실은 감수한다 — 곁가지 축하 1통 vs 알람 테러.
+     * 등록-시-완독({@link #stampIfFinished})은 마커를 찍지 않는다 — 그 경로는 원래 축하가 없고
+     * (아카이빙 푸시 폭주 방지), 나중에 첫 읽는중→완독 전이에서 1회 축하를 받는 게 자연스럽다.
      */
     public Book changeStatus(User user, Long bookId, BookStatus status) {
         Book book = ownedBook(user, bookId);
         boolean becameFinished = book.getStatus() != BookStatus.FINISHED && status == BookStatus.FINISHED;
+        boolean firstCelebration = becameFinished && book.getFinishCelebratedAt() == null;
         book.changeStatus(status, clock.instant());
+        if (firstCelebration) {
+            book.markFinishCelebrated(clock.instant()); // 발송 결과와 무관 — 재시도 틱이 없어 성공-마킹은 토글 구멍을 도로 연다
+        }
         Book saved = bookRepository.save(book);
-        if (becameFinished) {
+        if (firstCelebration) {
             finishCelebrationService.celebrate(user, saved); // 절대 던지지 않는다 — 완독 처리를 막지 않게
         }
         return saved;

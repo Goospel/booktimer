@@ -95,6 +95,14 @@ public class Book extends BaseTimeEntity {
     private Instant startedReadingAt;
 
     /**
+     * 완독 축하 푸시 멱등 마커 — <b>책당 영구 1회</b>. {@link #finishedAt}과 달리 완독 이탈에도
+     * 지우지 않는다: 지우면 완독↔읽는중 토글마다 축하가 다시 나가 알람 테러가 된다.
+     * 기록은 {@link #markFinishCelebrated(Instant)}가 담당하고, 시각(Clock)은 서비스가 넘긴다.
+     */
+    @Column(name = "finish_celebrated_at")
+    private Instant finishCelebratedAt;
+
+    /**
      * 알라딘 "구매"(제휴 링크) 클릭 누적 수. 어떤 책이 구매 의향을 내는지 보는 제휴 수익 데이터.
      * (이름은 하위호환으로 유지 — 쿠팡 도입 후 의미상 "알라딘 클릭"으로 굳었다. 쿠팡은 {@link #coupangClickCount}.)
      */
@@ -339,6 +347,19 @@ public class Book extends BaseTimeEntity {
 
     public BookStatus getStatus() {
         return status;
+    }
+
+    /**
+     * 완독 축하를 보냈다고 표시한다 — 되돌리는 메서드는 일부러 두지 않는다(영구 1회).
+     * 발송 성공 여부와 무관하게 전이 시점에 찍는다: 재시도 주체가 없어 "성공 시에만 마킹"으로 하면
+     * 발송 실패 후 토글로 재발송을 유도할 수 있는 구멍이 도로 열린다.
+     */
+    public void markFinishCelebrated(Instant now) {
+        this.finishCelebratedAt = now;
+    }
+
+    public Instant getFinishCelebratedAt() {
+        return finishCelebratedAt;
     }
 
     public Instant getFinishedAt() {
