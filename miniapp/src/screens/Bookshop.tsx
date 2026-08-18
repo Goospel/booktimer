@@ -236,69 +236,54 @@ export function Bookshop({
   );
 }
 
+/** 진입바 높이 — 손가락 최소치(44px)를 정확히 채운다. */
+const SEARCH_BAR_HEIGHT = 44;
+
 /**
- * 책방 상단 도구 — <b>검색 진입 하나</b>다. 왼쪽에 있던 여백 스트립은 사라졌다(2026-08-16 재설계):
- * 「새 글」 신호가 사람 단위(링)에서 <b>책 단위(격자 발광)</b>로 옮겨가, 상단에 사람 줄을 세울 이유가 없다.
+ * 책방 상단 도구 — <b>전폭 검색바 하나</b>다. 왼쪽에 있던 여백 스트립은 그 전에 사라졌고(2026-08-16:
+ * 「새 글」 신호가 사람 단위(링) → <b>책 단위(격자 발광)</b>), 그러자 남은 아이콘이 <b>오른쪽 끝에
+ * 정렬됐는데 왼쪽은 빈</b> 줄이 됐다 — 짝을 잃은 `justify-content: flex-end`가 이질감의 정체였다.
+ * 전폭은 한 줄을 다 쓰므로 그 정렬 문제 자체가 없다.
  *
- * <p>전에는 검색이 <b>전폭 알약</b>으로 최상단 한 줄을 통째로 먹었다 — 그만큼 이 화면의 본체인 공개 책이
- * 아래로 밀렸다. 토스 셸 헤더는 앱 소유라 인스타처럼 헤더 우측에 얹을 수 없어, 화면 안에서 가장 가까운
- * 줄을 그 자리로 삼았다. 스트립이 사라진 지금도 아이콘 형태를 지키는 이유가 그것이다.
+ * <p>2026-08-16엔 정반대로 판단했었다 — 전폭 알약이 "그 줄만큼 공개 책을 아래로 민다"고 보고 아이콘으로
+ * 줄였다. 그 논거는 지금 형태엔 안 맞는다: 캡션이 붙으면서 <b>아이콘 쪽이 세로로 더 먹었다</b>
+ * (원 56 + 여백 4 + 캡션 ≈ 80px 대 바 44px). 되돌리는 쪽이 오히려 책에 자리를 돌려준다.
+ *
+ * <p><b>입력창이 아니다</b> — 생김새만 검색바고 누르면 「친구 찾기」 시트가 열린다. 인라인 form이면
+ * 결과 패널이 내 책방 본문을 통째로 갈아끼워야 하는데, 그게 애초에 검색을 시트로 뺀 이유다.
+ * 문구를 본문에 그려 두면 돋보기 하나로는 안 서던 "무엇을 아이디로 찾는지"가 눌러 보기 전에 선다.
  *
  * <p>셸의 지역 변수가 아니라 컴포넌트로 남긴 것은 계측 때문이다 — 상단 도구의 유무·모양을 셸의 네 분기
- * (핸들 유무 × 로딩)와 무관하게 한 곳에서 잰다.
+ * (핸들 유무 × 로딩)와 무관하게 한 곳에서 잰다. 남의 책방은 이걸 아예 안 받는다(셸이 안 넘긴다).
  */
 export function BookshopHeader({ onSearch }: { onSearch: () => void }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', gap: 10 }}>
-      <SearchEntryButton onOpen={onSearch} />
-    </div>
-  );
-}
-
-/** 아이콘 지름 — 손가락 최소치(44px)를 넉넉히 넘긴다. */
-const SEARCH_ICON_SIZE = 56;
-
-/**
- * 검색 진입 아이콘 — 캡션이 딸린 원형 버튼. 실제 입력·결과는
- * 「친구 찾기」 시트가 맡는다(인라인 form이면 결과 패널이 내 책방 본문을 통째로 갈아끼워야 했다).
- *
- * <p>캡션 「친구 찾기」를 지우지 않는다 — 돋보기 하나만으로는 "무엇을 찾는지"가 안 서고, 책이 가득한
- * 화면이라 책 검색으로도 읽힌다. 스크린리더용 이름은 옛 진입바 문구를 그대로 물려받아
- * (`아이디로 친구 찾기`) "아이디로 찾는다"는 유일한 사용법을 잃지 않는다.
- */
-function SearchEntryButton({ onOpen }: { onOpen: () => void }) {
   return (
     <button
       type="button"
       aria-label="아이디로 친구 찾기"
-      onClick={onOpen}
+      onClick={onSearch}
       style={{
-        flex: '0 0 auto',
-        marginTop: 4,
-        padding: 0,
-        border: 'none',
-        background: 'transparent',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        width: '100%',
+        height: SEARCH_BAR_HEIGHT,
+        marginBottom: 16,
+        padding: '0 14px',
+        borderRadius: 10,
+        // 캔버스가 종이톤 크림(#F3EEE4)이라 카드지 fill + 테두리라야 눌리는 자리로 뜬다.
+        background: 'var(--adaptiveGrey100, #FCFAF5)',
+        border: '1px solid var(--adaptiveGrey200, #E4DDD0)',
+        color: 'var(--adaptiveGrey600, #6F6A5E)',
+        fontSize: 14,
+        textAlign: 'left',
         cursor: 'pointer',
       }}
     >
-      <span
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: SEARCH_ICON_SIZE,
-          height: SEARCH_ICON_SIZE,
-          borderRadius: '50%',
-          fontSize: 20,
-          background: 'var(--adaptiveGrey100, #FCFAF5)',
-          border: '1px solid var(--adaptiveGrey200, #E4DDD0)',
-        }}
-      >
+      <span aria-hidden="true" style={{ fontSize: 16 }}>
         🔍
       </span>
-      <span style={{ display: 'block', marginTop: 6, fontSize: 11, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>
-        친구 찾기
-      </span>
+      아이디로 친구 찾기
     </button>
   );
 }
