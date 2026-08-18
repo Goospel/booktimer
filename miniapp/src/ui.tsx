@@ -224,12 +224,35 @@ export function BookCover({
  * 크림 캔버스(--bg) 위 카드지(--card-bg)는 명도차가 작아 배경만으로는 경계가 안 보인다 → 보더를 함께 쓰는
  * 웹 카드 문법을 그대로 옮겼다.
  */
+/**
+ * 연필 테두리 프레임 — 필터를 넣은 SVG를 data URI로 박아 `border-image`로 쓴다.
+ *
+ * <p>인라인 `<svg>`의 filter를 참조하지 않는 이유: 그러면 필터 정의가 DOM 어딘가에 상주해야 하고
+ * 요소마다 매번 변위를 계산한다. data URI는 이미지 디코드 때 1회만 계산돼 비트맵으로 캐시된다 —
+ * 카드가 수십 개 깔리는 화면(책방 격자)에서 이 차이가 실기기 페인트 비용으로 돌아온다(T-176 계열).
+ *
+ * <p>`8 / 8px`는 slice(타일에서 잘라낼 폭) / width(화면에 그릴 폭)다. width는 요소의 실제 `border-width`와
+ * **독립**이라, border는 1px로 두고 그림만 8px로 그려 레이아웃을 1px도 밀지 않는다.
+ *
+ * <p>⚠️ repeat은 `stretch`다. `round`(타일 반복)를 쓰면 필터로 흔들린 선의 타일 좌우 끝 높이가 서로 달라
+ * 이음매마다 어긋나 **점선처럼 끊겨 보인다**(실측). 타일이 300px로 큰 것도 같은 이유 — stretch로 늘려도
+ * 배율이 낮아 떨림이 뭉개지지 않는다.
+ */
+export const PENCIL_FRAME =
+  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='r' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.055' numOctaves='3' seed='7' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='3' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Crect x='1.3' y='1.3' width='297.4' height='297.4' rx='6' fill='none' stroke='%2355504A' stroke-width='2.4' filter='url(%23r)'/%3E%3C/svg%3E\") 8 / 8px stretch";
+
+/**
+ * 카드 테두리를 연필선으로. `border`는 1px 그대로 두고 `border-image`의 `/ 8px`가 그림 폭을 정한다 —
+ * 레이아웃이 1px도 안 밀리므로 `padding`을 건드릴 필요가 없다.
+ * `borderRadius`는 border-image 렌더링에는 무시되지만 배경 클리핑에는 그대로 먹으므로 남긴다.
+ */
 export const sectionStyle = {
   marginTop: 20,
   padding: 16,
   borderRadius: 12,
   background: '#FCFAF5',
-  border: '1px solid #E4DDD0',
+  border: '1px solid transparent',
+  borderImage: PENCIL_FRAME,
 } as const;
 
 /**

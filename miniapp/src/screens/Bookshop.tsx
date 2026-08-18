@@ -11,7 +11,7 @@ import {
   validateHandleFormat,
 } from '../api';
 import { useBackClose } from '../back';
-import { ErrorMessage, Loading, Screen, Sheet } from '../ui';
+import { ErrorMessage, Loading, PENCIL_FRAME, Screen, Sheet } from '../ui';
 import { Profile } from './Profile';
 import { BookMargin, StoryComposer } from './Story';
 
@@ -277,7 +277,8 @@ export function BookshopHeader({ onSearch }: { onSearch: () => void }) {
         borderRadius: 10,
         // 캔버스가 종이톤 크림(#F3EEE4)이라 카드지 fill + 테두리라야 눌리는 자리로 뜬다.
         background: 'var(--adaptiveGrey100, #FCFAF5)',
-        border: '1px solid var(--adaptiveGrey200, #E4DDD0)',
+        border: '1px solid transparent',
+        borderImage: PENCIL_FRAME,
         color: 'var(--adaptiveGrey600, #6F6A5E)',
         fontSize: 14,
         cursor: 'pointer',

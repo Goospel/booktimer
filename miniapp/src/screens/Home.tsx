@@ -13,7 +13,7 @@ import {
   requestNotificationAgreement,
   watchRewardAd,
 } from '../toss';
-import { Avatar, BookCover, CoverInitial, ErrorMessage, Screen, Sheet, sectionStyle } from '../ui';
+import { Avatar, BookCover, CoverInitial, ErrorMessage, PENCIL_FRAME, Screen, Sheet, sectionStyle } from '../ui';
 import { HomeFeedBox } from './HomeFeed';
 
 /** 알림 동의 결과 캐시 — 값은 토스가 준 결과 문자열 그대로. 정본은 토스이고 이건 카드 노출 스위치일 뿐이다. */
@@ -865,6 +865,8 @@ export function Home({
           padding: '28px 20px',
           borderRadius: 16,
           background: 'var(--adaptiveGrey100, #FCFAF5)',
+          border: '1px solid transparent',
+          borderImage: PENCIL_FRAME,
           textAlign: 'center',
         }}
       >

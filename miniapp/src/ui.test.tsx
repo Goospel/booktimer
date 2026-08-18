@@ -7,7 +7,18 @@ import { describe, expect, it } from 'vitest';
 import type { DashboardResponse } from './api';
 import { History } from './screens/History';
 import { Home } from './screens/Home';
-import { BookCover, COVER_PALETTE, ErrorMessage, GrassGrid, Screen, coverColor, coverSource, initialOf } from './ui';
+import {
+  BookCover,
+  COVER_PALETTE,
+  ErrorMessage,
+  GrassGrid,
+  PENCIL_FRAME,
+  Screen,
+  coverColor,
+  coverSource,
+  initialOf,
+  sectionStyle,
+} from './ui';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
 // 홈이 렌더 중에 알림 동의 캐시를 읽는다. 여기선 describe 본문에서도 홈을 그리므로(수집 시점) 모듈 최상단에서 심는다.
@@ -288,7 +299,21 @@ describe('섹션 카드·화면 제목', () => {
 
   it('섹션은 크림 캔버스 위 카드지로 뜬다 — 배경만으로는 종이톤끼리 경계가 안 보인다', () => {
     expect(markup).toContain('background:#FCFAF5'); // 웹 --card-bg
-    expect(markup).toContain('border:1px solid #E4DDD0'); // 웹 --border
+    // 경계를 긋는 주체가 1px 실선에서 연필선(border-image)으로 바뀌었다. 테두리가 통째로 빠지면
+    // 종이톤 카드가 종이톤 캔버스에 녹아 사라지므로, 그리는 수단이 실재하는지를 못 박는다.
+    expect(markup).toContain('border:1px solid transparent');
+    expect(markup).toMatch(/border-image:url\(&quot;data:image\/svg\+xml/);
+  });
+
+  it('그림 폭을 border-width와 분리해 레이아웃을 밀지 않는다', () => {
+    // `8 / 8px`의 뒷값이 화면에 그릴 폭이고, 요소의 border는 1px 그대로다. 이 분리가 깨지면
+    // 테두리가 두꺼워진 만큼 카드가 커져 화면 전체가 밀린다.
+    expect(PENCIL_FRAME).toMatch(/\s8\s\/\s8px\sstretch$/);
+    expect(sectionStyle.border).toBe('1px solid transparent');
+  });
+
+  it('타일 반복(round)이 아니라 stretch다 — 흔들린 선은 반복하면 이음매마다 끊긴다', () => {
+    expect(PENCIL_FRAME).not.toMatch(/\sround$/);
   });
 
   it('화면 제목은 웹 브랜드와 같은 세리프(고운바탕)로 쓴다', () => {
@@ -363,10 +388,12 @@ describe('웹 브랜드 재테마 (global.css)', () => {
     expect(override).toMatch(/--adaptiveGrey600:\s*#6F6A5E/); // 웹 --muted
   });
 
-  it('본문 폰트를 웹 고운돋움으로 바꾸고 실제로 받아온다 — 스택만 바꾸면 폰트가 없어 시스템 폰트로 떨어진다', () => {
+  it('본문 폰트를 연필 손글씨로 바꾸고 실제로 받아온다 — 스택만 바꾸면 폰트가 없어 시스템 폰트로 떨어진다', () => {
     // TDS도 `body`에 폰트 스택을 주입하므로 여기도 `html body`(0-0-2)로 눌러야 한다.
-    expect(css).toMatch(/html\s+body\s*\{[^}]*font-family:[^;]*'Gowun Dodum'/);
-    expect(css).toContain('Gowun+Dodum');
+    // Gaegu가 스택 **맨 앞**이어야 한다 — 뒤에 두면 고운돋움이 먼저 잡혀 손글씨가 영영 안 뜬다.
+    expect(css).toMatch(/html\s+body\s*\{[^}]*font-family:\s*'Gaegu'/);
+    expect(css).toContain('family=Gaegu');
+    expect(css).toMatch(/html\s+body\s*\{[^}]*font-family:[^;]*'Gowun Dodum'/); // 폴백은 남긴다
   });
 });
 
@@ -380,14 +407,25 @@ describe('웹 브랜드 재테마 (global.css)', () => {
 describe('TDS Button 재색칠 (global.css)', () => {
   const css = readFileSync(new URL('./global.css', import.meta.url), 'utf8');
 
-  it('primary 버튼 채움을 세이지로 덮는다 — 인라인 커스텀 프로퍼티라 !important가 필요하다', () => {
+  it('primary 버튼의 토스 블루 채움을 눕히고 연필 해칭으로 바꾼다 — 인라인 프로퍼티라 !important가 필요하다', () => {
     expect(css).toMatch(/--button-background-color:\s*#3182f6/); // 선택자 키(토스 블루 인라인 값)
-    expect(css).toMatch(/--button-background-color:\s*#6E8A6A\s*!important/); // 웹 --accent
+    // 채움을 투명으로 눕히지 않으면 TDS 내부 레이어가 테두리·해칭을 통째로 덮는다(실측).
+    expect(css).toMatch(/--button-background-color:\s*transparent\s*!important/);
+    expect(css).toMatch(/repeating-linear-gradient\([^)]*rgba\(110,\s*138,\s*106/); // 세이지 해칭
   });
 
-  it('weak 버튼도 연세이지로 덮는다 — 앱 버튼 대부분이 weak다', () => {
-    expect(css).toMatch(/--button-background-color:\s*#E7EEE2\s*!important/);
+  it('primary 글자를 잉크색으로 되돌린다 — 흰 글자는 해칭 위에서 읽히지 않는다', () => {
     expect(css).toMatch(/--button-color:\s*#4F6B4C\s*!important/); // 웹 --accent-hover
+  });
+
+  it('weak 버튼은 채움 없이 흐린 연필선만 — 이게 primary(해칭)와의 위계를 만든다', () => {
+    expect(css).toMatch(/--button-background-color:\s*rgba\(100,\s*168,\s*255,\s*0\.15\)/); // 선택자 키
+    expect(css).toMatch(/border-image:\s*var\(--pencil-frame-soft\)/);
+  });
+
+  it('연필 프레임 두 종이 정의돼 있다 — 변수가 비면 border-image가 조용히 사라진다', () => {
+    expect(css).toMatch(/--pencil-frame:\s*url\("data:image\/svg\+xml/);
+    expect(css).toMatch(/--pencil-frame-soft:\s*url\("data:image\/svg\+xml/);
   });
 
   it('눌림·그라디언트·로더까지 같이 옮긴다 — 채움만 바꾸면 누를 때 파랑이 번쩍인다', () => {

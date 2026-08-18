@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import type { ContributionGraph, MonthlySection } from '../api';
 import { fetchHistory } from '../api';
 import { formatDuration } from '../format';
-import { ErrorMessage, GrassGrid, LEVEL_COLORS, MANUAL_OUTLINE, Screen, monthLabelPositions } from '../ui';
+import { ErrorMessage, GrassGrid, LEVEL_COLORS, MANUAL_OUTLINE, PENCIL_FRAME, Screen, monthLabelPositions } from '../ui';
 
 /** 기록 화면 잔디 칸 — `GrassGrid`의 기본값과 같아야 월 라벨이 그 열 위에 선다. */
 const CELL_SIZE = 11;
@@ -179,6 +179,8 @@ function Stat({ label, value }: { label: string; value: string }) {
         padding: '16px 12px',
         borderRadius: 12,
         background: 'var(--adaptiveGrey100, #FCFAF5)',
+        border: '1px solid transparent',
+        borderImage: PENCIL_FRAME,
         textAlign: 'center',
       }}
     >
