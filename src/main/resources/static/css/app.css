@@ -89,10 +89,19 @@
        축약형에 var()를 통째로 넣으면(그 변수가 또 var를 품으면) Chrome이 선언 전체를 무효로 버린다
        (실측: slice가 기본값 100%로 남아 테두리가 통째로 안 그려진다). slice·width·repeat은 리터럴로. */
 
-    /* 종이 결 — feTurbulence 노이즈 3겹(알갱이·섬유결·큰 얼룩). 이미지 파일도 요청도 0건. */
-    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
-    --fiber: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='440' height='440'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008 0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='440' height='440' filter='url(%23f)'/%3E%3C/svg%3E");
-    --mottle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='600' height='600' filter='url(%23m)'/%3E%3C/svg%3E");
+    /* 종이 결 — feTurbulence 노이즈 2겹(알갱이·섬유결). 이미지 파일도 요청도 0건.
+
+       ⚠️ 노이즈를 색이 아니라 **알파**로 얹는다. 한때 무채색 회색 rect를 30% 불투명도로 깔았는데,
+       그건 결이 아니라 안개다 — 회색을 30% 섞는 것은 밑에 깔린 검정을 회색으로 들어올리는 일이라,
+       종이 배경 위에서는 결로 보여도 책 표지 사진 위에서는 한 겹 바랜 것처럼 반투명해진다
+       (사용자 반려 2026-08-18, T-191). 글자는 대비가 커서 버티는 탓에 웹·목 모드 검증을 모두
+       통과했고 표지에서만 티가 났다. feColorMatrix의 알파 행으로 옮기면(`0.9*R - 0.42`, 음수는
+       0으로 클램프) 대부분의 픽셀이 완전투명이라 밑의 색을 건드리지 않고 드문 입자만 어둡게
+       얹힌다 — 연필선을 「흔든 선」에서 「농도 얼룩」으로 고친 것과 같은 수법이다(T-190).
+
+       큰 얼룩(mottle) 겹은 뺐다: 알파로 옮기면 결이 아니라 넓은 어두운 반점(때)이 된다. */
+    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.17 0 0 0 0 0.16 0 0 0 0 0.13 0.9 0 0 0 -0.42'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+    --fiber: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='440' height='440'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008 0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.20 0 0 0 0 0.18 0 0 0 0 0.14 0.55 0 0 0 -0.30'/%3E%3C/filter%3E%3Crect width='440' height='440' filter='url(%23f)'/%3E%3C/svg%3E");
 }
 
 * { box-sizing: border-box; }
@@ -132,9 +141,8 @@ body::before {
     inset: 0;
     pointer-events: none;
     z-index: 9999;
-    background-image: var(--grain), var(--fiber), var(--mottle);
-    background-size: 300px 300px, 440px 440px, 600px 600px;
-    opacity: .30;
+    background-image: var(--grain), var(--fiber);
+    background-size: 300px 300px, 440px 440px;
 }
 
 .container {
@@ -515,36 +523,31 @@ button, .btn {
     transition: background-color .15s ease;
 }
 
-/* primary — 단색 채움 대신 연필로 칠한 사선 해칭.
-   글자는 잉크색으로 둔다(흰 글자는 해칭 위에서 읽히지 않는다). */
+/* primary — 단색 채움 대신 색연필로 살짝 칠한 연한 세이지 면.
+   한때 사선 해칭으로 칠했는데 사선이 글자를 가로질러 지저분했다(사용자 반려 2026-08-18).
+   글자는 딥 세이지로 둔다(연한 채움 위에서 흰 글자는 읽히지 않는다). */
 .btn-primary {
-    background-color: transparent;
-    background-image: repeating-linear-gradient(48deg,
-        rgba(110, 138, 106, .55) 0 2.2px, transparent 2.2px 5px);
-    color: var(--text);   /* 해칭과 같은 세이지 계열이면 글자가 묻힌다 */
+    background-color: rgba(110, 138, 106, .20);
+    color: var(--accent-hover);
 }
 .btn-primary:hover {
-    background-image: repeating-linear-gradient(48deg,
-        rgba(110, 138, 106, .75) 0 2.4px, transparent 2.4px 5px);
+    background-color: rgba(110, 138, 106, .32);
 }
 
 /* 비활성(disabled) 버튼 — '다시 분석' 일일 한도 소진 등으로 막혔을 때, 배경색을 명시한 버튼(.btn-primary)이
    그대로 눌리는 것처럼 보이던 문제를 막는다. 옅게 + 금지 커서로 "지금은 못 누름"을 시각화한다. */
 button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
-.btn-primary:disabled:hover { background: var(--accent); } /* 비활성 중엔 hover 색 변화도 끈다 */
+.btn-primary:disabled:hover { background-color: rgba(110, 138, 106, .20); } /* 비활성 중엔 hover 색 변화도 끈다 */
 
 .btn-danger {
-    background-color: transparent;
-    background-image: repeating-linear-gradient(48deg,
-        rgba(220, 38, 38, .40) 0 2.2px, transparent 2.2px 5px);
+    background-color: rgba(220, 38, 38, .12);
     color: var(--danger);
 }
 .btn-danger:hover {
-    background-image: repeating-linear-gradient(48deg,
-        rgba(220, 38, 38, .58) 0 2.4px, transparent 2.4px 5px);
+    background-color: rgba(220, 38, 38, .20);
 }
 
-/* ghost — 채움 없이 흐린 연필선만. 이게 primary와의 위계를 만든다. */
+/* ghost — 채움 없이 흐린 연필선만. 이게 primary(연한 채움)와의 위계를 만든다. */
 .btn-ghost {
     background: transparent;
     color: var(--muted);
@@ -3656,17 +3659,15 @@ body.dashboard-page #dashboard-app { gap: 20px; }
     border: 1px solid transparent;
     border-image: var(--pencil-frame) 8 / 8px stretch;
     border-radius: 12px;
-    background-color: transparent;
-    background-image: repeating-linear-gradient(48deg,
-        rgba(110, 138, 106, .55) 0 2.2px, transparent 2.2px 5px);
-    color: var(--text);   /* 흰 글자는 해칭 위에서 읽히지 않고, 세이지 글자는 해칭에 묻힌다 */
+    background-color: rgba(110, 138, 106, .20);
+    color: var(--accent-hover);   /* 연한 채움 위에서 흰 글자는 읽히지 않는다 */
     font-family: inherit;
     font-weight: 700;
     font-size: 16px;
     cursor: pointer;
     transition: background .15s ease;
 }
-.auth-page .auth-btn-primary:hover { background: var(--accent-hover); }
+.auth-page .auth-btn-primary:hover { background-color: rgba(110, 138, 106, .32); }
 
 /* 구분선 '또는' */
 .auth-page .auth-divider {
