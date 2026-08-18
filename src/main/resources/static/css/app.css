@@ -8,7 +8,7 @@
 
 :root {
     /* 종이톤 + 세이지 그린 팔레트. 이름은 유지(무파괴), 값만 교체 → 전역 리프레시. */
-    --bg: #F3EEE4;          /* 종이 배경(따뜻한 크림) */
+    --bg: #F7F2E8;          /* 종이 배경(따뜻한 크림) — 위에 결이 옅게 얹히는 것까지 감안한 값 */
     --card-bg: #FCFAF5;     /* 카드 표면(종이톤 화이트) */
     --text: #2C2A24;        /* 잉크(따뜻한 차콜) */
     --muted: #6F6A5E;       /* 흐린 글자 */
@@ -99,9 +99,17 @@
        0으로 클램프) 대부분의 픽셀이 완전투명이라 밑의 색을 건드리지 않고 드문 입자만 어둡게
        얹힌다 — 연필선을 「흔든 선」에서 「농도 얼룩」으로 고친 것과 같은 수법이다(T-190).
 
-       큰 얼룩(mottle) 겹은 뺐다: 알파로 옮기면 결이 아니라 넓은 어두운 반점(때)이 된다. */
-    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.17 0 0 0 0 0.16 0 0 0 0 0.13 0.9 0 0 0 -0.42'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
-    --fiber: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='440' height='440'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008 0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.20 0 0 0 0 0.18 0 0 0 0 0.14 0.55 0 0 0 -0.30'/%3E%3C/filter%3E%3Crect width='440' height='440' filter='url(%23f)'/%3E%3C/svg%3E");
+       큰 얼룩(mottle) 겹은 뺐다: 알파로 옮기면 결이 아니라 넓은 어두운 반점(때)이 된다.
+
+   ⚠️ 알파로 옮기는 것만으로는 부족하고 **밀도**도 결의 일부다. 한때 입자가 픽셀의 61%를 덮었는데,
+   그러면 종이색 토큰을 아무리 밝혀도 눈에 들어오는 건 합성 결과라 종이가 칙칙해진다 — #F3EEE4를
+   깔아도 실제로 보이는 색은 #E5E0D6이었다(사용자 반려 2026-08-19, T-193). 표지도 다시 뿌예진다:
+   입자색은 중간 어둠이라 표지의 가장 어두운 부분보다 밝고, 그런 입자를 많이 깔면 검정을 들어올린다
+   (T-191과 같은 병이고 이번엔 원인이 opacity가 아니라 밀도다). 그래서 알파 오프셋을 올려 켜지는
+   픽셀을 25%로 줄이고 입자색도 한 단계 올렸다.
+   ⚠️ 세기를 고칠 땐 캔버스로 합성색을 재서 판정한다 — 눈으로는 종이색 변화와 구별이 안 된다. */
+    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.26 0 0 0 0 0.24 0 0 0 0 0.20 0.7 0 0 0 -0.40'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+    --fiber: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='440' height='440'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008 0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.28 0 0 0 0 0.26 0 0 0 0 0.21 0.4 0 0 0 -0.26'/%3E%3C/filter%3E%3Crect width='440' height='440' filter='url(%23f)'/%3E%3C/svg%3E");
 }
 
 * { box-sizing: border-box; }
@@ -2225,7 +2233,7 @@ body.history-page.history-wide .container { max-width: 940px; }
    스코프: .pbti-* 신규 클래스 + personality 전용 .personality-* 와 .carousel-*
    (이 둘은 personality 페이지에서만 쓰여 재스킨해도 회귀 0). 공유 클래스
    (.card · .greeting · .status-line · .tag-chip · .btn-* · .record-* · .link-row)는 미접촉.
-   토큰: --bg #F3EEE4 · --card-bg #FCFAF5 · --text #2C2A24 · --muted #6F6A5E
+   토큰: --bg #F7F2E8 · --card-bg #FCFAF5 · --text #2C2A24 · --muted #6F6A5E
         · --accent #6E8A6A · --accent-hover #4F6B4C · --border #E4DDD0 · --sage-soft #E7EEE2
    ═══════════════════════════════════════════════════════════════════════ */
 

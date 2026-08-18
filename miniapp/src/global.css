@@ -35,7 +35,7 @@ body {
  * `input, select, textarea, button { font-family: inherit }`이 body 값을 그대로 물려준다.
  */
 html body {
-  background: #F3EEE4; /* 웹 --bg (종이톤 크림) */
+  background: #F7F2E8; /* 웹 --bg (종이톤 크림) */
   font-family: 'Gaegu', 'Gowun Dodum', 'Toss Product Sans', -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic',
     sans-serif;
   /* 손글씨체 보정 — Gaegu는 x-height가 작아 같은 크기에서 눈에 띄게 작고 가늘다.
@@ -63,6 +63,13 @@ html body {
  * 밑의 색을 건드리지 않고 드문 입자만 어둡게 얹힌다 — 연필선을 「흔든 선」에서 「농도 얼룩」으로 고친
  * 것과 같은 수법이다(T-190). 큰 얼룩(mottle) 겹은 뺐다: 알파로 옮기면 결이 아니라 넓은 반점(때)이 된다.
  *
+ * ⚠️ 알파로 옮기는 것만으로는 부족하고 **밀도**도 결의 일부다. 한때 입자가 픽셀의 61%를 덮었는데,
+ * 그러면 캔버스 토큰을 아무리 밝혀도 눈에 들어오는 건 합성 결과라 종이가 칙칙하고, 표지도 다시
+ * 뿌예진다 — 입자색은 중간 어둠이라 표지의 가장 어두운 부분보다 밝기 때문이다(사용자 반려
+ * 2026-08-19, T-193 · T-191과 같은 병이고 이번엔 원인이 opacity가 아니라 밀도다). 알파 오프셋을
+ * 올려 켜지는 픽셀을 25%로 줄였다. 세기를 고칠 땐 캔버스로 합성색을 재서 판정한다 — 눈으로는
+ * 종이색 변화와 구별이 안 된다.
+ *
  * ⚠️ `mix-blend-mode`를 쓰지 않는다. blend는 매 프레임 backdrop과 다시 섞어야 해서 스크롤 내내 전면
  * 재합성을 강제한다 — `.margin-fresh` 맥동이 표지를 초당 60번 재래스터화하던 것과 같은 클래스다(T-176).
  * 값이 변하지 않는 타일 배경은 페이지 래스터에 한 번 그려지고 끝이라 스크롤해도 재계산이 없다.
@@ -75,8 +82,8 @@ body::before {
   inset: 0;
   pointer-events: none;
   z-index: 90;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.17 0 0 0 0 0.16 0 0 0 0 0.13 0.9 0 0 0 -0.42'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E"),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='440' height='440'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008 0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.20 0 0 0 0 0.18 0 0 0 0 0.14 0.55 0 0 0 -0.30'/%3E%3C/filter%3E%3Crect width='440' height='440' filter='url(%23f)'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.26 0 0 0 0 0.24 0 0 0 0 0.20 0.7 0 0 0 -0.40'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='440' height='440'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008 0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.28 0 0 0 0 0.26 0 0 0 0 0.21 0.4 0 0 0 -0.26'/%3E%3C/filter%3E%3Crect width='440' height='440' filter='url(%23f)'/%3E%3C/svg%3E");
   background-size: 300px 300px, 440px 440px;
 }
 
@@ -243,15 +250,16 @@ button {
  * 콜론 뒤 공백 차이에 걸리지 않는다.
  */
 .goal-wheels [style*='--wheel-top-shadow-gradient'] {
-  /* #F3EEE4 = 웹 --bg (종이톤 크림) */
+  /* #F7F2E8 = 위 `html body`의 캔버스색. 휠을 캔버스로 사라지게 하는 마스크라 둘이 같아야
+     한다 — 어긋나면 휠 위아래로 띠가 진다(ui.test.tsx가 둘을 묶어 둔다). */
   --wheel-top-shadow-gradient: linear-gradient(
     to bottom,
-    rgba(243, 238, 228, 0.95) 0%,
-    rgba(243, 238, 228, 0.45) 100%
+    rgba(247, 242, 232, 0.95) 0%,
+    rgba(247, 242, 232, 0.45) 100%
   ) !important;
   --wheel-bottom-shadow-gradient: linear-gradient(
     to bottom,
-    rgba(243, 238, 228, 0.45) 0%,
-    rgba(243, 238, 228, 0.95) 100%
+    rgba(247, 242, 232, 0.45) 0%,
+    rgba(247, 242, 232, 0.95) 100%
   ) !important;
 }

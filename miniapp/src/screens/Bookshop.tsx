@@ -275,7 +275,7 @@ export function BookshopHeader({ onSearch }: { onSearch: () => void }) {
         marginBottom: 16,
         padding: '0 14px',
         borderRadius: 10,
-        // 캔버스가 종이톤 크림(#F3EEE4)이라 카드지 fill + 테두리라야 눌리는 자리로 뜬다.
+        // 캔버스가 종이톤 크림(#F7F2E8)이라 카드지 fill + 테두리라야 눌리는 자리로 뜬다.
         background: 'var(--adaptiveGrey100, #FCFAF5)',
         border: '1px solid transparent',
         borderImage: PENCIL_FRAME,
