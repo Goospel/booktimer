@@ -28,7 +28,7 @@ import {
 } from '../api';
 import { useBackClose } from '../back';
 import { REWARD_AD_GROUP_ID, watchRewardAd } from '../toss';
-import { Avatar, ErrorMessage, Loading, Screen, Sheet } from '../ui';
+import { Avatar, ErrorMessage, Loading, PENCIL_FRAME, Screen, Sheet } from '../ui';
 import { waiverErrorMessage } from './Home';
 import { BookGrid, SECTIONS } from './Library';
 import { hasFreshStory } from './Story';
@@ -891,7 +891,7 @@ export function SafetyPanel({
         value={reason}
         disabled={busy}
         onChange={(e) => setReason(e.target.value as ReportReason)}
-        style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #E4DDD0' }}
+        style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid transparent', borderImage: PENCIL_FRAME }}
       >
         {REPORT_REASONS.map((r) => (
           <option key={r.value} value={r.value}>

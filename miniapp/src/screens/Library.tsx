@@ -14,7 +14,7 @@ import {
 import { useBackClose } from '../back';
 import { Coachmark } from '../coachmark';
 import { formatDuration } from '../format';
-import { BookCover, ErrorMessage, Loading, Screen, Sheet } from '../ui';
+import { BookCover, ErrorMessage, Loading, PENCIL_FRAME, Screen, Sheet } from '../ui';
 import { BookCarousel } from './Home';
 import { MarginCard } from './Story';
 
@@ -179,7 +179,8 @@ export function MarginBoxView({
   return (
     <div
       data-margin-box=""
-      style={{ marginTop: 16, padding: 14, border: '1px solid #E4DDD0', borderRadius: 16, background: '#FFFDF8' }}
+      style={{ marginTop: 16, padding: 14, border: '1px solid transparent',
+ borderImage: PENCIL_FRAME, borderRadius: 16, background: '#FFFDF8' }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline' }}>
         <Text typography="st11" style={{ flex: 1 }}>
@@ -526,7 +527,8 @@ export function Shelf({
               style={{
                 flex: 1,
                 height: HANDLE_ROW_HEIGHT,
-                border: '1px solid #D8D2C4',
+                border: '1px solid transparent',
+                borderImage: PENCIL_FRAME,
                 borderRadius: 14,
                 background: '#FCFAF5',
                 color: '#2C2C2A',
@@ -812,7 +814,8 @@ function SheetRow({
         marginBottom: 8,
         padding: '15px 14px',
         // 시트 바닥과 같은 크림색이라 배경만으론 경계가 안 보인다 — 테두리가 있어야 줄이 버튼으로 읽힌다.
-        border: '1px solid #E4DDD0',
+        border: '1px solid transparent',
+ borderImage: PENCIL_FRAME,
         borderRadius: 10,
         background: '#FFFDF8',
         color: danger ? '#A32D2D' : '#2C2C2A',
@@ -837,7 +840,8 @@ const HANDLE_ROW_HEIGHT = 38;
 export const handleStyle = {
   flex: '0 0 auto',
   padding: '8px 14px',
-  border: '1px solid #D8D2C4',
+  border: '1px solid transparent',
+  borderImage: PENCIL_FRAME,
   borderRadius: 10,
   background: '#FCFAF5',
   color: '#2C2C2A',
