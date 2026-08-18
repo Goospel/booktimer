@@ -412,6 +412,33 @@ describe('웹 브랜드 재테마 (global.css)', () => {
 });
 
 /**
+ * 종이 결 — 화면 전체를 덮는 고정 레이어라, 여기서 잘못 고르면 **표지 사진이 통째로 바랜다**.
+ *
+ * 한때 회색 노이즈(`saturate 0`으로 무채색화한 불투명 rect)를 `opacity: .30`으로 깔았다. 종이 배경
+ * 위에서는 결로 보이지만, 회색을 30% 섞는 것은 곧 **검정을 회색으로 들어올리는** 일이라 사진 위에서는
+ * 그냥 안개다 — 책 표지가 한 겹 벗겨진 것처럼 반투명하게 바래 보였다(사용자 반려 2026-08-18).
+ * 글자는 대비가 커서 버텨 웹·목 모드 검증을 모두 통과했고, 표지에서만 티가 났다.
+ *
+ * 그래서 노이즈를 **색이 아니라 알파**로 옮긴다(연필선을 농도 얼룩으로 고친 것과 같은 수법).
+ * 대부분의 픽셀은 완전투명이고 드문 입자만 어둡게 얹혀, 결은 남되 밑에 깔린 색을 들어올리지 않는다.
+ */
+describe('종이 결 (global.css)', () => {
+  const css = readFileSync(new URL('./global.css', import.meta.url), 'utf8');
+  // 여는 중괄호까지 붙여 규칙 블록을 잡는다 — 두 이름 다 위쪽 주석에서 먼저 언급돼(파일 8행의
+  // `html:root`) 중괄호 없이 자르면 구간이 통째로 비고, 그러면 not.* 단언이 공허하게 통과한다.
+  const veil = css.slice(css.indexOf('body::before {'), css.indexOf('html:root {'));
+
+  it('노이즈를 색이 아니라 알파로 얹는다 — 무채색 회색을 깔면 표지의 검정이 들려 뿌옇게 바랜다', () => {
+    expect(veil).toMatch(/feColorMatrix type='matrix'/); // 알파 행을 직접 쓴다
+    expect(veil).not.toContain("type='saturate'"); // 회색 장막
+  });
+
+  it('레이어 전체를 반투명으로 깔지 않는다 — opacity는 밑의 모든 픽셀을 함께 들어올린다', () => {
+    expect(veil).not.toMatch(/opacity:\s*0?\.\d/);
+  });
+});
+
+/**
  * TDS Button 재색칠 — Button만은 색을 CSS 변수로 안 읽는다. TDS가 JS 팔레트의 리터럴 hex를 렌더 시
  * **인라인 커스텀 프로퍼티**(`--button-background-color: #3182f6`)로 박아 넣어, `--adaptive*` 오버라이드가
  * 닿지 않는다(실측). 인라인을 이기려면 저자 규칙 + `!important`뿐이고, variant를 가릴 속성·클래스가 없어
@@ -421,18 +448,22 @@ describe('웹 브랜드 재테마 (global.css)', () => {
 describe('TDS Button 재색칠 (global.css)', () => {
   const css = readFileSync(new URL('./global.css', import.meta.url), 'utf8');
 
-  it('primary 버튼의 토스 블루 채움을 눕히고 연필 해칭으로 바꾼다 — 인라인 프로퍼티라 !important가 필요하다', () => {
+  it('primary 버튼의 토스 블루 채움을 눕히고 연한 세이지로 바꾼다 — 인라인 프로퍼티라 !important가 필요하다', () => {
     expect(css).toMatch(/--button-background-color:\s*#3182f6/); // 선택자 키(토스 블루 인라인 값)
-    // 채움을 투명으로 눕히지 않으면 TDS 내부 레이어가 테두리·해칭을 통째로 덮는다(실측).
+    // 채움을 투명으로 눕히지 않으면 TDS 내부 레이어가 테두리를 통째로 덮는다(실측).
     expect(css).toMatch(/--button-background-color:\s*transparent\s*!important/);
-    expect(css).toMatch(/repeating-linear-gradient\([^)]*rgba\(110,\s*138,\s*106/); // 세이지 해칭
+    expect(css).toMatch(/background-color:\s*rgba\(110,\s*138,\s*106,\s*0\.2\)\s*!important/); // 연한 세이지
   });
 
-  it('primary 글자를 잉크색으로 되돌린다 — 흰 글자는 해칭 위에서 읽히지 않는다', () => {
+  it('빗살무늬로 채우지 않는다 — 사선이 글자를 가로질러 지저분하다(사용자 반려)', () => {
+    expect(css).not.toContain('repeating-linear-gradient');
+  });
+
+  it('primary 글자를 잉크색으로 되돌린다 — 연한 채움 위에서 흰 글자는 읽히지 않는다', () => {
     expect(css).toMatch(/--button-color:\s*#4F6B4C\s*!important/); // 웹 --accent-hover
   });
 
-  it('weak 버튼은 채움 없이 흐린 연필선만 — 이게 primary(해칭)와의 위계를 만든다', () => {
+  it('weak 버튼은 채움 없이 흐린 연필선만 — 이게 primary(연한 채움)와의 위계를 만든다', () => {
     expect(css).toMatch(/--button-background-color:\s*rgba\(100,\s*168,\s*255,\s*0\.15\)/); // 선택자 키
     expect(css).toMatch(/border-image:\s*var\(--pencil-frame-soft\)/);
   });

@@ -38,7 +38,15 @@ html body {
 }
 
 /*
- * 종이 결 — 화면 전체를 덮는 고정 레이어(웹 app.css body::before와 같은 3겹: 알갱이·섬유결·큰 얼룩).
+ * 종이 결 — 화면 전체를 덮는 고정 레이어(웹 app.css body::before와 같은 2겹: 알갱이·섬유결).
+ *
+ * ⚠️ 노이즈를 색이 아니라 **알파**로 얹는다. 한때 무채색 회색 rect를 30% 불투명도로 깔았는데, 그건
+ * 결이 아니라 안개다 — 회색을 30% 섞는 것은 밑에 깔린 검정을 회색으로 들어올리는 일이라, 종이 배경
+ * 위에서는 결로 보여도 책 표지 사진 위에서는 한 겹 바랜 것처럼 반투명해진다(사용자 반려 2026-08-18,
+ * T-191). 글자는 대비가 커서 버티는 탓에 웹·목 모드 검증을 모두 통과했고 표지에서만 티가 났다.
+ * feColorMatrix의 알파 행으로 옮기면(`0.9*R - 0.42`, 음수는 0으로 클램프) 대부분의 픽셀이 완전투명이라
+ * 밑의 색을 건드리지 않고 드문 입자만 어둡게 얹힌다 — 연필선을 「흔든 선」에서 「농도 얼룩」으로 고친
+ * 것과 같은 수법이다(T-190). 큰 얼룩(mottle) 겹은 뺐다: 알파로 옮기면 결이 아니라 넓은 반점(때)이 된다.
  *
  * ⚠️ `mix-blend-mode`를 쓰지 않는다. blend는 매 프레임 backdrop과 다시 섞어야 해서 스크롤 내내 전면
  * 재합성을 강제한다 — `.margin-fresh` 맥동이 표지를 초당 60번 재래스터화하던 것과 같은 클래스다(T-176).
@@ -52,11 +60,9 @@ body::before {
   inset: 0;
   pointer-events: none;
   z-index: 9999;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E"),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='440' height='440'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008 0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='440' height='440' filter='url(%23f)'/%3E%3C/svg%3E"),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='600' height='600' filter='url(%23m)'/%3E%3C/svg%3E");
-  background-size: 300px 300px, 440px 440px, 600px 600px;
-  opacity: 0.3;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.17 0 0 0 0 0.16 0 0 0 0 0.13 0.9 0 0 0 -0.42'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='440' height='440'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008 0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.20 0 0 0 0 0.18 0 0 0 0 0.14 0.55 0 0 0 -0.30'/%3E%3C/filter%3E%3Crect width='440' height='440' filter='url(%23f)'/%3E%3C/svg%3E");
+  background-size: 300px 300px, 440px 440px;
 }
 
 /*
@@ -109,21 +115,23 @@ html:root {
  */
 .tds-mobile-button[style*='--button-background-color:#3182f6'],
 .tds-mobile-button[style*='--button-background-color: #3182f6'] {
-  /* 연필 테마 — 단색 채움을 걷고 사선 해칭 + 연필 테두리로 바꾼다. TDS가 내부 레이어로 칠하므로
-     변수를 투명으로 눕히지 않으면 그 레이어가 테두리·해칭을 통째로 덮는다. */
+  /* 연필 테마 — 토스 블루 단색 채움을 연한 세이지 + 연필 테두리로 바꾼다. TDS가 내부 레이어로
+     칠하므로 변수를 투명으로 눕히지 않으면 그 레이어가 테두리를 통째로 덮는다. 그래서 채움은
+     변수가 아니라 요소 자신의 background-color로 얹는다.
+     한때 사선 해칭으로 칠했는데 사선이 글자를 가로질러 지저분했다(사용자 반려 2026-08-18). */
   --button-background-color: transparent !important;
   --button-gradient-color: transparent !important;
-  --button-color: #4F6B4C !important; /* 웹 --accent-hover. 흰 글자는 해칭 위에서 읽히지 않는다 */
+  --button-color: #4F6B4C !important; /* 웹 --accent-hover. 흰 글자는 연한 채움 위에서 안 읽힌다 */
   --button-loader-color: #6E8A6A !important;
   border: 1px solid transparent !important;
   border-image: var(--pencil-frame) 8 / 8px stretch !important;
-  background-image: repeating-linear-gradient(48deg, rgba(110, 138, 106, 0.55) 0 2.2px, transparent 2.2px 5px) !important;
+  background-color: rgba(110, 138, 106, 0.2) !important;
 }
 
 /* weak — 앱 버튼 대부분이 이 variant다(연한 채움 + 색 글자 한 세트로 움직인다). */
 .tds-mobile-button[style*='--button-background-color:rgba(100, 168, 255, 0.15)'],
 .tds-mobile-button[style*='--button-background-color: rgba(100, 168, 255, 0.15)'] {
-  /* weak — 채움 없이 흐린 연필선만. 이게 primary(해칭)와의 위계를 만든다. */
+  /* weak — 채움 없이 흐린 연필선만. 이게 primary(연한 채움)와의 위계를 만든다. */
   --button-background-color: transparent !important;
   --button-color: #4F6B4C !important; /* 웹 --accent-hover */
   --button-dimmer-pressed-background-color: #6E8A6A !important;
