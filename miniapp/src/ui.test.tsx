@@ -358,7 +358,17 @@ describe('배경·color-scheme', () => {
 
   it('body에 웹 종이톤 캔버스를 칠한다 — 투명이면 기기 다크 캔버스가 그대로 비친다', () => {
     // `html body`(0-0-2)여야 한다 — TDS가 나중에 주입하는 `body`(0-0-1) 규칙과 동률이면 순서로 진다.
-    expect(read('./global.css')).toMatch(/html\s+body\s*\{[^}]*background:\s*#F3EEE4/); // 웹 --bg
+    expect(read('./global.css')).toMatch(/html\s+body\s*\{[^}]*background:\s*#F7F2E8/); // 웹 --bg
+  });
+
+  it('목표 휠 페이드가 캔버스와 같은 색이다 — 어긋나면 휠 위아래에 띠가 진다', () => {
+    // TDS 휠의 위아래 그라데이션은 캔버스로 「사라지게」 하는 마스크라, 캔버스 색이 바뀌면
+    // 여기도 함께 바뀌어야 한다. 손으로 동기화되는 두 값이라 한쪽만 고치기 쉽다.
+    const css = read('./global.css');
+    const bg = /html\s+body\s*\{[^}]*background:\s*(#[0-9A-Fa-f]{6})/.exec(css)?.[1] ?? '';
+    const rgb = [1, 3, 5].map((i) => parseInt(bg.substr(i, 2), 16)).join(', ');
+    expect(bg).toMatch(/^#[0-9A-Fa-f]{6}$/); // 위 정규식이 빗나가면 아래 단언이 공허해진다
+    expect(css).toContain(`rgba(${rgb}, 0.95)`);
   });
 
   it('TDS Text를 블록으로 되돌린다 — TDS가 호출부의 display:block을 inline-block으로 덮어써 줄이 붙는다', () => {
