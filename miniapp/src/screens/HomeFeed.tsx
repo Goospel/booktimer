@@ -32,8 +32,19 @@ export const EMPTY_MESSAGE: Record<FeedTab, string> = {
 /** 접힌 상태의 줄 수 — 폴드 아래 카드라 이보다 길면 홈이 피드에 잡아먹힌다. */
 export const PREVIEW_COUNT = 3;
 
-/** 소식 종류를 한눈에 가르는 표지 — 문장을 읽기 전에 무슨 일인지 보인다. */
-const EVENT_ICON: Record<SocialEvent['type'], string> = { FINISHED: '✅', STARTED: '📖', STORY: '✍️' };
+/**
+ * 소식 종류를 한눈에 가르는 표지 — 문장을 읽기 전에 무슨 일인지 보인다.
+ *
+ * <p>이모지(`✅📖✍️`)를 쓰다 <b>자체 팔레트의 색 점</b>으로 바꿨다(2026-08-18). 흔한 기본 이모지는
+ * 「AI가 만든 화면」이라는 인상을 줘서다. 다만 여기는 여러 줄이 세로로 쌓여 <b>훑어보는</b> 자리라
+ * 아이콘이 제 값을 하던 유일한 곳이라, 지우는 대신 이 앱 색으로 대체했다 — 세이지(완독)·베이지(시작)·
+ * 연보라(글)는 표지 색 팔레트와 같은 계열이다.
+ */
+const EVENT_COLOR: Record<SocialEvent['type'], string> = {
+  FINISHED: '#6E8A6A',
+  STARTED: '#C4A484',
+  STORY: '#9E8AA8',
+};
 
 /**
  * 그릴 탭 머리 — 뉴스가 꺼져 있으면(수집기 키 미설정) **「책 뉴스」 머리 자체를 안 그린다.**
@@ -296,22 +307,18 @@ export function FeedBox({
           row={(event: SocialEvent, index) => {
             const body = (
               <>
+                {/* 첫 줄 글자 높이에 맞춰 내린다 — 점이 작아 세로 가운데면 문장 위로 떠 보인다. */}
                 <span
                   aria-hidden="true"
                   style={{
                     flex: '0 0 auto',
-                    width: 28,
-                    height: 28,
+                    width: 7,
+                    height: 7,
+                    marginTop: 6,
                     borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 14,
-                    background: 'var(--adaptiveGrey200, #E4DDD0)',
+                    background: EVENT_COLOR[event.type],
                   }}
-                >
-                  {EVENT_ICON[event.type]}
-                </span>
+                />
                 {/* 한글 문장이 flex 자식이라 minWidth:0이 없으면 줄바꿈 대신 아이콘을 밀어낸다. */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <Text typography="st11" style={{ display: 'block', wordBreak: 'keep-all' }}>

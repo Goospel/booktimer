@@ -301,7 +301,7 @@ export function Settings({
         <ErrorMessage message={formatError ?? error} />
         {saved && error === null && formatError === null && (
           <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
-            ✅ 닉네임을 바꿨어요.
+            닉네임을 바꿨어요.
           </Text>
         )}
 

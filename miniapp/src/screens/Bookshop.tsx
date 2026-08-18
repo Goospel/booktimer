@@ -251,7 +251,11 @@ const SEARCH_BAR_HEIGHT = 44;
  *
  * <p><b>입력창이 아니다</b> — 생김새만 검색바고 누르면 「친구 찾기」 시트가 열린다. 인라인 form이면
  * 결과 패널이 내 책방 본문을 통째로 갈아끼워야 하는데, 그게 애초에 검색을 시트로 뺀 이유다.
- * 문구를 본문에 그려 두면 돋보기 하나로는 안 서던 "무엇을 아이디로 찾는지"가 눌러 보기 전에 선다.
+ * 문구가 본문에 있어 "무엇을 아이디로 찾는지"가 눌러 보기 전에 선다.
+ *
+ * <p>⚠️ <b>돋보기 이모지를 두지 않는다</b>(2026-08-18) — 흔한 기본 이모지는 「AI가 만든 화면」이라는
+ * 인상을 주고 사람들은 그 인상을 불쾌하게 여긴다. 문구가 이미 의미를 다 말하므로 아이콘 자체가 없어도
+ * 잃는 게 없어, 가운데 정렬로 문구만 세운다. 규칙 전체는 `no-emoji.test.ts`가 소스째 지킨다.
  *
  * <p>셸의 지역 변수가 아니라 컴포넌트로 남긴 것은 계측 때문이다 — 상단 도구의 유무·모양을 셸의 네 분기
  * (핸들 유무 × 로딩)와 무관하게 한 곳에서 잰다. 남의 책방은 이걸 아예 안 받는다(셸이 안 넘긴다).
@@ -265,7 +269,7 @@ export function BookshopHeader({ onSearch }: { onSearch: () => void }) {
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 8,
+        justifyContent: 'center',
         width: '100%',
         height: SEARCH_BAR_HEIGHT,
         marginBottom: 16,
@@ -276,13 +280,9 @@ export function BookshopHeader({ onSearch }: { onSearch: () => void }) {
         border: '1px solid var(--adaptiveGrey200, #E4DDD0)',
         color: 'var(--adaptiveGrey600, #6F6A5E)',
         fontSize: 14,
-        textAlign: 'left',
         cursor: 'pointer',
       }}
     >
-      <span aria-hidden="true" style={{ fontSize: 16 }}>
-        🔍
-      </span>
       아이디로 친구 찾기
     </button>
   );

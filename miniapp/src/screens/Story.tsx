@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { MarginBook, MarginEntry, MarginResponse } from '../api';
 import { ApiError, STORY_BG_CODES, createStory, deleteStory, fetchBookMargin } from '../api';
 import { relativeTime } from '../format';
-import { BookCover, CoverInitial, ErrorMessage, Loading, Screen } from '../ui';
+import { BookCover, ErrorMessage, Loading, Screen } from '../ui';
 
 /**
  * 여백 — <b>책에 딸린 자리</b>와 거기 쌓이는 글 (2026-08-16 재설계).
@@ -177,11 +177,7 @@ export function MarginView({
   return (
     <Screen title="여백" onBack={onBack}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        {book.coverUrl !== null ? (
-          <BookCover url={book.coverUrl} width={48} />
-        ) : (
-          <CoverInitial title={book.title} width={48} />
-        )}
+        <BookCover url={book.coverUrl} title={book.title} width={48} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <Text typography="st11" style={{ display: 'block', wordBreak: 'keep-all' }}>
             {book.title}

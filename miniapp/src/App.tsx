@@ -850,7 +850,6 @@ export function GuideBanner({ onStart, onDismiss }: { onStart: () => void; onDis
           cursor: 'pointer',
         }}
       >
-        <span style={{ fontSize: 15, lineHeight: 1 }}>👋</span>
         <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: sage }}>처음이신가요? 앱 사용법 보기</span>
         <span style={{ fontSize: 13, color: sage }}>›</span>
       </button>

@@ -14,7 +14,7 @@ import {
 import { useBackClose } from '../back';
 import { Coachmark } from '../coachmark';
 import { formatDuration } from '../format';
-import { BookCover, CoverInitial, ErrorMessage, Loading, Screen, Sheet } from '../ui';
+import { BookCover, ErrorMessage, Loading, Screen, Sheet } from '../ui';
 import { BookCarousel } from './Home';
 import { MarginCard } from './Story';
 
@@ -641,11 +641,7 @@ export function BookGrid({
             >
               {/* 표지를 감싸는 칸 — 발광 테두리·점 배지가 셀 폭이 아니라 표지에 붙어야 한다. */}
               <span className={fresh ? 'margin-fresh' : undefined} style={{ position: 'relative', display: 'inline-flex' }}>
-                {book.coverUrl !== null ? (
-                  <BookCover url={book.coverUrl} width={80} />
-                ) : (
-                  <CoverInitial title={book.title} width={80} />
-                )}
+                <BookCover url={book.coverUrl} title={book.title} width={80} />
                 {/* pulse는 움직임이라 `prefers-reduced-motion`에서 멈춘다 — 그때도 이 점은 남는다. */}
                 {fresh && (
                   <span
@@ -919,7 +915,7 @@ export function BookSearch({
           onClick={() => onAdd(row, 'READING')}
           style={{ ...rowStyle, marginTop: 8, borderRadius: 12, background: 'var(--adaptiveGrey100, #FCFAF5)' }}
         >
-          <BookCover url={row.coverUrl} />
+          <BookCover url={row.coverUrl} title={row.title} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div>
               <Text typography="st11">{row.title}</Text>

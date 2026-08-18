@@ -172,34 +172,41 @@ export function coverSource(url: string | null, failedUrl: string | null): strin
  * 책 표지 썸네일 — 서재·검색·책방·여백이 같은 컴포넌트를 쓴다.
  *
  * <p>표지가 없는 책도 같은 자리를 차지해야 목록의 줄 높이가 책마다 들쭉날쭉해지지 않는다 — 그래서
- * `null`이면 아무것도 안 그리는 대신 같은 크기의 자리 채움 상자를 그린다. 원격 표지(알라딘 등)의
- * **로드 실패도 같은 상자로** 떨어뜨린다 — 안 그러면 브라우저의 깨진 이미지 아이콘이 그대로 노출된다.
+ * `null`이면 아무것도 안 그리는 대신 같은 크기의 자리 채움을 그린다. 원격 표지(알라딘 등)의
+ * **로드 실패도 같은 자리 채움으로** 떨어뜨린다 — 안 그러면 브라우저의 깨진 이미지 아이콘이 그대로 노출된다.
  * `alt=""`는 의도적이다(제목이 바로 옆 줄에 있어 표지를 다시 읽어 주면 같은 말이 두 번 들린다).
+ *
+ * <p><b>`title`을 주면 자리 채움이 {@link CoverInitial}(첫 글자 + 제목색)이 된다</b>(2026-08-18).
+ * 전에는 여기서 `📚` 이모지를 그렸는데, 흔한 기본 이모지는 「AI가 만든 화면」이라는 인상을 준다. 게다가
+ * 무표지 책이 여럿이면 죄다 같은 회색 상자라 서로 구분되지도 않았다 — 이 레포엔 이미 그 문제를 푼
+ * `CoverInitial`이 있었고 <b>여기만 안 닿았을 뿐</b>이라, 없애는 김에 그 패턴으로 합류시킨다.
+ *
+ * <p>그래서 호출부의 `coverUrl !== null ? <BookCover> : <CoverInitial>` 삼항 세 개가 사라졌다
+ * (홈 캐러셀·서재 상세·여백 머리) — 같은 분기를 세 곳이 손으로 하던 것을 이 컴포넌트가 흡수한 것이다.
+ * `title`이 없는 자리(제목을 모르는 문맥)는 예전처럼 무채색 상자로 떨어진다.
  *
  * <p>`eager`는 접힌 위 첫 화면에 서는 표지(홈 캐러셀)만 켠다 — 홈은 탭을 오갈 때마다 재마운트되는데
  * lazy면 그때마다 표지가 한 박자 늦게 뜬다. 접힌 아래 목록(서재·프로필)은 그대로 lazy가 맞다.
  */
-export function BookCover({ url, width = 40, eager = false }: { url: string | null; width?: number; eager?: boolean }) {
+export function BookCover({
+  url,
+  title,
+  width = 40,
+  eager = false,
+}: {
+  url: string | null;
+  /** 있으면 자리 채움이 첫 글자 + 제목색이 된다. 없으면 무채색 상자. */
+  title?: string;
+  width?: number;
+  eager?: boolean;
+}) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const box = { width, height: Math.round(width * 1.4), borderRadius: 4, flex: '0 0 auto' } as const;
   const src = coverSource(url, failedUrl);
 
   if (src === null) {
-    return (
-      <div
-        aria-hidden="true"
-        style={{
-          ...box,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: Math.round(width * 0.45),
-          background: 'var(--adaptiveGrey200, #E4DDD0)',
-        }}
-      >
-        📚
-      </div>
-    );
+    if (title !== undefined) return <CoverInitial title={title} width={width} />;
+    return <div aria-hidden="true" style={{ ...box, background: 'var(--adaptiveGrey200, #E4DDD0)' }} />;
   }
   return (
     <img
