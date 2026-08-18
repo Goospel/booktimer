@@ -44,7 +44,8 @@ case "\$*" in
                  ADMIN_LOGIN_IDS LLM_API_KEY SPRING_MAIL_USERNAME SPRING_MAIL_PASSWORD \\
                  MYSQL_ROOT_PASSWORD MINIAPP_ALLOWED_ORIGINS \\
                  TOSS_MESSENGER_ENABLED TOSS_FINISH_TEMPLATE_CODE \\
-                 TOSS_GOAL_MET_ENABLED TOSS_GOAL_MET_TEMPLATE_CODE; do
+                 TOSS_GOAL_MET_ENABLED TOSS_GOAL_MET_TEMPLATE_CODE \\
+                 TOSS_RETENTION_ENABLED TOSS_RETENTION_TEMPLATE_CODE; do
             printf '/booktimer/%s\tvalue-of-%s\n' "\$n" "\$n"
         done
         # 여러 줄 SecureString(PEM)도 같은 /booktimer 경로에 살아 이 목록에 함께 나온다.
@@ -116,6 +117,9 @@ assert_has "  .env 에 완독 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_FINIS
 # 목표 달성 푸시 — 게이트가 매핑에서 빠지면 스케줄러 빈이 안 떠서 "켰는데 아무 일도 안 일어나는" 무성 장애가 된다.
 assert_has "  .env 에 목표달성 게이트" "$env_out" "BOOKTIMER_TOSS_GOAL_MET_ENABLED=value-of-TOSS_GOAL_MET_ENABLED"
 assert_has "  .env 에 목표달성 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_GOAL_MET_TEMPLATE_CODE=value-of-TOSS_GOAL_MET_TEMPLATE_CODE"
+# 재참여(7일 비활동) 넛지 푸시 — 같은 무성 장애. SSM을 true로 켜도 스케줄러 빈이 안 떠서 매일 19시 배치가 안 돈다.
+assert_has "  .env 에 재참여 게이트" "$env_out" "BOOKTIMER_TOSS_RETENTION_ENABLED=value-of-TOSS_RETENTION_ENABLED"
+assert_has "  .env 에 재참여 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_RETENTION_TEMPLATE_CODE=value-of-TOSS_RETENTION_TEMPLATE_CODE"
 
 # ── Case 2: 인증서 누락 → 배포 실패, 파일도 안 남는다 ──
 r="$(run TOSS_MTLS_CERT)"; rc="${r%%$'\n'*}"; out="${r#*$'\n'}"
