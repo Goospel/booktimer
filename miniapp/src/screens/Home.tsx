@@ -217,9 +217,7 @@ function NoBookCard() {
         gap: 4,
       }}
     >
-      <span aria-hidden="true" style={{ fontSize: 22 }}>
-        ⏱️
-      </span>
+      {/* 점선 상자가 이미 「표지가 아님」을 말한다 — 시계 이모지는 그 위에 얹힌 군더더기였다(2026-08-18). */}
       <Text typography="st12" color="grey600">
         책 없이
       </Text>
@@ -352,10 +350,9 @@ export function BookCarousel<T extends BookOption>({
             >
               {item === null ? (
                 <NoBookCard />
-              ) : item.coverUrl !== null ? (
-                <BookCover url={item.coverUrl} width={COVER_WIDTH} eager />
               ) : (
-                <CoverInitial title={item.title} width={COVER_WIDTH} />
+                // 표지 없음·로드 실패 분기는 BookCover가 든다 — title을 주면 첫 글자 + 제목색으로 떨어진다.
+                <BookCover url={item.coverUrl} title={item.title} width={COVER_WIDTH} eager />
               )}
             </button>
           );
