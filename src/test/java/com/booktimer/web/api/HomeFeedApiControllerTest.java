@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -134,6 +135,32 @@ class HomeFeedApiControllerTest {
                 .andExpect(jsonPath("$.social[1].bookTitle").value("빠른책"))
                 .andExpect(jsonPath("$.social[2].type").value("STARTED"))
                 .andExpect(jsonPath("$.social[2].bookTitle").value("느린책"));
+    }
+
+    @Test
+    @DisplayName("완독을 토글로 다시 찍어도 완독 소식의 시각·정렬 위치는 첫 완독 기준이다 (피드 재부상 차단)")
+    void finishedEventUsesFirstFinishTime() throws Exception {
+        User me = saveUser("hf-re@booktimer.com", "hfre", "나");
+        User followee = saveUser("hf-reyou@booktimer.com", "hfreyou", "친구");
+        followRepository.save(Follow.of(me, followee));
+        Instant older = hoursAgo(240).truncatedTo(ChronoUnit.SECONDS);  // 10일 전 — 첫 완독
+        Instant mid = hoursAgo(120).truncatedTo(ChronoUnit.SECONDS);    // 5일 전 — 완독 취소(읽는중)
+        Instant recent = hoursAgo(24).truncatedTo(ChronoUnit.SECONDS);  // 1일 전 — 재완독
+        Book toggled = Book.register(followee, "토글된 책", null, null, null, null, null,
+                BookStatus.WANT_TO_READ);
+        toggled.changeVisibility(BookVisibility.PUBLIC);
+        toggled.changeStatus(BookStatus.FINISHED, older);
+        toggled.changeStatus(BookStatus.READING, mid);
+        toggled.changeStatus(BookStatus.FINISHED, recent);
+        bookRepository.save(toggled);
+
+        // 완독 소식이 어제 시각으로 나오면 옛 책이 피드 맨 위로 재부상한 것 — 5일 전 시작 소식보다 아래여야 한다.
+        mockMvc.perform(get("/api/home-feed").with(user("hfre")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.social.length()").value(2))
+                .andExpect(jsonPath("$.social[0].type").value("STARTED"))
+                .andExpect(jsonPath("$.social[1].type").value("FINISHED"))
+                .andExpect(jsonPath("$.social[1].occurredAt").value(older.toString()));
     }
 
     @Test

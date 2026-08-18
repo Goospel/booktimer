@@ -87,7 +87,8 @@ public class Book extends BaseTimeEntity {
     /**
      * 읽기 시작 시각 — 홈 소식 피드 "읽기 시작했어요" 이벤트의 데이터 소스.
      * {@link #finishedAt}의 미러이되 <b>한 곳이 다르다</b>: 완독으로 넘어가도 지우지 않는다 —
-     * 시작·완독 두 이벤트가 시간순으로 공존하는 게 피드에선 맞다. 재독(완독→읽는중)은 새 시각으로 재스탬프.
+     * 시작·완독 두 이벤트가 시간순으로 공존하는 게 피드에선 맞다. <b>책당 영구 1회</b>라 재독(완독→읽는중)에도
+     * 재스탬프하지 않는다 — 밀면 옛 책이 피드 맨 위에 "방금 시작"처럼 재부상한다.
      * 기록은 {@link #changeStatus(BookStatus, Instant)}·{@link #startReading(Instant)}가 담당하고
      * 시각(Clock)은 서비스가 넘긴다. V64 이전의 기존 책은 백필하지 않아 null이다(피드 창 14일 밖이라 무해).
      */
@@ -101,6 +102,16 @@ public class Book extends BaseTimeEntity {
      */
     @Column(name = "finish_celebrated_at")
     private Instant finishCelebratedAt;
+
+    /**
+     * 첫 완독 시각 — 홈 소식 피드 "완독했어요" 이벤트의 시각(책당 영구 1회).
+     * {@link #finishedAt}과 달리 완독 이탈에도 지우지 않고, 재완독에도 재스탬프하지 않는다 —
+     * 지우거나 밀면 옛 완독이 피드 맨 위에 "방금"처럼 재부상한다({@link #finishCelebratedAt}과 같은 이유).
+     * 현재-완독 판정은 여전히 {@link #finishedAt}/{@link #status} 몫이다
+     * (완독 취소 시 피드 제거는 {@code BookRepository.feedFinished}의 status 조건이 담당).
+     */
+    @Column(name = "first_finished_at")
+    private Instant firstFinishedAt;
 
     /**
      * 알라딘 "구매"(제휴 링크) 클릭 누적 수. 어떤 책이 구매 의향을 내는지 보는 제휴 수익 데이터.
@@ -294,12 +305,20 @@ public class Book extends BaseTimeEntity {
             if (this.status != BookStatus.FINISHED || this.finishedAt == null) {
                 this.finishedAt = now;
             }
+            // 첫 완독만 스탬프 — 이탈·재완독에도 안 민다(피드 "완독했어요"는 책당 1회).
+            if (this.firstFinishedAt == null) {
+                this.firstFinishedAt = now;
+            }
         } else {
             this.finishedAt = null;
         }
-        // 읽는중 "진입"에만 스탬프 — 읽는중→읽는중 재저장은 기존 값 보존(멱등), 재독(완독→읽는중)은 재스탬프.
+        // 읽는중 "진입"에만, 그것도 <b>책당 1회</b> 스탬프 — 재독(완독→읽는중)도 재스탬프하지 않는다
+        // (피드 재부상 방지, 2026-08-18 제품 결정). 읽는중→읽는중 재저장은 기존 값 보존(멱등)이고,
         // 완독으로 넘어갈 땐 손대지 않는다(시작·완독 두 이벤트 공존).
-        if (newStatus == BookStatus.READING && this.status != BookStatus.READING) {
+        // 전이 조건(status != READING)을 null 조건과 <b>함께</b> 두는 이유: 시작 시각이 없는 레거시
+        // READING 책(V64 이전)이 no-op 재저장만으로 now에 스탬프돼 "방금 시작"으로 뜨는 걸 막는다.
+        if (newStatus == BookStatus.READING && this.status != BookStatus.READING
+                && this.startedReadingAt == null) {
             this.startedReadingAt = now;
         }
         this.status = newStatus;
@@ -360,6 +379,10 @@ public class Book extends BaseTimeEntity {
 
     public Instant getFinishCelebratedAt() {
         return finishCelebratedAt;
+    }
+
+    public Instant getFirstFinishedAt() {
+        return firstFinishedAt;
     }
 
     public Instant getFinishedAt() {
