@@ -849,7 +849,7 @@ export const handleStyle = {
   cursor: 'pointer',
 } as const;
 
-/** 책 검색 — 알라딘 1페이지. 탭하면 "읽는 중"으로 추가한다(가장 잦은 의도). */
+/** 책 검색 — 알라딘 1페이지. 탭하면 어디에 담을지 먼저 묻는다(`AddStatusSheet`). */
 export function BookSearch({
   busy,
   error,
@@ -866,6 +866,11 @@ export function BookSearch({
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchRow[] | null>(null);
   const [searching, setSearching] = useState(false);
+  /** 담을 곳을 고르는 중인 책 — 없으면 시트도 없다(진입 직후 화면을 덮지 않는다, T-183). */
+  const [picking, setPicking] = useState<SearchRow | null>(null);
+
+  // 열린 시트는 뒤로가기가 먼저 먹는다 — 없으면 고르다 만 시트가 검색 화면째로 닫힌다(서재 시트와 같다).
+  useBackClose(picking !== null, () => setPicking(null));
 
   const submit = () => {
     setSearching(true);
@@ -916,7 +921,7 @@ export function BookSearch({
           key={row.isbn13 ?? `${row.title}-${index}`}
           type="button"
           disabled={busy || row.owned}
-          onClick={() => onAdd(row, 'READING')}
+          onClick={() => setPicking(row)}
           style={{ ...rowStyle, marginTop: 8, borderRadius: 12, background: 'var(--adaptiveGrey100, #FCFAF5)' }}
         >
           <BookCover url={row.coverUrl} title={row.title} />
@@ -934,7 +939,46 @@ export function BookSearch({
         </button>
       ))}
 
+      {picking && (
+        <AddStatusSheet
+          row={picking}
+          busy={busy}
+          // 고른 즉시 닫는다 — 열어 둔 채 실패하면 딤이 에러 문구를 덮고, 성공하면 어차피 서재로 나간다.
+          onPick={(status) => {
+            setPicking(null);
+            onAdd(picking, status);
+          }}
+          onClose={() => setPicking(null)}
+        />
+      )}
     </Screen>
+  );
+}
+
+/**
+ * 담을 곳 고르기 — 서재 「관리」 시트와 <b>같은 껍데기·같은 어휘</b>다(`SECTIONS` 단일 출처).
+ *
+ * <p>예전엔 검색 결과를 탭하면 되묻지 않고 「읽는 중」으로 넣었다. 가장 잦은 의도라는 이유였지만,
+ * 읽고 싶어 담은 책까지 읽는 중이 된 뒤 서재에서 다시 옮겨야 했다 — 한 탭을 아끼려다 세 탭을 물렸다.
+ * 순서가 곧 자주 쓰는 순이라 「읽는 중」은 여전히 첫 줄, 손가락이 가장 먼저 닿는 자리다.
+ */
+export function AddStatusSheet({
+  row,
+  busy,
+  onPick,
+  onClose,
+}: {
+  row: SearchRow;
+  busy: boolean;
+  onPick: (status: BookStatus) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Sheet title={row.title} onClose={onClose}>
+      {SECTIONS.map(({ status, title }) => (
+        <SheetRow key={status} label={`${title}(으)로 담기`} busy={busy} onClick={() => onPick(status)} />
+      ))}
+    </Sheet>
   );
 }
 
