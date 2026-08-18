@@ -142,17 +142,27 @@ const [home, feed, history] = await Promise.all(['01-home', '02-feed', '04-histo
 const banner = `
 <!doctype html><meta charset="utf-8">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&display=swap');
   * { margin: 0; box-sizing: border-box; }
   body {
     width: ${LANDSCAPE.w}px; height: ${LANDSCAPE.h}px; overflow: hidden;
-    background: #F3EEE4; color: #2C2A24;
-    font-family: 'Gowun Dodum', 'Malgun Gothic', sans-serif;
+    /*
+     * ⚠️ 종이색·서체는 앱을 따라간다 — 배너는 앱 컷 3장을 얹은 합성물이라 여기만 옛 값이면
+     * 폰 안팎이 다른 톤·다른 서체로 갈린다. 색은 「거친 종이」 테마의 최종 종이색(#F7F2E8,
+     * T-193에서 #F3EEE4를 밝힌 값)이고, 서체는 앱 본문과 같은 Gaegu다.
+     */
+    background: #F7F2E8; color: #2C2A24;
+    font-family: 'Gaegu', 'Malgun Gothic', sans-serif;
     display: flex; align-items: center;
   }
+  /*
+   * Gaegu는 x-height가 작아 같은 px에서 눈에 띄게 작고 가늘다(앱 global.css의 112.5%·700 보정과
+   * 같은 이유) — 제목은 58 → 66으로 올리고 본문은 굵기만 700으로 세운다. ⚠️ 본문을 25px 위로
+   * 올리면 자폭이 넓어 480px 안에서 되접히고, 되접힌 줄이 폰 그림 위로 넘어간다(실측).
+   */
   .copy { flex: 0 0 auto; padding-left: 80px; width: 480px; }
-  .copy h1 { font-size: 58px; font-weight: 700; line-height: 1.28; letter-spacing: -1px; }
-  .copy p  { margin-top: 26px; font-size: 25px; line-height: 1.6; color: #6F6A5E; }
+  .copy h1 { font-size: 66px; font-weight: 700; line-height: 1.26; letter-spacing: -1px; }
+  .copy p  { margin-top: 24px; font-size: 25px; font-weight: 700; line-height: 1.6; color: #57534A; }
   .phones { position: relative; flex: 1; height: 100%; }
   .phone {
     position: absolute; width: 300px; border-radius: 24px; overflow: hidden;
