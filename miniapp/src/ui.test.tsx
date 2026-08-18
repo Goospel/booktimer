@@ -312,8 +312,22 @@ describe('섹션 카드·화면 제목', () => {
     expect(sectionStyle.border).toBe('1px solid transparent');
   });
 
-  it('타일 반복(round)이 아니라 stretch다 — 흔들린 선은 반복하면 이음매마다 끊긴다', () => {
+  it('타일 반복(round)이 아니라 stretch다 — 농도 얼룩이 이음매마다 끊긴다', () => {
     expect(PENCIL_FRAME).not.toMatch(/\sround$/);
+  });
+
+  it('선을 휘게 하는 필터를 쓰지 않는다 — 굴곡은 stretch 압축을 만나면 지글거린다', () => {
+    // border-image는 300px 타일을 요소 폭에 맞춰 늘리고 줄인다. 좁은 버튼에서는 3배 넘게 압축되는데,
+    // 굴곡(feDisplacementMap)이 있으면 파장도 같은 배율로 짧아져 변위가 선 두께를 넘어선다 —
+    // 그 순간 선은 휘는 게 아니라 가장자리가 깎여 「픽셀이 깨진 선」으로 보인다(실측 반려).
+    expect(PENCIL_FRAME).not.toContain('feDisplacementMap');
+  });
+
+  it('연필의 정체는 흔들림이 아니라 농도다 — 진하기를 얼룩지게 하는 필터가 있다', () => {
+    // 고주파 노이즈를 선의 알파에 곱해, 흑연이 종이 결에 걸려 생기는 농도 변화를 만든다.
+    // 고주파 입자는 압축돼도 고와질 뿐이라 굴곡과 달리 지글거리지 않는다 — 위 테스트와 한 쌍이다.
+    expect(PENCIL_FRAME).toContain('feComposite');
+    expect(PENCIL_FRAME).toContain("operator='in'");
   });
 
   it('화면 제목은 웹 브랜드와 같은 세리프(고운바탕)로 쓴다', () => {

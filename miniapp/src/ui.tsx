@@ -234,12 +234,17 @@ export function BookCover({
  * <p>`8 / 8px`는 slice(타일에서 잘라낼 폭) / width(화면에 그릴 폭)다. width는 요소의 실제 `border-width`와
  * **독립**이라, border는 1px로 두고 그림만 8px로 그려 레이아웃을 1px도 밀지 않는다.
  *
- * <p>⚠️ repeat은 `stretch`다. `round`(타일 반복)를 쓰면 필터로 흔들린 선의 타일 좌우 끝 높이가 서로 달라
- * 이음매마다 어긋나 **점선처럼 끊겨 보인다**(실측). 타일이 300px로 큰 것도 같은 이유 — stretch로 늘려도
- * 배율이 낮아 떨림이 뭉개지지 않는다.
+ * <p>⚠️ 선을 휘게 하는 필터(feDisplacementMap)를 쓰지 않는다. border-image는 300px 타일을 요소 폭에
+ * 맞춰 늘이고 줄이는데, 좁은 버튼에서는 3배 넘게 압축된다 — 굴곡이 있으면 파장도 같은 배율로 짧아져
+ * 변위가 선 두께를 넘어서고, 그 순간 선은 휘는 게 아니라 가장자리가 깎여 「픽셀이 깨진 선」이 된다(실측 반려).
+ * 연필선의 정체는 흔들림이 아니라 **흑연이 종이 결에 걸려 생기는 농도 얼룩**이라, 고주파 노이즈를
+ * 선의 알파에 곱해 진하기만 들쑓날롭하게 만든다. 고주파 입자는 압축돼도 고와질 뿐이라 지글거리지 않는다.
+ *
+ * <p>⚠️ repeat은 `stretch`다. `round`(타일 반복)를 쓰면 농도 얼룩이 타일 경계에서 어긋나 이음매마다
+ * 줄이 보인다(feTurbulence에 stitchTiles를 안 쓴다).
  */
 export const PENCIL_FRAME =
-  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='r' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.055' numOctaves='3' seed='7' result='n'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='n' scale='3' xChannelSelector='R' yChannelSelector='G'/%3E%3C/filter%3E%3Crect x='1.3' y='1.3' width='297.4' height='297.4' rx='6' fill='none' stroke='%2355504A' stroke-width='2.4' filter='url(%23r)'/%3E%3C/svg%3E\") 8 / 8px stretch";
+  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='a' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' seed='5' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.55 0 0 0 0.62' result='m'/%3E%3CfeComposite in='SourceGraphic' in2='m' operator='in'/%3E%3C/filter%3E%3Cfilter id='b' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' seed='23' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0 0 0 0.25' result='m'/%3E%3CfeComposite in='SourceGraphic' in2='m' operator='in'/%3E%3C/filter%3E%3Crect x='1.6' y='1.6' width='296.8' height='296.8' rx='7' fill='none' stroke='%2355504A' stroke-width='1.9' filter='url(%23a)'/%3E%3Crect x='2.4' y='2.4' width='295.2' height='295.2' rx='7' fill='none' stroke='%236B655C' stroke-width='1.4' filter='url(%23b)'/%3E%3C/svg%3E\") 8 / 8px stretch";
 
 /**
  * 카드 테두리를 연필선으로. `border`는 1px 그대로 두고 `border-image`의 `/ 8px`가 그림 폭을 정한다 —
