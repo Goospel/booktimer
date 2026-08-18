@@ -165,6 +165,28 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
     List<com.booktimer.user.User> findNudgeTargets(@Param("cutoff") java.time.Instant cutoff);
 
     /**
+     * 토스 푸시 재참여 넛지 대상 사용자. {@link #findNudgeTargets}와 같은 비활동·멱등 계약이되, 이메일 조건
+     * (마케팅 동의·이메일 검증) 대신 <b>토스 연동 여부</b>만 본다:
+     * <ol>
+     *   <li>채널 보유 — {@code tossUserKey is not null}(웹 전용 사용자는 보낼 곳이 없다).</li>
+     *   <li>한 번이라도 읽음 — 서브쿼리 {@code max(startedAt)}이 null이면 비교가 불성립해 자동 제외(N-055).</li>
+     *   <li>비활동 — {@code max(startedAt) <= cutoff}(호출부가 {@code now - 7일}, 경계 포함).</li>
+     *   <li>이 구간 미발송 — {@code lastNudgeSentAt is null OR < 마지막 활동}. 이메일 넛지와 <b>같은 컬럼</b>을
+     *       공유하는 것이 채널 간 중복 발송 방지다(어느 채널이 보냈든 그 구간은 끝).</li>
+     * </ol>
+     * 알림 동의는 조건에 없다 — 동의 정본은 토스이고, 미동의 발송은 토스가 거부해 {@code sendMessage=false}로 끝난다.
+     * 여기에 이메일 동의·검증을 복사해 넣으면 토스 사용자 대부분이 걸러져 대상 0명이 되는 침묵 실패가 난다.
+     */
+    @Query("""
+            select u from User u
+            where u.tossUserKey is not null
+              and (select max(s.startedAt) from ReadingSession s where s.user = u) <= :cutoff
+              and (u.lastNudgeSentAt is null
+                   or u.lastNudgeSentAt < (select max(s.startedAt) from ReadingSession s where s.user = u))
+            """)
+    List<com.booktimer.user.User> findTossNudgeTargets(@Param("cutoff") java.time.Instant cutoff);
+
+    /**
      * 책 삭제 시, 그 책을 가리키던 측정 세션을 "책 미지정"으로 푼다(book_id = null).
      *
      * <p>세션 자체는 지우지 않는다 — 책을 책장에서 빼도 그날 읽은 기록(잔디·누적 시간)은 보존돼야 한다.
