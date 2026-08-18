@@ -178,15 +178,20 @@ public interface BookRepository extends JpaRepository<Book, Long> {
      * (차단 시 팔로우 양방향 해제)이 보장하고 {@code BookFeedBlockInvariantTest}가 행동으로 못 박는다.
      * 비공개 전환·삭제된 책은 조회 시점 상태로 자연 소멸한다(이벤트를 따로 적재하지 않는 방식의 이점).
      * 소유자는 fetch로 즉시 초기화 — 이벤트 줄이 닉네임·핸들을 읽으므로 N+1을 막는다.
+     *
+     * <p><b>제거 장치는 {@code status = FINISHED}</b>이고(완독을 취소하면 즉시 사라진다),
+     * <b>시각·정렬은 첫 완독({@code firstFinishedAt})</b>이다 — 완독↔읽는중 토글로 재스탬프되는
+     * {@code finishedAt}을 쓰면 옛 책이 "방금"처럼 피드 맨 위로 재부상한다(2026-08-18 수정).
      */
     @Query("""
             select b from Book b join fetch b.user u, com.booktimer.follow.Follow f
             where f.followee = u and f.follower = :viewer
               and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
-              and b.finishedAt > :cutoff
+              and b.status = com.booktimer.book.BookStatus.FINISHED
+              and b.firstFinishedAt > :cutoff
               and u.role <> com.booktimer.user.Role.ADMIN
               and u.loginId is not null
-            order by b.finishedAt desc
+            order by b.firstFinishedAt desc
             """)
     List<Book> feedFinished(@Param("viewer") User viewer, @Param("cutoff") Instant cutoff);
 

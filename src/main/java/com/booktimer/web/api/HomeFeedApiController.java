@@ -84,7 +84,8 @@ public class HomeFeedApiController {
 
         List<SocialEvent> events = new ArrayList<>();
         for (Book book : bookRepository.feedFinished(viewer, cutoff)) {
-            events.add(event(book, "FINISHED", book.getFinishedAt()));
+            // 첫 완독 시각 — finishedAt은 토글마다 재스탬프돼 옛 책을 "방금"처럼 재부상시킨다.
+            events.add(event(book, "FINISHED", book.getFirstFinishedAt()));
         }
         for (Book book : bookRepository.feedStarted(viewer, cutoff)) {
             events.add(event(book, "STARTED", book.getStartedReadingAt()));
