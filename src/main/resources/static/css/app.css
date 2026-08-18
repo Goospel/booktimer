@@ -120,6 +120,7 @@ html { font-size: 112.5%; }
 body {
     margin: 0;
     min-height: 100vh;
+    position: relative;   /* 종이 결(body::before)의 위치 기준 — 없으면 결이 첫 화면만 덮는다 */
     background: var(--bg);
     color: var(--text);
     font-family: "Gaegu", "Gowun Dodum", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
@@ -131,16 +132,26 @@ body {
     padding: 32px 16px;
 }
 
-/* 종이 결 — 화면 전체를 덮는 고정 레이어.
+/* 종이 결 — 본문 전체를 덮는 레이어.
+
+   ⚠️ `absolute`다. `fixed`로 두면 결이 **뷰포트에 못 박혀**, 종이는 스크롤되는데 결만 제자리에
+   남는다 — 결이 종이가 아니라 화면에 낀 유리처럼 보인다(사용자 반려 2026-08-18, T-192).
+   결은 종이의 성질이니 종이와 함께 움직여야 한다. 그래서 위 `body`에 `position: relative`가
+   짝으로 필요하다 — 기준이 없으면 초기 컨테이닝 블록(뷰포트 크기)에 걸려 첫 화면 높이만 덮는다.
+
+   ⚠️ z-index는 **떠 있는 것들 아래**다(이 앱의 고정 오버레이는 100·150·200·9999).
+   결이 고정 요소를 덮으면 스크롤할 때 그 위를 무늬가 미끄러져, 위 어색함이 뒤집힌 형태로 재발한다.
+   본문 최대 z-index는 61이므로 90이면 「본문 위 · 떠 있는 것 아래」가 성립한다.
+
    ⚠️ mix-blend-mode를 쓰지 않는다. blend는 매 프레임 backdrop과 다시 섞어야 해서 스크롤 내내
-   전면 재합성을 강제한다(T-176 발광 box-shadow와 같은 클래스). 값이 변하지 않는 fixed 레이어는
-   GPU 텍스처로 한 번 캐시되고 끝이라 사실상 공짜다. */
+   전면 재합성을 강제한다(T-176 발광 box-shadow와 같은 클래스). 값이 변하지 않는 타일 배경은
+   페이지 래스터에 한 번 그려지고 끝이라 스크롤해도 재계산이 없다. */
 body::before {
     content: '';
-    position: fixed;
+    position: absolute;
     inset: 0;
     pointer-events: none;
-    z-index: 9999;
+    z-index: 90;
     background-image: var(--grain), var(--fiber);
     background-size: 300px 300px, 440px 440px;
 }

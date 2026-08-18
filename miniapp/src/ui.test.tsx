@@ -436,6 +436,22 @@ describe('종이 결 (global.css)', () => {
   it('레이어 전체를 반투명으로 깔지 않는다 — opacity는 밑의 모든 픽셀을 함께 들어올린다', () => {
     expect(veil).not.toMatch(/opacity:\s*0?\.\d/);
   });
+
+  it('결이 종이와 함께 스크롤한다 — fixed면 뷰포트에 못 박혀 결만 제자리에 남는다', () => {
+    expect(veil).toMatch(/position:\s*absolute/);
+    expect(veil).not.toMatch(/position:\s*fixed/);
+  });
+
+  it('absolute의 기준을 body로 잡는다 — 기준이 없으면 초기 컨테이닝 블록(첫 화면 높이)만 덮는다', () => {
+    expect(css).toMatch(/body\s*\{[^}]*position:\s*relative/);
+  });
+
+  it('떠 있는 것 밑에 깔린다 — 결이 고정 요소 위를 미끄러지면 같은 어색함이 뒤집혀 재발한다', () => {
+    // 미니앱의 고정 요소: 탭바 100 · 시트 딤 200 · 시트 201. 결은 그 아래, 본문 위.
+    const z = Number(/z-index:\s*(\d+)/.exec(veil)?.[1]);
+    expect(z).toBeGreaterThan(0);
+    expect(z).toBeLessThan(100);
+  });
 });
 
 /**
