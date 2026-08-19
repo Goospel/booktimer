@@ -32,6 +32,14 @@ const SAGE = '#6E8A6A';
 export const ACTIVE_SESSION_RELIEF = '화면을 꺼도 측정은 계속돼요. 책 읽고 오세요 🌿';
 
 /**
+ * 독서등이 켜져도 <b>밝게 남는 자리</b>의 표식 — 히어로 카드 하나뿐이다.
+ *
+ * <p>이 문자열이 js와 `global.css`를 잇는 매듭이라 한쪽만 고치면 카드가 밤 속으로 사라진다
+ * (`home.test.tsx`가 css에 셀렉터가 실재하는지 본다). 스위치는 `App`의 {@link LAMP_CLASS}.
+ */
+export const LAMP_PAGE_CLASS = 'lamp-page';
+
+/**
  * 첫 완료 축하 배너 — 서버 `firstCompletedSession`이 참인 그 한 번만. 잔디는 1초만 읽어도 lv1로
  * 점등되는데(`ContributionGraphBuilder.levelFor`) 그걸 보여 줄 자리가 홈에 없다 — 잔디 미리보기가
  * 피드 박스에 자리를 내줬으므로 **기록 탭**을 가리킨다(하이라이트 테두리는 가리킬 카드와 함께 사라졌다).
@@ -860,7 +868,10 @@ export function Home({
       {/* 첫 사용 안내로 들어오는 문 — 처음 온 사람이 히어로 카드보다 먼저 만나야 한다. */}
       {guide}
 
+      {/* 독서등이 켜지면 이 카드만 스탠드 밑에 펼쳐진 페이지로 남는다 — 표식만 붙이고, 켤지 말지와
+          색은 `body` 클래스와 css가 든다(그래서 측정 여부와 무관하게 늘 붙어 있다). */}
       <div
+        className={LAMP_PAGE_CLASS}
         style={{
           padding: '28px 20px',
           borderRadius: 16,

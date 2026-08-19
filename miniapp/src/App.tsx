@@ -105,6 +105,25 @@ const STOP_ICON = 'M8 8h8v8H8z';
  * <p>빨강은 옛 홈 「측정 끝내기」가 쓰던 TDS `color="danger"`와 같은 값이라 색 연속성이 유지된다.
  * 전환에 애니메이션을 두지 않는다 — 표지를 재래스터화하는 발광·펄스는 실기기에서 실측된 사고 클래스다(T-176).
  */
+/**
+ * 독서등이 켜졌을 때 `document.body`에 붙는 클래스 — 색은 전부 `global.css`가 든다.
+ *
+ * <p>이 문자열이 <b>js와 css를 잇는 유일한 매듭</b>이라 한쪽만 고치면 기능이 조용히 죽는다.
+ * `app.test.tsx`가 css에 이 셀렉터가 실재하는지 본다.
+ */
+export const LAMP_CLASS = 'reading-lamp';
+
+/**
+ * 독서등을 켤 자리인가 — <b>측정 중인 홈</b>일 때만 참이다(사용자 결정 2026-08-19: 「홈만」).
+ *
+ * <p>드는 것이 「지금 어느 탭인가 · 지금 측정 중인가」 둘뿐이라 <b>상태가 없다</b>. 그래서 앱을
+ * 나갔다 와도 대시보드가 다시 「측정 중」이라 말하는 순간 화면이 어두운 채로 열린다 —
+ * 「방금 눌렀는지」를 기억하는 코드가 0줄이라 재진입 규칙이 공짜로 따라온다.
+ */
+export function lampOn(tab: TabKey, hasActiveSession: boolean): boolean {
+  return tab === 'home' && hasActiveSession;
+}
+
 export function timerActionView(active: boolean): { label: string; background: string; icon: string } {
   return active
     ? { label: '측정 끝내기', background: 'var(--adaptiveRed500, #F04452)', icon: STOP_ICON }
@@ -615,6 +634,20 @@ export function MainTabs({
     setCoachmarkWalking(flowIndex >= 0);
     return () => setCoachmarkWalking(false);
   }, [flowIndex]);
+
+  /**
+   * 독서등 — 측정 중 홈이 밤이 된다. 색은 css가 들고 여기선 스위치만 올린다.
+   *
+   * <p>`body`에 붙이는 이유는 <b>캔버스가 body의 배경</b>이기 때문이다(`html body { background }`).
+   * 어두운 토큰 자체는 css가 `<main>` 안쪽에만 얹으므로, 탭바(화면 밖 형제)는 밝게 남는다 —
+   * 측정을 끝내는 원이 어둠에 잠기면 끄는 법을 잃는다.
+   *
+   * <p>cleanup이 없으면 홈을 벗어나거나 언마운트될 때 클래스가 남아 앱 전체가 어두워진다.
+   */
+  useEffect(() => {
+    document.body.classList.toggle(LAMP_CLASS, lampOn(tab, dashboard.hasActiveSession));
+    return () => document.body.classList.remove(LAMP_CLASS);
+  }, [tab, dashboard.hasActiveSession]);
 
   const flowStep = flowIndex < 0 ? undefined : COACHMARK_FLOW[flowIndex];
 
