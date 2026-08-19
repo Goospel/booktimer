@@ -1,10 +1,10 @@
 import { Text } from '@toss/tds-mobile';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import type { HomeFeedResponse, NewsItem, SocialEvent } from '../api';
+import type { HomeFeedResponse, NewsItem, ReaderStatus, SocialEvent } from '../api';
 import { fetchHomeFeed } from '../api';
-import { relativeTime } from '../format';
+import { elapsedSeconds, formatDuration, relativeTime } from '../format';
 import { openExternal } from '../toss';
 import { sectionStyle } from '../ui';
 
@@ -19,12 +19,22 @@ import { sectionStyle } from '../ui';
  * 계측한다(`BookSheet`·`RemainingNote`와 같은 처지).
  */
 
-export type FeedTab = 'social' | 'news';
+export type FeedTab = 'readers' | 'social' | 'news';
 
-const TAB_LABEL: Record<FeedTab, string> = { social: '소식', news: '책 뉴스' };
+/** 글자 탭의 라벨. `readers`는 <b>이름표가 없다</b> — 사람 그림 하나로 선다. */
+const TAB_LABEL: Record<Exclude<FeedTab, 'readers'>, string> = { social: '소식', news: '책 뉴스' };
 
-/** 빈 상태 문구 — 둘 다 "여기가 무엇으로 채워지는 자리인가"를 말한다(소식은 소셜 탭 유도를 겸한다). */
+/**
+ * 처음 열리는 탭 — <b>맨 왼쪽이지만 기본은 「소식」이다.</b>
+ *
+ * <p>위치가 곧 기본값이 되면 팔로우 0명인 사람이 홈에 들어오자마자 빈 목록을 만나고, 기존 사용자의
+ * 홈 경험도 예고 없이 바뀐다. 사람 탭은 왼쪽에 서서 <i>보이되</i>, 열리는 건 눌렀을 때다.
+ */
+export const DEFAULT_TAB: FeedTab = 'social';
+
+/** 빈 상태 문구 — 셋 다 "여기가 무엇으로 채워지는 자리인가"를 말한다(소식은 소셜 탭 유도를 겸한다). */
 export const EMPTY_MESSAGE: Record<FeedTab, string> = {
+  readers: '팔로우한 사람의 독서가 여기에 보여요',
   social: '팔로우한 사람의 소식이 여기에 떠요',
   news: '완독한 책의 뉴스가 여기에 떠요',
 };
@@ -49,9 +59,31 @@ const EVENT_COLOR: Record<SocialEvent['type'], string> = {
 /**
  * 그릴 탭 머리 — 뉴스가 꺼져 있으면(수집기 키 미설정) **「책 뉴스」 머리 자체를 안 그린다.**
  * 눌러도 늘 빈 탭은 죽은 탭이라, 있는 것보다 없는 게 낫다.
+ *
+ * <p>사람 탭은 **맨 왼쪽에 항상** 선다. 「소식」·「책 뉴스」가 *읽을 거리*라면 이쪽은 *사람*이라,
+ * 위치와 구분선이 그 다름을 말한다. 팔로우가 0명이어도 그린다 — 빈 상태 문구가 "여기가 무엇으로
+ * 채워지는 자리인지"를 알려 주는 진입점이라, 뉴스 탭과 달리 <b>죽은 탭이 아니다</b>.
  */
 export function visibleTabs(newsEnabled: boolean): FeedTab[] {
-  return newsEnabled ? ['social', 'news'] : ['social'];
+  return newsEnabled ? ['readers', 'social', 'news'] : ['readers', 'social'];
+}
+
+/**
+ * 「함께 읽는 사람」 한 줄의 문장.
+ *
+ * <p>읽는 중이 다른 무엇보다 앞선다(과거 기록이 있어도). 그 밖에는 <b>사실만 적는다</b> —
+ * 「3일째 안 읽었어요」가 아니라 「마지막 기록 3일 전」이다. 판단을 담지 않으려는 것이기도 하지만,
+ * 무엇보다 <b>비공개 책만 읽는 사람에겐 「안 읽었다」가 거짓</b>이기 때문이다. 같은 이유로 기록이
+ * 없을 땐 「공개된」을 밝혀, 조용한 사람을 안 읽는 사람으로 만들지 않는다.
+ */
+export function readerStatusLine(reader: ReaderStatus, now: number): string {
+  if (reader.readingBookTitle !== null) {
+    return `『${reader.readingBookTitle}』 읽는 중`;
+  }
+  if (reader.lastReadAt !== null) {
+    return `마지막 기록 ${relativeTime(reader.lastReadAt, now)}`;
+  }
+  return '공개된 기록이 없어요';
 }
 
 /**
@@ -136,6 +168,119 @@ const pillStyle = (active: boolean) =>
     fontWeight: active ? 600 : 400,
     cursor: 'pointer',
   }) as const;
+
+/**
+ * 사람 탭 알약 — 그림 하나뿐이라 좌우 여백만 좁힌다. 세로 크기는 글자 탭과 같게 맞춘다
+ * (혼자 커지면 「탭이 아니라 다른 버튼」으로 읽혀, 구분선이 하려던 말과 겹쳐 과해진다).
+ */
+const iconPillStyle = (active: boolean) =>
+  ({ ...pillStyle(active), padding: '6px 11px', display: 'inline-flex', alignItems: 'center' }) as const;
+
+/** 사람 탭과 글자 탭 사이의 세로 한 획 — 「같은 줄이지만 같은 종류가 아니다」. */
+const tabSplitStyle = {
+  flex: '0 0 auto',
+  width: 1,
+  height: 17,
+  margin: '0 5px',
+  background: 'var(--adaptiveGrey200, #E4DDD0)',
+} as const;
+
+/**
+ * 사람 그림 — 채운 실루엣이 아니라 <b>획</b>이다(머리 원 + 어깨 곡선).
+ * 이 앱은 종이와 연필이 컨셉이라 연필 테두리·손글씨체와 같은 굵기로 읽혀야 한다.
+ */
+function PersonMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <circle cx="10" cy="7" r="3.2" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M4.2 16.6c0-3.2 2.6-5.3 5.8-5.3s5.8 2.1 5.8 5.3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** 읽는 중 표식 — 아바타 모서리의 <b>정지된</b> 점. 깜빡이지 않는다(T-176: 아바타를 감싼 애니메이션 금지). */
+const liveDotStyle = {
+  position: 'absolute',
+  right: -1,
+  bottom: -1,
+  width: 10,
+  height: 10,
+  borderRadius: '50%',
+  background: 'var(--adaptiveBlue500, #6E8A6A)',
+  border: '2px solid var(--adaptiveGrey100, #FCFAF5)',
+} as const;
+
+/** 맞팔 배지 — 친구 시스템을 새로 만들지 않고 「친구감」만 가져오는 자리. */
+const mutualBadgeStyle = {
+  flex: '0 0 auto',
+  padding: '0 5px 1px',
+  border: '0.5px solid var(--adaptiveGrey200, #E4DDD0)',
+  borderRadius: 6,
+  color: 'var(--adaptiveGrey600, #6F6A5E)',
+  fontSize: 11,
+  lineHeight: 1.5,
+} as const;
+
+/**
+ * 「함께 읽는 사람」 한 줄 — 아바타 · 닉네임(+맞팔) · 상태 문장 · 경과.
+ *
+ * <p>정적 렌더 하니스가 닿도록 밖으로 뺐다(`Library.SearchResultRow` 선례). 갈 곳이 없어
+ * 비클릭 `div`다 — 남의 책방으로 보내려면 탭 전환 배선이 필요한데, 그건 별건이다(죽은 링크 금지).
+ */
+export function ReaderRow({ reader, index, now }: { reader: ReaderStatus; index: number; now: number }) {
+  const reading = reader.readingSince !== null;
+
+  return (
+    <div data-feed-row="" style={{ ...rowStyle(index), display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+      <span
+        style={{
+          position: 'relative',
+          flex: '0 0 auto',
+          width: 34,
+          height: 34,
+          borderRadius: '50%',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: reading ? 'var(--adaptiveBlue50, #E7EEE2)' : 'var(--adaptiveGrey200, #E4DDD0)',
+          color: reading ? 'var(--adaptiveBlue700, #4F6B4C)' : 'var(--adaptiveGrey600, #6F6A5E)',
+          fontSize: 14,
+          // 기록이 없는 사람은 문구로 한 번, 형태로 한 번 — 훑어도 읽힌다.
+          opacity: !reading && reader.lastReadAt === null ? 0.45 : 1,
+        }}
+      >
+        {reader.nickname.charAt(0)}
+        {reading && <span style={liveDotStyle} />}
+      </span>
+
+      {/* 한글 문장이 flex 자식이라 minWidth:0이 없으면 줄바꿈 대신 아바타를 밀어낸다. */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <Text typography="st11">{reader.nickname}</Text>
+          {reader.mutual && <span style={mutualBadgeStyle}>서로</span>}
+        </span>
+        <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 1, wordBreak: 'keep-all' }}>
+          {readerStatusLine(reader, now)}
+        </Text>
+      </div>
+
+      {/* 경과는 읽는 중일 때만 — 그 밖에는 본문이 이미 시점을 말해 같은 말이 두 번 된다. */}
+      {reading && (
+        <span
+          style={{
+            flex: '0 0 auto',
+            alignSelf: 'center',
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--adaptiveBlue700, #4F6B4C)',
+          }}
+        >
+          {formatDuration(elapsedSeconds(reader.readingSince!, now))}째
+        </span>
+      )}
+    </div>
+  );
+}
 
 /** 줄 사이 경계 — 첫 줄에는 안 긋는다(박스 머리와 겹쳐 두 줄로 보인다). */
 const rowStyle = (index: number) =>
@@ -234,18 +379,22 @@ export function FeedBox({
 }) {
   return (
     <section style={sectionStyle}>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 10 }}>
         {visibleTabs(feed?.newsEnabled ?? false).map((key) => (
-          <button
-            key={key}
-            type="button"
-            data-feed-tab={key}
-            aria-current={key === tab ? 'true' : undefined}
-            onClick={() => onTab(key)}
-            style={pillStyle(key === tab)}
-          >
-            {TAB_LABEL[key]}
-          </button>
+          <Fragment key={key}>
+            <button
+              type="button"
+              data-feed-tab={key}
+              // 그림뿐인 탭은 접근성 이름이 없으면 스크린리더에 무명 버튼이 된다.
+              aria-label={key === 'readers' ? '함께 읽는 사람' : undefined}
+              aria-current={key === tab ? 'true' : undefined}
+              onClick={() => onTab(key)}
+              style={key === 'readers' ? iconPillStyle(key === tab) : pillStyle(key === tab)}
+            >
+              {key === 'readers' ? <PersonMark /> : TAB_LABEL[key]}
+            </button>
+            {key === 'readers' && <span data-tab-split="" aria-hidden="true" style={tabSplitStyle} />}
+          </Fragment>
         ))}
       </div>
 
@@ -258,6 +407,17 @@ export function FeedBox({
         <Text typography="st12" color="grey600" style={{ display: 'block' }}>
           불러오는 중…
         </Text>
+      ) : tab === 'readers' ? (
+        <FeedList
+          // `?? []` — 이 필드를 아직 안 내려주는 서버와도 붙는다(배포 순서에 화면이 의존하지 않는다).
+          items={feed.readers ?? []}
+          expanded={expanded}
+          empty={EMPTY_MESSAGE.readers}
+          onToggle={onToggle}
+          row={(reader: ReaderStatus, index) => (
+            <ReaderRow key={reader.loginId} reader={reader} index={index} now={now} />
+          )}
+        />
       ) : tab === 'news' ? (
         <FeedList
           items={feed.news}
@@ -387,7 +547,7 @@ export function HomeFeedBox({
   onOpenMargin: (loginId: string, bookId: number) => void;
 }) {
   const [feed, setFeed] = useState<HomeFeedResponse | null>(null);
-  const [tab, setTab] = useState<FeedTab>('social');
+  const [tab, setTab] = useState<FeedTab>(DEFAULT_TAB);
   const [expanded, setExpanded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
