@@ -137,7 +137,7 @@ function _showChip(mode, deferred) {
     // 메인 라벨 (클릭 가능)
     const label = document.createElement('button');
     label.type = 'button';
-    label.textContent = '📲 홈 화면에 추가';
+    label.textContent = '홈 화면에 추가';
     label.setAttribute('aria-label', '홈 화면에 추가');
     label.style.cssText = [
         'background:none',

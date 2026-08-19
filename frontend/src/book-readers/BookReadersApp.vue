@@ -34,7 +34,7 @@ onMounted(load);
 
 <template>
     <div class="page-stack">
-        <p class="greeting">👥 내 팔로우 중 이 책을 보는 사람</p>
+        <p class="greeting">내 팔로우 중 이 책을 보는 사람</p>
         <section class="card">
             <h2>{{ title || '이 책' }}</h2>
 
@@ -45,7 +45,7 @@ onMounted(load);
             </p>
 
             <template v-if="reading.length">
-                <h3 class="reader-bucket">📖 읽는 중 · 완독</h3>
+                <h3 class="reader-bucket">읽는 중 · 완독</h3>
                 <ul class="book-list">
                     <UserRow v-for="u in reading" :key="u.loginId" :user="u">
                         <template #default="{ user }">
@@ -56,7 +56,7 @@ onMounted(load);
             </template>
 
             <template v-if="wanting.length">
-                <h3 class="reader-bucket">📌 읽고 싶음</h3>
+                <h3 class="reader-bucket">읽고 싶음</h3>
                 <ul class="book-list">
                     <UserRow v-for="u in wanting" :key="u.loginId" :user="u">
                         <template #default="{ user }">

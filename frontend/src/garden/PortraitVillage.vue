@@ -2,15 +2,15 @@
   <div class="portrait-village">
     <!-- 슬림 HUD -->
     <div class="pv-hud">
-      <a href="/" class="pv-hud-home" aria-label="홈으로">🏠 홈</a>
+      <a href="/" class="pv-hud-home" aria-label="홈으로">홈</a>
       <span class="pv-hud-title">{{ nickname }}님의 서재</span>
-      <span class="pv-hud-food">🍙 {{ foodBalance }}</span>
-      <button type="button" class="pv-hud-dex" @click="emit('open-dex')" aria-label="도감 열기">📖 도감</button>
+      <!-- 숫자만 두면 무엇의 개수인지 알 수 없어, 이모지가 지던 뜻을 글자로 옮긴다. -->
+      <span class="pv-hud-food">먹이 {{ foodBalance }}</span>
+      <button type="button" class="pv-hud-dex" @click="emit('open-dex')" aria-label="도감 열기">도감</button>
     </div>
 
     <!-- 식구가 없을 때 -->
     <div v-if="!hero" class="pv-empty">
-      <div class="pv-empty-emoji" aria-hidden="true">🏡</div>
       <p>아직 서재 식구가 없어요.</p>
       <p class="pv-empty-sub">작가의 책을 완독하면 그 작가가 서재로 찾아와요.</p>
     </div>
@@ -23,8 +23,9 @@
           <svg v-if="hero.spriteId" class="pv-hero-svg" aria-hidden="true">
             <use :href="'#sprite-' + hero.spriteId"></use>
           </svg>
-          <span v-else class="pv-hero-emoji" aria-hidden="true">{{ hero.emoji }}</span>
-          <span v-if="levelUpFlash" class="pv-hero-sparkle" aria-hidden="true">✨</span>
+          <!-- 스프라이트가 없는 종의 자리 채움 — 서버 `emoji` 대신 이름 첫 글자(기본 이모지를 쓰지 않는다). -->
+          <span v-else class="pv-hero-emoji" aria-hidden="true">{{ (hero.name || '?').charAt(0) }}</span>
+          <!-- 반짝임 이모지를 걷었다 — 레벨업 신호는 `pv-hero-levelup` 클래스(테두리·배경 전환)와 아래 문구가 함께 진다. -->
         </div>
         <p class="pv-hero-name">{{ hero.name }}</p>
         <p class="pv-hero-rank">Lv{{ hero.level }} · {{ hero.title || '아직 낯설어요' }}</p>
@@ -35,17 +36,17 @@
           <div class="pv-meter-fill" :style="{ width: (prog.progress * 100) + '%' }"></div>
         </div>
         <p class="pv-meter-caption">
-          <template v-if="prog.isMax">❤️ {{ hero.affection }} · 베프 — 최고 단계예요</template>
-          <template v-else>❤️ {{ hero.affection }} / {{ prog.nextThreshold }} · 다음 단계까지 {{ (prog.nextThreshold ?? 0) - hero.affection }}번</template>
+          <template v-if="prog.isMax">정 {{ hero.affection }} · 베프 — 최고 단계예요</template>
+          <template v-else>정 {{ hero.affection }} / {{ prog.nextThreshold }} · 다음 단계까지 {{ (prog.nextThreshold ?? 0) - hero.affection }}번</template>
         </p>
 
         <!-- 밥 주기 -->
         <button type="button" class="pv-feed-btn" :disabled="!canFeed || feeding" @click="feed">
-          {{ feeding ? '주는 중…' : (canFeed ? '🍙 밥 주기' : '🍙 밥이 없어요') }}
+          {{ feeding ? '주는 중…' : (canFeed ? '밥 주기' : '밥이 없어요') }}
         </button>
         <p class="pv-feed-hint" aria-live="polite">
           <template v-if="message">{{ message }}</template>
-          <template v-else-if="!canFeed">오늘 독서 목표를 채우면 먹이를 얻어요 🍙</template>
+          <template v-else-if="!canFeed">오늘 독서 목표를 채우면 먹이를 얻어요</template>
           <template v-else>밥을 주면 정이 쌓여요</template>
         </p>
       </div>
@@ -133,14 +134,14 @@ async function feed() {
             emit('fed', result);   // 부모(VillageApp)가 data 갱신 → hero/prog 반응성 재계산(미터 차오름)
             if (result.leveledUp) {
                 levelUpFlash.value = true;
-                message.value = `✨ ${result.title}! 정이 깊어졌어요`;
+                message.value = `${result.title}! 정이 깊어졌어요`;
                 setTimeout(() => { levelUpFlash.value = false; }, 1600);
             } else {
                 message.value = '냠냠 — 정이 조금 쌓였어요';
             }
         } else {
             const errText = await res.text().catch(() => '');
-            message.value = errText || '오늘 목표를 채우면 먹이를 얻어요 🍙';
+            message.value = errText || '오늘 목표를 채우면 먹이를 얻어요';
         }
     } catch (_e) {
         message.value = '네트워크 오류가 발생했어요.';

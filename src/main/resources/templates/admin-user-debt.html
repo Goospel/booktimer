@@ -23,7 +23,6 @@
 <body>
 <div class="container">
     <header class="brand">
-        <span class="emoji">📊</span>
         <h1 th:text="'@' + ${debt.loginId} + ' — 부채 진단'">부채 진단</h1>
     </header>
 
@@ -83,7 +82,7 @@
             <tr th:each="day : ${debt.trace.days}" th:classappend="${day.isToday()} ? 'today-row' : ''">
                 <td>
                     <span th:text="${#temporals.format(day.date,'MM-dd (E)')}">날짜</span>
-                    <b th:if="${day.isToday()}" style="color:#0078ff;"> ★</b>
+                    <b th:if="${day.isToday()}" style="color:#0078ff;"> 오늘</b>
                 </td>
                 <td th:text="${day.goalSeconds / 60}">60</td>
                 <td th:text="${day.readSeconds / 60}">0</td>

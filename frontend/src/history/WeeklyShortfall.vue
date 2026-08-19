@@ -26,5 +26,5 @@ function formatDebt(debtSeconds: number): string {
             </li>
         </ul>
     </div>
-    <p class="status-line" v-else>빠뜨린 날이 없어요. 잘하고 있어요! 🎉</p>
+    <p class="status-line" v-else>빠뜨린 날이 없어요. 잘하고 있어요!</p>
 </template>

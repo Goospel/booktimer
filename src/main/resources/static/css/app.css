@@ -1534,7 +1534,6 @@ body.bookdetail-page .link-row a { flex-direction: column; gap: 8px; padding: 20
     border-radius: var(--radius-sm); padding: 11px 13px;
     font-size: .8rem; margin: 0 0 16px;
 }
-.shelf-public-hint-icon { flex: 0 0 auto; }
 .shelf-public-hint-text { flex: 1 1 auto; min-width: 0; }
 .shelf-public-hint strong { font-weight: 600; }
 .shelf-public-hint a { color: var(--accent-hover); font-weight: 600; }
@@ -2686,7 +2685,6 @@ body.personality-page #personality-app { gap: 18px; }
     color: var(--muted);
     padding: 24px;
 }
-.pv-empty-emoji { font-size: 3rem; }
 .pv-empty p { margin: 4px 0; }
 .pv-empty-sub { font-size: .82rem; }
 
@@ -2724,16 +2722,6 @@ body.personality-page #personality-app { gap: 18px; }
 }
 .pv-hero-svg { width: 128px; height: 128px; }
 .pv-hero-emoji { font-size: 5rem; line-height: 1; }
-.pv-hero-sparkle {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 3rem;
-    pointer-events: none;
-    animation: pv-sparkle 1.6s ease-out;
-}
 .pv-hero-name { font-size: 1.2rem; font-weight: 700; color: var(--text); }
 .pv-hero-rank { font-size: .85rem; color: var(--muted); }
 
@@ -2777,11 +2765,6 @@ body.personality-page #personality-app { gap: 18px; }
 
 /* 레벨업 연출 */
 .pv-hero-levelup { animation: pv-levelup 1.6s ease-out; }
-@keyframes pv-sparkle {
-    0%   { opacity: 0; transform: scale(.4); }
-    30%  { opacity: 1; transform: scale(1.1); }
-    100% { opacity: 0; transform: scale(1.6); }
-}
 @keyframes pv-levelup {
     0%, 100% { box-shadow: var(--shadow); }
     40%      { box-shadow: 0 0 0 4px var(--sage-5), var(--shadow); }
@@ -2837,7 +2820,7 @@ body.personality-page #personality-app { gap: 18px; }
 
 @media (prefers-reduced-motion: reduce) {
     .pv-meter-fill { transition: none; }
-    .pv-hero-levelup, .pv-hero-sparkle { animation: none; }
+    .pv-hero-levelup { animation: none; }
 }
 
 /* 설정 알림 섹션 푸시 토글 = 스위치. 정의는 파일 끝 "설정 페이지 재스킨"(body.settings-page)에 있다.

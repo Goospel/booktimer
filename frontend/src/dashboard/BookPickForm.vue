@@ -49,7 +49,7 @@ function startBookless() { if (!props.pending) emit('start', null) }
     </template>
     <!-- 책 0권이어도 시작을 막지 않는다: 책 없이 바로 시작 + 책 고르기(검색·담기 시트) -->
     <div v-else class="dash-empty">
-        <p>무슨 책을 읽어볼까요? 책 없이 바로 시작해도 돼요. 📖</p>
+        <p>무슨 책을 읽어볼까요? 책 없이 바로 시작해도 돼요.</p>
         <button type="button" class="dash-btn-fill" :disabled="pending" @click="startBookless">
             {{ pending ? '시작하는 중…' : '책 없이 측정 시작' }}
         </button>

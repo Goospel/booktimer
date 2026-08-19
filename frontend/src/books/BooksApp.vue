@@ -236,7 +236,6 @@ async function removeBook(book: MyBookSummary) {
     </div>
   </div>
   <div v-else-if="loadError" class="shelf-load-error" role="alert">
-    <span aria-hidden="true">⚠️</span>
     <span>책장을 불러오지 못했어요. <button type="button" class="link-btn" @click="load">다시 시도</button></span>
   </div>
   <template v-else>
@@ -278,7 +277,7 @@ async function removeBook(book: MyBookSummary) {
             <template v-for="pop in [popularityForSearch(row.isbn13)]" :key="'sp'">
               <a v-if="pop" class="follow-popularity"
                  :href="`/books/readers?isbn=${row.isbn13}&title=${encodeURIComponent(row.title)}`"
-                 title="누가 읽는지 보기">👥 팔로우 중
+                 title="누가 읽는지 보기">팔로우 중
                 <span v-if="pop.wantCount > 0">{{ pop.wantCount }}명 원함</span>
                 <span v-if="pop.wantCount > 0 && pop.readCount > 0">·</span>
                 <span v-if="pop.readCount > 0">{{ pop.readCount }}명 읽음</span>
@@ -332,7 +331,6 @@ async function removeBook(book: MyBookSummary) {
         <div v-if="noteOpen" class="affiliate-pop-backdrop" @click="noteOpen = false"></div>
       </div>
       <p class="shelf-public-hint">
-        <span class="shelf-public-hint-icon" aria-hidden="true">🌍</span>
         <span class="shelf-public-hint-text"><strong>책방 공개</strong>로 켠 책은 <a :href="`/u/${myLoginId}`">내 책방</a>에서 누구나 볼 수 있어요.</span>
       </p>
 
@@ -346,9 +344,9 @@ async function removeBook(book: MyBookSummary) {
         <button type="button" class="filter-chip" :class="{ active: visFilter === null }"
                 @click="selectVis(null)">전체</button>
         <button type="button" class="filter-chip" :class="{ active: visFilter === 'PUBLIC' }"
-                @click="selectVis('PUBLIC')">🌍 공개</button>
+                @click="selectVis('PUBLIC')">공개</button>
         <button type="button" class="filter-chip" :class="{ active: visFilter === 'PRIVATE' }"
-                @click="selectVis('PRIVATE')">🔒 비공개</button>
+                @click="selectVis('PRIVATE')">비공개</button>
       </div>
 
       <div v-if="shelfBooks.length === 0 && statusFilter === null && visFilter === null" class="shelf-empty">
@@ -365,11 +363,11 @@ async function removeBook(book: MyBookSummary) {
             <a class="book-title" :href="`/books/${book.id}`">{{ book.title }}</a>
             <span v-if="book.author" class="book-author">{{ book.author }}</span>
             <span class="book-status-badge" :style="statusStyle(book.status)">{{ book.statusLabel }}</span>
-            <span v-if="book.seconds > 0" class="book-time mono">⏱ {{ formatTime(book.seconds) }}</span>
+            <span v-if="book.seconds > 0" class="book-time mono">{{ formatTime(book.seconds) }}</span>
             <template v-for="pop in [popularityFor(book.isbn13)]" :key="'bp'">
               <a v-if="pop" class="follow-popularity"
                  :href="`/books/readers?isbn=${book.isbn13}&title=${encodeURIComponent(book.title)}`"
-                 title="누가 읽는지 보기">👥 팔로우 중
+                 title="누가 읽는지 보기">팔로우 중
                 <span v-if="pop.wantCount > 0">{{ pop.wantCount }}명 원함</span>
                 <span v-if="pop.wantCount > 0 && pop.readCount > 0">·</span>
                 <span v-if="pop.readCount > 0">{{ pop.readCount }}명 읽음</span>
@@ -384,7 +382,7 @@ async function removeBook(book: MyBookSummary) {
             <button type="button" class="vis-chip" :class="{ 'is-public': book.isPublic }"
                     :aria-pressed="String(book.isPublic)"
                     :title="book.isPublic ? '책방에 공개 중 — 누르면 비공개로 전환' : '비공개 — 누르면 책방에 공개'"
-                    @click="toggleVisibility(book)">{{ book.isPublic ? '🌍 공개' : '🔒 비공개' }}</button>
+                    @click="toggleVisibility(book)">{{ book.isPublic ? '공개' : '비공개' }}</button>
             <!-- 구매 — 활성 제공자 리스트(알라딘/쿠팡/Yes24). 2개↑면 드롭다운, 1개면 제공자명 단일 버튼. -->
             <details v-if="buyOptions(book).length > 1" class="buy-menu">
               <summary class="btn-ghost">구매</summary>
