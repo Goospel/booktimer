@@ -216,6 +216,15 @@ export interface TimerState {
   activeStartedAt: string | null;
   activeBookTitle: string | null;
   activeBookTotalSeconds: number;
+  /**
+   * 지금 측정 중인 책 — 홈의 「읽는 중」 카드가 **표지를 그리는 재료**다.
+   *
+   * <p>`null`은 책 없이 측정 중이거나 측정 중이 아니라는 뜻이고, `undefined`는 이 필드를 아직 안 주는
+   * 옛 서버다(둘 다 카드는 「책 없이」로 선다 — 배포 순서에 화면이 의존하지 않는다).
+   *
+   * <p>`activeBookTitle`과 겹쳐 보여도 지우지 않는다: 제목 한 줄은 웹 SSR이 쓰고 있다.
+   */
+  activeBook?: BookOption | null;
   readingBooks: BookOption[];
   finishedBooks: BookOption[];
   recentBookId: number | null;

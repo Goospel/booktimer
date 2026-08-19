@@ -216,11 +216,14 @@ function buildMonths(): MonthlySection[] {
   }));
 }
 
+const toOption = ({ id, title, coverUrl, author, isPublic }: (typeof books)[number]): BookOption =>
+  ({ id, title, coverUrl, author, isPublic });
+
 const bookOptions = (status: BookStatus): BookOption[] =>
   books
     .filter((b) => b.status === status)
     // `isPublic`은 홈 문으로 곧장 연 작성 화면의 가시성 캡션 재료다(게이트가 아니다).
-    .map(({ id, title, coverUrl, author, isPublic }) => ({ id, title, coverUrl, author, isPublic }));
+    .map(toOption);
 
 function timerState(): TimerState {
   const active = books.find((b) => b.id === state.activeBookId) ?? null;
@@ -233,6 +236,8 @@ function timerState(): TimerState {
     activeStartedAt: state.activeStartedAt,
     activeBookTitle: active?.title ?? null,
     activeBookTotalSeconds: active?.seconds ?? 0,
+    // 홈의 「읽는 중」 카드가 표지를 그리는 재료 — 책 없이 측정 중이면 null이라 그 경로도 목으로 밟힌다.
+    activeBook: active === null ? null : toOption(active),
     readingBooks: bookOptions('READING'),
     finishedBooks: bookOptions('FINISHED'),
     // 서버는 `startedAt desc`로 고른다 — **활성 세션도 그 정렬에 들어가** 측정 중이면 그 책이 최신이다.

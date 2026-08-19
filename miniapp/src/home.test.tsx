@@ -1428,3 +1428,51 @@ describe('독서등 — 밝게 남는 자리 (lamp-page)', () => {
     expect(markup).toContain(ACTIVE_SESSION_RELIEF);
   });
 });
+
+/**
+ * 측정 중 「읽는 중」 카드 — 캐러셀이 서 있던 자리가 <b>지금 읽는 책 한 권</b>으로 바뀜다.
+ *
+ * <p>예전엔 측정을 누르면 그 섹션이 통째로 사라져 표지가 없어졌고, 히어로의 「측정 중 12분 · 데미안」
+ * 한 줄만 남았다(사용자 지적 2026-08-19: 「책 사진이 사라지고 텍스트로 바뀐다」).
+ */
+describe('측정 중 「읽는 중」 카드', () => {
+  const reading = book(7, '미움받을 용기', { author: '기시미 이치로', coverUrl: 'https://img.example/c.jpg' });
+
+  const measuring = (extra: Partial<DashboardResponse> = {}) =>
+    renderHome({
+      hasActiveSession: true,
+      activeStartedAt: new Date().toISOString(),
+      activeBookTitle: '미움받을 용기',
+      activeBook: reading,
+      readingBooks: [reading],
+      ...extra,
+    });
+
+  it('측정 중이면 「읽는 중」과 그 책의 표지·제목이 선다', () => {
+    const markup = measuring();
+
+    expect(markup).toContain('읽는 중');
+    expect(markup).toContain('https://img.example/c.jpg');
+    expect(markup).toContain('미움받을 용기');
+  });
+
+  it('측정 중엔 고르는 자리가 사라진다 — 대상은 이미 정해졌다', () => {
+    expect(measuring()).not.toContain('무엇으로 측정할까요?');
+    expect(renderHome({ readingBooks: [reading] })).toContain('무엇으로 측정할까요?'); // 부정 단언의 짝
+  });
+
+  /** 책 없이 측정은 이 앱의 정상 경로다 — 카드가 통째로 사라지면 화면이 튀다. */
+  it('책 없이 측정 중이면 카드는 서되 「책 없이」로 뜼다', () => {
+    const markup = measuring({ activeBook: null, activeBookTitle: null });
+
+    expect(markup).toContain('읽는 중');
+    expect(markup).toContain('책 없이');
+  });
+
+  /** 배포 순서에 화면이 의존하지 않는다 — activeBook을 안 주는 서버와도 붙는다. */
+  it('옆 서버(activeBook 없음)에서도 안 깨진다', () => {
+    const markup = measuring({ activeBook: undefined });
+
+    expect(markup).toContain('읽는 중');
+  });
+});
