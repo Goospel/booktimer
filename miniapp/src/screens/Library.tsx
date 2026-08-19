@@ -917,26 +917,12 @@ export function BookSearch({
       )}
 
       {results?.map((row, index) => (
-        <button
+        <SearchResultRow
           key={row.isbn13 ?? `${row.title}-${index}`}
-          type="button"
-          disabled={busy || row.owned}
-          onClick={() => setPicking(row)}
-          style={{ ...rowStyle, marginTop: 8, borderRadius: 12, background: 'var(--adaptiveGrey100, #FCFAF5)' }}
-        >
-          <BookCover url={row.coverUrl} title={row.title} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div>
-              <Text typography="st11">{row.title}</Text>
-            </div>
-            <div style={{ marginTop: 4 }}>
-              <Text typography="st12" color="grey600">
-                {row.author ?? '저자 미상'}
-                {row.owned && ' · 이미 서재에 있어요'}
-              </Text>
-            </div>
-          </div>
-        </button>
+          row={row}
+          busy={busy}
+          onPick={() => setPicking(row)}
+        />
       ))}
 
       {picking && (
@@ -954,6 +940,112 @@ export function BookSearch({
     </Screen>
   );
 }
+
+/**
+ * 검색 결과 한 줄. 이미 서재에 있는 책은 <b>두 겹으로</b> 말한다 — 읽어야 아는 칩(「서재에 있어요」)과,
+ * 읽지 않아도 보이는 형태(`.book-owned`: 눕힌 종이 · 표지 도장 · 접힌 모서리).
+ *
+ * <p>둘 다 필요한 이유는 이 행이 <b>`disabled`</b>이기 때문이다. 예전엔 저자 이름 뒤에
+ * 「 · 이미 서재에 있어요」를 이어 붙였는데, 저자와 같은 `st12 · grey600` 한 벌이라 이름의 일부처럼
+ * 읽혔다 — 그 한 줄을 놓치면 탭이 막힌 이유를 알 길이 없어 앱이 멈춘 것으로 보인다(사용자 제보
+ * 2026-08-19). 문구는 훑는 사람을 지나치므로, 형태가 먼저 말하고 문구가 확인해 주는 순서로 뒤집었다.
+ *
+ * <p>`BookSearch` 안에 인라인으로 두지 않고 꺼낸 데는 계측 이유도 있다: 정적 렌더 하니스에서는
+ * 검색 응답이 안 돌아 `results`가 영영 `null`이라, 행이 그 안에 있으면 어떤 단언도 세울 수 없다.
+ */
+export function SearchResultRow({
+  row,
+  busy,
+  onPick,
+}: {
+  row: SearchRow;
+  busy: boolean;
+  onPick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={row.owned ? 'book-owned' : undefined}
+      disabled={busy || row.owned}
+      onClick={onPick}
+      style={{
+        ...rowStyle,
+        position: 'relative', // 접힌 모서리(`.book-owned::after`)가 이 박스를 기준으로 앉는다
+        marginTop: 8,
+        borderRadius: 12,
+        // 담긴 책은 캔버스보다 한 톤 가라앉힌다 — 카드지(#FCFAF5)보다 어두워야 「지나간 칸」으로 읽힌다.
+        background: row.owned ? '#EFE9DC' : 'var(--adaptiveGrey100, #FCFAF5)',
+      }}
+    >
+      {/* 표지만 흐리고 도장은 또렷해야 하므로 흐림을 안쪽 겹에 건다(바깥에 걸면 도장까지 바랜다). */}
+      <span style={{ position: 'relative', flex: '0 0 auto', display: 'inline-flex' }}>
+        <span style={{ display: 'inline-flex', opacity: row.owned ? 0.62 : 1 }}>
+          <BookCover url={row.coverUrl} title={row.title} />
+        </span>
+        {row.owned && (
+          <span style={ownedStampStyle}>
+            <OwnedCheck color="#FCFAF5" />
+          </span>
+        )}
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div>
+          <Text typography="st11">{row.title}</Text>
+        </div>
+        <div style={{ marginTop: 4 }}>
+          <Text typography="st12" color="grey600">
+            {row.author ?? '저자 미상'}
+          </Text>
+        </div>
+        {row.owned && (
+          <span style={ownedChipStyle}>
+            <OwnedCheck color="#4F6B4C" />
+            서재에 있어요
+          </span>
+        )}
+      </div>
+    </button>
+  );
+}
+
+/** 담김 체크 — 기본 이모지를 쓰지 않기로 해서(2026-08-18) 선 하나로 그린다. 뜻은 옆 글자가 진다. */
+function OwnedCheck({ color }: { color: string }) {
+  return (
+    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path d="M2 6.4 L4.6 9 L10 3" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** 표지 귀퉁이의 도장. 테두리가 눕힌 종이색이라 표지에 찍혀 파인 것처럼 보인다. */
+const ownedStampStyle = {
+  position: 'absolute',
+  right: -5,
+  bottom: -3,
+  width: 20,
+  height: 20,
+  borderRadius: '50%',
+  background: '#6E8A6A', // 웹 --accent
+  border: '1.5px solid #EFE9DC',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+} as const;
+
+/** 「서재에 있어요」 칩 — 세이지 연한 채움. 연필 프레임은 쓰지 않는다(좁은 요소에서 그림이 깨진다). */
+const ownedChipStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  marginTop: 6,
+  padding: '1px 8px 2px',
+  borderRadius: 8,
+  border: '1px solid rgba(110, 138, 106, 0.5)',
+  background: 'rgba(110, 138, 106, 0.18)',
+  color: '#4F6B4C', // 웹 --accent-hover. 연한 채움 위에서 읽히는 유일한 톤
+  fontSize: 12.5,
+  lineHeight: 1.5,
+} as const;
 
 /**
  * 담을 곳 고르기 — 서재 「관리」 시트와 <b>같은 껍데기·같은 어휘</b>다(`SECTIONS` 단일 출처).

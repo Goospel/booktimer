@@ -11,6 +11,7 @@ import {
   BookGrid,
   BookSearch,
   MarginBoxView,
+  SearchResultRow,
   Shelf,
   marginBoxView,
   metaLine,
@@ -623,6 +624,65 @@ describe('책 담을 곳 고르기', () => {
 
     expect(markup).not.toContain('role="dialog"');
     expect(markup).not.toContain('담기');
+  });
+});
+
+/**
+ * 이미 서재에 있는 책 — <b>눌러도 아무 일이 없는 칸</b>을 눈에 보이게 한다(사용자 제보 2026-08-19).
+ *
+ * <p>예전엔 저자 이름 뒤에 「 · 이미 서재에 있어요」로 이어 붙였다. 저자와 이 안내가 같은
+ * `st12 · grey600` 한 벌이라 저자 이름의 일부처럼 읽혔다. 정작 그 행은 `disabled`라 탭이 막혀 있어서,
+ * 안내를 놓친 사람에겐 눌러도 아무 반응이 없는 칸이 된다 — 앱이 멈춘 것으로 읽히는 자리다.
+ *
+ * <p>그래서 신호를 둘로 나눴다: <b>읽어야 아는 것</b>(칩)과 <b>읽지 않아도 보이는 것</b>(눕힌 종이·도장·
+ * 접힌 모서리 = `.book-owned`). 뒤엣것이 「이 칸은 끝난 칸」을 형태로 말하므로 글자를 안 읽어도 전달된다.
+ *
+ * <p>정적 렌더라 `searchBooks` 응답이 안 돌아 `BookSearch` 통째로는 결과 행이 영영 안 뜬다 —
+ * 그래서 행을 `SearchResultRow`로 꺼내 직접 렌더해 계측한다(`AddStatusSheet`와 같은 처지).
+ */
+describe('검색 결과 — 이미 서재에 있는 책', () => {
+  const found: SearchRow = {
+    title: '미움받을 용기',
+    author: '기시미 이치로',
+    isbn13: '9788996991342',
+    coverUrl: null,
+    publisher: null,
+    purchaseLink: null,
+    category: null,
+    pubDate: null,
+    owned: false,
+  };
+
+  const row = (owned: boolean, busy = false) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <SearchResultRow row={{ ...found, owned }} busy={busy} onPick={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  it('담긴 책엔 「서재에 있어요」 칩이 선다', () => {
+    expect(row(true)).toContain('서재에 있어요');
+  });
+
+  it('그 말을 한 번만 한다 — 저자 줄로 이사가 끝났는지가 여기서 갈린다', () => {
+    expect(row(true).match(/서재에 있어요/g)).toHaveLength(1);
+    expect(row(true)).not.toContain('이미 서재에 있어요'); // 옛 문구가 저자 뒤에 남아 있으면 실패
+  });
+
+  it('읽지 않아도 보이는 표식을 함께 단다 — 문구는 읽어야 알지만 형태는 그냥 보인다', () => {
+    expect(row(true)).toContain('book-owned');
+  });
+
+  it('아직 없는 책엔 칩도 표식도 없다 — 담을 수 있는 칸이 담긴 칸처럼 보이지 않게', () => {
+    const markup = row(false);
+
+    expect(markup).not.toContain('서재에 있어요');
+    expect(markup).not.toContain('book-owned');
+  });
+
+  it('담긴 책은 여전히 눌리지 않는다 — 보이게 만든 것이지 담기게 만든 게 아니다', () => {
+    expect(row(true)).toContain('disabled');
+    expect(row(false)).not.toContain('disabled');
   });
 });
 
