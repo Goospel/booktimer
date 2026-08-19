@@ -1838,7 +1838,7 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 .book-sheet-book-title { font-weight: 600; color: var(--text); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .book-sheet-byline { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .book-sheet-badge { flex-shrink: 0; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; }
-.book-sheet-owned { flex-shrink: 0; font-size: 12px; color: var(--muted); }
+/* .book-sheet-owned 의 모양은 책장 배지와 한 규칙으로 묶여 있다 — 「이미 책장에 있음」 배지 절 참고. */
 .book-sheet-add-btn {
     width: auto; flex-shrink: 0; padding: 8px 14px; border: none; border-radius: 10px;
     background: var(--ok); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer;
@@ -2046,13 +2046,50 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 
 /* 검색 결과 중 이미 내 책장에 있는 책 표시(중복 추가 방지). followPopularity와 같은 메타 줄의 인포 배지지만,
    사회적 신호(accent)와 구분되게 소유 상태는 중립(muted) 톤. */
-.shelf-owned-badge {
+/*
+ * 「이미 책장에 있음」 배지 — 책장 검색 결과(.shelf-owned-badge)와 대시보드 책 시트(.book-sheet-owned)가
+ * 한 규칙을 공유한다. 둘은 같은 검색 API의 같은 `owned` 플래그를 그리므로, 표기가 갈리면 같은 사실이
+ * 두 얼굴로 보인다. 미니앱의 「서재에 있어요」 칩과 같은 언어이되 **문구는 「책장」이다** — 웹에서
+ * 「서재」는 작가 캐릭터가 사는 마을을 가리켜(garden.html·랜딩) 여기서 쓰면 뜻이 충돌한다.
+ *
+ * 흐린 회색 글자였던 것을 세이지 칩으로 올렸다. 저자·출판사 줄과 같은 옷이라 한 줄 더 붙은 메타로
+ * 읽혔는데, 이건 메타가 아니라 「담을 수 없다」는 상태 신호다.
+ */
+.shelf-owned-badge,
+.book-sheet-owned {
   display: inline-flex;
   align-items: center;
-  gap: .2rem;
+  gap: .25rem;
+  flex-shrink: 0;
+  padding: .05rem .45rem .1rem;
+  border: 1px solid rgba(110, 138, 106, .5);
+  border-radius: 8px;
+  background: rgba(110, 138, 106, .18);
   font-size: .78rem;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--accent-hover);
+}
+
+/*
+ * ⚠️ 책장 쪽 배지는 `.book-meta`(세로 flex)의 자식이라 기본 `align-items: stretch`가 **가로로 늘린다** —
+ * 흐린 글자였을 땐 안 보이던 것이 채움·테두리가 생기자 행 전체를 가로지르는 띠로 드러났다.
+ * 시트 쪽은 부모가 가로 flex(`align-items: center`)라 해당 없다.
+ */
+.shelf-owned-badge { align-self: flex-start; }
+
+/*
+ * 체크 표식 — 기본 이모지를 쓰지 않기로 해서(2026-08-18) 선 하나로 그린다. 마크업이 아니라 여기서
+ * 그리는 이유는 두 자리가 자동으로 같아지기 때문이다. mask라 색은 글자색을 그대로 따라간다.
+ */
+.shelf-owned-badge::before,
+.book-sheet-owned::before {
+  content: '';
+  width: .7em;
+  height: .7em;
+  flex-shrink: 0;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 6.4 4.6 9 10 3' fill='none' stroke='%23000' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 6.4 4.6 9 10 3' fill='none' stroke='%23000' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
 /* 인기 카운트 drill-down — "이 책 읽는 내 팔로우" 버킷 제목 */
