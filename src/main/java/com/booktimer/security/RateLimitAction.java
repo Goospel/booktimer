@@ -17,6 +17,12 @@ public enum RateLimitAction {
     STORY_CREATE(10, Duration.ofHours(1)),
 
     /**
+     * 여백 글 좋아요. 작성(시간당 10)보다 훨씬 넉넉한 건 <b>정상 사용이 연타</b>여서다 — 목록을 훑으며
+     * 마음에 든 문장마다 누르는 것이 이 기능의 쓰임이라, 작성과 같은 한도를 두면 일반 사용이 걸린다.
+     */
+    STORY_LIKE(60, Duration.ofMinutes(1)),
+
+    /**
      * 미니앱 토스 로그인·신규가입({@code /api/toss/login·register}). 정상 사용은 앱 진입당 1~2회라
      * 분당 20이면 넉넉하고, 자동화된 인가코드 대량 시도는 걸린다.
      */

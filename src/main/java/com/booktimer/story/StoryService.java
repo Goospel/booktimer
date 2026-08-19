@@ -14,6 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 여백 유스케이스 (sns-design §13) — 글 작성·본인 삭제.
@@ -40,17 +43,20 @@ public class StoryService {
     private final RateLimitService rateLimitService;
     private final FollowService followService;
     private final ProfileService profileService;
+    private final StoryLikeRepository storyLikeRepository;
 
     public StoryService(StoryRepository storyRepository,
                         BookRepository bookRepository,
                         RateLimitService rateLimitService,
                         FollowService followService,
-                        ProfileService profileService) {
+                        ProfileService profileService,
+                        StoryLikeRepository storyLikeRepository) {
         this.storyRepository = storyRepository;
         this.bookRepository = bookRepository;
         this.rateLimitService = rateLimitService;
         this.followService = followService;
         this.profileService = profileService;
+        this.storyLikeRepository = storyLikeRepository;
     }
 
     /**
@@ -102,13 +108,97 @@ public class StoryService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다");
         }
         boolean following = !self && followService.isFollowing(viewer, target);
-        List<MarginEntry> entries = (self || following)
+        List<Story> stories = (self || following)
                 ? storyRepository.findByUserAndBookOrderByCreatedAtDescIdDesc(
-                        target, book, PageRequest.of(0, MAX_MARGIN_ENTRIES)).stream()
-                        .map(MarginEntry::of)
-                        .toList()
+                        target, book, PageRequest.of(0, MAX_MARGIN_ENTRIES))
                 : List.of();
-        return new MarginResponse(MarginBook.of(book), target.getNickname(), self, following, entries);
+        return new MarginResponse(MarginBook.of(book), target.getNickname(), self, following,
+                withLikes(stories, viewer, self));
+    }
+
+    /**
+     * 글 목록에 좋아요 집계를 붙인다 — 카드마다 세지 않고 <b>배치 2쿼리</b>로 (N+1 금지,
+     * {@code recencyByBook}과 같은 관례).
+     *
+     * <p>빈 목록이면 쿼리를 아예 안 던진다({@code in ()}은 DB마다 취급이 다르고, 물어볼 것도 없다).
+     * 자기 여백에서는 「내가 눌렀는가」도 묻지 않는다 — 자기 글엔 누를 수 없어 답이 구조적으로 항상
+     * 비어 있다({@link StoryLike#of}가 막는다).
+     */
+    private List<MarginEntry> withLikes(List<Story> stories, User viewer, boolean self) {
+        if (stories.isEmpty()) {
+            return List.of();
+        }
+        List<Long> ids = stories.stream().map(Story::getId).toList();
+        Map<Long, Long> counts = storyLikeRepository.countsByStoryIds(ids).stream()
+                .collect(Collectors.toMap(StoryLikeRepository.StoryLikeCount::getStoryId,
+                        StoryLikeRepository.StoryLikeCount::getCount));
+        Set<Long> liked = self ? Set.of() : Set.copyOf(storyLikeRepository.likedStoryIds(ids, viewer));
+        return stories.stream()
+                .map(s -> MarginEntry.of(s, counts.getOrDefault(s.getId(), 0L), liked.contains(s.getId())))
+                .toList();
+    }
+
+    /**
+     * 글에 좋아요를 누른다. 게이트는 {@link #marginOf}와 <b>같은 판정</b>을 재사용한다 — 그러지 않으면
+     * 안 보이는 글 id에 눌러 보고 200/404로 <b>글의 존재를 알아낼 수 있다</b>.
+     *
+     * <p><b>멱등하다</b>: 이미 눌러 둔 글이면 저장하지 않고 현재 상태를 그대로 돌려준다. POST를 토글로
+     * 두지 않은 것도 같은 이유다 — 모바일에서 타임아웃 뒤 재전송이 흔한데, 토글이면 그 재시도가
+     * 좋아요를 <b>취소</b>해 버린다. 진짜 동시 요청의 중복은 DB 유니크({@code uk_story_like})가 막는다.
+     */
+    public LikeState like(User viewer, Long storyId) {
+        if (!rateLimitService.allow(RateLimitAction.STORY_LIKE, viewer.getId())) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "좋아요를 너무 자주 눌렀습니다");
+        }
+        Story story = storyRepository.findById(storyId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다"));
+        assertLikable(viewer, story);
+        if (storyLikeRepository.findByStoryAndUser(story, viewer).isEmpty()) {
+            storyLikeRepository.save(StoryLike.of(viewer, story));
+        }
+        return new LikeState(storyLikeRepository.countByStory(story), true);
+    }
+
+    /**
+     * 좋아요를 취소한다. <b>노출 게이트를 걸지 않는다</b> — 걸면 누른 뒤 언팔했거나 상대가 책을 비공개로
+     * 돌린 사람이 자기 좋아요를 <b>되돌릴 수 없게 갇힌다</b>. 행이 있다는 것 자체가 「한때 볼 수 있었다」의
+     * 증거이므로 게이트 없이도 안전하고, 없으면 404로 수렴시켜 존재도 누설하지 않는다.
+     */
+    public LikeState unlike(User viewer, Long storyId) {
+        Story story = storyRepository.findById(storyId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다"));
+        StoryLike like = storyLikeRepository.findByStoryAndUser(story, viewer)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다"));
+        storyLikeRepository.delete(like);
+        return new LikeState(storyLikeRepository.countByStory(story), false);
+    }
+
+    /**
+     * 좋아요 게이트 — {@code marginOf}의 목록 게이트와 <b>같은 판정을 순서까지 맞춰</b> 재사용한다.
+     * 여기가 목록과 어긋나는 순간, 목록에 안 뜨는 글에 좋아요가 달릴 수 있다.
+     *
+     * <p>핸들 없는 주인({@code loginId == null})은 {@code resolveVisibleTarget}이 걸러 낸다 —
+     * 그들의 글은 애초에 어느 목록에도 실리지 않는다(N-055).
+     */
+    private void assertLikable(User viewer, Story story) {
+        User owner = story.getUser();
+        // 자기 글 — 여백은 내 노트라 전부 자기 좋아요 대상이 된다. 게이트 실패를 한 코드로 모아 두면
+        // 클라가 분기할 것이 없다(존재를 이미 아는 사이라 404가 정보를 더 주지도 않는다).
+        if (isSameUser(owner, viewer)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다");
+        }
+        profileService.resolveVisibleTarget(viewer, owner.getLoginId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다"));
+        if (!story.getBook().isPublic()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다");
+        }
+        if (!followService.isFollowing(viewer, owner)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다");
+        }
+    }
+
+    /** 누르기·취소 직후의 상태 — 클라가 개수를 추측하지 않게 서버가 센 값을 그대로 준다. */
+    public record LikeState(long likeCount, boolean liked) {
     }
 
     /** 본인 글 즉시 삭제(실수 게시 회수 — §13.6). 없거나 타인 것이면 404(IDOR — 존재 비노출). */
@@ -116,6 +206,7 @@ public class StoryService {
         Story story = storyRepository.findById(storyId)
                 .filter(s -> isSameUser(s.getUser(), actor))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다"));
+        storyLikeRepository.deleteByStory(story); // story_like.story_id FK — 글보다 먼저
         storyRepository.delete(story);
     }
 

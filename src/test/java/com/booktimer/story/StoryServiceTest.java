@@ -14,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Pageable;
@@ -29,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -48,6 +50,8 @@ class StoryServiceTest {
     private FollowService followService;
     @Mock
     private ProfileService profileService;
+    @Mock
+    private StoryLikeRepository storyLikeRepository;
 
     private StoryService service;
 
@@ -56,7 +60,7 @@ class StoryServiceTest {
     @BeforeEach
     void setUp() {
         service = new StoryService(storyRepository, bookRepository, rateLimitService,
-                followService, profileService);
+                followService, profileService, storyLikeRepository);
         me = userWithId(1L, "meuser", "나");
     }
 
@@ -330,4 +334,259 @@ class StoryServiceTest {
 
         verify(storyRepository).delete(mine);
     }
+
+    // --- like / unlike ---
+
+    /** 배치 집계 투영 — 레포 관례가 인터페이스 투영이라(BookStoryRecency 등) 테스트가 익명 구현으로 만든다. */
+    private StoryLikeRepository.StoryLikeCount likeCount(long storyId, long count) {
+        return new StoryLikeRepository.StoryLikeCount() {
+            @Override
+            public Long getStoryId() {
+                return storyId;
+            }
+
+            @Override
+            public long getCount() {
+                return count;
+            }
+        };
+    }
+
+    /** 남의 공개 책에 달린 남의 글 — 좋아요 게이트를 통과하기 직전 상태. */
+    private Story othersPublicStory(User owner) {
+        return storyWithId(10L, owner, "남의 문장", NOW.minusSeconds(60), publicBookOf(owner, "남의 공개 책"));
+    }
+
+    @Test
+    @DisplayName("like: 레이트리밋 초과 → 429")
+    void like_rateLimited_throws429() {
+        when(rateLimitService.allow(RateLimitAction.STORY_LIKE, 1L)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.like(me, 10L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.TOO_MANY_REQUESTS));
+        verify(storyLikeRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("like: 없는 글 → 404")
+    void like_missingStory_throws404() {
+        when(rateLimitService.allow(RateLimitAction.STORY_LIKE, 1L)).thenReturn(true);
+        when(storyRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.like(me, 99L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("like: 내 글 → 404 (여백은 내 노트라 자기 좋아요는 의미가 없다)")
+    void like_ownStory_throws404() {
+        when(rateLimitService.allow(RateLimitAction.STORY_LIKE, 1L)).thenReturn(true);
+        Story mine = storyWithId(10L, me, "내 문장", NOW.minusSeconds(60), publicBookOf(me, "내 책"));
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(mine));
+
+        assertThatThrownBy(() -> service.like(me, 10L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+        verify(storyLikeRepository, never()).save(any());
+    }
+
+    /**
+     * 게이트가 {@code marginOf}와 같은 판정을 재사용함을 못 박는다 — 이게 없으면 안 보이는 글 id에
+     * 눌러 보고 200/404로 <b>존재를 알아낼 수 있다</b>.
+     */
+    @Test
+    @DisplayName("like: 가드 실패(차단·ADMIN·핸들 없는 주인) → 404")
+    void like_guardFails_throws404() {
+        when(rateLimitService.allow(RateLimitAction.STORY_LIKE, 1L)).thenReturn(true);
+        User owner = userWithId(2L, "owner", "주인");
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(othersPublicStory(owner)));
+        when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.like(me, 10L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+        verify(storyLikeRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("like: 남의 PRIVATE 책 글 → 404 (팔로우 검사에 닿지도 않는다)")
+    void like_privateBook_throws404() {
+        when(rateLimitService.allow(RateLimitAction.STORY_LIKE, 1L)).thenReturn(true);
+        User owner = userWithId(2L, "owner", "주인");
+        Book hidden = Book.register(owner, "비공개 책", null, null, null, null, null, BookStatus.READING);
+        when(storyRepository.findById(10L))
+                .thenReturn(Optional.of(storyWithId(10L, owner, "남의 메모", NOW.minusSeconds(60), hidden)));
+        when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.of(owner));
+
+        assertThatThrownBy(() -> service.like(me, 10L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+        verify(followService, never()).isFollowing(any(), any());
+    }
+
+    @Test
+    @DisplayName("like: 비팔로워 → 404 (애초에 글이 안 보이는 사이)")
+    void like_nonFollower_throws404() {
+        when(rateLimitService.allow(RateLimitAction.STORY_LIKE, 1L)).thenReturn(true);
+        User owner = userWithId(2L, "owner", "주인");
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(othersPublicStory(owner)));
+        when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.of(owner));
+        when(followService.isFollowing(me, owner)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.like(me, 10L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+        verify(storyLikeRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("like: 팔로워 → 저장하고 갱신된 개수를 돌려준다")
+    void like_follower_savesAndReturnsCount() {
+        when(rateLimitService.allow(RateLimitAction.STORY_LIKE, 1L)).thenReturn(true);
+        User owner = userWithId(2L, "owner", "주인");
+        Story story = othersPublicStory(owner);
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(story));
+        when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.of(owner));
+        when(followService.isFollowing(me, owner)).thenReturn(true);
+        when(storyLikeRepository.findByStoryAndUser(story, me)).thenReturn(Optional.empty());
+        when(storyLikeRepository.countByStory(story)).thenReturn(4L);
+
+        StoryService.LikeState state = service.like(me, 10L);
+
+        assertThat(state.likeCount()).isEqualTo(4L);
+        assertThat(state.liked()).isTrue();
+        ArgumentCaptor<StoryLike> captor = ArgumentCaptor.forClass(StoryLike.class);
+        verify(storyLikeRepository).save(captor.capture());
+        assertThat(captor.getValue().getUser()).isSameAs(me);
+        assertThat(captor.getValue().getStory()).isSameAs(story);
+    }
+
+    /**
+     * 모바일에서 타임아웃 뒤 재전송이 흔하다 — POST가 토글이면 그 재시도가 <b>좋아요를 취소</b>한다.
+     * 그래서 POST는 멱등이어야 하고, 이 테스트가 그 계약이다.
+     */
+    @Test
+    @DisplayName("like: 이미 눌러 둔 글 → 다시 저장하지 않고 그대로 liked:true (재전송 멱등)")
+    void like_alreadyLiked_isIdempotent() {
+        when(rateLimitService.allow(RateLimitAction.STORY_LIKE, 1L)).thenReturn(true);
+        User owner = userWithId(2L, "owner", "주인");
+        Story story = othersPublicStory(owner);
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(story));
+        when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.of(owner));
+        when(followService.isFollowing(me, owner)).thenReturn(true);
+        when(storyLikeRepository.findByStoryAndUser(story, me)).thenReturn(Optional.of(StoryLike.of(me, story)));
+        when(storyLikeRepository.countByStory(story)).thenReturn(4L);
+
+        StoryService.LikeState state = service.like(me, 10L);
+
+        assertThat(state.liked()).isTrue();
+        assertThat(state.likeCount()).isEqualTo(4L);
+        verify(storyLikeRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("unlike: 안 누른 글 → 404 (행의 부재로 수렴 — 존재도 누설하지 않는다)")
+    void unlike_notLiked_throws404() {
+        User owner = userWithId(2L, "owner", "주인");
+        Story story = othersPublicStory(owner);
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(story));
+        when(storyLikeRepository.findByStoryAndUser(story, me)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.unlike(me, 10L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    /**
+     * <b>취소에는 노출 게이트를 걸지 않는다.</b> 걸면 누른 뒤 언팔한 사람이 자기 좋아요를 되돌릴 수 없게
+     * 갇힌다. 행이 있다는 것 자체가 「한때 볼 수 있었다」의 증거라 존재 누설도 없다.
+     */
+    @Test
+    @DisplayName("unlike: 눌러 둔 글 → 팔로우 검사 없이 지운다 (언팔 뒤에도 되돌릴 수 있다)")
+    void unlike_liked_deletesWithoutGate() {
+        User owner = userWithId(2L, "owner", "주인");
+        Story story = othersPublicStory(owner);
+        StoryLike like = StoryLike.of(me, story);
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(story));
+        when(storyLikeRepository.findByStoryAndUser(story, me)).thenReturn(Optional.of(like));
+        when(storyLikeRepository.countByStory(story)).thenReturn(3L);
+
+        StoryService.LikeState state = service.unlike(me, 10L);
+
+        assertThat(state.liked()).isFalse();
+        assertThat(state.likeCount()).isEqualTo(3L);
+        verify(storyLikeRepository).delete(like);
+        verify(followService, never()).isFollowing(any(), any());
+        verify(profileService, never()).resolveVisibleTarget(any(), any());
+    }
+
+    @Test
+    @DisplayName("marginOf: 글마다 좋아요 개수와 내가 누른 여부가 실린다 (카드마다 세지 않는다 — 배치 2쿼리)")
+    void marginOf_projectsLikeCountAndLiked() {
+        User target = visibleTarget("target");
+        Book book = publicBookOf(target, "공개 책");
+        when(bookRepository.findByIdAndUser(7L, target)).thenReturn(Optional.of(book));
+        when(followService.isFollowing(me, target)).thenReturn(true);
+        Story liked = storyWithId(10L, target, "내가 누른 글", NOW.minusSeconds(60), book);
+        Story plain = storyWithId(11L, target, "아무도 안 누른 글", NOW.minusSeconds(120), book);
+        when(storyRepository.findByUserAndBookOrderByCreatedAtDescIdDesc(eq(target), eq(book), any(Pageable.class)))
+                .thenReturn(List.of(liked, plain));
+        when(storyLikeRepository.countsByStoryIds(List.of(10L, 11L))).thenReturn(List.of(likeCount(10L, 3L)));
+        when(storyLikeRepository.likedStoryIds(List.of(10L, 11L), me)).thenReturn(List.of(10L));
+
+        MarginResponse response = service.marginOf(me, "target", 7L);
+
+        assertThat(response.entries()).extracting(MarginEntry::likeCount).containsExactly(3L, 0L);
+        assertThat(response.entries()).extracting(MarginEntry::liked).containsExactly(true, false);
+    }
+
+    @Test
+    @DisplayName("marginOf: 내 여백은 liked 조회를 하지 않는다 — 자기 글엔 누를 수 없어 항상 false")
+    void marginOf_self_skipsLikedQuery() {
+        when(profileService.resolveVisibleTarget(me, "meuser")).thenReturn(Optional.of(me));
+        Book book = publicBookOf(me, "내 공개 책");
+        when(bookRepository.findByIdAndUser(7L, me)).thenReturn(Optional.of(book));
+        Story mine = storyWithId(10L, me, "내 글", NOW.minusSeconds(60), book);
+        when(storyRepository.findByUserAndBookOrderByCreatedAtDescIdDesc(eq(me), eq(book), any(Pageable.class)))
+                .thenReturn(List.of(mine));
+        when(storyLikeRepository.countsByStoryIds(List.of(10L))).thenReturn(List.of(likeCount(10L, 5L)));
+
+        MarginResponse response = service.marginOf(me, "meuser", 7L);
+
+        assertThat(response.entries()).extracting(MarginEntry::likeCount).containsExactly(5L);
+        assertThat(response.entries()).extracting(MarginEntry::liked).containsExactly(false);
+        verify(storyLikeRepository, never()).likedStoryIds(any(), any());
+    }
+
+    @Test
+    @DisplayName("marginOf: 글이 없으면 집계 쿼리를 아예 안 던진다 (in () 회피 — recencyByBook과 같은 가드)")
+    void marginOf_noEntries_skipsAggregates() {
+        User target = visibleTarget("target");
+        Book book = publicBookOf(target, "공개 책");
+        when(bookRepository.findByIdAndUser(7L, target)).thenReturn(Optional.of(book));
+        when(followService.isFollowing(me, target)).thenReturn(true);
+        when(storyRepository.findByUserAndBookOrderByCreatedAtDescIdDesc(eq(target), eq(book), any(Pageable.class)))
+                .thenReturn(List.of());
+
+        assertThat(service.marginOf(me, "target", 7L).entries()).isEmpty();
+
+        verify(storyLikeRepository, never()).countsByStoryIds(any());
+        verify(storyLikeRepository, never()).likedStoryIds(any(), any());
+    }
+
+    @Test
+    @DisplayName("delete: 글을 지우면 거기 달린 좋아요도 먼저 지운다 (story_like.story_id FK)")
+    void delete_owner_deletesLikesFirst() {
+        Story mine = storyWithId(10L, me, "내 문장", NOW.minusSeconds(60), publicBookOf(me, "내 책"));
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(mine));
+
+        service.delete(me, 10L);
+
+        InOrder order = inOrder(storyLikeRepository, storyRepository);
+        order.verify(storyLikeRepository).deleteByStory(mine);
+        order.verify(storyRepository).delete(mine);
+    }
+
 }

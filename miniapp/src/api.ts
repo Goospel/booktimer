@@ -713,6 +713,10 @@ export interface MarginEntry {
   text: string;
   bgCode: string | null;
   createdAt: string;
+  /** 이 글에 달린 좋아요 수. 누가 눌렀는지는 오지 않는다 — 개수만으로 카드가 그려진다. */
+  likeCount: number;
+  /** 내가 눌렀는가. 자기 글이면 항상 false다(자기 좋아요는 서버 도메인이 금지). */
+  liked: boolean;
 }
 
 /** `story.MarginBook` — 여백이 열린 책. 비공개 책은 **주인에게만** 온다(남에게는 404). */
@@ -766,3 +770,21 @@ export const createStory = (text: string, bookId: number, bgCode: string | null)
 
 /** 없거나 남의 것이면 404 — 존재를 누설하지 않는 서버 계약(IDOR)을 그대로 받는다. */
 export const deleteStory = (id: number): Promise<void> => request(`/api/stories/${id}`, { method: 'DELETE' });
+
+/** `StoryService.LikeState` — 누르기·취소 직후의 갱신값. 클라가 개수를 추측하지 않게 서버가 센 값을 준다. */
+export interface LikeState {
+  likeCount: number;
+  liked: boolean;
+}
+
+/**
+ * 좋아요를 누른다. **멱등**이라 재전송해도 취소되지 않는다 — 그래서 토글 단일 엔드포인트가 아니다
+ * (모바일 타임아웃 뒤 재시도가 흔한데, 토글이면 그 재시도가 좋아요를 지운다).
+ * 안 보이는 글(비팔로워·비공개 책·차단)·내 글은 404 — 존재를 누설하지 않는다.
+ */
+export const likeStory = (id: number): Promise<LikeState> =>
+  request(`/api/stories/${id}/like`, { method: 'POST' });
+
+/** 좋아요를 취소한다. 서버는 여기에 노출 게이트를 걸지 않는다 — 언팔한 뒤에도 되돌릴 수 있어야 한다. */
+export const unlikeStory = (id: number): Promise<LikeState> =>
+  request(`/api/stories/${id}/like`, { method: 'DELETE' });

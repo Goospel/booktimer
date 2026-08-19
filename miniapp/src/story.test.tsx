@@ -4,7 +4,15 @@ import { describe, expect, it } from 'vitest';
 
 import type { MarginEntry, MarginResponse } from './api';
 import { ApiError } from './api';
-import { MarginView, StoryComposer, createStoryMessage, hasFreshStory, visibilityNotice } from './screens/Story';
+import {
+  MarginCard,
+  MarginView,
+  StoryComposer,
+  createStoryMessage,
+  hasFreshStory,
+  likable,
+  visibilityNotice,
+} from './screens/Story';
 import { userAgent } from './test-fixtures';
 
 /**
@@ -23,7 +31,15 @@ function render(node: React.ReactNode) {
 }
 
 function entry(id: number, extra: Partial<MarginEntry> = {}): MarginEntry {
-  return { id, text: `문장 ${id}`, bgCode: 'paper', createdAt: new Date(NOW - HOUR).toISOString(), ...extra };
+  return {
+    id,
+    text: `문장 ${id}`,
+    bgCode: 'paper',
+    createdAt: new Date(NOW - HOUR).toISOString(),
+    likeCount: 0,
+    liked: false,
+    ...extra,
+  };
 }
 
 function margin(extra: Partial<MarginResponse> = {}): MarginResponse {
@@ -37,7 +53,10 @@ function margin(extra: Partial<MarginResponse> = {}): MarginResponse {
   };
 }
 
-function view(data: MarginResponse, extra: { confirmDeleteId?: number | null; error?: string | null } = {}) {
+function view(
+  data: MarginResponse,
+  extra: { confirmDeleteId?: number | null; error?: string | null; onToggleLike?: (e: MarginEntry) => void } = {},
+) {
   return render(
     <MarginView
       loginId="goospel"
@@ -49,6 +68,7 @@ function view(data: MarginResponse, extra: { confirmDeleteId?: number | null; er
       onCompose={() => {}}
       onConfirmDelete={() => {}}
       onDelete={() => {}}
+      onToggleLike={extra.onToggleLike ?? (() => {})}
       onBack={() => {}}
     />,
   );
@@ -277,5 +297,80 @@ describe('나가는 길 — 헤더 뒤로가기', () => {
 
   it('여백 상세엔 있다 — 지우면 나갈 길이 사라진다', () => {
     expect(view(margin())).toContain('돌아가기');
+  });
+});
+
+/**
+ * 좋아요 — <b>손잡이의 유무는 `self`가 아니라 핸들러의 유무가 가른다</b>.
+ *
+ * <p>이게 이 기능에서 가장 미끄러지기 쉬운 자리다: 서재의 인라인 여백 미리보기는 <b>내 글인데도</b>
+ * `self={false}`를 넘긴다(거기서 그 프롭은 「삭제 UI를 감춰」라는 뜻이다). `!self`로 하트를 켰다면
+ * 내 서재에서 내 글에 좋아요 버튼이 떴을 것이다. 아래 두 번째 테스트가 그 회귀를 막는다.
+ */
+describe('여백 좋아요', () => {
+  it('남의 글에는 하트 손잡이가 그려진다', () => {
+    const html = view(margin({ entries: [entry(1, { likeCount: 3, liked: false })] }));
+
+    expect(html).toContain('aria-label="좋아요"');
+    expect(html).toContain('>3<');
+  });
+
+  it('핸들러를 안 넘기면 손잡이가 없다 — 서재 미리보기가 내 글에 self=false를 넘기는 자리', () => {
+    const html = render(
+      <MarginCard
+        entry={entry(1, { likeCount: 3 })}
+        now={NOW}
+        self={false}
+        busy={false}
+        confirming={false}
+        onConfirmDelete={() => {}}
+        onDelete={() => {}}
+      />,
+    );
+
+    expect(html).not.toContain('aria-label="좋아요"');
+    expect(html).toContain('>3<'); // 개수는 여전히 보인다 — 데이터지 손잡이가 아니다
+  });
+
+  it('이미 누른 글은 취소 손잡이가 된다', () => {
+    const html = view(margin({ entries: [entry(1, { likeCount: 4, liked: true })] }));
+
+    expect(html).toContain('aria-label="좋아요 취소"');
+  });
+
+  it('아무도 안 누른 글에는 0을 그리지 않는다 — 빈 상태를 숫자로 박제하지 않는다', () => {
+    const html = view(margin({ entries: [entry(1, { likeCount: 0 })] }));
+
+    expect(html).toContain('aria-label="좋아요"'); // 손잡이는 있고
+    expect(html).not.toContain('>0<'); // 숫자만 없다
+  });
+
+  it('내 글에도 개수는 보인다 — 남이 눌러 준 것을 주인이 알아야 한다', () => {
+    const html = view(margin({ self: true, following: false, entries: [entry(1, { likeCount: 2 })] }));
+
+    expect(html).toContain('>2<');
+    expect(html).not.toContain('aria-label="좋아요"'); // 자기 좋아요는 없다
+  });
+});
+
+/**
+ * 하트를 손잡이로 그릴 수 있는가 — 서버 게이트({@code StoryService.assertLikable})를 화면에 옮긴 것.
+ * 어긋나면 눌러도 404가 나는 죽은 버튼이 생긴다.
+ */
+describe('좋아요 가능 판정 (likable)', () => {
+  it('내 글에는 못 누른다 — 여백은 내 노트라 전부 자기 좋아요가 된다', () => {
+    expect(likable(true, true)).toBe(false);
+  });
+
+  it('비공개 책에는 자리를 만들지 않는다 — 남이 볼 수 없어 개수가 영원히 0이다', () => {
+    expect(likable(false, false)).toBe(false);
+  });
+
+  it('남의 공개 책 글에는 누를 수 있다', () => {
+    expect(likable(false, true)).toBe(true);
+  });
+
+  it('필드가 없는 옛 서버 응답(undefined)은 공개로 간주한다 — 가시성 고지와 같은 기준', () => {
+    expect(likable(false, undefined)).toBe(true);
   });
 });

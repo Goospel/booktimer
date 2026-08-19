@@ -2,7 +2,15 @@ import { Button, Text } from '@toss/tds-mobile';
 import { useCallback, useEffect, useState } from 'react';
 
 import type { MarginBook, MarginEntry, MarginResponse } from '../api';
-import { ApiError, STORY_BG_CODES, createStory, deleteStory, fetchBookMargin } from '../api';
+import {
+  ApiError,
+  STORY_BG_CODES,
+  createStory,
+  deleteStory,
+  fetchBookMargin,
+  likeStory,
+  unlikeStory,
+} from '../api';
 import { relativeTime } from '../format';
 import { BookCover, ErrorMessage, Loading, Screen } from '../ui';
 
@@ -52,6 +60,42 @@ export function visibilityNotice(isPublic: boolean | undefined): string {
 }
 
 /**
+ * 하트를 <b>손잡이로</b> 그릴 수 있는가 — 서버 게이트({@code StoryService.assertLikable})를 화면에 옮긴 것.
+ * 어긋나면 눌러도 404가 나는 죽은 버튼이 생긴다.
+ *
+ * <p>비공개 책 가지는 <b>지금 서버 계약상 닿지 않는다</b> — 남의 비공개 책 여백은 404라 `self`가 이미
+ * 걸러 낸다. 그래도 두는 것은 서버 게이트를 <b>대칭으로 비춰</b> 두기 위해서다: 언젠가 목록이 팔로워에게
+ * 열려도 좋아요는 여전히 404이므로, 이 줄이 그때 죽은 버튼이 뜨는 것을 막는다.
+ * `undefined`(필드를 안 보내는 옛 서버)는 공개로 간주한다 — {@link visibilityNotice}와 같은 기준이다.
+ */
+export function likable(self: boolean, isPublic: boolean | undefined): boolean {
+  return !self && isPublic !== false;
+}
+
+/**
+ * 하트 — 색을 <b>`currentColor`로 상속</b>한다. 배경 팔레트가 6종이고 그중 sunset이 붉은 주황(#c96a4a)이라
+ * 빨간 하트는 거기서 사라진다. 카드 본문 색을 그대로 쓰면 여섯 배경 전부에서 읽히는 것이 보장되고,
+ * 상태 구분은 색이 아니라 <b>채움 여부</b>가 진다.
+ */
+function Heart({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 20.6 4.2 12.8a4.9 4.9 0 0 1 6.9-6.9l.9.9.9-.9a4.9 4.9 0 0 1 6.9 6.9Z" />
+    </svg>
+  );
+}
+
+/**
  * 작성 실패 안내 — 서버의 한글 검증 메시지는 `GlobalExceptionHandler`가 HTML `error` 뷰로 렌더해
  * 미니앱까지 오지 못한다(api.ts의 HTML 가드가 상태코드 문구로 대체). 그래서 상태코드로 안내를 나눈다.
  * 서버가 평문 메시지를 주는 날엔 그게 더 정확하므로 그대로 쓴다.
@@ -87,6 +131,8 @@ export function BookMargin({
   onError: (error: Error) => void;
 }) {
   const [margin, setMargin] = useState<MarginResponse | null>(null);
+  /** 낙관적 좋아요 — 서버 왕복을 기다리면 하트가 늦게 켜져 「안 눌렸다」로 읽힌다. */
+  const [likes, setLikes] = useState<Record<number, { likeCount: number; liked: boolean }>>({});
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -105,6 +151,24 @@ export function BookMargin({
   }, [loginId, bookId, fail]);
 
   useEffect(load, [load]);
+
+  /**
+   * 낙관적으로 먼저 칠하고, 서버 값으로 덮고, 실패하면 되돌린다.
+   *
+   * <p>서버 응답을 그대로 덮는 것이 핵심이다 — 그 사이 남이 누른 것까지 반영된 <b>진짜 개수</b>가 오므로
+   * 클라가 ±1로 센 추정치가 오래 남지 않는다.
+   */
+  const toggleLike = (entry: MarginEntry) => {
+    const before = likes[entry.id] ?? { likeCount: entry.likeCount, liked: entry.liked };
+    const after = { likeCount: before.likeCount + (before.liked ? -1 : 1), liked: !before.liked };
+    setLikes((m) => ({ ...m, [entry.id]: after }));
+    (after.liked ? likeStory(entry.id) : unlikeStory(entry.id))
+      .then((state) => setLikes((m) => ({ ...m, [entry.id]: state })))
+      .catch((e: Error) => {
+        setLikes((m) => ({ ...m, [entry.id]: before })); // 되돌린다 — 틀린 개수를 남기지 않는다
+        fail(e);
+      });
+  };
 
   const remove = (id: number) => {
     setBusy(true);
@@ -128,10 +192,13 @@ export function BookMargin({
     );
   }
 
+  // 낙관적 값을 서버 목록 위에 얹는다 — 손대지 않은 글은 `undefined` 전개라 그대로 남는다.
+  const merged = { ...margin, entries: margin.entries.map((e) => ({ ...e, ...likes[e.id] })) };
+
   return (
     <MarginView
       loginId={loginId}
-      margin={margin}
+      margin={merged}
       now={Date.now()}
       busy={busy}
       confirmDeleteId={confirmDeleteId}
@@ -139,6 +206,7 @@ export function BookMargin({
       onCompose={() => onCompose(margin.book)}
       onConfirmDelete={setConfirmDeleteId}
       onDelete={remove}
+      onToggleLike={toggleLike}
       onBack={onBack}
     />
   );
@@ -157,6 +225,7 @@ export function MarginView({
   onCompose,
   onConfirmDelete,
   onDelete,
+  onToggleLike,
   onBack,
 }: {
   loginId: string;
@@ -170,6 +239,7 @@ export function MarginView({
   onCompose: () => void;
   onConfirmDelete: (id: number | null) => void;
   onDelete: (id: number) => void;
+  onToggleLike: (entry: MarginEntry) => void;
   onBack: () => void;
 }) {
   const { book, ownerNickname, self, following, entries } = margin;
@@ -228,6 +298,7 @@ export function MarginView({
             confirming={confirmDeleteId === e.id}
             onConfirmDelete={onConfirmDelete}
             onDelete={onDelete}
+            onToggleLike={likable(self, book.isPublic) ? onToggleLike : undefined}
           />
         ))
       )}
@@ -249,6 +320,7 @@ export function MarginCard({
   confirming,
   onConfirmDelete,
   onDelete,
+  onToggleLike,
 }: {
   entry: MarginEntry;
   now: number;
@@ -257,6 +329,11 @@ export function MarginCard({
   confirming: boolean;
   onConfirmDelete: (id: number | null) => void;
   onDelete: (id: number) => void;
+  /**
+   * 좋아요 손잡이 — <b>있으면 버튼, 없으면 개수만</b>. 이 프롭의 유무가 게이트다: `self`로 갈랐다면
+   * 서재의 인라인 미리보기가 <b>내 글에 `self={false}`</b>를 넘기는 탓에 내 글에 하트가 떴을 것이다.
+   */
+  onToggleLike?: (entry: MarginEntry) => void;
 }) {
   const bg = palette(entry.bgCode);
 
@@ -275,6 +352,27 @@ export function MarginCard({
       </p>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 12, opacity: 0.75 }}>
         <span style={{ flex: 1, minWidth: 0 }}>{relativeTime(entry.createdAt, now)}</span>
+        {/* 개수는 데이터라 언제나 보이고(주인도 남이 눌러 준 걸 안다), 손잡이만 조건부다.
+            0은 안 그린다 — 빈 상태를 숫자로 박제하면 「아무도 안 눌렀다」가 카드마다 반복된다. */}
+        {onToggleLike === undefined ? (
+          entry.likeCount > 0 && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <Heart filled={entry.liked} />
+              {entry.likeCount}
+            </span>
+          )
+        ) : (
+          <button
+            type="button"
+            aria-label={entry.liked ? '좋아요 취소' : '좋아요'}
+            aria-pressed={entry.liked}
+            onClick={() => onToggleLike(entry)}
+            style={{ ...ghost(bg.color), display: 'inline-flex', alignItems: 'center', gap: 4 }}
+          >
+            <Heart filled={entry.liked} />
+            {entry.likeCount > 0 && entry.likeCount}
+          </button>
+        )}
         {self &&
           (confirming ? (
             <>
