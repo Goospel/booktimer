@@ -124,6 +124,25 @@ export function lampOn(tab: TabKey, hasActiveSession: boolean): boolean {
   return tab === 'home' && hasActiveSession;
 }
 
+/** 잠긴 탭을 눌렀을 때의 안내 — 말없이 무반응이면 고장으로 읽힌다. */
+export const TAB_LOCK_HINT = '측정을 끝내면 이동할 수 있어요';
+
+/** 그 안내가 떠 있는 시간 — 읽고 남을 만큼만. */
+export const TAB_LOCK_HINT_MS = 1800;
+
+/**
+ * 측정 중 잠기는 탭인가 — <b>홈만 빼고</b> 잠긴다(사용자 지시 2026-08-19 「읽는 도중엔 다른 화면으로
+ * 이동 못하게」, 범위는 탭만).
+ *
+ * <p><b>홈을 빼는 것이 이 설계의 요점이다.</b> 넷 다 잠그면 탈출구가 사라진다 — 코치마크 투어는
+ * {@link flowTabChange} effect가 `onTabChange`를 <b>직접</b> 부르므로 이 잠금을 안 탄다. 투어가
+ * 사용자를 서재에 데려다 놓은 상태에서 넷 다 잠겨 있으면 측정을 끊기 전엔 홈으로 못 돌아온다.
+ * 홈을 열어 두면 그 덫이 원천적으로 없고, 「내가 있을 곳은 여기」라는 표시도 함께 된다.
+ */
+export function tabLocked(key: TabKey, hasActiveSession: boolean): boolean {
+  return hasActiveSession && key !== 'home';
+}
+
 export function timerActionView(active: boolean): { label: string; background: string; icon: string } {
   return active
     ? { label: '측정 끝내기', background: 'var(--adaptiveRed500, #F04452)', icon: STOP_ICON }
@@ -635,6 +654,26 @@ export function MainTabs({
     return () => setCoachmarkWalking(false);
   }, [flowIndex]);
 
+  /** 잠긴 탭을 눌렀다는 안내가 떠 있는지 — 잠깐 떴다 스스로 사라진다. */
+  const [lockHint, setLockHint] = useState(false);
+  const lockHintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** 안내를 띄운다 — 연타해도 타이머가 겹치지 않게 앞의 것을 걷고 다시 잰다. */
+  const showLockHint = () => {
+    if (lockHintTimer.current !== null) clearTimeout(lockHintTimer.current);
+    setLockHint(true);
+    lockHintTimer.current = setTimeout(() => setLockHint(false), TAB_LOCK_HINT_MS);
+  };
+
+  // 측정이 끝나면 잠금이 풀리므로 안내도 함께 걷는다(남은 타이머가 사라진 화면을 건드리지 않게 한다).
+  useEffect(() => {
+    if (dashboard.hasActiveSession) return;
+    setLockHint(false);
+    return () => {
+      if (lockHintTimer.current !== null) clearTimeout(lockHintTimer.current);
+    };
+  }, [dashboard.hasActiveSession]);
+
   /**
    * 독서등 — 측정 중 홈이 밤이 된다. 색은 css가 들고 여기선 스위치만 올린다.
    *
@@ -805,6 +844,30 @@ export function MainTabs({
         </div>
       )}
 
+      {/* 잠긴 탭을 눌렀을 때의 안내 — 액션 실패 스트립과 같은 자리다(탭바 알약은 `overflow: hidden`이라
+          그 안에 두면 잘린다). 색은 토큰이라 독서등(밤)에서도 함께 어두워진다. */}
+      {lockHint && (
+        <div
+          role="status"
+          style={{
+            position: 'fixed',
+            left: TAB_BAR_MARGIN,
+            right: TAB_BAR_MARGIN,
+            bottom: `calc(12px + env(safe-area-inset-bottom) + ${TAB_BAR_HEIGHT}px + 8px)`,
+            zIndex: TAB_BAR_Z_INDEX,
+            padding: '8px 14px',
+            background: 'var(--adaptiveGrey100, #FCFAF5)',
+            color: 'var(--adaptiveGrey600, #6F6A5E)',
+            borderRadius: 12,
+            fontSize: 13,
+            textAlign: 'center',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
+          }}
+        >
+          {TAB_LOCK_HINT}
+        </div>
+      )}
+
       {/* 코치마크는 탭바보다 먼저 그린다 — 덮개가 탭바 아래 층이라는 것을 코드 순서로도 읽히게 둔다.
           인라인 걸음(말풍선 없음)에는 아무것도 그리지 않는다 — 그 화면의 `Coachmark`가 맡는다. */}
       {flowStep?.bubble !== undefined && (
@@ -814,6 +877,8 @@ export function MainTabs({
       <BottomTabBar
         tab={tab}
         onTabChange={changeTab}
+        locked={dashboard.hasActiveSession}
+        onBlocked={showLockHint}
         action={{ active: dashboard.hasActiveSession, busy, onPress: timerAction }}
       />
 
@@ -968,16 +1033,23 @@ export function BottomTabBar({
   tab,
   onTabChange,
   action,
+  locked = false,
+  onBlocked,
 }: {
   tab: TabKey;
   onTabChange: (tab: TabKey) => void;
   /** 가운데 측정 액션 — 탭이 아니라 동작이다(그래서 `TABS` 밖에 산다). */
   action: { active: boolean; busy: boolean; onPress: () => void };
+  /** 측정 중인가 — 홈을 뺀 탭이 잠긴다({@link tabLocked}). 가운데 액션은 절대 안 잠근다. */
+  locked?: boolean;
+  /** 잠긴 탭을 눌렀다 — 안내 문구는 `MainTabs`가 그린다(이 알약은 `overflow: hidden`이라 안에 두면 잘린다). */
+  onBlocked?: () => void;
 }) {
   const change = tabChangeHandler(onTabChange);
 
   const cells = TABS.map(({ key, label, icon }, index) => {
     const selected = key === tab;
+    const shut = tabLocked(key, locked);
     return (
       <button
         key={key}
@@ -985,8 +1057,10 @@ export function BottomTabBar({
         // ARIA tabs 패턴은 `role="tabpanel"`과 짝일 때만 성립하는데 이 앱엔 그 짝이 없다 —
         // 하단 내비게이션의 표준 마크업(APG)인 `aria-current`로 현재 위치를 말한다.
         aria-current={selected ? 'page' : undefined}
+        // `disabled`가 아니라 `aria-disabled`다 — 진짜로 잠그면 클릭이 안 와서 이유를 말할 기회가 없다.
+        aria-disabled={shut ? true : undefined}
         title={label}
-        onClick={() => change(index)}
+        onClick={() => (shut ? onBlocked?.() : change(index))}
         style={{
           flex: 1,
           minHeight: TAB_BAR_HEIGHT,
@@ -999,6 +1073,8 @@ export function BottomTabBar({
           border: 'none',
           background: 'transparent',
           color: selected ? 'var(--adaptiveBlue500, #6E8A6A)' : 'var(--adaptiveGrey600, #6F6A5E)',
+          // 잠긴 칸은 흐려진다 — 눌러 보기 전에 눈으로 먼저 알아야 한다.
+          opacity: shut ? 0.35 : 1,
           cursor: 'pointer',
         }}
       >

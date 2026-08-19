@@ -94,6 +94,7 @@ public class DashboardApiController {
                 live.todayGoalSeconds(), live.carryover(),
                 live.hasActiveSession(), live.activeStartedAt(),
                 live.activeBookTitle(), live.activeBookTotalSeconds(),
+                toOption(live.activeBook()),
                 toOptions(live.readingBooks()), toOptions(live.finishedBooks()),
                 toOptions(live.wantToReadBooks()),
                 live.recentBookId(),
@@ -171,6 +172,11 @@ public class DashboardApiController {
         return TimerState.of(dashboardModel.computeLive(user), goalWaiverService.availableFor(user));
     }
 
+    /** 한 권짜리 — 측정 중인 책은 목록이 아니라 하나거나 없다. */
+    private static BookOption toOption(Book b) {
+        return b == null ? null : new BookOption(b.getId(), b.getTitle(), b.getCoverUrl(), b.getAuthor(), b.isPublic());
+    }
+
     private static List<BookOption> toOptions(List<Book> books) {
         return books.stream()
                 .map(b -> new BookOption(b.getId(), b.getTitle(), b.getCoverUrl(), b.getAuthor(), b.isPublic()))
@@ -204,6 +210,8 @@ public class DashboardApiController {
             Instant activeStartedAt,
             String activeBookTitle,
             long activeBookTotalSeconds,
+            /** 지금 측정 중인 책 — 미니앱 「읽는 중」 카드가 표지를 그리는 재료. 책 없이 측정·비측정이면 null. */
+            BookOption activeBook,
             List<BookOption> readingBooks,
             List<BookOption> finishedBooks,
             List<BookOption> wantToReadBooks,
@@ -247,6 +255,8 @@ public class DashboardApiController {
             Instant activeStartedAt,
             String activeBookTitle,
             long activeBookTotalSeconds,
+            /** 측정 중인 책 — <b>시작 응답에도</b> 실려야 누른 직후 카드가 빈 채로 서 있지 않는다. */
+            BookOption activeBook,
             List<BookOption> readingBooks,
             List<BookOption> finishedBooks,
             Long recentBookId,
@@ -259,6 +269,7 @@ public class DashboardApiController {
                     live.todayGoalSeconds(), live.carryover(),
                     live.hasActiveSession(), live.activeStartedAt(),
                     live.activeBookTitle(), live.activeBookTotalSeconds(),
+                    toOption(live.activeBook()),
                     toOptions(live.readingBooks()), toOptions(live.finishedBooks()),
                     live.recentBookId(), debtWaiverAvailable);
         }

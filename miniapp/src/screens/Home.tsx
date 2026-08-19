@@ -204,19 +204,27 @@ export function noBookSubtitle(bookCount: number): string {
 export const SCROLL_SETTLE_MS = 120;
 
 /**
+ * 「읽는 중」 카드의 표지 폭 — 캐러셀(84)보다 작다. 그곳은 고르는 무대라 크게 서야 하지만,
+ * 여기는 이미 정해진 한 권을 한 줄로 알려 주는 자리라 제목·저자와 높이가 맞아야 한다.
+ */
+export const READING_NOW_COVER = 52;
+
+/**
  * 캐러셀 0번 칸의 「책 없이」 자리 표지 — 표지와 **같은 크기의 점선 상자**다.
  *
  * <p>`CoverInitial`을 쓰지 않는다: 색 상자 + 첫 글자라 실제 표지와 구분이 안 돼 "책 없이"가 책처럼 보인다.
  * `boxSizing`이 없으면 테두리 2px이 칸을 불려 스냅 위치(`i × stride`)가 이 카드부터 어긋난다.
  */
-function NoBookCard() {
+function NoBookCard({ width = COVER_WIDTH }: { width?: number } = {}) {
   return (
     <div
       style={{
-        width: COVER_WIDTH,
-        height: COVER_HEIGHT,
+        width,
+        height: Math.round(width * 1.4),
+        flex: '0 0 auto',
         boxSizing: 'border-box',
-        border: '2px dashed #E4DDD0',
+        // 토큰이라야 독서등(밤)에서 이 점선도 함께 어두워진다 — 리터럴이면 밤 종이 위에 낮의 선이 뜬다.
+        border: '2px dashed var(--adaptiveGrey200, #E4DDD0)',
         borderRadius: 4,
         display: 'flex',
         flexDirection: 'column',
@@ -761,6 +769,49 @@ export function AccountSection({
 }
 
 /**
+ * 측정 중 「읽는 중」 카드 — <b>캐러셀이 서 있던 자리</b>를 그대로 물려받는다.
+ *
+ * <p>예전엔 측정을 시작하면 그 섹션이 통째로 사라져 표지가 없어지고 히어로의 「측정 중 12분 · 데미안」
+ * 한 줄만 남았다(사용자 지적 2026-08-19: 「책 사진이 사라지고 텍스트로 바뀐다」). 고를 게 없으니
+ * <b>캐러셀일 이유가 없을 뿐</b>, 지금 읽는 책을 보여 줄 이유는 그대로였다.
+ *
+ * <p>책 없이 측정 중이면(`book === null`) 카드는 그대로 서고 표지 자리만 「책 없이」가 된다 — 미태깅
+ * 측정은 정상 경로이고, 여기서 카드를 감추면 시작·종료 때마다 화면이 세로로 튄다.
+ */
+export function ReadingNowCard({ book, totalSeconds }: { book: BookOption | null; totalSeconds: number }) {
+  return (
+    <section style={sectionStyle}>
+      <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
+        읽는 중
+      </Text>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {book === null ? (
+          <NoBookCard width={READING_NOW_COVER} />
+        ) : (
+          <BookCover url={book.coverUrl} title={book.title} width={READING_NOW_COVER} eager />
+        )}
+        <div style={{ minWidth: 0 }}>
+          <Text typography="t7" fontWeight="bold" style={{ wordBreak: 'keep-all' }}>
+            {book === null ? '책 없이 측정 중' : book.title}
+          </Text>
+          {book?.author != null && (
+            <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
+              {book.author}
+            </Text>
+          )}
+          {/* 누적은 이미 오는 값이라 공짜다 — 「이 책을 얼마나 읽었나」가 측정 중에 가장 궁금한 수다. */}
+          {book !== null && totalSeconds > 0 && (
+            <Text typography="st12" color="blue500" style={{ display: 'block', marginTop: 6 }}>
+              이 책 누적 {formatDuration(totalSeconds)}
+            </Text>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/**
  * 타이머 홈 — `/api/dashboard` 렌더(계정 진입 · 오늘 진행률 · 읽는 중 책 · 피드 박스).
  * 서재 관리·검색·정원은 웹이 본진이라 미니앱에 두지 않는다(설계 §2.5).
  *
@@ -987,7 +1038,9 @@ export function Home({
         </section>
       )}
 
-      {!dashboard.hasActiveSession && (
+      {dashboard.hasActiveSession ? (
+        <ReadingNowCard book={dashboard.activeBook ?? null} totalSeconds={dashboard.activeBookTotalSeconds} />
+      ) : (
         <section style={sectionStyle}>
           {/* 상태와 무관한 고정 문구다 — 「책 없이」가 가운데면 "이 책으로"는 틀린 말이고, 상태별로
               갈아끼우면 헤더가 나타났다 사라지며 캐러셀이 세로로 들썩인다. */}

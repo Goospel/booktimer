@@ -23,6 +23,7 @@ import {
   nextFlowStep,
   shouldRefresh,
   shouldShowGuideBanner,
+  tabLocked,
   slotCenter,
   tabChangeHandler,
   tabSlot,
@@ -692,5 +693,85 @@ describe('독서등 (lampOn)', () => {
     const markup = renderTab('home', { hasActiveSession: true });
 
     expect(markup.indexOf('<nav aria-label="메인 탭"')).toBeGreaterThan(markup.indexOf('</main>'));
+  });
+});
+
+/**
+ * 측정 중 탭 잠금 — 「읽는 도중엔 다른 화면으로 몸 가게」(사용자 지시 2026-08-19, 범위는 탭만).
+ *
+ * <p><b>홈은 안 잠그는 것이 이 설계의 요점이다.</b> 넷 다 잠그면 탈출구가 사라진다 — 코치마크 투어는
+ * `flowTabChange` effect가 `onTabChange`를 <b>직접</b> 부르므로 이 잠금을 안 탄다. 투어가 사용자를 서재에
+ * 데려다 놓은 상태에서 넷 다 잠겨 있으면 <b>측정을 끊기 전엔 홈으로 못 돌아온다</b>.
+ */
+describe('측정 중 탭 잠금 (tabLocked)', () => {
+  it('측정 중이면 서재·책방·기록이 잠긴다', () => {
+    expect(tabLocked('library', true)).toBe(true);
+    expect(tabLocked('bookshop', true)).toBe(true);
+    expect(tabLocked('history', true)).toBe(true);
+  });
+
+  it('홈은 측정 중에도 안 잠긴다 — 돌아올 길이 남아야 한다', () => {
+    expect(tabLocked('home', true)).toBe(false);
+  });
+
+  it('측정 중이 아니면 아무것도 안 잠긴다', () => {
+    for (const { key } of TABS) expect(tabLocked(key, false)).toBe(false);
+  });
+});
+
+/**
+ * 잠긴 탭의 마크업 — 잠김은 <b>보이고 읽혀야</b> 한다(안 눌리기만 하면 고장으로 읽힌다).
+ *
+ * <p>가운데 액션은 절대 잠기지 않는다 — 측정을 끝내는 유일한 버튼이라 잠기면 끄는 법을 잃는다.
+ */
+describe('하단 탭바 — 측정 중 잠금', () => {
+  const locked = () =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <BottomTabBar
+          tab="home"
+          onTabChange={() => {}}
+          locked
+          onBlocked={() => {}}
+          action={{ active: true, busy: false, onPress: () => {} }}
+        />
+      </TDSMobileProvider>,
+    );
+
+  /** 버튼 한 칸만 — 알약 전체를 보면 다른 칸의 속성이 섞여 단언이 공허해진다. */
+  const cell = (markup: string, marker: string) => {
+    const at = markup.indexOf(marker);
+    expect(at).toBeGreaterThan(-1);
+    const from = markup.lastIndexOf('<button', at);
+    return markup.slice(from, markup.indexOf('</button>', at));
+  };
+
+  it('서재·책방·기록 칸이 잠겼다고 말한다', () => {
+    const markup = locked();
+
+    for (const label of ['서재', '책방', '기록']) {
+      expect(cell(markup, `title="${label}"`)).toContain('aria-disabled="true"');
+    }
+  });
+
+  it('홈 칸과 가운데 액션은 잠기지 않는다', () => {
+    const markup = locked();
+
+    expect(cell(markup, 'title="홈"')).not.toContain('aria-disabled="true"');
+    expect(cell(markup, 'aria-label="측정 끝내기"')).not.toContain('aria-disabled="true"');
+  });
+
+  it('측정 중이 아니면 아무 칸도 잠기지 않는다 — 위 부정 단언의 짝', () => {
+    const open = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <BottomTabBar
+          tab="home"
+          onTabChange={() => {}}
+          action={{ active: false, busy: false, onPress: () => {} }}
+        />
+      </TDSMobileProvider>,
+    );
+
+    expect(open).not.toContain('aria-disabled="true"');
   });
 });
