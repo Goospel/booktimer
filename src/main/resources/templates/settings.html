@@ -132,7 +132,7 @@
                         <svg th:if="${ch.spriteId != null}" class="profile-char-svg" aria-hidden="true">
                             <use th:attr="href='#sprite-' + ${ch.code}"></use>
                         </svg>
-                        <span th:unless="${ch.spriteId != null}" th:text="${ch.emoji}">🪶</span>
+                        <span th:unless="${ch.spriteId != null}" th:text="${#strings.substring(ch.name, 0, 1)}">작</span>
                     </span>
                     <span class="profile-char-label" th:text="${ch.name}">작가</span>
                 </label>

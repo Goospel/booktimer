@@ -52,7 +52,7 @@ const sessionDisplay = computed(() => fmtMSS(elapsed.value))
 const goalText = computed(() => goalLabel(props.todayGoalSeconds))
 // 진행바 메타 우측: 달성이면 "목표 달성 ✓", 아니면 "목표까지 M:SS"(남은 시간은 보조 정보로 강등).
 const remainingLabel = computed(() =>
-    progress.value.isAchieved ? '목표 달성 ✓' : `목표까지 ${fmtMSS(progress.value.remainingToGoal)}`
+    progress.value.isAchieved ? '목표 달성' : `목표까지 ${fmtMSS(progress.value.remainingToGoal)}`
 )
 // 밀린 빚 안내 — 있을 때만. 7일 자동 소멸이 폐지됐으니(2026-08-14) "기다리면 사라진다"고 말할 수 없다.
 // 대신 지우는 두 수단(더 읽기·광고)을 제시해 여전히 위협이 아니라 "할 수 있다"로 프레이밍한다.
