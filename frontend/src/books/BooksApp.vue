@@ -284,7 +284,8 @@ async function removeBook(book: MyBookSummary) {
                 <span v-if="pop.readCount > 0">{{ pop.readCount }}명 읽음</span>
               </a>
             </template>
-            <span v-if="row.owned" class="shelf-owned-badge">📚 이미 책장에 있음</span>
+            <!-- 체크 표식은 CSS(.shelf-owned-badge::before)가 그린다 — 시트 배지와 한 규칙을 공유한다. -->
+            <span v-if="row.owned" class="shelf-owned-badge">책장에 있어요</span>
           </div>
           <div v-if="!row.owned" class="book-add-form">
             <select v-model="row.selectedStatus">

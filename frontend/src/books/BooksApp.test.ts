@@ -59,6 +59,52 @@ afterEach(() => {
     document.body.innerHTML = '';
 });
 
+/**
+ * 검색 결과의 「이미 있는 책」 배지 — 미니앱과 같은 언어로 맞춘다(2026-08-19).
+ *
+ * ⚠️ **문구는 「서재」가 아니라 「책장」이다.** 미니앱에서는 책 목록이 「서재」지만, 웹에서 「서재」는
+ * **작가 캐릭터가 사는 마을**을 가리킨다(`garden.html` 「나의 서재」 · `PortraitVillage` 「서재 식구」 ·
+ * 랜딩 「작가가 찾아오는 나의 서재」). 여기서 어휘까지 통일하면 웹 안에서 두 뜻이 충돌하므로,
+ * 맞추는 것은 **표기 방식(이모지 대신 체크 · 칩 모양 · -어요체)**이지 명칭이 아니다.
+ */
+describe('BooksApp 검색 결과 — 이미 책장에 있는 책', () => {
+    const searchRow = (title: string, owned: boolean) => ({
+        title, author: '지은이', isbn13: title, coverUrl: null,
+        publisher: null, purchaseLink: null, category: null, pubDate: null, owned,
+    });
+
+    /** 담긴 책 한 권 + 아직 없는 책 한 권을 나란히 띄운다. */
+    async function mountAndSearch(): Promise<VueWrapper> {
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({ books: [], searchEnabled: true }));
+        const wrapper = mount(BooksApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.find('.book-search-form').exists()).toBe(true));
+
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({
+            results: [searchRow('미움받을 용기', true), searchRow('역행자', false)],
+        }));
+        await wrapper.find('.book-search-form input').setValue('책');
+        await wrapper.find('.book-search-form').trigger('submit');
+        await vi.waitFor(() => expect(wrapper.findAll('.book-row').length).toBe(2));
+        return wrapper;
+    }
+
+    test('배지는 「책장에 있어요」 — 기본 이모지를 쓰지 않는다', async () => {
+        const wrapper = await mountAndSearch();
+
+        // 정확 일치라 `📚`가 남아 있으면 여기서 깨진다(문구 확인과 이모지 가드를 한 단언이 겸한다).
+        expect(wrapper.find('.shelf-owned-badge').text()).toBe('책장에 있어요');
+    });
+
+    test('배지 대신 담을 길을 잃지 않는다 — 아직 없는 책엔 추가 폼이 그대로다', async () => {
+        const rows = (await mountAndSearch()).findAll('.book-row');
+
+        expect(rows[0].find('.shelf-owned-badge').exists()).toBe(true);
+        expect(rows[0].find('.book-add-form').exists()).toBe(false);
+        expect(rows[1].find('.shelf-owned-badge').exists()).toBe(false);
+        expect(rows[1].find('.book-add-form').exists()).toBe(true);
+    });
+});
+
 describe('BooksApp 공개 전환 고지', () => {
     test('여백 글이 있는 비공개 책을 공개로 바꾸면 개수를 담아 확인을 묻는다', async () => {
         await mountAndToggle(book({ storyCount: 3 }));
