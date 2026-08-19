@@ -5,7 +5,10 @@ import com.booktimer.book.BookNews;
 import com.booktimer.book.BookNewsRepository;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.GoogleNewsRssClient;
+import com.booktimer.follow.FollowRepository;
 import com.booktimer.security.CurrentUserService;
+import com.booktimer.session.ReadingSession;
+import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.story.Story;
 import com.booktimer.story.StoryRepository;
 import com.booktimer.user.User;
@@ -23,6 +26,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 미니앱 홈 피드 박스용 JSON API — GET /api/home-feed.
@@ -56,10 +60,15 @@ public class HomeFeedApiController {
     /** 여백 글 미리보기 길이 — 말줄임(…)을 포함해 이 길이를 넘지 않는다. */
     private static final int EXCERPT_MAX_LENGTH = 80;
 
+    /** 「함께 읽는 사람」 상한. 소식·뉴스와 같은 값 — 미리보기 + 「더 보기」로 이 안에서 펼친다. */
+    private static final int MAX_READERS = 30;
+
     private final CurrentUserService currentUserService;
     private final BookRepository bookRepository;
     private final BookNewsRepository bookNewsRepository;
     private final StoryRepository storyRepository;
+    private final FollowRepository followRepository;
+    private final ReadingSessionRepository sessionRepository;
     private final GoogleNewsRssClient newsClient;
     private final Clock clock;
 
@@ -67,12 +76,16 @@ public class HomeFeedApiController {
                                  BookRepository bookRepository,
                                  BookNewsRepository bookNewsRepository,
                                  StoryRepository storyRepository,
+                                 FollowRepository followRepository,
+                                 ReadingSessionRepository sessionRepository,
                                  GoogleNewsRssClient newsClient,
                                  Clock clock) {
         this.currentUserService = currentUserService;
         this.bookRepository = bookRepository;
         this.bookNewsRepository = bookNewsRepository;
         this.storyRepository = storyRepository;
+        this.followRepository = followRepository;
+        this.sessionRepository = sessionRepository;
         this.newsClient = newsClient;
         this.clock = clock;
     }
@@ -95,7 +108,67 @@ public class HomeFeedApiController {
 
         return new HomeFeedResponse(
                 events.size() > MAX_EVENTS ? List.copyOf(events.subList(0, MAX_EVENTS)) : events,
-                newsClient.isEnabled(), newsFor(viewer));
+                newsClient.isEnabled(), newsFor(viewer), readersFor(viewer));
+    }
+
+    /**
+     * 「함께 읽는 사람」 — 내가 팔로우한 사람들의 <b>공개 책</b> 독서 상태.
+     *
+     * <p><b>이 목록의 불변식은 한 줄이다: 공개 책의 독서만 본다.</b> 그래서 새로 공개되는 것이 없고,
+     * 「내 상태를 누구에게 보일까」를 새로 물을 필요도 없다 — 책마다 이미 있는 공개 스위치가 그 설정이다.
+     * 비공개 독서는 「읽는 중」이라는 표시조차 남기지 않는다(그것만으로 지금 뭘 하는지가 샌다).
+     *
+     * <p>쿼리 3개 + 모집단 1개로 고정이다(팔로잉 수와 무관 — N+1 없음). 팔로잉이 0명이면
+     * 나머지 쿼리를 아예 타지 않는다.
+     */
+    private List<ReaderStatus> readersFor(User viewer) {
+        List<User> followees = followRepository.findVisibleFollowees(viewer, PageRequest.of(0, MAX_READERS));
+        if (followees.isEmpty()) {
+            return List.of();
+        }
+        List<Long> ids = followees.stream().map(User::getId).toList();
+
+        Set<Long> mutualIds = Set.copyOf(followRepository.findFollowerIdsAmong(viewer, ids));
+        Map<Long, ReadingSession> activeByUser = new HashMap<>();
+        for (ReadingSession session : sessionRepository.findActivePublicSessions(ids)) {
+            // 진행 중 세션은 사람당 하나가 불변식이나(서비스가 중복 start를 막는다) 방어적으로 최신을 남긴다.
+            activeByUser.merge(session.getUser().getId(), session,
+                    (a, b) -> a.getStartedAt().isAfter(b.getStartedAt()) ? a : b);
+        }
+        Map<Long, Instant> lastReadByUser = new HashMap<>();
+        for (ReadingSessionRepository.UserReadRecency row : sessionRepository.lastPublicReadAtByUser(ids)) {
+            lastReadByUser.put(row.getUserId(), row.getLastAt());
+        }
+
+        List<ReaderStatus> readers = new ArrayList<>();
+        for (User followee : followees) {
+            ReadingSession active = activeByUser.get(followee.getId());
+            readers.add(new ReaderStatus(
+                    followee.getLoginId(), followee.getNickname(), mutualIds.contains(followee.getId()),
+                    active == null ? null : active.getBook().getTitle(),
+                    active == null ? null : active.getStartedAt(),
+                    lastReadByUser.get(followee.getId())));
+        }
+        readers.sort(READER_ORDER);
+        return List.copyOf(readers);
+    }
+
+    /**
+     * 읽는 중 → 맞팔 → 최근 활동순 → 기록 없음. 동률은 loginId로 결정적 정렬.
+     *
+     * <p>비교자 하나로 끝내는 이유: 화면은 「읽는 중」과 「최근 기록」 두 묶음으로 보이지만 규칙을 둘로
+     * 나누면 두 곳이 따로 늙는다. 묶음 머리는 미니앱이 이 순서 위에 그린다.
+     */
+    private static final Comparator<ReaderStatus> READER_ORDER =
+            Comparator.comparing((ReaderStatus r) -> r.readingSince() != null).reversed()
+                    .thenComparing(Comparator.comparing(ReaderStatus::mutual).reversed())
+                    .thenComparing(HomeFeedApiController::lastActivityOf,
+                            Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(ReaderStatus::loginId);
+
+    /** 정렬 기준이 되는 마지막 활동 — 읽는 중이면 그 시작 시각, 아니면 마지막 공개 기록. */
+    private static Instant lastActivityOf(ReaderStatus reader) {
+        return reader.readingSince() != null ? reader.readingSince() : reader.lastReadAt();
     }
 
     /**
@@ -173,7 +246,22 @@ public class HomeFeedApiController {
                 book.getTitle(), type, occurredAt, null, null, 0); // 여백 전용 필드는 STORY 행만 채운다
     }
 
-    public record HomeFeedResponse(List<SocialEvent> social, boolean newsEnabled, List<NewsItem> news) {
+    public record HomeFeedResponse(List<SocialEvent> social, boolean newsEnabled, List<NewsItem> news,
+                                   List<ReaderStatus> readers) {
+    }
+
+    /**
+     * 「함께 읽는 사람」 한 줄 — 팔로우한 사람의 <b>공개 책</b> 독서 상태.
+     *
+     * @param mutual           서로 팔로우 중인가 — 「서로」 배지 + 정렬 우선. 관계 모델은 단방향 그대로다
+     * @param readingBookTitle 지금 읽는 중인 PUBLIC 책 제목. <b>비공개 책·미태깅 세션·미독서면 null</b>
+     * @param readingSince     그 세션의 시작 시각. {@code readingBookTitle}과 항상 함께 채워지거나 함께 null
+     * @param lastReadAt       끝낸 PUBLIC 책 세션 중 가장 최근의 시작 시각.
+     *                         공개 기록이 없으면 null → 미니앱이 「공개된 기록이 없어요」로 그린다
+     *                         (「안 읽었어요」가 아니다 — 비공개로 읽는 사람에겐 그게 거짓이다)
+     */
+    public record ReaderStatus(String loginId, String nickname, boolean mutual,
+                               String readingBookTitle, Instant readingSince, Instant lastReadAt) {
     }
 
     /**

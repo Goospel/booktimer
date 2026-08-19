@@ -324,10 +324,37 @@ export interface NewsItem {
  * 있어 서버 `booktimer.news.enabled`가 킬스위치로 남아 있고, **게이트가 서버에 있어 껐다 켜는 데
  * 미니앱 재배포가 필요 없다**(`VITE_*` 빌드타임 게이트보다 나은 자리).
  */
+/**
+ * `HomeFeedApiController.ReaderStatus` — 「함께 읽는 사람」 한 줄.
+ *
+ * <p><b>이 목록의 불변식은 한 줄이다: 공개 책의 독서만 본다.</b> 그래서 새로 공개되는 것이 없고,
+ * 「내 상태를 누구에게 보일까」를 새로 묻는 설정도 없다 — 책마다 이미 있는 공개 스위치가 그 설정이다.
+ * 비공개로 읽는 중인 사람은 세 필드가 전부 null로 와서 화면에서 「공개된 기록이 없어요」가 된다.
+ */
+export interface ReaderStatus {
+  loginId: string;
+  nickname: string;
+  /** 서로 팔로우 중인가 — 「서로」 배지 + 정렬 우선. 관계 모델은 단방향 그대로다. */
+  mutual: boolean;
+  /** 지금 읽는 중인 **공개** 책 제목. 비공개 책·미태깅 세션·미독서면 null. */
+  readingBookTitle: string | null;
+  /** 그 세션 시작 시각. `readingBookTitle`과 항상 함께 채워지거나 함께 null. */
+  readingSince: string | null;
+  /** 마지막 **공개** 독서 시각. 공개 기록이 없으면 null. */
+  lastReadAt: string | null;
+}
+
 export interface HomeFeedResponse {
   social: SocialEvent[];
   newsEnabled: boolean;
   news: NewsItem[];
+  /**
+   * 「함께 읽는 사람」 목록(상한 30명, 서버가 정렬해서 준다 — 읽는 중 → 맞팔 → 최근순).
+   *
+   * <p>서버가 이 필드를 아직 안 내려주는 구버전과도 붙을 수 있어야 해서 미니앱은 `?? []`로 읽는다 —
+   * 서버·미니앱 배포 순서에 화면이 의존하지 않는다.
+   */
+  readers: ReaderStatus[];
 }
 
 export const fetchHomeFeed = (): Promise<HomeFeedResponse> => request('/api/home-feed');

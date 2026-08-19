@@ -2,13 +2,17 @@ import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import type { HomeFeedResponse, NewsItem, SocialEvent } from './api';
+import type { HomeFeedResponse, NewsItem, ReaderStatus, SocialEvent } from './api';
+import type { FeedTab } from './screens/HomeFeed';
 import {
+  DEFAULT_TAB,
   EMPTY_MESSAGE,
   FeedBox,
   PREVIEW_COUNT,
+  ReaderRow,
   eventLine,
   previewOf,
+  readerStatusLine,
   sourceLabel,
   sourceOf,
   visibleTabs,
@@ -54,13 +58,26 @@ function news(
   return { title, link, publishedAt: new Date(NOW - hoursAgo * HOUR).toISOString(), bookTitle, source };
 }
 
+/** 「함께 읽는 사람」 한 줄. 서버는 공개 책 독서만 담아 준다 — 비공개는 세 필드가 전부 null로 온다. */
+function reader(overrides: Partial<ReaderStatus> = {}): ReaderStatus {
+  return {
+    loginId: 'nabi',
+    nickname: '여느밤',
+    mutual: false,
+    readingBookTitle: null,
+    readingSince: null,
+    lastReadAt: null,
+    ...overrides,
+  };
+}
+
 function feed(overrides: Partial<HomeFeedResponse> = {}): HomeFeedResponse {
-  return { social: [], newsEnabled: true, news: [], ...overrides };
+  return { social: [], newsEnabled: true, news: [], readers: [], ...overrides };
 }
 
 const renderBox = (
   data: HomeFeedResponse | null,
-  tab: 'social' | 'news' = 'social',
+  tab: FeedTab = 'social',
   expanded = false,
   error: string | null = null,
 ) =>
@@ -87,12 +104,89 @@ const rowCountOf = (markup: string) => [...markup.matchAll(/data-feed-row/g)].le
 const rowTagsOf = (markup: string) => [...markup.matchAll(/<(\w+)[^>]*data-feed-row/g)].map((m) => m[1]);
 
 describe('탭 노출 (visibleTabs)', () => {
-  it('뉴스가 꺼져 있으면 「소식」 하나 — 눌러도 빈 뉴스 탭은 죽은 탭이다', () => {
-    expect(visibleTabs(false)).toEqual(['social']);
+  it('뉴스가 꺼져 있으면 사람 탭 + 「소식」 — 눌러도 빈 뉴스 탭은 죽은 탭이다', () => {
+    expect(visibleTabs(false)).toEqual(['readers', 'social']);
   });
 
-  it('뉴스가 켜져 있으면 두 탭', () => {
-    expect(visibleTabs(true)).toEqual(['social', 'news']);
+  it('뉴스가 켜져 있으면 세 탭', () => {
+    expect(visibleTabs(true)).toEqual(['readers', 'social', 'news']);
+  });
+
+  it('사람 탭이 맨 왼쪽이다 — 위치가 곧 이 탭이 다른 종류라는 표시다', () => {
+    expect(visibleTabs(true)[0]).toBe('readers');
+  });
+
+  it('맨 왼쪽이지만 기본으로 열리는 탭은 「소식」이다 — 기존 홈 경험을 바꾸지 않는다', () => {
+    // 팔로우 0명인 사람이 빈 목록을 먼저 만나는 일도 이 한 줄이 막는다.
+    expect(DEFAULT_TAB).toBe('social');
+  });
+});
+
+describe('독서 상태 문구 (readerStatusLine)', () => {
+  const NOW_ISO = (hoursAgo: number) => new Date(NOW - hoursAgo * HOUR).toISOString();
+
+  it('읽는 중이면 책 제목이 문장에 든다', () => {
+    const line = readerStatusLine(
+      reader({ readingBookTitle: '데미안', readingSince: NOW_ISO(1) }),
+      NOW,
+    );
+
+    expect(line).toBe('『데미안』 읽는 중');
+  });
+
+  it('읽는 중이 아니면 마지막 기록을 사실대로 적는다 — 「안 읽었어요」라고 단정하지 않는다', () => {
+    expect(readerStatusLine(reader({ lastReadAt: NOW_ISO(72) }), NOW)).toBe('마지막 기록 3일 전');
+    expect(readerStatusLine(reader({ lastReadAt: NOW_ISO(2) }), NOW)).toBe('마지막 기록 2시간 전');
+  });
+
+  it('공개 기록이 없으면 「공개된」이라고 밝힌다 — 비공개로 읽는 사람을 안 읽는 사람으로 만들지 않는다', () => {
+    const line = readerStatusLine(reader(), NOW);
+
+    expect(line).toBe('공개된 기록이 없어요');
+    expect(line).not.toContain('안 읽');
+  });
+
+  it('읽는 중이면 과거 기록이 있어도 읽는 중이 이긴다', () => {
+    const line = readerStatusLine(
+      reader({ readingBookTitle: '코스모스', readingSince: NOW_ISO(1), lastReadAt: NOW_ISO(500) }),
+      NOW,
+    );
+
+    expect(line).toBe('『코스모스』 읽는 중');
+  });
+});
+
+describe('사람 한 줄 (ReaderRow)', () => {
+  const render = (r: ReaderStatus) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <ReaderRow reader={r} index={0} now={NOW} />
+      </TDSMobileProvider>,
+    );
+
+  it('읽는 중이면 경과 시간이 붙는다', () => {
+    const markup = render(
+      reader({ readingBookTitle: '데미안', readingSince: new Date(NOW - 42 * 60_000).toISOString() }),
+    );
+
+    expect(markup).toContain('42분째');
+    expect(markup).toContain('『데미안』 읽는 중');
+  });
+
+  it('읽는 중이 아니면 경과 시간을 안 붙인다 — 본문이 이미 시점을 말한다(같은 말 두 번 금지)', () => {
+    const markup = render(reader({ lastReadAt: new Date(NOW - 72 * HOUR).toISOString() }));
+
+    expect(markup).toContain('마지막 기록 3일 전');
+    expect(markup).not.toContain('째');
+  });
+
+  it('맞팔이면 「서로」가 붙고 아니면 안 붙는다 — 친구 시스템 없이 친구감만 가져오는 자리', () => {
+    expect(render(reader({ mutual: true }))).toContain('서로');
+    expect(render(reader({ mutual: false }))).not.toContain('서로');
+  });
+
+  it('닉네임을 그린다', () => {
+    expect(render(reader({ nickname: '물결' }))).toContain('물결');
   });
 });
 
@@ -273,16 +367,65 @@ describe('피드 박스 렌더 — 책 뉴스 탭', () => {
 });
 
 describe('피드 박스 — 탭 머리', () => {
-  it('뉴스가 켜져 있으면 두 탭이 서고 지금 탭이 표시된다', () => {
+  it('뉴스가 켜져 있으면 세 탭이 서고 지금 탭이 표시된다', () => {
     const markup = renderBox(feed(), 'news');
 
-    expect(tabsOf(markup)).toEqual(['social', 'news']);
+    expect(tabsOf(markup)).toEqual(['readers', 'social', 'news']);
     expect(markup).toContain('소식');
     expect(markup).toContain('책 뉴스');
   });
 
   it('뉴스가 꺼져 있으면 「책 뉴스」 머리 자체를 안 그린다 — 죽은 탭 금지', () => {
-    expect(tabsOf(renderBox(feed({ newsEnabled: false })))).toEqual(['social']);
+    expect(tabsOf(renderBox(feed({ newsEnabled: false })))).toEqual(['readers', 'social']);
+  });
+
+  it('사람 탭 뒤에 세로 구분선이 선다 — 같은 줄이지만 같은 종류가 아니라는 표시', () => {
+    const markup = renderBox(feed());
+
+    expect(markup).toContain('data-tab-split');
+    // 구분선은 사람 탭과 「소식」 사이에 있어야 의미가 산다.
+    expect(markup.indexOf('data-feed-tab="readers"')).toBeLessThan(markup.indexOf('data-tab-split'));
+    expect(markup.indexOf('data-tab-split')).toBeLessThan(markup.indexOf('data-feed-tab="social"'));
+  });
+
+  it('사람 탭엔 글자가 없으므로 이름을 달아 준다 — 없으면 스크린리더에 무명 버튼이 된다', () => {
+    expect(renderBox(feed())).toContain('aria-label="함께 읽는 사람"');
+  });
+});
+
+describe('피드 박스 — 사람 탭', () => {
+  it('팔로우한 사람들을 서버가 준 순서대로 그린다 (읽는 중 → 맞팔 → 최근순)', () => {
+    const markup = renderBox(
+      feed({
+        readers: [
+          reader({ loginId: 'a', nickname: '여느밤', readingBookTitle: '데미안', readingSince: new Date(NOW - HOUR).toISOString() }),
+          reader({ loginId: 'b', nickname: '물결', lastReadAt: new Date(NOW - 72 * HOUR).toISOString() }),
+        ],
+      }),
+      'readers',
+    );
+
+    expect(rowCountOf(markup)).toBe(2);
+    expect(markup.indexOf('여느밤')).toBeLessThan(markup.indexOf('물결'));
+  });
+
+  it('아무도 없으면 여기가 무엇으로 채워지는 자리인지 말한다', () => {
+    expect(renderBox(feed(), 'readers')).toContain(EMPTY_MESSAGE.readers);
+  });
+
+  it('미리보기는 3줄까지, 넘으면 「더 보기」 — 소식·뉴스와 같은 규칙', () => {
+    const many = Array.from({ length: 5 }, (_, i) => reader({ loginId: `u${i}`, nickname: `사람${i}` }));
+
+    expect(rowCountOf(renderBox(feed({ readers: many }), 'readers'))).toBe(PREVIEW_COUNT);
+    expect(renderBox(feed({ readers: many }), 'readers')).toContain('더 보기');
+    expect(rowCountOf(renderBox(feed({ readers: many }), 'readers', true))).toBe(5);
+  });
+
+  it('구버전 서버(readers 없음)에도 안 깨진다 — 서버·미니앱 배포 순서에 의존하지 않는다', () => {
+    const legacy = { social: [], newsEnabled: true, news: [] } as unknown as HomeFeedResponse;
+
+    expect(() => renderBox(legacy, 'readers')).not.toThrow();
+    expect(renderBox(legacy, 'readers')).toContain(EMPTY_MESSAGE.readers);
   });
 });
 
@@ -291,7 +434,7 @@ describe('피드 박스 — 실패·로딩', () => {
     const markup = renderBox(null, 'social', false, '요청에 실패했어요 (500)');
 
     expect(markup).toContain('요청에 실패했어요 (500)');
-    expect(tabsOf(markup)).toEqual(['social']); // 박스 자체는 그대로 서 있다
+    expect(tabsOf(markup)).toEqual(['readers', 'social']); // 박스 자체는 그대로 서 있다
   });
 
   it('아직 못 받았으면 불러오는 중이라고 말한다', () => {

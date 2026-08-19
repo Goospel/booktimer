@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -95,6 +96,47 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
     long sumCompletedSeconds(@Param("user") User user,
                              @Param("from") java.time.Instant from,
                              @Param("to") java.time.Instant to);
+
+    /**
+     * 홈 「함께 읽는 사람」 탭 — 여러 사람의 진행 중 세션 중 <b>PUBLIC 책</b>인 것만.
+     *
+     * <p>{@code join fetch}가 곧 게이트다: 비공개 책 세션은 조인에서 탈락해 <b>행 자체가 없다</b> —
+     * 제목만 가리고 「읽는 중」을 남기는 절충이 애초에 불가능한 모양이다. 그것만으로도 지금 뭘 하는지가
+     * 새기 때문이다(비공개 독서 시간 누출 방지, sns-design §3.5의 연장).
+     * {@code book}이 null인 미태깅 세션도 inner join이라 자연 제외된다 — 공개 여부를 판정할 수 없으면
+     * 비공개로 취급하는 게 안전한 쪽이다.
+     *
+     * <p>빈 목록이면 호출하지 않는다({@code in ()}은 DB마다 취급이 다르다 — {@code recencyByBook} 가드와 동일).
+     */
+    @Query("""
+            select s from ReadingSession s join fetch s.book b
+            where s.user.id in :userIds and s.endedAt is null
+              and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
+            """)
+    List<ReadingSession> findActivePublicSessions(@Param("userIds") Collection<Long> userIds);
+
+    /** 사람 한 명 → 그 사람의 마지막 공개 독서 시각. {@link #lastPublicReadAtByUser} 투영. */
+    interface UserReadRecency {
+        Long getUserId();
+
+        Instant getLastAt();
+    }
+
+    /**
+     * 사람별 <b>마지막 공개 독서 시각</b> — 끝낸 세션 + PUBLIC 책만, 한 쿼리로(N+1 금지).
+     *
+     * <p>기준이 {@code endedAt}이 아니라 <b>{@code startedAt}</b>인 것은 {@code sumCompletedSeconds}와
+     * 같은 규칙이다(세션은 시작일에 귀속된다). 공개 기록이 없는 사람은 <b>행이 아예 없어</b>
+     * 호출부가 null로 채운다 — 그 null이 화면에서 「공개된 기록이 없어요」가 된다.
+     */
+    @Query("""
+            select s.user.id as userId, max(s.startedAt) as lastAt
+            from ReadingSession s
+            where s.user.id in :userIds and s.endedAt is not null and s.book is not null
+              and s.book.visibility = com.booktimer.book.BookVisibility.PUBLIC
+            group by s.user.id
+            """)
+    List<UserReadRecency> lastPublicReadAtByUser(@Param("userIds") Collection<Long> userIds);
 
     /** 진행 중 세션을 책과 함께 즉시 로딩 — 트랜잭션 밖(뷰)에서 책 제목 접근 시 lazy 예외 방지. */
     @Query("select s from ReadingSession s left join fetch s.book where s.user = :user and s.endedAt is null")

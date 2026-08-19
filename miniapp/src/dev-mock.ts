@@ -17,6 +17,7 @@ import type {
   PersonalityMutation,
   PersonalityStatus,
   ProfileBook,
+  ReaderStatus,
   RequestOptions,
   SearchRow,
   SocialEvent,
@@ -390,6 +391,27 @@ const socialEvents: SocialEvent[] = [
     bookId: null, excerpt: null, count: 0 },
 ];
 
+/**
+ * 「함께 읽는 사람」 목록 — <b>서버가 정렬해서 주므로 목도 그 순서 그대로</b> 둔다
+ * (읽는 중 → 맞팔 → 최근순 → 기록 없음). 미니앱은 다시 정렬하지 않는다.
+ *
+ * <p>다섯 상태를 한 화면에 다 세워 브라우저로 전부 확인할 수 있게 했다 — 읽는 중(맞팔/아님) ·
+ * 맞팔인데 조용 · 최근 기록 · 공개 기록 없음. 마지막 줄이 특히 중요하다: 비공개로만 읽는 사람이
+ * 「안 읽는 사람」이 아니라 「공개된 기록이 없어요」로 보이는지가 이 기능의 핵심 약속이다.
+ */
+const readerStatuses: ReaderStatus[] = [
+  { loginId: 'nabi', nickname: '나비독서', mutual: true,
+    readingBookTitle: '데미안', readingSince: isoTime(0.7), lastReadAt: isoTime(26) },
+  { loginId: 'underline', nickname: '밑줄러', mutual: false,
+    readingBookTitle: '코스모스', readingSince: isoTime(0.15), lastReadAt: isoTime(50) },
+  { loginId: 'jieun', nickname: '지은의서재', mutual: true,
+    readingBookTitle: null, readingSince: null, lastReadAt: isoTime(5) },
+  { loginId: 'sowon', nickname: '소원', mutual: false,
+    readingBookTitle: null, readingSince: null, lastReadAt: isoTime(72) },
+  { loginId: 'bamnat', nickname: '밤과낮', mutual: true,
+    readingBookTitle: null, readingSince: null, lastReadAt: null },
+];
+
 const newsItems: NewsItem[] = [
   {
     title: '헤르만 헤세 『데미안』 출간 100년, 다시 읽히는 이유',
@@ -501,6 +523,7 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     social: socialEvents,
     newsEnabled: true,
     news: newsItems,
+    readers: readerStatuses,
   })],
 
   // ── 타이머 ──
