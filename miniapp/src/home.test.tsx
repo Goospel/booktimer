@@ -1,4 +1,5 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
+import { readFileSync } from 'node:fs';
 import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,6 +9,7 @@ import { TAB_BAR_Z_INDEX } from './App';
 import { ApiError, waiveDebt } from './api';
 import { dismissCoachmark, setCoachmarkWalking } from './coachmark';
 import {
+  ACTIVE_SESSION_RELIEF,
   AccountSection,
   BookCarousel,
   BookSheet,
@@ -17,6 +19,7 @@ import {
   EDGE_SPACE,
   FirstSessionBanner,
   Home,
+  LAMP_PAGE_CLASS,
   RemainingNote,
   TRACK_V_PAD,
   askNotificationAgreement,
@@ -1384,5 +1387,44 @@ describe('홈 여백 문의 대상 책 (marginDoorBook)', () => {
         expect(renderHome({ readingBooks: [] })).not.toContain(GUIDE);
       });
     });
+  });
+});
+
+/**
+ * 독서등 — 측정 중 홈이 밤이 될 때, 히어로 카드만 스탠드 밑에 펼쳐진 페이지로 남는다.
+ *
+ * <p>홈이 하는 일은 <b>「여기가 밝게 남을 자리」라고 표식을 붙이는 것</b>뿐이다 — 켤지 말지는
+ * `body` 클래스가 정하고 색은 css가 든다. 그래서 표식은 측정 여부와 <b>무관하게</b> 늘 붙어 있다
+ * (조건부로 붙이면 판단이 두 곳으로 갈라진다).
+ */
+describe('독서등 — 밝게 남는 자리 (lamp-page)', () => {
+  it('히어로 카드에 표식이 붙는다', () => {
+    expect(renderHome({ hasActiveSession: true })).toContain(LAMP_PAGE_CLASS);
+  });
+
+  it('측정 중이 아니어도 표식은 그대로 있다 — 켜고 끄는 판단은 여기 없다', () => {
+    expect(renderHome({ hasActiveSession: false })).toContain(LAMP_PAGE_CLASS);
+  });
+
+  it('표식은 화면에 하나뿐이다 — 밝게 남을 자리가 둘이면 스탠드가 아니다', () => {
+    const markup = renderHome({ hasActiveSession: true });
+
+    expect(markup.split(LAMP_PAGE_CLASS).length - 1).toBe(1);
+  });
+
+  it('js가 붙이는 표식이 css에 셀렉터로 실재한다', () => {
+    expect(readFileSync(new URL('./global.css', import.meta.url), 'utf8')).toContain(`.${LAMP_PAGE_CLASS}`);
+  });
+
+  /**
+   * 밤이 되어도 문구는 한 글자도 안 바뀐다 — 이 작업은 <b>색만</b> 바꾸는 것이다. 어두운 화면용
+   * 문구를 따로 만들면 두 벌을 영원히 같이 고쳐야 한다.
+   */
+  it('측정 중 문구는 밤에도 그대로다 — 바뀌는 것은 색뿐이다', () => {
+    const markup = renderHome({ hasActiveSession: true, activeBookTitle: '데미안' });
+
+    expect(markup).toContain('측정 중');
+    expect(markup).toContain('데미안');
+    expect(markup).toContain(ACTIVE_SESSION_RELIEF);
   });
 });

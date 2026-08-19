@@ -12,11 +12,13 @@ import {
   TAB_BAR_MARGIN,
   TAB_BAR_Z_INDEX,
   COACHMARK_FLOW,
+  LAMP_CLASS,
   TABS,
   TIMER_ACTION_SLOT,
   TabBarCoachmark,
   closeCompose,
   flowStepsOnAbandon,
+  lampOn,
   flowTabChange,
   nextFlowStep,
   shouldRefresh,
@@ -638,5 +640,57 @@ describe('작성 화면 닫기 (closeCompose)', () => {
       bookId: 7,
       composeBook: null,
     });
+  });
+});
+
+/**
+ * 독서등 — 측정 중 홈이 밤이 된다(시안 C 「스탠드」). 캔버스가 어두운 나무색으로 내려앉고 히어로
+ * 카드만 스탠드 밑에 펼쳐진 페이지로 남는다.
+ *
+ * <p>배선은 <b>`document.body`의 클래스 한 장</b>이고 색은 전부 css가 든다 — 그 토글은 effect라
+ * 정적 렌더 하니스로 못 잡으므로, <b>판단</b>만 순수 함수로 꺼내 계측한다(효과 자체는 브라우저 실측).
+ */
+describe('독서등 (lampOn)', () => {
+  it('홈에서 측정 중이면 켜진다', () => {
+    expect(lampOn('home', true)).toBe(true);
+  });
+
+  it('홈이어도 측정 중이 아니면 안 켜진다', () => {
+    expect(lampOn('home', false)).toBe(false);
+  });
+
+  /**
+   * 적용 범위 「홈만」(사용자 결정 2026-08-19)을 못 박는 자리다. 서재·책방·기록까지 어두워지면
+   * 표지·잔디·격자를 전부 밤 종이 위에서 다시 봐야 하는데, 그 색은 만든 적이 없다.
+   */
+  it('다른 탭에서는 측정 중이어도 안 켜진다 — 범위는 홈만이다', () => {
+    expect(lampOn('library', true)).toBe(false);
+    expect(lampOn('bookshop', true)).toBe(false);
+    expect(lampOn('history', true)).toBe(false);
+  });
+
+  /**
+   * 재진입이 공짜인 근거 — 켜짐 조건이 「지금 어느 탭인가 · 지금 측정 중인가」 둘뿐이라 상태를 안 든다.
+   * 「방금 눌렀는지」를 기억하는 인자가 생기면 이 시그니처가 먼저 깨진다.
+   */
+  it('판단에 드는 것은 탭과 측정 여부뿐이다 — 나갔다 와도 같은 답이 나온다', () => {
+    expect(lampOn.length).toBe(2);
+  });
+
+  it('js가 붙이는 클래스가 css에 셀렉터로 실재한다 — 한쪽만 고치면 기능이 조용히 죽는다', () => {
+    expect(readFileSync(new URL('./global.css', import.meta.url), 'utf8')).toContain(`body.${LAMP_CLASS}`);
+  });
+
+  /**
+   * 이 장치의 유일한 성립 조건 — 어두운 토큰을 `<main>`에만 얹으므로, 탭바가 그 <b>밖</b>에 서야
+   * 측정을 끝내는 원이 어둠에 잠기지 않는다. 코치마크 스포트라이트가 층 순서로 성립하는 것과 같은
+   * 수법이고(덮개가 탭바 아래), 여기선 <b>DOM 바깥</b>이 그 역할을 한다.
+   *
+   * <p>누군가 탭바를 `Screen` 안으로 옮기면 끄는 법을 잃는데, 색은 css에 있어 코드 리뷰로는 안 보인다.
+   */
+  it('탭바는 화면(<main>) 밖에 선다 — 어두운 토큰이 끄는 버튼에 닿지 않는다', () => {
+    const markup = renderTab('home', { hasActiveSession: true });
+
+    expect(markup.indexOf('<nav aria-label="메인 탭"')).toBeGreaterThan(markup.indexOf('</main>'));
   });
 });

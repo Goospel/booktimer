@@ -298,7 +298,8 @@ describe('섹션 카드·화면 제목', () => {
   const markup = home({ readingBooks: [{ id: 1, title: '데미안', coverUrl: null, author: null }] });
 
   it('섹션은 크림 캔버스 위 카드지로 뜬다 — 배경만으로는 종이톤끼리 경계가 안 보인다', () => {
-    expect(markup).toContain('background:#FCFAF5'); // 웹 --card-bg
+    // 리터럴이 아니라 토큰이라야 독서등(밤)이 이 카드도 함께 데려간다 — 값은 여전히 웹 --card-bg다.
+    expect(markup).toContain('background:var(--adaptiveGrey100, #FCFAF5)');
     // 경계를 긋는 주체가 1px 실선에서 연필선(border-image)으로 바뀌었다. 테두리가 통째로 빠지면
     // 종이톤 카드가 종이톤 캔버스에 녹아 사라지므로, 그리는 수단이 실재하는지를 못 박는다.
     expect(markup).toContain('border:1px solid transparent');
@@ -485,8 +486,13 @@ describe('TDS Button 재색칠 (global.css)', () => {
     expect(css).not.toContain('repeating-linear-gradient');
   });
 
+  /**
+   * 낮의 값은 그대로 웹 --accent-hover(#4F6B4C)다 — 다만 독서등(밤)이 이 색만 갈아 끼울 수 있게
+   * 변수를 한 겹 끼웠다. **폴백이 곧 낮의 값**이라 `--brandButtonInk`를 아무도 정의하지 않는
+   * 평소에도 결과가 같다. 그 폴백이 사라지면 밤이 아닌 화면의 버튼 글자가 통째로 죽으므로 함께 잠근다.
+   */
   it('primary 글자를 잉크색으로 되돌린다 — 연한 채움 위에서 흰 글자는 읽히지 않는다', () => {
-    expect(css).toMatch(/--button-color:\s*#4F6B4C\s*!important/); // 웹 --accent-hover
+    expect(css).toMatch(/--button-color:\s*var\(--brandButtonInk,\s*#4F6B4C\)\s*!important/);
   });
 
   it('weak 버튼은 채움 없이 흐린 연필선만 — 이게 primary(연한 채움)와의 위계를 만든다', () => {

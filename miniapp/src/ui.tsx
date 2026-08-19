@@ -255,7 +255,9 @@ export const sectionStyle = {
   marginTop: 20,
   padding: 16,
   borderRadius: 12,
-  background: '#FCFAF5',
+  // 리터럴이 아니라 토큰이라야 독서등이 이 카드도 함께 밤으로 데려간다 — 화면 안의 다른 카드는
+  // 전부 이미 토큰을 쓰고 있었고, 여기 하나가 그 체계의 유일한 구멍이었다.
+  background: 'var(--adaptiveGrey100, #FCFAF5)',
   border: '1px solid transparent',
   borderImage: PENCIL_FRAME,
 } as const;
