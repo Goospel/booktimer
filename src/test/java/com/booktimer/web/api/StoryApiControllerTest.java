@@ -376,4 +376,86 @@ class StoryApiControllerTest {
                         .with(user("del-actor@booktimer.com")).with(csrf()))
                 .andExpect(status().isNotFound());
     }
+
+    // ── 좋아요 (POST/DELETE /api/stories/{id}/like) ──
+    // 게이트 판정 자체는 StoryServiceTest가 전수로 계측한다. 여기서 잡는 것은 <b>배선</b>이다 —
+    // 새 경로가 default-deny·CSRF 안에 들어왔는가, 왕복이 JSON으로 직렬화되는가, 게이트가 실제로
+    // 호출되는가. 셋 다 서비스 단위테스트로는 원리상 안 보인다.
+
+    private Story storyOf(User author, Book book, String text) {
+        return storyRepository.save(Story.of(author, text, book, null));
+    }
+
+    private void follow(User follower, User followee) {
+        followRepository.save(Follow.of(follower, followee));
+    }
+
+    @Test
+    @DisplayName("POST /api/stories/{id}/like 미인증 → 302 로그인 리다이렉트 (새 경로도 기본 잠김)")
+    void like_unauthenticated_redirectsToLogin() throws Exception {
+        mockMvc.perform(post("/api/stories/1/like").with(csrf()))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    @DisplayName("POST /api/stories/{id}/like CSRF 없으면 403")
+    void like_withoutCsrf_returns403() throws Exception {
+        register("like-csrf@booktimer.com", "likecsrf", "누르는이");
+
+        mockMvc.perform(post("/api/stories/1/like").with(user("like-csrf@booktimer.com")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("좋아요 왕복 — 누르면 1·liked, 목록에 실리고, 취소하면 0으로 돌아온다")
+    void like_thenUnlike_roundTrip() throws Exception {
+        User author = register("like-author@booktimer.com", "likeauthor", "글쓴이");
+        User fan = register("like-fan@booktimer.com", "likefan", "독자");
+        Book book = publicBookOf(author, "좋아요가 달릴 책");
+        Story story = storyOf(author, book, "누를 만한 문장");
+        follow(fan, author);
+
+        mockMvc.perform(post("/api/stories/" + story.getId() + "/like")
+                        .with(user("like-fan@booktimer.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.likeCount").value(1))
+                .andExpect(jsonPath("$.liked").value(true));
+
+        // 목록에도 실린다 — 카드가 하트를 채우는 근거
+        mockMvc.perform(get("/api/stories/of/likeauthor").param("bookId", String.valueOf(book.getId()))
+                        .with(user("like-fan@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.entries[0].likeCount").value(1))
+                .andExpect(jsonPath("$.entries[0].liked").value(true));
+
+        mockMvc.perform(delete("/api/stories/" + story.getId() + "/like")
+                        .with(user("like-fan@booktimer.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.likeCount").value(0))
+                .andExpect(jsonPath("$.liked").value(false));
+    }
+
+    @Test
+    @DisplayName("POST .../like 비팔로워 → 404 (안 보이는 글에 눌러 보고 존재를 알아낼 수 없다)")
+    void like_nonFollower_returns404() throws Exception {
+        User author = register("like-closed@booktimer.com", "likeclosed", "글쓴이");
+        register("like-stranger@booktimer.com", "likestranger", "남");
+        Story story = storyOf(author, publicBookOf(author, "공개 책"), "남의 문장");
+
+        mockMvc.perform(post("/api/stories/" + story.getId() + "/like")
+                        .with(user("like-stranger@booktimer.com")).with(csrf()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("POST .../like 내 글 → 404 (여백은 내 노트라 자기 좋아요는 없다)")
+    void like_ownStory_returns404() throws Exception {
+        User me = register("like-self@booktimer.com", "likeself", "나");
+        Story story = storyOf(me, publicBookOf(me, "내 책"), "내 문장");
+
+        mockMvc.perform(post("/api/stories/" + story.getId() + "/like")
+                        .with(user("like-self@booktimer.com")).with(csrf()))
+                .andExpect(status().isNotFound());
+    }
 }

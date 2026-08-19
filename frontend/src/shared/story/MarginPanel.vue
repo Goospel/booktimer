@@ -4,7 +4,7 @@ import ReportModal from '../ReportModal.vue'
 import StoryComposer from './StoryComposer.vue'
 import { coverInitial, hasCover } from '../../profile/format'
 import { excerptForReport, formatStoryAge, type MarginEntry, type MarginResponse } from './storyFeed'
-import { deleteStory, fetchMargin } from './storyApi'
+import { deleteStory, fetchMargin, toggleStoryLike } from './storyApi'
 
 // 여백 패널 — 책 하나에 쌓인 글 목록 (2026-08-16 책 귀속 재설계). 옛 풀스크린 뷰어(진행바·자동 넘김·
 // 열람 기록)를 대체한다. 진입은 책방 리스트 행의 「여백」 손잡이 하나뿐.
@@ -21,6 +21,33 @@ const failed = ref(false)
 const composerOpen = ref(false)
 const reportEntry = ref<MarginEntry | null>(null)
 const busy = ref(false)
+// 누르는 중인 글 — 왕복이 겹치면 개수가 어긋나므로 한 번에 하나만 받는다.
+const likeBusy = ref<number | null>(null)
+
+// 손잡이를 그릴 수 있는가 — 서버 게이트(자기 글 금지 · 비공개 책)를 화면에 옮긴 것. 어긋나면 눌러도
+// 404가 나는 죽은 버튼이 생긴다. 비공개 책 가지는 지금 서버 계약상 닿지 않지만(남의 비공개 책 여백은
+// 404라 self가 이미 거른다) 서버 게이트를 대칭으로 비춰 둔다 — 목록이 열려도 좋아요는 여전히 404다.
+// undefined(옛 서버)는 공개로 간주(가시성 고지와 같은 기준).
+function likable(): boolean {
+    return margin.value !== null && !margin.value.self && margin.value.book.isPublic !== false
+}
+
+// 낙관적으로 먼저 칠하고, 서버가 센 값으로 덮고, 실패하면 되돌린다. 서버 값을 그대로 덮는 것이 핵심 —
+// 그 사이 남이 누른 것까지 반영된 진짜 개수가 오므로 ±1 추정치가 오래 남지 않는다.
+async function toggleLike(entry: MarginEntry) {
+    if (likeBusy.value !== null) return
+    const before = { likeCount: entry.likeCount, liked: entry.liked }
+    entry.likeCount += before.liked ? -1 : 1
+    entry.liked = !before.liked
+    likeBusy.value = entry.id
+    try {
+        const state = await toggleStoryLike(entry.id, entry.liked)
+        if (state === null) Object.assign(entry, before) // 되돌린다 — 틀린 개수를 남기지 않는다
+        else Object.assign(entry, state)
+    } finally {
+        likeBusy.value = null
+    }
+}
 
 async function load() {
     failed.value = false
@@ -102,6 +129,23 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
                         <p class="margin-card-text">{{ e.text }}</p>
                         <div class="margin-card-foot">
                             <span class="margin-card-age">{{ formatStoryAge(e.createdAt, Date.now()) }}</span>
+                            <!-- 개수는 데이터라 언제나 보이고(주인도 남이 눌러 준 걸 안다) 손잡이만 조건부다.
+                                 0은 안 그린다 — 빈 상태를 숫자로 박제하면 카드마다 반복된다. -->
+                            <button v-if="likable()" type="button" class="margin-card-btn margin-card-like"
+                                    :class="{ 'is-liked': e.liked }" :aria-pressed="e.liked"
+                                    :aria-label="e.liked ? '좋아요 취소' : '좋아요'"
+                                    :disabled="likeBusy !== null" @click="toggleLike(e)">
+                                <svg class="margin-like-ico" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M12 20.6 4.2 12.8a4.9 4.9 0 0 1 6.9-6.9l.9.9.9-.9a4.9 4.9 0 0 1 6.9 6.9Z" />
+                                </svg>
+                                <span v-if="e.likeCount > 0">{{ e.likeCount }}</span>
+                            </button>
+                            <span v-else-if="e.likeCount > 0" class="margin-card-likes">
+                                <svg class="margin-like-ico is-liked" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M12 20.6 4.2 12.8a4.9 4.9 0 0 1 6.9-6.9l.9.9.9-.9a4.9 4.9 0 0 1 6.9 6.9Z" />
+                                </svg>
+                                {{ e.likeCount }}
+                            </span>
                             <button v-if="margin.self" type="button" class="margin-card-btn margin-card-delete"
                                     :disabled="busy" @click="remove(e)">지우기</button>
                             <button v-else type="button" class="margin-card-btn margin-card-report"

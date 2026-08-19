@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 /**
  * 여백 FK 연쇄 통합 테스트 (실제 빈 + H2 — mock 금지, T-023·T-029 재발 방지).
  *
- * <p>story는 users·book을 FK 참조한다(cascade 없음). 부모 삭제 경로 둘(회원 탈퇴·책 삭제)이 자식을
+ * <p>story는 users·book을, story_like는 story·users를 FK 참조한다(cascade 없음). 부모 삭제 경로 둘(회원 탈퇴·책 삭제)이 자식을
  * 먼저 정리하지 않으면 제약 위반으로 500이 난다 — mock 단위테스트는 FK 제약을 검증하지 못하므로
  * 실 스키마로 못 박는다. 특히 {@code story.book_id}가 NOT NULL이 된 뒤로는 「첨부만 풀기」가 불가능해
  * 책 삭제가 글 삭제를 <b>반드시</b> 동반해야 한다(2026-08-16 재설계 — 옛 unlinkBook 경로 폐기).
@@ -41,6 +41,9 @@ class StoryFkIntegrationTest {
 
     @Autowired
     private StoryRepository storyRepository;
+
+    @Autowired
+    private StoryLikeRepository storyLikeRepository;
 
     @Autowired
     private BookRepository bookRepository;
@@ -107,5 +110,83 @@ class StoryFkIntegrationTest {
             assertThat(storyRepository.findById(story.getId())).isEmpty();
             assertThat(bookRepository.findById(book.getId())).isPresent();
         }).doesNotThrowAnyException();
+    }
+
+    // ── 좋아요(story_like) 연쇄 ──
+    // story_like는 story와 users를 <b>둘 다</b> FK 참조한다. 그래서 부모 삭제 경로가 넷이고
+    // (책 삭제 · 글 삭제 · 글쓴이 탈퇴 · 누른 사람 탈퇴), 넷 다 좋아요를 먼저 지워야 한다.
+    // 넷을 따로 세우는 이유: 하나를 빠뜨려도 나머지 셋은 그대로 통과해 결함이 안 보인다.
+
+    private StoryLike like(User liker, Story story) {
+        return storyLikeRepository.saveAndFlush(StoryLike.of(liker, story));
+    }
+
+    @Test
+    @DisplayName("좋아요 달린 글이 있는 책을 지워도 FK 위반이 없다 (좋아요 → 글 → 책 순서)")
+    void deleteBook_withLikedStories_succeeds() {
+        User author = user("liked-book@booktimer.com", "likedbook");
+        User liker = user("book-liker@booktimer.com", "booklikera");
+        Book book = publicBookOf(author, "좋아요가 달린 책");
+        Story story = storyRepository.saveAndFlush(Story.of(author, "누군가 좋아한 문장", book, null));
+        StoryLike given = like(liker, story);
+
+        assertThatCode(() -> bookService.delete(author, book.getId())).doesNotThrowAnyException();
+
+        assertThat(storyLikeRepository.findById(given.getId())).isEmpty();
+        assertThat(storyRepository.findById(story.getId())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("좋아요 달린 글을 본인이 지워도 FK 위반이 없다")
+    void deleteStory_withLikes_succeeds() {
+        User author = user("liked-story@booktimer.com", "likedstory");
+        User liker = user("story-liker@booktimer.com", "storylikera");
+        Book book = publicBookOf(author, "책은 남는다");
+        Story story = storyRepository.saveAndFlush(Story.of(author, "지울 인기 문장", book, null));
+        StoryLike given = like(liker, story);
+
+        assertThatCode(() -> {
+            storyService.delete(author, story.getId());
+            storyRepository.flush();
+        }).doesNotThrowAnyException();
+
+        assertThat(storyLikeRepository.findById(given.getId())).isEmpty();
+        assertThat(bookRepository.findById(book.getId())).isPresent();
+    }
+
+    @Test
+    @DisplayName("좋아요를 받은 사람이 탈퇴해도 FK 위반이 없다 — 남이 누른 행이 내 글에 매달려 있다")
+    void deleteAccount_ofAuthorWithLikes_succeeds() {
+        User author = user("popular@booktimer.com", "popularone");
+        User liker = user("fan@booktimer.com", "fanaccount");
+        Book book = publicBookOf(author, "인기 있는 책");
+        Story story = storyRepository.saveAndFlush(Story.of(author, "많이 눌린 문장", book, null));
+        StoryLike given = like(liker, story);
+
+        assertThatCode(() -> {
+            accountService.deleteAccount("popular@booktimer.com", "rawpw1234");
+            assertThat(userRepository.findByEmail("popular@booktimer.com")).isEmpty();
+        }).doesNotThrowAnyException();
+
+        assertThat(storyLikeRepository.findById(given.getId())).isEmpty();
+        assertThat(userRepository.findByEmail("fan@booktimer.com")).isPresent(); // 누른 쪽은 무사
+    }
+
+    @Test
+    @DisplayName("좋아요를 누른 사람이 탈퇴해도 FK 위반이 없다 — 글은 남고 좋아요만 사라진다")
+    void deleteAccount_ofLiker_succeeds() {
+        User author = user("author-stays@booktimer.com", "authorstays");
+        User liker = user("leaving@booktimer.com", "leavingone");
+        Book book = publicBookOf(author, "남을 책");
+        Story story = storyRepository.saveAndFlush(Story.of(author, "남을 문장", book, null));
+        StoryLike given = like(liker, story);
+
+        assertThatCode(() -> {
+            accountService.deleteAccount("leaving@booktimer.com", "rawpw1234");
+            assertThat(userRepository.findByEmail("leaving@booktimer.com")).isEmpty();
+        }).doesNotThrowAnyException();
+
+        assertThat(storyLikeRepository.findById(given.getId())).isEmpty();
+        assertThat(storyRepository.findById(story.getId())).isPresent(); // 글은 남는다
     }
 }

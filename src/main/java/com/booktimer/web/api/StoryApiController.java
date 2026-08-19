@@ -65,6 +65,21 @@ public class StoryApiController {
         }
     }
 
+    /**
+     * 좋아요를 누른다. <b>멱등</b>이라 재전송해도 취소되지 않는다 — 토글 단일 엔드포인트를 쓰지 않은
+     * 이유이자, 모바일 타임아웃 재시도가 흔한 경로라서다. 게이트·상태코드는 {@link StoryService#like}.
+     */
+    @PostMapping("/api/stories/{id}/like")
+    public StoryService.LikeState like(@PathVariable Long id, Principal principal) {
+        return storyService.like(currentUserService.resolve(principal), id);
+    }
+
+    /** 좋아요를 취소한다. 안 누른 글·없는 글은 404(존재 비노출) — 노출 게이트는 걸지 않는다. */
+    @DeleteMapping("/api/stories/{id}/like")
+    public StoryService.LikeState unlike(@PathVariable Long id, Principal principal) {
+        return storyService.unlike(currentUserService.resolve(principal), id);
+    }
+
     @DeleteMapping("/api/stories/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id, Principal principal) {
         storyService.delete(currentUserService.resolve(principal), id);

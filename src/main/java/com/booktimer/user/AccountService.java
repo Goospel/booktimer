@@ -12,6 +12,7 @@ import com.booktimer.report.ReportRepository;
 import com.booktimer.security.SessionInvalidator;
 import com.booktimer.session.ReadingGoalWaiverRepository;
 import com.booktimer.session.ReadingSessionRepository;
+import com.booktimer.story.StoryLikeRepository;
 import com.booktimer.story.StoryRepository;
 import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.timer.ReadingTimerRepository;
@@ -45,6 +46,7 @@ public class AccountService {
     private final FeedbackRepository feedbackRepository;
     private final EmailTokenRepository emailTokenRepository;
     private final StoryRepository storyRepository;
+    private final StoryLikeRepository storyLikeRepository;
     private final ApiTokenRepository apiTokenRepository;
     private final TossLinkCodeRepository tossLinkCodeRepository;
     private final AuthorAffectionRepository affectionRepository;
@@ -64,6 +66,7 @@ public class AccountService {
                           FeedbackRepository feedbackRepository,
                           EmailTokenRepository emailTokenRepository,
                           StoryRepository storyRepository,
+                          StoryLikeRepository storyLikeRepository,
                           ApiTokenRepository apiTokenRepository,
                           TossLinkCodeRepository tossLinkCodeRepository,
                           AuthorAffectionRepository affectionRepository,
@@ -82,6 +85,7 @@ public class AccountService {
         this.feedbackRepository = feedbackRepository;
         this.emailTokenRepository = emailTokenRepository;
         this.storyRepository = storyRepository;
+        this.storyLikeRepository = storyLikeRepository;
         this.apiTokenRepository = apiTokenRepository;
         this.tossLinkCodeRepository = tossLinkCodeRepository;
         this.affectionRepository = affectionRepository;
@@ -237,6 +241,8 @@ public class AccountService {
         blockRepository.deleteByBlocked(user);
         reportRepository.deleteByReporter(user);
         reportRepository.deleteByReported(user);
+        storyLikeRepository.deleteByUser(user);         // 내가 남에게 누른 좋아요 (story_like.user_id FK)
+        storyLikeRepository.deleteByStoryUser(user);    // 내 글에 달린 남의 좋아요 — 내 글보다 앞
         storyRepository.deleteByUser(user);            // 내가 여백에 남긴 글 — story.book_id 때문에 책보다 앞
         bookRepository.deleteByUser(user);
         personalityCacheRepository.deleteByUser(user);       // 책BTI 캐시도 user_id FK 참조 → 유저 전에 정리

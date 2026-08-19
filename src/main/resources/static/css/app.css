@@ -4018,6 +4018,12 @@ body.dashboard-page #dashboard-app { gap: 20px; }
     color: currentColor; font-size: 12px; padding: 3px 10px; cursor: pointer; appearance: none;
 }
 .margin-card-btn:disabled { opacity: .5; cursor: not-allowed; }
+/* 좋아요 — 색을 currentColor로 상속한다. 배경 팔레트가 6종이고 그중 sunset이 붉은 주황(#c96a4a)이라
+   빨간 하트는 거기서 사라진다. 카드 본문 색을 쓰면 여섯 배경 전부에서 읽히는 것이 보장되고,
+   상태 구분은 색이 아니라 채움 여부가 진다. */
+.margin-card-like, .margin-card-likes { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.margin-like-ico { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; }
+.margin-like-ico.is-liked, .margin-card-like.is-liked .margin-like-ico { fill: currentColor; }
 
 /* ── 작성 모달 ── */
 .story-composer-overlay {

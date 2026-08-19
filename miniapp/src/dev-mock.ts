@@ -324,11 +324,18 @@ const profileBooks: ProfileBook[] = [
   profileBook(13, '해변의 카프카', '무라카미 하루키', 'WANT_TO_READ', 0),
 ];
 
-const marginEntry = (id: number, text: string, bgCode: string, hoursAgo: number): MarginEntry => ({
+const marginEntry = (
+  id: number,
+  text: string,
+  bgCode: string,
+  hoursAgo: number,
+  like: { likeCount: number; liked: boolean } = { likeCount: 0, liked: false },
+): MarginEntry => ({
   id,
   text,
   bgCode,
   createdAt: isoTime(hoursAgo),
+  ...like,
 });
 
 /**
@@ -341,8 +348,9 @@ const marginEntries: Record<number, MarginEntry[]> = {
   // 3장인 것은 소식의 STORY 묶음(count: 3)과 같은 책이라서다 — 실서버에선 둘이 같은 행에서 나오므로
   // 「소식은 3개인데 열어 보니 2장」 같은 조합이 나올 수 없다. 목이 그걸 어기면 검증자를 헷갈리게 한다.
   11: [
-    marginEntry(901, '오늘은 30분만 읽자고 앉았는데 한 시간을 넘겼다.', 'paper', 3),
-    marginEntry(902, '밑줄 그은 문장이 오늘의 나를 설명한다.', 'night', 26),
+    // 남의 책이라 하트가 손잡이로 뜬다 — 세 상태를 다 깔아 둔다: 눌러 둔 것 / 남만 누른 것 / 아무도 안 누른 것.
+    marginEntry(901, '오늘은 30분만 읽자고 앉았는데 한 시간을 넘겼다.', 'paper', 3, { likeCount: 4, liked: true }),
+    marginEntry(902, '밑줄 그은 문장이 오늘의 나를 설명한다.', 'night', 26, { likeCount: 2, liked: false }),
     marginEntry(903, '서재라는 말이 이렇게 넓은 줄 몰랐다.', 'sea', 44),
   ],
   12: [marginEntry(911, '완독. 마지막 장을 아껴 읽었다.', 'forest', 30)],
@@ -350,12 +358,22 @@ const marginEntries: Record<number, MarginEntry[]> = {
   // 내 서재 첫 책(id 1) — **서재 인라인 박스의 자르기 검증용**: 3장이라 미리보기 2장 + 「여백 3」이
   // 브라우저에서 눈에 보인다(0장뿐이면 빈 상태 문구만 확인되고 자르기는 영영 못 본다).
   1: [
-    marginEntry(931, '용기라는 말이 이렇게 무겁게 읽힌 적이 없다.', 'paper', 2),
+    // 내 책이라 손잡이는 없고 개수만 뜬다 — 「주인도 남이 눌러 준 걸 안다」가 여기서 눈에 보인다.
+    marginEntry(931, '용기라는 말이 이렇게 무겁게 읽힌 적이 없다.', 'paper', 2, { likeCount: 3, liked: false }),
     marginEntry(932, '미움받을 각오가 곧 자유라는 문장에서 한참 멈췄다.', 'sunset', 28),
     marginEntry(933, '과제의 분리 — 남의 몫을 내려놓는 연습.', 'sea', 50),
   ],
   // 내 서재의 비공개 책(id 5) — 공개 전환 확인 시트의 「글 1개가 보여요」가 이 한 장에서 나온다.
   5: [marginEntry(921, '이건 아무에게도 안 보이는 메모.', 'plum', 5)],
+};
+
+/** 글 id로 찾는다 — 좋아요는 책이 아니라 글 하나를 축으로 도는 유일한 경로다. */
+const findMarginEntry = (id: number): MarginEntry | null => {
+  for (const entries of Object.values(marginEntries)) {
+    const found = entries.find((e) => e.id === id);
+    if (found !== undefined) return found;
+  }
+  return null;
 };
 
 /** 그 책 여백의 최신 글 시각 — 격자 발광의 재료다. 글을 남기면 이 값이 따라 움직인다. */
@@ -779,10 +797,31 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
       text: body.text as string,
       bgCode: (body.bgCode as string | null) ?? null,
       createdAt: new Date().toISOString(),
+      likeCount: 0,
+      liked: false,
     };
     // 맨 앞 = 최신(서버가 최신순으로 준다). 이 한 줄이 곧 격자 발광 갱신이다(`lastStoryAt`이 여기서 파생).
     marginEntries[bookId] = [entry, ...(marginEntries[bookId] ?? [])];
     return entry;
+  }],
+  // 좋아요 — 목도 픽스처를 실제로 바꾼다(하트가 켜지고 개수가 움직이는 것을 브라우저에서 본다).
+  // POST가 **멱등**인 것까지 흉내 낸다: 이미 눌러 둔 글이면 개수를 또 올리지 않는다.
+  ['POST', /^\/api\/stories\/(\d+)\/like$/, ({ id }) => {
+    const entry = findMarginEntry(id);
+    if (entry === null) throw new ApiError(404, '글을 찾을 수 없습니다');
+    if (!entry.liked) {
+      entry.liked = true;
+      entry.likeCount += 1;
+    }
+    return { likeCount: entry.likeCount, liked: true };
+  }],
+  ['DELETE', /^\/api\/stories\/(\d+)\/like$/, ({ id }) => {
+    const entry = findMarginEntry(id);
+    // 안 누른 글은 404 — 서버가 「행의 부재」로 수렴시키는 계약 그대로다.
+    if (entry === null || !entry.liked) throw new ApiError(404, '글을 찾을 수 없습니다');
+    entry.liked = false;
+    entry.likeCount -= 1;
+    return { likeCount: entry.likeCount, liked: false };
   }],
   ['DELETE', /^\/api\/stories\/(\d+)$/, ({ id }) => {
     for (const bookId of Object.keys(marginEntries)) {

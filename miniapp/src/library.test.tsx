@@ -219,11 +219,13 @@ describe('인라인 여백 박스 표시 (MarginBoxView)', () => {
   const NOW = Date.parse('2026-08-16T12:00:00Z');
   const HOUR = 3_600_000;
 
-  const entry = (id: number, text: string, bgCode: string, hoursAgo: number): MarginEntry => ({
+  const entry = (id: number, text: string, bgCode: string, hoursAgo: number, likeCount = 0): MarginEntry => ({
     id,
     text,
     bgCode,
     createdAt: new Date(NOW - hoursAgo * HOUR).toISOString(),
+    likeCount,
+    liked: false,
   });
 
   const margin = (entries: MarginEntry[]): MarginResponse => ({
@@ -235,7 +237,7 @@ describe('인라인 여백 박스 표시 (MarginBoxView)', () => {
   });
 
   const three = margin([
-    entry(1, '첫째 문장', 'night', 3),
+    entry(1, '첫째 문장', 'night', 3, 2),
     entry(2, '둘째 문장', 'forest', 28),
     entry(3, '셋째 문장', 'sea', 50),
   ]);
@@ -276,6 +278,18 @@ describe('인라인 여백 박스 표시 (MarginBoxView)', () => {
 
     expect(markup).toContain('첫째 문장');
     expect(markup).not.toContain('지우기');
+  });
+
+  /**
+   * <b>이 박스가 `self={false}`를 넘기는 자리다</b> — 글은 실제로 내 것인데 「삭제 UI를 감춰」라는 뜻으로
+   * 쓴다. 그래서 좋아요 손잡이를 `!self`로 켰다면 <b>내 서재에서 내 글에 하트가 떴을 것이다</b>.
+   * 손잡이의 게이트가 `self`가 아니라 <b>핸들러의 유무</b>인 덕에 여기엔 구조적으로 안 뜬다.
+   */
+  it('박스 안에는 좋아요 손잡이가 없다 — 개수는 보인다(내 글이라 누를 수만 없다)', () => {
+    const markup = box(three);
+
+    expect(markup).not.toContain('aria-label="좋아요"');
+    expect(markup).toContain('>2<');
   });
 
   it('글이 0장이어도 박스는 서 있다 — 사라지면 캐러셀을 밀 때마다 화면 높이가 출렁인다', () => {
