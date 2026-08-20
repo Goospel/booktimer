@@ -109,6 +109,47 @@ public interface FollowRepository extends JpaRepository<Follow, Long> {
     List<FriendOfFriendCount> findFriendsOfFriends(@Param("viewerId") Long viewerId, Pageable pageable);
 
     /**
+     * 공통 친구 — <b>내가 팔로우하는 사람 중 이 책방 주인도 팔로우하는 사람</b>(인스타 프로필의
+     * 「○○님 외 N명이 팔로우합니다」). 이름을 보여줄 상위 몇 명만 받는다.
+     *
+     * <p><b>차단 필터가 없는 이유</b>: {@code f1.follower = viewer}라 결과는 전부 <b>내가 지금 팔로우 중인
+     * 사람</b>이고, 차단하면 {@code BlockService.block}이 팔로우를 양방향으로 끊는다 — 차단한 사람은 애초에
+     * 이 결과에 없다. 운영자·핸들 미설정 계정은 다른 목록과 같은 노출 불변식으로 제외한다(N-055).
+     */
+    @Query("""
+            select f1.followee from Follow f1
+            where f1.follower.id = :viewerId
+              and f1.followee.role <> com.booktimer.user.Role.ADMIN
+              and f1.followee.loginId is not null
+              and exists (select 1 from Follow f2
+                          where f2.follower.id = f1.followee.id and f2.followee.loginId = :targetLoginId)
+            order by f1.followee.id asc
+            """)
+    List<User> findMutualFollowers(@Param("viewerId") Long viewerId,
+                                   @Param("targetLoginId") String targetLoginId,
+                                   Pageable pageable);
+
+    /**
+     * 위와 같은 조건의 전체 수 — 「외 N명」의 N이다. 이름은 상한만큼만 받으므로 총 수는 따로 세야 한다
+     * (받은 이름 개수로 세면 3명이든 30명이든 「외 0명」이 된다).
+     */
+    @Query("""
+            select count(f1.followee) from Follow f1
+            where f1.follower.id = :viewerId
+              and f1.followee.role <> com.booktimer.user.Role.ADMIN
+              and f1.followee.loginId is not null
+              and exists (select 1 from Follow f2
+                          where f2.follower.id = f1.followee.id and f2.followee.loginId = :targetLoginId)
+            """)
+    long countMutualFollowers(@Param("viewerId") Long viewerId, @Param("targetLoginId") String targetLoginId);
+
+    /**
+     * 이 책방 주인이 <b>나를</b> 팔로우하는가 — 프로필의 「나를 팔로우함」 배지.
+     * {@code following}(내가 그를)과 <b>방향이 반대</b>라 둘을 헷갈리면 배지가 거짓말을 한다.
+     */
+    boolean existsByFollower_LoginIdAndFollowee_Id(String followerLoginId, Long followeeId);
+
+    /**
      * 맞팔 후보 — 나를 팔로우했는데 내가 아직 안 한 사람의 id, 최근 맺은 순 — 친구 추천 하이브리드 1단계(G1).
      *
      * <p>역방향 에지(f.follower→viewer)가 곧 후보다. FoF와 같은 노출 불변식을 보존한다(ADMIN·login_id null·

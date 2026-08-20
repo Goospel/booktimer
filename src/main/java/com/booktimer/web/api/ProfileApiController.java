@@ -5,12 +5,14 @@ import com.booktimer.book.BookStatus;
 import com.booktimer.book.CoupangLinkBuilder;
 import com.booktimer.book.KyoboLinkBuilder;
 import com.booktimer.book.Yes24LinkBuilder;
+import com.booktimer.follow.FollowRepository;
 import com.booktimer.profile.ProfileService;
 import com.booktimer.profile.ProfileTag;
 import com.booktimer.profile.ProfileView;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.story.StoryRepository;
 import com.booktimer.user.User;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -37,25 +39,31 @@ import java.util.Map;
 @RestController
 public class ProfileApiController {
 
+    /** 공통 친구 줄에 이름으로 적는 인원 — 나머지는 「외 N명」으로 접는다(인스타와 같은 접기). */
+    private static final int MUTUAL_NAMES = 2;
+
     private final ProfileService profileService;
     private final CurrentUserService currentUserService;
     private final CoupangLinkBuilder coupangLinkBuilder;
     private final Yes24LinkBuilder yes24LinkBuilder;
     private final KyoboLinkBuilder kyoboLinkBuilder;
     private final StoryRepository storyRepository;
+    private final FollowRepository followRepository;
 
     public ProfileApiController(ProfileService profileService,
                                 CurrentUserService currentUserService,
                                 CoupangLinkBuilder coupangLinkBuilder,
                                 Yes24LinkBuilder yes24LinkBuilder,
                                 KyoboLinkBuilder kyoboLinkBuilder,
-                                StoryRepository storyRepository) {
+                                StoryRepository storyRepository,
+                                FollowRepository followRepository) {
         this.profileService = profileService;
         this.currentUserService = currentUserService;
         this.coupangLinkBuilder = coupangLinkBuilder;
         this.yes24LinkBuilder = yes24LinkBuilder;
         this.kyoboLinkBuilder = kyoboLinkBuilder;
         this.storyRepository = storyRepository;
+        this.followRepository = followRepository;
     }
 
     /** 프로필 헤더 + 책BTI 서술/태그칩 + 전체 PUBLIC 책 목록(상태필터 없음). */
@@ -67,7 +75,24 @@ public class ProfileApiController {
         boolean coupangEnabled = coupangLinkBuilder.isEnabled();
         boolean yes24Enabled = yes24LinkBuilder.isEnabled();
         boolean kyoboEnabled = kyoboLinkBuilder.isEnabled();
-        return ProfileResponse.from(v, recencyOf(v), coupangEnabled, yes24Enabled, kyoboEnabled);
+        return ProfileResponse.from(v, recencyOf(v), coupangEnabled, yes24Enabled, kyoboEnabled, mutualOf(v, viewer));
+    }
+
+    /**
+     * 관계 신호 — 공통 친구와 「나를 팔로우함」. <b>내 책방에서는 셋 다 뜻이 없어</b> 쿼리 없이 비운다
+     * (내가 나를 팔로우할 수 없고, 내 팔로워는 이미 카운트로 보인다).
+     */
+    private MutualInfo mutualOf(ProfileView v, User viewer) {
+        if (v.self()) {
+            return MutualInfo.NONE;
+        }
+        List<UserBrief> names = followRepository
+                .findMutualFollowers(viewer.getId(), v.loginId(), PageRequest.of(0, MUTUAL_NAMES)).stream()
+                .map(u -> new UserBrief(u.getLoginId(), u.getNickname()))
+                .toList();
+        long total = names.isEmpty() ? 0 : followRepository.countMutualFollowers(viewer.getId(), v.loginId());
+        boolean followsMe = followRepository.existsByFollower_LoginIdAndFollowee_Id(v.loginId(), viewer.getId());
+        return new MutualInfo(names, total, followsMe);
     }
 
     /**
@@ -185,16 +210,32 @@ public class ProfileApiController {
 
     public record BooksResponse(List<BookSummary> books) {}
 
+    /** 공통 친구 한 명 — 이름을 그리는 데 필요한 것만(핸들·표시이름). */
+    public record UserBrief(String loginId, String nickname) {}
+
+    /**
+     * 관계 신호 묶음 — 「○○님 외 N명이 팔로우합니다」와 「나를 팔로우함」.
+     *
+     * @param mutualFollowers 이름을 보여줄 공통 친구(상한 {@value #MUTUAL_NAMES}명)
+     * @param mutualFollowerCount 공통 친구 <b>전체</b> 수 — 「외 N명」은 이 값에서 나온다
+     * @param followsMe 이 책방 주인이 나를 팔로우하는가({@code following}과 방향이 반대)
+     */
+    public record MutualInfo(List<UserBrief> mutualFollowers, long mutualFollowerCount, boolean followsMe) {
+        static final MutualInfo NONE = new MutualInfo(List.of(), 0, false);
+    }
+
     public record ProfileResponse(
             String loginId, String nickname, String profileCharacterCode,
             long followerCount, long followingCount,
             boolean following, boolean self,
             String personality, List<TagChip> personalityTags,
-            List<BookSummary> books, boolean coupangEnabled, boolean yes24Enabled, boolean kyoboEnabled) {
+            List<BookSummary> books, boolean coupangEnabled, boolean yes24Enabled, boolean kyoboEnabled,
+            List<UserBrief> mutualFollowers, long mutualFollowerCount, boolean followsMe) {
 
         /** ⚠️ coupangEnabled·yes24Enabled·kyoboEnabled는 각 빌더의 isEnabled()로 계산해 전달 — 여기서 false 하드코딩 금지. */
         static ProfileResponse from(ProfileView v, Map<Long, Instant> recency,
-                                    boolean coupangEnabled, boolean yes24Enabled, boolean kyoboEnabled) {
+                                    boolean coupangEnabled, boolean yes24Enabled, boolean kyoboEnabled,
+                                    MutualInfo mutual) {
             List<BookSummary> books = v.books().stream()
                     .map(b -> BookSummary.from(b, v.bookTimes(), recency))
                     .toList();
@@ -204,7 +245,8 @@ public class ProfileApiController {
             return new ProfileResponse(v.loginId(), v.nickname(), v.profileCharacterCode(),
                     v.followerCount(), v.followingCount(),
                     v.following(), v.self(),
-                    v.personality(), tags, books, coupangEnabled, yes24Enabled, kyoboEnabled);
+                    v.personality(), tags, books, coupangEnabled, yes24Enabled, kyoboEnabled,
+                    mutual.mutualFollowers(), mutual.mutualFollowerCount(), mutual.followsMe());
         }
     }
 }

@@ -51,6 +51,20 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
             """)
     List<BookSecondsRow> sumSecondsByPublicBook(@Param("user") User user);
 
+    /**
+     * 여러 사람의 공개 집계 — 위 1인용을 후보 수만큼 부르면 N+1이라, 둘러보기는 이 한 방으로 끝낸다.
+     * 조건은 1인용과 글자 그대로 같다(완료·책지정·PUBLIC): 두 화면이 같은 초를 보게 하려면 조건이 갈리면 안 된다.
+     */
+    @Query("""
+            select new com.booktimer.session.UserBookSecondsRow(
+                       s.user.id, s.book.id, coalesce(sum(s.durationSeconds), 0))
+            from ReadingSession s
+            where s.user.id in :userIds and s.endedAt is not null and s.book is not null
+              and s.book.visibility = com.booktimer.book.BookVisibility.PUBLIC
+            group by s.user.id, s.book.id
+            """)
+    List<UserBookSecondsRow> sumSecondsByPublicBookOfUsers(@Param("userIds") Collection<Long> userIds);
+
     /** 한 책에 연결된(그 책으로 측정한) 세션들 — 책별 상세(잔디·기록) 집계에 쓰인다. */
     List<ReadingSession> findByUserAndBook(User user, Book book);
 
