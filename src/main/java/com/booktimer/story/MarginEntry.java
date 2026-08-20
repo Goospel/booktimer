@@ -11,9 +11,10 @@ import java.time.Instant;
  *
  * <p>§3.4 화이트리스트: 노출 필드는 여기 정의된 것뿐 — 작성자 이메일·내부값은 설계적 차단.
  *
- * @param likeCount 이 글에 달린 좋아요 수. <b>누가</b> 눌렀는지는 담지 않는다 — 개수만으로 카드가 그려지고,
- *                  명단은 새 조회 화면과 새 노출 경계를 부르는데 그만한 요구가 아직 없다
- * @param liked     viewer 본인이 눌렀는가. 자기 글이면 항상 false다(자기 좋아요는 도메인이 금지)
+ * @param likeCount 이 글에 달린 좋아요 수. <b>누가</b> 눌렀는지는 담지 않는다 — 카드는 개수만으로 그려지고,
+ *                  명단은 눌러야 열리는 별도 조회다({@code GET /api/stories/{id}/likes}). 목록 응답에 글마다
+ *                  명단을 실으면 100장 × N명이 한 번에 날아간다
+ * @param liked     viewer 본인이 눌렀는가. <b>자기 글도 true가 될 수 있다</b>(자기 좋아요 허용 — 2026-08-20)
  */
 public record MarginEntry(Long id, String text, String bgCode, Instant createdAt, long likeCount, boolean liked) {
 

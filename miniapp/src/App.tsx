@@ -19,6 +19,7 @@ import { BookSheet, Home, defaultBookId } from './screens/Home';
 import { Library } from './screens/Library';
 import { LinkAccount } from './screens/LinkAccount';
 import { LoginBridge } from './screens/LoginBridge';
+import { Profile } from './screens/Profile';
 import { Settings } from './screens/Settings';
 import { BookMargin, StoryComposer } from './screens/Story';
 import { showInterstitialAd, trackEvent } from './toss';
@@ -331,6 +332,13 @@ export function App() {
   /** 열린 여백 — 탭 위에 전체 화면으로 선다(홈 문·서재 문·홈 소식이 모두 이 한 자리로 온다). */
   const [margin, setMargin] = useState<MarginState | null>(null);
   /**
+   * 열린 남의 책방 — 여백의 좋아요 명단에서 사람을 눌렀을 때 선다.
+   *
+   * <p>여백과 <b>같은 자리</b>(탭 밖 전역 뷰)에 든다. 책방 탭으로 점프시키면 뒤로 갈 때 출발한
+   * 탭이 아니라 책방이 나오는데, 그게 바로 여백을 여기로 올린 이유였다(위 {@link MarginState}).
+   */
+  const [shop, setShop] = useState<string | null>(null);
+  /**
    * 홈 캐러셀에서 고른 책 — **홈이 아니라 여기서 든다**. 여백·목표·설정은 탭 위에 전체 화면으로 서서
    * 홈을 언마운트하므로, 홈에 두면 여백에 글 한 편 쓰고 돌아올 때마다 고른 책이 기본 책으로 되돌아갔다.
    *
@@ -411,6 +419,7 @@ export function App() {
   // 작성 화면이 위면 그것만 닫는다 — 단 밑에 깔린 여백 화면이 없으면 통째로 닫아 출발한 탭으로 돌아간다.
   useBackClose(margin?.composeBook != null, () => setMargin((m) => (m === null ? null : closeCompose(m))));
   useBackClose(margin !== null && margin.composeBook === null, () => setMargin(null));
+  useBackClose(shop !== null, () => setShop(null));
 
   const handleError = useCallback(
     (e: Error) => {
@@ -532,6 +541,26 @@ export function App() {
         bookId={under}
         onBack={() => setMargin(null)}
         onCompose={(book) => setMargin({ ...margin, bookId: under, composeBook: book })}
+        // 닫으면서 연다 — 뒤로 가면 출발한 탭으로 돌아간다(검색 시트와 같은 교체 경로, T-166).
+        onOpenProfile={(picked) => {
+          setMargin(null);
+          setShop(picked);
+        }}
+        onError={handleError}
+      />
+    );
+  }
+
+  /*
+   * 남의 책방 — 여백보다 **뒤에** 판정한다. 그래야 여기서 연 여백이 이 화면 위에 서고, 그 여백을 닫으면
+   * 책방이 다시 나온다(2단 스택). 헤더도 카운트 핸들러도 주지 않는다 — 서버 follow-list는 본인 것만 준다.
+   */
+  if (shop !== null) {
+    return (
+      <Profile
+        loginId={shop}
+        onBack={() => setShop(null)}
+        onOpenMargin={(bookId) => setMargin({ loginId: shop, bookId, composeBook: null })}
         onError={handleError}
       />
     );

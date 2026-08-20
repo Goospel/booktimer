@@ -11,7 +11,7 @@ import {
   validateHandleFormat,
 } from '../api';
 import { useBackClose } from '../back';
-import { ErrorMessage, Loading, PENCIL_FRAME, Screen, Sheet } from '../ui';
+import { ErrorMessage, Loading, PENCIL_FRAME, Screen, Sheet, UserList } from '../ui';
 import { Profile } from './Profile';
 import { BookMargin, StoryComposer } from './Story';
 
@@ -132,6 +132,11 @@ export function Bookshop({
         bookId={margin.bookId}
         onBack={() => setMargin(null)}
         onCompose={setComposing}
+        // 닫으면서 여는 교체 경로 — 좋아요 명단에서 그 사람의 책방으로 간다(검색 시트와 같은 관례, T-166).
+        onOpenProfile={(loginId) => {
+          setMargin(null);
+          setOpen(loginId);
+        }}
         onError={onError}
       />
     );
@@ -491,54 +496,5 @@ export function HandleSheet({
         {change !== null ? '평생 1번, 바꾸기' : '만들기'}
       </Button>
     </Sheet>
-  );
-}
-
-/** 사용자 목록 — 검색 결과·팔로우 목록이 같은 줄 모양을 쓴다(서버도 같은 행 DTO를 준다). */
-export function UserList({
-  users,
-  emptyMessage,
-  onSelect,
-}: {
-  users: UserRow[];
-  emptyMessage: string;
-  onSelect: (loginId: string) => void;
-}) {
-  if (users.length === 0) {
-    return (
-      <Text typography="st11" color="grey600" style={{ display: 'block' }}>
-        {emptyMessage}
-      </Text>
-    );
-  }
-
-  return (
-    <>
-      {users.map((u) => (
-        <button
-          key={u.loginId}
-          type="button"
-          onClick={() => onSelect(u.loginId)}
-          style={{
-            display: 'block',
-            width: '100%',
-            padding: 16,
-            marginBottom: 8,
-            border: 'none',
-            borderRadius: 12,
-            background: 'var(--adaptiveGrey100, #FCFAF5)',
-            textAlign: 'left',
-            cursor: 'pointer',
-          }}
-        >
-          <Text typography="st11" style={{ display: 'block' }}>
-            {u.nickname}
-          </Text>
-          <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 4 }}>
-            @{u.loginId} · 공개 책 {u.publicBookCount}권{u.following && ' · 팔로잉'}
-          </Text>
-        </button>
-      ))}
-    </>
   );
 }

@@ -4,6 +4,8 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.follow.FollowService;
 import com.booktimer.profile.ProfileService;
+import com.booktimer.search.UserRowAssembler;
+import com.booktimer.search.UserSearchResult;
 import com.booktimer.security.RateLimitAction;
 import com.booktimer.security.RateLimitService;
 import com.booktimer.user.User;
@@ -44,19 +46,22 @@ public class StoryService {
     private final FollowService followService;
     private final ProfileService profileService;
     private final StoryLikeRepository storyLikeRepository;
+    private final UserRowAssembler rowAssembler;
 
     public StoryService(StoryRepository storyRepository,
                         BookRepository bookRepository,
                         RateLimitService rateLimitService,
                         FollowService followService,
                         ProfileService profileService,
-                        StoryLikeRepository storyLikeRepository) {
+                        StoryLikeRepository storyLikeRepository,
+                        UserRowAssembler rowAssembler) {
         this.storyRepository = storyRepository;
         this.bookRepository = bookRepository;
         this.rateLimitService = rateLimitService;
         this.followService = followService;
         this.profileService = profileService;
         this.storyLikeRepository = storyLikeRepository;
+        this.rowAssembler = rowAssembler;
     }
 
     /**
@@ -113,7 +118,7 @@ public class StoryService {
                         target, book, PageRequest.of(0, MAX_MARGIN_ENTRIES))
                 : List.of();
         return new MarginResponse(MarginBook.of(book), target.getNickname(), self, following,
-                withLikes(stories, viewer, self));
+                withLikes(stories, viewer));
     }
 
     /**
@@ -121,10 +126,12 @@ public class StoryService {
      * {@code recencyByBook}과 같은 관례).
      *
      * <p>빈 목록이면 쿼리를 아예 안 던진다({@code in ()}은 DB마다 취급이 다르고, 물어볼 것도 없다).
-     * 자기 여백에서는 「내가 눌렀는가」도 묻지 않는다 — 자기 글엔 누를 수 없어 답이 구조적으로 항상
-     * 비어 있다({@link StoryLike#of}가 막는다).
+     *
+     * <p><b>자기 여백에서도 「내가 눌렀는가」를 묻는다</b>(2026-08-20). 예전엔 자기 글엔 누를 수 없어
+     * 답이 구조적으로 비어 있으니 건너뛰었는데, 자기 좋아요가 허용된 지금 건너뛰면 방금 누른 하트가
+     * 새로고침에 꺼진다.
      */
-    private List<MarginEntry> withLikes(List<Story> stories, User viewer, boolean self) {
+    private List<MarginEntry> withLikes(List<Story> stories, User viewer) {
         if (stories.isEmpty()) {
             return List.of();
         }
@@ -132,7 +139,7 @@ public class StoryService {
         Map<Long, Long> counts = storyLikeRepository.countsByStoryIds(ids).stream()
                 .collect(Collectors.toMap(StoryLikeRepository.StoryLikeCount::getStoryId,
                         StoryLikeRepository.StoryLikeCount::getCount));
-        Set<Long> liked = self ? Set.of() : Set.copyOf(storyLikeRepository.likedStoryIds(ids, viewer));
+        Set<Long> liked = Set.copyOf(storyLikeRepository.likedStoryIds(ids, viewer));
         return stories.stream()
                 .map(s -> MarginEntry.of(s, counts.getOrDefault(s.getId(), 0L), liked.contains(s.getId())))
                 .toList();
@@ -152,7 +159,7 @@ public class StoryService {
         }
         Story story = storyRepository.findById(storyId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다"));
-        assertLikable(viewer, story);
+        assertVisible(viewer, story);
         if (storyLikeRepository.findByStoryAndUser(story, viewer).isEmpty()) {
             storyLikeRepository.save(StoryLike.of(viewer, story));
         }
@@ -174,18 +181,22 @@ public class StoryService {
     }
 
     /**
-     * 좋아요 게이트 — {@code marginOf}의 목록 게이트와 <b>같은 판정을 순서까지 맞춰</b> 재사용한다.
-     * 여기가 목록과 어긋나는 순간, 목록에 안 뜨는 글에 좋아요가 달릴 수 있다.
+     * 「이 글이 viewer에게 보이는가」 — {@code marginOf}의 목록 게이트와 <b>같은 판정을 순서까지 맞춰</b>
+     * 재사용한다. 여기가 목록과 어긋나는 순간, 목록에 안 뜨는 글에 좋아요가 달리거나 그 명단이 열린다.
+     *
+     * <p>좋아요({@link #like})와 명단({@link #likers})이 이것 하나를 공유한다 — 갈라 두면 한쪽만 고치는
+     * 날이 온다.
+     *
+     * <p><b>자기 글은 즉시 통과</b>한다. 뒤 체인에 넣으면 자기 자신을 팔로우하지 않으므로 404가 되어
+     * 내 여백의 하트가 통째로 죽고, 내 비공개 책(나만 보는 메모)도 공개 검사에 걸린다.
      *
      * <p>핸들 없는 주인({@code loginId == null})은 {@code resolveVisibleTarget}이 걸러 낸다 —
      * 그들의 글은 애초에 어느 목록에도 실리지 않는다(N-055).
      */
-    private void assertLikable(User viewer, Story story) {
+    private void assertVisible(User viewer, Story story) {
         User owner = story.getUser();
-        // 자기 글 — 여백은 내 노트라 전부 자기 좋아요 대상이 된다. 게이트 실패를 한 코드로 모아 두면
-        // 클라가 분기할 것이 없다(존재를 이미 아는 사이라 404가 정보를 더 주지도 않는다).
         if (isSameUser(owner, viewer)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다");
+            return;
         }
         profileService.resolveVisibleTarget(viewer, owner.getLoginId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다"));
@@ -195,6 +206,35 @@ public class StoryService {
         if (!followService.isFollowing(viewer, owner)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다");
         }
+    }
+
+    /**
+     * 그 글에 좋아요를 누른 사람들 — 카드의 「좋아요 N명」이 여는 명단. 최근순.
+     *
+     * <p>게이트는 {@link #assertVisible} — 목록과 같은 판정이라, 안 보이는 글의 명단은 404다.
+     * 어긋나면 임의의 글 id로 명단을 열어 「그 글이 있다」와 「누가 눌렀다」를 한꺼번에 알아낼 수 있다.
+     *
+     * <p>명단에서 <b>두 부류를 뺀다</b>: 핸들 없는 사람(N-055 — 어느 목록에도 실리지 않는다)과
+     * 차단 관계인 사람. 차단은 팔로우를 양방향으로 끊지만 <b>이미 눌린 행은 남으므로</b>, 안 거르면
+     * 차단한 사람의 활동이 이 명단으로 샌다. 판정은 프로필과 같은 {@code resolveVisibleTarget}을
+     * 재사용한다(가드를 갈라 두지 않는다 — ADMIN 제외도 공짜로 따라온다).
+     *
+     * <p>개수({@code likeCount})는 걸러 내지 않는다 — 명단과 한둘 어긋날 수 있지만 눈에 띄지 않고,
+     * 집계 쿼리까지 관계를 태우면 목록 응답이 비싸진다.
+     *
+     * <p>ponytail: 행마다 가드 1~2쿼리다. 명단이 짧아 지금은 충분하고, 길어지면 배치 조회로 바꾼다.
+     */
+    @Transactional(readOnly = true)
+    public List<UserSearchResult> likers(User viewer, Long storyId) {
+        Story story = storyRepository.findById(storyId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다"));
+        assertVisible(viewer, story);
+        List<User> targets = storyLikeRepository.findByStoryOrderByCreatedAtDescIdDesc(story).stream()
+                .map(StoryLike::getUser)
+                .filter(u -> u.getLoginId() != null)
+                .filter(u -> profileService.resolveVisibleTarget(viewer, u.getLoginId()).isPresent())
+                .toList();
+        return rowAssembler.toRows(viewer, targets);
     }
 
     /** 누르기·취소 직후의 상태 — 클라가 개수를 추측하지 않게 서버가 센 값을 그대로 준다. */

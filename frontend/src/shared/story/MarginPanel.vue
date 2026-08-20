@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import ReportModal from '../ReportModal.vue'
+import UserRow from '../UserRow.vue'
 import StoryComposer from './StoryComposer.vue'
 import { coverInitial, hasCover } from '../../profile/format'
+import type { UserRowData } from '../follow'
 import { excerptForReport, formatStoryAge, type MarginEntry, type MarginResponse } from './storyFeed'
-import { deleteStory, fetchMargin, toggleStoryLike } from './storyApi'
+import { deleteStory, fetchMargin, fetchStoryLikers, toggleStoryLike } from './storyApi'
 
 // 여백 패널 — 책 하나에 쌓인 글 목록 (2026-08-16 책 귀속 재설계). 옛 풀스크린 뷰어(진행바·자동 넘김·
 // 열람 기록)를 대체한다. 진입은 책방 리스트 행의 「여백」 손잡이 하나뿐.
@@ -24,12 +26,27 @@ const busy = ref(false)
 // 누르는 중인 글 — 왕복이 겹치면 개수가 어긋나므로 한 번에 하나만 받는다.
 const likeBusy = ref<number | null>(null)
 
-// 손잡이를 그릴 수 있는가 — 서버 게이트(자기 글 금지 · 비공개 책)를 화면에 옮긴 것. 어긋나면 눌러도
-// 404가 나는 죽은 버튼이 생긴다. 비공개 책 가지는 지금 서버 계약상 닿지 않지만(남의 비공개 책 여백은
-// 404라 self가 이미 거른다) 서버 게이트를 대칭으로 비춰 둔다 — 목록이 열려도 좋아요는 여전히 404다.
-// undefined(옛 서버)는 공개로 간주(가시성 고지와 같은 기준).
-function likable(): boolean {
-    return margin.value !== null && !margin.value.self && margin.value.book.isPublic !== false
+// 펴진 명단의 글 — 한 번에 하나만 편다(여럿을 펴 두면 문장 사이가 명단으로 밀려 카드가 목록이 된다).
+// null이면 아직 받는 중 — 빈 배열(0명)·실패와 구분해야 "아직 아무도"를 먼저 깜빡이거나 실패를
+// 「아무도 안 눌렀다」로 둔갑시키지 않는다.
+const likersOf = ref<number | null>(null)
+const likers = ref<UserRowData[] | null>(null)
+const likersFailed = ref(false)
+
+// 명단은 펼 때 받는다 — 여백 한 장에 글이 100개까지 실려서, 목록 응답에 글마다 동봉하면 열지도 않을
+// 명단이 한꺼번에 날아온다.
+async function toggleLikers(entry: MarginEntry) {
+    if (likersOf.value === entry.id) {
+        likersOf.value = null
+        return
+    }
+    likersOf.value = entry.id
+    likers.value = null
+    likersFailed.value = false
+    const rows = await fetchStoryLikers(entry.id)
+    if (likersOf.value !== entry.id) return // 그 사이 다른 글을 폈다 — 늦게 온 답이 덮지 않게
+    if (rows === null) likersFailed.value = true
+    else likers.value = rows
 }
 
 // 낙관적으로 먼저 칠하고, 서버가 센 값으로 덮고, 실패하면 되돌린다. 서버 값을 그대로 덮는 것이 핵심 —
@@ -129,28 +146,36 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
                         <p class="margin-card-text">{{ e.text }}</p>
                         <div class="margin-card-foot">
                             <span class="margin-card-age">{{ formatStoryAge(e.createdAt, Date.now()) }}</span>
-                            <!-- 개수는 데이터라 언제나 보이고(주인도 남이 눌러 준 걸 안다) 손잡이만 조건부다.
-                                 0은 안 그린다 — 빈 상태를 숫자로 박제하면 카드마다 반복된다. -->
-                            <button v-if="likable()" type="button" class="margin-card-btn margin-card-like"
+                            <!-- 하트는 누르기/취소만 진다. 받은 글은 전부 누를 수 있어(자기 글·내 비공개 책
+                                 포함 — 2026-08-20) 화면에 옮길 게이트가 없다. -->
+                            <button type="button" class="margin-card-btn margin-card-like"
                                     :class="{ 'is-liked': e.liked }" :aria-pressed="e.liked"
                                     :aria-label="e.liked ? '좋아요 취소' : '좋아요'"
                                     :disabled="likeBusy !== null" @click="toggleLike(e)">
                                 <svg class="margin-like-ico" viewBox="0 0 24 24" aria-hidden="true">
                                     <path d="M12 20.6 4.2 12.8a4.9 4.9 0 0 1 6.9-6.9l.9.9.9-.9a4.9 4.9 0 0 1 6.9 6.9Z" />
                                 </svg>
-                                <span v-if="e.likeCount > 0">{{ e.likeCount }}</span>
                             </button>
-                            <span v-else-if="e.likeCount > 0" class="margin-card-likes">
-                                <svg class="margin-like-ico is-liked" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path d="M12 20.6 4.2 12.8a4.9 4.9 0 0 1 6.9-6.9l.9.9.9-.9a4.9 4.9 0 0 1 6.9 6.9Z" />
-                                </svg>
-                                {{ e.likeCount }}
-                            </span>
                             <button v-if="margin.self" type="button" class="margin-card-btn margin-card-delete"
                                     :disabled="busy" @click="remove(e)">지우기</button>
                             <button v-else type="button" class="margin-card-btn margin-card-report"
                                     @click="reportEntry = e">신고</button>
                         </div>
+
+                        <!-- 개수는 데이터라 언제나 보이고(주인도 남이 눌러 준 걸 안다), 누르면 명단이 편다.
+                             0은 줄 자체를 안 만든다 — 빈 상태를 숫자로 박제하면 카드마다 반복된다.
+                             푸터가 아니라 아래 줄인 이유: 시각·하트·지우기 옆 넷째 칸은 좁은 폭에서 접힌다. -->
+                        <button v-if="e.likeCount > 0" type="button" class="margin-card-likes"
+                                :aria-expanded="likersOf === e.id" @click="toggleLikers(e)">
+                            좋아요 {{ e.likeCount }}명
+                        </button>
+                        <ul v-if="likersOf === e.id" class="margin-likers">
+                            <li v-if="likersFailed" class="margin-likers-note">명단을 불러오지 못했어요.</li>
+                            <li v-else-if="likers === null" class="margin-likers-note">불러오는 중…</li>
+                            <!-- 0명은 그 사이 누른 사람이 취소한 경우다 — 개수 줄이 있었으니 여기 닿을 수 있다 -->
+                            <li v-else-if="likers.length === 0" class="margin-likers-note">아직 아무도 누르지 않았어요.</li>
+                            <UserRow v-for="u in likers ?? []" :key="u.loginId" :user="u" />
+                        </ul>
                     </li>
                 </ul>
             </template>

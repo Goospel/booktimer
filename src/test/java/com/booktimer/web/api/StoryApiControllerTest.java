@@ -449,13 +449,81 @@ class StoryApiControllerTest {
     }
 
     @Test
-    @DisplayName("POST .../like 내 글 → 404 (여백은 내 노트라 자기 좋아요는 없다)")
-    void like_ownStory_returns404() throws Exception {
+    @DisplayName("POST .../like 내 글 → 200 (자기 좋아요 허용 — 2026-08-20)")
+    void like_ownStory_returnsOk() throws Exception {
         User me = register("like-self@booktimer.com", "likeself", "나");
         Story story = storyOf(me, publicBookOf(me, "내 책"), "내 문장");
 
         mockMvc.perform(post("/api/stories/" + story.getId() + "/like")
                         .with(user("like-self@booktimer.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.likeCount").value(1))
+                .andExpect(jsonPath("$.liked").value(true));
+
+        // 내 여백을 다시 읽어도 하트가 채워져 있다 — 새로고침에 꺼지면 「눌린 적 없다」로 읽힌다
+        mockMvc.perform(get("/api/stories/of/likeself").param("bookId", String.valueOf(story.getBook().getId()))
+                        .with(user("like-self@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.entries[0].liked").value(true));
+    }
+
+    // ── 좋아요 명단 (GET /api/stories/{id}/likes) ──
+    // 필터·정렬은 StoryServiceTest가 계측한다. 여기서 잡는 것은 배선 — 새 경로가 default-deny 안에
+    // 들어왔는가, 사용자 행이 JSON 배열로 나가는가, 목록 게이트가 실제로 걸리는가.
+
+    @Test
+    @DisplayName("GET /api/stories/{id}/likes 미인증 → 302 로그인 리다이렉트 (새 경로도 기본 잠김)")
+    void likers_unauthenticated_redirectsToLogin() throws Exception {
+        mockMvc.perform(get("/api/stories/1/likes"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    @DisplayName("GET .../likes 팔로워 → 누른 사람의 핸들·닉네임이 실린다")
+    void likers_follower_returnsNames() throws Exception {
+        User author = register("likers-author@booktimer.com", "likersauthor", "글쓴이");
+        register("likers-fan@booktimer.com", "likersfan", "누른이");
+        Book book = publicBookOf(author, "명단이 열릴 책");
+        Story story = storyOf(author, book, "누를 만한 문장");
+        follow(userRepository.findByEmail("likers-fan@booktimer.com").orElseThrow(), author);
+
+        mockMvc.perform(post("/api/stories/" + story.getId() + "/like")
+                        .with(user("likers-fan@booktimer.com")).with(csrf()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/stories/" + story.getId() + "/likes")
+                        .with(user("likers-fan@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].loginId").value("likersfan"))
+                .andExpect(jsonPath("$[0].nickname").value("누른이"));
+    }
+
+    @Test
+    @DisplayName("GET .../likes 비팔로워 → 404 (안 보이는 글의 명단은 열리지 않는다)")
+    void likers_nonFollower_returns404() throws Exception {
+        User author = register("likers-closed@booktimer.com", "likersclosed", "글쓴이");
+        register("likers-stranger@booktimer.com", "likersstranger", "남");
+        Story story = storyOf(author, publicBookOf(author, "공개 책"), "남의 문장");
+
+        mockMvc.perform(get("/api/stories/" + story.getId() + "/likes")
+                        .with(user("likers-stranger@booktimer.com")))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("GET .../likes 내 글 → 200 (내 여백의 명단은 팔로우 검사 없이 열린다)")
+    void likers_ownStory_returnsOk() throws Exception {
+        User me = register("likers-self@booktimer.com", "likersself", "나");
+        Story story = storyOf(me, publicBookOf(me, "내 책"), "내 문장");
+
+        mockMvc.perform(post("/api/stories/" + story.getId() + "/like")
+                        .with(user("likers-self@booktimer.com")).with(csrf()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/stories/" + story.getId() + "/likes")
+                        .with(user("likers-self@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].loginId").value("likersself"));
     }
 }

@@ -2,6 +2,7 @@ package com.booktimer.story;
 
 import com.booktimer.book.Book;
 import com.booktimer.user.User;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -44,6 +45,18 @@ public interface StoryLikeRepository extends JpaRepository<StoryLike, Long> {
             where l.story.id in :storyIds and l.user = :viewer
             """)
     List<Long> likedStoryIds(@Param("storyIds") Collection<Long> storyIds, @Param("viewer") User viewer);
+
+    /**
+     * 그 글에 좋아요를 누른 사람들 — 최근순(「좋아요 N명」이 여는 명단). 동시각 타이는 id로 갈라
+     * 순서를 결정론으로 둔다({@code findByUserAndBookOrderByCreatedAtDescIdDesc}와 같은 관례).
+     *
+     * <p>{@code @EntityGraph}로 누른 사람을 즉시 로딩 — 행 조립의 lazy User ×N 제거(팔로워 목록과 같다).
+     *
+     * <p>ponytail: 상한이 없다. 관객이 「그 책 주인의 팔로워」로 이미 좁고 레이트리밋(분당 60)이 도배를
+     * 막아 팔로워 목록과 같은 처지다 — 실제로 길어지는 글이 나오면 그때 페이지네이션.
+     */
+    @EntityGraph(attributePaths = "user")
+    List<StoryLike> findByStoryOrderByCreatedAtDescIdDesc(Story story);
 
     Optional<StoryLike> findByStoryAndUser(Story story, User user);
 

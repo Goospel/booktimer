@@ -18,10 +18,12 @@ import jakarta.persistence.UniqueConstraint;
  * <p>{@code (story, user)} 유니크가 중복의 최종 방어다({@code Follow}와 같은 관례) — 앱 레벨
  * 존재 검사는 재전송 멱등을 위한 것이고, 진짜 동시 요청을 막는 것은 DB다.
  *
- * <p><b>자기 글은 못 누른다</b>: 여백은 자기 노트라 내 여백의 모든 글이 자기 좋아요 대상이 되고,
- * 그러면 개수가 「남이 인정한 문장」이라는 의미를 잃는다. 팔로우가 자기 자신을 금지하는 것과 같은 이유다.
+ * <p><b>자기 글도 누를 수 있다</b>(2026-08-20). 처음엔 「개수가 남이 인정한 문장이라는 의미를 잃는다」는
+ * 이유로 막았지만, 여백에 글을 쓴 사람이 아직 없어 좋아요를 확인할 길이 자체가 없다는 실사용 요구가
+ * 이겼고 트위터·인스타도 자기 글에 눌린다. 그 결과 도메인 불변식이 null 거부만 남았고, 노출 규칙은
+ * 「받은 글은 전부 누를 수 있다」 하나로 줄어 클라이언트의 `likable()` 분기가 통째로 사라졌다.
  *
- * <p>나머지 노출 게이트(차단·비공개 책·비팔로워)는 <b>관계</b>를 봐야 해서 여기가 아니라
+ * <p>노출 게이트(차단·비공개 책·비팔로워)는 <b>관계</b>를 봐야 해서 여기가 아니라
  * {@link StoryService#like}에 있다 — 그쪽이 목록 게이트({@code marginOf})와 같은 판정을 재사용한다.
  */
 @Entity
@@ -39,7 +41,7 @@ public class StoryLike extends BaseTimeEntity {
     @JoinColumn(name = "story_id", nullable = false)
     private Story story;
 
-    /** 누른 사람. 글 작성자와 같을 수 없다. */
+    /** 누른 사람. 글 작성자 본인일 수도 있다(자기 좋아요 허용 — 2026-08-20). */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
@@ -56,23 +58,13 @@ public class StoryLike extends BaseTimeEntity {
     /**
      * 좋아요를 만든다.
      *
-     * @throws IllegalArgumentException user/story가 없거나, 자기 글인 경우
+     * @throws IllegalArgumentException user/story가 없는 경우
      */
     public static StoryLike of(User user, Story story) {
         if (user == null || story == null) {
             throw new IllegalArgumentException("user/story must not be null");
         }
-        if (isSameUser(story.getUser(), user)) {
-            throw new IllegalArgumentException("cannot like own story");
-        }
         return new StoryLike(user, story);
-    }
-
-    private static boolean isSameUser(User a, User b) {
-        if (a == b) {
-            return true;
-        }
-        return a.getId() != null && a.getId().equals(b.getId());
     }
 
     public Long getId() {

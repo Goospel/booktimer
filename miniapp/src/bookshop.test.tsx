@@ -13,7 +13,8 @@ import type {
   UserRow,
 } from './api';
 import { ApiError, adRefreshPersonality, selectPersonality } from './api';
-import { Bookshop, BookshopHeader, FollowListSheet, HandleSheet, SearchSheet, UserList } from './screens/Bookshop';
+import { Bookshop, BookshopHeader, FollowListSheet, HandleSheet, SearchSheet } from './screens/Bookshop';
+import { UserList } from './ui';
 import {
   ArchiveSheet,
   BIO_CLAMP_CHARS,
