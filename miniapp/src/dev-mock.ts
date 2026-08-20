@@ -198,6 +198,27 @@ const nextId = (): number => (state.nextId += 1);
  * 날짜별 기록 목 — 잔디와 **같은 패턴·같은 초**에서 만든다. 둘이 어긋나면(잔디는 초록인데 목록은 빔)
  * 화면 버그가 아니라 목 버그로 시간을 태운다. 서버처럼 최신 월 먼저, 달 안에서도 최신 일 먼저다.
  */
+/**
+ * 한 뭉치를 책 수만큼 <b>내림차순</b>으로 나눈다 — 서버가 오래 읽은 순으로 주기 때문이다.
+ *
+ * <p>마지막 몫이 나머지를 흡수해 합이 `pot`과 <b>정확히</b> 같다. 반올림 오차를 그냥 두면 목이 서버와
+ * 1초씩 어긋나고, 그러면 「책 안 고른 기록」 줄이 있어야 할 날에 없거나 없어야 할 날에 생긴다.
+ */
+function splitSeconds(pot: number, count: number): number[] {
+  if (count === 0) return [];
+  const weights = [4, 3, 2, 1].slice(0, count);
+  const sum = weights.reduce((a, b) => a + b, 0);
+  const out: number[] = [];
+  let left = pot;
+  for (let i = 0; i < count - 1; i++) {
+    const share = Math.round((pot * weights[i]) / sum);
+    out.push(share);
+    left -= share;
+  }
+  out.push(left);
+  return out;
+}
+
 function buildMonths(): MonthlySection[] {
   const byMonth = new Map<string, DailyRecord[]>();
 
@@ -205,11 +226,20 @@ function buildMonths(): MonthlySection[] {
     const level = LEVELS[offset % LEVELS.length];
     if (level === 0) continue; // 안 읽은 날은 행이 없다(잔디는 회색 칸으로만 남는다).
     const date = isoDate(offset);
-    // 책 미지정 날·두 권 읽은 날을 섞어 둬야 제목 줄 생략과 쉼표 나열이 둘 다 눈에 보인다.
-    const titles =
-      offset % 5 === 0 ? [] : offset % 4 === 1 ? [books[0].title, books[1].title] : [books[offset % books.length].title];
+    const total = level * 900;
+    // 권수를 섞어 둬야 더미의 네 꼴(없음 · 한 권 · 두 권 · 넘침「+1」)이 다 눈에 보인다.
+    const count = offset % 5 === 0 ? 0 : offset % 4 === 1 ? 4 : offset % 6 === 5 ? 3 : offset % 3 === 2 ? 2 : 1;
+    // 책을 안 고르고 잰 시간이 남는 날 — 펼쳤을 때 회색 「책 안 고른 기록」 줄이 나오는 경로.
+    const leftover = offset % 7 === 3;
+    const picked = Array.from({ length: count }, (_, i) => books[(offset + i) % books.length]);
+    const shares = splitSeconds(leftover ? Math.round(total * 0.7) : total, count);
     const days = byMonth.get(date.slice(0, 7));
-    const record = { date, totalSeconds: level * 900, bookTitles: titles, manuallyFilled: offset % 13 === 5 };
+    const record = {
+      date,
+      totalSeconds: total,
+      books: picked.map((book, i) => ({ title: book.title, coverUrl: book.coverUrl, seconds: shares[i] })),
+      manuallyFilled: offset % 13 === 5,
+    };
     if (days === undefined) byMonth.set(date.slice(0, 7), [record]);
     else days.push(record);
   }

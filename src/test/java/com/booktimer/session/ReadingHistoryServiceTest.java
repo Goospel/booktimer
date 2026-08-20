@@ -56,7 +56,7 @@ class ReadingHistoryServiceTest {
     }
 
     @Test
-    @DisplayName("같은 날 여러 세션은 한 일자로 합산되고 그날 읽은 책 제목이 모인다")
+    @DisplayName("같은 날 여러 세션은 한 일자로 합산되고 그날 읽은 책이 오래 읽은 순으로 모인다")
     void dailyHistory_sumsSameDay() {
         User user = seoulUser();
         Book a = Book.register(user, "책A", null, null, null, null, null, BookStatus.READING);
@@ -74,11 +74,14 @@ class ReadingHistoryServiceTest {
         DailyReadingRecord day = history.get(0);
         assertThat(day.date()).isEqualTo(LocalDate.of(2026, 6, 1));
         assertThat(day.totalSeconds()).isEqualTo(1800L + HOUR);
-        assertThat(day.bookTitles()).containsExactly("책A", "책B");
+        // 오래 읽은 책이 앞이다 — 접힌 더미에서 보이는 건 맨 앞 한 장이라, 그 한 장이 그날을 대표해야 한다.
+        assertThat(day.books()).containsExactly(
+                new BookRead("책B", null, HOUR),
+                new BookRead("책A", null, 1800L));
     }
 
     @Test
-    @DisplayName("같은 날 같은 책을 여러 번 읽어도 책 제목은 중복 없이 한 번만 담긴다")
+    @DisplayName("같은 날 같은 책을 여러 번 읽으면 한 줄로 합산된다 — 같은 책이 더미에 두 번 꽂히면 안 된다")
     void dailyHistory_distinctBookTitles() {
         User user = seoulUser();
         Book a = Book.register(user, "책A", null, null, null, null, null, BookStatus.READING);
@@ -94,7 +97,50 @@ class ReadingHistoryServiceTest {
         List<DailyReadingRecord> history = service.dailyHistory(user);
 
         assertThat(history).hasSize(1);
-        assertThat(history.get(0).bookTitles()).containsExactly("책A", "책B");
+        assertThat(history.get(0).books()).containsExactly(
+                new BookRead("책A", null, 2 * HOUR),   // 두 세션이 한 줄로 합쳐진다
+                new BookRead("책B", null, HOUR));
+    }
+
+    @Test
+    @DisplayName("책마다 표지 주소가 함께 온다 — 기록 화면이 첫 글자 대신 진짜 표지를 세운다")
+    void dailyHistory_carriesCoverUrl() {
+        User user = seoulUser();
+        Book a = Book.register(user, "책A", null, null, "https://img/a.jpg", null, null, BookStatus.READING);
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(
+                sessionWithBook(user, Instant.parse("2026-06-01T01:00:00Z"), HOUR, a)));
+
+        assertThat(service.dailyHistory(user).get(0).books())
+                .containsExactly(new BookRead("책A", "https://img/a.jpg", HOUR));
+    }
+
+    @Test
+    @DisplayName("읽은 시간이 같으면 먼저 편 책이 앞에 온다 — 볼 때마다 더미 순서가 뒤바뀌면 안 된다")
+    void dailyHistory_tieKeepsReadingOrder() {
+        User user = seoulUser();
+        Book first = Book.register(user, "먼저 편 책", null, null, null, null, null, BookStatus.READING);
+        Book later = Book.register(user, "나중 편 책", null, null, null, null, null, BookStatus.READING);
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(
+                sessionWithBook(user, Instant.parse("2026-06-01T01:00:00Z"), HOUR, first),
+                sessionWithBook(user, Instant.parse("2026-06-01T05:00:00Z"), HOUR, later)));
+
+        assertThat(service.dailyHistory(user).get(0).books()).extracting(BookRead::title)
+                .containsExactly("먼저 편 책", "나중 편 책");
+    }
+
+    @Test
+    @DisplayName("책을 안 고른 세션은 책 목록엔 없지만 총합엔 남는다 — 화면은 그 차이를 「책 안 고른 기록」으로 밝힌다")
+    void dailyHistory_unassignedSessionStaysInTotalOnly() {
+        User user = seoulUser();
+        Book a = Book.register(user, "책A", null, null, null, null, null, BookStatus.READING);
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(
+                sessionWithBook(user, Instant.parse("2026-06-01T01:00:00Z"), HOUR, a),
+                session(user, Instant.parse("2026-06-01T05:00:00Z"), 1800L)));   // 책 미지정(레거시)
+
+        DailyReadingRecord day = service.dailyHistory(user).get(0);
+
+        assertThat(day.totalSeconds()).isEqualTo(HOUR + 1800L);
+        assertThat(day.books()).containsExactly(new BookRead("책A", null, HOUR));
     }
 
     @Test
