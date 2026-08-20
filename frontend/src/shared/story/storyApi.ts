@@ -1,4 +1,5 @@
 import { getCsrfToken } from '../follow'
+import type { UserRowData } from '../follow'
 import type { LikeState, MarginResponse } from './storyFeed'
 
 /**
@@ -46,6 +47,20 @@ export async function toggleStoryLike(id: number, like: boolean): Promise<LikeSt
     if (!res.ok) return null
     const data = await res.json()
     return typeof data?.likeCount === 'number' ? data : null
+}
+
+/**
+ * 그 글에 좋아요를 누른 사람들 — 「좋아요 N명」이 펴는 명단(최근순).
+ *
+ * <p>서버가 **차단 관계·핸들 없는 사람**을 이미 걸러 준다 — 화면은 받은 행을 그대로 그린다.
+ * 안 보이는 글의 명단은 404이고, 실패·비정형은 `null`로 수렴시킨다(`fetchMargin`과 같은 방어 관례) —
+ * 빈 배열로 뭉개면 「아직 아무도 안 눌렀다」는 거짓말이 된다.
+ */
+export async function fetchStoryLikers(id: number): Promise<UserRowData[] | null> {
+    const res = await fetch(`/api/stories/${id}/likes`, { credentials: 'same-origin' })
+    if (!res.ok) return null
+    const data = await res.json()
+    return Array.isArray(data) ? data : null
 }
 
 export async function deleteStory(id: number): Promise<boolean> {

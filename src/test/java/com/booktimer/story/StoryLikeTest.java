@@ -12,10 +12,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 좋아요 도메인 불변식 — 「누가 어느 글에」 한 번뿐이고, 자기 글에는 못 누른다.
+ * 좋아요 도메인 불변식 — 「누가 어느 글에」 한 번뿐. 중복 방지는 DB 유니크가 최종 방어라
+ * 여기서 남는 도메인 검증은 <b>null 거부</b>뿐이고, 노출 게이트(차단·비공개·비팔로워)는 관계를 봐야 해서
+ * {@link StoryService} 몫이다.
  *
- * <p>중복 방지는 DB 유니크가 최종 방어이고, 여기서는 <b>자기 글 금지</b>만 도메인으로 못 박는다 —
- * 노출 게이트(차단·비공개·비팔로워)는 관계를 봐야 해서 {@link StoryService} 몫이다.
+ * <p><b>자기 글 금지는 걷어냈다</b>(2026-08-20): 여백에 글을 쓴 사람이 아직 없어 좋아요를 확인할 길이
+ * 없다는 실사용 요구였고, 막을 근거도 약했다(트위터·인스타 모두 자기 글에 눌린다). 그 결과 불변식이
+ * 「받은 글은 전부 누를 수 있다」 하나로 줄어 클라이언트의 `likable()` 분기가 통째로 사라졌다.
  */
 class StoryLikeTest {
 
@@ -44,12 +47,15 @@ class StoryLikeTest {
     }
 
     @Test
-    @DisplayName("자기 글에는 좋아요를 못 만든다 — 여백은 내 노트라 전부 자기 좋아요가 된다")
-    void rejectsSelfLike() {
+    @DisplayName("자기 글에도 좋아요를 만든다 — 도메인은 더 이상 막지 않는다(2026-08-20)")
+    void allowsSelfLike() {
         User author = userWithId(1L, "author");
+        Story mine = storyOf(author);
 
-        assertThatThrownBy(() -> StoryLike.of(author, storyOf(author)))
-                .isInstanceOf(IllegalArgumentException.class);
+        StoryLike like = StoryLike.of(author, mine);
+
+        assertThat(like.getUser()).isSameAs(author);
+        assertThat(like.getStory()).isSameAs(mine);
     }
 
     @Test

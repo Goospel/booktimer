@@ -4021,9 +4021,23 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 /* 좋아요 — 색을 currentColor로 상속한다. 배경 팔레트가 6종이고 그중 sunset이 붉은 주황(#c96a4a)이라
    빨간 하트는 거기서 사라진다. 카드 본문 색을 쓰면 여섯 배경 전부에서 읽히는 것이 보장되고,
    상태 구분은 색이 아니라 채움 여부가 진다. */
-.margin-card-like, .margin-card-likes { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.margin-card-like { display: inline-flex; align-items: center; flex: 0 0 auto; }
 .margin-like-ico { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; }
-.margin-like-ico.is-liked, .margin-card-like.is-liked .margin-like-ico { fill: currentColor; }
+.margin-card-like.is-liked .margin-like-ico { fill: currentColor; }
+/* 「좋아요 N명」 — 하트(누르기)와 갈라 아래 줄에 둔다. 한 버튼이 둘을 겸하면 명단을 보려다 좋아요가
+   눌리고, 푸터에 넷째 칸으로 넣으면 좁은 폭에서 접힌다. */
+.margin-card-likes {
+    width: auto; /* 전역 button width:100% 상쇄 — 안 하면 카드 하단 전체가 명단 히트존 */
+    margin-top: 8px; padding: 4px 0 0;
+    background: none; border: none; color: currentColor;
+    font-size: 12px; opacity: .78; text-decoration: underline; cursor: pointer; appearance: none;
+}
+/* 명단은 카드 안에 접혀 든다 — 패널(z-150) 위에 또 오버레이를 얹지 않는다(새 z 층 발명 금지). */
+.margin-likers { list-style: none; margin: 6px 0 0; padding: 0; }
+.margin-likers .book-row { padding: 6px 0; border: none; background: none; }
+.margin-likers .book-title, .margin-likers .book-author { color: currentColor; }
+.margin-likers .book-author { opacity: .78; }
+.margin-likers-note { font-size: 12px; opacity: .78; padding: 6px 0; }
 
 /* ── 작성 모달 ── */
 .story-composer-overlay {

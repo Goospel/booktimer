@@ -823,6 +823,18 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     entry.likeCount -= 1;
     return { likeCount: entry.likeCount, liked: false };
   }],
+  /*
+   * 좋아요 명단 — 개수에 맞춰 픽스처 사용자를 잘라 준다. 목이 「누가」를 따로 들지 않는 이유는
+   * 화면이 확인할 것이 「개수만큼의 사람이 이름·핸들로 그려지는가」뿐이라서다. 내가 누른 글이면
+   * 내가 맨 앞에 선다 — 하트를 켜고 끄면 명단이 실제로 따라 움직인다.
+   */
+  ['GET', /^\/api\/stories\/(\d+)\/likes$/, ({ id }): UserRow[] => {
+    const entry = findMarginEntry(id);
+    if (entry === null) throw new ApiError(404, '글을 찾을 수 없습니다');
+    const mine = entry.liked ? users.filter((u) => u.self) : [];
+    const others = users.filter((u) => !u.self).slice(0, Math.max(0, entry.likeCount - mine.length));
+    return [...mine, ...others];
+  }],
   ['DELETE', /^\/api\/stories\/(\d+)$/, ({ id }) => {
     for (const bookId of Object.keys(marginEntries)) {
       const entries = marginEntries[Number(bookId)];

@@ -1,18 +1,20 @@
 import { Button, Text } from '@toss/tds-mobile';
 import { useCallback, useEffect, useState } from 'react';
 
-import type { MarginBook, MarginEntry, MarginResponse } from '../api';
+import type { MarginBook, MarginEntry, MarginResponse, UserRow } from '../api';
 import {
   ApiError,
   STORY_BG_CODES,
   createStory,
   deleteStory,
   fetchBookMargin,
+  fetchStoryLikers,
   likeStory,
   unlikeStory,
 } from '../api';
+import { useBackClose } from '../back';
 import { relativeTime } from '../format';
-import { BookCover, ErrorMessage, Loading, Screen } from '../ui';
+import { BookCover, ErrorMessage, Loading, Screen, Sheet, UserList } from '../ui';
 
 /**
  * 여백 — <b>책에 딸린 자리</b>와 거기 쌓이는 글 (2026-08-16 재설계).
@@ -57,19 +59,6 @@ export function visibilityNotice(isPublic: boolean | undefined): string {
   return isPublic === false
     ? '비공개 책이에요. 이 글은 나만 봐요. 책을 공개로 바꾸면 팔로워에게 보여요.'
     : '팔로워에게 보여요.';
-}
-
-/**
- * 하트를 <b>손잡이로</b> 그릴 수 있는가 — 서버 게이트({@code StoryService.assertLikable})를 화면에 옮긴 것.
- * 어긋나면 눌러도 404가 나는 죽은 버튼이 생긴다.
- *
- * <p>비공개 책 가지는 <b>지금 서버 계약상 닿지 않는다</b> — 남의 비공개 책 여백은 404라 `self`가 이미
- * 걸러 낸다. 그래도 두는 것은 서버 게이트를 <b>대칭으로 비춰</b> 두기 위해서다: 언젠가 목록이 팔로워에게
- * 열려도 좋아요는 여전히 404이므로, 이 줄이 그때 죽은 버튼이 뜨는 것을 막는다.
- * `undefined`(필드를 안 보내는 옛 서버)는 공개로 간주한다 — {@link visibilityNotice}와 같은 기준이다.
- */
-export function likable(self: boolean, isPublic: boolean | undefined): boolean {
-  return !self && isPublic !== false;
 }
 
 /**
@@ -121,6 +110,7 @@ export function BookMargin({
   bookId,
   onBack,
   onCompose,
+  onOpenProfile,
   onError,
 }: {
   loginId: string;
@@ -128,11 +118,18 @@ export function BookMargin({
   onBack: () => void;
   /** 「여백에 글 남기기」 — 작성 화면 전환은 셸이 든다(전체 화면 전이의 주인은 하나여야 한다). */
   onCompose: (book: MarginBook) => void;
+  /** 좋아요 명단에서 그 사람을 눌렀을 때 — 그의 책방으로 간다(전체 화면 전이는 셸이 든다). */
+  onOpenProfile: (loginId: string) => void;
   onError: (error: Error) => void;
 }) {
   const [margin, setMargin] = useState<MarginResponse | null>(null);
   /** 낙관적 좋아요 — 서버 왕복을 기다리면 하트가 늦게 켜져 「안 눌렸다」로 읽힌다. */
   const [likes, setLikes] = useState<Record<number, { likeCount: number; liked: boolean }>>({});
+  /** 명단이 열린 글 — `null`이면 닫힘. 시트는 한 번에 하나다(글마다 따로 열 이유가 없다). */
+  const [likersOf, setLikersOf] = useState<number | null>(null);
+  /** `null`이면 아직 받는 중 — 빈 배열(0명)과 구분해야 "없어요"를 먼저 깜빡이지 않는다. */
+  const [likers, setLikers] = useState<UserRow[] | null>(null);
+  const [likersError, setLikersError] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -153,6 +150,34 @@ export function BookMargin({
   useEffect(load, [load]);
 
   /**
+   * 명단은 <b>열 때 받는다</b> — 여백 한 장에 글이 100개까지 실리므로 목록 응답에 글마다 동봉하면
+   * 열지도 않을 명단이 한꺼번에 날아온다.
+   */
+  const loadLikers = useCallback(
+    (id: number) => {
+      setLikers(null);
+      setLikersError(null);
+      fetchStoryLikers(id)
+        .then(setLikers)
+        .catch((e: Error) => {
+          if (e.name === 'UnauthorizedError') onError(e);
+          else setLikersError(e.message);
+        });
+    },
+    [onError],
+  );
+
+  // 시트를 닫으면 그 안의 상태를 비운다 — 안 그러면 다음에 열 때 옛 명단이 한 프레임 번쩍인다.
+  const closeLikers = () => {
+    setLikersOf(null);
+    setLikers(null);
+    setLikersError(null);
+  };
+
+  // 하드웨어 뒤로가기는 시트부터 닫는다 — 없으면 명단에서 누른 back이 여백 화면을 통째로 닫는다.
+  useBackClose(likersOf !== null, closeLikers);
+
+  /**
    * 낙관적으로 먼저 칠하고, 서버 값으로 덮고, 실패하면 되돌린다.
    *
    * <p>서버 응답을 그대로 덮는 것이 핵심이다 — 그 사이 남이 누른 것까지 반영된 <b>진짜 개수</b>가 오므로
@@ -168,6 +193,11 @@ export function BookMargin({
         setLikes((m) => ({ ...m, [entry.id]: before })); // 되돌린다 — 틀린 개수를 남기지 않는다
         fail(e);
       });
+  };
+
+  const showLikers = (entry: MarginEntry) => {
+    setLikersOf(entry.id);
+    loadLikers(entry.id);
   };
 
   const remove = (id: number) => {
@@ -196,19 +226,70 @@ export function BookMargin({
   const merged = { ...margin, entries: margin.entries.map((e) => ({ ...e, ...likes[e.id] })) };
 
   return (
-    <MarginView
-      loginId={loginId}
-      margin={merged}
-      now={Date.now()}
-      busy={busy}
-      confirmDeleteId={confirmDeleteId}
-      error={error}
-      onCompose={() => onCompose(margin.book)}
-      onConfirmDelete={setConfirmDeleteId}
-      onDelete={remove}
-      onToggleLike={toggleLike}
-      onBack={onBack}
-    />
+    <>
+      <MarginView
+        loginId={loginId}
+        margin={merged}
+        now={Date.now()}
+        busy={busy}
+        confirmDeleteId={confirmDeleteId}
+        error={error}
+        onCompose={() => onCompose(margin.book)}
+        onConfirmDelete={setConfirmDeleteId}
+        onDelete={remove}
+        onToggleLike={toggleLike}
+        onShowLikers={showLikers}
+        onBack={onBack}
+      />
+      {likersOf !== null && (
+        <LikersSheet
+          users={likers}
+          error={likersError}
+          // 닫으면서 여는 교체 경로 — 셸이 그 사람의 책방을 세운다(전체 화면 전이의 주인은 하나여야 한다).
+          onSelect={(picked) => {
+            closeLikers();
+            onOpenProfile(picked);
+          }}
+          onClose={closeLikers}
+          onRetry={() => loadLikers(likersOf)}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * 좋아요 명단 시트 — 누가 눌렀는지. 팔로워 시트와 같은 처지라 <b>데이터를 프롭으로</b> 받는다
+ * (정적 렌더 하니스가 0명/N명 분기에 닿는 유일한 길).
+ *
+ * <p>서버가 차단 관계·핸들 없는 사람을 이미 걸러 주므로 여기서 다시 거르지 않는다 — 화면이 게이트를
+ * 흉내 내기 시작하면 서버와 어긋나는 날이 온다.
+ */
+export function LikersSheet({
+  users,
+  error,
+  onSelect,
+  onClose,
+  onRetry,
+}: {
+  /** `null`이면 아직 받는 중 — 빈 배열(0명)과 구분해야 "없어요"를 먼저 깜빡이지 않는다. */
+  users: UserRow[] | null;
+  error: string | null;
+  onSelect: (loginId: string) => void;
+  onClose: () => void;
+  onRetry: () => void;
+}) {
+  return (
+    <Sheet title="좋아요" onClose={onClose}>
+      {/* 못 받았으면 그 자리에서 다시 받는다 — 실패가 곧 빈 시트(막다른 길)가 되지 않게. */}
+      <ErrorMessage message={error} onRetry={onRetry} />
+      {users === null ? (
+        error === null && <Loading />
+      ) : (
+        // 개수가 0인 글엔 애초에 손잡이가 없다 — 그 사이 누른 사람이 취소하면 여기 닿는다.
+        <UserList users={users} emptyMessage="아직 아무도 누르지 않았어요." onSelect={onSelect} />
+      )}
+    </Sheet>
   );
 }
 
@@ -226,6 +307,7 @@ export function MarginView({
   onConfirmDelete,
   onDelete,
   onToggleLike,
+  onShowLikers,
   onBack,
 }: {
   loginId: string;
@@ -240,6 +322,7 @@ export function MarginView({
   onConfirmDelete: (id: number | null) => void;
   onDelete: (id: number) => void;
   onToggleLike: (entry: MarginEntry) => void;
+  onShowLikers: (entry: MarginEntry) => void;
   onBack: () => void;
 }) {
   const { book, ownerNickname, self, following, entries } = margin;
@@ -298,7 +381,8 @@ export function MarginView({
             confirming={confirmDeleteId === e.id}
             onConfirmDelete={onConfirmDelete}
             onDelete={onDelete}
-            onToggleLike={likable(self, book.isPublic) ? onToggleLike : undefined}
+            onToggleLike={onToggleLike}
+            onShowLikers={onShowLikers}
           />
         ))
       )}
@@ -321,6 +405,7 @@ export function MarginCard({
   onConfirmDelete,
   onDelete,
   onToggleLike,
+  onShowLikers,
 }: {
   entry: MarginEntry;
   now: number;
@@ -330,10 +415,15 @@ export function MarginCard({
   onConfirmDelete: (id: number | null) => void;
   onDelete: (id: number) => void;
   /**
-   * 좋아요 손잡이 — <b>있으면 버튼, 없으면 개수만</b>. 이 프롭의 유무가 게이트다: `self`로 갈랐다면
-   * 서재의 인라인 미리보기가 <b>내 글에 `self={false}`</b>를 넘기는 탓에 내 글에 하트가 떴을 것이다.
+   * 좋아요 손잡이 — <b>있으면 하트 버튼, 없으면 하트 없음</b>. 이 프롭의 유무가 게이트다: `self`로
+   * 갈랐다면 서재의 인라인 미리보기가 <b>내 글에 `self={false}`</b>를 넘기는 탓에 내 글에 하트가 떴을 것이다.
+   *
+   * <p>받은 글은 전부 누를 수 있다(자기 글 포함 — 2026-08-20). 그래서 화면에 옮길 게이트가 더는 없고,
+   * 여기 남은 판단은 「이 자리에 손잡이를 둘 것인가」뿐이다.
    */
   onToggleLike?: (entry: MarginEntry) => void;
+  /** 개수 줄의 손잡이 — 있으면 눌러서 명단을 연다. 미리보기(서재 박스)엔 열 시트가 없어 안 넘긴다. */
+  onShowLikers?: (entry: MarginEntry) => void;
 }) {
   const bg = palette(entry.bgCode);
 
@@ -352,25 +442,16 @@ export function MarginCard({
       </p>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 12, opacity: 0.75 }}>
         <span style={{ flex: 1, minWidth: 0 }}>{relativeTime(entry.createdAt, now)}</span>
-        {/* 개수는 데이터라 언제나 보이고(주인도 남이 눌러 준 걸 안다), 손잡이만 조건부다.
-            0은 안 그린다 — 빈 상태를 숫자로 박제하면 「아무도 안 눌렀다」가 카드마다 반복된다. */}
-        {onToggleLike === undefined ? (
-          entry.likeCount > 0 && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <Heart filled={entry.liked} />
-              {entry.likeCount}
-            </span>
-          )
-        ) : (
+        {/* 하트는 누르기/취소만 진다 — 개수를 같은 버튼에 넣으면 명단을 보려다 좋아요가 눌린다. */}
+        {onToggleLike !== undefined && (
           <button
             type="button"
             aria-label={entry.liked ? '좋아요 취소' : '좋아요'}
             aria-pressed={entry.liked}
             onClick={() => onToggleLike(entry)}
-            style={{ ...ghost(bg.color), display: 'inline-flex', alignItems: 'center', gap: 4 }}
+            style={{ ...ghost(bg.color), display: 'inline-flex', alignItems: 'center' }}
           >
             <Heart filled={entry.liked} />
-            {entry.likeCount > 0 && entry.likeCount}
           </button>
         )}
         {self &&
@@ -390,9 +471,44 @@ export function MarginCard({
             </button>
           ))}
       </div>
+
+      {/* 개수는 데이터라 손잡이와 무관하게 보이고(주인도 남이 눌러 준 걸 안다), 여는 손잡이만 조건부다.
+          0은 줄 자체를 안 만든다 — 빈 상태를 숫자로 박제하면 「아무도 안 눌렀다」가 카드마다 반복된다.
+          아래 줄로 내린 이유: 시각·하트·지우기가 있는 푸터에 넷째 칸을 우겨넣으면 좁은 폭에서 접힌다. */}
+      {entry.likeCount > 0 &&
+        (onShowLikers === undefined ? (
+          <p style={likesLine(bg.color)}>좋아요 {entry.likeCount}명</p>
+        ) : (
+          <button
+            type="button"
+            aria-label={`좋아요 ${entry.likeCount}명 보기`}
+            onClick={() => onShowLikers(entry)}
+            style={{ ...likesLine(bg.color), border: 'none', background: 'transparent', cursor: 'pointer' }}
+          >
+            좋아요 {entry.likeCount}명
+          </button>
+        ))}
     </div>
   );
 }
+
+/**
+ * 「좋아요 N명」 줄 — 손잡이일 때도 글자일 때도 같은 자리·같은 크기다. 세로 여백이 손가락 자리를
+ * 만든다: 12px 글자 높이만으로는 손끝이 옆 카드에 닿는다.
+ */
+const likesLine = (color: string) =>
+  ({
+    display: 'block',
+    width: 'auto',
+    margin: 0,
+    marginTop: 8,
+    padding: '6px 0 0',
+    color,
+    fontSize: 12,
+    opacity: 0.75,
+    textAlign: 'left',
+    textDecoration: 'underline',
+  }) as const;
 
 /**
  * 글 남기기 — 진입점이 <b>이미 그 책</b>이라 책을 고를 것이 없다(옛 첨부 select와 `/api/books` 조회는 삭제).

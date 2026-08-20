@@ -2,7 +2,7 @@ import { Button, Text } from '@toss/tds-mobile';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
-import type { ContributionDay } from './api';
+import type { ContributionDay, UserRow } from './api';
 
 /** 잔디 색 농도 0~4 — 웹 app.css `--grass-0..4`와 같은 값(서버가 level을 계산해 준다). */
 export const LEVEL_COLORS = ['#EAE4D7', '#C3D9B0', '#94BE7F', '#5E9250', '#35662F'];
@@ -464,5 +464,59 @@ export function Loading({ message = '불러오는 중…' }: { message?: string 
         {message}
       </Text>
     </main>
+  );
+}
+
+/**
+ * 사용자 목록 — 검색 결과·팔로우 목록·좋아요 명단이 같은 줄 모양을 쓴다(서버도 같은 행 DTO를 준다).
+ *
+ * <p>책방 화면에 있던 것을 여기로 옮겼다(2026-08-20) — 여백의 좋아요 명단이 쓰기 시작하면서
+ * 화면끼리 서로를 import 하는 순환이 생겼다. 공용 조각은 공용 자리에 둔다.
+ */
+export function UserList({
+  users,
+  emptyMessage,
+  onSelect,
+}: {
+  users: UserRow[];
+  emptyMessage: string;
+  onSelect: (loginId: string) => void;
+}) {
+  if (users.length === 0) {
+    return (
+      <Text typography="st11" color="grey600" style={{ display: 'block' }}>
+        {emptyMessage}
+      </Text>
+    );
+  }
+
+  return (
+    <>
+      {users.map((u) => (
+        <button
+          key={u.loginId}
+          type="button"
+          onClick={() => onSelect(u.loginId)}
+          style={{
+            display: 'block',
+            width: '100%',
+            padding: 16,
+            marginBottom: 8,
+            border: 'none',
+            borderRadius: 12,
+            background: 'var(--adaptiveGrey100, #FCFAF5)',
+            textAlign: 'left',
+            cursor: 'pointer',
+          }}
+        >
+          <Text typography="st11" style={{ display: 'block' }}>
+            {u.nickname}
+          </Text>
+          <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 4 }}>
+            @{u.loginId} · 공개 책 {u.publicBookCount}권{u.following && ' · 팔로잉'}
+          </Text>
+        </button>
+      ))}
+    </>
   );
 }

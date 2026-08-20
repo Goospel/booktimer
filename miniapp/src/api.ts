@@ -713,9 +713,9 @@ export interface MarginEntry {
   text: string;
   bgCode: string | null;
   createdAt: string;
-  /** 이 글에 달린 좋아요 수. 누가 눌렀는지는 오지 않는다 — 개수만으로 카드가 그려진다. */
+  /** 이 글에 달린 좋아요 수. 누가 눌렀는지는 여기 오지 않는다 — 명단은 눌러야 여는 별도 조회다. */
   likeCount: number;
-  /** 내가 눌렀는가. 자기 글이면 항상 false다(자기 좋아요는 서버 도메인이 금지). */
+  /** 내가 눌렀는가. **자기 글도 true가 될 수 있다**(자기 좋아요 허용 — 2026-08-20). */
   liked: boolean;
 }
 
@@ -788,3 +788,11 @@ export const likeStory = (id: number): Promise<LikeState> =>
 /** 좋아요를 취소한다. 서버는 여기에 노출 게이트를 걸지 않는다 — 언팔한 뒤에도 되돌릴 수 있어야 한다. */
 export const unlikeStory = (id: number): Promise<LikeState> =>
   request(`/api/stories/${id}/like`, { method: 'DELETE' });
+
+/**
+ * 그 글에 좋아요를 누른 사람들 — 카드의 「좋아요 N명」이 여는 명단(최근순).
+ *
+ * <p>서버가 <b>차단 관계·핸들 없는 사람</b>을 이미 걸러 준다 — 화면은 받은 행을 그대로 그린다.
+ * 안 보이는 글의 명단은 404다(목록과 같은 게이트).
+ */
+export const fetchStoryLikers = (id: number): Promise<UserRow[]> => request(`/api/stories/${id}/likes`);

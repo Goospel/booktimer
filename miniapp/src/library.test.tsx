@@ -289,7 +289,7 @@ describe('인라인 여백 박스 표시 (MarginBoxView)', () => {
     const markup = box(three);
 
     expect(markup).not.toContain('aria-label="좋아요"');
-    expect(markup).toContain('>2<');
+    expect(markup).toContain('좋아요 2명');
   });
 
   it('글이 0장이어도 박스는 서 있다 — 사라지면 캐러셀을 밀 때마다 화면 높이가 출렁인다', () => {

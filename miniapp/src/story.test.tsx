@@ -2,15 +2,15 @@ import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import type { MarginEntry, MarginResponse } from './api';
+import type { MarginEntry, MarginResponse, UserRow } from './api';
 import { ApiError } from './api';
 import {
+  LikersSheet,
   MarginCard,
   MarginView,
   StoryComposer,
   createStoryMessage,
   hasFreshStory,
-  likable,
   visibilityNotice,
 } from './screens/Story';
 import { userAgent } from './test-fixtures';
@@ -55,7 +55,12 @@ function margin(extra: Partial<MarginResponse> = {}): MarginResponse {
 
 function view(
   data: MarginResponse,
-  extra: { confirmDeleteId?: number | null; error?: string | null; onToggleLike?: (e: MarginEntry) => void } = {},
+  extra: {
+    confirmDeleteId?: number | null;
+    error?: string | null;
+    onToggleLike?: (e: MarginEntry) => void;
+    onShowLikers?: (e: MarginEntry) => void;
+  } = {},
 ) {
   return render(
     <MarginView
@@ -69,6 +74,7 @@ function view(
       onConfirmDelete={() => {}}
       onDelete={() => {}}
       onToggleLike={extra.onToggleLike ?? (() => {})}
+      onShowLikers={extra.onShowLikers ?? (() => {})}
       onBack={() => {}}
     />,
   );
@@ -306,13 +312,16 @@ describe('나가는 길 — 헤더 뒤로가기', () => {
  * <p>이게 이 기능에서 가장 미끄러지기 쉬운 자리다: 서재의 인라인 여백 미리보기는 <b>내 글인데도</b>
  * `self={false}`를 넘긴다(거기서 그 프롭은 「삭제 UI를 감춰」라는 뜻이다). `!self`로 하트를 켰다면
  * 내 서재에서 내 글에 좋아요 버튼이 떴을 것이다. 아래 두 번째 테스트가 그 회귀를 막는다.
+ *
+ * <p>손잡이가 <b>둘로 갈라졌다</b>(2026-08-20): 하트는 누르기/취소만 지고, 개수는 「좋아요 N명」이라는
+ * 별도 줄이 져서 명단을 연다. 한 버튼이 두 일을 하면 명단을 보려다 좋아요가 눌린다.
  */
 describe('여백 좋아요', () => {
-  it('남의 글에는 하트 손잡이가 그려진다', () => {
+  it('하트 손잡이가 그려지고, 개수는 별도 줄이 진다', () => {
     const html = view(margin({ entries: [entry(1, { likeCount: 3, liked: false })] }));
 
     expect(html).toContain('aria-label="좋아요"');
-    expect(html).toContain('>3<');
+    expect(html).toContain('좋아요 3명');
   });
 
   it('핸들러를 안 넘기면 손잡이가 없다 — 서재 미리보기가 내 글에 self=false를 넘기는 자리', () => {
@@ -329,7 +338,7 @@ describe('여백 좋아요', () => {
     );
 
     expect(html).not.toContain('aria-label="좋아요"');
-    expect(html).toContain('>3<'); // 개수는 여전히 보인다 — 데이터지 손잡이가 아니다
+    expect(html).toContain('좋아요 3명'); // 개수는 여전히 보인다 — 데이터지 손잡이가 아니다
   });
 
   it('이미 누른 글은 취소 손잡이가 된다', () => {
@@ -338,39 +347,89 @@ describe('여백 좋아요', () => {
     expect(html).toContain('aria-label="좋아요 취소"');
   });
 
-  it('아무도 안 누른 글에는 0을 그리지 않는다 — 빈 상태를 숫자로 박제하지 않는다', () => {
+  it('아무도 안 누른 글에는 개수 줄이 아예 없다 — 빈 상태를 숫자로 박제하지 않는다', () => {
     const html = view(margin({ entries: [entry(1, { likeCount: 0 })] }));
 
     expect(html).toContain('aria-label="좋아요"'); // 손잡이는 있고
-    expect(html).not.toContain('>0<'); // 숫자만 없다
+    expect(html).not.toContain('좋아요 0명'); // 개수 줄만 없다
   });
 
-  it('내 글에도 개수는 보인다 — 남이 눌러 준 것을 주인이 알아야 한다', () => {
+  /**
+   * 자기 좋아요를 허용하면서(2026-08-20) 내 여백에도 하트가 선다. 예전엔 여기가 「개수만」이었다 —
+   * 그때는 여백에 글을 쓴 사람이 없으면 좋아요를 확인할 길 자체가 없었다.
+   */
+  it('내 글에도 하트가 그려진다 — 자기 좋아요 허용', () => {
     const html = view(margin({ self: true, following: false, entries: [entry(1, { likeCount: 2 })] }));
 
-    expect(html).toContain('>2<');
-    expect(html).not.toContain('aria-label="좋아요"'); // 자기 좋아요는 없다
+    expect(html).toContain('aria-label="좋아요"');
+    expect(html).toContain('좋아요 2명');
+  });
+
+  it('내 비공개 책에도 하트가 그려진다 — 나만 보는 메모에도 표시를 남긴다', () => {
+    const html = view(
+      margin({
+        self: true,
+        following: false,
+        book: { id: 7, title: '비밀 노트', author: null, coverUrl: null, isPublic: false },
+        entries: [entry(1)],
+      }),
+    );
+
+    expect(html).toContain('aria-label="좋아요"');
+  });
+
+  it('개수 줄은 손잡이다 — 눌러서 명단을 연다', () => {
+    const html = view(margin({ entries: [entry(1, { likeCount: 3 })] }));
+
+    expect(html).toContain('aria-label="좋아요 3명 보기"');
+  });
+
+  it('명단 핸들러가 없으면 개수는 글자로만 남는다 — 서재 미리보기엔 열 시트가 없다', () => {
+    const html = render(
+      <MarginCard
+        entry={entry(1, { likeCount: 3 })}
+        now={NOW}
+        self={false}
+        busy={false}
+        confirming={false}
+        onConfirmDelete={() => {}}
+        onDelete={() => {}}
+      />,
+    );
+
+    expect(html).toContain('좋아요 3명');
+    expect(html).not.toContain('aria-label="좋아요 3명 보기"');
   });
 });
 
 /**
- * 하트를 손잡이로 그릴 수 있는가 — 서버 게이트({@code StoryService.assertLikable})를 화면에 옮긴 것.
- * 어긋나면 눌러도 404가 나는 죽은 버튼이 생긴다.
+ * 좋아요 명단 시트 — 팔로워 시트와 같은 처지라 <b>데이터를 프롭으로</b> 받는다(정적 렌더 하니스가
+ * 0명/N명 분기에 닿는 유일한 길). 실패는 그 자리에서 다시 받는 길을 준다.
  */
-describe('좋아요 가능 판정 (likable)', () => {
-  it('내 글에는 못 누른다 — 여백은 내 노트라 전부 자기 좋아요가 된다', () => {
-    expect(likable(true, true)).toBe(false);
+describe('좋아요 명단 시트 (LikersSheet)', () => {
+  const someone: UserRow = { loginId: 'nabi', nickname: '나비독서', publicBookCount: 12, following: true, self: false };
+
+  const sheet = (users: UserRow[] | null, error: string | null = null) =>
+    render(
+      <LikersSheet users={users} error={error} onSelect={() => {}} onClose={() => {}} onRetry={() => {}} />,
+    );
+
+  it('누른 사람의 닉네임과 핸들을 그린다', () => {
+    const html = sheet([someone]);
+
+    expect(html).toContain('나비독서');
+    expect(html).toContain('@nabi');
   });
 
-  it('비공개 책에는 자리를 만들지 않는다 — 남이 볼 수 없어 개수가 영원히 0이다', () => {
-    expect(likable(false, false)).toBe(false);
+  it('받는 중(null)에는 「없어요」를 먼저 깜빡이지 않는다', () => {
+    expect(sheet(null)).not.toContain('아직 아무도');
   });
 
-  it('남의 공개 책 글에는 누를 수 있다', () => {
-    expect(likable(false, true)).toBe(true);
+  it('0명이면 안내가 선다 — 그 사이 취소돼 빈 명단이 올 수 있다', () => {
+    expect(sheet([])).toContain('아직 아무도 누르지 않았어요.');
   });
 
-  it('필드가 없는 옛 서버 응답(undefined)은 공개로 간주한다 — 가시성 고지와 같은 기준', () => {
-    expect(likable(false, undefined)).toBe(true);
+  it('실패하면 그 자리에서 다시 받는 길을 준다 — 빈 시트가 막다른 길이 되지 않게', () => {
+    expect(sheet(null, '불러오지 못했어요')).toContain('다시');
   });
 });

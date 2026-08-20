@@ -5,6 +5,8 @@ import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.follow.FollowService;
 import com.booktimer.profile.ProfileService;
+import com.booktimer.search.UserRowAssembler;
+import com.booktimer.search.UserSearchResult;
 import com.booktimer.security.RateLimitAction;
 import com.booktimer.security.RateLimitService;
 import com.booktimer.user.Role;
@@ -29,6 +31,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
@@ -52,6 +55,8 @@ class StoryServiceTest {
     private ProfileService profileService;
     @Mock
     private StoryLikeRepository storyLikeRepository;
+    @Mock
+    private UserRowAssembler rowAssembler;
 
     private StoryService service;
 
@@ -60,7 +65,7 @@ class StoryServiceTest {
     @BeforeEach
     void setUp() {
         service = new StoryService(storyRepository, bookRepository, rateLimitService,
-                followService, profileService, storyLikeRepository);
+                followService, profileService, storyLikeRepository, rowAssembler);
         me = userWithId(1L, "meuser", "나");
     }
 
@@ -379,17 +384,39 @@ class StoryServiceTest {
                 .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
     }
 
+    /**
+     * 자기 글 금지를 걷어낸 자리(2026-08-20). 게이트를 <b>통과</b>시키는 것만으로는 부족해서
+     * 「팔로우·공개 검사에 닿지도 않는다」까지 못 박는다 — self가 그 체인에 들어가면 자기 자신을
+     * 팔로우하지 않으므로 404가 되고, 내 여백의 하트가 통째로 죽는다.
+     */
     @Test
-    @DisplayName("like: 내 글 → 404 (여백은 내 노트라 자기 좋아요는 의미가 없다)")
-    void like_ownStory_throws404() {
+    @DisplayName("like: 내 글 → 저장된다 (자기 좋아요 허용 — 팔로우·공개 검사에 닿지 않는다)")
+    void like_ownStory_saves() {
         when(rateLimitService.allow(RateLimitAction.STORY_LIKE, 1L)).thenReturn(true);
         Story mine = storyWithId(10L, me, "내 문장", NOW.minusSeconds(60), publicBookOf(me, "내 책"));
         when(storyRepository.findById(10L)).thenReturn(Optional.of(mine));
+        when(storyLikeRepository.findByStoryAndUser(mine, me)).thenReturn(Optional.empty());
+        when(storyLikeRepository.countByStory(mine)).thenReturn(1L);
 
-        assertThatThrownBy(() -> service.like(me, 10L))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
-        verify(storyLikeRepository, never()).save(any());
+        StoryService.LikeState state = service.like(me, 10L);
+
+        assertThat(state.likeCount()).isEqualTo(1L);
+        assertThat(state.liked()).isTrue();
+        verify(storyLikeRepository).save(any());
+        verify(followService, never()).isFollowing(any(), any());
+    }
+
+    @Test
+    @DisplayName("like: 내 PRIVATE 책 글도 눌린다 — 나만 보는 메모라 공개 검사가 닿지 않는다")
+    void like_ownPrivateBookStory_saves() {
+        when(rateLimitService.allow(RateLimitAction.STORY_LIKE, 1L)).thenReturn(true);
+        Book privateBook = Book.register(me, "내 비공개 책", null, null, null, null, null, BookStatus.READING);
+        Story mine = storyWithId(10L, me, "내 문장", NOW.minusSeconds(60), privateBook);
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(mine));
+        when(storyLikeRepository.findByStoryAndUser(mine, me)).thenReturn(Optional.empty());
+        when(storyLikeRepository.countByStory(mine)).thenReturn(1L);
+
+        assertThat(service.like(me, 10L).liked()).isTrue();
     }
 
     /**
@@ -542,9 +569,14 @@ class StoryServiceTest {
         assertThat(response.entries()).extracting(MarginEntry::liked).containsExactly(true, false);
     }
 
+    /**
+     * 자기 좋아요가 허용되면서 <b>내 여백에서도 liked를 물어야</b> 한다(2026-08-20). 예전엔 자기 글엔 누를
+     * 수 없어 답이 구조적으로 비어 있으니 쿼리를 건너뛰었는데, 지금 건너뛰면 방금 누른 하트가 새로고침에
+     * 꺼진다 — 「눌렀는데 안 눌린 것처럼 보인다」가 바로 이 지점이다.
+     */
     @Test
-    @DisplayName("marginOf: 내 여백은 liked 조회를 하지 않는다 — 자기 글엔 누를 수 없어 항상 false")
-    void marginOf_self_skipsLikedQuery() {
+    @DisplayName("marginOf: 내 여백에서도 내가 누른 하트가 채워진다 (자기 좋아요 허용)")
+    void marginOf_self_projectsLiked() {
         when(profileService.resolveVisibleTarget(me, "meuser")).thenReturn(Optional.of(me));
         Book book = publicBookOf(me, "내 공개 책");
         when(bookRepository.findByIdAndUser(7L, me)).thenReturn(Optional.of(book));
@@ -552,12 +584,12 @@ class StoryServiceTest {
         when(storyRepository.findByUserAndBookOrderByCreatedAtDescIdDesc(eq(me), eq(book), any(Pageable.class)))
                 .thenReturn(List.of(mine));
         when(storyLikeRepository.countsByStoryIds(List.of(10L))).thenReturn(List.of(likeCount(10L, 5L)));
+        when(storyLikeRepository.likedStoryIds(List.of(10L), me)).thenReturn(List.of(10L));
 
         MarginResponse response = service.marginOf(me, "meuser", 7L);
 
         assertThat(response.entries()).extracting(MarginEntry::likeCount).containsExactly(5L);
-        assertThat(response.entries()).extracting(MarginEntry::liked).containsExactly(false);
-        verify(storyLikeRepository, never()).likedStoryIds(any(), any());
+        assertThat(response.entries()).extracting(MarginEntry::liked).containsExactly(true);
     }
 
     @Test
@@ -587,6 +619,129 @@ class StoryServiceTest {
         InOrder order = inOrder(storyLikeRepository, storyRepository);
         order.verify(storyLikeRepository).deleteByStory(mine);
         order.verify(storyRepository).delete(mine);
+    }
+
+    /** 좋아요 행 — 최근순 정렬·필터를 계측하려면 실제 엔티티가 필요하다(투영이 아니라 관계를 탄다). */
+    private StoryLike likeBy(User user, Story story) {
+        return StoryLike.of(user, story);
+    }
+
+    @Test
+    @DisplayName("likers: 없는 글 → 404")
+    void likers_missingStory_throws404() {
+        when(storyRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.likers(me, 99L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    /**
+     * 명단은 <b>목록과 같은 판정</b>을 재사용해야 한다 — 어긋나면 안 보이는 글 id로 명단을 열어
+     * 「그 글이 있다」와 「누가 눌렀다」를 한꺼번에 알아낼 수 있다.
+     */
+    @Test
+    @DisplayName("likers: 비팔로워 → 404 (목록에 안 뜨는 글의 명단은 열리지 않는다)")
+    void likers_nonFollower_throws404() {
+        User owner = userWithId(2L, "owner", "주인");
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(othersPublicStory(owner)));
+        when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.of(owner));
+        when(followService.isFollowing(me, owner)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.likers(me, 10L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("likers: 남의 PRIVATE 책 글 → 404 (팔로우 검사에 닿지도 않는다)")
+    void likers_privateBook_throws404() {
+        User owner = userWithId(2L, "owner", "주인");
+        Book privateBook = Book.register(owner, "남의 비공개 책", null, null, null, null, null, BookStatus.READING);
+        when(storyRepository.findById(10L))
+                .thenReturn(Optional.of(storyWithId(10L, owner, "남의 문장", NOW.minusSeconds(60), privateBook)));
+        when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.of(owner));
+
+        assertThatThrownBy(() -> service.likers(me, 10L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+        verify(followService, never()).isFollowing(any(), any());
+    }
+
+    @Test
+    @DisplayName("likers: 팔로워 → 레포가 준 순서(최근순) 그대로 사용자 행으로 조립")
+    void likers_follower_returnsRowsInOrder() {
+        User owner = userWithId(2L, "owner", "주인");
+        Story story = othersPublicStory(owner);
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(story));
+        when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.of(owner));
+        when(followService.isFollowing(me, owner)).thenReturn(true);
+        User recent = visibleUser(3L, "recent");
+        User older = visibleUser(4L, "older");
+        when(storyLikeRepository.findByStoryOrderByCreatedAtDescIdDesc(story))
+                .thenReturn(List.of(likeBy(recent, story), likeBy(older, story)));
+        List<UserSearchResult> rows = List.of(row("recent"), row("older"));
+        when(rowAssembler.toRows(eq(me), anyList())).thenReturn(rows);
+
+        assertThat(service.likers(me, 10L)).isSameAs(rows);
+        assertThat(capturedTargets()).extracting(User::getLoginId).containsExactly("recent", "older");
+    }
+
+    @Test
+    @DisplayName("likers: 내 글 → 팔로우 검사 없이 열린다 (자기 여백의 명단은 내 것이다)")
+    void likers_ownStory_opensWithoutGate() {
+        Story mine = storyWithId(10L, me, "내 문장", NOW.minusSeconds(60), publicBookOf(me, "내 책"));
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(mine));
+        when(storyLikeRepository.findByStoryOrderByCreatedAtDescIdDesc(mine)).thenReturn(List.of());
+
+        assertThat(service.likers(me, 10L)).isEmpty();
+
+        verify(followService, never()).isFollowing(any(), any());
+    }
+
+    /**
+     * 두 필터를 한 테스트에 둔 것은 <b>같은 실패</b>를 막기 때문이다 — 명단은 「내가 볼 수 있는 사람」만
+     * 담아야 한다. 핸들 없는 사람(N-055)은 어느 목록에도 실리지 않고, 차단은 대칭이라 좋아요를 누른 뒤
+     * 차단이 걸려도 그 흔적이 남으면 안 된다(차단이 팔로우는 끊지만 이미 눌린 행은 남는다).
+     */
+    @Test
+    @DisplayName("likers: 핸들 없는 사람·차단 관계는 명단에서 뺀다 (N-055 · 차단 대칭)")
+    void likers_filtersHandlelessAndBlocked() {
+        User owner = userWithId(2L, "owner", "주인");
+        Story story = othersPublicStory(owner);
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(story));
+        when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.of(owner));
+        when(followService.isFollowing(me, owner)).thenReturn(true);
+        User visible = visibleUser(3L, "visible");
+        User handleless = userWithId(4L, "nohandle", "온보딩 전");
+        ReflectionTestUtils.setField(handleless, "loginId", null);
+        User blocked = userWithId(5L, "blocked", "차단됨"); // resolveVisibleTarget 미스텁 → 빈 Optional
+        when(storyLikeRepository.findByStoryOrderByCreatedAtDescIdDesc(story))
+                .thenReturn(List.of(likeBy(visible, story), likeBy(handleless, story), likeBy(blocked, story)));
+        when(rowAssembler.toRows(eq(me), anyList())).thenReturn(List.of(row("visible")));
+
+        service.likers(me, 10L);
+
+        assertThat(capturedTargets()).extracting(User::getLoginId).containsExactly("visible");
+    }
+
+    /** 조립기에 실제로 넘어간 사용자들 — 필터·정렬이 이 서비스의 일이라 여기서 계측한다. */
+    @SuppressWarnings("unchecked")
+    private List<User> capturedTargets() {
+        ArgumentCaptor<List<User>> captor = ArgumentCaptor.forClass(List.class);
+        verify(rowAssembler).toRows(eq(me), captor.capture());
+        return captor.getValue();
+    }
+
+    /** 명단에 남는(=차단 아님·ADMIN 아님) 사용자 — 가드가 그를 통과시키도록 스텁까지 함께 건다. */
+    private User visibleUser(long id, String loginId) {
+        User u = userWithId(id, loginId, "누른이");
+        when(profileService.resolveVisibleTarget(me, loginId)).thenReturn(Optional.of(u));
+        return u;
+    }
+
+    private UserSearchResult row(String loginId) {
+        return new UserSearchResult(loginId, "누른이", 0L, false, false);
     }
 
 }

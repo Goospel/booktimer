@@ -1,5 +1,6 @@
 package com.booktimer.web.api;
 
+import com.booktimer.search.UserSearchResult;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.story.MarginEntry;
 import com.booktimer.story.MarginResponse;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.security.Principal;
+import java.util.List;
 
 /**
  * 여백 JSON API (sns-design §13.4) — 책별 글 목록·작성·삭제.
@@ -72,6 +74,18 @@ public class StoryApiController {
     @PostMapping("/api/stories/{id}/like")
     public StoryService.LikeState like(@PathVariable Long id, Principal principal) {
         return storyService.like(currentUserService.resolve(principal), id);
+    }
+
+    /**
+     * 그 글에 좋아요를 누른 사람들 — 카드의 「좋아요 N명」이 여는 명단. 게이트는 목록과 같은 판정이라
+     * 안 보이는 글의 명단은 404다({@link StoryService#likers}).
+     *
+     * <p>목록 응답에 싣지 않고 별도 조회로 둔 이유: 여백 한 장이 글 100개까지 실리므로 글마다 명단을
+     * 동봉하면 열지도 않을 명단이 한꺼번에 날아온다.
+     */
+    @GetMapping("/api/stories/{id}/likes")
+    public List<UserSearchResult> likers(@PathVariable Long id, Principal principal) {
+        return storyService.likers(currentUserService.resolve(principal), id);
     }
 
     /** 좋아요를 취소한다. 안 누른 글·없는 글은 404(존재 비노출) — 노출 게이트는 걸지 않는다. */
