@@ -1,5 +1,5 @@
 import { Button, ProgressBar, Text } from '@toss/tds-mobile';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
 import type { BookOption, DashboardResponse, TimerState, WaiveResponse } from '../api';
@@ -263,6 +263,7 @@ export function BookCarousel<T extends BookOption>({
   onSelect,
   noBookCard = true,
   metaOf,
+  chipsOf,
 }: {
   books: T[];
   selectedId: number | null;
@@ -271,6 +272,11 @@ export function BookCarousel<T extends BookOption>({
   noBookCard?: boolean;
   /** 제목 아래 한 줄 — 기본은 저자. */
   metaOf?: (book: T) => string;
+  /**
+   * 메타 아래 칩 줄 — 서재가 읽은 시간·공개 여부를 여기로 보낸다. 홈은 안 넘긴다(측정할 책을 <b>고르는</b>
+   * 자리에서는 공개 여부가 군더더기다). 스타일까지 호출부가 정해 보내므로 캐러셀은 톤을 몰라도 된다.
+   */
+  chipsOf?: (book: T) => { label: string; style: CSSProperties }[];
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const settleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -389,16 +395,21 @@ export function BookCarousel<T extends BookOption>({
           </Text>
         ) : (
           (metaOf?.(selected) ?? selected.author) !== null && (
-            // `pre-line` — 서재는 저자와 「읽은 시간 · 공개」를 줄로 나눠 보낸다(긴 저자 문자열이 되접히며
-            // 그 둘이 이름 사이에 끼어 들던 자리). 홈의 저자 한 줄은 줄바꿈이 없어 영향받지 않는다.
-            <Text
-              typography="st12"
-              color="grey600"
-              style={{ display: 'block', marginTop: 2, whiteSpace: 'pre-line' }}
-            >
+            // 한 줄 = 저자다. 서재가 「읽은 시간 · 공개」를 줄바꿈으로 여기 얹던 시절엔 `pre-line`이
+            // 필요했는데, 그 둘이 아래 칩 줄로 나가면서 이 자리는 다시 한 줄짜리가 됐다.
+            <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
               {metaOf?.(selected) ?? selected.author}
             </Text>
           )
+        )}
+        {selected !== null && chipsOf !== undefined && (
+          <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
+            {chipsOf(selected).map(({ label, style }) => (
+              <span key={label} data-book-chip="" style={style}>
+                {label}
+              </span>
+            ))}
+          </div>
         )}
       </div>
 

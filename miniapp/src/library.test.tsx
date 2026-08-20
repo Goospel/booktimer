@@ -14,6 +14,7 @@ import {
   SearchResultRow,
   Shelf,
   marginBoxView,
+  bookStats,
   metaLine,
   needsPublishConfirm,
   resolveSelected,
@@ -133,25 +134,49 @@ describe('서재 탭', () => {
  * 끼어 든다(실기기 실측). 줄을 나누면 되접혀도 「누가 썼나」와 「얼마나 읽었나」가 섞이지 않는다.
  */
 describe('선택한 책 메타 (metaLine)', () => {
-  it('저자는 첫 줄, 읽은 시간·공개 여부는 다음 줄', () => {
-    expect(metaLine(book(1, '데미안', 'READING', { author: '헤세', seconds: 7200, isPublic: true }))).toBe(
-      '헤세\n2시간 · 공개',
-    );
+  it('저자만 남는다 — 읽은 시간·공개 여부는 아래 칩이 맡는다', () => {
+    expect(metaLine(book(1, '데미안', 'READING', { author: '헤세', seconds: 7200, isPublic: true }))).toBe('헤세');
   });
 
-  it('저자가 길어도 줄을 넘겨 섞이지 않는다 — 실기기에서 시간이 이름 사이에 끼어 들던 자리', () => {
+  it('저자가 길어도 다른 것이 섞이지 않는다 — 실기기에서 시간이 이름 사이에 끼어 들던 자리', () => {
     const long = '레프 니콜라예비치 톨스토이 (지은이), 연진희 (옮긴이)';
-    expect(metaLine(book(1, '전쟁과 평화 1', 'FINISHED', { author: long, seconds: 39_900, isPublic: true }))).toBe(
-      `${long}\n11시간 5분 · 공개`,
-    );
+    expect(metaLine(book(1, '전쟁과 평화 1', 'FINISHED', { author: long, seconds: 39_900, isPublic: true }))).toBe(long);
   });
 
-  it('아직 안 읽은 책은 시간을 적지 않는다 — 「0분」은 정보가 아니다', () => {
-    expect(metaLine(book(1, '코스모스', 'WANT_TO_READ', { author: null }))).toBe('저자 미상\n비공개');
+  it('저자를 모르면 「저자 미상」', () => {
+    expect(metaLine(book(1, '코스모스', 'WANT_TO_READ', { author: null }))).toBe('저자 미상');
+  });
+});
+
+describe('책 상태 칩 (bookStats)', () => {
+  it('읽은 시간은 「N 읽음」으로 — 「2시간」만 있으면 무엇의 2시간인지 안 보인다', () => {
+    expect(bookStats(book(1, '데미안', 'READING', { seconds: 7200, isPublic: true }))).toEqual([
+      { label: '2시간 읽음', tone: 'neutral' },
+      { label: '공개', tone: 'sage' },
+    ]);
   });
 
-  it('줄바꿈을 살리는 스타일이 실제로 걸린다 — 없으면 두 줄이 한 줄로 붙어 문자열만 바뀐 셈이 된다', () => {
-    expect(shelf([book(1, '데미안', 'READING')], { selectedId: 1 })).toContain('white-space:pre-line');
+  it('아직 안 읽은 책은 시간 칩이 없다 — 「0분」은 정보가 아니다', () => {
+    expect(bookStats(book(1, '코스모스', 'WANT_TO_READ', { seconds: 0, isPublic: false }))).toEqual([
+      { label: '비공개', tone: 'outline' },
+    ]);
+  });
+
+  it('공개는 켜지고 비공개는 눌린다 — 색이 곧 「누구에게 보이는가」다', () => {
+    const shown = bookStats(book(1, '가', 'READING', { isPublic: true }));
+    const hidden = bookStats(book(2, '나', 'READING', { isPublic: false }));
+
+    expect(shown.at(-1)!.tone).toBe('sage');
+    expect(hidden.at(-1)!.tone).toBe('outline');
+  });
+
+  it('상태 칩이 실제로 그려진다 — 순수 함수만 맞고 화면이 안 부르면 아무 일도 안 일어난다', () => {
+    const markup = shelf([book(1, '데미안', 'READING', { seconds: 7200, isPublic: true })], { selectedId: 1 });
+
+    expect(markup).toContain('2시간 읽음');
+    expect(markup).toContain('data-book-chip=""');
+    // 저자와 상태가 한 덩어리로 붙어 있던 옛 모양이 남아 있으면 안 된다.
+    expect(markup).not.toContain('2시간 · 공개');
   });
 });
 
