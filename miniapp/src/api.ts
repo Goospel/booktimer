@@ -267,13 +267,25 @@ export interface StopResponse {
 
 export const fetchDashboard = (): Promise<DashboardResponse> => request('/api/dashboard');
 
+/** `session.BookRead` — 그날 이 책만 읽은 시간. 같은 책의 여러 세션은 서버가 한 줄로 합쳐 준다. */
+export interface BookRead {
+  title: string;
+  coverUrl: string | null;
+  seconds: number;
+}
+
 /** `session.DailyReadingRecord` — 세션 "횟수"는 서버가 일부러 안 준다(1분짜리 측정까지 세어 숫자만 부푼다). */
 export interface DailyRecord {
   /** `YYYY-MM-DD`(유저 타임존 기준). */
   date: string;
   totalSeconds: number;
-  /** 그날 읽은 책 제목(중복 제거). 책 미지정 세션만 있으면 빈 목록이다. */
-  bookTitles: string[];
+  /**
+   * 그날 읽은 책 — 제목별 합산, <b>오래 읽은 순</b>(서버가 정한 순서다. 화면이 다시 정렬하지 않는다).
+   *
+   * <p>`totalSeconds`는 이 목록의 합보다 <b>클 수 있다</b> — 책을 안 고르고 잰 세션의 시간은 총합에만
+   * 들어가고 여기엔 안 잡힌다. 그 차액은 화면이 「책 안 고른 기록」 줄로 밝힌다(`bookRows`).
+   */
+  books: BookRead[];
   manuallyFilled: boolean;
 }
 

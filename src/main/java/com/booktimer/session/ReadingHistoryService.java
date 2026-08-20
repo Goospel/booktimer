@@ -7,8 +7,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -71,24 +72,50 @@ public class ReadingHistoryService {
             DayAccumulator acc = byDate.computeIfAbsent(date, d -> new DayAccumulator());
             acc.seconds += session.getDurationSeconds();
             acc.manual |= session.isManualEntry(); // 그날 수동 입력이 하나라도 있으면 "직접 채운 날"
-            // 책 제목을 읽은 순서대로, 중복 없이 모은다. 책 미지정(레거시 null) 세션은 제목 없음.
-            // book은 LAZY라 readOnly 트랜잭션 안에서 접근한다(MVP 규모라 N+1 허용; 커지면 fetch join/집계 쿼리로).
+            // 책별로 시간을 누적한다 — 같은 책을 여러 번 폈으면 한 줄로 합쳐야 더미에 같은 책이 두 번 안 꽂힌다.
+            // 묶는 키는 제목이다(예전 중복 제거와 같은 기준). book은 LAZY라 readOnly 트랜잭션 안에서 접근한다
+            // (MVP 규모라 N+1 허용; 커지면 fetch join/집계 쿼리로).
             Book book = session.getBook();
             if (book != null) {
-                acc.titles.add(book.getTitle());
+                BookAccumulator read = acc.books.computeIfAbsent(book.getTitle(), t -> new BookAccumulator());
+                read.seconds += session.getDurationSeconds();
+                if (read.coverUrl == null) {
+                    read.coverUrl = book.getCoverUrl();
+                }
             }
         }
 
         return byDate.entrySet().stream()
                 .map(e -> new DailyReadingRecord(e.getKey(), e.getValue().seconds,
-                        List.copyOf(e.getValue().titles), e.getValue().manual))
+                        e.getValue().booksLongestFirst(), e.getValue().manual))
                 .toList();
     }
 
-    /** 하루치 누적기 — 총 독서 시간(초), 읽은 책 제목(중복 제거·읽은 순서), 수동 입력 포함 여부. */
+    /** 하루치 누적기 — 총 독서 시간(초), 책별 누적(제목 키), 수동 입력 포함 여부. */
     private static final class DayAccumulator {
         long seconds = 0L;
         boolean manual = false;
-        final LinkedHashSet<String> titles = new LinkedHashSet<>();
+        /** 제목 → 그 책 누적. 삽입 순서를 보존해 <b>동률일 때 먼저 편 책이 앞</b>에 남는다. */
+        final Map<String, BookAccumulator> books = new LinkedHashMap<>();
+
+        /**
+         * 오래 읽은 순으로 굳힌 책 목록.
+         *
+         * <p>접힌 더미에서 눈에 보이는 건 맨 앞 한 장이라, 그 한 장이 <b>그날을 대표</b>해야 한다.
+         * 동률은 {@link List#sort}가 안정 정렬이라 삽입(=읽은) 순서가 그대로 남는다 — 안 그러면
+         * 같은 데이터를 볼 때마다 더미 순서가 뒤바뀐다.
+         */
+        List<BookRead> booksLongestFirst() {
+            List<BookRead> list = new ArrayList<>();
+            books.forEach((title, read) -> list.add(new BookRead(title, read.coverUrl, read.seconds)));
+            list.sort(Comparator.comparingLong(BookRead::seconds).reversed());
+            return List.copyOf(list);
+        }
+    }
+
+    /** 책 한 권의 하루 누적 — 표지는 처음 만난 세션 것을 쓴다(같은 책이면 어느 세션에서 와도 같다). */
+    private static final class BookAccumulator {
+        long seconds = 0L;
+        String coverUrl = null;
     }
 }

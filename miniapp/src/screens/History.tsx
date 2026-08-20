@@ -1,11 +1,12 @@
 import { Text } from '@toss/tds-mobile';
+import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';
 
-import type { ContributionGraph, DailyRecord, MonthlySection } from '../api';
+import type { BookRead, ContributionGraph, DailyRecord, MonthlySection } from '../api';
 import { fetchHistory } from '../api';
 import { formatDuration, subjectParticle } from '../format';
 import {
-  CoverInitial,
+  BookCover,
   ErrorMessage,
   GrassGrid,
   LEVEL_COLORS,
@@ -178,14 +179,56 @@ export function barPercent(seconds: number, maxSeconds: number): number {
 }
 
 /**
- * 그날의 표지 묶음 — 세울 제목과 넘친 권수.
+ * 그날의 표지 더미 — 앞에 쌓을 책과 넘친 권수.
  *
  * <p>전에는 제목을 쉼표로 이어 붙이고 `nowrap + ellipsis`로 잘랐다. 두 권만 돼도
  * 「미움받을 용기, 사피…」가 되는데, <b>몇 권인지도 무슨 책인지도 안 남는</b> 잘림이었다.
- * 표지 칸으로 옮기면 권수가 자리로 보이고, 넘치는 만큼은 숫자로 <b>밝혀서</b> 뺀다.
+ * 표지로 옮기면 권수가 자리로 보이고, 넘치는 만큼은 숫자로 <b>밝혀서</b> 뺀다.
+ *
+ * <p>서버가 오래 읽은 순으로 주므로 <b>맨 앞이 그날을 대표하는 책</b>이다 — 여기서 다시 정렬하지 않는다.
+ *
+ * <p>더미에 서는 <b>칸은 최대 {@code max}개</b>다 — 넘칠 땐 마지막 칸을 권수 타일에 내주므로 표지는
+ * {@code max - 1}장만 쌓인다. 넘친 만큼까지 표지로 세우면 칸이 넓어져 옆의 막대를 잡아먹는다.
  */
-export function coverStack(titles: string[], max = 3): { shown: string[]; more: number } {
-  return { shown: titles.slice(0, max), more: Math.max(0, titles.length - max) };
+export function coverStack(books: BookRead[], max = 3): { shown: BookRead[]; more: number } {
+  if (books.length <= max) return { shown: books, more: 0 };
+  return { shown: books.slice(0, max - 1), more: books.length - (max - 1) };
+}
+
+/** 펼친 하루의 한 줄 — 책 한 권, 또는 마지막의 「책 안 고른 기록」. */
+export interface DayBookRow extends BookRead {
+  /** 책이 아니라 차액 줄이면 true — 표지 대신 빈 칸, 회색으로 눌러 그린다. */
+  unassigned: boolean;
+}
+
+/** 「책 안 고른 기록」 줄의 이름 — 책이 아니라서 제목 자리에 설명이 온다. */
+const UNASSIGNED_LABEL = '책 안 고른 기록';
+
+/**
+ * 펼쳤을 때 세울 줄들 — 책들 + (남으면) 「책 안 고른 기록」.
+ *
+ * <p>책을 안 고르고 잰 세션은 서버 `books`에 안 잡히지만 `totalSeconds`에는 남아 있다. 그 차액을 그냥
+ * 버리면 <b>펼친 시간을 다 더해도 접힌 줄의 총합과 안 맞는다</b> — 사용자가 산수를 해 보는 순간 화면이
+ * 거짓말한 게 된다. 그래서 남는 만큼을 마지막 줄로 밝힌다. 차액이 없으면 그 줄을 안 만든다(「0초」 줄이 된다).
+ */
+export function bookRows(day: DailyRecord): DayBookRow[] {
+  const rows: DayBookRow[] = day.books.map((book) => ({ ...book, unassigned: false }));
+  const rest = day.totalSeconds - day.books.reduce((sum, book) => sum + book.seconds, 0);
+  if (rest > 0) {
+    rows.push({ title: UNASSIGNED_LABEL, coverUrl: null, seconds: rest, unassigned: true });
+  }
+  return rows;
+}
+
+/**
+ * 펼칠 수 있는 날인가 — 펼쳐서 <b>새로 보이는 게 있어야</b> 손잡이를 단다.
+ *
+ * <p>기준은 「몇 권인가」가 아니라 <b>「펼치면 줄이 둘 이상인가」</b>다. 한 권만 읽은 날은 그 책 시간이 곧
+ * 총합이라 펼쳐도 같은 숫자 하나가 나오고, 책을 아예 안 고른 날도 한 줄이 그날 전부다 — 그런 날까지
+ * 눌리게 보이면 화면이 없는 것을 약속하는 셈이다. 반대로 한 권 + 안 고른 시간이면 둘은 다른 숫자라 펼칠 값이 있다.
+ */
+export function isExpandable(day: DailyRecord): boolean {
+  return bookRows(day).length >= 2;
 }
 
 /** `2026-08` → `2026년 8월`. */
@@ -199,6 +242,9 @@ export function formatMonthTitle(month: string): string {
  * 월 ◀▶ 이동은 두지 않는다(A안): 폰은 세로 스크롤이 자연스럽고, 한 달만 담으면 잔디 아래가 다시 빈다.
  */
 export function MonthlyRecords({ months }: { months: MonthlySection[] }) {
+  // 한 번에 하나만 펼친다 — 여럿이 동시에 열리면 목록이 벽이 되고, 하루를 보러 온 사람이 스크롤을 잃는다.
+  const [openDate, setOpenDate] = useState<string | null>(null);
+
   if (months.length === 0) {
     return (
       <Text typography="st11" color="grey600" style={{ display: 'block', marginTop: 28 }}>
@@ -219,7 +265,15 @@ export function MonthlyRecords({ months }: { months: MonthlySection[] }) {
               {formatDuration(section.totalSeconds)}
             </Text>
           </div>
-          {section.days.map((day) => <DayRow key={day.date} day={day} monthMax={maxOf(section)} />)}
+          {section.days.map((day) => (
+            <DayRow
+              key={day.date}
+              day={day}
+              monthMax={maxOf(section)}
+              expanded={day.date === openDate}
+              onToggle={() => setOpenDate(day.date === openDate ? null : day.date)}
+            />
+          ))}
         </section>
       ))}
     </div>
@@ -232,26 +286,58 @@ function maxOf(section: MonthlySection): number {
 }
 
 /**
- * 하루 한 줄 — 날짜 · 표지 · 막대 · 시간.
+ * 하루 한 줄의 고정 격자 — 날짜 · 표지 더미 · 막대 · 시간 · 손잡이.
  *
- * <p>전에는 날짜와 쉼표로 이은 제목, 그리고 시간뿐이었다. 화면에 그림이 하나도 없어(기록 탭의
- * `img`·`svg`가 <b>0개였다</b>) 훑을 수가 없었고, 제목은 두 권만 넘어도 잘렸다. 표지 칸이 「무슨 책·몇 권」을,
- * 막대가 「그 달에서 어느 정도였나」를 글자 대신 형태로 말한다.
+ * <p><b>고정 폭이라야 한다.</b> 전에는 flex라 표지 개수(1~4장)와 시간 글자 폭(「45분」~「3시간 20분」)이
+ * 행마다 달라 막대의 <b>시작점과 끝점이 둘 다 흔들렸다</b> — 같은 퍼센트가 행마다 다른 픽셀로 그려지니
+ * 막대 길이로 날을 견주는 것 자체가 거짓이었다. 격자로 못 박으면 구조적으로 어긋날 수가 없다.
+ *
+ * <p>손잡이 칸은 <b>펼칠 수 없는 날에도 비워 남긴다</b> — 그 칸이 사라지면 시간의 오른쪽 끝이 밀린다.
  */
-function DayRow({ day, monthMax }: { day: DailyRecord; monthMax: number }) {
-  const { shown, more } = coverStack(day.bookTitles);
+const ROW_GRID: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '50px 56px minmax(0, 1fr) 76px 16px',
+  alignItems: 'center',
+  columnGap: 8,
+  width: '100%',
+  padding: '9px 0',
+  borderBottom: '1px solid var(--adaptiveGrey100, #EFEAE0)',
+};
 
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        padding: '9px 0',
-        borderBottom: '1px solid var(--adaptiveGrey100, #EFEAE0)',
-      }}
-    >
-      <div style={{ flex: '0 0 auto', width: 52 }}>
+/** 버튼의 기본 꼴을 지운다 — 손잡이지 알약이 아니다. `ROW_GRID`를 뒤에 펴서 아래 테두리를 되살린다. */
+const BUTTON_RESET: CSSProperties = {
+  border: 'none',
+  background: 'none',
+  color: 'inherit',
+  textAlign: 'left',
+  cursor: 'pointer',
+};
+
+/**
+ * 하루 한 줄 — 날짜 · 표지 더미 · 막대 · 시간.
+ *
+ * <p>전에는 표지를 <b>옆으로 나열</b>했다. 그래서 네 권을 읽은 날은 세 장 + 「+1」로 늘어서기만 하고,
+ * <b>어느 책을 오래 읽었는지</b>는 어디에도 없었다 — 그날 총합 하나뿐이었다. 겹쳐 쌓으면 자리를 덜 쓰면서
+ * 「여러 권」이 형태로 읽히고, 눌러 펼치면 책마다 얼마나 읽었는지가 나온다(사용자 요청 2026-08-20).
+ *
+ * <p>펼침 상태를 스스로 들지 않고 위에서 받는다 — 한 번에 하나만 열려야 하는데, 각 줄이 제 상태를 들면
+ * 그 규칙을 아무도 강제할 수 없다. 덕분에 정적 렌더 하니스(클릭이 안 도는)에서도 펼친 꼴을 계측할 수 있다.
+ */
+export function DayRow({
+  day,
+  monthMax,
+  expanded,
+  onToggle,
+}: {
+  day: DailyRecord;
+  monthMax: number;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const expandable = isExpandable(day);
+  const summary = (
+    <>
+      <div>
         <Text typography="st11" style={{ display: 'block', lineHeight: 1.2 }}>
           {formatRecordDate(day.date)}
         </Text>
@@ -260,48 +346,232 @@ function DayRow({ day, monthMax }: { day: DailyRecord; monthMax: number }) {
         </Text>
       </div>
 
-      {/* 표지는 제목색 첫 글자다 — 같은 책은 앱 어디서나 같은 색이라, 작아도 같은 책으로 읽힌다.
-          책을 안 붙인 날도 빈 칸을 남긴다(자리가 무너지면 아래 행의 막대 시작점이 어긋난다). */}
-      <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 3 }}>
-        {shown.map((title) => (
-          <CoverInitial key={title} title={title} width={20} />
-        ))}
-        {shown.length === 0 && (
-          <span
-            aria-hidden="true"
-            style={{
-              display: 'block',
-              width: 20,
-              height: 28,
-              borderRadius: 3,
-              border: '1px dashed var(--adaptiveGrey200, #E4DDD0)',
-            }}
-          />
-        )}
-        {more > 0 && (
-          <Text typography="st12" color="grey600">
-            +{more}
-          </Text>
-        )}
-      </div>
+      <CoverPile books={day.books} />
 
       {/* 막대 색은 잔디 팔레트에서 가져온다 — 같은 「얼마나 읽었나」를 두 곳이 다른 색으로 말하지 않게. */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          aria-hidden="true"
-          style={{
-            width: `${barPercent(day.totalSeconds, monthMax)}%`,
-            height: 6,
-            borderRadius: 3,
-            background: LEVEL_COLORS[2],
-          }}
-        />
+      <div
+        aria-hidden="true"
+        style={{
+          width: `${barPercent(day.totalSeconds, monthMax)}%`,
+          height: 6,
+          borderRadius: 3,
+          background: LEVEL_COLORS[2],
+        }}
+      />
+
+      {/* 정렬은 감싸는 요소가 한다 — TDS `Text` 는 style 의 `text-align` 을 <b>걸러 낸다</b>(인라인
+          스타일에 아예 안 실려서 조용히 왼쪽 정렬로 남는다). 오른쪽 정렬이라야 「10시간 30분」 같은 긴
+          값이 넘칠 때 빈 막대 쪽으로 넘치지, 옆의 손잡이를 침범하지 않는다. */}
+      <div style={{ textAlign: 'right' }}>
+        <Text typography="st11" color="grey700" style={{ whiteSpace: 'nowrap' }}>
+          {formatDuration(day.totalSeconds)}
+        </Text>
       </div>
 
-      <Text typography="st11" color="grey700" style={{ flex: '0 0 auto' }}>
-        {formatDuration(day.totalSeconds)}
-      </Text>
+      {expandable ? <Chevron open={expanded} /> : <span aria-hidden="true" />}
+    </>
+  );
+
+  return (
+    <div>
+      {expandable ? (
+        <button
+          type="button"
+          data-day-toggle=""
+          aria-expanded={expanded}
+          onClick={onToggle}
+          style={{ ...BUTTON_RESET, ...ROW_GRID }}
+        >
+          {summary}
+        </button>
+      ) : (
+        <div style={ROW_GRID}>{summary}</div>
+      )}
+      {expanded && <BookLines rows={bookRows(day)} />}
     </div>
+  );
+}
+
+/**
+ * 더미에서 뒷장이 내다보는 폭 — 20px 표지의 12px을 남긴다.
+ *
+ * <p>처음엔 7px만 남겼는데(겹침 -13), 목 모드에서 <b>가운데 장이 아예 안 보였다</b> — 앞장이 왼쪽을,
+ * 권수 타일이 오른쪽을 덮어 남는 게 없었다. 12px이면 첫 글자의 대부분이 나와 「무슨 책이 몇 권」이 읽힌다.
+ */
+const PILE_OVERLAP = -8;
+
+/**
+ * 더미의 한 장.
+ *
+ * <p>테두리는 캔버스와 같은 종이색이다(`#F7F2E8` — 이 앱 배경엔 css 변수가 없어 리터럴을 쓴다).
+ * 이게 없으면 색이 비슷한 책 둘이 붙어 <b>한 덩어리로 뭉쳐</b> 몇 권인지가 안 보인다.
+ */
+const PILE_CARD: CSSProperties = {
+  position: 'relative',
+  display: 'flex',
+  borderRadius: 4,
+  boxShadow: '0 0 0 1.5px #F7F2E8',
+};
+
+/**
+ * 겹쳐 쌓은 표지 더미 — <b>앞장이 위</b>다.
+ *
+ * <p>서버가 오래 읽은 순으로 주므로 맨 앞이 그날을 대표하는 책이다. 그러니 그 한 장은 온전히 보여야 한다
+ * (그냥 쌓으면 나중 장이 위로 덮여 대표 표지가 제일 많이 가려진다).
+ *
+ * <p>넘친 권수 타일은 <b>더미에 겹치지 않고</b> 옆에 선다. 겹쳐서 맨 위에 올리면 그 아래 장이 양쪽에서
+ * 눌려 사라지고, 아래에 깔면 「+2」 글자가 잘려 셀 수 없는 표시가 된다 — 애초에 책이 아니니 더미 밖이 맞다.
+ */
+function CoverPile({ books }: { books: BookRead[] }) {
+  const { shown, more } = coverStack(books);
+
+  // 책을 안 고른 날도 칸을 남긴다 — 자리가 무너지면 아래 행의 막대 시작점이 어긋난다.
+  if (shown.length === 0) {
+    return (
+      <span
+        aria-hidden="true"
+        style={{
+          display: 'block',
+          width: 20,
+          height: 28,
+          borderRadius: 3,
+          border: '1px dashed var(--adaptiveGrey200, #E4DDD0)',
+        }}
+      />
+    );
+  }
+
+  return (
+    <span style={{ display: 'flex', alignItems: 'center' }}>
+      {shown.map((book, index) => (
+        <span
+          key={book.title}
+          style={{ ...PILE_CARD, marginLeft: index === 0 ? 0 : PILE_OVERLAP, zIndex: shown.length - index }}
+        >
+          <BookCover url={book.coverUrl} title={book.title} width={20} />
+        </span>
+      ))}
+      {more > 0 && (
+        <span
+          style={{
+            ...PILE_CARD,
+            marginLeft: 3,
+            width: 20,
+            height: 28,
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--adaptiveGrey200, #E4DDD0)',
+            color: 'var(--adaptiveGrey700, #57534A)',
+            fontSize: 11,
+          }}
+        >
+          +{more}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/**
+ * 펼친 책 줄들 — 무슨 책을 얼마나.
+ *
+ * <p>막대 기준은 <b>그날 가장 오래 읽은 줄</b>이다. 하루 막대가 「그 달 최대」를 기준으로 재는 것과 같은
+ * 규칙을 한 단계 아래에 쓴 것 — 총합을 기준으로 재면 여러 권인 날은 죄다 짧은 막대가 돼 견줄 수가 없다.
+ * 그래서 하루 막대(그 달에서의 크기)와 책 막대(그날 안에서의 비중)는 서로 다른 것을 잰다.
+ */
+function BookLines({ rows }: { rows: DayBookRow[] }) {
+  const longest = rows.reduce((max, row) => Math.max(max, row.seconds), 0);
+  const name: CSSProperties = { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
+
+  return (
+    // 왼쪽 세로선은 여백의 인용 줄과 같은 값이다 — 「위 줄에 딸린 것」이라는 말을 앱이 한 가지로 한다.
+    <div
+      style={{
+        margin: '2px 0 9px 70px',
+        paddingLeft: 10,
+        borderLeft: '2px solid var(--adaptiveGrey200, #E4DDD0)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 7,
+      }}
+    >
+      {rows.map((row) => (
+        <div
+          key={row.title}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '18px minmax(0, 1fr) 46px 56px',
+            alignItems: 'center',
+            columnGap: 8,
+          }}
+        >
+          {row.unassigned ? (
+            <span
+              aria-hidden="true"
+              style={{
+                display: 'block',
+                width: 18,
+                height: 25,
+                borderRadius: 3,
+                border: '1px dashed var(--adaptiveGrey200, #E4DDD0)',
+              }}
+            />
+          ) : (
+            <BookCover url={row.coverUrl} title={row.title} width={18} />
+          )}
+
+          {row.unassigned ? (
+            <Text typography="st12" color="grey600" style={name}>
+              {row.title}
+            </Text>
+          ) : (
+            <Text typography="st12" style={name}>
+              {row.title}
+            </Text>
+          )}
+
+          <div
+            aria-hidden="true"
+            style={{
+              width: `${barPercent(row.seconds, longest)}%`,
+              height: 4,
+              borderRadius: 2,
+              background: row.unassigned ? 'var(--adaptiveGrey200, #E4DDD0)' : LEVEL_COLORS[1],
+            }}
+          />
+
+          <div style={{ textAlign: 'right' }}>
+            <Text typography="st12" color="grey600" style={{ whiteSpace: 'nowrap' }}>
+              {formatDuration(row.seconds)}
+            </Text>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 여닫는 손잡이.
+ *
+ * <p>도는 것은 `transform`뿐이다 — 합성만 유발해 표지를 다시 래스터화하지 않는다(T-176에서 발광
+ * `box-shadow` 애니메이션이 표지를 초당 60번 다시 그리게 했던 자리다).
+ */
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 10 10"
+      aria-hidden="true"
+      style={{
+        color: 'var(--adaptiveGrey600, #6F6A5E)',
+        transform: open ? 'rotate(180deg)' : 'none',
+        transition: 'transform 0.15s',
+      }}
+    >
+      <path d="M2 4 L5 7 L8 4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 

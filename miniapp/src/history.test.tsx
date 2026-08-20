@@ -3,16 +3,19 @@ import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import type { MonthlySection } from './api';
+import type { DailyRecord, MonthlySection } from './api';
 import {
+  DayRow,
   History,
   MonthlyRecords,
   barPercent,
+  bookRows,
   coverStack,
   formatMonthTitle,
   formatRecordDate,
   formatWeekday,
   growthNudge,
+  isExpandable,
 } from './screens/History';
 import { graph, userAgent } from './test-fixtures';
 import { monthLabelPositions } from './ui';
@@ -127,13 +130,124 @@ describe('하루 막대 (barPercent)', () => {
   });
 });
 
-describe('표지 묶음 (coverStack)', () => {
-  it('세 권까지는 그대로 세운다', () => {
-    expect(coverStack(['가', '나'])).toEqual({ shown: ['가', '나'], more: 0 });
+/** 그날 읽은 책 한 권. 표지 주소는 대개 없다(직접 등록한 책). */
+const bk = (title: string, seconds: number, coverUrl: string | null = null) => ({ title, coverUrl, seconds });
+
+const day = (over: Partial<DailyRecord> = {}): DailyRecord => ({
+  date: '2026-08-14',
+  totalSeconds: 5_400,
+  books: [],
+  manuallyFilled: false,
+  ...over,
+});
+
+describe('표지 더미 (coverStack)', () => {
+  it('세 권까지는 그대로 쌓는다', () => {
+    const stack = coverStack([bk('가', 600), bk('나', 300)]);
+
+    expect(stack.shown.map((b) => b.title)).toEqual(['가', '나']);
+    expect(stack.more).toBe(0);
   });
 
-  it('넘치면 세 권만 세우고 나머지는 개수로 말한다 — 예전처럼 조용히 잘라 내지 않는다', () => {
-    expect(coverStack(['가', '나', '다', '라', '마'])).toEqual({ shown: ['가', '나', '다'], more: 2 });
+  it('넘치면 마지막 칸을 권수에 내준다 — 표지 세 장 + 권수까지 세우면 칸이 옆의 막대를 잡아먹는다', () => {
+    const stack = coverStack([bk('가', 600), bk('나', 500), bk('다', 400), bk('라', 300), bk('마', 200)]);
+
+    expect(stack.shown.map((b) => b.title)).toEqual(['가', '나']);
+    expect(stack.more).toBe(3);
+  });
+
+  it('딱 세 권이면 권수 타일 없이 세 장 다 쌓는다 — 「+0」이 될 자리를 표지에 준다', () => {
+    const stack = coverStack([bk('가', 600), bk('나', 500), bk('다', 400)]);
+
+    expect(stack.shown).toHaveLength(3);
+    expect(stack.more).toBe(0);
+  });
+});
+
+describe('펼침 줄 (bookRows)', () => {
+  it('서버가 정한 오래 읽은 순 그대로 세운다 — 화면이 다시 정렬하면 접힌 더미와 펼친 목록이 어긋난다', () => {
+    const rows = bookRows(day({ totalSeconds: 5_400, books: [bk('미움받을 용기', 3_600), bk('사피엔스', 1_800)] }));
+
+    expect(rows.map((r) => r.title)).toEqual(['미움받을 용기', '사피엔스']);
+  });
+
+  it('책 시간의 합이 총합보다 적으면 마지막에 「책 안 고른 기록」을 둔다 — 조용히 빼면 펼친 시간을 더해도 위 총합과 안 맞는다', () => {
+    const rows = bookRows(day({ totalSeconds: 5_400, books: [bk('데미안', 3_600)] }));
+
+    expect(rows.at(-1)).toEqual({ title: '책 안 고른 기록', coverUrl: null, seconds: 1_800, unassigned: true });
+  });
+
+  it('차액이 없으면 그 줄을 안 만든다 — 「0초」짜리 빈 줄이 생긴다', () => {
+    expect(bookRows(day({ totalSeconds: 3_600, books: [bk('데미안', 3_600)] }))).toHaveLength(1);
+  });
+
+  it('책이 하나도 없는 날은 그날 전부가 「책 안 고른 기록」이다', () => {
+    expect(bookRows(day({ totalSeconds: 1_200, books: [] }))).toEqual([
+      { title: '책 안 고른 기록', coverUrl: null, seconds: 1_200, unassigned: true },
+    ]);
+  });
+});
+
+describe('펼칠 수 있는 날 (isExpandable)', () => {
+  it('두 권 이상이면 펼칠 수 있다', () => {
+    expect(isExpandable(day({ totalSeconds: 5_400, books: [bk('가', 3_600), bk('나', 1_800)] }))).toBe(true);
+  });
+
+  it('한 권뿐이면 펼칠 수 없다 — 펼쳐 봐야 위에 있는 것과 같은 숫자 하나다', () => {
+    expect(isExpandable(day({ totalSeconds: 3_600, books: [bk('가', 3_600)] }))).toBe(false);
+  });
+
+  it('한 권이어도 책 안 고른 시간이 있으면 펼칠 수 있다 — 그 책 시간과 그날 총합이 다르다', () => {
+    expect(isExpandable(day({ totalSeconds: 5_400, books: [bk('가', 3_600)] }))).toBe(true);
+  });
+
+  it('책이 아예 없는 날은 펼칠 수 없다 — 한 줄이 곧 그날 전부다', () => {
+    expect(isExpandable(day({ totalSeconds: 1_200, books: [] }))).toBe(false);
+  });
+});
+
+describe('하루 한 줄 (DayRow)', () => {
+  const busy = day({ date: '2026-08-14', totalSeconds: 4_500, books: [bk('미움받을 용기', 3_600), bk('사피엔스', 900)] });
+  const alone = day({ date: '2026-08-13', totalSeconds: 3_600, books: [bk('데미안', 3_600)] });
+
+  const render = (d: DailyRecord, expanded: boolean) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <DayRow day={d} monthMax={9_000} expanded={expanded} onToggle={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  it('접히면 그날 총 시간만 말한다 — 책 이름은 펼쳐야 나온다', () => {
+    expect(render(busy, false)).toContain('1시간 15분');
+    expect(render(busy, false)).not.toContain('미움받을 용기');
+  });
+
+  it('펼치면 책마다 얼마나 읽었는지 적는다 — 사용자가 물은 「무슨 책을 얼마나」다', () => {
+    const markup = render(busy, true);
+
+    expect(markup).toContain('미움받을 용기');
+    expect(markup).toContain('1시간');
+    expect(markup).toContain('15분');
+  });
+
+  it('책 막대는 그날 가장 오래 읽은 책을 기준으로 잰다 — 하루 막대가 그 달 최대를 기준으로 재는 것과 같은 규칙', () => {
+    const markup = render(busy, true);
+
+    // 하루 막대는 4500/9000 = 50%. 책 막대는 3600/3600 = 100%, 900/3600 = 25%.
+    expect(markup).toContain('width:50%');
+    expect(markup).toContain('width:100%');
+    expect(markup).toContain('width:25%');
+  });
+
+  it('한 권인 날과 여러 권인 날이 같은 격자를 쓴다 — 막대의 시작·끝이 행마다 어긋나면 길이 비교가 거짓이 된다', () => {
+    const grid = /grid-template-columns:([^;"]+)/;
+
+    expect(render(alone, false).match(grid)![1]).toBe(render(busy, false).match(grid)![1]);
+  });
+
+  it('펼칠 수 없는 날엔 여는 손잡이를 안 둔다 — 눌러도 같은 숫자만 나오는데 눌리게 보이면 거짓말이다', () => {
+    expect(render(busy, false)).toContain('data-day-toggle');
+    expect(render(alone, false)).not.toContain('data-day-toggle');
   });
 });
 
@@ -144,8 +258,13 @@ describe('월별 기록 목록', () => {
       month: '2026-08',
       totalSeconds: 45_000,
       days: [
-        { date: '2026-08-14', totalSeconds: 5_400, bookTitles: ['미움받을 용기', '사피엔스'], manuallyFilled: false },
-        { date: '2026-08-09', totalSeconds: 1_200, bookTitles: [], manuallyFilled: true },
+        {
+          date: '2026-08-14',
+          totalSeconds: 5_400,
+          books: [bk('미움받을 용기', 3_600), bk('사피엔스', 1_800)],
+          manuallyFilled: false,
+        },
+        { date: '2026-08-09', totalSeconds: 1_200, books: [], manuallyFilled: true },
       ],
     },
     { month: '2026-07', totalSeconds: 3_600, days: [] },
@@ -172,7 +291,7 @@ describe('월별 기록 목록', () => {
     expect(markup).not.toContain('미움받을 용기, 사피엔스');
   });
 
-  it('책은 표지 칸으로 선다 — 몇 권인지가 글자가 아니라 자리로 보인다', () => {
+  it('책은 표지 더미로 선다 — 몇 권인지가 글자가 아니라 자리로 보인다', () => {
     // 자리 표지는 제목의 첫 글자다(무표지 책과 같은 규칙) — 두 권이면 두 글자가 선다.
     expect(markup).toContain('>미<');
     expect(markup).toContain('>사<');

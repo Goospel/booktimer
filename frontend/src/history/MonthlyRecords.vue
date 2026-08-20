@@ -64,8 +64,8 @@ function formatTime(totalSeconds: number): string {
             <li class="record-row" v-for="r in months[monthIndex].days" :key="r.date">
                 <div class="record-main">
                     <span class="record-date">{{ formatRecordDate(r.date) }}</span>
-                    <span class="record-books" v-if="r.bookTitles.length > 0">
-                        {{ r.bookTitles.join(', ') }}
+                    <span class="record-books" v-if="r.books.length > 0">
+                        {{ r.books.map((b) => b.title).join(', ') }}
                     </span>
                 </div>
                 <span class="record-time mono">{{ formatTime(r.totalSeconds) }}</span>
