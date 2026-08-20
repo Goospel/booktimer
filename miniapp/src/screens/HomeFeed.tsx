@@ -4,9 +4,9 @@ import type { ReactNode } from 'react';
 
 import type { HomeFeedResponse, NewsItem, ReaderStatus, SocialEvent } from '../api';
 import { fetchHomeFeed } from '../api';
-import { elapsedSeconds, formatDuration, relativeTime } from '../format';
+import { elapsedSeconds, formatDuration, objectParticle, relativeTime } from '../format';
 import { openExternal } from '../toss';
-import { sectionStyle } from '../ui';
+import { BookCover, sectionStyle } from '../ui';
 
 /**
  * 홈 피드 박스 — 「소식」·「책 뉴스」 두 탭. 잔디 미리보기가 서 있던 자리를 물려받았다.
@@ -50,11 +50,47 @@ export const PREVIEW_COUNT = 3;
  * 아이콘이 제 값을 하던 유일한 곳이라, 지우는 대신 이 앱 색으로 대체했다 — 세이지(완독)·베이지(시작)·
  * 연보라(글)는 표지 색 팔레트와 같은 계열이다.
  */
-const EVENT_COLOR: Record<SocialEvent['type'], string> = {
-  FINISHED: '#6E8A6A',
-  STARTED: '#C4A484',
-  STORY: '#9E8AA8',
-};
+/**
+ * 사건 배지 — 소식 한 줄이 무슨 종류인지를 <b>글자로</b> 말한다.
+ *
+ * <p>전에는 7px 색점이 이 일을 했는데, 색만으로는 ① 완독과 읽기 시작이 <b>같은 무게</b>로 보이고
+ * ② 색이 무슨 뜻인지 화면 어디에도 안 적혀 있었다. 이 앱에서 가장 축하할 사건이 나머지와 구별되지
+ * 않는 게 문제의 핵심이라, <b>완독만 채운 배지</b>로 올리고 나머지는 눌러 둔다.
+ *
+ * <p>문구는 <b>서재가 이미 쓰는 말</b>(「다 읽음」·「읽는 중」)을 그대로 가져온다 — 같은 상태를 화면마다
+ * 다른 이름으로 부르면 두 화면이 서로 다른 앱처럼 읽힌다. 여백은 문장과 같은 규칙으로 개수를 센다
+ * (1장이면 안 세고, 2장 이상이면 묶인 이유가 드러나야 한다).
+ */
+export function eventBadge(event: SocialEvent): { label: string; tone: 'solid' | 'tint' | 'outline' } {
+  if (event.type === 'STORY') {
+    return { label: event.count > 1 ? `여백 ${event.count}` : '여백', tone: 'tint' };
+  }
+  return event.type === 'FINISHED'
+    ? { label: '다 읽음', tone: 'solid' }
+    : { label: '읽는 중', tone: 'outline' };
+}
+
+/**
+ * 배지 세 톤 — <b>새 색을 하나도 만들지 않는다</b>. 채움은 세이지 700, 연한 채움은 이 파일이
+ * 「내 책」 칩에 이미 쓰는 회갈색 짝(grey200/700), 외곽선은 카드 경계와 같은 선이다.
+ */
+const badgeStyle = (tone: 'solid' | 'tint' | 'outline') =>
+  ({
+    display: 'inline-block',
+    padding: '1px 7px',
+    borderRadius: 5,
+    fontSize: 11,
+    lineHeight: 1.6,
+    ...(tone === 'solid'
+      ? { background: 'var(--adaptiveBlue700, #4F6B4C)', color: 'var(--adaptiveGrey100, #FCFAF5)' }
+      : tone === 'tint'
+        ? { background: 'var(--adaptiveGrey200, #E4DDD0)', color: 'var(--adaptiveGrey700, #57534A)' }
+        : {
+            background: 'transparent',
+            color: 'var(--adaptiveGrey600, #6F6A5E)',
+            border: '1px solid var(--adaptiveGrey200, #E4DDD0)',
+          }),
+  }) as const;
 
 /**
  * 그릴 탭 머리 — 뉴스가 꺼져 있으면(수집기 키 미설정) **「책 뉴스」 머리 자체를 안 그린다.**
@@ -120,29 +156,6 @@ export function sourceOf(link: string): string {
   } catch {
     return '';
   }
-}
-
-/**
- * 목적격 조사 — 받침이 있으면 「을」, 없으면 「를」.
- *
- * <p>피드는 남의 책 제목을 그대로 싣는 자리라 조사를 하나로 고정할 수 없다
- * (「사피엔스을」이 목 픽스처 5건 중 3건에서 나왔다). 한글 음절은 유니코드
- * 자모 조합이라 `(코드 - 가) % 28`이 곧 종성 인덱스이고, 0이면 받침이 없다.
- * 숫자는 읽는 소리를 따르고(1984 → "사" → 를), 그 밖(영문·기호·빈 제목)은
- * 「를」로 떨어뜨린다 — 어느 쪽이든 문장이 깨지지 않는 게 우선이다.
- */
-function objectParticle(word: string): string {
-  const last = word.at(-1);
-  if (last === undefined) return '를';
-
-  const code = last.charCodeAt(0);
-  if (code >= 0xac00 && code <= 0xd7a3) return (code - 0xac00) % 28 === 0 ? '를' : '을';
-
-  // 영/일/이/삼/사/오/육/칠/팔/구 — 받침 있는 소리만 「을」.
-  const DIGIT_HAS_FINAL = [true, true, false, true, false, false, true, true, true, false];
-  if (last >= '0' && last <= '9') return DIGIT_HAS_FINAL[Number(last)] ? '을' : '를';
-
-  return '를';
 }
 
 /**
@@ -472,24 +485,19 @@ export function FeedBox({
           row={(event: SocialEvent, index) => {
             const body = (
               <>
-                {/* 첫 줄 글자 높이에 맞춰 내린다 — 점이 작아 세로 가운데면 문장 위로 떠 보인다. */}
-                <span
-                  aria-hidden="true"
-                  style={{
-                    flex: '0 0 auto',
-                    width: 7,
-                    height: 7,
-                    marginTop: 6,
-                    borderRadius: '50%',
-                    background: EVENT_COLOR[event.type],
-                  }}
-                />
-                {/* 한글 문장이 flex 자식이라 minWidth:0이 없으면 줄바꿈 대신 아이콘을 밀어낸다. */}
+                {/* 표지가 이 줄의 첫 신호다 — 문장을 읽기 전에 「무슨 책」이 먼저 보인다.
+                    표지가 없는 책은 BookCover가 첫 글자 자리 표지로 떨어뜨린다(제목색이라 책마다 다르다). */}
+                <BookCover url={event.coverUrl} title={event.bookTitle} width={30} />
+                {/* 한글 문장이 flex 자식이라 minWidth:0이 없으면 줄바꿈 대신 표지를 밀어낸다. */}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <Text typography="st11" style={{ display: 'block', wordBreak: 'keep-all' }}>
+                  <span style={badgeStyle(eventBadge(event).tone)}>{eventBadge(event).label}</span>
+                  <Text typography="st11" style={{ display: 'block', marginTop: 3, wordBreak: 'keep-all' }}>
                     {eventLine(event)}
                   </Text>
                   {/* 말줄임은 서버가 이미 했다(80자) — 여기 clamp는 폭에 맞춘 마지막 한 겹이다. */}
+                  {/* 남의 글은 세로선 안으로 들여 「인용」임을 형태로 말한다 — 그 전에는 문장·발췌·시각
+                      세 줄이 같은 들여쓰기로 쌓여 어디까지가 한 덩어리인지 안 보였다. 여백 카드의
+                      인용선(Story.tsx)과 같은 문법이라 화면에 새 규칙이 늘지 않는다. */}
                   {event.excerpt !== null && (
                     <Text
                       typography="st12"
@@ -499,7 +507,9 @@ export function FeedBox({
                         WebkitLineClamp: 1,
                         WebkitBoxOrient: 'vertical',
                         overflow: 'hidden',
-                        marginTop: 2,
+                        marginTop: 4,
+                        paddingLeft: 9,
+                        borderLeft: '2px solid var(--adaptiveGrey200, #E4DDD0)',
                         wordBreak: 'keep-all',
                       }}
                     >

@@ -11,6 +11,7 @@ import {
   PREVIEW_COUNT,
   ReaderRow,
   eventLine,
+  eventBadge,
   previewOf,
   readerStatusLine,
   sourceLabel,
@@ -40,6 +41,7 @@ function event(nickname: string, bookTitle: string, type: SocialEvent['type'], h
     bookId: null,
     excerpt: null,
     count: 0,
+    coverUrl: null,
   };
 }
 
@@ -120,6 +122,24 @@ describe('탭 노출 (visibleTabs)', () => {
   it('맨 왼쪽이지만 기본으로 열리는 탭은 「소식」이다 — 기존 홈 경험을 바꾸지 않는다', () => {
     // 팔로우 0명인 사람이 빈 목록을 먼저 만나는 일도 이 한 줄이 막는다.
     expect(DEFAULT_TAB).toBe('social');
+  });
+});
+
+describe('사건 배지 (eventBadge)', () => {
+  it('배지 문구는 서재가 이미 쓰는 말을 그대로 쓴다 — 화면마다 다른 이름으로 부르지 않는다', () => {
+    expect(eventBadge(event('나비', '데미안', 'FINISHED', 1)).label).toBe('다 읽음');
+    expect(eventBadge(event('나비', '데미안', 'STARTED', 1)).label).toBe('읽는 중');
+  });
+
+  it('완독만 채운 배지다 — 이 앱에서 가장 축하할 사건이 나머지와 같은 무게면 안 된다', () => {
+    expect(eventBadge(event('나비', '데미안', 'FINISHED', 1)).tone).toBe('solid');
+    expect(eventBadge(event('나비', '데미안', 'STARTED', 1)).tone).toBe('outline');
+    expect(eventBadge(story('나비', '데미안', 1, 1)).tone).toBe('tint');
+  });
+
+  it('여백은 묶인 개수를 배지가 세고, 1장이면 안 센다(문장과 같은 규칙)', () => {
+    expect(eventBadge(story('나비', '데미안', 1, 1)).label).toBe('여백');
+    expect(eventBadge(story('나비', '데미안', 1, 3)).label).toBe('여백 3');
   });
 });
 

@@ -13,6 +13,28 @@ import static org.assertj.core.api.Assertions.assertThat;
 class GrowthStageTest {
 
     @Test
+    @DisplayName("다음 단계는 사다리 순서를 따르고, 나무는 더 오를 곳이 없다")
+    void next_followsLadderAndStopsAtTree() {
+        assertThat(GrowthStage.GROUND.next()).isEqualTo(GrowthStage.SPROUT);
+        assertThat(GrowthStage.SPROUT.next()).isEqualTo(GrowthStage.FLOWER);
+        assertThat(GrowthStage.FLOWER.next()).isEqualTo(GrowthStage.TREE);
+        assertThat(GrowthStage.TREE.next()).isNull();
+    }
+
+    @Test
+    @DisplayName("단계의 최소 연속일 — of()의 경계와 같은 값이어야 한다(사다리는 한 곳에만 있다)")
+    void minStreak_matchesLadder() {
+        assertThat(GrowthStage.GROUND.minStreak()).isZero();
+        assertThat(GrowthStage.SPROUT.minStreak()).isEqualTo(1);
+        assertThat(GrowthStage.FLOWER.minStreak()).isEqualTo(4);
+        assertThat(GrowthStage.TREE.minStreak()).isEqualTo(14);
+        // of()가 minStreak에서 파생되는지 — 두 곳에 적힌 사다리가 어긋나는 일 자체를 막는다.
+        for (GrowthStage stage : GrowthStage.values()) {
+            assertThat(GrowthStage.of(stage.minStreak())).isEqualTo(stage);
+        }
+    }
+
+    @Test
     @DisplayName("0일(또는 그 이하)은 땅")
     void zero_isGround() {
         assertThat(GrowthStage.of(0)).isEqualTo(GrowthStage.GROUND);

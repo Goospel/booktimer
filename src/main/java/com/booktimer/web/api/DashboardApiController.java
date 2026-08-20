@@ -187,7 +187,9 @@ public class DashboardApiController {
         return new ContributionGraphDto(
                 g.weeks(), g.monthLabels(),
                 g.totalSeconds(), g.activeDays(), g.currentStreak(),
-                g.growthStage().name(), g.growthStage().emoji(), g.growthStage().label());
+                g.growthStage().name(), g.growthStage().emoji(), g.growthStage().label(),
+                g.growthProgressPercent(), g.daysToNextStage(),
+                g.growthStage().next() == null ? null : g.growthStage().next().label());
     }
 
     // ── DTO records ──────────────────────────────────────────────────────────
@@ -300,6 +302,12 @@ public class DashboardApiController {
             int currentStreak,
             String growthStageName,
             String growthStageEmoji,
-            String growthStageLabel
+            String growthStageLabel,
+            /** 현재 단계 안의 진행률(0~100) — 기록 화면이 막대로 그린다. 최고 단계면 100. */
+            int growthProgressPercent,
+            /** 다음 단계까지 남은 연속 일수 — 최고 단계면 0. */
+            int daysToNextStage,
+            /** 다음 단계 이름 — 최고 단계면 {@code null}(더 오를 곳이 없다). */
+            String nextStageLabel
     ) {}
 }
