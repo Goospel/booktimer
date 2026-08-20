@@ -13,6 +13,8 @@ export const BG_CODES = ['paper', 'night', 'forest', 'sunset', 'sea', 'plum'] as
 export type BgCode = typeof BG_CODES[number]
 
 const MAX_TEXT = 500
+/** 인용은 주석보다 짧다 — 백엔드 Story.MAX_QUOTE_LENGTH와 같은 값(어긋나면 400이 난다). */
+const MAX_QUOTE = 200
 const REPORT_EXCERPT_MAX = 200
 const REPORT_DETAIL_MAX = 500
 
@@ -22,7 +24,13 @@ export const FRESH_WINDOW_MS = 86_400_000
 /** 책 한 권의 여백에 남긴 글 한 장. */
 export interface MarginEntry {
     id: number
+    /** 내 주석 — **언제나 있다**(인용만 남기는 글은 서버가 거부한다). 카드의 본문이다. */
     text: string
+    /**
+     * 책에서 옮긴 문장 — 인용 없이 남긴 글(옛 글 포함)이면 `null`이고, 그러면 카드가 2026-08-20 이전과
+     * 똑같이 그려진다. 빈 문자열은 오지 않는다(서버가 null로 떨어뜨린다).
+     */
+    quote: string | null
     bgCode: string | null
     createdAt: string
     /** 이 글에 달린 좋아요 수. 누가 눌렀는지는 여기 오지 않는다 — 명단은 펴야 받는 별도 조회다. */
@@ -86,14 +94,23 @@ export function composeReportDetail(prefix: string, detail: string): string {
     return joined.slice(0, REPORT_DETAIL_MAX)
 }
 
-/** 작성 가능 여부 — 백엔드 Story.of와 동일 경계(1~500자 비공백). */
-export function canSubmit(text: string): boolean {
+/**
+ * 작성 가능 여부 — 백엔드 Story.of와 동일 경계(주석 1~500자 비공백 + 인용 ≤200자).
+ *
+ * <b>인용은 선택이라 비어도 제출된다</b>. 반대로 인용만 있고 주석이 비면 불가 — 여백의 본문은 주석이고,
+ * 그게 「인용은 從」이라는 규칙의 유일한 강제 지점이다(서버도 같은 자리에서 막는다).
+ */
+export function canSubmit(text: string, quote = ''): boolean {
     const stripped = text.trim()
-    return stripped.length > 0 && text.length <= MAX_TEXT
+    return stripped.length > 0 && text.length <= MAX_TEXT && quote.length <= MAX_QUOTE
 }
 
 export function remainingChars(text: string): number {
     return MAX_TEXT - text.length
+}
+
+export function remainingQuoteChars(quote: string): number {
+    return MAX_QUOTE - quote.length
 }
 
 /**

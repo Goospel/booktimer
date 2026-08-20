@@ -73,8 +73,10 @@ public class StoryService {
      * 남에게 안 새게 하는 책임은 읽기 쪽({@link #marginOf} · {@code feedRecent})이 전부 진다.
      *
      * <p>개수 상한은 없다 — 도배 방어는 레이트리밋(시간당 10)이 맡고, 목록 폭주는 읽기 쪽 상한이 맡는다.
+     *
+     * <p>{@code quote}(책에서 옮긴 문장)는 선택이다 — 길이·공백 정규화는 전부 {@link Story#of}가 한다.
      */
-    public Story create(User author, String text, Long bookId, String bgCode) {
+    public Story create(User author, String text, Long bookId, String bgCode, String quote) {
         if (!rateLimitService.allow(RateLimitAction.STORY_CREATE, author.getId())) {
             throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "글을 너무 자주 남겼습니다");
         }
@@ -84,7 +86,7 @@ public class StoryService {
         }
         Book book = bookRepository.findByIdAndUser(bookId, author)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "책을 찾을 수 없습니다"));
-        return storyRepository.save(Story.of(author, text, book, bgCode));
+        return storyRepository.save(Story.of(author, text, book, bgCode, quote));
     }
 
     /**

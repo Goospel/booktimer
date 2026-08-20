@@ -130,6 +130,37 @@ class StoryApiControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/stories 인용 포함 → 200, quote가 응답에 실린다")
+    void create_withQuote_returnsQuote() throws Exception {
+        User me = register("story-quote@booktimer.com", "storyquote", "작성자");
+        Book book = publicBookOf(me, "인용이 달린 책");
+
+        mockMvc.perform(post("/api/stories")
+                        .with(user("story-quote@booktimer.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"열아홉엔 몰랐다\",\"quote\":\"새는 알에서 나오려고 투쟁한다.\",\"bookId\":"
+                                + book.getId() + ",\"bgCode\":\"night\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.quote").value("새는 알에서 나오려고 투쟁한다."))
+                .andExpect(jsonPath("$.text").value("열아홉엔 몰랐다"));
+    }
+
+    @Test
+    @DisplayName("POST /api/stories quote 필드가 아예 없는 옛 요청도 200 → quote는 null (하위호환)")
+    void create_withoutQuoteField_returnsNullQuote() throws Exception {
+        User me = register("story-noquote@booktimer.com", "storynoquote", "작성자");
+        Book book = publicBookOf(me, "인용 없는 책");
+
+        mockMvc.perform(post("/api/stories")
+                        .with(user("story-noquote@booktimer.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"인용 없이 남긴 글\",\"bookId\":" + book.getId() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.text").value("인용 없이 남긴 글"))
+                .andExpect(jsonPath("$.quote").doesNotExist());
+    }
+
+    @Test
     @DisplayName("POST /api/stories bookId 없음 → 400 (여백은 책에 귀속)")
     void create_withoutBookId_returns400() throws Exception {
         register("story-nobook@booktimer.com", "storynobook", "작성자");

@@ -222,6 +222,7 @@ describe('인라인 여백 박스 표시 (MarginBoxView)', () => {
   const entry = (id: number, text: string, bgCode: string, hoursAgo: number, likeCount = 0): MarginEntry => ({
     id,
     text,
+    quote: null,
     bgCode,
     createdAt: new Date(NOW - hoursAgo * HOUR).toISOString(),
     likeCount,

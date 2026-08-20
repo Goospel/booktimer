@@ -100,7 +100,7 @@ class StoryServiceTest {
     void create_rateLimited_throws429() {
         when(rateLimitService.allow(RateLimitAction.STORY_CREATE, 1L)).thenReturn(false);
 
-        assertThatThrownBy(() -> service.create(me, "문장", 5L, null))
+        assertThatThrownBy(() -> service.create(me, "문장", 5L, null, null))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.TOO_MANY_REQUESTS));
         verify(storyRepository, never()).save(any());
@@ -111,7 +111,7 @@ class StoryServiceTest {
     void create_withoutBookId_throws400() {
         when(rateLimitService.allow(RateLimitAction.STORY_CREATE, 1L)).thenReturn(true);
 
-        assertThatThrownBy(() -> service.create(me, "문장", null, null))
+        assertThatThrownBy(() -> service.create(me, "문장", null, null, null))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.BAD_REQUEST));
         verify(storyRepository, never()).save(any());
@@ -123,7 +123,7 @@ class StoryServiceTest {
         when(rateLimitService.allow(RateLimitAction.STORY_CREATE, 1L)).thenReturn(true);
         when(bookRepository.findByIdAndUser(5L, me)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.create(me, "문장", 5L, null))
+        assertThatThrownBy(() -> service.create(me, "문장", 5L, null, null))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
     }
@@ -137,7 +137,7 @@ class StoryServiceTest {
         when(bookRepository.findByIdAndUser(5L, me)).thenReturn(Optional.of(privateBook));
         when(storyRepository.save(any(Story.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Story saved = service.create(me, "나만 보는 메모", 5L, null);
+        Story saved = service.create(me, "나만 보는 메모", 5L, null, null);
 
         assertThat(saved.getText()).isEqualTo("나만 보는 메모");
         assertThat(saved.getBook()).isSameAs(privateBook);
@@ -151,11 +151,13 @@ class StoryServiceTest {
         when(bookRepository.findByIdAndUser(5L, me)).thenReturn(Optional.of(mine));
         when(storyRepository.save(any(Story.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Story saved = service.create(me, "인상 깊은 문장", 5L, "night");
+        Story saved = service.create(me, "인상 깊은 문장", 5L, "night", "  새는 알에서 나오려고 투쟁한다.  ");
 
         assertThat(saved.getText()).isEqualTo("인상 깊은 문장");
         assertThat(saved.getBook()).isSameAs(mine);
         assertThat(saved.getBgCode()).isEqualTo("night");
+        // 인용은 그대로 흘려보내고 정규화(strip)는 도메인이 한다 — 서비스가 따로 손대지 않는다
+        assertThat(saved.getQuote()).isEqualTo("새는 알에서 나오려고 투쟁한다.");
     }
 
     // --- marginOf (책 하나의 글 목록) ---

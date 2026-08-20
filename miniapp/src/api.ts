@@ -710,7 +710,13 @@ export const reportUser = (loginId: string, reason: ReportReason, detail: string
 /** `story.MarginEntry` — 여백에 남긴 글 한 장. 책 라벨은 응답 헤더에 한 번만 실린다. */
 export interface MarginEntry {
   id: number;
+  /** 내 주석 — **언제나 있다**(인용만 남기는 글은 서버가 거부한다). 카드의 본문이다. */
   text: string;
+  /**
+   * 책에서 옮긴 문장 — 인용 없이 남긴 글(옛 글 포함)이면 `null`이고, 그러면 카드가 2026-08-20 이전과
+   * 똑같이 그려진다. 빈 문자열은 오지 않는다(서버가 null로 떨어뜨린다).
+   */
+  quote: string | null;
   bgCode: string | null;
   createdAt: string;
   /** 이 글에 달린 좋아요 수. 누가 눌렀는지는 여기 오지 않는다 — 명단은 눌러야 여는 별도 조회다. */
@@ -765,8 +771,13 @@ export const fetchBookMargin = (loginId: string, bookId: number): Promise<Margin
   request(`/api/stories/of/${loginId}`, { query: { bookId } });
 
 /** bookId는 **필수**다 — 여백은 책에 딸린 자리라 책 없는 글은 서버가 400으로 거절한다. */
-export const createStory = (text: string, bookId: number, bgCode: string | null): Promise<MarginEntry> =>
-  request('/api/stories', { body: { text, bookId, bgCode } });
+/** `quote`는 맨 뒤다 — `text`와 같은 타입이라 붙여 두면 순서를 바꿔 넣어도 컴파일러가 안 잡는다. */
+export const createStory = (
+  text: string,
+  bookId: number,
+  bgCode: string | null,
+  quote: string | null,
+): Promise<MarginEntry> => request('/api/stories', { body: { text, bookId, bgCode, quote } });
 
 /** 없거나 남의 것이면 404 — 존재를 누설하지 않는 서버 계약(IDOR)을 그대로 받는다. */
 export const deleteStory = (id: number): Promise<void> => request(`/api/stories/${id}`, { method: 'DELETE' });
