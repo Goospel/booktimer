@@ -351,6 +351,8 @@ export interface ReaderStatus {
   readingSince: string | null;
   /** 마지막 **공개** 독서 시각. 공개 기록이 없으면 null. */
   lastReadAt: string | null;
+  /** 그때 읽던 책 제목. `lastReadAt`과 **같은 세션**에서 온다(서버가 한 행으로 뽑는다). */
+  lastReadBookTitle: string | null;
 }
 
 export interface HomeFeedResponse {

@@ -430,15 +430,19 @@ const socialEvents: SocialEvent[] = [
  */
 const readerStatuses: ReaderStatus[] = [
   { loginId: 'nabi', nickname: '나비독서', mutual: true,
-    readingBookTitle: '데미안', readingSince: isoTime(0.7), lastReadAt: isoTime(26) },
+    readingBookTitle: '데미안', readingSince: isoTime(0.7), lastReadAt: isoTime(26),
+    lastReadBookTitle: '토지 1' }, // 읽는 중이 이겨 화면엔 안 보인다 — 우선순위를 목으로도 확인
   { loginId: 'underline', nickname: '밑줄러', mutual: false,
-    readingBookTitle: '코스모스', readingSince: isoTime(0.15), lastReadAt: isoTime(50) },
+    readingBookTitle: '코스모스', readingSince: isoTime(0.15), lastReadAt: isoTime(50),
+    lastReadBookTitle: '아무튼, 메모' },
   { loginId: 'jieun', nickname: '지은의서재', mutual: true,
-    readingBookTitle: null, readingSince: null, lastReadAt: isoTime(5) },
+    readingBookTitle: null, readingSince: null, lastReadAt: isoTime(5),
+    lastReadBookTitle: '아버지의 해방일지' },
   { loginId: 'sowon', nickname: '소원', mutual: false,
-    readingBookTitle: null, readingSince: null, lastReadAt: isoTime(72) },
+    readingBookTitle: null, readingSince: null, lastReadAt: isoTime(72),
+    lastReadBookTitle: '우리가 빛의 속도로 갈 수 없다면' }, // 긴 제목 — 좁은 폭 줄바꿈 확인용
   { loginId: 'bamnat', nickname: '밤과낮', mutual: true,
-    readingBookTitle: null, readingSince: null, lastReadAt: null },
+    readingBookTitle: null, readingSince: null, lastReadAt: null, lastReadBookTitle: null },
 ];
 
 const newsItems: NewsItem[] = [
