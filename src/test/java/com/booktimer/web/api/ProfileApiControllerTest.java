@@ -806,4 +806,101 @@ class ProfileApiControllerTest {
                 .andExpect(jsonPath("$.books", hasSize(1)))
                 .andExpect(jsonPath("$.books[0].lastStoryAt").doesNotExist());
     }
+
+    // ──────────────────────────────────────────────────────────────
+    // 공통 친구 · 나를 팔로우함 — 둘러보기 카드에서 걷어낸 칩이 이사 온 자리(2026-08-20)
+    // ──────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("공통 친구 없음 → 빈 목록·0. 화면은 이 값으로 줄 자체를 안 그린다")
+    void profile_noMutualFollowers() throws Exception {
+        register("mf-none-v@booktimer.com", "mfnonev", "열람자");
+        register("mf-none-o@booktimer.com", "mfnoneo", "주인");
+
+        mockMvc.perform(get("/api/profile").param("loginId", "mfnoneo")
+                        .with(user("mf-none-v@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mutualFollowers", hasSize(0)))
+                .andExpect(jsonPath("$.mutualFollowerCount").value(0));
+    }
+
+    @Test
+    @DisplayName("공통 친구 3명 → 이름은 2명만 싣고 총 수는 3 (「외 1명」의 재료)")
+    void profile_mutualFollowers_namesCappedButCountIsTotal() throws Exception {
+        User viewer = register("mf-cap-v@booktimer.com", "mfcapv", "열람자");
+        User owner = register("mf-cap-o@booktimer.com", "mfcapo", "주인");
+        for (int i = 1; i <= 3; i++) {
+            User friend = register("mf-cap-f" + i + "@booktimer.com", "mfcapf" + i, "친구" + i);
+            followRepository.save(Follow.of(viewer, friend)); // 내가 팔로우하고
+            followRepository.save(Follow.of(friend, owner));  // 그 친구가 주인을 팔로우한다
+        }
+
+        mockMvc.perform(get("/api/profile").param("loginId", "mfcapo")
+                        .with(user("mf-cap-v@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mutualFollowers", hasSize(2)))
+                .andExpect(jsonPath("$.mutualFollowers[0].nickname").exists())
+                .andExpect(jsonPath("$.mutualFollowers[0].loginId").exists())
+                .andExpect(jsonPath("$.mutualFollowerCount").value(3));
+    }
+
+    @Test
+    @DisplayName("내가 팔로우만 하고 그 사람은 주인을 안 팔로우하면 공통 친구가 아니다")
+    void profile_mutualFollowers_requiresBothDirections() throws Exception {
+        User viewer = register("mf-one-v@booktimer.com", "mfonev", "열람자");
+        register("mf-one-o@booktimer.com", "mfoneo", "주인");
+        User notFriend = register("mf-one-f@booktimer.com", "mfonef", "그냥아는사람");
+        followRepository.save(Follow.of(viewer, notFriend)); // 나만 팔로우, 주인과는 무관
+
+        mockMvc.perform(get("/api/profile").param("loginId", "mfoneo")
+                        .with(user("mf-one-v@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mutualFollowers", hasSize(0)))
+                .andExpect(jsonPath("$.mutualFollowerCount").value(0));
+    }
+
+    @Test
+    @DisplayName("내 책방에는 공통 친구도 「나를 팔로우함」도 없다(자기 자신에겐 뜻이 없다)")
+    void profile_self_hasNoMutualsAndNoFollowsMe() throws Exception {
+        User me = register("mf-self@booktimer.com", "mfselfid", "나");
+        User friend = register("mf-self-f@booktimer.com", "mfselff", "친구");
+        followRepository.save(Follow.of(me, friend));
+        followRepository.save(Follow.of(friend, me)); // 맞팔이어도 내 책방에선 안 그린다
+
+        mockMvc.perform(get("/api/profile").param("loginId", "mfselfid")
+                        .with(user("mf-self@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.self").value(true))
+                .andExpect(jsonPath("$.mutualFollowers", hasSize(0)))
+                .andExpect(jsonPath("$.mutualFollowerCount").value(0))
+                .andExpect(jsonPath("$.followsMe").value(false));
+    }
+
+    @Test
+    @DisplayName("주인이 나를 팔로우 중이면 followsMe=true")
+    void profile_followsMe_true() throws Exception {
+        User viewer = register("fm-true-v@booktimer.com", "fmtruev", "열람자");
+        User owner = register("fm-true-o@booktimer.com", "fmtrueo", "주인");
+        followRepository.save(Follow.of(owner, viewer)); // 주인 → 나
+
+        mockMvc.perform(get("/api/profile").param("loginId", "fmtrueo")
+                        .with(user("fm-true-v@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.followsMe").value(true))
+                .andExpect(jsonPath("$.following").value(false)); // 방향이 반대인 값과 섞이지 않는다
+    }
+
+    @Test
+    @DisplayName("내가 주인을 팔로우할 뿐이면 followsMe=false — following과 방향이 다르다")
+    void profile_followsMe_falseWhenOnlyIFollow() throws Exception {
+        User viewer = register("fm-false-v@booktimer.com", "fmfalsev", "열람자");
+        User owner = register("fm-false-o@booktimer.com", "fmfalseo", "주인");
+        followRepository.save(Follow.of(viewer, owner)); // 나 → 주인
+
+        mockMvc.perform(get("/api/profile").param("loginId", "fmfalseo")
+                        .with(user("fm-false-v@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.followsMe").value(false))
+                .andExpect(jsonPath("$.following").value(true));
+    }
 }

@@ -170,6 +170,19 @@ public interface BookRepository extends JpaRepository<Book, Long> {
                                            Pageable pageable);
 
     /**
+     * 여러 사람의 PUBLIC 책 전부 — 둘러보기 카드가 세울 책의 원천. 사람별 정렬·상위 4권 자르기는 호출부가 한다.
+     *
+     * <p>DB에서 사람별 top-N을 뽑으려면 윈도우 함수(=native 쿼리)라 H2·MySQL 방언을 둘 다 떠안는데,
+     * 후보는 수십 명이고 사람당 책은 수십 권이라 전부 받아 자바에서 자르는 편이 싸다(2026-08-20 판단).
+     */
+    @Query("""
+            select b from Book b
+            where b.user.id in :userIds
+              and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
+            """)
+    List<Book> findPublicBooksOfUsers(@Param("userIds") Collection<Long> userIds);
+
+    /**
      * 홈 소식 피드 — <b>완독</b> 이벤트: {@code viewer}가 팔로우한 사람의 PUBLIC 완독 책(최근 창).
      *
      * <p>{@code StoryRepository.feedOf} 미러. Follow와는 매핑된 연관이 없어 theta 조인

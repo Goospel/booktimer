@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,6 +25,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * 프로필({@code /u/{loginId}})·팔로우/차단/신고 대상 식별이 이걸로 이뤄진다.
      */
     Optional<User> findByLoginId(String loginId);
+
+    /**
+     * 여러 핸들을 한 번에 — 둘러보기가 추천 결과(핸들만 실려 온다)를 다시 사용자로 되돌릴 때 쓴다.
+     * 순서는 보장하지 않으므로 호출부가 원하는 순서로 다시 세운다.
+     */
+    List<User> findByLoginIdIn(Collection<String> loginIds);
 
     /**
      * login_id 부분일치 검색(대소문자 무시), login_id 오름차순, <b>최대 20명</b>.
