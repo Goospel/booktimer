@@ -35,6 +35,7 @@ function entry(id: number, extra: Partial<MarginEntry> = {}): MarginEntry {
     id,
     text: `문장 ${id}`,
     bgCode: 'paper',
+    quote: null,
     createdAt: new Date(NOW - HOUR).toISOString(),
     likeCount: 0,
     liked: false,
@@ -399,6 +400,59 @@ describe('여백 좋아요', () => {
 
     expect(html).toContain('좋아요 3명');
     expect(html).not.toContain('aria-label="좋아요 3명 보기"');
+  });
+});
+
+/**
+ * 인용문 — 글이 「책에서 옮긴 문장 + 내 주석」 두 층이 된다(2026-08-20). 인용은 <b>선택</b>이라
+ * 없는 글(옛 글 포함)이 지금까지와 똑같이 그려지는 것이 이 묶음의 핵심 단언이다.
+ */
+describe('인용문', () => {
+  it('인용이 있으면 주석과 함께 카드에 실린다', () => {
+    const html = view(
+      margin({ entries: [entry(1, { quote: '새는 알에서 나오려고 투쟁한다.', text: '열아홉엔 몰랐다' })] }),
+    );
+
+    expect(html).toContain('새는 알에서 나오려고 투쟁한다.');
+    expect(html).toContain('열아홉엔 몰랐다');
+    expect(html).toContain('<blockquote');
+  });
+
+  it('인용이 없으면 인용 블록이 아예 없다 — 옛 글은 예전 그대로 그려진다', () => {
+    const html = view(margin({ entries: [entry(1, { quote: null })] }));
+
+    expect(html).toContain('문장 1');
+    expect(html).not.toContain('<blockquote');
+  });
+
+  it('서재 인라인 미리보기(손잡이 없는 카드)도 인용을 그린다 — 같은 카드다', () => {
+    const html = render(
+      <MarginCard
+        entry={entry(1, { quote: '옮긴 문장' })}
+        now={NOW}
+        self={false}
+        busy={false}
+        confirming={false}
+        onConfirmDelete={() => {}}
+        onDelete={() => {}}
+      />,
+    );
+
+    expect(html).toContain('옮긴 문장');
+  });
+
+  it('컴포저에 인용 칸이 있다 — 주석 칸과 나란히', () => {
+    const html = render(
+      <StoryComposer
+        book={{ id: 7, title: '데미안', author: '헤르만 헤세', coverUrl: null }}
+        onDone={() => {}}
+        onCancel={() => {}}
+        onError={() => {}}
+      />,
+    );
+
+    expect(html).toContain('책에서 옮긴 문장');
+    expect(html).toContain('내 생각');
   });
 });
 

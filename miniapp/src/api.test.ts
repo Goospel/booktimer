@@ -842,14 +842,23 @@ describe('여백 API', () => {
     expect(error.status).toBe(404);
   });
 
-  it('작성은 문장·책·배경을 함께 보낸다 — 책은 필수다(여백은 책에 딸린 자리)', async () => {
+  it('작성은 문장·책·배경·인용을 함께 보낸다 — 책은 필수고 인용은 선택이다', async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(response(200, JSON.stringify({ id: 3, text: '한 문장' })) as never);
 
-    await createStory('한 문장', 7, 'paper');
+    await createStory('한 문장', 7, 'paper', '옮긴 문장');
 
     expect(lastRequest()[0]).toBe('http://localhost:8080/api/stories');
     expect(lastRequest()[1].method).toBe('POST');
-    expect(JSON.parse(lastRequest()[1].body as string)).toEqual({ text: '한 문장', bookId: 7, bgCode: 'paper' });
+    expect(JSON.parse(lastRequest()[1].body as string))
+      .toEqual({ text: '한 문장', bookId: 7, bgCode: 'paper', quote: '옮긴 문장' });
+  });
+
+  it('인용 없이 남기면 quote는 null로 나간다 — 서버가 「인용 없음」으로 읽는 유일한 표현', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, JSON.stringify({ id: 4, text: '한 문장' })) as never);
+
+    await createStory('한 문장', 7, 'paper', null);
+
+    expect(JSON.parse(lastRequest()[1].body as string).quote).toBeNull();
   });
 
   it('배경 코드는 서버 팔레트(Story.BG_CODES)와 같은 값이어야 400이 안 난다', () => {

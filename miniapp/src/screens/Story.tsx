@@ -437,6 +437,25 @@ export function MarginCard({
         color: bg.color,
       }}
     >
+      {/* 인용은 主가 아니라 從이다 — 작게·옅게 두고 세로선으로만 가른다. 크게 뽑으면 카드의 주인공이
+          남의 문장이 되어 「내 독서 기록」이 명언 카드가 된다. 세리프로 가르지 않는 이유: 폰에 한글
+          세리프가 없어 `serif`가 안드로이드는 명조·iOS는 고딕으로 갈린다(폰마다 다른 카드). */}
+      {entry.quote !== null && (
+        <blockquote
+          style={{
+            margin: '0 0 14px',
+            paddingLeft: 12,
+            borderLeft: `2px solid ${bg.color}`,
+            fontSize: 15,
+            lineHeight: 1.6,
+            opacity: 0.85,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'keep-all',
+          }}
+        >
+          {entry.quote}
+        </blockquote>
+      )}
       <p style={{ margin: 0, fontSize: 16, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'keep-all' }}>
         {entry.text}
       </p>
@@ -529,15 +548,17 @@ export function StoryComposer({
   onError: (error: Error) => void;
 }) {
   const [text, setText] = useState('');
+  const [quote, setQuote] = useState('');
   const [bgCode, setBgCode] = useState<string>(STORY_BG_CODES[0].code);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const trimmed = text.trim();
+  const trimmedQuote = quote.trim();
   const submit = () => {
     setBusy(true);
     setError(null);
-    createStory(trimmed, book.id, bgCode)
+    createStory(trimmed, book.id, bgCode, trimmedQuote === '' ? null : trimmedQuote)
       .then(onDone)
       .catch((e: Error) => {
         if (e.name === 'UnauthorizedError') onError(e);
@@ -555,28 +576,33 @@ export function StoryComposer({
       <Text typography="st12" color="grey600" style={{ display: 'block', marginBottom: 12, wordBreak: 'keep-all' }}>
         『{book.title}』의 여백 · {visibilityNotice(book.isPublic)}
       </Text>
-      <textarea
-        value={text}
-        disabled={busy}
-        maxLength={500}
-        placeholder="읽다가 마음에 걸린 문장이나 생각을 남겨 보세요."
-        onChange={(e) => setText(e.target.value)}
-        style={{
-          width: '100%',
-          minHeight: 140,
-          padding: 16,
-          borderRadius: 12,
-          border: 'none',
-          fontSize: 16,
-          lineHeight: 1.6,
-          resize: 'vertical',
-          background: bg.background,
-          color: bg.color,
-        }}
-      />
-      <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 6 }}>
-        {trimmed.length}/500
-      </Text>
+      {/* 두 칸을 한 배경 안에 넣는다 — 쓰는 동안 보이는 것이 곧 카드여야 미리보기 값을 한다.
+          라벨·카운터도 안에 두는 이유는 같다(밖으로 빼면 배경마다 대비가 어긋난다). */}
+      <div style={{ background: bg.background, color: bg.color, borderRadius: 12, padding: 16 }}>
+        <p style={composerLabel}>책에서 옮긴 문장 (선택)</p>
+        <textarea
+          value={quote}
+          disabled={busy}
+          maxLength={200}
+          placeholder="밑줄 그은 문장을 옮겨 보세요."
+          onChange={(e) => setQuote(e.target.value)}
+          style={{ ...composerField(bg.color), minHeight: 56, fontSize: 15, borderLeft: `2px solid ${bg.color}`, paddingLeft: 12 }}
+        />
+        <p style={{ ...composerLabel, textAlign: 'right', marginTop: 4 }}>{trimmedQuote.length}/200</p>
+
+        <div style={{ height: 1, background: bg.color, opacity: 0.15, margin: '14px 0' }} />
+
+        <p style={composerLabel}>내 생각</p>
+        <textarea
+          value={text}
+          disabled={busy}
+          maxLength={500}
+          placeholder="그 문장에 대해 든 생각을 남겨 보세요."
+          onChange={(e) => setText(e.target.value)}
+          style={{ ...composerField(bg.color), minHeight: 120, fontSize: 16 }}
+        />
+        <p style={{ ...composerLabel, textAlign: 'right', marginTop: 4 }}>{trimmed.length}/500</p>
+      </div>
 
       <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
         {STORY_BG_CODES.map((option) => (
@@ -610,6 +636,29 @@ export function StoryComposer({
     </Screen>
   );
 }
+
+/** 컴포저 라벨·카운터 — 배경 위에 얹히므로 색은 상속받고 농도만 낮춘다(팔레트 6색 어디서나 읽힌다). */
+const composerLabel = {
+  margin: 0,
+  fontSize: 11,
+  opacity: 0.6,
+  color: 'inherit',
+} as const;
+
+/** 배경 박스 안의 입력칸 — 테두리·배경을 지워 「박스 자체가 카드」로 보이게 한다. */
+const composerField = (color: string) =>
+  ({
+    width: '100%',
+    padding: 0,
+    marginTop: 6,
+    border: 'none',
+    outline: 'none',
+    background: 'transparent',
+    color,
+    fontFamily: 'inherit',
+    lineHeight: 1.6,
+    resize: 'vertical',
+  }) as const;
 
 const ghost = (color: string) =>
   ({

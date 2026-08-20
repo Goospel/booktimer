@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { BG_CODES, canSubmit, remainingChars, type BgCode } from './storyFeed'
+import { BG_CODES, canSubmit, remainingChars, remainingQuoteChars, type BgCode } from './storyFeed'
 import { createStory } from './storyApi'
 
 // 글 남기기 모달 — 500자 카운터·배경 팔레트 스와치 6색.
@@ -12,12 +12,13 @@ const emit = defineEmits<{
 }>()
 
 const text = ref('')
+const quote = ref('')
 const bgCode = ref<BgCode>('paper')
 const submitting = ref(false)
 const error = ref('')
 const inputEl = ref<HTMLTextAreaElement | null>(null)
 
-const submittable = computed(() => canSubmit(text.value) && !submitting.value)
+const submittable = computed(() => canSubmit(text.value, quote.value) && !submitting.value)
 
 // 포커스를 모달 안으로 — 없으면 @keydown.esc가 이벤트를 못 받아 Esc 무반응(리뷰 파인딩)
 onMounted(() => inputEl.value?.focus())
@@ -27,7 +28,13 @@ async function submit() {
     submitting.value = true
     error.value = ''
     try {
-        const res = await createStory({ text: text.value.trim(), bookId: props.bookId, bgCode: bgCode.value })
+        const trimmedQuote = quote.value.trim()
+        const res = await createStory({
+            text: text.value.trim(),
+            quote: trimmedQuote === '' ? null : trimmedQuote,
+            bookId: props.bookId,
+            bgCode: bgCode.value,
+        })
         if (res.ok) {
             emit('created')
             emit('close')
@@ -59,12 +66,20 @@ async function submit() {
 
             <p class="story-composer-hint">《{{ bookTitle }}》의 여백</p>
 
-            <!-- 미리보기 겸 입력 — 선택한 배경 위에 바로 쓴다 -->
+            <!-- 미리보기 겸 입력 — 선택한 배경 위에 바로 쓴다. 두 칸을 한 배경 안에 두어야
+                 쓰는 동안 보이는 것이 곧 카드가 된다(라벨도 안에 둔다 — 밖으로 빼면 배경마다 대비가 어긋난다) -->
             <div class="story-composer-preview" :class="'story-bg-' + bgCode">
-                <textarea ref="inputEl" v-model="text" class="story-composer-input" rows="6" maxlength="500"
-                          placeholder="읽다가 마음에 걸린 문장이나 생각을 남겨 보세요."></textarea>
+                <p class="story-composer-label">책에서 옮긴 문장 (선택)</p>
+                <textarea v-model="quote" class="story-composer-input story-composer-quote" rows="2" maxlength="200"
+                          placeholder="밑줄 그은 문장을 옮겨 보세요."></textarea>
+                <div class="story-composer-rule"></div>
+                <p class="story-composer-label">내 생각</p>
+                <textarea ref="inputEl" v-model="text" class="story-composer-input" rows="5" maxlength="500"
+                          placeholder="그 문장에 대해 든 생각을 남겨 보세요."></textarea>
             </div>
             <div class="story-composer-meta">
+                <!-- 인용 카운터는 쓰기 시작해야 나온다 — 안 쓰는 사람에게 숫자 하나를 더 보이지 않는다 -->
+                <span v-if="quote" class="story-composer-count">인용 {{ remainingQuoteChars(quote) }}자 남음</span>
                 <span class="story-composer-count" :class="{ over: remainingChars(text) < 0 }">
                     {{ remainingChars(text) }}자 남음
                 </span>

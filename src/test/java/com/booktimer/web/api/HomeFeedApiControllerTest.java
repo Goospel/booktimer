@@ -206,6 +206,20 @@ class HomeFeedApiControllerTest {
     }
 
     @Test
+    @DisplayName("소식 발췌는 인용이 아니라 주석이다 — 남의 문장으로 피드를 채우지 않는다")
+    void excerptUsesAnnotationNotQuote() throws Exception {
+        User me = saveUser("hs-q-me@booktimer.com", "hsqme", "나");
+        User followee = saveUser("hs-q-you@booktimer.com", "hsqyou", "친구");
+        followRepository.save(Follow.of(me, followee));
+        Book book = quietPublicBook(followee, "인용이 달린 책");
+        storyRepository.save(Story.of(followee, "열아홉엔 몰랐다", book, null, "새는 알에서 나오려고 투쟁한다."));
+
+        mockMvc.perform(get("/api/home-feed").with(user("hsqme")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.social[0].excerpt").value("열아홉엔 몰랐다"));
+    }
+
+    @Test
     @DisplayName("같은 사람이라도 책이 다르면 별개 행 (묶기 경계는 사람+책)")
     void doesNotGroupAcrossBooks() throws Exception {
         User me = saveUser("hs2-me@booktimer.com", "hs2me", "나");

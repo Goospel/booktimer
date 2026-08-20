@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-    excerptForReport, composeReportDetail, canSubmit, remainingChars, formatStoryAge,
+    excerptForReport, composeReportDetail, canSubmit, remainingChars, remainingQuoteChars, formatStoryAge,
     hasFreshStory, showMarginHandle, BG_CODES,
 } from './storyFeed'
 
@@ -68,6 +68,18 @@ describe('canSubmit / remainingChars', () => {
     })
     it('remainingChars: 500 - 길이', () => {
         expect(remainingChars('가'.repeat(120))).toBe(380)
+    })
+    // 인용은 선택이라 없어도 제출된다 — 막는 것은 길이뿐(주석 필수는 text 쪽 규칙이 이미 담당)
+    it('인용은 비어도 제출 가능, 200자까지 가능, 201자면 불가', () => {
+        expect(canSubmit('주석', '')).toBe(true)
+        expect(canSubmit('주석', '가'.repeat(200))).toBe(true)
+        expect(canSubmit('주석', '가'.repeat(201))).toBe(false)
+    })
+    it('인용만 있고 주석이 비면 불가 — 주석은 필수다', () => {
+        expect(canSubmit('   ', '새는 알에서 나오려고 투쟁한다.')).toBe(false)
+    })
+    it('remainingQuoteChars: 200 - 길이', () => {
+        expect(remainingQuoteChars('가'.repeat(30))).toBe(170)
     })
 })
 

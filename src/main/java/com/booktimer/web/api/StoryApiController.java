@@ -59,7 +59,8 @@ public class StoryApiController {
     public MarginEntry create(@RequestBody CreateStoryRequest request, Principal principal) {
         User me = currentUserService.resolve(principal);
         try {
-            Story story = storyService.create(me, request.text(), request.bookId(), request.bgCode());
+            Story story = storyService.create(me, request.text(), request.bookId(), request.bgCode(),
+                    request.quote());
             return MarginEntry.of(story);
         } catch (IllegalArgumentException e) {
             // 도메인 검증(문장 길이·팔레트 등) 실패 — 프론트는 상태코드로 분기해 안내한다
@@ -100,6 +101,10 @@ public class StoryApiController {
         return ResponseEntity.ok().build();
     }
 
-    public record CreateStoryRequest(String text, Long bookId, String bgCode) {
+    /**
+     * 글 작성 요청. {@code quote}(책에서 옮긴 문장)는 <b>선택</b>이고, 필드가 아예 없는 옛 클라이언트의
+     * 요청도 그대로 받는다(Jackson이 null로 채운다 — 인용 없이 남긴 글).
+     */
+    public record CreateStoryRequest(String text, String quote, Long bookId, String bgCode) {
     }
 }

@@ -7,9 +7,9 @@ import MarginPanel from './MarginPanel.vue'
 
 const BOOK = { id: 3, title: '데미안', author: '헤르만 헤세', coverUrl: null }
 
-function entry(id: number, text: string, like: { likeCount?: number; liked?: boolean } = {}) {
+function entry(id: number, text: string, like: { likeCount?: number; liked?: boolean; quote?: string } = {}) {
     return {
-        id, text, bgCode: 'paper', createdAt: '2026-07-02T10:00:00Z',
+        id, text, bgCode: 'paper', createdAt: '2026-07-02T10:00:00Z', quote: like.quote ?? null,
         likeCount: like.likeCount ?? 0, liked: like.liked ?? false,
     }
 }
@@ -30,6 +30,34 @@ beforeEach(() => {
 afterEach(() => {
     vi.unstubAllGlobals()
     document.body.innerHTML = ''
+})
+
+// 인용문 — 「책에서 옮긴 문장 + 내 주석」 두 층(2026-08-20). 인용은 선택이라, 없는 글이 지금까지와
+// 똑같이 그려지는 것이 핵심 단언이다.
+describe('MarginPanel 인용문', () => {
+    test('인용이 있으면 주석 위에 인용 블록이 선다', async () => {
+        respond({
+            book: BOOK, ownerNickname: '주인', self: false, following: true,
+            entries: [entry(7, '열아홉엔 몰랐다', { quote: '새는 알에서 나오려고 투쟁한다.' })],
+        })
+
+        const wrapper = open()
+        await vi.waitFor(() => expect(wrapper.text()).toContain('열아홉엔 몰랐다'))
+
+        expect(wrapper.find('.margin-card-quote').text()).toBe('새는 알에서 나오려고 투쟁한다.')
+    })
+
+    test('인용이 없으면 인용 블록이 아예 없다 — 옛 글은 예전 그대로', async () => {
+        respond({
+            book: BOOK, ownerNickname: '주인', self: false, following: true,
+            entries: [entry(7, '인용 없는 글')],
+        })
+
+        const wrapper = open()
+        await vi.waitFor(() => expect(wrapper.text()).toContain('인용 없는 글'))
+
+        expect(wrapper.find('.margin-card-quote').exists()).toBe(false)
+    })
 })
 
 describe('MarginPanel', () => {

@@ -143,6 +143,10 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
                 <ul v-else class="margin-cards">
                     <li v-for="e in margin.entries" :key="e.id" class="margin-card"
                         :class="'story-bg-' + (e.bgCode ?? 'paper')">
+                        <!-- 인용은 主가 아니라 從이다 — 작게·옅게 두고 세로선으로만 가른다(크게 뽑으면
+                             카드의 주인공이 남의 문장이 되어 「내 독서 기록」이 명언 카드가 된다).
+                             본문이 이미 명조라 서체로는 못 가른다 — 크기·농도·세로선이 유일한 신호. -->
+                        <blockquote v-if="e.quote" class="margin-card-quote">{{ e.quote }}</blockquote>
                         <p class="margin-card-text">{{ e.text }}</p>
                         <div class="margin-card-foot">
                             <span class="margin-card-age">{{ formatStoryAge(e.createdAt, Date.now()) }}</span>

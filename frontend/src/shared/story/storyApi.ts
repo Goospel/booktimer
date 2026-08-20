@@ -21,7 +21,10 @@ export async function fetchMargin(loginId: string, bookId: number): Promise<Marg
 }
 
 /** 작성 — 상태코드 분기(429 레이트리밋·400 검증)는 작성 모달이 하므로 Response를 그대로 돌려준다. */
-export function createStory(req: { text: string; bookId: number; bgCode: string | null }): Promise<Response> {
+/** `quote`(책에서 옮긴 문장)는 선택 — 비우면 `null`을 보낸다(빈 문자열은 서버가 어차피 null로 떨어뜨린다). */
+export function createStory(
+    req: { text: string; quote: string | null; bookId: number; bgCode: string | null },
+): Promise<Response> {
     return fetch('/api/stories', {
         method: 'POST',
         credentials: 'same-origin',

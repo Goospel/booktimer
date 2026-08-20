@@ -330,9 +330,11 @@ const marginEntry = (
   bgCode: string,
   hoursAgo: number,
   like: { likeCount: number; liked: boolean } = { likeCount: 0, liked: false },
+  quote: string | null = null,
 ): MarginEntry => ({
   id,
   text,
+  quote,
   bgCode,
   createdAt: isoTime(hoursAgo),
   ...like,
@@ -349,8 +351,12 @@ const marginEntries: Record<number, MarginEntry[]> = {
   // 「소식은 3개인데 열어 보니 2장」 같은 조합이 나올 수 없다. 목이 그걸 어기면 검증자를 헷갈리게 한다.
   11: [
     // 남의 책이라 하트가 손잡이로 뜬다 — 세 상태를 다 깔아 둔다: 눌러 둔 것 / 남만 누른 것 / 아무도 안 누른 것.
-    marginEntry(901, '오늘은 30분만 읽자고 앉았는데 한 시간을 넘겼다.', 'paper', 3, { likeCount: 4, liked: true }),
-    marginEntry(902, '밑줄 그은 문장이 오늘의 나를 설명한다.', 'night', 26, { likeCount: 2, liked: false }),
+    // 인용이 있는 글·없는 글을 나란히 둔다 — 「인용 없는 옛 글은 예전 그대로」가 한 화면에서 보인다.
+    marginEntry(901, '오늘은 30분만 읽자고 앉았는데 한 시간을 넘겼다.', 'paper', 3, { likeCount: 4, liked: true },
+      '새는 알에서 나오려고 투쟁한다.'),
+    // 어두운 배경 + 긴 인용 — 세로선 대비와 줄바꿈을 어두운 팔레트에서도 눈으로 확인하는 자리다.
+    marginEntry(902, '밑줄 그은 문장이 오늘의 나를 설명한다.', 'night', 26, { likeCount: 2, liked: false },
+      '우리가 두려워하는 것은 대개 일어나지 않고, 일어난 일은 대개 두려워하지 않았던 것이다.'),
     marginEntry(903, '서재라는 말이 이렇게 넓은 줄 몰랐다.', 'sea', 44),
   ],
   12: [marginEntry(911, '완독. 마지막 장을 아껴 읽었다.', 'forest', 30)],
@@ -795,6 +801,7 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     const entry: MarginEntry = {
       id: nextId(),
       text: body.text as string,
+      quote: (body.quote as string | null) ?? null,
       bgCode: (body.bgCode as string | null) ?? null,
       createdAt: new Date().toISOString(),
       likeCount: 0,

@@ -136,4 +136,57 @@ class StoryTest {
         assertThatThrownBy(() -> Story.of(me, "문장", mine, "neon"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    // ── 인용문 (2026-08-20) — 「책의 문장 + 내 주석」 두 층 ────────────────────────────
+
+    @Test
+    @DisplayName("of: 인용은 선택 — 4-arg 오버로드로 남긴 글은 quote가 null")
+    void of_quoteIsOptional() {
+        User me = author();
+
+        Story story = Story.of(me, "내 생각", publicBookOf(me), null);
+
+        assertThat(story.getQuote()).isNull();
+    }
+
+    @Test
+    @DisplayName("of: 인용 앞뒤 공백은 잘라 낸다(주석 text와 같은 정규화)")
+    void of_stripsQuote() {
+        User me = author();
+
+        Story story = Story.of(me, "내 생각", publicBookOf(me), null, "  새는 알에서 나오려고 투쟁한다.  ");
+
+        assertThat(story.getQuote()).isEqualTo("새는 알에서 나오려고 투쟁한다.");
+    }
+
+    @Test
+    @DisplayName("of: 공백뿐인 인용은 null로 떨어뜨린다 — 빈 문자열이 남으면 카드에 빈 인용선이 그려진다")
+    void of_blankQuoteBecomesNull() {
+        User me = author();
+        Book mine = publicBookOf(me);
+
+        assertThat(Story.of(me, "내 생각", mine, null, "   ").getQuote()).isNull();
+        assertThat(Story.of(me, "내 생각", mine, null, "").getQuote()).isNull();
+    }
+
+    @Test
+    @DisplayName("of: 인용 200자는 허용, 201자는 거부 (경계)")
+    void of_quoteLengthBoundary() {
+        User me = author();
+        Book mine = publicBookOf(me);
+
+        assertThat(Story.of(me, "내 생각", mine, null, "가".repeat(200)).getQuote()).hasSize(200);
+        assertThatThrownBy(() -> Story.of(me, "내 생각", mine, null, "가".repeat(201)))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("of: 인용만 있고 주석이 비면 거부 — 주석은 여전히 필수다(2026-08-20 확정)")
+    void of_rejectsQuoteWithoutText() {
+        User me = author();
+        Book mine = publicBookOf(me);
+
+        assertThatThrownBy(() -> Story.of(me, "   ", mine, null, "새는 알에서 나오려고 투쟁한다."))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }
