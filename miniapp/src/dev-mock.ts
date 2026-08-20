@@ -123,9 +123,14 @@ function buildGraph(): ContributionGraph {
     activeDays,
     // 오늘(offset 0)부터 처음 0레벨을 만나기까지 = 연속일. 패턴에 0이 있어 반드시 끝난다.
     currentStreak: LEVELS.indexOf(0),
-    growthStageName: 'SAPLING',
-    growthStageEmoji: '🌿',
-    growthStageLabel: '어린 나무',
+    // ⚠️ 서버 사다리(GrowthStage)는 땅·새싹·꽃·나무 넷뿐이다 — 한때 목이 「SAPLING·🌿·어린 나무」라는
+    // 서버에 없는 단계를 그렸다. 목이 실제와 다르면 브라우저 확인이 통과해도 아무것도 증명하지 못한다.
+    growthStageName: 'SPROUT',
+    growthStageEmoji: '🌱',
+    growthStageLabel: '새싹',
+    growthProgressPercent: 33,
+    daysToNextStage: 2,
+    nextStageLabel: '꽃',
   };
 }
 
@@ -402,22 +407,29 @@ function booksFor(loginId: string): ProfileBook[] {
  * <p>STORY는 **1장·3장 두 건**을 둔다 — 단수(「글을 남겼어요」)·복수(「글 3개를 남겼어요」) 문구가
  * 한 화면에 같이 서야 두 갈래를 눈으로 가른다. 탭하면 그 책의 여백으로 점프한다(bookId).
  */
+/**
+ * 표지 있는 책 한 권 — 목에 원격 주소를 넣으면 오프라인에서 404가 나 <b>전부 자리 표지로만</b> 보인다.
+ * data URI면 네트워크 없이 진짜 `<img>` 경로가 그려져, 표지 있는 책과 없는 책이 한 화면에 선다.
+ */
+const MOCK_COVER =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='84'%3E%3Crect width='60' height='84' fill='%23705B4A'/%3E%3Crect x='6' y='10' width='48' height='1.5' fill='%23D9CDBA'/%3E%3Crect x='6' y='58' width='30' height='1.5' fill='%23D9CDBA'/%3E%3C/svg%3E";
+
 const socialEvents: SocialEvent[] = [
   { loginId: 'nabi', nickname: '나비독서', bookTitle: '데미안', type: 'FINISHED', occurredAt: isoTime(0.2),
-    bookId: null, excerpt: null, count: 0 },
+    bookId: null, excerpt: null, count: 0, coverUrl: MOCK_COVER },
   { loginId: 'nabi', nickname: '나비독서', bookTitle: '아무튼, 서재', type: 'STORY', occurredAt: isoTime(3),
-    bookId: 11, excerpt: '오늘은 30분만 읽자고 앉았는데 한 시간을 넘겼다.', count: 3 },
+    bookId: 11, excerpt: '오늘은 30분만 읽자고 앉았는데 한 시간을 넘겼다.', count: 3, coverUrl: null },
   { loginId: 'underline', nickname: '밑줄러', bookTitle: '사피엔스', type: 'STARTED', occurredAt: isoTime(3.5),
-    bookId: null, excerpt: null, count: 0 },
+    bookId: null, excerpt: null, count: 0, coverUrl: null },
   { loginId: 'jieun', nickname: '지은의서재', bookTitle: '밑줄 긋는 사람', type: 'STORY', occurredAt: isoTime(9),
     // 80자 넘는 원문은 서버가 79자 + … 로 잘라 준다 — 클라의 1줄 clamp가 그 위에 얹히는지 눈으로 본다.
-    bookId: 12, excerpt: '읽다 말고 한참을 창밖만 봤다. 문장 하나가 오래 걸려서, 다음 장으로 넘어가는 게 아까웠고 그렇게 저녁이 다 갔다…', count: 1 },
+    bookId: 12, excerpt: '읽다 말고 한참을 창밖만 봤다. 문장 하나가 오래 걸려서, 다음 장으로 넘어가는 게 아까웠고 그렇게 저녁이 다 갔다…', count: 1, coverUrl: null },
   { loginId: 'jieun', nickname: '지은의서재', bookTitle: '미움받을 용기', type: 'FINISHED', occurredAt: isoTime(20),
-    bookId: null, excerpt: null, count: 0 },
+    bookId: null, excerpt: null, count: 0, coverUrl: null },
   { loginId: 'nabi', nickname: '나비독서', bookTitle: '코스모스', type: 'STARTED', occurredAt: isoTime(30),
-    bookId: null, excerpt: null, count: 0 },
+    bookId: null, excerpt: null, count: 0, coverUrl: null },
   { loginId: 'jieun', nickname: '지은의서재', bookTitle: '총, 균, 쇠', type: 'FINISHED', occurredAt: isoTime(96),
-    bookId: null, excerpt: null, count: 0 },
+    bookId: null, excerpt: null, count: 0, coverUrl: null },
 ];
 
 /**

@@ -4,7 +4,16 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import type { MonthlySection } from './api';
-import { History, MonthlyRecords, formatMonthTitle, formatRecordDate } from './screens/History';
+import {
+  History,
+  MonthlyRecords,
+  barPercent,
+  coverStack,
+  formatMonthTitle,
+  formatRecordDate,
+  formatWeekday,
+  growthNudge,
+} from './screens/History';
 import { graph, userAgent } from './test-fixtures';
 import { monthLabelPositions } from './ui';
 
@@ -13,6 +22,20 @@ import { monthLabelPositions } from './ui';
  * 웹 `ContributionGraph.vue`는 CSS 그리드의 `gridColumnStart`가 열을 맞춰 주지만, 미니앱 격자는
  * flex + 고정 칸이라 열 자리를 직접 계산해야 한다 — 그 계산만 꺼내 계측한다.
  */
+describe('성장 단계 문구 (growthNudge)', () => {
+  it('다음 단계가 남아 있으면 며칠 더 읽어야 하는지 말한다 — 계속 읽을 이유가 화면에 남는다', () => {
+    expect(growthNudge(2, '꽃')).toBe('2일 더 읽으면 꽃이 돼요');
+  });
+
+  it('하루 남았으면 「1일」이라고 그대로 적는다 — 「내일」로 바꾸면 자정 기준이 달라 거짓이 된다', () => {
+    expect(growthNudge(1, '나무')).toBe('1일 더 읽으면 나무가 돼요');
+  });
+
+  it('가장 큰 단계면 재촉하지 않는다 — 더 오를 곳이 없는데 남은 일수를 적으면 거짓말이다', () => {
+    expect(growthNudge(0, null)).toBe('가장 큰 단계예요');
+  });
+});
+
 describe('월 라벨 배치', () => {
   const at = (...weekIndexes: number[]) => weekIndexes.map((weekIndex) => ({ weekIndex, label: `${weekIndex}월` }));
 
@@ -70,17 +93,47 @@ describe('기록 화면', () => {
  * 웹 `MonthlyRecords.vue`와 같은 말을 쓰되 폭이 좁아 연도는 일자에서 뺀다.
  */
 describe('기록 목록 포맷', () => {
-  it('일자는 "MM-DD (요일)" — 연도는 월 머리글이 이미 말해 준다', () => {
-    expect(formatRecordDate('2026-08-14')).toBe('08-14 (금)');
+  it('일자는 "MM-DD" — 연도는 월 머리글이, 요일은 아랫줄이 말한다', () => {
+    expect(formatRecordDate('2026-08-14')).toBe('08-14');
   });
 
   it('한 자리 월·일도 0을 유지한다 — 자리수가 흔들리면 오른쪽 시간 열이 들쭉날쭉해진다', () => {
-    expect(formatRecordDate('2026-01-05')).toBe('01-05 (월)');
+    expect(formatRecordDate('2026-01-05')).toBe('01-05');
+  });
+
+  it('요일은 아랫줄에 온말로 — 표지 칸과 높이를 맞추면서 "(금)"보다 읽기 쉽다', () => {
+    expect(formatWeekday('2026-08-14')).toBe('금요일');
+    expect(formatWeekday('2026-01-05')).toBe('월요일');
   });
 
   it('월 머리글은 "YYYY년 M월" — 월의 앞 0은 뗀다(사람이 읽는 자리)', () => {
     expect(formatMonthTitle('2026-08')).toBe('2026년 8월');
     expect(formatMonthTitle('2026-01')).toBe('2026년 1월');
+  });
+});
+
+describe('하루 막대 (barPercent)', () => {
+  it('그 달에서 가장 오래 읽은 날이 가득 찬다 — 기준이 달마다 다시 잡혀야 편차가 보인다', () => {
+    expect(barPercent(3_600, 3_600)).toBe(100);
+    expect(barPercent(1_800, 3_600)).toBe(50);
+  });
+
+  it('기준이 0이면 0 — 0으로 나눠 NaN 폭이 되면 막대가 통째로 사라진다', () => {
+    expect(barPercent(0, 0)).toBe(0);
+  });
+
+  it('기준을 넘겨도 100을 안 넘는다 — 막대가 칸 밖으로 삐져나가지 않는다', () => {
+    expect(barPercent(7_200, 3_600)).toBe(100);
+  });
+});
+
+describe('표지 묶음 (coverStack)', () => {
+  it('세 권까지는 그대로 세운다', () => {
+    expect(coverStack(['가', '나'])).toEqual({ shown: ['가', '나'], more: 0 });
+  });
+
+  it('넘치면 세 권만 세우고 나머지는 개수로 말한다 — 예전처럼 조용히 잘라 내지 않는다', () => {
+    expect(coverStack(['가', '나', '다', '라', '마'])).toEqual({ shown: ['가', '나', '다'], more: 2 });
   });
 });
 
@@ -110,16 +163,24 @@ describe('월별 기록 목록', () => {
   });
 
   it('일자마다 날짜·읽은 시간을 그린다 — 사용자가 요청한 "언제 얼마나"', () => {
-    expect(markup).toContain('08-14 (금)');
+    expect(markup).toContain('08-14');
+    expect(markup).toContain('금요일');
     expect(markup).toContain('1시간 30분');
   });
 
-  it('그날 읽은 책 제목을 쉼표로 잇는다 — "무슨 책"이 이 화면의 나머지 절반이다', () => {
-    expect(markup).toContain('미움받을 용기, 사피엔스');
+  it('제목을 쉼표로 잇지 않는다 — 두 권만 돼도 잘려서 "미움받을 용기, 사피…"가 됐다', () => {
+    expect(markup).not.toContain('미움받을 용기, 사피엔스');
+  });
+
+  it('책은 표지 칸으로 선다 — 몇 권인지가 글자가 아니라 자리로 보인다', () => {
+    // 자리 표지는 제목의 첫 글자다(무표지 책과 같은 규칙) — 두 권이면 두 글자가 선다.
+    expect(markup).toContain('>미<');
+    expect(markup).toContain('>사<');
   });
 
   it('책 미지정 세션만 있는 날도 행을 남긴다 — 읽은 시간은 있는데 행이 사라지면 합계가 안 맞아 보인다', () => {
-    expect(markup).toContain('08-09 (일)');
+    expect(markup).toContain('08-09');
+    expect(markup).toContain('일요일');
     expect(markup).toContain('20분');
   });
 

@@ -205,6 +205,12 @@ export interface ContributionGraph {
   growthStageName: string;
   growthStageEmoji: string;
   growthStageLabel: string;
+  /** 현재 단계 안의 진행률(0~100). 최고 단계면 100 — 막대가 빈 채로 남지 않는다. */
+  growthProgressPercent: number;
+  /** 다음 단계까지 남은 연속 일수. 최고 단계면 0. */
+  daysToNextStage: number;
+  /** 다음 단계 이름. 최고 단계면 null(더 오를 곳이 없다). */
+  nextStageLabel: string | null;
 }
 
 export interface TimerState {
@@ -308,6 +314,8 @@ export interface SocialEvent {
   excerpt: string | null;
   /** 그 묶음의 글 수(1이면 단수 문구, 2 이상이면 「글 N개」). STORY가 아니면 0. */
   count: number;
+  /** 그 책의 표지 주소 — 세 종류 모두 채워 온다. 없으면 null(첫 글자 자리 표지로 떨어진다). */
+  coverUrl: string | null;
 }
 
 /** `HomeFeedApiController.NewsItem` */

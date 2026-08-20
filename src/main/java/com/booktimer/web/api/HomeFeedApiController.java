@@ -221,7 +221,8 @@ public class HomeFeedApiController {
             Story newest = group.get(0); // 스캔이 최신순
             events.add(new SocialEvent(newest.getUser().getLoginId(), newest.getUser().getNickname(),
                     newest.getBook().getTitle(), "STORY", newest.getCreatedAt(),
-                    newest.getBook().getId(), excerptOf(newest.getText()), group.size()));
+                    newest.getBook().getId(), excerptOf(newest.getText()), group.size(),
+                    newest.getBook().getCoverUrl()));
         }
         return events;
     }
@@ -246,7 +247,8 @@ public class HomeFeedApiController {
 
     private static SocialEvent event(Book book, String type, Instant occurredAt) {
         return new SocialEvent(book.getUser().getLoginId(), book.getUser().getNickname(),
-                book.getTitle(), type, occurredAt, null, null, 0); // 여백 전용 필드는 STORY 행만 채운다
+                book.getTitle(), type, occurredAt, null, null, 0, // 여백 전용 필드는 STORY 행만 채운다
+                book.getCoverUrl());
     }
 
     public record HomeFeedResponse(List<SocialEvent> social, boolean newsEnabled, List<NewsItem> news,
@@ -278,10 +280,12 @@ public class HomeFeedApiController {
      * @param excerpt    STORY 행만 채운다 — 그 묶음 <b>최신</b> 글의 발췌 1줄. 아니면 {@code null}
      * @param count      그 묶음의 글 수(1이면 "글을 남겼어요", 2 이상이면 "글 N개를 남겼어요").
      *                   STARTED·FINISHED 행은 0
+     * @param coverUrl   그 책의 표지 주소. <b>세 종류 모두 채운다</b> — 피드가 「누가·무슨 책」을 글보다
+     *                   먼저 보여주는 유일한 수단이다. 없으면 null → 미니앱이 첫 글자 자리 표지로 떨어뜨린다
      */
     public record SocialEvent(String loginId, String nickname, String bookTitle,
                               String type, Instant occurredAt,
-                              Long bookId, String excerpt, int count) {
+                              Long bookId, String excerpt, int count, String coverUrl) {
     }
 
     /**

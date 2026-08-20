@@ -108,6 +108,45 @@ class HomeFeedApiControllerTest {
     }
 
     @Test
+    @DisplayName("소식 행에 그 책의 표지가 함께 온다 — 완독·시작·여백 모두")
+    void socialEventsCarryCoverUrl() throws Exception {
+        User me = saveUser("hf-cv@booktimer.com", "hfcv", "나");
+        User followee = saveUser("hf-cv2@booktimer.com", "hfcv2", "친구");
+        followRepository.save(Follow.of(me, followee));
+
+        Book read = Book.register(followee, "표지책", null, null, "https://img/cover.jpg", null, null,
+                BookStatus.WANT_TO_READ);
+        read.changeVisibility(BookVisibility.PUBLIC);
+        read.changeStatus(BookStatus.READING, hoursAgo(3));
+        bookRepository.save(read);
+
+        Book margin = Book.register(followee, "여백책", null, null, "https://img/margin.jpg", null, null,
+                BookStatus.READING);
+        margin.changeVisibility(BookVisibility.PUBLIC);
+        storyAt(followee, bookRepository.save(margin), "남긴 문장", hoursAgo(1));
+
+        mockMvc.perform(get("/api/home-feed").with(user("hfcv")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.social[0].type").value("STORY"))
+                .andExpect(jsonPath("$.social[0].coverUrl").value("https://img/margin.jpg"))
+                .andExpect(jsonPath("$.social[1].type").value("STARTED"))
+                .andExpect(jsonPath("$.social[1].coverUrl").value("https://img/cover.jpg"));
+    }
+
+    @Test
+    @DisplayName("표지가 없는 책은 coverUrl이 null — 화면이 첫 글자 자리 표지로 떨어뜨린다")
+    void coverUrlIsNullWhenBookHasNone() throws Exception {
+        User me = saveUser("hf-cv3@booktimer.com", "hfcv3", "나");
+        User followee = saveUser("hf-cv4@booktimer.com", "hfcv4", "친구");
+        followRepository.save(Follow.of(me, followee));
+        publicBook(followee, "민책", hoursAgo(3), null);
+
+        mockMvc.perform(get("/api/home-feed").with(user("hfcv3")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.social[0].coverUrl").doesNotExist());
+    }
+
+    @Test
     @DisplayName("GET /api/home-feed 미인증 → 302 로그인 리다이렉트 (기본 잠김)")
     void unauthenticated_redirectsToLogin() throws Exception {
         mockMvc.perform(get("/api/home-feed"))

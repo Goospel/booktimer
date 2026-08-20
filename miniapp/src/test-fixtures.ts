@@ -20,6 +20,9 @@ export const graph: ContributionGraph = {
   growthStageName: 'SPROUT',
   growthStageEmoji: '🌱',
   growthStageLabel: '새싹',
+  growthProgressPercent: 33,
+  daysToNextStage: 2,
+  nextStageLabel: '꽃',
 };
 
 /**
