@@ -13,7 +13,7 @@ import type {
   UserRow,
 } from './api';
 import { ApiError, adRefreshPersonality, selectPersonality } from './api';
-import { Bookshop, BookshopHeader, FollowListSheet, HandleSheet, SearchSheet } from './screens/Bookshop';
+import { Bookshop, BookshopHeader, FollowListSheet, HandleSheet } from './screens/Bookshop';
 import { UserList } from './ui';
 import {
   ArchiveSheet,
@@ -277,41 +277,6 @@ describe('팔로우 목록 시트 (FollowListSheet)', () => {
 
   it('아직 못 받았으면 로딩 — 빈 목록 문구를 먼저 깜빡이지 않는다', () => {
     expect(sheet('followers', null)).toContain('불러오는 중');
-  });
-});
-
-/**
- * 친구 찾기 시트 — 옛 소셜 화면의 인라인 검색 form을 그대로 옮겼다. 상태(query·results)는 셸이 든다.
- */
-describe('친구 찾기 시트 (SearchSheet)', () => {
-  const sheet = (results: UserRow[] | null, query = 'goo') =>
-    render(
-      <SearchSheet
-        query={query}
-        results={results}
-        busy={false}
-        error={null}
-        onQueryChange={() => {}}
-        onSearch={() => {}}
-        onSelect={() => {}}
-        onClose={() => {}}
-      />,
-    );
-
-  it('아이디 입력을 form으로 감싼다 — 키보드 완료(엔터)가 아무 일도 안 하면 버튼을 따로 눌러야 한다', () => {
-    expect(sheet(null)).toContain('<form');
-  });
-
-  it('검색 버튼에 이름이 붙어 있다 — 로딩 중엔 라벨이 스피너로 바뀌어 이름 없는 버튼이 된다', () => {
-    expect(sheet(null)).toContain('aria-label="검색"');
-  });
-
-  it('0건이면 두 글자 이상으로 다시 찾으라고 알린다 — 서버가 1글자를 빈 결과로 주므로 문구가 유일한 안내다', () => {
-    expect(sheet([])).toContain('두 글자 이상');
-  });
-
-  it('결과가 있으면 목록으로 그린다', () => {
-    expect(sheet([user('goospel')])).toContain('@goospel');
   });
 });
 

@@ -12,6 +12,7 @@ import {
 } from '../api';
 import { useBackClose } from '../back';
 import { ErrorMessage, Loading, PENCIL_FRAME, Screen, Sheet, UserList } from '../ui';
+import { Explore } from './Explore';
 import { Profile } from './Profile';
 import { BookMargin, StoryComposer } from './Story';
 
@@ -26,9 +27,12 @@ export interface MarginTarget {
  * 토글 목록 · 차단 목록)은 사라졌다: 내 책방까지 두 탭이었고, 책방에 이미 있던 팔로워/팔로잉 카운트는
  * 눌러도 아무 일이 없어 "누가 팔로우하는지" 보려면 다시 이 화면으로 돌아와야 했다.
  *
- * <p>그래서 이건 <b>얇은 셸</b>이다 — 본문은 {@link Profile}이 그리고, 여기서는 전체 화면 전환(여백·
- * 글 남기기·남의 책방)과 시트 셋(친구 찾기·팔로우 목록·핸들 만들기)의 열림만 든다. 시트가 스스로
+ * <p>그래서 이건 <b>얇은 셸</b>이다 — 본문은 {@link Profile}이 그리고, 여기서는 전체 화면 전환(둘러보기·
+ * 여백· 글 남기기·남의 책방)과 시트 둘(팔로우 목록·핸들 만들기)의 열림만 든다. 시트가 스스로
  * fetch하지 않고 상태를 셸이 드는 것은 하니스 사정이기도 하다: 정적 렌더가 시트 안 분기에 못 닿는다.
+ *
+ * <p>「친구 찾기」는 2026-08-20에 시트에서 <b>화면</b>({@link Explore})으로 올라갔다 — 검색어가 없을 때
+ * 보여 줄 것이 생겨서다. 검색 상태(query·results·busy)는 그대로 여기 있고 넘겨만 준다.
  *
  * <p>여백을 열면 {@link Profile}이 언마운트됐다가 돌아올 때 다시 받는다 — 방금 남긴 글로 격자 발광이
  * 바뀌는 것이 그 재조회에 그냥 딸려 온다(별도 갱신 배선이 필요 없다).
@@ -163,6 +167,31 @@ export function Bookshop({
       .finally(() => setBusy(false));
   };
 
+  /*
+   * 둘러보기 — 전에는 「친구 찾기」 시트였다(2026-08-20 승격). 시트는 내 책방 위에 얹히는 도구였는데,
+   * 이제 검색어가 없을 때 보여 줄 것(사람 + 그 사람의 책)이 생겨 화면 하나를 다 쓴다. 여닫는 상태·검색
+   * 상태는 그대로 이 셸이 들고 `useBackClose(searchOpen, …)`도 손대지 않았다 — 바뀐 건 그리는 방식뿐이다.
+   */
+  if (searchOpen) {
+    return (
+      <Explore
+        query={query}
+        results={results}
+        busy={busy}
+        error={error}
+        onQueryChange={setQuery}
+        onSearch={search}
+        // 닫으면서 여는 교체 경로 — `back.ts`의 엔트리 물려주기(규칙 ③)가 히스토리 깊이를 보존한다(T-166).
+        onSelect={(loginId) => {
+          closeSearch();
+          setOpen(loginId);
+        }}
+        onClose={closeSearch}
+        onError={onError}
+      />
+    );
+  }
+
   // 검색은 화면 제목보다 위에 얹힌다 — 책방을 그리는 건 Profile이라 `above` 슬롯으로 건넨다.
   const header = <BookshopHeader onSearch={() => setSearchOpen(true)} />;
 
@@ -192,23 +221,6 @@ export function Bookshop({
           header={header}
           onOpenFollowList={setFollowList}
           onOpenMargin={(bookId) => setMargin({ loginId: handle, bookId })}
-        />
-      )}
-
-      {searchOpen && (
-        <SearchSheet
-          query={query}
-          results={results}
-          busy={busy}
-          error={error}
-          onQueryChange={setQuery}
-          onSearch={search}
-          // 닫으면서 여는 교체 경로 — `back.ts`의 엔트리 물려주기(규칙 ③)가 히스토리 깊이를 보존한다(T-166).
-          onSelect={(loginId) => {
-            closeSearch();
-            setOpen(loginId);
-          }}
-          onClose={closeSearch}
         />
       )}
 
@@ -291,78 +303,6 @@ export function BookshopHeader({ onSearch }: { onSearch: () => void }) {
     >
       아이디로 친구 찾기
     </button>
-  );
-}
-
-/**
- * 친구 찾기 시트 — 옛 소셜 화면의 인라인 검색을 그대로 옮겼다. 순수 표시다(상태는 셸이 든다).
- *
- * <p>「닫기」 버튼은 없앴다 — 시트 ✕ 가 그 일을 한다. 결과가 0건이어도 안내 문구가 서야 한다:
- * 서버는 두 글자 미만이면 <b>실패가 아니라 빈 결과</b>를 주므로(열거 방지), 그 문구가 유일한 안내다.
- */
-export function SearchSheet({
-  query,
-  results,
-  busy,
-  error,
-  onQueryChange,
-  onSearch,
-  onSelect,
-  onClose,
-}: {
-  query: string;
-  /** `null`이면 아직 안 찾았다 — 빈 배열(0건)과 구분해야 열자마자 "없어요"가 뜨지 않는다. */
-  results: UserRow[] | null;
-  busy: boolean;
-  error: string | null;
-  onQueryChange: (query: string) => void;
-  onSearch: () => void;
-  onSelect: (loginId: string) => void;
-  onClose: () => void;
-}) {
-  return (
-    <Sheet title="친구 찾기" onClose={onClose}>
-      {/* 입력 하나짜리 form은 브라우저가 엔터(키보드 「완료」)를 곧 제출로 친다 — 버튼은 밖에 둔다. */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault(); // 막지 않으면 페이지가 통째로 새로고침돼 미니앱이 처음으로 돌아간다
-          if (!busy && query.trim() !== '') onSearch();
-        }}
-      >
-        <TextField
-          variant="box"
-          label="아이디로 찾기"
-          placeholder="아이디 입력"
-          value={query}
-          disabled={busy}
-          onChange={(e) => onQueryChange(e.target.value)}
-        />
-      </form>
-
-      {/* aria-label을 명시한다 — loading 중에는 라벨이 스피너로 바뀌어 이름 없는 버튼이 된다. */}
-      <Button
-        aria-label="검색"
-        display="block"
-        style={{ marginTop: 12 }}
-        loading={busy}
-        disabled={query.trim() === ''}
-        onClick={onSearch}
-      >
-        검색
-      </Button>
-
-      <ErrorMessage message={error} />
-
-      {results !== null && (
-        <div style={{ marginTop: 20 }}>
-          <UserList
-            users={results}
-            emptyMessage="그 아이디를 쓰는 사람이 없어요. 두 글자 이상으로 다시 찾아보세요."
-            onSelect={onSelect}
-          />
-        </div>
-      )}
-    </Sheet>
   );
 }
 

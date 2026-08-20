@@ -518,6 +518,35 @@ export interface UserSearchResponse {
 /** 서버는 2글자 미만이면 빈 결과를 준다(열거 방지) — 실패가 아니라 0건이다. */
 export const searchUsers = (q: string): Promise<UserSearchResponse> => request('/api/search', { query: { q } });
 
+/**
+ * `ExploreApiController.ExploreBookDto` — 둘러보기 카드에 세우는 책.
+ *
+ * ⚠️ 누적 시간·마지막으로 읽은 시각이 <b>일부러 없다</b>. 서버가 그것으로 정렬은 하지만 응답에 담지
+ * 않는다 — 「언제 읽었는가」는 낯선 사람에게 보여줄 것이 아니라는 결정이다(2026-08-20). 필드를 늘리기
+ * 전에 그 결정을 먼저 보라.
+ */
+export interface ExploreBook {
+  title: string;
+  coverUrl: string | null;
+}
+
+/** `ExploreApiController.ExploreUserDto` — 사람 한 줄 + 그 사람의 공개 책(겹친 책이 앞, 최대 4권). */
+export interface ExploreUser extends UserRow {
+  books: ExploreBook[];
+}
+
+/** `ExploreApiController.ExploreResponse` — 한도에 닿으면 빈 목록 + `rateLimited`(조용한 0건과 구분). */
+export interface ExploreResponse {
+  users: ExploreUser[];
+  rateLimited: boolean;
+}
+
+/**
+ * 둘러보기 — 검색어 없이 볼 것을 받는다. 서버가 <b>매 호출 섞어</b> 주므로 화면에 들어올 때마다 얼굴이 바뀐다
+ * (그래서 「다른 사람 보기」 같은 새로고침 손잡이를 두지 않는다 — 재진입이 곧 새로고침이다).
+ */
+export const fetchExplore = (): Promise<ExploreResponse> => request('/api/explore');
+
 /** 서버 `User.LOGIN_ID_PATTERN`과 같은 규칙 — 정규화(소문자) 후 3~20자 [a-z0-9_]. */
 const HANDLE_PATTERN = /^[a-z0-9_]{3,20}$/;
 
@@ -621,6 +650,12 @@ export interface ProfileBook {
   lastStoryAt: string | null;
 }
 
+/** `ProfileApiController.UserBrief` — 공통 친구 줄에 이름으로 적히는 사람. */
+export interface UserBrief {
+  loginId: string;
+  nickname: string;
+}
+
 /** `ProfileApiController.ProfileResponse` — 제휴 서점 플래그는 미니앱이 안 써서 옮기지 않는다. */
 export interface ProfileResponse {
   loginId: string;
@@ -633,6 +668,15 @@ export interface ProfileResponse {
   personality: string | null;
   personalityTags: ProfileTagChip[];
   books: ProfileBook[];
+  /**
+   * 공통 친구 — 내가 팔로우하는 사람 중 이 사람도 팔로우하는 사람. <b>이름은 2명까지만</b> 오고 나머지
+   * 수는 {@link mutualFollowerCount}에 있다. 옛 서버는 안 보낸다(`undefined` = 줄을 안 그린다).
+   */
+  mutualFollowers?: UserBrief[];
+  /** 공통 친구 <b>전체</b> 수 — 「외 N명」이 여기서 나온다(받은 이름 개수로 세면 항상 「외 0명」이 된다). */
+  mutualFollowerCount?: number;
+  /** 이 사람이 <b>나를</b> 팔로우하는가 — {@link ProfileResponse.following}과 방향이 반대다. */
+  followsMe?: boolean;
 }
 
 /** 차단·ADMIN·없는 아이디는 모두 404 — 존재를 누설하지 않는 서버 계약을 그대로 받는다. */
