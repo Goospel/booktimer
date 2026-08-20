@@ -135,19 +135,22 @@ public class HomeFeedApiController {
             activeByUser.merge(session.getUser().getId(), session,
                     (a, b) -> a.getStartedAt().isAfter(b.getStartedAt()) ? a : b);
         }
-        Map<Long, Instant> lastReadByUser = new HashMap<>();
-        for (ReadingSessionRepository.UserReadRecency row : sessionRepository.lastPublicReadAtByUser(ids)) {
-            lastReadByUser.put(row.getUserId(), row.getLastAt());
+        Map<Long, ReadingSessionRepository.UserLastRead> lastReadByUser = new HashMap<>();
+        for (ReadingSessionRepository.UserLastRead row : sessionRepository.lastPublicReadByUser(ids)) {
+            // 같은 시각에 시작한 세션이 둘이면 먼저 만난 하나 — 둘 다 그 사람의 마지막 독서다.
+            lastReadByUser.putIfAbsent(row.getUserId(), row);
         }
 
         List<ReaderStatus> readers = new ArrayList<>();
         for (User followee : followees) {
             ReadingSession active = activeByUser.get(followee.getId());
+            ReadingSessionRepository.UserLastRead lastRead = lastReadByUser.get(followee.getId());
             readers.add(new ReaderStatus(
                     followee.getLoginId(), followee.getNickname(), mutualIds.contains(followee.getId()),
                     active == null ? null : active.getBook().getTitle(),
                     active == null ? null : active.getStartedAt(),
-                    lastReadByUser.get(followee.getId())));
+                    lastRead == null ? null : lastRead.getLastAt(),
+                    lastRead == null ? null : lastRead.getBookTitle()));
         }
         readers.sort(READER_ORDER);
         return List.copyOf(readers);
@@ -259,9 +262,12 @@ public class HomeFeedApiController {
      * @param lastReadAt       끝낸 PUBLIC 책 세션 중 가장 최근의 시작 시각.
      *                         공개 기록이 없으면 null → 미니앱이 「공개된 기록이 없어요」로 그린다
      *                         (「안 읽었어요」가 아니다 — 비공개로 읽는 사람에겐 그게 거짓이다)
+     * @param lastReadBookTitle 그때 읽던 책 제목. <b>{@code lastReadAt}과 반드시 같은 세션에서 온다</b> —
+     *                         쿼리가 한 행으로 뽑기 때문이다. 둘을 따로 뽑으면 화면이 없는 독서를 지어낸다
      */
     public record ReaderStatus(String loginId, String nickname, boolean mutual,
-                               String readingBookTitle, Instant readingSince, Instant lastReadAt) {
+                               String readingBookTitle, Instant readingSince, Instant lastReadAt,
+                               String lastReadBookTitle) {
     }
 
     /**

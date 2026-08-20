@@ -72,16 +72,21 @@ export function visibleTabs(newsEnabled: boolean): FeedTab[] {
  * 「함께 읽는 사람」 한 줄의 문장.
  *
  * <p>읽는 중이 다른 무엇보다 앞선다(과거 기록이 있어도). 그 밖에는 <b>사실만 적는다</b> —
- * 「3일째 안 읽었어요」가 아니라 「마지막 기록 3일 전」이다. 판단을 담지 않으려는 것이기도 하지만,
+ * 「3일째 안 읽었어요」가 아니라 「『책』 · 3일 전」이다. 판단을 담지 않으려는 것이기도 하지만,
  * 무엇보다 <b>비공개 책만 읽는 사람에겐 「안 읽었다」가 거짓</b>이기 때문이다. 같은 이유로 기록이
  * 없을 땐 「공개된」을 밝혀, 조용한 사람을 안 읽는 사람으로 만들지 않는다.
+ *
+ * <p>과거 기록도 <b>책 제목으로 시작한다</b> — 읽는 중 줄과 같은 자리에 서서 목록을 훑을 때
+ * 이름 아래로 책이 쭉 읽힌다. 제목 없이 시각만 오면 옛 문구로 떨어진다(서버가 둘을 한 행으로
+ * 뽑아 그 조합은 안 생기지만, 계약상 null이 가능한 한 그릴 수는 있어야 한다).
  */
 export function readerStatusLine(reader: ReaderStatus, now: number): string {
   if (reader.readingBookTitle !== null) {
     return `『${reader.readingBookTitle}』 읽는 중`;
   }
   if (reader.lastReadAt !== null) {
-    return `마지막 기록 ${relativeTime(reader.lastReadAt, now)}`;
+    const when = relativeTime(reader.lastReadAt, now);
+    return reader.lastReadBookTitle !== null ? `『${reader.lastReadBookTitle}』 · ${when}` : `마지막 기록 ${when}`;
   }
   return '공개된 기록이 없어요';
 }

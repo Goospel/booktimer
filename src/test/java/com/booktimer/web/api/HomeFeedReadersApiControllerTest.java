@@ -123,7 +123,8 @@ class HomeFeedReadersApiControllerTest {
                 .andExpect(jsonPath("$.readers[0].readingBookTitle").doesNotExist())
                 .andExpect(jsonPath("$.readers[0].readingSince").doesNotExist())
                 // 제목만 가리고 「읽는 중」을 남기면 그것만으로 지금 뭘 하는지가 샌다.
-                .andExpect(jsonPath("$.readers[0].lastReadAt").doesNotExist());
+                .andExpect(jsonPath("$.readers[0].lastReadAt").doesNotExist())
+                .andExpect(jsonPath("$.readers[0].lastReadBookTitle").doesNotExist());
     }
 
     @Test
@@ -152,7 +153,25 @@ class HomeFeedReadersApiControllerTest {
 
         mockMvc.perform(get("/api/home-feed").with(user("rdd")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.readers[0].lastReadAt").value(publicRead.toString()));
+                .andExpect(jsonPath("$.readers[0].lastReadAt").value(publicRead.toString()))
+                .andExpect(jsonPath("$.readers[0].lastReadBookTitle").value("공개책"));
+    }
+
+    @Test
+    @DisplayName("마지막 기록의 책 제목은 그 시각과 같은 세션에서 온다 — 짝이 어긋나면 거짓말이 된다")
+    void lastReadBookTitleComesFromTheSameSession() throws Exception {
+        User me = saveUser("rd-f@booktimer.com", "rdf", "나");
+        User friend = saveUser("rd-f2@booktimer.com", "rdf2", "친구");
+        followRepository.save(Follow.of(me, friend));
+        read(friend, book(friend, "옛책", BookVisibility.PUBLIC), hoursAgo(100));
+        Instant recent = hoursAgo(10);
+        read(friend, book(friend, "최근책", BookVisibility.PUBLIC), recent);
+
+        mockMvc.perform(get("/api/home-feed").with(user("rdf")))
+                .andExpect(status().isOk())
+                // 제목만 최신이고 시각은 옛 세션 것이면(또는 그 반대면) 화면이 없는 독서를 지어낸다
+                .andExpect(jsonPath("$.readers[0].lastReadBookTitle").value("최근책"))
+                .andExpect(jsonPath("$.readers[0].lastReadAt").value(recent.toString()));
     }
 
     @Test
@@ -165,7 +184,8 @@ class HomeFeedReadersApiControllerTest {
         mockMvc.perform(get("/api/home-feed").with(user("rde")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.readers.length()").value(1))
-                .andExpect(jsonPath("$.readers[0].lastReadAt").doesNotExist());
+                .andExpect(jsonPath("$.readers[0].lastReadAt").doesNotExist())
+                .andExpect(jsonPath("$.readers[0].lastReadBookTitle").doesNotExist());
     }
 
     // ── 관계 ────────────────────────────────────────────────────────────

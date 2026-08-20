@@ -115,28 +115,42 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
             """)
     List<ReadingSession> findActivePublicSessions(@Param("userIds") Collection<Long> userIds);
 
-    /** 사람 한 명 → 그 사람의 마지막 공개 독서 시각. {@link #lastPublicReadAtByUser} 투영. */
-    interface UserReadRecency {
+    /** 사람 한 명 → 그 사람의 마지막 공개 독서(시각 + 그때 읽던 책). {@link #lastPublicReadByUser} 투영. */
+    interface UserLastRead {
         Long getUserId();
 
         Instant getLastAt();
+
+        String getBookTitle();
     }
 
     /**
-     * 사람별 <b>마지막 공개 독서 시각</b> — 끝낸 세션 + PUBLIC 책만, 한 쿼리로(N+1 금지).
+     * 사람별 <b>마지막 공개 독서 한 줄</b> — 끝낸 세션 + PUBLIC 책만, 한 쿼리로(N+1 금지).
+     *
+     * <p><b>시각과 책 제목이 같은 행에서 나오는 것이 이 쿼리의 존재 이유다.</b> 둘을 따로 뽑으면
+     * 「A책 제목 + B세션 시각」이라는 있지도 않은 독서를 화면이 지어낸다.
+     *
+     * <p>JPQL엔 윈도 함수가 없어 「사람별 최신 한 행」은 상관 서브쿼리로 잡는다(greatest-n-per-group).
+     * 반환 행이 사람 수로 고정인 것이 요점이다 — 완료 세션을 전부 끌어와 자바에서 고르는 방식은
+     * 행 수가 그 사람의 독서량에 비례해 무제한이 된다.
      *
      * <p>기준이 {@code endedAt}이 아니라 <b>{@code startedAt}</b>인 것은 {@code sumCompletedSeconds}와
      * 같은 규칙이다(세션은 시작일에 귀속된다). 공개 기록이 없는 사람은 <b>행이 아예 없어</b>
      * 호출부가 null로 채운다 — 그 null이 화면에서 「공개된 기록이 없어요」가 된다.
+     *
+     * <p>같은 시각에 시작한 세션이 둘이면 행도 둘 온다 — 호출부가 먼저 만난 하나를 쓴다(둘 다
+     * 그 사람의 마지막 독서라 어느 쪽이든 참이다).
      */
     @Query("""
-            select s.user.id as userId, max(s.startedAt) as lastAt
+            select s.user.id as userId, s.startedAt as lastAt, s.book.title as bookTitle
             from ReadingSession s
             where s.user.id in :userIds and s.endedAt is not null and s.book is not null
               and s.book.visibility = com.booktimer.book.BookVisibility.PUBLIC
-            group by s.user.id
+              and s.startedAt = (select max(s2.startedAt) from ReadingSession s2
+                                 where s2.user = s.user and s2.endedAt is not null and s2.book is not null
+                                   and s2.book.visibility = com.booktimer.book.BookVisibility.PUBLIC)
             """)
-    List<UserReadRecency> lastPublicReadAtByUser(@Param("userIds") Collection<Long> userIds);
+    List<UserLastRead> lastPublicReadByUser(@Param("userIds") Collection<Long> userIds);
 
     /** 진행 중 세션을 책과 함께 즉시 로딩 — 트랜잭션 밖(뷰)에서 책 제목 접근 시 lazy 예외 방지. */
     @Query("select s from ReadingSession s left join fetch s.book where s.user = :user and s.endedAt is null")

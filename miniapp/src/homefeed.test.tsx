@@ -67,6 +67,7 @@ function reader(overrides: Partial<ReaderStatus> = {}): ReaderStatus {
     readingBookTitle: null,
     readingSince: null,
     lastReadAt: null,
+    lastReadBookTitle: null,
     ...overrides,
   };
 }
@@ -134,7 +135,13 @@ describe('독서 상태 문구 (readerStatusLine)', () => {
     expect(line).toBe('『데미안』 읽는 중');
   });
 
-  it('읽는 중이 아니면 마지막 기록을 사실대로 적는다 — 「안 읽었어요」라고 단정하지 않는다', () => {
+  it('마지막 기록에도 책 제목이 든다 — 읽는 중 줄과 같은 모양으로 서서 책이 열의 척추가 된다', () => {
+    expect(readerStatusLine(reader({ lastReadBookTitle: '아버지의 해방일지', lastReadAt: NOW_ISO(72) }), NOW))
+      .toBe('『아버지의 해방일지』 · 3일 전');
+  });
+
+  it('제목 없이 시각만 오면 옛 문구로 떨어진다 — 「사실만 적는다」는 약속은 그대로다', () => {
+    // 새 쿼리는 시각과 제목을 같은 행에서 뽑아 이 조합이 안 생기지만, 타입이 허용하는 한 그려야 한다.
     expect(readerStatusLine(reader({ lastReadAt: NOW_ISO(72) }), NOW)).toBe('마지막 기록 3일 전');
     expect(readerStatusLine(reader({ lastReadAt: NOW_ISO(2) }), NOW)).toBe('마지막 기록 2시간 전');
   });
@@ -148,11 +155,17 @@ describe('독서 상태 문구 (readerStatusLine)', () => {
 
   it('읽는 중이면 과거 기록이 있어도 읽는 중이 이긴다', () => {
     const line = readerStatusLine(
-      reader({ readingBookTitle: '코스모스', readingSince: NOW_ISO(1), lastReadAt: NOW_ISO(500) }),
+      reader({
+        readingBookTitle: '코스모스',
+        readingSince: NOW_ISO(1),
+        lastReadAt: NOW_ISO(500),
+        lastReadBookTitle: '옛책',
+      }),
       NOW,
     );
 
     expect(line).toBe('『코스모스』 읽는 중');
+    expect(line).not.toContain('옛책');
   });
 });
 
