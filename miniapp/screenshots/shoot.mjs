@@ -116,9 +116,27 @@ await page.evaluate(() => {
 await settle()
 await shot('03-library')
 
-// 04 기록 — 통계 + 잔디 + 날짜별 기록
+// 04 기록 — 잔디 + 날짜별 기록(하루에 읽은 책 더미)
+// ⚠️ 최상단에서 찍지 않는다 — 0에서 찍으면 연속·통계 카드가 위쪽을 다 먹고 이 화면의 새 얼굴인
+// **표지 더미**가 탭바 아래로 밀려 한 줄도 안 보인다(실측). 잔디 제목을 기준선으로 잡으면 잔디와
+// 날짜 줄이 한 컷에 같이 들어온다 — 위쪽 카드가 또 바뀌어도 컷의 첫 줄은 늘 잔디다.
 await tab('기록')
-await page.evaluate(() => window.scrollTo(0, 0))
+await page.evaluate(() => {
+    const label = [...document.querySelectorAll('*')].find(
+        (e) => e.children.length === 0 && (e.textContent ?? '').trim() === '읽은 날짜',
+    )
+    if (!label) throw new Error('기록 잔디 제목을 못 찾았다') // 문구가 바뀌면 엉뚱한 그림 대신 여기서 죽는다
+    window.scrollTo(0, label.getBoundingClientRect().top + window.scrollY - 12)
+})
+// 여러 권 읽은 첫 날을 펼쳐 둔다 — 더미만 접힌 채로는 「표지가 겹쳐 있다」까지만 보이고 이 기능의
+// 요점인 **책별로 얼마나 읽었나**가 그림에 없다. 펼침이 위쪽 레이아웃은 안 건드리므로 기준선은
+// 그대로 유효하다(아래 줄만 밀린다).
+await page.evaluate(() => {
+    const first = document.querySelector('button[data-day-toggle]')
+    if (!first) throw new Error('펼칠 수 있는 날이 없다') // 목 픽스처가 한 권짜리만 남으면 여기서 죽는다
+    first.click()
+})
+await settle()
 await shot('04-history')
 
 // 05 목표 — 시/분 휠 피커. 진입은 홈 「남은시간 ⓘ」 상자 → 「하루 목표 바꾸기」(전면광고는 목이 즉시 resolve).
