@@ -516,9 +516,10 @@ export function ProfileCard({
         @{profile.loginId}
       </Text>
 
-      {profile.personality !== null && <Bio text={profile.personality} />}
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+      {/* 태그가 서술보다 <b>먼저</b>다. 서술은 서버가 써 준 다섯 줄짜리 문단이고 태그는 그 요약인데,
+          문단이 앞에 있으면 「이 사람이 어떤 독자인가」를 스크롤해야 알 수 있었다(요약이 원문 뒤에 있는 꼴).
+          순서만 뒤집으면 세 단어가 이름 바로 아래에 선다. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 7 }}>
         {profile.personalityTags.map((tag) =>
           // 클릭 가능한 태그만 버튼 — 서버가 근거 책을 주지 않는 태그는 눌러도 빈 목록이라 안 누르게 한다.
           tag.clickable ? (
@@ -532,6 +533,8 @@ export function ProfileCard({
           ),
         )}
       </div>
+
+      {profile.personality !== null && <Bio text={profile.personality} />}
 
       {/* 성향 추출 관문 — 결과(서술·태그)가 보이는 바로 그 자리에 손잡이를 둔다. status를 못 받았으면
           아무것도 그리지 않는다(fail-closed): 서버 미배포 구간에도 번들이 먼저 나갈 수 있는 근거다. */}
@@ -737,7 +740,19 @@ function Bio({ text }: { text: string }) {
   const clamped = !expanded && needsBioToggle(text);
 
   return (
-    <div style={{ marginTop: 8 }}>
+    // 카드에 담는 이유는 <b>출처</b>다 — 이건 사용자가 쓴 소개가 아니라 서버가 읽은 책에서 뽑아 준
+    // 요약이다. 화면에 그냥 떠 있으면 다섯 줄짜리 벽으로 읽히고, 상자에 담기면 「분석 결과」가 된다.
+    <div
+      data-bio-card=""
+      style={{
+        marginTop: 12,
+        padding: 12,
+        borderRadius: 12,
+        background: 'var(--adaptiveGrey100, #FCFAF5)',
+        border: '1px solid transparent',
+        borderImage: PENCIL_FRAME,
+      }}
+    >
       <span
         style={{
           fontSize: 13,
@@ -752,18 +767,20 @@ function Bio({ text }: { text: string }) {
       >
         {text}
       </span>
-      {/* 알약 손잡이가 아니라 회색 글자 — 서술의 꼬리로 읽혀야지, 성향과 나란한 또 하나의 버튼이 되면 안 된다. */}
+      {/* 알약 손잡이가 아니라 회색 글자 — 서술의 꼬리로 읽혀야지, 성향과 나란한 또 하나의 버튼이 되면
+          안 된다. 카드 안 오른쪽으로 보내 문단의 끝임을 자리로 말한다. */}
       {needsBioToggle(text) && (
         <button
           type="button"
           onClick={() => setExpanded(!expanded)}
           style={{
             display: 'block',
-            marginTop: 2,
+            marginLeft: 'auto',
+            marginTop: 4,
             padding: 0,
             border: 'none',
             background: 'transparent',
-            fontSize: 13,
+            fontSize: 12,
             color: 'var(--adaptiveGrey600, #6F6A5E)',
             cursor: 'pointer',
           }}

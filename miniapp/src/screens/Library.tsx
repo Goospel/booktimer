@@ -1,4 +1,5 @@
 import { Button, Text, TextField } from '@toss/tds-mobile';
+import type { CSSProperties } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 
 import type { BookStatus, MarginResponse, MyBookSummary, SearchRow } from '../api';
@@ -48,19 +49,51 @@ export type BookAction =
   | { kind: 'visibility'; book: MyBookSummary }
   | { kind: 'delete'; book: MyBookSummary };
 
-/**
- * 캐러셀 아래 메타 — 표지와 제목만으론 안 보이는 것들. 읽은 시간이 0이면 적지 않는다(「0분」은 정보가 아니다).
- *
- * <p>**저자는 첫 줄, 읽은 시간·공개는 다음 줄**로 나눈다. 알라딘 저자 문자열은 「레프 니콜라예비치 톨스토이
- * (지은이), 연진희 (옮긴이)」처럼 길어서 한 줄로 이으면 폰 폭에서 되접히고, 그때 읽은 시간과 공개 여부가
- * 저자 이름 사이에 끼어 든다(실기기 실측). 줄을 나누면 「누가 썼나」와 「얼마나 읽었나」가 섞이지 않는다.
- * 줄바꿈을 실제로 살리는 건 렌더 쪽 `white-space: pre-line`이다 — 한 쌍으로 움직인다.
- */
+/** 캐러셀 아래 첫 줄 — <b>저자만</b>이다. 읽은 시간·공개 여부는 {@link bookStats}가 칩으로 맡는다. */
 export function metaLine(book: MyBookSummary): string {
-  const stats = [];
-  if (book.seconds > 0) stats.push(formatDuration(book.seconds));
-  stats.push(book.isPublic ? '공개' : '비공개');
-  return `${book.author ?? '저자 미상'}\n${stats.join(' · ')}`;
+  return book.author ?? '저자 미상';
+}
+
+/**
+ * 책 상태 칩 — 읽은 시간과 공개 여부.
+ *
+ * <p>전에는 저자 다음 줄에 「2시간 · 공개」로 붙어 있었다. 같은 회색 글자 두 줄이라 <b>「누가 썼나」와
+ * 「내 상태」가 한 덩어리로 뭉쳤고</b>, 이 화면에서 가장 중요한 토글인 공개 여부가 저자 이름과 같은
+ * 무게였다(바꾸는 자리는 「관리」 시트인데, 지금 어느 쪽인지가 안 보이면 열어 볼 이유도 안 생긴다).
+ * 칩으로 떼면 저자는 글자, 상태는 형태로 갈려 층이 생긴다.
+ *
+ * <p>시간은 「2시간」이 아니라 「2시간 읽음」이다 — 칩 하나만 떼어 놓고 보면 무엇의 2시간인지 알 수 없다.
+ * 0이면 칩 자체를 안 만든다(「0분 읽음」은 정보가 아니다).
+ *
+ * <p>공개는 세이지로 켜지고 비공개는 외곽선으로 눌린다 — <b>색이 곧 「누구에게 보이는가」</b>다.
+ *
+ * <p>저자를 줄바꿈으로 분리하던 옛 수법(`pre-line`)이 사라진 것도 이득이다 — 긴 알라딘 저자 문자열이
+ * 되접혀도 칩은 <b>다른 요소</b>라 그 사이에 끼어 들 수가 없다(전에는 문자열 한 덩어리라 가능했다).
+ */
+export function bookStats(book: MyBookSummary): { label: string; tone: BookChipTone }[] {
+  const chips: { label: string; tone: BookChipTone }[] = [];
+  if (book.seconds > 0) chips.push({ label: `${formatDuration(book.seconds)} 읽음`, tone: 'neutral' });
+  chips.push(book.isPublic ? { label: '공개', tone: 'sage' } : { label: '비공개', tone: 'outline' });
+  return chips;
+}
+
+type BookChipTone = 'neutral' | 'sage' | 'outline';
+
+/** 칩 세 톤 — 소식 배지와 같은 값이다(새 색을 만들지 않는다). */
+function bookChipStyle(tone: BookChipTone): CSSProperties {
+  const base: CSSProperties = { display: 'inline-block', padding: '2px 9px', borderRadius: 20, fontSize: 11, lineHeight: 1.6 };
+  if (tone === 'sage') {
+    return { ...base, background: 'var(--adaptiveBlue50, #E7EEE2)', color: 'var(--adaptiveBlue700, #4F6B4C)' };
+  }
+  if (tone === 'neutral') {
+    return { ...base, background: 'var(--adaptiveGrey200, #E4DDD0)', color: 'var(--adaptiveGrey700, #57534A)' };
+  }
+  return {
+    ...base,
+    background: 'transparent',
+    color: 'var(--adaptiveGrey600, #6F6A5E)',
+    border: '1px solid var(--adaptiveGrey200, #E4DDD0)',
+  };
 }
 
 /**
@@ -496,6 +529,7 @@ export function Shelf({
             onSelect={onSelect}
             noBookCard={false}
             metaOf={metaLine}
+            chipsOf={(b) => bookStats(b).map(({ label, tone }) => ({ label, style: bookChipStyle(tone) }))}
           />
           {/* 전폭 손잡이 줄 — 합폭은 「책 추가하기」와 같고, 비율은 2:1(쓰기가 주, 관리가 보조). */}
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>

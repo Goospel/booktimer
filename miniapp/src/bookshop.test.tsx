@@ -659,6 +659,23 @@ describe('책방 신원 블록 — 인스타식 상단', () => {
   it('짧은 성향에는 안 단다 — 눌러도 아무것도 안 펼쳐지는 죽은 버튼이 된다', () => {
     expect(card(profile({ personality: '한 작가를 깊게 파는 독자' }))).not.toContain('더보기');
   });
+
+  it('태그가 서술보다 먼저 온다 — 그 사람을 한눈에 요약하는 세 단어가 다섯 줄 뒤에 있으면 안 읽힌다', () => {
+    const markup = card(profile({ personality: '밑줄을 아끼지 않는 완독형이에요.' }));
+
+    expect(markup.indexOf('한우물형')).toBeGreaterThan(-1);
+    expect(markup.indexOf('한우물형')).toBeLessThan(markup.indexOf('밑줄을 아끼지 않는'));
+  });
+
+  it('서술은 카드에 담긴다 — 문단이 화면에 그냥 떠 있으면 벽처럼 읽힌다', () => {
+    const markup = card(profile({ personality: '밑줄을 아끼지 않는 완독형이에요.' }));
+
+    expect(markup).toContain('data-bio-card=""');
+  });
+
+  it('성향이 없으면 빈 카드를 세우지 않는다 — 테두리만 남은 상자가 생긴다', () => {
+    expect(card(profile({ personality: null }))).not.toContain('data-bio-card=""');
+  });
 });
 
 /** 「더보기」 노출 판정 — CSS clamp는 넘칠 때만 자르므로, 손잡이도 넘칠 때만 서야 짝이 맞는다. */
