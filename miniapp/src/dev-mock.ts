@@ -733,6 +733,40 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     const results = q.length < 2 ? [] : users.filter((u) => u.nickname.includes(q) || u.loginId.includes(q));
     return { q, results, myLoginId: myHandle, rateLimited: false };
   }],
+  /*
+   * 둘러보기 — 네 갈래를 일부러 섞어 둔다: 책 4권 / 4권 미만 / 표지 없는 책 / 아예 안 뜨는 사람.
+   * 서버는 매 호출 섞어 주지만 목은 고정 순서다(화면을 보면서 고칠 때 순서가 튀면 뭘 고쳤는지 안 보인다).
+   */
+  ['GET', /^\/api\/explore$/, () => ({
+    users: [
+      {
+        ...users[1], // 밑줄러 — 겹친 책이 앞자리에 선 모양(서버가 그 순서로 준다)
+        books: [
+          { title: '아몬드', coverUrl: null },
+          { title: '달러구트 꿈 백화점', coverUrl: null },
+          { title: '사피엔스', coverUrl: null },
+          { title: '파친코', coverUrl: null },
+        ],
+      },
+      {
+        loginId: 'doyun', nickname: '도윤', publicBookCount: 6, following: false, self: false,
+        books: [
+          { title: '모순', coverUrl: null },
+          { title: '채식주의자', coverUrl: null },
+          { title: '데미안', coverUrl: null },
+          { title: '총, 균, 쇠', coverUrl: null },
+        ],
+      },
+      {
+        loginId: 'hyerin', nickname: '혜린', publicBookCount: 2, following: false, self: false,
+        books: [
+          { title: '불안의 서', coverUrl: null },
+          { title: '사랑의 기술', coverUrl: null },
+        ],
+      },
+    ],
+    rateLimited: false,
+  })],
   ['GET', /^\/api\/follow-list$/, ({ query }) => ({
     type: query.type,
     users: query.type === 'following' ? users.filter((u) => u.following) : users.filter((u) => !u.self),
@@ -758,6 +792,15 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
         { label: '완독형', clickable: false },
       ],
       books: booksFor(user.loginId),
+      // 관계 신호 — 내 책방(self)에선 서버가 비워 보내므로 목도 그렇게 흉내낸다(줄·배지가 안 그려지는 상태).
+      mutualFollowers: user.self
+        ? []
+        : [
+            { loginId: 'nabi', nickname: '나비독서' },
+            { loginId: 'jieun', nickname: '지은의서재' },
+          ],
+      mutualFollowerCount: user.self ? 0 : 5,
+      followsMe: !user.self,
     };
   }],
   ['GET', /^\/api\/profile\/books$/, ({ query }) => {

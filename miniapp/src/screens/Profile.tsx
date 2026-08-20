@@ -11,6 +11,7 @@ import type {
   ProfileBook,
   ProfileResponse,
   ReportReason,
+  UserBrief,
 } from '../api';
 import {
   ApiError,
@@ -187,6 +188,68 @@ export const BIO_CLAMP_CHARS = 90;
  */
 export function needsBioToggle(personality: string | null): boolean {
   return personality !== null && personality.length > BIO_CLAMP_CHARS;
+}
+
+/**
+ * 「○○님, ○○님 외 N명이 팔로우합니다」 — 인스타 프로필의 그 줄이다(2026-08-20).
+ *
+ * <p>이름은 서버가 준 만큼(2명)만 쓰고 나머지는 <b>수로 접는다</b>. 접는 수는 받은 이름 개수가 아니라
+ * {@code total}에서 나온다 — 이름만 세면 3명이든 30명이든 「외 0명」이 되어 버린다.
+ *
+ * <p>{@code total}이 이름 수보다 작거나 0이면(옛 서버가 총 수를 안 줄 때) <b>접지 않고</b> 이름만 말한다 —
+ * 그러지 않으면 「외 -2명」 같은 문구가 나간다.
+ *
+ * @return 그릴 문구. 공통 친구가 하나도 없으면 {@code null}이고, 그러면 줄 자체를 그리지 않는다
+ */
+export function mutualFollowerText(names: string[], total: number): string | null {
+  if (names.length === 0) {
+    return null;
+  }
+  const listed = names.map((n) => `${n}님`).join(', ');
+  const rest = total - names.length;
+  return rest > 0 ? `${listed} 외 ${rest}명이 팔로우합니다` : `${listed}이 팔로우합니다`;
+}
+
+/**
+ * 공통 친구 줄 — 겹친 이니셜 아바타 + 문구. <b>팔로우 버튼 아래, 책 격자 위</b>가 자리다(인스타와 같다).
+ *
+ * <p>누를 수 없는 텍스트다. 인스타는 눌러서 명단을 열지만 그건 화면이 하나 더 붙는 일이라 지금은 안 만든다
+ * — 「이 사람이 내 아는 사람들과 닿아 있다」는 신호가 전달되면 이 줄의 일은 끝난다.
+ *
+ * <p>서버가 필드를 안 주는 구간(미배포)에서도 안전하다: `undefined`면 문구가 `null`이라 아무것도 안 그린다.
+ */
+export function MutualFollowers({ users, total }: { users?: UserBrief[]; total?: number }) {
+  const listed = users ?? [];
+  const text = mutualFollowerText(
+    listed.map((u) => u.nickname),
+    total ?? 0,
+  );
+  if (text === null) {
+    return null;
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 14 }}>
+      <div style={{ display: 'flex', flex: '0 0 auto' }}>
+        {listed.map((u, i) => (
+          // 캔버스색 테두리로 겹친 자리를 끊는다 — 테두리가 없으면 두 원이 한 덩어리로 뭉쳐 보인다.
+          <div
+            key={u.loginId}
+            style={{
+              display: 'flex',
+              marginLeft: i === 0 ? 0 : -7,
+              borderRadius: '50%',
+              border: '2px solid var(--adaptiveBackground, #FCFAF5)',
+            }}
+          >
+            <Avatar nickname={u.nickname} size={20} />
+          </div>
+        ))}
+      </div>
+      <Text typography="st12" color="grey600" style={{ display: 'block' }}>
+        {text}
+      </Text>
+    </div>
+  );
 }
 
 /**
@@ -508,8 +571,25 @@ export function ProfileCard({
         </div>
       </div>
 
-      <div style={{ marginTop: 14, fontSize: 15, fontWeight: 500, color: 'var(--adaptiveGrey900, #3A362E)' }}>
-        {profile.nickname}
+      <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--adaptiveGrey900, #3A362E)' }}>
+          {profile.nickname}
+        </span>
+        {/* 「나를 팔로우함」 — 둘러보기 카드에 있던 칩이 이사 온 자리(인스타는 이름 옆 배지로 단다).
+            내 책방에는 서버가 false로 보내므로 여기 분기를 또 두지 않는다(판정은 한 곳에서). */}
+        {profile.followsMe === true && (
+          <span
+            style={{
+              fontSize: 11,
+              padding: '2px 7px',
+              borderRadius: 9,
+              background: 'var(--adaptiveGrey200, #E4DDD0)',
+              color: 'var(--adaptiveGrey700, #57534A)',
+            }}
+          >
+            나를 팔로우함
+          </span>
+        )}
       </div>
       {/* @아이디는 닉네임에 딸린 식별자라 이름에 밀착시킨다(카운트와 한 줄로 섞이면 카운트의 일부로 읽힌다). */}
       <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 1 }}>
@@ -617,6 +697,8 @@ export function ProfileCard({
           </Button>
         </div>
       )}
+      {/* 팔로우 버튼 아래·책 격자 위 — 인스타 프로필에서 이 줄이 서는 그 자리다. */}
+      <MutualFollowers users={profile.mutualFollowers} total={profile.mutualFollowerCount} />
       {safety}
 
       {/*
