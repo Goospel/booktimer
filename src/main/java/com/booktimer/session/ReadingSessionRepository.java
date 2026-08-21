@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -49,6 +50,20 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
             group by s.book.id
             """)
     List<BookSecondsRow> sumSecondsByPublicBook(@Param("user") User user);
+
+    /**
+     * 여러 사람의 공개 집계 — 위 1인용을 후보 수만큼 부르면 N+1이라, 둘러보기는 이 한 방으로 끝낸다.
+     * 조건은 1인용과 글자 그대로 같다(완료·책지정·PUBLIC): 두 화면이 같은 초를 보게 하려면 조건이 갈리면 안 된다.
+     */
+    @Query("""
+            select new com.booktimer.session.UserBookSecondsRow(
+                       s.user.id, s.book.id, coalesce(sum(s.durationSeconds), 0))
+            from ReadingSession s
+            where s.user.id in :userIds and s.endedAt is not null and s.book is not null
+              and s.book.visibility = com.booktimer.book.BookVisibility.PUBLIC
+            group by s.user.id, s.book.id
+            """)
+    List<UserBookSecondsRow> sumSecondsByPublicBookOfUsers(@Param("userIds") Collection<Long> userIds);
 
     /** 한 책에 연결된(그 책으로 측정한) 세션들 — 책별 상세(잔디·기록) 집계에 쓰인다. */
     List<ReadingSession> findByUserAndBook(User user, Book book);
@@ -95,6 +110,61 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
     long sumCompletedSeconds(@Param("user") User user,
                              @Param("from") java.time.Instant from,
                              @Param("to") java.time.Instant to);
+
+    /**
+     * 홈 「함께 읽는 사람」 탭 — 여러 사람의 진행 중 세션 중 <b>PUBLIC 책</b>인 것만.
+     *
+     * <p>{@code join fetch}가 곧 게이트다: 비공개 책 세션은 조인에서 탈락해 <b>행 자체가 없다</b> —
+     * 제목만 가리고 「읽는 중」을 남기는 절충이 애초에 불가능한 모양이다. 그것만으로도 지금 뭘 하는지가
+     * 새기 때문이다(비공개 독서 시간 누출 방지, sns-design §3.5의 연장).
+     * {@code book}이 null인 미태깅 세션도 inner join이라 자연 제외된다 — 공개 여부를 판정할 수 없으면
+     * 비공개로 취급하는 게 안전한 쪽이다.
+     *
+     * <p>빈 목록이면 호출하지 않는다({@code in ()}은 DB마다 취급이 다르다 — {@code recencyByBook} 가드와 동일).
+     */
+    @Query("""
+            select s from ReadingSession s join fetch s.book b
+            where s.user.id in :userIds and s.endedAt is null
+              and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
+            """)
+    List<ReadingSession> findActivePublicSessions(@Param("userIds") Collection<Long> userIds);
+
+    /** 사람 한 명 → 그 사람의 마지막 공개 독서(시각 + 그때 읽던 책). {@link #lastPublicReadByUser} 투영. */
+    interface UserLastRead {
+        Long getUserId();
+
+        Instant getLastAt();
+
+        String getBookTitle();
+    }
+
+    /**
+     * 사람별 <b>마지막 공개 독서 한 줄</b> — 끝낸 세션 + PUBLIC 책만, 한 쿼리로(N+1 금지).
+     *
+     * <p><b>시각과 책 제목이 같은 행에서 나오는 것이 이 쿼리의 존재 이유다.</b> 둘을 따로 뽑으면
+     * 「A책 제목 + B세션 시각」이라는 있지도 않은 독서를 화면이 지어낸다.
+     *
+     * <p>JPQL엔 윈도 함수가 없어 「사람별 최신 한 행」은 상관 서브쿼리로 잡는다(greatest-n-per-group).
+     * 반환 행이 사람 수로 고정인 것이 요점이다 — 완료 세션을 전부 끌어와 자바에서 고르는 방식은
+     * 행 수가 그 사람의 독서량에 비례해 무제한이 된다.
+     *
+     * <p>기준이 {@code endedAt}이 아니라 <b>{@code startedAt}</b>인 것은 {@code sumCompletedSeconds}와
+     * 같은 규칙이다(세션은 시작일에 귀속된다). 공개 기록이 없는 사람은 <b>행이 아예 없어</b>
+     * 호출부가 null로 채운다 — 그 null이 화면에서 「공개된 기록이 없어요」가 된다.
+     *
+     * <p>같은 시각에 시작한 세션이 둘이면 행도 둘 온다 — 호출부가 먼저 만난 하나를 쓴다(둘 다
+     * 그 사람의 마지막 독서라 어느 쪽이든 참이다).
+     */
+    @Query("""
+            select s.user.id as userId, s.startedAt as lastAt, s.book.title as bookTitle
+            from ReadingSession s
+            where s.user.id in :userIds and s.endedAt is not null and s.book is not null
+              and s.book.visibility = com.booktimer.book.BookVisibility.PUBLIC
+              and s.startedAt = (select max(s2.startedAt) from ReadingSession s2
+                                 where s2.user = s.user and s2.endedAt is not null and s2.book is not null
+                                   and s2.book.visibility = com.booktimer.book.BookVisibility.PUBLIC)
+            """)
+    List<UserLastRead> lastPublicReadByUser(@Param("userIds") Collection<Long> userIds);
 
     /** 진행 중 세션을 책과 함께 즉시 로딩 — 트랜잭션 밖(뷰)에서 책 제목 접근 시 lazy 예외 방지. */
     @Query("select s from ReadingSession s left join fetch s.book where s.user = :user and s.endedAt is null")
@@ -163,6 +233,28 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
                    or u.lastNudgeSentAt < (select max(s.startedAt) from ReadingSession s where s.user = u))
             """)
     List<com.booktimer.user.User> findNudgeTargets(@Param("cutoff") java.time.Instant cutoff);
+
+    /**
+     * 토스 푸시 재참여 넛지 대상 사용자. {@link #findNudgeTargets}와 같은 비활동·멱등 계약이되, 이메일 조건
+     * (마케팅 동의·이메일 검증) 대신 <b>토스 연동 여부</b>만 본다:
+     * <ol>
+     *   <li>채널 보유 — {@code tossUserKey is not null}(웹 전용 사용자는 보낼 곳이 없다).</li>
+     *   <li>한 번이라도 읽음 — 서브쿼리 {@code max(startedAt)}이 null이면 비교가 불성립해 자동 제외(N-055).</li>
+     *   <li>비활동 — {@code max(startedAt) <= cutoff}(호출부가 {@code now - 7일}, 경계 포함).</li>
+     *   <li>이 구간 미발송 — {@code lastNudgeSentAt is null OR < 마지막 활동}. 이메일 넛지와 <b>같은 컬럼</b>을
+     *       공유하는 것이 채널 간 중복 발송 방지다(어느 채널이 보냈든 그 구간은 끝).</li>
+     * </ol>
+     * 알림 동의는 조건에 없다 — 동의 정본은 토스이고, 미동의 발송은 토스가 거부해 {@code sendMessage=false}로 끝난다.
+     * 여기에 이메일 동의·검증을 복사해 넣으면 토스 사용자 대부분이 걸러져 대상 0명이 되는 침묵 실패가 난다.
+     */
+    @Query("""
+            select u from User u
+            where u.tossUserKey is not null
+              and (select max(s.startedAt) from ReadingSession s where s.user = u) <= :cutoff
+              and (u.lastNudgeSentAt is null
+                   or u.lastNudgeSentAt < (select max(s.startedAt) from ReadingSession s where s.user = u))
+            """)
+    List<com.booktimer.user.User> findTossNudgeTargets(@Param("cutoff") java.time.Instant cutoff);
 
     /**
      * 책 삭제 시, 그 책을 가리키던 측정 세션을 "책 미지정"으로 푼다(book_id = null).

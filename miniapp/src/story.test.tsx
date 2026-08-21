@@ -2,252 +2,488 @@ import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import type { AuthorStories, StoryCard, StoryFeedResponse, StoryViewerEntry } from './api';
+import type { MarginEntry, MarginResponse, UserRow } from './api';
 import { ApiError } from './api';
-import { StoryCardView, StoryStrip, createStoryMessage, nextStoryIndex, viewTargetId } from './screens/Story';
+import {
+  LikersSheet,
+  MarginCard,
+  MarginView,
+  StoryComposer,
+  createStoryMessage,
+  hasFreshStory,
+  visibilityNotice,
+} from './screens/Story';
 import { userAgent } from './test-fixtures';
-import { coverColor } from './ui';
 
 /**
- * 스토리 화면 계측 — 정적 렌더로는 effect가 안 돌므로, 뷰어의 두 결정(다음/이전 전이 · 열람 기록 대상)은
- * 순수 함수로 뽑아 경계까지 단위로 본다. 24h 만료·작성 자격은 서버 몫이라 여기서 재검증하지 않는다(설계 §4).
+ * 여백 화면 계측 — 정적 렌더로는 effect·클릭이 안 돌므로, 화면의 결정은 순수 함수({@link hasFreshStory})와
+ * **프롭으로 데이터를 꽂는 표시 컴포넌트**({@link MarginView})로 갈라 계측한다(T-149: 부정 단언 금지).
+ * 노출 게이트(차단·IDOR·PRIVATE·비팔로워)는 서버 몫이라 여기서 재검증하지 않는다 — 화면은 서버가 준
+ * `self`·`following`·`entries`가 무엇을 켜고 끄는지만 진다.
  */
+
+const NOW = Date.parse('2026-08-16T12:00:00Z');
+const MINUTE = 60_000;
+const HOUR = 3_600_000;
 
 function render(node: React.ReactNode) {
   return renderToStaticMarkup(<TDSMobileProvider userAgent={userAgent}>{node}</TDSMobileProvider>);
 }
 
-function card(id: number, extra: Partial<StoryCard> = {}): StoryCard {
+function entry(id: number, extra: Partial<MarginEntry> = {}): MarginEntry {
   return {
     id,
     text: `문장 ${id}`,
     bgCode: 'paper',
-    bookTitle: null,
-    bookCoverUrl: null,
-    createdAt: '2026-08-11T00:00:00Z',
-    viewed: false,
+    quote: null,
+    createdAt: new Date(NOW - HOUR).toISOString(),
+    likeCount: 0,
+    liked: false,
     ...extra,
   };
 }
 
-function author(loginId: string | null, extra: Partial<AuthorStories> = {}): AuthorStories {
+function margin(extra: Partial<MarginResponse> = {}): MarginResponse {
   return {
-    loginId,
-    nickname: loginId === null ? '나' : `${loginId}님`,
-    profileCharacterCode: null,
-    allViewed: false,
-    stories: [card(1)],
+    book: { id: 7, title: '데미안', author: '헤르만 헤세', coverUrl: null },
+    ownerNickname: '구스펠',
+    self: false,
+    following: true,
+    entries: [entry(1)],
     ...extra,
   };
 }
 
-function strip(feed: StoryFeedResponse | null) {
-  return render(<StoryStrip feed={feed} onOpen={() => {}} onCompose={() => {}} />);
-}
-
-function viewerCard(props: Partial<Parameters<typeof StoryCardView>[0]> = {}) {
+function view(
+  data: MarginResponse,
+  extra: {
+    confirmDeleteId?: number | null;
+    error?: string | null;
+    onToggleLike?: (e: MarginEntry) => void;
+    onShowLikers?: (e: MarginEntry) => void;
+  } = {},
+) {
   return render(
-    <StoryCardView
-      author={author('goospel')}
-      card={card(1)}
-      index={0}
-      mine={false}
-      viewers={null}
+    <MarginView
+      loginId="goospel"
+      margin={data}
+      now={NOW}
       busy={false}
-      onStep={() => {}}
-      onClose={() => {}}
+      confirmDeleteId={extra.confirmDeleteId ?? null}
+      error={extra.error ?? null}
+      onCompose={() => {}}
+      onConfirmDelete={() => {}}
       onDelete={() => {}}
-      onViewers={() => {}}
-      onOpenProfile={() => {}}
-      {...props}
+      onToggleLike={extra.onToggleLike ?? (() => {})}
+      onShowLikers={extra.onShowLikers ?? (() => {})}
+      onBack={() => {}}
     />,
   );
 }
 
-describe('스토리 스트립 (소셜 탭 상단)', () => {
-  it('미열람 링에만 "새 스토리" 표식을 단다 — 링 테두리 색만으로는 구분이 안 되는 사람이 있다', () => {
-    const markup = strip({ mine: null, groups: [author('goospel'), author('reader', { allViewed: true })] });
-
-    expect(markup).toContain('goospel님');
-    expect(markup).toContain('reader님');
-    expect(markup.match(/새 스토리/g)).toHaveLength(1); // 전부 열람한 reader에는 안 붙는다
+/**
+ * 격자 발광 판정 — 서버는 **원시 사실(최근 글 시각)만** 주고 24시간 창은 클라가 잰다(설계 §D3ⓐ).
+ * 경계는 **미만(&lt;)**이다: 정각 24시간은 이미 지난 것으로 본다.
+ */
+describe('새 글 발광 — hasFreshStory (경계)', () => {
+  it('23시간 59분 전 글은 새 글이다', () => {
+    expect(hasFreshStory(new Date(NOW - 24 * HOUR + MINUTE).toISOString(), NOW)).toBe(true);
   });
 
-  it('피드가 비어도 작성 진입은 남기되, 팔로우 유도 문구는 스트립이 말하지 않는다(소셜 탭 빈 상태와 중복)', () => {
-    const markup = strip({ mine: null, groups: [] });
-
-    expect(markup).toContain('스토리');
-    expect(markup).not.toContain('팔로우한 사람이 없');
-    expect(markup).not.toContain('찾아');
+  it('24시간 정각은 새 글이 아니다 — 경계는 미만', () => {
+    expect(hasFreshStory(new Date(NOW - 24 * HOUR).toISOString(), NOW)).toBe(false);
   });
 
-  it('아직 못 받은 피드(null)에는 스트립을 그리지 않는다 — 빈 껍데기가 깜빡이지 않게', () => {
-    expect(renderToStaticMarkup(<StoryStrip feed={null} onOpen={() => {}} onCompose={() => {}} />)).toBe('');
+  it('24시간 1분 전은 새 글이 아니다', () => {
+    expect(hasFreshStory(new Date(NOW - 24 * HOUR - MINUTE).toISOString(), NOW)).toBe(false);
   });
 
-  it('가로 스크롤 스트립의 스크롤바를 숨긴다 — 링 아래로 두꺼운 회색 바가 그대로 보였다', () => {
-    expect(strip({ mine: null, groups: [author('goospel')] })).toContain('class="no-scrollbar"');
-  });
-
-  it('내 스토리가 있으면 맨 앞에 내 링을 둔다 — 핸들 없는 계정(loginId=null)도 포함(설계 §5-1)', () => {
-    const markup = strip({ mine: author(null, { stories: [card(9)] }), groups: [author('goospel')] });
-
-    expect(markup.indexOf('내 스토리')).toBeGreaterThanOrEqual(0);
-    expect(markup.indexOf('내 스토리')).toBeLessThan(markup.indexOf('goospel님'));
+  it('글이 없거나 비팔로워면(null) 발광하지 않는다 — 서버가 null로 가려 준다', () => {
+    expect(hasFreshStory(null, NOW)).toBe(false);
   });
 });
 
 /**
- * 링을 인스타 관습(원형 이니셜 아바타 + 바깥 링 + 닉네임 캡션)으로 세운다 — 텍스트 알약은
- * "스토리"라는 어휘를 화면에 만들어 주지 못했다. 링 색 분기의 출처는 서버 `AuthorStories.allViewed`다.
+ * 가시성 고지 — 비공개 책에도 여백을 쓸 수 있게 된 뒤(설계 결정 2), 「팔로워에게 보여요」는 비공개
+ * 책에서 <b>거짓말</b>이 됐다. 쓰는 순간 이 한 줄이 무엇이 새고 무엇이 안 새는지 말한다.
  */
-describe('스토리 링 — 원형 아바타', () => {
-  it('닉네임 첫 글자를 원형으로 세우고 배경은 닉네임에서 결정적으로 고른다 — 같은 사람은 늘 같은 색', () => {
-    const markup = strip({ mine: null, groups: [author('goospel')] });
+describe('가시성 고지 (visibilityNotice)', () => {
+  it('비공개 책이면 나만 본다고 말하고, 공개로 바꾸면 보인다는 것까지 알린다', () => {
+    const notice = visibilityNotice(false);
 
-    expect(markup).toContain('border-radius:50%');
-    expect(markup).toContain(`background:${coverColor('goospel님')}`);
+    expect(notice).toContain('나만 봐요');
+    expect(notice).toContain('공개로 바꾸면');
   });
 
-  it('미열람이면 링이 세이지로 선다 — 다 본 링은 옅은 테두리로 가라앉는다', () => {
-    const ring = (allViewed: boolean) => strip({ mine: null, groups: [author('goospel', { allViewed })] });
-
-    expect(ring(false)).toContain('background:var(--adaptiveBlue500, #6E8A6A)');
-    expect(ring(true)).not.toContain('background:var(--adaptiveBlue500, #6E8A6A)');
+  it('공개 책이면 팔로워에게 보인다고 말한다', () => {
+    expect(visibilityNotice(true)).toBe('팔로워에게 보여요.');
   });
 
-  it('「스토리 쓰기」는 이니셜이 아니라 + 아이콘 타일로 남는다 — 사람 링과 섞이면 남의 스토리로 오독한다', () => {
-    const markup = strip({ mine: null, groups: [] });
-
-    expect(markup).toContain('스토리 쓰기');
-    expect(markup).toContain('>+<');
+  it('필드가 없는 옛 서버 응답(undefined)은 공개로 간주한다 — 비공개라 단정하는 쪽이 더 위험한 거짓말이다', () => {
+    expect(visibilityNotice(undefined)).toBe('팔로워에게 보여요.');
   });
 });
 
-/**
- * 뷰어 진행 인디케이터 — "1/3" 텍스트는 스토리의 어휘가 아니다. 인스타식 세그먼트 바로 바꾸고,
- * 수치는 스크린리더가 읽을 수 있게 `progressbar`로 남긴다(텍스트를 지운 자리를 비워두지 않는다).
- */
-describe('스토리 뷰어 진행 인디케이터', () => {
-  const three = author('goospel', { stories: [card(1), card(2), card(3)] });
+describe('책 여백 화면 (MarginView)', () => {
+  it('책 라벨과 남긴 글 수를 머리에 세운다 — 홈 소식에서 바로 들어와도 어느 책인지 알아야 한다', () => {
+    const markup = view(margin({ entries: [entry(1), entry(2)] }));
 
-  it('카드 수만큼 세그먼트를 나누고 "N/M" 텍스트는 지운다', () => {
-    const markup = viewerCard({ author: three, index: 1 });
-
-    expect(markup).not.toContain('2/3');
-    expect(markup.match(/height:2px/g)).toHaveLength(3);
+    expect(markup).toContain('데미안');
+    expect(markup).toContain('헤르만 헤세');
+    expect(markup).toContain('@goospel');
+    expect(markup).toContain('여백에 남긴 글 2');
   });
 
-  it('현재 인덱스까지만 채운다 — 아직 안 본 카드만 옅게 남는다', () => {
-    expect(viewerCard({ author: three, index: 1 }).match(/opacity:0\.3/g)).toHaveLength(1);
-    expect(viewerCard({ author: three, index: 0 }).match(/opacity:0\.3/g)).toHaveLength(2);
+  it('글은 서버가 준 순서(최신순) 그대로 그린다', () => {
+    const markup = view(margin({ entries: [entry(9, { text: '최신 문장' }), entry(1, { text: '옛 문장' })] }));
+
+    expect(markup.indexOf('최신 문장')).toBeLessThan(markup.indexOf('옛 문장'));
   });
 
-  it('진행 수치를 스크린리더에 남긴다 — 텍스트를 지운 만큼 여기서 갚는다', () => {
-    const markup = viewerCard({ author: three, index: 1 });
-
-    expect(markup).toContain('aria-valuenow="2"');
-    expect(markup).toContain('aria-valuemax="3"');
+  it('배경 코드는 서버 팔레트 색으로만 칠한다 — 코드가 곧 스타일 화이트리스트다', () => {
+    expect(view(margin({ entries: [entry(1, { bgCode: 'night' })] }))).toContain('#1f2233');
+    expect(view(margin({ entries: [entry(1, { bgCode: 'javascript:evil' })] }))).not.toContain('javascript:evil');
   });
 
-  it('노치를 피해 상단 여백을 준다 — 전체화면이라 세그먼트가 상태바 아래로 깔렸다', () => {
-    expect(viewerCard()).toContain('env(safe-area-inset-top)');
-  });
-});
+  it('내 책이면 「여백에 글 남기기」와 글마다 지우기가 선다', () => {
+    const markup = view(margin({ self: true, following: false }));
 
-describe('스토리 열람 카드', () => {
-  it('문장·작성자·첨부 책 제목을 함께 그린다', () => {
-    const markup = viewerCard({ card: card(1, { bookTitle: '자바 최적화' }) });
-
-    expect(markup).toContain('문장 1');
-    expect(markup).toContain('goospel님');
-    expect(markup).toContain('자바 최적화');
+    expect(markup).toContain('여백에 글 남기기');
+    expect(markup).toContain('지우기');
   });
 
-  it('첨부 책 표지가 있으면 함께 그린다 — 없으면 제목만(있는 데이터만 쓴다)', () => {
-    expect(viewerCard({ card: card(1, { bookTitle: '자바 최적화', bookCoverUrl: 'https://img/java.jpg' }) })).toContain(
-      'src="https://img/java.jpg"',
+  it('지우기를 누른 글에만 확인 문구가 뜬다 — 되돌릴 수 없는 동작이라 한 탭 더 받는다', () => {
+    const markup = view(margin({ self: true, entries: [entry(1), entry(2)] }), { confirmDeleteId: 2 });
+
+    expect(markup).toContain('이 글을 지울까요?');
+    expect(markup.match(/정말 지우기/g)).toHaveLength(1);
+  });
+
+  it('남의 책이면 작성·삭제 손잡이가 없다 — 서버가 404로 거절하는 동작을 화면에서 먼저 막는다', () => {
+    const markup = view(margin({ self: false, following: true }));
+
+    expect(markup).not.toContain('여백에 글 남기기');
+    expect(markup).not.toContain('지우기');
+  });
+
+  it('비팔로워에게는 팔로우하면 볼 수 있다고 말한다 — 글 유무 자체가 새지 않는다(서버가 빈 배열)', () => {
+    const markup = view(margin({ self: false, following: false, entries: [] }));
+
+    expect(markup).toContain('팔로우하면');
+    expect(markup).toContain('여백에 남긴 글 0');
+  });
+
+  it('내 책인데 글이 하나도 없으면 첫 문장을 권한다 — 팔로우 안내가 내 화면에 뜨면 오독이다', () => {
+    const markup = view(margin({ self: true, following: false, entries: [] }));
+
+    expect(markup).toContain('아직 남긴 글이 없어요');
+    expect(markup).not.toContain('팔로우하면');
+  });
+
+  it('글마다 상대 시각을 적는다 — 만료가 없어진 뒤로 "언제 쓴 글인지"가 유일한 시간 단서다', () => {
+    expect(view(margin({ entries: [entry(1, { createdAt: new Date(NOW - 3 * HOUR).toISOString() })] }))).toContain(
+      '3시간 전',
     );
-    expect(viewerCard({ card: card(1, { bookTitle: '자바 최적화' }) })).not.toContain('<img');
   });
 
-  it('남의 스토리에는 삭제·본 사람이 없고 책방 진입이 있다 — 서버가 404로 거절하는 동작이라 화면에서 먼저 막는다', () => {
-    const markup = viewerCard({ mine: false });
+  /**
+   * 비공개 책의 여백은 나만 보는 메모다 — 그 사실을 화면이 말해 주지 않으면, 남긴 글이 팔로워에게
+   * 보인다고 오해한 채 쌓는다(또는 그 반대로 새는 줄 모른다). 공개 책엔 적지 않는다(잡음).
+   */
+  it('내 비공개 책 여백에는 나만 본다는 한 줄이 붙는다', () => {
+    const markup = view(margin({ self: true, book: { id: 7, title: '메모책', author: null, coverUrl: null, isPublic: false } }));
 
-    expect(markup).not.toContain('삭제');
-    expect(markup).not.toContain('본 사람');
-    expect(markup).toContain('책방');
+    expect(markup).toContain('나만 봐요');
   });
 
-  it('내 스토리에는 삭제·본 사람이 있고 책방 진입은 없다', () => {
-    const markup = viewerCard({ mine: true, author: author(null) });
+  it('내 공개 책 여백에는 그 줄이 없다 — 책방에 이미 진열된 책이라 새로 알릴 것이 없다', () => {
+    const markup = view(margin({ self: true, book: { id: 7, title: '공개책', author: null, coverUrl: null, isPublic: true } }));
 
-    expect(markup).toContain('삭제');
-    expect(markup).toContain('본 사람');
-    expect(markup).not.toContain('책방');
+    expect(markup).not.toContain('나만 봐요');
+    expect(markup).toContain('여백에 글 남기기'); // 화면 자체는 그려졌다(부재 단언의 쌍)
   });
 
-  it('본 사람 목록을 받으면 열람자 닉네임을 그리고, 0명이면 아직 없다고 말한다', () => {
-    const viewers: StoryViewerEntry[] = [
-      { loginId: 'a', nickname: '에이', profileCharacterCode: null, viewedAt: '2026-08-11T01:00:00Z' },
-    ];
+  it('실패 문구는 화면 안에서 끝난다 — 목록을 통째로 에러로 갈아치우지 않는다', () => {
+    const markup = view(margin(), { error: '요청에 실패했어요 (500)' });
 
-    expect(viewerCard({ mine: true, viewers })).toContain('에이');
-    expect(viewerCard({ mine: true, viewers: [] })).toContain('아직 본 사람이 없어요');
-  });
-
-  it('배경 코드는 서버 팔레트 색으로 칠한다 — 코드가 곧 스타일 화이트리스트다', () => {
-    expect(viewerCard({ card: card(1, { bgCode: 'night' }) })).toContain('#1f2233');
-    // 팔레트 밖 코드(옛 데이터·오타)는 기본 배경으로 떨어진다 — 스타일 주입 자리를 안 만든다
-    expect(viewerCard({ card: card(1, { bgCode: 'javascript:evil' }) })).not.toContain('javascript:evil');
+    expect(markup).toContain('요청에 실패했어요 (500)');
+    expect(markup).toContain('문장 1');
   });
 });
 
-describe('뷰어 전이 — nextStoryIndex (경계)', () => {
-  it('다음으로 넘기면 인덱스가 하나 오른다', () => {
-    expect(nextStoryIndex(0, 1, 3)).toBe(1);
+describe('글 남기기 (StoryComposer)', () => {
+  const composer = (isPublic?: boolean) =>
+    render(
+      <StoryComposer
+        book={{ id: 7, title: '데미안', author: '헤르만 헤세', coverUrl: null, isPublic }}
+        onDone={() => {}}
+        onCancel={() => {}}
+        onError={() => {}}
+      />,
+    );
+
+  it('제목은 「여백에 글 남기기」이고 어느 책의 여백인지 함께 적는다', () => {
+    const markup = composer();
+
+    expect(markup).toContain('여백에 글 남기기');
+    expect(markup).toContain('데미안');
   });
 
-  it('마지막에서 다음은 null — 뷰어를 닫는다(다음 작성자로 튀지 않는다)', () => {
-    expect(nextStoryIndex(2, 1, 3)).toBeNull();
+  it('책 고르는 select가 없다 — 진입점이 이미 그 책이라 고를 것이 남지 않았다', () => {
+    expect(composer()).not.toContain('<select');
   });
 
-  it('첫 카드에서 이전은 제자리 — 실수 탭에 뷰어가 닫히지 않는다', () => {
-    expect(nextStoryIndex(0, -1, 3)).toBe(0);
+  it('팔레트 스와치와 500자 카운터는 그대로 남는다', () => {
+    const markup = composer();
+
+    expect(markup).toContain('0/500');
+    expect(markup).toContain('aria-label="paper"');
   });
 
-  it('한 장뿐이면 다음은 곧 닫힘, 이전은 제자리', () => {
-    expect(nextStoryIndex(0, 1, 1)).toBeNull();
-    expect(nextStoryIndex(0, -1, 1)).toBe(0);
-  });
-});
-
-describe('열람 기록 대상 — viewTargetId', () => {
-  it('남의 미열람 스토리는 그 id를 기록한다', () => {
-    expect(viewTargetId(card(5), false)).toBe(5);
+  /** 쓰는 순간의 고지 — 캡션이라 글을 쓰기 시작해도 남는다(placeholder는 첫 글자에 사라진다). */
+  it('비공개 책이면 나만 본다고 캡션으로 알린다', () => {
+    expect(composer(false)).toContain('나만 봐요');
   });
 
-  it('내 스토리는 기록하지 않는다 — 서버가 no-op이라 요청이 낭비다', () => {
-    expect(viewTargetId(card(5), true)).toBeNull();
-  });
+  it('공개 책이면 팔로워에게 보인다고 알린다 — placeholder가 아니라 입력 위 캡션이다(써도 남는다)', () => {
+    const markup = composer(true);
 
-  it('이미 열람한 스토리는 다시 기록하지 않는다 — 서버 멱등에 기대지 않고 요청을 아낀다', () => {
-    expect(viewTargetId(card(5, { viewed: true }), false)).toBeNull();
+    expect(markup.indexOf('팔로워에게 보여요')).toBeLessThan(markup.indexOf('<textarea'));
+    expect(markup).not.toContain('나만 봐요');
   });
 });
 
 describe('작성 실패 안내 — createStoryMessage', () => {
-  it('레이트리밋(429)·상한(400)·책 없음(404)을 각각 다르게 안내한다', () => {
-    expect(createStoryMessage(new ApiError(429, '요청에 실패했어요 (429)'))).toContain('잠시');
+  it('레이트리밋(429)·검증 실패(400)·책 없음(404)을 각각 다르게 안내한다', () => {
+    expect(createStoryMessage(new ApiError(429, '요청에 실패했어요 (429)'))).toBe(
+      '글을 너무 자주 남겼어요. 잠시 후 다시 시도해 주세요.',
+    );
     expect(createStoryMessage(new ApiError(400, '요청에 실패했어요 (400)'))).toContain('500자');
-    expect(createStoryMessage(new ApiError(404, '요청에 실패했어요 (404)'))).toContain('책');
+    expect(createStoryMessage(new ApiError(404, '요청에 실패했어요 (404)'))).toContain('책방을 새로고침');
+  });
+
+  it('안내가 「여백」을 잃어버린 물건처럼 말하지 않는다 — 여백은 자리고, 남기는 것은 글이다', () => {
+    expect(createStoryMessage(new ApiError(429, '요청에 실패했어요 (429)'))).not.toContain('여백을');
+    expect(createStoryMessage(new ApiError(400, '요청에 실패했어요 (400)'))).not.toContain('여백을');
+  });
+
+  it('404는 첨부 selector가 아니라 책방 새로고침으로 안내한다 — 고를 selector가 사라졌다', () => {
+    expect(createStoryMessage(new ApiError(404, '요청에 실패했어요 (404)'))).not.toContain('골라');
   });
 
   it('서버가 평문 메시지를 주면 그대로 쓴다 — 상태코드 추측보다 서버 문구가 정확하다', () => {
-    expect(createStoryMessage(new ApiError(400, '활성 스토리는 최대 20장입니다'))).toBe('활성 스토리는 최대 20장입니다');
+    expect(createStoryMessage(new ApiError(400, '글을 남길 수 없습니다'))).toBe('글을 남길 수 없습니다');
   });
 
   it('네트워크 실패 등 상태코드 없는 오류는 그 메시지를 그대로 쓴다', () => {
     expect(createStoryMessage(new Error('Load failed'))).toBe('Load failed');
+  });
+});
+
+/**
+ * 나가는 길 — 두 화면이 다르다.
+ *
+ * <p>작성 화면은 「취소」가 곧 출구라 헤더의 뒤로가기가 중복이었다(토스 네비바의 `‹`까지 세면 화살표가
+ * 셋이었다). 여백 상세는 반대로 헤더 손잡이가 <b>유일한</b> 출구다 — 탭 위에 전체 화면으로 서 탭바가
+ * 가려지고 하단 버튼도 없다. 그래서 한쪽만 지운다. 부정 단언은 짝이 되는 긍정 단언과 함께 둔다(T-149).
+ */
+describe('나가는 길 — 헤더 뒤로가기', () => {
+  it('작성 화면엔 없다 — 「취소」가 출구다', () => {
+    const markup = render(
+      <StoryComposer
+        book={{ id: 7, title: '데미안', author: null, coverUrl: null, isPublic: true }}
+        onDone={() => {}}
+        onCancel={() => {}}
+        onError={() => {}}
+      />,
+    );
+
+    expect(markup).toContain('취소');
+    expect(markup).not.toContain('돌아가기');
+  });
+
+  it('여백 상세엔 있다 — 지우면 나갈 길이 사라진다', () => {
+    expect(view(margin())).toContain('돌아가기');
+  });
+});
+
+/**
+ * 좋아요 — <b>손잡이의 유무는 `self`가 아니라 핸들러의 유무가 가른다</b>.
+ *
+ * <p>이게 이 기능에서 가장 미끄러지기 쉬운 자리다: 서재의 인라인 여백 미리보기는 <b>내 글인데도</b>
+ * `self={false}`를 넘긴다(거기서 그 프롭은 「삭제 UI를 감춰」라는 뜻이다). `!self`로 하트를 켰다면
+ * 내 서재에서 내 글에 좋아요 버튼이 떴을 것이다. 아래 두 번째 테스트가 그 회귀를 막는다.
+ *
+ * <p>손잡이가 <b>둘로 갈라졌다</b>(2026-08-20): 하트는 누르기/취소만 지고, 개수는 「좋아요 N명」이라는
+ * 별도 줄이 져서 명단을 연다. 한 버튼이 두 일을 하면 명단을 보려다 좋아요가 눌린다.
+ */
+describe('여백 좋아요', () => {
+  it('하트 손잡이가 그려지고, 개수는 별도 줄이 진다', () => {
+    const html = view(margin({ entries: [entry(1, { likeCount: 3, liked: false })] }));
+
+    expect(html).toContain('aria-label="좋아요"');
+    expect(html).toContain('좋아요 3명');
+  });
+
+  it('핸들러를 안 넘기면 손잡이가 없다 — 서재 미리보기가 내 글에 self=false를 넘기는 자리', () => {
+    const html = render(
+      <MarginCard
+        entry={entry(1, { likeCount: 3 })}
+        now={NOW}
+        self={false}
+        busy={false}
+        confirming={false}
+        onConfirmDelete={() => {}}
+        onDelete={() => {}}
+      />,
+    );
+
+    expect(html).not.toContain('aria-label="좋아요"');
+    expect(html).toContain('좋아요 3명'); // 개수는 여전히 보인다 — 데이터지 손잡이가 아니다
+  });
+
+  it('이미 누른 글은 취소 손잡이가 된다', () => {
+    const html = view(margin({ entries: [entry(1, { likeCount: 4, liked: true })] }));
+
+    expect(html).toContain('aria-label="좋아요 취소"');
+  });
+
+  it('아무도 안 누른 글에는 개수 줄이 아예 없다 — 빈 상태를 숫자로 박제하지 않는다', () => {
+    const html = view(margin({ entries: [entry(1, { likeCount: 0 })] }));
+
+    expect(html).toContain('aria-label="좋아요"'); // 손잡이는 있고
+    expect(html).not.toContain('좋아요 0명'); // 개수 줄만 없다
+  });
+
+  /**
+   * 자기 좋아요를 허용하면서(2026-08-20) 내 여백에도 하트가 선다. 예전엔 여기가 「개수만」이었다 —
+   * 그때는 여백에 글을 쓴 사람이 없으면 좋아요를 확인할 길 자체가 없었다.
+   */
+  it('내 글에도 하트가 그려진다 — 자기 좋아요 허용', () => {
+    const html = view(margin({ self: true, following: false, entries: [entry(1, { likeCount: 2 })] }));
+
+    expect(html).toContain('aria-label="좋아요"');
+    expect(html).toContain('좋아요 2명');
+  });
+
+  it('내 비공개 책에도 하트가 그려진다 — 나만 보는 메모에도 표시를 남긴다', () => {
+    const html = view(
+      margin({
+        self: true,
+        following: false,
+        book: { id: 7, title: '비밀 노트', author: null, coverUrl: null, isPublic: false },
+        entries: [entry(1)],
+      }),
+    );
+
+    expect(html).toContain('aria-label="좋아요"');
+  });
+
+  it('개수 줄은 손잡이다 — 눌러서 명단을 연다', () => {
+    const html = view(margin({ entries: [entry(1, { likeCount: 3 })] }));
+
+    expect(html).toContain('aria-label="좋아요 3명 보기"');
+  });
+
+  it('명단 핸들러가 없으면 개수는 글자로만 남는다 — 서재 미리보기엔 열 시트가 없다', () => {
+    const html = render(
+      <MarginCard
+        entry={entry(1, { likeCount: 3 })}
+        now={NOW}
+        self={false}
+        busy={false}
+        confirming={false}
+        onConfirmDelete={() => {}}
+        onDelete={() => {}}
+      />,
+    );
+
+    expect(html).toContain('좋아요 3명');
+    expect(html).not.toContain('aria-label="좋아요 3명 보기"');
+  });
+});
+
+/**
+ * 인용문 — 글이 「책에서 옮긴 문장 + 내 주석」 두 층이 된다(2026-08-20). 인용은 <b>선택</b>이라
+ * 없는 글(옛 글 포함)이 지금까지와 똑같이 그려지는 것이 이 묶음의 핵심 단언이다.
+ */
+describe('인용문', () => {
+  it('인용이 있으면 주석과 함께 카드에 실린다', () => {
+    const html = view(
+      margin({ entries: [entry(1, { quote: '새는 알에서 나오려고 투쟁한다.', text: '열아홉엔 몰랐다' })] }),
+    );
+
+    expect(html).toContain('새는 알에서 나오려고 투쟁한다.');
+    expect(html).toContain('열아홉엔 몰랐다');
+    expect(html).toContain('<blockquote');
+  });
+
+  it('인용이 없으면 인용 블록이 아예 없다 — 옛 글은 예전 그대로 그려진다', () => {
+    const html = view(margin({ entries: [entry(1, { quote: null })] }));
+
+    expect(html).toContain('문장 1');
+    expect(html).not.toContain('<blockquote');
+  });
+
+  it('서재 인라인 미리보기(손잡이 없는 카드)도 인용을 그린다 — 같은 카드다', () => {
+    const html = render(
+      <MarginCard
+        entry={entry(1, { quote: '옮긴 문장' })}
+        now={NOW}
+        self={false}
+        busy={false}
+        confirming={false}
+        onConfirmDelete={() => {}}
+        onDelete={() => {}}
+      />,
+    );
+
+    expect(html).toContain('옮긴 문장');
+  });
+
+  it('컴포저에 인용 칸이 있다 — 주석 칸과 나란히', () => {
+    const html = render(
+      <StoryComposer
+        book={{ id: 7, title: '데미안', author: '헤르만 헤세', coverUrl: null }}
+        onDone={() => {}}
+        onCancel={() => {}}
+        onError={() => {}}
+      />,
+    );
+
+    expect(html).toContain('책에서 옮긴 문장');
+    expect(html).toContain('내 생각');
+  });
+});
+
+/**
+ * 좋아요 명단 시트 — 팔로워 시트와 같은 처지라 <b>데이터를 프롭으로</b> 받는다(정적 렌더 하니스가
+ * 0명/N명 분기에 닿는 유일한 길). 실패는 그 자리에서 다시 받는 길을 준다.
+ */
+describe('좋아요 명단 시트 (LikersSheet)', () => {
+  const someone: UserRow = { loginId: 'nabi', nickname: '나비독서', publicBookCount: 12, following: true, self: false };
+
+  const sheet = (users: UserRow[] | null, error: string | null = null) =>
+    render(
+      <LikersSheet users={users} error={error} onSelect={() => {}} onClose={() => {}} onRetry={() => {}} />,
+    );
+
+  it('누른 사람의 닉네임과 핸들을 그린다', () => {
+    const html = sheet([someone]);
+
+    expect(html).toContain('나비독서');
+    expect(html).toContain('@nabi');
+  });
+
+  it('받는 중(null)에는 「없어요」를 먼저 깜빡이지 않는다', () => {
+    expect(sheet(null)).not.toContain('아직 아무도');
+  });
+
+  it('0명이면 안내가 선다 — 그 사이 취소돼 빈 명단이 올 수 있다', () => {
+    expect(sheet([])).toContain('아직 아무도 누르지 않았어요.');
+  });
+
+  it('실패하면 그 자리에서 다시 받는 길을 준다 — 빈 시트가 막다른 길이 되지 않게', () => {
+    expect(sheet(null, '불러오지 못했어요')).toContain('다시');
   });
 });

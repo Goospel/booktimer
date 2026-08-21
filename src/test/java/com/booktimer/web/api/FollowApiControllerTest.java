@@ -186,6 +186,47 @@ class FollowApiControllerTest {
                 .andExpect(jsonPath("$.following").value(false));
     }
 
+    // ── 운영자(ADMIN) 노출 불변식 ─────────────────────────────────────────────
+    // 만드는 쪽(follow)에만 건다. 푸는 쪽(unfollow)에 걸면 상대가 나중에 ADMIN이 됐을 때
+    // 이미 만들어진 팔로우를 영영 못 끊는다 — 이 비대칭을 아래 두 테스트가 못 박는다.
+
+    @Test
+    @DisplayName("POST /api/follow 대상이 운영자 → 404 (핸들을 알아도 존재가 새지 않는다)")
+    void follow_adminTarget_returns404() throws Exception {
+        registrationService.register("fol-adm-actor@booktimer.com", "pw1234qwer!!", "foladmactor", "일반사용자", SEOUL, Role.USER, today());
+        registrationService.register("fol-adm-target@booktimer.com", "pw1234qwer!!", "foladmtarget", "운영자", SEOUL, Role.ADMIN, today());
+
+        mockMvc.perform(post("/api/follow")
+                        .with(user("fol-adm-actor@booktimer.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginId\":\"foladmtarget\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("POST /api/unfollow 대상이 나중에 운영자가 돼도 언팔로우는 된다 (비대칭 가드)")
+    void unfollow_targetPromotedToAdmin_stillWorks() throws Exception {
+        registrationService.register("unfol-adm-a@booktimer.com", "pw1234qwer!!", "unfoladma", "언팔로워", SEOUL, Role.USER, today());
+        registrationService.register("unfol-adm-b@booktimer.com", "pw1234qwer!!", "unfoladmb", "나중운영자", SEOUL, Role.USER, today());
+
+        mockMvc.perform(post("/api/follow")
+                        .with(user("unfol-adm-a@booktimer.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginId\":\"unfoladmb\"}"))
+                .andExpect(jsonPath("$.following").value(true));
+
+        var target = userRepository.findByLoginId("unfoladmb").orElseThrow();
+        target.promoteToAdmin();
+        userRepository.save(target);
+
+        mockMvc.perform(post("/api/unfollow")
+                        .with(user("unfol-adm-a@booktimer.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginId\":\"unfoladmb\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.following").value(false));
+    }
+
     @Test
     @DisplayName("POST /api/unfollow 미인증 → 302 리다이렉트 (기본 잠김)")
     void unfollow_unauthenticated_redirectsToLogin() throws Exception {

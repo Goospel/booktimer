@@ -14,8 +14,9 @@ const props = defineProps<{
 const handle = computed(() => sanitizeLoginId(props.loginId));
 const handleValid = computed(() => isValidLoginId(handle.value));
 const displayName = computed(() => props.nickname.trim() || '나');
-// 표시 이니셜 — 아바타 자리 채움(닉네임 첫 글자, 없으면 책 이모지 폴백).
-const initial = computed(() => Array.from(displayName.value)[0] ?? '📖');
+// 표시 이니셜 — 아바타 자리 채움(닉네임 첫 글자). `displayName`이 이미 '나'로 폴백하므로 여기 폴백은
+// 도달하지 않지만, 빈 문자열이 새어 들어와도 상자가 비지 않게 남겨 둔다.
+const initial = computed(() => Array.from(displayName.value)[0] ?? '나');
 </script>
 
 <template>

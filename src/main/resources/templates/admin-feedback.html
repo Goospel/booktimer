@@ -11,7 +11,6 @@
 <body>
 <div class="container">
     <header class="brand">
-        <span class="emoji">🛠️</span>
         <h1>문의함</h1>
     </header>
     <p class="status-line muted">사용자 문의를 읽고 읽음/처리완료를 표시하거나 답장합니다. 상태·답장은 작성자 본인 화면에만 보입니다.</p>
@@ -45,7 +44,7 @@
                 <button type="submit" class="btn-primary btn-small">처리완료</button>
             </form>
             <form th:action="@{/admin/feedback/{id}/delete(id=${row.id})}" method="post"
-                  onsubmit="return confirm('이 문의를 삭제할까요?');">
+                  data-confirm="이 문의를 삭제할까요?">
                 <button type="submit" class="btn-danger btn-small">삭제</button>
             </form>
         </div>
@@ -62,5 +61,7 @@
         <th:block th:replace="~{fragments/nav-links :: navLink(@{/admin}, 'back', '관리자 홈')}"></th:block>
     </nav>
 </div>
+<!-- data-confirm 위임 리스너 — 인라인 onsubmit은 CSP에서 실행되지 않는다 -->
+<script th:attr="nonce=${cspNonce}" th:src="@{/js/confirm-submit.js}"></script>
 </body>
 </html>

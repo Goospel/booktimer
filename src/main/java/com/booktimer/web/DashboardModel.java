@@ -59,6 +59,15 @@ public class DashboardModel {
             Instant activeStartedAt,
             String activeBookTitle,
             long activeBookTotalSeconds,
+            /**
+             * 지금 측정 중인 책 — 책 없이 측정 중이거나 측정 중이 아니면 {@code null}.
+             *
+             * <p>{@code activeBookTitle}과 겹쳐 보이지만 쓰임이 다르다: 제목 한 줄은 SSR이 그대로 쓰고,
+             * 이 엔티티는 <b>미니앱이 표지를 그리는 재료</b>다(id·coverUrl·author). 제목으로
+             * {@code readingBooks}에서 되찾는 우회는 동명 책에서 틀리고, 측정 중에 그 책을 완독으로
+             * 옮기면 목록에서 빠져 표지가 조용히 사라진다.
+             */
+            Book activeBook,
             List<Book> readingBooks,
             List<Book> finishedBooks,
             List<Book> wantToReadBooks,
@@ -103,6 +112,7 @@ public class DashboardModel {
                 activeSession.map(ReadingSession::getStartedAt).orElse(null),
                 activeBook != null ? activeBook.getTitle() : null,
                 activeBook != null ? sessionRepository.sumDurationByUserAndBook(user, activeBook) : 0L,
+                activeBook,
                 readingBooks,
                 finishedBooks,
                 wantToReadBooks,

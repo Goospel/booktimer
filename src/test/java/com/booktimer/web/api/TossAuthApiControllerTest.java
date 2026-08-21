@@ -3,6 +3,7 @@ package com.booktimer.web.api;
 import com.booktimer.auth.TossLoginClient;
 import com.booktimer.auth.TossLoginException;
 import com.booktimer.auth.TossUserInfo;
+import com.booktimer.security.RateLimitAction;
 import com.booktimer.security.RateLimitService;
 import com.booktimer.user.AuthProvider;
 import com.booktimer.user.Role;
@@ -22,6 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -53,6 +56,17 @@ class TossAuthApiControllerTest {
 
     private void tossReturns(String userKey, String email) {
         when(tossLoginClient.fetchUserInfo(any(), any())).thenReturn(new TossUserInfo(userKey, email));
+    }
+
+    /**
+     * 매 호출마다 <b>다른</b> userKey를 돌려준다 — IP 상한을 격리해 재려면 필요하다. 같은 키를 반복하면
+     * userKey를 키로 쓰는 {@link RateLimitAction#TOSS_AUTH}(20)가 먼저 터져 IP 상한(60)에 닿지 못한다.
+     * 신원을 돌려가며 두드리는 건 공격자의 실제 행동이기도 하다 — IP를 키로 한 겹 더 두는 이유가 그것이다.
+     */
+    private void tossReturnsFreshIdentityEachCall() {
+        java.util.concurrent.atomic.AtomicInteger seq = new java.util.concurrent.atomic.AtomicInteger();
+        when(tossLoginClient.fetchUserInfo(any(), any()))
+                .thenAnswer(invocation -> new TossUserInfo("uk-rot-" + seq.incrementAndGet(), null));
     }
 
     private static String body(String... kv) {
@@ -221,6 +235,60 @@ class TossAuthApiControllerTest {
         }
 
         callToss("/api/toss/link", body("authorizationCode", "c", "referrer", "r", "linkCode", "GUESSN"))
+                .andExpect(status().isTooManyRequests());
+    }
+
+    // ── IP 레이트리밋 (verify 앞) ────────────────────────────────────────────
+
+    @Test
+    @DisplayName("IP 한도 초과 → 토스를 호출하기 '전에' 429 (미인증 요청이 아웃바운드를 무제한 유발하지 못한다)")
+    void perIpLimit_shortCircuitsBeforeCallingToss() throws Exception {
+        tossReturnsFreshIdentityEachCall();
+        int limit = RateLimitAction.TOSS_VERIFY.limit();
+
+        for (int i = 0; i < limit; i++) {
+            callToss("/api/toss/login", body("authorizationCode", "c" + i, "referrer", "r"))
+                    .andExpect(status().isOk());
+        }
+
+        callToss("/api/toss/login", body("authorizationCode", "over", "referrer", "r"))
+                .andExpect(status().isTooManyRequests());
+
+        // 핵심 단언 — 429가 난 요청은 토스를 부르지 않았다(호출 수가 한도에서 늘지 않음).
+        verify(tossLoginClient, times(limit)).fetchUserInfo(any(), any());
+    }
+
+    @Test
+    @DisplayName("IP 한도는 인가코드가 '거부되는' 요청에도 걸린다 (401 무한 반복이 아웃바운드를 태우지 못한다)")
+    void perIpLimit_appliesToRejectedCodesToo() throws Exception {
+        when(tossLoginClient.fetchUserInfo(any(), any())).thenThrow(new TossLoginException("bad code"));
+        int limit = RateLimitAction.TOSS_VERIFY.limit();
+
+        for (int i = 0; i < limit; i++) {
+            callToss("/api/toss/login", body("authorizationCode", "bad" + i, "referrer", "r"))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        callToss("/api/toss/login", body("authorizationCode", "bad-over", "referrer", "r"))
+                .andExpect(status().isTooManyRequests());
+        verify(tossLoginClient, times(limit)).fetchUserInfo(any(), any());
+    }
+
+    @Test
+    @DisplayName("IP 한도는 세 엔드포인트가 '함께' 센다 (경로를 갈아타며 우회할 수 없다)")
+    void perIpLimit_isSharedAcrossEndpoints() throws Exception {
+        tossReturnsFreshIdentityEachCall();
+        int limit = RateLimitAction.TOSS_VERIFY.limit();
+
+        for (int i = 0; i < limit; i++) {
+            callToss("/api/toss/login", body("authorizationCode", "c" + i, "referrer", "r"))
+                    .andExpect(status().isOk());
+        }
+
+        // login으로 한도를 채웠으니 register·link도 막혀야 한다.
+        callToss("/api/toss/register", body("authorizationCode", "c", "referrer", "r"))
+                .andExpect(status().isTooManyRequests());
+        callToss("/api/toss/link", body("authorizationCode", "c", "referrer", "r", "linkCode", "ZZZZZZZZ"))
                 .andExpect(status().isTooManyRequests());
     }
 

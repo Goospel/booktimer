@@ -1,7 +1,7 @@
 <template>
   <!-- 전체 진척(작가 축) — 시각 진행바 -->
   <div class="garden-dex-progress">
-    <p class="garden-page-progress">🧑 작가 캐릭터 {{ catalog.ownedAuthorCharacterCount }}/{{ catalog.totalAuthorCharacterCount }}</p>
+    <p class="garden-page-progress">작가 캐릭터 {{ catalog.ownedAuthorCharacterCount }}/{{ catalog.totalAuthorCharacterCount }}</p>
     <div class="garden-meter" role="progressbar"
          :aria-valuenow="Math.round(progressPct)" aria-valuemin="0" aria-valuemax="100">
       <div class="garden-meter-fill" :style="{ width: progressPct + '%' }"></div>
@@ -19,7 +19,7 @@
   <!-- 작가 캐릭터 -->
   <section class="garden-axis">
     <div class="garden-dex-head">
-      <h2 class="garden-axis-title">🧑 작가 캐릭터</h2>
+      <h2 class="garden-axis-title">작가 캐릭터</h2>
       <span class="garden-progress">{{ catalog.ownedAuthorCharacterCount }}/{{ catalog.totalAuthorCharacterCount }}명</span>
     </div>
     <div class="garden-grid">
@@ -37,9 +37,9 @@
     </div>
     <p class="garden-next" v-if="visibleCharacters.length === 0">해당하는 캐릭터가 없어요.</p>
     <p class="garden-next" v-else-if="catalog.ownedAuthorCharacterCount < catalog.totalAuthorCharacterCount">
-      🧑 작가의 책을 완독해 캐릭터를 모아보세요
+      작가의 책을 완독해 캐릭터를 모아보세요
     </p>
-    <p class="garden-next" v-else-if="catalog.totalAuthorCharacterCount > 0">🎉 모든 작가 캐릭터를 모았어요!</p>
+    <p class="garden-next" v-else-if="catalog.totalAuthorCharacterCount > 0">모든 작가 캐릭터를 모았어요!</p>
   </section>
 
   <!-- 캐릭터 상세 바텀시트 -->

@@ -29,7 +29,11 @@ public class AladinBookSearchClient implements BookSearchClient {
     private static final Logger log = LoggerFactory.getLogger(AladinBookSearchClient.class);
     private static final String ENDPOINT = "https://www.aladin.co.kr/ttb/api/ItemSearch.aspx";
     private static final String LOOKUP_ENDPOINT = "https://www.aladin.co.kr/ttb/api/ItemLookUp.aspx";
+    private static final String LIST_ENDPOINT = "https://www.aladin.co.kr/ttb/api/ItemList.aspx";
     private static final String NOT_CONFIGURED = "not-configured";
+
+    /** 베스트셀러 요청 건수 — 화면은 8권 남짓 쓰지만, 이미 가진 책이 걸러지므로 여유를 두고 받는다. */
+    private static final int BESTSELLER_SIZE = 20;
 
     private final String ttbKey;
     private final RestClient restClient;
@@ -69,6 +73,22 @@ public class AladinBookSearchClient implements BookSearchClient {
     }
 
     @Override
+    public List<BookSearchResult> bestsellers() {
+        if (!isEnabled()) {
+            return List.of();
+        }
+        try {
+            String body = restClient.get().uri(buildBestsellerUrl(ttbKey)).retrieve().body(String.class);
+            // ItemList 응답도 ItemSearch와 같은 item[] 구조라 parse()를 그대로 재사용한다(매핑 단일 소스).
+            return parse(body, objectMapper);
+        } catch (Exception e) {
+            // 추천은 있으면 좋은 것이라, 실패는 「추천 없음」으로 흡수한다(화면이 깨지지 않는다).
+            log.warn("알라딘 베스트셀러 조회 실패: {}", e.toString());
+            return List.of();
+        }
+    }
+
+    @Override
     public Optional<BookSearchResult> lookupByIsbn(String isbn13) {
         if (!isEnabled() || isbn13 == null || isbn13.isBlank()) {
             return Optional.empty();
@@ -102,6 +122,26 @@ public class AladinBookSearchClient implements BookSearchClient {
                 .queryParam("Cover", "MidBig")
                 // includeKey=1이라야 응답 link에 TTBKey(제휴 식별자)가 실린다(기본 0=미포함). 없으면 저장·재생되는
                 // 구매링크에 제휴키가 빠져 클릭이 귀속되지 않아 제휴 수익 0(무성 추적실패 — 운영 실측으로 확인, 쿠팡 lptag와 동일 계열).
+                .queryParam("includeKey", 1)
+                .queryParam("output", "js")
+                .queryParam("Version", "20131101")
+                .build()
+                .toUriString();
+    }
+
+    /**
+     * 알라딘 ItemList 호출 URL을 만든다 — 베스트셀러 목록(QueryType=Bestseller). 추천 콜드스타트용.
+     * 네트워크 없이 단위테스트할 수 있게 정적·순수 함수로 분리한다(buildSearchUrl과 동일 정신).
+     */
+    static String buildBestsellerUrl(String ttbKey) {
+        return UriComponentsBuilder.fromUriString(LIST_ENDPOINT)
+                .queryParam("ttbkey", ttbKey)
+                .queryParam("QueryType", "Bestseller")
+                .queryParam("MaxResults", BESTSELLER_SIZE)
+                .queryParam("start", 1)
+                .queryParam("SearchTarget", "Book")
+                .queryParam("Cover", "MidBig")
+                // 추천에서 담은 책도 구매 링크를 타므로 제휴키가 실려야 한다(buildSearchUrl과 같은 이유).
                 .queryParam("includeKey", 1)
                 .queryParam("output", "js")
                 .queryParam("Version", "20131101")

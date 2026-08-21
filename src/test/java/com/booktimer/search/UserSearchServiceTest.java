@@ -404,4 +404,192 @@ class UserSearchServiceTest {
         assertThat(reasonsOf(recs, "overlapcand"))
                 .containsExactlyInAnyOrder("같이 읽은 책 1권", "요즘 꾸준히 읽어요");
     }
+
+    // ──────────────────────────────────────────────────────────────
+    // 둘러보기(explore) — 추천 사다리 위에 「책 4권 + 무작위 추출」을 얹은 미니앱 전용 경로
+    // ──────────────────────────────────────────────────────────────
+
+    /** PUBLIC 책 + 그 책으로 잰 완료 세션(누적 초) — 둘러보기 정렬의 입력. */
+    private Book publicBookWithSeconds(User owner, String title, String isbn, long seconds) {
+        Book b = Book.register(owner, title, null, isbn, "cover-" + title, null, null, BookStatus.READING);
+        b.makePublic();
+        bookRepository.save(b);
+        Instant start = Instant.now().minus(30, ChronoUnit.DAYS);
+        readingSessionRepository.save(ReadingSession.manual(owner, start, start.plusSeconds(seconds), b));
+        return b;
+    }
+
+    private List<String> titlesOf(List<ExploreUser> users, String loginId) {
+        return users.stream().filter(u -> u.row().loginId().equals(loginId))
+                .findFirst().orElseThrow().books().stream().map(ExploreBook::title).toList();
+    }
+
+    @Test
+    @DisplayName("둘러보기: 공개 책이 0권인 후보는 목록에서 아예 빠진다(빈 카드를 만들지 않는다)")
+    void explore_excludesUsersWithoutPublicBooks() {
+        User viewer = newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User hasBooks = newUser("has@booktimer.com", "hasbooks", "책있음");
+        publicBookWithSeconds(hasBooks, "있는책", "9788900001111", 600);
+        User noBooks = newUser("none@booktimer.com", "nobooks", "책없음");
+        privateBook(noBooks, "비공개책"); // 비공개만 가진 사람도 「공개 책 0권」이다
+
+        List<ExploreUser> users = searchService.explore(viewer, 10);
+
+        assertThat(users).extracting(u -> u.row().loginId())
+                .contains("hasbooks").doesNotContain("nobooks");
+    }
+
+    @Test
+    @DisplayName("둘러보기: 책은 누적 독서 시간이 긴 순으로 최대 4권 — 5권 이상 가져도 4권에서 끊는다")
+    void explore_topFourBySeconds() {
+        User viewer = newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User target = newUser("t@booktimer.com", "reader", "독자");
+        publicBookWithSeconds(target, "1등", "9788900002001", 5000);
+        publicBookWithSeconds(target, "2등", "9788900002002", 4000);
+        publicBookWithSeconds(target, "3등", "9788900002003", 3000);
+        publicBookWithSeconds(target, "4등", "9788900002004", 2000);
+        publicBookWithSeconds(target, "5등", "9788900002005", 1000);
+
+        List<ExploreUser> users = searchService.explore(viewer, 10);
+
+        assertThat(titlesOf(users, "reader")).containsExactly("1등", "2등", "3등", "4등");
+    }
+
+    @Test
+    @DisplayName("둘러보기: 공개 책이 4권 미만이면 있는 만큼만 담는다(빈 자리를 만들지 않는다)")
+    void explore_fewerThanFourBooks() {
+        User viewer = newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User target = newUser("t@booktimer.com", "reader", "독자");
+        publicBookWithSeconds(target, "가", "9788900003001", 300);
+        publicBookWithSeconds(target, "나", "9788900003002", 200);
+
+        List<ExploreUser> users = searchService.explore(viewer, 10);
+
+        assertThat(titlesOf(users, "reader")).containsExactly("가", "나");
+    }
+
+    @Test
+    @DisplayName("둘러보기: 나와 겹친 책은 최대 2권까지 앞자리에 서고, 남은 자리는 겹치지 않은 책의 누적순이다")
+    void explore_coReadBooksComeFirst() {
+        User viewer = newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User target = newUser("t@booktimer.com", "reader", "독자");
+        // 내가 읽은 책 3권 — 그중 2권만 앞자리에 설 수 있다
+        publicReadBook(viewer, "9788900004001");
+        publicReadBook(viewer, "9788900004002");
+        publicReadBook(viewer, "9788900004003");
+        // 상대의 책: 겹친 3권은 누적이 짧고, 안 겹친 2권이 누적 상위다
+        publicBookWithSeconds(target, "겹침A", "9788900004001", 300);
+        publicBookWithSeconds(target, "겹침B", "9788900004002", 200);
+        publicBookWithSeconds(target, "겹침C", "9788900004003", 100);
+        publicBookWithSeconds(target, "독자1등", "9788900004900", 9000);
+        publicBookWithSeconds(target, "독자2등", "9788900004901", 8000);
+
+        List<ExploreUser> users = searchService.explore(viewer, 10);
+
+        // 앞 2칸은 겹친 책(그 안에서도 누적순), 뒤 2칸은 겹치지 않은 책의 누적순
+        assertThat(titlesOf(users, "reader")).containsExactly("겹침A", "겹침B", "독자1등", "독자2등");
+    }
+
+    @Test
+    @DisplayName("둘러보기: 겹친 책이 누적 상위 4권 안에 이미 있어도 같은 책이 두 번 담기지 않는다")
+    void explore_coReadBookNotDuplicated() {
+        User viewer = newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User target = newUser("t@booktimer.com", "reader", "독자");
+        publicReadBook(viewer, "9788900005001"); // 겹친 책이 곧 상대의 1등 책이다
+        publicBookWithSeconds(target, "겹치고1등", "9788900005001", 9000);
+        publicBookWithSeconds(target, "둘째", "9788900005002", 800);
+        publicBookWithSeconds(target, "셋째", "9788900005003", 700);
+        publicBookWithSeconds(target, "넷째", "9788900005004", 600);
+        publicBookWithSeconds(target, "다섯째", "9788900005005", 500);
+
+        assertThat(titlesOf(searchService.explore(viewer, 10), "reader"))
+                .containsExactly("겹치고1등", "둘째", "셋째", "넷째");
+    }
+
+    @Test
+    @DisplayName("둘러보기: 겹친 책이 하나도 없으면 그냥 누적순이다")
+    void explore_noCoRead_plainOrder() {
+        User viewer = newUser("viewer@booktimer.com", "viewer", "뷰어");
+        publicReadBook(viewer, "9788900006999"); // 상대가 안 가진 책
+        User target = newUser("t@booktimer.com", "reader", "독자");
+        publicBookWithSeconds(target, "긴책", "9788900006001", 700);
+        publicBookWithSeconds(target, "짧은책", "9788900006002", 100);
+
+        assertThat(titlesOf(searchService.explore(viewer, 10), "reader"))
+                .containsExactly("긴책", "짧은책");
+    }
+
+    @Test
+    @DisplayName("둘러보기: 표지 주소를 함께 싣는다 — 카드 본체가 표지라서 없으면 화면이 빈다")
+    void explore_carriesCoverUrl() {
+        User viewer = newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User target = newUser("t@booktimer.com", "reader", "독자");
+        publicBookWithSeconds(target, "표지책", "9788900007001", 500);
+
+        List<ExploreUser> users = searchService.explore(viewer, 10);
+
+        assertThat(users).filteredOn(u -> u.row().loginId().equals("reader"))
+                .flatExtracting(ExploreUser::books)
+                .extracting(ExploreBook::coverUrl).containsExactly("cover-표지책");
+    }
+
+    @Test
+    @DisplayName("둘러보기: limit을 넘지 않는다 — 후보가 limit보다 많아도 그만큼만")
+    void explore_respectsLimit() {
+        User viewer = newUser("viewer@booktimer.com", "viewer", "뷰어");
+        for (int i = 1; i <= 12; i++) {
+            User u = newUser("u" + i + "@booktimer.com", "cand" + i, "후보" + i);
+            publicBookWithSeconds(u, "책" + i, "978890000800" + i, 100);
+        }
+
+        assertThat(searchService.explore(viewer, 5)).hasSize(5);
+    }
+
+    @Test
+    @DisplayName("둘러보기: 핸들 없는 계정은 책이 있어도 안 뜬다(추천 사다리의 노출 불변식을 그대로 물려받는다)")
+    void explore_excludesUsersWithoutLoginId() {
+        User viewer = newUser("viewer@booktimer.com", "viewer", "뷰어");
+        User pending = userRepository.save(
+                User.ofOAuth("pending@booktimer.com", "구글이름", "Asia/Seoul", Role.USER, AuthProvider.GOOGLE));
+        publicBookWithSeconds(pending, "핸들없는이의책", "9788900009001", 500);
+
+        assertThat(searchService.explore(viewer, 10))
+                .extracting(u -> u.row().loginId()).doesNotContain((String) null);
+    }
+
+    @Test
+    @DisplayName("무작위 추출: 같은 seed면 같은 결과 — 섞되 재현 가능해야 테스트가 성립한다")
+    void pickRandom_isDeterministicForSameSeed() {
+        List<String> pool = List.of("a", "b", "c", "d", "e", "f", "g", "h");
+
+        List<String> first = UserSearchService.pickRandom(pool, 3, new java.util.Random(42));
+        List<String> second = UserSearchService.pickRandom(pool, 3, new java.util.Random(42));
+
+        assertThat(first).isEqualTo(second).hasSize(3);
+    }
+
+    @Test
+    @DisplayName("무작위 추출: 뽑힌 것은 전부 풀 안의 원소이고 중복이 없다")
+    void pickRandom_picksDistinctMembersOfPool() {
+        List<String> pool = List.of("a", "b", "c", "d", "e");
+
+        List<String> picked = UserSearchService.pickRandom(pool, 3, new java.util.Random(7));
+
+        assertThat(picked).hasSize(3).doesNotHaveDuplicates().isSubsetOf(pool);
+    }
+
+    @Test
+    @DisplayName("무작위 추출: 풀이 limit 이하면 전원을 담는다(순서만 섞인다)")
+    void pickRandom_keepsEveryoneWhenPoolIsSmall() {
+        List<String> pool = List.of("a", "b", "c");
+
+        assertThat(UserSearchService.pickRandom(pool, 10, new java.util.Random(1)))
+                .containsExactlyInAnyOrderElementsOf(pool);
+    }
+
+    @Test
+    @DisplayName("무작위 추출: 빈 풀은 빈 결과 — 후보가 없어도 터지지 않는다")
+    void pickRandom_emptyPool() {
+        assertThat(UserSearchService.pickRandom(List.<String>of(), 5, new java.util.Random(1))).isEmpty();
+    }
 }

@@ -132,7 +132,7 @@
                         <svg th:if="${ch.spriteId != null}" class="profile-char-svg" aria-hidden="true">
                             <use th:attr="href='#sprite-' + ${ch.code}"></use>
                         </svg>
-                        <span th:unless="${ch.spriteId != null}" th:text="${ch.emoji}">🪶</span>
+                        <span th:unless="${ch.spriteId != null}" th:text="${#strings.substring(ch.name, 0, 1)}">작</span>
                     </span>
                     <span class="profile-char-label" th:text="${ch.name}">작가</span>
                 </label>
@@ -248,15 +248,17 @@
         <h2 class="set-card-title set-card-title-danger">회원 탈퇴</h2>
         <p class="set-card-desc">계정과 모든 독서 기록이 영구 삭제됩니다. 되돌릴 수 없습니다.</p>
         <form th:action="@{/settings/delete}" method="post"
-              onsubmit="return confirm('정말 탈퇴하시겠어요? 모든 기록이 삭제되며 되돌릴 수 없습니다.');">
-            <!--/* LOCAL 계정은 비밀번호로, 소셜 계정은 비밀번호가 없어 본인 @핸들(login_id) 재입력으로 확인한다. */-->
+              data-confirm="정말 탈퇴하시겠어요? 모든 기록이 삭제되며 되돌릴 수 없습니다.">
+            <!--/* LOCAL 계정은 비밀번호로, 소셜 계정은 비밀번호가 없어 본인 @핸들(login_id) 재입력으로 확인한다.
+                   아직 핸들이 없는(온보딩 전) 소셜 계정은 이메일이 확인 값이다 — 컨트롤러가 deleteConfirmValue로
+                   골라 싣는다. 핸들만 고집하면 "@null"을 안내하게 되고 그 계정은 탈퇴 자체가 불가능해진다. */-->
             <div class="set-field" th:if="${localAccount}">
                 <label class="set-label" for="password">확인을 위해 비밀번호를 입력하세요</label>
                 <input class="set-input set-input-danger" type="password" id="password" name="password" placeholder="비밀번호" autocomplete="current-password">
             </div>
             <div class="set-field" th:unless="${localAccount}">
-                <label class="set-label" for="confirmHandle">확인을 위해 아이디 <strong th:text="'@' + ${loginId}">@handle</strong> 를 입력하세요</label>
-                <input class="set-input set-input-danger" type="text" id="confirmHandle" name="confirmHandle" th:placeholder="'@' + ${loginId}" autocomplete="off" autocapitalize="none" autocorrect="off">
+                <label class="set-label" for="confirmHandle">확인을 위해 <strong th:text="${deleteConfirmValue}">@handle</strong> 를 입력하세요</label>
+                <input class="set-input set-input-danger" type="text" id="confirmHandle" name="confirmHandle" th:placeholder="${deleteConfirmValue}" autocomplete="off" autocapitalize="none" autocorrect="off">
             </div>
             <button type="submit" class="set-btn-danger">계정 영구 삭제</button>
         </form>
@@ -267,5 +269,7 @@
         <th:block th:replace="~{fragments/nav-links :: navLink(@{/books}, 'books', '내 책장')}"></th:block>
     </nav>
 </div>
+<!-- data-confirm 위임 리스너 — 인라인 onsubmit은 CSP에서 실행되지 않는다 -->
+<script th:attr="nonce=${cspNonce}" th:src="@{/js/confirm-submit.js}"></script>
 </body>
 </html>

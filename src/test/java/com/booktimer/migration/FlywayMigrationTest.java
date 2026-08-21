@@ -1,13 +1,14 @@
 package com.booktimer.migration;
 
+import com.booktimer.book.Book;
+import com.booktimer.book.BookRepository;
+import com.booktimer.book.BookStatus;
 import com.booktimer.email.EmailToken;
 import com.booktimer.email.EmailTokenRepository;
 import com.booktimer.email.EmailTokenType;
 import com.booktimer.garden.AuthorCharacterRepository;
 import com.booktimer.story.Story;
 import com.booktimer.story.StoryRepository;
-import com.booktimer.story.StoryView;
-import com.booktimer.story.StoryViewRepository;
 import com.booktimer.user.AuthProvider;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
@@ -70,10 +71,10 @@ class FlywayMigrationTest {
     AuthorCharacterRepository authorCharacterRepository;
 
     @Autowired
-    StoryRepository storyRepository;
+    BookRepository bookRepository;
 
     @Autowired
-    StoryViewRepository storyViewRepository;
+    StoryRepository storyRepository;
 
     @Autowired
     com.booktimer.auth.ApiTokenRepository apiTokenRepository;
@@ -201,29 +202,39 @@ class FlywayMigrationTest {
                 .allSatisfy(a -> assertThat(a.getSpriteId()).isEqualTo(a.getCode()));
     }
 
-    // ── 독서 스토리 (V56 story · V57 story_view) — 스키마↔엔티티 일치 + 열람 멱등 유니크 ──
-    @Test
-    void story_and_story_view_tables_persist_under_flyway_schema() {
-        // story·story_view 테이블(FK·컬럼)이 Flyway 스키마와 엔티티 매핑이 일치해야 저장된다(validate 모드).
-        User author = userRepository.saveAndFlush(userWithHandle("story-author@example.com", "storyauthor"));
-        Story story = storyRepository.saveAndFlush(Story.of(author, "마이그레이션 검증 문장", null, "night"));
-        assertThat(story.getId()).isNotNull();
+    // ── 여백 (V56 story · V71 책 귀속) — 스키마↔엔티티 일치 + 은퇴한 열람 테이블·NOT NULL 승격 ──
+    // 아래 두 테스트가 여기 있는 이유: 메인 스위트는 Hibernate가 엔티티에서 스키마를 만들므로
+    // 「story_view가 드롭됐는가」는 애초에 관측할 수 없고(엔티티 자체가 없다), 「book_id가 NOT NULL인가」도
+    // 엔티티 매핑을 그대로 되읽는 공허한 단언이 된다. V71이 실제로 적용된 스키마만이 이 둘을 증명한다.
 
-        User viewer = userRepository.saveAndFlush(userWithHandle("story-viewer@example.com", "storyviewer"));
-        StoryView view = storyViewRepository.saveAndFlush(StoryView.of(story, viewer));
-        assertThat(view.getId()).isNotNull();
+    @Test
+    void story_table_persists_under_flyway_schema() {
+        // story 테이블(FK·컬럼)이 Flyway 스키마와 엔티티 매핑이 일치해야 저장된다(validate 모드).
+        User author = userRepository.saveAndFlush(userWithHandle("story-author@example.com", "storyauthor"));
+        Book book = Book.register(author, "여백이 열린 책", null, null, null, null, null, BookStatus.READING);
+        book.makePublic();
+        bookRepository.saveAndFlush(book);
+
+        Story story = storyRepository.saveAndFlush(Story.of(author, "마이그레이션 검증 문장", book, "night"));
+
+        assertThat(story.getId()).isNotNull();
     }
 
     @Test
-    void story_view_unique_constraint_is_enforced() {
-        // uk_story_view(story_id, viewer_id) — 열람 기록 멱등의 DB 레벨 근거(§13.3).
-        User author = userRepository.saveAndFlush(userWithHandle("uk-author@example.com", "ukauthor"));
-        User viewer = userRepository.saveAndFlush(userWithHandle("uk-viewer@example.com", "ukviewer"));
-        Story story = storyRepository.saveAndFlush(Story.of(author, "유니크 검증 문장", null, null));
-        storyViewRepository.saveAndFlush(StoryView.of(story, viewer));
+    void v71_retires_story_view_and_requires_book() {
+        // V71: 열람 기록 은퇴(테이블 드롭) + 여백의 책 귀속(book_id NOT NULL). 둘 다 스키마에서 파생 단언.
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE UPPER(TABLE_NAME) = 'STORY_VIEW'
+                """, Integer.class))
+                .as("story_view는 V71이 드롭했다 — 남아 있으면 죽은 테이블이 다음 사람의 인지 비용이 된다")
+                .isZero();
 
-        assertThatThrownBy(() -> storyViewRepository.saveAndFlush(StoryView.of(story, viewer)))
-                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE UPPER(TABLE_NAME) = 'STORY' AND UPPER(COLUMN_NAME) = 'BOOK_ID'
+                """, String.class))
+                .as("여백은 책에 귀속된다 — book_id NOT NULL이 앱 코드 대신 DB가 지키는 제약")
+                .isEqualTo("NO");
     }
 
     // ── 토스 미니앱(V61) — users.toss_user_key 유니크 + api_token·toss_link_code 스키마↔엔티티 일치 ──
@@ -286,7 +297,7 @@ class FlywayMigrationTest {
     private static final Set<String> TABLES_PURGE_CLEARS = Set.of(
             "API_TOKEN", "AUTHOR_AFFECTION", "BLOCK", "BOOK", "EMAIL_TOKEN", "FEEDBACK", "FOLLOW",
             "READING_GOAL_CHANGE", "READING_GOAL_WAIVER", "READING_PERSONALITY", "READING_SESSION",
-            "READING_TIMER", "REPORT", "STORY", "STORY_VIEW", "TOSS_LINK_CODE");
+            "READING_TIMER", "REPORT", "STORY", "STORY_LIKE", "TOSS_LINK_CODE");
 
     /**
      * <b>users를 FK 참조하는 테이블 집합 == purge()가 지우는 집합</b>을 못 박는다.

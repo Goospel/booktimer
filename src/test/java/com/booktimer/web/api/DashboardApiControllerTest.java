@@ -440,6 +440,26 @@ class DashboardApiControllerTest {
                 .andExpect(jsonPath("$.readingBooks[0].author").doesNotExist());
     }
 
+    /**
+     * §5-1 ⓖ — 홈에서 여백 작성 화면으로 직행할 때 「비공개 책이에요, 이 글은 나만 봐요」 캡션을
+     * 띄우려면 홈이 쥔 책 옵션에 공개 여부가 있어야 한다(게이트가 아니라 <b>고지</b>용 — 결정 2로
+     * 비공개 책에도 글을 쓸 수 있게 됐기 때문에 옛 placeholder 「팔로워에게 보여요」가 거짓말이 된다).
+     */
+    @Test
+    @DisplayName("GET /api/dashboard: BookOption에 isPublic이 실린다 — 공개 책 true, 비공개 책 false")
+    void get_bookOptionCarriesIsPublic() throws Exception {
+        User u = register("vis@a.com", "vistest");
+        Book open = addBook(u, "공개 책", BookStatus.READING);
+        open.makePublic();
+        bookRepository.save(open);
+        addBook(u, "비공개 책", BookStatus.READING); // 기본 PRIVATE
+
+        mockMvc.perform(get("/api/dashboard").with(user("vis@a.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.readingBooks[?(@.title=='공개 책')].isPublic", contains(true)))
+                .andExpect(jsonPath("$.readingBooks[?(@.title=='비공개 책')].isPublic", contains(false)));
+    }
+
     // ── 9. DTO 화이트리스트 ───────────────────────────────────────────────────
 
     @Test
@@ -631,5 +651,74 @@ class DashboardApiControllerTest {
                         .content("{\"bookId\":" + book.getId() + "}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.carryover").isBoolean());
+    }
+    // ── 측정 중인 책(activeBook) ─────────────────────────────
+
+    /**
+     * 제목 문자열(activeBookTitle)만 있던 자리에 책 한 권을 통째로 실는다 — 미니앱이 측정 중
+     * 화면에 <b>표지</b>를 그리려면 id·표지·저자가 필요하다. 제목으로 readingBooks에서 되찾는 우회는
+     * 동명 책에서 틀리고, 측정 중에 그 책을 완독으로 옮기면 목록에서 빠져 표지가 조용히 사라진다.
+     */
+    @Test
+    @DisplayName("GET /api/dashboard: 측정 중이면 activeBook에 id·표지·저자까지 실린다")
+    void dashboard_activeBook_carriesCover() throws Exception {
+        User u = register("activebook@a.com", "activebook");
+        Book book = bookRepository.save(Book.register(
+                u, "미움받을 용기", "기시미 이치로", null,
+                "https://img.example/cover.jpg", null, null, BookStatus.READING));
+        sessionService.start(u, clock.instant(), book);
+
+        mockMvc.perform(get("/api/dashboard").with(user("activebook@a.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activeBook.id").value(book.getId().intValue()))
+                .andExpect(jsonPath("$.activeBook.title").value("미움받을 용기"))
+                .andExpect(jsonPath("$.activeBook.author").value("기시미 이치로"))
+                .andExpect(jsonPath("$.activeBook.coverUrl").value("https://img.example/cover.jpg"));
+    }
+
+    /** 책 없이 측정하는 것은 이 앱의 정상 경로다(발견 1) — 그때 activeBook은 없다. */
+    @Test
+    @DisplayName("GET /api/dashboard: 책 없이 측정 중이면 activeBook은 null")
+    void dashboard_activeBook_untaggedSession_null() throws Exception {
+        User u = register("untagbook@a.com", "untagbook");
+        sessionService.start(u, clock.instant(), null);
+
+        mockMvc.perform(get("/api/dashboard").with(user("untagbook@a.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasActiveSession").value(true))
+                .andExpect(jsonPath("$.activeBook").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("GET /api/dashboard: 측정 중이 아니면 activeBook은 null")
+    void dashboard_activeBook_noSession_null() throws Exception {
+        User u = register("nosessionbook@a.com", "nosessionbook");
+        addBook(u, "안 읽는 책", BookStatus.READING);
+
+        mockMvc.perform(get("/api/dashboard").with(user("nosessionbook@a.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasActiveSession").value(false))
+                .andExpect(jsonPath("$.activeBook").doesNotExist());
+    }
+
+    /**
+     * <b>시작 응답에도 실려야 한다</b> — 미니앱은 start 응답(TimerState)으로 화면을 갱신한다.
+     * 여기 빠지면 누른 직후 「읽는 중」 카드가 빈 채로 서 있다가 다음 재조회에야 채워진다.
+     */
+    @Test
+    @DisplayName("POST /api/sessions/start: 응답 TimerState에도 activeBook이 실린다")
+    void start_activeBook_present() throws Exception {
+        User u = register("startbook@a.com", "startbook");
+        Book book = bookRepository.save(Book.register(
+                u, "데미안", "헤르만 헤세", null,
+                "https://img.example/demian.jpg", null, null, BookStatus.READING));
+
+        mockMvc.perform(post("/api/sessions/start")
+                        .with(user("startbook@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + book.getId() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activeBook.id").value(book.getId().intValue()))
+                .andExpect(jsonPath("$.activeBook.coverUrl").value("https://img.example/demian.jpg"));
     }
 }

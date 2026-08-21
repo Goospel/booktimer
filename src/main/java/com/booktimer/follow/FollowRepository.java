@@ -25,6 +25,35 @@ public interface FollowRepository extends JpaRepository<Follow, Long> {
     @Query("select f.followee.id from Follow f where f.follower = :viewer and f.followee.id in :targetIds")
     List<Long> findFollowedIdsAmong(@Param("viewer") User viewer, @Param("targetIds") Collection<Long> targetIds);
 
+    /**
+     * 홈 「함께 읽는 사람」 탭의 모집단 — 내가 팔로우한 사람들, 최근 맺은 순.
+     *
+     * <p>{@link #findByFollowerOrderByCreatedAtDesc}와 달리 <b>노출 불변식을 쿼리에 건다</b>
+     * (ADMIN 제외 · 공개핸들 {@code login_id} 미설정 제외 — N-055). 그쪽은 본인 팔로잉 목록 화면용이라
+     * 내가 맺은 관계를 빠짐없이 보여주는 게 맞지만, 이건 <b>남을 노출하는 목록</b>이라 소식 피드
+     * ({@code BookRepository.feedStarted})와 같은 게이트를 통과해야 한다.
+     *
+     * <p>차단 필터는 불필요 — "팔로우 존재 → 차단 없음" write-시점 불변식(차단 시 팔로우 양방향 해제)이
+     * 보장한다. {@code Pageable}로 상한.
+     */
+    @Query("""
+            select f.followee from Follow f
+            where f.follower = :viewer
+              and f.followee.role <> com.booktimer.user.Role.ADMIN
+              and f.followee.loginId is not null
+            order by f.createdAt desc, f.followee.id asc
+            """)
+    List<User> findVisibleFollowees(@Param("viewer") User viewer, Pageable pageable);
+
+    /**
+     * 주어진 후보들 중 <b>나를</b> 팔로우하는 사람의 id — {@link #findFollowedIdsAmong}의 거울(방향만 반대).
+     *
+     * <p>둘을 교차하면 맞팔이 나온다: 호출부가 이미 "내가 팔로우한 사람들"을 손에 쥐고 있으므로
+     * 이 결과에 속하면 곧 맞팔이다. 행당 {@code existsByFollowerAndFollowee} N+1을 단일 쿼리로 대체한다.
+     */
+    @Query("select f.follower.id from Follow f where f.followee = :viewer and f.follower.id in :targetIds")
+    List<Long> findFollowerIdsAmong(@Param("viewer") User viewer, @Param("targetIds") Collection<Long> targetIds);
+
     void deleteByFollowerAndFollowee(User follower, User followee);
 
     /** followee를 팔로우하는 사람 수(= 팔로워 수). */
@@ -78,6 +107,47 @@ public interface FollowRepository extends JpaRepository<Follow, Long> {
             order by count(distinct f1.followee.id) desc, f2.followee.id asc
             """)
     List<FriendOfFriendCount> findFriendsOfFriends(@Param("viewerId") Long viewerId, Pageable pageable);
+
+    /**
+     * 공통 친구 — <b>내가 팔로우하는 사람 중 이 책방 주인도 팔로우하는 사람</b>(인스타 프로필의
+     * 「○○님 외 N명이 팔로우합니다」). 이름을 보여줄 상위 몇 명만 받는다.
+     *
+     * <p><b>차단 필터가 없는 이유</b>: {@code f1.follower = viewer}라 결과는 전부 <b>내가 지금 팔로우 중인
+     * 사람</b>이고, 차단하면 {@code BlockService.block}이 팔로우를 양방향으로 끊는다 — 차단한 사람은 애초에
+     * 이 결과에 없다. 운영자·핸들 미설정 계정은 다른 목록과 같은 노출 불변식으로 제외한다(N-055).
+     */
+    @Query("""
+            select f1.followee from Follow f1
+            where f1.follower.id = :viewerId
+              and f1.followee.role <> com.booktimer.user.Role.ADMIN
+              and f1.followee.loginId is not null
+              and exists (select 1 from Follow f2
+                          where f2.follower.id = f1.followee.id and f2.followee.loginId = :targetLoginId)
+            order by f1.followee.id asc
+            """)
+    List<User> findMutualFollowers(@Param("viewerId") Long viewerId,
+                                   @Param("targetLoginId") String targetLoginId,
+                                   Pageable pageable);
+
+    /**
+     * 위와 같은 조건의 전체 수 — 「외 N명」의 N이다. 이름은 상한만큼만 받으므로 총 수는 따로 세야 한다
+     * (받은 이름 개수로 세면 3명이든 30명이든 「외 0명」이 된다).
+     */
+    @Query("""
+            select count(f1.followee) from Follow f1
+            where f1.follower.id = :viewerId
+              and f1.followee.role <> com.booktimer.user.Role.ADMIN
+              and f1.followee.loginId is not null
+              and exists (select 1 from Follow f2
+                          where f2.follower.id = f1.followee.id and f2.followee.loginId = :targetLoginId)
+            """)
+    long countMutualFollowers(@Param("viewerId") Long viewerId, @Param("targetLoginId") String targetLoginId);
+
+    /**
+     * 이 책방 주인이 <b>나를</b> 팔로우하는가 — 프로필의 「나를 팔로우함」 배지.
+     * {@code following}(내가 그를)과 <b>방향이 반대</b>라 둘을 헷갈리면 배지가 거짓말을 한다.
+     */
+    boolean existsByFollower_LoginIdAndFollowee_Id(String followerLoginId, Long followeeId);
 
     /**
      * 맞팔 후보 — 나를 팔로우했는데 내가 아직 안 한 사람의 id, 최근 맺은 순 — 친구 추천 하이브리드 1단계(G1).

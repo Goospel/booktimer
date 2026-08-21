@@ -8,8 +8,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="BookTimer">
     <link rel="apple-touch-icon" th:href="@{/icons/apple-touch-icon.png}">
-    <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
-    <script type="module" th:src="@{/pwa-install.js}"></script>
+    <script th:attr="nonce=${cspNonce}">if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
+    <script type="module" th:attr="nonce=${cspNonce}" th:src="@{/pwa-install.js}"></script>
 </th:block>
 </head>
 </html>

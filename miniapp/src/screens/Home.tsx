@@ -1,20 +1,30 @@
 import { Button, ProgressBar, Text } from '@toss/tds-mobile';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
 import type { BookOption, DashboardResponse, TimerState, WaiveResponse } from '../api';
-import { ApiError, startSession, stopSession, tagBook, waiveDebt } from '../api';
-import { useBackClose } from '../back';
+import { ApiError, waiveDebt } from '../api';
+import { Coachmark } from '../coachmark';
 import { elapsedSeconds, formatClock, formatDuration } from '../format';
 import {
   GOAL_MET_TEMPLATE_CODE,
   REWARD_AD_GROUP_ID,
   notificationAgreementSupported,
   requestNotificationAgreement,
-  trackEvent,
   watchRewardAd,
 } from '../toss';
-import { BookCover, CoverInitial, ErrorMessage, Screen, Sheet, sectionStyle } from '../ui';
+import {
+  Avatar,
+  BookCover,
+  CoverInitial,
+  ErrorMessage,
+  PENCIL_FRAME,
+  SERIF_VALUE,
+  Screen,
+  SectionTitle,
+  Sheet,
+  sectionStyle,
+} from '../ui';
 import { HomeFeedBox } from './HomeFeed';
 
 /** 알림 동의 결과 캐시 — 값은 토스가 준 결과 문자열 그대로. 정본은 토스이고 이건 카드 노출 스위치일 뿐이다. */
@@ -31,6 +41,14 @@ const SAGE = '#6E8A6A';
  * 첫 세션에 한정하지 않는다: 짧고 무해하며, 잊어버리는 건 신규 유저만이 아니다.
  */
 export const ACTIVE_SESSION_RELIEF = '화면을 꺼도 측정은 계속돼요. 책 읽고 오세요 🌿';
+
+/**
+ * 독서등이 켜져도 <b>밝게 남는 자리</b>의 표식 — 히어로 카드 하나뿐이다.
+ *
+ * <p>이 문자열이 js와 `global.css`를 잇는 매듭이라 한쪽만 고치면 카드가 밤 속으로 사라진다
+ * (`home.test.tsx`가 css에 셀렉터가 실재하는지 본다). 스위치는 `App`의 {@link LAMP_CLASS}.
+ */
+export const LAMP_PAGE_CLASS = 'lamp-page';
 
 /**
  * 첫 완료 축하 배너 — 서버 `firstCompletedSession`이 참인 그 한 번만. 잔디는 1초만 읽어도 lv1로
@@ -60,6 +78,28 @@ export function FirstSessionBanner({ show }: { show: boolean }) {
  */
 export function defaultBookId(readingBooks: BookOption[], recentBookId: number | null): number | null {
   return readingBooks.find((b) => b.id === recentBookId)?.id ?? readingBooks[0]?.id ?? null;
+}
+
+/**
+ * 홈 여백 문이 가리키는 책 — 없으면 `null`(문을 그리지 않는다).
+ *
+ * <p>「측정 시작」을 누르듯 <b>1탭에 작성 화면</b>으로 보내려면 지금 이 화면이 어느 책을 뜻하는지가
+ * 먼저 정해져야 한다: 측정 중이면 그 책, 대기 중이면 캐러셀에서 고른 책이다. 활성 책 id는 대시보드에
+ * 따로 없지만 `recentBookId`가 `startedAt desc`(활성 세션 포함)라 책을 걸고 측정 중이면 그게 활성 책이고,
+ * 책 없이 측정 중인 경우는 `activeBookTitle === null`이 걸러 낸다.
+ *
+ * <p><b>공개 여부는 조건이 아니다</b> — 비공개 책의 여백은 나만 보는 메모다(설계 결정 2). 반면
+ * 핸들(@아이디)이 없으면 그린다 해도 열리지 않는다: 서버가 여백 대상을 loginId로만 찾아 자기 여백에도
+ * 닿을 수 없다(결정 A — 핸들 안내는 책방 탭 「아이디 만들기」가 이미 맡는다).
+ */
+export function marginDoorBook(dashboard: DashboardResponse, selectedBookId: number | null): BookOption | null {
+  if (dashboard.loginId === null) return null;
+  // 완독 책까지 보는 이유: 웹에선 다 읽은 책으로도 측정을 시작할 수 있어 활성 책이 그쪽에만 있을 수 있다.
+  const pool = [...dashboard.readingBooks, ...dashboard.finishedBooks];
+  const id = dashboard.hasActiveSession
+    ? (dashboard.activeBookTitle === null ? null : dashboard.recentBookId)
+    : selectedBookId;
+  return pool.find((b) => b.id === id) ?? null;
 }
 
 /** 캐러셀 표지 한 장의 폭·간격 — 계산(가운데 인덱스)과 스타일이 같은 값을 봐야 스냅과 선택이 어긋나지 않는다. */
@@ -123,7 +163,7 @@ function scrollToIndex(track: HTMLDivElement | null, index: number, instant = fa
  * 선택값 → 캐러셀 칸 인덱스. **0번은 언제나 「책 없이」**라 책은 한 칸씩 밀린다.
  *
  * <p>목록 밖 id(다 읽었거나 뺀 책이 stale하게 남는 경우)는 0번으로 떨어진다 — 화면 밖을 찌르느니
- * 「책 없이」가 가운데 온 상태가 정직하다(주 버튼도 그때 `start(null)`을 보낸다).
+ * 「책 없이」가 가운데 온 상태가 정직하다(탭바 액션도 그때 `startSession(null)`을 보낸다 — `timerStartBookId`).
  */
 export function carouselIndexOf(selectedId: number | null, books: BookOption[], offset = 1): number {
   if (selectedId === null) return 0;
@@ -175,19 +215,50 @@ export function noBookSubtitle(bookCount: number): string {
 export const SCROLL_SETTLE_MS = 120;
 
 /**
- * 캐러셀 0번 칸의 「책 없이」 자리 표지 — 표지와 **같은 크기의 점선 상자**다.
+ * 「읽는 중」 카드의 표지 폭 — 캐러셀(84)보다 작다. 그곳은 고르는 무대라 크게 서야 하지만,
+ * 여기는 이미 정해진 한 권을 한 줄로 알려 주는 자리라 제목·저자와 높이가 맞아야 한다.
+ */
+export const READING_NOW_COVER = 52;
+
+/**
+ * 캐러셀 0번의 특수 칸 — 화면마다 뜻이 다르다. 홈은 「책 없이」(측정 대상의 한 갈래), 서재는
+ * 「책 추가」(검색 화면으로 가는 문)다.
  *
- * <p>`CoverInitial`을 쓰지 않는다: 색 상자 + 첫 글자라 실제 표지와 구분이 안 돼 "책 없이"가 책처럼 보인다.
+ * <p>부품과 규약(<b>0번은 언제나 특수 칸</b>)은 공유하되 문구만 갈아 끼운다 — 두 화면이 같은
+ * 문법을 쓰면 「가운데 온 것이 곧 대상」 한 문장으로 둘 다 설명된다.
+ */
+export interface LeadCard {
+  /** 점선 상자 안 글자 — 짧아야 84px 안에서 안 접힌다. */
+  label: string;
+  /** 이 칸이 가운데일 때의 제목 자리이자 스크린리더가 읽는 이름. */
+  title: string;
+  /** 제목 아래 한 줄. 홈이 책 수에 따라 문구를 바꾸므로 값이 아니라 함수다. */
+  subtitle: (bookCount: number) => string;
+}
+
+/** 홈의 0번 칸 — 측정 대상의 한 갈래라 「고른 값」(`null`)으로 남는다. */
+export const NO_BOOK_CARD: LeadCard = {
+  label: '책 없이',
+  title: '책 없이 측정',
+  subtitle: noBookSubtitle,
+};
+
+/**
+ * 0번 칸의 자리 표지 — 표지와 **같은 크기의 점선 상자**다.
+ *
+ * <p>`CoverInitial`을 쓰지 않는다: 색 상자 + 첫 글자라 실제 표지와 구분이 안 돼 특수 칸이 책처럼 보인다.
  * `boxSizing`이 없으면 테두리 2px이 칸을 불려 스냅 위치(`i × stride`)가 이 카드부터 어긋난다.
  */
-function NoBookCard() {
+function NoBookCard({ width = COVER_WIDTH, label = '책 없이' }: { width?: number; label?: string } = {}) {
   return (
     <div
       style={{
-        width: COVER_WIDTH,
-        height: COVER_HEIGHT,
+        width,
+        height: Math.round(width * 1.4),
+        flex: '0 0 auto',
         boxSizing: 'border-box',
-        border: '2px dashed #E4DDD0',
+        // 토큰이라야 독서등(밤)에서 이 점선도 함께 어두워진다 — 리터럴이면 밤 종이 위에 낮의 선이 뜬다.
+        border: '2px dashed var(--adaptiveGrey200, #E4DDD0)',
         borderRadius: 4,
         display: 'flex',
         flexDirection: 'column',
@@ -196,11 +267,9 @@ function NoBookCard() {
         gap: 4,
       }}
     >
-      <span aria-hidden="true" style={{ fontSize: 22 }}>
-        ⏱️
-      </span>
+      {/* 점선 상자가 이미 「표지가 아님」을 말한다 — 시계 이모지는 그 위에 얹힌 군더더기였다(2026-08-18). */}
       <Text typography="st12" color="grey600">
-        책 없이
+        {label}
       </Text>
     </div>
   );
@@ -217,32 +286,41 @@ function NoBookCard() {
  * 버튼 갈래로 두면 "가운데 온 것이 측정 대상"이라는 단일 문법이 깨지고, 책 0권 사용자에게는
  * 캐러셀 자리가 통째로 다른 화면(빈 상태)이 됐다.
  *
- * <p>선택 상태는 밖(홈)이 들고 있다 — 「측정 시작」이 같은 값을 써야 캐러셀과 시작 대상이 어긋나지 않는다.
+ * <p>선택 상태는 밖(App)이 들고 있다 — 탭바의 측정 액션이 같은 값을 써야 캐러셀과 시작 대상이 어긋나지 않는다.
  *
- * <p>서재도 같은 캐러셀을 쓴다(세로로 길던 3섹션 목록을 대체) — 다만 거기선 고를 대상이 책뿐이라
- * `noBookCard`가 꺼지고, 아래 한 줄에 읽은 시간·공개 여부까지 실으므로 `metaOf`로 그 줄을 바꿔 끼운다.
+ * <p>서재도 같은 캐러셀을 쓴다(세로로 길던 3섹션 목록을 대체) — 거기선 0번이 「책 추가」 칸이고
+ * (`leadCard`), 아래 한 줄에 읽은 시간·공개 여부까지 실으므로 `metaOf`로 그 줄을 바꿔 끼운다.
  */
 export function BookCarousel<T extends BookOption>({
   books,
   selectedId,
   onSelect,
-  noBookCard = true,
+  leadCard = NO_BOOK_CARD,
   metaOf,
+  chipsOf,
 }: {
   books: T[];
   selectedId: number | null;
   onSelect: (bookId: number | null) => void;
-  /** 0번 「책 없이」 칸을 세울지 — 측정 대상을 고르는 홈만 켠다. */
-  noBookCard?: boolean;
+  /**
+   * 0번 특수 칸 — 홈은 기본값(「책 없이」), 서재는 「책 추가」를 넘긴다. `null`이면 책만 세운다
+   * (서재에서 서버가 검색을 껐을 때 — 눌러도 아무 데도 못 가는 칸을 남기지 않는다).
+   */
+  leadCard?: LeadCard | null;
   /** 제목 아래 한 줄 — 기본은 저자. */
   metaOf?: (book: T) => string;
+  /**
+   * 메타 아래 칩 줄 — 서재가 읽은 시간·공개 여부를 여기로 보낸다. 홈은 안 넘긴다(측정할 책을 <b>고르는</b>
+   * 자리에서는 공개 여부가 군더더기다). 스타일까지 호출부가 정해 보내므로 캐러셀은 톤을 몰라도 된다.
+   */
+  chipsOf?: (book: T) => { label: string; style: CSSProperties }[];
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const settleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selected = books.find((b) => b.id === selectedId) ?? null;
-  /** 홈은 0번이 「책 없이」(`null`)라 책이 한 칸 밀리고, 서재는 책이 곧 0번이다. */
-  const offset = noBookCard ? 1 : 0;
-  const items: (T | null)[] = noBookCard ? [null, ...books] : books;
+  /** 0번이 특수 칸(`null`)이면 책이 한 칸 밀린다 — 칸이 없으면 책이 곧 0번이다. */
+  const offset = leadCard !== null ? 1 : 0;
+  const items: (T | null)[] = leadCard !== null ? [null, ...books] : books;
 
   // 첫 진입 — 기본 선택(이어 읽기)이 처음부터 가운데였던 것처럼 즉시 이동한다(애니메이션은 거짓 움직임이다).
   useEffect(() => {
@@ -302,12 +380,12 @@ export function BookCarousel<T extends BookOption>({
             <button
               key={item?.id ?? 'no-book'}
               type="button"
-              aria-label={item?.title ?? '책 없이 측정'}
+              aria-label={item?.title ?? leadCard?.title}
               aria-current={current ? 'true' : undefined}
               // 계측용 표지 — TDS emotion 클래스 사이에서 "표지가 몇 장이고 어떤 책인가"를 집을 손잡이가 없다.
-              // 「책 없이」 카드는 따로 표시해 `data-cover-title`이 계속 "실제 책 목록"만 뜻하게 둔다.
+              // 0번 특수 칸은 따로 표시해 `data-cover-title`이 계속 "실제 책 목록"만 뜻하게 둔다.
               data-cover-title={item?.title}
-              data-no-book-card={item === null ? '' : undefined}
+              data-lead-card={item === null ? '' : undefined}
               onClick={() => {
                 onSelect(item?.id ?? null);
                 scrollToIndex(trackRef.current, index);
@@ -330,11 +408,10 @@ export function BookCarousel<T extends BookOption>({
               }}
             >
               {item === null ? (
-                <NoBookCard />
-              ) : item.coverUrl !== null ? (
-                <BookCover url={item.coverUrl} width={COVER_WIDTH} eager />
+                <NoBookCard label={leadCard?.label} />
               ) : (
-                <CoverInitial title={item.title} width={COVER_WIDTH} />
+                // 표지 없음·로드 실패 분기는 BookCover가 든다 — title을 주면 첫 글자 + 제목색으로 떨어진다.
+                <BookCover url={item.coverUrl} title={item.title} width={COVER_WIDTH} eager />
               )}
             </button>
           );
@@ -343,28 +420,33 @@ export function BookCarousel<T extends BookOption>({
 
       {/* 표지만으론 무슨 책인지 확정되지 않는다(비슷한 표지·자리 표지) — 가운데 온 것을 글자로 못 박는다. */}
       <div
-        data-selected-book={selected?.title ?? '책 없이 측정'}
+        data-selected-book={selected?.title ?? leadCard?.title}
         style={{ marginTop: 12, textAlign: 'center' }}
       >
         <Text typography="st10" fontWeight="bold" style={{ display: 'block', wordBreak: 'keep-all' }}>
-          {selected?.title ?? '책 없이 측정'}
+          {selected?.title ?? leadCard?.title}
         </Text>
         {selected === null ? (
           <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
-            {noBookSubtitle(books.length)}
+            {leadCard?.subtitle(books.length)}
           </Text>
         ) : (
           (metaOf?.(selected) ?? selected.author) !== null && (
-            // `pre-line` — 서재는 저자와 「읽은 시간 · 공개」를 줄로 나눠 보낸다(긴 저자 문자열이 되접히며
-            // 그 둘이 이름 사이에 끼어 들던 자리). 홈의 저자 한 줄은 줄바꿈이 없어 영향받지 않는다.
-            <Text
-              typography="st12"
-              color="grey600"
-              style={{ display: 'block', marginTop: 2, whiteSpace: 'pre-line' }}
-            >
+            // 한 줄 = 저자다. 서재가 「읽은 시간 · 공개」를 줄바꿈으로 여기 얹던 시절엔 `pre-line`이
+            // 필요했는데, 그 둘이 아래 칩 줄로 나가면서 이 자리는 다시 한 줄짜리가 됐다.
+            <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
               {metaOf?.(selected) ?? selected.author}
             </Text>
           )
+        )}
+        {selected !== null && chipsOf !== undefined && (
+          <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
+            {chipsOf(selected).map(({ label, style }) => (
+              <span key={label} data-book-chip="" style={style}>
+                {label}
+              </span>
+            ))}
+          </div>
         )}
       </div>
 
@@ -669,62 +751,174 @@ export function BookSheet({
  * <p>자리가 맨 아래에서 맨 위로 올라왔다(사용자 결정 2026-08-14) — 피드 박스는 세로로 자라는 상자라
  * 그 뒤에 두면 스크롤 끝에 묻히는데, 소셜 기능이 늘수록 프로필의 무게는 반대로 커진다.
  *
- * <p>모양은 **흰 채움 + 테두리**다(같은 날 실기기 제보). 연한 `weak` 알약은 배경과 대비가 약해 버튼으로
- * 안 읽혔다 — TDS에 outline 변형이 없어(`fill | weak`뿐) `light` 채움에 테두리를 얹어 윤곽을 만든다.
- * 주 CTA(「측정 시작」)와 무게가 겹치면 안 되므로 풀폭·강조색은 쓰지 않는다.
+ * <p>모양은 <b>인사말 + 아바타 원</b>이다(사용자 지적 2026-08-17). 앞서 쓰던 「흰 채움 + 테두리」 알약은
+ * 버튼으로는 잘 읽혔지만 <b>화면에서 가장 밝은 것</b>이 되어, 가장 안 중요한 손잡이가 첫 시선을 받았다
+ * (홈에 제목이 없어 그 알약이 사실상 헤더 노릇을 하고 있었다). 그래서 같은 행을 <b>헤더로</b> 만든다 —
+ * 왼쪽에 내가 누구인지 적고, 손잡이는 대비가 낮은 아바타로 줄인다. 행 전체가 탭 대상이라 손가락 표적은 오히려 커졌다.
+ *
+ * <p>덤이 하나 있다: 기본 닉네임(「토스유저」)인 사람이 <b>매일 자기 이름을 보게 되어</b> 바꿀 이유가 생긴다 —
+ * 이 화면이 존재하는 이유와 맞물린다. 아바타는 책방 프로필과 <b>같은 이니셜 원</b>이라 같은 사람이 같은 색으로 선다.
  */
-export function AccountSection({ onGoSettings }: { onGoSettings: () => void }) {
+export function AccountSection({
+  nickname,
+  loginId,
+  onGoSettings,
+}: {
+  nickname: string;
+  /** @아이디 — 온보딩 전이면 `null`이라 그 줄을 아예 그리지 않는다(「@」만 남는 줄이 생기지 않게). */
+  loginId: string | null;
+  onGoSettings: () => void;
+}) {
   return (
-    <div style={{ marginBottom: 12, textAlign: 'right' }}>
-      <Button
-        size="medium"
-        variant="fill"
-        color="light"
-        // TDS가 `light` 채움에 얹는 글자색은 브랜드 파랑(#3182f6)이고, 이 앱 팔레트는 세이지다 —
-        // Button은 색을 CSS 변수가 아니라 인라인 리터럴로 박아 전역 재테마가 안 닿으므로 여기서 직접 준다.
-        style={{ color: 'var(--adaptiveBlue700, #4F6B4C)', border: '1px solid var(--adaptiveGrey200, #E4DDD0)' }}
-        onClick={onGoSettings}
-      >
-        프로필·설정
-      </Button>
-    </div>
+    <button
+      type="button"
+      aria-label="프로필·설정"
+      onClick={onGoSettings}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        width: '100%',
+        marginBottom: 12,
+        padding: '2px 2px 0',
+        border: 'none',
+        background: 'transparent',
+        textAlign: 'left',
+        cursor: 'pointer',
+      }}
+    >
+      <span style={{ flex: 1, minWidth: 0 }}>
+        {/* 긴 닉네임이 아바타를 밀어내지 않도록 한 줄로 자른다(서버는 20자까지 받는다). */}
+        <span
+          style={{
+            display: 'block',
+            // 이름이다 — 책방의 닉네임(Profile.tsx)과 같은 단으로 맞춘다(한 사람이 두 화면에서 같은 체급).
+            fontSize: 19,
+            fontWeight: 700,
+            color: 'var(--adaptiveGrey900, #3A362E)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {nickname}님
+        </span>
+        {loginId !== null && (
+          <span
+            data-handle={loginId}
+            style={{ display: 'block', marginTop: 1, fontSize: 13, color: 'var(--adaptiveGrey600, #6F6A5E)' }}
+          >
+            @{loginId}
+          </span>
+        )}
+      </span>
+      <Avatar nickname={nickname} size={38} />
+    </button>
   );
 }
 
-/** 종료 직후 태깅 대상 — 책 없이 측정한 세션에 나중에 책을 붙인다. */
-interface Untagged {
-  sessionId: number;
+/**
+ * 측정 중 「읽는 중」 카드 — <b>캐러셀이 서 있던 자리</b>를 그대로 물려받는다.
+ *
+ * <p>예전엔 측정을 시작하면 그 섹션이 통째로 사라져 표지가 없어지고 히어로의 「측정 중 12분 · 데미안」
+ * 한 줄만 남았다(사용자 지적 2026-08-19: 「책 사진이 사라지고 텍스트로 바뀐다」). 고를 게 없으니
+ * <b>캐러셀일 이유가 없을 뿐</b>, 지금 읽는 책을 보여 줄 이유는 그대로였다.
+ *
+ * <p>책 없이 측정 중이면(`book === null`) 카드는 그대로 서고 표지 자리만 「책 없이」가 된다 — 미태깅
+ * 측정은 정상 경로이고, 여기서 카드를 감추면 시작·종료 때마다 화면이 세로로 튄다.
+ *
+ * <p>{@link children}는 카드 바닥의 손잡이 자리다 — 캐러셀 카드가 이 카드로 바뀌어도 <b>「지금 이
+ * 화면이 가리키는 책」에 딸린 손잡이는 따라와야</b> 하기 때문이다(지금은 여백 문 하나).
+ */
+export function ReadingNowCard({
+  book,
+  totalSeconds,
+  children,
+}: {
+  book: BookOption | null;
+  totalSeconds: number;
+  children?: ReactNode;
+}) {
+  return (
+    <section style={sectionStyle}>
+      <SectionTitle style={{ marginBottom: 10 }}>읽는 중</SectionTitle>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {book === null ? (
+          <NoBookCard width={READING_NOW_COVER} />
+        ) : (
+          <BookCover url={book.coverUrl} title={book.title} width={READING_NOW_COVER} eager />
+        )}
+        <div style={{ minWidth: 0 }}>
+          <Text typography="t7" fontWeight="bold" style={{ wordBreak: 'keep-all' }}>
+            {book === null ? '책 없이 측정 중' : book.title}
+          </Text>
+          {book?.author != null && (
+            <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
+              {book.author}
+            </Text>
+          )}
+          {/* 누적은 이미 오는 값이라 공짜다 — 「이 책을 얼마나 읽었나」가 측정 중에 가장 궁금한 수다. */}
+          {book !== null && totalSeconds > 0 && (
+            <Text typography="st12" color="blue500" style={{ display: 'block', marginTop: 6 }}>
+              이 책 누적 {formatDuration(totalSeconds)}
+            </Text>
+          )}
+        </div>
+      </div>
+      {children}
+    </section>
+  );
 }
 
 /**
- * 타이머 홈 — `/api/dashboard` 렌더(계정 진입 · 오늘 진행률 · 시작/정지 · 읽는 중 책 · 피드 박스).
+ * 타이머 홈 — `/api/dashboard` 렌더(계정 진입 · 오늘 진행률 · 읽는 중 책 · 피드 박스).
  * 서재 관리·검색·정원은 웹이 본진이라 미니앱에 두지 않는다(설계 §2.5).
+ *
+ * <p><b>시작·종료 버튼은 여기 없다</b> — 하단 탭바 가운데 원이 유일한 자리다(어느 탭에서든 눌러야 하므로
+ * 액션은 `MainTabs`가 든다). 홈이 측정에 대해 말하는 건 히어로의 「측정 중 N분」과 안심 문구까지다.
  */
 export function Home({
   dashboard,
+  guide,
+  selectedBookId: picked,
+  onSelectBook,
   onTimerChange,
-  onGraphChange,
+  celebrate,
   onGoGoal,
   goalAdPending,
   onGoSettings,
   onError,
+  onOpenMargin,
+  onComposeMargin,
 }: {
   dashboard: DashboardResponse;
+  /**
+   * 첫 사용 안내로 들어오는 배너 — **자리만 여기가 정한다**(헤더 바로 아래). 만드는 쪽은 흐름을 든
+   * `MainTabs`다: 안 본 길 안내가 있을 때만 노드가 오고, 없으면 `null`이라 빈 줄도 남지 않는다.
+   */
+  guide?: ReactNode;
+  /**
+   * 캐러셀에서 고른 책 — 상태는 **App이 든다**(홈은 여백·목표·설정이 열리면 언마운트된다).
+   * `undefined`는 아직 고르지 않음(여기서 {@link defaultBookId}로 정한다), `null`은 「책 없이」를 고른 것.
+   */
+  selectedBookId: number | null | undefined;
+  onSelectBook: (bookId: number | null) => void;
   onTimerChange: (timer: TimerState) => void;
-  onGraphChange: (graph: DashboardResponse['graph']) => void;
+  /** 첫 완료 축하가 떠 있는지 — 상태는 측정 액션과 함께 `MainTabs`가 든다(다른 탭에서 끝내도 여기 뜨도록). */
+  celebrate: boolean;
   onGoGoal: () => void;
   /** 전면광고를 기다리는 중 — 손잡이를 「준비 중」으로 바꾸고 비활성화한다(연타 방지는 App도 함께 한다). */
   goalAdPending: boolean;
   /** 홈 맨 위의 계정 진입 — 닉네임·@아이디·목표·로그아웃은 전부 설정 화면이 맡는다. */
   onGoSettings: () => void;
   onError: (error: Error) => void;
+  /** 소식의 여백 줄 탭 — 그 사람의 그 책 여백을 전체 화면으로 연다(전이는 App이 든다). */
+  onOpenMargin: (loginId: string, bookId: number) => void;
+  /** 여백 문 — 지금 이 화면이 가리키는 책의 **작성 화면으로 직행**한다(측정 시작과 같은 1탭). */
+  onComposeMargin: (book: BookOption) => void;
 }) {
-  /** 태깅 시트 — `null`이면 닫힘. 열림 여부와 대상 세션이 늘 같이 움직여 상태 하나로 족하다. */
-  const [tagging, setTagging] = useState<Untagged | null>(null);
-  /** 측정할 책 — 칩에 뜨는 그 책이고, 시작은 아래 주 버튼이 맡는다(여러 책을 번갈아 읽는 사람). */
-  const [selectedBookId, setSelectedBookId] = useState(() =>
-    defaultBookId(dashboard.readingBooks, dashboard.recentBookId),
-  );
+  /** 측정할 책 — 아직 안 골랐으면 기본값(이어 읽기)으로 떨어진다. 고른 값은 App이 들어 화면을 나갔다 와도 남는다. */
+  const selectedBookId = picked === undefined ? defaultBookId(dashboard.readingBooks, dashboard.recentBookId) : picked;
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -732,11 +926,6 @@ export function Home({
   const [waived, setWaived] = useState<number | null>(null);
   /** 남은시간 설명 상자 — 접힌 채로 시작한다(궁금한 사람만 편다). */
   const [showNote, setShowNote] = useState(false);
-  /**
-   * 첫 완료 축하가 떠 있는지 — 메모리에만 둔다. 새로고침·재조회로 사라지는 게 맞다(축하는 그 순간 1회로 족하고,
-   * 서버는 두 번째 종료부터 `firstCompletedSession=false`를 주므로 다시 켜질 일도 없다).
-   */
-  const [celebrate, setCelebrate] = useState(false);
   /** 알림 동의 캐시·지원 여부 — 렌더마다 다시 묻지 않게 초기값으로 한 번만 읽는다. */
   const [agreement, setAgreement] = useState(() => localStorage.getItem(AGREEMENT_KEY));
   const [agreementSupported] = useState(notificationAgreementSupported);
@@ -746,55 +935,6 @@ export function Home({
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, [dashboard.hasActiveSession]);
-
-  const fail = (e: Error) => {
-    // 401은 App이 재로그인으로 처리하고, 그 외(409 중복 시작 등)만 화면에 남긴다.
-    if (e.name === 'UnauthorizedError') onError(e);
-    else setError(e.message);
-  };
-
-  const run = (action: Promise<void>) => {
-    setBusy(true);
-    setError(null);
-    action.catch(fail).finally(() => setBusy(false));
-  };
-
-  // 다음 측정을 시작하면 축하는 접는다 — 지난 세션의 축하가 새 측정 화면에 남아 있으면 거짓말이 된다.
-  const start = (bookId: number | null) => {
-    setCelebrate(false);
-    return run(
-      startSession(bookId).then((timer) => {
-        onTimerChange(timer);
-        trackEvent('reading_session_started');
-      }),
-    );
-  };
-
-  const stop = () =>
-    run(
-      stopSession().then((result) => {
-        onTimerChange(result.timer);
-        onGraphChange(result.graph); // stop 응답에 잔디가 동봉돼 새로고침 없이 즉시 갱신된다.
-        setCelebrate(result.firstCompletedSession); // 첫 기록이면 배너 + 잔디 하이라이트로 시선을 아래로 보낸다.
-        // 이 앱의 핵심 전환 — 콘솔 대표 전환을 「토스로그인 완료」에서 여기로 갈아끼우기 위한 신호다.
-        // 서버 응답엔 세션 길이가 없어 화면이 세던 elapsed를 그대로 쓴다(시작 시각도 서버가 준 값이다).
-        trackEvent('reading_session_completed', { duration_seconds: elapsed });
-        // 웹처럼 종료 직후 시트를 저절로 연다 — 태깅은 지금 기억이 가장 선명하다.
-        // 붙일 책이 0권이면 열지 않는다 — 빈 시트는 닫는 것 말고 할 수 있는 게 없는 막다른 길이다.
-        if (result.untagged && dashboard.readingBooks.length > 0) setTagging({ sessionId: result.sessionId });
-      }),
-    );
-
-  const tag = (book: BookOption) => {
-    if (tagging === null) return;
-    run(tagBook(tagging.sessionId, book.id).then(() => setTagging(null)));
-  };
-
-  /** 시트 닫기 — 태깅 시트를 닫는 건 곧 「건너뛰기」다(다시 들어갈 자리를 만들지 않는다). */
-  const closeSheet = () => setTagging(null);
-
-  // 안드로이드 뒤로가기는 시트만 닫는다 — 시트가 열린 채로 미니앱이 꺼지지 않게.
-  useBackClose(tagging !== null, closeSheet);
 
   /** 광고 보고 밀린 하루 지우기 — 중간 이탈(null)이면 아무 일도 없었던 것처럼 둔다. */
   const claimWaiver = () => {
@@ -827,19 +967,60 @@ export function Home({
       : 0;
   // 측정 중이면 elapsed가 매초 늘어 todayRead도 매초 늘어난다 — 카운트업의 동력이 이 한 줄이다.
   const { todayRead, remaining, overflow, progress, achieved } = todayProgress(dashboard, elapsed);
-  // 캐러셀 가운데 온 책 — 시작 버튼도 이 값을 그대로 쓴다(고른 책과 시작 대상이 어긋날 자리를 없앤다).
-  const selectedBook = dashboard.readingBooks.find((b) => b.id === selectedBookId) ?? null;
+  // 여백 문이 가리키는 책 — 측정 중이면 그 책, 대기 중이면 캐러셀에서 고른 책(없으면 문을 안 그린다).
+  const doorBook = marginDoorBook(dashboard, selectedBookId);
+
+  /**
+   * 여백 문 — <b>지금 이 화면이 어느 책을 뜻하는지 말하는 카드 안</b>에 산다(대기 중이면 캐러셀 카드,
+   * 측정 중이면 「읽는 중」 카드). 상태는 둘이지만 규칙은 하나라 노드도 하나다.
+   *
+   * <p>예전엔 카드 <b>밖</b>에 홀로 서 있었는데, 그 자리에선 보이지 않았다(사용자 지적 2026-08-21:
+   * 「여백 버튼이 별로 눈에 안 띄네」). 이 앱의 `weak` 버튼은 css가 연필 테두리를 얹으므로, 연필
+   * 테두리 카드들 사이에 홀로 두면 버튼이 아니라 <b>글자 한 줄만 든 빈 카드</b>로 읽힌다 — 위아래와
+   * 테두리가 똑같으니 눈이 그냥 지나간다. 카드 안으로 들어오면 바깥 진한 선(카드) 안의 흐린 선(버튼)이
+   * 되어 위계가 서고, 「책을 고른다 → 그 책의 여백에 적는다」가 한 흐름으로 읽힌다.
+   *
+   * <p>`weak`는 유지한다 — 화면의 주 동작(탭바의 초록 원)보다 낮은 무게가 맞다.
+   */
+  const marginDoor = doorBook !== null && (
+    // 첫 방문 안내는 문이 실제로 선 자리에서만 뜬다 — 책 0권이면 문 자체가 없으므로, 이 안내는
+    // 책을 담고 측정을 해 본 뒤에야 저절로 차례가 온다(순서를 제어하는 코드가 없다).
+    <Coachmark
+      name="margin"
+      after="bookshop" // 탭바 투어를 마친 뒤에 — 딤 두 장이 겹치지 않게
+      title="읽다가 떠오른 생각을 여백에"
+      detail="문장·감상을 몇 줄 남겨 두는 자리예요"
+    >
+      <Button
+        display="block"
+        variant="weak"
+        size="medium"
+        style={{ marginTop: 16 }}
+        onClick={() => onComposeMargin(doorBook)}
+      >
+        여백에 글 남기기
+      </Button>
+    </Coachmark>
+  );
 
   return (
     <Screen>
-      {/* 계정 진입은 화면 맨 위 — 카드 위 한 줄이다(피드 박스 뒤 스크롤 끝에서 올라왔다). */}
-      <AccountSection onGoSettings={onGoSettings} />
+      {/* 계정 진입은 화면 맨 위 — 카드 위 한 줄이 곧 이 화면의 헤더다(인사말 + 아바타). */}
+      <AccountSection nickname={dashboard.nickname} loginId={dashboard.loginId} onGoSettings={onGoSettings} />
 
+      {/* 첫 사용 안내로 들어오는 문 — 처음 온 사람이 히어로 카드보다 먼저 만나야 한다. */}
+      {guide}
+
+      {/* 독서등이 켜지면 이 카드만 스탠드 밑에 펼쳐진 페이지로 남는다 — 표식만 붙이고, 켤지 말지와
+          색은 `body` 클래스와 css가 든다(그래서 측정 여부와 무관하게 늘 붙어 있다). */}
       <div
+        className={LAMP_PAGE_CLASS}
         style={{
           padding: '28px 20px',
           borderRadius: 16,
           background: 'var(--adaptiveGrey100, #FCFAF5)',
+          border: '1px solid transparent',
+          borderImage: PENCIL_FRAME,
           textAlign: 'center',
         }}
       >
@@ -850,7 +1031,9 @@ export function Home({
           </Text>
         </div>
         <div style={{ marginTop: 6 }}>
-          <Text typography="t2" fontWeight="bold">
+          {/* 세리프 + t2(44px) — 이 화면이 답하려는 유일한 수다. 개구 26px일 땐 화면 제목(22px)보다
+              4px 큰 게 전부라 히어로로 읽히지 않았다. */}
+          <Text typography="t2" fontWeight="bold" style={{ ...SERIF_VALUE }}>
             {formatClock(todayRead)}
           </Text>
         </div>
@@ -872,7 +1055,7 @@ export function Home({
                   background: 'transparent',
                   borderBottom: '1px dashed var(--adaptiveGrey600, #6F6A5E)',
                   color: 'var(--adaptiveGrey600, #6F6A5E)',
-                  fontSize: 13,
+                  fontSize: 14,
                   cursor: 'pointer',
                 }}
               >
@@ -949,46 +1132,26 @@ export function Home({
         </section>
       )}
 
-      {!dashboard.hasActiveSession && (
+      {dashboard.hasActiveSession ? (
+        <ReadingNowCard book={dashboard.activeBook ?? null} totalSeconds={dashboard.activeBookTotalSeconds}>
+          {marginDoor}
+        </ReadingNowCard>
+      ) : (
         <section style={sectionStyle}>
           {/* 상태와 무관한 고정 문구다 — 「책 없이」가 가운데면 "이 책으로"는 틀린 말이고, 상태별로
               갈아끼우면 헤더가 나타났다 사라지며 캐러셀이 세로로 들썩인다. */}
-          <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
-            무엇으로 측정할까요?
-          </Text>
+          <SectionTitle style={{ marginBottom: 10 }}>무엇으로 측정할까요?</SectionTitle>
           {/* 좌우로 밀어 고른다 — 가운데 온 칸이 곧 측정 대상이다(0번은 「책 없이」라 책 0권도 같은 화면). */}
-          <BookCarousel books={dashboard.readingBooks} selectedId={selectedBookId} onSelect={setSelectedBookId} />
+          <BookCarousel books={dashboard.readingBooks} selectedId={selectedBookId} onSelect={onSelectBook} />
+          {marginDoor}
         </section>
       )}
 
       <ErrorMessage message={error} />
 
-      {/* 시작은 이 버튼 하나 — 무엇으로 측정할지는 캐러셀이 이미 말했다(「책 없이」 칸이면 selectedBook이
-          null이라 그대로 `start(null)`이 나간다). 보조 갈래를 두면 "가운데 온 것으로 측정한다"는 문법이 깨진다. */}
-      <Button
-        display="block"
-        color={dashboard.hasActiveSession ? 'danger' : 'primary'}
-        style={{ marginTop: 24 }}
-        loading={busy}
-        onClick={dashboard.hasActiveSession ? stop : () => start(selectedBook?.id ?? null)}
-      >
-        {dashboard.hasActiveSession ? '측정 끝내기' : '측정 시작'}
-      </Button>
-
       {/* 잔디 미리보기가 서 있던 자리는 피드 박스가 통째로 쓴다 — 기록(잔디·연속일·총 시간)은 기록 탭이
           이미 전부 그리고 그 탭은 하단 탭바에서 한 번에 닿으므로, 홈에 진입 손잡이를 또 두지 않는다. */}
-      <HomeFeedBox onError={onError} />
-
-      {/* 시트는 측정 종료 후 태깅 자리 하나다 — 고르기는 캐러셀이 맡는다. */}
-      {tagging !== null && (
-        <BookSheet
-          books={dashboard.readingBooks}
-          disabled={busy}
-          onPick={tag}
-          onSkip={closeSheet}
-          onClose={closeSheet}
-        />
-      )}
+      <HomeFeedBox onError={onError} onOpenMargin={onOpenMargin} />
     </Screen>
   );
 }

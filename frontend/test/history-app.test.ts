@@ -32,15 +32,15 @@ const MOCK_MONTHS = [
         month: '2026-06',
         totalSeconds: 7200,
         days: [
-            { date: '2026-06-20', totalSeconds: 3600, bookTitles: ['클린 코드'], manuallyFilled: false },
-            { date: '2026-06-19', totalSeconds: 3600, bookTitles: [], manuallyFilled: false },
+            { date: '2026-06-20', totalSeconds: 3600, books: [{ title: '클린 코드', coverUrl: null, seconds: 3600 }], manuallyFilled: false },
+            { date: '2026-06-19', totalSeconds: 3600, books: [], manuallyFilled: false },
         ],
     },
     {
         month: '2026-05',
         totalSeconds: 3600,
         days: [
-            { date: '2026-05-31', totalSeconds: 3600, bookTitles: ['리팩터링'], manuallyFilled: false },
+            { date: '2026-05-31', totalSeconds: 3600, books: [{ title: '리팩터링', coverUrl: null, seconds: 3600 }], manuallyFilled: false },
         ],
     },
 ];
@@ -100,6 +100,12 @@ describe('MonthlyRecords 월 네비 경계', () => {
         const wrapper = mount(MonthlyRecords, { props: { months: MOCK_MONTHS } });
         // 최신달 레이블이 보인다
         expect(wrapper.text()).toContain('2026년 6월');
+    });
+
+    // 서버가 제목 목록 대신 책 목록(제목·표지·초)을 보낸다 — 웹은 제목만 쓰므로 그 꺼내는 길이 끊기면 조용히 빈칸이 된다.
+    test('일자 행에 그날 읽은 책 제목을 적는다', () => {
+        const wrapper = mount(MonthlyRecords, { props: { months: MOCK_MONTHS } });
+        expect(wrapper.text()).toContain('클린 코드');
     });
 
     test('prev(◀) 클릭 → 과거 달로 이동 (monthIndex++)', async () => {

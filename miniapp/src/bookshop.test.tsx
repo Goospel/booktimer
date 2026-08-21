@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
+  BookStatus,
   FollowListType,
   PersonalityEntry,
   PersonalityMutation,
@@ -12,19 +13,26 @@ import type {
   UserRow,
 } from './api';
 import { ApiError, adRefreshPersonality, selectPersonality } from './api';
-import { Bookshop, BookshopHeader, FollowListSheet, HandleSheet, SearchSheet, UserList } from './screens/Bookshop';
+import { cacheClear, cacheKeyProfile, cacheKeyProfileBooks, cachePut } from './cache';
+import { Bookshop, BookshopHeader, FollowListSheet, HandleSheet } from './screens/Bookshop';
+import { UserList } from './ui';
 import {
   ArchiveSheet,
+  Profile,
+  BIO_CLAMP_CHARS,
   FollowCountButton,
   ProfileCard,
   SafetyPanel,
   analysisFailed,
   claimPersonality,
   followCountsOpenable,
+  needsBioToggle,
   newestEntry,
+  personalityActions,
   personalityErrorMessage,
   personalityNoticeText,
   runPersonalityRefresh,
+  shelfTitle,
   showArchiveHandle,
   showPersonalityAdButton,
   toggleSafety,
@@ -93,8 +101,10 @@ function profile(extra: Partial<ProfileResponse> = {}): ProfileResponse {
   };
 }
 
-function book(id: number, title: string): ProfileBook {
-  return { id, title, author: '저자', coverUrl: null, status: '다 읽음', seconds: 600, purchaseLink: null };
+const NOW = Date.parse('2026-08-16T12:00:00Z');
+
+function book(id: number, title: string, lastStoryAt: string | null = null): ProfileBook {
+  return { id, title, author: '저자', coverUrl: null, status: '다 읽음', seconds: 600, purchaseLink: null, lastStoryAt };
 }
 
 function card(
@@ -102,8 +112,6 @@ function card(
   books: ProfileBook[] = [],
   activeTag: string | null = null,
   view: {
-    selectedId?: number | null;
-    gridOpen?: boolean;
     personalityStatus?: PersonalityStatus | null;
     earnedRetry?: boolean;
     personalityNotice?: string | null;
@@ -113,6 +121,10 @@ function card(
     /** 「돌아가기」의 대상 — 탭 루트에는 없다(출구가 탭바다). */
     back?: boolean;
     header?: React.ReactNode;
+    /** 격자 탭으로 여백을 여는 손잡이 — 책방 셸이 준다. */
+    openMargin?: boolean;
+    /** 걸린 상태 필터 — 기본은 「전체」(null). 클릭이 안 도는 하니스라 결과 상태를 밖에서 준다. */
+    statusFilter?: BookStatus | null;
   } = {},
 ) {
   return render(
@@ -120,8 +132,8 @@ function card(
       profile={p}
       books={books}
       activeTag={activeTag}
-      selectedId={view.selectedId ?? null}
-      gridOpen={view.gridOpen ?? false}
+      now={NOW}
+      onOpenMargin={view.openMargin === false ? undefined : () => {}}
       busy={false}
       personalityStatus={view.personalityStatus ?? null}
       adBusy={false}
@@ -134,8 +146,8 @@ function card(
       onRetryPersonality={() => {}}
       onFollowToggle={() => {}}
       onSelectTag={() => {}}
-      onSelect={() => {}}
-      onGrid={() => {}}
+      statusFilter={view.statusFilter ?? null}
+      onSelectStatus={() => {}}
       onMore={() => {}}
       safety={null}
       header={view.header}
@@ -270,47 +282,12 @@ describe('팔로우 목록 시트 (FollowListSheet)', () => {
   });
 });
 
-/**
- * 친구 찾기 시트 — 옛 소셜 화면의 인라인 검색 form을 그대로 옮겼다. 상태(query·results)는 셸이 든다.
- */
-describe('친구 찾기 시트 (SearchSheet)', () => {
-  const sheet = (results: UserRow[] | null, query = 'goo') =>
-    render(
-      <SearchSheet
-        query={query}
-        results={results}
-        busy={false}
-        error={null}
-        onQueryChange={() => {}}
-        onSearch={() => {}}
-        onSelect={() => {}}
-        onClose={() => {}}
-      />,
-    );
-
-  it('아이디 입력을 form으로 감싼다 — 키보드 완료(엔터)가 아무 일도 안 하면 버튼을 따로 눌러야 한다', () => {
-    expect(sheet(null)).toContain('<form');
-  });
-
-  it('검색 버튼에 이름이 붙어 있다 — 로딩 중엔 라벨이 스피너로 바뀌어 이름 없는 버튼이 된다', () => {
-    expect(sheet(null)).toContain('aria-label="검색"');
-  });
-
-  it('0건이면 두 글자 이상으로 다시 찾으라고 알린다 — 서버가 1글자를 빈 결과로 주므로 문구가 유일한 안내다', () => {
-    expect(sheet([])).toContain('두 글자 이상');
-  });
-
-  it('결과가 있으면 목록으로 그린다', () => {
-    expect(sheet([user('goospel')])).toContain('@goospel');
-  });
-});
-
-/** 핸들 시트 — 불변 경고가 여기 없으면 사용자가 되돌릴 수 없는 선택을 모르고 한다. */
+/** 핸들 시트 — 경고가 여기 없으면 사용자가 평생 1번뿐인 선택을 모르고 한다. */
 describe('핸들 만들기 시트', () => {
   const sheet = () => render(<HandleSheet onClose={() => {}} onCreated={() => {}} onFail={() => {}} />);
 
-  it('한 번 정하면 못 바꾼다고 미리 알린다', () => {
-    expect(sheet()).toContain('바꿀 수 없어요');
+  it('평생 1번만 바꿀 수 있다고 미리 알린다', () => {
+    expect(sheet()).toContain('평생 1번');
   });
 
   it('입력과 만들기 버튼을 준다 — 시트 안에서 끝난다', () => {
@@ -318,6 +295,29 @@ describe('핸들 만들기 시트', () => {
 
     expect(markup).toContain('<input');
     expect(markup).toContain('만들기');
+  });
+});
+
+/**
+ * 핸들 바꾸기 시트 — 같은 컴포넌트의 변형(`change`에 지금 핸들을 주면 전환된다). 시트 열림 가지에
+ * 프롭으로 닿는 이유는 이 파일의 다른 시트들과 같다: 정적 렌더 하니스가 클릭을 못 잡는다(T-149).
+ */
+describe('핸들 바꾸기 시트', () => {
+  const sheet = () =>
+    render(<HandleSheet change="goospel" onClose={() => {}} onCreated={() => {}} onFail={() => {}} />);
+
+  it('만들기가 아니라 바꾸기라고 말한다 — 제목·버튼이 함께 전환된다', () => {
+    const markup = sheet();
+
+    expect(markup).toContain('@아이디 바꾸기');
+    expect(markup).toContain('평생 1번, 바꾸기');
+  });
+
+  it('되돌릴 수 없다는 것과 옛 아이디를 다시 못 쓴다는 것을 먼저 말한다', () => {
+    const markup = sheet();
+
+    expect(markup).toContain('되돌릴 수 없');
+    expect(markup).toContain('다시 쓸 수 없');
   });
 });
 
@@ -332,7 +332,7 @@ describe('책방 (프로필)', () => {
     const markup = card(profile({ self: true }));
 
     expect(markup).not.toContain('팔로우');
-    expect(markup).not.toContain('더보기');
+    expect(markup).not.toContain('신고·차단');
     expect(markup).toContain('구스펠'); // 헤더 자체는 그대로 보인다
   });
 
@@ -356,11 +356,17 @@ describe('책방 (프로필)', () => {
     expect(card(profile(), [])).toContain('공개한 책이 없어요');
   });
 
-  it('공개 책은 제목과 상태 라벨을 함께 그린다', () => {
-    const markup = card(profile(), [book(1, '자바 최적화')]);
+  /**
+   * 격자 칸은 표지와 제목만 진다 — 캐러셀 아래 있던 「상태 · 읽은 시간」 자리가 없어졌다(승인된 교환).
+   * 상태 구분은 <b>필터 칩이 전담</b>하므로 「다 읽음」이라는 말은 화면에 칩 하나로만 존재해야 한다:
+   * 다 읽은 책을 2권 넣어도 등장이 1회면 칸에는 안 실린 것이고, 칸마다 실렸다면 3회가 된다.
+   */
+  it('공개 책은 격자에 제목만 그린다 — 상태는 칸이 아니라 필터 칩이 진다', () => {
+    const markup = card(profile(), [book(1, '자바 최적화'), book(2, '데미안')]);
 
     expect(markup).toContain('자바 최적화');
-    expect(markup).toContain('다 읽음');
+    expect(markup).toContain('데미안');
+    expect(markup.split('다 읽음').length - 1).toBe(1);
   });
 
   it('공개 책도 표지를 그린다 — 없으면 제목 첫 글자 자리 표지로 대신한다', () => {
@@ -372,60 +378,125 @@ describe('책방 (프로필)', () => {
 });
 
 /**
- * 책방 책 목록 — 세로로 쭈루룩 나열하던 카드를 서재와 같은 표지 캐러셀로 바꿨다.
- * 책이 많으면 아래 「돌아가기」까지 한참 스크롤해야 했고, 한 화면에 몇 권인지도 안 보였다.
+ * 책방 책 목록 — 캐러셀 + 「펼쳐보기」 시트를 <b>3열 격자 인라인</b>으로 바꿨다(사용자 승인 B안).
+ *
+ * <p>캐러셀은 한 번에 한 권만 보여 주고 나머지는 「펼쳐보기」를 눌러야 했다 — 책장을 훑는 화면인데
+ * 왕복이 끼어 있었다. 격자는 그 시트를 본문에 그대로 펼친 것이라 새로 만든 물건이 없다.
+ *
+ * <p>⚠️ <b>상태·읽은 시간은 사라진다</b>(캐러셀 아래 메타 자리가 격자엔 없다). 알고 한 교환이다.
  */
-describe('책방 책 목록 — 서재와 같은 캐러셀', () => {
+describe('책방 책 목록 — 3열 격자', () => {
   const books = [book(1, '자바 최적화'), book(2, '데미안')];
 
-  it('세로 나열 대신 표지 캐러셀로 그린다 — 가운데 온 책을 글자로 못 박는다', () => {
-    const markup = card(profile(), books, null, { selectedId: 2 });
-
-    expect(markup).toContain('data-cover-title="자바 최적화"');
-    expect(markup).toContain('data-cover-title="데미안"');
-    expect(markup).toContain('data-selected-book="데미안"');
-  });
-
-  it('고른 책 아래에 저자 한 줄, 상태·읽은 시간 한 줄을 적는다', () => {
-    const markup = card(profile(), [book(1, '자바 최적화')]);
-
-    expect(markup).toContain('저자\n다 읽음 · 10분');
-  });
-
-  it('읽은 시간이 0이면 적지 않는다 — 「0초」는 정보가 아니다', () => {
-    const markup = card(profile(), [{ ...book(1, '자바 최적화'), seconds: 0 }]);
-
-    expect(markup).toContain('저자\n다 읽음');
-    expect(markup).not.toContain('0초');
-  });
-
-  it('책이 두 권 이상일 때만 「펼쳐보기」를 준다 — 한 권은 캐러셀이 이미 다 보여 준다', () => {
-    expect(card(profile(), books)).toContain('펼쳐보기');
-    expect(card(profile(), [book(1, '자바 최적화')])).not.toContain('펼쳐보기');
-  });
-
-  /**
-   * 「펼쳐보기」는 목록 바로 위 줄에 선다 — 서재는 제목 줄에 뒀지만 책방은 제목과 캐러셀 사이에
-   * 핸들·성향·태그·팔로우가 깔려 손잡이와 그 대상(책)이 화면 절반쯤 떨어져 보였다(사용자 제보).
-   */
-  it('「펼쳐보기」를 화면 제목이 아니라 「공개한 책 N」 줄에 둔다', () => {
+  it('책들을 격자로 한 번에 그린다 — 「펼쳐보기」를 누르지 않아도 다 보인다', () => {
     const markup = card(profile(), books);
-
-    expect(markup.indexOf('공개한 책')).toBeLessThan(markup.indexOf('펼쳐보기'));
-    expect(markup.indexOf('펼쳐보기')).toBeLessThan(markup.indexOf('data-cover-title'));
-  });
-
-  it('펼쳐보기를 열면 그 책들을 격자로 한 번에 그린다', () => {
-    const markup = card(profile(), books, null, { gridOpen: true });
 
     expect(markup).toContain('data-grid-title="자바 최적화"');
     expect(markup).toContain('data-grid-title="데미안"');
   });
 
-  it('고른 책이 목록에서 사라지면 첫 책으로 떨어진다 — 태그 드릴다운이 목록을 통째로 간다', () => {
-    const markup = card(profile(), books, '한우물형', { selectedId: 999 });
+  it('캐러셀은 남지 않는다 — 두 목록이 같은 화면에 겹쳐 서면 어느 쪽이 진짜인지 흐려진다', () => {
+    expect(card(profile(), books)).not.toContain('data-selected-book');
+  });
 
-    expect(markup).toContain('data-selected-book="자바 최적화"');
+  it('「펼쳐보기」 손잡이가 사라진다 — 격자가 곧 그 시트라 열 곳이 없다', () => {
+    expect(card(profile(), books)).not.toContain('펼쳐보기');
+  });
+
+  it('한 권도 없으면 격자 대신 안내를 그린다', () => {
+    const markup = card(profile(), []);
+
+    expect(markup).toContain('공개한 책이 없어요');
+    expect(markup).not.toContain('data-grid-title');
+  });
+
+  it('태그를 고르면 그 근거 책만 격자에 남는다 — 목록의 출처는 하나다', () => {
+    const markup = card(profile(), [book(1, '자바 최적화')], '한우물형');
+
+    expect(markup).toContain('한우물형 근거 책 1');
+    expect(markup).toContain('data-grid-title="자바 최적화"');
+    expect(markup).not.toContain('data-grid-title="데미안"');
+  });
+
+  /**
+   * 격자 칸이 <b>그 책의 여백</b>으로 들어가는 문이 됐다 — 「보기만 하는 목록」이던 시절의 규율은
+   * 그대로다: 열어 줄 손잡이가 없으면 버튼으로도 만들지 않는다.
+   */
+  it('여백을 열 손잡이를 받으면 칸이 버튼이 된다', () => {
+    expect(card(profile(), [book(1, '자바 최적화')])).toContain('<button');
+  });
+
+  it('24시간 안에 새 글이 달린 책만 발광한다 — 판정은 서버가 준 시각으로 클라가 잰다', () => {
+    const markup = card(profile(), [
+      book(1, '자바 최적화', new Date(NOW - 3_600_000).toISOString()),
+      book(2, '데미안', new Date(NOW - 30 * 3_600_000).toISOString()),
+      book(3, '코스모스'),
+    ]);
+
+    expect(markup.match(/data-fresh-dot/g)).toHaveLength(1);
+    expect(markup).toContain('aria-label="자바 최적화 새 글"');
+  });
+});
+
+/**
+ * 공개 책 상태 필터 — 웹 책장의 <b>필터 축만</b> 이식했다(배지·정렬은 안 온다).
+ *
+ * <p>기본이 「전체」라 지금 화면·발광·여백 문이 그대로 보존되고, 구분이 필요한 순간에만 사용자가 좁힌다.
+ * 어휘는 서재 탭 `SECTIONS`를 그대로 재사용한다 — 같은 앱 안에서 서재와 필터가 다른 말을 쓰면 안 된다.
+ *
+ * <p>필터를 건 뒤의 fetch 배선은 정적 렌더 하니스로 못 잡는다(클릭·effect가 안 돈다 — 태그 드릴다운과 같다).
+ * 여기서는 순수 함수 {@link shelfTitle}과 걸린 상태를 프롭으로 넣었을 때의 마크업만 계측한다.
+ */
+describe('공개 책 상태 필터', () => {
+  describe('소제목 (shelfTitle)', () => {
+    it('아무것도 안 걸렸으면 전체 문구다', () => {
+      expect(shelfTitle(null, null, 3)).toBe('공개한 책 3');
+    });
+
+    it('상태가 걸리면 그 상태의 이름과 권수를 말한다 — 배지가 없으니 소제목이 상태를 진다', () => {
+      expect(shelfTitle(null, 'FINISHED', 2)).toBe('다 읽음 2');
+      expect(shelfTitle(null, 'WANT_TO_READ', 0)).toBe('읽고 싶어요 0');
+    });
+
+    it('태그 드릴다운이면 근거 책 문구다', () => {
+      expect(shelfTitle('한우물형', null, 1)).toBe('한우물형 근거 책 1');
+    });
+
+    // 상태셸이 태그 진입 때 필터를 리셋하므로 실제로는 도달하지 않는다 — 함수 단독 계약을 못 박아 둔다.
+    it('둘 다 걸리면 태그가 이긴다', () => {
+      expect(shelfTitle('한우물형', 'FINISHED', 1)).toBe('한우물형 근거 책 1');
+    });
+  });
+
+  it('칩 넷을 그리고 기본 활성은 「전체」다 — 진입 화면이 지금과 같아야 발광·여백 문이 안 사라진다', () => {
+    const markup = card(profile(), [book(1, '자바 최적화')]);
+
+    expect(markup).toContain('전체');
+    expect(markup).toContain('읽는 중');
+    expect(markup).toContain('다 읽음');
+    expect(markup).toContain('읽고 싶어요');
+    expect(markup.match(/aria-pressed="true"/g)).toHaveLength(1);
+  });
+
+  it('상태를 고르면 그 칩만 눌린 상태다', () => {
+    const markup = card(profile(), [book(1, '자바 최적화')], null, { statusFilter: 'FINISHED' });
+
+    expect(markup.match(/aria-pressed="true"/g)).toHaveLength(1);
+    expect(markup).toContain('다 읽음 1'); // 소제목이 상태를 말한다
+  });
+
+  it('태그 드릴다운 중에는 칩 줄을 숨긴다 — 두 축은 배타다(출구는 「전체 보기」 하나)', () => {
+    const markup = card(profile(), [book(1, '자바 최적화')], '한우물형');
+
+    expect(markup).not.toContain('읽고 싶어요');
+    expect(markup).not.toContain('aria-pressed');
+  });
+
+  it('필터가 걸린 채 비면 상태용 빈 문구다 — 「공개한 책이 없어요」는 거짓말이 된다', () => {
+    const markup = card(profile(), [], null, { statusFilter: 'WANT_TO_READ' });
+
+    expect(markup).toContain('이 상태의 공개 책이 없어요');
+    expect(markup).not.toContain('공개한 책이 없어요');
   });
 });
 
@@ -457,21 +528,21 @@ describe('책방 헤더 — 카운트 줄', () => {
     expect(markup).toContain('aria-label="팔로잉 5명 보기"');
   });
 
-  it('남의 책방이면 숫자 텍스트로 남는다 — 눌러도 열 목록이 없다', () => {
+  it('남의 책방이면 누를 수 없는 숫자로 남는다 — 눌러도 열 목록이 없다', () => {
     const markup = card(profile({ self: false }), [], null, { openFollowList: true });
 
-    expect(markup).toContain('팔로워 3 · 팔로잉 5');
+    expect(markup).toContain('data-stat="팔로워">3<');
     expect(markup).not.toContain('명 보기');
   });
 
-  it('내 책방이어도 핸들러를 안 받았으면 텍스트다 — 남의 책방 렌더 경로가 그대로 살아 있다', () => {
+  it('내 책방이어도 핸들러를 안 받았으면 못 누른다 — 남의 책방 렌더 경로가 그대로 살아 있다', () => {
     const markup = card(profile({ self: true }), [], null, { openFollowList: false });
 
-    expect(markup).toContain('팔로워 3 · 팔로잉 5');
+    expect(markup).toContain('data-stat="팔로워">3<');
     expect(markup).not.toContain('명 보기');
   });
 
-  it('셸이 준 header(스토리·검색)를 제목 아래 카운트 줄 위에 끼운다', () => {
+  it('셸이 준 header(여백·검색)를 제목 아래 카운트 줄 위에 끼운다', () => {
     const markup = card(profile(), [], null, { header: <i>헤더슬롯</i> });
 
     expect(markup).toContain('헤더슬롯');
@@ -498,42 +569,150 @@ describe('팔로우 카운트 버튼 (FollowCountButton)', () => {
  * 셋이 한 줄에 섞여 있으면 @아이디가 카운트의 일부처럼 읽힌다(사용자 제보).
  */
 describe('책방 헤더 — @아이디와 카운트 버튼', () => {
-  it('내 책방이면 @아이디가 카운트 버튼보다 위에 따로 선다', () => {
+  it('내 책방이면 @아이디가 카운트 줄 아래 이름 옆에 따로 선다(인스타 배치)', () => {
     const markup = card(profile({ self: true }), [], null, { openFollowList: true });
 
     expect(markup).toContain('aria-label="팔로워 3명 보기"');
     expect(markup).toContain('aria-label="팔로잉 5명 보기"');
-    expect(markup.indexOf('@goospel')).toBeLessThan(markup.indexOf('팔로워 3명 보기'));
+    expect(markup.indexOf('팔로워 3명 보기')).toBeLessThan(markup.indexOf('@goospel'));
     // 「@goospel ·」로 이어 붙던 옛 한 줄 — 되살아나면 아이디가 카운트에 섞여 다시 안 보인다.
     expect(markup).not.toContain('@goospel ·');
   });
 
-  it('남의 책방은 텍스트 그대로 — 서버가 남의 목록을 안 주므로 버튼처럼 보이게 하지 않는다(#788)', () => {
+  it('남의 책방은 같은 줄을 쓰되 버튼이 아니다 — 서버가 남의 목록을 안 주므로 누를 수 없다(#788)', () => {
     const markup = card(profile({ self: false }), [], null, { openFollowList: true });
 
-    expect(markup).toContain('팔로워 3 · 팔로잉 5');
+    expect(markup).toContain('data-stat="팔로워">3<');
+    expect(markup).toContain('data-stat="팔로잉">5<');
     expect(markup).not.toContain('명 보기');
   });
 });
 
 /**
- * 상단 도구 순서 — 검색이 최상단이고 스토리가 그 아래다. 셸의 지역 변수로 두면 첫 렌더(feed=null)에서
- * 스트립이 통째로 빠져 두 줄의 앞뒤를 잴 수 없어, 순서를 계측하려고 컴포넌트로 꺼냈다.
+ * 인스타식 상단(사용자 시안) — 큰 제목 「…님의 책방」을 지우고 <b>아바타 + 카운트 3개를 한 줄</b>에,
+ * 그 아래 닉네임·@아이디·성향(bio)을 놓는다.
+ *
+ * <p>이유는 자리다: 제목·검색바·여백·카운트 버튼·10줄 성향 문단이 화면 위를 다 먹어, 정작 이 화면의
+ * 본체인 「공개한 책」이 탭바 아래로 밀려 잘렸다(사용자 스크린샷). 위를 눌러 책을 첫 화면으로 끌어올린다.
+ */
+describe('책방 신원 블록 — 인스타식 상단', () => {
+  it('큰 제목을 그리지 않는다 — 닉네임은 이름 줄로 내려온다', () => {
+    const markup = card(profile());
+
+    expect(markup).not.toContain('님의 책방');
+    expect(markup).toContain('구스펠');
+  });
+
+  it('공개 책 수는 태그로 걸러진 목록이 아니라 profile.books를 센다', () => {
+    // 태그를 고르면 `books`는 근거 책만 남는다 — 그걸 세면 상단 카운트가 필터마다 요동친다.
+    const markup = card(profile({ books: [book(1, '가'), book(2, '나'), book(3, '다')] }), [book(1, '가')], '한우물형');
+
+    expect(markup).toContain('data-stat="공개 책">3<');
+  });
+
+  it('공개 책 카운트는 버튼이 아니다 — 눌러도 열 목록이 없다', () => {
+    const markup = card(profile({ self: true, books: [book(1, '가')] }), [], null, { openFollowList: true });
+
+    expect(markup).toContain('data-stat="공개 책">1<');
+    expect(markup).not.toContain('공개 책 1명 보기');
+  });
+
+  it('긴 성향에는 「더보기」를 단다 — 3줄만 남기고 접어야 책이 첫 화면에 남는다', () => {
+    const markup = card(profile({ personality: '가'.repeat(BIO_CLAMP_CHARS + 1) }));
+
+    expect(markup).toContain('더보기');
+  });
+
+  it('짧은 성향에는 안 단다 — 눌러도 아무것도 안 펼쳐지는 죽은 버튼이 된다', () => {
+    expect(card(profile({ personality: '한 작가를 깊게 파는 독자' }))).not.toContain('더보기');
+  });
+
+  it('태그가 서술보다 먼저 온다 — 그 사람을 한눈에 요약하는 세 단어가 다섯 줄 뒤에 있으면 안 읽힌다', () => {
+    const markup = card(profile({ personality: '밑줄을 아끼지 않는 완독형이에요.' }));
+
+    expect(markup.indexOf('한우물형')).toBeGreaterThan(-1);
+    expect(markup.indexOf('한우물형')).toBeLessThan(markup.indexOf('밑줄을 아끼지 않는'));
+  });
+
+  it('서술은 카드에 담긴다 — 문단이 화면에 그냥 떠 있으면 벽처럼 읽힌다', () => {
+    const markup = card(profile({ personality: '밑줄을 아끼지 않는 완독형이에요.' }));
+
+    expect(markup).toContain('data-bio-card=""');
+  });
+
+  it('성향이 없으면 빈 카드를 세우지 않는다 — 테두리만 남은 상자가 생긴다', () => {
+    expect(card(profile({ personality: null }))).not.toContain('data-bio-card=""');
+  });
+});
+
+/** 「더보기」 노출 판정 — CSS clamp는 넘칠 때만 자르므로, 손잡이도 넘칠 때만 서야 짝이 맞는다. */
+describe('성향 접기 판정 (needsBioToggle)', () => {
+  it('성향이 없으면 손잡이도 없다', () => {
+    expect(needsBioToggle(null)).toBe(false);
+  });
+
+  it('임계 길이 딱 맞으면 안 단다 — 3줄에 들어간다', () => {
+    expect(needsBioToggle('가'.repeat(BIO_CLAMP_CHARS))).toBe(false);
+  });
+
+  it('임계를 한 글자라도 넘기면 단다', () => {
+    expect(needsBioToggle('가'.repeat(BIO_CLAMP_CHARS + 1))).toBe(true);
+  });
+});
+
+/**
+ * 상단 도구 — <b>전폭 검색바 하나</b>다(2026-08-18). 여백 스트립이 서 있던 왼쪽 자리는 그 전에
+ * 사라졌고(「새 글」 신호가 사람 단위(링) → <b>책 단위(격자 발광)</b>, 2026-08-16), 그 뒤로 아이콘이
+ * <b>오른쪽 끝에 정렬됐는데 왼쪽은 빈</b> 줄로 홀로 남아 이질적이었다.
+ *
+ * <p>2026-08-16엔 반대로 판단했었다 — 전폭 알약이 "그 줄만큼 책을 아래로 민다"고 보고 아이콘으로 줄였다.
+ * 그 논거는 지금 형태엔 안 맞는다: 캡션이 붙으면서 <b>아이콘 쪽이 세로로 더 먹는다</b>(원 56 + 여백 4 +
+ * 캡션 ≈ 80px 대 바 44px). 그래서 전폭으로 되돌리되 세로는 오히려 줄어든다.
+ *
+ * <p>단 <b>입력창이 아니다</b> — 생김새만 검색바고 누르면 시트가 열린다. 인라인 입력으로 만들면 결과
+ * 패널이 내 책방 본문을 통째로 갈아끼워야 하는데, 그게 애초에 검색을 시트로 뺀 이유다.
  */
 describe('책방 상단 도구 (BookshopHeader)', () => {
-  it('검색 진입바가 스토리 스트립보다 위에 선다', () => {
-    const markup = render(
-      <BookshopHeader
-        feed={{ mine: null, groups: [] }}
-        onOpenStory={() => {}}
-        onCompose={() => {}}
-        onSearch={() => {}}
-      />,
-    );
+  const header = () => render(<BookshopHeader onSearch={() => {}} />);
+
+  it('검색 진입이 선다', () => {
+    expect(header()).toContain('aria-label="아이디로 친구 찾기"');
+  });
+
+  it('문구를 본문에 그린다 — 무엇을 찾는 자리인지가 눌러 보기 전에 서야 한다', () => {
+    // 아이콘 시절엔 이 문구가 aria-label 안에만 살고, 화면엔 11px 캡션 「친구 찾기」만 있었다.
+    expect(header()).toContain('>아이디로 친구 찾기<');
+  });
+
+  it('입력창이 아니라 시트를 여는 버튼이다 — 인라인 입력은 결과 패널이 본문을 갈아끼운다', () => {
+    expect(header()).toContain('<button');
+    expect(header()).not.toContain('<input');
+  });
+
+  it('여백 스트립은 남지 않는다 — 링(사람 단위 새 글)은 격자 발광으로 대체됐다', () => {
+    expect(header()).not.toContain('여백 적기');
+    expect(header()).not.toContain('내 여백');
+  });
+});
+
+/**
+ * 남의 책방에는 검색 진입이 없다 — 남의 전시장은 친구를 찾는 자리가 아니다(2026-08-18 사용자 결정).
+ *
+ * <p>실현 수단은 셸이다: 남의 책방 분기에 `header`를 아예 안 넘긴다. 그러니 이 화면이 스스로 검색바를
+ * 그리기 시작하면 그 배선이 조용히 무력해진다 — 전폭으로 커진 지금은 「상단이 허전하니 여기 두자」는
+ * 유혹이 실제로 생기는 자리라 더 그렇다. 부정 단언 홀로면 항상 참이라, 짝이 되는 긍정을 함께 세운다.
+ */
+describe('남의 책방 — 검색 진입 없음', () => {
+  it('header를 안 받으면 검색 진입을 그리지 않는다', () => {
+    expect(card(profile())).not.toContain('아이디로 친구 찾기');
+  });
+
+  it('header를 받으면 그린다 — 위 단언이 늘 참인 빈 껍데기가 아님을 보인다', () => {
+    const markup = card(profile({ self: true }), [], null, {
+      header: <BookshopHeader onSearch={() => {}} />,
+    });
 
     expect(markup).toContain('아이디로 친구 찾기');
-    expect(markup).toContain('스토리 쓰기');
-    expect(markup.indexOf('아이디로 친구 찾기')).toBeLessThan(markup.indexOf('스토리 쓰기'));
   });
 });
 
@@ -558,31 +737,29 @@ describe('책방 탭 루트 — 상단 도구가 제목보다 위', () => {
 });
 
 /**
- * 탭 루트가 된 내 책방에는 「돌아가기」가 없다 — 돌아갈 곳이 없는 버튼은 아무 데도 안 가는 막다른 손잡이다.
- * 출구는 플로팅 탭바가 맡는다.
+ * 남의 책방의 나가는 길 — **상단 「돌아가기」 하나**(2026-08-16).
+ *
+ * <p>이 화면은 같은 문제를 두 번 겪었다. 처음엔 제목 옆 `←` 글리프였는데 배경이 없어 버튼으로 안
+ * 읽혀 **지우고 하단 버튼만** 남겼고, 그 뒤 여백 화면에서 같은 지적이 또 나와 **글자가 붙은 알약**이
+ * 생겼다. 회피 이유가 사라졌으므로 위로 되돌리고 하단 버튼을 걷는다 — 앱 전체가 한 자리에서 나간다.
+ *
+ * <p>개수를 세는 것이 핵심이다: 위아래 둘이면 「통일」이 아니라 중복인데, 존재 단언만으로는 못 잡는다.
+ * 탭 루트(내 책방)는 돌아갈 곳이 없어 아무것도 그리지 않는다.
  */
-describe('돌아가기 — onBack이 있을 때만', () => {
-  it('onBack을 받으면 하단에 「돌아가기」가 선다 (남의 책방)', () => {
-    expect(card(profile())).toContain('돌아가기');
+describe('책방 — 나가는 길', () => {
+  it('「돌아가기」가 정확히 하나다 (남의 책방)', () => {
+    expect(card(profile()).match(/돌아가기/g)).toHaveLength(1);
   });
 
-  it('onBack이 없으면 「돌아가기」를 그리지 않는다 (탭 루트)', () => {
+  it('신원 블록보다 위에 온다 — 아래로 내려가서 찾지 않는다', () => {
+    const markup = card(profile());
+
+    expect(markup).toContain('돌아가기');
+    expect(markup.indexOf('돌아가기')).toBeLessThan(markup.indexOf('구스펠'));
+  });
+
+  it('onBack이 없으면 그리지 않는다 (탭 루트) — 아무 데도 안 가는 손잡이는 남기지 않는다', () => {
     expect(card(profile({ self: true }), [], null, { back: false })).not.toContain('돌아가기');
-  });
-});
-
-/**
- * 책방 상단 ← 제거 — 배경 없는 화살표 글자라 「버튼」으로 안 읽혔다. 원래 이유(긴 목록 끝까지
- * 스크롤해야 출구를 만난다)도 책 목록이 캐러셀로 바뀌며 사라졌다. 나갈 길은 하단 「돌아가기」와
- * 플로팅 탭바가 맡는다.
- */
-describe('책방 상단 뒤로가기', () => {
-  it('제목 옆에 ← 를 두지 않는다', () => {
-    expect(card(profile())).not.toContain('aria-label="뒤로"');
-  });
-
-  it('하단 「돌아가기」는 남긴다 — ← 를 없앤 뒤 이게 화면 안의 유일한 출구다', () => {
-    expect(card(profile())).toContain('돌아가기');
   });
 });
 
@@ -852,6 +1029,38 @@ describe('분석 실패 판정과 문구', () => {
   });
 });
 
+/**
+ * 한 줄에 무엇이 서는가 — 광고 버튼(전폭)과 보관함(오른쪽 끝 알약)이 서로 다른 물건처럼 흩어져
+ * 있던 것을 한 줄에 나란히 세운다(사용자 지적). 행의 유무와 칸 수가 한 곳에서 나와야 어긋나지 않는다.
+ */
+describe('성향 관문 손잡이 줄 (personalityActions)', () => {
+  const both = status({
+    hasSelected: true,
+    entries: [entry(1, '2026-08-16T10:00:00Z', true), entry(2, '2026-08-15T10:00:00Z')],
+  });
+
+  it('둘 다 자격이 되면 광고 → 보관함 순으로 두 칸', () => {
+    expect(personalityActions(true, both, 'g')).toEqual(['ad', 'archive']);
+  });
+
+  it('비교 대상이 1건이면 광고만 — 그 칸이 전폭을 가진다', () => {
+    expect(personalityActions(true, status({ hasSelected: true, entries: [entry(1, '2026-08-16T10:00:00Z', true)] }), 'g')).toEqual(['ad']);
+  });
+
+  it('오늘 총량을 다 썼으면 보관함만 남는다', () => {
+    expect(personalityActions(true, { ...both, adRefreshRemaining: 0 }, 'g')).toEqual(['archive']);
+  });
+
+  it('광고 그룹 ID가 없으면(config-gate) 광고 칸이 빠진다 — 목 모드가 이 경로다', () => {
+    expect(personalityActions(true, both, '')).toEqual(['archive']);
+  });
+
+  it('둘 다 아니면 빈 줄을 그리지 않는다 — 여백만 남는 유령 줄 방지', () => {
+    expect(personalityActions(true, status({ coldStart: true }), 'g')).toEqual([]);
+    expect(personalityActions(false, both, 'g')).toEqual([]); // 남의 책방
+  });
+});
+
 /** 술어가 실제로 마크업에 연결됐는지 — 순수 함수만 맞고 배선이 빠지면 화면엔 아무 일도 안 일어난다. */
 describe('내 책방의 성향 관문 렌더', () => {
   const me = (extra: Partial<ProfileResponse> = {}) => profile({ self: true, ...extra });
@@ -866,6 +1075,24 @@ describe('내 책방의 성향 관문 렌더', () => {
     const markup = card(me(), [], null, { personalityStatus: status({ hasSelected: true }) });
 
     expect(markup).toContain('광고 보고 다시 분석하기');
+  });
+
+  /**
+   * 관문 손잡이 둘은 <b>한 줄에 나란히</b> — 광고 버튼이 전폭, 보관함이 그 아래 오른쪽 끝 알약이라
+   * 서로 다른 물건처럼 흩어져 있었다(사용자 지적). 둘 다 "성향을 다루는" 같은 층위의 동작이다.
+   */
+  it('광고와 보관함이 한 줄에 나란히 — 광고가 왼쪽이다', () => {
+    const markup = card(me(), [], null, {
+      personalityStatus: status({
+        hasSelected: true,
+        entries: [entry(1, '2026-08-16T10:00:00Z', true), entry(2, '2026-08-15T10:00:00Z')],
+      }),
+    });
+
+    const ad = markup.indexOf('광고 보고 다시 분석하기');
+    const archive = markup.indexOf('보관함에서 비교하기');
+    expect(ad).toBeGreaterThan(-1);
+    expect(archive).toBeGreaterThan(ad);
   });
 
   it('콜드스타트면 버튼 대신 안내만 — 보상 없는 광고 시청을 원천 차단한다', () => {
@@ -970,5 +1197,47 @@ describe('dev-mock 보관함 계약', () => {
     const selected = (await mockRequest<PersonalityStatus>('/api/personality/status')).entries ?? [];
 
     expect(selected.filter((e) => e.selected).map((e) => e.id)).toEqual([target.id]);
+  });
+});
+
+/**
+ * 책방 세션 캐시 — 헤더·격자가 두 왕복(`fetchProfile` + `fetchProfileBooks`)을 기다리며 통째로 로딩이던 자리.
+ * 사람마다 키가 달라(`profile:{loginId}`) 남의 책방 캐시가 내 화면에 설 수 없다.
+ */
+describe('책방 세션 캐시 (Profile)', () => {
+  beforeEach(cacheClear);
+
+  const renderMounted = (loginId = 'goospel') =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Profile loginId={loginId} onError={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  it('캐시가 비면 지금처럼 로딩부터다 — 캐시는 없던 데이터를 지어내지 않는다', () => {
+    const markup = renderMounted();
+
+    expect(markup).toContain('불러오는 중');
+    expect(markup).not.toContain('구스펠');
+  });
+
+  it('지난 책방이 캐시에 있으면 첫 렌더부터 헤더와 격자가 선다', () => {
+    cachePut(cacheKeyProfile('goospel'), profile({ self: true }));
+    cachePut(cacheKeyProfileBooks('goospel'), [book(1, '데미안')]);
+
+    const markup = renderMounted();
+
+    expect(markup).toContain('구스펠');
+    expect(markup).toContain('데미안');
+    expect(markup).not.toContain('불러오는 중');
+  });
+
+  it('남의 책방 캐시는 내 화면에 안 선다 — 키에 loginId가 박혀 있다', () => {
+    cachePut(cacheKeyProfile('nabi'), profile({ nickname: '여느밤', loginId: 'nabi' }));
+
+    const markup = renderMounted('goospel');
+
+    expect(markup).not.toContain('여느밤');
+    expect(markup).toContain('불러오는 중');
   });
 });

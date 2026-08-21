@@ -275,6 +275,61 @@ class SettingsControllerTest {
         assertThat(userRepository.findByEmail("delno@booktimer.com")).isPresent(); // 삭제 안 됨
     }
 
+    // --- 핸들 없는 소셜 계정(온보딩 전 login_id=null)의 탈퇴 경로 ---
+    // 확인 수단을 @핸들에만 두면 이 계정은 화면으로 탈퇴가 불가능하다("@null" 안내 + 입력할 값 없음).
+    // 핸들이 없으면 본인 이메일 재입력으로 확인한다.
+
+    @Test
+    @DisplayName("GET /settings: 핸들 없는 소셜 계정 탈퇴 폼은 @null 대신 본인 이메일을 확인 값으로 안내한다")
+    void getSettings_socialWithoutHandle_showsEmailConfirmField() throws Exception {
+        registerSocial("nohandle@booktimer.com"); // 온보딩 전 — login_id=null
+
+        mockMvc.perform(get("/settings").with(user("nohandle@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("deleteConfirmValue", "nohandle@booktimer.com"))
+                .andExpect(content().string(containsString("confirmHandle")))
+                .andExpect(content().string(not(containsString("@null"))));
+    }
+
+    @Test
+    @DisplayName("POST /settings/delete: 핸들 없는 소셜 계정은 이메일이 일치하면 삭제한다")
+    void postDelete_socialWithoutHandle_emailMatches_deletes() throws Exception {
+        registerSocial("delnohandle@booktimer.com");
+
+        mockMvc.perform(post("/settings/delete").with(user("delnohandle@booktimer.com")).with(csrf())
+                        .param("confirmHandle", "delnohandle@booktimer.com"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login?deleted"));
+
+        assertThat(userRepository.findByEmail("delnohandle@booktimer.com")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("POST /settings/delete: 핸들 없는 소셜 계정도 값이 틀리면 삭제하지 않는다")
+    void postDelete_socialWithoutHandle_mismatch_doesNotDelete() throws Exception {
+        registerSocial("keepnohandle@booktimer.com");
+
+        mockMvc.perform(post("/settings/delete").with(user("keepnohandle@booktimer.com")).with(csrf())
+                        .param("confirmHandle", "wrong@booktimer.com"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/settings"));
+
+        assertThat(userRepository.findByEmail("keepnohandle@booktimer.com")).isPresent();
+    }
+
+    @Test
+    @DisplayName("POST /settings/delete: 핸들이 있는 소셜 계정은 이메일 입력으로는 삭제되지 않는다(안내한 값만 통과)")
+    void postDelete_socialWithHandle_emailIsNotAccepted() throws Exception {
+        registerSocialWithHandle("emailno@booktimer.com", "emailno");
+
+        mockMvc.perform(post("/settings/delete").with(user("emailno@booktimer.com")).with(csrf())
+                        .param("confirmHandle", "emailno@booktimer.com"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/settings"));
+
+        assertThat(userRepository.findByEmail("emailno@booktimer.com")).isPresent();
+    }
+
     // --- 밀린 부채 합산 표시 토글 (debtCarryover) ---
 
     @Test

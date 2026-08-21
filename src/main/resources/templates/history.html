@@ -29,6 +29,6 @@
     <div th:replace="~{ads :: unit}"></div>
 </div>
 <!-- Spring resource chain이 런타임에 history-<hash>.js 로 변환 -->
-<script type="module" th:src="@{/history/history.js}"></script>
+<script type="module" th:attr="nonce=${cspNonce}" th:src="@{/history/history.js}"></script>
 </body>
 </html>

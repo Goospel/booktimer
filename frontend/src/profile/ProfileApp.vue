@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { getCsrfToken } from '../shared/follow';
 import { setBlock } from '../shared/block';
 import ShopIcon from './ShopIcon.vue';
@@ -8,20 +8,19 @@ import ReportModal from '../shared/ReportModal.vue';
 import BtiPanel from './BtiPanel.vue';
 import ShelfPanel from './ShelfPanel.vue';
 import NavLinks from '../shared/NavLinks.vue';
-import StoryViewer from '../shared/story/StoryViewer.vue';
-import { fetchStoriesOf } from '../shared/story/storyApi';
-import type { AuthorStories, StoryCard } from '../shared/story/storyFeed';
+import MarginPanel from '../shared/story/MarginPanel.vue';
 
 // ── dataset ──────────────────────────────────────────────────────────────
 const appEl = document.getElementById('profile-app');
 const loginId  = appEl?.dataset.loginId  ?? '';
-const myLoginId = appEl?.dataset.myLoginId ?? '';
 
 // ── 타입 ─────────────────────────────────────────────────────────────────
 interface TagChip  { label: string; clickable: boolean; }
 interface BookSummary {
     id: number; title: string; author: string | null; coverUrl: string | null;
     status: string; seconds: number; purchaseLink: string | null;
+    /** 그 책 여백의 최신 글 시각 — 비팔로워·글 없는 책은 null(서버가 가린다, 설계 §D3ⓐ). */
+    lastStoryAt: string | null;
 }
 interface ProfileData {
     loginId: string; nickname: string;
@@ -44,33 +43,13 @@ const tagPanel   = ref<BookSummary[] | null>(null);
 const tagLabel   = ref('');
 const reportOpen = ref(false);
 
-// ── 독서 스토리 (sns-design §13.7) — 아바타 링 + 뷰어. 비팔로워·차단은 서버가 빈 배열로 수렴(링 미표시).
-const stories = ref<StoryCard[]>([]);
-const storyViewerOpen = ref(false);
-const storiesStale = ref(false); // 뷰어 재생 중 목록 교체 금지 — 닫힐 때 재조회(인덱스 드리프트 방지)
-const storyGroups = computed<AuthorStories[]>(() => {
-    const p = profile.value;
-    if (!p || stories.value.length === 0) return [];
-    return [{
-        loginId: p.loginId, nickname: p.nickname, profileCharacterCode: p.profileCharacterCode,
-        allViewed: stories.value.every(s => s.viewed), stories: stories.value,
-    }];
-});
+// ── 여백 (2026-08-16 책 귀속 재설계) — 책 리스트의 「여백」 손잡이로 여는 패널 하나가 전부다.
+// 사람 단위 스트립·링·뷰어는 폐기됐다("새 글" 신호가 사람에서 책으로 옮겨갔다).
+const marginBook = ref<BookSummary | null>(null);
 
-async function loadStories() {
-    try {
-        stories.value = await fetchStoriesOf(loginId);
-    } catch {
-        stories.value = []; // 네트워크 실패 — 링 미표시로 수렴(unhandled rejection 방지)
-    }
-}
-
-function onStoryViewerClose() {
-    storyViewerOpen.value = false;
-    if (storiesStale.value) {
-        storiesStale.value = false;
-        loadStories();
-    }
+/** 글 작성·삭제 후 — 표지 발광(lastStoryAt)이 달라졌으니 책 목록을 다시 받는다. */
+function onMarginChanged() {
+    loadBooks();
 }
 
 // 반응형 분기 — presentational only(데이터/액션 로직 불변). 와이드(≥860px)=2열, 모바일=탭.
@@ -102,7 +81,6 @@ async function load() {
         const data: ProfileData = await res.json();
         profile.value = data;
         books.value   = data.books;
-        loadStories(); // 프로필이 보이는 사람에게만 링 시도 — 결과 빈 배열이면 링 없음
 
         // 기본 탭 결정: personality 있고 필터 신호 없으면 bti, 콜드스타트·필터 신호면 shelf
         if (activeTab.value !== 'shelf') {
@@ -252,9 +230,8 @@ onUnmounted(() => {
                     :personality-tags="profile.personalityTags"
                     :follower-count="profile.followerCount" :following-count="profile.followingCount"
                     :self="profile.self" :following="profile.following"
-                    :has-stories="stories.length > 0" :stories-unviewed="stories.some(s => !s.viewed)"
                     @open-tag="openTag" @toggle-follow="toggleFollow" @do-block="doBlock"
-                    @open-report="reportOpen = true" @open-stories="storyViewerOpen = true" />
+                    @open-report="reportOpen = true" />
 
                 <section class="dash-card shop-tab-card">
                     <div class="shop-tabs">
@@ -269,7 +246,8 @@ onUnmounted(() => {
                     <ShelfPanel v-else
                                 :books="books" :shelf-filter="shelfFilter" :shelf-sort="shelfSort" :self="profile.self"
                                 :coupang-enabled="profile.coupangEnabled" :yes24-enabled="profile.yes24Enabled" :kyobo-enabled="profile.kyoboEnabled" :login-id="loginId"
-                                @select-status="selectStatus" @select-sort="selectSort" />
+                                @select-status="selectStatus" @select-sort="selectSort"
+                                @open-margin="marginBook = $event" />
                 </section>
             </template>
 
@@ -282,9 +260,8 @@ onUnmounted(() => {
                         :personality-tags="profile.personalityTags"
                         :follower-count="profile.followerCount" :following-count="profile.followingCount"
                         :self="profile.self" :following="profile.following"
-                        :has-stories="stories.length > 0" :stories-unviewed="stories.some(s => !s.viewed)"
                         @open-tag="openTag" @toggle-follow="toggleFollow" @do-block="doBlock"
-                        @open-report="reportOpen = true" @open-stories="storyViewerOpen = true" />
+                        @open-report="reportOpen = true" />
 
                     <section class="dash-card shop-bti-card">
                         <span class="dash-pill">책BTI</span>
@@ -297,7 +274,8 @@ onUnmounted(() => {
                     <section class="dash-card">
                         <ShelfPanel :books="books" :shelf-filter="shelfFilter" :shelf-sort="shelfSort" :self="profile.self"
                                     :coupang-enabled="profile.coupangEnabled" :yes24-enabled="profile.yes24Enabled" :kyobo-enabled="profile.kyoboEnabled" :login-id="loginId"
-                                    :show-title="true" @select-status="selectStatus" @select-sort="selectSort" />
+                                    :show-title="true" @select-status="selectStatus" @select-sort="selectSort"
+                                    @open-margin="marginBook = $event" />
                     </section>
                 </div>
             </div>
@@ -306,10 +284,9 @@ onUnmounted(() => {
             <ReportModal v-if="reportOpen && !profile.self" :login-id="loginId"
                          @close="reportOpen = false" />
 
-            <!-- 스토리 뷰어 — 아바타 링 탭. 삭제(본인) 재조회는 닫힐 때(재생 중 목록 교체 금지) -->
-            <StoryViewer v-if="storyViewerOpen && storyGroups.length" :groups="storyGroups"
-                         :start-group="0" :my-login-id="myLoginId"
-                         @close="onStoryViewerClose" @changed="storiesStale = true" />
+            <!-- 여백 패널 — 책 리스트의 「여백」 손잡이 탭. 작성·삭제 후엔 책 목록 재조회(발광 갱신) -->
+            <MarginPanel v-if="marginBook" :login-id="loginId" :book-id="marginBook.id"
+                         @close="marginBook = null" @changed="onMarginChanged" />
 
             <!-- ── 하단 링크 (전 페이지 공유 .link-row 타일) ──
                  차단 목록은 자주 안 쓰는 계정 관리라 책방 상시 노출 대신 대시보드 아바타 메뉴(DashHeader)로 이동. -->

@@ -1,3 +1,4 @@
+import { cacheClear, cacheDrop } from './cache';
 import { tossLogin } from './toss';
 
 /**
@@ -23,7 +24,11 @@ export const token = {
   // 목 모드는 더미 토큰이 항상 있는 것으로 둔다 — 토스 SDK 없는 브라우저에서 로그인 브릿지를 건너뛴다.
   get: (): string | null => (DEV_MOCK ? 'dev-mock-token' : localStorage.getItem(TOKEN_KEY)),
   set: (value: string): void => localStorage.setItem(TOKEN_KEY, value),
-  clear: (): void => localStorage.removeItem(TOKEN_KEY),
+  clear: (): void => {
+    localStorage.removeItem(TOKEN_KEY);
+    // 로그아웃·401·탈퇴가 전부 이 문을 지난다 — 남의 계정 데이터가 다음 로그인 첫 렌더에 새면 안 된다.
+    cacheClear();
+  },
 };
 
 /** 토큰이 없거나 만료됨 — 화면은 이걸 잡아 로그인 브릿지로 돌아간다. */
@@ -178,6 +183,11 @@ export interface BookOption {
   /** 표지 주소 — 손으로 넣은 책은 `null`이라 첫 글자 자리 표지로 떨어진다(검색 등록만 채운다). */
   coverUrl: string | null;
   author: string | null;
+  /**
+   * 공개 책인가 — 홈에서 곧장 여는 작성 화면의 가시성 캡션 재료다(게이트가 아니다: 비공개 책에도
+   * 여백을 쓸 수 있다). 옛 서버는 안 보내므로 `undefined`이고, 그때는 공개로 간주한다({@link visibilityNotice}).
+   */
+  isPublic?: boolean;
 }
 
 export interface ContributionDay {
@@ -200,6 +210,12 @@ export interface ContributionGraph {
   growthStageName: string;
   growthStageEmoji: string;
   growthStageLabel: string;
+  /** 현재 단계 안의 진행률(0~100). 최고 단계면 100 — 막대가 빈 채로 남지 않는다. */
+  growthProgressPercent: number;
+  /** 다음 단계까지 남은 연속 일수. 최고 단계면 0. */
+  daysToNextStage: number;
+  /** 다음 단계 이름. 최고 단계면 null(더 오를 곳이 없다). */
+  nextStageLabel: string | null;
 }
 
 export interface TimerState {
@@ -211,6 +227,15 @@ export interface TimerState {
   activeStartedAt: string | null;
   activeBookTitle: string | null;
   activeBookTotalSeconds: number;
+  /**
+   * 지금 측정 중인 책 — 홈의 「읽는 중」 카드가 **표지를 그리는 재료**다.
+   *
+   * <p>`null`은 책 없이 측정 중이거나 측정 중이 아니라는 뜻이고, `undefined`는 이 필드를 아직 안 주는
+   * 옛 서버다(둘 다 카드는 「책 없이」로 선다 — 배포 순서에 화면이 의존하지 않는다).
+   *
+   * <p>`activeBookTitle`과 겹쳐 보여도 지우지 않는다: 제목 한 줄은 웹 SSR이 쓰고 있다.
+   */
+  activeBook?: BookOption | null;
   readingBooks: BookOption[];
   finishedBooks: BookOption[];
   recentBookId: number | null;
@@ -222,6 +247,11 @@ export interface TimerState {
 export interface DashboardResponse extends TimerState {
   nickname: string;
   loginId: string | null;
+  /**
+   * 버리고 간 옛 @아이디 — `null`이면 평생 1회 변경권이 아직 남아 있다. 설정 화면이 이 한 필드로
+   * 「아이디 바꾸기」 버튼을 켜고 끄고, 소진 표시에 옛 값을 적는다(옛 서버가 주는 `undefined`도 미소진).
+   */
+  previousLoginId: string | null;
   profileCharacterCode: string | null;
   wantToReadBooks: BookOption[];
   graph: ContributionGraph;
@@ -242,13 +272,25 @@ export interface StopResponse {
 
 export const fetchDashboard = (): Promise<DashboardResponse> => request('/api/dashboard');
 
+/** `session.BookRead` — 그날 이 책만 읽은 시간. 같은 책의 여러 세션은 서버가 한 줄로 합쳐 준다. */
+export interface BookRead {
+  title: string;
+  coverUrl: string | null;
+  seconds: number;
+}
+
 /** `session.DailyReadingRecord` — 세션 "횟수"는 서버가 일부러 안 준다(1분짜리 측정까지 세어 숫자만 부푼다). */
 export interface DailyRecord {
   /** `YYYY-MM-DD`(유저 타임존 기준). */
   date: string;
   totalSeconds: number;
-  /** 그날 읽은 책 제목(중복 제거). 책 미지정 세션만 있으면 빈 목록이다. */
-  bookTitles: string[];
+  /**
+   * 그날 읽은 책 — 제목별 합산, <b>오래 읽은 순</b>(서버가 정한 순서다. 화면이 다시 정렬하지 않는다).
+   *
+   * <p>`totalSeconds`는 이 목록의 합보다 <b>클 수 있다</b> — 책을 안 고르고 잰 세션의 시간은 총합에만
+   * 들어가고 여기엔 안 잡힌다. 그 차액은 화면이 「책 안 고른 기록」 줄로 밝힌다(`bookRows`).
+   */
+  books: BookRead[];
   manuallyFilled: boolean;
 }
 
@@ -271,13 +313,26 @@ export const fetchHistory = (): Promise<{ months: MonthlySection[] }> => request
 
 // ── 홈 피드 (`web/api/HomeFeedApiController`의 record가 타입 단일 출처) ────────
 
-/** `HomeFeedApiController.SocialEvent` — 팔로우한 사람의 PUBLIC 책 활동 한 줄. */
+/**
+ * `HomeFeedApiController.SocialEvent` — 팔로우한 사람의 PUBLIC 책 활동 한 줄.
+ *
+ * <p>`STORY`는 **사람+책 단위로 묶인** 여백 이벤트다(서버가 묶는다) — 세 필드는 그 행에만 실린다.
+ * `STARTED`·`FINISHED`는 bookId·excerpt가 null이고 count가 0이다.
+ */
 export interface SocialEvent {
   loginId: string;
   nickname: string;
   bookTitle: string;
-  type: 'STARTED' | 'FINISHED';
+  type: 'STARTED' | 'FINISHED' | 'STORY';
   occurredAt: string;
+  /** STORY 행만 — 탭하면 그 책의 여백으로 점프한다. */
+  bookId: number | null;
+  /** STORY 행만 — 그 묶음 **최신** 글의 발췌(서버가 80자로 잘라 준다). */
+  excerpt: string | null;
+  /** 그 묶음의 글 수(1이면 단수 문구, 2 이상이면 「글 N개」). STORY가 아니면 0. */
+  count: number;
+  /** 그 책의 표지 주소 — 세 종류 모두 채워 온다. 없으면 null(첫 글자 자리 표지로 떨어진다). */
+  coverUrl: string | null;
 }
 
 /** `HomeFeedApiController.NewsItem` */
@@ -303,10 +358,39 @@ export interface NewsItem {
  * 있어 서버 `booktimer.news.enabled`가 킬스위치로 남아 있고, **게이트가 서버에 있어 껐다 켜는 데
  * 미니앱 재배포가 필요 없다**(`VITE_*` 빌드타임 게이트보다 나은 자리).
  */
+/**
+ * `HomeFeedApiController.ReaderStatus` — 「함께 읽는 사람」 한 줄.
+ *
+ * <p><b>이 목록의 불변식은 한 줄이다: 공개 책의 독서만 본다.</b> 그래서 새로 공개되는 것이 없고,
+ * 「내 상태를 누구에게 보일까」를 새로 묻는 설정도 없다 — 책마다 이미 있는 공개 스위치가 그 설정이다.
+ * 비공개로 읽는 중인 사람은 세 필드가 전부 null로 와서 화면에서 「공개된 기록이 없어요」가 된다.
+ */
+export interface ReaderStatus {
+  loginId: string;
+  nickname: string;
+  /** 서로 팔로우 중인가 — 「서로」 배지 + 정렬 우선. 관계 모델은 단방향 그대로다. */
+  mutual: boolean;
+  /** 지금 읽는 중인 **공개** 책 제목. 비공개 책·미태깅 세션·미독서면 null. */
+  readingBookTitle: string | null;
+  /** 그 세션 시작 시각. `readingBookTitle`과 항상 함께 채워지거나 함께 null. */
+  readingSince: string | null;
+  /** 마지막 **공개** 독서 시각. 공개 기록이 없으면 null. */
+  lastReadAt: string | null;
+  /** 그때 읽던 책 제목. `lastReadAt`과 **같은 세션**에서 온다(서버가 한 행으로 뽑는다). */
+  lastReadBookTitle: string | null;
+}
+
 export interface HomeFeedResponse {
   social: SocialEvent[];
   newsEnabled: boolean;
   news: NewsItem[];
+  /**
+   * 「함께 읽는 사람」 목록(상한 30명, 서버가 정렬해서 준다 — 읽는 중 → 맞팔 → 최근순).
+   *
+   * <p>서버가 이 필드를 아직 안 내려주는 구버전과도 붙을 수 있어야 해서 미니앱은 `?? []`로 읽는다 —
+   * 서버·미니앱 배포 순서에 화면이 의존하지 않는다.
+   */
+  readers: ReaderStatus[];
 }
 
 export const fetchHomeFeed = (): Promise<HomeFeedResponse> => request('/api/home-feed');
@@ -359,12 +443,25 @@ export interface MyBookSummary {
   isPublic: boolean;
   seconds: number;
   purchaseLink: string | null;
+  /** 이 책 여백에 남긴 글 수 — 공개 전환 확인 시트의 재료다. 옛 서버는 안 보낸다(`undefined` = 0 취급). */
+  storyCount?: number;
 }
 
 /** `BookApiController.SearchRow` — `owned`는 서버가 계산해 주는 UI 표시용이라 추가 요청에 되돌려 보내지 않는다. */
 export interface SearchRow {
   title: string;
+  /**
+   * 알라딘 원문 — <b>담기가 이 값을 서버로 되돌려 저장한다</b>. 목록에 그릴 땐 {@link authorShort}를
+   * 쓴다: 여길 축약본으로 바꾸면 책 저자가 「미겔 데 세르반떼스 외 32명」으로 영구 저장된다.
+   */
   author: string | null;
+  /**
+   * 목록 표시용 한 줄(「이름」/「이름 외 N명」) — 서버가 대표 글쓴이로 줄여 준다.
+   *
+   * <p>선택 필드인 이유는 <b>배포 순서</b>다: 미니앱이 서버보다 먼저 나가면 옛 서버는 이 필드를 안 준다.
+   * 그때 저자 줄이 빈칸이 되지 않게 화면이 {@link author}로 떨어진다.
+   */
+  authorShort?: string | null;
   isbn13: string | null;
   coverUrl: string | null;
   publisher: string | null;
@@ -384,6 +481,20 @@ export const fetchShelf = (): Promise<ShelfResponse> => request('/api/books');
 /** 알라딘 1페이지. 서버는 외부 API 장애도 빈 결과로 격리하므로 실패와 0건이 같은 모양으로 온다. */
 export const searchBooks = (q: string): Promise<{ results: SearchRow[] }> =>
   request('/api/books/search', { query: { q } });
+
+/**
+ * 「책 추가」 화면의 추천 — 제목·근거를 <b>서버가 문장으로</b> 만들어 준다.
+ *
+ * <p>어느 전략(내 저자 / 베스트셀러)으로 뽑혔는지는 알려주지 않는다. 화면은 라벨을 그대로 그리므로
+ * 서버가 전략을 늘려도 여기는 안 바뀐다. 뽑을 것이 없으면 `title`이 null — 그러면 카드를 그리지 않는다.
+ */
+export interface Recommendation {
+  title: string | null;
+  reason: string | null;
+  results: SearchRow[];
+}
+
+export const fetchRecommendation = (): Promise<Recommendation> => request('/api/books/recommend');
 
 /** 같은 ISBN을 이미 가졌으면 서버가 새 행을 만들지 않고 기존 책을 돌려준다(멱등). */
 export const addBook = (row: SearchRow, status: BookStatus): Promise<MyBookSummary> =>
@@ -437,6 +548,35 @@ export interface UserSearchResponse {
 /** 서버는 2글자 미만이면 빈 결과를 준다(열거 방지) — 실패가 아니라 0건이다. */
 export const searchUsers = (q: string): Promise<UserSearchResponse> => request('/api/search', { query: { q } });
 
+/**
+ * `ExploreApiController.ExploreBookDto` — 둘러보기 카드에 세우는 책.
+ *
+ * ⚠️ 누적 시간·마지막으로 읽은 시각이 <b>일부러 없다</b>. 서버가 그것으로 정렬은 하지만 응답에 담지
+ * 않는다 — 「언제 읽었는가」는 낯선 사람에게 보여줄 것이 아니라는 결정이다(2026-08-20). 필드를 늘리기
+ * 전에 그 결정을 먼저 보라.
+ */
+export interface ExploreBook {
+  title: string;
+  coverUrl: string | null;
+}
+
+/** `ExploreApiController.ExploreUserDto` — 사람 한 줄 + 그 사람의 공개 책(겹친 책이 앞, 최대 4권). */
+export interface ExploreUser extends UserRow {
+  books: ExploreBook[];
+}
+
+/** `ExploreApiController.ExploreResponse` — 한도에 닿으면 빈 목록 + `rateLimited`(조용한 0건과 구분). */
+export interface ExploreResponse {
+  users: ExploreUser[];
+  rateLimited: boolean;
+}
+
+/**
+ * 둘러보기 — 검색어 없이 볼 것을 받는다. 서버가 <b>매 호출 섞어</b> 주므로 화면에 들어올 때마다 얼굴이 바뀐다
+ * (그래서 「다른 사람 보기」 같은 새로고침 손잡이를 두지 않는다 — 재진입이 곧 새로고침이다).
+ */
+export const fetchExplore = (): Promise<ExploreResponse> => request('/api/explore');
+
 /** 서버 `User.LOGIN_ID_PATTERN`과 같은 규칙 — 정규화(소문자) 후 3~20자 [a-z0-9_]. */
 const HANDLE_PATTERN = /^[a-z0-9_]{3,20}$/;
 
@@ -452,9 +592,31 @@ export function validateHandleFormat(raw: string): string | null {
     : '영문·숫자·밑줄(_) 3~20자로 지어 주세요.';
 }
 
+/**
+ * 아이디 바꾸기 프리검증 — 형식에 더해 <b>지금 아이디와 같은지</b>까지 본다(순수 함수).
+ *
+ * <p>변경은 평생 1번뿐이라 "같은 값"으로 왕복하는 것 자체가 손해다 — 서버 400을 기다리지 않고
+ * 그 자리에서 막는다. 예약어·중복은 여전히 서버가 유일한 권위다({@link validateHandleFormat}과 같은 이유).
+ *
+ * @param current 지금 쓰는 핸들(서버가 정규화해 준 소문자 값)
+ */
+export function validateHandleChange(raw: string, current: string): string | null {
+  const format = validateHandleFormat(raw);
+  if (format !== null) return format;
+  return raw.trim().toLowerCase() === current ? '지금 아이디와 같아요. 다른 아이디를 지어 주세요.' : null;
+}
+
 /** `POST /api/miniapp/handle` — 성공하면 서버가 정규화한 핸들. 400(형식·예약어)·409(중복·이미 있음)는 ApiError. */
 export const createHandle = (loginId: string): Promise<{ loginId: string }> =>
   request('/api/miniapp/handle', { body: { loginId } });
+
+/**
+ * `POST /api/miniapp/handle/change` — 아이디를 평생 1번 바꾼다. 성공하면 서버가 정규화한 새 핸들.
+ * 400(형식·예약어·지금과 동일)·409(소진·중복)는 ApiError의 평문 그대로 시트에 띄운다.
+ * 만들기와 <b>경로가 다르다</b> — 같은 경로면 서버가 생성 의미로 읽어 문구가 뭉개진다.
+ */
+export const changeHandle = (loginId: string): Promise<{ loginId: string }> =>
+  request('/api/miniapp/handle/change', { body: { loginId } });
 
 /** 서버 `User.NICKNAME_MAX_LENGTH`와 같은 값 — 갈라지면 프리검증이 조용히 거짓말한다(통과시켰는데 서버가 400). */
 export const NICKNAME_MAX_LENGTH = 30;
@@ -508,6 +670,20 @@ export interface ProfileBook {
   status: string;
   seconds: number;
   purchaseLink: string | null;
+  /**
+   * 이 책의 여백에 마지막으로 글이 달린 시각 — 격자 발광의 재료다.
+   *
+   * <p>**비팔로워에게는 전부 null**이다(여백은 팔로워 전용 콘텐츠라 서버가 가린다). 글이 없는 책도 null.
+   * 24시간 창 판정은 클라가 한다({@link import('./screens/Story').hasFreshStory}) — 서버는 원시 사실만 준다.
+   * 성향 태그 드릴다운(`/api/profile/personality-tag`)은 항상 null이다(그 임시 목록엔 발광이 없다).
+   */
+  lastStoryAt: string | null;
+}
+
+/** `ProfileApiController.UserBrief` — 공통 친구 줄에 이름으로 적히는 사람. */
+export interface UserBrief {
+  loginId: string;
+  nickname: string;
 }
 
 /** `ProfileApiController.ProfileResponse` — 제휴 서점 플래그는 미니앱이 안 써서 옮기지 않는다. */
@@ -522,6 +698,15 @@ export interface ProfileResponse {
   personality: string | null;
   personalityTags: ProfileTagChip[];
   books: ProfileBook[];
+  /**
+   * 공통 친구 — 내가 팔로우하는 사람 중 이 사람도 팔로우하는 사람. <b>이름은 2명까지만</b> 오고 나머지
+   * 수는 {@link mutualFollowerCount}에 있다. 옛 서버는 안 보낸다(`undefined` = 줄을 안 그린다).
+   */
+  mutualFollowers?: UserBrief[];
+  /** 공통 친구 <b>전체</b> 수 — 「외 N명」이 여기서 나온다(받은 이름 개수로 세면 항상 「외 0명」이 된다). */
+  mutualFollowerCount?: number;
+  /** 이 사람이 <b>나를</b> 팔로우하는가 — {@link ProfileResponse.following}과 방향이 반대다. */
+  followsMe?: boolean;
 }
 
 /** 차단·ADMIN·없는 아이디는 모두 404 — 존재를 누설하지 않는 서버 계약을 그대로 받는다. */
@@ -611,42 +796,54 @@ export type ReportReason = (typeof REPORT_REASONS)[number]['value'];
 export const reportUser = (loginId: string, reason: ReportReason, detail: string): Promise<{ reported: boolean }> =>
   request('/api/report', { body: { loginId, reason, detail } });
 
-// ── 독서 스토리 (`web/api/StoryApiController` + `story` record가 타입 단일 출처) ──
+// ── 여백 (`web/api/StoryApiController` + `story` record가 타입 단일 출처) ──
 //
-// 소셜 API와 달리 스토리는 loginId에 묶이지 않는다 — 피드가 **내 활성 스토리를 `mine` 필드로 따로**
-// 실어 주므로, 핸들 없는 계정(미니앱 신규 가입)도 자기 스토리를 보고·삭제할 수 있다.
-// 그래서 미니앱은 `/api/stories/of/{loginId}`를 쓰지 않는다(설계 §5-1 재확인).
+// 여백은 **책에 딸린 자리**다(2026-08-16 재설계) — 글은 책 하나에 귀속되고, 목록은
+// 「누구의(loginId) + 어느 책(bookId)」 두 축으로만 열린다. 그래서 소셜 API처럼 loginId가 필요하고,
+// 핸들 없는 계정에는 작성 진입점이 없다(그들의 글은 예전에도 아무에게도 안 보였다 — 설계 §0 비목표).
+// URL·타입 이름이 `story`로 남은 것은 서버 경로가 `/api/stories`이기 때문(#814 결정).
 
-/** `story.StoryCard` — 책 라벨은 표시 시점에 공개 책만 실린다(비공개 전환 시 문장만 남는다). */
-export interface StoryCard {
+/** `story.MarginEntry` — 여백에 남긴 글 한 장. 책 라벨은 응답 헤더에 한 번만 실린다. */
+export interface MarginEntry {
   id: number;
+  /** 내 주석 — **언제나 있다**(인용만 남기는 글은 서버가 거부한다). 카드의 본문이다. */
   text: string;
+  /**
+   * 책에서 옮긴 문장 — 인용 없이 남긴 글(옛 글 포함)이면 `null`이고, 그러면 카드가 2026-08-20 이전과
+   * 똑같이 그려진다. 빈 문자열은 오지 않는다(서버가 null로 떨어뜨린다).
+   */
+  quote: string | null;
   bgCode: string | null;
-  bookTitle: string | null;
-  bookCoverUrl: string | null;
   createdAt: string;
-  viewed: boolean;
+  /** 이 글에 달린 좋아요 수. 누가 눌렀는지는 여기 오지 않는다 — 명단은 눌러야 여는 별도 조회다. */
+  likeCount: number;
+  /** 내가 눌렀는가. **자기 글도 true가 될 수 있다**(자기 좋아요 허용 — 2026-08-20). */
+  liked: boolean;
 }
 
-/** `story.AuthorStories` — 스트립의 링 하나. loginId는 내 그룹(mine)에서 null일 수 있다. */
-export interface AuthorStories {
-  loginId: string | null;
-  nickname: string;
-  profileCharacterCode: string | null;
-  allViewed: boolean;
-  stories: StoryCard[];
+/** `story.MarginBook` — 여백이 열린 책. 비공개 책은 **주인에게만** 온다(남에게는 404). */
+export interface MarginBook {
+  id: number;
+  title: string;
+  author: string | null;
+  coverUrl: string | null;
+  /** 비공개 책이면 false — 가시성 캡션의 재료다. 옛 서버는 안 보낸다(`undefined` = 공개로 간주). */
+  isPublic?: boolean;
 }
 
-export interface StoryFeedResponse {
-  mine: AuthorStories | null;
-  groups: AuthorStories[];
-}
-
-export interface StoryViewerEntry {
-  loginId: string;
-  nickname: string;
-  profileCharacterCode: string | null;
-  viewedAt: string;
+/**
+ * `story.MarginResponse` — **자기완결**이다: 책 라벨·주인·관계가 함께 실려 화면이 다른 요청 없이 그려진다
+ * (진입로가 둘이라 그렇다 — 책방 격자에서 오면 클라가 책을 알지만, 홈 소식에서 점프하면 모른다).
+ *
+ * <p>`entries`는 **비팔로워면 빈 배열**이다 — 글 유무 정보도 새지 않게 서버가 가린다. `self`일 때
+ * `following`은 항상 false(자기 자신은 팔로우 대상이 아니다).
+ */
+export interface MarginResponse {
+  book: MarginBook;
+  ownerNickname: string;
+  self: boolean;
+  following: boolean;
+  entries: MarginEntry[];
 }
 
 /**
@@ -662,17 +859,55 @@ export const STORY_BG_CODES = [
   { code: 'plum', background: '#5a3b5e', color: '#f7eef8' },
 ] as const;
 
-export const fetchStoryFeed = (): Promise<StoryFeedResponse> => request('/api/stories/feed');
+/**
+ * 책 하나의 여백 — 차단·ADMIN·미존재·남의 책 id(IDOR)·PRIVATE 책은 모두 404다(존재 비노출).
+ * 비팔로워는 404가 아니라 200 + 빈 `entries`로 온다(격자에 이미 보이는 공개 책이라 라벨은 숨길 게 없다).
+ */
+export const fetchBookMargin = (loginId: string, bookId: number): Promise<MarginResponse> =>
+  request(`/api/stories/of/${loginId}`, { query: { bookId } });
 
-/** bookId·bgCode는 선택이지만 null을 명시해 보낸다 — 서버 record가 세 필드를 다 받는다. */
-export const createStory = (text: string, bookId: number | null, bgCode: string | null): Promise<StoryCard> =>
-  request('/api/stories', { body: { text, bookId, bgCode } });
+/** bookId는 **필수**다 — 여백은 책에 딸린 자리라 책 없는 글은 서버가 400으로 거절한다. */
+/** `quote`는 맨 뒤다 — `text`와 같은 타입이라 붙여 두면 순서를 바꿔 넣어도 컴파일러가 안 잡는다. */
+export const createStory = (
+  text: string,
+  bookId: number,
+  bgCode: string | null,
+  quote: string | null,
+): Promise<MarginEntry> => {
+  // 요청 **전에** 버린다 — 실패해도 캐시가 없어 다음 조회가 서버 진실로 간다(fail-safe).
+  // 여백 쓰기 경로는 셋(홈 문·서재 손잡이·책방 composer)이지만 전부 이 함수를 지나므로 여기가 근본 자리다.
+  cacheDrop('margin:');
+  return request('/api/stories', { body: { text, bookId, bgCode, quote } });
+};
 
 /** 없거나 남의 것이면 404 — 존재를 누설하지 않는 서버 계약(IDOR)을 그대로 받는다. */
-export const deleteStory = (id: number): Promise<void> => request(`/api/stories/${id}`, { method: 'DELETE' });
+export const deleteStory = (id: number): Promise<void> => {
+  cacheDrop('margin:'); // 지운 글이 옛 스냅으로 되살아나지 않게
+  return request(`/api/stories/${id}`, { method: 'DELETE' });
+};
 
-/** 서버가 `@RequestBody`를 안 받으므로 본문 없이 POST한다. 멱등(중복 열람은 서버가 no-op). */
-export const markStoryViewed = (id: number): Promise<void> => request(`/api/stories/${id}/view`, { method: 'POST' });
+/** `StoryService.LikeState` — 누르기·취소 직후의 갱신값. 클라가 개수를 추측하지 않게 서버가 센 값을 준다. */
+export interface LikeState {
+  likeCount: number;
+  liked: boolean;
+}
 
-/** 작성자 본인만 — 남의 스토리면 404. 차단 관계 열람자는 서버가 이미 걸러 준다. */
-export const fetchStoryViewers = (id: number): Promise<StoryViewerEntry[]> => request(`/api/stories/${id}/viewers`);
+/**
+ * 좋아요를 누른다. **멱등**이라 재전송해도 취소되지 않는다 — 그래서 토글 단일 엔드포인트가 아니다
+ * (모바일 타임아웃 뒤 재시도가 흔한데, 토글이면 그 재시도가 좋아요를 지운다).
+ * 안 보이는 글(비팔로워·비공개 책·차단)·내 글은 404 — 존재를 누설하지 않는다.
+ */
+export const likeStory = (id: number): Promise<LikeState> =>
+  request(`/api/stories/${id}/like`, { method: 'POST' });
+
+/** 좋아요를 취소한다. 서버는 여기에 노출 게이트를 걸지 않는다 — 언팔한 뒤에도 되돌릴 수 있어야 한다. */
+export const unlikeStory = (id: number): Promise<LikeState> =>
+  request(`/api/stories/${id}/like`, { method: 'DELETE' });
+
+/**
+ * 그 글에 좋아요를 누른 사람들 — 카드의 「좋아요 N명」이 여는 명단(최근순).
+ *
+ * <p>서버가 <b>차단 관계·핸들 없는 사람</b>을 이미 걸러 준다 — 화면은 받은 행을 그대로 그린다.
+ * 안 보이는 글의 명단은 404다(목록과 같은 게이트).
+ */
+export const fetchStoryLikers = (id: number): Promise<UserRow[]> => request(`/api/stories/${id}/likes`);

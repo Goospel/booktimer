@@ -20,6 +20,9 @@ export const graph: ContributionGraph = {
   growthStageName: 'SPROUT',
   growthStageEmoji: '🌱',
   growthStageLabel: '새싹',
+  growthProgressPercent: 33,
+  daysToNextStage: 2,
+  nextStageLabel: '꽃',
 };
 
 /**
@@ -45,5 +48,10 @@ export function stubLocalStorage(): void {
     getItem: (k: string) => store.get(k) ?? null,
     setItem: (k: string, v: string) => void store.set(k, String(v)),
     removeItem: (k: string) => void store.delete(k),
+    // 열거(length·key)까지 흉내낸다 — 접두어로 코치마크 기록만 골라 지우는 쪽이 이 API로 훑는다.
+    get length() {
+      return store.size;
+    },
+    key: (i: number) => [...store.keys()][i] ?? null,
   });
 }

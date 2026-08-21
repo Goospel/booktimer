@@ -219,6 +219,47 @@ class BookTest {
         assertThat(bookWith(BookStatus.READING).getFinishedAt()).isNull();
     }
 
+    // ── 첫 완독 시각(firstFinishedAt) — 홈 소식 피드 "완독했어요" 이벤트의 데이터 소스 ──────
+    // finishedAt과 달리 책당 영구 1회: 완독 이탈에도 안 지우고, 재완독에도 안 민다(피드 재부상 방지).
+
+    @Test
+    @DisplayName("changeStatus: 첫 완독에 첫 완독 시각을 기록하고, 재완독해도 밀지 않는다 (피드 재부상 방지)")
+    void changeStatus_refinish_keepsFirstFinishedAt() {
+        Book book = bookWith(BookStatus.READING);
+        book.changeStatus(BookStatus.FINISHED, T1);
+        assertThat(book.getFirstFinishedAt()).isEqualTo(T1);
+
+        book.changeStatus(BookStatus.READING, T1);
+        book.changeStatus(BookStatus.FINISHED, T2);
+
+        assertThat(book.getFirstFinishedAt()).isEqualTo(T1);
+        assertThat(book.getFinishedAt()).isEqualTo(T2); // 책방 정렬용 finishedAt은 종전대로 재스탬프
+    }
+
+    @Test
+    @DisplayName("changeStatus: 완독에서 이탈해도 첫 완독 시각은 지우지 않는다 (finishedAt만 클리어)")
+    void changeStatus_leavingFinished_keepsFirstFinishedAt() {
+        Book book = bookWith(BookStatus.READING);
+        book.changeStatus(BookStatus.FINISHED, T1);
+
+        book.changeStatus(BookStatus.READING, T2);
+
+        assertThat(book.getFinishedAt()).isNull();
+        assertThat(book.getFirstFinishedAt()).isEqualTo(T1);
+    }
+
+    @Test
+    @DisplayName("changeStatus: 완독 상태로 등록된 책(아카이빙)의 서비스 스탬프 경로도 첫 완독 시각을 채운다")
+    void changeStatus_finishedWithoutStamp_stampsFirstFinishedAt() {
+        // BookService.stampIfFinished → changeStatus(FINISHED, now) 힐링 분기. 스탬프를
+        // "READING→FINISHED 전이"에만 걸면 아카이빙 책이 피드에서 통째로 사라진다.
+        Book book = bookWith(BookStatus.FINISHED);
+
+        book.changeStatus(BookStatus.FINISHED, T1);
+
+        assertThat(book.getFirstFinishedAt()).isEqualTo(T1);
+    }
+
     // ── 읽기 시작 시각(startedReadingAt) — 홈 소식 피드 "읽기 시작했어요" 이벤트의 데이터 소스 ──
     // finishedAt의 미러이되 한 곳이 다르다: 완독으로 넘어가도 지우지 않는다(시작·완독 두 이벤트 공존).
 
@@ -256,15 +297,28 @@ class BookTest {
     }
 
     @Test
-    @DisplayName("changeStatus: 재독(완독→읽는중)은 새 시각으로 다시 스탬프한다")
-    void changeStatus_reread_restamps() {
+    @DisplayName("changeStatus: 재독(완독→읽는중)도 첫 시작 시각을 유지한다 — 시작 이벤트는 책당 1회(피드 재부상 방지)")
+    void changeStatus_reread_keepsFirstStamp() {
         Book book = bookWith(BookStatus.WANT_TO_READ);
         book.changeStatus(BookStatus.READING, T1);
         book.changeStatus(BookStatus.FINISHED, T1);
 
         book.changeStatus(BookStatus.READING, T2);
 
-        assertThat(book.getStartedReadingAt()).isEqualTo(T2);
+        assertThat(book.getStartedReadingAt()).isEqualTo(T1);
+    }
+
+    @Test
+    @DisplayName("changeStatus: 시작 시각 없는 레거시 READING 책의 no-op 재저장은 스탬프하지 않는다 (가짜 「방금 시작」 금지)")
+    void changeStatus_legacyReadingNoOp_doesNotStamp() {
+        // V64 이전 책 = READING인데 startedReadingAt이 null. 상태 UI에서 같은 값을 다시 제출해도
+        // now로 스탬프되면 수년 전 시작한 책이 "방금 읽기 시작했어요"로 피드에 뜬다.
+        // 「startedReadingAt == null」 단독 조건으로 구현하는 변이를 죽이는 핀.
+        Book legacy = bookWith(BookStatus.READING);
+
+        legacy.changeStatus(BookStatus.READING, T2);
+
+        assertThat(legacy.getStartedReadingAt()).isNull();
     }
 
     @Test

@@ -7,7 +7,18 @@ import { describe, expect, it } from 'vitest';
 import type { DashboardResponse } from './api';
 import { History } from './screens/History';
 import { Home } from './screens/Home';
-import { BookCover, COVER_PALETTE, ErrorMessage, GrassGrid, Screen, coverColor, coverSource, initialOf } from './ui';
+import {
+  BookCover,
+  COVER_PALETTE,
+  ErrorMessage,
+  GrassGrid,
+  PENCIL_FRAME,
+  Screen,
+  coverColor,
+  coverSource,
+  initialOf,
+  sectionStyle,
+} from './ui';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
 // 홈이 렌더 중에 알림 동의 캐시를 읽는다. 여기선 describe 본문에서도 홈을 그리므로(수집 시점) 모듈 최상단에서 심는다.
@@ -38,7 +49,48 @@ describe('화면 껍데기 (Screen)', () => {
 });
 
 /**
- * 제목 위 슬롯(`above`) — 화면 소속이 아니라 그 위에 얹히는 도구(책방의 검색·스토리) 자리다.
+ * 뒤로가기 손잡이 — <b>글자가 붙은 알약을 제목 위 줄</b>에 세운다.
+ *
+ * <p>옛 모양은 배경 없는 `←` 글리프를 제목 옆에 둔 것이었는데 사용자 제보로 두 번 실패했다: 배경이
+ * 없어 버튼으로 안 보이고, 직선 화살표는 「이전 화면」보다 「왼쪽 이동」으로 읽힌다. 아이콘을 아무리
+ * 다듬어도 뜻은 추론에 맡겨지므로 <b>글자</b>를 붙였다 — 인식률을 아이콘 디자인에 걸지 않는다.
+ */
+describe('화면 껍데기 — 뒤로가기 손잡이', () => {
+  const withBack = (title?: string, onBack?: () => void) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Screen title={title} onBack={onBack}>
+          본문
+        </Screen>
+      </TDSMobileProvider>,
+    );
+
+  it('글자가 붙어 있다 — 아이콘만이면 뜻을 추론해야 한다', () => {
+    expect(withBack('여백', () => {})).toContain('돌아가기');
+  });
+
+  it('제목보다 위에 온다 — 제목 옆에 끼면 제목 행의 장식으로 읽힌다', () => {
+    const markup = withBack('여백', () => {});
+
+    // 둘 다 있는지 먼저 본다 — 없으면 indexOf가 -1이라 순서 단언이 저절로 참이 된다(공허한 계측).
+    expect(markup).toContain('돌아가기');
+    expect(markup.indexOf('돌아가기')).toBeLessThan(markup.indexOf('여백'));
+  });
+
+  it('onBack이 없으면 안 그린다 — 탭 루트는 갈 곳이 없다', () => {
+    const markup = withBack('여백');
+
+    expect(markup).toContain('여백');
+    expect(markup).not.toContain('돌아가기');
+  });
+
+  it('제목이 없어도 그린다 — 나갈 길은 제목 유무와 무관하다', () => {
+    expect(withBack(undefined, () => {})).toContain('돌아가기');
+  });
+});
+
+/**
+ * 제목 위 슬롯(`above`) — 화면 소속이 아니라 그 위에 얹히는 도구(책방의 검색) 자리다.
  * 본문에 끼우면 「…님의 책방」 아래에 검색창이 오는 어색한 순서가 된다(사용자 제보).
  */
 describe('화면 껍데기 — 제목 위 슬롯 (above)', () => {
@@ -170,6 +222,7 @@ function home(overrides: Partial<DashboardResponse>) {
   const dashboard: DashboardResponse = {
     nickname: '구스펠',
     loginId: 'goospel',
+    previousLoginId: null,
     profileCharacterCode: null,
     remainingSeconds: 900,
     carriedDebtSeconds: 0,
@@ -192,12 +245,16 @@ function home(overrides: Partial<DashboardResponse>) {
     <TDSMobileProvider userAgent={userAgent}>
       <Home
         dashboard={dashboard}
+        selectedBookId={undefined}
+        onSelectBook={() => {}}
         onTimerChange={() => {}}
-        onGraphChange={() => {}}
+        celebrate={false}
         onGoGoal={() => {}}
         goalAdPending={false}
         onGoSettings={() => {}}
         onError={() => {}}
+        onOpenMargin={() => {}}
+        onComposeMargin={() => {}}
       />
     </TDSMobileProvider>,
   );
@@ -241,8 +298,37 @@ describe('섹션 카드·화면 제목', () => {
   const markup = home({ readingBooks: [{ id: 1, title: '데미안', coverUrl: null, author: null }] });
 
   it('섹션은 크림 캔버스 위 카드지로 뜬다 — 배경만으로는 종이톤끼리 경계가 안 보인다', () => {
-    expect(markup).toContain('background:#FCFAF5'); // 웹 --card-bg
-    expect(markup).toContain('border:1px solid #E4DDD0'); // 웹 --border
+    // 리터럴이 아니라 토큰이라야 독서등(밤)이 이 카드도 함께 데려간다 — 값은 여전히 웹 --card-bg다.
+    expect(markup).toContain('background:var(--adaptiveGrey100, #FCFAF5)');
+    // 경계를 긋는 주체가 1px 실선에서 연필선(border-image)으로 바뀌었다. 테두리가 통째로 빠지면
+    // 종이톤 카드가 종이톤 캔버스에 녹아 사라지므로, 그리는 수단이 실재하는지를 못 박는다.
+    expect(markup).toContain('border:1px solid transparent');
+    expect(markup).toMatch(/border-image:url\(&quot;data:image\/svg\+xml/);
+  });
+
+  it('그림 폭을 border-width와 분리해 레이아웃을 밀지 않는다', () => {
+    // `8 / 8px`의 뒷값이 화면에 그릴 폭이고, 요소의 border는 1px 그대로다. 이 분리가 깨지면
+    // 테두리가 두꺼워진 만큼 카드가 커져 화면 전체가 밀린다.
+    expect(PENCIL_FRAME).toMatch(/\s8\s\/\s8px\sstretch$/);
+    expect(sectionStyle.border).toBe('1px solid transparent');
+  });
+
+  it('타일 반복(round)이 아니라 stretch다 — 농도 얼룩이 이음매마다 끊긴다', () => {
+    expect(PENCIL_FRAME).not.toMatch(/\sround$/);
+  });
+
+  it('선을 휘게 하는 필터를 쓰지 않는다 — 굴곡은 stretch 압축을 만나면 지글거린다', () => {
+    // border-image는 300px 타일을 요소 폭에 맞춰 늘리고 줄인다. 좁은 버튼에서는 3배 넘게 압축되는데,
+    // 굴곡(feDisplacementMap)이 있으면 파장도 같은 배율로 짧아져 변위가 선 두께를 넘어선다 —
+    // 그 순간 선은 휘는 게 아니라 가장자리가 깎여 「픽셀이 깨진 선」으로 보인다(실측 반려).
+    expect(PENCIL_FRAME).not.toContain('feDisplacementMap');
+  });
+
+  it('연필의 정체는 흔들림이 아니라 농도다 — 진하기를 얼룩지게 하는 필터가 있다', () => {
+    // 고주파 노이즈를 선의 알파에 곱해, 흑연이 종이 결에 걸려 생기는 농도 변화를 만든다.
+    // 고주파 입자는 압축돼도 고와질 뿐이라 굴곡과 달리 지글거리지 않는다 — 위 테스트와 한 쌍이다.
+    expect(PENCIL_FRAME).toContain('feComposite');
+    expect(PENCIL_FRAME).toContain("operator='in'");
   });
 
   it('화면 제목은 웹 브랜드와 같은 세리프(고운바탕)로 쓴다', () => {
@@ -273,7 +359,17 @@ describe('배경·color-scheme', () => {
 
   it('body에 웹 종이톤 캔버스를 칠한다 — 투명이면 기기 다크 캔버스가 그대로 비친다', () => {
     // `html body`(0-0-2)여야 한다 — TDS가 나중에 주입하는 `body`(0-0-1) 규칙과 동률이면 순서로 진다.
-    expect(read('./global.css')).toMatch(/html\s+body\s*\{[^}]*background:\s*#F3EEE4/); // 웹 --bg
+    expect(read('./global.css')).toMatch(/html\s+body\s*\{[^}]*background:\s*#F7F2E8/); // 웹 --bg
+  });
+
+  it('목표 휠 페이드가 캔버스와 같은 색이다 — 어긋나면 휠 위아래에 띠가 진다', () => {
+    // TDS 휠의 위아래 그라데이션은 캔버스로 「사라지게」 하는 마스크라, 캔버스 색이 바뀌면
+    // 여기도 함께 바뀌어야 한다. 손으로 동기화되는 두 값이라 한쪽만 고치기 쉽다.
+    const css = read('./global.css');
+    const bg = /html\s+body\s*\{[^}]*background:\s*(#[0-9A-Fa-f]{6})/.exec(css)?.[1] ?? '';
+    const rgb = [1, 3, 5].map((i) => parseInt(bg.substr(i, 2), 16)).join(', ');
+    expect(bg).toMatch(/^#[0-9A-Fa-f]{6}$/); // 위 정규식이 빗나가면 아래 단언이 공허해진다
+    expect(css).toContain(`rgba(${rgb}, 0.95)`);
   });
 
   it('TDS Text를 블록으로 되돌린다 — TDS가 호출부의 display:block을 inline-block으로 덮어써 줄이 붙는다', () => {
@@ -285,6 +381,11 @@ describe('배경·color-scheme', () => {
 
     expect(css).toMatch(/\.no-scrollbar[^}]*scrollbar-width:\s*none/);
     expect(css).toMatch(/\.no-scrollbar::-webkit-scrollbar[^}]*display:\s*none/);
+  });
+
+  it('민 버튼이 글자색을 물려받는다 — iOS UA 기본이 시스템 블루라 안 누르면 책 제목이 파랗게 뜬다', () => {
+    // 선택자가 딱 `button`이어야 한다: 클래스를 얹으면(0-0-1 → 0-0-2) TDS Button까지 사정권에 든다.
+    expect(read('./global.css')).toMatch(/(?:^|\n)button\s*\{[^}]*color:\s*inherit/);
   });
 });
 
@@ -312,10 +413,55 @@ describe('웹 브랜드 재테마 (global.css)', () => {
     expect(override).toMatch(/--adaptiveGrey600:\s*#6F6A5E/); // 웹 --muted
   });
 
-  it('본문 폰트를 웹 고운돋움으로 바꾸고 실제로 받아온다 — 스택만 바꾸면 폰트가 없어 시스템 폰트로 떨어진다', () => {
+  it('본문 폰트를 연필 손글씨로 바꾸고 실제로 받아온다 — 스택만 바꾸면 폰트가 없어 시스템 폰트로 떨어진다', () => {
     // TDS도 `body`에 폰트 스택을 주입하므로 여기도 `html body`(0-0-2)로 눌러야 한다.
-    expect(css).toMatch(/html\s+body\s*\{[^}]*font-family:[^;]*'Gowun Dodum'/);
-    expect(css).toContain('Gowun+Dodum');
+    // Gaegu가 스택 **맨 앞**이어야 한다 — 뒤에 두면 고운돋움이 먼저 잡혀 손글씨가 영영 안 뜬다.
+    expect(css).toMatch(/html\s+body\s*\{[^}]*font-family:\s*'Gaegu'/);
+    expect(css).toContain('family=Gaegu');
+    expect(css).toMatch(/html\s+body\s*\{[^}]*font-family:[^;]*'Gowun Dodum'/); // 폴백은 남긴다
+  });
+});
+
+/**
+ * 종이 결 — 화면 전체를 덮는 고정 레이어라, 여기서 잘못 고르면 **표지 사진이 통째로 바랜다**.
+ *
+ * 한때 회색 노이즈(`saturate 0`으로 무채색화한 불투명 rect)를 `opacity: .30`으로 깔았다. 종이 배경
+ * 위에서는 결로 보이지만, 회색을 30% 섞는 것은 곧 **검정을 회색으로 들어올리는** 일이라 사진 위에서는
+ * 그냥 안개다 — 책 표지가 한 겹 벗겨진 것처럼 반투명하게 바래 보였다(사용자 반려 2026-08-18).
+ * 글자는 대비가 커서 버텨 웹·목 모드 검증을 모두 통과했고, 표지에서만 티가 났다.
+ *
+ * 그래서 노이즈를 **색이 아니라 알파**로 옮긴다(연필선을 농도 얼룩으로 고친 것과 같은 수법).
+ * 대부분의 픽셀은 완전투명이고 드문 입자만 어둡게 얹혀, 결은 남되 밑에 깔린 색을 들어올리지 않는다.
+ */
+describe('종이 결 (global.css)', () => {
+  const css = readFileSync(new URL('./global.css', import.meta.url), 'utf8');
+  // 여는 중괄호까지 붙여 규칙 블록을 잡는다 — 두 이름 다 위쪽 주석에서 먼저 언급돼(파일 8행의
+  // `html:root`) 중괄호 없이 자르면 구간이 통째로 비고, 그러면 not.* 단언이 공허하게 통과한다.
+  const veil = css.slice(css.indexOf('body::before {'), css.indexOf('html:root {'));
+
+  it('노이즈를 색이 아니라 알파로 얹는다 — 무채색 회색을 깔면 표지의 검정이 들려 뿌옇게 바랜다', () => {
+    expect(veil).toMatch(/feColorMatrix type='matrix'/); // 알파 행을 직접 쓴다
+    expect(veil).not.toContain("type='saturate'"); // 회색 장막
+  });
+
+  it('레이어 전체를 반투명으로 깔지 않는다 — opacity는 밑의 모든 픽셀을 함께 들어올린다', () => {
+    expect(veil).not.toMatch(/opacity:\s*0?\.\d/);
+  });
+
+  it('결이 종이와 함께 스크롤한다 — fixed면 뷰포트에 못 박혀 결만 제자리에 남는다', () => {
+    expect(veil).toMatch(/position:\s*absolute/);
+    expect(veil).not.toMatch(/position:\s*fixed/);
+  });
+
+  it('absolute의 기준을 body로 잡는다 — 기준이 없으면 초기 컨테이닝 블록(첫 화면 높이)만 덮는다', () => {
+    expect(css).toMatch(/body\s*\{[^}]*position:\s*relative/);
+  });
+
+  it('떠 있는 것 밑에 깔린다 — 결이 고정 요소 위를 미끄러지면 같은 어색함이 뒤집혀 재발한다', () => {
+    // 미니앱의 고정 요소: 탭바 100 · 시트 딤 200 · 시트 201. 결은 그 아래, 본문 위.
+    const z = Number(/z-index:\s*(\d+)/.exec(veil)?.[1]);
+    expect(z).toBeGreaterThan(0);
+    expect(z).toBeLessThan(100);
   });
 });
 
@@ -329,14 +475,34 @@ describe('웹 브랜드 재테마 (global.css)', () => {
 describe('TDS Button 재색칠 (global.css)', () => {
   const css = readFileSync(new URL('./global.css', import.meta.url), 'utf8');
 
-  it('primary 버튼 채움을 세이지로 덮는다 — 인라인 커스텀 프로퍼티라 !important가 필요하다', () => {
+  it('primary 버튼의 토스 블루 채움을 눕히고 연한 세이지로 바꾼다 — 인라인 프로퍼티라 !important가 필요하다', () => {
     expect(css).toMatch(/--button-background-color:\s*#3182f6/); // 선택자 키(토스 블루 인라인 값)
-    expect(css).toMatch(/--button-background-color:\s*#6E8A6A\s*!important/); // 웹 --accent
+    // 채움을 투명으로 눕히지 않으면 TDS 내부 레이어가 테두리를 통째로 덮는다(실측).
+    expect(css).toMatch(/--button-background-color:\s*transparent\s*!important/);
+    expect(css).toMatch(/background-color:\s*rgba\(110,\s*138,\s*106,\s*0\.2\)\s*!important/); // 연한 세이지
   });
 
-  it('weak 버튼도 연세이지로 덮는다 — 앱 버튼 대부분이 weak다', () => {
-    expect(css).toMatch(/--button-background-color:\s*#E7EEE2\s*!important/);
-    expect(css).toMatch(/--button-color:\s*#4F6B4C\s*!important/); // 웹 --accent-hover
+  it('빗살무늬로 채우지 않는다 — 사선이 글자를 가로질러 지저분하다(사용자 반려)', () => {
+    expect(css).not.toContain('repeating-linear-gradient');
+  });
+
+  /**
+   * 낮의 값은 그대로 웹 --accent-hover(#4F6B4C)다 — 다만 독서등(밤)이 이 색만 갈아 끼울 수 있게
+   * 변수를 한 겹 끼웠다. **폴백이 곧 낮의 값**이라 `--brandButtonInk`를 아무도 정의하지 않는
+   * 평소에도 결과가 같다. 그 폴백이 사라지면 밤이 아닌 화면의 버튼 글자가 통째로 죽으므로 함께 잠근다.
+   */
+  it('primary 글자를 잉크색으로 되돌린다 — 연한 채움 위에서 흰 글자는 읽히지 않는다', () => {
+    expect(css).toMatch(/--button-color:\s*var\(--brandButtonInk,\s*#4F6B4C\)\s*!important/);
+  });
+
+  it('weak 버튼은 채움 없이 흐린 연필선만 — 이게 primary(연한 채움)와의 위계를 만든다', () => {
+    expect(css).toMatch(/--button-background-color:\s*rgba\(100,\s*168,\s*255,\s*0\.15\)/); // 선택자 키
+    expect(css).toMatch(/border-image:\s*var\(--pencil-frame-soft\)/);
+  });
+
+  it('연필 프레임 두 종이 정의돼 있다 — 변수가 비면 border-image가 조용히 사라진다', () => {
+    expect(css).toMatch(/--pencil-frame:\s*url\("data:image\/svg\+xml/);
+    expect(css).toMatch(/--pencil-frame-soft:\s*url\("data:image\/svg\+xml/);
   });
 
   it('눌림·그라디언트·로더까지 같이 옮긴다 — 채움만 바꾸면 누를 때 파랑이 번쩍인다', () => {
@@ -413,7 +579,7 @@ describe('표지 출처 결정', () => {
 });
 
 /**
- * 표지 로드 시점 — 목록(서재·프로필·스토리)은 접힌 아래까지 길어 lazy가 맞지만, 홈 캐러셀은
+ * 표지 로드 시점 — 목록(서재·프로필·여백)은 접힌 아래까지 길어 lazy가 맞지만, 홈 캐러셀은
  * 첫 화면 한가운데에 있고 탭을 오갈 때마다 재마운트돼 lazy면 표지가 한 박자 늦게 뜬다.
  */
 describe('표지 로드 시점', () => {
@@ -449,14 +615,42 @@ describe('실패 안내', () => {
   });
 
   it('재시도할 게 없으면 문구만 — 아무 데도 안 가는 버튼을 내놓지 않는다', () => {
-    const markup = errorBox('스토리를 너무 자주 올렸어요.');
+    const markup = errorBox('글을 너무 자주 남겼어요.');
 
-    expect(markup).toContain('스토리를 너무 자주 올렸어요.');
+    expect(markup).toContain('글을 너무 자주 남겼어요.');
     expect(markup).not.toContain('다시 시도');
   });
 
   it('실패가 없으면 아무것도 그리지 않는다', () => {
     // 프로바이더는 전역 스타일을 뱉으므로 이 단언만 맨몸으로 그린다.
     expect(renderToStaticMarkup(<ErrorMessage message={null} onRetry={() => {}} />)).toBe('');
+  });
+});
+
+/**
+ * 뒤로가기 잠금 — 요청이 도는 중에는 나가지 못하게 한다. 하단 「돌아가기」 버튼이 `disabled={busy}`로
+ * 하던 일을, 그 버튼을 걷고 상단 손잡이로 통일하면서 그대로 옮겨 온 것이다(책 추가·계정 연결).
+ * 잠금을 「손잡이를 감추기」로 하면 34px 줄이 사라졌다 나타나 화면이 튄다 — 그래서 disabled다.
+ */
+describe('화면 껍데기 — 뒤로가기 잠금', () => {
+  const backAt = (markup: string) => markup.slice(0, markup.indexOf('돌아가기'));
+  const withBack = (backDisabled?: boolean) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Screen title="책 추가" onBack={() => {}} backDisabled={backDisabled}>
+          본문
+        </Screen>
+      </TDSMobileProvider>,
+    );
+
+  it('잠그면 disabled가 붙는다', () => {
+    expect(backAt(withBack(true))).toContain('disabled');
+  });
+
+  it('기본은 안 잠근다 — 대부분의 화면은 언제든 나갈 수 있어야 한다', () => {
+    const markup = withBack();
+
+    expect(markup).toContain('돌아가기');
+    expect(backAt(markup)).not.toContain('disabled');
   });
 });

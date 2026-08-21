@@ -286,6 +286,45 @@ class BookRepositoryTest {
     }
 
     @Test
+    @DisplayName("feedFinished: 창 밖 첫 완독을 토글로 재완독해도 피드에 다시 안 뜬다 (재부상 차단 — 시각은 첫 완독 기준)")
+    void feedFinished_excludesRefinishedBookWhoseFirstFinishIsStale() {
+        User viewer = user("v@booktimer.com", "viewer");
+        User followee = followedBy(viewer, "a@booktimer.com", "alpha");
+        stampedBook(followee, "정상완독", BookVisibility.PUBLIC, null, RECENT);
+        // 15일 전에 완독 → 완독 취소 → 어제 재완독. finished_at은 어제지만 첫 완독은 창 밖이다.
+        Book toggled = Book.register(followee, "토글된책", null, null, null, null, null,
+                BookStatus.WANT_TO_READ);
+        toggled.changeVisibility(BookVisibility.PUBLIC);
+        toggled.changeStatus(BookStatus.FINISHED, STALE);
+        toggled.changeStatus(BookStatus.READING, STALE);
+        toggled.changeStatus(BookStatus.FINISHED, RECENT);
+        bookRepository.save(toggled);
+
+        assertThat(bookRepository.feedFinished(viewer, CUTOFF))
+                .extracting(Book::getTitle)
+                .containsExactly("정상완독");
+    }
+
+    @Test
+    @DisplayName("feedFinished: 완독을 취소하면(현재 읽는중) 첫 완독 시각이 창 안이어도 피드에서 사라진다")
+    void feedFinished_excludesBooksWhoseFinishWasCancelled() {
+        User viewer = user("v@booktimer.com", "viewer");
+        User followee = followedBy(viewer, "a@booktimer.com", "alpha");
+        stampedBook(followee, "완독유지", BookVisibility.PUBLIC, null, RECENT);
+        // 첫 완독 시각은 창 안에 남지만(영구 1회 마커) 지금은 완독이 아니다 — 제거 장치는 status 조건.
+        Book cancelled = Book.register(followee, "완독취소", null, null, null, null, null,
+                BookStatus.WANT_TO_READ);
+        cancelled.changeVisibility(BookVisibility.PUBLIC);
+        cancelled.changeStatus(BookStatus.FINISHED, RECENT);
+        cancelled.changeStatus(BookStatus.READING, RECENT);
+        bookRepository.save(cancelled);
+
+        assertThat(bookRepository.feedFinished(viewer, CUTOFF))
+                .extracting(Book::getTitle)
+                .containsExactly("완독유지");
+    }
+
+    @Test
     @DisplayName("feedStarted: 시작 시각이 없는 기존 책(백필 안 함)은 시작 피드에 안 뜬다")
     void feedStarted_excludesUnstampedLegacyBooks() {
         User viewer = user("v@booktimer.com", "viewer");

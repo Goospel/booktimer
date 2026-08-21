@@ -15,7 +15,7 @@ import java.security.Principal;
  * 미니앱(앱인토스) 경량 온보딩 API — 하루 목표 설정 (설계 §2.4).
  *
  * <p>미니앱 온보딩은 <b>하루 목표만</b> 정한다. 웹 온보딩과 달리 공개 핸들({@code login_id})을 요구하지 않는다 —
- * 핸들은 한 번 정하면 불변이라 첫 진입에서 강요하면 마찰이 크고 되돌릴 수도 없다. 그래서 이 경로는
+ * 핸들은 평생 1번만 바꿀 수 있어 첫 진입에서 강요하면 마찰이 크다. 그래서 이 경로는
  * {@code completeOnboarding()}을 부르지 않는다(부르면 핸들 없는 계정이 DB CHECK를 위반한다).
  * 핸들은 나중에 본인이 원할 때 {@link MiniappHandleApiController}({@code /api/miniapp/handle})로 만든다.
  *

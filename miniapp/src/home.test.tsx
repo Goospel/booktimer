@@ -7,7 +7,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BookOption, DashboardResponse } from './api';
 import { TAB_BAR_Z_INDEX } from './App';
 import { ApiError, waiveDebt } from './api';
+import { dismissCoachmark, setCoachmarkWalking } from './coachmark';
 import {
+  ACTIVE_SESSION_RELIEF,
   AccountSection,
   BookCarousel,
   BookSheet,
@@ -17,6 +19,7 @@ import {
   EDGE_SPACE,
   FirstSessionBanner,
   Home,
+  LAMP_PAGE_CLASS,
   RemainingNote,
   TRACK_V_PAD,
   askNotificationAgreement,
@@ -25,6 +28,7 @@ import {
   claimDebtWaiver,
   defaultBookId,
   goalHandleLabel,
+  marginDoorBook,
   noBookSubtitle,
   recenterIndex,
   selectionAt,
@@ -66,6 +70,10 @@ const supportedMock = vi.mocked(notificationAgreementSupported);
 const requestAgreementMock = vi.mocked(requestNotificationAgreement);
 
 const BUTTON_LABEL = '광고 보고 밀린 하루 지우기';
+/** 캐러셀 섹션 헤더 — 주 버튼이 탭바로 떠난 뒤 홈 아래쪽 순서를 재는 기준점이 이 줄이다. */
+const CAROUSEL_HEADER = '무엇으로 측정할까요?';
+/** 측정 중 캐러셀 자리를 물려받는 카드의 헤더 — 「지금 이 화면이 가리키는 책」을 말하는 카드가 이쪽으로 바뀐다. */
+const READING_NOW_HEADER = '읽는 중';
 const NOTIFICATION_LABEL = '알림 받기';
 const AGREEMENT_KEY = 'booktimer.notificationAgreement';
 
@@ -73,6 +81,7 @@ function dashboard(overrides: Partial<DashboardResponse> = {}): DashboardRespons
   return {
     nickname: '구스펠',
     loginId: 'goospel',
+    previousLoginId: null,
     profileCharacterCode: null,
     remainingSeconds: 900,
     carriedDebtSeconds: 1800,
@@ -93,6 +102,22 @@ function dashboard(overrides: Partial<DashboardResponse> = {}): DashboardRespons
   };
 }
 
+/**
+ * 카드(`<section>`) 한 장을 통째로 잘라 낸다 — 「이 손잡이가 카드 <b>안에</b> 있는가」는 정적 렌더에서
+ * 이 방법으로만 잰다.
+ *
+ * <p>순서 단언(`indexOf(헤더) < indexOf(손잡이)`)으로는 부족하다: 손잡이가 카드 <b>밖</b> 바로 아래에
+ * 고아로 서 있어도 그 단언은 그대로 통과한다 — 실제로 그게 옛 배치였고, 사용자가 「눈에 안 띈다」고
+ * 짚은 그 모습이다. 되돌아가도 초록인 테스트는 그 배치를 지켜 주지 못한다.
+ *
+ * <p>여는 `<section`을 뒤로 찾고 닫는 `</section>`을 앞으로 찾아도 되는 이유: 이 화면의 카드는
+ * 서로 중첩되지 않는다(실측 — 캐러셀·읽는 중·피드 모두 nested section 0개).
+ */
+function card(markup: string, header: string): string {
+  const open = markup.lastIndexOf('<section', markup.indexOf(header));
+  return markup.slice(open, markup.indexOf('</section>', open));
+}
+
 /** 읽는 중 책 한 권 — 표지·저자는 안 준 곳에서 `null`(=자리 표지 경로)로 떨어진다. */
 function book(id: number, title: string, extra: Partial<BookOption> = {}): BookOption {
   return { id, title, coverUrl: null, author: null, ...extra };
@@ -100,18 +125,28 @@ function book(id: number, title: string, extra: Partial<BookOption> = {}): BookO
 
 function renderHome(
   overrides: Partial<DashboardResponse> = {},
-  props: { goalAdPending?: boolean } = {},
+  props: {
+    goalAdPending?: boolean;
+    selectedBookId?: number | null;
+    celebrate?: boolean;
+    guide?: ReactNode;
+  } = {},
 ) {
   return renderToStaticMarkup(
     <TDSMobileProvider userAgent={userAgent}>
       <Home
+        guide={props.guide}
         dashboard={dashboard(overrides)}
+        selectedBookId={props.selectedBookId}
+        onSelectBook={() => {}}
         onTimerChange={() => {}}
-        onGraphChange={() => {}}
+        celebrate={props.celebrate ?? false}
         onGoGoal={() => {}}
         goalAdPending={props.goalAdPending ?? false}
         onGoSettings={() => {}}
         onError={() => {}}
+        onOpenMargin={() => {}}
+        onComposeMargin={() => {}}
       />
     </TDSMobileProvider>,
   );
@@ -124,6 +159,7 @@ beforeEach(() => {
   requestAgreementMock.mockReset();
   supportedMock.mockReturnValue(true);
   stubLocalStorage(); // 홈이 렌더 중에 동의 캐시를 읽는다
+  setCoachmarkWalking(true); // 여백 인라인 안내는 걷는 중에만 뜬다(잠금 계측은 coachmark.test)
 });
 
 describe('버튼 노출 조건 (showWaiverButton)', () => {
@@ -175,10 +211,10 @@ describe('홈에서 빠진 기록 흔적', () => {
     expect(markup).not.toContain('기록 보기');
   });
 
-  it('측정 시작 버튼 다음이 곧 피드 박스다 — 사이에 낀 카드가 없다', () => {
+  it('캐러셀 다음이 곧 피드 박스다 — 사이에 낀 카드가 없다', () => {
     const markup = renderHome();
 
-    expect(markup.indexOf('측정 시작')).toBeLessThan(markup.indexOf('data-feed-tab'));
+    expect(markup.indexOf(CAROUSEL_HEADER)).toBeLessThan(markup.indexOf('data-feed-tab'));
   });
 });
 
@@ -458,7 +494,8 @@ describe('목표 손잡이 (goalHandleLabel · 렌더)', () => {
     const markup = renderHome(noGoal);
 
     expect(markup).toContain('목표 정하기');
-    expect(markup.indexOf('목표 정하기')).toBeLessThan(markup.indexOf('측정 시작'));
+    // 히어로 카드 안이라 그 아래 캐러셀 섹션보다 앞선다(주 버튼은 탭바로 떠났다).
+    expect(markup.indexOf('목표 정하기')).toBeLessThan(markup.indexOf(CAROUSEL_HEADER));
     expect(markup).not.toContain('오늘 목표'); // 게이지 라벨은 목표 0이면 그리지 않는다
   });
 });
@@ -485,8 +522,9 @@ describe('측정 중 안심 문구 (B1)', () => {
  * (잔디 카드 → 피드 박스) 배너가 가리키는 곳도 **기록 탭**으로 옮겨진다. 하이라이트 테두리는 함께
  * 사라졌다 — 가리킬 카드가 없는데 테두리만 남으면 죽은 배선이다.
  *
- * <p>⚠️ 하니스 사각: 축하 상태는 stop 응답으로만 켜지는데 정적 렌더는 「측정 끝내기」를 누를 수 없다 —
- * `Home` 안의 배선(플래그→배너)은 여기서 못 잡고, 조각을 직접 렌더해 계측한다(`BookSheet`와 같은 처지).
+ * <p>축하 상태는 이제 **`MainTabs`가 들고 홈에 prop으로 내린다**(측정 액션이 탭바로 승격되면서). 다른 탭에서
+ * 끝냈어도 홈에 돌아오면 배너가 보인다. 켜는 배선(stop 응답)은 정적 렌더로 못 잡으므로 여기서는
+ * prop → 배너 연결과 배너 조각 자체를 계측한다(`BookSheet`와 같은 처지).
  */
 describe('첫 완료 축하 (B2)', () => {
   /** 배너 상자의 배경 — TDSMobileProvider가 늘 전역 style을 뿜어 "빈 마크업"으로는 부재를 가릴 수 없다. */
@@ -516,6 +554,11 @@ describe('첫 완료 축하 (B2)', () => {
   it('처음 그려진 홈엔 축하가 없다 — 상태는 stop 응답으로만 켜진다(새로고침하면 사라진다)', () => {
     expect(renderHome()).not.toContain('첫 독서 기록이 심어졌어요');
   });
+
+  it('탭바가 켠 축하가 홈 배너로 이어진다 — prop 하나가 이 배선의 전부다', () => {
+    expect(renderHome({}, { celebrate: true })).toContain('첫 독서 기록이 심어졌어요');
+    expect(renderHome({}, { celebrate: false })).not.toContain('첫 독서 기록이 심어졌어요');
+  });
 });
 
 /**
@@ -526,7 +569,7 @@ describe('책 0권', () => {
   it('빈 상태 대신 「책 없이」 카드가 선다 — 0권이라고 다른 화면이 뜨지 않는다', () => {
     const markup = renderHome({ readingBooks: [] });
 
-    expect(markup).toContain('data-no-book-card');
+    expect(markup).toContain('data-lead-card');
     expect(markup).toContain(noBookSubtitle(0));
     expect(markup).not.toContain('아직 책이 없어요');
     expect(labelsOf(markup)).not.toContain('첫 책 추가하기');
@@ -539,7 +582,7 @@ describe('책 0권', () => {
       activeStartedAt: '2026-08-11T09:00:00',
     });
 
-    expect(markup).not.toContain('data-no-book-card');
+    expect(markup).not.toContain('data-lead-card');
     expect(markup).not.toContain('아직 책이 없어요');
   });
 });
@@ -666,16 +709,13 @@ describe('지급 흐름 (claimDebtWaiver)', () => {
  *
  * <p>계측은 네 겹이다: ① 기본 선택은 순수 함수 {@link defaultBookId} ② 칸↔선택값 산식은
  * {@link carouselIndexOf}·{@link selectionAt} ③ 홈 배선은 마크업 손잡이(`data-cover-title`·
- * `data-no-book-card`·`data-selected-book`·`data-dot`) ④ 하니스로 열 수 없는 시트는
+ * `data-lead-card`·`data-selected-book`·`data-dot`) ④ 하니스로 열 수 없는 시트는
  * {@link BookSheet}를 직접 렌더해서.
  *
  * <p>⚠️ 남는 사각지대(실측): `onClick`·스크롤은 마크업에 안 남는다 — 미는 대로 선택이 따라오는지,
  * 첫 진입에 고른 칸이 가운데 서는지, 주 버튼이 정말 그 값으로 시작하는지는 여기서 못 잡는다.
  * jsdom 미도입은 이 저장소의 기존 결정이라, 이 배선들은 실기기·프리뷰 확인을 게이트로 둔다.
  */
-
-/** TDS Button이 인라인으로 박는 채움색 — variant를 가릴 class·속성이 없어 이 값이 유일한 표지다. */
-const FILL_PRIMARY = '#3182f6';
 
 function tdsButtons(markup: string): { label: string; fill: string }[] {
   return markup
@@ -689,7 +729,6 @@ function tdsButtons(markup: string): { label: string; fill: string }[] {
 }
 
 const labelsOf = (markup: string) => tdsButtons(markup).map((b) => b.label);
-const fillOf = (markup: string, label: string) => tdsButtons(markup).find((b) => b.label === label)?.fill;
 
 describe('측정할 책 기본값 (defaultBookId)', () => {
   const books = [book(1, '데미안'), book(2, '노인과 바다')];
@@ -846,7 +885,7 @@ describe('밖에서 바뀐 선택 따라가기 (recenterIndex)', () => {
  * 그 버튼 하나로 좁혀야 한다(마크업 전체 검색이면 옆 책의 속성에 속는다).
  */
 const noBookCardOf = (markup: string) =>
-  markup.split('<button').find((chunk) => chunk.includes('data-no-book-card')) ?? '';
+  markup.split('<button').find((chunk) => chunk.includes('data-lead-card')) ?? '';
 
 describe('표지 캐러셀', () => {
   const books = [
@@ -868,6 +907,19 @@ describe('표지 캐러셀', () => {
 
     expect(markup).toContain('data-selected-book="노인과 바다"');
     expect(markup).toContain('헤밍웨이');
+  });
+
+  it('고른 책은 홈이 아니라 밖(App)이 들고 있다 — 여백에 글을 쓰고 돌아와도 기본 책으로 되돌아가지 않는다', () => {
+    const markup = renderHome({ readingBooks: books, recentBookId: 1 }, { selectedBookId: 2 });
+
+    expect(markup).toContain('data-selected-book="노인과 바다"');
+  });
+
+  it('아직 안 골랐으면(undefined) 기본값 규칙을 따른다 — 「책 없이」를 고른 null과 다르다', () => {
+    expect(renderHome({ readingBooks: books, recentBookId: 2 })).toContain('data-selected-book="노인과 바다"');
+    expect(renderHome({ readingBooks: books, recentBookId: 2 }, { selectedBookId: null })).toContain(
+      'data-selected-book="책 없이 측정"',
+    );
   });
 
   it('최근 읽은 책이 목록 밖이면 첫 책이 가운데 — defaultBookId 규칙 그대로다', () => {
@@ -972,7 +1024,7 @@ describe('표지 캐러셀', () => {
   it('책이 0권이어도 캐러셀은 선다 — 「책 없이」 카드 한 장이 남는다', () => {
     const markup = renderHome({ readingBooks: [] });
 
-    expect(markup).toContain('data-no-book-card');
+    expect(markup).toContain('data-lead-card');
     expect(coverTitlesOf(markup)).toEqual([]); // 실제 책은 0권
   });
 
@@ -984,7 +1036,7 @@ describe('표지 캐러셀', () => {
     });
 
     expect(markup).not.toContain('무엇으로 측정할까요?');
-    expect(markup).not.toContain('data-no-book-card');
+    expect(markup).not.toContain('data-lead-card');
     expect(coverTitlesOf(markup)).toEqual([]);
   });
 });
@@ -1009,8 +1061,8 @@ describe('「책 없이」 카드 (캐러셀 0번 칸)', () => {
   it('카드가 실제 책보다 앞에 선다 — 0번 칸이 「책 없이」라는 규약이 마크업 순서다', () => {
     const markup = renderCarousel(1);
 
-    expect(markup).toContain('data-no-book-card');
-    expect(markup.indexOf('data-no-book-card')).toBeLessThan(markup.indexOf('data-cover-title'));
+    expect(markup).toContain('data-lead-card');
+    expect(markup.indexOf('data-lead-card')).toBeLessThan(markup.indexOf('data-cover-title'));
   });
 
   it('표지와 같은 크기의 점선 상자다 — 색 상자면 실제 표지와 구분이 안 된다', () => {
@@ -1046,7 +1098,7 @@ describe('「책 없이」 카드 (캐러셀 0번 칸)', () => {
   it('책이 0권이어도 카드 한 장으로 캐러셀이 선다 — 「첫 책 추가하기」 빈 상태를 대신한다', () => {
     const markup = renderCarousel(null, []);
 
-    expect(markup).toContain('data-no-book-card');
+    expect(markup).toContain('data-lead-card');
     expect(markup).toContain(noBookSubtitle(0)); // 서재로 가는 유일한 안내
     expect([...markup.matchAll(/data-dot="/g)]).toHaveLength(1);
   });
@@ -1108,36 +1160,35 @@ describe('태깅 시트 (BookSheet)', () => {
 });
 
 /**
- * 시작 버튼 — 갈래가 하나로 합쳐졌다. 보조 「책 없이 시작」이 캐러셀 0번 칸으로 흡수돼,
- * **무엇으로** 측정할지는 캐러셀이, **시작**은 주 버튼 하나가 맡는다.
+ * 홈에 측정 버튼은 없다 — 시작·종료의 유일한 자리가 하단 탭바 가운데 원으로 옮겨졌다(중복 CTA 금지).
+ * **무엇으로** 측정할지는 캐러셀이 그대로 맡는다.
  */
-describe('시작 버튼', () => {
+describe('홈에서 빠진 측정 버튼', () => {
   const books = [book(1, '데미안'), book(2, '노인과 바다')];
 
-  it('책이 있어도 주 버튼 하나뿐 — 보조 갈래는 캐러셀 카드가 대신한다', () => {
+  it('대기 중 홈에 「측정 시작」이 없다 — 탭바 가운데 원이 그 자리를 가져갔다', () => {
     const markup = renderHome({ readingBooks: books });
 
-    expect(fillOf(markup, '측정 시작')).toBe(FILL_PRIMARY);
-    expect(labelsOf(markup)).not.toContain('책 없이 시작');
+    expect(markup).not.toContain('측정 시작');
+    expect(labelsOf(markup)).not.toContain('측정 시작');
   });
 
-  it('책이 0권이어도 "측정 시작" 하나', () => {
-    const found = labelsOf(renderHome({ readingBooks: [] }));
-
-    expect(found).toContain('측정 시작');
-    expect(found).not.toContain('책 없이 시작');
+  it('책이 0권이어도 마찬가지다 — 상태에 따라 되살아나는 갈래가 없다', () => {
+    expect(renderHome({ readingBooks: [] })).not.toContain('측정 시작');
   });
 
-  it('측정 중이면 끝내기만 남는다 — 시작 갈래는 사라진다', () => {
-    const found = labelsOf(
-      renderHome({ readingBooks: books, hasActiveSession: true, activeStartedAt: '2026-08-11T09:00:00' }),
-    );
+  it('측정 중 홈에 「측정 끝내기」가 없다 — 끝내기도 탭바 한 자리다', () => {
+    const markup = renderHome({
+      readingBooks: books,
+      hasActiveSession: true,
+      activeStartedAt: '2026-08-11T09:00:00',
+    });
 
-    expect(found).toContain('측정 끝내기');
-    expect(found).not.toContain('측정 시작');
+    expect(markup).not.toContain('측정 끝내기');
+    expect(markup).toContain('측정 중'); // 측정 상태 표시(히어로)는 그대로 남는다
   });
 
-  it('「책 없이 시작」이라는 말이 홈 어디에도 없다 — 라벨 소멸이 이번 변경의 요구다', () => {
+  it('「책 없이 시작」이라는 말도 홈 어디에도 없다 — 보조 갈래는 캐러셀 0번 칸이 대신한다', () => {
     expect(renderHome({ readingBooks: books })).not.toContain('책 없이 시작');
     expect(renderHome({ readingBooks: [] })).not.toContain('책 없이 시작');
   });
@@ -1164,8 +1215,54 @@ describe('실패 문구 (waiverErrorMessage)', () => {
  * 로그아웃 2단 확인은 설정 화면으로 이사했고(`settings.test.tsx`), 여기엔 진입만 남는다.
  */
 describe('계정 진입점', () => {
-  it('설정 화면으로 가는 손잡이를 그린다', () => {
-    expect(renderHome()).toContain('프로필·설정');
+  const ENTRY = 'aria-label="프로필·설정"';
+
+  const section = (props: { nickname?: string; loginId?: string | null } = {}) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <AccountSection
+          nickname={props.nickname ?? '구스펠'}
+          loginId={props.loginId === undefined ? 'goospel' : props.loginId}
+          onGoSettings={() => {}}
+        />
+      </TDSMobileProvider>,
+    );
+
+  it('오늘 읽은 시간을 세리프로 크게 적는다 — 이 화면이 답하려는 유일한 수다', () => {
+    // 개구 26px(t2)일 때는 화면 제목(22px)보다 4px 큰 게 전부라 히어로로 안 읽혔다. 손글씨 옆의
+    // 세리프는 「적어 둔 값」으로 읽혀, 크기와 서체 두 축으로 주변에서 떨어져 나온다.
+    const clock = renderHome();
+    const shown = /<[^<>]*>(\d+:\d{2})</.exec(clock);
+    expect(shown).not.toBeNull();
+    const at = clock.indexOf('>' + shown![1] + '<');
+    const tag = clock.slice(clock.lastIndexOf('<', at), at);
+    expect(tag).toContain('Gowun Batang');
+    expect(tag).toContain('--tds-t-t2-text-fontSize');
+  });
+
+  it('설정 화면으로 가는 손잡이를 그린다 — 이름은 접근성 이름으로 남는다(글자는 아바타로 바뀌었다)', () => {
+    expect(renderHome()).toContain(ENTRY);
+  });
+
+  it('내가 누구인지 적는다 — 그 행에 닉네임과 @아이디가 실린다', () => {
+    const markup = renderHome();
+
+    expect(markup).toContain('구스펠님');
+    expect(markup).toContain('@goospel');
+  });
+
+  it('핸들이 없으면 @줄 자체를 그리지 않는다 — 온보딩 전 계정에 「@」만 남는 줄이 생기지 않는다', () => {
+    // 「@」 부재로 단언하면 emotion이 주입하는 `@media`에 걸려 저절로 실패한다 → 그 줄에 손잡이를 심는다.
+    expect(section()).toContain('data-handle');
+    expect(section({ loginId: null })).not.toContain('data-handle');
+    expect(section({ loginId: null })).toContain('구스펠님'); // 이름은 그대로 — 행이 통째로 사라지지 않는다
+  });
+
+  it('아바타는 책방과 같은 이니셜 원이다 — 같은 사람이 화면마다 다른 색이면 다른 사람으로 읽힌다', () => {
+    const markup = section({ nickname: '나비독서' });
+
+    expect(markup).toContain(coverColor('나비독서')); // 닉네임에서 결정적으로 고른 그 색
+    expect(markup).toContain('>나<');
   });
 
   it('실행할 수 없는 안내는 지웠다 — 토스로 가입한 계정은 booktimer.app에 로그인할 수 없다', () => {
@@ -1176,44 +1273,254 @@ describe('계정 진입점', () => {
     expect(renderHome()).not.toContain('로그아웃');
   });
 
-  // 실기기 제보(2026-08-14): 연한 weak 알약이라 「버튼」으로 안 읽혔다 → 흰 채움 + 테두리로 윤곽을 준다.
-  // TDS는 `light` 채움의 글자색을 브랜드 파랑 리터럴로 인라인에 박아 전역 재테마가 안 닿으므로(plan §미니앱 v2
-  // 실측) 세이지를 직접 준다 — 그 오버라이드가 조용히 빠지면 화면에 초록·파랑이 섞인다.
-  it('브랜드 세이지 글씨다 — TDS 기본 파랑이 그대로 나오면 앱에 색이 둘이 된다', () => {
-    const markup = renderToStaticMarkup(
-      <TDSMobileProvider userAgent={userAgent}>
-        <AccountSection onGoSettings={() => {}} />
-      </TDSMobileProvider>,
-    );
-
-    expect(markup).toContain('#4F6B4C');
+  // 알약을 걷어낸 이유(2026-08-17 사용자 지적): 흰 채움 + 테두리라 **화면에서 가장 밝은 것**이 되어, 가장 안
+  // 중요한 손잡이가 첫 시선을 받았다. TDS Button으로 되돌아가면 그 파랑 리터럴도 함께 돌아온다.
+  it('TDS 기본 파랑이 새지 않는다 — 앱 팔레트는 세이지다', () => {
+    expect(section()).not.toContain('#3182f6');
   });
 
   it('홈 맨 위에 둔다 — 피드 박스 뒤에 두면 스크롤 끝이라 눈에 안 띈다(사용자 결정 2026-08-14)', () => {
     const markup = renderHome();
 
-    expect(markup.indexOf('프로필·설정')).toBeGreaterThan(0);
+    expect(markup.indexOf(ENTRY)).toBeGreaterThan(0);
     // 히어로 카드보다도 앞 — 카드 위 한 줄이 이 손잡이의 자리다.
-    expect(markup.indexOf('프로필·설정')).toBeLessThan(markup.indexOf('오늘 읽은 시간'));
+    expect(markup.indexOf(ENTRY)).toBeLessThan(markup.indexOf('오늘 읽은 시간'));
+  });
+
+  it('안내 배너는 그 헤더 바로 아래에 선다 — 처음 온 사람이 카드보다 먼저 만나야 한다', () => {
+    // 배너를 만드는 쪽은 흐름을 든 `MainTabs`다(`app.test`) — 홈이 정하는 것은 **자리**뿐이라 슬롯으로 받는다.
+    const markup = renderHome({}, { guide: <div>안내-슬롯</div> });
+
+    expect(markup.indexOf('안내-슬롯')).toBeGreaterThan(markup.indexOf(ENTRY));
+    expect(markup.indexOf('안내-슬롯')).toBeLessThan(markup.indexOf('오늘 읽은 시간'));
+  });
+
+  it('배너를 안 넘기면 그 자리는 비어 있다 — 다 본 사람의 홈에 빈 줄이 남지 않는다', () => {
+    expect(renderHome()).not.toContain('안내-슬롯');
   });
 });
 
 /**
- * 전환 이벤트 배선 — 콘솔 「핵심 지표」의 대표 전환을 `reading_session_completed`로 갈아끼우려면
- * 그 이벤트가 **실제로 발생한 적**이 있어야 선택기에 뜬다. 즉 이 두 호출이 없으면 지표 교체 자체가 막힌다.
+ * 홈 여백 문이 가리키는 책 — 「측정 시작」을 누르듯 <b>1탭에 작성 화면</b>으로 가려면, 지금 이 화면이
+ * 어느 책을 뜻하는지가 먼저 정해져야 한다. 측정 중이면 활성 책, 대기 중이면 캐러셀에서 고른 책이다.
  *
- * <p>소스로 계측하는 이유는 잔디 `scrollLeft`와 같다 — 정적 렌더 하니스라 「측정 시작」·「측정 끝내기」를
- * 눌러 성공 콜백에 도달할 수 없다. 래퍼 자체의 행동은 `toss.test.ts`가 맡는다.
+ * <p>공개 여부는 조건이 아니다 — 비공개 책의 여백은 나만 보는 메모다(설계 결정 2).
+ * 핸들(@아이디)이 없으면 서버가 여백 대상을 loginId로만 찾아 자기 여백에도 닿을 수 없어 문을 그리지 않는다(결정 A).
  */
-describe('전환 이벤트 — Home 배선', () => {
-  const source = readFileSync(new URL('./screens/Home.tsx', import.meta.url), 'utf8');
+describe('홈 여백 문의 대상 책 (marginDoorBook)', () => {
+  const reading = [book(1, '미움받을 용기'), book(2, '사피엔스', { isPublic: false })];
+  const finished = [book(3, '데미안')];
+  const base = { readingBooks: reading, finishedBooks: finished };
 
-  it('측정 시작 성공 경로에서 reading_session_started를 쏜다', () => {
-    expect(source).toContain("trackEvent('reading_session_started'");
+  it('핸들이 없으면 문을 그리지 않는다 — loginId 없이는 자기 여백에도 닿지 못한다', () => {
+    expect(marginDoorBook(dashboard({ ...base, loginId: null }), 1)).toBeNull();
   });
 
-  it('측정 종료 성공 경로에서 reading_session_completed를 읽은 초와 함께 쏜다', () => {
-    expect(source).toContain("trackEvent('reading_session_completed'");
-    expect(source).toContain('duration_seconds');
+  it('대기 중이면 캐러셀에서 고른 책이다', () => {
+    expect(marginDoorBook(dashboard(base), 1)?.title).toBe('미움받을 용기');
+  });
+
+  it('고른 책이 비공개여도 문은 그 책을 가리킨다 — 비공개 책의 여백은 나만 보는 메모다', () => {
+    expect(marginDoorBook(dashboard(base), 2)?.title).toBe('사피엔스');
+  });
+
+  it('대기 중인데 「책 없이」를 골랐으면 문이 없다 — 책 없는 여백은 존재하지 않는다', () => {
+    expect(marginDoorBook(dashboard(base), null)).toBeNull();
+  });
+
+  it('책 없이 측정 중이면 문이 없다 — 지금 이 화면이 가리키는 책이 없다', () => {
+    expect(
+      marginDoorBook(dashboard({ ...base, hasActiveSession: true, activeBookTitle: null, recentBookId: 1 }), 1),
+    ).toBeNull();
+  });
+
+  it('측정 중이면 고른 값이 아니라 활성 책(=recentBookId)을 가리킨다', () => {
+    const data = dashboard({ ...base, hasActiveSession: true, activeBookTitle: '사피엔스', recentBookId: 2 });
+
+    expect(marginDoorBook(data, 1)?.title).toBe('사피엔스');
+  });
+
+  it('활성 책이 다 읽은 책이어도 찾는다 — 완독 책으로도 측정을 시작할 수 있다', () => {
+    const data = dashboard({ ...base, hasActiveSession: true, activeBookTitle: '데미안', recentBookId: 3 });
+
+    expect(marginDoorBook(data, null)?.title).toBe('데미안');
+  });
+
+  it('활성 책 id가 목록에 없으면 문이 없다 — 화면 밖 책을 가리키느니 그리지 않는다', () => {
+    const data = dashboard({ ...base, hasActiveSession: true, activeBookTitle: '뺀 책', recentBookId: 99 });
+
+    expect(marginDoorBook(data, 1)).toBeNull();
+  });
+
+  /** 판정이 실제로 마크업에 연결됐는지 — 함수만 맞고 화면에 안 걸리면 문은 여전히 없는 것이다. */
+  describe('홈 여백 문 노출', () => {
+    const DOOR = '여백에 글 남기기';
+
+    /**
+     * 문이 사는 곳은 <b>지금 이 화면이 어느 책을 뜻하는지 말하는 카드 안</b>이다 — 대기 중이면
+     * 캐러셀 카드, 측정 중이면 「읽는 중」 카드. 상태가 둘이어도 규칙은 하나다.
+     *
+     * <p>카드 밖 고아로 서 있던 옛 배치가 실제로 안 보였다(사용자 지적 2026-08-21: 「여백 버튼이
+     * 별로 눈에 안 띄네」). 이 앱의 `weak` 버튼은 연필 테두리를 받으므로, 연필 테두리 카드들 사이에
+     * 홀로 두면 버튼이 아니라 <b>글자 한 줄만 든 빈 카드</b>로 읽힌다.
+     */
+    it('고른 책이 있으면 문이 그 책을 고르는 카드 안에 선다 — 책 고르기와 여백은 한 흐름이다', () => {
+      const markup = renderHome({ readingBooks: [book(1, '미움받을 용기')], recentBookId: 1 });
+
+      expect(card(markup, CAROUSEL_HEADER)).toContain(DOOR);
+      expect(markup.indexOf(DOOR)).toBeLessThan(markup.indexOf('data-feed-tab'));
+    });
+
+    it('측정 중이면 문이 「읽는 중」 카드 안으로 따라간다 — 읽다가 떠오른 생각을 적는 자리가 정작 읽는 동안 사라지면 안 된다', () => {
+      const markup = renderHome({
+        readingBooks: [book(1, '미움받을 용기')],
+        recentBookId: 1,
+        hasActiveSession: true,
+        activeBookTitle: '미움받을 용기',
+      });
+
+      expect(card(markup, READING_NOW_HEADER)).toContain(DOOR);
+    });
+
+    it('비공개 책이어도 문이 선다 — 비공개 책의 여백은 나만 보는 메모다', () => {
+      expect(renderHome({ readingBooks: [book(2, '사피엔스', { isPublic: false })], recentBookId: 2 })).toContain(DOOR);
+    });
+
+    it('핸들이 없으면 문을 그리지 않는다 — 눌러도 열리지 않는 문은 죽은 UI다', () => {
+      expect(renderHome({ readingBooks: [book(1, '미움받을 용기')], recentBookId: 1, loginId: null })).not.toContain(
+        DOOR,
+      );
+    });
+
+    it('책이 한 권도 없으면 문을 그리지 않는다 — 책 없는 여백은 존재하지 않는다', () => {
+      expect(renderHome({ readingBooks: [] })).not.toContain(DOOR);
+    });
+
+    /**
+     * 여백 안내 — 문이 실제로 선 자리에서만, 투어를 마친 뒤 1회.
+     *
+     * <p>순서 제어 코드가 없다: 신규 사용자는 책이 0권이라 <b>문 자체가 안 그려지므로</b>
+     * 이 안내는 책을 담은 뒤에야 저절로 차례가 온다.
+     */
+    describe('여백 안내 코치마크', () => {
+      const GUIDE = '읽다가 떠오른 생각을 여백에';
+      const withBook = { readingBooks: [book(1, '미움받을 용기')], recentBookId: 1 };
+
+      it('투어를 마친 사람에게 문과 함께 뜬다', () => {
+        dismissCoachmark('bookshop'); // 투어 마지막 걸음
+
+        const markup = renderHome(withBook);
+
+        expect(markup).toContain(DOOR);
+        expect(markup).toContain(GUIDE);
+      });
+
+      it('투어 중에는 뜨지 않는다 — 탭바 안내와 딤이 겹치지 않는다', () => {
+        expect(renderHome(withBook)).not.toContain(GUIDE);
+      });
+
+      it('한 번 보면 다시 뜨지 않고 문만 남는다', () => {
+        dismissCoachmark('bookshop');
+        dismissCoachmark('margin');
+
+        const markup = renderHome(withBook);
+
+        expect(markup).toContain(DOOR);
+        expect(markup).not.toContain(GUIDE);
+      });
+
+      it('문이 없으면 안내도 없다 — 책을 담기 전에는 가리킬 것이 없다', () => {
+        dismissCoachmark('bookshop');
+
+        expect(renderHome({ readingBooks: [] })).not.toContain(GUIDE);
+      });
+    });
+  });
+});
+
+/**
+ * 독서등 — 측정 중 홈이 밤이 될 때, 히어로 카드만 스탠드 밑에 펼쳐진 페이지로 남는다.
+ *
+ * <p>홈이 하는 일은 <b>「여기가 밝게 남을 자리」라고 표식을 붙이는 것</b>뿐이다 — 켤지 말지는
+ * `body` 클래스가 정하고 색은 css가 든다. 그래서 표식은 측정 여부와 <b>무관하게</b> 늘 붙어 있다
+ * (조건부로 붙이면 판단이 두 곳으로 갈라진다).
+ */
+describe('독서등 — 밝게 남는 자리 (lamp-page)', () => {
+  it('히어로 카드에 표식이 붙는다', () => {
+    expect(renderHome({ hasActiveSession: true })).toContain(LAMP_PAGE_CLASS);
+  });
+
+  it('측정 중이 아니어도 표식은 그대로 있다 — 켜고 끄는 판단은 여기 없다', () => {
+    expect(renderHome({ hasActiveSession: false })).toContain(LAMP_PAGE_CLASS);
+  });
+
+  it('표식은 화면에 하나뿐이다 — 밝게 남을 자리가 둘이면 스탠드가 아니다', () => {
+    const markup = renderHome({ hasActiveSession: true });
+
+    expect(markup.split(LAMP_PAGE_CLASS).length - 1).toBe(1);
+  });
+
+  it('js가 붙이는 표식이 css에 셀렉터로 실재한다', () => {
+    expect(readFileSync(new URL('./global.css', import.meta.url), 'utf8')).toContain(`.${LAMP_PAGE_CLASS}`);
+  });
+
+  /**
+   * 밤이 되어도 문구는 한 글자도 안 바뀐다 — 이 작업은 <b>색만</b> 바꾸는 것이다. 어두운 화면용
+   * 문구를 따로 만들면 두 벌을 영원히 같이 고쳐야 한다.
+   */
+  it('측정 중 문구는 밤에도 그대로다 — 바뀌는 것은 색뿐이다', () => {
+    const markup = renderHome({ hasActiveSession: true, activeBookTitle: '데미안' });
+
+    expect(markup).toContain('측정 중');
+    expect(markup).toContain('데미안');
+    expect(markup).toContain(ACTIVE_SESSION_RELIEF);
+  });
+});
+
+/**
+ * 측정 중 「읽는 중」 카드 — 캐러셀이 서 있던 자리가 <b>지금 읽는 책 한 권</b>으로 바뀜다.
+ *
+ * <p>예전엔 측정을 누르면 그 섹션이 통째로 사라져 표지가 없어졌고, 히어로의 「측정 중 12분 · 데미안」
+ * 한 줄만 남았다(사용자 지적 2026-08-19: 「책 사진이 사라지고 텍스트로 바뀐다」).
+ */
+describe('측정 중 「읽는 중」 카드', () => {
+  const reading = book(7, '미움받을 용기', { author: '기시미 이치로', coverUrl: 'https://img.example/c.jpg' });
+
+  const measuring = (extra: Partial<DashboardResponse> = {}) =>
+    renderHome({
+      hasActiveSession: true,
+      activeStartedAt: new Date().toISOString(),
+      activeBookTitle: '미움받을 용기',
+      activeBook: reading,
+      readingBooks: [reading],
+      ...extra,
+    });
+
+  it('측정 중이면 「읽는 중」과 그 책의 표지·제목이 선다', () => {
+    const markup = measuring();
+
+    expect(markup).toContain('읽는 중');
+    expect(markup).toContain('https://img.example/c.jpg');
+    expect(markup).toContain('미움받을 용기');
+  });
+
+  it('측정 중엔 고르는 자리가 사라진다 — 대상은 이미 정해졌다', () => {
+    expect(measuring()).not.toContain('무엇으로 측정할까요?');
+    expect(renderHome({ readingBooks: [reading] })).toContain('무엇으로 측정할까요?'); // 부정 단언의 짝
+  });
+
+  /** 책 없이 측정은 이 앱의 정상 경로다 — 카드가 통째로 사라지면 화면이 튀다. */
+  it('책 없이 측정 중이면 카드는 서되 「책 없이」로 뜼다', () => {
+    const markup = measuring({ activeBook: null, activeBookTitle: null });
+
+    expect(markup).toContain('읽는 중');
+    expect(markup).toContain('책 없이');
+  });
+
+  /** 배포 순서에 화면이 의존하지 않는다 — activeBook을 안 주는 서버와도 붙는다. */
+  it('옆 서버(activeBook 없음)에서도 안 깨진다', () => {
+    const markup = measuring({ activeBook: undefined });
+
+    expect(markup).toContain('읽는 중');
   });
 });

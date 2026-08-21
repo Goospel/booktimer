@@ -1,6 +1,7 @@
 package com.booktimer.book;
 
 import com.booktimer.session.ReadingSessionRepository;
+import com.booktimer.story.StoryLikeRepository;
 import com.booktimer.story.StoryRepository;
 import com.booktimer.user.User;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ public class BookService {
     private final BookSearchClient searchClient;
     private final ReadingSessionRepository sessionRepository;
     private final StoryRepository storyRepository;
+    private final StoryLikeRepository storyLikeRepository;
     private final CoupangLinkBuilder coupangLinkBuilder;
     private final CoupangDeeplinkClient coupangDeeplinkClient;
     private final Yes24LinkBuilder yes24LinkBuilder;
@@ -34,6 +36,7 @@ public class BookService {
     public BookService(BookRepository bookRepository, BookSearchClient searchClient,
                        ReadingSessionRepository sessionRepository,
                        StoryRepository storyRepository,
+                       StoryLikeRepository storyLikeRepository,
                        CoupangLinkBuilder coupangLinkBuilder,
                        CoupangDeeplinkClient coupangDeeplinkClient,
                        Yes24LinkBuilder yes24LinkBuilder,
@@ -44,6 +47,7 @@ public class BookService {
         this.searchClient = searchClient;
         this.sessionRepository = sessionRepository;
         this.storyRepository = storyRepository;
+        this.storyLikeRepository = storyLikeRepository;
         this.coupangLinkBuilder = coupangLinkBuilder;
         this.coupangDeeplinkClient = coupangDeeplinkClient;
         this.yes24LinkBuilder = yes24LinkBuilder;
@@ -78,7 +82,27 @@ public class BookService {
     @Transactional(readOnly = true)
     public BookSearchPage search(String query, BookSearchType type, int page) {
         BookSearchPage raw = searchClient.search(query, type, page);
-        return filterToSearchType(raw, query, type);
+        return dropBoxSets(filterToSearchType(raw, query, type), query);
+    }
+
+    /**
+     * 세트 상품(「전N권」·「세트」)을 뺀다 — 검색도 「이어 읽기」 추천도 <b>다음에 읽을 한 권</b>을
+     * 고르는 자리라, 33권 묶음은 읽을 단위가 아니라 구매 단위다.
+     *
+     * <p>여기 한 곳이면 되는 이유: <b>검색 API와 추천이 둘 다 {@link #search}를 지난다</b>
+     * ({@code BookApiController} · {@code BookRecommendationService}).
+     *
+     * <p>⚠️ <b>검색어가 세트를 찾고 있으면 그대로 둔다</b> — 「노벨라33 세트」를 일부러 검색한 사람에게서
+     * 그 책을 빼앗으면 자기가 가진 책을 서재에 담을 길이 없어진다. 걸러 내기의 유일한 탈출구다.
+     */
+    private static BookSearchPage dropBoxSets(BookSearchPage page, String query) {
+        if (page == null || BookSetTitle.wanted(query)) {
+            return page;
+        }
+        List<BookSearchResult> kept = page.results().stream()
+                .filter(r -> !BookSetTitle.isSet(r.title()))
+                .toList();
+        return new BookSearchPage(kept, page.page(), page.pageSize(), page.totalResults());
     }
 
     /**
@@ -164,17 +188,24 @@ public class BookService {
     }
 
     /**
-     * 내 책의 읽기 상태를 바꾼다. <b>완독으로 전환되는 순간</b>에만 축하 푸시를 띄운다 —
-     * 기준은 {@code finishedAt} 유무가 아니라 <b>전이</b>다(FINISHED→FINISHED 재저장은 no-op이지만
-     * 이미 완독인 책을 다시 저장할 때 축하가 또 나가면 안 된다). 등록-시-완독({@link #stampIfFinished})은
-     * 제외 — 과거에 읽은 책을 아카이빙할 때 푸시가 쏟아지는 것을 막는다.
+     * 내 책의 읽기 상태를 바꾼다. 축하 푸시는 <b>완독으로 전환되는 순간</b>에, 그 책에 대해
+     * <b>딱 한 번</b>만 나간다 — 전이 판정만으로는 완독↔읽는중 토글을 반복해 축하를 무한 발송시킬 수
+     * 있어서({@code finishedAt}은 완독 이탈 시 지워지므로 멱등 마커가 못 된다),
+     * 지우지 않는 마커 {@link Book#getFinishCelebratedAt()}로 책당 1회를 강제한다.
+     * 진짜 재독에 축하가 안 오는 손실은 감수한다 — 곁가지 축하 1통 vs 알람 테러.
+     * 등록-시-완독({@link #stampIfFinished})은 마커를 찍지 않는다 — 그 경로는 원래 축하가 없고
+     * (아카이빙 푸시 폭주 방지), 나중에 첫 읽는중→완독 전이에서 1회 축하를 받는 게 자연스럽다.
      */
     public Book changeStatus(User user, Long bookId, BookStatus status) {
         Book book = ownedBook(user, bookId);
         boolean becameFinished = book.getStatus() != BookStatus.FINISHED && status == BookStatus.FINISHED;
+        boolean firstCelebration = becameFinished && book.getFinishCelebratedAt() == null;
         book.changeStatus(status, clock.instant());
+        if (firstCelebration) {
+            book.markFinishCelebrated(clock.instant()); // 발송 결과와 무관 — 재시도 틱이 없어 성공-마킹은 토글 구멍을 도로 연다
+        }
         Book saved = bookRepository.save(book);
-        if (becameFinished) {
+        if (firstCelebration) {
             finishCelebrationService.celebrate(user, saved); // 절대 던지지 않는다 — 완독 처리를 막지 않게
         }
         return saved;
@@ -196,11 +227,16 @@ public class BookService {
      * 내 책을 책장에서 삭제한다. 그 책을 가리키던 측정 세션은 "책 미지정"으로 풀어(book_id = null)
      * 독서 기록(잔디·누적 시간)을 보존한다 — {@code reading_session.book_id} FK 때문에 이 정리 없이는
      * 삭제가 제약 위반으로 실패한다(AccountService가 탈퇴 시 FK 순서로 정리하는 것과 같은 이유).
+     *
+     * <p>여백의 글은 세션과 달리 <b>함께 지운다</b> — 여백은 책에 딸린 자리라(2026-08-16 재설계,
+     * {@code story.book_id} NOT NULL) 풀어 둘 자리가 없고, 의미상으로도 책이 사라지면 자리도 사라진다.
+     * 삭제 확인 문구 "이 책에 쌓인 기록도 함께 사라져요"가 이미 이 의미를 커버한다.
      */
     public void delete(User user, Long bookId) {
         Book book = ownedBook(user, bookId);
         sessionRepository.unlinkBook(book);
-        storyRepository.unlinkBook(book); // 스토리도 첨부만 풀어 문장 보존 (story.book_id FK — 같은 이유)
+        storyLikeRepository.deleteByStoryBook(book); // 글에 달린 좋아요가 먼저 (story_like.story_id FK)
+        storyRepository.deleteByBook(book); // 여백의 글은 책과 함께 사라진다 (story.book_id FK)
         bookRepository.delete(book);
     }
 

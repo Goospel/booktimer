@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import type {
+  BookStatus,
   FollowListType,
   PersonalityEntry,
   PersonalityMutation,
@@ -10,6 +11,7 @@ import type {
   ProfileBook,
   ProfileResponse,
   ReportReason,
+  UserBrief,
 } from '../api';
 import {
   ApiError,
@@ -26,11 +28,12 @@ import {
   unfollow,
 } from '../api';
 import { useBackClose } from '../back';
-import { formatDuration } from '../format';
+import { cacheGet, cacheKeyProfile, cacheKeyProfileBooks, cachePut } from '../cache';
 import { REWARD_AD_GROUP_ID, watchRewardAd } from '../toss';
-import { ErrorMessage, Loading, Screen, Sheet } from '../ui';
-import { BookCarousel, waiverErrorMessage } from './Home';
-import { GridSheet, handleStyle, resolveSelected } from './Library';
+import { Avatar, ErrorMessage, Loading, PENCIL_FRAME, SERIF_VALUE, Screen, SectionTitle, Sheet } from '../ui';
+import { waiverErrorMessage } from './Home';
+import { BookGrid, SECTIONS } from './Library';
+import { hasFreshStory } from './Story';
 
 /**
  * 책방(프로필) 뷰 — 닉네임·책BTI·공개 책 목록 + 팔로우/언팔로우 + 차단·신고.
@@ -49,16 +52,6 @@ export interface SafetyState {
 /** 더보기 여닫기 — 어느 쪽이든 **차단 확인은 풀린 채로 시작한다**(위 불변식). */
 export function toggleSafety(open: SafetyState | null): SafetyState | null {
   return open === null ? { confirmBlock: false } : null;
-}
-
-/**
- * 캐러셀 아래 메타 — 저자 한 줄, 「상태 · 읽은 시간」 한 줄(서재 `metaLine`과 같은 문법).
- * 읽은 시간이 0이면 적지 않는다 — 「0초」는 정보가 아니다. 줄바꿈은 캐러셀의 `pre-line`이 살린다.
- */
-export function profileMetaLine(book: ProfileBook): string {
-  const stats = [book.status];
-  if (book.seconds > 0) stats.push(formatDuration(book.seconds));
-  return `${book.author ?? '저자 미상'}\n${stats.join(' · ')}`;
 }
 
 /**
@@ -162,28 +155,144 @@ export function followCountsOpenable(self: boolean, hasHandler: boolean): boolea
   return self && hasHandler;
 }
 
+/** 성향 관문 손잡이 — 한 줄에 나란히 설 것들. 순서가 곧 화면의 왼→오른쪽이다. */
+export type PersonalityAction = 'ad' | 'archive';
+
+/**
+ * 그 줄에 무엇이 서는가 — 광고 버튼은 전폭, 보관함은 그 아래 오른쪽 끝 알약이라 <b>같은 층위의 동작
+ * 둘이 서로 다른 물건처럼</b> 흩어져 있었다(사용자 지적). 한 줄에 나란히 세우려면 "무엇이 설 자격이
+ * 되는가"가 한 곳에서 나와야 한다 — 두 술어를 화면에서 각각 부르면 행의 유무와 칸 수가 어긋난다.
+ *
+ * <p>빈 배열이면 행 자체를 그리지 않는다(빈 여백만 남는 유령 줄 방지). 조건은 각 술어가 그대로 지고
+ * 여기서는 순서와 동석만 정한다.
+ */
+export function personalityActions(
+  self: boolean,
+  status: PersonalityStatus | null,
+  adGroupId: string,
+): PersonalityAction[] {
+  const actions: PersonalityAction[] = [];
+  if (showPersonalityAdButton(self, status, adGroupId)) actions.push('ad');
+  if (showArchiveHandle(self, status)) actions.push('archive');
+  return actions;
+}
+
+/**
+ * 성향(bio)을 접기 시작하는 길이 — 3줄 ≈ 90자(13px·폭 350 기준). CSS `line-clamp`가 실제로 자르고,
+ * 이 값은 <b>손잡이를 세울지</b>만 정한다. 정확한 줄 수는 폰트·폭에 달려 JS로는 못 재므로 근사치다.
+ */
+export const BIO_CLAMP_CHARS = 90;
+
+/**
+ * 「더보기」를 달지 — 접힐 만큼 길 때만. clamp는 넘칠 때만 자르므로, 짧은 서술에까지 손잡이를 달면
+ * 눌러도 아무것도 안 펼쳐지는 죽은 버튼이 된다.
+ */
+export function needsBioToggle(personality: string | null): boolean {
+  return personality !== null && personality.length > BIO_CLAMP_CHARS;
+}
+
+/**
+ * 「○○님, ○○님 외 N명이 팔로우합니다」 — 인스타 프로필의 그 줄이다(2026-08-20).
+ *
+ * <p>이름은 서버가 준 만큼(2명)만 쓰고 나머지는 <b>수로 접는다</b>. 접는 수는 받은 이름 개수가 아니라
+ * {@code total}에서 나온다 — 이름만 세면 3명이든 30명이든 「외 0명」이 되어 버린다.
+ *
+ * <p>{@code total}이 이름 수보다 작거나 0이면(옛 서버가 총 수를 안 줄 때) <b>접지 않고</b> 이름만 말한다 —
+ * 그러지 않으면 「외 -2명」 같은 문구가 나간다.
+ *
+ * @return 그릴 문구. 공통 친구가 하나도 없으면 {@code null}이고, 그러면 줄 자체를 그리지 않는다
+ */
+export function mutualFollowerText(names: string[], total: number): string | null {
+  if (names.length === 0) {
+    return null;
+  }
+  const listed = names.map((n) => `${n}님`).join(', ');
+  const rest = total - names.length;
+  return rest > 0 ? `${listed} 외 ${rest}명이 팔로우합니다` : `${listed}이 팔로우합니다`;
+}
+
+/**
+ * 공통 친구 줄 — 겹친 이니셜 아바타 + 문구. <b>팔로우 버튼 아래, 책 격자 위</b>가 자리다(인스타와 같다).
+ *
+ * <p>누를 수 없는 텍스트다. 인스타는 눌러서 명단을 열지만 그건 화면이 하나 더 붙는 일이라 지금은 안 만든다
+ * — 「이 사람이 내 아는 사람들과 닿아 있다」는 신호가 전달되면 이 줄의 일은 끝난다.
+ *
+ * <p>서버가 필드를 안 주는 구간(미배포)에서도 안전하다: `undefined`면 문구가 `null`이라 아무것도 안 그린다.
+ */
+export function MutualFollowers({ users, total }: { users?: UserBrief[]; total?: number }) {
+  const listed = users ?? [];
+  const text = mutualFollowerText(
+    listed.map((u) => u.nickname),
+    total ?? 0,
+  );
+  if (text === null) {
+    return null;
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 14 }}>
+      <div style={{ display: 'flex', flex: '0 0 auto' }}>
+        {listed.map((u, i) => (
+          // 캔버스색 테두리로 겹친 자리를 끊는다 — 테두리가 없으면 두 원이 한 덩어리로 뭉쳐 보인다.
+          <div
+            key={u.loginId}
+            style={{
+              display: 'flex',
+              marginLeft: i === 0 ? 0 : -7,
+              borderRadius: '50%',
+              border: '2px solid var(--adaptiveBackground, #FCFAF5)',
+            }}
+          >
+            <Avatar nickname={u.nickname} size={20} />
+          </div>
+        ))}
+      </div>
+      <Text typography="st12" color="grey600" style={{ display: 'block' }}>
+        {text}
+      </Text>
+    </div>
+  );
+}
+
+/**
+ * 공개 책 소제목 — 태그 드릴다운 &gt; 상태 필터 &gt; 전체 순으로 이긴다(태그 중엔 필터가 null이라 실제로는 충돌 없음).
+ *
+ * <p>격자 칸에는 상태 배지를 안 붙이므로(표지 80px + 제목뿐이고 발광 점이 이미 그 칸의 신호를 쓴다)
+ * <b>지금 무엇으로 좁혔는지</b>를 말하는 자리는 이 소제목 하나뿐이다.
+ */
+export function shelfTitle(activeTag: string | null, statusFilter: BookStatus | null, count: number): string {
+  if (activeTag !== null) return `${activeTag} 근거 책 ${count}`;
+  if (statusFilter !== null) return `${SECTIONS.find((s) => s.status === statusFilter)!.title} ${count}`;
+  return `공개한 책 ${count}`;
+}
+
 export function Profile({
   loginId,
   onBack,
   onError,
   header,
   onOpenFollowList,
+  onOpenMargin,
 }: {
   loginId: string;
   /** 없으면 「돌아가기」를 그리지 않는다 — 탭 루트(내 책방)에는 돌아갈 곳이 없고 출구가 탭바다. */
   onBack?: () => void;
   onError: (error: Error) => void;
-  /** 제목보다 **위**에 얹히는 슬롯 — 책방 셸이 검색 진입바·스토리 스트립을 여기 끼운다. */
+  /** 제목보다 **위**에 얹히는 슬롯 — 책방 셸이 검색 진입을 여기 끼운다. */
   header?: ReactNode;
   /** 카운트를 눌렀을 때 — 목록 시트는 셸이 연다(이 화면은 목록 상태를 들지 않는다). */
   onOpenFollowList?: (type: FollowListType) => void;
+  /** 격자에서 책을 눌렀을 때 — 그 책의 여백 화면으로 간다(전체 화면 전이는 셸이 든다). */
+  onOpenMargin?: (bookId: number) => void;
 }) {
-  const [profile, setProfile] = useState<ProfileResponse | null>(null);
-  const [books, setBooks] = useState<ProfileBook[]>([]);
+  // 지난 성공 응답이 첫 렌더의 출발점이다 — 헤더·격자가 두 왕복을 기다리며 통째로 로딩이던 자리.
+  // 키에 loginId가 박혀 있어 남의 책방 캐시가 내 화면에 설 수 없다(재검증은 그대로 매번 나간다).
+  const [profile, setProfile] = useState<ProfileResponse | null>(
+    () => cacheGet<ProfileResponse>(cacheKeyProfile(loginId)) ?? null,
+  );
+  const [books, setBooks] = useState<ProfileBook[]>(() => cacheGet<ProfileBook[]>(cacheKeyProfileBooks(loginId)) ?? []);
   const [activeTag, setActiveTag] = useState<string | null>(null);
-  /** 캐러셀에서 가운데 온 책 — 목록이 갈려 사라지면 `resolveSelected`가 첫 책으로 되돌린다. */
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [gridOpen, setGridOpen] = useState(false);
+  /** 걸린 상태 필터 — `null`이 「전체」다. 기본이 전체라 진입 화면·발광·여백 문이 지금 그대로다. */
+  const [statusFilter, setStatusFilter] = useState<BookStatus | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [more, setMore] = useState<SafetyState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -215,19 +324,26 @@ export function Profile({
     setError(null); // 재시도가 성공했는데 지난 실패 문구가 남지 않게
     fetchProfile(loginId)
       .then((page) => {
+        cachePut(cacheKeyProfile(loginId), page);
         setProfile(page);
         // 관문은 내 책방에만 선다 — 남의 책방에서 부르면 내 잔여를 남의 화면에서 소모하는 꼴이다.
         if (page.self) loadPersonalityStatus();
       })
       .catch(fail);
     // 헤더와 책 목록을 따로 받는다 — 태그 드릴다운이 책 목록만 갈아끼우므로 목록의 출처를 하나로 둔다.
-    fetchProfileBooks(loginId).then((page) => setBooks(page.books)).catch(fail);
+    // 캐시에 넣는 것은 이 「전체 목록」뿐이다 — 태그·상태 필터 결과를 넣으면 초기값이 부분 목록이 된다
+    // (초기 렌더는 `activeTag`·`statusFilter`가 둘 다 null이라 전체 목록이어야 정합).
+    fetchProfileBooks(loginId)
+      .then((page) => {
+        cachePut(cacheKeyProfileBooks(loginId), page.books);
+        setBooks(page.books);
+      })
+      .catch(fail);
   }, [loginId, fail, loadPersonalityStatus]);
 
   useEffect(load, [load]);
 
   // 열린 시트는 뒤로가기가 먼저 먹는다 — 시트가 열린 채로 책방이 통째로 닫히지 않게(서재와 같다).
-  useBackClose(gridOpen, () => setGridOpen(false));
   useBackClose(archiveOpen, () => setArchiveOpen(false));
 
   const run = (action: Promise<unknown>, after: () => void) => {
@@ -248,8 +364,17 @@ export function Profile({
 
   const selectTag = (tag: string | null) => {
     setActiveTag(tag);
+    // 두 축은 배타다 — 태그 근거 책 API에는 status 파라미터가 없어 AND를 하려면 클라가 한글 라벨로
+    // 역필터해야 한다(api.ts가 금한 짓). 태그로 들어가면 필터를 풀고, 나올 땐 이미 전체라 복원도 없다.
+    if (tag !== null) setStatusFilter(null);
     const load = tag === null ? fetchProfileBooks(loginId) : fetchPersonalityTagBooks(loginId, tag);
     load.then((page) => setBooks(page.books)).catch(fail);
+  };
+
+  const selectStatus = (status: BookStatus | null) => {
+    setStatusFilter(status);
+    // 서버가 거르게 둔다 — `GET /api/profile/books`가 이미 status를 받는다(웹 책장과 같은 파라미터).
+    fetchProfileBooks(loginId, status ?? undefined).then((page) => setBooks(page.books)).catch(fail);
   };
 
   // 차단하면 그 순간부터 이 책방이 404다(대칭 숨김) — 머무를 화면이 없으니 목록으로 돌려보낸다.
@@ -301,21 +426,13 @@ export function Profile({
     });
 
   if (profile === null) {
-    // 로딩 중에도 header를 그린다 — 스토리·검색은 프로필 조회와 독립이라, 이 분기에서 빼면
+    // 로딩 중에도 header를 그린다 — 여백·검색은 프로필 조회와 독립이라, 이 분기에서 빼면
     // 탭 진입 직후(응답 전) 상단이 통째로 비어 화면이 죽은 것처럼 보인다.
     return (
       <Screen title="책방" onBack={onBack} above={header}>
         {/* 못 받았을 때 나갈 길만 있으면 실패가 곧 막다른 길이다 — 그 자리에서 다시 받을 길도 함께 준다. */}
         <ErrorMessage message={error} onRetry={load} />
-        {error === null ? (
-          <Loading />
-        ) : (
-          onBack !== undefined && (
-            <Button display="block" variant="weak" style={{ marginTop: 24 }} onClick={onBack}>
-              돌아가기
-            </Button>
-          )
-        )}
+        {error === null && <Loading />}
       </Screen>
     );
   }
@@ -326,8 +443,8 @@ export function Profile({
         profile={profile}
         books={books}
         activeTag={activeTag}
-        selectedId={selectedId}
-        gridOpen={gridOpen}
+        now={Date.now()}
+        onOpenMargin={onOpenMargin}
         busy={busy}
         personalityStatus={personalityStatus}
         adBusy={adBusy}
@@ -340,8 +457,8 @@ export function Profile({
         onRetryPersonality={() => runPersonality(runPersonalityRefresh)}
         onFollowToggle={toggleFollow}
         onSelectTag={selectTag}
-        onSelect={setSelectedId}
-        onGrid={setGridOpen}
+        statusFilter={statusFilter}
+        onSelectStatus={selectStatus}
         onMore={() => setMore(toggleSafety)}
         header={header}
         onOpenFollowList={onOpenFollowList}
@@ -375,8 +492,8 @@ export function ProfileCard({
   profile,
   books,
   activeTag,
-  selectedId,
-  gridOpen,
+  now,
+  onOpenMargin,
   busy,
   personalityStatus,
   adBusy,
@@ -389,8 +506,8 @@ export function ProfileCard({
   onRetryPersonality,
   onFollowToggle,
   onSelectTag,
-  onSelect,
-  onGrid,
+  statusFilter,
+  onSelectStatus,
   onMore,
   safety,
   header,
@@ -400,8 +517,10 @@ export function ProfileCard({
   profile: ProfileResponse;
   books: ProfileBook[];
   activeTag: string | null;
-  selectedId: number | null;
-  gridOpen: boolean;
+  /** 발광 판정의 기준 시각 — 밖에서 받아야 테스트가 결정론이 된다. */
+  now: number;
+  /** 격자 칸을 눌러 여백을 여는 손잡이. 없으면 칸을 버튼으로도 만들지 않는다. */
+  onOpenMargin?: (bookId: number) => void;
   busy: boolean;
   personalityStatus: PersonalityStatus | null;
   adBusy: boolean;
@@ -414,59 +533,88 @@ export function ProfileCard({
   onRetryPersonality: () => void;
   onFollowToggle: () => void;
   onSelectTag: (tag: string | null) => void;
-  onSelect: (bookId: number | null) => void;
-  onGrid: (open: boolean) => void;
+  /** 걸린 상태 필터 — `null`이 「전체」. */
+  statusFilter: BookStatus | null;
+  onSelectStatus: (status: BookStatus | null) => void;
   onMore: () => void;
   safety: ReactNode;
-  /** 제목보다 **위**에 얹히는 슬롯 — 셸이 검색 진입바·스토리 스트립을 끼운다. */
+  /** 제목보다 **위**에 얹히는 슬롯 — 셸이 검색 진입바·여백 스트립을 끼운다. */
   header?: ReactNode;
   onOpenFollowList?: (type: FollowListType) => void;
   onBack?: () => void;
 }) {
-  const selected = resolveSelected(books, selectedId);
-  const sectionTitle = activeTag === null ? `공개한 책 ${books.length}` : `${activeTag} 근거 책 ${books.length}`;
+  const sectionTitle = shelfTitle(activeTag, statusFilter, books.length);
   const openable = followCountsOpenable(profile.self, onOpenFollowList !== undefined);
+  const actions = personalityActions(profile.self, personalityStatus, REWARD_AD_GROUP_ID);
 
-  // 제목 옆 ← 는 안 둔다 — 배경 없는 화살표 글자라 버튼으로 안 읽혔다. 출구는 아래 「돌아가기」와 탭바.
+  /*
+   * 나가는 길은 **상단 「돌아가기」 하나**다. 이 화면은 같은 문제를 두 번 겪었다 — 처음엔 제목 옆 `←`
+   * 글리프였는데 배경이 없어 버튼으로 안 읽혀 지우고 하단 버튼만 남겼고, 여백 화면에서 같은 지적이 또
+   * 나와 **글자가 붙은 알약**이 생겼다(2026-08-16). 회피 이유가 사라졌으므로 위로 되돌리고 하단 버튼을
+   * 걷는다. 탭 루트(내 책방)는 `onBack`이 없어 아무것도 안 그려진다 — 출구는 플로팅 탭바다.
+   */
   return (
-    <Screen
-      title={`${profile.nickname}님의 책방`}
-      // 검색·스토리는 화면 소속이 아니라 그 위에 얹히는 도구다 — 제목보다 위로 올린다.
-      above={header}
-      // @아이디는 닉네임에 딸린 식별자라 제목에 밀착시킨다(카운트와 한 줄로 섞이면 카운트의 일부로 읽힌다).
-      subtitle={
-        <Text typography="st12" color="grey600" style={{ display: 'block' }}>
-          @{profile.loginId}
-        </Text>
-      }
-    >
-      {openable ? (
-        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-          <FollowCountButton
-            label="팔로워"
-            count={profile.followerCount}
-            onClick={() => onOpenFollowList!('followers')}
-          />
-          <FollowCountButton
-            label="팔로잉"
-            count={profile.followingCount}
-            onClick={() => onOpenFollowList!('following')}
-          />
+    // 검색·여백는 화면 소속이 아니라 그 위에 얹히는 도구다 — 신원 블록보다 위로 올린다.
+    <Screen above={header} onBack={onBack}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <Avatar nickname={profile.nickname} />
+        <div style={{ flex: 1, display: 'flex', minWidth: 0 }}>
+          {/* 공개 책은 손잡이가 아니다 — 목록은 바로 아래 이 화면 안에 이미 있다. */}
+          <StatItem label="공개 책" count={profile.books.length} />
+          {openable ? (
+            <>
+              <FollowCountButton
+                label="팔로워"
+                count={profile.followerCount}
+                onClick={() => onOpenFollowList!('followers')}
+              />
+              <FollowCountButton
+                label="팔로잉"
+                count={profile.followingCount}
+                onClick={() => onOpenFollowList!('following')}
+              />
+            </>
+          ) : (
+            // 남의 책방 — 서버가 남의 목록을 안 주므로 누를 수 없다. 누를 수 없는 것을 버튼처럼 보이게 하지 않는다(#788).
+            <>
+              <StatItem label="팔로워" count={profile.followerCount} />
+              <StatItem label="팔로잉" count={profile.followingCount} />
+            </>
+          )}
         </div>
-      ) : (
-        // 남의 책방 — 서버가 남의 목록을 안 주므로 누를 수 없다. 누를 수 없는 것을 버튼처럼 보이게 하지 않는다(#788).
-        <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 10 }}>
-          팔로워 {profile.followerCount} · 팔로잉 {profile.followingCount}
-        </Text>
-      )}
+      </div>
 
-      {profile.personality !== null && (
-        <Text typography="st11" style={{ display: 'block', marginTop: 12 }}>
-          {profile.personality}
-        </Text>
-      )}
+      <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        {/* 이 화면의 제목이다. 15px/500 이었는데 개구엔 500이 없어 400으로 떨어져, 본문(700)보다
+            얇게 렌더됐다 — 강조하려고 쓴 값이 정확히 반대로 작동한 자리. */}
+        <span style={{ fontSize: 19, fontWeight: 700, color: 'var(--adaptiveGrey900, #3A362E)' }}>
+          {profile.nickname}
+        </span>
+        {/* 「나를 팔로우함」 — 둘러보기 카드에 있던 칩이 이사 온 자리(인스타는 이름 옆 배지로 단다).
+            내 책방에는 서버가 false로 보내므로 여기 분기를 또 두지 않는다(판정은 한 곳에서). */}
+        {profile.followsMe === true && (
+          <span
+            style={{
+              fontSize: 12,
+              padding: '2px 7px',
+              borderRadius: 9,
+              background: 'var(--adaptiveGrey200, #E4DDD0)',
+              color: 'var(--adaptiveGrey700, #57534A)',
+            }}
+          >
+            나를 팔로우함
+          </span>
+        )}
+      </div>
+      {/* @아이디는 닉네임에 딸린 식별자라 이름에 밀착시킨다(카운트와 한 줄로 섞이면 카운트의 일부로 읽힌다). */}
+      <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 1 }}>
+        @{profile.loginId}
+      </Text>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
+      {/* 태그가 서술보다 <b>먼저</b>다. 서술은 서버가 써 준 다섯 줄짜리 문단이고 태그는 그 요약인데,
+          문단이 앞에 있으면 「이 사람이 어떤 독자인가」를 스크롤해야 알 수 있었다(요약이 원문 뒤에 있는 꼴).
+          순서만 뒤집으면 세 단어가 이름 바로 아래에 선다. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 7 }}>
         {profile.personalityTags.map((tag) =>
           // 클릭 가능한 태그만 버튼 — 서버가 근거 책을 주지 않는 태그는 눌러도 빈 목록이라 안 누르게 한다.
           tag.clickable ? (
@@ -481,15 +629,43 @@ export function ProfileCard({
         )}
       </div>
 
+      {profile.personality !== null && <Bio text={profile.personality} />}
+
       {/* 성향 추출 관문 — 결과(서술·태그)가 보이는 바로 그 자리에 손잡이를 둔다. status를 못 받았으면
           아무것도 그리지 않는다(fail-closed): 서버 미배포 구간에도 번들이 먼저 나갈 수 있는 근거다. */}
       {profile.self && personalityStatus !== null && (
         <div style={{ marginTop: 16 }}>
-          {showPersonalityAdButton(profile.self, personalityStatus, REWARD_AD_GROUP_ID) && (
-            // 문구에 "광고"를 명시해 광고 위장 금지 조항을 지킨다(홈의 부채 버튼과 같은 규율).
-            <Button display="block" variant="weak" size="small" disabled={adBusy} onClick={onClaimPersonality}>
-              {personalityStatus.hasSelected ? '광고 보고 다시 분석하기' : '광고 보고 성향 분석 받기'}
-            </Button>
+          {/* 손잡이들은 한 줄에 나란히 — 폭을 반씩 나눠 쓰고, 하나만 설 자격이 되면 그게 전폭이다. */}
+          {actions.length > 0 && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              {actions.map((action) =>
+                action === 'ad' ? (
+                  // 문구에 "광고"를 명시해 광고 위장 금지 조항을 지킨다(홈의 부채 버튼과 같은 규율).
+                  <Button
+                    key="ad"
+                    style={{ flex: 1 }}
+                    variant="weak"
+                    size="small"
+                    disabled={adBusy}
+                    onClick={onClaimPersonality}
+                  >
+                    {personalityStatus.hasSelected ? '광고 보고 다시 분석하기' : '광고 보고 성향 분석 받기'}
+                  </Button>
+                ) : (
+                  // 보관함 — 비교 대상이 둘 이상일 때만. 「문구가 바뀌었나」를 확인할 유일한 자리다.
+                  <Button
+                    key="archive"
+                    style={{ flex: 1 }}
+                    variant="weak"
+                    size="small"
+                    disabled={adBusy}
+                    onClick={() => onArchive(true)}
+                  >
+                    보관함에서 비교하기
+                  </Button>
+                ),
+              )}
+            </div>
           )}
           {personalityStatus.coldStart && (
             <Text typography="st12" color="grey600" style={{ display: 'block' }}>
@@ -512,14 +688,6 @@ export function ProfileCard({
               {personalityNotice}
             </Text>
           )}
-          {/* 보관함 — 비교 대상이 둘 이상일 때만. 「문구가 바뀌었나」를 확인할 수 있는 유일한 자리다. */}
-          {showArchiveHandle(profile.self, personalityStatus) && (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
-              <button type="button" onClick={() => onArchive(true)} style={handleStyle}>
-                보관함에서 비교하기
-              </button>
-            </div>
-          )}
         </div>
       )}
 
@@ -538,74 +706,101 @@ export function ProfileCard({
           <Button style={{ flex: 1 }} variant={profile.following ? 'weak' : 'fill'} disabled={busy} onClick={onFollowToggle}>
             {profile.following ? '팔로우 취소' : '팔로우'}
           </Button>
+          {/* 「더보기」였다 — 성향 bio의 접기 손잡이와 같은 이름이라 한 화면에 둘이 섰다. 하는 일로 부른다. */}
           <Button variant="weak" disabled={busy} onClick={onMore}>
-            더보기
+            신고·차단
           </Button>
         </div>
       )}
+      {/* 팔로우 버튼 아래·책 격자 위 — 인스타 프로필에서 이 줄이 서는 그 자리다. */}
+      <MutualFollowers users={profile.mutualFollowers} total={profile.mutualFollowerCount} />
       {safety}
 
+      {/*
+       * 공개 책 = 3열 격자(사용자 승인 B안). 캐러셀은 한 번에 한 권만 보여 주고 나머지는 「펼쳐보기」를
+       * 눌러야 했다 — 책장을 훑는 화면인데 왕복이 끼어 있었다. 격자는 그 시트를 본문에 펼친 것이라
+       * 새로 만든 물건이 없다. ⚠️ 대신 캐러셀 아래 있던 메타(상태·읽은 시간)는 사라진다(알고 한 교환).
+       *
+       * 이제 각 칸이 **그 책의 여백으로 가는 문**이다(2026-08-16 재설계) — 24시간 안에 새 글이 달린 책은
+       * 발광한다. 판정 재료(`lastStoryAt`)는 서버가 주고 창 계산은 `hasFreshStory`가 한다.
+       */}
       <section style={{ marginTop: 28 }}>
-        {/* 손잡이는 목록 바로 위 줄에 — 서재는 제목 줄에 뒀지만 책방은 제목과 캐러셀 사이에 핸들·성향·태그·
-            팔로우가 깔려, 제목 줄에 두면 손잡이와 그 대상(책)이 화면 절반쯤 떨어진다. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-          <Text typography="st11" color="grey600" style={{ flex: 1, minWidth: 0 }}>
-            {sectionTitle}
-          </Text>
-          {books.length > 1 && (
-            <button type="button" onClick={() => onGrid(true)} style={handleStyle}>
-              펼쳐보기
-            </button>
-          )}
-        </div>
+        <SectionTitle style={{ marginBottom: 10 }}>{sectionTitle}</SectionTitle>
         {activeTag !== null && (
           <Button size="small" variant="weak" style={{ marginBottom: 10 }} onClick={() => onSelectTag(null)}>
             전체 보기
           </Button>
         )}
-        {selected === null ? (
+        {/* 상태 필터 — 격자 바로 위(성향 태그 줄과 자리로 구분된다). 드릴다운 중엔 숨긴다: 태그와 배타라
+            눌러 봐야 갈 곳이 없고, 칩이 없으면 "드릴다운 중 상태 클릭"이라는 경로 자체가 안 생긴다. */}
+        {activeTag === null && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+            {[null, ...SECTIONS.map((s) => s.status)].map((status) => (
+              <button
+                key={status ?? 'ALL'}
+                type="button"
+                aria-pressed={statusFilter === status}
+                onClick={() => onSelectStatus(status)}
+                style={filterChipStyle(statusFilter === status)}
+              >
+                {status === null ? '전체' : SECTIONS.find((s) => s.status === status)!.title}
+              </button>
+            ))}
+          </div>
+        )}
+        {books.length === 0 ? (
           <Text typography="st11" color="grey600" style={{ display: 'block' }}>
-            공개한 책이 없어요.
+            {/* 좁혀서 빈 것과 애초에 없는 것은 다른 사실이다 — 필터를 건 채 "공개한 책이 없어요"는 거짓말이다. */}
+            {statusFilter === null && activeTag === null ? '공개한 책이 없어요.' : '이 상태의 공개 책이 없어요.'}
           </Text>
         ) : (
-          // 태그를 고르면 목록이 통째로 갈리므로 다시 마운트한다 — 안 그러면 트랙이 옛 목록의 스크롤 자리에 머문다.
-          <BookCarousel
-            key={activeTag ?? 'all'}
-            books={books}
-            selectedId={selected.id}
-            onSelect={onSelect}
-            noBookCard={false}
-            metaOf={profileMetaLine}
+          <BookGrid
+            rows={books.map((b) => ({ ...b, fresh: hasFreshStory(b.lastStoryAt, now) }))}
+            selectedId={null}
+            onPick={onOpenMargin}
           />
         )}
       </section>
 
-      {gridOpen && (
-        <GridSheet
-          title={sectionTitle}
-          rows={books}
-          selectedId={selected?.id ?? null}
-          onPick={(id) => {
-            onSelect(id);
-            onGrid(false);
-          }}
-          onClose={() => onGrid(false)}
-        />
-      )}
-
-      {/* 탭 루트(내 책방)에는 돌아갈 곳이 없다 — 아무 데도 안 가는 손잡이를 남기지 않는다. */}
-      {onBack !== undefined && (
-        <Button display="block" variant="weak" style={{ marginTop: 24 }} onClick={onBack}>
-          돌아가기
-        </Button>
-      )}
     </Screen>
   );
 }
 
+/** 카운트 한 칸의 알맹이 — 숫자 위, 라벨 아래(인스타 문법). 버튼이든 아니든 같은 모양이어야 줄이 안 흔들린다. */
+function StatBody({ label, count }: { label: string; count: number }) {
+  return (
+    <>
+      {/* data-stat은 계측 손잡이 — 숫자와 라벨이 각자 span이라 마크업에서 「팔로워 3」이 이어 붙지 않는다. */}
+      <span
+        style={{
+          ...SERIF_VALUE,
+          display: 'block',
+          fontSize: 24,
+          color: 'var(--adaptiveGrey900, #3A362E)',
+        }}
+        data-stat={label}
+      >
+        {count}
+      </span>
+      <span style={{ display: 'block', marginTop: 2, fontSize: 13, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>
+        {label}
+      </span>
+    </>
+  );
+}
+
+/** 누를 수 없는 카운트 — 공개 책, 그리고 남의 책방의 팔로워·팔로잉(서버가 남의 목록을 안 준다). */
+export function StatItem({ label, count }: { label: string; count: number }) {
+  return (
+    <div style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>
+      <StatBody label={label} count={count} />
+    </div>
+  );
+}
+
 /**
- * 팔로워·팔로잉 손잡이 — 밑줄 친 작은 글자였던 것을 <b>테두리 있는 큰 버튼</b>으로 세운다.
- * 배경 없는 글자는 눌리는 것으로 안 읽혔고(#788), 손가락 표적도 작았다. 전폭을 반씩 나눠 둘 다 해결한다.
+ * 팔로워·팔로잉 손잡이 — 아바타 오른쪽 카운트 줄의 한 칸(인스타 배치). 테두리 버튼 두 개가 전폭을
+ * 차지하던 것을 접어 그 자리를 책에 돌려준다. 눌리는 것임은 이제 테두리가 아니라 <b>자리</b>가 말한다.
  */
 export function FollowCountButton({
   label,
@@ -623,26 +818,77 @@ export function FollowCountButton({
       onClick={onClick}
       style={{
         flex: 1,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 6,
-        padding: '11px 13px',
-        border: '1px solid #DDD6C8',
-        borderRadius: 12,
-        background: 'var(--adaptiveGrey100, #FCFAF5)',
+        minWidth: 0,
+        padding: 0,
+        border: 'none',
+        background: 'transparent',
+        textAlign: 'center',
         cursor: 'pointer',
       }}
     >
-      <span style={{ fontSize: 13, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>{label}</span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-        <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--adaptiveGrey900, #3A362E)' }}>{count}</span>
-        {/* 테두리 안의 장식이라 이 화살표는 어포던스를 혼자 지지 않는다 — 버튼임은 테두리가 말한다. */}
-        <span aria-hidden="true" style={{ fontSize: 13, color: '#A8A296' }}>
-          ›
-        </span>
-      </span>
+      <StatBody label={label} count={count} />
     </button>
+  );
+}
+
+/**
+ * 성향 서술 = 인스타 bio — 3줄만 보이고 나머지는 「더보기」. 10줄 문단이 통째로 펼쳐져 있으면 그 아래
+ * 책이 첫 화면 밖으로 밀린다(사용자 스크린샷에서 「공개한 책」이 탭바에 잘려 있었다).
+ */
+function Bio({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const clamped = !expanded && needsBioToggle(text);
+
+  return (
+    // 카드에 담는 이유는 <b>출처</b>다 — 이건 사용자가 쓴 소개가 아니라 서버가 읽은 책에서 뽑아 준
+    // 요약이다. 화면에 그냥 떠 있으면 다섯 줄짜리 벽으로 읽히고, 상자에 담기면 「분석 결과」가 된다.
+    <div
+      data-bio-card=""
+      style={{
+        marginTop: 12,
+        padding: 12,
+        borderRadius: 12,
+        background: 'var(--adaptiveGrey100, #FCFAF5)',
+        border: '1px solid transparent',
+        borderImage: PENCIL_FRAME,
+      }}
+    >
+      <span
+        style={{
+          fontSize: 14,
+          lineHeight: 1.55,
+          color: 'var(--adaptiveGrey900, #3A362E)',
+          wordBreak: 'keep-all',
+          // clamp는 넘칠 때만 자른다 — 짧은 서술엔 이 블록이 걸려도 아무 일도 일어나지 않는다.
+          ...(clamped
+            ? ({ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as const)
+            : { display: 'block' }),
+        }}
+      >
+        {text}
+      </span>
+      {/* 알약 손잡이가 아니라 회색 글자 — 서술의 꼬리로 읽혀야지, 성향과 나란한 또 하나의 버튼이 되면
+          안 된다. 카드 안 오른쪽으로 보내 문단의 끝임을 자리로 말한다. */}
+      {needsBioToggle(text) && (
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          style={{
+            display: 'block',
+            marginLeft: 'auto',
+            marginTop: 4,
+            padding: 0,
+            border: 'none',
+            background: 'transparent',
+            fontSize: 13,
+            color: 'var(--adaptiveGrey600, #6F6A5E)',
+            cursor: 'pointer',
+          }}
+        >
+          {expanded ? '접기' : '더보기'}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -694,7 +940,7 @@ export function ArchiveSheet({
                   flex: '0 0 auto',
                   padding: '3px 8px',
                   borderRadius: 999,
-                  fontSize: 11,
+                  fontSize: 12,
                   background: '#6E8A6A',
                   color: '#FFFDF8',
                 }}
@@ -762,7 +1008,7 @@ export function SafetyPanel({
         value={reason}
         disabled={busy}
         onChange={(e) => setReason(e.target.value as ReportReason)}
-        style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #E4DDD0' }}
+        style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid transparent', borderImage: PENCIL_FRAME }}
       >
         {REPORT_REASONS.map((r) => (
           <option key={r.value} value={r.value}>
@@ -803,13 +1049,29 @@ export function SafetyPanel({
   );
 }
 
+/**
+ * 상태 필터 칩 — 성향 태그 칩과 같은 문법(알약·13px)이되 <b>걸린 것만 배경이 반전</b>된다.
+ * 지금 무엇으로 좁혔는지는 소제목도 말하지만, 줄 안에서 "어느 칩이 눌렸나"는 색이 져야 한 눈에 읽힌다.
+ */
+const filterChipStyle = (active: boolean) =>
+  ({
+    display: 'inline-block',
+    padding: '6px 10px',
+    borderRadius: 999,
+    border: 'none',
+    fontSize: 14,
+    background: active ? 'var(--adaptiveBlue500, #6E8A6A)' : 'var(--adaptiveGrey100, #FCFAF5)',
+    color: active ? '#FFFDF8' : 'var(--adaptiveGrey700, #57534A)',
+    cursor: 'pointer',
+  }) as const;
+
 const chipStyle = (clickable: boolean) =>
   ({
     display: 'inline-block',
     padding: '6px 10px',
     borderRadius: 999,
     border: 'none',
-    fontSize: 13,
+    fontSize: 14,
     background: 'var(--adaptiveGrey100, #FCFAF5)',
     color: clickable ? 'var(--adaptiveBlue500, #6E8A6A)' : 'var(--adaptiveGrey700, #57534A)',
     cursor: clickable ? 'pointer' : 'default',

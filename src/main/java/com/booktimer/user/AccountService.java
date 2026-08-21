@@ -12,8 +12,8 @@ import com.booktimer.report.ReportRepository;
 import com.booktimer.security.SessionInvalidator;
 import com.booktimer.session.ReadingGoalWaiverRepository;
 import com.booktimer.session.ReadingSessionRepository;
+import com.booktimer.story.StoryLikeRepository;
 import com.booktimer.story.StoryRepository;
-import com.booktimer.story.StoryViewRepository;
 import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.timer.ReadingTimerRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -46,7 +46,7 @@ public class AccountService {
     private final FeedbackRepository feedbackRepository;
     private final EmailTokenRepository emailTokenRepository;
     private final StoryRepository storyRepository;
-    private final StoryViewRepository storyViewRepository;
+    private final StoryLikeRepository storyLikeRepository;
     private final ApiTokenRepository apiTokenRepository;
     private final TossLinkCodeRepository tossLinkCodeRepository;
     private final AuthorAffectionRepository affectionRepository;
@@ -66,7 +66,7 @@ public class AccountService {
                           FeedbackRepository feedbackRepository,
                           EmailTokenRepository emailTokenRepository,
                           StoryRepository storyRepository,
-                          StoryViewRepository storyViewRepository,
+                          StoryLikeRepository storyLikeRepository,
                           ApiTokenRepository apiTokenRepository,
                           TossLinkCodeRepository tossLinkCodeRepository,
                           AuthorAffectionRepository affectionRepository,
@@ -85,7 +85,7 @@ public class AccountService {
         this.feedbackRepository = feedbackRepository;
         this.emailTokenRepository = emailTokenRepository;
         this.storyRepository = storyRepository;
-        this.storyViewRepository = storyViewRepository;
+        this.storyLikeRepository = storyLikeRepository;
         this.apiTokenRepository = apiTokenRepository;
         this.tossLinkCodeRepository = tossLinkCodeRepository;
         this.affectionRepository = affectionRepository;
@@ -155,9 +155,12 @@ public class AccountService {
      * 입력 핸들은 앞뒤 공백·선행 {@code @}·대소문자만 다른 건 같은 것으로 본다. LOCAL 계정에는 쓸 수 없다 —
      * LOCAL은 반드시 비밀번호 확인 경로({@link #deleteAccount})를 거쳐야 한다.
      *
-     * @param confirmHandle 사용자가 재확인용으로 입력한 @핸들(본인 login_id와 일치해야 함)
+     * <p><b>아직 핸들이 없는 계정</b>(온보딩 전 소셜 가입)은 <b>이메일</b>을 확인 값으로 받는다 — @핸들만
+     * 인정하면 입력할 값이 없어 화면으로 탈퇴할 방법이 사라진다(화면 안내도 같은 값을 보여준다).
+     *
+     * @param confirmHandle 사용자가 재확인용으로 입력한 값(본인 login_id, 핸들이 없으면 이메일과 일치해야 함)
      * @throws IllegalStateException                 사용자가 없거나, 대상이 LOCAL 계정인 경우
-     * @throws AccountDeletionConfirmationException   입력 핸들이 본인 login_id와 일치하지 않는 경우(삭제 안 함)
+     * @throws AccountDeletionConfirmationException   입력값이 본인 확인 값과 일치하지 않는 경우(삭제 안 함)
      */
     public void deleteSocialAccount(String email, String confirmHandle) {
         User user = load(email);
@@ -193,9 +196,13 @@ public class AccountService {
         purge(user);
     }
 
-    /** 입력 핸들을 정규화(공백 제거·선행 @ 제거·소문자)해 본인 login_id와 같은지 본다. login_id 미설정/입력 null이면 불일치. */
+    /**
+     * 입력값을 정규화(앞뒤 공백 제거·선행 {@code @} 제거·대소문자 무시)해 본인 확인 값과 같은지 본다.
+     * 확인 값은 <b>@핸들(login_id)</b>이되, 아직 핸들이 없으면(온보딩 전 소셜 계정) <b>이메일</b>이다 —
+     * 핸들에만 매달리면 그 계정은 입력할 값이 없어 탈퇴 자체가 불가능해진다. 입력이 null이면 불일치.
+     */
     private boolean handleMatches(User user, String confirmHandle) {
-        String actual = user.getLoginId();
+        String actual = user.getLoginId() != null ? user.getLoginId() : user.getEmail();
         if (actual == null || confirmHandle == null) {
             return false;
         }
@@ -203,15 +210,15 @@ public class AccountService {
         if (typed.startsWith("@")) {
             typed = typed.substring(1);
         }
-        return actual.equals(typed.toLowerCase(java.util.Locale.ROOT));
+        return actual.equalsIgnoreCase(typed);
     }
 
     /**
      * 연관 데이터까지 FK 순서로 제거: 세션(N) → 타이머(1:1) → 목표 변경 이력(N) → 용서권(N) → 팔로우(양방향) → 차단(양방향)
-     * → 신고(양방향) → 스토리 열람·스토리(N) → 책(N) → 책BTI 캐시(1) → … → 작가 정(N) → 유저 → 로그인 세션.
+     * → 신고(양방향) → 여백 글(N) → 책(N) → 책BTI 캐시(1) → … → 작가 정(N) → 유저 → 로그인 세션.
      * <p>모두 users를 FK 참조하므로 유저 삭제 전에 정리한다. 책은 {@code reading_session.book_id}가
      * book을 FK 참조하므로 <b>세션 이후</b>에 지운다(세션이 책을 가리키는 채로 책을 지우면 위반).
-     * 스토리도 같은 이유로 <b>책보다 앞</b>에 지운다({@code story.book_id}가 book을 참조).
+     * 여백 글도 같은 이유로 <b>책보다 앞</b>에 지운다({@code story.book_id}가 book을 참조).
      *
      * <p><b>여기서 하나라도 빠지면 그 자식을 가진 사용자는 탈퇴 자체가 실패한다</b> — 모든 FK가
      * {@code NO ACTION}(cascade 없음)이라 DB가 대신 지워 주지 않는다. 실제로 {@code author_affection}이
@@ -234,9 +241,9 @@ public class AccountService {
         blockRepository.deleteByBlocked(user);
         reportRepository.deleteByReporter(user);
         reportRepository.deleteByReported(user);
-        storyViewRepository.deleteByViewer(user);      // 내가 남긴 열람 기록
-        storyViewRepository.deleteByStoryAuthor(user); // 내 스토리에 달린 열람 기록 (스토리 삭제 전)
-        storyRepository.deleteByUser(user);            // 내 스토리 — story.book_id 때문에 책보다 앞
+        storyLikeRepository.deleteByUser(user);         // 내가 남에게 누른 좋아요 (story_like.user_id FK)
+        storyLikeRepository.deleteByStoryUser(user);    // 내 글에 달린 남의 좋아요 — 내 글보다 앞
+        storyRepository.deleteByUser(user);            // 내가 여백에 남긴 글 — story.book_id 때문에 책보다 앞
         bookRepository.deleteByUser(user);
         personalityCacheRepository.deleteByUser(user);       // 책BTI 캐시도 user_id FK 참조 → 유저 전에 정리
         feedbackRepository.deleteByAuthor(user);             // 문의도 author_id FK 참조 → 유저 전에 정리

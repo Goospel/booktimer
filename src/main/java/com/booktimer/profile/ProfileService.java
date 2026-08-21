@@ -98,7 +98,7 @@ public class ProfileService {
     }
 
     /**
-     * 소셜 가시성 가드 — 운영자·차단·없는 아이디를 한 곳에서 거른다. 프로필 조회·드릴다운·스토리가 동일 보장
+     * 소셜 가시성 가드 — 운영자·차단·없는 아이디를 한 곳에서 거른다. 프로필 조회·드릴다운·여백이 동일 보장
      * 공유(분기 금지 — {@code StoryService}가 재사용). 비어 있으면 호출부가 404로 변환해 존재 누설을 피한다.
      */
     public Optional<User> resolveVisibleTarget(User viewer, String loginId) {

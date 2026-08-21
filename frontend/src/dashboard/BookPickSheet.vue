@@ -151,7 +151,7 @@ onMounted(() => { overlayEl.value?.focus(); loadShelf() })
                         <span class="book-sheet-book-title">{{ row.title }}</span>
                         <span v-if="byline(row.author, row.publisher)" class="book-sheet-byline">{{ byline(row.author, row.publisher) }}</span>
                     </div>
-                    <span v-if="row.owned" class="book-sheet-owned">📚 있음</span>
+                    <span v-if="row.owned" class="book-sheet-owned">책장에 있어요</span>
                     <button v-else type="button" class="book-sheet-add-btn" :disabled="pending" @click="addRow(row)">담기</button>
                 </li>
             </ul>

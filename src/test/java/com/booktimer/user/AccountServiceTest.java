@@ -8,7 +8,6 @@ import com.booktimer.personality.ReadingPersonalityCacheRepository;
 import com.booktimer.report.ReportRepository;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.story.StoryRepository;
-import com.booktimer.story.StoryViewRepository;
 import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.timer.ReadingTimerRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -70,7 +69,7 @@ class AccountServiceTest {
     @Mock
     private StoryRepository storyRepository;
     @Mock
-    private StoryViewRepository storyViewRepository;
+    private com.booktimer.story.StoryLikeRepository storyLikeRepository;
     @Mock
     private com.booktimer.auth.ApiTokenRepository apiTokenRepository;
     @Mock
@@ -133,7 +132,7 @@ class AccountServiceTest {
 
         service.deleteAccount(EMAIL, "pw");
 
-        var ordered = inOrder(sessionRepository, timerRepository, goalChangeRepository, goalWaiverRepository, followRepository, blockRepository, reportRepository, storyViewRepository, storyRepository, bookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository, apiTokenRepository, tossLinkCodeRepository, userRepository);
+        var ordered = inOrder(sessionRepository, timerRepository, goalChangeRepository, goalWaiverRepository, followRepository, blockRepository, reportRepository, storyLikeRepository, storyRepository, bookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository, apiTokenRepository, tossLinkCodeRepository, userRepository);
         ordered.verify(sessionRepository).deleteByUser(user); // book FK 참조하는 세션 먼저
         ordered.verify(timerRepository).deleteByUser(user);
         ordered.verify(goalChangeRepository).deleteByUser(user);   // FK: 목표 변경 이력도 유저 전에 정리
@@ -144,9 +143,9 @@ class AccountServiceTest {
         ordered.verify(blockRepository).deleteByBlocked(user);
         ordered.verify(reportRepository).deleteByReporter(user);   // FK: 유저 삭제 전에 신고 관계 정리
         ordered.verify(reportRepository).deleteByReported(user);
-        ordered.verify(storyViewRepository).deleteByViewer(user);      // FK: 내가 남긴 열람 기록
-        ordered.verify(storyViewRepository).deleteByStoryAuthor(user); // FK: 내 스토리의 열람 기록(스토리 전)
-        ordered.verify(storyRepository).deleteByUser(user);            // FK: 스토리는 book 참조라 책보다 앞
+        ordered.verify(storyLikeRepository).deleteByUser(user);        // FK: 내가 남에게 누른 좋아요
+        ordered.verify(storyLikeRepository).deleteByStoryUser(user);   // FK: 내 글에 달린 좋아요 — 글보다 앞
+        ordered.verify(storyRepository).deleteByUser(user);            // FK: 여백의 글은 book 참조라 책보다 앞
         ordered.verify(bookRepository).deleteByUser(user);    // FK: 유저 삭제 전에 책 정리(세션·스토리 이후)
         ordered.verify(personalityCacheRepository).deleteByUser(user); // FK: 책BTI 캐시도 유저 전에 정리
         ordered.verify(feedbackRepository).deleteByAuthor(user);  // FK: 문의도 유저 전에 정리
@@ -263,12 +262,12 @@ class AccountServiceTest {
         service.deleteTossVerifiedAccount(toss, "uk-mine");
 
         var ordered = inOrder(sessionRepository, timerRepository, goalChangeRepository, goalWaiverRepository,
-                followRepository, blockRepository, reportRepository, storyViewRepository, storyRepository,
+                followRepository, blockRepository, reportRepository, storyLikeRepository, storyRepository,
                 bookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository,
                 apiTokenRepository, tossLinkCodeRepository, userRepository);
         ordered.verify(sessionRepository).deleteByUser(toss);
         ordered.verify(timerRepository).deleteByUser(toss);
-        ordered.verify(storyViewRepository).deleteByViewer(toss);
+        ordered.verify(storyLikeRepository).deleteByStoryUser(toss);   // FK: 좋아요가 글보다 앞
         ordered.verify(storyRepository).deleteByUser(toss);
         ordered.verify(bookRepository).deleteByUser(toss);
         // 미니앱 Bearer 토큰까지 지워야 탈퇴 즉시 그 토큰이 죽는다(계정만 지우면 토큰이 유령으로 남는다).

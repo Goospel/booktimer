@@ -339,6 +339,84 @@ class ReadingSessionRepositoryTest {
                 .extracting(User::getId).containsExactly(u.getId());
     }
 
+    // --- findTossNudgeTargets: 토스 푸시 재참여 넛지 대상 (이메일 동의·검증 대신 토스 연동 조건) ---
+
+    /** 토스 연동 여부·이메일 동의/검증 상태·마지막 활동/넛지 시각을 갖춘 사용자를 저장한다(토스 넛지 픽스처). */
+    private User tossNudgeUser(String email, String tossUserKey, boolean consent, boolean verified,
+                               Instant lastActivity, Instant lastNudge) {
+        User u = User.of(email, "$2a$10$abcdefghijklmnopqrstuv", "책벌레", "Asia/Seoul", Role.USER);
+        if (consent) {
+            u.consentToMarketing(CONSENT_CLK);
+        }
+        if (verified) {
+            u.verifyEmail();
+        }
+        if (tossUserKey != null) {
+            u.linkTossUserKey(tossUserKey);
+        }
+        if (lastNudge != null) {
+            u.recordNudgeSent(lastNudge);
+        }
+        u = userRepository.save(u);
+        if (lastActivity != null) {
+            sessionRepository.save(ReadingSession.start(u, lastActivity)); // 마지막 활동 = startedAt
+        }
+        return u;
+    }
+
+    @Test
+    @DisplayName("findTossNudgeTargets: 7일 경계 포함 — 정확히 cutoff에 마지막 활동한 토스 연동 사용자는 대상")
+    void findTossNudgeTargets_inactiveAtCutoff_isIncluded() {
+        User target = tossNudgeUser("tosstarget@booktimer.com", "tkey-target", true, true, CUTOFF, null);
+
+        assertThat(sessionRepository.findTossNudgeTargets(CUTOFF))
+                .extracting(User::getId).containsExactly(target.getId());
+    }
+
+    @Test
+    @DisplayName("findTossNudgeTargets: cutoff 이후 활동(최근 활성)은 제외 — 활성 사용자에게 스팸 금지")
+    void findTossNudgeTargets_activeAfterCutoff_excluded() {
+        tossNudgeUser("tossrecent@booktimer.com", "tkey-recent", true, true, CUTOFF.plusSeconds(1), null);
+
+        assertThat(sessionRepository.findTossNudgeTargets(CUTOFF)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("findTossNudgeTargets: 한 번도 안 읽은 토스 사용자는 제외 (온보딩 이탈 — null-state 누출 가드 N-055)")
+    void findTossNudgeTargets_neverRead_excluded() {
+        tossNudgeUser("tossneverread@booktimer.com", "tkey-never", true, true, null, null); // 세션 없음
+
+        assertThat(sessionRepository.findTossNudgeTargets(CUTOFF)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("findTossNudgeTargets: 토스 미연동(웹 전용) 사용자는 제외 — 발송할 채널이 없다")
+    void findTossNudgeTargets_noTossUserKey_excluded() {
+        tossNudgeUser("tossweb@booktimer.com", null, true, true, CUTOFF.minusSeconds(86400), null);
+
+        assertThat(sessionRepository.findTossNudgeTargets(CUTOFF)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("findTossNudgeTargets: 이 비활동 구간에 이미 넛지를 보냈으면 제외 (구간당 1회 멱등)")
+    void findTossNudgeTargets_alreadyNudgedThisPeriod_excluded() {
+        Instant lastActivity = CUTOFF.minusSeconds(86400);
+        tossNudgeUser("tossnudged@booktimer.com", "tkey-nudged", true, true,
+                lastActivity, lastActivity.plusSeconds(3600));
+
+        assertThat(sessionRepository.findTossNudgeTargets(CUTOFF)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("findTossNudgeTargets: 이메일 미동의·미검증이어도 토스 연동이면 대상 (이메일 조건 복사 금지 — 대상 0명 침묵 실패)")
+    void findTossNudgeTargets_emailUnconsentedAndUnverified_stillIncluded() {
+        User target = tossNudgeUser("tossnoemail@booktimer.com", "tkey-noemail", false, false,
+                CUTOFF.minusSeconds(86400), null);
+
+        assertThat(sessionRepository.findTossNudgeTargets(CUTOFF))
+                .extracting(User::getId).containsExactly(target.getId());
+    }
+
     // --- findByEndedAtIsNull / sumCompletedSeconds: 목표 달성 푸시 감지의 두 재료 ---
 
     @Test

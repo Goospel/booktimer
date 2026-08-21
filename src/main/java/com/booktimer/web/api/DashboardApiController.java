@@ -88,12 +88,13 @@ public class DashboardApiController {
                 .toList();
 
         return new DashboardResponse(
-                live.nickname(), live.loginId(),
+                live.nickname(), live.loginId(), user.getPreviousLoginId(),
                 user.getProfileCharacterCode(),
                 live.remainingSeconds(), live.carriedDebtSeconds(),
                 live.todayGoalSeconds(), live.carryover(),
                 live.hasActiveSession(), live.activeStartedAt(),
                 live.activeBookTitle(), live.activeBookTotalSeconds(),
+                toOption(live.activeBook()),
                 toOptions(live.readingBooks()), toOptions(live.finishedBooks()),
                 toOptions(live.wantToReadBooks()),
                 live.recentBookId(),
@@ -171,9 +172,14 @@ public class DashboardApiController {
         return TimerState.of(dashboardModel.computeLive(user), goalWaiverService.availableFor(user));
     }
 
+    /** 한 권짜리 — 측정 중인 책은 목록이 아니라 하나거나 없다. */
+    private static BookOption toOption(Book b) {
+        return b == null ? null : new BookOption(b.getId(), b.getTitle(), b.getCoverUrl(), b.getAuthor(), b.isPublic());
+    }
+
     private static List<BookOption> toOptions(List<Book> books) {
         return books.stream()
-                .map(b -> new BookOption(b.getId(), b.getTitle(), b.getCoverUrl(), b.getAuthor()))
+                .map(b -> new BookOption(b.getId(), b.getTitle(), b.getCoverUrl(), b.getAuthor(), b.isPublic()))
                 .toList();
     }
 
@@ -181,7 +187,9 @@ public class DashboardApiController {
         return new ContributionGraphDto(
                 g.weeks(), g.monthLabels(),
                 g.totalSeconds(), g.activeDays(), g.currentStreak(),
-                g.growthStage().name(), g.growthStage().emoji(), g.growthStage().label());
+                g.growthStage().name(), g.growthStage().emoji(), g.growthStage().label(),
+                g.growthProgressPercent(), g.daysToNextStage(),
+                g.growthStage().next() == null ? null : g.growthStage().next().label());
     }
 
     // ── DTO records ──────────────────────────────────────────────────────────
@@ -189,6 +197,12 @@ public class DashboardApiController {
     public record DashboardResponse(
             String nickname,
             String loginId,
+            /**
+             * 버리고 간 옛 @아이디 — {@code null}이면 평생 1회 변경권이 아직 남아 있다는 뜻이다.
+             * 미니앱 설정 화면이 이 한 필드로 「아이디 바꾸기」 버튼을 켜고 끄고, 소진 표시에 옛 값을 적는다.
+             * <b>본인 응답에만</b> 싣는다 — 프로필·검색에 넣으면 "저 사람이 아이디를 바꿨구나"가 새어 나간다.
+             */
+            String previousLoginId,
             String profileCharacterCode,
             long remainingSeconds,
             long carriedDebtSeconds,
@@ -198,6 +212,8 @@ public class DashboardApiController {
             Instant activeStartedAt,
             String activeBookTitle,
             long activeBookTotalSeconds,
+            /** 지금 측정 중인 책 — 미니앱 「읽는 중」 카드가 표지를 그리는 재료. 책 없이 측정·비측정이면 null. */
+            BookOption activeBook,
             List<BookOption> readingBooks,
             List<BookOption> finishedBooks,
             List<BookOption> wantToReadBooks,
@@ -241,6 +257,8 @@ public class DashboardApiController {
             Instant activeStartedAt,
             String activeBookTitle,
             long activeBookTotalSeconds,
+            /** 측정 중인 책 — <b>시작 응답에도</b> 실려야 누른 직후 카드가 빈 채로 서 있지 않는다. */
+            BookOption activeBook,
             List<BookOption> readingBooks,
             List<BookOption> finishedBooks,
             Long recentBookId,
@@ -253,6 +271,7 @@ public class DashboardApiController {
                     live.todayGoalSeconds(), live.carryover(),
                     live.hasActiveSession(), live.activeStartedAt(),
                     live.activeBookTitle(), live.activeBookTotalSeconds(),
+                    toOption(live.activeBook()),
                     toOptions(live.readingBooks()), toOptions(live.finishedBooks()),
                     live.recentBookId(), debtWaiverAvailable);
         }
@@ -263,8 +282,12 @@ public class DashboardApiController {
      *
      * <p>{@code coverUrl}·{@code author}는 손으로 넣은 책이면 {@code null}이다(검색 등록만 채운다) —
      * 클라이언트는 그때 첫 글자 자리 표지로 떨어뜨린다. 필드 추가는 하위호환(옛 클라이언트는 무시).
+     *
+     * <p>{@code isPublic}은 <b>게이트가 아니라 고지</b>용이다 — 홈에서 여백 작성으로 직행할 때
+     * 「비공개 책이에요, 이 글은 나만 봐요」를 띄우는 근거(2026-08-16 결정 2). 비공개 책이라고
+     * 캐러셀에서 빠지지 않는다.
      */
-    public record BookOption(Long id, String title, String coverUrl, String author) {}
+    public record BookOption(Long id, String title, String coverUrl, String author, boolean isPublic) {}
 
     public record QuoteDto(String text, String author) {}
 
@@ -279,6 +302,12 @@ public class DashboardApiController {
             int currentStreak,
             String growthStageName,
             String growthStageEmoji,
-            String growthStageLabel
+            String growthStageLabel,
+            /** 현재 단계 안의 진행률(0~100) — 기록 화면이 막대로 그린다. 최고 단계면 100. */
+            int growthProgressPercent,
+            /** 다음 단계까지 남은 연속 일수 — 최고 단계면 0. */
+            int daysToNextStage,
+            /** 다음 단계 이름 — 최고 단계면 {@code null}(더 오를 곳이 없다). */
+            String nextStageLabel
     ) {}
 }
