@@ -1125,11 +1125,13 @@ export function SearchResultRow({
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div>
-          <Text typography="st11">{row.title}</Text>
+          <Text typography="st11" style={clampLine}>
+            {row.title}
+          </Text>
         </div>
         <div style={{ marginTop: 4 }}>
-          <Text typography="st12" color="grey600">
-            {row.author ?? '저자 미상'}
+          <Text typography="st12" color="grey600" style={clampLine}>
+            {authorLine(row)}
           </Text>
         </div>
         {row.owned && (
@@ -1228,16 +1230,49 @@ function RecommendRow({
       <BookCover url={row.coverUrl} title={row.title} width={36} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div>
-          <Text typography="st11">{row.title}</Text>
+          <Text typography="st11" style={clampLine}>
+            {row.title}
+          </Text>
         </div>
         <div style={{ marginTop: 2 }}>
-          <Text typography="st12" color="grey600">
-            {row.author ?? '저자 미상'}
+          <Text typography="st12" color="grey600" style={clampLine}>
+            {authorLine(row)}
           </Text>
         </div>
       </div>
     </button>
   );
+}
+
+/**
+ * 목록 한 줄의 제목·저자 — <b>각각 한 줄로 자른다</b>.
+ *
+ * <p>실기기 제보(2026-08-21): 저자 40명짜리 책(「노벨라33 세트 - 전33권」)이 추천 카드 한 줄을 세로
+ * 900px로 부풀려 카드를 통째로 먹었다. 카드 창은 `calc(5 × --reco-row + --reco-peek)` = 「75px짜리 줄
+ * 5개 + 반 줄」인데 <b>줄 높이가 가정일 뿐 강제가 아니었다</b> — 줄 하나가 창보다 커지면 그 계산도,
+ * 반 줄이 말하던 「더 있다」 신호도 함께 죽는다. 서버가 세트를 걸러도 <b>제목·저자가 긴 다음 책</b>이
+ * 언제든 오므로, 높이는 데이터가 아니라 화면이 정해야 한다.
+ *
+ * <p>⚠️ <b>`-webkit-box` line-clamp를 쓰지 않는다</b> — TDS `Text`가 인라인 `display`를 자기 값으로
+ * 덮어써 죽는다(서재 격자 제목이 그래서 두 줄 자르기를 포기했다). `display: block` + `nowrap +
+ * ellipsis`는 같은 `Text`에서 이미 세 번 검증됐다(둘러보기·기록·홈).
+ */
+const clampLine = {
+  display: 'block',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+} as const;
+
+/**
+ * 목록에 그릴 저자 한 줄 — 서버가 줄여 준 축약본이 우선이다.
+ *
+ * <p>원문(`author`)으로 떨어지는 갈래는 <b>배포 순서 방어</b>다: 미니앱이 서버보다 먼저 나가면 옛 서버는
+ * `authorShort`를 안 준다. 그때 저자 줄이 빈칸이 되면 배포 순서에 화면이 의존하게 된다.
+ * 축약본이 `null`인 경우(글쓴이 없이 옮긴이만 있는 책)도 원문이 「저자 미상」보다 정보가 많다.
+ */
+function authorLine(row: SearchRow): string {
+  return row.authorShort ?? row.author ?? '저자 미상';
 }
 
 /** 담김 체크 — 기본 이모지를 쓰지 않기로 해서(2026-08-18) 선 하나로 그린다. 뜻은 옆 글자가 진다. */

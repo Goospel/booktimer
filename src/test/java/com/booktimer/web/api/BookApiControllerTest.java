@@ -205,6 +205,48 @@ class BookApiControllerTest {
         assertThat(row.owned()).isFalse();
     }
 
+    /**
+     * 목록 한 줄에 들어갈 저자 — 저자 40명짜리 책이 추천 카드 한 줄을 세로 900px로 부풀린 자리다
+     * (실기기 제보 2026-08-21). 표시는 짧게, <b>저장은 원문으로</b>.
+     */
+    @Test
+    @DisplayName("SearchRow.from: 표시용 authorShort는 대표 글쓴이로 줄인다")
+    void searchRowFrom_authorShort_isSummarized() {
+        var r = new BookSearchResult("전쟁과 평화 3",
+                "레프 니콜라예비치 톨스토이 (지은이), 연진희 (옮긴이)", "9788900000003", null, null, null, null, null);
+
+        var row = BookApiController.SearchRow.from(r, Set.of());
+
+        assertThat(row.authorShort()).isEqualTo("레프 니콜라예비치 톨스토이");
+    }
+
+    /**
+     * ⚠️ <b>이 테스트가 데이터 오염을 막는다.</b> 「담기」({@code POST /api/books})는 검색 행의
+     * {@code author}를 그대로 서버로 되돌려 <b>DB에 저장</b>한다(miniapp {@code addBook}). 그래서
+     * {@code author}를 축약해 버리면 그 책의 저자가 「미겔 데 세르반떼스 외 32명」으로 <b>영구 저장</b>된다.
+     * 축약은 반드시 <b>별도 표시 필드</b>여야 한다.
+     */
+    @Test
+    @DisplayName("SearchRow.from: author 원문은 그대로 남는다 — 담기가 이 값을 저장한다")
+    void searchRowFrom_author_keepsRaw() {
+        String raw = "레프 니콜라예비치 톨스토이 (지은이), 연진희 (옮긴이)";
+        var r = new BookSearchResult("전쟁과 평화 3", raw, "9788900000003", null, null, null, null, null);
+
+        var row = BookApiController.SearchRow.from(r, Set.of());
+
+        assertThat(row.author()).isEqualTo(raw);
+    }
+
+    @Test
+    @DisplayName("SearchRow.from: 글쓴이가 없으면 authorShort는 null — 폴백은 화면이 정한다")
+    void searchRowFrom_authorShort_nullWhenNoWriter() {
+        var r = new BookSearchResult("책", "김번역 (옮긴이)", "9788900000004", null, null, null, null, null);
+
+        var row = BookApiController.SearchRow.from(r, Set.of());
+
+        assertThat(row.authorShort()).isNull();
+    }
+
     // ── 6. CSRF 없음 → 403 ──────────────────────────────────────────────────
 
     @Test

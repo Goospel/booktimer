@@ -725,6 +725,36 @@ describe('책 추가 — 추천 카드', () => {
     expect(card(reco({ title: null, reason: null, results: [] }))).not.toContain('<section');
   });
 
+  /**
+   * 저자 40명짜리 책이 이 카드를 통째로 먹은 자리다(실기기 제보 2026-08-21). 서버가 세트를 걸러
+   * 이 책 자체는 이제 안 오지만, <b>제목·저자가 긴 다음 책이 언제든 온다</b> — 줄 높이는 데이터가
+   * 아니라 화면이 정해야 한다. 검색 결과 행과 같은 고침이고, 같은 이유로 둘 다 필요하다.
+   */
+  it('한 줄이 창을 넘지 못하게 제목·저자를 자른다 — 카드 높이가 데이터에 안 휘둘린다', () => {
+    const markup = card(
+      reco({
+        results: [
+          {
+            title: '노벨라33 세트 - 전33권',
+            author: '미겔 데 세르반떼스, 메리 셸리, 오노레 드 발자크, 알렉산드르 세르게예비치 푸시킨',
+            authorShort: '미겔 데 세르반떼스 외 3명',
+            isbn13: '9788972756194',
+            coverUrl: null,
+            publisher: '현대문학',
+            purchaseLink: null,
+            category: null,
+            pubDate: null,
+            owned: false,
+          },
+        ],
+      }),
+    );
+
+    expect(markup).toContain('미겔 데 세르반떼스 외 3명');
+    expect(markup).not.toContain('오노레 드 발자크'); // 축약본이 원문을 대신했다
+    expect((markup.match(/white-space:nowrap/g) ?? []).length).toBeGreaterThanOrEqual(2);
+  });
+
   it('제목이 있어도 책이 0권이면 안 그린다 — 머리만 남은 카드를 막는다', () => {
     const markup = card(reco({ results: [] }));
 
@@ -887,6 +917,63 @@ describe('검색 결과 — 이미 서재에 있는 책', () => {
         <SearchResultRow row={{ ...found, owned }} busy={busy} onPick={() => {}} />
       </TDSMobileProvider>,
     );
+
+  /**
+   * 목록 한 줄은 <b>높이가 고정</b>이어야 한다 — 실기기 제보(2026-08-21): 저자 40명짜리 책
+   * (「노벨라33 세트 - 전33권」)이 한 줄을 세로 900px로 부풀려 추천 카드를 통째로 먹었다.
+   *
+   * <p>카드 창은 `calc(5 × --reco-row + --reco-peek)` = 「75px짜리 줄 5개 + 반 줄」로 잡혀 있는데,
+   * <b>줄 높이는 가정일 뿐 강제가 아니었다</b>. 줄 하나가 창보다 커지면 그 계산도, 반 줄이 말하던
+   * 「더 있다」 신호도 함께 죽는다.
+   *
+   * <p>⚠️ 자르기를 TDS `Text`에 직접 걸지 않는다 — TDS가 인라인 `display`를 자기 값으로 덮어써
+   * `-webkit-box` line-clamp가 죽는다(서재 격자 제목이 그래서 두 줄 자르기를 포기했다). 감싸는
+   * `div`에 `nowrap + ellipsis`로 거는 것이 이 레포에서 검증된 방식이다.
+   */
+  it('제목과 저자를 각각 한 줄로 자른다 — 데이터가 줄 높이를 못 깨게', () => {
+    const markup = row(false);
+    const clamps = markup.match(/white-space:nowrap/g) ?? [];
+
+    expect(clamps.length).toBeGreaterThanOrEqual(2); // 제목 줄 + 저자 줄
+    expect(markup).toContain('text-overflow:ellipsis');
+  });
+
+  /**
+   * 표시는 짧게, <b>저장은 원문으로</b> — 「담기」가 이 행의 `author`를 그대로 서버로 보내 DB에
+   * 저장하므로, 축약본은 반드시 별도 필드(`authorShort`)여야 한다.
+   */
+  it('저자는 축약본을 그린다 — 원문은 담기용으로 그대로 둔다', () => {
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <SearchResultRow
+          row={{
+            ...found,
+            author: '레프 니콜라예비치 톨스토이 (지은이), 연진희 (옮긴이)',
+            authorShort: '레프 니콜라예비치 톨스토이',
+          }}
+          busy={false}
+          onPick={() => {}}
+        />
+      </TDSMobileProvider>,
+    );
+
+    expect(markup).toContain('레프 니콜라예비치 톨스토이');
+    expect(markup).not.toContain('옮긴이'); // 축약본이 원문을 대신했다
+  });
+
+  /**
+   * 미니앱과 서버는 따로 배포된다 — 미니앱이 먼저 나가면 옛 서버엔 `authorShort`가 없다.
+   * 그때 저자 줄이 빈칸이 되면 <b>배포 순서에 화면이 의존</b>하게 된다.
+   */
+  it('축약본이 없으면 원문으로 떨어진다 — 옛 서버에서도 저자가 빈칸이 되지 않는다', () => {
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <SearchResultRow row={{ ...found, author: '기시미 이치로' }} busy={false} onPick={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+    expect(markup).toContain('기시미 이치로');
+  });
 
   it('담긴 책엔 「서재에 있어요」 칩이 선다', () => {
     expect(row(true)).toContain('서재에 있어요');

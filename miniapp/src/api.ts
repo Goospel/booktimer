@@ -450,7 +450,18 @@ export interface MyBookSummary {
 /** `BookApiController.SearchRow` — `owned`는 서버가 계산해 주는 UI 표시용이라 추가 요청에 되돌려 보내지 않는다. */
 export interface SearchRow {
   title: string;
+  /**
+   * 알라딘 원문 — <b>담기가 이 값을 서버로 되돌려 저장한다</b>. 목록에 그릴 땐 {@link authorShort}를
+   * 쓴다: 여길 축약본으로 바꾸면 책 저자가 「미겔 데 세르반떼스 외 32명」으로 영구 저장된다.
+   */
   author: string | null;
+  /**
+   * 목록 표시용 한 줄(「이름」/「이름 외 N명」) — 서버가 대표 글쓴이로 줄여 준다.
+   *
+   * <p>선택 필드인 이유는 <b>배포 순서</b>다: 미니앱이 서버보다 먼저 나가면 옛 서버는 이 필드를 안 준다.
+   * 그때 저자 줄이 빈칸이 되지 않게 화면이 {@link author}로 떨어진다.
+   */
+  authorShort?: string | null;
   isbn13: string | null;
   coverUrl: string | null;
   publisher: string | null;
