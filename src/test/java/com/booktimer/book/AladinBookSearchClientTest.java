@@ -114,6 +114,40 @@ class AladinBookSearchClientTest {
     }
 
     @Test
+    @DisplayName("link의 &amp; 를 & 로 되돌린다 — 안 되돌리면 제휴 파라미터가 amp;ttbkey 로 읽혀 추적만 조용히 죽는다")
+    void parse_unescapesAmpersandInLink() {
+        // 알라딘 ItemSearch가 실제로 내려주는 형태(2026-08-22 운영 실측) — link 값에만 &amp; 가 섞여 온다.
+        String json = """
+                {
+                  "item": [
+                    {
+                      "title": "채식주의자",
+                      "isbn13": "9788936434595",
+                      "link": "https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=291370219&amp;ttbkey=k&amp;partner=openAPI&amp;start=api"
+                    },
+                    {
+                      "title": "이미 정상인 링크",
+                      "isbn13": "9788900000002",
+                      "link": "https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=2&ttbkey=k&partner=openAPI"
+                    }
+                  ]
+                }
+                """;
+
+        List<BookSearchResult> results = AladinBookSearchClient.parse(json, objectMapper);
+
+        // 핵심 — 알라딘이 실제로 읽는 파라미터 이름으로 복원돼야 한다. "&amp; 가 없다"만으로는
+        // 부족하다: 추적을 살리는 것은 ttbkey·partner 가 독립 파라미터로 서는 것이기 때문.
+        assertThat(results.get(0).purchaseLink())
+                .doesNotContain("&amp;")
+                .contains("&ttbkey=k")
+                .contains("&partner=openAPI");
+        // 이미 정상인 링크는 건드리지 않는다(이중 디코딩으로 &를 더 먹지 않는다).
+        assertThat(results.get(1).purchaseLink())
+                .isEqualTo("https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=2&ttbkey=k&partner=openAPI");
+    }
+
+    @Test
     @DisplayName("책BTI 입력 — categoryName(장르)·pubDate(출간일)를 매핑한다. 없는 항목은 null")
     void parse_mapsCategoryAndPubDate() {
         String json = """

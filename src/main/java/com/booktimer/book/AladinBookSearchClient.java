@@ -186,7 +186,7 @@ public class AladinBookSearchClient implements BookSearchClient {
                             text(item, "isbn13"),
                             text(item, "cover"),
                             text(item, "publisher"),
-                            text(item, "link"),
+                            unescapeAmp(text(item, "link")),
                             // 책BTI 입력 — 장르/출간일. 없으면 null(text(): 누락 필드 → null)
                             text(item, "categoryName"),
                             text(item, "pubDate")));
@@ -208,6 +208,23 @@ public class AladinBookSearchClient implements BookSearchClient {
         } catch (Exception e) {
             return 0;
         }
+    }
+
+    /**
+     * 알라딘이 {@code link} 값에 실어 보내는 {@code &amp;} 를 {@code &} 로 되돌린다.
+     *
+     * <p><b>안 되돌리면 제휴 추적만 조용히 죽는다.</b> 알라딘 ItemSearch/ItemLookUp의 JSON은 다른 필드는
+     * 멀쩡한데 {@code link} 만 HTML 엔티티로 인코딩해 준다(2026-08-22 운영 실측: 20건 전부, 항목당 4개).
+     * 그대로 저장하면 알라딘이 파라미터를 {@code amp;ttbkey}·{@code amp;partner} 로 읽어 제휴 식별에
+     * 실패하는데, <b>상품 페이지는 정상으로 뜨기 때문에 화면상 아무 증상이 없다</b> — 수수료만 0이 된다.
+     * 같은 링크를 {@code &} 와 {@code &amp;} 로 각각 열어 귀속 쿠키({@code partner=UID=…&pname=openAPI})가
+     * 심기는지 대조해 확인했다(전자만 심긴다).
+     *
+     * <p>범용 HTML 엔티티 디코더를 쓰지 않는 이유: 실측상 알라딘이 내보내는 엔티티는 {@code &amp;} 하나뿐이고
+     * 그것도 {@code link} 필드에만 나온다. {@code &lt;} 같은 것이 실제로 관측되면 그때 넓힌다.
+     */
+    static String unescapeAmp(String link) {
+        return link == null ? null : link.replace("&amp;", "&");
     }
 
     private static String text(JsonNode node, String field) {
