@@ -534,6 +534,21 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
         CoupangDeeplinkSignerTest(openssl 독립 HMAC 벡터)·CoupangDeeplinkPropertiesTest(키+subId 게이트)·
         CoupangDeeplinkClientTest(MockRestServiceServer)·CoupangBookServiceTest 확장(딥링크 성공/실패 폴백 2케이스 추가)·
         기존 CoupangBuyControllerTest 4케이스 회귀 유지.
+      - **알라딘도 추적 0이었다 → `&amp;` 되돌리기 ✅ 2026-08-22**: 미니앱에 구매 흐름을 붙일 수 있는지
+        조사하다 모바일 귀속을 실측했고, 그 김에 **알라딘 제휴가 점등 이래 통째로 무추적이었음**을 발견했다
+        (운영 DB 실측: 제휴 링크를 가진 책 **47권 중 47권이 깨짐 · 정상 0권 · 클릭 22회 전부 무추적**,
+        최초 2026-06-05 ~ 최근 2026-08-13) — 알라딘 API가 응답 JSON의 **`link` 필드만** `&`를 `&amp;`로 인코딩해 주는데(20개 항목 전부,
+        다른 필드는 0건) 파싱이 그대로 저장해, 알라딘이 파라미터를 `amp;ttbkey`·`amp;partner`로 읽어 제휴 식별에
+        실패한다. **상품 페이지는 정확히 뜨므로 화면 증상이 0**이고 수수료만 죽는다(위 쿠팡 「추적 0」과 같은 클래스의
+        무성 실패지만, 그쪽은 리포트에 클릭 0으로 드러난 반면 이건 리포트를 봐도 트래픽 부족과 구분되지 않는다).
+        `AladinBookSearchClient.parse()`에 `unescapeAmp()` 1회 — 검색·ItemList·ItemLookUp·백필이 모두 이 메서드
+        하나를 지나 진입점 전체가 덮인다 — 와 기존 저장분 일괄 치환(Flyway V76). ⚠️ **백필은 이걸 원리상 못 걷어낸다**:
+        백필 대상 조회가 `'ttbkey='` 포함 여부로 "이미 제휴링크가 실렸다"를 판정하는데 `&amp;ttbkey=`에도 그
+        문자열이 있어 전부 건너뛴다. **판정 기준을 「페이지가 뜨는가」에서 「귀속 쿠키가 심기는가」로 바꾼 것이
+        발견의 전부다.** 부수 소득: 알라딘은 **모바일 UA에서도 귀속이 살아 있다**(iPhone·Android 둘 다
+        `m/mproduct.aspx`의 같은 상품 착지 + `partner` 쿠키) — 목적지를 모바일 메인으로 갈아치우는 Yes24(T-128)와
+        정반대라, 미니앱(100% 모바일)에 구매 링크를 붙일 근거가 됐다. TDD: AladinBookSearchClientTest에 엔티티
+        복원 + 정상 링크 불변(이중 디코딩 금지) 단언. 상세는 T-202.
         - **⚠️ 다중 에이전트 코드리뷰로 발견 → 버튼 노출을 딥링크 키에서 분리 (같은 날 후속 수정)**: 위 구현이
           `CoupangLinkBuilder.isEnabled()`(버튼·고지문구 노출)를 딥링크 API 키 게이트에 그대로 묶어, 파트너 가입은
           이미 완료(2026-06-12, #319)돼 운영에 떠 있던 버튼이 **키 미발급 상태 그대로 배포하면 사라지는 회귀**가
