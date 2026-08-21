@@ -18,12 +18,12 @@
     "test:e2e": "playwright test"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1",
+    "@playwright/test": "^1.62.1",
     "@vitejs/plugin-vue": "^6",
     "@vue/test-utils": "^2",
     "cross-env": "^7",
     "jsdom": "^26",
-    "sharp": "^0.35.2",
+    "sharp": "^0.35.3",
     "typescript": "^5",
     "vite": "^6",
     "vitest": "^4",
