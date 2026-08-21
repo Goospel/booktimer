@@ -554,6 +554,26 @@ const searchRows: SearchRow[] = [
   },
 ];
 
+/** 추천 픽스처 — 창(4.5줄)보다 길어야 「테두리 안에서 굴러가는가」를 눈으로 볼 수 있다. */
+const recommendRows: SearchRow[] = [
+  ['망원동 브라더스', '2013-04-05'],
+  ['고스트라이터즈', '2017-06-15'],
+  ['파우스터', '2019-10-25'],
+  ['연적', '2015-08-20'],
+  ['나의 돈키호테', '2024-01-10'],
+  ['김호연의 작업실', '2023-05-30'],
+].map(([title, pubDate], i) => ({
+  title,
+  author: '김호연',
+  isbn13: `978899412072${i}`,
+  coverUrl: null,
+  publisher: '나무옆의자',
+  purchaseLink: null,
+  category: '소설',
+  pubDate,
+  owned: false,
+}));
+
 // ── 라우팅 ──────────────────────────────────────────────────────────────────
 
 interface Ctx {
@@ -699,6 +719,13 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     const q = String(query.q ?? '').trim();
     return { results: q === '' ? [] : searchRows.filter((r) => r.title.includes(q) || (r.author ?? '').includes(q)) };
   }],
+  // 추천 — 서버가 제목·근거를 문장으로 만들어 주는 계약 그대로. 콜드스타트(title: null)를 보려면
+  // 아래 목록을 비우면 된다 — 그러면 화면이 카드를 아예 안 그리는지 눈으로 확인할 수 있다.
+  ['GET', /^\/api\/books\/recommend$/, () => ({
+    title: '김호연의 다른 책',
+    reason: '『불편한 편의점』을 읽으셨네요',
+    results: recommendRows,
+  })],
   ['POST', /^\/api\/books$/, ({ body }) => {
     // 같은 ISBN은 기존 책을 그대로 준다(서버 멱등 계약).
     const existing = books.find((b) => b.isbn13 !== null && b.isbn13 === body.isbn13);

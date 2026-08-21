@@ -1,6 +1,8 @@
 package com.booktimer.web.api;
 
 import com.booktimer.book.Book;
+import com.booktimer.book.BookRecommendation;
+import com.booktimer.book.BookRecommendationService;
 import com.booktimer.book.BookSearchResult;
 import com.booktimer.book.BookSearchType;
 import com.booktimer.book.BookService;
@@ -48,6 +50,7 @@ public class BookApiController {
 
     private final CurrentUserService currentUserService;
     private final BookService bookService;
+    private final BookRecommendationService recommendationService;
     private final BookReadingStatsService statsService;
     private final FollowScopePopularityService popularityService;
     private final StoryRepository storyRepository;
@@ -56,6 +59,7 @@ public class BookApiController {
     private final KyoboLinkBuilder kyoboLinkBuilder;
 
     public BookApiController(CurrentUserService currentUserService, BookService bookService,
+                             BookRecommendationService recommendationService,
                              BookReadingStatsService statsService,
                              FollowScopePopularityService popularityService,
                              StoryRepository storyRepository,
@@ -64,6 +68,7 @@ public class BookApiController {
                              KyoboLinkBuilder kyoboLinkBuilder) {
         this.currentUserService = currentUserService;
         this.bookService = bookService;
+        this.recommendationService = recommendationService;
         this.statsService = statsService;
         this.popularityService = popularityService;
         this.storyRepository = storyRepository;
@@ -106,6 +111,24 @@ public class BookApiController {
         Map<String, FollowScopePopularity> pop = popularityService.countByIsbn(user,
                 result.results().stream().map(BookSearchResult::isbn13).toList());
         return new SearchResponse(rows, toPopularityMap(pop));
+    }
+
+    /**
+     * 「책 추가」 화면의 추천 — 검색 결과가 없을 때만 화면이 그린다.
+     *
+     * <p>어느 전략으로 뽑혔는지는 <b>알려주지 않는다</b>. 화면은 {@code title}·{@code reason}을 그대로
+     * 그리므로 전략이 늘어도 클라이언트는 안 바뀐다. 뽑을 것이 없으면 title이 null이고 화면은 카드를 안 그린다.
+     */
+    @GetMapping("/api/books/recommend")
+    public RecommendResponse recommend(Principal principal) {
+        User user = currentUserService.resolve(principal);
+        BookRecommendation rec = recommendationService.recommendFor(user);
+        // 서버가 이미 내 책을 걸렀지만 owned를 계산해 준다 — 화면이 검색 결과와 **같은 행**을 쓰기 때문이다
+        // (isbn 없는 책은 판정 불가라 걸러지지 않으므로, 그 경우 화면이 형태로 말할 길이 남아 있어야 한다).
+        Set<String> myIsbns = bookService.myBooks(user).stream()
+                .map(Book::getIsbn13).filter(Objects::nonNull).collect(Collectors.toSet());
+        List<SearchRow> rows = rec.books().stream().map(r -> SearchRow.from(r, myIsbns)).toList();
+        return new RecommendResponse(rec.title(), rec.reason(), rows);
     }
 
     // ── 뮤테이션: 추가(검색결과/수동 공용) ───────────────────────────────────
@@ -219,6 +242,9 @@ public class BookApiController {
                                 List<MyBookSummary> books, Map<String, Popularity> popularity) {}
 
     public record SearchResponse(List<SearchRow> results, Map<String, Popularity> popularity) {}
+
+    /** 추천 응답 — 제목·근거는 서버가 문장으로 만들어 준다(화면은 전략을 모른다). */
+    public record RecommendResponse(String title, String reason, List<SearchRow> results) {}
 
     public record AddRequest(String title, String author, String isbn13, String coverUrl,
                              String publisher, String purchaseLink, String category, String pubDate,

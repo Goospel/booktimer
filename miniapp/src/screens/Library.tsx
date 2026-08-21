@@ -2,12 +2,13 @@ import { Button, Text } from '@toss/tds-mobile';
 import type { CSSProperties } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 
-import type { BookStatus, MarginResponse, MyBookSummary, SearchRow } from '../api';
+import type { BookStatus, MarginResponse, MyBookSummary, Recommendation, SearchRow } from '../api';
 import {
   addBook,
   changeBookStatus,
   deleteBook,
   fetchBookMargin,
+  fetchRecommendation,
   fetchShelf,
   searchBooks,
   setBookVisibility,
@@ -15,7 +16,17 @@ import {
 import { useBackClose } from '../back';
 import { Coachmark } from '../coachmark';
 import { formatDuration } from '../format';
-import { BookCover, ErrorMessage, Loading, PENCIL_FRAME, Screen, SearchField, SectionTitle, Sheet } from '../ui';
+import {
+  BookCover,
+  ErrorMessage,
+  Loading,
+  PENCIL_FRAME,
+  Screen,
+  SearchField,
+  SectionTitle,
+  Sheet,
+  sectionStyle,
+} from '../ui';
 import { BookCarousel } from './Home';
 import { MarginCard } from './Story';
 
@@ -902,6 +913,22 @@ export function BookSearch({
   const [searching, setSearching] = useState(false);
   /** 담을 곳을 고르는 중인 책 — 없으면 시트도 없다(진입 직후 화면을 덮지 않는다, T-183). */
   const [picking, setPicking] = useState<SearchRow | null>(null);
+  /** 추천 — 늦게 와도 검색을 막지 않는다. 실패는 「추천 없음」으로 흡수한다(있으면 좋은 것이다). */
+  const [reco, setReco] = useState<Recommendation | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetchRecommendation()
+      .then((r) => {
+        if (alive) setReco(r);
+      })
+      .catch(() => {
+        // 조용히 접는다 — 추천이 없다고 「책 추가」가 실패한 것처럼 보이면 안 된다.
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // 열린 시트는 뒤로가기가 먼저 먹는다 — 없으면 고르다 만 시트가 검색 화면째로 닫힌다(서재 시트와 같다).
   useBackClose(picking !== null, () => setPicking(null));
@@ -928,6 +955,11 @@ export function BookSearch({
       />
 
       <ErrorMessage message={error} />
+
+      {/* 아직 검색하지 않았을 때만 추천을 세운다 — 둘이 같은 화면에 있으면 무엇이 결과인지 흐려진다. */}
+      {results === null && reco !== null && (
+        <RecommendCard data={reco} busy={busy} onPick={(row) => setPicking(row)} />
+      )}
 
       {results !== null && results.length === 0 && (
         <Text typography="st11" color="grey600" style={{ display: 'block', marginTop: 20 }}>
@@ -1022,6 +1054,103 @@ export function SearchResultRow({
             서재에 있어요
           </span>
         )}
+      </div>
+    </button>
+  );
+}
+
+/**
+ * 추천 카드 — 검색 버튼을 걷고 남은 자리를 채운다(2026-08-21). 사용자 지적:
+ * 「책 추가하기 버튼 누르면 이동하는 페이지가 너무 비어보여」(실측 460px · 화면의 55%가 빈 종이였다).
+ *
+ * <p>제목·근거 문장은 <b>서버가</b> 만든다 — 화면은 어느 전략(내 저자 / 베스트셀러)으로 뽑혔는지 모른 채
+ * 라벨을 그대로 그린다. 그래서 서버가 전략을 늘려도 여기는 안 바뀐다.
+ *
+ * <p>⚠️ <b>안쪽 행은 카드를 쓰지 않는다.</b> 카드지(`#FCFAF5`)가 이미 명도 위쪽 끝이라 안쪽 행을 채우면
+ * 어두워지는 방향밖에 없는데, 그 방향엔 <b>이미 「서재에 있어요」 톤(`#EFE9DC`)이 자리를 잡고 있다</b> —
+ * 채운 행은 「지나간 칸」으로 읽힌다. 그래서 배경 없이 실선으로만 나눈다.
+ *
+ * <p>목록은 카드 <b>안에서</b> 굴러간다(`.reco-list`). 잘린 반 줄이 「더 있다」를 말하므로 페이드를
+ * 얹지 않는다 — 페이드는 그 신호를 지우는 짓이다.
+ */
+export function RecommendCard({
+  data,
+  busy,
+  onPick,
+}: {
+  data: Recommendation;
+  busy: boolean;
+  onPick: (row: SearchRow) => void;
+}) {
+  // 머리만 남은 카드를 세우지 않는다 — 빈 카드는 없느니만 못하다.
+  if (data.title === null || data.results.length === 0) {
+    return null;
+  }
+  return (
+    <section style={sectionStyle}>
+      <SectionTitle>{data.title}</SectionTitle>
+      {data.reason !== null && (
+        <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
+          {data.reason}
+        </Text>
+      )}
+      <div className="reco-list" style={{ marginTop: 4 }}>
+        {data.results.map((row, index) => (
+          <RecommendRow
+            key={row.isbn13 ?? `${row.title}-${index}`}
+            row={row}
+            first={index === 0}
+            busy={busy}
+            onPick={() => onPick(row)}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** 추천 한 줄 — 탭하면 검색 결과와 <b>같은 시트</b>(어디에 담을지)가 열린다. 새 흐름을 만들지 않는다. */
+function RecommendRow({
+  row,
+  first,
+  busy,
+  onPick,
+}: {
+  row: SearchRow;
+  first: boolean;
+  busy: boolean;
+  onPick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={busy || row.owned}
+      onClick={onPick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        width: '100%',
+        padding: '12px 0',
+        border: 0,
+        borderTop: first ? 0 : '1px solid rgba(107,101,92,0.18)',
+        background: 'transparent',
+        textAlign: 'left',
+        font: 'inherit',
+        color: 'inherit',
+        cursor: 'pointer',
+      }}
+    >
+      <BookCover url={row.coverUrl} title={row.title} width={36} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div>
+          <Text typography="st11">{row.title}</Text>
+        </div>
+        <div style={{ marginTop: 2 }}>
+          <Text typography="st12" color="grey600">
+            {row.author ?? '저자 미상'}
+          </Text>
+        </div>
       </div>
     </button>
   );

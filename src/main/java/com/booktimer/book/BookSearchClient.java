@@ -1,5 +1,6 @@
 package com.booktimer.book;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -26,6 +27,16 @@ public interface BookSearchClient {
      * @param page  1-based 페이지 번호
      */
     BookSearchPage search(String query, BookSearchType type, int page);
+
+    /**
+     * 지금 많이 읽히는 책 한 묶음 — 「책 추가」 화면 추천의 <b>콜드스타트</b>용(알라딘 ItemList/Bestseller).
+     *
+     * <p>{@link #search}가 "이 사람이 읽은 저자"를 근거로 삼는 것과 달리 여기엔 근거가 없다. 서재가 비었거나
+     * 저자를 못 고른 사람에게도 화면이 비지 않게 하는 것이 유일한 목적이라, 질의어를 받지 않는다.
+     *
+     * <p>비활성(키 없음)이거나 외부 오류면 빈 목록 — 호출자는 추천을 포기하고 화면은 카드를 안 그린다.
+     */
+    List<BookSearchResult> bestsellers();
 
     /**
      * ISBN-13으로 책 한 건의 카탈로그 메타(장르·출간일 등)를 조회한다 — 기존 책 백필용(알라딘 ItemLookUp).
