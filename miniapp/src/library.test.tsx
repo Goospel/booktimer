@@ -2,7 +2,7 @@ import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import type { BookStatus, MarginEntry, MarginResponse, MyBookSummary, SearchRow } from './api';
+import type { BookStatus, MarginEntry, MarginResponse, MyBookSummary, Recommendation, SearchRow } from './api';
 import { dismissCoachmark, setCoachmarkWalking } from './coachmark';
 import type { LibrarySheet } from './screens/Library';
 import {
@@ -11,6 +11,7 @@ import {
   BookGrid,
   BookSearch,
   MarginBoxView,
+  RecommendCard,
   SearchResultRow,
   Shelf,
   marginBoxView,
@@ -604,6 +605,66 @@ describe('책 검색 손잡이', () => {
 
   it('아이콘 손잡이에 이름이 붙어 있다 — 그림뿐인 버튼은 읽어 줄 이름이 없다', () => {
     expect(search()).toContain('aria-label="검색"');
+  });
+});
+
+/**
+ * 추천 카드 — 검색 버튼을 걷고 남은 자리를 채운다(2026-08-21). 사용자 지적:
+ * 「책 추가하기 버튼 누르면 이동하는 페이지가 너무 비어보여」(실측 460px · 화면의 55%가 빈 종이였다).
+ *
+ * <p>제목·근거 문장은 <b>서버가</b> 만든다 — 화면은 어느 전략(내 저자 / 베스트셀러)으로 뽑혔는지 모른 채
+ * 라벨을 그대로 그린다. 그래서 여기서 재는 것도 「받은 것을 그리는가」와 <b>「없을 때 안 그리는가」</b>다.
+ *
+ * <p>⚠️ {@code BookSearch} 안에서가 아니라 <b>카드를 직접</b> 렌더해 잰다 — 이 하니스는 정적 렌더라
+ * effect가 안 돌아 추천 응답이 영영 도착하지 않는다({@code SearchResultRow}를 꺼낸 것과 같은 사정).
+ * 그래서 「검색 결과가 뜨면 추천을 숨긴다」는 배선은 여기서 볼 수 없다 — 실브라우저 게이트가 맡는다.
+ */
+describe('책 추가 — 추천 카드', () => {
+  const reco = (over: Partial<Recommendation> = {}): Recommendation => ({
+    title: '김호연의 다른 책',
+    reason: '『불편한 편의점』을 읽으셨네요',
+    results: [
+      {
+        title: '망원동 브라더스',
+        author: '김호연',
+        isbn13: '9788994120720',
+        coverUrl: null,
+        publisher: '나무옆의자',
+        purchaseLink: null,
+        category: '소설',
+        pubDate: '2013-04-05',
+        owned: false,
+      },
+    ],
+    ...over,
+  });
+
+  const card = (data: Recommendation) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <RecommendCard data={data} busy={false} onPick={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  it('서버가 준 제목·근거·책을 그대로 그린다 — 「왜 이 책인가」가 안 보이면 추천이 광고로 읽힌다', () => {
+    const markup = card(reco());
+
+    expect(markup).toContain('김호연의 다른 책');
+    expect(markup).toContain('『불편한 편의점』을 읽으셨네요');
+    expect(markup).toContain('망원동 브라더스');
+  });
+
+  // 「아무것도 안 그린다」를 빈 문자열로 재면 안 된다 — Provider가 전역 <style>을 늘 뱉으므로 영영 실패한다.
+  // 카드의 몸통인 <section>이 없는지를 본다.
+  it('뽑을 것이 없으면 카드를 아예 안 그린다 — 제목만 있는 빈 카드가 서면 없느니만 못하다', () => {
+    expect(card(reco({ title: null, reason: null, results: [] }))).not.toContain('<section');
+  });
+
+  it('제목이 있어도 책이 0권이면 안 그린다 — 머리만 남은 카드를 막는다', () => {
+    const markup = card(reco({ results: [] }));
+
+    expect(markup).not.toContain('<section');
+    expect(markup).not.toContain('김호연의 다른 책');
   });
 });
 

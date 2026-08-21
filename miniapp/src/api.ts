@@ -466,6 +466,20 @@ export const fetchShelf = (): Promise<ShelfResponse> => request('/api/books');
 export const searchBooks = (q: string): Promise<{ results: SearchRow[] }> =>
   request('/api/books/search', { query: { q } });
 
+/**
+ * 「책 추가」 화면의 추천 — 제목·근거를 <b>서버가 문장으로</b> 만들어 준다.
+ *
+ * <p>어느 전략(내 저자 / 베스트셀러)으로 뽑혔는지는 알려주지 않는다. 화면은 라벨을 그대로 그리므로
+ * 서버가 전략을 늘려도 여기는 안 바뀐다. 뽑을 것이 없으면 `title`이 null — 그러면 카드를 그리지 않는다.
+ */
+export interface Recommendation {
+  title: string | null;
+  reason: string | null;
+  results: SearchRow[];
+}
+
+export const fetchRecommendation = (): Promise<Recommendation> => request('/api/books/recommend');
+
 /** 같은 ISBN을 이미 가졌으면 서버가 새 행을 만들지 않고 기존 책을 돌려준다(멱등). */
 export const addBook = (row: SearchRow, status: BookStatus): Promise<MyBookSummary> =>
   request('/api/books', {
