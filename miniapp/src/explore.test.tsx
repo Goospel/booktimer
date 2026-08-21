@@ -115,6 +115,19 @@ describe('둘러보기 화면의 검색', () => {
     expect(screen(null)).toContain('aria-label="검색"');
   });
 
+  /**
+   * 손잡이가 칸 <b>안</b>으로 들어갔다(2026-08-21) — 「책 추가」와 같은 변경이다. 두 화면이 같은
+   * `SearchField`를 쓰므로, 한쪽만 고쳐 앱 안에 검색이 두 모양으로 남는 것을 여기서 막는다.
+   */
+  it('칸 아래 전폭 「검색」 버튼이 없다 — 「책 추가」와 같은 모양이어야 한다', () => {
+    expect(screen(null)).not.toMatch(/>검색</);
+  });
+
+  it('키보드 엔터키가 「검색」이라고 적힌다 — 「완료」로는 눌러도 되는지 알 수 없다', () => {
+    // 대소문자 무시 — 정적 렌더는 `enterKeyHint`, 브라우저 DOM은 `enterkeyhint`다(library.test 주석 참조).
+    expect(screen(null)).toMatch(/enterkeyhint="search"/i);
+  });
+
   it('0건이면 두 글자 이상으로 다시 찾으라고 알린다 — 서버가 1글자를 빈 결과로 주므로 문구가 유일한 안내다', () => {
     expect(screen([])).toContain('두 글자 이상');
   });
