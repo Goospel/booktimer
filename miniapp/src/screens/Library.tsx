@@ -926,7 +926,7 @@ export function BookSearch({
         <TextField
           variant="box"
           label="책 제목"
-          placeholder="예: 자바 최적화"
+          placeholder="책 이름을 적어주세요"
           value={query}
           disabled={busy || searching}
           onChange={(e) => setQuery(e.target.value)}
