@@ -13,10 +13,12 @@ import type {
   UserRow,
 } from './api';
 import { ApiError, adRefreshPersonality, selectPersonality } from './api';
+import { cacheClear, cacheKeyProfile, cacheKeyProfileBooks, cachePut } from './cache';
 import { Bookshop, BookshopHeader, FollowListSheet, HandleSheet } from './screens/Bookshop';
 import { UserList } from './ui';
 import {
   ArchiveSheet,
+  Profile,
   BIO_CLAMP_CHARS,
   FollowCountButton,
   ProfileCard,
@@ -1195,5 +1197,47 @@ describe('dev-mock 보관함 계약', () => {
     const selected = (await mockRequest<PersonalityStatus>('/api/personality/status')).entries ?? [];
 
     expect(selected.filter((e) => e.selected).map((e) => e.id)).toEqual([target.id]);
+  });
+});
+
+/**
+ * 책방 세션 캐시 — 헤더·격자가 두 왕복(`fetchProfile` + `fetchProfileBooks`)을 기다리며 통째로 로딩이던 자리.
+ * 사람마다 키가 달라(`profile:{loginId}`) 남의 책방 캐시가 내 화면에 설 수 없다.
+ */
+describe('책방 세션 캐시 (Profile)', () => {
+  beforeEach(cacheClear);
+
+  const renderMounted = (loginId = 'goospel') =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Profile loginId={loginId} onError={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  it('캐시가 비면 지금처럼 로딩부터다 — 캐시는 없던 데이터를 지어내지 않는다', () => {
+    const markup = renderMounted();
+
+    expect(markup).toContain('불러오는 중');
+    expect(markup).not.toContain('구스펠');
+  });
+
+  it('지난 책방이 캐시에 있으면 첫 렌더부터 헤더와 격자가 선다', () => {
+    cachePut(cacheKeyProfile('goospel'), profile({ self: true }));
+    cachePut(cacheKeyProfileBooks('goospel'), [book(1, '데미안')]);
+
+    const markup = renderMounted();
+
+    expect(markup).toContain('구스펠');
+    expect(markup).toContain('데미안');
+    expect(markup).not.toContain('불러오는 중');
+  });
+
+  it('남의 책방 캐시는 내 화면에 안 선다 — 키에 loginId가 박혀 있다', () => {
+    cachePut(cacheKeyProfile('nabi'), profile({ nickname: '여느밤', loginId: 'nabi' }));
+
+    const markup = renderMounted('goospel');
+
+    expect(markup).not.toContain('여느밤');
+    expect(markup).toContain('불러오는 중');
   });
 });

@@ -2,7 +2,7 @@ import { Button, Text } from '@toss/tds-mobile';
 import type { CSSProperties } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 
-import type { BookStatus, MarginResponse, MyBookSummary, Recommendation, SearchRow } from '../api';
+import type { BookStatus, MarginResponse, MyBookSummary, Recommendation, SearchRow, ShelfResponse } from '../api';
 import {
   addBook,
   changeBookStatus,
@@ -14,6 +14,7 @@ import {
   setBookVisibility,
 } from '../api';
 import { useBackClose } from '../back';
+import { CACHE_SHELF, cacheGet, cacheKeyMargin, cachePut } from '../cache';
 import { Coachmark } from '../coachmark';
 import { formatDuration } from '../format';
 import {
@@ -184,12 +185,15 @@ function MarginBox({
     const timer = setTimeout(() => {
       fetchBookMargin(loginId, bookId)
         .then((margin) => {
+          // stale이어도 캐시에는 넣는다 — 키에 그 책의 id가 박혀 있어 남의 자리를 오염시킬 수 없고,
+          // 이미 지나쳐 온 책으로 되돌아왔을 때 그게 곧 즉시 렌더다.
+          cachePut(cacheKeyMargin(loginId, bookId), { bookId, margin } satisfies MarginSnap);
           if (!stale) setSnap({ bookId, margin });
         })
         .catch((e: Error) => {
           if (stale) return;
           if (e.name === 'UnauthorizedError') onError(e);
-          else setSnap({ bookId, margin: null });
+          else setSnap({ bookId, margin: null }); // 실패 스냅은 캐시에 안 넣는다 — 에러가 고착되면 안 된다
         });
     }, MARGIN_FETCH_DEBOUNCE_MS);
     return () => {
@@ -198,7 +202,14 @@ function MarginBox({
     };
   }, [loginId, bookId, onError]);
 
-  return <MarginBoxView view={marginBoxView(snap, bookId)} now={Date.now()} onOpenAll={onOpenAll} />;
+  /*
+   * 캐시는 **렌더 중에** 고른다(effect 아님). `snap`은 「이 화면이 방금 받아온 응답」만 들고, 지금 책 것이
+   * 아니면 무시하고 캐시를 본다 — 그래서 `bookId`가 바뀔 때 state를 갈아끼우는 배선이 아예 필요 없다.
+   * effect로 갈아끼우면 페인트 뒤에 도는 탓에 캐러셀을 옮길 때마다 「불러오는 중…」이 한 프레임 깜빡인다.
+   */
+  const shown = snap?.bookId === bookId ? snap : (cacheGet<MarginSnap>(cacheKeyMargin(loginId, bookId)) ?? null);
+
+  return <MarginBoxView view={marginBoxView(shown, bookId)} now={Date.now()} onOpenAll={onOpenAll} />;
 }
 
 /**
@@ -307,8 +318,13 @@ export function Library({
    */
   onComposeMargin: (book: MyBookSummary) => void;
 }) {
-  const [books, setBooks] = useState<MyBookSummary[] | null>(null);
-  const [searchEnabled, setSearchEnabled] = useState(false);
+  /*
+   * 첫 렌더의 출발점을 세션 캐시에서 집는다 — 탭을 오갈 때마다 화면이 통째로 `<Loading/>`이 되던 자리다.
+   * 재검증(`useEffect(load)`)은 그대로 매번 나가므로 stale 노출은 최대 1 왕복이다.
+   */
+  const cachedShelf = cacheGet<ShelfResponse>(CACHE_SHELF);
+  const [books, setBooks] = useState<MyBookSummary[] | null>(cachedShelf?.books ?? null);
+  const [searchEnabled, setSearchEnabled] = useState(cachedShelf?.searchEnabled ?? false);
   const [mode, setMode] = useState<'shelf' | 'search'>('shelf');
   const [tab, setTab] = useState<BookStatus>('READING');
   /** 캐러셀에서 가운데 온 책 — 그 탭에 없어지면 `resolveSelected`가 첫 책으로 되돌린다. */
@@ -330,6 +346,7 @@ export function Library({
     setError(null); // 다시 받는 김에 지난 실패 문구도 지운다 — 안 그러면 재시도가 성공해도 빨간 줄이 남는다
     fetchShelf()
       .then((shelf) => {
+        cachePut(CACHE_SHELF, shelf);
         setBooks(shelf.books);
         setSearchEnabled(shelf.searchEnabled);
       })

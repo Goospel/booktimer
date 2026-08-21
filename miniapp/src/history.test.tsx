@@ -1,9 +1,10 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { DailyRecord, MonthlySection } from './api';
+import { CACHE_HISTORY, cacheClear, cachePut } from './cache';
 import {
   DayRow,
   History,
@@ -322,5 +323,35 @@ describe('월별 기록 목록', () => {
       </TDSMobileProvider>,
     );
     expect(empty).toContain('아직 독서 기록이 없어요');
+  });
+});
+
+/**
+ * 기록 세션 캐시 — 잔디는 App이 든 `graph` prop이라 즉시 뜨는데, 월별 기록만 재마운트마다 늦게 붙었다.
+ * 지난 응답을 첫 렌더의 출발점으로 삼는다(재검증은 그대로 매번 나간다).
+ */
+describe('기록 세션 캐시', () => {
+  beforeEach(cacheClear);
+
+  const renderMounted = () =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <History graph={graph} />
+      </TDSMobileProvider>,
+    );
+
+  it('캐시가 비면 월별 기록 자리가 비어 있다 — effect가 안 도는 정적 렌더의 기본값', () => {
+    expect(renderMounted()).not.toContain('2026년 8월');
+  });
+
+  it('지난 기록이 캐시에 있으면 첫 렌더부터 월별 목록이 선다', () => {
+    cachePut(CACHE_HISTORY, [
+      { month: '2026-08', totalSeconds: 45_000, days: [{ date: '2026-08-14', totalSeconds: 5_400, books: [], manuallyFilled: false }] },
+    ] satisfies MonthlySection[]);
+
+    const markup = renderMounted();
+
+    expect(markup).toContain('2026년 8월');
+    expect(markup).toContain('08-14');
   });
 });

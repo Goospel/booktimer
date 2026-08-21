@@ -1,3 +1,4 @@
+import { cacheClear, cacheDrop } from './cache';
 import { tossLogin } from './toss';
 
 /**
@@ -23,7 +24,11 @@ export const token = {
   // 목 모드는 더미 토큰이 항상 있는 것으로 둔다 — 토스 SDK 없는 브라우저에서 로그인 브릿지를 건너뛴다.
   get: (): string | null => (DEV_MOCK ? 'dev-mock-token' : localStorage.getItem(TOKEN_KEY)),
   set: (value: string): void => localStorage.setItem(TOKEN_KEY, value),
-  clear: (): void => localStorage.removeItem(TOKEN_KEY),
+  clear: (): void => {
+    localStorage.removeItem(TOKEN_KEY);
+    // 로그아웃·401·탈퇴가 전부 이 문을 지난다 — 남의 계정 데이터가 다음 로그인 첫 렌더에 새면 안 된다.
+    cacheClear();
+  },
 };
 
 /** 토큰이 없거나 만료됨 — 화면은 이걸 잡아 로그인 브릿지로 돌아간다. */
@@ -857,10 +862,18 @@ export const createStory = (
   bookId: number,
   bgCode: string | null,
   quote: string | null,
-): Promise<MarginEntry> => request('/api/stories', { body: { text, bookId, bgCode, quote } });
+): Promise<MarginEntry> => {
+  // 요청 **전에** 버린다 — 실패해도 캐시가 없어 다음 조회가 서버 진실로 간다(fail-safe).
+  // 여백 쓰기 경로는 셋(홈 문·서재 손잡이·책방 composer)이지만 전부 이 함수를 지나므로 여기가 근본 자리다.
+  cacheDrop('margin:');
+  return request('/api/stories', { body: { text, bookId, bgCode, quote } });
+};
 
 /** 없거나 남의 것이면 404 — 존재를 누설하지 않는 서버 계약(IDOR)을 그대로 받는다. */
-export const deleteStory = (id: number): Promise<void> => request(`/api/stories/${id}`, { method: 'DELETE' });
+export const deleteStory = (id: number): Promise<void> => {
+  cacheDrop('margin:'); // 지운 글이 옛 스냅으로 되살아나지 않게
+  return request(`/api/stories/${id}`, { method: 'DELETE' });
+};
 
 /** `StoryService.LikeState` — 누르기·취소 직후의 갱신값. 클라가 개수를 추측하지 않게 서버가 센 값을 준다. */
 export interface LikeState {

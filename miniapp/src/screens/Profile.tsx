@@ -28,6 +28,7 @@ import {
   unfollow,
 } from '../api';
 import { useBackClose } from '../back';
+import { cacheGet, cacheKeyProfile, cacheKeyProfileBooks, cachePut } from '../cache';
 import { REWARD_AD_GROUP_ID, watchRewardAd } from '../toss';
 import { Avatar, ErrorMessage, Loading, PENCIL_FRAME, SERIF_VALUE, Screen, SectionTitle, Sheet } from '../ui';
 import { waiverErrorMessage } from './Home';
@@ -283,8 +284,12 @@ export function Profile({
   /** 격자에서 책을 눌렀을 때 — 그 책의 여백 화면으로 간다(전체 화면 전이는 셸이 든다). */
   onOpenMargin?: (bookId: number) => void;
 }) {
-  const [profile, setProfile] = useState<ProfileResponse | null>(null);
-  const [books, setBooks] = useState<ProfileBook[]>([]);
+  // 지난 성공 응답이 첫 렌더의 출발점이다 — 헤더·격자가 두 왕복을 기다리며 통째로 로딩이던 자리.
+  // 키에 loginId가 박혀 있어 남의 책방 캐시가 내 화면에 설 수 없다(재검증은 그대로 매번 나간다).
+  const [profile, setProfile] = useState<ProfileResponse | null>(
+    () => cacheGet<ProfileResponse>(cacheKeyProfile(loginId)) ?? null,
+  );
+  const [books, setBooks] = useState<ProfileBook[]>(() => cacheGet<ProfileBook[]>(cacheKeyProfileBooks(loginId)) ?? []);
   const [activeTag, setActiveTag] = useState<string | null>(null);
   /** 걸린 상태 필터 — `null`이 「전체」다. 기본이 전체라 진입 화면·발광·여백 문이 지금 그대로다. */
   const [statusFilter, setStatusFilter] = useState<BookStatus | null>(null);
@@ -319,13 +324,21 @@ export function Profile({
     setError(null); // 재시도가 성공했는데 지난 실패 문구가 남지 않게
     fetchProfile(loginId)
       .then((page) => {
+        cachePut(cacheKeyProfile(loginId), page);
         setProfile(page);
         // 관문은 내 책방에만 선다 — 남의 책방에서 부르면 내 잔여를 남의 화면에서 소모하는 꼴이다.
         if (page.self) loadPersonalityStatus();
       })
       .catch(fail);
     // 헤더와 책 목록을 따로 받는다 — 태그 드릴다운이 책 목록만 갈아끼우므로 목록의 출처를 하나로 둔다.
-    fetchProfileBooks(loginId).then((page) => setBooks(page.books)).catch(fail);
+    // 캐시에 넣는 것은 이 「전체 목록」뿐이다 — 태그·상태 필터 결과를 넣으면 초기값이 부분 목록이 된다
+    // (초기 렌더는 `activeTag`·`statusFilter`가 둘 다 null이라 전체 목록이어야 정합).
+    fetchProfileBooks(loginId)
+      .then((page) => {
+        cachePut(cacheKeyProfileBooks(loginId), page.books);
+        setBooks(page.books);
+      })
+      .catch(fail);
   }, [loginId, fail, loadPersonalityStatus]);
 
   useEffect(load, [load]);

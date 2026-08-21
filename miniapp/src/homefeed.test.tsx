@@ -1,13 +1,15 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { HomeFeedResponse, NewsItem, ReaderStatus, SocialEvent } from './api';
+import { CACHE_FEED, cacheClear, cachePut } from './cache';
 import type { FeedTab } from './screens/HomeFeed';
 import {
   DEFAULT_TAB,
   EMPTY_MESSAGE,
   FeedBox,
+  HomeFeedBox,
   PREVIEW_COUNT,
   ReaderRow,
   eventLine,
@@ -472,5 +474,31 @@ describe('피드 박스 — 실패·로딩', () => {
 
   it('아직 못 받았으면 불러오는 중이라고 말한다', () => {
     expect(renderBox(null)).toContain('불러오는 중');
+  });
+});
+
+/**
+ * 홈 피드 세션 캐시 — 홈은 탭을 오갈 때마다 재마운트돼서, 히어로는 즉시 뜨는데 피드 박스만 매번
+ * 빈 상태로 시작했다. 지난 성공 응답을 첫 렌더의 출발점으로 삼아 그 구간을 없앤다(재검증은 그대로).
+ */
+describe('홈 피드 세션 캐시 (HomeFeedBox)', () => {
+  beforeEach(cacheClear);
+
+  const renderMounted = () =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <HomeFeedBox onError={() => {}} onOpenMargin={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  it('캐시가 비면 지금처럼 빈 박스다 — effect가 안 도는 정적 렌더의 기본값', () => {
+    expect(renderMounted()).not.toContain('여느밤');
+  });
+
+  it('지난 피드가 캐시에 있으면 첫 렌더부터 줄이 선다', () => {
+    // 진입 탭은 `DEFAULT_TAB`('소식')이라 그 탭에 실리는 종류로 채운다.
+    cachePut(CACHE_FEED, feed({ social: [event('여느밤', '데미안', 'FINISHED', 2)] }));
+
+    expect(renderMounted()).toContain('여느밤');
   });
 });
