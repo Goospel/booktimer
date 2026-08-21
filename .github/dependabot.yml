@@ -1,35 +1,95 @@
 # Dependabot — 의존성 취약점·노후 버전을 주간으로 점검해 업데이트 PR을 자동 생성한다(SCA).
 # 보안 알림(vulnerability alerts)은 PUBLIC repo 기본 활성 — 취약 버전이 끼면 보안 업데이트 PR이
-# 별도로 즉시 뜨고, 아래 schedule은 그와 별개로 일반 버전 노후를 정리한다.
+# 별도로 즉시 뜨고, 아래 schedule·groups·ignore는 그와 **무관**하다(취약점은 그룹핑·무시를 뚫고 온다).
 # gap#4(CI 보안 게이트): 내 코드 정적분석은 CodeQL(.github/workflows/codeql.yml)이 담당.
+#
+# 정책 (2026-08-21) — 「소음을 줄이고 진짜 신호만 남긴다」:
+#   · minor·patch는 생태계별로 **한 PR로 묶는다**(groups). 개별 PR 7개가 한 달 쌓이던 것을 막는다.
+#   · major는 묶지 않는다 — 판단이 필요한 작업이라 개별 PR로 보여야 한다.
+#   · 단, **빌드 전용 도구의 major는 무시**한다(ignore). 사용자에게 배포되지 않아 급할 이유가 없고,
+#     올릴 땐 내가 시점을 골라 올린다. 무시 목록에서 뺀 것(vue 등)은 번들에 실리므로 계속 뜬다.
 version: 2
 updates:
-  # 백엔드(Gradle) — build.gradle 의존성
+  # 백엔드(Gradle) — build.gradle 의존성. 사용자에게 배포되는 런타임이라 major도 숨기지 않는다.
   - package-ecosystem: "gradle"
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     labels: ["dependencies", "backend"]
     commit-message:
       prefix: "chore(deps)"
+    groups:
+      gradle-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
-  # 프론트(npm) — frontend/package.json
+  # 웹 프론트(npm) — frontend/package.json. SSR 셸에 얹히는 Vue 섬 번들을 만든다.
+  # vue·@vitejs/plugin-vue는 산출물에 실리므로 major를 계속 노출하고, 순수 빌드 도구만 무시한다.
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     labels: ["dependencies", "frontend"]
     commit-message:
       prefix: "chore(deps)"
+    groups:
+      frontend-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      # 빌드 전용 — 번들에 안 실린다. major는 내가 원할 때만.
+      # vite 6→8은 의도적 보류다(Rollup→Rolldown = 11개 섬 번들 전면 재생성 + 헤드리스로 안 잡히는
+      # 로드순서 회귀). typescript 5→7도 별건.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vite"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "cross-env"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "sharp"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "jsdom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@playwright/test"
+        update-types: ["version-update:semver-major"]
 
-  # GitHub Actions — 워크플로가 핀한 액션 버전(actions/checkout 등)
+  # 미니앱(npm) — miniapp/package.json. 2026-08-21 신설: 지금 주력 제품인데 SCA 사각이었다.
+  # react·@apps-in-toss/web-framework·@toss/tds-mobile은 **실제로 사용자에게 실리는** 런타임이라
+  # 취약점·major 모두 보여야 한다. 빌드 도구 major만 위와 같은 이유로 무시.
+  - package-ecosystem: "npm"
+    directory: "/miniapp"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels: ["dependencies", "miniapp"]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      miniapp-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vite"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions — 워크플로가 핀한 액션 버전(actions/checkout 등).
+  # CI에서만 돌고 major도 대개 러너 교체 수준이라 전부 한 PR로 묶는다.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     labels: ["dependencies", "ci"]
     commit-message:
       prefix: "chore(ci)"
+    groups:
+      actions-all:
+        patterns: ["*"]
