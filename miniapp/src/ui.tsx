@@ -509,6 +509,18 @@ export function ErrorMessage({ message, onRetry }: { message: string | null; onR
  * 사람에게는 제출 수단이 통째로 사라진 화면이 된다. 둘은 반드시 한 쌍이다.
  *
  * <p>손잡이를 절대위치로 얹지 않는다 — TDS `TextField`가 `right` 슬롯을 이미 준다.
+ *
+ * <p>⚠️ <b>TDS의 `label`을 쓰지 않는다</b>(2026-08-21). 제목과 칸 사이가 63px이나 벌어져 있었는데
+ * 그중 27px이 라벨 자리였고, TDS는 <b>값이 있을 때만</b> 라벨을 띄우므로 빈 칸에서는
+ * `visibility: hidden`으로 <b>자리만 잡고 아무것도 안 그렸다</b> — 사용자가 처음 보는 그 상태에서
+ * 27px이 통째로 헛것이었다는 뜻이다(사용자 지적: 「공백이 너무 넓어」). 값이 생겨 라벨이 떠도
+ * 화면 제목이 이미 「책 추가」·「친구 찾기」라 보탤 말이 없다.
+ *
+ * <p>대신 이름은 `aria-label`로 옮긴다 — <b>안 그리는 것과 이름이 없는 것은 다르다</b>. 그림뿐인
+ * 칸은 읽어 줄 이름이 사라지므로, 라벨을 걷을 때 이 한 줄을 같이 안 옮기면 접근성만 조용히 깎인다.
+ *
+ * <p>`paddingTop={0}`도 같은 이유다 — TDS 기본값 16px은 라벨을 제목에서 떼려던 여백인데 라벨이
+ * 없으면 그냥 빈 자리다. 아래 16px은 남긴다(칸과 다음 카드가 붙으면 한 덩어리로 읽힌다).
  */
 export function SearchField({
   label,
@@ -519,6 +531,7 @@ export function SearchField({
   onChange,
   onSubmit,
 }: {
+  /** 칸의 <b>이름</b>(`aria-label`) — 그려지지는 않는다. 위 주석의 라벨 제거 참조. */
   label: string;
   placeholder: string;
   value: string;
@@ -531,6 +544,7 @@ export function SearchField({
   const empty = value.trim() === '';
   return (
     <form
+      className="search-field"
       onSubmit={(e) => {
         e.preventDefault(); // 막지 않으면 페이지가 새로고침돼 미니앱이 처음으로 돌아간다
         if (!disabled && !busy && !empty) onSubmit();
@@ -538,7 +552,8 @@ export function SearchField({
     >
       <TextField
         variant="box"
-        label={label}
+        aria-label={label}
+        paddingTop={0}
         placeholder={placeholder}
         value={value}
         disabled={disabled || busy}
