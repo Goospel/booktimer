@@ -1,6 +1,7 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -60,7 +61,7 @@ describe('굵기는 자리로 정해지지 않는다', () => {
     // 숫자가 자기 라벨보다 얇던 자리), 600·900은 700으로 올림돼 주변과 똑같아진다 — 어느 쪽이든
     // 「강조를 선언했는데 화면은 그대로」다. 자리마다 고치는 대신 소스를 훑어 다시 새지 않게 한다.
     const offenders: string[] = [];
-    for (const file of sourceFiles(new URL('.', import.meta.url).pathname)) {
+    for (const file of sourceFiles(fileURLToPath(new URL('.', import.meta.url)))) {
       readFileSync(file, 'utf8')
         .split('\n')
         .forEach((line, i) => {
@@ -86,7 +87,7 @@ const SCALE = [11, 12, 13, 14, 15, 16, 17, 19, 24, 26, 44];
 describe('인라인 크기도 같은 계단 위에 온다', () => {
   it('계단 밖의 fontSize 리터럴이 없다', () => {
     const offenders: string[] = [];
-    for (const file of sourceFiles(new URL('.', import.meta.url).pathname)) {
+    for (const file of sourceFiles(fileURLToPath(new URL('.', import.meta.url)))) {
       readFileSync(file, 'utf8')
         .split('\n')
         .forEach((line, i) => {
@@ -168,7 +169,40 @@ describe('값(수)은 세리프로 온다', () => {
   });
 });
 
-/** 규칙 대상 소스 — 테스트·목은 제품 UI가 아니다(no-emoji 가드와 같은 경계). */
+/**
+ * 입력칸 힌트는 입력값처럼 보이지 않는다 — 위 굵기·크기와 같은 병의 <b>색</b> 판이다.
+ *
+ * <p>TDS `TextField`는 힌트 색을 `--text-field-box-placeholder-color: var(--adaptiveGrey500)`로 그리는데,
+ * 이 앱은 색 토큰을 종이톤으로 갈아끼우면서 <b>Grey500만 빠뜨렸다</b>(100·200·600·700·800만 정의). 빈
+ * `var()`는 선언을 통째로 무효로 만들어, 힌트가 fallback도 없이 `input`의 색과 굵기를 그대로 물려받는다
+ * — 잉크색 700, 곧 <b>실제 입력값과 완전히 같은 글자</b>다(목 모드 실측 `rgb(44,42,36)`/700).
+ *
+ * <p>토큰 하나가 앱의 모든 입력칸을 동시에 고친다. 화면마다 인라인 스타일을 바르면 다음 입력칸이
+ * 또 잉크색으로 태어난다 — 구멍은 컴포넌트가 아니라 팔레트에 있다.
+ */
+describe('입력칸 힌트는 입력값처럼 보이지 않는다', () => {
+  it('TDS가 참조하는 힌트 색 토큰을 정의한다 — 비어 있으면 선언이 무효가 되고 잉크색으로 떨어진다', () => {
+    expect(rules).toMatch(/--adaptiveGrey500:\s*rgba\(/);
+  });
+
+  it('반투명이다 — 불투명 회색은 종이 결 위에 덧칠한 판처럼 떠, 힌트가 아니라 옅은 값으로 읽힌다', () => {
+    const alpha = rules.match(/--adaptiveGrey500:\s*rgba\([^)]*?,\s*([0-9.]+)\s*\)/);
+
+    expect(alpha).not.toBeNull();
+    // 입력값(1.0)과 확실히 구별되면서, 무엇을 적는 자리인지 읽히기는 해야 한다.
+    expect(Number(alpha![1])).toBeGreaterThan(0.3);
+    expect(Number(alpha![1])).toBeLessThan(0.6);
+  });
+});
+
+/**
+ * 규칙 대상 소스 — 테스트·목은 제품 UI가 아니다(no-emoji 가드와 같은 경계).
+ *
+ * <p>⚠️ 디렉터리는 `fileURLToPath`로 얻는다. `new URL(...).pathname`은 Windows에서 `/C:/Users/…`를
+ * 돌려주고, 앞의 `/` 때문에 node가 cwd 드라이브를 덧붙여 `C:\C:\Users\…`를 훑다 ENOENT로 죽는다.
+ * <b>리눅스에선 pathname이 그대로 유효해 CI가 초록이라</b>, 이 줄이 되돌아가면 Windows에서만 조용히
+ * 깨진다(2026-08-21 실측 — main이 이 머신에서 2건 red였다).
+ */
 function sourceFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
