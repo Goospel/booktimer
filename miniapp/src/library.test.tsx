@@ -7,7 +7,6 @@ import { CACHE_SHELF, cacheClear, cacheKeyMargin, cachePut } from './cache';
 import { dismissCoachmark, setCoachmarkWalking } from './coachmark';
 import type { LibrarySheet } from './screens/Library';
 import {
-  AddBookButton,
   AddStatusSheet,
   BookGrid,
   BookSearch,
@@ -61,9 +60,11 @@ function shelf(
   books: MyBookSummary[],
   {
     tab = 'READING' as BookStatus,
-    selectedId = null as number | null,
+    // `undefined`(아직 안 고름)가 기본이다 — `null`은 「책 추가」 칸을 <b>고른</b> 값이라 뜻이 다르다.
+    selectedId = undefined as number | null | undefined,
     sheet = null as LibrarySheet,
     myLoginId = 'goospel' as string | null,
+    searchEnabled = true,
   } = {},
 ) {
   return renderToStaticMarkup(
@@ -75,6 +76,7 @@ function shelf(
         sheet={sheet}
         busy={false}
         myLoginId={myLoginId}
+        searchEnabled={searchEnabled}
         onTab={() => {}}
         onSelect={() => {}}
         onSheet={() => {}}
@@ -82,6 +84,7 @@ function shelf(
         onOpenMargin={() => {}}
         onComposeMargin={() => {}}
         onError={() => {}}
+        onAddBook={() => {}}
       />
     </TDSMobileProvider>,
   );
@@ -125,8 +128,19 @@ describe('서재 탭', () => {
     expect(markup).not.toContain('관리');
   });
 
-  it('책이 하나도 없으면 추가를 유도한다', () => {
-    expect(shelf([])).toContain('아직 책이 없어요');
+  it('책이 하나도 없어도 캐러셀이 선다 — 0권이라고 다른 화면이 뜨지 않는다(홈과 같은 처리)', () => {
+    const markup = shelf([]);
+
+    expect(markup).toContain('책 추가');
+    expect(markup).toContain('읽는 중 0'); // 탭도 그대로 — 빈 상태라고 자리가 사라지지 않는다
+  });
+
+  /**
+   * 검색이 꺼진 날의 마지막 폴백 — 「책 추가」 칸이 게이트에 걸려 사라지면 캐러셀에 세울 것이 하나도 없다.
+   * 그때 옛 문장이 남지 않으면 <b>빈 화면</b>이 된다.
+   */
+  it('책 0권 + 검색 꺼짐이면 옛 안내 문장이 남는다 — 지우면 아무것도 없는 화면이다', () => {
+    expect(shelf([], { searchEnabled: false })).toContain('아직 책이 없어요');
   });
 });
 
@@ -901,53 +915,104 @@ describe('검색 결과 — 이미 서재에 있는 책', () => {
 });
 
 /**
- * 「책 추가하기」 + 첫 방문 코치마크 — 게이트와 안내가 <b>한 몸</b>이다.
+ * 「책 추가」 칸 — 화면 맨 아래 전폭 버튼이던 것이 <b>캐러셀 0번</b>으로 들어왔다(2026-08-21).
  *
- * <p>버튼은 서버 플래그(`searchEnabled`)에 달려 있어, 안내를 따로 두면 플래그가 꺼진 날
- * 아무것도 없는 자리를 가리키는 안내만 남는다. 그래서 같은 컴포넌트가 둘을 함께 든다.
+ * <p>홈의 「책 없이」 칸과 같은 부품(`leadCard`)이고 규약도 같다: <b>0번은 언제나 특수 칸</b>이다.
+ * 두 화면이 한 문장으로 통일되고, 「내 책을 훑는 손짓」과 「추가」가 같은 동작이 된다.
+ *
+ * <p>게이트와 안내는 여전히 <b>한 몸</b>이다 — 서버 플래그(`searchEnabled`)가 칸과 코치마크를 함께
+ * 끈다. 따로 두면 플래그가 꺼진 날 없는 칸을 가리키는 안내만 남는다.
  */
-describe('책 추가 손잡이', () => {
+describe('책 추가 칸 (캐러셀 0번)', () => {
   const GUIDE = '읽을 책은 여기서 찾아 담아요';
+  const books = [book(1, '읽는책', 'READING'), book(2, '딴책', 'READING')];
 
-  const addBook = (enabled: boolean) =>
-    renderToStaticMarkup(
-      <TDSMobileProvider userAgent={userAgent}>
-        <AddBookButton enabled={enabled} onPress={() => {}} />
-      </TDSMobileProvider>,
-    );
+  it('전폭 「책 추가하기」 버튼이 사라졌다 — 칸이 그 일을 대신한다', () => {
+    expect(shelf(books)).not.toContain('책 추가하기');
+  });
 
-  it('바로 앞 걸음(서재 설명)을 본 뒤에 버튼과 안내가 함께 뜬다 — 흐름이 이 화면으로 데려온 직후다', () => {
+  it('점선 칸이 실제 책보다 앞에 선다 — 0번이라는 규약이 곧 마크업 순서다', () => {
+    const markup = shelf(books);
+
+    expect(markup.indexOf('data-lead-card')).toBeGreaterThan(-1);
+    expect(markup.indexOf('data-lead-card')).toBeLessThan(markup.indexOf('data-cover-title'));
+  });
+
+  it('표지와 같은 크기의 점선 상자다 — 색 상자면 실제 표지와 구분이 안 된다', () => {
+    expect(shelf(books)).toContain('border:2px dashed');
+  });
+
+  /**
+   * 칸이 가운데 오면 아래가 통째로 갈린다 — 캐러셀 문법이 「가운데 온 것이 곧 대상」이라,
+   * 가리킬 책이 없는데 그 책의 손잡이·여백이 서 있으면 <b>다른 책의 것을 그 칸의 것으로 읽는다</b>.
+   */
+  describe('칸이 가운데 왔을 때 (selectedId === null)', () => {
+    const centered = () => shelf(books, { selectedId: null });
+
+    it('제목 자리가 「책 추가」가 되고 무엇을 하는 칸인지 한 줄로 말한다', () => {
+      const markup = centered();
+
+      expect(markup).toContain('data-selected-book="책 추가"');
+      expect(markup).toContain('제목으로 검색해 서재에 담아요');
+    });
+
+    it('손잡이가 「검색해서 담기」 하나로 갈린다 — 가리킬 책이 없으니 여백·관리는 뜻이 없다', () => {
+      const markup = centered();
+
+      expect(markup).toContain('검색해서 담기');
+      expect(markup).not.toContain('여백에 글쓰기');
+      expect(markup).not.toContain('관리');
+    });
+
+    it('여백 박스가 없다 — 남의 책 여백을 이 칸의 것으로 읽게 두지 않는다', () => {
+      expect(centered()).not.toContain('전체 보기');
+    });
+  });
+
+  it('책이 가운데면 아래는 지금 그대로다 — 칸이 생겼다고 평소 화면이 바뀌지 않는다', () => {
+    const markup = shelf(books, { selectedId: 1 });
+
+    expect(markup).toContain('여백에 글쓰기');
+    expect(markup).not.toContain('검색해서 담기');
+  });
+
+  /**
+   * `undefined`(아직 안 고름)와 `null`(칸을 고름)은 다른 값이다 — 하나로 합치면 서재를 열 때마다
+   * 「책 추가」가 가운데인 채로 시작한다(홈이 먼저 밟은 구분 — `App.tsx`).
+   */
+  it('아직 안 골랐으면 첫 책이 가운데다 — 칸을 고른 것과 다르다', () => {
+    expect(shelf(books)).toContain('data-selected-book="읽는책"');
+  });
+
+  it('검색이 꺼져 있으면 칸도 안내도 없다 — 없는 칸을 가리키지 않는다', () => {
     dismissCoachmark('library');
 
-    const markup = addBook(true);
+    const markup = shelf(books, { searchEnabled: false });
 
-    expect(markup).toContain('책 추가하기');
+    expect(markup).not.toContain('data-lead-card');
+    expect(markup).not.toContain(GUIDE);
+  });
+
+  it('바로 앞 걸음(서재 설명)을 본 뒤에 칸과 안내가 함께 뜬다 — 흐름이 이 화면으로 데려온 직후다', () => {
+    dismissCoachmark('library');
+
+    const markup = shelf(books);
+
+    expect(markup).toContain('data-lead-card');
     expect(markup).toContain(GUIDE);
   });
 
   it('앞 걸음 전에는 안내가 뜨지 않는다 — 딤 두 장이 겹치지 않는다', () => {
-    const markup = addBook(true);
-
-    expect(markup).toContain('책 추가하기');
-    expect(markup).not.toContain(GUIDE);
+    expect(shelf(books)).not.toContain(GUIDE);
   });
 
-  it('한 번 본 사람에게는 버튼만 남는다', () => {
+  it('한 번 본 사람에게는 칸만 남는다', () => {
     dismissCoachmark('library');
     dismissCoachmark('add-book');
 
-    const markup = addBook(true);
+    const markup = shelf(books);
 
-    expect(markup).toContain('책 추가하기');
-    expect(markup).not.toContain(GUIDE);
-  });
-
-  it('검색이 꺼져 있으면 버튼도 안내도 없다 — 없는 버튼을 가리키지 않는다', () => {
-    dismissCoachmark('library');
-
-    const markup = addBook(false);
-
-    expect(markup).not.toContain('책 추가하기');
+    expect(markup).toContain('data-lead-card');
     expect(markup).not.toContain(GUIDE);
   });
 });
@@ -990,10 +1055,10 @@ describe('서재 세션 캐시', () => {
     expect(markup).toContain('읽는 중 1');
   });
 
-  it('캐시된 책장은 검색 가능 여부까지 되살린다 — 「책 추가하기」가 한 박자 늦게 나타나지 않게', () => {
+  it('캐시된 책장은 검색 가능 여부까지 되살린다 — 「책 추가」 칸이 한 박자 늦게 나타나지 않게', () => {
     cachePut(CACHE_SHELF, { searchEnabled: true, books: [book(1, '데미안', 'READING')] });
 
-    expect(library()).toContain('책 추가하기');
+    expect(library()).toContain('data-lead-card');
   });
 
   it('방금 본 책의 여백은 캐시에서 곧바로 선다 — 캐러셀을 왕복해도 「불러오는 중」으로 안 되돌아간다', () => {

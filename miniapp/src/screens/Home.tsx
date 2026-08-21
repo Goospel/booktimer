@@ -221,12 +221,35 @@ export const SCROLL_SETTLE_MS = 120;
 export const READING_NOW_COVER = 52;
 
 /**
- * 캐러셀 0번 칸의 「책 없이」 자리 표지 — 표지와 **같은 크기의 점선 상자**다.
+ * 캐러셀 0번의 특수 칸 — 화면마다 뜻이 다르다. 홈은 「책 없이」(측정 대상의 한 갈래), 서재는
+ * 「책 추가」(검색 화면으로 가는 문)다.
  *
- * <p>`CoverInitial`을 쓰지 않는다: 색 상자 + 첫 글자라 실제 표지와 구분이 안 돼 "책 없이"가 책처럼 보인다.
+ * <p>부품과 규약(<b>0번은 언제나 특수 칸</b>)은 공유하되 문구만 갈아 끼운다 — 두 화면이 같은
+ * 문법을 쓰면 「가운데 온 것이 곧 대상」 한 문장으로 둘 다 설명된다.
+ */
+export interface LeadCard {
+  /** 점선 상자 안 글자 — 짧아야 84px 안에서 안 접힌다. */
+  label: string;
+  /** 이 칸이 가운데일 때의 제목 자리이자 스크린리더가 읽는 이름. */
+  title: string;
+  /** 제목 아래 한 줄. 홈이 책 수에 따라 문구를 바꾸므로 값이 아니라 함수다. */
+  subtitle: (bookCount: number) => string;
+}
+
+/** 홈의 0번 칸 — 측정 대상의 한 갈래라 「고른 값」(`null`)으로 남는다. */
+export const NO_BOOK_CARD: LeadCard = {
+  label: '책 없이',
+  title: '책 없이 측정',
+  subtitle: noBookSubtitle,
+};
+
+/**
+ * 0번 칸의 자리 표지 — 표지와 **같은 크기의 점선 상자**다.
+ *
+ * <p>`CoverInitial`을 쓰지 않는다: 색 상자 + 첫 글자라 실제 표지와 구분이 안 돼 특수 칸이 책처럼 보인다.
  * `boxSizing`이 없으면 테두리 2px이 칸을 불려 스냅 위치(`i × stride`)가 이 카드부터 어긋난다.
  */
-function NoBookCard({ width = COVER_WIDTH }: { width?: number } = {}) {
+function NoBookCard({ width = COVER_WIDTH, label = '책 없이' }: { width?: number; label?: string } = {}) {
   return (
     <div
       style={{
@@ -246,7 +269,7 @@ function NoBookCard({ width = COVER_WIDTH }: { width?: number } = {}) {
     >
       {/* 점선 상자가 이미 「표지가 아님」을 말한다 — 시계 이모지는 그 위에 얹힌 군더더기였다(2026-08-18). */}
       <Text typography="st12" color="grey600">
-        책 없이
+        {label}
       </Text>
     </div>
   );
@@ -265,22 +288,25 @@ function NoBookCard({ width = COVER_WIDTH }: { width?: number } = {}) {
  *
  * <p>선택 상태는 밖(App)이 들고 있다 — 탭바의 측정 액션이 같은 값을 써야 캐러셀과 시작 대상이 어긋나지 않는다.
  *
- * <p>서재도 같은 캐러셀을 쓴다(세로로 길던 3섹션 목록을 대체) — 다만 거기선 고를 대상이 책뿐이라
- * `noBookCard`가 꺼지고, 아래 한 줄에 읽은 시간·공개 여부까지 실으므로 `metaOf`로 그 줄을 바꿔 끼운다.
+ * <p>서재도 같은 캐러셀을 쓴다(세로로 길던 3섹션 목록을 대체) — 거기선 0번이 「책 추가」 칸이고
+ * (`leadCard`), 아래 한 줄에 읽은 시간·공개 여부까지 실으므로 `metaOf`로 그 줄을 바꿔 끼운다.
  */
 export function BookCarousel<T extends BookOption>({
   books,
   selectedId,
   onSelect,
-  noBookCard = true,
+  leadCard = NO_BOOK_CARD,
   metaOf,
   chipsOf,
 }: {
   books: T[];
   selectedId: number | null;
   onSelect: (bookId: number | null) => void;
-  /** 0번 「책 없이」 칸을 세울지 — 측정 대상을 고르는 홈만 켠다. */
-  noBookCard?: boolean;
+  /**
+   * 0번 특수 칸 — 홈은 기본값(「책 없이」), 서재는 「책 추가」를 넘긴다. `null`이면 책만 세운다
+   * (서재에서 서버가 검색을 껐을 때 — 눌러도 아무 데도 못 가는 칸을 남기지 않는다).
+   */
+  leadCard?: LeadCard | null;
   /** 제목 아래 한 줄 — 기본은 저자. */
   metaOf?: (book: T) => string;
   /**
@@ -292,9 +318,9 @@ export function BookCarousel<T extends BookOption>({
   const trackRef = useRef<HTMLDivElement>(null);
   const settleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selected = books.find((b) => b.id === selectedId) ?? null;
-  /** 홈은 0번이 「책 없이」(`null`)라 책이 한 칸 밀리고, 서재는 책이 곧 0번이다. */
-  const offset = noBookCard ? 1 : 0;
-  const items: (T | null)[] = noBookCard ? [null, ...books] : books;
+  /** 0번이 특수 칸(`null`)이면 책이 한 칸 밀린다 — 칸이 없으면 책이 곧 0번이다. */
+  const offset = leadCard !== null ? 1 : 0;
+  const items: (T | null)[] = leadCard !== null ? [null, ...books] : books;
 
   // 첫 진입 — 기본 선택(이어 읽기)이 처음부터 가운데였던 것처럼 즉시 이동한다(애니메이션은 거짓 움직임이다).
   useEffect(() => {
@@ -354,12 +380,12 @@ export function BookCarousel<T extends BookOption>({
             <button
               key={item?.id ?? 'no-book'}
               type="button"
-              aria-label={item?.title ?? '책 없이 측정'}
+              aria-label={item?.title ?? leadCard?.title}
               aria-current={current ? 'true' : undefined}
               // 계측용 표지 — TDS emotion 클래스 사이에서 "표지가 몇 장이고 어떤 책인가"를 집을 손잡이가 없다.
-              // 「책 없이」 카드는 따로 표시해 `data-cover-title`이 계속 "실제 책 목록"만 뜻하게 둔다.
+              // 0번 특수 칸은 따로 표시해 `data-cover-title`이 계속 "실제 책 목록"만 뜻하게 둔다.
               data-cover-title={item?.title}
-              data-no-book-card={item === null ? '' : undefined}
+              data-lead-card={item === null ? '' : undefined}
               onClick={() => {
                 onSelect(item?.id ?? null);
                 scrollToIndex(trackRef.current, index);
@@ -382,7 +408,7 @@ export function BookCarousel<T extends BookOption>({
               }}
             >
               {item === null ? (
-                <NoBookCard />
+                <NoBookCard label={leadCard?.label} />
               ) : (
                 // 표지 없음·로드 실패 분기는 BookCover가 든다 — title을 주면 첫 글자 + 제목색으로 떨어진다.
                 <BookCover url={item.coverUrl} title={item.title} width={COVER_WIDTH} eager />
@@ -394,15 +420,15 @@ export function BookCarousel<T extends BookOption>({
 
       {/* 표지만으론 무슨 책인지 확정되지 않는다(비슷한 표지·자리 표지) — 가운데 온 것을 글자로 못 박는다. */}
       <div
-        data-selected-book={selected?.title ?? '책 없이 측정'}
+        data-selected-book={selected?.title ?? leadCard?.title}
         style={{ marginTop: 12, textAlign: 'center' }}
       >
         <Text typography="st10" fontWeight="bold" style={{ display: 'block', wordBreak: 'keep-all' }}>
-          {selected?.title ?? '책 없이 측정'}
+          {selected?.title ?? leadCard?.title}
         </Text>
         {selected === null ? (
           <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
-            {noBookSubtitle(books.length)}
+            {leadCard?.subtitle(books.length)}
           </Text>
         ) : (
           (metaOf?.(selected) ?? selected.author) !== null && (

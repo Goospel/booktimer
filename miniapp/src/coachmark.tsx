@@ -190,6 +190,7 @@ export function Coachmark({
   after,
   title,
   detail,
+  enabled = true,
   children,
 }: {
   name: string;
@@ -197,6 +198,12 @@ export function Coachmark({
   after?: string;
   title: string;
   detail: string;
+  /**
+   * 가리킬 것이 아예 없으면 `false` — 안내와 <b>게이트를 한 몸으로</b> 두는 자리다(서재의 「책 추가」
+   * 칸은 서버 플래그에 달려 있다). 감싸는 쪽에서 조건부로 안 그리는 것과 결과는 같지만, 대상과
+   * 안내가 한 곳에 남아 「없는 것을 가리키는 안내」가 갈라져 생기지 않는다.
+   */
+  enabled?: boolean;
   children: ReactNode;
 }) {
   // 이 안내를 닫았는가 — 상태로 드는 것은 이 한 가지다(마운트 때 기기 기록에서 시작한다).
@@ -210,7 +217,7 @@ export function Coachmark({
    * 「진입 직후 오버레이」가 된다. 흐름을 시작·포기할 때 `MainTabs`가 이 잠금을 여닫고, 그 상태 변화가
    * 곧 이 화면의 리렌더라 별도 구독이 필요 없다.
    */
-  const open = coachmarkWalking() && !closed && (after === undefined || coachmarkSeen(after));
+  const open = enabled && coachmarkWalking() && !closed && (after === undefined || coachmarkSeen(after));
 
   const close = () => {
     dismissCoachmark(name);
