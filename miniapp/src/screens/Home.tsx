@@ -800,8 +800,19 @@ export function AccountSection({
  *
  * <p>책 없이 측정 중이면(`book === null`) 카드는 그대로 서고 표지 자리만 「책 없이」가 된다 — 미태깅
  * 측정은 정상 경로이고, 여기서 카드를 감추면 시작·종료 때마다 화면이 세로로 튄다.
+ *
+ * <p>{@link children}는 카드 바닥의 손잡이 자리다 — 캐러셀 카드가 이 카드로 바뀌어도 <b>「지금 이
+ * 화면이 가리키는 책」에 딸린 손잡이는 따라와야</b> 하기 때문이다(지금은 여백 문 하나).
  */
-export function ReadingNowCard({ book, totalSeconds }: { book: BookOption | null; totalSeconds: number }) {
+export function ReadingNowCard({
+  book,
+  totalSeconds,
+  children,
+}: {
+  book: BookOption | null;
+  totalSeconds: number;
+  children?: ReactNode;
+}) {
   return (
     <section style={sectionStyle}>
       <SectionTitle style={{ marginBottom: 10 }}>읽는 중</SectionTitle>
@@ -828,6 +839,7 @@ export function ReadingNowCard({ book, totalSeconds }: { book: BookOption | null
           )}
         </div>
       </div>
+      {children}
     </section>
   );
 }
@@ -931,6 +943,39 @@ export function Home({
   const { todayRead, remaining, overflow, progress, achieved } = todayProgress(dashboard, elapsed);
   // 여백 문이 가리키는 책 — 측정 중이면 그 책, 대기 중이면 캐러셀에서 고른 책(없으면 문을 안 그린다).
   const doorBook = marginDoorBook(dashboard, selectedBookId);
+
+  /**
+   * 여백 문 — <b>지금 이 화면이 어느 책을 뜻하는지 말하는 카드 안</b>에 산다(대기 중이면 캐러셀 카드,
+   * 측정 중이면 「읽는 중」 카드). 상태는 둘이지만 규칙은 하나라 노드도 하나다.
+   *
+   * <p>예전엔 카드 <b>밖</b>에 홀로 서 있었는데, 그 자리에선 보이지 않았다(사용자 지적 2026-08-21:
+   * 「여백 버튼이 별로 눈에 안 띄네」). 이 앱의 `weak` 버튼은 css가 연필 테두리를 얹으므로, 연필
+   * 테두리 카드들 사이에 홀로 두면 버튼이 아니라 <b>글자 한 줄만 든 빈 카드</b>로 읽힌다 — 위아래와
+   * 테두리가 똑같으니 눈이 그냥 지나간다. 카드 안으로 들어오면 바깥 진한 선(카드) 안의 흐린 선(버튼)이
+   * 되어 위계가 서고, 「책을 고른다 → 그 책의 여백에 적는다」가 한 흐름으로 읽힌다.
+   *
+   * <p>`weak`는 유지한다 — 화면의 주 동작(탭바의 초록 원)보다 낮은 무게가 맞다.
+   */
+  const marginDoor = doorBook !== null && (
+    // 첫 방문 안내는 문이 실제로 선 자리에서만 뜬다 — 책 0권이면 문 자체가 없으므로, 이 안내는
+    // 책을 담고 측정을 해 본 뒤에야 저절로 차례가 온다(순서를 제어하는 코드가 없다).
+    <Coachmark
+      name="margin"
+      after="bookshop" // 탭바 투어를 마친 뒤에 — 딤 두 장이 겹치지 않게
+      title="읽다가 떠오른 생각을 여백에"
+      detail="문장·감상을 몇 줄 남겨 두는 자리예요"
+    >
+      <Button
+        display="block"
+        variant="weak"
+        size="medium"
+        style={{ marginTop: 16 }}
+        onClick={() => onComposeMargin(doorBook)}
+      >
+        여백에 글 남기기
+      </Button>
+    </Coachmark>
+  );
 
   return (
     <Screen>
@@ -1062,7 +1107,9 @@ export function Home({
       )}
 
       {dashboard.hasActiveSession ? (
-        <ReadingNowCard book={dashboard.activeBook ?? null} totalSeconds={dashboard.activeBookTotalSeconds} />
+        <ReadingNowCard book={dashboard.activeBook ?? null} totalSeconds={dashboard.activeBookTotalSeconds}>
+          {marginDoor}
+        </ReadingNowCard>
       ) : (
         <section style={sectionStyle}>
           {/* 상태와 무관한 고정 문구다 — 「책 없이」가 가운데면 "이 책으로"는 틀린 말이고, 상태별로
@@ -1070,34 +1117,11 @@ export function Home({
           <SectionTitle style={{ marginBottom: 10 }}>무엇으로 측정할까요?</SectionTitle>
           {/* 좌우로 밀어 고른다 — 가운데 온 칸이 곧 측정 대상이다(0번은 「책 없이」라 책 0권도 같은 화면). */}
           <BookCarousel books={dashboard.readingBooks} selectedId={selectedBookId} onSelect={onSelectBook} />
+          {marginDoor}
         </section>
       )}
 
       <ErrorMessage message={error} />
-
-      {/* 여백 문 — 주 버튼이 탭바로 떠나며 그 자리(marginTop 24)를 그대로 물려받았다. 예전엔 책방 탭을
-          지나 격자에서 책을 찾아 들어가야 했다(3탭+스크롤): 남에게 보여지는 전시장이 개인 글의 유일한
-          입구였던 자리다. `weak`를 유지한다 — 화면의 주 동작(탭바의 초록 원)보다 낮은 무게가 맞다. */}
-      {doorBook !== null && (
-        // 첫 방문 안내는 문이 실제로 선 자리에서만 뜬다 — 책 0권이면 문 자체가 없으므로, 이 안내는
-        // 책을 담고 측정을 해 본 뒤에야 저절로 차례가 온다(순서를 제어하는 코드가 없다).
-        <Coachmark
-          name="margin"
-          after="bookshop" // 탭바 투어를 마친 뒤에 — 딤 두 장이 겹치지 않게
-          title="읽다가 떠오른 생각을 여백에"
-          detail="문장·감상을 몇 줄 남겨 두는 자리예요"
-        >
-          <Button
-            display="block"
-            variant="weak"
-            size="medium"
-            style={{ marginTop: 24 }}
-            onClick={() => onComposeMargin(doorBook)}
-          >
-            여백에 글 남기기
-          </Button>
-        </Coachmark>
-      )}
 
       {/* 잔디 미리보기가 서 있던 자리는 피드 박스가 통째로 쓴다 — 기록(잔디·연속일·총 시간)은 기록 탭이
           이미 전부 그리고 그 탭은 하단 탭바에서 한 번에 닿으므로, 홈에 진입 손잡이를 또 두지 않는다. */}

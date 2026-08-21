@@ -72,6 +72,8 @@ const requestAgreementMock = vi.mocked(requestNotificationAgreement);
 const BUTTON_LABEL = '광고 보고 밀린 하루 지우기';
 /** 캐러셀 섹션 헤더 — 주 버튼이 탭바로 떠난 뒤 홈 아래쪽 순서를 재는 기준점이 이 줄이다. */
 const CAROUSEL_HEADER = '무엇으로 측정할까요?';
+/** 측정 중 캐러셀 자리를 물려받는 카드의 헤더 — 「지금 이 화면이 가리키는 책」을 말하는 카드가 이쪽으로 바뀐다. */
+const READING_NOW_HEADER = '읽는 중';
 const NOTIFICATION_LABEL = '알림 받기';
 const AGREEMENT_KEY = 'booktimer.notificationAgreement';
 
@@ -98,6 +100,22 @@ function dashboard(overrides: Partial<DashboardResponse> = {}): DashboardRespons
     emailVerified: true,
     ...overrides,
   };
+}
+
+/**
+ * 카드(`<section>`) 한 장을 통째로 잘라 낸다 — 「이 손잡이가 카드 <b>안에</b> 있는가」는 정적 렌더에서
+ * 이 방법으로만 잰다.
+ *
+ * <p>순서 단언(`indexOf(헤더) < indexOf(손잡이)`)으로는 부족하다: 손잡이가 카드 <b>밖</b> 바로 아래에
+ * 고아로 서 있어도 그 단언은 그대로 통과한다 — 실제로 그게 옛 배치였고, 사용자가 「눈에 안 띈다」고
+ * 짚은 그 모습이다. 되돌아가도 초록인 테스트는 그 배치를 지켜 주지 못한다.
+ *
+ * <p>여는 `<section`을 뒤로 찾고 닫는 `</section>`을 앞으로 찾아도 되는 이유: 이 화면의 카드는
+ * 서로 중첩되지 않는다(실측 — 캐러셀·읽는 중·피드 모두 nested section 0개).
+ */
+function card(markup: string, header: string): string {
+  const open = markup.lastIndexOf('<section', markup.indexOf(header));
+  return markup.slice(open, markup.indexOf('</section>', open));
 }
 
 /** 읽는 중 책 한 권 — 표지·저자는 안 준 곳에서 `null`(=자리 표지 경로)로 떨어진다. */
@@ -1338,12 +1356,30 @@ describe('홈 여백 문의 대상 책 (marginDoorBook)', () => {
   describe('홈 여백 문 노출', () => {
     const DOOR = '여백에 글 남기기';
 
-    it('고른 책이 있으면 캐러셀 아래에 문이 선다 — 옛 주 버튼 자리를 그대로 물려받았다', () => {
+    /**
+     * 문이 사는 곳은 <b>지금 이 화면이 어느 책을 뜻하는지 말하는 카드 안</b>이다 — 대기 중이면
+     * 캐러셀 카드, 측정 중이면 「읽는 중」 카드. 상태가 둘이어도 규칙은 하나다.
+     *
+     * <p>카드 밖 고아로 서 있던 옛 배치가 실제로 안 보였다(사용자 지적 2026-08-21: 「여백 버튼이
+     * 별로 눈에 안 띄네」). 이 앱의 `weak` 버튼은 연필 테두리를 받으므로, 연필 테두리 카드들 사이에
+     * 홀로 두면 버튼이 아니라 <b>글자 한 줄만 든 빈 카드</b>로 읽힌다.
+     */
+    it('고른 책이 있으면 문이 그 책을 고르는 카드 안에 선다 — 책 고르기와 여백은 한 흐름이다', () => {
       const markup = renderHome({ readingBooks: [book(1, '미움받을 용기')], recentBookId: 1 });
 
-      expect(markup).toContain(DOOR);
-      expect(markup.indexOf(CAROUSEL_HEADER)).toBeLessThan(markup.indexOf(DOOR));
+      expect(card(markup, CAROUSEL_HEADER)).toContain(DOOR);
       expect(markup.indexOf(DOOR)).toBeLessThan(markup.indexOf('data-feed-tab'));
+    });
+
+    it('측정 중이면 문이 「읽는 중」 카드 안으로 따라간다 — 읽다가 떠오른 생각을 적는 자리가 정작 읽는 동안 사라지면 안 된다', () => {
+      const markup = renderHome({
+        readingBooks: [book(1, '미움받을 용기')],
+        recentBookId: 1,
+        hasActiveSession: true,
+        activeBookTitle: '미움받을 용기',
+      });
+
+      expect(card(markup, READING_NOW_HEADER)).toContain(DOOR);
     });
 
     it('비공개 책이어도 문이 선다 — 비공개 책의 여백은 나만 보는 메모다', () => {
