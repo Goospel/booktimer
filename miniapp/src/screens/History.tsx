@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 
 import type { BookRead, ContributionGraph, DailyRecord, MonthlySection } from '../api';
 import { fetchHistory } from '../api';
+import { CACHE_HISTORY, cacheGet, cachePut } from '../cache';
 import { formatDuration, subjectParticle } from '../format';
 import { BookCover, ErrorMessage, GrassGrid, LEVEL_COLORS, MANUAL_OUTLINE, PENCIL_FRAME, SERIF_VALUE, Screen, SectionTitle, monthLabelPositions } from '../ui';
 
@@ -22,13 +23,19 @@ export function History({ graph }: { graph: ContributionGraph }) {
 
   // 날짜별 기록은 대시보드에 안 실려 오므로 이 탭에서 따로 받는다. 실패해도 위쪽 잔디는 그대로 두고
   // 아래에만 사유를 남긴다 — 목록 하나 때문에 화면 전체를 에러로 덮으면 손해가 크다.
-  const [sections, setSections] = useState<MonthlySection[] | null>(null);
+  // 지난 성공 응답이 첫 렌더의 출발점이다 — 탭을 다시 열 때 아래쪽만 늦게 붙던 자리(재검증은 그대로).
+  const [sections, setSections] = useState<MonthlySection[] | null>(
+    () => cacheGet<MonthlySection[]>(CACHE_HISTORY) ?? null,
+  );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     fetchHistory()
-      .then((r) => alive && setSections(r.months))
+      .then((r) => {
+        cachePut(CACHE_HISTORY, r.months); // 언마운트 뒤 도착해도 캐시엔 넣는다 — 다음 진입의 첫 렌더가 된다
+        if (alive) setSections(r.months);
+      })
       .catch((e: Error) => alive && setError(e.message));
     return () => {
       alive = false;

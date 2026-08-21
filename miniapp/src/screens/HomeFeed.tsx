@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 
 import type { HomeFeedResponse, NewsItem, ReaderStatus, SocialEvent } from '../api';
 import { fetchHomeFeed } from '../api';
+import { CACHE_FEED, cacheGet, cachePut } from '../cache';
 import { elapsedSeconds, formatDuration, objectParticle, relativeTime } from '../format';
 import { openExternal } from '../toss';
 import { BookCover, sectionStyle } from '../ui';
@@ -561,14 +562,18 @@ export function HomeFeedBox({
   onError: (error: Error) => void;
   onOpenMargin: (loginId: string, bookId: number) => void;
 }) {
-  const [feed, setFeed] = useState<HomeFeedResponse | null>(null);
+  // 지난 성공 응답이 첫 렌더의 출발점이다 — 홈은 탭을 오갈 때마다 재마운트돼서 이 박스만 매번 비었다.
+  const [feed, setFeed] = useState<HomeFeedResponse | null>(() => cacheGet<HomeFeedResponse>(CACHE_FEED) ?? null);
   const [tab, setTab] = useState<FeedTab>(DEFAULT_TAB);
   const [expanded, setExpanded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchHomeFeed()
-      .then(setFeed)
+      .then((data) => {
+        cachePut(CACHE_FEED, data);
+        setFeed(data);
+      })
       .catch((e: Error) => {
         if (e.name === 'UnauthorizedError') onError(e);
         else setError(e.message);

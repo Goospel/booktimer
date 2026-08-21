@@ -44,6 +44,7 @@ import {
   validateNicknameFormat,
   waiveDebt,
 } from './api';
+import { CACHE_SHELF, cacheClear, cacheGet, cacheKeyMargin, cacheKeyProfile, cachePut } from './cache';
 import { tossLogin } from './toss';
 
 vi.mock('./toss', () => ({ tossLogin: vi.fn() }));
@@ -877,5 +878,55 @@ describe('여백 API', () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(response(404, '<html>error</html>') as never);
     const error = (await deleteStory(8).catch((e: unknown) => e)) as ApiError;
     expect(error.status).toBe(404);
+  });
+});
+
+/**
+ * 세션 캐시 무효화 — 캐시는 「Loading을 안 그리게」 하는 물건이라 stale 노출이 최대 1 왕복이지만,
+ * 두 자리만은 그 한 왕복도 허용하지 않는다: <b>계정 전환</b>(남의 데이터)과 <b>내가 방금 쓴 글</b>
+ * (「썼는데 안 보인다」로 읽힌다). 둘 다 쓰는 함수 하나를 지나므로 그 자리에 무효화를 붙인다.
+ */
+describe('세션 캐시 무효화', () => {
+  beforeEach(cacheClear);
+
+  it('토큰을 버리면 캐시도 통째로 버린다 — 로그아웃·401·탈퇴가 전부 이 문을 지난다', () => {
+    cachePut(CACHE_SHELF, 'shelf');
+    cachePut(cacheKeyProfile('goospel'), 'profile');
+    cachePut(cacheKeyMargin('goospel', 1), 'margin');
+
+    token.clear();
+
+    expect(cacheGet(CACHE_SHELF)).toBeUndefined();
+    expect(cacheGet(cacheKeyProfile('goospel'))).toBeUndefined();
+    expect(cacheGet(cacheKeyMargin('goospel', 1))).toBeUndefined();
+  });
+
+  it('여백 글을 쓰면 여백 스냅만 버린다 — 내 새 글이 빠진 옛 스냅보다 로딩이 정직하다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, JSON.stringify({ id: 3, text: '한 문장' })) as never);
+    cachePut(cacheKeyMargin('goospel', 7), 'margin');
+    cachePut(CACHE_SHELF, 'shelf');
+
+    await createStory('한 문장', 7, 'paper', null);
+
+    expect(cacheGet(cacheKeyMargin('goospel', 7))).toBeUndefined();
+    expect(cacheGet(CACHE_SHELF)).toBe('shelf'); // 책장은 안 낡았다 — 필요 이상으로 버리면 로딩이 늘어난다
+  });
+
+  it('작성이 실패해도 캐시는 이미 버려져 있다 — 요청 전에 버리는 fail-safe', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(500, 'boom') as never);
+    cachePut(cacheKeyMargin('goospel', 7), 'margin');
+
+    await createStory('한 문장', 7, 'paper', null).catch(() => {});
+
+    expect(cacheGet(cacheKeyMargin('goospel', 7))).toBeUndefined();
+  });
+
+  it('여백 글을 지워도 여백 스냅을 버린다 — 지운 글이 캐시로 되살아나면 안 된다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200) as never);
+    cachePut(cacheKeyMargin('goospel', 7), 'margin');
+
+    await deleteStory(3);
+
+    expect(cacheGet(cacheKeyMargin('goospel', 7))).toBeUndefined();
   });
 });

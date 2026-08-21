@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { BookStatus, MarginEntry, MarginResponse, MyBookSummary, Recommendation, SearchRow } from './api';
+import { CACHE_SHELF, cacheClear, cacheKeyMargin, cachePut } from './cache';
 import { dismissCoachmark, setCoachmarkWalking } from './coachmark';
 import type { LibrarySheet } from './screens/Library';
 import {
@@ -10,6 +11,7 @@ import {
   AddStatusSheet,
   BookGrid,
   BookSearch,
+  Library,
   MarginBoxView,
   RecommendCard,
   SearchResultRow,
@@ -25,6 +27,7 @@ import { stubLocalStorage, userAgent } from './test-fixtures';
 beforeEach(() => {
   stubLocalStorage(); // 「책 추가하기」가 렌더 중에 코치마크를 봤는지 읽는다
   setCoachmarkWalking(true); // 인라인 안내는 걷는 중에만 뜬다(잠금 계측은 coachmark.test)
+  cacheClear(); // 세션 캐시는 모듈 상태다 — 안 비우면 앞 테스트가 뒤 테스트의 첫 렌더를 채운다
 });
 
 /**
@@ -946,5 +949,91 @@ describe('책 추가 손잡이', () => {
 
     expect(markup).not.toContain('책 추가하기');
     expect(markup).not.toContain(GUIDE);
+  });
+});
+
+/**
+ * 세션 캐시 첫 렌더 — 탭을 오갈 때마다 화면이 `<Loading/>`으로 비었다가 다시 차던 자리다.
+ *
+ * <p>이 화면은 재마운트마다 `fetchShelf()`를 다시 돌린다(재검증은 그대로 둔다). 바뀐 것은 **첫 렌더의
+ * 출발점**뿐이다 — 지난 성공 응답이 캐시에 있으면 `books`가 `null`이 아닌 채로 시작해 로딩 분기를
+ * 건너뛴다. effect가 안 도는 정적 렌더라 여기서 보이는 것은 오직 캐시가 채운 것이다(양성 단언).
+ */
+describe('서재 세션 캐시', () => {
+  function library(myLoginId: string | null = 'goospel') {
+    return renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Library
+          myLoginId={myLoginId}
+          onError={() => {}}
+          onShelfChanged={() => {}}
+          onOpenMargin={() => {}}
+          onComposeMargin={() => {}}
+        />
+      </TDSMobileProvider>,
+    );
+  }
+
+  it('캐시가 비어 있으면 지금처럼 로딩부터다 — 캐시는 없던 데이터를 지어내지 않는다', () => {
+    const markup = library();
+
+    expect(markup).toContain('불러오는 중');
+    expect(markup).not.toContain('데미안');
+  });
+
+  it('지난 책장이 캐시에 있으면 첫 렌더부터 책이 선다 — 탭 왕복의 빈 화면이 사라지는 지점', () => {
+    cachePut(CACHE_SHELF, { searchEnabled: true, books: [book(1, '데미안', 'READING')] });
+
+    const markup = library();
+
+    expect(markup).toContain('데미안');
+    expect(markup).toContain('읽는 중 1');
+  });
+
+  it('캐시된 책장은 검색 가능 여부까지 되살린다 — 「책 추가하기」가 한 박자 늦게 나타나지 않게', () => {
+    cachePut(CACHE_SHELF, { searchEnabled: true, books: [book(1, '데미안', 'READING')] });
+
+    expect(library()).toContain('책 추가하기');
+  });
+
+  it('방금 본 책의 여백은 캐시에서 곧바로 선다 — 캐러셀을 왕복해도 「불러오는 중」으로 안 되돌아간다', () => {
+    cachePut(CACHE_SHELF, { searchEnabled: true, books: [book(1, '데미안', 'READING')] });
+    cachePut(cacheKeyMargin('goospel', 1), {
+      bookId: 1,
+      margin: {
+        book: { id: 1, title: '데미안', author: '헤세', coverUrl: null },
+        ownerNickname: '구스펠',
+        self: true,
+        following: false,
+        entries: [
+          { id: 9, text: '캐시에서 살아난 문장', bgCode: 'paper', createdAt: '2026-08-16T00:00:00Z', likeCount: 0, liked: false },
+        ],
+      },
+    });
+
+    const markup = library();
+
+    expect(markup).toContain('캐시에서 살아난 문장');
+    expect(markup).toContain('<b style="color:#4E6B4A"> 1</b>'); // 헤더 글 수 = 내용 상태로 그려졌다는 증거
+    expect(markup).not.toContain('불러오는 중');
+  });
+
+  it('남의 여백 캐시는 내 박스에 안 선다 — 키에 loginId가 박혀 있다', () => {
+    cachePut(CACHE_SHELF, { searchEnabled: true, books: [book(1, '데미안', 'READING')] });
+    cachePut(cacheKeyMargin('nabi', 1), {
+      bookId: 1,
+      margin: {
+        book: { id: 1, title: '데미안', author: '헤세', coverUrl: null },
+        ownerNickname: '나비',
+        self: false,
+        following: false,
+        entries: [{ id: 9, text: '남의 문장', bgCode: 'paper', createdAt: '2026-08-16T00:00:00Z', likeCount: 0, liked: false }],
+      },
+    });
+
+    const markup = library();
+
+    expect(markup).not.toContain('남의 문장');
+    expect(markup).toContain('불러오는 중');
   });
 });
