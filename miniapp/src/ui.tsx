@@ -548,13 +548,10 @@ export function SearchField({
           busy ? (
             <Loader size="small" />
           ) : (
-            <button
-              type="submit"
-              aria-label="검색"
-              disabled={disabled || empty}
-              style={searchHandleStyle}
-              onClick={onSubmit}
-            >
+            // ⚠️ `onClick`을 달지 않는다 — 이 버튼은 form 안의 `type="submit"`이라 탭하면 click과
+            // submit이 **둘 다** 돈다(실측: click 1 + submit 1). 핸들러까지 달면 한 탭에 검색이 두 번
+            // 나간다(GET이라 화면은 멀쩡해 보이고 알라딘 호출만 두 배가 된다 — 조용한 낭비).
+            <button type="submit" aria-label="검색" disabled={disabled || empty} style={searchHandleStyle}>
               <SearchGlass dim={empty} />
             </button>
           )

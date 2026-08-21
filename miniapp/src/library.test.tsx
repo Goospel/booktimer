@@ -606,6 +606,21 @@ describe('책 검색 손잡이', () => {
   it('아이콘 손잡이에 이름이 붙어 있다 — 그림뿐인 버튼은 읽어 줄 이름이 없다', () => {
     expect(search()).toContain('aria-label="검색"');
   });
+
+  /**
+   * 손잡이는 <b>form이 제출한다</b>(`type="submit"`, 자체 `onClick` 없음).
+   *
+   * <p>처음엔 `onClick`도 달았는데, form 안의 submit 버튼은 탭 한 번에 <b>click과 submit이 둘 다</b>
+   * 돌아 검색이 두 번 나갔다(브라우저 실측: click 1 + submit 1). GET이라 화면은 멀쩡해 보이고 알라딘
+   * 호출만 두 배가 되는 <b>조용한 낭비</b>였다.
+   *
+   * <p>그렇다고 `type="button"`으로 바꾸면 이번엔 <b>아무 일도 안 일어난다</b> — 그때는 `onClick`이
+   * 필수가 된다. 그 실수를 여기서 막는다(정적 렌더는 `onClick` 유무를 못 보므로 type을 못 박는 것이
+   * 이 하니스가 걸 수 있는 유일한 가드다).
+   */
+  it('손잡이가 form을 제출한다 — type이 submit이라 핸들러 없이도 눌린다', () => {
+    expect(search()).toMatch(/<button[^>]*type="submit"[^>]*aria-label="검색"/);
+  });
 });
 
 /**
