@@ -1,4 +1,4 @@
-import { Button, Text } from '@toss/tds-mobile';
+import { Button, Loader, Text, TextField } from '@toss/tds-mobile';
 import { useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 
@@ -494,6 +494,98 @@ export function ErrorMessage({ message, onRetry }: { message: string | null; onR
         </Button>
       )}
     </>
+  );
+}
+
+/**
+ * 검색 입력칸 — 제출 손잡이가 <b>칸 안</b>에 있다(2026-08-21). 「책 추가」와 「친구 찾기」가 함께 쓴다.
+ *
+ * <p>예전엔 칸 아래 전폭 「검색」 버튼이었다. 그런데 입력 하나짜리 form은 브라우저가 엔터를 곧 제출로
+ * 치므로 엔터는 이미 됐고, 사람은 제목을 치고 엔터를 친다 — 버튼은 자리만 먹었다(사용자 지적).
+ * 그 자리가 비면서 「책 추가」 화면은 추천 카드에 쓸 세로 73px을 얻는다.
+ *
+ * <p>⚠️ <b>`enterKeyHint`가 이 변경의 절반이다.</b> 엔터가 <b>먹는데도</b> 키캡엔 「완료」라고 적혀
+ * 있었다(레포 전체에 `enterkeyhint` 0건이었다). 버튼만 걷고 이걸 안 넣으면, 눌러도 되는지 모르는
+ * 사람에게는 제출 수단이 통째로 사라진 화면이 된다. 둘은 반드시 한 쌍이다.
+ *
+ * <p>손잡이를 절대위치로 얹지 않는다 — TDS `TextField`가 `right` 슬롯을 이미 준다.
+ */
+export function SearchField({
+  label,
+  placeholder,
+  value,
+  disabled = false,
+  busy = false,
+  onChange,
+  onSubmit,
+}: {
+  label: string;
+  placeholder: string;
+  value: string;
+  disabled?: boolean;
+  /** 요청이 도는 중 — 손잡이 자리가 로더로 바뀐다(옛 버튼의 `loading`이 하던 일). */
+  busy?: boolean;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+}) {
+  const empty = value.trim() === '';
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault(); // 막지 않으면 페이지가 새로고침돼 미니앱이 처음으로 돌아간다
+        if (!disabled && !busy && !empty) onSubmit();
+      }}
+    >
+      <TextField
+        variant="box"
+        label={label}
+        placeholder={placeholder}
+        value={value}
+        disabled={disabled || busy}
+        enterKeyHint="search"
+        onChange={(e) => onChange(e.target.value)}
+        right={
+          busy ? (
+            <Loader size="small" />
+          ) : (
+            <button
+              type="submit"
+              aria-label="검색"
+              disabled={disabled || empty}
+              style={searchHandleStyle}
+              onClick={onSubmit}
+            >
+              <SearchGlass dim={empty} />
+            </button>
+          )
+        }
+      />
+    </form>
+  );
+}
+
+/** 손잡이는 그림만 있어 몸집이 작다 — 44×44는 손가락이 닿는 최소치라 그림과 따로 잡는다. */
+const searchHandleStyle = {
+  width: 44,
+  height: 44,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  border: 0,
+  padding: 0,
+  background: 'transparent',
+  cursor: 'pointer',
+} as const;
+
+/** 돋보기 — 기본 이모지를 쓰지 않기로 해서(2026-08-18) 선으로 그린다({@link OwnedCheck}과 같은 방식). */
+function SearchGlass({ dim }: { dim: boolean }) {
+  // 검색어가 없으면 흐린다 — 옛 버튼의 `disabled`가 하던 「아직 누를 때가 아니다」를 색이 잇는다.
+  const color = dim ? 'rgba(79,107,76,0.35)' : '#4F6B4C';
+  return (
+    <svg width="23" height="23" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="10.5" cy="10.5" r="6.6" stroke={color} strokeWidth="1.9" />
+      <path d="M15.6 15.6 L20 20" stroke={color} strokeWidth="1.9" strokeLinecap="round" />
+    </svg>
   );
 }
 

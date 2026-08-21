@@ -1,4 +1,4 @@
-import { Button, Text, TextField } from '@toss/tds-mobile';
+import { Button, Text } from '@toss/tds-mobile';
 import type { CSSProperties } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -15,7 +15,7 @@ import {
 import { useBackClose } from '../back';
 import { Coachmark } from '../coachmark';
 import { formatDuration } from '../format';
-import { BookCover, ErrorMessage, Loading, PENCIL_FRAME, Screen, SectionTitle, Sheet } from '../ui';
+import { BookCover, ErrorMessage, Loading, PENCIL_FRAME, Screen, SearchField, SectionTitle, Sheet } from '../ui';
 import { BookCarousel } from './Home';
 import { MarginCard } from './Story';
 
@@ -916,31 +916,16 @@ export function BookSearch({
 
   return (
     <Screen title="책 추가" onBack={onBack} backDisabled={busy}>
-      {/* 입력 하나짜리 form이라 엔터(키보드 「완료」)가 곧 제출이다 — 버튼은 밖에 둔다(Social과 같은 배선). */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault(); // 막지 않으면 페이지가 새로고침돼 미니앱이 처음으로 돌아간다
-          if (!busy && !searching && query.trim() !== '') submit();
-        }}
-      >
-        <TextField
-          variant="box"
-          label="책 제목"
-          placeholder="책 이름을 적어주세요"
-          value={query}
-          disabled={busy || searching}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-      </form>
-      <Button
-        display="block"
-        style={{ marginTop: 16 }}
-        loading={searching}
-        disabled={query.trim() === '' || busy}
-        onClick={submit}
-      >
-        검색
-      </Button>
+      {/* 손잡이는 칸 안이다 — 아래 전폭 버튼은 엔터가 살아난 뒤로 자리만 먹었다(`SearchField` 주석). */}
+      <SearchField
+        label="책 제목"
+        placeholder="책 이름을 적어주세요"
+        value={query}
+        disabled={busy}
+        busy={searching}
+        onChange={setQuery}
+        onSubmit={submit}
+      />
 
       <ErrorMessage message={error} />
 

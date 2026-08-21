@@ -1,9 +1,9 @@
-import { Button, Text, TextField } from '@toss/tds-mobile';
+import { Text } from '@toss/tds-mobile';
 import { useEffect, useState } from 'react';
 
 import type { ExploreUser, UserRow } from '../api';
 import { fetchExplore } from '../api';
-import { Avatar, BookCover, ErrorMessage, Loading, Screen, UserList } from '../ui';
+import { Avatar, BookCover, ErrorMessage, Loading, Screen, SearchField, UserList } from '../ui';
 
 /**
  * 둘러보기 — <b>아이디를 몰라도 사람을 만나는 화면</b>(2026-08-20).
@@ -63,36 +63,18 @@ export function Explore({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 손잡이는 칸 안이다 — 「책 추가」와 같은 `SearchField`를 쓴다(두 화면이 다른 모양이면 안 된다).
   const search = (
-    <>
-      {/* 입력 하나짜리 form은 브라우저가 엔터(키보드 「완료」)를 곧 제출로 친다 — 버튼은 밖에 둔다. */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault(); // 막지 않으면 페이지가 통째로 새로고침돼 미니앱이 처음으로 돌아간다
-          if (!busy && query.trim() !== '') onSearch();
-        }}
-      >
-        <TextField
-          variant="box"
-          label="아이디로 찾기"
-          placeholder="아이디 입력"
-          value={query}
-          disabled={busy}
-          onChange={(e) => onQueryChange(e.target.value)}
-        />
-      </form>
-      {/* aria-label을 명시한다 — loading 중에는 라벨이 스피너로 바뀌어 이름 없는 버튼이 된다. */}
-      <Button
-        aria-label="검색"
-        display="block"
-        style={{ marginTop: 12, marginBottom: 16 }}
-        loading={busy}
-        disabled={query.trim() === ''}
-        onClick={onSearch}
-      >
-        검색
-      </Button>
-    </>
+    <div style={{ marginBottom: 16 }}>
+      <SearchField
+        label="아이디로 찾기"
+        placeholder="아이디 입력"
+        value={query}
+        busy={busy}
+        onChange={onQueryChange}
+        onSubmit={onSearch}
+      />
+    </div>
   );
 
   return (
