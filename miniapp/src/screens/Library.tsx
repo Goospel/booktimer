@@ -28,6 +28,7 @@ import {
   Sheet,
   sectionStyle,
 } from '../ui';
+import { openExternal } from '../toss';
 import { BookCarousel, type LeadCard } from './Home';
 import { MarginCard } from './Story';
 
@@ -914,6 +915,8 @@ function ActionSheet({
         busy={busy}
         onClick={() => (needsPublishConfirm(book) ? onConfirmPublish(true) : onAction({ kind: 'visibility', book }))}
       />
+      {/* 구매는 삭제 위다 — 위험한 것이 목록 끝에 남는 배치를 지킨다. */}
+      <BuyRow link={book.purchaseLink} busy={busy} />
       <SheetRow label="서재에서 삭제" busy={busy} danger onClick={() => onConfirmDelete(true)} />
     </Sheet>
   );
@@ -1315,6 +1318,44 @@ const ownedChipStyle = {
 } as const;
 
 /**
+ * 제휴 구매 줄 — 링크가 없으면 아무것도 그리지 않는다(수동 등록 책·옛 데이터).
+ *
+ * <p><b>고지문구를 같은 컴포넌트 안에 묶은 이유</b>: 시트 두 곳(관리·담기)이 이걸 쓰는데 각자
+ * 조립하게 두면 한쪽에서 고지를 빠뜨리기 쉽다. 살 곳 없이 「수수료를 받는다」만 남는 것도, 살 곳만
+ * 있고 고지가 없는 것도 둘 다 사고다 — 한 몸이면 어느 쪽도 일어날 수 없다.
+ *
+ * <p>모바일에서도 제휴 귀속이 유지되는 것은 운영 링크로 실측했다(2026-08-22): 알라딘은 모바일 UA를
+ * 만나면 `m/mproduct.aspx`로 3회 리다이렉트하지만 `ttbkey`·`partner`를 그대로 들고 가 `partner`
+ * 쿠키를 심는다. Yes24가 목적지를 모바일 메인으로 갈아치워 추적을 잃는 것(T-128)과 정반대라,
+ * 100% 모바일인 미니앱에 붙일 수 있는 유일한 제공자다.
+ *
+ * <p>{@link openExternal}은 앱 안에서는 기기 브라우저로, 목 모드에서는 새 창으로 떨어뜨린다 —
+ * 어느 쪽이든 미니앱을 떠나므로 시트를 따로 닫지 않는다(돌아오면 그대로 열려 있다).
+ */
+function BuyRow({ link, busy }: { link: string | null; busy: boolean }) {
+  if (link === null || link === '') {
+    return null;
+  }
+  return (
+    <>
+      <SheetRow label="알라딘에서 구매" busy={busy} onClick={() => openExternal(link)} />
+      {/*
+        위아래 간격이 비대칭인 것은 의도다 — 관리 시트에서는 이 문구 <b>아래</b>에 「서재에서 삭제」가 온다.
+        간격이 6px대 10px이던 첫 시안에서는 소속이 애매해 삭제 버튼의 설명처럼 읽혔다(목 모드 실측).
+        위 4px·아래 18px로 벌려 이 문구가 어느 줄에 딸린 것인지를 거리만으로 알 수 있게 한다.
+      */}
+      <Text
+        typography="st12"
+        color="grey600"
+        style={{ display: 'block', margin: '-4px 2px 18px', wordBreak: 'keep-all' }}
+      >
+        제휴 링크예요. 구매하시면 일부 수수료를 받을 수 있어요.
+      </Text>
+    </>
+  );
+}
+
+/**
  * 담을 곳 고르기 — 서재 「관리」 시트와 <b>같은 껍데기·같은 어휘</b>다(`SECTIONS` 단일 출처).
  *
  * <p>예전엔 검색 결과를 탭하면 되묻지 않고 「읽는 중」으로 넣었다. 가장 잦은 의도라는 이유였지만,
@@ -1337,6 +1378,8 @@ export function AddStatusSheet({
       {SECTIONS.map(({ status, title }) => (
         <SheetRow key={status} label={`${title}(으)로 담기`} busy={busy} onClick={() => onPick(status)} />
       ))}
+      {/* 담기가 이 시트의 본래 일이라 구매는 그 뒤다 — 다만 사러 갈 의향은 여기서 가장 높다. */}
+      <BuyRow link={row.purchaseLink} busy={busy} />
     </Sheet>
   );
 }

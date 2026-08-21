@@ -168,7 +168,13 @@ function shelfBook(
     visibilityLabel: visibility === 'PUBLIC' ? '공개' : '비공개',
     isPublic: visibility === 'PUBLIC',
     seconds,
-    purchaseLink: null,
+    // 제휴 링크는 알라딘 검색으로 담은 책에만 있다(수동 등록·옛 데이터는 null). 짝수 id에만 주는 이유는
+    // **없는 쪽도 목에 남기기 위해서**다 — 전부 채우면 「구매 줄이 안 뜨는 책」이 검증 경로에서 사라져,
+    // 조건부 노출이 깨져도 목 모드로는 영영 못 본다(픽스처가 실데이터보다 순해서 생기는 사각, T-191).
+    purchaseLink:
+      id % 2 === 0
+        ? `https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=${1000 + id}&ttbkey=mock&partner=openAPI&start=api`
+        : null,
   };
 }
 
@@ -525,7 +531,10 @@ const searchRows: SearchRow[] = [
     isbn13: '9791168340084',
     coverUrl: null,
     publisher: '나무옆의자',
-    purchaseLink: null,
+    // 알라딘 검색이 실제로 내려주는 형태(제휴 파라미터 포함). 아래 「미움받을 용기」는 null로 남겨
+    // 「구매 줄이 없는 검색 결과」도 목에 둔다 — 조건부 노출의 양쪽을 다 볼 수 있게.
+    purchaseLink:
+      'https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=267381987&ttbkey=mock&partner=openAPI&start=api',
     category: '소설',
     pubDate: '2021-04-20',
     owned: false,
@@ -536,7 +545,8 @@ const searchRows: SearchRow[] = [
     isbn13: '9791165341909',
     coverUrl: null,
     publisher: '웅진지식하우스',
-    purchaseLink: null,
+    purchaseLink:
+      'https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=295128932&ttbkey=mock&partner=openAPI&start=api',
     category: '자기계발',
     pubDate: '2022-05-30',
     owned: false,

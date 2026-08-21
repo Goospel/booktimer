@@ -438,6 +438,27 @@ describe('관리 시트', () => {
     expect(markup).not.toContain('정말 삭제');
   });
 
+  it('구매 링크가 있으면 사러 가는 길과 제휴 고지를 함께 준다', () => {
+    const withLink = [book(1, '데미안', 'READING', { purchaseLink: 'https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=1&ttbkey=k' })];
+
+    const markup = shelf(withLink, { selectedId: 1, sheet: actions });
+
+    expect(markup).toContain('알라딘에서 구매');
+    expect(markup).toContain('제휴 링크');
+  });
+
+  /**
+   * 고지문구가 구매 줄과 <b>한 몸</b>이어야 하는 이유: 살 곳이 없는데 "수수료를 받는다"만 남으면
+   * 사용자에게 거짓 고지가 된다. 둘을 각 시트에서 따로 조립하면 한쪽만 빠뜨리기 쉬워서 함께 묶었고,
+   * 이 단언이 그 묶음을 지킨다.
+   */
+  it('구매 링크가 없으면 고지문구도 함께 사라진다 — 살 곳 없는 고지는 거짓말이다', () => {
+    const markup = shelf(books, { selectedId: 1, sheet: actions }); // 기본 픽스처의 purchaseLink는 null
+
+    expect(markup).not.toContain('알라딘에서 구매');
+    expect(markup).not.toContain('제휴 링크');
+  });
+
   /**
    * 공개 전환 확인 단계 — 「공개로 바꾸기」를 누르면 곧바로 전환하지 않고 <b>무엇이 새는지</b>를 먼저 말한다.
    * 삭제 확인과 같은 골격이되 색은 danger가 아니다: 파괴가 아니라 노출이다.
@@ -866,6 +887,35 @@ describe('책 담을 곳 고르기', () => {
 
   it('고른 책 제목을 시트 제목으로 세운다 — 어느 책을 담는 중인지가 시트 안에 남는다', () => {
     expect(sheet()).toContain('자바 최적화');
+  });
+
+  /**
+   * 담기 직전이 사러 갈 의향이 가장 높은 자리다 — 서재에 이미 있는 책(관리 시트)보다 여기가 앞선다.
+   * 두 시트가 <b>같은 컴포넌트</b>를 쓰므로 라벨·고지가 갈릴 수 없다.
+   */
+  it('구매 링크가 있으면 담기 옵션과 함께 사러 가는 길도 준다', () => {
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <AddStatusSheet
+          row={{ ...row, purchaseLink: 'https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=1&ttbkey=k' }}
+          busy={false}
+          onPick={() => {}}
+          onClose={() => {}}
+        />
+      </TDSMobileProvider>,
+    );
+
+    expect(markup).toContain('알라딘에서 구매');
+    expect(markup).toContain('제휴 링크');
+    // 담기가 이 시트의 본래 일이다 — 구매가 그걸 밀어내지 않는다.
+    expect(markup.indexOf('읽는 중(으)로 담기')).toBeLessThan(markup.indexOf('알라딘에서 구매'));
+  });
+
+  it('구매 링크가 없으면 고지문구도 함께 사라진다 — 살 곳 없는 고지는 거짓말이다', () => {
+    const markup = sheet(); // 기본 픽스처의 purchaseLink는 null
+
+    expect(markup).not.toContain('알라딘에서 구매');
+    expect(markup).not.toContain('제휴 링크');
   });
 
   it('추가 요청 중에는 잠근다 — 두 번 눌러 두 권이 들어가지 않게', () => {
