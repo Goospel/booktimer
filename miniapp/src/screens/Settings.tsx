@@ -10,8 +10,9 @@ import {
   updateNickname,
   validateNicknameFormat,
 } from '../api';
+import { resetCoachmarks } from '../coachmark';
 import { openExternal } from '../toss';
-import { ErrorMessage, Screen, Sheet, sectionStyle } from '../ui';
+import { ErrorMessage, Screen, SectionTitle, Sheet, sectionStyle } from '../ui';
 import { HandleSheet } from './Bookshop';
 
 /** 웹에 공개된 문서들 — 둘 다 `permitAll`이라 로그인 없이 열린다(미니앱 계정은 웹 로그인 자체가 불가). */
@@ -31,6 +32,17 @@ export async function logoutAndLeave(onDone: () => void): Promise<void> {
     // 폐기 실패는 삼킨다 — 되던지면 호출부의 `void`가 unhandled rejection이 된다. 토큰은 이미 버려졌다.
   }
   onDone();
+}
+
+/**
+ * 안내 다시 보기 — 기기 기록을 지우고 <b>화면을 넘긴다</b>.
+ *
+ * <p>넘기는 것이 절반이다: 설정 화면에는 홈도 탭바도 없어, 지우고 여기 서 있으면 아무 일도 안 일어난 것처럼
+ * 보인다. 돌아가는 순간 탭 셸이 새로 마운트되며 첫 걸음부터 다시 걷는다 — 커서를 흔드는 배선이 따로 없는 이유다.
+ */
+export function replayGuide(onBack: () => void): void {
+  resetCoachmarks();
+  onBack();
 }
 
 /**
@@ -106,7 +118,7 @@ export function DeleteAccountSection({
       {open && (
         <Sheet title="회원 탈퇴" onClose={onClose}>
           <Text typography="st11" style={{ display: 'block' }}>
-            탈퇴하면 독서 기록·책장·스토리·친구 관계가 <b>영구히 삭제</b>되고, <b>되돌릴 수 없어요.</b>
+            탈퇴하면 독서 기록·책장·여백·친구 관계가 <b>영구히 삭제</b>되고, <b>되돌릴 수 없어요.</b>
           </Text>
           {/* 클라이언트는 이 계정이 웹 계정과 연결됐는지 모른다 — 조건 노출 대신 상시 고지가 정직하다. */}
           <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
@@ -150,9 +162,7 @@ export function BlockedSection({
 
   return (
     <section style={sectionStyle}>
-      <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
-        차단한 사람 {blocked.length}
-      </Text>
+      <SectionTitle style={{ marginBottom: 10 }}>차단한 사람 {blocked.length}</SectionTitle>
       {blocked.map((u) => (
         <div key={u.loginId} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <Text typography="st11" style={{ flex: 1 }}>
@@ -201,6 +211,9 @@ export function Settings({
   const [draft, setDraft] = useState(dashboard.nickname);
   const [handle, setHandle] = useState(dashboard.loginId);
   const [creatingHandle, setCreatingHandle] = useState(false);
+  const [changingHandle, setChangingHandle] = useState(false);
+  /** 버리고 간 옛 아이디 = 변경권 소진 표식. `null`이면 아직 1번이 남아 있다(서버 응답이 유일한 출처). */
+  const [prevHandle, setPrevHandle] = useState(dashboard.previousLoginId ?? null);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [quitting, setQuitting] = useState(false);
   const [quitBusy, setQuitBusy] = useState(false);
@@ -286,7 +299,7 @@ export function Settings({
         <ErrorMessage message={formatError ?? error} />
         {saved && error === null && formatError === null && (
           <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
-            ✅ 닉네임을 바꿨어요.
+            닉네임을 바꿨어요.
           </Text>
         )}
 
@@ -316,9 +329,26 @@ export function Settings({
             <Text typography="st11" style={{ display: 'block' }}>
               @{handle}
             </Text>
-            <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 4 }}>
-              아이디는 한 번 정하면 바꿀 수 없어요.
-            </Text>
+            {prevHandle === null ? (
+              <>
+                <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 4 }}>
+                  아이디는 평생 1번만 바꿀 수 있어요.
+                </Text>
+                <Button
+                  display="block"
+                  variant="weak"
+                  style={{ marginTop: 12 }}
+                  onClick={() => setChangingHandle(true)}
+                >
+                  아이디 바꾸기
+                </Button>
+              </>
+            ) : (
+              // 소진 — 버튼을 지우는 것으로 끝내지 않고 옛 아이디를 함께 적는다(본인만 보는 응답이다).
+              <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 4 }}>
+                아이디 변경을 이미 사용했어요. (이전: @{prevHandle})
+              </Text>
+            )}
           </>
         )}
       </section>
@@ -326,6 +356,10 @@ export function Settings({
       <section style={sectionStyle}>
         <Button display="block" variant="weak" onClick={onGoGoal} disabled={goalAdPending}>
           {goalAdPending ? '준비 중…' : '하루 목표 바꾸기'}
+        </Button>
+        {/* 첫 진입 안내를 다시 부른다 — 누르면 홈으로 돌아가 첫 걸음부터 다시 걷는다. */}
+        <Button display="block" variant="weak" style={{ marginTop: 8 }} onClick={() => replayGuide(onBack)}>
+          처음 안내 다시 보기
         </Button>
       </section>
 
@@ -375,6 +409,20 @@ export function Settings({
             setHandle(loginId); // 서버가 정규화한 값 — 이 화면이 그 자리에서 @표시로 바뀐다
             setCreatingHandle(false);
             onProfileChanged(); // 대시보드 재조회로 진실을 서버와 맞춘다
+          }}
+          onFail={fail}
+        />
+      )}
+
+      {changingHandle && handle !== null && (
+        <HandleSheet
+          change={handle}
+          onClose={() => setChangingHandle(false)}
+          onCreated={(loginId) => {
+            setPrevHandle(handle); // 방금 버린 아이디 — 섹션이 즉시 소진 표시로 바뀐다
+            setHandle(loginId);
+            setChangingHandle(false);
+            onProfileChanged();
           }}
           onFail={fail}
         />

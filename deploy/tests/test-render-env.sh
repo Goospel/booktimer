@@ -44,7 +44,8 @@ case "\$*" in
                  ADMIN_LOGIN_IDS LLM_API_KEY SPRING_MAIL_USERNAME SPRING_MAIL_PASSWORD \\
                  MYSQL_ROOT_PASSWORD MINIAPP_ALLOWED_ORIGINS \\
                  TOSS_MESSENGER_ENABLED TOSS_FINISH_TEMPLATE_CODE \\
-                 TOSS_GOAL_MET_ENABLED TOSS_GOAL_MET_TEMPLATE_CODE; do
+                 TOSS_GOAL_MET_ENABLED TOSS_GOAL_MET_TEMPLATE_CODE \\
+                 TOSS_RETENTION_ENABLED TOSS_RETENTION_TEMPLATE_CODE; do
             printf '/booktimer/%s\tvalue-of-%s\n' "\$n" "\$n"
         done
         # 여러 줄 SecureString(PEM)도 같은 /booktimer 경로에 살아 이 목록에 함께 나온다.
@@ -116,6 +117,9 @@ assert_has "  .env 에 완독 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_FINIS
 # 목표 달성 푸시 — 게이트가 매핑에서 빠지면 스케줄러 빈이 안 떠서 "켰는데 아무 일도 안 일어나는" 무성 장애가 된다.
 assert_has "  .env 에 목표달성 게이트" "$env_out" "BOOKTIMER_TOSS_GOAL_MET_ENABLED=value-of-TOSS_GOAL_MET_ENABLED"
 assert_has "  .env 에 목표달성 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_GOAL_MET_TEMPLATE_CODE=value-of-TOSS_GOAL_MET_TEMPLATE_CODE"
+# 재참여(7일 비활동) 넛지 푸시 — 같은 무성 장애. SSM을 true로 켜도 스케줄러 빈이 안 떠서 매일 19시 배치가 안 돈다.
+assert_has "  .env 에 재참여 게이트" "$env_out" "BOOKTIMER_TOSS_RETENTION_ENABLED=value-of-TOSS_RETENTION_ENABLED"
+assert_has "  .env 에 재참여 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_RETENTION_TEMPLATE_CODE=value-of-TOSS_RETENTION_TEMPLATE_CODE"
 
 # ── Case 2: 인증서 누락 → 배포 실패, 파일도 안 남는다 ──
 r="$(run TOSS_MTLS_CERT)"; rc="${r%%$'\n'*}"; out="${r#*$'\n'}"
@@ -132,7 +136,22 @@ assert_has  "  누락을 이름으로 알린다" "$out" "TOSS_MTLS_KEY"
 src="$(cat "$S")"
 assert_has "PEM 파일 권한 600" "$src" "chmod 600"
 
-# ── Case 5: compose가 인증서 디렉터리를 컨테이너에 읽기전용 마운트한다 ──
+# ── Case 5: PEM 소유자를 컨테이너 uid로 넘긴다 (정적 — 위 Case 4와 같은 이유로 런타임 재현 불가) ──
+# 이 배포는 root로 돈다(SSM Run Command — 실측 uid=0). 그대로면 PEM이 root:root 600이라
+# 비root 컨테이너가 못 읽는데, Spring SSL 번들은 지연 생성이라 **앱은 뜨고 토스 로그인만 죽는다**.
+assert_has "PEM 소유자를 APP_UID로 넘긴다" "$src" 'chown "$APP_UID:$APP_UID"'
+
+# ── Case 6: Dockerfile의 USER uid와 render-env.sh의 APP_UID가 같다 ──
+# **이 PR의 핵심 단언**이다. 두 값은 서로 다른 파일에 있고 어긋나도 빌드·기동·헬스가 전부 초록이라,
+# 드리프트는 오직 "토스 로그인만 안 된다"는 사용자 제보로만 드러난다. 숫자 하나를 고치고 다른 하나를
+# 잊는 것이 이 무성 장애의 유일한 재발 경로이므로, 그 결합을 여기서 못 박는다.
+docker_uid="$(grep -oE '^USER[[:space:]]+[0-9]+' "$REPO/Dockerfile" | grep -oE '[0-9]+$')"
+render_uid="$(grep -oE 'APP_UID:-[0-9]+' "$S" | grep -oE '[0-9]+$')"
+assert_eq "Dockerfile USER uid 를 읽어낸다(형식 변경 감지)" "$(printf '%s' "$docker_uid" | grep -cE '^[0-9]+$')" "1"
+assert_eq "render-env APP_UID 를 읽어낸다(형식 변경 감지)"  "$(printf '%s' "$render_uid" | grep -cE '^[0-9]+$')" "1"
+assert_eq "컨테이너 uid == PEM 소유자 uid" "$docker_uid" "$render_uid"
+
+# ── Case 7: compose가 인증서 디렉터리를 컨테이너에 읽기전용 마운트한다 ──
 # 렌더만 되고 마운트가 없으면 파일은 EC2에 있는데 컨테이너 안엔 없다 — 증상이 "인증서 없음"으로 같아 헷갈린다.
 compose="$(cat "$REPO/deploy/compose.prod.yaml")"
 assert_has "compose 마운트(읽기전용)" "$compose" "./toss:/etc/booktimer/toss:ro"

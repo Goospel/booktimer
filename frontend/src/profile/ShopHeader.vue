@@ -17,17 +17,12 @@ defineProps<{
     followingCount: number
     self: boolean
     following: boolean
-    /** 활성 스토리 존재 — 아바타에 링 + 탭하면 뷰어(팔로워/본인만 서버가 목록을 내려줌, §13.2). */
-    hasStories?: boolean
-    /** 미열람 존재 — 링 강조. */
-    storiesUnviewed?: boolean
 }>()
 defineEmits<{
     (e: 'openTag', label: string): void
     (e: 'toggleFollow'): void
     (e: 'doBlock'): void
     (e: 'openReport'): void
-    (e: 'openStories'): void
 }>()
 
 const menuOpen = ref(false)
@@ -56,15 +51,9 @@ const menuOpen = ref(false)
         </div>
 
         <!-- 정체성: 이니셜 아바타(대시보드 헤더와 동일 42px 세이지 원) + 책방명/핸들.
-             활성 스토리가 있으면 링을 두르고 버튼이 된다(탭 = 스토리 뷰어). -->
+             옛 스토리 링은 폐기 — "새 글" 신호는 이제 사람이 아니라 책(책 리스트 표지 발광)에 붙는다. -->
         <div class="shop-id-head">
-            <button v-if="hasStories" type="button"
-                    class="dash-header-avatar shop-avatar story-ring"
-                    :class="{ 'story-ring-unviewed': storiesUnviewed }"
-                    aria-label="스토리 보기" @click="$emit('openStories')">
-                <AuthorAvatar :code="profileCharacterCode" :fallback-text="loginId" />
-            </button>
-            <div v-else class="dash-header-avatar shop-avatar" aria-hidden="true"><AuthorAvatar :code="profileCharacterCode" :fallback-text="loginId" /></div>
+            <div class="dash-header-avatar shop-avatar" aria-hidden="true"><AuthorAvatar :code="profileCharacterCode" :fallback-text="loginId" /></div>
             <div class="shop-id-text">
                 <div class="shop-id-title">{{ nickname }}</div>
                 <div class="shop-id-handle">@{{ loginId }}</div>

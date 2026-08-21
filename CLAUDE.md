@@ -3,7 +3,8 @@
 > 이 파일은 글로벌 `~/.claude/CLAUDE.md` 와 **합쳐서** 적용된다.
 > 글로벌은 사용자 메타 시스템(PKM 등), 이 파일은 BookTimer 고유 규칙.
 
-프로젝트 개요·도메인 규칙은 [README.md](README.md), 로드맵·설계는 [plan.md](plan.md), 갱신 이력(변경 일지)은 [claude-docs/changelog.md](claude-docs/changelog.md), 학습 노트는 [claude-docs/learning-notes.md](claude-docs/learning-notes.md), 트러블슈팅은 [claude-docs/troubleshooting.md](claude-docs/troubleshooting.md) 참고.
+프로젝트 개요·도메인 규칙은 [README.md](README.md), 로드맵·설계는 [plan.md](plan.md), 갱신 이력(변경 일지)은 [claude-docs/changelog.md](claude-docs/changelog.md), 트러블슈팅은 [claude-docs/troubleshooting.md](claude-docs/troubleshooting.md) 참고.
+옛 학습 노트 [claude-docs/learning-notes.md](claude-docs/learning-notes.md)는 **아카이브**다 — 읽는 건 유용하나 새로 쓰지 않는다(2026-08-18 폐기, 「🧯 트러블슈팅 활용」 절).
 
 ---
 
@@ -86,7 +87,7 @@
 
 1. **브랜치 생성** — `main` 에서 분기
    - 네이밍: `feat/<요약>`, `fix/<요약>`, `docs/<요약>`, `chore/<요약>`
-   - 예: `feat/reading-timer-entity`, `docs/learning-notes-n004`
+   - 예: `feat/reading-timer-entity`, `docs/t183-review-overlay`
 2. **작업 + 커밋** — 의미 단위로 커밋
    - **커밋 제목에 PR 번호(`(#NNN)`)를 직접 넣지 않는다** — squash 머지 시 GitHub가 자동 부착해 중복된다.
      **(훅 `check-commit-message.ps1`이 하드 강제. 우회: `ALLOW_PR_NUM_IN_TITLE` 토큰.)**
@@ -99,7 +100,7 @@
      ```
      🤖 Generated with [Claude Code](https://claude.com/claude-code)
      ```
-   - PR body 작성 시 글로벌 규칙대로 **troubleshooting / learning-notes sweep** 수행
+   - PR body 작성 시 글로벌 규칙대로 **troubleshooting sweep** 수행(학습 노트 sweep은 2026-08-18 폐기)
    - **갱신 이력 항목을 PR 브랜치 안에 포함한다 (필수)** — 그 작업을
      [claude-docs/changelog.md](claude-docs/changelog.md) 표 **맨 아래에 한 줄**로 남긴다(일자 / 한 일).
      **PR 번호는 넣지 않는다**(번호 반영 추가 커밋 = push·CI 2회. 추적은 PR body·git log로 충분).
@@ -184,7 +185,7 @@ powershell -File .claude/scripts/remove-worktree.ps1 ../BookTimer-<task>   # 또
 폴더를 나눠도 repo 전체가 공유하는 것은 여전히 충돌하니 조율한다:
 
 - **Flyway 버전 번호**(`V5__`, `V6__` …) — 세션별 번호 구역 배정 또는 머지 후 부여
-- **공유 문서**(plan.md / changelog / README / 이 파일 / learning-notes / troubleshooting) — 작게·원자적으로, **편집 직전 재읽기**
+- **공유 문서**(plan.md / changelog / README / 이 파일 / troubleshooting) — 작게·원자적으로, **편집 직전 재읽기**
 - **앱 포트 8080** — 두 세션이 `bootRun` 하면 충돌 → 트리별 `server.port` 분리(또는 한 곳에서만 실행).
   **검증용 `bootRun`은 작업 종료 시 반드시 끈다(본인이 띄운 건 본인이 끈다).** 떠도는 잔재 강제 종료:
   ```powershell
@@ -277,10 +278,21 @@ Claude Code 는 그 자식 프로세스 종료를 기다릴 뿐이라 **코어 �
 
 **왜**: `defer`/`async`가 실행 시점을 바꿔, 헤드리스 재현이 동기 로드로 단순화되면 **버그가 사라진 가짜 green**이 나온다 — 정원 Phaser 위젯에서 반복 실측(#356~364). 전문은 [참조](claude-docs/claude-md-reference.md), 개념은 N-082·N-083·T-053·T-054.
 
-- **브라우저는 데스크톱 크롬이 기본** (사용자 지정 2026-08-13): 화면 확인·스크린샷은 `mcp__claude-in-chrome__*`(사용자 실 크롬)로 한다 — 클로드 내부 브라우저 패널은 사용자가 패널을 열어놔야만 스크린샷·클릭이 되고, 닫혀 있으면 "not compositing frames" 타임아웃이 난다. **단 dev 서버 기동(`preview_start`)은 내부 도구가 유일 경로**라 그것만 쓰고, 확인은 크롬 탭에서 한다 — 미니앱 목 모드는 `.claude/launch.json` 의 `miniapp-mock` 항목(`npm --prefix miniapp run dev:mock`, 포트 5174). ⚠️ **`launch.json` 은 gitignore 대상(머신 로컬)이라 새 워크트리·새 PC엔 없다** — 없으면 그 항목을 다시 넣고 시작한다. 미니앱은 폰 화면 기준이라 크롬 `Ctrl+Shift+M`(기기 모드)로 본다. ⚠️ vite는 `::1`에만 바인딩 — `127.0.0.1:5174`는 안 열리니 `localhost:5174`로.
-- **진단**: 막히면 추측 전에 **실 배포/로컬 페이지에 Chrome 확장으로 붙어 콘솔·네트워크를 직접 읽는다.** "UI는 멀쩡한데 한 기능만 안 됨"일수록 콘솔에 답이 있다.
+- 📌 **브라우저 표면 선택·CDP 함정은 글로벌 `~/.claude/CLAUDE.md` 「🖥️ 브라우저 확인」이 단일 출처다 (2026-08-21 글로벌 승격 — 2개 프로젝트 11회 재발).** 표면 3종(로그인 불필요=`chrome-devtools` MCP 1순위 / 인증 화면=확장 / dev 서버 기동만 내부 패널), `emulate` 기기 모드(F12 불요), 「1회 탭 갈아타기 → 다른 크롬 → 수치로 마감」 순서, **판정 수치 선행·스크린샷 후행** 규칙, 「이상값을 만나면 관측 경로부터 의심」이 전부 거기 있다. 아래는 **이 레포 고유분만**.
+- **목 모드 dev 서버 (이 레포)**: 미니앱 목 모드는 `.claude/launch.json`의 `miniapp-mock` 항목(`npm --prefix miniapp run dev:mock`). **포트는 그 항목이 정한다** — 이 PC는 5300이다(5174는 OS 예약 구간에 걸렸다, T-197). ⚠️ **`launch.json`은 gitignore 대상(머신 로컬)이라 새 워크트리·새 PC엔 없다** — 없으면 그 항목을 다시 넣고 시작한다.
+- **진단**: 막히면 추측 전에 **실 배포/로컬 페이지에 붙어 콘솔·네트워크를 직접 읽는다.** "UI는 멀쩡한데 한 기능만 안 됨"일수록 콘솔에 답이 있다.
+- **스토어 스크린샷의 실데이터는 사용자 폰이 유일 경로다** — `chrome-devtools` 크롬은 빈 프로필이라 미니앱 실계정에 못 붙는다(API 토큰이 토스 SDK 경유). 목 모드로 찍고, 실데이터가 필요하면 **사용자에게 촬영을 요청**한다(찍은 척 목 화면을 올리지 않는다).
 - **재현 하니스**: 만든다면 production의 `defer`/로드 순서·반응성 래핑까지 충실히 복제한다 — 동기 로드로 단순화하면 그 버그를 못 잡는다(T-053).
 - **게이트**: 로드순서·타이밍·반응성이 걸린 변경은 **머지 전 실 브라우저 1회 확인**. 순수 로직은 단위테스트(TDD), 클라이언트 통합은 실 브라우저 — 역할 분담.
+- ⚠️ **미니앱의 성능·합성(CSS 애니메이션·큰 리스트·이미지 다량)이 걸린 변경은 실기기가 유일한 게이트다 (2026-08-16 승격, T-176).**
+  데스크톱 크롬·목 모드는 여유가 커서 **이 클래스를 원리상 못 잡는다** — 발광 `box-shadow` 무한 애니메이션이
+  표지를 초당 60번 재래스터화하던 버그가 목 모드 전 경로 검증과 로컬 `bootRun` 웹 검증을 **모두 통과한 채** 머지됐다.
+  **애니메이션할 속성은 `transform`·`opacity`로 제한**하고(그 외는 페인트·레이아웃 유발), 특히 **이미지·텍스트를
+  감싸는 요소에 걸지 않는다**(콘텐츠 재래스터화까지 끌고 온다). 실기기 확인 전이라면 애니메이션 없는 정적 표현을 기본값으로.
+  위 「로드순서」 규율과 같은 뿌리의 2회차다 — **검증 환경이 실환경보다 관대하면 그 클래스는 가짜 green으로 통과한다**(T-053·T-054·N-083 계열).
+- ⚠️ **설계의 「미검증 가정」 절은 읽고 끝낼 목록이 아니라 머지 전 체크리스트다 (T-176).** 위 버그는 설계 §6에
+  「box-shadow 애니메이션은 GPU 합성이 안 될 수 있다 — 목 모드 브라우저에서 판단」이라고 **먼저 적혀 있었는데** 건너뛰고 머지했다.
+  계획 md에 미검증 가정을 적었으면 **그 검증을 수행했는지 PR 전에 항목별로 확인**한다(못 했으면 그 사실을 PR body에 명시).
 - **E2E(Playwright)는 로컬 수동 — 커밋 훅 금지, 승격은 CI 잡(머지 게이트)으로** (2026-06-26 결정): `frontend/e2e/` 표적 2개(로그인·정원 저장). 승격 트리거 = E2E가 잡았어야 할 회귀가 또 새거나, 스펙이 2~3개 흐름 이상으로 커질 때. (근거 전문은 [참조](claude-docs/claude-md-reference.md), 실행법은 N-127.)
 
 ---
@@ -302,20 +314,23 @@ Claude Code 는 그 자식 프로세스 종료를 기다릴 뿐이라 **코어 �
 
 ### 작업 시작 / 디버깅 전 — 먼저 참고
 
-- 빌드·git·PowerShell·테스트 등에서 막히면, **추측하기 전에 먼저** `troubleshooting.md` 와 `learning-notes.md` 를 확인한다.
+- 빌드·git·PowerShell·테스트 등에서 막히면, **추측하기 전에 먼저** `troubleshooting.md` 를 확인한다.
 - 이미 기록된 트랩이면 그 해법을 그대로 적용한다 (두 번 헤매지 않기).
+- 옛 개념 노트 `claude-docs/learning-notes.md` 는 **아카이브**다(아래 폐기 안내) — 검색해서 읽는 건 유용하니 막지 않되, **새로 쓰지 않는다**.
 
-### 디버깅 후 — 자동 sweep (learning-notes 파이프라인과 동일)
+### 디버깅 후 — 자동 sweep
 
-1분 이상 헤맨 문제를 해결했으면 **두 종류의 후보를 점검**한다:
+1분 이상 헤맨 문제를 해결했으면 **`T-###` 후보 하나를 점검**한다 — "이렇게 하지 마라"(재발 방지 절차)와
+"왜 이렇게 동작하는가"(개념)를 **한 항목 안에서** 다룬다. 개념은 `T-###` 의 *원인* 필드가 담는 몫이다.
 
-| 종류 | 위치 | 성격 |
-|---|---|---|
-| **Trap (해결법)** — "이렇게 하지 마라" | `troubleshooting.md` (`T-###`) | 재발 방지 절차 |
-| **개념 (이해)** — "왜 이렇게 동작하는가" | `learning-notes.md` (`N-###`) | 면접 설명 가능 수준 |
+> **⚠️ 학습 노트(`N-###`) 파이프라인은 폐기했다 (2026-08-18 사용자 확정).** 예전엔 개념을
+> `claude-docs/learning-notes.md` 에 따로 쌓고 후보를 별도로 제안했는데, **개념만 있고 함정이 없는 것은
+> 이제 아예 안 남긴다**. 실제 운영도 그렇게 흘러왔다(마지막 항목 N-149 이후 사실상 정지). 파일과 기존
+> `N-###` 상호참조는 **아카이브로 보존**한다 — 가리키는 내용이 실재하고 여전히 읽을 값어치가 있어서다.
+> 그러니 이 문서 다른 절에 남아 있는 `N-###` 링크는 낡은 게 아니라 **의도된 포인터**다(N-032·N-055·N-077 등).
 
-- 해결 직후, 답변 끝에 **"🧯 troubleshooting 추가 후보 — `<한 줄 요약>`. 박을까?"** (또는 learning-notes 후보)를 짧게 제안한다.
-- 사용자가 OK 하면 즉시 해당 파일에 `T-###` / `N-###` 로 추가한다.
+- 해결 직후, 답변 끝에 **"🧯 troubleshooting 추가 후보 — `<한 줄 요약>`. 박을까?"** 를 짧게 제안한다.
+- 사용자가 OK 하면 즉시 `troubleshooting.md` 에 `T-###` 로 추가한다.
 - PR 머지 직전에도 sweep 을 함께 수행한다 (Git 워크플로 4번).
 - **자주 재발(2회 이상)하는 트랩은 `troubleshooting.md`(참조용)에 더해 이 `CLAUDE.md`(항상 로드)의 해당 섹션에도 승격**한다 — 매번 troubleshooting 을 안 펼쳐도 바로 대처하게. (예: git/gradle 무한 hang → 「🧪 TDD → ⚠️ 커밋이 무한 hang 하면」, T-078. 사용자 합의: 2026-06-22.)
 - **재발 카운팅 = `troubleshooting.md` 상단 「🔁 재발·승격 트래커」 표로 한다 (필수).** `T-###` 를 새로 쓸 때 같은 트랩의 재발이면 ① 항목 끝에 `N회차(이전 T-### 재발)` 명시 ② 트래커 표의 회차·승격상태 갱신(신규 1회는 표에 안 올리고 2회째에 군으로). 표에서 **2회+인데 미승격**이 보이면 승격 — **prose 한 줄보다 하드픽스(훅·스크립트) 우선**. 답변에서도 재발이면 "이건 N회차"를 짚는다. (배경은 [참조](claude-docs/claude-md-reference.md).)
@@ -337,11 +352,17 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
 - 빌드: `./gradlew build` (Windows: `gradlew.bat`)
 - 컴파일만: `./gradlew compileJava`
 - 실행: `./gradlew bootRun` — **`local` 프로파일** 자동 활성(build.gradle `bootRun` 태스크). Security 가 있어 전 엔드포인트 기본 잠김(로컬은 아래 시드 계정으로 로그인).
-- **로컬 테스트 계정(시드)**: `bootRun` 시 `LocalTestAccountSeeder(@Profile("local"))`가 멱등하게 시드.
-  - login_id: `testid`(소문자 — loadUserByUsername이 입력을 소문자화하지 않음), 비번: `1234qwer!!`
+- **로컬 테스트 계정(시드)** — **로컬 전용이다. 운영엔 테스트 계정이 없다.**
+  - `bootRun` 시 `LocalTestAccountSeeder(@Profile("local"))`가 멱등하게 시드. login_id: `testid`
+    (소문자 — loadUserByUsername이 입력을 소문자화하지 않음), 비번: `1234qwer!!`, 이메일: `testid@local.test`.
   - 이미 존재하면 "시드 생략" 로그만 출력(멱등). 재기동에도 중복 생성 없음.
   - admin 뷰 필요 시 코드 추가 없이 `BOOKTIMER_ADMIN_LOGIN_IDS=testid` 환경변수로 `AdminAccountSeeder`가 승격.
-  - **운영(`booktimer.app`)에도 동일 계정(`testid` / `1234qwer!!`)이 존재** — 로컬·운영 양쪽에서 Chrome MCP 폼에 직접 입력해도 된다. 로그인 화면이 뜨면 이 계정으로 바로 로그인하고, 새 회원가입은 금지.
+  - ⚠️ **운영(`booktimer.app`)에 로그인하지 않는다.** 예전엔 이메일 발송 검증용으로 만든 동명 운영 계정
+    (`testid` / `testtest@gmail.com`)이 있었고 이 파일이 그 비밀번호를 적고 있었다 — **공개 레포에 운영
+    자격증명을 두는 것**이라, 이메일 작업이 끝난 뒤 계정을 지우고(2026-08-15) 이 기술도 걷어냈다.
+    운영 화면 확인이 꼭 필요하면 계정을 새로 만들되 **비밀번호는 이 레포에 적지 않는다**.
+  - 위 비밀번호가 여기 남아 있는 건 안전하다 — `LocalTestAccountSeeder`에 하드코딩된 **로컬 픽스처**이고
+    (`dev/LocalTestAccountSeeder.java`), `@local.test`는 라우팅 불가 예약 TLD라 어디에도 붙지 않는다.
 - DB: `compose.yaml` 의 MySQL 이 DevTools docker-compose 연동으로 자동 기동 (Docker 필요).
   - **이 컨테이너를 만드는 건 `bootRun`이지 `./gradlew test`가 아니다**(테스트는 H2 — 아래). bootRun이 워크트리별로 MySQL 컨테이너를 띄워 누적되니, **검증을 마치거나 주기적으로** `bash .claude/scripts/docker-cleanup.sh`(기본 Exited만, `--all`이면 Up 포함)로 정리한다 — `working_dir` 라벨로 BookTimer 소속만 지우고 타 프로젝트는 보호. 세션 종료 시엔 `SessionEnd` 훅이 기본 모드로 자동 정리한다(gap#3 자동배선). 멀티세션 동시 작업 시 정리 주의는 「🪢 다중 세션 → bootRun docker-compose 컨테이너」 절 참고.
 - 테스트 DB: 운영은 MySQL, **테스트는 H2 인메모리**(`src/test/resources/application.properties`) — Docker 없이 테스트 독립 실행. 테스트 시 docker-compose 자동 기동은 꺼짐(`spring.docker.compose.enabled=false`)
@@ -351,11 +372,20 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
 
 ### 미니앱 개발 루프 — 기본은 브라우저 목 모드 (2026-08-12 실측 갱신)
 
-미니앱 화면 작업 시 **Claude가 직접 `npm --prefix miniapp run dev:mock`을 백그라운드로 띄워 브라우저(vite HMR, 포트 5174)로 확인한다** — 사용자에게 명령어를 요구하지 않는다(사용자 지정). 목 모드는 `api.ts`가 서버 대신 `src/dev-mock.ts`의 픽스처를 돌려주고 토큰을 더미로 두므로, 서버·토스 SDK·에뮬레이터 없이 홈·서재·소셜·스토리·기록·목표가 전부 뜬다. 목에 없는 경로는 404로 던져 조용히 빈 화면이 되지 않는다.
+미니앱 화면 작업 시 **Claude가 직접 `npm --prefix miniapp run dev:mock`을 백그라운드로 띄워 브라우저(vite HMR, 포트는 `launch.json`이 정한다 — 이 PC는 5300)로 확인한다** — 사용자에게 명령어를 요구하지 않는다(사용자 지정). 목 모드는 `api.ts`가 서버 대신 `src/dev-mock.ts`의 픽스처를 돌려주고 토큰을 더미로 두므로, 서버·토스 SDK·에뮬레이터 없이 홈·서재·소셜·스토리·기록·목표가 전부 뜬다. 목에 없는 경로는 404로 던져 조용히 빈 화면이 되지 않는다.
 
 - 픽스처를 고치려면 `miniapp/src/dev-mock.ts` 한 곳(모듈 메모리 상태라 새로고침이 초기화다).
 - 목 코드는 프로드 번들에서 통째로 잘린다(`import.meta.env.DEV` 게이트 + dynamic import). `deploy.sh`가 `__DEV_MOCK__` 부재를 배포 전에 재확인한다.
 - **실기기·SDK 연동(실로그인·광고·알림 동의)만** `bash miniapp/deploy.sh --expect "<이번 변경 문구>"` + 실기기다 — 목 모드로는 원리상 확인되지 않는다. ⚠️ **`--expect` 마커는 「소스에 따옴표째 적혀 있어 번들에 그대로 실리는」 문구여야 한다**(T-153) — ① `slice(0,15)` 같은 **코드 조각**은 minify가 `slice(0,EGe)`로 변형하고 ② `11시간 5분`처럼 **런타임에 조립되는 값**(`formatDuration(...)` 결과·템플릿 보간)은 애초에 번들에 리터럴로 없다. 판별법: 그 문구를 소스에서 따옴표째 찾을 수 있는가. **새 UI 문구가 0인 변경**(순수 동작·레이아웃 수정)은 마커를 억지로 만들지 말고 `--expect` 없이 클린 빌드 + `.ait` 해시 검증에 맡긴다.
+- ⚠️ **진입 직후 화면을 덮는 것을 만들지 않는다 — 심사가 두 번 반려한 자리다 (2026-08-17 승격, T-183).**
+  시트·딤·모달·**툴팁까지 전부**다. 심사가 막는 것은 「바텀시트」라는 모양이 아니라 **사용자 동의 없이 진입
+  직후 화면을 덮는 행위**다(1회차 2026-08-12 「서비스 설명 없이 즉시 로그인 유도」 → 인트로 신설, 2회차
+  2026-08-17 「접속 직후 바텀시트」 → 코치마크를 배너 수동 시작으로). 안내가 필요하면 **화면 안 요소**(배너·링크)로
+  두고 사용자가 눌러 시작하게 한다.
+  - **판정은 첫 진입을 실제로 재현해서** 한다: 목 모드에서 `localStorage.clear()` → 진입 → **`position:fixed` ·
+    `z-index ≥ 99` 요소가 0개**임을 세고, **거절·완주·재방문**까지 밟는다. 「자동 노출을 껐다」는 코드 판독으로
+    끝내지 않는다 — 실제로 **거절 경로에서 재발**했다(길 안내 키가 남아 인라인 안내의 게이트가 열렸다).
+  - 훅 강제는 불가하다(「진입 직후 뜨는가」는 정적 분석으로 판정할 수 없다) — 이 prose와 위 재현 절차가 게이트다.
 - **배포 권한 경계**: Claude는 `deploy.sh` 업로드(deploymentId 확보)까지다 — **앱인토스 콘솔(심사 제출·[출시하기])은 Claude 접근이 차단**돼 있어 사용자 몫. 배포 보고 시 "업로드 완료, 심사 제출은 콘솔에서"로 경계를 명시하고 출시 완료로 오보고하지 않는다.
 - **심사·제출이 언급되면 스토어 스크린샷을 점검한다 (필수)**: 사용자가 심사·[출시하기]를 입에 올리면 그 자리에서
   `miniapp/screenshots/`(01-home·02-library·03-history·04-goal)가 **지금 배포될 UI와 일치하는지** 확인하고, 어긋나면 갱신한다.

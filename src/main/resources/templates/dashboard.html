@@ -29,6 +29,6 @@
     <noscript><p class="status-line">JavaScript가 필요합니다.</p></noscript>
     <div th:replace="~{ads :: unit}"></div>
 </div>
-<script type="module" th:src="@{/dashboard/dashboard.js}"></script>
+<script type="module" th:attr="nonce=${cspNonce}" th:src="@{/dashboard/dashboard.js}"></script>
 </body>
 </html>

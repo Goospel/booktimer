@@ -16,11 +16,24 @@ import jakarta.persistence.Table;
 import java.util.Set;
 
 /**
- * 독서 스토리 — 팔로워에게 24시간만 보이는 텍스트 카드 (sns-design §13).
+ * 여백에 남긴 글 한 장 — 읽다가 인상 깊은 문장·생각을 적어 두는 텍스트 카드 (sns-design §13).
  *
- * <p>만료는 물리 삭제가 아니라 표시 필터다({@code createdAt} 기준 24h — §13.6). 책 첨부는
- * <b>본인 소유 + PUBLIC만</b> — 책 라벨(제목·표지)이 팔로워에게 보이므로, PRIVATE 첨부를 허용하면
- * 비공개 책장이 새는 유일 경로가 된다(§13.2, §3.5 불변식 예외 없이 유지).
+ * <p>「여백」은 <b>책에 딸린 자리</b>고, 이 클래스는 거기 쌓이는 <b>글</b>이다. 그래서 {@code book}은
+ * 선택이 아니라 <b>필수</b>다(2026-08-16 재설계 — V71이 DB에도 NOT NULL로 못 박았다). 도달 경로가
+ * 「책방 격자 → 책 → 그 책의 글」뿐이라, 책 없는 글은 표시 표면이 0인 유령 행이 된다.
+ *
+ * <p>2026-08-16까지는 사람에게 딸린 24시간짜리 「스토리」였다 — 시간 만료도, 사람 단위 스트립도 함께
+ * 폐기됐다. 클래스·테이블 이름은 {@code Story}로 남았다: 어휘만 바꾸고 스키마는 두는 게 싸다.
+ *
+ * <p>글은 <b>두 층</b>이다(2026-08-20): 책에서 옮긴 {@code quote}(선택)와 그에 다는 {@code text}(필수).
+ * 위계는 뒤집지 않는다 — 인용이 主가 되면 여백이 「내 독서 기록」이 아니라 명언 카드가 되고, 정당한
+ * 인용의 요건(내 글이 主·인용이 從)에서도 멀어진다. 그래서 인용만 있고 주석이 빈 글은 만들 수 없다.
+ *
+ * <p>책은 <b>본인 소유만</b> — 공개 여부는 묻지 않는다(2026-08-16 결정 2). 비공개 책의 여백은
+ * 「나만 보는 메모」라서 쓰기를 막을 이유가 없다. 대신 <b>가시성은 언제나 읽기 시점에 책에서
+ * 파생</b>한다 — 글에 자체 공개 필드가 없으므로 남에게 새지 않게 하는 책임은 전적으로 읽기
+ * 게이트에 있다: {@code StoryService.marginOf}(소유자 아니면 PRIVATE 책은 404) ·
+ * {@code StoryRepository.feedRecent}(쿼리가 PUBLIC만) · 프로필 격자(PUBLIC 책만 목록에 있음).
  */
 @Entity
 @Table(name = "story")
@@ -31,6 +44,9 @@ public class Story extends BaseTimeEntity {
 
     private static final int MAX_TEXT_LENGTH = 500;
 
+    /** 인용은 주석보다 짧다 — 시각 위계이자 「인용은 從」이라는 규칙의 수치 표현. */
+    private static final int MAX_QUOTE_LENGTH = 200;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -40,13 +56,25 @@ public class Story extends BaseTimeEntity {
     @JoinColumn(name = "user_id")
     private User user;
 
-    /** 선택 첨부 책 — 책 삭제 시 첨부만 풀린다(book_id = null, 문장은 보존). */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "book_id")
+    /** 글이 놓인 여백의 책 (필수) — 책이 사라지면 그 자리도 사라진다({@code BookService.delete}가 함께 지운다). */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "book_id", nullable = false)
     private Book book;
 
     @Column(nullable = false, length = 500)
     private String text;
+
+    /**
+     * 책에서 옮긴 문장 (선택) — 없으면 {@code null}이고, 그러면 카드는 2026-08-20 이전과 똑같이 그려진다.
+     *
+     * <p><b>빈 문자열은 저장하지 않는다</b>(공백뿐이면 {@code of}가 null로 떨어뜨린다) — 화면이
+     * {@code quote != null}만 보고 인용 블록을 그리므로, 빈 문자열이 남으면 글 없는 인용선이 그려진다.
+     *
+     * <p>쪽수는 두지 않는다(2026-08-20 결정) — ebook은 글자 크기·기기마다 쪽이 달라져서 적어 봐야
+     * 읽는 사람이 못 찾는 숫자이고, 종이책 판본까지 섞이면 더 어긋난다.
+     */
+    @Column(length = 200)
+    private String quote;
 
     @Column(name = "bg_code", length = 20)
     private String bgCode;
@@ -55,19 +83,34 @@ public class Story extends BaseTimeEntity {
         // JPA
     }
 
-    private Story(User user, String text, Book book, String bgCode) {
+    private Story(User user, String text, Book book, String bgCode, String quote) {
         this.user = user;
         this.text = text;
         this.book = book;
         this.bgCode = bgCode;
+        this.quote = quote;
     }
 
     /**
-     * 스토리를 만든다. 문장은 1~500자 비공백, 책은 작성자 소유 + PUBLIC만, 배경은 닫힌 팔레트 코드만.
+     * 인용 없이 남기는 글 — 2026-08-20 이전의 유일한 모양이자 지금도 기본이다.
      *
-     * @throws IllegalArgumentException author/문장이 없거나, 501자 초과, 남의 책·비공개 책, 팔레트 밖 bgCode
+     * <p>오버로드로 남긴 이유는 호출부가 서른 곳 넘고 전부 「인용 없음」이라서다. 인자로 {@code null}을
+     * 하나씩 붙이는 편집은 diff만 늘리고 정보를 주지 않는다.
      */
     public static Story of(User author, String text, Book book, String bgCode) {
+        return of(author, text, book, bgCode, null);
+    }
+
+    /**
+     * 여백에 글을 남긴다. 문장은 1~500자 비공백, 책은 <b>필수</b>이고 작성자 소유만(공개 여부 무관),
+     * 배경은 닫힌 팔레트 코드만, 인용은 선택이고 최대 200자.
+     *
+     * <p><b>주석({@code text})은 인용이 있어도 필수</b>다 — 인용만 남기는 글은 이 검사에 걸린다.
+     *
+     * @throws IllegalArgumentException author/문장/책이 없거나, 501자 초과, 남의 책, 팔레트 밖 bgCode,
+     *                                  201자 초과 인용
+     */
+    public static Story of(User author, String text, Book book, String bgCode, String quote) {
         if (author == null) {
             throw new IllegalArgumentException("author must not be null");
         }
@@ -78,18 +121,21 @@ public class Story extends BaseTimeEntity {
         if (stripped.length() > MAX_TEXT_LENGTH) {
             throw new IllegalArgumentException("text must be at most " + MAX_TEXT_LENGTH + " chars");
         }
-        if (book != null) {
-            if (!isSameUser(book.getUser(), author)) {
-                throw new IllegalArgumentException("book must be owned by the author");
-            }
-            if (!book.isPublic()) {
-                throw new IllegalArgumentException("book must be public");
-            }
+        if (book == null) {
+            throw new IllegalArgumentException("book must not be null"); // 여백은 책에 귀속된다
+        }
+        if (!isSameUser(book.getUser(), author)) {
+            throw new IllegalArgumentException("book must be owned by the author");
         }
         if (bgCode != null && !BG_CODES.contains(bgCode)) {
             throw new IllegalArgumentException("unknown bgCode: " + bgCode);
         }
-        return new Story(author, stripped, book, bgCode);
+        // 공백뿐인 인용은 「인용 없음」이다 — 빈 문자열을 저장하면 화면에 글 없는 인용선이 남는다
+        String strippedQuote = (quote == null || quote.isBlank()) ? null : quote.strip();
+        if (strippedQuote != null && strippedQuote.length() > MAX_QUOTE_LENGTH) {
+            throw new IllegalArgumentException("quote must be at most " + MAX_QUOTE_LENGTH + " chars");
+        }
+        return new Story(author, stripped, book, bgCode, strippedQuote);
     }
 
     private static boolean isSameUser(User a, User b) {
@@ -113,6 +159,11 @@ public class Story extends BaseTimeEntity {
 
     public String getText() {
         return text;
+    }
+
+    /** 책에서 옮긴 문장 — 인용 없이 남긴 글이면 {@code null}. */
+    public String getQuote() {
+        return quote;
     }
 
     public String getBgCode() {

@@ -40,9 +40,12 @@ class PasswordResetServiceTest {
     private EmailDispatcher emailDispatcher;
     @Mock
     private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+    @Mock
+    private com.booktimer.security.SessionInvalidator sessionInvalidator;
 
     private PasswordResetService service() {
-        return new PasswordResetService(userRepository, tokenService, emailDispatcher, passwordEncoder, BASE_URL);
+        return new PasswordResetService(userRepository, tokenService, emailDispatcher, passwordEncoder,
+                sessionInvalidator, BASE_URL);
     }
 
     private User localUser() {
@@ -120,5 +123,28 @@ class PasswordResetServiceTest {
         assertThat(result).isFalse();
         verify(userRepository, never()).save(any());
         verifyNoInteractions(passwordEncoder);
+    }
+
+    @Test
+    @DisplayName("reset: 비밀번호를 바꾸면 그 사용자의 세션을 전부 끊는다 — 옛 비번으로 들어온 침입자를 남기지 않는다")
+    void reset_validToken_invalidatesEverySession() {
+        User user = localUser();
+        when(tokenService.consume("good", EmailTokenType.PASSWORD_RESET)).thenReturn(Optional.of(user));
+        when(passwordEncoder.encode("newSecret123")).thenReturn("NEWHASH");
+
+        service().reset("good", "newSecret123");
+
+        // null = 남길 세션 없음. 재설정은 비로그인 흐름이라 살려둘 "내 창"이 없다.
+        verify(sessionInvalidator).invalidate(user, null);
+    }
+
+    @Test
+    @DisplayName("reset: 토큰이 무효면 세션을 건드리지 않는다 — 실패한 시도로 남을 로그아웃시킬 수 없게")
+    void reset_invalidToken_leavesSessionsAlone() {
+        when(tokenService.consume(eq("bad"), eq(EmailTokenType.PASSWORD_RESET))).thenReturn(Optional.empty());
+
+        service().reset("bad", "newSecret123");
+
+        verifyNoInteractions(sessionInvalidator);
     }
 }

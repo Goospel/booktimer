@@ -10,18 +10,18 @@ import java.util.Map;
  *
  * <p>건물(BUILDING)축은 작가 꾸미기 피벗으로 은퇴됨 — 작가(AUTHOR)축만 포함.
  * 배치/편집 엔진 제거(PR-2): {@code placed}·{@code owned} 필드가 사라졌다 — 보기 전용 서재는
- * 좌표 저장이 없다. 응답엔 world·nickname·catalog·characters·foodBalance만 남는다.
+ * 좌표 저장이 없다. 응답엔 nickname·foodBalance·catalog만 남는다.
  * 먹이주기 루프: {@code foodBalance}(top-level), 각 작가 DTO에 {@code affection}.
+ *
+ * <p><b>제거된 필드</b>(2026-08-15): {@code world}(월드 크기 — 좌표 배치가 사라져 프론트가 안 읽는다)와
+ * top-level {@code characters}({@code catalog.ownedCharacters}와 <b>같은 리스트</b>였다). 소비처는
+ * {@code VillageApp}·{@code PortraitVillage}·{@code GardenDex} 셋뿐이고 모두 {@code catalog.*}만 읽는다.
  */
 public record GardenApiResponse(
-        WorldDto world,
         String nickname,
         int foodBalance,
-        CatalogDto catalog,
-        List<OwnedCharacterDto> characters
+        CatalogDto catalog
 ) {
-
-    public record WorldDto(int width, int height) {}
 
     public record CatalogDto(
             List<AuthorCharacterDto> authorCharacters,
@@ -74,17 +74,11 @@ public record GardenApiResponse(
      */
     static GardenApiResponse of(
             GardenView view,
-            int worldWidth,
-            int worldHeight,
             String nickname,
             int foodBalance,
             Map<String, Integer> affectionByCharacter
     ) {
-        List<OwnedCharacterDto> characters = view.ownedCharacters().stream()
-                .map(c -> OwnedCharacterDto.from(c, affectionByCharacter.getOrDefault(c.code(), 0)))
-                .toList();
         return new GardenApiResponse(
-                new WorldDto(worldWidth, worldHeight),
                 nickname,
                 foodBalance,
                 new CatalogDto(
@@ -93,7 +87,9 @@ public record GardenApiResponse(
                                         affectionByCharacter.getOrDefault(s.character().getCode(), 0)))
                                 .toList(),
                         view.ownedAuthorCharacterCount(), view.totalAuthorCharacterCount(),
-                        characters),
-                characters);
+                        view.ownedCharacters().stream()
+                                .map(c -> OwnedCharacterDto.from(c,
+                                        affectionByCharacter.getOrDefault(c.code(), 0)))
+                                .toList()));
     }
 }

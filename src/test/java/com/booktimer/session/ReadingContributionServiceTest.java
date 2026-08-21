@@ -69,7 +69,8 @@ class ReadingContributionServiceTest {
         long read = 1800L; // 30분
 
         ReadingHistoryService history = mock(ReadingHistoryService.class);
-        when(history.dailyHistory(user)).thenReturn(List.of(new DailyReadingRecord(day, read, List.of("책"))));
+        when(history.dailyHistory(user))
+                .thenReturn(List.of(new DailyReadingRecord(day, read, List.of(new BookRead("책", null, read)))));
         ReadingTimerRepository timers = mock(ReadingTimerRepository.class);
         ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);
         when(goalChanges.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of()); // 이력 없음 → 타이머 목표 폴백
@@ -93,7 +94,8 @@ class ReadingContributionServiceTest {
         long read = 1800L;                            // 30분
 
         ReadingHistoryService history = mock(ReadingHistoryService.class);
-        when(history.dailyHistory(user)).thenReturn(List.of(new DailyReadingRecord(metDay, read, List.of("책"))));
+        when(history.dailyHistory(user))
+                .thenReturn(List.of(new DailyReadingRecord(metDay, read, List.of(new BookRead("책", null, read)))));
         ReadingTimerRepository timers = mock(ReadingTimerRepository.class);
         when(timers.findByUser(user)).thenReturn(Optional.of(ReadingTimer.of(3600L))); // 현재(폴백) 목표 60분
         ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);
@@ -117,7 +119,7 @@ class ReadingContributionServiceTest {
         ReadingHistoryService history = mock(ReadingHistoryService.class);
         // manuallyFilled=true인 일자 집계(=수동 입력 포함)
         when(history.dailyHistory(user)).thenReturn(List.of(
-                new DailyReadingRecord(filled, 3600L, List.of("전쟁과 평화 1"), true)));
+                new DailyReadingRecord(filled, 3600L, List.of(new BookRead("전쟁과 평화 1", null, 3600L)), true)));
         ReadingTimerRepository timers = mock(ReadingTimerRepository.class);
         when(timers.findByUser(user)).thenReturn(Optional.empty());
         ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);

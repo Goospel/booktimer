@@ -172,6 +172,7 @@ body.landing-page {
     border: 1px solid var(--border);
 }
 
+/* 일러스트 자리의 새싹(`🌱🌿`은 이 서비스의 핵심 은유라 이모지 규칙의 예외다 — noEmoji 가드 ALLOWED). */
 .lp-placeholder-icon {
     font-size: 3.5rem;
     opacity: .55;

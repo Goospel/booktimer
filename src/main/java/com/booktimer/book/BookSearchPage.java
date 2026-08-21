@@ -36,12 +36,4 @@ public record BookSearchPage(List<BookSearchResult> results, int page, int pageS
     public boolean hasNext() {
         return page < totalPages();
     }
-
-    public int prevPage() {
-        return Math.max(1, page - 1);
-    }
-
-    public int nextPage() {
-        return page + 1;
-    }
 }

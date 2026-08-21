@@ -5,7 +5,6 @@ import com.booktimer.garden.FeedResult;
 import com.booktimer.garden.FeedingService;
 import com.booktimer.garden.GardenService;
 import com.booktimer.garden.GardenView;
-import com.booktimer.garden.GardenWorld;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.user.User;
 import org.springframework.http.HttpStatus;
@@ -46,13 +45,7 @@ public class GardenApiController {
         GardenView view = gardenService.view(user);
         int foodBalance = feedingService.foodBalance(user);
         Map<String, Integer> affectionByCharacter = feedingService.affectionByCharacter(user);
-        return GardenApiResponse.of(
-                view,
-                GardenWorld.WORLD_WIDTH,
-                GardenWorld.WORLD_HEIGHT,
-                user.getNickname(),
-                foodBalance,
-                affectionByCharacter);
+        return GardenApiResponse.of(view, user.getNickname(), foodBalance, affectionByCharacter);
     }
 
     /**

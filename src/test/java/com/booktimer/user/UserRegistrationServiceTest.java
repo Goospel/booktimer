@@ -134,7 +134,7 @@ class UserRegistrationServiceTest {
     @DisplayName("register: 로컬 가입에서 login_id를 정규화해 불변으로 확정한다 (로그인 식별자 — PR-4)")
     void register_assignsNormalizedLoginId() {
         when(userRepository.existsByEmail("lid@booktimer.com")).thenReturn(false);
-        when(userRepository.existsByLoginId("goospel")).thenReturn(false);
+        when(userRepository.isLoginIdTaken("goospel")).thenReturn(false);
         when(userRepository.save(any(User.class))).thenAnswer(returnsFirstArg());
         when(passwordEncoder.encode(any())).thenReturn("$2a$10$ENCODED");
 
@@ -148,7 +148,7 @@ class UserRegistrationServiceTest {
     @DisplayName("register: 이미 쓰이는 login_id면 LoginIdAlreadyExistsException을 던지고 저장하지 않는다")
     void register_duplicateLoginId_throws() {
         // login_id를 email보다 먼저 검사한다(열거 완화: email 중복은 가장 마지막) → email 스텁 불필요.
-        when(userRepository.existsByLoginId("taken")).thenReturn(true);
+        when(userRepository.isLoginIdTaken("taken")).thenReturn(true);
 
         assertThatThrownBy(() -> service.register(
                 "lid2@booktimer.com", "rawpw1234", "taken", "책벌레", "Asia/Seoul", Role.USER, DAY0))
@@ -164,7 +164,7 @@ class UserRegistrationServiceTest {
     @DisplayName("register(marketingConsent=true): 가입과 동시에 마케팅 동의 + 동의시각을 기록한다")
     void register_withMarketingConsent_recordsConsent() {
         when(userRepository.existsByEmail("c@booktimer.com")).thenReturn(false);
-        when(userRepository.existsByLoginId("reader_c")).thenReturn(false);
+        when(userRepository.isLoginIdTaken("reader_c")).thenReturn(false);
         when(userRepository.save(any(User.class))).thenAnswer(returnsFirstArg());
         when(passwordEncoder.encode(any())).thenReturn("$2a$10$ENCODED");
         when(clock.instant()).thenReturn(Instant.parse("2026-06-11T01:00:00Z"));
@@ -180,7 +180,7 @@ class UserRegistrationServiceTest {
     @DisplayName("register(marketingConsent=false): 미동의로 가입한다 (기본 OFF·끼워팔기 금지 불변식)")
     void register_withoutMarketingConsent_staysOptedOut() {
         when(userRepository.existsByEmail("d@booktimer.com")).thenReturn(false);
-        when(userRepository.existsByLoginId("reader_d2")).thenReturn(false);
+        when(userRepository.isLoginIdTaken("reader_d2")).thenReturn(false);
         when(userRepository.save(any(User.class))).thenAnswer(returnsFirstArg());
         when(passwordEncoder.encode(any())).thenReturn("$2a$10$ENCODED");
 
@@ -195,7 +195,7 @@ class UserRegistrationServiceTest {
     @DisplayName("기존 7-인자 register는 마케팅 미동의로 위임한다 (하위호환)")
     void register_legacyOverload_defaultsOptedOut() {
         when(userRepository.existsByEmail("e@booktimer.com")).thenReturn(false);
-        when(userRepository.existsByLoginId("reader_e")).thenReturn(false);
+        when(userRepository.isLoginIdTaken("reader_e")).thenReturn(false);
         when(userRepository.save(any(User.class))).thenAnswer(returnsFirstArg());
         when(passwordEncoder.encode(any())).thenReturn("$2a$10$ENCODED");
 

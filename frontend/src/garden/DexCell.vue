@@ -3,16 +3,16 @@
        :class="isOwned ? 'owned' : 'plant-locked'"
        :title="cellTitle"
        @click="emit('select')">
-    <!-- 보유/발견: sprite 있으면 SVG, 없으면 이모지 -->
+    <!-- 보유/발견: sprite 있으면 SVG, 없으면 이름 첫 글자(서버 `emoji` 폴백을 글자로 바꿨다) -->
     <span v-if="isOwned" class="plant-emoji">
       <svg v-if="spriteId" class="plant-svg" aria-hidden="true">
         <use :href="'#sprite-' + spriteId"></use>
       </svg>
-      <span v-else>{{ emoji }}</span>
+      <span v-else>{{ (name || '?').charAt(0) }}</span>
     </span>
-    <!-- 미보유: 레시피 미발견은 ❔, 나머지는 🔒 -->
+    <!-- 미보유: 아직 못 만난 작가는 '?', 조건을 아는 작가는 '잠김'(기본 이모지를 쓰지 않는다) -->
     <span v-else class="plant-emoji" :class="mystery ? 'mystery' : 'locked'" aria-hidden="true">
-      {{ mystery ? '❔' : '🔒' }}
+      {{ mystery ? '?' : '잠김' }}
     </span>
 
     <!-- 이름/잠금 라벨 -->
@@ -21,7 +21,7 @@
 
     <!-- 정(affection) 배지 — 보유 작가 + affection > 0 일 때만 -->
     <span v-if="isOwned && affection" class="plant-affection" :class="level ? `affection-lv${level}` : ''">
-      Lv{{ level }} {{ affectionTitle }} ❤️{{ affection }}
+      Lv{{ level }} {{ affectionTitle }} · 정 {{ affection }}
     </span>
 
     <!-- NEW 배지 -->

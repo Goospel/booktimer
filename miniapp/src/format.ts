@@ -1,3 +1,36 @@
+/**
+ * 마지막 글자에 받침이 있는가 — 조사(을/를 · 이/가)를 고르는 유일한 기준.
+ *
+ * <p>한글 음절은 유니코드 자모 조합이라 `(코드 - 가) % 28`이 곧 종성 인덱스이고, 0이면 받침이 없다.
+ * 숫자는 <b>읽는 소리</b>를 따르고(1984 → "사" → 받침 없음), 그 밖(영문·기호·빈 문자열)은 받침 없음으로
+ * 떨어뜨린다 — 어느 쪽이든 문장이 깨지지 않는 게 우선이다.
+ *
+ * <p>피드 문장(을/를)과 성장 문구(이/가)가 <b>같은 판정</b>을 쓴다. 두 벌로 두면 한쪽만 고쳐진다.
+ */
+export function hasFinalConsonant(word: string): boolean {
+  const last = word.at(-1);
+  if (last === undefined) return false;
+
+  const code = last.charCodeAt(0);
+  if (code >= 0xac00 && code <= 0xd7a3) return (code - 0xac00) % 28 !== 0;
+
+  // 영/일/이/삼/사/오/육/칠/팔/구 — 받침 있는 소리만 true.
+  const DIGIT_HAS_FINAL = [true, true, false, true, false, false, true, true, true, false];
+  if (last >= '0' && last <= '9') return DIGIT_HAS_FINAL[Number(last)];
+
+  return false;
+}
+
+/** 주격 조사 — 받침이 있으면 「이」, 없으면 「가」. */
+export function subjectParticle(word: string): string {
+  return hasFinalConsonant(word) ? '이' : '가';
+}
+
+/** 목적격 조사 — 받침이 있으면 「을」, 없으면 「를」. */
+export function objectParticle(word: string): string {
+  return hasFinalConsonant(word) ? '을' : '를';
+}
+
 /** 초 → "1시간 20분" / "45분" / "30초". 음수(밀린 시간)는 부호를 떼고 호출부가 문구로 표현한다. */
 export function formatDuration(seconds: number): string {
   const total = Math.floor(Math.abs(seconds));

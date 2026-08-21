@@ -1,24 +1,33 @@
 import { Button, Text } from '@toss/tds-mobile';
 import { useCallback, useEffect, useState } from 'react';
 
-import type { AuthorStories, MyBookSummary, StoryCard, StoryFeedResponse, StoryViewerEntry } from '../api';
+import type { MarginBook, MarginEntry, MarginResponse, UserRow } from '../api';
 import {
   ApiError,
   STORY_BG_CODES,
   createStory,
   deleteStory,
-  fetchShelf,
-  fetchStoryViewers,
-  markStoryViewed,
+  fetchBookMargin,
+  fetchStoryLikers,
+  likeStory,
+  unlikeStory,
 } from '../api';
-import { BookCover, COVER_FG, ErrorMessage, Screen, coverColor, initialOf } from '../ui';
+import { useBackClose } from '../back';
+import { relativeTime } from '../format';
+import { BookCover, ErrorMessage, Loading, Screen, Sheet, UserList } from '../ui';
 
 /**
- * 독서 스토리 — 소셜 탭 상단 스트립 · 전체화면 열람 · 작성 (설계 §4 PR-7).
+ * 여백 — <b>책에 딸린 자리</b>와 거기 쌓이는 글 (2026-08-16 재설계).
  *
- * <p>24h 만료·작성 자격·열람 권한은 전부 서버가 판정한다(웹과 같은 `StoryService` 게이트) — 미니앱은
- * 표시와 액션 배선만 한다. 정적 렌더 하니스로는 effect가 안 도므로 뷰어의 두 결정(전이·열람 기록 대상)은
- * {@link nextStoryIndex}·{@link viewTargetId} 순수 함수로 뽑아 따로 계측한다.
+ * <p>인스타를 베껴 스트립·전체화면 뷰어·진행바·열람 기록으로 시작했지만, 그 문법이 "24시간 뒤 사라지는
+ * 남의 근황"을 전제해 책과 아무 관계가 없었다. 지금은 <b>책 → 그 책의 여백</b> 한 경로뿐이다: 책방 격자에서
+ * 책을 누르거나(발광 = 24시간 안에 새 글), 홈 소식의 여백 줄에서 곧장 그 책으로 점프한다.
+ *
+ * <p>파일·타입 이름은 `Story`로 남아 있다 — 서버 경로가 `/api/stories`라 맞춰 둔 것(#814 결정).
+ *
+ * <p>노출 권한(차단·IDOR·PRIVATE·비팔로워)은 전부 서버가 판정한다 — 미니앱은 서버가 준
+ * `self`·`following`·`entries`를 표시와 액션으로 옮길 뿐이다. 정적 렌더 하니스로는 effect가 안 도므로
+ * 판정({@link hasFreshStory})과 표시({@link MarginView})를 상태에서 떼어 따로 계측한다.
  */
 
 /** 배경 코드 → 색. 팔레트 밖 코드(옛 데이터·오타)는 기본으로 떨어뜨려 스타일 주입 자리를 안 만든다. */
@@ -26,185 +35,104 @@ function palette(bgCode: string | null) {
   return STORY_BG_CODES.find((bg) => bg.code === bgCode) ?? STORY_BG_CODES[0];
 }
 
+/** 발광이 지속되는 창 — 하루. 서버는 시각만 주고 이 판정은 클라가 한다(설계 §D3ⓐ). */
+export const FRESH_WINDOW_MS = 86_400_000;
+
 /**
- * 뷰어 전이 — 다음(+1)·이전(-1). 마지막에서 다음은 `null`(닫기)이고, 첫 카드에서 이전은 제자리다.
- * 다음 작성자로 자동으로 넘어가지 않는다 — 실수 탭에 남의 스토리가 열람 처리되면 되돌릴 수 없다.
+ * 24시간 이내 새 글이 달린 책인가 — 책방 격자 발광의 유일한 근거.
+ *
+ * <p>경계는 <b>미만(&lt;)</b>이다: 정각 24시간은 이미 창 밖이다. `null`(글이 없거나 비팔로워라 서버가
+ * 가린 경우)은 false — 발광은 "새 글이 있다"는 단언이라 모르는 상태를 참으로 올리지 않는다.
  */
-export function nextStoryIndex(current: number, direction: 1 | -1, total: number): number | null {
-  if (direction === -1) return Math.max(0, current - 1);
-  return current + 1 >= total ? null : current + 1;
+export function hasFreshStory(lastStoryAt: string | null, now: number): boolean {
+  return lastStoryAt !== null && now - Date.parse(lastStoryAt) < FRESH_WINDOW_MS;
 }
 
 /**
- * 이 카드를 보여줄 때 열람 기록(POST view)할 id — 없으면 `null`.
- * 내 스토리는 서버가 no-op이고 이미 열람한 카드는 멱등이라, 둘 다 요청 자체를 아낀다.
+ * 작성·여백 화면의 가시성 안내 — <b>쓰는 순간</b>의 고지다(공개 전환 확인 시트는 「공개하는 순간」을 맡는다).
+ *
+ * <p>비공개 책에도 여백을 쓸 수 있게 되면서(설계 결정 2) 「팔로워에게 보여요」가 비공개 책에서는
+ * 거짓말이 됐다. `undefined`(필드를 안 보내는 옛 서버)는 <b>공개로 간주</b>한다 — 보수적인 쪽은
+ * 「나만 본다」가 아니다: 실제로는 새는 글을 안 샌다고 말하는 것이 더 위험한 거짓말이다.
  */
-export function viewTargetId(card: StoryCard, mine: boolean): number | null {
-  return mine || card.viewed ? null : card.id;
+export function visibilityNotice(isPublic: boolean | undefined): string {
+  return isPublic === false
+    ? '비공개 책이에요. 이 글은 나만 봐요. 책을 공개로 바꾸면 팔로워에게 보여요.'
+    : '팔로워에게 보여요.';
+}
+
+/**
+ * 하트 — 색을 <b>`currentColor`로 상속</b>한다. 배경 팔레트가 6종이고 그중 sunset이 붉은 주황(#c96a4a)이라
+ * 빨간 하트는 거기서 사라진다. 카드 본문 색을 그대로 쓰면 여섯 배경 전부에서 읽히는 것이 보장되고,
+ * 상태 구분은 색이 아니라 <b>채움 여부</b>가 진다.
+ */
+function Heart({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 20.6 4.2 12.8a4.9 4.9 0 0 1 6.9-6.9l.9.9.9-.9a4.9 4.9 0 0 1 6.9 6.9Z" />
+    </svg>
+  );
 }
 
 /**
  * 작성 실패 안내 — 서버의 한글 검증 메시지는 `GlobalExceptionHandler`가 HTML `error` 뷰로 렌더해
  * 미니앱까지 오지 못한다(api.ts의 HTML 가드가 상태코드 문구로 대체). 그래서 상태코드로 안내를 나눈다.
  * 서버가 평문 메시지를 주는 날엔 그게 더 정확하므로 그대로 쓴다.
+ *
+ * <p>어휘 규칙: <b>여백은 자리고, 남기는 것은 글이다</b> — "여백을 남겼다"가 아니라 "글을 남겼다".
  */
 export function createStoryMessage(error: Error): string {
   if (!(error instanceof ApiError) || error.message !== `요청에 실패했어요 (${error.status})`) return error.message;
-  if (error.status === 429) return '스토리를 너무 자주 올렸어요. 잠시 후 다시 시도해 주세요.';
-  if (error.status === 404) return '첨부한 책을 찾을 수 없어요. 다시 골라 주세요.';
-  return '스토리를 올리지 못했어요. 문장은 1~500자, 활성 스토리는 최대 20장이에요.';
+  if (error.status === 429) return '글을 너무 자주 남겼어요. 잠시 후 다시 시도해 주세요.';
+  // 책 첨부 selector가 사라져 "다시 골라 달라"고 할 수가 없다 — 목록 자체가 낡은 상황이다.
+  if (error.status === 404) return '책을 찾을 수 없어요. 책방을 새로고침해 주세요.';
+  return '글을 남기지 못했어요. 문장은 1~500자까지 쓸 수 있어요.';
 }
 
 /**
- * 소셜 탭 상단 스트립 — 내 링(있으면) + 팔로잉 작성자 링.
+ * 책 하나의 여백 화면 — 마운트 시 한 번 받아 그린다.
  *
- * <p>피드가 비어도 작성 진입은 남기되 팔로우 유도 문구는 말하지 않는다 — 소셜 탭의 빈 상태 문구가
- * 이미 "아이디로 찾아 책방을 구경해 보세요"라고 안내하므로, 같은 말을 두 번 하면 화면만 시끄럽다.
+ * <p>진입로가 둘이다(책방 격자 탭 · 홈 소식 점프). 어느 쪽으로 와도 응답 하나로 화면이 완성되게
+ * 서버가 책 라벨·주인·관계를 동봉한다(`MarginResponse`가 자기완결) — 클라가 아는 것에 기대지 않는다.
  */
-export function StoryStrip({
-  feed,
-  onOpen,
+export function BookMargin({
+  loginId,
+  bookId,
+  onBack,
   onCompose,
-}: {
-  feed: StoryFeedResponse | null;
-  onOpen: (author: AuthorStories, mine: boolean) => void;
-  onCompose: () => void;
-}) {
-  if (feed === null) return null; // 아직 못 받음 — 빈 껍데기를 깜빡이지 않는다
-
-  return (
-    <div className="no-scrollbar" style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '4px 0 12px' }}>
-      {feed.mine !== null && (
-        <Ring seed={feed.mine.nickname} caption="내 스토리" onClick={() => onOpen(feed.mine!, true)} />
-      )}
-      {feed.groups.map((group) => (
-        <Ring
-          key={group.loginId ?? group.nickname}
-          seed={group.nickname}
-          caption={group.nickname}
-          fresh={!group.allViewed}
-          onClick={() => onOpen(group, false)}
-        />
-      ))}
-      <Ring seed={null} caption="스토리 쓰기" onClick={onCompose} />
-    </div>
-  );
-}
-
-/** 링 하나의 지름 — 손가락 최소치(44px)를 넘기고, 캡션까지 합쳐도 스트립이 한 줄에 들어간다. */
-const RING_SIZE = 56;
-
-/**
- * 스토리 링 — 원형 이니셜 아바타 + 바깥 링 + 닉네임 캡션(인스타 관습).
- *
- * <p>텍스트 알약이던 시절엔 "스토리"라는 어휘가 화면에 서지 않아 그냥 버튼 줄로 읽혔다. 아바타 색은
- * 무표지 책과 같은 `coverColor`라 **같은 사람은 언제 그려도 같은 색**이다(닉네임이 곧 씨앗).
- *
- * <p>`seed`가 `null`이면 작성 타일(+ 아이콘) — 사람 링과 같은 크기·자리를 쓰되 이니셜을 세우지 않는다.
- * 미열람 표식은 링 색이 맡지만 **색만으로는 구분 못 하는 사람이 있어** 이름에도 남긴다(aria-label).
- */
-function Ring({
-  seed,
-  caption,
-  fresh = false,
-  onClick,
-}: {
-  seed: string | null;
-  caption: string;
-  fresh?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={fresh ? `${caption} 새 스토리` : caption}
-      style={{
-        flex: '0 0 auto',
-        width: RING_SIZE + 12,
-        padding: 0,
-        border: 'none',
-        background: 'transparent',
-        cursor: 'pointer',
-      }}
-    >
-      <div
-        style={{
-          width: RING_SIZE,
-          height: RING_SIZE,
-          margin: '0 auto',
-          padding: 2,
-          borderRadius: '50%',
-          background: fresh ? 'var(--adaptiveBlue500, #6E8A6A)' : 'var(--adaptiveGrey200, #E4DDD0)',
-        }}
-      >
-        <div
-          style={{
-            width: '100%',
-            height: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: '50%',
-            // 링과 아바타 사이 종이색 틈 — 없으면 링이 아니라 그냥 두꺼운 테두리로 읽힌다.
-            border: '2px solid #FCFAF5',
-            fontSize: 22,
-            background: seed === null ? 'var(--adaptiveGrey100, #FCFAF5)' : coverColor(seed),
-            color: seed === null ? 'var(--adaptiveBlue500, #6E8A6A)' : COVER_FG,
-          }}
-        >
-          {seed === null ? '+' : initialOf(seed)}
-        </div>
-      </div>
-      <span
-        style={{
-          display: 'block',
-          marginTop: 6,
-          fontSize: 11,
-          color: 'var(--adaptiveGrey600, #6F6A5E)',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {caption}
-      </span>
-    </button>
-  );
-}
-
-/**
- * 전체화면 열람 — 한 작성자의 활성 스토리를 작성순으로 넘겨 본다.
- *
- * <p>카드가 바뀔 때마다 열람을 기록한다. 실패는 삼킨다 — 기록이 안 됐다고 읽던 사람을 막을 이유가 없고,
- * 만료·차단으로 404가 나는 정상 경로가 있다(그건 다음 새로고침에서 목록으로 드러난다).
- */
-export function StoryViewer({
-  author,
-  mine,
-  onClose,
   onOpenProfile,
-  onDeleted,
   onError,
 }: {
-  author: AuthorStories;
-  mine: boolean;
-  onClose: () => void;
+  loginId: string;
+  bookId: number;
+  onBack: () => void;
+  /** 「여백에 글 남기기」 — 작성 화면 전환은 셸이 든다(전체 화면 전이의 주인은 하나여야 한다). */
+  onCompose: (book: MarginBook) => void;
+  /** 좋아요 명단에서 그 사람을 눌렀을 때 — 그의 책방으로 간다(전체 화면 전이는 셸이 든다). */
   onOpenProfile: (loginId: string) => void;
-  onDeleted: () => void;
   onError: (error: Error) => void;
 }) {
-  const [index, setIndex] = useState(0);
-  const [viewers, setViewers] = useState<StoryViewerEntry[] | null>(null);
+  const [margin, setMargin] = useState<MarginResponse | null>(null);
+  /** 낙관적 좋아요 — 서버 왕복을 기다리면 하트가 늦게 켜져 「안 눌렸다」로 읽힌다. */
+  const [likes, setLikes] = useState<Record<number, { likeCount: number; liked: boolean }>>({});
+  /** 명단이 열린 글 — `null`이면 닫힘. 시트는 한 번에 하나다(글마다 따로 열 이유가 없다). */
+  const [likersOf, setLikersOf] = useState<number | null>(null);
+  /** `null`이면 아직 받는 중 — 빈 배열(0명)과 구분해야 "없어요"를 먼저 깜빡이지 않는다. */
+  const [likers, setLikers] = useState<UserRow[] | null>(null);
+  const [likersError, setLikersError] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  const card = author.stories[index];
-
-  useEffect(() => {
-    const target = card === undefined ? null : viewTargetId(card, mine);
-    if (target !== null) void markStoryViewed(target).catch(() => {});
-  }, [card, mine]);
 
   const fail = useCallback(
     (e: Error) => {
@@ -214,209 +142,423 @@ export function StoryViewer({
     [onError],
   );
 
-  if (card === undefined) return null;
+  const load = useCallback(() => {
+    setError(null); // 재시도가 성공했는데 지난 실패 문구가 남지 않게
+    fetchBookMargin(loginId, bookId).then(setMargin).catch(fail);
+  }, [loginId, bookId, fail]);
 
-  const step = (direction: 1 | -1) => {
-    const next = nextStoryIndex(index, direction, author.stories.length);
-    if (next === null) {
-      onClose();
-      return;
-    }
-    setViewers(null); // 카드마다 열람자가 다르다 — 앞 카드 목록이 남아 있으면 오독한다
-    setIndex(next);
+  useEffect(load, [load]);
+
+  /**
+   * 명단은 <b>열 때 받는다</b> — 여백 한 장에 글이 100개까지 실리므로 목록 응답에 글마다 동봉하면
+   * 열지도 않을 명단이 한꺼번에 날아온다.
+   */
+  const loadLikers = useCallback(
+    (id: number) => {
+      setLikers(null);
+      setLikersError(null);
+      fetchStoryLikers(id)
+        .then(setLikers)
+        .catch((e: Error) => {
+          if (e.name === 'UnauthorizedError') onError(e);
+          else setLikersError(e.message);
+        });
+    },
+    [onError],
+  );
+
+  // 시트를 닫으면 그 안의 상태를 비운다 — 안 그러면 다음에 열 때 옛 명단이 한 프레임 번쩍인다.
+  const closeLikers = () => {
+    setLikersOf(null);
+    setLikers(null);
+    setLikersError(null);
   };
 
-  const remove = () => {
+  // 하드웨어 뒤로가기는 시트부터 닫는다 — 없으면 명단에서 누른 back이 여백 화면을 통째로 닫는다.
+  useBackClose(likersOf !== null, closeLikers);
+
+  /**
+   * 낙관적으로 먼저 칠하고, 서버 값으로 덮고, 실패하면 되돌린다.
+   *
+   * <p>서버 응답을 그대로 덮는 것이 핵심이다 — 그 사이 남이 누른 것까지 반영된 <b>진짜 개수</b>가 오므로
+   * 클라가 ±1로 센 추정치가 오래 남지 않는다.
+   */
+  const toggleLike = (entry: MarginEntry) => {
+    const before = likes[entry.id] ?? { likeCount: entry.likeCount, liked: entry.liked };
+    const after = { likeCount: before.likeCount + (before.liked ? -1 : 1), liked: !before.liked };
+    setLikes((m) => ({ ...m, [entry.id]: after }));
+    (after.liked ? likeStory(entry.id) : unlikeStory(entry.id))
+      .then((state) => setLikes((m) => ({ ...m, [entry.id]: state })))
+      .catch((e: Error) => {
+        setLikes((m) => ({ ...m, [entry.id]: before })); // 되돌린다 — 틀린 개수를 남기지 않는다
+        fail(e);
+      });
+  };
+
+  const showLikers = (entry: MarginEntry) => {
+    setLikersOf(entry.id);
+    loadLikers(entry.id);
+  };
+
+  const remove = (id: number) => {
     setBusy(true);
-    deleteStory(card.id)
+    setError(null);
+    deleteStory(id)
       .then(() => {
-        onDeleted();
-        onClose();
+        setConfirmDeleteId(null);
+        load(); // 서버가 준 목록이 진실 — 지운 카드를 손으로 빼지 않는다
       })
       .catch(fail)
       .finally(() => setBusy(false));
   };
 
-  const showViewers = () => {
-    setBusy(true);
-    fetchStoryViewers(card.id)
-      .then(setViewers)
-      .catch(fail)
-      .finally(() => setBusy(false));
-  };
+  if (margin === null) {
+    return (
+      <Screen title="여백" onBack={onBack}>
+        {/* 못 받았을 때 나갈 길만 있으면 실패가 곧 막다른 길이다 — 그 자리에서 다시 받을 길도 함께 준다. */}
+        <ErrorMessage message={error} onRetry={load} />
+        {error === null && <Loading />}
+      </Screen>
+    );
+  }
+
+  // 낙관적 값을 서버 목록 위에 얹는다 — 손대지 않은 글은 `undefined` 전개라 그대로 남는다.
+  const merged = { ...margin, entries: margin.entries.map((e) => ({ ...e, ...likes[e.id] })) };
 
   return (
-    <StoryCardView
-      author={author}
-      card={card}
-      index={index}
-      mine={mine}
-      viewers={viewers}
-      busy={busy}
-      error={error}
-      onStep={step}
-      onClose={onClose}
-      onDelete={remove}
-      onViewers={showViewers}
-      onOpenProfile={onOpenProfile}
-    />
+    <>
+      <MarginView
+        loginId={loginId}
+        margin={merged}
+        now={Date.now()}
+        busy={busy}
+        confirmDeleteId={confirmDeleteId}
+        error={error}
+        onCompose={() => onCompose(margin.book)}
+        onConfirmDelete={setConfirmDeleteId}
+        onDelete={remove}
+        onToggleLike={toggleLike}
+        onShowLikers={showLikers}
+        onBack={onBack}
+      />
+      {likersOf !== null && (
+        <LikersSheet
+          users={likers}
+          error={likersError}
+          // 닫으면서 여는 교체 경로 — 셸이 그 사람의 책방을 세운다(전체 화면 전이의 주인은 하나여야 한다).
+          onSelect={(picked) => {
+            closeLikers();
+            onOpenProfile(picked);
+          }}
+          onClose={closeLikers}
+          onRetry={() => loadLikers(likersOf)}
+        />
+      )}
+    </>
   );
 }
 
-/** 열람 카드 본문 — 순수 표시. mine 플래그가 삭제·열람자와 책방 진입을 가른다. */
-export function StoryCardView({
-  author,
-  card,
-  index,
-  mine,
-  viewers,
-  busy,
-  error = null,
-  onStep,
+/**
+ * 좋아요 명단 시트 — 누가 눌렀는지. 팔로워 시트와 같은 처지라 <b>데이터를 프롭으로</b> 받는다
+ * (정적 렌더 하니스가 0명/N명 분기에 닿는 유일한 길).
+ *
+ * <p>서버가 차단 관계·핸들 없는 사람을 이미 걸러 주므로 여기서 다시 거르지 않는다 — 화면이 게이트를
+ * 흉내 내기 시작하면 서버와 어긋나는 날이 온다.
+ */
+export function LikersSheet({
+  users,
+  error,
+  onSelect,
   onClose,
-  onDelete,
-  onViewers,
-  onOpenProfile,
+  onRetry,
 }: {
-  author: AuthorStories;
-  card: StoryCard;
-  index: number;
-  mine: boolean;
-  viewers: StoryViewerEntry[] | null;
-  busy: boolean;
-  error?: string | null;
-  onStep: (direction: 1 | -1) => void;
+  /** `null`이면 아직 받는 중 — 빈 배열(0명)과 구분해야 "없어요"를 먼저 깜빡이지 않는다. */
+  users: UserRow[] | null;
+  error: string | null;
+  onSelect: (loginId: string) => void;
   onClose: () => void;
-  onDelete: () => void;
-  onViewers: () => void;
-  onOpenProfile: (loginId: string) => void;
+  onRetry: () => void;
 }) {
-  const bg = palette(card.bgCode);
-  const total = author.stories.length;
+  return (
+    <Sheet title="좋아요" onClose={onClose}>
+      {/* 못 받았으면 그 자리에서 다시 받는다 — 실패가 곧 빈 시트(막다른 길)가 되지 않게. */}
+      <ErrorMessage message={error} onRetry={onRetry} />
+      {users === null ? (
+        error === null && <Loading />
+      ) : (
+        // 개수가 0인 글엔 애초에 손잡이가 없다 — 그 사이 누른 사람이 취소하면 여기 닿는다.
+        <UserList users={users} emptyMessage="아직 아무도 누르지 않았어요." onSelect={onSelect} />
+      )}
+    </Sheet>
+  );
+}
+
+/**
+ * 여백 본문 — 순수 표시. 상태는 전부 밖에서 받는다(정적 렌더 하니스가 네 상태에 닿는 유일한 길).
+ */
+export function MarginView({
+  loginId,
+  margin,
+  now,
+  busy,
+  confirmDeleteId,
+  error,
+  onCompose,
+  onConfirmDelete,
+  onDelete,
+  onToggleLike,
+  onShowLikers,
+  onBack,
+}: {
+  loginId: string;
+  margin: MarginResponse;
+  /** 상대 시각의 기준 — 밖에서 받아야 테스트가 결정론이 된다. */
+  now: number;
+  busy: boolean;
+  /** 지우기 확인이 열린 글 — 되돌릴 수 없는 동작이라 카드 하나씩만 연다. */
+  confirmDeleteId: number | null;
+  error: string | null;
+  onCompose: () => void;
+  onConfirmDelete: (id: number | null) => void;
+  onDelete: (id: number) => void;
+  onToggleLike: (entry: MarginEntry) => void;
+  onShowLikers: (entry: MarginEntry) => void;
+  onBack: () => void;
+}) {
+  const { book, ownerNickname, self, following, entries } = margin;
+
+  return (
+    <Screen title="여백" onBack={onBack}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <BookCover url={book.coverUrl} title={book.title} width={48} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Text typography="st11" style={{ display: 'block', wordBreak: 'keep-all' }}>
+            {book.title}
+          </Text>
+          <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
+            {[book.author, `${ownerNickname} @${loginId}`].filter((s) => s !== null).join(' · ')}
+          </Text>
+        </div>
+      </div>
+
+      {/* 내 비공개 책이면 무엇이 안 새는지 여기서 말한다 — 공개 책엔 새로 알릴 것이 없어 적지 않는다. */}
+      {self && book.isPublic === false && (
+        <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 12, wordBreak: 'keep-all' }}>
+          {visibilityNotice(book.isPublic)}
+        </Text>
+      )}
+
+      <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 20 }}>
+        여백에 남긴 글 {entries.length}
+      </Text>
+
+      {/* 작성 진입은 목록 위다 — 글이 쌓일수록 아래로 밀려나면 내 책에서 쓰기가 점점 멀어진다. */}
+      {self && (
+        <Button display="block" variant="weak" size="small" style={{ marginTop: 10 }} onClick={onCompose}>
+          여백에 글 남기기
+        </Button>
+      )}
+
+      <ErrorMessage message={error} />
+
+      {entries.length === 0 ? (
+        <Text typography="st11" color="grey600" style={{ display: 'block', marginTop: 16, wordBreak: 'keep-all' }}>
+          {self
+            ? '아직 남긴 글이 없어요. 읽다가 마음에 걸린 문장을 남겨 보세요.'
+            : following
+              ? '아직 남긴 글이 없어요.'
+              : // 서버가 비팔로워에게 빈 배열을 준다 — 글이 있는지 없는지도 여기서 말하지 않는다.
+                '팔로우하면 이 책의 여백에 남긴 글을 볼 수 있어요.'}
+        </Text>
+      ) : (
+        entries.map((e) => (
+          <MarginCard
+            key={e.id}
+            entry={e}
+            now={now}
+            self={self}
+            busy={busy}
+            confirming={confirmDeleteId === e.id}
+            onConfirmDelete={onConfirmDelete}
+            onDelete={onDelete}
+            onToggleLike={onToggleLike}
+            onShowLikers={onShowLikers}
+          />
+        ))
+      )}
+    </Screen>
+  );
+}
+
+/**
+ * 글 한 장 — 배경은 서버 팔레트 색, 삭제는 본인 카드에만. 확인 단계는 밖에서 받는다(서재 관리 시트와 같다).
+ *
+ * <p>서재의 인라인 여백 박스가 미리보기로 이 카드를 그대로 재사용한다 — 거기서는 {@code self=false}라
+ * 지우기 UI가 통째로 안 그려진다(글은 실제로 내 것이지만 삭제는 전체 화면의 몫).
+ */
+export function MarginCard({
+  entry,
+  now,
+  self,
+  busy,
+  confirming,
+  onConfirmDelete,
+  onDelete,
+  onToggleLike,
+  onShowLikers,
+}: {
+  entry: MarginEntry;
+  now: number;
+  self: boolean;
+  busy: boolean;
+  confirming: boolean;
+  onConfirmDelete: (id: number | null) => void;
+  onDelete: (id: number) => void;
+  /**
+   * 좋아요 손잡이 — <b>있으면 하트 버튼, 없으면 하트 없음</b>. 이 프롭의 유무가 게이트다: `self`로
+   * 갈랐다면 서재의 인라인 미리보기가 <b>내 글에 `self={false}`</b>를 넘기는 탓에 내 글에 하트가 떴을 것이다.
+   *
+   * <p>받은 글은 전부 누를 수 있다(자기 글 포함 — 2026-08-20). 그래서 화면에 옮길 게이트가 더는 없고,
+   * 여기 남은 판단은 「이 자리에 손잡이를 둘 것인가」뿐이다.
+   */
+  onToggleLike?: (entry: MarginEntry) => void;
+  /** 개수 줄의 손잡이 — 있으면 눌러서 명단을 연다. 미리보기(서재 박스)엔 열 시트가 없어 안 넘긴다. */
+  onShowLikers?: (entry: MarginEntry) => void;
+}) {
+  const bg = palette(entry.bgCode);
 
   return (
     <div
       style={{
-        position: 'fixed',
-        inset: 0,
-        // 플로팅 탭바(App.BottomTabBar, zIndex 100)보다 위 — 낮으면 전체화면 뷰어 위로 탭바가 뚫고 올라온다.
-        zIndex: 200,
-        display: 'flex',
-        flexDirection: 'column',
-        // 노치 아래로 세그먼트가 깔리지 않게 — 전체화면이라 상태바를 앱이 직접 피해야 한다.
-        padding: 'calc(24px + env(safe-area-inset-top)) 20px 24px',
+        marginTop: 12,
+        padding: 16,
+        borderRadius: 12,
         background: bg.background,
         color: bg.color,
       }}
     >
-      {/* 인스타식 진행 세그먼트 — 카드 수만큼 나누고 현재 인덱스까지 채운다. 수치는 aria로 남긴다. */}
-      <div
-        role="progressbar"
-        aria-label="스토리 진행"
-        aria-valuemin={1}
-        aria-valuenow={index + 1}
-        aria-valuemax={total}
-        style={{ display: 'flex', gap: 3, marginBottom: 12 }}
-      >
-        {author.stories.map((story, i) => (
-          <span
-            key={story.id}
-            style={{ flex: 1, height: 2, borderRadius: 1, background: bg.color, opacity: i <= index ? 1 : 0.3 }}
-          />
-        ))}
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{mine ? '내 스토리' : author.nickname}</span>
-        <button type="button" onClick={onClose} style={ghost(bg.color)}>
-          닫기
-        </button>
-      </div>
-
-      {/* 좌우 탭으로 넘긴다 — 인스타와 같은 조작. 버튼도 함께 둬 탭이 안 먹는 환경을 막는다. */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
-        <button type="button" aria-label="이전" onClick={() => onStep(-1)} style={tapZone} />
-        <p style={{ flex: 1, fontSize: 20, lineHeight: 1.6, whiteSpace: 'pre-wrap', textAlign: 'center' }}>
-          {card.text}
-        </p>
-        <button type="button" aria-label="다음" onClick={() => onStep(1)} style={tapZone} />
-      </div>
-
-      {card.bookTitle !== null && (
-        // 표지는 서버가 준 것만 — 없으면 옛 아이콘 그대로. 카드 주인공은 문장이라 썸네일은 작게 둔다.
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13, opacity: 0.8 }}>
-          {/* 표지가 없으면 옛 아이콘 그대로, 있으면 공용 썸네일 — 로드 실패 폴백을 같이 물려받는다. */}
-          {card.bookCoverUrl === null ? <span>📖</span> : <BookCover url={card.bookCoverUrl} width={24} />}
-          <span>{card.bookTitle}</span>
-        </div>
+      {/* 인용은 主가 아니라 從이다 — 작게·옅게 두고 세로선으로만 가른다. 크게 뽑으면 카드의 주인공이
+          남의 문장이 되어 「내 독서 기록」이 명언 카드가 된다. 세리프로 가르지 않는 이유: 폰에 한글
+          세리프가 없어 `serif`가 안드로이드는 명조·iOS는 고딕으로 갈린다(폰마다 다른 카드). */}
+      {entry.quote !== null && (
+        <blockquote
+          style={{
+            margin: '0 0 14px',
+            paddingLeft: 12,
+            borderLeft: `2px solid ${bg.color}`,
+            fontSize: 16,
+            lineHeight: 1.6,
+            opacity: 0.85,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'keep-all',
+          }}
+        >
+          {entry.quote}
+        </blockquote>
       )}
-
-      {error !== null && <p style={{ fontSize: 13, textAlign: 'center' }}>{error}</p>}
-
-      {viewers !== null && (
-        <div style={{ maxHeight: 140, overflowY: 'auto', fontSize: 13, opacity: 0.9 }}>
-          {viewers.length === 0 ? (
-            <p>아직 본 사람이 없어요.</p>
-          ) : (
-            viewers.map((v) => <p key={v.loginId}>{v.nickname}</p>)
-          )}
-        </div>
-      )}
-
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <button type="button" onClick={() => onStep(-1)} style={ghost(bg.color)}>
-          이전
-        </button>
-        <button type="button" onClick={() => onStep(1)} style={{ ...ghost(bg.color), flex: 1 }}>
-          다음
-        </button>
-        {mine ? (
-          <>
-            <button type="button" disabled={busy} onClick={onViewers} style={ghost(bg.color)}>
-              본 사람
-            </button>
-            <button type="button" disabled={busy} onClick={onDelete} style={ghost(bg.color)}>
-              삭제
-            </button>
-          </>
-        ) : (
-          author.loginId !== null && (
-            <button type="button" onClick={() => onOpenProfile(author.loginId!)} style={ghost(bg.color)}>
-              책방 보기
-            </button>
-          )
+      <p style={{ margin: 0, fontSize: 17, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'keep-all' }}>
+        {entry.text}
+      </p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 13, opacity: 0.75 }}>
+        <span style={{ flex: 1, minWidth: 0 }}>{relativeTime(entry.createdAt, now)}</span>
+        {/* 하트는 누르기/취소만 진다 — 개수를 같은 버튼에 넣으면 명단을 보려다 좋아요가 눌린다. */}
+        {onToggleLike !== undefined && (
+          <button
+            type="button"
+            aria-label={entry.liked ? '좋아요 취소' : '좋아요'}
+            aria-pressed={entry.liked}
+            onClick={() => onToggleLike(entry)}
+            style={{ ...ghost(bg.color), display: 'inline-flex', alignItems: 'center' }}
+          >
+            <Heart filled={entry.liked} />
+          </button>
         )}
+        {self &&
+          (confirming ? (
+            <>
+              <span>이 글을 지울까요?</span>
+              <button type="button" disabled={busy} onClick={() => onDelete(entry.id)} style={ghost(bg.color)}>
+                정말 지우기
+              </button>
+              <button type="button" disabled={busy} onClick={() => onConfirmDelete(null)} style={ghost(bg.color)}>
+                취소
+              </button>
+            </>
+          ) : (
+            <button type="button" disabled={busy} onClick={() => onConfirmDelete(entry.id)} style={ghost(bg.color)}>
+              지우기
+            </button>
+          ))}
       </div>
+
+      {/* 개수는 데이터라 손잡이와 무관하게 보이고(주인도 남이 눌러 준 걸 안다), 여는 손잡이만 조건부다.
+          0은 줄 자체를 안 만든다 — 빈 상태를 숫자로 박제하면 「아무도 안 눌렀다」가 카드마다 반복된다.
+          아래 줄로 내린 이유: 시각·하트·지우기가 있는 푸터에 넷째 칸을 우겨넣으면 좁은 폭에서 접힌다. */}
+      {entry.likeCount > 0 &&
+        (onShowLikers === undefined ? (
+          <p style={likesLine(bg.color)}>좋아요 {entry.likeCount}명</p>
+        ) : (
+          <button
+            type="button"
+            aria-label={`좋아요 ${entry.likeCount}명 보기`}
+            onClick={() => onShowLikers(entry)}
+            style={{ ...likesLine(bg.color), border: 'none', background: 'transparent', cursor: 'pointer' }}
+          >
+            좋아요 {entry.likeCount}명
+          </button>
+        ))}
     </div>
   );
 }
 
 /**
- * 작성 — 오늘 읽은 책의 한 문장. 책 첨부는 **공개 책만**(서버 불변식: 비공개 책장이 새는 유일 경로라
- * 막혀 있다) 이라 서재에서 공개 책만 골라 보여준다.
+ * 「좋아요 N명」 줄 — 손잡이일 때도 글자일 때도 같은 자리·같은 크기다. 세로 여백이 손가락 자리를
+ * 만든다: 12px 글자 높이만으로는 손끝이 옆 카드에 닿는다.
  */
-export function StoryComposer({ onDone, onCancel, onError }: { onDone: () => void; onCancel: () => void; onError: (error: Error) => void }) {
-  const [books, setBooks] = useState<MyBookSummary[]>([]);
+const likesLine = (color: string) =>
+  ({
+    display: 'block',
+    width: 'auto',
+    margin: 0,
+    marginTop: 8,
+    padding: '6px 0 0',
+    color,
+    fontSize: 13,
+    opacity: 0.75,
+    textAlign: 'left',
+    textDecoration: 'underline',
+  }) as const;
+
+/**
+ * 글 남기기 — 진입점이 <b>이미 그 책</b>이라 책을 고를 것이 없다(옛 첨부 select와 `/api/books` 조회는 삭제).
+ * 남는 것은 문장·배경·1~500자 카운터뿐이다.
+ *
+ * <p>헤더에 뒤로가기를 두지 않는다 — 아래 「취소」가 이미 출구라 중복이었다(토스 네비바의 `‹`까지 세면
+ * 한 화면에 나가는 화살표가 셋이었다). 안드로이드 하드웨어 뒤로가기는 셸의 `useBackClose`가 맡는다.
+ */
+export function StoryComposer({
+  book,
+  onDone,
+  onCancel,
+  onError,
+}: {
+  book: MarginBook;
+  onDone: () => void;
+  onCancel: () => void;
+  onError: (error: Error) => void;
+}) {
   const [text, setText] = useState('');
-  const [bookId, setBookId] = useState('');
+  const [quote, setQuote] = useState('');
   const [bgCode, setBgCode] = useState<string>(STORY_BG_CODES[0].code);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    fetchShelf()
-      .then((page) => setBooks(page.books.filter((b) => b.isPublic)))
-      .catch((e: Error) => {
-        if (e.name === 'UnauthorizedError') onError(e);
-        // 책 목록 실패는 치명적이지 않다 — 책 없이도 문장은 올릴 수 있다
-      });
-  }, [onError]);
-
   const trimmed = text.trim();
+  const trimmedQuote = quote.trim();
   const submit = () => {
     setBusy(true);
     setError(null);
-    createStory(trimmed, bookId === '' ? null : Number(bookId), bgCode)
+    createStory(trimmed, book.id, bgCode, trimmedQuote === '' ? null : trimmedQuote)
       .then(onDone)
       .catch((e: Error) => {
         if (e.name === 'UnauthorizedError') onError(e);
@@ -428,29 +570,39 @@ export function StoryComposer({ onDone, onCancel, onError }: { onDone: () => voi
   const bg = palette(bgCode);
 
   return (
-    <Screen title="스토리 쓰기">
-      <textarea
-        value={text}
-        disabled={busy}
-        maxLength={500}
-        placeholder="오늘 읽은 문장을 남겨 보세요. 팔로워에게 24시간 동안 보여요."
-        onChange={(e) => setText(e.target.value)}
-        style={{
-          width: '100%',
-          minHeight: 140,
-          padding: 16,
-          borderRadius: 12,
-          border: 'none',
-          fontSize: 16,
-          lineHeight: 1.6,
-          resize: 'vertical',
-          background: bg.background,
-          color: bg.color,
-        }}
-      />
-      <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 6 }}>
-        {trimmed.length}/500
+    <Screen title="여백에 글 남기기">
+      {/* 가시성 고지는 placeholder가 아니라 캡션이다 — placeholder는 첫 글자에 사라지는데, 정작
+          "이게 누구에게 보이나"가 필요한 순간은 쓰는 도중이다. */}
+      <Text typography="st12" color="grey600" style={{ display: 'block', marginBottom: 12, wordBreak: 'keep-all' }}>
+        『{book.title}』의 여백 · {visibilityNotice(book.isPublic)}
       </Text>
+      {/* 두 칸을 한 배경 안에 넣는다 — 쓰는 동안 보이는 것이 곧 카드여야 미리보기 값을 한다.
+          라벨·카운터도 안에 두는 이유는 같다(밖으로 빼면 배경마다 대비가 어긋난다). */}
+      <div style={{ background: bg.background, color: bg.color, borderRadius: 12, padding: 16 }}>
+        <p style={composerLabel}>책에서 옮긴 문장 (선택)</p>
+        <textarea
+          value={quote}
+          disabled={busy}
+          maxLength={200}
+          placeholder="밑줄 그은 문장을 옮겨 보세요."
+          onChange={(e) => setQuote(e.target.value)}
+          style={{ ...composerField(bg.color), minHeight: 56, fontSize: 16, borderLeft: `2px solid ${bg.color}`, paddingLeft: 12 }}
+        />
+        <p style={{ ...composerLabel, textAlign: 'right', marginTop: 4 }}>{trimmedQuote.length}/200</p>
+
+        <div style={{ height: 1, background: bg.color, opacity: 0.15, margin: '14px 0' }} />
+
+        <p style={composerLabel}>내 생각</p>
+        <textarea
+          value={text}
+          disabled={busy}
+          maxLength={500}
+          placeholder="그 문장에 대해 든 생각을 남겨 보세요."
+          onChange={(e) => setText(e.target.value)}
+          style={{ ...composerField(bg.color), minHeight: 120, fontSize: 17 }}
+        />
+        <p style={{ ...composerLabel, textAlign: 'right', marginTop: 4 }}>{trimmed.length}/500</p>
+      </div>
 
       <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
         {STORY_BG_CODES.map((option) => (
@@ -471,32 +623,11 @@ export function StoryComposer({ onDone, onCancel, onError }: { onDone: () => voi
         ))}
       </div>
 
-      {books.length > 0 && (
-        <div style={{ marginTop: 20 }}>
-          <Text typography="st12" color="grey600" style={{ display: 'block', marginBottom: 6 }}>
-            책 첨부 (공개 책만)
-          </Text>
-          <select
-            value={bookId}
-            disabled={busy}
-            onChange={(e) => setBookId(e.target.value)}
-            style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #E4DDD0' }}
-          >
-            <option value="">첨부 안 함</option>
-            {books.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.title}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
       <ErrorMessage message={error} />
 
       <div style={{ display: 'flex', gap: 8, marginTop: 24 }}>
         <Button style={{ flex: 1 }} loading={busy} disabled={trimmed === ''} onClick={submit}>
-          올리기
+          남기기
         </Button>
         <Button variant="weak" disabled={busy} onClick={onCancel}>
           취소
@@ -506,12 +637,34 @@ export function StoryComposer({ onDone, onCancel, onError }: { onDone: () => voi
   );
 }
 
-const tapZone = { width: 56, alignSelf: 'stretch', border: 'none', background: 'transparent', cursor: 'pointer' } as const;
+/** 컴포저 라벨·카운터 — 배경 위에 얹히므로 색은 상속받고 농도만 낮춘다(팔레트 6색 어디서나 읽힌다). */
+const composerLabel = {
+  margin: 0,
+  fontSize: 12,
+  opacity: 0.6,
+  color: 'inherit',
+} as const;
+
+/** 배경 박스 안의 입력칸 — 테두리·배경을 지워 「박스 자체가 카드」로 보이게 한다. */
+const composerField = (color: string) =>
+  ({
+    width: '100%',
+    padding: 0,
+    marginTop: 6,
+    border: 'none',
+    outline: 'none',
+    background: 'transparent',
+    color,
+    fontFamily: 'inherit',
+    lineHeight: 1.6,
+    resize: 'vertical',
+  }) as const;
 
 const ghost = (color: string) =>
   ({
-    padding: '10px 14px',
-    borderRadius: 10,
+    flex: '0 0 auto',
+    padding: '6px 10px',
+    borderRadius: 8,
     border: `1px solid ${color}`,
     background: 'transparent',
     color,

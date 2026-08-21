@@ -7,9 +7,4 @@ package com.booktimer.popularity;
  * @param readCount 내 팔로우 중 이 책을 "읽음"(READING∪FINISHED)으로 가진 distinct 사용자 수
  */
 public record FollowScopePopularity(long wantCount, long readCount) {
-
-    /** 표시할 게 하나라도 있는가(둘 다 0이면 화면에서 숨김). */
-    public boolean hasAny() {
-        return wantCount > 0 || readCount > 0;
-    }
 }

@@ -58,9 +58,9 @@ public class OnboardingService {
         // login_id가 아직 없을 때(소셜 로그인)만 온보딩에서 확정한다. 로컬은 가입에서 받았으므로 건너뛴다(불변).
         if (user.getLoginId() == null) {
             // 정규화·형식·예약어는 도메인이 검증(IAE), 유니크는 정규화값으로 사전 확인한다 — assign 전에
-            // 확인해야 (아직 미영속인) 자기 자신과의 오탐을 피한다.
+            // 확인해야 (아직 미영속인) 자기 자신과의 오탐을 피한다. 남이 놓아준 옛 핸들도 점유로 본다.
             String normalizedLoginId = User.normalizeLoginId(loginId);
-            if (userRepository.existsByLoginId(normalizedLoginId)) {
+            if (userRepository.isLoginIdTaken(normalizedLoginId)) {
                 throw new LoginIdAlreadyExistsException(normalizedLoginId);
             }
             user.assignLoginId(loginId);
@@ -119,8 +119,9 @@ public class OnboardingService {
             throw new IllegalStateException("login_id already set: " + user.getLoginId());
         }
         // 유니크는 정규화값으로 사전 확인한다 — assign 전에 봐야 (아직 미영속인) 자기 자신과 오탐하지 않는다.
+        // 남이 놓아준 옛 핸들도 점유로 본다(isLoginIdTaken).
         String normalized = User.normalizeLoginId(rawLoginId);
-        if (userRepository.existsByLoginId(normalized)) {
+        if (userRepository.isLoginIdTaken(normalized)) {
             throw new LoginIdAlreadyExistsException(normalized);
         }
         user.assignLoginId(rawLoginId);

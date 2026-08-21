@@ -86,3 +86,26 @@ describe('계정 연결 엔터 제출', () => {
     expect(markup).toContain('<form');
   });
 });
+
+/**
+ * 계정 연결의 나가는 길 — 책 추가·책방과 같은 규칙(상단 「돌아가기」 하나, 요청 중 잠금).
+ */
+describe('계정 연결 — 나가는 길', () => {
+  const link = (extra: Record<string, unknown> = {}) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <LinkAccount onLinked={() => {}} onBack={() => {}} {...extra} />
+      </TDSMobileProvider>,
+    );
+
+  it('「돌아가기」가 정확히 하나다', () => {
+    expect(link().match(/돌아가기/g)).toHaveLength(1);
+  });
+
+  it('제목보다 위에 온다', () => {
+    const markup = link();
+
+    expect(markup).toContain('돌아가기');
+    expect(markup.indexOf('돌아가기')).toBeLessThan(markup.indexOf('기존 계정 연결'));
+  });
+});

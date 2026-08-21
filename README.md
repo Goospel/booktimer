@@ -48,7 +48,7 @@ BookTimer는 사용자가 하루에 일정 시간 책을 읽도록 **독려**하
 
 | 값 | 역할 | 공개 | 가변 |
 |---|---|---|---|
-| **로그인 아이디 (`login_id`)** | 로그인 + 내부 식별 + **공개 @핸들**(검색·프로필 URL) | 공개 | **불변** |
+| **로그인 아이디 (`login_id`)** | 로그인 + 내부 식별 + **공개 @핸들**(검색·프로필 URL) | 공개 | **평생 1회 변경** |
 | **닉네임 (nickname)** | 화면 표시 이름 | 공개 | 자유 변경 (중복 허용) |
 | **이메일 (email)** | 연락·복구·OAuth 계정 연결 | **비공개** | (정책 별도) |
 
@@ -189,7 +189,7 @@ CI/CD: GitHub Actions → Docker 이미지 → ECS 롤링 배포 (start-then-sto
 | **backward-only catch-up** | 오늘 목표 초과 읽기 → 초과분이 **가장 오래된 과거 빚부터 자동 상환** (선납 불가) |
 | **일일 리셋 시점** | **자정 00:00, 사용자 타임존 기준**. 이 시점에 새 하루 부채 발생 |
 | **리셋 계산 방식** | **Lazy 계산** — 사용자 접속 시 `마지막 계산일 ~ 오늘`의 경과 일수만큼 per-day 부채 산출. 배치 스케줄러 없음 |
-| **식별/인증 분리** | 로그인·식별·공개 핸들 = `login_id`(불변·유니크), 표시 = nickname(가변·중복허용), 이메일 = 비공개 속성 |
+| **식별/인증 분리** | 로그인·식별·공개 핸들 = `login_id`(유니크 · 평생 1회 변경, 옛 핸들은 영구 예약), 표시 = nickname(가변·중복허용), 이메일 = 비공개 속성 |
 | **측정엔 책 필수** | 측정 세션은 반드시 책을 지정(어떤 책을 읽었는지 명확). 레거시 null-book 세션은 읽기·집계만 보존 |
 | **공개 경계** | 책 공개여부(PUBLIC/PRIVATE) + 차단 관계로 조회 주체를 게이트(IDOR 방지) |
 | **타이머 신뢰성** | 부정 사용(켜두고 안 읽기) 검증 안 함. 자기 양심 기반 |
@@ -259,6 +259,6 @@ npm --prefix frontend run test:e2e   # E2E (Playwright; 별도 터미널에서 b
 - [claude-docs/admin-data-lookup-design.md](claude-docs/admin-data-lookup-design.md) — 운영자 데이터 조회 설계
 - [claude-docs/reading-personality-design.md](claude-docs/reading-personality-design.md) — 독서 성향 분석(미구현) 설계
 - [claude-docs/deploy-aws.md](claude-docs/deploy-aws.md) — AWS 배포 가이드
-- [claude-docs/learning-notes.md](claude-docs/learning-notes.md) — 작업 중 배운 개념 정리
+- [claude-docs/learning-notes.md](claude-docs/learning-notes.md) — 작업 중 배운 개념 정리 (**아카이브** — 2026-08-18 폐기, 새 항목 추가 안 함)
 - [claude-docs/troubleshooting.md](claude-docs/troubleshooting.md) — 함정·해결 기록
 - [claude-docs/copyright-registration.md](claude-docs/copyright-registration.md) — 한국 저작권 등록 가이드

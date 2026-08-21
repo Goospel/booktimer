@@ -10,22 +10,21 @@ import {
   addBook,
   blockUser,
   changeBookStatus,
+  changeHandle,
   createHandle,
   createStory,
   deleteAccount,
   deleteBook,
   deleteStory,
   fetchBlocks,
+  fetchBookMargin,
   fetchDashboard,
   fetchFollowList,
   fetchPersonalityTagBooks,
   fetchProfile,
   fetchProfileBooks,
   fetchShelf,
-  fetchStoryFeed,
-  fetchStoryViewers,
   follow,
-  markStoryViewed,
   linkAccount,
   login,
   logout,
@@ -40,10 +39,12 @@ import {
   unblockUser,
   unfollow,
   updateNickname,
+  validateHandleChange,
   validateHandleFormat,
   validateNicknameFormat,
   waiveDebt,
 } from './api';
+import { CACHE_SHELF, cacheClear, cacheGet, cacheKeyMargin, cacheKeyProfile, cachePut } from './cache';
 import { tossLogin } from './toss';
 
 vi.mock('./toss', () => ({ tossLogin: vi.fn() }));
@@ -680,6 +681,56 @@ describe('핸들 만들기 API (createHandle)', () => {
 });
 
 /**
+ * 아이디 바꾸기 프리검증 — 형식에 더해 **지금 아이디와 같은가**를 본다. 평생 1번뿐인 변경권을
+ * "같은 값"으로 헛되이 태우지 않도록, 서버 400을 왕복해 오기 전에 그 자리에서 막는 것이 목적이다.
+ */
+describe('아이디 바꾸기 프리검증 (validateHandleChange)', () => {
+  it('형식이 틀리면 만들기와 같은 형식 문구를 준다 — 규칙이 갈라지면 안내가 두 갈래로 거짓말한다', () => {
+    expect(validateHandleChange('ab', 'goospel')).toBe(validateHandleFormat('ab'));
+    expect(validateHandleChange('한글아이디', 'goospel')).toBe(validateHandleFormat('한글아이디'));
+  });
+
+  it('지금 아이디와 같으면 그 사실을 알린다 — 대소문자·앞뒤 공백만 다른 입력도 같은 값이다', () => {
+    expect(validateHandleChange('goospel', 'goospel')).toContain('지금 아이디와 같아요');
+    expect(validateHandleChange('  Goospel  ', 'goospel')).toContain('지금 아이디와 같아요');
+  });
+
+  it('형식이 맞고 지금과 다른 값이면 통과한다 — 예약어·중복은 서버가 유일한 권위다', () => {
+    expect(validateHandleChange('newname_1', 'goospel')).toBeNull();
+    expect(validateHandleChange('admin', 'goospel')).toBeNull(); // 예약어는 흉내내지 않는다(서버 400)
+  });
+});
+
+describe('아이디 바꾸기 API (changeHandle)', () => {
+  beforeEach(() => {
+    token.set('tok');
+  });
+
+  it('POST /api/miniapp/handle/change — 만들기와 다른 경로다(같은 경로면 서버가 생성으로 읽는다)', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '{"loginId":"newworm_2"}') as never);
+
+    const result = await changeHandle('NewWorm_2');
+
+    const [url, init] = lastRequest();
+    expect(url).toBe('http://localhost:8080/api/miniapp/handle/change');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ loginId: 'NewWorm_2' });
+    expect(result.loginId).toBe('newworm_2');
+  });
+
+  it('소진(409)은 서버 평문을 그대로 올린다 — 시트가 그 문구를 띄운다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(409, '아이디 변경은 평생 1번이에요. 이미 사용했어요.') as never,
+    );
+
+    const error = (await changeHandle('again').catch((e: unknown) => e)) as ApiError;
+
+    expect(error.status).toBe(409);
+    expect(error.message).toBe('아이디 변경은 평생 1번이에요. 이미 사용했어요.');
+  });
+});
+
+/**
  * 닉네임 변경 — 토스로 가입한 계정(전원 기본값 "토스유저")이 표시 이름을 바꾸는 유일한 경로.
  *
  * <p>핸들과 달리 **바꿀 수 있고**, 규칙은 길이뿐이다. 상한은 서버 `User.NICKNAME_MAX_LENGTH`와 같은 값이어야
@@ -740,52 +791,82 @@ describe('닉네임 변경 API (updateNickname)', () => {
   });
 });
 
-describe('독서 스토리 API', () => {
-  it('피드는 GET — 팔로우가 없으면 mine·groups가 빈 응답이다(실패가 아니라 0건)', async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
-      response(200, JSON.stringify({ mine: null, groups: [] })) as never,
-    );
-
-    const feed = await fetchStoryFeed();
-
-    expect(lastRequest()[0]).toBe('http://localhost:8080/api/stories/feed');
-    expect(lastRequest()[1].method).toBe('GET');
-    expect(feed.mine).toBeNull();
-    expect(feed.groups).toEqual([]);
-  });
-
-  it('피드는 내 스토리를 groups가 아니라 mine으로 준다 — 핸들 없는 계정도 자기 목록을 본다(설계 §5-1)', async () => {
+describe('여백 API', () => {
+  it('책 하나의 여백은 「누구의 + 어느 책」 두 축으로 받는다 — bookId는 쿼리다', async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
       response(
         200,
         JSON.stringify({
-          mine: { loginId: null, nickname: '나', profileCharacterCode: null, allViewed: true, stories: [{ id: 9 }] },
-          groups: [],
+          book: { id: 7, title: '데미안', author: '헤르만 헤세', coverUrl: null },
+          ownerNickname: '구스펠',
+          self: false,
+          following: true,
+          entries: [{ id: 3, text: '한 문장', bgCode: 'paper', createdAt: '2026-08-16T00:00:00Z' }],
         }),
       ) as never,
     );
 
-    const feed = await fetchStoryFeed();
+    const result = await fetchBookMargin('goospel', 7);
 
-    expect(feed.mine?.loginId).toBeNull(); // 핸들 없이도 mine이 채워진다 = /of/{loginId} 불필요
-    expect(feed.mine?.stories[0].id).toBe(9);
+    expect(lastRequest()[0]).toBe('http://localhost:8080/api/stories/of/goospel?bookId=7');
+    expect(lastRequest()[1].method).toBe('GET');
+    expect(result.book.title).toBe('데미안');
+    expect(result.entries[0].id).toBe(3);
   });
 
-  it('작성은 문장·책·배경을 함께 보낸다 — 책 미첨부는 null(생략이 아니라 명시)', async () => {
+  it('비팔로워에게도 책 라벨은 실리고 글만 빈 배열이다 — 글 유무 자체를 누설하지 않는 서버 계약', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(
+        200,
+        JSON.stringify({
+          book: { id: 7, title: '데미안', author: null, coverUrl: null },
+          ownerNickname: '구스펠',
+          self: false,
+          following: false,
+          entries: [],
+        }),
+      ) as never,
+    );
+
+    const result = await fetchBookMargin('goospel', 7);
+
+    expect(result.book.title).toBe('데미안');
+    expect(result.entries).toEqual([]);
+    expect(result.following).toBe(false);
+  });
+
+  it('차단·PRIVATE·남의 책 id는 모두 404 — 존재를 누설하지 않는 계약을 그대로 올린다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(404, '<html>error</html>') as never);
+
+    const error = (await fetchBookMargin('goospel', 99).catch((e: unknown) => e)) as ApiError;
+
+    expect(error.status).toBe(404);
+  });
+
+  it('작성은 문장·책·배경·인용을 함께 보낸다 — 책은 필수고 인용은 선택이다', async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(response(200, JSON.stringify({ id: 3, text: '한 문장' })) as never);
 
-    await createStory('한 문장', null, 'paper');
+    await createStory('한 문장', 7, 'paper', '옮긴 문장');
 
     expect(lastRequest()[0]).toBe('http://localhost:8080/api/stories');
     expect(lastRequest()[1].method).toBe('POST');
-    expect(JSON.parse(lastRequest()[1].body as string)).toEqual({ text: '한 문장', bookId: null, bgCode: 'paper' });
+    expect(JSON.parse(lastRequest()[1].body as string))
+      .toEqual({ text: '한 문장', bookId: 7, bgCode: 'paper', quote: '옮긴 문장' });
+  });
+
+  it('인용 없이 남기면 quote는 null로 나간다 — 서버가 「인용 없음」으로 읽는 유일한 표현', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, JSON.stringify({ id: 4, text: '한 문장' })) as never);
+
+    await createStory('한 문장', 7, 'paper', null);
+
+    expect(JSON.parse(lastRequest()[1].body as string).quote).toBeNull();
   });
 
   it('배경 코드는 서버 팔레트(Story.BG_CODES)와 같은 값이어야 400이 안 난다', () => {
     expect(STORY_BG_CODES.map((bg) => bg.code)).toEqual(['paper', 'night', 'forest', 'sunset', 'sea', 'plum']);
   });
 
-  it('삭제는 DELETE + 본문 없음, 남의 스토리는 404를 그대로 전달한다(IDOR 비노출 계약)', async () => {
+  it('삭제는 DELETE + 본문 없음, 남의 글은 404를 그대로 전달한다(IDOR 비노출 계약)', async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '') as never);
 
     await deleteStory(7);
@@ -798,26 +879,54 @@ describe('독서 스토리 API', () => {
     const error = (await deleteStory(8).catch((e: unknown) => e)) as ApiError;
     expect(error.status).toBe(404);
   });
+});
 
-  it('열람 기록은 POST이고 본문이 없다 — 서버가 @RequestBody를 안 받는다', async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '') as never);
+/**
+ * 세션 캐시 무효화 — 캐시는 「Loading을 안 그리게」 하는 물건이라 stale 노출이 최대 1 왕복이지만,
+ * 두 자리만은 그 한 왕복도 허용하지 않는다: <b>계정 전환</b>(남의 데이터)과 <b>내가 방금 쓴 글</b>
+ * (「썼는데 안 보인다」로 읽힌다). 둘 다 쓰는 함수 하나를 지나므로 그 자리에 무효화를 붙인다.
+ */
+describe('세션 캐시 무효화', () => {
+  beforeEach(cacheClear);
 
-    await markStoryViewed(7);
+  it('토큰을 버리면 캐시도 통째로 버린다 — 로그아웃·401·탈퇴가 전부 이 문을 지난다', () => {
+    cachePut(CACHE_SHELF, 'shelf');
+    cachePut(cacheKeyProfile('goospel'), 'profile');
+    cachePut(cacheKeyMargin('goospel', 1), 'margin');
 
-    expect(lastRequest()[0]).toBe('http://localhost:8080/api/stories/7/view');
-    expect(lastRequest()[1].method).toBe('POST');
-    expect(lastRequest()[1].body).toBeUndefined();
+    token.clear();
+
+    expect(cacheGet(CACHE_SHELF)).toBeUndefined();
+    expect(cacheGet(cacheKeyProfile('goospel'))).toBeUndefined();
+    expect(cacheGet(cacheKeyMargin('goospel', 1))).toBeUndefined();
   });
 
-  it('뷰어 목록은 그 스토리 경로의 GET이다', async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
-      response(200, JSON.stringify([{ loginId: 'a', nickname: 'A', profileCharacterCode: null, viewedAt: 'x' }])) as never,
-    );
+  it('여백 글을 쓰면 여백 스냅만 버린다 — 내 새 글이 빠진 옛 스냅보다 로딩이 정직하다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, JSON.stringify({ id: 3, text: '한 문장' })) as never);
+    cachePut(cacheKeyMargin('goospel', 7), 'margin');
+    cachePut(CACHE_SHELF, 'shelf');
 
-    const viewers = await fetchStoryViewers(7);
+    await createStory('한 문장', 7, 'paper', null);
 
-    expect(lastRequest()[0]).toBe('http://localhost:8080/api/stories/7/viewers');
-    expect(lastRequest()[1].method).toBe('GET');
-    expect(viewers[0].nickname).toBe('A');
+    expect(cacheGet(cacheKeyMargin('goospel', 7))).toBeUndefined();
+    expect(cacheGet(CACHE_SHELF)).toBe('shelf'); // 책장은 안 낡았다 — 필요 이상으로 버리면 로딩이 늘어난다
+  });
+
+  it('작성이 실패해도 캐시는 이미 버려져 있다 — 요청 전에 버리는 fail-safe', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(500, 'boom') as never);
+    cachePut(cacheKeyMargin('goospel', 7), 'margin');
+
+    await createStory('한 문장', 7, 'paper', null).catch(() => {});
+
+    expect(cacheGet(cacheKeyMargin('goospel', 7))).toBeUndefined();
+  });
+
+  it('여백 글을 지워도 여백 스냅을 버린다 — 지운 글이 캐시로 되살아나면 안 된다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200) as never);
+    cachePut(cacheKeyMargin('goospel', 7), 'margin');
+
+    await deleteStory(3);
+
+    expect(cacheGet(cacheKeyMargin('goospel', 7))).toBeUndefined();
   });
 });

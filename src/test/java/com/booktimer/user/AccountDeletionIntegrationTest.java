@@ -5,6 +5,8 @@ import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.follow.Follow;
 import com.booktimer.follow.FollowRepository;
+import com.booktimer.garden.AuthorAffection;
+import com.booktimer.garden.AuthorAffectionRepository;
 import com.booktimer.report.ReportReason;
 import com.booktimer.report.ReportService;
 import com.booktimer.session.ReadingGoalWaiver;
@@ -13,14 +15,15 @@ import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.story.Story;
 import com.booktimer.story.StoryRepository;
-import com.booktimer.story.StoryView;
-import com.booktimer.story.StoryViewRepository;
 import com.booktimer.timer.ReadingGoalService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.session.FindByIndexNameSessionRepository;
+import org.springframework.session.Session;
+import org.springframework.session.SessionRepository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -56,11 +59,13 @@ class AccountDeletionIntegrationTest {
     @Autowired
     private StoryRepository storyRepository;
     @Autowired
-    private StoryViewRepository storyViewRepository;
-    @Autowired
     private FollowRepository followRepository;
     @Autowired
     private PasswordEncoder passwordEncoder;
+    @Autowired
+    private AuthorAffectionRepository affectionRepository;
+    @Autowired
+    private FindByIndexNameSessionRepository<? extends Session> sessions;
 
     @Test
     @DisplayName("책을 가진 사용자가 탈퇴해도 FK 위반 없이 계정·책이 삭제된다")
@@ -119,7 +124,7 @@ class AccountDeletionIntegrationTest {
      * FK 참조하므로, 순서가 하나만 틀려도 flush 시점에 제약 위반으로 터진다. mock은 FK를 모른다(T-023·T-029).
      */
     @Test
-    @DisplayName("미니앱 탈퇴: 세션·책·스토리·팔로우를 가진 토스 계정도 FK 위반 없이 전부 삭제된다")
+    @DisplayName("미니앱 탈퇴: 세션·책·여백 글·팔로우를 가진 토스 계정도 FK 위반 없이 전부 삭제된다")
     void deleteTossVerifiedAccount_withChildren_succeeds() {
         User me = userRepository.saveAndFlush(
                 withTossKey(User.ofOAuth("toss-quit@noreply.booktimer.app", "토스유저", "Asia/Seoul",
@@ -128,13 +133,12 @@ class AccountDeletionIntegrationTest {
                 User.of("friend@booktimer.com", passwordEncoder.encode("rawpw1234"), "친구", "Asia/Seoul", Role.USER));
 
         Book book = Book.register(me, "탈퇴 전에 읽던 책", null, null, null, null, null, BookStatus.READING);
-        book.makePublic(); // 스토리는 공개 책에만 붙는다(Story.of의 불변식)
+        book.makePublic(); // 여백은 공개 책에만 열린다(Story.of의 불변식)
         bookRepository.saveAndFlush(book);
         // 세션은 book을 FK 참조한다 — 책보다 뒤에 지우면 위반이다.
         sessionRepository.saveAndFlush(ReadingSession.start(me, Instant.now().minusSeconds(3600), book));
-        // 스토리도 book 참조 + 열람기록이 스토리를 참조한다(3단 사슬).
-        Story story = storyRepository.saveAndFlush(Story.of(me, "오늘로 마지막 기록.", book, "paper"));
-        storyViewRepository.saveAndFlush(StoryView.of(story, friend));
+        // 여백의 글도 book을 FK 참조한다 — 책보다 먼저 지워야 한다.
+        storyRepository.saveAndFlush(Story.of(me, "오늘로 마지막 기록.", book, "paper"));
         // 팔로우는 양방향 — 내가 건 것과 남이 나에게 건 것 둘 다 정리돼야 한다.
         followRepository.saveAndFlush(Follow.of(me, friend));
         followRepository.saveAndFlush(Follow.of(friend, me));
@@ -168,5 +172,45 @@ class AccountDeletionIntegrationTest {
             accountService.deleteAccount(email, "rawpw1234");
             assertThat(userRepository.findByEmail(email)).isEmpty();
         }).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("작가에게 먹이를 준 사용자(author_affection)도 FK 위반 없이 탈퇴된다")
+    void deleteAccount_withAuthorAffection_succeeds() {
+        String email = "feeder@booktimer.com";
+        User user = userRepository.saveAndFlush(
+                User.of(email, passwordEncoder.encode("rawpw1234"), "사육사", "Asia/Seoul", Role.USER));
+        affectionRepository.saveAndFlush(AuthorAffection.create(user, "author-001"));
+
+        // author_affection.user_id FK가 정리되지 않으면 flush 시 제약 위반.
+        // 운영 실측(2026-08-15)에서 실제로 이 테이블 때문에 27명 중 2명이 탈퇴 불가였다.
+        assertThatCode(() -> {
+            accountService.deleteAccount(email, "rawpw1234");
+            assertThat(userRepository.findByEmail(email)).isEmpty();
+        }).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("탈퇴하면 그 사용자의 로그인 세션도 사라진다 — 계정 없는 유령 세션을 남기지 않는다")
+    void deleteAccount_removesLoginSessions() {
+        String email = "ghost@booktimer.com";
+        User user = User.of(email, passwordEncoder.encode("rawpw1234"), "유령", "Asia/Seoul", Role.USER);
+        user.assignLoginId("ghostid");
+        userRepository.saveAndFlush(user);
+        String sessionId = createSession(sessions, "ghostid");
+
+        accountService.deleteAccount(email, "rawpw1234");
+
+        // 세션은 users와 FK로 묶여 있지 않아 계정을 지워도 남는다 — 남으면 계정 없는 principal이
+        // 인증된 채로 떠다닌다(운영 실측: testid 삭제 후 616건 잔존).
+        assertThat(sessions.findById(sessionId)).isNull();
+    }
+
+    /** principal 이름으로 인덱싱된 세션을 실 저장소에 하나 만든다. */
+    private static <S extends Session> String createSession(SessionRepository<S> repo, String principalName) {
+        S session = repo.createSession();
+        session.setAttribute(FindByIndexNameSessionRepository.PRINCIPAL_NAME_INDEX_NAME, principalName);
+        repo.save(session);
+        return session.getId();
     }
 }

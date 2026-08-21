@@ -27,7 +27,7 @@
                 <input class="auth-input" th:classappend="${#fields.hasErrors('loginId')} ? 'is-error'"
                        type="text" id="loginId" th:field="*{loginId}" autocomplete="username"
                        pattern="[A-Za-z0-9_]{3,20}" placeholder="영문/숫자/_ 3~20자">
-                <small class="auth-hint auth-hint-accent">로그인·검색·책방 주소(/u/아이디)에 쓰여요. 한번 정하면 바꿀 수 없어요.</small>
+                <small class="auth-hint auth-hint-accent">로그인·검색·책방 주소(/u/아이디)에 쓰여요. 바꾸는 건 평생 한 번뿐이에요.</small>
                 <span class="auth-field-error" th:if="${#fields.hasErrors('loginId')}" th:errors="*{loginId}">아이디 오류</span>
             </div>
             <!-- 비밀번호 -->

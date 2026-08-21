@@ -37,6 +37,17 @@ health_ok() {  # $1 = 서비스명. 전체 /actuator/health가 아니라 readine
         curl -sf --max-time 5 http://localhost:8080/actuator/health/readiness >/dev/null 2>&1
 }
 
+pem_readable() {  # $1 = 서비스명. 컨테이너가 토스 mTLS 인증서를 **실제로 읽을 수 있는지** 본다.
+                  # 컨테이너는 비root(Dockerfile USER)로 돌고 PEM은 600이라, render-env.sh 의 chown 과
+                  # uid가 어긋나면 못 읽는다. 그런데 Spring SSL 번들은 **지연 생성**이라 앱은 멀쩡히 뜨고
+                  # 위 헬스체크도 통과한다 — 토스 로그인만 죽어 미니앱이 시작조차 못 하는 무성 장애가 된다.
+                  # 그래서 uid 산수를 믿지 않고 전환 전에 직접 읽어 본다(권한 비트가 아니라 실제 read).
+    if [ "$DRYRUN" = 1 ]; then [ "${DEPLOY_FAKE_PEM:-ok}" = ok ]; return $?; fi
+    docker compose -f "$COMPOSE_FILE" exec -T "$1" sh -c \
+        'head -c1 /etc/booktimer/toss/client-cert.pem >/dev/null && head -c1 /etc/booktimer/toss/client-key.pem >/dev/null' \
+        >/dev/null 2>&1
+}
+
 # ── 1) 전환 방향 결정 (blue ↔ green 대칭) ──
 if running_services | grep -qx app-blue; then
     NEW=app-green; OLD=app-blue
@@ -58,17 +69,35 @@ fi
 dc pull "$NEW"
 
 # ── 2.5) Caddyfile 반영 ──
-# 워크플로의 S3 sync가 /opt/booktimer/Caddyfile을 갱신하지만 **Caddy는 파일을 다시 읽지 않는다**
-# (컨테이너에 :ro로 마운트돼 있을 뿐, 감시하지 않는다). reload를 안 치면 프록시 설정 변경이
-# 조용히 무반영으로 남는다 — 배포는 성공으로 끝나는데 바뀐 건 없는 무성 실패다.
-# 무중단이다(실측: active health check가 붙은 상태에서 reload 2회 × 부하 400건, 실패 0건).
-# 설정이 잘못되면 Caddy가 **옛 설정을 유지한 채** 논제로로 끝나므로, 앱 전환 전인 여기서 멈추는 게 맞다.
-if running_services | grep -qx caddy; then
-    echo "[deploy] Caddyfile 반영 (caddy reload)"
-    dc exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+# S3 sync가 caddy/Caddyfile을 갱신해도 **Caddy는 그걸 스스로 다시 읽지 않는다** — reload를 쳐야 한다.
+# 안 치면 프록시 설정 변경이 배포 성공 뒤에도 조용히 무반영으로 남는다(무성 실패, T-167).
+# reload는 무중단이다(실측: active health check가 붙은 상태에서 reload 2회 × 부하 400건, 실패 0건).
+#
+# 순서가 중요하다:
+#  ① validate — 일회용 컨테이너에 **운영과 동일한 마운트**로 붙여 설정을 검사한다. 문법 오류나
+#     마운트 경로 오타를 **라이브 Caddy를 건드리기 전에** 잡는다(여긴 유일한 입구라 잘못 뜨면 전면 장애).
+#  ② up -d caddy — 서비스 **정의**(마운트 등)가 바뀐 경우에만 compose가 재생성한다. 내용만 바뀐
+#     평시 배포엔 no-op이라 순단이 없다.
+#  ③ reload — 내용 변경을 무중단 반영.
+# 앱 전환 전에 두는 이유: 여기서 실패하면 앱을 아직 안 건드린 상태로 멈추는 게 안전하다.
+if [ "$DRYRUN" = 1 ]; then
+    echo "docker run --rm -v ./caddy:/etc/caddy:ro caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile"
 else
-    echo "[deploy] caddy 미실행 — reload 생략(콜드 스타트: bootstrap-ec2.sh가 새 설정으로 띄운다)"
+    docker run --rm -v "$(pwd)/caddy:/etc/caddy:ro" caddy:2-alpine \
+        caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 fi
+echo "[deploy] Caddyfile 검증 통과"
+dc up -d caddy
+# ③ reload — up -d가 caddy 기동을 보장하므로 "실행중인가" 가드는 필요 없다. 대신 **재시도**한다:
+#    방금 재생성된 경우 admin API(:2019)가 아직 안 떠 첫 시도가 실패할 수 있고, 그대로 두면
+#    set -e가 배포를 죽인다. 이미 떠 있던 평시 배포는 첫 시도에 성공한다.
+echo "[deploy] Caddyfile 반영 (caddy reload)"
+reloaded=0
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if dc exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile; then reloaded=1; break; fi
+    sleep 1
+done
+[ "$reloaded" = 1 ] || { echo "[deploy] caddy reload 실패 — 앱은 건드리지 않고 중단합니다" >&2; exit 1; }
 
 # ── 3) 새 컨테이너 기동 (옛 컨테이너는 계속 트래픽을 받는 중) ──
 dc up -d "$NEW"
@@ -80,9 +109,18 @@ for _ in $(seq 1 "$HEALTH_RETRIES"); do
     sleep "$HEALTH_SLEEP"
 done
 
+# ── 4.5) 토스 mTLS 인증서 가독성 게이트 ──
+# 헬스 통과 ≠ 토스 로그인 가능. 위 pem_readable 주석대로 SSL 번들이 지연 생성이라 인증서를 못 읽어도
+# 헬스는 초록이다. 여기서 걸러 **아래 5)의 롤백 경로로 합류**시킨다 — 옛 컨테이너는 안 건드린다.
+if [ "$ok" = 1 ] && ! pem_readable "$NEW"; then
+    echo "[deploy] $NEW 가 토스 mTLS 인증서를 못 읽습니다 — 컨테이너 uid(Dockerfile USER)와" >&2
+    echo "         PEM 소유자(render-env.sh APP_UID)가 어긋났을 수 있습니다." >&2
+    ok=0
+fi
+
 # ── 5) 실패: 새 것만 버리고 옛 것은 그대로 살려둔다 ──
 if [ "$ok" != 1 ]; then
-    echo "[deploy] $NEW 헬스체크 실패 — $OLD 를 유지한 채 롤백합니다" >&2
+    echo "[deploy] $NEW 기동 검증 실패 — $OLD 를 유지한 채 롤백합니다" >&2
     dc rm -sf "$NEW" || true
     exit 1
 fi

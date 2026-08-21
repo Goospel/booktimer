@@ -19,6 +19,6 @@
 <div id="village-app"
      th:attr="data-nickname=${nickname}">불러오는 중…</div>
 
-<script type="module" th:src="@{/garden/garden.js}"></script>
+<script type="module" th:attr="nonce=${cspNonce}" th:src="@{/garden/garden.js}"></script>
 </body>
 </html>

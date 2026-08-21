@@ -15,7 +15,7 @@
         <h1>BookTimer</h1>
     </header>
     <div class="entry-hero">
-        <h2>환영합니다! 🎉</h2>
+        <h2>환영합니다!</h2>
         <p th:text="${needsLoginId} ? '아이디와 시작 설정만 정하면 바로 시작이에요.' : '시작 설정만 정하면 바로 시작이에요.'">시작 설정만 정하면 바로 시작이에요.</p>
     </div>
 
@@ -23,7 +23,7 @@
         <!-- 부채 규칙은 신규 사용자에게 부담이므로 기본 접힘 아코디언으로 숨긴다(발견 9).
              궁금한 사람만 펼쳐 보고, 시작 자체는 가로막지 않는다. -->
         <details class="entry-accordion">
-            <summary>📖 목표를 못 채운 날은 어떻게 되나요?</summary>
+            <summary>목표를 못 채운 날은 어떻게 되나요?</summary>
             <p class="entry-accordion-body">
                 매일 <strong>하루 목표</strong>만큼 읽는 게 목표예요. 못 채운 날은 <strong>밀린 시간</strong>으로 남는데,
                 빠뜨린 기록을 나중에 채우거나 목표보다 더 읽으면 줄어들어요. 목표는 나중에 설정에서 바꿀 수 있어요.
@@ -36,7 +36,7 @@
                 <input type="text" id="loginId" maxlength="20" th:field="*{loginId}"
                        autocapitalize="none" autocomplete="username" placeholder="영문/숫자/_ 3~20자">
                 <!-- 불변 경고는 흐린 힌트가 아니라 앰버 경고 박스로 격상 — 되돌릴 수 없는 결정임을 분명히(발견 11). -->
-                <p class="warn-box">⚠️ <strong>한번 정하면 바꿀 수 없어요.</strong> 영소문자·숫자·언더스코어(_)만, 3~20자.</p>
+                <p class="warn-box"><strong>바꾸는 건 평생 한 번뿐이에요.</strong> 영소문자·숫자·언더스코어(_)만, 3~20자.</p>
                 <span class="field-error" th:if="${#fields.hasErrors('loginId')}" th:errors="*{loginId}">아이디 오류</span>
             </div>
             <div class="field">
@@ -58,6 +58,6 @@
         </form>
     </section>
 </div>
-<script type="module" th:src="@{/onboarding/onboarding.js}"></script>
+<script type="module" th:attr="nonce=${cspNonce}" th:src="@{/onboarding/onboarding.js}"></script>
 </body>
 </html>

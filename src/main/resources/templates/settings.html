@@ -132,7 +132,7 @@
                         <svg th:if="${ch.spriteId != null}" class="profile-char-svg" aria-hidden="true">
                             <use th:attr="href='#sprite-' + ${ch.code}"></use>
                         </svg>
-                        <span th:unless="${ch.spriteId != null}" th:text="${ch.emoji}">🪶</span>
+                        <span th:unless="${ch.spriteId != null}" th:text="${#strings.substring(ch.name, 0, 1)}">작</span>
                     </span>
                     <span class="profile-char-label" th:text="${ch.name}">작가</span>
                 </label>
@@ -142,6 +142,39 @@
             </p>
             <div class="set-actions">
                 <button type="submit" class="set-btn-save">저장</button>
+            </div>
+        </form>
+    </section>
+
+    <!--/* 아이디 변경 카드: 평생 1번. 소진했으면 폼 대신 정적 표기만 남긴다(옛 아이디는 영구히 잠긴다).
+           아이디를 아직 안 정한 계정(온보딩 전)엔 카드를 아예 그리지 않는다 — 그리면 안내가 '@null'이 되고,
+           제출해 봐야 도메인이 ISE로 막는 걸 컨트롤러가 '이미 사용했어요'라는 거짓 안내로 흡수한다. */-->
+    <section class="set-card" th:if="${loginId != null}">
+        <h2 class="set-card-title">아이디 변경</h2>
+        <p class="set-card-desc">
+            지금 아이디는 <strong th:text="'@' + ${loginId}">@handle</strong> 이에요.
+            <span th:unless="${loginIdChangeUsed}">아이디는 <strong>평생 한 번만</strong> 바꿀 수 있고, 바꾼 뒤에는 되돌릴 수 없어요. 옛 아이디는 다른 사람이 쓸 수 없게 잠겨요.</span>
+        </p>
+
+        <p th:if="${loginIdChangeUsed}" class="set-card-desc">
+            <strong>아이디 변경을 이미 사용했어요</strong> — 평생 한 번뿐이라 더는 바꿀 수 없어요.
+        </p>
+
+        <form th:unless="${loginIdChangeUsed}" th:action="@{/settings/login-id}" method="post">
+            <div class="set-field">
+                <label class="set-label" for="newLoginId">새 아이디 (영문 소문자·숫자·밑줄 3~20자)</label>
+                <input class="set-input" type="text" id="newLoginId" name="newLoginId" placeholder="새 아이디"
+                       autocomplete="off" autocapitalize="none" autocorrect="off">
+            </div>
+            <label class="set-check" for="confirmOnce">
+                <input type="checkbox" id="confirmOnce" name="confirmOnce" value="true">
+                <span class="set-check-box" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
+                <span class="set-check-body">
+                    <span class="set-check-title">아이디 변경은 평생 1번뿐이며 되돌릴 수 없음을 이해했어요</span>
+                </span>
+            </label>
+            <div class="set-actions">
+                <button type="submit" class="set-btn-save">아이디 변경</button>
             </div>
         </form>
     </section>
@@ -215,15 +248,17 @@
         <h2 class="set-card-title set-card-title-danger">회원 탈퇴</h2>
         <p class="set-card-desc">계정과 모든 독서 기록이 영구 삭제됩니다. 되돌릴 수 없습니다.</p>
         <form th:action="@{/settings/delete}" method="post"
-              onsubmit="return confirm('정말 탈퇴하시겠어요? 모든 기록이 삭제되며 되돌릴 수 없습니다.');">
-            <!--/* LOCAL 계정은 비밀번호로, 소셜 계정은 비밀번호가 없어 본인 @핸들(login_id) 재입력으로 확인한다. */-->
+              data-confirm="정말 탈퇴하시겠어요? 모든 기록이 삭제되며 되돌릴 수 없습니다.">
+            <!--/* LOCAL 계정은 비밀번호로, 소셜 계정은 비밀번호가 없어 본인 @핸들(login_id) 재입력으로 확인한다.
+                   아직 핸들이 없는(온보딩 전) 소셜 계정은 이메일이 확인 값이다 — 컨트롤러가 deleteConfirmValue로
+                   골라 싣는다. 핸들만 고집하면 "@null"을 안내하게 되고 그 계정은 탈퇴 자체가 불가능해진다. */-->
             <div class="set-field" th:if="${localAccount}">
                 <label class="set-label" for="password">확인을 위해 비밀번호를 입력하세요</label>
                 <input class="set-input set-input-danger" type="password" id="password" name="password" placeholder="비밀번호" autocomplete="current-password">
             </div>
             <div class="set-field" th:unless="${localAccount}">
-                <label class="set-label" for="confirmHandle">확인을 위해 아이디 <strong th:text="'@' + ${loginId}">@handle</strong> 를 입력하세요</label>
-                <input class="set-input set-input-danger" type="text" id="confirmHandle" name="confirmHandle" th:placeholder="'@' + ${loginId}" autocomplete="off" autocapitalize="none" autocorrect="off">
+                <label class="set-label" for="confirmHandle">확인을 위해 <strong th:text="${deleteConfirmValue}">@handle</strong> 를 입력하세요</label>
+                <input class="set-input set-input-danger" type="text" id="confirmHandle" name="confirmHandle" th:placeholder="${deleteConfirmValue}" autocomplete="off" autocapitalize="none" autocorrect="off">
             </div>
             <button type="submit" class="set-btn-danger">계정 영구 삭제</button>
         </form>
@@ -234,5 +269,7 @@
         <th:block th:replace="~{fragments/nav-links :: navLink(@{/books}, 'books', '내 책장')}"></th:block>
     </nav>
 </div>
+<!-- data-confirm 위임 리스너 — 인라인 onsubmit은 CSP에서 실행되지 않는다 -->
+<script th:attr="nonce=${cspNonce}" th:src="@{/js/confirm-submit.js}"></script>
 </body>
 </html>

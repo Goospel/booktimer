@@ -49,6 +49,16 @@ public class ReadingDebtService {
     private final ReadingGoalChangeRepository goalChangeRepository;
     private final ReadingGoalWaiverRepository waiverRepository;
     private final Clock clock;
+    /**
+     * 부채 누적 시작일(하한) — 이 날 이전은 부채로 세지 않는다.
+     *
+     * <p>7일 자동 소멸을 폐지하며 둔 전환 장치다. 이 하한이 없으면 전환 순간 옛 사용자에게 가입 이후
+     * 수백 시간의 부채가 한꺼번에 살아나 화면이 무의미해진다. 운영값은 전환 배포일보다 <b>7일 이른</b>
+     * 날짜라, 전환 직후 보이는 부채가 옛 7일 창과 같고 그 뒤로 하루씩 누적된다(체감 급변 0).
+     *
+     * <p>프로퍼티인 이유: 테스트는 고정 Clock을 각기 다른 날짜로 쓰므로 절대 상수를 박으면 창이 하루로
+     * 좁혀져 무관한 테스트가 줄줄이 깨진다. 테스트는 아주 이른 날짜로 덮어써 하한을 무력화한다.
+     */
     private final LocalDate debtEpoch;
 
     public ReadingDebtService(ReadingHistoryService historyService,
@@ -63,20 +73,6 @@ public class ReadingDebtService {
         this.waiverRepository = waiverRepository;
         this.clock = clock;
         this.debtEpoch = LocalDate.parse(debtEpoch);
-    }
-
-    /**
-     * 부채 누적 시작일(하한) — 이 날 이전은 부채로 세지 않는다.
-     *
-     * <p>7일 자동 소멸을 폐지하며 둔 전환 장치다. 이 하한이 없으면 전환 순간 옛 사용자에게 가입 이후
-     * 수백 시간의 부채가 한꺼번에 살아나 화면이 무의미해진다. 운영값은 전환 배포일보다 <b>7일 이른</b>
-     * 날짜라, 전환 직후 보이는 부채가 옛 7일 창과 같고 그 뒤로 하루씩 누적된다(체감 급변 0).
-     *
-     * <p>프로퍼티인 이유: 테스트는 고정 Clock을 각기 다른 날짜로 쓰므로 절대 상수를 박으면 창이 하루로
-     * 좁혀져 무관한 테스트가 줄줄이 깨진다. 테스트는 아주 이른 날짜로 덮어써 하한을 무력화한다.
-     */
-    public LocalDate debtEpoch() {
-        return debtEpoch;
     }
 
     /**

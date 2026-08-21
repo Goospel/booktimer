@@ -47,9 +47,12 @@ class BookServiceTest {
                 User.of(email, passwordEncoder.encode("rawpw1234"), "독자", "Asia/Seoul", Role.USER));
     }
 
+    /** 진짜 알라딘 링크 형식이어야 한다 — 구매 클릭 경로가 host를 검사해 외부 도메인을 버린다(AladinLink). */
+    private static final String ALADIN_LINK = "https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=1&ttbkey=x";
+
     private static BookSearchResult cleanCode() {
         return new BookSearchResult("클린 코드", "로버트 마틴", "9788966260959",
-                "http://cover/clean.jpg", "인사이트", "http://aladin/buy?ttbkey=x");
+                "http://cover/clean.jpg", "인사이트", ALADIN_LINK);
     }
 
     @Test
@@ -64,7 +67,7 @@ class BookServiceTest {
         assertThat(saved.getAuthor()).isEqualTo("로버트 마틴");
         assertThat(saved.getIsbn13()).isEqualTo("9788966260959");
         assertThat(saved.getCoverUrl()).isEqualTo("http://cover/clean.jpg");
-        assertThat(saved.getPurchaseLink()).isEqualTo("http://aladin/buy?ttbkey=x");
+        assertThat(saved.getPurchaseLink()).isEqualTo(ALADIN_LINK);
         assertThat(saved.getStatus()).isEqualTo(BookStatus.WANT_TO_READ);
     }
 
@@ -263,7 +266,7 @@ class BookServiceTest {
 
         String link = bookService.recordPurchaseClick(u, book.getId());
 
-        assertThat(link).isEqualTo("http://aladin/buy?ttbkey=x");
+        assertThat(link).isEqualTo(ALADIN_LINK);
         assertThat(bookService.myBooks(u).get(0).getClickCount()).isEqualTo(1L);
     }
 
@@ -300,7 +303,7 @@ class BookServiceTest {
 
         String link = bookService.recordPublicPurchaseClick(book.getId());
 
-        assertThat(link).isEqualTo("http://aladin/buy?ttbkey=x");
+        assertThat(link).isEqualTo(ALADIN_LINK);
         // 클릭은 viewer가 아니라 "그 책(=책 주인 행)"에 집계된다 — 사용자 결정(2026-06-06)
         assertThat(bookService.myBooks(owner).get(0).getClickCount()).isEqualTo(1L);
     }
@@ -336,6 +339,39 @@ class BookServiceTest {
         String link = bookService.recordPublicPurchaseClick(999_999L);
 
         assertThat(link).isNull();
+    }
+
+    // ── 오픈 리다이렉트 방어 ────────────────────────────────────────────────
+    // purchase_link는 POST /api/books가 검증 없이 저장하는 사용자 입력이고, 이 두 메서드의 반환값이
+    // 그대로 "redirect:"에 실린다(BookController). 공개 경로가 특히 위험하다 — 공격자가 자기 책을
+    // 공개해 두면 우리 도메인 주소 한 줄로 임의 사이트에 착지시킬 수 있다.
+
+    @Test
+    @DisplayName("공개 책 구매 클릭: 구매링크가 알라딘이 아니면 null·집계 없음 — 오픈 리다이렉트 차단")
+    void recordPublicPurchaseClick_foreignLink_returnsNullNoCount() {
+        User owner = newUser("evilpub@booktimer.com");
+        Book book = bookService.addFromSearch(owner, cleanCode(), BookStatus.WANT_TO_READ);
+        book.updatePurchaseLink("https://evil.example/phish");
+        book.makePublic();
+
+        String link = bookService.recordPublicPurchaseClick(book.getId());
+
+        assertThat(link).isNull();
+        // 갈 곳이 없으니 집계도 하지 않는다(링크 없는 책과 같은 취급).
+        assertThat(bookService.myBooks(owner).get(0).getClickCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("구매 클릭: 내 책이어도 구매링크가 알라딘이 아니면 null·집계 없음")
+    void recordPurchaseClick_foreignLink_returnsNullNoCount() {
+        User u = newUser("evilown@booktimer.com");
+        Book book = bookService.addFromSearch(u, cleanCode(), BookStatus.WANT_TO_READ);
+        book.updatePurchaseLink("https://evil.example/phish");
+
+        String link = bookService.recordPurchaseClick(u, book.getId());
+
+        assertThat(link).isNull();
+        assertThat(bookService.myBooks(u).get(0).getClickCount()).isZero();
     }
 
     @Test
@@ -402,6 +438,43 @@ class BookServiceTest {
 
         assertThat(page.results()).extracting(BookSearchResult::title)
                 .containsExactly("황소 엉덩이를 찌른 모기"); // 저자만 매칭된 책은 제외
+    }
+
+    /**
+     * 세트 상품 제외 — 실기기 제보(2026-08-21): 「노벨라33 세트 - 전33권」이 추천 카드에 떠서, 저자
+     * 40명이 한 줄을 세로 900px로 부풀려 창을 통째로 먹었다. 화면은 줄 고정으로 따로 막지만
+     * <b>세트는 애초에 「이어 읽기」에 안 맞는다</b> — 여기는 다음에 읽을 <b>한 권</b>을 권하는 자리다.
+     *
+     * <p>검색과 추천이 <b>둘 다 이 메서드를 지나므로</b>(BookApiController · BookRecommendationService)
+     * 걸러 내는 곳도 여기 한 곳이다.
+     */
+    @Test
+    @DisplayName("세트 상품은 검색 결과에서 뺀다 — 「이어 읽기」는 한 권을 권하는 자리다")
+    void search_dropsBoxSets() {
+        BookSearchResult single = new BookSearchResult("전쟁과 평화 3", "톨스토이", "1", null, "민음사", null);
+        BookSearchResult boxSet = new BookSearchResult("노벨라33 세트 - 전33권", "여럿", "2", null, "현대문학", null);
+        when(searchClient.search("톨스토이", BookSearchType.AUTHOR, 1))
+                .thenReturn(new BookSearchPage(List.of(single, boxSet), 1, 10, 2));
+
+        BookSearchPage page = bookService.search("톨스토이", BookSearchType.AUTHOR, 1);
+
+        assertThat(page.results()).extracting(BookSearchResult::title).containsExactly("전쟁과 평화 3");
+    }
+
+    /**
+     * 의도를 존중한다 — 세트를 <b>일부러</b> 검색한 사람에게서 그 책을 빼앗으면, 자기가 가진 책을
+     * 서재에 담을 길이 아예 없어진다. 걸러 내기의 유일한 탈출구라 반드시 남긴다.
+     */
+    @Test
+    @DisplayName("검색어가 세트를 찾고 있으면 거르지 않는다 — 가진 책을 담을 길을 막지 않는다")
+    void search_keepsBoxSets_whenQueryWantsThem() {
+        BookSearchResult boxSet = new BookSearchResult("노벨라33 세트 - 전33권", "여럿", "2", null, "현대문학", null);
+        when(searchClient.search("노벨라33 세트", BookSearchType.TITLE, 1))
+                .thenReturn(new BookSearchPage(List.of(boxSet), 1, 10, 1));
+
+        BookSearchPage page = bookService.search("노벨라33 세트", BookSearchType.TITLE, 1);
+
+        assertThat(page.results()).extracting(BookSearchResult::title).containsExactly("노벨라33 세트 - 전33권");
     }
 
     @Test

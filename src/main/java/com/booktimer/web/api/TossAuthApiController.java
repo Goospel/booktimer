@@ -56,8 +56,8 @@ public class TossAuthApiController {
      * 미니앱이 "새로 시작 / 기존 계정 연결"을 물을 수 있게 한다(여기서 만들어 버리면 그 선택권이 사라진다).
      */
     @PostMapping("/api/toss/login")
-    public TossAuthResponse login(@RequestBody TossAuthRequest request) {
-        TossUserInfo info = verify(request.authorizationCode(), request.referrer());
+    public TossAuthResponse login(@RequestBody TossAuthRequest request, HttpServletRequest http) {
+        TossUserInfo info = verify(request.authorizationCode(), request.referrer(), http);
         limit(RateLimitAction.TOSS_AUTH, info.userKey());
         return provisioningService.login(info.userKey())
                 .map(this::registeredResponse)
@@ -66,8 +66,8 @@ public class TossAuthApiController {
 
     /** 토스에서 시작하는 신규 계정 생성(핸들·비밀번호 없음, 이메일 미검증) + 토큰 발급. */
     @PostMapping("/api/toss/register")
-    public TossAuthResponse register(@RequestBody TossAuthRequest request) {
-        TossUserInfo info = verify(request.authorizationCode(), request.referrer());
+    public TossAuthResponse register(@RequestBody TossAuthRequest request, HttpServletRequest http) {
+        TossUserInfo info = verify(request.authorizationCode(), request.referrer(), http);
         limit(RateLimitAction.TOSS_AUTH, info.userKey());
         return registeredResponse(provisioningService.register(info.userKey(), info.email()));
     }
@@ -77,8 +77,8 @@ public class TossAuthApiController {
      * 성공 이후 미니앱의 모든 기록이 그 기존 계정으로 쌓인다(채널 병행의 성립 지점).
      */
     @PostMapping("/api/toss/link")
-    public TossAuthResponse link(@RequestBody TossLinkRequest request) {
-        TossUserInfo info = verify(request.authorizationCode(), request.referrer());
+    public TossAuthResponse link(@RequestBody TossLinkRequest request, HttpServletRequest http) {
+        TossUserInfo info = verify(request.authorizationCode(), request.referrer(), http);
         // 코드 검증 '전에' 센다 — 검증 후에 세면 실패한 추측이 카운트되지 않아 브루트포스 방어가 무력해진다.
         limit(RateLimitAction.TOSS_LINK, info.userKey());
         User owner = linkCodeService.consume(request.linkCode())
@@ -98,8 +98,18 @@ public class TossAuthApiController {
         return ResponseEntity.noContent().build();
     }
 
-    /** 인가코드로 토스 신원을 확인한다 — 실패는 전부 401(원인은 로그에만, 응답으로 구분해 주지 않는다). */
-    private TossUserInfo verify(String authorizationCode, String referrer) {
+    /**
+     * 인가코드로 토스 신원을 확인한다 — 실패는 전부 401(원인은 로그에만, 응답으로 구분해 주지 않는다).
+     *
+     * <p><b>토스를 부르기 전에 IP 상한을 먼저 센다</b>({@link RateLimitAction#TOSS_VERIFY}). 아래 호출부의
+     * {@code TOSS_AUTH}·{@code TOSS_LINK} 제한은 토스 {@code userKey}가 키인데, 그 키는 이 검증이 성공해야
+     * 나온다 — 즉 인가코드가 쓰레기면 여기서 401로 끝나 그 제한기에 <b>닿지도 못한다</b>. 이 경로는
+     * {@code permitAll}이라 그대로 두면 미인증 요청이 mTLS 아웃바운드를 무제한으로 유발한다. 신원을 모르는
+     * 단계에서 셀 수 있는 유일한 키가 클라이언트 IP다(Caddy가 {@code Forwarded}를 입구에서 버리고
+     * {@code ForwardedHeaderFilter}가 {@code X-Forwarded-For}를 반영하므로 위조가 안 된다 — #793).
+     */
+    private TossUserInfo verify(String authorizationCode, String referrer, HttpServletRequest http) {
+        limit(RateLimitAction.TOSS_VERIFY, http.getRemoteAddr());
         try {
             return tossLoginClient.fetchUserInfo(authorizationCode, referrer);
         } catch (TossLoginException e) {

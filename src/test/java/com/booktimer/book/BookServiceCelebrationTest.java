@@ -86,16 +86,58 @@ class BookServiceCelebrationTest {
     }
 
     @Test
-    @DisplayName("완독 → 읽는 중 → 완독이면 다시 축하 (재완독은 허용 — 빈도 낮고 무해)")
-    void refinished_celebratesAgain() {
+    @DisplayName("완독↔읽는 중 토글을 반복해도 축하는 책당 1회뿐 — 알람 테러 차단")
+    void toggleLoop_celebratesOnlyOnce() {
         User u = tossUser("t3@booktimer.com");
         Book book = bookService.addFromSearch(u, cleanCode(), BookStatus.READING);
+
+        for (int i = 0; i < 3; i++) {
+            bookService.changeStatus(u, book.getId(), BookStatus.FINISHED);
+            bookService.changeStatus(u, book.getId(), BookStatus.READING);
+        }
+        bookService.changeStatus(u, book.getId(), BookStatus.FINISHED);
+
+        verify(messengerClient, times(1)).sendMessage(anyString(), anyString(), any());
+    }
+
+    @Test
+    @DisplayName("완독 이탈에도 축하 마커는 살아남는다 — finishedAt과 달리 지우지 않는다")
+    void refinish_marksNothingNew_markerSurvivesUnfinish() {
+        User u = tossUser("t8@booktimer.com");
+        Book book = bookService.addFromSearch(u, cleanCode(), BookStatus.READING);
+        bookService.changeStatus(u, book.getId(), BookStatus.FINISHED);
+
+        Book unfinished = bookService.changeStatus(u, book.getId(), BookStatus.READING);
+
+        assertThat(unfinished.getFinishedAt()).isNull();
+        assertThat(unfinished.getFinishCelebratedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("완독으로 등록된 책도 첫 읽는 중→완독 전이에선 1회 축하 — 등록 경로가 축하 기회를 소멸시키지 않는다")
+    void registeredAsFinished_thenRetoggled_celebratesOnce() {
+        User u = tossUser("t6@booktimer.com");
+        Book book = bookService.addFromSearch(u, cleanCode(), BookStatus.FINISHED);
+
+        bookService.changeStatus(u, book.getId(), BookStatus.READING);
+        bookService.changeStatus(u, book.getId(), BookStatus.FINISHED);
+
+        verify(messengerClient, times(1)).sendMessage(anyString(), anyString(), any());
+    }
+
+    @Test
+    @DisplayName("발송이 실패해도 마커는 찍힌다 — 토글로 재발송을 유도할 수 없다")
+    void sendFailure_stillMarks_noRetryByToggle() {
+        User u = tossUser("t7@booktimer.com");
+        Book book = bookService.addFromSearch(u, cleanCode(), BookStatus.READING);
+        when(messengerClient.sendMessage(anyString(), anyString(), any()))
+                .thenThrow(new RuntimeException("toss down"));
+
         bookService.changeStatus(u, book.getId(), BookStatus.FINISHED);
         bookService.changeStatus(u, book.getId(), BookStatus.READING);
-
         bookService.changeStatus(u, book.getId(), BookStatus.FINISHED);
 
-        verify(messengerClient, times(2)).sendMessage(anyString(), anyString(), any());
+        verify(messengerClient, times(1)).sendMessage(anyString(), anyString(), any());
     }
 
     @Test

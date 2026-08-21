@@ -11,7 +11,6 @@
 <body>
 <div class="container">
     <header class="brand">
-        <span class="emoji">🛠️</span>
         <h1>신고함</h1>
     </header>
     <p class="status-line muted">사용자가 보낸 신고를 읽고 후속 처리합니다. 처리를 마친 신고는 삭제하세요.</p>
@@ -34,7 +33,7 @@
             <a class="btn-ghost btn-small" th:if="${row.reportedLoginId != null}"
                th:href="@{/u/{loginId}(loginId=${row.reportedLoginId})}" target="_blank" rel="noopener">대상 책방 보기</a>
             <form th:action="@{/admin/reports/{id}/delete(id=${row.id})}" method="post"
-                  onsubmit="return confirm('이 신고를 삭제할까요?');">
+                  data-confirm="이 신고를 삭제할까요?">
                 <button type="submit" class="btn-danger btn-small">삭제</button>
             </form>
         </div>
@@ -44,5 +43,7 @@
         <th:block th:replace="~{fragments/nav-links :: navLink(@{/admin}, 'back', '관리자 홈')}"></th:block>
     </nav>
 </div>
+<!-- data-confirm 위임 리스너 — 인라인 onsubmit은 CSP에서 실행되지 않는다 -->
+<script th:attr="nonce=${cspNonce}" th:src="@{/js/confirm-submit.js}"></script>
 </body>
 </html>

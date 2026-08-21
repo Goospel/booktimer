@@ -1,13 +1,14 @@
 package com.booktimer.migration;
 
+import com.booktimer.book.Book;
+import com.booktimer.book.BookRepository;
+import com.booktimer.book.BookStatus;
 import com.booktimer.email.EmailToken;
 import com.booktimer.email.EmailTokenRepository;
 import com.booktimer.email.EmailTokenType;
 import com.booktimer.garden.AuthorCharacterRepository;
 import com.booktimer.story.Story;
 import com.booktimer.story.StoryRepository;
-import com.booktimer.story.StoryView;
-import com.booktimer.story.StoryViewRepository;
 import com.booktimer.user.AuthProvider;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
@@ -23,6 +24,12 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.TestPropertySource;
 
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -52,6 +59,9 @@ class FlywayMigrationTest {
     Flyway flyway;
 
     @Autowired
+    JdbcTemplate jdbcTemplate;
+
+    @Autowired
     UserRepository userRepository;
 
     @Autowired
@@ -61,10 +71,10 @@ class FlywayMigrationTest {
     AuthorCharacterRepository authorCharacterRepository;
 
     @Autowired
-    StoryRepository storyRepository;
+    BookRepository bookRepository;
 
     @Autowired
-    StoryViewRepository storyViewRepository;
+    StoryRepository storyRepository;
 
     @Autowired
     com.booktimer.auth.ApiTokenRepository apiTokenRepository;
@@ -192,29 +202,39 @@ class FlywayMigrationTest {
                 .allSatisfy(a -> assertThat(a.getSpriteId()).isEqualTo(a.getCode()));
     }
 
-    // ── 독서 스토리 (V56 story · V57 story_view) — 스키마↔엔티티 일치 + 열람 멱등 유니크 ──
-    @Test
-    void story_and_story_view_tables_persist_under_flyway_schema() {
-        // story·story_view 테이블(FK·컬럼)이 Flyway 스키마와 엔티티 매핑이 일치해야 저장된다(validate 모드).
-        User author = userRepository.saveAndFlush(userWithHandle("story-author@example.com", "storyauthor"));
-        Story story = storyRepository.saveAndFlush(Story.of(author, "마이그레이션 검증 문장", null, "night"));
-        assertThat(story.getId()).isNotNull();
+    // ── 여백 (V56 story · V71 책 귀속) — 스키마↔엔티티 일치 + 은퇴한 열람 테이블·NOT NULL 승격 ──
+    // 아래 두 테스트가 여기 있는 이유: 메인 스위트는 Hibernate가 엔티티에서 스키마를 만들므로
+    // 「story_view가 드롭됐는가」는 애초에 관측할 수 없고(엔티티 자체가 없다), 「book_id가 NOT NULL인가」도
+    // 엔티티 매핑을 그대로 되읽는 공허한 단언이 된다. V71이 실제로 적용된 스키마만이 이 둘을 증명한다.
 
-        User viewer = userRepository.saveAndFlush(userWithHandle("story-viewer@example.com", "storyviewer"));
-        StoryView view = storyViewRepository.saveAndFlush(StoryView.of(story, viewer));
-        assertThat(view.getId()).isNotNull();
+    @Test
+    void story_table_persists_under_flyway_schema() {
+        // story 테이블(FK·컬럼)이 Flyway 스키마와 엔티티 매핑이 일치해야 저장된다(validate 모드).
+        User author = userRepository.saveAndFlush(userWithHandle("story-author@example.com", "storyauthor"));
+        Book book = Book.register(author, "여백이 열린 책", null, null, null, null, null, BookStatus.READING);
+        book.makePublic();
+        bookRepository.saveAndFlush(book);
+
+        Story story = storyRepository.saveAndFlush(Story.of(author, "마이그레이션 검증 문장", book, "night"));
+
+        assertThat(story.getId()).isNotNull();
     }
 
     @Test
-    void story_view_unique_constraint_is_enforced() {
-        // uk_story_view(story_id, viewer_id) — 열람 기록 멱등의 DB 레벨 근거(§13.3).
-        User author = userRepository.saveAndFlush(userWithHandle("uk-author@example.com", "ukauthor"));
-        User viewer = userRepository.saveAndFlush(userWithHandle("uk-viewer@example.com", "ukviewer"));
-        Story story = storyRepository.saveAndFlush(Story.of(author, "유니크 검증 문장", null, null));
-        storyViewRepository.saveAndFlush(StoryView.of(story, viewer));
+    void v71_retires_story_view_and_requires_book() {
+        // V71: 열람 기록 은퇴(테이블 드롭) + 여백의 책 귀속(book_id NOT NULL). 둘 다 스키마에서 파생 단언.
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE UPPER(TABLE_NAME) = 'STORY_VIEW'
+                """, Integer.class))
+                .as("story_view는 V71이 드롭했다 — 남아 있으면 죽은 테이블이 다음 사람의 인지 비용이 된다")
+                .isZero();
 
-        assertThatThrownBy(() -> storyViewRepository.saveAndFlush(StoryView.of(story, viewer)))
-                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE UPPER(TABLE_NAME) = 'STORY' AND UPPER(COLUMN_NAME) = 'BOOK_ID'
+                """, String.class))
+                .as("여백은 책에 귀속된다 — book_id NOT NULL이 앱 코드 대신 DB가 지키는 제약")
+                .isEqualTo("NO");
     }
 
     // ── 토스 미니앱(V61) — users.toss_user_key 유니크 + api_token·toss_link_code 스키마↔엔티티 일치 ──
@@ -267,5 +287,96 @@ class FlywayMigrationTest {
         assertThat(saved.getId()).isNotNull();
         assertThat(saved.getLoginId()).isEqualTo("realhandle");
         assertThat(saved.isOnboarded()).isTrue();
+    }
+
+    /**
+     * {@code AccountService.purge()}가 정리하는 테이블 목록 — users를 FK 참조하는 <b>모든</b> 테이블이어야 한다.
+     *
+     * <p>순서는 purge()의 삭제 순서와 무관하다(여기선 집합만 본다). 항목을 늘릴 땐 purge()에도 같이 넣어야 한다.
+     */
+    private static final Set<String> TABLES_PURGE_CLEARS = Set.of(
+            "API_TOKEN", "AUTHOR_AFFECTION", "BLOCK", "BOOK", "EMAIL_TOKEN", "FEEDBACK", "FOLLOW",
+            "READING_GOAL_CHANGE", "READING_GOAL_WAIVER", "READING_PERSONALITY", "READING_SESSION",
+            "READING_TIMER", "REPORT", "STORY", "STORY_LIKE", "TOSS_LINK_CODE");
+
+    /**
+     * <b>users를 FK 참조하는 테이블 집합 == purge()가 지우는 집합</b>을 못 박는다.
+     *
+     * <p>왜 여기(마이그레이션 테스트)인가: 메인 스위트는 Hibernate가 <b>엔티티 매핑에서</b> 스키마를 만들어서
+     * <b>JPA에 매핑되지 않은 테이블은 아예 존재하지 않는다</b>. 그런데 이 결함이 생긴 경로가 정확히 그것이었다 —
+     * {@code garden_placement}·{@code garden_decoration_placement}·{@code push_subscriptions}는 Flyway에만
+     * 있고 자바 코드가 한 번도 참조하지 않는 테이블인데, FK({@code NO ACTION})만 살아서 <b>탈퇴를 막고
+     * 있었다</b>(운영 실측 2026-08-15: 27명 중 2명이 탈퇴 불가). 실제 마이그레이션 스키마를 보는 이 테스트만이
+     * 그 부류를 잡는다.
+     *
+     * <p>그래서 이 단언은 <b>양방향</b>이다: FK가 새로 생겼는데 purge()에 없으면(=탈퇴가 깨진다) 실패하고,
+     * 반대로 목록에만 있고 스키마에 없으면(=죽은 항목) 그것도 실패한다.
+     */
+    @Test
+    void everyTableWithForeignKeyToUsersIsClearedByPurge() {
+        Set<String> referencing = new HashSet<>(jdbcTemplate.queryForList("""
+                SELECT DISTINCT fk.TABLE_NAME
+                FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
+                JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE fk
+                  ON fk.CONSTRAINT_NAME = rc.CONSTRAINT_NAME
+                 AND fk.CONSTRAINT_SCHEMA = rc.CONSTRAINT_SCHEMA
+                JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE pk
+                  ON pk.CONSTRAINT_NAME = rc.UNIQUE_CONSTRAINT_NAME
+                 AND pk.CONSTRAINT_SCHEMA = rc.UNIQUE_CONSTRAINT_SCHEMA
+                WHERE UPPER(pk.TABLE_NAME) = 'USERS'
+                """, String.class)).stream().map(t -> t.toUpperCase(Locale.ROOT))
+                .collect(Collectors.toCollection(HashSet::new));
+
+        assertThat(referencing)
+                .as("users를 FK 참조하는 테이블은 전부 AccountService.purge()가 지워야 한다 "
+                        + "(빠지면 그 자식을 가진 사용자의 탈퇴가 FK 위반으로 실패한다)")
+                .containsExactlyInAnyOrderElementsOf(TABLES_PURGE_CLEARS);
+    }
+
+    // ── 옛 핸들 영구 예약 (V69 uk_users_previous_login_id) ──
+    // 이 두 테스트가 여기 있는 이유: 메인 스위트는 Hibernate가 스키마를 만들어 이 UNIQUE가 아예 없다
+    // (login_id의 uk_users_login_id와 마찬가지로 엔티티 매핑에 선언하지 않는다 — DB가 단일 출처).
+    // 슬라이스(@DataJpaTest)에 두면 제약이 없어 영영 초록이 안 되거나 공허해진다.
+
+    @Test
+    void previous_login_id_unique_constraint_is_enforced() {
+        // 서비스의 사전 중복 검사를 우회해 DB 최종 방어선만 본다(경합 시 늦은 커밋이 여기서 막혀야 한다).
+        User first = userWithHandle("prev-first@example.com", "sharedold");
+        first.changeLoginId("prevfirstnew");
+        userRepository.saveAndFlush(first);
+
+        // 이제 sharedold는 비어 보이지만 예약돼 있다 — 남이 집어 다시 버리면 예약이 겹친다.
+        User second = userWithHandle("prev-second@example.com", "sharedold");
+        second.changeLoginId("prevsecondnew");
+
+        assertThatThrownBy(() -> userRepository.saveAndFlush(second))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void onboarded_user_can_change_login_id() {
+        // 아이디 변경은 login_id를 null로 만들지 않으므로 V15 CHECK(onboarded ⟹ login_id IS NOT NULL)를
+        // 위반할 수 없다 — 정식 계정(온보딩 완료)에서 실제로 한 번 못 박는다.
+        User u = userWithHandle("change-onboarded@example.com", "beforehandle");
+        u.completeOnboarding();
+        userRepository.saveAndFlush(u);
+
+        u.changeLoginId("afterhandle");
+        User saved = userRepository.saveAndFlush(u);
+
+        assertThat(saved.getLoginId()).isEqualTo("afterhandle");
+        assertThat(saved.getPreviousLoginId()).isEqualTo("beforehandle");
+        assertThat(saved.isOnboarded()).isTrue();
+    }
+
+    @Test
+    void unchanged_accounts_keep_null_previous_login_id() {
+        // 미변경 계정은 previous_login_id가 NULL이다 — nullable+unique라 NULL은 여럿 허용된다
+        // (전원 NULL이어도 무충돌). 두 계정을 나란히 저장해 그 사실을 못 박는다(null-state 경계).
+        User a = userRepository.saveAndFlush(userWithHandle("nullprev-a@example.com", "nullpreva"));
+        User b = userRepository.saveAndFlush(userWithHandle("nullprev-b@example.com", "nullprevb"));
+
+        assertThat(a.getPreviousLoginId()).isNull();
+        assertThat(b.getPreviousLoginId()).isNull();
     }
 }

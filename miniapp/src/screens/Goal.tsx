@@ -49,7 +49,7 @@ export function initialGoalSelection(firstRun: boolean, current: number): number
 /**
  * 목표 설정 — 신규 계정 첫 실행 유도 + 이후 변경(같은 엔드포인트).
  *
- * <p>미니앱 온보딩은 공개 핸들(login_id)을 요구하지 않는다 — 한 번 정하면 불변이라 첫 진입에
+ * <p>미니앱 온보딩은 공개 핸들(login_id)을 요구하지 않는다 — 평생 1번만 바꿀 수 있어 첫 진입에
  * 강요하지 않는다(설계 §2.4).
  */
 export function Goal({

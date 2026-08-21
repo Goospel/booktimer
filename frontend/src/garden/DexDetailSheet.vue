@@ -11,8 +11,9 @@
         <svg v-if="character.owned && character.spriteId" class="dex-detail-svg" aria-hidden="true">
           <use :href="'#sprite-' + character.spriteId"></use>
         </svg>
-        <span v-else-if="character.owned" class="dex-detail-emoji" aria-hidden="true">{{ character.emoji }}</span>
-        <span v-else class="dex-detail-emoji locked" aria-hidden="true">🔒</span>
+        <!-- 스프라이트가 없는 종의 자리 채움 — 서버가 내려주는 `emoji` 대신 이름 첫 글자를 쓴다. -->
+        <span v-else-if="character.owned" class="dex-detail-emoji" aria-hidden="true">{{ (character.name || '?').charAt(0) }}</span>
+        <span v-else class="dex-detail-emoji locked" aria-hidden="true">잠김</span>
       </div>
 
       <p class="dex-detail-name">{{ character.owned ? character.name : character.matchName }}</p>
@@ -25,8 +26,8 @@
           <div class="garden-meter-fill" :style="{ width: (prog.progress * 100) + '%' }"></div>
         </div>
         <p class="dex-detail-caption">
-          <template v-if="prog.isMax">❤️ {{ character.affection }} · 베프 — 최고 단계예요</template>
-          <template v-else>❤️ {{ character.affection }} / {{ prog.nextThreshold }} · 서재에서 밥을 주면 정이 쌓여요</template>
+          <template v-if="prog.isMax">정 {{ character.affection }} · 베프 — 최고 단계예요</template>
+          <template v-else>정 {{ character.affection }} / {{ prog.nextThreshold }} · 서재에서 밥을 주면 정이 쌓여요</template>
         </p>
       </template>
 

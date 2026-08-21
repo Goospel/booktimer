@@ -28,10 +28,18 @@ export interface GraphDto {
     growthLabel: string;
 }
 
+/** `session.BookRead` — 그날 이 책만 읽은 시간. 표지·시간은 미니앱 기록 화면이 쓰고, 웹은 제목만 쓴다. */
+export interface BookRead {
+    title: string;
+    coverUrl: string | null;
+    seconds: number;
+}
+
 export interface DailyReadingRecord {
     date: string;
     totalSeconds: number;
-    bookTitles: string[];
+    /** 그날 읽은 책(제목별 합산, 오래 읽은 순). `totalSeconds`는 이 합보다 클 수 있다(책 미지정 세션). */
+    books: BookRead[];
     manuallyFilled: boolean;
 }
 

@@ -75,4 +75,47 @@ class WriterNameTest {
         assertThat(WriterName.lead("")).isNull();
         assertThat(WriterName.lead("   ")).isNull();
     }
+
+    /**
+     * 목록 한 줄에 들어갈 표시용 요약 — 저자 40명짜리 책(「노벨라33 세트」)이 추천 카드 한 줄을
+     * 세로 900px로 부풀려 창을 통째로 먹은 자리다(실기기 제보 2026-08-21).
+     *
+     * <p>세는 대상은 <b>글쓴이만</b>이다 — 옮긴이·그림·감수를 「외 N명」에 넣으면 「톨스토이 외 1명」
+     * 같은 문장이 나오는데, 그 1명은 옮긴이다. 그 구분은 {@link WriterName#lead}가 이미 하고 있어서
+     * 세는 규칙을 새로 만들지 않는다.
+     */
+    @Test
+    @DisplayName("글쓴이 1명이면 이름만 — 옮긴이는 세지 않는다")
+    void summary_singleWriter() {
+        assertThat(WriterName.summary("레프 니콜라예비치 톨스토이 (지은이), 연진희 (옮긴이)"))
+                .isEqualTo("레프 니콜라예비치 톨스토이");
+    }
+
+    @Test
+    @DisplayName("글쓴이가 여럿이면 「대표 외 N명」 — N은 나머지 글쓴이 수다")
+    void summary_manyWriters() {
+        assertThat(WriterName.summary("홍길동 (지은이), 김철수 (지은이), 이영희 (지은이)"))
+                .isEqualTo("홍길동 외 2명");
+    }
+
+    @Test
+    @DisplayName("글쓴이가 여럿이어도 옮긴이는 N에 안 들어간다")
+    void summary_translatorsNotCounted() {
+        assertThat(WriterName.summary("홍길동 (지은이), 김철수 (지은이), 박번역 (옮긴이), 최번역 (옮긴이)"))
+                .isEqualTo("홍길동 외 1명");
+    }
+
+    @Test
+    @DisplayName("글쓴이가 하나도 없으면 null — 화면이 폴백을 정한다(「저자 미상」)")
+    void summary_noWriter() {
+        assertThat(WriterName.summary("김번역 (옮긴이), 이그림 (그림)")).isNull();
+        assertThat(WriterName.summary(null)).isNull();
+        assertThat(WriterName.summary("   ")).isNull();
+    }
+
+    @Test
+    @DisplayName("역할 표기가 없는 이름은 글쓴이로 센다 — lead()와 같은 규칙이다")
+    void summary_bareNames() {
+        assertThat(WriterName.summary("홍길동, 김철수")).isEqualTo("홍길동 외 1명");
+    }
 }

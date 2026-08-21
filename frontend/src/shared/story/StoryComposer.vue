@@ -1,48 +1,40 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { BG_CODES, canSubmit, remainingChars, type BgCode } from './storyFeed'
+import { BG_CODES, canSubmit, remainingChars, remainingQuoteChars, type BgCode } from './storyFeed'
 import { createStory } from './storyApi'
 
-// 스토리 작성 모달 (sns-design §13.7) — 500자 카운터·배경 팔레트 스와치 6색·공개 책 드롭다운.
-// 책 목록은 기존 내 책장 API(/api/books)를 재사용해 isPublic만 거른다(별도 엔드포인트 없음 — 계획 §3).
+// 글 남기기 모달 — 500자 카운터·배경 팔레트 스와치 6색.
+// 진입점이 이미 그 책이라 고를 것이 없다(옛 첨부 select와 /api/books 조회는 삭제 — 2026-08-16 재설계).
+const props = defineProps<{ bookId: number; bookTitle: string }>()
 const emit = defineEmits<{
     (e: 'close'): void
     (e: 'created'): void
 }>()
 
-interface PublicBookOption { id: number; title: string }
-
 const text = ref('')
+const quote = ref('')
 const bgCode = ref<BgCode>('paper')
-const bookId = ref<number | null>(null)
-const books = ref<PublicBookOption[]>([])
 const submitting = ref(false)
 const error = ref('')
 const inputEl = ref<HTMLTextAreaElement | null>(null)
 
-const submittable = computed(() => canSubmit(text.value) && !submitting.value)
+const submittable = computed(() => canSubmit(text.value, quote.value) && !submitting.value)
 
-onMounted(async () => {
-    // 포커스를 모달 안으로 — 없으면 @keydown.esc가 이벤트를 못 받아 Esc 무반응(리뷰 파인딩)
-    inputEl.value?.focus()
-    try {
-        const res = await fetch('/api/books', { credentials: 'same-origin' })
-        if (!res.ok) return
-        const data = await res.json()
-        books.value = (data.books ?? [])
-            .filter((b: { isPublic: boolean }) => b.isPublic)
-            .map((b: { id: number; title: string }) => ({ id: b.id, title: b.title }))
-    } catch {
-        // 책 목록 실패는 치명적이지 않다 — 책 없이 작성 가능
-    }
-})
+// 포커스를 모달 안으로 — 없으면 @keydown.esc가 이벤트를 못 받아 Esc 무반응(리뷰 파인딩)
+onMounted(() => inputEl.value?.focus())
 
 async function submit() {
     if (!submittable.value) return
     submitting.value = true
     error.value = ''
     try {
-        const res = await createStory({ text: text.value.trim(), bookId: bookId.value, bgCode: bgCode.value })
+        const trimmedQuote = quote.value.trim()
+        const res = await createStory({
+            text: text.value.trim(),
+            quote: trimmedQuote === '' ? null : trimmedQuote,
+            bookId: props.bookId,
+            bgCode: bgCode.value,
+        })
         if (res.ok) {
             emit('created')
             emit('close')
@@ -50,11 +42,11 @@ async function submit() {
         }
         // 상태코드 분기 — reason 문자열은 클라이언트에 안 내려오므로 하드코딩(집 관례)
         if (res.status === 429) {
-            error.value = '작성이 너무 잦아요. 잠시 후 다시 올려주세요.'
+            error.value = '글을 너무 자주 남겼어요. 잠시 후 다시 시도해 주세요.'
         } else if (res.status === 400) {
-            error.value = '지금은 올릴 수 없어요 — 활성 스토리가 가득 찼거나(최대 20장) 입력이 올바르지 않아요.'
+            error.value = '글을 남기지 못했어요. 문장은 1~500자까지 쓸 수 있어요.'
         } else {
-            error.value = '스토리를 올리지 못했어요. 잠시 후 다시 시도해 주세요.'
+            error.value = '글을 남기지 못했어요. 잠시 후 다시 시도해 주세요.'
         }
     } catch {
         error.value = '네트워크 오류가 발생했어요.'
@@ -68,16 +60,26 @@ async function submit() {
     <div class="story-composer-overlay" @click.self="emit('close')" @keydown.esc="emit('close')" tabindex="-1">
         <div class="story-composer-panel" role="dialog" aria-modal="true" aria-labelledby="story-composer-title">
             <div class="story-composer-head">
-                <p id="story-composer-title" class="story-composer-title">스토리 올리기</p>
-                <button type="button" class="story-viewer-close" aria-label="닫기" @click="emit('close')">✕</button>
+                <p id="story-composer-title" class="story-composer-title">여백에 글 남기기</p>
+                <button type="button" class="margin-close" aria-label="닫기" @click="emit('close')">✕</button>
             </div>
 
-            <!-- 미리보기 겸 입력 — 선택한 배경 위에 바로 쓴다 -->
+            <p class="story-composer-hint">《{{ bookTitle }}》의 여백</p>
+
+            <!-- 미리보기 겸 입력 — 선택한 배경 위에 바로 쓴다. 두 칸을 한 배경 안에 두어야
+                 쓰는 동안 보이는 것이 곧 카드가 된다(라벨도 안에 둔다 — 밖으로 빼면 배경마다 대비가 어긋난다) -->
             <div class="story-composer-preview" :class="'story-bg-' + bgCode">
-                <textarea ref="inputEl" v-model="text" class="story-composer-input" rows="6" maxlength="500"
-                          placeholder="인상 깊은 문장을 남겨보세요 (24시간 뒤 사라져요)"></textarea>
+                <p class="story-composer-label">책에서 옮긴 문장 (선택)</p>
+                <textarea v-model="quote" class="story-composer-input story-composer-quote" rows="2" maxlength="200"
+                          placeholder="밑줄 그은 문장을 옮겨 보세요."></textarea>
+                <div class="story-composer-rule"></div>
+                <p class="story-composer-label">내 생각</p>
+                <textarea ref="inputEl" v-model="text" class="story-composer-input" rows="5" maxlength="500"
+                          placeholder="그 문장에 대해 든 생각을 남겨 보세요."></textarea>
             </div>
             <div class="story-composer-meta">
+                <!-- 인용 카운터는 쓰기 시작해야 나온다 — 안 쓰는 사람에게 숫자 하나를 더 보이지 않는다 -->
+                <span v-if="quote" class="story-composer-count">인용 {{ remainingQuoteChars(quote) }}자 남음</span>
                 <span class="story-composer-count" :class="{ over: remainingChars(text) < 0 }">
                     {{ remainingChars(text) }}자 남음
                 </span>
@@ -91,19 +93,10 @@ async function submit() {
                         @click="bgCode = code"></button>
             </div>
 
-            <!-- 공개 책 첨부 (선택) -->
-            <label class="story-composer-book">책 함께 올리기 (선택)
-                <select v-model="bookId">
-                    <option :value="null">책 없이 올리기</option>
-                    <option v-for="b in books" :key="b.id" :value="b.id">{{ b.title }}</option>
-                </select>
-            </label>
-            <p class="story-composer-hint">비공개 책은 책장에서 공개로 바꾸면 붙일 수 있어요.</p>
-
             <div v-if="error" class="alert alert-error">{{ error }}</div>
 
             <button type="button" class="dash-btn-fill story-composer-submit"
-                    :disabled="!submittable" @click="submit">올리기</button>
+                    :disabled="!submittable" @click="submit">남기기</button>
         </div>
     </div>
 </template>

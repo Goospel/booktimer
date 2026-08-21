@@ -38,7 +38,6 @@
 <body>
 <div class="container">
     <header class="brand">
-        <span class="emoji">🛠️</span>
         <h1>BookTimer 관리자</h1>
     </header>
     <p class="greeting"><span th:text="${nickname}">운영자</span>님 — 운영 데이터 확인 화면입니다.</p>
@@ -121,7 +120,7 @@
             기존 책의 장르·출간일을 알라딘에서 채운다(책BTI 입력). 한 번에 일부만 처리하니, 남은 권수가 있으면 다시 누르세요.
         </p>
         <form method="post" th:action="@{/admin/books/backfill-catalog}">
-            <button type="submit" class="btn-primary">📚 카탈로그 백필 실행</button>
+            <button type="submit" class="btn-primary">카탈로그 백필 실행</button>
         </form>
     </section>
 
@@ -131,7 +130,7 @@
             TTBKey가 빠진 옛 구매링크(제휴 추적 안 됨)를 알라딘에서 재조회해 정식 제휴링크로 교체한다. 한 번에 일부만 처리하니, 남은 권수가 있으면 다시 누르세요.
         </p>
         <form method="post" th:action="@{/admin/books/backfill-purchase-links}">
-            <button type="submit" class="btn-primary">🔗 제휴링크 백필 실행</button>
+            <button type="submit" class="btn-primary">제휴링크 백필 실행</button>
         </form>
     </section>
 
@@ -142,7 +141,7 @@
             평소엔 매일 새벽 4시 30분에 자동으로 돌고, 지금 바로 반영하고 싶을 때 누르세요.
         </p>
         <form method="post" th:action="@{/admin/books/collect-news}">
-            <button type="submit" class="btn-primary">📰 책 뉴스 수집 실행</button>
+            <button type="submit" class="btn-primary">책 뉴스 수집 실행</button>
         </form>
     </section>
 
