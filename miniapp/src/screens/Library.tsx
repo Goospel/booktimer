@@ -15,7 +15,7 @@ import {
 import { useBackClose } from '../back';
 import { Coachmark } from '../coachmark';
 import { formatDuration } from '../format';
-import { BookCover, ErrorMessage, Loading, PENCIL_FRAME, Screen, Sheet } from '../ui';
+import { BookCover, ErrorMessage, Loading, PENCIL_FRAME, Screen, SectionTitle, Sheet } from '../ui';
 import { BookCarousel } from './Home';
 import { MarginCard } from './Story';
 
@@ -81,7 +81,7 @@ type BookChipTone = 'neutral' | 'sage' | 'outline';
 
 /** 칩 세 톤 — 소식 배지와 같은 값이다(새 색을 만들지 않는다). */
 function bookChipStyle(tone: BookChipTone): CSSProperties {
-  const base: CSSProperties = { display: 'inline-block', padding: '2px 9px', borderRadius: 20, fontSize: 11, lineHeight: 1.6 };
+  const base: CSSProperties = { display: 'inline-block', padding: '2px 9px', borderRadius: 20, fontSize: 12, lineHeight: 1.6 };
   if (tone === 'sage') {
     return { ...base, background: 'var(--adaptiveBlue50, #E7EEE2)', color: 'var(--adaptiveBlue700, #4F6B4C)' };
   }
@@ -216,9 +216,9 @@ export function MarginBoxView({
  borderImage: PENCIL_FRAME, borderRadius: 16, background: '#FFFDF8' }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline' }}>
-        <Text typography="st11" style={{ flex: 1 }}>
+        <SectionTitle style={{ flex: 1 }}>
           여백{typeof view !== 'string' && <b style={{ color: '#4E6B4A' }}> {entries.length}</b>}
-        </Text>
+        </SectionTitle>
         <button
           type="button"
           onClick={onOpenAll}
@@ -227,7 +227,7 @@ export function MarginBoxView({
             border: 'none',
             background: 'transparent',
             color: 'var(--adaptiveGrey600, #6F6A5E)',
-            fontSize: 13,
+            fontSize: 14,
             cursor: 'pointer',
           }}
         >
@@ -503,7 +503,7 @@ export function Shelf({
                 padding: '9px 0',
                 border: 'none',
                 borderRadius: 8,
-                fontSize: 13,
+                fontSize: 14,
                 cursor: 'pointer',
                 background: current ? '#FCFAF5' : 'transparent',
                 color: current ? '#2C2C2A' : 'var(--adaptiveGrey700, #57534A)',
@@ -546,8 +546,8 @@ export function Shelf({
                   borderRadius: 14,
                   background: 'rgba(110,138,106,.14)',
                   color: '#4E6B4A',
-                  fontSize: 15,
-                  fontWeight: 600,
+                  fontSize: 16,
+                  fontWeight: 700,
                   cursor: 'pointer',
                 }}
               >
@@ -566,8 +566,8 @@ export function Shelf({
                 borderRadius: 14,
                 background: '#FCFAF5',
                 color: '#2C2C2A',
-                fontSize: 15,
-                fontWeight: 600,
+                fontSize: 16,
+                fontWeight: 700,
                 cursor: 'pointer',
               }}
             >
@@ -853,7 +853,7 @@ function SheetRow({
         borderRadius: 10,
         background: '#FFFDF8',
         color: danger ? '#A32D2D' : '#2C2C2A',
-        fontSize: 14,
+        fontSize: 15,
         textAlign: 'left',
         cursor: 'pointer',
       }}
@@ -879,7 +879,7 @@ export const handleStyle = {
   borderRadius: 10,
   background: '#FCFAF5',
   color: '#2C2C2A',
-  fontSize: 13,
+  fontSize: 14,
   cursor: 'pointer',
 } as const;
 
@@ -1077,7 +1077,7 @@ const ownedChipStyle = {
   border: '1px solid rgba(110, 138, 106, 0.5)',
   background: 'rgba(110, 138, 106, 0.18)',
   color: '#4F6B4C', // 웹 --accent-hover. 연한 채움 위에서 읽히는 유일한 톤
-  fontSize: 12.5,
+  fontSize: 13,
   lineHeight: 1.5,
 } as const;
 

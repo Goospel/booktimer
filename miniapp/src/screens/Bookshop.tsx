@@ -297,7 +297,7 @@ export function BookshopHeader({ onSearch }: { onSearch: () => void }) {
         border: '1px solid transparent',
         borderImage: PENCIL_FRAME,
         color: 'var(--adaptiveGrey600, #6F6A5E)',
-        fontSize: 14,
+        fontSize: 15,
         cursor: 'pointer',
       }}
     >

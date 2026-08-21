@@ -12,7 +12,7 @@ import {
 } from '../api';
 import { resetCoachmarks } from '../coachmark';
 import { openExternal } from '../toss';
-import { ErrorMessage, Screen, Sheet, sectionStyle } from '../ui';
+import { ErrorMessage, Screen, SectionTitle, Sheet, sectionStyle } from '../ui';
 import { HandleSheet } from './Bookshop';
 
 /** 웹에 공개된 문서들 — 둘 다 `permitAll`이라 로그인 없이 열린다(미니앱 계정은 웹 로그인 자체가 불가). */
@@ -162,9 +162,7 @@ export function BlockedSection({
 
   return (
     <section style={sectionStyle}>
-      <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
-        차단한 사람 {blocked.length}
-      </Text>
+      <SectionTitle style={{ marginBottom: 10 }}>차단한 사람 {blocked.length}</SectionTitle>
       {blocked.map((u) => (
         <div key={u.loginId} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <Text typography="st11" style={{ flex: 1 }}>

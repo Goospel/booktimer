@@ -29,7 +29,7 @@ import {
 } from '../api';
 import { useBackClose } from '../back';
 import { REWARD_AD_GROUP_ID, watchRewardAd } from '../toss';
-import { Avatar, ErrorMessage, Loading, PENCIL_FRAME, Screen, Sheet } from '../ui';
+import { Avatar, ErrorMessage, Loading, PENCIL_FRAME, SERIF_VALUE, Screen, SectionTitle, Sheet } from '../ui';
 import { waiverErrorMessage } from './Home';
 import { BookGrid, SECTIONS } from './Library';
 import { hasFreshStory } from './Story';
@@ -572,7 +572,9 @@ export function ProfileCard({
       </div>
 
       <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--adaptiveGrey900, #3A362E)' }}>
+        {/* 이 화면의 제목이다. 15px/500 이었는데 개구엔 500이 없어 400으로 떨어져, 본문(700)보다
+            얇게 렌더됐다 — 강조하려고 쓴 값이 정확히 반대로 작동한 자리. */}
+        <span style={{ fontSize: 19, fontWeight: 700, color: 'var(--adaptiveGrey900, #3A362E)' }}>
           {profile.nickname}
         </span>
         {/* 「나를 팔로우함」 — 둘러보기 카드에 있던 칩이 이사 온 자리(인스타는 이름 옆 배지로 단다).
@@ -580,7 +582,7 @@ export function ProfileCard({
         {profile.followsMe === true && (
           <span
             style={{
-              fontSize: 11,
+              fontSize: 12,
               padding: '2px 7px',
               borderRadius: 9,
               background: 'var(--adaptiveGrey200, #E4DDD0)',
@@ -710,9 +712,7 @@ export function ProfileCard({
        * 발광한다. 판정 재료(`lastStoryAt`)는 서버가 주고 창 계산은 `hasFreshStory`가 한다.
        */}
       <section style={{ marginTop: 28 }}>
-        <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
-          {sectionTitle}
-        </Text>
+        <SectionTitle style={{ marginBottom: 10 }}>{sectionTitle}</SectionTitle>
         {activeTag !== null && (
           <Button size="small" variant="weak" style={{ marginBottom: 10 }} onClick={() => onSelectTag(null)}>
             전체 보기
@@ -759,12 +759,17 @@ function StatBody({ label, count }: { label: string; count: number }) {
     <>
       {/* data-stat은 계측 손잡이 — 숫자와 라벨이 각자 span이라 마크업에서 「팔로워 3」이 이어 붙지 않는다. */}
       <span
-        style={{ display: 'block', fontSize: 17, fontWeight: 500, color: 'var(--adaptiveGrey900, #3A362E)' }}
+        style={{
+          ...SERIF_VALUE,
+          display: 'block',
+          fontSize: 24,
+          color: 'var(--adaptiveGrey900, #3A362E)',
+        }}
         data-stat={label}
       >
         {count}
       </span>
-      <span style={{ display: 'block', marginTop: 2, fontSize: 12, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>
+      <span style={{ display: 'block', marginTop: 2, fontSize: 13, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>
         {label}
       </span>
     </>
@@ -837,7 +842,7 @@ function Bio({ text }: { text: string }) {
     >
       <span
         style={{
-          fontSize: 13,
+          fontSize: 14,
           lineHeight: 1.55,
           color: 'var(--adaptiveGrey900, #3A362E)',
           wordBreak: 'keep-all',
@@ -862,7 +867,7 @@ function Bio({ text }: { text: string }) {
             padding: 0,
             border: 'none',
             background: 'transparent',
-            fontSize: 12,
+            fontSize: 13,
             color: 'var(--adaptiveGrey600, #6F6A5E)',
             cursor: 'pointer',
           }}
@@ -922,7 +927,7 @@ export function ArchiveSheet({
                   flex: '0 0 auto',
                   padding: '3px 8px',
                   borderRadius: 999,
-                  fontSize: 11,
+                  fontSize: 12,
                   background: '#6E8A6A',
                   color: '#FFFDF8',
                 }}
@@ -1041,7 +1046,7 @@ const filterChipStyle = (active: boolean) =>
     padding: '6px 10px',
     borderRadius: 999,
     border: 'none',
-    fontSize: 13,
+    fontSize: 14,
     background: active ? 'var(--adaptiveBlue500, #6E8A6A)' : 'var(--adaptiveGrey100, #FCFAF5)',
     color: active ? '#FFFDF8' : 'var(--adaptiveGrey700, #57534A)',
     cursor: 'pointer',
@@ -1053,7 +1058,7 @@ const chipStyle = (clickable: boolean) =>
     padding: '6px 10px',
     borderRadius: 999,
     border: 'none',
-    fontSize: 13,
+    fontSize: 14,
     background: 'var(--adaptiveGrey100, #FCFAF5)',
     color: clickable ? 'var(--adaptiveBlue500, #6E8A6A)' : 'var(--adaptiveGrey700, #57534A)',
     cursor: clickable ? 'pointer' : 'default',

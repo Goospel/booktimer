@@ -5,16 +5,7 @@ import { useEffect, useState } from 'react';
 import type { BookRead, ContributionGraph, DailyRecord, MonthlySection } from '../api';
 import { fetchHistory } from '../api';
 import { formatDuration, subjectParticle } from '../format';
-import {
-  BookCover,
-  ErrorMessage,
-  GrassGrid,
-  LEVEL_COLORS,
-  MANUAL_OUTLINE,
-  PENCIL_FRAME,
-  Screen,
-  monthLabelPositions,
-} from '../ui';
+import { BookCover, ErrorMessage, GrassGrid, LEVEL_COLORS, MANUAL_OUTLINE, PENCIL_FRAME, SERIF_VALUE, Screen, SectionTitle, monthLabelPositions } from '../ui';
 
 /** 기록 화면 잔디 칸 — `GrassGrid`의 기본값과 같아야 월 라벨이 그 열 위에 선다. */
 const CELL_SIZE = 11;
@@ -54,9 +45,7 @@ export function History({ graph }: { graph: ContributionGraph }) {
         <Stat label="총 시간" value={formatDuration(graph.totalSeconds)} />
       </div>
 
-      <Text typography="st12" color="grey600" style={{ display: 'block', margin: '24px 0 8px' }}>
-        읽은 날짜
-      </Text>
+      <SectionTitle style={{ margin: '24px 0 8px' }}>읽은 날짜</SectionTitle>
 
       <div className="no-scrollbar" style={{ overflowX: 'auto', paddingBottom: 8 }}>
         {/* 라벨은 격자 폭 안에서 절대 배치된다 — inline-block이라 이 상자가 격자만큼만 넓어진다. */}
@@ -65,7 +54,7 @@ export function History({ graph }: { graph: ContributionGraph }) {
             {months.map(({ label, left }) => (
               <span
                 key={label}
-                style={{ position: 'absolute', left, fontSize: 10, color: '#6F6A5E', whiteSpace: 'nowrap' }}
+                style={{ position: 'absolute', left, fontSize: 11, color: '#6F6A5E', whiteSpace: 'nowrap' }}
               >
                 {label}
               </span>
@@ -125,7 +114,7 @@ function GrowthCard({ graph }: { graph: ContributionGraph }) {
         <Text typography="st12" color="grey600" style={{ display: 'block' }}>
           연속 {graph.currentStreak}일째
         </Text>
-        <Text typography="t6" fontWeight="bold" style={{ display: 'block', lineHeight: 1.25 }}>
+        <Text typography="t6" fontWeight="bold" style={{ ...SERIF_VALUE, display: 'block', lineHeight: 1.25 }}>
           {graph.growthStageLabel}
         </Text>
         {/* 막대는 「지금 단계 안에서 얼마나 왔나」 — 서버가 퍼센트로 계산해 준다. */}
@@ -363,7 +352,8 @@ export function DayRow({
           스타일에 아예 안 실려서 조용히 왼쪽 정렬로 남는다). 오른쪽 정렬이라야 「10시간 30분」 같은 긴
           값이 넘칠 때 빈 막대 쪽으로 넘치지, 옆의 손잡이를 침범하지 않는다. */}
       <div style={{ textAlign: 'right' }}>
-        <Text typography="st11" color="grey700" style={{ whiteSpace: 'nowrap' }}>
+        {/* 잉크색이다 — 이 줄이 대답하는 값이 이것인데, 흐린 색이면 왼쪽 날짜보다 뒤로 물러난다. */}
+        <Text typography="st11" style={{ whiteSpace: 'nowrap' }}>
           {formatDuration(day.totalSeconds)}
         </Text>
       </div>
@@ -462,7 +452,7 @@ function CoverPile({ books }: { books: BookRead[] }) {
             justifyContent: 'center',
             background: 'var(--adaptiveGrey200, #E4DDD0)',
             color: 'var(--adaptiveGrey700, #57534A)',
-            fontSize: 11,
+            fontSize: 12,
           }}
         >
           +{more}
@@ -614,7 +604,8 @@ function Stat({ label, value }: { label: string; value: string }) {
       <Text typography="st12" color="grey600" style={{ display: 'block' }}>
         {label}
       </Text>
-      <Text typography="t6" fontWeight="bold" style={{ display: 'block', marginTop: 4 }}>
+      {/* 세리프 + st10 — 라벨(st12)과 크기·서체 두 축으로 갈린다. 전에는 3px 차이가 전부였다. */}
+      <Text typography="st10" fontWeight="bold" style={{ ...SERIF_VALUE, display: 'block', marginTop: 4 }}>
         {value}
       </Text>
     </div>

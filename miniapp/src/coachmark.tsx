@@ -132,8 +132,10 @@ export function CoachmarkBubble({
         ...style,
       }}
     >
-      <div style={{ color: '#FFFFFF', fontSize: 15, fontWeight: 600, lineHeight: 1.45 }}>{title}</div>
-      <div style={{ color: '#FFFFFF', fontSize: 13, lineHeight: 1.45, opacity: 0.85 }}>{detail}</div>
+      {/* 제목과 설명은 크기·불투명도로 갈린다 — 개구엔 600이 없어 700으로 올림되므로, 굵기로
+          층을 만들려던 시도는 화면에 아무 자국도 남기지 않았다. */}
+      <div style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 700, lineHeight: 1.45 }}>{title}</div>
+      <div style={{ color: '#FFFFFF', fontSize: 14, lineHeight: 1.45, opacity: 0.85 }}>{detail}</div>
 
       {dots !== undefined && (
         <div style={{ display: 'flex', gap: 5, justifyContent: 'center', marginTop: 9 }}>

@@ -126,6 +126,34 @@ html:root {
   --adaptiveGrey600: #6F6A5E; /* 흐린 글자 = 웹 --muted */
   --adaptiveGrey700: #57534A;
   --adaptiveGrey800: #2C2A24; /* 본문 잉크 = 웹 --text */
+
+  /*
+   * 타이포 스케일 — 개구 보정을 **크기 토큰 자체**에 넣는다.
+   *
+   * 위 `html body`의 `font-size: 112.5%`는 웹 app.css에서 그대로 옮겨 온 개구 보정인데, 웹은 본문이
+   * 전부 `rem`이라 먹지만 **미니앱 글자는 전부 px다** — TDS 타이포 토큰도 px, 인라인 `fontSize: 13`도 px.
+   * 그래서 `body`가 실제로 18px로 계산돼도 그 값을 물려받는 텍스트 노드가 **0개**였다(목 모드 실측
+   * 486개 전수). 개구는 같은 px에서 본문용 한글 폰트보다 글자가 0.85배 낮고 0.83배 좁아, 보정이 빠진
+   * 만큼 앱 전체가 작아진 채로 있었다.
+   *
+   * 고치는 자리는 컴포넌트가 아니라 여기다 — 색 토큰(--adaptive*)을 갈아끼운 것과 같은 수법으로,
+   * TDS가 소비하는 크기 토큰을 개구 기준으로 다시 잡으면 `Text` 181개가 한 줄도 안 바뀌고 따라온다.
+   *
+   * ⚠️ 줄높이를 **함께** 올린다. 크기만 올리면 커진 글자가 옛 줄 상자에 눌려 줄간이 답답해진다.
+   *
+   * ⚠️ `t5`·`t6`·`t7`·`st10`은 TDS 컴포넌트 내부도 쓴다(버튼·목록 행·토스트). 그쪽도 같은 개구로
+   * 그려지니 함께 올라가는 게 맞다 — 앱만 키우고 TDS만 작게 두면 한 화면에 두 체급이 산다.
+   * 반대로 `t2`는 TDS 내부 사용이 0이라 히어로 전용으로 크게 벌려도 다른 데 파장이 없다.
+   */
+  --tds-t-st13-text-fontSize: 12px;  --tds-t-st13-text-lineHeight: 18px;  /* 11 → 12  칩·범례 */
+  --tds-t-st12-text-fontSize: 13px;  --tds-t-st12-text-lineHeight: 20px;  /* 12 → 13  보조·설명 */
+  --tds-t-t7-text-fontSize: 14px;    --tds-t-t7-text-lineHeight: 21px;    /* 13 → 14 */
+  --tds-t-st11-text-fontSize: 15px;  --tds-t-st11-text-lineHeight: 23px;  /* 14 → 15  본문·값 */
+  --tds-t-t6-text-fontSize: 17px;    --tds-t-t6-text-lineHeight: 25px;    /* 15 → 17  시트 제목 */
+  --tds-t-st10-text-fontSize: 19px;  --tds-t-st10-text-lineHeight: 27px;  /* 16 → 19  섹션 제목 */
+  --tds-t-t5-text-fontSize: 19px;    --tds-t-t5-text-lineHeight: 27px;    /* 17 → 19 */
+  --tds-t-t3-text-fontSize: 26px;    --tds-t-t3-text-lineHeight: 35px;    /* 22 → 26  화면 제목 */
+  --tds-t-t2-text-fontSize: 44px;    --tds-t-t2-text-lineHeight: 50px;    /* 26 → 44  홈 히어로 */
 }
 
 /*
@@ -212,6 +240,38 @@ html:root {
  */
 button {
   color: inherit;
+  /*
+   * 굵기도 같은 이유로 상속시킨다 — UA 기본이 `button { font: 400 … }`이라 위 `html body`의 700
+   * 보정을 **버튼 안에서만** 취소한다. TDS `Text`는 굵기를 `var(--tds-paragraph-font-weight)`로
+   * 그리는데 그 변수는 `fontWeight` prop을 넘겼을 때만 채워지므로(앱의 `Text` 181개 중 7개),
+   * 안 넘긴 나머지는 선언이 무효가 돼 **굵기가 상속으로 떨어진다**. 그래서 같은 `<Text>`가
+   * `div` 안이면 700, `button` 안이면 400으로 갈렸다.
+   *
+   * 눈에 보이던 증상: 기록 화면 날짜 줄이 「펼칠 수 있는 날(button)」만 한 줄 걸러 얇았고,
+   * 책방의 `공개 책`(div·700)과 `팔로워·팔로잉`(button·400)이 한 줄에서 갈렸다. 결과는 정확히
+   * 뒤집힌 위계다 — **누를 수 있는 것이 못 누르는 것보다 얇다.**
+   */
+  font-weight: inherit;
+}
+
+/*
+ * 본문 속 강조 — 색이 진다.
+ *
+ * TDS 리셋이 `b, strong { font-weight: bolder }`를 넣는데 개구엔 700 위가 없어 주변과 **똑같이**
+ * 렌더된다. 탈퇴·아이디 변경 경고문의 강조가 통째로 안 보이던 자리다(되돌릴 수 없는 행동을 알리는
+ * 문장이라 놓치면 값이 크다). 웹 app.css가 `.entry-note strong`·`.timer-empty p strong`을
+ * --accent-hover로 칠하는 것과 같은 처방이라, 같은 앱이 강조를 한 가지 방식으로 말하게 된다.
+ *
+ * `--adaptiveBlue700`은 위 재테마가 웹 --accent-hover(#4F6B4C)로 잡아 둔 값이고, 독서등(밤)에선
+ * 밝은 세이지로 갈리므로 두 모드 모두에서 읽힌다.
+ */
+html b,
+html strong {
+  /* `html`을 앞에 붙여 명시도를 0-0-2로 올린다 — TDS 리셋(`b, strong { font-weight: bolder }`)이
+     **런타임에, 우리 css보다 뒤에** 주입되므로 같은 0-0-1로는 순서에서 진다(위 `html body`와 같은 처지).
+     개구가 900을 700으로 떨어뜨려 화면은 어차피 같지만, 규칙이 지고 있는 상태를 남겨 두지 않는다. */
+  font-weight: 700;
+  color: var(--adaptiveBlue700, #4F6B4C);
 }
 
 /*
