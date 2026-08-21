@@ -28,7 +28,7 @@ import {
   Sheet,
   sectionStyle,
 } from '../ui';
-import { BookCarousel } from './Home';
+import { BookCarousel, type LeadCard } from './Home';
 import { MarginCard } from './Story';
 
 /**
@@ -327,8 +327,14 @@ export function Library({
   const [searchEnabled, setSearchEnabled] = useState(cachedShelf?.searchEnabled ?? false);
   const [mode, setMode] = useState<'shelf' | 'search'>('shelf');
   const [tab, setTab] = useState<BookStatus>('READING');
-  /** 캐러셀에서 가운데 온 책 — 그 탭에 없어지면 `resolveSelected`가 첫 책으로 되돌린다. */
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  /**
+   * 캐러셀에서 가운데 온 것 — 그 탭에 없어지면 `resolveSelected`가 첫 책으로 되돌린다.
+   *
+   * <p><b>세 값이다</b>: 책 id · `null`(「책 추가」 칸을 고름) · `undefined`(아직 안 고름).
+   * 뒤의 둘을 하나로 합치면 서재를 열 때마다 「책 추가」가 가운데인 채로 시작한다 — 홈이 먼저
+   * 밟은 구분이다(`App.tsx`의 `timerStartBookId`).
+   */
+  const [selectedId, setSelectedId] = useState<number | null | undefined>(undefined);
   const [sheet, setSheet] = useState<LibrarySheet>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -427,15 +433,21 @@ export function Library({
             sheet={sheet}
             busy={busy}
             myLoginId={myLoginId}
-            onTab={setTab}
+            searchEnabled={searchEnabled}
+            onTab={(status) => {
+              setTab(status);
+              // 「책 추가」 칸을 고른 채 탭을 옮기면 새 탭도 그 칸이 가운데다 — 탭을 바꾼 사람이
+              // 보려는 건 그 탭의 책이므로 「아직 안 고름」으로 되돌려 첫 책이 서게 한다.
+              setSelectedId(undefined);
+            }}
             onSelect={setSelectedId}
             onSheet={setSheet}
             onAction={act}
             onOpenMargin={onOpenMargin}
             onComposeMargin={onComposeMargin}
             onError={onError}
+            onAddBook={() => setMode('search')}
           />
-          <AddBookButton enabled={searchEnabled} onPress={() => setMode('search')} />
         </>
       )}
     </Screen>
@@ -443,27 +455,20 @@ export function Library({
 }
 
 /**
- * 「책 추가하기」 + 첫 방문 코치마크 — 게이트와 안내가 <b>한 몸</b>이다.
+ * 서재 캐러셀의 0번 칸 — 화면 맨 아래 전폭 「책 추가하기」 버튼이던 것이 여기로 들어왔다(2026-08-21).
  *
- * <p>버튼이 서버 플래그(`searchEnabled`)에 달려 있어, 안내를 따로 두면 플래그가 꺼진 날
- * 아무것도 없는 자리를 가리키는 안내만 남는다. 둘을 같은 컴포넌트가 들면 그 사고가 원리상 불가능하다.
+ * <p>홈의 「책 없이」 칸과 <b>같은 부품·같은 규약</b>이다(0번은 언제나 특수 칸). 버튼 갈래로 두면
+ * 「가운데 온 것이 곧 대상」이라는 단일 문법이 화면마다 갈리고, 그 버튼은 실제로 여백 박스 아래
+ * <b>스크롤 끝</b>에 있어 책을 훑다가 닿기까지 멀었다.
+ *
+ * <p>홈과 뜻이 하나 다르다: 홈의 0번은 <b>측정 대상의 한 갈래</b>(그 자체가 값)인데 여기 0번은
+ * <b>검색 화면으로 가는 문</b>이다. 그래서 이 칸이 가운데 오면 아래 손잡이·여백 박스가 통째로 갈린다.
  */
-export function AddBookButton({ enabled, onPress }: { enabled: boolean; onPress: () => void }) {
-  if (!enabled) return null;
-
-  return (
-    <Coachmark
-      name="add-book"
-      after="library" // 바로 앞 걸음(서재 설명)을 본 뒤에 — 흐름이 이 화면으로 데려온 직후가 제 차례다
-      title="읽을 책은 여기서 찾아 담아요"
-      detail="제목으로 검색하면 서재에 들어와요"
-    >
-      <Button display="block" size="medium" style={{ marginTop: 24 }} onClick={onPress}>
-        책 추가하기
-      </Button>
-    </Coachmark>
-  );
-}
+export const ADD_BOOK_CARD: LeadCard = {
+  label: '책 추가',
+  title: '책 추가',
+  subtitle: () => '제목으로 검색해 서재에 담아요',
+};
 
 /**
  * 책장 — 상태 탭 + 표지 캐러셀 + 「관리」. 순수 표시라 정적 렌더로 분류·시트를 계측할 수 있다.
@@ -479,6 +484,7 @@ export function Shelf({
   sheet,
   busy,
   myLoginId,
+  searchEnabled,
   onTab,
   onSelect,
   onSheet,
@@ -486,14 +492,18 @@ export function Shelf({
   onOpenMargin,
   onComposeMargin,
   onError,
+  onAddBook,
 }: {
   books: MyBookSummary[];
   tab: BookStatus;
-  selectedId: number | null;
+  /** 책 id · `null`(「책 추가」 칸을 고름) · `undefined`(아직 안 고름) — 뒤의 둘은 다른 값이다. */
+  selectedId: number | null | undefined;
   sheet: LibrarySheet;
   busy: boolean;
   /** 없으면 여백 손잡이·박스를 그리지 않는다 — 눌러도 서버가 대상을 못 찾는다(설계 결정 A). */
   myLoginId: string | null;
+  /** 서버가 검색을 껐으면 「책 추가」 칸도 안내도 세우지 않는다 — 눌러도 못 가는 칸을 남기지 않는다. */
+  searchEnabled: boolean;
   onTab: (status: BookStatus) => void;
   onSelect: (bookId: number | null) => void;
   onSheet: (sheet: LibrarySheet) => void;
@@ -501,8 +511,13 @@ export function Shelf({
   onOpenMargin: (loginId: string, bookId: number) => void;
   onComposeMargin: (book: MyBookSummary) => void;
   onError: (error: Error) => void;
+  onAddBook: () => void;
 }) {
-  if (books.length === 0) {
+  /** 게이트와 안내가 한 몸이다 — 이 값 하나가 0번 칸과 코치마크를 함께 켜고 끈다. */
+  const leadCard = searchEnabled ? ADD_BOOK_CARD : null;
+
+  // 검색이 꺼진 날의 마지막 폴백 — 캐러셀에 세울 것이 하나도 없으면 옛 문장이 화면을 지킨다.
+  if (books.length === 0 && leadCard === null) {
     return (
       <Text typography="st11" color="grey600" style={{ display: 'block' }}>
         아직 책이 없어요. 읽고 있는 책을 추가하면 측정할 때 고를 수 있어요.
@@ -512,7 +527,12 @@ export function Shelf({
 
   const section = SECTIONS.find((s) => s.status === tab) ?? SECTIONS[0];
   const rows = books.filter((b) => b.status === tab);
-  const selected = resolveSelected(rows, selectedId);
+  const selected = resolveSelected(rows, selectedId ?? null);
+  /**
+   * 「책 추가」 칸이 가운데인가 — 고른 값이 `null`이거나(칸을 골랐다), 이 탭에 세울 책이 아예 없을 때다.
+   * `resolveSelected`는 `null`을 「첫 책으로 떨어져라」로 읽으므로 그 값을 여기서 따로 본다.
+   */
+  const onLeadCard = leadCard !== null && (selectedId === null || selected === null);
 
   return (
     <>
@@ -543,32 +563,49 @@ export function Shelf({
         })}
       </div>
 
-      {selected === null ? (
+      {selected === null && leadCard === null ? (
         <Text typography="st11" color="grey600" style={{ display: 'block', marginTop: 28, textAlign: 'center' }}>
           {section.empty}
         </Text>
       ) : (
         <div style={{ marginTop: 20 }}>
-          {/* 탭이 바뀌면 목록이 통째로 갈리므로 다시 마운트한다 — 안 그러면 트랙이 옛 탭의 스크롤 자리에 머문다. */}
-          <BookCarousel
-            key={tab}
-            books={rows}
-            selectedId={selected.id}
-            onSelect={onSelect}
-            noBookCard={false}
-            metaOf={metaLine}
-            chipsOf={(b) => bookStats(b).map(({ label, tone }) => ({ label, style: bookChipStyle(tone) }))}
-          />
-          {/* 전폭 손잡이 줄 — 합폭은 「책 추가하기」와 같고, 비율은 2:1(쓰기가 주, 관리가 보조). */}
-          <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-            {/* 들춰보기는 아래 박스가 맡으므로 손잡이는 작성 직행이다 — 홈 여백 문과 같은 경로. */}
-            {myLoginId !== null && (
+          {/* 「이 탭이 비었다」와 「책 추가 칸이 섰다」는 다른 말이다 — 칸의 부제가 탭 사정까지 대신하지 못한다. */}
+          {selected === null && (
+            <Text typography="st11" color="grey600" style={{ display: 'block', textAlign: 'center' }}>
+              {section.empty}
+            </Text>
+          )}
+          {/*
+            탭이 바뀌면 목록이 통째로 갈리므로 다시 마운트한다 — 안 그러면 트랙이 옛 탭의 스크롤 자리에 머문다.
+            안내는 캐러셀을 감싼다: 「책 추가하기」 버튼이 서 있던 자리를 이 칸이 물려받았고, 게이트(`leadCard`)가
+            없는 날엔 감싸지도 않아 없는 칸을 가리키는 안내가 원리상 생기지 않는다.
+          */}
+          <Coachmark
+            name="add-book"
+            after="library" // 바로 앞 걸음(서재 설명)을 본 뒤에 — 흐름이 이 화면으로 데려온 직후가 제 차례다
+            title="읽을 책은 여기서 찾아 담아요"
+            detail="맨 앞 점선 칸에서 검색해 담아요"
+            enabled={leadCard !== null}
+          >
+            <BookCarousel
+              key={tab}
+              books={rows}
+              selectedId={onLeadCard ? null : (selected?.id ?? null)}
+              onSelect={onSelect}
+              leadCard={leadCard}
+              metaOf={metaLine}
+              chipsOf={(b) => bookStats(b).map(({ label, tone }) => ({ label, style: bookChipStyle(tone) }))}
+            />
+          </Coachmark>
+          {onLeadCard ? (
+            // 칸이 가운데면 할 수 있는 일은 하나뿐이다 — 손잡이도 하나로 갈린다(합폭은 아래 줄과 같다).
+            <div style={{ display: 'flex', marginTop: 16 }}>
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => onComposeMargin(selected)}
+                onClick={onAddBook}
                 style={{
-                  flex: 2,
+                  flex: 1,
                   height: HANDLE_ROW_HEIGHT,
                   border: 'none',
                   borderRadius: 14,
@@ -579,36 +616,65 @@ export function Shelf({
                   cursor: 'pointer',
                 }}
               >
-                여백에 글쓰기
+                검색해서 담기
               </button>
-            )}
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => onSheet({ kind: 'actions', confirmDelete: false, confirmPublish: false })}
-              style={{
-                flex: 1,
-                height: HANDLE_ROW_HEIGHT,
-                border: '1px solid transparent',
-                borderImage: PENCIL_FRAME,
-                borderRadius: 14,
-                background: '#FCFAF5',
-                color: '#2C2C2A',
-                fontSize: 16,
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              관리
-            </button>
-          </div>
-          {myLoginId !== null && (
-            <MarginBox
-              loginId={myLoginId}
-              bookId={selected.id}
-              onError={onError}
-              onOpenAll={() => onOpenMargin(myLoginId, selected.id)}
-            />
+            </div>
+          ) : (
+            selected !== null && (
+              <>
+                {/* 전폭 손잡이 줄 — 비율은 2:1(쓰기가 주, 관리가 보조). */}
+                <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                  {/* 들춰보기는 아래 박스가 맡으므로 손잡이는 작성 직행이다 — 홈 여백 문과 같은 경로. */}
+                  {myLoginId !== null && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => onComposeMargin(selected)}
+                      style={{
+                        flex: 2,
+                        height: HANDLE_ROW_HEIGHT,
+                        border: 'none',
+                        borderRadius: 14,
+                        background: 'rgba(110,138,106,.14)',
+                        color: '#4E6B4A',
+                        fontSize: 16,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      여백에 글쓰기
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => onSheet({ kind: 'actions', confirmDelete: false, confirmPublish: false })}
+                    style={{
+                      flex: 1,
+                      height: HANDLE_ROW_HEIGHT,
+                      border: '1px solid transparent',
+                      borderImage: PENCIL_FRAME,
+                      borderRadius: 14,
+                      background: '#FCFAF5',
+                      color: '#2C2C2A',
+                      fontSize: 16,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    관리
+                  </button>
+                </div>
+                {myLoginId !== null && (
+                  <MarginBox
+                    loginId={myLoginId}
+                    bookId={selected.id}
+                    onError={onError}
+                    onOpenAll={() => onOpenMargin(myLoginId, selected.id)}
+                  />
+                )}
+              </>
+            )
           )}
         </div>
       )}
@@ -617,7 +683,7 @@ export function Shelf({
         <GridSheet
           title={`${section.title} ${rows.length}권`}
           rows={rows}
-          selectedId={selected?.id ?? null}
+          selectedId={onLeadCard ? null : (selected?.id ?? null)}
           onPick={(id) => {
             onSelect(id);
             onSheet(null);
@@ -892,9 +958,10 @@ function SheetRow({
 }
 
 /**
- * 손잡이 줄 높이 — 아래 「책 추가하기」(TDS `Button size="medium" display="block"`)의 <b>실측</b> 높이다
- * (목 모드 390px 뷰포트에서 38px). TDS 내부 값이라 코드로 유도할 수 없어 재서 박았다 — 두 줄이 같은
- * 높이라야 캐러셀 아래가 한 벌의 손잡이로 읽힌다.
+ * 손잡이 줄 높이 — 원래 아래 「책 추가하기」(TDS `Button size="medium" display="block"`)의 <b>실측</b>
+ * 높이였다(목 모드 390px 뷰포트에서 38px). 그 버튼은 2026-08-21에 캐러셀 0번 칸으로 들어가며 사라졌지만
+ * 값은 그대로 둔다 — 이제 기준은 <b>「여백에 글쓰기·관리」와 「검색해서 담기」가 같은 높이</b>라는 것이다.
+ * 두 줄이 어긋나면 칸을 오갈 때 손잡이가 위아래로 튄다.
  */
 const HANDLE_ROW_HEIGHT = 38;
 

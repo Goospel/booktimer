@@ -569,7 +569,7 @@ describe('책 0권', () => {
   it('빈 상태 대신 「책 없이」 카드가 선다 — 0권이라고 다른 화면이 뜨지 않는다', () => {
     const markup = renderHome({ readingBooks: [] });
 
-    expect(markup).toContain('data-no-book-card');
+    expect(markup).toContain('data-lead-card');
     expect(markup).toContain(noBookSubtitle(0));
     expect(markup).not.toContain('아직 책이 없어요');
     expect(labelsOf(markup)).not.toContain('첫 책 추가하기');
@@ -582,7 +582,7 @@ describe('책 0권', () => {
       activeStartedAt: '2026-08-11T09:00:00',
     });
 
-    expect(markup).not.toContain('data-no-book-card');
+    expect(markup).not.toContain('data-lead-card');
     expect(markup).not.toContain('아직 책이 없어요');
   });
 });
@@ -709,7 +709,7 @@ describe('지급 흐름 (claimDebtWaiver)', () => {
  *
  * <p>계측은 네 겹이다: ① 기본 선택은 순수 함수 {@link defaultBookId} ② 칸↔선택값 산식은
  * {@link carouselIndexOf}·{@link selectionAt} ③ 홈 배선은 마크업 손잡이(`data-cover-title`·
- * `data-no-book-card`·`data-selected-book`·`data-dot`) ④ 하니스로 열 수 없는 시트는
+ * `data-lead-card`·`data-selected-book`·`data-dot`) ④ 하니스로 열 수 없는 시트는
  * {@link BookSheet}를 직접 렌더해서.
  *
  * <p>⚠️ 남는 사각지대(실측): `onClick`·스크롤은 마크업에 안 남는다 — 미는 대로 선택이 따라오는지,
@@ -885,7 +885,7 @@ describe('밖에서 바뀐 선택 따라가기 (recenterIndex)', () => {
  * 그 버튼 하나로 좁혀야 한다(마크업 전체 검색이면 옆 책의 속성에 속는다).
  */
 const noBookCardOf = (markup: string) =>
-  markup.split('<button').find((chunk) => chunk.includes('data-no-book-card')) ?? '';
+  markup.split('<button').find((chunk) => chunk.includes('data-lead-card')) ?? '';
 
 describe('표지 캐러셀', () => {
   const books = [
@@ -1024,7 +1024,7 @@ describe('표지 캐러셀', () => {
   it('책이 0권이어도 캐러셀은 선다 — 「책 없이」 카드 한 장이 남는다', () => {
     const markup = renderHome({ readingBooks: [] });
 
-    expect(markup).toContain('data-no-book-card');
+    expect(markup).toContain('data-lead-card');
     expect(coverTitlesOf(markup)).toEqual([]); // 실제 책은 0권
   });
 
@@ -1036,7 +1036,7 @@ describe('표지 캐러셀', () => {
     });
 
     expect(markup).not.toContain('무엇으로 측정할까요?');
-    expect(markup).not.toContain('data-no-book-card');
+    expect(markup).not.toContain('data-lead-card');
     expect(coverTitlesOf(markup)).toEqual([]);
   });
 });
@@ -1061,8 +1061,8 @@ describe('「책 없이」 카드 (캐러셀 0번 칸)', () => {
   it('카드가 실제 책보다 앞에 선다 — 0번 칸이 「책 없이」라는 규약이 마크업 순서다', () => {
     const markup = renderCarousel(1);
 
-    expect(markup).toContain('data-no-book-card');
-    expect(markup.indexOf('data-no-book-card')).toBeLessThan(markup.indexOf('data-cover-title'));
+    expect(markup).toContain('data-lead-card');
+    expect(markup.indexOf('data-lead-card')).toBeLessThan(markup.indexOf('data-cover-title'));
   });
 
   it('표지와 같은 크기의 점선 상자다 — 색 상자면 실제 표지와 구분이 안 된다', () => {
@@ -1098,7 +1098,7 @@ describe('「책 없이」 카드 (캐러셀 0번 칸)', () => {
   it('책이 0권이어도 카드 한 장으로 캐러셀이 선다 — 「첫 책 추가하기」 빈 상태를 대신한다', () => {
     const markup = renderCarousel(null, []);
 
-    expect(markup).toContain('data-no-book-card');
+    expect(markup).toContain('data-lead-card');
     expect(markup).toContain(noBookSubtitle(0)); // 서재로 가는 유일한 안내
     expect([...markup.matchAll(/data-dot="/g)]).toHaveLength(1);
   });
