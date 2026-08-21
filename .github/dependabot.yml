@@ -1,6 +1,22 @@
 # Dependabot — 의존성 취약점·노후 버전을 주간으로 점검해 업데이트 PR을 자동 생성한다(SCA).
-# 보안 알림(vulnerability alerts)은 PUBLIC repo 기본 활성 — 취약 버전이 끼면 보안 업데이트 PR이
-# 별도로 즉시 뜨고, 아래 schedule·groups·ignore는 그와 **무관**하다(취약점은 그룹핑·무시를 뚫고 온다).
+#
+# ⚠️ 보안 알림(Dependabot alerts)은 「PUBLIC repo라 기본 활성」이 아니다 — 이 레포는 2026-08-21까지
+#    **꺼져 있었다**(`dependabot_security_updates: disabled`). 그날 API로 켰고, 켜자마자 high 2건 +
+#    medium 1건이 떴다(#905·#906). 그 전까지 이 주석은 없는 안전망을 있다고 적고 있었다.
+#    상태 확인은 추측하지 말고 실측한다:
+#      gh api repos/Goospel/booktimer --jq '.security_and_analysis.dependabot_security_updates.status'
+#      gh api --method GET repos/Goospel/booktimer/vulnerability-alerts -i | head -1   # 204=켜짐 404=꺼짐
+#    (Git Bash에서는 MSYS_NO_PATHCONV=1을 앞에 붙인다 — 안 그러면 경로로 변환돼 엉뚱한 에러가 난다.)
+#
+#    켜져 있는 한, 아래 groups·ignore는 보안 업데이트와 **무관**하다. GitHub 문서 확인(2026-08-21):
+#      · `ignore`는 version updates 전용이다 — 보안 업데이트엔 안 걸린다.
+#      · `groups`는 `applies-to` 미지정 시 version-updates가 기본이라 보안 PR은 개별로 온다.
+#    실제로 #905·#906이 묶이지 않고 따로 열린 것이 그 증거다.
+#
+# ⚠️ 「Dependabot 알림 0건」이 「취약점 0건」은 아니다. 2026-08-21 실측: 알림이 0건인 시점에
+#    `npm --prefix miniapp audit`은 high 1건(nanoid < 3.3.18, vite→postcss 전이)을 잡았다 —
+#    miniapp을 그날 대상에 넣어 GitHub가 아직 그 lockfile을 스캔하지 못한 것이다.
+#    새 디렉터리를 추가한 직후에는 로컬 `npm audit`으로 교차 확인한다.
 # gap#4(CI 보안 게이트): 내 코드 정적분석은 CodeQL(.github/workflows/codeql.yml)이 담당.
 #
 # 정책 (2026-08-21) — 「소음을 줄이고 진짜 신호만 남긴다」:
