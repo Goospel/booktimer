@@ -128,6 +128,27 @@ describe('둘러보기 화면의 검색', () => {
     expect(screen(null)).toMatch(/enterkeyhint="search"/i);
   });
 
+  /**
+   * 라벨 자리도 「책 추가」와 함께 걷었다(2026-08-21) — 빈 칸에서 <code>visibility: hidden</code>으로
+   * 27px만 먹던 자리다. 두 화면이 같은 `SearchField`를 쓰므로 한쪽만 고치면 검색이 두 모양으로 남는다.
+   *
+   * <p>이 화면은 검색칸이 제목 <b>위</b>에 선다(`Screen`의 `above` 슬롯) — 「책 추가」처럼 제목과
+   * 칸 사이가 벌어진 게 아니라 <b>나가는 길과 칸 사이</b>가 벌어져 있었다. 걷어 내는 값은 같다.
+   * 무엇을 적는 칸인지는 placeholder 「아이디 입력」과 여기로 들어온 손잡이(「아이디로 친구 찾기」)가
+   * 이미 말하므로, 라벨이 값을 보태는 자리가 아니다.
+   */
+  it('「아이디로 찾기」 라벨 줄을 그리지 않는다 — placeholder가 이미 무엇을 적는지 말한다', () => {
+    expect(screen(null)).not.toMatch(/>아이디로 찾기</);
+  });
+
+  it('칸의 이름은 남는다 — 라벨을 걷는 것과 이름을 지우는 것은 다르다', () => {
+    expect(screen(null)).toContain('aria-label="아이디로 찾기"');
+  });
+
+  it('칸 위 기본 여백 16px을 0으로 넘긴다 — 「책 추가」와 같은 값이어야 한다', () => {
+    expect(screen(null)).toMatch(/padding-top:\s*0(px)?;\s*padding-bottom:\s*16px/);
+  });
+
   it('0건이면 두 글자 이상으로 다시 찾으라고 알린다 — 서버가 1글자를 빈 결과로 주므로 문구가 유일한 안내다', () => {
     expect(screen([])).toContain('두 글자 이상');
   });
