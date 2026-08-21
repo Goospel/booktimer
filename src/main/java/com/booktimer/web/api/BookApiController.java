@@ -8,6 +8,7 @@ import com.booktimer.book.BookSearchType;
 import com.booktimer.book.BookService;
 import com.booktimer.book.BookStatus;
 import com.booktimer.book.BookVisibility;
+import com.booktimer.personality.WriterName;
 import com.booktimer.book.CoupangLinkBuilder;
 import com.booktimer.book.KyoboLinkBuilder;
 import com.booktimer.book.Yes24LinkBuilder;
@@ -225,12 +226,23 @@ public class BookApiController {
         }
     }
 
-    public record SearchRow(String title, String author, String isbn13, String coverUrl,
+    /**
+     * 검색·추천 목록 한 행.
+     *
+     * <p>⚠️ <b>{@code author}와 {@code authorShort}는 쓰임이 다르다.</b> 「담기」가 이 행의
+     * {@code author}를 그대로 돌려보내 <b>DB에 저장</b>하므로(miniapp {@code addBook}), 저장용은 반드시
+     * 원문이어야 한다. 축약본을 그 자리에 넣으면 책 저자가 「미겔 데 세르반떼스 외 32명」으로 영구 저장된다.
+     * 목록에 그릴 때만 {@code authorShort}를 쓴다.
+     *
+     * @param author      알라딘 원문 — <b>저장되는 값</b>
+     * @param authorShort 목록 표시용 한 줄(「이름」/「이름 외 N명」). 글쓴이가 없으면 null
+     */
+    public record SearchRow(String title, String author, String authorShort, String isbn13, String coverUrl,
                             String publisher, String purchaseLink, String category, String pubDate,
                             boolean owned) {
         static SearchRow from(BookSearchResult r, Set<String> myIsbns) {
             boolean owned = r.isbn13() != null && myIsbns.contains(r.isbn13()); // N-055: null isbn은 owned 아님
-            return new SearchRow(r.title(), r.author(), r.isbn13(), r.coverUrl(),
+            return new SearchRow(r.title(), r.author(), WriterName.summary(r.author()), r.isbn13(), r.coverUrl(),
                     r.publisher(), r.purchaseLink(), r.category(), r.pubDate(), owned);
         }
     }

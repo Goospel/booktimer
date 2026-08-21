@@ -1,5 +1,6 @@
 package com.booktimer.personality;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -59,6 +60,50 @@ public final class WriterName {
             }
         }
         return null;
+    }
+
+    /**
+     * 목록 한 줄에 들어갈 <b>표시용</b> 저자 — {@code "이름"} 또는 {@code "이름 외 N명"}.
+     *
+     * <p>왜 필요한가: 알라딘 author는 길이 제한이 없다. 「노벨라33 세트 - 전33권」은 40명이 넘는 이름을
+     * 한 필드에 담아 오는데, 그걸 그대로 그리면 목록 한 줄이 세로 900px로 자라 카드를 통째로 먹는다
+     * (실기기 제보 2026-08-21).
+     *
+     * <p><b>N은 글쓴이만 센다</b> — 옮긴이·그림·감수를 넣으면 「톨스토이 외 1명」의 그 1명이 옮긴이가
+     * 되어 문장이 거짓말을 한다. 그 구분은 {@link #lead}가 이미 하고 있어서 세는 규칙을 새로 만들지 않는다.
+     *
+     * <p>⚠️ <b>저장에는 쓰지 않는다.</b> 「담기」는 검색 행의 author 원문을 그대로 서버로 보내 DB에
+     * 저장하므로, 이 값을 그 자리에 넣으면 책의 저자가 「미겔 데 세르반떼스 외 32명」으로 <b>영구 저장</b>된다.
+     * 표시 필드와 저장 필드를 반드시 나눠 둔다.
+     *
+     * @param rawAuthor 알라딘 author 원문(null 허용)
+     * @return 표시용 한 줄. 글쓴이가 하나도 없으면 null(폴백 문구는 화면이 정한다)
+     */
+    public static String summary(String rawAuthor) {
+        List<String> writers = writers(rawAuthor);
+        if (writers.isEmpty()) {
+            return null;
+        }
+        int others = writers.size() - 1;
+        return others == 0 ? writers.get(0) : writers.get(0) + " 외 " + others + "명";
+    }
+
+    /** author 원문의 글쓴이 이름 전부(등장 순서) — 비저자 역할과 빈 이름은 빠진다. */
+    private static List<String> writers(String rawAuthor) {
+        if (rawAuthor == null) {
+            return List.of();
+        }
+        List<String> names = new ArrayList<>();
+        for (String token : rawAuthor.split(",")) {
+            if (!isWriterRole(roleText(token))) {
+                continue;
+            }
+            String name = nameOf(token);
+            if (!name.isEmpty()) {
+                names.add(name);
+            }
+        }
+        return names;
     }
 
     /** 토큰 안 모든 괄호 내용을 이어 붙인 역할 텍스트(괄호 없으면 ""). */

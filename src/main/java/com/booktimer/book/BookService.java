@@ -82,7 +82,27 @@ public class BookService {
     @Transactional(readOnly = true)
     public BookSearchPage search(String query, BookSearchType type, int page) {
         BookSearchPage raw = searchClient.search(query, type, page);
-        return filterToSearchType(raw, query, type);
+        return dropBoxSets(filterToSearchType(raw, query, type), query);
+    }
+
+    /**
+     * 세트 상품(「전N권」·「세트」)을 뺀다 — 검색도 「이어 읽기」 추천도 <b>다음에 읽을 한 권</b>을
+     * 고르는 자리라, 33권 묶음은 읽을 단위가 아니라 구매 단위다.
+     *
+     * <p>여기 한 곳이면 되는 이유: <b>검색 API와 추천이 둘 다 {@link #search}를 지난다</b>
+     * ({@code BookApiController} · {@code BookRecommendationService}).
+     *
+     * <p>⚠️ <b>검색어가 세트를 찾고 있으면 그대로 둔다</b> — 「노벨라33 세트」를 일부러 검색한 사람에게서
+     * 그 책을 빼앗으면 자기가 가진 책을 서재에 담을 길이 없어진다. 걸러 내기의 유일한 탈출구다.
+     */
+    private static BookSearchPage dropBoxSets(BookSearchPage page, String query) {
+        if (page == null || BookSetTitle.wanted(query)) {
+            return page;
+        }
+        List<BookSearchResult> kept = page.results().stream()
+                .filter(r -> !BookSetTitle.isSet(r.title()))
+                .toList();
+        return new BookSearchPage(kept, page.page(), page.pageSize(), page.totalResults());
     }
 
     /**
