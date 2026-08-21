@@ -1210,6 +1210,18 @@ describe('계정 진입점', () => {
       </TDSMobileProvider>,
     );
 
+  it('오늘 읽은 시간을 세리프로 크게 적는다 — 이 화면이 답하려는 유일한 수다', () => {
+    // 개구 26px(t2)일 때는 화면 제목(22px)보다 4px 큰 게 전부라 히어로로 안 읽혔다. 손글씨 옆의
+    // 세리프는 「적어 둔 값」으로 읽혀, 크기와 서체 두 축으로 주변에서 떨어져 나온다.
+    const clock = renderHome();
+    const shown = /<[^<>]*>(\d+:\d{2})</.exec(clock);
+    expect(shown).not.toBeNull();
+    const at = clock.indexOf('>' + shown![1] + '<');
+    const tag = clock.slice(clock.lastIndexOf('<', at), at);
+    expect(tag).toContain('Gowun Batang');
+    expect(tag).toContain('--tds-t-t2-text-fontSize');
+  });
+
   it('설정 화면으로 가는 손잡이를 그린다 — 이름은 접근성 이름으로 남는다(글자는 아바타로 바뀌었다)', () => {
     expect(renderHome()).toContain(ENTRY);
   });

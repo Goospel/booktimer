@@ -13,7 +13,18 @@ import {
   requestNotificationAgreement,
   watchRewardAd,
 } from '../toss';
-import { Avatar, BookCover, CoverInitial, ErrorMessage, PENCIL_FRAME, Screen, Sheet, sectionStyle } from '../ui';
+import {
+  Avatar,
+  BookCover,
+  CoverInitial,
+  ErrorMessage,
+  PENCIL_FRAME,
+  SERIF_VALUE,
+  Screen,
+  SectionTitle,
+  Sheet,
+  sectionStyle,
+} from '../ui';
 import { HomeFeedBox } from './HomeFeed';
 
 /** 알림 동의 결과 캐시 — 값은 토스가 준 결과 문자열 그대로. 정본은 토스이고 이건 카드 노출 스위치일 뿐이다. */
@@ -755,8 +766,9 @@ export function AccountSection({
         <span
           style={{
             display: 'block',
-            fontSize: 17,
-            fontWeight: 600,
+            // 이름이다 — 책방의 닉네임(Profile.tsx)과 같은 단으로 맞춘다(한 사람이 두 화면에서 같은 체급).
+            fontSize: 19,
+            fontWeight: 700,
             color: 'var(--adaptiveGrey900, #3A362E)',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -768,7 +780,7 @@ export function AccountSection({
         {loginId !== null && (
           <span
             data-handle={loginId}
-            style={{ display: 'block', marginTop: 1, fontSize: 12, color: 'var(--adaptiveGrey600, #6F6A5E)' }}
+            style={{ display: 'block', marginTop: 1, fontSize: 13, color: 'var(--adaptiveGrey600, #6F6A5E)' }}
           >
             @{loginId}
           </span>
@@ -792,9 +804,7 @@ export function AccountSection({
 export function ReadingNowCard({ book, totalSeconds }: { book: BookOption | null; totalSeconds: number }) {
   return (
     <section style={sectionStyle}>
-      <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
-        읽는 중
-      </Text>
+      <SectionTitle style={{ marginBottom: 10 }}>읽는 중</SectionTitle>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         {book === null ? (
           <NoBookCard width={READING_NOW_COVER} />
@@ -950,7 +960,9 @@ export function Home({
           </Text>
         </div>
         <div style={{ marginTop: 6 }}>
-          <Text typography="t2" fontWeight="bold">
+          {/* 세리프 + t2(44px) — 이 화면이 답하려는 유일한 수다. 개구 26px일 땐 화면 제목(22px)보다
+              4px 큰 게 전부라 히어로로 읽히지 않았다. */}
+          <Text typography="t2" fontWeight="bold" style={{ ...SERIF_VALUE }}>
             {formatClock(todayRead)}
           </Text>
         </div>
@@ -972,7 +984,7 @@ export function Home({
                   background: 'transparent',
                   borderBottom: '1px dashed var(--adaptiveGrey600, #6F6A5E)',
                   color: 'var(--adaptiveGrey600, #6F6A5E)',
-                  fontSize: 13,
+                  fontSize: 14,
                   cursor: 'pointer',
                 }}
               >
@@ -1055,9 +1067,7 @@ export function Home({
         <section style={sectionStyle}>
           {/* 상태와 무관한 고정 문구다 — 「책 없이」가 가운데면 "이 책으로"는 틀린 말이고, 상태별로
               갈아끼우면 헤더가 나타났다 사라지며 캐러셀이 세로로 들썩인다. */}
-          <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
-            무엇으로 측정할까요?
-          </Text>
+          <SectionTitle style={{ marginBottom: 10 }}>무엇으로 측정할까요?</SectionTitle>
           {/* 좌우로 밀어 고른다 — 가운데 온 칸이 곧 측정 대상이다(0번은 「책 없이」라 책 0권도 같은 화면). */}
           <BookCarousel books={dashboard.readingBooks} selectedId={selectedBookId} onSelect={onSelectBook} />
         </section>

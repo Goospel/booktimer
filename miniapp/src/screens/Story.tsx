@@ -446,7 +446,7 @@ export function MarginCard({
             margin: '0 0 14px',
             paddingLeft: 12,
             borderLeft: `2px solid ${bg.color}`,
-            fontSize: 15,
+            fontSize: 16,
             lineHeight: 1.6,
             opacity: 0.85,
             whiteSpace: 'pre-wrap',
@@ -456,10 +456,10 @@ export function MarginCard({
           {entry.quote}
         </blockquote>
       )}
-      <p style={{ margin: 0, fontSize: 16, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'keep-all' }}>
+      <p style={{ margin: 0, fontSize: 17, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'keep-all' }}>
         {entry.text}
       </p>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 12, opacity: 0.75 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 13, opacity: 0.75 }}>
         <span style={{ flex: 1, minWidth: 0 }}>{relativeTime(entry.createdAt, now)}</span>
         {/* 하트는 누르기/취소만 진다 — 개수를 같은 버튼에 넣으면 명단을 보려다 좋아요가 눌린다. */}
         {onToggleLike !== undefined && (
@@ -523,7 +523,7 @@ const likesLine = (color: string) =>
     marginTop: 8,
     padding: '6px 0 0',
     color,
-    fontSize: 12,
+    fontSize: 13,
     opacity: 0.75,
     textAlign: 'left',
     textDecoration: 'underline',
@@ -586,7 +586,7 @@ export function StoryComposer({
           maxLength={200}
           placeholder="밑줄 그은 문장을 옮겨 보세요."
           onChange={(e) => setQuote(e.target.value)}
-          style={{ ...composerField(bg.color), minHeight: 56, fontSize: 15, borderLeft: `2px solid ${bg.color}`, paddingLeft: 12 }}
+          style={{ ...composerField(bg.color), minHeight: 56, fontSize: 16, borderLeft: `2px solid ${bg.color}`, paddingLeft: 12 }}
         />
         <p style={{ ...composerLabel, textAlign: 'right', marginTop: 4 }}>{trimmedQuote.length}/200</p>
 
@@ -599,7 +599,7 @@ export function StoryComposer({
           maxLength={500}
           placeholder="그 문장에 대해 든 생각을 남겨 보세요."
           onChange={(e) => setText(e.target.value)}
-          style={{ ...composerField(bg.color), minHeight: 120, fontSize: 16 }}
+          style={{ ...composerField(bg.color), minHeight: 120, fontSize: 17 }}
         />
         <p style={{ ...composerLabel, textAlign: 'right', marginTop: 4 }}>{trimmed.length}/500</p>
       </div>
@@ -640,7 +640,7 @@ export function StoryComposer({
 /** 컴포저 라벨·카운터 — 배경 위에 얹히므로 색은 상속받고 농도만 낮춘다(팔레트 6색 어디서나 읽힌다). */
 const composerLabel = {
   margin: 0,
-  fontSize: 11,
+  fontSize: 12,
   opacity: 0.6,
   color: 'inherit',
 } as const;
@@ -668,6 +668,6 @@ const ghost = (color: string) =>
     border: `1px solid ${color}`,
     background: 'transparent',
     color,
-    fontSize: 12,
+    fontSize: 13,
     cursor: 'pointer',
   }) as const;

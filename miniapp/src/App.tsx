@@ -888,7 +888,7 @@ export function MainTabs({
             background: 'var(--adaptiveGrey100, #FCFAF5)',
             color: 'var(--adaptiveGrey600, #6F6A5E)',
             borderRadius: 12,
-            fontSize: 13,
+            fontSize: 14,
             textAlign: 'center',
             boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
           }}
@@ -977,8 +977,8 @@ export function GuideBanner({ onStart, onDismiss }: { onStart: () => void; onDis
           cursor: 'pointer',
         }}
       >
-        <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: sage }}>처음이신가요? 앱 사용법 보기</span>
-        <span style={{ fontSize: 13, color: sage }}>›</span>
+        <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: sage }}>처음이신가요? 앱 사용법 보기</span>
+        <span style={{ fontSize: 14, color: sage }}>›</span>
       </button>
 
       <span style={{ width: 1, height: 14, background: 'rgba(79, 107, 76, 0.25)', margin: '0 2px' }} />
@@ -992,7 +992,7 @@ export function GuideBanner({ onStart, onDismiss }: { onStart: () => void; onDis
           background: 'transparent',
           padding: '0 2px',
           color: 'var(--adaptiveGrey600, #6F6A5E)',
-          fontSize: 13,
+          fontSize: 14,
           cursor: 'pointer',
         }}
       >
@@ -1120,7 +1120,7 @@ export function BottomTabBar({
         >
           <path d={icon} />
         </svg>
-        <span style={{ fontSize: 11, fontWeight: selected ? 600 : 400, lineHeight: 1.2 }}>{label}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.2 }}>{label}</span>
       </button>
     );
   });

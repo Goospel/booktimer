@@ -1,6 +1,6 @@
 import { Button, Text } from '@toss/tds-mobile';
 import { useState } from 'react';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 
 import type { ContributionDay, UserRow } from './api';
 
@@ -263,6 +263,46 @@ export const sectionStyle = {
 } as const;
 
 /**
+ * 값(수)·성취 이름을 세리프로 — 웹이 이미 쓰는 축을 미니앱에도 놓는다.
+ *
+ * <p>개구는 본문이 이미 700이라 <b>굵기로는 더 강조할 수 없다</b>(700 위가 없다). 크기만 키우면
+ * 카드가 세로로 커지므로, 남은 축이 색과 <b>서체</b>다. 웹 app.css는 제목·숫자·강조를 고운바탕으로
+ * 바꾸는 축을 39곳에서 쓰는데(`.bd-accum-value`·`.shop-count strong`·`.record-time` …) 미니앱은 그
+ * 폰트를 불러만 놓고 화면 제목 한 곳에서만 썼다. 손글씨 옆의 세리프는 「적어 둔 값」으로 읽혀,
+ * 크기를 덜 키우고도 눈에 먼저 든다.
+ *
+ * <p>클래스가 아니라 <b>인라인 스타일 상수</b>인 이유는 {@link PENCIL_FRAME}·{@link sectionStyle}과 같다 —
+ * 이 저장소의 테스트 하니스는 `renderToStaticMarkup` 정적 렌더라 <b>css를 적용하지 않는다</b>.
+ * 인라인이라야 「이 값이 세리프로 오는가」를 마크업에서 계측할 수 있다.
+ *
+ * <p>`tabular-nums`가 한 쌍인 이유: 이 상수가 붙는 자리는 대부분 <b>변하는 수</b>(측정 중 시계·누적
+ * 시간·팔로워 수)라, 폭이 들쭉날쭉하면 값이 바뀔 때마다 글자가 좌우로 흔들린다.
+ */
+export const SERIF_VALUE = {
+  fontFamily: "'Gowun Batang', serif",
+  fontVariantNumeric: 'tabular-nums',
+} as const;
+
+/**
+ * 섹션 제목 — 카드·목록 덩어리의 머리.
+ *
+ * <p>전에는 자리마다 `<Text typography="st11" color="grey600">`을 손으로 적었다. 그건 <b>본문과 같은
+ * 크기에 더 흐린</b> 글자라, 제목이 자기가 이끄는 본문보다 약했다 — 훑는 사람에겐 덩어리의 시작이
+ * 안 보인다. 크기를 한 단 올리고(st10) 잉크색으로 되돌린다.
+ *
+ * <p>역할에 이름을 붙여 컴포넌트로 꺼낸 이유: 같은 `st11 · grey600` 조합이 <b>제목이 아닌 자리</b>에도
+ * 스무 곳 넘게 쓰인다(빈 목록 안내·시트 설명문·보조 문구). 그것들은 흐린 게 맞으므로 일괄 치환이
+ * 불가능하고, 「여기는 제목이다」라는 판단이 코드에 남아야 다음 화면에서도 같은 결정을 반복할 수 있다.
+ */
+export function SectionTitle({ children, style }: { children: ReactNode; style?: CSSProperties }) {
+  return (
+    <Text typography="st10" fontWeight="bold" style={{ display: 'block', wordBreak: 'keep-all', ...style }}>
+      {children}
+    </Text>
+  );
+}
+
+/**
  * 바텀시트 공통 껍데기 — 딤 + 하단 패널 + 제목 줄(닫기 ✕).
  *
  * <p>TDS `BottomSheet`을 쓰지 않는다: 포털(`tds-mobile-portal-container`)로 그려져
@@ -389,8 +429,8 @@ export function Screen({
               borderRadius: 999,
               background: 'var(--adaptiveGrey100, #EDE7DA)',
               color: 'var(--adaptiveGrey700, #57534A)',
-              fontSize: 14,
-              fontWeight: 600,
+              fontSize: 15,
+              fontWeight: 700,
               opacity: backDisabled === true ? 0.5 : 1,
               cursor: backDisabled === true ? 'default' : 'pointer',
             }}

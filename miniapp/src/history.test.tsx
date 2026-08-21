@@ -222,6 +222,14 @@ describe('하루 한 줄 (DayRow)', () => {
     expect(render(busy, false)).not.toContain('미움받을 용기');
   });
 
+  it('그날 읽은 시간은 흐린 색이 아니다 — 그 줄이 대답하는 값이 이것이다', () => {
+    // grey700(흐린 글자)이었는데, 왼쪽 날짜는 잉크색이라 **답이 질문보다 뒤로 물러나** 있었다.
+    const markup = render(alone, false);
+    const at = markup.indexOf('>1시간<');
+    expect(at).toBeGreaterThan(-1);
+    expect(markup.slice(markup.lastIndexOf('<', at), at)).not.toContain('--tds-paragraph-color:grey');
+  });
+
   it('펼치면 책마다 얼마나 읽었는지 적는다 — 사용자가 물은 「무슨 책을 얼마나」다', () => {
     const markup = render(busy, true);
 

@@ -79,7 +79,7 @@ const badgeStyle = (tone: 'solid' | 'tint' | 'outline') =>
     display: 'inline-block',
     padding: '1px 7px',
     borderRadius: 5,
-    fontSize: 11,
+    fontSize: 12,
     lineHeight: 1.6,
     ...(tone === 'solid'
       ? { background: 'var(--adaptiveBlue700, #4F6B4C)', color: 'var(--adaptiveGrey100, #FCFAF5)' }
@@ -182,8 +182,8 @@ const pillStyle = (active: boolean) =>
     borderRadius: 20,
     background: active ? 'var(--adaptiveBlue50, #E7EEE2)' : 'transparent',
     color: active ? 'var(--adaptiveBlue700, #4F6B4C)' : 'var(--adaptiveGrey600, #6F6A5E)',
-    fontSize: 13,
-    fontWeight: active ? 600 : 400,
+    fontSize: 14,
+    fontWeight: 700,
     cursor: 'pointer',
   }) as const;
 
@@ -235,7 +235,7 @@ const mutualBadgeStyle = {
   border: '0.5px solid var(--adaptiveGrey200, #E4DDD0)',
   borderRadius: 6,
   color: 'var(--adaptiveGrey600, #6F6A5E)',
-  fontSize: 11,
+  fontSize: 12,
   lineHeight: 1.5,
 } as const;
 
@@ -262,7 +262,7 @@ export function ReaderRow({ reader, index, now }: { reader: ReaderStatus; index:
           justifyContent: 'center',
           background: reading ? 'var(--adaptiveBlue50, #E7EEE2)' : 'var(--adaptiveGrey200, #E4DDD0)',
           color: reading ? 'var(--adaptiveBlue700, #4F6B4C)' : 'var(--adaptiveGrey600, #6F6A5E)',
-          fontSize: 14,
+          fontSize: 15,
           // 기록이 없는 사람은 문구로 한 번, 형태로 한 번 — 훑어도 읽힌다.
           opacity: !reading && reader.lastReadAt === null ? 0.45 : 1,
         }}
@@ -288,8 +288,8 @@ export function ReaderRow({ reader, index, now }: { reader: ReaderStatus; index:
           style={{
             flex: '0 0 auto',
             alignSelf: 'center',
-            fontSize: 11,
-            fontWeight: 600,
+            fontSize: 12,
+            fontWeight: 700,
             color: 'var(--adaptiveBlue700, #4F6B4C)',
           }}
         >
@@ -354,7 +354,7 @@ function FeedList<T>({
               border: 0,
               background: 'transparent',
               color: 'var(--adaptiveGrey600, #6F6A5E)',
-              fontSize: 13,
+              fontSize: 14,
               cursor: 'pointer',
             }}
           >
@@ -468,7 +468,7 @@ export function FeedBox({
                   borderRadius: 20,
                   background: 'var(--adaptiveGrey200, #E4DDD0)',
                   color: 'var(--adaptiveGrey700, #57534A)',
-                  fontSize: 11,
+                  fontSize: 12,
                 }}
               >
                 내 책 · 『{item.bookTitle}』
