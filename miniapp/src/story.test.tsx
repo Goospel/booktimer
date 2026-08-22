@@ -2,9 +2,10 @@ import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import type { MarginEntry, MarginResponse, UserRow } from './api';
+import type { BookMarginAllResponse, MarginEntry, MarginResponse, SharedMarginEntry, UserRow } from './api';
 import { ApiError } from './api';
 import {
+  BookMarginAllView,
   LikersSheet,
   MarginCard,
   MarginView,
@@ -12,6 +13,8 @@ import {
   TIMER_STOPPED_NOTICE,
   createStoryMessage,
   hasFreshStory,
+  marginTabLabel,
+  shareNotice,
   visibilityNotice,
 } from './screens/Story';
 import { userAgent } from './test-fixtures';
@@ -46,7 +49,7 @@ function entry(id: number, extra: Partial<MarginEntry> = {}): MarginEntry {
 
 function margin(extra: Partial<MarginResponse> = {}): MarginResponse {
   return {
-    book: { id: 7, title: '데미안', author: '헤르만 헤세', coverUrl: null },
+    book: { id: 7, title: '데미안', author: '헤르만 헤세', coverUrl: null, isbn13: '9791168340084' },
     ownerNickname: '구스펠',
     self: false,
     following: true,
@@ -524,5 +527,148 @@ describe('측정 종료 고지 (timerStopped)', () => {
 
   it('작성 화면도 측정 중이 아니었으면 고지가 없다', () => {
     expect(composer(false)).not.toContain(TIMER_STOPPED_NOTICE);
+  });
+});
+
+/**
+ * 「함께 걸기」 — 글 하나를 <b>같은 책을 보는 누구에게나</b> 여는 opt-in(2026-08-22 책축 개방).
+ *
+ * <p>노출 판정은 전부 서버다(책 PUBLIC AND (팔로워 OR shared)) — 화면이 재현하지 않는다.
+ * 여기서 재는 것은 ① 고지 문구가 책 공개 여부로 갈리는가 ② 칩·손잡이가 상태를 말하는가뿐이다.
+ */
+describe('함께 걸기 — 고지 문구 (M-1)', () => {
+  it('공개 책이면 지금 당장 모두에게 보인다고 말한다', () => {
+    expect(shareNotice(true)).toBe('이 책을 보는 모두에게 보여요.');
+  });
+
+  it('비공개 책이면 「공개로 바꾸면」이라는 조건이 앞선다 — 켜도 지금은 아무에게도 안 보인다', () => {
+    expect(shareNotice(false)).toBe('책을 공개로 바꾸면 이 책을 보는 모두에게 보여요.');
+  });
+
+  it('필드를 안 보내는 옛 서버는 공개로 간주한다 — 새는 글을 안 샌다고 말하는 쪽이 더 위험한 거짓말이다', () => {
+    expect(shareNotice(undefined)).toBe(shareNotice(true));
+  });
+});
+
+describe('함께 걸기 — 카드의 칩과 손잡이 (M-2)', () => {
+  const card = (extra: Partial<MarginEntry>, onToggleShare?: (e: MarginEntry) => void) =>
+    render(
+      <MarginCard
+        entry={entry(1, extra)}
+        now={NOW}
+        self
+        busy={false}
+        confirming={false}
+        onConfirmDelete={() => {}}
+        onDelete={() => {}}
+        onToggleShare={onToggleShare}
+      />,
+    );
+
+  it('걸어 둔 글은 「함께 걸림」이라고 말한다 — 상태가 카드에 보여야 끌 생각도 든다', () => {
+    expect(card({ shared: true }, () => {})).toContain('함께 걸림');
+  });
+
+  it('안 건 글의 손잡이는 「함께 걸기」다 — 사후에 켜는 길이 카드에 있어야 한다', () => {
+    expect(card({ shared: false }, () => {})).toContain('함께 걸기');
+  });
+
+  it('상태는 aria-pressed로도 말한다 — 켠 것과 끈 것이 접근성 층에서 갈린다', () => {
+    expect(card({ shared: true }, () => {})).toContain('aria-pressed="true"');
+    expect(card({ shared: false }, () => {})).toContain('aria-pressed="false"');
+  });
+
+  /** 손잡이의 유무가 게이트다 — 남의 카드·서재 미리보기는 이 프롭을 안 넘긴다(`onToggleLike` 관례). */
+  it('핸들러가 없으면 칩은 글자로만 남는다 — 남의 카드에서 남의 글이 켜지지 않는다', () => {
+    const html = card({ shared: true });
+
+    expect(html).toContain('함께 걸림'); // 사실값은 여전히 보인다(부재 단언의 쌍)
+    expect(html).not.toContain('aria-label="함께 걸기 끄기"');
+  });
+});
+
+describe('책축 탭 라벨 (M-6)', () => {
+  it('개수를 알면 이름 뒤에 붙인다', () => {
+    expect(marginTabLabel('내 여백', 3)).toBe('내 여백 3');
+  });
+
+  it('아직 안 받았으면 이름만 — 0을 먼저 그리면 「글이 없다」는 거짓말이 된다', () => {
+    expect(marginTabLabel('모두', null)).toBe('모두');
+  });
+
+  it('진짜 0은 0으로 그린다 — 모르는 것과 없는 것은 다르다', () => {
+    expect(marginTabLabel('모두', 0)).toBe('모두 0');
+  });
+});
+
+/**
+ * 「이 책의 여백」 — 사람 좌표 없이 isbn13 하나로 서는 화면. 상태는 전부 밖에서 받는다
+ * (정적 렌더 하니스가 「담기 안내」·「빈 상태」 분기에 닿는 유일한 길).
+ */
+describe('이 책의 여백 — 책축 목록 (M-3)', () => {
+  const shared = (id: number, extra: Partial<SharedMarginEntry> = {}): SharedMarginEntry => ({
+    id,
+    text: `함께 건 글 ${id}`,
+    quote: null,
+    bgCode: 'paper',
+    createdAt: new Date(NOW - HOUR).toISOString(),
+    likeCount: 0,
+    liked: false,
+    authorLoginId: 'reader',
+    authorNickname: '옆자리 독자',
+    ...extra,
+  });
+
+  const all = (extra: Partial<BookMarginAllResponse> = {}): BookMarginAllResponse => ({
+    book: { isbn13: '9791168340084', title: '데미안', author: '헤르만 헤세', coverUrl: null },
+    myBookId: null,
+    totalCount: 1,
+    entries: [shared(1)],
+    ...extra,
+  });
+
+  const view = (data: BookMarginAllResponse) =>
+    render(
+      <BookMarginAllView
+        data={data}
+        now={NOW}
+        error={null}
+        onBack={() => {}}
+        onToggleLike={() => {}}
+        onOpenProfile={() => {}}
+      />,
+    );
+
+  it('책이 주인공이다 — 헤더는 제목·저자뿐이고 주인 이름이 없다', () => {
+    const html = view(all());
+
+    expect(html).toContain('데미안');
+    expect(html).toContain('헤르만 헤세');
+  });
+
+  it('카드마다 작성자 줄이 붙는다 — 여러 사람의 글이 한 목록에 섞이므로 누가 썼는지가 정보다', () => {
+    const html = view(all());
+
+    expect(html).toContain('옆자리 독자');
+    expect(html).toContain('@reader');
+  });
+
+  it('개수는 상한이 아니라 서버가 센 진짜 값이다 — 100장에서 잘려도 헤더는 전부를 말한다', () => {
+    expect(view(all({ totalCount: 137 }))).toContain('함께 걸린 글 137');
+  });
+
+  it('아직 아무도 안 걸었으면 그렇게 말한다', () => {
+    expect(view(all({ totalCount: 0, entries: [] }))).toContain('아직 함께 걸린 글이 없어요');
+  });
+
+  it('안 가진 책이면 담는 길을 안내한다 — 버튼이 아니라 문구다(검색으로 뒤로 가면 담기가 있다)', () => {
+    expect(view(all())).toContain('내 서재에 담으면');
+  });
+
+  it('가진 책이면 그 안내가 없다 — 이미 담긴 책에 담으라고 하지 않는다', () => {
+    const html = view(all({ myBookId: 42 }));
+
+    expect(html).toContain('함께 걸린 글 1'); // 목록은 그대로 그려진다(부재 단언의 쌍)
+    expect(html).not.toContain('내 서재에 담으면');
   });
 });

@@ -843,21 +843,33 @@ describe('여백 API', () => {
     expect(error.status).toBe(404);
   });
 
-  it('작성은 문장·책·배경·인용을 함께 보낸다 — 책은 필수고 인용은 선택이다', async () => {
+  it('작성은 문장·책·배경·인용·함께걸기를 함께 보낸다 — 책은 필수고 나머지는 선택이다', async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(response(200, JSON.stringify({ id: 3, text: '한 문장' })) as never);
 
-    await createStory('한 문장', 7, 'paper', '옮긴 문장');
+    await createStory('한 문장', 7, 'paper', '옮긴 문장', false);
 
     expect(lastRequest()[0]).toBe('http://localhost:8080/api/stories');
     expect(lastRequest()[1].method).toBe('POST');
     expect(JSON.parse(lastRequest()[1].body as string))
-      .toEqual({ text: '한 문장', bookId: 7, bgCode: 'paper', quote: '옮긴 문장' });
+      .toEqual({ text: '한 문장', bookId: 7, bgCode: 'paper', quote: '옮긴 문장', shared: false });
+  });
+
+  /**
+   * 「함께 걸기」는 <b>서버가 켜는 값을 우리가 보내는 것</b>이라 참·거짓 둘 다 실려 나가야 한다.
+   * 켠 요청만 재면 「언제나 false를 보낸다」는 구현이 초록으로 통과한다.
+   */
+  it('함께 걸기를 켜면 shared:true가 실려 나간다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, JSON.stringify({ id: 5, text: '한 문장' })) as never);
+
+    await createStory('한 문장', 7, 'paper', null, true);
+
+    expect(JSON.parse(lastRequest()[1].body as string).shared).toBe(true);
   });
 
   it('인용 없이 남기면 quote는 null로 나간다 — 서버가 「인용 없음」으로 읽는 유일한 표현', async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(response(200, JSON.stringify({ id: 4, text: '한 문장' })) as never);
 
-    await createStory('한 문장', 7, 'paper', null);
+    await createStory('한 문장', 7, 'paper', null, false);
 
     expect(JSON.parse(lastRequest()[1].body as string).quote).toBeNull();
   });
@@ -906,7 +918,7 @@ describe('세션 캐시 무효화', () => {
     cachePut(cacheKeyMargin('goospel', 7), 'margin');
     cachePut(CACHE_SHELF, 'shelf');
 
-    await createStory('한 문장', 7, 'paper', null);
+    await createStory('한 문장', 7, 'paper', null, false);
 
     expect(cacheGet(cacheKeyMargin('goospel', 7))).toBeUndefined();
     expect(cacheGet(CACHE_SHELF)).toBe('shelf'); // 책장은 안 낡았다 — 필요 이상으로 버리면 로딩이 늘어난다
@@ -916,7 +928,7 @@ describe('세션 캐시 무효화', () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(response(500, 'boom') as never);
     cachePut(cacheKeyMargin('goospel', 7), 'margin');
 
-    await createStory('한 문장', 7, 'paper', null).catch(() => {});
+    await createStory('한 문장', 7, 'paper', null, false).catch(() => {});
 
     expect(cacheGet(cacheKeyMargin('goospel', 7))).toBeUndefined();
   });

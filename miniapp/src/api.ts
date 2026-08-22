@@ -478,8 +478,13 @@ export interface ShelfResponse {
 
 export const fetchShelf = (): Promise<ShelfResponse> => request('/api/books');
 
-/** 알라딘 1페이지. 서버는 외부 API 장애도 빈 결과로 격리하므로 실패와 0건이 같은 모양으로 온다. */
-export const searchBooks = (q: string): Promise<{ results: SearchRow[] }> =>
+/**
+ * 알라딘 1페이지. 서버는 외부 API 장애도 빈 결과로 격리하므로 실패와 0건이 같은 모양으로 온다.
+ *
+ * <p>`marginCounts`는 isbn13 → 함께 걸린 글 수(검색 행의 「여백 N」 배지). **0인 책은 키 자체가 없다** —
+ * 화면이 0 배지를 안 그리는 근거가 응답에 그대로 있다. 옛 서버는 맵 자체를 안 보낸다(`undefined`).
+ */
+export const searchBooks = (q: string): Promise<{ results: SearchRow[]; marginCounts?: Record<string, number> }> =>
   request('/api/books/search', { query: { q } });
 
 /**
@@ -819,6 +824,16 @@ export interface MarginEntry {
   likeCount: number;
   /** 내가 눌렀는가. **자기 글도 true가 될 수 있다**(자기 좋아요 허용 — 2026-08-20). */
   liked: boolean;
+  /**
+   * 「함께 걸림」인가 — 이 글이 **같은 책을 보는 누구에게나** 열려 있는가(2026-08-22 책축 개방).
+   *
+   * <p>선택 필드인 이유는 **배포 순서**다: 미니앱이 서버보다 먼저 나가면 옛 서버는 이 필드를 안 준다.
+   * 그때 `undefined`는 **꺼짐으로 읽는다** — 안 걸린 글을 걸렸다고 말하는 쪽이 더 위험한 거짓말이다.
+   *
+   * <p>이것만으로는 아무것도 안 열린다: 노출 = 책 PUBLIC **AND** (팔로워 **OR** shared)이고,
+   * 판정은 전부 서버가 한다(화면은 이 사실값을 칩으로 옮길 뿐이다).
+   */
+  shared?: boolean;
 }
 
 /** `story.MarginBook` — 여백이 열린 책. 비공개 책은 **주인에게만** 온다(남에게는 404). */
@@ -829,6 +844,11 @@ export interface MarginBook {
   coverUrl: string | null;
   /** 비공개 책이면 false — 가시성 캡션의 재료다. 옛 서버는 안 보낸다(`undefined` = 공개로 간주). */
   isPublic?: boolean;
+  /**
+   * 책축(「모두」 탭)의 좌표 — `null`이면 그 책엔 책축 자체가 없다(수동 등록 등 isbn 없는 책).
+   * 옛 서버는 안 보낸다(`undefined`) — 그래서 판정은 언제나 `!= null`로 한다(둘을 한 번에 건진다).
+   */
+  isbn13?: string | null;
 }
 
 /**
@@ -873,11 +893,12 @@ export const createStory = (
   bookId: number,
   bgCode: string | null,
   quote: string | null,
+  shared: boolean,
 ): Promise<MarginEntry> => {
   // 요청 **전에** 버린다 — 실패해도 캐시가 없어 다음 조회가 서버 진실로 간다(fail-safe).
   // 여백 쓰기 경로는 셋(홈 문·서재 손잡이·책방 composer)이지만 전부 이 함수를 지나므로 여기가 근본 자리다.
   cacheDrop('margin:');
-  return request('/api/stories', { body: { text, bookId, bgCode, quote } });
+  return request('/api/stories', { body: { text, bookId, bgCode, quote, shared } });
 };
 
 /** 없거나 남의 것이면 404 — 존재를 누설하지 않는 서버 계약(IDOR)을 그대로 받는다. */
@@ -911,3 +932,68 @@ export const unlikeStory = (id: number): Promise<LikeState> =>
  * 안 보이는 글의 명단은 404다(목록과 같은 게이트).
  */
 export const fetchStoryLikers = (id: number): Promise<UserRow[]> => request(`/api/stories/${id}/likes`);
+
+// ── 책축 여백 (2026-08-22) ───────────────────────────────────────────────────
+//
+// 여백에 닿는 둘째 좌표계다: 사람이 아니라 **책 하나(isbn13)**. 「함께 걸기」를 켠 글만 실리고,
+// 팔로우와 무관하게 같은 책을 보는 누구에게나 열린다. 노출 판정은 전부 서버 쿼리에 있다
+// (책 PUBLIC AND shared AND 차단 아님 AND ADMIN 아님 AND 핸들 있음) — 화면은 재현하지 않는다.
+
+/** `story.BookMarginLabel` — 책축 화면의 헤더. **주인 이름이 없다**(이 화면의 주인공은 책이다). */
+export interface BookMarginLabel {
+  isbn13: string;
+  title: string;
+  author: string | null;
+  coverUrl: string | null;
+}
+
+/** `story.SharedMarginEntry` — 책축 카드. 사람축 {@link MarginEntry}에 **작성자 줄**이 더해진 모양. */
+export interface SharedMarginEntry {
+  id: number;
+  text: string;
+  quote: string | null;
+  bgCode: string | null;
+  createdAt: string;
+  likeCount: number;
+  liked: boolean;
+  /** 작성자 핸들 — 탭하면 그의 책방으로 가는 좌표다. 서버가 핸들 없는 작성자를 이미 걸러 준다. */
+  authorLoginId: string;
+  authorNickname: string;
+}
+
+/**
+ * `story.BookMarginResponse` — 책 하나에 함께 걸린 글 전부.
+ *
+ * <p>`totalCount`는 **상한과 무관한 진짜 값**이고 `entries`는 100장에서 잘린다 — 헤더의 N과 카드 수가
+ * 어긋날 수 있다는 뜻이며, 그건 결함이 아니라 계약이다.
+ *
+ * <p>`myBookId`는 내가 이 책을 서재에 가졌는가다. `null`이면 글쓰기가 없고 「담기」 안내로 갈린다.
+ */
+export interface BookMarginAllResponse {
+  book: BookMarginLabel;
+  myBookId: number | null;
+  totalCount: number;
+  entries: SharedMarginEntry[];
+}
+
+/**
+ * 「이 책의 여백」 — 함께 걸린 글도 내 책도 없으면 404다(그릴 헤더가 없다는 뜻이지 권한 실패가 아니지만,
+ * 화면 입장에선 구분할 이유가 없다). 하이픈이 붙어 있어도 서버가 한 번 더 정규화해 같은 책에 닿는다.
+ */
+export const fetchBookMarginAll = (isbn: string): Promise<BookMarginAllResponse> =>
+  request(`/api/stories/book/${encodeURIComponent(isbn)}`);
+
+/**
+ * 「함께 걸기」를 켠다 — {@link likeStory}와 같은 이유로 **멱등 POST**다(토글 단일 엔드포인트면
+ * 모바일 타임아웃 재전송이 방금 켠 것을 꺼 버린다). 남의 글은 404(IDOR — 존재 비노출).
+ */
+export const shareStory = (id: number): Promise<{ shared: boolean }> => {
+  cacheDrop('margin:');
+  return request(`/api/stories/${id}/share`, { method: 'POST' });
+};
+
+/** 「함께 걸기」를 끈다 — 다음 조회부터 책축 목록·검색 배지에서 빠진다. */
+export const unshareStory = (id: number): Promise<{ shared: boolean }> => {
+  cacheDrop('margin:');
+  return request(`/api/stories/${id}/share`, { method: 'DELETE' });
+};

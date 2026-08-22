@@ -603,7 +603,7 @@ describe('책 검색 엔터 제출', () => {
   it('제목 입력을 form으로 감싼다', () => {
     const markup = renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} />
+        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} onOpenBookMargin={() => {}} />
       </TDSMobileProvider>,
     );
 
@@ -625,7 +625,7 @@ describe('책 검색 손잡이', () => {
   const search = () =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} />
+        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} onOpenBookMargin={() => {}} />
       </TDSMobileProvider>,
     );
 
@@ -677,7 +677,7 @@ describe('책 검색칸 — 안 보이는 라벨 자리를 걷었다', () => {
   const search = () =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} />
+        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} onOpenBookMargin={() => {}} />
       </TDSMobileProvider>,
     );
 
@@ -798,7 +798,7 @@ describe('책 검색 입력칸 힌트', () => {
   const search = () =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} />
+        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} onOpenBookMargin={() => {}} />
       </TDSMobileProvider>,
     );
 
@@ -820,7 +820,7 @@ describe('책 추가 — 나가는 길', () => {
   const search = () =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} />
+        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} onOpenBookMargin={() => {}} />
       </TDSMobileProvider>,
     );
 
@@ -838,7 +838,7 @@ describe('책 추가 — 나가는 길', () => {
   it('추가 요청 중에는 잠근다 — 응답 전에 나가면 결과를 못 본다', () => {
     const busy = renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BookSearch busy error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} />
+        <BookSearch busy error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} onOpenBookMargin={() => {}} />
       </TDSMobileProvider>,
     );
     // 손잡이 앞부분만 잘라 본다. 한가할 때도 함께 봐야 의미가 있다 — 손잡이가 화면 아래에 있으면
@@ -926,7 +926,7 @@ describe('책 담을 곳 고르기', () => {
   it('검색 화면 진입 직후에는 시트가 없다 — 화면을 덮는 것은 사용자가 부른 뒤에만(T-183)', () => {
     const markup = renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} />
+        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} onOpenBookMargin={() => {}} />
       </TDSMobileProvider>,
     );
 
@@ -1036,6 +1036,48 @@ describe('검색 결과 — 이미 서재에 있는 책', () => {
 
   it('읽지 않아도 보이는 표식을 함께 단다 — 문구는 읽어야 알지만 형태는 그냥 보인다', () => {
     expect(row(true)).toContain('book-owned');
+  });
+
+  /**
+   * 「여백 N」 배지 — 검색 행에서 <b>책축 여백</b>으로 가는 문(2026-08-22 책축 개방). 낯선 책에 닿는
+   * 유일한 경로가 검색이라, 이 배지가 없으면 「이 책의 여백」 화면에 도달할 방법 자체가 없다.
+   *
+   * <p>배지는 행 <b>바깥의 형제 버튼</b>이다 — 행 버튼 안에 버튼을 넣으면 마크업이 깨지고, 담긴 책은
+   * 행이 `disabled`라 안쪽에 있으면 눌리지도 않는다(담긴 책일수록 여백을 보고 싶다).
+   */
+  const badged = (marginCount?: number, owned = false) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <SearchResultRow
+          row={{ ...found, owned }}
+          busy={false}
+          onPick={() => {}}
+          marginCount={marginCount}
+          onOpenMargin={() => {}}
+        />
+      </TDSMobileProvider>,
+    );
+
+  it('함께 걸린 글이 있으면 「여백 N」 배지가 뜬다', () => {
+    expect(badged(3)).toContain('여백 3');
+  });
+
+  it('0이면 배지를 안 그린다 — 빈 상태를 숫자로 박제하면 「아무도 안 썼다」가 행마다 반복된다', () => {
+    const markup = badged(0);
+
+    expect(markup).toContain('미움받을 용기'); // 행 자체는 그려졌다(부재 단언의 쌍)
+    expect(markup).not.toContain('여백 0');
+  });
+
+  it('서버가 키를 안 준 책(undefined)도 배지가 없다 — 0인 책은 응답에 키 자체가 없다', () => {
+    const markup = badged(undefined);
+
+    expect(markup).toContain('미움받을 용기');
+    expect(markup).not.toContain('여백 ');
+  });
+
+  it('담긴 책의 배지는 눌린다 — 행은 `disabled`지만 배지는 그 바깥이다', () => {
+    expect(badged(2, true)).toMatch(/aria-label="이 책의 여백 2개 보기"/);
   });
 
   it('아직 없는 책엔 칩도 표식도 없다 — 담을 수 있는 칸이 담긴 칸처럼 보이지 않게', () => {
@@ -1171,6 +1213,7 @@ describe('서재 세션 캐시', () => {
           onShelfChanged={() => {}}
           onOpenMargin={() => {}}
           onComposeMargin={() => {}}
+          onOpenBookMargin={() => {}}
         />
       </TDSMobileProvider>,
     );

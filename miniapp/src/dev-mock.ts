@@ -1,5 +1,6 @@
 import { ApiError } from './api';
 import type {
+  BookMarginAllResponse,
   BookOption,
   BookStatus,
   BookVisibility,
@@ -20,6 +21,7 @@ import type {
   ReaderStatus,
   RequestOptions,
   SearchRow,
+  SharedMarginEntry,
   SocialEvent,
   TimerState,
   UserRow,
@@ -179,7 +181,9 @@ function shelfBook(
 }
 
 const books: MyBookSummary[] = [
-  shelfBook(1, '미움받을 용기', '기시미 이치로', 'READING', 7_200, mockCover('용', '#D8CBB4')),
+  // ⚠️ isbn을 검색 픽스처(`searchRows`의 「미움받을 용기」)와 **같은 값**으로 맞춘다 — 책축 여백은
+  // isbn13이 축이라, 어긋나면 검색 배지를 눌러도 내 책이 아닌 것으로 나와 「내 여백」 탭이 안 뜬다.
+  { ...shelfBook(1, '미움받을 용기', '기시미 이치로', 'READING', 7_200, mockCover('용', '#D8CBB4')), isbn13: '9788996991342' },
   shelfBook(2, '사피엔스', '유발 하라리', 'READING', 3_600), // 표지 없는 책 — 캐러셀의 자리 표지 경로
   shelfBook(3, '데미안', '헤르만 헤세', 'FINISHED', 18_000, mockCover('데', '#C7D3C0')),
   shelfBook(4, '코스모스', '칼 세이건', 'WANT_TO_READ', 0),
@@ -372,12 +376,14 @@ const marginEntry = (
   hoursAgo: number,
   like: { likeCount: number; liked: boolean } = { likeCount: 0, liked: false },
   quote: string | null = null,
+  shared = false,
 ): MarginEntry => ({
   id,
   text,
   quote,
   bgCode,
   createdAt: isoTime(hoursAgo),
+  shared,
   ...like,
 });
 
@@ -406,17 +412,29 @@ const marginEntries: Record<number, MarginEntry[]> = {
   // 브라우저에서 눈에 보인다(0장뿐이면 빈 상태 문구만 확인되고 자르기는 영영 못 본다).
   1: [
     // 내 책이라 손잡이는 없고 개수만 뜬다 — 「주인도 남이 눌러 준 걸 안다」가 여기서 눈에 보인다.
-    marginEntry(931, '용기라는 말이 이렇게 무겁게 읽힌 적이 없다.', 'paper', 2, { likeCount: 3, liked: false }),
-    marginEntry(932, '미움받을 각오가 곧 자유라는 문장에서 한참 멈췄다.', 'sunset', 28),
+    // 앞 둘은 **함께 걸어 둔** 상태다 — 검색 배지·책축 목록·칩 토글을 목 모드에서 눈으로 보려면
+    // 「걸린 것」과 「안 걸린 것」이 한 여백에 같이 있어야 한다(셋째가 안 걸린 쪽).
+    marginEntry(931, '용기라는 말이 이렇게 무겁게 읽힌 적이 없다.', 'paper', 2, { likeCount: 3, liked: false }, null, true),
+    marginEntry(932, '미움받을 각오가 곧 자유라는 문장에서 한참 멈췄다.', 'sunset', 28, undefined, null, true),
     marginEntry(933, '과제의 분리 — 남의 몫을 내려놓는 연습.', 'sea', 50),
   ],
   // 내 서재의 비공개 책(id 5) — 공개 전환 확인 시트의 「글 1개가 보여요」가 이 한 장에서 나온다.
   5: [marginEntry(921, '이건 아무에게도 안 보이는 메모.', 'plum', 5)],
 };
 
-/** 글 id로 찾는다 — 좋아요는 책이 아니라 글 하나를 축으로 도는 유일한 경로다. */
-const findMarginEntry = (id: number): MarginEntry | null => {
+/**
+ * 글 id로 찾는다 — 좋아요는 책이 아니라 글 하나를 축으로 도는 유일한 경로다.
+ *
+ * <p><b>남이 걸어 둔 글({@link sharedByOthers})까지 뒤진다</b>: 책축 목록에는 내 여백에 없는 글이 실리고,
+ * 낯선 사람의 글에 좋아요를 누르는 것이 이번 개방의 본체다. 여기서 안 찾으면 목이 404를 주어
+ * <b>서버가 200을 주는 경로를 목 모드에서 실패로 보게 된다</b>(2026-08-22 실측 — 목이 실물보다 좁았다).
+ */
+const findMarginEntry = (id: number): MarginEntry | SharedMarginEntry | null => {
   for (const entries of Object.values(marginEntries)) {
+    const found = entries.find((e) => e.id === id);
+    if (found !== undefined) return found;
+  }
+  for (const entries of Object.values(sharedByOthers)) {
     const found = entries.find((e) => e.id === id);
     if (found !== undefined) return found;
   }
@@ -425,6 +443,82 @@ const findMarginEntry = (id: number): MarginEntry | null => {
 
 /** 그 책 여백의 최신 글 시각 — 격자 발광의 재료다. 글을 남기면 이 값이 따라 움직인다. */
 const lastStoryAt = (bookId: number): string | null => marginEntries[bookId]?.[0]?.createdAt ?? null;
+
+/**
+ * <b>남</b>이 함께 걸어 둔 글 — 책축(isbn13) 목록의 절반. 나머지 절반은 내 여백에서 파생하므로
+ * ({@link sharedEntriesOf}) 칩을 켜고 끄면 이 목록이 <b>실제로</b> 길어지고 짧아진다.
+ *
+ * <p>목이 남의 글을 따로 드는 이유: 내 여백만으로 채우면 「작성자 줄」이 전부 나라서, 여러 사람의 글이
+ * 섞이는 이 화면의 핵심이 목 모드에서 영영 안 보인다.
+ */
+const sharedByOthers: Record<string, SharedMarginEntry[]> = {
+  '9788996991342': [
+    {
+      id: 941,
+      text: '과제의 분리를 알고 나서 인간관계가 절반으로 가벼워졌다.',
+      quote: '타인의 과제에는 개입하지 않는다.',
+      bgCode: 'forest',
+      createdAt: isoTime(6),
+      likeCount: 5,
+      liked: false,
+      authorLoginId: 'nabi',
+      authorNickname: '나비독서',
+    },
+    {
+      id: 942,
+      text: '두 번째로 읽으니 청년이 아니라 철학자 쪽이 이해된다.',
+      quote: null,
+      bgCode: 'night',
+      createdAt: isoTime(52),
+      likeCount: 0,
+      liked: false,
+      authorLoginId: 'underline',
+      authorNickname: '밑줄러',
+    },
+  ],
+};
+
+/** 경로 변수 isbn 정규화 — 서버가 `Isbn.normalize`로 한 번 더 거르는 것과 같은 자리(하이픈 방어). */
+const normalizeIsbn = (raw: string): string => raw.replace(/[\s-]/g, '');
+
+/**
+ * 그 isbn에 <b>함께 걸린</b> 글 전부 — 내 여백에서 파생한 것 + 남의 픽스처, 최신순.
+ *
+ * <p>서버 술어(책 PUBLIC ∧ shared ∧ 차단 아님 ∧ ADMIN 아님 ∧ 핸들 있음) 중 목이 흉내 내는 것은
+ * <b>shared와 책 공개 여부</b>뿐이다 — 나머지는 목 픽스처에 그런 사용자가 없어 재현할 대상이 없다.
+ */
+function sharedEntriesOf(isbn: string): SharedMarginEntry[] {
+  const mine = books.find((b) => b.isbn13 === isbn) ?? null;
+  const fromMe: SharedMarginEntry[] =
+    mine === null || !mine.isPublic
+      ? []
+      : (marginEntries[mine.id] ?? [])
+          .filter((e) => e.shared === true)
+          .map((e) => ({
+            id: e.id,
+            text: e.text,
+            quote: e.quote,
+            bgCode: e.bgCode,
+            createdAt: e.createdAt,
+            likeCount: e.likeCount,
+            liked: e.liked,
+            authorLoginId: MY_LOGIN_ID,
+            authorNickname: myNickname,
+          }));
+  return [...fromMe, ...(sharedByOthers[isbn] ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+/** 「함께 걸기」 토글 — 내 여백의 글만 찾는다(남의 글은 404, 서버의 IDOR 계약 그대로). */
+function setShared(id: number, shared: boolean): { shared: boolean } {
+  for (const entries of Object.values(marginEntries)) {
+    const found = entries.find((e) => e.id === id);
+    if (found !== undefined) {
+      found.shared = shared;
+      return { shared };
+    }
+  }
+  throw new ApiError(404, '글을 찾을 수 없습니다');
+}
 
 /**
  * 그 사람의 책방 책 — **여백 시각은 본인·팔로워에게만** 실린다(서버 프라이버시 게이트를 그대로 흉내낸다).
@@ -749,7 +843,15 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
   // 픽스처 3권을 제목·저자로 필터한다 — 결과 있는 화면을 보려면 '미움'·'역행' 같은 조각을 넣는다.
   ['GET', /^\/api\/books\/search$/, ({ query }) => {
     const q = String(query.q ?? '').trim();
-    return { results: q === '' ? [] : searchRows.filter((r) => r.title.includes(q) || (r.author ?? '').includes(q)) };
+    const results = q === '' ? [] : searchRows.filter((r) => r.title.includes(q) || (r.author ?? '').includes(q));
+    // 0인 책은 **키 자체를 안 준다** — 화면이 0 배지를 안 그리는 근거가 응답에 그대로 있어야 한다.
+    const marginCounts: Record<string, number> = {};
+    for (const row of results) {
+      if (row.isbn13 === null) continue;
+      const count = sharedEntriesOf(row.isbn13).length;
+      if (count > 0) marginCounts[row.isbn13] = count;
+    }
+    return { results, marginCounts };
   }],
   // 추천 — 서버가 제목·근거를 문장으로 만들어 주는 계약 그대로. 콜드스타트(title: null)를 보려면
   // 아래 목록을 비우면 된다 — 그러면 화면이 카드를 아예 안 그리는지 눈으로 확인할 수 있다.
@@ -942,6 +1044,28 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
       entries: user.self || following ? [...(marginEntries[bookId] ?? [])] : [],
     };
   }],
+  /*
+   * 책축 — 사람 좌표 없이 isbn13 하나. 「모두」 탭·검색 배지가 이 문을 지난다.
+   * 라벨은 서버와 같은 우선순위다: 내 책 → (목에선) 검색 픽스처 → 둘 다 없으면 404.
+   */
+  ['GET', /^\/api\/stories\/book\/([^/]+)$/, ({ param }): BookMarginAllResponse => {
+    const isbn = normalizeIsbn(param);
+    const mine = books.find((b) => b.isbn13 === isbn) ?? null;
+    const entries = sharedEntriesOf(isbn);
+    const label = mine ?? searchRows.find((r) => r.isbn13 === isbn) ?? null;
+    // 그릴 헤더가 없으면 404 — 서버와 같다(권한 실패는 아니지만 화면 입장에선 구분할 이유가 없다).
+    if (label === null) throw new ApiError(404, '책을 찾을 수 없습니다');
+    return {
+      book: { isbn13: isbn, title: label.title, author: label.author, coverUrl: label.coverUrl },
+      myBookId: mine?.id ?? null,
+      totalCount: entries.length,
+      entries,
+    };
+  }],
+  // 「함께 걸기」 — 목도 픽스처를 실제로 바꾼다(끄면 책축 목록·배지에서 그 자리에서 빠지는 것을 본다).
+  // 「함께 걸기」는 **내 글만** — 남의 글은 서버가 404(IDOR)라 목도 내 여백에서만 찾는다.
+  ['POST', /^\/api\/stories\/(\d+)\/share$/, ({ id }) => setShared(id, true)],
+  ['DELETE', /^\/api\/stories\/(\d+)\/share$/, ({ id }) => setShared(id, false)],
   ['POST', /^\/api\/stories$/, ({ body }) => {
     const bookId = Number(body.bookId);
     // 쓰는 것은 언제나 내 책이다 — 내 서재 책(홈·서재 문)과 내 책방 책(격자)이 둘 다 여기로 온다.
@@ -954,6 +1078,7 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
       createdAt: new Date().toISOString(),
       likeCount: 0,
       liked: false,
+      shared: body.shared === true,
     };
     // 맨 앞 = 최신(서버가 최신순으로 준다). 이 한 줄이 곧 격자 발광 갱신이다(`lastStoryAt`이 여기서 파생).
     marginEntries[bookId] = [entry, ...(marginEntries[bookId] ?? [])];
@@ -1013,13 +1138,28 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
 function marginBookOf(bookId: number, self: boolean): MarginResponse['book'] | null {
   const social = profileBooks.find((b) => b.id === bookId);
   if (social !== undefined) {
-    return { id: social.id, title: social.title, author: social.author, coverUrl: social.coverUrl, isPublic: true };
+    // 남의 책엔 isbn을 안 싣는다 — 남의 여백에서 「모두」 탭을 여는 것은 진입점 확장이라 v1 밖이다.
+    return {
+      id: social.id,
+      title: social.title,
+      author: social.author,
+      coverUrl: social.coverUrl,
+      isPublic: true,
+      isbn13: null,
+    };
   }
   if (!self) return null;
   const mine = books.find((b) => b.id === bookId);
   return mine === undefined
     ? null
-    : { id: mine.id, title: mine.title, author: mine.author, coverUrl: mine.coverUrl, isPublic: mine.isPublic };
+    : {
+        id: mine.id,
+        title: mine.title,
+        author: mine.author,
+        coverUrl: mine.coverUrl,
+        isPublic: mine.isPublic,
+        isbn13: mine.isbn13,
+      };
 }
 
 function mustFindBook(id: number): MyBookSummary {
