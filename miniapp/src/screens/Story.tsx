@@ -313,7 +313,6 @@ export function BookMargin({
             onToggleLike={likes.toggleLike}
             onShowLikers={likes.showLikers}
             onOpenProfile={onOpenProfile}
-            onCompose={() => onCompose(margin.book)}
             tabs={tabs}
             expanded={expanded}
             onToggleExpand={toggleExpand}
@@ -568,7 +567,6 @@ export function BookMarginAllView({
   onToggleLike,
   onShowLikers,
   onOpenProfile,
-  onCompose,
   tabs,
   expanded,
   onToggleExpand,
@@ -582,12 +580,6 @@ export function BookMarginAllView({
   onToggleLike: (entry: Likeable) => void;
   onShowLikers?: (entry: Likeable) => void;
   onOpenProfile: (loginId: string) => void;
-  /**
-   * 글쓰기 손잡이 — 있어야 게시판 머리 우상단에 버튼이 선다. 검색으로 들어온 낯선 책에는 안 넘긴다:
-   * 이 화면의 응답({@link BookMarginAllResponse})엔 책의 공개 여부가 없어, 억지로 합성해 넘기면 작성
-   * 화면의 가시성 고지가 비공개 책에서 「모두에게 보여요」라고 거짓말한다.
-   */
-  onCompose?: () => void;
   /** 「내가 쓴 여백 / 모두의 여백」 탭 줄 — 내 책일 때만 셸이 넘긴다. */
   tabs?: ReactNode;
   expanded?: ReadonlySet<number>;
@@ -617,7 +609,11 @@ export function BookMarginAllView({
 
       <ErrorMessage message={error} />
 
-      <MarginBoard count={totalCount} onCompose={onCompose}>
+      {/* 글쓰기 손잡이를 <b>아예 안 준다</b> — 「모두의 여백」은 조회 전용이다(2026-08-22 사용자 결정).
+          여러 사람의 글이 섞인 목록에 글쓰기를 두면 「그 목록에 바로 쓴다」로 읽히는데, 실제로는 내 여백에
+          남고 「올리기」를 켜야 여기 실린다. 문이 둘이면 그 차이를 화면이 설명할 자리가 없다.
+          프롭 자체를 없앤 것이 게이트다 — 조건으로 거르면 다음 사람이 조건만 지우고 되살릴 수 있다. */}
+      <MarginBoard count={totalCount}>
         {entries.length === 0 ? (
           <Text
             typography="st12"
