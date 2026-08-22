@@ -274,16 +274,8 @@ export function MarginBoxView({
           </Text>
         ) : (
           entries.slice(0, MARGIN_PREVIEW_COUNT).map((e) => (
-            <MarginCard
-              key={e.id}
-              entry={e}
-              now={now}
-              self={false}
-              busy={false}
-              confirming={false}
-              onConfirmDelete={() => {}}
-              onDelete={() => {}}
-            />
+            // 손잡이를 하나도 안 넘긴다 — 미리보기는 읽기 전용이고, 출구는 위의 「전체 보기」다.
+            <MarginCard key={e.id} entry={e} now={now} />
           ))
         ))}
     </div>

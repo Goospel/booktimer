@@ -476,6 +476,37 @@ const sharedByOthers: Record<string, SharedMarginEntry[]> = {
       authorNickname: '밑줄러',
     },
   ],
+  /**
+   * <b>내 서재에 없는</b> 책(『불편한 편의점』 — `searchRows`에만 있다). 검색 배지로 들어가면
+   * `myBookId === null`인 화면이 서는 자리다: 탭줄도 글쓰기도 없고 「담기」 안내만 남는다.
+   *
+   * <p>이 항목이 없으면 목이 그 상태를 <b>만들 수 없어</b> 화면을 눈으로 확인할 길이 사라진다 —
+   * 목이 서버가 낼 수 있는 상태를 못 내는 것은 이 레포가 두 번 만난 함정이다(T-175).
+   */
+  '9791168340084': [
+    {
+      id: 951,
+      text: '편의점이라는 공간이 이렇게 다정할 일인가 싶었다. 밤에 혼자 읽다가 괜히 울컥했는데, 울 만한 장면이 아니어서 더 오래 남았다.',
+      quote: null,
+      bgCode: 'sunset',
+      createdAt: isoTime(30),
+      likeCount: 8,
+      liked: false,
+      authorLoginId: 'nabi',
+      authorNickname: '나비독서',
+    },
+    {
+      id: 952,
+      text: '짧게 읽고 오래 생각한 책.',
+      quote: '사람은 사람으로 인해 무너지고, 사람으로 인해 다시 선다.',
+      bgCode: 'sea',
+      createdAt: isoTime(120),
+      likeCount: 2,
+      liked: false,
+      authorLoginId: 'underline',
+      authorNickname: '밑줄러',
+    },
+  ],
 };
 
 /** 경로 변수 isbn 정규화 — 서버가 `Isbn.normalize`로 한 번 더 거르는 것과 같은 자리(하이픈 방어). */
