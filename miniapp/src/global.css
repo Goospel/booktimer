@@ -484,17 +484,23 @@ body.reading-lamp .lamp-page {
   box-shadow: 0 0 54px 16px rgba(255, 220, 160, 0.2);
 }
 
-/* 넘어가는 순간만 부드럽게 — 그 뒤론 아무것도 안 움직인다. */
-body.reading-lamp,
-body.reading-lamp main,
-body.reading-lamp .lamp-page {
+/*
+ * 넘어가는 순간만 부드럽게 — 그 뒤론 아무것도 안 움직인다.
+ *
+ * ⚠️ **셀렉터에 `.reading-lamp`를 넣지 않는다.** 넣으면 켜질 때만 부드럽고 꺼질 때는 뚝 밝아진다 —
+ * 클래스가 걷힐 때 `transition` 선언 자체도 같이 사라져, 낮으로 돌아가는 값이 보간 없이 점프하기 때문이다.
+ * 전환 규칙은 **켜진 상태와 꺼진 상태가 둘 다 보는 자리**에 살아야 한다(사용자 보고 2026-08-22).
+ */
+body,
+body main,
+body .lamp-page {
   transition: background-color 0.45s ease, color 0.45s ease, box-shadow 0.45s ease;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body.reading-lamp,
-  body.reading-lamp main,
-  body.reading-lamp .lamp-page {
+  body,
+  body main,
+  body .lamp-page {
     transition: none;
   }
 }
