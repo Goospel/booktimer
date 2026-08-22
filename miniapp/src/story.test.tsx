@@ -9,6 +9,7 @@ import {
   MarginCard,
   MarginView,
   StoryComposer,
+  TIMER_STOPPED_NOTICE,
   createStoryMessage,
   hasFreshStory,
   visibilityNotice,
@@ -61,6 +62,7 @@ function view(
     error?: string | null;
     onToggleLike?: (e: MarginEntry) => void;
     onShowLikers?: (e: MarginEntry) => void;
+    timerStopped?: boolean;
   } = {},
 ) {
   return render(
@@ -77,6 +79,7 @@ function view(
       onToggleLike={extra.onToggleLike ?? (() => {})}
       onShowLikers={extra.onShowLikers ?? (() => {})}
       onBack={() => {}}
+      timerStopped={extra.timerStopped ?? false}
     />,
   );
 }
@@ -485,5 +488,41 @@ describe('좋아요 명단 시트 (LikersSheet)', () => {
 
   it('실패하면 그 자리에서 다시 받는 길을 준다 — 빈 시트가 막다른 길이 되지 않게', () => {
     expect(sheet(null, '불러오지 못했어요')).toContain('다시');
+  });
+});
+
+/**
+ * 여백에 들어오며 측정이 끝났다는 고지 — 「여백은 독서가 아니다」(사용자 결정 2026-08-22)라
+ * <b>진입이 곧 종료</b>다. 말없이 끝나면 사용자에겐 시간이 사라진 것으로 읽히므로, 끝쳤으면 그 자리에서 밝힌다.
+ *
+ * <p>읽기({@link MarginView})·쓰기({@link StoryComposer}) <b>둘 다</b> 진입점이라 각자 고지를 진다 —
+ * 홈 문은 여백 상세를 거치지 않고 작성으로 직행하므로, 한쪽에만 달면 그 경로가 조용히 비어 있다.
+ */
+describe('측정 종료 고지 (timerStopped)', () => {
+  const composer = (timerStopped: boolean) =>
+    render(
+      <StoryComposer
+        book={{ id: 7, title: '데미안', author: '헤르만 헤세', coverUrl: null, isPublic: true }}
+        onDone={() => {}}
+        onCancel={() => {}}
+        onError={() => {}}
+        timerStopped={timerStopped}
+      />,
+    );
+
+  it('측정을 끝내고 들어온 여백에는 고지가 뜨다', () => {
+    expect(view(margin(), { timerStopped: true })).toContain(TIMER_STOPPED_NOTICE);
+  });
+
+  it('측정 중이 아니었으면 고지가 없다 — 늘 뜨면 아무 뜻도 없는 문구가 된다', () => {
+    expect(view(margin())).not.toContain(TIMER_STOPPED_NOTICE);
+  });
+
+  it('작성 화면도 같은 고지를 진다 — 홈 문은 여백 상세를 거치지 않고 여기로 직행한다', () => {
+    expect(composer(true)).toContain(TIMER_STOPPED_NOTICE);
+  });
+
+  it('작성 화면도 측정 중이 아니었으면 고지가 없다', () => {
+    expect(composer(false)).not.toContain(TIMER_STOPPED_NOTICE);
   });
 });

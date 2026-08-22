@@ -100,6 +100,24 @@ export function createStoryMessage(error: Error): string {
 }
 
 /**
+ * 여백에 들어오면서 측정을 끝냈다는 고지 — 「여백은 독서가 아니다」(사용자 결정 2026-08-22)라
+ * <b>진입이 곧 종료</b>다({@link App}의 `openMargin`이 문에서 끝낸다).
+ *
+ * <p>말없이 끝내면 사용자에겐 시간이 사라진 것으로 읽힐다. 홈으로 돌아가면 탭바 원이 이미
+ * 「측정 시작」으로 돌아가 있어 <b>상태</b>는 보이지만, <b>왜</b> 끝났는지는 이 자리에서만 말할 수 있다.
+ */
+export const TIMER_STOPPED_NOTICE = '여백을 열면서 측정을 마쳤어요';
+
+/** 그 고지 한 줄 — 읽기·쓰기 두 화면이 같은 것을 쓴다(문구가 갈리면 같은 일이 다르게 읽힌다). */
+export function TimerStoppedNotice() {
+  return (
+    <Text typography="st11" color="grey800" style={{ display: 'block', marginBottom: 14, wordBreak: 'keep-all' }}>
+      {TIMER_STOPPED_NOTICE}
+    </Text>
+  );
+}
+
+/**
  * 책 하나의 여백 화면 — 마운트 시 한 번 받아 그린다.
  *
  * <p>진입로가 둘이다(책방 격자 탭 · 홈 소식 점프). 어느 쪽으로 와도 응답 하나로 화면이 완성되게
@@ -112,6 +130,7 @@ export function BookMargin({
   onCompose,
   onOpenProfile,
   onError,
+  timerStopped = false,
 }: {
   loginId: string;
   bookId: number;
@@ -121,6 +140,8 @@ export function BookMargin({
   /** 좋아요 명단에서 그 사람을 눌렀을 때 — 그의 책방으로 간다(전체 화면 전이는 셸이 든다). */
   onOpenProfile: (loginId: string) => void;
   onError: (error: Error) => void;
+  /** 여기 들어오느라 측정을 끝냈는가 — {@link TIMER_STOPPED_NOTICE}를 여는 스위치다. */
+  timerStopped?: boolean;
 }) {
   const [margin, setMargin] = useState<MarginResponse | null>(null);
   /** 낙관적 좋아요 — 서버 왕복을 기다리면 하트가 늦게 켜져 「안 눌렸다」로 읽힌다. */
@@ -215,6 +236,7 @@ export function BookMargin({
   if (margin === null) {
     return (
       <Screen title="여백" onBack={onBack}>
+        {timerStopped && <TimerStoppedNotice />}
         {/* 못 받았을 때 나갈 길만 있으면 실패가 곧 막다른 길이다 — 그 자리에서 다시 받을 길도 함께 준다. */}
         <ErrorMessage message={error} onRetry={load} />
         {error === null && <Loading />}
@@ -240,6 +262,7 @@ export function BookMargin({
         onToggleLike={toggleLike}
         onShowLikers={showLikers}
         onBack={onBack}
+        timerStopped={timerStopped}
       />
       {likersOf !== null && (
         <LikersSheet
@@ -309,6 +332,7 @@ export function MarginView({
   onToggleLike,
   onShowLikers,
   onBack,
+  timerStopped = false,
 }: {
   loginId: string;
   margin: MarginResponse;
@@ -324,11 +348,14 @@ export function MarginView({
   onToggleLike: (entry: MarginEntry) => void;
   onShowLikers: (entry: MarginEntry) => void;
   onBack: () => void;
+  /** 여기 들어오느라 측정을 끝냈는가 — {@link TIMER_STOPPED_NOTICE}를 여는 스위치다. */
+  timerStopped?: boolean;
 }) {
   const { book, ownerNickname, self, following, entries } = margin;
 
   return (
     <Screen title="여백" onBack={onBack}>
+      {timerStopped && <TimerStoppedNotice />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <BookCover url={book.coverUrl} title={book.title} width={48} />
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -541,11 +568,14 @@ export function StoryComposer({
   onDone,
   onCancel,
   onError,
+  timerStopped = false,
 }: {
   book: MarginBook;
   onDone: () => void;
   onCancel: () => void;
   onError: (error: Error) => void;
+  /** 여기 들어오느라 측정을 끝냈는가 — 홈·서재 여백 문은 상세를 거치지 않고 여기로 직행한다. */
+  timerStopped?: boolean;
 }) {
   const [text, setText] = useState('');
   const [quote, setQuote] = useState('');
@@ -571,6 +601,7 @@ export function StoryComposer({
 
   return (
     <Screen title="여백에 글 남기기">
+      {timerStopped && <TimerStoppedNotice />}
       {/* 가시성 고지는 placeholder가 아니라 캡션이다 — placeholder는 첫 글자에 사라지는데, 정작
           "이게 누구에게 보이나"가 필요한 순간은 쓰는 도중이다. */}
       <Text typography="st12" color="grey600" style={{ display: 'block', marginBottom: 12, wordBreak: 'keep-all' }}>

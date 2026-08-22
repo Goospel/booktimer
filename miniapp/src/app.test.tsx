@@ -793,3 +793,27 @@ describe('하단 탭바 — 측정 중 잠금', () => {
     expect(open).not.toContain('aria-disabled="true"');
   });
 });
+
+/**
+ * 여백을 여는 문은 하나다 — 측정 중이면 먼저 끝내야 하므로(「여백은 독서가 아니다」,
+ * 사용자 결정 2026-08-22), 진입점 하나가 게이트를 우회하면 규칙이 <b>조용히</b> 샘다.
+ * 경로가 셋(홈 여백 문·소식 피드·남의 책방)이라 사람 눈으로는 하나 빠진 것을 못 잡는다.
+ *
+ * <p>계측은 소스 문자열이다 — 여는 것은 `setMargin({…})`(객체 리터럴)이고 닫는 것은
+ * `setMargin(null)`·`setMargin(closeCompose(…))`라, 정규식이 <b>여는 자리만</b> 갈라낸다. jsdom이 없어
+ * 클릭을 못 돌리는 하니스에서 이 규칙을 지킬 수 있는 유일한 자리다.
+ */
+describe('여백 진입 게이트', () => {
+  it('여백을 여는 자리는 openMargin 하나뿐이다 — 새 진입점이 게이트를 안 타면 측정이 여백에서 계속 돌다', () => {
+    // 주석을 먼저 걷는다 — 규칙을 설명하는 주석에 그 호출 모양이 예시로 적힐 수밖에 없어, 안 걷으면
+    // 설명이 곧 거짓 음성이 된다(같은 함정을 css 전환 규칙 계측에서 한 번 밟았다).
+    const src = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*/g, '');
+
+    const opens = [...src.matchAll(/setMargin\(\{/g)];
+
+    expect(opens).toHaveLength(1);
+    expect(opens[0].index).toBeGreaterThan(src.indexOf('const openMargin'));
+  });
+});
