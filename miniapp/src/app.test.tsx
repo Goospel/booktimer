@@ -683,6 +683,24 @@ describe('독서등 (lampOn)', () => {
   });
 
   /**
+   * 켤 때만 부드럽고 끌 때는 뚝 밝아지던 자리(사용자 보고 2026-08-22). 원인은 색이 아니라 <b>전환 규칙이
+   * 사는 곳</b>이었다 — 셀렉터에 `.reading-lamp`가 들어가면 클래스가 걷히는 순간 `transition` 선언까지
+   * 함께 사라져, 낮으로 되돌아가는 값이 보간 없이 즉시 점프한다(켤 때는 선언이 먼저 붙어 멀쩡하다).
+   *
+   * <p>그래서 전환은 <b>양쪽 상태가 다 보는 자리</b>(클래스 밖)에 산다. 육안으로는 「끌 때만」이라
+   * 리뷰에서 절반이 정상으로 보이는 종류의 회귀라 css 문자열로 못 박는다.
+   */
+  it('전환 규칙은 lamp 클래스 밖에 산다 — 클래스와 함께 사라지면 끌 때만 뚝 밝아진다', () => {
+    // 주석을 먼저 걷는다 — 셀렉터 앞 주석에는 중괄호가 없어 정규식이 통째로 빨아들인다(이 규칙을 설명하는 주석이 곧 거짓 음성이 된다).
+    const css = readFileSync(new URL('./global.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+
+    const rules = css.match(/[^{}]+lamp-page[^{}]*\{[^}]*transition[^}]*\}/g) ?? [];
+
+    expect(rules.length).toBeGreaterThan(0); // 평시 + prefers-reduced-motion
+    rules.forEach((rule) => expect(rule.split('{')[0]).not.toContain(LAMP_CLASS));
+  });
+
+  /**
    * 이 장치의 유일한 성립 조건 — 어두운 토큰을 `<main>`에만 얹으므로, 탭바가 그 <b>밖</b>에 서야
    * 측정을 끝내는 원이 어둠에 잠기지 않는다. 코치마크 스포트라이트가 층 순서로 성립하는 것과 같은
    * 수법이고(덮개가 탭바 아래), 여기선 <b>DOM 바깥</b>이 그 역할을 한다.
