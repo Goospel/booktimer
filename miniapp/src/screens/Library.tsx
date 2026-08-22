@@ -302,6 +302,7 @@ export function Library({
   onShelfChanged,
   onOpenMargin,
   onComposeMargin,
+  onOpenBookMargin,
 }: {
   /** 내 @아이디 — 없으면 서버가 여백 대상을 찾지 못하므로 여백 손잡이를 그리지 않는다(설계 결정 A). */
   myLoginId: string | null;
@@ -318,6 +319,8 @@ export function Library({
    * 충족해 변환이 없다(오히려 비공개 여부가 실려 작성 화면 캡션이 더 정확하다).
    */
   onComposeMargin: (book: MyBookSummary) => void;
+  /** 검색 행의 「여백 N」 배지 — 책축 화면은 탭 밖 전역 뷰라 셸(App)이 든다. */
+  onOpenBookMargin: (isbn13: string) => void;
 }) {
   /*
    * 첫 렌더의 출발점을 세션 캐시에서 집는다 — 탭을 오갈 때마다 화면이 통째로 `<Loading/>`이 되던 자리다.
@@ -403,7 +406,16 @@ export function Library({
   };
 
   if (mode === 'search') {
-    return <BookSearch busy={busy} error={error} onAdd={add} onFail={fail} onBack={() => setMode('shelf')} />;
+    return (
+      <BookSearch
+        busy={busy}
+        error={error}
+        onAdd={add}
+        onFail={fail}
+        onBack={() => setMode('shelf')}
+        onOpenBookMargin={onOpenBookMargin}
+      />
+    );
   }
 
   const rows = books?.filter((b) => b.status === tab) ?? [];
@@ -988,15 +1000,20 @@ export function BookSearch({
   onAdd,
   onFail,
   onBack,
+  onOpenBookMargin,
 }: {
   busy: boolean;
   error: string | null;
   onAdd: (row: SearchRow, status: BookStatus) => void;
   onFail: (error: Error) => void;
   onBack: () => void;
+  /** 검색 행의 「여백 N」 배지 — 낯선 책의 책축 여백으로 가는 유일한 문(2026-08-22). */
+  onOpenBookMargin: (isbn13: string) => void;
 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchRow[] | null>(null);
+  /** isbn13 → 함께 걸린 글 수. 서버가 페이지당 1쿼리로 세 준다(0인 책은 키 자체가 없다). */
+  const [marginCounts, setMarginCounts] = useState<Record<string, number>>({});
   const [searching, setSearching] = useState(false);
   /** 담을 곳을 고르는 중인 책 — 없으면 시트도 없다(진입 직후 화면을 덮지 않는다, T-183). */
   const [picking, setPicking] = useState<SearchRow | null>(null);
@@ -1023,7 +1040,10 @@ export function BookSearch({
   const submit = () => {
     setSearching(true);
     searchBooks(query.trim())
-      .then((page) => setResults(page.results))
+      .then((page) => {
+        setResults(page.results);
+        setMarginCounts(page.marginCounts ?? {}); // 옛 서버는 맵을 안 준다 — 그러면 배지가 하나도 안 뜬다
+      })
       .catch(onFail)
       .finally(() => setSearching(false));
   };
@@ -1060,6 +1080,8 @@ export function BookSearch({
           row={row}
           busy={busy}
           onPick={() => setPicking(row)}
+          marginCount={row.isbn13 === null ? undefined : marginCounts[row.isbn13]}
+          onOpenMargin={row.isbn13 === null ? undefined : () => onOpenBookMargin(row.isbn13 as string)}
         />
       ))}
 
@@ -1095,12 +1117,30 @@ export function SearchResultRow({
   row,
   busy,
   onPick,
+  marginCount,
+  onOpenMargin,
 }: {
   row: SearchRow;
   busy: boolean;
   onPick: () => void;
+  /**
+   * 이 책에 함께 걸린 글 수 — 「여백 N」 배지(2026-08-22 책축 개방). <b>0·`undefined`면 배지가 없다</b>:
+   * 서버가 0인 책은 키 자체를 안 주므로, 빈 상태를 숫자로 박제하지 않는 근거가 응답에 그대로 있다.
+   */
+  marginCount?: number;
+  /** 배지 손잡이 — 있으면 눌러서 「이 책의 여백」으로 간다(`onToggleLike` 관례). */
+  onOpenMargin?: () => void;
 }) {
-  return (
+  // 배지는 행 <b>바깥</b>의 형제다 — 버튼 안에 버튼을 넣으면 마크업이 깨지고, 담긴 책은 행이
+  // `disabled`라 안쪽에 있으면 눌리지도 않는다(담긴 책일수록 그 책의 여백을 보고 싶다).
+  const badge =
+    marginCount !== undefined && marginCount > 0 && onOpenMargin !== undefined ? (
+      <button type="button" aria-label={`이 책의 여백 ${marginCount}개 보기`} onClick={onOpenMargin} style={marginBadgeStyle}>
+        여백 {marginCount}
+      </button>
+    ) : null;
+
+  const main = (
     <button
       type="button"
       className={row.owned ? 'book-owned' : undefined}
@@ -1109,7 +1149,9 @@ export function SearchResultRow({
       style={{
         ...rowStyle,
         position: 'relative', // 접힌 모서리(`.book-owned::after`)가 이 박스를 기준으로 앉는다
-        marginTop: 8,
+        flex: 1,
+        minWidth: 0,
+        marginTop: badge === null ? 8 : 0,
         borderRadius: 12,
         // 담긴 책은 캔버스보다 한 톤 가라앉힌다 — 카드지(#FCFAF5)보다 어두워야 「지나간 칸」으로 읽힌다.
         background: row.owned ? '#EFE9DC' : 'var(--adaptiveGrey100, #FCFAF5)',
@@ -1146,7 +1188,30 @@ export function SearchResultRow({
       </div>
     </button>
   );
+
+  // 배지가 없으면 감싸지 않는다 — 대다수 행이 그 경우라, 없는 자리에 div를 남기지 않는다.
+  return badge === null ? (
+    main
+  ) : (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+      {main}
+      {badge}
+    </div>
+  );
 }
+
+/** 「여백 N」 배지 — 행과 같은 카드지 위에 서지만 테두리로 「누를 수 있는 다른 것」임을 말한다. */
+const marginBadgeStyle = {
+  flex: '0 0 auto',
+  padding: '8px 10px',
+  borderRadius: 10,
+  border: '1px solid var(--adaptiveGrey200, #E4DDD0)',
+  background: 'var(--adaptiveGrey100, #FCFAF5)',
+  color: 'var(--adaptiveBlue700, #4F6B4C)',
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: 'pointer',
+} as const;
 
 /**
  * 추천 카드 — 검색 버튼을 걷고 남은 자리를 채운다(2026-08-21). 사용자 지적:

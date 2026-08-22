@@ -20,6 +20,7 @@ import {
   closeCompose,
   flowStepsOnAbandon,
   lampOn,
+  marginScreen,
   flowTabChange,
   nextFlowStep,
   shouldRefresh,
@@ -76,6 +77,7 @@ function renderTab(tab: (typeof TABS)[number]['key'], overrides: Partial<Dashboa
         onSelectHomeBook={() => {}}
         onOpenMargin={() => {}}
         onComposeMargin={() => {}}
+        onOpenBookMargin={() => {}}
         onTimerChange={() => {}}
         onStartTimer={() => Promise.resolve()}
         onGraphChange={() => {}}
@@ -634,15 +636,51 @@ describe('작성 화면 닫기 (closeCompose)', () => {
   const book = { id: 7, title: '데미안', author: '헤르만 헤세', coverUrl: null, isPublic: true };
 
   it('작성 직행으로 열었으면(bookId=null) 전부 닫아 출발한 탭으로 돌아간다', () => {
-    expect(closeCompose({ loginId: 'goospel', bookId: null, composeBook: book })).toBeNull();
+    expect(closeCompose({ loginId: 'goospel', bookId: null, isbn13: null, composeBook: book })).toBeNull();
   });
 
   it('여백 상세에서 열었으면 그 상세만 남긴다 — 왔던 목록으로 돌아가는 게 맞다', () => {
-    expect(closeCompose({ loginId: 'goospel', bookId: 7, composeBook: book })).toEqual({
+    expect(closeCompose({ loginId: 'goospel', bookId: 7, isbn13: null, composeBook: book })).toEqual({
       loginId: 'goospel',
       bookId: 7,
+      isbn13: null,
       composeBook: null,
     });
+  });
+});
+
+/**
+ * 어느 여백 화면을 세울까 — 여백이 <b>두 좌표계</b>를 갖게 되면서(사람축 `loginId+bookId` ·
+ * 책축 `isbn13`) 셸의 분기가 셋이 됐다. 판정만 순수하게 빼 계측한다(`closeCompose` 관례).
+ *
+ * <p>순서가 곧 규칙이다: 작성이 가장 위, 그다음 사람축, 마지막이 책축. 사람축이 책축보다 앞서야
+ * 「내 여백」 탭에서 연 화면이 책축으로 미끄러지지 않는다.
+ */
+describe('여백 화면 판정 (marginScreen)', () => {
+  const book = { id: 7, title: '데미안', author: '헤르만 헤세', coverUrl: null, isPublic: true };
+
+  it('작성할 책이 있으면 무엇보다 작성 화면이다', () => {
+    expect(marginScreen({ loginId: 'goospel', bookId: 7, isbn13: '9791168340084', composeBook: book })).toBe(
+      'compose',
+    );
+  });
+
+  it('사람+책 좌표가 다 있으면 사람축 화면 — 책축 좌표를 함께 들고 있어도 그렇다(탭이 거기 산다)', () => {
+    expect(marginScreen({ loginId: 'goospel', bookId: 7, isbn13: '9791168340084', composeBook: null })).toBe(
+      'person',
+    );
+  });
+
+  it('isbn만 있으면 책축 화면 — 검색에서 낯선 책으로 들어온 자리다', () => {
+    expect(marginScreen({ loginId: null, bookId: null, isbn13: '9791168340084', composeBook: null })).toBe('book');
+  });
+
+  it('핸들 없이 책 id만 있으면 아무 화면도 아니다 — 사람축은 두 축이 다 있어야 열린다', () => {
+    expect(marginScreen({ loginId: null, bookId: 7, isbn13: null, composeBook: null })).toBeNull();
+  });
+
+  it('좌표가 하나도 없으면 아무 화면도 아니다 — 막다른 길 대신 탭으로 떨어진다', () => {
+    expect(marginScreen({ loginId: 'goospel', bookId: null, isbn13: null, composeBook: null })).toBeNull();
   });
 });
 
@@ -852,15 +890,23 @@ describe('여백 위의 탭바 (MarginShell)', () => {
   });
 
   /**
-   * 여백은 화면이 둘이다(상세 · 글 작성) — 하나만 껍데기를 입으면 그 화면에서만 탭바가 사라져
-   * 「여백에는 탭바가 있다」는 규칙이 절반만 맞는 상태가 된다 — 정적 렌더로는 분기를 몸 돌려볼 수 없어 소스로 센다.
+   * 여백은 화면이 <b>셋</b>이다(상세 · 글 작성 · 「이 책의 여백」) — 하나만 껍데기를 벗으면 그 화면에서만
+   * 탭바가 사라져 「여백에는 탭바가 있다」가 부분적으로만 맞는 상태가 된다. 정적 렌더로는 분기를
+   * 몸 돌려볼 수 없어 소스로 센다.
+   *
+   * <p>2026-08-22에 2 → 3이 됐다(책축 개방). <b>이 숫자를 늘릴 땐 새 분기가 실제로 셸을 입었는지
+   * 보고 늘린다</b> — 숫자만 맞추면 이 계측기는 아무것도 안 지킨다.
    */
-  it('여백 전체 화면 분기 둘이 모두 이 껍데기를 입는다', () => {
+  it('여백 전체 화면 분기 셋이 모두 이 껍데기를 입는다', () => {
     // 주석을 먼저 걷는다(T-203) — 규칙을 설명하는 주석에 그 태그가 예시로 적힐 수밖에 없다.
     const src = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\/\/.*/g, '');
 
-    expect(src.match(/<MarginShell/g)).toHaveLength(2);
+    expect(src.match(/<MarginShell/g)).toHaveLength(3);
+    // 셋의 정체를 함께 못 박는다 — 숫자만 맞고 엉뚱한 화면이 들어오면 위 단언은 통과한다.
+    for (const screen of ['<StoryComposer', '<BookMargin', '<BookMarginAll']) {
+      expect(src).toContain(screen);
+    }
   });
 });

@@ -22,7 +22,7 @@ import { LinkAccount } from './screens/LinkAccount';
 import { LoginBridge } from './screens/LoginBridge';
 import { Profile } from './screens/Profile';
 import { Settings } from './screens/Settings';
-import { BookMargin, StoryComposer } from './screens/Story';
+import { BookMargin, BookMarginAll, StoryComposer } from './screens/Story';
 import { showInterstitialAd, trackEvent } from './toss';
 import { ErrorMessage, Loading, Screen } from './ui';
 
@@ -292,7 +292,8 @@ type View = 'auth' | 'link' | 'loading' | 'main' | 'goal' | 'settings' | 'error'
  * 여기서 들면 열었던 탭이 그대로 뒤에 남는다(`goal`·`settings`와 같은 자리).
  */
 export interface MarginState {
-  loginId: string;
+  /** 사람축 좌표의 절반 — 책축(검색에서 낯선 책)으로 들어오면 `null`이다. */
+  loginId: string | null;
   /**
    * 작성 화면 **아래에 깔린** 여백 화면 — `null`이면 깔린 것이 없어, 작성을 닫으면 열었던 탭으로 곧장 돌아간다.
    *
@@ -300,6 +301,11 @@ export interface MarginState {
    * 출발한 탭이 아니라 <b>한 번도 요청한 적 없는 여백 상세</b>에 떨어졌다.
    */
   bookId: number | null;
+  /**
+   * 책축 좌표 — 사람 없이 <b>책 하나(isbn13)</b>로 서는 화면(2026-08-22 개방). 사람축 좌표와 함께
+   * 실릴 수 있다: 내 여백 화면의 「모두」 탭이 그 조합이고, 그때는 사람축이 이긴다({@link marginScreen}).
+   */
+  isbn13: string | null;
   composeBook: MarginBook | null;
   /**
    * 여기 들어오느라 측정을 끝냈는가 — 화면이 그 사실을 한 줄로 밝힌다({@link TIMER_STOPPED_NOTICE}).
@@ -315,6 +321,23 @@ export interface MarginState {
  */
 export function closeCompose(margin: MarginState): MarginState | null {
   return margin.bookId === null ? null : { ...margin, composeBook: null };
+}
+
+/** 여백이 설 수 있는 화면 — 작성 · 사람축(누구의 어느 책) · 책축(이 책의 여백). */
+export type MarginScreen = 'compose' | 'person' | 'book';
+
+/**
+ * 어느 여백 화면을 세울까 — 좌표계가 둘이 되면서 셸의 분기가 셋이 됐다. 배선은 렌더라 판정만
+ * 순수하게 빼 계측한다({@link closeCompose} 관례).
+ *
+ * <p><b>순서가 곧 규칙이다</b>: 작성이 가장 위, 그다음 사람축, 마지막이 책축. 사람축이 앞서야
+ * 「내 여백」 탭에서 연 화면이 책축으로 미끄러지지 않는다(둘 다 들고 있는 조합이 정상이다).
+ * 좌표가 모자라면 `null` — 막다른 길 대신 열었던 탭으로 떨어진다.
+ */
+export function marginScreen(margin: MarginState): MarginScreen | null {
+  if (margin.composeBook !== null) return 'compose';
+  if (margin.loginId !== null && margin.bookId !== null) return 'person';
+  return margin.isbn13 !== null ? 'book' : null;
 }
 
 /** 포커스 복귀 재조회의 최소 간격 — 미니앱은 앱 전환이 잦아 복귀마다 받으면 서버를 두들긴다. */
@@ -616,7 +639,9 @@ export function App() {
    * 작성 화면을 닫으면 `composeBook`만 비워 그 아래 여백 화면이 **새로 마운트**되고, 그 재조회가
    * 곧 "방금 남긴 글이 보인다"이다(에포크 같은 별도 갱신 표식이 필요 없다).
    */
-  if (margin !== null && margin.composeBook !== null) {
+  const screen = margin === null ? null : marginScreen(margin);
+
+  if (margin !== null && margin.composeBook !== null && screen === 'compose') {
     const close = () => setMargin(closeCompose(margin));
     return (
       <MarginShell tab={tab} onGo={leaveMargin} onStart={startFromMargin}>
@@ -632,8 +657,9 @@ export function App() {
   }
 
   // 작성도 아니고 깔린 화면도 없는 조합은 만들지 않는다 — 만약 생겨도 탭으로 떨어져 막다른 길이 안 된다.
-  if (margin !== null && margin.bookId !== null) {
+  if (margin !== null && margin.loginId !== null && margin.bookId !== null && screen === 'person') {
     const under = margin.bookId;
+    const who = margin.loginId;
     return (
       <MarginShell
         tab={tab}
@@ -641,12 +667,40 @@ export function App() {
         onStart={startFromMargin}
       >
         <BookMargin
-          loginId={margin.loginId}
+          loginId={who}
           bookId={under}
           timerStopped={margin.timerStopped === true}
           onBack={() => setMargin(null)}
           onCompose={(book) => openMargin({ ...margin, bookId: under, composeBook: book })}
           // 닫으면서 연다 — 뒤로 가면 출발한 탭으로 돌아간다(검색 시트와 같은 교체 경로, T-166).
+          onOpenProfile={(picked) => {
+            setMargin(null);
+            setShop(picked);
+          }}
+          onError={handleError}
+        />
+      </MarginShell>
+    );
+  }
+
+  /*
+   * 「이 책의 여백」 — 사람 좌표 없이 isbn13 하나로 서는 화면(검색 배지에서 들어온다).
+   * 사람축보다 **뒤에** 판정한다: 둘 다 들고 있으면 사람축이 이긴다(「내 여백」 탭이 거기 산다).
+   */
+  if (margin !== null && margin.isbn13 !== null && screen === 'book') {
+    return (
+      <MarginShell tab={tab} onGo={leaveMargin} onStart={startFromMargin}>
+        <BookMarginAll
+          isbn13={margin.isbn13}
+          timerStopped={margin.timerStopped === true}
+          onBack={() => setMargin(null)}
+          // 「내 여백」 탭 — 사람축 화면으로 갈아탄다(작성·삭제·토글이 사는 자리). 이미 여백 안이라
+          // 측정은 진작 끝났으므로 문을 다시 지나도 아무 일이 없다(멱등).
+          onOpenMine={(bookId) =>
+            dashboard.loginId !== null &&
+            openMargin({ ...margin, loginId: dashboard.loginId, bookId, composeBook: null })
+          }
+          // 닫으면서 연다 — 뒤로 가면 출발한 탭으로 돌아간다(사람축과 같은 교체 경로).
           onOpenProfile={(picked) => {
             setMargin(null);
             setShop(picked);
@@ -666,7 +720,7 @@ export function App() {
       <Profile
         loginId={shop}
         onBack={() => setShop(null)}
-        onOpenMargin={(bookId) => openMargin({ loginId: shop, bookId, composeBook: null })}
+        onOpenMargin={(bookId) => openMargin({ loginId: shop, bookId, isbn13: null, composeBook: null })}
         onError={handleError}
       />
     );
@@ -679,11 +733,14 @@ export function App() {
       dashboard={dashboard}
       homeBookId={homeBookId}
       onSelectHomeBook={setHomeBookId}
-      onOpenMargin={(loginId, bookId) => openMargin({ loginId, bookId, composeBook: null })}
+      onOpenMargin={(loginId, bookId) => openMargin({ loginId, bookId, isbn13: null, composeBook: null })}
+      // 책축 — 사람 좌표를 비운다. 내가 가진 책인지는 서버가 `myBookId`로 알려 주므로 클라가 안 따진다.
+      onOpenBookMargin={(isbn13) => openMargin({ loginId: null, bookId: null, isbn13, composeBook: null })}
       onComposeMargin={(book) =>
         // 문은 핸들이 있을 때만 그려지므로 여기서 loginId는 언제나 있다(`marginDoorBook`이 앞에서 판정).
         // `bookId: null` — 작성만 띄운다. 닫으면 여백 상세를 거치지 않고 여기(홈·서재)로 곧장 돌아온다.
-        dashboard.loginId !== null && openMargin({ loginId: dashboard.loginId, bookId: null, composeBook: book })
+        dashboard.loginId !== null &&
+        openMargin({ loginId: dashboard.loginId, bookId: null, isbn13: null, composeBook: book })
       }
       onTimerChange={applyTimer}
       onStartTimer={startTimer}
@@ -743,6 +800,7 @@ export function MainTabs({
   onSelectHomeBook,
   onOpenMargin,
   onComposeMargin,
+  onOpenBookMargin,
   onTimerChange,
   onStartTimer,
   onGraphChange,
@@ -763,6 +821,8 @@ export function MainTabs({
   onOpenMargin: (loginId: string, bookId: number) => void;
   /** 홈 여백 문 — 그 책의 작성 화면으로 직행한다. */
   onComposeMargin: (book: BookOption) => void;
+  /** 검색 행의 「여백 N」 배지 — 사람 좌표 없이 책 하나(isbn13)로 서는 화면을 연다. */
+  onOpenBookMargin: (isbn13: string) => void;
   onTimerChange: (timer: TimerState) => void;
   /** 측정 시작 — 구현은 App이 든다(여백 탭바와 같은 것을 쓴다). 실패는 여기서 스트립으로 말한다. */
   onStartTimer: () => Promise<void>;
@@ -976,6 +1036,7 @@ export function MainTabs({
             onShelfChanged={onShelfChanged}
             onOpenMargin={onOpenMargin}
             onComposeMargin={onComposeMargin}
+            onOpenBookMargin={onOpenBookMargin}
           />
         )}
         {tab === 'bookshop' && (
