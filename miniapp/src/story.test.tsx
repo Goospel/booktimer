@@ -914,27 +914,24 @@ describe('이 책의 여백 — 책축 목록 (M-3)', () => {
     expect(html).not.toContain('aria-label="이 글 관리"');
   });
 
-  /** R11 — 서재에 없는 책엔 글을 남길 수 없다. 손잡이(`onCompose`)가 없으면 버튼 자체가 안 선다. */
-  it('글쓰기 손잡이가 없으면 게시판 머리가 비어 있다 — 담기 전에는 남길 수 없다', () => {
-    const html = view(all());
+  /**
+   * R11 — 「모두의 여백」은 <b>읽기 전용</b>이다(2026-08-22 사용자 결정). 쓰기는 「내가 쓴 여백」 한 곳에만
+   * 산다: 여러 사람의 글이 섞인 목록에 글쓰기를 두면 <b>그 목록에 바로 쓰는 것</b>으로 읽히는데, 실제로는
+   * 내 여백에 남고 「올리기」를 켜야 여기 실린다. 문이 둘이면 그 차이를 화면이 설명할 자리가 없다.
+   *
+   * <p>가진 책이든 아니든 같다 — 이 화면엔 글쓰기 버튼이 서지 않는다.
+   */
+  it('가진 책이어도 글쓰기가 없다 — 모두의 여백은 조회 전용이다', () => {
+    const html = view(all({ myBookId: 42 }));
 
     expect(html).toContain('글 1'); // 게시판 머리는 그려졌다(부재 단언의 쌍)
     expect(html).not.toContain('글쓰기');
   });
 
-  it('손잡이를 넘기면 게시판 머리 우상단에 글쓰기가 선다 — 내 책의 「모두의 여백」 탭이 그 자리다', () => {
-    const html = render(
-      <BookMarginAllView
-        data={all({ myBookId: 42 })}
-        now={NOW}
-        error={null}
-        onBack={() => {}}
-        onToggleLike={() => {}}
-        onOpenProfile={() => {}}
-        onCompose={() => {}}
-      />,
-    );
+  it('안 가진 책에도 글쓰기가 없다 — 담기 안내만 남는다', () => {
+    const html = view(all());
 
-    expect(html).toContain('글쓰기');
+    expect(html).toContain('내 서재에 담으면'); // 안내는 그려졌다(부재 단언의 쌍)
+    expect(html).not.toContain('글쓰기');
   });
 });
