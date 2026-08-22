@@ -109,9 +109,25 @@ public class BookApiController {
                 .map(Book::getIsbn13).filter(Objects::nonNull).collect(Collectors.toSet());
         List<SearchRow> rows = result.results().stream()
                 .map(r -> SearchRow.from(r, myIsbns)).toList();
-        Map<String, FollowScopePopularity> pop = popularityService.countByIsbn(user,
-                result.results().stream().map(BookSearchResult::isbn13).toList());
-        return new SearchResponse(rows, toPopularityMap(pop));
+        List<String> resultIsbns = result.results().stream().map(BookSearchResult::isbn13).toList();
+        Map<String, FollowScopePopularity> pop = popularityService.countByIsbn(user, resultIsbns);
+        return new SearchResponse(rows, toPopularityMap(pop), marginCounts(resultIsbns));
+    }
+
+    /**
+     * 검색 행의 「여백 N」 배지 — 함께 걸린 글 수. <b>페이지당 1쿼리</b>(N+1 금지, {@code storyCounts} 관례).
+     *
+     * <p>글이 없는 isbn은 <b>키 자체가 없다</b>(group by가 행을 안 준다) — 화면이 0 배지를 그리지
+     * 않는 근거가 서버 응답에 그대로 있다. isbn null인 결과와 빈 목록은 선제 가드({@code in ()} 회피).
+     */
+    private Map<String, Long> marginCounts(List<String> isbns) {
+        List<String> keys = isbns.stream().filter(Objects::nonNull).distinct().toList();
+        if (keys.isEmpty()) {
+            return Map.of();
+        }
+        return storyRepository.sharedCountsByIsbn(keys).stream()
+                .collect(Collectors.toMap(StoryRepository.IsbnStoryCount::getIsbn13,
+                        StoryRepository.IsbnStoryCount::getCount));
     }
 
     /**
@@ -253,7 +269,12 @@ public class BookApiController {
                                 boolean coupangEnabled, boolean yes24Enabled, boolean kyoboEnabled,
                                 List<MyBookSummary> books, Map<String, Popularity> popularity) {}
 
-    public record SearchResponse(List<SearchRow> results, Map<String, Popularity> popularity) {}
+    /**
+     * @param marginCounts isbn13 → 함께 걸린 글 수. <b>0인 책은 키가 없다</b>(배지 미표시의 근거).
+     *                     {@code popularity}와 동형 — isbn 키 맵을 검색 응답에 얹는 선례를 그대로 따른다
+     */
+    public record SearchResponse(List<SearchRow> results, Map<String, Popularity> popularity,
+                                 Map<String, Long> marginCounts) {}
 
     /** 추천 응답 — 제목·근거는 서버가 문장으로 만들어 준다(화면은 전략을 모른다). */
     public record RecommendResponse(String title, String reason, List<SearchRow> results) {}

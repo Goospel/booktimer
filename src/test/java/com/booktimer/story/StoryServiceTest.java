@@ -100,7 +100,7 @@ class StoryServiceTest {
     void create_rateLimited_throws429() {
         when(rateLimitService.allow(RateLimitAction.STORY_CREATE, 1L)).thenReturn(false);
 
-        assertThatThrownBy(() -> service.create(me, "문장", 5L, null, null))
+        assertThatThrownBy(() -> service.create(me, "문장", 5L, null, null, false))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.TOO_MANY_REQUESTS));
         verify(storyRepository, never()).save(any());
@@ -111,7 +111,7 @@ class StoryServiceTest {
     void create_withoutBookId_throws400() {
         when(rateLimitService.allow(RateLimitAction.STORY_CREATE, 1L)).thenReturn(true);
 
-        assertThatThrownBy(() -> service.create(me, "문장", null, null, null))
+        assertThatThrownBy(() -> service.create(me, "문장", null, null, null, false))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.BAD_REQUEST));
         verify(storyRepository, never()).save(any());
@@ -123,7 +123,7 @@ class StoryServiceTest {
         when(rateLimitService.allow(RateLimitAction.STORY_CREATE, 1L)).thenReturn(true);
         when(bookRepository.findByIdAndUser(5L, me)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.create(me, "문장", 5L, null, null))
+        assertThatThrownBy(() -> service.create(me, "문장", 5L, null, null, false))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
     }
@@ -137,7 +137,7 @@ class StoryServiceTest {
         when(bookRepository.findByIdAndUser(5L, me)).thenReturn(Optional.of(privateBook));
         when(storyRepository.save(any(Story.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Story saved = service.create(me, "나만 보는 메모", 5L, null, null);
+        Story saved = service.create(me, "나만 보는 메모", 5L, null, null, false);
 
         assertThat(saved.getText()).isEqualTo("나만 보는 메모");
         assertThat(saved.getBook()).isSameAs(privateBook);
@@ -151,13 +151,28 @@ class StoryServiceTest {
         when(bookRepository.findByIdAndUser(5L, me)).thenReturn(Optional.of(mine));
         when(storyRepository.save(any(Story.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Story saved = service.create(me, "인상 깊은 문장", 5L, "night", "  새는 알에서 나오려고 투쟁한다.  ");
+        Story saved = service.create(me, "인상 깊은 문장", 5L, "night", "  새는 알에서 나오려고 투쟁한다.  ",
+                false);
 
         assertThat(saved.getText()).isEqualTo("인상 깊은 문장");
         assertThat(saved.getBook()).isSameAs(mine);
         assertThat(saved.getBgCode()).isEqualTo("night");
         // 인용은 그대로 흘려보내고 정규화(strip)는 도메인이 한다 — 서비스가 따로 손대지 않는다
         assertThat(saved.getQuote()).isEqualTo("새는 알에서 나오려고 투쟁한다.");
+        assertThat(saved.isShared()).isFalse();
+    }
+
+    @Test
+    @DisplayName("create: shared=true → 켜진 채 저장된다. 내 PRIVATE 책이어도 막지 않는다(읽기 시점 판정)")
+    void create_shared_savesWithFlagRegardlessOfVisibility() {
+        when(rateLimitService.allow(RateLimitAction.STORY_CREATE, 1L)).thenReturn(true);
+        Book privateBook = Book.register(me, "비공개", null, null, null, null, null, BookStatus.READING);
+        when(bookRepository.findByIdAndUser(5L, me)).thenReturn(Optional.of(privateBook));
+        when(storyRepository.save(any(Story.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Story saved = service.create(me, "미리 걸어 두는 글", 5L, null, null, true);
+
+        assertThat(saved.isShared()).isTrue();
     }
 
     // --- marginOf (책 하나의 글 목록) ---
@@ -746,4 +761,248 @@ class StoryServiceTest {
         return new UserSearchResult(loginId, "누른이", 0L, false, false);
     }
 
+    // ── 「함께 걸기」(shared) — 게이트 확장 (T-R4~R7) ──────────────────────────
+    // 불변식: 노출 = book.isPublic() AND (팔로워 OR shared). shared는 게이트를 여는 값이 아니라
+    // 좁히는 값이다 — 두 축을 OR로 이으면 비공개 메모가 낯선 사람에게 샌다.
+
+    private Story sharedStoryOf(User owner, Book book) {
+        Story story = storyWithId(10L, owner, "함께 건 글", NOW.minusSeconds(60), book);
+        story.markShared(true);
+        return story;
+    }
+
+    @Test
+    @DisplayName("like: 낯선 사람 + 함께 걸린 공개 글 → 200 (책축 목록의 미러 — 팔로우 없이도 눌린다)")
+    void like_strangerOnSharedPublicStory_saves() {
+        when(rateLimitService.allow(RateLimitAction.STORY_LIKE, 1L)).thenReturn(true);
+        User owner = userWithId(2L, "owner", "주인");
+        Story story = sharedStoryOf(owner, publicBookOf(owner, "남의 공개 책"));
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(story));
+        when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.of(owner));
+        when(storyLikeRepository.findByStoryAndUser(story, me)).thenReturn(Optional.empty());
+        when(storyLikeRepository.countByStory(story)).thenReturn(1L);
+
+        StoryService.LikeState state = service.like(me, 10L);
+
+        assertThat(state.liked()).isTrue();
+        verify(storyLikeRepository).save(any());
+    }
+
+    @Test
+    @DisplayName("like: 낯선 사람 + 함께 걸지 않은 공개 글 → 404 (shared는 좁히는 값이지 여는 값이 아니다)")
+    void like_strangerOnUnsharedStory_throws404() {
+        when(rateLimitService.allow(RateLimitAction.STORY_LIKE, 1L)).thenReturn(true);
+        User owner = userWithId(2L, "owner", "주인");
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(othersPublicStory(owner)));
+        when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.of(owner));
+        when(followService.isFollowing(me, owner)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.like(me, 10L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+        verify(storyLikeRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("like: 함께 걸었어도 책이 PRIVATE면 404 — 책 게이트가 상위 AND (핵심 누출 가드)")
+    void like_sharedStoryOnPrivateBook_throws404() {
+        when(rateLimitService.allow(RateLimitAction.STORY_LIKE, 1L)).thenReturn(true);
+        User owner = userWithId(2L, "owner", "주인");
+        Book hidden = Book.register(owner, "비공개 책", null, null, null, null, null, BookStatus.READING);
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(sharedStoryOf(owner, hidden)));
+        when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.of(owner));
+
+        assertThatThrownBy(() -> service.like(me, 10L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+        verify(storyLikeRepository, never()).save(any());
+    }
+
+    /** 회귀 — {@code assertVisible}의 마지막 게이트가 바뀌므로 팔로워 경로가 살아 있는지 못 박는다. */
+    @Test
+    @DisplayName("like: 팔로워 + 함께 걸지 않은 글은 여전히 200 (팔로우 축 회귀)")
+    void like_followerOnUnsharedStory_stillSaves() {
+        when(rateLimitService.allow(RateLimitAction.STORY_LIKE, 1L)).thenReturn(true);
+        User owner = userWithId(2L, "owner", "주인");
+        Story story = othersPublicStory(owner);
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(story));
+        when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.of(owner));
+        when(followService.isFollowing(me, owner)).thenReturn(true);
+        when(storyLikeRepository.findByStoryAndUser(story, me)).thenReturn(Optional.empty());
+        when(storyLikeRepository.countByStory(story)).thenReturn(2L);
+
+        assertThat(service.like(me, 10L).liked()).isTrue();
+        assertThat(story.isShared()).isFalse();
+        verify(storyLikeRepository).save(any());
+    }
+
+    @Test
+    @DisplayName("likers: 낯선 사람도 함께 걸린 공개 글의 명단을 연다 (목록·단건 미러 일치)")
+    void likers_strangerOnSharedStory_opens() {
+        User owner = userWithId(2L, "owner", "주인");
+        Story story = sharedStoryOf(owner, publicBookOf(owner, "남의 공개 책"));
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(story));
+        when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.of(owner));
+        when(storyLikeRepository.findByStoryOrderByCreatedAtDescIdDesc(story)).thenReturn(List.of());
+        when(rowAssembler.toRows(eq(me), anyList())).thenReturn(List.of());
+
+        assertThat(service.likers(me, 10L)).isEmpty();
+        verify(followService, never()).isFollowing(any(), any());
+    }
+
+    // --- setShared ---
+
+    @Test
+    @DisplayName("setShared: 없는 글·남의 글 → 404 (IDOR — 존재 비노출, delete와 같은 필터)")
+    void setShared_missingOrOthers_throws404() {
+        User other = userWithId(2L, "other", "남");
+        when(storyRepository.findById(99L)).thenReturn(Optional.empty());
+        when(storyRepository.findById(10L))
+                .thenReturn(Optional.of(othersPublicStory(other)));
+
+        assertThatThrownBy(() -> service.setShared(me, 99L, true))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+        assertThatThrownBy(() -> service.setShared(me, 10L, true))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("setShared: 켜기는 멱등 — 이미 켜진 글을 다시 켜도 true (재전송이 꺼 버리지 않는다)")
+    void setShared_on_isIdempotent() {
+        Story mine = storyWithId(10L, me, "내 글", NOW.minusSeconds(60), publicBookOf(me, "내 책"));
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(mine));
+
+        assertThat(service.setShared(me, 10L, true).shared()).isTrue();
+        assertThat(service.setShared(me, 10L, true).shared()).isTrue();
+        assertThat(mine.isShared()).isTrue();
+    }
+
+    @Test
+    @DisplayName("setShared: 끄면 shared=false — 내린 글은 다음 조회부터 책축에서 빠진다")
+    void setShared_off_turnsFalse() {
+        Story mine = sharedStoryOf(me, publicBookOf(me, "내 책"));
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(mine));
+
+        assertThat(service.setShared(me, 10L, false).shared()).isFalse();
+        assertThat(mine.isShared()).isFalse();
+    }
+
+    @Test
+    @DisplayName("setShared: 내 PRIVATE 책 글도 켤 수 있다 — 쓰기 시점엔 검사하지 않는다(공개하면 그때부터 보인다)")
+    void setShared_onPrivateOwnBook_allowed() {
+        Book privateBook = Book.register(me, "비공개", null, null, null, null, null, BookStatus.READING);
+        Story mine = storyWithId(10L, me, "나만 보는 메모", NOW.minusSeconds(60), privateBook);
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(mine));
+
+        assertThat(service.setShared(me, 10L, true).shared()).isTrue();
+    }
+
+    // --- bookMarginOf (책축 목록) ---
+
+    private static final String ISBN = "9791168340084";
+
+    private Book bookWithIsbn(User owner, String title, String isbn, boolean makePublic) {
+        Book book = Book.register(owner, title, "저자", isbn, "https://img/cover.jpg", null, null,
+                BookStatus.READING);
+        if (makePublic) {
+            book.makePublic();
+        }
+        return book;
+    }
+
+    @Test
+    @DisplayName("bookMarginOf: 하이픈 붙은 isbn도 정규화해 조회한다 (클라 방어)")
+    void bookMarginOf_normalizesIsbn() {
+        User author = userWithId(2L, "author", "글쓴이");
+        Story story = sharedStoryOf(author, bookWithIsbn(author, "이 책", ISBN, true));
+        when(storyRepository.sharedByIsbn(eq(ISBN), eq(1L), any(Pageable.class)))
+                .thenReturn(List.of(story));
+        when(storyRepository.countSharedByIsbn(ISBN, 1L)).thenReturn(1L);
+        when(bookRepository.findFirstByUserAndIsbn13(me, ISBN)).thenReturn(Optional.empty());
+        when(storyLikeRepository.countsByStoryIds(anyList())).thenReturn(List.of());
+        when(storyLikeRepository.likedStoryIds(anyList(), eq(me))).thenReturn(List.of());
+
+        BookMarginResponse response = service.bookMarginOf(me, "979-11-6834-008-4");
+
+        assertThat(response.book().isbn13()).isEqualTo(ISBN);
+        assertThat(response.book().title()).isEqualTo("이 책");
+    }
+
+    @Test
+    @DisplayName("bookMarginOf: 알맹이 없는 isbn → 404 (isbn 없는 책은 책축 자체가 없다)")
+    void bookMarginOf_blankIsbn_throws404() {
+        assertThatThrownBy(() -> service.bookMarginOf(me, " - "))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+        verify(storyRepository, never()).sharedByIsbn(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("bookMarginOf: 라벨은 내 책 우선 — myBookId가 채워지고 주인 이름은 어디에도 없다")
+    void bookMarginOf_prefersMyBookForLabel() {
+        User author = userWithId(2L, "author", "글쓴이");
+        Book myBook = bookWithIsbn(me, "내가 가진 판", ISBN, false);
+        ReflectionTestUtils.setField(myBook, "id", 42L);
+        when(bookRepository.findFirstByUserAndIsbn13(me, ISBN)).thenReturn(Optional.of(myBook));
+        when(storyRepository.sharedByIsbn(eq(ISBN), eq(1L), any(Pageable.class)))
+                .thenReturn(List.of(sharedStoryOf(author, bookWithIsbn(author, "남의 판", ISBN, true))));
+        when(storyRepository.countSharedByIsbn(ISBN, 1L)).thenReturn(1L);
+        when(storyLikeRepository.countsByStoryIds(anyList())).thenReturn(List.of());
+        when(storyLikeRepository.likedStoryIds(anyList(), eq(me))).thenReturn(List.of());
+
+        BookMarginResponse response = service.bookMarginOf(me, ISBN);
+
+        assertThat(response.myBookId()).isEqualTo(42L);
+        assertThat(response.book().title()).isEqualTo("내가 가진 판");
+    }
+
+    @Test
+    @DisplayName("bookMarginOf: 내 책이 없으면 첫 글의 책이 라벨 — myBookId는 null (담기 안내 분기)")
+    void bookMarginOf_fallsBackToFirstStoryBook() {
+        User author = userWithId(2L, "author", "글쓴이");
+        when(bookRepository.findFirstByUserAndIsbn13(me, ISBN)).thenReturn(Optional.empty());
+        when(storyRepository.sharedByIsbn(eq(ISBN), eq(1L), any(Pageable.class)))
+                .thenReturn(List.of(sharedStoryOf(author, bookWithIsbn(author, "남의 판", ISBN, true))));
+        when(storyRepository.countSharedByIsbn(ISBN, 1L)).thenReturn(1L);
+        when(storyLikeRepository.countsByStoryIds(anyList())).thenReturn(List.of());
+        when(storyLikeRepository.likedStoryIds(anyList(), eq(me))).thenReturn(List.of());
+
+        BookMarginResponse response = service.bookMarginOf(me, ISBN);
+
+        assertThat(response.myBookId()).isNull();
+        assertThat(response.book().title()).isEqualTo("남의 판");
+        assertThat(response.entries()).extracting(SharedMarginEntry::authorLoginId).containsExactly("author");
+        assertThat(response.entries()).extracting(SharedMarginEntry::authorNickname).containsExactly("글쓴이");
+    }
+
+    @Test
+    @DisplayName("bookMarginOf: 내 책도 없고 함께 걸린 글도 없으면 404 (그릴 헤더가 없다)")
+    void bookMarginOf_nothingToLabel_throws404() {
+        when(bookRepository.findFirstByUserAndIsbn13(me, ISBN)).thenReturn(Optional.empty());
+        when(storyRepository.sharedByIsbn(eq(ISBN), eq(1L), any(Pageable.class))).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.bookMarginOf(me, ISBN))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("bookMarginOf: totalCount는 상한과 무관한 진짜 값 + 목록은 100장 상한")
+    void bookMarginOf_totalCountIsUncapped() {
+        User author = userWithId(2L, "author", "글쓴이");
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        when(bookRepository.findFirstByUserAndIsbn13(me, ISBN)).thenReturn(Optional.empty());
+        when(storyRepository.sharedByIsbn(eq(ISBN), eq(1L), captor.capture()))
+                .thenReturn(List.of(sharedStoryOf(author, bookWithIsbn(author, "남의 판", ISBN, true))));
+        when(storyRepository.countSharedByIsbn(ISBN, 1L)).thenReturn(137L);
+        when(storyLikeRepository.countsByStoryIds(anyList())).thenReturn(List.of());
+        when(storyLikeRepository.likedStoryIds(anyList(), eq(me))).thenReturn(List.of());
+
+        BookMarginResponse response = service.bookMarginOf(me, ISBN);
+
+        assertThat(response.totalCount()).isEqualTo(137L);
+        assertThat(captor.getValue().getPageSize()).isEqualTo(100);
+    }
 }

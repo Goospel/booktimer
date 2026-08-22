@@ -28,6 +28,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -556,5 +557,159 @@ class StoryApiControllerTest {
                         .with(user("likers-self@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].loginId").value("likersself"));
+    }
+
+    // ── 「함께 걸기」 배선 (T-R9) ──
+    // 게이트 판정은 StoryServiceTest·StoryRepositoryTest가 전수로 잡는다. 여기서 재는 것은 배선 —
+    // 새 경로 3종이 default-deny·CSRF 안에 들어왔는가, 옛 클라의 요청이 그대로 통하는가.
+
+    private static final String SHARE_ISBN = "9791168340084";
+
+    private Book publicBookWithIsbn(User owner, String title, String isbn) {
+        Book book = Book.register(owner, title, "저자", isbn, null, null, null, BookStatus.READING);
+        book.makePublic();
+        return bookRepository.save(book);
+    }
+
+    @Test
+    @DisplayName("POST /api/stories shared 필드가 아예 없는 옛 요청도 200 → shared=false 저장 (기본 꺼짐)")
+    void create_withoutSharedField_savesUnshared() throws Exception {
+        User me = register("share-oldclient@booktimer.com", "shareoldclient", "작성자");
+        Book book = publicBookOf(me, "옛 클라의 책");
+
+        mockMvc.perform(post("/api/stories")
+                        .with(user("share-oldclient@booktimer.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"옛 클라가 남긴 글\",\"bookId\":" + book.getId() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shared").value(false));
+
+        assertThat(storyRepository.findAll()).allMatch(s -> !s.isShared());
+    }
+
+    /**
+     * 프리미티브 {@code boolean}으로 두면 이 요청이 <b>500으로 죽는다</b>(Jackson 3의
+     * {@code FAIL_ON_NULL_FOR_PRIMITIVES} 기본 켜짐). 래퍼 선택을 못 박는 계측기다.
+     */
+    @Test
+    @DisplayName("POST /api/stories shared:null을 명시한 요청도 200 → shared=false (프리미티브였다면 500)")
+    void create_withExplicitNullShared_savesUnshared() throws Exception {
+        User me = register("share-nullfield@booktimer.com", "sharenullfield", "작성자");
+        Book book = publicBookOf(me, "null을 보낸 책");
+
+        mockMvc.perform(post("/api/stories")
+                        .with(user("share-nullfield@booktimer.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"널을 보낸 글\",\"bookId\":" + book.getId()
+                                + ",\"shared\":null}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shared").value(false));
+    }
+
+    @Test
+    @DisplayName("POST /api/stories shared:true → 켜진 채 저장된다 (작성 화면의 「함께 걸기」)")
+    void create_withSharedTrue_savesShared() throws Exception {
+        User me = register("share-new@booktimer.com", "sharenew", "작성자");
+        Book book = publicBookWithIsbn(me, "함께 걸 책", SHARE_ISBN);
+
+        mockMvc.perform(post("/api/stories")
+                        .with(user("share-new@booktimer.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"함께 걸어 둔 글\",\"bookId\":" + book.getId()
+                                + ",\"shared\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shared").value(true));
+    }
+
+    @Test
+    @DisplayName("POST/DELETE /api/stories/{id}/share 미인증 → 302 (새 경로도 기본 잠김)")
+    void share_unauthenticated_redirectsToLogin() throws Exception {
+        mockMvc.perform(post("/api/stories/1/share").with(csrf()))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+        mockMvc.perform(delete("/api/stories/1/share").with(csrf()))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    @DisplayName("POST /api/stories/{id}/share CSRF 없으면 403")
+    void share_withoutCsrf_returns403() throws Exception {
+        User me = register("share-csrf@booktimer.com", "sharecsrf", "작성자");
+        Story story = storyOf(me, publicBookWithIsbn(me, "책", SHARE_ISBN), "내 글");
+
+        mockMvc.perform(post("/api/stories/" + story.getId() + "/share")
+                        .with(user("share-csrf@booktimer.com")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("POST → DELETE /api/stories/{id}/share 왕복 — 상태가 JSON으로 오간다")
+    void share_roundTrip_returnsState() throws Exception {
+        User me = register("share-toggle@booktimer.com", "sharetoggle", "작성자");
+        Story story = storyOf(me, publicBookWithIsbn(me, "책", SHARE_ISBN), "내 글");
+
+        mockMvc.perform(post("/api/stories/" + story.getId() + "/share")
+                        .with(user("share-toggle@booktimer.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shared").value(true));
+
+        mockMvc.perform(delete("/api/stories/" + story.getId() + "/share")
+                        .with(user("share-toggle@booktimer.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shared").value(false));
+    }
+
+    @Test
+    @DisplayName("POST /api/stories/{id}/share 남의 글 → 404 (IDOR — 존재 비노출)")
+    void share_othersStory_returns404() throws Exception {
+        User owner = register("share-owner@booktimer.com", "shareowner", "주인");
+        register("share-intruder@booktimer.com", "shareintruder", "침입자");
+        Story story = storyOf(owner, publicBookWithIsbn(owner, "남의 책", SHARE_ISBN), "남의 글");
+
+        mockMvc.perform(post("/api/stories/" + story.getId() + "/share")
+                        .with(user("share-intruder@booktimer.com")).with(csrf()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("GET /api/stories/book/{isbn} 미인증 → 302 (새 경로도 기본 잠김)")
+    void bookMargin_unauthenticated_redirectsToLogin() throws Exception {
+        mockMvc.perform(get("/api/stories/book/" + SHARE_ISBN))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    @DisplayName("GET /api/stories/book/{isbn} 낯선 사람에게도 함께 걸린 글이 실린다 — 작성자 줄과 함께")
+    void bookMargin_strangerSeesSharedStories() throws Exception {
+        User author = register("bookaxis-author@booktimer.com", "bookaxisauthor", "글쓴이");
+        register("bookaxis-stranger@booktimer.com", "bookaxisstranger", "낯선이");
+        Book book = publicBookWithIsbn(author, "함께 읽는 책", SHARE_ISBN);
+        Story shared = storyOf(author, book, "함께 건 글");
+        shared.markShared(true);
+        storyOf(author, book, "안 건 글");
+
+        mockMvc.perform(get("/api/stories/book/" + SHARE_ISBN)
+                        .with(user("bookaxis-stranger@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.book.isbn13").value(SHARE_ISBN))
+                .andExpect(jsonPath("$.book.title").value("함께 읽는 책"))
+                .andExpect(jsonPath("$.myBookId").doesNotExist())
+                .andExpect(jsonPath("$.totalCount").value(1))
+                .andExpect(jsonPath("$.entries.length()").value(1))
+                .andExpect(jsonPath("$.entries[0].text").value("함께 건 글"))
+                .andExpect(jsonPath("$.entries[0].authorLoginId").value("bookaxisauthor"))
+                .andExpect(jsonPath("$.entries[0].authorNickname").value("글쓴이"));
+    }
+
+    @Test
+    @DisplayName("GET /api/stories/book/{isbn} 함께 걸린 글도 내 책도 없으면 404")
+    void bookMargin_nothingToShow_returns404() throws Exception {
+        register("bookaxis-empty@booktimer.com", "bookaxisempty", "빈손");
+
+        mockMvc.perform(get("/api/stories/book/" + SHARE_ISBN)
+                        .with(user("bookaxis-empty@booktimer.com")))
+                .andExpect(status().isNotFound());
     }
 }

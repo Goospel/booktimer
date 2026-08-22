@@ -30,9 +30,19 @@ import java.util.Set;
  * 인용의 요건(내 글이 主·인용이 從)에서도 멀어진다. 그래서 인용만 있고 주석이 빈 글은 만들 수 없다.
  *
  * <p>책은 <b>본인 소유만</b> — 공개 여부는 묻지 않는다(2026-08-16 결정 2). 비공개 책의 여백은
- * 「나만 보는 메모」라서 쓰기를 막을 이유가 없다. 대신 <b>가시성은 언제나 읽기 시점에 책에서
- * 파생</b>한다 — 글에 자체 공개 필드가 없으므로 남에게 새지 않게 하는 책임은 전적으로 읽기
- * 게이트에 있다: {@code StoryService.marginOf}(소유자 아니면 PRIVATE 책은 404) ·
+ * 「나만 보는 메모」라서 쓰기를 막을 이유가 없다.
+ *
+ * <p><b>가시성 불변식</b>(2026-08-22 「함께 걸기」 개방으로 재정의): 가시성은 여전히 <b>읽기
+ * 시점</b>에 판정하며, <b>책 게이트가 상위</b>다. {@code shared}는 게이트를 <b>여는</b> 값이 아니라
+ * <b>좁히는</b> 값이다 — 노출 = {@code book.isPublic()} <b>AND</b> (팔로워 <b>OR</b> {@code shared}).
+ * {@code shared=true}여도 책이 PRIVATE면 아무에게도 안 보인다(쓰기 시점엔 아무것도 검사하지 않는다 —
+ * 비공개 책에서 켜 두는 것도 유효하고, 책이 공개되는 순간부터만 보인다).
+ * <b>두 축을 OR로 잇는 코드는 이 불변식 위반이다.</b>
+ *
+ * <p>이 판정이 사는 곳은 <b>정확히 두 곳</b>이고 서로 미러다: 단건 {@code StoryService.assertVisible}
+ * (좋아요·명단이 공유) · 목록 {@code StoryRepository.sharedByIsbn}(행마다 호출하면 N+1이라 쿼리가
+ * 같은 술어를 진다). 한쪽만 고치면 목록에 안 뜨는 글에 좋아요가 달리거나 그 반대가 된다.
+ * 팔로우 축의 읽기 게이트는 그대로다: {@code StoryService.marginOf}(소유자 아니면 PRIVATE 책은 404) ·
  * {@code StoryRepository.feedRecent}(쿼리가 PUBLIC만) · 프로필 격자(PUBLIC 책만 목록에 있음).
  */
 @Entity
@@ -78,6 +88,17 @@ public class Story extends BaseTimeEntity {
 
     @Column(name = "bg_code", length = 20)
     private String bgCode;
+
+    /**
+     * 「함께 걸기」 — 이 글을 <b>같은 책(isbn13)을 보는 누구에게나</b> 열지(팔로우 무관) 여부.
+     *
+     * <p><b>기본 꺼짐</b>이고 V77의 {@code default false}가 기존 글 전부에 그것을 보장한다(소급 노출 0 —
+     * 지금까지 쓴 사람들은 「팔로워에게 보여요」를 보고 썼다). 켜는 것은 언제나 명시적 행동이다.
+     *
+     * <p>이것만으로는 아무것도 열리지 않는다 — 클래스 javadoc의 불변식대로 <b>책 게이트가 상위</b>다.
+     */
+    @Column(nullable = false)
+    private boolean shared = false;
 
     protected Story() {
         // JPA
@@ -168,5 +189,18 @@ public class Story extends BaseTimeEntity {
 
     public String getBgCode() {
         return bgCode;
+    }
+
+    /** 「함께 걸림」인가 — 책축 목록·좋아요 게이트가 읽는 두 번째 통행증(책 게이트는 여전히 상위). */
+    public boolean isShared() {
+        return shared;
+    }
+
+    /**
+     * 「함께 걸기」를 켜거나 끈다. <b>책 공개 여부를 검사하지 않는다</b> — 비공개 책에서 미리 켜 두는
+     * 것도 유효하고, 그 글은 책이 공개되는 순간부터만 보인다(불변식은 읽기 시점 판정이다).
+     */
+    public void markShared(boolean shared) {
+        this.shared = shared;
     }
 }

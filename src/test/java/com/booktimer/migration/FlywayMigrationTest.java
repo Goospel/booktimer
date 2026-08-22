@@ -237,6 +237,33 @@ class FlywayMigrationTest {
                 .isEqualTo("NO");
     }
 
+    @Test
+    void v77_story_shared_defaults_to_false_in_db() {
+        // V77: 「함께 걸기」의 기본 꺼짐은 **DB가** 보장한다 — 앱을 거치지 않고 들어온 행(백필·수동 INSERT)도
+        // 꺼져 있어야 「소급 노출 0」이라는 약속이 성립한다. 엔티티의 `= false` 초기화를 되읽는 것으로는
+        // 이 층을 증명할 수 없으므로 스키마 기본값과 컬럼을 우회한 INSERT로 잰다.
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE UPPER(TABLE_NAME) = 'STORY' AND UPPER(COLUMN_NAME) = 'SHARED'
+                """, String.class))
+                .as("shared는 NOT NULL — 「모르는 상태」가 없어야 노출 판정이 3분기로 갈라지지 않는다")
+                .isEqualTo("NO");
+
+        User author = userRepository.saveAndFlush(userWithHandle("v77-author@example.com", "v77author"));
+        Book book = Book.register(author, "V77 검증 책", null, null, null, null, null, BookStatus.READING);
+        book.makePublic();
+        bookRepository.saveAndFlush(book);
+        jdbcTemplate.update("""
+                INSERT INTO story (user_id, book_id, text, created_at, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """, author.getId(), book.getId(), "shared를 안 적고 들어온 행");
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT shared FROM story WHERE text = ?", Boolean.class, "shared를 안 적고 들어온 행"))
+                .as("default false — 기존 글은 전부 꺼진 채로 남는다(소급 노출 0)")
+                .isFalse();
+    }
+
     // ── 토스 미니앱(V61) — users.toss_user_key 유니크 + api_token·toss_link_code 스키마↔엔티티 일치 ──
 
     @Test

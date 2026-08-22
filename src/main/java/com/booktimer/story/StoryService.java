@@ -2,6 +2,7 @@ package com.booktimer.story;
 
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
+import com.booktimer.book.Isbn;
 import com.booktimer.follow.FollowService;
 import com.booktimer.profile.ProfileService;
 import com.booktimer.search.UserRowAssembler;
@@ -17,6 +18,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -75,8 +77,12 @@ public class StoryService {
      * <p>개수 상한은 없다 — 도배 방어는 레이트리밋(시간당 10)이 맡고, 목록 폭주는 읽기 쪽 상한이 맡는다.
      *
      * <p>{@code quote}(책에서 옮긴 문장)는 선택이다 — 길이·공백 정규화는 전부 {@link Story#of}가 한다.
+     *
+     * <p>{@code shared}(「함께 걸기」)는 <b>기본 꺼짐</b>이고 켜도 여기서는 아무것도 검사하지 않는다 —
+     * 비공개 책에서 켜 두는 것도 유효하고, 그 글은 책이 공개되는 순간부터만 보인다({@link Story} 불변식).
      */
-    public Story create(User author, String text, Long bookId, String bgCode, String quote) {
+    public Story create(User author, String text, Long bookId, String bgCode, String quote,
+                        boolean shared) {
         if (!rateLimitService.allow(RateLimitAction.STORY_CREATE, author.getId())) {
             throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "글을 너무 자주 남겼습니다");
         }
@@ -86,7 +92,9 @@ public class StoryService {
         }
         Book book = bookRepository.findByIdAndUser(bookId, author)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "책을 찾을 수 없습니다"));
-        return storyRepository.save(Story.of(author, text, book, bgCode, quote));
+        Story story = Story.of(author, text, book, bgCode, quote);
+        story.markShared(shared);
+        return storyRepository.save(story);
     }
 
     /**
@@ -137,14 +145,83 @@ public class StoryService {
         if (stories.isEmpty()) {
             return List.of();
         }
+        Likes likes = likesOf(stories, viewer);
+        return stories.stream()
+                .map(s -> MarginEntry.of(s, likes.countOf(s), likes.likedBy(s)))
+                .toList();
+    }
+
+    /** 배치 2쿼리의 결과 — 사람축({@link MarginEntry})·책축({@link SharedMarginEntry})이 같은 것을 쓴다. */
+    private record Likes(Map<Long, Long> counts, Set<Long> liked) {
+        long countOf(Story story) {
+            return counts.getOrDefault(story.getId(), 0L);
+        }
+
+        boolean likedBy(Story story) {
+            return liked.contains(story.getId());
+        }
+    }
+
+    private Likes likesOf(List<Story> stories, User viewer) {
         List<Long> ids = stories.stream().map(Story::getId).toList();
         Map<Long, Long> counts = storyLikeRepository.countsByStoryIds(ids).stream()
                 .collect(Collectors.toMap(StoryLikeRepository.StoryLikeCount::getStoryId,
                         StoryLikeRepository.StoryLikeCount::getCount));
-        Set<Long> liked = Set.copyOf(storyLikeRepository.likedStoryIds(ids, viewer));
-        return stories.stream()
-                .map(s -> MarginEntry.of(s, counts.getOrDefault(s.getId(), 0L), liked.contains(s.getId())))
+        return new Likes(counts, Set.copyOf(storyLikeRepository.likedStoryIds(ids, viewer)));
+    }
+
+    /**
+     * 「이 책의 여백」 — isbn13 하나에 <b>함께 걸린</b> 글 전부(최신순). 사람 좌표 없이 책만으로 도달한다.
+     *
+     * <p>노출 게이트는 통째로 {@link StoryRepository#sharedByIsbn} 쿼리에 있다(책 PUBLIC ∧ shared ∧
+     * 차단 아님 ∧ ADMIN 아님 ∧ 핸들 있음) — 행마다 {@code assertVisible}을 부르면 N+1이라 쿼리가 같은
+     * 술어를 진다. 둘은 미러이므로 술어가 늘면 양쪽을 같이 고친다({@link Story} 불변식).
+     *
+     * <p>경로 변수 isbn은 서버가 한 번 더 정규화한다({@link Isbn#normalize}) — 클라가 하이픈을 붙여
+     * 보내도 같은 책에 도달한다. 알맹이가 없으면 404(isbn 없는 책은 책축 좌표 자체가 없다).
+     *
+     * <p>헤더 라벨은 ① viewer 본인 책 행 → ② 첫 공유 글의 책 행 → ③ 둘 다 없으면 <b>404</b>.
+     * 셋째는 「그릴 헤더가 없다」는 뜻이지 권한 실패가 아니지만, 화면 입장에선 구분할 이유가 없다.
+     */
+    @Transactional(readOnly = true)
+    public BookMarginResponse bookMarginOf(User viewer, String rawIsbn) {
+        String isbn = Isbn.normalize(rawIsbn);
+        if (isbn == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "책을 찾을 수 없습니다");
+        }
+        Optional<Book> myBook = bookRepository.findFirstByUserAndIsbn13(viewer, isbn);
+        List<Story> stories = storyRepository.sharedByIsbn(isbn, viewer.getId(),
+                PageRequest.of(0, MAX_MARGIN_ENTRIES));
+        Book label = myBook.orElseGet(() -> stories.stream().findFirst().map(Story::getBook)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "책을 찾을 수 없습니다")));
+        Likes likes = stories.isEmpty() ? new Likes(Map.of(), Set.of()) : likesOf(stories, viewer);
+        List<SharedMarginEntry> entries = stories.stream()
+                .map(s -> SharedMarginEntry.of(s, likes.countOf(s), likes.likedBy(s)))
                 .toList();
+        return new BookMarginResponse(BookMarginLabel.of(label), myBook.map(Book::getId).orElse(null),
+                storyRepository.countSharedByIsbn(isbn, viewer.getId()), entries);
+    }
+
+    /**
+     * 「함께 걸기」를 켜거나 끈다 — <b>본인 글만</b>({@link #delete}와 같은 필터: 없거나 타인 것이면
+     * 404로 존재를 감춘다).
+     *
+     * <p><b>멱등</b>하다. POST/DELETE 쌍으로 둔 것도 {@link #like}와 같은 이유다 — 토글 단일
+     * 엔드포인트면 모바일 타임아웃 뒤 재전송이 방금 켠 것을 꺼 버린다.
+     *
+     * <p>책 공개 여부는 검사하지 않는다: 비공개 책에서 미리 켜 두는 것도 유효하고, 그 글은 책이
+     * 공개되는 순간부터만 보인다(가시성은 읽기 시점 판정 — {@link Story} 불변식).
+     */
+    public ShareState setShared(User actor, Long storyId, boolean shared) {
+        Story story = storyRepository.findById(storyId)
+                .filter(s -> isSameUser(s.getUser(), actor))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다"));
+        story.markShared(shared);
+        return new ShareState(story.isShared());
+    }
+
+    /** 켜기·끄기 직후의 상태 — 클라가 추측하지 않게 서버가 읽은 값을 그대로 준다({@link LikeState} 관례). */
+    public record ShareState(boolean shared) {
     }
 
     /**
@@ -194,6 +271,11 @@ public class StoryService {
      *
      * <p>핸들 없는 주인({@code loginId == null})은 {@code resolveVisibleTarget}이 걸러 낸다 —
      * 그들의 글은 애초에 어느 목록에도 실리지 않는다(N-055).
+     *
+     * <p><b>마지막 게이트는 두 통행증 중 하나</b>다(2026-08-22 책축 개방): 팔로워이거나, 글이 스스로
+     * 「함께 걸림」이거나. 그 앞의 <b>책 게이트는 상위 AND라 그대로</b>다 — {@code shared}를 책 검사와
+     * OR로 잇는 순간 비공개 메모가 낯선 사람에게 샌다({@link Story} 불변식).
+     * 목록 쪽 미러는 {@link StoryRepository#sharedByIsbn}이고, 둘은 같이 고친다.
      */
     private void assertVisible(User viewer, Story story) {
         User owner = story.getUser();
@@ -205,7 +287,7 @@ public class StoryService {
         if (!story.getBook().isPublic()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다");
         }
-        if (!followService.isFollowing(viewer, owner)) {
+        if (!story.isShared() && !followService.isFollowing(viewer, owner)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다");
         }
     }

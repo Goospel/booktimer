@@ -18,9 +18,11 @@ import java.time.Instant;
  *                  명단은 눌러야 열리는 별도 조회다({@code GET /api/stories/{id}/likes}). 목록 응답에 글마다
  *                  명단을 실으면 100장 × N명이 한 번에 날아간다
  * @param liked     viewer 본인이 눌렀는가. <b>자기 글도 true가 될 수 있다</b>(자기 좋아요 허용 — 2026-08-20)
+ * @param shared    「함께 걸림」인가(2026-08-22) — 내 카드의 상태 칩·토글이 읽는 값. 남의 카드에도 실리지만
+ *                  무해한 사실값이다(이 목록에 그가 걸어 뒀다는 것 이상을 말하지 않는다)
  */
 public record MarginEntry(Long id, String text, String quote, String bgCode, Instant createdAt,
-                          long likeCount, boolean liked) {
+                          long likeCount, boolean liked, boolean shared) {
 
     /** 방금 만든 글 — 좋아요가 달릴 시간이 없었다({@code StoryApiController.create}의 응답). */
     public static MarginEntry of(Story story) {
@@ -29,6 +31,6 @@ public record MarginEntry(Long id, String text, String quote, String bgCode, Ins
 
     public static MarginEntry of(Story story, long likeCount, boolean liked) {
         return new MarginEntry(story.getId(), story.getText(), story.getQuote(), story.getBgCode(),
-                story.getCreatedAt(), likeCount, liked);
+                story.getCreatedAt(), likeCount, liked, story.isShared());
     }
 }

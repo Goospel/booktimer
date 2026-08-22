@@ -102,6 +102,83 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
     List<Story> findByUserAndBookOrderByCreatedAtDescIdDesc(User user, Book book, Pageable pageable);
 
     /**
+     * 책축(isbn13) 목록 — 같은 책을 보는 <b>누구에게나</b> 열린 글(「함께 걸기」). 최신순, 동시각 tie는 id로.
+     *
+     * <p><b>{@code StoryService.assertVisible}의 쿼리 미러</b>다: 노출 = 책 PUBLIC <b>AND</b>
+     * (팔로워 <b>OR</b> shared) 중 여기는 shared 축을 담당한다. 팔로우를 안 보는 대신 {@code s.shared}를
+     * 보되, <b>{@code b.visibility = PUBLIC}은 그대로 진다</b> — 이 한 줄이 빠지면 남의 비공개 메모가
+     * 낯선 사람에게 통째로 샌다({@code Story} 불변식). 행 단위로 {@code assertVisible}을 부르지 않는 건
+     * 100장 × 게이트 = N+1이라서다({@code feedRecent}가 목록 방어를 쿼리에 두는 것과 같은 구조).
+     *
+     * <p><b>차단 필터가 쿼리에 필수</b>다 — {@code feedRecent}는 "팔로우 존재 → 차단 없음" write-시점
+     * 불변식 덕에 생략했지만, 이 목록은 <b>팔로우 무관</b>이라 그 불변식이 통하지 않는다. 양방향 제외
+     * 패턴은 {@code BookRepository.findCoReadCandidates}와 동형. ADMIN·핸들(login_id) 없는 작성자
+     * 제외도 노출 불변식 그대로(N-055).
+     *
+     * <p>작성자는 fetch로 즉시 초기화 — 카드마다 닉네임·핸들을 그리므로(사람축 카드와 다른 점).
+     */
+    @Query("""
+            select s from Story s join fetch s.user u join s.book b
+            where b.isbn13 = :isbn
+              and s.shared = true
+              and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
+              and u.role <> com.booktimer.user.Role.ADMIN
+              and u.loginId is not null
+              and not exists (select 1 from com.booktimer.block.Block bl
+                              where (bl.blocker.id = :viewerId and bl.blocked.id = u.id)
+                                 or (bl.blocker.id = u.id and bl.blocked.id = :viewerId))
+            order by s.createdAt desc, s.id desc
+            """)
+    List<Story> sharedByIsbn(@Param("isbn") String isbn, @Param("viewerId") Long viewerId, Pageable pageable);
+
+    /**
+     * 「함께 걸린 글 N」 — {@link #sharedByIsbn}과 <b>같은 술어</b>의 count다. 목록은 상한 100장에서
+     * 잘리지만 이 값은 자르지 않는다(헤더가 진짜 개수를 말한다). 술어가 갈라지면 헤더의 N과 카드 수가
+     * 설명 없이 어긋나므로 둘은 같이 고친다.
+     */
+    @Query("""
+            select count(s) from Story s join s.user u join s.book b
+            where b.isbn13 = :isbn
+              and s.shared = true
+              and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
+              and u.role <> com.booktimer.user.Role.ADMIN
+              and u.loginId is not null
+              and not exists (select 1 from com.booktimer.block.Block bl
+                              where (bl.blocker.id = :viewerId and bl.blocked.id = u.id)
+                                 or (bl.blocker.id = u.id and bl.blocked.id = :viewerId))
+            """)
+    long countSharedByIsbn(@Param("isbn") String isbn, @Param("viewerId") Long viewerId);
+
+    /** isbn13 하나 → 그 책에 함께 걸린 글 수. {@link #sharedCountsByIsbn} 투영. */
+    interface IsbnStoryCount {
+        String getIsbn13();
+
+        long getCount();
+    }
+
+    /**
+     * 검색 결과 행의 「여백 N」 배지 — <b>페이지당 1쿼리</b> 배치 집계(N+1 금지, {@code recencyByBook} 관례).
+     *
+     * <p><b>차단은 걸러 내지 않는다</b>(viewer 무관) — {@code likers}의 likeCount와 같은 선례다.
+     * 배지 숫자가 목록보다 한둘 많을 수 있지만 눈에 띄지 않고, 집계까지 관계를 태우면 검색 응답이
+     * 비싸진다. 이 어긋남은 버그가 아니라 의도된 트레이드오프다.
+     *
+     * <p>글이 없는 isbn은 <b>행이 아예 없다</b>(group by) — 호출부가 키 없음으로 두면 화면이 배지를
+     * 안 그린다(0 배지 금지). 빈 목록이면 호출하지 않는다({@code in ()}은 DB마다 취급이 다르다).
+     */
+    @Query("""
+            select b.isbn13 as isbn13, count(s) as count
+            from Story s join s.user u join s.book b
+            where b.isbn13 in :isbns
+              and s.shared = true
+              and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
+              and u.role <> com.booktimer.user.Role.ADMIN
+              and u.loginId is not null
+            group by b.isbn13
+            """)
+    List<IsbnStoryCount> sharedCountsByIsbn(@Param("isbns") Collection<String> isbns);
+
+    /**
      * 책 삭제 시 그 책 여백의 글을 함께 지운다 — 여백은 책에 딸린 자리라, 책이 사라지면 자리도 사라진다.
      * {@code story.book_id}가 NOT NULL이 된 뒤로 「첨부만 풀기」(옛 {@code unlinkBook})는 불가능하다.
      */
