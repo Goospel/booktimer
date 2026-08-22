@@ -17,6 +17,7 @@ import {
   hasFreshStory,
   marginTabLabel,
   shareNotice,
+  showMarginTabs,
   visibilityNotice,
 } from './screens/Story';
 import { userAgent } from './test-fixtures';
@@ -226,6 +227,21 @@ describe('책 여백 화면 (MarginView)', () => {
 
     expect(markup).toContain('문장 1'); // 목록은 그려졌다(부재 단언의 쌍)
     expect(markup).not.toContain('aria-label="이 글 관리"');
+  });
+
+  /**
+   * 접기 <b>배선</b>을 잰다 — 카드 단위 테스트는 프롭을 직접 꽂으므로, 목록 뷰가 그 둘(`expanded`·
+   * `onToggleExpand`)을 실제로 이어 주는지는 아무도 안 본다. 리뷰 실측에서 둘 다 끊어도 전건 통과했다:
+   * 끊기면 실제 화면에서 「더보기」가 통째로 사라지거나 눌러도 안 펴진다.
+   */
+  const longEntry = () => entry(1, { text: '가'.repeat(80) });
+
+  it('긴 글이 실린 목록에는 「더보기」가 이어진다', () => {
+    expect(view(margin({ self: true, entries: [longEntry()] }))).toContain('더보기');
+  });
+
+  it('펼쳐 둔 글은 「접기」로 이어진다 — 펼침 상태가 목록까지 닿아야 한다', () => {
+    expect(view(margin({ self: true, entries: [longEntry()] }), { expanded: new Set([1]) })).toContain('접기');
   });
 
   it('비팔로워에게는 팔로우하면 볼 수 있다고 말한다 — 글 유무 자체가 새지 않는다(서버가 빈 배열)', () => {
@@ -750,6 +766,46 @@ describe('긴 글 접기 (더보기)', () => {
     expect(html).toContain('-webkit-line-clamp:3');
     expect(html).not.toContain('더보기');
   });
+
+  /**
+   * 본문은 `pre-wrap`이라 <b>줄바꿈이 그대로 산다</b> — 글자 수만 세면 「짧지만 여러 문단」인 글이
+   * 안 접혀 행이 통째로 늘어난다. 문단을 나눠 쓰는 것은 여백 글에서 예외가 아니라 기본이다.
+   */
+  it('짧아도 세 줄을 넘기면 접는다 — 게시판을 늘리는 것은 글자 수가 아니라 차지하는 줄이다', () => {
+    const html = card('오늘 읽은 곳\n\n인상 깊은 대목\n\n내일 이어서');
+
+    expect(html).toContain('-webkit-line-clamp:3');
+    expect(html).toContain('더보기');
+  });
+
+  it('세 줄까지는 접지 않는다 — 경계는 넘침이지 줄바꿈의 유무가 아니다', () => {
+    const html = card('첫 줄\n둘째 줄\n셋째 줄');
+
+    expect(html).toContain('셋째 줄'); // 본문은 그려졌다(부재 단언의 쌍)
+    expect(html).not.toContain('-webkit-line-clamp');
+    expect(html).not.toContain('더보기');
+  });
+});
+
+/**
+ * 탭줄이 서는 조건 — <b>내 책 + isbn13</b>. 컨테이너의 JSX 안에만 있으면 정적 렌더 하니스가 못 닿아
+ * 계측이 0이 된다(리뷰 실측: `margin.self &&`를 지워도 전건 통과했다).
+ *
+ * <p>이 게이트가 무너지면 남의 여백에 탭줄이 서고, 「모두의 여백」을 누른 화면이 <b>남의 책 id로 여는
+ * 글쓰기 버튼</b>을 세운다 — 그 경로는 {@link MarginView}의 `self` 가드가 덮지 못한다(다른 컴포넌트다).
+ */
+describe('탭줄이 서는 조건 (showMarginTabs)', () => {
+  it('내 책이고 책축 좌표가 있으면 선다', () => {
+    expect(showMarginTabs(true, '9788996991342')).toBe(true);
+  });
+
+  it('남의 여백에는 안 선다 — 「내가 쓴 여백」이 있을 수 없는 화면이다', () => {
+    expect(showMarginTabs(false, '9788996991342')).toBe(false);
+  });
+
+  it('isbn 없는 책에는 안 선다 — 책축 좌표가 없어 「모두의 여백」이 가리킬 자리가 없다', () => {
+    expect(showMarginTabs(true, null)).toBe(false);
+  });
 });
 
 describe('책축 탭 라벨 (M-6)', () => {
@@ -822,8 +878,12 @@ describe('이 책의 여백 — 책축 목록 (M-3)', () => {
     expect(view(all({ totalCount: 137 }))).toContain('글 137');
   });
 
-  it('아직 아무도 안 걸었으면 그렇게 말한다', () => {
-    expect(view(all({ totalCount: 0, entries: [] }))).toContain('아직 함께 걸린 글이 없어요');
+  /** 빈 화면은 새 어휘가 가장 잘 보여야 할 자리다 — 여기만 옛 동사(「걸다」)로 남으면 통일이 무너진다. */
+  it('아직 아무도 안 올렸으면 그렇게 말한다 — 탭·시트와 같은 동사로', () => {
+    const html = view(all({ totalCount: 0, entries: [] }));
+
+    expect(html).toContain('아직 올라온 글이 없어요');
+    expect(html).not.toContain('걸린');
   });
 
   it('안 가진 책이면 담는 길을 안내한다 — 버튼이 아니라 문구다(검색으로 뒤로 가면 담기가 있다)', () => {
@@ -840,6 +900,11 @@ describe('이 책의 여백 — 책축 목록 (M-3)', () => {
   /**
    * R10 — 책축 목록은 <b>전부 올라간 글</b>이라 칩이 모든 행에 붙으면 정보가 0이고, 남의 글이라
    * 관리 손잡이도 없다. 반대로 작성자 줄은 이 목록의 핵심 정보라 반드시 남는다.
+   *
+   * <p>⚠️ 이 단언은 <b>칩 게이트의 계측기가 아니다</b>. `SharedMarginEntry`엔 `shared` 필드가 아예 없어
+   * `entry.shared === true`가 언제나 거짓이라, 게이트를 지워도 여기선 칩이 안 뜬다(이중 방어라 안전하되
+   * 계측은 아니다 — 리뷰 실측). 그 게이트의 진짜 계측기는 M-2의 「관리 손잡이가 없는 목록에는 칩이
+   * 아예 없다」 하나다. 여기서 재는 것은 <b>게시판 머리가 「모두의 여백」을 제 이름으로 쓰지 않는다</b>는 쪽.
    */
   it('칩도 ⋯ 도 없고 작성자 이름만 글마다 남는다', () => {
     const html = view(all());

@@ -284,12 +284,7 @@ export function BookMargin({
   const entries = likes.merge(margin.entries).map((e) => ({ ...e, shared: shares[e.id] ?? e.shared }));
   const merged = { ...margin, entries };
 
-  /**
-   * 탭은 <b>내 책 + isbn13이 있을 때만</b> 선다. 남의 여백에서 「모두」를 열 수 있게 하는 것은 진입점
-   * 확장이라 v1 범위 밖이고(설계 §2-④ 3순위), isbn 없는 책은 책축 좌표 자체가 없다.
-   */
-  const tabs =
-    margin.self && isbn13 !== null ? (
+  const tabs = showMarginTabs(margin.self, isbn13) ? (
       <MarginTabs
         tab={tab}
         mineCount={margin.entries.length}
@@ -453,6 +448,17 @@ function useMarginLikes(fail: (e: Error) => void, onError: (e: Error) => void) {
  * <p>「모두」 개수는 그 탭을 눌러야 받으므로 그전엔 `null`이고, 라벨이 숫자를 안 적는다
  * ({@link marginTabLabel}).
  */
+/**
+ * 탭줄이 서는가 — <b>내 책 + isbn13</b>. 남의 여백에서 「모두의 여백」을 열 수 있게 하는 것은 진입점
+ * 확장이라 v1 범위 밖이고(설계 §2-④ 3순위), isbn 없는 책은 책축 좌표 자체가 없다.
+ *
+ * <p>컨테이너 JSX에서 <b>꺼내 둔</b> 이유는 계측이다. 조건이 JSX 안에만 있으면 정적 렌더 하니스가 못 닿아
+ * 이 게이트를 지워도 전건이 통과한다(리뷰 실측). 게이트가 무너지면 남의 여백에 탭줄이 서고, 「모두의
+ * 여백」을 누른 화면이 <b>남의 책 id로 여는 글쓰기 버튼</b>을 세운다 — 그 경로는 {@link MarginView}의
+ * `self` 가드가 덮지 못한다(그 화면은 {@link BookMarginAllView}다).
+ */
+export const showMarginTabs = (self: boolean, isbn13: string | null): boolean => self && isbn13 !== null;
+
 export function MarginTabs({
   tab,
   mineCount,
@@ -618,7 +624,7 @@ export function BookMarginAllView({
             color="grey600"
             style={{ display: 'block', padding: '34px 16px', textAlign: 'center', wordBreak: 'keep-all' }}
           >
-            아직 함께 걸린 글이 없어요. 이 책을 읽은 누군가가 걸면 여기에 쌓여요.
+            아직 올라온 글이 없어요. 이 책을 읽은 누군가가 올리면 여기에 쌓여요.
           </Text>
         ) : (
           entries.map((e) => (
@@ -641,7 +647,7 @@ export function BookMarginAllView({
           가면 담기 버튼이 거기 있다. 화면 안에서 끝내는 전용 경로는 진입점이 늘어날 때 붙인다. */}
       {myBookId === null && (
         <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 12, wordBreak: 'keep-all' }}>
-          내 서재에 담으면 이 책의 여백에 글을 남길 수 있어요.
+          내 서재에 담으면 여기에 글을 남길 수 있어요.
         </Text>
       )}
     </Screen>
@@ -955,7 +961,8 @@ export function MarginCard({
 }) {
   const bg = palette(entry.bgCode);
   const shared = entry.shared === true;
-  const clamped = entry.text.length > CLAMP_CHARS && expanded !== true;
+  const foldable = needsFold(entry.text);
+  const clamped = foldable && expanded !== true;
 
   return (
     <div style={{ display: 'flex', gap: 9, padding: '11px 12px', borderTop: '1px solid #EFE8D9' }}>
@@ -1007,14 +1014,19 @@ export function MarginCard({
             whiteSpace: 'pre-wrap',
             wordBreak: 'keep-all',
             ...(clamped
-              ? ({ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as const)
+              ? ({
+                  display: '-webkit-box',
+                  WebkitLineClamp: CLAMP_LINES,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                } as const)
               : {}),
           }}
         >
           {entry.text}
         </p>
         {/* 펼침은 손잡이가 있을 때만 — 없으면 접힌 채로 둔다(자를 수는 있어도 못 펴는 자리가 있다). */}
-        {onToggleExpand !== undefined && (clamped || expanded === true) && entry.text.length > CLAMP_CHARS && (
+        {onToggleExpand !== undefined && foldable && (
           <button type="button" onClick={() => onToggleExpand(entry.id)} style={moreLine}>
             {clamped ? '더보기' : '접기'}
           </button>
@@ -1069,31 +1081,44 @@ export function MarginCard({
 }
 
 /**
- * 본문을 접는 글자 수 임계.
+ * 이 글이 세 줄을 넘기는가 — 접기와 「더보기」가 <b>같은 판정</b>을 쓴다(둘이 갈리면 펼 수 없는 접힘이나
+ * 아무것도 안 하는 손잡이가 생긴다).
  *
- * <p>넘침 <b>실측</b>(`scrollHeight`)이 정확하지만 정적 렌더 하니스에서 안 돌아 테스트가 통째로 불가능해진다 —
- * 글자 수는 결정론이라 계측이 붙는다.
+ * <p>축이 <b>둘</b>인 이유: 본문은 `pre-wrap`이라 줄바꿈이 그대로 산다. 글자 수만 세면 「오늘 읽은 곳 /
+ * 인상 깊은 대목 / 내일 이어서」처럼 <b>짧지만 여러 문단</b>인 글이 30자짜리로 계산돼 안 접히고, 게시판
+ * 행이 7줄로 늘어난다. 문단을 나눠 쓰는 것은 여백 글에서 예외가 아니라 기본이다.
  *
- * <p>값은 목 모드 실측이다(390×844, 15px/line-height 23.25px, `wordBreak: keep-all`): 98자 한글 문단이
- * <b>4줄</b>이었으므로 ≈ 24.5자/줄, 3줄 ≈ 73자. 여유 2자를 더해 75로 둔다. 설계가 처음 잡았던 90은
- * 실측 전 추정치(28~30자/줄)였고 <b>틀렸다</b> — 그 값이면 74~90자 글이 4줄인 채로 안 접힌다.
+ * <p>넘침 <b>실측</b>(`scrollHeight`)이 정확하지만 정적 렌더 하니스에서 안 돌아 테스트가 통째로
+ * 불가능해진다 — 이 둘은 결정론이라 계측이 붙는다.
+ *
+ * ponytail: 휴리스틱 — 라틴 문자 비중이 높거나 어절이 유난히 긴 글에선 글자 수 축이 어긋난다. 눈에 띄면
+ * `ResizeObserver` 실측으로 올린다(그때는 이 판정을 컨테이너로 올려 테스트를 유지한다).
+ */
+const needsFold = (text: string): boolean => text.length > CLAMP_CHARS || text.split('\n').length > CLAMP_LINES;
+
+/**
+ * 접는 글자 수 임계 — 목 모드 실측이다(390×844, 15px/line-height 23.25px, `wordBreak: keep-all`):
+ * 98자 한글 문단이 <b>4줄</b>이었으므로 ≈ 24.5자/줄, 3줄 ≈ 73자. 여유 2자를 더해 75.
+ *
+ * <p>설계가 처음 잡았던 90은 실측 전 추정치(28~30자/줄)였고 <b>틀렸다</b> — 그 값이면 74~90자 글이
+ * 4줄인 채로 안 접힌다.
  *
  * <p>여유를 <b>위쪽</b>으로 두는 이유: 두 오차의 무게가 다르다. 4줄이 안 접히면 행이 조금 길어질 뿐이지만,
  * 3줄 글에 「더보기」가 붙으면 눌러도 아무것도 안 변하는 <b>가짜 손잡이</b>가 된다.
- *
- * ponytail: 글자 수 휴리스틱 — 라틴 문자 비중이 높거나 어절이 유난히 긴 글에선 어긋난다. 눈에 띄면
- * `ResizeObserver` 실측으로 올린다(그때는 이 판정을 컨테이너로 올려 테스트를 유지한다).
  */
 const CLAMP_CHARS = 75;
+
+/** 접기 후 남기는 줄 수 — `WebkitLineClamp` 값과 같아야 한다(다르면 판정과 그림이 어긋난다). */
+const CLAMP_LINES = 3;
 
 /** 행의 본문 색 — 배경이 흰 게시판이라 팔레트 색을 상속하지 않는다(막대만 색을 진다). */
 const ROW_TEXT = 'var(--adaptiveGrey900, #2C2A24)';
 const ROW_SUB = 'var(--adaptiveGrey600, #8A8578)';
 
 /**
- * 행 푸터의 아이콘 버튼 — <b>테두리가 없다</b>. 옛 {@link ghost}는 1px 테두리를 두르는데, 색 카드
- * 위에서는 옅은 윤곽이던 것이 흰 게시판 위에서는 상자로 읽혀 하트 하나가 행을 지배했다.
- * 손가락 자리는 테두리가 아니라 padding이 만든다.
+ * 행 푸터의 아이콘 버튼 — <b>테두리가 없다</b>. 옛 ghost 버튼은 1px 테두리를 둘렀는데, 색 카드 위에서는
+ * 옅은 윤곽이던 것이 흰 게시판 위에서는 상자로 읽혀 하트 하나가 행을 지배했다(그래서 그 스타일은
+ * 호출처가 사라져 함께 지웠다). 손가락 자리는 테두리가 아니라 padding이 만든다.
  */
 const rowGhost = (color: string) =>
   ({
@@ -1406,14 +1431,3 @@ const composerField = (color: string) =>
     resize: 'vertical',
   }) as const;
 
-const ghost = (color: string) =>
-  ({
-    flex: '0 0 auto',
-    padding: '6px 10px',
-    borderRadius: 8,
-    border: `1px solid ${color}`,
-    background: 'transparent',
-    color,
-    fontSize: 13,
-    cursor: 'pointer',
-  }) as const;
