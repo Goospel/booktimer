@@ -188,6 +188,10 @@ export function BookMargin({
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** ⋯ 가 열린 글 — `null`이면 닫힘. 시트는 한 번에 하나다(좋아요 명단과 같은 규칙). */
+  const [menuOf, setMenuOf] = useState<number | null>(null);
+  /** 펼쳐 둔 글 — 접기가 기본이라 여기 담긴 것만 전문이 보인다. */
+  const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
 
   const fail = useCallback(
     (e: Error) => {
@@ -198,6 +202,24 @@ export function BookMargin({
   );
 
   const likes = useMarginLikes(fail, onError);
+
+  /**
+   * 시트를 닫을 땐 지우기 확인도 함께 접는다 — 안 접으면 다음에 ⋯ 를 열었을 때 「정말 지우기」가 이미
+   * 서 있어, 확인 단계를 <b>건너뛴 삭제 버튼</b>이 첫 화면이 된다.
+   */
+  const closeMenu = useCallback(() => {
+    setMenuOf(null);
+    setConfirmDeleteId(null);
+  }, []);
+
+  useBackClose(menuOf !== null, closeMenu);
+
+  const toggleExpand = (id: number) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
 
   const load = useCallback(() => {
     setError(null); // 재시도가 성공했는데 지난 실패 문구가 남지 않게
@@ -224,7 +246,8 @@ export function BookMargin({
   const toggleShare = (entry: MarginEntry) => {
     const before = shares[entry.id] ?? entry.shared === true;
     setShares((m) => ({ ...m, [entry.id]: !before }));
-    setAll(null); // 목록이 달라졌다 — 다음에 「모두」를 열면 새로 받는다
+    setAll(null); // 목록이 달라졌다 — 다음에 「모두의 여백」을 열면 새로 받는다
+    closeMenu(); // 눌렀으면 끝난 동작이다 — 시트를 남기면 결과(칩)가 시트에 가려 안 보인다
     (before ? unshareStory(entry.id) : shareStory(entry.id))
       .then((state) => setShares((m) => ({ ...m, [entry.id]: state.shared })))
       .catch((e: Error) => {
@@ -238,9 +261,9 @@ export function BookMargin({
     setError(null);
     deleteStory(id)
       .then(() => {
-        setConfirmDeleteId(null);
-        setAll(null); // 지운 글이 「모두」 탭의 옛 스냅으로 되살아나지 않게
-        load(); // 서버가 준 목록이 진실 — 지운 카드를 손으로 빼지 않는다
+        closeMenu(); // 지운 글의 시트가 남아 있으면 없는 글을 관리하는 화면이 된다
+        setAll(null); // 지운 글이 「모두의 여백」 탭의 옛 스냅으로 되살아나지 않게
+        load(); // 서버가 준 목록이 진실 — 지운 행을 손으로 빼지 않는다
       })
       .catch(fail)
       .finally(() => setBusy(false));
@@ -261,12 +284,7 @@ export function BookMargin({
   const entries = likes.merge(margin.entries).map((e) => ({ ...e, shared: shares[e.id] ?? e.shared }));
   const merged = { ...margin, entries };
 
-  /**
-   * 탭은 <b>내 책 + isbn13이 있을 때만</b> 선다. 남의 여백에서 「모두」를 열 수 있게 하는 것은 진입점
-   * 확장이라 v1 범위 밖이고(설계 §2-④ 3순위), isbn 없는 책은 책축 좌표 자체가 없다.
-   */
-  const tabs =
-    margin.self && isbn13 !== null ? (
+  const tabs = showMarginTabs(margin.self, isbn13) ? (
       <MarginTabs
         tab={tab}
         mineCount={margin.entries.length}
@@ -275,11 +293,13 @@ export function BookMargin({
       />
     ) : undefined;
 
+  const menuEntry = entries.find((e) => e.id === menuOf) ?? null;
+
   return (
     <>
       {tab === 'all' && tabs !== undefined ? (
         all === null ? (
-          <Screen title="이 책의 여백" onBack={onBack}>
+          <Screen title="여백" onBack={onBack}>
             {tabs}
             <ErrorMessage message={error} />
             {error === null && <Loading />}
@@ -293,7 +313,10 @@ export function BookMargin({
             onToggleLike={likes.toggleLike}
             onShowLikers={likes.showLikers}
             onOpenProfile={onOpenProfile}
+            onCompose={() => onCompose(margin.book)}
             tabs={tabs}
+            expanded={expanded}
+            onToggleExpand={toggleExpand}
           />
         )
       ) : (
@@ -301,18 +324,28 @@ export function BookMargin({
           loginId={loginId}
           margin={merged}
           now={Date.now()}
-          busy={busy}
-          confirmDeleteId={confirmDeleteId}
           error={error}
           tabs={tabs}
+          expanded={expanded}
           onCompose={() => onCompose(margin.book)}
-          onConfirmDelete={setConfirmDeleteId}
-          onDelete={remove}
           onToggleLike={likes.toggleLike}
-          onToggleShare={toggleShare}
           onShowLikers={likes.showLikers}
+          onOpenMenu={(e) => setMenuOf(e.id)}
+          onToggleExpand={toggleExpand}
           onBack={onBack}
           timerStopped={timerStopped}
+        />
+      )}
+      {menuEntry !== null && (
+        <MarginMenuSheet
+          entry={menuEntry}
+          canShare={isbn13 !== null}
+          confirming={confirmDeleteId === menuEntry.id}
+          busy={busy}
+          onShare={toggleShare}
+          onConfirmDelete={setConfirmDeleteId}
+          onDelete={remove}
+          onClose={closeMenu}
         />
       )}
       {likes.likersOf !== null && (
@@ -415,6 +448,17 @@ function useMarginLikes(fail: (e: Error) => void, onError: (e: Error) => void) {
  * <p>「모두」 개수는 그 탭을 눌러야 받으므로 그전엔 `null`이고, 라벨이 숫자를 안 적는다
  * ({@link marginTabLabel}).
  */
+/**
+ * 탭줄이 서는가 — <b>내 책 + isbn13</b>. 남의 여백에서 「모두의 여백」을 열 수 있게 하는 것은 진입점
+ * 확장이라 v1 범위 밖이고(설계 §2-④ 3순위), isbn 없는 책은 책축 좌표 자체가 없다.
+ *
+ * <p>컨테이너 JSX에서 <b>꺼내 둔</b> 이유는 계측이다. 조건이 JSX 안에만 있으면 정적 렌더 하니스가 못 닿아
+ * 이 게이트를 지워도 전건이 통과한다(리뷰 실측). 게이트가 무너지면 남의 여백에 탭줄이 서고, 「모두의
+ * 여백」을 누른 화면이 <b>남의 책 id로 여는 글쓰기 버튼</b>을 세운다 — 그 경로는 {@link MarginView}의
+ * `self` 가드가 덮지 못한다(그 화면은 {@link BookMarginAllView}다).
+ */
+export const showMarginTabs = (self: boolean, isbn13: string | null): boolean => self && isbn13 !== null;
+
 export function MarginTabs({
   tab,
   mineCount,
@@ -427,19 +471,19 @@ export function MarginTabs({
   onSelect: (tab: 'mine' | 'all') => void;
 }) {
   const items = [
-    { key: 'mine' as const, label: marginTabLabel('내 여백', mineCount) },
-    { key: 'all' as const, label: marginTabLabel('모두', allCount) },
+    { key: 'mine' as const, label: marginTabLabel('내가 쓴 여백', mineCount) },
+    { key: 'all' as const, label: marginTabLabel('모두의 여백', allCount) },
   ];
 
   return (
-    <div style={{ display: 'flex', gap: 6, marginTop: 16 }}>
+    <div style={{ display: 'flex', marginTop: 16, borderBottom: '1px solid #E2DACA' }}>
       {items.map(({ key, label }) => (
         <button
           key={key}
           type="button"
           aria-pressed={tab === key}
           onClick={() => onSelect(key)}
-          style={tabPillStyle(tab === key)}
+          style={tabStyle(tab === key)}
         >
           {label}
         </button>
@@ -448,18 +492,66 @@ export function MarginTabs({
   );
 }
 
-/** 탭 알약 — 홈 피드 탭과 같은 값이라 화면에 새 색이 늘지 않는다. */
-const tabPillStyle = (active: boolean) =>
+/**
+ * 탭 한 칸 — <b>밑줄 2분할</b>이다(2026-08-22 게시판 개편). 옛 알약은 목록 위에 뜬 「필터」로 읽혀서,
+ * 두 좌표계를 오가는 탭이라는 것이 전달되지 않았다. 화면 폭을 반씩 먹고 아래 목록과 선으로 이어져야
+ * 게시판 상단 탭으로 읽힌다.
+ *
+ * <p>`marginBottom: -1`은 컨테이너의 1px 밑줄을 <b>덮어</b> 선택된 칸만 두꺼운 선으로 잇는 값이다.
+ */
+const tabStyle = (active: boolean) =>
   ({
-    padding: '6px 14px',
+    flex: 1,
+    padding: '9px 0',
     border: 0,
-    borderRadius: 20,
-    background: active ? 'var(--adaptiveBlue50, #E7EEE2)' : 'transparent',
-    color: active ? 'var(--adaptiveBlue700, #4F6B4C)' : 'var(--adaptiveGrey600, #6F6A5E)',
+    borderBottom: active ? '2px solid var(--adaptiveBlue700, #4F6B4C)' : '2px solid transparent',
+    marginBottom: -1,
+    background: 'transparent',
+    color: active ? '#3E5A3B' : 'var(--adaptiveGrey600, #8C877B)',
     fontSize: 14,
     fontWeight: 700,
+    textAlign: 'center',
     cursor: 'pointer',
   }) as const;
+
+/**
+ * 게시판 껍데기 — 흰 카드 + 머리줄(왼쪽 개수 · 오른쪽 「글쓰기」). 목록을 이 카드로 감싸는 것이
+ * 「딱 봐도 게시판」의 본체다(탭줄이 아니라 이쪽이 성격을 정한다 — 탭이 없는 낯선 책 화면도 게시판으로 읽힌다).
+ *
+ * <p>`onCompose`가 없으면 우상단이 빈다 — 서재에 없는 책엔 글을 남길 수 없다(손잡이 관례).
+ */
+function MarginBoard({ count, onCompose, children }: { count: number; onCompose?: () => void; children: ReactNode }) {
+  return (
+    <div
+      style={{
+        marginTop: 12,
+        borderRadius: 12,
+        border: '0.5px solid #E6DFCF',
+        background: 'var(--adaptiveBackground, #FCFAF5)',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          padding: '10px 12px',
+        }}
+      >
+        <Text typography="st12" color="grey600">
+          글 {count}
+        </Text>
+        {onCompose !== undefined && (
+          <Button display="inline" variant="weak" size="small" onClick={onCompose}>
+            글쓰기
+          </Button>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
 
 /**
  * 「이 책의 여백」 — 책 하나(isbn13)에 함께 걸린 글 전부. 순수 표시라 상태는 전부 밖에서 받는다
@@ -476,7 +568,10 @@ export function BookMarginAllView({
   onToggleLike,
   onShowLikers,
   onOpenProfile,
+  onCompose,
   tabs,
+  expanded,
+  onToggleExpand,
   timerStopped = false,
 }: {
   data: BookMarginAllResponse;
@@ -487,14 +582,22 @@ export function BookMarginAllView({
   onToggleLike: (entry: Likeable) => void;
   onShowLikers?: (entry: Likeable) => void;
   onOpenProfile: (loginId: string) => void;
-  /** 「내 여백 / 모두」 탭 줄 — 내 책일 때만 셸이 넘긴다. */
+  /**
+   * 글쓰기 손잡이 — 있어야 게시판 머리 우상단에 버튼이 선다. 검색으로 들어온 낯선 책에는 안 넘긴다:
+   * 이 화면의 응답({@link BookMarginAllResponse})엔 책의 공개 여부가 없어, 억지로 합성해 넘기면 작성
+   * 화면의 가시성 고지가 비공개 책에서 「모두에게 보여요」라고 거짓말한다.
+   */
+  onCompose?: () => void;
+  /** 「내가 쓴 여백 / 모두의 여백」 탭 줄 — 내 책일 때만 셸이 넘긴다. */
   tabs?: ReactNode;
+  expanded?: ReadonlySet<number>;
+  onToggleExpand?: (id: number) => void;
   timerStopped?: boolean;
 }) {
   const { book, myBookId, totalCount, entries } = data;
 
   return (
-    <Screen title="이 책의 여백" onBack={onBack}>
+    <Screen title="여백" onBack={onBack}>
       {timerStopped && <TimerStoppedNotice />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <BookCover url={book.coverUrl} title={book.title} width={48} />
@@ -512,41 +615,40 @@ export function BookMarginAllView({
 
       {tabs}
 
-      <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 20 }}>
-        함께 걸린 글 {totalCount}
-      </Text>
+      <ErrorMessage message={error} />
+
+      <MarginBoard count={totalCount} onCompose={onCompose}>
+        {entries.length === 0 ? (
+          <Text
+            typography="st12"
+            color="grey600"
+            style={{ display: 'block', padding: '34px 16px', textAlign: 'center', wordBreak: 'keep-all' }}
+          >
+            아직 올라온 글이 없어요. 이 책을 읽은 누군가가 올리면 여기에 쌓여요.
+          </Text>
+        ) : (
+          entries.map((e) => (
+            <MarginCard
+              key={e.id}
+              entry={e}
+              now={now}
+              author={{ loginId: e.authorLoginId, nickname: e.authorNickname }}
+              expanded={expanded?.has(e.id)}
+              onOpenAuthor={onOpenProfile}
+              onToggleLike={onToggleLike}
+              onShowLikers={onShowLikers}
+              onToggleExpand={onToggleExpand}
+            />
+          ))
+        )}
+      </MarginBoard>
 
       {/* 안 가진 책에는 「담기」 안내만 둔다(v1) — 낯선 책에 닿는 유일한 길이 검색이라, 뒤로 한 번
           가면 담기 버튼이 거기 있다. 화면 안에서 끝내는 전용 경로는 진입점이 늘어날 때 붙인다. */}
       {myBookId === null && (
-        <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8, wordBreak: 'keep-all' }}>
-          내 서재에 담으면 이 책의 여백에 글을 남길 수 있어요.
+        <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 12, wordBreak: 'keep-all' }}>
+          내 서재에 담으면 여기에 글을 남길 수 있어요.
         </Text>
-      )}
-
-      <ErrorMessage message={error} />
-
-      {entries.length === 0 ? (
-        <Text typography="st11" color="grey600" style={{ display: 'block', marginTop: 16, wordBreak: 'keep-all' }}>
-          아직 함께 걸린 글이 없어요. 이 책을 읽은 누군가가 걸면 여기에 쌓여요.
-        </Text>
-      ) : (
-        entries.map((e) => (
-          <MarginCard
-            key={e.id}
-            entry={e}
-            now={now}
-            self={false}
-            busy={false}
-            confirming={false}
-            author={{ loginId: e.authorLoginId, nickname: e.authorNickname }}
-            onOpenAuthor={onOpenProfile}
-            onConfirmDelete={() => {}}
-            onDelete={() => {}}
-            onToggleLike={onToggleLike}
-            onShowLikers={onShowLikers}
-          />
-        ))
       )}
     </Screen>
   );
@@ -577,6 +679,8 @@ export function BookMarginAll({
 }) {
   const [data, setData] = useState<BookMarginAllResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** 펼쳐 둔 글 — 남의 글만 있는 화면이라 ⋯ 는 없고 이 상태만 든다. */
+  const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
 
   const fail = useCallback(
     (e: Error) => {
@@ -588,6 +692,13 @@ export function BookMarginAll({
 
   const likes = useMarginLikes(fail, onError);
 
+  const toggleExpand = (id: number) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+
   const load = useCallback(() => {
     setError(null); // 재시도가 성공했는데 지난 실패 문구가 남지 않게
     fetchBookMarginAll(isbn13).then(setData).catch(fail);
@@ -597,7 +708,7 @@ export function BookMarginAll({
 
   if (data === null) {
     return (
-      <Screen title="이 책의 여백" onBack={onBack}>
+      <Screen title="여백" onBack={onBack}>
         {timerStopped && <TimerStoppedNotice />}
         {/* 못 받았을 때 나갈 길만 있으면 실패가 곧 막다른 길이다 — 그 자리에서 다시 받을 길도 함께 준다. */}
         <ErrorMessage message={error} onRetry={load} />
@@ -620,6 +731,8 @@ export function BookMarginAll({
         onShowLikers={likes.showLikers}
         onOpenProfile={onOpenProfile}
         timerStopped={timerStopped}
+        expanded={expanded}
+        onToggleExpand={toggleExpand}
         tabs={
           myBookId === null ? undefined : (
             <MarginTabs
@@ -692,16 +805,14 @@ export function MarginView({
   loginId,
   margin,
   now,
-  busy,
-  confirmDeleteId,
   error,
   tabs,
+  expanded,
   onCompose,
-  onConfirmDelete,
-  onDelete,
   onToggleLike,
-  onToggleShare,
   onShowLikers,
+  onOpenMenu,
+  onToggleExpand,
   onBack,
   timerStopped = false,
 }: {
@@ -709,24 +820,27 @@ export function MarginView({
   margin: MarginResponse;
   /** 상대 시각의 기준 — 밖에서 받아야 테스트가 결정론이 된다. */
   now: number;
-  busy: boolean;
-  /** 지우기 확인이 열린 글 — 되돌릴 수 없는 동작이라 카드 하나씩만 연다. */
-  confirmDeleteId: number | null;
   error: string | null;
   onCompose: () => void;
-  onConfirmDelete: (id: number | null) => void;
-  onDelete: (id: number) => void;
   onToggleLike: (entry: MarginEntry) => void;
-  /** 내 글의 「함께 걸기」 토글 — 내 여백에서만 넘어온다(남의 글은 서버가 404로 거절한다). */
-  onToggleShare?: (entry: MarginEntry) => void;
   onShowLikers: (entry: MarginEntry) => void;
-  /** 「내 여백 / 모두」 탭 줄 — 내 책이고 isbn13이 있을 때만 셸이 넘긴다. */
+  /** 행의 ⋯ — 내 글에만 넘어간다(남의 글은 서버가 404로 거절한다). 없으면 ⋯ 자체가 안 그려진다. */
+  onOpenMenu?: (entry: MarginEntry) => void;
+  /** 펼쳐 둔 글 id — 상태는 컨테이너가 든다. */
+  expanded?: ReadonlySet<number>;
+  onToggleExpand?: (id: number) => void;
+  /** 「내가 쓴 여백 / 모두의 여백」 탭 줄 — 내 책이고 isbn13이 있을 때만 셸이 넘긴다. */
   tabs?: ReactNode;
   onBack: () => void;
   /** 여기 들어오느라 측정을 끝냈는가 — {@link TIMER_STOPPED_NOTICE}를 여는 스위치다. */
   timerStopped?: boolean;
 }) {
   const { book, ownerNickname, self, following, entries } = margin;
+  /**
+   * 머리글 둘째 줄 — 주인 이름은 <b>남의 여백에서만</b> 선다. 내 여백은 탭줄이 서는 자리라 주인이
+   * 언제나 나여서 이름이 잉여이지만, 남의 여백은 탭이 없어 이 줄이 「누구의 여백인가」의 유일한 좌표다.
+   */
+  const subtitle = [book.author, self ? null : `${ownerNickname} @${loginId}`].filter((s) => s !== null).join(' · ');
 
   return (
     <Screen title="여백" onBack={onBack}>
@@ -737,9 +851,11 @@ export function MarginView({
           <Text typography="st11" style={{ display: 'block', wordBreak: 'keep-all' }}>
             {book.title}
           </Text>
-          <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
-            {[book.author, `${ownerNickname} @${loginId}`].filter((s) => s !== null).join(' · ')}
-          </Text>
+          {subtitle !== '' && (
+            <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
+              {subtitle}
+            </Text>
+          )}
         </div>
       </div>
 
@@ -752,76 +868,66 @@ export function MarginView({
         </Text>
       )}
 
-      <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 20 }}>
-        여백에 남긴 글 {entries.length}
-      </Text>
-
-      {/* 작성 진입은 목록 위다 — 글이 쌓일수록 아래로 밀려나면 내 책에서 쓰기가 점점 멀어진다. */}
-      {self && (
-        <Button display="block" variant="weak" size="small" style={{ marginTop: 10 }} onClick={onCompose}>
-          여백에 글 남기기
-        </Button>
-      )}
-
       <ErrorMessage message={error} />
 
-      {entries.length === 0 ? (
-        <Text typography="st11" color="grey600" style={{ display: 'block', marginTop: 16, wordBreak: 'keep-all' }}>
-          {self
-            ? '아직 남긴 글이 없어요. 읽다가 마음에 걸린 문장을 남겨 보세요.'
-            : following
-              ? '아직 남긴 글이 없어요.'
-              : // 서버가 비팔로워에게 빈 배열을 준다 — 글이 있는지 없는지도 여기서 말하지 않는다.
-                '팔로우하면 이 책의 여백에 남긴 글을 볼 수 있어요.'}
-        </Text>
-      ) : (
-        entries.map((e) => (
-          <MarginCard
-            key={e.id}
-            entry={e}
-            now={now}
-            self={self}
-            busy={busy}
-            confirming={confirmDeleteId === e.id}
-            onConfirmDelete={onConfirmDelete}
-            onDelete={onDelete}
-            onToggleLike={onToggleLike}
-            onToggleShare={self ? onToggleShare : undefined}
-            onShowLikers={onShowLikers}
-          />
-        ))
-      )}
+      <MarginBoard count={entries.length} onCompose={self ? onCompose : undefined}>
+        {entries.length === 0 ? (
+          <Text
+            typography="st12"
+            color="grey600"
+            style={{ display: 'block', padding: '34px 16px', textAlign: 'center', wordBreak: 'keep-all' }}
+          >
+            {self
+              ? '아직 남긴 글이 없어요. 읽다가 마음에 걸린 문장을 남겨 보세요.'
+              : following
+                ? '아직 남긴 글이 없어요.'
+                : // 서버가 비팔로워에게 빈 배열을 준다 — 글이 있는지 없는지도 여기서 말하지 않는다.
+                  '팔로우하면 이 사람이 남긴 글을 볼 수 있어요.'}
+          </Text>
+        ) : (
+          entries.map((e) => (
+            <MarginCard
+              key={e.id}
+              entry={e}
+              now={now}
+              expanded={expanded?.has(e.id)}
+              onToggleLike={onToggleLike}
+              onShowLikers={onShowLikers}
+              onOpenMenu={self ? onOpenMenu : undefined}
+              onToggleExpand={onToggleExpand}
+            />
+          ))
+        )}
+      </MarginBoard>
     </Screen>
   );
 }
 
 /**
- * 글 한 장 — 배경은 서버 팔레트 색, 삭제는 본인 카드에만. 확인 단계는 밖에서 받는다(서재 관리 시트와 같다).
+ * 글 한 장 — <b>게시판 행</b>이다(2026-08-22 개편). 옛 모습은 팔레트 6색이 통째로 배경인 카드였는데,
+ * 목록으로 쌓이면 색 덩어리가 줄줄이 늘어서 「글이 몇 개인가」조차 안 읽혔다. 색은 <b>왼쪽 3px 막대</b>로
+ * 남는다 — 쓸 때 고른 값이라 통째로 버리면 작성 화면의 색 선택이 무의미해진다.
  *
- * <p>서재의 인라인 여백 박스가 미리보기로 이 카드를 그대로 재사용한다 — 거기서는 {@code self=false}라
- * 지우기 UI가 통째로 안 그려진다(글은 실제로 내 것이지만 삭제는 전체 화면의 몫).
+ * <p>행의 <b>동작</b>(올리기·내리기·지우기)은 여기 없다 — ⋯ 로 여는 {@link MarginMenuSheet}가 진다.
+ * 그래서 옛 프롭 여섯(`self`·`busy`·`confirming`·`onConfirmDelete`·`onDelete`·`onToggleShare`)이 통째로
+ * 빠졌다: 게시판 행이 옛 카드보다 <b>단순해졌다</b>.
+ *
+ * <p>서재의 인라인 여백 박스가 미리보기로 이 행을 그대로 재사용한다 — 손잡이를 하나도 안 넘기므로
+ * 하트·⋯·「더보기」 없이 본문만 그려진다.
  */
 export function MarginCard({
   entry,
   now,
-  self,
-  busy,
-  confirming,
   author,
-  onConfirmDelete,
-  onDelete,
+  expanded,
   onToggleLike,
-  onToggleShare,
   onShowLikers,
   onOpenAuthor,
+  onOpenMenu,
+  onToggleExpand,
 }: {
   entry: MarginEntry;
   now: number;
-  self: boolean;
-  busy: boolean;
-  confirming: boolean;
-  onConfirmDelete: (id: number | null) => void;
-  onDelete: (id: number) => void;
   /**
    * 좋아요 손잡이 — <b>있으면 하트 버튼, 없으면 하트 없음</b>. 이 프롭의 유무가 게이트다: `self`로
    * 갈랐다면 서재의 인라인 미리보기가 <b>내 글에 `self={false}`</b>를 넘기는 탓에 내 글에 하트가 떴을 것이다.
@@ -840,143 +946,301 @@ export function MarginCard({
   /** 작성자 줄의 손잡이 — 있으면 눌러서 그의 책방으로 간다(전체 화면 전이는 셸이 든다). */
   onOpenAuthor?: (loginId: string) => void;
   /**
-   * 「함께 걸기」 손잡이 — <b>있으면 칩이 버튼, 없으면 사실값 글자</b>({@link onToggleLike} 관례).
-   * 내 카드에만 넘긴다: 남의 글을 내가 걸거나 내릴 수는 없다(서버도 404로 거절한다).
+   * 행 오른쪽 끝 ⋯ — <b>있으면 버튼, 없으면 ⋯ 자체가 없다</b>({@link onToggleLike} 관례). 내 글에만
+   * 넘긴다: 남의 글은 내가 올리거나 지울 수 없다(서버도 404로 거절한다).
    *
-   * <p>손잡이가 있을 땐 <b>꺼진 글에도</b> 칩이 선다 — 사후에 켜는 길이 카드에 없으면 「함께 걸기」는
-   * 작성 순간에만 정할 수 있는 값이 되어 버린다.
+   * <p><b>「모두의 여백」 칩의 게이트이기도 하다.</b> 칩은 행마다 켜짐/꺼짐이 갈리는 목록에서만 뜻이
+   * 있는데, 그런 목록은 곧 내가 관리할 수 있는 목록이다 — 책축 목록은 전부 올라간 글이라 모든 행에
+   * 같은 딱지가 붙어 정보량이 0이 된다.
    */
-  onToggleShare?: (entry: MarginEntry) => void;
+  onOpenMenu?: (entry: MarginEntry) => void;
+  /** 본문이 펼쳐졌는가 — 상태는 밖에서 받는다(정적 렌더 하니스가 두 상태에 닿는 유일한 길). */
+  expanded?: boolean;
+  /** 「더보기」 손잡이 — 없으면 접히기만 한다(서재 미리보기는 박스의 「전체 보기」가 출구다). */
+  onToggleExpand?: (id: number) => void;
 }) {
   const bg = palette(entry.bgCode);
   const shared = entry.shared === true;
+  const foldable = needsFold(entry.text);
+  const clamped = foldable && expanded !== true;
 
   return (
-    <div
-      style={{
-        marginTop: 12,
-        padding: 16,
-        borderRadius: 12,
-        background: bg.background,
-        color: bg.color,
-      }}
-    >
-      {/* 인용은 主가 아니라 從이다 — 작게·옅게 두고 세로선으로만 가른다. 크게 뽑으면 카드의 주인공이
-          남의 문장이 되어 「내 독서 기록」이 명언 카드가 된다. 세리프로 가르지 않는 이유: 폰에 한글
-          세리프가 없어 `serif`가 안드로이드는 명조·iOS는 고딕으로 갈린다(폰마다 다른 카드). */}
-      {/* 작성자가 카드 머리에 선다 — 책축 목록에서 「누가 썼나」는 본문보다 먼저 읽히는 정보다. */}
-      {author !== undefined &&
-        (onOpenAuthor === undefined ? (
-          <p style={authorLine}>
-            {author.nickname} @{author.loginId}
-          </p>
-        ) : (
-          <button
-            type="button"
-            aria-label={`${author.nickname}님의 책방 보기`}
-            onClick={() => onOpenAuthor(author.loginId)}
-            style={{ ...authorLine, border: 'none', background: 'transparent', cursor: 'pointer', color: 'inherit' }}
-          >
-            {author.nickname} @{author.loginId}
-          </button>
-        ))}
-      {entry.quote !== null && (
-        <blockquote
-          style={{
-            margin: '0 0 14px',
-            paddingLeft: 12,
-            borderLeft: `2px solid ${bg.color}`,
-            fontSize: 16,
-            lineHeight: 1.6,
-            opacity: 0.85,
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'keep-all',
-          }}
-        >
-          {entry.quote}
-        </blockquote>
-      )}
-      <p style={{ margin: 0, fontSize: 17, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'keep-all' }}>
-        {entry.text}
-      </p>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 13, opacity: 0.75 }}>
-        <span style={{ flex: 1, minWidth: 0 }}>{relativeTime(entry.createdAt, now)}</span>
-        {/* 하트는 누르기/취소만 진다 — 개수를 같은 버튼에 넣으면 명단을 보려다 좋아요가 눌린다. */}
-        {onToggleLike !== undefined && (
-          <button
-            type="button"
-            aria-label={entry.liked ? '좋아요 취소' : '좋아요'}
-            aria-pressed={entry.liked}
-            onClick={() => onToggleLike(entry)}
-            style={{ ...ghost(bg.color), display: 'inline-flex', alignItems: 'center' }}
-          >
-            <Heart filled={entry.liked} />
-          </button>
-        )}
-        {/* 「함께 걸림」은 사실값이라 손잡이가 없어도 보인다(남의 카드에도 무해하다 — 그가 건 것이 맞다).
-            손잡이가 있으면 꺼진 글에도 서서 사후에 켜는 길이 된다. */}
-        {(shared || onToggleShare !== undefined) &&
-          (onToggleShare === undefined ? (
-            <span style={{ flex: '0 0 auto' }}>함께 걸림</span>
+    <div style={{ display: 'flex', gap: 9, padding: '11px 12px', borderTop: '1px solid #EFE8D9' }}>
+      {/* 팔레트 색이 사는 유일한 자리 — 배경으로 깔면 목록이 색 덩어리가 되고, 아예 버리면 작성 화면의
+          색 선택이 뜻을 잃는다. 3px 막대가 그 사이의 값이다. */}
+      <div style={{ flex: '0 0 auto', width: 3, background: bg.background }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {/* 작성자가 행 머리에 선다 — 책축 목록에서 「누가 썼나」는 본문보다 먼저 읽히는 정보다. */}
+        {author !== undefined &&
+          (onOpenAuthor === undefined ? (
+            <p style={authorLine}>
+              {author.nickname} @{author.loginId}
+            </p>
           ) : (
             <button
               type="button"
-              aria-label={shared ? '함께 걸기 끄기' : '함께 걸기'}
-              aria-pressed={shared}
-              disabled={busy}
-              onClick={() => onToggleShare(entry)}
-              style={{ ...ghost(bg.color), opacity: shared ? 1 : 0.7 }}
+              aria-label={`${author.nickname}님의 책방 보기`}
+              onClick={() => onOpenAuthor(author.loginId)}
+              style={{ ...authorLine, border: 'none', background: 'transparent', cursor: 'pointer' }}
             >
-              {shared ? '함께 걸림' : '함께 걸기'}
+              {author.nickname} @{author.loginId}
             </button>
           ))}
-        {self &&
-          (confirming ? (
-            <>
-              <span>이 글을 지울까요?</span>
-              <button type="button" disabled={busy} onClick={() => onDelete(entry.id)} style={ghost(bg.color)}>
-                정말 지우기
-              </button>
-              <button type="button" disabled={busy} onClick={() => onConfirmDelete(null)} style={ghost(bg.color)}>
-                취소
-              </button>
-            </>
+        {/* 인용은 主가 아니라 從이다 — 작게·옅게 두고 세로선으로만 가른다. 크게 뽑으면 행의 주인공이
+            남의 문장이 되어 「내 독서 기록」이 명언 카드가 된다. 세리프로 가르지 않는 이유: 폰에 한글
+            세리프가 없어 `serif`가 안드로이드는 명조·iOS는 고딕으로 갈린다(폰마다 다른 화면). */}
+        {entry.quote !== null && (
+          <blockquote
+            style={{
+              margin: '0 0 5px',
+              paddingLeft: 7,
+              borderLeft: '2px solid #DCD4C2',
+              color: ROW_SUB,
+              fontSize: 13,
+              lineHeight: 1.55,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'keep-all',
+            }}
+          >
+            {entry.quote}
+          </blockquote>
+        )}
+        <p
+          style={{
+            margin: 0,
+            color: ROW_TEXT,
+            fontSize: 15,
+            lineHeight: 1.55,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'keep-all',
+            ...(clamped
+              ? ({
+                  display: '-webkit-box',
+                  WebkitLineClamp: CLAMP_LINES,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                } as const)
+              : {}),
+          }}
+        >
+          {entry.text}
+        </p>
+        {/* 펼침은 손잡이가 있을 때만 — 없으면 접힌 채로 둔다(자를 수는 있어도 못 펴는 자리가 있다). */}
+        {onToggleExpand !== undefined && foldable && (
+          <button type="button" onClick={() => onToggleExpand(entry.id)} style={moreLine}>
+            {clamped ? '더보기' : '접기'}
+          </button>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7, fontSize: 11, color: ROW_SUB }}>
+          <span>{relativeTime(entry.createdAt, now)}</span>
+          {/* 칩은 이제 <b>상태 표시 전용</b>이다 — 켜고 끄는 일은 ⋯ 시트로 옮겼다(2026-08-22). */}
+          {shared && onOpenMenu !== undefined && <span style={sharedChip}>모두의 여백</span>}
+          <span style={{ flex: 1, minWidth: 0 }} />
+          {/* 하트는 누르기/취소만 진다 — 개수를 같은 버튼에 넣으면 명단을 보려다 좋아요가 눌린다. */}
+          {onToggleLike !== undefined && (
+            <button
+              type="button"
+              aria-label={entry.liked ? '좋아요 취소' : '좋아요'}
+              aria-pressed={entry.liked}
+              onClick={() => onToggleLike(entry)}
+              style={{ ...rowGhost(ROW_SUB), display: 'inline-flex', alignItems: 'center' }}
+            >
+              <Heart filled={entry.liked} />
+            </button>
+          )}
+          {onOpenMenu !== undefined && (
+            <button
+              type="button"
+              aria-label="이 글 관리"
+              onClick={() => onOpenMenu(entry)}
+              style={{ ...rowGhost(ROW_TEXT), fontSize: 17, lineHeight: 1 }}
+            >
+              ⋯
+            </button>
+          )}
+        </div>
+
+        {/* 개수는 데이터라 손잡이와 무관하게 보이고(주인도 남이 눌러 준 걸 안다), 여는 손잡이만 조건부다.
+            0은 줄 자체를 안 만든다 — 빈 상태를 숫자로 박제하면 「아무도 안 눌렀다」가 행마다 반복된다. */}
+        {entry.likeCount > 0 &&
+          (onShowLikers === undefined ? (
+            <p style={likesLine(ROW_SUB)}>좋아요 {entry.likeCount}명</p>
           ) : (
-            <button type="button" disabled={busy} onClick={() => onConfirmDelete(entry.id)} style={ghost(bg.color)}>
-              지우기
+            <button
+              type="button"
+              aria-label={`좋아요 ${entry.likeCount}명 보기`}
+              onClick={() => onShowLikers(entry)}
+              style={{ ...likesLine(ROW_SUB), border: 'none', background: 'transparent', cursor: 'pointer' }}
+            >
+              좋아요 {entry.likeCount}명
             </button>
           ))}
       </div>
-
-      {/* 개수는 데이터라 손잡이와 무관하게 보이고(주인도 남이 눌러 준 걸 안다), 여는 손잡이만 조건부다.
-          0은 줄 자체를 안 만든다 — 빈 상태를 숫자로 박제하면 「아무도 안 눌렀다」가 카드마다 반복된다.
-          아래 줄로 내린 이유: 시각·하트·지우기가 있는 푸터에 넷째 칸을 우겨넣으면 좁은 폭에서 접힌다. */}
-      {entry.likeCount > 0 &&
-        (onShowLikers === undefined ? (
-          <p style={likesLine(bg.color)}>좋아요 {entry.likeCount}명</p>
-        ) : (
-          <button
-            type="button"
-            aria-label={`좋아요 ${entry.likeCount}명 보기`}
-            onClick={() => onShowLikers(entry)}
-            style={{ ...likesLine(bg.color), border: 'none', background: 'transparent', cursor: 'pointer' }}
-          >
-            좋아요 {entry.likeCount}명
-          </button>
-        ))}
     </div>
   );
 }
 
-/** 작성자 줄 — 카드 색을 상속해 팔레트 6색 어디서나 읽힌다(하트와 같은 규칙). */
+/**
+ * 이 글이 세 줄을 넘기는가 — 접기와 「더보기」가 <b>같은 판정</b>을 쓴다(둘이 갈리면 펼 수 없는 접힘이나
+ * 아무것도 안 하는 손잡이가 생긴다).
+ *
+ * <p>축이 <b>둘</b>인 이유: 본문은 `pre-wrap`이라 줄바꿈이 그대로 산다. 글자 수만 세면 「오늘 읽은 곳 /
+ * 인상 깊은 대목 / 내일 이어서」처럼 <b>짧지만 여러 문단</b>인 글이 30자짜리로 계산돼 안 접히고, 게시판
+ * 행이 7줄로 늘어난다. 문단을 나눠 쓰는 것은 여백 글에서 예외가 아니라 기본이다.
+ *
+ * <p>넘침 <b>실측</b>(`scrollHeight`)이 정확하지만 정적 렌더 하니스에서 안 돌아 테스트가 통째로
+ * 불가능해진다 — 이 둘은 결정론이라 계측이 붙는다.
+ *
+ * ponytail: 휴리스틱 — 라틴 문자 비중이 높거나 어절이 유난히 긴 글에선 글자 수 축이 어긋난다. 눈에 띄면
+ * `ResizeObserver` 실측으로 올린다(그때는 이 판정을 컨테이너로 올려 테스트를 유지한다).
+ */
+const needsFold = (text: string): boolean => text.length > CLAMP_CHARS || text.split('\n').length > CLAMP_LINES;
+
+/**
+ * 접는 글자 수 임계 — 목 모드 실측이다(390×844, 15px/line-height 23.25px, `wordBreak: keep-all`):
+ * 98자 한글 문단이 <b>4줄</b>이었으므로 ≈ 24.5자/줄, 3줄 ≈ 73자. 여유 2자를 더해 75.
+ *
+ * <p>설계가 처음 잡았던 90은 실측 전 추정치(28~30자/줄)였고 <b>틀렸다</b> — 그 값이면 74~90자 글이
+ * 4줄인 채로 안 접힌다.
+ *
+ * <p>여유를 <b>위쪽</b>으로 두는 이유: 두 오차의 무게가 다르다. 4줄이 안 접히면 행이 조금 길어질 뿐이지만,
+ * 3줄 글에 「더보기」가 붙으면 눌러도 아무것도 안 변하는 <b>가짜 손잡이</b>가 된다.
+ */
+const CLAMP_CHARS = 75;
+
+/** 접기 후 남기는 줄 수 — `WebkitLineClamp` 값과 같아야 한다(다르면 판정과 그림이 어긋난다). */
+const CLAMP_LINES = 3;
+
+/** 행의 본문 색 — 배경이 흰 게시판이라 팔레트 색을 상속하지 않는다(막대만 색을 진다). */
+const ROW_TEXT = 'var(--adaptiveGrey900, #2C2A24)';
+const ROW_SUB = 'var(--adaptiveGrey600, #8A8578)';
+
+/**
+ * 행 푸터의 아이콘 버튼 — <b>테두리가 없다</b>. 옛 ghost 버튼은 1px 테두리를 둘렀는데, 색 카드 위에서는
+ * 옅은 윤곽이던 것이 흰 게시판 위에서는 상자로 읽혀 하트 하나가 행을 지배했다(그래서 그 스타일은
+ * 호출처가 사라져 함께 지웠다). 손가락 자리는 테두리가 아니라 padding이 만든다.
+ */
+const rowGhost = (color: string) =>
+  ({
+    flex: '0 0 auto',
+    padding: '4px 6px',
+    border: 'none',
+    background: 'transparent',
+    color,
+    fontSize: 13,
+    cursor: 'pointer',
+  }) as const;
+
+/** 「더보기」/「접기」 — 본문 바로 아래 왼쪽 정렬. 세로 여백이 손가락 자리를 만든다. */
+const moreLine = {
+  display: 'block',
+  width: 'auto',
+  margin: '4px 0 0',
+  padding: '2px 0',
+  border: 'none',
+  background: 'transparent',
+  color: 'var(--adaptiveBlue700, #4F6B4C)',
+  fontSize: 12,
+  fontWeight: 700,
+  textAlign: 'left',
+  cursor: 'pointer',
+} as const;
+
+/** 「모두의 여백」 딱지 — 눌리지 않는다(동작은 ⋯ 시트가 진다). */
+const sharedChip = {
+  flex: '0 0 auto',
+  padding: '1px 7px',
+  borderRadius: 999,
+  background: 'var(--adaptiveBlue50, #E7EEE2)',
+  color: 'var(--adaptiveBlue700, #4F6B4C)',
+} as const;
+
+/**
+ * 글 관리 시트 — 행의 ⋯ 가 여는 자리. 「올리기/내리기」와 「지우기」 <b>둘</b>이 들어가서 ⋯ 가 값을 한다
+ * (지우기 하나뿐이면 한 겹 더 누르게 만든 손해였다).
+ *
+ * <p>자체 구현 {@link Sheet}를 쓴다 — TDS `BottomSheet`는 포털이라 정적 렌더에서 마크업이 통째로 빈다.
+ * ⚠️ 진입 직후 자동으로 뜨지 않는다(T-183): 여는 것은 언제나 사용자의 ⋯ 탭이다.
+ */
+export function MarginMenuSheet({
+  entry,
+  canShare,
+  confirming,
+  busy,
+  onShare,
+  onConfirmDelete,
+  onDelete,
+  onClose,
+}: {
+  entry: MarginEntry;
+  /** 책축 좌표(isbn13)가 있는가 — 없으면 올릴 자리 자체가 없어 그 줄을 안 그린다. */
+  canShare: boolean;
+  confirming: boolean;
+  busy: boolean;
+  onShare: (entry: MarginEntry) => void;
+  onConfirmDelete: (id: number | null) => void;
+  onDelete: (id: number) => void;
+  onClose: () => void;
+}) {
+  const shared = entry.shared === true;
+
+  return (
+    <Sheet title="글 관리" onClose={onClose}>
+      {canShare && (
+        <button
+          type="button"
+          aria-pressed={shared}
+          disabled={busy}
+          onClick={() => onShare(entry)}
+          style={menuRow(false)}
+        >
+          {shared ? '모두의 여백에서 내리기' : '모두의 여백에 올리기'}
+        </button>
+      )}
+      {confirming ? (
+        <>
+          <p style={{ margin: '10px 2px 6px', color: ROW_SUB, fontSize: 13 }}>이 글을 지울까요?</p>
+          <button type="button" disabled={busy} onClick={() => onDelete(entry.id)} style={menuRow(true)}>
+            정말 지우기
+          </button>
+          <button type="button" disabled={busy} onClick={() => onConfirmDelete(null)} style={menuRow(false)}>
+            취소
+          </button>
+        </>
+      ) : (
+        <button type="button" disabled={busy} onClick={() => onConfirmDelete(entry.id)} style={menuRow(true)}>
+          지우기
+        </button>
+      )}
+    </Sheet>
+  );
+}
+
+/** 시트의 한 줄 — 손가락 높이(44px)를 쓰는 전체폭 버튼. 되돌릴 수 없는 줄만 붉다. */
+const menuRow = (danger: boolean) =>
+  ({
+    display: 'block',
+    width: '100%',
+    height: 44,
+    padding: '0 4px',
+    border: 'none',
+    background: 'transparent',
+    color: danger ? '#A32D2D' : ROW_TEXT,
+    fontSize: 15,
+    fontWeight: 700,
+    textAlign: 'left',
+    cursor: 'pointer',
+  }) as const;
+
+/** 작성자 줄 — 게시판 행의 머리. 세이지로 눌러 본문보다 뒤로 물린다(이름이 본문을 이기면 안 된다). */
 const authorLine = {
   display: 'block',
   width: 'auto',
-  margin: '0 0 10px',
+  margin: '0 0 4px',
   padding: 0,
-  fontSize: 13,
+  color: 'var(--adaptiveBlue700, #4F6B4C)',
+  fontSize: 12,
   fontWeight: 700,
-  opacity: 0.8,
   textAlign: 'left',
 } as const;
 
@@ -1098,8 +1362,11 @@ export function StoryComposer({
         ))}
       </div>
 
-      {/* 「함께 걸기」는 배경 팔레트 아래·버튼 위다 — 쓰기가 끝난 뒤 마지막으로 정하는 값이고,
-          체크를 카드 안에 넣으면 여섯 배경마다 대비를 다시 맞춰야 한다. */}
+      {/* 공개 스위치는 배경 팔레트 아래·버튼 위다 — 쓰기가 끝난 뒤 마지막으로 정하는 값이고,
+          체크를 카드 안에 넣으면 여섯 배경마다 대비를 다시 맞춰야 한다.
+
+          문구는 목록의 ⋯ 시트와 <b>같은 말</b>이어야 한다(2026-08-22): 쓸 때 「함께 걸기」, 고칠 때
+          「모두의 여백에 올리기」로 갈리면 같은 값이라는 것이 안 읽힌다. 명사는 「모두의 여백」 하나. */}
       <label style={shareRow}>
         <input
           type="checkbox"
@@ -1110,7 +1377,7 @@ export function StoryComposer({
         />
         <span style={{ minWidth: 0 }}>
           <Text typography="st11" style={{ display: 'block', wordBreak: 'keep-all' }}>
-            이 책의 여백에 함께 걸기
+            모두의 여백에 올리기
           </Text>
           <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2, wordBreak: 'keep-all' }}>
             {shareNotice(book.isPublic)}
@@ -1164,14 +1431,3 @@ const composerField = (color: string) =>
     resize: 'vertical',
   }) as const;
 
-const ghost = (color: string) =>
-  ({
-    flex: '0 0 auto',
-    padding: '6px 10px',
-    borderRadius: 8,
-    border: `1px solid ${color}`,
-    background: 'transparent',
-    color,
-    fontSize: 13,
-    cursor: 'pointer',
-  }) as const;

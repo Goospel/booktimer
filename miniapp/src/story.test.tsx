@@ -8,6 +8,8 @@ import {
   BookMarginAllView,
   LikersSheet,
   MarginCard,
+  MarginMenuSheet,
+  MarginTabs,
   MarginView,
   StoryComposer,
   TIMER_STOPPED_NOTICE,
@@ -15,6 +17,7 @@ import {
   hasFreshStory,
   marginTabLabel,
   shareNotice,
+  showMarginTabs,
   visibilityNotice,
 } from './screens/Story';
 import { userAgent } from './test-fixtures';
@@ -61,10 +64,12 @@ function margin(extra: Partial<MarginResponse> = {}): MarginResponse {
 function view(
   data: MarginResponse,
   extra: {
-    confirmDeleteId?: number | null;
     error?: string | null;
     onToggleLike?: (e: MarginEntry) => void;
     onShowLikers?: (e: MarginEntry) => void;
+    /** `undefined`를 명시하면 ⋯ 없는 화면이 된다 — 남의 여백·서재 미리보기가 그 자리다. */
+    onOpenMenu?: (e: MarginEntry) => void;
+    expanded?: ReadonlySet<number>;
     timerStopped?: boolean;
   } = {},
 ) {
@@ -73,14 +78,13 @@ function view(
       loginId="goospel"
       margin={data}
       now={NOW}
-      busy={false}
-      confirmDeleteId={extra.confirmDeleteId ?? null}
       error={extra.error ?? null}
+      expanded={extra.expanded}
       onCompose={() => {}}
-      onConfirmDelete={() => {}}
-      onDelete={() => {}}
       onToggleLike={extra.onToggleLike ?? (() => {})}
       onShowLikers={extra.onShowLikers ?? (() => {})}
+      onOpenMenu={'onOpenMenu' in extra ? extra.onOpenMenu : () => {}}
+      onToggleExpand={() => {}}
       onBack={() => {}}
       timerStopped={extra.timerStopped ?? false}
     />,
@@ -137,7 +141,33 @@ describe('책 여백 화면 (MarginView)', () => {
     expect(markup).toContain('데미안');
     expect(markup).toContain('헤르만 헤세');
     expect(markup).toContain('@goospel');
-    expect(markup).toContain('여백에 남긴 글 2');
+    expect(markup).toContain('글 2');
+  });
+
+  /**
+   * R2·R3 — 머리글의 주인 이름은 <b>남의 여백에서만</b> 선다. 내 여백은 탭줄이 서는 자리라 주인이
+   * 언제나 나여서 이름이 잉여이지만, 남의 여백은 탭이 없어 그 이름이 「누구의 여백인가」의 유일한 좌표다.
+   */
+  it('내 여백 머리글에는 주인 이름이 없다 — 주인이 언제나 나다', () => {
+    const markup = view(margin({ self: true }));
+
+    expect(markup).not.toContain('@goospel');
+    expect(markup).toContain('데미안'); // 머리글 자체는 그려졌다(부재 단언의 쌍)
+    expect(markup).toContain('헤르만 헤세');
+  });
+
+  it('남의 여백 머리글에는 주인 이름이 선다 — 탭이 없어 이 줄이 유일한 좌표다', () => {
+    const markup = view(margin({ self: false }));
+
+    expect(markup).toContain('구스펠');
+    expect(markup).toContain('@goospel');
+  });
+
+  it('저자가 없는 내 책이면 둘째 줄 자체가 없다 — 빈 줄만 남기지 않는다', () => {
+    const markup = view(margin({ self: true, book: { id: 7, title: '수기', author: null, coverUrl: null } }));
+
+    expect(markup).toContain('수기'); // 제목은 그려졌다(부재 단언의 쌍)
+    expect(markup).not.toContain('@goospel');
   });
 
   it('글은 서버가 준 순서(최신순) 그대로 그린다', () => {
@@ -151,32 +181,74 @@ describe('책 여백 화면 (MarginView)', () => {
     expect(view(margin({ entries: [entry(1, { bgCode: 'javascript:evil' })] }))).not.toContain('javascript:evil');
   });
 
-  it('내 책이면 「여백에 글 남기기」와 글마다 지우기가 선다', () => {
+  /**
+   * R4 — 작성 진입은 게시판 머리 <b>우상단</b>의 작은 버튼이다. 옛 전체폭 버튼이 남으면 한 화면에
+   * 작성 문이 둘이 되므로, 새 버튼의 존재만이 아니라 <b>옛 버튼의 부재</b>까지 함께 못 박는다.
+   */
+  it('내 책이면 게시판 머리에 「글쓰기」가 선다 — 옛 전체폭 버튼은 없다', () => {
     const markup = view(margin({ self: true, following: false }));
 
-    expect(markup).toContain('여백에 글 남기기');
-    expect(markup).toContain('지우기');
+    expect(markup).toContain('글쓰기');
+    expect(markup).not.toContain('여백에 글 남기기');
   });
 
-  it('지우기를 누른 글에만 확인 문구가 뜬다 — 되돌릴 수 없는 동작이라 한 탭 더 받는다', () => {
-    const markup = view(margin({ self: true, entries: [entry(1), entry(2)] }), { confirmDeleteId: 2 });
-
-    expect(markup).toContain('이 글을 지울까요?');
-    expect(markup.match(/정말 지우기/g)).toHaveLength(1);
-  });
-
-  it('남의 책이면 작성·삭제 손잡이가 없다 — 서버가 404로 거절하는 동작을 화면에서 먼저 막는다', () => {
+  it('남의 책이면 글쓰기가 없다 — 서버가 404로 거절하는 동작을 화면에서 먼저 막는다', () => {
     const markup = view(margin({ self: false, following: true }));
 
-    expect(markup).not.toContain('여백에 글 남기기');
+    expect(markup).toContain('문장 1'); // 목록은 그려졌다(부재 단언의 쌍)
+    expect(markup).not.toContain('글쓰기');
+  });
+
+  /**
+   * R7 — 행의 동작(올리기·내리기·지우기)은 ⋯ 시트로 접혔다. 목록 안에 지우기 글자가 남아 있으면
+   * 그 자리에서 지울 수 있다는 뜻이 되어, 확인 단계가 없는 삭제 손잡이가 된다.
+   */
+  it('목록에는 ⋯ 손잡이만 있고 지우기 글자는 없다 — 동작은 시트로 접혔다', () => {
+    const markup = view(margin({ self: true, following: false }));
+
+    expect(markup).toContain('aria-label="이 글 관리"');
     expect(markup).not.toContain('지우기');
+  });
+
+  it('⋯ 손잡이를 안 넘기면 ⋯ 자체가 없다 — 남의 글은 내가 관리하지 않는다', () => {
+    const markup = view(margin({ self: false, following: true }), { onOpenMenu: undefined });
+
+    expect(markup).toContain('문장 1'); // 목록은 그려졌다(부재 단언의 쌍)
+    expect(markup).not.toContain('aria-label="이 글 관리"');
+  });
+
+  /**
+   * 컨테이너는 `onOpenMenu`를 <b>언제나</b> 넘긴다(내 여백인지 남의 여백인지 모르는 채로 배선된다) —
+   * 그래서 남의 글에 ⋯ 가 안 뜨게 막는 것은 이 화면의 `self` 게이트 하나뿐이다. 손잡이를 안 넘긴
+   * 위 케이스로는 이 게이트가 계측되지 않는다(돌연변이 실측에서 살아남았다).
+   */
+  it('남의 여백이면 손잡이를 받아도 ⋯ 를 안 그린다 — 서버 404를 화면에서 먼저 막는다', () => {
+    const markup = view(margin({ self: false, following: true }), { onOpenMenu: () => {} });
+
+    expect(markup).toContain('문장 1'); // 목록은 그려졌다(부재 단언의 쌍)
+    expect(markup).not.toContain('aria-label="이 글 관리"');
+  });
+
+  /**
+   * 접기 <b>배선</b>을 잰다 — 카드 단위 테스트는 프롭을 직접 꽂으므로, 목록 뷰가 그 둘(`expanded`·
+   * `onToggleExpand`)을 실제로 이어 주는지는 아무도 안 본다. 리뷰 실측에서 둘 다 끊어도 전건 통과했다:
+   * 끊기면 실제 화면에서 「더보기」가 통째로 사라지거나 눌러도 안 펴진다.
+   */
+  const longEntry = () => entry(1, { text: '가'.repeat(80) });
+
+  it('긴 글이 실린 목록에는 「더보기」가 이어진다', () => {
+    expect(view(margin({ self: true, entries: [longEntry()] }))).toContain('더보기');
+  });
+
+  it('펼쳐 둔 글은 「접기」로 이어진다 — 펼침 상태가 목록까지 닿아야 한다', () => {
+    expect(view(margin({ self: true, entries: [longEntry()] }), { expanded: new Set([1]) })).toContain('접기');
   });
 
   it('비팔로워에게는 팔로우하면 볼 수 있다고 말한다 — 글 유무 자체가 새지 않는다(서버가 빈 배열)', () => {
     const markup = view(margin({ self: false, following: false, entries: [] }));
 
     expect(markup).toContain('팔로우하면');
-    expect(markup).toContain('여백에 남긴 글 0');
+    expect(markup).toContain('글 0');
   });
 
   it('내 책인데 글이 하나도 없으면 첫 문장을 권한다 — 팔로우 안내가 내 화면에 뜨면 오독이다', () => {
@@ -206,7 +278,7 @@ describe('책 여백 화면 (MarginView)', () => {
     const markup = view(margin({ self: true, book: { id: 7, title: '공개책', author: null, coverUrl: null, isPublic: true } }));
 
     expect(markup).not.toContain('나만 봐요');
-    expect(markup).toContain('여백에 글 남기기'); // 화면 자체는 그려졌다(부재 단언의 쌍)
+    expect(markup).toContain('글쓰기'); // 화면 자체는 그려졌다(부재 단언의 쌍)
   });
 
   it('실패 문구는 화면 안에서 끝난다 — 목록을 통째로 에러로 갈아치우지 않는다', () => {
@@ -333,15 +405,7 @@ describe('여백 좋아요', () => {
 
   it('핸들러를 안 넘기면 손잡이가 없다 — 서재 미리보기가 내 글에 self=false를 넘기는 자리', () => {
     const html = render(
-      <MarginCard
-        entry={entry(1, { likeCount: 3 })}
-        now={NOW}
-        self={false}
-        busy={false}
-        confirming={false}
-        onConfirmDelete={() => {}}
-        onDelete={() => {}}
-      />,
+      <MarginCard entry={entry(1, { likeCount: 3 })} now={NOW} />,
     );
 
     expect(html).not.toContain('aria-label="좋아요"');
@@ -393,15 +457,7 @@ describe('여백 좋아요', () => {
 
   it('명단 핸들러가 없으면 개수는 글자로만 남는다 — 서재 미리보기엔 열 시트가 없다', () => {
     const html = render(
-      <MarginCard
-        entry={entry(1, { likeCount: 3 })}
-        now={NOW}
-        self={false}
-        busy={false}
-        confirming={false}
-        onConfirmDelete={() => {}}
-        onDelete={() => {}}
-      />,
+      <MarginCard entry={entry(1, { likeCount: 3 })} now={NOW} />,
     );
 
     expect(html).toContain('좋아요 3명');
@@ -433,15 +489,7 @@ describe('인용문', () => {
 
   it('서재 인라인 미리보기(손잡이 없는 카드)도 인용을 그린다 — 같은 카드다', () => {
     const html = render(
-      <MarginCard
-        entry={entry(1, { quote: '옮긴 문장' })}
-        now={NOW}
-        self={false}
-        busy={false}
-        confirming={false}
-        onConfirmDelete={() => {}}
-        onDelete={() => {}}
-      />,
+      <MarginCard entry={entry(1, { quote: '옮긴 문장' })} now={NOW} />,
     );
 
     expect(html).toContain('옮긴 문장');
@@ -459,6 +507,24 @@ describe('인용문', () => {
 
     expect(html).toContain('책에서 옮긴 문장');
     expect(html).toContain('내 생각');
+  });
+
+  /**
+   * 어휘는 <b>한 벌</b>이다 — 쓸 때 「함께 걸기」, 고칠 때 「모두의 여백에 올리기」로 갈리면 같은 값이라는
+   * 것이 안 읽힌다. 명사는 「모두의 여백」 하나, 동사는 「올리기/내리기」 하나(2026-08-22 게시판 개편).
+   */
+  it('작성 화면의 공개 스위치도 목록·시트와 같은 말을 쓴다', () => {
+    const html = render(
+      <StoryComposer
+        book={{ id: 7, title: '데미안', author: '헤르만 헤세', coverUrl: null }}
+        onDone={() => {}}
+        onCancel={() => {}}
+        onError={() => {}}
+      />,
+    );
+
+    expect(html).toContain('모두의 여백에 올리기');
+    expect(html).not.toContain('함께 걸기');
   });
 });
 
@@ -550,40 +616,195 @@ describe('함께 걸기 — 고지 문구 (M-1)', () => {
   });
 });
 
-describe('함께 걸기 — 카드의 칩과 손잡이 (M-2)', () => {
-  const card = (extra: Partial<MarginEntry>, onToggleShare?: (e: MarginEntry) => void) =>
+/**
+ * 「모두의 여백」 칩 — <b>상태 표시 전용</b>이다(2026-08-22 게시판 개편). 켜고 끄는 일은 ⋯ 시트로
+ * 옮겼으므로 칩은 더 이상 버튼이 아니다.
+ *
+ * <p>칩이 서는 조건에 <b>관리 손잡이의 유무</b>가 함께 들어가는 것이 핵심이다: 책축 목록은 전부 올라간
+ * 글이라 모든 행에 같은 딱지가 붙으면 정보량이 0이 된다.
+ */
+describe('「모두의 여백」 칩 — 상태 표시 (M-2)', () => {
+  const card = (shared: boolean | undefined, onOpenMenu?: (e: MarginEntry) => void) =>
+    render(<MarginCard entry={entry(1, { shared })} now={NOW} onOpenMenu={onOpenMenu} />);
+
+  it('올린 글에는 「모두의 여백」이라고 적힌다 — 상태가 보여야 내릴 생각도 든다', () => {
+    expect(card(true, () => {})).toContain('모두의 여백');
+  });
+
+  it('안 올린 글에는 칩이 없다 — 꺼짐을 딱지로 박제하지 않는다', () => {
+    const html = card(false, () => {});
+
+    expect(html).toContain('문장 1'); // 카드 자체는 그려졌다(부재 단언의 쌍)
+    expect(html).not.toContain('모두의 여백');
+  });
+
+  it('관리 손잡이가 없는 목록에는 칩이 아예 없다 — 전부 올라간 목록에서는 정보가 0이다', () => {
+    const html = card(true);
+
+    expect(html).toContain('문장 1');
+    expect(html).not.toContain('모두의 여백');
+  });
+
+  it('필드를 안 보내는 옛 서버(undefined)는 꺼짐으로 읽는다 — 안 올린 글을 올렸다고 하는 쪽이 더 위험하다', () => {
+    const html = card(undefined, () => {});
+
+    expect(html).toContain('문장 1');
+    expect(html).not.toContain('모두의 여백');
+  });
+});
+
+/**
+ * 글 관리 시트 — 행의 동작(올리기·내리기·지우기)이 ⋯ 하나로 접힌 자리. 자체 구현 `Sheet`를 쓰므로
+ * 정적 렌더에서도 마크업이 나온다(TDS 포털 시트였다면 통째로 비었을 것이다).
+ */
+describe('글 관리 시트 (MarginMenuSheet)', () => {
+  const sheet = (extra: Partial<MarginEntry>, o: { canShare?: boolean; confirming?: boolean } = {}) =>
     render(
-      <MarginCard
+      <MarginMenuSheet
         entry={entry(1, extra)}
-        now={NOW}
-        self
+        canShare={o.canShare ?? true}
+        confirming={o.confirming ?? false}
         busy={false}
-        confirming={false}
+        onShare={() => {}}
         onConfirmDelete={() => {}}
         onDelete={() => {}}
-        onToggleShare={onToggleShare}
+        onClose={() => {}}
       />,
     );
 
-  it('걸어 둔 글은 「함께 걸림」이라고 말한다 — 상태가 카드에 보여야 끌 생각도 든다', () => {
-    expect(card({ shared: true }, () => {})).toContain('함께 걸림');
+  it('안 올린 글이면 올리는 길을 준다', () => {
+    expect(sheet({ shared: false })).toContain('모두의 여백에 올리기');
   });
 
-  it('안 건 글의 손잡이는 「함께 걸기」다 — 사후에 켜는 길이 카드에 있어야 한다', () => {
-    expect(card({ shared: false }, () => {})).toContain('함께 걸기');
+  it('올린 글이면 내리는 길로 바뀐다', () => {
+    expect(sheet({ shared: true })).toContain('모두의 여백에서 내리기');
   });
 
-  it('상태는 aria-pressed로도 말한다 — 켠 것과 끈 것이 접근성 층에서 갈린다', () => {
-    expect(card({ shared: true }, () => {})).toContain('aria-pressed="true"');
-    expect(card({ shared: false }, () => {})).toContain('aria-pressed="false"');
+  it('책축 좌표가 없는 책이면 올리기 줄 자체가 없다 — 올릴 자리가 없다', () => {
+    const html = sheet({ shared: false }, { canShare: false });
+
+    expect(html).toContain('지우기'); // 시트는 그려졌다(부재 단언의 쌍)
+    expect(html).not.toContain('모두의 여백에');
   });
 
-  /** 손잡이의 유무가 게이트다 — 남의 카드·서재 미리보기는 이 프롭을 안 넘긴다(`onToggleLike` 관례). */
-  it('핸들러가 없으면 칩은 글자로만 남는다 — 남의 카드에서 남의 글이 켜지지 않는다', () => {
-    const html = card({ shared: true });
+  it('평소엔 지우기 한 줄, 누르면 확인이 붙는다 — 되돌릴 수 없는 동작이다', () => {
+    const idle = sheet({});
+    const confirming = sheet({}, { confirming: true });
 
-    expect(html).toContain('함께 걸림'); // 사실값은 여전히 보인다(부재 단언의 쌍)
-    expect(html).not.toContain('aria-label="함께 걸기 끄기"');
+    expect(idle).toContain('지우기');
+    expect(idle).not.toContain('이 글을 지울까요?');
+    expect(confirming).toContain('이 글을 지울까요?');
+    expect(confirming).toContain('정말 지우기');
+  });
+});
+
+/**
+ * 게시판 탭줄 — 두 좌표계(사람축·책축)를 한 화면에서 오간다. 알약이 아니라 밑줄 2분할이라
+ * 「필터」가 아니라 「탭」으로 읽힌다.
+ */
+describe('게시판 탭줄 (MarginTabs)', () => {
+  const tabs = (tab: 'mine' | 'all', mineCount: number | null, allCount: number | null) =>
+    render(<MarginTabs tab={tab} mineCount={mineCount} allCount={allCount} onSelect={() => {}} />);
+
+  it('두 탭의 이름은 「내가 쓴 여백」과 「모두의 여백」이다', () => {
+    const html = tabs('mine', 3, 12);
+
+    expect(html).toContain('내가 쓴 여백 3');
+    expect(html).toContain('모두의 여백 12');
+  });
+
+  it('선택된 쪽만 눌린 상태다 — 둘 다 켜지면 어디 있는지 알 수 없다', () => {
+    expect(tabs('all', 3, 12).match(/aria-pressed="true"/g)).toHaveLength(1);
+    expect(tabs('mine', 3, 12).match(/aria-pressed="true"/g)).toHaveLength(1);
+  });
+});
+
+/**
+ * 긴 글 접기 — 게시판이 되려면 행이 짧아야 하는데 여백 글엔 제목이 없다. 넘침 <b>실측</b>은 정적 렌더
+ * 하니스에서 안 돌아 계측이 불가능하므로, 글자 수 임계로 가른다(결정론이라 테스트가 붙는다).
+ *
+ * <p>⚠️ 아래 74·76은 구현 상수(`CLAMP_CHARS = 75`)와 <b>손으로 맞춘 값</b>이다. 상수를 테스트가 import하면
+ * 임계를 0으로 바꿔도 두 단언이 함께 미끄러져 통과한다 — 그러면 계측기가 죽는다.
+ */
+describe('긴 글 접기 (더보기)', () => {
+  const text = (n: number) => '가'.repeat(n);
+  const card = (t: string, o: { expanded?: boolean; foldable?: boolean } = {}) =>
+    render(
+      <MarginCard
+        entry={entry(1, { text: t })}
+        now={NOW}
+        expanded={o.expanded}
+        onToggleExpand={o.foldable === false ? undefined : () => {}}
+      />,
+    );
+
+  it('임계를 넘는 글은 세 줄에서 접히고 「더보기」가 붙는다', () => {
+    const html = card(text(76));
+
+    expect(html).toContain('-webkit-line-clamp:3');
+    expect(html).toContain('더보기');
+  });
+
+  it('임계 이하의 글은 접지 않는다 — 한 줄 글에 「더보기」가 붙으면 잡음이다', () => {
+    const html = card(text(74));
+
+    expect(html).toContain(text(74)); // 본문은 그려졌다(부재 단언의 쌍)
+    expect(html).not.toContain('-webkit-line-clamp');
+    expect(html).not.toContain('더보기');
+  });
+
+  it('펼친 글은 클램프가 풀리고 「접기」로 바뀐다 — 되돌릴 길이 없으면 목록이 영영 길어진다', () => {
+    const html = card(text(91), { expanded: true });
+
+    expect(html).toContain('접기');
+    expect(html).not.toContain('-webkit-line-clamp');
+  });
+
+  it('펼치기 손잡이가 없으면 접히기만 한다 — 서재 미리보기는 「전체 보기」가 출구다', () => {
+    const html = card(text(91), { foldable: false });
+
+    expect(html).toContain('-webkit-line-clamp:3');
+    expect(html).not.toContain('더보기');
+  });
+
+  /**
+   * 본문은 `pre-wrap`이라 <b>줄바꿈이 그대로 산다</b> — 글자 수만 세면 「짧지만 여러 문단」인 글이
+   * 안 접혀 행이 통째로 늘어난다. 문단을 나눠 쓰는 것은 여백 글에서 예외가 아니라 기본이다.
+   */
+  it('짧아도 세 줄을 넘기면 접는다 — 게시판을 늘리는 것은 글자 수가 아니라 차지하는 줄이다', () => {
+    const html = card('오늘 읽은 곳\n\n인상 깊은 대목\n\n내일 이어서');
+
+    expect(html).toContain('-webkit-line-clamp:3');
+    expect(html).toContain('더보기');
+  });
+
+  it('세 줄까지는 접지 않는다 — 경계는 넘침이지 줄바꿈의 유무가 아니다', () => {
+    const html = card('첫 줄\n둘째 줄\n셋째 줄');
+
+    expect(html).toContain('셋째 줄'); // 본문은 그려졌다(부재 단언의 쌍)
+    expect(html).not.toContain('-webkit-line-clamp');
+    expect(html).not.toContain('더보기');
+  });
+});
+
+/**
+ * 탭줄이 서는 조건 — <b>내 책 + isbn13</b>. 컨테이너의 JSX 안에만 있으면 정적 렌더 하니스가 못 닿아
+ * 계측이 0이 된다(리뷰 실측: `margin.self &&`를 지워도 전건 통과했다).
+ *
+ * <p>이 게이트가 무너지면 남의 여백에 탭줄이 서고, 「모두의 여백」을 누른 화면이 <b>남의 책 id로 여는
+ * 글쓰기 버튼</b>을 세운다 — 그 경로는 {@link MarginView}의 `self` 가드가 덮지 못한다(다른 컴포넌트다).
+ */
+describe('탭줄이 서는 조건 (showMarginTabs)', () => {
+  it('내 책이고 책축 좌표가 있으면 선다', () => {
+    expect(showMarginTabs(true, '9788996991342')).toBe(true);
+  });
+
+  it('남의 여백에는 안 선다 — 「내가 쓴 여백」이 있을 수 없는 화면이다', () => {
+    expect(showMarginTabs(false, '9788996991342')).toBe(false);
+  });
+
+  it('isbn 없는 책에는 안 선다 — 책축 좌표가 없어 「모두의 여백」이 가리킬 자리가 없다', () => {
+    expect(showMarginTabs(true, null)).toBe(false);
   });
 });
 
@@ -654,11 +875,15 @@ describe('이 책의 여백 — 책축 목록 (M-3)', () => {
   });
 
   it('개수는 상한이 아니라 서버가 센 진짜 값이다 — 100장에서 잘려도 헤더는 전부를 말한다', () => {
-    expect(view(all({ totalCount: 137 }))).toContain('함께 걸린 글 137');
+    expect(view(all({ totalCount: 137 }))).toContain('글 137');
   });
 
-  it('아직 아무도 안 걸었으면 그렇게 말한다', () => {
-    expect(view(all({ totalCount: 0, entries: [] }))).toContain('아직 함께 걸린 글이 없어요');
+  /** 빈 화면은 새 어휘가 가장 잘 보여야 할 자리다 — 여기만 옛 동사(「걸다」)로 남으면 통일이 무너진다. */
+  it('아직 아무도 안 올렸으면 그렇게 말한다 — 탭·시트와 같은 동사로', () => {
+    const html = view(all({ totalCount: 0, entries: [] }));
+
+    expect(html).toContain('아직 올라온 글이 없어요');
+    expect(html).not.toContain('걸린');
   });
 
   it('안 가진 책이면 담는 길을 안내한다 — 버튼이 아니라 문구다(검색으로 뒤로 가면 담기가 있다)', () => {
@@ -668,7 +893,48 @@ describe('이 책의 여백 — 책축 목록 (M-3)', () => {
   it('가진 책이면 그 안내가 없다 — 이미 담긴 책에 담으라고 하지 않는다', () => {
     const html = view(all({ myBookId: 42 }));
 
-    expect(html).toContain('함께 걸린 글 1'); // 목록은 그대로 그려진다(부재 단언의 쌍)
+    expect(html).toContain('글 1'); // 목록은 그대로 그려진다(부재 단언의 쌍)
     expect(html).not.toContain('내 서재에 담으면');
+  });
+
+  /**
+   * R10 — 책축 목록은 <b>전부 올라간 글</b>이라 칩이 모든 행에 붙으면 정보가 0이고, 남의 글이라
+   * 관리 손잡이도 없다. 반대로 작성자 줄은 이 목록의 핵심 정보라 반드시 남는다.
+   *
+   * <p>⚠️ 이 단언은 <b>칩 게이트의 계측기가 아니다</b>. `SharedMarginEntry`엔 `shared` 필드가 아예 없어
+   * `entry.shared === true`가 언제나 거짓이라, 게이트를 지워도 여기선 칩이 안 뜬다(이중 방어라 안전하되
+   * 계측은 아니다 — 리뷰 실측). 그 게이트의 진짜 계측기는 M-2의 「관리 손잡이가 없는 목록에는 칩이
+   * 아예 없다」 하나다. 여기서 재는 것은 <b>게시판 머리가 「모두의 여백」을 제 이름으로 쓰지 않는다</b>는 쪽.
+   */
+  it('칩도 ⋯ 도 없고 작성자 이름만 글마다 남는다', () => {
+    const html = view(all());
+
+    expect(html).toContain('@reader'); // 작성자 줄은 그대로다(부재 단언의 쌍)
+    expect(html).not.toContain('모두의 여백');
+    expect(html).not.toContain('aria-label="이 글 관리"');
+  });
+
+  /** R11 — 서재에 없는 책엔 글을 남길 수 없다. 손잡이(`onCompose`)가 없으면 버튼 자체가 안 선다. */
+  it('글쓰기 손잡이가 없으면 게시판 머리가 비어 있다 — 담기 전에는 남길 수 없다', () => {
+    const html = view(all());
+
+    expect(html).toContain('글 1'); // 게시판 머리는 그려졌다(부재 단언의 쌍)
+    expect(html).not.toContain('글쓰기');
+  });
+
+  it('손잡이를 넘기면 게시판 머리 우상단에 글쓰기가 선다 — 내 책의 「모두의 여백」 탭이 그 자리다', () => {
+    const html = render(
+      <BookMarginAllView
+        data={all({ myBookId: 42 })}
+        now={NOW}
+        error={null}
+        onBack={() => {}}
+        onToggleLike={() => {}}
+        onOpenProfile={() => {}}
+        onCompose={() => {}}
+      />,
+    );
+
+    expect(html).toContain('글쓰기');
   });
 });
