@@ -565,6 +565,16 @@ export function App() {
   };
 
   /**
+   * 여백 탭바의 가운데 원 — 두 여백 화면(상세 · 글 작성)이 같은 것을 쓴다.
+   *
+   * <p><b>먼저 나간다</b> — 측정이 여백 위에서 시작되는 순간을 만들지 않는다.
+   */
+  const startFromMargin = () => {
+    leaveMargin('home');
+    startTimer().catch(handleError);
+  };
+
+  /**
    * 여백을 여는 <b>유일한 문</b> — 측정 중이면 먼저 끝낸다(「여백은 독서가 아니다」, 사용자 결정 2026-08-22).
    *
    * <p>진입 경로가 셋(홈·서재 여백 문 · 홈 소식 피드 · 남의 책방)인데 전부 이 문을 지나므로, 규칙을
@@ -609,13 +619,15 @@ export function App() {
   if (margin !== null && margin.composeBook !== null) {
     const close = () => setMargin(closeCompose(margin));
     return (
-      <StoryComposer
-        book={margin.composeBook}
-        onDone={close}
-        onCancel={close}
-        onError={handleError}
-        timerStopped={margin.timerStopped === true}
-      />
+      <MarginShell tab={tab} onGo={leaveMargin} onStart={startFromMargin}>
+        <StoryComposer
+          book={margin.composeBook}
+          onDone={close}
+          onCancel={close}
+          onError={handleError}
+          timerStopped={margin.timerStopped === true}
+        />
+      </MarginShell>
     );
   }
 
@@ -626,11 +638,7 @@ export function App() {
       <MarginShell
         tab={tab}
         onGo={leaveMargin}
-        onStart={() => {
-          // 먼저 나간다 — 측정이 여백 위에서 시작되는 순간을 만들지 않는다.
-          leaveMargin('home');
-          startTimer().catch(handleError);
-        }}
+        onStart={startFromMargin}
       >
         <BookMargin
           loginId={margin.loginId}
