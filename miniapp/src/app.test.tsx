@@ -850,4 +850,17 @@ describe('여백 위의 탭바 (MarginShell)', () => {
   it('본문 끝이 떠 있는 알약에 가려지 않게 그만큼 비운다', () => {
     expect(markup).toContain(`padding-bottom:calc(${TAB_BAR_HEIGHT}px`);
   });
+
+  /**
+   * 여백은 화면이 둘이다(상세 · 글 작성) — 하나만 껍데기를 입으면 그 화면에서만 탭바가 사라져
+   * 「여백에는 탭바가 있다」는 규칙이 절반만 맞는 상태가 된다 — 정적 렌더로는 분기를 몸 돌려볼 수 없어 소스로 센다.
+   */
+  it('여백 전체 화면 분기 둘이 모두 이 껍데기를 입는다', () => {
+    // 주석을 먼저 걷는다(T-203) — 규칙을 설명하는 주석에 그 태그가 예시로 적힐 수밖에 없다.
+    const src = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*/g, '');
+
+    expect(src.match(/<MarginShell/g)).toHaveLength(2);
+  });
 });
