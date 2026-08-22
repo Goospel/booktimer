@@ -7,6 +7,7 @@ import {
   App,
   BottomTabBar,
   MainTabs,
+  MarginShell,
   REFRESH_THROTTLE_MS,
   TAB_BAR_HEIGHT,
   TAB_BAR_MARGIN,
@@ -76,6 +77,7 @@ function renderTab(tab: (typeof TABS)[number]['key'], overrides: Partial<Dashboa
         onOpenMargin={() => {}}
         onComposeMargin={() => {}}
         onTimerChange={() => {}}
+        onStartTimer={() => Promise.resolve()}
         onGraphChange={() => {}}
         onGoGoal={() => {}}
         goalAdPending={false}
@@ -815,5 +817,37 @@ describe('여백 진입 게이트', () => {
 
     expect(opens).toHaveLength(1);
     expect(opens[0].index).toBeGreaterThan(src.indexOf('const openMargin'));
+  });
+});
+
+/**
+ * 여백 위의 탭바 — 여백은 탭 밖 전체 화면이라 탭바가 함께 사라졌고, 나갈 길이 뒤로가기 하나뿐이었다.
+ *
+ * <p>여백에선 측정이 <b>항상 꺼져 있다</b>(여백 진입 게이트가 먼저 끝낸다) — 그래서 원은 언제나
+ * 「시작」이고 잠긴 칸도 없다. 그 두 가정이 깨지면 여백에서 측정을 「끝내기」로 불러야 하는 모순이 된다.
+ */
+describe('여백 위의 탭바 (MarginShell)', () => {
+  const markup = renderToStaticMarkup(
+    <MarginShell tab="home" onGo={() => {}} onStart={() => {}}>
+      <p>여백 본문</p>
+    </MarginShell>,
+  );
+
+  it('본문 위에 탭바가 함께 선다', () => {
+    expect(markup).toContain('여백 본문');
+    expect(markup).toContain('aria-label="메인 탭"');
+  });
+
+  it('원은 언제나 「시작」이다 — 여백에선 측정이 돌지 않는다', () => {
+    expect(markup).toContain('aria-label="측정 시작"');
+    expect(markup).not.toContain('aria-label="측정 끝내기"');
+  });
+
+  it('잠긴 칸이 없다 — 어느 탭으로든 곷장 나간다', () => {
+    expect(markup).not.toContain('aria-disabled');
+  });
+
+  it('본문 끝이 떠 있는 알약에 가려지 않게 그만큼 비운다', () => {
+    expect(markup).toContain(`padding-bottom:calc(${TAB_BAR_HEIGHT}px`);
   });
 });

@@ -1,5 +1,6 @@
 import { Button } from '@toss/tds-mobile';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 
 import type { BookOption, DashboardResponse, MarginBook, TimerState } from './api';
 import { fetchDashboard, startSession, stopSession, tagBook, token } from './api';
@@ -56,6 +57,12 @@ export const TAB_BAR_MARGIN = 16;
 
 /** 떠 있는 탭바의 층 — 시트·딤은 이 위로 올라가야 한다(홈의 책 고르기 시트가 이 값을 넘겨 쓴다). */
 export const TAB_BAR_Z_INDEX = 100;
+
+/**
+ * 떠 있는 탭바가 먹는 하단 공간 — 본문 끝이 알약에 숨지 않게 이만큼 비운다(바 높이 + 띄운 높이 +
+ * 홈 인디케이터 + 숨 쉼 여백). 탭 화면과 여백이 <b>같은 값</b>을 써야 여백에서만 끝이 잠기는 일이 없다.
+ */
+export const TAB_BAR_SPACE = `calc(${TAB_BAR_HEIGHT}px + 12px + env(safe-area-inset-bottom) + 16px)`;
 
 export type TabKey = (typeof TABS)[number]['key'];
 
@@ -533,6 +540,31 @@ export function App() {
   }
 
   /**
+   * 측정 시작 — 문이 둘이라(탭바 원 · 여백 탭바) 구현을 여기 한 자리에 둔다.
+   *
+   * <p><b>실패 처리는 부르는 쪽 몫</b>이라 삼키지 않고 그대로 넘긴다 — 탭바는 바 위 스트립으로,
+   * 여백은 전역 에러로 다르게 말한다(409 중복 시작을 어디서 보이느냐가 같지 않다).
+   */
+  const startTimer = () =>
+    startSession(timerStartBookId(dashboard.readingBooks, dashboard.recentBookId, homeBookId)).then((timer) => {
+      applyTimer(timer);
+      trackEvent('reading_session_started');
+    });
+
+  /**
+   * 여백에서 탭바를 눌렀다 — 여백을 닫고 그 탭으로 나간다. 뒤에 깔린 남의 책방도 함께 닫는다
+   * — 탭을 눌렀는데 책방이 나오면 「나갔다」가 아니다.
+   *
+   * <p>가운데 원(측정 시작)도 이 문을 지난다 — 그래서 「시작은 됐는데 여백에 그대로 남아 있다」가
+   * 구조적으로 불가능하다(여백은 독서가 아니라는 규칙을 두 번째로 어기지 않는다).
+   */
+  const leaveMargin = (next: TabKey) => {
+    setMargin(null);
+    setShop(null);
+    setTab(next);
+  };
+
+  /**
    * 여백을 여는 <b>유일한 문</b> — 측정 중이면 먼저 끝낸다(「여백은 독서가 아니다」, 사용자 결정 2026-08-22).
    *
    * <p>진입 경로가 셋(홈·서재 여백 문 · 홈 소식 피드 · 남의 책방)인데 전부 이 문을 지나므로, 규칙을
@@ -591,19 +623,29 @@ export function App() {
   if (margin !== null && margin.bookId !== null) {
     const under = margin.bookId;
     return (
-      <BookMargin
-        loginId={margin.loginId}
-        bookId={under}
-        timerStopped={margin.timerStopped === true}
-        onBack={() => setMargin(null)}
-        onCompose={(book) => openMargin({ ...margin, bookId: under, composeBook: book })}
-        // 닫으면서 연다 — 뒤로 가면 출발한 탭으로 돌아간다(검색 시트와 같은 교체 경로, T-166).
-        onOpenProfile={(picked) => {
-          setMargin(null);
-          setShop(picked);
+      <MarginShell
+        tab={tab}
+        onGo={leaveMargin}
+        onStart={() => {
+          // 먼저 나간다 — 측정이 여백 위에서 시작되는 순간을 만들지 않는다.
+          leaveMargin('home');
+          startTimer().catch(handleError);
         }}
-        onError={handleError}
-      />
+      >
+        <BookMargin
+          loginId={margin.loginId}
+          bookId={under}
+          timerStopped={margin.timerStopped === true}
+          onBack={() => setMargin(null)}
+          onCompose={(book) => openMargin({ ...margin, bookId: under, composeBook: book })}
+          // 닫으면서 연다 — 뒤로 가면 출발한 탭으로 돌아간다(검색 시트와 같은 교체 경로, T-166).
+          onOpenProfile={(picked) => {
+            setMargin(null);
+            setShop(picked);
+          }}
+          onError={handleError}
+        />
+      </MarginShell>
     );
   }
 
@@ -636,6 +678,7 @@ export function App() {
         dashboard.loginId !== null && openMargin({ loginId: dashboard.loginId, bookId: null, composeBook: book })
       }
       onTimerChange={applyTimer}
+      onStartTimer={startTimer}
       onGraphChange={applyGraph}
       onGoGoal={goToGoal}
       goalAdPending={goalAdPending}
@@ -644,6 +687,35 @@ export function App() {
       onShelfChanged={() => silentRefresh(true)}
       onHandleCreated={() => silentRefresh(true)}
     />
+  );
+}
+
+/**
+ * 여백 위에 탭바를 남기는 껍데기 — 여백은 탭 밖 전체 화면이라 {@link MainTabs}가 통째로
+ * 언마운트되고, 그때 탭바도 함께 사라져 나갈 길이 뒤로가기 하나뿐이었다.
+ *
+ * <p><b>상태가 0이다</b> — 여백에 있다는 것은 곱 측정이 꺼져 있다는 뜻이라(여백 진입 게이트가
+ * 먼저 끝낸다) 원은 언제나 「시작」이고 잠길 탭도 없다. `dashboard`를 들이지 않는 이유다.
+ */
+export function MarginShell({
+  tab,
+  onGo,
+  onStart,
+  children,
+}: {
+  /** 여백을 열었던 탭 — 그 칸이 선택 표시로 남아 「어디서 왜는지」를 잃지 않는다. */
+  tab: TabKey;
+  /** 탭을 눌렀다 — 여백을 닫고 그 탭으로 나간다. */
+  onGo: (tab: TabKey) => void;
+  /** 가운데 원 — 홈으로 나가며 측정을 시작한다(여백에 남지 않는다). */
+  onStart: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <div style={{ paddingBottom: TAB_BAR_SPACE }}>{children}</div>
+      <BottomTabBar tab={tab} onTabChange={onGo} action={{ active: false, busy: false, onPress: onStart }} />
+    </>
   );
 }
 
@@ -664,6 +736,7 @@ export function MainTabs({
   onOpenMargin,
   onComposeMargin,
   onTimerChange,
+  onStartTimer,
   onGraphChange,
   onGoGoal,
   goalAdPending,
@@ -683,6 +756,8 @@ export function MainTabs({
   /** 홈 여백 문 — 그 책의 작성 화면으로 직행한다. */
   onComposeMargin: (book: BookOption) => void;
   onTimerChange: (timer: TimerState) => void;
+  /** 측정 시작 — 구현은 App이 든다(여백 탭바와 같은 것을 쓴다). 실패는 여기서 스트립으로 말한다. */
+  onStartTimer: () => Promise<void>;
   onGraphChange: (graph: DashboardResponse['graph']) => void;
   onGoGoal: () => void;
   /** 전면광고를 기다리는 중 — 목표 손잡이를 "준비 중"으로 바꿔 탭이 먹통으로 보이지 않게 한다. */
@@ -834,11 +909,7 @@ export function MainTabs({
         .finally(() => setBusy(false));
     } else {
       setCelebrate(false); // 지난 세션의 축하가 새 측정 화면에 남아 있으면 거짓말이 된다.
-      startSession(timerStartBookId(dashboard.readingBooks, dashboard.recentBookId, homeBookId))
-        .then((timer) => {
-          onTimerChange(timer);
-          trackEvent('reading_session_started');
-        })
+      onStartTimer()
         .catch(fail)
         .finally(() => setBusy(false));
     }
@@ -862,7 +933,7 @@ export function MainTabs({
   return (
     <>
       {/* 떠 있는 탭바 아래로 본문 끝이 숨는다 — 바 높이 + 띄운 높이 + 홈 인디케이터 + 숨 쉴 여백만큼 비운다. */}
-      <div style={{ paddingBottom: `calc(${TAB_BAR_HEIGHT}px + 12px + env(safe-area-inset-bottom) + 16px)` }}>
+      <div style={{ paddingBottom: TAB_BAR_SPACE }}>
         {tab === 'home' && (
           <Home
             dashboard={dashboard}
