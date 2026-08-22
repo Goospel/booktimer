@@ -701,7 +701,9 @@ class ProfileApiControllerTest {
 
     // ── 13. 격자 발광용 recency (lastStoryAt) ──────────────────
     // 서버는 「그 책 여백의 최근 글 시각」이라는 원시 사실만 준다 — 24시간 판정은 클라 순수 함수의 몴.
-    // 프라이버시: 여백은 팔로워 전용 콘텐츠라, 비팔로워엔 전부 null이어야 한다(격자가 오늘과 동일).
+    // 프라이버시(2026-08-22 개정): 팔로우 게이트를 걷었다. 여백 목록 자체가 공개 책이면 누구에게나
+    // 열리므로, 발광만 막아 두면 「글이 보이는데 격자는 안 빛나는」 어긋남이 된다. 방어는 책 가시성
+    // 하나로 모았다 — v.books()가 늘 PUBLIC만 담으므로(ProfileService) 비공개 책은 여기 닿지 않는다.
 
     @Test
     @DisplayName("GET /api/profile 팔로워 → 글 있는 책만 lastStoryAt(최신 글 시각), 글 없는 책은 null")
@@ -725,18 +727,18 @@ class ProfileApiControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/profile 비팔로워 → 글이 있어도 lastStoryAt 전부 null (여백은 팔로워 전용)")
-    void profile_nonFollower_getsNoRecency() throws Exception {
+    @DisplayName("GET /api/profile 비팔로워 → 공개 책이면 lastStoryAt이 실린다 (목록이 열렸으니 발광도 연다)")
+    void profile_nonFollower_getsRecency() throws Exception {
         register("rc-nfviewer@booktimer.com", "rcnfviewer", "비팔로워");
         User owner = register("rc-nfowner@booktimer.com", "rcnfowner", "주인");
         Book book = publicBookOf(owner, "글 있는 책");
-        storyAt(owner, book, "비팔로워에겐 안 보일 시각", Instant.parse("2026-08-10T09:00:00Z"));
+        storyAt(owner, book, "낯선 사람도 볼 글", Instant.parse("2026-08-10T09:00:00Z"));
 
         mockMvc.perform(get("/api/profile").param("loginId", "rcnfowner")
                         .with(user("rc-nfviewer@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.books[0].title").value("글 있는 책"))
-                .andExpect(jsonPath("$.books[0].lastStoryAt").doesNotExist());
+                .andExpect(jsonPath("$.books[0].lastStoryAt").value("2026-08-10T09:00:00Z"));
     }
 
     @Test

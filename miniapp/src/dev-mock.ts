@@ -552,13 +552,14 @@ function setShared(id: number, shared: boolean): { shared: boolean } {
 }
 
 /**
- * 그 사람의 책방 책 — **여백 시각은 본인·팔로워에게만** 실린다(서버 프라이버시 게이트를 그대로 흉내낸다).
- * 비팔로워(`밑줄러`)로 열면 발광이 통째로 사라지는 것이 브라우저에서 확인된다.
+ * 그 사람의 책방 책 — **여백 시각은 누구에게나** 실린다(2026-08-22 서버 미러: 팔로우 게이트 제거).
+ *
+ * <p>여백 목록 자체가 공개 책이면 열리므로, 발광만 막으면 「글은 보이는데 격자는 안 빛나는」 어긋남이
+ * 된다. 프라이버시 방어는 책 가시성 하나뿐이고 그건 `profileBooks`가 이미 공개 책만 담아 진다.
  */
 function booksFor(loginId: string): ProfileBook[] {
-  const user = mustFindUser(loginId);
-  const visible = user.self || user.following;
-  return profileBooks.map((b) => ({ ...b, lastStoryAt: visible ? lastStoryAt(b.id) : null }));
+  mustFindUser(loginId); // 없는 핸들은 여기서 404 — 게이트는 사라져도 존재 확인은 남는다
+  return profileBooks.map((b) => ({ ...b, lastStoryAt: lastStoryAt(b.id) }));
 }
 
 /**
@@ -1065,14 +1066,14 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     const book = marginBookOf(bookId, user.self);
     // 서버는 남의 책 id(IDOR)·남의 PRIVATE 책·미존재를 전부 404로 준다 — 목도 존재를 누설하지 않는다.
     if (book === null) throw new ApiError(404, '글을 찾을 수 없습니다');
-    const following = user.self ? false : user.following;
     return {
       book,
       ownerNickname: user.nickname,
       self: user.self,
-      following,
-      // 비팔로워에게는 빈 배열 — 글이 있는지 없는지도 새지 않는다.
-      entries: user.self || following ? [...(marginEntries[bookId] ?? [])] : [],
+      // 팔로우와 무관하게 준다(2026-08-22 서버 미러) — 책 게이트는 marginBookOf가 이미 통과시켰다.
+      // 목이 서버보다 좁으면 브라우저 검증이 옛 동작을 보여 준다(T-175 계열): 여기서 비팔로워를
+      // 빈 배열로 두면 「비팔로워도 읽힌다」를 목 모드에서 원리상 확인할 수 없다.
+      entries: [...(marginEntries[bookId] ?? [])],
     };
   }],
   /*

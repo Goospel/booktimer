@@ -111,7 +111,9 @@ describe('BooksApp 공개 전환 고지', () => {
 
         expect(vi.mocked(confirm)).toHaveBeenCalledTimes(1);
         expect(vi.mocked(confirm).mock.calls[0][0]).toContain('3');
-        expect(vi.mocked(confirm).mock.calls[0][0]).toContain('팔로워에게 보여요');
+        // 2026-08-22 — 옛 문구 「팔로워에게 보여요」는 실제보다 좁은 고지였다(팔로우 축 제거).
+        expect(vi.mocked(confirm).mock.calls[0][0]).toContain('누구에게나 보여요');
+        expect(vi.mocked(confirm).mock.calls[0][0]).not.toContain('팔로워');
     });
 
     test('취소하면 화면이 공개로 바뀌지 않고 서버 요청도 안 나간다', async () => {

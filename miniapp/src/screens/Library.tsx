@@ -112,8 +112,9 @@ function bookChipStyle(tone: BookChipTone): CSSProperties {
 /**
  * 공개 전환 확인이 필요한가 — <b>비공개→공개 방향 + 여백에 남긴 글이 있을 때만</b>.
  *
- * <p>비공개 책에 쌓아 둔 글은 나만 보는 메모인데, 책을 공개로 바꾸는 순간 팔로워에게 실린다
+ * <p>비공개 책에 쌓아 둔 글은 나만 보는 메모인데, 책을 공개로 바꾸는 순간 <b>누구에게나</b> 실린다
  * (글에 자체 공개 필드가 없어 가시성은 언제나 책에서 파생된다). 되돌리는 방향은 `isPublic`이 걸러 낸다.
+ * 고지가 「팔로워에게」였던 것은 2026-08-22에 고쳤다 — 팔로우 축이 사라진 뒤로 실제보다 좁은 고지였다.
  *
  * <p>`storyCount`가 없는 옛 서버는 0으로 떨어져 오늘과 같이 즉시 전환된다 — 보안 게이트가 아니라
  * 고지 UX라 fail-open을 택했다(명시적 결정).
@@ -863,7 +864,7 @@ function ActionSheet({
     return (
       <Sheet title={book.title} onClose={onClose}>
         <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 12, wordBreak: 'keep-all' }}>
-          여백에 남긴 글 {book.storyCount}개가 팔로워에게 보여요.
+          여백에 남긴 글 {book.storyCount}개가 누구에게나 보여요.
         </Text>
         {/* 파괴가 아니라 노출이다 — danger 색은 쓰지 않는다. 행 라벨과 같은 말이라 무엇을 확정하는지 분명하다. */}
         <Button display="block" disabled={busy} onClick={() => onAction({ kind: 'visibility', book })}>

@@ -19,7 +19,7 @@ interface TagChip  { label: string; clickable: boolean; }
 interface BookSummary {
     id: number; title: string; author: string | null; coverUrl: string | null;
     status: string; seconds: number; purchaseLink: string | null;
-    /** 그 책 여백의 최신 글 시각 — 비팔로워·글 없는 책은 null(서버가 가린다, 설계 §D3ⓐ). */
+    /** 그 책 여백의 최신 글 시각 — 글 없는 책은 null. 팔로우와 무관하다(2026-08-22). */
     lastStoryAt: string | null;
 }
 interface ProfileData {

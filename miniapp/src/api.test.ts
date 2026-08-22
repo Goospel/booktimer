@@ -800,7 +800,6 @@ describe('여백 API', () => {
           book: { id: 7, title: '데미안', author: '헤르만 헤세', coverUrl: null },
           ownerNickname: '구스펠',
           self: false,
-          following: true,
           entries: [{ id: 3, text: '한 문장', bgCode: 'paper', createdAt: '2026-08-16T00:00:00Z' }],
         }),
       ) as never,
@@ -814,7 +813,8 @@ describe('여백 API', () => {
     expect(result.entries[0].id).toBe(3);
   });
 
-  it('비팔로워에게도 책 라벨은 실리고 글만 빈 배열이다 — 글 유무 자체를 누설하지 않는 서버 계약', async () => {
+  /** 글이 하나도 없는 책 — 빈 배열이어도 책 라벨은 실려 화면이 그려진다(자기완결 계약). */
+  it('글이 없는 책도 책 라벨은 실린다 — 빈 목록에서도 화면이 그려져야 한다', async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
       response(
         200,
@@ -822,7 +822,6 @@ describe('여백 API', () => {
           book: { id: 7, title: '데미안', author: null, coverUrl: null },
           ownerNickname: '구스펠',
           self: false,
-          following: false,
           entries: [],
         }),
       ) as never,
@@ -832,7 +831,7 @@ describe('여백 API', () => {
 
     expect(result.book.title).toBe('데미안');
     expect(result.entries).toEqual([]);
-    expect(result.following).toBe(false);
+    expect(result.ownerNickname).toBe('구스펠');
   });
 
   it('차단·PRIVATE·남의 책 id는 모두 404 — 존재를 누설하지 않는 계약을 그대로 올린다', async () => {

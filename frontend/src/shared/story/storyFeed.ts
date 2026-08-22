@@ -59,16 +59,14 @@ export interface MarginResponse {
     book: MarginBook
     ownerNickname: string
     self: boolean
-    /** 팔로우 관계 — self일 때 서버는 항상 false를 준다. */
-    following: boolean
-    /** 비팔로워에겐 빈 배열(글 유무도 안 샌다). */
+    /** 공개 책이면 누구에게나 실린다 — 2026-08-22에 팔로우 축을 걷었다(`following` 필드도 함께 사라졌다). */
     entries: MarginEntry[]
 }
 
 /**
  * 24시간 이내 새 글이 달린 책인가 — 책방 리스트 표지 발광의 유일한 근거.
  *
- * 경계는 <b>미만(&lt;)</b>이다: 정각 24시간은 이미 창 밖. null(글이 없거나 비팔로워라 서버가 가린 경우)은
+ * 경계는 <b>미만(&lt;)</b>이다: 정각 24시간은 이미 창 밖. null(그 책에 글이 없는 경우)은
  * false — 발광은 "새 글이 있다"는 단언이라 모르는 상태를 참으로 올리지 않는다.
  */
 export function hasFreshStory(lastStoryAt: string | null, now: number): boolean {
@@ -76,7 +74,7 @@ export function hasFreshStory(lastStoryAt: string | null, now: number): boolean 
 }
 
 /**
- * 리스트 행에 「여백」 손잡이를 세울지 — 프라이버시 게이트는 서버가 이미 했다(비팔로워는 lastStoryAt 전부 null).
+ * 리스트 행에 「여백」 손잡이를 세울지 — 프라이버시 게이트는 서버가 이미 했다(비공개 책은 목록에 아예 없다).
  * 본인은 글이 없어도 노출(작성 진입), 남의 책은 글이 있을 때만(눌러도 빈 버튼을 안 만든다 — 이 집 관례).
  */
 export function showMarginHandle(self: boolean, lastStoryAt: string | null): boolean {

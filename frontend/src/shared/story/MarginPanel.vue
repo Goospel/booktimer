@@ -11,7 +11,7 @@ import { deleteStory, fetchMargin, fetchStoryLikers, toggleStoryLike } from './s
 // 여백 패널 — 책 하나에 쌓인 글 목록 (2026-08-16 책 귀속 재설계). 옛 풀스크린 뷰어(진행바·자동 넘김·
 // 열람 기록)를 대체한다. 진입은 책방 리스트 행의 「여백」 손잡이 하나뿐.
 // 오버레이 z-150(도감 50 < 여백 패널 150 < 신고 모달 200 — 옛 뷰어의 z 층 계승, 새 값 발명 금지).
-// 노출 권한(차단·IDOR·PRIVATE·비팔로워)은 전부 서버 판정 — 여기선 self·following·entries를 표시로 옮긴다.
+// 노출 권한(차단·IDOR·PRIVATE)은 전부 서버 판정 — 여기선 self·entries를 표시로 옮긴다.
 const props = defineProps<{ loginId: string; bookId: number }>()
 const emit = defineEmits<{
     (e: 'close'): void
@@ -133,11 +133,11 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
                 <button v-if="margin.self" type="button" class="dash-btn-fill margin-compose"
                         @click="composerOpen = true">여백에 글 남기기</button>
 
+                <!-- 남의 여백이 비면 그냥 비었다고 말한다 — 옛 「팔로우하면 볼 수 있어요」는 2026-08-22에
+                     걷었다(팔로우가 열람 권한에서 빠져 거짓말이 됐다). 미니앱 Story.tsx와 같은 문구다. -->
                 <p v-if="margin.entries.length === 0" class="margin-empty">
                     <template v-if="margin.self">아직 남긴 글이 없어요. 읽다가 마음에 걸린 문장을 남겨 보세요.</template>
-                    <template v-else-if="margin.following">아직 남긴 글이 없어요.</template>
-                    <!-- 서버가 비팔로워에겐 빈 배열을 준다 — 글이 있는지 없는지도 여기서 말하지 않는다 -->
-                    <template v-else>팔로우하면 이 책의 여백에 남긴 글을 볼 수 있어요.</template>
+                    <template v-else>아직 남긴 글이 없어요.</template>
                 </p>
 
                 <ul v-else class="margin-cards">

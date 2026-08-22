@@ -9,7 +9,7 @@ import type { LikeState, MarginResponse } from './storyFeed'
 
 /**
  * 책 하나의 여백 — 「누구의」(loginId) + 「어느 책」(bookId) 두 축.
- * 노출 게이트는 전부 서버(차단·IDOR·PRIVATE → 404 / 비팔로워 → 빈 entries).
+ * 노출 게이트는 전부 서버(차단·IDOR·PRIVATE → 404). 공개 책이면 팔로우와 무관하게 목록이 온다.
  * 404·비정형 응답은 null로 수렴 — 패널이 "불러오지 못했어요"로 그린다(기존 방어 관례).
  */
 export async function fetchMargin(loginId: string, bookId: number): Promise<MarginResponse | null> {

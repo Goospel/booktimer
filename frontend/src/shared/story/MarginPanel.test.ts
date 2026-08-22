@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-// 여백 패널 동작 테스트 — fetch mock으로 서버 관계(self·following)가 화면으로 옮겨지는지 검증.
-// 노출 판정은 전부 서버가 한다(차단·IDOR·PRIVATE→404 / 비팔로워→빈 목록) — 여기는 그 결과의 표시 계약.
+// 여백 패널 동작 테스트 — fetch mock으로 서버가 준 self·entries가 화면으로 옮겨지는지 검증.
+// 노출 판정은 전부 서버가 한다(차단·IDOR·PRIVATE→404) — 여기는 그 결과의 표시 계약.
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import MarginPanel from './MarginPanel.vue'
@@ -37,7 +37,7 @@ afterEach(() => {
 describe('MarginPanel 인용문', () => {
     test('인용이 있으면 주석 위에 인용 블록이 선다', async () => {
         respond({
-            book: BOOK, ownerNickname: '주인', self: false, following: true,
+            book: BOOK, ownerNickname: '주인', self: false,
             entries: [entry(7, '열아홉엔 몰랐다', { quote: '새는 알에서 나오려고 투쟁한다.' })],
         })
 
@@ -49,7 +49,7 @@ describe('MarginPanel 인용문', () => {
 
     test('인용이 없으면 인용 블록이 아예 없다 — 옛 글은 예전 그대로', async () => {
         respond({
-            book: BOOK, ownerNickname: '주인', self: false, following: true,
+            book: BOOK, ownerNickname: '주인', self: false,
             entries: [entry(7, '인용 없는 글')],
         })
 
@@ -61,9 +61,9 @@ describe('MarginPanel 인용문', () => {
 })
 
 describe('MarginPanel', () => {
-    test('팔로워: 서버가 준 최신순 그대로 카드 + 「여백에 남긴 글 N」', async () => {
+    test('남의 공개 책: 서버가 준 최신순 그대로 카드 + 「여백에 남긴 글 N」', async () => {
         respond({
-            book: BOOK, ownerNickname: '주인', self: false, following: true,
+            book: BOOK, ownerNickname: '주인', self: false,
             entries: [entry(7, '최신 문장'), entry(6, '옛 문장')],
         })
 
@@ -76,19 +76,32 @@ describe('MarginPanel', () => {
         expect(texts).toEqual(['최신 문장', '옛 문장'])
     })
 
-    test('비팔로워: 빈 상태 문구만 — 글 유무도 말하지 않고, 작성 손잡이도 없다', async () => {
-        respond({ book: BOOK, ownerNickname: '주인', self: false, following: false, entries: [] })
+    /**
+     * 2026-08-22 — 옛 단언은 「비팔로워에게 팔로우하면 볼 수 있다고 말한다」였다. 팔로우가 열람 권한에서
+     * 빠지면서 그 안내는 거짓말이 됐다(공개 책이면 비팔로워도 목록을 받는다).
+     */
+    test('남의 여백이 비면 그냥 비었다고 말한다 — 팔로우 안내는 없고, 작성 손잡이도 없다', async () => {
+        respond({ book: BOOK, ownerNickname: '주인', self: false, entries: [] })
 
         const wrapper = open()
-        await vi.waitFor(() => expect(wrapper.text()).toContain('팔로우하면'))
+        await vi.waitFor(() => expect(wrapper.text()).toContain('아직 남긴 글이 없어요'))
 
-        expect(wrapper.text()).toContain('팔로우하면 이 책의 여백에 남긴 글을 볼 수 있어요.')
+        expect(wrapper.text()).not.toContain('팔로우')
         expect(wrapper.text()).not.toContain('여백에 글 남기기')
+    })
+
+    test('비팔로워도 남의 공개 책 글을 읽는다 — 서버가 목록을 그대로 준다', async () => {
+        respond({ book: BOOK, ownerNickname: '주인', self: false, entries: [entry(7, '낯선 사람도 읽는 글')] })
+
+        const wrapper = open()
+        await vi.waitFor(() => expect(wrapper.text()).toContain('낯선 사람도 읽는 글'))
+
+        expect(wrapper.text()).not.toContain('팔로우')
     })
 
     test('본인: 작성 손잡이 + 카드마다 지우기', async () => {
         respond({
-            book: BOOK, ownerNickname: '나', self: true, following: false,
+            book: BOOK, ownerNickname: '나', self: true,
             entries: [entry(7, '내 문장'), entry(6, '내 옛 문장')],
         })
 
@@ -102,7 +115,7 @@ describe('MarginPanel', () => {
 
     test('타인 글: 신고 버튼 → 신고 모달에 원문 발췌가 접두로 첨부된다', async () => {
         respond({
-            book: BOOK, ownerNickname: '주인', self: false, following: true,
+            book: BOOK, ownerNickname: '주인', self: false,
             entries: [entry(7, '남의 문장')],
         })
 
@@ -125,7 +138,7 @@ describe('MarginPanel', () => {
  * 「받은 글은 전부 누를 수 있다」로 줄었다) `likable()` 분기가 통째로 사라졌다.
  */
 describe('MarginPanel 좋아요', () => {
-    const likeBody = { book: { ...BOOK, isPublic: true }, ownerNickname: '주인', self: false, following: true }
+    const likeBody = { book: { ...BOOK, isPublic: true }, ownerNickname: '주인', self: false }
 
     test('타인 글: 하트 손잡이 + 「좋아요 N명」 줄', async () => {
         respond({ ...likeBody, entries: [entry(7, '남의 문장', { likeCount: 3 })] })
@@ -139,7 +152,7 @@ describe('MarginPanel 좋아요', () => {
 
     test('내 글에도 하트가 있다 — 자기 좋아요 허용(2026-08-20)', async () => {
         respond({
-            book: { ...BOOK, isPublic: true }, ownerNickname: '나', self: true, following: false,
+            book: { ...BOOK, isPublic: true }, ownerNickname: '나', self: true,
             entries: [entry(7, '내 문장', { likeCount: 2 })],
         })
 
@@ -152,7 +165,7 @@ describe('MarginPanel 좋아요', () => {
 
     test('내 비공개 책에도 하트가 있다 — 나만 보는 메모에도 표시를 남긴다', async () => {
         respond({
-            book: { ...BOOK, isPublic: false }, ownerNickname: '나', self: true, following: false,
+            book: { ...BOOK, isPublic: false }, ownerNickname: '나', self: true,
             entries: [entry(7, '나만 보는 메모', { likeCount: 0 })],
         })
 
@@ -198,7 +211,7 @@ describe('MarginPanel 좋아요', () => {
  */
 describe('MarginPanel 좋아요 명단', () => {
     const NABI = { loginId: 'nabi', nickname: '나비독서', publicBookCount: 12, following: true, self: false }
-    const likeBody = { book: { ...BOOK, isPublic: true }, ownerNickname: '주인', self: false, following: true }
+    const likeBody = { book: { ...BOOK, isPublic: true }, ownerNickname: '주인', self: false }
 
     async function openWithLikers(users: object[] | null) {
         respond({ ...likeBody, entries: [entry(7, '누를 문장', { likeCount: 1 })] })

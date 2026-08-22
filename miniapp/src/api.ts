@@ -678,7 +678,8 @@ export interface ProfileBook {
   /**
    * 이 책의 여백에 마지막으로 글이 달린 시각 — 격자 발광의 재료다.
    *
-   * <p>**비팔로워에게는 전부 null**이다(여백은 팔로워 전용 콘텐츠라 서버가 가린다). 글이 없는 책도 null.
+   * <p>글이 없는 책은 null이다. **팔로우와 무관하게** 실린다(2026-08-22 — 여백 목록 자체가 공개 책이면
+   * 누구에게나 열려서, 발광만 막으면 「글은 보이는데 격자는 안 빛나는」 어긋남이 된다).
    * 24시간 창 판정은 클라가 한다({@link import('./screens/Story').hasFreshStory}) — 서버는 원시 사실만 준다.
    * 성향 태그 드릴다운(`/api/profile/personality-tag`)은 항상 null이다(그 임시 목록엔 발광이 없다).
    */
@@ -830,8 +831,8 @@ export interface MarginEntry {
    * <p>선택 필드인 이유는 **배포 순서**다: 미니앱이 서버보다 먼저 나가면 옛 서버는 이 필드를 안 준다.
    * 그때 `undefined`는 **꺼짐으로 읽는다** — 안 걸린 글을 걸렸다고 말하는 쪽이 더 위험한 거짓말이다.
    *
-   * <p>이것만으로는 아무것도 안 열린다: 노출 = 책 PUBLIC **AND** (팔로워 **OR** shared)이고,
-   * 판정은 전부 서버가 한다(화면은 이 사실값을 칩으로 옮길 뿐이다).
+   * <p><b>이 값은 노출 권한이 아니다</b>(2026-08-22 팔로우 축 제거): 노출 = 책 PUBLIC, 그게 전부다.
+   * shared가 정하는 것은 **책축 목록에 실려 발견되는가**뿐이고, 안 올린 글도 공개 책이면 읽힌다.
    */
   shared?: boolean;
 }
@@ -855,14 +856,13 @@ export interface MarginBook {
  * `story.MarginResponse` — **자기완결**이다: 책 라벨·주인·관계가 함께 실려 화면이 다른 요청 없이 그려진다
  * (진입로가 둘이라 그렇다 — 책방 격자에서 오면 클라가 책을 알지만, 홈 소식에서 점프하면 모른다).
  *
- * <p>`entries`는 **비팔로워면 빈 배열**이다 — 글 유무 정보도 새지 않게 서버가 가린다. `self`일 때
- * `following`은 항상 false(자기 자신은 팔로우 대상이 아니다).
+ * <p>`entries`는 **공개 책이면 누구에게나** 실린다(2026-08-22 팔로우 축 제거). 비공개 책은 주인
+ * 아니면 응답 자체가 404다. 서버가 함께 주던 `following`은 이 변경으로 아무도 안 읽게 돼 뺐다.
  */
 export interface MarginResponse {
   book: MarginBook;
   ownerNickname: string;
   self: boolean;
-  following: boolean;
   entries: MarginEntry[];
 }
 
@@ -881,7 +881,7 @@ export const STORY_BG_CODES = [
 
 /**
  * 책 하나의 여백 — 차단·ADMIN·미존재·남의 책 id(IDOR)·PRIVATE 책은 모두 404다(존재 비노출).
- * 비팔로워는 404가 아니라 200 + 빈 `entries`로 온다(격자에 이미 보이는 공개 책이라 라벨은 숨길 게 없다).
+ * 공개 책이면 **팔로우와 무관하게** 글 목록이 그대로 온다(2026-08-22 — 팔로우는 열람 권한이 아니다).
  */
 export const fetchBookMargin = (loginId: string, bookId: number): Promise<MarginResponse> =>
   request(`/api/stories/of/${loginId}`, { query: { bookId } });
@@ -916,7 +916,7 @@ export interface LikeState {
 /**
  * 좋아요를 누른다. **멱등**이라 재전송해도 취소되지 않는다 — 그래서 토글 단일 엔드포인트가 아니다
  * (모바일 타임아웃 뒤 재시도가 흔한데, 토글이면 그 재시도가 좋아요를 지운다).
- * 안 보이는 글(비팔로워·비공개 책·차단)·내 글은 404 — 존재를 누설하지 않는다.
+ * 안 보이는 글(비공개 책·차단)은 404 — 존재를 누설하지 않는다. 내 글은 누를 수 있다(2026-08-20).
  */
 export const likeStory = (id: number): Promise<LikeState> =>
   request(`/api/stories/${id}/like`, { method: 'POST' });

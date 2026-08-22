@@ -139,16 +139,15 @@ public class ProfileApiController {
     }
 
     /**
-     * 책 id → 그 책 여백의 마지막 글 시각. <b>본인이거나 팔로워일 때만</b> 채우고 아니면 빈 맵이다 —
-     * 여백은 팔로워 전용 콘텐츠라(§13.2) 비팔로워의 격자는 오늘과 똑같이(발광 없이) 그려져야 한다.
+     * 책 id → 그 책 여백의 마지막 글 시각.
      *
-     * <p>프로필은 비팔로워에게도 열리므로 이 게이트가 없으면 「누가 언제 글을 남겼는가」가 새는
-     * 유일 경로가 된다 — 목록(marginOf)을 막아 놔도 시각만으로 활동이 드러난다.
+     * <p><b>팔로우 게이트를 걷었다</b>(2026-08-22). 예전엔 본인·팔로워에게만 채웠는데, 여백 목록
+     * 자체가 공개 책이면 누구에게나 열린 지금은 발광만 막아 두면 「글은 보이는데 격자는 안 빛나는」
+     * 어긋남이 된다. 방어는 <b>책 가시성 하나</b>로 모였다 — {@code v.books()}가 언제나 PUBLIC만
+     * 담으므로({@link com.booktimer.profile.ProfileService}) 비공개 책은 여기 닿지 않는다.
+     * 그 필터를 걷으면 비공개 책의 활동 시각이 이 경로로 샌다.
      */
     private Map<Long, Instant> recencyOf(ProfileView v) {
-        if (!v.self() && !v.following()) {
-            return Map.of();
-        }
         List<Long> bookIds = v.books().stream().map(Book::getId).toList();
         if (bookIds.isEmpty()) {
             return Map.of(); // 공개 책이 없으면 물어볼 것도 없다 (null-state — 빈 in 절 회피)
