@@ -189,4 +189,28 @@ class StoryTest {
         assertThatThrownBy(() -> Story.of(me, "   ", mine, null, "새는 알에서 나오려고 투쟁한다."))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("of: 「함께 걸기」는 기본 꺼짐 — 켜는 것은 명시적 행동이어야 한다(소급 노출 0)")
+    void of_defaultsToNotShared() {
+        User me = author();
+
+        Story story = Story.of(me, "인상 깊은 문장", publicBookOf(me), null);
+
+        assertThat(story.isShared()).isFalse();
+    }
+
+    @Test
+    @DisplayName("markShared: 켜고 끌 수 있다 — 쓰기 시점엔 책 공개 여부를 검사하지 않는다")
+    void markShared_togglesWithoutCheckingBookVisibility() {
+        User me = author();
+        Book privateBook = Book.register(me, "비공개", null, null, null, null, null, BookStatus.READING);
+        Story story = Story.of(me, "나만 보는 메모", privateBook, null);
+
+        story.markShared(true);
+        assertThat(story.isShared()).isTrue();
+
+        story.markShared(false);
+        assertThat(story.isShared()).isFalse();
+    }
 }

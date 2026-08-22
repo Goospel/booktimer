@@ -2,6 +2,7 @@ package com.booktimer.web.api;
 
 import com.booktimer.search.UserSearchResult;
 import com.booktimer.security.CurrentUserService;
+import com.booktimer.story.BookMarginResponse;
 import com.booktimer.story.MarginEntry;
 import com.booktimer.story.MarginResponse;
 import com.booktimer.story.Story;
@@ -55,12 +56,21 @@ public class StoryApiController {
         return storyService.marginOf(currentUserService.resolve(principal), loginId, bookId);
     }
 
+    /**
+     * 「이 책의 여백」 — isbn13 하나에 함께 걸린 글 전부. 사람 좌표가 없는 <b>책축</b> 경로다.
+     * 노출 게이트는 전부 {@link StoryService#bookMarginOf}(정확히는 그 목록 쿼리)에 있다.
+     */
+    @GetMapping("/api/stories/book/{isbn}")
+    public BookMarginResponse bookMargin(@PathVariable String isbn, Principal principal) {
+        return storyService.bookMarginOf(currentUserService.resolve(principal), isbn);
+    }
+
     @PostMapping("/api/stories")
     public MarginEntry create(@RequestBody CreateStoryRequest request, Principal principal) {
         User me = currentUserService.resolve(principal);
         try {
             Story story = storyService.create(me, request.text(), request.bookId(), request.bgCode(),
-                    request.quote());
+                    request.quote(), request.isShared());
             return MarginEntry.of(story);
         } catch (IllegalArgumentException e) {
             // 도메인 검증(문장 길이·팔레트 등) 실패 — 프론트는 상태코드로 분기해 안내한다
@@ -95,6 +105,21 @@ public class StoryApiController {
         return storyService.unlike(currentUserService.resolve(principal), id);
     }
 
+    /**
+     * 「함께 걸기」를 켠다 — 이 글이 같은 책을 보는 누구에게나 열린다(책이 PUBLIC일 때만).
+     * {@code like}와 같은 이유로 <b>멱등 POST</b>다: 토글 단일 엔드포인트면 재전송이 방금 켠 것을 끈다.
+     */
+    @PostMapping("/api/stories/{id}/share")
+    public StoryService.ShareState share(@PathVariable Long id, Principal principal) {
+        return storyService.setShared(currentUserService.resolve(principal), id, true);
+    }
+
+    /** 「함께 걸기」를 끈다 — 다음 조회부터 책축 목록·배지에서 빠진다. 남의 글은 404(IDOR). */
+    @DeleteMapping("/api/stories/{id}/share")
+    public StoryService.ShareState unshare(@PathVariable Long id, Principal principal) {
+        return storyService.setShared(currentUserService.resolve(principal), id, false);
+    }
+
     @DeleteMapping("/api/stories/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id, Principal principal) {
         storyService.delete(currentUserService.resolve(principal), id);
@@ -104,7 +129,18 @@ public class StoryApiController {
     /**
      * 글 작성 요청. {@code quote}(책에서 옮긴 문장)는 <b>선택</b>이고, 필드가 아예 없는 옛 클라이언트의
      * 요청도 그대로 받는다(Jackson이 null로 채운다 — 인용 없이 남긴 글).
+     *
+     * <p>{@code shared}(「함께 걸기」)가 <b>래퍼</b>인 것은 의도다. 프리미티브 {@code boolean}으로 두면
+     * 필드 없는 옛 클라의 요청이 <b>500으로 죽는다</b> — Jackson 3의 {@code FAIL_ON_NULL_FOR_PRIMITIVES}가
+     * 기본 켜짐이라 「없는 필드 → false」가 공짜가 아니다(2026-08-22 실측). 「기본 꺼짐」은 여기서
+     * {@link #isShared} 한 줄이 진다.
      */
-    public record CreateStoryRequest(String text, String quote, Long bookId, String bgCode) {
+    public record CreateStoryRequest(String text, String quote, Long bookId, String bgCode,
+                                     Boolean shared) {
+
+        /** 필드가 없거나 null이면 꺼짐 — 옛 클라이언트의 요청이 그대로 통하는 지점이다. */
+        boolean isShared() {
+            return Boolean.TRUE.equals(shared);
+        }
     }
 }
