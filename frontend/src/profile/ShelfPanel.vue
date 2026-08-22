@@ -10,7 +10,7 @@ import { hasFreshStory, showMarginHandle } from '../shared/story/storyFeed'
 interface BookSummary {
     id: number; title: string; author: string | null; coverUrl: string | null;
     status: string; seconds: number; purchaseLink: string | null;
-    /** 그 책 여백의 최신 글 시각 — 비팔로워·글 없는 책은 null(서버가 가린다, 설계 §D3ⓐ). */
+    /** 그 책 여백의 최신 글 시각 — 글 없는 책은 null. 팔로우와 무관하다(2026-08-22). */
     lastStoryAt: string | null;
 }
 
@@ -128,7 +128,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onNoteKeydown))
                             <ShopIcon name="clock" :size="13" />{{ formatReadingTime(b.seconds) }}
                         </span>
                         <!-- 「여백」 진입 — 본인은 전 책(작성 진입), 남의 책방은 글이 있는 책만.
-                             프라이버시 게이트는 서버가 이미 했다(비팔로워는 lastStoryAt 전부 null). -->
+                             프라이버시 게이트는 서버가 이미 했다(비공개 책은 목록에 없다). -->
                         <button v-if="showMarginHandle(self, b.lastStoryAt)" type="button" class="shop-margin-btn"
                                 :aria-label="b.title + ' 여백 보기'" @click="$emit('openMargin', b)">여백</button>
                     </div>

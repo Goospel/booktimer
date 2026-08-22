@@ -3,7 +3,6 @@ package com.booktimer.story;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
-import com.booktimer.follow.FollowService;
 import com.booktimer.profile.ProfileService;
 import com.booktimer.search.UserRowAssembler;
 import com.booktimer.search.UserSearchResult;
@@ -50,8 +49,6 @@ class StoryServiceTest {
     @Mock
     private RateLimitService rateLimitService;
     @Mock
-    private FollowService followService;
-    @Mock
     private ProfileService profileService;
     @Mock
     private StoryLikeRepository storyLikeRepository;
@@ -65,7 +62,7 @@ class StoryServiceTest {
     @BeforeEach
     void setUp() {
         service = new StoryService(storyRepository, bookRepository, rateLimitService,
-                followService, profileService, storyLikeRepository, rowAssembler);
+                profileService, storyLikeRepository, rowAssembler);
         me = userWithId(1L, "meuser", "나");
     }
 
@@ -231,7 +228,6 @@ class StoryServiceTest {
         assertThatThrownBy(() -> service.marginOf(me, "target", 7L))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
-        verify(followService, never()).isFollowing(any(), any());
         verify(storyRepository, never()).findByUserAndBookOrderByCreatedAtDescIdDesc(any(), any(), any());
     }
 
@@ -253,31 +249,35 @@ class StoryServiceTest {
         assertThat(response.book().title()).isEqualTo("내 비공개 책");
     }
 
+    /**
+     * 2026-08-22 — <b>팔로우는 열람 권한에서 빠졌다</b>. 예전엔 비팔로워에게 빈 배열을 줬는데, 「모두의
+     * 여백」(책축)이 열린 뒤로는 같은 글을 팔로우 없이 이미 읽을 수 있어 게이트가 절반만 작동했다.
+     * 이제 공개 책의 여백은 공개고, 팔로우는 홈 소식 구독에만 남는다.
+     */
     @Test
-    @DisplayName("marginOf: 비팔로워 → 책 라벨은 주되 entries는 빈 배열 (글 유무 정보도 안 샘)")
-    void marginOf_nonFollower_returnsEmptyEntriesWithBookLabel() {
+    @DisplayName("marginOf: 비팔로워 → 공개 책이면 목록을 그대로 준다 (팔로우는 열람 권한이 아니다)")
+    void marginOf_nonFollower_seesEntries() {
         User target = visibleTarget("target");
         Book book = publicBookOf(target, "남의 공개 책");
         when(bookRepository.findByIdAndUser(7L, target)).thenReturn(Optional.of(book));
-        when(followService.isFollowing(me, target)).thenReturn(false);
+        Story theirs = storyWithId(10L, target, "낯선 사람도 읽는 글", NOW.minusSeconds(60), book);
+        when(storyRepository.findByUserAndBookOrderByCreatedAtDescIdDesc(eq(target), eq(book), any(Pageable.class)))
+                .thenReturn(List.of(theirs));
 
         MarginResponse response = service.marginOf(me, "target", 7L);
 
-        assertThat(response.entries()).isEmpty();
-        assertThat(response.following()).isFalse();
+        assertThat(response.entries()).extracting(MarginEntry::text).containsExactly("낯선 사람도 읽는 글");
         assertThat(response.self()).isFalse();
-        assertThat(response.book().title()).isEqualTo("남의 공개 책"); // 화면이 "팔로우하면 볼 수 있어요"를 그린다
+        assertThat(response.book().title()).isEqualTo("남의 공개 책");
         assertThat(response.ownerNickname()).isEqualTo("대상");
-        verify(storyRepository, never()).findByUserAndBookOrderByCreatedAtDescIdDesc(any(), any(), any());
     }
 
     @Test
-    @DisplayName("marginOf: 팔로워 → 최신순 글 목록 + following:true")
-    void marginOf_follower_returnsNewestFirst() {
+    @DisplayName("marginOf: 남의 공개 책 → 최신순 글 목록")
+    void marginOf_othersPublicBook_returnsNewestFirst() {
         User target = visibleTarget("target");
         Book book = publicBookOf(target, "공개 책");
         when(bookRepository.findByIdAndUser(7L, target)).thenReturn(Optional.of(book));
-        when(followService.isFollowing(me, target)).thenReturn(true);
         Story older = storyWithId(10L, target, "먼저 남긴 글", NOW.minusSeconds(600), book);
         Story newer = storyWithId(11L, target, "나중 남긴 글", NOW.minusSeconds(60), book);
         when(storyRepository.findByUserAndBookOrderByCreatedAtDescIdDesc(eq(target), eq(book), any(Pageable.class)))
@@ -285,7 +285,6 @@ class StoryServiceTest {
 
         MarginResponse response = service.marginOf(me, "target", 7L);
 
-        assertThat(response.following()).isTrue();
         assertThat(response.self()).isFalse();
         assertThat(response.entries()).extracting(MarginEntry::text)
                 .containsExactly("나중 남긴 글", "먼저 남긴 글");
@@ -298,7 +297,6 @@ class StoryServiceTest {
         User target = visibleTarget("target");
         Book book = publicBookOf(target, "공개 책");
         when(bookRepository.findByIdAndUser(7L, target)).thenReturn(Optional.of(book));
-        when(followService.isFollowing(me, target)).thenReturn(true);
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
         when(storyRepository.findByUserAndBookOrderByCreatedAtDescIdDesc(eq(target), eq(book), captor.capture()))
                 .thenReturn(List.of());
@@ -321,10 +319,8 @@ class StoryServiceTest {
         MarginResponse response = service.marginOf(me, "meuser", 7L);
 
         assertThat(response.self()).isTrue();
-        assertThat(response.following()).isFalse(); // 자기 자신은 팔로우 대상이 아니다
         assertThat(response.entries()).extracting(MarginEntry::text).containsExactly("내 글");
         assertThat(response.book().coverUrl()).isEqualTo("https://img/cover.jpg");
-        verify(followService, never()).isFollowing(any(), any());
     }
 
     // --- delete ---
@@ -420,7 +416,6 @@ class StoryServiceTest {
         assertThat(state.likeCount()).isEqualTo(1L);
         assertThat(state.liked()).isTrue();
         verify(storyLikeRepository).save(any());
-        verify(followService, never()).isFollowing(any(), any());
     }
 
     @Test
@@ -467,22 +462,22 @@ class StoryServiceTest {
         assertThatThrownBy(() -> service.like(me, 10L))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
-        verify(followService, never()).isFollowing(any(), any());
     }
 
+    /** 팔로우 축 제거(2026-08-22)의 단건 미러 — 팔로우를 게이트로 되살리면 이 테스트가 붉어진다. */
     @Test
-    @DisplayName("like: 비팔로워 → 404 (애초에 글이 안 보이는 사이)")
-    void like_nonFollower_throws404() {
+    @DisplayName("like: 비팔로워 → 공개 책 글이면 눌린다 (팔로우는 열람 권한이 아니다)")
+    void like_nonFollower_saves() {
         when(rateLimitService.allow(RateLimitAction.STORY_LIKE, 1L)).thenReturn(true);
         User owner = userWithId(2L, "owner", "주인");
-        when(storyRepository.findById(10L)).thenReturn(Optional.of(othersPublicStory(owner)));
+        Story story = othersPublicStory(owner);
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(story));
         when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.of(owner));
-        when(followService.isFollowing(me, owner)).thenReturn(false);
+        when(storyLikeRepository.findByStoryAndUser(story, me)).thenReturn(Optional.empty());
+        when(storyLikeRepository.countByStory(story)).thenReturn(1L);
 
-        assertThatThrownBy(() -> service.like(me, 10L))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
-        verify(storyLikeRepository, never()).save(any());
+        assertThat(service.like(me, 10L).liked()).isTrue();
+        verify(storyLikeRepository).save(any());
     }
 
     @Test
@@ -493,7 +488,6 @@ class StoryServiceTest {
         Story story = othersPublicStory(owner);
         when(storyRepository.findById(10L)).thenReturn(Optional.of(story));
         when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.of(owner));
-        when(followService.isFollowing(me, owner)).thenReturn(true);
         when(storyLikeRepository.findByStoryAndUser(story, me)).thenReturn(Optional.empty());
         when(storyLikeRepository.countByStory(story)).thenReturn(4L);
 
@@ -519,7 +513,6 @@ class StoryServiceTest {
         Story story = othersPublicStory(owner);
         when(storyRepository.findById(10L)).thenReturn(Optional.of(story));
         when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.of(owner));
-        when(followService.isFollowing(me, owner)).thenReturn(true);
         when(storyLikeRepository.findByStoryAndUser(story, me)).thenReturn(Optional.of(StoryLike.of(me, story)));
         when(storyLikeRepository.countByStory(story)).thenReturn(4L);
 
@@ -562,7 +555,6 @@ class StoryServiceTest {
         assertThat(state.liked()).isFalse();
         assertThat(state.likeCount()).isEqualTo(3L);
         verify(storyLikeRepository).delete(like);
-        verify(followService, never()).isFollowing(any(), any());
         verify(profileService, never()).resolveVisibleTarget(any(), any());
     }
 
@@ -572,7 +564,6 @@ class StoryServiceTest {
         User target = visibleTarget("target");
         Book book = publicBookOf(target, "공개 책");
         when(bookRepository.findByIdAndUser(7L, target)).thenReturn(Optional.of(book));
-        when(followService.isFollowing(me, target)).thenReturn(true);
         Story liked = storyWithId(10L, target, "내가 누른 글", NOW.minusSeconds(60), book);
         Story plain = storyWithId(11L, target, "아무도 안 누른 글", NOW.minusSeconds(120), book);
         when(storyRepository.findByUserAndBookOrderByCreatedAtDescIdDesc(eq(target), eq(book), any(Pageable.class)))
@@ -615,7 +606,6 @@ class StoryServiceTest {
         User target = visibleTarget("target");
         Book book = publicBookOf(target, "공개 책");
         when(bookRepository.findByIdAndUser(7L, target)).thenReturn(Optional.of(book));
-        when(followService.isFollowing(me, target)).thenReturn(true);
         when(storyRepository.findByUserAndBookOrderByCreatedAtDescIdDesc(eq(target), eq(book), any(Pageable.class)))
                 .thenReturn(List.of());
 
@@ -658,16 +648,16 @@ class StoryServiceTest {
      * 「그 글이 있다」와 「누가 눌렀다」를 한꺼번에 알아낼 수 있다.
      */
     @Test
-    @DisplayName("likers: 비팔로워 → 404 (목록에 안 뜨는 글의 명단은 열리지 않는다)")
-    void likers_nonFollower_throws404() {
+    @DisplayName("likers: 비팔로워 → 공개 책 글이면 열린다 (목록과 같은 판정 — 팔로우 축 제거의 미러)")
+    void likers_nonFollower_opens() {
         User owner = userWithId(2L, "owner", "주인");
-        when(storyRepository.findById(10L)).thenReturn(Optional.of(othersPublicStory(owner)));
+        Story story = othersPublicStory(owner);
+        when(storyRepository.findById(10L)).thenReturn(Optional.of(story));
         when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.of(owner));
-        when(followService.isFollowing(me, owner)).thenReturn(false);
+        when(storyLikeRepository.findByStoryOrderByCreatedAtDescIdDesc(story)).thenReturn(List.of());
+        when(rowAssembler.toRows(eq(me), anyList())).thenReturn(List.of());
 
-        assertThatThrownBy(() -> service.likers(me, 10L))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
+        assertThat(service.likers(me, 10L)).isEmpty();
     }
 
     @Test
@@ -682,17 +672,15 @@ class StoryServiceTest {
         assertThatThrownBy(() -> service.likers(me, 10L))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
-        verify(followService, never()).isFollowing(any(), any());
     }
 
     @Test
-    @DisplayName("likers: 팔로워 → 레포가 준 순서(최근순) 그대로 사용자 행으로 조립")
-    void likers_follower_returnsRowsInOrder() {
+    @DisplayName("likers: 남의 공개 글 → 레포가 준 순서(최근순) 그대로 사용자 행으로 조립")
+    void likers_othersPublicStory_returnsRowsInOrder() {
         User owner = userWithId(2L, "owner", "주인");
         Story story = othersPublicStory(owner);
         when(storyRepository.findById(10L)).thenReturn(Optional.of(story));
         when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.of(owner));
-        when(followService.isFollowing(me, owner)).thenReturn(true);
         User recent = visibleUser(3L, "recent");
         User older = visibleUser(4L, "older");
         when(storyLikeRepository.findByStoryOrderByCreatedAtDescIdDesc(story))
@@ -712,8 +700,6 @@ class StoryServiceTest {
         when(storyLikeRepository.findByStoryOrderByCreatedAtDescIdDesc(mine)).thenReturn(List.of());
 
         assertThat(service.likers(me, 10L)).isEmpty();
-
-        verify(followService, never()).isFollowing(any(), any());
     }
 
     /**
@@ -728,7 +714,6 @@ class StoryServiceTest {
         Story story = othersPublicStory(owner);
         when(storyRepository.findById(10L)).thenReturn(Optional.of(story));
         when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.of(owner));
-        when(followService.isFollowing(me, owner)).thenReturn(true);
         User visible = visibleUser(3L, "visible");
         User handleless = userWithId(4L, "nohandle", "온보딩 전");
         ReflectionTestUtils.setField(handleless, "loginId", null);
@@ -761,9 +746,10 @@ class StoryServiceTest {
         return new UserSearchResult(loginId, "누른이", 0L, false, false);
     }
 
-    // ── 「함께 걸기」(shared) — 게이트 확장 (T-R4~R7) ──────────────────────────
-    // 불변식: 노출 = book.isPublic() AND (팔로워 OR shared). shared는 게이트를 여는 값이 아니라
-    // 좁히는 값이다 — 두 축을 OR로 이으면 비공개 메모가 낯선 사람에게 샌다.
+    // ── 「모두의 여백」(shared) ────────────────────────────────────────────────
+    // 불변식(2026-08-22 개정): 노출 = book.isPublic(). 그게 전부다 — 팔로우도 shared도 게이트가
+    // 아니다. shared는 이제 「책축 목록에 실을지」를 정하는 배치 값이고, 열람 권한과 무관하다.
+    // 여기 남은 테스트가 지키는 것은 <b>책 게이트가 유일한 방어로 살아 있는가</b> 하나다.
 
     private Story sharedStoryOf(User owner, Book book) {
         Story story = storyWithId(10L, owner, "함께 건 글", NOW.minusSeconds(60), book);
@@ -789,21 +775,6 @@ class StoryServiceTest {
     }
 
     @Test
-    @DisplayName("like: 낯선 사람 + 함께 걸지 않은 공개 글 → 404 (shared는 좁히는 값이지 여는 값이 아니다)")
-    void like_strangerOnUnsharedStory_throws404() {
-        when(rateLimitService.allow(RateLimitAction.STORY_LIKE, 1L)).thenReturn(true);
-        User owner = userWithId(2L, "owner", "주인");
-        when(storyRepository.findById(10L)).thenReturn(Optional.of(othersPublicStory(owner)));
-        when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.of(owner));
-        when(followService.isFollowing(me, owner)).thenReturn(false);
-
-        assertThatThrownBy(() -> service.like(me, 10L))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(t -> assertThat(statusOf(t)).isEqualTo(HttpStatus.NOT_FOUND));
-        verify(storyLikeRepository, never()).save(any());
-    }
-
-    @Test
     @DisplayName("like: 함께 걸었어도 책이 PRIVATE면 404 — 책 게이트가 상위 AND (핵심 누출 가드)")
     void like_sharedStoryOnPrivateBook_throws404() {
         when(rateLimitService.allow(RateLimitAction.STORY_LIKE, 1L)).thenReturn(true);
@@ -818,23 +789,12 @@ class StoryServiceTest {
         verify(storyLikeRepository, never()).save(any());
     }
 
-    /** 회귀 — {@code assertVisible}의 마지막 게이트가 바뀌므로 팔로워 경로가 살아 있는지 못 박는다. */
-    @Test
-    @DisplayName("like: 팔로워 + 함께 걸지 않은 글은 여전히 200 (팔로우 축 회귀)")
-    void like_followerOnUnsharedStory_stillSaves() {
-        when(rateLimitService.allow(RateLimitAction.STORY_LIKE, 1L)).thenReturn(true);
-        User owner = userWithId(2L, "owner", "주인");
-        Story story = othersPublicStory(owner);
-        when(storyRepository.findById(10L)).thenReturn(Optional.of(story));
-        when(profileService.resolveVisibleTarget(me, "owner")).thenReturn(Optional.of(owner));
-        when(followService.isFollowing(me, owner)).thenReturn(true);
-        when(storyLikeRepository.findByStoryAndUser(story, me)).thenReturn(Optional.empty());
-        when(storyLikeRepository.countByStory(story)).thenReturn(2L);
-
-        assertThat(service.like(me, 10L).liked()).isTrue();
-        assertThat(story.isShared()).isFalse();
-        verify(storyLikeRepository).save(any());
-    }
+    /**
+     * 팔로우·shared 두 축이 게이트에서 빠진 뒤, 이 자리에 있던 회귀 가드 둘
+     * ({@code like_strangerOnUnsharedStory_throws404} · {@code like_followerOnUnsharedStory_stillSaves})은
+     * 지웠다 — 둘 다 「낯선 사람 + 공개 책 글」이라 {@code like_nonFollower_saves}와 같은 돌연변이를
+     * 잡는 완전 중복이 됐다. 남은 가드는 위 PRIVATE 404 하나이고, 그게 이제 유일한 방어선이다.
+     */
 
     @Test
     @DisplayName("likers: 낯선 사람도 함께 걸린 공개 글의 명단을 연다 (목록·단건 미러 일치)")
@@ -847,7 +807,6 @@ class StoryServiceTest {
         when(rowAssembler.toRows(eq(me), anyList())).thenReturn(List.of());
 
         assertThat(service.likers(me, 10L)).isEmpty();
-        verify(followService, never()).isFollowing(any(), any());
     }
 
     // --- setShared ---

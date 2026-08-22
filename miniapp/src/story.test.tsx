@@ -25,8 +25,8 @@ import { userAgent } from './test-fixtures';
 /**
  * 여백 화면 계측 — 정적 렌더로는 effect·클릭이 안 돌므로, 화면의 결정은 순수 함수({@link hasFreshStory})와
  * **프롭으로 데이터를 꽂는 표시 컴포넌트**({@link MarginView})로 갈라 계측한다(T-149: 부정 단언 금지).
- * 노출 게이트(차단·IDOR·PRIVATE·비팔로워)는 서버 몫이라 여기서 재검증하지 않는다 — 화면은 서버가 준
- * `self`·`following`·`entries`가 무엇을 켜고 끄는지만 진다.
+ * 노출 게이트(차단·IDOR·PRIVATE)는 서버 몫이라 여기서 재검증하지 않는다 — 화면은 서버가 준
+ * `self`·`entries`가 무엇을 켜고 끄는지만 진다.
  */
 
 const NOW = Date.parse('2026-08-16T12:00:00Z');
@@ -55,7 +55,6 @@ function margin(extra: Partial<MarginResponse> = {}): MarginResponse {
     book: { id: 7, title: '데미안', author: '헤르만 헤세', coverUrl: null, isbn13: '9791168340084' },
     ownerNickname: '구스펠',
     self: false,
-    following: true,
     entries: [entry(1)],
     ...extra,
   };
@@ -108,14 +107,17 @@ describe('새 글 발광 — hasFreshStory (경계)', () => {
     expect(hasFreshStory(new Date(NOW - 24 * HOUR - MINUTE).toISOString(), NOW)).toBe(false);
   });
 
-  it('글이 없거나 비팔로워면(null) 발광하지 않는다 — 서버가 null로 가려 준다', () => {
+  it('글이 없는 책(null)은 발광하지 않는다 — 모르는 상태를 발광으로 올리지 않는다', () => {
     expect(hasFreshStory(null, NOW)).toBe(false);
   });
 });
 
 /**
- * 가시성 고지 — 비공개 책에도 여백을 쓸 수 있게 된 뒤(설계 결정 2), 「팔로워에게 보여요」는 비공개
- * 책에서 <b>거짓말</b>이 됐다. 쓰는 순간 이 한 줄이 무엇이 새고 무엇이 안 새는지 말한다.
+ * 가시성 고지 — 쓰는 순간 이 한 줄이 무엇이 새고 무엇이 안 새는지 말한다.
+ *
+ * <p>2026-08-22에 「팔로워에게 보여요」를 걷었다. 팔로우가 열람 권한에서 빠지면서 그 말이 <b>실제보다
+ * 좁게</b> 고지하게 됐다 — 공개 책의 글은 팔로워가 아닌 누구에게나 보인다. 아래 단언이 「누구나」를
+ * 못 박는 이유다: 노출 범위를 실제보다 작게 말하는 것이 가장 위험한 거짓말이다.
  */
 describe('가시성 고지 (visibilityNotice)', () => {
   it('비공개 책이면 나만 본다고 말하고, 공개로 바꾸면 보인다는 것까지 알린다', () => {
@@ -125,12 +127,18 @@ describe('가시성 고지 (visibilityNotice)', () => {
     expect(notice).toContain('공개로 바꾸면');
   });
 
-  it('공개 책이면 팔로워에게 보인다고 말한다', () => {
-    expect(visibilityNotice(true)).toBe('팔로워에게 보여요.');
+  it('공개 책이면 누구나 볼 수 있다고 말한다 — 「팔로워에게」로 좁히면 실제보다 적게 고지하는 것이다', () => {
+    expect(visibilityNotice(true)).toBe('공개 책이라 누구나 볼 수 있어요.');
+    expect(visibilityNotice(true)).not.toContain('팔로워');
+  });
+
+  it('비공개 책 고지도 공개 뒤의 범위를 「누구나」로 말한다', () => {
+    expect(visibilityNotice(false)).toContain('누구나');
+    expect(visibilityNotice(false)).not.toContain('팔로워');
   });
 
   it('필드가 없는 옛 서버 응답(undefined)은 공개로 간주한다 — 비공개라 단정하는 쪽이 더 위험한 거짓말이다', () => {
-    expect(visibilityNotice(undefined)).toBe('팔로워에게 보여요.');
+    expect(visibilityNotice(undefined)).toBe('공개 책이라 누구나 볼 수 있어요.');
   });
 });
 
@@ -186,14 +194,14 @@ describe('책 여백 화면 (MarginView)', () => {
    * 작성 문이 둘이 되므로, 새 버튼의 존재만이 아니라 <b>옛 버튼의 부재</b>까지 함께 못 박는다.
    */
   it('내 책이면 게시판 머리에 「글쓰기」가 선다 — 옛 전체폭 버튼은 없다', () => {
-    const markup = view(margin({ self: true, following: false }));
+    const markup = view(margin({ self: true }));
 
     expect(markup).toContain('글쓰기');
     expect(markup).not.toContain('여백에 글 남기기');
   });
 
   it('남의 책이면 글쓰기가 없다 — 서버가 404로 거절하는 동작을 화면에서 먼저 막는다', () => {
-    const markup = view(margin({ self: false, following: true }));
+    const markup = view(margin({ self: false }));
 
     expect(markup).toContain('문장 1'); // 목록은 그려졌다(부재 단언의 쌍)
     expect(markup).not.toContain('글쓰기');
@@ -204,14 +212,14 @@ describe('책 여백 화면 (MarginView)', () => {
    * 그 자리에서 지울 수 있다는 뜻이 되어, 확인 단계가 없는 삭제 손잡이가 된다.
    */
   it('목록에는 ⋯ 손잡이만 있고 지우기 글자는 없다 — 동작은 시트로 접혔다', () => {
-    const markup = view(margin({ self: true, following: false }));
+    const markup = view(margin({ self: true }));
 
     expect(markup).toContain('aria-label="이 글 관리"');
     expect(markup).not.toContain('지우기');
   });
 
   it('⋯ 손잡이를 안 넘기면 ⋯ 자체가 없다 — 남의 글은 내가 관리하지 않는다', () => {
-    const markup = view(margin({ self: false, following: true }), { onOpenMenu: undefined });
+    const markup = view(margin({ self: false }), { onOpenMenu: undefined });
 
     expect(markup).toContain('문장 1'); // 목록은 그려졌다(부재 단언의 쌍)
     expect(markup).not.toContain('aria-label="이 글 관리"');
@@ -223,7 +231,7 @@ describe('책 여백 화면 (MarginView)', () => {
    * 위 케이스로는 이 게이트가 계측되지 않는다(돌연변이 실측에서 살아남았다).
    */
   it('남의 여백이면 손잡이를 받아도 ⋯ 를 안 그린다 — 서버 404를 화면에서 먼저 막는다', () => {
-    const markup = view(margin({ self: false, following: true }), { onOpenMenu: () => {} });
+    const markup = view(margin({ self: false }), { onOpenMenu: () => {} });
 
     expect(markup).toContain('문장 1'); // 목록은 그려졌다(부재 단언의 쌍)
     expect(markup).not.toContain('aria-label="이 글 관리"');
@@ -244,18 +252,24 @@ describe('책 여백 화면 (MarginView)', () => {
     expect(view(margin({ self: true, entries: [longEntry()] }), { expanded: new Set([1]) })).toContain('접기');
   });
 
-  it('비팔로워에게는 팔로우하면 볼 수 있다고 말한다 — 글 유무 자체가 새지 않는다(서버가 빈 배열)', () => {
-    const markup = view(margin({ self: false, following: false, entries: [] }));
+  /**
+   * 2026-08-22 — 옛 단언은 「비팔로워에게 팔로우하면 볼 수 있다고 말한다」였다. 팔로우가 열람 권한에서
+   * 빠지면서 그 안내는 <b>거짓말이자 모순</b>이 됐다: 「모두의 여백」에서 그 사람 글을 이미 읽고
+   * 넘어온 사람에게 "팔로우해야 읽을 수 있다"고 말하는 자리였다.
+   */
+  it('남의 여백이 비어 있으면 그냥 비었다고 말한다 — 팔로우 안내는 이제 거짓말이다', () => {
+    const markup = view(margin({ self: false, entries: [] }));
 
-    expect(markup).toContain('팔로우하면');
+    expect(markup).toContain('아직 남긴 글이 없어요');
+    expect(markup).not.toContain('팔로우');
     expect(markup).toContain('글 0');
   });
 
-  it('내 책인데 글이 하나도 없으면 첫 문장을 권한다 — 팔로우 안내가 내 화면에 뜨면 오독이다', () => {
-    const markup = view(margin({ self: true, following: false, entries: [] }));
+  it('내 책인데 글이 하나도 없으면 첫 문장을 권한다', () => {
+    const markup = view(margin({ self: true, entries: [] }));
 
-    expect(markup).toContain('아직 남긴 글이 없어요');
-    expect(markup).not.toContain('팔로우하면');
+    expect(markup).toContain('읽다가 마음에 걸린 문장을 남겨 보세요');
+    expect(markup).not.toContain('팔로우');
   });
 
   it('글마다 상대 시각을 적는다 — 만료가 없어진 뒤로 "언제 쓴 글인지"가 유일한 시간 단서다', () => {
@@ -323,11 +337,24 @@ describe('글 남기기 (StoryComposer)', () => {
     expect(composer(false)).toContain('나만 봐요');
   });
 
-  it('공개 책이면 팔로워에게 보인다고 알린다 — placeholder가 아니라 입력 위 캡션이다(써도 남는다)', () => {
+  it('공개 책이면 누구나 본다고 알린다 — placeholder가 아니라 입력 위 캡션이다(써도 남는다)', () => {
     const markup = composer(true);
 
-    expect(markup.indexOf('팔로워에게 보여요')).toBeLessThan(markup.indexOf('<textarea'));
+    expect(markup.indexOf('누구나 볼 수 있어요')).toBeLessThan(markup.indexOf('<textarea'));
     expect(markup).not.toContain('나만 봐요');
+  });
+
+  /**
+   * 캡션과 체크박스 설명이 <b>서로 모순되지 않는가</b>. 예전엔 위에서 「팔로워에게 보여요」라 하고
+   * 바로 아래 체크박스가 「이 책을 보는 모두에게 보여요」라 해서, 위아래로 읽으면 뒷문장이 앞문장을
+   * 뒤집었다(설계 의도는 AND였지만 화면에 그 AND를 설명할 자리가 없었다).
+   */
+  it('캡션과 체크박스 설명이 노출 범위를 두 가지로 말하지 않는다', () => {
+    const markup = composer(true);
+
+    expect(markup).toContain('누구나 볼 수 있어요');
+    expect(markup).toContain('「모두의 여백」에 함께 올라가요');
+    expect(markup).not.toContain('팔로워');
   });
 });
 
@@ -430,7 +457,7 @@ describe('여백 좋아요', () => {
    * 그때는 여백에 글을 쓴 사람이 없으면 좋아요를 확인할 길 자체가 없었다.
    */
   it('내 글에도 하트가 그려진다 — 자기 좋아요 허용', () => {
-    const html = view(margin({ self: true, following: false, entries: [entry(1, { likeCount: 2 })] }));
+    const html = view(margin({ self: true, entries: [entry(1, { likeCount: 2 })] }));
 
     expect(html).toContain('aria-label="좋아요"');
     expect(html).toContain('좋아요 2명');
@@ -440,7 +467,6 @@ describe('여백 좋아요', () => {
     const html = view(
       margin({
         self: true,
-        following: false,
         book: { id: 7, title: '비밀 노트', author: null, coverUrl: null, isPublic: false },
         entries: [entry(1)],
       }),
@@ -533,6 +559,8 @@ describe('인용문', () => {
  * 0명/N명 분기에 닿는 유일한 길). 실패는 그 자리에서 다시 받는 길을 준다.
  */
 describe('좋아요 명단 시트 (LikersSheet)', () => {
+  // UserRow.following은 그대로다 — 여기 팔로우는 「이 사람을 팔로우 중인가」라는 사람 관계 표시이지
+  // 여백 노출 게이트가 아니다(그건 2026-08-22에 사라졌다).
   const someone: UserRow = { loginId: 'nabi', nickname: '나비독서', publicBookCount: 12, following: true, self: false };
 
   const sheet = (users: UserRow[] | null, error: string | null = null) =>
@@ -599,16 +627,23 @@ describe('측정 종료 고지 (timerStopped)', () => {
 /**
  * 「함께 걸기」 — 글 하나를 <b>같은 책을 보는 누구에게나</b> 여는 opt-in(2026-08-22 책축 개방).
  *
- * <p>노출 판정은 전부 서버다(책 PUBLIC AND (팔로워 OR shared)) — 화면이 재현하지 않는다.
+ * <p>노출 판정은 전부 서버다(책 PUBLIC 하나 — 2026-08-22에 팔로우·shared 축이 빠졌다).
  * 여기서 재는 것은 ① 고지 문구가 책 공개 여부로 갈리는가 ② 칩·손잡이가 상태를 말하는가뿐이다.
  */
-describe('함께 걸기 — 고지 문구 (M-1)', () => {
-  it('공개 책이면 지금 당장 모두에게 보인다고 말한다', () => {
-    expect(shareNotice(true)).toBe('이 책을 보는 모두에게 보여요.');
+describe('모두의 여백에 올리기 — 고지 문구 (M-1)', () => {
+  /**
+   * 2026-08-22 — 이 체크박스는 <b>권한 스위치가 아니라 배치 스위치</b>가 됐다. 팔로우 축이 사라져
+   * 공개 책의 글은 올리든 안 올리든 누구나 볼 수 있고, 올리기가 정하는 것은 「책축 목록에 실려
+   * 그 책을 보는 사람에게 <i>발견되는가</i>」다. 그래서 문구가 노출("보여요")이 아니라 게재
+   * ("올라가요")를 말해야 한다 — 옛 문구는 이제 안 올린 글이 안 보인다는 오해를 만든다.
+   */
+  it('공개 책이면 모두의 여백에 올라간다고 말한다 — 노출이 아니라 게재를 말한다', () => {
+    expect(shareNotice(true)).toBe('이 책의 「모두의 여백」에 함께 올라가요.');
+    expect(shareNotice(true)).not.toContain('보여요');
   });
 
-  it('비공개 책이면 「공개로 바꾸면」이라는 조건이 앞선다 — 켜도 지금은 아무에게도 안 보인다', () => {
-    expect(shareNotice(false)).toBe('책을 공개로 바꾸면 이 책을 보는 모두에게 보여요.');
+  it('비공개 책이면 「공개로 바꾸면」이라는 조건이 앞선다 — 켜도 지금은 아무 데도 안 실린다', () => {
+    expect(shareNotice(false)).toBe('책을 공개로 바꾸면 「모두의 여백」에 올라가요.');
   });
 
   it('필드를 안 보내는 옛 서버는 공개로 간주한다 — 새는 글을 안 샌다고 말하는 쪽이 더 위험한 거짓말이다', () => {

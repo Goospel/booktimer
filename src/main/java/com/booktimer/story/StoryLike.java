@@ -23,7 +23,7 @@ import jakarta.persistence.UniqueConstraint;
  * 이겼고 트위터·인스타도 자기 글에 눌린다. 그 결과 도메인 불변식이 null 거부만 남았고, 노출 규칙은
  * 「받은 글은 전부 누를 수 있다」 하나로 줄어 클라이언트의 `likable()` 분기가 통째로 사라졌다.
  *
- * <p>노출 게이트(차단·비공개 책·비팔로워)는 <b>관계</b>를 봐야 해서 여기가 아니라
+ * <p>노출 게이트(차단·비공개 책)는 <b>관계</b>를 봐야 해서 여기가 아니라
  * {@link StoryService#like}에 있다 — 그쪽이 목록 게이트({@code marginOf})와 같은 판정을 재사용한다.
  */
 @Entity

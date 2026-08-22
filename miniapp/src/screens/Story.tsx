@@ -36,8 +36,8 @@ import { BookCover, ErrorMessage, Loading, Screen, Sheet, UserList } from '../ui
  *
  * <p>파일·타입 이름은 `Story`로 남아 있다 — 서버 경로가 `/api/stories`라 맞춰 둔 것(#814 결정).
  *
- * <p>노출 권한(차단·IDOR·PRIVATE·비팔로워)은 전부 서버가 판정한다 — 미니앱은 서버가 준
- * `self`·`following`·`entries`를 표시와 액션으로 옮길 뿐이다. 정적 렌더 하니스로는 effect가 안 도므로
+ * <p>노출 권한(차단·IDOR·PRIVATE)은 전부 서버가 판정한다 — 미니앱은 서버가 준
+ * `self`·`entries`를 표시와 액션으로 옮길 뿐이다. 정적 렌더 하니스로는 effect가 안 도므로
  * 판정({@link hasFreshStory})과 표시({@link MarginView})를 상태에서 떼어 따로 계측한다.
  */
 
@@ -52,7 +52,7 @@ export const FRESH_WINDOW_MS = 86_400_000;
 /**
  * 24시간 이내 새 글이 달린 책인가 — 책방 격자 발광의 유일한 근거.
  *
- * <p>경계는 <b>미만(&lt;)</b>이다: 정각 24시간은 이미 창 밖이다. `null`(글이 없거나 비팔로워라 서버가
+ * <p>경계는 <b>미만(&lt;)</b>이다: 정각 24시간은 이미 창 밖이다. `null`(그 책에 글이 없어 서버가
  * 가린 경우)은 false — 발광은 "새 글이 있다"는 단언이라 모르는 상태를 참으로 올리지 않는다.
  */
 export function hasFreshStory(lastStoryAt: string | null, now: number): boolean {
@@ -62,28 +62,32 @@ export function hasFreshStory(lastStoryAt: string | null, now: number): boolean 
 /**
  * 작성·여백 화면의 가시성 안내 — <b>쓰는 순간</b>의 고지다(공개 전환 확인 시트는 「공개하는 순간」을 맡는다).
  *
- * <p>비공개 책에도 여백을 쓸 수 있게 되면서(설계 결정 2) 「팔로워에게 보여요」가 비공개 책에서는
- * 거짓말이 됐다. `undefined`(필드를 안 보내는 옛 서버)는 <b>공개로 간주</b>한다 — 보수적인 쪽은
- * 「나만 본다」가 아니다: 실제로는 새는 글을 안 샌다고 말하는 것이 더 위험한 거짓말이다.
+ * <p>2026-08-22에 「팔로워에게 보여요」를 걷었다. 팔로우가 열람 권한에서 빠져(서버 {@code marginOf})
+ * 공개 책의 글은 <b>누구에게나</b> 보이는데, 옛 문구는 노출 범위를 실제보다 좁게 말하고 있었다.
+ * `undefined`(필드를 안 보내는 옛 서버)는 <b>공개로 간주</b>한다 — 보수적인 쪽은 「나만 본다」가
+ * 아니다: 실제로는 새는 글을 안 샌다고 말하는 것이 더 위험한 거짓말이다.
  */
 export function visibilityNotice(isPublic: boolean | undefined): string {
   return isPublic === false
-    ? '비공개 책이에요. 이 글은 나만 봐요. 책을 공개로 바꾸면 팔로워에게 보여요.'
-    : '팔로워에게 보여요.';
+    ? '비공개 책이에요. 이 글은 나만 봐요. 책을 공개로 바꾸면 누구나 볼 수 있어요.'
+    : '공개 책이라 누구나 볼 수 있어요.';
 }
 
 /**
- * 「함께 걸기」 고지 — 켜면 누구에게 보이는지. {@link visibilityNotice}(팔로워 축)와 <b>나란히</b> 선다:
- * 노출은 둘의 AND라 두 문장이 함께 있어야 전체가 설명된다.
+ * 「모두의 여백에 올리기」 고지 — <b>노출이 아니라 게재</b>를 말한다(2026-08-22).
  *
- * <p>비공개 책이면 <b>조건이 앞선다</b> — 켜 두는 것 자체는 유효하지만 지금은 아무에게도 안 보인다
- * (가시성은 읽기 시점 판정이고 책 게이트가 상위다). `undefined`(필드를 안 보내는 옛 서버)는
- * {@link visibilityNotice}와 같은 이유로 <b>공개로 간주</b>한다.
+ * <p>팔로우 축이 사라지기 전까지 이 체크박스는 권한 스위치였고({@link visibilityNotice}의 팔로워 축과
+ * AND), 그래서 「모두에게 보여요」라고 말했다. 지금은 공개 책의 글이 올리든 안 올리든 누구에게나
+ * 보이므로, 이 값이 정하는 것은 <b>책축 목록에 실려 그 책을 보는 사람에게 발견되는가</b>뿐이다.
+ * 「보여요」로 두면 「안 올리면 안 보인다」는 반대 오해를 만든다 — 그래서 「올라가요」다.
+ *
+ * <p>비공개 책이면 <b>조건이 앞선다</b> — 켜 두는 것 자체는 유효하지만 지금은 아무 데도 안 실린다
+ * (책 게이트가 상위다). `undefined`는 {@link visibilityNotice}와 같은 이유로 공개로 간주한다.
  */
 export function shareNotice(isPublic: boolean | undefined): string {
   return isPublic === false
-    ? '책을 공개로 바꾸면 이 책을 보는 모두에게 보여요.'
-    : '이 책을 보는 모두에게 보여요.';
+    ? '책을 공개로 바꾸면 「모두의 여백」에 올라가요.'
+    : '이 책의 「모두의 여백」에 함께 올라가요.';
 }
 
 /**
@@ -831,7 +835,7 @@ export function MarginView({
   /** 여기 들어오느라 측정을 끝냈는가 — {@link TIMER_STOPPED_NOTICE}를 여는 스위치다. */
   timerStopped?: boolean;
 }) {
-  const { book, ownerNickname, self, following, entries } = margin;
+  const { book, ownerNickname, self, entries } = margin;
   /**
    * 머리글 둘째 줄 — 주인 이름은 <b>남의 여백에서만</b> 선다. 내 여백은 탭줄이 서는 자리라 주인이
    * 언제나 나여서 이름이 잉여이지만, 남의 여백은 탭이 없어 이 줄이 「누구의 여백인가」의 유일한 좌표다.
@@ -873,12 +877,12 @@ export function MarginView({
             color="grey600"
             style={{ display: 'block', padding: '34px 16px', textAlign: 'center', wordBreak: 'keep-all' }}
           >
+            {/* 남의 여백이 비면 그냥 비었다고 말한다 — 예전의 「팔로우하면 볼 수 있어요」는 2026-08-22에
+                걷었다. 「모두의 여백」에서 그 사람 글을 읽고 넘어온 사람에게 "팔로우해야 읽을 수 있다"고
+                말하는 자리였다(팔로우는 이제 열람 권한이 아니다). */}
             {self
               ? '아직 남긴 글이 없어요. 읽다가 마음에 걸린 문장을 남겨 보세요.'
-              : following
-                ? '아직 남긴 글이 없어요.'
-                : // 서버가 비팔로워에게 빈 배열을 준다 — 글이 있는지 없는지도 여기서 말하지 않는다.
-                  '팔로우하면 이 사람이 남긴 글을 볼 수 있어요.'}
+              : '아직 남긴 글이 없어요.'}
           </Text>
         ) : (
           entries.map((e) => (

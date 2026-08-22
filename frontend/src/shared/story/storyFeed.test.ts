@@ -16,12 +16,12 @@ describe('hasFreshStory', () => {
     it('24시간 1분 전 → false', () => {
         expect(hasFreshStory('2026-07-01T11:59:00Z', now)).toBe(false)
     })
-    it('null(글 없음·비팔로워) → false — 모르는 상태를 발광으로 올리지 않는다', () => {
+    it('null(글 없음) → false — 모르는 상태를 발광으로 올리지 않는다', () => {
         expect(hasFreshStory(null, now)).toBe(false)
     })
 })
 
-// ── 「여백」 손잡이 노출 — 프라이버시 게이트는 서버(비팔로워는 lastStoryAt 전부 null) ──
+// ── 「여백」 손잡이 노출 — 프라이버시 게이트는 서버(비공개 책은 목록에 없다) ──
 describe('showMarginHandle', () => {
     it('본인 책은 글이 없어도 노출(작성 진입)', () => {
         expect(showMarginHandle(true, null)).toBe(true)

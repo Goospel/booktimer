@@ -11,12 +11,15 @@ import java.util.List;
  *
  * <p>§3.4 화이트리스트: 노출 필드는 이 record 트리에 정의된 것뿐.
  *
- * @param book          여백이 열린 책(라벨용). 비팔로워에게도 실린다 — 격자에 이미 보이는 공개 책이다
+ * <p><b>{@code following}은 2026-08-22에 뺐다</b> — 팔로우가 여백 노출에서 빠지면서 두 클라 어디도
+ * 읽지 않게 됐고, 권한처럼 생긴 죽은 필드를 남기면 다음 사람이 게이트가 아직 있다고 읽는다.
+ * 여백 화면에 팔로우 버튼을 세우는 날 되살리면 된다(한 줄이다).
+ *
+ * @param book          여백이 열린 책(라벨용)
  * @param ownerNickname 책 주인 표시 이름
  * @param self          viewer 본인의 책인가(작성·삭제 손잡이 분기)
- * @param following     viewer가 주인을 팔로우 중인가. 본인이면 항상 false(자기 자신은 팔로우 대상이 아니다)
- * @param entries       최신순 글 목록. <b>비팔로워면 빈 배열</b> — 글 유무 정보도 새지 않게(§13.2)
+ * @param entries       최신순 글 목록. 공개 책이면 누구에게나 실린다
  */
-public record MarginResponse(MarginBook book, String ownerNickname, boolean self, boolean following,
+public record MarginResponse(MarginBook book, String ownerNickname, boolean self,
                              List<MarginEntry> entries) {
 }

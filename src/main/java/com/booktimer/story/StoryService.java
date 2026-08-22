@@ -3,7 +3,6 @@ package com.booktimer.story;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.Isbn;
-import com.booktimer.follow.FollowService;
 import com.booktimer.profile.ProfileService;
 import com.booktimer.search.UserRowAssembler;
 import com.booktimer.search.UserSearchResult;
@@ -45,22 +44,21 @@ public class StoryService {
     private final StoryRepository storyRepository;
     private final BookRepository bookRepository;
     private final RateLimitService rateLimitService;
-    private final FollowService followService;
     private final ProfileService profileService;
     private final StoryLikeRepository storyLikeRepository;
     private final UserRowAssembler rowAssembler;
 
+    // FollowService 의존성은 2026-08-22에 걷었다 — 여백 노출에서 팔로우 축이 사라지면서 이 서비스가
+    // 팔로우를 물어볼 일이 하나도 남지 않았다. 게이트를 되살리려는 손이 있으면 여기서 먼저 막힌다.
     public StoryService(StoryRepository storyRepository,
                         BookRepository bookRepository,
                         RateLimitService rateLimitService,
-                        FollowService followService,
                         ProfileService profileService,
                         StoryLikeRepository storyLikeRepository,
                         UserRowAssembler rowAssembler) {
         this.storyRepository = storyRepository;
         this.bookRepository = bookRepository;
         this.rateLimitService = rateLimitService;
-        this.followService = followService;
         this.profileService = profileService;
         this.storyLikeRepository = storyLikeRepository;
         this.rowAssembler = rowAssembler;
@@ -108,9 +106,12 @@ public class StoryService {
      *   <li>책이 PRIVATE <b>이고 본인이 아니면</b> → 404. 남에게는 오늘과 동일하다(존재조차 안 샌다).
      *       <b>소유자만 예외</b>다(2026-08-16 결정 2 — 비공개 책 여백 = 나만 보는 메모): 팔로워라고
      *       열리지 않으므로 {@code self} 판정은 반드시 이 게이트 <i>앞</i>에 있어야 한다</li>
-     *   <li>비팔로워(본인 아님) → {@code entries} 빈 배열 + {@code following:false}. 404가 아닌 이유:
-     *       공개 책은 격자에 이미 보이므로 감출 것이 책이 아니라 <b>글</b>이다(글 유무 정보도 안 샘)</li>
      * </ol>
+     *
+     * <p><b>팔로우 게이트는 없다</b>(2026-08-22). 예전엔 비팔로워에게 빈 배열을 줬는데, 「모두의 여백」
+     * (책축)이 열린 뒤로 같은 글을 팔로우 없이 이미 읽을 수 있어 게이트가 절반만 작동했다 — 낯선
+     * 사람의 글을 읽고 그 사람 책방으로 넘어오면 「팔로우하면 볼 수 있어요」를 만나는 모순이었다.
+     * 이제 <b>책 가시성이 유일한 방어</b>고, 팔로우는 홈 소식 구독({@code feedRecent})에만 남는다.
      */
     @Transactional(readOnly = true)
     public MarginResponse marginOf(User viewer, String loginId, Long bookId) {
@@ -122,12 +123,9 @@ public class StoryService {
         if (!book.isPublic() && !self) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다");
         }
-        boolean following = !self && followService.isFollowing(viewer, target);
-        List<Story> stories = (self || following)
-                ? storyRepository.findByUserAndBookOrderByCreatedAtDescIdDesc(
-                        target, book, PageRequest.of(0, MAX_MARGIN_ENTRIES))
-                : List.of();
-        return new MarginResponse(MarginBook.of(book), target.getNickname(), self, following,
+        List<Story> stories = storyRepository.findByUserAndBookOrderByCreatedAtDescIdDesc(
+                target, book, PageRequest.of(0, MAX_MARGIN_ENTRIES));
+        return new MarginResponse(MarginBook.of(book), target.getNickname(), self,
                 withLikes(stories, viewer));
     }
 
@@ -266,16 +264,17 @@ public class StoryService {
      * <p>좋아요({@link #like})와 명단({@link #likers})이 이것 하나를 공유한다 — 갈라 두면 한쪽만 고치는
      * 날이 온다.
      *
-     * <p><b>자기 글은 즉시 통과</b>한다. 뒤 체인에 넣으면 자기 자신을 팔로우하지 않으므로 404가 되어
-     * 내 여백의 하트가 통째로 죽고, 내 비공개 책(나만 보는 메모)도 공개 검사에 걸린다.
+     * <p><b>자기 글은 즉시 통과</b>한다. 뒤 체인에 넣으면 내 비공개 책(나만 보는 메모)이 공개 검사에
+     * 걸려 내 여백의 하트가 통째로 죽는다.
      *
      * <p>핸들 없는 주인({@code loginId == null})은 {@code resolveVisibleTarget}이 걸러 낸다 —
      * 그들의 글은 애초에 어느 목록에도 실리지 않는다(N-055).
      *
-     * <p><b>마지막 게이트는 두 통행증 중 하나</b>다(2026-08-22 책축 개방): 팔로워이거나, 글이 스스로
-     * 「함께 걸림」이거나. 그 앞의 <b>책 게이트는 상위 AND라 그대로</b>다 — {@code shared}를 책 검사와
-     * OR로 잇는 순간 비공개 메모가 낯선 사람에게 샌다({@link Story} 불변식).
-     * 목록 쪽 미러는 {@link StoryRepository#sharedByIsbn}이고, 둘은 같이 고친다.
+     * <p><b>책 게이트가 마지막이자 유일한 방어</b>다(2026-08-22 팔로우 축 제거). 예전엔 그 뒤에
+     * 「팔로워이거나 shared이거나」가 한 겹 더 있었는데, 둘 다 게이트에서 걷었다 — 팔로우는 열람
+     * 권한이 아니고({@code marginOf} 참조), {@code shared}는 책축 목록에 실을지를 정하는 배치 값이다.
+     * 이중 방어가 사라졌으므로 <b>이 공개 검사를 지우면 곧바로 비공개 메모가 샌다</b>({@link Story}
+     * 불변식). 목록 쪽 미러는 {@link StoryRepository#sharedByIsbn}이고, 둘은 같이 고친다.
      */
     private void assertVisible(User viewer, Story story) {
         User owner = story.getUser();
@@ -285,9 +284,6 @@ public class StoryService {
         profileService.resolveVisibleTarget(viewer, owner.getLoginId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다"));
         if (!story.getBook().isPublic()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다");
-        }
-        if (!story.isShared() && !followService.isFollowing(viewer, owner)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "글을 찾을 수 없습니다");
         }
     }

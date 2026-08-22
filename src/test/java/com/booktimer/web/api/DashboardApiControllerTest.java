@@ -443,7 +443,7 @@ class DashboardApiControllerTest {
     /**
      * §5-1 ⓖ — 홈에서 여백 작성 화면으로 직행할 때 「비공개 책이에요, 이 글은 나만 봐요」 캡션을
      * 띄우려면 홈이 쥔 책 옵션에 공개 여부가 있어야 한다(게이트가 아니라 <b>고지</b>용 — 결정 2로
-     * 비공개 책에도 글을 쓸 수 있게 됐기 때문에 옛 placeholder 「팔로워에게 보여요」가 거짓말이 된다).
+     * 비공개 책에도 글을 쓸 수 있게 됐기 때문에 「나만 봐요」와 「누구나 볼 수 있어요」가 갈린다).
      */
     @Test
     @DisplayName("GET /api/dashboard: BookOption에 isPublic이 실린다 — 공개 책 true, 비공개 책 false")

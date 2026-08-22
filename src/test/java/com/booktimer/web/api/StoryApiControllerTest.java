@@ -248,40 +248,26 @@ class StoryApiControllerTest {
                 .andExpect(status().isNotFound());
     }
 
+    /**
+     * 2026-08-22 — 팔로우 축 제거. 옛 단언은 「비팔로워 → entries 빈 배열」이었고, 그 짝인
+     * 「팔로워 → 목록」 테스트는 이제 같은 시나리오라 여기 합쳤다(팔로우 관계가 결과를 안 바꾼다).
+     */
     @Test
-    @DisplayName("GET /api/stories/of 비팔로워 → 200 + 책 라벨은 주되 entries는 빈 배열")
-    void marginOf_nonFollower_returnsEmptyEntries() throws Exception {
+    @DisplayName("GET /api/stories/of 비팔로워 → 공개 책이면 글 목록이 그대로 온다 (팔로우 무관)")
+    void marginOf_nonFollower_returnsEntries() throws Exception {
         register("nf-viewer@booktimer.com", "nfviewer", "열람자");
         User target = register("nf-target@booktimer.com", "nftarget", "대상");
         Book book = publicBookOf(target, "공개 책");
-        storyRepository.save(Story.of(target, "비팔로워에겐 안 보일 문장", book, null));
+        storyRepository.save(Story.of(target, "낯선 사람에게도 보일 문장", book, "sea"));
 
         mockMvc.perform(get("/api/stories/of/nftarget")
                         .param("bookId", String.valueOf(book.getId()))
                         .with(user("nf-viewer@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.book.title").value("공개 책"))
-                .andExpect(jsonPath("$.following").value(false))
-                .andExpect(jsonPath("$.self").value(false))
-                .andExpect(jsonPath("$.entries").isEmpty());
-    }
-
-    @Test
-    @DisplayName("GET /api/stories/of 팔로워 → 그 책 여백의 글 목록(최신순)")
-    void marginOf_follower_returnsEntries() throws Exception {
-        User viewer = register("fw-viewer@booktimer.com", "fwviewer", "열람자");
-        User target = register("fw-target@booktimer.com", "fwtarget", "대상");
-        followRepository.save(Follow.of(viewer, target));
-        Book book = publicBookOf(target, "공개 책");
-        storyRepository.save(Story.of(target, "팔로워에겐 보일 문장", book, "sea"));
-
-        mockMvc.perform(get("/api/stories/of/fwtarget")
-                        .param("bookId", String.valueOf(book.getId()))
-                        .with(user("fw-viewer@booktimer.com")))
-                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ownerNickname").value("대상"))
-                .andExpect(jsonPath("$.following").value(true))
-                .andExpect(jsonPath("$.entries[0].text").value("팔로워에겐 보일 문장"))
+                .andExpect(jsonPath("$.self").value(false))
+                .andExpect(jsonPath("$.entries[0].text").value("낯선 사람에게도 보일 문장"))
                 .andExpect(jsonPath("$.entries[0].bgCode").value("sea"));
     }
 
@@ -320,7 +306,7 @@ class StoryApiControllerTest {
 
     /** §5-1 ⓔ 짝 — 공개 책이면 같은 필드가 true다(직렬화 ⓖ의 양성 대조군). */
     @Test
-    @DisplayName("공개 책: 여백 응답의 book.isPublic은 true — 캡션이 「팔로워에게 보여요」로 갈리는 근거")
+    @DisplayName("공개 책: 여백 응답의 book.isPublic은 true — 캡션이 「누구나 볼 수 있어요」로 갈리는 근거")
     void marginOf_publicBook_isPublicTrue() throws Exception {
         User me = register("pb-pub@booktimer.com", "pbpub", "주인");
         Book open = publicBookOf(me, "내 공개 책");
@@ -368,8 +354,10 @@ class StoryApiControllerTest {
      * 자동으로 사라진다」는 것 자체가 검증 대상이다. 여백 게이트와 소식 피드 두 경로를 한 흐름에서 본다.
      */
     @Test
-    @DisplayName("PUBLIC→PRIVATE 전환: 같은 팔로워가 보던 여백은 404, 소식에서도 사라진다 (동기화 코드 0줄)")
-    void publicToPrivate_hidesMarginAndFeedFromFollower() throws Exception {
+    // 팔로우 관계를 세팅해 두는 이유: 여백은 팔로우를 안 보지만 <b>소식 피드는 여전히 본다</b>
+    // (feedRecent). 한 흐름에서 두 경로를 같이 보므로 관계가 있어야 소식 쪽이 의미를 갖는다.
+    @DisplayName("PUBLIC→PRIVATE 전환: 보이던 여백은 404, 소식에서도 사라진다 (동기화 코드 0줄)")
+    void publicToPrivate_hidesMarginAndFeed() throws Exception {
         User viewer = register("tr-viewer@booktimer.com", "trviewer", "팔로워");
         User owner = register("tr-owner@booktimer.com", "trowner", "주인");
         followRepository.save(Follow.of(viewer, owner));
@@ -469,14 +457,48 @@ class StoryApiControllerTest {
     }
 
     @Test
-    @DisplayName("POST .../like 비팔로워 → 404 (안 보이는 글에 눌러 보고 존재를 알아낼 수 없다)")
-    void like_nonFollower_returns404() throws Exception {
+    @DisplayName("POST .../like 비팔로워 → 공개 책 글이면 200 (팔로우 축 제거 — 배선 확인)")
+    void like_nonFollower_returnsOk() throws Exception {
         User author = register("like-closed@booktimer.com", "likeclosed", "글쓴이");
         register("like-stranger@booktimer.com", "likestranger", "남");
         Story story = storyOf(author, publicBookOf(author, "공개 책"), "남의 문장");
 
         mockMvc.perform(post("/api/stories/" + story.getId() + "/like")
                         .with(user("like-stranger@booktimer.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.liked").value(true));
+    }
+
+    /**
+     * 2026-08-22 — 팔로우 축을 걷은 뒤 {@code assertVisible}에 남은 게이트는 <b>책 공개 검사 하나</b>다.
+     * 그 게이트에 통합 계측이 없었다(목 단위테스트 3건뿐): 목은 {@code profileService}·{@code bookRepository}가
+     * 전부 가짜라 <b>배선이 어긋나는 실패</b>(엔티티 로딩·컨트롤러 경유·JPA 프록시)를 원리상 못 잡는다.
+     * 같은 게이트를 지는 {@code marginOf}는 통합 3건이 받치고 있는데 like·likers만 비어 있었다.
+     *
+     * <p>아래 둘이 그 자리를 메운다 — 이중 방어가 사라진 지금 이 게이트가 <b>최후 방어선</b>이라
+     * 계측이 목에만 있으면 안 된다. 차단(block) 경로의 통합 계측도 이 둘이 함께 진다.
+     */
+    @Test
+    @DisplayName("POST .../like 남의 PRIVATE 책 글 → 404 (책 게이트가 유일한 방어 — 실 DB 배선 확인)")
+    void like_othersPrivateBook_returns404() throws Exception {
+        User author = register("like-priv@booktimer.com", "likepriv", "글쓴이");
+        register("like-privstranger@booktimer.com", "likeprivstranger", "남");
+        Story story = storyOf(author, privateBookOf(author, "남의 비공개 책"), "나만 보는 메모");
+
+        mockMvc.perform(post("/api/stories/" + story.getId() + "/like")
+                        .with(user("like-privstranger@booktimer.com")).with(csrf()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("GET .../likes 남의 PRIVATE 책 글 → 404 (명단도 같은 게이트 — 실 DB 배선 확인)")
+    void likers_othersPrivateBook_returns404() throws Exception {
+        User author = register("likers-priv@booktimer.com", "likerspriv", "글쓴이");
+        register("likers-privstranger@booktimer.com", "likersprivstranger", "남");
+        Story story = storyOf(author, privateBookOf(author, "남의 비공개 책"), "나만 보는 메모");
+
+        mockMvc.perform(get("/api/stories/" + story.getId() + "/likes")
+                        .with(user("likers-privstranger@booktimer.com")))
                 .andExpect(status().isNotFound());
     }
 
@@ -532,15 +554,15 @@ class StoryApiControllerTest {
     }
 
     @Test
-    @DisplayName("GET .../likes 비팔로워 → 404 (안 보이는 글의 명단은 열리지 않는다)")
-    void likers_nonFollower_returns404() throws Exception {
+    @DisplayName("GET .../likes 비팔로워 → 공개 책 글이면 200 (목록과 같은 판정 — 팔로우 축 제거)")
+    void likers_nonFollower_returnsOk() throws Exception {
         User author = register("likers-closed@booktimer.com", "likersclosed", "글쓴이");
         register("likers-stranger@booktimer.com", "likersstranger", "남");
         Story story = storyOf(author, publicBookOf(author, "공개 책"), "남의 문장");
 
         mockMvc.perform(get("/api/stories/" + story.getId() + "/likes")
                         .with(user("likers-stranger@booktimer.com")))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isOk());
     }
 
     @Test

@@ -228,7 +228,6 @@ describe('인라인 여백 스냅 판정 (marginBoxView)', () => {
     book: { id: bookId, title: '데미안', author: '헤세', coverUrl: null },
     ownerNickname: '구스펠',
     self: true,
-    following: false,
     entries: [],
   });
 
@@ -276,7 +275,6 @@ describe('인라인 여백 박스 표시 (MarginBoxView)', () => {
     book: { id: 1, title: '데미안', author: '헤세', coverUrl: null, isPublic: true },
     ownerNickname: '구스펠',
     self: true,
-    following: false,
     entries,
   });
 
@@ -463,11 +461,18 @@ describe('관리 시트', () => {
    * 공개 전환 확인 단계 — 「공개로 바꾸기」를 누르면 곧바로 전환하지 않고 <b>무엇이 새는지</b>를 먼저 말한다.
    * 삭제 확인과 같은 골격이되 색은 danger가 아니다: 파괴가 아니라 노출이다.
    */
+  /**
+   * 2026-08-22 — 옛 문구는 「팔로워에게 보여요」였는데 <b>실제보다 적게 고지</b>하고 있었다. 그 글 중
+   * 「모두의 여백」에 올린 것은 팔로워가 아니라 전체에게 열렸고(비공개 책에서도 켤 수 있다), 팔로우
+   * 축이 사라진 지금은 <b>모든 글</b>이 그렇다. 되돌리기 어려운 행동 직전의 고지라 범위를 좁게 말하면
+   * 안 된다 — 「누구에게나」가 이 문장의 핵심이다.
+   */
   it('글이 있는 비공개 책의 확인 단계는 새는 글 수를 말하고 다른 길을 감춘다', () => {
     const memo = [book(1, '메모책', 'READING', { isPublic: false, storyCount: 2 })];
     const markup = shelf(memo, { selectedId: 1, sheet: { kind: 'actions', confirmDelete: false, confirmPublish: true } });
 
-    expect(markup).toContain('여백에 남긴 글 2개가 팔로워에게 보여요.');
+    expect(markup).toContain('여백에 남긴 글 2개가 누구에게나 보여요.');
+    expect(markup).not.toContain('팔로워');
     expect(markup.match(/공개로 바꾸기/g)).toHaveLength(1); // 행이 아니라 확인 버튼 하나뿐
     expect(markup).toContain('취소');
     expect(markup).not.toContain('옮기기');
@@ -1249,7 +1254,6 @@ describe('서재 세션 캐시', () => {
         book: { id: 1, title: '데미안', author: '헤세', coverUrl: null },
         ownerNickname: '구스펠',
         self: true,
-        following: false,
         entries: [
           { id: 9, text: '캐시에서 살아난 문장', bgCode: 'paper', createdAt: '2026-08-16T00:00:00Z', likeCount: 0, liked: false },
         ],
@@ -1271,7 +1275,6 @@ describe('서재 세션 캐시', () => {
         book: { id: 1, title: '데미안', author: '헤세', coverUrl: null },
         ownerNickname: '나비',
         self: false,
-        following: false,
         entries: [{ id: 9, text: '남의 문장', bgCode: 'paper', createdAt: '2026-08-16T00:00:00Z', likeCount: 0, liked: false }],
       },
     });
