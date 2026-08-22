@@ -294,6 +294,13 @@ export interface MarginState {
    */
   bookId: number | null;
   composeBook: MarginBook | null;
+  /**
+   * 여기 들어오느라 측정을 끝냈는가 — 화면이 그 사실을 한 줄로 밝힌다({@link TIMER_STOPPED_NOTICE}).
+   *
+   * <p>상태에 드는 이유는 작성 화면과 여백 상세가 한 몸이기 때문이다 — `closeCompose`가 값을
+   * 물려주므로, 여백을 열면서 끝낸 측정은 그 안에서 글을 쓰고 나와도 같은 사실로 남는다.
+   */
+  timerStopped?: boolean;
 }
 
 /**
@@ -436,6 +443,9 @@ export function App() {
     setDashboard((prev) => (prev === null ? prev : { ...prev, graph }));
   }, []);
 
+  /** 여백 문을 열면서 도는 종료 왕복 — 연타하면 두 번째 stop을 서버가 409로 거절한다. */
+  const stoppingForMargin = useRef(false);
+
   /**
    * 목표 바꾸기 진입 — 홈 손잡이와 설정 화면이 **같은 경로**를 탄다(둘이 갈라지면 광고 규칙도 갈라진다).
    *
@@ -522,6 +532,43 @@ export function App() {
     );
   }
 
+  /**
+   * 여백을 여는 <b>유일한 문</b> — 측정 중이면 먼저 끝낸다(「여백은 독서가 아니다」, 사용자 결정 2026-08-22).
+   *
+   * <p>진입 경로가 셋(홈·서재 여백 문 · 홈 소식 피드 · 남의 책방)인데 전부 이 문을 지나므로, 규칙을
+   * 지키는 코드가 한 자리다. 새 진입점이 `setMargin`을 직접 부르면 규칙이 <b>조용히</b> 새기 때문에,
+   * `app.test.tsx`가 여는 호출(`setMargin({…})`)이 여기 말고 없는지를 소스로 계측한다.
+   *
+   * <p><b>종료가 끝난 뒤에 열다</b> — 실패하면 여백을 열지 않는다. 측정이 살아 있는데 여백에 들어가면
+   * 「끝난 줄 알았는데 계속 돌고 있었다」가 되어, 고치려던 그 결함이 그대로 남는다.
+   *
+   * <p><b>태깅 시트·완독 축하는 저절로 안 뜨다</b> — 그 상태는 `MainTabs` 안에 있고 이 문은 셸에 있다.
+   * 여백 위로 시트가 튀어나오지 않게 하려고 억제 코드를 쓸 필요가 없다(구조가 대신 진다).
+   */
+  const openMargin = (next: MarginState) => {
+    if (!dashboard.hasActiveSession) {
+      setMargin(next);
+      return;
+    }
+    if (stoppingForMargin.current) return;
+    stoppingForMargin.current = true;
+    // 종료 직전 값으로 재는다 — 응답엔 세션 길이가 없고, 탭바 원의 종료와 같은 셜법을 쓴다.
+    const duration =
+      dashboard.activeStartedAt === null ? 0 : elapsedSeconds(dashboard.activeStartedAt, Date.now());
+    stopSession()
+      .then((result) => {
+        applyTimer(result.timer);
+        applyGraph(result.graph); // stop 응답에 잔디가 동봉돼 새로고침 없이 즉시 갱신된다.
+        // 세션이 실제로 끝났으므로 지표에도 남긴다 — 빠지면 콘솔 대표 전환이 과소집계된다.
+        trackEvent('reading_session_completed', { duration_seconds: duration });
+        setMargin({ ...next, timerStopped: true });
+      })
+      .catch(handleError)
+      .finally(() => {
+        stoppingForMargin.current = false;
+      });
+  };
+
   /*
    * 여백은 탭 위에 전체 화면으로 선다 — 닫으면 열었던 탭이 그대로 남는다.
    * 작성 화면을 닫으면 `composeBook`만 비워 그 아래 여백 화면이 **새로 마운트**되고, 그 재조회가
@@ -529,7 +576,15 @@ export function App() {
    */
   if (margin !== null && margin.composeBook !== null) {
     const close = () => setMargin(closeCompose(margin));
-    return <StoryComposer book={margin.composeBook} onDone={close} onCancel={close} onError={handleError} />;
+    return (
+      <StoryComposer
+        book={margin.composeBook}
+        onDone={close}
+        onCancel={close}
+        onError={handleError}
+        timerStopped={margin.timerStopped === true}
+      />
+    );
   }
 
   // 작성도 아니고 깔린 화면도 없는 조합은 만들지 않는다 — 만약 생겨도 탭으로 떨어져 막다른 길이 안 된다.
@@ -539,8 +594,9 @@ export function App() {
       <BookMargin
         loginId={margin.loginId}
         bookId={under}
+        timerStopped={margin.timerStopped === true}
         onBack={() => setMargin(null)}
-        onCompose={(book) => setMargin({ ...margin, bookId: under, composeBook: book })}
+        onCompose={(book) => openMargin({ ...margin, bookId: under, composeBook: book })}
         // 닫으면서 연다 — 뒤로 가면 출발한 탭으로 돌아간다(검색 시트와 같은 교체 경로, T-166).
         onOpenProfile={(picked) => {
           setMargin(null);
@@ -560,7 +616,7 @@ export function App() {
       <Profile
         loginId={shop}
         onBack={() => setShop(null)}
-        onOpenMargin={(bookId) => setMargin({ loginId: shop, bookId, composeBook: null })}
+        onOpenMargin={(bookId) => openMargin({ loginId: shop, bookId, composeBook: null })}
         onError={handleError}
       />
     );
@@ -573,11 +629,11 @@ export function App() {
       dashboard={dashboard}
       homeBookId={homeBookId}
       onSelectHomeBook={setHomeBookId}
-      onOpenMargin={(loginId, bookId) => setMargin({ loginId, bookId, composeBook: null })}
+      onOpenMargin={(loginId, bookId) => openMargin({ loginId, bookId, composeBook: null })}
       onComposeMargin={(book) =>
         // 문은 핸들이 있을 때만 그려지므로 여기서 loginId는 언제나 있다(`marginDoorBook`이 앞에서 판정).
         // `bookId: null` — 작성만 띄운다. 닫으면 여백 상세를 거치지 않고 여기(홈·서재)로 곧장 돌아온다.
-        dashboard.loginId !== null && setMargin({ loginId: dashboard.loginId, bookId: null, composeBook: book })
+        dashboard.loginId !== null && openMargin({ loginId: dashboard.loginId, bookId: null, composeBook: book })
       }
       onTimerChange={applyTimer}
       onGraphChange={applyGraph}
