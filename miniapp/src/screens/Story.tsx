@@ -37,7 +37,7 @@ import { BookCover, ErrorMessage, Loading, Screen, Sheet, UserList } from '../ui
  * <p>파일·타입 이름은 `Story`로 남아 있다 — 서버 경로가 `/api/stories`라 맞춰 둔 것(#814 결정).
  *
  * <p>노출 권한(차단·IDOR·PRIVATE)은 전부 서버가 판정한다 — 미니앱은 서버가 준
- * `self`·`following`·`entries`를 표시와 액션으로 옮길 뿐이다. 정적 렌더 하니스로는 effect가 안 도므로
+ * `self`·`entries`를 표시와 액션으로 옮길 뿐이다. 정적 렌더 하니스로는 effect가 안 도므로
  * 판정({@link hasFreshStory})과 표시({@link MarginView})를 상태에서 떼어 따로 계측한다.
  */
 

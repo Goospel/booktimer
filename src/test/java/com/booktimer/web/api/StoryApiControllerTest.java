@@ -306,7 +306,7 @@ class StoryApiControllerTest {
 
     /** §5-1 ⓔ 짝 — 공개 책이면 같은 필드가 true다(직렬화 ⓖ의 양성 대조군). */
     @Test
-    @DisplayName("공개 책: 여백 응답의 book.isPublic은 true — 캡션이 「팔로워에게 보여요」로 갈리는 근거")
+    @DisplayName("공개 책: 여백 응답의 book.isPublic은 true — 캡션이 「누구나 볼 수 있어요」로 갈리는 근거")
     void marginOf_publicBook_isPublicTrue() throws Exception {
         User me = register("pb-pub@booktimer.com", "pbpub", "주인");
         Book open = publicBookOf(me, "내 공개 책");
@@ -467,6 +467,39 @@ class StoryApiControllerTest {
                         .with(user("like-stranger@booktimer.com")).with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.liked").value(true));
+    }
+
+    /**
+     * 2026-08-22 — 팔로우 축을 걷은 뒤 {@code assertVisible}에 남은 게이트는 <b>책 공개 검사 하나</b>다.
+     * 그 게이트에 통합 계측이 없었다(목 단위테스트 3건뿐): 목은 {@code profileService}·{@code bookRepository}가
+     * 전부 가짜라 <b>배선이 어긋나는 실패</b>(엔티티 로딩·컨트롤러 경유·JPA 프록시)를 원리상 못 잡는다.
+     * 같은 게이트를 지는 {@code marginOf}는 통합 3건이 받치고 있는데 like·likers만 비어 있었다.
+     *
+     * <p>아래 둘이 그 자리를 메운다 — 이중 방어가 사라진 지금 이 게이트가 <b>최후 방어선</b>이라
+     * 계측이 목에만 있으면 안 된다. 차단(block) 경로의 통합 계측도 이 둘이 함께 진다.
+     */
+    @Test
+    @DisplayName("POST .../like 남의 PRIVATE 책 글 → 404 (책 게이트가 유일한 방어 — 실 DB 배선 확인)")
+    void like_othersPrivateBook_returns404() throws Exception {
+        User author = register("like-priv@booktimer.com", "likepriv", "글쓴이");
+        register("like-privstranger@booktimer.com", "likeprivstranger", "남");
+        Story story = storyOf(author, privateBookOf(author, "남의 비공개 책"), "나만 보는 메모");
+
+        mockMvc.perform(post("/api/stories/" + story.getId() + "/like")
+                        .with(user("like-privstranger@booktimer.com")).with(csrf()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("GET .../likes 남의 PRIVATE 책 글 → 404 (명단도 같은 게이트 — 실 DB 배선 확인)")
+    void likers_othersPrivateBook_returns404() throws Exception {
+        User author = register("likers-priv@booktimer.com", "likerspriv", "글쓴이");
+        register("likers-privstranger@booktimer.com", "likersprivstranger", "남");
+        Story story = storyOf(author, privateBookOf(author, "남의 비공개 책"), "나만 보는 메모");
+
+        mockMvc.perform(get("/api/stories/" + story.getId() + "/likes")
+                        .with(user("likers-privstranger@booktimer.com")))
+                .andExpect(status().isNotFound());
     }
 
     @Test

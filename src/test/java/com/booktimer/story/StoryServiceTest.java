@@ -700,7 +700,6 @@ class StoryServiceTest {
         when(storyLikeRepository.findByStoryOrderByCreatedAtDescIdDesc(mine)).thenReturn(List.of());
 
         assertThat(service.likers(me, 10L)).isEmpty();
-
     }
 
     /**

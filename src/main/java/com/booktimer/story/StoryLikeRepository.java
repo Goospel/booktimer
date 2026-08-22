@@ -52,8 +52,8 @@ public interface StoryLikeRepository extends JpaRepository<StoryLike, Long> {
      *
      * <p>{@code @EntityGraph}로 누른 사람을 즉시 로딩 — 행 조립의 lazy User ×N 제거(팔로워 목록과 같다).
      *
-     * <p>ponytail: 상한이 없다. 관객이 「그 책 주인의 팔로워」로 이미 좁고 레이트리밋(분당 60)이 도배를
-     * 막아 팔로워 목록과 같은 처지다 — 실제로 길어지는 글이 나오면 그때 페이지네이션.
+     * <p>ponytail: 상한이 없다. <b>근거가 2026-08-22에 바뀌었다</b> — 팔로우 축이 사라져 관객은 이제
+     * <b>공개 책을 보는 누구나</b>다. 남은 근거는 레이트리밋(분당 60)뿐 — 길어지는 글이 나오면 그때 페이지네이션.
      */
     @EntityGraph(attributePaths = "user")
     List<StoryLike> findByStoryOrderByCreatedAtDescIdDesc(Story story);

@@ -104,9 +104,14 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
     /**
      * 책축(isbn13) 목록 — 같은 책을 보는 <b>누구에게나</b> 열린 글(「함께 걸기」). 최신순, 동시각 tie는 id로.
      *
-     * <p><b>{@code StoryService.assertVisible}의 쿼리 미러</b>다: 노출 = 책 PUBLIC <b>AND</b>
-     * (팔로워 <b>OR</b> shared) 중 여기는 shared 축을 담당한다. 팔로우를 안 보는 대신 {@code s.shared}를
-     * 보되, <b>{@code b.visibility = PUBLIC}은 그대로 진다</b> — 이 한 줄이 빠지면 남의 비공개 메모가
+     * <p><b>{@code StoryService.assertVisible}의 미러가 아니다 — 의도적으로 더 좁다</b>(2026-08-22
+     * 개정). 열람 권한은 책 PUBLIC 하나이고 그것이 {@code assertVisible}의 전부인데, 이 목록은 거기에
+     * {@code s.shared = true}를 <b>더</b> 진다: 「모두의 여백」에는 <b>올린 글만</b> 실리기 때문이다
+     * (안 올린 글도 읽히기는 한다 — 사람축 목록으로 도달한다). <b>미러로 착각해 이 술어를 걷으면
+     * 올리지 않은 글이 통째로 여기 실린다.</b> 옛 주석이 「미러다, 둘은 같이 고친다」라고 지시했는데,
+     * 팔로우 축이 사라진 지금 그 지시를 따르는 것이 곧 사고다.
+     *
+     * <p><b>{@code b.visibility = PUBLIC}은 그대로 진다</b> — 이 한 줄이 빠지면 남의 비공개 메모가
      * 낯선 사람에게 통째로 샌다({@code Story} 불변식). 행 단위로 {@code assertVisible}을 부르지 않는 건
      * 100장 × 게이트 = N+1이라서다({@code feedRecent}가 목록 방어를 쿼리에 두는 것과 같은 구조).
      *
