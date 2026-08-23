@@ -1,4 +1,4 @@
-import { Button, Text } from '@toss/tds-mobile';
+import { Button } from '@toss/tds-mobile';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -25,7 +25,7 @@ import {
 } from '../api';
 import { useBackClose } from '../back';
 import { relativeTime } from '../format';
-import { BookCover, ErrorMessage, Loading, Screen, Sheet, UserList } from '../ui';
+import { BookCover, ErrorMessage, Loading, Screen, Sheet, Text, UserList } from '../ui';
 
 /**
  * 여백 — <b>책에 딸린 자리</b>와 거기 쌓이는 글 (2026-08-16 재설계).

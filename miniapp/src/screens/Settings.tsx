@@ -1,4 +1,4 @@
-import { Button, Text, TextField } from '@toss/tds-mobile';
+import { Button, TextField } from '@toss/tds-mobile';
 import { useCallback, useEffect, useState } from 'react';
 
 import type { DashboardResponse, UserRow } from '../api';
@@ -12,7 +12,7 @@ import {
 } from '../api';
 import { resetCoachmarks } from '../coachmark';
 import { openExternal } from '../toss';
-import { ErrorMessage, Screen, SectionTitle, Sheet, sectionStyle } from '../ui';
+import { ErrorMessage, Screen, SectionTitle, Sheet, Text, sectionStyle } from '../ui';
 import { HandleSheet } from './Bookshop';
 
 /** 웹에 공개된 문서들 — 둘 다 `permitAll`이라 로그인 없이 열린다(미니앱 계정은 웹 로그인 자체가 불가). */

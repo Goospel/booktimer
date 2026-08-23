@@ -24,9 +24,9 @@ body {
 }
 
 /*
- * 캔버스와 본문 폰트 — 둘 다 TDS 전역 스타일(`body { background-color: var(--adaptiveBackground);
- * font-family: 'Toss Product Sans' … }`)과 정면으로 다툰다. TDS는 이 스타일을 **런타임에, 우리 css보다
- * 뒤에** 주입하므로 같은 명시도(`body`, 0-0-1)로는 순서에서 진다 — 그래서 `html body`(0-0-2)로 올린다.
+ * 캔버스와 본문 잉크·폰트 — 셋 다 TDS 전역 스타일(`body { background-color: var(--adaptiveBackground);
+ * color: #212529; font-family: 'Toss Product Sans' … }`)과 정면으로 다툰다. TDS는 이 스타일을 **런타임에,
+ * 우리 css보다 뒤에** 주입하므로 같은 명시도(`body`, 0-0-1)로는 순서에서 진다 — 그래서 `html body`(0-0-2)다.
  *
  * 캔버스만 크림이고 `--adaptiveBackground`는 카드지(#FCFAF5)로 남는 게 의도다 — 탭바·시트·섹션 카드가
  * 캔버스 위에 한 톤 밝게 떠야 웹과 같은 위계가 나온다.
@@ -36,6 +36,17 @@ body {
  */
 html body {
   background: #F7F2E8; /* 웹 --bg (종이톤 크림) */
+  /*
+   * 본문 잉크 — 이 줄이 없던 동안 낮 모드 화면 전역이 브랜드 잉크가 아니라 TDS 리셋의 `#212529`(푸른기
+   * 도는 차콜)였다. TDS `Text`는 색을 `var(--tds-paragraph-color, var(--adaptiveGrey900))`로 그리는데
+   * 두 변수 모두 낮 모드에선 안 풀려(전자는 토큰 이름, 후자는 독서등 블록 안에만 정의) **선언이 통째로
+   * 버려지고 상속으로 떨어지기** 때문이다 — 즉 앱의 거의 모든 글자가 이 한 값을 본다.
+   *
+   * 덤: 잉크를 정적 css에서 확정하면 마운트 뒤 TDS 주입으로 색이 **바뀌지 않아**, 아래 독서등 전환의
+   * `transition: … color 0.45s`가 매 로드마다 발화하는 일도 사라진다. 그 전환이 시작값(UA 기본 검정)에서
+   * 출발하는 탓에, 백그라운드 탭에서 재면 「화면 전역이 rgb(0,0,0)」으로 얼어붙어 보였다(T-207).
+   */
+  color: var(--adaptiveGrey800, #2C2A24); /* 웹 --text (종이 위 잉크) */
   font-family: 'Gaegu', 'Gowun Dodum', 'Toss Product Sans', -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic',
     sans-serif;
   /* 손글씨체 보정 — Gaegu는 x-height가 작아 같은 크기에서 눈에 띄게 작고 가늘다.

@@ -1,4 +1,3 @@
-import { Text } from '@toss/tds-mobile';
 import { Fragment, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -7,7 +6,7 @@ import { fetchHomeFeed } from '../api';
 import { CACHE_FEED, cacheGet, cachePut } from '../cache';
 import { elapsedSeconds, formatDuration, objectParticle, relativeTime } from '../format';
 import { openExternal } from '../toss';
-import { BookCover, sectionStyle } from '../ui';
+import { BookCover, Text, sectionStyle } from '../ui';
 
 /**
  * 홈 피드 박스 — 「소식」·「책 뉴스」 두 탭. 잔디 미리보기가 서 있던 자리를 물려받았다.

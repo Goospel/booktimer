@@ -1,4 +1,4 @@
-import { Button, ProgressBar, Text } from '@toss/tds-mobile';
+import { Button, ProgressBar } from '@toss/tds-mobile';
 import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -23,6 +23,7 @@ import {
   Screen,
   SectionTitle,
   Sheet,
+  Text,
   sectionStyle,
 } from '../ui';
 import { HomeFeedBox } from './HomeFeed';

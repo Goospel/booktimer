@@ -1,8 +1,44 @@
-import { Button, Loader, Text, TextField } from '@toss/tds-mobile';
+import { Button, Loader, Text as TdsText, TextField } from '@toss/tds-mobile';
 import { useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ComponentProps, CSSProperties, ReactNode } from 'react';
 
 import type { ContributionDay, UserRow } from './api';
+
+/**
+ * 글자색 토큰 이름 → CSS 색 — TDS `Text`의 `color`는 <b>CSS 색 문자열</b>이지 토큰 이름이 아니다.
+ *
+ * <p>TDS는 이 prop을 인라인 `--tds-paragraph-color`에 그대로 박고 `color: var(--tds-paragraph-color,
+ * var(--adaptiveGrey900))`로 소비한다. `grey600` 같은 이름은 무효 색이라 선언이 통째로 버려지고
+ * <b>색이 상속으로 떨어진다</b> — 곧 본문과 완전히 같은 잉크다. 그렇게 죽어 있던 호출부가 87곳이었다
+ * (목 모드 실측 2026-08-23: `color="grey600"`인 Text와 prop 없는 Text가 똑같이 `rgb(33,37,41)`).
+ *
+ * <p>값의 출처는 `global.css`의 `html:root` 팔레트다. <b>fallback을 함께 주는 이유</b>: `--adaptiveRed500`
+ * 처럼 이 앱이 아예 정의하지 않는 토큰이 실제로 있고, 미정의 `var()`는 다시 상속으로 풀려 고친 자리가
+ * 조용히 원위치한다(그게 위 Grey900 폴백이 아무 일도 못 한 이유이기도 하다).
+ */
+const INK: Record<string, string> = {
+  grey600: 'var(--adaptiveGrey600, #6F6A5E)',
+  grey700: 'var(--adaptiveGrey700, #57534A)',
+  grey800: 'var(--adaptiveGrey800, #2C2A24)',
+  blue500: 'var(--adaptiveBlue500, #6E8A6A)',
+  blue700: 'var(--adaptiveBlue700, #4F6B4C)',
+  red500: 'var(--adaptiveRed500, #F04452)',
+};
+
+/**
+ * TDS `Text` — 색 토큰 이름을 값으로 옮기는 통로. 화면은 <b>반드시</b> 이걸 쓴다(TDS에서 직접 import 하면
+ * 그 화면만 다시 토큰 이름이 무효가 된다 — `typography.test.tsx`가 import 경로를 가드한다).
+ *
+ * <p>이미 CSS 색인 값(`#4F6B4C`·`var(…)`)은 그대로 흘려보낸다. 표에 없는 <b>토큰처럼 생긴</b> 값은
+ * dev에서 시끄럽게 짚는다 — 조용히 상속으로 떨어지는 게 이 버그의 정체였으니, 다음 색은 소리를 내야 한다.
+ */
+export function Text({ color, ...rest }: ComponentProps<typeof TdsText>) {
+  const resolved = color == null ? color : (INK[color] ?? color);
+  if (import.meta.env.DEV && resolved === color && typeof color === 'string' && /^[a-z]+\d{2,3}$/.test(color)) {
+    console.warn(`[Text] color="${color}"는 CSS 색이 아니다 — ui.tsx의 INK 표에 없으면 상속으로 떨어진다.`);
+  }
+  return <TdsText color={resolved} {...rest} />;
+}
 
 /** 잔디 색 농도 0~4 — 웹 app.css `--grass-0..4`와 같은 값(서버가 level을 계산해 준다). */
 export const LEVEL_COLORS = ['#EAE4D7', '#C3D9B0', '#94BE7F', '#5E9250', '#35662F'];

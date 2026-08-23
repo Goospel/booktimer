@@ -1,9 +1,8 @@
-import { Text } from '@toss/tds-mobile';
 import { useEffect, useState } from 'react';
 
 import type { ExploreUser, UserRow } from '../api';
 import { fetchExplore } from '../api';
-import { Avatar, BookCover, ErrorMessage, Loading, Screen, SearchField, UserList } from '../ui';
+import { Avatar, BookCover, ErrorMessage, Loading, Screen, SearchField, Text, UserList } from '../ui';
 
 /**
  * 둘러보기 — <b>아이디를 몰라도 사람을 만나는 화면</b>(2026-08-20).
