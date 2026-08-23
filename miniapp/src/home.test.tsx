@@ -70,6 +70,10 @@ const supportedMock = vi.mocked(notificationAgreementSupported);
 const requestAgreementMock = vi.mocked(requestNotificationAgreement);
 
 const BUTTON_LABEL = '광고 보고 밀린 하루 지우기';
+/** 목표 진입 알약 — ⓘ(설명)와 갈라선 「이동」 쪽 손잡이(감사 3e → 시안 4a). */
+const GOAL_PILL = '변경 ›';
+/** ⓘ 툴팁이 말하는 이월 규칙 — 접혔는지 펼쳤는지를 이 문구로 잰다. */
+const CARRYOVER_NOTE = '내일 남은 시간에 더해져요';
 /** 캐러셀 섹션 헤더 — 주 버튼이 탭바로 떠난 뒤 홈 아래쪽 순서를 재는 기준점이 이 줄이다. */
 const CAROUSEL_HEADER = '무엇으로 측정할까요?';
 /** 측정 중 캐러셀 자리를 물려받는 카드의 헤더 — 「지금 이 화면이 가리키는 책」을 말하는 카드가 이쪽으로 바뀐다. */
@@ -339,12 +343,15 @@ describe('히어로 프레이밍 (렌더)', () => {
     expect(markup).toContain('45:00'); // 3600 − 900
   });
 
-  it('보조 줄은 「남은시간」이다 — 게이지가 목표+밀린을 재니 라벨도 그 총량을 말해야 한다', () => {
+  it('보조 줄이 2열 통계다 — 「남은 시간 | 하루 목표」가 나란히 선다', () => {
     const markup = renderHome({ remainingSeconds: 900, todayGoalSeconds: 3600 });
 
-    expect(markup).toContain('남은시간 : 15:00');
-    expect(markup).not.toContain('목표까지'); // 목표만 재던 옛 라벨
-    expect(markup).not.toContain('오늘 목표 1시간'); // 목표 값은 우상단 손잡이 몫
+    expect(markup).toContain('남은 시간');
+    expect(markup).toContain('하루 목표');
+    expect(markup).toContain('15:00'); // 남은 시간
+    expect(markup).toContain('01:00:00'); // 하루 목표
+    expect(markup).not.toContain('남은시간 : '); // 대시 밑줄 한 줄이던 옛 자리
+    expect(markup).not.toContain('목표까지'); // 목표만 재던 더 옛 라벨
   });
 
   it('달성하면 축하와 초과분을 보여준다 — 목표를 넘겨도 계속 센다', () => {
@@ -353,22 +360,59 @@ describe('히어로 프레이밍 (렌더)', () => {
 
     expect(markup).toContain('오늘 목표 달성');
     expect(markup).toContain('+10분 더 읽었어요');
-    expect(markup).not.toContain('남은시간'); // 남은 게 없으면 그 줄도 없다
   });
 
-  it('정확히 달성하면 보조 줄을 생략한다 — 히어로 한 줄이면 족하다', () => {
+  /**
+   * 달성한 사람에게도 목표 문이 열려 있어야 한다 — 옛 배치는 「남은 시간 > 0」일 때만 보조 줄을 그려,
+   * 목표를 다 채운 사람은 홈에서 목표를 바꿀 길이 통째로 없었다(카드 안 `GoalHandle`은 목표 0일 때만 선다).
+   * 통계 행이 목표 유무로만 갈리면 그 구멍이 닫힌다.
+   */
+  it('정확히 달성해도 통계 행은 남는다 — 목표로 가는 문이 달성과 함께 사라지면 안 된다', () => {
     const markup = renderHome({ remainingSeconds: 0, todayGoalSeconds: 3600 });
 
     expect(markup).toContain('오늘 목표 달성');
     expect(markup).not.toContain('더 읽었어요');
-    expect(markup).not.toContain('남은시간');
+    expect(markup).toContain('하루 목표');
+    expect(markup).toContain(GOAL_PILL);
   });
 
-  it('응원 문구가 사라졌다 — 밀린 시간 안내는 「남은시간」을 눌러야 보이는 상자로 들어갔다', () => {
+  it('응원 문구가 사라졌다 — 밀린 시간 안내는 ⓘ를 눌러야 보이는 툴팁으로 들어갔다', () => {
     const markup = renderHome({ carriedDebtSeconds: 1800, carryover: true });
 
     expect(markup).not.toContain('뒤처져도 괜찮아요');
-    expect(markup).not.toContain('광고를 보고 하루씩'); // 상자는 접힌 채로 시작한다
+    expect(markup).not.toContain('광고를 보고 하루씩'); // 툴팁은 접힌 채로 시작한다
+    expect(markup).not.toContain(CARRYOVER_NOTE); // 이월 설명도 접혀 있다
+  });
+});
+
+/**
+ * 목표 진입 — 「변경 ›」 알약이 목표 화면으로 가는 <b>명시적</b> 문이다(감사 3e → 시안 4a).
+ *
+ * <p>옛 배치는 "남은시간 : 15:00 ⓘ" 한 줄이 <b>설명과 이동을 겸했다</b> — ⓘ는 설명으로 읽히지
+ * 이동으로 읽히지 않아, 홈에서 목표를 바꾸는 길이 사실상 숨어 있었다. 역할을 둘로 가른다:
+ * <b>ⓘ = 설명(툴팁) · 「변경 ›」 = 이동</b>.
+ */
+describe('목표 진입 알약 (변경 ›)', () => {
+  it('하루 목표 값 아래 선다 — 목표를 바꾸는 문이라고 스스로 말한다', () => {
+    const markup = renderHome({ todayGoalSeconds: 3600 });
+
+    expect(markup).toContain(GOAL_PILL);
+    expect(markup.indexOf('하루 목표')).toBeLessThan(markup.indexOf(GOAL_PILL));
+  });
+
+  // 전면광고 로드에 1~2초가 걸린다 — 라벨이 그대로면 눌러도 아무 일 없는 것처럼 보여 다시 누른다.
+  it('전면광고를 기다리는 동안엔 「준비 중…」— 누른 게 먹혔다고 말한다', () => {
+    const markup = renderHome({ todayGoalSeconds: 3600 }, { goalAdPending: true });
+
+    expect(markup).toContain('준비 중…');
+    expect(markup).not.toContain(GOAL_PILL);
+  });
+
+  it('목표가 0이면 통계 행이 없고 카드 안 손잡이가 그 길을 맡는다 — 게이지 줄이 통째로 안 그려진다', () => {
+    const markup = renderHome({ todayGoalSeconds: 0, carriedDebtSeconds: 0 });
+
+    expect(markup).not.toContain(GOAL_PILL);
+    expect(markup).toContain('목표 정하기');
   });
 });
 
@@ -382,7 +426,7 @@ describe('히어로 프레이밍 (렌더)', () => {
  *
  * <p>여는 동작은 정적 렌더 하니스로 못 잡으므로(T-149) 내용은 컴포넌트를 직접 그려서 계측한다.
  */
-describe('남은시간 설명 상자', () => {
+describe('ⓘ 이월 설명 툴팁', () => {
   const note = (goal: number, debt: number, remaining: number, children?: ReactNode) =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
@@ -392,20 +436,30 @@ describe('남은시간 설명 상자', () => {
       </TDSMobileProvider>,
     );
 
-  it('내역 세 줄로 합을 밝힌다 — 목표 + 밀린 = 남은시간', () => {
+  /**
+   * ⓘ가 답해야 할 유일한 질문 — "못 채우면 어떻게 되나". 빚이 있든 없든 규칙은 같으니 늘 말한다.
+   * 옛 상자는 이 규칙을 <b>밀린 시간이 있을 때만</b> 흘렸다(「더 읽거나 광고를 보고…」) — 규칙을
+   * 가장 먼저 알아야 할 사람은 아직 빚이 없는 사람이다.
+   */
+  it('이월 규칙을 늘 말한다 — 빚이 없어도 규칙은 같다', () => {
+    expect(note(1800, 0, 900)).toContain(CARRYOVER_NOTE);
+    expect(note(1800, 600, 900)).toContain(CARRYOVER_NOTE);
+  });
+
+  it('밀린 게 없으면 내역 줄이 없다 — 목표·남은 시간은 바로 위 통계 행이 이미 말한다', () => {
+    const markup = note(1800, 0, 900);
+
+    expect(markup).not.toContain('밀린 시간');
+    expect(markup).not.toContain('더 읽거나');
+    expect(markup).not.toContain('오늘 목표'); // 통계 행과 중복이라 접는다
+  });
+
+  it('밀린 게 있으면 내역 세 줄로 합을 밝힌다 — 목표 + 밀린 = 남은시간', () => {
     const markup = note(1800, 600, 900);
 
     expect(markup).toContain('30분'); // 오늘 목표
     expect(markup).toContain('10분'); // 밀린 시간
     expect(markup).toContain('15:00'); // 남은시간
-  });
-
-  it('밀린 게 없으면 그 줄도 안내 문구도 없다 — 「밀린 시간 0분」은 없는 빚을 상기시키는 줄이다', () => {
-    const markup = note(1800, 0, 900);
-
-    expect(markup).not.toContain('밀린 시간');
-    expect(markup).not.toContain('더 읽거나');
-    expect(markup).toContain('15:00'); // 남은시간 합계는 그대로 밝힌다
   });
 
   it('지우는 수단을 함께 알린다 — 7일 자동 소멸이 폐지돼 "기다리면 사라진다"는 더 이상 사실이 아니다', () => {
@@ -416,11 +470,16 @@ describe('남은시간 설명 상자', () => {
     expect(markup).not.toContain('자동으로 사라져요');
   });
 
-  it('손잡이를 내역 아래에 담는다 — 목표 바꾸기·광고가 서는 자리가 이 상자다', () => {
-    const markup = note(1800, 600, 900, <button type="button">목표 30분 ›</button>);
+  /**
+   * 광고 손잡이가 사는 자리 — 시안 4a가 말하지 않은 자리라 여기서 못 박는다. 「변경 ›」이 목표 손잡이를
+   * 가져갔다고 <b>광고까지 함께 사라지면 수익 경로가 끊긴다</b>. 죄책감(밀린 시간)이 뜬 이 상자가
+   * 그 버튼의 유일한 집이다.
+   */
+  it('손잡이를 내역 아래에 담는다 — 「변경 ›」이 목표를 가져가도 광고는 이 상자에 남는다', () => {
+    const markup = note(1800, 600, 900, <button type="button">{BUTTON_LABEL}</button>);
 
-    expect(markup).toContain('목표 30분 ›');
-    expect(markup.indexOf('남은시간')).toBeLessThan(markup.indexOf('목표 30분'));
+    expect(markup).toContain(BUTTON_LABEL);
+    expect(markup.indexOf('남은시간')).toBeLessThan(markup.indexOf(BUTTON_LABEL));
   });
 });
 
