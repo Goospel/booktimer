@@ -6,7 +6,7 @@ import { fetchHomeFeed } from '../api';
 import { CACHE_FEED, cacheGet, cachePut } from '../cache';
 import { elapsedSeconds, formatDuration, objectParticle, relativeTime } from '../format';
 import { openExternal } from '../toss';
-import { BookCover, Text, sectionStyle } from '../ui';
+import { BookCover, HANDWRITING, Text, sectionStyle } from '../ui';
 
 /**
  * 홈 피드 박스 — 「소식」·「책 뉴스」 두 탭. 잔디 미리보기가 서 있던 자리를 물려받았다.
@@ -511,6 +511,8 @@ export function FeedBox({
                         paddingLeft: 9,
                         borderLeft: '2px solid var(--adaptiveGrey200, #E4DDD0)',
                         wordBreak: 'keep-all',
+                        // 여백 인용은 장식이다 — 남이 손으로 적은 글이라 손글씨로 남긴다.
+                        ...HANDWRITING,
                       }}
                     >
                       {event.excerpt}

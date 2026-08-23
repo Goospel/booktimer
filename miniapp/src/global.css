@@ -47,12 +47,40 @@ html body {
    * 출발하는 탓에, 백그라운드 탭에서 재면 「화면 전역이 rgb(0,0,0)」으로 얼어붙어 보였다(T-207).
    */
   color: var(--adaptiveGrey800, #2C2A24); /* 웹 --text (종이 위 잉크) */
-  font-family: 'Gaegu', 'Gowun Dodum', 'Toss Product Sans', -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic',
+  /*
+   * 서체 축 — **기능 글자가 기본, 장식이 opt-in**이다(「또렷한 연필」 개편, 2026-08-24).
+   *
+   * 한때 개구(Gaegu)가 맨 앞이라 앱 전체가 손글씨였다. 라벨·버튼·탭까지 손글씨면 읽는 속도가 떨어지고
+   * 강조에 쓸 축도 남지 않는다 — 손글씨는 실질 굵기가 하나뿐이라 굵기로 더 말할 수 없기 때문이다.
+   * 그래서 기능 글자를 고운돋움으로 옮기고, 손글씨는 **장식 자리에서만 명시로** 부른다
+   * (`ui.tsx`의 `HANDWRITING` — 표지 이니셜·placeholder·여백 인용).
+   *
+   * ⚠️ 방향이 뒤집히면(장식이 기본 · 기능이 opt-in) **지정 안 한 다음 화면이 다시 손글씨로 태어난다.**
+   * 기본값이 다수(기능)를 맡고 소수(장식)가 손드는 쪽만 안정적이다.
+   *
+   * ⚠️ **Gaegu를 폴백으로도 안 남긴다.** 남기면 고운돋움이 못 그리는 글리프만 손글씨로 떨어져 한 단어
+   * 안에서 서체가 갈린다 — 시스템 한글 폰트로 떨어지는 쪽이 덜 이상하다. 위 `@import`의 Gaegu는
+   * 지우지 않는다(장식이 그 웹폰트를 쓴다).
+   */
+  font-family: 'Gowun Dodum', 'Toss Product Sans', -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic',
     sans-serif;
-  /* 손글씨체 보정 — Gaegu는 x-height가 작아 같은 크기에서 눈에 띄게 작고 가늘다.
-     빼면 본문이 흐린 낙서로 보인다(웹 app.css의 html{font-size}·body{font-weight}와 같은 짝). */
-  font-size: 112.5%;
-  font-weight: 700;
+  /*
+   * 개구 보정 둘을 걷는다.
+   *
+   * ⚠️ `font-size: 112.5%`는 **삭제**다. 웹 app.css에서 옮겨 온 개구 보정인데 미니앱 글자는 전부 px라
+   * 그 값을 물려받는 텍스트 노드가 **0개**였다(2026-08-21 실측) — 시각 효과가 없는 죽은 스위치다.
+   * 그런데 남겨 두면 나중에 누가 `rem`을 한 줄 쓰는 순간 유령 배율이 깨어난다. 죽은 스위치는 걷는다.
+   *
+   * ⚠️ `font-weight`는 700 → **400 명시**다. 700은 개구의 얇은 획을 메우던 보정인데, 고운돋움에서 700은
+   * **전면 합성 볼드**라 시안이 살리려는 400/700 강조 축을 통째로 무너뜨린다(본문이 이미 굵으면 굵기로
+   * 강조할 자리가 없다). **명시**하는 이유는 TDS 리셋이 뭘 주입하든 결과가 결정적이게 하려는 것이다.
+   *
+   * ⚠️ 고운돋움은 **400 단일 웨이트**다(위 `@import`에 웨이트 축 자체가 없다 — 구글폰트에 400뿐).
+   * 그래서 화면의 700은 전부 브라우저 합성 볼드이고, iOS WebView는 그걸 데스크톱보다 굵게 그린다 —
+   * **실기기 확인이 유일한 판정**이다(T-176 계열: 검증 환경이 실환경보다 관대하면 그 클래스는 가짜
+   * green으로 통과한다).
+   */
+  font-weight: 400;
 }
 
 /*
@@ -172,15 +200,15 @@ html:root {
    * 그려지니 함께 올라가는 게 맞다 — 앱만 키우고 TDS만 작게 두면 한 화면에 두 체급이 산다.
    * 반대로 `t2`는 TDS 내부 사용이 0이라 히어로 전용으로 크게 벌려도 다른 데 파장이 없다.
    */
-  --tds-t-st13-text-fontSize: 12px;  --tds-t-st13-text-lineHeight: 18px;  /* 11 → 12  칩·범례 */
-  --tds-t-st12-text-fontSize: 13px;  --tds-t-st12-text-lineHeight: 20px;  /* 12 → 13  보조·설명 */
-  --tds-t-t7-text-fontSize: 14px;    --tds-t-t7-text-lineHeight: 21px;    /* 13 → 14 */
-  --tds-t-st11-text-fontSize: 15px;  --tds-t-st11-text-lineHeight: 23px;  /* 14 → 15  본문·값 */
-  --tds-t-t6-text-fontSize: 17px;    --tds-t-t6-text-lineHeight: 25px;    /* 15 → 17  시트 제목 */
-  --tds-t-st10-text-fontSize: 19px;  --tds-t-st10-text-lineHeight: 27px;  /* 16 → 19  섹션 제목 */
-  --tds-t-t5-text-fontSize: 19px;    --tds-t-t5-text-lineHeight: 27px;    /* 17 → 19 */
-  --tds-t-t3-text-fontSize: 26px;    --tds-t-t3-text-lineHeight: 35px;    /* 22 → 26  화면 제목 */
-  --tds-t-t2-text-fontSize: 44px;    --tds-t-t2-text-lineHeight: 50px;    /* 26 → 44  홈 히어로 */
+  --tds-t-st13-text-fontSize: 11px;  --tds-t-st13-text-lineHeight: 16px;  /* 배지·칩 */
+  --tds-t-st12-text-fontSize: 12px;  --tds-t-st12-text-lineHeight: 18px;  /* 보조·타임스탬프 */
+  --tds-t-t7-text-fontSize: 13px;    --tds-t-t7-text-lineHeight: 20px;    /* 책별 기록 */
+  --tds-t-st11-text-fontSize: 14px;  --tds-t-st11-text-lineHeight: 22px;  /* 본문 (lh 1.6) */
+  --tds-t-t6-text-fontSize: 16px;    --tds-t-t6-text-lineHeight: 24px;    /* 시트 제목 */
+  --tds-t-st10-text-fontSize: 17px;  --tds-t-st10-text-lineHeight: 25px;  /* 섹션 제목 (시안 16.5 → 올림) */
+  --tds-t-t5-text-fontSize: 17px;    --tds-t-t5-text-lineHeight: 25px;    /* 버튼·측정 중 라인 */
+  --tds-t-t3-text-fontSize: 26px;    --tds-t-t3-text-lineHeight: 34px;    /* 화면 제목 (lh 1.3) */
+  --tds-t-t2-text-fontSize: 54px;    --tds-t-t2-text-lineHeight: 59px;    /* 홈 히어로 (lh 1.1) */
 }
 
 /*
@@ -228,6 +256,33 @@ html:root {
   --button-loader-color: #6E8A6A !important;
   border: 1px solid transparent !important;
   border-image: var(--pencil-frame-soft) 8 / 8px stretch !important;
+}
+
+/*
+ * 채움 주 버튼 — 한 화면의 **주 동작 하나**(서재=여백에 글쓰기 · 목표=저장). `ui.tsx`의 `FilledButton`이
+ * 짝이고, 그 래퍼가 인라인에 마커 커스텀 프로퍼티 `--btn-filled`를 얹는다.
+ *
+ * 위 둘과 합쳐 위계가 3단이 된다: **채움**(화면의 주 동작) > primary(연한 세이지 — 시트·확인 흐름의
+ * 긍정 동작) > weak(연필선 — 보조). 채움이 화면마다 여럿이면 그 축이 곧 무너지므로 개수를 소스로 센다.
+ *
+ * ⚠️ **이 규칙은 primary 재색칠보다 반드시 뒤에 온다.** `FilledButton`도 TDS primary variant라 인라인에
+ * `--button-background-color:#3182f6`을 그대로 들고 있어 **위 primary 규칙과 둘 다 매칭**된다. 두 선택자는
+ * 명시도가 같고 선언도 `!important` 동급이라 **나중 규칙이 이긴다** — 순서가 곧 결과다. 위로 옮기면
+ * 채움 버튼이 조용히 연한 세이지로 돌아간다.
+ *
+ * ⚠️ 키가 **hex가 아니라 프로퍼티 이름**인 것이 요점이다. 위 두 규칙은 인라인 hex 값을 키로 쓰는 탓에
+ * 콜론 뒤 공백 직렬화 차이(`: #3182f6` / `:#3182f6`)까지 선택자를 두 벌 적어야 했는데, 이름만 보면 그
+ * 함정이 없다. 덤으로 **danger red 값을 이 파일에 적을 일 자체가 안 생긴다** — 위험 버튼이 사정권에
+ * 드는 실수의 여지를 없앤다(그 원칙은 위 primary 규칙 주석 참고).
+ */
+.tds-mobile-button[style*='--btn-filled'] {
+  --button-background-color: transparent !important;
+  --button-gradient-color: transparent !important;
+  --button-color: #F7F2E8 !important; /* 진한 채움 위에서는 종이색 글자가 읽힌다 */
+  --button-loader-color: #F7F2E8 !important;
+  background-color: var(--adaptiveBlue700, #4F6B4C) !important;
+  border: 1px solid transparent !important;
+  border-image: var(--pencil-frame) 8 / 8px stretch !important;
 }
 
 /*

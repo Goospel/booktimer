@@ -18,6 +18,7 @@ import {
   BookCover,
   CoverInitial,
   ErrorMessage,
+  HANDWRITING,
   PENCIL_FRAME,
   SERIF_VALUE,
   Screen,
@@ -279,8 +280,9 @@ function NoBookCard({ width = COVER_WIDTH, label = '책 없이' }: { width?: num
         gap: 4,
       }}
     >
-      {/* 점선 상자가 이미 「표지가 아님」을 말한다 — 시계 이모지는 그 위에 얹힌 군더더기였다(2026-08-18). */}
-      <Text typography="st12" color="grey600">
+      {/* 점선 상자가 이미 「표지가 아님」을 말한다 — 시계 이모지는 그 위에 얹힌 군더더기였다(2026-08-18).
+          손글씨는 장식 자리의 명시 opt-in이다(본문은 고운돋움) — 표지 자리의 글자라 표지 이니셜과 한 몸이다. */}
+      <Text typography="st12" color="grey600" style={{ ...HANDWRITING }}>
         {label}
       </Text>
     </div>

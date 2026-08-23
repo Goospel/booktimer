@@ -10,7 +10,7 @@ import { History } from './screens/History';
 import { ReadingNowCard } from './screens/Home';
 import { StatItem } from './screens/Profile';
 import { graph, userAgent } from './test-fixtures';
-import { SectionTitle, Text } from './ui';
+import { Avatar, CoverInitial, FilledButton, SectionTitle, Text } from './ui';
 
 /**
  * 타이포그래피 위계 — <b>개구(Gaegu)로 갈아탄 뒤 크기·강조가 무너진 자리</b>를 못 박는다(#857 후속).
@@ -82,7 +82,7 @@ describe('굵기는 자리로 정해지지 않는다', () => {
  * 두 체급이 산다. 값 하나하나를 눈으로 지키는 대신 <b>계단을 벗어난 값이 있는가</b>를 묻는다 —
  * 오늘 이 가드가 `10`·`12.5`·`13.5`를 찾아냈다.
  */
-const SCALE = [11, 12, 13, 14, 15, 16, 17, 19, 24, 26, 44];
+const SCALE = [11, 12, 13, 14, 15, 16, 17, 19, 20, 24, 26, 54];
 
 describe('인라인 크기도 같은 계단 위에 온다', () => {
   it('계단 밖의 fontSize 리터럴이 없다', () => {
@@ -103,24 +103,91 @@ describe('인라인 크기도 같은 계단 위에 온다', () => {
   });
 });
 
-describe('크기 보정이 실제로 닿는다', () => {
-  // 웹은 `rem`이라 `html{font-size:112.5%}`가 먹지만 미니앱은 전부 px다. 색 토큰(--adaptive*)을
-  // 갈아끼운 것과 같은 수법으로 **크기 토큰 자체**를 개구 기준으로 다시 잡는다.
-  it('본문·보조 토큰을 개구 기준으로 올린다', () => {
-    expect(css).toMatch(/--tds-t-st11-text-fontSize:\s*15px/); // 본문 14 → 15
-    expect(css).toMatch(/--tds-t-st12-text-fontSize:\s*13px/); // 보조 12 → 13
-    expect(css).toMatch(/--tds-t-st13-text-fontSize:\s*12px/); // 칩·범례 11 → 12
+describe('계단이 시안 눈금으로 돌아온다', () => {
+  // 옛 값들은 **개구 보정**이었다 — 같은 px에서 손글씨가 본문용 한글 폰트보다 낮고 좁아 계단 전체가
+  // 한 칸씩 올라가 있었다. 본문이 고운돋움으로 바뀌며 그 보정의 근거가 사라져 시안 눈금으로 되돌린다.
+  it('본문·보조 토큰이 시안 값이다', () => {
+    expect(css).toMatch(/--tds-t-st11-text-fontSize:\s*14px/); // 본문 (개구 보정 15 → 14)
+    expect(css).toMatch(/--tds-t-st12-text-fontSize:\s*12px/); // 보조·타임스탬프
+    expect(css).toMatch(/--tds-t-st13-text-fontSize:\s*11px/); // 배지·칩
   });
 
-  it('제목·히어로 토큰은 층이 보이게 더 벌린다', () => {
-    expect(css).toMatch(/--tds-t-st10-text-fontSize:\s*19px/); // 섹션 제목 16 → 19
-    expect(css).toMatch(/--tds-t-t3-text-fontSize:\s*26px/); //  화면 제목 22 → 26
-    expect(css).toMatch(/--tds-t-t2-text-fontSize:\s*44px/); //  홈 히어로 26 → 44
+  it('제목은 본문과의 간격으로 위계를 만든다 — 히어로만 크게 벌린다', () => {
+    expect(css).toMatch(/--tds-t-st10-text-fontSize:\s*17px/); // 섹션 제목 (시안 16.5 → 올림)
+    expect(css).toMatch(/--tds-t-t3-text-fontSize:\s*26px/); //  화면 제목
+    expect(css).toMatch(/--tds-t-t2-text-fontSize:\s*54px/); //  홈 히어로 (44 → 54)
   });
 
-  it('줄높이를 함께 올린다 — 크기만 올리면 커진 글자가 옛 줄 상자에 눌린다', () => {
-    expect(css).toMatch(/--tds-t-st11-text-lineHeight:\s*23px/);
-    expect(css).toMatch(/--tds-t-t2-text-lineHeight:\s*50px/);
+  it('줄높이를 쌍으로 움직인다 — 내릴 때도 같이 내려야 줄간이 안 뜬다', () => {
+    expect(css).toMatch(/--tds-t-st11-text-lineHeight:\s*22px/);
+    expect(css).toMatch(/--tds-t-t2-text-lineHeight:\s*59px/);
+  });
+});
+
+/**
+ * 서체 축 — 기능 글자는 고운돋움, 장식만 손글씨다. 이 방향이 뒤집히면(장식이 기본, 기능이 opt-in)
+ * <b>지정 안 한 다음 화면이 다시 손글씨로 태어난다</b> — 그래서 기본값이 다수를 맡는다.
+ */
+describe('서체 축은 기능=돋움 · 장식=손글씨다', () => {
+  it('본문 스택이 고운돋움으로 시작한다 — 맨 앞이 아니면 영영 안 잡힌다', () => {
+    expect(rules).toMatch(/html\s+body\s*\{[^}]*font-family:\s*'Gowun Dodum'/);
+  });
+
+  // ⚠️ 부재 단언은 **주석 걷은 소스**에 건다 — 안 그러면 규칙을 주석 처리해도 통과한다(T-205).
+  it('스택에서 손글씨를 뺀다 — 폴백으로 남기면 한 단어 안에서 서체가 갈린다', () => {
+    const body = rules.match(/html\s+body\s*\{[^}]*\}/)?.[0] ?? '';
+
+    expect(body).not.toContain('Gaegu');
+    expect(css).toContain('family=Gaegu'); // @import는 남는다 — 장식이 쓴다
+  });
+
+  it('개구 보정을 걷는다 — 죽은 스위치를 남기면 미래의 rem 한 줄에 유령 배율이 깨어난다', () => {
+    const body = rules.match(/html\s+body\s*\{[^}]*\}/)?.[0] ?? '';
+
+    expect(body).not.toContain('112.5%');
+    expect(body).toMatch(/font-weight:\s*400/); // 700 보정 → 400 명시
+  });
+
+  /**
+   * 장식이 <b>상속에서 명시로</b> 넘어왔는지 — 이 전환의 가장 조용한 실패 자리다. 옛 앱은 body가
+   * 손글씨라 표지 이니셜·placeholder가 <b>아무것도 지정하지 않고도</b> 손글씨였다(레포 전체에서 Gaegu를
+   * 명시한 tsx가 0건이었다). 기본값만 뒤집고 opt-in을 빠뜨리면 장식이 통째로, 에러 없이 사라진다.
+   */
+  it('표지 이니셜이 손글씨로 남는다 — 상속이 끊긴 자리라 명시가 없으면 조용히 사라진다', () => {
+    const markup = render(<CoverInitial title="데미안" />);
+
+    expect(markup).toContain('Gaegu');
+  });
+
+  it('아바타 이니셜도 같다 — 표지와 한 몸이라 한쪽만 남으면 화면에 서체가 둘이 된다', () => {
+    expect(render(<Avatar nickname="구스펠" />)).toContain('Gaegu');
+  });
+});
+
+/**
+ * 채움 주 버튼 — 위계의 새 꼭대기(채움 > primary > weak). 화면당 하나뿐이어야 축이 서므로,
+ * 개수 강제는 그 버튼을 쓰는 PR에서 소스 스캔으로 한다(여기서는 <b>장치가 성립하는지</b>만 본다).
+ */
+describe('채움 주 버튼', () => {
+  it('마커를 인라인으로 싣는다 — css가 그 이름을 선택자 키로 쓴다', () => {
+    expect(render(<FilledButton>저장</FilledButton>)).toContain('--btn-filled');
+  });
+
+  it('css에 그 마커 규칙이 있다', () => {
+    expect(rules).toMatch(/\.tds-mobile-button\[style\*='--btn-filled'\]/);
+  });
+
+  /**
+   * ⚠️ <b>순서가 곧 결과다.</b> `FilledButton`도 TDS primary variant라 인라인에 primary hex를 그대로
+   * 들고 있어 두 규칙에 <b>동시 매칭</b>된다. 명시도·`!important`가 동급이라 나중 규칙이 이기므로,
+   * 마커 규칙이 primary 재색칠보다 앞서면 채움 버튼이 조용히 연한 세이지로 돌아간다.
+   */
+  it('마커 규칙이 primary 재색칠보다 뒤에 온다 — 앞서면 채움이 조용히 연한 세이지가 된다', () => {
+    const primary = rules.indexOf("--button-background-color:#3182f6");
+    const filled = rules.indexOf("[style*='--btn-filled']");
+
+    expect(primary).toBeGreaterThan(-1);
+    expect(filled).toBeGreaterThan(primary);
   });
 });
 

@@ -413,12 +413,13 @@ describe('웹 브랜드 재테마 (global.css)', () => {
     expect(override).toMatch(/--adaptiveGrey600:\s*#6F6A5E/); // 웹 --muted
   });
 
-  it('본문 폰트를 연필 손글씨로 바꾸고 실제로 받아온다 — 스택만 바꾸면 폰트가 없어 시스템 폰트로 떨어진다', () => {
+  it('본문 폰트를 고운돋움으로 잡고 실제로 받아온다 — 스택만 바꾸면 폰트가 없어 시스템 폰트로 떨어진다', () => {
     // TDS도 `body`에 폰트 스택을 주입하므로 여기도 `html body`(0-0-2)로 눌러야 한다.
-    // Gaegu가 스택 **맨 앞**이어야 한다 — 뒤에 두면 고운돋움이 먼저 잡혀 손글씨가 영영 안 뜬다.
-    expect(css).toMatch(/html\s+body\s*\{[^}]*font-family:\s*'Gaegu'/);
-    expect(css).toContain('family=Gaegu');
-    expect(css).toMatch(/html\s+body\s*\{[^}]*font-family:[^;]*'Gowun Dodum'/); // 폴백은 남긴다
+    // **기능 글자가 기본**이라 고운돋움이 맨 앞이다 — 손글씨는 장식 자리에서 명시로 opt-in 한다
+    // (`ui.tsx`의 HANDWRITING). 스택에 Gaegu를 폴백으로 남기지 않는 이유는 typography.test 참고.
+    expect(css).toMatch(/html\s+body\s*\{[^}]*font-family:\s*'Gowun Dodum'/);
+    expect(css).toContain('family=Gowun+Dodum');
+    expect(css).toContain('family=Gaegu'); // @import는 남긴다 — 장식이 그 웹폰트를 쓴다
   });
 });
 

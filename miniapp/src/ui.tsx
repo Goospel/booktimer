@@ -164,6 +164,7 @@ export function Avatar({ nickname, size = 72 }: { nickname: string; size?: numbe
         fontSize: Math.round(size * 0.375),
         background: coverColor(nickname),
         color: COVER_FG,
+        ...HANDWRITING, // 장식 — 본문이 고운돋움으로 넘어가도 이니셜은 손글씨로 남는다
       }}
     >
       {initialOf(nickname)}
@@ -187,6 +188,7 @@ export function CoverInitial({ title, width = 32 }: { title: string; width?: num
         fontSize: Math.round(width * 0.5),
         background: coverColor(title),
         color: COVER_FG,
+        ...HANDWRITING, // 장식 — 표지 이니셜은 손글씨로 남는다(본문은 고운돋움)
       }}
     >
       {initialOf(title)}
@@ -318,6 +320,39 @@ export const SERIF_VALUE = {
   fontFamily: "'Gowun Batang', serif",
   fontVariantNumeric: 'tabular-nums',
 } as const;
+
+/**
+ * 손글씨(장식) — <b>표지 이니셜 · placeholder · 여백 인용문</b>만. 기능 글자에 쓰지 않는다.
+ *
+ * <p>한때 이 서체가 `html body` 스택 맨 앞이라 <b>앱 전체가 손글씨</b>였고, 그래서 장식 자리들은
+ * 아무것도 지정하지 않아도 손글씨였다 — 즉 <b>상속에 기대고 있었다</b>. 본문이 고운돋움으로 넘어가는
+ * 순간 그 자리들이 통째로 조용히 사라지므로(레포 전체에서 Gaegu를 명시한 tsx가 0건이었다),
+ * 기본값 전환과 <b>같은 변경 안에서</b> 명시 opt-in으로 뒤집는다.
+ *
+ * <p>굵기 700인 이유: 개구는 300·400·700만 있고 400은 획이 흐물해 장식으로도 약하다.
+ */
+export const HANDWRITING = {
+  fontFamily: "'Gaegu', sans-serif",
+  fontWeight: 700,
+} as const;
+
+/**
+ * 채움 주 버튼 — <b>한 화면의 주 동작 하나</b>에만 쓴다(서재=여백에 글쓰기 · 목표=저장).
+ * 홈은 탭바 가운데 원이 그 역할이라 여기 해당하지 않는다.
+ *
+ * <p>위계가 3단이 된다: <b>채움</b>(화면의 주 동작) &gt; primary(연한 세이지 — 시트·확인 흐름의 긍정
+ * 동작) &gt; weak(연필선 — 보조). 채움이 화면마다 여럿이면 그 축이 곧 무너지므로 개수를 소스로 센다.
+ *
+ * <p><b>마커 커스텀 프로퍼티를 선택자 키로 쓴다</b>(`global.css`의 대응 규칙 참고). TDS Button은
+ * variant를 가려낼 표지가 class에도 data 속성에도 없어 인라인 값 자체를 키로 쓸 수밖에 없는데,
+ * hex를 키로 쓰는 기존 방식과 달리 <b>이름만</b> 보므로 콜론 뒤 공백 직렬화 차이에 안 걸리고
+ * danger red 팔레트를 css에 적을 일도 생기지 않는다.
+ *
+ * <p>TDS `Button`을 그대로 감싸는 이유: 목표 「저장」의 `loading`·`disabled`가 공짜로 따라온다.
+ */
+export function FilledButton({ style, ...props }: ComponentProps<typeof Button>) {
+  return <Button {...props} style={{ ...style, ['--btn-filled' as string]: '1' }} />;
+}
 
 /**
  * 섹션 제목 — 카드·목록 덩어리의 머리.
