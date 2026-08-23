@@ -29,9 +29,12 @@ export function trackEvent(logName: string, params: Record<string, LogParam> = {
 }
 
 /**
- * 콘솔에서 발급받은 리워드 광고 그룹 ID. **빈 값이면 광고 기능 전체가 꺼진다**(config-gate) —
+ * 「밀린 하루 지우개」(홈)에 띄우는 **리워드** 광고 그룹 ID. **빈 값이면 그 버튼이 꺼진다**(config-gate) —
  * 광고 그룹 생성 후 구글 등록까지 최대 2시간이 걸리므로, 그 전 빌드에서도 버튼이 안 뜨게 해야 안전하다.
  * 전면형·리워드형은 같은 API를 쓰고 타입은 이 그룹 ID로 결정된다.
+ *
+ * <p>지면마다 그룹이 따로인 이유: 콘솔 리포트의 단위가 **광고 그룹**이라, 지면 둘이 한 그룹을 쓰면
+ * 노출·시청·수익이 한 줄로 합산돼 **어느 자리가 버는지 영영 못 가른다**. 포맷이 같아도 나눈다.
  */
 export const REWARD_AD_GROUP_ID: string = import.meta.env.VITE_REWARD_AD_GROUP_ID ?? '';
 
@@ -40,6 +43,13 @@ export const REWARD_AD_GROUP_ID: string = import.meta.env.VITE_REWARD_AD_GROUP_I
  * 리워드와 같은 config-gate: 빈 값이면 안 뜬다(구글 반영 대기 중인 빌드·브라우저 목 모드).
  */
 export const INTERSTITIAL_AD_GROUP_ID: string = import.meta.env.VITE_INTERSTITIAL_AD_GROUP_ID ?? '';
+
+/**
+ * 「책 성향 분석」(내 책방)에 띄우는 **리워드** 광고 그룹 ID — 부채 지우개와 포맷은 같지만 **다른 그룹**이다
+ * (위 `REWARD_AD_GROUP_ID` 주석의 분리 이유). 콘솔 보상 표기도 그룹마다 달라 여기만 「성향 분석 사용권 1」이다.
+ * 같은 config-gate: 빈 값이면 책방의 광고 버튼이 안 선다.
+ */
+export const PERSONALITY_AD_GROUP_ID: string = import.meta.env.VITE_PERSONALITY_AD_GROUP_ID ?? '';
 
 /**
  * 알림 동의문의 콘솔 발송(템플릿) 코드. 캠페인 2종(완독 축하·하루 목표 달성)이 **같은 동의문 한 장**을

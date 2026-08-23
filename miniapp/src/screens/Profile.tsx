@@ -29,7 +29,7 @@ import {
 } from '../api';
 import { useBackClose } from '../back';
 import { cacheGet, cacheKeyProfile, cacheKeyProfileBooks, cachePut } from '../cache';
-import { REWARD_AD_GROUP_ID, watchRewardAd } from '../toss';
+import { PERSONALITY_AD_GROUP_ID, watchRewardAd } from '../toss';
 import { Avatar, ErrorMessage, Loading, PENCIL_FRAME, SERIF_VALUE, Screen, SectionTitle, Sheet } from '../ui';
 import { waiverErrorMessage } from './Home';
 import { BookGrid, SECTIONS } from './Library';
@@ -453,7 +453,7 @@ export function Profile({
         archiveOpen={archiveOpen}
         onArchive={setArchiveOpen}
         onSelectPersonality={selectArchived}
-        onClaimPersonality={() => runPersonality(() => claimPersonality(REWARD_AD_GROUP_ID))}
+        onClaimPersonality={() => runPersonality(() => claimPersonality(PERSONALITY_AD_GROUP_ID))}
         onRetryPersonality={() => runPersonality(runPersonalityRefresh)}
         onFollowToggle={toggleFollow}
         onSelectTag={selectTag}
@@ -545,7 +545,7 @@ export function ProfileCard({
 }) {
   const sectionTitle = shelfTitle(activeTag, statusFilter, books.length);
   const openable = followCountsOpenable(profile.self, onOpenFollowList !== undefined);
-  const actions = personalityActions(profile.self, personalityStatus, REWARD_AD_GROUP_ID);
+  const actions = personalityActions(profile.self, personalityStatus, PERSONALITY_AD_GROUP_ID);
 
   /*
    * 나가는 길은 **상단 「돌아가기」 하나**다. 이 화면은 같은 문제를 두 번 겪었다 — 처음엔 제목 옆 `←`
