@@ -165,6 +165,28 @@ public class ReadingSession extends BaseTimeEntity {
         this.book = book;
     }
 
+    /**
+     * <b>진행 중</b> 세션의 측정 대상을 바꾼다 — 시작 시 고른 책을 재는 도중 교체하는 경로.
+     * 위 {@link #tagBook} 의 javadoc이 "다른 관심사"라고 선을 그어 둔 바로 그 자리다.
+     *
+     * <p>관심사가 다르니 <b>가드도 반대다</b>: tagBook은 끝난 세션에 책을 <i>붙이는</i> 1회성 문이라
+     * 재태깅을 막고 null을 거부하지만, 이쪽은 <i>재는 동안</i> 라벨을 고쳐 다는 문이라 여러 번 허용하고
+     * null(=「책 없이」로 되돌리기)도 받는다. 대신 <b>종료된 세션은 거부</b>한다 — 끝난 기록의 대상을
+     * 바꾸는 문이 아니고, 그쪽은 tagBook의 1회 규칙이 지킨다.
+     *
+     * <p>세션은 멈추지 않는다. 세션이 시간의 원장이고 book은 그 원장의 <b>라벨</b>이라, 라벨만 갈면
+     * 지금까지 잰 시간이 통째로 새 책에 붙는다.
+     *
+     * @param book 새 대상(null = 책 없이)
+     * @throws IllegalStateException 이미 종료된 세션인 경우
+     */
+    public void changeBook(Book book) {
+        if (this.endedAt != null) {
+            throw new IllegalStateException("cannot change book of an ended session");
+        }
+        this.book = book;
+    }
+
     public boolean isActive() {
         return endedAt == null;
     }

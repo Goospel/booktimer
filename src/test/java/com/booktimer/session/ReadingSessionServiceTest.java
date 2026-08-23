@@ -398,4 +398,67 @@ class ReadingSessionServiceTest {
                 .isInstanceOf(IllegalStateException.class);
         verify(sessionRepository, never()).save(any(ReadingSession.class));
     }
+
+    // --- changeActiveBook (진행 중 세션의 대상 교체, 핸드오프 3f) ---
+    //
+    // tagBook과 달리 세션 id를 받지 않는다 — "내 진행 중 세션"을 서버가 찾으므로(stop과 같은 finder)
+    // 요청에 세션 좌표가 아예 없고, 그래서 세션 IDOR이 구조적으로 성립하지 않는다.
+
+    @Test
+    @DisplayName("changeActiveBook: 진행 중 세션을 찾아 책을 갈고 저장한다(세션은 안 멈춘다)")
+    void changeActiveBook_replacesBookAndSaves() {
+        Book started = Book.register(user, "시작한 책", null, null, null, null, null, BookStatus.READING);
+        ReadingSession session = ReadingSession.start(user, T0, started);
+        Book other = Book.register(user, "바꾼 책", null, null, null, null, null, BookStatus.READING);
+        when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(session));
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        ReadingSession result = service.changeActiveBook(user, other);
+
+        assertThat(result.getBook()).isSameAs(other);
+        assertThat(result.getStartedAt()).isEqualTo(T0); // 라벨만 갈렸다 — 잰 시간은 그대로 새 책에 붙는다
+        assertThat(result.getEndedAt()).isNull();
+        verify(sessionRepository).save(session);
+    }
+
+    @Test
+    @DisplayName("changeActiveBook: null 이면 「책 없이」로 되돌린다 — 책 조회도 저장도 없다")
+    void changeActiveBook_null_clearsBook() {
+        Book started = Book.register(user, "시작한 책", null, null, null, null, null, BookStatus.READING);
+        ReadingSession session = ReadingSession.start(user, T0, started);
+        when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(session));
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        ReadingSession result = service.changeActiveBook(user, null);
+
+        assertThat(result.getBook()).isNull();
+        verify(bookRepository, never()).save(any(Book.class));
+    }
+
+    @Test
+    @DisplayName("changeActiveBook: 읽고싶음 책으로 바꾸면 읽는중으로 전환하고 시작 시각은 세션 시작 시각이다")
+    void changeActiveBook_withWantToReadBook_marksReadingFromSessionStart() {
+        ReadingSession session = ReadingSession.start(user, T0); // 책 없이 시작
+        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.WANT_TO_READ);
+        when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(session));
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        service.changeActiveBook(user, book);
+
+        assertThat(book.getStatus()).isEqualTo(BookStatus.READING);
+        // 태깅 시점(지금)이 아니라 실제로 읽기 시작한 때 — tagBook과 같은 시맨틱이다.
+        assertThat(book.getStartedReadingAt()).isEqualTo(T0);
+        verify(bookRepository).save(book);
+    }
+
+    @Test
+    @DisplayName("changeActiveBook: 진행 중 세션이 없으면 거부한다(IllegalStateException, 저장 없음)")
+    void changeActiveBook_noActiveSession_throwsAndDoesNotSave() {
+        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
+        when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.changeActiveBook(user, book))
+                .isInstanceOf(IllegalStateException.class);
+        verify(sessionRepository, never()).save(any(ReadingSession.class));
+    }
 }

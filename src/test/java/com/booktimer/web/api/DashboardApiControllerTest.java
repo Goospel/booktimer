@@ -395,6 +395,122 @@ class DashboardApiControllerTest {
                 .andExpect(status().isConflict());
     }
 
+    // ── 8d-2. 진행 중 세션의 대상 교체 (IDOR·무세션·양방향 전이) ──────────────
+    //
+    // tag-book과 달리 URL·body에 세션 좌표가 없다 — 서버가 "내 진행 중 세션"을 찾으므로 세션 IDOR이
+    // 구조적으로 성립하지 않는다. 남는 IDOR 경계는 책 하나뿐이라 그것을 아래에서 겨눈다.
+
+    @Test
+    @DisplayName("POST /api/sessions/active/book: 진행 중 세션의 책을 갈고 읽고싶음→읽는중 전환 (측정은 안 멈춘다)")
+    void changeActiveBook_replacesBookAndFlipsWantToRead() throws Exception {
+        User u = register("chg@a.com", "chg");
+        Book started = addBook(u, "시작한 책", BookStatus.READING);
+        Book target = addBook(u, "바꾼 책", BookStatus.WANT_TO_READ);
+        ReadingSession s = sessionService.start(u, clock.instant(), started);
+
+        mockMvc.perform(post("/api/sessions/active/book")
+                        .with(user("chg@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + target.getId() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasActiveSession").value(true))
+                .andExpect(jsonPath("$.activeBookTitle").value("바꾼 책"));
+
+        ReadingSession reloaded = sessionRepository.findById(s.getId()).orElseThrow();
+        assertThat(reloaded.getBook().getId()).isEqualTo(target.getId());
+        assertThat(reloaded.getEndedAt()).isNull(); // 라벨만 갈렸다 — 세션은 살아 있다
+        assertThat(bookRepository.findById(target.getId()).orElseThrow().getStatus())
+                .isEqualTo(BookStatus.READING);
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/active/book: bookId null → 「책 없이」로 되돌린다 (양방향 전이)")
+    void changeActiveBook_nullClearsBook() throws Exception {
+        User u = register("chgnull@a.com", "chgnull");
+        Book started = addBook(u, "시작한 책", BookStatus.READING);
+        ReadingSession s = sessionService.start(u, clock.instant(), started);
+
+        mockMvc.perform(post("/api/sessions/active/book")
+                        .with(user("chgnull@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":null}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activeBookTitle").doesNotExist());
+
+        assertThat(sessionRepository.findById(s.getId()).orElseThrow().getBook()).isNull();
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/active/book: 책 없이 시작한 세션에 책을 붙인다 (반대 방향 전이)")
+    void changeActiveBook_attachesToUntaggedSession() throws Exception {
+        User u = register("chgatt@a.com", "chgatt");
+        Book target = addBook(u, "고른 책", BookStatus.READING);
+        ReadingSession s = sessionService.start(u, clock.instant(), null);
+
+        mockMvc.perform(post("/api/sessions/active/book")
+                        .with(user("chgatt@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + target.getId() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activeBookTitle").value("고른 책"));
+
+        assertThat(sessionRepository.findById(s.getId()).orElseThrow().getBook().getId())
+                .isEqualTo(target.getId());
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/active/book: 남의 책으로 교체 → 404 (IDOR)")
+    void changeActiveBook_othersBook_404() throws Exception {
+        User alice = register("chgalice@a.com", "chgalice");
+        User bob = register("chgbob@a.com", "chgbob");
+        Book aliceBook = addBook(alice, "앨리스책", BookStatus.READING);
+        Book bobBook = addBook(bob, "밥책", BookStatus.READING);
+        ReadingSession bobSession = sessionService.start(bob, clock.instant(), bobBook);
+
+        mockMvc.perform(post("/api/sessions/active/book")
+                        .with(user("chgbob@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + aliceBook.getId() + "}"))
+                .andExpect(status().isNotFound());
+
+        // 남의 책을 거부하면서 내 세션도 건드리지 않았다 — 실패가 상태를 남기지 않는다.
+        assertThat(sessionRepository.findById(bobSession.getId()).orElseThrow().getBook().getId())
+                .isEqualTo(bobBook.getId());
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/active/book: 진행 중 측정이 없으면 → 409 (stop과 같은 계약)")
+    void changeActiveBook_noActiveSession_409() throws Exception {
+        User u = register("chgnone@a.com", "chgnone");
+        Book book = addBook(u, "책", BookStatus.READING);
+
+        mockMvc.perform(post("/api/sessions/active/book")
+                        .with(user("chgnone@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + book.getId() + "}"))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/active/book: 방금 종료된 뒤 도착해도 → 409 (경합 시 엉뚱한 세션을 안 건드린다)")
+    void changeActiveBook_afterStop_409() throws Exception {
+        User u = register("chgstop@a.com", "chgstop");
+        Book started = addBook(u, "시작한 책", BookStatus.READING);
+        Book other = addBook(u, "다른 책", BookStatus.READING);
+        ReadingSession s = sessionService.start(u, clock.instant(), started);
+        sessionService.stop(u, clock.instant());
+
+        mockMvc.perform(post("/api/sessions/active/book")
+                        .with(user("chgstop@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + other.getId() + "}"))
+                .andExpect(status().isConflict());
+
+        // 끝난 기록의 대상은 그대로다 — 그쪽은 tag-book의 1회 규칙이 지킨다.
+        assertThat(sessionRepository.findById(s.getId()).orElseThrow().getBook().getId())
+                .isEqualTo(started.getId());
+    }
+
     // ── 8e. wantToReadBooks 노출 (태깅 시트용) ────────────────────────────────
 
     @Test

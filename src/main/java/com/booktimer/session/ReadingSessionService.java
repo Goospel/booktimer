@@ -174,4 +174,29 @@ public class ReadingSessionService {
         }
         return sessionRepository.save(session);
     }
+
+    /**
+     * <b>진행 중</b> 세션의 측정 대상 교체 — 다른 탭에서 시작한 측정이 무슨 책인지 알고 그 자리에서
+     * 바꾸는 경로(핸드오프 3f). 세션은 멈추지 않는다: 지금까지 잰 시간이 통째로 새 책에 붙는다.
+     *
+     * <p><b>세션 id를 받지 않는다.</b> {@code stop}과 같은 finder로 "내 진행 중 세션"을 서버가 찾으므로
+     * 요청에 세션 좌표가 아예 없고, 그래서 세션 IDOR이 <b>구조적으로 성립하지 않는다</b>(그 대신 클라가
+     * 든 id가 낡아 엉뚱한 세션을 건드릴 길도 없다). 책 소유 검증은 컨트롤러가 {@code findByIdAndUser}로
+     * 마친 뒤 넘긴다 — {@link #tagBook}과 같은 분업이다.
+     *
+     * @param user 대상 사용자
+     * @param book 새 대상(null = 책 없이)
+     * @throws IllegalStateException 진행 중 세션이 없는 경우(컨트롤러가 409로 옮긴다 — stop과 같은 계약)
+     */
+    public ReadingSession changeActiveBook(User user, Book book) {
+        ReadingSession active = sessionRepository.findByUserAndEndedAtIsNull(user)
+                .orElseThrow(() -> new IllegalStateException("no active session"));
+        active.changeBook(book);
+        // 새 책이 "읽고싶음"이었다면 "읽는중"으로 자동 전환 — 시작 시각은 교체 시점(지금)이 아니라
+        // 그 세션이 시작된 때다. tagBook과 같은 시맨틱이라 두 경로가 책 상태를 다르게 만들지 않는다.
+        if (book != null && book.startReading(active.getStartedAt())) {
+            bookRepository.save(book);
+        }
+        return sessionRepository.save(active);
+    }
 }
