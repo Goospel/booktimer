@@ -10,7 +10,7 @@ import { History } from './screens/History';
 import { ReadingNowCard } from './screens/Home';
 import { StatItem } from './screens/Profile';
 import { graph, userAgent } from './test-fixtures';
-import { Avatar, CoverInitial, FilledButton, SectionTitle, Text } from './ui';
+import { Avatar, CoverInitial, FilledButton, HANDWRITING, SectionTitle, Text } from './ui';
 
 /**
  * 타이포그래피 위계 — <b>개구(Gaegu)로 갈아탄 뒤 크기·강조가 무너진 자리</b>를 못 박는다(#857 후속).
@@ -19,10 +19,10 @@ import { Avatar, CoverInitial, FilledButton, SectionTitle, Text } from './ui';
  * 미니앱 글자는 전부 px라 <b>닿는 텍스트가 0개</b>였다. ② TDS `Text`는 굵기를
  * `font-weight: var(--tds-paragraph-font-weight)`로 그리는데 그 변수는 `fontWeight` prop을 넘겼을 때만
  * 채워져, 안 넘기면 선언이 무효가 되고 <b>굵기가 상속으로 떨어진다</b> — `div` 안이면 body의 700,
- * `button` 안이면 UA 기본 400. ③ 본문이 이미 700이라 굵기로는 더 강조할 수 없는데, 웹이 쓰는
+ * `button` 안이면 UA 기본 400. ③ (당시) 본문이 이미 700이라 굵기로는 더 강조할 수 없는데, 웹이 쓰는
  * 세리프(고운바탕) 축을 미니앱은 화면 제목 한 곳에서만 썼다.
  *
- * <p>그래서 위계를 <b>크기 · 색 · 세리프</b> 셋이 맡고 굵기는 700 한 값으로 눕힌다. 아래 테스트가
+ * <p>그래서 위계를 <b>크기 · 색 · 세리프</b>가 맡는다. 아래 테스트가
  * 그 셋을 각각 지킨다.
  */
 
@@ -51,15 +51,19 @@ function tagOf(markup: string, text: string): string {
 
 describe('굵기는 자리로 정해지지 않는다', () => {
   it('button의 UA 기본 굵기를 끊는다 — 없으면 같은 <Text>가 버튼 안에서만 400으로 떨어진다', () => {
-    // UA 기본 `button { font: 400 … }`이 `html body { font-weight: 700 }` 보정을 취소한다.
-    // 그래서 기록 화면 날짜 줄이 「펼칠 수 있는 날(button)」만 한 줄 걸러 얇았다.
+    // 한때 body가 700이었고 UA 기본 `button { font: 400 … }`이 그 보정을 **버튼 안에서만** 취소해,
+    // 기록 화면 날짜 줄이 「펼칠 수 있는 날(button)」만 한 줄 걸러 얇았다. 지금은 body가 400이라
+    // 우연히 값이 같지만, 이 규칙이 지키는 건 값이 아니라 **「굵기는 자리로 정해지지 않는다」**는
+    // 원칙이다 — 지우면 700을 명시한 부모 안의 버튼에서 그대로 재발한다.
     expect(rules).toMatch(/\bbutton\s*\{[^}]*font-weight:\s*inherit/);
   });
 
-  it('개구에 없는 굵기를 선언하지 않는다 — 500·600·900은 조용히 다른 값으로 떨어진다', () => {
-    // 개구는 300·400·700만 있다. 500을 부르면 400으로 떨어져 **본문(700)보다 얇아지고**(책방 카운트
-    // 숫자가 자기 라벨보다 얇던 자리), 600·900은 700으로 올림돼 주변과 똑같아진다 — 어느 쪽이든
-    // 「강조를 선언했는데 화면은 그대로」다. 자리마다 고치는 대신 소스를 훑어 다시 새지 않게 한다.
+  it('로드되지 않은 굵기를 선언하지 않는다 — 500·600·900은 조용히 다른 값으로 떨어진다', () => {
+    // 이 앱이 **실제로 받아오는 굵기는 400(고운돋움)과 700(고운바탕·개구)뿐**이다. 그 사이 값을 부르면
+    // 브라우저가 가진 face로 반올림하거나 합성해, 엔진마다 다른 결과가 나온다 — 「강조를 선언했는데
+    // 화면은 그대로(혹은 폰마다 다름)」다. 자리마다 고치는 대신 소스를 훑어 다시 새지 않게 한다.
+    // (개구가 본문이던 시절엔 500이 400으로 떨어져 **본문 700보다 얇아지는** 형태로 드러났다 —
+    //  책방 카운트 숫자가 자기 라벨보다 얇던 자리. 전제는 바뀌었어도 금지 목록은 같다.)
     const offenders: string[] = [];
     for (const file of sourceFiles(fileURLToPath(new URL('.', import.meta.url)))) {
       readFileSync(file, 'utf8')
@@ -137,6 +141,9 @@ describe('서체 축은 기능=돋움 · 장식=손글씨다', () => {
   it('스택에서 손글씨를 뺀다 — 폴백으로 남기면 한 단어 안에서 서체가 갈린다', () => {
     const body = rules.match(/html\s+body\s*\{[^}]*\}/)?.[0] ?? '';
 
+    // ⚠️ 부재 단언은 **찾은 게 있을 때만** 뜻이 있다 — 선택자가 바뀌어 매칭이 빗나가면 `''`이 되고,
+    //    그러면 아래 `not.toContain`이 무조건 통과한다(T-205와 같은 부류의 공허함).
+    expect(body).not.toBe('');
     expect(body).not.toContain('Gaegu');
     expect(css).toContain('family=Gaegu'); // @import는 남는다 — 장식이 쓴다
   });
@@ -162,6 +169,50 @@ describe('서체 축은 기능=돋움 · 장식=손글씨다', () => {
   it('아바타 이니셜도 같다 — 표지와 한 몸이라 한쪽만 남으면 화면에 서체가 둘이 된다', () => {
     expect(render(<Avatar nickname="구스펠" />)).toContain('Gaegu');
   });
+
+  it('굵기까지 장식 값이다 — 개구 400은 획이 흐물해 장식으로도 약하다(상수 주석이 그렇게 말한다)', () => {
+    expect(HANDWRITING.fontWeight).toBe(700);
+    expect(render(<CoverInitial title="데미안" />)).toContain('700');
+  });
+
+  /**
+   * 나머지 장식 자리 — 캐러셀 placeholder · 피드 인용 · 여백 카드(인용/본문) · 작성 화면 입력칸.
+   * 렌더로도 잡히지만 <b>어디서 손글씨를 부르는가</b>를 한 줄로 세는 편이 「빠뜨린 자리」에 답이 된다.
+   *
+   * <p>핸드오프가 이름을 대 가며 개구로 지정한 자리들이라, 여기서 빠지면 이 변경의 존재 이유 절반이
+   * 서사로만 남는다(리뷰 지적 — 초판은 이 자리들이 돌연변이에서 <b>살아남았다</b>).
+   *
+   * <p>⚠️ 세는 단위가 <b>파일이 아니라 자리</b>다. 파일 집합으로 세면 한 파일 안의 여러 자리 중 하나가
+   * 빠져도 그 파일은 여전히 목록에 남아 통과한다 — 실제로 `Story.tsx`의 본문 opt-in을 지운 돌연변이가
+   * 집합 방식에서 살아남았다. 숫자가 바뀌면 테스트도 바뀌어야 하는 것이 의도다: 장식 자리를 늘리는 건
+   * 「기본값(기능 서체)에서 예외를 하나 더 판다」는 뜻이라 눈에 띄어야 한다.
+   */
+  it('장식 자리 수가 그대로다 — 하나라도 빠지면 그 자리만 조용히 기능 서체가 된다', () => {
+    const callers: Record<string, number> = {};
+    for (const file of sourceFiles(fileURLToPath(new URL('.', import.meta.url)))) {
+      const hits = readFileSync(file, 'utf8').match(/\.\.\.HANDWRITING/g);
+      if (hits !== null) callers[file.split(/[\\/]/).pop()!] = hits.length;
+    }
+
+    // Story가 셋인 이유: 여백 카드의 인용·본문, 그리고 작성 화면 입력칸(`composerField`).
+    expect(callers).toEqual({ 'Home.tsx': 1, 'HomeFeed.tsx': 1, 'Story.tsx': 3, 'ui.tsx': 2 });
+  });
+
+  /**
+   * 여백 <b>작성 화면</b>이 특히 중요하다 — 코드가 스스로 「쓰는 동안 보이는 것이 곧 카드」라고
+   * 선언한 미리보기 자리다. 한때 `fontFamily: 'inherit'`로 body를 따랐고 그때는 body가 손글씨라
+   * 우연히 맞았는데, 축이 뒤집히며 그 우연이 사라졌다(리뷰 지적 — 초판이 빠뜨린 자리).
+   */
+  it('작성 화면 입력칸도 손글씨다 — 쓰는 글씨와 저장된 글씨가 다르면 미리보기가 아니다', () => {
+    const src = readFileSync(new URL('./screens/Story.tsx', import.meta.url), 'utf8');
+    const at = src.indexOf('const composerField');
+    // ⚠️ 주석을 걷고 본다 — 이 자리의 경위를 설명하는 주석이 옛 선언을 그대로 인용하고 있어,
+    //    안 걷으면 부재 단언이 **주석에 걸려** 영영 실패한다(T-205의 거울상).
+    const field = src.slice(at, src.indexOf('}) as const;', at)).replace(/^\s*\/\/.*$/gm, '');
+
+    expect(field).toContain('...HANDWRITING');
+    expect(field).not.toContain("fontFamily: 'inherit'");
+  });
 });
 
 /**
@@ -169,8 +220,14 @@ describe('서체 축은 기능=돋움 · 장식=손글씨다', () => {
  * 개수 강제는 그 버튼을 쓰는 PR에서 소스 스캔으로 한다(여기서는 <b>장치가 성립하는지</b>만 본다).
  */
 describe('채움 주 버튼', () => {
-  it('마커를 인라인으로 싣는다 — css가 그 이름을 선택자 키로 쓴다', () => {
-    expect(render(<FilledButton>저장</FilledButton>)).toContain('--btn-filled');
+  it('마커를 버튼 요소 자신에 싣는다 — 래퍼로 밀리면 테스트는 그린인데 css가 안 닿는다', () => {
+    const markup = render(<FilledButton>저장</FilledButton>);
+    const tag = markup.slice(markup.lastIndexOf('<button', markup.indexOf('--btn-filled')),
+                            markup.indexOf('>', markup.indexOf('--btn-filled')) + 1);
+
+    // css 선택자가 `.tds-mobile-button[style*='--btn-filled']`이므로 **같은 요소**여야 한다.
+    expect(tag).toContain('tds-mobile-button');
+    expect(tag).toContain('--btn-filled');
   });
 
   it('css에 그 마커 규칙이 있다', () => {

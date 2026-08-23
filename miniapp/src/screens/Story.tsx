@@ -1430,7 +1430,11 @@ const composerField = (color: string) =>
     outline: 'none',
     background: 'transparent',
     color,
-    fontFamily: 'inherit',
+    // ⚠️ 손글씨를 **명시**한다. 이 두 칸은 「쓰는 동안 보이는 것이 곧 카드」인 미리보기라(위 주석),
+    //    저장 뒤 `MarginCard`가 손글씨로 그리는데 여기만 기능 서체면 그 계약이 깨진다.
+    //    한때 `fontFamily: 'inherit'`로 body를 따랐고 그때는 body가 손글씨라 우연히 맞았다 —
+    //    서체 축이 뒤집히며(기능=고운돋움) 그 우연이 사라진 자리다.
+    ...HANDWRITING,
     lineHeight: 1.6,
     resize: 'vertical',
   }) as const;
