@@ -404,6 +404,16 @@ export const stopSession = (): Promise<StopResponse> => request('/api/sessions/s
 export const tagBook = (sessionId: number, bookId: number): Promise<{ sessionId: number; bookTitle: string }> =>
   request(`/api/sessions/${sessionId}/tag-book`, { body: { bookId } });
 
+/**
+ * 진행 중 세션의 측정 대상 교체 — `bookId`가 `null`이면 「책 없이」로 되돌린다. 측정은 멈추지 않고,
+ * 지금까지 잰 시간이 통째로 새 책에 붙는다.
+ *
+ * <p>위 `tagBook`과 달리 **세션 id를 안 보낸다** — 서버가 「내 진행 중 세션」을 직접 찾으므로 요청에
+ * 세션 좌표가 없다. 진행 중 측정이 없으면 409다(방금 끝난 뒤 도착한 요청도 여기로 떨어진다).
+ */
+export const changeActiveBook = (bookId: number | null): Promise<TimerState> =>
+  request('/api/sessions/active/book', { body: { bookId } });
+
 export const setGoal = (dailyIncrementSeconds: number): Promise<void> =>
   request('/api/miniapp/goal', { body: { dailyIncrementSeconds } });
 

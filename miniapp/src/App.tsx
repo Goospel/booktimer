@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import type { BookOption, DashboardResponse, MarginBook, TimerState } from './api';
-import { fetchDashboard, startSession, stopSession, tagBook, token } from './api';
+import { changeActiveBook, fetchDashboard, startSession, stopSession, tagBook, token } from './api';
 import { useBackClose } from './back';
 import {
   CoachmarkBubble,
@@ -24,7 +24,7 @@ import { Profile } from './screens/Profile';
 import { Settings } from './screens/Settings';
 import { BookMargin, BookMarginAll, StoryComposer } from './screens/Story';
 import { showInterstitialAd, trackEvent } from './toss';
-import { ErrorMessage, Loading, Screen } from './ui';
+import { CoverInitial, ErrorMessage, Loading, PENCIL_FRAME, SERIF_VALUE, Screen, Sheet } from './ui';
 
 /**
  * 메인 탭 — 이 순서가 곧 탭바 순서다(index↔화면 대응의 단일 출처).
@@ -137,6 +137,48 @@ export const TAB_LOCK_HINT = '측정을 끝내면 이동할 수 있어요';
 
 /** 그 안내가 떠 있는 시간 — 읽고 남을 만큼만. */
 export const TAB_LOCK_HINT_MS = 1800;
+
+/** 시작 토스트가 떠 있는 시간 — 읽고 [바꾸기]까지 누를 만큼. */
+export const START_TOAST_MS = 5000;
+
+/** 시작 토스트가 말할 내용 — `book === null`은 「책 없이」, `changed`는 시작이 아니라 교체 확인. */
+export interface StartToastState {
+  book: BookOption | null;
+  changed: boolean;
+}
+
+/**
+ * 토스트 문구.
+ *
+ * <p>⚠️ <b>조사가 제목 뒤에 붙지 않는 꼴로 고정</b>한다. 「『용기』로」 같은 자리에 받침 판정이 끼면
+ * 「용기로 / 용기으로」가 갈리는데 제목은 사용자 데이터라 그 판정을 이길 수 없다 — 그래서 조사는
+ * 제목이 아니라 <b>「측정」</b>이 받는다(『제목』 측정<b>을</b> / 『제목』 측정<b>으로</b>).
+ */
+export function startToastMessage(toast: StartToastState): string {
+  const target = toast.book === null ? '책 없이' : `『${toast.book.title}』`;
+  return toast.changed ? `${target} 측정으로 바꿨어요` : `${target} 측정을 시작했어요`;
+}
+
+/**
+ * 토스트 노출 판정 — 토스트·액션 실패·잠금 안내 <b>셋이 같은 fixed 좌표</b>(탭바 위 8px)를 쓰므로
+ * 한 장만 세운다. 상태 간 clear 배선을 만드는 대신 게이트 하나로 가리는 이유는, 배선은 늘어날수록
+ * 빠뜨린 조합이 생기기 때문이다.
+ *
+ * <p>우선순위 = 에러 &gt; 잠금 안내 &gt; 토스트. 뒤 둘은 <b>항상 토스트보다 새 사건</b>이다 —
+ * 토스트는 5초를 버티는데 그동안 사용자가 한 다른 행동에 대한 답이 밀리면 안 된다.
+ *
+ * <p><b>홈에선 안 띄운다</b> — 「읽는 중」 카드가 이미 그 책을 표지째 말한다. 이 규칙이 시작 시점이
+ * 아니라 <b>여기</b>(매 렌더) 있는 이유: 토스트는 5초를 버티므로 그 사이 홈으로 건너가면 시작 시점
+ * 판정만으로는 중복이 그대로 따라온다(목 모드 실측으로 드러난 자리다).
+ */
+export function startToastVisible(
+  toast: StartToastState | null,
+  actionError: string | null,
+  lockHint: boolean,
+  tab: TabKey,
+): toast is StartToastState {
+  return toast !== null && actionError === null && !lockHint && tab !== 'home';
+}
 
 /**
  * 측정 중 잠기는 탭인가 — <b>홈만 빼고</b> 잠긴다(사용자 지시 2026-08-19 「읽는 도중엔 다른 화면으로
@@ -572,6 +614,8 @@ export function App() {
     startSession(timerStartBookId(dashboard.readingBooks, dashboard.recentBookId, homeBookId)).then((timer) => {
       applyTimer(timer);
       trackEvent('reading_session_started');
+      // 토스트가 「무슨 책으로 시작됐나」를 그리려면 서버가 확정한 값이 필요하다 — 부르는 쪽으로 흘린다.
+      return timer;
     });
 
   /**
@@ -825,7 +869,8 @@ export function MainTabs({
   onOpenBookMargin: (isbn13: string) => void;
   onTimerChange: (timer: TimerState) => void;
   /** 측정 시작 — 구현은 App이 든다(여백 탭바와 같은 것을 쓴다). 실패는 여기서 스트립으로 말한다. */
-  onStartTimer: () => Promise<void>;
+  /** 측정 시작 — 응답 `TimerState`를 그대로 흘려준다(토스트가 그릴 책의 단일 출처). */
+  onStartTimer: () => Promise<TimerState>;
   onGraphChange: (graph: DashboardResponse['graph']) => void;
   onGoGoal: () => void;
   /** 전면광고를 기다리는 중 — 목표 손잡이를 "준비 중"으로 바꿔 탭이 먹통으로 보이지 않게 한다. */
@@ -893,14 +938,57 @@ export function MainTabs({
     lockHintTimer.current = setTimeout(() => setLockHint(false), TAB_LOCK_HINT_MS);
   };
 
+  /** 시작 토스트 — 다른 탭에서 시작했을 때 「무슨 책인가」를 말한다(홈은 「읽는 중」 카드가 이미 말한다). */
+  const [startToast, setStartToast] = useState<StartToastState | null>(null);
+  const startToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** 교체 시트가 열려 있는지 — 토스트의 [바꾸기]가 여는 유일한 문이다. */
+  const [changing, setChanging] = useState(false);
+
+  /** 토스트를 걷는다 — 타이머까지 함께 걷어야 나중에 빈 토스트가 되살아나지 않는다. */
+  const clearStartToast = () => {
+    if (startToastTimer.current !== null) clearTimeout(startToastTimer.current);
+    setStartToast(null);
+  };
+
+  /** 토스트를 띄운다 — `showLockHint`와 같은 패턴(앞 타이머를 걷고 다시 잰다). */
+  const showStartToast = (next: StartToastState) => {
+    if (startToastTimer.current !== null) clearTimeout(startToastTimer.current);
+    setStartToast(next);
+    startToastTimer.current = setTimeout(() => setStartToast(null), START_TOAST_MS);
+  };
+
   // 측정이 끝나면 잠금이 풀리므로 안내도 함께 걷는다(남은 타이머가 사라진 화면을 건드리지 않게 한다).
+  // 시작 토스트·교체 시트도 같은 운명이다 — 세션이 다른 경로로 끝나면(여백 진입 자동 종료 등)
+  // 「이 책으로 재는 중」이라 말하는 카드와 그 대상을 고르는 시트는 둘 다 거짓말이 된다.
   useEffect(() => {
     if (dashboard.hasActiveSession) return;
     setLockHint(false);
+    setStartToast(null);
+    setChanging(false);
     return () => {
       if (lockHintTimer.current !== null) clearTimeout(lockHintTimer.current);
     };
   }, [dashboard.hasActiveSession]);
+
+  /**
+   * 토스트 타이머는 <b>언마운트 때만</b> 걷는다.
+   *
+   * <p>⚠️ 위 effect의 cleanup에 얹으면 안 된다 — React는 cleanup을 <b>의존성이 바뀔 때마다</b> 돌리는데,
+   * 측정을 시작하는 순간이 바로 `hasActiveSession`이 `false → true`로 뒤집히는 순간이다. 그러면 방금
+   * 건 5초 타이머가 그 자리에서 지워져 <b>시작 토스트가 영영 안 사라진다</b>(목 모드 실측: 8초 뒤에도
+   * 그대로였고, 같은 탭에서 잰 맨 `setTimeout(5000)`은 5186ms에 정상 발화해 스로틀이 아님을 갈랐다).
+   * 교체 토스트는 그 사이 `hasActiveSession`이 안 변해 멀쩡했던 탓에 증상이 절반만 보였다.
+   *
+   * <p>세션이 끝날 때 남은 타이머를 따로 걷지 않아도 되는 이유: 위 effect가 이미 `setStartToast(null)`로
+   * 상태를 비워, 뒤늦게 발화한 타이머는 같은 값을 한 번 더 쓰는 무해한 no-op이 된다.
+   */
+  useEffect(
+    () => () => {
+      if (startToastTimer.current !== null) clearTimeout(startToastTimer.current);
+    },
+    [],
+  );
 
   /**
    * 독서등 — 측정 중 홈이 밤이 된다. 색은 css가 들고 여기선 스위치만 올린다.
@@ -978,6 +1066,11 @@ export function MainTabs({
     } else {
       setCelebrate(false); // 지난 세션의 축하가 새 측정 화면에 남아 있으면 거짓말이 된다.
       onStartTimer()
+        .then((timer) => {
+          // 책은 서버가 확정한 값을 쓴다(`?? null`은 이 필드를 안 주는 옛 서버 방어 — api.ts의 기존 규약).
+          // 「홈에선 안 띄운다」 판정은 여기가 아니라 렌더 게이트가 든다(토스트가 5초를 버티므로).
+          showStartToast({ book: timer.activeBook ?? null, changed: false });
+        })
         .catch(fail)
         .finally(() => setBusy(false));
     }
@@ -992,11 +1085,41 @@ export function MainTabs({
       .finally(() => setBusy(false));
   };
 
+  /**
+   * 측정 대상 교체 — 세션은 멈추지 않는다. 응답 `TimerState`로 대시보드를 갱신해야 홈의 「읽는 중」
+   * 카드가 어긋나지 않는다(재조회 없이 따라온다).
+   */
+  const changeBook = (book: BookOption | null) => {
+    setBusy(true);
+    setActionError(null);
+    changeActiveBook(book === null ? null : book.id)
+      .then((timer) => {
+        onTimerChange(timer);
+        setChanging(false);
+        // 시작이 아니라 교체를 확인한다 — 같은 문구면 두 번 시작한 것처럼 읽힌다.
+        showStartToast({ book: timer.activeBook ?? null, changed: true });
+      })
+      .catch((e) => {
+        // ⚠️ 실패해도 시트를 닫는다. 에러 스트립은 탭바 층(z 100)인데 시트 패널은 z 201 **불투명**이라,
+        //    시트를 연 채로 두면 메시지가 통째로 가려진다 — 사용자는 눌렀는데 아무 일도 안 일어나는
+        //    화면을 보고 또 누른다(목 모드 실측: 스트립 좌표의 elementFromPoint가 시트의 책 행이었다).
+        //    409(방금 끝난 세션)·네트워크 오류 둘 다 이 경로로 온다.
+        setChanging(false);
+        fail(e);
+      })
+      .finally(() => setBusy(false));
+  };
+
+  /** 교체 시트 닫기 — 안 바꾸고 닫으면 토스트도 되살리지 않는다(제 역할은 끝났다). */
+  const closeChangeSheet = () => setChanging(false);
+
   /** 시트 닫기 — 태깅 시트를 닫는 건 곧 「건너뛰기」다(다시 들어갈 자리를 만들지 않는다). */
   const closeSheet = () => setTagging(null);
 
   // 안드로이드 뒤로가기는 시트만 닫는다 — 시트가 열린 채로 미니앱이 꺼지지 않게.
+  // 둘은 동시에 열리지 않는다(태깅은 종료 후, 교체는 측정 중) — backStack이 스택이라 공존도 안전하다.
   useBackClose(tagging !== null, closeSheet);
+  useBackClose(changing, closeChangeSheet);
 
   return (
     <>
@@ -1093,6 +1216,17 @@ export function MainTabs({
         </div>
       )}
 
+      {/* 시작 토스트 — 위 두 스트립과 같은 좌표라 게이트가 한 장만 세운다(우선순위: 에러 > 잠금 > 토스트). */}
+      {startToastVisible(startToast, actionError, lockHint, tab) && (
+        <StartToast
+          toast={startToast}
+          onChange={() => {
+            clearStartToast(); // 시트를 여는 순간 토스트는 제 역할을 다했다.
+            setChanging(true);
+          }}
+        />
+      )}
+
       {/* 코치마크는 탭바보다 먼저 그린다 — 덮개가 탭바 아래 층이라는 것을 코드 순서로도 읽히게 둔다.
           인라인 걸음(말풍선 없음)에는 아무것도 그리지 않는다 — 그 화면의 `Coachmark`가 맡는다. */}
       {flowStep?.bubble !== undefined && (
@@ -1115,6 +1249,17 @@ export function MainTabs({
           onPick={tag}
           onSkip={closeSheet}
           onClose={closeSheet}
+        />
+      )}
+
+      {/* 교체 시트 — 측정 중에만 열리고, 토스트의 [바꾸기]가 여는 유일한 문이다. */}
+      {changing && (
+        <ChangeBookSheet
+          books={dashboard.readingBooks}
+          currentBookId={dashboard.activeBook?.id ?? null}
+          disabled={busy}
+          onPick={changeBook}
+          onClose={closeChangeSheet}
         />
       )}
     </>
@@ -1244,6 +1389,182 @@ export function TabBarCoachmark({
         }}
       />
     </>
+  );
+}
+
+/**
+ * 토스트·시트가 함께 쓰는 미니 표지 — 책이 없으면 점선 빈 칸(「책 없이」의 시각 언어).
+ *
+ * <p>높이·radius를 프롭으로 받지 않고 {@link CoverInitial}과 <b>같은 식으로 파생</b>한다. 둘이 한 행에
+ * 나란히 서므로 값이 갈리면 그 행만 어긋나는데, 프롭으로 받으면 width만 바꾼 다음 사람이 그걸 모른다.
+ */
+function MiniCover({ book, width }: { book: BookOption | null; width: number }) {
+  if (book === null) {
+    return (
+      <span
+        style={{
+          flex: 'none',
+          width,
+          height: Math.round(width * 1.4),
+          borderRadius: 4,
+          border: '1.5px dashed #B8B29F',
+          boxSizing: 'border-box',
+        }}
+      />
+    );
+  }
+  return (
+    <span style={{ flex: 'none' }}>
+      <CoverInitial title={book.title} width={width} />
+    </span>
+  );
+}
+
+/**
+ * 측정 시작 토스트 — 다른 탭에서 ▶를 눌렀을 때 <b>무슨 책으로 시작됐는지</b>를 말하고 그 자리에서
+ * 바꾸게 한다. 대상 책은 홈 캐러셀 선택(`timerStartBookId`)으로 조용히 정해지는데, 정작 그 화면
+ * 어디에도 표시되지 않던 것이 이 장치의 존재 이유다(UX 감사 3f).
+ *
+ * <p>자리는 `actionError`·`lockHint` 스트립과 <b>같은 좌표</b>다(탭바 위 8px) — 세 장이 겹치지 않게
+ * {@link startToastVisible} 게이트가 한 장만 세운다.
+ *
+ * <p>⚠️ <b>애니메이션·트랜지션이 없다</b>(T-176). 이 카드는 표지를 품고 있어, 값이 변하는 그림자·필터를
+ * 걸면 실기기에서 표지를 매 프레임 재래스터화한다 — 발광 `box-shadow`가 책방 격자를 무너뜨린 자리와
+ * 같은 클래스다. 나타남·사라짐은 즉시 마운트/언마운트다.
+ *
+ * <p>화면에서 꺼내 둔 이유는 늘 같다: 하니스가 정적 렌더라 시작 성공 콜백에 도달할 수 없다(T-149).
+ */
+export function StartToast({ toast, onChange }: { toast: StartToastState; onChange: () => void }) {
+  const message = startToastMessage(toast);
+  // 제목만 세리프로 — 문구 안에서 「무슨 책인가」가 값이고 나머지는 서술이다.
+  const quoted = toast.book === null ? null : `『${toast.book.title}』`;
+  const rest = quoted === null ? message : message.slice(quoted.length);
+
+  return (
+    <div
+      role="status"
+      style={{
+        position: 'fixed',
+        left: TAB_BAR_MARGIN,
+        right: TAB_BAR_MARGIN,
+        bottom: `calc(12px + env(safe-area-inset-bottom) + ${TAB_BAR_HEIGHT}px + 8px)`,
+        zIndex: TAB_BAR_Z_INDEX,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '10px 12px',
+        background: 'var(--adaptiveBackground, #FCFAF5)',
+        borderRadius: 12,
+        border: '1px solid transparent',
+        borderImage: PENCIL_FRAME,
+        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.14)',
+      }}
+    >
+      <MiniCover book={toast.book} width={26} />
+      <span style={{ flex: 1, minWidth: 0, fontSize: 14, lineHeight: 1.5, wordBreak: 'keep-all' }}>
+        {quoted !== null && <span style={{ ...SERIF_VALUE, fontWeight: 700 }}>{quoted}</span>}
+        {rest}
+      </span>
+      <button
+        type="button"
+        onClick={onChange}
+        style={{
+          flex: 'none',
+          padding: '6px 12px',
+          border: 0,
+          borderRadius: 8,
+          background: 'rgba(110, 138, 106, 0.16)',
+          color: 'var(--adaptiveBlue700, #4F6B4C)',
+          fontSize: 13,
+          fontWeight: 700,
+          cursor: 'pointer',
+        }}
+      >
+        바꾸기
+      </button>
+    </div>
+  );
+}
+
+/**
+ * 측정 대상 교체 시트 — 종료 후 태깅 시트(`BookSheet`)와 <b>다른 자리</b>다. 저쪽은 "끝난 세션에 무슨
+ * 책이었는지 붙이기"고 이쪽은 "재는 도중 대상을 갈아 끼우기"라, 여기엔 저쪽에 없는 셋이 있다:
+ * <b>지금 대상 표시</b>·<b>「책 없이」로 되돌리는 행</b>·<b>측정이 안 멈춘다는 부제</b>.
+ *
+ * <p>부제가 특히 필요하다 — 재는 도중에 뭔가를 누르라고 하면 사용자는 시간이 날아갈까 봐 안 누른다.
+ *
+ * <p>읽는 중인 책이 0권이어도 「책 없이」 행은 남는다(빈 시트는 닫는 것 말고 할 게 없다).
+ */
+export function ChangeBookSheet({
+  books,
+  currentBookId,
+  disabled,
+  onPick,
+  onClose,
+}: {
+  books: BookOption[];
+  /** 지금 재고 있는 책 — `null`이면 「책 없이」 행에 표시가 선다. */
+  currentBookId: number | null;
+  disabled: boolean;
+  /** `null` = 「책 없이」 선택. */
+  onPick: (book: BookOption | null) => void;
+  onClose: () => void;
+}) {
+  const row = (book: BookOption | null) => {
+    const current = (book === null ? null : book.id) === currentBookId;
+    return (
+      <button
+        key={book === null ? 'none' : book.id}
+        type="button"
+        // 계측용 표지 — TDS emotion 클래스 사이에서 "어느 행인가"를 집을 손잡이가 없다(BookSheet 선례).
+        data-book-title={book === null ? '' : book.title}
+        aria-current={current ? 'true' : undefined}
+        disabled={disabled}
+        onClick={() => onPick(book)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          width: '100%',
+          marginBottom: 8,
+          padding: '10px 12px',
+          border: 'none',
+          borderRadius: 10,
+          background: current ? 'rgba(110, 138, 106, 0.14)' : 'transparent',
+          cursor: 'pointer',
+        }}
+      >
+        <MiniCover book={book} width={30} />
+        <span
+          style={{
+            flex: 1,
+            minWidth: 0,
+            textAlign: 'left',
+            fontSize: 15,
+            fontWeight: current ? 700 : undefined,
+            color: book === null ? 'var(--adaptiveGrey600, #6F6A5E)' : undefined,
+            wordBreak: 'keep-all',
+          }}
+        >
+          {book === null ? '책 없이' : book.title}
+        </span>
+        {current && (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flex: 'none', stroke: 'var(--adaptiveBlue700, #4F6B4C)' }} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12.5 10 17.5 19 7" />
+          </svg>
+        )}
+      </button>
+    );
+  };
+
+  return (
+    <Sheet title="무슨 책으로 잴까요?" onClose={onClose}>
+      <div style={{ marginTop: -4, marginBottom: 10, fontSize: 13, color: 'var(--adaptiveGrey600, #6F6A5E)', wordBreak: 'keep-all' }}>
+        측정은 멈추지 않아요 — 지금까지 잰 시간은 바꾼 책에 붙어요
+      </div>
+      {books.map((b) => row(b))}
+      {row(null)}
+    </Sheet>
   );
 }
 

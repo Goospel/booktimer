@@ -168,6 +168,34 @@ public class DashboardApiController {
         }
     }
 
+    /**
+     * 진행 중 세션의 <b>측정 대상 교체</b> — 다른 탭에서 시작한 측정이 무슨 책인지 알고 그 자리에서
+     * 바꾸는 경로(핸드오프 3f). {@code bookId} 가 null 이면 「책 없이」로 되돌린다.
+     *
+     * <p><b>세션 좌표가 요청에 없다.</b> 위 {@code tag-book} 은 {@code {id}} 를 받아 서비스가 소유를
+     * 검증하지만, 이쪽은 서버가 "내 진행 중 세션"을 직접 찾으므로 <b>세션 IDOR이 구조적으로 성립하지
+     * 않는다</b>. 남는 경계는 책 하나뿐이라 {@code findByIdAndUser} 로 404 마스킹한다.
+     *
+     * <p>응답은 start 와 같은 {@link TimerState} — 클라가 재조회 없이 화면을 갱신한다.
+     * 진행 중 측정이 없으면 409로, stop 과 같은 계약이다(방금 끝난 뒤 도착한 요청도 여기로 떨어진다).
+     */
+    @PostMapping("/api/sessions/active/book")
+    public ResponseEntity<TimerState> changeActiveBook(@RequestBody ChangeActiveBookRequest req,
+                                                       Principal principal) {
+        User user = currentUserService.resolve(principal);
+        Book book = null;
+        if (req.bookId() != null) {
+            book = bookRepository.findByIdAndUser(req.bookId(), user)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "책을 찾을 수 없습니다")); // 책 IDOR
+        }
+        try {
+            sessionService.changeActiveBook(user, book);
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "진행 중인 측정이 없습니다"); // stop과 같은 계약
+        }
+        return ResponseEntity.ok(buildTimerState(user));
+    }
+
     private TimerState buildTimerState(User user) {
         return TimerState.of(dashboardModel.computeLive(user), goalWaiverService.availableFor(user));
     }
@@ -238,6 +266,9 @@ public class DashboardApiController {
                                TimerState timer, ContributionGraphDto graph) {}
 
     public record TagBookRequest(Long bookId) {}
+
+    /** 진행 중 세션 대상 교체 요청 — null 이면 「책 없이」(tag-book 과 달리 null 이 유효값이다). */
+    public record ChangeActiveBookRequest(Long bookId) {}
 
     /** tag-book 응답 — 어느 세션에 어떤 책을 붙였는지 확인용. */
     public record TagBookResponse(Long sessionId, String bookTitle) {}

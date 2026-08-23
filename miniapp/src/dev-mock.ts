@@ -807,6 +807,13 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     const book = books.find((b) => b.id === body.bookId);
     return { sessionId: id, bookTitle: book?.title ?? '알 수 없는 책' };
   }],
+  // 진행 중 세션의 대상 교체 — 세션 id를 안 받는다(서버가 「내 진행 중 세션」을 찾는다).
+  // 409를 실물처럼 재현해야 「방금 끝난 뒤 바꾸기」가 목에서도 같은 말을 한다.
+  ['POST', /^\/api\/sessions\/active\/book$/, ({ body }) => {
+    if (state.activeStartedAt === null) throw new ApiError(409, '진행 중인 측정이 없습니다');
+    state.activeBookId = (body.bookId as number | null) ?? null;
+    return timerState();
+  }],
 
   ['POST', /^\/api\/miniapp\/goal$/, ({ body }) => {
     state.goalSeconds = body.dailyIncrementSeconds as number;

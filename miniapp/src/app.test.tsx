@@ -79,7 +79,7 @@ function renderTab(tab: (typeof TABS)[number]['key'], overrides: Partial<Dashboa
         onComposeMargin={() => {}}
         onOpenBookMargin={() => {}}
         onTimerChange={() => {}}
-        onStartTimer={() => Promise.resolve()}
+        onStartTimer={() => Promise.resolve(dashboard)}
         onGraphChange={() => {}}
         onGoGoal={() => {}}
         goalAdPending={false}
