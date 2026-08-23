@@ -4,6 +4,9 @@ import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// 렌더로 관측 불가능한 배선을 소스로 잰다 — `env-production.test.ts`와 같은 방식(아래 「광고 손잡이 배선」).
+import homeSource from './screens/Home.tsx?raw';
+
 import type { BookOption, DashboardResponse } from './api';
 import { TAB_BAR_Z_INDEX } from './App';
 import { ApiError, waiveDebt } from './api';
@@ -70,6 +73,12 @@ const supportedMock = vi.mocked(notificationAgreementSupported);
 const requestAgreementMock = vi.mocked(requestNotificationAgreement);
 
 const BUTTON_LABEL = '광고 보고 밀린 하루 지우기';
+/** 목표 진입 알약 — ⓘ(설명)와 갈라선 「이동」 쪽 손잡이(감사 3e → 시안 4a). */
+const GOAL_PILL = '변경 ›';
+/** ⓘ 툴팁이 말하는 이월 규칙 — 접혔는지 펼쳤는지를 이 문구로 잰다. */
+const CARRYOVER_NOTE = '내일 남은 시간에 더해져요';
+/** 이월을 끈 사용자가 듣는 말 — 위 문구는 그 사람에게 **거짓**이라 갈라 말한다. */
+const NO_CARRYOVER_NOTE = '내일로 넘어가지 않아요';
 /** 캐러셀 섹션 헤더 — 주 버튼이 탭바로 떠난 뒤 홈 아래쪽 순서를 재는 기준점이 이 줄이다. */
 const CAROUSEL_HEADER = '무엇으로 측정할까요?';
 /** 측정 중 캐러셀 자리를 물려받는 카드의 헤더 — 「지금 이 화면이 가리키는 책」을 말하는 카드가 이쪽으로 바뀐다. */
@@ -181,7 +190,7 @@ describe('버튼 노출 조건 (showWaiverButton)', () => {
 });
 
 describe('홈 렌더 배선', () => {
-  it('첫 렌더에는 버튼이 없다 — 상자가 접힌 채로 시작하므로 「남은시간」을 눌러야 나온다', () => {
+  it('첫 렌더에는 버튼이 없다 — 툴팁이 접힌 채로 시작하므로 ⓘ를 눌러야 나온다', () => {
     expect(renderHome()).not.toContain(BUTTON_LABEL);
   });
 
@@ -339,12 +348,15 @@ describe('히어로 프레이밍 (렌더)', () => {
     expect(markup).toContain('45:00'); // 3600 − 900
   });
 
-  it('보조 줄은 「남은시간」이다 — 게이지가 목표+밀린을 재니 라벨도 그 총량을 말해야 한다', () => {
+  it('보조 줄이 2열 통계다 — 「남은 시간 | 하루 목표」가 나란히 선다', () => {
     const markup = renderHome({ remainingSeconds: 900, todayGoalSeconds: 3600 });
 
-    expect(markup).toContain('남은시간 : 15:00');
-    expect(markup).not.toContain('목표까지'); // 목표만 재던 옛 라벨
-    expect(markup).not.toContain('오늘 목표 1시간'); // 목표 값은 우상단 손잡이 몫
+    expect(markup).toContain('남은 시간');
+    expect(markup).toContain('하루 목표');
+    expect(markup).toContain('15:00'); // 남은 시간
+    expect(markup).toContain('01:00:00'); // 하루 목표
+    expect(markup).not.toContain('남은시간 : '); // 대시 밑줄 한 줄이던 옛 자리
+    expect(markup).not.toContain('목표까지'); // 목표만 재던 더 옛 라벨
   });
 
   it('달성하면 축하와 초과분을 보여준다 — 목표를 넘겨도 계속 센다', () => {
@@ -353,59 +365,179 @@ describe('히어로 프레이밍 (렌더)', () => {
 
     expect(markup).toContain('오늘 목표 달성');
     expect(markup).toContain('+10분 더 읽었어요');
-    expect(markup).not.toContain('남은시간'); // 남은 게 없으면 그 줄도 없다
   });
 
-  it('정확히 달성하면 보조 줄을 생략한다 — 히어로 한 줄이면 족하다', () => {
+  /**
+   * 달성한 사람에게도 목표 문이 열려 있어야 한다 — 옛 배치는 「남은 시간 > 0」일 때만 보조 줄을 그려,
+   * 목표를 다 채운 사람은 홈에서 목표를 바꿀 길이 통째로 없었다(카드 안 `GoalHandle`은 목표 0일 때만 선다).
+   * 통계 행이 목표 유무로만 갈리면 그 구멍이 닫힌다.
+   */
+  it('정확히 달성해도 통계 행은 남는다 — 목표로 가는 문이 달성과 함께 사라지면 안 된다', () => {
     const markup = renderHome({ remainingSeconds: 0, todayGoalSeconds: 3600 });
 
     expect(markup).toContain('오늘 목표 달성');
     expect(markup).not.toContain('더 읽었어요');
-    expect(markup).not.toContain('남은시간');
+    expect(markup).toContain('하루 목표');
+    expect(markup).toContain(GOAL_PILL);
   });
 
-  it('응원 문구가 사라졌다 — 밀린 시간 안내는 「남은시간」을 눌러야 보이는 상자로 들어갔다', () => {
+  it('응원 문구가 사라졌다 — 밀린 시간 안내는 ⓘ를 눌러야 보이는 툴팁으로 들어갔다', () => {
     const markup = renderHome({ carriedDebtSeconds: 1800, carryover: true });
 
     expect(markup).not.toContain('뒤처져도 괜찮아요');
-    expect(markup).not.toContain('광고를 보고 하루씩'); // 상자는 접힌 채로 시작한다
+    expect(markup).not.toContain('광고를 보고 하루씩'); // 툴팁은 접힌 채로 시작한다(ⓘ를 눌러야 열린다)
+    expect(markup).not.toContain(CARRYOVER_NOTE); // 이월 설명도 접혀 있다
   });
 });
 
 /**
- * 남은시간 설명 상자 — 「남은시간」이 목표와 밀린 시간의 합이라는 사실은 숫자만 봐서는 못 읽는다.
- * 탭하면 그 자리에서 펼쳐지는 상자가 내역을 밝히고, **목표 바꾸기·광고 버튼도 여기로 들어왔다**
- * (히어로 카드에 얹혀 있던 손잡이들 — 카드는 숫자와 게이지만 남는다, 사용자 결정 2026-08-14).
+ * 목표 진입 — 「변경 ›」 알약이 목표 화면으로 가는 <b>명시적</b> 문이다(감사 3e → 시안 4a).
  *
- * <p>손잡이들은 `children`으로 받는다 — 상자는 표시만 하고 배선(광고·busy·전면광고 대기)은 홈이
- * 그대로 들고 있어야 조건 술어(`showWaiverButton`)와 상자가 서로를 모른 채 각자 계측된다.
+ * <p>옛 배치는 "남은시간 : 15:00 ⓘ" 한 줄이 <b>설명과 이동을 겸했다</b> — ⓘ는 설명으로 읽히지
+ * 이동으로 읽히지 않아, 홈에서 목표를 바꾸는 길이 사실상 숨어 있었다. 역할을 둘로 가른다:
+ * <b>ⓘ = 설명(툴팁) · 「변경 ›」 = 이동</b>.
+ */
+describe('목표 진입 알약 (변경 ›)', () => {
+  it('하루 목표 값 아래 선다 — 목표를 바꾸는 문이라고 스스로 말한다', () => {
+    const markup = renderHome({ todayGoalSeconds: 3600 });
+
+    expect(markup).toContain(GOAL_PILL);
+    expect(markup.indexOf('하루 목표')).toBeLessThan(markup.indexOf(GOAL_PILL));
+  });
+
+  // 전면광고 로드에 1~2초가 걸린다 — 라벨이 그대로면 눌러도 아무 일 없는 것처럼 보여 다시 누른다.
+  it('전면광고를 기다리는 동안엔 「준비 중…」— 누른 게 먹혔다고 말한다', () => {
+    const markup = renderHome({ todayGoalSeconds: 3600 }, { goalAdPending: true });
+
+    expect(markup).toContain('준비 중…');
+    expect(markup).not.toContain(GOAL_PILL);
+  });
+
+  it('목표가 0이면 통계 행이 없고 카드 안 손잡이가 그 길을 맡는다 — 게이지 줄이 통째로 안 그려진다', () => {
+    const markup = renderHome({ todayGoalSeconds: 0, carriedDebtSeconds: 0 });
+
+    expect(markup).not.toContain(GOAL_PILL);
+    expect(markup).toContain('목표 정하기');
+  });
+
+  /**
+   * 목표 0인데 통계 행이 뜨는 유일한 칸 — 게이지 최대치는 「목표 + 밀린」이라 목표가 0이어도
+   * 밀린 시간이 있으면 `progress !== null`이 된다(미니앱 목표 화면은 0 저장을 막지만 웹은 된다).
+   * 그때 「하루 목표 00:00」 옆에 「변경 ›」이 서면 <b>없는 값을 바꾸라는 말</b>이 된다 —
+   * 옛 경로의 `GoalHandle`이 그 상태에서 「목표 정하기」였던 것과 말을 맞춘다.
+   */
+  it('바꿀 목표가 없으면 「정하기」라 말한다 — 00:00을 「변경」하라는 건 말이 안 된다', () => {
+    const markup = renderHome({ todayGoalSeconds: 0, carriedDebtSeconds: 1800, carryover: true });
+
+    expect(markup).toContain('정하기 ›');
+    expect(markup).not.toContain(GOAL_PILL);
+  });
+});
+
+/**
+ * 광고 손잡이가 홈에 <b>실제로 배선돼 있는가</b> — 술어(`showWaiverButton`)와 상자(`RemainingNote`)는
+ * 각각 계측되지만, <b>홈이 그 둘을 잇는지</b>는 아무도 안 보고 있었다. 리뷰의 돌연변이가 그걸 실증했다:
+ * 홈에서 광고 버튼 블록을 통째로 지워도(`{false && …}`) 전체 스위트가 초록이었다.
+ *
+ * <p>왜 렌더가 아니라 소스 판독인가: 이 버튼은 ⓘ 툴팁 <b>안</b>에 있고 툴팁은 `showNote` 초기 false로
+ * 시작한다 — 하니스가 정적 렌더라 펼 수가 없어 <b>렌더로는 관측 자체가 불가능</b>하다(T-149).
+ * `?raw`로 소스를 읽는 건 `env-production.test.ts`가 지면↔광고 그룹 배선에 이미 쓰는 방식 그대로다.
+ *
+ * <p>주석을 먼저 걷는 이유는 T-205다 — 걷지 않으면 블록을 <b>주석 처리해도</b> 문자열이 남아 통과한다.
+ */
+describe('광고 손잡이 배선 (수익 경로)', () => {
+  /** JSX 주석(`{/* … *\/}`)·블록 주석·줄 주석을 걷어낸 홈 소스 — 「살아 있는 코드」만 남긴다. */
+  const homeCode = homeSource.replace(/\{?\/\*[\s\S]*?\*\/\}?/g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  it('노출 술어가 광고 버튼을 직접 연다 — 게이트를 떼면 부채 없는 사람에게도 광고가 뜬다', () => {
+    expect(homeCode).toMatch(/showWaiverButton\([\s\S]{0,200}?\)\s*&&\s*\(\s*<Button/);
+  });
+
+  it('그 버튼이 ⓘ 툴팁 안에 산다 — 밖으로 나오면 죄책감 없는 화면에 광고가 상주한다', () => {
+    const open = homeCode.indexOf('<RemainingNote');
+    const gate = homeCode.indexOf('showWaiverButton(', open);
+    const close = homeCode.indexOf('</RemainingNote>', open);
+
+    expect(open).toBeGreaterThan(-1);
+    expect(gate).toBeGreaterThan(open);
+    expect(gate).toBeLessThan(close);
+  });
+
+  it('문구에 「광고」를 명시한다 — 광고 위장 금지 조항이다', () => {
+    expect(homeCode).toContain(BUTTON_LABEL);
+    expect(BUTTON_LABEL).toContain('광고');
+  });
+
+  /**
+   * 툴팁의 문은 `showNote` <b>하나</b>여야 한다. 옛 배치처럼 `remaining > 0`을 덧대면 광고 버튼이
+   * 조용히 닫히는 창이 생긴다 — `remaining`은 측정 중 매초 라이브로 줄지만 `carriedDebtSeconds`는
+   * 스냅샷이라 안 줄어서, <b>측정 중 총량을 다 채우는 순간</b> 빚이 남았는데도 상자로 갈 길이 사라진다.
+   */
+  it('툴팁의 문은 showNote 하나다 — 조건을 덧대면 빚이 남은 채로 광고가 닫히는 창이 생긴다', () => {
+    expect(homeCode).toMatch(/\{\s*showNote\s*&&\s*\(\s*<RemainingNote/);
+  });
+});
+
+/**
+ * ⓘ 툴팁 — 「남은 시간」 라벨 옆 ⓘ를 탭하면 통계 행 아래로 펼쳐진다. 역할은 **설명 하나**다:
+ * 못 채운 시간이 어떻게 되는지를 말하고, 밀린 게 있으면 내역으로 합을 밝힌다.
+ * 목표 손잡이는 통계 행의 「변경 ›」이 가져갔고, **광고 버튼만 이 상자에 남았다**.
+ *
+ * <p>광고 손잡이는 `children`으로 받는다 — 상자는 표시만 하고 배선(광고·busy)은 홈이 그대로 들고
+ * 있어야 조건 술어(`showWaiverButton`)와 상자가 서로를 모른 채 각자 계측된다. 그 둘을 **홈이 잇는지**는
+ * 렌더로 관측이 안 돼 아래 「광고 손잡이 배선」이 소스로 잰다.
  *
  * <p>여는 동작은 정적 렌더 하니스로 못 잡으므로(T-149) 내용은 컴포넌트를 직접 그려서 계측한다.
  */
-describe('남은시간 설명 상자', () => {
-  const note = (goal: number, debt: number, remaining: number, children?: ReactNode) =>
+describe('ⓘ 이월 설명 툴팁', () => {
+  const note = (goal: number, debt: number, remaining: number, children?: ReactNode, carryover = true) =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <RemainingNote goalSeconds={goal} debtSeconds={debt} remainingSeconds={remaining}>
+        <RemainingNote goalSeconds={goal} debtSeconds={debt} remainingSeconds={remaining} carryover={carryover}>
           {children}
         </RemainingNote>
       </TDSMobileProvider>,
     );
 
-  it('내역 세 줄로 합을 밝힌다 — 목표 + 밀린 = 남은시간', () => {
+  /**
+   * ⓘ가 답해야 할 유일한 질문 — "못 채우면 어떻게 되나". 빚이 있든 없든 규칙은 같으니 늘 말한다.
+   * 옛 상자는 이 규칙을 <b>밀린 시간이 있을 때만</b> 흘렸다(「더 읽거나 광고를 보고…」) — 규칙을
+   * 가장 먼저 알아야 할 사람은 아직 빚이 없는 사람이다.
+   */
+  it('이월 규칙을 늘 말한다 — 빚이 없어도 규칙은 같다', () => {
+    expect(note(1800, 0, 900)).toContain(CARRYOVER_NOTE);
+    expect(note(1800, 600, 900)).toContain(CARRYOVER_NOTE);
+  });
+
+  /**
+   * ⚠️ 이월은 <b>사용자 설정</b>이다(웹 설정의 「밀린 시간 이월」 토글, 기본 켬). 끄면 서버가
+   * `carriedDebtSeconds`를 0으로 눌러 보내고(`DashboardModel.computeLive`) 밀린 시간은 오늘 몫에
+   * 안 얹힌다 — 그 사람에게 「내일 남은 시간에 더해져요」는 <b>거짓말</b>이다.
+   *
+   * <p>`debtSeconds`만으로는 「이월 켬 · 빚 없음」과 「이월 끔」이 구별되지 않아(둘 다 0) 설정을
+   * 따로 받는다. 두 상태 모두 ⓘ는 남는다 — 질문("못 채우면 어떻게 되나")은 같고 답만 갈린다.
+   */
+  it('이월을 끈 사람에겐 반대로 말한다 — 그 사람에게 이월 문구는 거짓이다', () => {
+    const off = note(1800, 0, 900, undefined, false);
+
+    expect(off).toContain(NO_CARRYOVER_NOTE);
+    expect(off).not.toContain(CARRYOVER_NOTE);
+  });
+
+  it('밀린 게 없으면 내역 줄이 없다 — 목표·남은 시간은 바로 위 통계 행이 이미 말한다', () => {
+    const markup = note(1800, 0, 900);
+
+    expect(markup).not.toContain('밀린 시간');
+    expect(markup).not.toContain('더 읽거나');
+    expect(markup).not.toContain('오늘 목표'); // 통계 행과 중복이라 접는다
+  });
+
+  it('밀린 게 있으면 내역 세 줄로 합을 밝힌다 — 목표 + 밀린 = 남은시간', () => {
     const markup = note(1800, 600, 900);
 
     expect(markup).toContain('30분'); // 오늘 목표
     expect(markup).toContain('10분'); // 밀린 시간
     expect(markup).toContain('15:00'); // 남은시간
-  });
-
-  it('밀린 게 없으면 그 줄도 안내 문구도 없다 — 「밀린 시간 0분」은 없는 빚을 상기시키는 줄이다', () => {
-    const markup = note(1800, 0, 900);
-
-    expect(markup).not.toContain('밀린 시간');
-    expect(markup).not.toContain('더 읽거나');
-    expect(markup).toContain('15:00'); // 남은시간 합계는 그대로 밝힌다
   });
 
   it('지우는 수단을 함께 알린다 — 7일 자동 소멸이 폐지돼 "기다리면 사라진다"는 더 이상 사실이 아니다', () => {
@@ -416,11 +548,16 @@ describe('남은시간 설명 상자', () => {
     expect(markup).not.toContain('자동으로 사라져요');
   });
 
-  it('손잡이를 내역 아래에 담는다 — 목표 바꾸기·광고가 서는 자리가 이 상자다', () => {
-    const markup = note(1800, 600, 900, <button type="button">목표 30분 ›</button>);
+  /**
+   * 광고 손잡이가 사는 자리 — 시안 4a가 말하지 않은 자리라 여기서 못 박는다. 「변경 ›」이 목표 손잡이를
+   * 가져갔다고 <b>광고까지 함께 사라지면 수익 경로가 끊긴다</b>. 죄책감(밀린 시간)이 뜬 이 상자가
+   * 그 버튼의 유일한 집이다.
+   */
+  it('손잡이를 내역 아래에 담는다 — 「변경 ›」이 목표를 가져가도 광고는 이 상자에 남는다', () => {
+    const markup = note(1800, 600, 900, <button type="button">{BUTTON_LABEL}</button>);
 
-    expect(markup).toContain('목표 30분 ›');
-    expect(markup.indexOf('남은시간')).toBeLessThan(markup.indexOf('목표 30분'));
+    expect(markup).toContain(BUTTON_LABEL);
+    expect(markup.indexOf('남은시간')).toBeLessThan(markup.indexOf(BUTTON_LABEL));
   });
 });
 

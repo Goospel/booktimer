@@ -37,6 +37,17 @@ const AGREEMENT_KEY = 'booktimer.notificationAgreement';
 const SAGE = '#6E8A6A';
 
 /**
+ * 진한 세이지 — 통계 행의 ⓘ와 「변경 ›」 알약이 쓰는 손잡이 색(웹 `--accent-hover`).
+ *
+ * <p>리터럴 `#4F6B4C`이 아니라 **토큰 경유**인 이유는 독서등(밤)이다 — 다만 **지금 이 자리에선
+ * 픽셀이 같다**: 히어로 카드는 `LAMP_PAGE_CLASS`를 달고 있고 `global.css`의
+ * `body.reading-lamp .lamp-page`가 `--adaptiveBlue700`을 낮값으로 도로 고정하기 때문이다(실측 확인).
+ * 그러니 이건 「안 그러면 깨진다」가 아니라 **방어**다 — 이 조각이 등불 밖으로 옮겨지거나 그 예외가
+ * 걷히는 날 리터럴이면 조용히 낮 색으로 남는다. 값이 같을 때 토큰을 쓰는 편이 나중을 안 망친다.
+ */
+const ACCENT = 'var(--adaptiveBlue700, #4F6B4C)';
+
+/**
  * 측정 중 안심 문구 — 이 앱의 핵심 계약은 "화면을 꺼도 서버가 센다"인데 측정 중 화면에 그 말이 없었다.
  * 첫 세션에 한정하지 않는다: 짧고 무해하며, 잊어버리는 건 신규 유저만이 아니다.
  */
@@ -532,9 +543,9 @@ export function goalHandleLabel(goalSeconds: number, adPending = false): string 
 }
 
 /**
- * 목표 손잡이 — 서는 자리가 둘이라 컴포넌트로 뽑았다: 평상시엔 **「남은시간」 상자 안**, 목표가 0이라
- * 그 상자로 갈 길이 없을 때만 **히어로 카드 안**. 두 자리가 같은 모양이어야 사용자가 한 번 배운 손잡이가
- * 상태에 따라 다른 물건으로 보이지 않는다.
+ * 목표 손잡이 — 이제 서는 자리는 **하나**다: 목표가 0이라 게이지 줄이 통째로 안 그려질 때의 히어로 카드 안.
+ * 평상시 자리(「남은시간」 상자 안)는 히어로 통계 행의 「변경 ›」 알약이 가져갔다 — 같은 일을 하는 문이
+ * 둘이면 어느 쪽이 진짜인지 사용자가 고민한다.
  *
  * <p>**자작 칩이 아니라 TDS `Button`이다**(2026-08-14 실기기 제보). 작고 테두리 없는 인라인 칩이라
  * 같은 상자에 선 「광고 보고 밀린 하루 지우기」와 나란히 놓였을 때 **버튼으로 읽히지 않았다** — 광고 쪽과
@@ -558,18 +569,20 @@ function GoalHandle({
 }
 
 /**
- * 남은시간 설명 상자 — 「남은시간」을 탭하면 그 자리에서 펼쳐진다.
+ * ⓘ 이월 설명 툴팁 — 「남은 시간」 라벨 옆 ⓘ를 탭하면 통계 행 아래로 펼쳐진다.
  *
- * <p>남은시간이 **목표 + 밀린 시간**이라는 사실은 숫자 하나만 봐서는 못 읽는다. 내역으로 합을
- * 밝히고, 밀린 시간을 어떻게 없애는지도 여기서 알린다 — 7일 자동 소멸이 폐지돼(2026-08-14) "기다리면
- * 사라진다"가 더 이상 사실이 아니므로, 지우는 두 수단(더 읽기·광고)으로 문구를 바꿨다.
+ * <p>**역할이 하나다: 설명.** 한때 이 상자는 설명과 이동(목표 바꾸기)을 겸했고, 그 문은 "남은시간 :
+ * 15:00 ⓘ" 라는 대시 밑줄 한 줄 뒤에 숨어 있었다 — ⓘ는 설명으로 읽히지 이동으로 읽히지 않는다
+ * (UX 감사 3e). 이동은 「하루 목표」 열의 「변경 ›」 알약이 가져가고, 여기 남는 건 규칙 설명뿐이다.
  *
- * <p>**손잡이(목표 바꾸기·광고 보기)도 여기 담긴다** — 히어로 카드에 칩으로 얹혀 있던 것들이
- * 카드를 어지럽혀 이 상자로 들어왔다(사용자 결정 2026-08-14). 상자는 표시만 맡고 배선은 `children`으로
- * 받는다: 광고의 busy·전면광고 대기 같은 상태를 상자가 알기 시작하면 표시와 배선이 한 덩어리가 된다.
+ * <p>**이월 규칙은 빚이 없어도 말한다** — 규칙을 가장 먼저 알아야 할 사람은 아직 못 채운 적 없는
+ * 사람이다. 반면 내역 세 줄(목표 + 밀린 = 남은시간)은 밀린 게 있을 때만 온다: 빚이 0이면 그 합은
+ * 바로 위 통계 행이 이미 말한 값의 되풀이이고, 「밀린 시간 0분」은 없는 빚을 상기시키는 줄이다.
  *
- * <p>밀린 게 0이면 그 줄과 안내 문구를 통째로 접는다 — 「밀린 시간 0분」은 없는 빚을 상기시키는 줄이고,
- * 지우는 방법 안내도 지울 게 없는 사람에겐 잡음이다.
+ * <p>**광고 손잡이는 여전히 여기 산다** — 시안 4a가 자리를 말하지 않은 유일한 요소라, 「변경 ›」이
+ * 목표 손잡이를 가져갈 때 함께 쓸려 나갈 뻔했다. 죄책감(밀린 시간)이 뜬 이 상자가 그 버튼의 집이다.
+ * 상자는 표시만 맡고 배선은 `children`으로 받는다: 광고의 busy·전면광고 대기 같은 상태를 상자가
+ * 알기 시작하면 표시와 배선이 한 덩어리가 된다.
  *
  * <p>화면에서 꺼내 둔 이유는 늘 같다 — 하니스가 정적 렌더라 탭해서 펼친 상태에 도달할 수 없다(T-149).
  */
@@ -577,12 +590,18 @@ export function RemainingNote({
   goalSeconds,
   debtSeconds,
   remainingSeconds,
+  carryover,
   children,
 }: {
   goalSeconds: number;
   debtSeconds: number;
   remainingSeconds: number;
-  /** 내역 아래 손잡이 자리 — 목표 바꾸기·광고 버튼이 여기 선다. */
+  /**
+   * 이월 설정 — `debtSeconds`만으로는 「이월 켬 · 빚 없음」과 「이월 끔」이 구별되지 않는다(둘 다 0).
+   * 규칙 문장이 정반대라 설정을 따로 받아야 한다.
+   */
+  carryover: boolean;
+  /** 내역 아래 손잡이 자리 — 광고 버튼이 여기 선다. */
   children?: ReactNode;
 }) {
   const row = (label: string, value: string, strong = false) => (
@@ -597,26 +616,70 @@ export function RemainingNote({
   );
 
   return (
-    <div
-      style={{
-        marginTop: 10,
-        padding: '10px 12px',
-        borderRadius: 10,
-        background: 'var(--adaptiveGrey200, #E4DDD0)',
-        textAlign: 'left',
-      }}
-    >
-      {row('오늘 목표', formatDuration(goalSeconds))}
-      {debtSeconds > 0 && row('밀린 시간', formatDuration(debtSeconds))}
-      <div style={{ marginTop: 4, paddingTop: 4, borderTop: '0.5px solid var(--adaptiveGrey600, #6F6A5E)' }}>
-        {row('남은시간', formatClock(remainingSeconds), true)}
-      </div>
-      {debtSeconds > 0 && (
-        <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8, wordBreak: 'keep-all' }}>
-          밀린 시간은 목표보다 더 읽거나, 광고를 보고 하루씩 지울 수 있어요.
+    <div style={{ position: 'relative', marginTop: 14, textAlign: 'left' }}>
+      {/* 캐럿 — 이 상자가 어느 손잡이에서 나왔는지를 그림으로 말한다. 왼쪽 열(남은 시간 · ⓘ)의
+          가운데를 가리키므로 두 열이 `flex: 1`인 한 25%가 곧 그 지점이다(값 길이에 안 흔들린다). */}
+      <div
+        style={{
+          position: 'absolute',
+          left: 'calc(25% - 5px)',
+          top: -6,
+          width: 10,
+          height: 10,
+          background: 'var(--adaptiveBackground, #FCFAF5)',
+          borderLeft: '1px solid rgba(140, 133, 122, 0.6)',
+          borderTop: '1px solid rgba(140, 133, 122, 0.6)',
+          transform: 'rotate(45deg)',
+        }}
+      />
+      <div
+        style={{
+          position: 'relative',
+          padding: '9px 12px',
+          borderRadius: 10,
+          background: 'var(--adaptiveBackground, #FCFAF5)',
+          /* 연필선(시안의 `pfs`) — 그림자만으론 안 떨어진다. 이 상자의 배경은 히어로 카드지와 거의
+             같은 색이라 분리 신호가 알파 0.07 그림자 하나뿐이었고, 테두리 없는 카드 위에 윤곽선 있는
+             캐럿만 뜬 꼴이었다. 변수는 `.lamp-page`가 밤에도 낮 버전으로 고정한다. */
+          border: '1px solid transparent',
+          borderImage: 'var(--pencil-frame-soft) 8 / 8px stretch',
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.07)',
+        }}
+      >
+        {/* ⓘ가 답해야 할 유일한 질문 — "못 채우면 어떻게 되나". 빚이 있든 없든 규칙은 같으므로 늘
+            말하되, 이월을 끈 사람에겐 **반대로** 말한다(그 사람에게 이월 문구는 거짓이다). */}
+        <Text
+          typography="st12"
+          style={{ display: 'block', color: 'var(--adaptiveGrey700, #57534A)', wordBreak: 'keep-all' }}
+        >
+          {carryover ? (
+            <>
+              오늘 못 채운 시간은 사라지지 않고 <strong>내일 남은 시간에 더해져요.</strong>
+            </>
+          ) : (
+            <>
+              오늘 못 채운 시간은 <strong>내일로 넘어가지 않아요.</strong> 오늘 몫은 오늘까지예요.
+            </>
+          )}
         </Text>
-      )}
-      {children}
+        {debtSeconds > 0 && (
+          <>
+            <div
+              style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(44, 42, 36, 0.12)' }}
+            >
+              {row('오늘 목표', formatDuration(goalSeconds))}
+              {row('밀린 시간', formatDuration(debtSeconds))}
+              <div style={{ marginTop: 4, paddingTop: 4, borderTop: '0.5px solid var(--adaptiveGrey600, #6F6A5E)' }}>
+                {row('남은시간', formatClock(remainingSeconds), true)}
+              </div>
+            </div>
+            <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8, wordBreak: 'keep-all' }}>
+              밀린 시간은 목표보다 더 읽거나, 광고를 보고 하루씩 지울 수 있어요.
+            </Text>
+          </>
+        )}
+        {children}
+      </div>
     </div>
   );
 }
@@ -1040,43 +1103,102 @@ export function Home({
         {progress !== null ? (
           <div style={{ marginTop: 16 }}>
             <ProgressBar progress={progress} size="normal" color={SAGE} />
-            {/* 남은 게 있으면 그 값이, 다 채웠으면 초과분이 온다. 정확히 다 채운 순간엔 히어로가 이미
-                「🌿 오늘 목표 달성」이라 말했으니 이 줄을 통째로 생략한다. */}
-            {remaining > 0 ? (
-              // 남은 게 있으면 언제나 손잡이다 — 밝힐 내역(오늘 목표)이 늘 있고, 목표·광고 손잡이가
-              // 이 상자 안으로 들어와 조건부로 잠그면 그 둘에 닿을 길까지 함께 사라진다.
-              <button
-                type="button"
-                onClick={() => setShowNote((open) => !open)}
-                style={{
-                  marginTop: 8,
-                  padding: 0,
-                  border: 0,
-                  background: 'transparent',
-                  borderBottom: '1px dashed var(--adaptiveGrey600, #6F6A5E)',
-                  color: 'var(--adaptiveGrey600, #6F6A5E)',
-                  fontSize: 14,
-                  cursor: 'pointer',
-                }}
-              >
-                남은시간 : {formatClock(remaining)} ⓘ
-              </button>
-            ) : (
-              overflow > 0 && (
-                <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
-                  +{formatDuration(overflow)} 더 읽었어요
-                </Text>
-              )
+            {/*
+              2열 통계 — 「남은 시간 | 하루 목표」. 옛 자리는 "남은시간 : 15:00 ⓘ" 대시 밑줄 한 줄이
+              전부였고, 그 한 줄이 **설명과 이동을 겸했다**(UX 감사 3e). 여기서 역할을 가른다:
+              ⓘ = 설명(툴팁) · 「변경 ›」 = 이동.
+
+              주의 — **목표가 있으면 남은 시간이 0이어도 그린다.** 옛 배치는 `remaining > 0`으로 이 줄을
+              잠갔는데, 그러면 **목표를 다 채운 사람은 홈에서 목표를 바꿀 길이 통째로 사라졌다** —
+              카드 안 `GoalHandle`은 목표가 0일 때만 서기 때문이다. 달성이 문을 닫아선 안 된다.
+            */}
+            <div style={{ display: 'flex', marginTop: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {/* ⓘ는 라벨에 붙는다 — 값이 아니라 「남은 시간」이라는 개념을 설명하는 손잡이다. */}
+                <button
+                  type="button"
+                  onClick={() => setShowNote((open) => !open)}
+                  aria-expanded={showNote}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 4,
+                    width: '100%',
+                    padding: 0,
+                    border: 0,
+                    background: 'transparent',
+                    color: 'var(--adaptiveGrey600, #6F6A5E)',
+                    // 시안은 11.5px이나 이 레포의 계단(typography.test `SCALE`)엔 없는 값이다 —
+                    // 그 11.5는 고운돋움 스케일 전제라 서체 교체 PR에서 계단째 다시 잡는다.
+                    fontSize: 12,
+                    cursor: 'pointer',
+                  }}
+                >
+                  남은 시간
+                  {/* 색은 속성이 아니라 style로 준다 — 프레젠테이션 속성엔 `var()`가 안 먹는다(토큰이
+                      죽으면 독서등에서 이 아이콘만 낮 색으로 남는다). */}
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    style={{ stroke: ACCENT, flex: 'none' }}
+                  >
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 11v5M12 7.5v.5" />
+                  </svg>
+                </button>
+                <div style={{ ...SERIF_VALUE, fontSize: 19, fontWeight: 700, marginTop: 2 }}>
+                  {formatClock(remaining)}
+                </div>
+              </div>
+              <div style={{ width: 1, background: 'rgba(44, 42, 36, 0.12)' }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>하루 목표</div>
+                <div style={{ ...SERIF_VALUE, fontSize: 19, fontWeight: 700, marginTop: 2 }}>
+                  {formatClock(goal)}
+                </div>
+                {/* 목표로 가는 명시적 문. 전면광고 로드에 1~2초가 걸려 그동안 라벨이 그대로면
+                    눌러도 아무 일 없는 것처럼 보인다 — 대기 사실이 목표값보다 우선이다. */}
+                <button
+                  type="button"
+                  onClick={onGoGoal}
+                  disabled={goalAdPending}
+                  style={{
+                    marginTop: 5,
+                    padding: '3px 10px',
+                    border: 0,
+                    borderRadius: 8,
+                    background: 'rgba(110, 138, 106, 0.14)',
+                    color: ACCENT,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {goalAdPending ? '준비 중…' : goal > 0 ? '변경 ›' : '정하기 ›'}
+                </button>
+              </div>
+            </div>
+            {overflow > 0 && (
+              <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
+                +{formatDuration(overflow)} 더 읽었어요
+              </Text>
             )}
-            {remaining > 0 && showNote && (
+            {showNote && (
               <RemainingNote
                 goalSeconds={goal}
                 // 이월이 꺼져 있으면 밀린 시간은 남은시간 합계에 안 들어간다 — 그때 이 줄을 그리면 합이 어긋난다.
                 debtSeconds={dashboard.carryover ? dashboard.carriedDebtSeconds : 0}
                 remainingSeconds={remaining}
+                carryover={dashboard.carryover}
               >
-                <GoalHandle goalSeconds={goal} pending={goalAdPending} onGoGoal={onGoGoal} />
-                {/* 광고는 죄책감이 뜬 이 자리에만 나타난다. 문구에 "광고"를 명시해 광고 위장 금지 조항을 지킨다. */}
+                {/* 목표 손잡이는 위 「변경 ›」 알약이 가져갔다 — 같은 일을 하는 문이 한 상자에 둘이면
+                    어느 쪽이 진짜인지 사용자가 고민한다.
+                    광고는 죄책감이 뜬 이 자리에만 나타난다. 문구에 "광고"를 명시해 광고 위장 금지 조항을 지킨다. */}
                 {showWaiverButton(dashboard.carriedDebtSeconds, dashboard.debtWaiverAvailable, REWARD_AD_GROUP_ID) && (
                   <Button
                     display="block"
