@@ -39,9 +39,11 @@ const SAGE = '#6E8A6A';
 /**
  * 진한 세이지 — 통계 행의 ⓘ와 「변경 ›」 알약이 쓰는 손잡이 색(웹 `--accent-hover`).
  *
- * <p>리터럴 `#4F6B4C`이 아니라 **토큰 경유**인 이유는 독서등(밤)이다: `body.reading-lamp main`이
- * `--adaptiveBlue*`를 야간판으로 갈아끼우므로, 토큰을 타는 색만 밤에도 따라 밝아진다. 리터럴로
- * 박으면 그 자리만 낮 색으로 남아 어두운 카드 위에서 사라진다.
+ * <p>리터럴 `#4F6B4C`이 아니라 **토큰 경유**인 이유는 독서등(밤)이다 — 다만 **지금 이 자리에선
+ * 픽셀이 같다**: 히어로 카드는 `LAMP_PAGE_CLASS`를 달고 있고 `global.css`의
+ * `body.reading-lamp .lamp-page`가 `--adaptiveBlue700`을 낮값으로 도로 고정하기 때문이다(실측 확인).
+ * 그러니 이건 「안 그러면 깨진다」가 아니라 **방어**다 — 이 조각이 등불 밖으로 옮겨지거나 그 예외가
+ * 걷히는 날 리터럴이면 조용히 낮 색으로 남는다. 값이 같을 때 토큰을 쓰는 편이 나중을 안 망친다.
  */
 const ACCENT = 'var(--adaptiveBlue700, #4F6B4C)';
 
@@ -541,9 +543,9 @@ export function goalHandleLabel(goalSeconds: number, adPending = false): string 
 }
 
 /**
- * 목표 손잡이 — 서는 자리가 둘이라 컴포넌트로 뽑았다: 평상시엔 **「남은시간」 상자 안**, 목표가 0이라
- * 그 상자로 갈 길이 없을 때만 **히어로 카드 안**. 두 자리가 같은 모양이어야 사용자가 한 번 배운 손잡이가
- * 상태에 따라 다른 물건으로 보이지 않는다.
+ * 목표 손잡이 — 이제 서는 자리는 **하나**다: 목표가 0이라 게이지 줄이 통째로 안 그려질 때의 히어로 카드 안.
+ * 평상시 자리(「남은시간」 상자 안)는 히어로 통계 행의 「변경 ›」 알약이 가져갔다 — 같은 일을 하는 문이
+ * 둘이면 어느 쪽이 진짜인지 사용자가 고민한다.
  *
  * <p>**자작 칩이 아니라 TDS `Button`이다**(2026-08-14 실기기 제보). 작고 테두리 없는 인라인 칩이라
  * 같은 상자에 선 「광고 보고 밀린 하루 지우기」와 나란히 놓였을 때 **버튼으로 읽히지 않았다** — 광고 쪽과
@@ -588,12 +590,18 @@ export function RemainingNote({
   goalSeconds,
   debtSeconds,
   remainingSeconds,
+  carryover,
   children,
 }: {
   goalSeconds: number;
   debtSeconds: number;
   remainingSeconds: number;
-  /** 내역 아래 손잡이 자리 — 목표 바꾸기·광고 버튼이 여기 선다. */
+  /**
+   * 이월 설정 — `debtSeconds`만으로는 「이월 켬 · 빚 없음」과 「이월 끔」이 구별되지 않는다(둘 다 0).
+   * 규칙 문장이 정반대라 설정을 따로 받아야 한다.
+   */
+  carryover: boolean;
+  /** 내역 아래 손잡이 자리 — 광고 버튼이 여기 선다. */
   children?: ReactNode;
 }) {
   const row = (label: string, value: string, strong = false) => (
@@ -630,15 +638,29 @@ export function RemainingNote({
           padding: '9px 12px',
           borderRadius: 10,
           background: 'var(--adaptiveBackground, #FCFAF5)',
+          /* 연필선(시안의 `pfs`) — 그림자만으론 안 떨어진다. 이 상자의 배경은 히어로 카드지와 거의
+             같은 색이라 분리 신호가 알파 0.07 그림자 하나뿐이었고, 테두리 없는 카드 위에 윤곽선 있는
+             캐럿만 뜬 꼴이었다. 변수는 `.lamp-page`가 밤에도 낮 버전으로 고정한다. */
+          border: '1px solid transparent',
+          borderImage: 'var(--pencil-frame-soft) 8 / 8px stretch',
           boxShadow: '0 2px 8px rgba(0, 0, 0, 0.07)',
         }}
       >
-        {/* ⓘ가 답해야 할 유일한 질문 — 빚이 있든 없든 규칙은 같으므로 늘 말한다. */}
+        {/* ⓘ가 답해야 할 유일한 질문 — "못 채우면 어떻게 되나". 빚이 있든 없든 규칙은 같으므로 늘
+            말하되, 이월을 끈 사람에겐 **반대로** 말한다(그 사람에게 이월 문구는 거짓이다). */}
         <Text
           typography="st12"
           style={{ display: 'block', color: 'var(--adaptiveGrey700, #57534A)', wordBreak: 'keep-all' }}
         >
-          오늘 못 채운 시간은 사라지지 않고 <strong>내일 남은 시간에 더해져요.</strong>
+          {carryover ? (
+            <>
+              오늘 못 채운 시간은 사라지지 않고 <strong>내일 남은 시간에 더해져요.</strong>
+            </>
+          ) : (
+            <>
+              오늘 못 채운 시간은 <strong>내일로 넘어가지 않아요.</strong> 오늘 몫은 오늘까지예요.
+            </>
+          )}
         </Text>
         {debtSeconds > 0 && (
           <>
@@ -1157,7 +1179,7 @@ export function Home({
                     cursor: 'pointer',
                   }}
                 >
-                  {goalAdPending ? '준비 중…' : '변경 ›'}
+                  {goalAdPending ? '준비 중…' : goal > 0 ? '변경 ›' : '정하기 ›'}
                 </button>
               </div>
             </div>
@@ -1172,6 +1194,7 @@ export function Home({
                 // 이월이 꺼져 있으면 밀린 시간은 남은시간 합계에 안 들어간다 — 그때 이 줄을 그리면 합이 어긋난다.
                 debtSeconds={dashboard.carryover ? dashboard.carriedDebtSeconds : 0}
                 remainingSeconds={remaining}
+                carryover={dashboard.carryover}
               >
                 {/* 목표 손잡이는 위 「변경 ›」 알약이 가져갔다 — 같은 일을 하는 문이 한 상자에 둘이면
                     어느 쪽이 진짜인지 사용자가 고민한다.
