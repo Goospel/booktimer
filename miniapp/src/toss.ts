@@ -46,7 +46,8 @@ export const INTERSTITIAL_AD_GROUP_ID: string = import.meta.env.VITE_INTERSTITIA
 
 /**
  * 「책 성향 분석」(내 책방)에 띄우는 **리워드** 광고 그룹 ID — 부채 지우개와 포맷은 같지만 **다른 그룹**이다
- * (위 `REWARD_AD_GROUP_ID` 주석의 분리 이유). 콘솔 보상 표기도 그룹마다 달라 여기만 「성향 분석 사용권 1」이다.
+ * (위 `REWARD_AD_GROUP_ID` 주석의 분리 이유). 콘솔 보상 표기도 그룹마다 달라 여기만 「성향 분석 / 1」이다
+ * (부채 쪽은 「밀린 하루 지우기 / 1」 — 둘 다 콘솔 실측값이다).
  * 같은 config-gate: 빈 값이면 책방의 광고 버튼이 안 선다.
  */
 export const PERSONALITY_AD_GROUP_ID: string = import.meta.env.VITE_PERSONALITY_AD_GROUP_ID ?? '';
