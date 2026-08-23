@@ -56,7 +56,10 @@ vi.mock('./api', async (importOriginal) => ({
   selectPersonality: vi.fn(),
 }));
 vi.mock('./toss', () => ({
-  REWARD_AD_GROUP_ID: 'test-ad-group',
+  // 지면 분리 가드 — 책방이 쓰는 건 성향 그룹뿐이다. 부채 지우개 그룹을 빈 값으로 둬서, 책방이 그쪽으로
+  // 되돌아가면 config-gate(`adGroupId !== ''`)에 걸려 아래 광고 버튼 렌더 단언이 깨지게 한다.
+  REWARD_AD_GROUP_ID: '',
+  PERSONALITY_AD_GROUP_ID: 'test-ad-group',
   watchRewardAd: vi.fn(),
   GOAL_MET_TEMPLATE_CODE: 'test-template',
   notificationAgreementSupported: vi.fn(),
