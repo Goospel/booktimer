@@ -64,19 +64,29 @@ describe('겹침 게이트 (startToastVisible)', () => {
   const toast = { book: null, changed: false };
 
   it('토스트만 있으면 선다', () => {
-    expect(startToastVisible(toast, null, false)).toBe(true);
+    expect(startToastVisible(toast, null, false, 'library')).toBe(true);
   });
 
   it('토스트가 없으면 안 선다', () => {
-    expect(startToastVisible(null, null, false)).toBe(false);
+    expect(startToastVisible(null, null, false, 'library')).toBe(false);
   });
 
   it('액션 실패가 이긴다 — 실패는 토스트보다 새 사건이고 더 급하다', () => {
-    expect(startToastVisible(toast, '이미 진행 중인 측정이 있습니다', false)).toBe(false);
+    expect(startToastVisible(toast, '이미 진행 중인 측정이 있습니다', false, 'library')).toBe(false);
   });
 
   it('잠금 안내가 이긴다 — 방금 누른 탭에 대한 답이 먼저다', () => {
-    expect(startToastVisible(toast, null, true)).toBe(false);
+    expect(startToastVisible(toast, null, true, 'library')).toBe(false);
+  });
+
+  /**
+   * 홈 규칙이 <b>시작 시점이 아니라 매 렌더</b>에 있어야 하는 이유 — 토스트는 5초를 버티므로,
+   * 시작 시점 판정만으로는 그 사이 홈으로 건너간 사용자에게 중복이 그대로 따라온다.
+   * (목 모드 실측으로 드러난 자리: 서재에서 시작 → 홈 이동 → 토스트가 「읽는 중」 카드와 같은 말을 했다.)
+   */
+  it('홈에선 안 선다 — 「읽는 중」 카드가 이미 그 책을 말한다', () => {
+    expect(startToastVisible(toast, null, false, 'home')).toBe(false);
+    expect(startToastVisible(toast, null, false, 'library')).toBe(true);
   });
 });
 
@@ -170,6 +180,20 @@ describe('교체 시트 (ChangeBookSheet)', () => {
     expect(rowTag(markup, '데미안')).not.toContain('aria-current="true"');
   });
 
+  /**
+   * 교체는 네트워크를 탄다 — 응답 전에 다른 행을 또 누르면 요청이 겹쳐, 나중에 도착한 응답이 이기는
+   * 경합이 된다(사용자가 마지막에 고른 책과 다를 수 있다). 그 창을 막는 게 `disabled` 배선이다.
+   */
+  it('진행 중(disabled)이면 행이 잠긴다 — 연타하면 어느 책으로 바뀔지 사용자가 못 정한다', () => {
+    const markup = render(
+      <ChangeBookSheet books={books} currentBookId={1} disabled onPick={() => {}} onClose={() => {}} />,
+    );
+
+    for (const title of ['데미안', '사피엔스', '']) {
+      expect(rowTag(markup, title)).toContain('disabled=""');
+    }
+  });
+
   it('읽는 중인 책이 없어도 「책 없이」 행은 남는다 — 빈 시트는 닫는 것 말고 할 게 없다', () => {
     const markup = render(
       <ChangeBookSheet books={[]} currentBookId={null} disabled={false} onPick={() => {}} onClose={() => {}} />,
@@ -203,6 +227,27 @@ describe('배선 (MainTabs)', () => {
 
   it('교체 응답으로 화면을 갱신한다 — 재조회 없이 대시보드가 따라와야 「읽는 중」 카드가 안 어긋난다', () => {
     expect(code).toMatch(/changeActiveBook\([\s\S]{0,200}?onTimerChange\(/);
+  });
+
+  /**
+   * 교체 성공은 `changed: true`로 말해야 한다 — `false`면 「측정을 시작했어요」가 되어, 바꿨을 뿐인데
+   * <b>두 번 시작한 것처럼</b> 읽힌다. 문구 함수는 두 변형을 다 계측하지만 <b>호출부가 어느 쪽을 쓰는지</b>는
+   * 렌더로 관측할 수 없다(교체 성공 콜백에 정적 하니스가 못 닿는다).
+   */
+  it('교체 성공은 changed: true로 말한다 — false면 두 번 시작한 것처럼 읽힌다', () => {
+    expect(code).toMatch(/changeActiveBook\([\s\S]{0,320}?showStartToast\(\{[^}]*changed:\s*true/);
+  });
+
+  /**
+   * ⚠️ 교체 <b>실패</b>는 시트를 닫아야 보인다 — 에러 스트립은 탭바 층(z 100)인데 시트 패널은
+   * <b>z 201 불투명</b>이라, 열린 채로 두면 메시지가 통째로 가려지고 사용자는 무반응 화면을 보고 또 누른다.
+   * 409(방금 끝난 세션)·네트워크 오류 둘 다 이 경로다.
+   */
+  it('교체 실패가 시트를 닫는다 — 안 닫으면 에러가 불투명 패널 뒤에 숨는다', () => {
+    const at = code.indexOf('changeActiveBook(');
+    const body = code.slice(at, code.indexOf('.finally(', at));
+
+    expect(body).toMatch(/\.catch\([\s\S]{0,200}?setChanging\(false\)/);
   });
 
   /**

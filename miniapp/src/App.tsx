@@ -166,13 +166,18 @@ export function startToastMessage(toast: StartToastState): string {
  *
  * <p>우선순위 = 에러 &gt; 잠금 안내 &gt; 토스트. 뒤 둘은 <b>항상 토스트보다 새 사건</b>이다 —
  * 토스트는 5초를 버티는데 그동안 사용자가 한 다른 행동에 대한 답이 밀리면 안 된다.
+ *
+ * <p><b>홈에선 안 띄운다</b> — 「읽는 중」 카드가 이미 그 책을 표지째 말한다. 이 규칙이 시작 시점이
+ * 아니라 <b>여기</b>(매 렌더) 있는 이유: 토스트는 5초를 버티므로 그 사이 홈으로 건너가면 시작 시점
+ * 판정만으로는 중복이 그대로 따라온다(목 모드 실측으로 드러난 자리다).
  */
 export function startToastVisible(
   toast: StartToastState | null,
   actionError: string | null,
   lockHint: boolean,
+  tab: TabKey,
 ): toast is StartToastState {
-  return toast !== null && actionError === null && !lockHint;
+  return toast !== null && actionError === null && !lockHint && tab !== 'home';
 }
 
 /**
@@ -1062,9 +1067,9 @@ export function MainTabs({
       setCelebrate(false); // 지난 세션의 축하가 새 측정 화면에 남아 있으면 거짓말이 된다.
       onStartTimer()
         .then((timer) => {
-          // 홈에선 안 띄운다 — 「읽는 중」 카드가 이미 그 책을 표지째 말하고 있어 중복이다.
           // 책은 서버가 확정한 값을 쓴다(`?? null`은 이 필드를 안 주는 옛 서버 방어 — api.ts의 기존 규약).
-          if (tab !== 'home') showStartToast({ book: timer.activeBook ?? null, changed: false });
+          // 「홈에선 안 띄운다」 판정은 여기가 아니라 렌더 게이트가 든다(토스트가 5초를 버티므로).
+          showStartToast({ book: timer.activeBook ?? null, changed: false });
         })
         .catch(fail)
         .finally(() => setBusy(false));
@@ -1094,7 +1099,14 @@ export function MainTabs({
         // 시작이 아니라 교체를 확인한다 — 같은 문구면 두 번 시작한 것처럼 읽힌다.
         showStartToast({ book: timer.activeBook ?? null, changed: true });
       })
-      .catch(fail)
+      .catch((e) => {
+        // ⚠️ 실패해도 시트를 닫는다. 에러 스트립은 탭바 층(z 100)인데 시트 패널은 z 201 **불투명**이라,
+        //    시트를 연 채로 두면 메시지가 통째로 가려진다 — 사용자는 눌렀는데 아무 일도 안 일어나는
+        //    화면을 보고 또 누른다(목 모드 실측: 스트립 좌표의 elementFromPoint가 시트의 책 행이었다).
+        //    409(방금 끝난 세션)·네트워크 오류 둘 다 이 경로로 온다.
+        setChanging(false);
+        fail(e);
+      })
       .finally(() => setBusy(false));
   };
 
@@ -1205,7 +1217,7 @@ export function MainTabs({
       )}
 
       {/* 시작 토스트 — 위 두 스트립과 같은 좌표라 게이트가 한 장만 세운다(우선순위: 에러 > 잠금 > 토스트). */}
-      {startToastVisible(startToast, actionError, lockHint) && (
+      {startToastVisible(startToast, actionError, lockHint, tab) && (
         <StartToast
           toast={startToast}
           onChange={() => {
@@ -1380,16 +1392,21 @@ export function TabBarCoachmark({
   );
 }
 
-/** 토스트·시트가 함께 쓰는 미니 표지 — 책이 없으면 점선 빈 칸(「책 없이」의 시각 언어). */
-function MiniCover({ book, width, height }: { book: BookOption | null; width: number; height: number }) {
+/**
+ * 토스트·시트가 함께 쓰는 미니 표지 — 책이 없으면 점선 빈 칸(「책 없이」의 시각 언어).
+ *
+ * <p>높이·radius를 프롭으로 받지 않고 {@link CoverInitial}과 <b>같은 식으로 파생</b>한다. 둘이 한 행에
+ * 나란히 서므로 값이 갈리면 그 행만 어긋나는데, 프롭으로 받으면 width만 바꾼 다음 사람이 그걸 모른다.
+ */
+function MiniCover({ book, width }: { book: BookOption | null; width: number }) {
   if (book === null) {
     return (
       <span
         style={{
           flex: 'none',
           width,
-          height,
-          borderRadius: 3,
+          height: Math.round(width * 1.4),
+          borderRadius: 4,
           border: '1.5px dashed #B8B29F',
           boxSizing: 'border-box',
         }}
@@ -1443,7 +1460,7 @@ export function StartToast({ toast, onChange }: { toast: StartToastState; onChan
         boxShadow: '0 4px 16px rgba(0, 0, 0, 0.14)',
       }}
     >
-      <MiniCover book={toast.book} width={26} height={36} />
+      <MiniCover book={toast.book} width={26} />
       <span style={{ flex: 1, minWidth: 0, fontSize: 14, lineHeight: 1.5, wordBreak: 'keep-all' }}>
         {quoted !== null && <span style={{ ...SERIF_VALUE, fontWeight: 700 }}>{quoted}</span>}
         {rest}
@@ -1517,7 +1534,7 @@ export function ChangeBookSheet({
           cursor: 'pointer',
         }}
       >
-        <MiniCover book={book} width={30} height={42} />
+        <MiniCover book={book} width={30} />
         <span
           style={{
             flex: 1,

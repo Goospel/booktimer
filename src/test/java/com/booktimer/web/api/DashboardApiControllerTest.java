@@ -414,7 +414,10 @@ class DashboardApiControllerTest {
                         .content("{\"bookId\":" + target.getId() + "}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.hasActiveSession").value(true))
-                .andExpect(jsonPath("$.activeBookTitle").value("바꾼 책"));
+                .andExpect(jsonPath("$.activeBookTitle").value("바꾼 책"))
+                // 미니앱 토스트·시트가 실제로 읽는 건 제목 한 줄이 아니라 이 객체다(표지를 그려야 한다).
+                .andExpect(jsonPath("$.activeBook.id").value(target.getId().intValue()))
+                .andExpect(jsonPath("$.activeBook.title").value("바꾼 책"));
 
         ReadingSession reloaded = sessionRepository.findById(s.getId()).orElseThrow();
         assertThat(reloaded.getBook().getId()).isEqualTo(target.getId());
@@ -435,7 +438,8 @@ class DashboardApiControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"bookId\":null}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.activeBookTitle").doesNotExist());
+                .andExpect(jsonPath("$.activeBookTitle").doesNotExist())
+                .andExpect(jsonPath("$.activeBook").doesNotExist());
 
         assertThat(sessionRepository.findById(s.getId()).orElseThrow().getBook()).isNull();
     }
@@ -452,7 +456,8 @@ class DashboardApiControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"bookId\":" + target.getId() + "}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.activeBookTitle").value("고른 책"));
+                .andExpect(jsonPath("$.activeBookTitle").value("고른 책"))
+                .andExpect(jsonPath("$.activeBook.id").value(target.getId().intValue()));
 
         assertThat(sessionRepository.findById(s.getId()).orElseThrow().getBook().getId())
                 .isEqualTo(target.getId());
