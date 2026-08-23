@@ -395,6 +395,115 @@ class DashboardApiControllerTest {
                 .andExpect(status().isConflict());
     }
 
+    // ── 8d-2. 진행 중 대상 교체 엔드포인트 (미니앱 「바꾸기」 시트) ──────────────
+    //
+    // 경로에 세션 id가 없다 — TimerState가 그 값을 안 싣고(stop 응답에만 있다) 진행 중 세션은
+    // 사용자당 최대 하나라, "내 진행 중 세션"으로 지목하는 편이 id를 새로 노출하는 것보다 작다.
+
+    @Test
+    @DisplayName("POST /api/sessions/active/book: 진행 중 세션의 책을 바꾸고 갱신된 TimerState를 돌려준다")
+    void changeActiveBook_replacesBookAndReturnsTimerState() throws Exception {
+        User u = register("chg@a.com", "chg");
+        Book before = addBook(u, "기존 책", BookStatus.READING);
+        Book after = addBook(u, "바꾼 책", BookStatus.WANT_TO_READ);
+        ReadingSession s = sessionService.start(u, clock.instant(), before);
+
+        mockMvc.perform(post("/api/sessions/active/book")
+                        .with(user("chg@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + after.getId() + "}"))
+                .andExpect(status().isOk())
+                // 응답만으로 홈 히어로가 갱신돼야 한다 — 재조회를 시키면 그만큼 옛 책이 화면에 남는다.
+                .andExpect(jsonPath("$.activeBook.id").value(after.getId().intValue()))
+                .andExpect(jsonPath("$.activeBookTitle").value("바꾼 책"))
+                .andExpect(jsonPath("$.hasActiveSession").value(true));
+
+        assertThat(sessionRepository.findById(s.getId()).orElseThrow().getBook().getId())
+                .isEqualTo(after.getId());
+        // 새 책은 시작·태깅과 같은 시맨틱으로 읽는중이 된다.
+        assertThat(bookRepository.findById(after.getId()).orElseThrow().getStatus())
+                .isEqualTo(BookStatus.READING);
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/active/book: bookId=null이면 「책 없이」로 되돌린다 — 세션은 계속 진행 중")
+    void changeActiveBook_nullClearsBook() throws Exception {
+        User u = register("chgnull@a.com", "chgnull");
+        Book before = addBook(u, "기존 책", BookStatus.READING);
+        ReadingSession s = sessionService.start(u, clock.instant(), before);
+
+        mockMvc.perform(post("/api/sessions/active/book")
+                        .with(user("chgnull@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":null}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activeBook").doesNotExist())
+                .andExpect(jsonPath("$.hasActiveSession").value(true));
+
+        assertThat(sessionRepository.findById(s.getId()).orElseThrow().getBook()).isNull();
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/active/book: bookId 필드가 아예 없어도 「책 없이」다 — 옛 클라 500 방지(T-204)")
+    void changeActiveBook_missingBookIdField_treatedAsNull() throws Exception {
+        // Jackson 3은 FAIL_ON_NULL_FOR_PRIMITIVES가 기본 켜짐이라, 요청 record의 선택 필드는
+        // 래퍼 타입이어야 "필드 부재"가 500이 아니라 null로 온다.
+        User u = register("chgmiss@a.com", "chgmiss");
+        Book before = addBook(u, "기존 책", BookStatus.READING);
+        sessionService.start(u, clock.instant(), before);
+
+        mockMvc.perform(post("/api/sessions/active/book")
+                        .with(user("chgmiss@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activeBook").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/active/book: 남의 책으로 바꾸면 404 (IDOR)")
+    void changeActiveBook_othersBook_404() throws Exception {
+        User alice = register("chgalice@a.com", "chgalice");
+        User bob = register("chgbob@a.com", "chgbob");
+        Book aliceBook = addBook(alice, "앨리스책", BookStatus.READING);
+        sessionService.start(bob, clock.instant(), null);
+
+        mockMvc.perform(post("/api/sessions/active/book")
+                        .with(user("chgbob@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + aliceBook.getId() + "}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/active/book: 진행 중 측정이 없으면 409 — 끝난 기록을 이 문으로 못 고친다")
+    void changeActiveBook_noActiveSession_409() throws Exception {
+        User u = register("chgnone@a.com", "chgnone");
+        Book book = addBook(u, "책", BookStatus.READING);
+        sessionService.start(u, clock.instant(), null);
+        sessionService.stop(u, clock.instant()); // 진행 중 세션 없음
+
+        mockMvc.perform(post("/api/sessions/active/book")
+                        .with(user("chgnone@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + book.getId() + "}"))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/active/book: CSRF 없으면 403 — 다른 뮤테이션과 같은 경계")
+    void changeActiveBook_withoutCsrf_403() throws Exception {
+        User u = register("chgcsrf@a.com", "chgcsrf");
+        Book book = addBook(u, "책", BookStatus.READING);
+        sessionService.start(u, clock.instant(), null);
+
+        mockMvc.perform(post("/api/sessions/active/book")
+                        .with(user("chgcsrf@a.com"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + book.getId() + "}"))
+                .andExpect(status().isForbidden());
+    }
+
     // ── 8e. wantToReadBooks 노출 (태깅 시트용) ────────────────────────────────
 
     @Test

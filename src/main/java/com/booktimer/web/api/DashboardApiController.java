@@ -146,6 +146,36 @@ public class DashboardApiController {
     }
 
     /**
+     * 진행 중 측정의 <b>대상 책 교체</b> — 미니앱이 다른 탭에서 시작한 뒤 띄우는 토스트의 「바꾸기」.
+     *
+     * <p><b>경로에 세션 id가 없다.</b> {@link TimerState}가 그 값을 안 실어 클라이언트가 지목할 수단이
+     * 없고, 진행 중 세션은 사용자당 최대 하나라 "내 진행 중 세션"이면 충분하다 — id를 새로 노출하는 것보다
+     * 계약이 작다. 소유 경계는 서비스의 진행 중 세션 조회가 곧 보장한다(남의 세션엔 닿지 않음).
+     *
+     * <p>{@code bookId}는 선택이다({@code null}이면 「책 없이」로 되돌린다) — {@code tag-book}이 null을
+     * 거부하는 것과 갈리는 지점이다. 있는데 소유 아님/미존재면 404(IDOR 마스킹, {@code start}와 같은 경계).
+     * ⚠️ 래퍼 {@code Long}인 이유: Jackson 3은 {@code FAIL_ON_NULL_FOR_PRIMITIVES}가 기본 켜짐이라
+     * 프리미티브로 두면 <b>필드를 안 보내는 옛 클라이언트가 통째로 500</b>이 된다(T-204).
+     */
+    @PostMapping("/api/sessions/active/book")
+    public ResponseEntity<TimerState> changeActiveBook(@RequestBody ChangeActiveBookRequest req,
+                                                       Principal principal) {
+        User user = currentUserService.resolve(principal);
+        Book book = null;
+        if (req.bookId() != null) {
+            book = bookRepository.findByIdAndUser(req.bookId(), user)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "책을 찾을 수 없습니다"));
+        }
+        try {
+            sessionService.changeActiveBook(user, book);
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "진행 중인 측정이 없습니다");
+        }
+        // 갱신된 TimerState를 그대로 돌려준다 — 재조회를 시키면 그만큼 옛 책이 화면에 남는다.
+        return ResponseEntity.ok(buildTimerState(user));
+    }
+
+    /**
      * 종료 후 태깅 — 책 없이 측정한 세션에 나중에 책을 연결한다(발견 1).
      *
      * <p>IDOR 이중 방어: 책은 {@code findByIdAndUser}로 소유 검증(남의 책이면 404), 세션은 서비스가
@@ -238,6 +268,14 @@ public class DashboardApiController {
                                TimerState timer, ContributionGraphDto graph) {}
 
     public record TagBookRequest(Long bookId) {}
+
+    /**
+     * 진행 중 대상 교체 요청 — {@code bookId}가 {@code null}이거나 필드 자체가 없으면 「책 없이」다.
+     *
+     * <p>⚠️ 래퍼 {@code Long}이어야 한다(T-204) — Jackson 3의 {@code FAIL_ON_NULL_FOR_PRIMITIVES} 기본
+     * 활성 때문에 프리미티브면 필드 부재가 500이 된다.
+     */
+    public record ChangeActiveBookRequest(Long bookId) {}
 
     /** tag-book 응답 — 어느 세션에 어떤 책을 붙였는지 확인용. */
     public record TagBookResponse(Long sessionId, String bookTitle) {}

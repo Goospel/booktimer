@@ -807,6 +807,13 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     const book = books.find((b) => b.id === body.bookId);
     return { sessionId: id, bookTitle: book?.title ?? '알 수 없는 책' };
   }],
+  // 진행 중 대상 교체 — 서버처럼 **갱신된 TimerState를 돌려준다**(홈 히어로가 재조회 없이 새 책을 말한다).
+  // 시작 시각은 건드리지 않는다: "지금까지 잰 시간은 바꾼 책에 붙는다"가 이 기능의 약속이라,
+  // 목이 시각을 리셋해 버리면 그 약속이 깨진 것을 목 모드에서 영영 못 본다.
+  ['POST', /^\/api\/sessions\/active\/book$/, ({ body }) => {
+    state.activeBookId = (body.bookId as number | null) ?? null;
+    return timerState();
+  }],
 
   ['POST', /^\/api\/miniapp\/goal$/, ({ body }) => {
     state.goalSeconds = body.dailyIncrementSeconds as number;

@@ -398,4 +398,81 @@ class ReadingSessionServiceTest {
                 .isInstanceOf(IllegalStateException.class);
         verify(sessionRepository, never()).save(any(ReadingSession.class));
     }
+
+    // --- changeActiveBook (진행 중 대상 교체 — 미니앱 「바꾸기」 시트) ---
+    //
+    // 세션 id를 안 받는다. 클라이언트에 그 값이 없기 때문이다 — TimerState는 세션 id를 안 싣고
+    // (stop 응답에만 있다) 진행 중 세션은 사용자당 최대 하나라, "그 사용자의 진행 중 세션"으로
+    // 지목하는 편이 id를 새로 노출하는 것보다 작다.
+
+    @Test
+    @DisplayName("changeActiveBook: 진행 중 세션을 찾아 책을 바꾸고 저장한다")
+    void changeActiveBook_replacesBookAndSaves() {
+        Book before = Book.register(user, "기존 책", null, null, null, null, null, BookStatus.READING);
+        Book after = Book.register(user, "바꾼 책", null, null, null, null, null, BookStatus.READING);
+        ReadingSession session = ReadingSession.start(user, T0, before);
+        when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(session));
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        ReadingSession result = service.changeActiveBook(user, after);
+
+        assertThat(result.getBook()).isSameAs(after);
+        verify(sessionRepository).save(session);
+    }
+
+    @Test
+    @DisplayName("changeActiveBook: null이면 「책 없이」로 되돌린다 — 책 조회·저장은 일어나지 않는다")
+    void changeActiveBook_nullClearsBookWithoutTouchingBookRepository() {
+        Book before = Book.register(user, "기존 책", null, null, null, null, null, BookStatus.READING);
+        ReadingSession session = ReadingSession.start(user, T0, before);
+        when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(session));
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        ReadingSession result = service.changeActiveBook(user, null);
+
+        assertThat(result.getBook()).isNull();
+        verify(sessionRepository).save(session);
+        verify(bookRepository, never()).save(any(Book.class));
+    }
+
+    @Test
+    @DisplayName("changeActiveBook: 읽고싶음 책으로 바꾸면 읽는중으로 자동 전환한다(측정 시작·태깅과 동일 시맨틱)")
+    void changeActiveBook_withWantToReadBook_marksReading() {
+        ReadingSession session = ReadingSession.start(user, T0);
+        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.WANT_TO_READ);
+        when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(session));
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        service.changeActiveBook(user, book);
+
+        assertThat(book.getStatus()).isEqualTo(BookStatus.READING);
+        verify(bookRepository).save(book);
+    }
+
+    @Test
+    @DisplayName("changeActiveBook: 옛 책의 상태는 건드리지 않는다 — 그 책이 읽는중이 된 출처가 이 세션이라는 보장이 없다")
+    void changeActiveBook_leavesPreviousBookStatusAlone() {
+        Book before = Book.register(user, "기존 책", null, null, null, null, null, BookStatus.READING);
+        Book after = Book.register(user, "바꾼 책", null, null, null, null, null, BookStatus.READING);
+        ReadingSession session = ReadingSession.start(user, T0, before);
+        when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(session));
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        service.changeActiveBook(user, after);
+
+        // 되돌리면 다른 세션·수동 기록·사용자 조작이 만든 상태를 남의 이유로 뒤집는다.
+        assertThat(before.getStatus()).isEqualTo(BookStatus.READING);
+        verify(bookRepository, never()).save(before);
+    }
+
+    @Test
+    @DisplayName("changeActiveBook: 진행 중 세션이 없으면 거부한다(IllegalStateException, 저장 없음)")
+    void changeActiveBook_noActiveSession_throwsAndDoesNotSave() {
+        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
+        when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.changeActiveBook(user, book))
+                .isInstanceOf(IllegalStateException.class);
+        verify(sessionRepository, never()).save(any(ReadingSession.class));
+    }
 }

@@ -165,6 +165,27 @@ public class ReadingSession extends BaseTimeEntity {
         this.book = book;
     }
 
+    /**
+     * <b>진행 중</b> 세션의 측정 대상 책을 바꾼다 — 미니앱 시작 토스트의 「바꾸기」가 지나는 문.
+     *
+     * <p>{@link #tagBook}과 규칙이 정반대라 한 메서드로 합칠 수 없다. 태깅은 "빈 자리를 채우는" 것이라
+     * 책이 이미 있으면 거부하고 {@code null}도 거부하지만, 이쪽은 "라벨을 바꾸는" 것이라 책이 있어도 되고
+     * {@code null}이 유효한 목적지다(「책 없이」로 되돌리기). 대신 <b>진행 중일 때만</b> 연다 — 끝난 기록의
+     * 책을 조용히 고치는 경로를 만들지 않는다.
+     *
+     * <p>잰 시간은 세션이 들고 책은 라벨일 뿐이라, 교체가 {@code startedAt}·{@code durationSeconds}를
+     * 건드리지 않는다(그래서 "지금까지 잰 시간이 바꾼 책에 붙는다"가 공짜로 성립한다).
+     *
+     * @param book 새 측정 대상({@code null}이면 「책 없이」)
+     * @throws IllegalStateException 이미 종료된 세션인 경우
+     */
+    public void changeBook(Book book) {
+        if (!isActive()) {
+            throw new IllegalStateException("cannot change the book of an ended session");
+        }
+        this.book = book;
+    }
+
     public boolean isActive() {
         return endedAt == null;
     }

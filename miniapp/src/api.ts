@@ -404,6 +404,17 @@ export const stopSession = (): Promise<StopResponse> => request('/api/sessions/s
 export const tagBook = (sessionId: number, bookId: number): Promise<{ sessionId: number; bookTitle: string }> =>
   request(`/api/sessions/${sessionId}/tag-book`, { body: { bookId } });
 
+/**
+ * 진행 중 측정의 대상 책 교체 — 시작 토스트의 「바꾸기」.
+ *
+ * <p>경로에 세션 id가 없다: `TimerState`가 그 값을 안 실어 클라이언트가 지목할 수단이 없고, 진행 중
+ * 세션은 사용자당 최대 하나라 「내 진행 중 세션」이면 충분하다. `bookId: null`이면 「책 없이」로
+ * 되돌린다(`tagBook`이 null을 거부하는 것과 갈리는 지점 — 그건 붙이기고 이건 바꾸기다).
+ */
+export const changeActiveBook = (bookId: number | null): Promise<TimerState> =>
+  request('/api/sessions/active/book', { body: { bookId } });
+
+
 export const setGoal = (dailyIncrementSeconds: number): Promise<void> =>
   request('/api/miniapp/goal', { body: { dailyIncrementSeconds } });
 

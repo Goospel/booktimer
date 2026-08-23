@@ -159,4 +159,66 @@ class ReadingSessionTest {
         assertThatThrownBy(() -> session.tagBook(null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    // --- changeBook (진행 중 대상 교체 — 미니앱 「바꾸기」 시트) ---
+    //
+    // tagBook과 일부러 나눠 둔다. tagBook의 주석이 그 경계를 이미 적어 뒀다("측정 시작 시 고른 책을
+    // 사후에 바꾸는 건 다른 관심사"). 규칙이 정반대라 한 메서드로 합칠 수 없다 —
+    // tagBook은 "책이 없어야" 하고 null을 거부하지만, changeBook은 "책이 있어도" 되고 null이 유효한
+    // 목적지다(「책 없이」로 되돌리기). 대신 changeBook은 진행 중일 때만 연다.
+
+    @Test
+    @DisplayName("changeBook: 진행 중 세션의 책을 다른 책으로 바꾼다")
+    void changeBook_replacesBookOfActiveSession() {
+        User user = sampleUser();
+        Book before = Book.register(user, "기존 책", null, null, null, null, null, BookStatus.READING);
+        Book after = Book.register(user, "바꾼 책", null, null, null, null, null, BookStatus.READING);
+        ReadingSession session = ReadingSession.start(user, T0, before);
+
+        session.changeBook(after);
+
+        assertThat(session.getBook()).isSameAs(after);
+        // 잰 시간은 세션이 들고 있고 책은 라벨일 뿐이라, 교체가 시작 시각을 건드리면 안 된다
+        // (시트 부제가 "지금까지 잰 시간은 바꾼 책에 붙어요"라고 약속한다).
+        assertThat(session.getStartedAt()).isEqualTo(T0);
+        assertThat(session.isActive()).isTrue();
+    }
+
+    @Test
+    @DisplayName("changeBook: null이면 「책 없이」로 되돌린다 — tagBook과 갈리는 지점")
+    void changeBook_nullClearsBook() {
+        User user = sampleUser();
+        Book before = Book.register(user, "기존 책", null, null, null, null, null, BookStatus.READING);
+        ReadingSession session = ReadingSession.start(user, T0, before);
+
+        session.changeBook(null);
+
+        assertThat(session.getBook()).isNull();
+    }
+
+    @Test
+    @DisplayName("changeBook: 책 없이 시작한 세션에도 붙는다")
+    void changeBook_setsBookOnUntaggedActiveSession() {
+        User user = sampleUser();
+        ReadingSession session = ReadingSession.start(user, T0); // book=null
+        Book book = Book.register(user, "고른 책", null, null, null, null, null, BookStatus.READING);
+
+        session.changeBook(book);
+
+        assertThat(session.getBook()).isSameAs(book);
+    }
+
+    @Test
+    @DisplayName("changeBook: 이미 끝난 세션은 못 바꾼다 — 지난 기록을 조용히 고치는 문을 열지 않는다")
+    void changeBook_endedSession_throws() {
+        User user = sampleUser();
+        Book original = Book.register(user, "그때 읽던 책", null, null, null, null, null, BookStatus.READING);
+        ReadingSession session = ReadingSession.start(user, T0, original);
+        session.end(T0.plusSeconds(1800));
+        Book other = Book.register(user, "다른 책", null, null, null, null, null, BookStatus.READING);
+
+        assertThatThrownBy(() -> session.changeBook(other))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(session.getBook()).isSameAs(original); // 원래 책 보존
+    }
 }

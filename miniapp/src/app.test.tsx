@@ -6,9 +6,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   App,
   BottomTabBar,
+  ChangeBookSheet,
   MainTabs,
   MarginShell,
   REFRESH_THROTTLE_MS,
+  START_TOAST_MS,
+  StartToast,
   TAB_BAR_HEIGHT,
   TAB_BAR_MARGIN,
   TAB_BAR_Z_INDEX,
@@ -908,5 +911,154 @@ describe('여백 위의 탭바 (MarginShell)', () => {
     for (const screen of ['<StoryComposer', '<BookMargin', '<BookMarginAll']) {
       expect(src).toContain(screen);
     }
+  });
+});
+
+/**
+ * 측정 시작 토스트 — <b>다른 탭에서 시작하면 무슨 책인지 화면 어디에도 없다</b>(감사 3f).
+ *
+ * <p>가운데 ▶는 `timerStartBookId`(홈 캐러셀 선택)로 시작하는데, 그 탭엔 표지도 제목도 없다.
+ * 게다가 측정 중엔 탭 이동이 잠겨(`locked`) 확인하러 홈에 갈 수도 없다 — 무엇을 재고 있는지 모른 채
+ * 측정이 도는 상태다. 그래서 시작 직후 그 자리에서 말하고, 틀렸으면 그 자리에서 고치게 한다.
+ *
+ * <p>하니스가 정적 렌더라 「시작 성공 후」 상태엔 도달할 수 없다(effect·비동기가 안 돈다) — 그래서
+ * 부품을 따로 export해 직접 렌더한다(`BookSheet`가 쓰는 바로 그 수법). 배선은 아래 소스 단언이 본다.
+ */
+describe('측정 시작 토스트', () => {
+  const book: BookOption = { id: 7, title: '미움받을 용기', coverUrl: null, author: '기시미 이치로', isPublic: false };
+
+  function toast(target: BookOption | null): string {
+    return renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <StartToast book={target} onChange={() => {}} />
+      </TDSMobileProvider>,
+    );
+  }
+
+  it('무슨 책으로 시작했는지 제목으로 말한다', () => {
+    expect(toast(book)).toContain('미움받을 용기');
+  });
+
+  it('책 없이 시작이면 그렇게 말한다 — 「제목이 빈 토스트」로 흘리지 않는다', () => {
+    const markup = toast(null);
+
+    expect(markup).toContain('책 없이');
+    expect(markup).toContain('측정을 시작했어요');
+  });
+
+  it('그 자리에 「바꾸기」 손잡이가 선다 — 말만 하고 못 고치면 잠긴 탭에서 할 수 있는 게 없다', () => {
+    expect(toast(book)).toContain('바꾸기');
+  });
+
+  it('애니메이션을 걸지 않는다 — 값이 변하는 그림자·전환은 실기기 페인트를 무너뜨린다(T-176)', () => {
+    const markup = toast(book);
+
+    expect(markup).not.toContain('animation');
+    expect(markup).not.toContain('transition');
+  });
+
+  it('실패 스트립·잠금 힌트와 같은 자리에 선다 — 탭바 위 한 자리를 셋이 나눠 쓴다', () => {
+    expect(toast(book)).toContain(`${TAB_BAR_HEIGHT}px`);
+  });
+
+  it('스스로 사라진다 — 남아 있으면 다음 탭 조작을 가린다', () => {
+    // 값 자체를 못 박는다(시안 5초). 배선은 아래 소스 단언이 본다.
+    expect(START_TOAST_MS).toBe(5000);
+  });
+});
+
+/**
+ * 바꾸기 시트 — 진행 중 측정의 대상을 그 자리에서 교체한다.
+ *
+ * <p>종료 후 태깅 시트(`BookSheet`)와 <b>겹쳐 보이지만 규칙이 반대다</b>: 그쪽은 끝난 세션의 빈 자리를
+ * 채우는 것이라 「책 없이」가 목적지일 수 없고, 이쪽은 진행 중 라벨을 바꾸는 것이라 「책 없이」로
+ * 되돌리는 것도 유효한 선택이다. 한때 `BookSheet`가 이중 모드였다가 일부러 하나로 좁힌 자리라
+ * (`Home.tsx`), 다시 합치지 않고 부품을 따로 둔다.
+ */
+describe('바꾸기 시트', () => {
+  const books: BookOption[] = [
+    { id: 1, title: '미움받을 용기', coverUrl: null, author: null, isPublic: false },
+    { id: 2, title: '데미안', coverUrl: null, author: null, isPublic: false },
+  ];
+
+  function sheet(current: number | null): string {
+    return renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <ChangeBookSheet books={books} current={current} disabled={false} onPick={() => {}} onClose={() => {}} />
+      </TDSMobileProvider>,
+    );
+  }
+
+  it('읽는 책 전부에 「책 없이」 한 줄을 더해 고르게 한다', () => {
+    const rows = sheet(1).match(/data-change-row/g);
+
+    // 책 2권 + 「책 없이」 = 3. 「책 없이」가 빠지면 한번 고른 책을 되돌릴 길이 없다.
+    expect(rows).toHaveLength(3);
+  });
+
+  it('지금 재는 책을 표시한다 — 무엇을 바꾸는 중인지 모르면 고르는 게 도박이 된다', () => {
+    const markup = sheet(2);
+
+    expect(markup.match(/aria-current="true"/g)).toHaveLength(1);
+    // 그 표시가 **맞는 행**에 붙었는지까지 본다 — 개수만 세면 엉뚱한 행에 붙어도 통과한다.
+    expect(markup).toMatch(/data-change-row[^>]*data-book-id="2"[^>]*aria-current="true"/);
+  });
+
+  it('책 없이 재는 중이면 그 줄이 현재 행이다', () => {
+    expect(sheet(null)).toMatch(/data-change-row[^>]*data-book-id=""[^>]*aria-current="true"/);
+  });
+
+  it('측정이 멈추지 않는다고 먼저 말한다 — 시트를 여는 손이 가장 무서워하는 것이 그거다', () => {
+    const markup = sheet(1);
+
+    expect(markup).toContain('측정은 멈추지 않아요');
+    expect(markup).toContain('바꾼 책');
+  });
+
+  /**
+   * 제목은 왼쪽에서 시작한다 — 정렬을 <b>행 버튼</b>이 들어야 한다(T-198).
+   *
+   * <p>TDS `Text`에 `textAlign`을 주면 DOM에 도달조차 못 하고 걸러진다. 그러면 라벨이 `<button>`의 UA
+   * 기본 `center`를 물려받아 가운데로 선다 — 목 모드에서 실제로 그렇게 렌더됐다(`labelTextAlign: center`).
+   *
+   * <p>이 단언이 성립하는 이유는 행이 <b>맨 `<button>`</b>이라서다: TDS를 안 거치므로 인라인 스타일이
+   * 마크업에 그대로 찍힌다. Text 쪽에 준 값은 찍히지도 않아 애초에 단언할 대상이 없다(그래서 그 자리를
+   * 계측하려던 시도는 항상 통과하는 공허한 테스트가 된다).
+   */
+  it('행 라벨이 왼쪽에서 시작한다 — TDS Text가 정렬을 삼키므로 버튼이 든다', () => {
+    const rows = sheet(1).match(/<button[^>]*data-change-row[^>]*>/g) ?? [];
+
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      expect(row).toContain('text-align:left');
+    }
+  });
+});
+
+/**
+ * 배선 — 부품이 옳아도 <b>App이 그 둘을 잇지 않으면</b> 아무 일도 안 일어난다.
+ *
+ * <p>#936 리뷰가 정확히 이 구멍을 잡았다(술어와 상자는 각각 계측되는데 그 사이를 아무도 안 봤다).
+ * 정적 렌더로는 시작 성공 후 상태에 못 가므로 소스를 읽어 계측한다 — 주석을 먼저 걷는다(T-203).
+ */
+describe('토스트·시트 배선', () => {
+  const src = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*/g, '');
+
+  it('MainTabs가 토스트와 시트를 실제로 그린다', () => {
+    expect(src).toContain('<StartToast');
+    expect(src).toContain('<ChangeBookSheet');
+  });
+
+  it('시작 성공 경로에서 토스트를 켠다 — 실패했는데 「시작했어요」가 뜨면 거짓말이다', () => {
+    // onStartTimer().then(...) 안에서 켜야 한다. catch 뒤에 켜면 실패에도 뜬다.
+    expect(src).toMatch(/onStartTimer\(\)[\s\S]{0,200}?\.then\([\s\S]{0,200}?setToast/);
+  });
+
+  it('고른 책을 서버에 실제로 보낸다 — 화면만 바뀌고 세션은 옛 책인 상태를 만들지 않는다', () => {
+    expect(src).toContain('changeActiveBook(');
+    // 응답 TimerState를 반영해야 홈 히어로가 재조회 없이 새 책을 말한다.
+    expect(src).toMatch(/changeActiveBook\([\s\S]{0,200}?onTimerChange/);
   });
 });

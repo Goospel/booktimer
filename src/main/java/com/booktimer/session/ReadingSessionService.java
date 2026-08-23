@@ -174,4 +174,30 @@ public class ReadingSessionService {
         }
         return sessionRepository.save(session);
     }
+
+    /**
+     * <b>진행 중 세션의 측정 대상을 바꾼다</b> — 미니앱이 다른 탭에서 측정을 시작한 뒤 "무슨 책으로
+     * 재고 있는지"를 토스트로 말하고 그 자리에서 고치게 하는 경로다.
+     *
+     * <p><b>세션 id를 안 받는다.</b> 클라이언트에 그 값이 없기 때문이다 — {@code TimerState}는 세션 id를
+     * 싣지 않고(종료 응답에만 있다) 진행 중 세션은 사용자당 최대 하나라, "그 사용자의 진행 중 세션"으로
+     * 지목하는 편이 id를 새로 노출하는 것보다 작다. 소유 경계도 이 조회가 곧 보장한다(남의 세션엔 닿지 않음).
+     *
+     * <p>새 책이 "읽고싶음"이면 {@code start}·{@code tagBook}과 동일하게 "읽는중"으로 전환한다(시작 시각은
+     * 그 세션이 시작된 때). <b>옛 책의 상태는 되돌리지 않는다</b> — 그 책이 "읽는중"이 된 출처가 이 세션
+     * 하나라는 보장이 없어(다른 세션·수동 기록·사용자 조작), 되돌리면 남의 이유로 만든 상태를 뒤집는다.
+     *
+     * @param book 새 측정 대상(선택 — {@code null}이면 「책 없이」. 소유 검증은 호출부가 마친 뒤 넘긴다)
+     * @return 대상이 바뀐 진행 중 세션
+     * @throws IllegalStateException 진행 중 세션이 없는 경우(컨트롤러가 409로)
+     */
+    public ReadingSession changeActiveBook(User user, Book book) {
+        ReadingSession session = sessionRepository.findByUserAndEndedAtIsNull(user)
+                .orElseThrow(() -> new IllegalStateException("no active session"));
+        session.changeBook(book);
+        if (book != null && book.startReading(session.getStartedAt())) {
+            bookRepository.save(book);
+        }
+        return sessionRepository.save(session);
+    }
 }
