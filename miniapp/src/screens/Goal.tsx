@@ -1,9 +1,9 @@
-import { Button, Text, Wheel } from '@toss/tds-mobile';
+import { Button, Wheel } from '@toss/tds-mobile';
 import { useState } from 'react';
 
 import { setGoal } from '../api';
 import { formatDuration } from '../format';
-import { ErrorMessage, Screen } from '../ui';
+import { ErrorMessage, Screen, Text } from '../ui';
 
 /** 휠 시간 열의 상한 — 하루 독서 목표로 12시간이면 넘치고, 더 길면 휠만 길어져 고르기 힘들다. */
 const MAX_HOURS = 12;

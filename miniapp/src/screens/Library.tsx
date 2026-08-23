@@ -1,4 +1,4 @@
-import { Button, Text } from '@toss/tds-mobile';
+import { Button } from '@toss/tds-mobile';
 import type { CSSProperties } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -26,6 +26,7 @@ import {
   SearchField,
   SectionTitle,
   Sheet,
+  Text,
   sectionStyle,
 } from '../ui';
 import { openExternal } from '../toss';

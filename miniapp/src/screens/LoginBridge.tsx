@@ -1,8 +1,8 @@
-import { Button, Text } from '@toss/tds-mobile';
+import { Button } from '@toss/tds-mobile';
 import { useState } from 'react';
 
 import { login, register } from '../api';
-import { ErrorMessage, Loading, Screen } from '../ui';
+import { ErrorMessage, Loading, Screen, Text } from '../ui';
 
 type Phase = 'intro' | 'checking' | 'choice' | 'failed';
 

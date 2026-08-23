@@ -1,4 +1,4 @@
-import { Button, Text, TextField } from '@toss/tds-mobile';
+import { Button, TextField } from '@toss/tds-mobile';
 import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -30,7 +30,7 @@ import {
 import { useBackClose } from '../back';
 import { cacheGet, cacheKeyProfile, cacheKeyProfileBooks, cachePut } from '../cache';
 import { PERSONALITY_AD_GROUP_ID, watchRewardAd } from '../toss';
-import { Avatar, ErrorMessage, Loading, PENCIL_FRAME, SERIF_VALUE, Screen, SectionTitle, Sheet } from '../ui';
+import { Avatar, ErrorMessage, Loading, PENCIL_FRAME, SERIF_VALUE, Screen, SectionTitle, Sheet, Text } from '../ui';
 import { waiverErrorMessage } from './Home';
 import { BookGrid, SECTIONS } from './Library';
 import { hasFreshStory } from './Story';

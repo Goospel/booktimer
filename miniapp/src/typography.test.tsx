@@ -10,7 +10,7 @@ import { History } from './screens/History';
 import { ReadingNowCard } from './screens/Home';
 import { StatItem } from './screens/Profile';
 import { graph, userAgent } from './test-fixtures';
-import { SectionTitle } from './ui';
+import { SectionTitle, Text } from './ui';
 
 /**
  * 타이포그래피 위계 — <b>개구(Gaegu)로 갈아탄 뒤 크기·강조가 무너진 자리</b>를 못 박는다(#857 후속).
@@ -192,6 +192,94 @@ describe('입력칸 힌트는 입력값처럼 보이지 않는다', () => {
     // 입력값(1.0)과 확실히 구별되면서, 무엇을 적는 자리인지 읽히기는 해야 한다.
     expect(Number(alpha![1])).toBeGreaterThan(0.3);
     expect(Number(alpha![1])).toBeLessThan(0.6);
+  });
+});
+
+/**
+ * 흐린 글자가 실제로 흐리다 — TDS `Text`의 `color`는 <b>CSS 색 문자열</b>이지 토큰 이름이 아니다.
+ *
+ * <p>`<Text color="grey600">`은 인라인에 `--tds-paragraph-color: grey600`을 박고, TDS는 그 변수를
+ * `color: var(--tds-paragraph-color, var(--adaptiveGrey900))`로 소비한다. `grey600`은 무효 색이라
+ * 선언이 통째로 버려지고(invalid at computed-value time) <b>색이 상속으로 떨어진다</b> — 곧 본문과
+ * 완전히 같은 잉크다. 목 모드 실측(2026-08-23, 페인트 강제 후) `grey600 → rgb(33,37,41)`으로 prop 없는
+ * `Text`와 한 값이었고, 그렇게 죽어 있던 호출부가 <b>87곳</b>이다(grey600 81 · blue500 3 · red500 2 ·
+ * grey800 1). 흐림·강조 위계가 통째로 없었다는 뜻이다.
+ *
+ * <p>폴백도 못 받쳐 준다 — `--adaptiveGrey900`은 독서등(밤) 블록 <b>안에만</b> 정의돼 있어 낮 모드에선
+ * 미정의다. 즉 prop을 주든 안 주든 결과가 「상속」으로 같다.
+ *
+ * <p>고치는 자리는 호출부 87곳이 아니라 <b>래퍼 하나</b>다 — 위 Grey500 팔레트 구멍과 같은 판단이다
+ * (구멍은 컴포넌트가 아니라 한 곳에 있다). 토큰 이름을 값으로 옮기면 지금 호출부는 한 글자도 안 바뀌고,
+ * 새로 쓰는 사람이 같은 함정에 다시 빠지지도 않는다.
+ */
+describe('흐린 글자가 실제로 흐리다', () => {
+  it('토큰 이름을 CSS 색으로 옮긴다 — 맨 이름은 무효값이라 상속으로 떨어진다', () => {
+    const tag = tagOf(render(<Text color="grey600">흐린 글자</Text>), '흐린 글자');
+
+    expect(tag).toMatch(/--tds-paragraph-color:\s*var\(--adaptiveGrey600/);
+  });
+
+  it('나머지 토큰도 같은 표에서 온다 — 하나만 살리면 다음 색이 또 조용히 죽는다', () => {
+    const cases = [
+      ['blue500', /--tds-paragraph-color:\s*var\(--adaptiveBlue500/],
+      ['red500', /--tds-paragraph-color:\s*var\(--adaptiveRed500/],
+      ['grey800', /--tds-paragraph-color:\s*var\(--adaptiveGrey800/],
+    ] as const;
+
+    for (const [token, expected] of cases) {
+      expect(tagOf(render(<Text color={token}>{token}</Text>), token)).toMatch(expected);
+    }
+  });
+
+  it('토큰마다 fallback을 함께 준다 — 어느 쪽 모드에서도 정의하지 않는 토큰이 실제로 있다(Red500)', () => {
+    // `--adaptiveRed500`은 이 앱 어디서도 정의하지 않는다(웹 --danger와 TDS red가 사실상 같아 재테마를
+    // 건너뛴 자리). fallback이 없으면 `var()`가 미정의로 풀려 **다시 상속**이다 — 고친 자리가 원위치한다.
+    const tag = tagOf(render(<Text color="red500">경고</Text>), '경고');
+
+    expect(tag).toMatch(/--tds-paragraph-color:\s*var\(--adaptiveRed500,\s*#[0-9A-Fa-f]{6}\)/);
+  });
+
+  it('이미 CSS 색인 값은 그대로 흘려보낸다 — 표에 없는 값을 삼키면 호출부가 조용히 다른 색이 된다', () => {
+    const tag = tagOf(render(<Text color="#4F6B4C">세이지</Text>), '세이지');
+
+    expect(tag).toMatch(/--tds-paragraph-color:\s*#4F6B4C/);
+  });
+
+  it('화면은 TDS `Text`를 직접 부르지 않는다 — 직접 부르면 그 화면만 다시 토큰 이름이 무효가 된다', () => {
+    // 래퍼는 「거쳐 가는 길이 하나」일 때만 가드다. `ui.tsx`만 원본을 알고, 나머지는 래퍼를 쓴다.
+    const offenders: string[] = [];
+    for (const file of sourceFiles(fileURLToPath(new URL('.', import.meta.url)))) {
+      const name = file.split(/[\\/]/).pop()!;
+      if (name === 'ui.tsx') continue;
+      readFileSync(file, 'utf8')
+        .split('\n')
+        .forEach((line, i) => {
+          if (/^import\s*\{[^}]*\bText\b[^}]*\}\s*from\s*'@toss\/tds-mobile'/.test(line)) {
+            offenders.push(`${name}:${i + 1}  ${line.trim()}`);
+          }
+        });
+    }
+
+    expect(offenders).toEqual([]);
+  });
+});
+
+/**
+ * 본문 잉크는 우리 팔레트에서 온다 — 안 잡으면 TDS 리셋의 `#212529`가 낮 모드 전체를 칠한다.
+ *
+ * <p>TDS는 `body { color: #212529 }`를 <b>런타임에, 우리 css보다 뒤에</b> 주입한다. `html body`가
+ * `color`를 안 잡고 있어 화면 전역이 브랜드 잉크(#2C2A24)가 아니라 그 푸른기 도는 차콜이었다
+ * (실측 2026-08-23 `rgb(33,37,41)`). `html body`는 0-0-2라 순서와 무관하게 이긴다 — 바로 위에서
+ * 배경·폰트를 같은 이유로 그렇게 잡아 둔 자리다.
+ *
+ * <p>덤이 하나 더 있다. 이 한 줄이 없으면 잉크가 <b>마운트 뒤에</b> 바뀌고, 아래 독서등 전환 규칙의
+ * `transition: … color 0.45s`가 매 로드마다 발화해 본문이 검정에서 잉크로 0.45초 페이드한다
+ * (그 검정이 hidden 탭에서 얼어붙어 「전역이 검정」으로 오진되게 만든 값이다 — T-207).
+ * 정적 css에서 잉크를 확정하면 색이 애초에 안 바뀌어 전환이 발화하지 않는다.
+ */
+describe('본문 잉크는 우리 팔레트에서 온다', () => {
+  it('html body가 잉크를 잡는다 — 비워 두면 TDS 리셋(#212529)이 낮 모드를 칠한다', () => {
+    expect(rules).toMatch(/html body\s*\{[^}]*color:\s*var\(--adaptiveGrey800/);
   });
 });
 

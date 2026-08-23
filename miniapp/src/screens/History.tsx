@@ -1,4 +1,3 @@
-import { Text } from '@toss/tds-mobile';
 import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';
 
@@ -6,7 +5,7 @@ import type { BookRead, ContributionGraph, DailyRecord, MonthlySection } from '.
 import { fetchHistory } from '../api';
 import { CACHE_HISTORY, cacheGet, cachePut } from '../cache';
 import { formatDuration, subjectParticle } from '../format';
-import { BookCover, ErrorMessage, GrassGrid, LEVEL_COLORS, MANUAL_OUTLINE, PENCIL_FRAME, SERIF_VALUE, Screen, SectionTitle, monthLabelPositions } from '../ui';
+import { BookCover, ErrorMessage, GrassGrid, LEVEL_COLORS, MANUAL_OUTLINE, PENCIL_FRAME, SERIF_VALUE, Screen, SectionTitle, Text, monthLabelPositions } from '../ui';
 
 /** 기록 화면 잔디 칸 — `GrassGrid`의 기본값과 같아야 월 라벨이 그 열 위에 선다. */
 const CELL_SIZE = 11;

@@ -1,4 +1,4 @@
-import { Button, Text, TextField } from '@toss/tds-mobile';
+import { Button, TextField } from '@toss/tds-mobile';
 import { useCallback, useEffect, useState } from 'react';
 
 import type { FollowListType, MarginBook, UserRow } from '../api';
@@ -11,7 +11,7 @@ import {
   validateHandleFormat,
 } from '../api';
 import { useBackClose } from '../back';
-import { ErrorMessage, Loading, PENCIL_FRAME, Screen, Sheet, UserList } from '../ui';
+import { ErrorMessage, Loading, PENCIL_FRAME, Screen, Sheet, Text, UserList } from '../ui';
 import { Explore } from './Explore';
 import { Profile } from './Profile';
 import { BookMargin, StoryComposer } from './Story';

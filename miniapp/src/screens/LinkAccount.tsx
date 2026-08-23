@@ -1,8 +1,8 @@
-import { Button, Text, TextField } from '@toss/tds-mobile';
+import { Button, TextField } from '@toss/tds-mobile';
 import { useState } from 'react';
 
 import { linkAccount } from '../api';
-import { ErrorMessage, Screen } from '../ui';
+import { ErrorMessage, Screen, Text } from '../ui';
 
 /**
  * 계정 연결 — 웹 설정에서 발급받은 일회용 코드가 "이 계정의 주인" 증명이다(설계 §2.2 ⓐ).
