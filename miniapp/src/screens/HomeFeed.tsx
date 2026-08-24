@@ -6,7 +6,7 @@ import { fetchHomeFeed } from '../api';
 import { CACHE_FEED, cacheGet, cachePut } from '../cache';
 import { elapsedSeconds, formatDuration, objectParticle, relativeTime } from '../format';
 import { openExternal } from '../toss';
-import { BookCover, HANDWRITING, Text, sectionStyle } from '../ui';
+import { BookCover, HANDWRITING, SERIF_VALUE, Text, sectionStyle } from '../ui';
 
 /**
  * 홈 피드 박스 — 「소식」·「책 뉴스」 두 탭. 잔디 미리보기가 서 있던 자리를 물려받았다.
@@ -61,6 +61,39 @@ export const PREVIEW_COUNT = 3;
  * 다른 이름으로 부르면 두 화면이 서로 다른 앱처럼 읽힌다. 여백은 문장과 같은 규칙으로 개수를 센다
  * (1장이면 안 세고, 2장 이상이면 묶인 이유가 드러나야 한다).
  */
+/**
+ * 문장에서 『책 제목』 조각만 떼어낸다 — 그 조각에만 세리프를 입히기 위해서다.
+ *
+ * <p>문장을 만드는 쪽(`eventLine`)은 <b>그대로 둔다</b>. 조사 처리가 그 안에 있어서, 조각 배열을
+ * 돌려주게 바꾸면 그 로직과 테스트가 통째로 흔들린다. 완성된 문자열을 <b>렌더 직전에</b> 쪼개는
+ * 쪽이 훨씬 싸다.
+ *
+ * <p>⚠️ 정규식이 <b>비탐욕</b>(`.+?`)인 것이 요점이다. 제목 안에 『』이 들어 있는 책이 실제로 있는데
+ * (『『책』을 읽는 법』) 탐욕적으로 끊으면 <b>문장 절반이 세리프</b>가 된다. 가장 짧게 끊으면 제목이
+ * 어중간하게 잘릴 뿐 문장은 그대로 읽힌다 — 두 고장 중 덜 눈에 띄는 쪽을 고른다.
+ */
+export function quotedParts(text: string): { text: string; quoted: boolean }[] {
+  const parts: { text: string; quoted: boolean }[] = [];
+  let at = 0;
+  for (const m of text.matchAll(/『.+?』/g)) {
+    if (m.index > at) parts.push({ text: text.slice(at, m.index), quoted: false });
+    parts.push({ text: m[0], quoted: true });
+    at = m.index + m[0].length;
+  }
+  if (at < text.length) parts.push({ text: text.slice(at), quoted: false });
+  return parts;
+}
+
+/** 배지 라벨에서 숫자만 떼어낸다 — 「여백 3」의 3이 값이다(라벨은 기능 글자). */
+export function badgeParts(label: string): { text: string; value: boolean }[] {
+  const m = label.match(/^(.*?)(\d+)$/);
+  if (m === null) return [{ text: label, value: false }];
+  return [
+    { text: m[1], value: false },
+    { text: m[2], value: true },
+  ];
+}
+
 export function eventBadge(event: SocialEvent): { label: string; tone: 'solid' | 'tint' | 'outline' } {
   if (event.type === 'STORY') {
     return { label: event.count > 1 ? `여백 ${event.count}` : '여백', tone: 'tint' };
@@ -490,9 +523,31 @@ export function FeedBox({
                 <BookCover url={event.coverUrl} title={event.bookTitle} width={30} />
                 {/* 한글 문장이 flex 자식이라 minWidth:0이 없으면 줄바꿈 대신 표지를 밀어낸다. */}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <span style={badgeStyle(eventBadge(event).tone)}>{eventBadge(event).label}</span>
+                  <span style={badgeStyle(eventBadge(event).tone)}>
+                    {/* 「여백 3」의 숫자는 값이다 — 배지 안에서 그 수 하나가 말하려는 전부라,
+                        라벨과 같은 서체면 「여백」과 「3」이 한 덩어리로 뭉개진다. */}
+                    {badgeParts(eventBadge(event).label).map((part, i) =>
+                      part.value ? (
+                        <span key={i} style={{ ...SERIF_VALUE }}>
+                          {part.text}
+                        </span>
+                      ) : (
+                        part.text
+                      ),
+                    )}
+                  </span>
                   <Text typography="st11" style={{ display: 'block', marginTop: 3, wordBreak: 'keep-all' }}>
-                    {eventLine(event)}
+                    {/* 『제목』만 세리프 700 — 문장 안에서 「무슨 책인가」가 값이다(시안 2b).
+                        문장 전체를 세리프로 두면 강조가 사라진다. */}
+                    {quotedParts(eventLine(event)).map((part, i) =>
+                      part.quoted ? (
+                        <span key={i} style={{ ...SERIF_VALUE }}>
+                          {part.text}
+                        </span>
+                      ) : (
+                        part.text
+                      ),
+                    )}
                   </Text>
                   {/* 말줄임은 서버가 이미 했다(80자) — 여기 clamp는 폭에 맞춘 마지막 한 겹이다. */}
                   {/* 남의 글은 세로선 안으로 들여 「인용」임을 형태로 말한다 — 그 전에는 문장·발췌·시각

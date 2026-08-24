@@ -859,7 +859,9 @@ export function AccountSection({
           style={{
             display: 'block',
             // 이름이다 — 책방의 닉네임(Profile.tsx)과 같은 단으로 맞춘다(한 사람이 두 화면에서 같은 체급).
-            fontSize: 19,
+            // 시안 2a — 인사말은 값이다(「누구의 화면인가」). 세리프 + 한 단 크게.
+            ...SERIF_VALUE,
+            fontSize: 24,
             fontWeight: 700,
             color: 'var(--adaptiveGrey900, #3A362E)',
             overflow: 'hidden',
@@ -1092,9 +1094,17 @@ export function Home({
       >
         {/* 라벨과 값은 각자 블록이어야 세로로 쌓인다 — 같은 줄에 붙으면 "오늘 읽은 시간45:00"으로 읽힌다. */}
         <div>
-          <Text typography="st11" color="grey600">
+          {/* 오버라인 — 자간을 벌려 「제목이 아니라 머리말」로 읽히게 한다(시안 2a: 12px · 자간 3 · 세이지).
+              아래 54px 값과 크기 차가 크므로 색·자간이 그 사이를 잇는다. */}
+          <span
+            style={{
+              fontSize: 12,
+              letterSpacing: 3,
+              color: ACCENT,
+            }}
+          >
             {achieved ? '🌿 오늘 목표 달성' : '오늘 읽은 시간'}
-          </Text>
+          </span>
         </div>
         <div style={{ marginTop: 6 }}>
           {/* 세리프 + t2(44px) — 이 화면이 답하려는 유일한 수다. 개구 26px일 땐 화면 제목(22px)보다
@@ -1134,7 +1144,7 @@ export function Home({
                     color: 'var(--adaptiveGrey600, #6F6A5E)',
                     // 시안은 11.5px이나 이 레포의 계단(typography.test `SCALE`)엔 없는 값이다 —
                     // 그 11.5는 고운돋움 스케일 전제라 서체 교체 PR에서 계단째 다시 잡는다.
-                    fontSize: 12,
+                    fontSize: 11,
                     cursor: 'pointer',
                   }}
                 >
@@ -1160,7 +1170,7 @@ export function Home({
               </div>
               <div style={{ width: 1, background: 'rgba(44, 42, 36, 0.12)' }} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>하루 목표</div>
+                <div style={{ fontSize: 11, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>하루 목표</div>
                 <div style={{ ...SERIF_VALUE, fontSize: 19, fontWeight: 700, marginTop: 2 }}>
                   {formatClock(goal)}
                 </div>
