@@ -858,9 +858,12 @@ export function AccountSection({
         <span
           style={{
             display: 'block',
-            // 이름이다 — 책방의 닉네임(Profile.tsx)과 같은 단으로 맞춘다(한 사람이 두 화면에서 같은 체급).
-            fontSize: 19,
-            fontWeight: 700,
+            // 시안 2a — 인사말은 값이다(「누구의 화면인가」). 그래서 이름이 아니라 값으로 조판한다.
+            // 시안 25는 계단(typography.test `SCALE`)에 없어 t3(26)로 **올려** 붙였다 — A가 정한
+            // 「섹션 제목은 올림, 내리면 시안 의도가 죽는다」 그대로다. 홈엔 `Screen` 제목이 없어
+            // t3와 부딪히지 않는다. (책방 닉네임 Profile.tsx는 19 — 그 화면은 2a~2e 밖이다.)
+            ...SERIF_VALUE,
+            fontSize: 26,
             color: 'var(--adaptiveGrey900, #3A362E)',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -1092,9 +1095,17 @@ export function Home({
       >
         {/* 라벨과 값은 각자 블록이어야 세로로 쌓인다 — 같은 줄에 붙으면 "오늘 읽은 시간45:00"으로 읽힌다. */}
         <div>
-          <Text typography="st11" color="grey600">
+          {/* 오버라인 — 자간을 벌려 「제목이 아니라 머리말」로 읽히게 한다(시안 2a: 12px · 자간 3 · 세이지).
+              아래 54px 값과 크기 차가 크므로 색·자간이 그 사이를 잇는다. */}
+          <span
+            style={{
+              fontSize: 12,
+              letterSpacing: 3,
+              color: ACCENT,
+            }}
+          >
             {achieved ? '🌿 오늘 목표 달성' : '오늘 읽은 시간'}
-          </Text>
+          </span>
         </div>
         <div style={{ marginTop: 6 }}>
           {/* 세리프 + t2(44px) — 이 화면이 답하려는 유일한 수다. 개구 26px일 땐 화면 제목(22px)보다
@@ -1132,9 +1143,9 @@ export function Home({
                     border: 0,
                     background: 'transparent',
                     color: 'var(--adaptiveGrey600, #6F6A5E)',
-                    // 시안은 11.5px이나 이 레포의 계단(typography.test `SCALE`)엔 없는 값이다 —
-                    // 그 11.5는 고운돋움 스케일 전제라 서체 교체 PR에서 계단째 다시 잡는다.
-                    fontSize: 12,
+                    // 시안 11.5는 계단(typography.test `SCALE`)에 없어 st13(11)로 내렸다 — 그 11.5가
+                    // 전제한 고운돋움 스케일은 A가 st13을 12→11로 재단하며 이미 들여왔다.
+                    fontSize: 11,
                     cursor: 'pointer',
                   }}
                 >
@@ -1160,7 +1171,7 @@ export function Home({
               </div>
               <div style={{ width: 1, background: 'rgba(44, 42, 36, 0.12)' }} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>하루 목표</div>
+                <div style={{ fontSize: 11, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>하루 목표</div>
                 <div style={{ ...SERIF_VALUE, fontSize: 19, fontWeight: 700, marginTop: 2 }}>
                   {formatClock(goal)}
                 </div>

@@ -331,12 +331,25 @@ describe('피드 박스 렌더 — 소식 탭', () => {
     event('나비독서', '총, 균, 쇠', 'STARTED', 80),
   ];
 
+  /**
+   * ⚠️ 마크업이 아니라 **태그를 걷은 글자**로 잰다. 피드 문장은 『제목』 조각만 세리프로 감싸느라
+   * 여러 span으로 나뉘어 있어(2b) 마크업 통짜 비교로는 안 잡힌다 — 그런데 이 테스트가 지키려는 건
+   * 서식이 아니라 <b>「이 줄이 무엇을 말하는가」</b>다. 글자로 재면 서식이 바뀌어도 계속 그 뜻을 지킨다.
+   *
+   * <p>⚠️ 태그를 <b>지우지</b> 않고 텍스트 노드를 <b>모은다</b>. `replace(/<[^>]*>/g, '')`는 고장 난
+   * HTML 살균기의 전형이라 CodeQL `js/incomplete-multi-character-sanitization`이 high로 잡는다 —
+   * 여기선 살균이 아니지만, 레포 스캔에 보안 경보를 남길 값이 없다. 이 파일이 이미 쓰는 관용구
+   * (`rowCountOf`의 `matchAll`)와도 같아진다.
+   */
+  const textOf = (markup: string) =>
+    [...markup.matchAll(/>([^<>]+)</g)].map((m) => m[1]).join('');
+
   it('소식 한 줄마다 문구와 상대 시간을 적는다', () => {
     const markup = renderBox(feed({ social }));
 
-    expect(markup).toContain('나비독서님이 『데미안』을 완독했어요');
+    expect(textOf(markup)).toContain('나비독서님이 『데미안』을 완독했어요');
     expect(markup).toContain('1시간 전');
-    expect(markup).toContain('밑줄러님이 『사피엔스』를 읽기 시작했어요');
+    expect(textOf(markup)).toContain('밑줄러님이 『사피엔스』를 읽기 시작했어요');
   });
 
   it('접힌 상태는 3줄까지 + 「더 보기」', () => {
@@ -350,7 +363,7 @@ describe('피드 박스 렌더 — 소식 탭', () => {
     const markup = renderBox(feed({ social }), 'social', true);
 
     expect(rowCountOf(markup)).toBe(social.length);
-    expect(markup).toContain('나비독서님이 『총, 균, 쇠』를 읽기 시작했어요');
+    expect(textOf(markup)).toContain('나비독서님이 『총, 균, 쇠』를 읽기 시작했어요');
   });
 
   it('소식이 없으면 소셜 탭으로 유도하는 빈 상태를 띄운다', () => {

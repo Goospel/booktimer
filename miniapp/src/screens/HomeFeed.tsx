@@ -6,7 +6,7 @@ import { fetchHomeFeed } from '../api';
 import { CACHE_FEED, cacheGet, cachePut } from '../cache';
 import { elapsedSeconds, formatDuration, objectParticle, relativeTime } from '../format';
 import { openExternal } from '../toss';
-import { BookCover, HANDWRITING, Text, sectionStyle } from '../ui';
+import { BookCover, HANDWRITING, SERIF_VALUE, Text, sectionStyle } from '../ui';
 
 /**
  * 홈 피드 박스 — 「소식」·「책 뉴스」 두 탭. 잔디 미리보기가 서 있던 자리를 물려받았다.
@@ -61,6 +61,39 @@ export const PREVIEW_COUNT = 3;
  * 다른 이름으로 부르면 두 화면이 서로 다른 앱처럼 읽힌다. 여백은 문장과 같은 규칙으로 개수를 센다
  * (1장이면 안 세고, 2장 이상이면 묶인 이유가 드러나야 한다).
  */
+/**
+ * 문장에서 『책 제목』 조각만 떼어낸다 — 그 조각에만 세리프를 입히기 위해서다.
+ *
+ * <p>문장을 만드는 쪽(`eventLine`)은 <b>그대로 둔다</b>. 조사 처리가 그 안에 있어서, 조각 배열을
+ * 돌려주게 바꾸면 그 로직과 테스트가 통째로 흔들린다. 완성된 문자열을 <b>렌더 직전에</b> 쪼개는
+ * 쪽이 훨씬 싸다.
+ *
+ * <p>⚠️ 정규식이 <b>비탐욕</b>(`.+?`)인 것이 요점이다. 제목 안에 『』이 들어 있는 책이 실제로 있는데
+ * (『『책』을 읽는 법』) 탐욕적으로 끊으면 <b>문장 절반이 세리프</b>가 된다. 가장 짧게 끊으면 제목이
+ * 어중간하게 잘릴 뿐 문장은 그대로 읽힌다 — 두 고장 중 덜 눈에 띄는 쪽을 고른다.
+ */
+export function quotedParts(text: string): { text: string; quoted: boolean }[] {
+  const parts: { text: string; quoted: boolean }[] = [];
+  let at = 0;
+  for (const m of text.matchAll(/『[\s\S]+?』/g)) {
+    if (m.index > at) parts.push({ text: text.slice(at, m.index), quoted: false });
+    parts.push({ text: m[0], quoted: true });
+    at = m.index + m[0].length;
+  }
+  if (at < text.length) parts.push({ text: text.slice(at), quoted: false });
+  return parts;
+}
+
+/** 배지 라벨에서 숫자만 떼어낸다 — 「여백 3」의 3이 값이다(라벨은 기능 글자). */
+export function badgeParts(label: string): { text: string; value: boolean }[] {
+  const m = label.match(/^(.*?)(\d+)$/);
+  if (m === null) return [{ text: label, value: false }];
+  return [
+    { text: m[1], value: false },
+    { text: m[2], value: true },
+  ];
+}
+
 export function eventBadge(event: SocialEvent): { label: string; tone: 'solid' | 'tint' | 'outline' } {
   if (event.type === 'STORY') {
     return { label: event.count > 1 ? `여백 ${event.count}` : '여백', tone: 'tint' };
@@ -71,18 +104,24 @@ export function eventBadge(event: SocialEvent): { label: string; tone: 'solid' |
 }
 
 /**
- * 배지 세 톤 — <b>새 색을 하나도 만들지 않는다</b>. 채움은 세이지 700, 연한 채움은 이 파일이
- * 「내 책」 칩에 이미 쓰는 회갈색 짝(grey200/700), 외곽선은 카드 경계와 같은 선이다.
+ * 배지 세 톤 — <b>새 색을 하나도 만들지 않는다</b>. 채움은 세이지 800(시안 2b의 `#40573E`가
+ * 마침 이 램프의 한 칸이다), 연한 채움은 이 파일이 「내 책」 칩에 이미 쓰는 회갈색 짝(grey200/700),
+ * 외곽선은 카드 경계와 같은 선이다.
+ *
+ * <p>시안 2b에서 <b>일부러 안 따라간 두 자리</b>(ABANDON): ① 연한 채움의 `rgba(199,184,155,.35)` —
+ * 같은 베이지 계열인데 토큰을 생 rgba로 바꾸면 다크모드 적응을 잃고 「내 책」 칩과의 짝도 끊긴다.
+ * ② 외곽선의 연필선(`--pencil-frame-soft`) — 300×300 rx7 SVG를 20px 배지로 늘이면 결이 뭉개진다,
+ * 그 선은 카드·버튼 크기를 전제로 그려졌다.
  */
 const badgeStyle = (tone: 'solid' | 'tint' | 'outline') =>
   ({
     display: 'inline-block',
-    padding: '1px 7px',
-    borderRadius: 5,
-    fontSize: 12,
+    padding: '1px 8px',
+    borderRadius: 6,
+    fontSize: 11,
     lineHeight: 1.6,
     ...(tone === 'solid'
-      ? { background: 'var(--adaptiveBlue700, #4F6B4C)', color: 'var(--adaptiveGrey100, #FCFAF5)' }
+      ? { background: 'var(--adaptiveBlue800, #40573E)', color: 'var(--adaptiveGrey100, #FCFAF5)' }
       : tone === 'tint'
         ? { background: 'var(--adaptiveGrey200, #E4DDD0)', color: 'var(--adaptiveGrey700, #57534A)' }
         : {
@@ -490,9 +529,31 @@ export function FeedBox({
                 <BookCover url={event.coverUrl} title={event.bookTitle} width={30} />
                 {/* 한글 문장이 flex 자식이라 minWidth:0이 없으면 줄바꿈 대신 표지를 밀어낸다. */}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <span style={badgeStyle(eventBadge(event).tone)}>{eventBadge(event).label}</span>
+                  <span style={badgeStyle(eventBadge(event).tone)}>
+                    {/* 「여백 3」의 숫자는 값이다 — 배지 안에서 그 수 하나가 말하려는 전부라,
+                        라벨과 같은 서체면 「여백」과 「3」이 한 덩어리로 뭉개진다. */}
+                    {badgeParts(eventBadge(event).label).map((part, i) =>
+                      part.value ? (
+                        <span key={i} style={{ ...SERIF_VALUE }}>
+                          {part.text}
+                        </span>
+                      ) : (
+                        part.text
+                      ),
+                    )}
+                  </span>
                   <Text typography="st11" style={{ display: 'block', marginTop: 3, wordBreak: 'keep-all' }}>
-                    {eventLine(event)}
+                    {/* 『제목』만 세리프 700 — 문장 안에서 「무슨 책인가」가 값이다(시안 2b).
+                        문장 전체를 세리프로 두면 강조가 사라진다. */}
+                    {quotedParts(eventLine(event)).map((part, i) =>
+                      part.quoted ? (
+                        <span key={i} style={{ ...SERIF_VALUE }}>
+                          {part.text}
+                        </span>
+                      ) : (
+                        part.text
+                      ),
+                    )}
                   </Text>
                   {/* 말줄임은 서버가 이미 했다(80자) — 여기 clamp는 폭에 맞춘 마지막 한 겹이다. */}
                   {/* 남의 글은 세로선 안으로 들여 「인용」임을 형태로 말한다 — 그 전에는 문장·발췌·시각
@@ -509,7 +570,10 @@ export function FeedBox({
                         overflow: 'hidden',
                         marginTop: 4,
                         paddingLeft: 9,
-                        borderLeft: '2px solid var(--adaptiveGrey200, #E4DDD0)',
+                        // 시안 2b의 `rgba(110,138,106,.5)` — 세이지 500을 반투명으로 깐 색이고,
+                        // 크림 위에서 이 램프의 200 칸에 내려앉는다. 카드 경계(회갈색)와 달라야
+                        // 「남의 말」로 읽힌다.
+                        borderLeft: '2px solid var(--adaptiveBlue200, #B6C9AE)',
                         wordBreak: 'keep-all',
                         // 여백 인용은 장식이다 — 남이 손으로 적은 글이라 손글씨로 남긴다.
                         ...HANDWRITING,

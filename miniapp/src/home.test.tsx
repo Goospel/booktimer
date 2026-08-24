@@ -1661,3 +1661,43 @@ describe('측정 중 「읽는 중」 카드', () => {
     expect(markup).toContain('읽는 중');
   });
 });
+
+/**
+ * 시안 2a의 위계 — <b>자리마다 하나씩</b> 못 박는다. A(#944) 리뷰가 「장식 6자리 중 4자리가
+ * 무보호」를 잡았던 그 사각의 재발이라(B 리뷰 실측: `Home.tsx`를 통째로 origin/main으로 되돌려도
+ * 전 스위트 초록), 되돌리면 무너지는 계측을 남긴다.
+ *
+ * <p>`typography.test.tsx`의 `SCALE` 가드는 여기서 도움이 안 된다 — 26·12·11·19가 모두 계단 위
+ * 값이라 <b>서로 바꿔치기해도 통과</b>한다. 계단에 있는지가 아니라 어느 자리가 어느 칸인지가 값이다.
+ */
+describe('홈 히어로 위계 (시안 2a)', () => {
+  /** 그 글자를 감싼 여는 태그 — 크기·서체·색이 인라인 style이라 태그만 잘라 보면 판정된다. */
+  const tagBefore = (markup: string, text: string) => {
+    const at = markup.indexOf(text);
+    return at < 0 ? '' : markup.slice(markup.lastIndexOf('<', at), at);
+  };
+
+  it('인사말은 세리프 26이다 — 「누구의 화면인가」에 답하는 값이라 이름이 아니라 값으로 조판한다', () => {
+    const tag = tagBefore(renderHome(), '구스펠님');
+
+    expect(tag).not.toBe('');
+    expect(tag).toContain('Gowun Batang');
+    expect(tag).toContain('font-size:26px');
+  });
+
+  it('오버라인은 자간 3의 세이지 12다 — 54px 값과의 크기 차를 색·자간이 잇는다', () => {
+    const tag = tagBefore(renderHome(), '오늘 읽은 시간');
+
+    expect(tag).not.toBe('');
+    expect(tag).toContain('font-size:12px');
+    expect(tag).toContain('letter-spacing:3px');
+    expect(tag).toContain('--adaptiveBlue700');
+  });
+
+  it('2열 라벨은 11이다 — 값(19)보다 또렷하게 작아야 라벨로 읽힌다', () => {
+    const markup = renderHome();
+
+    expect(tagBefore(markup, '남은 시간')).toContain('font-size:11px');
+    expect(tagBefore(markup, '하루 목표')).toContain('font-size:11px');
+  });
+});
