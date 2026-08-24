@@ -25,7 +25,7 @@ import {
 } from '../api';
 import { useBackClose } from '../back';
 import { relativeTime } from '../format';
-import { BookCover, ErrorMessage, Loading, Screen, Sheet, Text, UserList } from '../ui';
+import { BookCover, ErrorMessage, HANDWRITING, Loading, Screen, Sheet, Text, UserList } from '../ui';
 
 /**
  * 여백 — <b>책에 딸린 자리</b>와 거기 쌓이는 글 (2026-08-16 재설계).
@@ -1000,6 +1000,9 @@ export function MarginCard({
               lineHeight: 1.55,
               whiteSpace: 'pre-wrap',
               wordBreak: 'keep-all',
+              // 장식 — 여백은 「연필로 적어 둔 것」이라 손글씨로 남는다(기능 글자는 고운돋움).
+              // 본문이 손글씨이던 시절엔 상속으로 그랬고, 축이 뒤집힌 뒤로는 여기서 명시한다.
+              ...HANDWRITING,
             }}
           >
             {entry.quote}
@@ -1013,6 +1016,7 @@ export function MarginCard({
             lineHeight: 1.55,
             whiteSpace: 'pre-wrap',
             wordBreak: 'keep-all',
+            ...HANDWRITING, // 위와 같은 이유 — 사용자가 손으로 적은 글이다
             ...(clamped
               ? ({
                   display: '-webkit-box',
@@ -1426,7 +1430,11 @@ const composerField = (color: string) =>
     outline: 'none',
     background: 'transparent',
     color,
-    fontFamily: 'inherit',
+    // ⚠️ 손글씨를 **명시**한다. 이 두 칸은 「쓰는 동안 보이는 것이 곧 카드」인 미리보기라(위 주석),
+    //    저장 뒤 `MarginCard`가 손글씨로 그리는데 여기만 기능 서체면 그 계약이 깨진다.
+    //    한때 `fontFamily: 'inherit'`로 body를 따랐고 그때는 body가 손글씨라 우연히 맞았다 —
+    //    서체 축이 뒤집히며(기능=고운돋움) 그 우연이 사라진 자리다.
+    ...HANDWRITING,
     lineHeight: 1.6,
     resize: 'vertical',
   }) as const;
