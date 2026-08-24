@@ -1089,9 +1089,6 @@ export function Home({
       {/* 계정 진입은 화면 맨 위 — 카드 위 한 줄이 곧 이 화면의 헤더다(인사말 + 아바타). */}
       <AccountSection nickname={dashboard.nickname} loginId={dashboard.loginId} onGoSettings={onGoSettings} />
 
-      {/* 첫 사용 안내로 들어오는 문 — 처음 온 사람이 히어로 카드보다 먼저 만나야 한다. */}
-      {guide}
-
       {/* 독서등이 켜지면 이 카드만 스탠드 밑에 펼쳐진 페이지로 남는다 — 표식만 붙이고, 켤지 말지와
           색은 `body` 클래스와 css가 든다(그래서 측정 여부와 무관하게 늘 붙어 있다). */}
       <div
@@ -1105,163 +1102,172 @@ export function Home({
           textAlign: 'center',
         }}
       >
-        {/* 라벨과 값은 각자 블록이어야 세로로 쌓인다 — 같은 줄에 붙으면 "오늘 읽은 시간45:00"으로 읽힌다. */}
-        <div>
-          {/* 오버라인 — 자간을 벌려 「제목이 아니라 머리말」로 읽히게 한다(시안 2a: 12px · 자간 3 · 세이지).
-              아래 54px 값과 크기 차가 크므로 색·자간이 그 사이를 잇는다. */}
-          <span
-            style={{
-              fontSize: 12,
-              letterSpacing: 3,
-              color: ACCENT,
-            }}
-          >
-            {achieved ? '🌿 오늘 목표 달성' : '오늘 읽은 시간'}
-          </span>
-        </div>
-        <div style={{ marginTop: 6 }}>
-          {/* 세리프 + t2(44px) — 이 화면이 답하려는 유일한 수다. 개구 26px일 땐 화면 제목(22px)보다
-              4px 큰 게 전부라 히어로로 읽히지 않았다. */}
-          <Text typography="t2" fontWeight="bold" style={{ ...SERIF_VALUE }}>
-            {formatClock(todayRead)}
-          </Text>
-        </div>
-        {progress !== null ? (
-          <div style={{ marginTop: 16 }}>
-            <ProgressBar progress={progress} size="normal" color={SAGE} />
-            {/*
-              2열 통계 — 「남은 시간 | 하루 목표」. 옛 자리는 "남은시간 : 15:00 ⓘ" 대시 밑줄 한 줄이
-              전부였고, 그 한 줄이 **설명과 이동을 겸했다**(UX 감사 3e). 여기서 역할을 가른다:
-              ⓘ = 설명(툴팁) · 「변경 ›」 = 이동.
-
-              주의 — **목표가 있으면 남은 시간이 0이어도 그린다.** 옛 배치는 `remaining > 0`으로 이 줄을
-              잠갔는데, 그러면 **목표를 다 채운 사람은 홈에서 목표를 바꿀 길이 통째로 사라졌다** —
-              카드 안 `GoalHandle`은 목표가 0일 때만 서기 때문이다. 달성이 문을 닫아선 안 된다.
-            */}
-            <div style={{ display: 'flex', marginTop: 12 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                {/* ⓘ는 라벨에 붙는다 — 값이 아니라 「남은 시간」이라는 개념을 설명하는 손잡이다. */}
-                <button
-                  type="button"
-                  onClick={() => setShowNote((open) => !open)}
-                  aria-expanded={showNote}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 4,
-                    width: '100%',
-                    padding: 0,
-                    border: 0,
-                    background: 'transparent',
-                    color: 'var(--adaptiveGrey600, #6F6A5E)',
-                    // 시안 11.5는 계단(typography.test `SCALE`)에 없어 st13(11)로 내렸다 — 그 11.5가
-                    // 전제한 고운돋움 스케일은 A가 st13을 12→11로 재단하며 이미 들여왔다.
-                    fontSize: 11,
-                    cursor: 'pointer',
-                  }}
-                >
-                  남은 시간
-                  {/* 색은 속성이 아니라 style로 준다 — 프레젠테이션 속성엔 `var()`가 안 먹는다(토큰이
-                      죽으면 독서등에서 이 아이콘만 낮 색으로 남는다). */}
-                  <svg
-                    width="13"
-                    height="13"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    style={{ stroke: ACCENT, flex: 'none' }}
-                  >
-                    <circle cx="12" cy="12" r="9" />
-                    <path d="M12 11v5M12 7.5v.5" />
-                  </svg>
-                </button>
-                <div style={{ ...SERIF_VALUE, fontSize: 19, fontWeight: 700, marginTop: 2 }}>
-                  {formatClock(remaining)}
-                </div>
-              </div>
-              <div style={{ width: 1, background: 'rgba(44, 42, 36, 0.12)' }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 11, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>하루 목표</div>
-                <div style={{ ...SERIF_VALUE, fontSize: 19, fontWeight: 700, marginTop: 2 }}>
-                  {formatClock(goal)}
-                </div>
-                {/* 목표로 가는 명시적 문. 전면광고 로드에 1~2초가 걸려 그동안 라벨이 그대로면
-                    눌러도 아무 일 없는 것처럼 보인다 — 대기 사실이 목표값보다 우선이다. */}
-                <button
-                  type="button"
-                  onClick={onGoGoal}
-                  disabled={goalAdPending}
-                  style={{
-                    marginTop: 5,
-                    padding: '3px 10px',
-                    border: 0,
-                    borderRadius: 8,
-                    background: 'rgba(110, 138, 106, 0.14)',
-                    color: ACCENT,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {goalAdPending ? '준비 중…' : goal > 0 ? '변경 ›' : '정하기 ›'}
-                </button>
-              </div>
-            </div>
-            {overflow > 0 && (
-              <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
-                +{formatDuration(overflow)} 더 읽었어요
-              </Text>
-            )}
-            {showNote && (
-              <RemainingNote
-                goalSeconds={goal}
-                // 이월이 꺼져 있으면 밀린 시간은 남은시간 합계에 안 들어간다 — 그때 이 줄을 그리면 합이 어긋난다.
-                debtSeconds={dashboard.carryover ? dashboard.carriedDebtSeconds : 0}
-                remainingSeconds={remaining}
-                carryover={dashboard.carryover}
-              >
-                {/* 목표 손잡이는 위 「변경 ›」 알약이 가져갔다 — 같은 일을 하는 문이 한 상자에 둘이면
-                    어느 쪽이 진짜인지 사용자가 고민한다.
-                    광고는 죄책감이 뜬 이 자리에만 나타난다. 문구에 "광고"를 명시해 광고 위장 금지 조항을 지킨다. */}
-                {showWaiverButton(dashboard.carriedDebtSeconds, dashboard.debtWaiverAvailable, REWARD_AD_GROUP_ID) && (
-                  <Button
-                    display="block"
-                    variant="weak"
-                    size="small"
-                    style={{ marginTop: 8 }}
-                    disabled={busy}
-                    onClick={claimWaiver}
-                  >
-                    광고 보고 밀린 하루 지우기
-                  </Button>
-                )}
-                {waived !== null && (
-                  <Text typography="st12" color="blue500" style={{ display: 'block', marginTop: 8 }}>
-                    밀린 {formatDuration(waived)}을 지웠어요. 잔디는 그대로예요.
-                  </Text>
-                )}
-              </RemainingNote>
-            )}
-          </div>
-        ) : (
-          // 목표 0 — 게이지 줄이 통째로 없어 상자로 갈 길이 없다. 목표를 정하러 가는 유일한 손잡이가 여기 남는다.
-          <div style={{ marginTop: 16 }}>
-            <GoalHandle goalSeconds={goal} pending={goalAdPending} onGoGoal={onGoGoal} />
-          </div>
-        )}
-        {dashboard.hasActiveSession && (
+        {/* 첫 사용 안내는 이 카드 <b>속을 통째로</b> 가져간다 — 처음 온 사람에게 이 박스는 타이머가
+            아니라 안내 시작 버튼이다(M-1, 2026-08-23 실기기 제보: 헤더 아래 얇은 배너는 놓치기 쉬웠다).
+            껍데기(연필 테두리·독서등 표식)가 여기 남아 자리가 안 흔들리고, 안내를 닫으면 그 자리에서
+            평소의 타이머로 돌아온다. 만드는 쪽은 흐름을 든 `MainTabs`다 — 안 본 길 안내가 있고 측정
+            중이 아닐 때만 노드가 오므로, 「측정 중 N분」이 안내에 덮이는 일은 없다. */}
+        {guide ?? (
           <>
-            <Text typography="t5" color="blue500" style={{ display: 'block', marginTop: 16 }}>
-              측정 중 {formatDuration(elapsed)}
-              {dashboard.activeBookTitle !== null && ` · ${dashboard.activeBookTitle}`}
+          {/* 라벨과 값은 각자 블록이어야 세로로 쌓인다 — 같은 줄에 붙으면 "오늘 읽은 시간45:00"으로 읽힌다. */}
+          <div>
+            {/* 오버라인 — 자간을 벌려 「제목이 아니라 머리말」로 읽히게 한다(시안 2a: 12px · 자간 3 · 세이지).
+                아래 54px 값과 크기 차가 크므로 색·자간이 그 사이를 잇는다. */}
+            <span
+              style={{
+                fontSize: 12,
+                letterSpacing: 3,
+                color: ACCENT,
+              }}
+            >
+              {achieved ? '🌿 오늘 목표 달성' : '오늘 읽은 시간'}
+            </span>
+          </div>
+          <div style={{ marginTop: 6 }}>
+            {/* 세리프 + t2(44px) — 이 화면이 답하려는 유일한 수다. 개구 26px일 땐 화면 제목(22px)보다
+                4px 큰 게 전부라 히어로로 읽히지 않았다. */}
+            <Text typography="t2" fontWeight="bold" style={{ ...SERIF_VALUE }}>
+              {formatClock(todayRead)}
             </Text>
-            {/* 이 앱의 핵심 계약(측정은 서버 권위)을 측정 중 화면에서 말하지 않으면, 사용자는 화면을 켜 둬야
-                하는 줄 알고 몇 초 만에 끈다 — 운영 실측에서 완료 세션 대부분이 1분 미만이었다. */}
-            <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 6 }}>
-              {ACTIVE_SESSION_RELIEF}
-            </Text>
+          </div>
+          {progress !== null ? (
+            <div style={{ marginTop: 16 }}>
+              <ProgressBar progress={progress} size="normal" color={SAGE} />
+              {/*
+                2열 통계 — 「남은 시간 | 하루 목표」. 옛 자리는 "남은시간 : 15:00 ⓘ" 대시 밑줄 한 줄이
+                전부였고, 그 한 줄이 **설명과 이동을 겸했다**(UX 감사 3e). 여기서 역할을 가른다:
+                ⓘ = 설명(툴팁) · 「변경 ›」 = 이동.
+
+                주의 — **목표가 있으면 남은 시간이 0이어도 그린다.** 옛 배치는 `remaining > 0`으로 이 줄을
+                잠갔는데, 그러면 **목표를 다 채운 사람은 홈에서 목표를 바꿀 길이 통째로 사라졌다** —
+                카드 안 `GoalHandle`은 목표가 0일 때만 서기 때문이다. 달성이 문을 닫아선 안 된다.
+              */}
+              <div style={{ display: 'flex', marginTop: 12 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {/* ⓘ는 라벨에 붙는다 — 값이 아니라 「남은 시간」이라는 개념을 설명하는 손잡이다. */}
+                  <button
+                    type="button"
+                    onClick={() => setShowNote((open) => !open)}
+                    aria-expanded={showNote}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 4,
+                      width: '100%',
+                      padding: 0,
+                      border: 0,
+                      background: 'transparent',
+                      color: 'var(--adaptiveGrey600, #6F6A5E)',
+                      // 시안 11.5는 계단(typography.test `SCALE`)에 없어 st13(11)로 내렸다 — 그 11.5가
+                      // 전제한 고운돋움 스케일은 A가 st13을 12→11로 재단하며 이미 들여왔다.
+                      fontSize: 11,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    남은 시간
+                    {/* 색은 속성이 아니라 style로 준다 — 프레젠테이션 속성엔 `var()`가 안 먹는다(토큰이
+                        죽으면 독서등에서 이 아이콘만 낮 색으로 남는다). */}
+                    <svg
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      style={{ stroke: ACCENT, flex: 'none' }}
+                    >
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 11v5M12 7.5v.5" />
+                    </svg>
+                  </button>
+                  <div style={{ ...SERIF_VALUE, fontSize: 19, fontWeight: 700, marginTop: 2 }}>
+                    {formatClock(remaining)}
+                  </div>
+                </div>
+                <div style={{ width: 1, background: 'rgba(44, 42, 36, 0.12)' }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>하루 목표</div>
+                  <div style={{ ...SERIF_VALUE, fontSize: 19, fontWeight: 700, marginTop: 2 }}>
+                    {formatClock(goal)}
+                  </div>
+                  {/* 목표로 가는 명시적 문. 전면광고 로드에 1~2초가 걸려 그동안 라벨이 그대로면
+                      눌러도 아무 일 없는 것처럼 보인다 — 대기 사실이 목표값보다 우선이다. */}
+                  <button
+                    type="button"
+                    onClick={onGoGoal}
+                    disabled={goalAdPending}
+                    style={{
+                      marginTop: 5,
+                      padding: '3px 10px',
+                      border: 0,
+                      borderRadius: 8,
+                      background: 'rgba(110, 138, 106, 0.14)',
+                      color: ACCENT,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {goalAdPending ? '준비 중…' : goal > 0 ? '변경 ›' : '정하기 ›'}
+                  </button>
+                </div>
+              </div>
+              {overflow > 0 && (
+                <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
+                  +{formatDuration(overflow)} 더 읽었어요
+                </Text>
+              )}
+              {showNote && (
+                <RemainingNote
+                  goalSeconds={goal}
+                  // 이월이 꺼져 있으면 밀린 시간은 남은시간 합계에 안 들어간다 — 그때 이 줄을 그리면 합이 어긋난다.
+                  debtSeconds={dashboard.carryover ? dashboard.carriedDebtSeconds : 0}
+                  remainingSeconds={remaining}
+                  carryover={dashboard.carryover}
+                >
+                  {/* 목표 손잡이는 위 「변경 ›」 알약이 가져갔다 — 같은 일을 하는 문이 한 상자에 둘이면
+                      어느 쪽이 진짜인지 사용자가 고민한다.
+                      광고는 죄책감이 뜬 이 자리에만 나타난다. 문구에 "광고"를 명시해 광고 위장 금지 조항을 지킨다. */}
+                  {showWaiverButton(dashboard.carriedDebtSeconds, dashboard.debtWaiverAvailable, REWARD_AD_GROUP_ID) && (
+                    <Button
+                      display="block"
+                      variant="weak"
+                      size="small"
+                      style={{ marginTop: 8 }}
+                      disabled={busy}
+                      onClick={claimWaiver}
+                    >
+                      광고 보고 밀린 하루 지우기
+                    </Button>
+                  )}
+                  {waived !== null && (
+                    <Text typography="st12" color="blue500" style={{ display: 'block', marginTop: 8 }}>
+                      밀린 {formatDuration(waived)}을 지웠어요. 잔디는 그대로예요.
+                    </Text>
+                  )}
+                </RemainingNote>
+              )}
+            </div>
+          ) : (
+            // 목표 0 — 게이지 줄이 통째로 없어 상자로 갈 길이 없다. 목표를 정하러 가는 유일한 손잡이가 여기 남는다.
+            <div style={{ marginTop: 16 }}>
+              <GoalHandle goalSeconds={goal} pending={goalAdPending} onGoGoal={onGoGoal} />
+            </div>
+          )}
+          {dashboard.hasActiveSession && (
+            <>
+              <Text typography="t5" color="blue500" style={{ display: 'block', marginTop: 16 }}>
+                측정 중 {formatDuration(elapsed)}
+                {dashboard.activeBookTitle !== null && ` · ${dashboard.activeBookTitle}`}
+              </Text>
+              {/* 이 앱의 핵심 계약(측정은 서버 권위)을 측정 중 화면에서 말하지 않으면, 사용자는 화면을 켜 둬야
+                  하는 줄 알고 몇 초 만에 끈다 — 운영 실측에서 완료 세션 대부분이 1분 미만이었다. */}
+              <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 6 }}>
+                {ACTIVE_SESSION_RELIEF}
+              </Text>
+            </>
+          )}
           </>
         )}
       </div>

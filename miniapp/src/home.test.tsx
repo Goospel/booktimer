@@ -1424,16 +1424,21 @@ describe('계정 진입점', () => {
     expect(markup.indexOf(ENTRY)).toBeLessThan(markup.indexOf('오늘 읽은 시간'));
   });
 
-  it('안내 배너는 그 헤더 바로 아래에 선다 — 처음 온 사람이 카드보다 먼저 만나야 한다', () => {
-    // 배너를 만드는 쪽은 흐름을 든 `MainTabs`다(`app.test`) — 홈이 정하는 것은 **자리**뿐이라 슬롯으로 받는다.
+  it('안내가 오면 히어로 카드 속을 통째로 내준다 — 처음 온 사람에게 그 박스는 타이머가 아니다', () => {
+    // 안내 노드를 만드는 쪽은 흐름을 든 `MainTabs`다(`app.test`) — 홈이 정하는 것은 **자리**뿐이다.
+    // 그 자리가 헤더 아래 한 줄에서 **카드 속**으로 바뀌었다(M-1, 2026-08-23 실기기 제보).
     const markup = renderHome({}, { guide: <div>안내-슬롯</div> });
 
     expect(markup.indexOf('안내-슬롯')).toBeGreaterThan(markup.indexOf(ENTRY));
-    expect(markup.indexOf('안내-슬롯')).toBeLessThan(markup.indexOf('오늘 읽은 시간'));
+    expect(markup).not.toContain('오늘 읽은 시간'); // 타이머 내용은 그동안 물러난다
+    expect(markup).toContain(LAMP_PAGE_CLASS); // 껍데기(카드)는 그대로 — 자리가 안 흔들린다
   });
 
-  it('배너를 안 넘기면 그 자리는 비어 있다 — 다 본 사람의 홈에 빈 줄이 남지 않는다', () => {
-    expect(renderHome()).not.toContain('안내-슬롯');
+  it('안내를 안 넘기면 카드는 평소의 타이머다 — 다 본 사람의 홈은 그대로다', () => {
+    const markup = renderHome();
+
+    expect(markup).not.toContain('안내-슬롯');
+    expect(markup).toContain('오늘 읽은 시간');
   });
 });
 

@@ -24,7 +24,8 @@ import {
   flowTabChange,
   nextFlowStep,
   shouldRefresh,
-  shouldShowGuideBanner,
+  shouldShowGuideHero,
+  GuideHero,
   tabLocked,
   slotCenter,
   tabChangeHandler,
@@ -94,8 +95,9 @@ function renderTab(tab: (typeof TABS)[number]['key'], overrides: Partial<Dashboa
 
 describe('탭 구조', () => {
   it('탭마다 그 탭의 화면을 그린다 — 탭 선택 ↔ 화면 대응', () => {
-    // 홈은 제목 행이 없다(첫 카드가 곧 히어로) — 그 카드의 문구로 식별한다.
-    expect(renderTab('home')).toContain('오늘 읽은 시간');
+    // 홈은 제목 행이 없다(첫 카드가 곧 히어로) — 식별은 **캐러셀 머리말**로 한다. 히어로 카드 문구는
+    // 첫 사용 안내가 그 속을 가져가는 동안 「앱 사용법 보기」로 바뀌므로 탭 대응의 표식이 못 된다.
+    expect(renderTab('home')).toContain('무엇으로 측정할까요?');
     expect(renderTab('library')).toContain('내 서재');
     // 책방 탭은 중간 화면 없이 곧장 내 책방이다 — 그 상단의 검색 진입바로 식별한다.
     expect(renderTab('bookshop')).toContain('아이디로 친구 찾기');
@@ -104,7 +106,7 @@ describe('탭 구조', () => {
 
   it('다른 탭의 화면은 함께 그리지 않는다 — 한 번에 한 화면', () => {
     expect(renderTab('home')).not.toContain('내 기록');
-    expect(renderTab('library')).not.toContain('오늘 읽은 시간');
+    expect(renderTab('library')).not.toContain('무엇으로 측정할까요?');
     expect(renderTab('home')).not.toContain('아이디로 친구 찾기');
   });
 
@@ -457,47 +459,71 @@ describe('첫 진입 투어', () => {
  * 떼어 여기서 박는다. 실제 연쇄 이동은 실 브라우저 게이트가 맡는다(T-182와 같은 분담).
  */
 /**
- * 안내 배너 — 첫 사용 안내를 <b>사용자가 눌러서</b> 시작한다.
+ * 안내 카드 — 첫 사용 안내를 <b>사용자가 눌러서</b> 시작한다. 그 문은 <b>히어로 카드 자체</b>다.
  *
  * <p>2026-08-17 토스 심사 반려: 「미니앱 접속 직후 바텀시트가 바로 노출돼요」. 우리가 만든 것은 툴팁이었지만
  * 렌더 결과가 **전체 딤 + 하단 좌우 24px 와이드 패널**이라 시트와 구별되지 않았다(2026-08-12 「즉시 로그인 유도」
  * 반려와 같은 계열 — 심사는 진입 직후 들이대는 것을 막는다). 그래서 안내 자체는 그대로 두고 **시작 트리거만**
  * 자동 → 수동으로 뒤집었다.
  */
-describe('안내 배너 — 수동 시작', () => {
-  it('안 본 길 안내가 있으면 배너를 띄운다 — 진입 직후 오버레이 대신 이것이 뜬다', () => {
-    expect(shouldShowGuideBanner(false, false)).toBe(true);
+describe('안내 카드 — 수동 시작 · 히어로 자리', () => {
+  it('안 본 길 안내가 있으면 안내 카드를 띄운다 — 진입 직후 오버레이 대신 이것이 뜬다', () => {
+    expect(shouldShowGuideHero(false, false, false)).toBe(true);
     expect(renderTab('home')).toContain('앱 사용법 보기');
   });
 
-  it('걷는 중에는 배너를 감춘다 — 딤 아래에 배너가 남아 있으면 두 겹이 된다', () => {
-    expect(shouldShowGuideBanner(true, false)).toBe(false);
+  it('히어로 카드 속을 통째로 가져간다 — 처음 온 사람에게 그 박스는 타이머가 아니다', () => {
+    // M-1(2026-08-23 실기기 제보): 헤더 아래 얇은 배너는 놓치기 쉬웠다. 홈에서 가장 크고 시선이 먼저
+    // 닿는 것이 곧 안내의 문이어야 발견율이 오른다 — 그래서 배너가 아니라 **카드 속**을 가져간다.
+    const markup = renderTab('home');
+
+    expect(markup).toContain('앱 사용법 보기');
+    expect(markup).not.toContain('오늘 읽은 시간'); // 타이머 내용은 그동안 물러난다
+  });
+
+  it('측정 중에는 안 뜬다 — 「측정 중 N분」을 덮으면 재는 중인지 알 길이 사라진다', () => {
+    // 카드 자리를 가져가면서 생긴 **새 제약**이다(배너였을 땐 카드 위에 나란히 서서 둘 다 보였다).
+    expect(shouldShowGuideHero(false, false, true)).toBe(false);
+
+    const markup = renderTab('home', { hasActiveSession: true });
+    expect(markup).toContain('측정 중');
+    expect(markup).not.toContain('앱 사용법 보기');
+  });
+
+  it('아무것도 덮지 않는다 — 화면 안 요소라야 「진입 직후 오버레이」가 아니다(T-183)', () => {
+    // 판정의 본체는 목 모드 실측(`position:fixed` · `z-index ≥ 99` 0개)이고, 이 단언은 그 사이
+    // 조각이 다시 떠오르지 않게 하는 값싼 가드다 — 이 카드는 흐름 안에 선다.
+    expect(renderToStaticMarkup(<GuideHero onStart={() => {}} onDismiss={() => {}} />)).not.toContain('fixed');
+  });
+
+  it('걷는 중에는 안내 카드를 감춘다 — 딤 아래에 그것이 남아 있으면 두 겹이 된다', () => {
+    expect(shouldShowGuideHero(true, false, false)).toBe(false);
   });
 
   it('길 안내를 다 본 사람에게는 안 뜬다 — 여백 걸음이 남아 있어도 그렇다', () => {
     // 신규 사용자는 책이 0권이라 홈 여백 문이 없어 마지막 걸음 키가 영영 안 남는다 —
-    // 「전 걸음 완료」로 판정하면 그 사람에겐 배너가 평생 뜬다. 그래서 기준은 길 안내(탭바 걸음)뿐이다.
+    // 「전 걸음 완료」로 판정하면 그 사람에겐 안내 카드가 평생 뜬다. 그래서 기준은 길 안내(탭바 걸음)뿐이다.
     ['timer', 'library', 'bookshop'].forEach(dismissCoachmark);
 
     expect(coachmarkSeen('margin')).toBe(false); // 여백은 아직 안 봤다(이 단언이 위 주석의 전제다)
-    expect(shouldShowGuideBanner(false, false)).toBe(false);
+    expect(shouldShowGuideHero(false, false, false)).toBe(false);
   });
 
   it('#833 안내만 본 옛 사용자에게는 뜬다 — 서재·책방을 아직 모른다', () => {
     dismissCoachmark('timer');
 
-    expect(shouldShowGuideBanner(false, false)).toBe(true);
+    expect(shouldShowGuideHero(false, false, false)).toBe(true);
   });
 
-  it('닫는 손잡이가 있다 — 「들이대지 않는다」가 배너에도 있어야 한다', () => {
-    expect(renderTab('home')).toContain('안내 배너 닫기');
+  it('닫는 손잡이가 있다 — 「들이대지 않는다」가 이 카드에도 있어야 한다', () => {
+    expect(renderTab('home')).toContain('안내 카드 닫기');
   });
 
   it('✕로 닫으면 그 자리에서 사라진다 — 기록만으로는 화면이 안 갱신된다(실 브라우저 실측)', () => {
-    // 배너만 보고 있을 때 커서는 이미 -1이라 `setFlowIndex(-1)`이 같은 값이고, React가 리렌더를 건너뛴다.
+    // 안내 카드만 보고 있을 때 커서는 이미 -1이라 `setFlowIndex(-1)`이 같은 값이고, React가 리렌더를 건너뛴다.
     // 그래서 닫힘을 별도 상태로 들어야 즉시 사라진다 — 기록(키 3개)은 다음 진입의 판정만 맡는다.
-    expect(shouldShowGuideBanner(false, true)).toBe(false);
-    expect(shouldShowGuideBanner(false, false)).toBe(true); // 짝 단언 — 위가 공허하지 않다
+    expect(shouldShowGuideHero(false, true, false)).toBe(false);
+    expect(shouldShowGuideHero(false, false, false)).toBe(true); // 짝 단언 — 위가 공허하지 않다
   });
 
   it('홈에만 둔다 — 진입 화면이 아닌 탭에서는 소음이다', () => {
