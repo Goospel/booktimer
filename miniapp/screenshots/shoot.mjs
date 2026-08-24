@@ -5,9 +5,9 @@
  *   npm --prefix miniapp run dev:mock      # 먼저 목 서버를 띄운다
  *   node miniapp/screenshots/shoot.mjs     # 이 폴더의 png들을 덮어쓴다
  *
- * ⚠️ 포트를 정하는 건 이 파일이 아니라 `.claude/launch.json`의 `miniapp-mock` 항목이다(이 PC는 5300 —
- * 5174가 OS 예약 구간에 걸려 옮겼다, T-197). 그 파일은 gitignore 대상이라 머신마다 다를 수 있으니,
- * 아래 기본값이 안 맞으면 `MINIAPP_MOCK_URL`로 넘긴다.
+ * ⚠️ 포트의 단일 출처는 체크인된 `miniapp/vite.config.ts`의 `server.port`(5300)다 — 아래 기본값은 그
+ * 사본이니 한쪽만 고치지 않는다. `.claude/launch.json`은 gitignore 대상이라 **없는 워크트리도 있다**
+ * (있으면 같은 값이어야 한다). 다른 포트로 띄웠으면 `MINIAPP_MOCK_URL`로 넘긴다.
  *
  * 규격·촬영조건의 근거는 옆의 README.md다. 특히 375×618@2로 찍어 636×1048로 축소하는 이유
  * (636 폭으로 직접 렌더하면 CSS 폭이 폰이 아니게 되어 실제 앱과 다른 레이아웃이 나온다)와
