@@ -58,6 +58,15 @@
             "command": "powershell.exe -NoProfile -File \".claude\\hooks\\require-troubleshooting-toc.ps1\""
           }
         ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -File \".claude\\hooks\\require-changelog-no-dup.ps1\""
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
