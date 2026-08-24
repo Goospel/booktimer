@@ -193,10 +193,28 @@ export function tabLocked(key: TabKey, hasActiveSession: boolean): boolean {
   return hasActiveSession && key !== 'home';
 }
 
-export function timerActionView(active: boolean): { label: string; background: string; icon: string } {
+export function timerActionView(active: boolean): {
+  label: string;
+  background: string;
+  ring: string;
+  icon: string;
+} {
+  // ⚠️ **링은 배경과 한 쌍으로 여기 산다** — 설계 D7이 값과 함께 그 이유까지 적어 뒀다:
+  // 「색 쌍이 흩어지면 다음 손질 때 한쪽만 바뀐다」. 실제로 링을 `TimerActionButton`에 무조건으로
+  // 박았더니 **빨간 정지 버튼에 초록 후광**이 남았다(독립 리뷰 적발). 쌍으로 두면 못 어긋난다.
   return active
-    ? { label: '측정 끝내기', background: 'var(--adaptiveRed500, #F04452)', icon: STOP_ICON }
-    : { label: '측정 시작', background: 'var(--adaptiveBlue700, #4F6B4C)', icon: PLAY_ICON };
+    ? {
+        label: '측정 끝내기',
+        background: 'var(--adaptiveRed500, #F04452)',
+        ring: '0 0 0 3px rgba(240,68,82,.2)',
+        icon: STOP_ICON,
+      }
+    : {
+        label: '측정 시작',
+        background: 'var(--adaptiveBlue700, #4F6B4C)',
+        ring: '0 0 0 3px rgba(110,138,106,.25)',
+        icon: PLAY_ICON,
+      };
 }
 
 /**
@@ -1720,8 +1738,8 @@ function TimerActionButton({ active, busy, onPress }: { active: boolean; busy: b
           background: view.background,
           // 시안 4c의 링 — **고정값 단층**이다. 애니메이션을 걸지 않는다: T-176이 발광
           // `box-shadow` 무한 애니메이션으로 표지를 초당 60번 재래스터화한 자리와 같은 종류이고,
-          // 데스크톱·목 모드는 그 클래스를 원리상 못 잡는다.
-          boxShadow: '0 0 0 3px rgba(110,138,106,.25)',
+          // 데스크톱·목 모드는 그 클래스를 원리상 못 잡는다. 값은 상태 전환 때만 바뀐다.
+          boxShadow: view.ring,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

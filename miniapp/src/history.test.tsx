@@ -416,15 +416,33 @@ describe('기록 위계 (시안 2d)', () => {
     expect(tag).not.toContain('Gowun Batang');
   });
 
-  it('펼친 책별 시간은 세리프 13이다', () => {
+  /**
+   * ⚠️ 픽스처가 계측기의 조준을 정한다 — 책이 한 권이면 하루 합계와 책 시간이 같은 문자열이 되어
+   * `indexOf`가 <b>합계(15px)를 먼저</b> 집는다. 그래서 두 권으로 갈라 책 줄만 겨눈다(월/일 합계에는
+   * 이미 같은 규율을 썼는데 여기만 빠져 있었다 — 독립 리뷰 적발).
+   */
+  it('펼친 책별 시간은 세리프 13이다 — 하루 합계(15)보다 한 단 작다', () => {
+    const twoBooks: DailyRecord = {
+      date: '2026-08-21',
+      totalSeconds: 1_800,
+      books: [
+        { title: '사피엔스', coverUrl: null, seconds: 1_200 }, // 20분
+        { title: '데미안', coverUrl: null, seconds: 600 }, // 10분
+      ],
+      manuallyFilled: false,
+    };
     const markup = renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <DayRow day={day('2026-08-21', 1_800)} monthMax={9_000} expanded onToggle={() => {}} />
+        <DayRow day={twoBooks} monthMax={9_000} expanded onToggle={() => {}} />
       </TDSMobileProvider>,
     );
 
-    expect(tagBefore(markup, '30분')).toContain('Gowun Batang');
-    expect(markup).toContain('font-size:13px');
+    const bookTime = tagBefore(markup, '20분');
+
+    expect(bookTime).not.toBe('');
+    expect(bookTime).toContain('Gowun Batang');
+    expect(bookTime).toContain('font-size:13px');
+    expect(tagBefore(markup, '30분')).toContain('font-size:15px'); // 하루 합계는 그대로 15
   });
 
   it('가이드라인은 여백 인용 줄과 같은 세이지 선이다 — 「위 줄에 딸린 것」을 앱이 한 가지로 말한다', () => {

@@ -666,11 +666,19 @@ export function Shelf({
                       style={{
                         flex: 2,
                         height: HANDLE_ROW_HEIGHT,
-                        border: 'none',
-                        borderRadius: 14,
                         // 시안 2c — 이 화면의 주 동작 하나라 **채움**이다(전엔 14% 틴트였다).
-                        // radius는 시안 10이 아니라 14로 둔다: 옆 「관리」가 연필 프레임 + 14라
-                        // 짝이고, 시안은 그 프레임이 없는 평면이다.
+                        // ⚠️ 연필 프레임을 옆 「관리」와 똑같이 준다. 처음엔 이게 빠져 한 줄에 나란한
+                        // 두 버튼의 테두리가 갈렸다(독립 리뷰 적발) — 시안도 두 버튼 다 프레임이다
+                        // (`.pf`·`.pfs` 둘 다 `border-image` 연필선). 「시안은 평면이다」던 옛 주석은
+                        // **시안을 확인하지 않고 쓴 거짓**이었다.
+                        // ⚠️ 설계 D5는 이 자리를 `FilledButton`으로 교체하라고 했는데 **안 따랐다**:
+                        // TDS Button이 `--button-min-height: 56px`를 박아 이 38px 손잡이 줄에서
+                        // 혼자 56px로 솟는다(실측). 프레임은 이 두 줄로 같은 값을 얻으므로, 사이즈
+                        // 변수 4개와 싸우는 것보다 싸다. 채움 개수 계측은 `typography.test`가
+                        // **두 형태를 함께 세는** 방식으로 받는다.
+                        border: '1px solid transparent',
+                        borderImage: PENCIL_FRAME,
+                        borderRadius: 14,
                         background: 'var(--adaptiveBlue700, #4F6B4C)',
                         color: '#F7F2E8',
                         fontSize: 15,
@@ -1001,7 +1009,7 @@ function SheetRow({
  * 값은 그대로 둔다 — 이제 기준은 <b>「여백에 글쓰기·관리」와 「검색해서 담기」가 같은 높이</b>라는 것이다.
  * 두 줄이 어긋나면 칸을 오갈 때 손잡이가 위아래로 튄다.
  */
-const HANDLE_ROW_HEIGHT = 38;
+export const HANDLE_ROW_HEIGHT = 38;
 
 /** 테두리만 있는 작은 손잡이 — 제목 줄 「펼쳐보기」가 쓴다(캐러셀 아래 줄은 전폭 손잡이로 갈렸다). */
 export const handleStyle = {

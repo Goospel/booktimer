@@ -450,37 +450,43 @@ describe('목표 휠 선택 행 (시안 2e)', () => {
 /**
  * 채움 주 버튼은 <b>화면당 최대 1개</b>다 (설계 D5).
  *
- * <p>설계는 「`typography.test.tsx`가 파일당 사용 횟수를 소스 스캔으로 강제한다」고 적었지만
- * <b>그 가드는 만들어진 적이 없다</b> — A PR에서 「실사용이 생기는 B·C 몫」으로 넘겨진 뒤 아무도
- * 만들지 않았다(C 자가 리뷰에서 발견). 채움이 한 화면에 여럿이면 「주 동작 하나」라는 축이 곧
- * 무너지는데, 그걸 막는 것이 아무것도 없었다.
+ * <p>설계는 「소스 스캔으로 강제한다」고 적었지만 <b>그 가드는 만들어진 적이 없었다</b> — A PR에서
+ * 「실사용이 생기는 B·C 몫」으로 넘겨진 뒤 아무도 만들지 않았다. 채움이 한 화면에 여럿이면
+ * 「주 동작 하나」라는 축이 곧 무너지는데, 그걸 막는 것이 아무것도 없었다.
  *
- * <p>⚠️ 세는 것이 <b>두 형태</b>인 것이 요점이다. 목표는 `FilledButton`(TDS Button 래퍼 + 마커
- * 커스텀 프로퍼티)이지만, 서재의 「여백에 글쓰기」는 <b>맨 `<button>`</b>이라 그 래퍼를 못 쓴다 —
- * 인라인 스타일로 같은 채움을 만든다. 한 형태만 세면 다른 쪽이 그물 밖이라, 불변식이 있는 척만
- * 하게 된다(번들 문자열 검사가 「항상 통과 쪽으로 고장」나는 것과 같은 실패다).
+ * <p>⚠️ <b>지표는 배경이다.</b> 초판은 글자색 `#F7F2E8`로 셌는데, 독립 리뷰가 흰 글자(`#FFFFFF`)
+ * 채움 버튼을 하나 더 만들어 <b>전 스위트를 초록으로 통과</b>시켰다 — 「항상 통과 쪽으로 고장난」
+ * 계측기였다. 채움을 채움이게 하는 것은 글자색이 아니라 <b>채워진 배경</b>이라, 그쪽으로 옮긴다.
  *
- * <p>맨 버튼 쪽 지표로 `color: '#F7F2E8'`(진한 채움 위의 종이색 글자)를 쓴다 — screens에서 이 값을
- * <b>글자색으로</b> 쓰는 자리는 그 버튼 하나다(실측. `History`의 같은 값은 `boxShadow`다).
+ * <p>세는 형태가 <b>둘</b>인 것도 요점이다: 목표는 `FilledButton`(TDS 래퍼 + 마커), 서재는 맨
+ * `<button>`이다(TDS가 `--button-min-height: 56px`를 박아 38px 손잡이 줄에서 혼자 솟는다 — 실측).
+ * 한 형태만 세면 다른 쪽이 그물 밖이라 불변식이 있는 척만 하게 된다.
+ *
+ * <p>`App.tsx`도 센다 — 탭바 가운데 원이 홈의 채움 자리다(설계 D5: 「홈은 탭바 원이 그 역할」).
+ * 초판은 `screens/`만 훑어 그 자리가 계측 밖이었다.
  */
 describe('채움 주 버튼 개수 (설계 D5)', () => {
-  const FILLED = /<FilledButton|color: '#F7F2E8'/g;
+  /** 주석을 걷는다 — 주석이 지표 문자열을 인용하면 거짓 실패한다(설계 D5가 요구한 절차). */
+  const codeOnly = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
 
-  const screens = readdirSync(new URL('./screens', import.meta.url))
-    .filter((f) => f.endsWith('.tsx'))
-    .map((f) => ({
-      file: f,
-      count: (readFileSync(new URL(`./screens/${f}`, import.meta.url), 'utf8').match(FILLED) ?? []).length,
-    }));
+  const FILLED = /<FilledButton|background: 'var\(--adaptiveBlue700/g;
+
+  const read = (rel: string) => codeOnly(readFileSync(new URL(rel, import.meta.url), 'utf8'));
+
+  const surfaces = [
+    ...readdirSync(new URL('./screens', import.meta.url))
+      .filter((f) => f.endsWith('.tsx'))
+      .map((f) => ({ file: f, count: (read(`./screens/${f}`).match(FILLED) ?? []).length })),
+    { file: 'App.tsx', count: (read('./App.tsx').match(FILLED) ?? []).length },
+  ];
 
   it('한 화면에 채움 버튼이 둘 이상 서지 않는다 — 여럿이면 「주 동작 하나」라는 축이 무너진다', () => {
-    const over = screens.filter((s) => s.count > 1);
-
-    expect(over).toEqual([]);
+    expect(surfaces.filter((s) => s.count > 1)).toEqual([]);
   });
 
-  it('채움이 선 화면은 서재와 목표 둘뿐이다 — 설계가 이름을 댄 그 2자리다(홈은 탭바 원이 그 역할)', () => {
-    expect(screens.filter((s) => s.count > 0).map((s) => s.file).sort()).toEqual([
+  it('채움이 선 자리는 셋뿐이다 — 서재·목표 + 홈을 대신하는 탭바 원(설계 D5가 이름을 댄 그 자리들)', () => {
+    expect(surfaces.filter((s) => s.count > 0).map((s) => s.file).sort()).toEqual([
+      'App.tsx',
       'Goal.tsx',
       'Library.tsx',
     ]);
