@@ -109,8 +109,16 @@ describe('소식 피드 (2b)', () => {
     expect(tag).toContain('700');
   });
 
+  /**
+   * ⚠️ `tagOf`는 못 찾으면 `''`을 돌려주고 `''.not.toContain(...)`은 <b>항상 통과</b>한다 —
+   * 부정 단언에는 「찾았다」를 먼저 못 박아야 계측이 산다(픽스처에 `&`가 섞이면 HTML
+   * 이스케이프로 원문 검색이 0건이 되어 이 단언이 조용히 죽는다).
+   */
   it('제목 아닌 부분은 세리프가 아니다 — 문장 전체가 세리프면 강조가 사라진다', () => {
-    expect(tagOf(feed(event()), '나비독서님이 ')).not.toContain('Gowun Batang');
+    const tag = tagOf(feed(event()), '나비독서님이 ');
+
+    expect(tag).not.toBe('');
+    expect(tag).not.toContain('Gowun Batang');
   });
 
   /**
@@ -119,6 +127,26 @@ describe('소식 피드 (2b)', () => {
    */
   it('「여백 N」 배지의 숫자가 세리프다', () => {
     expect(tagOf(feed(event({ type: 'STORY', count: 3 })), '3')).toContain('Gowun Batang');
+  });
+
+  /** 시안 2b는 배지를 11로 둔다 — A가 계단의 `st13`을 12→11로 다시 재단한 그 칸이다. */
+  it('배지는 11이다 — 본문(14)과 같은 칸이면 배지가 문장처럼 읽힌다', () => {
+    const tag = tagOf(feed(event({ type: 'STORY', count: 3 })), '여백 ');
+
+    expect(tag).not.toBe('');
+    expect(tag).toContain('font-size:11px');
+  });
+
+  /**
+   * 시안 2b의 색 두 자리 — <b>서사로만 두지 않는다</b>. 채움은 세이지 800(시안 `#40573E`가 이 램프의
+   * 한 칸), 인용 보더는 200(시안 `rgba(110,138,106,.5)`가 크림 위에서 내려앉는 칸)이다. 회갈색으로
+   * 되돌아가면 「남의 말」과 「카드 경계」가 같은 선이 된다.
+   */
+  it('채움 배지는 세이지 800, 여백 인용 보더는 세이지 200이다', () => {
+    expect(tagOf(feed(event()), '다 읽음')).toContain('--adaptiveBlue800');
+    expect(feed(event({ type: 'STORY', excerpt: '밑줄 그은 문장' }))).toContain(
+      '2px solid var(--adaptiveBlue200',
+    );
   });
 
   it('여백이 1장이면 숫자를 안 센다 — 셀 것이 없으면 배지도 「여백」 한 마디다', () => {

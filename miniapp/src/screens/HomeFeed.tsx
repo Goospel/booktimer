@@ -104,18 +104,24 @@ export function eventBadge(event: SocialEvent): { label: string; tone: 'solid' |
 }
 
 /**
- * 배지 세 톤 — <b>새 색을 하나도 만들지 않는다</b>. 채움은 세이지 700, 연한 채움은 이 파일이
- * 「내 책」 칩에 이미 쓰는 회갈색 짝(grey200/700), 외곽선은 카드 경계와 같은 선이다.
+ * 배지 세 톤 — <b>새 색을 하나도 만들지 않는다</b>. 채움은 세이지 800(시안 2b의 `#40573E`가
+ * 마침 이 램프의 한 칸이다), 연한 채움은 이 파일이 「내 책」 칩에 이미 쓰는 회갈색 짝(grey200/700),
+ * 외곽선은 카드 경계와 같은 선이다.
+ *
+ * <p>시안 2b에서 <b>일부러 안 따라간 두 자리</b>(ABANDON): ① 연한 채움의 `rgba(199,184,155,.35)` —
+ * 같은 베이지 계열인데 토큰을 생 rgba로 바꾸면 다크모드 적응을 잃고 「내 책」 칩과의 짝도 끊긴다.
+ * ② 외곽선의 연필선(`--pencil-frame-soft`) — 300×300 rx7 SVG를 20px 배지로 늘이면 결이 뭉개진다,
+ * 그 선은 카드·버튼 크기를 전제로 그려졌다.
  */
 const badgeStyle = (tone: 'solid' | 'tint' | 'outline') =>
   ({
     display: 'inline-block',
-    padding: '1px 7px',
-    borderRadius: 5,
-    fontSize: 12,
+    padding: '1px 8px',
+    borderRadius: 6,
+    fontSize: 11,
     lineHeight: 1.6,
     ...(tone === 'solid'
-      ? { background: 'var(--adaptiveBlue700, #4F6B4C)', color: 'var(--adaptiveGrey100, #FCFAF5)' }
+      ? { background: 'var(--adaptiveBlue800, #40573E)', color: 'var(--adaptiveGrey100, #FCFAF5)' }
       : tone === 'tint'
         ? { background: 'var(--adaptiveGrey200, #E4DDD0)', color: 'var(--adaptiveGrey700, #57534A)' }
         : {
@@ -564,7 +570,10 @@ export function FeedBox({
                         overflow: 'hidden',
                         marginTop: 4,
                         paddingLeft: 9,
-                        borderLeft: '2px solid var(--adaptiveGrey200, #E4DDD0)',
+                        // 시안 2b의 `rgba(110,138,106,.5)` — 세이지 500을 반투명으로 깐 색이고,
+                        // 크림 위에서 이 램프의 200 칸에 내려앉는다. 카드 경계(회갈색)와 달라야
+                        // 「남의 말」로 읽힌다.
+                        borderLeft: '2px solid var(--adaptiveBlue200, #B6C9AE)',
                         wordBreak: 'keep-all',
                         // 여백 인용은 장식이다 — 남이 손으로 적은 글이라 손글씨로 남긴다.
                         ...HANDWRITING,
