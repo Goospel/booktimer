@@ -22,6 +22,7 @@ import {
   ErrorMessage,
   Loading,
   PENCIL_FRAME,
+  SECTION_RULE,
   Screen,
   SearchField,
   SectionTitle,
@@ -252,7 +253,8 @@ export function MarginBoxView({
       style={{ marginTop: 16, padding: 14, border: '1px solid transparent',
  borderImage: PENCIL_FRAME, borderRadius: 16, background: '#FFFDF8' }}
     >
-      <div style={{ display: 'flex', alignItems: 'baseline' }}>
+      {/* 선은 제목이 아니라 이 줄에 건다 — 오른쪽 「전체 보기 ›」까지 지나야 머리 한 줄로 읽힌다(시안 2c). */}
+      <div style={{ display: 'flex', alignItems: 'baseline', paddingBottom: 9, borderBottom: SECTION_RULE }}>
         {/* 시안 2c — 라벨 16에 카운트만 세리프. 색은 토큰으로 준다(옛 `#4E6B4A`는 세이지 700과
             한 글자 다른 사본이라 다크모드에서 갈라졌다). */}
         <SectionTitle style={{ flex: 1, fontSize: 16 }}>

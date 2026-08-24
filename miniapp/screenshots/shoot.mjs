@@ -2,8 +2,12 @@
  * 스토어 스크린샷 재촬영기 — 목 모드 앱을 열어 세로 5장 + 가로 배너 1장을 규격대로 찍는다.
  *
  * 실행:
- *   npm --prefix miniapp run dev:mock      # 먼저 목 서버를 띄운다(포트 5174)
+ *   npm --prefix miniapp run dev:mock      # 먼저 목 서버를 띄운다
  *   node miniapp/screenshots/shoot.mjs     # 이 폴더의 png들을 덮어쓴다
+ *
+ * ⚠️ 포트를 정하는 건 이 파일이 아니라 `.claude/launch.json`의 `miniapp-mock` 항목이다(이 PC는 5300 —
+ * 5174가 OS 예약 구간에 걸려 옮겼다, T-197). 그 파일은 gitignore 대상이라 머신마다 다를 수 있으니,
+ * 아래 기본값이 안 맞으면 `MINIAPP_MOCK_URL`로 넘긴다.
  *
  * 규격·촬영조건의 근거는 옆의 README.md다. 특히 375×618@2로 찍어 636×1048로 축소하는 이유
  * (636 폭으로 직접 렌더하면 CSS 폭이 폰이 아니게 되어 실제 앱과 다른 레이아웃이 나온다)와
@@ -21,7 +25,7 @@ const sharp = (await import(new URL('sharp/dist/index.cjs', NM))).default
 const { readFile } = await import('node:fs/promises')
 
 /** 목 서버 주소 — vite는 `::1`에만 바인딩하므로 `127.0.0.1`이 아니라 `localhost`여야 한다. */
-const URL_APP = process.env.MINIAPP_MOCK_URL ?? 'http://localhost:5174'
+const URL_APP = process.env.MINIAPP_MOCK_URL ?? 'http://localhost:5300'
 
 /** 콘솔 실측 규격(README) — 크기가 안 맞으면 업로드 자체가 거부된다. */
 const PORTRAIT = { w: 636, h: 1048 }

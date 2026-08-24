@@ -5,7 +5,7 @@ import type { BookRead, ContributionGraph, DailyRecord, MonthlySection } from '.
 import { fetchHistory } from '../api';
 import { CACHE_HISTORY, cacheGet, cachePut } from '../cache';
 import { formatDuration, subjectParticle } from '../format';
-import { BookCover, ErrorMessage, GrassGrid, LEVEL_COLORS, MANUAL_OUTLINE, PENCIL_FRAME, SERIF_VALUE, Screen, SectionTitle, Text, monthLabelPositions } from '../ui';
+import { BookCover, ErrorMessage, GrassGrid, LEVEL_COLORS, MANUAL_OUTLINE, PENCIL_FRAME, SECTION_RULE, SERIF_VALUE, Screen, SectionTitle, Text, monthLabelPositions } from '../ui';
 
 /** 기록 화면 잔디 칸 — `GrassGrid`의 기본값과 같아야 월 라벨이 그 열 위에 선다. */
 const CELL_SIZE = 11;
@@ -253,7 +253,17 @@ export function MonthlyRecords({ months }: { months: MonthlySection[] }) {
     <div style={{ marginTop: 28, borderTop: '1px solid var(--adaptiveGrey200, #E4DDD0)' }}>
       {months.map((section) => (
         <section key={section.month}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: '20px 0 4px' }}>
+          {/* 달 이름과 합계가 한 줄로 머리를 이룬다 — 선은 그 줄 아래를 지난다(시안 2d). */}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'baseline',
+              margin: '20px 0 4px',
+              paddingBottom: 10,
+              borderBottom: SECTION_RULE,
+            }}
+          >
             {/* 시안 2d — 달 이름과 그 달의 합계는 둘 다 값이다. 크기로 층을 두되 서체는 같이 간다. */}
             <Text typography="st10" fontWeight="bold" style={{ ...SERIF_VALUE, fontSize: 20 }}>
               {formatMonthTitle(section.month)}
