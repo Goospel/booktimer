@@ -1000,4 +1000,28 @@ describe('탭바 위계 (시안 4c)', () => {
     expect(timerActionView(false).background).toContain('--adaptiveBlue700');
     expect(timerActionView(true).background).toContain('Red'); // 끝내기는 빨강 그대로
   });
+
+  /**
+   * ⚠️ 링은 배경과 <b>한 쌍</b>으로 `timerActionView`에 산다 — 설계 D7이 값과 함께 그 이유까지 적어
+   * 뒀다: 「색 쌍이 흩어지면 다음 손질 때 한쪽만 바뀐다」. 실제로 링을 `TimerActionButton`에 무조건으로
+   * 박았더니 <b>빨간 정지 버튼에 초록 후광</b>이 남았다(독립 리뷰 적발). 쌍으로 두면 구조적으로 못 어긋난다.
+   */
+  it('링도 상태를 따라간다 — 측정 중엔 빨강 계열이라야 정지 버튼에 초록 후광이 안 남는다', () => {
+    expect(timerActionView(false).ring).toContain('110,138,106'); // 대기 = 세이지
+    expect(timerActionView(true).ring).toContain('240,68,82'); // 측정 중 = 빨강
+  });
+
+  it('측정 중 원은 빨간 링을 두른다 — 렌더까지 실제로 닿는지 본다(단위값만 맞고 안 쓰이면 소용없다)', () => {
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <BottomTabBar tab="home" onTabChange={() => {}} action={{ active: true, busy: false, onPress: () => {} }} />
+      </TDSMobileProvider>,
+    );
+    const at = markup.indexOf('aria-label="측정 끝내기"');
+
+    expect(at).toBeGreaterThan(-1);
+    const cell = markup.slice(at, markup.indexOf('</button>', at));
+    expect(cell).toContain('box-shadow:0 0 0 3px rgba(240,68,82,.2)');
+    expect(cell).not.toContain('110,138,106');
+  });
 });

@@ -10,6 +10,7 @@ import {
   AddStatusSheet,
   BookGrid,
   BookSearch,
+  HANDLE_ROW_HEIGHT,
   Library,
   MarginBoxView,
   RecommendCard,
@@ -1371,6 +1372,23 @@ describe('서재 위계 (시안 2c)', () => {
     expect(tag).toContain('--adaptiveBlue700');
     expect(tag).toContain('#F7F2E8');
     expect(tag).toContain('font-size:15px'); // 시안 15.5 -> 계단 15(설계 D3 반올림)
+  });
+
+  /**
+   * ⚠️ 연필 프레임이 <b>옆 「관리」와 같아야</b> 한 줄로 읽힌다. 처음엔 이 버튼만 `border: none`이라
+   * 나란한 두 버튼의 테두리가 갈렸다(독립 리뷰 적발) — 시안도 두 버튼 다 프레임이다.
+   * 설계 D5의 `FilledButton` 교체는 안 따랐다: TDS가 `--button-min-height: 56px`를 박아 이 38px
+   * 손잡이 줄에서 혼자 솟는다(실측). 그 판단이 조용히 뒤집히지 않게 <b>프레임 자체</b>를 잠근다.
+   */
+  it('「여백에 글쓰기」도 옆 「관리」와 같은 연필 프레임을 두른다', () => {
+    const markup = shelf([read()], { tab: 'READING', selectedId: 1 });
+    const write = tagBefore(markup, '여백에 글쓰기');
+    const manage = tagBefore(markup, '관리');
+
+    expect(write).toContain('border-image');
+    expect(manage).toContain('border-image'); // 짝이 되는 쪽도 함께 — 한쪽만 바뀌면 여기서 걸린다
+    expect(write).toContain(`height:${HANDLE_ROW_HEIGHT}px`);
+    expect(manage).toContain(`height:${HANDLE_ROW_HEIGHT}px`);
   });
 
   /**

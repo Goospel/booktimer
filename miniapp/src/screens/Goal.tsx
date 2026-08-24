@@ -103,6 +103,9 @@ export function Goal({
             top: '50%',
             height: 44,
             transform: 'translateY(-50%)',
+            // ⚠️ 시안·설계는 `rgba(110,138,106,.12)`인데 **토큰으로 바꿨다**: 종이색 위 합성값이
+            // ≈`#EAECE4`로 이 토큰(`#E7EEE2`)과 사실상 같고, 토큰이라야 밤 테마를 함께 탄다.
+            // (이탈이라는 사실이 어디에도 없어 처음부터 그랬던 것처럼 읽혔다 — 독립 리뷰 적발.)
             background: 'var(--adaptiveBlue50, #E7EEE2)',
             borderRadius: 10,
           }}
