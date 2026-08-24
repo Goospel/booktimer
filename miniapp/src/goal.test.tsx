@@ -166,8 +166,15 @@ describe('목표 위계 (시안 2e)', () => {
 
   it('휠 뒤에 선택 밴드를 깐다 — 어느 칸이 골라졌는지 색으로 말한다', () => {
     const markup = goalScreen(1_800);
+    const at = markup.indexOf('data-wheel-band');
 
-    expect(markup).toContain('data-wheel-band');
+    expect(at).toBeGreaterThan(-1);
+    // ⚠️ 존재만 단언하면 높이·색·모서리가 통째로 서사로 남는다 — 자가 리뷰 돌연변이에서
+    // 44->30 · 세이지->회갈색 · r10->r0이 <b>전부 생존</b>했다. 「어떤 밴드인가」까지 잠근다.
+    const tag = markup.slice(markup.lastIndexOf('<', at), markup.indexOf('>', at));
+    expect(tag).toContain('height:44px');
+    expect(tag).toContain('--adaptiveBlue50');
+    expect(tag).toContain('border-radius:10px');
   });
 
   it('저장은 채움 주 버튼이다 — 이 화면의 주 동작 하나', () => {

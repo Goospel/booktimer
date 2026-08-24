@@ -1325,6 +1325,9 @@ describe('서재 위계 (시안 2c)', () => {
     expect(on).toContain('box-shadow');
     expect(off).not.toBe('');
     expect(off).not.toContain('box-shadow');
+    // 크기·모서리도 함께 잠근다 — 굵기만 재면 13->14, r10->r8이 조용히 지나간다(자가 리뷰 실측).
+    expect(on).toContain('font-size:13px');
+    expect(on).toContain('border-radius:10px');
   });
 
   it('세그먼트 권수는 세리프다 — 탭 이름은 말이고 권수는 값이다', () => {
@@ -1367,5 +1370,21 @@ describe('서재 위계 (시안 2c)', () => {
     expect(tag).not.toBe('');
     expect(tag).toContain('--adaptiveBlue700');
     expect(tag).toContain('#F7F2E8');
+    expect(tag).toContain('font-size:15px'); // 시안 15.5 -> 계단 15(설계 D3 반올림)
+  });
+
+  /**
+   * ⚠️ 칩 렌더는 `label.slice(value.length)`로 꼬리를 잘라 낸다 — `value`가 `label`의 <b>접두사가
+   * 아니게 되는 순간</b>(`formatDuration` 출력이 바뀌거나 라벨 문안이 뒤집히면) 글자를 조용히 잃는다.
+   * 그 결합을 계약으로 못 박는다. 렌더가 아니라 <b>여기</b>서 잡는 이유는, 깨지는 지점이 데이터
+   * 쪽이고 정적 렌더는 「글자가 좀 줄었다」를 알아볼 수 없기 때문이다.
+   */
+  it('칩의 value는 항상 label의 접두사다 — 아니면 렌더가 글자를 조용히 잘라 먹는다', () => {
+    const chips = bookStats(book(1, '데미안', 'READING', { seconds: 7_200, isPublic: true }));
+
+    expect(chips.some((c) => c.value !== undefined)).toBe(true); // 표본이 비면 아래가 공허해진다
+    for (const chip of chips) {
+      if (chip.value !== undefined) expect(chip.label.startsWith(chip.value)).toBe(true);
+    }
   });
 });
