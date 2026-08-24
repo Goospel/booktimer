@@ -75,7 +75,7 @@ export const PREVIEW_COUNT = 3;
 export function quotedParts(text: string): { text: string; quoted: boolean }[] {
   const parts: { text: string; quoted: boolean }[] = [];
   let at = 0;
-  for (const m of text.matchAll(/『.+?』/g)) {
+  for (const m of text.matchAll(/『[\s\S]+?』/g)) {
     if (m.index > at) parts.push({ text: text.slice(at, m.index), quoted: false });
     parts.push({ text: m[0], quoted: true });
     at = m.index + m[0].length;

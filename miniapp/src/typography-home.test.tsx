@@ -77,6 +77,19 @@ describe('제목 조각 분리 (quotedParts)', () => {
 
     expect(quoted[0].text).toBe('『『책』');
   });
+
+  /**
+   * ⚠️ `.`은 개행에 안 붙으므로 문자클래스를 넓혀 둔다. 서버 `Book.title`은 `strip()`만 해서
+   * <b>양끝만 걷고 안쪽 개행은 통과</b>시킨다 — 즉 이 입력이 도메인에서 막혀 있지 않다.
+   * 좁게 두면 그 제목만 조용히 세리프를 잃는데, HTML에선 개행이 공백으로 렌더돼
+   * <b>원인이 화면에 보이지도 않는다</b>.
+   */
+  it('제목 안에 개행이 있어도 떼어낸다 — 서버가 안쪽 개행을 걸러 주지 않는다', () => {
+    const quoted = quotedParts('『줄\n바꿈 제목』 완독').filter((p) => p.quoted);
+
+    expect(quoted).toHaveLength(1);
+    expect(quoted[0].text).toBe('『줄\n바꿈 제목』');
+  });
 });
 
 describe('소식 피드 (2b)', () => {
