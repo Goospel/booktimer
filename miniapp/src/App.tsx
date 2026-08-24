@@ -196,7 +196,7 @@ export function tabLocked(key: TabKey, hasActiveSession: boolean): boolean {
 export function timerActionView(active: boolean): { label: string; background: string; icon: string } {
   return active
     ? { label: '측정 끝내기', background: 'var(--adaptiveRed500, #F04452)', icon: STOP_ICON }
-    : { label: '측정 시작', background: 'var(--adaptiveBlue500, #6E8A6A)', icon: PLAY_ICON };
+    : { label: '측정 시작', background: 'var(--adaptiveBlue700, #4F6B4C)', icon: PLAY_ICON };
 }
 
 /**
@@ -1614,30 +1614,49 @@ export function BottomTabBar({
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: 3,
+          gap: 2,
           padding: 0,
           border: 'none',
           background: 'transparent',
-          color: selected ? 'var(--adaptiveBlue500, #6E8A6A)' : 'var(--adaptiveGrey600, #6F6A5E)',
+          // 시안 4c — 고른 칸은 세이지 700이다(500은 옆 라벨 회색과 대비가 약했다).
+          color: selected ? 'var(--adaptiveBlue700, #4F6B4C)' : 'var(--adaptiveGrey600, #6F6A5E)',
           // 잠긴 칸은 흐려진다 — 눌러 보기 전에 눈으로 먼저 알아야 한다.
           opacity: shut ? 0.35 : 1,
           cursor: 'pointer',
         }}
       >
-        <svg
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={1.8}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
+        {/* 시안 4c — 고른 칸의 아이콘만 알약을 입는다. 색약에게도 「여기」가 형태로 보이게.
+            안 고른 칸도 <b>같은 38×26 span</b>을 쓰고 배경만 비운다 — 알약이 있다가 없으면 칸마다
+            아이콘 위치가 달라져 탭을 옮길 때 레이아웃이 튄다. 반투명 세이지를 쓰는 것은 의도다
+            (불투명 토큰보다 밤 테마에서 잘 적응한다). */}
+        <span
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 38,
+            height: 26,
+            borderRadius: 13,
+            background: selected ? 'rgba(110,138,106,.18)' : 'transparent',
+          }}
         >
-          <path d={icon} />
-        </svg>
-        <span style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.2 }}>{label}</span>
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            // 22px 아이콘에서 0.2 차이가 실제로 보인다 — 굵기도 「고른 칸」을 함께 말한다.
+            strokeWidth={selected ? 2 : 1.8}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d={icon} />
+          </svg>
+        </span>
+        {/* 전부 700이면 굵기가 아무 말도 안 한다 — 고른 칸만 굵다(비선택 400은 body 상속과 같다). */}
+        <span style={{ fontSize: 11, fontWeight: selected ? 700 : 400, lineHeight: 1.2 }}>{label}</span>
       </button>
     );
   });
@@ -1670,7 +1689,8 @@ export function BottomTabBar({
  * 탭바 가운데의 측정 액션 — 채운 원이라 스트로크 아이콘들 사이에서 **동작**으로 읽힌다.
  *
  * <p>라벨 글자는 없다(원 44px과 11px 라벨은 56px 높이에 함께 못 선다) — 상태는 `aria-label`이 말한다.
- * 원이 셀(69×56) 안에 들어가므로 알약의 `overflow: hidden`에 잘리지 않는다(돌출형 아님).
+ * 원이 셀(69×56) 안에 들어가므로 알약의 `overflow: hidden`에 잘리지 않는다(돌출형 아님) —
+ * 46px + 링 3px = 52px라 시안 4c로 키운 뒤에도 세로·가로 모두 여유가 남는다.
  */
 function TimerActionButton({ active, busy, onPress }: { active: boolean; busy: boolean; onPress: () => void }) {
   const view = timerActionView(active);
@@ -1694,10 +1714,14 @@ function TimerActionButton({ active, busy, onPress }: { active: boolean; busy: b
     >
       <span
         style={{
-          width: 44,
-          height: 44,
+          width: 46,
+          height: 46,
           borderRadius: '50%',
           background: view.background,
+          // 시안 4c의 링 — **고정값 단층**이다. 애니메이션을 걸지 않는다: T-176이 발광
+          // `box-shadow` 무한 애니메이션으로 표지를 초당 60번 재래스터화한 자리와 같은 종류이고,
+          // 데스크톱·목 모드는 그 클래스를 원리상 못 잡는다.
+          boxShadow: '0 0 0 3px rgba(110,138,106,.25)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
