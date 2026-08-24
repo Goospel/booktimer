@@ -107,8 +107,11 @@ await shot('02-feed')
 // 위쪽 레이아웃이 또 바뀌어도 컷의 첫 줄은 늘 상태 탭이다.
 await tab('서재')
 await page.evaluate(() => {
-    const label = [...document.querySelectorAll('*')].find(
-        (e) => e.children.length === 0 && (e.textContent ?? '').trim().startsWith('읽는 중'),
+    // 「잎 요소」로 찾지 않는다 — 시안 2c에서 권수를 세리프 span으로 떼면서 이 버튼이 더는
+    // 잎이 아니게 됐고, 그 순간 이 촬영기가 죽었다(2026-08-24 실측). 버튼 자체를 찾으면
+    // 안쪽이 몇 조각으로 갈리든 상관이 없다.
+    const label = [...document.querySelectorAll('button')].find((e) =>
+        (e.textContent ?? '').trim().startsWith('읽는 중'),
     )
     if (!label) throw new Error('서재 상태 탭을 못 찾았다') // 문구가 바뀌면 엉뚱한 그림 대신 여기서 죽는다
     window.scrollTo(0, label.closest('div').getBoundingClientRect().top + window.scrollY - 12)
@@ -139,11 +142,20 @@ await page.evaluate(() => {
 await settle()
 await shot('04-history')
 
-// 05 목표 — 시/분 휠 피커. 진입은 홈 「남은시간 ⓘ」 상자 → 「하루 목표 바꾸기」(전면광고는 목이 즉시 resolve).
+// 05 목표 — 시/분 휠 피커.
+// ⚠️ 진입이 **한 번 눌러 들어가는 알약**으로 바뀌었다(#936). 전에는 홈의 대시 밑줄 「남은시간 ⓘ」
+// 한 줄을 누른 뒤 「하루 목표 바꾸기」를 또 눌렀는데, 그 줄이 2열 스탯 행 + 「변경 ›」 알약으로
+// 갈리면서 두 단계가 한 단계가 됐다(그리고 라벨도 「남은 시간」으로 띄어쓰기가 생겼다).
+// 목표가 0이면 알약 문구가 「정하기 ›」라 둘 다 받는다 — 목 픽스처는 목표 30분이라 「변경 ›」이다.
 await tab('홈')
 await page.evaluate(() => window.scrollTo(0, 0))
-await clickText('남은시간')
-await clickText('하루 목표 바꾸기')
+await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find((x) =>
+        /변경|정하기/.test(x.textContent ?? ''),
+    )
+    if (!b) throw new Error('목표 진입 알약을 못 찾았다') // 문구가 바뀌면 엉뚱한 그림 대신 여기서 죽는다
+    b.click()
+})
 await settle(1200)
 await shot('05-goal')
 
