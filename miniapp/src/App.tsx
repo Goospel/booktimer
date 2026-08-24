@@ -312,7 +312,7 @@ export function flowTabChange(step: FlowStep | undefined, tab: TabKey): TabKey |
  * 대상이 있는 화면에 섰을 때가 제 차례라 남겨 둔다(그 화면에 가면 인라인 안내가 스스로 뜬다).
  */
 /**
- * 안내 배너를 띄울까 — 첫 사용 안내는 <b>사용자가 눌러서</b> 시작한다.
+ * 안내 카드를 띄울까 — 첫 사용 안내는 <b>사용자가 눌러서</b> 시작한다.
  *
  * <p>2026-08-17 토스 심사 반려: 「미니앱 접속 직후 바텀시트가 바로 노출돼요」. 우리가 만든 것은 툴팁이지만
  * 렌더 결과가 <b>전체 딤 + 하단 와이드 패널</b>이라 시트와 구별되지 않았다(2026-08-12 「서비스 설명 없이 즉시
@@ -327,8 +327,8 @@ export function flowTabChange(step: FlowStep | undefined, tab: TabKey): TabKey |
  * <b>화면이 갱신되지 않는다</b> — 배너만 보고 있을 때 커서는 이미 `-1`이라 `setFlowIndex(-1)`이 같은 값이고
  * React가 리렌더를 건너뛴다. 그래서 즉시 반영은 이 상태가, 다음 진입의 판정은 키가 맡는다(역할이 다르다).
  */
-export function shouldShowGuideBanner(running: boolean, closed: boolean): boolean {
-  return !running && !closed && flowStepsOnAbandon().some((name) => !coachmarkSeen(name));
+export function shouldShowGuideHero(running: boolean, closed: boolean, measuring: boolean): boolean {
+  return !running && !closed && !measuring && flowStepsOnAbandon().some((name) => !coachmarkSeen(name));
 }
 
 export function flowStepsOnAbandon(): string[] {
@@ -1146,10 +1146,10 @@ export function MainTabs({
         {tab === 'home' && (
           <Home
             dashboard={dashboard}
-            // 안내로 들어오는 문 — 홈은 자리만 정하고(헤더 바로 아래), 만드는 쪽은 흐름을 든 여기다.
+            // 안내로 들어오는 문 — 홈은 자리만 정하고(히어로 카드 속), 만드는 쪽은 흐름을 든 여기다.
             guide={
-              shouldShowGuideBanner(flowIndex >= 0, guideClosed) ? (
-                <GuideBanner
+              shouldShowGuideHero(flowIndex >= 0, guideClosed, dashboard.hasActiveSession) ? (
+                <GuideHero
                   onStart={startFlow}
                   onDismiss={() => {
                     abandonFlow(); // 길 안내만 접고 인라인 걸음은 남긴다(포기 규칙 그대로)
@@ -1296,60 +1296,66 @@ export function MainTabs({
  * 순수 CSS로 주고, 세로는 탭바와 같은 식(띄운 높이 + 홈 인디케이터 + 바 높이)에 여백만 더한다.
  */
 /**
- * 안내 배너 — 첫 사용 안내로 들어오는 문. 홈 헤더 바로 아래 한 줄이다.
+ * 안내 카드 — 첫 사용 안내로 들어오는 문. <b>홈 히어로 카드 속을 통째로</b> 쓴다.
  *
  * <p>진입 직후 자동으로 뜨던 안내를 <b>사용자가 눌러서</b> 시작하도록 뒤집은 결과다(심사 반려 대응 —
- * {@link shouldShowGuideBanner}). 배너는 <b>화면 안 요소</b>라 시트가 아니고 배경을 잠그지 않는다.
+ * {@link shouldShowGuideHero}). 이 카드는 <b>화면 안 요소</b>라 시트가 아니고 배경을 잠그지 않는다.
  * ✕가 있는 것이 요점이다 — 「들이대지 않는다」가 눈에 보여야 한다.
+ *
+ * <p>한때는 헤더 아래 <b>얇은 배너</b> 한 줄이었는데 <b>놓치기 쉬웠다</b>(M-1, 2026-08-23 실기기 제보).
+ * 그래서 홈에서 가장 크고 시선이 먼저 닿는 것 — 히어로 카드 — 이 곧 안내의 문이 된다: 처음 온 사람에게
+ * 그 박스는 타이머가 아니라 <b>안내 시작 버튼</b>이다. 껍데기(연필 테두리·독서등 표식)는 홈이 그대로 들고
+ * 여기서는 <b>속만</b> 채우므로, 안내를 닫아도 카드가 제자리에서 타이머로 돌아올 뿐 화면이 밀리지 않는다.
+ *
+ * <p>⚠️ 첫 측정이 멀어지지 않는다 — 이 앱에서 측정을 여닫는 자리는 <b>탭바 가운데 원</b>이고 이 카드는
+ * 원래부터 버튼이 아니었다. 카드 안 손잡이(ⓘ·「변경 ›」·「목표 정하기」)는 안내가 떠 있는 동안만 물러난다.
+ *
+ * <p>큰 버튼과 ✕는 <b>형제</b>다(중첩 아님) — 버튼 안의 버튼은 잘못된 DOM이라 React가 경고한다.
+ * ✕가 뒤에 그려져 겹치는 자리에서 위에 얹히므로 z 층을 따로 쌓지 않는다.
  *
  * <p>닫기는 {@link MainTabs}의 포기 규칙을 그대로 쓴다: 길 안내만 본 것으로 접고 <b>인라인 걸음은 남긴다</b>
  * (서재·홈에서 그 대상 옆에 뜨는 안내는 시트로 읽힐 자리가 아니고, 그때가 제 차례다).
  */
-export function GuideBanner({ onStart, onDismiss }: { onStart: () => void; onDismiss: () => void }) {
+export function GuideHero({ onStart, onDismiss }: { onStart: () => void; onDismiss: () => void }) {
   const sage = 'var(--adaptiveBlue700, #4F6B4C)';
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        marginBottom: 12,
-        padding: '12px 14px',
-        borderRadius: 12,
-        background: 'rgba(110, 138, 106, 0.10)',
-      }}
-    >
+    <div style={{ position: 'relative' }}>
       <button
         type="button"
         onClick={onStart}
         style={{
-          flex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          minWidth: 0,
+          display: 'block',
+          width: '100%',
           border: 'none',
           background: 'transparent',
           padding: 0,
-          textAlign: 'left',
+          textAlign: 'center',
           cursor: 'pointer',
         }}
       >
-        <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: sage }}>처음이신가요? 앱 사용법 보기</span>
-        <span style={{ fontSize: 14, color: sage }}>›</span>
+        {/* 오버라인 — 카드가 평소 「오늘 읽은 시간」을 놓는 자리다. 자간을 벌려 머리말로 읽히게 한다. */}
+        <span style={{ display: 'block', fontSize: 12, letterSpacing: 3, color: sage }}>처음이신가요?</span>
+        {/* 카드의 주인공 자리 — 세리프로 히어로의 수(오늘 읽은 시간)와 같은 무게를 받는다. */}
+        <span style={{ display: 'block', marginTop: 6, fontSize: 26, ...SERIF_VALUE }}>앱 사용법 보기 ›</span>
+        <span
+          style={{ display: 'block', marginTop: 10, fontSize: 14, color: 'var(--adaptiveGrey600, #6F6A5E)' }}
+        >
+          서재·책방·여백까지 차례로 짚어드려요
+        </span>
       </button>
-
-      <span style={{ width: 1, height: 14, background: 'rgba(79, 107, 76, 0.25)', margin: '0 2px' }} />
 
       <button
         type="button"
-        aria-label="안내 배너 닫기"
+        aria-label="안내 카드 닫기"
         onClick={onDismiss}
         style={{
+          position: 'absolute',
+          top: -12,
+          right: -8,
           border: 'none',
           background: 'transparent',
-          padding: '0 2px',
+          padding: 8,
           color: 'var(--adaptiveGrey600, #6F6A5E)',
           fontSize: 14,
           cursor: 'pointer',
