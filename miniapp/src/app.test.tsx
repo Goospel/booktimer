@@ -215,9 +215,9 @@ describe('하단 탭바', () => {
   it('액션은 채운 원이다 — 탭 아이콘들 사이에서 동작으로 읽히는 유일한 형태다', () => {
     const cell = actionCell(bar('home'), '측정 시작');
 
-    expect(cell).toContain('width:44px;height:44px');
+    expect(cell).toContain('width:46px;height:46px'); // 시안 4c에서 44 -> 46
     expect(cell).toContain('border-radius:50%');
-    expect(cell).toContain('#6E8A6A'); // 시작 = 브랜드 세이지
+    expect(cell).toContain('#4F6B4C'); // 시작 = 브랜드 세이지(4c에서 500 -> 700)
   });
 
   it('측정 중이면 빨간 ■로 바뀐다 — 시작과 끝내기가 한 자리에서 갈린다', () => {
@@ -233,7 +233,9 @@ describe('하단 탭바', () => {
   });
 
   it('선택 탭 색 폴백이 웹 세이지다 — 변수가 안 잡히는 순간 토스 블루로 되돌아가는 걸 막는다', () => {
-    expect(bar('home')).toContain('var(--adaptiveBlue500, #6E8A6A)');
+    // 시안 4c에서 한 단 진해졌다(500 -> 700). 이 단언이 지키는 것은 「어느 칸인가」가 아니라
+    // **폴백이 세이지인가**이므로 램프의 칸이 바뀌어도 의도는 그대로다.
+    expect(bar('home')).toContain('var(--adaptiveBlue700, #4F6B4C)');
     expect(bar('home')).not.toContain('#3182f6');
   });
 
@@ -296,7 +298,7 @@ describe('액션 버튼 시각 (timerActionView)', () => {
     const view = timerActionView(false);
 
     expect(view.label).toBe('측정 시작');
-    expect(view.background).toContain('#6E8A6A');
+    expect(view.background).toContain('#4F6B4C'); // 4c에서 세이지 500 -> 700
   });
 
   it('측정 중이면 빨강 ■ 「측정 끝내기」 — 옛 홈 danger 버튼의 색 연속성', () => {
@@ -908,5 +910,94 @@ describe('여백 위의 탭바 (MarginShell)', () => {
     for (const screen of ['<StoryComposer', '<BookMargin', '<BookMarginAll']) {
       expect(src).toContain(screen);
     }
+  });
+});
+
+/**
+ * 시안 4c의 탭바 — <b>자리마다 하나씩</b> 못 박는다.
+ *
+ * <p>B 리뷰가 「파일째 되돌려도 전 스위트 초록」인 사각을 잡았고, 원인은 `typography.test`의 `SCALE`
+ * 가드가 <b>계단 위 값끼리의 바꿔치기를 통과시킨다</b>는 것이었다. 11도 12도 계단 위 값이라 라벨
+ * 크기를 되돌려도 그 가드는 안 운다 — 그래서 여기서 직접 잠근다.
+ */
+describe('탭바 위계 (시안 4c)', () => {
+  const tabBar = (tab: (typeof TABS)[number]['key']) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <BottomTabBar tab={tab} onTabChange={() => {}} action={{ active: false, busy: false, onPress: () => {} }} />
+      </TDSMobileProvider>,
+    );
+
+  /** 가운데 액션 한 칸만 — 위 「하단 탭바」의 같은 이름 헬퍼는 그 describe 스코프에 갇혀 있다. */
+  const centerCell = (markup: string) => {
+    const at = markup.indexOf('aria-label="측정 시작"');
+    expect(at).toBeGreaterThan(-1);
+    return markup.slice(at, markup.indexOf('</button>', at));
+  };
+
+  /** 탭 한 칸만 — 알약 전체를 보면 칸들의 색·크기가 섞여 단언이 공허해진다(같은 규율). */
+  const tabCell = (markup: string, label: string) => {
+    const at = markup.indexOf(`title="${label}"`);
+    expect(at).toBeGreaterThan(-1);
+    return markup.slice(markup.lastIndexOf('<button', at), markup.indexOf('</button>', at));
+  };
+
+  it('고른 칸의 아이콘만 알약을 입는다 — 색약에게도 「여기」가 형태로 보인다', () => {
+    const on = tabCell(tabBar('home'), '홈');
+
+    expect(on).toContain('width:38px');
+    expect(on).toContain('height:26px');
+    expect(on).toContain('border-radius:13px');
+    expect(on).toContain('rgba(110,138,106,.18)');
+  });
+
+  it('안 고른 칸도 같은 38×26 span을 쓴다 — 배경만 없다(있다가 없으면 레이아웃이 튄다)', () => {
+    const off = tabCell(tabBar('home'), '서재');
+
+    expect(off).toContain('width:38px');
+    expect(off).toContain('height:26px');
+    expect(off).not.toContain('rgba(110,138,106,.18)');
+  });
+
+  it('고른 칸 색은 세이지 700이다 — 500은 라벨 회색과 대비가 약했다(시안값)', () => {
+    const markup = tabBar('home');
+
+    expect(tabCell(markup, '홈')).toContain('--adaptiveBlue700');
+    expect(tabCell(markup, '서재')).toContain('--adaptiveGrey600');
+  });
+
+  it('라벨은 11px이고 굵기는 고른 칸만 700이다 — 전부 700이면 굵기가 아무 말도 안 한다', () => {
+    const markup = tabBar('home');
+
+    expect(tabCell(markup, '홈')).toContain('font-size:11px');
+    expect(tabCell(markup, '홈')).toContain('font-weight:700');
+    expect(tabCell(markup, '서재')).toContain('font-size:11px');
+    expect(tabCell(markup, '서재')).toContain('font-weight:400');
+  });
+
+  it('아이콘 획도 고른 칸만 굵다 — 22px 아이콘에서 0.2 차이가 실제로 보인다', () => {
+    const markup = tabBar('home');
+
+    expect(tabCell(markup, '홈')).toContain('width="22"');
+    expect(tabCell(markup, '홈')).toContain('stroke-width="2"');
+    expect(tabCell(markup, '서재')).toContain('stroke-width="1.8"');
+  });
+
+  /**
+   * 링은 <b>고정값 단층</b>이다 — 애니메이션을 걸지 않는다. T-176이 발광 `box-shadow` 무한
+   * 애니메이션으로 표지를 초당 60번 재래스터화한 자리와 같은 종류이고, 데스크톱·목 모드는
+   * 그 클래스를 원리상 못 잡는다.
+   */
+  it('가운데 원은 46px에 링을 두른다 — 스트로크 아이콘들 사이에서 동작으로 떠 보인다', () => {
+    const cell = centerCell(tabBar('home'));
+
+    expect(cell).toContain('width:46px');
+    expect(cell).toContain('height:46px');
+    expect(cell).toContain('box-shadow:0 0 0 3px rgba(110,138,106,.25)');
+  });
+
+  it('가운데 원 배경도 세이지 700이다 — 고른 칸과 같은 잉크라야 한 팔레트로 읽힌다', () => {
+    expect(timerActionView(false).background).toContain('--adaptiveBlue700');
+    expect(timerActionView(true).background).toContain('Red'); // 끝내기는 빨강 그대로
   });
 });
