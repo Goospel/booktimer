@@ -26,7 +26,7 @@
 ```bash
 npm install
 cp .env.example .env.local     # VITE_API_BASE_URL — 개발은 로컬 백엔드(:8080), 운영은 https://booktimer.app
-npm run dev                    # http://localhost:5174 — 실서버(:8080 또는 운영)에 붙는다
+npm run dev                    # http://localhost:5300 — 실서버(:8080 또는 운영)에 붙는다
 npm run dev:mock               # 목 모드: 서버·토스 SDK 없이 브라우저에서 전 화면 + HMR
 npm test                       # vitest — API 클라이언트 분기 로직
 npm run build                  # tsc -b && vite build → dist/

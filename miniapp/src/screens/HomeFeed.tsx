@@ -6,7 +6,7 @@ import { fetchHomeFeed } from '../api';
 import { CACHE_FEED, cacheGet, cachePut } from '../cache';
 import { elapsedSeconds, formatDuration, objectParticle, relativeTime } from '../format';
 import { openExternal } from '../toss';
-import { BookCover, HANDWRITING, SERIF_VALUE, Text, sectionStyle } from '../ui';
+import { BookCover, HANDWRITING, SECTION_RULE, SERIF_VALUE, Text, sectionStyle } from '../ui';
 
 /**
  * 홈 피드 박스 — 「소식」·「책 뉴스」 두 탭. 잔디 미리보기가 서 있던 자리를 물려받았다.
@@ -436,7 +436,18 @@ export function FeedBox({
 }) {
   return (
     <section style={sectionStyle}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 10 }}>
+      {/* 탭 머리는 카드 안의 섹션 머리다 — 시안 2b가 그 아래에 선을 긋는다(줄 전체를 지나야 하므로
+          탭 버튼이 아니라 이 줄에 건다). */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 5,
+          marginBottom: 10,
+          paddingBottom: 11,
+          borderBottom: SECTION_RULE,
+        }}
+      >
         {visibleTabs(feed?.newsEnabled ?? false).map((key) => (
           <Fragment key={key}>
             <button

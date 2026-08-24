@@ -20,6 +20,7 @@ import {
   ErrorMessage,
   HANDWRITING,
   PENCIL_FRAME,
+  SECTION_RULE,
   SERIF_VALUE,
   Screen,
   SectionTitle,
@@ -921,7 +922,7 @@ export function ReadingNowCard({
 }) {
   return (
     <section style={sectionStyle}>
-      <SectionTitle style={{ marginBottom: 10 }}>읽는 중</SectionTitle>
+      <SectionTitle style={{ marginBottom: 10, paddingBottom: 9, borderBottom: SECTION_RULE }}>읽는 중</SectionTitle>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         {book === null ? (
           <NoBookCard width={READING_NOW_COVER} />
@@ -1287,7 +1288,7 @@ export function Home({
         <section style={sectionStyle}>
           {/* 상태와 무관한 고정 문구다 — 「책 없이」가 가운데면 "이 책으로"는 틀린 말이고, 상태별로
               갈아끼우면 헤더가 나타났다 사라지며 캐러셀이 세로로 들썩인다. */}
-          <SectionTitle style={{ marginBottom: 10 }}>무엇으로 측정할까요?</SectionTitle>
+          <SectionTitle style={{ marginBottom: 10, paddingBottom: 9, borderBottom: SECTION_RULE }}>무엇으로 측정할까요?</SectionTitle>
           {/* 좌우로 밀어 고른다 — 가운데 온 칸이 곧 측정 대상이다(0번은 「책 없이」라 책 0권도 같은 화면). */}
           <BookCarousel books={dashboard.readingBooks} selectedId={selectedBookId} onSelect={onSelectBook} />
           {marginDoor}
