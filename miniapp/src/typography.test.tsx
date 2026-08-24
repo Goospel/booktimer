@@ -27,6 +27,8 @@ import { Avatar, CoverInitial, FilledButton, HANDWRITING, SectionTitle, Text } f
  */
 
 const css = readFileSync(new URL('./global.css', import.meta.url), 'utf8');
+/** css 주석을 걷는다 — 주석이 선택자를 인용하면 소스 단언이 공허하게 통과한다(T-205의 거울상). */
+const cssCode = css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 /** 주석을 걷어낸 css — 이 레포 주석엔 `button { font: 400 … }` 처럼 중괄호가 들어 있어, 규칙 구조를
  *  볼 땐 먼저 지워야 한다(안 지우면 `[^}]*`가 주석 속 `}`에서 멈춘다). */
@@ -425,3 +427,22 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
   }
   return out;
 }
+
+/**
+ * 목표 휠의 선택 행(시안 2e) — <b>emotion 해시가 아니라 ARIA 계약으로</b> 집는다.
+ *
+ * <p>설계 §7 U-3은 「선택 행만 집는 안정된 selector가 있는지 미확인」이라 적고, 없으면 전 행 세리프로
+ * 후퇴하는 1차안을 뒀다. 목 모드 실측에서 항목이 `role="radio"` + `aria-checked`를 다는 것을 확인해
+ * <b>후퇴가 필요 없어졌다</b>(항목 73개 중 `true`가 휠당 정확히 1개).
+ *
+ * <p>정적 렌더로는 휠 항목이 안 나오므로(TDS가 클라이언트에서 채운다) css 소스로 잠근다.
+ */
+describe('목표 휠 선택 행 (시안 2e)', () => {
+  it('선택 행만 세리프로 집는다 — 해시 클래스에 기대면 TDS 업그레이드에 조용히 끊긴다', () => {
+    expect(cssCode).toMatch(/\.goal-wheels[^{]*\[aria-checked='true'\][^{]*\{[^}]*Gowun Batang/);
+  });
+
+  it('선택 행 크기는 !important다 — TDS가 인라인 커스텀 프로퍼티로 크기를 박는다', () => {
+    expect(cssCode).toMatch(/\[aria-checked='true'\][^{]*\{[^}]*font-size:\s*23px\s*!important/);
+  });
+});

@@ -146,3 +146,31 @@ describe('목표 화면 렌더', () => {
     expect(buttonAttrs(render(false, 3600), '저장')[0]).not.toContain('disabled');
   });
 });
+
+/**
+ * 시안 2e — 휠 뒤 밴드 + 선택 행 세리프 + 채움 저장 버튼.
+ *
+ * <p>휠 항목은 TDS 내부라 정적 렌더로 안 보인다. 설계 §7 U-3의 CHECK를 목 모드에서 돌려
+ * <b>안정된 selector가 있음을 실측했다</b> — 항목이 `role="radio"` + `aria-checked`를 달고 있어
+ * emotion 해시(`css-a9zorm`)에 의존하지 않고 선택 행만 집힌다(73개 중 `true`가 휠당 1개).
+ * 그래서 설계의 1차안(전 행 세리프)으로 후퇴하지 않았다. 그 css 규칙 자체는 `typography.test.tsx`가
+ * `readFileSync`로 잠근다(vite `?raw`는 CSS에 안 통한다 — 빈 문자열이 온다, 실측).
+ */
+describe('목표 위계 (시안 2e)', () => {
+  const goalScreen = (current: number) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Goal current={current} firstRun={false} onSaved={() => {}} onSkip={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  it('휠 뒤에 선택 밴드를 깐다 — 어느 칸이 골라졌는지 색으로 말한다', () => {
+    const markup = goalScreen(1_800);
+
+    expect(markup).toContain('data-wheel-band');
+  });
+
+  it('저장은 채움 주 버튼이다 — 이 화면의 주 동작 하나', () => {
+    expect(goalScreen(1_800)).toContain('--btn-filled');
+  });
+});

@@ -51,7 +51,8 @@ export function History({ graph }: { graph: ContributionGraph }) {
         <Stat label="총 시간" value={formatDuration(graph.totalSeconds)} />
       </div>
 
-      <SectionTitle style={{ margin: '24px 0 8px' }}>읽은 날짜</SectionTitle>
+      {/* 시안 2d — 이 화면이 답하는 것의 이름이라 값으로 조판한다(세리프 20). */}
+      <SectionTitle style={{ margin: '24px 0 8px', ...SERIF_VALUE, fontSize: 20 }}>읽은 날짜</SectionTitle>
 
       <div className="no-scrollbar" style={{ overflowX: 'auto', paddingBottom: 8 }}>
         {/* 라벨은 격자 폭 안에서 절대 배치된다 — inline-block이라 이 상자가 격자만큼만 넓어진다. */}
@@ -253,10 +254,11 @@ export function MonthlyRecords({ months }: { months: MonthlySection[] }) {
       {months.map((section) => (
         <section key={section.month}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: '20px 0 4px' }}>
-            <Text typography="st10" fontWeight="bold">
+            {/* 시안 2d — 달 이름과 그 달의 합계는 둘 다 값이다. 크기로 층을 두되 서체는 같이 간다. */}
+            <Text typography="st10" fontWeight="bold" style={{ ...SERIF_VALUE, fontSize: 20 }}>
               {formatMonthTitle(section.month)}
             </Text>
-            <Text typography="st12" color="grey600">
+            <Text typography="st12" color="grey600" style={{ ...SERIF_VALUE, fontSize: 14 }}>
               {formatDuration(section.totalSeconds)}
             </Text>
           </div>
@@ -333,7 +335,7 @@ export function DayRow({
   const summary = (
     <>
       <div>
-        <Text typography="st11" style={{ display: 'block', lineHeight: 1.2 }}>
+        <Text typography="st11" style={{ display: 'block', lineHeight: 1.2, ...SERIF_VALUE, fontSize: 15 }}>
           {formatRecordDate(day.date)}
         </Text>
         <Text typography="st12" color="grey600" style={{ display: 'block' }}>
@@ -359,7 +361,7 @@ export function DayRow({
           값이 넘칠 때 빈 막대 쪽으로 넘치지, 옆의 손잡이를 침범하지 않는다. */}
       <div style={{ textAlign: 'right' }}>
         {/* 잉크색이다 — 이 줄이 대답하는 값이 이것인데, 흐린 색이면 왼쪽 날짜보다 뒤로 물러난다. */}
-        <Text typography="st11" style={{ whiteSpace: 'nowrap' }}>
+        <Text typography="st11" style={{ whiteSpace: 'nowrap', ...SERIF_VALUE, fontSize: 15 }}>
           {formatDuration(day.totalSeconds)}
         </Text>
       </div>
@@ -481,11 +483,14 @@ function BookLines({ rows }: { rows: DayBookRow[] }) {
 
   return (
     // 왼쪽 세로선은 여백의 인용 줄과 같은 값이다 — 「위 줄에 딸린 것」이라는 말을 앱이 한 가지로 한다.
+    // 그 줄이 B에서 세이지 200으로 옮겨 갔으므로 여기도 함께 옮긴다(안 옮기면 이 주석이 거짓이 된다).
+    // 시안 2d는 `rgba(110,138,106,.35)`로 인용(.5)보다 한 톤 옅지만, 15% 알파 차이로 두 자리를
+    // 갈라 두면 「한 가지로 한다」는 규약만 잃는다.
     <div
       style={{
         margin: '2px 0 9px 70px',
-        paddingLeft: 10,
-        borderLeft: '2px solid var(--adaptiveGrey200, #E4DDD0)',
+        paddingLeft: 16,
+        borderLeft: '2px solid var(--adaptiveBlue200, #B6C9AE)',
         display: 'flex',
         flexDirection: 'column',
         gap: 7,
@@ -537,7 +542,7 @@ function BookLines({ rows }: { rows: DayBookRow[] }) {
           />
 
           <div style={{ textAlign: 'right' }}>
-            <Text typography="st12" color="grey600" style={{ whiteSpace: 'nowrap' }}>
+            <Text typography="st12" color="grey600" style={{ whiteSpace: 'nowrap', ...SERIF_VALUE, fontSize: 13 }}>
               {formatDuration(row.seconds)}
             </Text>
           </div>

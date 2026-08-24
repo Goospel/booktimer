@@ -3,7 +3,7 @@ import { useState } from 'react';
 
 import { setGoal } from '../api';
 import { formatDuration } from '../format';
-import { ErrorMessage, Screen, Text } from '../ui';
+import { ErrorMessage, FilledButton, Screen, Text } from '../ui';
 
 /** 휠 시간 열의 상한 — 하루 독서 목표로 12시간이면 넘치고, 더 길면 휠만 길어져 고르기 힘들다. */
 const MAX_HOURS = 12;
@@ -87,7 +87,26 @@ export function Goal({
       {/* 프리셋 칩 대신 휠 2열 — 초는 selected 하나가 단일 소스고, 시/분은 그때그때 풀었다 다시 합친다.
           높이는 컨테이너가 줘야 한다 — Wheel 루트가 height:100%라(항목 한 칸 = 그 16%) 높이 없는 부모에
           넣으면 컨테이너가 0이 되어 항목이 전부 한 줄에 겹친다(브라우저 실측 2026-08-13). */}
-      <div className="goal-wheels" style={{ display: 'flex', justifyContent: 'center', gap: 8, height: 180 }}>
+      <div
+        className="goal-wheels"
+        style={{ position: 'relative', display: 'flex', justifyContent: 'center', gap: 8, height: 180 }}
+      >
+        {/* 선택 밴드(시안 2e) — 가운데 칸이 「고른 것」임을 색으로 말한다. 정적이다(애니메이션 0):
+            T-176이 발광 애니메이션으로 표지를 초당 60번 재래스터화했던 자리와 같은 종류다. */}
+        <div
+          aria-hidden="true"
+          data-wheel-band=""
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: '50%',
+            height: 44,
+            transform: 'translateY(-50%)',
+            background: 'var(--adaptiveBlue50, #E7EEE2)',
+            borderRadius: 10,
+          }}
+        />
         <Wheel
           options={HOUR_OPTIONS}
           formatValue={(n) => `${n}시간`}
@@ -118,7 +137,8 @@ export function Goal({
       <ErrorMessage message={error} />
 
       {/* 0시간 0분 저장은 서버가 허용하는 「목표 없음」이지만, 휠을 끝까지 내린 실수일 가능성이 더 높다. */}
-      <Button
+      {/* 이 화면의 주 동작 하나 — 채움이다(시안 2e). 홈은 탭바 원이 그 역할을 한다. */}
+      <FilledButton
         display="block"
         style={{ marginTop: 28 }}
         loading={busy}
@@ -126,7 +146,7 @@ export function Goal({
         onClick={save}
       >
         {firstRun ? '이걸로 시작하기' : '저장'}
-      </Button>
+      </FilledButton>
       <Button display="block" variant="weak" style={{ marginTop: 12 }} disabled={busy} onClick={onSkip}>
         {firstRun ? '나중에 정할래요' : '돌아가기'}
       </Button>

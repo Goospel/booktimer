@@ -25,6 +25,7 @@ import {
   Screen,
   SearchField,
   SectionTitle,
+  SERIF_VALUE,
   Sheet,
   Text,
   sectionStyle,
@@ -84,11 +85,22 @@ export function metaLine(book: MyBookSummary): string {
  * <p>저자를 줄바꿈으로 분리하던 옛 수법(`pre-line`)이 사라진 것도 이득이다 — 긴 알라딘 저자 문자열이
  * 되접혀도 칩은 <b>다른 요소</b>라 그 사이에 끼어 들 수가 없다(전에는 문자열 한 덩어리라 가능했다).
  */
-export function bookStats(book: MyBookSummary): { label: string; tone: BookChipTone }[] {
-  const chips: { label: string; tone: BookChipTone }[] = [];
-  if (book.seconds > 0) chips.push({ label: `${formatDuration(book.seconds)} 읽음`, tone: 'neutral' });
+export function bookStats(book: MyBookSummary): BookChip[] {
+  const chips: BookChip[] = [];
+  if (book.seconds > 0) {
+    // `value`는 세리프로 그릴 앞부분이다 — 「2시간」이 값이고 「 읽음」은 그게 무엇인지 말하는 꼬리다.
+    const read = formatDuration(book.seconds);
+    chips.push({ label: `${read} 읽음`, value: read, tone: 'neutral' });
+  }
   chips.push(book.isPublic ? { label: '공개', tone: 'sage' } : { label: '비공개', tone: 'outline' });
   return chips;
+}
+
+/** 칩 하나 — `value`가 있으면 라벨의 그 앞부분만 세리프로 그린다(시안 2c). */
+export interface BookChip {
+  label: string;
+  tone: BookChipTone;
+  value?: string;
 }
 
 type BookChipTone = 'neutral' | 'sage' | 'outline';
@@ -241,8 +253,16 @@ export function MarginBoxView({
  borderImage: PENCIL_FRAME, borderRadius: 16, background: '#FFFDF8' }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline' }}>
-        <SectionTitle style={{ flex: 1 }}>
-          여백{typeof view !== 'string' && <b style={{ color: '#4E6B4A' }}> {entries.length}</b>}
+        {/* 시안 2c — 라벨 16에 카운트만 세리프. 색은 토큰으로 준다(옛 `#4E6B4A`는 세이지 700과
+            한 글자 다른 사본이라 다크모드에서 갈라졌다). */}
+        <SectionTitle style={{ flex: 1, fontSize: 16 }}>
+          여백
+          {typeof view !== 'string' && (
+            <b style={{ ...SERIF_VALUE, fontSize: 16, color: 'var(--adaptiveBlue700, #4F6B4C)' }}>
+              {' '}
+              {entries.length}
+            </b>
+          )}
         </SectionTitle>
         <button
           type="button"
@@ -557,14 +577,18 @@ export function Shelf({
                 flex: 1,
                 padding: '9px 0',
                 border: 'none',
-                borderRadius: 8,
-                fontSize: 14,
+                borderRadius: 10,
+                fontSize: 13,
+                // 시안 2c — 고른 칸은 색만으로 말하지 않는다. 굵기와 그림자가 「떠 있음」을 만든다.
+                fontWeight: current ? 700 : 400,
+                boxShadow: current ? '0 1px 3px rgba(0, 0, 0, 0.08)' : undefined,
                 cursor: 'pointer',
                 background: current ? '#FCFAF5' : 'transparent',
                 color: current ? '#2C2C2A' : 'var(--adaptiveGrey700, #57534A)',
               }}
             >
-              {title} {books.filter((b) => b.status === status).length}
+              {/* 탭 이름은 말이고 권수는 값이다 — 세리프로 갈라 놓으면 한 덩어리로 안 읽힌다(시안 2c). */}
+              {title} <span style={SERIF_VALUE}>{books.filter((b) => b.status === status).length}</span>
             </button>
           );
         })}
@@ -601,7 +625,9 @@ export function Shelf({
               onSelect={onSelect}
               leadCard={leadCard}
               metaOf={metaLine}
-              chipsOf={(b) => bookStats(b).map(({ label, tone }) => ({ label, style: bookChipStyle(tone) }))}
+              chipsOf={(b) =>
+                bookStats(b).map(({ label, tone, value }) => ({ label, value, style: bookChipStyle(tone) }))
+              }
             />
           </Coachmark>
           {onLeadCard ? (
@@ -642,9 +668,12 @@ export function Shelf({
                         height: HANDLE_ROW_HEIGHT,
                         border: 'none',
                         borderRadius: 14,
-                        background: 'rgba(110,138,106,.14)',
-                        color: '#4E6B4A',
-                        fontSize: 16,
+                        // 시안 2c — 이 화면의 주 동작 하나라 **채움**이다(전엔 14% 틴트였다).
+                        // radius는 시안 10이 아니라 14로 둔다: 옆 「관리」가 연필 프레임 + 14라
+                        // 짝이고, 시안은 그 프레임이 없는 평면이다.
+                        background: 'var(--adaptiveBlue700, #4F6B4C)',
+                        color: '#F7F2E8',
+                        fontSize: 15,
                         fontWeight: 700,
                         cursor: 'pointer',
                       }}
@@ -664,7 +693,7 @@ export function Shelf({
                       borderRadius: 14,
                       background: '#FCFAF5',
                       color: '#2C2C2A',
-                      fontSize: 16,
+                      fontSize: 15,
                       fontWeight: 700,
                       cursor: 'pointer',
                     }}

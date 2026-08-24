@@ -326,8 +326,12 @@ export function BookCarousel<T extends BookOption>({
   /**
    * 메타 아래 칩 줄 — 서재가 읽은 시간·공개 여부를 여기로 보낸다. 홈은 안 넘긴다(측정할 책을 <b>고르는</b>
    * 자리에서는 공개 여부가 군더더기다). 스타일까지 호출부가 정해 보내므로 캐러셀은 톤을 몰라도 된다.
+   *
+   * <p>{@code value}는 라벨의 <b>앞부분</b>이다 — 있으면 그만큼만 세리프로 그린다(시안 2c: 「2시간」은
+   * 값이고 「 읽음」은 그게 무엇인지 말하는 꼬리다). 자리를 호출부가 아니라 <b>렌더가</b> 아는 이유는
+   * 칩 마크업이 여기 하나뿐이라서다.
    */
-  chipsOf?: (book: T) => { label: string; style: CSSProperties }[];
+  chipsOf?: (book: T) => { label: string; style: CSSProperties; value?: string }[];
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const settleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -455,9 +459,16 @@ export function BookCarousel<T extends BookOption>({
         )}
         {selected !== null && chipsOf !== undefined && (
           <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
-            {chipsOf(selected).map(({ label, style }) => (
+            {chipsOf(selected).map(({ label, style, value }) => (
               <span key={label} data-book-chip="" style={style}>
-                {label}
+                {value === undefined ? (
+                  label
+                ) : (
+                  <>
+                    <span style={SERIF_VALUE}>{value}</span>
+                    {label.slice(value.length)}
+                  </>
+                )}
               </span>
             ))}
           </div>

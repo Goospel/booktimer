@@ -101,16 +101,16 @@ describe('서재 탭', () => {
   it('탭 라벨에 그 상태의 권수를 함께 적는다', () => {
     const markup = shelf(books);
 
-    expect(markup).toContain('읽는 중 1');
-    expect(markup).toContain('다 읽음 1');
-    expect(markup).toContain('읽고 싶어요 1');
+    expect(textOf(markup)).toContain('읽는 중 1');
+    expect(textOf(markup)).toContain('다 읽음 1');
+    expect(textOf(markup)).toContain('읽고 싶어요 1');
   });
 
   it('빈 탭도 라벨은 남는다 — 탭이 나타났다 사라지면 자리가 흔들린다', () => {
     const markup = shelf([book(1, '읽는책', 'READING')]);
 
-    expect(markup).toContain('다 읽음 0');
-    expect(markup).toContain('읽고 싶어요 0');
+    expect(textOf(markup)).toContain('다 읽음 0');
+    expect(textOf(markup)).toContain('읽고 싶어요 0');
   });
 
   it('고른 탭의 책만 캐러셀에 세운다', () => {
@@ -132,7 +132,7 @@ describe('서재 탭', () => {
     const markup = shelf([]);
 
     expect(markup).toContain('책 추가');
-    expect(markup).toContain('읽는 중 0'); // 탭도 그대로 — 빈 상태라고 자리가 사라지지 않는다
+    expect(textOf(markup)).toContain('읽는 중 0'); // 탭도 그대로 — 빈 상태라고 자리가 사라지지 않는다
   });
 
   /**
@@ -169,7 +169,7 @@ describe('선택한 책 메타 (metaLine)', () => {
 describe('책 상태 칩 (bookStats)', () => {
   it('읽은 시간은 「N 읽음」으로 — 「2시간」만 있으면 무엇의 2시간인지 안 보인다', () => {
     expect(bookStats(book(1, '데미안', 'READING', { seconds: 7200, isPublic: true }))).toEqual([
-      { label: '2시간 읽음', tone: 'neutral' },
+      { label: '2시간 읽음', value: '2시간', tone: 'neutral' },
       { label: '공개', tone: 'sage' },
     ]);
   });
@@ -191,7 +191,7 @@ describe('책 상태 칩 (bookStats)', () => {
   it('상태 칩이 실제로 그려진다 — 순수 함수만 맞고 화면이 안 부르면 아무 일도 안 일어난다', () => {
     const markup = shelf([book(1, '데미안', 'READING', { seconds: 7200, isPublic: true })], { selectedId: 1 });
 
-    expect(markup).toContain('2시간 읽음');
+    expect(textOf(markup)).toContain('2시간 읽음');
     expect(markup).toContain('data-book-chip=""');
     // 저자와 상태가 한 덩어리로 붙어 있던 옛 모양이 남아 있으면 안 된다.
     expect(markup).not.toContain('2시간 · 공개');
@@ -375,7 +375,8 @@ describe('서재 손잡이 줄과 인라인 여백 박스', () => {
 
     expect(markup).toContain('flex:2');
     expect(markup).toContain('flex:1');
-    expect(markup).toContain('rgba(110,138,106,.14)'); // 세이지 채움 = 주 동작
+    // 시안 2c에서 틴트(.14)가 **채움**으로 바뀌었다 — 이 화면의 주 동작 하나라는 뜻이 색으로 선다.
+    expect(tagBefore(markup, '여백에 글쓰기')).toContain('--adaptiveBlue700');
   });
 
   it('고른 책 아래 박스가 선다 — effect가 안 도는 정적 렌더에서는 로딩이다', () => {
@@ -1237,7 +1238,7 @@ describe('서재 세션 캐시', () => {
     const markup = library();
 
     expect(markup).toContain('데미안');
-    expect(markup).toContain('읽는 중 1');
+    expect(textOf(markup)).toContain('읽는 중 1');
   });
 
   it('캐시된 책장은 검색 가능 여부까지 되살린다 — 「책 추가」 칸이 한 박자 늦게 나타나지 않게', () => {
@@ -1263,7 +1264,9 @@ describe('서재 세션 캐시', () => {
     const markup = library();
 
     expect(markup).toContain('캐시에서 살아난 문장');
-    expect(markup).toContain('<b style="color:#4E6B4A"> 1</b>'); // 헤더 글 수 = 내용 상태로 그려졌다는 증거
+    // 헤더 글 수 = 내용 상태로 그려졌다는 증거. 숫자가 세리프 span으로 갈렸으므로(시안 2c) 서식이
+    // 아니라 글자로 잰다 — 이 단언이 지키려던 것은 「로딩이 아니라 내용이 그려졌다」다.
+    expect(textOf(markup)).toContain('여백 1');
     expect(markup).not.toContain('불러오는 중');
   });
 
@@ -1283,5 +1286,86 @@ describe('서재 세션 캐시', () => {
 
     expect(markup).not.toContain('남의 문장');
     expect(markup).toContain('불러오는 중');
+  });
+});
+
+/**
+ * 태그를 걷은 글자 — 탭 라벨·칩은 값 조각만 세리프로 감싸느라 여러 span으로 나뉘어(2c) 마크업 통짜
+ * 비교가 안 된다. 그런데 이 단언들이 지키려는 건 서식이 아니라 <b>「이 자리가 무엇을 말하는가」</b>다.
+ *
+ * <p>⚠️ 태그를 <b>지우지</b> 않고 텍스트 노드를 <b>모은다</b> — `replace(/<[^>]*>/g, '')`는 고장 난 HTML
+ * 살균기의 전형이라 CodeQL `js/incomplete-multi-character-sanitization`이 high로 잡는다(B에서 실제로
+ * 겪었다). 여기선 살균이 아니지만 레포 스캔에 보안 경보를 남길 값이 없다.
+ */
+const textOf = (markup: string) =>
+  [...markup.matchAll(/>([^<>]+)</g)].map((m) => m[1]).join('');
+
+/** 그 글자를 감싼 여는 태그 — 크기·서체·색·그림자가 인라인 style이라 태그만 잘라 보면 판정된다. */
+const tagBefore = (markup: string, text: string) => {
+  const at = markup.indexOf(text);
+  return at < 0 ? '' : markup.slice(markup.lastIndexOf('<', at), at);
+};
+
+/**
+ * 시안 2c의 위계 — <b>자리마다 하나씩</b> 못 박는다.
+ *
+ * <p>B 리뷰가 「`Home.tsx`를 통째로 되돌려도 전 스위트 초록」인 사각을 잡았다. 원인은 `typography.test`의
+ * `SCALE` 가드가 <b>계단 위 값끼리의 바꿔치기를 통과시킨다</b>는 것이었다 — 계단에 있는지가 아니라
+ * 어느 자리가 어느 칸인지가 값이다. 그래서 C는 처음부터 자리별로 잠근다.
+ */
+describe('서재 위계 (시안 2c)', () => {
+  const read = (extra = {}) => book(1, '미움받을 용기', 'READING', { seconds: 7_200, ...extra });
+
+  it('고른 세그먼트만 굵고 그림자를 진다 — 색만으로는 어느 탭인지 약하다', () => {
+    const markup = shelf([read()], { tab: 'READING' });
+    const on = tagBefore(markup, '읽는 중');
+    const off = tagBefore(markup, '다 읽음');
+
+    expect(on).toContain('font-weight:700');
+    expect(on).toContain('box-shadow');
+    expect(off).not.toBe('');
+    expect(off).not.toContain('box-shadow');
+  });
+
+  it('세그먼트 권수는 세리프다 — 탭 이름은 말이고 권수는 값이다', () => {
+    const markup = shelf([read()], { tab: 'READING' });
+    const at = markup.indexOf('읽는 중');
+    const after = markup.slice(at, at + 260);
+
+    expect(after).toContain('Gowun Batang');
+  });
+
+  it('「N시간 읽음」 칩은 시간만 세리프다 — 「읽음」까지 세리프면 값이 어디까지인지 흐려진다', () => {
+    const markup = shelf([read()], { tab: 'READING', selectedId: 1 });
+
+    expect(tagBefore(markup, '2시간')).toContain('Gowun Batang');
+    expect(tagBefore(markup, ' 읽음')).not.toContain('Gowun Batang');
+  });
+
+  it('여백 헤더는 16이고 카운트만 세리프다', () => {
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <MarginBoxView
+          view={{
+            book: { id: 1, title: '데미안', author: '헤세', coverUrl: null },
+            ownerNickname: '구스펠',
+            self: true,
+            entries: [],
+          }}
+          now={0}
+          onOpenAll={() => {}}
+        />
+      </TDSMobileProvider>,
+    );
+
+    expect(tagBefore(markup, '여백')).toContain('font-size:16px');
+  });
+
+  it('「여백에 글쓰기」는 채움 버튼이다 — 이 화면의 주 동작 하나', () => {
+    const tag = tagBefore(shelf([read()], { tab: 'READING', selectedId: 1 }), '여백에 글쓰기');
+
+    expect(tag).not.toBe('');
+    expect(tag).toContain('--adaptiveBlue700');
+    expect(tag).toContain('#F7F2E8');
   });
 });
