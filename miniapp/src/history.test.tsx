@@ -355,3 +355,86 @@ describe('기록 세션 캐시', () => {
     expect(markup).toContain('08-14');
   });
 });
+
+/** 그 글자를 감싼 여는 태그 — 크기·서체·색·그림자가 인라인 style이라 태그만 잘라 보면 판정된다. */
+const tagBefore = (markup: string, text: string) => {
+  const at = markup.indexOf(text);
+  return at < 0 ? '' : markup.slice(markup.lastIndexOf('<', at), at);
+};
+
+/**
+ * 시안 2d의 위계 — 값은 세리프, 말은 고운돋움. 설계의 「비세리프 확인 목록」(요일·타임스탬프)도
+ * 함께 잠근다 — 값처럼 보이지만 값이 아닌 자리다.
+ */
+describe('기록 위계 (시안 2d)', () => {
+  const day = (date: string, seconds: number): DailyRecord => ({
+    date,
+    totalSeconds: seconds,
+    books: [{ title: '사피엔스', coverUrl: null, seconds }],
+    manuallyFilled: false,
+  });
+  /**
+   * ⚠️ 월 합계가 하루 합계를 <b>문자열로 포함하지 않게</b> 고른다 — 37,800초는 「10시간 30분」이라
+   * 하루의 「30분」을 품고, `indexOf`가 월 합계를 먼저 집어 이 테스트가 엉뚱한 요소를 재게 된다.
+   * 계측기가 무엇을 집는지 픽스처가 정한다.
+   */
+  const month = (): MonthlySection => ({
+    month: '2026-08',
+    totalSeconds: 7_200,
+    days: [day('2026-08-21', 1_800)],
+  });
+  const records = () =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <MonthlyRecords months={[month()]} />
+      </TDSMobileProvider>,
+    );
+
+  it('월 머리글은 세리프 20, 월 합계는 세리프 14다', () => {
+    const markup = records();
+    const head = tagBefore(markup, '2026년 8월');
+    const total = tagBefore(markup, '2시간');
+
+    expect(head).toContain('Gowun Batang');
+    expect(head).toContain('font-size:20px');
+    expect(total).toContain('Gowun Batang');
+    expect(total).toContain('font-size:14px');
+  });
+
+  it('날짜와 하루 합계는 둘 다 세리프 15다 — 한 줄이 대답하는 두 값이다', () => {
+    const markup = records();
+
+    expect(tagBefore(markup, '08-21')).toContain('font-size:15px');
+    expect(tagBefore(markup, '08-21')).toContain('Gowun Batang');
+    expect(tagBefore(markup, '30분')).toContain('font-size:15px');
+  });
+
+  it('요일은 세리프가 아니다 — 값처럼 보이지만 말이다(설계 비세리프 목록)', () => {
+    const tag = tagBefore(records(), '금요일');
+
+    expect(tag).not.toBe('');
+    expect(tag).not.toContain('Gowun Batang');
+  });
+
+  it('펼친 책별 시간은 세리프 13이다', () => {
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <DayRow day={day('2026-08-21', 1_800)} monthMax={9_000} expanded onToggle={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+    expect(tagBefore(markup, '30분')).toContain('Gowun Batang');
+    expect(markup).toContain('font-size:13px');
+  });
+
+  it('가이드라인은 여백 인용 줄과 같은 세이지 선이다 — 「위 줄에 딸린 것」을 앱이 한 가지로 말한다', () => {
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <DayRow day={day('2026-08-21', 1_800)} monthMax={9_000} expanded onToggle={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+    expect(markup).toContain('padding-left:16px');
+    expect(markup).toContain('2px solid var(--adaptiveBlue200');
+  });
+});
