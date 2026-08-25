@@ -568,25 +568,30 @@ function MarginBoard({ count, onCompose, children }: { count: number; onCompose?
  *
  * <p><b>96px을 미리 잡고, 죽으면 0으로 접는다</b>: 인라인(높이 미지정)이면 광고가 뜨는 **성공 경로마다**
  * 게시판이 아래로 밀리고, 항상 예약이면 노 필인 날 빈 구멍이 남는다. 접기는 트랜지션 없이 즉시다
- * (높이 애니메이션은 레이아웃을 유발한다 — T-176).
+ * (높이 애니메이션은 레이아웃을 유발한다 — T-176). 나중에 자동 갱신이 채우면 다시 열린다
+ * (`onAdRendered` → `setAlive(true)` — 접힌 채 두면 안 보이는 광고의 노출만 집계된다).
  *
- * <p>풀블리드(`margin: '0 -20px'`)인 이유: 문서가 「배너 폭은 항상 화면 너비」를 요구하는데 `Screen`이
- * 좌우 20px을 물려 준다. 시각적 인셋은 `variant: 'card'`가 SDK 쪽에서 만든다.
+ * <p><b>좌우 -10px인 이유(주의: -20이 아니다)</b>: `Screen`이 좌우 20px을 물려 주는데,
+ * `variant: 'card'`일 때 SDK가 배너 래퍼에 <b>`padding: '0 10px'`을 하드코딩</b>한다
+ * (`@apps-in-toss/web-framework/dist/index.js` — `if (variant === "card") wrapper.style.padding = "0 10px"`).
+ * 그래서 -10px로 당겨야 SDK 패딩 10 + 이 마진 10 = 20px이 되어 광고 카드가 `MarginBoard`와 같은 열에 선다.
+ * -20px이면 광고만 10px 더 바깥으로 삐져나온다. <b>`variant`를 바꾸면 이 값도 함께 바꿔야 한다</b>
+ * (`expanded`엔 그 패딩이 없어 -20px이 맞다).
  *
  * <p>`data-ad-group`은 지면↔그룹 배선의 정적 렌더 계측 지점이다(그룹 ID는 어차피 번들에 실리는 공개값).
  */
 function MarginBannerAd({ adGroupId }: { adGroupId: string }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [dead, setDead] = useState(false);
+  const [alive, setAlive] = useState(true);
 
-  useEffect(() => attachMarginBanner(adGroupId, ref.current!, () => setDead(true)), [adGroupId]);
+  useEffect(() => attachMarginBanner(adGroupId, ref.current!, setAlive), [adGroupId]);
 
   // 부착 대상 안은 비워 둔다(SDK 요구).
   return (
     <div
       ref={ref}
       data-ad-group={adGroupId}
-      style={{ height: dead ? 0 : 96, margin: '12px -20px 0', overflow: 'hidden' }}
+      style={{ height: alive ? 96 : 0, margin: '12px -10px 0', overflow: 'hidden' }}
     />
   );
 }

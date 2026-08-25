@@ -2,6 +2,7 @@ import { Analytics, Notification, loadFullScreenAd, showFullScreenAd } from '@ap
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  BANNER_RENDER_TIMEOUT_MS,
   INTERSTITIAL_TIMEOUT_MS,
   marginBannerEnabled,
   notificationAgreementSupported,
@@ -401,7 +402,9 @@ describe('trackEvent', () => {
  *
  * <p>계측 지점 셋: ① **자리를 만들 자격**(`marginBannerEnabled`) — 그룹 미설정·브라우저·구버전 토스앱을
  * 렌더 전에 거른다 ② **초기화 1회 계약** — 두 지면이 같은 memo를 공유해도 `initialize`는 한 번
- * ③ **죽음의 모든 갈래가 `onDead` 하나로 접히는가** — 안 접히면 빈 96px 구멍이 화면에 영구히 남는다.
+ * ③ **죽음의 모든 갈래가 `setAlive(false)` 하나로 접히는가** — 안 접히면 빈 96px 구멍이 화면에 영구히 남는다.
+ * <b>콜백 침묵까지</b> 포함한다: SDK 번들 전체에 `setTimeout`이 스크립트 로더 하나뿐이라(실측), 네이티브
+ * 브릿지가 답을 안 주면 `onNoFill`도 `onAdFailedToRender`도 오지 않는다 — 우리 쪽 상한이 유일한 벨트다.
  */
 describe('marginBannerEnabled — 자리를 만들 자격', () => {
   beforeEach(() => {
@@ -486,14 +489,14 @@ describe('attachMarginBanner — 초기화 후 부착, 실패는 전부 접힘',
 
   it('초기화 실패면 부착하지 않고 자리를 접는다 — 빈 96px 구멍이 남으면 안 된다', async () => {
     const attachMarginBanner = await freshAttach();
-    const onDead = vi.fn();
+    const setAlive = vi.fn();
 
-    attachMarginBanner('ait.margin', {} as HTMLElement, onDead);
+    attachMarginBanner('ait.margin', {} as HTMLElement, setAlive);
     settleInit.fail();
     await flush();
 
     expect(tossAdsMock.attachBanner).not.toHaveBeenCalled();
-    expect(onDead).toHaveBeenCalledTimes(1);
+    expect(setAlive).toHaveBeenCalledWith(false);
   });
 
   it('두 지면이 연달아 붙어도 initialize는 1회 — 탭 왕복(사람축 ↔ 책축)이 정확히 이 시나리오다', async () => {
@@ -530,17 +533,17 @@ describe('attachMarginBanner — 초기화 후 부착, 실패는 전부 접힘',
     '%s면 자리를 접는다 — isSupported가 true로 새는 구버전을 받는 2차 벨트다',
     async (callback) => {
       const attachMarginBanner = await freshAttach();
-      const onDead = vi.fn();
+      const setAlive = vi.fn();
 
-      attachMarginBanner('ait.margin', {} as HTMLElement, onDead);
+      attachMarginBanner('ait.margin', {} as HTMLElement, setAlive);
       settleInit.ok();
       await flush();
 
       const options = tossAdsMock.attachBanner.mock.calls[0][2];
-      expect(onDead).not.toHaveBeenCalled(); // 접히기 전이 기준선이라 이 부정 단언은 공허하지 않다
+      expect(setAlive).not.toHaveBeenCalled(); // 접히기 전이 기준선이라 이 부정 단언은 공허하지 않다
       options.callbacks[callback]({ slotId: 's', adGroupId: 'ait.margin', adMetadata: {} });
 
-      expect(onDead).toHaveBeenCalledTimes(1);
+      expect(setAlive).toHaveBeenCalledWith(false);
     },
   );
 
@@ -566,5 +569,92 @@ describe('attachMarginBanner — 초기화 후 부착, 실패는 전부 접힘',
     await flush();
 
     expect(tossAdsMock.attachBanner).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 렌더 상한 — 부착 <b>이후</b>의 침묵을 받는 벨트. 실측 근거: SDK 번들
+   * (`@apps-in-toss/web-framework/dist/index.js`) 전체에서 `setTimeout`은 **스크립트 로더 하나뿐**이라
+   * 광고 요청(`customAdFetcher` → 네이티브 브릿지) 자체엔 상한이 없다. 브릿지가 침묵하면 `onNoFill`도
+   * `onAdFailedToRender`도 오지 않아 96px이 그 마운트 내내 빈 구멍으로 굳는다 — 전면 광고가 이미
+   * {@link INTERSTITIAL_TIMEOUT_MS}로 같은 실패 모드를 막고 있다.
+   */
+  const payload = { slotId: 'slot-1', adGroupId: 'ait.margin', adMetadata: { creativeId: 'c', requestId: 'r' } };
+
+  it('아무 콜백도 안 오면 상한에서 접는다 — 브릿지 침묵이 빈 구멍으로 굳지 않게', async () => {
+    const attachMarginBanner = await freshAttach();
+    const setAlive = vi.fn();
+    vi.useFakeTimers();
+    try {
+      attachMarginBanner('ait.margin', {} as HTMLElement, setAlive);
+      settleInit.ok();
+
+      await vi.advanceTimersByTimeAsync(BANNER_RENDER_TIMEOUT_MS - 1);
+      expect(setAlive).not.toHaveBeenCalled(); // 아직은 광고를 기다린다(기준선이 있으니 공허하지 않다)
+
+      await vi.advanceTimersByTimeAsync(2);
+      expect(setAlive).toHaveBeenCalledTimes(1);
+      expect(setAlive).toHaveBeenCalledWith(false);
+    } finally {
+      vi.useRealTimers(); // 가짜 타이머가 새면 뒤따르는 테스트가 통째로 타임아웃 난다
+    }
+  });
+
+  it('광고가 그려지면 상한을 걷는다 — 멀쩡히 뜬 배너를 상한이 뒤늦게 접으면 안 된다', async () => {
+    const attachMarginBanner = await freshAttach();
+    const setAlive = vi.fn();
+    vi.useFakeTimers();
+    try {
+      attachMarginBanner('ait.margin', {} as HTMLElement, setAlive);
+      settleInit.ok();
+      await vi.advanceTimersByTimeAsync(0);
+
+      // 상한이 **아직 살아 있는 상태**에서 그려진다 — 앞에 접힘이 있으면 그때 이미 걷혀서
+      // 이 경로가 안 재진다(돌연변이 실측으로 잡은 사각: onNoFill 뒤에 재면 항상 통과한다).
+      tossAdsMock.attachBanner.mock.calls[0][2].callbacks.onAdRendered(payload);
+      expect(setAlive).toHaveBeenLastCalledWith(true);
+
+      await vi.advanceTimersByTimeAsync(BANNER_RENDER_TIMEOUT_MS * 2);
+
+      expect(setAlive).toHaveBeenCalledTimes(1); // 걷힌 상한이 뒤늦게 다시 접지 않는다
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('접힌 뒤 자동 갱신이 채우면 자리를 되살린다 — 안 열면 안 보이는 광고의 노출만 집계된다', async () => {
+    const attachMarginBanner = await freshAttach();
+    const setAlive = vi.fn();
+
+    attachMarginBanner('ait.margin', {} as HTMLElement, setAlive);
+    settleInit.ok();
+    await flush();
+    const { callbacks } = tossAdsMock.attachBanner.mock.calls[0][2];
+
+    callbacks.onNoFill({ slotId: 'slot-1', adGroupId: 'ait.margin', adMetadata: {} });
+    expect(setAlive).toHaveBeenLastCalledWith(false);
+
+    // 슬롯은 `autoLoad: true`로 계속 갱신한다(SDK 실측) — 접힌 채로 두면 나중에 채워진 광고가
+    // `height:0` 뒤에서 렌더돼 사용자는 못 보는데 노출만 잡힌다(무효 트래픽).
+    callbacks.onAdRendered(payload);
+
+    expect(setAlive).toHaveBeenLastCalledWith(true);
+  });
+
+  it('cleanup은 상한 타이머도 걷는다 — 사라진 화면에 뒤늦게 접힘 신호를 쏘지 않는다', async () => {
+    const attachMarginBanner = await freshAttach();
+    const setAlive = vi.fn();
+    vi.useFakeTimers();
+    try {
+      const cleanup = attachMarginBanner('ait.margin', {} as HTMLElement, setAlive);
+      settleInit.ok();
+      await vi.advanceTimersByTimeAsync(0);
+      cleanup();
+
+      await vi.advanceTimersByTimeAsync(BANNER_RENDER_TIMEOUT_MS * 2);
+
+      expect(setAlive).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
