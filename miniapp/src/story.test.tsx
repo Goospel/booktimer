@@ -1,6 +1,6 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { BookMarginAllResponse, MarginEntry, MarginResponse, SharedMarginEntry, UserRow } from './api';
 import { ApiError } from './api';
@@ -20,7 +20,22 @@ import {
   showMarginTabs,
   visibilityNotice,
 } from './screens/Story';
+import { marginBannerEnabled } from './toss';
+
 import { userAgent } from './test-fixtures';
+
+/**
+ * 광고 SDK는 통째로 목으로 잡는다 — 그룹 ID 상수는 `import.meta.env`로 구워져 테스트에선 늘 빈 값이라
+ * (= 지면 OFF) 배선을 관측할 방법이 이것뿐이다. 두 지면에 **서로 다른 더미값**을 물려, 화면이 남의
+ * 그룹을 보면 아래 배선 단언이 깨지게 한다.
+ */
+vi.mock('./toss', () => ({
+  MARGIN_BANNER_AD_GROUP_ID: 'ait.test.margin',
+  BOOK_MARGIN_BANNER_AD_GROUP_ID: 'ait.test.book-margin',
+  marginBannerEnabled: vi.fn(),
+  attachMarginBanner: vi.fn(),
+  tossLogin: vi.fn(), // api.ts가 로그인 때 쓴다 — 모듈을 통째로 대체하므로 여기도 채워야 한다
+}));
 
 /**
  * 여백 화면 계측 — 정적 렌더로는 effect·클릭이 안 돌므로, 화면의 결정은 순수 함수({@link hasFreshStory})와
@@ -968,5 +983,63 @@ describe('이 책의 여백 — 책축 목록 (M-3)', () => {
 
     expect(html).toContain('내 서재에 담으면'); // 안내는 그려졌다(부재 단언의 쌍)
     expect(html).not.toContain('글쓰기');
+  });
+});
+
+/**
+ * 배너 지면↔광고 그룹 배선 — 콘솔 리포트의 단위가 광고 그룹이라, 두 지면이 한 그룹을 보면 노출·수익이
+ * 합산돼 <b>어느 자리가 버는지 영영 못 가린다</b>. 홈·책방은 소스 판독(`env-production.test.ts`)으로
+ * 같은 것을 재지만, 여백의 두 지면은 <b>한 파일 안</b>이라 `?raw` 판독으로는 못 가른다 —
+ * 컨테이너에 실은 `data-ad-group`이 그 자리를 대신한다(그룹 ID는 어차피 번들에 실리는 공개값이다).
+ *
+ * <p>부착 자체(`useEffect`)는 여기서 못 잰다(정적 렌더) — `toss.test.ts`가 그 몫이고, 목 모드 진입이
+ * 게이트다.
+ */
+describe('여백 배너 지면 배선', () => {
+  const enabled = vi.mocked(marginBannerEnabled);
+
+  const bookMargin = (
+    <BookMarginAllView
+      data={{
+        book: { isbn13: '9791168340084', title: '데미안', author: '헤르만 헤세', coverUrl: null },
+        myBookId: null,
+        totalCount: 0,
+        entries: [],
+      }}
+      now={NOW}
+      error={null}
+      onBack={() => {}}
+      onToggleLike={() => {}}
+      onOpenProfile={() => {}}
+    />
+  );
+
+  beforeEach(() => {
+    enabled.mockReset();
+  });
+
+  it('사람축(내 여백·남의 여백)은 사람축 그룹만 본다 — 책축 그룹으로 새면 두 지면이 합산된다', () => {
+    enabled.mockReturnValue(true);
+
+    const html = view(margin());
+
+    expect(html).toContain('data-ad-group="ait.test.margin"');
+    expect(html).not.toContain('ait.test.book-margin');
+  });
+
+  it('책축(모두의 여백)은 책축 그룹만 본다', () => {
+    enabled.mockReturnValue(true);
+
+    const html = render(bookMargin);
+
+    expect(html).toContain('data-ad-group="ait.test.book-margin"');
+    expect(html).not.toContain('"ait.test.margin"');
+  });
+
+  it('자격이 없으면(그룹 미설정·브라우저·구버전) 두 화면 모두 자리 자체가 없다 — 빈 96px 구멍 금지', () => {
+    enabled.mockReturnValue(false);
+
+    expect(view(margin())).not.toContain('data-ad-group');
+    expect(render(bookMargin)).not.toContain('data-ad-group');
   });
 });

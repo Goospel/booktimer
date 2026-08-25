@@ -3,6 +3,7 @@ import {
   Device,
   type LogParam,
   Notification,
+  TossAds,
   TossAuth,
   loadFullScreenAd,
   showFullScreenAd,
@@ -214,4 +215,129 @@ export function showInterstitialAd(adGroupId: string = INTERSTITIAL_AD_GROUP_ID)
       done();
     }
   });
+}
+
+/**
+ * 「여백」 사람축({@link MarginView} — 내 여백·남의 여백) 배너 그룹 — config-gate: 빈 값이면 자리 자체가 안 생긴다.
+ * 콘솔에서 그룹을 만들어야 나오는 값이라 점등은 별도 커밋이다(구글 등록까지 최대 2시간).
+ */
+export const MARGIN_BANNER_AD_GROUP_ID: string = import.meta.env.VITE_MARGIN_BANNER_AD_GROUP_ID ?? '';
+
+/**
+ * 「모두의 여백」 책축(`BookMarginAllView` — 탭·검색 진입) 배너 그룹 — 사람축과 **다른 그룹**이다.
+ * 콘솔 리포트의 단위가 광고 그룹이라, 합치면 두 지면의 노출·수익이 한 줄로 합산돼 어느 자리가 버는지
+ * 영영 못 가른다. 지면별로 독립된 config-gate라 한쪽만 점등하는 것도 된다.
+ */
+export const BOOK_MARGIN_BANNER_AD_GROUP_ID: string = import.meta.env.VITE_BOOK_MARGIN_BANNER_AD_GROUP_ID ?? '';
+
+/**
+ * 배너를 세울 수 있는 환경인가 — 그룹 미설정·브라우저(SDK 부재)·구버전 토스앱을 **렌더 전에** 거른다.
+ * false면 컨테이너 자체를 안 그리므로 빈 자리(96px 구멍)가 남지 않는다.
+ *
+ * <p>`try`가 필요한 이유는 {@link notificationAgreementSupported}와 같다 — 실물 `isSupported()`는
+ * 호스트가 주입하는 `window` 상수를 읽는데, 일반 브라우저엔 `window`는 있고 그 상수만 없다(목 모드).
+ */
+export function marginBannerEnabled(adGroupId: string): boolean {
+  if (adGroupId === '' || typeof window === 'undefined') return false;
+  try {
+    return TossAds.attachBanner.isSupported();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 광고 SDK 초기화 — 문서의 「앱에서 한 번만」 계약을 **모듈 캐시**가 지킨다(두 지면이 공유해도 1회).
+ * 최상위(`App.tsx`) 대신 여기 둔 이유: 여백을 안 여는 세션이 대부분인데 그때까지 광고 SDK를 깨울 이유가 없다.
+ */
+let adsInitialized: Promise<boolean> | null = null;
+
+function initTossAdsOnce(): Promise<boolean> {
+  adsInitialized ??= new Promise<boolean>((resolve) => {
+    try {
+      if (!TossAds.initialize.isSupported()) {
+        resolve(false);
+        return;
+      }
+      TossAds.initialize({
+        callbacks: { onInitialized: () => resolve(true), onInitializationFailed: () => resolve(false) },
+      });
+    } catch {
+      resolve(false); // 브라우저·구버전: 동기 TypeError
+    }
+  });
+  return adsInitialized;
+}
+
+/**
+ * 배너가 그려지길 기다리는 상한(ms). **부착 이후의 침묵**을 받는 유일한 벨트다 — SDK 번들 전체에서
+ * `setTimeout`은 스크립트 로더 하나뿐이라(실측) 광고 요청 자체엔 상한이 없고, 네이티브 브릿지가 답을
+ * 안 주면 `onNoFill`도 `onAdFailedToRender`도 오지 않는다. 그러면 96px이 그 마운트 내내 빈 구멍이다.
+ *
+ * <p>{@link INTERSTITIAL_TIMEOUT_MS}와 같은 값으로 뒀다 — 이 앱이 「SDK가 아무 콜백도 안 부르는 경우」에
+ * 이미 고른 수이고, 배너는 화면을 막지 않아 더 기다릴 이유도 더 서두를 이유도 없다(길면 빈 구멍이
+ * 오래 가고, 짧으면 그려지려던 광고를 접었다가 되살리며 자리가 한 번 더 흔들린다).
+ */
+export const BANNER_RENDER_TIMEOUT_MS = 5000;
+
+/**
+ * 「여백」 배너 1장 부착 — 초기화 **성공 후에만** 붙인다(초기화 전 attach의 동작이 문서에 없어 순서 의존을 없앴다).
+ *
+ * <p>`setAlive`로 자리의 생사를 알린다. 죽음의 갈래(초기화 실패·노 필·렌더 실패·상한 초과)는 전부
+ * `false` 한 번으로 접히고, **`onAdRendered`는 다시 `true`로 연다**. 되살리기가 필요한 이유: 슬롯은
+ * `autoLoad`로 계속 갱신하는데(SDK 실측) 접힌 채로 두면 나중에 채워진 광고가 `height:0` 뒤에서
+ * 렌더돼 **사용자는 못 보는 노출만 집계된다**(무효 트래픽). 슬롯을 죽이는 쪽 대신 되살리기를 고른 건
+ * 첫 요청의 노 필이 흔한 정상 경로라, 한 번 비었다고 그 화면의 광고를 영영 포기할 이유가 없어서다.
+ *
+ * <p>반환값은 언마운트에서 부를 cleanup이다. 부착 뒤면 SDK 슬롯을 destroy하고(탭 왕복의 유령 슬롯·누수
+ * 방어선), 초기화를 기다리는 중이면 죽음 플래그로 **부착 자체를 건너뛴다**(빠른 왕복의 경주).
+ */
+export function attachMarginBanner(
+  adGroupId: string,
+  target: HTMLElement,
+  setAlive: (alive: boolean) => void,
+): () => void {
+  let dead = false;
+  let slot: { destroy: () => void } | null = null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  void initTossAdsOnce().then((initialized) => {
+    if (dead) return;
+    if (!initialized) {
+      setAlive(false);
+      return;
+    }
+    const collapse = () => {
+      clearTimeout(timer);
+      setAlive(false);
+    };
+    timer = setTimeout(collapse, BANNER_RENDER_TIMEOUT_MS);
+    try {
+      slot = TossAds.attachBanner(adGroupId, target, {
+        // 이 앱은 크림색 라이트 고정이다(main.tsx가 TDS colorPreference를 못 박았다) — `auto`면 다크
+        // 기기에서 크림 화면 한가운데 검은 배너가 뜬다. `card`는 게시판 카드와 같은 「둥근 카드」 문법.
+        theme: 'light',
+        tone: 'grey',
+        variant: 'card',
+        callbacks: {
+          // 그려진 순간이 상한을 걷을 유일한 신호다(갱신마다 온다 — 접혔던 자리도 여기서 되살아난다).
+          onAdRendered: () => {
+            clearTimeout(timer);
+            setAlive(true);
+          },
+          // isSupported가 true로 새는 구버전에서 「빈 화면」이 남지 않게 하는 2차 벨트.
+          onNoFill: collapse,
+          onAdFailedToRender: collapse,
+        },
+      });
+    } catch {
+      collapse();
+    }
+  });
+
+  return () => {
+    dead = true;
+    clearTimeout(timer); // 사라진 화면에 뒤늦게 접힘 신호를 쏘지 않는다
+    slot?.destroy();
+  };
 }
