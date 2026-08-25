@@ -414,13 +414,31 @@ export function shouldRefresh(lastAt: number, now: number, force = false): boole
 }
 
 /**
+ * 딥링크로 착지할 탭 — 푸시 알림의 이동 URL(`intoss://<앱이름>/?tab=history`)이 화면을 지목한다.
+ *
+ * <p><b>모르는 값은 전부 홈이다.</b> 이 문자열은 우리 코드 밖(콘솔에 손으로 적은 캠페인 URL)에서
+ * 오므로 오타·옛 링크·탭이 아닌 이름이 얼마든지 온다. 그때 필요한 건 오류가 아니라 홈이다.
+ *
+ * <p>목록을 하드코딩하지 않고 {@link TABS}에서 확인하는 이유는 탭이 늘 때 여기를 같이 고치는 걸
+ * 잊으면 <b>조용히</b> 홈으로 떨어지기 때문이다 — 탭바 순서의 단일 출처를 그대로 쓴다.
+ */
+export function initialTab(search: string): TabKey {
+  const key = new URLSearchParams(search).get('tab');
+  return TABS.some((tab) => tab.key === key) ? (key as TabKey) : 'home';
+}
+
+/**
  * 라우터 없이 상태 두 개로 화면을 정한다 — `view`(탭 밖 오케스트레이션) × `tab`(메인 탭).
  *
  * <p>인증 실패(401)는 어디서 나든 토큰이 이미 폐기된 상태라 로그인 브릿지로 되돌린다.
  */
 export function App() {
   const [view, setView] = useState<View>(() => (token.get() === null ? 'auth' : 'loading'));
-  const [tab, setTab] = useState<TabKey>('home');
+  // 첫 렌더에서 한 번만 읽는다 — 딥링크는 진입 시점의 사실이라, 이후 탭 이동을 되돌리면 안 된다.
+  // `window` 가드는 테스트의 정적 렌더용이다(이 하니스엔 jsdom이 없다 — `toss.ts`와 같은 사정).
+  const [tab, setTab] = useState<TabKey>(() =>
+    initialTab(typeof window === 'undefined' ? '' : window.location.search),
+  );
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [firstRun, setFirstRun] = useState(false);
   const [error, setError] = useState<string | null>(null);

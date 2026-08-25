@@ -19,6 +19,7 @@ import {
   TabBarCoachmark,
   closeCompose,
   flowStepsOnAbandon,
+  initialTab,
   lampOn,
   marginScreen,
   flowTabChange,
@@ -709,6 +710,44 @@ describe('여백 화면 판정 (marginScreen)', () => {
 
   it('좌표가 하나도 없으면 아무 화면도 아니다 — 막다른 길 대신 탭으로 떨어진다', () => {
     expect(marginScreen({ loginId: 'goospel', bookId: null, isbn13: null, composeBook: null })).toBeNull();
+  });
+});
+
+/**
+ * 딥링크 착지 탭 — 푸시를 누르고 들어온 사람이 홈이 아니라 그 푸시가 말한 화면에 선다.
+ *
+ * <p>알 수 없는 값이 전부 홈으로 접히는 게 이 함수의 전부다. 바깥에서 오는 문자열이라
+ * 오타·옛 링크·장난 아무거나 올 수 있고, 그때 필요한 것은 오류 화면이 아니라 <b>홈</b>이다.
+ */
+describe('딥링크 착지 탭 (initialTab)', () => {
+  it('탭 이름을 주면 그 탭에서 시작한다 — 푸시가 가리킨 화면이다', () => {
+    expect(initialTab('?tab=history')).toBe('history');
+  });
+
+  it('다른 파라미터에 섞여 있어도 찾는다 — 캠페인 URL엔 추적 파라미터가 함께 붙는다', () => {
+    expect(initialTab('?utm_source=toss&tab=library')).toBe('library');
+  });
+
+  it('탭 목록에 있는 이름은 전부 착지한다 — 탭이 늘어도 여기 목록을 따로 고칠 일이 없다', () => {
+    for (const { key } of TABS) {
+      expect(initialTab(`?tab=${key}`)).toBe(key);
+    }
+  });
+
+  it('파라미터가 아예 없으면 홈이다 — 딥링크 없이 그냥 연 평소 진입', () => {
+    expect(initialTab('')).toBe('home');
+  });
+
+  it('값이 비어 있으면 홈이다', () => {
+    expect(initialTab('?tab=')).toBe('home');
+  });
+
+  it('모르는 값이면 홈이다 — 오타·옛 링크가 막다른 길이 되지 않는다', () => {
+    expect(initialTab('?tab=nope')).toBe('home');
+  });
+
+  it('탭이 아닌 화면 이름도 홈이다 — 여백은 탭이 아니라 탭 위에 서는 화면이다', () => {
+    expect(initialTab('?tab=margin')).toBe('home');
   });
 });
 
