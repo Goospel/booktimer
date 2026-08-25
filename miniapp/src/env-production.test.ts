@@ -29,6 +29,16 @@ describe('.env.production', () => {
   it('성향 분석 광고 그룹 ID를 굽는다 — 비면 책방의 성향 광고 버튼이 통째로 사라진다', () => {
     expect(envProduction).toMatch(/^VITE_PERSONALITY_AD_GROUP_ID=ait\.v2\.live\.75558b51a0444cc7\s*$/m);
   });
+
+  // 배너 둘은 화면이 다를 뿐 포맷·종류(문구 강조)가 같아 값만 봐서는 뒤바뀜을 눈치챌 수 없다 —
+  // 어느 쪽으로 섞여도 화면은 멀쩡히 광고를 그리고, 어긋난 것은 콘솔 리포트뿐이다. 그래서 여기서 못 박는다.
+  it('사람축 여백 배너 그룹 ID를 굽는다 — 비면 「내가 쓴 여백」의 배너 자리가 통째로 사라진다', () => {
+    expect(envProduction).toMatch(/^VITE_MARGIN_BANNER_AD_GROUP_ID=ait\.v2\.live\.5a5ce4d4d4654fce\s*$/m);
+  });
+
+  it('책축 여백 배너 그룹 ID를 굽는다 — 사람축과 뒤바뀌면 두 지면의 수익이 서로의 이름으로 잡힌다', () => {
+    expect(envProduction).toMatch(/^VITE_BOOK_MARGIN_BANNER_AD_GROUP_ID=ait\.v2\.live\.673c1d77a6f9451e\s*$/m);
+  });
 });
 
 /**
