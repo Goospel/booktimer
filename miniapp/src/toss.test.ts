@@ -3,12 +3,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   INTERSTITIAL_TIMEOUT_MS,
+  marginBannerEnabled,
   notificationAgreementSupported,
   requestNotificationAgreement,
   showInterstitialAd,
   trackEvent,
   watchRewardAd,
 } from './toss';
+
+/**
+ * 배너 SDK 목은 `vi.hoisted`로 **모듈 리셋을 넘어 살아남게** 만든다. 배너 초기화가 모듈 레벨 memo라
+ * (「한 번만」 계약) 초기화 분기를 테스트마다 새로 밟으려면 `vi.resetModules()`로 `toss.ts`를 다시
+ * 읽어야 하는데, 목 팩토리가 그때 또 돌아 `vi.fn()`을 새로 만들면 여기 잡아 둔 참조가 낡아 버린다.
+ */
+const { tossAdsMock } = vi.hoisted(() => {
+  const supportable = () => Object.assign(vi.fn(), { isSupported: vi.fn() });
+  return { tossAdsMock: { initialize: supportable(), attachBanner: supportable() } };
+});
 
 /**
  * 리워드 광고 래퍼 — SDK 이벤트 시퀀스를 "보상을 받았나"라는 boolean 하나로 접는다.
@@ -26,6 +37,7 @@ vi.mock('@apps-in-toss/web-framework', () => ({
   // requestAgreement는 "함수 + isSupported 프로퍼티"라 실물 모양 그대로 흉내 낸다.
   Notification: { requestAgreement: Object.assign(vi.fn(), { isSupported: vi.fn() }) },
   Analytics: { log: vi.fn() },
+  TossAds: tossAdsMock,
 }));
 
 const loadMock = vi.mocked(loadFullScreenAd);
@@ -377,5 +389,182 @@ describe('trackEvent', () => {
     expect(attachHandler).toHaveBeenCalledTimes(1);
 
     rejected.catch(() => {}); // 단언이 실패해도 떠도는 거부를 러너에 남기지 않는다
+  });
+});
+
+/**
+ * 「여백」 배너 래퍼 — 컴포넌트에 남는 건 `useEffect`와 ref뿐이고, 판단은 전부 여기 있다.
+ *
+ * <p>왜 이렇게 갈랐나: 이 하니스엔 jsdom이 없어 `useEffect`가 아예 안 돈다(T-149). 배너의 위험은
+ * 죄다 effect 안쪽 — 초기화 순서·실패 접힘·언마운트 정리 — 이라, SDK를 목으로 잡을 수 있는
+ * `toss.ts`로 내려야 계측이 가능하다.
+ *
+ * <p>계측 지점 셋: ① **자리를 만들 자격**(`marginBannerEnabled`) — 그룹 미설정·브라우저·구버전 토스앱을
+ * 렌더 전에 거른다 ② **초기화 1회 계약** — 두 지면이 같은 memo를 공유해도 `initialize`는 한 번
+ * ③ **죽음의 모든 갈래가 `onDead` 하나로 접히는가** — 안 접히면 빈 96px 구멍이 화면에 영구히 남는다.
+ */
+describe('marginBannerEnabled — 자리를 만들 자격', () => {
+  beforeEach(() => {
+    tossAdsMock.attachBanner.isSupported.mockReset();
+    tossAdsMock.attachBanner.isSupported.mockReturnValue(true);
+  });
+
+  it('그룹 ID가 비면 SDK를 아예 안 건드린다 — 점등 전 빌드·목 모드가 여기 걸린다', () => {
+    expect(marginBannerEnabled('')).toBe(false);
+    expect(tossAdsMock.attachBanner.isSupported).not.toHaveBeenCalled();
+  });
+
+  it('브라우저 밖(window 없음)이면 false — SDK가 window를 읽다 던진다', () => {
+    vi.stubGlobal('window', undefined);
+
+    expect(marginBannerEnabled('ait.dummy')).toBe(false);
+    expect(tossAdsMock.attachBanner.isSupported).not.toHaveBeenCalled();
+  });
+
+  it('지원하는 토스앱이면 true, 미지원(구버전)이면 false — 구버전 「빈 화면」의 1차 방어', () => {
+    expect(marginBannerEnabled('ait.dummy')).toBe(true);
+
+    tossAdsMock.attachBanner.isSupported.mockReturnValue(false);
+    expect(marginBannerEnabled('ait.dummy')).toBe(false);
+  });
+
+  it('isSupported가 동기로 던져도 false — 일반 브라우저엔 window는 있고 주입 상수만 없다', () => {
+    tossAdsMock.attachBanner.isSupported.mockImplementation(() => {
+      throw new TypeError("Cannot read properties of undefined (reading 'isAttachBannerSupported')");
+    });
+
+    expect(marginBannerEnabled('ait.dummy')).toBe(false);
+  });
+});
+
+describe('attachMarginBanner — 초기화 후 부착, 실패는 전부 접힘', () => {
+  /** 초기화 콜백을 붙잡아 둔다 — 「해소 전/후」를 갈라 봐야 순서 계약을 잴 수 있다. */
+  let settleInit: { ok: () => void; fail: () => void };
+
+  /**
+   * 모듈을 새로 읽어 memo(`adsInitialized`)를 비운다 — 안 비우면 첫 테스트의 초기화 결과가
+   * 뒤따르는 모든 테스트에 눌러앉아 실패 분기를 영영 못 밟는다.
+   */
+  async function freshAttach() {
+    vi.resetModules();
+    return (await import('./toss')).attachMarginBanner;
+  }
+
+  /** 마이크로태스크(초기화 Promise → attach)를 흘려보낸다. */
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  beforeEach(() => {
+    tossAdsMock.initialize.mockReset();
+    tossAdsMock.initialize.isSupported.mockReset();
+    tossAdsMock.initialize.isSupported.mockReturnValue(true);
+    tossAdsMock.attachBanner.mockReset();
+    tossAdsMock.attachBanner.mockReturnValue({ destroy: vi.fn() });
+    tossAdsMock.attachBanner.isSupported.mockReset();
+    tossAdsMock.attachBanner.isSupported.mockReturnValue(true);
+    settleInit = { ok: () => {}, fail: () => {} };
+    tossAdsMock.initialize.mockImplementation((options) => {
+      settleInit = {
+        ok: () => options.callbacks?.onInitialized?.(),
+        fail: () => options.callbacks?.onInitializationFailed?.(new Error('init failed')),
+      };
+    });
+  });
+
+  it('초기화가 끝나기 전에는 부착하지 않는다 — 초기화 전 attach의 동작이 문서에 없다', async () => {
+    const attachMarginBanner = await freshAttach();
+
+    attachMarginBanner('ait.margin', {} as HTMLElement, () => {});
+    await flush();
+
+    expect(tossAdsMock.attachBanner).not.toHaveBeenCalled();
+
+    settleInit.ok();
+    await flush();
+
+    expect(tossAdsMock.attachBanner).toHaveBeenCalledTimes(1);
+  });
+
+  it('초기화 실패면 부착하지 않고 자리를 접는다 — 빈 96px 구멍이 남으면 안 된다', async () => {
+    const attachMarginBanner = await freshAttach();
+    const onDead = vi.fn();
+
+    attachMarginBanner('ait.margin', {} as HTMLElement, onDead);
+    settleInit.fail();
+    await flush();
+
+    expect(tossAdsMock.attachBanner).not.toHaveBeenCalled();
+    expect(onDead).toHaveBeenCalledTimes(1);
+  });
+
+  it('두 지면이 연달아 붙어도 initialize는 1회 — 탭 왕복(사람축 ↔ 책축)이 정확히 이 시나리오다', async () => {
+    const attachMarginBanner = await freshAttach();
+
+    attachMarginBanner('ait.margin', {} as HTMLElement, () => {});
+    settleInit.ok();
+    await flush();
+    attachMarginBanner('ait.book-margin', {} as HTMLElement, () => {});
+    await flush();
+
+    expect(tossAdsMock.initialize).toHaveBeenCalledTimes(1);
+    expect(tossAdsMock.attachBanner).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([['ait.margin'], ['ait.book-margin']])(
+    '넘긴 그룹(%s)과 확정 옵션이 그대로 SDK로 간다 — 그룹이 어긋나면 정산이, 옵션이 어긋나면 디자인이 어긋난다',
+    async (adGroupId) => {
+      const attachMarginBanner = await freshAttach();
+      const target = {} as HTMLElement;
+
+      attachMarginBanner(adGroupId, target, () => {});
+      settleInit.ok();
+      await flush();
+
+      const [passedGroup, passedTarget, options] = tossAdsMock.attachBanner.mock.calls[0];
+      expect(passedGroup).toBe(adGroupId);
+      expect(passedTarget).toBe(target);
+      expect(options).toMatchObject({ theme: 'light', tone: 'grey', variant: 'card' });
+    },
+  );
+
+  it.each([['onNoFill'], ['onAdFailedToRender']])(
+    '%s면 자리를 접는다 — isSupported가 true로 새는 구버전을 받는 2차 벨트다',
+    async (callback) => {
+      const attachMarginBanner = await freshAttach();
+      const onDead = vi.fn();
+
+      attachMarginBanner('ait.margin', {} as HTMLElement, onDead);
+      settleInit.ok();
+      await flush();
+
+      const options = tossAdsMock.attachBanner.mock.calls[0][2];
+      expect(onDead).not.toHaveBeenCalled(); // 접히기 전이 기준선이라 이 부정 단언은 공허하지 않다
+      options.callbacks[callback]({ slotId: 's', adGroupId: 'ait.margin', adMetadata: {} });
+
+      expect(onDead).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('부착 뒤 cleanup이면 슬롯을 destroy한다 — 탭 왕복의 유령 슬롯·누수 방어선', async () => {
+    const attachMarginBanner = await freshAttach();
+    const destroy = vi.fn();
+    tossAdsMock.attachBanner.mockReturnValue({ destroy });
+
+    const cleanup = attachMarginBanner('ait.margin', {} as HTMLElement, () => {});
+    settleInit.ok();
+    await flush();
+    cleanup();
+
+    expect(destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('초기화를 기다리는 중에 cleanup되면 부착 자체를 건너뛴다 — 빠른 탭 왕복의 경주', async () => {
+    const attachMarginBanner = await freshAttach();
+
+    const cleanup = attachMarginBanner('ait.margin', {} as HTMLElement, () => {});
+    cleanup(); // 초기화가 끝나기 전에 화면이 갈렸다
+    settleInit.ok();
+    await flush();
+
+    expect(tossAdsMock.attachBanner).not.toHaveBeenCalled();
   });
 });

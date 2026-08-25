@@ -1,6 +1,6 @@
 import { Button } from '@toss/tds-mobile';
 import type { ReactNode } from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type {
   BookMarginAllResponse,
@@ -25,6 +25,12 @@ import {
 } from '../api';
 import { useBackClose } from '../back';
 import { relativeTime } from '../format';
+import {
+  BOOK_MARGIN_BANNER_AD_GROUP_ID,
+  MARGIN_BANNER_AD_GROUP_ID,
+  attachMarginBanner,
+  marginBannerEnabled,
+} from '../toss';
 import { BookCover, ErrorMessage, HANDWRITING, Loading, Screen, Sheet, Text, UserList } from '../ui';
 
 /**
@@ -557,6 +563,35 @@ function MarginBoard({ count, onCompose, children }: { count: number; onCompose?
 }
 
 /**
+ * 여백 배너 광고 한 장 — 게시판 상자 <b>바깥 바로 위</b>에 선다. 판단은 전부 `toss.ts`에 있고
+ * 여기 남은 건 ref와 생애주기뿐이다(이 하니스엔 jsdom이 없어 effect가 안 돈다 — T-149).
+ *
+ * <p><b>96px을 미리 잡고, 죽으면 0으로 접는다</b>: 인라인(높이 미지정)이면 광고가 뜨는 **성공 경로마다**
+ * 게시판이 아래로 밀리고, 항상 예약이면 노 필인 날 빈 구멍이 남는다. 접기는 트랜지션 없이 즉시다
+ * (높이 애니메이션은 레이아웃을 유발한다 — T-176).
+ *
+ * <p>풀블리드(`margin: '0 -20px'`)인 이유: 문서가 「배너 폭은 항상 화면 너비」를 요구하는데 `Screen`이
+ * 좌우 20px을 물려 준다. 시각적 인셋은 `variant: 'card'`가 SDK 쪽에서 만든다.
+ *
+ * <p>`data-ad-group`은 지면↔그룹 배선의 정적 렌더 계측 지점이다(그룹 ID는 어차피 번들에 실리는 공개값).
+ */
+function MarginBannerAd({ adGroupId }: { adGroupId: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [dead, setDead] = useState(false);
+
+  useEffect(() => attachMarginBanner(adGroupId, ref.current!, () => setDead(true)), [adGroupId]);
+
+  // 부착 대상 안은 비워 둔다(SDK 요구).
+  return (
+    <div
+      ref={ref}
+      data-ad-group={adGroupId}
+      style={{ height: dead ? 0 : 96, margin: '12px -20px 0', overflow: 'hidden' }}
+    />
+  );
+}
+
+/**
  * 「이 책의 여백」 — 책 하나(isbn13)에 함께 걸린 글 전부. 순수 표시라 상태는 전부 밖에서 받는다
  * (정적 렌더 하니스가 「담기 안내」·빈 상태 분기에 닿는 유일한 길).
  *
@@ -612,6 +647,13 @@ export function BookMarginAllView({
       {tabs}
 
       <ErrorMessage message={error} />
+
+      {/* 책축 지면 — 사람축과 **다른 광고 그룹**이다(합치면 어느 자리가 버는지 못 가른다).
+          두 뷰는 탭에서 조건부로 갈아끼워지므로 한 화면에 배너가 둘 서는 일이 없다 —
+          배너를 공통부로 끌어올리는 리팩터는 그 전제를 깨뜨린다(「동일 화면 동일 포맷 2개 금지」). */}
+      {marginBannerEnabled(BOOK_MARGIN_BANNER_AD_GROUP_ID) && (
+        <MarginBannerAd adGroupId={BOOK_MARGIN_BANNER_AD_GROUP_ID} />
+      )}
 
       {/* 글쓰기 손잡이를 <b>아예 안 준다</b> — 「모두의 여백」은 조회 전용이다(2026-08-22 사용자 결정).
           여러 사람의 글이 섞인 목록에 글쓰기를 두면 「그 목록에 바로 쓴다」로 읽히는데, 실제로는 내 여백에
@@ -869,6 +911,9 @@ export function MarginView({
       )}
 
       <ErrorMessage message={error} />
+
+      {/* 사람축 지면 — 내 여백·남의 여백을 안 가른다(지면의 단위는 사람이 아니라 화면이다). */}
+      {marginBannerEnabled(MARGIN_BANNER_AD_GROUP_ID) && <MarginBannerAd adGroupId={MARGIN_BANNER_AD_GROUP_ID} />}
 
       <MarginBoard count={entries.length} onCompose={self ? onCompose : undefined}>
         {entries.length === 0 ? (
