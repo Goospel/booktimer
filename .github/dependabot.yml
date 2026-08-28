@@ -87,6 +87,12 @@ updates:
     groups:
       miniapp-minor-patch:
         patterns: ["*"]
+        # ⚠️ SDK만 묶음에서 뺀다 — 3.1.1+로 올리면 **미니앱이 서비스되는 Origin이 바뀐다**(공지
+        # 「WebView 미니앱 Origin 변경」 2026-08-25: 3.1.1 이상은 2.x와 같은 Origin으로 서비스).
+        # Origin이 바뀌면 사용자 localStorage가 통째로 리셋돼 코치마크·알림 동의 캐시가 날아가고,
+        # 서버 CORS 허용 목록도 그 Origin을 포함해야 한다(지금은 신·구 병기라 안전). 현재 3.0.4.
+        # minor라 묶음에 섞이면 이름이 안 보인 채 머지되므로, 개별 PR로 떠서 눈에 걸리게 한다.
+        exclude-patterns: ["@apps-in-toss/web-framework"]
         update-types: ["minor", "patch"]
     ignore:
       - dependency-name: "typescript"
