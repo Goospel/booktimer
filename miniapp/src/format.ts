@@ -5,7 +5,9 @@
  * 숫자는 <b>읽는 소리</b>를 따르고(1984 → "사" → 받침 없음), 그 밖(영문·기호·빈 문자열)은 받침 없음으로
  * 떨어뜨린다 — 어느 쪽이든 문장이 깨지지 않는 게 우선이다.
  *
- * <p>피드 문장(을/를)과 성장 문구(이/가)가 <b>같은 판정</b>을 쓴다. 두 벌로 두면 한쪽만 고쳐진다.
+ * <p>지금 이 판정을 쓰는 곳은 피드 문장의 목적격 조사(을/를) 하나다 — 주격(이/가)을 쓰던 성장 문구는
+ * 사다리와 함께 폐기됐다(2026-08-29). 조사가 다시 늘면 그때도 <b>이 함수 하나</b>를 쓴다: 두 벌로
+ * 두면 한쪽만 고쳐진다(「나무이 돼요」가 그렇게 났다).
  */
 export function hasFinalConsonant(word: string): boolean {
   const last = word.at(-1);
@@ -19,11 +21,6 @@ export function hasFinalConsonant(word: string): boolean {
   if (last >= '0' && last <= '9') return DIGIT_HAS_FINAL[Number(last)];
 
   return false;
-}
-
-/** 주격 조사 — 받침이 있으면 「이」, 없으면 「가」. */
-export function subjectParticle(word: string): string {
-  return hasFinalConsonant(word) ? '이' : '가';
 }
 
 /** 목적격 조사 — 받침이 있으면 「을」, 없으면 「를」. */
