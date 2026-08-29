@@ -405,15 +405,39 @@ export function SectionTitle({ children, style }: { children: ReactNode; style?:
  * `renderToStaticMarkup` 하니스에서 **마크업이 통째로 비어 나온다**(실측) — 이 저장소는 jsdom을 두지
  * 않기로 했으므로 시트 내용이 영영 계측 불가가 된다. 딤·safe-area·zIndex는 이 30줄로 충분하다.
  *
- * <p>홈의 태깅 시트와 서재의 「펼쳐보기」·「관리」가 같은 껍데기를 쓴다 — 셋이 각자 딤과 zIndex를
- * 들고 있으면 탭바(zIndex 100) 위를 덮는 규칙이 한 군데만 어긋나도 시트 아래로 탭바가 비친다.
+ * <p>홈의 태깅 시트와 서재의 「펼쳐보기」·「관리」, 여백 쓰기가 같은 껍데기를 쓴다 — 넷이 각자 딤과
+ * zIndex를 들고 있으면 탭바(zIndex 100) 위를 덮는 규칙이 한 군데만 어긋나도 시트 아래로 탭바가 비친다.
+ *
+ * <p>올라오는 움직임은 `global.css`의 `.sheet-dim`·`.sheet-panel`이 든다. 인라인 style이 아닌 이유는
+ * `prefers-reduced-motion`이 인라인 선언을 이길 수 없어서다(그 파일의 주석 참고).
+ *
+ * <p><b>`onDimClose`는 딤 탭만 따로 받는 문</b>이다(기본값 = `onClose`라 기존 세 시트는 그대로). 딤은
+ * 스치기만 해도 눌리는 <b>우발적</b> 출구여서, 되돌릴 수 없는 것을 든 시트는 여기만 막고 ✕는 열어 둘
+ * 필요가 있다 — 여백 쓰기가 그 자리다(`StoryComposer`의 `dimClosable`). ✕와 한 핸들러로 묶으면
+ * 딤을 막는 순간 ✕까지 잠겨 시트에 갇힌다.
  */
-export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Sheet({
+  title,
+  onClose,
+  onDimClose = onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  /** 딤 탭 전용 — 생략하면 `onClose`와 같다. 원고를 든 시트만 여기를 좁힌다. */
+  onDimClose?: () => void;
+  children: ReactNode;
+}) {
   return (
     <>
       {/* 딤 — 탭바(zIndex 100) 위를 덮어야 시트 아래로 탭바가 비치지 않는다. */}
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0, 0, 0, 0.45)' }} />
       <div
+        className="sheet-dim"
+        onClick={onDimClose}
+        style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0, 0, 0, 0.45)' }}
+      />
+      <div
+        className="sheet-panel"
         role="dialog"
         aria-modal="true"
         aria-label={title}

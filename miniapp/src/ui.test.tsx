@@ -14,6 +14,7 @@ import {
   GrassGrid,
   PENCIL_FRAME,
   Screen,
+  Sheet,
   coverColor,
   coverSource,
   initialOf,
@@ -653,5 +654,58 @@ describe('화면 껍데기 — 뒤로가기 잠금', () => {
 
     expect(markup).toContain('돌아가기');
     expect(backAt(markup)).not.toContain('disabled');
+  });
+});
+
+/**
+ * 바텀시트가 올라오는 순간 — 태깅·관리·명단·여백 쓰기가 <b>한 껍데기</b>를 공유하므로 움직임도 한 벌이다.
+ *
+ * <p>인라인 style이 아니라 클래스인 이유는 `prefers-reduced-motion` 때문이다: 인라인 선언은 미디어
+ * 쿼리가 이길 수 없어, 움직임을 줄여 달라는 설정을 무시하게 된다.
+ *
+ * <p>움직이는 속성을 `transform`·`opacity`로 잠근다 — 그림자·배경·크기를 흔들면 시트 안 표지·글자가
+ * 프레임마다 다시 래스터화되고, 그건 데스크톱 목 모드가 원리상 못 잡는 실기기 회귀다(T-176).
+ */
+describe('바텀시트 (Sheet)', () => {
+  const css = readFileSync(new URL('./global.css', import.meta.url), 'utf8');
+  const markup = renderToStaticMarkup(
+    <TDSMobileProvider userAgent={userAgent}>
+      <Sheet title="관리" onClose={() => {}}>
+        시트 본문
+      </Sheet>
+    </TDSMobileProvider>,
+  );
+
+  it('딤과 패널이 움직임 클래스를 입는다', () => {
+    expect(markup).toContain('class="sheet-dim"');
+    expect(markup).toContain('class="sheet-panel"');
+    expect(markup).toContain('시트 본문');
+  });
+
+  it('global.css가 그 둘을 그린다 — 클래스만 붙고 규칙이 없으면 아무것도 안 움직인다', () => {
+    expect(css).toContain('.sheet-dim {');
+    expect(css).toContain('.sheet-panel {');
+  });
+
+  it('움직임을 줄이는 설정에서는 멈춘다', () => {
+    const blocks = css.match(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\n\}/g) ?? [];
+
+    expect(
+      blocks.some((b) => b.includes('.sheet-dim') && b.includes('.sheet-panel') && b.includes('animation: none')),
+    ).toBe(true);
+  });
+
+  it('움직이는 속성은 transform·opacity뿐이다 (T-176)', () => {
+    const frames = css.match(/@keyframes sheet-(?:dim|panel)-in \{[\s\S]*?\n\}/g) ?? [];
+
+    expect(frames).toHaveLength(2);
+    const props = [...frames.join('\n').matchAll(/^\s*([a-z-]+):/gm)].map((m) => m[1]);
+    expect(props.length).toBeGreaterThan(0);
+    expect([...new Set(props)].sort()).toEqual(['opacity', 'transform']);
+  });
+
+  it('한 번 올라오고 끝이다 — 무한 반복은 실기기를 무너뜨린다 (T-176)', () => {
+    expect(css).not.toMatch(/sheet-(?:dim|panel)-in[^;]*infinite/);
+    expect(css).toContain('animation: sheet-panel-in'); // 부재 단언의 짝 — 규칙 자체는 있다
   });
 });
