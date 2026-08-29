@@ -54,7 +54,40 @@ const ACCENT = 'var(--adaptiveBlue700, #4F6B4C)';
  * 측정 중 안심 문구 — 이 앱의 핵심 계약은 "화면을 꺼도 서버가 센다"인데 측정 중 화면에 그 말이 없었다.
  * 첫 세션에 한정하지 않는다: 짧고 무해하며, 잊어버리는 건 신규 유저만이 아니다.
  */
-export const ACTIVE_SESSION_RELIEF = '화면을 꺼도 측정은 계속돼요. 책 읽고 오세요 🌿';
+export const ACTIVE_SESSION_RELIEF = '화면을 꺼도 측정은 계속돼요. 책 읽고 오세요.';
+
+/**
+ * 새싹 표식 — 줄기 하나에 잎 두 장짜리 획 SVG. 기본 이모지를 쓰던 자리를 대신한다.
+ *
+ * <p>기본 이모지가 불쾌한 이유는 형식이 아니라 <b>집어온 표식</b>이라는 데 있다(`no-emoji.test.ts`).
+ * 그래서 카드의 ⓘ와 같은 문법으로 그린다 — 24 격자·2px 획·둥근 끝이라 옆에 서도 한 벌로 읽힌다.
+ *
+ * <p>색은 속성이 아니라 style로 준다 — 프레젠테이션 속성엔 `var()`가 안 먹어, 토큰이 죽으면 독서등에서
+ * 이 표식만 낮 색으로 남는다(같은 파일 ⓘ 아이콘과 같은 이유).
+ *
+ * <p>`data-sprout`은 계측 손잡이다: TDS가 뿜는 emotion 클래스 사이에서 이 조각을 집을 유일한 수단이라
+ * `data-cover-title` 관례를 따른다.
+ */
+function SproutMark({ size }: { size: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      data-sprout=""
+      style={{ stroke: ACCENT, flex: 'none', verticalAlign: '-2px' }}
+    >
+      <path d="M12 20v-6" />
+      <path d="M12 14c0-3.5-2.5-6-6-6 0 3.5 2.5 6 6 6z" />
+      <path d="M12 14c0-3.5 2.5-6 6-6 0 3.5-2.5 6-6 6z" />
+    </svg>
+  );
+}
 
 /**
  * 독서등이 켜져도 <b>밝게 남는 자리</b>의 표식 — 히어로 카드 하나뿐이다.
@@ -78,7 +111,7 @@ export function FirstSessionBanner({ show }: { show: boolean }) {
   return (
     <div style={{ marginTop: 12, padding: 14, borderRadius: 12, background: '#EFF3EE', textAlign: 'center' }}>
       <Text typography="st11" style={{ display: 'block', wordBreak: 'keep-all' }}>
-        🌱 첫 독서 기록이 심어졌어요! 기록 탭에 첫 칸이 생겼어요.
+        <SproutMark size={14} /> 첫 독서 기록이 심어졌어요! 기록 탭에 첫 칸이 생겼어요.
       </Text>
     </div>
   );
@@ -1122,7 +1155,14 @@ export function Home({
                 color: ACCENT,
               }}
             >
-              {achieved ? '🌿 오늘 목표 달성' : '오늘 읽은 시간'}
+              {/* 달성일 때만 새싹이 선다 — 평소 머리말은 글자 그대로여서 미달성 렌더가 안 흔들린다. */}
+              {achieved ? (
+                <>
+                  <SproutMark size={13} /> 오늘 목표 달성
+                </>
+              ) : (
+                '오늘 읽은 시간'
+              )}
             </span>
           </div>
           <div style={{ marginTop: 6 }}>

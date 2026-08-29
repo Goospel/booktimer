@@ -391,6 +391,51 @@ describe('히어로 프레이밍 (렌더)', () => {
 });
 
 /**
+ * 새싹 표식 — 기본 이모지(`🌱`·`🌿`)를 쓰던 세 자리를 자체 획 SVG와 평문으로 갈아끼운 결과.
+ * 계측 손잡이는 `data-sprout`이다: TDS가 뿜는 emotion 클래스 사이에서 이 조각을 집을 유일한
+ * 수단이라 `data-cover-title`과 같은 관례를 따른다.
+ *
+ * <p>주의: 「이모지가 없다」는 부정 단언만으론 문구를 통째로 지워도 초록이라, 자리마다 <b>긍정 짝</b>을
+ * 함께 둔다. 미달성 케이스가 그 반대 짝이다 — 표식이 두 분기에 다 들어가면 그것이 죽인다.
+ */
+describe('새싹 표식 (SproutMark)', () => {
+  const SPROUT = 'data-sprout';
+
+  it('달성 머리말이 이모지 대신 새싹 SVG를 앞세운다', () => {
+    const markup = renderHome({ remainingSeconds: 0, todayGoalSeconds: 3600 });
+
+    expect(markup).toContain('오늘 목표 달성');
+    expect(markup).toContain(SPROUT);
+    expect(markup).not.toContain('🌿');
+  });
+
+  it('미달성이면 새싹이 없다 — 표식은 달성에만 뜬다', () => {
+    const markup = renderHome({ remainingSeconds: 900, todayGoalSeconds: 3600 });
+
+    expect(markup).toContain('오늘 읽은 시간');
+    expect(markup).not.toContain(SPROUT);
+  });
+
+  it('첫 완료 배너도 새싹 SVG로 바뀌었다', () => {
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <FirstSessionBanner show />
+      </TDSMobileProvider>,
+    );
+
+    expect(markup).toContain('첫 독서 기록이 심어졌어요');
+    expect(markup).toContain(SPROUT);
+    expect(markup).not.toContain('🌱');
+  });
+
+  it('측정 중 안심 문구는 표식 없이 마침표로 끝난다 — 이모지가 뜻을 보태던 자리가 아니다', () => {
+    expect(ACTIVE_SESSION_RELIEF).toContain('화면을 꺼도 측정은 계속돼요');
+    expect(ACTIVE_SESSION_RELIEF).not.toContain('🌿');
+    expect(ACTIVE_SESSION_RELIEF.endsWith('.')).toBe(true);
+  });
+});
+
+/**
  * 목표 진입 — 「변경 ›」 알약이 목표 화면으로 가는 <b>명시적</b> 문이다(감사 3e → 시안 4a).
  *
  * <p>옛 배치는 "남은시간 : 15:00 ⓘ" 한 줄이 <b>설명과 이동을 겸했다</b> — ⓘ는 설명으로 읽히지
