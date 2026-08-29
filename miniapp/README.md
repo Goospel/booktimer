@@ -76,7 +76,8 @@ deploymentId 출력. **어느 검증이든 실패하면 배포 전에 exit 1**.
 
 ### 업로드 이후 — 콘솔 단계 (심사 기간 · 롤백)
 
-`deploy.sh`가 끝나면 나머지는 앱인토스 콘솔이고 **사용자 몫**이다([공식 가이드](https://developers-apps-in-toss.toss.im/guide/operation/deploy)).
+`deploy.sh`가 끝나면 나머지는 앱인토스 콘솔 단계다([공식 가이드](https://developers-apps-in-toss.toss.im/guide/operation/deploy)).
+**검수 요청까지는 Claude가 콘솔 MCP로 직접 할 수 있다**(`bundle_submit_review` — 출시노트 포함, 테스트 푸시·라이브 번들 조회도 가능. 단 **사용자 지시가 있을 때만** 제출) — **[출시하기](라이브 전환)만 콘솔 웹 전용(사용자 몫)**이다(2026-08-29 실측, 상세는 루트 CLAUDE.md 「배포 권한 경계」).
 
 - **심사 기간 = 영업일 기준 최대 3일**(일부 카테고리 7일+). 우리는 지금까지 계속 당일 승인이었지만
   그건 운이지 SLA가 아니다 — 출시일이 걸린 작업이면 3일을 전제로 잡는다. **한 번에 한 버전만 제출** 가능하고,
