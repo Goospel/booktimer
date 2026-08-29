@@ -9,7 +9,6 @@ import DashboardApp from '../src/dashboard/DashboardApp.vue';
 const GRAPH = {
     weeks: [[{ date: null, totalSeconds: 0, level: 0, manual: false }]],
     monthLabels: [], totalSeconds: 0, activeDays: 0, currentStreak: 0,
-    growthStageName: 'SPROUT', growthStageEmoji: '🌱', growthStageLabel: '새싹',
 };
 
 // 책 없이 측정 "중"으로 시작(activeBookTitle=null) → 종료 시 untagged 시트가 떠야 한다.

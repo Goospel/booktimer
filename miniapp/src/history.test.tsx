@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import type { DailyRecord, MonthlySection } from './api';
+import type { ContributionGraph, DailyRecord, MonthlySection } from './api';
 import { CACHE_HISTORY, cacheClear, cachePut } from './cache';
 import {
   DayRow,
@@ -15,7 +15,6 @@ import {
   formatMonthTitle,
   formatRecordDate,
   formatWeekday,
-  growthNudge,
   isExpandable,
 } from './screens/History';
 import { graph, userAgent } from './test-fixtures';
@@ -26,20 +25,6 @@ import { monthLabelPositions } from './ui';
  * 웹 `ContributionGraph.vue`는 CSS 그리드의 `gridColumnStart`가 열을 맞춰 주지만, 미니앱 격자는
  * flex + 고정 칸이라 열 자리를 직접 계산해야 한다 — 그 계산만 꺼내 계측한다.
  */
-describe('성장 단계 문구 (growthNudge)', () => {
-  it('다음 단계가 남아 있으면 며칠 더 읽어야 하는지 말한다 — 계속 읽을 이유가 화면에 남는다', () => {
-    expect(growthNudge(2, '꽃')).toBe('2일 더 읽으면 꽃이 돼요');
-  });
-
-  it('하루 남았으면 「1일」이라고 그대로 적는다 — 「내일」로 바꾸면 자정 기준이 달라 거짓이 된다', () => {
-    expect(growthNudge(1, '나무')).toBe('1일 더 읽으면 나무가 돼요');
-  });
-
-  it('가장 큰 단계면 재촉하지 않는다 — 더 오를 곳이 없는데 남은 일수를 적으면 거짓말이다', () => {
-    expect(growthNudge(0, null)).toBe('가장 큰 단계예요');
-  });
-});
-
 describe('월 라벨 배치', () => {
   const at = (...weekIndexes: number[]) => weekIndexes.map((weekIndex) => ({ weekIndex, label: `${weekIndex}월` }));
 
@@ -89,6 +74,62 @@ describe('기록 화면', () => {
   it('가로 스크롤을 손대지 않는다 — weeks[0]이 최신이라 초기 위치(왼쪽 끝)가 이미 오늘이다', () => {
     // 마운트 이펙트는 정적 렌더에 안 잡히니 소스로 계측한다. 오른쪽 끝으로 밀면 1년 전 빈 잔디가 뜬다.
     expect(readFileSync(new URL('./screens/History.tsx', import.meta.url), 'utf8')).not.toContain('scrollLeft');
+  });
+});
+
+/**
+ * 화면 맨 위 스탯 줄 — 연속 · 읽은 날 · 총 시간.
+ *
+ * <p>전에는 여기 <b>식물 성장 카드</b>(땅→새싹→꽃→나무)가 서 있었다. 그 사다리를 통째로 폐기하면서
+ * 이 자리는 「이 화면이 답하는 세 수」만 담백하게 적는다 — 연속은 카드가 데려가 있던 값이라
+ * 카드를 걷으면 화면 어디에도 안 남는다. 그래서 셋을 한 줄로 되돌린다.
+ */
+describe('기록 상단 스탯 줄', () => {
+  const markup = renderToStaticMarkup(
+    <TDSMobileProvider userAgent={userAgent}>
+      <History graph={graph} />
+    </TDSMobileProvider>,
+  );
+
+  it('연속·읽은 날·총 시간 셋을 라벨과 값으로 적는다 — 카드가 데려갔던 연속이 여기로 돌아온다', () => {
+    expect(markup).toContain('>연속<');
+    expect(markup).toContain(`>${graph.currentStreak}일<`);
+    expect(markup).toContain('>읽은 날<');
+    expect(markup).toContain(`>${graph.activeDays}일<`);
+    expect(markup).toContain('>총 시간<');
+    expect(markup).toContain('>1시간<');
+  });
+
+  /**
+   * ⚠️ <b>기본 픽스처로 이 단언을 걸면 공허하다</b>(T-149의 부정 단언 함정) — `graph`엔 growth 필드가
+   * 없어서, 화면이 그 필드를 <b>다시 읽어도</b> `undefined`가 빈 마크업으로 떨어져 「🌱이 없다」가
+   * 구현과 무관하게 늘 참이 된다. 실제로 리뷰가 필드 읽기를 되살렸는데 전원 통과했다.
+   *
+   * <p>그래서 <b>서버가 아직 실어 보내는 레거시 6필드를 일부러 채워</b> 렌더한다. 2단계(서버 제거)
+   * 전까지 응답의 실제 모습이 이것이고, 화면이 그중 하나라도 다시 읽으면 값이 마크업에 실려 죽는다.
+   */
+  const legacyGraph = {
+    ...graph,
+    growthStageName: 'SPROUT',
+    growthStageEmoji: '🌱',
+    growthStageLabel: '새싹',
+    growthProgressPercent: 33,
+    daysToNextStage: 2,
+    nextStageLabel: '꽃',
+  } as ContributionGraph;
+
+  it('응답에 남아 있는 growth 필드를 화면이 그리지 않는다 — 서버 제거(2단계)는 새 번들 라이브 후라 그때까진 실려 온다', () => {
+    const legacy = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <History graph={legacyGraph} />
+      </TDSMobileProvider>,
+    );
+
+    expect(legacy).not.toContain('🌱');
+    expect(legacy).not.toContain('새싹');
+    expect(legacy).not.toContain('돼요');
+    // 진행 막대 — 픽스처 진행률 33%가 화면 어디에도 남지 않는다.
+    expect(legacy).not.toContain('width:33%');
   });
 });
 

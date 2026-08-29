@@ -6,7 +6,6 @@ import ContributionGraph from '../src/dashboard/ContributionGraph.vue';
 const GRAPH = {
     weeks: [[{ date: '2026-06-25', totalSeconds: 600, level: 2, manual: false }]],
     monthLabels: [], totalSeconds: 600, activeDays: 1, currentStreak: 3,
-    growthStageName: 'SPROUT', growthStageEmoji: '🌱', growthStageLabel: '새싹',
 };
 
 describe('ContributionGraph 독서 기록 진입점', () => {

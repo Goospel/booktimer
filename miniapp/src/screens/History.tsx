@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import type { BookRead, ContributionGraph, DailyRecord, MonthlySection } from '../api';
 import { fetchHistory } from '../api';
 import { CACHE_HISTORY, cacheGet, cachePut } from '../cache';
-import { formatDuration, subjectParticle } from '../format';
-import { BookCover, ErrorMessage, GrassGrid, LEVEL_COLORS, MANUAL_OUTLINE, PENCIL_FRAME, SECTION_RULE, SERIF_VALUE, Screen, SectionTitle, Text, monthLabelPositions } from '../ui';
+import { formatDuration } from '../format';
+import { BookCover, ErrorMessage, GrassGrid, LEVEL_COLORS, MANUAL_OUTLINE, SECTION_RULE, SERIF_VALUE, Screen, SectionTitle, Text, monthLabelPositions } from '../ui';
 
 /** 기록 화면 잔디 칸 — `GrassGrid`의 기본값과 같아야 월 라벨이 그 열 위에 선다. */
 const CELL_SIZE = 11;
@@ -43,13 +43,7 @@ export function History({ graph }: { graph: ContributionGraph }) {
 
   return (
     <Screen title="내 기록">
-      <GrowthCard graph={graph} />
-
-      {/* 연속은 위 성장 카드가 이미 말한다 — 여기 다시 두면 한 화면에서 같은 숫자를 두 번 읽게 된다. */}
-      <div style={{ display: 'flex', gap: 12, marginTop: 14 }}>
-        <Stat label="읽은 날" value={`${graph.activeDays}일`} />
-        <Stat label="총 시간" value={formatDuration(graph.totalSeconds)} />
-      </div>
+      <StatStrip graph={graph} />
 
       {/* 시안 2d — 이 화면이 답하는 것의 이름이라 값으로 조판한다(세리프 20). */}
       <SectionTitle style={{ margin: '24px 0 8px', ...SERIF_VALUE, fontSize: 20 }}>읽은 날짜</SectionTitle>
@@ -80,66 +74,46 @@ export function History({ graph }: { graph: ContributionGraph }) {
 }
 
 /**
- * 다음 단계까지 — 「N일 더 읽으면 …이 돼요」. 최고 단계면 재촉하지 않는다.
+ * 화면 맨 위 스탯 줄 — 연속 · 읽은 날 · 총 시간.
  *
- * <p>「1일 남음」을 「내일」로 바꾸지 않는다: 연속은 <b>유저 타임존의 하루</b> 단위라 자정을 넘기면
- * 기준이 달라져, 오늘 밤 읽는 사람에게 「내일」이 거짓이 된다. 남은 일수는 언제 읽어도 참이다.
+ * <p>여기 있던 식물 성장 카드(땅→새싹→꽃→나무 + 진행 막대)는 폐기했다. 사다리가 주는 것은
+ * 「다음 단계까지 N일」이라는 재촉뿐이었고, 정작 이 화면이 답해야 할 세 수는 카드 안팎으로
+ * 흩어져 있었다. 상자도 배경도 없이 한 줄로 세운다 — 값이 셋뿐이면 칸막이보다 가는 선이 낫다.
+ *
+ * <p>총 시간 칸만 넓다: 「11시간 5분」은 「4일」의 두 배가 넘어, 같은 폭이면 그 칸만 줄바꿈된다.
  */
-export function growthNudge(daysToNext: number, nextLabel: string | null): string {
-  if (nextLabel === null) return '가장 큰 단계예요';
-  // 단계 이름은 서버가 준다(땅·새싹·꽃·나무) — 「나무이 돼요」가 나오지 않게 받침으로 조사를 고른다.
-  return `${daysToNext}일 더 읽으면 ${nextLabel}${subjectParticle(nextLabel)} 돼요`;
-}
+function StatStrip({ graph }: { graph: ContributionGraph }) {
+  const cells = [
+    { label: '연속', value: `${graph.currentStreak}일`, flex: 1 },
+    { label: '읽은 날', value: `${graph.activeDays}일`, flex: 1 },
+    { label: '총 시간', value: formatDuration(graph.totalSeconds), flex: 1.5 },
+  ];
 
-/**
- * 성장 카드 — 이 앱이 주는 유일한 보상을 카드로 세운다.
- *
- * <p>전에는 스탯과 잔디 사이에 `🌿 어린 나무` 한 줄이 각주처럼 끼어 있었다. 문제가 둘이었다:
- * ① 보상인데 <b>강조가 하나도 없고</b> ② 이 단계가 <b>어디서 오는지</b>가 화면 어디에도 없었다
- * (연속 일수가 정본인데 그 숫자는 옆 칸에 따로 서 있었다). 그래서 연속을 이 카드 안으로 들여
- * 「연속 N일째 → 지금 단계 → 다음 단계까지」 한 흐름으로 묶는다.
- */
-function GrowthCard({ graph }: { graph: ContributionGraph }) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        padding: 14,
-        borderRadius: 12,
-        background: 'var(--adaptiveGrey100, #FCFAF5)',
-        border: '1px solid transparent',
-        borderImage: PENCIL_FRAME,
-      }}
-    >
-      {/* 단계 그림은 서버가 준다(땅·새싹·꽃·나무) — 화면이 사다리를 다시 정하지 않는다. */}
-      <span aria-hidden="true" style={{ flex: '0 0 auto', fontSize: 26, lineHeight: 1 }}>
-        {graph.growthStageEmoji}
-      </span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <Text typography="st12" color="grey600" style={{ display: 'block' }}>
-          연속 {graph.currentStreak}일째
-        </Text>
-        <Text typography="t6" fontWeight="bold" style={{ ...SERIF_VALUE, display: 'block', lineHeight: 1.25 }}>
-          {graph.growthStageLabel}
-        </Text>
-        {/* 막대는 「지금 단계 안에서 얼마나 왔나」 — 서버가 퍼센트로 계산해 준다. */}
-        <div style={{ height: 5, borderRadius: 3, background: 'var(--adaptiveGrey200, #E4DDD0)', marginTop: 7 }}>
-          <span
-            style={{
-              display: 'block',
-              width: `${graph.growthProgressPercent}%`,
-              height: '100%',
-              borderRadius: 3,
-              background: 'var(--adaptiveBlue500, #6E8A6A)',
-            }}
-          />
+    <div style={{ display: 'flex', marginTop: 14 }}>
+      {cells.map(({ label, value, flex }, index) => (
+        <div
+          key={label}
+          style={
+            index === 0
+              ? { flex }
+              : { flex, borderLeft: '1px solid var(--adaptiveGrey200, #E4DDD0)', paddingLeft: 14 }
+          }
+        >
+          <Text typography="st12" color="grey600" style={{ display: 'block' }}>
+            {label}
+          </Text>
+          {/* 세리프 + 19 — 라벨(st12)과 크기·서체 두 축으로 갈린다. 시안은 18이었으나 계단에 18은
+              없다(`typography.test` SCALE) — 한 값 때문에 계단을 넓히느니 옆 칸을 쓴다. */}
+          <Text
+            typography="st10"
+            fontWeight="bold"
+            style={{ ...SERIF_VALUE, display: 'block', fontSize: 19, marginTop: 3, whiteSpace: 'nowrap' }}
+          >
+            {value}
+          </Text>
         </div>
-        <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 4 }}>
-          {growthNudge(graph.daysToNextStage, graph.nextStageLabel)}
-        </Text>
-      </div>
+      ))}
     </div>
   );
 }
@@ -604,30 +578,6 @@ function Legend() {
       <span style={{ ...swatch, marginLeft: 10, background: LEVEL_COLORS[2], outline: MANUAL_OUTLINE }} />
       <Text typography="st12" color="grey600">
         직접 채움
-      </Text>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      style={{
-        flex: 1,
-        padding: '16px 12px',
-        borderRadius: 12,
-        background: 'var(--adaptiveGrey100, #FCFAF5)',
-        border: '1px solid transparent',
-        borderImage: PENCIL_FRAME,
-        textAlign: 'center',
-      }}
-    >
-      <Text typography="st12" color="grey600" style={{ display: 'block' }}>
-        {label}
-      </Text>
-      {/* 세리프 + st10 — 라벨(st12)과 크기·서체 두 축으로 갈린다. 전에는 3px 차이가 전부였다. */}
-      <Text typography="st10" fontWeight="bold" style={{ ...SERIF_VALUE, display: 'block', marginTop: 4 }}>
-        {value}
       </Text>
     </div>
   );
