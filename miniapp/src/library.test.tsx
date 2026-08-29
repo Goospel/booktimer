@@ -148,6 +148,31 @@ describe('서재 탭', () => {
   it('책 0권 + 검색 꺼짐이면 옛 안내 문장이 남는다 — 지우면 아무것도 없는 화면이다', () => {
     expect(shelf([], { searchEnabled: false })).toContain('아직 책이 없어요');
   });
+
+  /**
+   * ⚠️ 가운데 정렬은 <b>바깥 div</b>가 해야 한다 — TDS `Text`는 넘긴 style에서 `textAlign`을 걸러내
+   * 인라인 스타일에 남기지 않는다(목 모드 실측 2026-08-29: computed `text-align: start`로 왼쪽에
+   * 붙어 있었다). 통짜 `toContain`은 격자 셀(`data-grid-title`)의 `text-align:center`에 걸려 늘
+   * 통과하므로, 문구를 <b>가장 가까이 감싼 div</b>만 본다(글자 수 창은 TDS가 끼워 넣는 `<style>`
+   * 블록에 먹혀 눈금이 안 맞는다).
+   */
+  const wrapperOf = (markup: string, text: string) => {
+    const at = markup.indexOf(text);
+    expect(at).toBeGreaterThan(-1); // 문구 자체가 사라지면 이 단언이 공허해진다
+    return markup.slice(markup.lastIndexOf('<div', at), at);
+  };
+
+  it('빈 탭 안내는 가운데 정렬이다 — 「책 추가」 칸이 선 날', () => {
+    const markup = shelf([book(1, '읽는책', 'READING')], { tab: 'FINISHED' });
+
+    expect(wrapperOf(markup, '다 읽은 책이 없어요')).toContain('text-align:center');
+  });
+
+  it('빈 탭 안내는 가운데 정렬이다 — 검색이 꺼져 「책 추가」 칸이 없는 날', () => {
+    const markup = shelf([book(1, '읽는책', 'READING')], { tab: 'FINISHED', searchEnabled: false });
+
+    expect(wrapperOf(markup, '다 읽은 책이 없어요')).toContain('text-align:center');
+  });
 });
 
 /**

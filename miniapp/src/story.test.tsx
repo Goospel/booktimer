@@ -282,6 +282,20 @@ describe('책 여백 화면 (MarginView)', () => {
     expect(markup).toContain('글 0');
   });
 
+  /**
+   * ⚠️ 가운데 정렬은 <b>바깥 div</b>가 해야 한다 — TDS `Text`는 넘긴 style에서 `textAlign`을 걸러내
+   * 인라인 스타일에 남기지 않는다(목 모드 실측 2026-08-29: computed `text-align: start`). 통짜
+   * `toContain`은 탭 줄의 `text-align:center`에 걸려 늘 통과하므로, 문구를 <b>가장 가까이 감싼
+   * div</b>만 본다(글자 수 창은 TDS가 끼워 넣는 `<style>` 블록에 먹혀 눈금이 안 맞는다).
+   */
+  it('빈 여백 안내는 가운데 정렬이다', () => {
+    const markup = view(margin({ self: false, entries: [] }));
+    const at = markup.indexOf('아직 남긴 글이 없어요');
+
+    expect(at).toBeGreaterThan(-1); // 문구가 사라지면 이 단언이 공허해진다
+    expect(markup.slice(markup.lastIndexOf('<div', at), at)).toContain('text-align:center');
+  });
+
   it('내 책인데 글이 하나도 없으면 첫 문장을 권한다', () => {
     const markup = view(margin({ self: true, entries: [] }));
 
@@ -1004,6 +1018,15 @@ describe('이 책의 여백 — 책축 목록 (M-3)', () => {
 
     expect(html).toContain('아직 올라온 글이 없어요');
     expect(html).not.toContain('걸린');
+  });
+
+  /** 위 「빈 여백 안내는 가운데 정렬이다」와 같은 함정 — TDS `Text`가 `textAlign`을 걸러낸다. */
+  it('빈 목록 안내는 가운데 정렬이다', () => {
+    const html = view(all({ totalCount: 0, entries: [] }));
+    const at = html.indexOf('아직 올라온 글이 없어요');
+
+    expect(at).toBeGreaterThan(-1);
+    expect(html.slice(html.lastIndexOf('<div', at), at)).toContain('text-align:center');
   });
 
   it('안 가진 책이면 담는 길을 안내한다 — 버튼이 아니라 문구다(검색으로 뒤로 가면 담기가 있다)', () => {
