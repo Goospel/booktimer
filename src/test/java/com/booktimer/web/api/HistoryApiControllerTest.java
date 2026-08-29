@@ -80,6 +80,8 @@ class HistoryApiControllerTest {
                 .andExpect(jsonPath("$.months").isArray())
                 .andExpect(jsonPath("$.graph").exists())
                 .andExpect(jsonPath("$.graph.weeks").isArray())
+                // 미니앱 기록 화면 스탯 줄의 「총 시간」이 읽는 값 — DTO에서 잘려도 잡아낼 계약 단언이 없었다.
+                .andExpect(jsonPath("$.graph.totalSeconds").isNumber())
                 .andExpect(jsonPath("$.weeklyShortfall").isArray());
     }
 
