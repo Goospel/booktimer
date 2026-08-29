@@ -1294,6 +1294,16 @@ describe('태깅 시트 (BookSheet)', () => {
   it('홈 인디케이터를 피해 하단 여백을 둔다', () => {
     expect(renderSheet()).toContain('env(safe-area-inset-bottom)');
   });
+
+  // 제목 정렬은 행 버튼이 갖는다 — TDS `Text`에 주면 `textAlign`이 걸러져 UA 기본(버튼=가운데)이 남는다(T-216).
+  // 창을 「제목을 가장 가까이 감싼 button」으로 좁혀야 판별력이 생긴다(통짜 toContain은 다른 버튼에 걸려 상시 통과).
+  it('책 제목을 왼쪽에 붙인다 — 정렬을 Text에 주면 TDS가 삼켜 가운데로 남는다', () => {
+    const markup = renderSheet();
+    const at = markup.indexOf('데미안</span>');
+
+    expect(at).toBeGreaterThan(-1); // 제목이 사라지면 아래 단언이 공허해진다
+    expect(markup.slice(markup.lastIndexOf('<button', at), at)).toContain('text-align:left');
+  });
 });
 
 /**

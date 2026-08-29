@@ -801,12 +801,14 @@ export function BookSheet({
               border: 'none',
               borderRadius: 10,
               background: 'transparent',
+              // 정렬은 여기가 갖는다 — `Text`에 주면 TDS가 `textAlign`을 걸러 UA 기본(버튼=가운데)이 남는다(T-216).
+              textAlign: 'left',
               cursor: 'pointer',
             }}
           >
             <CoverInitial title={book.title} width={28} />
             {/* 한글 제목이 flex 자식이라 minWidth:0이 없으면 줄바꿈 대신 행을 밀어낸다. */}
-            <Text typography="st11" style={{ flex: 1, minWidth: 0, textAlign: 'left', wordBreak: 'keep-all' }}>
+            <Text typography="st11" style={{ flex: 1, minWidth: 0, wordBreak: 'keep-all' }}>
               {book.title}
             </Text>
           </button>
