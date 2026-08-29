@@ -99,8 +99,6 @@ class DashboardApiControllerTest {
                 .andExpect(jsonPath("$.finishedBooks").isArray())
                 .andExpect(jsonPath("$.graph").exists())
                 .andExpect(jsonPath("$.graph.weeks").isArray())
-                .andExpect(jsonPath("$.graph.growthStageName").isString())
-                .andExpect(jsonPath("$.graph.growthStageLabel").isString())
                 .andExpect(jsonPath("$.garden").exists())
                 .andExpect(jsonPath("$.quotes").isArray())
                 .andExpect(jsonPath("$.quotes[0].text").isString())

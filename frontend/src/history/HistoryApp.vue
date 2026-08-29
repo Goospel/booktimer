@@ -24,7 +24,7 @@ export interface GraphDto {
     totalSeconds: number;
     activeDays: number;
     currentStreak: number;
-    // 식물 성장 단계(growthEmoji·growthLabel)는 폐기했다 — 서버는 아직 실어 보내지만 화면이 안 읽는다.
+    // 식물 성장 단계는 2026-08-29에 폐기했다 — 서버 응답에도 더 이상 없다.
 }
 
 /** `session.BookRead` — 그날 이 책만 읽은 시간. 표지·시간은 미니앱 기록 화면이 쓰고, 웹은 제목만 쓴다. */

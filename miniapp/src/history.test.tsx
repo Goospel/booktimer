@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import type { ContributionGraph, DailyRecord, MonthlySection } from './api';
+import type { DailyRecord, MonthlySection } from './api';
 import { CACHE_HISTORY, cacheClear, cachePut } from './cache';
 import {
   DayRow,
@@ -100,37 +100,8 @@ describe('기록 상단 스탯 줄', () => {
     expect(markup).toContain('>1시간<');
   });
 
-  /**
-   * ⚠️ <b>기본 픽스처로 이 단언을 걸면 공허하다</b>(T-149의 부정 단언 함정) — `graph`엔 growth 필드가
-   * 없어서, 화면이 그 필드를 <b>다시 읽어도</b> `undefined`가 빈 마크업으로 떨어져 「🌱이 없다」가
-   * 구현과 무관하게 늘 참이 된다. 실제로 리뷰가 필드 읽기를 되살렸는데 전원 통과했다.
-   *
-   * <p>그래서 <b>서버가 아직 실어 보내는 레거시 6필드를 일부러 채워</b> 렌더한다. 2단계(서버 제거)
-   * 전까지 응답의 실제 모습이 이것이고, 화면이 그중 하나라도 다시 읽으면 값이 마크업에 실려 죽는다.
-   */
-  const legacyGraph = {
-    ...graph,
-    growthStageName: 'SPROUT',
-    growthStageEmoji: '🌱',
-    growthStageLabel: '새싹',
-    growthProgressPercent: 33,
-    daysToNextStage: 2,
-    nextStageLabel: '꽃',
-  } as ContributionGraph;
-
-  it('응답에 남아 있는 growth 필드를 화면이 그리지 않는다 — 서버 제거(2단계)는 새 번들 라이브 후라 그때까진 실려 온다', () => {
-    const legacy = renderToStaticMarkup(
-      <TDSMobileProvider userAgent={userAgent}>
-        <History graph={legacyGraph} />
-      </TDSMobileProvider>,
-    );
-
-    expect(legacy).not.toContain('🌱');
-    expect(legacy).not.toContain('새싹');
-    expect(legacy).not.toContain('돼요');
-    // 진행 막대 — 픽스처 진행률 33%가 화면 어디에도 남지 않는다.
-    expect(legacy).not.toContain('width:33%');
-  });
+  // 「응답에 남아 있는 growth 필드를 그리지 않는다」 단언은 2026-08-29 서버 제거로 걷었다 —
+  // 필드가 응답에서 사라져 화면이 다시 읽을 대상 자체가 없다.
 });
 
 /**

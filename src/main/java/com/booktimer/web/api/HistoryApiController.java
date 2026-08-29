@@ -22,7 +22,6 @@ import java.util.List;
  *
  * <p>기존 {@link com.booktimer.web.HistoryController}가 SSR로 하던 데이터 조회를 JSON으로 반환한다.
  * 서비스 재사용 — 새 도메인 로직 없음. SecurityConfig default-deny로 자동 인증 보호.
- * GrowthStage enum은 클라이언트가 쓸 수 없으므로 {@link GraphDto}에서 emoji·label 문자열로 평탄화.
  */
 @RestController
 @RequestMapping("/api/history")
@@ -56,9 +55,7 @@ public class HistoryApiController {
                         graph.monthLabels(),
                         graph.totalSeconds(),
                         graph.activeDays(),
-                        graph.currentStreak(),
-                        graph.growthStage().emoji(),
-                        graph.growthStage().label()
+                        graph.currentStreak()
                 ),
                 // 부채가 무제한 누적되므로 목록도 무한히 자란다 — 화면에 쓰이는 최근 분량만 잘라 보낸다.
                 // 합계(carriedDebtSeconds)는 대시보드가 전량으로 따로 계산하니 여기 상한은 표시에만 영향한다.
@@ -76,14 +73,12 @@ public class HistoryApiController {
             List<DayDebt> weeklyShortfall) {
     }
 
-    /** ContributionGraph에서 GrowthStage enum을 제거하고 emoji·label 문자열로 평탄화한 DTO. */
+    /** ContributionGraph의 JSON 표현 — 잔디 그리드와 집계값만 싣는다. */
     public record GraphDto(
             List<List<ContributionDay>> weeks,
             List<ContributionGraph.MonthLabel> monthLabels,
             long totalSeconds,
             int activeDays,
-            int currentStreak,
-            String growthEmoji,
-            String growthLabel) {
+            int currentStreak) {
     }
 }
