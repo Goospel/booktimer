@@ -1122,7 +1122,13 @@ export function MarginCard({
               type="button"
               aria-label={`좋아요 ${entry.likeCount}명 보기`}
               onClick={() => onShowLikers(entry)}
-              style={{ ...likesLine(ROW_SUB), border: 'none', background: 'transparent', cursor: 'pointer' }}
+              style={{
+                ...likesLine(ROW_SUB),
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+              }}
             >
               좋아요 {entry.likeCount}명
             </button>
@@ -1311,7 +1317,8 @@ const likesLine = (color: string) =>
     fontSize: 13,
     opacity: 0.75,
     textAlign: 'left',
-    textDecoration: 'underline',
+    // 밑줄은 여기 없다 — 명단을 여는 버튼 갈래에만 준다. 밑줄은 「눌러진다」는 약속이라, 손잡이가 없는
+    // 서재 인라인 미리보기(`<p>`)에 깔면 눌러도 아무 일 없는 죽은 글자가 된다.
   }) as const;
 
 /**

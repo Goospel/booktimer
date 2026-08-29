@@ -551,7 +551,31 @@ describe('여백 좋아요', () => {
     expect(html).toContain('좋아요 3명');
     expect(html).not.toContain('aria-label="좋아요 3명 보기"');
   });
+
+  /**
+   * 밑줄은 <b>손잡이라는 약속</b>이다 — 서재 인라인 미리보기의 개수 줄은 눌러도 아무 일이 없는 `<p>`라,
+   * 밑줄이 있으면 누를 것처럼 생겼는데 안 눌리는 죽은 글자가 된다. 짝으로 잰다(한쪽만 재면 「밑줄을
+   * 통째로 걷어라」가 통과한다).
+   */
+  it('밑줄은 명단을 여는 갈래에만 — 죽은 글자는 밑줄을 안 진다', () => {
+    const dead = render(<MarginCard entry={entry(1, { likeCount: 3 })} now={NOW} />);
+    const live = view(margin({ entries: [entry(1, { likeCount: 3 })] }));
+
+    expect(tagBefore(dead, '좋아요 3명')).not.toContain('underline');
+    expect(tagBefore(live, '좋아요 3명')).toContain('underline');
+  });
 });
+
+/**
+ * 그 글자를 감싼 여는 태그 — 서식이 인라인 style이라 태그만 잘라 보면 판정된다(`library.test`와 같은 수법).
+ *
+ * <p>⚠️ 텍스트 <b>노드</b>를 찾는다(`>` 를 앞에 붙여). 같은 글자가 `aria-label`에도 실려 있어 맨 검색은
+ * 속성값을 먼저 집고, 그러면 잘린 조각이 `style`에 닿지 못해 언제나 밑줄이 없다고 나온다.
+ */
+const tagBefore = (markup: string, text: string) => {
+  const at = markup.indexOf(`>${text}`);
+  return at < 0 ? '' : markup.slice(markup.lastIndexOf('<', at), at);
+};
 
 /**
  * 인용문 — 글이 「책에서 옮긴 문장 + 내 주석」 두 층이 된다(2026-08-20). 인용은 <b>선택</b>이라
