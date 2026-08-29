@@ -22,7 +22,6 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -81,8 +80,6 @@ class HistoryApiControllerTest {
                 .andExpect(jsonPath("$.months").isArray())
                 .andExpect(jsonPath("$.graph").exists())
                 .andExpect(jsonPath("$.graph.weeks").isArray())
-                .andExpect(jsonPath("$.graph.growthEmoji").isString())
-                .andExpect(jsonPath("$.graph.growthLabel").isString())
                 .andExpect(jsonPath("$.weeklyShortfall").isArray());
     }
 
@@ -102,7 +99,7 @@ class HistoryApiControllerTest {
     }
 
     @Test
-    @DisplayName("직렬화: YearMonth='yyyy-MM', LocalDate='yyyy-MM-dd', growthEmoji 문자열(enum raw 아님)")
+    @DisplayName("직렬화: YearMonth='yyyy-MM', LocalDate='yyyy-MM-dd'")
     void getHistory_withSession_serializationFormats() throws Exception {
         User u = registrationService.register("histser@booktimer.com", "rawpw1234", "직렬화", SEOUL, Role.USER, today());
         Book book = bookRepository.save(
@@ -111,20 +108,13 @@ class HistoryApiControllerTest {
         sessionService.start(u, start, book);
         sessionService.stop(u, start.plusSeconds(3600));
 
-        var result = mockMvc.perform(get("/api/history")
+        mockMvc.perform(get("/api/history")
                         .accept(MediaType.APPLICATION_JSON)
                         .with(user("histser@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.months[0].month")
                         .value(today().format(DateTimeFormatter.ofPattern("yyyy-MM"))))
                 .andExpect(jsonPath("$.months[0].days[0].date")
-                        .value(today().format(DateTimeFormatter.ISO_LOCAL_DATE)))
-                .andReturn();
-
-        String body = result.getResponse().getContentAsString();
-        // GrowthStage enum이 raw("GROUND", "SPROUT" 등)로 새지 않아야 한다
-        assertThat(body).doesNotContain("\"GROUND\"", "\"SPROUT\"", "\"FLOWER\"", "\"TREE\"");
-        // growthEmoji·growthLabel 필드가 실제 문자열 값으로 존재한다
-        assertThat(body).contains("growthEmoji").contains("growthLabel");
+                        .value(today().format(DateTimeFormatter.ISO_LOCAL_DATE)));
     }
 }

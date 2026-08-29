@@ -294,10 +294,10 @@ HTTP→HTTPS 301 리다이렉트 + Route 53 alias. 배경 개념 **N-021**.
   단계 이름·이모지·진행 막대가 정작 이 화면이 답해야 할 세 수(연속·읽은 날·총 시간)를 밀어냈다.
   - [x] **1단계 — 화면 제거 ✅ 2026-08-29**: 미니앱 기록 화면의 성장 카드를 걷고 그 자리를 담백한 스탯 줄
         (연속 · 읽은 날 · 총 시간)로 되돌렸다. 웹은 표시가 애초에 없어 타입·픽스처만 정리.
-  - [ ] ⏸ **2단계 — 서버 제거**: `session/GrowthStage`, `ContributionGraph`의 growth 메서드,
-        `DashboardApiController`·`HistoryApiController`의 growth 응답 필드.
-        **게이트: 새 미니앱 번들이 라이브로 확인된 뒤**에 한다 — 지금 라이브인 6차 번들이 그 필드를 읽고 있어,
-        먼저 지우면 배포된 앱이 깨진다. JSON에 여분 필드가 남는 것은 클라이언트에 무해하다.
+  - [x] **2단계 — 서버 제거 ✅ 2026-08-29**: `session/GrowthStage` 삭제, `ContributionGraph`의 growth
+        메서드 3종, `DashboardApiController`·`HistoryApiController`의 growth 응답 필드(6+2)를 걷었다.
+        **게이트가 열린 근거**: 콘솔 실측으로 라이브 번들 = `01a04ca2`(7차) 확인 — growth 필드를 읽던
+        6차 번들은 더 이상 라이브가 아니다. 문서(README·code-map)의 성장 식물 현행 서술도 함께 화해.
 - (남은 후속 아이디어) 색 단계 사용자 데이터 분포 기반 조정.
 
 ### 독서 마을 — 잔디를 게임화한 "수집형 마을"로 (아이디어 📝, 2026-06-10 / 사용자 대면 명칭·URL 마을/village로 리네임 ✅ 2026-06-18)

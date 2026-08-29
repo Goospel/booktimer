@@ -20,32 +20,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class ContributionGraphBuilderTest {
 
-    /** 다음 단계까지 남은 일수 — 화면이 「N일 더 읽으면 …이 돼요」로 그린다. */
-    @Test
-    @DisplayName("다음 단계까지 남은 일수와 현재 단계 진행률")
-    void growthProgress() {
-        assertThat(graphWithStreak(0).daysToNextStage()).isEqualTo(1);   // 땅 → 새싹
-        assertThat(graphWithStreak(0).growthProgressPercent()).isZero();
-
-        assertThat(graphWithStreak(2).daysToNextStage()).isEqualTo(2);   // 새싹(1~3) → 꽃(4)
-        assertThat(graphWithStreak(2).growthProgressPercent()).isEqualTo(33);
-
-        assertThat(graphWithStreak(13).daysToNextStage()).isEqualTo(1);  // 꽃(4~13) → 나무(14)
-        assertThat(graphWithStreak(13).growthProgressPercent()).isEqualTo(90);
-    }
-
-    @Test
-    @DisplayName("나무는 더 오를 곳이 없다 — 남은 일수 0, 진행률 100 (막대가 빈 채로 남지 않는다)")
-    void treeIsTerminal() {
-        assertThat(graphWithStreak(14).daysToNextStage()).isZero();
-        assertThat(graphWithStreak(14).growthProgressPercent()).isEqualTo(100);
-        assertThat(graphWithStreak(900).growthProgressPercent()).isEqualTo(100);
-    }
-
-    private static ContributionGraph graphWithStreak(int streak) {
-        return new ContributionGraph(java.util.List.of(), java.util.List.of(), 0L, 0, streak);
-    }
-
     // 화요일
     private static final LocalDate TODAY = LocalDate.of(2026, 6, 2);
 
@@ -301,16 +275,15 @@ class ContributionGraphBuilderTest {
     }
 
     @Test
-    @DisplayName("연속: build()가 만든 그래프의 currentStreak·growthStage가 streak를 반영한다")
-    void build_populatesStreakAndStage() {
+    @DisplayName("연속: build()가 만든 그래프의 currentStreak가 streak를 반영한다")
+    void build_populatesStreak() {
         java.util.Map<LocalDate, Long> data = new java.util.HashMap<>();
         for (int i = 0; i < 5; i++) {
-            data.put(TODAY.minusDays(i), 60L); // 5일 연속 → 꽃(4~13)
+            data.put(TODAY.minusDays(i), 60L);
         }
         ContributionGraph graph = ContributionGraphBuilder.build(data, TODAY, GOAL);
 
         assertThat(graph.currentStreak()).isEqualTo(5);
-        assertThat(graph.growthStage()).isEqualTo(GrowthStage.FLOWER);
     }
 
     private static ContributionDay findCell(ContributionGraph graph, LocalDate date) {

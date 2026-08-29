@@ -207,8 +207,7 @@ export interface ContributionGraph {
   totalSeconds: number;
   activeDays: number;
   currentStreak: number;
-  // 식물 성장 단계(growthStage*·daysToNextStage·nextStageLabel)는 폐기했다. 서버는 아직 그 필드를
-  // 실어 보내지만(라이브 번들이 읽고 있어 2단계에서 걷는다) 이 화면은 더 이상 읽지 않는다.
+  // 식물 성장 단계는 2026-08-29에 폐기했다 — 서버 응답에도 더 이상 없다.
 }
 
 export interface TimerState {
