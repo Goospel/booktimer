@@ -649,13 +649,12 @@ export function BookMarginAllView({
           프롭 자체를 없앤 것이 게이트다 — 조건으로 거르면 다음 사람이 조건만 지우고 되살릴 수 있다. */}
       <MarginBoard count={totalCount}>
         {entries.length === 0 ? (
-          <Text
-            typography="st12"
-            color="grey600"
-            style={{ display: 'block', padding: '34px 16px', textAlign: 'center', wordBreak: 'keep-all' }}
-          >
-            아직 올라온 글이 없어요. 이 책을 읽은 누군가가 올리면 여기에 쌓여요.
-          </Text>
+          // 가운데 정렬은 바깥 div가 한다(T-216) — Text에 준 `textAlign`은 TDS가 걸러낸다.
+          <div style={{ padding: '34px 16px', textAlign: 'center' }}>
+            <Text typography="st12" color="grey600" style={{ wordBreak: 'keep-all' }}>
+              아직 올라온 글이 없어요. 이 책을 읽은 누군가가 올리면 여기에 쌓여요.
+            </Text>
+          </div>
         ) : (
           entries.map((e) => (
             <MarginCard
@@ -920,18 +919,17 @@ export function MarginView({
 
       <MarginBoard count={entries.length} onCompose={self ? onCompose : undefined}>
         {entries.length === 0 ? (
-          <Text
-            typography="st12"
-            color="grey600"
-            style={{ display: 'block', padding: '34px 16px', textAlign: 'center', wordBreak: 'keep-all' }}
-          >
-            {/* 남의 여백이 비면 그냥 비었다고 말한다 — 예전의 「팔로우하면 볼 수 있어요」는 2026-08-22에
-                걷었다. 「모두의 여백」에서 그 사람 글을 읽고 넘어온 사람에게 "팔로우해야 읽을 수 있다"고
-                말하는 자리였다(팔로우는 이제 열람 권한이 아니다). */}
-            {self
-              ? '아직 남긴 글이 없어요. 읽다가 마음에 걸린 문장을 남겨 보세요.'
-              : '아직 남긴 글이 없어요.'}
-          </Text>
+          // 가운데 정렬은 바깥 div가 한다(T-216) — Text에 준 `textAlign`은 TDS가 걸러낸다.
+          <div style={{ padding: '34px 16px', textAlign: 'center' }}>
+            <Text typography="st12" color="grey600" style={{ wordBreak: 'keep-all' }}>
+              {/* 남의 여백이 비면 그냥 비었다고 말한다 — 예전의 「팔로우하면 볼 수 있어요」는 2026-08-22에
+                  걷었다. 「모두의 여백」에서 그 사람 글을 읽고 넘어온 사람에게 "팔로우해야 읽을 수 있다"고
+                  말하는 자리였다(팔로우는 이제 열람 권한이 아니다). */}
+              {self
+                ? '아직 남긴 글이 없어요. 읽다가 마음에 걸린 문장을 남겨 보세요.'
+                : '아직 남긴 글이 없어요.'}
+            </Text>
+          </div>
         ) : (
           entries.map((e) => (
             <MarginCard

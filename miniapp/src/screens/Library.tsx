@@ -606,17 +606,23 @@ export function Shelf({
         })}
       </div>
 
+      {/* 가운데 정렬은 **바깥 div**가 한다 — TDS `Text`는 넘긴 style에서 `textAlign`을 걸러낸다(T-216). */}
       {selected === null && leadCard === null ? (
-        <Text typography="st11" color="grey600" style={{ display: 'block', marginTop: 28, textAlign: 'center' }}>
-          {section.empty}
-        </Text>
+        <div style={{ marginTop: 28, textAlign: 'center' }}>
+          <Text typography="st11" color="grey600">
+            {section.empty}
+          </Text>
+        </div>
       ) : (
         <div style={{ marginTop: 20 }}>
           {/* 「이 탭이 비었다」와 「책 추가 칸이 섰다」는 다른 말이다 — 칸의 부제가 탭 사정까지 대신하지 못한다. */}
           {selected === null && (
-            <Text typography="st11" color="grey600" style={{ display: 'block', textAlign: 'center' }}>
-              {section.empty}
-            </Text>
+            // 가운데 정렬은 바깥 div가 한다(T-216) — Text에 준 `textAlign`은 TDS가 걸러낸다.
+            <div style={{ textAlign: 'center' }}>
+              <Text typography="st11" color="grey600">
+                {section.empty}
+              </Text>
+            </div>
           )}
           {/*
             탭이 바뀌면 목록이 통째로 갈리므로 다시 마운트한다 — 안 그러면 트랙이 옛 탭의 스크롤 자리에 머문다.
@@ -849,10 +855,9 @@ export function BookGrid({
             </div>
             {/* 긴 제목을 두 줄에서 끊지는 않는다 — TDS `Text`가 인라인 `display`를 자기 값으로 덮어써
                 (`-webkit-box` → `inline-block`) line-clamp가 죽는다. 줄이 벌어져도 제목은 다 보인다. */}
-            <Text
-              typography="st12"
-              style={{ display: 'block', marginTop: 6, wordBreak: 'keep-all', textAlign: 'center' }}
-            >
+            {/* 가운데 정렬은 아래 셀(`data-grid-title` div·button)의 `textAlign`을 상속받는다 — 여기 적어도
+                TDS가 걸러내 죽은 키였다(T-216. 목 모드 실측: 상속만으로 이미 `center`라 래퍼는 불필요). */}
+            <Text typography="st12" style={{ display: 'block', marginTop: 6, wordBreak: 'keep-all' }}>
               {book.title}
             </Text>
           </>
