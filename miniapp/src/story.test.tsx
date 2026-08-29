@@ -16,7 +16,6 @@ import {
   createStoryMessage,
   dimClosable,
   hasFreshStory,
-  marginTabLabel,
   shareNotice,
   showMarginTabs,
   visibilityNotice,
@@ -801,19 +800,32 @@ describe('글 관리 시트 (MarginMenuSheet)', () => {
  * 「필터」가 아니라 「탭」으로 읽힌다.
  */
 describe('게시판 탭줄 (MarginTabs)', () => {
-  const tabs = (tab: 'mine' | 'all', mineCount: number | null, allCount: number | null) =>
-    render(<MarginTabs tab={tab} mineCount={mineCount} allCount={allCount} onSelect={() => {}} />);
+  const tabs = (tab: 'mine' | 'all') => render(<MarginTabs tab={tab} onSelect={() => {}} />);
 
   it('두 탭의 이름은 「내가 쓴 여백」과 「모두의 여백」이다', () => {
-    const html = tabs('mine', 3, 12);
+    const html = tabs('mine');
 
-    expect(html).toContain('내가 쓴 여백 3');
-    expect(html).toContain('모두의 여백 12');
+    expect(html).toContain('내가 쓴 여백');
+    expect(html).toContain('모두의 여백');
+  });
+
+  /**
+   * 개수를 걷었다 (2026-08-29 사용자 지정: "탭 위에 저거 뜨는 게 좀 싸보여. 담백하게 글자만").
+   *
+   * <p><b>닫는 태그까지 붙여 경계를 잡는다</b>. 이름만 `toContain`하면 「내가 쓴 여백 3」도 통과하고,
+   * 「숫자가 없다」로 쓰면 개수 프롭이 사라진 호출에서 `undefined`가 붙어도 통과한다(둘 다 겪었다) —
+   * 라벨이 이름 <b>그대로 끝나는지</b>가 이 규칙의 전부다.
+   */
+  it('이름 뒤에 아무것도 붙지 않는다 — 개수도, 그 자리에 새는 값도', () => {
+    const html = tabs('mine');
+
+    expect(html).toContain('>내가 쓴 여백</button>');
+    expect(html).toContain('>모두의 여백</button>');
   });
 
   it('선택된 쪽만 눌린 상태다 — 둘 다 켜지면 어디 있는지 알 수 없다', () => {
-    expect(tabs('all', 3, 12).match(/aria-pressed="true"/g)).toHaveLength(1);
-    expect(tabs('mine', 3, 12).match(/aria-pressed="true"/g)).toHaveLength(1);
+    expect(tabs('all').match(/aria-pressed="true"/g)).toHaveLength(1);
+    expect(tabs('mine').match(/aria-pressed="true"/g)).toHaveLength(1);
   });
 });
 
@@ -903,20 +915,6 @@ describe('탭줄이 서는 조건 (showMarginTabs)', () => {
 
   it('isbn 없는 책에는 안 선다 — 책축 좌표가 없어 「모두의 여백」이 가리킬 자리가 없다', () => {
     expect(showMarginTabs(true, null)).toBe(false);
-  });
-});
-
-describe('책축 탭 라벨 (M-6)', () => {
-  it('개수를 알면 이름 뒤에 붙인다', () => {
-    expect(marginTabLabel('내 여백', 3)).toBe('내 여백 3');
-  });
-
-  it('아직 안 받았으면 이름만 — 0을 먼저 그리면 「글이 없다」는 거짓말이 된다', () => {
-    expect(marginTabLabel('모두', null)).toBe('모두');
-  });
-
-  it('진짜 0은 0으로 그린다 — 모르는 것과 없는 것은 다르다', () => {
-    expect(marginTabLabel('모두', 0)).toBe('모두 0');
   });
 });
 

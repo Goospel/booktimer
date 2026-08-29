@@ -97,14 +97,6 @@ export function shareNotice(isPublic: boolean | undefined): string {
 }
 
 /**
- * 책축 탭의 라벨 — 아직 안 받은 개수(`null`)는 <b>숫자를 안 적는다</b>. 0을 먼저 그리면 「글이 없다」는
- * 거짓말을 한 프레임 보여 주고, 값이 도착하는 순간 숫자가 튄다. 진짜 0은 0으로 적는다.
- */
-export function marginTabLabel(name: string, count: number | null): string {
-  return count === null ? name : `${name} ${count}`;
-}
-
-/**
  * 하트 — 색을 <b>`currentColor`로 상속</b>한다. 배경 팔레트가 6종이고 그중 sunset이 붉은 주황(#c96a4a)이라
  * 빨간 하트는 거기서 사라진다. 카드 본문 색을 그대로 쓰면 여섯 배경 전부에서 읽히는 것이 보장되고,
  * 상태 구분은 색이 아니라 <b>채움 여부</b>가 진다.
@@ -300,14 +292,7 @@ export function BookMargin({
   const entries = likes.merge(margin.entries).map((e) => ({ ...e, shared: shares[e.id] ?? e.shared }));
   const merged = { ...margin, entries };
 
-  const tabs = showMarginTabs(margin.self, isbn13) ? (
-      <MarginTabs
-        tab={tab}
-        mineCount={margin.entries.length}
-        allCount={all?.totalCount ?? null}
-        onSelect={setTab}
-      />
-    ) : undefined;
+  const tabs = showMarginTabs(margin.self, isbn13) ? <MarginTabs tab={tab} onSelect={setTab} /> : undefined;
 
   const menuEntry = entries.find((e) => e.id === menuOf) ?? null;
 
@@ -458,11 +443,12 @@ function useMarginLikes(fail: (e: Error) => void, onError: (e: Error) => void) {
 }
 
 /**
- * 여백 화면의 탭 줄 — 「내 여백 / 모두」. 내가 가진 책이고 isbn13이 있을 때만 선다
+ * 여백 화면의 탭 줄 — 「내가 쓴 여백 / 모두의 여백」. 내가 가진 책이고 isbn13이 있을 때만 선다
  * (isbn 없는 책은 책축 좌표 자체가 없어 「모두」가 가리킬 자리가 없다).
  *
- * <p>「모두」 개수는 그 탭을 눌러야 받으므로 그전엔 `null`이고, 라벨이 숫자를 안 적는다
- * ({@link marginTabLabel}).
+ * <p><b>개수를 안 적는다</b>(2026-08-29 사용자 지정) — 이름 뒤의 숫자가 「싸 보인다」는 판단이다.
+ * 값을 잃는 것도 아니다: 「내가 쓴 여백」의 수는 바로 아래 게시판 머리글(`MarginBoard`)이 이미 말하고,
+ * 「모두의 여백」은 그 탭을 눌러야 받는 값이라 탭 줄에서는 어차피 절반이 비어 있었다.
  */
 /**
  * 탭줄이 서는가 — <b>내 책 + isbn13</b>. 남의 여백에서 「모두의 여백」을 열 수 있게 하는 것은 진입점
@@ -475,20 +461,10 @@ function useMarginLikes(fail: (e: Error) => void, onError: (e: Error) => void) {
  */
 export const showMarginTabs = (self: boolean, isbn13: string | null): boolean => self && isbn13 !== null;
 
-export function MarginTabs({
-  tab,
-  mineCount,
-  allCount,
-  onSelect,
-}: {
-  tab: 'mine' | 'all';
-  mineCount: number | null;
-  allCount: number | null;
-  onSelect: (tab: 'mine' | 'all') => void;
-}) {
+export function MarginTabs({ tab, onSelect }: { tab: 'mine' | 'all'; onSelect: (tab: 'mine' | 'all') => void }) {
   const items = [
-    { key: 'mine' as const, label: marginTabLabel('내가 쓴 여백', mineCount) },
-    { key: 'all' as const, label: marginTabLabel('모두의 여백', allCount) },
+    { key: 'mine' as const, label: '내가 쓴 여백' },
+    { key: 'all' as const, label: '모두의 여백' },
   ];
 
   return (
@@ -791,8 +767,6 @@ export function BookMarginAll({
           myBookId === null ? undefined : (
             <MarginTabs
               tab="all"
-              mineCount={null}
-              allCount={data.totalCount}
               onSelect={(next) => {
                 if (next === 'mine') onOpenMine(myBookId);
               }}
