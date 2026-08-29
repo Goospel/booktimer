@@ -207,15 +207,8 @@ export interface ContributionGraph {
   totalSeconds: number;
   activeDays: number;
   currentStreak: number;
-  growthStageName: string;
-  growthStageEmoji: string;
-  growthStageLabel: string;
-  /** 현재 단계 안의 진행률(0~100). 최고 단계면 100 — 막대가 빈 채로 남지 않는다. */
-  growthProgressPercent: number;
-  /** 다음 단계까지 남은 연속 일수. 최고 단계면 0. */
-  daysToNextStage: number;
-  /** 다음 단계 이름. 최고 단계면 null(더 오를 곳이 없다). */
-  nextStageLabel: string | null;
+  // 식물 성장 단계(growthStage*·daysToNextStage·nextStageLabel)는 폐기했다. 서버는 아직 그 필드를
+  // 실어 보내지만(라이브 번들이 읽고 있어 2단계에서 걷는다) 이 화면은 더 이상 읽지 않는다.
 }
 
 export interface TimerState {

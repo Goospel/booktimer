@@ -16,9 +16,6 @@ const GRAPH_INITIAL = {
     totalSeconds: 0,
     activeDays: 0,
     currentStreak: 1,
-    growthStageName: 'SPROUT',
-    growthStageEmoji: '🌱',
-    growthStageLabel: '새싹',
 };
 
 // 측정 종료 후 — 방금 확정된 세션이 반영돼 연속일·활동일·총시간이 올라간 잔디.

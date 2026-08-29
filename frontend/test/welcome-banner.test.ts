@@ -10,7 +10,6 @@ import DashboardApp from '../src/dashboard/DashboardApp.vue';
 const GRAPH = {
     weeks: [[{ date: null, totalSeconds: 0, level: 0, manual: false }]],
     monthLabels: [], totalSeconds: 0, activeDays: 0, currentStreak: 0,
-    growthStageName: 'SPROUT', growthStageEmoji: '🌱', growthStageLabel: '새싹',
 };
 const DASHBOARD = {
     nickname: '테스터', loginId: 'tester', profileCharacterCode: null,

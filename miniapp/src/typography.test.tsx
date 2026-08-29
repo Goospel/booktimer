@@ -284,9 +284,9 @@ describe('값(수)은 세리프로 온다', () => {
     expect(tagOf(history, `${graph.activeDays}일`)).toContain('Gowun Batang');
   });
 
-  it('성장 단계 이름이 세리프다 — 그 카드가 말하려는 성취다', () => {
+  it('연속 일수도 세리프다 — 같은 줄에 선 세 값이 서체가 갈리면 줄이 아니라 파편으로 읽힌다', () => {
     const history = render(<History graph={graph} />);
-    expect(tagOf(history, graph.growthStageLabel)).toContain('Gowun Batang');
+    expect(tagOf(history, `${graph.currentStreak}일`)).toContain('Gowun Batang');
   });
 
   it('책방 카운트 숫자가 세리프다 — 500을 부르다 400으로 떨어져 라벨보다 얇던 자리', () => {

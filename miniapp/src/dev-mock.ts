@@ -125,14 +125,6 @@ function buildGraph(): ContributionGraph {
     activeDays,
     // 오늘(offset 0)부터 처음 0레벨을 만나기까지 = 연속일. 패턴에 0이 있어 반드시 끝난다.
     currentStreak: LEVELS.indexOf(0),
-    // ⚠️ 서버 사다리(GrowthStage)는 땅·새싹·꽃·나무 넷뿐이다 — 한때 목이 「SAPLING·🌿·어린 나무」라는
-    // 서버에 없는 단계를 그렸다. 목이 실제와 다르면 브라우저 확인이 통과해도 아무것도 증명하지 못한다.
-    growthStageName: 'SPROUT',
-    growthStageEmoji: '🌱',
-    growthStageLabel: '새싹',
-    growthProgressPercent: 33,
-    daysToNextStage: 2,
-    nextStageLabel: '꽃',
   };
 }
 

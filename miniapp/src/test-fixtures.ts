@@ -17,12 +17,6 @@ export const graph: ContributionGraph = {
   totalSeconds: 3600,
   activeDays: 4,
   currentStreak: 2,
-  growthStageName: 'SPROUT',
-  growthStageEmoji: '🌱',
-  growthStageLabel: '새싹',
-  growthProgressPercent: 33,
-  daysToNextStage: 2,
-  nextStageLabel: '꽃',
 };
 
 /**
