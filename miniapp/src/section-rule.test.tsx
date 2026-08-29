@@ -72,11 +72,14 @@ const event = (): SocialEvent => ({
   count: 1,
 });
 
+/** ⚠️ 글이 <b>있어야</b> 한다 — 0장이면 여백 헤더가 카운트·「전체 보기」와 함께 아랫선까지 접는다. */
 const margin = (): MarginResponse => ({
   book: { id: 1, title: '데미안', author: '헤세', coverUrl: null, isPublic: true },
   ownerNickname: '구스펠',
   self: true,
-  entries: [],
+  entries: [
+    { id: 1, text: '첫 문장', quote: null, bgCode: 'paper', createdAt: '2026-08-24T00:00:00Z', likeCount: 0, liked: false },
+  ],
 });
 
 const month = (): MonthlySection => ({ month: '2026-08', totalSeconds: 7_200, days: [] });

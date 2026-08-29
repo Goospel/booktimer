@@ -233,7 +233,8 @@ function MarginBox({
  *
  * <p>헤더는 세 상태 모두 서 있다 — 박스 뼈대가 고정이라야 캐러셀을 밀 때 화면이 들썩이지 않는다.
  * 실패에 재시도 버튼을 두지 않는 것은 의도다: 헤더 「전체 보기 ›」가 살아 있어 전체 화면(자체 재시도가
- * 있다)으로 갈 수 있고, 책을 옮기거나 돌아오면 그 자체가 재조회다.
+ * 있다)으로 갈 수 있고, 책을 옮기거나 돌아오면 그 자체가 재조회다. 글이 <b>0장</b>일 때만 카운트·문·
+ * 아랫선을 접는다({@link empty}) — 그 문 너머엔 같은 빈 화면뿐이라 출구가 아니다.
  */
 export function MarginBoxView({
   view,
@@ -246,6 +247,12 @@ export function MarginBoxView({
   onOpenAll: () => void;
 }) {
   const entries = typeof view === 'string' ? [] : view.entries;
+  /**
+   * 아직 한 장도 없는 책 — 헤더가 <b>말만</b> 남는다. 「0」은 빈 상태를 숫자로 박제하고, 「전체 보기 ›」는
+   * 같은 빈 화면으로 가는 문이라 눌러도 같은 사실을 다시 본다. 아랫선도 가를 내용이 없으면 머리와 안내를
+   * 두 덩어리로 쪼갤 뿐이다. 로딩·실패는 <b>여기 아니다</b> — 그때는 전체 화면의 자체 재시도가 유일한 출구다.
+   */
+  const empty = typeof view !== 'string' && entries.length === 0;
 
   return (
     <div
@@ -254,32 +261,34 @@ export function MarginBoxView({
  borderImage: PENCIL_FRAME, borderRadius: 16, background: '#FFFDF8' }}
     >
       {/* 선은 제목이 아니라 이 줄에 건다 — 오른쪽 「전체 보기 ›」까지 지나야 머리 한 줄로 읽힌다(시안 2c). */}
-      <div style={{ display: 'flex', alignItems: 'baseline', paddingBottom: 9, borderBottom: SECTION_RULE }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', paddingBottom: 9, borderBottom: empty ? undefined : SECTION_RULE }}>
         {/* 시안 2c — 라벨 16에 카운트만 세리프. 색은 토큰으로 준다(옛 `#4E6B4A`는 세이지 700과
             한 글자 다른 사본이라 다크모드에서 갈라졌다). */}
         <SectionTitle style={{ flex: 1, fontSize: 16 }}>
           여백
-          {typeof view !== 'string' && (
+          {entries.length > 0 && (
             <b style={{ ...SERIF_VALUE, fontSize: 16, color: 'var(--adaptiveBlue700, #4F6B4C)' }}>
               {' '}
               {entries.length}
             </b>
           )}
         </SectionTitle>
-        <button
-          type="button"
-          onClick={onOpenAll}
-          style={{
-            padding: 0,
-            border: 'none',
-            background: 'transparent',
-            color: 'var(--adaptiveGrey600, #6F6A5E)',
-            fontSize: 14,
-            cursor: 'pointer',
-          }}
-        >
-          전체 보기 ›
-        </button>
+        {!empty && (
+          <button
+            type="button"
+            onClick={onOpenAll}
+            style={{
+              padding: 0,
+              border: 'none',
+              background: 'transparent',
+              color: 'var(--adaptiveGrey600, #6F6A5E)',
+              fontSize: 14,
+              cursor: 'pointer',
+            }}
+          >
+            전체 보기 ›
+          </button>
+        )}
       </div>
       {view === 'loading' && (
         <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 10 }}>
@@ -294,7 +303,7 @@ export function MarginBoxView({
       {typeof view !== 'string' &&
         (entries.length === 0 ? (
           <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 10 }}>
-            아직 남긴 글이 없어요
+            아직 남긴 글이 없어요. 위의 「여백에 글쓰기」로 첫 장을 남겨보세요.
           </Text>
         ) : (
           entries.slice(0, MARGIN_PREVIEW_COUNT).map((e) => (
@@ -589,8 +598,9 @@ export function Shelf({
                 color: current ? '#2C2C2A' : 'var(--adaptiveGrey700, #57534A)',
               }}
             >
-              {/* 탭 이름은 말이고 권수는 값이다 — 세리프로 갈라 놓으면 한 덩어리로 안 읽힌다(시안 2c). */}
-              {title} <span style={SERIF_VALUE}>{books.filter((b) => b.status === status).length}</span>
+              {/* 이름만 적는다 — 권수는 「펼쳐보기」 시트 제목(`읽는 중 N권`)이 이미 말한다. 세 칸에
+                  숫자가 늘 떠 있으면 고르는 자리가 세는 자리로 읽힌다. */}
+              {title}
             </button>
           );
         })}
