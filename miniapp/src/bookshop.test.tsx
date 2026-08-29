@@ -331,6 +331,17 @@ describe('책방 (프로필)', () => {
     expect(card(profile({ following: true }))).toContain('팔로우 취소');
   });
 
+  /**
+   * 신고·차단은 <b>드문 안전장치</b>다 — 팔로우와 나란한 큰 글자 버튼이면 첫인상이 방어적이다.
+   * 여백 카드의 ⋯ 문법으로 강등하고, 무엇을 여는지는 `aria-label`이 진다(스크린리더가 유일한 독자다).
+   */
+  it('남의 책방의 신고·차단은 ⋯ 버튼이다 — 글자 버튼으로 서지 않는다', () => {
+    const markup = card(profile());
+
+    expect(markup).toContain('aria-label="신고·차단"');
+    expect(markup).not.toContain('>신고·차단<');
+  });
+
   it('내 책방에는 팔로우·차단/신고 진입이 없다 — 서버가 400으로 거절하는 동작이라 화면에서 먼저 막는다', () => {
     const markup = card(profile({ self: true }));
 
@@ -452,8 +463,10 @@ describe('책방 책 목록 — 3열 격자', () => {
  */
 describe('공개 책 상태 필터', () => {
   describe('소제목 (shelfTitle)', () => {
-    it('아무것도 안 걸렸으면 전체 문구다', () => {
-      expect(shelfTitle(null, null, 3)).toBe('공개한 책 3');
+    // 상단 스탯이 「공개 책 N」을 이미 말한다 — 바로 아래 소제목이 같은 숫자를 또 말하면 잉여다.
+    it('아무것도 안 걸렸으면 숫자를 접는다 — 상단 스탯이 이미 그 수를 말했다', () => {
+      expect(shelfTitle(null, null, 3)).toBe('공개한 책');
+      expect(shelfTitle(null, null, 0)).toBe('공개한 책');
     });
 
     it('상태가 걸리면 그 상태의 이름과 권수를 말한다 — 배지가 없으니 소제목이 상태를 진다', () => {
