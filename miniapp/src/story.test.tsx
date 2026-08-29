@@ -14,6 +14,7 @@ import {
   StoryComposer,
   TIMER_STOPPED_NOTICE,
   createStoryMessage,
+  dimClosable,
   hasFreshStory,
   marginTabLabel,
   shareNotice,
@@ -85,6 +86,7 @@ function view(
     onOpenMenu?: (e: MarginEntry) => void;
     expanded?: ReadonlySet<number>;
     timerStopped?: boolean;
+    adSuppressed?: boolean;
   } = {},
 ) {
   return render(
@@ -101,6 +103,7 @@ function view(
       onToggleExpand={() => {}}
       onBack={() => {}}
       timerStopped={extra.timerStopped ?? false}
+      adSuppressed={extra.adSuppressed ?? false}
     />,
   );
 }
@@ -416,12 +419,14 @@ describe('작성 실패 안내 — createStoryMessage', () => {
 /**
  * 나가는 길 — 두 화면이 다르다.
  *
- * <p>작성 화면은 「취소」가 곧 출구라 헤더의 뒤로가기가 중복이었다(토스 네비바의 `‹`까지 세면 화살표가
- * 셋이었다). 여백 상세는 반대로 헤더 손잡이가 <b>유일한</b> 출구다 — 탭 위에 전체 화면으로 서 탭바가
- * 가려지고 하단 버튼도 없다. 그래서 한쪽만 지운다. 부정 단언은 짝이 되는 긍정 단언과 함께 둔다(T-149).
+ * <p>작성은 <b>시트</b>라 나가는 길이 셋이다: 시트의 ✕ · 아래 「취소」 · 딤 탭(단 빈 시트일 때만 —
+ * 아래 {@link dimClosable}). 헤더 뒤로가기는 여기 없다 — 「취소」가 이미 출구라 중복이었다(토스
+ * 네비바의 `‹`까지 세면 화살표가 셋이었다). 여백 상세는 반대로 헤더 손잡이가 <b>유일한</b> 출구다 —
+ * 탭 위에 전체 화면으로 서 탭바가 가려지고 하단 버튼도 없다. 그래서 한쪽만 지운다.
+ * 부정 단언은 짝이 되는 긍정 단언과 함께 둔다(T-149).
  */
 describe('나가는 길 — 헤더 뒤로가기', () => {
-  it('작성 화면엔 없다 — 「취소」가 출구다', () => {
+  it('작성 시트엔 없다 — 「취소」와 ✕가 출구다', () => {
     const markup = render(
       <StoryComposer
         book={{ id: 7, title: '데미안', author: null, coverUrl: null, isPublic: true }}
@@ -432,11 +437,41 @@ describe('나가는 길 — 헤더 뒤로가기', () => {
     );
 
     expect(markup).toContain('취소');
+    expect(markup).toContain('aria-label="닫기"'); // 시트의 ✕ — 「취소」와 함께 두 출구다
     expect(markup).not.toContain('돌아가기');
   });
 
   it('여백 상세엔 있다 — 지우면 나갈 길이 사라진다', () => {
     expect(view(margin())).toContain('돌아가기');
+  });
+});
+
+/**
+ * 딤 탭으로 닫아도 되는가 — <b>빈 시트일 때만</b>이다 (2026-08-29 리뷰 반영).
+ *
+ * <p>딤은 이 PR이 새로 연 출구다. 전체 화면이던 시절엔 출구가 「취소」와 하드웨어 뒤로가기뿐이었고
+ * 둘 다 <b>의도적</b>인 동작이었다. 그런데 시트 밖은 <b>스치기만 해도</b> 눌리는 자리라, 인용 200자와
+ * 본문 500자를 든 첫 입력 화면에서 원고가 확인 없이 통째로 날아간다.
+ *
+ * <p>확인 시트를 새로 세우는 대신 <b>딤만 무시</b>한다 — 「저장 안 함/계속 쓰기」를 묻는 것은 우발적
+ * 탭 하나를 위해 화면을 하나 더 세우는 일이고, 의도적 출구(✕·취소)는 그대로 열려 있어 갇히지 않는다.
+ * 배선은 클릭이라 정적 하니스가 못 잡으므로 판정만 순수하게 뺐다(`closeCompose` 관례).
+ */
+describe('딤 탭으로 닫기 (dimClosable)', () => {
+  it('둘 다 비었으면 닫는다 — 버릴 원고가 없다', () => {
+    expect(dimClosable('', '')).toBe(true);
+  });
+
+  it('공백만 쳤어도 닫는다 — 그건 원고가 아니다(「남기기」도 같은 기준으로 잠긴다)', () => {
+    expect(dimClosable('   ', '\n  \t ')).toBe(true);
+  });
+
+  it('본문에 한 글자라도 있으면 무시한다', () => {
+    expect(dimClosable('ㄱ', '')).toBe(false);
+  });
+
+  it('인용만 옮겨 적었어도 무시한다 — 「남기기」가 잠겨 있는 상태라 특히 잃기 쉽다', () => {
+    expect(dimClosable('', '밑줄 그은 문장')).toBe(false);
   });
 });
 
@@ -1054,5 +1089,23 @@ describe('여백 배너 지면 배선', () => {
 
     expect(view(margin())).not.toContain('data-ad-group');
     expect(render(bookMargin)).not.toContain('data-ad-group');
+  });
+
+  /**
+   * 작성 시트가 열려 있는 동안은 <b>지면을 접는다</b>(2026-08-29 리뷰 반영).
+   *
+   * <p>전체 화면이던 시절엔 작성으로 들어가면 이 화면이 언마운트되며 `slot.destroy()`가 광고를 껐다.
+   * 시트로 겹치면서 화면이 살아남자 배너가 <b>딤 뒤에서</b> autoLoad 갱신을 계속 받게 됐다 —
+   * `toss.ts`가 접힌 슬롯을 되살리며 스스로 금지한 「사용자는 못 보는 노출만 집계」(무효 트래픽)가
+   * 딤 뒤에서 재현되는 것이다. 수익 경로라 <b>main과 같은 동작으로</b> 보수적으로 되돌린다.
+   *
+   * <p>닫으면 다시 마운트되어 부착이 1회 도는 것도 main과 같다.
+   */
+  it('작성 시트가 열려 있으면 밑 화면의 배너를 접는다 — 딤 뒤 노출은 무효 트래픽이다', () => {
+    enabled.mockReturnValue(true);
+
+    expect(view(margin(), { adSuppressed: true })).not.toContain('data-ad-group');
+    // 부재 단언의 짝 — 같은 조건에서 지면 자체는 살아 있다(자격을 껐을 때와 구별된다).
+    expect(view(margin(), { adSuppressed: false })).toContain('data-ad-group="ait.test.margin"');
   });
 });

@@ -987,11 +987,10 @@ describe('여백 위의 탭바 (MarginShell)', () => {
    *
    * <p>2026-08-22에 2 → 3(책축 개방), 2026-08-29에 다시 3 → 2다: 글 작성이 전체 화면에서
    * <b>바텀시트</b>가 되면서 자기 껍데기를 갖지 않고 밑 화면 위에 얹힌다. 그래서 이 숫자와 짝이 되는
-   * 규칙이 아래 `withCompose`다 — 밑에 깔릴 수 있는 화면이 <b>전부</b> 그 문을 지나야 어느 화면
-   * 위에서도 시트가 산다. <b>숫자를 고칠 땐 분기가 실제로 그렇게 생겼는지 보고 고친다</b> —
+   * 규칙이 아래 `withCompose`다. <b>숫자를 고칠 땐 분기가 실제로 그렇게 생겼는지 보고 고친다</b> —
    * 숫자만 맞추면 이 계측기는 아무것도 안 지킨다.
    */
-  it('여백 전체 화면 분기 둘이 이 껍데기를 입고, 작성 시트는 밑 화면 전부에 얹힌다', () => {
+  it('여백 전체 화면 분기 둘이 이 껍데기를 입고, 작성 시트는 도달 가능한 밑 화면에 얹힌다', () => {
     // 주석을 먼저 걷는다(T-203) — 규칙을 설명하는 주석에 그 태그가 예시로 적힐 수밖에 없다.
     const src = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -1002,8 +1001,13 @@ describe('여백 위의 탭바 (MarginShell)', () => {
     for (const screen of ['<BookMargin', '<BookMarginAll']) {
       expect(src).toContain(screen);
     }
-    // 작성은 겹침이다 — 여백 상세·책축·남의 책방·탭 화면 넷이 모두 시트를 얹고 나간다.
-    expect(src.match(/return withCompose\(/g)).toHaveLength(4);
+    /*
+     * 규칙은 「깔릴 수 있는 화면이 전부 이 문을 지난다」이고, **깔릴 수 있는 화면은 둘뿐**이다
+     * (2026-08-29 리뷰): 여백 상세(사람축)와 탭 화면. 책축 뷰는 `BookMarginAllView`에 `onCompose`
+     * 프롭 자체가 없어 거기서 작성을 열 길이 없고, 남의 책방은 `setMargin(null)`을 거쳐야 열려
+     * 작성과 공존할 수 없다. 도달 불가 분기까지 감싸면 「이 조합이 가능하다」는 거짓말이 코드에 남는다.
+     */
+    expect(src.match(/return withCompose\(/g)).toHaveLength(2);
     expect(src).toContain('<StoryComposer');
   });
 

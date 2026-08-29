@@ -174,17 +174,23 @@ export function BookMargin({
   onOpenProfile,
   onError,
   timerStopped = false,
+  adSuppressed = false,
 }: {
   loginId: string;
   bookId: number;
   onBack: () => void;
-  /** 「여백에 글 남기기」 — 작성 화면 전환은 셸이 든다(전체 화면 전이의 주인은 하나여야 한다). */
+  /**
+   * 「여백에 글 남기기」 — 작성 시트를 여는 것은 셸이 든다(이 화면 위에 겹쳐 서므로 「무엇이 깔리는가」의
+   * 주인은 하나여야 한다). 시트가 뜨면 셸이 `adSuppressed`로 이 화면의 배너도 함께 접는다.
+   */
   onCompose: (book: MarginBook) => void;
   /** 좋아요 명단에서 그 사람을 눌렀을 때 — 그의 책방으로 간다(전체 화면 전이는 셸이 든다). */
   onOpenProfile: (loginId: string) => void;
   onError: (error: Error) => void;
   /** 여기 들어오느라 측정을 끝냈는가 — {@link TIMER_STOPPED_NOTICE}를 여는 스위치다. */
   timerStopped?: boolean;
+  /** 위에 작성 시트가 떠 있는가 — 배너를 접는 스위치({@link MarginView}). */
+  adSuppressed?: boolean;
 }) {
   const [margin, setMargin] = useState<MarginResponse | null>(null);
   /**
@@ -343,6 +349,7 @@ export function BookMargin({
           onToggleExpand={toggleExpand}
           onBack={onBack}
           timerStopped={timerStopped}
+          adSuppressed={adSuppressed}
         />
       )}
       {menuEntry !== null && (
@@ -862,6 +869,7 @@ export function MarginView({
   onToggleExpand,
   onBack,
   timerStopped = false,
+  adSuppressed = false,
 }: {
   loginId: string;
   margin: MarginResponse;
@@ -881,6 +889,11 @@ export function MarginView({
   onBack: () => void;
   /** 여기 들어오느라 측정을 끝냈는가 — {@link TIMER_STOPPED_NOTICE}를 여는 스위치다. */
   timerStopped?: boolean;
+  /**
+   * 이 화면 위에 작성 시트가 떠 있는가 — 그렇다면 <b>배너를 접는다</b>(딤 뒤 노출 = 무효 트래픽).
+   * 자세한 사정은 아래 배너 자리의 주석.
+   */
+  adSuppressed?: boolean;
 }) {
   const { book, ownerNickname, self, entries } = margin;
   /**
@@ -917,8 +930,19 @@ export function MarginView({
 
       <ErrorMessage message={error} />
 
-      {/* 사람축 지면 — 내 여백·남의 여백을 안 가른다(지면의 단위는 사람이 아니라 화면이다). */}
-      {marginBannerEnabled(MARGIN_BANNER_AD_GROUP_ID) && <MarginBannerAd adGroupId={MARGIN_BANNER_AD_GROUP_ID} />}
+      {/*
+        사람축 지면 — 내 여백·남의 여백을 안 가른다(지면의 단위는 사람이 아니라 화면이다).
+
+        **작성 시트가 떠 있는 동안은 접는다**(2026-08-29). 작성이 전체 화면이던 시절엔 이 화면이
+        언마운트되며 `attachMarginBanner`의 cleanup이 `slot.destroy()`로 광고를 껐다. 시트로 겹치면서
+        화면이 살아남자 배너가 **딤 뒤에서** autoLoad 갱신을 계속 받게 됐는데, 그건 `toss.ts`가
+        접힌 슬롯을 되살리며 스스로 금지한 「사용자는 못 보는 노출만 집계」(무효 트래픽)와 같은 것이다.
+        수익 경로라 보수적으로 main과 같은 동작으로 되돌린다 — 조건부 렌더가 곧 언마운트라 destroy가
+        그대로 돌고, 시트를 닫으면(취소든 저장이든) 다시 마운트돼 부착이 1회 돈다.
+      */}
+      {marginBannerEnabled(MARGIN_BANNER_AD_GROUP_ID) && !adSuppressed && (
+        <MarginBannerAd adGroupId={MARGIN_BANNER_AD_GROUP_ID} />
+      )}
 
       <MarginBoard count={entries.length} onCompose={self ? onCompose : undefined}>
         {entries.length === 0 ? (
@@ -1325,9 +1349,10 @@ const likesLine = (color: string) =>
  * 읽던 자리와 이어지지 않는 별개의 여행처럼 느껴졌다. 시트는 덮을 뿐이라 취소하면 하던 자리가 그대로다.
  * 겹침 배선(밑에 무엇이 깔리는가)은 셸이 든다 — `App.tsx`의 `underCompose`·`withCompose`.
  *
- * <p>출구가 둘이다(시트의 ✕ · 아래 「취소」) — 시트에서는 ✕가 관례라 없으면 닫는 법을 찾게 되고,
- * 「취소」는 다 쓰고 나서 손이 이미 아래에 있을 때의 출구다. 안드로이드 하드웨어 뒤로가기는 셸의
- * `useBackClose`가 맡는다.
+ * <p><b>출구는 의도적인 둘 + 조건부 하나</b>다. 시트의 ✕와 아래 「취소」는 언제나 닫는다 — ✕는 시트의
+ * 관례라 없으면 닫는 법을 찾게 되고, 「취소」는 다 쓰고 나서 손이 이미 아래에 있을 때의 출구다.
+ * <b>딤 탭은 빈 시트일 때만</b> 닫는다({@link dimClosable}) — 스치기만 해도 눌리는 자리에 원고
+ * 700자를 걸어 둘 수 없다. 안드로이드 하드웨어 뒤로가기는 셸의 `useBackClose`가 맡는다.
  */
 export function StoryComposer({
   book,
@@ -1368,7 +1393,12 @@ export function StoryComposer({
   const bg = palette(bgCode);
 
   return (
-    <Sheet title="여백에 글 남기기" onClose={onCancel}>
+    <Sheet
+      title="여백에 글 남기기"
+      onClose={onCancel}
+      // 딤은 우발적 출구다 — 쓰던 것이 있으면 무시한다(✕·취소는 의도적이라 그대로 닫는다).
+      onDimClose={dimClosable(text, quote) ? onCancel : () => {}}
+    >
       {timerStopped && <TimerStoppedNotice />}
       {/* 가시성 고지는 placeholder가 아니라 캡션이다 — placeholder는 첫 글자에 사라지는데, 정작
           "이게 누구에게 보이나"가 필요한 순간은 쓰는 도중이다. */}
@@ -1457,6 +1487,21 @@ export function StoryComposer({
       </div>
     </Sheet>
   );
+}
+
+/**
+ * 딤 탭으로 시트를 닫아도 되는가 — <b>빈 시트일 때만</b>이다.
+ *
+ * <p>딤은 시트가 되면서 새로 생긴 출구이고, 전체 화면 시절의 출구(「취소」·하드웨어 뒤로가기)와 달리
+ * <b>스치기만 해도</b> 눌린다. 인용 200자 + 본문 500자를 든 첫 입력 화면에서 그 사고는 원고를 통째로
+ * 날린다 — 저장 전이라 되돌릴 곳도 없다.
+ *
+ * <p>확인 시트를 새로 세우지 않는 이유: 우발적 탭 하나 때문에 화면을 하나 더 세우는 것은 값이 안 맞고,
+ * 의도적 출구(✕·취소)가 그대로 열려 있어 사용자가 갇히지도 않는다. 공백만 친 것은 원고로 치지 않는다 —
+ * 「남기기」 버튼도 같은 기준(`trim`)으로 잠겨 있어 두 곳의 「비었다」가 어긋나지 않는다.
+ */
+export function dimClosable(text: string, quote: string): boolean {
+  return text.trim() === '' && quote.trim() === '';
 }
 
 /** 「함께 걸기」 줄 — 체크와 두 줄 설명이 한 손가락 자리에 든다(라벨 전체가 탭 영역이다). */

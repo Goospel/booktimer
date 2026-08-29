@@ -687,7 +687,9 @@ export function App() {
   };
 
   /**
-   * 여백 탭바의 가운데 원 — 두 여백 화면(상세 · 글 작성)이 같은 것을 쓴다.
+   * 여백 탭바의 가운데 원 — 전체 화면으로 서는 두 여백 화면(사람축 상세 · 책축)이 같은 것을 쓴다.
+   * 작성은 이제 그 위에 겹치는 시트라 자기 탭바를 갖지 않는다(2026-08-29) — 시트가 딤으로 탭바를
+   * 덮으므로, 작성 중에는 이 원 자체가 눌리지 않는다.
    *
    * <p><b>먼저 나간다</b> — 측정이 여백 위에서 시작되는 순간을 만들지 않는다.
    */
@@ -760,6 +762,12 @@ export function App() {
   /**
    * 밑 화면 위에 작성 시트를 얹는다 — 깔릴 수 있는 화면이 **전부** 이 문을 지나야, 어느 화면 위에서
    * 시트를 열든 시트가 산다. 하나만 빠지면 그 경로에서 작성이 조용히 사라진다(`app.test.tsx`가 센다).
+   * 도달 가능한 밑 화면은 둘뿐이다 — 사람축 여백 상세와 탭 화면(그 근거도 같은 테스트에 적었다).
+   *
+   * ⚠️ **최상위 Fragment에 key를 달거나 `{composer}{under}` 순서를 뒤집지 마라.** 시트가 열려도 밑
+   * 화면이 remount되지 않는 것은 React가 **key 없는 최상위 Fragment를 언랩**해(react-dom 18.3.1의
+   * `isUnkeyedTopLevelFragment`) `under`가 같은 index에 남기 때문이다. 둘 중 하나만 어겨도 밑 화면이
+   * **조용히** 새로 마운트되어 스크롤·탭 상태가 날아간다(겹침으로 얻은 것이 통째로 사라진다).
    */
   const withCompose = (under: ReactNode) =>
     composer === null ? (
@@ -786,6 +794,8 @@ export function App() {
           key={composeEpoch}
           loginId={who}
           bookId={under}
+          // 시트가 떠 있는 동안은 이 화면의 배너를 접는다 — 딤 뒤에서 도는 노출은 무효 트래픽이다.
+          adSuppressed={margin.composeBook !== null}
           timerStopped={margin.timerStopped === true}
           onBack={() => setMargin(null)}
           onCompose={(book) => openMargin({ ...margin, bookId: under, composeBook: book })}
@@ -803,9 +813,12 @@ export function App() {
   /*
    * 「이 책의 여백」 — 사람 좌표 없이 isbn13 하나로 서는 화면(검색 배지에서 들어온다).
    * 사람축보다 **뒤에** 판정한다: 둘 다 들고 있으면 사람축이 이긴다(「내 여백」 탭이 거기 산다).
+   *
+   * 시트를 얹지 않는다 — 이 화면에서는 작성을 열 길이 없다(`BookMarginAllView`에 `onCompose` 프롭
+   * 자체가 없다). 도달 불가 분기를 감싸면 「이 조합이 가능하다」는 거짓말이 코드에 남는다.
    */
   if (margin !== null && margin.isbn13 !== null && screen === 'book') {
-    return withCompose(
+    return (
       <MarginShell tab={tab} onGo={leaveMargin} onStart={startFromMargin}>
         <BookMarginAll
           isbn13={margin.isbn13}
@@ -824,22 +837,25 @@ export function App() {
           }}
           onError={handleError}
         />
-      </MarginShell>,
+      </MarginShell>
     );
   }
 
   /*
    * 남의 책방 — 여백보다 **뒤에** 판정한다. 그래야 여기서 연 여백이 이 화면 위에 서고, 그 여백을 닫으면
    * 책방이 다시 나온다(2단 스택). 헤더도 카운트 핸들러도 주지 않는다 — 서버 follow-list는 본인 것만 준다.
+   *
+   * 여기도 시트를 얹지 않는다 — 책방은 `setMargin(null)`을 거쳐야 열려(`onOpenProfile`) 작성과 공존할
+   * 수 없고, 여기서 여는 여백은 `composeBook: null`이다.
    */
   if (shop !== null) {
-    return withCompose(
+    return (
       <Profile
         loginId={shop}
         onBack={() => setShop(null)}
         onOpenMargin={(bookId) => openMargin({ loginId: shop, bookId, isbn13: null, composeBook: null })}
         onError={handleError}
-      />,
+      />
     );
   }
 
@@ -847,7 +863,9 @@ export function App() {
     <MainTabs
       // 여백 상세와 같은 이유로 다시 마운트한다 — 서재의 인라인 여백 박스(「여백 N」 + 최근 2장)도
       // 작성 화면이 탭을 언마운트해 주던 덕에 갱신되고 있었다(plan.md 「응답 캐시 ⏸ 보류」의 전제).
-      // 탭·고른 책은 App이 들고 있어(위 `homeBookId`) remount로 잃는 상태가 없다.
+      // 탭·고른 책은 App이 들고 있어(위 `homeBookId`) 살아남지만, 축하 배너·태깅 시트 상태와 스크롤은
+      // 버려진다 — 전체 화면 시절 저장 경로가 정확히 그랬으므로 회귀는 아니고, 취소 경로는 개선이다
+      // (예전엔 취소해도 날아갔다). 잃는 것이 아까워지면 그때 재조회를 좁힌다(지금은 remount가 가장 싸다).
       key={composeEpoch}
       tab={tab}
       onTabChange={setTab}

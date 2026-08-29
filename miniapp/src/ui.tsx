@@ -410,14 +410,30 @@ export function SectionTitle({ children, style }: { children: ReactNode; style?:
  *
  * <p>올라오는 움직임은 `global.css`의 `.sheet-dim`·`.sheet-panel`이 든다. 인라인 style이 아닌 이유는
  * `prefers-reduced-motion`이 인라인 선언을 이길 수 없어서다(그 파일의 주석 참고).
+ *
+ * <p><b>`onDimClose`는 딤 탭만 따로 받는 문</b>이다(기본값 = `onClose`라 기존 세 시트는 그대로). 딤은
+ * 스치기만 해도 눌리는 <b>우발적</b> 출구여서, 되돌릴 수 없는 것을 든 시트는 여기만 막고 ✕는 열어 둘
+ * 필요가 있다 — 여백 쓰기가 그 자리다(`StoryComposer`의 `dimClosable`). ✕와 한 핸들러로 묶으면
+ * 딤을 막는 순간 ✕까지 잠겨 시트에 갇힌다.
  */
-export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Sheet({
+  title,
+  onClose,
+  onDimClose = onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  /** 딤 탭 전용 — 생략하면 `onClose`와 같다. 원고를 든 시트만 여기를 좁힌다. */
+  onDimClose?: () => void;
+  children: ReactNode;
+}) {
   return (
     <>
       {/* 딤 — 탭바(zIndex 100) 위를 덮어야 시트 아래로 탭바가 비치지 않는다. */}
       <div
         className="sheet-dim"
-        onClick={onClose}
+        onClick={onDimClose}
         style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0, 0, 0, 0.45)' }}
       />
       <div
