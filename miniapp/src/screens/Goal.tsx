@@ -47,6 +47,17 @@ export function initialGoalSelection(firstRun: boolean, current: number): number
 }
 
 /**
+ * 고른 값의 일주일 환산 한 줄 — 하루치 숫자 하나로는 크기가 안 잡힌다("10분"은 하찮게 읽히지만
+ * "1시간 10분"은 쌓인 것처럼 읽힌다).
+ *
+ * <p>0 이하면 문장 자체가 없다 — 「0초씩 쌓여요」는 목표를 지운 사람에게 할 말이 아니다.
+ */
+export function weeklyLine(seconds: number): string | null {
+  if (seconds <= 0) return null;
+  return `일주일이면 ${formatDuration(seconds * 7)}씩 쌓여요`;
+}
+
+/**
  * 목표 설정 — 신규 계정 첫 실행 유도 + 이후 변경(같은 엔드포인트).
  *
  * <p>미니앱 온보딩은 공개 핸들(login_id)을 요구하지 않는다 — 평생 1번만 바꿀 수 있어 첫 진입에
@@ -80,10 +91,20 @@ export function Goal({
 
   return (
     <Screen title={firstRun ? '하루에 얼마나 읽을까요?' : '하루 목표 바꾸기'}>
+      {/* 화면 한 장을 세로로 다 쓴다 — 휠은 가운데, 버튼은 바닥. 예전엔 전부 위에 몰려 「돌아가기」가
+          화면 중턱(390×844에서 y=477)에 떠 있었고 아래 43%가 빈 채였다.
+          120 = Screen 상단 패딩 24 + 제목 줄 ≈56 + 하단 패딩 40. 제목 줄까지 빼는 이유: 덜 빼면
+          그만큼 화면 밖으로 밀려 버튼이 스크롤해야 보인다(넘게 빼면 버튼이 조금 위에 설 뿐 무해하다).
+          dvh 미지원 브라우저는 calc가 통째로 무효라 minHeight가 사라지고 예전 상단 몰림으로 강등된다. */}
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 120px)' }}>
       <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 20 }}>
-        매일 이만큼씩 쌓여요. 못 채운 시간은 다음 날로 넘어가니 부담 없는 값으로 시작해 보세요.
+        {firstRun
+          ? '매일 이만큼씩 쌓여요. 못 채운 시간은 다음 날로 넘어가니 부담 없는 값으로 시작해 보세요.'
+          : '매일 이만큼씩 쌓여요. 못 채운 시간은 다음 날로 넘어가요.'}
       </Text>
 
+      {/* 고르는 자리는 세로 가운데 — 위아래 남는 공간을 `auto`가 반씩 먹는다. */}
+      <div style={{ margin: 'auto 0' }}>
       {/* 프리셋 칩 대신 휠 2열 — 초는 selected 하나가 단일 소스고, 시/분은 그때그때 풀었다 다시 합친다.
           높이는 컨테이너가 줘야 한다 — Wheel 루트가 height:100%라(항목 한 칸 = 그 16%) 높이 없는 부모에
           넣으면 컨테이너가 0이 되어 항목이 전부 한 줄에 겹친다(브라우저 실측 2026-08-13). */}
@@ -128,31 +149,47 @@ export function Goal({
         />
       </div>
 
+      {/* 고른 값의 일주일 환산 — 휠이 돌면 함께 바뀐다(selected가 단일 소스). */}
+      {weeklyLine(selected) !== null && (
+        <Text
+          typography="st12"
+          color="blue700"
+          style={{ display: 'block', textAlign: 'center', marginTop: 12 }}
+        >
+          {weeklyLine(selected)}
+        </Text>
+      )}
+
       {/* 미리 골라 둔 값이 왜 이렇게 작은지 한 줄로 — 없으면 "이 앱은 나를 얕본다"로 읽히고,
           있으면 첫날 달성을 밟게 하려는 배려로 읽힌다. 목표를 바꾸러 온 사람에겐 할 말이 아니다. */}
       {firstRun && (
         <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 12 }}>
-          🌱 가볍게 시작 — {formatDuration(FIRST_RUN_GOAL_SECONDS)}이면 오늘 안에 한 번 달성할 수 있어요.
+          가볍게 시작 — {formatDuration(FIRST_RUN_GOAL_SECONDS)}이면 오늘 안에 한 번 달성할 수 있어요.
           언제든 늘릴 수 있어요.
         </Text>
       )}
+      </div>
 
-      <ErrorMessage message={error} />
+      {/* 바닥에 붙는 손잡이 — 위 가운데 블록과의 간격은 남는 공간이 알아서 벌린다(marginTop은 최소값). */}
+      <div>
+        <ErrorMessage message={error} />
 
-      {/* 0시간 0분 저장은 서버가 허용하는 「목표 없음」이지만, 휠을 끝까지 내린 실수일 가능성이 더 높다. */}
-      {/* 이 화면의 주 동작 하나 — 채움이다(시안 2e). 홈은 탭바 원이 그 역할을 한다. */}
-      <FilledButton
-        display="block"
-        style={{ marginTop: 28 }}
-        loading={busy}
-        disabled={selected === 0}
-        onClick={save}
-      >
-        {firstRun ? '이걸로 시작하기' : '저장'}
-      </FilledButton>
-      <Button display="block" variant="weak" style={{ marginTop: 12 }} disabled={busy} onClick={onSkip}>
-        {firstRun ? '나중에 정할래요' : '돌아가기'}
-      </Button>
+        {/* 0시간 0분 저장은 서버가 허용하는 「목표 없음」이지만, 휠을 끝까지 내린 실수일 가능성이 더 높다. */}
+        {/* 이 화면의 주 동작 하나 — 채움이다(시안 2e). 홈은 탭바 원이 그 역할을 한다. */}
+        <FilledButton
+          display="block"
+          style={{ marginTop: 20 }}
+          loading={busy}
+          disabled={selected === 0}
+          onClick={save}
+        >
+          {firstRun ? '이걸로 시작하기' : '저장'}
+        </FilledButton>
+        <Button display="block" variant="weak" style={{ marginTop: 12 }} disabled={busy} onClick={onSkip}>
+          {firstRun ? '나중에 정할래요' : '돌아가기'}
+        </Button>
+      </div>
+      </div>
     </Screen>
   );
 }

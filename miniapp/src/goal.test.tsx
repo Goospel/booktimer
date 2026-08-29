@@ -7,6 +7,7 @@ import {
   FIRST_RUN_GOAL_SECONDS,
   Goal,
   initialGoalSelection,
+  weeklyLine,
   wheelIndices,
 } from './screens/Goal';
 import { userAgent } from './test-fixtures';
@@ -81,6 +82,25 @@ describe('휠 표시값 → 초 (combineWheel)', () => {
   });
 });
 
+/**
+ * 환산 줄 — 고른 값이 일주일이면 얼마가 되는지. 숫자 하나(하루치)로는 크기가 안 잡히지만
+ * 7배는 잡힌다("10분"은 하찮아 보여도 "1시간 10분"은 쌓인 것처럼 읽힌다).
+ */
+describe('일주일 환산 줄 (weeklyLine)', () => {
+  it('고른 값의 7배를 문장으로 만든다', () => {
+    expect(weeklyLine(1800)).toBe('일주일이면 3시간 30분씩 쌓여요');
+    expect(weeklyLine(600)).toBe('일주일이면 1시간 10분씩 쌓여요');
+  });
+
+  it('0이면 할 말이 없다 — 목표 없음에 「0초씩 쌓여요」는 조롱이다', () => {
+    expect(weeklyLine(0)).toBeNull();
+  });
+
+  it('음수도 없다 — 서버가 이상한 값을 줘도 문장이 깨지지 않는다', () => {
+    expect(weeklyLine(-600)).toBeNull();
+  });
+});
+
 describe('목표 화면 렌더', () => {
   const render = (firstRun: boolean, current: number) =>
     renderToStaticMarkup(
@@ -122,8 +142,29 @@ describe('목표 화면 렌더', () => {
     expect(wheelIndices(initialGoalSelection(true, 3600))).toEqual({ hours: 0, minutes: 10 });
   });
 
+  it('고른 값의 일주일 환산을 함께 보여준다 — 하루치 숫자만으론 크기가 안 잡힌다', () => {
+    expect(render(false, 1800)).toContain('일주일이면 3시간 30분씩 쌓여요');
+  });
+
   it('첫 실행이면 왜 낮은 값인지 한 줄로 말한다 — 목표가 작다고 실망하지 않게', () => {
     expect(render(true, 3600)).toContain('언제든 늘릴 수 있어요');
+  });
+
+  /**
+   * 안내 문구는 모드마다 할 말이 다르다 — 「시작해 보세요」는 처음 정하는 사람에게만 맞는 말이라,
+   * 목표를 바꾸러 온 사람에겐 짧은 사실 두 문장만 남긴다. 부정 단언만 두면 문구가 통째로
+   * 빠져도 통과하므로 새 문장의 존재를 함께 못 박는다.
+   */
+  it('바꾸기 모드 안내는 사실만 — 「시작해 보세요」는 처음 정하는 사람에게 할 말이다', () => {
+    const markup = render(false, 3600);
+    expect(markup).toContain('못 채운 시간은 다음 날로 넘어가요');
+    expect(markup).not.toContain('시작해 보세요');
+  });
+
+  it('첫 실행 안내엔 이모지를 쓰지 않는다 — 문구는 그대로 남긴다', () => {
+    const markup = render(true, 3600);
+    expect(markup).toContain('가볍게 시작');
+    expect(markup).not.toContain('🌱');
   });
 
   it('기존 사용자에겐 그 안내가 없다 — 이미 정해 놓은 사람에게 할 말이 아니다', () => {
