@@ -606,6 +606,55 @@ body .lamp-page {
 }
 
 /*
+ * 바텀시트가 올라오는 순간 — `ui.tsx`의 `Sheet` 하나가 태깅·서재 관리·좋아요 명단·여백 쓰기를 모두
+ * 그리므로, 움직임도 여기 한 벌이면 네 자리가 같이 산다.
+ *
+ * 인라인 style이 아니라 클래스인 이유는 아래 `prefers-reduced-motion`이다 — 인라인 선언은 미디어
+ * 쿼리가 이길 수 없어, 움직임을 줄여 달라는 설정을 무시하게 된다(이 저장소는 계측을 위해 인라인을
+ * 선호하지만 그 선호가 접근성을 이기지는 않는다).
+ *
+ * ⚠️ **마운트 때 한 번만 돌고, 움직이는 속성은 `transform`·`opacity`뿐이다.** 그림자·배경·크기를
+ * 흔들면 시트 안의 표지·글자가 프레임마다 다시 래스터화되고, 그건 데스크톱 목 모드가 여유가 커서
+ * 원리상 못 잡는 실기기 회귀다 — 발광 `box-shadow` 무한 반복이 실기기를 무너뜨린 그 자리(T-176).
+ */
+@keyframes sheet-dim-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sheet-panel-in {
+  from {
+    /* 102% — 100%면 패널의 위쪽 그림자가 화면 바닥에 한 줄 걸쳐 시작 프레임에 얇게 비친다. */
+    transform: translateY(102%);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
+.sheet-dim {
+  animation: sheet-dim-in 0.25s ease;
+}
+
+.sheet-panel {
+  /* 딤보다 살짝 길고 끝에서 감속한다 — 종이 한 장이 밀려 올라와 멎는 감각. */
+  animation: sheet-panel-in 0.28s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-dim,
+  .sheet-panel {
+    animation: none;
+  }
+}
+
+/*
  * 검색칸 높이 — 칸을 부풀린 건 글자가 아니라 **손잡이**다.
  *
  * 입력 글자는 27px뿐인데 칸 안 돋보기가 44px(손가락이 닿는 최소치)이라, TDS 기본 패딩 14px을 그대로

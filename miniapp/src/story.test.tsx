@@ -336,6 +336,19 @@ describe('글 남기기 (StoryComposer)', () => {
     expect(markup).toContain('데미안');
   });
 
+  /**
+   * 화면이 아니라 <b>시트</b>다 (2026-08-29). 전체 화면 교체는 「한 줄 적고 만다」에 비해 값이 너무 컸다 —
+   * 밑 화면이 통째로 언마운트되고 다시 마운트되며 스크롤·탭 자리가 날아갔다. 시트는 덮을 뿐이라
+   * 취소하면 하던 자리가 그대로 남는다.
+   */
+  it('바텀시트 안에 선다 — 밑 화면을 갈아치우지 않고 그 위로 올라온다', () => {
+    const markup = composer();
+
+    expect(markup).toContain('role="dialog"');
+    expect(markup).toContain('aria-label="여백에 글 남기기"');
+    expect(markup).toContain('class="sheet-panel"'); // 올라오는 움직임은 이 클래스가 든다
+  });
+
   it('책 고르는 select가 없다 — 진입점이 이미 그 책이라 고를 것이 남지 않았다', () => {
     expect(composer()).not.toContain('<select');
   });

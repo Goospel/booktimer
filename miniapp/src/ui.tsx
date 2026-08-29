@@ -405,15 +405,23 @@ export function SectionTitle({ children, style }: { children: ReactNode; style?:
  * `renderToStaticMarkup` 하니스에서 **마크업이 통째로 비어 나온다**(실측) — 이 저장소는 jsdom을 두지
  * 않기로 했으므로 시트 내용이 영영 계측 불가가 된다. 딤·safe-area·zIndex는 이 30줄로 충분하다.
  *
- * <p>홈의 태깅 시트와 서재의 「펼쳐보기」·「관리」가 같은 껍데기를 쓴다 — 셋이 각자 딤과 zIndex를
- * 들고 있으면 탭바(zIndex 100) 위를 덮는 규칙이 한 군데만 어긋나도 시트 아래로 탭바가 비친다.
+ * <p>홈의 태깅 시트와 서재의 「펼쳐보기」·「관리」, 여백 쓰기가 같은 껍데기를 쓴다 — 넷이 각자 딤과
+ * zIndex를 들고 있으면 탭바(zIndex 100) 위를 덮는 규칙이 한 군데만 어긋나도 시트 아래로 탭바가 비친다.
+ *
+ * <p>올라오는 움직임은 `global.css`의 `.sheet-dim`·`.sheet-panel`이 든다. 인라인 style이 아닌 이유는
+ * `prefers-reduced-motion`이 인라인 선언을 이길 수 없어서다(그 파일의 주석 참고).
  */
 export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
     <>
       {/* 딤 — 탭바(zIndex 100) 위를 덮어야 시트 아래로 탭바가 비치지 않는다. */}
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0, 0, 0, 0.45)' }} />
       <div
+        className="sheet-dim"
+        onClick={onClose}
+        style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0, 0, 0, 0.45)' }}
+      />
+      <div
+        className="sheet-panel"
         role="dialog"
         aria-modal="true"
         aria-label={title}

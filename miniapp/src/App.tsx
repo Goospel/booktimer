@@ -400,6 +400,17 @@ export function marginScreen(margin: MarginState): MarginScreen | null {
   return margin.isbn13 !== null ? 'book' : null;
 }
 
+/**
+ * 작성 시트 <b>아래에 깔릴</b> 화면 — 작성이 바텀시트가 되면서(2026-08-29) 밑 화면이 살아 있어야 한다.
+ *
+ * <p>「작성이 가장 위」라는 {@link marginScreen}의 첫 줄을 한 칸 걷어낸 것이 전부다. `null`은 막다른
+ * 길이 아니라 <b>깔린 여백 화면이 없다</b>는 뜻이다 — 홈·서재에서 직행한 작성이 그것이고, 그때 시트
+ * 뒤에는 열었던 탭 화면이 그대로 선다.
+ */
+export function underCompose(margin: MarginState): MarginScreen | null {
+  return marginScreen({ ...margin, composeBook: null });
+}
+
 /** 포커스 복귀 재조회의 최소 간격 — 미니앱은 앱 전환이 잦아 복귀마다 받으면 서버를 두들긴다. */
 export const REFRESH_THROTTLE_MS = 60_000;
 
@@ -446,6 +457,14 @@ export function App() {
   const [goalAdPending, setGoalAdPending] = useState(false);
   /** 열린 여백 — 탭 위에 전체 화면으로 선다(홈 문·서재 문·홈 소식이 모두 이 한 자리로 온다). */
   const [margin, setMargin] = useState<MarginState | null>(null);
+  /**
+   * 글을 남긴 횟수 — 밑에 깔린 여백 상세를 다시 마운트시키는 열쇠다.
+   *
+   * <p>작성이 전체 화면이던 시절엔 닫는 순간 밑 화면이 <b>새로 마운트</b>되고 그 재조회가 곧 "방금
+   * 남긴 글이 보인다"였다. 시트로 겹치면서 밑 화면이 안 죽으니 그 재조회도 저절로 안 일어난다 —
+   * 남긴 뒤에만 이 값을 올려 그때만 다시 받는다(취소는 올리지 않는다: 바뀐 것이 없다).
+   */
+  const [composeEpoch, setComposeEpoch] = useState(0);
   /**
    * 열린 남의 책방 — 여백의 좋아요 명단에서 사람을 눌렀을 때 선다.
    *
@@ -687,8 +706,9 @@ export function App() {
    * <p><b>종료가 끝난 뒤에 열다</b> — 실패하면 여백을 열지 않는다. 측정이 살아 있는데 여백에 들어가면
    * 「끝난 줄 알았는데 계속 돌고 있었다」가 되어, 고치려던 그 결함이 그대로 남는다.
    *
-   * <p><b>태깅 시트·완독 축하는 저절로 안 뜨다</b> — 그 상태는 `MainTabs` 안에 있고 이 문은 셸에 있다.
-   * 여백 위로 시트가 튀어나오지 않게 하려고 억제 코드를 쓸 필요가 없다(구조가 대신 진다).
+   * <p><b>태깅 시트·완독 축하는 저절로 안 뜨다</b> — 그것들은 탭바 원의 종료 경로(`MainTabs` 안)에만
+   * 달려 있고 이 문의 종료는 별개의 왕복이다. 작성이 겹침이 되어 `MainTabs`가 뒤에 살아남은 뒤에도
+   * 그대로다 — 억제 코드가 필요 없는 이유가 「언마운트」에서 「경로가 다름」으로 옮겨졌을 뿐이다.
    */
   const openMargin = (next: MarginState) => {
     if (!dashboard.hasActiveSession) {
@@ -716,37 +736,54 @@ export function App() {
 
   /*
    * 여백은 탭 위에 전체 화면으로 선다 — 닫으면 열었던 탭이 그대로 남는다.
-   * 작성 화면을 닫으면 `composeBook`만 비워 그 아래 여백 화면이 **새로 마운트**되고, 그 재조회가
-   * 곧 "방금 남긴 글이 보인다"이다(에포크 같은 별도 갱신 표식이 필요 없다).
+   *
+   * 작성만 **겹침**이다(2026-08-29): 시트라서 밑 화면을 갈아치우지 않고 그 위에 얹힌다. 그래서
+   * 화면 판정은 `composeBook`을 걷어낸 좌표로 한다 — 시트가 열려도 밑에 깔린 것은 그대로다.
    */
-  const screen = margin === null ? null : marginScreen(margin);
+  const screen = margin === null ? null : underCompose(margin);
 
-  if (margin !== null && margin.composeBook !== null && screen === 'compose') {
-    const close = () => setMargin(closeCompose(margin));
-    return (
-      <MarginShell tab={tab} onGo={leaveMargin} onStart={startFromMargin}>
-        <StoryComposer
-          book={margin.composeBook}
-          onDone={close}
-          onCancel={close}
-          onError={handleError}
-          timerStopped={margin.timerStopped === true}
-        />
-      </MarginShell>
+  const composer =
+    margin === null || margin.composeBook === null ? null : (
+      <StoryComposer
+        book={margin.composeBook}
+        // 남겼으면 밑 여백 상세를 다시 받아야 방금 쓴 글이 거기 보인다(취소는 그럴 것이 없다).
+        onDone={() => {
+          setComposeEpoch((n) => n + 1);
+          setMargin(closeCompose(margin));
+        }}
+        onCancel={() => setMargin(closeCompose(margin))}
+        onError={handleError}
+        timerStopped={margin.timerStopped === true}
+      />
     );
-  }
+
+  /**
+   * 밑 화면 위에 작성 시트를 얹는다 — 깔릴 수 있는 화면이 **전부** 이 문을 지나야, 어느 화면 위에서
+   * 시트를 열든 시트가 산다. 하나만 빠지면 그 경로에서 작성이 조용히 사라진다(`app.test.tsx`가 센다).
+   */
+  const withCompose = (under: ReactNode) =>
+    composer === null ? (
+      under
+    ) : (
+      <>
+        {under}
+        {composer}
+      </>
+    );
 
   // 작성도 아니고 깔린 화면도 없는 조합은 만들지 않는다 — 만약 생겨도 탭으로 떨어져 막다른 길이 안 된다.
   if (margin !== null && margin.loginId !== null && margin.bookId !== null && screen === 'person') {
     const under = margin.bookId;
     const who = margin.loginId;
-    return (
+    return withCompose(
       <MarginShell
         tab={tab}
         onGo={leaveMargin}
         onStart={startFromMargin}
       >
         <BookMargin
+          // 글을 남기면 새로 마운트돼 목록을 다시 받는다 — 시트는 겹침이라 저절로는 안 일어난다.
+          key={composeEpoch}
           loginId={who}
           bookId={under}
           timerStopped={margin.timerStopped === true}
@@ -759,7 +796,7 @@ export function App() {
           }}
           onError={handleError}
         />
-      </MarginShell>
+      </MarginShell>,
     );
   }
 
@@ -768,7 +805,7 @@ export function App() {
    * 사람축보다 **뒤에** 판정한다: 둘 다 들고 있으면 사람축이 이긴다(「내 여백」 탭이 거기 산다).
    */
   if (margin !== null && margin.isbn13 !== null && screen === 'book') {
-    return (
+    return withCompose(
       <MarginShell tab={tab} onGo={leaveMargin} onStart={startFromMargin}>
         <BookMarginAll
           isbn13={margin.isbn13}
@@ -787,7 +824,7 @@ export function App() {
           }}
           onError={handleError}
         />
-      </MarginShell>
+      </MarginShell>,
     );
   }
 
@@ -796,18 +833,22 @@ export function App() {
    * 책방이 다시 나온다(2단 스택). 헤더도 카운트 핸들러도 주지 않는다 — 서버 follow-list는 본인 것만 준다.
    */
   if (shop !== null) {
-    return (
+    return withCompose(
       <Profile
         loginId={shop}
         onBack={() => setShop(null)}
         onOpenMargin={(bookId) => openMargin({ loginId: shop, bookId, isbn13: null, composeBook: null })}
         onError={handleError}
-      />
+      />,
     );
   }
 
-  return (
+  return withCompose(
     <MainTabs
+      // 여백 상세와 같은 이유로 다시 마운트한다 — 서재의 인라인 여백 박스(「여백 N」 + 최근 2장)도
+      // 작성 화면이 탭을 언마운트해 주던 덕에 갱신되고 있었다(plan.md 「응답 캐시 ⏸ 보류」의 전제).
+      // 탭·고른 책은 App이 들고 있어(위 `homeBookId`) remount로 잃는 상태가 없다.
+      key={composeEpoch}
       tab={tab}
       onTabChange={setTab}
       dashboard={dashboard}
@@ -831,7 +872,7 @@ export function App() {
       onError={handleError}
       onShelfChanged={() => silentRefresh(true)}
       onHandleCreated={() => silentRefresh(true)}
-    />
+    />,
   );
 }
 

@@ -1320,8 +1320,14 @@ const likesLine = (color: string) =>
  * 글 남기기 — 진입점이 <b>이미 그 책</b>이라 책을 고를 것이 없다(옛 첨부 select와 `/api/books` 조회는 삭제).
  * 남는 것은 문장·배경·1~500자 카운터뿐이다.
  *
- * <p>헤더에 뒤로가기를 두지 않는다 — 아래 「취소」가 이미 출구라 중복이었다(토스 네비바의 `‹`까지 세면
- * 한 화면에 나가는 화살표가 셋이었다). 안드로이드 하드웨어 뒤로가기는 셸의 `useBackClose`가 맡는다.
+ * <p><b>화면이 아니라 바텀시트다</b>(2026-08-29). 전체 화면 교체는 「한 줄 적고 만다」에 비해 값이
+ * 너무 컸다 — 밑 화면이 통째로 언마운트됐다가 다시 마운트되며 스크롤·탭 자리가 날아갔고, 쓰기가
+ * 읽던 자리와 이어지지 않는 별개의 여행처럼 느껴졌다. 시트는 덮을 뿐이라 취소하면 하던 자리가 그대로다.
+ * 겹침 배선(밑에 무엇이 깔리는가)은 셸이 든다 — `App.tsx`의 `underCompose`·`withCompose`.
+ *
+ * <p>출구가 둘이다(시트의 ✕ · 아래 「취소」) — 시트에서는 ✕가 관례라 없으면 닫는 법을 찾게 되고,
+ * 「취소」는 다 쓰고 나서 손이 이미 아래에 있을 때의 출구다. 안드로이드 하드웨어 뒤로가기는 셸의
+ * `useBackClose`가 맡는다.
  */
 export function StoryComposer({
   book,
@@ -1362,7 +1368,7 @@ export function StoryComposer({
   const bg = palette(bgCode);
 
   return (
-    <Screen title="여백에 글 남기기">
+    <Sheet title="여백에 글 남기기" onClose={onCancel}>
       {timerStopped && <TimerStoppedNotice />}
       {/* 가시성 고지는 placeholder가 아니라 캡션이다 — placeholder는 첫 글자에 사라지는데, 정작
           "이게 누구에게 보이나"가 필요한 순간은 쓰는 도중이다. */}
@@ -1449,7 +1455,7 @@ export function StoryComposer({
           취소
         </Button>
       </div>
-    </Screen>
+    </Sheet>
   );
 }
 

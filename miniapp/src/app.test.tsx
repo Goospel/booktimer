@@ -22,6 +22,7 @@ import {
   initialTab,
   lampOn,
   marginScreen,
+  underCompose,
   flowTabChange,
   nextFlowStep,
   shouldRefresh,
@@ -714,6 +715,29 @@ describe('여백 화면 판정 (marginScreen)', () => {
 });
 
 /**
+ * 작성 시트 <b>아래에 깔릴</b> 화면 — 작성이 전체 화면 교체에서 바텀시트로 바뀌면서(2026-08-29) 밑
+ * 화면이 살아 있어야 한다. 시트는 덮는 것이지 갈아치우는 것이 아니다.
+ *
+ * <p>`null`은 「깔린 여백 화면이 없다」이지 막다른 길이 아니다 — 홈·서재에서 직행한 작성이 그것이고,
+ * 그때 시트 뒤에는 <b>탭 화면이 그대로</b> 있다.
+ */
+describe('작성 시트 아래 화면 (underCompose)', () => {
+  const book = { id: 7, title: '데미안', author: '헤르만 헤세', coverUrl: null, isPublic: true };
+
+  it('여백 상세에서 열었으면 그 상세가 뒤에 남는다', () => {
+    expect(underCompose({ loginId: 'goospel', bookId: 7, isbn13: null, composeBook: book })).toBe('person');
+  });
+
+  it('책축 화면에서 열었으면 책축이 뒤에 남는다', () => {
+    expect(underCompose({ loginId: null, bookId: null, isbn13: '9791168340084', composeBook: book })).toBe('book');
+  });
+
+  it('홈·서재 직행이면 깔린 여백 화면이 없다 — 시트 뒤에 탭 화면이 그대로 선다', () => {
+    expect(underCompose({ loginId: 'goospel', bookId: null, isbn13: null, composeBook: book })).toBeNull();
+  });
+});
+
+/**
  * 딥링크 착지 탭 — 푸시를 누르고 들어온 사람이 홈이 아니라 그 푸시가 말한 화면에 선다.
  *
  * <p>알 수 없는 값이 전부 홈으로 접히는 게 이 함수의 전부다. 바깥에서 오는 문자열이라
@@ -957,24 +981,50 @@ describe('여백 위의 탭바 (MarginShell)', () => {
   });
 
   /**
-   * 여백은 화면이 <b>셋</b>이다(상세 · 글 작성 · 「이 책의 여백」) — 하나만 껍데기를 벗으면 그 화면에서만
+   * 여백 <b>전체 화면</b>은 둘이다(상세 · 「이 책의 여백」) — 하나만 껍데기를 벗으면 그 화면에서만
    * 탭바가 사라져 「여백에는 탭바가 있다」가 부분적으로만 맞는 상태가 된다. 정적 렌더로는 분기를
-   * 몸 돌려볼 수 없어 소스로 센다.
+   * 돌려볼 수 없어 소스로 센다.
    *
-   * <p>2026-08-22에 2 → 3이 됐다(책축 개방). <b>이 숫자를 늘릴 땐 새 분기가 실제로 셸을 입었는지
-   * 보고 늘린다</b> — 숫자만 맞추면 이 계측기는 아무것도 안 지킨다.
+   * <p>2026-08-22에 2 → 3(책축 개방), 2026-08-29에 다시 3 → 2다: 글 작성이 전체 화면에서
+   * <b>바텀시트</b>가 되면서 자기 껍데기를 갖지 않고 밑 화면 위에 얹힌다. 그래서 이 숫자와 짝이 되는
+   * 규칙이 아래 `withCompose`다 — 밑에 깔릴 수 있는 화면이 <b>전부</b> 그 문을 지나야 어느 화면
+   * 위에서도 시트가 산다. <b>숫자를 고칠 땐 분기가 실제로 그렇게 생겼는지 보고 고친다</b> —
+   * 숫자만 맞추면 이 계측기는 아무것도 안 지킨다.
    */
-  it('여백 전체 화면 분기 셋이 모두 이 껍데기를 입는다', () => {
+  it('여백 전체 화면 분기 둘이 이 껍데기를 입고, 작성 시트는 밑 화면 전부에 얹힌다', () => {
     // 주석을 먼저 걷는다(T-203) — 규칙을 설명하는 주석에 그 태그가 예시로 적힐 수밖에 없다.
     const src = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\/\/.*/g, '');
 
-    expect(src.match(/<MarginShell/g)).toHaveLength(3);
-    // 셋의 정체를 함께 못 박는다 — 숫자만 맞고 엉뚱한 화면이 들어오면 위 단언은 통과한다.
-    for (const screen of ['<StoryComposer', '<BookMargin', '<BookMarginAll']) {
+    expect(src.match(/<MarginShell/g)).toHaveLength(2);
+    // 둘의 정체를 함께 못 박는다 — 숫자만 맞고 엉뚱한 화면이 들어오면 위 단언은 통과한다.
+    for (const screen of ['<BookMargin', '<BookMarginAll']) {
       expect(src).toContain(screen);
     }
+    // 작성은 겹침이다 — 여백 상세·책축·남의 책방·탭 화면 넷이 모두 시트를 얹고 나간다.
+    expect(src.match(/return withCompose\(/g)).toHaveLength(4);
+    expect(src).toContain('<StoryComposer');
+  });
+
+  /**
+   * 겹침이 <b>가져간 것</b>을 되돌려 놓는다 — 작성이 전체 화면이던 시절엔 닫는 순간 밑 화면이 통째로
+   * 새로 마운트됐고, 그 재조회가 곧 "방금 남긴 글이 보인다"였다. 시트는 밑 화면을 안 죽이므로 그 반영이
+   * <b>조용히</b> 사라진다 — 목 모드 실측으로 두 자리가 다 굳는 것을 봤다(여백 상세의 글 목록 ·
+   * 서재 인라인 여백 박스의 「여백 N」).
+   *
+   * <p>그래서 글을 남긴 뒤에만 `composeEpoch`를 올려 그 둘을 remount한다. <b>키를 첫 프롭으로</b> 두는
+   * 것이 이 계측기의 전제다 — 어느 한쪽이 빠지면 그 화면만 옛 목록을 보여 주고 아무도 안 운다.
+   */
+  it('글을 남기면 밑에 깔린 두 화면이 다시 마운트된다 — 겹침이 재조회를 삼키지 않게', () => {
+    const src = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*/g, '');
+
+    expect(src).toMatch(/<BookMargin\s+key=\{composeEpoch\}/); // 여백 상세의 글 목록
+    expect(src).toMatch(/<MainTabs\s+key=\{composeEpoch\}/); // 서재 인라인 여백 박스
+    // 올리는 자리는 「남겼을 때」 하나다 — 취소로도 올리면 안 바뀐 화면을 매번 다시 받는다.
+    expect(src.match(/setComposeEpoch\(/g)).toHaveLength(1);
   });
 });
 
