@@ -149,15 +149,16 @@ export function Goal({
         />
       </div>
 
-      {/* 고른 값의 일주일 환산 — 휠이 돌면 함께 바뀐다(selected가 단일 소스). */}
+      {/* 고른 값의 일주일 환산 — 휠이 돌면 함께 바뀐다(selected가 단일 소스).
+          주의: 가운데 정렬은 **바깥 div**가 한다 — TDS `Text`는 넘긴 style에서 `textAlign`을 걸러내고
+          `display`도 자기 값(`inline-block`)으로 덮어, 인라인 스타일엔 `margin-top`만 남는다
+          (목 모드 실측 2026-08-29: computed `text-align: start`로 왼쪽에 붙어 있었다). */}
       {weeklyLine(selected) !== null && (
-        <Text
-          typography="st12"
-          color="blue700"
-          style={{ display: 'block', textAlign: 'center', marginTop: 12 }}
-        >
-          {weeklyLine(selected)}
-        </Text>
+        <div style={{ textAlign: 'center', marginTop: 12 }}>
+          <Text typography="st12" color="blue700">
+            {weeklyLine(selected)}
+          </Text>
+        </div>
       )}
 
       {/* 미리 골라 둔 값이 왜 이렇게 작은지 한 줄로 — 없으면 "이 앱은 나를 얕본다"로 읽히고,

@@ -142,8 +142,15 @@ describe('목표 화면 렌더', () => {
     expect(wheelIndices(initialGoalSelection(true, 3600))).toEqual({ hours: 0, minutes: 10 });
   });
 
-  it('고른 값의 일주일 환산을 함께 보여준다 — 하루치 숫자만으론 크기가 안 잡힌다', () => {
-    expect(render(false, 1800)).toContain('일주일이면 3시간 30분씩 쌓여요');
+  /**
+   * ⚠️ 가운데 정렬은 **우리 div**가 해야 한다 — TDS `Text`는 넘긴 style에서 `textAlign`을 걸러내
+   * (`display`도 자기 값으로 덮는다) 인라인 스타일에 `margin-top`만 남긴다(목 모드 실측 2026-08-29:
+   * computed `text-align: start`로 왼쪽에 붙어 있었다). 문자열 포함 단언만 두면 이 실패가 안 보인다.
+   */
+  it('고른 값의 일주일 환산을 가운데 한 줄로 보여준다 — 하루치 숫자만으론 크기가 안 잡힌다', () => {
+    const markup = render(false, 1800);
+    expect(markup).toContain('일주일이면 3시간 30분씩 쌓여요');
+    expect(markup).toContain('text-align:center');
   });
 
   it('첫 실행이면 왜 낮은 값인지 한 줄로 말한다 — 목표가 작다고 실망하지 않게', () => {
