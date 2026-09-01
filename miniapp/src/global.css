@@ -161,6 +161,11 @@ html:root {
   --adaptiveBlue800: #40573E;
   --adaptiveBlue900: #324430;
   --adaptiveDisabledBlue500: #B6C9AE;
+  /* 강조 반투명 두 겹 — 탭바 가운데 원의 링과 「고른 칸」 알약, 그리고 홈 모드 토글이 함께 쓴다.
+     리터럴로 흩어져 있던 값을 토큰으로 모은 이유는 공부 모드다: 여기가 단일 출처라야
+     `body.study-mode` 한 블록으로 세 자리가 같이 파랑이 된다(안 그러면 두 곳만 바뀐다). */
+  --accentRing: rgba(110, 138, 106, .25);
+  --accentPill: rgba(110, 138, 106, .18);
   /* 표면 → 종이톤 (웹 --card-bg/--border/--muted/--text) */
   --adaptiveBackground: #FCFAF5; /* 탭바·시트 표면 = 카드지 */
   --adaptiveGrey100: #FCFAF5; /* 섹션·행 fill — 크림 캔버스 위 카드지 */
@@ -582,6 +587,58 @@ body.reading-lamp .lamp-page {
   color: #2C2A24;
   /* 값이 고정된 그림자 한 겹 — 페이지 래스터에 한 번 그려지고 끝이라 스크롤해도 재계산이 없다. */
   box-shadow: 0 0 54px 16px rgba(255, 220, 160, 0.2);
+}
+
+/*
+ * ══ 공부 모드 — 세이지 사다리를 같은 채도·명도의 흐린 파랑으로 (시안 accent #5F7E96 · deep #47657C) ══
+ *
+ * 독서등과 <b>같은 수법</b>이다: 스위치는 `App`이 `document.body`에 붙이는 `.study-mode` 한 장
+ * (`STUDY_CLASS`)이고 색은 전부 여기다. 화면 대부분이 이미 `var(--adaptive*)`를 소비하므로
+ * 토큰만 갈아 끼우면 컴포넌트를 한 줄도 안 건드린다.
+ *
+ * ⚠️ 독서등과 달리 <b>`body`에 얹는다</b> — 모드는 「측정 중인 홈」이라는 상태가 아니라 앱 전체의
+ * 상태라, 탭바 가운데 원까지 같은 잉크여야 한다. 독서등이 `main`에 얹는 이유(끄는 버튼이 어둠에
+ * 잠기면 안 된다)는 여기 해당하지 않는다 — 색만 갈릴 뿐 명도는 그대로다.
+ *
+ * ⚠️ `.reading-lamp`와 <b>동시에 붙을 수 없다</b>: `lampOn`이 독서 모드에서만 참이고
+ * `effectiveMode`가 독서 세션 활성 시 reading을 강제하므로, 밤 세이지와 파랑이 만나는 조합이
+ * 구조적으로 없다(명시도 매트릭스가 통째로 사라진다).
+ *
+ * 사다리 중간값은 세이지와 같은 간격의 보간이다 — 승인값은 500(accent)·700(deep) 둘이다.
+ */
+body.study-mode {
+  --adaptiveBlue50: #E6ECF0;
+  --adaptiveBlue100: #D6E0E7;
+  --adaptiveBlue200: #AFC4D2;
+  --adaptiveBlue300: #A2BACA;
+  --adaptiveBlue400: #83A0B4;
+  --adaptiveBlue500: #5F7E96; /* 시안 accent */
+  --adaptiveBlue600: #536F85;
+  --adaptiveBlue700: #47657C; /* 시안 deep */
+  --adaptiveBlue800: #3A5266;
+  --adaptiveBlue900: #2E4050;
+  --adaptiveDisabledBlue500: #AFC4D2;
+  --brandButtonInk: #47657C;
+  --accentRing: rgba(95, 126, 150, .25);
+  --accentPill: rgba(95, 126, 150, .18);
+}
+
+/*
+ * TDS 버튼 규칙 속 <b>리터럴</b>만 따로 덮는다 — 그 규칙들은 값이 변수가 아니라 리터럴이라
+ * 위 토큰 스왑이 닿지 않는다(위 재색칠 절의 인라인 hex 선택자와 같은 사정).
+ * 선택자를 두 벌 쓰는 이유도 거기와 같다(콜론 뒤 공백 직렬화 차이).
+ */
+body.study-mode .tds-mobile-button[style*='--button-background-color:#3182f6'],
+body.study-mode .tds-mobile-button[style*='--button-background-color: #3182f6'] {
+  background-color: rgba(95, 126, 150, 0.16) !important; /* 시안 연한 채움 */
+  --button-loader-color: #5F7E96 !important;
+}
+
+body.study-mode .tds-mobile-button[style*='--button-background-color:rgba(100, 168, 255, 0.15)'],
+body.study-mode .tds-mobile-button[style*='--button-background-color: rgba(100, 168, 255, 0.15)'] {
+  --button-dimmer-pressed-background-color: #5F7E96 !important;
+  --button-dimmer-loading-background-color: rgba(95, 126, 150, 0.26) !important;
+  --button-loader-color: #5F7E96 !important;
 }
 
 /*

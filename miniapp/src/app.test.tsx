@@ -36,6 +36,7 @@ import {
   timerStartBookId,
 } from './App';
 import type { BookOption, DashboardResponse } from './api';
+import { IDLE_STUDY } from './api';
 import { coachmarkSeen, dismissCoachmark, resetCoachmarks } from './coachmark';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
@@ -76,6 +77,10 @@ function renderTab(tab: (typeof TABS)[number]['key'], overrides: Partial<Dashboa
         tab={tab}
         onTabChange={() => {}}
         dashboard={{ ...dashboard, ...overrides }}
+        mode="reading"
+        study={IDLE_STUDY}
+        onStudyChange={() => {}}
+        onChangeMode={() => {}}
         homeBookId={undefined}
         onSelectHomeBook={() => {}}
         onOpenMargin={() => {}}
@@ -203,8 +208,8 @@ describe('하단 탭바', () => {
   it('액션은 서재와 책방 사이 가운데 자리다 — 마크업 순서가 곧 시각 순서다', () => {
     const markup = bar('home');
 
-    expect(markup.indexOf('title="서재"')).toBeLessThan(markup.indexOf('aria-label="측정 시작"'));
-    expect(markup.indexOf('aria-label="측정 시작"')).toBeLessThan(markup.indexOf('title="책방"'));
+    expect(markup.indexOf('title="서재"')).toBeLessThan(markup.indexOf('aria-label="독서 측정 시작"'));
+    expect(markup.indexOf('aria-label="독서 측정 시작"')).toBeLessThan(markup.indexOf('title="책방"'));
     expect(TIMER_ACTION_SLOT).toBe(2);
   });
 
@@ -217,7 +222,7 @@ describe('하단 탭바', () => {
   });
 
   it('액션은 채운 원이다 — 탭 아이콘들 사이에서 동작으로 읽히는 유일한 형태다', () => {
-    const cell = actionCell(bar('home'), '측정 시작');
+    const cell = actionCell(bar('home'), '독서 측정 시작');
 
     expect(cell).toContain('width:46px;height:46px'); // 시안 4c에서 44 -> 46
     expect(cell).toContain('border-radius:50%');
@@ -228,12 +233,12 @@ describe('하단 탭바', () => {
     const markup = bar('home', { active: true });
 
     expect(markup).toContain('aria-label="측정 끝내기"');
-    expect(markup).not.toContain('aria-label="측정 시작"');
+    expect(markup).not.toContain('aria-label="독서 측정 시작"');
     expect(actionCell(markup, '측정 끝내기')).toContain('#F04452');
   });
 
   it('처리 중이면 원이 흐려진다 — 연타로 세션이 두 번 시작되지 않게', () => {
-    expect(actionCell(bar('home', { busy: true }), '측정 시작')).toContain('opacity:0.6');
+    expect(actionCell(bar('home', { busy: true }), '독서 측정 시작')).toContain('opacity:0.6');
   });
 
   it('선택 탭 색 폴백이 웹 세이지다 — 변수가 안 잡히는 순간 토스 블루로 되돌아가는 걸 막는다', () => {
@@ -298,10 +303,10 @@ describe('액션이 시작할 책 (timerStartBookId)', () => {
 
 /** 액션 버튼의 두 얼굴 — 상태에 따라 라벨·색·아이콘이 통째로 갈린다. */
 describe('액션 버튼 시각 (timerActionView)', () => {
-  it('대기 중이면 세이지 ▶ 「측정 시작」', () => {
+  it('대기 중이면 세이지 ▶ 「독서 측정 시작」', () => {
     const view = timerActionView(false);
 
-    expect(view.label).toBe('측정 시작');
+    expect(view.label).toBe('독서 측정 시작');
     expect(view.background).toContain('#4F6B4C'); // 4c에서 세이지 500 -> 700
   });
 
@@ -324,7 +329,7 @@ describe('액션 버튼 시각 (timerActionView)', () => {
  */
 describe('어느 탭에서든 측정 (MainTabs)', () => {
   it('네 탭 어디서든 시작 버튼이 서 있다', () => {
-    for (const { key } of TABS) expect(renderTab(key)).toContain('aria-label="측정 시작"');
+    for (const { key } of TABS) expect(renderTab(key)).toContain('aria-label="독서 측정 시작"');
   });
 
   it('측정 중이면 네 탭 어디서든 끝낼 수 있다 — 홈으로 돌아가지 않아도 된다', () => {
@@ -332,7 +337,7 @@ describe('어느 탭에서든 측정 (MainTabs)', () => {
       const markup = renderTab(key, { hasActiveSession: true, activeStartedAt: '2026-08-17T09:00:00' });
 
       expect(markup).toContain('aria-label="측정 끝내기"');
-      expect(markup).not.toContain('aria-label="측정 시작"');
+      expect(markup).not.toContain('aria-label="독서 측정 시작"');
     }
   });
 
@@ -784,11 +789,11 @@ describe('딥링크 착지 탭 (initialTab)', () => {
  */
 describe('독서등 (lampOn)', () => {
   it('홈에서 측정 중이면 켜진다', () => {
-    expect(lampOn('home', true)).toBe(true);
+    expect(lampOn('home', true, 'reading')).toBe(true);
   });
 
   it('홈이어도 측정 중이 아니면 안 켜진다', () => {
-    expect(lampOn('home', false)).toBe(false);
+    expect(lampOn('home', false, 'reading')).toBe(false);
   });
 
   /**
@@ -796,17 +801,17 @@ describe('독서등 (lampOn)', () => {
    * 표지·잔디·격자를 전부 밤 종이 위에서 다시 봐야 하는데, 그 색은 만든 적이 없다.
    */
   it('다른 탭에서는 측정 중이어도 안 켜진다 — 범위는 홈만이다', () => {
-    expect(lampOn('library', true)).toBe(false);
-    expect(lampOn('bookshop', true)).toBe(false);
-    expect(lampOn('history', true)).toBe(false);
+    expect(lampOn('library', true, 'reading')).toBe(false);
+    expect(lampOn('bookshop', true, 'reading')).toBe(false);
+    expect(lampOn('history', true, 'reading')).toBe(false);
   });
 
   /**
    * 재진입이 공짜인 근거 — 켜짐 조건이 「지금 어느 탭인가 · 지금 측정 중인가」 둘뿐이라 상태를 안 든다.
    * 「방금 눌렀는지」를 기억하는 인자가 생기면 이 시그니처가 먼저 깨진다.
    */
-  it('판단에 드는 것은 탭과 측정 여부뿐이다 — 나갔다 와도 같은 답이 나온다', () => {
-    expect(lampOn.length).toBe(2);
+  it('판단에 드는 것은 탭·측정 여부·모드뿐이다 — 나갔다 와도 같은 답이 나온다', () => {
+    expect(lampOn.length).toBe(3);
   });
 
   it('js가 붙이는 클래스가 css에 셀렉터로 실재한다 — 한쪽만 고치면 기능이 조용히 죽는다', () => {
@@ -944,8 +949,19 @@ describe('여백 진입 게이트', () => {
 
     const opens = [...src.matchAll(/setMargin\(\{/g)];
 
-    expect(opens).toHaveLength(1);
-    expect(opens[0].index).toBeGreaterThan(src.indexOf('const openMargin'));
+    // ⚠️ 「한 개인가」가 아니라 <b>「전부 openMargin 안인가」</b>를 잰다. 개수로 재면 게이트 안에서
+    // 분기가 늘 때(공부 측정도 끊게 되면서 갈래가 둘이 됐다) 규칙이 멀쩡한데도 붉어진다 —
+    // 지켜야 할 것은 개수가 아니라 「여는 자리가 그 문 밖에 없다」이다.
+    const from = src.indexOf('const openMargin');
+    const to = src.indexOf('const screen =');
+
+    expect(opens.length).toBeGreaterThan(0);
+    expect(from).toBeGreaterThan(-1);
+    expect(to).toBeGreaterThan(from);
+    for (const open of opens) {
+      expect(open.index).toBeGreaterThan(from);
+      expect(open.index).toBeLessThan(to);
+    }
   });
 });
 
@@ -968,7 +984,7 @@ describe('여백 위의 탭바 (MarginShell)', () => {
   });
 
   it('원은 언제나 「시작」이다 — 여백에선 측정이 돌지 않는다', () => {
-    expect(markup).toContain('aria-label="측정 시작"');
+    expect(markup).toContain('aria-label="독서 측정 시작"');
     expect(markup).not.toContain('aria-label="측정 끝내기"');
   });
 
@@ -1049,7 +1065,7 @@ describe('탭바 위계 (시안 4c)', () => {
 
   /** 가운데 액션 한 칸만 — 위 「하단 탭바」의 같은 이름 헬퍼는 그 describe 스코프에 갇혀 있다. */
   const centerCell = (markup: string) => {
-    const at = markup.indexOf('aria-label="측정 시작"');
+    const at = markup.indexOf('aria-label="독서 측정 시작"');
     expect(at).toBeGreaterThan(-1);
     return markup.slice(at, markup.indexOf('</button>', at));
   };
@@ -1112,7 +1128,9 @@ describe('탭바 위계 (시안 4c)', () => {
 
     expect(cell).toContain('width:46px');
     expect(cell).toContain('height:46px');
-    expect(cell).toContain('box-shadow:0 0 0 3px rgba(110,138,106,.25)');
+    // 링은 이제 토큰 경유다(`--accentRing`) — 공부 모드가 css 한 벌로 이 링까지 파랑으로 바꾼다.
+    // 리터럴 단언에서 옮겨 온 것이라 회귀가 아니라 **계측 대상이 바뀐** 자리다.
+    expect(cell).toContain('box-shadow:0 0 0 3px var(--accentRing');
   });
 
   it('가운데 원 배경도 세이지 700이다 — 고른 칸과 같은 잉크라야 한 팔레트로 읽힌다', () => {

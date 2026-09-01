@@ -24,13 +24,19 @@ import java.time.Instant;
 public class StaleSessionSweeper {
 
     private final ReadingSessionService sessionService;
+    private final StudySessionService studySessionService;
 
-    public StaleSessionSweeper(ReadingSessionService sessionService) {
+    public StaleSessionSweeper(ReadingSessionService sessionService,
+                               StudySessionService studySessionService) {
         this.sessionService = sessionService;
+        this.studySessionService = studySessionService;
     }
 
     @Scheduled(fixedDelay = 600_000)
     public void closeStaleSessions() {
-        sessionService.closeStaleSessions(Instant.now());
+        Instant now = Instant.now();
+        sessionService.closeStaleSessions(now);
+        // 공부 세션도 같은 정책·같은 주기로 닫는다 — 원장이 갈렸다고 위생까지 갈리면 방치 세션이 한쪽에만 쌓인다.
+        studySessionService.closeStaleSessions(now);
     }
 }

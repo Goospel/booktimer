@@ -53,6 +53,8 @@ class AccountServiceTest {
     @Mock
     private ReadingSessionRepository sessionRepository;
     @Mock
+    private com.booktimer.session.StudySessionRepository studySessionRepository;
+    @Mock
     private FollowRepository followRepository;
     @Mock
     private BlockRepository blockRepository;
@@ -132,8 +134,10 @@ class AccountServiceTest {
 
         service.deleteAccount(EMAIL, "pw");
 
-        var ordered = inOrder(sessionRepository, timerRepository, goalChangeRepository, goalWaiverRepository, followRepository, blockRepository, reportRepository, storyLikeRepository, storyRepository, bookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository, apiTokenRepository, tossLinkCodeRepository, userRepository);
+        var ordered = inOrder(sessionRepository, studySessionRepository, timerRepository, goalChangeRepository, goalWaiverRepository, followRepository, blockRepository, reportRepository, storyLikeRepository, storyRepository, bookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository, apiTokenRepository, tossLinkCodeRepository, userRepository);
         ordered.verify(sessionRepository).deleteByUser(user); // book FK 참조하는 세션 먼저
+        // 공부 원장도 users를 FK 참조한다 — 빠지면 그 기록을 가진 사람의 탈퇴가 통째로 실패한다(T-168 계열).
+        ordered.verify(studySessionRepository).deleteByUser(user);
         ordered.verify(timerRepository).deleteByUser(user);
         ordered.verify(goalChangeRepository).deleteByUser(user);   // FK: 목표 변경 이력도 유저 전에 정리
         ordered.verify(goalWaiverRepository).deleteByUser(user);   // FK: 용서권도 유저 전에 정리

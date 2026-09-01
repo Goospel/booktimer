@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { DashboardResponse, MarginResponse, MonthlySection, SocialEvent } from './api';
+import { IDLE_STUDY } from './api';
 import { History, MonthlyRecords } from './screens/History';
 import { Home, ReadingNowCard } from './screens/Home';
 import { FeedBox } from './screens/HomeFeed';
@@ -122,6 +123,10 @@ describe('제목이 곧 줄인 자리 — 선은 제목에 건다', () => {
   it('홈 캐러셀 머리 (시안 2a)', () => {
     const markup = render(<Home
       dashboard={dashboard()}
+      mode="reading"
+      study={IDLE_STUDY}
+      onChangeMode={() => {}}
+      onBlockedModeChange={() => {}}
       selectedBookId={null}
       onSelectBook={() => {}}
       onTimerChange={() => {}}
