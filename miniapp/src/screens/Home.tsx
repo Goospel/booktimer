@@ -138,9 +138,15 @@ export function ModeToggle({
         aria-disabled={locked ? true : undefined}
         onClick={() => (locked ? onBlocked() : onChange(target))}
         style={{
-          // 히트영역 44×44는 이 패딩이 든다(시각 알약은 21px 그대로) — 가로 2px일 때 실측 40.1px라
-          // 손가락 최소치에 4px 모자랐다(목 모드 390×844). 알약은 그만큼만 넓어진다.
-          padding: '12px 4px',
+          // flex라야 알약이 가운데 선다 — inline 흐름이면 알약이 버튼 baseline에 앉고 상속 폰트(16px)의
+          // line box strut이 아래로 민다(실측 위 4.5px / 아래 −0.5px로 테두리를 삐져나갔다).
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          // 히트영역 44는 이제 버튼이 명시로 든다 — strut이 벌어주던 7px이 위 수정으로 사라졌다.
+          // 가로 4px은 그대로(2px일 때 실측 40.1px로 손가락 최소치에 모자랐다, 목 모드 390×844).
+          minHeight: 44,
+          padding: '0 4px',
           border: 0,
           background: 'transparent',
           cursor: 'pointer',
