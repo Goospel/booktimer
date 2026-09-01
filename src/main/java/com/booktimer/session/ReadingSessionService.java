@@ -10,6 +10,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 /**
  * 독서 세션 start/stop/수동기록 유스케이스 오케스트레이션.
@@ -21,6 +26,16 @@ import java.time.Instant;
  *   <li>stop — 진행 중 세션을 종료하고 저장.</li>
  *   <li>recordManual — 측정 깜빡한 독서를 완료 세션 한 건으로 직접 기록.</li>
  * </ul>
+ *
+ * <p><b>자정 분할</b>: 종료 시각이 확정되는 세 경로(stop · closeStaleSessions · recordManual)는
+ * 저장 직전에 구간을 <b>유저 타임존 자정</b>으로 잘라 조각마다 한 행씩 저장한다
+ * ({@link #splitByMidnight}). 날짜 귀속은 {@code startedAt}의 유저 TZ 날짜라
+ * ({@link ReadingHistoryService}) 자정을 걸친 독서가 통째로 시작일에 잡히던 어긋남을 저장 시점에
+ * 없애는 것이 목적이다 — 기록·부채·잔디·오늘 읽은 시간이 전부 세션 행에서 유도되므로 소비처는
+ * 한 줄도 바뀌지 않는다. 규칙 셋: ① 상한 클램프가 <b>분할보다 먼저</b>다(상한은 「한 번의 물리적
+ * 독서」에 대한 정책이라 원본 구간에 건다) ② 경계가 끝점과 일치하면 자르지 않는다(0초 조각 금지)
+ * ③ 진행 중 세션은 절대 분할하지 않는다. 분할 기준 타임존은 <b>저장 시점의 스냅샷</b>이고 과거
+ * 저장분의 소급 재분할·마이그레이션은 없다(레거시 행은 여전히 자정을 걸칠 수 있다).
  *
  * <p><b>부채 차감 로직이 없다.</b> 부채는 더 이상 저장된 단일 카운터가 아니라 완료 세션에서
  * 유도되므로(7일 윈도우 per-day, {@link ReadingDebtService}), <b>세션을 저장하는 것 자체가
@@ -93,14 +108,68 @@ public class ReadingSessionService {
         if (book == null) {
             throw new IllegalArgumentException("a book is required to record a reading session");
         }
-        ReadingSession session = ReadingSession.manual(user, startedAt, endedAt, book);
-        sessionRepository.save(session);
+        // 자정을 걸친 수동 기록은 조각마다 한 행 — 모든 조각이 manualEntry=true·같은 책이다.
+        ReadingSession last = null;
+        for (Segment segment : splitByMidnight(startedAt, endedAt, ZoneId.of(user.getTimezone()))) {
+            last = sessionRepository.save(
+                    ReadingSession.manual(user, segment.start(), segment.end(), book));
+        }
         // 기록한 책이 "읽고싶음"이었다면 "읽는중"으로 자동 전환(전환 시에만 저장) — start와 동일.
-        // 시작 시각 스탬프는 "적은 시각"인 startedAt으로 — 뒤늦게 적어도 실제 읽기 시작 시점이 남는다.
+        // 시작 시각 스탬프는 "적은 시각"인 startedAt으로 — 뒤늦게 적어도 실제 읽기 시작 시점이 남는다
+        // (분할해도 최초 조각의 시작 = 원본 startedAt이라 의미가 그대로다).
         if (book.startReading(startedAt)) {
             bookRepository.save(book);
         }
-        return session;
+        return last;
+    }
+
+    /** 자정 분할 조각 — 시각 쌍 하나가 저장될 한 행이 된다. */
+    record Segment(Instant start, Instant end) {
+    }
+
+    /**
+     * {@code [startedAt, endedAt]}을 {@code zone}의 자정 경계로 자른다. 항상 1개 이상을 돌려주고,
+     * 조각들은 빈틈·겹침 없이 인접한다(앞 {@code end} == 뒤 {@code start} — 이 등치가 곧 조각 링크다,
+     * {@link #tagBook}).
+     *
+     * <p>경계가 끝점과 일치하면 자르지 않는다(<b>0초 조각 금지</b>) — 정확히 자정에 끝난 독서는 1행이다.
+     * 조각 수를 2개로 특수화하지 않는 이유: 수동 입력 24시간이 DST 짧은 날(23시간)을 끼면 자정을 2회
+     * 넘어 3조각이 실제로 나온다. 경계 계산에 {@code atStartOfDay(zone)}를 쓰는 것도 같은 이유다 —
+     * 자정이 DST로 <b>존재하지 않는</b> 날(예: America/Santiago)에도 그날의 첫 유효 시각을 돌려준다.
+     */
+    static List<Segment> splitByMidnight(Instant startedAt, Instant endedAt, ZoneId zone) {
+        List<Segment> segments = new ArrayList<>();
+        Instant cursor = startedAt;
+        while (true) {
+            // plusDays(1)이라 경계는 항상 cursor보다 미래 — 자정에 시작해도 무한루프가 없다.
+            Instant nextMidnight = LocalDate.ofInstant(cursor, zone).plusDays(1).atStartOfDay(zone).toInstant();
+            if (!nextMidnight.isBefore(endedAt)) {
+                segments.add(new Segment(cursor, endedAt));
+                return segments;
+            }
+            segments.add(new Segment(cursor, nextMidnight));
+            cursor = nextMidnight;
+        }
+    }
+
+    /**
+     * 진행 중 세션을 {@code endedAt}으로 닫되 자정 경계로 잘라 저장한다 — 기존 행이 첫 조각이 되고
+     * ({@code startedAt} 불변) 나머지 조각은 새 완료 행으로 저장된다. 모든 조각이 같은 책·같은
+     * {@code manualEntry}(=false)를 갖는다.
+     *
+     * @return 마지막 조각({@code endedAt}이 속한 쪽) — 호출부가 응답의 세션 id로 쓴다.
+     */
+    private ReadingSession endSplitAndSave(ReadingSession open, Instant endedAt) {
+        List<Segment> segments = splitByMidnight(
+                open.getStartedAt(), endedAt, ZoneId.of(open.getUser().getTimezone()));
+        open.end(segments.get(0).end()); // 이미 종료된 세션이면 여기서 IllegalStateException(경합 가드 유지)
+        ReadingSession last = sessionRepository.save(open);
+        for (int i = 1; i < segments.size(); i++) {
+            ReadingSession piece = ReadingSession.start(open.getUser(), segments.get(i).start(), open.getBook());
+            piece.end(segments.get(i).end());
+            last = sessionRepository.save(piece);
+        }
+        return last;
     }
 
     /**
@@ -110,13 +179,16 @@ public class ReadingSessionService {
      * 잘라 인정한다 — 끝내기를 깜빡한 21시간짜리 세션이 통계·잔디를 왜곡한 실측 사례 때문(2026-08-13).
      * 클램프는 <b>서비스 정책</b>이라 엔티티 불변식({@code durationSeconds = endedAt - startedAt})은 그대로다.
      *
+     * <p><b>클램프가 분할보다 먼저다</b> — 상한을 원본 구간에 걸고 그 결과를 자정으로 자른다.
+     * 순서를 뒤집으면 조각마다 6시간이 허용돼 하루를 넘겨 읽은 세션이 cap을 초과한다.
+     *
+     * @return 자정을 넘겼으면 <b>마지막 조각</b>(now가 속한 쪽), 아니면 그 세션 자신
      * @throws IllegalStateException 진행 중 세션이 없는 경우
      */
     public ReadingSession stop(User user, Instant now) {
         ReadingSession active = sessionRepository.findByUserAndEndedAtIsNull(user)
                 .orElseThrow(() -> new IllegalStateException("no active session to stop"));
-        active.end(clampToCap(active.getStartedAt(), now));
-        return sessionRepository.save(active);
+        return endSplitAndSave(active, clampToCap(active.getStartedAt(), now));
     }
 
     /**
@@ -126,18 +198,17 @@ public class ReadingSessionService {
      * <p>경합 방어: 조회와 종료 사이에 사용자가 stop을 눌러 이미 닫힌 세션은 {@code end()}가
      * {@link IllegalStateException}을 던진다 — 한 건 실패가 나머지를 막지 않게 건별로 스킵한다.
      *
-     * @return 실제로 닫은 세션 수
+     * @return 실제로 닫은 <b>세션</b> 수(자정 분할로 행이 늘어도 원본 세션 단위로 센다)
      */
     public int closeStaleSessions(Instant now) {
         int closed = 0;
         for (ReadingSession session : sessionRepository.findByEndedAtIsNullAndStartedAtBefore(now.minus(MAX_SESSION_DURATION))) {
             try {
-                session.end(session.getStartedAt().plus(MAX_SESSION_DURATION));
+                endSplitAndSave(session, session.getStartedAt().plus(MAX_SESSION_DURATION));
             } catch (IllegalStateException alreadyEnded) {
                 log.info("stale session {} already ended, skipping: {}", session.getId(), alreadyEnded.getMessage());
                 continue;
             }
-            sessionRepository.save(session);
             closed++;
         }
         return closed;
@@ -157,9 +228,15 @@ public class ReadingSessionService {
      * 책 소유 검증은 호출부(컨트롤러)가 {@code findByIdAndUser}로 이미 마친 뒤 넘긴다. 태깅한 책이
      * "읽고싶음"이면 {@code start}와 동일하게 "읽는중"으로 자동 전환한다.
      *
+     * <p><b>자정 분할 조각까지 함께 태깅한다.</b> {@code stop}은 마지막 조각을 돌려주므로 그 하나만
+     * 붙이면 자정 전 몫이 미태깅으로 남아 책 통계에서 샌다. 조각 링크 컬럼은 없고 <b>시각 인접성</b>이
+     * 링크다 — 앞 조각의 {@code endedAt}은 뒤 조각의 {@code startedAt}과 같은 값이므로 뒤에서 앞으로
+     * 체인을 걷는다. 미태깅·실시간 세션만 후보라(수동 기록은 책이 필수라 미태깅이 없다) 남의 독서나
+     * 무관한 세션이 딸려올 길이 없다.
+     *
      * @param sessionId 태깅할 세션 id
      * @param book      연결할 책(호출부에서 소유 검증 완료)
-     * @return 책이 연결된 세션
+     * @return 책이 연결된 세션(넘겨받은 그 세션 — 앞 조각들도 함께 태깅되지만 반환은 이것)
      * @throws IllegalArgumentException 해당 사용자의 그 세션이 없는 경우(IDOR — 컨트롤러가 404로 마스킹)
      * @throws IllegalStateException    이미 책이 지정된 세션인 경우(컨트롤러가 409로)
      */
@@ -167,12 +244,22 @@ public class ReadingSessionService {
         ReadingSession session = sessionRepository.findByIdAndUser(sessionId, user)
                 .orElseThrow(() -> new IllegalArgumentException("session not found for user"));
         session.tagBook(book); // 이미 책 있으면 IllegalStateException
+        ReadingSession saved = sessionRepository.save(session);
+        // 인접한 앞 조각을 따라 올라가며 같은 책을 붙인다(분할이 없었으면 첫 조회가 바로 empty).
+        ReadingSession earliest = session;
+        for (Optional<ReadingSession> previous;
+             (previous = sessionRepository.findByUserAndEndedAtAndBookIsNullAndManualEntryFalse(
+                     user, earliest.getStartedAt())).isPresent(); ) {
+            earliest = previous.get();
+            earliest.tagBook(book);
+            sessionRepository.save(earliest);
+        }
         // 태깅한 책이 "읽고싶음"이었다면 "읽는중"으로 자동 전환(측정 시작과 동일).
-        // 시작 시각은 그 세션이 시작된 시각 — 태깅 시점(지금)이 아니라 실제로 읽기 시작한 때다.
-        if (book.startReading(session.getStartedAt())) {
+        // 시작 시각은 태깅 시점(지금)이 아니라 실제로 읽기 시작한 때 — 분할됐으면 최초 조각의 시각이다.
+        if (book.startReading(earliest.getStartedAt())) {
             bookRepository.save(book);
         }
-        return sessionRepository.save(session);
+        return saved;
     }
 
     /**

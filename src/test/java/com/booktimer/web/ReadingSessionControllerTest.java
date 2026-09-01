@@ -262,6 +262,30 @@ class ReadingSessionControllerTest {
     }
 
     @Test
+    @DisplayName("POST /sessions/manual: 과거 날짜 20시간 기록도 전날로 새지 않는다 — 앵커가 그날 00:00 순방향(정오 역산 폐지)")
+    void manualSubmit_pastDateLongDuration_staysWithinThatDate() throws Exception {
+        User user = register("mlong@booktimer.com");
+        Book book = book(user);
+        LocalDate past = today().minusDays(3);
+
+        mockMvc.perform(post("/sessions/manual")
+                        .param("bookId", String.valueOf(book.getId()))
+                        .param("date", past.toString())
+                        .param("hours", "20").param("minutes", "0")
+                        .with(user("mlong@booktimer.com")).with(csrf()))
+                .andExpect(redirectedUrl("/sessions/manual"));
+
+        // 정오 역산이면 20시간이 전날 16:00부터 시작해 전날에 8시간이 샌다 — 그 꼴이 아님을 못 박는다.
+        List<ReadingSession> sessions = sessionRepository.findByUser(user);
+        assertThat(sessions).hasSize(1);
+        ReadingSession s = sessions.get(0);
+        assertThat(s.getStartedAt()).isEqualTo(past.atStartOfDay(ZoneId.of(SEOUL)).toInstant());
+        assertThat(s.getDurationSeconds()).isEqualTo(20 * 3600L);
+        assertThat(LocalDate.ofInstant(s.getStartedAt(), ZoneId.of(SEOUL))).isEqualTo(past);
+        assertThat(LocalDate.ofInstant(s.getEndedAt(), ZoneId.of(SEOUL))).isEqualTo(past);
+    }
+
+    @Test
     @DisplayName("POST /sessions/manual: 오늘 날짜로 기록하면 오늘 부채가 그만큼 준다(세션 저장으로 자동 반영)")
     void manualSubmit_today_reducesTodayDebt() throws Exception {
         User user = register("mtoday@booktimer.com");
