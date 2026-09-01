@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 // 렌더로 관측 불가능한 배선(App의 모드 분기)은 소스로 잰다 — `timer-toast.test.tsx`와 같은 방식.
 import appSource from './App.tsx?raw';
+import studyLibrarySource from './screens/StudyLibrary.tsx?raw';
 
 import type { SearchRow, ShelfResponse, StudyBookRow, StudyShelfResponse } from './api';
 import { mockRequest } from './dev-mock';
@@ -185,6 +186,34 @@ describe('StudyActionSheet — 관리 시트', () => {
     expect(markup).toContain('취소');
     // 확인 문구 옆에 다른 손잡이가 남아 있으면 무엇을 확정하는지 흐려진다(서재 관리 시트와 같은 규율).
     expect(markup).not.toContain('회독 -1');
+  });
+});
+
+/**
+ * 손잡이·시트·검색 행의 <b>배선</b> — 정적 렌더로는 원리상 관측되지 않는 자리다.
+ *
+ * <p>셋 다 마크업이 <b>똑같은 채로</b> 뜻만 갈린다: 「회독 +1」이 몇을 보내는지, 삭제가 확인을 거치는지,
+ * 검색 행이 어느 집합으로 담김을 판정하는지는 <b>누르는 순간에만</b> 드러나는데 하니스는 클릭을 못
+ * 돌린다(T-149). 독립 리뷰의 돌연변이 셋이 전건을 초록으로 통과한 자리라, 소스로 잠근다
+ * (`reconcileTab` 셸 배선·홈 여백 문과 같은 수법).
+ */
+describe('손잡이·시트 배선 (정적 렌더 사각)', () => {
+  it('「회독 +1」은 현재값 +1을 보낸다 — 델타가 아니라 절대값이라 값 계산이 곧 계약이다', () => {
+    expect(studyLibrarySource).toContain('onReadCount(selected, selected.readCount + 1)');
+  });
+
+  it('「회독 -1」은 현재값 -1을 보낸다', () => {
+    expect(studyLibrarySource).toContain('onReadCount(book, book.readCount - 1)');
+  });
+
+  it('삭제 행은 확인 단계를 거친다 — 곧장 onDelete로 가면 오삭제가 한 탭 거리다', () => {
+    expect(studyLibrarySource).toMatch(
+      /label="서재에서 삭제"[^/]*onClick=\{\(\) => onConfirmDelete\(true\)\}/,
+    );
+  });
+
+  it('검색 행의 담김은 공부 서재 집합으로 다시 센다 — 서버 owned를 그대로 흘리면 독서 책을 못 담는다', () => {
+    expect(studyLibrarySource).toContain('owned: studyOwned(myIsbns, row)');
   });
 });
 

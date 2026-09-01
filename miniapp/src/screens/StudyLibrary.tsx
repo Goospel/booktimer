@@ -75,21 +75,22 @@ const readCountChipStyle: CSSProperties = {
 };
 
 /**
- * 전폭 손잡이 — 주(「회독 +1」)와 보조(「관리」)가 같은 줄에 2:1로 선다.
+ * 채움이 아닌 손잡이 — 「관리」(카드지)와 「검색해서 담기」(틴트)가 쓴다.
  *
- * <p>주 손잡이가 <b>채움이 아니라 틴트</b>인 것은 의도다: 채움 주 버튼은 화면당 하나라는 불변식
- * (설계 D5 · `typography.test`가 파일 목록으로 잠근다)이 있고, 이 화면의 주 동작은 틴트만으로도
- * 옆 「관리」(카드지)와 층이 갈린다 — 독서 서재의 「검색해서 담기」가 이미 같은 꼴이다.
+ * <p>주 손잡이(「회독 +1」)는 여기 없다: 채움 레시피를 <b>호출부에 리터럴로</b> 편다. 헬퍼 삼항에
+ * 숨기면 「채움 주 버튼은 화면당 하나」 불변식의 계측기(설계 D5 · `typography.test`의 소스 스캔)가
+ * <b>그 채움을 못 본다</b> — 리뷰어 실측으로 확인된 사각이다. 계측기에 걸리는 자리에 두는 것이 요점이라
+ * 이 스타일만 인라인인 것은 중복이 아니라 계약이다.
  */
-function handleRowStyle(tone: 'primary' | 'secondary'): CSSProperties {
+function handleRowStyle(tone: 'tint' | 'card'): CSSProperties {
   return {
-    flex: tone === 'primary' ? 2 : 1,
+    flex: 1,
     height: HANDLE_ROW_HEIGHT,
     border: '1px solid transparent',
     borderImage: PENCIL_FRAME,
     borderRadius: 14,
-    background: tone === 'primary' ? 'var(--adaptiveBlue50, #E7EEE2)' : '#FCFAF5',
-    color: tone === 'primary' ? 'var(--adaptiveBlue700, #4F6B4C)' : '#2C2C2A',
+    background: tone === 'tint' ? 'var(--adaptiveBlue50, #E7EEE2)' : '#FCFAF5',
+    color: tone === 'tint' ? 'var(--adaptiveBlue700, #4F6B4C)' : '#2C2C2A',
     fontSize: 15,
     fontWeight: 700,
     cursor: 'pointer',
@@ -103,10 +104,16 @@ function handleRowStyle(tone: 'primary' | 'secondary'): CSSProperties {
  * 자체가 흔들리고, 회독만 바뀐 경우에도 한 번의 왕복이 화면과 서버를 확실히 맞춘다.
  */
 export function StudyLibrary({ onError }: { onError: (error: Error) => void }) {
-  /* 첫 렌더의 출발점을 세션 캐시에서 집는다(독서 서재와 같은 SWR) — 탭을 오갈 때 통째로 로딩이 되지 않게. */
-  const cached = cacheGet<StudyShelfResponse>(CACHE_STUDY_SHELF);
-  const [books, setBooks] = useState<StudyBookRow[] | null>(cached?.books ?? null);
-  const [searchEnabled, setSearchEnabled] = useState(cached?.searchEnabled ?? false);
+  /*
+   * 첫 렌더의 출발점을 세션 캐시에서 집는다(독서 서재와 같은 SWR) — 탭을 오갈 때 통째로 로딩이 되지 않게.
+   * 지연 초기화(`useState(() => …)`)라 캐시 조회가 <b>마운트 1회</b>다 — 매 렌더 읽어도 결과는 버려진다.
+   */
+  const [books, setBooks] = useState<StudyBookRow[] | null>(
+    () => cacheGet<StudyShelfResponse>(CACHE_STUDY_SHELF)?.books ?? null,
+  );
+  const [searchEnabled, setSearchEnabled] = useState(
+    () => cacheGet<StudyShelfResponse>(CACHE_STUDY_SHELF)?.searchEnabled ?? false,
+  );
   const [mode, setMode] = useState<'shelf' | 'search'>('shelf');
   /** 책 id · `null`(「책 추가」 칸을 고름) · `undefined`(아직 안 고름) — 뒤의 둘은 다른 값이다. */
   const [selectedId, setSelectedId] = useState<number | null | undefined>(undefined);
@@ -123,9 +130,10 @@ export function StudyLibrary({ onError }: { onError: (error: Error) => void }) {
     [onError],
   );
 
+  /** 재조회 — <b>프라미스를 돌려준다</b>. 뮤테이션이 그걸 기다려야 busy가 목록보다 먼저 안 풀린다(아래 `run`). */
   const load = useCallback(() => {
     setError(null); // 다시 받는 김에 지난 실패 문구도 지운다
-    fetchStudyBooks()
+    return fetchStudyBooks()
       .then((shelf) => {
         cachePut(CACHE_STUDY_SHELF, shelf);
         setBooks(shelf.books);
@@ -134,7 +142,10 @@ export function StudyLibrary({ onError }: { onError: (error: Error) => void }) {
       .catch(fail);
   }, [fail]);
 
-  useEffect(load, [load]);
+  // 반환값을 삼킨다 — effect의 반환은 cleanup 자리라, 프라미스를 그대로 흘리면 React가 그걸 정리 함수로 읽는다.
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   // 검색은 서재를 덮는 별도 화면이다 — 뒤로가기를 「돌아가기」와 같은 자리로 돌린다.
   useBackClose(mode === 'search', () => setMode('shelf'));
@@ -147,7 +158,9 @@ export function StudyLibrary({ onError }: { onError: (error: Error) => void }) {
     action
       .then(() => {
         setSheet(null);
-        load();
+        // 재조회까지 기다린 뒤에 busy를 푼다 — 안 기다리면 화면이 <b>옛 회독 수</b>를 들고 있는 채로
+        // 손잡이가 살아나, 연타가 같은 절대값을 다시 보내고 그 한 번은 조용히 사라진다(멱등이라 티도 안 난다).
+        return load();
       })
       .catch(fail)
       .finally(() => setBusy(false));
@@ -275,19 +288,36 @@ export function StudyShelf({
       {onLeadCard ? (
         // 칸이 가운데면 할 수 있는 일은 하나뿐이다 — 손잡이도 하나로 갈린다.
         <div style={{ display: 'flex', marginTop: 16 }}>
-          <button type="button" disabled={busy} onClick={onAddBook} style={{ ...handleRowStyle('primary'), flex: 1 }}>
+          <button type="button" disabled={busy} onClick={onAddBook} style={handleRowStyle('tint')}>
             검색해서 담기
           </button>
         </div>
       ) : (
         selected !== null && (
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-            {/* 한 회독을 끝냈을 때 누르는 자리 — 이 화면의 유일한 핵심 동작이라 주 손잡이다. */}
+            {/*
+              * 한 회독을 끝냈을 때 누르는 자리 — 이 화면의 유일한 핵심 동작이라 <b>채움</b>이다.
+              * 독서 서재의 구조적 대응물은 「검색해서 담기」(0번 칸 전용 틴트)가 아니라 같은 2:1 줄의
+              * 「여백에 글쓰기」이고, 그쪽 레시피(채움 + 연필 프레임 + 크림 잉크)를 그대로 쓴다.
+              * TDS `Button`이 아니라 맨 `<button>`인 것도 그쪽과 같은 이유다 — `--button-min-height: 56px`가
+              * 박혀 있어 38px 손잡이 줄에서 혼자 솟는다.
+              */}
             <button
               type="button"
               disabled={busy}
               onClick={() => onReadCount(selected, selected.readCount + 1)}
-              style={handleRowStyle('primary')}
+              style={{
+                flex: 2,
+                height: HANDLE_ROW_HEIGHT,
+                border: '1px solid transparent',
+                borderImage: PENCIL_FRAME,
+                borderRadius: 14,
+                background: 'var(--adaptiveBlue700, #4F6B4C)',
+                color: '#F7F2E8',
+                fontSize: 15,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
             >
               회독 +1
             </button>
@@ -295,7 +325,7 @@ export function StudyShelf({
               type="button"
               disabled={busy}
               onClick={() => onSheet({ kind: 'actions', confirmDelete: false })}
-              style={handleRowStyle('secondary')}
+              style={handleRowStyle('card')}
             >
               관리
             </button>
