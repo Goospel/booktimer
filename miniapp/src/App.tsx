@@ -195,6 +195,19 @@ export interface StartToastState {
  * 「용기로 / 용기으로」가 갈리는데 제목은 사용자 데이터라 그 판정을 이길 수 없다 — 그래서 조사는
  * 제목이 아니라 <b>「측정」</b>이 받는다(『제목』 측정<b>을</b> / 『제목』 측정<b>으로</b>).
  */
+/**
+ * 이 토스트가 <b>책 장치</b>(표지 자리 · [바꾸기])를 다는가 — 공부 측정이면 달지 않는다.
+ *
+ * <p>남겨 두면 [바꾸기]가 <b>죽은 컨트롤</b>이 된다: 누르면 교체 시트가 열리고, 진행 중 독서 세션이
+ * 없어 서버가 409 「진행 중인 측정이 없습니다」로 끝낸다 — 사용자에겐 이유 없는 에러다. 표지 자리도
+ * 공부엔 가리킬 것이 없어 점선 네모만 남는다.
+ *
+ * <p>판단을 함수로 꺼낸 이유는 늘 같다 — 하니스가 정적 렌더라 클릭 경로로는 못 잰다(T-149).
+ */
+export function toastHasBookControls(toast: StartToastState): boolean {
+  return toast.mode !== 'study';
+}
+
 export function startToastMessage(toast: StartToastState): string {
   // 공부엔 책이 없다 — 「책 없이 측정을 시작했어요」는 여기서 거짓말이 된다(빠진 것이 아니라 무관하다).
   if (toast.mode === 'study') return '공부 측정을 시작했어요';
@@ -1695,6 +1708,7 @@ function MiniCover({ book, width }: { book: BookOption | null; width: number }) 
  */
 export function StartToast({ toast, onChange }: { toast: StartToastState; onChange: () => void }) {
   const message = startToastMessage(toast);
+  const hasBookControls = toastHasBookControls(toast);
   // 제목만 세리프로 — 문구 안에서 「무슨 책인가」가 값이고 나머지는 서술이다.
   const quoted = toast.book === null ? null : `『${toast.book.title}』`;
   const rest = quoted === null ? message : message.slice(quoted.length);
@@ -1719,28 +1733,33 @@ export function StartToast({ toast, onChange }: { toast: StartToastState; onChan
         boxShadow: '0 4px 16px rgba(0, 0, 0, 0.14)',
       }}
     >
-      <MiniCover book={toast.book} width={26} />
+      {/* 표지 자리와 [바꾸기]는 책이 있는 측정의 장치다 — 공부 토스트엔 둘 다 안 그린다
+          ({@link toastHasBookControls}). 덤으로 아래 버튼 배경 리터럴이 공부 모드의 마지막 세이지
+          누출이었는데, 그 조각이 아예 안 그려지면서 색 스코프도 함께 닫힌다. */}
+      {hasBookControls && <MiniCover book={toast.book} width={26} />}
       <span style={{ flex: 1, minWidth: 0, fontSize: 14, lineHeight: 1.5, wordBreak: 'keep-all' }}>
         {quoted !== null && <span style={{ ...SERIF_VALUE, fontWeight: 700 }}>{quoted}</span>}
         {rest}
       </span>
-      <button
-        type="button"
-        onClick={onChange}
-        style={{
-          flex: 'none',
-          padding: '6px 12px',
-          border: 0,
-          borderRadius: 8,
-          background: 'rgba(110, 138, 106, 0.16)',
-          color: 'var(--adaptiveBlue700, #4F6B4C)',
-          fontSize: 13,
-          fontWeight: 700,
-          cursor: 'pointer',
-        }}
-      >
-        바꾸기
-      </button>
+      {hasBookControls && (
+        <button
+          type="button"
+          onClick={onChange}
+          style={{
+            flex: 'none',
+            padding: '6px 12px',
+            border: 0,
+            borderRadius: 8,
+            background: 'rgba(110, 138, 106, 0.16)',
+            color: 'var(--adaptiveBlue700, #4F6B4C)',
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          바꾸기
+        </button>
+      )}
     </div>
   );
 }

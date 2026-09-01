@@ -54,6 +54,20 @@ class StudyApiControllerTest {
         return userRepository.findByLoginId(loginId).orElseThrow();
     }
 
+    /**
+     * <b>오늘 정오(KST)</b> — 「오늘 안이지만 경계에서 가장 먼 시각」이다.
+     *
+     * <p>당일 누적을 재는 테스트가 {@code now - 1시간} 같은 <b>상대 좌표</b>로 세션을 심으면
+     * KST 00:00~01:00에 그 시각이 어제로 넘어가 CI가 날짜에 따라 붉어진다. 정오는 어느 쪽 경계와도
+     * 12시간 떨어져 있어 그 창이 사라진다(경계 자체를 재는 것은 {@code todaySeconds_excludesYesterday}의 몫).
+     */
+    private Instant todayNoon() {
+        return LocalDate.ofInstant(clock.instant(), ZoneId.of(SEOUL))
+                .atTime(12, 0)
+                .atZone(ZoneId.of(SEOUL))
+                .toInstant();
+    }
+
     /** 완료된 공부 세션 한 건을 그 시각에 심는다(집계·격리 검증용). */
     private void completedStudy(User user, Instant startedAt, Duration length) {
         StudySession session = StudySession.start(user, startedAt);
@@ -121,7 +135,7 @@ class StudyApiControllerTest {
     @DisplayName("POST /api/study/stop: 종료하면 오늘 누적에 합산된다")
     void stop_accumulatesToday() throws Exception {
         User u = register("study-sum@a.com", "studysum");
-        completedStudy(u, clock.instant().minus(Duration.ofHours(1)), Duration.ofMinutes(25));
+        completedStudy(u, todayNoon(), Duration.ofMinutes(25));
 
         mockMvc.perform(post("/api/study/start").with(user("studysum")).with(csrf()))
                 .andExpect(status().isOk());
@@ -193,7 +207,7 @@ class StudyApiControllerTest {
     @DisplayName("GET /api/dashboard: study 블록을 동봉한다(미니앱이 초기 모드·누적을 여기서 받는다)")
     void dashboard_includesStudyBlock() throws Exception {
         User u = register("study-dash@a.com", "studydash");
-        completedStudy(u, clock.instant().minus(Duration.ofMinutes(30)), Duration.ofMinutes(10));
+        completedStudy(u, todayNoon(), Duration.ofMinutes(10));
 
         mockMvc.perform(get("/api/dashboard").with(user("studydash")))
                 .andExpect(status().isOk())

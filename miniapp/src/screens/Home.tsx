@@ -1457,7 +1457,9 @@ export function Home({
         )}
       </div>
 
-      <FirstSessionBanner show={celebrate} />
+      {/* 축하는 <b>독서</b> 기록에 대한 말이다(「기록 탭에 첫 칸이 생겼어요」 — 공부는 그 탭에 안 남는다).
+          `celebrate`는 `MainTabs`가 들어 탭 전환에 살아남으므로, 켜진 채 토글만 넘기면 공부 화면에 떴다. */}
+      {mode === 'reading' && <FirstSessionBanner show={celebrate} />}
 
       {/* 알림 동의 — 발송은 동의한 유저에게만 가능하고, 동의를 받는 주체는 미니앱이다(콘솔 심사 조건). */}
       {shouldShowNotificationCard(agreement, agreementSupported) && (

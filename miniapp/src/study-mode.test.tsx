@@ -6,11 +6,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   MODE_KEY,
   STUDY_CLASS,
+  StartToast,
   effectiveMode,
   lampOn,
   readMode,
   startToastMessage,
   timerActionView,
+  toastHasBookControls,
 } from './App';
 import type { DashboardResponse, StudyState } from './api';
 import { IDLE_STUDY } from './api';
@@ -117,6 +119,50 @@ describe('시작 토스트 — 공부엔 책이 없다', () => {
   it('독서 문구는 그대로다(회귀 가드)', () => {
     expect(startToastMessage({ book: null, changed: false })).toBe('책 없이 측정을 시작했어요');
   });
+
+  /**
+   * 표지 자리와 [바꾸기]는 <b>책이 있는 측정</b>의 장치다. 공부 토스트에 남겨 두면 [바꾸기]가
+   * <b>죽은 컨트롤</b>이 된다 — 누르면 교체 시트가 열리고, 진행 중 독서 세션이 없어 서버가 409
+   * 「진행 중인 측정이 없습니다」로 끝낸다(사용자에겐 이유 없는 에러다).
+   */
+  it('공부 토스트엔 표지·[바꾸기]가 없다', () => {
+    expect(toastHasBookControls({ book: null, changed: false, mode: 'study' })).toBe(false);
+  });
+
+  it('독서 토스트엔 그대로 있다 — 「무슨 책인가」를 말하고 그 자리에서 바꾸는 것이 이 장치의 존재 이유다', () => {
+    expect(toastHasBookControls({ book: null, changed: false })).toBe(true);
+    expect(toastHasBookControls({ book: { id: 1, title: '데미안', coverUrl: null, author: null }, changed: true })).toBe(true);
+  });
+
+  it('그 판단이 렌더까지 닿는다 — 공부 토스트 마크업에 [바꾸기]도 표지 자리도 없다', () => {
+    const study = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <StartToast toast={{ book: null, changed: false, mode: 'study' }} onChange={() => {}} />
+      </TDSMobileProvider>,
+    );
+    const reading = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <StartToast toast={{ book: null, changed: false }} onChange={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+    expect(study).toContain('공부 측정을 시작했어요');
+    expect(study).not.toContain('바꾸기');
+    expect(study).not.toContain('dashed'); // 책 없음 점선 표지 자리
+    // 독서 토스트는 불변 — 위 단언들이 「그냥 다 사라졌다」로 통과하지 않게 반대편을 함께 잰다.
+    expect(reading).toContain('바꾸기');
+    expect(reading).toContain('dashed');
+  });
+
+  it('공부 토스트에 세이지 리터럴이 남지 않는다 — [바꾸기] 배경이 공부 모드의 마지막 누출이었다', () => {
+    const study = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <StartToast toast={{ book: null, changed: false, mode: 'study' }} onChange={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+    expect(study).not.toContain('110, 138, 106');
+  });
 });
 
 describe('히어로 오버라인', () => {
@@ -210,7 +256,12 @@ function dashboard(overrides: Partial<DashboardResponse> = {}, study: StudyState
   };
 }
 
-function renderHome(mode: 'reading' | 'study', overrides: Partial<DashboardResponse> = {}, study = IDLE_STUDY) {
+function renderHome(
+  mode: 'reading' | 'study',
+  overrides: Partial<DashboardResponse> = {},
+  study = IDLE_STUDY,
+  celebrate = false,
+) {
   return renderToStaticMarkup(
     <TDSMobileProvider userAgent={userAgent}>
       <Home
@@ -222,7 +273,7 @@ function renderHome(mode: 'reading' | 'study', overrides: Partial<DashboardRespo
         selectedBookId={undefined}
         onSelectBook={() => {}}
         onTimerChange={() => {}}
-        celebrate={false}
+        celebrate={celebrate}
         onGoGoal={() => {}}
         goalAdPending={false}
         onGoSettings={() => {}}
@@ -265,6 +316,14 @@ describe('홈 — 공부 모드 렌더', () => {
     expect(markup).toContain(ACTIVE_STUDY_RELIEF);
   });
 
+  /**
+   * 축하 배너는 <b>독서</b> 기록에 대한 말이다("기록 탭에 첫 칸이 생겼어요" — 공부는 그 탭에 안 남는다).
+   * `celebrate`는 `MainTabs`가 들고 탭 전환에 살아남으므로, 켜진 채로 토글만 넘기면 공부 화면에 뜬다.
+   */
+  it('첫 독서 기록 축하 배너가 안 뜬다 — 공부는 잔디 밖이라 그 말이 거짓말이 된다', () => {
+    expect(renderHome('study', {}, IDLE_STUDY, true)).not.toContain('첫 독서 기록이 심어졌어요');
+  });
+
   it('홈 피드·계정 헤더는 그대로다 — 모드는 타이머의 모드지 화면의 모드가 아니다', () => {
     expect(renderHome('study')).toContain('공부하는사람');
   });
@@ -276,6 +335,10 @@ describe('홈 — 독서 모드 회귀 가드', () => {
     expect(markup).toContain('오늘 읽은 시간');
     expect(markup).toContain('무엇으로 측정할까요?');
     expect(markup).toContain('하루 목표');
+  });
+
+  it('독서 모드에선 축하 배너가 그대로 뜬다 — 위 게이트가 배너를 통째로 죽이지 않았다', () => {
+    expect(renderHome('reading', {}, IDLE_STUDY, true)).toContain('첫 독서 기록이 심어졌어요');
   });
 
   it('공부 문구가 새지 않는다', () => {
@@ -317,7 +380,11 @@ describe('모드 토글', () => {
   it('측정 중이면 잠긴다 — 진짜 disabled가 아니라 aria-disabled라야 이유를 말할 기회가 남는다', () => {
     const locked = toggle('reading', true);
     expect(locked).toContain('aria-disabled="true"');
-    expect(locked).not.toContain('<button type="button" disabled');
+    // ⚠️ 「`<button type="button" disabled`이 없다」로 재던 줄을 걷었다 — React는 `disabled`를 그 위치에
+    //    직렬화하지 않아 **어떤 구현에서도 통과하는** 공허한 단언이었다(T-149 계열). 대신 속성 자체의
+    //    부재를 재고, 잠기지 않은 렌더와 대조해 이 단언이 실제로 갈리는지 함께 못 박는다.
+    expect(locked).not.toMatch(/\sdisabled(=|\s|>)/);
+    expect(toggle('reading')).not.toContain('aria-disabled');
   });
 
   it('히트영역은 44px 컨테이너가 든다 — 알약은 작아도 손가락은 닿아야 한다', () => {
