@@ -54,6 +54,14 @@ public class DashboardModel {
             long remainingSeconds,
             long carriedDebtSeconds,
             long todayGoalSeconds,
+            /**
+             * 오늘 실제로 읽은 초(완료 세션 합, 상한 없음) — 화면의 「오늘 읽은 시간」 카운트업 시작값.
+             *
+             * <p>{@code remainingSeconds}에서 역산하지 <b>않는</b> 이유는 {@link WeeklyDebt#todayReadSeconds()}에
+             * 적혀 있다: 부채는 0에서 바닥을 쳐 목표 초과분이 남지 않는다. 진행 중인 세션 몫은 빠져 있으므로
+             * 클라이언트가 {@code activeStartedAt} 기준 경과를 얹는다(공부 모드 {@code todaySeconds}와 같은 분업).
+             */
+            long todayReadSeconds,
             boolean carryover,
             boolean hasActiveSession,
             Instant activeStartedAt,
@@ -107,6 +115,7 @@ public class DashboardModel {
                 headlineSeconds,
                 carriedDebtSeconds,
                 debt.todayGoalSeconds(),
+                debt.todayReadSeconds(),
                 carryover,
                 activeSession.isPresent(),
                 activeSession.map(ReadingSession::getStartedAt).orElse(null),

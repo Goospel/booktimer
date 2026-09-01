@@ -19,7 +19,7 @@ import {
 describe('computeProgress', () => {
     // 기본 케이스 (carryover=false, floor=0)
     it('read=0 → pct=0, 미달성', () => {
-        const r = computeProgress(3600, 0, 3600, false)
+        const r = computeProgress(3600, 0, 3600, false, 0)
         expect(r.pct).toBe(0)
         expect(r.pctStr).toBe('0%')
         expect(r.isAchieved).toBe(false)
@@ -27,26 +27,26 @@ describe('computeProgress', () => {
     })
 
     it('read=goal → pct=100, 달성', () => {
-        const r = computeProgress(0, 0, 3600, false)
+        const r = computeProgress(0, 0, 3600, false, 3600)
         expect(r.pct).toBe(100)
         expect(r.isAchieved).toBe(true)
     })
 
     it('read>goal → pct=100 clamp, 달성', () => {
-        // remainingNow가 이미 floor에서 멈춰 0이므로 read=goal
-        const r = computeProgress(0, 0, 3600, false)
+        // 부채는 0에서 바닥을 쳤지만 읽은 초는 5400 — 이제 초과를 실제로 표현할 수 있다.
+        const r = computeProgress(0, 0, 3600, false, 5400)
         expect(r.pct).toBe(100)
         expect(r.isAchieved).toBe(true)
     })
 
     it('goal=0 → 분모 0 가드: pct=100, 달성', () => {
-        const r = computeProgress(0, 0, 0, false)
+        const r = computeProgress(0, 0, 0, false, 0)
         expect(r.pct).toBe(100)
         expect(r.isAchieved).toBe(true)
     })
 
     it('중간 값: remainingNow=1800, goal=3600 → pct=50', () => {
-        const r = computeProgress(1800, 0, 3600, false)
+        const r = computeProgress(1800, 0, 3600, false, 1800)
         expect(r.pct).toBe(50)
         expect(r.isAchieved).toBe(false)
     })
@@ -54,7 +54,7 @@ describe('computeProgress', () => {
     // carryover ON + floor > 0 (오늘 달성 케이스)
     it('carryover ON: remainingNow=floor → todayDebtLive=0, pct=100, 달성', () => {
         // 밀린 빚 1800, 오늘 목표 3600, 오늘 다 읽어 remainingNow = floor = 1800
-        const r = computeProgress(1800, 1800, 3600, true)
+        const r = computeProgress(1800, 1800, 3600, true, 3600)
         expect(r.pct).toBe(100)
         expect(r.isAchieved).toBe(true)
     })
@@ -64,7 +64,7 @@ describe('computeProgress', () => {
     // 유지해야 한다 — todayDebtLive가 음수가 되어 todayRead > goal → pct 100 clamp.
     it('carryover ON: remainingNow < floor(과거 빚 갚는 중) → pct=100 clamp, 달성 유지', () => {
         // floor=1800(과거 빚), remainingNow=1700(빚 100초 갚음): todayDebtLive=-100, todayRead=goal+100
-        const r = computeProgress(1700, 1800, 3600, true)
+        const r = computeProgress(1700, 1800, 3600, true, 3700)
         expect(r.pct).toBe(100)
         expect(r.isAchieved).toBe(true)
     })
@@ -73,23 +73,23 @@ describe('computeProgress', () => {
         // goal=3600, floor=900(어제 빚), 오늘 1800 남음: remainingNow = max(floor, 900+1800-1800)?
         // 실제: remainingNow = 2700 (total remaining), floor=900
         // todayDebtLive = 2700 - 900 = 1800, todayRead = 3600 - 1800 = 1800, pct=50
-        const r = computeProgress(2700, 900, 3600, true)
+        const r = computeProgress(2700, 900, 3600, true, 1800)
         expect(r.pct).toBe(50)
         expect(r.isAchieved).toBe(false)
     })
 
     // carryover OFF → floor 무시
     it('carryover OFF: floor 값에 무관하게 remainingNow만 사용', () => {
-        const r1 = computeProgress(1800, 0, 3600, false)
-        const r2 = computeProgress(1800, 900, 3600, false)
+        const r1 = computeProgress(1800, 0, 3600, false, 1800)
+        const r2 = computeProgress(1800, 900, 3600, false, 1800)
         expect(r1.pct).toBe(r2.pct) // floor 다르지만 같은 결과
         expect(r1.pct).toBe(50)
     })
 
     // pct ∈ [0, 100] 항상
     it('pct는 항상 0~100 범위 (음수 todayRead)', () => {
-        // remainingNow > goal → todayRead 음수 → pct=0으로 clamp
-        const r = computeProgress(5000, 0, 3600, false)
+        // 스냅샷이 어긋나 남은 시간이 목표보다 커도 todayRead는 서버가 준 값이라 음수가 될 자리가 없다.
+        const r = computeProgress(5000, 0, 3600, false, 0)
         expect(r.pct).toBeGreaterThanOrEqual(0)
         expect(r.pct).toBeLessThanOrEqual(100)
     })
@@ -97,9 +97,9 @@ describe('computeProgress', () => {
     // ★ 라이브성: remainingNow가 줄면 pct가 증가
     it('★ 라이브성: remainingNow 감소 → pct 증가 (서버 정적값 아님)', () => {
         const goal = 3600
-        const r1 = computeProgress(3600, 0, goal, false) // 0% 읽음
-        const r2 = computeProgress(1800, 0, goal, false) // 50% 읽음
-        const r3 = computeProgress(0, 0, goal, false)    // 100% 읽음
+        const r1 = computeProgress(3600, 0, goal, false, 0) // 0% 읽음
+        const r2 = computeProgress(1800, 0, goal, false, 1800) // 50% 읽음
+        const r3 = computeProgress(0, 0, goal, false, 3600)    // 100% 읽음
         expect(r1.pct).toBeLessThan(r2.pct)
         expect(r2.pct).toBeLessThan(r3.pct)
     })
@@ -112,51 +112,61 @@ describe('computeProgress', () => {
 
 describe('computeProgress — 히어로 카운트업(todayRead)·목표까지(remainingToGoal)', () => {
     it('read=0 → todayRead=0, remainingToGoal=goal(목표 전부 남음)', () => {
-        const r = computeProgress(3600, 0, 3600, false)
+        const r = computeProgress(3600, 0, 3600, false, 0)
         expect(r.todayRead).toBe(0)
         expect(r.remainingToGoal).toBe(3600)
     })
 
     it('절반 읽음(remainingNow=1800) → todayRead=1800, remainingToGoal=1800', () => {
-        const r = computeProgress(1800, 0, 3600, false)
+        const r = computeProgress(1800, 0, 3600, false, 1800)
         expect(r.todayRead).toBe(1800)
         expect(r.remainingToGoal).toBe(1800)
     })
 
     it('정확히 달성(remainingNow=0) → todayRead=goal, remainingToGoal=0', () => {
-        const r = computeProgress(0, 0, 3600, false)
+        const r = computeProgress(0, 0, 3600, false, 3600)
         expect(r.todayRead).toBe(3600)
         expect(r.remainingToGoal).toBe(0)
     })
 
     // ★ 카운트업: 측정으로 remainingNow가 줄면 todayRead가 라이브로 증가
     it('★ remainingNow 감소 → todayRead 증가(카운트업)', () => {
-        const a = computeProgress(3600, 0, 3600, false) // 0 읽음
-        const b = computeProgress(3000, 0, 3600, false) // 600 읽음
-        const c = computeProgress(1200, 0, 3600, false) // 2400 읽음
+        const a = computeProgress(3600, 0, 3600, false, 0) // 0 읽음
+        const b = computeProgress(3000, 0, 3600, false, 600) // 600 읽음
+        const c = computeProgress(1200, 0, 3600, false, 2400) // 2400 읽음
         expect(a.todayRead).toBeLessThan(b.todayRead)
         expect(b.todayRead).toBeLessThan(c.todayRead)
         expect(b.todayRead).toBe(600)
         expect(c.todayRead).toBe(2400)
     })
 
+    // ★ 목표를 넘겨 읽고 중지하면 서버 부채는 0에서 바닥을 친다. 그 값에서 역산하면 표시값이 목표에서
+    // 천장을 쳐 초과분이 사라진다(실사용자 제보). 그래서 todayRead는 서버가 준 원시 초를 그대로 받는다.
+    it('★ 목표 초과 후 중지 — 부채가 0이어도 todayRead는 잘리지 않는다', () => {
+        const r = computeProgress(0, 0, 3600, false, 5400) // 90분 읽고 중지한 직후
+        expect(r.todayRead).toBe(5400)
+        expect(r.remainingToGoal).toBe(0)
+        expect(r.isAchieved).toBe(true)
+        expect(r.pct).toBe(100) // 게이지는 100에서 멈춘다
+    })
+
     it('carryover ON: 오늘분만 카운트업(과거 빚 floor 제외)', () => {
         // remainingNow=2700(전체), floor=900(과거 빚), goal=3600 → todayRead=1800
-        const r = computeProgress(2700, 900, 3600, true)
+        const r = computeProgress(2700, 900, 3600, true, 1800)
         expect(r.todayRead).toBe(1800)
         expect(r.remainingToGoal).toBe(1800)
     })
 
     it('carryover ON: 과거 빚 갚는 중(remainingNow<floor) → 달성 유지, remainingToGoal=0, todayRead>goal', () => {
         // remainingNow=1700, floor=1800 → todayDebtLive=-100, todayRead=3700(초과분 반영)
-        const r = computeProgress(1700, 1800, 3600, true)
+        const r = computeProgress(1700, 1800, 3600, true, 3700)
         expect(r.isAchieved).toBe(true)
         expect(r.remainingToGoal).toBe(0)
         expect(r.todayRead).toBe(3700)
     })
 
     it('goal=0 가드 → todayRead=0, remainingToGoal=0', () => {
-        const r = computeProgress(0, 0, 0, false)
+        const r = computeProgress(0, 0, 0, false, 0)
         expect(r.todayRead).toBe(0)
         expect(r.remainingToGoal).toBe(0)
     })

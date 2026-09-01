@@ -93,6 +93,7 @@ const dashboard = (): DashboardResponse => ({
   remainingSeconds: 900,
   carriedDebtSeconds: 1_800,
   todayGoalSeconds: 3_600,
+  todayReadSeconds: 2_700,
   carryover: false,
   hasActiveSession: false,
   activeStartedAt: null,

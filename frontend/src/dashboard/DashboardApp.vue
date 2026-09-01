@@ -28,6 +28,7 @@ const stopping = ref(false)
 const remainingSeconds = ref(0)
 const carriedDebtSeconds = ref(0)
 const todayGoalSeconds = ref(0)
+const todayReadSeconds = ref(0)
 const carryover = ref(true)
 const hasActiveSession = ref(false)
 const activeStartedAt = ref<string | null>(null)
@@ -47,6 +48,7 @@ function applyTimerState(s: TimerState) {
     remainingSeconds.value = s.remainingSeconds
     carriedDebtSeconds.value = s.carriedDebtSeconds
     todayGoalSeconds.value = s.todayGoalSeconds
+    todayReadSeconds.value = s.todayReadSeconds
     carryover.value = s.carryover
     hasActiveSession.value = s.hasActiveSession
     activeStartedAt.value = s.activeStartedAt
@@ -188,6 +190,7 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
             :remaining-seconds="remainingSeconds"
             :carried-debt-seconds="carriedDebtSeconds"
             :today-goal-seconds="todayGoalSeconds"
+            :today-read-seconds="todayReadSeconds"
             :carryover="carryover"
             :streak="data.graph.currentStreak"
             :has-active-session="hasActiveSession"

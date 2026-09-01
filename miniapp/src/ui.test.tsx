@@ -229,6 +229,7 @@ function home(overrides: Partial<DashboardResponse>) {
     remainingSeconds: 900,
     carriedDebtSeconds: 0,
     todayGoalSeconds: 3600,
+    todayReadSeconds: 2700, // 목표 3600 중 남은 900 → 45분 읽은 상태
     carryover: false,
     hasActiveSession: false,
     activeStartedAt: null,
@@ -273,7 +274,7 @@ describe('홈 오늘 진행률', () => {
   });
 
   it('목표를 초과해도 게이지는 가득 찬 채로 멈춘다 — TDS는 100%를 안 잘라 준다(실측: 116%가 그대로 샌다)', () => {
-    const markup = home({ todayGoalSeconds: 3600, remainingSeconds: -600 });
+    const markup = home({ todayGoalSeconds: 3600, remainingSeconds: 0, todayReadSeconds: 4200 });
 
     expect(markup).toContain('오늘 목표 달성');
     expect(markup).toContain('aria-valuetext="100%"');

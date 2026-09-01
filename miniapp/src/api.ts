@@ -214,6 +214,15 @@ export interface TimerState {
   remainingSeconds: number;
   carriedDebtSeconds: number;
   todayGoalSeconds: number;
+  /**
+   * 오늘 읽은 초 — <b>완료 세션 합</b>이고 상한이 없다. 측정 중 몫은 화면이 `activeStartedAt`으로 매초
+   * 더한다(공부 모드 `todaySeconds`와 같은 분업).
+   *
+   * <p>`remainingSeconds`에서 역산하지 <b>않는다</b>: 서버 부채는 `max(0, 목표 − 읽은 양)`이라 0에서
+   * 바닥을 쳐, 역산한 표시값이 목표에서 천장을 친다. 그래서 목표를 넘겨 읽다가 중지하면 화면이 정확히
+   * 목표값으로 되돌아갔다(초과분은 과거 날 상환에 소비돼 응답에 흔적이 없어 역산이 불가능하다).
+   */
+  todayReadSeconds: number;
   carryover: boolean;
   hasActiveSession: boolean;
   activeStartedAt: string | null;

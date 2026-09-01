@@ -24,7 +24,7 @@ public record WeeklyDebtTrace(List<DayDebtTrace> days) {
                 missed.add(new DayDebt(d.date(), d.remainingSeconds()));
             }
         }
-        return new WeeklyDebt(today.remainingSeconds(), today.goalSeconds(), List.copyOf(missed));
+        return new WeeklyDebt(today.remainingSeconds(), today.goalSeconds(), today.readSeconds(), List.copyOf(missed));
     }
 
     /** 총 부채(초) = 오늘 부채 + 빠뜨린 날 합. */

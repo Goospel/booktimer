@@ -95,6 +95,7 @@ function dashboard(overrides: Partial<DashboardResponse> = {}): DashboardRespons
     remainingSeconds: 900,
     carriedDebtSeconds: 1800,
     todayGoalSeconds: 3600,
+    todayReadSeconds: 2700, // 목표 3600 중 남은 900 → 45분 읽은 상태(서버가 주는 두 값의 짝)
     carryover: false,
     hasActiveSession: false,
     activeStartedAt: null,
@@ -236,11 +237,13 @@ describe('홈에서 빠진 기록 흔적', () => {
  * (`frontend/src/dashboard/timerProgress.ts`의 `computeProgress`). 대형 숫자는 "오늘 남은 시간"이
  * 아니라 **오늘 읽은 시간**이고, 남은 시간은 보조 메타로 강등된다.
  *
- * <p>서버는 스냅샷만 주므로 측정 중 라이브 값은 `remainingSeconds - elapsed`로 만든다 —
- * 그래서 별도 tick 없이 기존 elapsed 인터벌만으로 읽은 시간이 매초 늘어난다.
+ * <p>대형 숫자는 **서버가 준 `todayReadSeconds`(완료 세션 합) + 경과**다. 한때 부채에서 역산했지만
+ * (`목표 − 남은`) 서버 부채가 0에서 바닥을 치는 탓에 표시값이 목표에서 천장을 쳐, 목표를 넘겨 읽고
+ * 중지하는 순간 초과분이 사라졌다(실사용자 제보). 남은 시간·게이지는 그대로 부채 스냅샷에서 만든다.
  */
 describe('오늘 읽은 시간 (todayProgress)', () => {
-  const timer = { remainingSeconds: 3600, carriedDebtSeconds: 0, todayGoalSeconds: 3600, carryover: false };
+  // 서버가 주는 두 값은 짝이다 — 읽은 초 R, 남은 부채 max(0, 목표 − R). 픽스처도 그 짝을 지킨다.
+  const timer = { remainingSeconds: 3600, carriedDebtSeconds: 0, todayGoalSeconds: 3600, todayReadSeconds: 0, carryover: false };
 
   it('아직 0초 읽었으면 0 — 진행바도 0이고 목표까지는 목표 전부다', () => {
     expect(todayProgress(timer, 0)).toEqual({
@@ -253,7 +256,7 @@ describe('오늘 읽은 시간 (todayProgress)', () => {
   });
 
   it('1초 남았으면 아직 달성이 아니다 — 경계에서 축하가 먼저 뜨면 거짓말이 된다', () => {
-    const result = todayProgress({ ...timer, remainingSeconds: 1 }, 0);
+    const result = todayProgress({ ...timer, remainingSeconds: 1, todayReadSeconds: 3599 }, 0);
 
     expect(result.todayRead).toBe(3599);
     expect(result.remaining).toBe(1);
@@ -261,7 +264,7 @@ describe('오늘 읽은 시간 (todayProgress)', () => {
   });
 
   it('딱 0이 되는 순간 달성 — 초과분은 아직 0이다', () => {
-    expect(todayProgress({ ...timer, remainingSeconds: 0 }, 0)).toEqual({
+    expect(todayProgress({ ...timer, remainingSeconds: 0, todayReadSeconds: 3600 }, 0)).toEqual({
       todayRead: 3600,
       remaining: 0,
       overflow: 0,
@@ -271,7 +274,8 @@ describe('오늘 읽은 시간 (todayProgress)', () => {
   });
 
   it('목표를 넘겨도 계속 센다 — 초과분이 따로 잡히고 진행바는 1에서 멈춘다', () => {
-    expect(todayProgress({ ...timer, remainingSeconds: -600 }, 0)).toEqual({
+    // 부채는 이미 0에서 바닥을 쳤다(remainingSeconds: 0) — 그래도 읽은 초 4200이 그대로 보여야 한다.
+    expect(todayProgress({ ...timer, remainingSeconds: 0, todayReadSeconds: 4200 }, 0)).toEqual({
       todayRead: 4200,
       remaining: 0,
       overflow: 600,
@@ -280,25 +284,37 @@ describe('오늘 읽은 시간 (todayProgress)', () => {
     });
   });
 
-  it('측정 중이면 경과한 만큼 더 읽은 것으로 센다 — 매초 tick이 그대로 카운트업이 된다', () => {
-    const before = todayProgress({ ...timer, remainingSeconds: 900 }, 300);
-    const oneSecondLater = todayProgress({ ...timer, remainingSeconds: 900 }, 301);
+  it('★ 중지해도 초과분이 사라지지 않는다 — 측정 중 값과 중지 후 값이 같다', () => {
+    // 90분 읽는 중: 서버 스냅샷은 완료 60분, 나머지 30분은 클라가 경과로 얹는다.
+    const measuring = todayProgress({ ...timer, remainingSeconds: 0, todayReadSeconds: 3600 }, 1800);
+    // 중지 직후: 서버가 완료 90분 · 부채 0으로 다시 준다. 옛 역산에선 여기서 정확히 목표(3600)로 되돌아갔다.
+    const stopped = todayProgress({ ...timer, remainingSeconds: 0, todayReadSeconds: 5400 }, 0);
 
-    expect(before.todayRead).toBe(3000); // 목표 3600 − (남은 900 − 경과 300)
+    expect(measuring.todayRead).toBe(5400);
+    expect(stopped.todayRead).toBe(5400);
+    expect(stopped.overflow).toBe(1800); // 「+30분 더 읽었어요」 배너도 같은 뿌리로 죽어 있었다
+  });
+
+  it('측정 중이면 경과한 만큼 더 읽은 것으로 센다 — 매초 tick이 그대로 카운트업이 된다', () => {
+    const measuring = { ...timer, remainingSeconds: 900, todayReadSeconds: 2700 };
+    const before = todayProgress(measuring, 300);
+    const oneSecondLater = todayProgress(measuring, 301);
+
+    expect(before.todayRead).toBe(3000); // 완료 2700 + 경과 300
     expect(oneSecondLater.todayRead).toBe(3001);
     expect(before.remaining).toBe(600);
   });
 
   it('이월 모드면 밀린 시간은 오늘 몫에서 뺀다 — 어제 빚이 오늘 성취를 갉아먹지 않는다', () => {
-    const carried = { remainingSeconds: 5400, carriedDebtSeconds: 1800, todayGoalSeconds: 3600, carryover: true };
+    const carried = { remainingSeconds: 5400, carriedDebtSeconds: 1800, todayGoalSeconds: 3600, todayReadSeconds: 0, carryover: true };
 
-    expect(todayProgress(carried, 0).todayRead).toBe(0); // 남은 5400 − 밀린 1800 = 오늘 몫 3600
-    expect(todayProgress({ ...carried, remainingSeconds: 4200 }, 0).todayRead).toBe(1200);
+    expect(todayProgress(carried, 0).todayRead).toBe(0); // 남은 5400 = 오늘 몫 3600 + 밀린 1800
+    expect(todayProgress({ ...carried, remainingSeconds: 4200, todayReadSeconds: 1200 }, 0).todayRead).toBe(1200);
   });
 
   it('이월 모드면 게이지 최대치가 목표 + 밀린 시간이다 — 오늘 실제로 채워야 할 양이 그거다', () => {
     // 목표 30분 + 밀린 10분 = 40분 중 25분 읽음.
-    const carried = { remainingSeconds: 900, carriedDebtSeconds: 600, todayGoalSeconds: 1800, carryover: true };
+    const carried = { remainingSeconds: 900, carriedDebtSeconds: 600, todayGoalSeconds: 1800, todayReadSeconds: 1500, carryover: true };
     const result = todayProgress(carried, 0);
 
     expect(result.todayRead).toBe(1500);
@@ -307,7 +323,7 @@ describe('오늘 읽은 시간 (todayProgress)', () => {
   });
 
   it('이월이 꺼져 있으면 밀린 시간은 최대치에 안 들어간다 — 오늘 갚을 몫이 아니다', () => {
-    const result = todayProgress({ ...timer, carriedDebtSeconds: 1800, remainingSeconds: 900 }, 0);
+    const result = todayProgress({ ...timer, carriedDebtSeconds: 1800, remainingSeconds: 900, todayReadSeconds: 2700 }, 0);
 
     expect(result.remaining).toBe(900);
     expect(result.progress).toBe(2700 / 3600); // 분모는 목표 3600 그대로
@@ -316,7 +332,7 @@ describe('오늘 읽은 시간 (todayProgress)', () => {
   it('목표를 채웠어도 밀린 시간이 남으면 게이지는 안 찬다 — 달성 축하는 그대로 뜬다(결정 a)', () => {
     // 목표 30분은 다 채웠고(오늘 몫 0) 밀린 10분만 남은 상태.
     const result = todayProgress(
-      { remainingSeconds: 600, carriedDebtSeconds: 600, todayGoalSeconds: 1800, carryover: true },
+      { remainingSeconds: 600, carriedDebtSeconds: 600, todayGoalSeconds: 1800, todayReadSeconds: 1800, carryover: true },
       0,
     );
 
@@ -325,8 +341,9 @@ describe('오늘 읽은 시간 (todayProgress)', () => {
     expect(result.progress).toBe(1800 / 2400);
   });
 
-  it('읽은 시간은 음수로 내려가지 않는다 — 서버 스냅샷이 어긋나도 "-30분"이 뜨지 않는다', () => {
-    expect(todayProgress({ ...timer, remainingSeconds: 7200 }, 0).todayRead).toBe(0);
+  it('표시값은 부채 스냅샷이 아니라 서버가 준 읽은 초를 따른다 — 남은 시간이 목표보다 커도 음수가 안 뜬다', () => {
+    // 옛 역산(목표 − 남은)이면 −3600이라 바닥 클램프가 필요했다. 이제 출처가 갈려 그 자리 자체가 없다.
+    expect(todayProgress({ ...timer, remainingSeconds: 7200, todayReadSeconds: 0 }, 0).todayRead).toBe(0);
   });
 
   it('목표 미설정(0)이면 진행바가 없다 — 나눌 게 없고 달성이라 우길 수도 없다', () => {
@@ -365,7 +382,8 @@ describe('히어로 프레이밍 (렌더)', () => {
 
   it('달성하면 축하와 초과분을 보여준다 — 목표를 넘겨도 계속 센다', () => {
     // 알림 동의 카드 문구에도 "목표 달성"이 들어 있어 그것만으로는 판별이 안 된다 — 히어로 문구로 좁힌다.
-    const markup = renderHome({ remainingSeconds: -600, todayGoalSeconds: 3600 });
+    // 70분 읽어 부채는 이미 0에서 바닥을 친 상태 — 초과 10분은 부채가 아니라 todayReadSeconds가 말한다.
+    const markup = renderHome({ remainingSeconds: 0, todayReadSeconds: 4200, todayGoalSeconds: 3600 });
 
     expect(markup).toContain('오늘 목표 달성');
     expect(markup).toContain('+10분 더 읽었어요');
@@ -377,7 +395,7 @@ describe('히어로 프레이밍 (렌더)', () => {
    * 통계 행이 목표 유무로만 갈리면 그 구멍이 닫힌다.
    */
   it('정확히 달성해도 통계 행은 남는다 — 목표로 가는 문이 달성과 함께 사라지면 안 된다', () => {
-    const markup = renderHome({ remainingSeconds: 0, todayGoalSeconds: 3600 });
+    const markup = renderHome({ remainingSeconds: 0, todayReadSeconds: 3600, todayGoalSeconds: 3600 });
 
     expect(markup).toContain('오늘 목표 달성');
     expect(markup).not.toContain('더 읽었어요');
@@ -406,7 +424,7 @@ describe('새싹 표식 (SproutMark)', () => {
   const SPROUT = 'data-sprout';
 
   it('달성 머리말이 이모지 대신 새싹 SVG를 앞세운다', () => {
-    const markup = renderHome({ remainingSeconds: 0, todayGoalSeconds: 3600 });
+    const markup = renderHome({ remainingSeconds: 0, todayReadSeconds: 3600, todayGoalSeconds: 3600 });
 
     expect(markup).toContain('오늘 목표 달성');
     expect(markup).toContain(SPROUT);

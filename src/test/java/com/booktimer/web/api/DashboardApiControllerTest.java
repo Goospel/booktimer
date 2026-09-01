@@ -135,6 +135,60 @@ class DashboardApiControllerTest {
                 .andExpect(jsonPath("$.carriedDebtSeconds").value(0));
     }
 
+    // ── 4b. 목표 초과분 보존 — todayReadSeconds ───────────────────────────────
+    // 「오늘 읽은 시간」을 부채에서 역산하면(목표 − 부채) 부채가 0에서 바닥을 치는 탓에 표시값이 목표에서
+    // 천장을 친다 — 목표를 넘겨 읽고 측정을 멈추는 순간 초과분이 사라진 것처럼 보인 실사용자 제보의 뿌리다.
+    // 그래서 원시 초를 따로 싣는다. 부채가 0인데 읽은 초는 5400 — 이 둘이 갈라지는 것이 이 필드의 존재 이유.
+
+    /** 오늘(유저 TZ) 안에 확정 완료 세션 한 건을 심는다 — 실행 시각과 무관하게 날짜가 흔들리지 않도록 자정 기준 오프셋으로. */
+    private void seedTodayReading(User u, Book book, long seconds) {
+        Instant dayStart = today().atStartOfDay(ZoneId.of(SEOUL)).toInstant();
+        sessionService.recordManual(u, dayStart.plusSeconds(3600), dayStart.plusSeconds(3600 + seconds), book);
+    }
+
+    /**
+     * 이월 표시를 꺼 헤드라인({@code remainingSeconds})을 <b>오늘 부채만</b>으로 좁힌다.
+     *
+     * <p>갓 가입한 사용자는 목표 이력이 없어 부채 창이 7일 폴백으로 열린다 — 켜 두면 헤드라인에 빈 과거
+     * 6일치가 섞여 "오늘 부채가 0으로 잘렸다"는 이 테스트의 관심사가 가려진다.
+     */
+    private void disableCarryover(User u) {
+        timerRepository.findByUser(u).ifPresent(t -> {
+            t.updateSettings(t.getDailyIncrementSeconds(), false);
+            timerRepository.save(t);
+        });
+    }
+
+    @Test
+    @DisplayName("GET /api/dashboard: 목표(1시간) 초과해 90분 읽음 → 부채는 0으로 잘려도 todayReadSeconds는 5400")
+    void dashboard_readOverGoal_keepsRawTodayReadSeconds() throws Exception {
+        User u = register("over@a.com", "overread");
+        disableCarryover(u);
+        seedTodayReading(u, addBook(u, "초과한 책", BookStatus.READING), 5400L);
+
+        mockMvc.perform(get("/api/dashboard").with(user("over@a.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.todayGoalSeconds").value(3600))
+                .andExpect(jsonPath("$.remainingSeconds").value(0))     // 부채는 바닥을 친다(역산 불가의 원인)
+                .andExpect(jsonPath("$.todayReadSeconds").value(5400)); // 읽은 양은 원시값 그대로
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/stop: 종료 응답의 todayReadSeconds도 목표에서 잘리지 않는다 — 중지 순간 초과분이 사라지던 자리")
+    void stopSession_timerKeepsRawTodayReadSeconds() throws Exception {
+        User u = register("overstop@a.com", "overstop");
+        disableCarryover(u);
+        Book book = addBook(u, "초과한 책", BookStatus.READING);
+        seedTodayReading(u, book, 5400L);
+        sessionService.start(u, clock.instant(), book);
+
+        mockMvc.perform(post("/api/sessions/stop")
+                        .with(user("overstop@a.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.timer.remainingSeconds").value(0))
+                .andExpect(jsonPath("$.timer.todayReadSeconds", greaterThanOrEqualTo(5400)));
+    }
+
     // ── 프로필 사진(도감 작가 얼굴) ───────────────────────────────────────────
 
     @Test

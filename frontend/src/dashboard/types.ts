@@ -47,6 +47,8 @@ export interface TimerState {
     remainingSeconds: number
     carriedDebtSeconds: number
     todayGoalSeconds: number
+    /** 오늘 읽은 초(완료 세션 합, 상한 없음) — 히어로 카운트업의 출처. 측정 중 몫은 클라가 얹는다. */
+    todayReadSeconds: number
     carryover: boolean
     hasActiveSession: boolean
     activeStartedAt: string | null
