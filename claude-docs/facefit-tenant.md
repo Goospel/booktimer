@@ -1,11 +1,22 @@
 # facefit 동거 — 이 EC2에는 BookTimer 말고 하나가 더 산다
 
-> **상태: 배선 중**(2026-09-01) — MySQL의 `facefit` 데이터베이스·전용 사용자와 이 PR의 Caddy
-> 블록까지는 실물이고, **컨테이너는 아직 안 떠 있다**(facefit 레포의 배포 워크플로가 띄운다).
-> 그동안 `facefit-api.booktimer.app`은 502다 — 정상이다. 컨테이너가 뜨면 이 줄을
-> 「**가동 중** · YYYY-MM-DD」로 고친다.
+> **상태: 가동 중**(2026-09-01부터) — `facefit-api` 컨테이너가 떠 있고
+> `https://facefit-api.booktimer.app/health`가 200이다.
 > 단일 출처는 facefit 레포의 `docs/2026-08-30-server-design.md` — §2-5(AWS 실측) ·
 > §3-6(호스팅 결정) · **§3-6-1(분리 경로)**.
+
+**가동 첫날 실측(2026-09-01)** — 「얼마나 먹나」의 기준선이다. 지금 값이 이보다 한참 크면
+facefit 쪽에 무슨 일이 생긴 것이다:
+
+| 컨테이너 | `mem_limit` | 실사용 |
+|---|---|---|
+| `booktimer-app-*` | 700MB | 388MB |
+| `booktimer-mysql-1` | 600MB | 240MB |
+| `booktimer-caddy-1` | 128MB | 33MB |
+| **`facefit-api`** | **320MB** | **149MB** (상한의 46%) |
+
+호스트 `available` 754MB · swap 654MB(**facefit 투입 전후 변화 없음**) · 디스크 24GB 여유.
+blue-green 배포로 app이 2개 뜨는 순간까지 더해도 약 1,389MB / 1,913MB로 여유가 있다.
 
 ## 왜 이 문서가 있나
 
@@ -61,3 +72,26 @@ facefit까지 합치면 물리 메모리(1.9GB)를 **약 200MB 넘겨 swap으로
 facefit 설계 **§3-6-1**에 결합 목록·분리 신호·절차·사전 준비가 있다.
 **이 레포에서 할 일은 `deploy/caddy/Caddyfile`의 facefit 블록 삭제 하나**이고,
 나머지(컨테이너·DB·DNS)는 facefit 쪽에서 처리한다.
+
+## ⚠️ 곁다리로 고친 것 — 이 레포의 배포 역할 신뢰 정책
+
+facefit 배포를 붙이다 발견한 건데, **`githubActionsDeployRole`이 터질 뻔했다.**
+
+GitHub이 OIDC 토큰의 `sub` 클레임을 **숫자 ID가 박힌 형식**으로 전환하고 있다. 같은 계정인데
+레포마다 다르다 — 실측(2026-09-01):
+
+| 레포 | 실제 `sub` |
+|---|---|
+| booktimer | `repo:Goospel/booktimer:ref:refs/heads/main` (옛 형식) |
+| facefit | `repo:Goospel@80618017/facefit@1350348409:ref:refs/heads/main` (새 형식) |
+
+이 역할은 옛 형식만 신뢰하고 있어서, **GitHub이 booktimer도 새 형식으로 바꾸는 날 배포가
+통째로 멈출** 참이었다. 그래서 신뢰 정책의 `sub`를 배열로 바꿔 **두 형식을 다 허용**해 뒀다
+(기존 항목은 그대로 두고 덧붙이기만 했으므로 지금 도는 배포에는 영향이 없다).
+
+⚠️ **`GitHubActions-MoodiaryFrontend-S3Sync` 역할은 아직 옛 형식만 신뢰한다** — 같은 폭탄이다.
+
+증상이 특히 고약하다: 에러가 `Not authorized to perform sts:AssumeRoleWithWebIdentity`뿐이라
+**어느 조건이 안 맞았는지 전혀 안 알려준다**(열거 방지 설계). 다음에 이 에러를 보면 추측하지
+말고 **CloudTrail Event history에서 실패한 `AssumeRoleWithWebIdentity` 이벤트의
+`userIdentity.userName`을 읽는다** — 실제 `sub`가 거기 그대로 찍혀 있다.
