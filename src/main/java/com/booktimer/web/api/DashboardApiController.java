@@ -131,6 +131,9 @@ public class DashboardApiController {
     @PostMapping("/api/sessions/stop")
     public ResponseEntity<StopResponse> stop(Principal principal) {
         User user = currentUserService.resolve(principal);
+        // 첫 완료 축하 판정은 stop '전'에 한다 — 자정을 넘긴 독서는 종료 시 2행 이상으로 분할되므로
+        // 사후 count==1 방식이면 첫 기록이 축하를 영영 못 받는다. 사전 count==0은 조각 수와 무관하다.
+        boolean firstCompletedSession = sessionRepository.countByUserAndEndedAtIsNotNull(user) == 0;
         ReadingSession stopped;
         try {
             stopped = sessionService.stop(user, clock.instant());
@@ -144,9 +147,6 @@ public class DashboardApiController {
         // sessionId + untagged: 책 없이 시작한 세션(book==null)이면 종료 후 "무슨 책?" 태깅 시트를 띄운다(발견 1).
         // getBook()==null은 lazy 프록시를 초기화하지 않는 참조 비교라 트랜잭션 밖에서도 안전(null 연관=실제 null).
         boolean untagged = stopped.getBook() == null;
-        // 첫 완료 축하 — 방금 종료로 완료 세션 수가 '정확히 1'이 된 순간에만 참(2번째부터는 거짓).
-        // 소유자 스코프 count라 남의 기록은 섞이지 않고, 수동 기록이 선행돼 있으면 자연히 2 이상이 된다.
-        boolean firstCompletedSession = sessionRepository.countByUserAndEndedAtIsNotNull(user) == 1;
         return ResponseEntity.ok(new StopResponse(stopped.getId(), untagged, firstCompletedSession, timer, graph));
     }
 
@@ -270,9 +270,13 @@ public class DashboardApiController {
      * stop 응답 — 방금 종료된 세션의 id·미태깅 여부 + 타이머 + 잔디(측정 종료 즉시 잔디 갱신용).
      * {@code untagged}이면 클라이언트가 "무슨 책?" 태깅 시트를 띄우고 {@code sessionId}로 태깅 요청한다(발견 1).
      *
+     * @param sessionId             자정을 넘긴 독서는 종료 시 여러 행으로 분할되므로 <b>마지막 조각</b>의 id다.
+     *                              그 하나로 태깅하면 서비스가 인접한 앞 조각까지 함께 붙인다
+     *                              ({@code ReadingSessionService.tagBook})
      * @param firstCompletedSession 이번 종료가 이 사용자의 <b>첫 완료 기록</b>인지 — 미니앱이 축하 배너와
      *                              잔디 하이라이트를 띄우는 스위치다. 잔디는 1초만 읽어도 점등되는데
-     *                              미리보기가 폴드 아래라 첫 보상을 아무도 보지 못했다(운영 실측 2026-08-13)
+     *                              미리보기가 폴드 아래라 첫 보상을 아무도 보지 못했다(운영 실측 2026-08-13).
+     *                              판정은 stop <b>전</b> 완료 세션 수가 0인지로 한다 — 분할 조각 수와 무관해야 한다
      */
     public record StopResponse(Long sessionId, boolean untagged, boolean firstCompletedSession,
                                TimerState timer, ContributionGraphDto graph) {}

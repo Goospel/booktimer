@@ -106,7 +106,10 @@ class HistoryApiControllerTest {
         User u = registrationService.register("histser@booktimer.com", "rawpw1234", "직렬화", SEOUL, Role.USER, today());
         Book book = bookRepository.save(
                 Book.register(u, "직렬화책", null, null, null, null, null, BookStatus.READING));
-        Instant start = clock.instant();
+        // 「지금」에서 1시간을 재면 자정 직전에 돌 때 세션이 자정으로 분할돼(ReadingSessionService)
+        // 최신 일자가 내일이 된다 — 이 테스트가 보는 건 날짜 귀속이 아니라 직렬화 형태이므로
+        // 오늘 안에 확실히 들어가는 구간(00:00~01:00)으로 고정한다.
+        Instant start = today().atStartOfDay(ZoneId.of(SEOUL)).toInstant();
         sessionService.start(u, start, book);
         sessionService.stop(u, start.plusSeconds(3600));
 

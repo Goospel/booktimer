@@ -360,6 +360,38 @@ class DashboardApiControllerTest {
                 .andExpect(jsonPath("$.firstCompletedSession").value(false));
     }
 
+    /** 오늘 유저 TZ 자정 10분 전 — 여기서 시작해 지금 멈추면 반드시 자정을 넘어 분할된다. */
+    private Instant tenMinutesBeforeTodayMidnight() {
+        return today().atStartOfDay(ZoneId.of(SEOUL)).toInstant().minusSeconds(600);
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/stop: 첫 독서가 자정을 넘겨 2행이 돼도 firstCompletedSession=true (판정은 stop 전 count==0)")
+    void stop_firstEverCompletionAcrossMidnight_flagsTrue() throws Exception {
+        User u = register("firstmid@a.com", "firstmid");
+        sessionService.start(u, tenMinutesBeforeTodayMidnight(), null);
+
+        mockMvc.perform(post("/api/sessions/stop").with(user("firstmid@a.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.firstCompletedSession").value(true));
+
+        // 실제로 갈렸는지 확인 — 갈리지 않았다면 이 테스트는 옛 count==1 로직도 통과시켜 공허해진다.
+        assertThat(sessionRepository.countByUserAndEndedAtIsNotNull(u)).isEqualTo(2L);
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/stop: 자정을 넘긴 두 번째 종료는 false (조각 수와 무관)")
+    void stop_secondCompletionAcrossMidnight_flagsFalse() throws Exception {
+        User u = register("secondmid@a.com", "secondmid");
+        sessionService.start(u, clock.instant(), null);
+        sessionService.stop(u, clock.instant());
+        sessionService.start(u, tenMinutesBeforeTodayMidnight(), null);
+
+        mockMvc.perform(post("/api/sessions/stop").with(user("secondmid@a.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.firstCompletedSession").value(false));
+    }
+
     @Test
     @DisplayName("POST /api/sessions/stop: 남의 완료 세션은 내 count에 안 섞인다 — 남이 읽었다고 내 첫 기록이 사라지지 않는다")
     void stop_othersCompletionsDoNotCount() throws Exception {

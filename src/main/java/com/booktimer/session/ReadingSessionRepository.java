@@ -84,6 +84,18 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
     List<ReadingSession> findByEndedAtIsNullAndStartedAtBefore(Instant startedAt);
 
     /**
+     * <b>자정 분할 조각의 앞쪽 이웃</b> — 주어진 시각에 끝난, 그 사용자의 미태깅 실시간 세션.
+     *
+     * <p>조각 링크 컬럼은 없다. 분할은 앞 조각의 {@code endedAt}과 뒤 조각의 {@code startedAt}을
+     * <b>같은 Instant 값</b>으로 저장하므로 그 등치가 곧 링크다({@code ReadingSessionService.tagBook}이
+     * 뒤에서 앞으로 체인을 걷는다). {@code manualEntry=false} 조건은 방어다 — 수동 기록은 책이 필수라
+     * 애초에 미태깅이 없지만, 조건을 못 박아 두면 손으로 적은 기록이 실시간 조각 체인에 끼어들 수 없다.
+     *
+     * <p>같은 시각에 끝난 미태깅 실시간 세션이 둘일 수는 없다(단일 활성 세션 불변식) — 그래서 Optional이다.
+     */
+    Optional<ReadingSession> findByUserAndEndedAtAndBookIsNullAndManualEntryFalse(User user, Instant endedAt);
+
+    /**
      * id + 소유자(user)로 세션을 조회 — 종료 후 태깅의 IDOR-안전 경계.
      * 남의 세션 id를 넘겨도 소유자가 다르면 빈 결과라(→ 404 마스킹) 남의 측정에 책을 붙일 수 없다.
      */
@@ -99,8 +111,12 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
      * 한 사용자가 <b>주어진 구간에 시작해 이미 끝낸</b> 세션들의 측정 길이 합(초). 기록이 없으면 0(coalesce).
      *
      * <p>구간은 {@code [from, to)} — 유저 타임존 하루의 시작/끝 Instant를 호출부가 넘긴다. 판정 기준이
-     * {@code endedAt}이 아니라 <b>{@code startedAt}</b>인 것이 핵심이다: 세션은 시작일에 귀속되므로
-     * ({@link ReadingHistoryService}와 동일 규칙) 자정을 넘겨 끝난 독서도 시작한 날에 계상된다.
+     * {@code endedAt}이 아니라 <b>{@code startedAt}</b>인 것이 핵심이다: 세션은 시작일에 귀속된다
+     * ({@link ReadingHistoryService}와 동일 규칙).
+     *
+     * <p><b>신규 세션은 저장 시 자정으로 분할</b>되므로 한 행이 유저 TZ 하루 안에 있고, 시작일 귀속이
+     * 곧 정확한 귀속이다({@code ReadingSessionService.splitByMidnight}). 분할 도입 전에 저장된
+     * <b>레거시 행은 여전히 자정을 걸칠 수 있다</b> — 소급 재분할을 하지 않았기 때문이다.
      */
     @Query("""
             select coalesce(sum(s.durationSeconds), 0) from ReadingSession s
@@ -149,7 +165,9 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
      * 행 수가 그 사람의 독서량에 비례해 무제한이 된다.
      *
      * <p>기준이 {@code endedAt}이 아니라 <b>{@code startedAt}</b>인 것은 {@code sumCompletedSeconds}와
-     * 같은 규칙이다(세션은 시작일에 귀속된다). 공개 기록이 없는 사람은 <b>행이 아예 없어</b>
+     * 같은 규칙이다(세션은 시작일에 귀속된다). 자정을 넘긴 독서는 저장 시 분할되므로 마지막 조각의
+     * {@code startedAt}이 <b>자정(00:00)으로 표시될 수 있다</b> — 실제로 그때부터 읽은 것이라 참인 정보다.
+     * 공개 기록이 없는 사람은 <b>행이 아예 없어</b>
      * 호출부가 null로 채운다 — 그 null이 화면에서 「공개된 기록이 없어요」가 된다.
      *
      * <p>같은 시각에 시작한 세션이 둘이면 행도 둘 온다 — 호출부가 먼저 만난 하나를 쓴다(둘 다
