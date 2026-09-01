@@ -23,6 +23,7 @@ import type {
   SearchRow,
   SharedMarginEntry,
   SocialEvent,
+  StudyBookRow,
   StudyState,
   TimerState,
   UserRow,
@@ -207,6 +208,23 @@ const state = {
    * <p>지킴·못 지킴·무기록 셋이 처음부터 화면에 있어야 세 꼴을 한눈에 견줄 수 있다.
    */
   studyChecks: { [isoDate(2)]: true, [isoDate(4)]: false } as Record<string, boolean>,
+  /**
+   * 공부 서재 — 독서 책장(`books`)과 <b>다른 배열</b>이다. 서버가 테이블을 가른 것과 같은 격리를
+   * 목에서도 지켜야 「두 서재가 안 섞인다」를 브라우저로 확인할 수 있다.
+   *
+   * <p>회독 수를 0·1·3으로 섞어 둔다 — 칩 세 꼴(아직 안 돎 · 한 번 돎 · 여러 번 돎)이 한 화면에 있어야
+   * 견줄 수 있고, 「회독 -1」 행이 <b>0독에서만 사라지는 것</b>도 여기서만 눈에 보인다.
+   * 구매 링크도 있는 책·없는 책을 섞는다(조건부 구매 행이 목에서 사라지지 않게 — `shelfBook`과 같은 규율).
+   */
+  studyBooks: [
+    { id: 101, title: '정보처리기사 필기 기본서', author: '수험서편찬위', coverUrl: mockCover('정', '#B8C6D3'),
+      isbn13: '9791100000001', readCount: 3,
+      purchaseLink: 'https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=2001&ttbkey=mock&partner=openAPI&start=api' },
+    { id: 102, title: '토익 실전 1000제', author: '테스터', coverUrl: null, isbn13: '9791100000002',
+      readCount: 1, purchaseLink: null },
+    { id: 103, title: '한국사능력검정 심화', author: '테스터', coverUrl: mockCover('한', '#D3C4B8'),
+      isbn13: '9791100000003', readCount: 0, purchaseLink: null },
+  ] as StudyBookRow[],
   /** 이 세션에서 끝낸 측정 수 — 첫 종료(=1)에만 축하 배너가 뜬다. 새로고침하면 0으로 돌아가 다시 볼 수 있다. */
   completedSessions: 0,
   nextId: 500,
@@ -910,6 +928,42 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     return { date, kept };
   }],
 
+  // ── 공부 서재 ──
+  // 독서 책장(`books`)을 <b>한 줄도 안 건드린다</b> — 서버가 별도 테이블을 쓰는 것과 같은 격리를
+  // 목에서도 지켜야, 「두 서재가 안 섞인다」를 브라우저로 확인할 수 있다.
+  // 검색은 여기 없다: `/api/books/search`(알라딘 프록시)가 도메인 중립이라 공부 화면도 그대로 쓴다.
+  ['GET', /^\/api\/study\/books$/, () => ({ searchEnabled: true, books: state.studyBooks })],
+  ['POST', /^\/api\/study\/books$/, ({ body }) => {
+    // 같은 isbn은 기존 행을 그대로 준다(서버 멱등 계약) — 「추가」가 회독 수를 리셋하지 않는다.
+    const isbn13 = (body.isbn13 as string | null) ?? null;
+    const existing = isbn13 === null ? undefined : state.studyBooks.find((b) => b.isbn13 === isbn13);
+    if (existing !== undefined) return existing;
+    const added: StudyBookRow = {
+      id: nextId(),
+      title: body.title as string,
+      author: (body.author as string | null) ?? null,
+      coverUrl: (body.coverUrl as string | null) ?? null,
+      isbn13,
+      readCount: 0, // 담기는 언제나 0독에서 시작한다 — 그래서 담을 때 상태를 묻지 않는다
+      purchaseLink: (body.purchaseLink as string | null) ?? null,
+    };
+    state.studyBooks.unshift(added); // 등록 최신순(서버 `createdAtDesc`)
+    return added;
+  }],
+  // 회독 수는 절대값 설정이다 — 음수 400을 목도 지켜야 「저장 실패」 경로를 브라우저로 밟을 수 있다.
+  // 음수 검사가 조회보다 먼저인 것도 서버와 같다(400/404를 갈라 남의 책 존재를 캐낼 창을 안 연다).
+  ['POST', /^\/api\/study\/books\/(\d+)\/read-count$/, ({ id, body }) => {
+    const readCount = body.readCount as number;
+    if (readCount < 0) throw new ApiError(400, '회독 수는 0보다 작을 수 없습니다');
+    const book = mustFindStudyBook(id);
+    book.readCount = readCount;
+    return book;
+  }],
+  ['POST', /^\/api\/study\/books\/(\d+)\/delete$/, ({ id }) => {
+    state.studyBooks.splice(state.studyBooks.indexOf(mustFindStudyBook(id)), 1);
+    return { deleted: true };
+  }],
+
   ['POST', /^\/api\/miniapp\/goal$/, ({ body }) => {
     state.goalSeconds = body.dailyIncrementSeconds as number;
     return undefined;
@@ -1299,6 +1353,13 @@ function marginBookOf(bookId: number, self: boolean): MarginResponse['book'] | n
 function mustFindBook(id: number): MyBookSummary {
   const book = books.find((b) => b.id === id);
   if (book === undefined) throw new ApiError(404, '없는 책이에요');
+  return book;
+}
+
+/** 없는 책·남의 책은 서버처럼 404다(존재 비노출) — 목이 서버보다 무르면 그 경로를 못 밟는다. */
+function mustFindStudyBook(id: number): StudyBookRow {
+  const book = state.studyBooks.find((b) => b.id === id);
+  if (book === undefined) throw new ApiError(404, '책을 찾을 수 없습니다');
   return book;
 }
 

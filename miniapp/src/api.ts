@@ -622,6 +622,60 @@ export const setBookVisibility = (id: number, visibility: BookVisibility): Promi
 export const deleteBook = (id: number): Promise<{ deleted: boolean }> =>
   request(`/api/books/${id}/delete`, { body: {} });
 
+// ── 공부 서재 (`web/api/StudyBookApiController`의 record가 타입 단일 출처) ──────
+//
+// 독서 서재(`/api/books`)와 **다른 문**인 것이 요구 그 자체다 — 두 서재가 섞이지 않는다.
+// 그래서 여기엔 상태·공개범위·읽은 시간이 없고, 대신 이 화면의 유일한 분류 축인 `readCount`가 있다.
+
+/** `StudyBookApiController.StudyBookRow` — 독서 {@link MyBookSummary}보다 훨씬 좁다. */
+export interface StudyBookRow {
+  id: number;
+  title: string;
+  author: string | null;
+  coverUrl: string | null;
+  isbn13: string | null;
+  /** 지금까지 돈 회독 수. **0은 「아직 안 돌았다」**이지 「모른다」가 아니다(화면이 0독 칩을 그린다). */
+  readCount: number;
+  purchaseLink: string | null;
+}
+
+export interface StudyShelfResponse {
+  searchEnabled: boolean;
+  books: StudyBookRow[];
+}
+
+export const fetchStudyBooks = (): Promise<StudyShelfResponse> => request('/api/study/books');
+
+/**
+ * 검색 행을 공부 서재에 담는다 — 언제나 0독으로 시작하므로 상태를 묻지 않는다(독서와 다른 점).
+ *
+ * <p>`category`·`pubDate`를 안 보낸다: 책BTI 입력용이라 공부엔 소비처가 없고, 서버 테이블에 컬럼도 없다.
+ * 같은 isbn을 다시 담으면 서버가 기존 행을 그대로 준다(멱등 — 회독 수가 보존된다).
+ */
+export const addStudyBook = (row: SearchRow): Promise<StudyBookRow> =>
+  request('/api/study/books', {
+    body: {
+      title: row.title,
+      author: row.author,
+      isbn13: row.isbn13,
+      coverUrl: row.coverUrl,
+      publisher: row.publisher,
+      purchaseLink: row.purchaseLink,
+    },
+  });
+
+/**
+ * 회독 수를 <b>절대값으로</b> 설정한다 — 클라가 현재값 ±1을 보낸다.
+ *
+ * <p>델타(+1/-1)가 아니라 절대값인 이유는 멱등이라서다: 연타·재시도가 두 번 세지 않는다.
+ * 음수는 서버가 400으로 막고, 남의 책·없는 책은 404다(존재 비노출).
+ */
+export const setStudyReadCount = (id: number, readCount: number): Promise<StudyBookRow> =>
+  request(`/api/study/books/${id}/read-count`, { body: { readCount } });
+
+export const deleteStudyBook = (id: number): Promise<{ deleted: boolean }> =>
+  request(`/api/study/books/${id}/delete`, { body: {} });
+
 // ── 소셜 (search·follow·profile·block·report 컨트롤러의 record가 타입 단일 출처) ──
 //
 // 소셜 API는 대상 사용자를 **loginId(공개 @핸들)로만** 식별한다 — 서버가 전부

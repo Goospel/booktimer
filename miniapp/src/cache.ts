@@ -14,6 +14,8 @@ const store = new Map<string, unknown>();
 
 /** 캐시 키 — 문자열 리터럴이 화면마다 흩어지지 않게 여기 모은다. */
 export const CACHE_SHELF = 'shelf';
+/** 공부 서재 — 독서 서재와 <b>다른 키</b>다(원장이 갈린 만큼 캐시도 갈린다). */
+export const CACHE_STUDY_SHELF = 'study-shelf';
 export const CACHE_FEED = 'home-feed';
 export const CACHE_HISTORY = 'history';
 export const cacheKeyProfile = (loginId: string): string => `profile:${loginId}`;
