@@ -145,8 +145,10 @@ public class ReadingSessionController {
             startedAt = endedAt.minusSeconds(durationSeconds);
         } else {
             // 과거: 그날 00:00에서 순방향 — 폼의 의미가 「이 날짜에 N시간」이라 다른 날로 새면 안 된다.
-            // 정오 앵커로 역산하던 옛 방식은 12시간을 넘는 기록의 앞부분이 전날로 샜다(24h cap이라 여기선
-            // 다음 자정을 넘지 않고, 정확히 24h면 경계가 끝점과 같아 0초 조각 금지 규칙으로 1행이다).
+            // 정오 앵커로 역산하던 옛 방식은 12시간을 넘는 기록의 앞부분이 전날로 샜다.
+            // 보통은 24h cap이라 1행으로 끝난다(정확히 24h여도 경계가 끝점과 같아 0초 조각 금지 규칙이 받는다).
+            // 단 DST로 하루가 23시간인 날엔 24h가 다음 자정을 넘어 조각이 하나 더 난다 — 그건 의도된 동작이다
+            // (그날 실제로 24시간을 읽었다면 일부는 다음 날에 걸린다). 분할이 받아내므로 여기서 막지 않는다.
             startedAt = readDate.atStartOfDay(zone).toInstant();
             endedAt = startedAt.plusSeconds(durationSeconds);
         }

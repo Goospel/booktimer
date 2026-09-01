@@ -488,6 +488,18 @@ class ReadingSessionServiceTest {
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
+    /**
+     * 이 머신(KST)·서버 UTC 어느 쪽과도 다른 TZ. 분할 기준이 <b>유저</b> TZ임을 계측하려면
+     * 픽스처 TZ가 시스템 기본값과 달라야 한다 — Asia/Seoul 유저만으로는
+     * {@code ZoneId.systemDefault()}로 바꾼 돌연변이가 이 머신에서 살아남는다.
+     */
+    private static final ZoneId AUCKLAND = ZoneId.of("Pacific/Auckland");
+
+    /** Pacific/Auckland 사용자 — 6월엔 NZST(UTC+12)라 자정이 KST·UTC 자정과 겹치지 않는다. */
+    private static User aucklandUser() {
+        return User.of("kiwi@booktimer.com", "$2a$10$abcdefghijklmnopqrstuv", "키위", "Pacific/Auckland", Role.USER);
+    }
+
     /** 유저 TZ 로컬 시각 문자열("2026-06-01T23:50")을 Instant로 — 손으로 UTC를 환산하지 않는다. */
     private static Instant at(String localDateTime, ZoneId zone) {
         return LocalDateTime.parse(localDateTime).atZone(zone).toInstant();
@@ -636,12 +648,15 @@ class ReadingSessionServiceTest {
     // ==========================================================================
 
     @Test
-    @DisplayName("stop #10: 23:50 시작 → 익일 00:40 종료면 2행으로 저장하고 마지막 조각을 반환한다")
+    @DisplayName("stop #10: 23:50 시작 → 익일 00:40 종료면 2행으로 저장하고 마지막 조각을 반환한다(경계는 유저 TZ 자정)")
     void stop_acrossMidnight_savesTwoRowsReturnsLast() {
+        // 유저 TZ를 Auckland로 둔다 — 이 구간은 KST·UTC 기준으로는 같은 날 안이라(20:50~21:40 KST,
+        // 11:50~12:40Z) 서버 TZ로 자르는 구현이면 1조각이 된다. 그래서 이 테스트가 곧 「유저 TZ로 자른다」의 계측기다.
+        User user = aucklandUser();
         Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
-        Instant started = kst("2026-06-01T23:50");
-        Instant now = kst("2026-06-02T00:40");
-        Instant midnight = LocalDate.of(2026, 6, 2).atStartOfDay(KST).toInstant();
+        Instant started = at("2026-06-01T23:50", AUCKLAND);
+        Instant now = at("2026-06-02T00:40", AUCKLAND);
+        Instant midnight = LocalDate.of(2026, 6, 2).atStartOfDay(AUCKLAND).toInstant();
         ReadingSession active = ReadingSession.start(user, started, book);
         when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(active));
         when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
@@ -712,12 +727,14 @@ class ReadingSessionServiceTest {
     }
 
     @Test
-    @DisplayName("recordManual #14: 자정을 걸친 수동 기록은 조각마다 manualEntry=true·같은 책이고 마지막 조각을 반환한다")
+    @DisplayName("recordManual #14: 자정을 걸친 수동 기록은 조각마다 manualEntry=true·같은 책이고 마지막 조각을 반환한다(경계는 유저 TZ 자정)")
     void recordManual_acrossMidnight_splitsKeepingManualFlag() {
+        // stop #10과 같은 이유로 Auckland — 이 구간도 KST·UTC로는 같은 날 안이다(19:40~21:40 KST, 10:40~12:40Z).
+        User user = aucklandUser();
         Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
-        Instant started = kst("2026-06-01T22:40");
-        Instant ended = kst("2026-06-02T00:40");
-        Instant midnight = LocalDate.of(2026, 6, 2).atStartOfDay(KST).toInstant();
+        Instant started = at("2026-06-01T22:40", AUCKLAND);
+        Instant ended = at("2026-06-02T00:40", AUCKLAND);
+        Instant midnight = LocalDate.of(2026, 6, 2).atStartOfDay(AUCKLAND).toInstant();
         org.mockito.ArgumentCaptor<ReadingSession> saved = org.mockito.ArgumentCaptor.forClass(ReadingSession.class);
         when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
 
