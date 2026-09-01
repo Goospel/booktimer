@@ -3,6 +3,8 @@ package com.booktimer.user;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
+import com.booktimer.book.StudyBook;
+import com.booktimer.book.StudyBookRepository;
 import com.booktimer.follow.Follow;
 import com.booktimer.follow.FollowRepository;
 import com.booktimer.garden.AuthorAffection;
@@ -52,6 +54,8 @@ class AccountDeletionIntegrationTest {
     private UserRepository userRepository;
     @Autowired
     private BookRepository bookRepository;
+    @Autowired
+    private StudyBookRepository studyBookRepository;
     @Autowired
     private ReportService reportService;
     @Autowired
@@ -206,6 +210,28 @@ class AccountDeletionIntegrationTest {
                 StudyDailyCheck.of(user, LocalDate.now().minusDays(1), true));
 
         // study_daily_check.user_id FK가 정리되지 않으면 flush 시 제약 위반.
+        assertThatCode(() -> {
+            accountService.deleteAccount(email, "rawpw1234");
+            assertThat(userRepository.findByEmail(email)).isEmpty();
+        }).doesNotThrowAnyException();
+    }
+
+    /**
+     * 공부 <b>서재</b>(study_book)도 같은 부류다 — 독서 책({@code book})과 별개 테이블이라 purge에 한 줄이
+     * 더 필요하고, 빠지면 「공부 책을 한 권이라도 담은 사람만」 탈퇴가 실패한다.
+     *
+     * <p>mock으로는 영영 못 잡는다(FK를 모른다 — T-023·T-029). study_session·study_daily_check와 같은 규율.
+     */
+    @Test
+    @DisplayName("공부 책(study_book)을 가진 사용자도 FK 위반 없이 탈퇴된다")
+    void deleteAccount_withStudyBook_succeeds() {
+        String email = "studybookquit@booktimer.com";
+        User user = userRepository.saveAndFlush(
+                User.of(email, passwordEncoder.encode("rawpw1234"), "수험생", "Asia/Seoul", Role.USER));
+        studyBookRepository.saveAndFlush(
+                StudyBook.register(user, "정보처리기사 실기", null, null, null, null, null));
+
+        // study_book.user_id FK가 정리되지 않으면 flush 시 제약 위반.
         assertThatCode(() -> {
             accountService.deleteAccount(email, "rawpw1234");
             assertThat(userRepository.findByEmail(email)).isEmpty();

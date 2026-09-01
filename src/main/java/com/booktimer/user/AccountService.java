@@ -3,6 +3,7 @@ package com.booktimer.user;
 import com.booktimer.auth.ApiTokenRepository;
 import com.booktimer.block.BlockRepository;
 import com.booktimer.book.BookRepository;
+import com.booktimer.book.StudyBookRepository;
 import com.booktimer.email.EmailTokenRepository;
 import com.booktimer.feedback.FeedbackRepository;
 import com.booktimer.follow.FollowRepository;
@@ -46,6 +47,7 @@ public class AccountService {
     private final BlockRepository blockRepository;
     private final ReportRepository reportRepository;
     private final BookRepository bookRepository;
+    private final StudyBookRepository studyBookRepository;
     private final ReadingPersonalityCacheRepository personalityCacheRepository;
     private final FeedbackRepository feedbackRepository;
     private final EmailTokenRepository emailTokenRepository;
@@ -68,6 +70,7 @@ public class AccountService {
                           BlockRepository blockRepository,
                           ReportRepository reportRepository,
                           BookRepository bookRepository,
+                          StudyBookRepository studyBookRepository,
                           ReadingPersonalityCacheRepository personalityCacheRepository,
                           FeedbackRepository feedbackRepository,
                           EmailTokenRepository emailTokenRepository,
@@ -89,6 +92,7 @@ public class AccountService {
         this.blockRepository = blockRepository;
         this.reportRepository = reportRepository;
         this.bookRepository = bookRepository;
+        this.studyBookRepository = studyBookRepository;
         this.personalityCacheRepository = personalityCacheRepository;
         this.feedbackRepository = feedbackRepository;
         this.emailTokenRepository = emailTokenRepository;
@@ -255,6 +259,7 @@ public class AccountService {
         storyLikeRepository.deleteByStoryUser(user);    // 내 글에 달린 남의 좋아요 — 내 글보다 앞
         storyRepository.deleteByUser(user);            // 내가 여백에 남긴 글 — story.book_id 때문에 책보다 앞
         bookRepository.deleteByUser(user);
+        studyBookRepository.deleteByUser(user);  // FK: study_book.user_id → users (공부 서재 — book과 별개 테이블)
         personalityCacheRepository.deleteByUser(user);       // 책BTI 캐시도 user_id FK 참조 → 유저 전에 정리
         feedbackRepository.deleteByAuthor(user);             // 문의도 author_id FK 참조 → 유저 전에 정리
         emailTokenRepository.deleteByUser(user);             // 이메일 토큰도 user_id FK 참조 → 유저 전에 정리

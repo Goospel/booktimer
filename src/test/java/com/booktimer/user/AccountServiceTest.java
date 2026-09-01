@@ -65,6 +65,8 @@ class AccountServiceTest {
     @Mock
     private BookRepository bookRepository;
     @Mock
+    private com.booktimer.book.StudyBookRepository studyBookRepository;
+    @Mock
     private ReadingPersonalityCacheRepository personalityCacheRepository;
     @Mock
     private FeedbackRepository feedbackRepository;
@@ -136,7 +138,7 @@ class AccountServiceTest {
 
         service.deleteAccount(EMAIL, "pw");
 
-        var ordered = inOrder(sessionRepository, studySessionRepository, studyDailyCheckRepository, timerRepository, goalChangeRepository, goalWaiverRepository, followRepository, blockRepository, reportRepository, storyLikeRepository, storyRepository, bookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository, apiTokenRepository, tossLinkCodeRepository, userRepository);
+        var ordered = inOrder(sessionRepository, studySessionRepository, studyDailyCheckRepository, timerRepository, goalChangeRepository, goalWaiverRepository, followRepository, blockRepository, reportRepository, storyLikeRepository, storyRepository, bookRepository, studyBookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository, apiTokenRepository, tossLinkCodeRepository, userRepository);
         ordered.verify(sessionRepository).deleteByUser(user); // book FK 참조하는 세션 먼저
         // 공부 원장도 users를 FK 참조한다 — 빠지면 그 기록을 가진 사람의 탈퇴가 통째로 실패한다(T-168 계열).
         ordered.verify(studySessionRepository).deleteByUser(user);
@@ -155,6 +157,7 @@ class AccountServiceTest {
         ordered.verify(storyLikeRepository).deleteByStoryUser(user);   // FK: 내 글에 달린 좋아요 — 글보다 앞
         ordered.verify(storyRepository).deleteByUser(user);            // FK: 여백의 글은 book 참조라 책보다 앞
         ordered.verify(bookRepository).deleteByUser(user);    // FK: 유저 삭제 전에 책 정리(세션·스토리 이후)
+        ordered.verify(studyBookRepository).deleteByUser(user); // FK: 공부 서재도 유저 전에 정리(book과 별개 테이블)
         ordered.verify(personalityCacheRepository).deleteByUser(user); // FK: 책BTI 캐시도 유저 전에 정리
         ordered.verify(feedbackRepository).deleteByAuthor(user);  // FK: 문의도 유저 전에 정리
         ordered.verify(emailTokenRepository).deleteByUser(user);  // FK: 이메일 토큰도 유저 전에 정리
