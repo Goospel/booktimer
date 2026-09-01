@@ -53,9 +53,22 @@ export function initialGoalSelection(firstRun: boolean, current: number): number
  *
  * <p>0 이하면 문장 자체가 없다 — 「0초씩 쌓여요」는 목표를 지운 사람에게 할 말이 아니다.
  */
-export function weeklyLine(seconds: number): string | null {
+export function weeklyLine(seconds: number, variant: TimerMode = 'reading'): string | null {
   if (seconds <= 0) return null;
-  return `일주일이면 ${formatDuration(seconds * 7)}씩 쌓여요`;
+  const week = formatDuration(seconds * 7);
+  // 「쌓여요」는 이월 어휘다 — 공부는 못 채운 시간이 다음 날로 넘어가지 않아 그 말이 거짓이 된다.
+  return variant === 'study' ? `일주일이면 ${week}을 공부하는 셈이에요` : `일주일이면 ${week}씩 쌓여요`;
+}
+
+/**
+ * 고른 목표를 <b>어느 문으로</b> 보내는가 — 두 목표는 서버 원장이 갈려 있어 문도 다르다.
+ *
+ * <p>화면 밖으로 꺼낸 이유는 늘 같다: 하니스가 정적 렌더라 「저장」 클릭이 안 돌아(T-149), 이 분기가
+ * 컴포넌트 클로저 안에 있으면 <b>계측할 방법이 소스 grep밖에 없다</b>. 실패해도 조용한 자리다 —
+ * 잘못 보내면 공부 목표가 독서 목표를 덮어쓰고 `ReadingGoalChange` 원장까지 오염시킨다(서버는 200을 준다).
+ */
+export function saveGoal(variant: TimerMode, seconds: number): Promise<void> {
+  return variant === 'study' ? setStudyGoal(seconds).then(() => {}) : setGoal(seconds);
 }
 
 /**
@@ -91,9 +104,7 @@ export function Goal({
   const save = () => {
     setBusy(true);
     setError(null);
-    // 두 목표는 서버 원장이 갈려 있어 문도 다르다 — 여기서 섞이면 공부 목표가 독서 부채를 흔든다.
-    const saving = study ? setStudyGoal(selected).then(() => {}) : setGoal(selected);
-    saving
+    saveGoal(variant, selected)
       .then(onSaved)
       .catch((e: Error) => setError(e.message))
       .finally(() => setBusy(false));
@@ -167,10 +178,10 @@ export function Goal({
           주의: 가운데 정렬은 **바깥 div**가 한다 — TDS `Text`는 넘긴 style에서 `textAlign`을 걸러내고
           `display`도 자기 값(`inline-block`)으로 덮어, 인라인 스타일엔 `margin-top`만 남는다
           (목 모드 실측 2026-08-29: computed `text-align: start`로 왼쪽에 붙어 있었다). */}
-      {weeklyLine(selected) !== null && (
+      {weeklyLine(selected, variant) !== null && (
         <div style={{ textAlign: 'center', marginTop: 12 }}>
           <Text typography="st12" color="blue700">
-            {weeklyLine(selected)}
+            {weeklyLine(selected, variant)}
           </Text>
         </div>
       )}

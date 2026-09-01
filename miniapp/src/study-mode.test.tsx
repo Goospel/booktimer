@@ -387,11 +387,20 @@ describe('홈 — 공부 모드 렌더', () => {
     expect(markup).toContain('20:00');
   });
 
-  it('부채 장치는 여전히 없다 — 이월이 없는 모드에 ⓘ·밀린 시간·광고를 들이지 않는다', () => {
-    const markup = renderHome('study', {}, { ...IDLE_STUDY, todaySeconds: 600, goalSeconds: 1_800 });
-    expect(markup).not.toContain('밀린 시간');
-    expect(markup).not.toContain('다음 날로 넘어가');
-    expect(markup).not.toContain('광고 보고');
+  /**
+   * ⚠️ 이 단언은 <b>부채가 있는 픽스처</b>로 재야 한다 — 빚 0으로 재면 독서 렌더에서도 ⓘ가 서지만
+   * 판별의 근거가 「그 모드엔 원래 없다」로 흐려진다. 그리고 「밀린 시간」·「광고 보고」 문자열로 재던
+   * 앞 판(2026-09-01)은 <b>공허했다</b>: 그 둘은 `RemainingNote` 안이라 ⓘ를 <b>탭해야</b> 열리는데
+   * 하니스가 정적 렌더라 어느 모드에서도 렌더되지 않는다(T-149 — 도달 불가 경로엔 부정 단언 금지).
+   * 실제로 갈리는 것은 <b>ⓘ 손잡이 자체</b>(`aria-expanded`)라 그걸 짝으로 대조한다.
+   */
+  it('부채 장치는 여전히 없다 — 밀린 시간이 있어도 ⓘ 툴팁 손잡이가 서지 않는다', () => {
+    const debt = { carriedDebtSeconds: 1_200, debtWaiverAvailable: true };
+
+    // 짝: 같은 빚을 가진 독서 렌더엔 ⓘ가 선다 — 아래 부재 단언이 공허하지 않다는 증거다.
+    expect(renderHome('reading', debt)).toContain('aria-expanded');
+    expect(renderHome('study', debt, { ...IDLE_STUDY, todaySeconds: 600, goalSeconds: 1_800 }))
+      .not.toContain('aria-expanded');
   });
 
   it('목표가 0이면 게이지 대신 「목표 정하기」 손잡이만 — 강요 없이 문만 둔다', () => {

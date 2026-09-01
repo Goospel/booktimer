@@ -1,12 +1,13 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   combineWheel,
   FIRST_RUN_GOAL_SECONDS,
   Goal,
   initialGoalSelection,
+  saveGoal,
   weeklyLine,
   wheelIndices,
 } from './screens/Goal';
@@ -90,6 +91,18 @@ describe('일주일 환산 줄 (weeklyLine)', () => {
   it('고른 값의 7배를 문장으로 만든다', () => {
     expect(weeklyLine(1800)).toBe('일주일이면 3시간 30분씩 쌓여요');
     expect(weeklyLine(600)).toBe('일주일이면 1시간 10분씩 쌓여요');
+  });
+
+  /** 「쌓여요」는 <b>이월 어휘</b>다 — 공부는 못 채운 시간이 다음 날로 넘어가지 않아 그 말이 거짓이 된다. */
+  it('공부는 쌓인다고 말하지 않는다 — 같은 숫자, 다른 서술', () => {
+    expect(weeklyLine(1800, 'study')).toBe('일주일이면 3시간 30분을 공부하는 셈이에요');
+    expect(weeklyLine(1800, 'study')).not.toContain('쌓여요');
+    // 독서 문구는 그대로 — 분기가 한쪽을 지운 게 아니다.
+    expect(weeklyLine(1800, 'reading')).toBe('일주일이면 3시간 30분씩 쌓여요');
+  });
+
+  it('0이면 두 모드 다 할 말이 없다', () => {
+    expect(weeklyLine(0, 'study')).toBeNull();
   });
 
   it('0이면 할 말이 없다 — 목표 없음에 「0초씩 쌓여요」는 조롱이다', () => {
@@ -221,11 +234,47 @@ describe('공부 목표 렌더 (variant)', () => {
     expect(render('reading')).toContain('다음 날로 넘어가요');
   });
 
-  it('휠·밴드·주간 환산은 그대로 공유한다 — 재사용이 이 옵션의 이유다', () => {
+  it('휠·밴드·주간 환산은 그대로 공유한다 — 재사용이 이 옵션의 이유다(문구만 모드를 탄다)', () => {
     const study = render('study');
     expect(study).toContain('aria-label="시간 선택"');
     expect(study).toContain('data-wheel-band');
-    expect(study).toContain('일주일이면 3시간 30분씩 쌓여요');
+    expect(study).toContain('일주일이면 3시간 30분을 공부하는 셈이에요');
+    expect(render('reading')).toContain('일주일이면 3시간 30분씩 쌓여요');
+  });
+});
+
+/**
+ * 저장 분기 — <b>variant가 어느 문을 두드리는가</b>. 화면 밖으로 꺼내 둔 이유는 늘 같다(정적 렌더라
+ * 「저장」 클릭이 안 돈다, T-149): 클로저 안에 두면 이 분기를 겨눌 계측기가 소스 grep밖에 안 남는다.
+ *
+ * <p>실패하면 조용하다 — 공부 목표 저장이 <b>독서 목표를 덮어쓰고</b> `ReadingGoalChange` 원장까지
+ * 오염시킨다(서버는 정상 200을 준다). 그래서 URL·본문 키까지 함께 잠근다.
+ */
+describe('목표 저장 분기 (saveGoal)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
+    vi.stubGlobal('fetch', vi.fn(async () => ({ status: 200, ok: true, text: async () => '{}' })));
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  const lastRequest = () =>
+    vi.mocked(globalThis.fetch).mock.calls.at(-1) as unknown as [string, RequestInit];
+
+  it('공부는 /api/study/goal로 간다 — 독서 문을 두드리면 독서 목표가 덮어써진다', async () => {
+    await saveGoal('study', 5400);
+
+    const [url, init] = lastRequest();
+    expect(url).toBe('http://localhost:8080/api/study/goal');
+    expect(init.body).toBe(JSON.stringify({ dailyGoalSeconds: 5400 }));
+  });
+
+  it('독서는 그대로 /api/miniapp/goal — 분기가 한쪽으로 쏠리지 않았다', async () => {
+    await saveGoal('reading', 5400);
+
+    const [url, init] = lastRequest();
+    expect(url).toBe('http://localhost:8080/api/miniapp/goal');
+    expect(init.body).toBe(JSON.stringify({ dailyIncrementSeconds: 5400 }));
   });
 });
 
