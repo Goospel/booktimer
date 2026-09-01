@@ -82,6 +82,9 @@ class FlywayMigrationTest {
     @Autowired
     com.booktimer.user.TossLinkCodeRepository tossLinkCodeRepository;
 
+    @Autowired
+    com.booktimer.session.StudyDailyCheckRepository studyDailyCheckRepository;
+
     @Test
     void v1_baseline_migration_is_applied() {
         boolean v1Applied = Arrays.stream(flyway.info().applied())
@@ -103,6 +106,28 @@ class FlywayMigrationTest {
 
         assertThat(saved.getId()).isNotNull();
         assertThat(saved.getPasswordHash()).isNull();
+    }
+
+    /**
+     * V80 {@code uq_study_daily_check(user_id, check_date)} — 「하루 한 판정」 불변식의 최종 방어선.
+     *
+     * <p>여기(Flyway 스위트)에 있는 이유: 이 UNIQUE는 엔티티 {@code @Table}이 아니라 <b>마이그레이션에만</b>
+     * 있다(이 레포는 DB를 제약의 단일 출처로 둔다 — {@code uk_users_login_id} 선례). 메인 스위트는
+     * Hibernate가 엔티티 매핑에서 스키마를 만들어 <b>제약이 아예 없고, 없는 제약은 위반될 수도 없다</b>
+     * — 거기 두면 영영 초록이 안 되는 공허한 테스트가 된다(T-169).
+     */
+    @Test
+    void study_daily_check_unique_per_day_is_enforced() {
+        User owner = userRepository.saveAndFlush(
+                User.of("studycheck-dup@example.com", "hash", "닉", "Asia/Seoul", Role.USER));
+        java.time.LocalDate date = java.time.LocalDate.of(2026, 8, 30);
+        studyDailyCheckRepository.saveAndFlush(
+                com.booktimer.session.StudyDailyCheck.of(owner, date, true));
+
+        // 서비스는 조회-후-갱신으로 막지만, 경합에 진 두 번째 INSERT는 여기서 걸려야 한다.
+        assertThatThrownBy(() -> studyDailyCheckRepository.saveAndFlush(
+                com.booktimer.session.StudyDailyCheck.of(owner, date, false)))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
@@ -324,7 +349,8 @@ class FlywayMigrationTest {
     private static final Set<String> TABLES_PURGE_CLEARS = Set.of(
             "API_TOKEN", "AUTHOR_AFFECTION", "BLOCK", "BOOK", "EMAIL_TOKEN", "FEEDBACK", "FOLLOW",
             "READING_GOAL_CHANGE", "READING_GOAL_WAIVER", "READING_PERSONALITY", "READING_SESSION",
-            "READING_TIMER", "REPORT", "STORY", "STORY_LIKE", "STUDY_SESSION", "TOSS_LINK_CODE");
+            "READING_TIMER", "REPORT", "STORY", "STORY_LIKE", "STUDY_DAILY_CHECK", "STUDY_SESSION",
+            "TOSS_LINK_CODE");
 
     /**
      * <b>users를 FK 참조하는 테이블 집합 == purge()가 지우는 집합</b>을 못 박는다.

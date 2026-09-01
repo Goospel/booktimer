@@ -12,6 +12,7 @@ import com.booktimer.report.ReportRepository;
 import com.booktimer.security.SessionInvalidator;
 import com.booktimer.session.ReadingGoalWaiverRepository;
 import com.booktimer.session.ReadingSessionRepository;
+import com.booktimer.session.StudyDailyCheckRepository;
 import com.booktimer.session.StudySessionRepository;
 import com.booktimer.story.StoryLikeRepository;
 import com.booktimer.story.StoryRepository;
@@ -40,6 +41,7 @@ public class AccountService {
     private final ReadingGoalWaiverRepository goalWaiverRepository;
     private final ReadingSessionRepository sessionRepository;
     private final StudySessionRepository studySessionRepository;
+    private final StudyDailyCheckRepository studyDailyCheckRepository;
     private final FollowRepository followRepository;
     private final BlockRepository blockRepository;
     private final ReportRepository reportRepository;
@@ -61,6 +63,7 @@ public class AccountService {
                           ReadingGoalWaiverRepository goalWaiverRepository,
                           ReadingSessionRepository sessionRepository,
                           StudySessionRepository studySessionRepository,
+                          StudyDailyCheckRepository studyDailyCheckRepository,
                           FollowRepository followRepository,
                           BlockRepository blockRepository,
                           ReportRepository reportRepository,
@@ -81,6 +84,7 @@ public class AccountService {
         this.goalWaiverRepository = goalWaiverRepository;
         this.sessionRepository = sessionRepository;
         this.studySessionRepository = studySessionRepository;
+        this.studyDailyCheckRepository = studyDailyCheckRepository;
         this.followRepository = followRepository;
         this.blockRepository = blockRepository;
         this.reportRepository = reportRepository;
@@ -237,6 +241,7 @@ public class AccountService {
     private void purge(User user) {
         sessionRepository.deleteByUser(user);
         studySessionRepository.deleteByUser(user);  // FK: study_session.user_id → users (공부 측정 원장)
+        studyDailyCheckRepository.deleteByUser(user); // FK: study_daily_check.user_id → users (공부 일정 판정)
         timerRepository.deleteByUser(user);
         goalChangeRepository.deleteByUser(user);   // FK: reading_goal_change.user_id → users (유저 삭제 전 정리)
         goalWaiverRepository.deleteByUser(user);   // FK: reading_goal_waiver.user_id → users (리워드 광고 용서 기록)

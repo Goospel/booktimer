@@ -55,6 +55,8 @@ class AccountServiceTest {
     @Mock
     private com.booktimer.session.StudySessionRepository studySessionRepository;
     @Mock
+    private com.booktimer.session.StudyDailyCheckRepository studyDailyCheckRepository;
+    @Mock
     private FollowRepository followRepository;
     @Mock
     private BlockRepository blockRepository;
@@ -134,10 +136,12 @@ class AccountServiceTest {
 
         service.deleteAccount(EMAIL, "pw");
 
-        var ordered = inOrder(sessionRepository, studySessionRepository, timerRepository, goalChangeRepository, goalWaiverRepository, followRepository, blockRepository, reportRepository, storyLikeRepository, storyRepository, bookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository, apiTokenRepository, tossLinkCodeRepository, userRepository);
+        var ordered = inOrder(sessionRepository, studySessionRepository, studyDailyCheckRepository, timerRepository, goalChangeRepository, goalWaiverRepository, followRepository, blockRepository, reportRepository, storyLikeRepository, storyRepository, bookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository, apiTokenRepository, tossLinkCodeRepository, userRepository);
         ordered.verify(sessionRepository).deleteByUser(user); // book FK 참조하는 세션 먼저
         // 공부 원장도 users를 FK 참조한다 — 빠지면 그 기록을 가진 사람의 탈퇴가 통째로 실패한다(T-168 계열).
         ordered.verify(studySessionRepository).deleteByUser(user);
+        // 공부 일정 판정도 같은 부류의 별도 테이블이다(V80) — 세션과 함께 지워야 한다.
+        ordered.verify(studyDailyCheckRepository).deleteByUser(user);
         ordered.verify(timerRepository).deleteByUser(user);
         ordered.verify(goalChangeRepository).deleteByUser(user);   // FK: 목표 변경 이력도 유저 전에 정리
         ordered.verify(goalWaiverRepository).deleteByUser(user);   // FK: 용서권도 유저 전에 정리
