@@ -63,3 +63,29 @@ booktimer.app {
 www.booktimer.app, booktimer.click, www.booktimer.click {
 	redir https://booktimer.app{uri} permanent
 }
+
+# ─── facefit (동거 테넌트) ────────────────────────────────────────────────────
+# 이 EC2에는 BookTimer 말고 하나가 더 산다 — 같은 사용자의 다른 미니앱 **facefit**의 API 서버다.
+# 자원 몫(mem_limit 320m)·증상별 감별·`docker stop facefit-api`로 facefit만 끄는 법은
+# claude-docs/facefit-tenant.md. 설계 단일 출처는 facefit 레포 docs/2026-08-30-server-design.md.
+#
+# 이 레포가 facefit을 아는 곳은 **이 블록 하나뿐**이다. 컨테이너 정의는 facefit 레포에 있고
+# (별개 compose 프로젝트) 배포도 그쪽 워크플로가 한다 — 떼어낼 땐 이 블록만 지우면 된다.
+#
+# blue-green이 없다(facefit은 컨테이너 1개다). 그래서 upstream도 하나고 health check도 안 건다 —
+# 죽으면 502가 나고, 그건 BookTimer가 아니라 facefit 쪽 문제다.
+facefit-api.booktimer.app {
+	reverse_proxy facefit-api:8080 {
+		# 위 booktimer.app 블록과 **같은 이유**로 버린다: Caddy가 세팅하지도 지우지도 않는
+		# 헤더라 들어온 값이 그대로 앱까지 간다. facefit은 X-Forwarded-For로 레이트리밋을
+		# 세는데(그게 아니면 상한이 전역이 된다), `Forwarded`가 우선하는 설정이 훗날 켜지면
+		# 아무나 이 한 줄로 상한을 우회할 수 있다. Caddy가 만들지 않는 헤더는 통째로 버린다.
+		header_up -Forwarded
+	}
+
+	encode gzip zstd
+	log {
+		output stdout
+		format console
+	}
+}
