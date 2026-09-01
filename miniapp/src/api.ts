@@ -235,6 +235,21 @@ export interface TimerState {
   debtWaiverAvailable: boolean;
 }
 
+/**
+ * 공부 모드 상태 — 독서({@link TimerState})와 <b>다른 타입</b>인 것이 이 기능의 요구 그 자체다.
+ * 목표·부채·책이 없어 실을 것이 셋뿐이고, 서버 원장도 별도 테이블(`study_session`)이라 섞일 길이 없다.
+ *
+ * <p>`todaySeconds`는 <b>완료 세션 합</b>이다 — 측정 중 몫은 화면이 `activeStartedAt`으로 매초 더한다.
+ */
+export interface StudyState {
+  hasActiveSession: boolean;
+  activeStartedAt: string | null;
+  todaySeconds: number;
+}
+
+/** 공부 기록이 없는 상태 — 옛 서버(이 필드를 안 주는)와 붙었을 때의 폴백이기도 하다. */
+export const IDLE_STUDY: StudyState = { hasActiveSession: false, activeStartedAt: null, todaySeconds: 0 };
+
 // 서버는 작가 격언(`quotes`)도 실어 보내지만 미니앱은 쓰지 않는다 — 웹 대시보드 전용이라 필드를 받지 않는다.
 export interface DashboardResponse extends TimerState {
   nickname: string;
@@ -248,6 +263,8 @@ export interface DashboardResponse extends TimerState {
   wantToReadBooks: BookOption[];
   graph: ContributionGraph;
   emailVerified: boolean;
+  /** 공부 모드 상태 — `undefined`는 이 필드를 아직 안 주는 옛 서버다(화면은 {@link IDLE_STUDY}로 떨어진다). */
+  study?: StudyState;
 }
 
 export interface StopResponse {
@@ -405,6 +422,14 @@ export const tagBook = (sessionId: number, bookId: number): Promise<{ sessionId:
  */
 export const changeActiveBook = (bookId: number | null): Promise<TimerState> =>
   request('/api/sessions/active/book', { body: { bookId } });
+
+/**
+ * 공부 측정 시작·종료 — 독서와 <b>다른 엔드포인트</b>다(원장이 다르므로 문도 다르다).
+ * 409 계약은 독서와 같다: 중복 시작 / 무세션 종료. 독서 측정 중에도 시작은 409다(이중 계측 금지).
+ */
+export const startStudy = (): Promise<StudyState> => request('/api/study/start', { body: {} });
+
+export const stopStudy = (): Promise<StudyState> => request('/api/study/stop', { body: {} });
 
 export const setGoal = (dailyIncrementSeconds: number): Promise<void> =>
   request('/api/miniapp/goal', { body: { dailyIncrementSeconds } });

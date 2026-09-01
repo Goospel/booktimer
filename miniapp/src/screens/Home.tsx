@@ -2,8 +2,9 @@ import { Button, ProgressBar } from '@toss/tds-mobile';
 import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
-import type { BookOption, DashboardResponse, TimerState, WaiveResponse } from '../api';
+import type { BookOption, DashboardResponse, StudyState, TimerState, WaiveResponse } from '../api';
 import { ApiError, waiveDebt } from '../api';
+import type { TimerMode } from '../App';
 import { Coachmark } from '../coachmark';
 import { elapsedSeconds, formatClock, formatDuration } from '../format';
 import {
@@ -55,6 +56,111 @@ const ACCENT = 'var(--adaptiveBlue700, #4F6B4C)';
  * 첫 세션에 한정하지 않는다: 짧고 무해하며, 잊어버리는 건 신규 유저만이 아니다.
  */
 export const ACTIVE_SESSION_RELIEF = '화면을 꺼도 측정은 계속돼요. 책 읽고 오세요.';
+
+/** 공부 모드의 같은 말 — 계약은 같고 하는 일만 다르다. */
+export const ACTIVE_STUDY_RELIEF = '화면을 꺼도 측정은 계속돼요. 공부하고 오세요.';
+
+/**
+ * 히어로 머리말 — 모드가 갈리는 자리이자, 독서에서만 「달성」으로 한 번 더 갈리는 자리다.
+ *
+ * <p>`null`은 <b>새싹 머리말</b>(「오늘 목표 달성」)을 뜻한다 — 그 자리는 글자가 아니라 SVG를 품어
+ * 문자열로 못 돌려준다. 공부 모드엔 목표가 없어 그 분기 자체가 없다.
+ */
+export function heroOverline(mode: TimerMode, achieved: boolean): string | null {
+  if (mode === 'study') return '오늘 공부한 시간';
+  return achieved ? null : '오늘 읽은 시간';
+}
+
+/**
+ * 히어로 우측 상단의 「독서 | 공부」 세그먼트 — 이 앱에서 <b>모드를 바꾸는 유일한 손잡이</b>다.
+ *
+ * <p>시각 알약은 21px로 작지만 <b>히트영역은 44px</b>이다 — 컨테이너 높이 + 버튼 세로 패딩이 그 몫을
+ * 들고, 알약은 그 안에서 작게만 그려진다(알약 자체를 키우면 카드 머리가 뚱뚱해진다).
+ *
+ * <p>선택 세그먼트의 색이 <b>토큰</b>인 것이 요점이다 — `body.study-mode`가 토큰을 갈아 끼우면 이 알약도
+ * 코드 한 줄 없이 파랑으로 따라온다.
+ *
+ * <p>측정 중엔 `aria-disabled`로 잠근다(진짜 `disabled`가 아니다 — 그러면 클릭이 안 와서 <b>왜</b>
+ * 못 바꾸는지 말할 기회가 사라진다. 탭 잠금과 같은 문법).
+ */
+export function ModeToggle({
+  mode,
+  locked,
+  onChange,
+  onBlocked,
+}: {
+  mode: TimerMode;
+  /** 측정 중인가 — 재는 도중 모드를 갈면 어느 원장에 쌓이는지가 화면과 어긋난다. */
+  locked: boolean;
+  onChange: (mode: TimerMode) => void;
+  onBlocked: () => void;
+}) {
+  const segment = (target: TimerMode, label: string) => {
+    const selected = mode === target;
+    return (
+      <button
+        type="button"
+        aria-pressed={selected}
+        aria-disabled={locked ? true : undefined}
+        onClick={() => (locked ? onBlocked() : onChange(target))}
+        style={{
+          // 히트영역 44×44는 이 패딩이 든다(시각 알약은 21px 그대로) — 가로 2px일 때 실측 40.1px라
+          // 손가락 최소치에 4px 모자랐다(목 모드 390×844). 알약은 그만큼만 넓어진다.
+          padding: '12px 4px',
+          border: 0,
+          background: 'transparent',
+          cursor: 'pointer',
+        }}
+      >
+        <span
+          style={{
+            display: 'inline-block',
+            padding: '0 8px',
+            borderRadius: 8.5,
+            // 토큰이라 공부 모드에서 저절로 파랑이 된다 — 리터럴이면 세이지로 남는다.
+            background: selected ? 'var(--accentPill, rgba(110,138,106,.18))' : 'transparent',
+            color: selected ? 'var(--adaptiveBlue700, #4F6B4C)' : 'var(--adaptiveGrey600, #6F6A5E)',
+            fontSize: 11,
+            lineHeight: '17px',
+            fontWeight: selected ? 700 : 400,
+          }}
+        >
+          {label}
+        </span>
+      </button>
+    );
+  };
+
+  return (
+    <div
+      data-mode-toggle=""
+      style={{
+        position: 'absolute',
+        top: 0,
+        right: 8,
+        display: 'flex',
+        alignItems: 'center',
+        height: 44, // 손가락 몫 — 알약은 이 안에서 작게 그려진다
+        opacity: locked ? 0.4 : 1,
+      }}
+    >
+      <span
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          height: 21,
+          padding: 2,
+          borderRadius: 10.5,
+          // 중립 종이 음영 — 모드와 무관하게 같다(홈이 「지금 어느 쪽인가」를 알약 안에서만 말하게).
+          background: 'rgba(44, 42, 36, 0.06)',
+        }}
+      >
+        {segment('reading', '독서')}
+        {segment('study', '공부')}
+      </span>
+    </div>
+  );
+}
 
 /**
  * 새싹 표식 — 줄기 하나에 잎 두 장짜리 획 SVG. 기본 이모지를 쓰던 자리를 대신한다.
@@ -995,6 +1101,10 @@ export function ReadingNowCard({
  */
 export function Home({
   dashboard,
+  mode,
+  study,
+  onChangeMode,
+  onBlockedModeChange,
   guide,
   selectedBookId: picked,
   onSelectBook,
@@ -1008,6 +1118,13 @@ export function Home({
   onComposeMargin,
 }: {
   dashboard: DashboardResponse;
+  /** 지금 재는 것 — 히어로 한 장이 이 값으로 두 얼굴을 갖는다(파생은 App이 한다). */
+  mode: TimerMode;
+  /** 공부 원장 — 독서(`dashboard`)와 따로 온다. */
+  study: StudyState;
+  onChangeMode: (mode: TimerMode) => void;
+  /** 측정 중 토글을 눌렀다 — 안내는 탭 잠금과 같은 스트립이 맡는다(`MainTabs`). */
+  onBlockedModeChange: () => void;
   /**
    * 첫 사용 안내로 들어오는 배너 — **자리만 여기가 정한다**(헤더 바로 아래). 만드는 쪽은 흐름을 든
    * `MainTabs`다: 안 본 길 안내가 있을 때만 노드가 오고, 없으면 `null`이라 빈 줄도 남지 않는다.
@@ -1046,11 +1163,13 @@ export function Home({
   const [agreement, setAgreement] = useState(() => localStorage.getItem(AGREEMENT_KEY));
   const [agreementSupported] = useState(notificationAgreementSupported);
 
+  // 어느 쪽을 재든 시계는 매초 올라야 한다 — 조건을 모드별로 갈라 물으면 한쪽이 멈춘 채로 남는다.
+  const measuring = dashboard.hasActiveSession || study.hasActiveSession;
   useEffect(() => {
-    if (!dashboard.hasActiveSession) return;
+    if (!measuring) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [dashboard.hasActiveSession]);
+  }, [measuring]);
 
   /** 광고 보고 밀린 하루 지우기 — 중간 이탈(null)이면 아무 일도 없었던 것처럼 둔다. */
   const claimWaiver = () => {
@@ -1083,6 +1202,9 @@ export function Home({
       : 0;
   // 측정 중이면 elapsed가 매초 늘어 todayRead도 매초 늘어난다 — 카운트업의 동력이 이 한 줄이다.
   const { todayRead, remaining, overflow, progress, achieved } = todayProgress(dashboard, elapsed);
+  /** 공부 경과 — 서버가 준 완료 합에 진행 중 몫을 클라가 매초 얹는다(독서 히어로와 같은 분업). */
+  const studyElapsed =
+    study.hasActiveSession && study.activeStartedAt !== null ? elapsedSeconds(study.activeStartedAt, now) : 0;
   // 여백 문이 가리키는 책 — 측정 중이면 그 책, 대기 중이면 캐러셀에서 고른 책(없으면 문을 안 그린다).
   const doorBook = marginDoorBook(dashboard, selectedBookId);
 
@@ -1129,6 +1251,8 @@ export function Home({
       <div
         className={LAMP_PAGE_CLASS}
         style={{
+          // 모드 토글이 카드 모서리에 붙는다 — 그 좌표의 기준이 이 카드다.
+          position: 'relative',
           padding: '28px 20px',
           borderRadius: 16,
           background: 'var(--adaptiveGrey100, #FCFAF5)',
@@ -1144,6 +1268,14 @@ export function Home({
             중이 아닐 때만 노드가 오므로, 「측정 중 N분」이 안내에 덮이는 일은 없다. */}
         {guide ?? (
           <>
+          {/* 모드 손잡이 — 카드 우측 상단. 첫 사용 안내가 카드를 통째로 가져간 동안엔 서지 않는다
+              (안내 위에 다른 손잡이를 겹치지 않는다). */}
+          <ModeToggle
+            mode={mode}
+            locked={measuring}
+            onChange={onChangeMode}
+            onBlocked={onBlockedModeChange}
+          />
           {/* 라벨과 값은 각자 블록이어야 세로로 쌓인다 — 같은 줄에 붙으면 "오늘 읽은 시간45:00"으로 읽힌다. */}
           <div>
             {/* 오버라인 — 자간을 벌려 「제목이 아니라 머리말」로 읽히게 한다(시안 2a: 12px · 자간 3 · 세이지).
@@ -1155,13 +1287,12 @@ export function Home({
                 color: ACCENT,
               }}
             >
-              {/* 달성일 때만 새싹이 선다 — 평소 머리말은 글자 그대로여서 미달성 렌더가 안 흔들린다. */}
-              {achieved ? (
+              {/* 달성일 때만 새싹이 선다 — 평소 머리말은 글자 그대로여서 미달성 렌더가 안 흔들린다.
+                  공부 모드엔 목표가 없어 그 분기 자체가 없다({@link heroOverline}). */}
+              {heroOverline(mode, achieved) ?? (
                 <>
                   <SproutMark size={13} /> 오늘 목표 달성
                 </>
-              ) : (
-                '오늘 읽은 시간'
               )}
             </span>
           </div>
@@ -1169,10 +1300,12 @@ export function Home({
             {/* 세리프 + t2(44px) — 이 화면이 답하려는 유일한 수다. 개구 26px일 땐 화면 제목(22px)보다
                 4px 큰 게 전부라 히어로로 읽히지 않았다. */}
             <Text typography="t2" fontWeight="bold" style={{ ...SERIF_VALUE }}>
-              {formatClock(todayRead)}
+              {formatClock(mode === 'study' ? study.todaySeconds + studyElapsed : todayRead)}
             </Text>
           </div>
-          {progress !== null ? (
+          {/* 아래 게이지·통계 2열·목표 손잡이는 <b>독서 전제</b>다 — 공부엔 목표가 없어 통째로 빠진다.
+              그 부재가 곧 광고 두 개(부채 지우개 리워드·목표 변경 전면)의 자연 소멸이다(조건 분기 0줄). */}
+          {mode === 'study' ? null : progress !== null ? (
             <div style={{ marginTop: 16 }}>
               <ProgressBar progress={progress} size="normal" color={SAGE} />
               {/*
@@ -1297,7 +1430,17 @@ export function Home({
               <GoalHandle goalSeconds={goal} pending={goalAdPending} onGoGoal={onGoGoal} />
             </div>
           )}
-          {dashboard.hasActiveSession && (
+          {mode === 'study' && study.hasActiveSession && (
+            <>
+              <Text typography="t5" color="blue500" style={{ display: 'block', marginTop: 16 }}>
+                측정 중 {formatDuration(studyElapsed)}
+              </Text>
+              <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 6 }}>
+                {ACTIVE_STUDY_RELIEF}
+              </Text>
+            </>
+          )}
+          {mode === 'reading' && dashboard.hasActiveSession && (
             <>
               <Text typography="t5" color="blue500" style={{ display: 'block', marginTop: 16 }}>
                 측정 중 {formatDuration(elapsed)}
@@ -1314,7 +1457,9 @@ export function Home({
         )}
       </div>
 
-      <FirstSessionBanner show={celebrate} />
+      {/* 축하는 <b>독서</b> 기록에 대한 말이다(「기록 탭에 첫 칸이 생겼어요」 — 공부는 그 탭에 안 남는다).
+          `celebrate`는 `MainTabs`가 들어 탭 전환에 살아남으므로, 켜진 채 토글만 넘기면 공부 화면에 떴다. */}
+      {mode === 'reading' && <FirstSessionBanner show={celebrate} />}
 
       {/* 알림 동의 — 발송은 동의한 유저에게만 가능하고, 동의를 받는 주체는 미니앱이다(콘솔 심사 조건). */}
       {shouldShowNotificationCard(agreement, agreementSupported) && (
@@ -1328,7 +1473,9 @@ export function Home({
         </section>
       )}
 
-      {dashboard.hasActiveSession ? (
+      {/* 책 캐러셀·「읽는 중」 카드·여백 문은 전부 <b>책</b>을 전제한다 — 공부엔 책이 없어 통째로 빠진다.
+          숨기는 것이 아니라 그리지 않는 것이다(태깅 시트가 공부 종료에 안 붙는 것과 같은 규율). */}
+      {mode === 'study' ? null : dashboard.hasActiveSession ? (
         <ReadingNowCard book={dashboard.activeBook ?? null} totalSeconds={dashboard.activeBookTotalSeconds}>
           {marginDoor}
         </ReadingNowCard>

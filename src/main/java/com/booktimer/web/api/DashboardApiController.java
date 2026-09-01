@@ -12,6 +12,7 @@ import com.booktimer.session.ReadingContributionService;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.session.ReadingSessionService;
+import com.booktimer.session.StudySessionService;
 import com.booktimer.user.User;
 import com.booktimer.web.DashboardModel;
 import org.springframework.http.ResponseEntity;
@@ -53,6 +54,7 @@ public class DashboardApiController {
     private final ReadingSessionRepository sessionRepository;
     private final BookRepository bookRepository;
     private final GoalWaiverService goalWaiverService;
+    private final StudySessionService studySessionService;
     private final Clock clock;
 
     public DashboardApiController(CurrentUserService currentUserService,
@@ -64,6 +66,7 @@ public class DashboardApiController {
                                   ReadingSessionRepository sessionRepository,
                                   BookRepository bookRepository,
                                   GoalWaiverService goalWaiverService,
+                                  StudySessionService studySessionService,
                                   Clock clock) {
         this.currentUserService = currentUserService;
         this.dashboardModel = dashboardModel;
@@ -74,6 +77,7 @@ public class DashboardApiController {
         this.sessionRepository = sessionRepository;
         this.bookRepository = bookRepository;
         this.goalWaiverService = goalWaiverService;
+        this.studySessionService = studySessionService;
         this.clock = clock;
     }
 
@@ -102,7 +106,8 @@ public class DashboardApiController {
                 garden,
                 quotes,
                 user.isEmailVerified(),
-                goalWaiverService.availableFor(user));
+                goalWaiverService.availableFor(user),
+                StudyApiController.StudyState.of(studySessionService, user, clock.instant()));
     }
 
     @PostMapping("/api/sessions/start")
@@ -248,7 +253,15 @@ public class DashboardApiController {
             List<QuoteDto> quotes,
             boolean emailVerified,
             /** 리워드 광고로 밀린 하루를 지울 수 있는지 — 미니앱 홈 버튼 노출 조건(웹에는 버튼이 없다). */
-            boolean debtWaiverAvailable
+            boolean debtWaiverAvailable,
+            /**
+             * 공부 모드 상태 — 미니앱이 진입 시 「지금 공부를 재는 중인가 · 오늘 얼마나 했나」를 여기서 받는다.
+             *
+             * <p><b>맨 뒤에 붙인다</b>: 웹 Vue 대시보드 섬은 이 필드를 모르고 그냥 무시하므로(모르는 키는
+             * 읽지 않는다) 웹 회귀가 0이다. 미니앱도 옛 서버(이 필드 없음)에 대비해 {@code ?? IDLE}로 읽는다 —
+             * 배포 순서에 화면이 의존하지 않는다.
+             */
+            StudyApiController.StudyState study
     ) {}
 
     /**

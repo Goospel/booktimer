@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import type { DashboardResponse } from './api';
+import { IDLE_STUDY } from './api';
 import { History } from './screens/History';
 import { Home } from './screens/Home';
 import {
@@ -246,6 +247,10 @@ function home(overrides: Partial<DashboardResponse>) {
     <TDSMobileProvider userAgent={userAgent}>
       <Home
         dashboard={dashboard}
+        mode="reading"
+        study={IDLE_STUDY}
+        onChangeMode={() => {}}
+        onBlockedModeChange={() => {}}
         selectedBookId={undefined}
         onSelectBook={() => {}}
         onTimerChange={() => {}}

@@ -2,8 +2,8 @@ import { Button } from '@toss/tds-mobile';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import type { BookOption, DashboardResponse, MarginBook, TimerState } from './api';
-import { changeActiveBook, fetchDashboard, startSession, stopSession, tagBook, token } from './api';
+import type { BookOption, DashboardResponse, MarginBook, StudyState, TimerState } from './api';
+import { IDLE_STUDY, changeActiveBook, fetchDashboard, startSession, startStudy, stopSession, stopStudy, tagBook, token } from './api';
 import { useBackClose } from './back';
 import {
   CoachmarkBubble,
@@ -122,14 +122,53 @@ const STOP_ICON = 'M8 8h8v8H8z';
 export const LAMP_CLASS = 'reading-lamp';
 
 /**
+ * 타이머가 무엇을 재고 있나 — 독서(기본)냐 공부냐. <b>타이머의 모드</b>이지 화면의 모드가 아니다
+ * (서재·책방·기록은 어느 쪽이든 독서 도메인 그대로다).
+ */
+export type TimerMode = 'reading' | 'study';
+
+/**
+ * 공부 모드일 때 `document.body`에 붙는 클래스 — 색은 전부 `global.css`가 든다(독서등과 같은 수법).
+ *
+ * <p>{@link LAMP_CLASS}와 마찬가지로 이 문자열이 <b>js와 css를 잇는 유일한 매듭</b>이라,
+ * 한쪽만 고치면 기능이 조용히 죽는다. `study-mode.test.tsx`가 css에 이 셀렉터가 실재하는지 본다.
+ */
+export const STUDY_CLASS = 'study-mode';
+
+/** 모드 저장 키 — 기기 로컬이다(모드는 데이터가 아니라 UI 선호라 기기 간 비대칭을 수용한다). */
+export const MODE_KEY = 'booktimer.timerMode';
+
+/** 저장된 모드 — 미지값·손상·증발은 전부 독서로 떨어진다(기본 모드가 독서다). */
+export function readMode(): TimerMode {
+  return localStorage.getItem(MODE_KEY) === 'study' ? 'study' : 'reading';
+}
+
+/**
+ * 지금 보여 줄 모드 — <b>서버 진실이 저장값을 이긴다</b>.
+ *
+ * <p>진행 중 측정이 있으면 그 측정의 모드가 무조건 이긴다(웹에서 시작한 독서가 공부 화면에 가려지면
+ * 「끝내는 법」이 사라진다). 그래서 「재진입하면 모드가 유지된다」와 「측정 중 화면이 어긋나지 않는다」를
+ * 상태 동기화 코드 없이 <b>이 한 줄이 함께</b> 책임진다.
+ */
+export function effectiveMode(readingActive: boolean, studyActive: boolean, stored: TimerMode): TimerMode {
+  if (readingActive) return 'reading';
+  if (studyActive) return 'study';
+  return stored;
+}
+
+/**
  * 독서등을 켤 자리인가 — <b>측정 중인 홈</b>일 때만 참이다(사용자 결정 2026-08-19: 「홈만」).
  *
- * <p>드는 것이 「지금 어느 탭인가 · 지금 측정 중인가」 둘뿐이라 <b>상태가 없다</b>. 그래서 앱을
- * 나갔다 와도 대시보드가 다시 「측정 중」이라 말하는 순간 화면이 어두운 채로 열린다 —
+ * <p>드는 것이 「지금 어느 탭인가 · 지금 측정 중인가 · 어느 모드인가」 셋뿐이라 <b>상태가 없다</b>. 그래서
+ * 앱을 나갔다 와도 대시보드가 다시 「측정 중」이라 말하는 순간 화면이 어두운 채로 열린다 —
  * 「방금 눌렀는지」를 기억하는 코드가 0줄이라 재진입 규칙이 공짜로 따라온다.
+ *
+ * <p><b>공부 모드에선 켜지 않는다</b>(1차 결정): 독서등은 「독서」 브랜드 장치고, 공부용 밤 팔레트는
+ * 1차 가치 대비 비용이 크다. 덕분에 `body.study-mode`와 `body.reading-lamp`가 <b>동시에 붙을 수 없어</b>
+ * (밤 세이지 vs 파랑) 명시도 싸움이 통째로 사라진다.
  */
-export function lampOn(tab: TabKey, hasActiveSession: boolean): boolean {
-  return tab === 'home' && hasActiveSession;
+export function lampOn(tab: TabKey, hasActiveSession: boolean, mode: TimerMode): boolean {
+  return tab === 'home' && hasActiveSession && mode === 'reading';
 }
 
 /** 잠긴 탭을 눌렀을 때의 안내 — 말없이 무반응이면 고장으로 읽힌다. */
@@ -145,6 +184,8 @@ export const START_TOAST_MS = 5000;
 export interface StartToastState {
   book: BookOption | null;
   changed: boolean;
+  /** 공부 측정이면 `'study'` — 책 은유가 통째로 빠진다(생략하면 독서). */
+  mode?: TimerMode;
 }
 
 /**
@@ -154,7 +195,22 @@ export interface StartToastState {
  * 「용기로 / 용기으로」가 갈리는데 제목은 사용자 데이터라 그 판정을 이길 수 없다 — 그래서 조사는
  * 제목이 아니라 <b>「측정」</b>이 받는다(『제목』 측정<b>을</b> / 『제목』 측정<b>으로</b>).
  */
+/**
+ * 이 토스트가 <b>책 장치</b>(표지 자리 · [바꾸기])를 다는가 — 공부 측정이면 달지 않는다.
+ *
+ * <p>남겨 두면 [바꾸기]가 <b>죽은 컨트롤</b>이 된다: 누르면 교체 시트가 열리고, 진행 중 독서 세션이
+ * 없어 서버가 409 「진행 중인 측정이 없습니다」로 끝낸다 — 사용자에겐 이유 없는 에러다. 표지 자리도
+ * 공부엔 가리킬 것이 없어 점선 네모만 남는다.
+ *
+ * <p>판단을 함수로 꺼낸 이유는 늘 같다 — 하니스가 정적 렌더라 클릭 경로로는 못 잰다(T-149).
+ */
+export function toastHasBookControls(toast: StartToastState): boolean {
+  return toast.mode !== 'study';
+}
+
 export function startToastMessage(toast: StartToastState): string {
+  // 공부엔 책이 없다 — 「책 없이 측정을 시작했어요」는 여기서 거짓말이 된다(빠진 것이 아니라 무관하다).
+  if (toast.mode === 'study') return '공부 측정을 시작했어요';
   const target = toast.book === null ? '책 없이' : `『${toast.book.title}』`;
   return toast.changed ? `${target} 측정으로 바꿨어요` : `${target} 측정을 시작했어요`;
 }
@@ -193,7 +249,7 @@ export function tabLocked(key: TabKey, hasActiveSession: boolean): boolean {
   return hasActiveSession && key !== 'home';
 }
 
-export function timerActionView(active: boolean): {
+export function timerActionView(active: boolean, mode: TimerMode = 'reading'): {
   label: string;
   background: string;
   ring: string;
@@ -210,9 +266,12 @@ export function timerActionView(active: boolean): {
         icon: STOP_ICON,
       }
     : {
-        label: '측정 시작',
+        // 시안의 「독서 시작하기 / 공부 시작하기」가 실물에서 서는 자리 — 이 앱엔 시작 버튼 글자가 없고
+        // 원 하나뿐이라, 무엇을 재기 시작하는지는 이 라벨과 시작 토스트가 말한다.
+        label: mode === 'study' ? '공부 측정 시작' : '독서 측정 시작',
         background: 'var(--adaptiveBlue700, #4F6B4C)',
-        ring: '0 0 0 3px rgba(110,138,106,.25)',
+        // 링·배경 둘 다 토큰이라 공부 모드 색 전환이 css 한 벌로 따라온다(빨강 링은 모드 무관 — danger).
+        ring: '0 0 0 3px var(--accentRing, rgba(110,138,106,.25))',
         icon: PLAY_ICON,
       };
 }
@@ -451,6 +510,15 @@ export function App() {
     initialTab(typeof window === 'undefined' ? '' : window.location.search),
   );
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  /**
+   * 공부 원장 — 대시보드와 <b>따로</b> 든다. start/stop 응답(`StudyState`)이 대시보드를 통째로 갈아치우지
+   * 않고 이 한 칸만 갱신하므로, 독서 상태와 서로를 덮어쓸 자리가 없다.
+   */
+  const [study, setStudy] = useState<StudyState>(IDLE_STUDY);
+  /** 사용자가 고른 모드(기기 로컬) — 실제로 보여 줄 모드는 {@link effectiveMode}가 정한다. */
+  const [storedMode, setStoredMode] = useState<TimerMode>(() =>
+    typeof localStorage === 'undefined' ? 'reading' : readMode(),
+  );
   const [firstRun, setFirstRun] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** 목표 바꾸기 전면광고를 기다리는 중 — 버튼을 "준비 중"으로 바꾸고 중복 진입을 막는다. */
@@ -496,6 +564,7 @@ export function App() {
       fetchDashboard()
         .then((data) => {
           setDashboard(data);
+          setStudy(data.study ?? IDLE_STUDY); // 옛 서버(필드 없음)는 「공부 기록 없음」으로 떨어진다
           setView(next);
         })
         .catch((e: Error) => {
@@ -529,7 +598,10 @@ export function App() {
       if (!shouldRefresh(lastFetchedAt.current, Date.now(), force)) return;
       lastFetchedAt.current = Date.now(); // 응답 전에 찍는다 — 연속 복귀가 요청을 겹쳐 쌓지 않게
       fetchDashboard()
-        .then(setDashboard)
+        .then((data) => {
+          setDashboard(data);
+          setStudy(data.study ?? IDLE_STUDY); // 공부도 서버가 진실이다 — 다른 기기에서 시작했을 수 있다
+        })
         .catch((e: Error) => {
           if (e.name === 'UnauthorizedError') toLogin(); // 토큰이 폐기됐으면 조용히 넘어갈 수 없다
         });
@@ -673,6 +745,15 @@ export function App() {
       return timer;
     });
 
+  /** 지금 보여 줄 모드 — 진행 중 측정이 저장값을 이긴다(재진입·다른 기기 시작을 한 줄이 함께 처리한다). */
+  const mode = effectiveMode(dashboard.hasActiveSession, study.hasActiveSession, storedMode);
+
+  /** 모드 전환 — 저장은 기기 로컬 한 줄이고, 화면은 위 파생값이 알아서 따라온다. */
+  const changeMode = (next: TimerMode) => {
+    localStorage.setItem(MODE_KEY, next);
+    setStoredMode(next);
+  };
+
   /**
    * 여백에서 탭바를 눌렀다 — 여백을 닫고 그 탭으로 나간다. 뒤에 깔린 남의 책방도 함께 닫는다
    * — 탭을 눌렀는데 책방이 나오면 「나갔다」가 아니다.
@@ -711,14 +792,36 @@ export function App() {
    * <p><b>태깅 시트·완독 축하는 저절로 안 뜨다</b> — 그것들은 탭바 원의 종료 경로(`MainTabs` 안)에만
    * 달려 있고 이 문의 종료는 별개의 왕복이다. 작성이 겹침이 되어 `MainTabs`가 뒤에 살아남은 뒤에도
    * 그대로다 — 억제 코드가 필요 없는 이유가 「언마운트」에서 「경로가 다름」으로 옮겨졌을 뿐이다.
+   *
+   * <p>⚠️ <b>공부 측정도 같은 규칙으로 끊는다</b> — 규칙의 이름은 「여백은 독서가 아니다」지만 내용은
+   * 「여백은 <b>측정</b>이 아니다」이다. 안 끊으면 여백 화면에서 두 가지가 동시에 깨진다: ① 공부 시간이
+   * 남의 글을 읽는 동안 계속 쌓이고 ② 여백 탭바({@link MarginShell})가 「여기선 측정이 꺼져 있다」를
+   * <b>전제로</b> 상태 없이 그려져, 그 원이 「독서 측정 시작」인 채로 눌려 <b>두 세션이 동시에</b> 돈다
+   * (그 상태는 화면 어디에도 안 보인 채 스윕이 6시간 뒤에 닫는다 — 목 모드 실측으로 드러난 자리다).
    */
   const openMargin = (next: MarginState) => {
-    if (!dashboard.hasActiveSession) {
+    if (!dashboard.hasActiveSession && !study.hasActiveSession) {
       setMargin(next);
       return;
     }
     if (stoppingForMargin.current) return;
     stoppingForMargin.current = true;
+    // 공부만 돌고 있으면 이쪽으로 — 독서와 같은 모양의 왕복이되 잔디·태깅이 없다(공부는 잔디 밖).
+    if (!dashboard.hasActiveSession) {
+      const studied =
+        study.activeStartedAt === null ? 0 : elapsedSeconds(study.activeStartedAt, Date.now());
+      stopStudy()
+        .then((state) => {
+          setStudy(state);
+          trackEvent('study_session_completed', { duration_seconds: studied });
+          setMargin({ ...next, timerStopped: true });
+        })
+        .catch(handleError)
+        .finally(() => {
+          stoppingForMargin.current = false;
+        });
+      return;
+    }
     // 종료 직전 값으로 재는다 — 응답엔 세션 길이가 없고, 탭바 원의 종료와 같은 셜법을 쓴다.
     const duration =
       dashboard.activeStartedAt === null ? 0 : elapsedSeconds(dashboard.activeStartedAt, Date.now());
@@ -870,6 +973,10 @@ export function App() {
       tab={tab}
       onTabChange={setTab}
       dashboard={dashboard}
+      mode={mode}
+      study={study}
+      onStudyChange={setStudy}
+      onChangeMode={changeMode}
       homeBookId={homeBookId}
       onSelectHomeBook={setHomeBookId}
       onOpenMargin={(loginId, bookId) => openMargin({ loginId, bookId, isbn13: null, composeBook: null })}
@@ -935,6 +1042,10 @@ export function MainTabs({
   tab,
   onTabChange,
   dashboard,
+  mode,
+  study,
+  onStudyChange,
+  onChangeMode,
   homeBookId,
   onSelectHomeBook,
   onOpenMargin,
@@ -953,6 +1064,14 @@ export function MainTabs({
   tab: TabKey;
   onTabChange: (tab: TabKey) => void;
   dashboard: DashboardResponse;
+  /** 지금 재는 것 — 독서냐 공부냐. 파생값이라 여기선 받기만 한다({@link effectiveMode}). */
+  mode: TimerMode;
+  /** 공부 원장 — 독서(`dashboard`)와 따로 온다. */
+  study: StudyState;
+  /** 공부 start/stop 응답 반영 — 대시보드를 건드리지 않는다(원장이 갈렸으니 갱신도 갈린다). */
+  onStudyChange: (study: StudyState) => void;
+  /** 모드 전환 — 저장은 App이 든다(홈 토글이 부른다). */
+  onChangeMode: (mode: TimerMode) => void;
   /** 홈 캐러셀에서 고른 책 — 탭 밖 전체 화면이 홈을 언마운트해도 남도록 App이 든다(`undefined`=아직 안 고름). */
   homeBookId: number | null | undefined;
   onSelectHomeBook: (bookId: number | null) => void;
@@ -980,6 +1099,13 @@ export function MainTabs({
 }) {
   /** 액션 처리 중 — 연타로 세션이 두 번 시작·종료되지 않게 원을 흐리고 핸들러를 잠근다. */
   const [busy, setBusy] = useState(false);
+  /**
+   * 지금 <b>무엇이든</b> 재고 있나 — 탭 잠금·안내 배너·토스트 정리가 전부 이 하나를 본다.
+   *
+   * <p>모드별로 갈라 물으면 「공부 재는 중인데 서재로 넘어가진다」 같은 빠뜨린 조합이 생긴다.
+   * 원장은 갈렸지만 <b>「재는 중」이라는 사실은 하나</b>다.
+   */
+  const measuring = dashboard.hasActiveSession || study.hasActiveSession;
   /** 태깅 시트 — `null`이면 닫힘. 열림 여부와 대상 세션이 늘 같이 움직여 상태 하나로 족하다. */
   const [tagging, setTagging] = useState<Untagged | null>(null);
   /** 첫 완료 축하 — 홈에 prop으로 내린다. 다른 탭에서 끝냈어도 홈에 돌아오면 배너가 보인다. */
@@ -1057,14 +1183,14 @@ export function MainTabs({
   // 시작 토스트·교체 시트도 같은 운명이다 — 세션이 다른 경로로 끝나면(여백 진입 자동 종료 등)
   // 「이 책으로 재는 중」이라 말하는 카드와 그 대상을 고르는 시트는 둘 다 거짓말이 된다.
   useEffect(() => {
-    if (dashboard.hasActiveSession) return;
+    if (measuring) return;
     setLockHint(false);
     setStartToast(null);
     setChanging(false);
     return () => {
       if (lockHintTimer.current !== null) clearTimeout(lockHintTimer.current);
     };
-  }, [dashboard.hasActiveSession]);
+  }, [measuring]);
 
   /**
    * 토스트 타이머는 <b>언마운트 때만</b> 걷는다.
@@ -1095,9 +1221,18 @@ export function MainTabs({
    * <p>cleanup이 없으면 홈을 벗어나거나 언마운트될 때 클래스가 남아 앱 전체가 어두워진다.
    */
   useEffect(() => {
-    document.body.classList.toggle(LAMP_CLASS, lampOn(tab, dashboard.hasActiveSession));
+    document.body.classList.toggle(LAMP_CLASS, lampOn(tab, dashboard.hasActiveSession, mode));
     return () => document.body.classList.remove(LAMP_CLASS);
-  }, [tab, dashboard.hasActiveSession]);
+  }, [tab, dashboard.hasActiveSession, mode]);
+
+  /**
+   * 공부 모드 색 — 독서등과 같은 배선(스위치만 여기, 색은 css). 이쪽은 <b>탭과 무관</b>하다:
+   * 모드는 앱 전체의 상태라 어느 탭에 있든 잉크가 같은 색이어야 한다.
+   */
+  useEffect(() => {
+    document.body.classList.toggle(STUDY_CLASS, mode === 'study');
+    return () => document.body.classList.remove(STUDY_CLASS);
+  }, [mode]);
 
   const flowStep = flowIndex < 0 ? undefined : COACHMARK_FLOW[flowIndex];
 
@@ -1134,6 +1269,33 @@ export function MainTabs({
   // 401은 App이 재로그인으로 처리하고, 그 외(409 중복 시작 등)만 화면에 남긴다.
   const fail = (e: Error) => (e.name === 'UnauthorizedError' ? onError(e) : setActionError(e.message));
 
+  /**
+   * 공부 측정 여닫기 — 독서 경로와 <b>갈라 둔다</b>. 태깅 시트·완독 축하·잔디 갱신이 여기 없는 것이
+   * 곧 「공부는 잔디 밖」이라는 규칙의 구현이다(억제 코드가 0줄이다 — 배선 자체가 없다).
+   */
+  const studyAction = () => {
+    if (study.hasActiveSession) {
+      const duration =
+        study.activeStartedAt === null ? 0 : elapsedSeconds(study.activeStartedAt, Date.now());
+      stopStudy()
+        .then((next) => {
+          onStudyChange(next);
+          trackEvent('study_session_completed', { duration_seconds: duration });
+        })
+        .catch(fail)
+        .finally(() => setBusy(false));
+      return;
+    }
+    startStudy()
+      .then((next) => {
+        onStudyChange(next);
+        trackEvent('study_session_started');
+        showStartToast({ book: null, changed: false, mode: 'study' });
+      })
+      .catch(fail)
+      .finally(() => setBusy(false));
+  };
+
   /** 탭바 가운데 원 — 측정 중이면 종료, 아니면 시작. 이 앱에서 세션을 여닫는 유일한 자리다. */
   const timerAction = () => {
     // 안내를 읽고 곧장 이 버튼을 누른 경우 — 덮개가 탭바 아래라 원이 그대로 눌린다. 그 걸음은 역할을 다했다.
@@ -1141,6 +1303,10 @@ export function MainTabs({
     if (busy) return;
     setBusy(true);
     setActionError(null);
+    if (mode === 'study') {
+      studyAction();
+      return;
+    }
     if (dashboard.hasActiveSession) {
       // 종료 시각 기준 경과 — 서버 응답엔 세션 길이가 없다. 홈의 매초 tick 없이 이 한 번의 계산으로 족하다.
       const duration =
@@ -1223,9 +1389,14 @@ export function MainTabs({
         {tab === 'home' && (
           <Home
             dashboard={dashboard}
+            mode={mode}
+            study={study}
+            onChangeMode={onChangeMode}
+            // 측정 중엔 못 바꾼다 — 잠금 안내는 탭 잠금과 <b>같은 스트립</b>을 쓴다(새 층을 만들지 않는다).
+            onBlockedModeChange={showLockHint}
             // 안내로 들어오는 문 — 홈은 자리만 정하고(히어로 카드 속), 만드는 쪽은 흐름을 든 여기다.
             guide={
-              shouldShowGuideHero(flowIndex >= 0, guideClosed, dashboard.hasActiveSession) ? (
+              shouldShowGuideHero(flowIndex >= 0, guideClosed, measuring) ? (
                 <GuideHero
                   onStart={startFlow}
                   onDismiss={() => {
@@ -1331,9 +1502,9 @@ export function MainTabs({
       <BottomTabBar
         tab={tab}
         onTabChange={changeTab}
-        locked={dashboard.hasActiveSession}
+        locked={measuring}
         onBlocked={showLockHint}
-        action={{ active: dashboard.hasActiveSession, busy, onPress: timerAction }}
+        action={{ active: measuring, busy, onPress: timerAction, mode }}
       />
 
       {/* 시트는 측정 종료 후 태깅 자리 하나다 — 탭바(zIndex 100) 위에 떠 어느 탭에서 끝내도 보인다. */}
@@ -1537,6 +1708,7 @@ function MiniCover({ book, width }: { book: BookOption | null; width: number }) 
  */
 export function StartToast({ toast, onChange }: { toast: StartToastState; onChange: () => void }) {
   const message = startToastMessage(toast);
+  const hasBookControls = toastHasBookControls(toast);
   // 제목만 세리프로 — 문구 안에서 「무슨 책인가」가 값이고 나머지는 서술이다.
   const quoted = toast.book === null ? null : `『${toast.book.title}』`;
   const rest = quoted === null ? message : message.slice(quoted.length);
@@ -1561,28 +1733,33 @@ export function StartToast({ toast, onChange }: { toast: StartToastState; onChan
         boxShadow: '0 4px 16px rgba(0, 0, 0, 0.14)',
       }}
     >
-      <MiniCover book={toast.book} width={26} />
+      {/* 표지 자리와 [바꾸기]는 책이 있는 측정의 장치다 — 공부 토스트엔 둘 다 안 그린다
+          ({@link toastHasBookControls}). 덤으로 아래 버튼 배경 리터럴이 공부 모드의 마지막 세이지
+          누출이었는데, 그 조각이 아예 안 그려지면서 색 스코프도 함께 닫힌다. */}
+      {hasBookControls && <MiniCover book={toast.book} width={26} />}
       <span style={{ flex: 1, minWidth: 0, fontSize: 14, lineHeight: 1.5, wordBreak: 'keep-all' }}>
         {quoted !== null && <span style={{ ...SERIF_VALUE, fontWeight: 700 }}>{quoted}</span>}
         {rest}
       </span>
-      <button
-        type="button"
-        onClick={onChange}
-        style={{
-          flex: 'none',
-          padding: '6px 12px',
-          border: 0,
-          borderRadius: 8,
-          background: 'rgba(110, 138, 106, 0.16)',
-          color: 'var(--adaptiveBlue700, #4F6B4C)',
-          fontSize: 13,
-          fontWeight: 700,
-          cursor: 'pointer',
-        }}
-      >
-        바꾸기
-      </button>
+      {hasBookControls && (
+        <button
+          type="button"
+          onClick={onChange}
+          style={{
+            flex: 'none',
+            padding: '6px 12px',
+            border: 0,
+            borderRadius: 8,
+            background: 'rgba(110, 138, 106, 0.16)',
+            color: 'var(--adaptiveBlue700, #4F6B4C)',
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          바꾸기
+        </button>
+      )}
     </div>
   );
 }
@@ -1685,8 +1862,8 @@ export function BottomTabBar({
 }: {
   tab: TabKey;
   onTabChange: (tab: TabKey) => void;
-  /** 가운데 측정 액션 — 탭이 아니라 동작이다(그래서 `TABS` 밖에 산다). */
-  action: { active: boolean; busy: boolean; onPress: () => void };
+  /** 가운데 측정 액션 — 탭이 아니라 동작이다(그래서 `TABS` 밖에 산다). `mode`는 라벨만 가른다. */
+  action: { active: boolean; busy: boolean; onPress: () => void; mode?: TimerMode };
   /** 측정 중인가 — 홈을 뺀 탭이 잠긴다({@link tabLocked}). 가운데 액션은 절대 안 잠근다. */
   locked?: boolean;
   /** 잠긴 탭을 눌렀다 — 안내 문구는 `MainTabs`가 그린다(이 알약은 `overflow: hidden`이라 안에 두면 잘린다). */
@@ -1738,7 +1915,8 @@ export function BottomTabBar({
             width: 38,
             height: 26,
             borderRadius: 13,
-            background: selected ? 'rgba(110,138,106,.18)' : 'transparent',
+            // 토큰 경유 — 공부 모드에서 이 알약도 저절로 파랑이 된다(리터럴이면 세이지로 남는다).
+            background: selected ? 'var(--accentPill, rgba(110,138,106,.18))' : 'transparent',
           }}
         >
           <svg
@@ -1793,8 +1971,18 @@ export function BottomTabBar({
  * 원이 셀(69×56) 안에 들어가므로 알약의 `overflow: hidden`에 잘리지 않는다(돌출형 아님) —
  * 46px + 링 3px = 52px라 시안 4c로 키운 뒤에도 세로·가로 모두 여유가 남는다.
  */
-function TimerActionButton({ active, busy, onPress }: { active: boolean; busy: boolean; onPress: () => void }) {
-  const view = timerActionView(active);
+function TimerActionButton({
+  active,
+  busy,
+  onPress,
+  mode = 'reading',
+}: {
+  active: boolean;
+  busy: boolean;
+  onPress: () => void;
+  mode?: TimerMode;
+}) {
+  const view = timerActionView(active, mode);
 
   return (
     <button

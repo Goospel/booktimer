@@ -13,6 +13,8 @@ import com.booktimer.session.ReadingGoalWaiver;
 import com.booktimer.session.ReadingGoalWaiverRepository;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
+import com.booktimer.session.StudySession;
+import com.booktimer.session.StudySessionRepository;
 import com.booktimer.story.Story;
 import com.booktimer.story.StoryRepository;
 import com.booktimer.timer.ReadingGoalService;
@@ -56,6 +58,8 @@ class AccountDeletionIntegrationTest {
     private ReadingGoalWaiverRepository waiverRepository;
     @Autowired
     private ReadingSessionRepository sessionRepository;
+    @Autowired
+    private StudySessionRepository studySessionRepository;
     @Autowired
     private StoryRepository storyRepository;
     @Autowired
@@ -156,6 +160,30 @@ class AccountDeletionIntegrationTest {
     private User withTossKey(User user, String userKey) {
         user.linkTossUserKey(userKey);
         return user;
+    }
+
+    /**
+     * 공부 원장(study_session)도 users를 FK 참조한다 — 독서와 <b>다른 테이블</b>이라 purge가 따로
+     * 지워야 하고, 빠지면 <b>공부 기록을 가진 사람만</b> 탈퇴가 실패한다. 그 부류가 정확히
+     * {@code author_affection} 누락으로 운영 27명 중 2명이 탈퇴 불가였던 자리다(2026-08-15).
+     *
+     * <p>mock 단위테스트는 FK를 모른다(T-023·T-029) — 실 스키마로만 잡힌다.
+     */
+    @Test
+    @DisplayName("공부 기록(study_session)을 가진 사용자도 FK 위반 없이 탈퇴된다")
+    void deleteAccount_withStudySession_succeeds() {
+        String email = "studyquit@booktimer.com";
+        User user = userRepository.saveAndFlush(
+                User.of(email, passwordEncoder.encode("rawpw1234"), "공부하던이", "Asia/Seoul", Role.USER));
+        StudySession session = StudySession.start(user, Instant.now().minusSeconds(3600));
+        session.end(Instant.now().minusSeconds(1800));
+        studySessionRepository.saveAndFlush(session);
+
+        // study_session.user_id FK가 정리되지 않으면 flush 시 제약 위반.
+        assertThatCode(() -> {
+            accountService.deleteAccount(email, "rawpw1234");
+            assertThat(userRepository.findByEmail(email)).isEmpty();
+        }).doesNotThrowAnyException();
     }
 
     @Test

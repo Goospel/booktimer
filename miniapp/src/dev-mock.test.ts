@@ -12,6 +12,7 @@ import type {
   ProfileBook,
   ShelfResponse,
   StopResponse,
+  StudyState,
   TimerState,
 } from './api';
 import { ApiError } from './api';
@@ -43,6 +44,39 @@ describe('dev-mock 핸들러', () => {
     const stopped = await mockRequest<StopResponse>('/api/sessions/stop', { body: {} });
     expect(stopped.timer.hasActiveSession).toBe(false);
     expect(stopped.graph.weeks.length).toBeGreaterThan(0);
+  });
+
+  it('공부 시작 → 종료 — 종료분이 오늘 누적에 얹히고, 계약(409)까지 서버와 같다', async () => {
+    const started = await mockRequest<StudyState>('/api/study/start', { body: {} });
+    expect(started.hasActiveSession).toBe(true);
+    expect(started.activeStartedAt).not.toBeNull();
+
+    // 중복 시작은 서버처럼 409다 — 목이 서버보다 무르면 그 경로를 브라우저로 확인할 길이 없다.
+    await expect(mockRequest('/api/study/start', { body: {} })).rejects.toMatchObject({ status: 409 });
+
+    const stopped = await mockRequest<StudyState>('/api/study/stop', { body: {} });
+    expect(stopped.hasActiveSession).toBe(false);
+    expect(stopped.activeStartedAt).toBeNull();
+
+    // 무세션 stop도 409(서버 계약 그대로).
+    await expect(mockRequest('/api/study/stop', { body: {} })).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('대시보드가 study 블록을 동봉한다 — 미니앱이 진입 모드를 여기서 정한다', async () => {
+    const data = await mockRequest<DashboardResponse>('/api/dashboard', {});
+
+    expect(data.study).toBeDefined();
+    expect(data.study!.hasActiveSession).toBe(false);
+  });
+
+  it('공부는 독서 원장에 안 섞인다 — 목에서도 잔디·기록이 안 움직인다(격리를 목이 흉내낸다)', async () => {
+    const before = await mockRequest<DashboardResponse>('/api/dashboard', {});
+    await mockRequest('/api/study/start', { body: {} });
+    await mockRequest('/api/study/stop', { body: {} });
+    const after = await mockRequest<DashboardResponse>('/api/dashboard', {});
+
+    expect(after.graph.totalSeconds).toBe(before.graph.totalSeconds);
+    expect(after.remainingSeconds).toBe(before.remainingSeconds);
   });
 
   it('서재 추가 — 뮤테이션이 목록에 반영된다(화면 전이가 실제처럼 보이는 최소 조건)', async () => {
@@ -97,7 +131,11 @@ describe('dev-mock 핸들러', () => {
 
     expect(months.length).toBeGreaterThan(1);
     expect(months[0].month > months[1].month).toBe(true);
-    const [first, second] = months[0].days;
+    // ⚠️ 달 안 순서는 **하루짜리가 아닌 달**에서 잰다 — 매달 1~2일엔 최신 달의 일자가 한 건뿐이라
+    //    `months[0].days[1]`이 `undefined`가 된다(2026-09-01 실측 실패: 날짜에 따라 붉어지는 계측기였다).
+    const multiDay = months.find((m) => m.days.length > 1);
+    expect(multiDay).toBeDefined();
+    const [first, second] = multiDay!.days;
     expect(first.date > second.date).toBe(true);
     // 월 합계가 일자 합과 어긋나면 화면의 월 머리글이 거짓말을 한다.
     expect(months[0].totalSeconds).toBe(months[0].days.reduce((sum, d) => sum + d.totalSeconds, 0));

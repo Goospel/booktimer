@@ -23,6 +23,7 @@ import type {
   SearchRow,
   SharedMarginEntry,
   SocialEvent,
+  StudyState,
   TimerState,
   UserRow,
 } from './api';
@@ -189,6 +190,9 @@ const state = {
   carriedDebtSeconds: 600,
   activeStartedAt: null as string | null,
   activeBookId: null as number | null,
+  /** 공부 원장 — 독서와 <b>따로 든다</b>. 목에서도 원장이 갈려 있어야 「안 섞인다」를 브라우저로 확인할 수 있다. */
+  studyStartedAt: null as string | null,
+  studyTodaySeconds: 0,
   /** 이 세션에서 끝낸 측정 수 — 첫 종료(=1)에만 축하 배너가 뜬다. 새로고침하면 0으로 돌아가 다시 볼 수 있다. */
   completedSessions: 0,
   nextId: 500,
@@ -282,6 +286,14 @@ function timerState(): TimerState {
     recentBookId: state.activeBookId ?? 1,
     // 광고 SDK가 없는 브라우저라 버튼은 뜨지 않는다(`.env.mock`이 광고 그룹 ID를 비운다) — 값은 실제처럼 둔다.
     debtWaiverAvailable: true,
+  };
+}
+
+function studyState(): StudyState {
+  return {
+    hasActiveSession: state.studyStartedAt !== null,
+    activeStartedAt: state.studyStartedAt,
+    todaySeconds: state.studyTodaySeconds,
   };
 }
 
@@ -755,6 +767,7 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     wantToReadBooks: bookOptions('WANT_TO_READ'),
     graph: buildGraph(),
     emailVerified: true,
+    study: studyState(),
   })],
 
   // 웹 history 섬이 쓰던 그 엔드포인트 — 미니앱 기록 탭이 잔디 아래 목록에 쓴다(서버 무변경).
@@ -805,6 +818,23 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     if (state.activeStartedAt === null) throw new ApiError(409, '진행 중인 측정이 없습니다');
     state.activeBookId = (body.bookId as number | null) ?? null;
     return timerState();
+  }],
+
+  // ── 공부 타이머 ──
+  // 잔디·부채·책 통계를 <b>한 줄도 안 건드린다</b> — 서버가 별도 테이블을 쓰는 것과 같은 격리를
+  // 목에서도 지켜야, 「공부가 독서 화면에 안 샌다」를 브라우저로 확인할 수 있다.
+  ['POST', /^\/api\/study\/start$/, () => {
+    if (state.studyStartedAt !== null) throw new ApiError(409, '이미 진행 중인 측정이 있습니다');
+    // 독서 측정 중이면 서버가 거절한다 — 두 원장이 같은 시간을 이중으로 세지 않는다.
+    if (state.activeStartedAt !== null) throw new ApiError(409, '이미 진행 중인 측정이 있습니다');
+    state.studyStartedAt = new Date().toISOString();
+    return studyState();
+  }],
+  ['POST', /^\/api\/study\/stop$/, () => {
+    if (state.studyStartedAt === null) throw new ApiError(409, '진행 중인 측정이 없습니다');
+    state.studyTodaySeconds += Math.floor((Date.now() - Date.parse(state.studyStartedAt)) / 1000);
+    state.studyStartedAt = null;
+    return studyState();
   }],
 
   ['POST', /^\/api\/miniapp\/goal$/, ({ body }) => {

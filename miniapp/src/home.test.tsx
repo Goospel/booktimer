@@ -9,7 +9,7 @@ import homeSource from './screens/Home.tsx?raw';
 
 import type { BookOption, DashboardResponse } from './api';
 import { TAB_BAR_Z_INDEX } from './App';
-import { ApiError, waiveDebt } from './api';
+import { ApiError, IDLE_STUDY, waiveDebt } from './api';
 import { dismissCoachmark, setCoachmarkWalking } from './coachmark';
 import {
   ACTIVE_SESSION_RELIEF,
@@ -146,6 +146,10 @@ function renderHome(
       <Home
         guide={props.guide}
         dashboard={dashboard(overrides)}
+        mode="reading"
+        study={IDLE_STUDY}
+        onChangeMode={() => {}}
+        onBlockedModeChange={() => {}}
         selectedBookId={props.selectedBookId}
         onSelectBook={() => {}}
         onTimerChange={() => {}}
