@@ -163,6 +163,39 @@ await page.evaluate(() => {
 await settle(1200)
 await shot('05-goal')
 
+/*
+ * ── 공부 모드 3컷 ─────────────────────────────────────────────────────────────
+ *
+ * 모드는 홈의 토글이 `localStorage`에 적고(`App.tsx` MODE_KEY), 앱은 그 값을 **마운트 1회**만 읽는다
+ * (`useState(() => readMode())`). 그래서 토글을 클릭하는 대신 키를 심고 다시 연다 — 클릭 경로는
+ * 홈 스크롤 위치·토글 좌표에 기대지만 키는 그런 게 없다. 다시 열지 않으면 심어도 안 먹는다.
+ */
+await page.addInitScript(() => localStorage.setItem('booktimer.timerMode', 'study'))
+await page.goto(URL_APP, { waitUntil: 'networkidle' })
+await settle(1200)
+
+// 06 공부 홈 — 「독서|공부」 토글이 공부로 선 파랑 화면(`body.study-mode`)+ 공부 게이지.
+await page.evaluate(() => window.scrollTo(0, 0))
+await shot('06-study-home')
+
+// 07 공부 서재 — 「N독」 칩 + 「회독 +1」 채움 버튼.
+// 기본 선택이 첫 책이라(`resolveSelected`) 「회독 +1」·「관리」 줄이 이미 서 있다 — 고를 것이 없다.
+await tab('서재')
+await shot('07-study-library')
+
+// 08 공부 일정 — 월 달력(지킴 원 · 못지킴 테두리 · 측정 점).
+// 탭 이름이 「책방」이 아니라 「일정」인 것 자체가 공부 모드 탭바(`STUDY_TABS`)의 증거다.
+// ⚠️ 목 픽스처는 표식을 **최근 4일**에 놓는다 — 달 초에 찍으면 그것들이 지난달에 있어 이번 달 격자가
+// 통째로 빈다(2026-09-01 실측: 9월이 백지였다). 빈 달력은 이 화면이 뭘 하는지 말하지 못하므로,
+// 표식이 하나도 없으면 지난달로 한 칸 물러선다. 달 중순엔 이 분기가 안 타고 이번 달이 그대로 찍힌다.
+await tab('일정')
+const MARKS = '[data-cal-state="kept"],[data-cal-state="missed"],[data-cal-dot]'
+if ((await page.locator(MARKS).count()) === 0) {
+    await page.click('button[aria-label="지난달 보기"]')
+    await settle()
+}
+await shot('08-study-calendar')
+
 } // if (!BANNER_ONLY)
 
 // ── 가로 배너 — 앱에 가로 화면이 없어 세로 컷 3장을 얹은 합성물이다 ──────────────
