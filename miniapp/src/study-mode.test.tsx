@@ -16,7 +16,7 @@ import {
 } from './App';
 import type { DashboardResponse, StudyState } from './api';
 import { IDLE_STUDY } from './api';
-import { ACTIVE_STUDY_RELIEF, Home, ModeToggle, heroOverline } from './screens/Home';
+import { ACTIVE_STUDY_RELIEF, HERO_CARD_BG_VAR, Home, ModeToggle, heroOverline, studyProgress } from './screens/Home';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
 /**
@@ -166,14 +166,42 @@ describe('시작 토스트 — 공부엔 책이 없다', () => {
 });
 
 describe('히어로 오버라인', () => {
-  it('공부 모드는 「오늘 공부한 시간」 — 목표가 없어 달성 분기도 없다', () => {
+  it('공부 모드도 달성이면 새싹 머리말로 갈린다(null = 새싹 분기) — 2차에서 목표가 생겼다', () => {
     expect(heroOverline('study', false)).toBe('오늘 공부한 시간');
-    expect(heroOverline('study', true)).toBe('오늘 공부한 시간');
+    expect(heroOverline('study', true)).toBeNull();
   });
 
   it('독서 모드는 「오늘 읽은 시간」이고, 달성이면 새싹 머리말로 갈린다(null = 새싹 분기)', () => {
     expect(heroOverline('reading', false)).toBe('오늘 읽은 시간');
     expect(heroOverline('reading', true)).toBeNull();
+  });
+});
+
+/**
+ * 공부 게이지 파생값 — {@link todayProgress}(독서)에서 <b>이월·부채 항을 뺀</b> 축소판이다.
+ * 공부엔 빚이 없어 게이지 최대치가 곧 목표고, 「목표는 달성인데 게이지는 아직」 구간도 없다.
+ */
+describe('공부 진행률 (studyProgress)', () => {
+  it('목표 0이면 게이지를 안 그린다 — 달성이라 우기지도 않는다', () => {
+    expect(studyProgress(0, 0)).toEqual({ remaining: 0, progress: null, achieved: false, overflow: 0 });
+    expect(studyProgress(0, 3_600)).toEqual({ remaining: 0, progress: null, achieved: false, overflow: 0 });
+  });
+
+  it('덜 채웠으면 남은 시간과 비율이 함께 온다', () => {
+    expect(studyProgress(1_800, 600)).toEqual({ remaining: 1_200, progress: 1 / 3, achieved: false, overflow: 0 });
+  });
+
+  it('정확히 채운 순간이 달성이다 — 경계는 「이상」이지 「초과」가 아니다', () => {
+    expect(studyProgress(1_800, 1_800)).toEqual({ remaining: 0, progress: 1, achieved: true, overflow: 0 });
+  });
+
+  it('넘기면 비율은 1에서 멈추고 초과분이 따로 온다 — 게이지가 밖으로 자라지 않는다', () => {
+    expect(studyProgress(1_800, 2_400)).toEqual({ remaining: 0, progress: 1, achieved: true, overflow: 600 });
+  });
+
+  it('음수 입력에도 화면에 음수 시간이 뜨지 않는다 — 서버 스냅샷이 어긋나도 바닥을 친다', () => {
+    expect(studyProgress(-1, 600)).toEqual({ remaining: 0, progress: null, achieved: false, overflow: 0 });
+    expect(studyProgress(1_800, -600)).toEqual({ remaining: 1_800, progress: 0, achieved: false, overflow: 0 });
   });
 });
 
@@ -196,6 +224,34 @@ describe('공부 모드 색 — css에 실재하는가', () => {
     const root = css.slice(css.indexOf('html:root {'), css.indexOf('}', css.indexOf('html:root {')));
     expect(root).toContain('--accentRing:');
     expect(root).toContain('--accentPill:');
+  });
+
+  /**
+   * 히어로 카드 틴트(2차 §7-B) — 「토글했는데 색이 안 바뀐다」의 처방이다. 값이 <b>양쪽에</b> 있어야
+   * 의미가 있다: 낮 기본값이 빠지면 인라인 fallback만 남아 공부 모드에서도 종이색 그대로다.
+   */
+  it('히어로 카드 배경 토큰이 낮·공부 양쪽에 있다 — 한쪽만 있으면 틴트가 조용히 죽는다', () => {
+    const root = css.slice(css.indexOf('html:root {'), css.indexOf('}', css.indexOf('html:root {')));
+    const study = css.slice(css.indexOf(`body.${STUDY_CLASS} {`), css.indexOf('}', css.indexOf(`body.${STUDY_CLASS} {`)));
+
+    expect(root).toContain(`${HERO_CARD_BG_VAR}: #FCFAF5`); // 독서 = 지금까지의 종이색 그대로(회귀 0)
+    expect(study).toContain(`${HERO_CARD_BG_VAR}: #EFF3F6`); // 공부 = 명도 유지·색상만 한랭한 「푸른 종이」
+  });
+
+  it('히어로 카드가 그 토큰을 실제로 소비한다 — 선언만 있고 안 쓰면 화면은 안 바뀐다', () => {
+    expect(renderHome('study')).toContain(`background:var(${HERO_CARD_BG_VAR}`);
+  });
+
+  /** 큰 시계 잉크(2차 §7-C) — 화면 최대 활자가 「파란 펜」이 된다. 토큰 경유라 값은 css가 정한다. */
+  it('공부 모드의 큰 시계는 파란 잉크다 — 독서 모드 시계는 그대로 잉크색', () => {
+    // 큰 시계만 집는다 — 머리말(오버라인)은 두 모드 다 ACCENT라 그걸로 재면 늘 파랑이 잡힌다.
+    const clockTag = (markup: string, clock: string) =>
+      markup.slice(markup.lastIndexOf('<span', markup.indexOf(clock)), markup.indexOf(clock));
+
+    expect(clockTag(renderHome('study', {}, { ...IDLE_STUDY, todaySeconds: 3_725 }), '01:02:05'))
+      .toContain('--adaptiveBlue700');
+    // 독서 픽스처의 오늘 읽은 시간 = 목표 1시간 − 남은 15분 = 45:00
+    expect(clockTag(renderHome('reading'), '45:00')).not.toContain('--adaptiveBlue700');
   });
 });
 
@@ -224,6 +280,24 @@ describe('여백 진입 게이트 — 공부 측정도 끊는다', () => {
 
   it('그 종료도 지표에 남는다 — 빠지면 이 경로의 공부 세션만 집계에서 증발한다', () => {
     expect(gate).toContain("trackEvent('study_session_completed'");
+  });
+});
+
+/**
+ * 목표 화면 진입 배선 — 손잡이(홈 「변경 ›」·GoalHandle)는 <b>코드 무변경</b>이고, 어느 목표 화면으로
+ * 가느냐는 App이 모드로 고른다. 정적 렌더로는 클릭이 안 도니(T-149) 배선을 소스로 잰다.
+ */
+describe('공부 목표 진입 배선 (App)', () => {
+  const code = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8');
+
+  it('공부 모드면 공부 목표 화면으로 간다 — 분기가 없으면 손잡이가 독서 목표를 연다', () => {
+    expect(code).toContain("onGoGoal={mode === 'study' ? goToStudyGoal : goToGoal}");
+  });
+
+  it('전면광고는 기존 경로를 그대로 탄다 — 「목표 바꾸기 = 광고 1회」 규칙이 모드 무관 동일하다', () => {
+    const enter = code.slice(code.indexOf('const goToStudyGoal ='), code.indexOf('switch (view)'));
+    expect(enter).toContain('showInterstitialAd()');
+    expect(enter).toContain("setView('studyGoal')");
   });
 });
 
@@ -300,11 +374,42 @@ describe('홈 — 공부 모드 렌더', () => {
     expect(renderHome('study')).not.toContain('무엇으로 측정할까요?');
   });
 
-  it('목표·게이지·부채 손잡이가 없다 — 부재가 곧 광고 두 개의 자연 소멸이다', () => {
-    const markup = renderHome('study');
-    expect(markup).not.toContain('하루 목표');
+  /**
+   * 2차에서 <b>목표만</b> 돌아왔다 — 게이지·남은 시간·「변경 ›」은 서고, 부채 장치(ⓘ 툴팁·이월 문구·
+   * 리워드 광고)는 그대로 없다. 공부엔 이월이 없어 설명할 규칙도, 지울 빚도 없기 때문이다.
+   */
+  it('목표가 있으면 게이지·남은 시간·「변경 ›」이 선다', () => {
+    const markup = renderHome('study', {}, { ...IDLE_STUDY, todaySeconds: 600, goalSeconds: 1_800 });
+    expect(markup).toContain('하루 목표');
+    expect(markup).toContain('남은 시간');
+    expect(markup).toContain('변경 ›');
+    // 게이지 분모는 공부 목표다 — 남은 시간 20분(=1800-600)이 화면에 실제로 닿는지.
+    expect(markup).toContain('20:00');
+  });
+
+  it('부채 장치는 여전히 없다 — 이월이 없는 모드에 ⓘ·밀린 시간·광고를 들이지 않는다', () => {
+    const markup = renderHome('study', {}, { ...IDLE_STUDY, todaySeconds: 600, goalSeconds: 1_800 });
+    expect(markup).not.toContain('밀린 시간');
+    expect(markup).not.toContain('다음 날로 넘어가');
+    expect(markup).not.toContain('광고 보고');
+  });
+
+  it('목표가 0이면 게이지 대신 「목표 정하기」 손잡이만 — 강요 없이 문만 둔다', () => {
+    const markup = renderHome('study', {}, { ...IDLE_STUDY, goalSeconds: 0 });
+    expect(markup).toContain('목표 정하기');
     expect(markup).not.toContain('남은 시간');
-    expect(markup).not.toContain('변경 ›');
+  });
+
+  it('목표를 넘기면 초과분을 말한다 — 독서와 같은 꼴(공짜 대칭)', () => {
+    const markup = renderHome('study', {}, { ...IDLE_STUDY, todaySeconds: 2_400, goalSeconds: 1_800 });
+    expect(markup).toContain('+10분 더 공부했어요');
+  });
+
+  it('달성하면 머리말이 새싹으로 바뀐다 — 「오늘 공부한 시간」 글자가 사라지고 표식이 선다', () => {
+    const markup = renderHome('study', {}, { ...IDLE_STUDY, todaySeconds: 1_800, goalSeconds: 1_800 });
+    expect(markup).toContain('오늘 목표 달성');
+    expect(markup).toContain('data-sprout');
+    expect(markup).not.toContain('오늘 공부한 시간');
   });
 
   it('공부 측정 중이면 안심 문구를 말한다 — 화면을 꺼도 서버가 센다는 계약', () => {

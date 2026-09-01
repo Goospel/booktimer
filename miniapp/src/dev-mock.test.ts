@@ -69,6 +69,29 @@ describe('dev-mock 핸들러', () => {
     expect(data.study!.hasActiveSession).toBe(false);
   });
 
+  it('공부 목표 — 저장하면 응답과 대시보드 study 블록에 그대로 실린다(음수는 서버처럼 400)', async () => {
+    const saved = await mockRequest<StudyState>('/api/study/goal', { body: { dailyGoalSeconds: 5400 } });
+    expect(saved.goalSeconds).toBe(5400);
+
+    const data = await mockRequest<DashboardResponse>('/api/dashboard', {});
+    expect(data.study!.goalSeconds).toBe(5400);
+
+    // 음수 거부가 목에도 있어야 「저장 실패 문구」를 브라우저로 확인할 수 있다.
+    await expect(mockRequest('/api/study/goal', { body: { dailyGoalSeconds: -1 } })).rejects.toMatchObject({
+      status: 400,
+    });
+    // 거절된 값이 상태를 물들이지 않는다.
+    expect((await mockRequest<StudyState>('/api/study/goal', { body: { dailyGoalSeconds: 0 } })).goalSeconds).toBe(0);
+  });
+
+  it('공부 목표는 독서 목표를 건드리지 않는다 — 목에서도 두 목표가 갈려 있다', async () => {
+    const before = await mockRequest<DashboardResponse>('/api/dashboard', {});
+    await mockRequest('/api/study/goal', { body: { dailyGoalSeconds: 3600 } });
+    const after = await mockRequest<DashboardResponse>('/api/dashboard', {});
+
+    expect(after.todayGoalSeconds).toBe(before.todayGoalSeconds);
+  });
+
   it('공부는 독서 원장에 안 섞인다 — 목에서도 잔디·기록이 안 움직인다(격리를 목이 흉내낸다)', async () => {
     const before = await mockRequest<DashboardResponse>('/api/dashboard', {});
     await mockRequest('/api/study/start', { body: {} });

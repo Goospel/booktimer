@@ -169,6 +169,14 @@ html:root {
   /* 표면 → 종이톤 (웹 --card-bg/--border/--muted/--text) */
   --adaptiveBackground: #FCFAF5; /* 탭바·시트 표면 = 카드지 */
   --adaptiveGrey100: #FCFAF5; /* 섹션·행 fill — 크림 캔버스 위 카드지 */
+  /*
+   * 히어로 카드 <b>한 장만</b>의 배경 — grey100(전 화면 공용)에서 이 자리만 떼어낸 토큰이다.
+   *
+   * 공부 모드로 토글해도 「색이 안 바뀐다」던 실기기 피드백의 처방: 1차의 유색 요소가 12px 머리말뿐이라
+   * 화면에 파랑이 사실상 없었다. 화면 최대 카드가 <b>면으로</b> 말하면 진행도·목표 유무와 무관하게 보인다.
+   * 낮 기본값은 지금까지의 카드지 그대로 — 독서 렌더는 픽셀 하나 안 바뀐다.
+   */
+  --heroCardBg: #FCFAF5;
   --adaptiveGrey200: #E4DDD0; /* 표지 placeholder·연보더 */
   /*
    * 입력칸 힌트 — TDS `TextField`가 `--text-field-box-placeholder-color: var(--adaptiveGrey500)`로 쓴다.
@@ -621,6 +629,9 @@ body.study-mode {
   --brandButtonInk: #47657C;
   --accentRing: rgba(95, 126, 150, .25);
   --accentPill: rgba(95, 126, 150, .18);
+  /* 히어로 카드 틴트 — 명도는 종이 그대로 두고 색상만 한랭하게 민 「푸른 종이」다(연필 테두리·질감 불변).
+     전환 트랜지션은 기존 `.lamp-page`의 background-color 트랜지션에 그대로 편승한다(추가 코드 0). */
+  --heroCardBg: #EFF3F6;
 }
 
 /*

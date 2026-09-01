@@ -694,4 +694,33 @@ class UserTest {
         assertThat(user.getLoginId()).isEqualTo("oldhandle");
         assertThat(user.getPreviousLoginId()).isNull();
     }
+
+    /**
+     * 공부 하루 목표 — 독서 목표({@link com.booktimer.timer.ReadingTimer#updateSettings})와 <b>같은 규칙</b>이다:
+     * 0은 「목표 없음」으로 허용하고 음수만 거부한다. 두 모드가 다른 규칙을 가지면 그건 결정이 아니라 표류다.
+     */
+    @Test
+    @DisplayName("updateStudyDailyGoal: 기본은 0(목표 없음)이고 값을 그대로 반영한다")
+    void updateStudyDailyGoal_setsValue() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+
+        assertThat(user.getStudyDailyGoalSeconds()).isZero();
+
+        user.updateStudyDailyGoal(3600);
+        assertThat(user.getStudyDailyGoalSeconds()).isEqualTo(3600);
+
+        // 0 = 목표 지우기 — 허용해야 「목표 없음」으로 되돌아갈 길이 있다.
+        user.updateStudyDailyGoal(0);
+        assertThat(user.getStudyDailyGoalSeconds()).isZero();
+    }
+
+    @Test
+    @DisplayName("updateStudyDailyGoal: 음수는 IAE — 값은 그대로다")
+    void updateStudyDailyGoal_negative_throws() {
+        User user = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+        user.updateStudyDailyGoal(1800);
+
+        assertThatThrownBy(() -> user.updateStudyDailyGoal(-1)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(user.getStudyDailyGoalSeconds()).isEqualTo(1800);
+    }
 }

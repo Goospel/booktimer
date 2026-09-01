@@ -196,6 +196,40 @@ describe('목표 화면 렌더', () => {
 });
 
 /**
+ * 공부 목표 — 같은 화면을 `variant`로 갈아 쓴다(휠·밴드·버튼 전부 공유). 갈리는 건 <b>문구와 저장 함수</b>뿐이고,
+ * 파랑은 공짜다: 밴드·주간 줄이 토큰이라 `body.study-mode`가 알아서 칠한다.
+ */
+describe('공부 목표 렌더 (variant)', () => {
+  const render = (variant: 'reading' | 'study') =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Goal current={1_800} firstRun={false} variant={variant} onSaved={() => {}} onSkip={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  it('제목이 「공부 하루 목표」다 — 어느 목표를 고치는지 화면이 스스로 말한다', () => {
+    expect(render('study')).toContain('공부 하루 목표');
+    expect(render('reading')).not.toContain('공부 하루 목표');
+  });
+
+  /** 공부엔 이월이 없다 — 독서 문구를 그대로 쓰면 <b>거짓말</b>이 된다. */
+  it('이월 문구가 없다 — 대신 지킨 날은 직접 체크한다고 말한다', () => {
+    const study = render('study');
+    expect(study).not.toContain('다음 날로 넘어가요');
+    expect(study).toContain('목표로 해요');
+    // 독서 문구는 그대로 — 분기가 한쪽을 지운 게 아니다.
+    expect(render('reading')).toContain('다음 날로 넘어가요');
+  });
+
+  it('휠·밴드·주간 환산은 그대로 공유한다 — 재사용이 이 옵션의 이유다', () => {
+    const study = render('study');
+    expect(study).toContain('aria-label="시간 선택"');
+    expect(study).toContain('data-wheel-band');
+    expect(study).toContain('일주일이면 3시간 30분씩 쌓여요');
+  });
+});
+
+/**
  * 시안 2e — 휠 뒤 밴드 + 선택 행 세리프 + 채움 저장 버튼.
  *
  * <p>휠 항목은 TDS 내부라 정적 렌더로 안 보인다. 설계 §7 U-3의 CHECK를 목 모드에서 돌려

@@ -400,7 +400,20 @@ interface Untagged {
 }
 
 /** 탭 밖 전역 상태 — 인증·연결·목표·에러는 탭바 없이 화면 전체를 차지한다. */
-type View = 'auth' | 'link' | 'loading' | 'main' | 'goal' | 'settings' | 'error';
+type View =
+  | 'auth'
+  | 'link'
+  | 'loading'
+  | 'main'
+  /** 독서 목표 화면. */
+  | 'goal'
+  /**
+   * 공부 목표 화면 — 파생 `mode`로 렌더를 가르지 않고 <b>진입 시점 스냅샷</b>으로 둔다. 원격에서 모드가
+   * 플립되면(다른 기기에서 측정 시작) 편집 중이던 목표 화면이 통째로 갈아타는 엣지가 생기기 때문이다.
+   */
+  | 'studyGoal'
+  | 'settings'
+  | 'error';
 
 /**
  * 열린 여백 — 「누구의 + 어느 책」 두 축이 곧 서버 계약이고, `composeBook`이 있으면 그 책의 **작성
@@ -621,6 +634,7 @@ export function App() {
     setFirstRun(false);
     setView('main');
   });
+  useBackClose(view === 'studyGoal', () => setView('main'));
   useBackClose(view === 'settings', () => setView('main'));
   // 작성 화면이 위면 그것만 닫는다 — 단 밑에 깔린 여백 화면이 없으면 통째로 닫아 출발한 탭으로 돌아간다.
   useBackClose(margin?.composeBook != null, () => setMargin((m) => (m === null ? null : closeCompose(m))));
@@ -665,6 +679,24 @@ export function App() {
     await showInterstitialAd();
     setGoalAdPending(false);
     setView('goal');
+  }, [goalAdPending]);
+
+  /**
+   * 공부 목표 바꾸기 진입 — 위와 <b>같은 몸, 같은 광고 그룹</b>이다(가는 화면만 다르다).
+   *
+   * <p>전면 지면을 새로 만들지 않는 이유: SDK에서 광고 그룹은 재고 단위지 진입점 단위가 아니라, 같은
+   * 그룹을 두 자리에서 요청하는 데 제약이 없다. 무엇보다 「목표 바꾸기 = 광고 1회」 규칙이 모드와
+   * 무관해야 사용자가 규칙을 하나만 배운다(독서만 광고면 「왜 독서만?」이 된다).
+   *
+   * <p>`goalAdPending`도 <b>공유</b>한다 — 모드는 한 번에 하나라 두 경로가 동시에 눌릴 수 없고,
+   * 공유해야 설정 화면 버튼까지 함께 「준비 중」이 된다.
+   */
+  const goToStudyGoal = useCallback(async () => {
+    if (goalAdPending) return;
+    setGoalAdPending(true);
+    await showInterstitialAd();
+    setGoalAdPending(false);
+    setView('studyGoal');
   }, [goalAdPending]);
 
   switch (view) {
@@ -712,6 +744,19 @@ export function App() {
           setFirstRun(false);
           setView('main');
         }}
+      />
+    );
+  }
+
+  if (view === 'studyGoal') {
+    return (
+      <Goal
+        variant="study"
+        // 옛 서버(필드 없음)는 「목표 없음」으로 떨어진다 — 휠은 0시간 0분에서 시작한다.
+        current={study.goalSeconds ?? 0}
+        firstRun={false} // 공부엔 온보딩이 없다 — 첫 진입 유도 문구가 설 자리가 아니다.
+        onSaved={() => load('main')}
+        onSkip={() => setView('main')}
       />
     );
   }
@@ -991,7 +1036,8 @@ export function App() {
       onTimerChange={applyTimer}
       onStartTimer={startTimer}
       onGraphChange={applyGraph}
-      onGoGoal={goToGoal}
+      // 홈 손잡이(「변경 ›」·GoalHandle)는 코드 무변경 — 어느 목표 화면으로 가느냐만 모드가 고른다.
+      onGoGoal={mode === 'study' ? goToStudyGoal : goToGoal}
       goalAdPending={goalAdPending}
       onGoSettings={() => setView('settings')}
       onError={handleError}

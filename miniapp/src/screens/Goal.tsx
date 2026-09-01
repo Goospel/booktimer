@@ -1,7 +1,8 @@
 import { Button, Wheel } from '@toss/tds-mobile';
 import { useState } from 'react';
 
-import { setGoal } from '../api';
+import { setGoal, setStudyGoal } from '../api';
+import type { TimerMode } from '../App';
 import { formatDuration } from '../format';
 import { ErrorMessage, FilledButton, Screen, Text } from '../ui';
 
@@ -66,14 +67,21 @@ export function weeklyLine(seconds: number): string | null {
 export function Goal({
   current,
   firstRun,
+  variant = 'reading',
   onSaved,
   onSkip,
 }: {
   current: number;
   firstRun: boolean;
+  /**
+   * 어느 목표를 정하는가 — 휠·밴드·레이아웃·버튼은 <b>전부 공유</b>하고 문구와 저장 함수만 갈린다.
+   * 파랑은 공짜다: 밴드(`--adaptiveBlue50`)·주간 줄(`blue700`)이 토큰이라 `body.study-mode`가 칠한다.
+   */
+  variant?: TimerMode;
   onSaved: () => void;
   onSkip: () => void;
 }) {
+  const study = variant === 'study';
   const [selected, setSelected] = useState(() => initialGoalSelection(firstRun, current));
   /** 휠은 비제어 컴포넌트라 시작 칸만 첫 렌더에서 한 번 읽는다 — 이후 값은 onChange가 selected로 되돌린다. */
   const [initialWheel] = useState(() => wheelIndices(initialGoalSelection(firstRun, current)));
@@ -83,24 +91,30 @@ export function Goal({
   const save = () => {
     setBusy(true);
     setError(null);
-    setGoal(selected)
+    // 두 목표는 서버 원장이 갈려 있어 문도 다르다 — 여기서 섞이면 공부 목표가 독서 부채를 흔든다.
+    const saving = study ? setStudyGoal(selected).then(() => {}) : setGoal(selected);
+    saving
       .then(onSaved)
       .catch((e: Error) => setError(e.message))
       .finally(() => setBusy(false));
   };
 
+  // 공부엔 온보딩이 없어 `firstRun` 분기가 오지 않는다(진입은 홈 손잡이·설정뿐).
   return (
-    <Screen title={firstRun ? '하루에 얼마나 읽을까요?' : '하루 목표 바꾸기'}>
+    <Screen title={study ? '공부 하루 목표' : firstRun ? '하루에 얼마나 읽을까요?' : '하루 목표 바꾸기'}>
       {/* 화면 한 장을 세로로 다 쓴다 — 휠은 가운데, 버튼은 바닥. 예전엔 전부 위에 몰려 「돌아가기」가
           화면 중턱(390×844에서 y=477)에 떠 있었고 아래 43%가 빈 채였다.
           120 = Screen 상단 패딩 24 + 제목 줄 ≈56 + 하단 패딩 40. 제목 줄까지 빼는 이유: 덜 빼면
           그만큼 화면 밖으로 밀려 버튼이 스크롤해야 보인다(넘게 빼면 버튼이 조금 위에 설 뿐 무해하다).
           dvh 미지원 브라우저는 calc가 통째로 무효라 minHeight가 사라지고 예전 상단 몰림으로 강등된다. */}
       <div style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 120px)' }}>
+      {/* 주의: 공부에 독서 문구(「다음 날로 넘어가요」)를 그대로 쓰면 <b>거짓말</b>이다 — 공부엔 이월이 없다. */}
       <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 20 }}>
-        {firstRun
-          ? '매일 이만큼씩 쌓여요. 못 채운 시간은 다음 날로 넘어가니 부담 없는 값으로 시작해 보세요.'
-          : '매일 이만큼씩 쌓여요. 못 채운 시간은 다음 날로 넘어가요.'}
+        {study
+          ? '매일 이만큼 공부하는 걸 목표로 해요. 못 채워도 다음 날로 넘어가지 않아요.'
+          : firstRun
+            ? '매일 이만큼씩 쌓여요. 못 채운 시간은 다음 날로 넘어가니 부담 없는 값으로 시작해 보세요.'
+            : '매일 이만큼씩 쌓여요. 못 채운 시간은 다음 날로 넘어가요.'}
       </Text>
 
       {/* 고르는 자리는 세로 가운데 — 위아래 남는 공간을 `auto`가 반씩 먹는다. */}
