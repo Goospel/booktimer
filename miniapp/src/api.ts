@@ -245,10 +245,22 @@ export interface StudyState {
   hasActiveSession: boolean;
   activeStartedAt: string | null;
   todaySeconds: number;
+  /**
+   * 공부 하루 목표(초) — {@code 0}이면 목표 없음. <b>독서 목표와 완전 별개</b>이고 이월·부채가 없다.
+   *
+   * <p>선택 필드인 이유는 옛 서버 방어다(2차 이전 서버는 이 필드를 안 준다) — 소비처는 {@code ?? 0}으로
+   * 「목표 없음」 화면(1차와 같은 렌더)으로 떨어진다.
+   */
+  goalSeconds?: number;
 }
 
 /** 공부 기록이 없는 상태 — 옛 서버(이 필드를 안 주는)와 붙었을 때의 폴백이기도 하다. */
-export const IDLE_STUDY: StudyState = { hasActiveSession: false, activeStartedAt: null, todaySeconds: 0 };
+export const IDLE_STUDY: StudyState = {
+  hasActiveSession: false,
+  activeStartedAt: null,
+  todaySeconds: 0,
+  goalSeconds: 0,
+};
 
 // 서버는 작가 격언(`quotes`)도 실어 보내지만 미니앱은 쓰지 않는다 — 웹 대시보드 전용이라 필드를 받지 않는다.
 export interface DashboardResponse extends TimerState {
@@ -433,6 +445,13 @@ export const stopStudy = (): Promise<StudyState> => request('/api/study/stop', {
 
 export const setGoal = (dailyIncrementSeconds: number): Promise<void> =>
   request('/api/miniapp/goal', { body: { dailyIncrementSeconds } });
+
+/**
+ * 공부 하루 목표 설정 — <b>독서와 다른 문</b>이다(원장이 다르므로 문도 다르다). 응답이 갱신된
+ * {@link StudyState}라 저장 직후 화면이 재조회 없이도 새 목표를 안다.
+ */
+export const setStudyGoal = (dailyGoalSeconds: number): Promise<StudyState> =>
+  request('/api/study/goal', { body: { dailyGoalSeconds } });
 
 /** 용서 지급 결과 — `timer`가 동봉돼 부채·버튼 노출이 재조회 없이 갱신된다. */
 export interface WaiveResponse {

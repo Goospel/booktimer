@@ -1,7 +1,8 @@
 import { Button, Wheel } from '@toss/tds-mobile';
 import { useState } from 'react';
 
-import { setGoal } from '../api';
+import { setGoal, setStudyGoal } from '../api';
+import type { TimerMode } from '../App';
 import { formatDuration } from '../format';
 import { ErrorMessage, FilledButton, Screen, Text } from '../ui';
 
@@ -52,9 +53,22 @@ export function initialGoalSelection(firstRun: boolean, current: number): number
  *
  * <p>0 이하면 문장 자체가 없다 — 「0초씩 쌓여요」는 목표를 지운 사람에게 할 말이 아니다.
  */
-export function weeklyLine(seconds: number): string | null {
+export function weeklyLine(seconds: number, variant: TimerMode = 'reading'): string | null {
   if (seconds <= 0) return null;
-  return `일주일이면 ${formatDuration(seconds * 7)}씩 쌓여요`;
+  const week = formatDuration(seconds * 7);
+  // 「쌓여요」는 이월 어휘다 — 공부는 못 채운 시간이 다음 날로 넘어가지 않아 그 말이 거짓이 된다.
+  return variant === 'study' ? `일주일이면 ${week}을 공부하는 셈이에요` : `일주일이면 ${week}씩 쌓여요`;
+}
+
+/**
+ * 고른 목표를 <b>어느 문으로</b> 보내는가 — 두 목표는 서버 원장이 갈려 있어 문도 다르다.
+ *
+ * <p>화면 밖으로 꺼낸 이유는 늘 같다: 하니스가 정적 렌더라 「저장」 클릭이 안 돌아(T-149), 이 분기가
+ * 컴포넌트 클로저 안에 있으면 <b>계측할 방법이 소스 grep밖에 없다</b>. 실패해도 조용한 자리다 —
+ * 잘못 보내면 공부 목표가 독서 목표를 덮어쓰고 `ReadingGoalChange` 원장까지 오염시킨다(서버는 200을 준다).
+ */
+export function saveGoal(variant: TimerMode, seconds: number): Promise<void> {
+  return variant === 'study' ? setStudyGoal(seconds).then(() => {}) : setGoal(seconds);
 }
 
 /**
@@ -66,14 +80,21 @@ export function weeklyLine(seconds: number): string | null {
 export function Goal({
   current,
   firstRun,
+  variant = 'reading',
   onSaved,
   onSkip,
 }: {
   current: number;
   firstRun: boolean;
+  /**
+   * 어느 목표를 정하는가 — 휠·밴드·레이아웃·버튼은 <b>전부 공유</b>하고 문구와 저장 함수만 갈린다.
+   * 파랑은 공짜다: 밴드(`--adaptiveBlue50`)·주간 줄(`blue700`)이 토큰이라 `body.study-mode`가 칠한다.
+   */
+  variant?: TimerMode;
   onSaved: () => void;
   onSkip: () => void;
 }) {
+  const study = variant === 'study';
   const [selected, setSelected] = useState(() => initialGoalSelection(firstRun, current));
   /** 휠은 비제어 컴포넌트라 시작 칸만 첫 렌더에서 한 번 읽는다 — 이후 값은 onChange가 selected로 되돌린다. */
   const [initialWheel] = useState(() => wheelIndices(initialGoalSelection(firstRun, current)));
@@ -83,24 +104,28 @@ export function Goal({
   const save = () => {
     setBusy(true);
     setError(null);
-    setGoal(selected)
+    saveGoal(variant, selected)
       .then(onSaved)
       .catch((e: Error) => setError(e.message))
       .finally(() => setBusy(false));
   };
 
+  // 공부엔 온보딩이 없어 `firstRun` 분기가 오지 않는다(진입은 홈 손잡이·설정뿐).
   return (
-    <Screen title={firstRun ? '하루에 얼마나 읽을까요?' : '하루 목표 바꾸기'}>
+    <Screen title={study ? '공부 하루 목표' : firstRun ? '하루에 얼마나 읽을까요?' : '하루 목표 바꾸기'}>
       {/* 화면 한 장을 세로로 다 쓴다 — 휠은 가운데, 버튼은 바닥. 예전엔 전부 위에 몰려 「돌아가기」가
           화면 중턱(390×844에서 y=477)에 떠 있었고 아래 43%가 빈 채였다.
           120 = Screen 상단 패딩 24 + 제목 줄 ≈56 + 하단 패딩 40. 제목 줄까지 빼는 이유: 덜 빼면
           그만큼 화면 밖으로 밀려 버튼이 스크롤해야 보인다(넘게 빼면 버튼이 조금 위에 설 뿐 무해하다).
           dvh 미지원 브라우저는 calc가 통째로 무효라 minHeight가 사라지고 예전 상단 몰림으로 강등된다. */}
       <div style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 120px)' }}>
+      {/* 주의: 공부에 독서 문구(「다음 날로 넘어가요」)를 그대로 쓰면 <b>거짓말</b>이다 — 공부엔 이월이 없다. */}
       <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 20 }}>
-        {firstRun
-          ? '매일 이만큼씩 쌓여요. 못 채운 시간은 다음 날로 넘어가니 부담 없는 값으로 시작해 보세요.'
-          : '매일 이만큼씩 쌓여요. 못 채운 시간은 다음 날로 넘어가요.'}
+        {study
+          ? '매일 이만큼 공부하는 걸 목표로 해요. 못 채워도 다음 날로 넘어가지 않아요.'
+          : firstRun
+            ? '매일 이만큼씩 쌓여요. 못 채운 시간은 다음 날로 넘어가니 부담 없는 값으로 시작해 보세요.'
+            : '매일 이만큼씩 쌓여요. 못 채운 시간은 다음 날로 넘어가요.'}
       </Text>
 
       {/* 고르는 자리는 세로 가운데 — 위아래 남는 공간을 `auto`가 반씩 먹는다. */}
@@ -153,10 +178,10 @@ export function Goal({
           주의: 가운데 정렬은 **바깥 div**가 한다 — TDS `Text`는 넘긴 style에서 `textAlign`을 걸러내고
           `display`도 자기 값(`inline-block`)으로 덮어, 인라인 스타일엔 `margin-top`만 남는다
           (목 모드 실측 2026-08-29: computed `text-align: start`로 왼쪽에 붙어 있었다). */}
-      {weeklyLine(selected) !== null && (
+      {weeklyLine(selected, variant) !== null && (
         <div style={{ textAlign: 'center', marginTop: 12 }}>
           <Text typography="st12" color="blue700">
-            {weeklyLine(selected)}
+            {weeklyLine(selected, variant)}
           </Text>
         </div>
       )}

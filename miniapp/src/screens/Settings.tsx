@@ -354,8 +354,10 @@ export function Settings({
       </section>
 
       <section style={sectionStyle}>
+        {/* 「독서」를 붙인 건 목표가 둘이 된 뒤의 보정이다 — 이 화면은 계정 설정이지 모드 화면이 아니라
+            이 버튼은 <b>독서 목표 고정</b>이다(공부 목표는 홈의 모드 손잡이가 연다). */}
         <Button display="block" variant="weak" onClick={onGoGoal} disabled={goalAdPending}>
-          {goalAdPending ? '준비 중…' : '하루 목표 바꾸기'}
+          {goalAdPending ? '준비 중…' : '독서 하루 목표 바꾸기'}
         </Button>
         {/* 첫 진입 안내를 다시 부른다 — 누르면 홈으로 돌아가 첫 걸음부터 다시 걷는다. */}
         <Button display="block" variant="weak" style={{ marginTop: 8 }} onClick={() => replayGuide(onBack)}>

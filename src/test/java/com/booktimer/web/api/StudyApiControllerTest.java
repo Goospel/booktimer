@@ -3,6 +3,8 @@ package com.booktimer.web.api;
 import com.booktimer.session.ReadingSessionService;
 import com.booktimer.session.StudySession;
 import com.booktimer.session.StudySessionRepository;
+import com.booktimer.timer.ReadingGoalChangeRepository;
+import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
@@ -12,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +24,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -46,6 +50,8 @@ class StudyApiControllerTest {
     @Autowired UserRepository userRepository;
     @Autowired StudySessionRepository studyRepository;
     @Autowired ReadingSessionService readingSessionService;
+    @Autowired ReadingTimerRepository timerRepository;
+    @Autowired ReadingGoalChangeRepository goalChangeRepository;
     @Autowired Clock clock;
 
     private User register(String email, String loginId) {
@@ -213,5 +219,99 @@ class StudyApiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.study.hasActiveSession").value(false))
                 .andExpect(jsonPath("$.study.todaySeconds").value(600));
+    }
+
+    // ── 공부 하루 목표 (2차) ──────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("POST /api/study/goal: 미인증 → 로그인으로 차단")
+    void goal_unauthenticated_isBlocked() throws Exception {
+        mockMvc.perform(post("/api/study/goal").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"dailyGoalSeconds\":3600}"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    @DisplayName("POST /api/study/goal: 200 + 응답 상태에 goalSeconds가 실린다")
+    void goal_savesAndEchoes() throws Exception {
+        register("study-goal@a.com", "studygoal");
+
+        mockMvc.perform(post("/api/study/goal").with(user("studygoal")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"dailyGoalSeconds\":3600}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.goalSeconds").value(3600))
+                .andExpect(jsonPath("$.hasActiveSession").value(false));
+    }
+
+    @Test
+    @DisplayName("POST /api/study/goal: 음수는 400 — 도메인 규칙이 문 앞에서 걸린다")
+    void goal_negative_isBadRequest() throws Exception {
+        register("study-goalneg@a.com", "studygoalneg");
+
+        mockMvc.perform(post("/api/study/goal").with(user("studygoalneg")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"dailyGoalSeconds\":-1}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("POST /api/study/goal: 저장한 목표가 대시보드 study 블록에 그대로 실린다(재진입 유지)")
+    void goal_isCarriedByDashboard() throws Exception {
+        register("study-goaldash@a.com", "studygoaldash");
+
+        mockMvc.perform(post("/api/study/goal").with(user("studygoaldash")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"dailyGoalSeconds\":5400}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/dashboard").with(user("studygoaldash")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.study.goalSeconds").value(5400));
+    }
+
+    @Test
+    @DisplayName("start/stop 응답도 goalSeconds를 실어 준다 — 측정 왕복 뒤 게이지가 분모를 잃지 않는다")
+    void startStop_carryGoalSeconds() throws Exception {
+        register("study-goalss@a.com", "studygoalss");
+
+        mockMvc.perform(post("/api/study/goal").with(user("studygoalss")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"dailyGoalSeconds\":1800}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/study/start").with(user("studygoalss")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.goalSeconds").value(1800));
+        mockMvc.perform(post("/api/study/stop").with(user("studygoalss")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.goalSeconds").value(1800));
+    }
+
+    /**
+     * <b>격리의 다른 축</b> — 세션 원장이 아니라 <b>목표</b>가 안 섞이는지를 본다.
+     *
+     * <p>공부 목표를 저장할 때 {@code ReadingGoalService.record}를 부르면 독서 목표 이력에 공부 값이
+     * 섞여 <b>부채 판정이 오염</b>된다(그날 목표로 과거를 판정하는 원장이라 조용히 틀린 값이 된다).
+     */
+    @Test
+    @DisplayName("격리: 공부 목표를 저장해도 독서 목표·목표 변경 이력은 그대로다")
+    void studyGoalDoesNotTouchReadingGoal() throws Exception {
+        User u = register("study-goaliso@a.com", "studygoaliso");
+        long readingGoalBefore = timerRepository.findByUser(u).orElseThrow().getDailyIncrementSeconds();
+        int goalChangesBefore = goalChangeRepository.findByUserOrderByEffectiveDateAsc(u).size();
+
+        mockMvc.perform(post("/api/study/goal").with(user("studygoaliso")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"dailyGoalSeconds\":7200}"))
+                .andExpect(status().isOk());
+
+        assertThat(timerRepository.findByUser(u).orElseThrow().getDailyIncrementSeconds())
+                .isEqualTo(readingGoalBefore);
+        assertThat(goalChangeRepository.findByUserOrderByEffectiveDateAsc(u)).hasSize(goalChangesBefore);
+        mockMvc.perform(get("/api/dashboard").with(user("studygoaliso")))
+                .andExpect(jsonPath("$.todayGoalSeconds").value((int) readingGoalBefore));
     }
 }

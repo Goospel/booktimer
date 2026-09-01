@@ -193,6 +193,8 @@ const state = {
   /** 공부 원장 — 독서와 <b>따로 든다</b>. 목에서도 원장이 갈려 있어야 「안 섞인다」를 브라우저로 확인할 수 있다. */
   studyStartedAt: null as string | null,
   studyTodaySeconds: 0,
+  /** 공부 하루 목표 — 0(목표 없음)에서 시작해야 「목표 정하기」 손잡이부터 밟아 볼 수 있다. */
+  studyGoalSeconds: 0,
   /** 이 세션에서 끝낸 측정 수 — 첫 종료(=1)에만 축하 배너가 뜬다. 새로고침하면 0으로 돌아가 다시 볼 수 있다. */
   completedSessions: 0,
   nextId: 500,
@@ -294,6 +296,7 @@ function studyState(): StudyState {
     hasActiveSession: state.studyStartedAt !== null,
     activeStartedAt: state.studyStartedAt,
     todaySeconds: state.studyTodaySeconds,
+    goalSeconds: state.studyGoalSeconds,
   };
 }
 
@@ -834,6 +837,15 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     if (state.studyStartedAt === null) throw new ApiError(409, '진행 중인 측정이 없습니다');
     state.studyTodaySeconds += Math.floor((Date.now() - Date.parse(state.studyStartedAt)) / 1000);
     state.studyStartedAt = null;
+    return studyState();
+  }],
+
+  // 공부 하루 목표 — 독서 목표(`/api/miniapp/goal`)와 <b>다른 문·다른 값</b>이다. 음수 400까지
+  // 서버 계약 그대로 재현해야 저장 실패 문구를 브라우저로 확인할 수 있다.
+  ['POST', /^\/api\/study\/goal$/, ({ body }) => {
+    const seconds = body.dailyGoalSeconds as number;
+    if (seconds < 0) throw new ApiError(400, 'studyDailyGoalSeconds must be >= 0');
+    state.studyGoalSeconds = seconds;
     return studyState();
   }],
 

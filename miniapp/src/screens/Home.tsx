@@ -40,6 +40,15 @@ const AGREEMENT_KEY = 'booktimer.notificationAgreement';
  */
 const SAGE = '#6E8A6A';
 
+/** 공부 모드의 같은 자리 — {@link SAGE}와 같은 사정이다(TDS ProgressBar는 색을 prop으로만 받는다). */
+const STUDY_BLUE = '#5F7E96';
+
+/**
+ * 히어로 카드 배경 토큰 — js–css 매듭이라 이름을 한 곳에서 든다(`LAMP_PAGE_CLASS`와 같은 이유).
+ * 값은 `global.css`가 정한다: 낮 종이색, `body.study-mode`에서 푸른 종이.
+ */
+export const HERO_CARD_BG_VAR = '--heroCardBg';
+
 /**
  * 진한 세이지 — 통계 행의 ⓘ와 「변경 ›」 알약이 쓰는 손잡이 색(웹 `--accent-hover`).
  *
@@ -61,14 +70,39 @@ export const ACTIVE_SESSION_RELIEF = '화면을 꺼도 측정은 계속돼요. �
 export const ACTIVE_STUDY_RELIEF = '화면을 꺼도 측정은 계속돼요. 공부하고 오세요.';
 
 /**
- * 히어로 머리말 — 모드가 갈리는 자리이자, 독서에서만 「달성」으로 한 번 더 갈리는 자리다.
+ * 히어로 머리말 — 모드가 갈리고, 「달성」으로 한 번 더 갈리는 자리다.
  *
  * <p>`null`은 <b>새싹 머리말</b>(「오늘 목표 달성」)을 뜻한다 — 그 자리는 글자가 아니라 SVG를 품어
- * 문자열로 못 돌려준다. 공부 모드엔 목표가 없어 그 분기 자체가 없다.
+ * 문자열로 못 돌려준다. 2차에서 공부에도 목표가 생겨 <b>두 모드가 같은 분기</b>를 탄다: 새싹·글자색이
+ * ACCENT 토큰이라 공부 모드에선 저절로 파란 새싹이 된다(색 체감에도 기여).
  */
 export function heroOverline(mode: TimerMode, achieved: boolean): string | null {
-  if (mode === 'study') return '오늘 공부한 시간';
-  return achieved ? null : '오늘 읽은 시간';
+  if (achieved) return null;
+  return mode === 'study' ? '오늘 공부한 시간' : '오늘 읽은 시간';
+}
+
+/**
+ * 공부 히어로 파생값 — {@link todayProgress}에서 <b>이월·부채 항을 뺀 축소판</b>이다.
+ *
+ * <p>공부엔 빚이 없어 게이지 최대치가 곧 목표이고, 독서에 있는 「목표는 달성인데 게이지는 아직」 구간이
+ * 존재하지 않는다(그 구간은 밀린 시간이 분모에 들어가서 생긴다). 그래서 여기선 `progress === 1`과
+ * `achieved`가 같은 순간에 참이 된다.
+ *
+ * <p>이상값은 바닥을 친다 — 서버 스냅샷과 클라 카운트업이 어긋나도 화면에 음수 시간이 뜨지 않는다.
+ */
+export function studyProgress(
+  goalSeconds: number,
+  doneSeconds: number,
+): { remaining: number; progress: number | null; achieved: boolean; overflow: number } {
+  const goal = Math.max(0, goalSeconds);
+  const done = Math.max(0, doneSeconds);
+  return {
+    remaining: Math.max(0, goal - done),
+    // 목표 0이면 나눌 게 없다 — 게이지를 안 그리고 달성이라 우기지도 않는다(독서와 같은 판단).
+    progress: goal > 0 ? Math.min(1, done / goal) : null,
+    achieved: goal > 0 && done >= goal,
+    overflow: goal > 0 ? Math.max(0, done - goal) : 0,
+  };
 }
 
 /**
@@ -1205,6 +1239,11 @@ export function Home({
   /** 공부 경과 — 서버가 준 완료 합에 진행 중 몫을 클라가 매초 얹는다(독서 히어로와 같은 분업). */
   const studyElapsed =
     study.hasActiveSession && study.activeStartedAt !== null ? elapsedSeconds(study.activeStartedAt, now) : 0;
+  /** 공부 목표 — 옛 서버는 이 필드를 안 준다(`?? 0` = 목표 없음, 1차와 같은 화면). */
+  const studyGoal = study.goalSeconds ?? 0;
+  const studyStats = studyProgress(studyGoal, study.todaySeconds + studyElapsed);
+  /** 지금 이 히어로의 「달성」 — 모드마다 원장이 달라 값도 다르다(머리말·새싹이 이 하나를 본다). */
+  const heroAchieved = mode === 'study' ? studyStats.achieved : achieved;
   // 여백 문이 가리키는 책 — 측정 중이면 그 책, 대기 중이면 캐러셀에서 고른 책(없으면 문을 안 그린다).
   const doorBook = marginDoorBook(dashboard, selectedBookId);
 
@@ -1255,7 +1294,9 @@ export function Home({
           position: 'relative',
           padding: '28px 20px',
           borderRadius: 16,
-          background: 'var(--adaptiveGrey100, #FCFAF5)',
+          // 이 카드 <b>한 장만</b>의 토큰이다(grey100은 전 화면 공용이라 스왑하면 앱이 통째로 파래진다).
+          // 공부 모드에서 화면 최대 면이 색으로 말하는 자리 — 값은 `global.css`가 정한다.
+          background: `var(${HERO_CARD_BG_VAR}, #FCFAF5)`,
           border: '1px solid transparent',
           borderImage: PENCIL_FRAME,
           textAlign: 'center',
@@ -1288,8 +1329,8 @@ export function Home({
               }}
             >
               {/* 달성일 때만 새싹이 선다 — 평소 머리말은 글자 그대로여서 미달성 렌더가 안 흔들린다.
-                  공부 모드엔 목표가 없어 그 분기 자체가 없다({@link heroOverline}). */}
-              {heroOverline(mode, achieved) ?? (
+                  두 모드가 같은 분기를 타되 달성 판정은 각자의 원장에서 온다(`heroAchieved`). */}
+              {heroOverline(mode, heroAchieved) ?? (
                 <>
                   <SproutMark size={13} /> 오늘 목표 달성
                 </>
@@ -1299,13 +1340,77 @@ export function Home({
           <div style={{ marginTop: 6 }}>
             {/* 세리프 + t2(44px) — 이 화면이 답하려는 유일한 수다. 개구 26px일 땐 화면 제목(22px)보다
                 4px 큰 게 전부라 히어로로 읽히지 않았다. */}
-            <Text typography="t2" fontWeight="bold" style={{ ...SERIF_VALUE }}>
+            {/* 공부 모드에선 잉크색이 바뀐다 — 화면 최대 활자가 「파란 펜」이 되는 것이라 종이·연필
+                서사를 깨지 않는다(토큰 경유라 값은 css가 정한다). */}
+            <Text
+              typography="t2"
+              fontWeight="bold"
+              color={mode === 'study' ? 'blue700' : undefined}
+              style={{ ...SERIF_VALUE }}
+            >
               {formatClock(mode === 'study' ? study.todaySeconds + studyElapsed : todayRead)}
             </Text>
           </div>
-          {/* 아래 게이지·통계 2열·목표 손잡이는 <b>독서 전제</b>다 — 공부엔 목표가 없어 통째로 빠진다.
-              그 부재가 곧 광고 두 개(부채 지우개 리워드·목표 변경 전면)의 자연 소멸이다(조건 분기 0줄). */}
-          {mode === 'study' ? null : progress !== null ? (
+          {/*
+            공부 게이지 — 독서 블록의 <b>축소판</b>이다: 게이지 + 2열(남은 시간 | 하루 목표 · 변경 ›)까지
+            같고, ⓘ 툴팁·「밀린 시간」 내역·리워드 광고가 없다. 공부엔 이월이 없어 설명할 규칙도, 지울
+            빚도 없기 때문이다(전면광고는 「변경 ›」 진입에 그대로 붙는다 — 그건 App이 든다).
+
+            독서 블록과 합치지 않는 이유: 왼쪽 열이 저쪽은 ⓘ 토글 버튼이고 여기는 맨 라벨이라, 합치면
+            없는 규칙을 설명하는 손잡이를 조건부로 감추는 코드가 된다(부재가 조건이 아니라 사실이어야 한다).
+          */}
+          {mode === 'study' ? (
+            studyStats.progress !== null ? (
+              <div style={{ marginTop: 16 }}>
+                <ProgressBar progress={studyStats.progress} size="normal" color={STUDY_BLUE} />
+                <div style={{ display: 'flex', marginTop: 12 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>남은 시간</div>
+                    <div style={{ ...SERIF_VALUE, fontSize: 19, fontWeight: 700, marginTop: 2 }}>
+                      {formatClock(studyStats.remaining)}
+                    </div>
+                  </div>
+                  <div style={{ width: 1, background: 'rgba(44, 42, 36, 0.12)' }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>하루 목표</div>
+                    <div style={{ ...SERIF_VALUE, fontSize: 19, fontWeight: 700, marginTop: 2 }}>
+                      {formatClock(studyGoal)}
+                    </div>
+                    {/* 알약 배경이 <b>토큰</b>인 것이 독서 쪽과 다른 유일한 점이다 — 이 자리는 새로 서는
+                        만큼 처음부터 모드를 타게 둔다(독서 쪽 리터럴은 픽셀 보존을 위해 그대로 둔다). */}
+                    <button
+                      type="button"
+                      onClick={onGoGoal}
+                      disabled={goalAdPending}
+                      style={{
+                        marginTop: 5,
+                        padding: '3px 10px',
+                        border: 0,
+                        borderRadius: 8,
+                        background: 'var(--accentPill, rgba(110, 138, 106, 0.18))',
+                        color: ACCENT,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {goalAdPending ? '준비 중…' : '변경 ›'}
+                    </button>
+                  </div>
+                </div>
+                {studyStats.overflow > 0 && (
+                  <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
+                    +{formatDuration(studyStats.overflow)} 더 공부했어요
+                  </Text>
+                )}
+              </div>
+            ) : (
+              // 목표 0 — 정하러 가는 유일한 손잡이(독서와 같은 부품·같은 문구).
+              <div style={{ marginTop: 16 }}>
+                <GoalHandle goalSeconds={0} pending={goalAdPending} onGoGoal={onGoGoal} />
+              </div>
+            )
+          ) : progress !== null ? (
             <div style={{ marginTop: 16 }}>
               <ProgressBar progress={progress} size="normal" color={SAGE} />
               {/*
