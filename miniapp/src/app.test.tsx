@@ -1080,6 +1080,33 @@ describe('공부 모드 탭바 — 책방 자리의 「일정」', () => {
   });
 
   /**
+   * <b>탭바를 그리는 셸들이 파생값을 실제로 받는가</b> — 위 배선과 같은 종류의 사각이다.
+   *
+   * <p>`reconcileTab`·`tabsFor`는 단위로 잠겨 있지만 <b>App이 그 결과를 내려보내는 줄</b>은 아무도 안 봤다:
+   * `tab={shownTab}`을 `tab={tab}`으로, `mode={mode}`를 지워도 <b>전 스위트가 초록이다</b>(독립 리뷰 W-1·W-2
+   * 실측). 폴백은 원격 모드 플립에서만 발동하고 여백 탭바는 정적 렌더 대상이 아니라, 마크업으로는 닿지 않는다.
+   *
+   * <p>그래서 세 호출부(여백 셸 2 · 메인 셸 1)가 <b>파생값을 받는지</b>를 소스로 센다.
+   */
+  it('탭바를 그리는 셸 전부가 파생 탭·모드를 받는다 — 사라진 칸 폴백이 화면에 닿는다', () => {
+    const src = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*/g, '');
+
+    const callSites = [...src.matchAll(/<(MarginShell|MainTabs)\b/g)];
+    // 셸 호출부는 셋이다(여백 상세 · 「이 책의 여백」 · 메인 탭). 늘어나면 이 단언이 먼저 붉어져
+    // 새 호출부도 같은 규칙을 지키게 한다.
+    expect(callSites).toHaveLength(3);
+
+    for (const site of callSites) {
+      // 프롭은 태그 바로 뒤에 모여 있다 — 창을 넉넉히 잡되 다음 호출부까지 넘어가지는 않는 길이.
+      const props = src.slice(site.index, site.index + 300);
+      expect(props).toContain('tab={shownTab}');
+      expect(props).toContain('mode={mode}');
+    }
+  });
+
+  /**
    * 코치마크 투어는 서재·책방 걸음을 <b>TABS 좌표</b>로 가리키고 그 탭으로 직접 이동시킨다 —
    * 공부 탭바엔 책방 칸이 없어 존재하지 않는 자리를 가리키게 된다. 그래서 공부 모드에선 안 그린다.
    */

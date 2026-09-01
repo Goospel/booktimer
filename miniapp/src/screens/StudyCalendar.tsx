@@ -265,6 +265,9 @@ export function StudyCalendar({ onError }: { onError: (error: Error) => void }) 
   useEffect(() => {
     let alive = true;
     setDays(null);
+    // 앞 달의 실패 문구를 걷는다 — 안 걷으면 8월 조회가 실패한 뒤 9월이 멀쩡히 떠도 그 에러가 화면에
+    // 남아, 방금 성공한 달을 실패한 것처럼 말한다(독립 리뷰 W-4).
+    setError(null);
     fetchStudyCalendar(monthParam)
       .then((r) => alive && setDays(r.days))
       .catch((e: Error) => {

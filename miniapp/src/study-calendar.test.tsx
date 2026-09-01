@@ -1,4 +1,5 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
@@ -151,6 +152,26 @@ describe('달력 격자 렌더', () => {
 
   it('셀 터치 영역이 손가락 최소치(44px)를 넘는다', () => {
     expect(cell(grid(), '2026-09-01')).toContain('min-height:44px');
+  });
+
+  /**
+   * <b>달을 옮기면 앞 달의 실패 문구를 걷는가</b>(독립 리뷰 W-4).
+   *
+   * <p>안 걷으면 8월 조회가 실패한 뒤 9월이 멀쩡히 떠도 그 에러가 화면에 남아, 방금 성공한 달을
+   * 실패한 것처럼 말한다. 에러 상태는 화면 안에 있고 하니스는 effect를 못 돌리므로(T-149) 소스로 잰다 —
+   * 조회 effect가 `setError(null)`을 <b>실제로 부르는지</b>가 유일하게 관측 가능한 형태다.
+   */
+  it('달을 옮기는 조회 effect가 앞 달의 에러를 걷는다', () => {
+    const src = readFileSync(new URL('./screens/StudyCalendar.tsx', import.meta.url), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*/g, '');
+    // 그 effect만 본다 — 통짜 검색이면 탭 저장 경로(`pick`)의 setError(null)에 걸려 늘 통과한다.
+    const from = src.indexOf('useEffect(() => {');
+    const to = src.indexOf('[monthParam, onError]);');
+    expect(from).toBeGreaterThan(-1);
+    expect(to).toBeGreaterThan(from);
+
+    expect(src.slice(from, to)).toContain('setError(null)');
   });
 
   it('범례가 세 표식의 뜻을 말한다 — 기본 이모지가 아니라 도형으로', () => {
