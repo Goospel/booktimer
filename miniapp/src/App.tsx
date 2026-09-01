@@ -23,6 +23,7 @@ import { LoginBridge } from './screens/LoginBridge';
 import { Profile } from './screens/Profile';
 import { Settings } from './screens/Settings';
 import { StudyCalendar } from './screens/StudyCalendar';
+import { StudyLibrary } from './screens/StudyLibrary';
 import { BookMargin, BookMarginAll, StoryComposer } from './screens/Story';
 import { showInterstitialAd, trackEvent } from './toss';
 import { CoverInitial, ErrorMessage, Loading, PENCIL_FRAME, SERIF_VALUE, Screen, Sheet } from './ui';
@@ -1546,7 +1547,9 @@ export function MainTabs({
             onComposeMargin={onComposeMargin}
           />
         )}
-        {tab === 'library' && (
+        {/* 서재 탭은 두 모드 공통이지만 화면은 갈린다 — 공부 책과 독서 책이 섞이지 않는 것이 요구 그 자체다. */}
+        {tab === 'library' && mode === 'study' && <StudyLibrary onError={onError} />}
+        {tab === 'library' && mode !== 'study' && (
           <Library
             myLoginId={dashboard.loginId}
             onError={onError}
