@@ -310,6 +310,7 @@ function dashboard(overrides: Partial<DashboardResponse> = {}, study: StudyState
     previousLoginId: null,
     profileCharacterCode: null,
     remainingSeconds: 900,
+    todayReadSeconds: 2700,
     carriedDebtSeconds: 0,
     todayGoalSeconds: 3600,
     carryover: true,

@@ -14,9 +14,14 @@ import java.util.List;
  *
  * @param todayDebtSeconds 오늘 부채(초) = max(0, 하루목표 − 오늘 읽은 양). 헤드라인 카운트다운의 시작값.
  * @param todayGoalSeconds 오늘 유효 하루 목표(초). 진행바 분모로 쓴다 — 부채 계산과 같은 trace에서 유도해 단일 출처.
+ * @param todayReadSeconds 오늘 실제로 읽은 초(완료 세션 합, <b>상한 없음</b>). 화면의 「오늘 읽은 시간」 출처다.
+ *                         부채에서 역산하면({@code 목표 − 부채}) 부채가 0에서 바닥을 치는 탓에 표시값이
+ *                         목표에서 천장을 쳐, 목표를 넘겨 읽고 측정을 멈추는 순간 초과분이 사라진다.
+ *                         초과분은 과거 날 상환에 소비되어 응답 어디에도 남지 않으므로 역산이 불가능하다 —
+ *                         그래서 원시값을 따로 싣는다.
  * @param missedDays       창 내 과거 빠뜨린 날(부채>0)을 <b>최근이 먼저</b> 오도록. 모두 채웠으면 빈 목록.
  */
-public record WeeklyDebt(long todayDebtSeconds, long todayGoalSeconds, List<DayDebt> missedDays) {
+public record WeeklyDebt(long todayDebtSeconds, long todayGoalSeconds, long todayReadSeconds, List<DayDebt> missedDays) {
 
     /** 총 부채(초) = 오늘 부채 + 빠뜨린 날 부채 합. 관리자 요약·전체 현황 표시에 쓴다. */
     public long totalDebtSeconds() {

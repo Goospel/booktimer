@@ -95,7 +95,7 @@ public class DashboardApiController {
                 live.nickname(), live.loginId(), user.getPreviousLoginId(),
                 user.getProfileCharacterCode(),
                 live.remainingSeconds(), live.carriedDebtSeconds(),
-                live.todayGoalSeconds(), live.carryover(),
+                live.todayGoalSeconds(), live.todayReadSeconds(), live.carryover(),
                 live.hasActiveSession(), live.activeStartedAt(),
                 live.activeBookTitle(), live.activeBookTotalSeconds(),
                 toOption(live.activeBook()),
@@ -237,6 +237,8 @@ public class DashboardApiController {
             long remainingSeconds,
             long carriedDebtSeconds,
             long todayGoalSeconds,
+            /** 오늘 읽은 초(완료 세션 합, 상한 없음) — 히어로 「오늘 읽은 시간」의 출처. {@link DashboardModel.LiveState} 참조. */
+            long todayReadSeconds,
             boolean carryover,
             boolean hasActiveSession,
             Instant activeStartedAt,
@@ -293,6 +295,8 @@ public class DashboardApiController {
             long remainingSeconds,
             long carriedDebtSeconds,
             long todayGoalSeconds,
+            /** 오늘 읽은 초(완료 세션 합, 상한 없음) — 히어로 「오늘 읽은 시간」의 출처. {@link DashboardModel.LiveState} 참조. */
+            long todayReadSeconds,
             boolean carryover,
             boolean hasActiveSession,
             Instant activeStartedAt,
@@ -309,7 +313,7 @@ public class DashboardApiController {
         public static TimerState of(DashboardModel.LiveState live, boolean debtWaiverAvailable) {
             return new TimerState(
                     live.remainingSeconds(), live.carriedDebtSeconds(),
-                    live.todayGoalSeconds(), live.carryover(),
+                    live.todayGoalSeconds(), live.todayReadSeconds(), live.carryover(),
                     live.hasActiveSession(), live.activeStartedAt(),
                     live.activeBookTitle(), live.activeBookTotalSeconds(),
                     toOption(live.activeBook()),

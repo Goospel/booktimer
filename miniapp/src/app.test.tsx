@@ -60,6 +60,7 @@ const dashboard: DashboardResponse = {
   remainingSeconds: 900,
   carriedDebtSeconds: 0,
   todayGoalSeconds: 3600,
+  todayReadSeconds: 2700,
   carryover: false,
   hasActiveSession: false,
   activeStartedAt: null,

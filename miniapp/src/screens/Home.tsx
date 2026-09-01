@@ -683,9 +683,14 @@ export function BookCarousel<T extends BookOption>({
  * <p>웹은 UX 리뷰로 "오늘 남은 시간" 카운트다운을 **"오늘 읽은 시간" 카운트업**으로 뒤집었다(성취를
  * 세지, 빚을 세지 않는다). 남은 시간은 보조 메타로 강등된다. 미니앱도 같은 프레이밍을 쓴다.
  *
- * <p>서버는 스냅샷만 주므로 측정 중 라이브 값은 `remainingSeconds - elapsed`로 만든다 — 기존 elapsed
- * 인터벌이 그대로 카운트업의 동력이 되어 tick을 따로 두지 않는다. `carryover`면 밀린 시간은 오늘 몫이
- * 아니라 바닥(floor)이라 빼고 센다(그래야 어제 빚이 오늘 성취를 갉아먹지 않는다).
+ * <p>**「오늘 읽은 시간」은 서버가 준 `todayReadSeconds`(완료 세션 합) + 경과다** — 부채에서 역산하지
+ * 않는다. 서버 부채는 `max(0, 목표 − 읽은 양)`이라 0에서 바닥을 쳐, 역산하면 표시값이 목표에서 천장을
+ * 친다: 목표를 넘겨 읽는 동안엔 클라가 스냅샷에서 경과를 빼 부채를 음수로 밀어 제대로 올라가지만,
+ * **중지하는 순간 바닥친 스냅샷이 다시 와 정확히 목표값으로 되돌아갔다**(실사용자 제보 — 기록은 멀쩡한데
+ * 타이머만 1시간이 됐다). 초과분은 과거 날 상환에 소비되어 응답 어디에도 남지 않아 역산이 불가능하다.
+ *
+ * <p>반면 **남은 시간·게이지는 그대로 부채 스냅샷(`remainingSeconds - elapsed`)에서 만든다** — 그쪽은
+ * 카운트다운이라 0에서 멈추는 게 맞다. `carryover`면 밀린 시간은 오늘 몫이 아니라 바닥(floor)이다.
  *
  * <p>목표 미설정(0)이면 나눌 게 없어 `progress`는 `null`(게이지를 안 그린다)이고 달성이라 우기지도
  * 않는다 — 웹은 이 경우를 100% 달성으로 치지만, 미니앱은 목표 설정으로 유도하는 자리라 그대로 둔다.
@@ -700,21 +705,20 @@ export function BookCarousel<T extends BookOption>({
  * 구간이 의도적으로 존재한다. 그 구간에서 남은 몫은 아래 「남은시간」 줄이 말한다.
  */
 export function todayProgress(
-  timer: Pick<TimerState, 'remainingSeconds' | 'carriedDebtSeconds' | 'todayGoalSeconds' | 'carryover'>,
+  timer: Pick<TimerState, 'remainingSeconds' | 'carriedDebtSeconds' | 'todayGoalSeconds' | 'todayReadSeconds' | 'carryover'>,
   elapsed: number,
 ): { todayRead: number; remaining: number; overflow: number; progress: number | null; achieved: boolean } {
   const { carriedDebtSeconds: floor, todayGoalSeconds: goal, carryover } = timer;
   const remainingNow = timer.remainingSeconds - elapsed;
-  const todayDebt = carryover ? remainingNow - floor : remainingNow;
-  // 스냅샷이 어긋나도 음수 시간이 화면에 뜨지 않게 바닥을 친다(표시용 값이라 여기서 자른다).
-  const todayRead = Math.max(0, goal - todayDebt);
+  // 완료 세션 합(서버) + 진행 중 몫(클라). 둘 다 0 이상이라 바닥 클램프가 필요 없다.
+  const todayRead = timer.todayReadSeconds + elapsed;
   const target = goal + (carryover ? floor : 0); // 오늘 채워야 할 총량 = 게이지 최대치
   return {
     todayRead,
     remaining: Math.max(0, remainingNow),
     overflow: Math.max(0, todayRead - goal),
     progress: target > 0 ? Math.min(1, todayRead / target) : null,
-    achieved: goal > 0 && todayDebt <= 0,
+    achieved: goal > 0 && todayRead >= goal,
   };
 }
 

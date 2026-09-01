@@ -9,6 +9,8 @@ const props = defineProps<{
     remainingSeconds: number
     carriedDebtSeconds: number
     todayGoalSeconds: number
+    /** 오늘 읽은 초(완료 세션 합). 측정 중 몫은 elapsed로 얹는다 — 부채에서 역산하지 않는 이유는 computeProgress 참조. */
+    todayReadSeconds: number
     carryover: boolean
     streak: number
     hasActiveSession: boolean
@@ -40,13 +42,19 @@ watch(() => props.activeStartedAt, v => startedAtIso.value = v)
 
 const { elapsed, remainingNow } = useReadingTimer(baseRemaining, active, startedAtIso)
 
-// 진행바·달성은 서버 스냅샷이 아니라 라이브 remainingNow에서 파생(계획 §3-B/D)
+// 진행바·달성은 서버 스냅샷이 아니라 라이브 값에서 파생(계획 §3-B/D)
 const progress = computed(() =>
-    computeProgress(remainingNow.value, props.carriedDebtSeconds, props.todayGoalSeconds, props.carryover)
+    computeProgress(
+        remainingNow.value,
+        props.carriedDebtSeconds,
+        props.todayGoalSeconds,
+        props.carryover,
+        props.todayReadSeconds + elapsed.value
+    )
 )
 const state = computed(() => panelState(props.hasActiveSession, progress.value.isAchieved))
-// 히어로 큰 숫자 = 오늘 읽은 시간(카운트업). 측정 중엔 remainingNow가 매초 줄어 todayRead가
-// 매초 늘어난다 — 별도 tick 없이 라이브 증가(발견 3·4: 남은시간 카운트다운 → 성취 카운트업).
+// 히어로 큰 숫자 = 오늘 읽은 시간(카운트업) = 서버 완료 합 + 측정 중 경과. 같은 elapsed 틱이 동력이라
+// 별도 tick이 없다(발견 3·4: 남은시간 카운트다운 → 성취 카운트업).
 const todayReadDisplay = computed(() => fmtMSS(progress.value.todayRead))
 const sessionDisplay = computed(() => fmtMSS(elapsed.value))
 const goalText = computed(() => goalLabel(props.todayGoalSeconds))

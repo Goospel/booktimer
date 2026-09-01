@@ -55,6 +55,23 @@ class WeeklyDebtCalculatorTest {
         assertThat(debt.todayDebtSeconds()).isZero();
     }
 
+    @Test
+    @DisplayName("오늘 실제로 읽은 초는 부채가 0으로 잘려도 그대로 남는다 — 히어로 「오늘 읽은 시간」의 출처")
+    void todayRead_overGoal_keepsRawSeconds() {
+        Map<LocalDate, Long> reads = reads();
+        reads.put(TODAY, GOAL + 5000L);
+        WeeklyDebt debt = WeeklyDebtCalculator.compute(reads, GOAL, TODAY);
+        // 부채는 바닥(0)을 치지만 읽은 양은 원시값이다 — 이 둘이 갈라지는 것이 이 필드의 존재 이유다.
+        assertThat(debt.todayDebtSeconds()).isZero();
+        assertThat(debt.todayReadSeconds()).isEqualTo(GOAL + 5000L);
+    }
+
+    @Test
+    @DisplayName("오늘 안 읽었으면 오늘 읽은 초 = 0")
+    void todayRead_noReading_isZero() {
+        assertThat(WeeklyDebtCalculator.compute(reads(), GOAL, TODAY).todayReadSeconds()).isZero();
+    }
+
     // --- 빠뜨린 날(미충족) 목록 ---
 
     @Test

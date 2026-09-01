@@ -187,6 +187,11 @@ const books: MyBookSummary[] = [
 const state = {
   goalSeconds: 1_800,
   remainingSeconds: 900,
+  /**
+   * 오늘 읽은 초(완료분) — 서버처럼 부채와 <b>따로</b> 든다. 목표를 넘겨도 상한이 없어야 초과분 경로를 밟는다.
+   * 값은 위 셋과 짝이 맞다: 오늘 부채 = 남은 900 − 밀린 600 = 300 → 읽은 양 = 목표 1800 − 300 = 1500.
+   */
+  todayReadSeconds: 1_500,
   carriedDebtSeconds: 600,
   activeStartedAt: null as string | null,
   activeBookId: null as number | null,
@@ -281,6 +286,7 @@ function timerState(): TimerState {
     remainingSeconds: state.remainingSeconds,
     carriedDebtSeconds: state.carriedDebtSeconds,
     todayGoalSeconds: state.goalSeconds,
+    todayReadSeconds: state.todayReadSeconds,
     carryover: true,
     hasActiveSession: state.activeStartedAt !== null,
     activeStartedAt: state.activeStartedAt,
@@ -832,7 +838,9 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
   ['POST', /^\/api\/sessions\/stop$/, () => {
     const elapsed = state.activeStartedAt === null ? 0 : Math.floor((Date.now() - Date.parse(state.activeStartedAt)) / 1000);
     const untagged = state.activeBookId === null;
+    // 부채는 0에서 바닥을 치고(서버와 동일), 읽은 초는 상한 없이 쌓인다 — 이 비대칭이 초과분 표시의 전부다.
     state.remainingSeconds = Math.max(0, state.remainingSeconds - elapsed);
+    state.todayReadSeconds += elapsed;
     const book = books.find((b) => b.id === state.activeBookId);
     if (book !== undefined) book.seconds += elapsed;
     state.activeStartedAt = null;

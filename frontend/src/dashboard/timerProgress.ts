@@ -6,21 +6,29 @@ import type { ContributionDay } from './types'
  * 계획 §3-B/D: 진행바·달성은 서버 스냅샷이 아니라 클라이언트 라이브 remainingNow 기준.
  */
 
+/**
+ * @param todayRead 오늘 읽은 초(서버 `todayReadSeconds` + 라이브 경과). **부채에서 역산하지 않는다** —
+ *                  서버 부채는 `max(0, 목표 − 읽은 양)`이라 0에서 바닥을 쳐, 역산하면 표시값이 목표에서
+ *                  천장을 친다. 목표를 넘겨 읽는 동안엔 라이브 `remainingNow`가 음수로 밀려 제대로 올라가지만
+ *                  **중지하는 순간 바닥친 스냅샷이 다시 와 정확히 목표값으로 되돌아갔다**(실사용자 제보).
+ *                  초과분은 과거 날 상환에 소비돼 응답에 흔적이 없어 역산이 불가능하다.
+ */
 export function computeProgress(
     remainingNow: number,
     floor: number,
     goal: number,
-    carryover: boolean
+    carryover: boolean,
+    todayRead: number
 ): { todayRead: number; remainingToGoal: number; pct: number; pctStr: string; isAchieved: boolean } {
     if (goal <= 0) {
-        return { todayRead: 0, remainingToGoal: 0, pct: 100, pctStr: '100%', isAchieved: true }
+        return { todayRead, remainingToGoal: 0, pct: 100, pctStr: '100%', isAchieved: true }
     }
+    // 목표까지 남은 초(히어로 보조·진행바 메타 우측)는 그대로 부채 스냅샷에서 만든다 — 카운트다운이라
+    // 0에서 멈추는 게 맞다. 카운트업(todayRead)만 출처가 갈린다.
     const todayDebtLive = carryover ? remainingNow - floor : remainingNow
-    const todayRead = goal - todayDebtLive
-    // 목표까지 남은 초(히어로 보조·진행바 메타 우측). 달성(todayDebtLive<=0)이면 0.
     const remainingToGoal = Math.max(0, todayDebtLive)
     const pct = Math.min(100, Math.max(0, Math.round((todayRead / goal) * 100)))
-    const isAchieved = todayDebtLive <= 0
+    const isAchieved = todayRead >= goal
     return { todayRead, remainingToGoal, pct, pctStr: `${pct}%`, isAchieved }
 }
 
