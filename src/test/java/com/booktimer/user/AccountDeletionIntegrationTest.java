@@ -13,6 +13,8 @@ import com.booktimer.session.ReadingGoalWaiver;
 import com.booktimer.session.ReadingGoalWaiverRepository;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
+import com.booktimer.session.StudyDailyCheck;
+import com.booktimer.session.StudyDailyCheckRepository;
 import com.booktimer.session.StudySession;
 import com.booktimer.session.StudySessionRepository;
 import com.booktimer.story.Story;
@@ -60,6 +62,8 @@ class AccountDeletionIntegrationTest {
     private ReadingSessionRepository sessionRepository;
     @Autowired
     private StudySessionRepository studySessionRepository;
+    @Autowired
+    private StudyDailyCheckRepository studyDailyCheckRepository;
     @Autowired
     private StoryRepository storyRepository;
     @Autowired
@@ -180,6 +184,28 @@ class AccountDeletionIntegrationTest {
         studySessionRepository.saveAndFlush(session);
 
         // study_session.user_id FK가 정리되지 않으면 flush 시 제약 위반.
+        assertThatCode(() -> {
+            accountService.deleteAccount(email, "rawpw1234");
+            assertThat(userRepository.findByEmail(email)).isEmpty();
+        }).doesNotThrowAnyException();
+    }
+
+    /**
+     * 공부 <b>일정 체크</b>(study_daily_check)도 같은 부류다 — 세션과 별개 테이블이라 purge에 한 줄이
+     * 더 필요하고, 빠지면 「달력을 한 번이라도 눌러 본 사람만」 탈퇴가 실패한다.
+     *
+     * <p>mock으로는 영영 못 잡는다(FK를 모른다 — T-023·T-029). 1차 리뷰 W-3의 교훈 그대로 실 H2다.
+     */
+    @Test
+    @DisplayName("공부 일정 체크(study_daily_check)를 가진 사용자도 FK 위반 없이 탈퇴된다")
+    void deleteAccount_withStudyDailyCheck_succeeds() {
+        String email = "studycheckquit@booktimer.com";
+        User user = userRepository.saveAndFlush(
+                User.of(email, passwordEncoder.encode("rawpw1234"), "체크하던이", "Asia/Seoul", Role.USER));
+        studyDailyCheckRepository.saveAndFlush(
+                StudyDailyCheck.of(user, LocalDate.now().minusDays(1), true));
+
+        // study_daily_check.user_id FK가 정리되지 않으면 flush 시 제약 위반.
         assertThatCode(() -> {
             accountService.deleteAccount(email, "rawpw1234");
             assertThat(userRepository.findByEmail(email)).isEmpty();

@@ -14,6 +14,7 @@ import {
   TAB_BAR_Z_INDEX,
   COACHMARK_FLOW,
   LAMP_CLASS,
+  STUDY_TABS,
   TABS,
   TIMER_ACTION_SLOT,
   TabBarCoachmark,
@@ -25,6 +26,7 @@ import {
   underCompose,
   flowTabChange,
   nextFlowStep,
+  reconcileTab,
   shouldRefresh,
   shouldShowGuideHero,
   GuideHero,
@@ -32,9 +34,11 @@ import {
   slotCenter,
   tabChangeHandler,
   tabSlot,
+  tabsFor,
   timerActionView,
   timerStartBookId,
 } from './App';
+import type { TabKey, TimerMode } from './App';
 import type { BookOption, DashboardResponse } from './api';
 import { IDLE_STUDY } from './api';
 import { coachmarkSeen, dismissCoachmark, resetCoachmarks } from './coachmark';
@@ -70,14 +74,18 @@ const dashboard: DashboardResponse = {
   emailVerified: true,
 };
 
-function renderTab(tab: (typeof TABS)[number]['key'], overrides: Partial<DashboardResponse> = {}) {
+function renderTab(
+  tab: TabKey,
+  overrides: Partial<DashboardResponse> = {},
+  mode: TimerMode = 'reading',
+) {
   return renderToStaticMarkup(
     <TDSMobileProvider userAgent={userAgent}>
       <MainTabs
         tab={tab}
         onTabChange={() => {}}
         dashboard={{ ...dashboard, ...overrides }}
-        mode="reading"
+        mode={mode}
         study={IDLE_STUDY}
         onStudyChange={() => {}}
         onChangeMode={() => {}}
@@ -135,6 +143,15 @@ describe('탭 구조', () => {
     TABS.forEach((_, index) => change(index));
 
     expect(picked).toEqual(['home', 'library', 'bookshop', 'history']);
+  });
+
+  it('목록을 주면 그 목록의 index↔키로 옮긴다 — 공부 탭바도 같은 계약을 쓴다', () => {
+    const picked: string[] = [];
+    const change = tabChangeHandler((tab) => picked.push(tab), STUDY_TABS);
+
+    STUDY_TABS.forEach((_, index) => change(index));
+
+    expect(picked).toEqual(['home', 'library', 'calendar', 'history']);
   });
 
   it('책방 탭은 서재와 기록 사이에 온다 — 탭바 순서가 곧 TABS 순서다', () => {
@@ -966,6 +983,116 @@ describe('여백 진입 게이트', () => {
 });
 
 /**
+ * 공부 모드 탭바 — <b>책방 자리에 「일정」</b>이 선다(사용자 확정).
+ *
+ * <p>바꾸는 것이 목록 하나뿐이라는 게 이 설계의 요점이다: 두 목록이 <b>같은 길이(4)</b>라
+ * {@code TIMER_ACTION_SLOT}·{@code slotCenter}가 값 그대로 남고, index↔화면 계약도
+ * {@code tabChangeHandler(onChange, tabs)} 한 줄로 일반화된다. 그 「안 바뀌어야 하는 것들」까지
+ * 여기서 못 박는다 — 리팩터가 가장 넓게 닿는 자리라 조용히 어긋나기 쉽다.
+ */
+describe('공부 모드 탭바 — 책방 자리의 「일정」', () => {
+  it('공부 목록은 책방을 일정으로 바꾼 것이다 — 나머지 셋은 그대로', () => {
+    expect(tabsFor('study').map((t) => t.key)).toEqual(['home', 'library', 'calendar', 'history']);
+    expect(tabsFor('study').map((t) => t.label)).toEqual(['홈', '서재', '일정', '기록']);
+  });
+
+  it('독서 목록은 손대지 않는다 — 독서 탭바는 픽셀 불변이어야 한다', () => {
+    expect(tabsFor('reading')).toBe(TABS);
+  });
+
+  it('두 목록의 길이가 같다 — 액션 슬롯·말풍선 좌표가 값 그대로 남는 근거다', () => {
+    expect(tabsFor('study')).toHaveLength(TABS.length);
+    // 길이가 갈리면 이 두 상수가 조용히 어긋난다(가운데 원이 엉뚱한 칸에 서거나 말풍선이 빗나간다).
+    expect(TIMER_ACTION_SLOT).toBe(2);
+    expect(slotCenter(TIMER_ACTION_SLOT)).toContain(`* ${(TIMER_ACTION_SLOT + 0.5) / (TABS.length + 1)}`);
+  });
+
+  /**
+   * 모드가 원격으로 뒤집히면(다른 기기에서 측정 시작) 지금 선 탭이 <b>그 모드의 탭바에 없을 수</b> 있다.
+   * setState 없는 파생 폴백이라 동기화 코드가 0줄이다.
+   */
+  it('지금 모드에 없는 탭이면 홈으로 떨어진다 — 존재하지 않는 칸에 서 있지 않는다', () => {
+    expect(reconcileTab('bookshop', 'study')).toBe('home');
+    expect(reconcileTab('calendar', 'reading')).toBe('home');
+  });
+
+  it('그 모드에 있는 탭이면 그대로 둔다 — 폴백이 멀쩡한 자리를 흔들지 않는다', () => {
+    expect(reconcileTab('bookshop', 'reading')).toBe('bookshop');
+    expect(reconcileTab('calendar', 'study')).toBe('calendar');
+    expect(reconcileTab('library', 'study')).toBe('library');
+    expect(reconcileTab('home', 'study')).toBe('home');
+  });
+
+  const modeBar = (mode: TimerMode, tab: TabKey = 'home') =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <BottomTabBar
+          tab={tab}
+          onTabChange={() => {}}
+          action={{ active: false, busy: false, onPress: () => {}, mode }}
+        />
+      </TDSMobileProvider>,
+    );
+
+  it('공부 모드 탭바에는 「일정」이 서고 「책방」이 없다', () => {
+    const markup = modeBar('study');
+
+    expect(markup).toContain('title="일정"');
+    expect(markup).not.toContain('title="책방"');
+  });
+
+  it('독서 모드 탭바는 그대로다 — 위 부정 단언의 짝(회귀 가드)', () => {
+    const markup = modeBar('reading');
+
+    expect(markup).toContain('title="책방"');
+    expect(markup).not.toContain('title="일정"');
+  });
+
+  it('일정 탭에 서면 그 칸이 선택 표시된다 — 새 목록에서도 index↔화면이 맞는다', () => {
+    const markup = modeBar('study', 'calendar');
+
+    expect(markup).toContain('aria-current="page" title="일정"');
+    expect(markup.match(/aria-current="page"/g)).toHaveLength(1);
+  });
+
+  it('일정 탭은 그 화면을 그린다 — 탭 선택 ↔ 화면 대응(공부 목록에서도)', () => {
+    expect(renderTab('calendar', {}, 'study')).toContain('공부 일정');
+  });
+
+  /**
+   * <b>그리는 목록과 index를 푸는 목록이 같은 배열인가</b> — 이 앱에서 가장 조용히 깨지는 자리다.
+   *
+   * <p>목록 인자를 빠뜨려도(`tabChangeHandler(onTabChange)`) 마크업은 <b>완전히 똑같다</b>: 어긋남은
+   * 누르는 순간에만 드러나는데 하니스는 클릭을 못 돌린다(T-149). 실제로 그 돌연변이가 전 스위트를
+   * 초록으로 통과했다 — 그래서 소스로 잰다(`setMargin` 봉인·`<MarginShell` 세기와 같은 수법).
+   * 목 모드 실브라우저가 짝 게이트다(공부 탭바에서 일정 칸을 실제로 눌러 본다).
+   */
+  it('탭바는 그리는 목록과 같은 배열로 index를 푼다 — 누른 칸과 바뀌는 탭이 어긋나지 않는다', () => {
+    const src = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*/g, '');
+    const from = src.indexOf('export function BottomTabBar');
+    expect(from).toBeGreaterThan(-1);
+    const body = src.slice(from);
+
+    expect(body).toContain('tabChangeHandler(onTabChange, tabs)');
+    expect(body).toContain('tabs.map(');
+  });
+
+  /**
+   * 코치마크 투어는 서재·책방 걸음을 <b>TABS 좌표</b>로 가리키고 그 탭으로 직접 이동시킨다 —
+   * 공부 탭바엔 책방 칸이 없어 존재하지 않는 자리를 가리키게 된다. 그래서 공부 모드에선 안 그린다.
+   */
+  it('공부 모드에선 첫 사용 안내 카드를 안 그린다 — 안내가 없는 칸을 가리키지 않는다', () => {
+    expect(renderTab('home', {}, 'study')).not.toContain('앱 사용법 보기');
+  });
+
+  it('독서 모드에선 그대로 그린다 — 위 부정 단언의 짝', () => {
+    expect(renderTab('home', {}, 'reading')).toContain('앱 사용법 보기');
+  });
+});
+
+/**
  * 여백 위의 탭바 — 여백은 탭 밖 전체 화면이라 탭바가 함께 사라졌고, 나갈 길이 뒤로가기 하나뿐이었다.
  *
  * <p>여백에선 측정이 <b>항상 꺼져 있다</b>(여백 진입 게이트가 먼저 끝낸다) — 그래서 원은 언제나
@@ -994,6 +1121,23 @@ describe('여백 위의 탭바 (MarginShell)', () => {
 
   it('본문 끝이 떠 있는 알약에 가려지 않게 그만큼 비운다', () => {
     expect(markup).toContain(`padding-bottom:calc(${TAB_BAR_HEIGHT}px`);
+  });
+
+  /**
+   * 여백은 공부 모드에서도 도달 가능하다(진입 게이트가 측정만 먼저 끊는다) — 그때 이 껍데기가
+   * 모드를 모르면 <b>여백에서만 탭바가 책방으로 되돌아간다</b>. 나가는 칸이 화면마다 달라지는 셈이다.
+   */
+  it('모드를 받아 그 모드의 탭바를 그린다 — 여백에서 나가는 칸이 홈과 같다', () => {
+    const study = renderToStaticMarkup(
+      <MarginShell tab="home" mode="study" onGo={() => {}} onStart={() => {}}>
+        <p>여백 본문</p>
+      </MarginShell>,
+    );
+
+    expect(study).toContain('title="일정"');
+    expect(study).not.toContain('title="책방"');
+    // 짝 단언 — 모드를 안 주면(독서) 그대로다.
+    expect(markup).toContain('title="책방"');
   });
 
   /**

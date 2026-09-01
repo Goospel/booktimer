@@ -12,6 +12,7 @@ import type {
   ProfileBook,
   ShelfResponse,
   StopResponse,
+  StudyCalendarResponse,
   StudyState,
   TimerState,
 } from './api';
@@ -90,6 +91,50 @@ describe('dev-mock 핸들러', () => {
     const after = await mockRequest<DashboardResponse>('/api/dashboard', {});
 
     expect(after.todayGoalSeconds).toBe(before.todayGoalSeconds);
+  });
+
+  /**
+   * `offsetDays`일 전의 `YYYY-MM-DD` — 목의 `isoDate`와 같은 셈법(UTC).
+   *
+   * <p>달은 <b>그 날짜에서 파생</b>한다. 「오늘의 달」로 고정하면 매달 1일에 어제가 지난달이 되어
+   * 목록에서 빠지고, 테스트가 <b>한 달에 하루만</b> 붉어진다(달력이라 안 그러기 쉽다).
+   */
+  const daysAgo = (offsetDays: number) =>
+    new Date(Date.now() - offsetDays * 86_400_000).toISOString().slice(0, 10);
+
+  it('공부 일정 달력 — 체크가 저장되고 재조회에 그대로 실린다(3상태 순환의 왕복)', async () => {
+    const yesterday = daysAgo(1);
+    const month = yesterday.slice(0, 7);
+
+    await mockRequest('/api/study/check', { body: { date: yesterday, kept: true } });
+    const kept = await mockRequest<StudyCalendarResponse>('/api/study/calendar', { query: { month } });
+    expect(kept.days.find((d) => d.date === yesterday)?.kept).toBe(true);
+
+    await mockRequest('/api/study/check', { body: { date: yesterday, kept: false } });
+    const missed = await mockRequest<StudyCalendarResponse>('/api/study/calendar', { query: { month } });
+    expect(missed.days.find((d) => d.date === yesterday)?.kept).toBe(false);
+
+    // null = 무기록 복귀 — 서버처럼 행을 지운다(그 날이 목록에서 빠지거나 kept가 null이다).
+    await mockRequest('/api/study/check', { body: { date: yesterday, kept: null } });
+    const cleared = await mockRequest<StudyCalendarResponse>('/api/study/calendar', { query: { month } });
+    expect(cleared.days.find((d) => d.date === yesterday)?.kept ?? null).toBeNull();
+  });
+
+  it('공부 일정 달력 — 미래 날짜 체크는 서버처럼 400이다(클라 no-op의 이중 방어)', async () => {
+    await expect(mockRequest('/api/study/check', { body: { date: daysAgo(-1), kept: true } })).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+
+  it('공부 일정 달력 — 목표와 지난 며칠의 측정 픽스처가 실린다(점이 뜨는 경로를 브라우저로 밟는다)', async () => {
+    await mockRequest('/api/study/goal', { body: { dailyGoalSeconds: 3600 } });
+    // 어제가 든 달을 본다 — 측정 픽스처(1~3일 전)가 반드시 걸리는 달이다.
+    const month = daysAgo(1).slice(0, 7);
+
+    const calendar = await mockRequest<StudyCalendarResponse>('/api/study/calendar', { query: { month } });
+
+    expect(calendar.goalSeconds).toBe(3600);
+    expect(calendar.days.some((d) => d.studiedSeconds > 0)).toBe(true);
   });
 
   it('공부는 독서 원장에 안 섞인다 — 목에서도 잔디·기록이 안 움직인다(격리를 목이 흉내낸다)', async () => {

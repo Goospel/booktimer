@@ -22,6 +22,7 @@ import { LinkAccount } from './screens/LinkAccount';
 import { LoginBridge } from './screens/LoginBridge';
 import { Profile } from './screens/Profile';
 import { Settings } from './screens/Settings';
+import { StudyCalendar } from './screens/StudyCalendar';
 import { BookMargin, BookMarginAll, StoryComposer } from './screens/Story';
 import { showInterstitialAd, trackEvent } from './toss';
 import { CoverInitial, ErrorMessage, Loading, PENCIL_FRAME, SERIF_VALUE, Screen, Sheet } from './ui';
@@ -64,16 +65,64 @@ export const TAB_BAR_Z_INDEX = 100;
  */
 export const TAB_BAR_SPACE = `calc(${TAB_BAR_HEIGHT}px + 12px + env(safe-area-inset-bottom) + 16px)`;
 
-export type TabKey = (typeof TABS)[number]['key'];
+/**
+ * 공부 모드에서 <b>책방 자리에</b> 서는 탭 — 그 달의 일정(지킨 날)을 표시하는 달력이다.
+ *
+ * <p>책방을 내주는 이유(사용자 확정): 책방은 여백 글이 전시되는 사회면이라 「공부 중에 쓰지 않는」
+ * 화면이고, 서재(내 책)·기록(잔디)은 공부 모드에서도 이름이 뚜렷하다.
+ *
+ * <p>아이콘은 기존 넷과 같은 문법이다 — 24 격자의 단색 스트로크 path(달력 몸통 + 머리줄 + 고리 둘).
+ */
+export const CALENDAR_TAB = {
+  key: 'calendar',
+  label: '일정',
+  icon: 'M4.5 6.5h15v13h-15zM4.5 10.5h15M8.5 4v4M15.5 4v4',
+} as const;
 
 /**
- * 탭바가 주는 index를 탭 키로 옮기는 핸들러 — `TABS` 순서가 곧 탭바 순서라는 계약이 여기 한 줄에 모인다.
+ * 공부 모드 탭바 — {@link TABS}에서 <b>책방 한 칸만</b> 갈아 끼운 것이다.
+ *
+ * <p>길이를 4로 지킨 것이 이 설계의 요점이다: {@link TIMER_ACTION_SLOT}·{@link slotCenter}가 값
+ * 그대로 남아 가운데 원과 말풍선 좌표를 한 줄도 안 고친다.
+ */
+export const STUDY_TABS = TABS.map((tab) => (tab.key === 'bookshop' ? CALENDAR_TAB : tab));
+
+export type TabKey = (typeof TABS)[number]['key'] | (typeof CALENDAR_TAB)['key'];
+
+/** 탭바 한 칸의 모양 — 두 목록이 같은 꼴이라 그리는 쪽은 어느 목록인지 몰라도 된다. */
+export interface TabItem {
+  key: TabKey;
+  label: string;
+  icon: string;
+}
+
+/** 이 모드의 탭 목록. 독서는 {@link TABS} <b>그 객체</b>를 돌려준다(독서 탭바는 픽셀 불변이다). */
+export function tabsFor(mode: TimerMode): readonly TabItem[] {
+  return mode === 'study' ? STUDY_TABS : TABS;
+}
+
+/**
+ * 지금 모드의 탭바에 없는 탭이면 홈으로 — <b>setState 없는 파생값</b>이라 동기화 코드가 0줄이다.
+ *
+ * <p>사용자 손으로는 이 조합이 안 생긴다(모드 토글이 홈에만 있다). 생기는 길은 원격뿐이다:
+ * 다른 기기에서 공부를 시작하면 {@link effectiveMode}가 study를 강제하는데, 그때 책방 탭에 서 있었으면
+ * 존재하지 않는 칸을 가리키게 된다. 반대 방향(달력에 있는데 reading 강제)도 같은 줄이 처리한다.
+ */
+export function reconcileTab(tab: TabKey, mode: TimerMode): TabKey {
+  return tabsFor(mode).some((t) => t.key === tab) ? tab : 'home';
+}
+
+/**
+ * 탭바가 주는 index를 탭 키로 옮기는 핸들러 — 목록 순서가 곧 탭바 순서라는 계약이 여기 한 줄에 모인다.
  * 정적 렌더 하니스로는 클릭을 못 잡으므로, 이 변환만 따로 꺼내 단위로 계측한다.
+ *
+ * <p>목록을 인자로 받는 것이 공부 탭바를 지탱한다 — 그리는 목록과 <b>같은 배열</b>로 index를 풀어야
+ * 「눌린 칸과 바뀌는 탭」이 어긋나지 않는다(기본값은 독서 목록).
  */
 export const tabChangeHandler =
-  (onTabChange: (tab: TabKey) => void) =>
+  (onTabChange: (tab: TabKey) => void, tabs: readonly TabItem[] = TABS) =>
   (index: number): void =>
-    onTabChange(TABS[index].key);
+    onTabChange(tabs[index].key);
 
 /**
  * 측정 액션이 서는 시각적 자리 — `TABS` index가 아니라 **렌더 배열의 위치**다.
@@ -793,6 +842,14 @@ export function App() {
   /** 지금 보여 줄 모드 — 진행 중 측정이 저장값을 이긴다(재진입·다른 기기 시작을 한 줄이 함께 처리한다). */
   const mode = effectiveMode(dashboard.hasActiveSession, study.hasActiveSession, storedMode);
 
+  /**
+   * 지금 <b>보여 줄</b> 탭 — 모드가 바뀌어 사라진 칸에 서 있으면 홈으로 떨어진다({@link reconcileTab}).
+   *
+   * <p>상태(`tab`)는 그대로 둔다 — 원격 플립이 되돌아가면 원래 있던 탭으로 돌아오는 편이 옳고,
+   * 무엇보다 파생값이라 동기화 effect가 0줄이다.
+   */
+  const shownTab = reconcileTab(tab, mode);
+
   /** 모드 전환 — 저장은 기기 로컬 한 줄이고, 화면은 위 파생값이 알아서 따라온다. */
   const changeMode = (next: TimerMode) => {
     localStorage.setItem(MODE_KEY, next);
@@ -933,7 +990,8 @@ export function App() {
     const who = margin.loginId;
     return withCompose(
       <MarginShell
-        tab={tab}
+        tab={shownTab}
+        mode={mode}
         onGo={leaveMargin}
         onStart={startFromMargin}
       >
@@ -967,7 +1025,7 @@ export function App() {
    */
   if (margin !== null && margin.isbn13 !== null && screen === 'book') {
     return (
-      <MarginShell tab={tab} onGo={leaveMargin} onStart={startFromMargin}>
+      <MarginShell tab={shownTab} mode={mode} onGo={leaveMargin} onStart={startFromMargin}>
         <BookMarginAll
           isbn13={margin.isbn13}
           timerStopped={margin.timerStopped === true}
@@ -1015,7 +1073,7 @@ export function App() {
       // 버려진다 — 전체 화면 시절 저장 경로가 정확히 그랬으므로 회귀는 아니고, 취소 경로는 개선이다
       // (예전엔 취소해도 날아갔다). 잃는 것이 아까워지면 그때 재조회를 좁힌다(지금은 remount가 가장 싸다).
       key={composeEpoch}
-      tab={tab}
+      tab={shownTab}
       onTabChange={setTab}
       dashboard={dashboard}
       mode={mode}
@@ -1056,12 +1114,18 @@ export function App() {
  */
 export function MarginShell({
   tab,
+  mode = 'reading',
   onGo,
   onStart,
   children,
 }: {
   /** 여백을 열었던 탭 — 그 칸이 선택 표시로 남아 「어디서 왜는지」를 잃지 않는다. */
   tab: TabKey;
+  /**
+   * 지금 재는 것 — 탭바가 그릴 목록을 고른다. 여백은 공부 모드에서도 도달 가능하므로
+   * (진입 게이트는 측정만 끊는다) 이걸 안 받으면 <b>여백에서만</b> 탭바가 책방으로 되돌아간다.
+   */
+  mode?: TimerMode;
   /** 탭을 눌렀다 — 여백을 닫고 그 탭으로 나간다. */
   onGo: (tab: TabKey) => void;
   /** 가운데 원 — 홈으로 나가며 측정을 시작한다(여백에 남지 않는다). */
@@ -1071,7 +1135,7 @@ export function MarginShell({
   return (
     <>
       <div style={{ paddingBottom: TAB_BAR_SPACE }}>{children}</div>
-      <BottomTabBar tab={tab} onTabChange={onGo} action={{ active: false, busy: false, onPress: onStart }} />
+      <BottomTabBar tab={tab} onTabChange={onGo} action={{ active: false, busy: false, onPress: onStart, mode }} />
     </>
   );
 }
@@ -1312,6 +1376,22 @@ export function MainTabs({
     onTabChange(next);
   };
 
+  /**
+   * 걷는 도중 모드가 study로 뒤집히면(원격 — 다른 기기에서 공부 시작) 그 자리에서 접는다.
+   *
+   * <p>안 접으면 말풍선이 <b>존재하지 않는 칸</b>(공부 탭바엔 책방이 없다)을 가리키는 프레임이 뜬다.
+   * 위 `guide` 게이트는 <b>시작</b>을 막을 뿐이라, 이미 걷는 중인 흐름은 여기가 맡는다.
+   */
+  useEffect(() => {
+    if (mode === 'study' && flowIndex >= 0) {
+      abandoned.current = true;
+      flowStepsOnAbandon().forEach(dismissCoachmark);
+      setFlowIndex(-1);
+    }
+    // 모드 플립에만 반응한다 — flowIndex를 넣으면 걷는 매 걸음마다 다시 돈다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
   // 401은 App이 재로그인으로 처리하고, 그 외(409 중복 시작 등)만 화면에 남긴다.
   const fail = (e: Error) => (e.name === 'UnauthorizedError' ? onError(e) : setActionError(e.message));
 
@@ -1442,7 +1522,9 @@ export function MainTabs({
             onBlockedModeChange={showLockHint}
             // 안내로 들어오는 문 — 홈은 자리만 정하고(히어로 카드 속), 만드는 쪽은 흐름을 든 여기다.
             guide={
-              shouldShowGuideHero(flowIndex >= 0, guideClosed, measuring) ? (
+              // 공부 모드에선 안내를 안 만든다 — 투어가 가리키는 책방 칸이 그 탭바엔 없고,
+              // 문구도 서재·책방·여백 전제라 공부 화면에서 할 말이 아니다.
+              mode === 'reading' && shouldShowGuideHero(flowIndex >= 0, guideClosed, measuring) ? (
                 <GuideHero
                   onStart={startFlow}
                   onDismiss={() => {
@@ -1481,6 +1563,8 @@ export function MainTabs({
             onError={onError}
           />
         )}
+        {/* 달력은 공부 탭바로만 도달한다 — 도달 경로가 곧 게이트라 여기서 모드를 다시 안 따진다. */}
+        {tab === 'calendar' && <StudyCalendar onError={onError} />}
         {tab === 'history' && <History graph={dashboard.graph} />}
       </div>
 
@@ -1915,9 +1999,12 @@ export function BottomTabBar({
   /** 잠긴 탭을 눌렀다 — 안내 문구는 `MainTabs`가 그린다(이 알약은 `overflow: hidden`이라 안에 두면 잘린다). */
   onBlocked?: () => void;
 }) {
-  const change = tabChangeHandler(onTabChange);
+  // 모드가 목록을 고르고, 그리기·index 풀이가 **같은 배열**을 쓴다 — 여기가 갈리면 누른 칸과
+  // 바뀌는 탭이 어긋난다. 액션이 모드를 이미 들고 있어(라벨 분기) 새 프롭이 필요 없다.
+  const tabs = tabsFor(action.mode ?? 'reading');
+  const change = tabChangeHandler(onTabChange, tabs);
 
-  const cells = TABS.map(({ key, label, icon }, index) => {
+  const cells = tabs.map(({ key, label, icon }, index) => {
     const selected = key === tab;
     const shut = tabLocked(key, locked);
     return (

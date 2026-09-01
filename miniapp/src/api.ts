@@ -453,6 +453,47 @@ export const setGoal = (dailyIncrementSeconds: number): Promise<void> =>
 export const setStudyGoal = (dailyGoalSeconds: number): Promise<StudyState> =>
   request('/api/study/goal', { body: { dailyGoalSeconds } });
 
+/**
+ * 공부 일정 달력의 하루 — 자동 정보(측정)와 원장(판정)이 <b>한 칸에 나란히</b> 온다.
+ *
+ * <p>`kept`가 `null`이면 <b>무기록</b>이다(서버엔 행 자체가 없다). 이 3상태가 화면 순환의 전부라
+ * 다른 필드로 상태를 파생하지 않는다 — `studiedSeconds > 0`은 「점」일 뿐 판정이 아니다.
+ */
+export interface StudyCalendarDay {
+  /** `YYYY-MM-DD`(유저 타임존의 달력 날짜). */
+  date: string;
+  studiedSeconds: number;
+  kept: boolean | null;
+}
+
+/** `days`는 <b>데이터 있는 날만</b> 날짜순으로 온다(희소) — 화면이 빈 칸을 채운다. */
+export interface StudyCalendarResponse {
+  goalSeconds: number;
+  days: StudyCalendarDay[];
+}
+
+/**
+ * 그 달의 달력을 받는다.
+ *
+ * <p>달을 경로에 이어 붙이지 않고 `query`로 넘기는 이유: 목 모드 라우터가 <b>경로 문자열 그대로</b>
+ * 정규식에 물리므로, `?month=…`를 경로에 넣으면 목이 그 경로를 못 찾는다(404). 실 요청에서는
+ * {@link request}가 같은 쿼리스트링을 만들어 준다.
+ *
+ * @param month `YYYY-MM`
+ */
+export const fetchStudyCalendar = (month: string): Promise<StudyCalendarResponse> =>
+  request('/api/study/calendar', { query: { month } });
+
+/**
+ * 그날의 일정 판정을 남긴다 — `kept`가 `null`이면 무기록으로 되돌린다(3상태 순환의 마지막 칸).
+ *
+ * <p>미래 날짜는 400이다(화면도 흐리게 눌러 막지만, 서버가 유저 타임존으로 다시 판정한다).
+ */
+export const setStudyCheck = (
+  date: string,
+  kept: boolean | null,
+): Promise<{ date: string; kept: boolean | null }> => request('/api/study/check', { body: { date, kept } });
+
 /** 용서 지급 결과 — `timer`가 동봉돼 부채·버튼 노출이 재조회 없이 갱신된다. */
 export interface WaiveResponse {
   waivedDate: string;

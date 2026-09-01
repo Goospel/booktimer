@@ -314,4 +314,156 @@ class StudyApiControllerTest {
         mockMvc.perform(get("/api/dashboard").with(user("studygoaliso")))
                 .andExpect(jsonPath("$.todayGoalSeconds").value((int) readingGoalBefore));
     }
+
+    // ── 공부 일정 달력 (2차 PR-B) ─────────────────────────────────────────────
+
+    /** 유저 타임존의 오늘 — 체크 대상 날짜와 조회할 달을 같은 시계에서 뽑는다. */
+    private LocalDate today() {
+        return LocalDate.ofInstant(clock.instant(), ZoneId.of(SEOUL));
+    }
+
+    private String thisMonth() {
+        return today().toString().substring(0, 7);
+    }
+
+    @Test
+    @DisplayName("GET /api/study/calendar: 미인증 → 로그인으로 차단")
+    void calendar_unauthenticated_isBlocked() throws Exception {
+        mockMvc.perform(get("/api/study/calendar").param("month", "2026-08"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    @DisplayName("GET /api/study/calendar: 목표와 일별 측정·판정을 함께 준다")
+    void calendar_returnsGoalAndDays() throws Exception {
+        User u = register("study-cal@a.com", "studycal");
+        completedStudy(u, todayNoon(), Duration.ofMinutes(40));
+
+        mockMvc.perform(post("/api/study/goal").with(user("studycal")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"dailyGoalSeconds\":3600}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/study/calendar").param("month", thisMonth()).with(user("studycal")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.goalSeconds").value(3600))
+                .andExpect(jsonPath("$.days[0].date").value(today().toString()))
+                .andExpect(jsonPath("$.days[0].studiedSeconds").value(2400))
+                // 측정만 있고 판정은 없는 날 — 「측정 있음 점」은 뜨되 체크는 무기록이다.
+                .andExpect(jsonPath("$.days[0].kept").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("GET /api/study/calendar: 달 형식이 틀리면 400 — 사용자에게 보이는 평문이다")
+    void calendar_malformedMonth_isBadRequest() throws Exception {
+        register("study-calbad@a.com", "studycalbad");
+
+        mockMvc.perform(get("/api/study/calendar").param("month", "2026-13-01").with(user("studycalbad")))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string("달 형식이 올바르지 않아요"));
+    }
+
+    @Test
+    @DisplayName("POST /api/study/check: 미인증 → 로그인으로 차단")
+    void check_unauthenticated_isBlocked() throws Exception {
+        mockMvc.perform(post("/api/study/check").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"date\":\"2026-08-30\",\"kept\":true}"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    @DisplayName("POST /api/study/check: 남긴 판정이 그 달 달력에 그대로 실린다(왕복)")
+    void check_isReflectedInCalendar() throws Exception {
+        register("study-check@a.com", "studycheck");
+        String date = today().toString();
+
+        mockMvc.perform(post("/api/study/check").with(user("studycheck")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"date\":\"" + date + "\",\"kept\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.date").value(date))
+                .andExpect(jsonPath("$.kept").value(true));
+
+        mockMvc.perform(get("/api/study/calendar").param("month", thisMonth()).with(user("studycheck")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.days[0].date").value(date))
+                .andExpect(jsonPath("$.days[0].kept").value(true))
+                .andExpect(jsonPath("$.days[0].studiedSeconds").value(0));
+    }
+
+    @Test
+    @DisplayName("POST /api/study/check: kept=null이면 무기록으로 되돌아가 달력에서 빠진다(3상태 순환의 끝)")
+    void check_nullClearsTheDay() throws Exception {
+        register("study-checkclear@a.com", "studycheckclear");
+        String date = today().toString();
+
+        mockMvc.perform(post("/api/study/check").with(user("studycheckclear")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"date\":\"" + date + "\",\"kept\":false}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/study/check").with(user("studycheckclear")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"date\":\"" + date + "\",\"kept\":null}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.kept").doesNotExist());
+
+        mockMvc.perform(get("/api/study/calendar").param("month", thisMonth()).with(user("studycheckclear")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.days").isEmpty());
+    }
+
+    /**
+     * 미래 거부는 <b>클라이언트와 이중 방어</b>다(화면은 흐림 + no-op). 이 400 본문은
+     * {@code @ExceptionHandler(IllegalArgumentException.class)}가 그대로 내보내므로 곧 사용자 문구다.
+     */
+    @Test
+    @DisplayName("POST /api/study/check: 미래 날짜는 400 + 한국어 평문")
+    void check_futureDate_isBadRequest() throws Exception {
+        register("study-checkfuture@a.com", "studycheckfuture");
+
+        mockMvc.perform(post("/api/study/check").with(user("studycheckfuture")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"date\":\"" + today().plusDays(1) + "\",\"kept\":true}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string("미래 날짜는 체크할 수 없어요"));
+    }
+
+    @Test
+    @DisplayName("POST /api/study/check: 날짜 형식이 틀리면 400 — 사용자에게 보이는 평문이다")
+    void check_malformedDate_isBadRequest() throws Exception {
+        register("study-checkbad@a.com", "studycheckbad");
+
+        mockMvc.perform(post("/api/study/check").with(user("studycheckbad")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"date\":\"어제\",\"kept\":true}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string("날짜 형식이 올바르지 않아요"));
+    }
+
+    /**
+     * <b>격리의 셋째 축</b> — 세션(원장)·목표에 이어 <b>일정 체크</b>도 독서 표면에 0 영향이어야 한다.
+     * 새 테이블이라 구조적으로 샐 길이 없지만, 그 구조가 깨졌을 때 울릴 계측기를 남긴다.
+     */
+    @Test
+    @DisplayName("격리: 공부 일정 체크는 잔디·기록 목록 어디에도 안 나타난다")
+    void studyCheckDoesNotLeakIntoReadingSurfaces() throws Exception {
+        User u = register("study-checkiso@a.com", "studycheckiso");
+        completedStudy(u, todayNoon(), Duration.ofHours(1));
+
+        mockMvc.perform(post("/api/study/check").with(user("studycheckiso")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"date\":\"" + today() + "\",\"kept\":true}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/dashboard").with(user("studycheckiso")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.graph.totalSeconds").value(0))
+                .andExpect(jsonPath("$.graph.activeDays").value(0));
+        mockMvc.perform(get("/api/history").with(user("studycheckiso")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.months").isEmpty());
+    }
 }

@@ -38,6 +38,16 @@ public interface StudySessionRepository extends JpaRepository<StudySession, Long
                              @Param("from") Instant from,
                              @Param("to") Instant to);
 
+    /**
+     * 구간 안의 완료 세션들 — 달력이 <b>일자별로</b> 갈라 세려고 원본 행을 받는다
+     * ({@link #sumCompletedSeconds}는 한 덩어리 합이라 일자별로 못 쪼갠다).
+     *
+     * <p>귀속 기준은 여기서도 {@code startedAt}이다 — 합계와 달력이 같은 규칙을 써야 자정을 걸친
+     * 세션이 두 화면에서 다른 날에 서지 않는다. 범위는 한 사람의 한 달이라 행 수가 수십을 넘지 않는다.
+     */
+    List<StudySession> findByUserAndEndedAtIsNotNullAndStartedAtGreaterThanEqualAndStartedAtLessThan(
+            User user, Instant from, Instant to);
+
     /** 회원 탈퇴 시 해당 유저의 모든 공부 기록을 제거한다(FK: study_session.user_id → users). */
     void deleteByUser(User user);
 }

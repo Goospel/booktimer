@@ -195,6 +195,13 @@ const state = {
   studyTodaySeconds: 0,
   /** 공부 하루 목표 — 0(목표 없음)에서 시작해야 「목표 정하기」 손잡이부터 밟아 볼 수 있다. */
   studyGoalSeconds: 0,
+  /**
+   * 공부 일정 판정 — `YYYY-MM-DD` → 지킴/못 지킴. <b>키가 없으면 무기록</b>이라 서버의 「행 부재」와
+   * 같은 3상태가 된다(모듈 메모리라 새로고침이 초기화다).
+   *
+   * <p>지킴·못 지킴·무기록 셋이 처음부터 화면에 있어야 세 꼴을 한눈에 견줄 수 있다.
+   */
+  studyChecks: { [isoDate(2)]: true, [isoDate(4)]: false } as Record<string, boolean>,
   /** 이 세션에서 끝낸 측정 수 — 첫 종료(=1)에만 축하 배너가 뜬다. 새로고침하면 0으로 돌아가 다시 볼 수 있다. */
   completedSessions: 0,
   nextId: 500,
@@ -289,6 +296,35 @@ function timerState(): TimerState {
     // 광고 SDK가 없는 브라우저라 버튼은 뜨지 않는다(`.env.mock`이 광고 그룹 ID를 비운다) — 값은 실제처럼 둔다.
     debtWaiverAvailable: true,
   };
+}
+
+/**
+ * 지난 며칠의 공부 측정 픽스처 — 달력의 「측정 있음 점」이 뜨는 경로를 브라우저로 밟게 한다.
+ *
+ * <p>체크 픽스처와 <b>일부러 어긋나게</b> 둔다: 측정만 있는 날(1·3)·판정만 있는 날(4)·둘 다인 날(2)이
+ * 모두 있어야 점과 원이 서로 다른 것을 말한다는 게 눈에 보인다.
+ */
+const studyDayTotals: Record<string, number> = {
+  [isoDate(1)]: 3_600,
+  [isoDate(2)]: 5_400,
+  [isoDate(3)]: 1_200,
+};
+
+/** 달력 한 달치 — 오늘 몫은 실제 측정 상태(`studyTodaySeconds`)에서 합류한다. */
+function studyCalendarDays(month: string): { date: string; studiedSeconds: number; kept: boolean | null }[] {
+  const seconds: Record<string, number> = { ...studyDayTotals };
+  if (state.studyTodaySeconds > 0) {
+    seconds[isoDate(0)] = (seconds[isoDate(0)] ?? 0) + state.studyTodaySeconds;
+  }
+  const dates = new Set([...Object.keys(seconds), ...Object.keys(state.studyChecks)]);
+  return [...dates]
+    .filter((date) => date.startsWith(month))
+    .sort()
+    .map((date) => ({
+      date,
+      studiedSeconds: seconds[date] ?? 0,
+      kept: state.studyChecks[date] ?? null,
+    }));
 }
 
 function studyState(): StudyState {
@@ -847,6 +883,23 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     if (seconds < 0) throw new ApiError(400, 'studyDailyGoalSeconds must be >= 0');
     state.studyGoalSeconds = seconds;
     return studyState();
+  }],
+
+  // 공부 일정 달력 — 판정(체크)은 <b>사용자가 남긴 것만</b> 있고 서버가 자동으로 만들지 않는다.
+  // 그 관계를 목도 그대로 지킨다: 측정 픽스처는 점(자동 정보)에만 쓰이고 체크를 건드리지 않는다.
+  ['GET', /^\/api\/study\/calendar$/, ({ query }) => ({
+    goalSeconds: state.studyGoalSeconds,
+    days: studyCalendarDays(String(query.month ?? '')),
+  })],
+  // 미래 400·null 삭제까지 서버 계약 그대로 — 화면의 no-op이 풀렸을 때 목이 먼저 소리를 내야 한다.
+  ['POST', /^\/api\/study\/check$/, ({ body }) => {
+    const date = String(body.date ?? '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new ApiError(400, '날짜 형식이 올바르지 않아요');
+    if (date > isoDate(0)) throw new ApiError(400, '미래 날짜는 체크할 수 없어요');
+    const kept = (body.kept ?? null) as boolean | null;
+    if (kept === null) delete state.studyChecks[date];
+    else state.studyChecks[date] = kept;
+    return { date, kept };
   }],
 
   ['POST', /^\/api\/miniapp\/goal$/, ({ body }) => {
