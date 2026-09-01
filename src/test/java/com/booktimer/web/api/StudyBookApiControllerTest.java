@@ -120,10 +120,18 @@ class StudyBookApiControllerTest {
                 .andExpect(jsonPath("$.books").isEmpty());
     }
 
+    /**
+     * 격리의 <b>두 축을 한 번에</b> 잰다 — ① 내 독서 책이 공부 서재에 안 실리고(도메인 경계)
+     * ② <b>남의 공부 책</b>도 안 실린다(소유자 스코프).
+     *
+     * <p>②가 없으면 목록 쿼리가 {@code findAll()}로 바뀌어도 전 스위트가 초록이다 — 테스트마다
+     * 사용자가 하나뿐이면 「내 것만」과 「전부」가 같은 답을 내기 때문이다(리뷰 W-1 실측).
+     */
     @Test
-    @DisplayName("격리: 독서 책은 공부 서재(GET /api/study/books)에 실리지 않는다")
-    void readingBookDoesNotLeakIntoStudyShelf() throws Exception {
+    @DisplayName("격리: 공부 서재는 내 독서 책도, 남의 공부 책도 싣지 않는다(도메인 경계 + 소유자 스코프)")
+    void studyShelfCarriesOnlyMyStudyBooks() throws Exception {
         register("sb-iso2@a.com", "sbisotwo");
+        register("sb-iso3@a.com", "sbisothree");
 
         mockMvc.perform(post("/api/books").with(user("sbisotwo")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -132,10 +140,13 @@ class StudyBookApiControllerTest {
                                  "status":"READING"}
                                 """))
                 .andExpect(status().isOk());
+        addStudyBook("sbisotwo", "내 공부 책", "9791100000010");
+        addStudyBook("sbisothree", "남의 공부 책", "9791100000011");
 
         mockMvc.perform(get("/api/study/books").with(user("sbisotwo")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.books").isEmpty());
+                .andExpect(jsonPath("$.books", hasSize(1)))
+                .andExpect(jsonPath("$.books[0].title").value("내 공부 책"));
     }
 
     // ── ③ 회독 경계 ──────────────────────────────────────────────────────────
@@ -218,14 +229,26 @@ class StudyBookApiControllerTest {
 
     // ── ⑤ isbn 멱등 ─────────────────────────────────────────────────────────
 
+    /**
+     * ⚠️ <b>하이픈 표기를 먼저 담는 순서가 이 테스트의 핵심</b>이다 — 알라딘 응답의 isbn13은 표기가 갈릴 수
+     * 있는데, {@link com.booktimer.book.Isbn#normalize}가 <b>적재 시점</b>에 표기를 모으지 않으면 하이픈째
+     * 저장되고, 다음에 같은 책을 하이픈 없이 담을 때 조회가 빗나가 <b>같은 책이 두 행으로 쪼개지며 회독 수가
+     * 0으로 되돌아간다</b>.
+     *
+     * <p><b>순서를 뒤집으면 이 테스트는 공허해진다</b>: {@code StudyBookService.add}가 조회 키를 스스로
+     * 정규화하므로, 먼저 담은 값이 이미 하이픈 없는 꼴이면 엔티티의 정규화는 no-op이라 걷어내도 초록이다
+     * (리뷰 W-2가 지적한 사각이고, 처음 쓴 계측기가 정확히 그 순서라 돌연변이가 살아남았다).
+     */
     @Test
-    @DisplayName("같은 isbn 재추가: 새 행 없이 기존 행을 돌려주고 회독수를 보존한다(「추가」가 회독을 리셋하지 않는다)")
+    @DisplayName("같은 isbn 재추가: 하이픈 표기로 먼저 담아도 표기를 모아 한 행을 유지하고 회독수를 보존한다")
     void addSameIsbn_keepsExistingRowAndReadCount() throws Exception {
         User u = register("sb-dup@a.com", "sbdup");
-        addStudyBook("sbdup", "중복 대상", "9791100000008");
+        // ① 하이픈 표기로 먼저 담는다 — 적재 정규화가 없으면 여기서 하이픈째 저장된다.
+        addStudyBook("sbdup", "중복 대상", "979-11-0000-0008");
         Long id = onlyBookId(u);
         setReadCount("sbdup", id, 4).andExpect(status().isOk());
 
+        // ② 하이픈 없는 표기로 재추가 — 적재가 정규화됐어야 여기서 기존 행을 찾는다.
         mockMvc.perform(post("/api/study/books").with(user("sbdup")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(addBody("중복 대상", "9791100000008")))
@@ -233,9 +256,19 @@ class StudyBookApiControllerTest {
                 .andExpect(jsonPath("$.id").value(id))
                 .andExpect(jsonPath("$.readCount").value(4));
 
+        // ③ 하이픈 표기로 한 번 더 — 조회 키 정규화도 함께 잠근다.
+        mockMvc.perform(post("/api/study/books").with(user("sbdup")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(addBody("중복 대상", "979-11-0000-0008")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id))
+                .andExpect(jsonPath("$.readCount").value(4));
+
         mockMvc.perform(get("/api/study/books").with(user("sbdup")))
                 .andExpect(jsonPath("$.books", hasSize(1)))
-                .andExpect(jsonPath("$.books[0].readCount").value(4));
+                .andExpect(jsonPath("$.books[0].readCount").value(4))
+                // 저장된 표기는 정규화된 한 형태다(적재 단일 통로 — 동일성 키가 쪼개지지 않는 근거).
+                .andExpect(jsonPath("$.books[0].isbn13").value("9791100000008"));
     }
 
     // ── ⑥ isbn null ─────────────────────────────────────────────────────────
