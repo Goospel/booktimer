@@ -504,4 +504,26 @@ describe('모드 토글', () => {
   it('히트영역은 44px 컨테이너가 든다 — 알약은 작아도 손가락은 닿아야 한다', () => {
     expect(toggle('reading')).toContain('height:44px');
   });
+
+  /**
+   * 세로 정렬 — 정적 렌더라 좌표는 못 재니 <b>정렬을 만드는 스타일의 존재</b>로 계측한다.
+   *
+   * <p>버튼이 inline 흐름이면 안의 알약이 버튼 baseline에 앉고, 상속 폰트(16px)의 line box strut이
+   * 알약을 아래로 민다 — 실측 위 4.5px / 아래 −0.5px(테두리를 삐져나갔다). flex 컨테이너로 바꾸면
+   * strut이 사라져 알약이 정확히 가운데 선다. 실좌표 판정은 목 모드가 게이트다.
+   */
+  const button = (mode: 'reading' | 'study') => {
+    const markup = toggle(mode);
+    return markup.slice(markup.indexOf('<button'), markup.indexOf('</button>'));
+  };
+
+  it('세그먼트 버튼은 flex 정렬이다 — inline strut이 알약을 아래로 못 민다', () => {
+    expect(button('reading')).toContain('display:flex');
+    expect(button('reading')).toContain('align-items:center');
+  });
+
+  it('strut을 걷어내도 손가락 몫은 그대로다 — 버튼 자체가 44px를 든다', () => {
+    // strut이 벌어주던 7px이 사라지므로, 44는 이제 버튼이 명시로 들어야 한다.
+    expect(button('reading')).toContain('min-height:44px');
+  });
 });
