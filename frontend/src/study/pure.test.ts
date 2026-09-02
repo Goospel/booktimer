@@ -5,6 +5,7 @@ import {
     cellLabel,
     cellMarks,
     cycleCheck,
+    errorMessage,
     monthTitle,
     nextDay,
     planSummary,
@@ -111,5 +112,24 @@ describe('planSummary', () => {
 describe('studyNavLinks', () => {
     it('홈과 내 책장으로 돌아가는 길을 준다', () => {
         expect(studyNavLinks().map((l) => l.href)).toEqual(['/', '/books']);
+    });
+});
+
+describe('errorMessage', () => {
+    it('400은 서버가 준 한국어 문구를 그대로 쓴다 — 사용자가 고칠 수 있는 유일한 실패다', () => {
+        expect(errorMessage(400, '할 일을 입력해 주세요')).toBe('할 일을 입력해 주세요');
+    });
+
+    it('400인데 본문이 비면 고정 문구로 떨어진다', () => {
+        expect(errorMessage(400, '   ')).toBe('일정을 추가하지 못했어요.');
+    });
+
+    it('404는 본문을 믿지 않는다 — GlobalExceptionHandler가 error.html을 통째로 준다', () => {
+        expect(errorMessage(404, '<!DOCTYPE html><html><body>오류</body></html>'))
+            .toBe('책을 찾을 수 없어요');
+    });
+
+    it('500도 본문을 버리고 고정 문구를 쓴다 — HTML이 상태줄에 찍히면 안 된다', () => {
+        expect(errorMessage(500, '<!DOCTYPE html><html>...</html>')).toBe('일정을 추가하지 못했어요.');
     });
 });

@@ -112,6 +112,20 @@ export function planSummary(items: PlanItem[]): string {
     return `${items[0].task} +${items.length - 1}`;
 }
 
+/**
+ * 실패 응답을 화면에 띄울 한 줄로 옮긴다.
+ *
+ * <p><b>본문을 믿는 것은 400뿐</b>이다 — 그 상태만 컨트롤러의 `@ExceptionHandler(IAE)`가 한국어
+ * 완성문을 본문으로 돌려준다. 404·500은 `GlobalExceptionHandler`가 `error.html`을 렌더해
+ * <b>HTML 문서 전체</b>가 본문이라, 그대로 던지면 상태줄에 `<!DOCTYPE html>…`이 찍힌다.
+ */
+export function errorMessage(status: number, bodyText: string): string {
+    const fallback = '일정을 추가하지 못했어요.';
+    if (status === 400) return bodyText.trim() || fallback;
+    if (status === 404) return '책을 찾을 수 없어요';
+    return fallback;
+}
+
 /** 하단 네비 — 이 화면은 홈과 내 책장으로만 나간다(공부 서재·타이머 동선은 미니앱 몫). */
 export function studyNavLinks(): NavLinkSpec[] {
     return [

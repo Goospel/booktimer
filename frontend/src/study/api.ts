@@ -1,5 +1,5 @@
 import { getCsrfToken } from '../shared/follow';
-import type { CalendarDay, PlanItem, RecallMark } from './pure';
+import { errorMessage, type CalendarDay, type PlanItem, type RecallMark } from './pure';
 
 /**
  * 「공부」 화면의 서버 문.
@@ -24,7 +24,9 @@ export interface StudyCalendar {
 }
 
 async function json<T>(res: Response): Promise<T> {
-    if (!res.ok) throw new Error(await res.text().catch(() => '') || `HTTP ${res.status}`);
+    if (!res.ok) {
+        throw new Error(errorMessage(res.status, await res.text().catch(() => '')));
+    }
     return (await res.json()) as T;
 }
 

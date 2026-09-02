@@ -2,19 +2,25 @@ package com.booktimer.web;
 
 import com.booktimer.user.Role;
 import com.booktimer.user.UserRegistrationService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.Principal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -38,6 +44,7 @@ class StudyControllerTest {
 
     @Autowired MockMvc mockMvc;
     @Autowired UserRegistrationService registrationService;
+    @Autowired StudyController controller;
     @Autowired Clock clock;
 
     private LocalDate today() {
@@ -55,6 +62,25 @@ class StudyControllerTest {
         mockMvc.perform(get("/study"))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/login"));
+    }
+
+    /**
+     * 마크업 단언({@code name="_csrf"})만으로는 이 줄을 못 지킨다 — 메타 태그는 Thymeleaf가 그리므로
+     * {@code precommit} 호출을 지워도 그대로 초록이다. 그 줄이 막는 것은 「큰 페이지에서 세션이 늦게
+     * 생겨 응답 커밋 뒤 500」이라 <b>토큰을 실제로 당겼는가</b>로만 잴 수 있다(T-033·T-049 · FeedbackController 선례).
+     */
+    @Test
+    @DisplayName("GET /study: 렌더 전 CSRF 토큰을 선확정한다 — 마크업 단언이 못 잡는 자리")
+    void study_precommitsCsrfToken() {
+        register("csrfstudy");
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        CsrfToken token = mock(CsrfToken.class);
+        when(request.getAttribute(CsrfToken.class.getName())).thenReturn(token);
+        Principal principal = () -> "csrfstudy";
+
+        controller.study(principal, request);
+
+        verify(token).getToken();
     }
 
     @Test

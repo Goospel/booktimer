@@ -1,5 +1,6 @@
 package com.booktimer.session;
 
+import com.booktimer.study.StudyDates;
 import com.booktimer.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,7 +58,7 @@ public class StudyCalendarService {
      * @throws IllegalArgumentException 유저 타임존 기준 오늘을 넘는 날짜 — 메시지가 그대로 400 본문이 된다
      */
     public void setCheck(User user, LocalDate date, Boolean kept, Instant now) {
-        LocalDate today = LocalDate.ofInstant(now, ZoneId.of(user.getTimezone()));
+        LocalDate today = StudyDates.today(user, now);
         if (date.isAfter(today)) {
             throw new IllegalArgumentException("미래 날짜는 체크할 수 없어요");
         }
