@@ -12,6 +12,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.AdditionalAnswers.returnsFirstArg;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -156,5 +160,129 @@ class StudySessionServiceTest {
                 .thenReturn(1500L);
 
         assertThat(service.todaySeconds(user, T0)).isEqualTo(1500L);
+    }
+
+    // ==========================================================================
+    // 자정 분할 — 종료 2경로 배선 (stop / closeStaleSessions)
+    //
+    // 순수 함수 splitByMidnight 자체의 경계 규칙(0초 조각 금지·DST·다중 경계)은
+    // ReadingSessionServiceTest #1~#9가 이미 전수로 잡는다 — 같은 함수를 공유하므로
+    // 여기서 다시 세지 않고, 공부 쪽 「배선이 실제로 걸렸나」만 계측한다.
+    // ==========================================================================
+
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+
+    /**
+     * 이 머신(KST)·서버 UTC 어느 쪽과도 다른 TZ. 분할 기준이 <b>유저</b> TZ임을 계측하려면 픽스처 TZ가
+     * 시스템 기본값과 달라야 한다 — Asia/Seoul 유저만으로는 {@code ZoneId.systemDefault()}로 바꾼
+     * 돌연변이가 이 머신에서 살아남는다(독서 쪽과 같은 사각 방지).
+     */
+    private static final ZoneId AUCKLAND = ZoneId.of("Pacific/Auckland");
+
+    private static User aucklandUser() {
+        return User.of("kiwi@booktimer.com", "$2a$10$abcdefghijklmnopqrstuv", "키위", "Pacific/Auckland", Role.USER);
+    }
+
+    /** 유저 TZ 로컬 시각 문자열("2026-06-01T23:50")을 Instant로 — 손으로 UTC를 환산하지 않는다. */
+    private static Instant at(String localDateTime, ZoneId zone) {
+        return LocalDateTime.parse(localDateTime).atZone(zone).toInstant();
+    }
+
+    private static Instant kst(String localDateTime) {
+        return at(localDateTime, KST);
+    }
+
+    @Test
+    @DisplayName("stop: 23:50 시작 → 익일 00:40 종료면 2행으로 저장하고 마지막 조각을 반환한다(경계는 유저 TZ 자정)")
+    void stop_acrossMidnight_savesTwoRowsReturnsLast() {
+        // 유저 TZ를 Auckland로 둔다 — 이 구간은 KST·UTC 기준으로는 같은 날 안이라(20:50~21:40 KST,
+        // 11:50~12:40Z) 서버 TZ로 자르는 구현이면 1조각이 된다. 그래서 이 테스트가 곧 「유저 TZ로 자른다」의 계측기다.
+        User kiwi = aucklandUser();
+        Instant started = at("2026-06-01T23:50", AUCKLAND);
+        Instant now = at("2026-06-02T00:40", AUCKLAND);
+        Instant midnight = LocalDate.of(2026, 6, 2).atStartOfDay(AUCKLAND).toInstant();
+        StudySession active = StudySession.start(kiwi, started);
+        when(studyRepository.findByUserAndEndedAtIsNull(kiwi)).thenReturn(Optional.of(active));
+        when(studyRepository.save(any(StudySession.class))).thenAnswer(returnsFirstArg());
+
+        StudySession result = service.stop(kiwi, now);
+
+        verify(studyRepository, times(2)).save(any(StudySession.class));
+        // 기존 행이 첫 조각 — startedAt 은 그대로, endedAt 만 자정으로 확정된다.
+        assertThat(active.getStartedAt()).isEqualTo(started);
+        assertThat(active.getEndedAt()).isEqualTo(midnight);
+        assertThat(active.getDurationSeconds()).isEqualTo(600L);
+        // 반환은 now 가 속한 마지막 조각.
+        assertThat(result).isNotSameAs(active);
+        assertThat(result.getStartedAt()).isEqualTo(midnight);
+        assertThat(result.getEndedAt()).isEqualTo(now);
+        assertThat(result.getDurationSeconds()).isEqualTo(2400L);
+        assertThat(result.getUser()).isSameAs(kiwi);
+    }
+
+    @Test
+    @DisplayName("stop: 자정을 안 넘기면 지금처럼 1행만 저장한다(핫패스 회귀 방지)")
+    void stop_withinOneDay_savesOnce() {
+        Instant started = kst("2026-06-01T10:00");
+        StudySession active = StudySession.start(user, started);
+        when(studyRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(active));
+        when(studyRepository.save(any(StudySession.class))).thenAnswer(returnsFirstArg());
+
+        StudySession result = service.stop(user, started.plusSeconds(1800));
+
+        verify(studyRepository, times(1)).save(any(StudySession.class));
+        assertThat(result).isSameAs(active);
+        assertThat(result.getDurationSeconds()).isEqualTo(1800L);
+    }
+
+    @Test
+    @DisplayName("stop: 정확히 자정에 끝나면 1행이다(0초 조각 금지)")
+    void stop_endsExactlyAtMidnight_savesOnce() {
+        User kiwi = aucklandUser();
+        Instant started = at("2026-06-01T23:00", AUCKLAND);
+        Instant midnight = LocalDate.of(2026, 6, 2).atStartOfDay(AUCKLAND).toInstant();
+        StudySession active = StudySession.start(kiwi, started);
+        when(studyRepository.findByUserAndEndedAtIsNull(kiwi)).thenReturn(Optional.of(active));
+        when(studyRepository.save(any(StudySession.class))).thenAnswer(returnsFirstArg());
+
+        StudySession result = service.stop(kiwi, midnight);
+
+        verify(studyRepository, times(1)).save(any(StudySession.class));
+        assertThat(result).isSameAs(active);
+        assertThat(result.getDurationSeconds()).isEqualTo(3600L);
+    }
+
+    @Test
+    @DisplayName("stop: 클램프가 분할보다 먼저다 — 20:00 시작 + 9시간이면 6h cap 뒤 02:00까지만 두 조각")
+    void stop_clampBeforeSplit() {
+        Instant started = kst("2026-06-01T20:00");
+        StudySession active = StudySession.start(user, started);
+        when(studyRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(active));
+        when(studyRepository.save(any(StudySession.class))).thenAnswer(returnsFirstArg());
+
+        StudySession result = service.stop(user, started.plusSeconds(9 * 3600));
+
+        verify(studyRepository, times(2)).save(any(StudySession.class));
+        // 분할을 먼저 하고 조각마다 클램프하면 마지막 조각이 05:00까지 살아남는다 — 그 꼴이 아님을 단언.
+        assertThat(result.getEndedAt()).isEqualTo(kst("2026-06-02T02:00"));
+        assertThat(active.getDurationSeconds() + result.getDurationSeconds())
+                .isEqualTo(ReadingSessionService.MAX_SESSION_DURATION.toSeconds());
+    }
+
+    @Test
+    @DisplayName("closeStaleSessions: 22:00 방치 세션은 익일 04:00(cap)으로 닫히며 2조각이 되고 closed는 여전히 1이다")
+    void closeStaleSessions_acrossMidnight_countsOriginalSessions() {
+        Instant started = kst("2026-06-01T22:00");
+        StudySession stale = StudySession.start(user, started);
+        when(studyRepository.findByEndedAtIsNullAndStartedAtBefore(any(Instant.class)))
+                .thenReturn(List.of(stale));
+        when(studyRepository.save(any(StudySession.class))).thenAnswer(returnsFirstArg());
+
+        int closed = service.closeStaleSessions(started.plusSeconds(21 * 3600));
+
+        assertThat(closed).isEqualTo(1); // 조각 수가 아니라 원본 세션 수
+        verify(studyRepository, times(2)).save(any(StudySession.class));
+        assertThat(stale.getEndedAt()).isEqualTo(LocalDate.of(2026, 6, 2).atStartOfDay(KST).toInstant());
+        assertThat(stale.getDurationSeconds()).isEqualTo(2 * 3600L);
     }
 }

@@ -77,7 +77,8 @@ public class StudyCalendarService {
      * <p>월 합산을 DB 함수가 아니라 자바에서 그룹핑하는 이유: 타임존 변환을 SQL로 하면 H2/MySQL 방언이
      * 갈리는데, 한 사람의 한 달치는 아무리 많아도 수십 행이라 옮겨 세는 편이 단순하고 같게 돈다.
      * 귀속 기준은 {@code startedAt}이다 — 히어로의 「오늘 공부한 시간」과 같은 규칙이라야 두 화면이
-     * 자정을 걸친 세션을 서로 다른 날에 세지 않는다.
+     * 한 세션을 서로 다른 날에 세지 않는다. 자정을 걸친 공부는 저장 시 이미 자정에서 조각나 있으므로
+     * ({@code StudySessionService}) 각 조각이 제 날짜 칸에 선다.
      */
     @Transactional(readOnly = true)
     public List<CalendarDay> month(User user, YearMonth month) {
