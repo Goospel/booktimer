@@ -25,8 +25,12 @@ public interface StudySessionRepository extends JpaRepository<StudySession, Long
     List<StudySession> findByEndedAtIsNullAndStartedAtBefore(Instant threshold);
 
     /**
-     * 완료 세션의 구간 합(초). 귀속 기준은 <b>{@code startedAt}</b>이라 자정을 걸친 세션은
-     * <b>시작한 날에 전부</b> 들어간다(단순 규칙 — 독서 집계가 {@code started_at} 인덱스를 쓰는 선례와 정렬).
+     * 완료 세션의 구간 합(초). 귀속 기준은 <b>{@code startedAt}</b>이다(독서 집계가 {@code started_at}
+     * 인덱스를 쓰는 선례와 정렬).
+     *
+     * <p><b>신규 세션은 저장 시 자정으로 분할</b>되므로 한 행이 유저 TZ 하루 안에 있고, 시작일 귀속이
+     * 곧 정확한 귀속이다({@code StudySessionService.endSplitAndSave}). 분할 도입 전에 저장된
+     * <b>레거시 행은 여전히 자정을 걸칠 수 있다</b> — 소급 재분할을 하지 않았기 때문이다.
      */
     @Query("""
             select coalesce(sum(s.durationSeconds), 0)
@@ -42,8 +46,9 @@ public interface StudySessionRepository extends JpaRepository<StudySession, Long
      * 구간 안의 완료 세션들 — 달력이 <b>일자별로</b> 갈라 세려고 원본 행을 받는다
      * ({@link #sumCompletedSeconds}는 한 덩어리 합이라 일자별로 못 쪼갠다).
      *
-     * <p>귀속 기준은 여기서도 {@code startedAt}이다 — 합계와 달력이 같은 규칙을 써야 자정을 걸친
-     * 세션이 두 화면에서 다른 날에 서지 않는다. 범위는 한 사람의 한 달이라 행 수가 수십을 넘지 않는다.
+     * <p>귀속 기준은 여기서도 {@code startedAt}이다 — 합계와 달력이 같은 규칙을 써야 한 세션이 두
+     * 화면에서 다른 날에 서지 않는다. 자정을 걸친 공부는 저장 시 이미 조각난 행들이라 각 조각이 제
+     * 날짜에 선다. 범위는 한 사람의 한 달이라 행 수가 수십을 넘지 않는다.
      */
     List<StudySession> findByUserAndEndedAtIsNotNullAndStartedAtGreaterThanEqualAndStartedAtLessThan(
             User user, Instant from, Instant to);
@@ -52,7 +57,8 @@ public interface StudySessionRepository extends JpaRepository<StudySession, Long
      * 기록 화면 몫 — <b>전 기간</b> 완료 세션. 잔디(53주)와 월별 목록(전 기간)을 한 번에 묶으려면
      * 구간을 자를 수가 없다({@link StudyHistoryService}가 두 범위를 자바에서 가른다).
      *
-     * <p>귀속 기준은 다른 둘과 같은 {@code startedAt}이다 — 자정을 걸친 세션은 시작한 날에 전부 들어간다.
+     * <p>귀속 기준은 다른 둘과 같은 {@code startedAt}이다 — 자정을 걸친 공부는 저장 시 조각난 행들이라
+     * 각 조각이 제 날짜에 들어간다(레거시 행은 예외).
      */
     List<StudySession> findByUserAndEndedAtIsNotNull(User user);
 

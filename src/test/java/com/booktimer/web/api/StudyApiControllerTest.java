@@ -3,6 +3,7 @@ package com.booktimer.web.api;
 import com.booktimer.session.ReadingSessionService;
 import com.booktimer.session.StudySession;
 import com.booktimer.session.StudySessionRepository;
+import com.booktimer.session.StudySessionService;
 import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.Role;
@@ -22,6 +23,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -49,6 +51,7 @@ class StudyApiControllerTest {
     @Autowired UserRegistrationService registrationService;
     @Autowired UserRepository userRepository;
     @Autowired StudySessionRepository studyRepository;
+    @Autowired StudySessionService studySessionService;
     @Autowired ReadingSessionService readingSessionService;
     @Autowired ReadingTimerRepository timerRepository;
     @Autowired ReadingGoalChangeRepository goalChangeRepository;
@@ -529,6 +532,44 @@ class StudyApiControllerTest {
                 .andExpect(jsonPath("$.months").isEmpty())
                 .andExpect(jsonPath("$.graph.weeks.length()").value(53))
                 .andExpect(jsonPath("$.graph.totalSeconds").value(0));
+    }
+
+    // ── 자정 분할 (하위 집계 자동 정합) ──────────────────────────────────────
+
+    /**
+     * <b>저장 시점 분할만으로 하위 집계가 전부 맞는다</b>는 이 PR의 주장 그 자체를 재는 유일한 자리다.
+     * 기록·달력은 한 줄도 안 고쳤으므로, 두 화면이 두 날짜로 갈려 보이면 그건 세션 행이 실제로
+     * 두 개로 저장됐다는 뜻이다(단위 테스트의 mock 저장으론 여기까지 못 본다).
+     *
+     * <p>시각은 <b>고정 과거 일자</b>로 만든다 — {@code now} 기준 상대 좌표로 심으면 자정 근처에
+     * 돌린 CI에서만 붉어진다.
+     */
+    @Test
+    @DisplayName("자정 분할: 23:50→익일 00:40 공부는 기록·달력에서 두 날짜(10분·40분)로 갈린다")
+    void midnightSplit_isReflectedInHistoryAndCalendar() throws Exception {
+        User u = register("study-mid@a.com", "studymid");
+        studySessionService.start(u, LocalDateTime.parse("2026-06-01T23:50").atZone(ZoneId.of(SEOUL)).toInstant());
+        studySessionService.stop(u, LocalDateTime.parse("2026-06-02T00:40").atZone(ZoneId.of(SEOUL)).toInstant());
+
+        mockMvc.perform(get("/api/study/history").with(user("studymid")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.months.length()").value(1))
+                .andExpect(jsonPath("$.months[0].month").value("2026-06"))
+                .andExpect(jsonPath("$.months[0].totalSeconds").value(3000))
+                // 최신 일 먼저 — 06-02(40분) 다음 06-01(10분)
+                .andExpect(jsonPath("$.months[0].days.length()").value(2))
+                .andExpect(jsonPath("$.months[0].days[0].date").value("2026-06-02"))
+                .andExpect(jsonPath("$.months[0].days[0].totalSeconds").value(2400))
+                .andExpect(jsonPath("$.months[0].days[1].date").value("2026-06-01"))
+                .andExpect(jsonPath("$.months[0].days[1].totalSeconds").value(600));
+
+        mockMvc.perform(get("/api/study/calendar").param("month", "2026-06").with(user("studymid")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.days.length()").value(2))
+                .andExpect(jsonPath("$.days[0].date").value("2026-06-01"))
+                .andExpect(jsonPath("$.days[0].studiedSeconds").value(600))
+                .andExpect(jsonPath("$.days[1].date").value("2026-06-02"))
+                .andExpect(jsonPath("$.days[1].studiedSeconds").value(2400));
     }
 
     /**

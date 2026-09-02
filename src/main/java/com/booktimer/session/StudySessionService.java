@@ -9,13 +9,24 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.List;
 
 /**
  * 공부 세션 start/stop 유스케이스 오케스트레이션 — {@link ReadingSessionService}의 공부판이다.
  *
  * <p>상한(6시간)·방치 스윕·클램프 정책은 독서에서 <b>값을 그대로 재사용</b>한다
  * ({@link ReadingSessionService#MAX_SESSION_DURATION}) — 두 모드가 다른 상한을 갖는다면 그건 결정이 아니라
- * 표류다.
+ * 표류다. <b>자정 분할도 같은 이유로 함수째 재사용</b>한다
+ * ({@link ReadingSessionService#splitByMidnight}) — 순수 함수라 독서 의존이 0이고, 복제하면 0초 조각
+ * 금지·DST 규칙을 두 번 밟게 된다. 세 번째 소비처가 생기면 그때 중립 헬퍼로 뽑는다.
+ *
+ * <p><b>자정 분할</b>: 종료 시각이 확정되는 두 경로(stop · closeStaleSessions)는 저장 직전에 구간을
+ * <b>유저 타임존 자정</b>으로 잘라 조각마다 한 행씩 저장한다. 날짜 귀속이 {@code startedAt}의 유저 TZ
+ * 날짜라({@link StudyHistoryService}·{@link StudyCalendarService}) 자정을 걸친 공부가 통째로 시작일에
+ * 잡히던 어긋남을 저장 시점에 없애는 것이 목적이다 — 기록·달력·오늘 공부한 시간이 전부 세션 행에서
+ * 유도되므로 소비처는 한 줄도 바뀌지 않는다. 규칙은 독서와 같다: ① 상한 클램프가 <b>분할보다 먼저</b>다
+ * ② 경계가 끝점과 일치하면 자르지 않는다(0초 조각 금지) ③ 진행 중 세션은 절대 분할하지 않는다.
+ * 분할 기준 타임존은 <b>저장 시점의 스냅샷</b>이고 과거 저장분의 소급 재분할·마이그레이션은 없다.
  *
  * <p>독서에 없는 규칙 하나: <b>진행 중 독서 세션이 있으면 공부 시작을 거부</b>한다. 두 원장이 같은 시간을
  * 이중으로 세지 않게 하는 자리다. ⚠️ <b>역방향은 넣지 않는다</b> — {@code ReadingSessionService.start}에
@@ -53,35 +64,56 @@ public class StudySessionService {
     }
 
     /**
+     * 진행 중 공부 세션을 {@code endedAt}으로 닫되 자정 경계로 잘라 저장한다 — 기존 행이 첫 조각이 되고
+     * ({@code startedAt} 불변) 나머지 조각은 새 완료 행으로 저장된다.
+     *
+     * @return 마지막 조각({@code endedAt}이 속한 쪽)
+     */
+    private StudySession endSplitAndSave(StudySession open, Instant endedAt) {
+        List<ReadingSessionService.Segment> segments = ReadingSessionService.splitByMidnight(
+                open.getStartedAt(), endedAt, ZoneId.of(open.getUser().getTimezone()));
+        open.end(segments.get(0).end()); // 이미 종료된 세션이면 여기서 IllegalStateException(경합 가드 유지)
+        StudySession last = studyRepository.save(open);
+        for (int i = 1; i < segments.size(); i++) {
+            StudySession piece = StudySession.start(open.getUser(), segments.get(i).start());
+            piece.end(segments.get(i).end());
+            last = studyRepository.save(piece);
+        }
+        return last;
+    }
+
+    /**
      * 진행 중 공부 세션을 종료하고 저장한다. 경과가 상한을 넘으면 {@code startedAt + cap}으로 잘라 인정한다
      * (독서와 같은 정책 — 끝내기를 깜빡한 세션이 통계를 왜곡한 실측 때문).
      *
+     * <p><b>클램프가 분할보다 먼저다</b> — 상한을 원본 구간에 걸고 그 결과를 자정으로 자른다. 순서를
+     * 뒤집으면 조각마다 6시간이 허용돼 하루를 넘겨 공부한 세션이 cap을 초과한다.
+     *
+     * @return 자정을 넘겼으면 <b>마지막 조각</b>(now가 속한 쪽), 아니면 그 세션 자신
      * @throws IllegalStateException 진행 중 세션이 없는 경우
      */
     public StudySession stop(User user, Instant now) {
         StudySession active = studyRepository.findByUserAndEndedAtIsNull(user)
                 .orElseThrow(() -> new IllegalStateException("no active study session to stop"));
-        active.end(clampToCap(active.getStartedAt(), now));
-        return studyRepository.save(active);
+        return endSplitAndSave(active, clampToCap(active.getStartedAt(), now));
     }
 
     /**
      * <b>방치 세션 자동 종료</b> — cap을 넘겨 열려 있는 공부 세션들을 정확히 cap 길이로 닫는다
      * ({@link StaleSessionSweeper}가 독서와 같은 주기로 부른다).
      *
-     * @return 실제로 닫은 세션 수
+     * @return 실제로 닫은 <b>세션</b> 수(자정 분할로 행이 늘어도 원본 세션 단위로 센다)
      */
     public int closeStaleSessions(Instant now) {
         int closed = 0;
         for (StudySession session : studyRepository.findByEndedAtIsNullAndStartedAtBefore(
                 now.minus(ReadingSessionService.MAX_SESSION_DURATION))) {
             try {
-                session.end(session.getStartedAt().plus(ReadingSessionService.MAX_SESSION_DURATION));
+                endSplitAndSave(session, session.getStartedAt().plus(ReadingSessionService.MAX_SESSION_DURATION));
             } catch (IllegalStateException alreadyEnded) {
                 log.info("stale study session {} already ended, skipping: {}", session.getId(), alreadyEnded.getMessage());
                 continue;
             }
-            studyRepository.save(session);
             closed++;
         }
         return closed;
