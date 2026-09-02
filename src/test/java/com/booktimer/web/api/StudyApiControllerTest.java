@@ -497,6 +497,28 @@ class StudyApiControllerTest {
                 .andExpect(jsonPath("$.months").isEmpty());
     }
 
+    /**
+     * <b>진행 중 세션은 기록에 없다</b> — 히어로가 매초 더하는 몫은 기록의 것이 아니다(독서와 같은 분업).
+     *
+     * <p>이 불변식은 <b>리포지토리 파생 쿼리 이름</b>({@code ...AndEndedAtIsNotNull})에만 있어서, 그 쿼리를
+     * 스텁하는 서비스 단위 테스트로는 원리상 못 잡는다(필터를 지운 돌연변이가 단위층에서 생존한다).
+     * 그래서 여기 H2 통합에 잠근다 — 필터가 사라지면 0초짜리 진행 중 세션이 그날 행으로 서서 이 단언이 죽는다.
+     */
+    @Test
+    @DisplayName("GET /api/study/history: 진행 중 세션은 집계에서 빠진다 — 0초짜리 오늘 행이 생기지 않는다")
+    void history_excludesActiveSession() throws Exception {
+        register("study-histactive@a.com", "studyhistactive");
+
+        mockMvc.perform(post("/api/study/start").with(user("studyhistactive")).with(csrf()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/study/history").with(user("studyhistactive")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.months").isEmpty())
+                .andExpect(jsonPath("$.graph.totalSeconds").value(0))
+                .andExpect(jsonPath("$.graph.activeDays").value(0));
+    }
+
     @Test
     @DisplayName("GET /api/study/history: 신규 유저는 빈 목록 + 빈 잔디 53주 — 가입 직후가 여기로 온다")
     void history_newUserIsEmpty() throws Exception {
