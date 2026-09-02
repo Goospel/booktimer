@@ -182,6 +182,17 @@ describe('홈 공부 히어로 — 대기 중엔 고르고, 재는 중엔 무엇
     expect(markup).toContain('토익 실전 1000제');
   });
 
+  /**
+   * 기본 선택 규칙이 <b>화면에 닿는지</b>를 잰다 — 순수 함수(`defaultBookId`) 테스트만으론
+   * 홈이 그 함수를 부르는지 알 수 없다(리뷰어 실측: 호출을 `null`로 바꿔도 전건 초록이었다).
+   * `data-selected-book`은 정적 렌더에 실리는 캐러셀 손잡이다(`home.test`의 독서판 선례).
+   */
+  it('아직 안 골랐으면 최근 공부한 책이 가운데 온다 — 규칙이 화면까지 닿는다', () => {
+    const markup = renderHome('study', { ...IDLE_STUDY, books: studyBooks, recentBookId: 102 });
+
+    expect(markup).toContain('data-selected-book="토익 실전 1000제"');
+  });
+
   it('측정 중이면 캐러셀 대신 「측정 중 · 제목」이다 — 고를 자리가 사라진다', () => {
     const markup = renderHome('study', {
       ...IDLE_STUDY,
@@ -222,17 +233,40 @@ describe('배선 — 정적 렌더가 못 도는 경로는 소스로 잠근다',
   const app = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8');
   const home = readFileSync(new URL('./screens/Home.tsx', import.meta.url), 'utf8');
   const shelf = readFileSync(new URL('./screens/StudyLibrary.tsx', import.meta.url), 'utf8');
+  const api = readFileSync(new URL('./api.ts', import.meta.url), 'utf8');
 
-  it('공부 시작이 고른 책 id를 실어 보낸다 — 무인자 회귀가 곧 「책이 안 붙는다」다', () => {
-    expect(app).toContain('startStudy(timerStartBookId(');
+  /**
+   * ⚠️ <b>인자열 전체</b>를 잰다. 앞 판은 `startStudy(timerStartBookId(`까지만 봐서, 셋째 인자를
+   * `homeBookId`로 바꾼 <b>슬롯 혼용</b>(설계 §6 「그럴듯한 사고 ②」)이 `tsc`도 이 단언도 통과했다 —
+   * 두 서재의 id 공간이 섞이는 바로 그 사고가 계측 밖에 서 있었다(리뷰어 돌연변이 실측).
+   */
+  it('공부 시작이 고른 책 id를 실어 보낸다 — 무인자 회귀도 슬롯 혼용도 여기서 걸린다', () => {
+    expect(app).toContain(
+      'startStudy(timerStartBookId(study.books ?? [], study.recentBookId ?? null, studyBookId))',
+    );
+  });
+
+  /**
+   * 와이어 키는 <b>클라이언트가 보내는 문자열</b>이라 목 왕복으로는 안 잡힌다 — 그 테스트는
+   * `mockRequest`를 직접 부르므로 `startStudy`의 body를 <b>한 번도 안 지난다</b>(리뷰어 실측:
+   * `{ book: bookId }`로 바꿔도 전건 초록이었다).
+   */
+  it('시작 요청의 필드명이 서버 계약(bookId)과 같다', () => {
+    expect(api).toContain("request('/api/study/start', { body: { bookId } })");
   });
 
   it('시작 토스트가 서버 확정값을 말한다 — 클라가 고른 값을 되뇌지 않는다', () => {
     expect(app).toContain("showStartToast({ book: next.activeBook ?? null, changed: false, mode: 'study' })");
   });
 
-  it('공부 캐러셀 선택은 App이 든 별개 슬롯이다 — 독서 `homeBookId`와 섞이지 않는다', () => {
-    expect(app).toContain('setStudyBookId');
+  /**
+   * ⚠️ `setStudyBookId`를 <b>개수로</b> 잰다. 앞 판의 `toContain('setStudyBookId')`는 `useState`
+   * <b>선언문</b>에 걸려 항상 통과했고, 그래서 App→MainTabs 프롭 전달을 통째로 지워도 초록이었다
+   * (리뷰어 실측). 2건 = 선언 1 + `MainTabs`로 전달 1이다.
+   */
+  it('공부 캐러셀 선택은 App이 든 별개 슬롯이고, 그 슬롯이 실제로 아래까지 내려간다', () => {
+    expect(app.match(/setStudyBookId/g) ?? []).toHaveLength(2);
+    expect(app).toContain('studyBookId={studyBookId}');
     expect(app).toContain('selectedStudyBookId={studyBookId}');
     expect(home).toContain('onSelect={onSelectStudyBook}');
   });
@@ -251,6 +285,12 @@ describe('배선 — 정적 렌더가 못 도는 경로는 소스로 잠근다',
 // ── dev-mock 왕복 ──────────────────────────────────────────────────────────
 
 describe('dev-mock — 고르고 재고 쌓인다', () => {
+  // 목은 모듈 메모리라 한 건이 세션을 열어 둔 채 죽으면 다음 건이 전부 409로 연쇄한다 —
+  // 진짜 원인 하나가 실패 다섯 줄에 묻힌다. 매 건 앞에서 열린 세션만 걷는다(없으면 409를 삼킨다).
+  beforeEach(async () => {
+    await mockRequest('/api/study/stop', { body: {} }).catch(() => {});
+  });
+
   it('책을 걸고 시작하면 activeBook이 서고, 종료분이 그 책에 쌓인다', async () => {
     const started = await mockRequest<StudyState>('/api/study/start', { body: { bookId: 101 } });
     expect(started.activeBook?.id).toBe(101);
