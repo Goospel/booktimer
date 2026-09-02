@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import type { BookOption, DashboardResponse, MarginBook, StudyState, TimerState } from './api';
 import { IDLE_STUDY, changeActiveBook, changeActiveStudyBook, fetchDashboard, startSession, startStudy, stopSession, stopStudy, tagBook, tagStudyBook, token } from './api';
-import { useBackClose } from './back';
+import { nativeBack, useBackClose } from './back';
 import {
   CoachmarkBubble,
   coachmarkSeen,
@@ -26,7 +26,7 @@ import { StudyCalendar } from './screens/StudyCalendar';
 import { StudyHistory } from './screens/StudyHistory';
 import { StudyLibrary } from './screens/StudyLibrary';
 import { BookMargin, BookMarginAll, StoryComposer } from './screens/Story';
-import { showInterstitialAd, trackEvent } from './toss';
+import { showInterstitialAd, subscribeNativeBack, trackEvent } from './toss';
 import { CoverInitial, ErrorMessage, Loading, PENCIL_FRAME, SERIF_VALUE, Screen, Sheet } from './ui';
 
 /**
@@ -678,6 +678,13 @@ export function App() {
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [silentRefresh]);
+
+  /*
+   * 토스 「<」를 앱이 받는다 — 구독하면 기본 동작(어느 화면에서든 미니앱 종료)이 차단되고 `nativeBack`이
+   * 「서브뷰 하나 닫기 / 첫 화면이면 앱 닫기」를 정한다. **앱에 하나뿐이어야 한다**: 리스너가 여럿이면
+   * 한 번의 back에 서브뷰가 여럿 닫힌다(`back.ts` 모듈 리스너와 같은 이유). 그래서 화면마다 달지 않는다.
+   */
+  useEffect(() => subscribeNativeBack(nativeBack), []);
 
   // 탭 밖 전체 화면을 나가는 유일한 길이다 — 자체 뒤로가기를 걷었으므로(T-220) 네이티브 back이 여기로 온다.
   useBackClose(view === 'link', () => setView('auth'));

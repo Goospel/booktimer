@@ -5,6 +5,7 @@ import {
   Notification,
   TossAds,
   TossAuth,
+  graniteEvent,
   loadFullScreenAd,
   showFullScreenAd,
 } from '@apps-in-toss/web-framework';
@@ -125,6 +126,28 @@ export interface TossLoginResult {
  */
 export function tossLogin(): Promise<TossLoginResult> {
   return TossAuth.login();
+}
+
+/**
+ * 시스템 뒤로가기(토스 상단 바 「<」·안드로이드 하드웨어 back) 구독 — 해제 함수를 돌려준다.
+ *
+ * <p><b>구독 자체가 동작을 바꾼다</b>: `backEvent`를 구독하면 토스의 기본 뒤로가기가 차단되고 나가기
+ * 판단이 앱으로 온다. 구독하지 않으면 「<」는 **어느 화면에서든 미니앱을 통째로 닫는다**(2026-09-02
+ * 아이폰 실측) — 서브화면에서 돌아갈 길이 사라진다. 판단 로직은 `back.ts`의 `nativeBack`이다.
+ *
+ * <p>`isSupported()`가 없는 API라 `trackEvent`·`openExternal`처럼 **try/catch만**으로 접는다 —
+ * 앱 밖(목 모드·일반 브라우저)에는 호스트 브리지가 없어 SDK가 동기 TypeError를 던진다. 이 호출은
+ * `App` 마운트 effect 한가운데라 실패가 새면 목 모드에서 앱이 통째로 안 뜨므로, **조용히 no-op
+ * 해제 함수**를 돌려준다(구독이 없으니 해제할 것도 없다).
+ */
+export function subscribeNativeBack(onBack: () => void): () => void {
+  const noop = () => {};
+  if (typeof window === 'undefined') return noop;
+  try {
+    return graniteEvent.addEventListener('backEvent', { onEvent: onBack, onError: noop });
+  } catch {
+    return noop;
+  }
 }
 
 /**
