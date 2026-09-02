@@ -52,3 +52,19 @@ describe('제품 화면에 자체 뒤로가기 문구를 세우지 않는다 (T-
     ).toEqual([]);
   });
 });
+
+/**
+ * `backEvent` 구독은 **앱에 하나뿐**이어야 한다 — 리스너가 여럿이면 한 번의 back에 서브뷰가 여럿 닫힌다
+ * (`back.ts`의 모듈 popstate 리스너와 같은 이유). `back.ts`·`App.tsx` 주석이 이 불변식을 <b>선언만</b>
+ * 하고 있어서 계측기를 붙인다.
+ *
+ * <p>정적 렌더 하니스라 effect가 안 돌아(T-149) 「구독이 몇 번 걸렸나」를 렌더로 볼 수 없다. 그래서
+ * 이 레포 관례대로 <b>소스의 건수</b>로 잰다 — 존재 단언은 복제를 못 잡는다(T-218).
+ */
+describe('네이티브 뒤로가기 구독은 앱에 하나뿐이다', () => {
+  it('구독은 앱에 하나뿐이다 — 여럿이면 한 번의 back에 서브뷰가 여럿 닫힌다', () => {
+    const src = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8');
+
+    expect(src.match(/subscribeNativeBack\(nativeBack\)/g)).toHaveLength(1);
+  });
+});

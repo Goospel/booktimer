@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createBackStack, handleNativeBack } from './back';
+import { createBackStack, handleNativeBack, nativeBack } from './back';
 
 /**
  * 뒤로가기 스택 — 안드로이드 하드웨어/제스처 back이 미니앱을 종료시키지 않고 **열린 서브뷰 하나**를
@@ -200,5 +200,19 @@ describe('네이티브 뒤로가기 판정 (handleNativeBack)', () => {
     back.close(token);
     await flush();
     expect(back.depth()).toBe(0);
+  });
+});
+
+/**
+ * 실물 배선 — 앱 밖(테스트·목 모드·일반 브라우저)에서 불려도 <b>던지지 않아야</b> 한다.
+ *
+ * <p>SDK의 `Screen.close`는 `callAsyncMethod('closeView')`이고, 그것이 Promise를 만들기 <b>전에</b>
+ * `assertWebViewEnvironment()`를 동기로 부른다 — 브리지가 없으면 <b>동기 throw</b>라 `.catch()`가 못 받는다.
+ * 이 호출은 `backEvent` 콜백 한가운데라, 새면 뒤로가기 핸들러가 통째로 죽는다.
+ */
+describe('네이티브 뒤로가기 실물 배선 (nativeBack)', () => {
+  it('앱 밖에서 불려도 던지지 않는다 — Screen.close는 동기로도 던진다', () => {
+    // 이 하니스엔 열린 서브뷰가 없다(depth 0) — 그래서 종료 갈래를 탄다.
+    expect(() => nativeBack()).not.toThrow();
   });
 });

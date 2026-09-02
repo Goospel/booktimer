@@ -120,8 +120,15 @@ export const nativeBack = (): void => {
   handleNativeBack({
     depth: backStack.depth,
     back: () => history.back(),
-    // 브릿지가 죽으면 거부된 Promise가 아무도 안 받는다 — 닫기 실패는 사용자에게 할 말이 없으니 삼킨다.
-    exit: () => void Screen.close().catch(() => {}),
+    // 브리지가 없으면 SDK가 **동기로** 던지고(`assertWebViewEnvironment`), 브리지가 죽으면 Promise가
+    // 거부된다(아무도 안 받으면 unhandled rejection) — 닫기 실패는 사용자에게 할 말이 없으니 둘 다 삼킨다.
+    exit: () => {
+      try {
+        void Screen.close().catch(() => {});
+      } catch {
+        /* 앱 밖에서 부른 경우 — 닫을 것이 없다 */
+      }
+    },
   });
 };
 
