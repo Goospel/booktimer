@@ -193,7 +193,7 @@ export function StudyLibrary({
     void load();
   }, [load]);
 
-  // 검색은 서재를 덮는 별도 화면이다 — 뒤로가기를 「돌아가기」와 같은 자리로 돌린다.
+  // 검색은 서재를 덮는 별도 화면이다 — 나가는 길은 네이티브 뒤로가기 하나이므로 여기가 유일한 출구다.
   useBackClose(mode === 'search', () => setMode('shelf'));
   // 열린 시트는 뒤로가기가 먼저 먹는다 — 시트가 열린 채로 미니앱이 꺼지지 않게.
   useBackClose(sheet !== null, () => setSheet(null));
@@ -234,7 +234,6 @@ export function StudyLibrary({
         error={error}
         onAdd={add}
         onFail={fail}
-        onBack={() => setMode('shelf')}
       />
     );
   }
@@ -542,14 +541,12 @@ export function StudyBookSearch({
   error,
   onAdd,
   onFail,
-  onBack,
 }: {
   myIsbns: Set<string>;
   busy: boolean;
   error: string | null;
   onAdd: (row: SearchRow) => void;
   onFail: (error: Error) => void;
-  onBack: () => void;
 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchRow[] | null>(null);
@@ -564,7 +561,7 @@ export function StudyBookSearch({
   };
 
   return (
-    <Screen title="공부 책 추가" onBack={onBack} backDisabled={busy}>
+    <Screen title="공부 책 추가">
       <SearchField
         label="책 제목"
         placeholder="책 이름을 적어주세요"

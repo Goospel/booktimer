@@ -8,6 +8,7 @@ import {
   notificationAgreementSupported,
   requestNotificationAgreement,
   showInterstitialAd,
+  subscribeNativeBack,
   trackEvent,
   watchRewardAd,
 } from './toss';
@@ -656,5 +657,22 @@ describe('attachMarginBanner — 초기화 후 부착, 실패는 전부 접힘',
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+/**
+ * 네이티브 뒤로가기 구독 — 앱 밖(목 모드·일반 브라우저)에는 호스트 브리지가 없어 SDK가 던진다.
+ * 그때도 **조용히 no-op 해제 함수**를 돌려줘야 한다: 이 구독은 `App`의 마운트 effect 한가운데라,
+ * 실패가 새면 목 모드에서 앱이 통째로 안 뜬다(`trackEvent`·`openExternal`과 같은 사정).
+ *
+ * <p>이 파일의 SDK 목엔 `graniteEvent`가 없다 — 그래서 이 테스트는 **실제 실패 경로**를 탄다
+ * (접근하는 순간 던진다). try/catch를 걷어내면 여기서 죽는다.
+ */
+describe('네이티브 뒤로가기 구독', () => {
+  it('SDK가 없으면 조용히 no-op 해제 함수를 준다 — 목 모드에서 콘솔 에러 0', () => {
+    const unsubscribe = subscribeNativeBack(() => {});
+
+    expect(typeof unsubscribe).toBe('function');
+    expect(() => unsubscribe()).not.toThrow();
   });
 });

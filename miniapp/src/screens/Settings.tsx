@@ -274,7 +274,7 @@ export function Settings({
   };
 
   return (
-    <Screen title="프로필·설정" onBack={onBack}>
+    <Screen title="프로필·설정">
       <section style={{ ...sectionStyle, marginTop: 0 }}>
         {/* 입력 하나짜리 form — 키보드 「완료」가 곧 저장이다(버튼은 밖에 둬 다른 버튼이 제출로 새지 않게). */}
         <form

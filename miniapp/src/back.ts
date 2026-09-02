@@ -1,3 +1,4 @@
+import { Screen } from '@apps-in-toss/web-framework';
 import { useEffect, useRef } from 'react';
 
 /**
@@ -71,7 +72,33 @@ export function createBackStack(nav: BackNav) {
       }
       entries.pop()?.onClose();
     },
+
+    /** 열려 있는 서브뷰 수 — 네이티브 「<」가 「하나 닫기」와 「앱 닫기」를 가르는 유일한 입력이다. */
+    depth(): number {
+      return entries.length;
+    },
   };
+}
+
+/**
+ * 토스 상단 바 「<」(및 안드로이드 시스템 뒤로가기)가 왔을 때 무엇을 할지 정한다.
+ *
+ * <p><b>왜 앱이 정하는가</b>: 실기기 실측(2026-09-02 아이폰) 결과 토스의 「<」는 히스토리 뒤로가기가
+ * 아니라 **어느 화면에서든 미니앱을 통째로 닫는다**. 자체 「돌아가기」를 걷은 뒤로는(T-220) 서브화면에서
+ * 나갈 길이 iOS 스와이프 제스처뿐이었다. `graniteEvent`의 `backEvent`를 구독하면 그 기본 동작이
+ * 차단되고 나가기 판단이 우리에게 온다 — 그 판단이 이 함수다.
+ *
+ * <p>닫는 수단이 `history.back()`인 것이 요점이다: popstate → {@link createBackStack}의 `popped()`로
+ * 흘러 **하드웨어 back과 완전히 같은 경로**를 탄다. 서브뷰를 여기서 직접 닫으면 히스토리 깊이가
+ * 그만큼 어긋나 다음 back이 엉뚱한 것을 먹는다(T-166이 그 얼굴이다).
+ */
+export function handleNativeBack(nav: { depth: () => number; back: () => void; exit: () => void }): 'subview' | 'exit' {
+  if (nav.depth() > 0) {
+    nav.back();
+    return 'subview';
+  }
+  nav.exit();
+  return 'exit';
 }
 
 const backStack = createBackStack({
@@ -81,6 +108,29 @@ const backStack = createBackStack({
 
 // 리스너는 모듈당 하나 — 훅마다 달면 한 번의 back이 열린 서브뷰 전부를 닫는다(중첩 규칙이 깨진다).
 if (typeof window !== 'undefined') window.addEventListener('popstate', () => backStack.popped());
+
+/**
+ * 실물 배선 — `App`이 마운트 때 한 번 `subscribeNativeBack`에 넘긴다(리스너가 여럿이면 한 번의 back에
+ * 서브뷰가 여럿 닫힌다, 위 모듈 리스너와 같은 이유).
+ *
+ * <p>첫 화면에서 `Screen.close()`인 것은 체크리스트 「최초 화면에서 뒤로가기를 누르면 미니앱이
+ * 종료돼요」를 만족시키는 자리다 — 여기서 `history.back()`을 부르면 갈 곳이 없다.
+ */
+export const nativeBack = (): void => {
+  handleNativeBack({
+    depth: backStack.depth,
+    back: () => history.back(),
+    // 브리지가 없으면 SDK가 **동기로** 던지고(`assertWebViewEnvironment`), 브리지가 죽으면 Promise가
+    // 거부된다(아무도 안 받으면 unhandled rejection) — 닫기 실패는 사용자에게 할 말이 없으니 둘 다 삼킨다.
+    exit: () => {
+      try {
+        void Screen.close().catch(() => {});
+      } catch {
+        /* 앱 밖에서 부른 경우 — 닫을 것이 없다 */
+      }
+    },
+  });
+};
 
 /**
  * 서브뷰가 열려 있는 동안 뒤로가기를 `onClose`로 돌린다.

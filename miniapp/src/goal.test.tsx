@@ -297,17 +297,49 @@ describe('목표 해제 버튼 렌더', () => {
   });
 
   /**
-   * 독서 렌더 불변 — 존재 단언이 아니라 <b>건수</b>다(T-218). 변경 전 실측 2건(저장 + 돌아가기)을
-   * 상수로 박는다: 독서에 버튼이 하나라도 새면 여기서 죽는다.
+   * 독서 렌더 불변 — 존재 단언이 아니라 <b>건수</b>다(T-218). 2026-09-02(T-220)에 하단 「돌아가기」를
+   * 걷어 2건 → <b>1건(저장)</b>이 됐다: 독서에 버튼이 하나라도 새면 여기서 죽는다.
    */
-  it('독서 목표 화면의 버튼 수가 변경 전과 같다 — 새 문이 독서로 새지 않았다', () => {
-    expect(render('reading', 1_800).split('<button').length - 1).toBe(2);
-    expect(render('reading', 0).split('<button').length - 1).toBe(2);
+  it('독서 목표 화면의 버튼은 저장 하나뿐이다 — 새 문이 독서로 새지 않았다', () => {
+    expect(render('reading', 1_800).split('<button').length - 1).toBe(1);
+    expect(render('reading', 0).split('<button').length - 1).toBe(1);
   });
 
   /** 휠 0 가드는 그대로다 — 해제는 별도 문으로만 밟는다(주 버튼은 여전히 0을 못 보낸다). */
   it('공부에서도 휠 0 가드는 그대로다 — 실수 경로는 안 열렸다', () => {
     expect(buttonAttrs(render('study', 0), '저장')[0]).toContain('disabled');
+  });
+});
+
+/**
+ * 목표 화면의 나가는 길 — **토스 네이티브 내비게이션 바의 뒤로가기**다(2026-09-02, T-220).
+ *
+ * <p>하단 weak 버튼은 `firstRun`일 때만 남긴다. 「나중에 정할래요」는 <b>건너뛰기라는 선택</b>이지
+ * 뒤로가기가 아니다 — 첫 실행에는 돌아갈 화면이 아직 없고, 목표를 안 정하고 시작하는 문이 필요하다.
+ * 비-firstRun의 「돌아가기」는 네이티브 버튼과 중복이라 걷었다(`useBackClose(view === 'goal', …)`가 받는다).
+ */
+describe('목표 — 나가는 길', () => {
+  const render = (variant: 'reading' | 'study', firstRun: boolean) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Goal current={1_800} firstRun={firstRun} variant={variant} onSaved={() => {}} onSkip={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  it('비-firstRun에는 「돌아가기」가 0건이다 — 저장은 그대로 선다', () => {
+    for (const variant of ['reading', 'study'] as const) {
+      const markup = render(variant, false);
+
+      expect(markup).toContain('저장');
+      expect(markup).not.toContain('돌아가기');
+    }
+  });
+
+  it('firstRun에는 「나중에 정할래요」가 하나 남는다 — 건너뛰기는 뒤로가기가 아니다', () => {
+    const markup = render('reading', true);
+
+    expect(markup.match(/나중에 정할래요/g)).toHaveLength(1);
+    expect(markup).not.toContain('돌아가기');
   });
 });
 

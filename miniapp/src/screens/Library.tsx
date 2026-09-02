@@ -390,7 +390,7 @@ export function Library({
 
   useEffect(load, [load]);
 
-  // 검색은 서재를 덮는 별도 화면이다 — 뒤로가기를 「돌아가기」와 같은 자리로 돌린다.
+  // 검색은 서재를 덮는 별도 화면이다 — 나가는 길은 네이티브 뒤로가기 하나이므로 여기가 유일한 출구다.
   useBackClose(mode === 'search', () => setMode('shelf'));
   // 열린 시트는 뒤로가기가 먼저 먹는다 — 시트가 열린 채로 미니앱이 꺼지지 않게(홈 태깅 시트와 같다).
   useBackClose(sheet !== null, () => setSheet(null));
@@ -437,7 +437,6 @@ export function Library({
         error={error}
         onAdd={add}
         onFail={fail}
-        onBack={() => setMode('shelf')}
         onOpenBookMargin={onOpenBookMargin}
       />
     );
@@ -1047,14 +1046,12 @@ export function BookSearch({
   error,
   onAdd,
   onFail,
-  onBack,
   onOpenBookMargin,
 }: {
   busy: boolean;
   error: string | null;
   onAdd: (row: SearchRow, status: BookStatus) => void;
   onFail: (error: Error) => void;
-  onBack: () => void;
   /** 검색 행의 「여백 N」 배지 — 낯선 책의 책축 여백으로 가는 유일한 문(2026-08-22). */
   onOpenBookMargin: (isbn13: string) => void;
 }) {
@@ -1097,7 +1094,7 @@ export function BookSearch({
   };
 
   return (
-    <Screen title="책 추가" onBack={onBack} backDisabled={busy}>
+    <Screen title="책 추가">
       {/* 손잡이는 칸 안이다 — 아래 전폭 버튼은 엔터가 살아난 뒤로 자리만 먹었다(`SearchField` 주석). */}
       <SearchField
         label="책 제목"

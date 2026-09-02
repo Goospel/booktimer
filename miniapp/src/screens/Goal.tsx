@@ -232,9 +232,13 @@ export function Goal({
             목표 없이 지내기
           </Button>
         )}
-        <Button display="block" variant="weak" style={{ marginTop: 12 }} disabled={busy} onClick={onSkip}>
-          {firstRun ? '나중에 정할래요' : '돌아가기'}
-        </Button>
+        {/* firstRun에만 남는다 — 「나중에 정할래요」는 건너뛰기라는 선택이고(첫 실행엔 돌아갈 화면이
+            아직 없다), 비-firstRun의 「돌아가기」는 네이티브 뒤로가기와 중복이라 걷었다(T-220). */}
+        {firstRun && (
+          <Button display="block" variant="weak" style={{ marginTop: 12 }} disabled={busy} onClick={onSkip}>
+            나중에 정할래요
+          </Button>
+        )}
       </div>
       </div>
     </Screen>

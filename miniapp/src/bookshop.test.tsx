@@ -121,8 +121,6 @@ function card(
     archiveOpen?: boolean;
     /** 카운트 클릭 핸들러를 건넸는가 — 내 책방(탭 루트)에서만 셸이 준다. */
     openFollowList?: boolean;
-    /** 「돌아가기」의 대상 — 탭 루트에는 없다(출구가 탭바다). */
-    back?: boolean;
     header?: React.ReactNode;
     /** 격자 탭으로 여백을 여는 손잡이 — 책방 셸이 준다. */
     openMargin?: boolean;
@@ -155,7 +153,6 @@ function card(
       safety={null}
       header={view.header}
       onOpenFollowList={view.openFollowList === true ? () => {} : undefined}
-      onBack={view.back === false ? undefined : () => {}}
     />,
   );
 }
@@ -753,29 +750,24 @@ describe('책방 탭 루트 — 상단 도구가 제목보다 위', () => {
 });
 
 /**
- * 남의 책방의 나가는 길 — **상단 「돌아가기」 하나**(2026-08-16).
+ * 남의 책방의 나가는 길 — **토스 네이티브 내비게이션 바의 뒤로가기 하나**(2026-09-02, T-220).
  *
- * <p>이 화면은 같은 문제를 두 번 겪었다. 처음엔 제목 옆 `←` 글리프였는데 배경이 없어 버튼으로 안
- * 읽혀 **지우고 하단 버튼만** 남겼고, 그 뒤 여백 화면에서 같은 지적이 또 나와 **글자가 붙은 알약**이
- * 생겼다. 회피 이유가 사라졌으므로 위로 되돌리고 하단 버튼을 걷는다 — 앱 전체가 한 자리에서 나간다.
+ * <p>이 화면은 같은 자리에서 세 번 바뀌었다. 제목 옆 `←` 글리프 → 하단 버튼 → 글자가 붙은 알약
+ * (2026-08-16). 그 알약이 네이티브 뒤로가기와 <b>동시 노출</b>이라 심사 필수 항목에 걸렸다 — 자체
+ * 뒤로가기를 통째로 걷고 나가는 길을 네이티브 하나로 둔다(`useBackClose` 배선은 그대로다).
  *
- * <p>개수를 세는 것이 핵심이다: 위아래 둘이면 「통일」이 아니라 중복인데, 존재 단언만으로는 못 잡는다.
- * 탭 루트(내 책방)는 돌아갈 곳이 없어 아무것도 그리지 않는다.
+ * <p>「없다」만 재면 카드가 통째로 안 그려져도 초록이라, 같은 마크업에 <b>있어야 할 신원</b>을 함께 잰다.
  */
 describe('책방 — 나가는 길', () => {
-  it('「돌아가기」가 정확히 하나다 (남의 책방)', () => {
-    expect(card(profile()).match(/돌아가기/g)).toHaveLength(1);
-  });
-
-  it('신원 블록보다 위에 온다 — 아래로 내려가서 찾지 않는다', () => {
+  it('남의 책방에 자체 「돌아가기」가 0건이다 — 네이티브 뒤로가기와 중복이면 심사가 막는다', () => {
     const markup = card(profile());
 
-    expect(markup).toContain('돌아가기');
-    expect(markup.indexOf('돌아가기')).toBeLessThan(markup.indexOf('구스펠'));
+    expect(markup).toContain('구스펠');
+    expect(markup.match(/돌아가기/g)).toBeNull();
   });
 
-  it('onBack이 없으면 그리지 않는다 (탭 루트) — 아무 데도 안 가는 손잡이는 남기지 않는다', () => {
-    expect(card(profile({ self: true }), [], null, { back: false })).not.toContain('돌아가기');
+  it('탭 루트(내 책방)도 같다 — 두 경로가 같은 규칙을 따른다', () => {
+    expect(card(profile({ self: true }), [], null, {})).not.toContain('돌아가기');
   });
 });
 

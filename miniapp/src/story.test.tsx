@@ -100,7 +100,6 @@ function view(
       onShowLikers={extra.onShowLikers ?? (() => {})}
       onOpenMenu={'onOpenMenu' in extra ? extra.onOpenMenu : () => {}}
       onToggleExpand={() => {}}
-      onBack={() => {}}
       timerStopped={extra.timerStopped ?? false}
       adSuppressed={extra.adSuppressed ?? false}
     />,
@@ -454,8 +453,12 @@ describe('나가는 길 — 헤더 뒤로가기', () => {
     expect(markup).not.toContain('돌아가기');
   });
 
-  it('여백 상세엔 있다 — 지우면 나갈 길이 사라진다', () => {
-    expect(view(margin())).toContain('돌아가기');
+  it('여백 상세에도 없다 — 나가는 길은 네이티브 뒤로가기다(T-220)', () => {
+    const markup = view(margin());
+
+    // 「없다」만 재면 화면이 통째로 안 그려져도 초록이라, 제목이 서 있는지 함께 본다.
+    expect(markup).toContain('여백');
+    expect(markup).not.toContain('돌아가기');
   });
 });
 
@@ -988,7 +991,6 @@ describe('이 책의 여백 — 책축 목록 (M-3)', () => {
         data={data}
         now={NOW}
         error={null}
-        onBack={() => {}}
         onToggleLike={() => {}}
         onOpenProfile={() => {}}
       />,
@@ -1101,7 +1103,6 @@ describe('여백 배너 지면 배선', () => {
       }}
       now={NOW}
       error={null}
-      onBack={() => {}}
       onToggleLike={() => {}}
       onOpenProfile={() => {}}
     />

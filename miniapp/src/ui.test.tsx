@@ -51,43 +51,34 @@ describe('화면 껍데기 (Screen)', () => {
 });
 
 /**
- * 뒤로가기 손잡이 — <b>글자가 붙은 알약을 제목 위 줄</b>에 세운다.
+ * 자체 뒤로가기를 그리지 않는다 — 나가는 길은 <b>토스 네이티브 내비게이션 바</b>의 뒤로가기다.
  *
- * <p>옛 모양은 배경 없는 `←` 글리프를 제목 옆에 둔 것이었는데 사용자 제보로 두 번 실패했다: 배경이
- * 없어 버튼으로 안 보이고, 직선 화살표는 「이전 화면」보다 「왼쪽 이동」으로 읽힌다. 아이콘을 아무리
- * 다듬어도 뜻은 추론에 맡겨지므로 <b>글자</b>를 붙였다 — 인식률을 아이콘 디자인에 걸지 않는다.
+ * <p>2026-09-02 심사 반려(T-220): 「내비게이션 바의 뒤로가기 버튼과 미니앱 자체 헤더 및 뒤로가기 버튼이
+ * 함께 노출돼요」. 비게임 출시 체크리스트의 <b>필수</b> 항목이라 판정 편차가 아니다 — 08-16에 세운
+ * 「‹ 돌아가기」 알약(#830·#831)을 통째로 걷었다.
+ *
+ * <p>「없다」만 재면 껍데기가 통째로 안 그려져도 초록이라, 같은 마크업에 <b>있어야 할 제목</b>을 함께 잰다.
  */
-describe('화면 껍데기 — 뒤로가기 손잡이', () => {
-  const withBack = (title?: string, onBack?: () => void) =>
+describe('화면 껍데기 — 자체 뒤로가기를 그리지 않는다', () => {
+  const screen = (title?: string) =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <Screen title={title} onBack={onBack}>
-          본문
-        </Screen>
+        <Screen title={title}>본문</Screen>
       </TDSMobileProvider>,
     );
 
-  it('글자가 붙어 있다 — 아이콘만이면 뜻을 추론해야 한다', () => {
-    expect(withBack('여백', () => {})).toContain('돌아가기');
-  });
-
-  it('제목보다 위에 온다 — 제목 옆에 끼면 제목 행의 장식으로 읽힌다', () => {
-    const markup = withBack('여백', () => {});
-
-    // 둘 다 있는지 먼저 본다 — 없으면 indexOf가 -1이라 순서 단언이 저절로 참이 된다(공허한 계측).
-    expect(markup).toContain('돌아가기');
-    expect(markup.indexOf('돌아가기')).toBeLessThan(markup.indexOf('여백'));
-  });
-
-  it('onBack이 없으면 안 그린다 — 탭 루트는 갈 곳이 없다', () => {
-    const markup = withBack('여백');
+  it('제목은 그리되 「돌아가기」는 없다 — 네이티브 뒤로가기와 중복이면 심사가 막는다', () => {
+    const markup = screen('여백');
 
     expect(markup).toContain('여백');
     expect(markup).not.toContain('돌아가기');
   });
 
-  it('제목이 없어도 그린다 — 나갈 길은 제목 유무와 무관하다', () => {
-    expect(withBack(undefined, () => {})).toContain('돌아가기');
+  it('제목이 없는 화면에도 없다 — 출구는 화면 밖(네이티브 바)이다', () => {
+    const markup = screen();
+
+    expect(markup).toContain('본문');
+    expect(markup).not.toContain('돌아가기');
   });
 });
 
@@ -635,34 +626,6 @@ describe('실패 안내', () => {
   it('실패가 없으면 아무것도 그리지 않는다', () => {
     // 프로바이더는 전역 스타일을 뱉으므로 이 단언만 맨몸으로 그린다.
     expect(renderToStaticMarkup(<ErrorMessage message={null} onRetry={() => {}} />)).toBe('');
-  });
-});
-
-/**
- * 뒤로가기 잠금 — 요청이 도는 중에는 나가지 못하게 한다. 하단 「돌아가기」 버튼이 `disabled={busy}`로
- * 하던 일을, 그 버튼을 걷고 상단 손잡이로 통일하면서 그대로 옮겨 온 것이다(책 추가·계정 연결).
- * 잠금을 「손잡이를 감추기」로 하면 34px 줄이 사라졌다 나타나 화면이 튄다 — 그래서 disabled다.
- */
-describe('화면 껍데기 — 뒤로가기 잠금', () => {
-  const backAt = (markup: string) => markup.slice(0, markup.indexOf('돌아가기'));
-  const withBack = (backDisabled?: boolean) =>
-    renderToStaticMarkup(
-      <TDSMobileProvider userAgent={userAgent}>
-        <Screen title="책 추가" onBack={() => {}} backDisabled={backDisabled}>
-          본문
-        </Screen>
-      </TDSMobileProvider>,
-    );
-
-  it('잠그면 disabled가 붙는다', () => {
-    expect(backAt(withBack(true))).toContain('disabled');
-  });
-
-  it('기본은 안 잠근다 — 대부분의 화면은 언제든 나갈 수 있어야 한다', () => {
-    const markup = withBack();
-
-    expect(markup).toContain('돌아가기');
-    expect(backAt(markup)).not.toContain('disabled');
   });
 });
 

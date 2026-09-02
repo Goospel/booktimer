@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import type { BookOption, DashboardResponse, MarginBook, StudyState, TimerState } from './api';
 import { IDLE_STUDY, changeActiveBook, changeActiveStudyBook, fetchDashboard, startSession, startStudy, stopSession, stopStudy, tagBook, tagStudyBook, token } from './api';
-import { useBackClose } from './back';
+import { nativeBack, useBackClose } from './back';
 import {
   CoachmarkBubble,
   coachmarkSeen,
@@ -26,7 +26,7 @@ import { StudyCalendar } from './screens/StudyCalendar';
 import { StudyHistory } from './screens/StudyHistory';
 import { StudyLibrary } from './screens/StudyLibrary';
 import { BookMargin, BookMarginAll, StoryComposer } from './screens/Story';
-import { showInterstitialAd, trackEvent } from './toss';
+import { showInterstitialAd, subscribeNativeBack, trackEvent } from './toss';
 import { CoverInitial, ErrorMessage, Loading, PENCIL_FRAME, SERIF_VALUE, Screen, Sheet } from './ui';
 
 /**
@@ -679,7 +679,14 @@ export function App() {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [silentRefresh]);
 
-  // 탭 밖 전체 화면도 뒤로가기로 나갈 수 있다 — 각 화면의 「돌아가기」와 같은 자리로 돌려보낸다.
+  /*
+   * 토스 「<」를 앱이 받는다 — 구독하면 기본 동작(어느 화면에서든 미니앱 종료)이 차단되고 `nativeBack`이
+   * 「서브뷰 하나 닫기 / 첫 화면이면 앱 닫기」를 정한다. **앱에 하나뿐이어야 한다**: 리스너가 여럿이면
+   * 한 번의 back에 서브뷰가 여럿 닫힌다(`back.ts` 모듈 리스너와 같은 이유). 그래서 화면마다 달지 않는다.
+   */
+  useEffect(() => subscribeNativeBack(nativeBack), []);
+
+  // 탭 밖 전체 화면을 나가는 유일한 길이다 — 자체 뒤로가기를 걷었으므로(T-220) 네이티브 back이 여기로 온다.
   useBackClose(view === 'link', () => setView('auth'));
   useBackClose(view === 'goal', () => {
     setFirstRun(false);
@@ -764,7 +771,7 @@ export function App() {
       );
 
     case 'link':
-      return <LinkAccount onLinked={() => load('main')} onBack={() => setView('auth')} />;
+      return <LinkAccount onLinked={() => load('main')} />;
 
     case 'error':
       return (
@@ -1005,7 +1012,6 @@ export function App() {
           // 시트가 떠 있는 동안은 이 화면의 배너를 접는다 — 딤 뒤에서 도는 노출은 무효 트래픽이다.
           adSuppressed={margin.composeBook !== null}
           timerStopped={margin.timerStopped === true}
-          onBack={() => setMargin(null)}
           onCompose={(book) => openMargin({ ...margin, bookId: under, composeBook: book })}
           // 닫으면서 연다 — 뒤로 가면 출발한 탭으로 돌아간다(검색 시트와 같은 교체 경로, T-166).
           onOpenProfile={(picked) => {
@@ -1031,7 +1037,6 @@ export function App() {
         <BookMarginAll
           isbn13={margin.isbn13}
           timerStopped={margin.timerStopped === true}
-          onBack={() => setMargin(null)}
           // 「내 여백」 탭 — 사람축 화면으로 갈아탄다(작성·삭제·토글이 사는 자리). 이미 여백 안이라
           // 측정은 진작 끝났으므로 문을 다시 지나도 아무 일이 없다(멱등).
           onOpenMine={(bookId) =>
