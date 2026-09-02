@@ -39,8 +39,9 @@ import {
   timerStartBookId,
 } from './App';
 import type { TabKey, TimerMode } from './App';
-import type { BookOption, DashboardResponse } from './api';
+import type { BookOption, DashboardResponse, StudyHistoryResponse } from './api';
 import { IDLE_STUDY } from './api';
+import { CACHE_STUDY_HISTORY, cacheClear, cachePut } from './cache';
 import { coachmarkSeen, dismissCoachmark, resetCoachmarks } from './coachmark';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
@@ -1058,6 +1059,35 @@ describe('공부 모드 탭바 — 책방 자리의 「일정」', () => {
 
   it('일정 탭은 그 화면을 그린다 — 탭 선택 ↔ 화면 대응(공부 목록에서도)', () => {
     expect(renderTab('calendar', {}, 'study')).toContain('공부 일정');
+  });
+
+  /**
+   * 기록 탭은 <b>두 모드 공통</b>이지만 화면은 갈린다 — 서재와 같은 규칙이다. 안 가르면 공부 모드에서
+   * 독서 잔디·독서 목록이 그대로 뜬다(대시보드 `graph`는 독서 것이다).
+   */
+  it('공부 모드의 기록 탭은 공부 기록을 그린다 — 독서 기록이 아니다', () => {
+    const markup = renderTab('history', {}, 'study');
+
+    expect(markup).toContain('공부 기록');
+    expect(markup).not.toContain('내 기록');
+  });
+
+  /**
+   * 캐시 키가 갈렸다는 증거 — 공부 캐시를 심으면 공부 화면이 첫 렌더부터 데이터를 세운다.
+   * (effect가 안 도는 하니스라 캐시가 유일한 데이터 경로다.)
+   */
+  it('공부 기록 캐시가 첫 렌더가 된다 — 독서 캐시와 다른 키다', () => {
+    cacheClear();
+    cachePut(CACHE_STUDY_HISTORY, {
+      graph,
+      months: [{ month: '2026-09', totalSeconds: 3_600, days: [{ date: '2026-09-02', totalSeconds: 3_600 }] }],
+    } satisfies StudyHistoryResponse);
+
+    const markup = renderTab('history', {}, 'study');
+
+    expect(markup).toContain('공부한 날');
+    expect(markup).toContain('2026년 9월');
+    cacheClear();
   });
 
   /**

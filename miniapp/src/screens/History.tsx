@@ -17,9 +17,6 @@ const CELL_SIZE = 11;
  * <p>탭 재편(PR-5) 전까지 있던 "돌아가기" 버튼은 탭 전환이 대신하므로 없앴다.
  */
 export function History({ graph }: { graph: ContributionGraph }) {
-  // 스크롤 위치는 손대지 않는다 — weeks[0]이 최신 주라 초기 위치(왼쪽 끝)가 이미 오늘이다(api.ts `weeks`).
-  const months = monthLabelPositions(graph.monthLabels, CELL_SIZE);
-
   // 날짜별 기록은 대시보드에 안 실려 오므로 이 탭에서 따로 받는다. 실패해도 위쪽 잔디는 그대로 두고
   // 아래에만 사유를 남긴다 — 목록 하나 때문에 화면 전체를 에러로 덮으면 손해가 크다.
   // 지난 성공 응답이 첫 렌더의 출발점이다 — 탭을 다시 열 때 아래쪽만 늦게 붙던 자리(재검증은 그대로).
@@ -48,28 +45,43 @@ export function History({ graph }: { graph: ContributionGraph }) {
       {/* 시안 2d — 이 화면이 답하는 것의 이름이라 값으로 조판한다(세리프 20). */}
       <SectionTitle style={{ margin: '24px 0 8px', ...SERIF_VALUE, fontSize: 20 }}>읽은 날짜</SectionTitle>
 
-      <div className="no-scrollbar" style={{ overflowX: 'auto', paddingBottom: 8 }}>
-        {/* 라벨은 격자 폭 안에서 절대 배치된다 — inline-block이라 이 상자가 격자만큼만 넓어진다. */}
-        <div style={{ position: 'relative', display: 'inline-block', paddingTop: 16 }}>
-          <div aria-hidden="true" style={{ position: 'absolute', top: 0, left: 0, height: 14 }}>
-            {months.map(({ label, left }) => (
-              <span
-                key={label}
-                style={{ position: 'absolute', left, fontSize: 11, color: '#6F6A5E', whiteSpace: 'nowrap' }}
-              >
-                {label}
-              </span>
-            ))}
-          </div>
-          <GrassGrid weeks={graph.weeks} cellSize={CELL_SIZE} />
-        </div>
-      </div>
+      <GrassPanel graph={graph} />
 
       <Legend />
 
       {sections !== null && <MonthlyRecords months={sections} />}
       <ErrorMessage message={error} />
     </Screen>
+  );
+}
+
+/**
+ * 잔디 한 판 — 위에 월 라벨, 아래에 격자. 가로 스크롤 상자까지 한 덩어리다.
+ *
+ * <p>스크롤 위치는 손대지 않는다 — `weeks[0]`이 최신 주라 초기 위치(왼쪽 끝)가 이미 오늘이다(api.ts `weeks`).
+ *
+ * <p>공부 기록 화면이 같은 판을 쓴다 — 잔디 산수를 두 곳에 두면 「최신 주가 왼쪽」 같은 규약을 두 번 밟는다.
+ */
+export function GrassPanel({ graph }: { graph: ContributionGraph }) {
+  const months = monthLabelPositions(graph.monthLabels, CELL_SIZE);
+
+  return (
+    <div className="no-scrollbar" style={{ overflowX: 'auto', paddingBottom: 8 }}>
+      {/* 라벨은 격자 폭 안에서 절대 배치된다 — inline-block이라 이 상자가 격자만큼만 넓어진다. */}
+      <div style={{ position: 'relative', display: 'inline-block', paddingTop: 16 }}>
+        <div aria-hidden="true" style={{ position: 'absolute', top: 0, left: 0, height: 14 }}>
+          {months.map(({ label, left }) => (
+            <span
+              key={label}
+              style={{ position: 'absolute', left, fontSize: 11, color: '#6F6A5E', whiteSpace: 'nowrap' }}
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+        <GrassGrid weeks={graph.weeks} cellSize={CELL_SIZE} />
+      </div>
+    </div>
   );
 }
 
@@ -82,10 +94,17 @@ export function History({ graph }: { graph: ContributionGraph }) {
  *
  * <p>총 시간 칸만 넓다: 「11시간 5분」은 「4일」의 두 배가 넘어, 같은 폭이면 그 칸만 줄바꿈된다.
  */
-function StatStrip({ graph }: { graph: ContributionGraph }) {
+export function StatStrip({
+  graph,
+  /** 가운데 칸의 이름 — 공부 기록은 「공부한 날」로 바꿔 쓴다. 기본값이 독서의 옛 문구다(렌더 불변). */
+  activeDaysLabel = '읽은 날',
+}: {
+  graph: ContributionGraph;
+  activeDaysLabel?: string;
+}) {
   const cells = [
     { label: '연속', value: `${graph.currentStreak}일`, flex: 1 },
-    { label: '읽은 날', value: `${graph.activeDays}일`, flex: 1 },
+    { label: activeDaysLabel, value: `${graph.activeDays}일`, flex: 1 },
     { label: '총 시간', value: formatDuration(graph.totalSeconds), flex: 1.5 },
   ];
 
@@ -560,8 +579,13 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
-/** 색 농도 범례 — 잔디가 무슨 뜻인지 화면 어디에도 없었다. 웹 `.grass-legend`와 같은 말을 쓴다. */
-function Legend() {
+/**
+ * 색 농도 범례 — 잔디가 무슨 뜻인지 화면 어디에도 없었다. 웹 `.grass-legend`와 같은 말을 쓴다.
+ *
+ * @param manual 「직접 채움」 스와치를 함께 둘지. 공부 기록은 수동 입력이 없어 false로 뺀다
+ *               (기본값이 독서의 옛 동작이라 그쪽 렌더는 불변이다).
+ */
+export function Legend({ manual = true }: { manual?: boolean } = {}) {
   const swatch = { width: 10, height: 10, borderRadius: 2, flex: '0 0 auto' } as const;
 
   return (
@@ -575,10 +599,14 @@ function Legend() {
       <Text typography="st12" color="grey600">
         많이
       </Text>
-      <span style={{ ...swatch, marginLeft: 10, background: LEVEL_COLORS[2], outline: MANUAL_OUTLINE }} />
-      <Text typography="st12" color="grey600">
-        직접 채움
-      </Text>
+      {manual && (
+        <>
+          <span style={{ ...swatch, marginLeft: 10, background: LEVEL_COLORS[2], outline: MANUAL_OUTLINE }} />
+          <Text typography="st12" color="grey600">
+            직접 채움
+          </Text>
+        </>
+      )}
     </div>
   );
 }

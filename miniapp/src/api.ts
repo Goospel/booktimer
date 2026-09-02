@@ -503,6 +503,35 @@ export const setStudyCheck = (
   kept: boolean | null,
 ): Promise<{ date: string; kept: boolean | null }> => request('/api/study/check', { body: { date, kept } });
 
+// ── 공부 기록 (`session.StudyHistoryService`의 record가 타입 단일 출처) ──────
+
+/** @param date `YYYY-MM-DD`(유저 타임존의 달력 날짜) */
+export interface StudyDay {
+  date: string;
+  totalSeconds: number;
+}
+
+/** `YYYY-MM` — Jackson이 `YearMonth`를 이 모양으로 직렬화한다. 최신 월 먼저, 달 안에서도 최신 일 먼저. */
+export interface StudyMonth {
+  month: string;
+  totalSeconds: number;
+  days: StudyDay[];
+}
+
+/**
+ * 공부 기록 — 잔디와 월별 목록.
+ *
+ * <p>`graph`는 독서와 <b>같은 `ContributionGraph` 꼴</b>이다(`weeks[0]`=최신 주). `manual`은 항상
+ * false — 공부엔 수동 입력이 없다. ⚠️ 두 범위가 다르다: `months`는 전 기간이고 `graph`는 53주라,
+ * 오래된 달은 목록엔 있고 잔디 총합엔 없다.
+ */
+export interface StudyHistoryResponse {
+  graph: ContributionGraph;
+  months: StudyMonth[];
+}
+
+export const fetchStudyHistory = (): Promise<StudyHistoryResponse> => request('/api/study/history');
+
 /** 용서 지급 결과 — `timer`가 동봉돼 부채·버튼 노출이 재조회 없이 갱신된다. */
 export interface WaiveResponse {
   waivedDate: string;

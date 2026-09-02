@@ -13,6 +13,7 @@ import type {
   ShelfResponse,
   StopResponse,
   StudyCalendarResponse,
+  StudyHistoryResponse,
   StudyState,
   TimerState,
 } from './api';
@@ -135,6 +136,28 @@ describe('dev-mock 핸들러', () => {
 
     expect(calendar.goalSeconds).toBe(3600);
     expect(calendar.days.some((d) => d.studiedSeconds > 0)).toBe(true);
+  });
+
+  /**
+   * 공부 기록 — 잔디 방향 규약(#730)과 목록 순서를 목도 지켜야 한다. 목이 서버와 다른 방향을 주면
+   * 화면 버그가 아니라 목 버그로 시간을 태운다. 「수동 기록 없음」은 공부 원장의 사실이라 함께 잠근다.
+   */
+  it('공부 기록 — weeks[0]이 최신 주, 월은 최신 먼저, 월 합계 = 일 합, 수동 칸 0', async () => {
+    const data = await mockRequest<StudyHistoryResponse>('/api/study/history', {});
+
+    const latest = data.graph.weeks[0].at(-1)!.date!;
+    const older = data.graph.weeks[1].at(-1)!.date!;
+    expect(latest > older).toBe(true);
+
+    expect(data.months.length).toBeGreaterThan(0);
+    expect(data.months.every((m, i) => i === 0 || data.months[i - 1].month > m.month)).toBe(true);
+    for (const month of data.months) {
+      expect(month.totalSeconds).toBe(month.days.reduce((sum, d) => sum + d.totalSeconds, 0));
+      // 달 안에서도 최신 일 먼저 — 화면이 다시 정렬하지 않는다.
+      expect(month.days.every((d, i) => i === 0 || month.days[i - 1].date > d.date)).toBe(true);
+    }
+
+    expect(data.graph.weeks.every((w) => w.every((d) => !d.manual))).toBe(true);
   });
 
   it('공부는 독서 원장에 안 섞인다 — 목에서도 잔디·기록이 안 움직인다(격리를 목이 흉내낸다)', async () => {

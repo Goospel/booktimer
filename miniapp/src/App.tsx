@@ -23,6 +23,7 @@ import { LoginBridge } from './screens/LoginBridge';
 import { Profile } from './screens/Profile';
 import { Settings } from './screens/Settings';
 import { StudyCalendar } from './screens/StudyCalendar';
+import { StudyHistory } from './screens/StudyHistory';
 import { StudyLibrary } from './screens/StudyLibrary';
 import { BookMargin, BookMarginAll, StoryComposer } from './screens/Story';
 import { showInterstitialAd, trackEvent } from './toss';
@@ -1568,7 +1569,9 @@ export function MainTabs({
         )}
         {/* 달력은 공부 탭바로만 도달한다 — 도달 경로가 곧 게이트라 여기서 모드를 다시 안 따진다. */}
         {tab === 'calendar' && <StudyCalendar onError={onError} />}
-        {tab === 'history' && <History graph={dashboard.graph} />}
+        {/* 기록도 서재처럼 모드로 갈린다 — 공부 기록은 잔디·목록을 따로 받는다(대시보드 graph는 독서 것이다). */}
+        {tab === 'history' && mode === 'study' && <StudyHistory onError={onError} />}
+        {tab === 'history' && mode !== 'study' && <History graph={dashboard.graph} />}
       </div>
 
       {/* 액션 실패는 탭바 바로 위 스트립으로 — 다른 탭엔 홈의 ErrorMessage 자리가 없다.

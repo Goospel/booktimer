@@ -95,7 +95,11 @@ const GRAPH_WEEKS = 20;
  * 잔디 픽스처 — **`weeks[0]`이 최신 주**다. 서버가 뒤집어 보내는 계약이고(`ContributionGraph`),
  * 목이 이걸 어기면 화면 버그가 아니라 목 버그로 시간을 태운다(#730에서 실제로 겪은 방향 버그).
  */
-function buildGraph(): ContributionGraph {
+function graphOf(
+  secondsAt: (offset: number) => number,
+  manualAt: (offset: number) => boolean,
+  levelOf: (seconds: number) => number,
+): ContributionGraph {
   const weeks: ContributionDay[][] = [];
   let totalSeconds = 0;
   let activeDays = 0;
@@ -105,11 +109,10 @@ function buildGraph(): ContributionGraph {
     for (let d = 0; d < 7; d++) {
       // 주 사이는 최근→과거(왼→오른쪽, 서버 계약), 주 안은 과거→최근(위→아래).
       const offset = w * 7 + (6 - d);
-      const level = LEVELS[offset % LEVELS.length];
-      const seconds = level * 900;
-      days.push({ date: isoDate(offset), totalSeconds: seconds, level, manual: offset % 13 === 5 });
+      const seconds = secondsAt(offset);
+      days.push({ date: isoDate(offset), totalSeconds: seconds, level: levelOf(seconds), manual: manualAt(offset) });
       totalSeconds += seconds;
-      if (level > 0) activeDays += 1;
+      if (seconds > 0) activeDays += 1;
     }
     weeks.push(days);
   }
@@ -120,14 +123,19 @@ function buildGraph(): ContributionGraph {
     return month === previous ? [] : [{ weekIndex, label: `${Number(month)}월` }];
   });
 
-  return {
-    weeks,
-    monthLabels,
-    totalSeconds,
-    activeDays,
-    // 오늘(offset 0)부터 처음 0레벨을 만나기까지 = 연속일. 패턴에 0이 있어 반드시 끝난다.
-    currentStreak: LEVELS.indexOf(0),
-  };
+  // 오늘(offset 0)부터 처음 빈 날을 만나기까지 = 연속일. 두 패턴 모두 0이 있어 반드시 끝난다.
+  let currentStreak = 0;
+  while (secondsAt(currentStreak) > 0) currentStreak += 1;
+
+  return { weeks, monthLabels, totalSeconds, activeDays, currentStreak };
+}
+
+function buildGraph(): ContributionGraph {
+  return graphOf(
+    (offset) => LEVELS[offset % LEVELS.length] * 900,
+    (offset) => offset % 13 === 5,
+    (seconds) => seconds / 900,
+  );
 }
 
 // ── 상태 (모듈 메모리) ───────────────────────────────────────────────────────
@@ -333,6 +341,49 @@ const studyDayTotals: Record<string, number> = {
   [isoDate(2)]: 5_400,
   [isoDate(3)]: 1_200,
 };
+
+/**
+ * 공부 잔디·기록의 바탕 패턴 — 1800초 단위. 독서보다 <b>성기게</b> 둔다(0이 넷).
+ *
+ * <p>값이 0·1h·2h·3h·4h로 갈려 서버 눈금(4h 절대 기준)의 다섯 농도가 한 화면에 다 보인다 —
+ * 한 레벨이라도 빠지면 잔디 색이 제대로 갈리는지 브라우저로 확인할 길이 없다.
+ */
+const STUDY_PATTERN = [0, 2, 0, 4, 0, 6, 8];
+
+/** 그 offset의 공부 초 — 픽스처가 있으면 그것, 없으면 패턴. 오늘 몫은 실제 측정 상태가 합류한다. */
+function studySecondsAt(offset: number): number {
+  const base = studyDayTotals[isoDate(offset)] ?? STUDY_PATTERN[offset % STUDY_PATTERN.length] * 1_800;
+  return offset === 0 ? base + state.studyTodaySeconds : base;
+}
+
+/** 서버 `StudyHistoryService`의 고정 눈금(4h)을 그대로 미러한다 — 목이 다른 색을 주면 확인이 거짓이 된다. */
+function studyLevel(seconds: number): number {
+  if (seconds <= 0) return 0;
+  if (seconds * 4 <= 14_400) return 1;
+  if (seconds * 2 <= 14_400) return 2;
+  if (seconds < 14_400) return 3;
+  return 4;
+}
+
+/** 공부 기록 목록 — 0 아닌 날만 월별로 묶는다. offset이 커질수록 과거라 월·일 모두 최신 먼저로 굳는다. */
+function studyMonths(): { month: string; totalSeconds: number; days: { date: string; totalSeconds: number }[] }[] {
+  const byMonth = new Map<string, { date: string; totalSeconds: number }[]>();
+
+  for (let offset = 0; offset < GRAPH_WEEKS * 7; offset++) {
+    const seconds = studySecondsAt(offset);
+    if (seconds === 0) continue; // 안 한 날은 행이 없다(잔디는 회색 칸으로만 남는다).
+    const date = isoDate(offset);
+    const days = byMonth.get(date.slice(0, 7));
+    if (days === undefined) byMonth.set(date.slice(0, 7), [{ date, totalSeconds: seconds }]);
+    else days.push({ date, totalSeconds: seconds });
+  }
+
+  return [...byMonth].map(([month, days]) => ({
+    month,
+    totalSeconds: days.reduce((sum, d) => sum + d.totalSeconds, 0),
+    days,
+  }));
+}
 
 /** 달력 한 달치 — 오늘 몫은 실제 측정 상태(`studyTodaySeconds`)에서 합류한다. */
 function studyCalendarDays(month: string): { date: string; studiedSeconds: number; kept: boolean | null }[] {
@@ -916,6 +967,12 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
   ['GET', /^\/api\/study\/calendar$/, ({ query }) => ({
     goalSeconds: state.studyGoalSeconds,
     days: studyCalendarDays(String(query.month ?? '')),
+  })],
+  // 공부 기록 — 잔디와 월별 목록. 달력 픽스처(`studyDayTotals`)를 같이 쓰므로 목에서도 두 화면의
+  // 같은 날이 같은 초를 말한다(어긋나면 브라우저 확인이 거짓 신호를 준다). 수동 칸은 없다(공부엔 수동 입력이 없다).
+  ['GET', /^\/api\/study\/history$/, () => ({
+    graph: graphOf(studySecondsAt, () => false, studyLevel),
+    months: studyMonths(),
   })],
   // 미래 400·null 삭제까지 서버 계약 그대로 — 화면의 no-op이 풀렸을 때 목이 먼저 소리를 내야 한다.
   ['POST', /^\/api\/study\/check$/, ({ body }) => {

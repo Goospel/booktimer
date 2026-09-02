@@ -2,6 +2,7 @@ package com.booktimer.web.api;
 
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.StudyCalendarService;
+import com.booktimer.session.StudyHistoryService;
 import com.booktimer.session.StudySession;
 import com.booktimer.session.StudySessionService;
 import com.booktimer.user.User;
@@ -39,17 +40,20 @@ public class StudyApiController {
     private final CurrentUserService currentUserService;
     private final StudySessionService studyService;
     private final StudyCalendarService calendarService;
+    private final StudyHistoryService historyService;
     private final UserRepository userRepository;
     private final Clock clock;
 
     public StudyApiController(CurrentUserService currentUserService,
                               StudySessionService studyService,
                               StudyCalendarService calendarService,
+                              StudyHistoryService historyService,
                               UserRepository userRepository,
                               Clock clock) {
         this.currentUserService = currentUserService;
         this.studyService = studyService;
         this.calendarService = calendarService;
+        this.historyService = historyService;
         this.userRepository = userRepository;
         this.clock = clock;
     }
@@ -122,6 +126,21 @@ public class StudyApiController {
         LocalDate date = parseDate(request.date());
         calendarService.setCheck(user, date, request.kept(), clock.instant());
         return ResponseEntity.ok(new StudyCheckResponse(date, request.kept()));
+    }
+
+    /**
+     * 공부 기록 — 잔디(53주)와 월별 일자 기록(전 기간). <b>판정(일정 체크)은 안 싣는다</b>: 그건
+     * {@code /api/study/calendar}의 몫이고, 기록 화면은 측정 사실만 말한다.
+     *
+     * <p>서비스 record를 그대로 낸다 — 감싸지 않아도 {@code graph}·{@code months} 두 키가 바로 나오고,
+     * {@code graph}는 대시보드·독서 기록과 <b>같은 다섯 키</b>라 미니앱이 같은 타입으로 받는다.
+     *
+     * @return 200 {@link StudyHistoryService.StudyHistory} / 401 토큰 없음·무효(체인이 처리)
+     */
+    @GetMapping("/api/study/history")
+    public ResponseEntity<StudyHistoryService.StudyHistory> history(Principal principal) {
+        User user = currentUserService.resolve(principal);
+        return ResponseEntity.ok(historyService.history(user, clock.instant()));
     }
 
     /**
