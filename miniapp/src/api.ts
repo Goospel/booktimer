@@ -466,6 +466,27 @@ export const startStudy = (bookId: number | null): Promise<StudyState> =>
 
 export const stopStudy = (): Promise<StudyState> => request('/api/study/stop', { body: {} });
 
+/**
+ * 종료 후 태깅 — 책 없이 끝낸 공부 측정에 나중에 책을 붙인다. 좌표는 stop 응답의
+ * {@link StudyState.untaggedSessionId} 하나뿐이다.
+ *
+ * <p>독서 `tagBook`과 <b>다른 응답</b>이다: 공부 뮤테이션은 전부 갱신된 {@link StudyState}를 돌려주므로
+ * 붙인 직후 `books[].totalSeconds`·`recentBookId`가 재조회 없이 맞는다. 진행 중이거나 이미 책이 있는
+ * 측정이면 409, 남의 세션·남의 책이면 404다(존재 비노출).
+ */
+export const tagStudyBook = (sessionId: number, bookId: number): Promise<StudyState> =>
+  request(`/api/study/sessions/${sessionId}/tag-book`, { body: { bookId } });
+
+/**
+ * 측정 중 대상 교체 — `bookId`가 `null`이면 「책 없이」로 되돌린다. 측정은 멈추지 않고 지금까지 잰
+ * 시간이 통째로 새 책에 붙는다(갈라지지 않는다).
+ *
+ * <p>독서 `changeActiveBook`과 같이 <b>세션 좌표를 안 보낸다</b> — 서버가 「내 진행 중 측정」을 직접
+ * 찾는다. 진행 중 측정이 없으면 409(방금 끝난 뒤 도착한 요청도 여기로 떨어진다).
+ */
+export const changeActiveStudyBook = (bookId: number | null): Promise<StudyState> =>
+  request('/api/study/active/book', { body: { bookId } });
+
 export const setGoal = (dailyIncrementSeconds: number): Promise<void> =>
   request('/api/miniapp/goal', { body: { dailyIncrementSeconds } });
 

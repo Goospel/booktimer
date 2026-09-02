@@ -12,7 +12,6 @@ import {
   readMode,
   startToastMessage,
   timerActionView,
-  toastHasBookControls,
 } from './App';
 import type { DashboardResponse, StudyState } from './api';
 import { IDLE_STUDY } from './api';
@@ -126,20 +125,12 @@ describe('시작 토스트 — 공부에도 책이 생겼다', () => {
   });
 
   /**
-   * 표지 자리와 [바꾸기]는 <b>책이 있는 측정</b>의 장치다. 공부 토스트에 남겨 두면 [바꾸기]가
-   * <b>죽은 컨트롤</b>이 된다 — 누르면 교체 시트가 열리고, 진행 중 독서 세션이 없어 서버가 409
-   * 「진행 중인 측정이 없습니다」로 끝낸다(사용자에겐 이유 없는 에러다).
+   * ⚠️ 2026-09-02에 <b>계측 대상이 사라졌다</b>: 옛 게이트 `toastHasBookControls`는 「공부 토스트엔
+   * 표지·[바꾸기]가 없다」를 잰 함수인데, 공부 측정에도 교체 문(`/api/study/active/book`)이 생기면서
+   * 항상 참이 되어 삭제됐다. 그 자리를 잇는 단언(공부 토스트에도 [바꾸기]가 서고 색은 `--accentPill`을
+   * 탄다)은 <b>`study-timer-book.test.tsx`</b>에 있다.
    */
-  it('공부 토스트엔 표지·[바꾸기]가 없다', () => {
-    expect(toastHasBookControls({ book: null, changed: false, mode: 'study' })).toBe(false);
-  });
-
-  it('독서 토스트엔 그대로 있다 — 「무슨 책인가」를 말하고 그 자리에서 바꾸는 것이 이 장치의 존재 이유다', () => {
-    expect(toastHasBookControls({ book: null, changed: false })).toBe(true);
-    expect(toastHasBookControls({ book: { id: 1, title: '데미안', coverUrl: null, author: null }, changed: true })).toBe(true);
-  });
-
-  it('그 판단이 렌더까지 닿는다 — 공부 토스트 마크업에 [바꾸기]도 표지 자리도 없다', () => {
+  it('두 모드 모두 표지 자리와 [바꾸기]를 단다 — 공부에도 고를 책과 바꿀 문이 생겼다', () => {
     const study = renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
         <StartToast toast={{ book: null, changed: false, mode: 'study' }} onChange={() => {}} />
@@ -152,21 +143,10 @@ describe('시작 토스트 — 공부에도 책이 생겼다', () => {
     );
 
     expect(study).toContain('책 없이 공부 측정을 시작했어요');
-    expect(study).not.toContain('바꾸기');
-    expect(study).not.toContain('dashed'); // 책 없음 점선 표지 자리
-    // 독서 토스트는 불변 — 위 단언들이 「그냥 다 사라졌다」로 통과하지 않게 반대편을 함께 잰다.
-    expect(reading).toContain('바꾸기');
-    expect(reading).toContain('dashed');
-  });
-
-  it('공부 토스트에 세이지 리터럴이 남지 않는다 — [바꾸기] 배경이 공부 모드의 마지막 누출이었다', () => {
-    const study = renderToStaticMarkup(
-      <TDSMobileProvider userAgent={userAgent}>
-        <StartToast toast={{ book: null, changed: false, mode: 'study' }} onChange={() => {}} />
-      </TDSMobileProvider>,
-    );
-
-    expect(study).not.toContain('110, 138, 106');
+    for (const markup of [study, reading]) {
+      expect(markup).toContain('바꾸기');
+      expect(markup).toContain('dashed'); // 책 없음 점선 표지 자리
+    }
   });
 });
 

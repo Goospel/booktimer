@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import type { BookOption, DashboardResponse, MarginBook, StudyState, TimerState } from './api';
-import { IDLE_STUDY, changeActiveBook, fetchDashboard, startSession, startStudy, stopSession, stopStudy, tagBook, token } from './api';
+import { IDLE_STUDY, changeActiveBook, changeActiveStudyBook, fetchDashboard, startSession, startStudy, stopSession, stopStudy, tagBook, tagStudyBook, token } from './api';
 import { useBackClose } from './back';
 import {
   CoachmarkBubble,
@@ -235,7 +235,7 @@ export const START_TOAST_MS = 5000;
 export interface StartToastState {
   book: BookOption | null;
   changed: boolean;
-  /** 공부 측정이면 `'study'` — 책 은유가 통째로 빠진다(생략하면 독서). */
+  /** 공부 측정이면 `'study'` — 명사만 「공부 측정」으로 갈린다(생략하면 독서). */
   mode?: TimerMode;
 }
 
@@ -246,19 +246,6 @@ export interface StartToastState {
  * 「용기로 / 용기으로」가 갈리는데 제목은 사용자 데이터라 그 판정을 이길 수 없다 — 그래서 조사는
  * 제목이 아니라 <b>「측정」</b>이 받는다(『제목』 측정<b>을</b> / 『제목』 측정<b>으로</b>).
  */
-/**
- * 이 토스트가 <b>책 장치</b>(표지 자리 · [바꾸기])를 다는가 — 공부 측정이면 달지 않는다.
- *
- * <p>남겨 두면 [바꾸기]가 <b>죽은 컨트롤</b>이 된다: 누르면 교체 시트가 열리고, 진행 중 독서 세션이
- * 없어 서버가 409 「진행 중인 측정이 없습니다」로 끝낸다 — 사용자에겐 이유 없는 에러다. 표지 자리도
- * 공부엔 가리킬 것이 없어 점선 네모만 남는다.
- *
- * <p>판단을 함수로 꺼낸 이유는 늘 같다 — 하니스가 정적 렌더라 클릭 경로로는 못 잰다(T-149).
- */
-export function toastHasBookControls(toast: StartToastState): boolean {
-  return toast.mode !== 'study';
-}
-
 export function startToastMessage(toast: StartToastState): string {
   // 모드는 <b>명사만</b> 바꾼다 — 공부에도 책이 생겼으니 문장 구조를 가를 이유가 사라졌다.
   // 책 없이 시작한 공부의 「책 없이」는 거짓말이 아니라 정보다(고를 수 있는데 안 고른 것이다).
@@ -449,6 +436,11 @@ export function flowStepsOnAbandon(): string[] {
 /** 종료 직후 태깅 대상 — 책 없이 측정한 세션에 나중에 책을 붙인다. */
 interface Untagged {
   sessionId: number;
+  /**
+   * 공부 측정인가 — <b>시트가 열릴 때</b> 못 박는다. 매번 `mode`를 다시 보면, 시트를 열어 둔 채
+   * 원격으로 모드가 뒤집혔을 때 <b>공부 세션 id로 독서 문</b>을 두드려 404가 된다(원장이 다르다).
+   */
+  study: boolean;
 }
 
 /** 탭 밖 전역 상태 — 인증·연결·목표·에러는 탭바 없이 화면 전체를 차지한다. */
@@ -1429,6 +1421,10 @@ export function MainTabs({
         .then((next) => {
           onStudyChange(next);
           trackEvent('study_session_completed', { duration_seconds: duration });
+          // 종료 직후 시트를 저절로 연다(독서 1474행과 같은 규율) — 태깅은 지금 기억이 가장 선명하다.
+          // 붙일 책이 0권이면 열지 않는다: 빈 시트는 닫는 것 말고 할 게 없는 막다른 길이다.
+          if (next.untaggedSessionId != null && (next.books ?? []).length > 0)
+            setTagging({ sessionId: next.untaggedSessionId, study: true });
         })
         .catch(fail)
         .finally(() => setBusy(false));
@@ -1471,7 +1467,8 @@ export function MainTabs({
           trackEvent('reading_session_completed', { duration_seconds: duration });
           // 종료 직후 시트를 저절로 연다(태깅은 지금 기억이 가장 선명하다). 붙일 책이 0권이면 열지 않는다 —
           // 빈 시트는 닫는 것 말고 할 수 있는 게 없는 막다른 길이다.
-          if (result.untagged && dashboard.readingBooks.length > 0) setTagging({ sessionId: result.sessionId });
+          if (result.untagged && dashboard.readingBooks.length > 0)
+            setTagging({ sessionId: result.sessionId, study: false });
         })
         .catch(fail)
         .finally(() => setBusy(false));
@@ -1488,10 +1485,14 @@ export function MainTabs({
     }
   };
 
+  /**
+   * 방금 끝낸 측정에 책 붙이기 — <b>어느 원장인지는 시트가 열릴 때 정해진 값</b>(`tagging.study`)이 든다.
+   * 공부 응답은 갱신된 `StudyState`라 서재 칩·최근 책이 재조회 없이 따라온다(독서 문은 그런 게 없다).
+   */
   const tag = (book: BookOption) => {
     if (tagging === null) return;
     setBusy(true);
-    tagBook(tagging.sessionId, book.id)
+    (tagging.study ? tagStudyBook(tagging.sessionId, book.id).then(onStudyChange) : tagBook(tagging.sessionId, book.id))
       .then(() => setTagging(null))
       .catch(fail)
       .finally(() => setBusy(false));
@@ -1504,12 +1505,22 @@ export function MainTabs({
   const changeBook = (book: BookOption | null) => {
     setBusy(true);
     setActionError(null);
-    changeActiveBook(book === null ? null : book.id)
-      .then((timer) => {
-        onTimerChange(timer);
+    const id = book === null ? null : book.id;
+    // 교체 시트는 재는 도중에만 열리므로 지금 재는 원장이 곧 그 문이다 — 여기선 `mode`가 단일 출처다.
+    (mode === 'study'
+      ? changeActiveStudyBook(id).then((next) => {
+          onStudyChange(next);
+          return next.activeBook ?? null;
+        })
+      : changeActiveBook(id).then((timer) => {
+          onTimerChange(timer);
+          return timer.activeBook ?? null;
+        })
+    )
+      .then((current) => {
         setChanging(false);
         // 시작이 아니라 교체를 확인한다 — 같은 문구면 두 번 시작한 것처럼 읽힌다.
-        showStartToast({ book: timer.activeBook ?? null, changed: true });
+        showStartToast({ book: current, changed: true, mode });
       })
       .catch((e) => {
         // ⚠️ 실패해도 시트를 닫는다. 에러 스트립은 탭바 층(z 100)인데 시트 패널은 z 201 **불투명**이라,
@@ -1671,7 +1682,8 @@ export function MainTabs({
       {/* 시트는 측정 종료 후 태깅 자리 하나다 — 탭바(zIndex 100) 위에 떠 어느 탭에서 끝내도 보인다. */}
       {tagging !== null && (
         <BookSheet
-          books={dashboard.readingBooks}
+          books={tagging.study ? (study.books ?? []) : dashboard.readingBooks}
+          title={tagging.study ? '무슨 책을 공부하셨나요?' : undefined}
           disabled={busy}
           onPick={tag}
           onSkip={closeSheet}
@@ -1682,8 +1694,8 @@ export function MainTabs({
       {/* 교체 시트 — 측정 중에만 열리고, 토스트의 [바꾸기]가 여는 유일한 문이다. */}
       {changing && (
         <ChangeBookSheet
-          books={dashboard.readingBooks}
-          currentBookId={dashboard.activeBook?.id ?? null}
+          books={mode === 'study' ? (study.books ?? []) : dashboard.readingBooks}
+          currentBookId={mode === 'study' ? (study.activeBook?.id ?? null) : (dashboard.activeBook?.id ?? null)}
           disabled={busy}
           onPick={changeBook}
           onClose={closeChangeSheet}
@@ -1869,7 +1881,6 @@ function MiniCover({ book, width }: { book: BookOption | null; width: number }) 
  */
 export function StartToast({ toast, onChange }: { toast: StartToastState; onChange: () => void }) {
   const message = startToastMessage(toast);
-  const hasBookControls = toastHasBookControls(toast);
   // 제목만 세리프로 — 문구 안에서 「무슨 책인가」가 값이고 나머지는 서술이다.
   const quoted = toast.book === null ? null : `『${toast.book.title}』`;
   const rest = quoted === null ? message : message.slice(quoted.length);
@@ -1894,33 +1905,31 @@ export function StartToast({ toast, onChange }: { toast: StartToastState; onChan
         boxShadow: '0 4px 16px rgba(0, 0, 0, 0.14)',
       }}
     >
-      {/* 표지 자리와 [바꾸기]는 책이 있는 측정의 장치다 — 공부 토스트엔 둘 다 안 그린다
-          ({@link toastHasBookControls}). 덤으로 아래 버튼 배경 리터럴이 공부 모드의 마지막 세이지
-          누출이었는데, 그 조각이 아예 안 그려지면서 색 스코프도 함께 닫힌다. */}
-      {hasBookControls && <MiniCover book={toast.book} width={26} />}
+      {/* 표지 자리와 [바꾸기]는 이제 두 모드의 장치다 — 공부에도 고를 책과 바꿀 문이 생겼다.
+          모드를 가르던 게이트(`toastHasBookControls`)는 항상 참이 되어 지웠다. */}
+      <MiniCover book={toast.book} width={26} />
       <span style={{ flex: 1, minWidth: 0, fontSize: 14, lineHeight: 1.5, wordBreak: 'keep-all' }}>
         {quoted !== null && <span style={{ ...SERIF_VALUE, fontWeight: 700 }}>{quoted}</span>}
         {rest}
       </span>
-      {hasBookControls && (
-        <button
-          type="button"
-          onClick={onChange}
-          style={{
-            flex: 'none',
-            padding: '6px 12px',
-            border: 0,
-            borderRadius: 8,
-            background: 'rgba(110, 138, 106, 0.16)',
-            color: 'var(--adaptiveBlue700, #4F6B4C)',
-            fontSize: 13,
-            fontWeight: 700,
-            cursor: 'pointer',
-          }}
-        >
-          바꾸기
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={onChange}
+        style={{
+          flex: 'none',
+          padding: '6px 12px',
+          border: 0,
+          borderRadius: 8,
+          // 모드 토큰을 탄다 — 리터럴로 두면 공부 모드에 독서 세이지가 샌다(독서는 알파 .16→.18, 육안 무차이).
+          background: 'var(--accentPill, rgba(110, 138, 106, 0.16))',
+          color: 'var(--adaptiveBlue700, #4F6B4C)',
+          fontSize: 13,
+          fontWeight: 700,
+          cursor: 'pointer',
+        }}
+      >
+        바꾸기
+      </button>
     </div>
   );
 }
@@ -1969,7 +1978,8 @@ export function ChangeBookSheet({
           padding: '10px 12px',
           border: 'none',
           borderRadius: 10,
-          background: current ? 'rgba(110, 138, 106, 0.14)' : 'transparent',
+          // 모드 토큰(위 [바꾸기]와 같은 사정) — 독서는 알파 .14→.18로 2% 진해진다(의도된 예외).
+          background: current ? 'var(--accentPill, rgba(110, 138, 106, 0.14))' : 'transparent',
           cursor: 'pointer',
         }}
       >

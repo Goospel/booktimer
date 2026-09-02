@@ -216,6 +216,13 @@ const state = {
   studyBookSeconds: { 101: 12_000 } as Record<number, number>,
   /** 가장 최근에 공부한 책 — 홈 캐러셀의 기본 선택이 여기서 나온다. */
   studyRecentBookId: null as number | null,
+  /**
+   * 마지막으로 끝낸 공부 측정 — 종료 후 태깅의 <b>유일한 좌표</b>다(서버의 `study_session` 행 하나에 해당).
+   *
+   * <p>`seconds`를 같이 드는 이유: 태깅은 「그 세션이 잰 시간을 그 책으로 옮기는」 일이라, 길이를 모르면
+   * 옮길 것이 없다. `bookId`가 이미 차 있으면 재태깅 409의 근거다(한 번 잰 시간이 두 책에 쌓이는 것을 막는다).
+   */
+  studyLastStopped: null as { id: number; bookId: number | null; seconds: number } | null,
   /** 공부 하루 목표 — 0(목표 없음)에서 시작해야 「목표 정하기」 손잡이부터 밟아 볼 수 있다. */
   studyGoalSeconds: 0,
   /**
@@ -426,6 +433,8 @@ function studyState(): StudyState {
     activeBook: active === null ? null : (studyBookRows().find((b) => b.id === active) ?? null),
     recentBookId: state.studyRecentBookId,
     books: studyBookRows(),
+    // 태깅 좌표는 <b>stop 응답에서만</b> 채워진다(서버와 같다) — 그 라우트가 이 값을 덮어쓴다.
+    untaggedSessionId: null,
   };
 }
 
@@ -979,8 +988,39 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
       const id = state.studyStudyingBookId;
       state.studyBookSeconds[id] = (state.studyBookSeconds[id] ?? 0) + seconds;
     }
+    const sessionId = nextId();
+    state.studyLastStopped = { id: sessionId, bookId: state.studyStudyingBookId, seconds };
     state.studyStartedAt = null;
     state.studyStudyingBookId = null;
+    // 책 없이 잰 측정만 붙일 자리가 있다 — 책을 걸고 잰 것엔 좌표를 안 준다(서버 `stopped.getBook()==null`).
+    return { ...studyState(), untaggedSessionId: state.studyLastStopped.bookId === null ? sessionId : null };
+  }],
+
+  /**
+   * 종료 후 태깅 — 책 검증이 <b>세션 조회보다 먼저</b>다(서버와 같은 순서). 그 세션이 잰 초를 그 책으로
+   * 옮기고, 옮긴 사실을 `studyLastStopped.bookId`에 적어 재태깅을 409로 막는다.
+   */
+  ['POST', /^\/api\/study\/sessions\/(\d+)\/tag-book$/, ({ id, body }) => {
+    const book = mustFindStudyBook((body.bookId ?? -1) as number);
+    const last = state.studyLastStopped;
+    if (last === null || last.id !== id) throw new ApiError(404, '측정을 찾을 수 없습니다');
+    if (last.bookId !== null) throw new ApiError(409, '책을 붙일 수 없는 측정입니다');
+    state.studyBookSeconds[book.id] = (state.studyBookSeconds[book.id] ?? 0) + last.seconds;
+    state.studyRecentBookId = book.id;
+    state.studyLastStopped = { ...last, bookId: book.id };
+    return studyState();
+  }],
+
+  /**
+   * 측정 중 교체 — 세션 좌표가 없다(서버가 「내 진행 중 측정」을 찾는다). 측정은 멈추지 않으므로
+   * 지금까지 잰 시간은 종료 시점에 <b>통째로 새 책</b>에 붙는다(초를 여기서 나누지 않는다).
+   */
+  ['POST', /^\/api\/study\/active\/book$/, ({ body }) => {
+    const bookId = (body.bookId ?? null) as number | null;
+    const book = bookId === null ? null : mustFindStudyBook(bookId);
+    if (state.studyStartedAt === null) throw new ApiError(409, '진행 중인 측정이 없습니다');
+    state.studyStudyingBookId = book === null ? null : book.id;
+    if (book !== null) state.studyRecentBookId = book.id;
     return studyState();
   }],
 
