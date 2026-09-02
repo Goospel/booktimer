@@ -84,6 +84,14 @@ describe('dev-mock 핸들러', () => {
     });
     // 거절된 값이 상태를 물들이지 않는다.
     expect((await mockRequest<StudyState>('/api/study/goal', { body: { dailyGoalSeconds: 0 } })).goalSeconds).toBe(0);
+
+    // 0 = 「목표 없음」이고, 화면 두 곳이 그걸 읽는다 — 목이 0을 무시하면 「목표 없이 지내기」를
+    // 브라우저로 밟아도 홈·달력이 옛 목표를 계속 그린다.
+    expect((await mockRequest<DashboardResponse>('/api/dashboard', {})).study!.goalSeconds).toBe(0);
+    const month = new Date().toISOString().slice(0, 7);
+    expect(
+      (await mockRequest<StudyCalendarResponse>('/api/study/calendar', { query: { month } })).goalSeconds,
+    ).toBe(0);
   });
 
   it('공부 목표는 독서 목표를 건드리지 않는다 — 목에서도 두 목표가 갈려 있다', async () => {

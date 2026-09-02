@@ -634,6 +634,33 @@ class StudyApiControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
+    /**
+     * 0 = 「목표 없음」 — 주석과 javadoc에만 있던 계약을 테스트로 못 박는다.
+     *
+     * <p>미니앱 「목표 없이 지내기」가 정확히 이 값을 보낸다. 누군가 방어적으로 {@code > 0} 검증을
+     * 문 앞에 추가하면 그 화면이 조용히 죽는데, 프론트 테스트로는 서버 쪽 회귀를 못 잡는다.
+     */
+    @Test
+    @DisplayName("POST /api/study/goal: 0은 「목표 없음」으로 저장된다 — 목표를 되돌리는 경로")
+    void goal_zero_clearsGoal() throws Exception {
+        register("study-goalzero@a.com", "studygoalzero");
+
+        mockMvc.perform(post("/api/study/goal").with(user("studygoalzero")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"dailyGoalSeconds\":3600}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/study/goal").with(user("studygoalzero")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"dailyGoalSeconds\":0}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.goalSeconds").value(0));
+
+        mockMvc.perform(get("/api/dashboard").with(user("studygoalzero")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.study.goalSeconds").value(0));
+    }
+
     @Test
     @DisplayName("POST /api/study/goal: 저장한 목표가 대시보드 study 블록에 그대로 실린다(재진입 유지)")
     void goal_isCarriedByDashboard() throws Exception {

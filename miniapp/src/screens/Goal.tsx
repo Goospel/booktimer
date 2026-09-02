@@ -72,6 +72,19 @@ export function saveGoal(variant: TimerMode, seconds: number): Promise<void> {
 }
 
 /**
+ * 「목표 없이 지내기」가 서는 조건 — 공부이고 <b>지울 목표가 있을 때만</b>.
+ *
+ * <p>독서엔 이 문이 없다: 독서의 0은 「목표 없음」이 아니라 이월·부채 원장이 깨지는 값이다.
+ *
+ * <p>`selected`가 아니라 `current`를 본다 — 휠을 돌리는 동안 버튼이 나타났다 사라지면 안 된다.
+ * 화면 밖으로 꺼낸 이유는 `saveGoal`과 같다: 하니스가 정적 렌더라 이 조건을 클로저 안에 두면
+ * 계측할 방법이 소스 grep밖에 없다(T-149).
+ */
+export function showClearGoal(variant: TimerMode, current: number): boolean {
+  return variant === 'study' && current > 0;
+}
+
+/**
  * 목표 설정 — 신규 계정 첫 실행 유도 + 이후 변경(같은 엔드포인트).
  *
  * <p>미니앱 온보딩은 공개 핸들(login_id)을 요구하지 않는다 — 평생 1번만 바꿀 수 있어 첫 진입에
@@ -101,10 +114,11 @@ export function Goal({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const save = () => {
+  /** 값을 받는다 — 휠 값과 0(해제) 두 문이 한 몸을 쓴다. */
+  const save = (seconds: number) => {
     setBusy(true);
     setError(null);
-    saveGoal(variant, selected)
+    saveGoal(variant, seconds)
       .then(onSaved)
       .catch((e: Error) => setError(e.message))
       .finally(() => setBusy(false));
@@ -207,10 +221,17 @@ export function Goal({
           style={{ marginTop: 20 }}
           loading={busy}
           disabled={selected === 0}
-          onClick={save}
+          onClick={() => save(selected)}
         >
           {firstRun ? '이걸로 시작하기' : '저장'}
         </FilledButton>
+        {/* 휠 0 가드는 그대로다 — 「목표 없음」은 실수로 못 밟게 별도 문으로 낸다. 저장이 끝나면
+            onSaved가 대시보드를 다시 읽어 홈이 「목표 정하기」로 돌아간다(배선 추가 없음). */}
+        {showClearGoal(variant, current) && (
+          <Button display="block" variant="weak" style={{ marginTop: 12 }} disabled={busy} onClick={() => save(0)}>
+            목표 없이 지내기
+          </Button>
+        )}
         <Button display="block" variant="weak" style={{ marginTop: 12 }} disabled={busy} onClick={onSkip}>
           {firstRun ? '나중에 정할래요' : '돌아가기'}
         </Button>
