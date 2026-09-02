@@ -443,6 +443,94 @@ class StudyApiControllerTest {
                 .andExpect(content().string("날짜 형식이 올바르지 않아요"));
     }
 
+    // ── 공부 기록 (3차) ──────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("GET /api/study/history: 미인증 → 로그인으로 차단")
+    void history_unauthenticated_isBlocked() throws Exception {
+        mockMvc.perform(get("/api/study/history"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+    }
+
+    /**
+     * 응답의 {@code graph}는 {@code ContributionGraph} record를 그대로 직렬화한 것이다 — 다섯 키가
+     * 기존 {@code /api/dashboard}·{@code /api/history}의 DTO와 <b>글자 그대로 같아야</b> 미니앱이
+     * 같은 타입으로 받는다. 하나라도 빠지면 아래 jsonPath가 붉어진다.
+     */
+    @Test
+    @DisplayName("GET /api/study/history: 잔디 다섯 키와 월별 목록을 함께 준다")
+    void history_returnsGraphAndMonths() throws Exception {
+        User u = register("study-hist@a.com", "studyhist");
+        completedStudy(u, todayNoon(), Duration.ofMinutes(25));
+
+        mockMvc.perform(get("/api/study/history").with(user("studyhist")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.graph.weeks").isArray())
+                .andExpect(jsonPath("$.graph.weeks.length()").value(53))
+                .andExpect(jsonPath("$.graph.monthLabels").isArray())
+                .andExpect(jsonPath("$.graph.totalSeconds").value(1500))
+                .andExpect(jsonPath("$.graph.activeDays").value(1))
+                .andExpect(jsonPath("$.graph.currentStreak").value(1))
+                .andExpect(jsonPath("$.months.length()").value(1))
+                .andExpect(jsonPath("$.months[0].month").value(thisMonth()))
+                .andExpect(jsonPath("$.months[0].totalSeconds").value(1500))
+                .andExpect(jsonPath("$.months[0].days[0].date").value(today().toString()))
+                .andExpect(jsonPath("$.months[0].days[0].totalSeconds").value(1500));
+    }
+
+    /**
+     * <b>역방향 격리</b> — 기존 두 격리 테스트는 「공부가 독서 화면에 안 샌다」만 본다. 새 화면이
+     * 생겼으니 반대 방향도 계측기가 필요하다: 독서 세션은 공부 기록에 한 건도 안 나타나야 한다.
+     */
+    @Test
+    @DisplayName("격리(역방향): 독서 세션은 공부 기록에 0건이다")
+    void readingDoesNotLeakIntoStudyHistory() throws Exception {
+        User u = register("study-histiso@a.com", "studyhistiso");
+        readingSessionService.start(u, todayNoon(), null);
+        readingSessionService.stop(u, todayNoon().plus(Duration.ofHours(1)));
+
+        mockMvc.perform(get("/api/study/history").with(user("studyhistiso")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.graph.totalSeconds").value(0))
+                .andExpect(jsonPath("$.graph.activeDays").value(0))
+                .andExpect(jsonPath("$.months").isEmpty());
+    }
+
+    /**
+     * <b>진행 중 세션은 기록에 없다</b> — 히어로가 매초 더하는 몫은 기록의 것이 아니다(독서와 같은 분업).
+     *
+     * <p>이 불변식은 <b>리포지토리 파생 쿼리 이름</b>({@code ...AndEndedAtIsNotNull})에만 있어서, 그 쿼리를
+     * 스텁하는 서비스 단위 테스트로는 원리상 못 잡는다(필터를 지운 돌연변이가 단위층에서 생존한다).
+     * 그래서 여기 H2 통합에 잠근다 — 필터가 사라지면 0초짜리 진행 중 세션이 그날 행으로 서서 이 단언이 죽는다.
+     */
+    @Test
+    @DisplayName("GET /api/study/history: 진행 중 세션은 집계에서 빠진다 — 0초짜리 오늘 행이 생기지 않는다")
+    void history_excludesActiveSession() throws Exception {
+        register("study-histactive@a.com", "studyhistactive");
+
+        mockMvc.perform(post("/api/study/start").with(user("studyhistactive")).with(csrf()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/study/history").with(user("studyhistactive")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.months").isEmpty())
+                .andExpect(jsonPath("$.graph.totalSeconds").value(0))
+                .andExpect(jsonPath("$.graph.activeDays").value(0));
+    }
+
+    @Test
+    @DisplayName("GET /api/study/history: 신규 유저는 빈 목록 + 빈 잔디 53주 — 가입 직후가 여기로 온다")
+    void history_newUserIsEmpty() throws Exception {
+        register("study-histnew@a.com", "studyhistnew");
+
+        mockMvc.perform(get("/api/study/history").with(user("studyhistnew")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.months").isEmpty())
+                .andExpect(jsonPath("$.graph.weeks.length()").value(53))
+                .andExpect(jsonPath("$.graph.totalSeconds").value(0));
+    }
+
     /**
      * <b>격리의 셋째 축</b> — 세션(원장)·목표에 이어 <b>일정 체크</b>도 독서 표면에 0 영향이어야 한다.
      * 새 테이블이라 구조적으로 샐 길이 없지만, 그 구조가 깨졌을 때 울릴 계측기를 남긴다.

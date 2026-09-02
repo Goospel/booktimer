@@ -18,6 +18,11 @@ export const CACHE_SHELF = 'shelf';
 export const CACHE_STUDY_SHELF = 'study-shelf';
 export const CACHE_FEED = 'home-feed';
 export const CACHE_HISTORY = 'history';
+/**
+ * 공부 기록 — 독서 `CACHE_HISTORY`와 <b>다른 키</b>다. 공유하면 모드를 바꾼 직후 첫 렌더에
+ * 상대 모드의 기록이 선다(두 화면 모두 캐시를 초기 state로 쓴다).
+ */
+export const CACHE_STUDY_HISTORY = 'study-history';
 export const cacheKeyProfile = (loginId: string): string => `profile:${loginId}`;
 export const cacheKeyProfileBooks = (loginId: string): string => `profile-books:${loginId}`;
 export const cacheKeyMargin = (loginId: string, bookId: number): string => `margin:${loginId}:${bookId}`;
