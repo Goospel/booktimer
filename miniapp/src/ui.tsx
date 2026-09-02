@@ -40,8 +40,20 @@ export function Text({ color, ...rest }: ComponentProps<typeof TdsText>) {
   return <TdsText color={resolved} {...rest} />;
 }
 
-/** 잔디 색 농도 0~4 — 웹 app.css `--grass-0..4`와 같은 값(서버가 level을 계산해 준다). */
-export const LEVEL_COLORS = ['#EAE4D7', '#C3D9B0', '#94BE7F', '#5E9250', '#35662F'];
+/**
+ * 잔디 색 농도 0~4 — 웹 app.css `--grass-0..4`와 같은 값(서버가 level을 계산해 준다).
+ *
+ * <p>리터럴이 아니라 <b>토큰 경유</b>인 이유는 공부 모드다: `body.study-mode`가 이 토큰을 파랑
+ * 사다리로 갈아 끼워, 잔디·범례·하루 막대가 컴포넌트 한 줄 없이 따라온다(`--accentPill`과 같은 수법).
+ * 리터럴은 fallback으로 남아 독서 렌더는 픽셀 하나 안 바뀐다.
+ */
+export const LEVEL_COLORS = [
+  'var(--grass0, #EAE4D7)',
+  'var(--grass1, #C3D9B0)',
+  'var(--grass2, #94BE7F)',
+  'var(--grass3, #5E9250)',
+  'var(--grass4, #35662F)',
+];
 
 /** 수동 기록 칸의 테두리 — 웹 `--neutral-3`. 격자와 범례가 같은 값을 봐야 범례가 거짓말을 안 한다. */
 export const MANUAL_OUTLINE = '1px solid #9A9486';

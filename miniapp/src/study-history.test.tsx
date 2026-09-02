@@ -58,6 +58,26 @@ describe('공부 기록 화면', () => {
     expect(render(<StudyMonthlyRecords months={[]} />)).toContain('아직 공부 기록이 없어요');
   });
 
+  /**
+   * 색 — 공부 화면의 잔디·범례·막대가 <b>토큰 경유</b>라야 `body.study-mode`가 파랑으로 갈아 끼운다.
+   *
+   * <p>존재가 아니라 <b>건수와 전체 인자열</b>로 잰다(T-218): 「어딘가에 토큰이 있다」는 한 자리만
+   * 고쳐도 통과하지만, 세 자리가 각각 몇 개인지는 한 곳만 리터럴로 남아도 붉어진다.
+   */
+  it('맨 세이지 리터럴이 한 칸도 없다 — 하나라도 남으면 그 자리만 공부 모드에서 초록으로 남는다', () => {
+    expect(markup).not.toMatch(/background:#(C3D9B0|94BE7F|5E9250|35662F)/);
+  });
+
+  it('하루 막대 3줄이 전부 토큰을 탄다 — 픽스처의 날 수만큼', () => {
+    const bars = markup.match(/height:6px;border-radius:3px;background:var\(--grass2, #94BE7F\)/g);
+    expect(bars).toHaveLength(3);
+  });
+
+  it('범례 스와치 5개가 전부 토큰을 탄다 — 농도 0~4가 한 칸도 빠짐없이', () => {
+    const swatches = markup.match(/width:10px;height:10px;border-radius:2px;flex:0 0 auto;background:var\(--grass/g);
+    expect(swatches).toHaveLength(5);
+  });
+
   it('월 머리글에 그 달 합계를, 하루 줄에 그날 시간을 적는다', () => {
     // ⚠️ `>…<`로 겨눈다 — 맨 문자열이면 월 합계 「1시간 30분」이 하루의 「1시간」·「30분」을 품어
     //    두 단언이 통째로 공허해진다(history.test의 같은 함정과 한 뿌리).
