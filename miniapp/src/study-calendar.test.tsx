@@ -155,6 +155,24 @@ describe('달력 격자 렌더', () => {
   });
 
   /**
+   * <b>요일 머리글이 날짜 열의 가운데에 서는가</b>(T-219 — T-198·T-216의 3회차).
+   *
+   * <p>TDS `Text`는 넘긴 `style`의 `textAlign`·`display`를 <b>자기 prop 값으로 덮어쓴다</b> — `style={{ textAlign }}`은
+   * DOM에 안 실려 머리글이 칸 왼쪽에 붙고, 가운데 선 날짜와 어긋난다(실기기 2026-09-02: 「일」이 6의 왼쪽 위).
+   * 정렬은 `textAlign` <b>prop</b>으로 준다 — 그러면 인라인 스타일에 남아 여기서 계측된다. 통짜 `toContain`은
+   * 다른 자리에 걸려 늘 통과하므로(T-216) 머리글 글자를 <b>가장 가까이 감싼 span</b>만 본다.
+   */
+  it('요일 머리글은 날짜와 같은 가운데 정렬이다 — 칸 왼쪽에 붙으면 요일과 날짜가 어긋난다', () => {
+    const markup = grid();
+
+    for (const label of ['일', '월', '화', '수', '목', '금', '토']) {
+      const at = markup.indexOf(`>${label}</span>`);
+      expect(at).toBeGreaterThan(-1); // 머리글 자체가 사라지면 이 단언이 공허해진다
+      expect(markup.slice(markup.lastIndexOf('<span', at), at)).toContain('text-align:center');
+    }
+  });
+
+  /**
    * <b>달을 옮기면 앞 달의 실패 문구를 걷는가</b>(독립 리뷰 W-4).
    *
    * <p>안 걷으면 8월 조회가 실패한 뒤 9월이 멀쩡히 떠도 그 에러가 화면에 남아, 방금 성공한 달을
