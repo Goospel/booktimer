@@ -111,9 +111,14 @@ describe('탭바 원 — 무엇을 재기 시작하는지 라벨이 말한다', 
   });
 });
 
-describe('시작 토스트 — 공부엔 책이 없다', () => {
-  it('공부 시작은 책 은유 없이 말한다', () => {
-    expect(startToastMessage({ book: null, changed: false, mode: 'study' })).toBe('공부 측정을 시작했어요');
+describe('시작 토스트 — 공부에도 책이 생겼다', () => {
+  /**
+   * ⚠️ 2026-09-02에 <b>계측 대상이 바뀌었다</b>: 공부 측정에도 책을 고를 수 있게 되면서 「책 없이」가
+   * 거짓말이 아니라 정보가 됐다(고를 수 있는데 안 고른 것이다). 옛 고정 문구 「공부 측정을 시작했어요」는
+   * 이제 무엇을 재는지 말하지 않는 쪽이라 여기서 갱신한다.
+   */
+  it('책을 안 고른 공부 시작은 「책 없이」라고 말한다', () => {
+    expect(startToastMessage({ book: null, changed: false, mode: 'study' })).toBe('책 없이 공부 측정을 시작했어요');
   });
 
   it('독서 문구는 그대로다(회귀 가드)', () => {
@@ -146,7 +151,7 @@ describe('시작 토스트 — 공부엔 책이 없다', () => {
       </TDSMobileProvider>,
     );
 
-    expect(study).toContain('공부 측정을 시작했어요');
+    expect(study).toContain('책 없이 공부 측정을 시작했어요');
     expect(study).not.toContain('바꾸기');
     expect(study).not.toContain('dashed'); // 책 없음 점선 표지 자리
     // 독서 토스트는 불변 — 위 단언들이 「그냥 다 사라졌다」로 통과하지 않게 반대편을 함께 잰다.
@@ -371,7 +376,13 @@ describe('홈 — 공부 모드 렌더', () => {
     expect(markup).toContain('01:02:05');
   });
 
-  it('책 캐러셀이 없다 — 공부엔 「무엇으로 측정할까요?」가 없다', () => {
+  /**
+   * 2026-09-02에 <b>계측 대상이 바뀌었다</b>: 공부에도 캐러셀이 섰다. 재는 것은 「캐러셀이 있느냐」가
+   * 아니라 <b>독서 헤더가 아니라 공부 헤더가 선다</b>는 것 — 두 목록이 섞이지 않는다는 뜻이다.
+   * (공부 캐러셀의 내용물은 `study-timer-book.test.tsx`가 잰다.)
+   */
+  it('공부 캐러셀은 자기 헤더로 선다 — 독서 헤더가 새지 않는다', () => {
+    expect(renderHome('study')).toContain('무엇을 공부할까요?');
     expect(renderHome('study')).not.toContain('무엇으로 측정할까요?');
   });
 

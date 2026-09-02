@@ -206,7 +206,16 @@ const state = {
   activeBookId: null as number | null,
   /** 공부 원장 — 독서와 <b>따로 든다</b>. 목에서도 원장이 갈려 있어야 「안 섞인다」를 브라우저로 확인할 수 있다. */
   studyStartedAt: null as string | null,
+  /** 지금 재고 있는 공부 책 — 안 골랐으면 `null`(책 없이 재는 것이 정당한 사용이다). */
+  studyStudyingBookId: null as number | null,
   studyTodaySeconds: 0,
+  /**
+   * 책별 누적 공부 시간(초) — 101번에 12 000초를 미리 넣어 「3시간 20분 공부」 칩이 첫 화면부터 보인다.
+   * 안 그러면 목에서 시간 칩을 보려면 매번 몇 분을 실제로 재야 한다(0초는 칩이 없는 것이 규약이다).
+   */
+  studyBookSeconds: { 101: 12_000 } as Record<number, number>,
+  /** 가장 최근에 공부한 책 — 홈 캐러셀의 기본 선택이 여기서 나온다. */
+  studyRecentBookId: null as number | null,
   /** 공부 하루 목표 — 0(목표 없음)에서 시작해야 「목표 정하기」 손잡이부터 밟아 볼 수 있다. */
   studyGoalSeconds: 0,
   /**
@@ -402,12 +411,21 @@ function studyCalendarDays(month: string): { date: string; studiedSeconds: numbe
     }));
 }
 
+/** 서재 한 줄 — 누적 시간을 <b>여기서만</b> 얹는다(원장은 `studyBookSeconds`가 단일 출처다). */
+function studyBookRows(): StudyBookRow[] {
+  return state.studyBooks.map((b) => ({ ...b, totalSeconds: state.studyBookSeconds[b.id] ?? 0 }));
+}
+
 function studyState(): StudyState {
+  const active = state.studyStudyingBookId;
   return {
     hasActiveSession: state.studyStartedAt !== null,
     activeStartedAt: state.studyStartedAt,
     todaySeconds: state.studyTodaySeconds,
     goalSeconds: state.studyGoalSeconds,
+    activeBook: active === null ? null : (studyBookRows().find((b) => b.id === active) ?? null),
+    recentBookId: state.studyRecentBookId,
+    books: studyBookRows(),
   };
 }
 
@@ -939,17 +957,30 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
   // ── 공부 타이머 ──
   // 잔디·부채·책 통계를 <b>한 줄도 안 건드린다</b> — 서버가 별도 테이블을 쓰는 것과 같은 격리를
   // 목에서도 지켜야, 「공부가 독서 화면에 안 샌다」를 브라우저로 확인할 수 있다.
-  ['POST', /^\/api\/study\/start$/, () => {
+  ['POST', /^\/api\/study\/start$/, ({ body }) => {
     if (state.studyStartedAt !== null) throw new ApiError(409, '이미 진행 중인 측정이 있습니다');
     // 독서 측정 중이면 서버가 거절한다 — 두 원장이 같은 시간을 이중으로 세지 않는다.
     if (state.activeStartedAt !== null) throw new ApiError(409, '이미 진행 중인 측정이 있습니다');
+    // 책 검증이 세션 생성보다 <b>먼저</b>다(서버와 같은 순서) — 없는 책으로 시작해 놓고 404를 주면
+    // 화면은 실패로 읽는데 서버엔 세션이 남아, 다음 시작이 409로 막힌다.
+    const bookId = (body.bookId ?? null) as number | null;
+    if (bookId !== null) mustFindStudyBook(bookId);
     state.studyStartedAt = new Date().toISOString();
+    state.studyStudyingBookId = bookId;
+    if (bookId !== null) state.studyRecentBookId = bookId;
     return studyState();
   }],
   ['POST', /^\/api\/study\/stop$/, () => {
     if (state.studyStartedAt === null) throw new ApiError(409, '진행 중인 측정이 없습니다');
-    state.studyTodaySeconds += Math.floor((Date.now() - Date.parse(state.studyStartedAt)) / 1000);
+    const seconds = Math.floor((Date.now() - Date.parse(state.studyStartedAt)) / 1000);
+    state.studyTodaySeconds += seconds;
+    // 책을 걸고 잰 몫만 그 책에 쌓인다 — 책 없이 잰 시간은 당일 합에만 남는다(서버와 같다).
+    if (state.studyStudyingBookId !== null) {
+      const id = state.studyStudyingBookId;
+      state.studyBookSeconds[id] = (state.studyBookSeconds[id] ?? 0) + seconds;
+    }
     state.studyStartedAt = null;
+    state.studyStudyingBookId = null;
     return studyState();
   }],
 
@@ -989,7 +1020,7 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
   // 독서 책장(`books`)을 <b>한 줄도 안 건드린다</b> — 서버가 별도 테이블을 쓰는 것과 같은 격리를
   // 목에서도 지켜야, 「두 서재가 안 섞인다」를 브라우저로 확인할 수 있다.
   // 검색은 여기 없다: `/api/books/search`(알라딘 프록시)가 도메인 중립이라 공부 화면도 그대로 쓴다.
-  ['GET', /^\/api\/study\/books$/, () => ({ searchEnabled: true, books: state.studyBooks })],
+  ['GET', /^\/api\/study\/books$/, () => ({ searchEnabled: true, books: studyBookRows() })],
   ['POST', /^\/api\/study\/books$/, ({ body }) => {
     // 같은 isbn은 기존 행을 그대로 준다(서버 멱등 계약) — 「추가」가 회독 수를 리셋하지 않는다.
     const isbn13 = (body.isbn13 as string | null) ?? null;
@@ -1018,6 +1049,11 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
   }],
   ['POST', /^\/api\/study\/books\/(\d+)\/delete$/, ({ id }) => {
     state.studyBooks.splice(state.studyBooks.indexOf(mustFindStudyBook(id)), 1);
+    // 책이 사라지면 그 책을 가리키던 자리도 함께 푼다 — 서버 `unlinkBook`이 하는 일과 같다
+    // (시간 기록 자체는 당일 합에 남아 있고, 여기선 「그 책의 시간」이라는 좌표만 사라진다).
+    delete state.studyBookSeconds[id];
+    if (state.studyStudyingBookId === id) state.studyStudyingBookId = null;
+    if (state.studyRecentBookId === id) state.studyRecentBookId = null;
     return { deleted: true };
   }],
 

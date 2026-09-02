@@ -260,10 +260,11 @@ export function toastHasBookControls(toast: StartToastState): boolean {
 }
 
 export function startToastMessage(toast: StartToastState): string {
-  // 공부엔 책이 없다 — 「책 없이 측정을 시작했어요」는 여기서 거짓말이 된다(빠진 것이 아니라 무관하다).
-  if (toast.mode === 'study') return '공부 측정을 시작했어요';
+  // 모드는 <b>명사만</b> 바꾼다 — 공부에도 책이 생겼으니 문장 구조를 가를 이유가 사라졌다.
+  // 책 없이 시작한 공부의 「책 없이」는 거짓말이 아니라 정보다(고를 수 있는데 안 고른 것이다).
+  const noun = toast.mode === 'study' ? '공부 측정' : '측정';
   const target = toast.book === null ? '책 없이' : `『${toast.book.title}』`;
-  return toast.changed ? `${target} 측정으로 바꿨어요` : `${target} 측정을 시작했어요`;
+  return toast.changed ? `${target} ${noun}으로 바꿨어요` : `${target} ${noun}을 시작했어요`;
 }
 
 /**
@@ -612,6 +613,13 @@ export function App() {
    * 고른 사람이 돌아올 때마다 이어 읽기 책으로 끌려간다.
    */
   const [homeBookId, setHomeBookId] = useState<number | null | undefined>(undefined);
+  /**
+   * 공부 캐러셀에서 고른 책 — 위 독서 선택과 <b>별개 슬롯</b>이다.
+   *
+   * <p>한 슬롯에 합치면 두 서재의 id 공간이 섞인다: 독서 책 1번을 골라 둔 채 모드가 뒤집히면(웹에서
+   * 시작한 측정이 {@link effectiveMode}로 모드를 바꾼다) 공부 서재의 1번이 「고른 책」이 된다.
+   */
+  const [studyBookId, setStudyBookId] = useState<number | null | undefined>(undefined);
 
   const toLogin = useCallback(() => {
     token.clear();
@@ -1084,6 +1092,8 @@ export function App() {
       onChangeMode={changeMode}
       homeBookId={homeBookId}
       onSelectHomeBook={setHomeBookId}
+      studyBookId={studyBookId}
+      onSelectStudyBook={setStudyBookId}
       onOpenMargin={(loginId, bookId) => openMargin({ loginId, bookId, isbn13: null, composeBook: null })}
       // 책축 — 사람 좌표를 비운다. 내가 가진 책인지는 서버가 `myBookId`로 알려 주므로 클라가 안 따진다.
       onOpenBookMargin={(isbn13) => openMargin({ loginId: null, bookId: null, isbn13, composeBook: null })}
@@ -1160,6 +1170,8 @@ export function MainTabs({
   onChangeMode,
   homeBookId,
   onSelectHomeBook,
+  studyBookId,
+  onSelectStudyBook,
   onOpenMargin,
   onComposeMargin,
   onOpenBookMargin,
@@ -1187,6 +1199,14 @@ export function MainTabs({
   /** 홈 캐러셀에서 고른 책 — 탭 밖 전체 화면이 홈을 언마운트해도 남도록 App이 든다(`undefined`=아직 안 고름). */
   homeBookId: number | null | undefined;
   onSelectHomeBook: (bookId: number | null) => void;
+  /**
+   * 공부 캐러셀에서 고른 책 — 독서 선택과 <b>별개 슬롯</b>이다(id 공간이 다르다).
+   *
+   * <p>둘 다 선택 프롭인 이유는 `Home`의 같은 이름 프롭과 같다: 독서 경로만 재는 기존 하니스가
+   * 공부 재료를 안 넘겨도 종전 그대로 서야 한다. 안 넘기면 「아직 안 고름」이라 기본 선택으로 떨어진다.
+   */
+  studyBookId?: number | null | undefined;
+  onSelectStudyBook?: (bookId: number | null) => void;
   /** 그 사람의 그 책 여백을 연다 — 홈 소식과 서재 문이 같은 자리로 온다(App이 전체 화면으로 든다). */
   onOpenMargin: (loginId: string, bookId: number) => void;
   /** 홈 여백 문 — 그 책의 작성 화면으로 직행한다. */
@@ -1414,11 +1434,14 @@ export function MainTabs({
         .finally(() => setBusy(false));
       return;
     }
-    startStudy()
+    // 무엇을 잴지는 홈 캐러셀 선택이 정한다 — 독서와 같은 규칙(`timerStartBookId`)을 공부 목록에 그대로 쓴다.
+    // 서재에서 빠진 id는 「책 없이」로 강등되므로 어떤 조합에서도 원이 죽지 않는다.
+    startStudy(timerStartBookId(study.books ?? [], study.recentBookId ?? null, studyBookId))
       .then((next) => {
         onStudyChange(next);
         trackEvent('study_session_started');
-        showStartToast({ book: null, changed: false, mode: 'study' });
+        // 책은 서버가 확정한 값을 쓴다(독서 시작과 같은 규약) — 클라가 고른 값을 되뇌면 어긋날 창이 생긴다.
+        showStartToast({ book: next.activeBook ?? null, changed: false, mode: 'study' });
       })
       .catch(fail)
       .finally(() => setBusy(false));
@@ -1538,6 +1561,8 @@ export function MainTabs({
             }
             selectedBookId={homeBookId}
             onSelectBook={onSelectHomeBook}
+            selectedStudyBookId={studyBookId}
+            onSelectStudyBook={onSelectStudyBook}
             onTimerChange={onTimerChange}
             celebrate={celebrate}
             onGoGoal={onGoGoal}
@@ -1549,7 +1574,7 @@ export function MainTabs({
           />
         )}
         {/* 서재 탭은 두 모드 공통이지만 화면은 갈린다 — 공부 책과 독서 책이 섞이지 않는 것이 요구 그 자체다. */}
-        {tab === 'library' && mode === 'study' && <StudyLibrary onError={onError} />}
+        {tab === 'library' && mode === 'study' && <StudyLibrary onError={onError} onShelfChanged={onShelfChanged} />}
         {tab === 'library' && mode !== 'study' && (
           <Library
             myLoginId={dashboard.loginId}
