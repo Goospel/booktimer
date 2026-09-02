@@ -5,6 +5,7 @@ import type { SearchRow, StudyBookRow, StudyShelfResponse } from '../api';
 import { addStudyBook, deleteStudyBook, fetchStudyBooks, searchBooks, setStudyReadCount } from '../api';
 import { useBackClose } from '../back';
 import { CACHE_STUDY_SHELF, cacheGet, cachePut } from '../cache';
+import { formatDuration } from '../format';
 import { openExternal } from '../toss';
 import { ErrorMessage, Loading, PENCIL_FRAME, Screen, SearchField, Sheet, Text } from '../ui';
 import { BookCarousel, type LeadCard } from './Home';
@@ -75,6 +76,41 @@ const readCountChipStyle: CSSProperties = {
 };
 
 /**
+ * 누적 공부 시간 칩 — 회독 칩과 <b>같은 박스, 다른 색</b>이다(회독은 파랑 토큰, 시간은 중립).
+ *
+ * <p>색값은 독서 서재 `bookChipStyle('neutral')`에서 <b>복사</b>했다: 그 함수는 export돼 있지 않고
+ * `Library.tsx`는 이 작업에서 수정 금지라(독서 경로 diff 0), 값 복사가 가장 싼 길이다.
+ */
+const studyTimeChipStyle: CSSProperties = {
+  display: 'inline-block',
+  padding: '2px 9px',
+  borderRadius: 20,
+  fontSize: 12,
+  lineHeight: 1.6,
+  background: 'var(--adaptiveGrey200, #E4DDD0)',
+  color: 'var(--adaptiveGrey700, #57534A)',
+};
+
+/**
+ * 카드가 이 책에 대해 말하는 것 — 회독 수는 <b>언제나</b>, 잰 시간은 <b>있을 때만</b>.
+ *
+ * <p>0을 가르는 것이 두 칩의 유일한 차이다: 「0독」은 「아직 안 돌았다」는 상태지만 「0초 공부」는
+ * 부재라 할 말이 아니다(독서 서재 `bookStats`와 같은 규약).
+ *
+ * <p>순수 함수로 꺼낸 이유는 늘 같다 — 하니스가 정적 렌더라 칩 규칙을 여기서만 계측할 수 있다(T-149).
+ */
+export function studyBookChips(book: StudyBookRow): { label: string; value: string; style: CSSProperties }[] {
+  const chips = [{ label: readCountLabel(book.readCount), value: String(book.readCount), style: readCountChipStyle }];
+  const seconds = book.totalSeconds ?? 0;
+  if (seconds > 0) {
+    const studied = formatDuration(seconds);
+    // 숫자만 세리프로 그린다 — 「3시간 20분」이 값이고 「공부」는 그게 무엇인지 말하는 꼬리다.
+    chips.push({ label: `${studied} 공부`, value: studied, style: studyTimeChipStyle });
+  }
+  return chips;
+}
+
+/**
  * 채움이 아닌 손잡이 — 「관리」(카드지)와 「검색해서 담기」(틴트)가 쓴다.
  *
  * <p>주 손잡이(「회독 +1」)는 여기 없다: 채움 레시피를 <b>호출부에 리터럴로</b> 편다. 헬퍼 삼항에
@@ -103,7 +139,17 @@ function handleRowStyle(tone: 'tint' | 'card'): CSSProperties {
  * <p>뮤테이션 뒤에 서버 응답으로 그 책만 갈아끼우지 않고 목록을 다시 받는다 — 삭제·추가는 목록
  * 자체가 흔들리고, 회독만 바뀐 경우에도 한 번의 왕복이 화면과 서버를 확실히 맞춘다.
  */
-export function StudyLibrary({ onError }: { onError: (error: Error) => void }) {
+export function StudyLibrary({
+  onError,
+  onShelfChanged,
+}: {
+  onError: (error: Error) => void;
+  /**
+   * 서재에서 책이 늘거나 줄면 홈이 보는 목록(`StudyState.books`)도 낡는다 — 안 부르면 홈 캐러셀이
+   * 옛 목록 그대로다(독서 서재의 같은 이름 프롭과 같은 역할).
+   */
+  onShelfChanged: () => void;
+}) {
   /*
    * 첫 렌더의 출발점을 세션 캐시에서 집는다(독서 서재와 같은 SWR) — 탭을 오갈 때 통째로 로딩이 되지 않게.
    * 지연 초기화(`useState(() => …)`)라 캐시 조회가 <b>마운트 1회</b>다 — 매 렌더 읽어도 결과는 버려진다.
@@ -173,6 +219,7 @@ export function StudyLibrary({ onError }: { onError: (error: Error) => void }) {
       .then((added) => {
         setMode('shelf');
         setSelectedId(added.id); // 방금 담은 책이 가운데 — 아니면 추가가 아무 일도 안 한 것처럼 보인다
+        onShelfChanged(); // 홈 캐러셀도 이 책을 알아야 한다(방금 담은 책으로 바로 재는 것이 자연스러운 다음 동작이다)
         load();
       })
       .catch(fail)
@@ -218,7 +265,8 @@ export function StudyLibrary({ onError }: { onError: (error: Error) => void }) {
           onSelect={setSelectedId}
           onSheet={setSheet}
           onReadCount={(book, readCount) => run(setStudyReadCount(book.id, readCount))}
-          onDelete={(book) => run(deleteStudyBook(book.id))}
+          // 지운 책은 홈 캐러셀에서도 사라져야 한다 — 남아 있으면 그 id로 시작해 404가 난다.
+          onDelete={(book) => run(deleteStudyBook(book.id).then(() => onShelfChanged()))}
           onAddBook={() => setMode('search')}
         />
       )}
@@ -280,9 +328,9 @@ export function StudyShelf({
         onSelect={onSelect}
         leadCard={leadCard}
         metaOf={(b) => b.author ?? '저자 미상'}
-        // 칩은 하나뿐이다 — 이 화면에서 책에 대해 말할 것은 회독 수가 전부다.
         // 숫자만 세리프로 그린다(「3」이 값이고 「독」은 그게 무엇인지 말하는 꼬리다 — 독서 서재의 「2시간 읽음」과 같은 규약).
-        chipsOf={(b) => [{ label: readCountLabel(b.readCount), value: String(b.readCount), style: readCountChipStyle }]}
+        // 칩 규칙은 순수 함수가 든다 — 시간 칩의 0 경계를 정적 하니스로 재려면 렌더 밖에 있어야 한다.
+        chipsOf={studyBookChips}
       />
 
       {onLeadCard ? (

@@ -261,6 +261,19 @@ export interface StudyState {
    * 「목표 없음」 화면(1차와 같은 렌더)으로 떨어진다.
    */
   goalSeconds?: number;
+  /**
+   * 지금 재고 있는 공부 책 — 안 골랐거나 대기 중이면 `null`. 히어로의 「측정 중 · 제목」이 이 한 필드를 본다.
+   *
+   * <p>아래 셋과 함께 <b>선택 필드</b>인 이유는 `goalSeconds`와 같다: 이 필드를 아직 안 주는 서버가
+   * 살아 있는 동안에도 화면이 「책 없이」 쪽으로 온전히 떨어진다.
+   */
+  activeBook?: StudyBookRow | null;
+  /** 가장 최근에 공부한 책 — 홈 캐러셀의 기본 선택이 여기서 나온다(`defaultBookId`). */
+  recentBookId?: number | null;
+  /** 공부 서재 전체(등록 최신순) — 홈 캐러셀이 이 목록으로 선다(서재 탭을 안 거쳐도 고를 수 있다). */
+  books?: StudyBookRow[];
+  /** 방금 끝낸 <b>책 없는</b> 측정의 id — stop 응답에서만 채워진다(태깅 좌표). */
+  untaggedSessionId?: number | null;
 }
 
 /** 공부 기록이 없는 상태 — 옛 서버(이 필드를 안 주는)와 붙었을 때의 폴백이기도 하다. */
@@ -448,7 +461,8 @@ export const changeActiveBook = (bookId: number | null): Promise<TimerState> =>
  * 공부 측정 시작·종료 — 독서와 <b>다른 엔드포인트</b>다(원장이 다르므로 문도 다르다).
  * 409 계약은 독서와 같다: 중복 시작 / 무세션 종료. 독서 측정 중에도 시작은 409다(이중 계측 금지).
  */
-export const startStudy = (): Promise<StudyState> => request('/api/study/start', { body: {} });
+export const startStudy = (bookId: number | null): Promise<StudyState> =>
+  request('/api/study/start', { body: { bookId } });
 
 export const stopStudy = (): Promise<StudyState> => request('/api/study/stop', { body: {} });
 
@@ -666,6 +680,11 @@ export interface StudyBookRow {
   /** 지금까지 돈 회독 수. **0은 「아직 안 돌았다」**이지 「모른다」가 아니다(화면이 0독 칩을 그린다). */
   readCount: number;
   purchaseLink: string | null;
+  /**
+   * 이 책으로 잰 공부 시간의 총합(초) — <b>0은 부재</b>라 화면이 칩을 안 만든다(0독과 다른 규약:
+   * 「아직 안 돌았다」는 상태지만 「0초 공부」는 할 말이 아니다). 이 필드를 안 주는 옛 서버는 `undefined`.
+   */
+  totalSeconds?: number;
 }
 
 export interface StudyShelfResponse {

@@ -1152,6 +1152,9 @@ export function Home({
   guide,
   selectedBookId: picked,
   onSelectBook,
+  selectedStudyBookId,
+  // 독서 렌더를 재는 기존 하니스는 공부 재료를 안 넘긴다 — 기본값이 있어야 그 화면이 종전 그대로 선다.
+  onSelectStudyBook = () => {},
   onTimerChange,
   celebrate,
   onGoGoal,
@@ -1180,6 +1183,14 @@ export function Home({
    */
   selectedBookId: number | null | undefined;
   onSelectBook: (bookId: number | null) => void;
+  /**
+   * 공부 캐러셀에서 고른 책 — 위 독서 선택과 <b>별개 슬롯</b>이다(id 공간이 다르다). 상태는 App이 든다.
+   *
+   * <p>선택 프롭인 이유는 독서 렌더를 재는 기존 하니스들 때문이다 — 공부 재료를 안 넘겨도 독서 홈이
+   * 종전 그대로 서야 한다(공부 갈래에서만 쓰이므로 없어도 렌더가 깨지지 않는다).
+   */
+  selectedStudyBookId?: number | null | undefined;
+  onSelectStudyBook?: (bookId: number | null) => void;
   onTimerChange: (timer: TimerState) => void;
   /** 첫 완료 축하가 떠 있는지 — 상태는 측정 액션과 함께 `MainTabs`가 든다(다른 탭에서 끝내도 여기 뜨도록). */
   celebrate: boolean;
@@ -1196,6 +1207,11 @@ export function Home({
 }) {
   /** 측정할 책 — 아직 안 골랐으면 기본값(이어 읽기)으로 떨어진다. 고른 값은 App이 들어 화면을 나갔다 와도 남는다. */
   const selectedBookId = picked === undefined ? defaultBookId(dashboard.readingBooks, dashboard.recentBookId) : picked;
+  /** 공부 서재 — 옛 서버(이 필드를 안 주는)는 빈 목록이라 캐러셀에 「책 없이」 칸만 선다. */
+  const studyBooks = study.books ?? [];
+  /** 공부 캐러셀의 가운데 — 독서와 같은 규칙(최근 공부한 책 → 첫 책 → 「책 없이」). */
+  const studySelectedId =
+    selectedStudyBookId === undefined ? defaultBookId(studyBooks, study.recentBookId ?? null) : selectedStudyBookId;
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -1549,6 +1565,7 @@ export function Home({
             <>
               <Text typography="t5" color="blue500" style={{ display: 'block', marginTop: 16 }}>
                 측정 중 {formatDuration(studyElapsed)}
+                {study.activeBook != null && ` · ${study.activeBook.title}`}
               </Text>
               <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 6 }}>
                 {ACTIVE_STUDY_RELIEF}
@@ -1588,9 +1605,16 @@ export function Home({
         </section>
       )}
 
-      {/* 책 캐러셀·「읽는 중」 카드·여백 문은 전부 <b>책</b>을 전제한다 — 공부엔 책이 없어 통째로 빠진다.
-          숨기는 것이 아니라 그리지 않는 것이다(태깅 시트가 공부 종료에 안 붙는 것과 같은 규율). */}
-      {mode === 'study' ? null : dashboard.hasActiveSession ? (
+      {/* 두 모드가 <b>같은 자리</b>에서 대상을 고른다 — 다만 목록도 문구도 갈린다(원장이 갈렸으니).
+          공부엔 「읽는 중」 카드·여백 문이 없어 측정 중엔 아무것도 안 선다(히어로가 이미 제목을 말한다). */}
+      {mode === 'study' ? (
+        study.hasActiveSession ? null : (
+          <section style={sectionStyle}>
+            <SectionTitle style={{ marginBottom: 10, paddingBottom: 9, borderBottom: SECTION_RULE }}>무엇을 공부할까요?</SectionTitle>
+            <BookCarousel books={studyBooks} selectedId={studySelectedId} onSelect={onSelectStudyBook} />
+          </section>
+        )
+      ) : dashboard.hasActiveSession ? (
         <ReadingNowCard book={dashboard.activeBook ?? null} totalSeconds={dashboard.activeBookTotalSeconds}>
           {marginDoor}
         </ReadingNowCard>
