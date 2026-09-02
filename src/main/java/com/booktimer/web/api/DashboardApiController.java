@@ -2,6 +2,7 @@ package com.booktimer.web.api;
 
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
+import com.booktimer.book.StudyBookService;
 import com.booktimer.garden.GardenService;
 import com.booktimer.quote.QuoteService;
 import com.booktimer.security.CurrentUserService;
@@ -55,6 +56,7 @@ public class DashboardApiController {
     private final BookRepository bookRepository;
     private final GoalWaiverService goalWaiverService;
     private final StudySessionService studySessionService;
+    private final StudyBookService studyBookService;
     private final Clock clock;
 
     public DashboardApiController(CurrentUserService currentUserService,
@@ -67,6 +69,7 @@ public class DashboardApiController {
                                   BookRepository bookRepository,
                                   GoalWaiverService goalWaiverService,
                                   StudySessionService studySessionService,
+                                  StudyBookService studyBookService,
                                   Clock clock) {
         this.currentUserService = currentUserService;
         this.dashboardModel = dashboardModel;
@@ -78,6 +81,7 @@ public class DashboardApiController {
         this.bookRepository = bookRepository;
         this.goalWaiverService = goalWaiverService;
         this.studySessionService = studySessionService;
+        this.studyBookService = studyBookService;
         this.clock = clock;
     }
 
@@ -107,7 +111,7 @@ public class DashboardApiController {
                 quotes,
                 user.isEmailVerified(),
                 goalWaiverService.availableFor(user),
-                StudyApiController.StudyState.of(studySessionService, user, clock.instant()));
+                StudyApiController.StudyState.of(studySessionService, studyBookService, user, clock.instant()));
     }
 
     @PostMapping("/api/sessions/start")

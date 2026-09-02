@@ -5,6 +5,7 @@ import com.booktimer.book.BookService;
 import com.booktimer.book.StudyBook;
 import com.booktimer.book.StudyBookService;
 import com.booktimer.security.CurrentUserService;
+import com.booktimer.session.StudySessionService;
 import com.booktimer.user.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +18,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.security.Principal;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Supplier;
 
 /**
@@ -38,13 +40,16 @@ public class StudyBookApiController {
 
     private final CurrentUserService currentUserService;
     private final StudyBookService studyBookService;
+    private final StudySessionService studySessionService;
     private final BookService bookService;
 
     public StudyBookApiController(CurrentUserService currentUserService,
                                   StudyBookService studyBookService,
+                                  StudySessionService studySessionService,
                                   BookService bookService) {
         this.currentUserService = currentUserService;
         this.studyBookService = studyBookService;
+        this.studySessionService = studySessionService;
         this.bookService = bookService;
     }
 
@@ -57,7 +62,10 @@ public class StudyBookApiController {
     @GetMapping("/api/study/books")
     public StudyShelfResponse shelf(Principal principal) {
         User user = currentUserService.resolve(principal);
-        List<StudyBookRow> rows = studyBookService.myBooks(user).stream().map(StudyBookRow::from).toList();
+        Map<Long, Long> seconds = studySessionService.totalSecondsByBook(user);
+        List<StudyBookRow> rows = studyBookService.myBooks(user).stream()
+                .map(book -> StudyBookRow.from(book, seconds))
+                .toList();
         return new StudyShelfResponse(bookService.searchEnabled(), rows);
     }
 
@@ -71,7 +79,7 @@ public class StudyBookApiController {
         BookSearchResult result = new BookSearchResult(req.title(), req.author(), req.isbn13(),
                 req.coverUrl(), req.publisher(), req.purchaseLink());
         try {
-            return ResponseEntity.ok(StudyBookRow.from(studyBookService.add(user, result)));
+            return ResponseEntity.ok(row(user, studyBookService.add(user, result)));
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "책을 추가할 수 없습니다");
         }
@@ -93,8 +101,7 @@ public class StudyBookApiController {
         if (req.readCount() < 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "회독 수는 0보다 작을 수 없습니다");
         }
-        return ResponseEntity.ok(StudyBookRow.from(
-                mutate(() -> studyBookService.changeReadCount(user, id, req.readCount()))));
+        return ResponseEntity.ok(row(user, mutate(() -> studyBookService.changeReadCount(user, id, req.readCount()))));
     }
 
     @PostMapping("/api/study/books/{id}/delete")
@@ -102,6 +109,11 @@ public class StudyBookApiController {
         User user = currentUserService.resolve(principal);
         mutate(() -> { studyBookService.delete(user, id); return null; });
         return ResponseEntity.ok(new DeleteResult(true));
+    }
+
+    /** 한 권짜리 응답 — 누적 시간이 필요해 집계를 함께 묻는다(뮤테이션 직후에도 칩이 맞는다). */
+    private StudyBookRow row(User user, StudyBook book) {
+        return StudyBookRow.from(book, studySessionService.totalSecondsByBook(user));
     }
 
     /** IDOR/없는 책 IAE → 404(존재 비노출). 독서 {@code BookApiController.mutate}와 같은 계약. */
@@ -116,14 +128,20 @@ public class StudyBookApiController {
     // ── DTO (엔티티 직렬화 금지 — 평탄 record 화이트리스트) ───────────────────
 
     /**
-     * 공부 서재 한 행. 독서 {@code MyBookSummary}보다 <b>훨씬 좁다</b> — 상태·공개범위·누적 시간·여백 글 수는
+     * 공부 서재 한 행. 독서 {@code MyBookSummary}보다 <b>훨씬 좁다</b> — 상태·공개범위·여백 글 수는
      * 공부 화면에 소비처가 없다. 대신 이 화면의 유일한 분류 축인 {@code readCount}가 있다.
+     *
+     * @param totalSeconds 그 책으로 잰 누적 공부 시간(초) — <b>맨 뒤에</b> 붙였다(하위호환).
+     *                     0은 「아직 그 책으로 안 쟀다」는 <b>부재</b>라 화면이 칩을 그리지 않는다
+     *                     (0독이 「상태」인 {@code readCount}와 반대다).
      */
     public record StudyBookRow(Long id, String title, String author, String coverUrl, String isbn13,
-                               int readCount, String purchaseLink) {
-        static StudyBookRow from(StudyBook b) {
+                               int readCount, String purchaseLink, long totalSeconds) {
+        /** @param secondsByBook 책 id → 누적 초({@code StudySessionService.totalSecondsByBook}) */
+        static StudyBookRow from(StudyBook b, Map<Long, Long> secondsByBook) {
             return new StudyBookRow(b.getId(), b.getTitle(), b.getAuthor(), b.getCoverUrl(), b.getIsbn13(),
-                    b.getReadCount(), b.getPurchaseLink());
+                    b.getReadCount(), b.getPurchaseLink(),
+                    secondsByBook.getOrDefault(b.getId(), 0L));
         }
     }
 

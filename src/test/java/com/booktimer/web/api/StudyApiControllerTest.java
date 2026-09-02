@@ -1,5 +1,10 @@
 package com.booktimer.web.api;
 
+import com.booktimer.book.Book;
+import com.booktimer.book.BookRepository;
+import com.booktimer.book.BookStatus;
+import com.booktimer.book.StudyBook;
+import com.booktimer.book.StudyBookRepository;
 import com.booktimer.session.ReadingSessionService;
 import com.booktimer.session.StudySession;
 import com.booktimer.session.StudySessionRepository;
@@ -52,6 +57,8 @@ class StudyApiControllerTest {
     @Autowired UserRepository userRepository;
     @Autowired StudySessionRepository studyRepository;
     @Autowired StudySessionService studySessionService;
+    @Autowired StudyBookRepository studyBookRepository;
+    @Autowired BookRepository bookRepository;
     @Autowired ReadingSessionService readingSessionService;
     @Autowired ReadingTimerRepository timerRepository;
     @Autowired ReadingGoalChangeRepository goalChangeRepository;
@@ -78,10 +85,31 @@ class StudyApiControllerTest {
     }
 
     /** 완료된 공부 세션 한 건을 그 시각에 심는다(집계·격리 검증용). */
-    private void completedStudy(User user, Instant startedAt, Duration length) {
-        StudySession session = StudySession.start(user, startedAt);
+    private StudySession completedStudy(User user, Instant startedAt, Duration length) {
+        return completedStudy(user, startedAt, length, null);
+    }
+
+    /** 완료된 공부 세션 한 건 — 책을 걸 수도 있다(책별 집계 검증용). */
+    private StudySession completedStudy(User user, Instant startedAt, Duration length, StudyBook book) {
+        StudySession session = StudySession.start(user, startedAt, book);
         session.end(startedAt.plus(length));
-        studyRepository.save(session);
+        return studyRepository.save(session);
+    }
+
+    /** 내 공부 서재에 책 한 권(검색 왕복 없이 직접 — 이 테스트가 재는 것은 세션-책 연결이다). */
+    private StudyBook studyBook(User user, String title) {
+        return studyBookRepository.save(StudyBook.register(user, title, "저자", null, null, null, null));
+    }
+
+    /** 독서 책장의 책 한 권 — <b>다른 테이블</b>이라 이 id는 공부 문에서 404여야 한다. */
+    private Book readingBook(User user, String title) {
+        return bookRepository.save(
+                Book.register(user, title, null, null, null, null, null, BookStatus.READING));
+    }
+
+    /** {@code $.books[?(@.id == N)].totalSeconds} — 배열 순서에 기대지 않고 그 책의 초만 집어낸다. */
+    private static String bookSeconds(StudyBook book) {
+        return "$.books[?(@.id == " + book.getId() + ")].totalSeconds";
     }
 
     // ── 인증 경계 ────────────────────────────────────────────────────────────
@@ -222,6 +250,352 @@ class StudyApiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.study.hasActiveSession").value(false))
                 .andExpect(jsonPath("$.study.todaySeconds").value(600));
+    }
+
+    // ── 타이머-책 연결: start(bookId?) ────────────────────────────────────────
+
+    @Test
+    @DisplayName("POST /api/study/start: bookId를 주면 그 책으로 시작한다(응답에 activeBook)")
+    void start_withBookId_setsActiveBook() throws Exception {
+        User u = register("study-startbook@a.com", "studystartbook");
+        StudyBook book = studyBook(u, "정보처리기사 실기");
+
+        mockMvc.perform(post("/api/study/start").with(user("studystartbook")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + book.getId() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasActiveSession").value(true))
+                .andExpect(jsonPath("$.activeBook.id").value(book.getId()))
+                .andExpect(jsonPath("$.activeBook.title").value("정보처리기사 실기"));
+    }
+
+    /**
+     * <b>하위호환(U3)</b> — 12차 라이브 번들은 {@code {}}를 보내고, 더 옛 클라이언트는 body가 아예 없다.
+     * {@code @RequestBody(required = false)}가 빠지면 이 둘이 400이 되어 <b>배포 창 동안 공부 시작이
+     * 통째로 죽는다</b>. 옛 네 필드가 그대로 실리는지도 여기서 함께 못 박는다.
+     */
+    @Test
+    @DisplayName("POST /api/study/start: 빈 객체·body 없음 모두 200 + activeBook은 null(옛 번들 하위호환)")
+    void start_withoutBookId_isBackwardCompatible() throws Exception {
+        register("study-startempty@a.com", "studystartempty");
+
+        mockMvc.perform(post("/api/study/start").with(user("studystartempty")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasActiveSession").value(true))
+                .andExpect(jsonPath("$.todaySeconds").exists())
+                .andExpect(jsonPath("$.goalSeconds").exists())
+                .andExpect(jsonPath("$.activeBook").doesNotExist());
+
+        mockMvc.perform(post("/api/study/stop").with(user("studystartempty")).with(csrf()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/study/start").with(user("studystartempty")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasActiveSession").value(true))
+                .andExpect(jsonPath("$.activeBook").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("POST /api/study/start: 남의 공부 책 id면 404 + 세션은 아예 안 만들어진다")
+    void start_withForeignBook_isNotFoundAndStartsNothing() throws Exception {
+        register("study-startidor@a.com", "studystartidor");
+        User stranger = register("study-startidor2@a.com", "studystartidortwo");
+        StudyBook theirs = studyBook(stranger, "남의 책");
+
+        mockMvc.perform(post("/api/study/start").with(user("studystartidor")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + theirs.getId() + "}"))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(get("/api/dashboard").with(user("studystartidor")))
+                .andExpect(jsonPath("$.study.hasActiveSession").value(false));
+    }
+
+    /** 테이블 경계 — 독서 책장의 id는 공부 문에서 존재하지 않는 책이다(두 서재가 안 섞인다). */
+    @Test
+    @DisplayName("POST /api/study/start: 독서 책장의 id는 404 — 서재가 다른 테이블이다")
+    void start_withReadingBookId_isNotFound() throws Exception {
+        User u = register("study-startcross@a.com", "studystartcross");
+        Book reading = readingBook(u, "독서 책장의 책");
+
+        mockMvc.perform(post("/api/study/start").with(user("studystartcross")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + reading.getId() + "}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("POST /api/study/start: 이미 진행 중이면 bookId가 있어도 409")
+    void start_withBookId_whileActive_conflicts() throws Exception {
+        User u = register("study-startdup2@a.com", "studystartduptwo");
+        StudyBook book = studyBook(u, "책");
+
+        mockMvc.perform(post("/api/study/start").with(user("studystartduptwo")).with(csrf()))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/study/start").with(user("studystartduptwo")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + book.getId() + "}"))
+                .andExpect(status().isConflict());
+    }
+
+    /**
+     * 두 조건이 동시에 틀렸을 때 <b>어느 쪽을 말해 주는가</b>. 책 조회를 활성 검사보다 먼저 하면
+     * 「측정이 이미 돈다」(409)가 아니라 「책이 없다」(404)가 나가, 클라이언트가 엉뚱한 안내를 한다
+     * (캐시에 남은 낡은 bookId로 다른 탭에서 다시 시작을 누르는 경로가 실제로 그 조합이다).
+     */
+    @Test
+    @DisplayName("POST /api/study/start: 진행 중 + 낡은 bookId면 404가 아니라 409다(활성 검사가 먼저)")
+    void start_whileActive_withStaleBookId_conflictsNotNotFound() throws Exception {
+        register("study-startstale@a.com", "studystartstale");
+
+        mockMvc.perform(post("/api/study/start").with(user("studystartstale")).with(csrf()))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/study/start").with(user("studystartstale")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":999999}"))
+                .andExpect(status().isConflict());
+    }
+
+    // ── stop 응답의 태깅 좌표 ─────────────────────────────────────────────────
+
+    /** {@code untaggedSessionId}가 없으면 종료 후 태깅 시트가 어느 세션을 붙일지 모른다(시트가 안 열린다). */
+    @Test
+    @DisplayName("POST /api/study/stop: 책 없이 잰 세션이면 untaggedSessionId에 그 세션 id가 실린다")
+    void stop_withoutBook_returnsUntaggedSessionId() throws Exception {
+        User u = register("study-untag@a.com", "studyuntag");
+        mockMvc.perform(post("/api/study/start").with(user("studyuntag")).with(csrf()))
+                .andExpect(status().isOk());
+        Long sessionId = studyRepository.findByUserAndEndedAtIsNull(u).orElseThrow().getId();
+
+        mockMvc.perform(post("/api/study/stop").with(user("studyuntag")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.untaggedSessionId").value(sessionId));
+    }
+
+    @Test
+    @DisplayName("POST /api/study/stop: 책을 걸고 잰 세션이면 untaggedSessionId는 null(붙일 것이 없다)")
+    void stop_withBook_hasNoUntaggedSessionId() throws Exception {
+        User u = register("study-tagged@a.com", "studytagged");
+        StudyBook book = studyBook(u, "책");
+
+        mockMvc.perform(post("/api/study/start").with(user("studytagged")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + book.getId() + "}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/study/stop").with(user("studytagged")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.untaggedSessionId").doesNotExist());
+    }
+
+    /** 태깅 좌표는 <b>stop 응답에서만</b> 산다 — 대시보드·start가 최근 미태깅 세션을 실어 오면 시트가 유령처럼 뜬다. */
+    @Test
+    @DisplayName("start·대시보드 응답의 untaggedSessionId는 언제나 null — 시트는 종료 동작 직후에만 열린다")
+    void startAndDashboard_neverCarryUntaggedSessionId() throws Exception {
+        User u = register("study-untagscope@a.com", "studyuntagscope");
+        completedStudy(u, todayNoon(), Duration.ofMinutes(20));
+
+        mockMvc.perform(post("/api/study/start").with(user("studyuntagscope")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.untaggedSessionId").doesNotExist());
+        mockMvc.perform(get("/api/dashboard").with(user("studyuntagscope")))
+                .andExpect(jsonPath("$.study.untaggedSessionId").doesNotExist());
+    }
+
+    // ── 종료 후 태깅 ─────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("POST /api/study/sessions/{id}/tag-book: 붙인 시간이 그 책의 totalSeconds가 되고 recentBookId가 된다")
+    void tagBook_movesSecondsToThatBook() throws Exception {
+        User u = register("study-tag@a.com", "studytag");
+        StudyBook book = studyBook(u, "정보처리기사 실기");
+        StudyBook idle = studyBook(u, "안 쓴 책");
+        StudySession session = completedStudy(u, todayNoon(), Duration.ofMinutes(30));
+
+        mockMvc.perform(post("/api/study/sessions/" + session.getId() + "/tag-book")
+                        .with(user("studytag")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + book.getId() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(bookSeconds(book), hasItem(1800)))
+                // 다른 책은 0초 — 「부재」라 미니앱이 칩을 안 그린다.
+                .andExpect(jsonPath(bookSeconds(idle), hasItem(0)))
+                .andExpect(jsonPath("$.recentBookId").value(book.getId().intValue()))
+                // 라벨을 붙였을 뿐이라 당일 합은 그대로다(시간의 원장은 세션이다).
+                .andExpect(jsonPath("$.todaySeconds").value(1800));
+    }
+
+    @Test
+    @DisplayName("tag-book: 남의 세션 id는 404 「측정을 찾을 수 없습니다」 + 그 세션은 그대로다")
+    void tagBook_foreignSession_isNotFound() throws Exception {
+        User u = register("study-tagidor@a.com", "studytagidor");
+        User stranger = register("study-tagidor2@a.com", "studytagidortwo");
+        StudyBook mine = studyBook(u, "내 책");
+        StudySession theirs = completedStudy(stranger, todayNoon(), Duration.ofMinutes(10));
+
+        mockMvc.perform(post("/api/study/sessions/" + theirs.getId() + "/tag-book")
+                        .with(user("studytagidor")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + mine.getId() + "}"))
+                .andExpect(status().isNotFound());
+
+        assertThat(studyRepository.findById(theirs.getId()).orElseThrow().getBook()).isNull();
+    }
+
+    @Test
+    @DisplayName("tag-book: 남의 책·독서 책장의 id는 404 「책을 찾을 수 없습니다」")
+    void tagBook_foreignOrReadingBook_isNotFound() throws Exception {
+        User u = register("study-tagbookidor@a.com", "studytagbookidor");
+        User stranger = register("study-tagbookidor2@a.com", "studytagbookidortwo");
+        StudySession session = completedStudy(u, todayNoon(), Duration.ofMinutes(10));
+        StudyBook theirs = studyBook(stranger, "남의 공부 책");
+        Book reading = readingBook(u, "내 독서 책");
+
+        mockMvc.perform(post("/api/study/sessions/" + session.getId() + "/tag-book")
+                        .with(user("studytagbookidor")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + theirs.getId() + "}"))
+                // ⚠️ 문구 자체는 여기서 못 잰다 — MockMvc가 ResponseStatusException을 HTML 에러 페이지로
+                // 렌더해 reason·본문 어디에도 안 실린다(레포 전체에 그 단언이 없는 이유). 코드만 잠근다.
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(post("/api/study/sessions/" + session.getId() + "/tag-book")
+                        .with(user("studytagbookidor")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + reading.getId() + "}"))
+                .andExpect(status().isNotFound());
+
+        assertThat(studyRepository.findById(session.getId()).orElseThrow().getBook()).isNull();
+    }
+
+    /** 진행 중 세션에 책을 붙이는 문은 {@code active/book}이다 — tag-book으로 오면 막힌다. */
+    @Test
+    @DisplayName("tag-book: 진행 중 세션이면 409 — 재는 도중은 교체 문의 몫이다")
+    void tagBook_activeSession_conflicts() throws Exception {
+        User u = register("study-tagactive@a.com", "studytagactive");
+        StudyBook book = studyBook(u, "책");
+        mockMvc.perform(post("/api/study/start").with(user("studytagactive")).with(csrf()))
+                .andExpect(status().isOk());
+        Long sessionId = studyRepository.findByUserAndEndedAtIsNull(u).orElseThrow().getId();
+
+        mockMvc.perform(post("/api/study/sessions/" + sessionId + "/tag-book")
+                        .with(user("studytagactive")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + book.getId() + "}"))
+                .andExpect(status().isConflict());
+
+        assertThat(studyRepository.findById(sessionId).orElseThrow().getBook()).isNull();
+    }
+
+    @Test
+    @DisplayName("tag-book: 이미 책이 지정된 세션의 재태깅은 409(1회성)")
+    void tagBook_alreadyTagged_conflicts() throws Exception {
+        User u = register("study-tagtwice@a.com", "studytagtwice");
+        StudyBook first = studyBook(u, "먼저 붙인 책");
+        StudyBook second = studyBook(u, "나중 책");
+        StudySession session = completedStudy(u, todayNoon(), Duration.ofMinutes(10), first);
+
+        mockMvc.perform(post("/api/study/sessions/" + session.getId() + "/tag-book")
+                        .with(user("studytagtwice")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + second.getId() + "}"))
+                .andExpect(status().isConflict());
+
+        assertThat(studyRepository.findById(session.getId()).orElseThrow().getBook().getId())
+                .isEqualTo(first.getId());
+    }
+
+    // ── 측정 중 교체 ─────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("POST /api/study/active/book: 진행 중 측정이 없으면 409")
+    void changeActiveBook_withoutSession_conflicts() throws Exception {
+        User u = register("study-chgnone@a.com", "studychgnone");
+        StudyBook book = studyBook(u, "책");
+
+        mockMvc.perform(post("/api/study/active/book").with(user("studychgnone")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + book.getId() + "}"))
+                .andExpect(status().isConflict());   // 문구는 MockMvc에서 관측 불가(위 tag-book 주석)
+    }
+
+    /**
+     * ⚡ 교체가 <b>새 세션을 만드는</b> 구현이면 잰 시간이 A·B로 갈라진다 — 그 구현을 여기서 잡는다.
+     * 세션은 시간의 원장이고 book은 그 라벨이라, 라벨만 갈면 지금까지 잰 시간이 통째로 새 책에 붙는다.
+     */
+    @Test
+    @DisplayName("active/book: A로 재던 시간이 통째로 B에 붙는다(세션은 안 멈춘다)")
+    void changeActiveBook_movesAllSecondsToNewBook() throws Exception {
+        User u = register("study-chg@a.com", "studychg");
+        StudyBook a = studyBook(u, "책 A");
+        StudyBook b = studyBook(u, "책 B");
+        studyRepository.save(StudySession.start(u, clock.instant().minus(Duration.ofMinutes(30)), a));
+
+        mockMvc.perform(post("/api/study/active/book").with(user("studychg")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + b.getId() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasActiveSession").value(true))
+                .andExpect(jsonPath("$.activeBook.id").value(b.getId()));
+
+        mockMvc.perform(post("/api/study/stop").with(user("studychg")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(bookSeconds(b), hasItem(greaterThanOrEqualTo(1800))))
+                .andExpect(jsonPath(bookSeconds(a), hasItem(0)));
+    }
+
+    @Test
+    @DisplayName("active/book: bookId가 null이면 「책 없이」로 되돌아간다")
+    void changeActiveBook_null_clearsBook() throws Exception {
+        User u = register("study-chgnull@a.com", "studychgnull");
+        StudyBook book = studyBook(u, "책");
+        mockMvc.perform(post("/api/study/start").with(user("studychgnull")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + book.getId() + "}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/study/active/book").with(user("studychgnull")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":null}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasActiveSession").value(true))
+                .andExpect(jsonPath("$.activeBook").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("active/book: 남의 책 id면 404 — 측정은 그대로 돈다")
+    void changeActiveBook_foreignBook_isNotFound() throws Exception {
+        User u = register("study-chgidor@a.com", "studychgidor");
+        User stranger = register("study-chgidor2@a.com", "studychgidortwo");
+        StudyBook theirs = studyBook(stranger, "남의 책");
+        mockMvc.perform(post("/api/study/start").with(user("studychgidor")).with(csrf()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/study/active/book").with(user("studychgidor")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + theirs.getId() + "}"))
+                .andExpect(status().isNotFound());
+
+        assertThat(studyRepository.findByUserAndEndedAtIsNull(u)).isPresent();
+    }
+
+    // ── 대시보드 동봉 (캐러셀 재료) ───────────────────────────────────────────
+
+    @Test
+    @DisplayName("GET /api/dashboard: study 블록이 서재 목록·최근 책·측정 중인 책을 함께 싣는다")
+    void dashboard_carriesStudyBooksAndRecentBook() throws Exception {
+        User u = register("study-dashbooks@a.com", "studydashbooks");
+        StudyBook book = studyBook(u, "정보처리기사 실기");
+        completedStudy(u, todayNoon(), Duration.ofMinutes(30), book);
+        studyRepository.save(StudySession.start(u, clock.instant(), book));
+
+        mockMvc.perform(get("/api/dashboard").with(user("studydashbooks")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.study.books", hasSize(1)))
+                .andExpect(jsonPath("$.study.books[0].title").value("정보처리기사 실기"))
+                .andExpect(jsonPath("$.study.books[0].totalSeconds").value(1800))
+                .andExpect(jsonPath("$.study.recentBookId").value(book.getId().intValue()))
+                .andExpect(jsonPath("$.study.activeBook.title").value("정보처리기사 실기"));
     }
 
     // ── 공부 하루 목표 (2차) ──────────────────────────────────────────────────
@@ -548,7 +922,7 @@ class StudyApiControllerTest {
     @DisplayName("자정 분할: 23:50→익일 00:40 공부는 기록·달력에서 두 날짜(10분·40분)로 갈린다")
     void midnightSplit_isReflectedInHistoryAndCalendar() throws Exception {
         User u = register("study-mid@a.com", "studymid");
-        studySessionService.start(u, LocalDateTime.parse("2026-06-01T23:50").atZone(ZoneId.of(SEOUL)).toInstant());
+        studySessionService.start(u, LocalDateTime.parse("2026-06-01T23:50").atZone(ZoneId.of(SEOUL)).toInstant(), null);
         studySessionService.stop(u, LocalDateTime.parse("2026-06-02T00:40").atZone(ZoneId.of(SEOUL)).toInstant());
 
         mockMvc.perform(get("/api/study/history").with(user("studymid")))
@@ -570,6 +944,74 @@ class StudyApiControllerTest {
                 .andExpect(jsonPath("$.days[0].studiedSeconds").value(600))
                 .andExpect(jsonPath("$.days[1].date").value("2026-06-02"))
                 .andExpect(jsonPath("$.days[1].studiedSeconds").value(2400));
+    }
+
+    // ── 자정 분할 × 책 라벨 (실 DB 왕복) ────────────────────────────────────
+
+    /** 유저 TZ 로컬 시각을 Instant로 — 손으로 UTC를 환산하지 않는다(고정 과거 일자). */
+    private static Instant seoul(String localDateTime) {
+        return LocalDateTime.parse(localDateTime).atZone(ZoneId.of(SEOUL)).toInstant();
+    }
+
+    /**
+     * 책을 걸고 자정을 넘기면 <b>두 조각이 같은 책</b>을 들어야 책별 누적이 온전하다 — 상속이 없으면
+     * 둘째 조각이 미태깅이라 칩이 40분(2400)만 세고 나머지 10분이 조용히 샌다.
+     */
+    @Test
+    @DisplayName("자정 분할 + 시작 시 책: 두 조각이 같은 책을 들어 totalSeconds가 50분 전부를 센다")
+    void midnightSplit_withBook_keepsAllSecondsOnThatBook() throws Exception {
+        User u = register("study-midbook@a.com", "studymidbook");
+        StudyBook book = studyBook(u, "정보처리기사 실기");
+        studySessionService.start(u, seoul("2026-06-01T23:50"), book);
+        studySessionService.stop(u, seoul("2026-06-02T00:40"));
+
+        mockMvc.perform(get("/api/dashboard").with(user("studymidbook")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.study.books[?(@.id == " + book.getId() + ")].totalSeconds",
+                        hasItem(3000)))
+                .andExpect(jsonPath("$.study.recentBookId").value(book.getId().intValue()));
+    }
+
+    /**
+     * 책 <b>없이</b> 자정을 넘겨 잰 뒤 태깅하면, 좌표는 마지막 조각인데 앞 조각까지 함께 붙어야 한다
+     * (⚡ 체인이 없으면 2400만 붙는다). 태깅은 라벨만 다는 일이라 <b>기록의 날짜별 합은 불변</b>이다.
+     */
+    @Test
+    @DisplayName("자정 분할 + 종료 후 태깅: 앞 조각까지 체인으로 붙어 50분 전부가 그 책에 간다")
+    void midnightSplit_tagBook_walksChain() throws Exception {
+        User u = register("study-midtag@a.com", "studymidtag");
+        StudyBook book = studyBook(u, "토익 RC");
+        studySessionService.start(u, seoul("2026-06-01T23:50"), null);
+        Long lastPieceId = studySessionService.stop(u, seoul("2026-06-02T00:40")).getId();
+
+        mockMvc.perform(post("/api/study/sessions/" + lastPieceId + "/tag-book")
+                        .with(user("studymidtag")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + book.getId() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(bookSeconds(book), hasItem(3000)))
+                .andExpect(jsonPath("$.recentBookId").value(book.getId().intValue()));
+
+        // 라벨을 달았을 뿐이라 날짜별 합은 그대로다(시간의 원장은 세션 행이다).
+        mockMvc.perform(get("/api/study/history").with(user("studymidtag")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.months[0].days[0].totalSeconds").value(2400))
+                .andExpect(jsonPath("$.months[0].days[1].totalSeconds").value(600));
+    }
+
+    /** ⚡ 정렬이 {@code Asc}면 <b>처음</b> 공부한 책이 기본 선택으로 떠 캐러셀이 엉뚱한 데서 시작한다. */
+    @Test
+    @DisplayName("recentBookId: 가장 최근에 책을 걸고 잰 쪽이다(먼저 잰 책이 아니다)")
+    void recentBookId_isTheLatestTaggedSession() throws Exception {
+        User u = register("study-recent@a.com", "studyrecent");
+        StudyBook older = studyBook(u, "먼저 공부한 책");
+        StudyBook newer = studyBook(u, "나중 공부한 책");
+        completedStudy(u, seoul("2026-06-01T10:00"), Duration.ofMinutes(30), older);
+        completedStudy(u, seoul("2026-06-02T10:00"), Duration.ofMinutes(10), newer);
+
+        mockMvc.perform(get("/api/dashboard").with(user("studyrecent")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.study.recentBookId").value(newer.getId().intValue()));
     }
 
     /**

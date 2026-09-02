@@ -1,5 +1,8 @@
 package com.booktimer.web.api;
 
+import com.booktimer.book.StudyBook;
+import com.booktimer.book.StudyBookRepository;
+import com.booktimer.book.StudyBookService;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.StudyCalendarService;
 import com.booktimer.session.StudyHistoryService;
@@ -11,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -24,12 +28,17 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 공부 측정 start/stop JSON API — 미니앱 「공부」 모드가 쓰는 유일한 서버 문이다.
  *
- * <p>에러 계약은 독서({@code /api/sessions/*})와 <b>글자 그대로 같다</b>: 409 = 중복 start / 무세션 stop.
- * 두 모드가 다른 말을 하면 클라이언트가 모드마다 다른 처리를 하게 된다.
+ * <p>에러 계약은 독서({@code /api/sessions/*})와 <b>같은 상태 코드</b>다: 409 = 중복 start / 무세션 stop,
+ * 404 = 남의·없는 책·측정. 두 모드가 다른 코드를 내면 클라이언트가 모드마다 다른 처리를 하게 된다.
+ *
+ * <p>⚠️ {@code ResponseStatusException}에 실은 <b>한국어 문구는 서버 로그·디버깅용</b>이다 — 미니앱은
+ * 상태 코드로 자기 문구를 만들고, MockMvc는 이 예외를 HTML 에러 페이지로 렌더해 문구가 응답에 실리지도
+ * 않는다. 그러니 문구를 고쳐도 화면 문구는 안 바뀐다(계약은 코드 쪽이다).
  *
  * <p>인증 라우팅은 설정 변경이 필요 없다 — {@code SecurityConfig.isMiniappApiRequest}가 Bearer 헤더 붙은
  * {@code /api/**}를 미니앱 체인으로 보내므로 {@code /api/study/**}가 자동으로 커버된다.
@@ -41,6 +50,8 @@ public class StudyApiController {
     private final StudySessionService studyService;
     private final StudyCalendarService calendarService;
     private final StudyHistoryService historyService;
+    private final StudyBookService studyBookService;
+    private final StudyBookRepository studyBookRepository;
     private final UserRepository userRepository;
     private final Clock clock;
 
@@ -48,39 +59,125 @@ public class StudyApiController {
                               StudySessionService studyService,
                               StudyCalendarService calendarService,
                               StudyHistoryService historyService,
+                              StudyBookService studyBookService,
+                              StudyBookRepository studyBookRepository,
                               UserRepository userRepository,
                               Clock clock) {
         this.currentUserService = currentUserService;
         this.studyService = studyService;
         this.calendarService = calendarService;
         this.historyService = historyService;
+        this.studyBookService = studyBookService;
+        this.studyBookRepository = studyBookRepository;
         this.userRepository = userRepository;
         this.clock = clock;
     }
 
+    /**
+     * 공부 측정 시작 — {@code bookId}로 대상 책을 함께 정할 수 있다(안 줘도 시작된다).
+     *
+     * <p>{@code @RequestBody(required = false)}인 것이 <b>하위호환</b>이다: 12차 라이브 번들은
+     * {@code {}}를 보내고 그보다 옛 클라이언트는 body가 아예 없다 — required면 배포 창 동안 공부
+     * 시작이 통째로 400이 된다.
+     */
     @PostMapping("/api/study/start")
-    public ResponseEntity<StudyState> start(Principal principal) {
+    public ResponseEntity<StudyState> start(@RequestBody(required = false) StartStudyRequest request,
+                                            Principal principal) {
         User user = currentUserService.resolve(principal);
+        // 활성 검사를 책 조회보다 먼저 한다 — 순서가 반대면 「이미 재는 중 + 낡은 bookId」가 409가 아니라
+        // 404로 나가, 클라이언트가 「측정이 이미 돈다」가 아니라 「책이 없다」로 잘못 안내한다.
+        // (독서가 도는 중인 경우는 서비스가 그대로 409로 잡는다 — 미니앱은 토글 잠금이 먼저 막는 조합이다.)
+        if (studyService.activeSession(user) != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 진행 중인 측정이 있습니다");
+        }
+        StudyBook book = request == null ? null : ownedBookOrNull(user, request.bookId());
         Instant now = clock.instant();
         try {
-            studyService.start(user, now);
+            studyService.start(user, now, book);
         } catch (IllegalStateException e) {
             // 공부가 이미 돌고 있든 독서가 돌고 있든 사용자에겐 같은 사실이다 — 「지금 재는 중인 게 있다」.
             throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 진행 중인 측정이 있습니다");
         }
-        return ResponseEntity.ok(StudyState.of(studyService, user, now));
+        return ResponseEntity.ok(state(user, now));
     }
 
     @PostMapping("/api/study/stop")
     public ResponseEntity<StudyState> stop(Principal principal) {
         User user = currentUserService.resolve(principal);
         Instant now = clock.instant();
+        StudySession stopped;
         try {
-            studyService.stop(user, now);
+            stopped = studyService.stop(user, now);
         } catch (IllegalStateException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "진행 중인 측정이 없습니다");
         }
-        return ResponseEntity.ok(StudyState.of(studyService, user, now));
+        // 태깅 좌표는 stop 응답에서만 산다 — 책 없이 잰 세션이면 그 id, 아니면 null(대시보드·start는 항상 null).
+        // 대시보드가 최근 미태깅 세션을 실어 오면 앱에 들어올 때마다 시트가 유령처럼 뜬다.
+        // getBook()==null은 lazy 프록시를 초기화하지 않는 참조 비교라 트랜잭션 밖에서도 안전(독서 stop과 같다).
+        Long untaggedSessionId = stopped.getBook() == null ? stopped.getId() : null;
+        return ResponseEntity.ok(StudyState.of(studyService, studyBookService, user, now, untaggedSessionId));
+    }
+
+    /**
+     * <b>종료 후 태깅</b> — 책 없이 잰 측정에 나중에 책을 붙인다("무슨 책을 공부하셨나요?").
+     *
+     * <p>IDOR 이중 방어: 책은 {@code findByIdAndUser}로(남의 책이면 404), 세션은 서비스가 같은 방식으로
+     * (남의 세션이면 404 마스킹). 독서 책장의 id도 여기선 404다 — 서재가 다른 테이블이라 애초에 없는 책이다.
+     *
+     * @return 200 갱신된 화면 상태 / 404 책·측정 없음 / 409 진행 중이거나 이미 책이 있는 측정
+     */
+    @PostMapping("/api/study/sessions/{id}/tag-book")
+    public ResponseEntity<StudyState> tagBook(@PathVariable("id") Long id,
+                                              @RequestBody TagBookRequest request,
+                                              Principal principal) {
+        User user = currentUserService.resolve(principal);
+        StudyBook book = ownedBook(user, request.bookId());
+        try {
+            studyService.tagBook(user, id, book);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "측정을 찾을 수 없습니다"); // 세션 IDOR 마스킹
+        } catch (IllegalStateException e) {
+            // 독서 문구 「이미 책이 지정된 측정입니다」는 진행 중 거부를 모른다 — 두 원인을 한 문장으로 덮는다.
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "책을 붙일 수 없는 측정입니다");
+        }
+        return ResponseEntity.ok(state(user, clock.instant()));
+    }
+
+    /**
+     * <b>측정 중 교체</b> — 재는 도중 대상을 바꾼다. 세션은 멈추지 않으므로 지금까지 잰 시간이 통째로
+     * 새 책에 붙는다. {@code bookId}가 null이면 「책 없이」로 되돌린다.
+     *
+     * <p><b>세션 좌표가 요청에 없다</b> — 서버가 "내 진행 중 세션"을 찾으므로 세션 IDOR이 구조적으로
+     * 성립하지 않는다. 남는 경계는 책 하나뿐이라 404로 마스킹한다(독서 {@code /api/sessions/active/book}과 같다).
+     *
+     * @return 200 갱신된 화면 상태 / 404 남의 책·없는 책 / 409 진행 중 측정 없음(stop과 같은 계약)
+     */
+    @PostMapping("/api/study/active/book")
+    public ResponseEntity<StudyState> changeActiveBook(@RequestBody ChangeActiveBookRequest request,
+                                                       Principal principal) {
+        User user = currentUserService.resolve(principal);
+        StudyBook book = ownedBookOrNull(user, request.bookId());
+        try {
+            studyService.changeActiveBook(user, book);
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "진행 중인 측정이 없습니다");
+        }
+        return ResponseEntity.ok(state(user, clock.instant()));
+    }
+
+    /** 내 공부 책일 때만 반환 — 아니면(없음/남의 것/독서 책장의 id) 404로 존재 비노출. */
+    private StudyBook ownedBook(User user, Long bookId) {
+        return studyBookRepository.findByIdAndUser(bookId, user)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "책을 찾을 수 없습니다"));
+    }
+
+    /** {@code bookId}가 null이면 「책 없이」 — 그 자체가 정당한 값이라 404가 아니다. */
+    private StudyBook ownedBookOrNull(User user, Long bookId) {
+        return bookId == null ? null : ownedBook(user, bookId);
+    }
+
+    private StudyState state(User user, Instant now) {
+        return StudyState.of(studyService, studyBookService, user, now);
     }
 
     /**
@@ -97,7 +194,7 @@ public class StudyApiController {
         User user = currentUserService.resolve(principal);
         user.updateStudyDailyGoal(request.dailyGoalSeconds());
         userRepository.save(user);
-        return ResponseEntity.ok(StudyState.of(studyService, user, clock.instant()));
+        return ResponseEntity.ok(state(user, clock.instant()));
     }
 
     /**
@@ -191,24 +288,57 @@ public class StudyApiController {
     public record StudyCalendarResponse(long goalSeconds, List<StudyCalendarService.CalendarDay> days) {
     }
 
+    /** @param bookId 대상 공부 책(null·body 자체 생략 = 책 없이 시작) */
+    public record StartStudyRequest(Long bookId) {
+    }
+
+    /** @param bookId 붙일 공부 책(필수 — 「책 없이」로 되돌리는 문은 {@code active/book}이다) */
+    public record TagBookRequest(Long bookId) {
+    }
+
+    /** @param bookId 새 대상(null = 「책 없이」로 되돌리기) */
+    public record ChangeActiveBookRequest(Long bookId) {
+    }
+
     /**
-     * 공부 모드 화면 상태 — 이 넷이면 히어로가 다 그려진다(부채·책이 없어 더 실을 것이 없다).
+     * 공부 모드 화면 상태 — 히어로·캐러셀·시트가 이 하나로 다 그려진다.
      *
      * <p>{@code todaySeconds}는 <b>완료 세션 합</b>이다 — 진행 중 몫은 클라이언트가 {@code activeStartedAt}
      * 으로 매초 더한다(독서 히어로와 같은 분업).
      *
-     * <p>{@code goalSeconds}는 <b>맨 뒤에</b> 붙였다 — 대시보드·start/stop 응답이 이 레코드를 그대로
-     * 실어 나르므로 옛 미니앱은 모르는 필드 하나를 무시할 뿐이다(하위호환).
+     * <p>필드를 <b>맨 뒤에</b>만 늘린다 — 대시보드·start/stop/goal/tag/change 응답이 이 레코드를 그대로
+     * 실어 나르므로 옛 미니앱은 모르는 필드를 무시할 뿐이다(하위호환). {@code goalSeconds}가 그 선례고
+     * 뒤의 넷이 이번 추가다.
+     *
+     * @param activeBook        측정 중인 책(없거나 「책 없이」면 null) — 히어로 제목과 교체 시트의 현재 행
+     * @param recentBookId      가장 최근 책을 걸고 잰 책 — 홈 캐러셀의 기본 선택
+     * @param books             내 공부 서재 전체(누적 시간 포함) — 캐러셀·시트 둘이 같은 목록을 본다
+     * @param untaggedSessionId <b>stop 응답에서만</b> non-null — 방금 책 없이 끝낸 측정의 태깅 좌표
      */
-    public record StudyState(boolean hasActiveSession, Instant activeStartedAt, long todaySeconds, long goalSeconds) {
+    public record StudyState(boolean hasActiveSession, Instant activeStartedAt, long todaySeconds, long goalSeconds,
+                             StudyBookApiController.StudyBookRow activeBook, Long recentBookId,
+                             List<StudyBookApiController.StudyBookRow> books, Long untaggedSessionId) {
 
-        static StudyState of(StudySessionService service, User user, Instant now) {
-            StudySession active = service.activeSession(user);
+        static StudyState of(StudySessionService service, StudyBookService bookService, User user, Instant now) {
+            return of(service, bookService, user, now, null);
+        }
+
+        static StudyState of(StudySessionService service, StudyBookService bookService, User user, Instant now,
+                             Long untaggedSessionId) {
+            StudySession active = service.activeSession(user);   // 활성 finder가 fetch join이라 book이 로드돼 있다
+            Map<Long, Long> seconds = service.totalSecondsByBook(user);
             return new StudyState(
                     active != null,
                     active == null ? null : active.getStartedAt(),
                     service.todaySeconds(user, now),
-                    user.getStudyDailyGoalSeconds());
+                    user.getStudyDailyGoalSeconds(),
+                    active == null || active.getBook() == null
+                            ? null : StudyBookApiController.StudyBookRow.from(active.getBook(), seconds),
+                    service.recentBookId(user),
+                    bookService.myBooks(user).stream()
+                            .map(book -> StudyBookApiController.StudyBookRow.from(book, seconds))
+                            .toList(),
+                    untaggedSessionId);
         }
     }
 }
