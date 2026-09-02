@@ -240,6 +240,38 @@ describe('공부 모드 색 — css에 실재하는가', () => {
     expect(study).toContain('--accentPill:');
   });
 
+  /**
+   * 잔디 팔레트(`--grass0..4`) — 기록 화면의 잔디·범례·하루 막대가 이 토큰 하나를 본다.
+   *
+   * <p>`--accentPill`과 같은 처방이다: 값이 <b>양쪽에</b> 있어야 뜻이 산다. 낮 기본값이 빠지면
+   * 인라인 fallback(세이지 리터럴)만 남아 공부 모드에서도 초록 잔디가 그대로 뜨고, 공부 블록이
+   * 빠지면 갈아 끼울 것이 아예 없다.
+   */
+  it('잔디 낮 기본값 5단이 html:root에 있다 — 없으면 fallback만 남아 공부 모드가 안 따라온다', () => {
+    const root = css.slice(css.indexOf('html:root {'), css.indexOf('}', css.indexOf('html:root {')));
+
+    for (const decl of [
+      '--grass0: #EAE4D7',
+      '--grass1: #C3D9B0',
+      '--grass2: #94BE7F',
+      '--grass3: #5E9250',
+      '--grass4: #35662F',
+    ]) {
+      expect(root).toContain(decl);
+    }
+  });
+
+  it('공부 블록이 잔디 1~4단을 파랑 사다리로 덮는다 — 0단(빈 칸)은 종이색 그대로 둔다', () => {
+    const study = css.slice(css.indexOf(`body.${STUDY_CLASS} {`), css.indexOf('}', css.indexOf(`body.${STUDY_CLASS} {`)));
+
+    // 세이지 4단과 같은 명도의 파랑 짝수 칸(200·400·600·800) — 새 색을 만들지 않는다.
+    for (const decl of ['--grass1: #AFC4D2', '--grass2: #83A0B4', '--grass3: #536F85', '--grass4: #3A5266']) {
+      expect(study).toContain(decl);
+    }
+    // 0단은 「기록 없음」의 종이색이라 모드가 갈려도 같다 — 덮으면 빈 칸이 파래진다.
+    expect(study).not.toContain('--grass0:');
+  });
+
   /** 큰 시계 잉크(2차 §7-C) — 화면 최대 활자가 「파란 펜」이 된다. 토큰 경유라 값은 css가 정한다. */
   it('공부 모드의 큰 시계는 파란 잉크다 — 독서 모드 시계는 그대로 잉크색', () => {
     // 큰 시계만 집는다 — 머리말(오버라인)은 두 모드 다 ACCENT라 그걸로 재면 늘 파랑이 잡힌다.

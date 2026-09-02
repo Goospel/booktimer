@@ -170,9 +170,12 @@ describe('잔디 렌더', () => {
 
   it('칸마다 level 색을 칠한다 — 0~4 단계가 웹 잔디와 같은 팔레트', () => {
     // 웹 app.css --grass-0..4 와 같은 값(잔디 색의 단일 출처는 웹 브랜드 팔레트다).
-    for (const color of ['#EAE4D7', '#C3D9B0', '#94BE7F', '#5E9250', '#35662F']) {
-      expect(markup).toContain(`background:${color}`);
-    }
+    // 토큰 경유 — 공부 모드가 `body.study-mode`에서 이 토큰을 파랑 사다리로 갈아 끼운다.
+    // 리터럴은 fallback으로 남아 독서 렌더의 색은 한 픽셀도 안 바뀐다.
+    const colors = ['#EAE4D7', '#C3D9B0', '#94BE7F', '#5E9250', '#35662F'];
+    colors.forEach((color, i) => {
+      expect(markup).toContain(`background:var(--grass${i}, ${color})`);
+    });
   });
 
   it('날짜 없는 칸은 그리드 가장자리 placeholder라 투명하게 둔다', () => {

@@ -166,6 +166,12 @@ html:root {
      `body.study-mode` 한 블록으로 세 자리가 같이 파랑이 된다(안 그러면 두 곳만 바뀐다). */
   --accentRing: rgba(110, 138, 106, .25);
   --accentPill: rgba(110, 138, 106, .18);
+  /* 잔디 농도 0~4 — 웹 app.css --grass-0..4. 공부 모드가 1~4를 파랑 사다리로 덮는다 */
+  --grass0: #EAE4D7;
+  --grass1: #C3D9B0;
+  --grass2: #94BE7F;
+  --grass3: #5E9250;
+  --grass4: #35662F;
   /* 표면 → 종이톤 (웹 --card-bg/--border/--muted/--text) */
   --adaptiveBackground: #FCFAF5; /* 탭바·시트 표면 = 카드지 */
   --adaptiveGrey100: #FCFAF5; /* 섹션·행 fill — 크림 캔버스 위 카드지 */
@@ -632,6 +638,11 @@ body.study-mode {
   /* 히어로 카드 틴트 — 명도는 종이 그대로 두고 색상만 한랭하게 민 「푸른 종이」다(연필 테두리·질감 불변).
      전환 트랜지션은 기존 `.lamp-page`의 background-color 트랜지션에 그대로 편승한다(추가 코드 0). */
   --heroCardBg: #EFF3F6;
+  /* 잔디 — 세이지 4단과 같은 명도의 파랑 사다리 짝수 칸(200·400·600·800). 0단(빈 칸)은 종이색 그대로 */
+  --grass1: #AFC4D2;
+  --grass2: #83A0B4;
+  --grass3: #536F85;
+  --grass4: #3A5266;
 }
 
 /*
