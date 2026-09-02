@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,6 +10,7 @@ import {
   Goal,
   initialGoalSelection,
   saveGoal,
+  showClearGoal,
   weeklyLine,
   wheelIndices,
 } from './screens/Goal';
@@ -244,6 +247,91 @@ describe('공부 목표 렌더 (variant)', () => {
 });
 
 /**
+ * 「목표 없이 지내기」 — 공부 목표를 0(=목표 없음)으로 되돌리는 문.
+ *
+ * <p>서버는 0을 이미 허용하는데(`User.updateStudyDailyGoal`은 음수만 거부) UI에 그리로 가는 문이 없었다 —
+ * 휠 0 가드(`disabled={selected === 0}`)가 독서 기준으로 옳아서 공부까지 막았다. 가드는 그대로 두고
+ * 해제만 별도 문으로 낸다.
+ */
+describe('공부 목표 해제 (showClearGoal)', () => {
+  it('공부이고 지울 목표가 있을 때만 선다 — 없는 목표를 지우는 문은 무의미하다', () => {
+    expect(showClearGoal('study', 1_800)).toBe(true);
+    expect(showClearGoal('study', 0)).toBe(false);
+    expect(showClearGoal('study', -1)).toBe(false);
+  });
+
+  /** 독서의 0은 「목표 없음」이 아니라 이월·부채 원장이 깨지는 값이다 — 그 문은 열지 않는다. */
+  it('독서엔 그 문이 없다 — 독서의 0은 목표 없음이 아니다', () => {
+    expect(showClearGoal('reading', 1_800)).toBe(false);
+    expect(showClearGoal('reading', 0)).toBe(false);
+  });
+});
+
+describe('목표 해제 버튼 렌더', () => {
+  const render = (variant: 'reading' | 'study', current: number) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Goal current={current} firstRun={false} variant={variant} onSaved={() => {}} onSkip={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  const buttonAttrs = (markup: string, label: string) =>
+    markup
+      .split('<button')
+      .slice(1)
+      .filter((chunk) => chunk.includes(label))
+      .map((chunk) => chunk.slice(0, chunk.indexOf('>')));
+
+  it('공부이고 목표가 있으면 「목표 없이 지내기」가 정확히 하나 선다', () => {
+    const attrs = buttonAttrs(render('study', 1_800), '목표 없이 지내기');
+    expect(attrs).toHaveLength(1);
+    expect(attrs[0]).not.toContain('disabled');
+  });
+
+  it('공부라도 목표가 0이면 없다 — 지울 목표가 없으면 문이 안 선다', () => {
+    expect(buttonAttrs(render('study', 0), '목표 없이 지내기')).toHaveLength(0);
+  });
+
+  it('독서엔 없다 — 독서 화면은 한 바이트도 안 바뀐다', () => {
+    expect(buttonAttrs(render('reading', 1_800), '목표 없이 지내기')).toHaveLength(0);
+  });
+
+  /**
+   * 독서 렌더 불변 — 존재 단언이 아니라 <b>건수</b>다(T-218). 변경 전 실측 2건(저장 + 돌아가기)을
+   * 상수로 박는다: 독서에 버튼이 하나라도 새면 여기서 죽는다.
+   */
+  it('독서 목표 화면의 버튼 수가 변경 전과 같다 — 새 문이 독서로 새지 않았다', () => {
+    expect(render('reading', 1_800).split('<button').length - 1).toBe(2);
+    expect(render('reading', 0).split('<button').length - 1).toBe(2);
+  });
+
+  /** 휠 0 가드는 그대로다 — 해제는 별도 문으로만 밟는다(주 버튼은 여전히 0을 못 보낸다). */
+  it('공부에서도 휠 0 가드는 그대로다 — 실수 경로는 안 열렸다', () => {
+    expect(buttonAttrs(render('study', 0), '저장')[0]).toContain('disabled');
+  });
+});
+
+/**
+ * 소스 배선 — 정적 렌더는 `onClick` 핸들러를 마크업에 안 실어(T-149) 「어느 값이 어느 문으로 가는가」를
+ * 렌더로 못 본다. 그래서 소스를 읽되 <b>건수와 전체 인자열</b>로 잰다(존재 단언은 뒤바뀜을 못 잡는다, T-218).
+ */
+describe('목표 해제 소스 배선', () => {
+  const source = readFileSync(new URL('./screens/Goal.tsx', import.meta.url), 'utf8');
+  const count = (needle: string) => source.split(needle).length - 1;
+
+  /** ⚡ `selected`로 바꿔 배선하면 휠을 돌리는 동안 버튼이 나타났다 사라진다 — 렌더 테스트는 못 잡는다. */
+  it('노출 조건은 current를 본다 — selected가 아니다', () => {
+    expect(count('showClearGoal(variant, current)')).toBe(1);
+    expect(count('showClearGoal(variant, selected)')).toBe(0);
+  });
+
+  it('해제 버튼은 0을, 주 버튼은 고른 값을 보낸다 — 두 문이 뒤바뀌면 여기서 죽는다', () => {
+    expect(count('onClick={() => save(0)}')).toBe(1);
+    expect(count('onClick={() => save(selected)}')).toBe(1);
+  });
+});
+
+/**
  * 저장 분기 — <b>variant가 어느 문을 두드리는가</b>. 화면 밖으로 꺼내 둔 이유는 늘 같다(정적 렌더라
  * 「저장」 클릭이 안 돈다, T-149): 클로저 안에 두면 이 분기를 겨눌 계측기가 소스 grep밖에 안 남는다.
  *
@@ -267,6 +355,15 @@ describe('목표 저장 분기 (saveGoal)', () => {
     const [url, init] = lastRequest();
     expect(url).toBe('http://localhost:8080/api/study/goal');
     expect(init.body).toBe(JSON.stringify({ dailyGoalSeconds: 5400 }));
+  });
+
+  /** ⚡ 0을 falsy로 걸러 요청 자체를 안 보내는 구현 — 화면은 조용히 아무 일도 안 한 것처럼 보인다. */
+  it('해제(0)도 같은 문으로 실제 요청을 보낸다 — 0을 falsy로 걸러 삼키면 안 된다', async () => {
+    await saveGoal('study', 0);
+
+    const [url, init] = lastRequest();
+    expect(url).toBe('http://localhost:8080/api/study/goal');
+    expect(init.body).toBe(JSON.stringify({ dailyGoalSeconds: 0 }));
   });
 
   it('독서는 그대로 /api/miniapp/goal — 분기가 한쪽으로 쏠리지 않았다', async () => {
