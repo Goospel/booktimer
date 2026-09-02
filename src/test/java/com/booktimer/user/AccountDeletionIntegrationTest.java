@@ -21,6 +21,8 @@ import com.booktimer.session.StudySession;
 import com.booktimer.session.StudySessionRepository;
 import com.booktimer.story.Story;
 import com.booktimer.story.StoryRepository;
+import com.booktimer.study.StudyPlanItem;
+import com.booktimer.study.StudyPlanItemRepository;
 import com.booktimer.timer.ReadingGoalService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -68,6 +70,8 @@ class AccountDeletionIntegrationTest {
     private StudySessionRepository studySessionRepository;
     @Autowired
     private StudyDailyCheckRepository studyDailyCheckRepository;
+    @Autowired
+    private StudyPlanItemRepository studyPlanItemRepository;
     @Autowired
     private StoryRepository storyRepository;
     @Autowired
@@ -256,6 +260,32 @@ class AccountDeletionIntegrationTest {
                 StudyBook.register(user, "정보처리기사 실기", null, null, null, null, null));
 
         // study_book.user_id FK가 정리되지 않으면 flush 시 제약 위반.
+        assertThatCode(() -> {
+            accountService.deleteAccount(email, "rawpw1234");
+            assertThat(userRepository.findByEmail(email)).isEmpty();
+        }).doesNotThrowAnyException();
+    }
+
+    /**
+     * 공부 <b>일정</b>(study_plan_item)은 FK가 둘이라 정리 <b>순서</b>까지 걸려 있다 —
+     * {@code user_id → users}와 {@code book_id → study_book}. 그래서 일정을 study_book보다 <b>앞</b>에
+     * 지워야 하고, 뒤로 가면 「공부 책에 일정을 걸어 둔 사람만」 탈퇴가 실패한다(story ↔ book과 같은 함정).
+     *
+     * <p>{@code FlywayMigrationTest}는 「FK 있는 테이블 == purge 목록」만 대조한다 — 목록에 이름이 있어도
+     * purge 코드에 줄이 없으면 초록이다. 그 사각을 여기서 실제 삭제로 닫는다.
+     */
+    @Test
+    @DisplayName("공부 책에 걸린 일정(study_plan_item)을 가진 사용자도 FK 위반 없이 탈퇴된다(일정 → 책 순서)")
+    void deleteAccount_withStudyPlanItem_succeeds() {
+        String email = "studyplanquit@booktimer.com";
+        User user = userRepository.saveAndFlush(
+                User.of(email, passwordEncoder.encode("rawpw1234"), "계획하던이", "Asia/Seoul", Role.USER));
+        StudyBook book = studyBookRepository.saveAndFlush(
+                StudyBook.register(user, "정보처리기사 실기", null, null, null, null, null));
+        studyPlanItemRepository.saveAndFlush(
+                StudyPlanItem.of(user, LocalDate.now(), book, "정보처리기사 실기", "3장 함수 p.45-70"));
+
+        // study_plan_item의 두 FK가 순서대로 정리되지 않으면 flush 시 제약 위반.
         assertThatCode(() -> {
             accountService.deleteAccount(email, "rawpw1234");
             assertThat(userRepository.findByEmail(email)).isEmpty();

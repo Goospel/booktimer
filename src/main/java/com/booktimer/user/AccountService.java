@@ -14,6 +14,7 @@ import com.booktimer.security.SessionInvalidator;
 import com.booktimer.session.ReadingGoalWaiverRepository;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.session.StudyDailyCheckRepository;
+import com.booktimer.study.StudyPlanItemRepository;
 import com.booktimer.session.StudySessionRepository;
 import com.booktimer.story.StoryLikeRepository;
 import com.booktimer.story.StoryRepository;
@@ -43,6 +44,7 @@ public class AccountService {
     private final ReadingSessionRepository sessionRepository;
     private final StudySessionRepository studySessionRepository;
     private final StudyDailyCheckRepository studyDailyCheckRepository;
+    private final StudyPlanItemRepository studyPlanItemRepository;
     private final FollowRepository followRepository;
     private final BlockRepository blockRepository;
     private final ReportRepository reportRepository;
@@ -66,6 +68,7 @@ public class AccountService {
                           ReadingSessionRepository sessionRepository,
                           StudySessionRepository studySessionRepository,
                           StudyDailyCheckRepository studyDailyCheckRepository,
+                          StudyPlanItemRepository studyPlanItemRepository,
                           FollowRepository followRepository,
                           BlockRepository blockRepository,
                           ReportRepository reportRepository,
@@ -88,6 +91,7 @@ public class AccountService {
         this.sessionRepository = sessionRepository;
         this.studySessionRepository = studySessionRepository;
         this.studyDailyCheckRepository = studyDailyCheckRepository;
+        this.studyPlanItemRepository = studyPlanItemRepository;
         this.followRepository = followRepository;
         this.blockRepository = blockRepository;
         this.reportRepository = reportRepository;
@@ -246,6 +250,9 @@ public class AccountService {
         sessionRepository.deleteByUser(user);
         studySessionRepository.deleteByUser(user);  // FK: study_session.user_id → users (공부 측정 원장)
         studyDailyCheckRepository.deleteByUser(user); // FK: study_daily_check.user_id → users (공부 일정 판정)
+        // FK: study_plan_item.user_id → users (공부 일정 원장). study_book보다 **앞**이다 —
+        // study_plan_item.book_id가 study_book을 참조하므로 책을 먼저 지우면 제약 위반이 난다(book↔story와 같은 이유).
+        studyPlanItemRepository.deleteByUser(user);
         timerRepository.deleteByUser(user);
         goalChangeRepository.deleteByUser(user);   // FK: reading_goal_change.user_id → users (유저 삭제 전 정리)
         goalWaiverRepository.deleteByUser(user);   // FK: reading_goal_waiver.user_id → users (리워드 광고 용서 기록)

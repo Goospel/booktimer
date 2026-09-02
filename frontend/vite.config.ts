@@ -59,6 +59,11 @@ const apps = {
     dir: '../src/main/resources/static/onboarding',
     entry: 'onboarding.js',
   },
+  study: {
+    input: 'src/study/main.ts',
+    dir: '../src/main/resources/static/study',
+    entry: 'study.js',
+  },
 } as const;
 
 const cfg = apps[APP as keyof typeof apps] ?? apps.garden;

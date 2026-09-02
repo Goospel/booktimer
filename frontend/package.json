@@ -2,7 +2,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "npm run build:garden && npm run build:search && npm run build:history && npm run build:personality && npm run build:follow-list && npm run build:book-readers && npm run build:block-list && npm run build:profile && npm run build:books && npm run build:dashboard && npm run build:onboarding",
+    "build": "npm run build:garden && npm run build:search && npm run build:history && npm run build:personality && npm run build:follow-list && npm run build:book-readers && npm run build:block-list && npm run build:profile && npm run build:books && npm run build:dashboard && npm run build:onboarding && npm run build:study",
     "build:garden": "cross-env APP=garden vite build",
     "build:search": "cross-env APP=search vite build",
     "build:history": "cross-env APP=history vite build",
@@ -14,6 +14,7 @@
     "build:books": "cross-env APP=books vite build",
     "build:dashboard": "cross-env APP=dashboard vite build",
     "build:onboarding": "cross-env APP=onboarding vite build",
+    "build:study": "cross-env APP=study vite build",
     "test": "vitest run",
     "test:e2e": "playwright test"
   },
