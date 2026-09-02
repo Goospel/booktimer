@@ -675,7 +675,7 @@ describe('책 검색 엔터 제출', () => {
   it('제목 입력을 form으로 감싼다', () => {
     const markup = renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} onOpenBookMargin={() => {}} />
+        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onOpenBookMargin={() => {}} />
       </TDSMobileProvider>,
     );
 
@@ -697,7 +697,7 @@ describe('책 검색 손잡이', () => {
   const search = () =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} onOpenBookMargin={() => {}} />
+        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onOpenBookMargin={() => {}} />
       </TDSMobileProvider>,
     );
 
@@ -749,7 +749,7 @@ describe('책 검색칸 — 안 보이는 라벨 자리를 걷었다', () => {
   const search = () =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} onOpenBookMargin={() => {}} />
+        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onOpenBookMargin={() => {}} />
       </TDSMobileProvider>,
     );
 
@@ -870,7 +870,7 @@ describe('책 검색 입력칸 힌트', () => {
   const search = () =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} onOpenBookMargin={() => {}} />
+        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onOpenBookMargin={() => {}} />
       </TDSMobileProvider>,
     );
 
@@ -884,41 +884,25 @@ describe('책 검색 입력칸 힌트', () => {
 });
 
 /**
- * 책 추가의 나가는 길 — 하단 버튼을 걷고 **상단 「돌아가기」 하나**로 통일했다(2026-08-16).
- * 앱 전체가 같은 자리·같은 모양으로 나가야 한다. 개수를 세는 것이 핵심이다 — 위아래 둘이 되면
- * 「통일」이 아니라 중복이고, 존재 단언만으로는 그걸 못 잡는다.
+ * 책 추가의 나가는 길 — **토스 네이티브 내비게이션 바의 뒤로가기 하나**(2026-09-02, T-220).
+ * 08-16에 하단 버튼을 걷고 상단 알약으로 통일했는데, 그 알약이 네이티브 뒤로가기와 <b>동시 노출</b>이라
+ * 심사 필수 항목에 걸렸다. 나가는 길은 네이티브 하나이고 `useBackClose(mode === 'search', …)`가 받는다.
+ *
+ * <p>「요청 중 잠금」은 함께 폐기했다 — 네이티브 버튼에는 `disabled`를 걸 수 없다(수용하는 회귀).
  */
 describe('책 추가 — 나가는 길', () => {
   const search = () =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} onOpenBookMargin={() => {}} />
+        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onOpenBookMargin={() => {}} />
       </TDSMobileProvider>,
     );
 
-  it('「돌아가기」가 정확히 하나다 — 상단 손잡이와 하단 버튼이 겹치지 않는다', () => {
-    expect(search().match(/돌아가기/g)).toHaveLength(1);
-  });
-
-  it('제목보다 위에 온다 — 목록이 길어도 나갈 길을 찾아 내려가지 않는다', () => {
+  it('자체 「돌아가기」가 0건이다 — 제목은 그대로 선다', () => {
     const markup = search();
 
-    expect(markup).toContain('돌아가기');
-    expect(markup.indexOf('돌아가기')).toBeLessThan(markup.indexOf('책 추가'));
-  });
-
-  it('추가 요청 중에는 잠근다 — 응답 전에 나가면 결과를 못 본다', () => {
-    const busy = renderToStaticMarkup(
-      <TDSMobileProvider userAgent={userAgent}>
-        <BookSearch busy error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} onOpenBookMargin={() => {}} />
-      </TDSMobileProvider>,
-    );
-    // 손잡이 앞부분만 잘라 본다. 한가할 때도 함께 봐야 의미가 있다 — 손잡이가 화면 아래에 있으면
-    // 이 구간에 입력·검색 버튼의 disabled가 섞여 들어와 busy 단언만으로는 저절로 참이 된다(T-181).
-    const backAt = (m: string) => m.slice(0, m.indexOf('돌아가기'));
-
-    expect(backAt(busy)).toContain('disabled');
-    expect(backAt(search())).not.toContain('disabled');
+    expect(markup).toContain('책 추가');
+    expect(markup.match(/돌아가기/g)).toBeNull();
   });
 });
 
@@ -998,7 +982,7 @@ describe('책 담을 곳 고르기', () => {
   it('검색 화면 진입 직후에는 시트가 없다 — 화면을 덮는 것은 사용자가 부른 뒤에만(T-183)', () => {
     const markup = renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} onOpenBookMargin={() => {}} />
+        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onOpenBookMargin={() => {}} />
       </TDSMobileProvider>,
     );
 

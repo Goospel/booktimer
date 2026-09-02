@@ -502,12 +502,8 @@ export function Sheet({
 /**
  * 화면 공통 껍데기 — 제목 + 본문 여백. 미니앱은 화면이 다섯 뿐이라 레이아웃도 이 하나면 된다.
  *
- * <p>`onBack`을 주면 **제목 위 줄에 「‹ 돌아가기」 알약**을 세운다. 나갈 길이 화면 맨 아래에만 있으면
- * 목록이 긴 화면에서 나가려고 끝까지 스크롤해야 한다 — 그래서 위다.
- *
- * <p>글자를 붙인 것은 취향이 아니라 두 번의 제보다(2026-08-16): 배경 없는 `←` 글리프는 ① 버튼으로
- * 안 보이고 ② 직선 화살표가 「이전 화면」보다 「왼쪽 이동」으로 읽힌다. 아이콘을 아무리 다듬어도 뜻은
- * 읽는 사람의 추론에 맡겨지므로, 인식률을 아이콘 디자인에 걸지 않고 글자로 못 박는다.
+ * <p>나가는 길은 **토스 네이티브 내비게이션 바의 뒤로가기**다(2026-09-02 심사 체크리스트 필수 항목 —
+ * 자체 뒤로가기와 동시 노출 금지). 08-16의 「‹ 돌아가기」 알약(#830·#831)은 그래서 걷었다.
  *
  * <p>제목은 **선택**이다. 홈처럼 첫 카드가 곧 히어로인 화면에서는 제목이 정보를 하나도 안 보태면서
  * 자리만 먹었다(「구스펠님의 오늘」은 바로 아래 「오늘 읽은 시간」의 중복이고, 그 화면 이름은 탭바가
@@ -520,20 +516,12 @@ export function Sheet({
  */
 export function Screen({
   title,
-  onBack,
-  backDisabled,
   right,
   above,
   subtitle,
   children,
 }: {
   title?: string;
-  onBack?: () => void;
-  /**
-   * 요청이 도는 중엔 못 나가게 잠근다(책 추가·계정 연결). 하단 「돌아가기」 버튼이 `disabled={busy}`로
-   * 하던 일을 그대로 옮겨 온 것 — 잠금을 「감추기」로 하면 34px 줄이 사라졌다 나타나 화면이 튄다.
-   */
-  backDisabled?: boolean;
   /** 제목 줄 오른쪽 끝 손잡이(서재의 「펼쳐보기」) — 제목이 없으면 그릴 줄 자체가 없다. */
   right?: ReactNode;
   /** 제목보다 **위**에 얹히는 도구 줄 — 제목이 없는 화면에서도 그린다. */
@@ -544,47 +532,6 @@ export function Screen({
 }) {
   return (
     <main style={{ padding: '24px 20px 40px', maxWidth: 480, margin: '0 auto' }}>
-      {/* 나갈 길이 맨 위다 — 제목·도구줄보다 앞. 제목이 없는 화면에서도 그린다(출구는 제목과 무관). */}
-      {onBack !== undefined && (
-        <div style={{ display: 'flex', marginBottom: 14 }}>
-          <button
-            type="button"
-            onClick={onBack}
-            disabled={backDisabled}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 2,
-              height: 34,
-              padding: '0 14px 0 8px',
-              border: 'none',
-              borderRadius: 999,
-              background: 'var(--adaptiveGrey100, #EDE7DA)',
-              color: 'var(--adaptiveGrey700, #57534A)',
-              fontSize: 15,
-              fontWeight: 700,
-              opacity: backDisabled === true ? 0.5 : 1,
-              cursor: backDisabled === true ? 'default' : 'pointer',
-            }}
-          >
-            {/* 꺾쇠다 — 직선 화살표는 「이전 화면」이 아니라 「왼쪽 이동」으로 읽힌다. */}
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2.2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M14.5 5 8 12l6.5 7" />
-            </svg>
-            돌아가기
-          </button>
-        </div>
-      )}
       {above}
       {title !== undefined && (
       <>

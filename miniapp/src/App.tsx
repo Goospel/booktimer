@@ -679,7 +679,7 @@ export function App() {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [silentRefresh]);
 
-  // 탭 밖 전체 화면도 뒤로가기로 나갈 수 있다 — 각 화면의 「돌아가기」와 같은 자리로 돌려보낸다.
+  // 탭 밖 전체 화면을 나가는 유일한 길이다 — 자체 뒤로가기를 걷었으므로(T-220) 네이티브 back이 여기로 온다.
   useBackClose(view === 'link', () => setView('auth'));
   useBackClose(view === 'goal', () => {
     setFirstRun(false);
@@ -764,7 +764,7 @@ export function App() {
       );
 
     case 'link':
-      return <LinkAccount onLinked={() => load('main')} onBack={() => setView('auth')} />;
+      return <LinkAccount onLinked={() => load('main')} />;
 
     case 'error':
       return (
@@ -1005,7 +1005,6 @@ export function App() {
           // 시트가 떠 있는 동안은 이 화면의 배너를 접는다 — 딤 뒤에서 도는 노출은 무효 트래픽이다.
           adSuppressed={margin.composeBook !== null}
           timerStopped={margin.timerStopped === true}
-          onBack={() => setMargin(null)}
           onCompose={(book) => openMargin({ ...margin, bookId: under, composeBook: book })}
           // 닫으면서 연다 — 뒤로 가면 출발한 탭으로 돌아간다(검색 시트와 같은 교체 경로, T-166).
           onOpenProfile={(picked) => {
@@ -1031,7 +1030,6 @@ export function App() {
         <BookMarginAll
           isbn13={margin.isbn13}
           timerStopped={margin.timerStopped === true}
-          onBack={() => setMargin(null)}
           // 「내 여백」 탭 — 사람축 화면으로 갈아탄다(작성·삭제·토글이 사는 자리). 이미 여백 안이라
           // 측정은 진작 끝났으므로 문을 다시 지나도 아무 일이 없다(멱등).
           onOpenMine={(bookId) =>

@@ -280,7 +280,10 @@ export function Profile({
   onOpenMargin,
 }: {
   loginId: string;
-  /** 없으면 「돌아가기」를 그리지 않는다 — 탭 루트(내 책방)에는 돌아갈 곳이 없고 출구가 탭바다. */
+  /**
+   * 차단한 뒤 돌려보낼 자리 — 차단하면 이 책방이 그 순간 404라 머무를 화면이 없다. 남의 책방에만 있고
+   * 탭 루트(내 책방)에는 없다(차단 진입 자체가 없다). 나가는 길과는 무관하다 — 그건 네이티브 뒤로가기다.
+   */
   onBack?: () => void;
   onError: (error: Error) => void;
   /** 제목보다 **위**에 얹히는 슬롯 — 책방 셸이 검색 진입을 여기 끼운다. */
@@ -435,7 +438,7 @@ export function Profile({
     // 로딩 중에도 header를 그린다 — 여백·검색은 프로필 조회와 독립이라, 이 분기에서 빼면
     // 탭 진입 직후(응답 전) 상단이 통째로 비어 화면이 죽은 것처럼 보인다.
     return (
-      <Screen title="책방" onBack={onBack} above={header}>
+      <Screen title="책방" above={header}>
         {/* 못 받았을 때 나갈 길만 있으면 실패가 곧 막다른 길이다 — 그 자리에서 다시 받을 길도 함께 준다. */}
         <ErrorMessage message={error} onRetry={load} />
         {error === null && <Loading />}
@@ -479,7 +482,6 @@ export function Profile({
             />
           )
         }
-        onBack={onBack}
       />
       <div style={{ padding: '0 20px 40px' }}>
         {notice !== null && (
@@ -518,7 +520,6 @@ export function ProfileCard({
   safety,
   header,
   onOpenFollowList,
-  onBack,
 }: {
   profile: ProfileResponse;
   books: ProfileBook[];
@@ -547,21 +548,19 @@ export function ProfileCard({
   /** 제목보다 **위**에 얹히는 슬롯 — 셸이 검색 진입바·여백 스트립을 끼운다. */
   header?: ReactNode;
   onOpenFollowList?: (type: FollowListType) => void;
-  onBack?: () => void;
 }) {
   const sectionTitle = shelfTitle(activeTag, statusFilter, books.length);
   const openable = followCountsOpenable(profile.self, onOpenFollowList !== undefined);
   const actions = personalityActions(profile.self, personalityStatus, PERSONALITY_AD_GROUP_ID);
 
   /*
-   * 나가는 길은 **상단 「돌아가기」 하나**다. 이 화면은 같은 문제를 두 번 겪었다 — 처음엔 제목 옆 `←`
-   * 글리프였는데 배경이 없어 버튼으로 안 읽혀 지우고 하단 버튼만 남겼고, 여백 화면에서 같은 지적이 또
-   * 나와 **글자가 붙은 알약**이 생겼다(2026-08-16). 회피 이유가 사라졌으므로 위로 되돌리고 하단 버튼을
-   * 걷는다. 탭 루트(내 책방)는 `onBack`이 없어 아무것도 안 그려진다 — 출구는 플로팅 탭바다.
+   * 나가는 길은 **토스 네이티브 내비게이션 바의 뒤로가기**다(2026-09-02, T-220). 이 화면은 같은 자리에서
+   * 세 번 바뀌었다 — 제목 옆 `←` 글리프 → 하단 버튼 → 글자가 붙은 알약(2026-08-16). 그 알약이 네이티브
+   * 뒤로가기와 동시 노출이라 심사 필수 항목에 걸려 통째로 걷었다. 탭 루트의 출구는 플로팅 탭바 그대로다.
    */
   return (
     // 검색·여백는 화면 소속이 아니라 그 위에 얹히는 도구다 — 신원 블록보다 위로 올린다.
-    <Screen above={header} onBack={onBack}>
+    <Screen above={header}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         <Avatar nickname={profile.nickname} />
         <div style={{ flex: 1, display: 'flex', minWidth: 0 }}>

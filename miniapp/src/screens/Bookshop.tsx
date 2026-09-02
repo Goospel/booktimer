@@ -134,7 +134,6 @@ export function Bookshop({
         key={marginEpoch}
         loginId={margin.loginId}
         bookId={margin.bookId}
-        onBack={() => setMargin(null)}
         onCompose={setComposing}
         // 닫으면서 여는 교체 경로 — 좋아요 명단에서 그 사람의 책방으로 간다(검색 시트와 같은 관례, T-166).
         onOpenProfile={(loginId) => {
@@ -186,7 +185,6 @@ export function Bookshop({
           closeSearch();
           setOpen(loginId);
         }}
-        onClose={closeSearch}
         onError={onError}
       />
     );
@@ -214,7 +212,8 @@ export function Bookshop({
           <ErrorMessage message={error} />
         </Screen>
       ) : (
-        // onBack을 주지 않는다 — 탭 루트라 「돌아가기」가 갈 곳이 없다(출구는 플로팅 탭바).
+        // onBack을 주지 않는다 — 탭 루트라 나갈 곳이 없다(출구는 플로팅 탭바). 남의 책방에만 있는
+        // 차단 진입도 여기엔 없어, 차단 후 돌려보낼 자리도 필요 없다.
         <Profile
           loginId={handle}
           onError={onError}

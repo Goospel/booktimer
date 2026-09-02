@@ -1,7 +1,8 @@
-import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
+
+import { sourceFiles, stripComments } from './source-scan';
 
 /**
  * TDS `Text`에 `style={{ textAlign }}`을 주지 않는다 — <b>DOM에 안 실리는 죽은 키</b>다
@@ -26,27 +27,6 @@ import { describe, expect, it } from 'vitest';
 
 /** TDS `Text`가 자기 prop으로 덮어써 `style`에 적어도 DOM에 안 실리는 키. */
 const DEAD_KEYS = ['textAlign'];
-
-/** 테스트·목·픽스처는 제품 마크업이 아니다. */
-const SKIP_FILES = /\.test\.(ts|tsx)$|^dev-mock\.ts$|^test-fixtures\.ts$/;
-
-function sourceFiles(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) return sourceFiles(full);
-    if (!/\.tsx$/.test(entry.name) || SKIP_FILES.test(entry.name)) return [];
-    return [full];
-  });
-}
-
-/** 주석을 걷는다 — 주석 속 `<Text style={{ textAlign }}` 예시는 코드가 아니다. 줄머리 `//`만 본다(URL의 `//`를 살리려고). */
-export function stripComments(src: string): string {
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .split('\n')
-    .filter((line) => !line.trimStart().startsWith('//'))
-    .join('\n');
-}
 
 /**
  * `<Text …>` 여는 태그 전부 — 중괄호 깊이를 세어 속성 속 `=>`·`>`에 속지 않는다.

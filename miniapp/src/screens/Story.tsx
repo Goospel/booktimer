@@ -161,7 +161,6 @@ export function TimerStoppedNotice() {
 export function BookMargin({
   loginId,
   bookId,
-  onBack,
   onCompose,
   onOpenProfile,
   onError,
@@ -170,7 +169,6 @@ export function BookMargin({
 }: {
   loginId: string;
   bookId: number;
-  onBack: () => void;
   /**
    * 「여백에 글 남기기」 — 작성 시트를 여는 것은 셸이 든다(이 화면 위에 겹쳐 서므로 「무엇이 깔리는가」의
    * 주인은 하나여야 한다). 시트가 뜨면 셸이 `adSuppressed`로 이 화면의 배너도 함께 접는다.
@@ -279,7 +277,7 @@ export function BookMargin({
 
   if (margin === null) {
     return (
-      <Screen title="여백" onBack={onBack}>
+      <Screen title="여백">
         {timerStopped && <TimerStoppedNotice />}
         {/* 못 받았을 때 나갈 길만 있으면 실패가 곧 막다른 길이다 — 그 자리에서 다시 받을 길도 함께 준다. */}
         <ErrorMessage message={error} onRetry={load} />
@@ -300,7 +298,7 @@ export function BookMargin({
     <>
       {tab === 'all' && tabs !== undefined ? (
         all === null ? (
-          <Screen title="여백" onBack={onBack}>
+          <Screen title="여백">
             {tabs}
             <ErrorMessage message={error} />
             {error === null && <Loading />}
@@ -310,7 +308,6 @@ export function BookMargin({
             data={{ ...all, entries: likes.merge(all.entries) }}
             now={Date.now()}
             error={error}
-            onBack={onBack}
             onToggleLike={likes.toggleLike}
             onShowLikers={likes.showLikers}
             onOpenProfile={onOpenProfile}
@@ -332,7 +329,6 @@ export function BookMargin({
           onShowLikers={likes.showLikers}
           onOpenMenu={(e) => setMenuOf(e.id)}
           onToggleExpand={toggleExpand}
-          onBack={onBack}
           timerStopped={timerStopped}
           adSuppressed={adSuppressed}
         />
@@ -590,7 +586,6 @@ export function BookMarginAllView({
   data,
   now,
   error,
-  onBack,
   onToggleLike,
   onShowLikers,
   onOpenProfile,
@@ -603,7 +598,6 @@ export function BookMarginAllView({
   /** 상대 시각의 기준 — 밖에서 받아야 테스트가 결정론이 된다. */
   now: number;
   error: string | null;
-  onBack: () => void;
   onToggleLike: (entry: Likeable) => void;
   onShowLikers?: (entry: Likeable) => void;
   onOpenProfile: (loginId: string) => void;
@@ -616,7 +610,7 @@ export function BookMarginAllView({
   const { book, myBookId, totalCount, entries } = data;
 
   return (
-    <Screen title="여백" onBack={onBack}>
+    <Screen title="여백">
       {timerStopped && <TimerStoppedNotice />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <BookCover url={book.coverUrl} title={book.title} width={48} />
@@ -692,14 +686,12 @@ export function BookMarginAllView({
  */
 export function BookMarginAll({
   isbn13,
-  onBack,
   onOpenMine,
   onOpenProfile,
   onError,
   timerStopped = false,
 }: {
   isbn13: string;
-  onBack: () => void;
   /** 「내 여백」 탭 — 내가 가진 책이면 그 책 id로 사람축 화면을 연다. */
   onOpenMine: (bookId: number) => void;
   onOpenProfile: (loginId: string) => void;
@@ -737,7 +729,7 @@ export function BookMarginAll({
 
   if (data === null) {
     return (
-      <Screen title="여백" onBack={onBack}>
+      <Screen title="여백">
         {timerStopped && <TimerStoppedNotice />}
         {/* 못 받았을 때 나갈 길만 있으면 실패가 곧 막다른 길이다 — 그 자리에서 다시 받을 길도 함께 준다. */}
         <ErrorMessage message={error} onRetry={load} />
@@ -755,7 +747,6 @@ export function BookMarginAll({
         data={{ ...data, entries: likes.merge(data.entries) }}
         now={Date.now()}
         error={error}
-        onBack={onBack}
         onToggleLike={likes.toggleLike}
         onShowLikers={likes.showLikers}
         onOpenProfile={onOpenProfile}
@@ -840,7 +831,6 @@ export function MarginView({
   onShowLikers,
   onOpenMenu,
   onToggleExpand,
-  onBack,
   timerStopped = false,
   adSuppressed = false,
 }: {
@@ -859,7 +849,6 @@ export function MarginView({
   onToggleExpand?: (id: number) => void;
   /** 「내가 쓴 여백 / 모두의 여백」 탭 줄 — 내 책이고 isbn13이 있을 때만 셸이 넘긴다. */
   tabs?: ReactNode;
-  onBack: () => void;
   /** 여기 들어오느라 측정을 끝냈는가 — {@link TIMER_STOPPED_NOTICE}를 여는 스위치다. */
   timerStopped?: boolean;
   /**
@@ -876,7 +865,7 @@ export function MarginView({
   const subtitle = [book.author, self ? null : `${ownerNickname} @${loginId}`].filter((s) => s !== null).join(' · ');
 
   return (
-    <Screen title="여백" onBack={onBack}>
+    <Screen title="여백">
       {timerStopped && <TimerStoppedNotice />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <BookCover url={book.coverUrl} title={book.title} width={48} />
