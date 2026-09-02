@@ -187,10 +187,11 @@ await shot('07-study-library')
 // 탭 이름이 「책방」이 아니라 「일정」인 것 자체가 공부 모드 탭바(`STUDY_TABS`)의 증거다.
 // ⚠️ 목 픽스처는 표식을 **최근 4일**에 놓는다 — 달 초에 찍으면 그것들이 지난달에 있어 이번 달 격자가
 // 통째로 빈다(2026-09-01 실측: 9월이 백지였다). 빈 달력은 이 화면이 뭘 하는지 말하지 못하므로,
-// 표식이 하나도 없으면 지난달로 한 칸 물러선다. 달 중순엔 이 분기가 안 타고 이번 달이 그대로 찍힌다.
+// 표식이 3개 미만이면 지난달로 한 칸 물러선다 — 셋은 원·테두리·점을 다 보일 최소치다(09-02 실측: 9월에
+// 점 하나뿐이라 0개 기준으론 안 물러섰고 백지와 같은 그림이 됐다). 달 중순엔 이 분기가 안 타고 이번 달이 찍힌다.
 await tab('일정')
 const MARKS = '[data-cal-state="kept"],[data-cal-state="missed"],[data-cal-dot]'
-if ((await page.locator(MARKS).count()) === 0) {
+if ((await page.locator(MARKS).count()) < 3) {
     await page.click('button[aria-label="지난달 보기"]')
     await settle()
 }
