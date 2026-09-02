@@ -953,19 +953,22 @@ export function waiverErrorMessage(error: Error): string {
  */
 export function BookSheet({
   books,
+  title,
   disabled,
   onPick,
   onSkip,
   onClose,
 }: {
   books: BookOption[];
+  /** 물음 — 안 주면 독서 문구다. 기본값이 옛 리터럴이라 독서 렌더는 이 프롭이 생겨도 바이트 불변이다. */
+  title?: string;
   disabled: boolean;
   onPick: (book: BookOption) => void;
   onSkip: () => void;
   onClose: () => void;
 }) {
   return (
-    <Sheet title="무슨 책을 읽으셨나요?" onClose={onClose}>
+    <Sheet title={title ?? '무슨 책을 읽으셨나요?'} onClose={onClose}>
       {books.map((book) => (
           <button
             key={book.id}

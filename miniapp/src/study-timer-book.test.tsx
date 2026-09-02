@@ -3,16 +3,17 @@ import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { startToastMessage, timerStartBookId } from './App';
-import type { DashboardResponse, StudyBookRow, StudyState } from './api';
+import { ChangeBookSheet, StartToast, startToastMessage, timerStartBookId } from './App';
+import type { BookOption, DashboardResponse, StudyBookRow, StudyState } from './api';
 import { IDLE_STUDY } from './api';
 import { mockRequest } from './dev-mock';
-import { Home } from './screens/Home';
+import { BookSheet, Home } from './screens/Home';
 import { studyBookChips } from './screens/StudyLibrary';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
 /**
- * 공부 타이머–책 연결(PR-2) — 시작할 때 책을 고르고, 홈이 그 책을 말하고, 서재 카드가 누적 시간을 말한다.
+ * 공부 타이머–책 연결(PR-2·PR-3) — 시작할 때 책을 고르고, 홈이 그 책을 말하고, 서재 카드가 누적 시간을
+ * 말하며, 책 없이 끝낸 측정에 나중에 책을 붙이고 재는 도중 대상을 바꾼다.
  *
  * <p>하니스가 정적 렌더라(effect·클릭 없음) 배선은 순수 함수와 <b>소스 문자열</b>로 잰다(T-149:
  * 못 도는 경로에 부정 단언을 두지 않는다).
@@ -324,5 +325,213 @@ describe('dev-mock — 고르고 재고 쌓인다', () => {
     const shelf = await mockRequest<{ books: StudyBookRow[] }>('/api/study/books');
     // 앞 테스트가 이미 이 책에 얹었을 수 있어 하한으로 잰다 — 재는 것은 「픽스처가 실려 온다」다.
     expect(shelf.books.find((b) => b.id === 101)?.totalSeconds).toBeGreaterThanOrEqual(12_000);
+  });
+});
+
+// ══ PR-3: 종료 후 태깅 시트 + 측정 중 교체 시트 ══════════════════════════════
+
+function render(node: React.ReactNode): string {
+  return renderToStaticMarkup(<TDSMobileProvider userAgent={userAgent}>{node}</TDSMobileProvider>);
+}
+
+/** 그 책 행의 여는 태그만 — 배경·표시는 행 단위라 마크업 전체로 재면 옆 행의 값에 속는다. */
+function rowTag(markup: string, title: string): string {
+  const at = markup.indexOf(`data-book-title="${title}"`);
+  expect(at).toBeGreaterThan(-1);
+  return markup.slice(markup.lastIndexOf('<button', at), markup.indexOf('>', at) + 1);
+}
+
+const option = (id: number, title: string): BookOption => ({ id, title, coverUrl: null, author: null });
+
+describe('BookSheet 제목 — 모드가 명사만 바꾼다', () => {
+  const sheet = (title?: string) =>
+    render(
+      <BookSheet books={[option(1, '데미안')]} title={title} disabled={false} onPick={() => {}} onSkip={() => {}} onClose={() => {}} />,
+    );
+
+  it('제목을 안 주면 독서 문구 그대로다 — 기본값이 옛 리터럴이라 독서 렌더가 바이트 불변이다', () => {
+    expect(sheet()).toContain('무슨 책을 읽으셨나요?');
+  });
+
+  it('공부 시트는 제목만 갈아 끼운다 — 「읽으셨나요」로 공부를 물으면 딴 원장 이야기가 된다', () => {
+    const markup = sheet('무슨 책을 공부하셨나요?');
+
+    expect(markup).toContain('무슨 책을 공부하셨나요?');
+    expect(markup).not.toContain('무슨 책을 읽으셨나요?');
+  });
+});
+
+describe('교체 장치 — 공부에도 [바꾸기]가 서고, 색은 토큰을 탄다', () => {
+  it('공부 토스트에도 표지 자리와 [바꾸기]가 선다 — 이제 공부에도 교체 문이 있다', () => {
+    const markup = render(<StartToast toast={{ book: null, changed: false, mode: 'study' }} onChange={() => {}} />);
+
+    expect(markup).toContain('바꾸기');
+    expect(markup).toContain('dashed'); // 책 없음 점선 표지 자리
+  });
+
+  it('[바꾸기] 배경이 --accentPill을 탄다 — 세이지 리터럴이면 공부 모드에 독서 색이 샌다', () => {
+    const markup = render(<StartToast toast={{ book: null, changed: false, mode: 'study' }} onChange={() => {}} />);
+
+    expect(markup).toContain('var(--accentPill');
+  });
+
+  it('교체 시트의 현재 행 배경도 같은 토큰이다 — 두 장치가 한 색을 본다', () => {
+    const markup = render(
+      <ChangeBookSheet books={[option(1, '데미안')]} currentBookId={1} disabled={false} onPick={() => {}} onClose={() => {}} />,
+    );
+
+    expect(rowTag(markup, '데미안')).toContain('var(--accentPill');
+  });
+});
+
+describe('배선 — 시트 두 장이 모드로 갈린다(소스)', () => {
+  // 주석을 먼저 걷는다(T-205) — 안 걷으면 블록을 주석 처리해 죽여도 문자열이 남아 통과한다.
+  const code = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+    .replace(/\{?\/\*[\s\S]*?\*\/\}?/g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+
+  it('공부 종료가 태깅 시트를 연다 — 안 열면 붙일 자리가 영영 없다', () => {
+    expect(code).toContain('setTagging({ sessionId: next.untaggedSessionId, study: true })');
+  });
+
+  it('붙일 책이 0권이면 안 연다 — 빈 시트는 닫는 것 말고 할 게 없는 막다른 길이다', () => {
+    expect(code).toMatch(/next\.untaggedSessionId != null && \(next\.books \?\? \[\]\)\.length > 0/);
+  });
+
+  it('태깅이 모드로 갈린다 — 공부 세션 id로 독서 문을 두드리면 남의 원장이라 404다', () => {
+    expect(code).toMatch(/tagging\.study\s*\?\s*tagStudyBook\(/);
+  });
+
+  it('태깅 응답으로 공부 상태를 갱신한다 — 재조회 없이 서재 칩이 따라와야 한다', () => {
+    expect(code).toMatch(/tagStudyBook\([^)]*\)\.then\(onStudyChange\)/);
+  });
+
+  it('교체가 모드로 갈린다 — 공부 교체가 독서 문을 두드리면 409다', () => {
+    expect(code).toMatch(/mode === 'study'\s*\?\s*changeActiveStudyBook\(/);
+  });
+
+  /**
+   * 교체 <b>응답</b>으로 공부 상태를 갱신한다. 안 하면 서버는 바뀌었는데 홈의 「측정 중 · 제목」이
+   * <b>옛 책</b>에 머문다 — 화면과 원장이 갈라진 채 다음 새로고침까지 간다(태깅 갈래와 같은 사정).
+   */
+  it('교체 응답으로 공부 상태를 갱신한다 — 안 하면 홈이 옛 책을 계속 말한다', () => {
+    expect(code).toMatch(/changeActiveStudyBook\(id\)\.then\(\(next\) => \{\s*onStudyChange\(next\)/);
+  });
+
+  /**
+   * 교체 토스트가 <b>지금 모드</b>를 실어야 한다. `'reading'`으로 굳으면 공부 교체가 「『제목』
+   * 측정으로 바꿨어요」가 되어, 명사만 갈리는 그 공식이 공부 쪽에서만 조용히 깨진다.
+   */
+  it('교체 토스트가 지금 모드를 실어 보낸다 — 굳히면 공부가 「공부 측정」이라 말하지 않는다', () => {
+    expect(code).toMatch(/showStartToast\(\{ book: current, changed: true, mode \}\)/);
+  });
+
+  /**
+   * 태깅 성공이 공부 서재를 <b>다시 세운다</b>. `StudyLibrary`는 자기 목록을 마운트 1회만 받으므로,
+   * 시트가 그 화면 <b>위에서</b> 닫히면 방금 붙인 시간이 카드에 안 뜬다. 그리고 측정 중엔 비-홈 탭이
+   * 잠겨 <b>시작한 탭에서 끝나므로</b>, 서재 탭에서 시작하면 100% 이 경로다. `key`를 올려 탭 전환과
+   * 같은 remount를 태운다 — 그 화면은 한 줄도 안 고친다.
+   */
+  it('태깅이 공부 서재를 다시 세운다 — 안 그러면 방금 붙인 시간이 그 카드에 안 뜬다', () => {
+    expect(code).toMatch(/tagStudyBook\([^)]*\)\.then\(onStudyChange\)[\s\S]{0,240}?setShelfEpoch\(/);
+    expect(code).toMatch(/<StudyLibrary key=\{shelfEpoch\}/);
+  });
+
+  it('시트 두 장의 재료가 모드로 갈린다 — 독서 책장으로 공부를 물으면 딴 서재가 뜬다', () => {
+    expect(code).toMatch(/tagging\.study \? \(study\.books \?\? \[\]\) : dashboard\.readingBooks/);
+    expect(code).toMatch(/title=\{tagging\.study \? '무슨 책을 공부하셨나요\?'/);
+    expect(code).toMatch(/mode === 'study' \? \(study\.activeBook\?\.id \?\? null\)/);
+  });
+
+  it('항상 참이 되는 게이트는 남기지 않는다 — toastHasBookControls는 사라졌다', () => {
+    expect(code).not.toContain('toastHasBookControls');
+  });
+});
+
+describe('dev-mock — 붙이고 바꾼다', () => {
+  it('책 없이 잰 뒤 그 세션에 책을 붙이면 시간이 그 책으로 옮겨간다', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-09-02T01:00:00Z'));
+      await mockRequest('/api/study/start', { body: { bookId: null } });
+      vi.setSystemTime(new Date('2026-09-02T01:01:00Z'));
+      const stopped = await mockRequest<StudyState>('/api/study/stop', { body: {} });
+
+      expect(typeof stopped.untaggedSessionId).toBe('number');
+      const before = stopped.books?.find((b) => b.id === 102)?.totalSeconds ?? 0;
+
+      const tagged = await mockRequest<StudyState>(`/api/study/sessions/${stopped.untaggedSessionId}/tag-book`, {
+        body: { bookId: 102 },
+      });
+
+      expect(tagged.books?.find((b) => b.id === 102)?.totalSeconds).toBe(before + 60);
+      expect(tagged.recentBookId).toBe(102);
+
+      // 같은 세션에 또 붙이면 409 — 안 막으면 한 번 잰 시간이 두 책에 두 번 쌓인다.
+      await expect(
+        mockRequest(`/api/study/sessions/${stopped.untaggedSessionId}/tag-book`, { body: { bookId: 101 } }),
+      ).rejects.toMatchObject({ status: 409, message: '책을 붙일 수 없는 측정입니다' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('엉뚱한 세션 id는 404다 — 남의 측정에 책을 붙일 수 없다', async () => {
+    await expect(
+      mockRequest('/api/study/sessions/999999/tag-book', { body: { bookId: 102 } }),
+    ).rejects.toMatchObject({ status: 404, message: '측정을 찾을 수 없습니다' });
+  });
+
+  it('책을 걸고 잰 측정엔 태깅 좌표가 없다 — 시트를 열 이유가 없다', async () => {
+    await mockRequest('/api/study/start', { body: { bookId: 101 } });
+    const stopped = await mockRequest<StudyState>('/api/study/stop', { body: {} });
+
+    expect(stopped.untaggedSessionId).toBeNull();
+  });
+
+  it('재는 도중 대상을 바꾸면 시간이 통째로 새 책에 붙는다 — 갈라지지 않는다', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-09-02T02:00:00Z'));
+      const started = await mockRequest<StudyState>('/api/study/start', { body: { bookId: 101 } });
+      expect(started.activeBook?.id).toBe(101);
+      const beforeA = started.books?.find((b) => b.id === 101)?.totalSeconds ?? 0;
+      const beforeB = started.books?.find((b) => b.id === 102)?.totalSeconds ?? 0;
+
+      const changed = await mockRequest<StudyState>('/api/study/active/book', { body: { bookId: 102 } });
+      expect(changed.activeBook?.id).toBe(102);
+      expect(changed.hasActiveSession).toBe(true); // 측정은 멈추지 않는다
+
+      vi.setSystemTime(new Date('2026-09-02T02:02:00Z'));
+      const stopped = await mockRequest<StudyState>('/api/study/stop', { body: {} });
+
+      expect(stopped.books?.find((b) => b.id === 102)?.totalSeconds).toBe(beforeB + 120);
+      expect(stopped.books?.find((b) => b.id === 101)?.totalSeconds).toBe(beforeA);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('「책 없이」로 되돌릴 수 있다 — null이 정당한 값이다', async () => {
+    await mockRequest('/api/study/start', { body: { bookId: 101 } });
+    const changed = await mockRequest<StudyState>('/api/study/active/book', { body: { bookId: null } });
+
+    expect(changed.activeBook).toBeNull();
+    await mockRequest('/api/study/stop', { body: {} });
+  });
+
+  it('진행 중 측정이 없으면 교체는 409다 — 방금 끝난 뒤 도착한 요청도 여기로 온다', async () => {
+    await expect(mockRequest('/api/study/active/book', { body: { bookId: 101 } })).rejects.toMatchObject({
+      status: 409,
+      message: '진행 중인 측정이 없습니다',
+    });
+  });
+
+  it('없는 책으로는 못 바꾼다 — 책 검증이 교체보다 먼저다', async () => {
+    await mockRequest('/api/study/start', { body: { bookId: null } });
+    await expect(mockRequest('/api/study/active/book', { body: { bookId: 999 } })).rejects.toMatchObject({
+      status: 404,
+    });
+    await mockRequest('/api/study/stop', { body: {} });
   });
 });
