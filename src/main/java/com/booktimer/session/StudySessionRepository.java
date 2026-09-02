@@ -24,14 +24,27 @@ public interface StudySessionRepository extends JpaRepository<StudySession, Long
     /**
      * 진행 중(미종료) 공부 세션 — 사용자당 최대 하나라는 규칙은 서비스가 지킨다.
      *
-     * <p><b>책을 함께 즉시 로딩</b>한다: 화면 상태({@code StudyState.activeBook})가 트랜잭션 밖에서
-     * 제목을 읽으므로 lazy 프록시로 두면 그 자리가 예외가 된다. LEFT join이라 책 없는 세션도 그대로 온다.
+     * <p><b>책을 함께 즉시 로딩</b>한다. 지금은 OSIV가 기본값(true)이라 트랜잭션 밖 직렬화도 lazy로
+     * 돌아가므로 이 fetch join이 아끼는 것은 <b>쿼리 한 번</b>이지만, OSIV를 끄는 날에는 화면 상태
+     * ({@code StudyState.activeBook})가 제목을 읽는 자리가 예외가 된다 — 그때 이 줄이 이미 서 있다.
+     * LEFT join이라 책 없는 세션도 그대로 온다.
      */
     @Query("select s from StudySession s left join fetch s.book where s.user = :user and s.endedAt is null")
     Optional<StudySession> findByUserAndEndedAtIsNull(@Param("user") User user);
 
     /** 소유권 확인용 — 내 세션일 때만 조회된다(종료 후 태깅의 IDOR 경계). */
     Optional<StudySession> findByIdAndUser(Long id, User user);
+
+    /**
+     * 자정 분할로 갈린 <b>바로 앞 조각</b> — 종료 후 태깅이 체인을 거슬러 올라갈 때 쓴다.
+     *
+     * <p>조각 링크 컬럼은 없고 <b>시각 인접성</b>이 링크다: 앞 조각의 {@code endedAt}은 뒤 조각의
+     * {@code startedAt}과 <b>같은 Instant 값</b>으로 저장되므로 그 등치가 곧 링크다
+     * ({@code endSplitAndSave}가 한 구간을 잘라 만든다). 미태깅 조각만 후보라 이미 라벨이 붙은
+     * 남의 시간이 딸려올 길이 없다 — 독서 {@code ReadingSessionRepository}의 같은 이름 쿼리와
+     * 같은 규율이되, 공부엔 수동 기록이 없어 {@code manualEntry} 방어 조건이 필요 없다.
+     */
+    Optional<StudySession> findByUserAndEndedAtAndBookIsNull(User user, Instant endedAt);
 
     /**
      * 책별 누적 공부 시간(초) — 완료·책지정 세션만 DB에서 GROUP BY 집계.

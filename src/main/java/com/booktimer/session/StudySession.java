@@ -137,6 +137,9 @@ public class StudySession extends BaseTimeEntity {
      * <p>독서 {@code ReadingSession#tagBook}에 <b>진행 중 거부</b>를 더했다: 재는 도중에 대상을 정하는
      * 것은 {@link #changeBook}의 문이라, 두 문이 같은 상태를 서로 다른 규칙으로 건드리지 않게 한다.
      *
+     * <p>이 메서드는 <b>한 행</b>만 본다 — 자정 분할로 갈린 앞 조각까지 함께 붙이는 것은
+     * {@code StudySessionService.tagBook}의 몫이다(조각 체인은 리포지터리를 타야 걸을 수 있다).
+     *
      * @param book 연결할 책(필수)
      * @throws IllegalArgumentException book 이 null 인 경우(「책 없이」로 되돌리는 문은 changeBook)
      * @throws IllegalStateException    진행 중 세션이거나, 이미 책이 지정된 경우(재태깅 금지)

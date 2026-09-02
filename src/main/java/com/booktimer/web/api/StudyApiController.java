@@ -33,8 +33,12 @@ import java.util.Map;
 /**
  * 공부 측정 start/stop JSON API — 미니앱 「공부」 모드가 쓰는 유일한 서버 문이다.
  *
- * <p>에러 계약은 독서({@code /api/sessions/*})와 <b>글자 그대로 같다</b>: 409 = 중복 start / 무세션 stop.
- * 두 모드가 다른 말을 하면 클라이언트가 모드마다 다른 처리를 하게 된다.
+ * <p>에러 계약은 독서({@code /api/sessions/*})와 <b>같은 상태 코드</b>다: 409 = 중복 start / 무세션 stop,
+ * 404 = 남의·없는 책·측정. 두 모드가 다른 코드를 내면 클라이언트가 모드마다 다른 처리를 하게 된다.
+ *
+ * <p>⚠️ {@code ResponseStatusException}에 실은 <b>한국어 문구는 서버 로그·디버깅용</b>이다 — 미니앱은
+ * 상태 코드로 자기 문구를 만들고, MockMvc는 이 예외를 HTML 에러 페이지로 렌더해 문구가 응답에 실리지도
+ * 않는다. 그러니 문구를 고쳐도 화면 문구는 안 바뀐다(계약은 코드 쪽이다).
  *
  * <p>인증 라우팅은 설정 변경이 필요 없다 — {@code SecurityConfig.isMiniappApiRequest}가 Bearer 헤더 붙은
  * {@code /api/**}를 미니앱 체인으로 보내므로 {@code /api/study/**}가 자동으로 커버된다.
@@ -80,6 +84,12 @@ public class StudyApiController {
     public ResponseEntity<StudyState> start(@RequestBody(required = false) StartStudyRequest request,
                                             Principal principal) {
         User user = currentUserService.resolve(principal);
+        // 활성 검사를 책 조회보다 먼저 한다 — 순서가 반대면 「이미 재는 중 + 낡은 bookId」가 409가 아니라
+        // 404로 나가, 클라이언트가 「측정이 이미 돈다」가 아니라 「책이 없다」로 잘못 안내한다.
+        // (독서가 도는 중인 경우는 서비스가 그대로 409로 잡는다 — 미니앱은 토글 잠금이 먼저 막는 조합이다.)
+        if (studyService.activeSession(user) != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 진행 중인 측정이 있습니다");
+        }
         StudyBook book = request == null ? null : ownedBookOrNull(user, request.bookId());
         Instant now = clock.instant();
         try {

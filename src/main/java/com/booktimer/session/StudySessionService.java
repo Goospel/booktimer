@@ -73,6 +73,10 @@ public class StudySessionService {
      * 진행 중 공부 세션을 {@code endedAt}으로 닫되 자정 경계로 잘라 저장한다 — 기존 행이 첫 조각이 되고
      * ({@code startedAt} 불변) 나머지 조각은 새 완료 행으로 저장된다.
      *
+     * <p><b>조각은 원본의 책을 상속한다</b> — 분할은 시간의 문제고 book은 그 원장의 라벨이라, 라벨이
+     * 조각마다 이어지지 않으면 자정을 넘긴 공부의 절반이 미태깅으로 남아 책별 누적이 조용히 반토막 난다
+     * (독서 {@code ReadingSessionService}의 같은 자리와 동일).
+     *
      * @return 마지막 조각({@code endedAt}이 속한 쪽)
      */
     private StudySession endSplitAndSave(StudySession open, Instant endedAt) {
@@ -81,7 +85,7 @@ public class StudySessionService {
         open.end(segments.get(0).end()); // 이미 종료된 세션이면 여기서 IllegalStateException(경합 가드 유지)
         StudySession last = studyRepository.save(open);
         for (int i = 1; i < segments.size(); i++) {
-            StudySession piece = StudySession.start(open.getUser(), segments.get(i).start());
+            StudySession piece = StudySession.start(open.getUser(), segments.get(i).start(), open.getBook());
             piece.end(segments.get(i).end());
             last = studyRepository.save(piece);
         }
@@ -150,12 +154,19 @@ public class StudySessionService {
     /**
      * <b>종료 후 태깅</b> — 책 없이 잰 세션에 나중에 책을 붙인다("무슨 책을 공부하셨나요?").
      *
-     * <p>독서와 달리 <b>조각 체인이 없다</b>: 공부 세션엔 자정 분할이 없어 한 측정 = 한 행이다.
-     * 책 상태 전이도 없다(공부 책엔 상태가 없고 회독 수만 있다 — 자동 반영은 범위 밖).
+     * <p><b>자정 분할 조각까지 함께 태깅한다</b>(독서와 같다). {@code stop}이 마지막 조각을 돌려주므로
+     * 태깅 좌표({@code untaggedSessionId})도 마지막 조각이다 — 그 하나만 붙이면 자정 <b>전</b> 몫이
+     * 미태깅으로 남아 책별 누적에서 샌다. 조각 링크 컬럼은 없고 <b>시각 인접성</b>이 링크라
+     * ({@link StudySessionRepository#findByUserAndEndedAtAndBookIsNull}) 뒤에서 앞으로 체인을 걷는다.
+     * 미태깅 조각만 후보라 무관한 세션이 딸려올 길이 없다.
+     *
+     * <p>독서에 있는 <b>책 상태 전이는 없다</b> — 공부 책엔 상태가 없고 회독 수만 있으며, 회독 자동
+     * 반영은 범위 밖이다(세션 한 건은 진도를 모른다).
      *
      * <p>소유 경계(IDOR): 그 세션이 {@code user}의 것이어야 한다 — 아니면 없는 것으로 취급(404 마스킹).
      * 책 소유 검증은 호출부가 마친 뒤 넘긴다.
      *
+     * @return 넘겨받은 그 세션(앞 조각들도 함께 태깅되지만 반환은 이것)
      * @throws IllegalArgumentException 해당 사용자의 그 세션이 없는 경우(컨트롤러가 404로)
      * @throws IllegalStateException    진행 중이거나 이미 책이 지정된 세션인 경우(컨트롤러가 409로)
      */
@@ -163,7 +174,17 @@ public class StudySessionService {
         StudySession session = studyRepository.findByIdAndUser(sessionId, user)
                 .orElseThrow(() -> new IllegalArgumentException("study session not found for user"));
         session.tagBook(book);
-        return studyRepository.save(session);
+        StudySession saved = studyRepository.save(session);
+        // 인접한 앞 조각을 따라 올라가며 같은 책을 붙인다(분할이 없었으면 첫 조회가 바로 empty).
+        StudySession earliest = session;
+        for (Optional<StudySession> previous;
+             (previous = studyRepository.findByUserAndEndedAtAndBookIsNull(
+                     user, earliest.getStartedAt())).isPresent(); ) {
+            earliest = previous.get();
+            earliest.tagBook(book);
+            studyRepository.save(earliest);
+        }
+        return saved;
     }
 
     /**

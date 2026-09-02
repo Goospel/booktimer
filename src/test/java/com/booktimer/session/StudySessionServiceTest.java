@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -388,5 +389,83 @@ class StudySessionServiceTest {
         verify(studyRepository, times(2)).save(any(StudySession.class));
         assertThat(stale.getEndedAt()).isEqualTo(LocalDate.of(2026, 6, 2).atStartOfDay(KST).toInstant());
         assertThat(stale.getDurationSeconds()).isEqualTo(2 * 3600L);
+    }
+
+    // ==========================================================================
+    // 자정 분할 × 책 라벨 — 분할이 라벨을 흘리지 않는다
+    //
+    // 분할은 <b>시간</b>의 문제고 book은 그 원장의 라벨이라, 조각이 갈려도 라벨은 이어져야 한다.
+    // 안 그러면 자정을 넘긴 공부의 절반이 미태깅으로 남아 책 칩이 절반만 센다(화면엔 그럴듯한 숫자가
+    // 떠서 조용히 틀린다).
+    // ==========================================================================
+
+    @Test
+    @DisplayName("stop: 자정을 넘겨도 모든 조각이 시작할 때 고른 책을 그대로 든다")
+    void stop_acrossMidnight_everyPieceKeepsBook() {
+        StudySession active = StudySession.start(user, kst("2026-06-01T23:50"), book);
+        when(studyRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(active));
+        when(studyRepository.save(any(StudySession.class))).thenAnswer(returnsFirstArg());
+
+        StudySession last = service.stop(user, kst("2026-06-02T00:40"));
+
+        verify(studyRepository, times(2)).save(any(StudySession.class));
+        assertThat(active.getBook()).as("첫 조각(기존 행)").isSameAs(book);
+        assertThat(last.getBook()).as("둘째 조각 — 상속이 없으면 여기가 null이라 절반이 샌다").isSameAs(book);
+    }
+
+    @Test
+    @DisplayName("closeStaleSessions: 방치 세션이 잘려도 조각들이 그 책을 그대로 든다(같은 자리, 다른 문)")
+    void closeStaleSessions_acrossMidnight_everyPieceKeepsBook() {
+        StudySession stale = StudySession.start(user, kst("2026-06-01T22:00"), book);
+        when(studyRepository.findByEndedAtIsNullAndStartedAtBefore(any(Instant.class)))
+                .thenReturn(List.of(stale));
+        when(studyRepository.save(any(StudySession.class))).thenAnswer(returnsFirstArg());
+
+        service.closeStaleSessions(kst("2026-06-02T19:00"));
+
+        ArgumentCaptor<StudySession> saved = ArgumentCaptor.forClass(StudySession.class);
+        verify(studyRepository, times(2)).save(saved.capture());
+        assertThat(saved.getAllValues()).allSatisfy(s -> assertThat(s.getBook()).isSameAs(book));
+    }
+
+    /**
+     * {@code stop}이 <b>마지막</b> 조각을 돌려주므로 태깅 좌표({@code untaggedSessionId})도 마지막 조각이다 —
+     * 그 한 행만 붙이면 자정 <b>전</b> 몫이 미태깅으로 남는다. 조각 링크 컬럼은 없고 <b>시각 인접성</b>이
+     * 링크다(앞 조각의 {@code endedAt} == 뒤 조각의 {@code startedAt}) — 독서와 같은 규율.
+     */
+    @Test
+    @DisplayName("tagBook: 인접한 앞 조각까지 거슬러 올라가며 같은 책을 붙인다(자정 분할 몫)")
+    void tagBook_walksChainToEarlierPieces() {
+        Instant midnight = kst("2026-06-02T00:00");
+        StudySession earlier = StudySession.start(user, kst("2026-06-01T23:50"));
+        earlier.end(midnight);
+        StudySession last = StudySession.start(user, midnight);
+        last.end(kst("2026-06-02T00:40"));
+        when(studyRepository.findByIdAndUser(7L, user)).thenReturn(Optional.of(last));
+        when(studyRepository.findByUserAndEndedAtAndBookIsNull(user, midnight)).thenReturn(Optional.of(earlier));
+        when(studyRepository.findByUserAndEndedAtAndBookIsNull(user, earlier.getStartedAt()))
+                .thenReturn(Optional.empty());
+        when(studyRepository.save(any(StudySession.class))).thenAnswer(returnsFirstArg());
+
+        service.tagBook(user, 7L, book);
+
+        assertThat(last.getBook()).isSameAs(book);
+        assertThat(earlier.getBook()).as("체인이 없으면 자정 전 50분이 미태깅으로 샌다").isSameAs(book);
+        verify(studyRepository, times(2)).save(any(StudySession.class));
+    }
+
+    @Test
+    @DisplayName("tagBook: 분할이 없었으면 첫 조회가 바로 비어 1행만 저장한다(핫패스 회귀 방지)")
+    void tagBook_withoutSplit_savesOnce() {
+        StudySession ended = StudySession.start(user, kst("2026-06-01T10:00"));
+        ended.end(kst("2026-06-01T10:30"));
+        when(studyRepository.findByIdAndUser(7L, user)).thenReturn(Optional.of(ended));
+        when(studyRepository.findByUserAndEndedAtAndBookIsNull(user, ended.getStartedAt()))
+                .thenReturn(Optional.empty());
+        when(studyRepository.save(ended)).thenReturn(ended);
+
+        service.tagBook(user, 7L, book);
+
+        verify(studyRepository, times(1)).save(any(StudySession.class));
     }
 }

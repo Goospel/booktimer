@@ -327,13 +327,23 @@ class StudyBookApiControllerTest {
         mockMvc.perform(post("/api/study/books/" + id + "/delete").with(user("sbdelsess")).with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.deleted").value(true));
+        // flush 없이는 delete가 미뤄져 FK 제약이 아예 평가되지 않는다 — 그러면 이 테스트는
+        // 「참조가 풀렸나」만 재고 「FK 게이트를 통과하나」는 못 잰다(unlinkBook의 두 이유 중 하나가 무계측).
+        studyBookRepository.flush();
 
         StudySession kept = studySessionRepository.findById(sessionId).orElseThrow();
         assertThat(kept.getBook()).as("책은 사라져도 잰 시간은 남는다").isNull();
         assertThat(kept.getDurationSeconds()).isEqualTo(1800);
     }
 
-    /** 소유자 스코프 — 집계가 {@code sumSecondsByBook()}에서 사용자 조건을 잃으면 남의 시간이 내 칩에 뜬다. */
+    /**
+     * 두 사람의 시간이 각자의 칩에만 실리는지 본다.
+     *
+     * <p>⚠️ 이 테스트는 <b>집계 쿼리의 user 조건을 계측하지 않는다</b> — 조건이 빠져도 결과는 책 id를
+     * 키로 한 맵이고 렌더는 {@code myBooks(user)}가 고른 내 책만 도니 남의 시간이 뜰 자리가 없다
+     * (그 조건은 스캔 범위를 줄이는 성능 몫이다). 여기서 실제로 잠그는 것은 <b>「집계 → 행 매핑이
+     * 책마다 제 값을 집는다」</b>는 배선이다.
+     */
     @Test
     @DisplayName("totalSeconds: 서재 행에 내 누적 공부 시간만 실린다(남의 시간은 안 섞인다)")
     void shelf_carriesOnlyMyTotalSeconds() throws Exception {

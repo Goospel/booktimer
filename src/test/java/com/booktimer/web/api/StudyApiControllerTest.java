@@ -339,6 +339,24 @@ class StudyApiControllerTest {
                 .andExpect(status().isConflict());
     }
 
+    /**
+     * 두 조건이 동시에 틀렸을 때 <b>어느 쪽을 말해 주는가</b>. 책 조회를 활성 검사보다 먼저 하면
+     * 「측정이 이미 돈다」(409)가 아니라 「책이 없다」(404)가 나가, 클라이언트가 엉뚱한 안내를 한다
+     * (캐시에 남은 낡은 bookId로 다른 탭에서 다시 시작을 누르는 경로가 실제로 그 조합이다).
+     */
+    @Test
+    @DisplayName("POST /api/study/start: 진행 중 + 낡은 bookId면 404가 아니라 409다(활성 검사가 먼저)")
+    void start_whileActive_withStaleBookId_conflictsNotNotFound() throws Exception {
+        register("study-startstale@a.com", "studystartstale");
+
+        mockMvc.perform(post("/api/study/start").with(user("studystartstale")).with(csrf()))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/study/start").with(user("studystartstale")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":999999}"))
+                .andExpect(status().isConflict());
+    }
+
     // ── stop 응답의 태깅 좌표 ─────────────────────────────────────────────────
 
     /** {@code untaggedSessionId}가 없으면 종료 후 태깅 시트가 어느 세션을 붙일지 모른다(시트가 안 열린다). */
@@ -926,6 +944,74 @@ class StudyApiControllerTest {
                 .andExpect(jsonPath("$.days[0].studiedSeconds").value(600))
                 .andExpect(jsonPath("$.days[1].date").value("2026-06-02"))
                 .andExpect(jsonPath("$.days[1].studiedSeconds").value(2400));
+    }
+
+    // ── 자정 분할 × 책 라벨 (실 DB 왕복) ────────────────────────────────────
+
+    /** 유저 TZ 로컬 시각을 Instant로 — 손으로 UTC를 환산하지 않는다(고정 과거 일자). */
+    private static Instant seoul(String localDateTime) {
+        return LocalDateTime.parse(localDateTime).atZone(ZoneId.of(SEOUL)).toInstant();
+    }
+
+    /**
+     * 책을 걸고 자정을 넘기면 <b>두 조각이 같은 책</b>을 들어야 책별 누적이 온전하다 — 상속이 없으면
+     * 둘째 조각이 미태깅이라 칩이 40분(2400)만 세고 나머지 10분이 조용히 샌다.
+     */
+    @Test
+    @DisplayName("자정 분할 + 시작 시 책: 두 조각이 같은 책을 들어 totalSeconds가 50분 전부를 센다")
+    void midnightSplit_withBook_keepsAllSecondsOnThatBook() throws Exception {
+        User u = register("study-midbook@a.com", "studymidbook");
+        StudyBook book = studyBook(u, "정보처리기사 실기");
+        studySessionService.start(u, seoul("2026-06-01T23:50"), book);
+        studySessionService.stop(u, seoul("2026-06-02T00:40"));
+
+        mockMvc.perform(get("/api/dashboard").with(user("studymidbook")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.study.books[?(@.id == " + book.getId() + ")].totalSeconds",
+                        hasItem(3000)))
+                .andExpect(jsonPath("$.study.recentBookId").value(book.getId().intValue()));
+    }
+
+    /**
+     * 책 <b>없이</b> 자정을 넘겨 잰 뒤 태깅하면, 좌표는 마지막 조각인데 앞 조각까지 함께 붙어야 한다
+     * (⚡ 체인이 없으면 2400만 붙는다). 태깅은 라벨만 다는 일이라 <b>기록의 날짜별 합은 불변</b>이다.
+     */
+    @Test
+    @DisplayName("자정 분할 + 종료 후 태깅: 앞 조각까지 체인으로 붙어 50분 전부가 그 책에 간다")
+    void midnightSplit_tagBook_walksChain() throws Exception {
+        User u = register("study-midtag@a.com", "studymidtag");
+        StudyBook book = studyBook(u, "토익 RC");
+        studySessionService.start(u, seoul("2026-06-01T23:50"), null);
+        Long lastPieceId = studySessionService.stop(u, seoul("2026-06-02T00:40")).getId();
+
+        mockMvc.perform(post("/api/study/sessions/" + lastPieceId + "/tag-book")
+                        .with(user("studymidtag")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + book.getId() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(bookSeconds(book), hasItem(3000)))
+                .andExpect(jsonPath("$.recentBookId").value(book.getId().intValue()));
+
+        // 라벨을 달았을 뿐이라 날짜별 합은 그대로다(시간의 원장은 세션 행이다).
+        mockMvc.perform(get("/api/study/history").with(user("studymidtag")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.months[0].days[0].totalSeconds").value(2400))
+                .andExpect(jsonPath("$.months[0].days[1].totalSeconds").value(600));
+    }
+
+    /** ⚡ 정렬이 {@code Asc}면 <b>처음</b> 공부한 책이 기본 선택으로 떠 캐러셀이 엉뚱한 데서 시작한다. */
+    @Test
+    @DisplayName("recentBookId: 가장 최근에 책을 걸고 잰 쪽이다(먼저 잰 책이 아니다)")
+    void recentBookId_isTheLatestTaggedSession() throws Exception {
+        User u = register("study-recent@a.com", "studyrecent");
+        StudyBook older = studyBook(u, "먼저 공부한 책");
+        StudyBook newer = studyBook(u, "나중 공부한 책");
+        completedStudy(u, seoul("2026-06-01T10:00"), Duration.ofMinutes(30), older);
+        completedStudy(u, seoul("2026-06-02T10:00"), Duration.ofMinutes(10), newer);
+
+        mockMvc.perform(get("/api/dashboard").with(user("studyrecent")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.study.recentBookId").value(newer.getId().intValue()));
     }
 
     /**
