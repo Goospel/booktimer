@@ -99,7 +99,10 @@ export function CalendarGrid({
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginTop: 8 }}>
         {WEEKDAYS.map((label) => (
-          <Text key={label} typography="st12" color="grey600" style={{ display: 'block', textAlign: 'center' }}>
+          // 정렬은 `textAlign` prop이다 — TDS `Text`는 `style`의 `textAlign`·`display`를 자기 prop 값으로 덮어써
+          // `style={{ textAlign }}`이 DOM에 안 실린다(T-219, T-216의 3회차). 걸러진 채 머리글이 칸 왼쪽에 붙어
+          // 가운데 선 날짜와 어긋났다(실기기 2026-09-02). 격자 아이템은 블록화되므로 display는 줄 것이 없다.
+          <Text key={label} typography="st12" color="grey600" textAlign="center">
             {label}
           </Text>
         ))}
@@ -341,7 +344,8 @@ export function StudyCalendar({ onError }: { onError: (error: Error) => void }) 
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 12 }}>
         {navButton('prev', false)}
-        <Text typography="st10" fontWeight="bold" style={{ ...SERIF_VALUE, fontSize: 19, minWidth: 120, textAlign: 'center' }}>
+        {/* 같은 이유로 `textAlign`은 prop(T-219) — style에 두면 짧은 달(「1월」)이 120px 상자의 왼쪽에 붙는다. */}
+        <Text typography="st10" fontWeight="bold" textAlign="center" style={{ ...SERIF_VALUE, fontSize: 19, minWidth: 120 }}>
           {monthTitle(year, month)}
         </Text>
         {navButton('next', atCurrentMonth)}
