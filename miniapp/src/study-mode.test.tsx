@@ -227,6 +227,19 @@ describe('공부 모드 색 — css에 실재하는가', () => {
     expect(renderHome('study')).toContain(`background:var(${HERO_CARD_BG_VAR}`);
   });
 
+  /**
+   * 강조 알약(`--accentPill`) — 교체 시트의 현재 행과 시작 토스트 [바꾸기]가 이 토큰 하나를 본다.
+   *
+   * <p>공부 블록의 선언이 빠지면 <b>인라인 fallback(세이지 리터럴)만 남아</b> 공부 모드에 독서 색이
+   * 그대로 뜬다. 옛 계측기(「공부 토스트에 세이지 리터럴이 없다」)로는 이걸 못 잡는다 — 폴백을 쓰는
+   * 이상 마크업엔 리터럴이 늘 실린다. 그래서 <b>선언 자체</b>를 잰다(히어로 카드 틴트와 같은 처방).
+   */
+  it('강조 알약 토큰이 공부 블록에도 있다 — 빠지면 fallback 세이지가 그대로 뜬다', () => {
+    const study = css.slice(css.indexOf(`body.${STUDY_CLASS} {`), css.indexOf('}', css.indexOf(`body.${STUDY_CLASS} {`)));
+
+    expect(study).toContain('--accentPill:');
+  });
+
   /** 큰 시계 잉크(2차 §7-C) — 화면 최대 활자가 「파란 펜」이 된다. 토큰 경유라 값은 css가 정한다. */
   it('공부 모드의 큰 시계는 파란 잉크다 — 독서 모드 시계는 그대로 잉크색', () => {
     // 큰 시계만 집는다 — 머리말(오버라인)은 두 모드 다 ACCENT라 그걸로 재면 늘 파랑이 잡힌다.

@@ -410,6 +410,33 @@ describe('배선 — 시트 두 장이 모드로 갈린다(소스)', () => {
     expect(code).toMatch(/mode === 'study'\s*\?\s*changeActiveStudyBook\(/);
   });
 
+  /**
+   * 교체 <b>응답</b>으로 공부 상태를 갱신한다. 안 하면 서버는 바뀌었는데 홈의 「측정 중 · 제목」이
+   * <b>옛 책</b>에 머문다 — 화면과 원장이 갈라진 채 다음 새로고침까지 간다(태깅 갈래와 같은 사정).
+   */
+  it('교체 응답으로 공부 상태를 갱신한다 — 안 하면 홈이 옛 책을 계속 말한다', () => {
+    expect(code).toMatch(/changeActiveStudyBook\(id\)\.then\(\(next\) => \{\s*onStudyChange\(next\)/);
+  });
+
+  /**
+   * 교체 토스트가 <b>지금 모드</b>를 실어야 한다. `'reading'`으로 굳으면 공부 교체가 「『제목』
+   * 측정으로 바꿨어요」가 되어, 명사만 갈리는 그 공식이 공부 쪽에서만 조용히 깨진다.
+   */
+  it('교체 토스트가 지금 모드를 실어 보낸다 — 굳히면 공부가 「공부 측정」이라 말하지 않는다', () => {
+    expect(code).toMatch(/showStartToast\(\{ book: current, changed: true, mode \}\)/);
+  });
+
+  /**
+   * 태깅 성공이 공부 서재를 <b>다시 세운다</b>. `StudyLibrary`는 자기 목록을 마운트 1회만 받으므로,
+   * 시트가 그 화면 <b>위에서</b> 닫히면 방금 붙인 시간이 카드에 안 뜬다. 그리고 측정 중엔 비-홈 탭이
+   * 잠겨 <b>시작한 탭에서 끝나므로</b>, 서재 탭에서 시작하면 100% 이 경로다. `key`를 올려 탭 전환과
+   * 같은 remount를 태운다 — 그 화면은 한 줄도 안 고친다.
+   */
+  it('태깅이 공부 서재를 다시 세운다 — 안 그러면 방금 붙인 시간이 그 카드에 안 뜬다', () => {
+    expect(code).toMatch(/tagStudyBook\([^)]*\)\.then\(onStudyChange\)[\s\S]{0,240}?setShelfEpoch\(/);
+    expect(code).toMatch(/<StudyLibrary key=\{shelfEpoch\}/);
+  });
+
   it('시트 두 장의 재료가 모드로 갈린다 — 독서 책장으로 공부를 물으면 딴 서재가 뜬다', () => {
     expect(code).toMatch(/tagging\.study \? \(study\.books \?\? \[\]\) : dashboard\.readingBooks/);
     expect(code).toMatch(/title=\{tagging\.study \? '무슨 책을 공부하셨나요\?'/);

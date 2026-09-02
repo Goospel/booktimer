@@ -1232,6 +1232,15 @@ export function MainTabs({
   const measuring = dashboard.hasActiveSession || study.hasActiveSession;
   /** 태깅 시트 — `null`이면 닫힘. 열림 여부와 대상 세션이 늘 같이 움직여 상태 하나로 족하다. */
   const [tagging, setTagging] = useState<Untagged | null>(null);
+  /**
+   * 공부 서재를 다시 세우는 세대 번호 — `<StudyLibrary key={shelfEpoch}>`의 `key`다.
+   *
+   * <p>그 화면은 자기 목록을 <b>마운트 1회</b>만 받는다. 그런데 태깅 시트는 그 화면 <b>위에서</b>
+   * 닫힌다 — 측정 중엔 비-홈 탭이 잠겨 <b>시작한 탭에서 끝나므로</b> 서재 탭에서 시작하면 100%
+   * 이 경로다 — 그래서 방금 붙인 시간이 카드에 안 뜬다. 번호를 올려 <b>탭 전환과 같은 remount</b>를
+   * 태운다: 새 프롭·리프레시 배선보다 싸고 `StudyLibrary`는 한 줄도 안 고친다.
+   */
+  const [shelfEpoch, setShelfEpoch] = useState(0);
   /** 첫 완료 축하 — 홈에 prop으로 내린다. 다른 탭에서 끝냈어도 홈에 돌아오면 배너가 보인다. */
   const [celebrate, setCelebrate] = useState(false);
   /** 액션 실패 문구 — 다른 탭엔 홈의 ErrorMessage가 없으므로 탭바 위 스트립으로 띄운다. */
@@ -1492,7 +1501,10 @@ export function MainTabs({
   const tag = (book: BookOption) => {
     if (tagging === null) return;
     setBusy(true);
-    (tagging.study ? tagStudyBook(tagging.sessionId, book.id).then(onStudyChange) : tagBook(tagging.sessionId, book.id))
+    // 시트 아래가 공부 서재일 수 있다(그쪽 목록은 마운트 1회) — `shelfEpoch`가 그 화면을 다시 세운다.
+    (tagging.study
+      ? tagStudyBook(tagging.sessionId, book.id).then(onStudyChange).then(() => setShelfEpoch((n) => n + 1))
+      : tagBook(tagging.sessionId, book.id))
       .then(() => setTagging(null))
       .catch(fail)
       .finally(() => setBusy(false));
@@ -1585,7 +1597,9 @@ export function MainTabs({
           />
         )}
         {/* 서재 탭은 두 모드 공통이지만 화면은 갈린다 — 공부 책과 독서 책이 섞이지 않는 것이 요구 그 자체다. */}
-        {tab === 'library' && mode === 'study' && <StudyLibrary onError={onError} onShelfChanged={onShelfChanged} />}
+        {tab === 'library' && mode === 'study' && (
+          <StudyLibrary key={shelfEpoch} onError={onError} onShelfChanged={onShelfChanged} />
+        )}
         {tab === 'library' && mode !== 'study' && (
           <Library
             myLoginId={dashboard.loginId}
