@@ -289,6 +289,23 @@ class FlywayMigrationTest {
                 .isFalse();
     }
 
+    /**
+     * V82 — 공부 측정에 붙는 책({@code study_session.book_id}).
+     *
+     * <p>메인 스위트는 Hibernate가 엔티티에서 스키마를 만들어 이 컬럼이 <b>항상</b> 존재하므로,
+     * 「마이그레이션에 실제로 들어갔는가」는 여기서만 관측된다 — DDL을 빠뜨린 채 엔티티만 고치면
+     * 전 스위트가 초록인 채 <b>운영 배포에서만</b> 깨진다.
+     */
+    @Test
+    void v82_adds_nullable_book_id_to_study_session() {
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE UPPER(TABLE_NAME) = 'STUDY_SESSION' AND UPPER(COLUMN_NAME) = 'BOOK_ID'
+                """, String.class))
+                .as("책 없이 재는 것이 정당한 사용이고, 책을 지워도 시간은 남는다 — nullable이어야 한다")
+                .isEqualTo("YES");
+    }
+
     // ── 토스 미니앱(V61) — users.toss_user_key 유니크 + api_token·toss_link_code 스키마↔엔티티 일치 ──
 
     @Test

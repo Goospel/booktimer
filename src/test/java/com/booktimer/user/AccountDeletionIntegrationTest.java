@@ -195,6 +195,30 @@ class AccountDeletionIntegrationTest {
     }
 
     /**
+     * <b>책이 붙은</b> 공부 세션은 FK가 둘이다({@code user_id → users}, {@code book_id → study_book}) —
+     * purge가 세션보다 책을 먼저 지우면 그 순서만으로 탈퇴가 깨진다. 「공부 책을 쓰는 사람만」 못 나가는
+     * 부류라, 책 없는 세션 픽스처로는 영영 안 잡힌다(mock은 FK를 아예 모른다 — T-023·T-029).
+     */
+    @Test
+    @DisplayName("책이 붙은 공부 세션을 가진 사용자도 FK 위반 없이 탈퇴된다(세션 → 책 순서)")
+    void deleteAccount_withBookLinkedStudySession_succeeds() {
+        String email = "studybookquit@booktimer.com";
+        User user = userRepository.saveAndFlush(
+                User.of(email, passwordEncoder.encode("rawpw1234"), "책으로공부한이", "Asia/Seoul", Role.USER));
+        StudyBook book = studyBookRepository.saveAndFlush(
+                StudyBook.register(user, "정보처리기사 실기", "저자", null, null, null, null));
+        StudySession session = StudySession.start(user, Instant.now().minusSeconds(3600), book);
+        session.end(Instant.now().minusSeconds(1800));
+        studySessionRepository.saveAndFlush(session);
+
+        // study_session.book_id FK가 정리되지 않으면(책을 먼저 지우면) flush 시 제약 위반.
+        assertThatCode(() -> {
+            accountService.deleteAccount(email, "rawpw1234");
+            assertThat(userRepository.findByEmail(email)).isEmpty();
+        }).doesNotThrowAnyException();
+    }
+
+    /**
      * 공부 <b>일정 체크</b>(study_daily_check)도 같은 부류다 — 세션과 별개 테이블이라 purge에 한 줄이
      * 더 필요하고, 빠지면 「달력을 한 번이라도 눌러 본 사람만」 탈퇴가 실패한다.
      *

@@ -2,6 +2,8 @@ package com.booktimer.web.api;
 
 import com.booktimer.book.StudyBook;
 import com.booktimer.book.StudyBookRepository;
+import com.booktimer.session.StudySession;
+import com.booktimer.session.StudySessionRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
@@ -50,6 +52,7 @@ class StudyBookApiControllerTest {
     @Autowired UserRegistrationService registrationService;
     @Autowired UserRepository userRepository;
     @Autowired StudyBookRepository studyBookRepository;
+    @Autowired StudySessionRepository studySessionRepository;
     @Autowired Clock clock;
 
     private User register(String email, String loginId) {
@@ -303,7 +306,59 @@ class StudyBookApiControllerTest {
                 .andExpect(jsonPath("$.books").isEmpty());
     }
 
+    /**
+     * <b>RED가 FK 위반 500이었던 자리</b> — 세션이 가리키는 책을 지우려면 그 참조를 먼저 풀어야 한다
+     * ({@code StudySessionRepository.unlinkBook}). 시간 기록은 <b>보존</b>한다: 책을 서재에서 빼도
+     * 그날 공부한 시간(당일 합·달력)은 사라지면 안 된다(달력·합계는 book을 아예 안 본다).
+     *
+     * <p>mock은 FK를 모른다(T-023·T-029) — 실 H2 통합으로만 잡히는 부류다.
+     */
+    @Test
+    @DisplayName("POST /{id}/delete: 세션이 붙은 책도 지워지고, 그 세션은 「책 미지정」으로 남는다")
+    void delete_unlinksSessionsAndKeepsTime() throws Exception {
+        User u = register("sb-delsess@a.com", "sbdelsess");
+        addStudyBook("sbdelsess", "시간이 붙은 책", "9791100000020");
+        Long id = onlyBookId(u);
+        StudyBook book = studyBookRepository.findById(id).orElseThrow();
+        StudySession session = StudySession.start(u, clock.instant().minusSeconds(3600), book);
+        session.end(clock.instant().minusSeconds(1800));
+        Long sessionId = studySessionRepository.saveAndFlush(session).getId();
+
+        mockMvc.perform(post("/api/study/books/" + id + "/delete").with(user("sbdelsess")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deleted").value(true));
+
+        StudySession kept = studySessionRepository.findById(sessionId).orElseThrow();
+        assertThat(kept.getBook()).as("책은 사라져도 잰 시간은 남는다").isNull();
+        assertThat(kept.getDurationSeconds()).isEqualTo(1800);
+    }
+
+    /** 소유자 스코프 — 집계가 {@code sumSecondsByBook()}에서 사용자 조건을 잃으면 남의 시간이 내 칩에 뜬다. */
+    @Test
+    @DisplayName("totalSeconds: 서재 행에 내 누적 공부 시간만 실린다(남의 시간은 안 섞인다)")
+    void shelf_carriesOnlyMyTotalSeconds() throws Exception {
+        User mine = register("sb-secs@a.com", "sbsecs");
+        User stranger = register("sb-secs2@a.com", "sbsecstwo");
+        addStudyBook("sbsecs", "내 책", "9791100000021");
+        addStudyBook("sbsecstwo", "남의 책", "9791100000022");
+        studied(mine, onlyBookId(mine), 1800);
+        studied(stranger, onlyBookId(stranger), 600);
+
+        mockMvc.perform(get("/api/study/books").with(user("sbsecs")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.books", hasSize(1)))
+                .andExpect(jsonPath("$.books[0].totalSeconds").value(1800));
+    }
+
     // ── 헬퍼 ────────────────────────────────────────────────────────────────
+
+    /** 그 책으로 잰 완료 세션 한 건을 심는다. */
+    private void studied(User user, Long bookId, long seconds) {
+        StudyBook book = studyBookRepository.findById(bookId).orElseThrow();
+        StudySession session = StudySession.start(user, clock.instant().minusSeconds(seconds * 2), book);
+        session.end(session.getStartedAt().plusSeconds(seconds));
+        studySessionRepository.saveAndFlush(session);
+    }
 
     private Long onlyBookId(User user) {
         return studyBookRepository.findByUserOrderByCreatedAtDesc(user).get(0).getId();

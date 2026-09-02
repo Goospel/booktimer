@@ -1,5 +1,6 @@
 package com.booktimer.session;
 
+import com.booktimer.book.StudyBook;
 import com.booktimer.user.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,7 +10,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
  * 공부 세션 start/stop 유스케이스 오케스트레이션 — {@link ReadingSessionService}의 공부판이다.
@@ -51,16 +55,18 @@ public class StudySessionService {
     /**
      * 새 공부 세션을 시작한다.
      *
+     * @param book 대상 공부 책(null = 책 없이 — 시작을 책 선택으로 가로막지 않는다).
+     *             소유 검증은 호출부(컨트롤러)가 {@code findByIdAndUser}로 마친 뒤 넘긴다.
      * @throws IllegalStateException 진행 중인 공부 <b>또는 독서</b> 세션이 있는 경우
      */
-    public StudySession start(User user, Instant now) {
+    public StudySession start(User user, Instant now, StudyBook book) {
         studyRepository.findByUserAndEndedAtIsNull(user).ifPresent(s -> {
             throw new IllegalStateException("an active study session already exists");
         });
         readingRepository.findByUserAndEndedAtIsNull(user).ifPresent(s -> {
             throw new IllegalStateException("an active reading session already exists");
         });
-        return studyRepository.save(StudySession.start(user, now));
+        return studyRepository.save(StudySession.start(user, now, book));
     }
 
     /**
@@ -135,10 +141,63 @@ public class StudySessionService {
                 today.plusDays(1).atStartOfDay(zone).toInstant());
     }
 
-    /** 진행 중 공부 세션(없으면 null) — 화면 상태(hasActiveSession·activeStartedAt)의 출처. */
+    /** 진행 중 공부 세션(없으면 null) — 화면 상태(hasActiveSession·activeStartedAt·activeBook)의 출처. */
     @Transactional(readOnly = true)
     public StudySession activeSession(User user) {
         return studyRepository.findByUserAndEndedAtIsNull(user).orElse(null);
+    }
+
+    /**
+     * <b>종료 후 태깅</b> — 책 없이 잰 세션에 나중에 책을 붙인다("무슨 책을 공부하셨나요?").
+     *
+     * <p>독서와 달리 <b>조각 체인이 없다</b>: 공부 세션엔 자정 분할이 없어 한 측정 = 한 행이다.
+     * 책 상태 전이도 없다(공부 책엔 상태가 없고 회독 수만 있다 — 자동 반영은 범위 밖).
+     *
+     * <p>소유 경계(IDOR): 그 세션이 {@code user}의 것이어야 한다 — 아니면 없는 것으로 취급(404 마스킹).
+     * 책 소유 검증은 호출부가 마친 뒤 넘긴다.
+     *
+     * @throws IllegalArgumentException 해당 사용자의 그 세션이 없는 경우(컨트롤러가 404로)
+     * @throws IllegalStateException    진행 중이거나 이미 책이 지정된 세션인 경우(컨트롤러가 409로)
+     */
+    public StudySession tagBook(User user, Long sessionId, StudyBook book) {
+        StudySession session = studyRepository.findByIdAndUser(sessionId, user)
+                .orElseThrow(() -> new IllegalArgumentException("study session not found for user"));
+        session.tagBook(book);
+        return studyRepository.save(session);
+    }
+
+    /**
+     * <b>진행 중</b> 세션의 측정 대상 교체 — 세션은 멈추지 않으므로 잰 시간이 통째로 새 책에 붙는다.
+     *
+     * <p>요청에 세션 좌표가 없다(서버가 "내 진행 중 세션"을 찾는다) — 그래서 세션 IDOR이 구조적으로
+     * 성립하지 않는다. 독서 {@code changeActiveBook}과 같은 분업이다.
+     *
+     * @param book 새 대상(null = 「책 없이」로 되돌리기)
+     * @throws IllegalStateException 진행 중 세션이 없는 경우(컨트롤러가 409로 — stop과 같은 계약)
+     */
+    public StudySession changeActiveBook(User user, StudyBook book) {
+        StudySession active = studyRepository.findByUserAndEndedAtIsNull(user)
+                .orElseThrow(() -> new IllegalStateException("no active study session"));
+        active.changeBook(book);
+        return studyRepository.save(active);
+    }
+
+    /** 책 id → 누적 공부 시간(초). 완료·책지정 세션만(0초인 책은 아예 키가 없다). */
+    @Transactional(readOnly = true)
+    public Map<Long, Long> totalSecondsByBook(User user) {
+        Map<Long, Long> seconds = new HashMap<>();
+        for (BookSecondsRow row : studyRepository.sumSecondsByBook(user)) {
+            seconds.put(row.bookId(), row.seconds() == null ? 0L : row.seconds());
+        }
+        return seconds;
+    }
+
+    /** 가장 최근에 책을 걸고 잰 공부 책의 id(없으면 null) — 홈 캐러셀의 기본 선택. */
+    @Transactional(readOnly = true)
+    public Long recentBookId(User user) {
+        return studyRepository.findFirstByUserAndBookIsNotNullOrderByStartedAtDesc(user)
+                .map(s -> s.getBook().getId())
+                .orElse(null);
     }
 
     /** 경과가 cap을 초과하면 {@code startedAt + cap}, 아니면 {@code now} 그대로. */

@@ -1,5 +1,6 @@
 package com.booktimer.session;
 
+import com.booktimer.book.StudyBook;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,6 +21,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.AdditionalAnswers.returnsFirstArg;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -49,10 +51,14 @@ class StudySessionServiceTest {
     private StudySessionService service;
 
     private User user;
+    private StudyBook book;
+    private StudyBook other;
 
     @BeforeEach
     void setUp() {
         user = User.of("student@booktimer.com", "$2a$10$abcdefghijklmnopqrstuv", "공부벌레", "Asia/Seoul", Role.USER);
+        book = StudyBook.register(user, "정보처리기사 실기", "저자", null, null, null, null);
+        other = StudyBook.register(user, "토익 RC", "저자", null, null, null, null);
     }
 
     // --- start ---
@@ -64,11 +70,24 @@ class StudySessionServiceTest {
         when(readingRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.empty());
         when(studyRepository.save(any(StudySession.class))).thenAnswer(returnsFirstArg());
 
-        StudySession started = service.start(user, T0);
+        StudySession started = service.start(user, T0, null);
 
         assertThat(started.getStartedAt()).isEqualTo(T0);
         assertThat(started.isActive()).isTrue();
+        assertThat(started.getBook()).isNull();
         verify(studyRepository).save(any(StudySession.class));
+    }
+
+    @Test
+    @DisplayName("start: 책을 주면 그 책으로 시작한다 — 시작 시 대상 선택")
+    void start_withBook_savesWithBook() {
+        when(studyRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.empty());
+        when(readingRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.empty());
+        when(studyRepository.save(any(StudySession.class))).thenAnswer(returnsFirstArg());
+
+        StudySession started = service.start(user, T0, book);
+
+        assertThat(started.getBook()).isSameAs(book);
     }
 
     @Test
@@ -77,7 +96,7 @@ class StudySessionServiceTest {
         when(studyRepository.findByUserAndEndedAtIsNull(user))
                 .thenReturn(Optional.of(StudySession.start(user, T0)));
 
-        assertThatThrownBy(() -> service.start(user, T0.plusSeconds(60)))
+        assertThatThrownBy(() -> service.start(user, T0.plusSeconds(60), null))
                 .isInstanceOf(IllegalStateException.class);
         verify(studyRepository, never()).save(any(StudySession.class));
     }
@@ -89,7 +108,7 @@ class StudySessionServiceTest {
         when(readingRepository.findByUserAndEndedAtIsNull(user))
                 .thenReturn(Optional.of(ReadingSession.start(user, T0)));
 
-        assertThatThrownBy(() -> service.start(user, T0.plusSeconds(60)))
+        assertThatThrownBy(() -> service.start(user, T0.plusSeconds(60), null))
                 .isInstanceOf(IllegalStateException.class);
         verify(studyRepository, never()).save(any(StudySession.class));
     }
@@ -145,6 +164,91 @@ class StudySessionServiceTest {
         assertThat(closed).isEqualTo(1);
         assertThat(stale.getDurationSeconds())
                 .isEqualTo(ReadingSessionService.MAX_SESSION_DURATION.toSeconds());
+    }
+
+    // --- 종료 후 태깅 ---
+
+    @Test
+    @DisplayName("tagBook: 내 세션이면 책을 붙여 저장한다")
+    void tagBook_attachesAndSaves() {
+        StudySession ended = StudySession.start(user, T0);
+        ended.end(T0.plusSeconds(600));
+        when(studyRepository.findByIdAndUser(7L, user)).thenReturn(Optional.of(ended));
+        when(studyRepository.save(ended)).thenReturn(ended);
+
+        StudySession tagged = service.tagBook(user, 7L, book);
+
+        assertThat(tagged.getBook()).isSameAs(book);
+        verify(studyRepository).save(ended);
+    }
+
+    /**
+     * 소유 경계 — 남의 세션 id로는 태깅이 성립하면 안 된다. {@code findByIdAndUser}가 아니라
+     * {@code findById}로 찾는 구현이면 이 테스트만 빨개진다(그 구현은 남의 기록을 내 책에 붙인다).
+     */
+    @Test
+    @DisplayName("tagBook: 내 세션이 아니면 거부한다(IDOR — 컨트롤러가 404로 마스킹)")
+    void tagBook_rejectsForeignSession() {
+        when(studyRepository.findByIdAndUser(99L, user)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.tagBook(user, 99L, book))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(studyRepository, never()).save(any(StudySession.class));
+    }
+
+    // --- 측정 중 교체 ---
+
+    @Test
+    @DisplayName("changeActiveBook: 진행 중 세션의 대상을 바꾼다(세션은 안 멈춘다)")
+    void changeActiveBook_swapsTarget() {
+        StudySession active = StudySession.start(user, T0, book);
+        when(studyRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(active));
+        when(studyRepository.save(active)).thenReturn(active);
+
+        StudySession changed = service.changeActiveBook(user, other);
+
+        assertThat(changed.getBook()).isSameAs(other);
+        assertThat(changed.isActive()).isTrue();
+    }
+
+    /** null을 IAE로 막는 구현이면 「책 없이」로 되돌릴 길이 사라진다 — 그 구현을 여기서 잡는다. */
+    @Test
+    @DisplayName("changeActiveBook: null이면 「책 없이」로 되돌린다")
+    void changeActiveBook_nullClearsBook() {
+        StudySession active = StudySession.start(user, T0, book);
+        when(studyRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(active));
+        when(studyRepository.save(active)).thenReturn(active);
+
+        assertThat(service.changeActiveBook(user, null).getBook()).isNull();
+    }
+
+    @Test
+    @DisplayName("changeActiveBook: 진행 중 세션이 없으면 거부한다(컨트롤러가 409로 — stop과 같은 계약)")
+    void changeActiveBook_rejectsWhenNoActiveSession() {
+        when(studyRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.changeActiveBook(user, book))
+                .isInstanceOf(IllegalStateException.class);
+        verify(studyRepository, never()).save(any(StudySession.class));
+    }
+
+    // --- 책별 집계 · 최근 책 ---
+
+    @Test
+    @DisplayName("totalSecondsByBook: 집계 행을 책 id → 초 맵으로 옮긴다(null 초는 0)")
+    void totalSecondsByBook_mapsRows() {
+        when(studyRepository.sumSecondsByBook(user))
+                .thenReturn(List.of(new BookSecondsRow(11L, 1200L), new BookSecondsRow(12L, null)));
+
+        assertThat(service.totalSecondsByBook(user)).containsOnly(entry(11L, 1200L), entry(12L, 0L));
+    }
+
+    @Test
+    @DisplayName("recentBookId: 책이 붙은 가장 최근 세션의 책 id (없으면 null)")
+    void recentBookId_readsLatestTaggedSession() {
+        when(studyRepository.findFirstByUserAndBookIsNotNullOrderByStartedAtDesc(user))
+                .thenReturn(Optional.empty());
+        assertThat(service.recentBookId(user)).isNull();
     }
 
     // --- 당일 누적 ---

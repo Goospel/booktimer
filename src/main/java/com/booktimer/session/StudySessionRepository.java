@@ -1,7 +1,9 @@
 package com.booktimer.session;
 
+import com.booktimer.book.StudyBook;
 import com.booktimer.user.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -12,14 +14,49 @@ import java.util.Optional;
 /**
  * StudySession 영속성. User와 N:1.
  *
- * <p>쿼리가 넷뿐인 것이 이 원장의 요점이다 — 독서 집계(잔디·부채·기록·홈피드·책 통계)는 이 인터페이스를
- * 아예 모르고, 공부 화면은 이 넷만 본다. 새 공부 쿼리를 여기가 아니라 {@code ReadingSessionRepository}에
- * 다는 것이 이 설계에서 유일하게 남은 누수 경로다.
+ * <p>독서 집계(잔디·부채·기록·홈피드·책 통계)는 이 인터페이스를 아예 모르고, 공부 화면은 여기만 본다.
+ * 새 공부 쿼리를 여기가 아니라 {@code ReadingSessionRepository}에 다는 것이 이 설계에서 유일하게 남은
+ * 누수 경로다 — 책별 집계({@link #sumSecondsByBook})가 독서 쿼리와 <b>같은 이름·같은 조건</b>인 것도
+ * 그래서다(조건이 갈리면 두 화면이 다른 초를 말한다).
  */
 public interface StudySessionRepository extends JpaRepository<StudySession, Long> {
 
-    /** 진행 중(미종료) 공부 세션 — 사용자당 최대 하나라는 규칙은 서비스가 지킨다. */
-    Optional<StudySession> findByUserAndEndedAtIsNull(User user);
+    /**
+     * 진행 중(미종료) 공부 세션 — 사용자당 최대 하나라는 규칙은 서비스가 지킨다.
+     *
+     * <p><b>책을 함께 즉시 로딩</b>한다: 화면 상태({@code StudyState.activeBook})가 트랜잭션 밖에서
+     * 제목을 읽으므로 lazy 프록시로 두면 그 자리가 예외가 된다. LEFT join이라 책 없는 세션도 그대로 온다.
+     */
+    @Query("select s from StudySession s left join fetch s.book where s.user = :user and s.endedAt is null")
+    Optional<StudySession> findByUserAndEndedAtIsNull(@Param("user") User user);
+
+    /** 소유권 확인용 — 내 세션일 때만 조회된다(종료 후 태깅의 IDOR 경계). */
+    Optional<StudySession> findByIdAndUser(Long id, User user);
+
+    /**
+     * 책별 누적 공부 시간(초) — 완료·책지정 세션만 DB에서 GROUP BY 집계.
+     * 조건은 독서 {@code ReadingSessionRepository.sumSecondsByBook}과 글자 그대로 같다.
+     */
+    @Query("""
+            select new com.booktimer.session.BookSecondsRow(s.book.id, coalesce(sum(s.durationSeconds), 0))
+            from StudySession s
+            where s.user = :user and s.endedAt is not null and s.book is not null
+            group by s.book.id
+            """)
+    List<BookSecondsRow> sumSecondsByBook(@Param("user") User user);
+
+    /** 가장 최근에 <b>책을 걸고</b> 잰 세션 — 홈 캐러셀의 기본 선택({@code recentBookId})의 출처. */
+    Optional<StudySession> findFirstByUserAndBookIsNotNullOrderByStartedAtDesc(User user);
+
+    /**
+     * 공부 책 삭제 시, 그 책을 가리키던 세션을 "책 미지정"으로 푼다(book_id = null).
+     *
+     * <p>세션 자체는 지우지 않는다 — 책을 서재에서 빼도 그날 공부한 시간(당일 합·달력)은 보존돼야 한다.
+     * 벌크 갱신이라 영속성 컨텍스트를 우회하므로 flush/clear를 자동 수행한다(독서 {@code unlinkBook}과 같다).
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update StudySession s set s.book = null where s.book = :book")
+    void unlinkBook(@Param("book") StudyBook book);
 
     /** 방치 스윕 대상 — 임계 시각 이전에 시작해 아직 안 닫힌 세션들. */
     List<StudySession> findByEndedAtIsNullAndStartedAtBefore(Instant threshold);

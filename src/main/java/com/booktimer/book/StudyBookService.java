@@ -1,5 +1,6 @@
 package com.booktimer.book;
 
+import com.booktimer.session.StudySessionRepository;
 import com.booktimer.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,17 +14,20 @@ import java.util.Optional;
  * <p>검색은 도메인 중립이라 독서와 같은 문({@code GET /api/books/search})을 그대로 재사용한다 —
  * 여기엔 검색이 없다. 조회/변경/삭제는 소유권을 강제하고(IDOR 방지) {@link StudyBookRepository}로 영속한다.
  *
- * <p>{@link BookService#delete}와 달리 삭제가 <b>단순 delete 한 줄</b>이다: 공부 책엔 딸린 자식이 없다
- * (세션이 가리키지 않고 — 타이머-책 연결은 이번 범위 밖 — 여백 글도 공부 모드엔 없다).
+ * <p>삭제는 {@link BookService#delete}와 같은 모양이 됐다 — 공부 세션이 이 책을 가리키므로
+ * ({@code study_session.book_id}) 참조를 먼저 풀어야 한다. 여백 글은 공부 모드에 없어 그 한 줄만 다르다.
  */
 @Service
 @Transactional
 public class StudyBookService {
 
     private final StudyBookRepository studyBookRepository;
+    private final StudySessionRepository studySessionRepository;
 
-    public StudyBookService(StudyBookRepository studyBookRepository) {
+    public StudyBookService(StudyBookRepository studyBookRepository,
+                            StudySessionRepository studySessionRepository) {
         this.studyBookRepository = studyBookRepository;
+        this.studySessionRepository = studySessionRepository;
     }
 
     @Transactional(readOnly = true)
@@ -67,12 +71,16 @@ public class StudyBookService {
     }
 
     /**
-     * 내 공부 책을 서재에서 지운다. 딸린 자식이 없어 정리 단계가 필요 없다(위 클래스 주석).
+     * 내 공부 책을 서재에서 지운다. 그 책으로 잰 세션은 <b>「책 미지정」으로 풀어</b>(book_id = null)
+     * 공부 시간을 보존한다 — 책을 서재에서 빼도 그날 공부한 시간(당일 합·달력)은 남아야 하고,
+     * {@code study_session.book_id} FK 때문에 이 정리 없이는 삭제가 제약 위반으로 실패한다.
      *
      * @throws IllegalArgumentException 내 책이 아니거나 존재하지 않는 경우
      */
     public void delete(User user, Long bookId) {
-        studyBookRepository.delete(ownedBook(user, bookId));
+        StudyBook book = ownedBook(user, bookId);
+        studySessionRepository.unlinkBook(book);
+        studyBookRepository.delete(book);
     }
 
     /** 내 책일 때만 반환한다. 아니면(존재 안 함/남의 책) 거부 — 존재 여부도 노출하지 않는다(IDOR 방지). */
