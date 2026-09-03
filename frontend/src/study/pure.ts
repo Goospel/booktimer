@@ -231,7 +231,26 @@ export function validatePlanForm(input: PlanFormInput, today: string): string | 
         return '주 공부일수는 1일에서 7일 사이로 정해 주세요.';
     }
     if (input.scope.length > 4000) return '범위는 4000자까지 적을 수 있어요.';
+    if (today && estimatedItems(today, input.examDate, input.daysPerWeek) > MAX_PLAN_ITEMS) {
+        return '기간이 길어 한 번에 만들기 어려워요. 시험일을 앞당기거나 주 공부일수를 줄여 주세요.';
+    }
     return null;
+}
+
+/**
+ * 한 번에 만들 수 있는 예상 항목 수 — 서버 `StudyPlanService.MAX_PLAN_ITEMS`와 **같은 값**이다.
+ *
+ * 지연에서 역산한 값이다(실측 `ms ≈ 9,200 + 843 × 항목수` → 90항목 ≈ 85초, 타임아웃 90초 바로 아래).
+ * 여기서 막는 것은 헛왕복을 없애기 위해서고, **최종 판정은 서버**다(같은 규칙을 두 곳이 든다).
+ */
+const MAX_PLAN_ITEMS = 90;
+
+/** 후보 날짜 수(오늘~시험 전날) × 주 공부일수 / 7 — 서버와 같은 추정식. */
+function estimatedItems(today: string, examDate: string, daysPerWeek: number): number {
+    const [ty, tm, td] = today.split('-').map(Number);
+    const [ey, em, ed] = examDate.split('-').map(Number);
+    const days = Math.round((Date.UTC(ey, em - 1, ed) - Date.UTC(ty, tm - 1, td)) / 86400000);
+    return Math.floor((days * daysPerWeek) / 7);
 }
 
 /** 그 날짜가 속한 ISO 주(월~일)의 월요일 — 서버 `sanitizePlan`과 <b>같은 주 경계</b>다. */

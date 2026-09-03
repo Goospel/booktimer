@@ -40,8 +40,7 @@ import java.util.List;
  * <p>에러 계약은 {@link StudyApiController}와 같다: IAE → 400(문구가 그대로 본문) · 남의 것·없는 것 → 404.
  *
  * <p>{@link Agenda}는 화면이 보는 <b>단 하나의 상태</b>다 — 달력·상세·AI 상태 줄이 전부 이 응답에서 그려진다.
- * {@code remaining}의 {@code plan}은 아직 그 버튼이 없어 0 고정이고, {@code transcribe}·{@code analyze}는
- * 실제 남은 몫이다(버튼이 붙는 판에서 나머지가 채워진다).
+ * {@code remaining}의 셋({@code plan}·{@code transcribe}·{@code analyze})은 전부 오늘 실제로 남은 몫이다.
  */
 @RestController
 public class StudyPlanApiController {

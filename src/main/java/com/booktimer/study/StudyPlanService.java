@@ -16,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -60,6 +61,20 @@ public class StudyPlanService {
 
     /** 「범위」 텍스트 상한 — {@code study_recall.scope_text}와 같은 4000자. */
     public static final int SCOPE_MAX = 4000;
+
+    /**
+     * 한 번에 만들 수 있는 <b>예상 항목 수</b>의 상한 — 지연에서 역산한 값이다.
+     *
+     * <p>실측 회귀식이 {@code ms ≈ 9,200 + 6.29 × 출력토큰}이고 항목 하나가 약 134토큰이라, 항목 수
+     * {@code n}에 대해 대략 {@code ms ≈ 9,200 + 843n}이다(2026-09-03 실측 2점: 79항목 75.7초 · 15항목
+     * 28.9초). 90항목이면 약 85초로 클라이언트 타임아웃 90초 <b>바로 아래</b>다 — 여유가 5초뿐이라
+     * 넉넉하지 않지만, 더 줄이면 3개월·주 5일(약 65항목)이라는 주 사용례의 바로 옆까지 좁아진다.
+     * 근본 해법은 상한이 아니라 스트리밍·비동기다(plan.md 🔜).
+     *
+     * <p><b>기간이 아니라 항목 수로 막는 이유</b>: {@link #MAX_EXAM_DAYS_AHEAD}를 줄이면 「1년 뒤 시험을
+     * 주 1일로 준비」(52항목, 실제로는 빠르다)까지 함께 막힌다. 느리게 만드는 것은 기간이 아니라 출력량이다.
+     */
+    public static final int MAX_PLAN_ITEMS = 90;
 
     private final StudyPlanItemRepository planItemRepository;
     private final StudyAiAccessService accessService;
@@ -175,6 +190,7 @@ public class StudyPlanService {
         requireRange(command.dailyMinutes(), MIN_DAILY_MINUTES, MAX_DAILY_MINUTES,
                 "하루 공부 시간은 " + MIN_DAILY_MINUTES + "분에서 " + MAX_DAILY_MINUTES + "분 사이로 적어 주세요");
         requireRange(command.daysPerWeek(), 1, 7, "주 공부일수는 1일에서 7일 사이로 정해 주세요");
+        requireAnswerableSize(today, examDate, command.daysPerWeek());
         String scope = command.scope() == null ? "" : command.scope().strip();
         if (scope.length() > SCOPE_MAX) {
             throw new IllegalArgumentException("범위는 " + SCOPE_MAX + "자까지 적을 수 있어요");
@@ -233,6 +249,22 @@ public class StudyPlanService {
             throw new IllegalArgumentException("시험일은 1년 안으로 정해 주세요");
         }
         return examDate;
+    }
+
+    /**
+     * 「이 요청은 시간 안에 끝나는가」를 <b>보내기 전에</b> 판정한다.
+     *
+     * <p>후보 날짜 수 × 주 공부일수 / 7 이 그대로 예상 항목 수다(모델이 주당 상한을 지킨다는 전제 —
+     * 안 지키면 {@code sanitizePlan}이 잘라 실제 항목은 이보다 적다. 즉 이 추정은 안전한 쪽으로 크다).
+     *
+     * @throws IllegalArgumentException 상한 초과 — 그대로 400 본문이 되어 화면에 뜬다
+     */
+    private static void requireAnswerableSize(LocalDate today, LocalDate examDate, int daysPerWeek) {
+        long candidateDays = ChronoUnit.DAYS.between(today, examDate); // 오늘 ~ 시험 전날
+        if (candidateDays * daysPerWeek / 7 > MAX_PLAN_ITEMS) {
+            throw new IllegalArgumentException(
+                    "기간이 길어 한 번에 만들기 어려워요 — 시험일을 앞당기거나 주 공부일수를 줄여 주세요");
+        }
     }
 
     private static void requireRange(int value, int min, int max, String message) {

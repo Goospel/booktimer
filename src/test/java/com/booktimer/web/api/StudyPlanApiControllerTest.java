@@ -480,6 +480,57 @@ class StudyPlanApiControllerTest {
     }
 
     @Test
+    @DisplayName("generate 검증: 예상 항목 수가 상한을 넘으면 400 — 4개월·주 6일은 타임아웃에 걸린다")
+    void generate_tooManyEstimatedItems_isBadRequest() throws Exception {
+        registerWith("plantoolong", StudyAiAccess.APPROVED);
+        given(assistant.isEnabled()).willReturn(true);
+
+        // 122일 × 6/7 = 104항목 → 회귀식으로 약 96초, 클라이언트 타임아웃 90초를 넘긴다
+        performGenerateBadRequest("plantoolong",
+                generateBody("정보보안기사", "1장", today().plusDays(122), 120, 6));
+    }
+
+    @Test
+    @DisplayName("generate 검증: 항목 수 경계 — 90개는 통과한다")
+    void generate_estimatedItemsAtLimit_isAllowed() throws Exception {
+        registerWith("planatlimit", StudyAiAccess.APPROVED);
+        given(assistant.isEnabled()).willReturn(true);
+        given(assistant.generatePlan(any())).willReturn(AiResult.ok(new PlanDraft(
+                List.of(new PlanDay(iso(today().plusDays(1)), "1장 접근통제")))));
+
+        // 90일 × 7/7 = 90항목 — 상한과 같으므로 통과다(넘을 때만 막는다)
+        mockMvc.perform(post("/api/study/plan/generate").with(user("planatlimit")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(generateBody("과목", "1장", today().plusDays(90), 120, 7)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("generate 검증: 항목 수 경계 — 91개는 400이고 어댑터를 부르지 않는다")
+    void generate_estimatedItemsOverLimit_isBadRequest() throws Exception {
+        registerWith("planoverlimit", StudyAiAccess.APPROVED);
+        given(assistant.isEnabled()).willReturn(true);
+
+        performGenerateBadRequest("planoverlimit",
+                generateBody("과목", "1장", today().plusDays(91), 120, 7));
+    }
+
+    @Test
+    @DisplayName("generate 검증: 1년짜리라도 주 1일이면 통과한다 — 기간이 아니라 항목 수로 막는다")
+    void generate_longRangeWithFewDaysPerWeek_isAllowed() throws Exception {
+        registerWith("planlongthin", StudyAiAccess.APPROVED);
+        given(assistant.isEnabled()).willReturn(true);
+        given(assistant.generatePlan(any())).willReturn(AiResult.ok(new PlanDraft(
+                List.of(new PlanDay(iso(today().plusDays(7)), "1장 접근통제")))));
+
+        // 365일 × 1/7 = 52항목 — 기간만 보고 막으면 이 정당한 장기 계획까지 막힌다
+        mockMvc.perform(post("/api/study/plan/generate").with(user("planlongthin")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(generateBody("과목", "1장", today().plusDays(365), 120, 1)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     @DisplayName("generate 검증: 시험일 형식이 틀리면 400")
     void generate_badExamDate_isBadRequest() throws Exception {
         registerWith("planbaddate", StudyAiAccess.APPROVED);

@@ -265,8 +265,10 @@ describe('validatePlanForm', () => {
     });
 
     it('시험일이 1년을 넘으면 막는다 — 경계(365일)는 통과', () => {
-        expect(validatePlanForm({ ...ok, examDate: '2027-09-03' }, TODAY)).toBeNull();
-        expect(validatePlanForm({ ...ok, examDate: '2027-09-04' }, TODAY)).toBe('시험일은 1년 안으로 정해 주세요.');
+        // 주 1일로 재는 것은 항목 수 상한(아래)과 겹치지 않게 하려는 것이다 — 여기서 재는 것은 기간이다.
+        expect(validatePlanForm({ ...ok, examDate: '2027-09-03', daysPerWeek: 1 }, TODAY)).toBeNull();
+        expect(validatePlanForm({ ...ok, examDate: '2027-09-04', daysPerWeek: 1 }, TODAY))
+            .toBe('시험일은 1년 안으로 정해 주세요.');
     });
 
     it('하루 공부 시간은 10~600분이다 — 경계는 통과', () => {
@@ -278,7 +280,8 @@ describe('validatePlanForm', () => {
 
     it('주 공부일수는 1~7일이다 — 경계는 통과', () => {
         expect(validatePlanForm({ ...ok, daysPerWeek: 1 }, TODAY)).toBeNull();
-        expect(validatePlanForm({ ...ok, daysPerWeek: 7 }, TODAY)).toBeNull();
+        // 주 7일은 짧은 기간으로 잰다 — 긴 기간이면 항목 수 상한이 먼저 걸려 이 경계를 못 본다.
+        expect(validatePlanForm({ ...ok, examDate: '2026-10-03', daysPerWeek: 7 }, TODAY)).toBeNull();
         expect(validatePlanForm({ ...ok, daysPerWeek: 0 }, TODAY)).toBe('주 공부일수는 1일에서 7일 사이로 정해 주세요.');
         expect(validatePlanForm({ ...ok, daysPerWeek: 8 }, TODAY)).toBe('주 공부일수는 1일에서 7일 사이로 정해 주세요.');
     });
@@ -286,6 +289,18 @@ describe('validatePlanForm', () => {
     it('범위는 4000자까지다 — 경계는 통과', () => {
         expect(validatePlanForm({ ...ok, scope: '가'.repeat(4000) }, TODAY)).toBeNull();
         expect(validatePlanForm({ ...ok, scope: '가'.repeat(4001) }, TODAY)).toBe('범위는 4000자까지 적을 수 있어요.');
+    });
+
+    it('예상 항목 수가 90개를 넘으면 막는다 — 90은 통과, 91은 거부(주 7일 기준)', () => {
+        expect(validatePlanForm({ ...ok, examDate: '2026-12-02', daysPerWeek: 7 }, TODAY)).toBeNull();
+        expect(validatePlanForm({ ...ok, examDate: '2026-12-03', daysPerWeek: 7 }, TODAY))
+            .toBe('기간이 길어 한 번에 만들기 어려워요. 시험일을 앞당기거나 주 공부일수를 줄여 주세요.');
+    });
+
+    it('기간이 아니라 항목 수로 막는다 — 1년짜리라도 주 1일이면 통과한다', () => {
+        expect(validatePlanForm({ ...ok, examDate: '2027-09-03', daysPerWeek: 1 }, TODAY)).toBeNull();
+        expect(validatePlanForm({ ...ok, examDate: '2027-01-03', daysPerWeek: 6 }, TODAY))
+            .toBe('기간이 길어 한 번에 만들기 어려워요. 시험일을 앞당기거나 주 공부일수를 줄여 주세요.');
     });
 
     it('서버 오늘을 아직 모르면 막지 않는다 — 화면이 먼저 지레 잠기지 않게', () => {
