@@ -2,6 +2,7 @@ package com.booktimer.book;
 
 import com.booktimer.session.StudySessionRepository;
 import com.booktimer.study.StudyPlanItemRepository;
+import com.booktimer.study.StudyRecallRepository;
 import com.booktimer.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,13 +26,16 @@ public class StudyBookService {
     private final StudyBookRepository studyBookRepository;
     private final StudySessionRepository studySessionRepository;
     private final StudyPlanItemRepository studyPlanItemRepository;
+    private final StudyRecallRepository studyRecallRepository;
 
     public StudyBookService(StudyBookRepository studyBookRepository,
                             StudySessionRepository studySessionRepository,
-                            StudyPlanItemRepository studyPlanItemRepository) {
+                            StudyPlanItemRepository studyPlanItemRepository,
+                            StudyRecallRepository studyRecallRepository) {
         this.studyBookRepository = studyBookRepository;
         this.studySessionRepository = studySessionRepository;
         this.studyPlanItemRepository = studyPlanItemRepository;
+        this.studyRecallRepository = studyRecallRepository;
     }
 
     @Transactional(readOnly = true)
@@ -87,6 +91,8 @@ public class StudyBookService {
         // 일정도 같은 규칙으로 푼다(study_plan_item.book_id FK) — 「그날 뭘 하기로 했었나」는 남아야 하고,
         // subject 스냅샷이 제목을 대신 든다. 빠뜨리면 그 책을 쓴 사용자는 삭제 자체가 제약 위반으로 실패한다.
         studyPlanItemRepository.unlinkBook(book);
+        // 백지복습도 같은 규칙 — 글은 남고 책 참조만 푼다(study_recall.book_id FK).
+        studyRecallRepository.unlinkBook(book);
         studyBookRepository.delete(book);
     }
 

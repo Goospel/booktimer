@@ -17,7 +17,9 @@ import com.booktimer.session.StudyDailyCheckRepository;
 import com.booktimer.session.StudySessionRepository;
 import com.booktimer.story.StoryLikeRepository;
 import com.booktimer.story.StoryRepository;
+import com.booktimer.study.StudyAiUsageRepository;
 import com.booktimer.study.StudyPlanItemRepository;
+import com.booktimer.study.StudyRecallRepository;
 import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.timer.ReadingTimerRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -45,6 +47,8 @@ public class AccountService {
     private final StudySessionRepository studySessionRepository;
     private final StudyDailyCheckRepository studyDailyCheckRepository;
     private final StudyPlanItemRepository studyPlanItemRepository;
+    private final StudyRecallRepository studyRecallRepository;
+    private final StudyAiUsageRepository studyAiUsageRepository;
     private final FollowRepository followRepository;
     private final BlockRepository blockRepository;
     private final ReportRepository reportRepository;
@@ -69,6 +73,8 @@ public class AccountService {
                           StudySessionRepository studySessionRepository,
                           StudyDailyCheckRepository studyDailyCheckRepository,
                           StudyPlanItemRepository studyPlanItemRepository,
+                          StudyRecallRepository studyRecallRepository,
+                          StudyAiUsageRepository studyAiUsageRepository,
                           FollowRepository followRepository,
                           BlockRepository blockRepository,
                           ReportRepository reportRepository,
@@ -92,6 +98,8 @@ public class AccountService {
         this.studySessionRepository = studySessionRepository;
         this.studyDailyCheckRepository = studyDailyCheckRepository;
         this.studyPlanItemRepository = studyPlanItemRepository;
+        this.studyRecallRepository = studyRecallRepository;
+        this.studyAiUsageRepository = studyAiUsageRepository;
         this.followRepository = followRepository;
         this.blockRepository = blockRepository;
         this.reportRepository = reportRepository;
@@ -253,6 +261,9 @@ public class AccountService {
         // FK: study_plan_item.user_id → users (공부 일정 원장). study_book보다 **앞**이다 —
         // study_plan_item.book_id가 study_book을 참조하므로 책을 먼저 지우면 제약 위반이 난다(book↔story와 같은 이유).
         studyPlanItemRepository.deleteByUser(user);
+        // FK: study_recall.user_id → users. study_book보다 앞이다 — recall.book_id가 study_book을 참조한다.
+        studyRecallRepository.deleteByUser(user);
+        studyAiUsageRepository.deleteByUser(user); // FK: study_ai_usage.user_id → users (AI 하루 상한 카운터)
         timerRepository.deleteByUser(user);
         goalChangeRepository.deleteByUser(user);   // FK: reading_goal_change.user_id → users (유저 삭제 전 정리)
         goalWaiverRepository.deleteByUser(user);   // FK: reading_goal_waiver.user_id → users (리워드 광고 용서 기록)

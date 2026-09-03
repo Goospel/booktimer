@@ -41,7 +41,7 @@ case "\$*" in
                  GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET ALADIN_TTB_KEY \\
                  COUPANG_SEARCH_URL_TEMPLATE YES24_TRACKING_CODE YES24_SEARCH_URL_TEMPLATE \\
                  KYOBO_TRACKING_CODE KYOBO_SEARCH_URL_TEMPLATE KYOBO_MOBILE_SEARCH_URL_TEMPLATE \\
-                 ADMIN_LOGIN_IDS LLM_API_KEY SPRING_MAIL_USERNAME SPRING_MAIL_PASSWORD \\
+                 ADMIN_LOGIN_IDS LLM_API_KEY CLAUDE_API_KEY SPRING_MAIL_USERNAME SPRING_MAIL_PASSWORD \\
                  MYSQL_ROOT_PASSWORD MINIAPP_ALLOWED_ORIGINS \\
                  TOSS_MESSENGER_ENABLED TOSS_FINISH_TEMPLATE_CODE \\
                  TOSS_GOAL_MET_ENABLED TOSS_GOAL_MET_TEMPLATE_CODE \\
@@ -120,6 +120,10 @@ assert_has "  .env 에 목표달성 템플릿 코드" "$env_out" "BOOKTIMER_TOSS
 # 재참여(7일 비활동) 넛지 푸시 — 같은 무성 장애. SSM을 true로 켜도 스케줄러 빈이 안 떠서 매일 19시 배치가 안 돈다.
 assert_has "  .env 에 재참여 게이트" "$env_out" "BOOKTIMER_TOSS_RETENTION_ENABLED=value-of-TOSS_RETENTION_ENABLED"
 assert_has "  .env 에 재참여 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_RETENTION_TEMPLATE_CODE=value-of-TOSS_RETENTION_TEMPLATE_CODE"
+# Claude API 키(공부 화면 백지복습 분석) — SSM 이름(CLAUDE_API_KEY)과 앱 환경변수 이름
+# (BOOKTIMER_CLAUDE_API_KEY)이 달라 매핑이 필요하다. 빠지면 .env에 안 실려 앱이 not-configured 기본값으로
+# 뜨고, 승인된 사용자에게도 「AI 기능이 꺼져 있어요」만 나오는 무성 장애가 된다(LLM_API_KEY와 같은 부류).
+assert_has "  .env 에 Claude API 키" "$env_out" "BOOKTIMER_CLAUDE_API_KEY=value-of-CLAUDE_API_KEY"
 
 # ── Case 2: 인증서 누락 → 배포 실패, 파일도 안 남는다 ──
 r="$(run TOSS_MTLS_CERT)"; rc="${r%%$'\n'*}"; out="${r#*$'\n'}"

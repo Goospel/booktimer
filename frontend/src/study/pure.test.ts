@@ -11,6 +11,8 @@ import {
     nextDay,
     planSummary,
     prevDay,
+    recallScopePrefill,
+    recallSubjectPrefill,
     studyNavLinks,
 } from './pure';
 
@@ -146,6 +148,41 @@ describe('errorMessage', () => {
     it('폴백을 주면 500·빈 400에도 그 문구가 나온다 — 「일정」 문구가 엉뚱한 화면에 새지 않는다', () => {
         expect(errorMessage(500, '<html>...</html>', 'AI 기능을 신청하지 못했어요.')).toBe('AI 기능을 신청하지 못했어요.');
         expect(errorMessage(400, '  ', 'AI 기능을 신청하지 못했어요.')).toBe('AI 기능을 신청하지 못했어요.');
+    });
+
+    it('429·503도 본문을 믿는다 — 상한·AI 장애 사유는 사용자가 행동을 바꿀 수 있는 안내다', () => {
+        expect(errorMessage(429, '오늘 몫을 다 썼어요 — 내일 다시 해 주세요', 'x'))
+            .toBe('오늘 몫을 다 썼어요 — 내일 다시 해 주세요');
+        expect(errorMessage(503, 'AI 응답을 받지 못했어요 — 글은 저장돼 있어요', 'x'))
+            .toBe('AI 응답을 받지 못했어요 — 글은 저장돼 있어요');
+    });
+
+    it('403 본문이 한국어 사유면 그걸 쓴다 — 백지복습 문은 사유를 평문으로 준다', () => {
+        expect(errorMessage(403, 'AI 기능은 승인 후 쓸 수 있어요', 'x')).toBe('AI 기능은 승인 후 쓸 수 있어요');
+    });
+
+    it('HTML은 상태와 무관하게 버린다 — 서버 자체가 낸 503·429도 error.html일 수 있다', () => {
+        expect(errorMessage(503, '<!DOCTYPE html><html>...</html>', 'AI 분석을 받지 못했어요.'))
+            .toBe('AI 분석을 받지 못했어요.');
+        expect(errorMessage(429, '<html>Too Many</html>', 'AI 분석을 받지 못했어요.'))
+            .toBe('AI 분석을 받지 못했어요.');
+    });
+});
+
+describe('recall 프리필', () => {
+    const items = [
+        { id: 1, date: '2026-09-03', bookId: null, subject: '정보처리기사', task: '3장 함수 p.45-70' },
+        { id: 2, date: '2026-09-03', bookId: null, subject: '영어', task: '단어 200개' },
+    ];
+
+    it('범위는 그날 할 일들을 줄바꿈으로 잇는다 — 오늘 하기로 한 것이 곧 오늘의 범위다', () => {
+        expect(recallScopePrefill(items)).toBe('3장 함수 p.45-70\n단어 200개');
+    });
+
+    it('과목은 첫 일정의 과목 — 일정이 없으면 빈 문자열이라 사용자가 직접 쓴다', () => {
+        expect(recallSubjectPrefill(items)).toBe('정보처리기사');
+        expect(recallSubjectPrefill([])).toBe('');
+        expect(recallScopePrefill([])).toBe('');
     });
 });
 
