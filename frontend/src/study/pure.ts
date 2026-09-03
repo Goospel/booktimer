@@ -115,13 +115,17 @@ export function planSummary(items: PlanItem[]): string {
 /**
  * 실패 응답을 화면에 띄울 한 줄로 옮긴다.
  *
- * <p><b>본문을 믿는 것은 400뿐</b>이다 — 그 상태만 컨트롤러의 `@ExceptionHandler(IAE)`가 한국어
- * 완성문을 본문으로 돌려준다. 404·500은 `GlobalExceptionHandler`가 `error.html`을 렌더해
- * <b>HTML 문서 전체</b>가 본문이라, 그대로 던지면 상태줄에 `<!DOCTYPE html>…`이 찍힌다.
+ * <p><b>본문을 믿는 것은 400·409뿐</b>이다 — 그 둘만 컨트롤러의 `@ExceptionHandler`가 한국어
+ * 완성문을 본문으로 돌려준다(400은 IAE, 409는 승인 신청의 전이 위반). 그 밖의 상태는
+ * `GlobalExceptionHandler`가 `error.html`을 렌더해 <b>HTML 문서 전체</b>가 본문이라, 그대로
+ * 던지면 상태줄에 `<!DOCTYPE html>…`이 찍힌다 — CSRF가 만료된 403이 정확히 그 경로다.
+ *
+ * @param fallback 본문을 못 믿을 때 띄울 문구. 부르는 쪽마다 다르라고 인자로 받는다 —
+ *                 「일정을 추가하지 못했어요」가 AI 신청 실패에 뜨면 엉뚱하다
  */
-export function errorMessage(status: number, bodyText: string): string {
-    const fallback = '일정을 추가하지 못했어요.';
-    if (status === 400) return bodyText.trim() || fallback;
+export function errorMessage(status: number, bodyText: string,
+                             fallback = '일정을 추가하지 못했어요.'): string {
+    if (status === 400 || status === 409) return bodyText.trim() || fallback;
     if (status === 404) return '책을 찾을 수 없어요';
     return fallback;
 }

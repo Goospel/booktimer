@@ -154,7 +154,7 @@ class AdminControllerTest {
         userRepository.saveAndFlush(user);
     }
 
-    /** 모델에 실린 행 목록에서 @아이디만 뽑는다 — 행 타입이 바뀌어도 이 단언은 화면이 보는 값을 잰다. */
+    /** 모델에 실린 {@code AiAccessRow} 목록에서 @아이디만 뽑아 순서를 재는 헬퍼. */
     private java.util.List<String> loginIds(Object rows) {
         return ((java.util.List<?>) rows).stream()
                 .map(row -> ((com.booktimer.study.StudyAiAccessService.AiAccessRow) row).loginId())

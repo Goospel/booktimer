@@ -23,6 +23,8 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.hamcrest.Matchers.containsString;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -98,7 +100,10 @@ class StudyAiAccessApiControllerTest {
         mockMvc.perform(post(REQUEST_URL).with(user("aiuser3")).with(csrf())).andExpect(status().isOk());
 
         mockMvc.perform(post(REQUEST_URL).with(user("aiuser3")).with(csrf()))
-                .andExpect(status().isConflict());
+                .andExpect(status().isConflict())
+                // 본문 문구까지 잰다 — 화면이 409 본문을 그대로 상태줄에 띄우므로(`errorMessage`가
+                // 400·409만 본문을 믿는다), 여기가 영어나 빈 값이 되면 사용자가 그걸 읽게 된다.
+                .andExpect(content().string(containsString("이미 신청")));
 
         assertThat(accessOf("aiuser3")).isEqualTo(StudyAiAccess.PENDING);
     }

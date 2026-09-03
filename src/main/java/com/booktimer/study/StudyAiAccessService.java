@@ -5,6 +5,7 @@ import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -76,8 +77,13 @@ public class StudyAiAccessService {
     /**
      * AI 호출 직전의 게이트 — 승인된 사용자가 아니면 403으로 막는다.
      *
+     * <p>{@code SUPPORTS}인 것은 이 메서드가 DB를 만지지 않기 때문이다 — 클래스 레벨
+     * {@code @Transactional}을 그대로 물려받으면, 호출부가 트랜잭션 밖에서 부를 때 빈 트랜잭션이
+     * 열렸다 닫힌다(AI 호출을 트랜잭션 밖에 두는 다음 판에서 정확히 그 모양이 된다).
+     *
      * @throws ResponseStatusException 403, 상태가 {@link StudyAiAccess#APPROVED}가 아닌 경우
      */
+    @Transactional(propagation = Propagation.SUPPORTS)
     public void requireApproved(User user) {
         if (user.getStudyAiAccess() != StudyAiAccess.APPROVED) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "AI 기능은 승인 후 쓸 수 있어요");

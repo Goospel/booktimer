@@ -28,9 +28,9 @@ export interface StudyCalendar {
     days: CalendarDay[];
 }
 
-async function json<T>(res: Response): Promise<T> {
+async function json<T>(res: Response, fallback?: string): Promise<T> {
     if (!res.ok) {
-        throw new Error(errorMessage(res.status, await res.text().catch(() => '')));
+        throw new Error(errorMessage(res.status, await res.text().catch(() => ''), fallback));
     }
     return (await res.json()) as T;
 }
@@ -78,13 +78,14 @@ export interface AiAccessState {
     aiAccessAt: string | null;
 }
 
-/** AI 기능을 신청한다. 이미 대기·승인 상태면 서버가 409로 막는다(그 문구를 그대로 띄운다). */
+/**
+ * AI 기능을 신청한다. 이미 대기·승인 상태면 서버가 409로 막고, 그 한국어 본문이 그대로 뜬다.
+ *
+ * <p>다른 문들과 <b>같은 `json()` 경로</b>를 탄다 — 여기만 본문을 날것으로 던지면 CSRF가 만료된
+ * 403에서 `error.html` 문서 전체가 상태줄에 찍힌다.
+ */
 export async function requestAiAccess(): Promise<AiAccessState> {
-    const res = await post('/api/study/ai-access/request');
-    if (!res.ok) {
-        throw new Error((await res.text().catch(() => '')).trim() || 'AI 기능을 신청하지 못했어요.');
-    }
-    return (await res.json()) as AiAccessState;
+    return json(await post('/api/study/ai-access/request'), 'AI 기능을 신청하지 못했어요.');
 }
 
 export interface StudyBookRow {

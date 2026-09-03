@@ -12,15 +12,20 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.servlet.DispatcherServlet;
 
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.hamcrest.Matchers.containsString;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -179,6 +184,24 @@ class AdminStudyAiControllerTest {
                 .andExpect(flash().attributeExists("error"));
 
         assertThat(accessOf("target8")).isEqualTo(StudyAiAccess.PENDING);
+    }
+
+    @Test
+    @DisplayName("플래시 오류가 대시보드에 실제로 렌더된다 — 모델에 있는 것만으론 사용자가 못 본다")
+    void flashError_isRenderedOnDashboard() throws Exception {
+        registrationService.register("boss@booktimer.com", "rawpw1234", "사장", SEOUL, Role.ADMIN, today());
+
+        // 리다이렉트 뒤의 GET을 흉내 낸다: DispatcherServlet은 넘겨받은 플래시를 이 요청 속성에 넣고,
+        // 핸들러 어댑터가 그걸 모델로 옮긴다 — 그래서 여기에 직접 넣으면 실제 「리다이렉트 다음 요청」과
+        // 같은 모양이 된다(MockMvc의 flashAttr·세션 왕복으로는 이 지점까지 오지 않는다).
+        // 앞의 전이 테스트들은 「플래시에 error가 담겼다」까지만 보므로, 이 단언이 없으면
+        // admin.html의 렌더 줄을 통째로 지워도 전부 초록이다 — 오류가 조용히 사라지는 자리다.
+        mockMvc.perform(get("/admin")
+                        .requestAttr(DispatcherServlet.INPUT_FLASH_MAP_ATTRIBUTE,
+                                Map.of("error", "이미 처리된 신청이에요"))
+                        .with(user("boss@booktimer.com").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("이미 처리된 신청이에요")));
     }
 
     @Test

@@ -133,6 +133,20 @@ describe('errorMessage', () => {
     it('500도 본문을 버리고 고정 문구를 쓴다 — HTML이 상태줄에 찍히면 안 된다', () => {
         expect(errorMessage(500, '<!DOCTYPE html><html>...</html>')).toBe('일정을 추가하지 못했어요.');
     });
+
+    it('409도 본문을 믿는다 — 신청 API가 「이미 신청했거나 승인된 상태예요」를 본문으로 준다', () => {
+        expect(errorMessage(409, '이미 신청했거나 승인된 상태예요')).toBe('이미 신청했거나 승인된 상태예요');
+    });
+
+    it('403은 본문을 버리고 부른 쪽이 준 폴백을 쓴다 — CSRF 만료 응답이 상태줄에 찍히면 안 된다', () => {
+        expect(errorMessage(403, '<!DOCTYPE html><html><body>Forbidden</body></html>', 'AI 기능을 신청하지 못했어요.'))
+            .toBe('AI 기능을 신청하지 못했어요.');
+    });
+
+    it('폴백을 주면 500·빈 400에도 그 문구가 나온다 — 「일정」 문구가 엉뚱한 화면에 새지 않는다', () => {
+        expect(errorMessage(500, '<html>...</html>', 'AI 기능을 신청하지 못했어요.')).toBe('AI 기능을 신청하지 못했어요.');
+        expect(errorMessage(400, '  ', 'AI 기능을 신청하지 못했어요.')).toBe('AI 기능을 신청하지 못했어요.');
+    });
 });
 
 describe('aiStatusLine', () => {
