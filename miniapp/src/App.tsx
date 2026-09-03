@@ -26,7 +26,7 @@ import { StudyCalendar } from './screens/StudyCalendar';
 import { StudyHistory } from './screens/StudyHistory';
 import { StudyLibrary } from './screens/StudyLibrary';
 import { BookMargin, BookMarginAll, StoryComposer } from './screens/Story';
-import { showInterstitialAd, subscribeNativeBack, trackEvent } from './toss';
+import { showInterstitialAd, subscribeNativeBack, trackEvent, trackScreen } from './toss';
 import { CoverInitial, ErrorMessage, Loading, PENCIL_FRAME, SERIF_VALUE, Screen, Sheet } from './ui';
 
 /**
@@ -527,6 +527,80 @@ export function underCompose(margin: MarginState): MarginScreen | null {
   return marginScreen({ ...margin, composeBook: null });
 }
 
+/** App 수준에서 구분되는 화면 이름 — 콘솔에는 `screen_` 접두사가 붙는다({@link trackScreen}). */
+export type ScreenName =
+  | 'login'
+  | 'link_account'
+  | 'error'
+  | 'goal'
+  | 'study_goal'
+  | 'settings'
+  | 'margin'
+  | 'book_margin'
+  | 'profile'
+  | 'home'
+  | 'library'
+  | 'study_library'
+  | 'bookshop'
+  | 'history'
+  | 'study_history'
+  | 'calendar';
+
+/**
+ * 지금 떠 있는 화면 — {@link App}의 렌더 분기를 그대로 옮겨 적은 판정이다. 배선은 effect라 하니스가
+ * 못 돌리므로 판정만 순수하게 계측한다({@link marginScreen} 관례). `null` = 과도 상태(로딩), 안 쏜다.
+ *
+ * <p><b>순서가 곧 규칙이다</b>: 탭 밖 뷰 &gt; 대시보드 로딩 &gt; 목표·설정 &gt; 여백 사람축 &gt; 여백 책축
+ * &gt; 남의 책방 &gt; 탭. 특히 <b>로딩 가드가 목표·설정보다 앞</b>이라야 한다 — 렌더가 그 순서라
+ * (`dashboard === null` 조기 return이 `view === 'goal'`보다 위) 뒤집으면 대시보드를 기다리는 동안
+ * `goal`이 찍혀 사용자가 안 본 화면이 퍼널에 쌓인다.
+ *
+ * <p><b>`switch`인 이유</b>: `View`에 화면이 늘 때 여기 분기를 빠뜨리면 그 화면 사용자가 조용히
+ * 오분류된다. `default`의 `never` 대입이 그걸 컴파일 에러로 바꾼다(tsc가 유일한 계측기다 — 새 화면은
+ * 테스트에도 안 적힐 테니까).
+ */
+export function currentScreen(s: {
+  view: View;
+  loaded: boolean;
+  margin: MarginState | null;
+  shop: string | null;
+  tab: TabKey;
+  mode: TimerMode;
+}): ScreenName | null {
+  switch (s.view) {
+    case 'auth':
+      return 'login';
+    case 'link':
+      return 'link_account';
+    case 'error':
+      return 'error';
+    case 'loading':
+      return null;
+    // 대시보드가 오기 전엔 <Loading />이 뜬다 — 그 순서를 각 갈래가 직접 들고 있어 뒤집을 수가 없다.
+    case 'goal':
+      return s.loaded ? 'goal' : null;
+    case 'studyGoal':
+      return s.loaded ? 'study_goal' : null;
+    case 'settings':
+      return s.loaded ? 'settings' : null;
+    case 'main':
+      break; // 아래 탭 판정으로 내려간다
+    default: {
+      const exhaustive: never = s.view;
+      return exhaustive;
+    }
+  }
+  if (!s.loaded) return null;
+  // 작성 시트는 걷어낸다(`underCompose`) — 개폐로 이름이 바뀌면 그때마다 중복 발화한다.
+  const under = s.margin === null ? null : underCompose(s.margin);
+  if (under === 'person') return 'margin';
+  if (under === 'book') return 'book_margin';
+  if (s.shop !== null) return 'profile';
+  if (s.tab === 'library') return s.mode === 'study' ? 'study_library' : 'library';
+  if (s.tab === 'history') return s.mode === 'study' ? 'study_history' : 'history';
+  return s.tab; // 'home' | 'bookshop' | 'calendar'
+}
+
 /** 포커스 복귀 재조회의 최소 간격 — 미니앱은 앱 전환이 잦아 복귀마다 받으면 서버를 두들긴다. */
 export const REFRESH_THROTTLE_MS = 60_000;
 
@@ -699,6 +773,33 @@ export function App() {
   useBackClose(margin !== null && margin.composeBook === null, () => setMargin(null));
   useBackClose(shop !== null, () => setShop(null));
 
+  /**
+   * 지금 보여 줄 모드 — 진행 중 측정이 저장값을 이긴다(재진입·다른 기기 시작을 한 줄이 함께 처리한다).
+   *
+   * <p>조기 return(`dashboard === null`)보다 <b>위</b>에 있는 이유는 아래 화면 이름 effect뿐이다 —
+   * 훅은 조건부로 돌 수 없다. 대시보드 전엔 `hasActiveSession`을 `false`로 보지만 그 값은 화면 이름
+   * 파생에만 쓰이고(그때 이름은 `null`), 실제 렌더 분기는 가드 뒤라 종전과 같은 값을 본다.
+   */
+  const mode = effectiveMode(dashboard?.hasActiveSession ?? false, study.hasActiveSession, storedMode);
+
+  /**
+   * 지금 <b>보여 줄</b> 탭 — 모드가 바뀌어 사라진 칸에 서 있으면 홈으로 떨어진다({@link reconcileTab}).
+   *
+   * <p>상태(`tab`)는 그대로 둔다 — 원격 플립이 되돌아가면 원래 있던 탭으로 돌아오는 편이 옳고,
+   * 무엇보다 파생값이라 동기화 effect가 0줄이다.
+   */
+  const shownTab = reconcileTab(tab, mode);
+
+  /*
+   * 화면 진입 1건 — 퍼널(진입 → 로그인 → 목표 → 홈 → 서재·책방)의 유일한 관측점이다.
+   * 의존성이 **문자열 하나**라 같은 화면으로 리렌더되면 안 돈다 — 시트 개폐·`MainTabs` remount가
+   * 중복 발화로 새지 않는 것이 이 자리(App 루트)를 고른 이유다. `null`은 과도 상태(로딩)라 안 쏜다.
+   */
+  const screenName = currentScreen({ view, loaded: dashboard !== null, margin, shop, tab: shownTab, mode });
+  useEffect(() => {
+    if (screenName !== null) trackScreen(screenName);
+  }, [screenName]);
+
   const handleError = useCallback(
     (e: Error) => {
       if (e.name === 'UnauthorizedError') toLogin();
@@ -847,17 +948,6 @@ export function App() {
       // 토스트가 「무슨 책으로 시작됐나」를 그리려면 서버가 확정한 값이 필요하다 — 부르는 쪽으로 흘린다.
       return timer;
     });
-
-  /** 지금 보여 줄 모드 — 진행 중 측정이 저장값을 이긴다(재진입·다른 기기 시작을 한 줄이 함께 처리한다). */
-  const mode = effectiveMode(dashboard.hasActiveSession, study.hasActiveSession, storedMode);
-
-  /**
-   * 지금 <b>보여 줄</b> 탭 — 모드가 바뀌어 사라진 칸에 서 있으면 홈으로 떨어진다({@link reconcileTab}).
-   *
-   * <p>상태(`tab`)는 그대로 둔다 — 원격 플립이 되돌아가면 원래 있던 탭으로 돌아오는 편이 옳고,
-   * 무엇보다 파생값이라 동기화 effect가 0줄이다.
-   */
-  const shownTab = reconcileTab(tab, mode);
 
   /** 모드 전환 — 저장은 기기 로컬 한 줄이고, 화면은 위 파생값이 알아서 따라온다. */
   const changeMode = (next: TimerMode) => {

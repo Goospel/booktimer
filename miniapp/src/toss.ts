@@ -31,6 +31,24 @@ export function trackEvent(logName: string, params: Record<string, LogParam> = {
 }
 
 /**
+ * 화면 진입 1건 — 콘솔 카탈로그에 SCREEN 타입·`screen_` 접두사로 묶인다(발사 후 망각).
+ *
+ * <p>실패 처리는 {@link trackEvent}와 정확히 같다(앱 밖 동기 TypeError는 try가, 브릿지 거부는 catch가 받는다).
+ * try/catch 네 줄이 겹치지만 공용 `send()`를 빼지는 않았다 — 함수가 하나 더 느는 값이 지금은 없다.
+ *
+ * <p>SDK에 있는 `Analytics.screen`을 안 쓰는 이유: `location.protocol !== 'https:'`면 **호출 없이 조용히
+ * `undefined`를 돌려주는 가드**가 있어, 그 전제가 틀리면 기능 전체가 소리 없이 죽는다(늘 초록인 계측기).
+ * 와이어는 `Analytics.log`와 같으므로 가드 없는 쪽을 쓴다 — 자동 파라미터(referrer 등)가 필요해지면 그때 갈아탄다.
+ */
+export function trackScreen(name: string): void {
+  try {
+    void Analytics.log({ log_type: 'screen', log_name: `screen_${name}`, params: {} }).catch(() => {});
+  } catch {
+    // 지표 실패는 사용자에게 아무 의미가 없다 — 조용히 버린다.
+  }
+}
+
+/**
  * 「밀린 하루 지우개」(홈)에 띄우는 **리워드** 광고 그룹 ID. **빈 값이면 그 버튼이 꺼진다**(config-gate) —
  * 광고 그룹 생성 후 구글 등록까지 최대 2시간이 걸리므로, 그 전 빌드에서도 버튼이 안 뜨게 해야 안전하다.
  * 전면형·리워드형은 같은 API를 쓰고 타입은 이 그룹 ID로 결정된다.

@@ -6,6 +6,7 @@ import { login } from './api';
 import { LinkAccount } from './screens/LinkAccount';
 import { LoginBridge, beginLogin } from './screens/LoginBridge';
 import { userAgent } from './test-fixtures';
+import { trackEvent } from './toss';
 
 /**
  * 진입 인트로 — 심사 반려 1("서비스 설명 없이 즉시 토스 로그인을 유도")의 계측기.
@@ -23,10 +24,17 @@ vi.mock('./api', async (importOriginal) => ({
   register: vi.fn(),
 }));
 
+vi.mock('./toss', () => ({
+  trackEvent: vi.fn(),
+  tossLogin: vi.fn(), // api.ts가 로그인 때 쓴다 — 모듈을 통째로 대체하므로 여기도 채워야 한다
+}));
+
 const loginMock = vi.mocked(login);
+const trackEventMock = vi.mocked(trackEvent);
 
 beforeEach(() => {
   loginMock.mockReset();
+  trackEventMock.mockReset();
 });
 
 const intro = () =>
@@ -71,6 +79,28 @@ describe('로그인 시작 (beginLogin)', () => {
     loginMock.mockRejectedValue(new Error('인가 취소'));
 
     await expect(beginLogin()).rejects.toThrow('인가 취소');
+  });
+
+  /**
+   * 「토스로 시작하기」를 눌렀는가 — 진입(토스 자동 로그)과 첫 화면 사이의 가장 큰 미지수다.
+   *
+   * <p>안 눌렀으면 소개문 문제, 눌렀는데 홈·목표가 없으면 토스 인가·약관 단계 문제로 <b>처방이 완전히
+   * 다르다</b>. 이 화면의 단계(`intro → checking`)는 컴포넌트 내부 상태라 App 수준 화면 로그에 안 잡히고,
+   * 하니스는 클릭을 못 돌린다 — 그래서 이 흐름 함수가 유일한 계측 지점이다.
+   */
+  it('누른 사실을 먼저 남긴다 — 인가 결과와 무관하게 「눌렀다」가 퍼널의 한 칸이다', async () => {
+    loginMock.mockResolvedValue({ registered: true, token: 'tok', loginId: 'goospel' });
+
+    await beginLogin();
+
+    expect(trackEventMock).toHaveBeenCalledWith('login_started');
+  });
+
+  it('인가가 실패해도 눌렀다는 사실은 남는다 — 「눌렀는데 안 온 사람」을 가르는 유일한 점이다', async () => {
+    loginMock.mockRejectedValue(new Error('인가 취소'));
+
+    await expect(beginLogin()).rejects.toThrow('인가 취소');
+    expect(trackEventMock).toHaveBeenCalledWith('login_started');
   });
 });
 
