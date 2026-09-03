@@ -98,11 +98,19 @@ async function load(): Promise<void> {
 
 watch(() => props.date, load, { immediate: true });
 
+/**
+ * 날짜를 옮길 때 사진 상태를 씻는다.
+ *
+ * <p><b>`source`가 여기 있는 것이 요점</b>이다 — 저장된 글에서 읽어 오는 `try` 안에 두면 조회가 실패했을
+ * 때 전날의 `PHOTO`가 그대로 남아, 손으로 새로 친 글이 사진에서 온 것으로 저장된다(원장이 거짓말을 한다).
+ * 씻는 일은 실패할 수 있는 일보다 <b>앞</b>에 둔다.
+ */
 function resetPhotos(): void {
     photos.value = [];
     photoError.value = '';
     transcribed.value = false;
     mode.value = 'TEXT';
+    source.value = 'TEXT';
 }
 
 /**

@@ -219,6 +219,31 @@ describe('백지복습 — 사진 전사', () => {
         expect(wrapper.find('[data-testid="recall-photo-error"]').text()).toBe('사진은 3MB 이하로 올려 주세요');
     });
 
+    test('불러오기가 실패해도 source는 TEXT로 돌아온다 — 전날의 PHOTO가 새 글에 눌어붙지 않는다', async () => {
+        const wrapper = await mountPanel();
+        await pickPhoto(wrapper);
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({ text: '사진에서 읽은 글', unreadable: false }));
+        await wrapper.find('[data-testid="recall-transcribe"]').trigger('click');
+        await vi.waitFor(() => expect(bodyValue(wrapper)).toBe('사진에서 읽은 글'));
+
+        // 날짜를 옮기는데 그날 글 조회가 실패한다(서버 장애·네트워크) — 여기서 source가 안 씻기면
+        // 손으로 새로 친 글이 PHOTO로 저장돼 원장이 거짓말을 한다.
+        vi.mocked(fetch).mockRejectedValueOnce(new Error('boom'));
+        await wrapper.setProps({ date: '2026-09-04', today: '2026-09-04' });
+        await vi.waitFor(() => expect(bodyValue(wrapper)).toBe(''));
+
+        await wrapper.find('[data-testid="recall-body"]').setValue('손으로 친 글');
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({
+            date: '2026-09-04', bookId: null, subject: '', scope: '', body: '손으로 친 글',
+            source: 'TEXT', summary: null, holes: [], questions: [], model: null, analyzedAt: null,
+        }));
+        await wrapper.find('[data-testid="recall-save"]').trigger('click');
+        await vi.waitFor(() => expect(vi.mocked(fetch).mock.calls.length).toBe(4));
+
+        expect(JSON.parse(String((vi.mocked(fetch).mock.calls[3][1] as RequestInit).body)))
+            .toMatchObject({ source: 'TEXT', body: '손으로 친 글' });
+    });
+
     test('AI가 꺼져 있으면 사진 탭 자체가 없다 — 못 쓰는 버튼을 보여 주지 않는다', async () => {
         const wrapper = await mountPanel({ aiEnabled: false });
 

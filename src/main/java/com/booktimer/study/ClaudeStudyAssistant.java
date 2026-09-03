@@ -256,6 +256,10 @@ public class ClaudeStudyAssistant {
     static String recallUserPrompt(RecallInput in) {
         String subject = blankToNull(in.subject());
         String scope = blankToNull(in.scope());
+        // ⚠️ 본문·범위·과목은 사용자가 친 글이거나 사진에서 전사된 텍스트라 신뢰할 수 없다 — 그 안에
+        // 「[범위]」 같은 라벨을 적어 넣어 이 템플릿의 섹션을 위조할 수 있다. 지금은 폭발 반경이 자기
+        // 분석 결과뿐이라(툴·외부 호출·다른 사용자로 새는 경로가 없다) 막지 않았다. 여기에 툴 사용이나
+        // 유출 경로가 붙는 날에는 구분자·이스케이프(또는 본문을 별도 블록으로 분리)를 먼저 넣어야 한다.
         return """
                 [과목] %s
                 [범위] %s
