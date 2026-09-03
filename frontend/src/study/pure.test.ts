@@ -161,6 +161,11 @@ describe('errorMessage', () => {
         expect(errorMessage(403, 'AI 기능은 승인 후 쓸 수 있어요', 'x')).toBe('AI 기능은 승인 후 쓸 수 있어요');
     });
 
+    it('413도 본문을 믿는다 — 「사진은 3MB 이하로」는 사용자가 바로 고칠 수 있는 안내다', () => {
+        expect(errorMessage(413, '사진은 3MB 이하로 올려 주세요', '사진을 읽지 못했어요.'))
+            .toBe('사진은 3MB 이하로 올려 주세요');
+    });
+
     it('HTML은 상태와 무관하게 버린다 — 서버 자체가 낸 503·429도 error.html일 수 있다', () => {
         expect(errorMessage(503, '<!DOCTYPE html><html>...</html>', 'AI 분석을 받지 못했어요.'))
             .toBe('AI 분석을 받지 못했어요.');

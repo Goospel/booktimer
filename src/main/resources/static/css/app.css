@@ -4205,6 +4205,23 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .study-recall-scope { resize: vertical; }
 .study-recall-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .study-recall-actions .btn { width: auto; flex: 0 0 auto; }
+/* 타이핑 / 사진 — 탭 둘뿐이라 별도 컴포넌트 없이 눌린 버튼 하나로 현재 자리를 표시한다. */
+.study-recall-tabs { display: flex; gap: 6px; }
+.study-recall-tabs .btn { width: auto; flex: 0 0 auto; }
+.study-recall-tabs .btn.is-active { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.study-recall-photo { display: flex; flex-direction: column; gap: 8px; }
+.study-recall-photo .btn { align-self: flex-start; width: auto; }
+.study-recall-photo-list { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 8px; }
+.study-recall-photo-list li { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+.study-recall-photo-list img {
+    width: 96px; height: 96px; object-fit: cover;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+/* 「고쳐 주세요」가 이 화면의 필수 단계라, 안내를 문구 하나가 아니라 눈에 띄는 띠로 둔다. */
+.study-recall-transcribed {
+    margin: 0; padding: 8px 10px; border-radius: var(--radius-sm);
+    border: 1px solid var(--accent); background: var(--sage-soft);
+}
 .study-recall-heading { margin: 10px 0 4px; font-size: 12px; color: var(--muted); }
 .study-recall-summary { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .study-recall-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }

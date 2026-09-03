@@ -3,6 +3,7 @@ package com.booktimer.web.api;
 import com.booktimer.book.StudyBook;
 import com.booktimer.book.StudyBookRepository;
 import com.booktimer.security.CurrentUserService;
+import com.booktimer.study.ClaudeStudyAssistant;
 import com.booktimer.study.StudyRecall;
 import com.booktimer.study.StudyRecallService;
 import com.booktimer.user.User;
@@ -13,7 +14,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.security.Principal;
@@ -86,6 +89,26 @@ public class StudyRecallApiController {
         return ResponseEntity.ok(RecallResponse.from(recallService.analyze(user, parseDate(date))));
     }
 
+    /**
+     * 사진에 손으로 쓴 메모를 읽어 텍스트로 돌려준다 — <b>저장하지 않는다</b>.
+     *
+     * <p>응답이 그대로 저장되지 않는 것이 이 문의 요점이다: 읽은 글은 화면의 textarea로 들어가고,
+     * 사용자가 틀린 곳을 고쳐 {@code POST /api/study/recall}로 다시 보내야 비로소 서버에 남는다. 그래서
+     * 전사와 분석 사이에는 <b>서버 상태가 없다</b>(그 사이 사용자가 창을 닫으면 아무 흔적도 남지 않는다).
+     *
+     * @param images 1~3장, {@code image/jpeg|png|webp}, 각 3MB 이하
+     * @return 200 {@link TranscribeResponse} / 403 미승인 / 400 장수·형식·읽기 실패 / 413 용량 /
+     *         429 오늘 몫 소진 / 503 AI 꺼짐·응답 없음
+     */
+    @PostMapping("/api/study/recall/transcribe")
+    public ResponseEntity<TranscribeResponse> transcribe(
+            Principal principal,
+            @RequestParam(name = "images", required = false) List<MultipartFile> images) {
+        User user = currentUserService.resolve(principal);
+        ClaudeStudyAssistant.Transcript transcript = recallService.transcribe(user, images);
+        return ResponseEntity.ok(new TranscribeResponse(transcript.text(), transcript.unreadable()));
+    }
+
     /** {@link StudyPlanApiController}와 같은 규약 — IAE 메시지가 그대로 400 본문이 되어 화면에 뜬다. */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<String> handleInvalidRequest(IllegalArgumentException e) {
@@ -140,6 +163,15 @@ public class StudyRecallApiController {
      */
     public record SaveRequest(String date, Long bookId, String subject, String scope,
                               String body, String source) {
+    }
+
+    /**
+     * 전사 응답 — <b>이게 전부다</b>. 서버에 남은 것도, 다음 요청이 참조할 식별자도 없다.
+     *
+     * @param text       읽어 낸 글. 못 읽은 글자는 {@code [?]}로 표시돼 있다
+     * @param unreadable 글씨를 전혀 못 읽음 — 이때 {@code text}는 빈 값이고 화면이 안내를 띄운다
+     */
+    public record TranscribeResponse(String text, boolean unreadable) {
     }
 
     /**

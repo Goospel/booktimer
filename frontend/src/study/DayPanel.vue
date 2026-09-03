@@ -18,6 +18,8 @@ const props = defineProps<{
     aiBusy: boolean;
     /** 오늘 남은 분석 몫. */
     remainingAnalyze: number;
+    /** 오늘 남은 사진 전사 몫. */
+    remainingTranscribe: number;
     /** 전날 복습에 문제가 붙어 있나 — 달력이 이미 아는 사실이라 그대로 내려 준다(불필요한 왕복 제거). */
     hasYesterdayQuestions: boolean;
 }>();
@@ -105,6 +107,7 @@ function submit(): void {
             :books="books"
             :ai-enabled="aiEnabled"
             :remaining-analyze="remainingAnalyze"
+            :remaining-transcribe="remainingTranscribe"
             :has-yesterday-questions="hasYesterdayQuestions"
             @saved="emit('recall-saved')"
         />

@@ -4,9 +4,14 @@ import com.anthropic.client.AnthropicClient;
 import com.anthropic.client.okhttp.AnthropicOkHttpClient;
 import com.anthropic.errors.BadRequestException;
 import com.anthropic.errors.RateLimitException;
+import com.anthropic.models.messages.Base64ImageSource;
 import com.anthropic.models.messages.CacheControlEphemeral;
+import com.anthropic.models.messages.ContentBlockParam;
+import com.anthropic.models.messages.ImageBlockParam;
+import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.StopReason;
 import com.anthropic.models.messages.StructuredMessage;
+import com.anthropic.models.messages.StructuredMessageCreateParams;
 import com.anthropic.models.messages.TextBlockParam;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +20,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 
@@ -41,6 +47,29 @@ public class ClaudeStudyAssistant {
     static final int MAX_LIST_ITEMS = 10;
 
     private static final long ANALYZE_MAX_TOKENS = 8192;
+    private static final long TRANSCRIBE_MAX_TOKENS = 4096;
+
+    /** 한 요청에 넘길 수 있는 사진 수 — 컨트롤러의 400 판정과 <b>같은 상수</b>를 본다. */
+    public static final int MAX_IMAGES = 3;
+
+    /**
+     * 전사 시스템 프롬프트 — <b>옮겨 적기</b>만 시킨다.
+     *
+     * <p>이 프롬프트의 요점은 「고치지 마라」다. 모델이 손글씨를 읽으며 문장을 다듬으면, 사용자는 자기가
+     * 쓰지 않은 문장을 자기 글로 알고 저장하게 되고 그 글이 다음 판의 분석 근거가 된다 — 확인 단계가
+     * 있어도 사람은 그럴듯한 문장을 잘 지나친다. 그래서 못 읽은 글자는 지어내는 대신 {@code [?]}로 남긴다.
+     */
+    private static final String TRANSCRIBE_SYSTEM = """
+            사진에 찍힌 것은 종이에 손으로 쓴 공부 메모다. 보이는 대로 옮겨 적는다.
+
+            반드시 지킬 것:
+            - 내용을 고치거나 보태거나 요약하지 않는다. 맞춤법도 손대지 않는다.
+            - 못 읽는 글자는 지어내지 말고 [?] 로 남긴다.
+            - 취소선으로 지운 부분은 옮기지 않는다.
+            - 줄바꿈·번호·들여쓰기·화살표(→)는 텍스트로 그대로 살린다.
+            - 사진이 공부 메모가 아니거나 글씨를 전혀 못 읽으면 unreadable=true 로 하고 text 는 비운다.
+            - 사진이 여러 장이면 올라온 순서대로 이어 붙인다.
+            """;
 
     /**
      * 분석 시스템 프롬프트 — 환각 억제가 목적이다. 「적힌 것만 근거」·「범위 울타리」·「확실하지 않으면
@@ -106,55 +135,116 @@ public class ClaudeStudyAssistant {
         if (!isEnabled() || in == null) {
             return AiResult.fail(Failure.DISABLED);
         }
+        return call("analyze", MessageCreateParams.builder()
+                .model(model)
+                .maxTokens(ANALYZE_MAX_TOKENS)
+                // 시스템 프롬프트는 매 호출 같은 문자열이라 캐시를 건다. 최소 캐시 길이 미만이면
+                // 조용히 캐시되지 않을 뿐 요청은 정상이다(무해 — U-7).
+                .systemOfTextBlockParams(List.of(TextBlockParam.builder()
+                        .text(ANALYZE_SYSTEM)
+                        .cacheControl(CacheControlEphemeral.builder().build())
+                        .build()))
+                .outputConfig(RecallAnalysis.class)
+                .addUserMessage(recallUserPrompt(in))
+                .build());
+    }
+
+    /**
+     * 사진에 손으로 쓴 메모를 <b>옮겨 적는다</b>(고치지 않는다).
+     *
+     * <p>바이트는 여기서 base64 문자열이 되어 요청에 실릴 뿐 <b>어디에도 저장되지 않는다</b> — 이 메서드가
+     * 끝나면 남는 것은 응답 텍스트뿐이고, 그 텍스트마저 저장 여부는 사용자가 확인한 뒤에 정한다.
+     *
+     * @param images 1~{@value #MAX_IMAGES}장. 장수·형식·크기 검증은 호출부(서비스)가 이미 끝냈다
+     */
+    public AiResult<Transcript> transcribe(List<ImagePart> images) {
+        if (!isEnabled() || images == null || images.isEmpty()) {
+            return AiResult.fail(Failure.DISABLED);
+        }
+        List<ContentBlockParam> blocks = new ArrayList<>();
+        for (ImagePart image : images) {
+            blocks.add(ContentBlockParam.ofImage(ImageBlockParam.builder()
+                    .source(Base64ImageSource.builder()
+                            .data(Base64.getEncoder().encodeToString(image.bytes()))
+                            .mediaType(mediaTypeOf(image.mediaType()))
+                            .build())
+                    .build()));
+        }
+        // 지시 블록은 사진 <b>뒤</b>에 둔다 — 모델이 이미지를 먼저 본 뒤 지시를 읽는 순서가 된다.
+        blocks.add(ContentBlockParam.ofText("이 사진들에 적힌 글을 순서대로 옮겨 적어 주세요."));
+
+        return call("transcribe", MessageCreateParams.builder()
+                .model(model)
+                .maxTokens(TRANSCRIBE_MAX_TOKENS)
+                .systemOfTextBlockParams(List.of(TextBlockParam.builder()
+                        .text(TRANSCRIBE_SYSTEM)
+                        .cacheControl(CacheControlEphemeral.builder().build())
+                        .build()))
+                .outputConfig(Transcript.class)
+                .addUserMessageOfBlockParams(blocks)
+                .build());
+    }
+
+    /**
+     * 한 번의 호출 — 두 능력이 공유하는 몸통.
+     *
+     * <p>여기 모아 둔 것이 <b>실패의 갈래</b>다: 잘린 응답 · 레이트리밋 · 요청 거부 · 그 밖의 장애.
+     * 능력마다 이 사다리를 따로 쓰면 한쪽에서만 429를 500으로 새게 하기 쉽다.
+     */
+    private <T> AiResult<T> call(String kind, StructuredMessageCreateParams<T> params) {
         long started = System.currentTimeMillis();
         try {
-            StructuredMessage<RecallAnalysis> message = client.messages().create(
-                    com.anthropic.models.messages.MessageCreateParams.builder()
-                            .model(model)
-                            .maxTokens(ANALYZE_MAX_TOKENS)
-                            // 시스템 프롬프트는 매 호출 같은 문자열이라 캐시를 건다. 최소 캐시 길이 미만이면
-                            // 조용히 캐시되지 않을 뿐 요청은 정상이다(무해 — U-7).
-                            .systemOfTextBlockParams(List.of(TextBlockParam.builder()
-                                    .text(ANALYZE_SYSTEM)
-                                    .cacheControl(CacheControlEphemeral.builder().build())
-                                    .build()))
-                            .outputConfig(RecallAnalysis.class)
-                            .addUserMessage(recallUserPrompt(in))
-                            .build());
+            StructuredMessage<T> message = client.messages().create(params);
 
-            // 끝까지 못 쓴 응답(MAX_TOKENS·REFUSAL)은 잘린 분석이라 성공으로 치지 않는다.
+            // 끝까지 못 쓴 응답(MAX_TOKENS·REFUSAL)은 잘린 결과라 성공으로 치지 않는다.
             Optional<StopReason> stop = message.stopReason();
             if (stop.isPresent() && !StopReason.END_TURN.equals(stop.get())) {
-                log.warn("Claude 분석 중단 — stopReason={}", stop.get());
+                log.warn("Claude {} 중단 — stopReason={}", kind, stop.get());
                 return AiResult.fail(Failure.UNAVAILABLE);
             }
-            RecallAnalysis parsed = message.content().stream()
+            T parsed = message.content().stream()
                     .flatMap(block -> block.text().stream())
                     .map(text -> text.text())
                     .findFirst()
                     .orElse(null);
-            logCall(started, message);
+            logCall(kind, started, message);
             return parsed == null ? AiResult.fail(Failure.UNAVAILABLE) : AiResult.ok(parsed);
         } catch (RateLimitException e) {
-            log.warn("Claude 분석 레이트리밋: {}", e.toString());
+            log.warn("Claude {} 레이트리밋: {}", kind, e.toString());
             return AiResult.fail(Failure.RATE_LIMITED);
         } catch (BadRequestException e) {
-            log.warn("Claude 분석 요청 거부: {}", e.toString());
+            log.warn("Claude {} 요청 거부: {}", kind, e.toString());
             return AiResult.fail(Failure.BAD_INPUT);
         } catch (Exception e) {
-            // 키·본문은 로그에 남기지 않는다(Gemini 선례) — toString만.
-            log.warn("Claude 분석 실패: {}", e.toString());
+            // 키·본문·사진은 로그에 남기지 않는다(Gemini 선례) — toString만.
+            log.warn("Claude {} 실패: {}", kind, e.toString());
             return AiResult.fail(Failure.UNAVAILABLE);
         }
     }
 
-    /** 지연·캐시 실측(U-6·U-7)의 유일한 계측 지점. 본문은 찍지 않는다. */
-    private void logCall(long startedMillis, StructuredMessage<RecallAnalysis> message) {
-        log.info("claude analyze {}ms cacheRead={} in={} out={}",
+    /** 지연·캐시 실측(U-6·U-7)의 유일한 계측 지점. 본문·사진은 찍지 않는다. */
+    private void logCall(String kind, long startedMillis, StructuredMessage<?> message) {
+        log.info("claude {} {}ms cacheRead={} in={} out={}", kind,
                 System.currentTimeMillis() - startedMillis,
                 message.usage().cacheReadInputTokens().orElse(0L),
                 message.usage().inputTokens(),
                 message.usage().outputTokens());
+    }
+
+    /**
+     * 우리가 허용한 세 형식만 SDK 상수로 옮긴다.
+     *
+     * <p>검증은 서비스가 이미 했으므로 여기 오는 값은 셋 중 하나다 — 그럼에도 기본값을 두는 대신
+     * {@link IllegalArgumentException}으로 터뜨리는 것은, 검증을 고치며 여기를 잊으면 <b>heic를 jpeg라고
+     * 우기며</b> 외부에 나가기 때문이다.
+     */
+    private static Base64ImageSource.MediaType mediaTypeOf(String contentType) {
+        return switch (contentType == null ? "" : contentType) {
+            case "image/jpeg" -> Base64ImageSource.MediaType.IMAGE_JPEG;
+            case "image/png" -> Base64ImageSource.MediaType.IMAGE_PNG;
+            case "image/webp" -> Base64ImageSource.MediaType.IMAGE_WEBP;
+            default -> throw new IllegalArgumentException("지원하지 않는 사진 형식: " + contentType);
+        };
     }
 
     // ── 순수(정적) — 네트워크 없이 단위테스트하는 절반 ──
@@ -166,6 +256,10 @@ public class ClaudeStudyAssistant {
     static String recallUserPrompt(RecallInput in) {
         String subject = blankToNull(in.subject());
         String scope = blankToNull(in.scope());
+        // ⚠️ 본문·범위·과목은 사용자가 친 글이거나 사진에서 전사된 텍스트라 신뢰할 수 없다 — 그 안에
+        // 「[범위]」 같은 라벨을 적어 넣어 이 템플릿의 섹션을 위조할 수 있다. 지금은 폭발 반경이 자기
+        // 분석 결과뿐이라(툴·외부 호출·다른 사용자로 새는 경로가 없다) 막지 않았다. 여기에 툴 사용이나
+        // 유출 경로가 붙는 날에는 구분자·이스케이프(또는 본문을 별도 블록으로 분리)를 먼저 넣어야 한다.
         return """
                 [과목] %s
                 [범위] %s
@@ -192,6 +286,26 @@ public class ClaudeStudyAssistant {
             return Optional.empty();
         }
         return Optional.of(new RecallAnalysis(summary, cleanList(raw.holes()), cleanList(raw.questions())));
+    }
+
+    /**
+     * 전사 결과를 화면에 담을 모양으로 다듬는다 — 앞뒤 공백만 턴다.
+     *
+     * <p>줄바꿈은 <b>내용</b>이라 손대지 않는다(번호 목록·화살표가 줄로 서 있는 것이 손메모의 형태다).
+     *
+     * <p>「읽은 글도 없고 unreadable도 아니다」는 모델이 답을 못 낸 것이라 빈 결과다 — 그대로 200을
+     * 돌려주면 화면이 <b>빈 textarea를 「전사 완료」라고</b> 말한다. 반면 unreadable=true는 정상적인 답이라
+     * 빈 글이어도 값이 있다(「못 읽었어요」라고 말할 근거).
+     */
+    static Optional<Transcript> normalize(Transcript raw) {
+        if (raw == null) {
+            return Optional.empty();
+        }
+        String text = raw.text() == null ? "" : raw.text().strip();
+        if (raw.unreadable()) {
+            return Optional.of(new Transcript(text, true));
+        }
+        return text.isEmpty() ? Optional.empty() : Optional.of(new Transcript(text, false));
     }
 
     private static List<String> cleanList(List<String> values) {
@@ -259,6 +373,26 @@ public class ClaudeStudyAssistant {
 
     /** 분석 입력 — 어댑터는 엔티티를 모른다(호출부가 옮겨 담는다). */
     public record RecallInput(String subject, String scope, String body) {
+    }
+
+    /**
+     * 보낼 사진 한 장 — 바이트를 <b>메모리로만</b> 들고 다닌다.
+     *
+     * <p>{@code MultipartFile}이 아니라 이 형인 것이 무저장 규칙의 자리다: 어댑터가 파일 핸들을 쥐지
+     * 않으므로 「어디에 저장할지」를 정할 수 있는 코드 자체가 없다.
+     *
+     * @param mediaType {@code image/jpeg} | {@code image/png} | {@code image/webp}
+     */
+    public record ImagePart(String mediaType, byte[] bytes) {
+    }
+
+    /**
+     * 전사 구조화 출력 스키마.
+     *
+     * @param text       읽어 낸 글(못 읽은 글자는 {@code [?]})
+     * @param unreadable 공부 메모가 아니거나 글씨를 전혀 못 읽음 — 이때 {@code text}는 빈 값이다
+     */
+    public record Transcript(String text, boolean unreadable) {
     }
 
     /**

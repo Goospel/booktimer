@@ -133,7 +133,7 @@ export function errorMessage(status: number, bodyText: string,
     // (403 CSRF 만료, 서버 자체의 503 등). 상태 코드 목록보다 이 한 줄이 더 오래 맞는 가드다.
     const trustworthy = body.length > 0 && !body.startsWith('<');
     if (trustworthy && (status === 400 || status === 409 || status === 403
-        || status === 429 || status === 503)) {
+        || status === 413 || status === 429 || status === 503)) {
         return body;
     }
     if (status === 404) return '책을 찾을 수 없어요';
