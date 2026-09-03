@@ -2,6 +2,7 @@ import { Button } from '@toss/tds-mobile';
 import { useState } from 'react';
 
 import { login, register } from '../api';
+import { trackEvent } from '../toss';
 import { ErrorMessage, Loading, Screen, Text } from '../ui';
 
 type Phase = 'intro' | 'checking' | 'choice' | 'failed';
@@ -20,6 +21,9 @@ const PITCH = [
  * (관례: `claimDebtWaiver`·`tabChangeHandler`).
  */
 export async function beginLogin(): Promise<'authenticated' | 'choice'> {
+  // 「토스로 시작하기」를 눌렀다 — `await` **앞**이라 인가가 취소·실패해도 남는다. 「눌렀는데 안 온
+  // 사람」과 「아예 안 누른 사람」은 처방이 달라서(인가·약관 단계 문제 vs 소개문 문제) 이 한 점이 가른다.
+  trackEvent('login_started');
   const result = await login();
   return result.registered ? 'authenticated' : 'choice';
 }

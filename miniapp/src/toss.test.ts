@@ -10,6 +10,7 @@ import {
   showInterstitialAd,
   subscribeNativeBack,
   trackEvent,
+  trackScreen,
   watchRewardAd,
 } from './toss';
 
@@ -388,6 +389,42 @@ describe('trackEvent', () => {
     logMock.mockReturnValue(rejected);
 
     expect(() => trackEvent('reading_session_started')).not.toThrow();
+    expect(attachHandler).toHaveBeenCalledTimes(1);
+
+    rejected.catch(() => {}); // 단언이 실패해도 떠도는 거부를 러너에 남기지 않는다
+  });
+});
+
+/**
+ * 화면 진입 래퍼 — 퍼널(어디까지 왔나)을 콘솔 카탈로그에서 화면 단위로 읽게 하는 유일한 관측점이다.
+ *
+ * <p>{@link trackEvent}와 계측 지점이 같되 두 가지가 더 있다. ① **`log_type`이 `'screen'`**이어야 콘솔이
+ * SCREEN 타입으로 분류한다(토스 자체 헬퍼가 `log_type`을 분류 키로 쓴다는 방증뿐이라 확정은 배포 후지만,
+ * `'event'`로 새면 그때 전환 이벤트 4종과 한 통에 섞여 카탈로그가 무너진다). ② **`screen_` 접두사** —
+ * 카탈로그 검색 한 번에 화면 로그 전부가 묶이는 규약이라, 접두가 빠지면 이름이 흩어진다.
+ */
+describe('trackScreen', () => {
+  it('log_type=screen에 screen_ 접두를 붙여 보낸다 — 콘솔이 이 두 값으로 화면 로그를 묶는다', () => {
+    trackScreen('home');
+
+    expect(logMock).toHaveBeenCalledTimes(1);
+    expect(logMock).toHaveBeenCalledWith({ log_type: 'screen', log_name: 'screen_home', params: {} });
+  });
+
+  it('SDK가 동기로 던져도 삼킨다 — 이 호출은 App 마운트 경로라 새면 앱이 통째로 안 뜬다', () => {
+    logMock.mockImplementation(() => {
+      throw new TypeError("Cannot read properties of undefined (reading 'log')");
+    });
+
+    expect(() => trackScreen('home')).not.toThrow();
+  });
+
+  it('거부된 Promise에도 핸들러를 달아 둔다 — 발사 후 망각이라 아무도 안 받으면 unhandled rejection이 된다', () => {
+    const rejected = Promise.reject(new Error('bridge failed'));
+    const attachHandler = vi.spyOn(rejected, 'catch');
+    logMock.mockReturnValue(rejected);
+
+    expect(() => trackScreen('home')).not.toThrow();
     expect(attachHandler).toHaveBeenCalledTimes(1);
 
     rejected.catch(() => {}); // 단언이 실패해도 떠도는 거부를 러너에 남기지 않는다

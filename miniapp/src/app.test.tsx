@@ -19,6 +19,7 @@ import {
   TIMER_ACTION_SLOT,
   TabBarCoachmark,
   closeCompose,
+  currentScreen,
   flowStepsOnAbandon,
   initialTab,
   lampOn,
@@ -981,6 +982,140 @@ describe('여백 진입 게이트', () => {
       expect(open.index).toBeGreaterThan(from);
       expect(open.index).toBeLessThan(to);
     }
+  });
+});
+
+/**
+ * 화면 이름 판정 — 퍼널(콘솔 SCREEN 로그)이 무엇을 「한 화면」으로 세는지가 전부 여기 있다.
+ *
+ * <p><b>판정 순서가 곧 규칙이다</b>: 탭 밖 뷰 &gt; 대시보드 로딩 &gt; 목표·설정 &gt; 여백 사람축 &gt;
+ * 여백 책축 &gt; 남의 책방 &gt; 탭. {@link App}의 렌더 분기를 그대로 옮겨 적은 것이라, 순서가
+ * 어긋나면 <b>사용자가 실제로 본 화면과 다른 이름이 찍힌다</b> — 퍼널의 구멍보다 나쁜 것이 오분류다
+ * (없으면 모른다고 답하지만, 틀리면 틀리게 답한다).
+ *
+ * <p>배선(effect)은 이 하니스가 못 돌리므로(T-149) 판정만 순수하게 계측한다({@link marginScreen} 관례).
+ */
+describe('화면 이름 판정 (currentScreen)', () => {
+  const base = {
+    view: 'main' as const,
+    loaded: true,
+    margin: null,
+    shop: null,
+    tab: 'home' as const,
+    mode: 'reading' as const,
+  };
+  const personMargin = { loginId: 'goospel', bookId: 7, isbn13: null, composeBook: null };
+  const bookMargin = { loginId: null, bookId: null, isbn13: '9791168340084', composeBook: null };
+  const composeBook = { id: 7, title: '책', author: '지은이', coverUrl: null, isbn13: null };
+
+  it('로그인 브릿지가 퍼널 꼭대기다 — 대시보드가 없어도 찍힌다', () => {
+    expect(currentScreen({ ...base, view: 'auth', loaded: false })).toBe('login');
+  });
+
+  it('탭 밖 뷰 둘도 각자 이름이 있다 — 계정 연결과 에러 화면', () => {
+    expect(currentScreen({ ...base, view: 'link', loaded: false })).toBe('link_account');
+    expect(currentScreen({ ...base, view: 'error', loaded: false })).toBe('error');
+  });
+
+  it('로딩은 화면이 아니다 — 재방문마다 유령 1건이 쌓이지 않게', () => {
+    expect(currentScreen({ ...base, view: 'loading', loaded: false })).toBeNull();
+    expect(currentScreen({ ...base, view: 'main', loaded: false })).toBeNull();
+  });
+
+  it('대시보드 로딩이 목표 화면보다 앞이다 — 렌더도 그 순서다(로딩 중에 goal이 찍히면 오분류)', () => {
+    expect(currentScreen({ ...base, view: 'goal', loaded: false })).toBeNull();
+  });
+
+  it('신규 온보딩 도달점 셋 — 목표·공부 목표·설정', () => {
+    expect(currentScreen({ ...base, view: 'goal' })).toBe('goal');
+    expect(currentScreen({ ...base, view: 'studyGoal' })).toBe('study_goal');
+    expect(currentScreen({ ...base, view: 'settings' })).toBe('settings');
+  });
+
+  it('여백은 좌표계로 갈린다 — 사람축은 여백 상세, 책축은 이 책의 여백', () => {
+    expect(currentScreen({ ...base, margin: personMargin })).toBe('margin');
+    expect(currentScreen({ ...base, margin: bookMargin })).toBe('book_margin');
+  });
+
+  it('둘 다 들고 있으면 사람축이 이긴다 — marginScreen과 같은 규칙', () => {
+    expect(currentScreen({ ...base, margin: { ...personMargin, isbn13: '9791168340084' } })).toBe('margin');
+  });
+
+  it('작성 시트는 화면을 안 바꾼다 — 개폐할 때마다 중복 발화하지 않게', () => {
+    expect(currentScreen({ ...base, margin: { ...personMargin, composeBook } })).toBe('margin');
+  });
+
+  it('깔린 여백 없이 직행한 작성은 뒤에 선 탭이 화면이다 — 시트가 이름을 훔치지 않는다', () => {
+    expect(currentScreen({ ...base, margin: { loginId: 'goospel', bookId: null, isbn13: null, composeBook } })).toBe(
+      'home',
+    );
+  });
+
+  it('여백이 남의 책방보다 앞이다 — 책방 위에 여백을 연 상태', () => {
+    expect(currentScreen({ ...base, margin: personMargin, shop: 'other' })).toBe('margin');
+  });
+
+  it('남의 책방은 탭보다 앞이다', () => {
+    expect(currentScreen({ ...base, shop: 'other' })).toBe('profile');
+  });
+
+  it('탭 밖 뷰가 여백을 이긴다 — 렌더도 goal return이 앞이다', () => {
+    expect(currentScreen({ ...base, view: 'goal', margin: personMargin })).toBe('goal');
+  });
+
+  it('나머지는 탭 이름 그대로다 — 홈·책방·일정', () => {
+    expect(currentScreen({ ...base, tab: 'home' })).toBe('home');
+    expect(currentScreen({ ...base, tab: 'bookshop' })).toBe('bookshop');
+    expect(currentScreen({ ...base, tab: 'calendar' })).toBe('calendar');
+  });
+
+  it('서재와 기록은 모드로 갈린다 — 다른 컴포넌트가 뜨므로 이름도 가른다', () => {
+    expect(currentScreen({ ...base, tab: 'library' })).toBe('library');
+    expect(currentScreen({ ...base, tab: 'library', mode: 'study' })).toBe('study_library');
+    expect(currentScreen({ ...base, tab: 'history' })).toBe('history');
+    expect(currentScreen({ ...base, tab: 'history', mode: 'study' })).toBe('study_history');
+  });
+});
+
+/**
+ * 화면 진입 배선 — 위 판정({@link currentScreen})을 <b>effect가 그 의존성으로 받는가</b>.
+ *
+ * <p>소스 문자열로 재는 이유와 그 한계를 정직하게 적는다. jsdom이 없어 effect가 아예 안 도는 하니스라
+ * (T-149) <b>줄이 있다</b>는 것 말고는 증명하지 못한다 — 실제로 도는지·한 번만 도는지는 React 의미론에
+ * 기대는 것이지 이 테스트가 보는 게 아니다. 공백·개행이 바뀌면 규칙이 멀쩡해도 붉어진다(브리틀).
+ * 발화·중복의 진짜 게이트는 배포 후 콘솔 카탈로그 건수다(설계 §6 U-1·U-2).
+ *
+ * <p>그럼에도 이 세 줄을 재는 이유: 인자 하나(`tab: shownTab` → `tab`)나 의존성 배열 하나(`[screenName]`
+ * → `[]`)가 바뀌어도 <b>마크업은 완전히 똑같아</b> 나머지 전 스위트가 초록이다(탭바 배선에서 이미 밟은
+ * 사각이다). 주석을 먼저 걷는 것은 T-205 처방 — 설명 주석에 적힌 호출 예시가 곧 거짓 음성이 된다.
+ */
+describe('화면 진입 배선', () => {
+  const src = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*/g, '');
+  const from = src.indexOf('export function App()');
+  const to = src.indexOf('export function MarginShell');
+  const app = src.slice(from, to);
+
+  it('App이 파생 탭·모드까지 넘겨 화면 이름을 만든다 — 인자가 빠지면 모드 플립 때 사라진 탭이 찍힌다', () => {
+    expect(from).toBeGreaterThan(-1);
+    expect(to).toBeGreaterThan(from);
+    expect(app).toContain(
+      'const screenName = currentScreen({ view, loaded: dashboard !== null, margin, shop, tab: shownTab, mode })',
+    );
+  });
+
+  it('이름이 바뀔 때만 쏜다 — 의존성이 문자열 하나라 같은 화면 리렌더로는 안 돈다', () => {
+    expect(app).toContain('if (screenName !== null) trackScreen(screenName);');
+    expect(app).toContain('}, [screenName]);');
+  });
+
+  it('쏘는 자리는 App 하나뿐이다 — MainTabs는 시트를 닫을 때마다 remount돼 중복 발화한다', () => {
+    const calls = [...src.matchAll(/trackScreen\(/g)];
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].index).toBeGreaterThan(from);
+    expect(calls[0].index).toBeLessThan(to);
   });
 });
 
