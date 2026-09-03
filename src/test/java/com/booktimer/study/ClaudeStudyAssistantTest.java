@@ -1,11 +1,14 @@
 package com.booktimer.study;
 
+import com.booktimer.study.ClaudeStudyAssistant.PlanDay;
+import com.booktimer.study.ClaudeStudyAssistant.PlanInput;
 import com.booktimer.study.ClaudeStudyAssistant.RecallAnalysis;
 import com.booktimer.study.ClaudeStudyAssistant.RecallInput;
 import com.booktimer.study.ClaudeStudyAssistant.Transcript;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -169,5 +172,171 @@ class ClaudeStudyAssistantTest {
 
         assertThat(result.ok()).isFalse();
         assertThat(result.failure()).isEqualTo(ClaudeStudyAssistant.Failure.DISABLED);
+    }
+
+    @Test
+    @DisplayName("generatePlan: 키가 없으면 외부 호출 없이 DISABLED")
+    void generatePlan_whenDisabled_returnsDisabled() {
+        var result = withKey("not-configured").generatePlan(
+                new PlanInput("정보보안기사", "1장", LocalDate.of(2026, 9, 3),
+                        LocalDate.of(2026, 12, 3), 120, 5));
+
+        assertThat(result.ok()).isFalse();
+        assertThat(result.failure()).isEqualTo(ClaudeStudyAssistant.Failure.DISABLED);
+    }
+
+    // ── planUserPrompt — 후보 날짜를 서버가 계산해 넣는다 ───────────────────
+
+    @Test
+    @DisplayName("planUserPrompt: 후보 날짜는 오늘부터 시험 전날까지다 — 시험 당일은 없다")
+    void planUserPrompt_listsCandidateDatesUpToTheDayBeforeExam() {
+        String prompt = ClaudeStudyAssistant.planUserPrompt(new PlanInput(
+                "정보보안기사", "1장 접근통제", LocalDate.of(2026, 9, 3), LocalDate.of(2026, 9, 6), 120, 5));
+
+        // 후보 항목은 늘 요일 괄호를 달고 온다 — 「2026-09-06」만 보면 [시험일] 줄에도 걸려 판별력이 없다.
+        assertThat(prompt).contains("2026-09-03(목)", "2026-09-04(금)", "2026-09-05(토)");
+        assertThat(prompt).doesNotContain("2026-09-06("); // 시험날엔 배정하지 않는다
+    }
+
+    @Test
+    @DisplayName("planUserPrompt: 과목·범위 원문·분·주 N일이 그대로 실린다")
+    void planUserPrompt_carriesTheInputs() {
+        String prompt = ClaudeStudyAssistant.planUserPrompt(new PlanInput(
+                "정보보안기사", "1장 접근통제\n2장 암호학", LocalDate.of(2026, 9, 3),
+                LocalDate.of(2026, 9, 10), 90, 4));
+
+        assertThat(prompt).contains("정보보안기사");
+        assertThat(prompt).contains("1장 접근통제");
+        assertThat(prompt).contains("2장 암호학");
+        assertThat(prompt).contains("90");
+        assertThat(prompt).contains("주 4일");
+    }
+
+    @Test
+    @DisplayName("planUserPrompt: 범위가 비면 그 사실을 명시한다 — 빈 줄을 남기면 모델이 단원을 지어낸다")
+    void planUserPrompt_whenScopeBlank_saysSo() {
+        String prompt = ClaudeStudyAssistant.planUserPrompt(new PlanInput(
+                "정보보안기사", "   ", LocalDate.of(2026, 9, 3), LocalDate.of(2026, 9, 10), 90, 4));
+
+        assertThat(prompt).contains("범위가 주어지지 않았");
+    }
+
+    @Test
+    @DisplayName("planUserPrompt: 후보 날짜가 아주 많아도 프롬프트가 폭발하지 않는다(1년치 상한)")
+    void planUserPrompt_withYearLongRange_staysBounded() {
+        LocalDate today = LocalDate.of(2026, 1, 1);
+        String prompt = ClaudeStudyAssistant.planUserPrompt(new PlanInput(
+                "과목", "범위", today, today.plusDays(365), 120, 5));
+
+        assertThat(prompt).contains("2026-01-01", "2026-12-31");
+        assertThat(prompt.length()).isLessThan(20_000);
+    }
+
+    // ── sanitizePlan — 모델 출력을 믿지 않는 방어선(경계 전수) ─────────────
+
+    private static final LocalDate TODAY = LocalDate.of(2026, 9, 3);   // 목요일
+    private static final LocalDate EXAM = LocalDate.of(2026, 10, 3);
+
+    private static List<PlanDay> sanitize(List<PlanDay> days) {
+        return ClaudeStudyAssistant.sanitizePlan(days, TODAY, EXAM, 7);
+    }
+
+    private static PlanDay day(String date, String task) {
+        return new PlanDay(date, task);
+    }
+
+    @Test
+    @DisplayName("sanitizePlan: 오늘 이전 날짜는 버린다 — 오늘은 남는다")
+    void sanitizePlan_dropsPastKeepsToday() {
+        List<PlanDay> kept = sanitize(List.of(
+                day("2026-09-02", "어제"), day("2026-09-03", "오늘")));
+
+        assertThat(kept).extracting(PlanDay::date).containsExactly("2026-09-03");
+    }
+
+    @Test
+    @DisplayName("sanitizePlan: 시험 당일과 그 뒤는 버린다 — 시험날엔 공부를 배정하지 않는다")
+    void sanitizePlan_dropsExamDayAndLater() {
+        List<PlanDay> kept = sanitize(List.of(
+                day("2026-10-02", "시험 전날"), day("2026-10-03", "시험 당일"), day("2026-10-04", "시험 다음날")));
+
+        assertThat(kept).extracting(PlanDay::date).containsExactly("2026-10-02");
+    }
+
+    @Test
+    @DisplayName("sanitizePlan: 같은 날짜가 두 번 오면 앞엣것만 남는다")
+    void sanitizePlan_dropsDuplicateDates() {
+        List<PlanDay> kept = sanitize(List.of(
+                day("2026-09-10", "먼저"), day("2026-09-10", "나중")));
+
+        assertThat(kept).hasSize(1);
+        assertThat(kept.get(0).task()).isEqualTo("먼저");
+    }
+
+    @Test
+    @DisplayName("sanitizePlan: 빈 task·공백 task는 버린다")
+    void sanitizePlan_dropsBlankTasks() {
+        List<PlanDay> kept = sanitize(List.of(
+                day("2026-09-10", ""), day("2026-09-11", "   "), day("2026-09-12", null),
+                day("2026-09-13", "1장 접근통제")));
+
+        assertThat(kept).extracting(PlanDay::date).containsExactly("2026-09-13");
+    }
+
+    @Test
+    @DisplayName("sanitizePlan: 501자 task는 500자로 자른다(버리지 않는다)")
+    void sanitizePlan_truncatesLongTask() {
+        List<PlanDay> kept = sanitize(List.of(day("2026-09-10", "가".repeat(501))));
+
+        assertThat(kept).hasSize(1);
+        assertThat(kept.get(0).task()).hasSize(500);
+    }
+
+    @Test
+    @DisplayName("sanitizePlan: ISO로 파싱되지 않는 날짜는 버린다 — 2026-13-45도, 빈 값도")
+    void sanitizePlan_dropsUnparsableDates() {
+        List<PlanDay> kept = sanitize(List.of(
+                day("2026-13-45", "달이 13월"), day("9월 10일", "한글"), day("", "빈 값"),
+                day(null, "널"), day("2026-09-10", "멀쩡한 날")));
+
+        assertThat(kept).extracting(PlanDay::date).containsExactly("2026-09-10");
+    }
+
+    @Test
+    @DisplayName("sanitizePlan: 주(월~일)당 daysPerWeek를 넘으면 그 주의 앞 날짜만 남는다")
+    void sanitizePlan_capsPerIsoWeek() {
+        // 2026-09-07(월)~09-13(일)은 한 주다. 주 2일이면 앞의 두 날만 남는다.
+        List<PlanDay> kept = ClaudeStudyAssistant.sanitizePlan(List.of(
+                day("2026-09-07", "월"), day("2026-09-08", "화"), day("2026-09-09", "수"),
+                day("2026-09-13", "일")), TODAY, EXAM, 2);
+
+        assertThat(kept).extracting(PlanDay::date).containsExactly("2026-09-07", "2026-09-08");
+    }
+
+    @Test
+    @DisplayName("sanitizePlan: 주 경계는 월요일이다 — 일요일과 그 다음 월요일은 서로 다른 주다")
+    void sanitizePlan_weekBoundaryIsMonday() {
+        // 2026-09-13(일)과 2026-09-14(월)은 다른 주라, 주 1일이어도 둘 다 남는다.
+        List<PlanDay> kept = ClaudeStudyAssistant.sanitizePlan(List.of(
+                day("2026-09-13", "일요일"), day("2026-09-14", "다음 주 월요일")), TODAY, EXAM, 1);
+
+        assertThat(kept).extracting(PlanDay::date).containsExactly("2026-09-13", "2026-09-14");
+    }
+
+    @Test
+    @DisplayName("sanitizePlan: 날짜가 뒤섞여 와도 오름차순으로 돌려준다")
+    void sanitizePlan_sortsByDate() {
+        List<PlanDay> kept = sanitize(List.of(
+                day("2026-09-20", "나중"), day("2026-09-10", "먼저")));
+
+        assertThat(kept).extracting(PlanDay::date).containsExactly("2026-09-10", "2026-09-20");
+    }
+
+    @Test
+    @DisplayName("sanitizePlan: 전부 걸러지면 빈 목록 — 호출부가 UNAVAILABLE로 옮긴다")
+    void sanitizePlan_whenNothingSurvives_isEmpty() {
+        assertThat(sanitize(List.of(day("2026-01-01", "지난해"), day("2026-11-11", "시험 뒤")))).isEmpty();
+        assertThat(sanitize(List.of())).isEmpty();
+        assertThat(ClaudeStudyAssistant.sanitizePlan(null, TODAY, EXAM, 5)).isEmpty();
     }
 }

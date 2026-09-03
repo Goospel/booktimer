@@ -33,6 +33,15 @@ public interface StudyPlanItemRepository extends JpaRepository<StudyPlanItem, Lo
     int deleteByUserAndPlanDateGreaterThanEqual(User user, LocalDate from);
 
     /**
+     * 교체가 지울 항목 수 — 미리보기의 「오늘 이후 N개가 바뀝니다」.
+     *
+     * <p>세는 시점과 지우는 시점이 다르다(생성 → 사람이 미리보기를 읽는 동안 → 적용). 그 사이 사용자가
+     * 일정을 더하면 실제로 지워지는 수는 이 값보다 많아진다 — 화면 문구는 그래서 「지금 기준」이라고
+     * 말한다({@code PlanForm.vue}).
+     */
+    int countByUserAndPlanDateGreaterThanEqual(User user, LocalDate from);
+
+    /**
      * 공부 책 삭제 시, 그 책을 가리키던 일정을 "책 미지정"으로 푼다(book_id = null).
      *
      * <p>일정 행 자체는 지우지 않는다 — 책을 서재에서 빼도 「그날 뭘 하기로 했었나」는 남아야 하고,

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
+import PlanForm from './PlanForm.vue';
 import RecallPanel from './RecallPanel.vue';
 import type { AddItemInput, StudyBookRow } from './api';
 import { aiStatusLine, type AiAccess, type PlanItem } from './pure';
@@ -20,6 +21,8 @@ const props = defineProps<{
     remainingAnalyze: number;
     /** 오늘 남은 사진 전사 몫. */
     remainingTranscribe: number;
+    /** 오늘 남은 일정 생성 몫. */
+    remainingPlan: number;
     /** 전날 복습에 문제가 붙어 있나 — 달력이 이미 아는 사실이라 그대로 내려 준다(불필요한 왕복 제거). */
     hasYesterdayQuestions: boolean;
 }>();
@@ -29,11 +32,14 @@ const emit = defineEmits<{
     (e: 'remove', id: number): void;
     (e: 'request-ai'): void;
     (e: 'recall-saved'): void;
+    (e: 'plan-applied'): void;
 }>();
 
 const subject = ref('');
 const task = ref('');
 const bookId = ref<number | null>(null);
+/** AI 일정 폼을 펼쳤나 — 접어 두는 것이 기본이다(달력이 먼저 보여야 한다). */
+const planOpen = ref(false);
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -122,5 +128,24 @@ function submit(): void {
             <input v-model="task" type="text" maxlength="500" placeholder="할 일 한 줄 (예: 3장 함수 p.45-70)" aria-label="할 일">
             <button type="submit" class="btn btn-primary btn-small" :disabled="!canSubmit">추가</button>
         </form>
+
+        <!-- AI 일정은 접어 둔다 — 시험을 앞둔 날에만 쓰는 기능이라 매번 펼쳐 두면 화면만 길어진다. -->
+        <template v-if="aiEnabled">
+            <button
+                type="button"
+                class="btn btn-ghost btn-small study-day-planbtn"
+                data-testid="plan-toggle"
+                @click="planOpen = !planOpen"
+            >{{ planOpen ? 'AI 일정 닫기' : 'AI로 일정 만들기' }}</button>
+
+            <PlanForm
+                v-if="planOpen"
+                :today="today"
+                :items="items"
+                :books="books"
+                :remaining-plan="remainingPlan"
+                @applied="emit('plan-applied')"
+            />
+        </template>
     </section>
 </template>

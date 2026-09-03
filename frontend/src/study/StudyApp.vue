@@ -52,6 +52,7 @@ const aiBusy = ref(false);
 /** 오늘 남은 분석 몫 — 서버가 준다(기기가 세지 않는다). */
 const remainingAnalyze = ref(0);
 const remainingTranscribe = ref(0);
+const remainingPlan = ref(0);
 
 const monthParam = computed(() => `${year.value}-${String(month.value).padStart(2, '0')}`);
 const cells = computed(() => calendarCells(year.value, month.value));
@@ -72,6 +73,7 @@ async function load(): Promise<void> {
         aiEnabled.value = agenda.aiEnabled;
         remainingAnalyze.value = agenda.remaining.analyze;
         remainingTranscribe.value = agenda.remaining.transcribe;
+        remainingPlan.value = agenda.remaining.plan;
         items.value = agenda.items;
         recalls.value = agenda.recalls;
         days.value = calendar.days;
@@ -243,11 +245,13 @@ onMounted(async () => {
             :ai-busy="aiBusy"
             :remaining-analyze="remainingAnalyze"
             :remaining-transcribe="remainingTranscribe"
+            :remaining-plan="remainingPlan"
             :has-yesterday-questions="cellMarks(selected, recalls).questions"
             @add="onAdd"
             @remove="onDelete"
             @request-ai="onRequestAi"
             @recall-saved="load"
+            @plan-applied="load"
         />
 
         <NavLinks :links="studyNavLinks()" />

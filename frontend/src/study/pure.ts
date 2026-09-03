@@ -191,6 +191,95 @@ export function aiStatusLine(access: AiAccess, aiEnabled: boolean, accessAt: str
     return { text: 'AI 분석·일정 기능은 승인제예요.', button: 'AI 기능 신청' };
 }
 
+/** AI가 만든 일정 한 줄 — 아직 저장 전이라 id가 없다(적용해야 `PlanItem`이 된다). */
+export interface DraftDay {
+    /** `YYYY-MM-DD` */
+    date: string;
+    task: string;
+}
+
+export interface PlanFormInput {
+    subject: string;
+    scope: string;
+    /** `YYYY-MM-DD`. 비어 있으면 아직 안 고른 것이다. */
+    examDate: string;
+    dailyMinutes: number;
+    daysPerWeek: number;
+}
+
+/**
+ * 일정 생성 폼 검증 — <b>서버와 같은 규칙</b>을 화면에서 먼저 본다.
+ *
+ * <p>2중 방어이지 유일한 방어가 아니다(서버가 같은 값을 다시 잰다). 여기 있는 이유는 헛왕복 때문이다 —
+ * 잘못 채운 폼 하나에 90초짜리 외부 호출과 오늘 몫 하나를 태울 이유가 없다.
+ *
+ * @param today 서버(유저 tz) 기준 오늘. <b>아직 모르면 막지 않는다</b> — 화면이 지레 잠기는 편이
+ *              틀린 날짜를 보내는 것보다 나쁘다(서버가 어차피 다시 잰다)
+ * @return 첫 번째 위반 문구, 통과면 `null`
+ */
+export function validatePlanForm(input: PlanFormInput, today: string): string | null {
+    if (!input.subject.trim()) return '과목을 입력해 주세요.';
+    if (!input.examDate) return '시험일을 골라 주세요.';
+    if (today) {
+        if (input.examDate <= today) return '시험일은 내일 이후로 정해 주세요.';
+        if (input.examDate > shiftDay(today, 365)) return '시험일은 1년 안으로 정해 주세요.';
+    }
+    if (input.dailyMinutes < 10 || input.dailyMinutes > 600) {
+        return '하루 공부 시간은 10분에서 600분 사이로 적어 주세요.';
+    }
+    if (input.daysPerWeek < 1 || input.daysPerWeek > 7) {
+        return '주 공부일수는 1일에서 7일 사이로 정해 주세요.';
+    }
+    if (input.scope.length > 4000) return '범위는 4000자까지 적을 수 있어요.';
+    if (today && estimatedItems(today, input.examDate, input.daysPerWeek) > MAX_PLAN_ITEMS) {
+        return '기간이 길어 한 번에 만들기 어려워요. 시험일을 앞당기거나 주 공부일수를 줄여 주세요.';
+    }
+    return null;
+}
+
+/**
+ * 한 번에 만들 수 있는 예상 항목 수 — 서버 `StudyPlanService.MAX_PLAN_ITEMS`와 **같은 값**이다.
+ *
+ * 지연에서 역산한 값이다(실측 `ms ≈ 9,200 + 843 × 항목수` → 90항목 ≈ 85초, 타임아웃 90초 바로 아래).
+ * 여기서 막는 것은 헛왕복을 없애기 위해서고, **최종 판정은 서버**다(같은 규칙을 두 곳이 든다).
+ */
+const MAX_PLAN_ITEMS = 90;
+
+/** 후보 날짜 수(오늘~시험 전날) × 주 공부일수 / 7 — 서버와 같은 추정식. */
+function estimatedItems(today: string, examDate: string, daysPerWeek: number): number {
+    const [ty, tm, td] = today.split('-').map(Number);
+    const [ey, em, ed] = examDate.split('-').map(Number);
+    const days = Math.round((Date.UTC(ey, em - 1, ed) - Date.UTC(ty, tm - 1, td)) / 86400000);
+    return Math.floor((days * daysPerWeek) / 7);
+}
+
+/** 그 날짜가 속한 ISO 주(월~일)의 월요일 — 서버 `sanitizePlan`과 <b>같은 주 경계</b>다. */
+function isoWeekStart(date: string): string {
+    const [y, m, d] = date.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7)); // 일=0인 getDay를 월=0으로 옮긴다
+    return iso(dt.getFullYear(), dt.getMonth() + 1, dt.getDate());
+}
+
+/**
+ * 미리보기를 주차로 묶는다 — 30~90일짜리 목록을 한 줄씩 세워 두면 사람이 읽지 못한다.
+ *
+ * <p>주 경계가 서버의 정제 규칙과 같아야 「주 5일로 짰는데 한 주에 6개가 보인다」는 오해가 안 생긴다.
+ */
+export function planWeeks(days: DraftDay[]): { label: string; days: DraftDay[] }[] {
+    const groups = new Map<string, DraftDay[]>();
+    for (const day of days) {
+        const key = isoWeekStart(day.date);
+        const bucket = groups.get(key);
+        if (bucket) bucket.push(day);
+        else groups.set(key, [day]);
+    }
+    return [...groups.keys()].sort().map((key, index) => ({
+        label: `${index + 1}주차`,
+        days: groups.get(key)!,
+    }));
+}
+
 /** 하단 네비 — 이 화면은 홈과 내 책장으로만 나간다(공부 서재·타이머 동선은 미니앱 몫). */
 export function studyNavLinks(): NavLinkSpec[] {
     return [

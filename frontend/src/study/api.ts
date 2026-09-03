@@ -1,5 +1,13 @@
 import { getCsrfToken } from '../shared/follow';
-import { errorMessage, type AiAccess, type CalendarDay, type PlanItem, type RecallMark } from './pure';
+import {
+    errorMessage,
+    type AiAccess,
+    type CalendarDay,
+    type DraftDay,
+    type PlanFormInput,
+    type PlanItem,
+    type RecallMark,
+} from './pure';
 
 /**
  * 「공부」 화면의 서버 문.
@@ -155,6 +163,37 @@ export async function transcribePhotos(images: Blob[]): Promise<TranscriptResult
  */
 export async function analyzeRecall(date: string): Promise<Recall> {
     return json(await post(`/api/study/recall/${date}/analyze`), 'AI 분석을 받지 못했어요.');
+}
+
+export interface PlanDraft {
+    days: DraftDay[];
+    /**
+     * 지금 적용하면 지워질 「오늘 이후」 항목 수 — <b>생성 시점에 센 값</b>이다.
+     *
+     * 미리보기를 읽는 동안 다른 탭에서 일정을 더하면 실제로 지워지는 수는 이보다 많아진다. 그래서
+     * 화면 문구가 「지금 기준」이라고 말하고, 적용 뒤에는 서버가 준 실제 `removed`를 보여 준다.
+     */
+    replaceCount: number;
+}
+
+/**
+ * AI에게 일정 초안을 받는다 — <b>아직 저장되지 않는다</b>(미리보기까지다).
+ *
+ * 실패 문구는 서버가 한국어로 준다(403 승인 필요 · 429 오늘 몫 소진 · 503 꺼짐·응답 없음).
+ */
+export async function generatePlan(input: PlanFormInput): Promise<PlanDraft> {
+    return json(await post('/api/study/plan/generate', input), 'AI 일정을 만들지 못했어요.');
+}
+
+export interface ApplyPlanInput {
+    bookId: number | null;
+    subject: string;
+    days: DraftDay[];
+}
+
+/** 미리보기를 달력에 적는다 — 오늘 이후를 갈아치우고 과거는 남긴다. */
+export async function applyPlan(input: ApplyPlanInput): Promise<{ applied: number; removed: number }> {
+    return json(await post('/api/study/plan/apply', input), '일정을 적용하지 못했어요.');
 }
 
 export interface StudyBookRow {
