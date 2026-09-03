@@ -60,15 +60,18 @@ public class ClaudeStudyAssistant {
             - 전부 한국어 존댓말로 쓴다.
             """;
 
-    private final String apiKey;
     private final String model;
 
-    /** 키가 있을 때만 만든다 — 없으면 {@code null}이고 {@link #isEnabled()}가 그 앞을 막는다. */
+    /**
+     * 키가 있을 때만 만든다 — 없으면 {@code null}이고 {@link #isEnabled()}가 그 앞을 막는다.
+     *
+     * <p>키를 <b>필드로 들고 있지 않는 것</b>이 의도다: 클라이언트가 이미 쥐고 있어 다시 볼 일이 없고,
+     * 시크릿을 필드에 남겨 두면 힙 덤프·디버거·무심한 로그에 실릴 자리가 하나 더 생긴다.
+     */
     private final AnthropicClient client;
 
     public ClaudeStudyAssistant(@Value("${booktimer.claude.api-key:not-configured}") String apiKey,
                                 @Value("${booktimer.claude.model:claude-sonnet-5}") String model) {
-        this.apiKey = apiKey;
         this.model = model;
         this.client = hasRealKey(apiKey)
                 ? AnthropicOkHttpClient.builder()
