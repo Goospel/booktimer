@@ -6,6 +6,7 @@ import com.booktimer.security.CurrentUserService;
 import com.booktimer.study.StudyDates;
 import com.booktimer.study.StudyPlanItem;
 import com.booktimer.study.StudyPlanService;
+import com.booktimer.user.StudyAiAccess;
 import com.booktimer.user.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +21,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.security.Principal;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
@@ -73,6 +75,8 @@ public class StudyPlanApiController {
                 .toList();
         return ResponseEntity.ok(new Agenda(
                 StudyDates.today(user, clock),
+                user.getStudyAiAccess(),
+                user.getStudyAiAccessAt(),
                 false,                       // AI는 다음 판 — 지금은 저장·수동 편집만 한다
                 new Remaining(0, 0, 0),
                 items,
@@ -143,13 +147,17 @@ public class StudyPlanApiController {
     }
 
     /**
-     * @param today     유저 타임존 기준 오늘 — 화면의 미래 잠금이 서버와 같은 날을 보게 하는 기준
-     * @param aiEnabled AI 기능 사용 가능 여부(키 있음 AND 승인됨) — 이번 판에선 항상 {@code false}
-     * @param remaining 오늘 남은 AI 호출 몫 — 이번 판에선 전부 0
-     * @param items     그 달의 일정(날짜 오름차순)
-     * @param recalls   그 달 + 전달 말일의 백지복습 표식 — 이번 판에선 빈 목록
+     * @param today       유저 타임존 기준 오늘 — 화면의 미래 잠금이 서버와 같은 날을 보게 하는 기준
+     * @param aiAccess    관리자 승인 상태 — 화면의 AI 상태 줄(신청 버튼·대기·거절 문구)이 이걸로 갈린다
+     * @param aiAccessAt  마지막 상태 전이 시각(「M월 D일 신청」 표시용). 신청 전이면 {@code null}
+     * @param aiEnabled   AI 기능 사용 가능 여부(키 있음 AND 승인됨) — 이번 판에선 항상 {@code false}.
+     *                    <b>승인만으론 켜지지 않는다</b>: 키가 붙는 다음 판에서야 true가 될 수 있다
+     * @param remaining   오늘 남은 AI 호출 몫 — 이번 판에선 전부 0
+     * @param items       그 달의 일정(날짜 오름차순)
+     * @param recalls     그 달 + 전달 말일의 백지복습 표식 — 이번 판에선 빈 목록
      */
-    public record Agenda(LocalDate today, boolean aiEnabled, Remaining remaining,
+    public record Agenda(LocalDate today, StudyAiAccess aiAccess, Instant aiAccessAt,
+                         boolean aiEnabled, Remaining remaining,
                          List<PlanItemRow> items, List<RecallRow> recalls) {
     }
 

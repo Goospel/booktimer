@@ -1,5 +1,5 @@
 import { getCsrfToken } from '../shared/follow';
-import { errorMessage, type CalendarDay, type PlanItem, type RecallMark } from './pure';
+import { errorMessage, type AiAccess, type CalendarDay, type PlanItem, type RecallMark } from './pure';
 
 /**
  * 「공부」 화면의 서버 문.
@@ -12,6 +12,11 @@ import { errorMessage, type CalendarDay, type PlanItem, type RecallMark } from '
 export interface Agenda {
     /** 서버(유저 tz) 기준 오늘 — 기기 시계가 아니라 이걸로 미래 잠금을 판정한다. */
     today: string;
+    /** 관리자 승인 상태 — 상태 줄이 이걸로 갈린다. */
+    aiAccess: AiAccess;
+    /** 마지막 상태 전이 시각(ISO). 신청 전이면 null. */
+    aiAccessAt: string | null;
+    /** 승인됐고 키도 있을 때만 true — 승인만으론 켜지지 않는다. */
     aiEnabled: boolean;
     remaining: { plan: number; transcribe: number; analyze: number };
     items: PlanItem[];
@@ -66,6 +71,20 @@ export async function addPlanItem(input: AddItemInput): Promise<PlanItem> {
 export async function deletePlanItem(id: number): Promise<void> {
     const res = await post(`/api/study/plan/items/${id}/delete`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+export interface AiAccessState {
+    aiAccess: AiAccess;
+    aiAccessAt: string | null;
+}
+
+/** AI 기능을 신청한다. 이미 대기·승인 상태면 서버가 409로 막는다(그 문구를 그대로 띄운다). */
+export async function requestAiAccess(): Promise<AiAccessState> {
+    const res = await post('/api/study/ai-access/request');
+    if (!res.ok) {
+        throw new Error((await res.text().catch(() => '')).trim() || 'AI 기능을 신청하지 못했어요.');
+    }
+    return (await res.json()) as AiAccessState;
 }
 
 export interface StudyBookRow {

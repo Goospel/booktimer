@@ -3108,9 +3108,13 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
   `/study` 셸 + Vue 섬 `study`(월 내비·7열 격자·3상태 체크 순환·날짜 상세·수동 일정 추가/삭제) ·
   홈 QuickNav 「공부」 타일. 달력·체크는 미니앱과 **같은 문**(`/api/study/calendar`·`/check`)을 재사용한다.
   책 삭제·계정 삭제 두 경로 모두 실 H2 FK 통합 테스트로 못 박았다.
-- 🔜 **PR-2 AI 기능 승인제** — `V84` `users.study_ai_access`(NONE/PENDING/APPROVED/REJECTED) + 전이 4메서드 ·
-  신청 API · `/admin`의 「AI 기능 승인」 섹션(수락·거절·회수) · `agenda.aiAccess` · 섬의 AI 상태 줄.
-- ⬜ **PR-3 Claude 어댑터 + 백지복습(텍스트) + 하루 상한** — `anthropic-java` 의존 · 키 `BOOKTIMER_CLAUDE_API_KEY`
+- ✅ **PR-2 AI 기능 승인제 (2026-09-03, AI 없음)** — `V84` `users.study_ai_access`(NONE/PENDING/APPROVED/REJECTED,
+  DEFAULT 'NONE'이라 아무도 자동 승인되지 않는다) + `study_ai_access_at` · 전이 4메서드(`User`가 `IllegalStateException`으로
+  지키는 **단일 출처**) · `POST /api/study/ai-access/request`(재신청 409) · `/admin`의 「AI 기능 승인」 섹션
+  (대기·승인자 표, 수락·거절·회수 — 잘못된 전이는 500이 아니라 플래시 오류) · `agenda.aiAccess`·`aiAccessAt` ·
+  섬의 AI 상태 줄(`aiStatusLine` 5행). **관리자 우회 없음** — 운영자도 `/study`에서 신청한 뒤 자기 계정을 승인한다.
+  게이트 `StudyAiAccessService.requireApproved`는 이 판에 호출부가 없고 PR-3의 세 AI 문이 첫 줄에서 부른다.
+- 🔜 **PR-3 Claude 어댑터 + 백지복습(텍스트) + 하루 상한** — `anthropic-java` 의존 · 키 `BOOKTIMER_CLAUDE_API_KEY`
   (SSM 선행 필수 — 없으면 배포가 exit 1) · `V85 study_recall`·`study_ai_usage` · 승인 게이트를 세 AI 문의 첫 줄에.
 - ⬜ **PR-4 사진 전사** — multipart(≤3장·각 ≤3MB) → 전사 → **사용자 확인 후** 저장. 서버는 사진을 보관하지 않는다.
 - ⬜ **PR-5 AI 일정 생성** — 입력 폼 → 미리보기 → 「달력에 적용」(오늘 이후 N개 교체 확인).

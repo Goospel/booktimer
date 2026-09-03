@@ -14,6 +14,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -43,6 +44,9 @@ class AdminControllerTest {
 
     @Autowired
     private UserRegistrationService registrationService;
+
+    @Autowired
+    private com.booktimer.user.UserRepository userRepository;
 
     @Autowired
     private Clock clock;
@@ -96,5 +100,64 @@ class AdminControllerTest {
                 .andExpect(content().string(allOf(
                         containsString("action=\"/logout\""),
                         containsString("method=\"post\""))));
+    }
+
+    // ── AI 기능 승인 섹션 ───────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("GET /admin: 대기·승인 목록이 모델에 실리고 대기 큐는 신청 시각 오름차순이다")
+    void admin_admin_modelHasStudyAiQueues() throws Exception {
+        registrationService.register("boss@booktimer.com", "rawpw1234", "사장", SEOUL, Role.ADMIN, today());
+        // 늦게 신청한 사람을 먼저 만든다 — 정렬을 안 걸면 이 순서가 그대로 나와 테스트가 잡는다.
+        pending("late", clock.instant());
+        pending("early", clock.instant().minusSeconds(600));
+        approved("okuser");
+
+        var model = mockMvc.perform(get("/admin").with(user("boss@booktimer.com").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeExists("studyAiPending"))
+                .andExpect(model().attributeExists("studyAiApproved"))
+                .andReturn().getModelAndView().getModel();
+
+        assertThat(loginIds(model.get("studyAiPending"))).containsExactly("early", "late");
+        assertThat(loginIds(model.get("studyAiApproved"))).containsExactly("okuser");
+    }
+
+    @Test
+    @DisplayName("GET /admin: 「AI 기능 승인」 섹션에 대기 건수와 신청자 행이 렌더된다")
+    void admin_admin_rendersStudyAiSection() throws Exception {
+        registrationService.register("boss@booktimer.com", "rawpw1234", "사장", SEOUL, Role.ADMIN, today());
+        pending("waiting1", clock.instant());
+
+        mockMvc.perform(get("/admin").with(user("boss@booktimer.com").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(content().string(allOf(
+                        containsString("AI 기능 승인"),
+                        containsString("대기 1건"),
+                        containsString("@waiting1"),
+                        containsString("/admin/study-ai/waiting1/approve"),
+                        containsString("/admin/study-ai/waiting1/reject"))));
+    }
+
+    private void pending(String loginId, java.time.Instant at) {
+        com.booktimer.user.User user = registrationService.register(loginId + "@booktimer.com",
+                "pw1234qwer!!", loginId, "닉네임_" + loginId, SEOUL, Role.USER, today());
+        user.requestStudyAi(at);
+        userRepository.saveAndFlush(user);
+    }
+
+    private void approved(String loginId) {
+        com.booktimer.user.User user = registrationService.register(loginId + "@booktimer.com",
+                "pw1234qwer!!", loginId, "닉네임_" + loginId, SEOUL, Role.USER, today());
+        user.requestStudyAi(clock.instant());
+        user.approveStudyAi(clock.instant());
+        userRepository.saveAndFlush(user);
+    }
+
+    /** 모델에 실린 행 목록에서 @아이디만 뽑는다 — 행 타입이 바뀌어도 이 단언은 화면이 보는 값을 잰다. */
+    private java.util.List<String> loginIds(Object rows) {
+        return ((java.util.List<?>) rows).stream()
+                .map(row -> ((com.booktimer.study.StudyAiAccessService.AiAccessRow) row).loginId())
+                .toList();
     }
 }

@@ -4171,6 +4171,8 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 }
 .study-day-subject { flex: 0 0 auto; font-size: 12px; color: var(--muted); }
 .study-day-task { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.study-day-ai { margin: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.study-day-ai .btn { width: auto; flex: 0 0 auto; }
 .study-day-form { display: flex; flex-direction: column; gap: 8px; }
 .study-day-form input, .study-day-book { width: 100%; }
 .study-day-form .btn { align-self: flex-start; width: auto; }
