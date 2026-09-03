@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue';
 
 import type { AddItemInput, StudyBookRow } from './api';
-import type { PlanItem } from './pure';
+import { aiStatusLine, type AiAccess, type PlanItem } from './pure';
 
 const props = defineProps<{
     date: string;
@@ -10,11 +10,17 @@ const props = defineProps<{
     today: string;
     items: PlanItem[];
     books: StudyBookRow[];
+    aiAccess: AiAccess;
+    aiAccessAt: string | null;
+    aiEnabled: boolean;
+    /** 신청 요청이 날아가 있는 동안 — 버튼을 잠가 두 번 신청(409)이 나지 않게 한다. */
+    aiBusy: boolean;
 }>();
 
 const emit = defineEmits<{
     (e: 'add', input: AddItemInput): void;
     (e: 'remove', id: number): void;
+    (e: 'request-ai'): void;
 }>();
 
 const subject = ref('');
@@ -43,6 +49,8 @@ watch(() => props.date, () => {
 
 const canSubmit = computed(() => subject.value.trim().length > 0 && task.value.trim().length > 0);
 
+const aiStatus = computed(() => aiStatusLine(props.aiAccess, props.aiEnabled, props.aiAccessAt));
+
 function submit(): void {
     if (!canSubmit.value) return;
     emit('add', {
@@ -70,6 +78,19 @@ function submit(): void {
             </ul>
             <p v-else class="status-line muted">아직 일정이 없어요.</p>
         </div>
+
+        <!-- AI 상태 줄 — 승인제라 대부분의 사용자에겐 여기가 AI의 유일한 접점이다.
+             승인됐고 키도 있는 조합에선 문구가 비고(그 자리는 다음 판의 AI 버튼 몫) 줄 자체가 사라진다. -->
+        <p v-if="aiStatus.text || aiStatus.button" class="study-day-ai status-line">
+            <span v-if="aiStatus.text">{{ aiStatus.text }}</span>
+            <button
+                v-if="aiStatus.button"
+                type="button"
+                class="btn btn-ghost btn-small"
+                :disabled="aiBusy"
+                @click="emit('request-ai')"
+            >{{ aiStatus.button }}</button>
+        </p>
 
         <form class="study-day-form" @submit.prevent="submit">
             <p class="study-day-label">일정 추가</p>

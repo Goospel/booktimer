@@ -115,15 +115,55 @@ export function planSummary(items: PlanItem[]): string {
 /**
  * 실패 응답을 화면에 띄울 한 줄로 옮긴다.
  *
- * <p><b>본문을 믿는 것은 400뿐</b>이다 — 그 상태만 컨트롤러의 `@ExceptionHandler(IAE)`가 한국어
- * 완성문을 본문으로 돌려준다. 404·500은 `GlobalExceptionHandler`가 `error.html`을 렌더해
- * <b>HTML 문서 전체</b>가 본문이라, 그대로 던지면 상태줄에 `<!DOCTYPE html>…`이 찍힌다.
+ * <p><b>본문을 믿는 것은 400·409뿐</b>이다 — 그 둘만 컨트롤러의 `@ExceptionHandler`가 한국어
+ * 완성문을 본문으로 돌려준다(400은 IAE, 409는 승인 신청의 전이 위반). 그 밖의 상태는
+ * `GlobalExceptionHandler`가 `error.html`을 렌더해 <b>HTML 문서 전체</b>가 본문이라, 그대로
+ * 던지면 상태줄에 `<!DOCTYPE html>…`이 찍힌다 — CSRF가 만료된 403이 정확히 그 경로다.
+ *
+ * @param fallback 본문을 못 믿을 때 띄울 문구. 부르는 쪽마다 다르라고 인자로 받는다 —
+ *                 「일정을 추가하지 못했어요」가 AI 신청 실패에 뜨면 엉뚱하다
  */
-export function errorMessage(status: number, bodyText: string): string {
-    const fallback = '일정을 추가하지 못했어요.';
-    if (status === 400) return bodyText.trim() || fallback;
+export function errorMessage(status: number, bodyText: string,
+                             fallback = '일정을 추가하지 못했어요.'): string {
+    if (status === 400 || status === 409) return bodyText.trim() || fallback;
     if (status === 404) return '책을 찾을 수 없어요';
     return fallback;
+}
+
+/** 서버가 주는 AI 기능 승인 상태 — 관리자가 켜 준 사람만 APPROVED다. */
+export type AiAccess = 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface AiStatus {
+    /** 상태 줄에 띄울 한 줄. 빈 문자열이면 줄 자체를 그리지 않는다. */
+    text: string;
+    /** 누를 수 있는 버튼의 이름. `null`이면 버튼 없음(기다리는 중이거나 이미 끝난 상태). */
+    button: string | null;
+}
+
+/**
+ * AI 기능의 지금 상태를 한 줄로 옮긴다.
+ *
+ * <p><b>승인 판정이 키 판정보다 먼저</b>인 것이 요점이다 — 아직 승인 안 된 사람에게 「AI가 꺼져 있어요」는
+ * 틀린 안내다(켜져 있어도 그 사람은 못 쓴다). 그래서 `aiEnabled`는 APPROVED 가지 안에서만 본다.
+ *
+ * <p>APPROVED × 켜짐 칸이 빈 문자열인 것은 그 자리를 AI 버튼들이 가져가기 때문이다 — 이번 판엔 그 버튼이
+ * 아직 없어서 그 조합이 화면에 나오지 않지만(서버가 `aiEnabled=false` 고정), 경계는 여기서 정해 둔다.
+ */
+export function aiStatusLine(access: AiAccess, aiEnabled: boolean, accessAt: string | null): AiStatus {
+    if (access === 'PENDING') {
+        if (!accessAt) return { text: '승인 대기 중이에요.', button: null };
+        const at = new Date(accessAt);
+        return { text: `승인 대기 중 — ${at.getMonth() + 1}월 ${at.getDate()}일 신청`, button: null };
+    }
+    if (access === 'REJECTED') {
+        return { text: '승인되지 않았어요.', button: '다시 신청' };
+    }
+    if (access === 'APPROVED') {
+        return aiEnabled
+            ? { text: '', button: null }
+            : { text: 'AI 기능이 꺼져 있어 저장만 됩니다.', button: null };
+    }
+    return { text: 'AI 분석·일정 기능은 승인제예요.', button: 'AI 기능 신청' };
 }
 
 /** 하단 네비 — 이 화면은 홈과 내 책장으로만 나간다(공부 서재·타이머 동선은 미니앱 몫). */

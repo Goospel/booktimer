@@ -33,6 +33,14 @@
             opacity: 0.7;
             margin-top: 0.2rem;
         }
+        /* 표 규칙은 admin-users.html의 .admin-table을 그대로 옮겨 왔다(관례 — 페이지 내 <style>). */
+        .admin-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; font-size: 0.9rem; }
+        .admin-table th, .admin-table td { padding: 0.5rem 0.6rem; border-bottom: 1px solid rgba(0,0,0,0.08); text-align: left; }
+        .admin-table th { font-size: 0.8rem; opacity: 0.7; }
+        .admin-table tr:hover { background: rgba(0,0,0,0.02); }
+        .admin-table form { display: inline; }
+        /* 좁은 컨테이너에서 버튼이 100% 폭으로 늘어 세로로 쌓이는 걸 막는다(수락·거절은 한 줄에). */
+        .admin-table button { width: auto; }
     </style>
 </head>
 <body>
@@ -44,6 +52,8 @@
 
     <!-- 운영 액션 결과(예: 백필) 알림 — POST→리다이렉트 후 1회 노출 -->
     <p class="alert" th:if="${message}" th:text="${message}">결과</p>
+    <!-- 실패한 액션(예: 이미 처리된 신청) — 500으로 튀지 않고 여기서 말한다 -->
+    <p class="alert" th:if="${error}" th:text="${error}">오류</p>
 
     <section class="card">
         <h2>통계 요약</h2>
@@ -80,6 +90,70 @@
                 <div class="stat-label">가입자당 평균</div>
             </div>
         </div>
+    </section>
+
+    <!-- 공부 화면의 AI 기능은 승인제다 — 신청 알림이 따로 없으니 이 섹션을 위쪽에 둬 대기가 눈에 띄게 한다.
+         관리자 우회는 없다: 운영자 본인도 /study에서 신청한 뒤 여기서 자기 계정을 승인해야 한다. -->
+    <section class="card">
+        <h2>AI 기능 승인</h2>
+        <p class="status-line">
+            <!-- 대기가 있을 때만 굵게 — 배지 관례가 없는 화면이라 문구 자체로 눈에 띄게 한다. -->
+            <strong th:unless="${#lists.isEmpty(studyAiPending)}"
+                    th:text="|대기 ${#lists.size(studyAiPending)}건|">대기 0건</strong>
+            <span th:if="${#lists.isEmpty(studyAiPending)}">대기 0건</span>
+            · <span th:text="|승인 ${#lists.size(studyAiApproved)}명|">승인 0명</span>
+        </p>
+
+        <p class="muted" th:if="${#lists.isEmpty(studyAiPending)}">대기 중인 신청이 없어요.</p>
+        <table class="admin-table" th:unless="${#lists.isEmpty(studyAiPending)}">
+            <thead>
+            <tr>
+                <th>@아이디</th>
+                <th>닉네임</th>
+                <th>신청</th>
+                <th>처리</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="row : ${studyAiPending}">
+                <td th:text="'@' + ${row.loginId}">@handle</td>
+                <td th:text="${row.nickname}">닉네임</td>
+                <td th:text="${#temporals.format(row.at, 'yyyy-MM-dd HH:mm')}">2026-01-01 00:00</td>
+                <td>
+                    <form method="post" th:action="@{/admin/study-ai/{loginId}/approve(loginId=${row.loginId})}">
+                        <button type="submit" class="btn-primary btn-small">수락</button>
+                    </form>
+                    <form method="post" th:action="@{/admin/study-ai/{loginId}/reject(loginId=${row.loginId})}">
+                        <button type="submit" class="btn-danger btn-small">거절</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+
+        <p class="muted" th:if="${#lists.isEmpty(studyAiApproved)}">승인된 사용자가 없어요.</p>
+        <table class="admin-table" th:unless="${#lists.isEmpty(studyAiApproved)}">
+            <thead>
+            <tr>
+                <th>@아이디</th>
+                <th>닉네임</th>
+                <th>승인</th>
+                <th>처리</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="row : ${studyAiApproved}">
+                <td th:text="'@' + ${row.loginId}">@handle</td>
+                <td th:text="${row.nickname}">닉네임</td>
+                <td th:text="${#temporals.format(row.at, 'yyyy-MM-dd HH:mm')}">2026-01-01 00:00</td>
+                <td>
+                    <form method="post" th:action="@{/admin/study-ai/{loginId}/revoke(loginId=${row.loginId})}">
+                        <button type="submit" class="btn-ghost btn-small">회수</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
     </section>
 
     <section class="card">

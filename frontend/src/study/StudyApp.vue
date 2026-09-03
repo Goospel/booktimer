@@ -9,6 +9,7 @@ import {
     fetchAgenda,
     fetchCalendar,
     fetchStudyBooks,
+    requestAiAccess,
     saveCheck,
     type AddItemInput,
     type StudyBookRow,
@@ -21,6 +22,7 @@ import {
     monthTitle,
     planSummary,
     studyNavLinks,
+    type AiAccess,
     type CalendarDay,
     type PlanItem,
     type RecallMark,
@@ -43,6 +45,11 @@ const busyDate = ref<string | null>(null);
 const loading = ref(true);
 const error = ref('');
 
+const aiAccess = ref<AiAccess>('NONE');
+const aiAccessAt = ref<string | null>(null);
+const aiEnabled = ref(false);
+const aiBusy = ref(false);
+
 const monthParam = computed(() => `${year.value}-${String(month.value).padStart(2, '0')}`);
 const cells = computed(() => calendarCells(year.value, month.value));
 const byDate = computed(() => new Map(days.value.map((d) => [d.date, d])));
@@ -57,6 +64,9 @@ async function load(): Promise<void> {
     try {
         const [agenda, calendar] = await Promise.all([fetchAgenda(monthParam.value), fetchCalendar(monthParam.value)]);
         today.value = agenda.today;
+        aiAccess.value = agenda.aiAccess;
+        aiAccessAt.value = agenda.aiAccessAt;
+        aiEnabled.value = agenda.aiEnabled;
         items.value = agenda.items;
         recalls.value = agenda.recalls;
         days.value = calendar.days;
@@ -131,6 +141,27 @@ async function onDelete(id: number): Promise<void> {
     }
 }
 
+/**
+ * AI 기능 신청 — 응답이 준 상태로 갈아끼운다(낙관 갱신 없음).
+ *
+ * 서버가 상태의 단일 출처라, 다른 탭에서 이미 신청했거나 관리자가 방금 처리했으면 여기서 409가 오고
+ * 그 문구가 그대로 뜬다. 화면이 혼자 「대기 중」으로 바뀌어 있는 것보다 정직하다.
+ */
+async function onRequestAi(): Promise<void> {
+    if (aiBusy.value) return;
+    aiBusy.value = true;
+    error.value = '';
+    try {
+        const state = await requestAiAccess();
+        aiAccess.value = state.aiAccess;
+        aiAccessAt.value = state.aiAccessAt;
+    } catch (e) {
+        error.value = e instanceof Error && e.message ? e.message : 'AI 기능을 신청하지 못했어요.';
+    } finally {
+        aiBusy.value = false;
+    }
+}
+
 onMounted(async () => {
     void fetchStudyBooks().then((rows) => (books.value = rows));
     await load();
@@ -201,8 +232,13 @@ onMounted(async () => {
             :today="today"
             :items="itemsOn(selected)"
             :books="books"
+            :ai-access="aiAccess"
+            :ai-access-at="aiAccessAt"
+            :ai-enabled="aiEnabled"
+            :ai-busy="aiBusy"
             @add="onAdd"
             @remove="onDelete"
+            @request-ai="onRequestAi"
         />
 
         <NavLinks :links="studyNavLinks()" />

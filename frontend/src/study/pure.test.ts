@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    aiStatusLine,
     calendarCells,
     cellLabel,
     cellMarks,
@@ -131,5 +132,69 @@ describe('errorMessage', () => {
 
     it('500도 본문을 버리고 고정 문구를 쓴다 — HTML이 상태줄에 찍히면 안 된다', () => {
         expect(errorMessage(500, '<!DOCTYPE html><html>...</html>')).toBe('일정을 추가하지 못했어요.');
+    });
+
+    it('409도 본문을 믿는다 — 신청 API가 「이미 신청했거나 승인된 상태예요」를 본문으로 준다', () => {
+        expect(errorMessage(409, '이미 신청했거나 승인된 상태예요')).toBe('이미 신청했거나 승인된 상태예요');
+    });
+
+    it('403은 본문을 버리고 부른 쪽이 준 폴백을 쓴다 — CSRF 만료 응답이 상태줄에 찍히면 안 된다', () => {
+        expect(errorMessage(403, '<!DOCTYPE html><html><body>Forbidden</body></html>', 'AI 기능을 신청하지 못했어요.'))
+            .toBe('AI 기능을 신청하지 못했어요.');
+    });
+
+    it('폴백을 주면 500·빈 400에도 그 문구가 나온다 — 「일정」 문구가 엉뚱한 화면에 새지 않는다', () => {
+        expect(errorMessage(500, '<html>...</html>', 'AI 기능을 신청하지 못했어요.')).toBe('AI 기능을 신청하지 못했어요.');
+        expect(errorMessage(400, '  ', 'AI 기능을 신청하지 못했어요.')).toBe('AI 기능을 신청하지 못했어요.');
+    });
+});
+
+describe('aiStatusLine', () => {
+    it('NONE: 승인제임을 알리고 신청 버튼을 준다', () => {
+        expect(aiStatusLine('NONE', false, null)).toEqual({
+            text: 'AI 분석·일정 기능은 승인제예요.',
+            button: 'AI 기능 신청',
+        });
+    });
+
+    it('키가 켜져 있어도 미승인이면 승인 얘기를 먼저 한다 — 「꺼져 있어요」는 틀린 안내다', () => {
+        expect(aiStatusLine('NONE', true, null).button).toBe('AI 기능 신청');
+        expect(aiStatusLine('PENDING', true, null).text).toBe('승인 대기 중이에요.');
+        expect(aiStatusLine('REJECTED', true, null).button).toBe('다시 신청');
+    });
+
+    it('PENDING: 신청한 날을 함께 보여 주고 버튼은 없앤다 — 두 번 눌러도 소용없다', () => {
+        expect(aiStatusLine('PENDING', false, '2026-09-03T04:05:06Z')).toEqual({
+            text: '승인 대기 중 — 9월 3일 신청',
+            button: null,
+        });
+    });
+
+    it('PENDING인데 시각을 모르면 날짜 없이 말한다(과거 데이터·null 방어)', () => {
+        expect(aiStatusLine('PENDING', false, null)).toEqual({
+            text: '승인 대기 중이에요.',
+            button: null,
+        });
+    });
+
+    it('REJECTED: 다시 신청할 수 있다 — 막다른 길로 두지 않는다', () => {
+        expect(aiStatusLine('REJECTED', false, '2026-09-03T04:05:06Z')).toEqual({
+            text: '승인되지 않았어요.',
+            button: '다시 신청',
+        });
+    });
+
+    it('APPROVED인데 AI가 꺼져 있으면 저장만 된다고 말한다(키가 아직 없는 판)', () => {
+        expect(aiStatusLine('APPROVED', false, '2026-09-03T04:05:06Z')).toEqual({
+            text: 'AI 기능이 꺼져 있어 저장만 됩니다.',
+            button: null,
+        });
+    });
+
+    it('APPROVED이고 AI가 켜져 있으면 상태 줄이 사라진다 — 그 자리는 AI 버튼 몫이다', () => {
+        expect(aiStatusLine('APPROVED', true, '2026-09-03T04:05:06Z')).toEqual({
+            text: '',
+            button: null,
+        });
     });
 });

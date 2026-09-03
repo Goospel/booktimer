@@ -102,6 +102,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
     /** 역할별 사용자 수 — 운영 통계에서 "가입자 수"는 {@code Role.USER}만 세어 ADMIN이 지표를 부풀리지 않게 한다. */
     long countByRole(Role role);
 
+    /**
+     * 공부 AI 승인 상태로 사용자를 모은다 — 관리자 화면의 「대기 목록」·「승인자 목록」이 이 한 줄로 끝난다.
+     * 정렬 키는 마지막 전이 시각이라 <b>대기 큐는 오래 기다린 사람이 위</b>다(먼저 신청한 사람이 먼저).
+     */
+    List<User> findByStudyAiAccessOrderByStudyAiAccessAtAsc(StudyAiAccess studyAiAccess);
+
     /** 역할 + 온보딩 완료 여부별 사용자 수 — 운영 통계의 "온보딩 완료자" 카드. */
     long countByRoleAndOnboarded(Role role, boolean onboarded);
 

@@ -208,6 +208,21 @@ public class User extends BaseTimeEntity {
     @Column(name = "study_daily_goal_seconds", nullable = false)
     private long studyDailyGoalSeconds = 0;
 
+    /**
+     * 공부 화면 AI 기능의 승인 상태 — 관리자가 켜 준 사람만 AI를 부른다(설계 §2.6).
+     *
+     * <p>기본값 {@link StudyAiAccess#NONE}은 마이그레이션(V84)의 컬럼 DEFAULT와 짝이라, <b>기존 전 유저가
+     * 자동으로 켜지지 않는다</b>. 별도 신청 테이블을 두지 않은 이유는 관리자 화면이 필요로 하는 것이
+     * 「대기 목록·승인자 목록」뿐이고, 그건 이 컬럼 하나의 조회로 끝나기 때문이다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "study_ai_access", nullable = false, length = 10)
+    private StudyAiAccess studyAiAccess = StudyAiAccess.NONE;
+
+    /** 마지막 상태 전이 시각 — 대기 큐 정렬과 「M월 D일 신청」 표시에 쓴다. 한 번도 없으면 {@code null}. */
+    @Column(name = "study_ai_access_at")
+    private java.time.Instant studyAiAccessAt;
+
     protected User() {
         // JPA
     }
@@ -452,6 +467,66 @@ public class User extends BaseTimeEntity {
             throw new IllegalArgumentException("studyDailyGoalSeconds must be >= 0");
         }
         this.studyDailyGoalSeconds = seconds;
+    }
+
+    /** 공부 AI 기능의 현재 승인 상태. 기본값은 {@link StudyAiAccess#NONE}이다. */
+    public StudyAiAccess getStudyAiAccess() {
+        return studyAiAccess;
+    }
+
+    /** 마지막 승인 상태 전이 시각(신청·수락·거절·회수 중 가장 최근). 한 번도 없으면 {@code null}. */
+    public java.time.Instant getStudyAiAccessAt() {
+        return studyAiAccessAt;
+    }
+
+    /**
+     * AI 기능을 신청한다 — {@code NONE}·{@code REJECTED}에서만. 거절·회수 뒤 재신청은 즉시 가능하다
+     * (쿨다운을 두지 않는 이유는 대기 큐를 관리자만 보고, 반복 거절이 규칙보다 싸기 때문이다 — 설계 §2.6).
+     *
+     * @throws IllegalStateException 이미 신청했거나(PENDING) 승인된(APPROVED) 상태인 경우
+     */
+    public void requestStudyAi(java.time.Instant now) {
+        transitionStudyAi(java.util.Set.of(StudyAiAccess.NONE, StudyAiAccess.REJECTED),
+                StudyAiAccess.PENDING, now);
+    }
+
+    /**
+     * 신청을 수락한다 — {@code PENDING}에서만.
+     *
+     * @throws IllegalStateException 대기 중인 신청이 아닌 경우
+     */
+    public void approveStudyAi(java.time.Instant now) {
+        transitionStudyAi(java.util.Set.of(StudyAiAccess.PENDING), StudyAiAccess.APPROVED, now);
+    }
+
+    /**
+     * 신청을 거절한다 — {@code PENDING}에서만.
+     *
+     * @throws IllegalStateException 대기 중인 신청이 아닌 경우
+     */
+    public void rejectStudyAi(java.time.Instant now) {
+        transitionStudyAi(java.util.Set.of(StudyAiAccess.PENDING), StudyAiAccess.REJECTED, now);
+    }
+
+    /**
+     * 승인을 회수한다 — {@code APPROVED}에서만. 이미 저장된 분석 결과·일정은 <b>지우지 않는다</b>
+     * (과거 산출물은 사용자 것이다).
+     *
+     * @throws IllegalStateException 승인 상태가 아닌 경우
+     */
+    public void revokeStudyAi(java.time.Instant now) {
+        transitionStudyAi(java.util.Set.of(StudyAiAccess.APPROVED), StudyAiAccess.REJECTED, now);
+    }
+
+    /** 전이 규칙의 단일 출처 — 허용 상태가 아니면 상태·시각을 <b>건드리지 않고</b> 거부한다. */
+    private void transitionStudyAi(java.util.Set<StudyAiAccess> allowedFrom, StudyAiAccess to,
+                                   java.time.Instant now) {
+        if (!allowedFrom.contains(studyAiAccess)) {
+            throw new IllegalStateException(
+                    "study AI access transition not allowed: " + studyAiAccess + " -> " + to);
+        }
+        this.studyAiAccess = to;
+        this.studyAiAccessAt = now;
     }
 
     /** 책BTI "다시 분석"의 하루 허용 횟수(악의적 반복 클릭 → LLM 남용 방어). 무광고(웹) 경로의 천장이다. */

@@ -91,5 +91,8 @@ export default defineConfig({
     // 실행하려다 깨진다. src/** 누락 시 소스 곁 테스트(예: dashboard/timerProgress.test.ts)가
     // 조용히 미실행되던 사각을 막는다.
     include: ['test/**/*.{test,spec}.ts', 'src/**/*.{test,spec}.ts'],
+    // 타임존을 고정한다 — `aiStatusLine`의 「M월 D일 신청」이 ISO 시각을 브라우저 로컬 tz로 옮겨
+    // 찍으므로, 이게 없으면 같은 테스트가 기계·CI의 tz에 따라 하루 어긋나 깨진다.
+    env: { TZ: 'Asia/Seoul' },
   },
 });
