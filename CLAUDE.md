@@ -362,6 +362,7 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
 → 메시지를 **UTF-8 파일** `.commit-msg-tmp` 로 쓰고 `git commit -F .commit-msg-tmp` 로 커밋.
 
 - `.commit-msg-tmp` 는 `.gitignore` 에 등록되어 있어 추적되지 않는다 (잔재 add 방지).
+- **쓰기 직전 `rm -f .commit-msg-tmp`, 커밋 직후 삭제, 그리고 쓰기와 커밋은 별도 명령으로** — 이전 세션 잔재를 `-F`가 조용히 집어 옛 메시지로 커밋된다(T-221). 쓰기 명령이 훅에 막혀도 뒤에 이은 커밋만 살아남는 구조를 없앤다.
 - **(훅 `check-commit-message.ps1`이 하드 강제 — `-m` 인라인 한글 감지 시 차단. 우회: `ALLOW_INLINE_MSG` 토큰. `-F` 파일경유는 검사 대상 아님.)**
 
 ---
