@@ -18,6 +18,13 @@ defineProps<{ loginId: string }>()
                 </svg>
                 <span class="dash-nav-label">내 책방</span>
             </a>
+            <!-- 연필 라인아트 — 하단 네비 사전(navIcons)엔 넣지 않는다: 「공부」 링크를 든 .link-row가 아직 없다 -->
+            <a class="dash-nav-tile" href="/study">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 20l4-1 10-10-3-3L5 16z" /><path d="M13 7l3 3" />
+                </svg>
+                <span class="dash-nav-label">공부</span>
+            </a>
             <a class="dash-nav-tile" href="/personality">
                 <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M7 4c0 5 10 5 10 8s-10 3-10 8" /><path d="M17 4c0 5-10 5-10 8s10 3 10 8" /><path d="M8.5 7h7" /><path d="M8.5 17h7" />

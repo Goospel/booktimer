@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <th:block th:replace="~{analytics :: gtag}"></th:block>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- 섬의 POST(체크 순환·일정 추가·삭제)가 여기서 토큰을 읽는다 — StudyController.precommit이 짝이다 -->
+    <meta name="_csrf" th:content="${_csrf != null ? _csrf.token : ''}">
+    <title>공부 — BookTimer</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <a class="brand-home" th:href="@{/}" title="홈으로">
+            <svg class="brand-ico" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="3.4" height="16" rx="1"/><rect x="9.3" y="4" width="3.4" height="16" rx="1"/><path d="M15 5.4l3.3-.7 2.4 15.4-3.3.7z"/></svg>
+            <h1>BookTimer</h1>
+        </a>
+    </header>
+    <div id="study-app">불러오는 중…</div>
+    <noscript><p class="status-line">JavaScript가 필요합니다.</p></noscript>
+</div>
+<script type="module" th:attr="nonce=${cspNonce}" th:src="@{/study/study.js}"></script>
+</body>
+</html>
