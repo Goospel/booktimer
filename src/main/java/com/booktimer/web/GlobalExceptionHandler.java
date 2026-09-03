@@ -4,10 +4,13 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -57,6 +60,24 @@ public class GlobalExceptionHandler {
                 ? "요청하신 페이지를 찾을 수 없습니다."
                 : "요청을 처리할 수 없습니다.");
         return "error";
+    }
+
+    /**
+     * 업로드 용량 초과 → <b>413</b>. 여기(전역)에 있어야 하는 이유가 있다.
+     *
+     * <p>{@code MaxUploadSizeExceededException}은 {@code DispatcherServlet.checkMultipart()}에서,
+     * 즉 <b>핸들러를 고르기 전에</b> 터진다. 그래서 컨트롤러 안의 {@code @ExceptionHandler}는 이 예외를
+     * 영영 못 본다(핸들러가 아직 null이다) — 컨트롤러에 두면 조용히 아래 catch-all로 떨어져 <b>500 +
+     * error.html + 스택트레이스</b>가 된다. 사용자에겐 「사진이 크다」가, 로그엔 서버 결함이 찍힌다.
+     *
+     * <p>본문을 뷰가 아니라 평문으로 돌려주는 것은 이 예외가 API(사진 전사)에서만 나기 때문이다 —
+     * 화면의 {@code errorMessage()}가 그 문구를 그대로 상태줄에 띄운다.
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    @ResponseBody
+    public ResponseEntity<String> handleUploadTooLarge(MaxUploadSizeExceededException ex) {
+        log.debug("업로드 용량 초과 — 413으로 응답: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body("사진은 3MB 이하로 올려 주세요");
     }
 
     @ExceptionHandler(Exception.class)

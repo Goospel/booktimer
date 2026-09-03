@@ -116,10 +116,37 @@ export interface SaveRecallInput {
     subject: string;
     scope: string;
     body: string;
+    /** 사진에서 읽어 온 글이면 `PHOTO` — 사용자가 고친 뒤라도 출처는 사진이다. */
+    source: 'TEXT' | 'PHOTO';
 }
 
 export async function saveRecall(input: SaveRecallInput): Promise<Recall> {
-    return json(await post('/api/study/recall', { ...input, source: 'TEXT' }), '글을 저장하지 못했어요.');
+    return json(await post('/api/study/recall', input), '글을 저장하지 못했어요.');
+}
+
+export interface TranscriptResult {
+    text: string;
+    /** 공부 메모가 아니거나 글씨를 전혀 못 읽음 — 이때 `text`는 빈 값이다. */
+    unreadable: boolean;
+}
+
+/**
+ * 사진에 손으로 쓴 메모를 읽어 <b>텍스트만</b> 받아 온다 — 서버는 사진을 저장하지 않는다.
+ *
+ * <p>여기만 `post()`를 안 쓰는 이유는 `Content-Type`이다: FormData는 <b>브라우저가</b> boundary와 함께
+ * 헤더를 붙여야 하고, 손으로 `multipart/form-data`를 적으면 boundary가 빠져 서버가 파트를 못 읽는다.
+ * 그 외(자격증명·CSRF 헤더·`errorMessage` 경로)는 다른 문들과 같다.
+ */
+export async function transcribePhotos(images: Blob[]): Promise<TranscriptResult> {
+    const form = new FormData();
+    images.forEach((blob, i) => form.append('images', blob, `memo-${i + 1}.jpg`));
+    const res = await fetch('/api/study/recall/transcribe', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-CSRF-TOKEN': getCsrfToken() },
+        body: form,
+    });
+    return json(res, '사진을 읽지 못했어요.');
 }
 
 /**

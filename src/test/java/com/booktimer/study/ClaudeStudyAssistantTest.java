@@ -2,6 +2,7 @@ package com.booktimer.study;
 
 import com.booktimer.study.ClaudeStudyAssistant.RecallAnalysis;
 import com.booktimer.study.ClaudeStudyAssistant.RecallInput;
+import com.booktimer.study.ClaudeStudyAssistant.Transcript;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -90,7 +91,7 @@ class ClaudeStudyAssistantTest {
                 new RecallAnalysis("   ", List.of("구멍"), List.of("문제")))).isEmpty();
         assertThat(ClaudeStudyAssistant.normalize(
                 new RecallAnalysis(null, List.of("구멍"), List.of("문제")))).isEmpty();
-        assertThat(ClaudeStudyAssistant.normalize(null)).isEmpty();
+        assertThat(ClaudeStudyAssistant.normalize((RecallAnalysis) null)).isEmpty();
     }
 
     @Test
@@ -117,6 +118,48 @@ class ClaudeStudyAssistantTest {
 
         assertThat(result.holes()).hasSize(10).first().isEqualTo("항목 1");
         assertThat(result.questions()).hasSize(10);
+    }
+
+    // ── 전사 정제 (PR-4) ──
+
+    @Test
+    @DisplayName("normalize(Transcript): 앞뒤 공백을 털어 그대로 돌려준다 — 줄바꿈은 본문이라 보존한다")
+    void normalizeTranscript_trimsEdgesButKeepsLineBreaks() {
+        Optional<Transcript> result = ClaudeStudyAssistant.normalize(
+                new Transcript("\n  1. 함수의 정의\n2. 호출 규약 [?]  \n", false));
+
+        assertThat(result).isPresent();
+        assertThat(result.get().text()).isEqualTo("1. 함수의 정의\n2. 호출 규약 [?]");
+        assertThat(result.get().unreadable()).isFalse();
+    }
+
+    @Test
+    @DisplayName("normalize(Transcript): 읽은 글이 없는데 unreadable도 아니면 빈 결과 — 담을 값이 없다")
+    void normalizeTranscript_blankTextWithoutFlag_isEmpty() {
+        assertThat(ClaudeStudyAssistant.normalize(new Transcript("   ", false))).isEmpty();
+        assertThat(ClaudeStudyAssistant.normalize(new Transcript(null, false))).isEmpty();
+        assertThat(ClaudeStudyAssistant.normalize((Transcript) null)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("normalize(Transcript): 「전혀 못 읽었다」는 빈 글이어도 정상 답이다 — 실패로 접지 않는다")
+    void normalizeTranscript_unreadable_isPresentWithEmptyText() {
+        Optional<Transcript> result = ClaudeStudyAssistant.normalize(new Transcript(null, true));
+
+        assertThat(result).isPresent();
+        assertThat(result.get().text()).isEmpty();
+        assertThat(result.get().unreadable()).isTrue();
+    }
+
+    @Test
+    @DisplayName("transcribe: 키가 없으면 외부 호출 없이 DISABLED · 사진도 없으면 마찬가지")
+    void transcribe_whenDisabled_returnsDisabled() {
+        var images = List.of(new ClaudeStudyAssistant.ImagePart("image/jpeg", new byte[] {1}));
+
+        assertThat(withKey("not-configured").transcribe(images).failure())
+                .isEqualTo(ClaudeStudyAssistant.Failure.DISABLED);
+        assertThat(withKey("sk-ant-실값").transcribe(List.of()).failure())
+                .isEqualTo(ClaudeStudyAssistant.Failure.DISABLED);
     }
 
     @Test

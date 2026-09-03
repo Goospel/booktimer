@@ -40,7 +40,7 @@ import java.util.List;
  * <p>에러 계약은 {@link StudyApiController}와 같다: IAE → 400(문구가 그대로 본문) · 남의 것·없는 것 → 404.
  *
  * <p>{@link Agenda}는 화면이 보는 <b>단 하나의 상태</b>다 — 달력·상세·AI 상태 줄이 전부 이 응답에서 그려진다.
- * {@code remaining}의 {@code plan}·{@code transcribe}는 아직 그 버튼이 없어 0 고정이고, {@code analyze}만
+ * {@code remaining}의 {@code plan}은 아직 그 버튼이 없어 0 고정이고, {@code transcribe}·{@code analyze}는
  * 실제 남은 몫이다(버튼이 붙는 판에서 나머지가 채워진다).
  */
 @RestController
@@ -97,8 +97,8 @@ public class StudyPlanApiController {
                 user.getStudyAiAccess(),
                 user.getStudyAiAccessAt(),
                 aiEnabled,
-                // 일정 생성·사진 전사는 아직 없다 — 남은 몫도 0으로 둔다(버튼이 없으니 표시할 자리도 없다).
-                new Remaining(0, 0, recallService.remainingAnalyze(user)),
+                // 일정 생성은 아직 없다 — 남은 몫도 0으로 둔다(버튼이 없으니 표시할 자리도 없다).
+                new Remaining(0, recallService.remainingTranscribe(user), recallService.remainingAnalyze(user)),
                 items,
                 recalls));
     }
@@ -171,7 +171,7 @@ public class StudyPlanApiController {
      * @param aiAccess    관리자 승인 상태 — 화면의 AI 상태 줄(신청 버튼·대기·거절 문구)이 이걸로 갈린다
      * @param aiAccessAt  마지막 상태 전이 시각(「M월 D일 신청」 표시용). 신청 전이면 {@code null}
      * @param aiEnabled   AI 기능 사용 가능 여부 — <b>키 있음 AND 승인됨</b>일 때만 true다(둘 중 하나로는 안 켜진다)
-     * @param remaining   오늘 남은 AI 호출 몫. {@code analyze}만 실값이고 나머지는 아직 0 고정이다
+     * @param remaining   오늘 남은 AI 호출 몫. {@code plan}만 아직 0 고정이다(그 버튼이 없다)
      * @param items       그 달의 일정(날짜 오름차순)
      * @param recalls     그 달 + <b>전달 말일</b>의 백지복습 표식 — 달 첫날의 「문제」가 전달 글에서 나오기 때문
      */

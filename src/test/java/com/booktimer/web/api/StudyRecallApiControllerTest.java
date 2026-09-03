@@ -10,10 +10,12 @@ import com.booktimer.user.UserRegistrationService;
 import com.booktimer.user.UserRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +34,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -465,5 +468,235 @@ class StudyRecallApiControllerTest {
         mockMvc.perform(post("/api/study/recall").with(user(loginId)).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content(bodyJson(date, body)))
                 .andExpect(status().isOk());
+    }
+
+    // ── 사진 전사 (PR-4) ──
+
+    /**
+     * 게이트가 이 엔드포인트에서 특히 중요한 이유: 사진 전사는 <b>입력 크기가 글보다 크고</b>(장당 수천
+     * 토큰) 승인 없이 열리면 비용이 가장 빨리 새는 문이다. 그래서 「403이 떴다」로 끝내지 않고 어댑터
+     * 무호출·상한 행 0까지 함께 잰다 — 게이트가 검증·상한보다 <b>앞</b>이라는 순서의 계측기다.
+     */
+    @Test
+    @DisplayName("전사 게이트: 미승인(NONE) → 403 · 어댑터 무호출 · 상한 행 0")
+    void transcribe_whenNotApproved_isForbiddenWithoutTouchingAnything() throws Exception {
+        registerWith("trgate", StudyAiAccess.NONE);
+
+        mockMvc.perform(multipart("/api/study/recall/transcribe")
+                        .file(jpeg("images", 1024)).with(user("trgate")).with(csrf()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(assistant);
+        assertThat(usageOf("trgate")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("전사 게이트: 대기·거절 상태도 403 — 신청만으론 열리지 않는다")
+    void transcribe_whenPendingOrRejected_isForbidden() throws Exception {
+        registerWith("trpending", StudyAiAccess.PENDING);
+        registerWith("trrejected", StudyAiAccess.REJECTED);
+
+        for (String loginId : List.of("trpending", "trrejected")) {
+            mockMvc.perform(multipart("/api/study/recall/transcribe")
+                            .file(jpeg("images", 1024)).with(user(loginId)).with(csrf()))
+                    .andExpect(status().isForbidden());
+        }
+        verifyNoInteractions(assistant);
+    }
+
+    @Test
+    @DisplayName("전사: 사진이 한 장도 없으면 400 — 빈 요청으로 상한을 깎지 않는다")
+    void transcribe_withoutImages_isBadRequest() throws Exception {
+        registerWith("trzero", StudyAiAccess.APPROVED);
+        given(assistant.isEnabled()).willReturn(true);
+
+        mockMvc.perform(multipart("/api/study/recall/transcribe").with(user("trzero")).with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string("사진을 한 장 이상 올려 주세요"));
+
+        assertThat(usageOf("trzero")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("전사: 4장이면 400 — 장수 제한이 어댑터 호출보다 앞이다")
+    void transcribe_withFourImages_isBadRequest() throws Exception {
+        registerWith("trfour", StudyAiAccess.APPROVED);
+        given(assistant.isEnabled()).willReturn(true);
+
+        mockMvc.perform(multipart("/api/study/recall/transcribe")
+                        .file(jpeg("images", 10)).file(jpeg("images", 10))
+                        .file(jpeg("images", 10)).file(jpeg("images", 10))
+                        .with(user("trfour")).with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string("사진은 3장까지 올릴 수 있어요"));
+
+        org.mockito.Mockito.verify(assistant, org.mockito.Mockito.never()).transcribe(any());
+        assertThat(usageOf("trfour")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("전사: heic 등 지원하지 않는 형식은 400 — iOS 기본 포맷이 그대로 올라오는 자리다")
+    void transcribe_withUnsupportedType_isBadRequest() throws Exception {
+        registerWith("trheic", StudyAiAccess.APPROVED);
+        given(assistant.isEnabled()).willReturn(true);
+
+        mockMvc.perform(multipart("/api/study/recall/transcribe")
+                        .file(new MockMultipartFile("images", "memo.heic", "image/heic", new byte[64]))
+                        .with(user("trheic")).with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string("JPG·PNG로 올려 주세요"));
+
+        org.mockito.Mockito.verify(assistant, org.mockito.Mockito.never()).transcribe(any());
+    }
+
+    @Test
+    @DisplayName("전사: 3MB를 넘는 사진은 413 — 500이 아니다(U-5)")
+    void transcribe_withTooLargeImage_isPayloadTooLarge() throws Exception {
+        registerWith("trbig", StudyAiAccess.APPROVED);
+        given(assistant.isEnabled()).willReturn(true);
+
+        mockMvc.perform(multipart("/api/study/recall/transcribe")
+                        .file(jpeg("images", 3 * 1024 * 1024 + 1)).with(user("trbig")).with(csrf()))
+                .andExpect(status().isPayloadTooLarge())
+                .andExpect(content().string("사진은 3MB 이하로 올려 주세요"));
+
+        org.mockito.Mockito.verify(assistant, org.mockito.Mockito.never()).transcribe(any());
+        assertThat(usageOf("trbig")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("전사: 키가 없으면 503이고 상한은 안 깎인다")
+    void transcribe_whenDisabled_is503WithoutSpendingShare() throws Exception {
+        registerWith("trdisabled", StudyAiAccess.APPROVED);
+        given(assistant.isEnabled()).willReturn(false);
+
+        mockMvc.perform(multipart("/api/study/recall/transcribe")
+                        .file(jpeg("images", 1024)).with(user("trdisabled")).with(csrf()))
+                .andExpect(status().isServiceUnavailable());
+
+        assertThat(usageOf("trdisabled")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("전사: 성공하면 읽은 글과 unreadable 플래그만 돌려준다 — 서버에 아무것도 저장하지 않는다")
+    void transcribe_success_returnsTextOnly() throws Exception {
+        registerWith("trok", StudyAiAccess.APPROVED);
+        givenTranscript(new ClaudeStudyAssistant.Transcript("1. 함수의 정의\n2. 호출 규약 [?]", false));
+
+        mockMvc.perform(multipart("/api/study/recall/transcribe")
+                        .file(jpeg("images", 1024)).with(user("trok")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.text").value("1. 함수의 정의\n2. 호출 규약 [?]"))
+                .andExpect(jsonPath("$.unreadable").value(false));
+
+        // 전사와 분석 사이에 서버 상태가 없다 — 그날 글은 여전히 「쓴 적 없음」이다
+        mockMvc.perform(get("/api/study/recall/" + today()).with(user("trok")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("전사: 글씨를 전혀 못 읽으면 200 unreadable=true — 실패가 아니라 「못 읽었다」는 답이다")
+    void transcribe_whenUnreadable_isOkWithFlag() throws Exception {
+        registerWith("trunread", StudyAiAccess.APPROVED);
+        givenTranscript(new ClaudeStudyAssistant.Transcript("", true));
+
+        mockMvc.perform(multipart("/api/study/recall/transcribe")
+                        .file(jpeg("images", 1024)).with(user("trunread")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.text").value(""))
+                .andExpect(jsonPath("$.unreadable").value(true));
+    }
+
+    @Test
+    @DisplayName("전사: 모델이 요청을 거부하면 400 「사진을 읽을 수 없어요」 + 환불 — 분석 쪽 문구와 다르다")
+    void transcribe_whenBadInput_is400AndRefunds() throws Exception {
+        registerWith("trbad", StudyAiAccess.APPROVED);
+        given(assistant.isEnabled()).willReturn(true);
+        given(assistant.transcribe(any()))
+                .willReturn(ClaudeStudyAssistant.AiResult.fail(ClaudeStudyAssistant.Failure.BAD_INPUT));
+
+        mockMvc.perform(multipart("/api/study/recall/transcribe")
+                        .file(jpeg("images", 1024)).with(user("trbad")).with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string("사진을 읽을 수 없어요"));
+
+        assertThat(usageOf("trbad")).allSatisfy(row -> assertThat(row.getUsed()).isZero());
+    }
+
+    @Test
+    @DisplayName("전사: 오늘 몫 3회를 다 쓰면 429이고 어댑터를 안 부른다")
+    void transcribe_whenDailyCapSpent_is429WithoutCallingAdapter() throws Exception {
+        registerWith("trcap", StudyAiAccess.APPROVED);
+        givenTranscript(new ClaudeStudyAssistant.Transcript("읽은 글", false));
+
+        for (int i = 0; i < 3; i++) {
+            mockMvc.perform(multipart("/api/study/recall/transcribe")
+                            .file(jpeg("images", 512)).with(user("trcap")).with(csrf()))
+                    .andExpect(status().isOk());
+        }
+
+        org.mockito.Mockito.clearInvocations(assistant);
+        mockMvc.perform(multipart("/api/study/recall/transcribe")
+                        .file(jpeg("images", 512)).with(user("trcap")).with(csrf()))
+                .andExpect(status().isTooManyRequests());
+
+        org.mockito.Mockito.verify(assistant, org.mockito.Mockito.never()).transcribe(any());
+    }
+
+    @Test
+    @DisplayName("전사: 세 장까지는 그대로 어댑터에 넘어간다 — 바이트와 형식이 보존된다")
+    void transcribe_passesEveryImageThrough() throws Exception {
+        registerWith("trpass", StudyAiAccess.APPROVED);
+        givenTranscript(new ClaudeStudyAssistant.Transcript("읽은 글", false));
+
+        mockMvc.perform(multipart("/api/study/recall/transcribe")
+                        .file(new MockMultipartFile("images", "a.jpg", "image/jpeg", new byte[] {1, 2}))
+                        .file(new MockMultipartFile("images", "b.png", "image/png", new byte[] {3}))
+                        .file(new MockMultipartFile("images", "c.webp", "image/webp", new byte[] {4}))
+                        .with(user("trpass")).with(csrf()))
+                .andExpect(status().isOk());
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ClaudeStudyAssistant.ImagePart>> captor = ArgumentCaptor.forClass(List.class);
+        org.mockito.Mockito.verify(assistant).transcribe(captor.capture());
+        assertThat(captor.getValue()).hasSize(3);
+        assertThat(captor.getValue().get(0).mediaType()).isEqualTo("image/jpeg");
+        assertThat(captor.getValue().get(0).bytes()).containsExactly(1, 2);
+        assertThat(captor.getValue().get(2).mediaType()).isEqualTo("image/webp");
+    }
+
+    /**
+     * 화면이 「읽어 오기 (N회 남음)」을 그리고 0이면 버튼을 잠그는 근거가 이 값이다 — 0으로 고정돼 있으면
+     * 승인된 사용자에게도 사진 기능이 <b>영영 잠긴 채</b> 뜬다(PR-3까지는 버튼이 없어 0이 맞았다).
+     */
+    @Test
+    @DisplayName("agenda: 남은 전사 몫이 실값으로 실리고, 한 번 쓰면 줄어든다")
+    void agenda_carriesRemainingTranscribe() throws Exception {
+        registerWith("agendatr", StudyAiAccess.APPROVED);
+        givenTranscript(new ClaudeStudyAssistant.Transcript("읽은 글", false));
+
+        expectRemainingTranscribe("agendatr", 3);
+
+        mockMvc.perform(multipart("/api/study/recall/transcribe")
+                        .file(jpeg("images", 512)).with(user("agendatr")).with(csrf()))
+                .andExpect(status().isOk());
+
+        expectRemainingTranscribe("agendatr", 2);
+    }
+
+    private void expectRemainingTranscribe(String loginId, int expected) throws Exception {
+        mockMvc.perform(get("/api/study/agenda").param("month", YearMonth.from(today()).toString())
+                        .with(user(loginId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.remaining.transcribe").value(expected));
+    }
+
+    private void givenTranscript(ClaudeStudyAssistant.Transcript transcript) {
+        given(assistant.isEnabled()).willReturn(true);
+        given(assistant.transcribe(any())).willReturn(ClaudeStudyAssistant.AiResult.ok(transcript));
+    }
+
+    private static MockMultipartFile jpeg(String name, int size) {
+        return new MockMultipartFile(name, "memo.jpg", "image/jpeg", new byte[size]);
     }
 }

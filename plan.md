@@ -3135,8 +3135,14 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
   `GET·POST /api/study/recall`·`/{date}/analyze` · 섬 `RecallPanel` · 처리방침 문단.
   하루 상한 `ANALYZE 1`(선점 → 호출 → 실패면 환불). ⚠️ **키는 아직 미발급** — 승인자도 지금은
   「AI 기능이 꺼져 있어 저장만 됩니다」를 본다(U-2·U-6·U-7 실측은 키 등록 후).
-- 🔜 **PR-4 사진 전사** — multipart(≤3장·각 ≤3MB) → 전사 → **사용자 확인 후** 저장. 서버는 사진을 보관하지 않는다.
-- ⬜ **PR-5 AI 일정 생성** — 입력 폼 → 미리보기 → 「달력에 적용」(오늘 이후 N개 교체 확인).
+- ✅ **PR-4 백지복습 사진 전사 (2026-09-03)** — `POST /api/study/recall/transcribe`(multipart `images` ≤3장·각 ≤3MB·
+  jpeg/png/webp, **첫 줄이 `requireApproved`**) · 어댑터 `transcribe(List<ImagePart>)`+`Transcript`+`normalize` ·
+  섬 `image.ts`(canvas 1568px·JPEG 0.85·EXIF 회전 반영·**미리보기는 data URL** — CSP에 `blob:`이 없다) ·
+  RecallPanel 「타이핑/사진」 탭 + **전사 확인 단계**(「AI가 읽은 내용이에요…」 — 분석은 자동으로 돌지 않는다) ·
+  multipart 프로퍼티 3줄 + `MaxUploadSizeExceededException` → **413 평문** · 처리방침 5-1에 사진 항목.
+  하루 상한 `TRANSCRIBE 3`. **서버는 사진을 보관하지 않는다** — 메모리에서 base64로 넘기고 버리며, 저장되는
+  것은 사용자가 확인·수정한 텍스트(`source=PHOTO`)뿐이다.
+- 🔜 **PR-5 AI 일정 생성** — 입력 폼 → 미리보기 → 「달력에 적용」(오늘 이후 N개 교체 확인).
 
 #### 보류 (⏸)
 - ⏸ **복습문제 1→3→7일 간격 자동 재출제** — 이번 산출물은 「다음날 1회 표시」까지.

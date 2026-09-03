@@ -3,8 +3,10 @@ package com.booktimer.study;
 import com.booktimer.book.StudyBook;
 import com.booktimer.study.ClaudeStudyAssistant.AiResult;
 import com.booktimer.study.ClaudeStudyAssistant.Failure;
+import com.booktimer.study.ClaudeStudyAssistant.ImagePart;
 import com.booktimer.study.ClaudeStudyAssistant.RecallAnalysis;
 import com.booktimer.study.ClaudeStudyAssistant.RecallInput;
+import com.booktimer.study.ClaudeStudyAssistant.Transcript;
 import com.booktimer.study.StudyAiUsage.Kind;
 import com.booktimer.user.User;
 import org.slf4j.Logger;
@@ -13,15 +15,19 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.io.IOException;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 백지복습 유스케이스 — 저장(하루 한 장 upsert)과 분석(승인 · 상한 · 외부 호출 · 환불).
@@ -44,6 +50,15 @@ public class StudyRecallService {
     // Boot 4 모듈러 autoconfig라 ObjectMapper 빈이 없다(T-022) — 자체 인스턴스(스레드 안전·재사용).
     private static final ObjectMapper JSON = JsonMapper.builder().build();
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() { };
+
+    /**
+     * 받아 주는 사진 형식 — heic는 <b>일부러 빠져 있다</b>(Claude가 못 받고, 화면의 canvas 재인코딩이
+     * 어차피 JPEG로 만들어 준다).
+     */
+    private static final Set<String> ALLOWED_IMAGE_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
+
+    /** 사진 한 장의 상한. {@code spring.servlet.multipart.max-file-size}와 <b>같은 값</b>이어야 한다. */
+    private static final long MAX_IMAGE_BYTES = 3L * 1024 * 1024;
 
     private final StudyRecallRepository recallRepository;
     private final StudyAiAccessService accessService;
@@ -142,9 +157,105 @@ public class StudyRecallService {
         return recallRepository.save(recall);
     }
 
+    /**
+     * 사진에 손으로 쓴 메모를 읽어 <b>텍스트만</b> 돌려준다 — 서버는 사진을 저장하지 않는다.
+     *
+     * <p>순서는 {@link #analyze}와 같다: ① 승인 → ② 요청 검증 → ③ 키 → ④ 상한 선점 → ⑤ 호출 →
+     * ⑥ 실패면 환불. 검증이 상한보다 앞인 것은 <b>잘못 만든 요청으로 오늘 몫을 잃지 않게</b> 하기 위해서다.
+     *
+     * <p><b>여기가 사진의 수명 전부다.</b> 바이트를 메모리로 읽어 {@link ClaudeStudyAssistant.ImagePart}로
+     * 옮기고, 호출이 끝나면 참조를 놓는다 — 디스크·DB·객체 저장소 어디에도 쓰지 않고, 반환값에도 담기지
+     * 않는다. 저장되는 것은 사용자가 화면에서 확인·수정한 뒤 {@link #save}로 다시 보내는 텍스트뿐이다.
+     *
+     * @return 읽어 낸 글(사용자 확인 전이라 아직 아무 데도 저장되지 않았다)
+     * @throws ResponseStatusException 403 미승인 · 400 장수·형식·읽기 실패 · 413 용량 · 429 · 503
+     */
+    public Transcript transcribe(User user, List<MultipartFile> images) {
+        accessService.requireApproved(user); // ① 게이트가 가장 앞 — 검증·상한·호출보다 먼저다
+
+        List<ImagePart> parts = toImageParts(images);
+        if (!assistant.isEnabled()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI 기능이 꺼져 있어요");
+        }
+
+        LocalDate today = StudyDates.today(user, clock);
+        if (!usageService.tryConsume(user, today, Kind.TRANSCRIBE)) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "오늘 몫을 다 썼어요 — 내일 다시 해 주세요");
+        }
+
+        AiResult<Transcript> result = assistant.transcribe(parts);
+        if (!result.ok()) {
+            usageService.refund(user, today, Kind.TRANSCRIBE);
+            throw photoFailure(result.failure());
+        }
+        Optional<Transcript> transcript = ClaudeStudyAssistant.normalize(result.value());
+        if (transcript.isEmpty()) {
+            // 읽은 글도 없고 「못 읽었다」는 답도 아니다 — 빈 textarea를 「다 읽었다」고 말할 수 없다.
+            log.warn("Claude 전사 결과가 비어 돌려주지 않는다 — user={}", user.getId());
+            usageService.refund(user, today, Kind.TRANSCRIBE);
+            throw photoFailure(Failure.UNAVAILABLE);
+        }
+        return transcript.get();
+    }
+
+    /**
+     * 업로드를 검증하고 <b>메모리로</b> 옮긴다.
+     *
+     * <p>{@code getBytes()}로 읽는 것이 무저장 규칙의 마지막 고리다 — 파일 핸들·경로를 서비스 밖으로
+     * 내보내지 않으므로, 사진을 어디에 남길 수 있는 코드 경로가 아예 없다. 파싱 단계의 임시파일도
+     * {@code spring.servlet.multipart.file-size-threshold}가 막는다(그쪽 프로퍼티 주석).
+     */
+    private static List<ImagePart> toImageParts(List<MultipartFile> images) {
+        List<MultipartFile> files = images == null ? List.of()
+                : images.stream().filter(f -> f != null && !f.isEmpty()).toList();
+        if (files.isEmpty()) {
+            throw new IllegalArgumentException("사진을 한 장 이상 올려 주세요");
+        }
+        if (files.size() > ClaudeStudyAssistant.MAX_IMAGES) {
+            throw new IllegalArgumentException("사진은 " + ClaudeStudyAssistant.MAX_IMAGES + "장까지 올릴 수 있어요");
+        }
+        List<ImagePart> parts = new ArrayList<>(files.size());
+        for (MultipartFile file : files) {
+            if (!ALLOWED_IMAGE_TYPES.contains(file.getContentType())) {
+                // iOS가 기본으로 내놓는 heic가 여기 온다 — 화면은 애초에 accept로 걸러 두지만, 그건 힌트다.
+                throw new IllegalArgumentException("JPG·PNG로 올려 주세요");
+            }
+            if (file.getSize() > MAX_IMAGE_BYTES) {
+                throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "사진은 3MB 이하로 올려 주세요");
+            }
+            try {
+                parts.add(new ImagePart(file.getContentType(), file.getBytes()));
+            } catch (IOException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "사진을 읽을 수 없어요");
+            }
+        }
+        return parts;
+    }
+
+    /**
+     * 사진 경로의 실패 문구 — <b>글 경로와 다르다</b>.
+     *
+     * <p>{@code BAD_INPUT}이 갈리는 자리다: 글은 「이 글은 분석할 수 없어요」, 사진은 「사진을 읽을 수
+     * 없어요」. 문구를 한 곳에 합치면 사용자가 무엇을 고쳐야 하는지 알 수 없다.
+     */
+    private static ResponseStatusException photoFailure(Failure failure) {
+        return switch (failure) {
+            case DISABLED -> new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI 기능이 꺼져 있어요");
+            case RATE_LIMITED -> new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "잠시 후 다시 시도해 주세요");
+            case BAD_INPUT -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "사진을 읽을 수 없어요");
+            case UNAVAILABLE -> new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "사진을 읽지 못했어요 — 잠시 후 다시 시도해 주세요");
+        };
+    }
+
     /** 오늘 남은 분석 몫 — 화면이 버튼 옆에 그린다. */
     public int remainingAnalyze(User user) {
         return usageService.remaining(user, StudyDates.today(user, clock), Kind.ANALYZE);
+    }
+
+    /** 오늘 남은 전사 몫 — 화면이 「읽어 오기 (N회 남음)」을 그리고 0이면 버튼을 잠근다. */
+    public int remainingTranscribe(User user) {
+        return usageService.remaining(user, StudyDates.today(user, clock), Kind.TRANSCRIBE);
     }
 
     /**
