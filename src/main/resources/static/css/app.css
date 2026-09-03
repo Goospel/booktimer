@@ -148,6 +148,15 @@ body {
     padding: 32px 16px;
 }
 
+/* 폼 요소엔 body 서체가 상속으로 오지 않는다 — UA 기본 스타일이 input/textarea/select에
+   자기 폰트(Arial 13.3px)를 직접 지정하고, author 규칙이 없으면 그 값이 이기기 때문이다.
+   그래서 이 한 줄이 없으면 하필 「사용자가 직접 글자를 치는 칸」만 딴 서체로 남는다.
+   미니앱엔 이 구멍이 없었다 — TDS가 같은 규칙을 주고 있다(miniapp/src/global.css 상단 주석).
+   ⚠️ 타입 선택자(0-0-1)로 둔 것은 일부러다. 클래스로 잡은 개별 규칙(.auth-input ·
+   .set-input · 세리프를 의도적으로 쓰는 .story-composer-input 등)을 덮지 않아야 한다.
+   font-size도 일부러 건드리지 않는다 — 칸 높이가 함께 바뀐다. button은 이미 개별 규칙이 맡는다. */
+input, textarea, select { font-family: inherit; }
+
 /* 종이 결 — 본문 전체를 덮는 레이어.
 
    ⚠️ `absolute`다. `fixed`로 두면 결이 **뷰포트에 못 박혀**, 종이는 스크롤되는데 결만 제자리에
