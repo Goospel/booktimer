@@ -97,8 +97,8 @@ public class StudyPlanApiController {
                 user.getStudyAiAccess(),
                 user.getStudyAiAccessAt(),
                 aiEnabled,
-                // 일정 생성은 아직 없다 — 남은 몫도 0으로 둔다(버튼이 없으니 표시할 자리도 없다).
-                new Remaining(0, recallService.remainingTranscribe(user), recallService.remainingAnalyze(user)),
+                new Remaining(planService.remainingPlan(user),
+                        recallService.remainingTranscribe(user), recallService.remainingAnalyze(user)),
                 items,
                 recalls));
     }
@@ -132,6 +132,45 @@ public class StudyPlanApiController {
     }
 
     /**
+     * AI에게 시험일까지의 일정 초안을 받는다 — <b>저장하지 않는다</b>(미리보기까지다).
+     *
+     * @return 200 {@link PlanDraftResponse} / 400 검증·요청 거부 / 403 미승인 / 429 오늘 몫 소진 /
+     *         503 AI 꺼짐·응답 없음
+     */
+    @PostMapping("/api/study/plan/generate")
+    public ResponseEntity<PlanDraftResponse> generate(Principal principal,
+                                                      @RequestBody GenerateRequest request) {
+        User user = currentUserService.resolve(principal);
+        StudyPlanService.PlanDraft draft = planService.generate(user, new StudyPlanService.GenerateCommand(
+                request.subject(), request.scope(), parseDate(request.examDate()),
+                request.dailyMinutes(), request.daysPerWeek()));
+        return ResponseEntity.ok(new PlanDraftResponse(
+                draft.days().stream().map(d -> new DraftDay(d.date(), d.task())).toList(),
+                draft.replaceCount()));
+    }
+
+    /**
+     * 미리보기의 일정을 달력에 적는다 — 「오늘 이후 전부 교체」다.
+     *
+     * <p><b>승인 게이트가 없다</b>: AI를 쓰지 않는 저장이라 막을 이유가 없고, 수동으로 짠 일정을 한 번에
+     * 넣는 경로로도 쓰인다(AI가 꺼져 있어도 성립하는 폴백).
+     *
+     * @return 200 {@link StudyPlanService.ApplyResult} / 400 빈 목록·과거 날짜·중복·길이 위반 / 404 남의 bookId
+     */
+    @PostMapping("/api/study/plan/apply")
+    public ResponseEntity<StudyPlanService.ApplyResult> apply(Principal principal,
+                                                              @RequestBody ApplyRequest request) {
+        User user = currentUserService.resolve(principal);
+        StudyBook book = ownedBookOrNull(user, request.bookId());
+        List<StudyPlanService.PlanDay> days = (request.days() == null ? List.<DraftDay>of() : request.days())
+                .stream()
+                .map(d -> new StudyPlanService.PlanDay(parseDate(d.date()), d.task()))
+                .toList();
+        return ResponseEntity.ok(planService.applyReplacingFuture(
+                user, StudyDates.today(user, clock), request.subject(), book, days));
+    }
+
+    /**
      * ⚠️ 컨트롤러 전역이라, 여기서 나가는 {@link IllegalArgumentException}의 메시지가 그대로 400 본문이
      * 되어 <b>사용자 화면에 뜬다</b>({@link StudyApiController}와 같은 규약) — 그래서 이 경로가 던지는
      * IAE 문구는 전부 한국어 완성문이다.
@@ -139,6 +178,18 @@ public class StudyPlanApiController {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<String> handleInvalidRequest(IllegalArgumentException e) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+    }
+
+    /**
+     * 403·429·503의 <b>한국어 사유를 본문으로</b> 돌려준다({@link StudyRecallApiController}와 같은 규약).
+     *
+     * <p>이게 없으면 전역 처리기가 {@code error.html}을 렌더해 HTML 문서 전체가 본문이 된다 — 화면은
+     * 「승인이 필요해요」 대신 {@code <!DOCTYPE html>…}을 상태줄에 찍는다. 이 문의 실패는 사용자가 읽고
+     * 행동을 바꿀 수 있는 것들이라(승인 신청 · 내일 다시) 사유가 화면까지 닿아야 한다.
+     */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<String> handleStatus(ResponseStatusException e) {
+        return ResponseEntity.status(e.getStatusCode()).body(e.getReason());
     }
 
     /** 내 공부 책일 때만 — 아니면(없음/남의 것/독서 책장의 id) 404로 존재 비노출. null은 「책 없이」라 정당하다. */
@@ -204,5 +255,30 @@ public class StudyPlanApiController {
 
     /** @param bookId 대상 공부 책(null·생략 = 자유 제목) */
     public record AddItemRequest(String date, Long bookId, String subject, String task) {
+    }
+
+    /**
+     * @param scope        공부할 범위 원문 — 모델이 배분할 단원의 <b>울타리</b>다(비어도 된다)
+     * @param examDate     {@code YYYY-MM-DD}. 내일 이후 1년 안
+     * @param dailyMinutes 하루 공부 시간(분) 10~600
+     * @param daysPerWeek  주 공부일수 1~7
+     */
+    public record GenerateRequest(String subject, String scope, String examDate,
+                                  int dailyMinutes, int daysPerWeek) {
+    }
+
+    /** 미리보기 한 줄 — 적용 요청도 같은 모양으로 되돌아온다. */
+    public record DraftDay(String date, String task) {
+    }
+
+    /**
+     * @param replaceCount 지금 적용하면 지워질 「오늘 이후」 항목 수 — <b>생성 시점의 값</b>이라
+     *                     미리보기를 읽는 동안 일정을 더하면 실제 지워지는 수가 더 클 수 있다
+     */
+    public record PlanDraftResponse(List<DraftDay> days, int replaceCount) {
+    }
+
+    /** @param bookId 대상 공부 책(null·생략 = 자유 제목) */
+    public record ApplyRequest(Long bookId, String subject, List<DraftDay> days) {
     }
 }

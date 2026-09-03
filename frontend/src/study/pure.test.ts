@@ -10,10 +10,12 @@ import {
     monthTitle,
     nextDay,
     planSummary,
+    planWeeks,
     prevDay,
     recallScopePrefill,
     recallSubjectPrefill,
     studyNavLinks,
+    validatePlanForm,
 } from './pure';
 
 describe('calendarCells', () => {
@@ -238,5 +240,83 @@ describe('aiStatusLine', () => {
             text: '',
             button: null,
         });
+    });
+});
+
+describe('validatePlanForm', () => {
+    const TODAY = '2026-09-03';
+    const ok = { subject: '정보보안기사', scope: '1장 접근통제', examDate: '2026-12-03', dailyMinutes: 120, daysPerWeek: 5 };
+
+    it('제대로 채운 폼은 통과한다', () => {
+        expect(validatePlanForm(ok, TODAY)).toBeNull();
+    });
+
+    it('과목이 비면 막는다', () => {
+        expect(validatePlanForm({ ...ok, subject: '   ' }, TODAY)).toBe('과목을 입력해 주세요.');
+    });
+
+    it('시험일을 안 고르면 막는다', () => {
+        expect(validatePlanForm({ ...ok, examDate: '' }, TODAY)).toBe('시험일을 골라 주세요.');
+    });
+
+    it('시험일이 오늘이거나 지났으면 막는다 — 짤 일정이 없다', () => {
+        expect(validatePlanForm({ ...ok, examDate: TODAY }, TODAY)).toBe('시험일은 내일 이후로 정해 주세요.');
+        expect(validatePlanForm({ ...ok, examDate: '2026-09-02' }, TODAY)).toBe('시험일은 내일 이후로 정해 주세요.');
+    });
+
+    it('시험일이 1년을 넘으면 막는다 — 경계(365일)는 통과', () => {
+        expect(validatePlanForm({ ...ok, examDate: '2027-09-03' }, TODAY)).toBeNull();
+        expect(validatePlanForm({ ...ok, examDate: '2027-09-04' }, TODAY)).toBe('시험일은 1년 안으로 정해 주세요.');
+    });
+
+    it('하루 공부 시간은 10~600분이다 — 경계는 통과', () => {
+        expect(validatePlanForm({ ...ok, dailyMinutes: 10 }, TODAY)).toBeNull();
+        expect(validatePlanForm({ ...ok, dailyMinutes: 600 }, TODAY)).toBeNull();
+        expect(validatePlanForm({ ...ok, dailyMinutes: 9 }, TODAY)).toBe('하루 공부 시간은 10분에서 600분 사이로 적어 주세요.');
+        expect(validatePlanForm({ ...ok, dailyMinutes: 601 }, TODAY)).toBe('하루 공부 시간은 10분에서 600분 사이로 적어 주세요.');
+    });
+
+    it('주 공부일수는 1~7일이다 — 경계는 통과', () => {
+        expect(validatePlanForm({ ...ok, daysPerWeek: 1 }, TODAY)).toBeNull();
+        expect(validatePlanForm({ ...ok, daysPerWeek: 7 }, TODAY)).toBeNull();
+        expect(validatePlanForm({ ...ok, daysPerWeek: 0 }, TODAY)).toBe('주 공부일수는 1일에서 7일 사이로 정해 주세요.');
+        expect(validatePlanForm({ ...ok, daysPerWeek: 8 }, TODAY)).toBe('주 공부일수는 1일에서 7일 사이로 정해 주세요.');
+    });
+
+    it('범위는 4000자까지다 — 경계는 통과', () => {
+        expect(validatePlanForm({ ...ok, scope: '가'.repeat(4000) }, TODAY)).toBeNull();
+        expect(validatePlanForm({ ...ok, scope: '가'.repeat(4001) }, TODAY)).toBe('범위는 4000자까지 적을 수 있어요.');
+    });
+
+    it('서버 오늘을 아직 모르면 막지 않는다 — 화면이 먼저 지레 잠기지 않게', () => {
+        expect(validatePlanForm(ok, '')).toBeNull();
+    });
+});
+
+describe('planWeeks', () => {
+    it('주(월~일) 단위로 묶고 1주차부터 번호를 매긴다', () => {
+        // 2026-09-03(목)·09-04(금)은 같은 주, 09-07(월)은 다음 주다.
+        const weeks = planWeeks([
+            { date: '2026-09-03', task: '1장' },
+            { date: '2026-09-04', task: '2장' },
+            { date: '2026-09-07', task: '3장' },
+        ]);
+
+        expect(weeks.map((w) => w.label)).toEqual(['1주차', '2주차']);
+        expect(weeks[0].days.map((d) => d.date)).toEqual(['2026-09-03', '2026-09-04']);
+        expect(weeks[1].days.map((d) => d.date)).toEqual(['2026-09-07']);
+    });
+
+    it('주 경계는 월요일이다 — 일요일과 그 다음 월요일은 다른 주다(서버 sanitizePlan과 같은 규칙)', () => {
+        const weeks = planWeeks([
+            { date: '2026-09-13', task: '일요일' },
+            { date: '2026-09-14', task: '월요일' },
+        ]);
+
+        expect(weeks).toHaveLength(2);
+    });
+
+    it('빈 목록은 빈 결과다', () => {
+        expect(planWeeks([])).toEqual([]);
     });
 });

@@ -18,11 +18,17 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.time.DayOfWeek;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 
 /**
  * Claude API 어댑터 — 공부 화면의 AI 능력 한 곳.
@@ -48,6 +54,16 @@ public class ClaudeStudyAssistant {
 
     private static final long ANALYZE_MAX_TOKENS = 8192;
     private static final long TRANSCRIBE_MAX_TOKENS = 4096;
+    /**
+     * 일정은 다른 둘보다 <b>출력이 길다</b> — 3개월·주 6일이면 항목이 80개에 가깝고, 한국어 task는
+     * 글자당 토큰이 비싸다. 게다가 adaptive thinking의 사고 토큰이 이 예산을 <b>같이</b> 쓴다.
+     *
+     * <p>설계값은 8192였는데, 실측에서 그 조합이 {@code stopReason=max_tokens}로 잘려 503이 났다
+     * (2026-09-03 로컬 실키 — 정보보안기사 5단원 · 시험일 3개월 뒤 · 주 6일). 잘린 응답은 성공으로
+     * 치지 않으므로 조용히 반쪽 일정이 저장되진 않았지만, 사용자에겐 그냥 실패다. 출력 토큰은 <b>쓴
+     * 만큼</b> 과금되므로 한도를 올려도 평소 비용은 그대로다.
+     */
+    private static final long PLAN_MAX_TOKENS = 32000;
 
     /** 한 요청에 넘길 수 있는 사진 수 — 컨트롤러의 400 판정과 <b>같은 상수</b>를 본다. */
     public static final int MAX_IMAGES = 3;
@@ -87,6 +103,27 @@ public class ClaudeStudyAssistant {
               확실하지 않으면 넣지 않는다 — 없으면 빈 배열이 정답이다.
             - questions(복습문제): 내일 풀 문제를 3~7개 만든다. holes를 먼저 겨눈다.
             - 전부 한국어 존댓말로 쓴다.
+            """;
+
+    /**
+     * 일정 시스템 프롬프트 — <b>범위 밖으로 나가지 마라</b>가 요점이다.
+     *
+     * <p>모델은 「정보보안기사」라는 과목명만 보고도 그럴듯한 커리큘럼을 지어낼 수 있다. 그 일정은
+     * 사용자가 실제로 가진 책·범위와 어긋나고, 어긋난 일정은 매일 달력에 떠서 사람을 헷갈리게 한다.
+     * 그래서 「적힌 단원만」이고, 날짜도 우리가 계산해 준 후보 안에서만 고르게 한다.
+     */
+    private static final String PLAN_SYSTEM = """
+            당신은 수험 일정을 짜 주는 보조다. 과목, 공부할 범위, 시험일, 하루 공부 시간, 주 공부일수,
+            그리고 배정 가능한 후보 날짜 목록이 주어진다.
+
+            반드시 지킬 것:
+            - **범위 텍스트에 적힌 단원·항목만** 배분한다. 적혀 있지 않은 단원을 만들어 내지 않는다.
+            - 날짜는 **주어진 후보 날짜 중에서만** 고른다. 후보에 없는 날짜를 쓰지 않는다.
+            - 한 주(월요일~일요일)에 **주 공부일수만큼만** 고른다. 그보다 많이 넣지 않는다.
+            - 하루 분량은 하루 공부 시간(분)에 맞춘다. 시간이 짧으면 쪼개고, 길면 묶는다.
+            - 시험 전날은 총복습으로 둔다. 마지막 3일 중 하루는 취약한 부분 재점검으로 둔다.
+            - task는 한국어 한 줄(120자 이내)로 쓰고, 범위에 적힌 표기(장 번호·쪽수)를 그대로 옮긴다.
+            - date는 YYYY-MM-DD 형식으로 쓴다.
             """;
 
     private final String model;
@@ -146,6 +183,30 @@ public class ClaudeStudyAssistant {
                         .build()))
                 .outputConfig(RecallAnalysis.class)
                 .addUserMessage(recallUserPrompt(in))
+                .build());
+    }
+
+    /**
+     * 시험일까지의 날짜별 일정을 만든다.
+     *
+     * <p>정제({@link #sanitizePlan})는 여기서 하지 않는다 — {@link #analyzeRecall}과 같은 이유다.
+     * 어댑터를 목으로 갈아끼우는 테스트에서 정제까지 함께 사라지면 그 규칙엔 계측기가 없어진다.
+     *
+     * @return 성공이면 모델이 낸 <b>날것</b>(범위 밖 날짜·중복이 섞여 있을 수 있다), 실패면 {@link Failure}
+     */
+    public AiResult<PlanDraft> generatePlan(PlanInput in) {
+        if (!isEnabled() || in == null) {
+            return AiResult.fail(Failure.DISABLED);
+        }
+        return call("plan", MessageCreateParams.builder()
+                .model(model)
+                .maxTokens(PLAN_MAX_TOKENS)
+                .systemOfTextBlockParams(List.of(TextBlockParam.builder()
+                        .text(PLAN_SYSTEM)
+                        .cacheControl(CacheControlEphemeral.builder().build())
+                        .build()))
+                .outputConfig(PlanDraft.class)
+                .addUserMessage(planUserPrompt(in))
                 .build());
     }
 
@@ -272,6 +333,99 @@ public class ClaudeStudyAssistant {
     }
 
     /**
+     * 일정 요청의 user 메시지 — <b>후보 날짜를 서버가 계산해</b> 넣는다.
+     *
+     * <p>「오늘부터 시험 전날까지」를 모델에게 세게 하지 않는 이유는 두 가지다. ① 날짜 산술은 모델이
+     * 조용히 틀리는 대표적인 자리이고(윤년·월말), ② 후보를 우리가 주면 「시험 당일엔 배정하지 않는다」는
+     * 규칙이 프롬프트의 지시가 아니라 <b>입력의 형태</b>가 된다 — 지시는 무시될 수 있어도 없는 날짜는
+     * 고를 수 없다({@link #sanitizePlan}이 그래도 한 번 더 거른다).
+     *
+     * <p>요일을 붙이는 것은 「주 N일」을 고르는 데 필요해서다(모델이 날짜에서 요일을 다시 세지 않게).
+     */
+    static String planUserPrompt(PlanInput in) {
+        String scope = blankToNull(in.scope());
+        StringBuilder candidates = new StringBuilder();
+        for (LocalDate date = in.today(); date.isBefore(in.examDate()); date = date.plusDays(1)) {
+            if (!candidates.isEmpty()) {
+                candidates.append(' ');
+            }
+            candidates.append(date).append('(').append(WEEKDAYS[date.getDayOfWeek().getValue() - 1]).append(')');
+        }
+        // ⚠️ 과목·범위는 사용자가 친 글이라 신뢰할 수 없다 — 라벨을 흉내 내 섹션을 위조할 수 있다.
+        // 폭발 반경이 자기 일정뿐이라(툴·외부 호출로 새는 경로가 없다) 지금은 막지 않는다.
+        // 여기에 툴 사용이 붙는 날에는 구분자·이스케이프를 먼저 넣어야 한다(recallUserPrompt와 같은 주석).
+        return """
+                [과목] %s
+                [범위]
+                %s
+                [시험일] %s
+                [하루 공부 시간] %d분
+                [주 공부일수] 주 %d일
+                [배정 가능한 후보 날짜] %s
+                """.formatted(
+                in.subject() == null ? "(적지 않음)" : in.subject().strip(),
+                scope == null ? "범위가 주어지지 않았어요 — 과목명만 보고 단원을 지어내지 말고, 큰 흐름의 복습 일정으로 짜 주세요" : scope,
+                in.examDate(), in.dailyMinutes(), in.daysPerWeek(), candidates);
+    }
+
+    private static final String[] WEEKDAYS = {"월", "화", "수", "목", "금", "토", "일"};
+
+    /**
+     * 모델이 낸 일정 초안을 <b>믿지 않고</b> 다듬는다 — 이 메서드가 이 판의 방어선이다.
+     *
+     * <p>거르는 것: 파싱 안 되는 날짜 · 오늘 이전 · 시험 당일 이후(시험날엔 배정하지 않는다) · 같은 날짜
+     * 중복(앞엣것이 이긴다) · 빈 할 일. 자르는 것: {@value StudyPlanItem#TASK_MAX}자를 넘는 할 일.
+     * 그리고 <b>주(월요일~일요일)당 {@code daysPerWeek}개</b>까지만 남긴다.
+     *
+     * <p>주 경계는 <b>ISO-8601</b>이다 — 월요일이 첫날이고 일요일이 마지막이다. 일요일과 그 다음 월요일은
+     * 서로 다른 주라, 일요일에 하나 월요일에 하나면 「주 1일」을 두 번 지킨 것이다. 결과를 날짜 오름차순으로
+     * 돌려주므로 주당 상한에 남는 것은 <b>그 주의 앞 날짜들</b>이다.
+     *
+     * @return 오름차순 정제 결과. 전부 걸러지면 빈 목록 — 호출부가 {@link Failure#UNAVAILABLE}로 옮긴다
+     */
+    static List<PlanDay> sanitizePlan(List<PlanDay> days, LocalDate today, LocalDate examDate, int daysPerWeek) {
+        if (days == null || days.isEmpty()) {
+            return List.of();
+        }
+        // TreeMap 하나가 정렬과 중복 제거를 같이 한다(putIfAbsent라 목록에서 먼저 온 쪽이 이긴다).
+        Map<LocalDate, String> byDate = new TreeMap<>();
+        for (PlanDay day : days) {
+            LocalDate date = parseIsoOrNull(day == null ? null : day.date());
+            if (date == null || date.isBefore(today) || !date.isBefore(examDate)) {
+                continue;
+            }
+            String task = day.task() == null ? "" : day.task().strip();
+            if (task.isEmpty()) {
+                continue;
+            }
+            byDate.putIfAbsent(date, task.length() > StudyPlanItem.TASK_MAX
+                    ? task.substring(0, StudyPlanItem.TASK_MAX) : task);
+        }
+        Map<LocalDate, Integer> perWeek = new HashMap<>();
+        List<PlanDay> kept = new ArrayList<>();
+        for (Map.Entry<LocalDate, String> entry : byDate.entrySet()) {
+            // ISO 주의 시작(월요일)을 열쇠로 센다 — DayOfWeek 조정자가 곧 ISO 주 경계다.
+            LocalDate weekStart = entry.getKey().with(DayOfWeek.MONDAY);
+            if (perWeek.merge(weekStart, 1, Integer::sum) > daysPerWeek) {
+                continue;
+            }
+            kept.add(new PlanDay(entry.getKey().toString(), entry.getValue()));
+        }
+        return List.copyOf(kept);
+    }
+
+    private static LocalDate parseIsoOrNull(String date) {
+        if (date == null || date.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(date.strip());
+        } catch (DateTimeParseException e) {
+            return null;
+        }
+    }
+
+    /**
      * 모델 응답을 화면·DB에 담을 모양으로 다듬는다.
      *
      * <p>비는 경우가 정상 동작이라 {@link Optional}이다 — 정리(summary)가 없는 분석은 저장할 값이 없다
@@ -373,6 +527,31 @@ public class ClaudeStudyAssistant {
 
     /** 분석 입력 — 어댑터는 엔티티를 모른다(호출부가 옮겨 담는다). */
     public record RecallInput(String subject, String scope, String body) {
+    }
+
+    /**
+     * 일정 생성 입력 — 검증(시험일이 미래인가, 분·일수가 범위 안인가)은 <b>호출부가 이미 끝냈다</b>.
+     *
+     * @param today        유저 타임존 기준 오늘 — 후보 날짜의 첫날
+     * @param examDate     시험일. 이 날은 후보에서 <b>빠진다</b>(시험날에 공부를 배정하지 않는다)
+     * @param dailyMinutes 하루 공부 시간(분)
+     * @param daysPerWeek  주 공부일수(1~7)
+     */
+    public record PlanInput(String subject, String scope, LocalDate today, LocalDate examDate,
+                            int dailyMinutes, int daysPerWeek) {
+    }
+
+    /**
+     * 하루치 일정 — 구조화 출력 스키마라 날짜가 <b>문자열</b>이다({@code YYYY-MM-DD}).
+     *
+     * <p>모델이 「2026-13-45」를 보내는 것도 정상 동작이므로, {@code LocalDate}로 받을 수 없다 —
+     * 파싱은 {@link #sanitizePlan}의 일이고, 못 읽는 날짜는 거기서 버려진다.
+     */
+    public record PlanDay(String date, String task) {
+    }
+
+    /** 구조화 출력 스키마 — SDK가 이 record에서 JSON 스키마를 만든다. */
+    public record PlanDraft(List<PlanDay> days) {
     }
 
     /**

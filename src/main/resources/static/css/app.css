@@ -4229,3 +4229,26 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .study-recall-yesterday, .study-recall-result {
     border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--sage-soft);
 }
+
+/* AI 일정 생성 — 폼 → 미리보기 → 적용 */
+.study-day-planbtn { align-self: flex-start; width: auto; }
+.study-plan-form { display: flex; flex-direction: column; gap: 8px; }
+.study-plan-form input[type="text"], .study-plan-form textarea, .study-plan-book { width: 100%; }
+.study-plan-scope { resize: vertical; }
+.study-plan-form > .btn { align-self: flex-start; width: auto; }
+.study-plan-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.study-plan-row label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.study-plan-row input { width: 100%; max-width: 180px; }
+.study-plan-preview {
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--sage-soft);
+}
+.study-plan-heading { margin: 0 0 6px; font-size: 12px; color: var(--muted); }
+.study-plan-week + .study-plan-week { margin-top: 8px; }
+.study-plan-week-label { margin: 0 0 2px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.study-plan-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; }
+.study-plan-list li { display: flex; gap: 8px; align-items: baseline; }
+.study-plan-date { flex: 0 0 auto; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
+.study-plan-task { overflow-wrap: anywhere; }
+.study-plan-replace { margin-top: 10px; }
+.study-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.study-plan-actions .btn { width: auto; flex: 0 0 auto; }
