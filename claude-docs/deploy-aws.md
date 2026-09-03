@@ -557,6 +557,54 @@ Google이 2026년 들어 API 키를 구형 `AIza…`(Traffic key)에서 신형 `
 
 ---
 
+## 12-4. 공부 화면 AI(Claude) 키 연동
+
+웹 `/study`의 백지복습 분석은 Claude API(`anthropic-java`)를 쓴다. 앱은 `BOOKTIMER_CLAUDE_API_KEY`를 읽어
+(`@Value("${booktimer.claude.api-key:not-configured}")`), 없으면 어댑터가 **클라이언트를 만들지도 않고**
+화면은 「AI 기능이 꺼져 있어 저장만 됩니다」로 폴백한다. 즉 키가 없어도 글쓰기·저장·달력은 정상이다.
+
+⚠️ **키 소비의 실질 분모는 「관리자가 승인한 사용자 수」다** — AI 문 3종은 `/admin`의 「AI 기능 승인」에서
+켜 준 사람만 쓸 수 있고(관리자 본인 포함, 우회 없음), 그 위에 하루 상한(분석 1 · 전사 3 · 일정 3)이 걸린다.
+
+### ① API 키 발급 (외부, 1회)
+<https://console.anthropic.com/> → **API Keys → Create Key**. 발급된 `sk-ant-api03-…`를 복사한다.
+결제 수단이 등록돼 있어야 호출이 된다(무료 티어 없음). 원가 가늠은 설계 §6 「비용·남용 가드」.
+
+### ② SSM에 파라미터 저장 (배포보다 **먼저**!)
+`deploy/render-env.sh`의 `SECRET_MAP`에 `[CLAUDE_API_KEY]=BOOKTIMER_CLAUDE_API_KEY`가 들어 있어,
+**SSM에 이 파라미터가 없으면 배포 스크립트가 누락으로 `exit 1`** 한다(빈 값으로 조용히 뜨지 않게 하는 설계).
+그러니 머지·배포 **전에** 만든다:
+```bash
+MSYS_NO_PATHCONV=1 aws ssm put-parameter --name /booktimer/CLAUDE_API_KEY \
+  --value "sk-ant-api03-본인키" --type SecureString \
+  --profile booktimer --region ap-northeast-2
+# 갱신(재발급/회전) 시엔 --overwrite 추가
+```
+> ⚠️ Git Bash에서 `/booktimer/...`는 MSYS 경로 변환에 걸려 `C:/Program Files/Git/booktimer/...`로 바뀐다 —
+> 위처럼 `MSYS_NO_PATHCONV=1`을 꼭 얹는다(안 그러면 「없는 파라미터」로 오판한다).
+>
+> 아직 키를 안 넣을 거면 값 `not-configured`로 만들어 두면 된다 — 배포는 통과하고 앱은 폴백으로 뜬다.
+
+확인:
+```bash
+MSYS_NO_PATHCONV=1 aws ssm get-parameter --name /booktimer/CLAUDE_API_KEY \
+  --profile booktimer --region ap-northeast-2 --query Parameter.Name --output text
+bash deploy/tests/test-render-env.sh   # SECRET_MAP 매핑 회귀 가드
+```
+
+### ③ 배포 후 확인
+승인된 계정으로 `/study` → 백지복습에 글을 쓰고 「저장하고 분석」. 정리·빠진 곳·내일 풀 문제가 뜨면 성공.
+안 되면 서버 로그의 `claude analyze …ms`(성공 시 지연·캐시 토큰) 또는 `Claude 분석 실패: …`를 본다.
+
+### (선택) 모델 변경
+기본은 `claude-sonnet-5`(`@Value("${booktimer.claude.model:claude-sonnet-5}")`). 코드 수정 없이 바꾸려면
+`BOOKTIMER_CLAUDE_MODEL`을 env로 준다(평문이라 SecureString이 아니어도 된다).
+
+> 로컬 테스트: `BOOKTIMER_CLAUDE_API_KEY=sk-ant-... ./gradlew bootRun`
+> (관리자 화면이 필요하면 `BOOKTIMER_ADMIN_LOGIN_IDS=testid`도 함께.)
+
+---
+
 ## Phase 2에서 쓸 GitHub Secrets (미리 메모)
 
 CI/CD 워크플로(다음 단계)에서 저장소 Settings → Secrets에 등록할 값:

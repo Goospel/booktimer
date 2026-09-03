@@ -88,6 +88,48 @@ export async function requestAiAccess(): Promise<AiAccessState> {
     return json(await post('/api/study/ai-access/request'), 'AI 기능을 신청하지 못했어요.');
 }
 
+export interface Recall {
+    date: string;
+    bookId: number | null;
+    subject: string | null;
+    scope: string | null;
+    body: string;
+    source: 'TEXT' | 'PHOTO';
+    /** 분석 전이면 null — 화면의 「분석됨」 분기 기준은 `analyzedAt`이다. */
+    summary: string | null;
+    holes: string[];
+    questions: string[];
+    model: string | null;
+    analyzedAt: string | null;
+}
+
+/** 그날 쓴 글. 쓴 적이 없으면 404라 `null`로 옮긴다(빈 화면이 정상 상태다). */
+export async function fetchRecall(date: string): Promise<Recall | null> {
+    const res = await fetch(`/api/study/recall/${date}`, { credentials: 'same-origin' });
+    if (res.status === 404) return null;
+    return json(res, '쓴 글을 불러오지 못했어요.');
+}
+
+export interface SaveRecallInput {
+    date: string;
+    bookId: number | null;
+    subject: string;
+    scope: string;
+    body: string;
+}
+
+export async function saveRecall(input: SaveRecallInput): Promise<Recall> {
+    return json(await post('/api/study/recall', { ...input, source: 'TEXT' }), '글을 저장하지 못했어요.');
+}
+
+/**
+ * 그날 글을 분석한다. 실패해도 <b>글은 서버에 남아 있다</b> — 그래서 실패 문구가 「글은 저장돼 있어요」로
+ * 끝나고, 화면은 쓰던 내용을 지우지 않는다.
+ */
+export async function analyzeRecall(date: string): Promise<Recall> {
+    return json(await post(`/api/study/recall/${date}/analyze`), 'AI 분석을 받지 못했어요.');
+}
+
 export interface StudyBookRow {
     id: number;
     title: string;

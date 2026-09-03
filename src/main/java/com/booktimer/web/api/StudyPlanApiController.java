@@ -3,9 +3,12 @@ package com.booktimer.web.api;
 import com.booktimer.book.StudyBook;
 import com.booktimer.book.StudyBookRepository;
 import com.booktimer.security.CurrentUserService;
+import com.booktimer.study.ClaudeStudyAssistant;
 import com.booktimer.study.StudyDates;
 import com.booktimer.study.StudyPlanItem;
 import com.booktimer.study.StudyPlanService;
+import com.booktimer.study.StudyRecall;
+import com.booktimer.study.StudyRecallService;
 import com.booktimer.user.StudyAiAccess;
 import com.booktimer.user.User;
 import org.springframework.http.HttpStatus;
@@ -36,24 +39,30 @@ import java.util.List;
  *
  * <p>에러 계약은 {@link StudyApiController}와 같다: IAE → 400(문구가 그대로 본문) · 남의 것·없는 것 → 404.
  *
- * <p>{@link Agenda}의 {@code aiEnabled}·{@code remaining}·{@code recalls}는 <b>지금은 항상 꺼짐/빈 값</b>이다 —
- * 필드를 미리 두는 이유는 화면이 이 응답 하나만 보고 그려지기 때문이다(AI가 붙는 판에 응답 모양이 바뀌면
- * 섬 전체가 같이 흔들린다). 뒤에 붙는 판이 값을 채운다.
+ * <p>{@link Agenda}는 화면이 보는 <b>단 하나의 상태</b>다 — 달력·상세·AI 상태 줄이 전부 이 응답에서 그려진다.
+ * {@code remaining}의 {@code plan}·{@code transcribe}는 아직 그 버튼이 없어 0 고정이고, {@code analyze}만
+ * 실제 남은 몫이다(버튼이 붙는 판에서 나머지가 채워진다).
  */
 @RestController
 public class StudyPlanApiController {
 
     private final CurrentUserService currentUserService;
     private final StudyPlanService planService;
+    private final StudyRecallService recallService;
+    private final ClaudeStudyAssistant assistant;
     private final StudyBookRepository studyBookRepository;
     private final Clock clock;
 
     public StudyPlanApiController(CurrentUserService currentUserService,
                                   StudyPlanService planService,
+                                  StudyRecallService recallService,
+                                  ClaudeStudyAssistant assistant,
                                   StudyBookRepository studyBookRepository,
                                   Clock clock) {
         this.currentUserService = currentUserService;
         this.planService = planService;
+        this.recallService = recallService;
+        this.assistant = assistant;
         this.studyBookRepository = studyBookRepository;
         this.clock = clock;
     }
@@ -70,17 +79,28 @@ public class StudyPlanApiController {
     @GetMapping("/api/study/agenda")
     public ResponseEntity<Agenda> agenda(Principal principal, @RequestParam String month) {
         User user = currentUserService.resolve(principal);
-        List<PlanItemRow> items = planService.month(user, parseMonth(month)).stream()
+        YearMonth target = parseMonth(month);
+        List<PlanItemRow> items = planService.month(user, target).stream()
                 .map(PlanItemRow::from)
                 .toList();
+        // 전달 말일부터 당긴다 — 「문제」 표식은 쓴 날이 아니라 푸는 날(다음날)에 서므로, 달 첫날의 표식은
+        // 전달 마지막 글에서 나온다. 하루 더 읽는 값으로 달 경계의 빈 칸을 없앤다.
+        List<RecallRow> recalls = recallService
+                .between(user, target.atDay(1).minusDays(1), target.atEndOfMonth()).stream()
+                .map(RecallRow::from)
+                .toList();
+        // 승인만으론, 키만으론 켜지지 않는다 — 둘 다여야 화면에 AI 버튼이 선다.
+        boolean aiEnabled = assistant.isEnabled()
+                && user.getStudyAiAccess() == StudyAiAccess.APPROVED;
         return ResponseEntity.ok(new Agenda(
                 StudyDates.today(user, clock),
                 user.getStudyAiAccess(),
                 user.getStudyAiAccessAt(),
-                false,                       // AI는 다음 판 — 지금은 저장·수동 편집만 한다
-                new Remaining(0, 0, 0),
+                aiEnabled,
+                // 일정 생성·사진 전사는 아직 없다 — 남은 몫도 0으로 둔다(버튼이 없으니 표시할 자리도 없다).
+                new Remaining(0, 0, recallService.remainingAnalyze(user)),
                 items,
-                List.of()));
+                recalls));
     }
 
     /**
@@ -150,11 +170,10 @@ public class StudyPlanApiController {
      * @param today       유저 타임존 기준 오늘 — 화면의 미래 잠금이 서버와 같은 날을 보게 하는 기준
      * @param aiAccess    관리자 승인 상태 — 화면의 AI 상태 줄(신청 버튼·대기·거절 문구)이 이걸로 갈린다
      * @param aiAccessAt  마지막 상태 전이 시각(「M월 D일 신청」 표시용). 신청 전이면 {@code null}
-     * @param aiEnabled   AI 기능 사용 가능 여부(키 있음 AND 승인됨) — 이번 판에선 항상 {@code false}.
-     *                    <b>승인만으론 켜지지 않는다</b>: 키가 붙는 다음 판에서야 true가 될 수 있다
-     * @param remaining   오늘 남은 AI 호출 몫 — 이번 판에선 전부 0
+     * @param aiEnabled   AI 기능 사용 가능 여부 — <b>키 있음 AND 승인됨</b>일 때만 true다(둘 중 하나로는 안 켜진다)
+     * @param remaining   오늘 남은 AI 호출 몫. {@code analyze}만 실값이고 나머지는 아직 0 고정이다
      * @param items       그 달의 일정(날짜 오름차순)
-     * @param recalls     그 달 + 전달 말일의 백지복습 표식 — 이번 판에선 빈 목록
+     * @param recalls     그 달 + <b>전달 말일</b>의 백지복습 표식 — 달 첫날의 「문제」가 전달 글에서 나오기 때문
      */
     public record Agenda(LocalDate today, StudyAiAccess aiAccess, Instant aiAccessAt,
                          boolean aiEnabled, Remaining remaining,
@@ -174,11 +193,13 @@ public class StudyPlanApiController {
         }
     }
 
-    /**
-     * 달력 칸의 복습 표식 — 그날 복습이 있었나({@code 복습}), 그 복습에 다음날 문제가 붙었나.
-     * 다음 판에서 채운다.
-     */
+    /** 달력 칸의 복습 표식 — 그날 복습이 있었나({@code 복습}), 그 복습에 다음날 문제가 붙었나. */
     public record RecallRow(LocalDate date, boolean analyzed, boolean hasQuestions) {
+
+        static RecallRow from(StudyRecall recall) {
+            return new RecallRow(recall.getRecallDate(), recall.isAnalyzed(),
+                    !StudyRecallService.decode(recall.getQuestionsJson()).isEmpty());
+        }
     }
 
     /** @param bookId 대상 공부 책(null·생략 = 자유 제목) */

@@ -4197,3 +4197,18 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .study-day-form input, .study-day-book { width: 100%; }
 .study-day-form .btn { align-self: flex-start; width: auto; }
 .study-day-list .btn { width: auto; flex: 0 0 auto; }
+
+/* 백지복습 — 쓰는 자리가 화면의 주인공이라 본문 textarea만 크게 두고 나머지는 눌러 둔다. */
+.study-recall { display: flex; flex-direction: column; gap: 8px; }
+.study-recall input, .study-recall textarea { width: 100%; }
+.study-recall-body { min-height: 180px; resize: vertical; line-height: 1.6; }
+.study-recall-scope { resize: vertical; }
+.study-recall-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.study-recall-actions .btn { width: auto; flex: 0 0 auto; }
+.study-recall-heading { margin: 10px 0 4px; font-size: 12px; color: var(--muted); }
+.study-recall-summary { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.study-recall-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.study-recall-list li { overflow-wrap: anywhere; }
+.study-recall-yesterday, .study-recall-result {
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--sage-soft);
+}

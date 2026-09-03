@@ -35,6 +35,10 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	implementation 'org.thymeleaf.extras:thymeleaf-extras-springsecurity6'
+	// Claude API(공부 화면 백지복습 분석). anthropic-java-core가 Jackson **2**(com.fasterxml) databind를
+	// 끌고 오는데, 이 앱은 Jackson **3**(tools.jackson)을 쓴다 — 패키지가 달라 클래스 충돌은 없고
+	// 버전은 Boot BOM이 각각 고정한다(설계 U-1: 두 databind가 런타임 클래스패스에 공존).
+	implementation 'com.anthropic:anthropic-java:2.60.0'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	developmentOnly 'org.springframework.boot:spring-boot-docker-compose'
 	runtimeOnly 'com.mysql:mysql-connector-j'

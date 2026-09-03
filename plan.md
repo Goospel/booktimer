@@ -3127,9 +3127,15 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
   (대기·승인자 표, 수락·거절·회수 — 잘못된 전이는 500이 아니라 플래시 오류) · `agenda.aiAccess`·`aiAccessAt` ·
   섬의 AI 상태 줄(`aiStatusLine` 5행). **관리자 우회 없음** — 운영자도 `/study`에서 신청한 뒤 자기 계정을 승인한다.
   게이트 `StudyAiAccessService.requireApproved`는 이 판에 호출부가 없고 PR-3의 세 AI 문이 첫 줄에서 부른다.
-- 🔜 **PR-3 Claude 어댑터 + 백지복습(텍스트) + 하루 상한** — `anthropic-java` 의존 · 키 `BOOKTIMER_CLAUDE_API_KEY`
-  (SSM 선행 필수 — 없으면 배포가 exit 1) · `V85 study_recall`·`study_ai_usage` · 승인 게이트를 세 AI 문의 첫 줄에.
-- ⬜ **PR-4 사진 전사** — multipart(≤3장·각 ≤3MB) → 전사 → **사용자 확인 후** 저장. 서버는 사진을 보관하지 않는다.
+- ✅ **PR-3 Claude 어댑터 + 백지복습(텍스트) + 하루 상한 (2026-09-03)** — `anthropic-java 2.60.0` 의존 ·
+  키 `BOOKTIMER_CLAUDE_API_KEY`(`render-env.sh` SECRET_MAP + `deploy/tests` 단언 — **SSM 파라미터 선행 필수**,
+  없으면 배포가 exit 1) · `V85 study_recall`(하루 한 장 UNIQUE)·`study_ai_usage`(조건부 UPDATE 카운터) ·
+  `ClaudeStudyAssistant`(키 게이트·90s 타임아웃·구조화 출력·실패는 `Failure`로 격리) ·
+  `StudyRecallService`(**첫 줄이 `requireApproved`** — 키 검사·상한 선점·어댑터 호출보다 앞) ·
+  `GET·POST /api/study/recall`·`/{date}/analyze` · 섬 `RecallPanel` · 처리방침 문단.
+  하루 상한 `ANALYZE 1`(선점 → 호출 → 실패면 환불). ⚠️ **키는 아직 미발급** — 승인자도 지금은
+  「AI 기능이 꺼져 있어 저장만 됩니다」를 본다(U-2·U-6·U-7 실측은 키 등록 후).
+- 🔜 **PR-4 사진 전사** — multipart(≤3장·각 ≤3MB) → 전사 → **사용자 확인 후** 저장. 서버는 사진을 보관하지 않는다.
 - ⬜ **PR-5 AI 일정 생성** — 입력 폼 → 미리보기 → 「달력에 적용」(오늘 이후 N개 교체 확인).
 
 #### 보류 (⏸)

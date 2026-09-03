@@ -125,9 +125,31 @@ export function planSummary(items: PlanItem[]): string {
  */
 export function errorMessage(status: number, bodyText: string,
                              fallback = '일정을 추가하지 못했어요.'): string {
-    if (status === 400 || status === 409) return bodyText.trim() || fallback;
+    const body = bodyText.trim();
+    // HTML 문서면 무조건 못 믿는다 — `error.html`이 그 상태로 렌더될 수 있는 자리가 계속 늘어난다
+    // (403 CSRF 만료, 서버 자체의 503 등). 상태 코드 목록보다 이 한 줄이 더 오래 맞는 가드다.
+    const trustworthy = body.length > 0 && !body.startsWith('<');
+    if (trustworthy && (status === 400 || status === 409 || status === 403
+        || status === 429 || status === 503)) {
+        return body;
+    }
     if (status === 404) return '책을 찾을 수 없어요';
     return fallback;
+}
+
+/**
+ * 백지복습의 「범위」 프리필 — 그날 일정의 할 일들.
+ *
+ * <p>범위는 구멍 판정의 울타리인데, 사용자가 매번 손으로 적기엔 귀찮아 비워 두기 십상이다. 그날 하기로
+ * 한 것이 곧 그날의 범위라, 이미 적어 둔 일정을 가져다 쓴다(고쳐도 된다).
+ */
+export function recallScopePrefill(items: PlanItem[]): string {
+    return items.map((i) => i.task).join('\n');
+}
+
+/** 백지복습의 「과목」 프리필 — 그날 첫 일정의 과목. 일정이 없으면 빈 문자열이다. */
+export function recallSubjectPrefill(items: PlanItem[]): string {
+    return items.length > 0 ? items[0].subject : '';
 }
 
 /** 서버가 주는 AI 기능 승인 상태 — 관리자가 켜 준 사람만 APPROVED다. */
@@ -146,8 +168,8 @@ export interface AiStatus {
  * <p><b>승인 판정이 키 판정보다 먼저</b>인 것이 요점이다 — 아직 승인 안 된 사람에게 「AI가 꺼져 있어요」는
  * 틀린 안내다(켜져 있어도 그 사람은 못 쓴다). 그래서 `aiEnabled`는 APPROVED 가지 안에서만 본다.
  *
- * <p>APPROVED × 켜짐 칸이 빈 문자열인 것은 그 자리를 AI 버튼들이 가져가기 때문이다 — 이번 판엔 그 버튼이
- * 아직 없어서 그 조합이 화면에 나오지 않지만(서버가 `aiEnabled=false` 고정), 경계는 여기서 정해 둔다.
+ * <p>APPROVED × 켜짐 칸이 빈 문자열인 것은 그 자리를 AI 버튼들이 가져가기 때문이다 — 상태 줄은 사라지고
+ * 백지복습 패널의 「저장하고 분석」이 그 자리를 대신한다.
  */
 export function aiStatusLine(access: AiAccess, aiEnabled: boolean, accessAt: string | null): AiStatus {
     if (access === 'PENDING') {

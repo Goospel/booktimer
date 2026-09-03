@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
+import RecallPanel from './RecallPanel.vue';
 import type { AddItemInput, StudyBookRow } from './api';
 import { aiStatusLine, type AiAccess, type PlanItem } from './pure';
 
@@ -15,12 +16,17 @@ const props = defineProps<{
     aiEnabled: boolean;
     /** 신청 요청이 날아가 있는 동안 — 버튼을 잠가 두 번 신청(409)이 나지 않게 한다. */
     aiBusy: boolean;
+    /** 오늘 남은 분석 몫. */
+    remainingAnalyze: number;
+    /** 전날 복습에 문제가 붙어 있나 — 달력이 이미 아는 사실이라 그대로 내려 준다(불필요한 왕복 제거). */
+    hasYesterdayQuestions: boolean;
 }>();
 
 const emit = defineEmits<{
     (e: 'add', input: AddItemInput): void;
     (e: 'remove', id: number): void;
     (e: 'request-ai'): void;
+    (e: 'recall-saved'): void;
 }>();
 
 const subject = ref('');
@@ -80,7 +86,7 @@ function submit(): void {
         </div>
 
         <!-- AI 상태 줄 — 승인제라 대부분의 사용자에겐 여기가 AI의 유일한 접점이다.
-             승인됐고 키도 있는 조합에선 문구가 비고(그 자리는 다음 판의 AI 버튼 몫) 줄 자체가 사라진다. -->
+             승인됐고 키도 있는 조합에선 문구가 비고(그 자리는 아래 백지복습의 분석 버튼 몫) 줄 자체가 사라진다. -->
         <p v-if="aiStatus.text || aiStatus.button" class="study-day-ai status-line">
             <span v-if="aiStatus.text">{{ aiStatus.text }}</span>
             <button
@@ -91,6 +97,16 @@ function submit(): void {
                 @click="emit('request-ai')"
             >{{ aiStatus.button }}</button>
         </p>
+
+        <RecallPanel
+            :date="date"
+            :today="today"
+            :items="items"
+            :ai-enabled="aiEnabled"
+            :remaining-analyze="remainingAnalyze"
+            :has-yesterday-questions="hasYesterdayQuestions"
+            @saved="emit('recall-saved')"
+        />
 
         <form class="study-day-form" @submit.prevent="submit">
             <p class="study-day-label">일정 추가</p>
