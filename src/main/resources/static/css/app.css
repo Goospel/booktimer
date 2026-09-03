@@ -1,10 +1,14 @@
 /* BookTimer — 공통 스타일 (종이톤+세이지 디자인 리프레시: 입구부터 미감 통일) */
 
-/* 본문 폰트 — 연필 손글씨 '개구'(Gaegu, Google Fonts). 종이 위에 연필로 쓴 무드를
-   글자까지 끌고 온다. 고운돋움·고운바탕은 폴백 겸 일부 잔여 용도로 남긴다.
-   ⚠️ 손글씨체는 x-height가 작아 같은 pt에서 눈에 띄게 작고 가늘어 보인다 —
-   아래 html{font-size}와 body{font-weight}가 그 보정이다(빼면 본문이 흐려진다). */
-@import url('https://fonts.googleapis.com/css2?family=Gaegu:wght@300;400;700&family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&display=swap');
+/* 본문 폰트 — 기능 글자가 기본값(고운돋움), 장식이 opt-in.
+   손글씨 '개구'(Gaegu)는 2026-09-03에 걷었다. 미니앱이 「또렷한 연필」에서 먼저 내린 결론을
+   옮긴 것이고, 근거 전문은 miniapp/src/global.css의 `html body` 주석에 있다
+   (그쪽 '값'을 여기 베껴 적지 않는다 — 한쪽만 고치면 나머지가 조용히 거짓이 된다).
+   ⚠️ Gaegu는 폴백으로도 남기지 않는다. 남기면 고운돋움이 못 그리는 글리프만 손글씨로 떨어져
+   한 단어 안에서 서체가 갈린다 — 시스템 한글 폰트로 떨어지는 쪽이 덜 이상하다.
+   웹의 장식 축은 손글씨가 아니라 고운바탕(Gowun Batang)이다 — 표지·아바타 이니셜,
+   여백 글·인용, 명언 각주가 전부 그 서체를 '명시'한다(상속에 기대는 자리를 두지 않는다). */
+@import url('https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&display=swap');
 
 :root {
     /* 종이톤 + 세이지 그린 팔레트. 이름은 유지(무파괴), 값만 교체 → 전역 리프레시. */
@@ -121,8 +125,10 @@
    details:not([open]) 메커니즘이라 여기 안 걸리며, 그 케이스는 개별 :not([open]) 재숨김이 필요하다. */
 [hidden] { display: none !important; }
 
-/* 손글씨체 보정 — Gaegu는 x-height가 작아 16px에서 눈에 띄게 작다. rem 기준을 올려
-   본문·여백이 함께 커지게 한다(body에만 주면 rem로 잡힌 크기들이 따라오지 않는다). */
+/* 본문 배율 — 사용자 확정(2026-09-03). 손글씨 보정으로 들어왔던 값이지만, 고운돋움으로
+   갈아탄 뒤 실측해 보고도 18px 본문을 그대로 택했다. 서체 교체와 독립된 결정이다.
+   ⚠️ 이 값은 서체와 따로 다룬다 — 내리면 rem으로 잡힌 크기들이 전부 함께 줄어든다
+   (body에만 주면 반대로 rem 크기들이 안 따라온다. 그래서 여기 html에 있다). */
 html { font-size: 112.5%; }
 
 body {
@@ -131,14 +137,25 @@ body {
     position: relative;   /* 종이 결(body::before)의 위치 기준 — 없으면 결이 첫 화면만 덮는다 */
     background: var(--bg);
     color: var(--text);
-    font-family: "Gaegu", "Gowun Dodum", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    font-family: "Gowun Dodum", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
         "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
-    font-weight: 700;   /* 손글씨체는 400이 연필 스케치라기보다 흐린 낙서로 보인다 */
+    /* 400을 '명시'한다 — 미지정으로 두면 결과가 UA에 맡겨진다. 고운돋움은 400 단일 face라
+       700을 걸면 전면 합성 볼드가 되어 본문/강조를 가르는 굵기 축이 통째로 죽는다. */
+    font-weight: 400;
     line-height: 1.6;
     display: flex;
     justify-content: center;
     padding: 32px 16px;
 }
+
+/* 폼 요소엔 body 서체가 상속으로 오지 않는다 — UA 기본 스타일이 input/textarea/select에
+   자기 폰트(Arial 13.3px)를 직접 지정하고, author 규칙이 없으면 그 값이 이기기 때문이다.
+   그래서 이 한 줄이 없으면 하필 「사용자가 직접 글자를 치는 칸」만 딴 서체로 남는다.
+   미니앱엔 이 구멍이 없었다 — TDS가 같은 규칙을 주고 있다(miniapp/src/global.css 상단 주석).
+   ⚠️ 타입 선택자(0-0-1)로 둔 것은 일부러다. 클래스로 잡은 개별 규칙(.auth-input ·
+   .set-input · 세리프를 의도적으로 쓰는 .story-composer-input 등)을 덮지 않아야 한다.
+   font-size도 일부러 건드리지 않는다 — 칸 높이가 함께 바뀐다. button은 이미 개별 규칙이 맡는다. */
+input, textarea, select { font-family: inherit; }
 
 /* 종이 결 — 본문 전체를 덮는 레이어.
 
@@ -371,6 +388,7 @@ body::before {
     display: inline-flex; align-items: center; justify-content: center;
     width: 40px; height: 40px; border-radius: 50%;
     background: var(--sage-soft); color: var(--accent-hover);
+    font-family: 'Gowun Batang', serif;
     font-size: 1.1rem; font-weight: 700; flex: none;
 }
 .onb-preview-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -1330,6 +1348,7 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     align-items: center;
     justify-content: center;
     font-family: 'Gowun Batang', serif;
+    font-weight: 700;
     font-size: 18px;
     line-height: 1;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .4), 0 2px 4px rgba(120, 100, 70, .18);
@@ -1419,7 +1438,7 @@ body.bookdetail-page .buy-menu-items a:hover svg { color: var(--accent-hover); }
    반드시 body.bookdetail-page 스코프 아래에서만 건드린다(전역·history 화면 무손상). */
 body.bookdetail-page .month-nav-btn { border-radius: 999px; }
 body.bookdetail-page .month-nav-btn svg { flex: 0 0 auto; }
-body.bookdetail-page .month-nav-label { font-family: 'Gowun Batang', serif; font-size: 15px; }
+body.bookdetail-page .month-nav-label { font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 15px; }
 body.bookdetail-page .record-row { padding: 10px 2px; border-bottom-color: #EFE9DD; }
 body.bookdetail-page .record-date { color: var(--muted); font-weight: 400; font-size: 13px; letter-spacing: .3px; }
 body.bookdetail-page .record-time { color: var(--accent-hover); font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 14px; }
@@ -1695,7 +1714,7 @@ body.profile-page .container { max-width: 1160px; }  /* 와이드 2열 여유 �
 .shop-id-head { display: flex; align-items: center; gap: 14px; }
 .shop-avatar { cursor: default; }                     /* 비클릭 div라 .dash-header-avatar의 pointer 상쇄 */
 .shop-id-text { min-width: 0; }                       /* flex 자식 ellipsis 함정 방지 */
-.shop-id-title { font-family: 'Gowun Batang', serif; font-size: 18px; color: var(--text); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shop-id-title { font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 18px; color: var(--text); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .shop-id-handle { font-size: 13px; color: var(--muted); margin-top: 2px; }
 
 /* BTI 태그칩 — 클릭형 vs 정적형 */
@@ -1708,7 +1727,7 @@ body.profile-page .container { max-width: 1160px; }  /* 와이드 2열 여유 �
 /* 카운트 + 액션 */
 .shop-counts { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .shop-count { font-size: 13.5px; color: var(--muted); text-decoration: none; }
-.shop-count strong { font-family: 'Gowun Batang', serif; color: var(--text); font-variant-numeric: tabular-nums; }
+.shop-count strong { font-family: 'Gowun Batang', serif; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 .shop-actions { margin-left: auto; display: flex; gap: 8px; }
 .shop-actions .dash-btn-fill, .shop-actions .dash-btn-outline { width: auto; padding: 9px 16px; border-radius: 10px; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; }
@@ -1830,7 +1849,7 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 .book-sheet-cover {
     width: 34px; height: 48px; border-radius: 4px; flex-shrink: 0; object-fit: cover;
     background: var(--border); display: flex; align-items: center; justify-content: center;
-    font-family: 'Gowun Batang', serif; font-size: 15px; line-height: 1; user-select: none;
+    font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 15px; line-height: 1; user-select: none;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .4), 0 2px 4px rgba(120, 100, 70, .18);
 }
 .book-sheet-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
@@ -1892,7 +1911,7 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 .shop-drill { background: #FAF7EF; border: 1px solid var(--border);
  border-image: var(--pencil-frame) 8 / 8px stretch; border-radius: 12px; padding: 14px; }
 .shop-drill-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-.shop-drill-head h3 { font-family: 'Gowun Batang', serif; font-size: 15px; color: var(--text); margin: 0; }
+.shop-drill-head h3 { font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 15px; color: var(--text); margin: 0; }
 .shop-drill-close { width: auto; flex: none; background: transparent; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-family: inherit; font-size: 12.5px; color: var(--muted); padding: 2px; }
 .shop-drill-close:hover { color: var(--text); }
 /* 드릴다운(근거책) 리스트 — 헤더 카드 안 보조 미리보기라 셸프(.shop-shelf>.shop-books 60vh)보다
@@ -1911,7 +1930,7 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 /* 공개 책장 */
 .shop-shelf { display: flex; flex-direction: column; gap: 14px; }
 .shop-shelf-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.shop-shelf-title { font-family: 'Gowun Batang', serif; font-size: 18px; color: var(--text); margin: 0; }
+.shop-shelf-title { font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 18px; color: var(--text); margin: 0; }
 /* 헤드 우측 도구 묶음 — 필터칩 + 제휴 고지 ⓘ. head는 제목|도구 2분할 유지(space-between). */
 .shop-shelf-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .shop-filter { display: flex; flex-wrap: wrap; gap: 7px; }
@@ -1946,7 +1965,7 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 .shop-cover { flex: 0 0 auto; width: 54px; height: 78px; border-radius: 5px; display: flex; align-items: center; justify-content: center; object-fit: cover;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .4), 0 2px 5px rgba(120, 100, 70, .18); }
 .shop-cover-ph { background: repeating-linear-gradient(#FCFAF5, #FCFAF5 19px, #E8E0D2 20px);
-    font-family: 'Gowun Batang', serif; font-size: 22px; color: rgba(110, 138, 106, .85); }
+    font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 22px; color: rgba(110, 138, 106, .85); }
 
 /* 책 메타 */
 .shop-book-meta { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -1985,7 +2004,7 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 /* 404 — 미존재·차단·운영자 통합 카드 */
 .shop-notfound { align-items: center; text-align: center; gap: 14px; padding: 44px 24px; }
 .shop-notfound .shop-ico { color: var(--accent); opacity: .5; }
-.shop-notfound-msg { margin: 0; font-family: 'Gowun Batang', serif; font-size: 19px; color: var(--text); }
+.shop-notfound-msg { margin: 0; font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 19px; color: var(--text); }
 .shop-notfound-link { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--accent-hover); text-decoration: none; font-weight: 600; }
 .shop-notfound-link:hover { text-decoration: underline; }
 
@@ -3207,6 +3226,7 @@ body.personality-page #personality-app { gap: 18px; }
 }
 .dash-session-time {
     font-family: 'Gowun Batang', serif;
+    font-weight: 700;
     font-size: 22px;
     color: var(--accent-hover);
     font-variant-numeric: tabular-nums;
@@ -3214,7 +3234,7 @@ body.personality-page #personality-app { gap: 18px; }
 .dash-divider { height: 1px; background: var(--border); }
 .dash-kv { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
 .dash-kv-k { font-size: 13px; color: var(--muted); }
-.dash-kv-v { font-family: 'Gowun Batang', serif; font-size: 16px; color: var(--text); text-align: right; }
+.dash-kv-v { font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 16px; color: var(--text); text-align: right; }
 .dash-kv-v-num { font-size: 14.5px; color: var(--text); font-variant-numeric: tabular-nums; }
 
 /* 버튼 — 패널 안 풀폭(전역 button{width:100%} 활용); a는 block 명시 */
@@ -3248,7 +3268,7 @@ body.personality-page #personality-app { gap: 18px; }
 /* ACHIEVED */
 .dash-state-achieved { background: #E9F2EB; border-color: #CFE4D6; text-align: center; align-items: center; gap: 12px; }
 .dash-achieved-emoji { font-size: 34px; }
-.dash-achieved-title { margin: 0; font-family: 'Gowun Batang', serif; font-size: 19px; color: var(--ok); line-height: 1.4; }
+.dash-achieved-title { margin: 0; font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 19px; color: var(--ok); line-height: 1.4; }
 .dash-achieved-sub { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.5; }
 /* 달성 패널에 측정 시작 폼이 함께 들어갈 때: 격려 텍스트는 가운데 유지, 폼 컨트롤은 풀폭으로
    (패널이 align-items:center라 폼 자식이 좁아지는 것 방지). */
@@ -3310,7 +3330,7 @@ body.personality-page #personality-app { gap: 18px; }
 .dash-book-chip-cover {
     width: 30px; height: 42px; border-radius: 4px; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
-    font-family: 'Gowun Batang', serif; font-size: 14px; line-height: 1; user-select: none;
+    font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 14px; line-height: 1; user-select: none;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .4), 0 2px 4px rgba(120, 100, 70, .18);
 }
 .dash-book-chip-title { flex: 1 1 auto; min-width: 0; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -3399,7 +3419,7 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 /* 헤더 사용자영역 (brand 로고는 dashboard.html SSR 유지 — 로고 중복 0) */
 .dash-header-user { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-bottom: 4px; }
 .dash-header-text { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; }
-.dash-header-name { font-family: 'Gowun Batang', serif; font-size: 16px; color: var(--text); }
+.dash-header-name { font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 16px; color: var(--text); }
 .dash-header-name strong { color: var(--accent-hover); }
 .dash-header-sub { font-size: 12px; color: var(--muted); }
 /* 아바타 = 사용자 메뉴 토글 버튼(클릭 가능). 전역 button{width:100%}은 width:42px 고정(클래스 특이도)으로 상쇄. */
@@ -3407,7 +3427,7 @@ body.dashboard-page #dashboard-app { gap: 20px; }
     width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0;
     background: var(--accent); color: var(--card-bg);
     display: flex; align-items: center; justify-content: center;
-    font-family: 'Gowun Batang', serif; font-size: 18px;
+    font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 18px;
     box-shadow: inset 0 0 0 3px var(--card-bg), 0 0 0 1px var(--border);
     padding: 0; border: none; cursor: pointer; appearance: none;
     overflow: hidden;   /* 작가 스프라이트를 원형으로 클립 */

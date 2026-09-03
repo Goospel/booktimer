@@ -8,7 +8,9 @@
  * 3) 브랜드 색·폰트: 아래 html:root 블록 주석 참고.
  */
 
-/* 웹폰트 — 웹 app.css와 같은 패밀리(감성 동기화의 절반은 폰트다). */
+/* 웹폰트 — 웹 app.css와 본문·세리프를 같은 패밀리로 맞춘다(감성 동기화의 절반은 폰트다).
+   ⚠️ 손글씨(Gaegu)만은 여기 전용이다 — 웹은 2026-09-03부터 받지 않는다(app.css 상단 주석).
+   미니앱은 표지 이니셜·여백 인용 같은 '장식 opt-in' 자리가 남아 있어 계속 받는다. */
 @import url('https://fonts.googleapis.com/css2?family=Gaegu:wght@300;400;700&family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap');
 
 html,
