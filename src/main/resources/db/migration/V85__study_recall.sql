@@ -9,6 +9,14 @@
 --
 -- book_id nullable + 앱 코드가 FK를 푸는 규칙은 V82·V83 그대로다(StudyBookService.delete가
 -- StudyRecallRepository.unlinkBook 호출). subject는 제목 스냅샷이라 책이 사라져도 「무슨 과목이었나」가 남는다.
+--
+-- ⚠️ body/summary/holes_json/questions_json은 **이 레포 최초의 text 컬럼**이다. 두 가지를 알아 둔다.
+--   ① 엔티티(StudyRecall)는 같은 필드를 varchar length로 선언한다(@Lob 아님). 운영 MySQL의 실타입은
+--      TEXT(약 64KB)이고 엔티티의 length는 **입력 검증용 상한**일 뿐, 둘은 원래 다르다 — varchar로
+--      맞추려 했다면 utf8mb4에서 이 테이블의 행 크기 상한(65535바이트)을 넘겨 CREATE TABLE부터 실패한다.
+--   ② 그래서 **그 차이를 잡아 주는 테스트가 없다**. FlywayMigrationTest는 H2라 `text`를 CHARACTER
+--      VARYING으로 보고하고(그래서 varchar 매핑이 통과한다), 길이는 애초에 대조하지 않는다. 이 컬럼들의
+--      타입·크기를 바꿀 땐 테스트 초록을 근거로 삼지 말고 MySQL에서 직접 확인한다.
 
 create table study_recall (
     id             bigint        not null auto_increment,

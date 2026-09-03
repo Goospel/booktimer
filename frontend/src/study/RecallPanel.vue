@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import { analyzeRecall, fetchRecall, saveRecall, type Recall } from './api';
+import { analyzeRecall, fetchRecall, saveRecall, type Recall, type StudyBookRow } from './api';
 import { prevDay, recallScopePrefill, recallSubjectPrefill, type PlanItem } from './pure';
 
 /**
@@ -19,6 +19,8 @@ const props = defineProps<{
     today: string;
     /** 그날 일정 — 과목·범위 프리필의 출처. */
     items: PlanItem[];
+    /** 공부 서재 — 글을 책에 걸 때 고르는 목록(일정 추가와 <b>같은 목록</b>을 위에서 내려받는다). */
+    books: StudyBookRow[];
     /** 승인됨 AND 키 있음일 때만 분석 버튼을 그린다. */
     aiEnabled: boolean;
     /** 오늘 남은 분석 몫. 0이면 버튼을 잠근다. */
@@ -34,6 +36,7 @@ const yesterdayQuestions = ref<string[]>([]);
 const body = ref('');
 const subject = ref('');
 const scope = ref('');
+const bookId = ref<number | null>(null);
 const busy = ref(false);
 const error = ref('');
 const notice = ref('');
@@ -42,6 +45,8 @@ const isFuture = computed(() => !props.today || props.date > props.today);
 const analyzed = computed(() => recall.value?.analyzedAt != null);
 const canSave = computed(() => body.value.trim().length > 0 && !busy.value);
 const canAnalyze = computed(() => canSave.value && props.remainingAnalyze > 0 && !analyzed.value);
+/** 오늘 몫을 다 썼는데 이 글은 아직 분석 전 — 버튼만 잠그면 「왜 안 되는지」가 화면에 없다. */
+const capSpent = computed(() => props.aiEnabled && props.remainingAnalyze === 0 && !analyzed.value);
 
 async function load(): Promise<void> {
     error.value = '';
@@ -56,6 +61,8 @@ async function load(): Promise<void> {
         body.value = found?.body ?? '';
         subject.value = found?.subject ?? recallSubjectPrefill(props.items);
         scope.value = found?.scope ?? recallScopePrefill(props.items);
+        // 저장된 글이 있으면 그때 고른 책을, 없으면 그날 일정이 가리키는 책을 기본으로(대개 같은 책이다).
+        bookId.value = found?.bookId ?? props.items.find((i) => i.bookId !== null)?.bookId ?? null;
     } catch {
         error.value = '쓴 글을 불러오지 못했어요.';
     }
@@ -79,7 +86,7 @@ async function onSave(thenAnalyze: boolean): Promise<void> {
     try {
         let saved = await saveRecall({
             date: props.date,
-            bookId: null,
+            bookId: bookId.value,
             subject: subject.value.trim(),
             scope: scope.value.trim(),
             body: body.value,
@@ -115,6 +122,10 @@ async function onSave(thenAnalyze: boolean): Promise<void> {
         <p v-if="isFuture" class="status-line muted">아직 오지 않은 날이에요.</p>
 
         <template v-else>
+            <select v-model="bookId" class="study-recall-book" aria-label="공부 책" data-testid="recall-book">
+                <option :value="null">책 없이 (직접 입력)</option>
+                <option v-for="book in books" :key="book.id" :value="book.id">{{ book.title }}</option>
+            </select>
             <input v-model="subject" type="text" maxlength="300" placeholder="과목 (예: 정보처리기사 실기)" aria-label="과목">
             <textarea
                 v-model="scope"
@@ -154,6 +165,7 @@ async function onSave(thenAnalyze: boolean): Promise<void> {
                     @click="onSave(true)"
                 >저장하고 분석 ({{ remainingAnalyze }}회 남음)</button>
                 <span v-if="aiEnabled && analyzed" class="status-line muted">오늘 분석은 끝났어요.</span>
+                <span v-else-if="capSpent" class="status-line muted" data-testid="recall-cap-spent">오늘 몫을 다 썼어요 — 내일 다시 해 주세요.</span>
             </div>
 
             <div v-if="recall && recall.analyzedAt" class="study-recall-result">

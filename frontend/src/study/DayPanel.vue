@@ -102,6 +102,7 @@ function submit(): void {
             :date="date"
             :today="today"
             :items="items"
+            :books="books"
             :ai-enabled="aiEnabled"
             :remaining-analyze="remainingAnalyze"
             :has-yesterday-questions="hasYesterdayQuestions"

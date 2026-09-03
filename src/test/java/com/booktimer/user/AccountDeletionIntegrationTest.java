@@ -21,8 +21,12 @@ import com.booktimer.session.StudySession;
 import com.booktimer.session.StudySessionRepository;
 import com.booktimer.story.Story;
 import com.booktimer.story.StoryRepository;
+import com.booktimer.study.StudyAiUsage;
+import com.booktimer.study.StudyAiUsageRepository;
 import com.booktimer.study.StudyPlanItem;
 import com.booktimer.study.StudyPlanItemRepository;
+import com.booktimer.study.StudyRecall;
+import com.booktimer.study.StudyRecallRepository;
 import com.booktimer.timer.ReadingGoalService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -72,6 +76,10 @@ class AccountDeletionIntegrationTest {
     private StudyDailyCheckRepository studyDailyCheckRepository;
     @Autowired
     private StudyPlanItemRepository studyPlanItemRepository;
+    @Autowired
+    private StudyRecallRepository studyRecallRepository;
+    @Autowired
+    private StudyAiUsageRepository studyAiUsageRepository;
     @Autowired
     private StoryRepository storyRepository;
     @Autowired
@@ -286,6 +294,38 @@ class AccountDeletionIntegrationTest {
                 StudyPlanItem.of(user, LocalDate.now(), book, "정보처리기사 실기", "3장 함수 p.45-70"));
 
         // study_plan_item의 두 FK가 순서대로 정리되지 않으면 flush 시 제약 위반.
+        assertThatCode(() -> {
+            accountService.deleteAccount(email, "rawpw1234");
+            assertThat(userRepository.findByEmail(email)).isEmpty();
+        }).doesNotThrowAnyException();
+    }
+
+    /**
+     * 백지복습(study_recall)도 FK가 둘이라 {@code study_plan_item}과 <b>같은 순서 함정</b>을 진다 —
+     * {@code user_id → users}와 {@code book_id → study_book}. 글을 study_book보다 <b>앞</b>에 지워야 하고,
+     * 뒤로 가면 「공부 책에 백지복습을 걸어 둔 사람만」 탈퇴가 실패한다.
+     *
+     * <p>상한 카운터(study_ai_usage)도 같은 픽스처에 태운다 — 별개 테이블이라 purge에 줄이 하나 더
+     * 필요하고, 빠지면 「AI 분석을 한 번이라도 시도한 사람만」 못 나간다. 두 테이블을 한 사용자에 함께
+     * 매다는 것이 요점이다: 실제 사용자가 그 모양이고, 그래야 <b>순서</b>까지 한 번에 잠긴다.
+     *
+     * <p>{@code AccountServiceTest}의 {@code inOrder} 단언은 mock이라 FK를 모른다(T-023·T-029) —
+     * 목록에 이름만 있고 purge 코드에 줄이 없어도, 순서가 틀려도 거기선 초록이다. 그 사각을 여기서 닫는다.
+     */
+    @Test
+    @DisplayName("공부 책에 걸린 백지복습(study_recall)과 AI 상한 행을 가진 사용자도 FK 위반 없이 탈퇴된다(복습 → 책 순서)")
+    void deleteAccount_withStudyRecallAndAiUsage_succeeds() {
+        String email = "studyrecallquit@booktimer.com";
+        User user = userRepository.saveAndFlush(
+                User.of(email, passwordEncoder.encode("rawpw1234"), "복습하던이", "Asia/Seoul", Role.USER));
+        StudyBook book = studyBookRepository.saveAndFlush(
+                StudyBook.register(user, "정보처리기사 실기", null, null, null, null, null));
+        studyRecallRepository.saveAndFlush(StudyRecall.of(user, LocalDate.now(), book,
+                "정보처리기사 실기", "3장 함수", "함수는 입력을 받아 출력을 낸다", StudyRecall.Source.TEXT));
+        studyAiUsageRepository.saveAndFlush(
+                StudyAiUsage.of(user, LocalDate.now(), StudyAiUsage.Kind.ANALYZE));
+
+        // study_recall의 두 FK(+ study_ai_usage.user_id)가 순서대로 정리되지 않으면 flush 시 제약 위반.
         assertThatCode(() -> {
             accountService.deleteAccount(email, "rawpw1234");
             assertThat(userRepository.findByEmail(email)).isEmpty();

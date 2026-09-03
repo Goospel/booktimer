@@ -4200,7 +4200,7 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 
 /* 백지복습 — 쓰는 자리가 화면의 주인공이라 본문 textarea만 크게 두고 나머지는 눌러 둔다. */
 .study-recall { display: flex; flex-direction: column; gap: 8px; }
-.study-recall input, .study-recall textarea { width: 100%; }
+.study-recall input, .study-recall textarea, .study-recall-book { width: 100%; }
 .study-recall-body { min-height: 180px; resize: vertical; line-height: 1.6; }
 .study-recall-scope { resize: vertical; }
 .study-recall-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
