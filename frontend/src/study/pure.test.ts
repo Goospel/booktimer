@@ -15,6 +15,7 @@ import {
     recallScopePrefill,
     recallSubjectPrefill,
     studyNavLinks,
+    studyView,
     validatePlanForm,
 } from './pure';
 
@@ -115,8 +116,21 @@ describe('planSummary', () => {
 });
 
 describe('studyNavLinks', () => {
-    it('홈과 내 책장으로 돌아가는 길을 준다', () => {
-        expect(studyNavLinks().map((l) => l.href)).toEqual(['/', '/books']);
+    // 공부 세계 안에서만 돈다 — 독서 서재(/books)로 나가는 문은 미니앱 공부 모드에도 없다.
+    it('홈과 공부 기록으로만 잇는다 (독서 서재로 나가지 않는다)', () => {
+        expect(studyNavLinks().map((l) => l.href)).toEqual(['/', '/study/history']);
+    });
+});
+
+describe('studyView', () => {
+    it('/study는 달력, /study/history는 기록 — 같은 셸이 경로로 화면을 고른다', () => {
+        expect(studyView('/study')).toBe('calendar');
+        expect(studyView('/study/history')).toBe('history');
+    });
+
+    it('컨텍스트 패스 배포에서도 끝자락으로 고른다', () => {
+        expect(studyView('/ctx/study/history')).toBe('history');
+        expect(studyView('/ctx/study')).toBe('calendar');
     });
 });
 
