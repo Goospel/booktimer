@@ -60,6 +60,30 @@ public class TossLinkCodeService {
         if (user.getTossUserKey() != null) {
             throw new TossLinkConflictException("이미 토스에 연결된 계정입니다");
         }
+        return issue(user, TossLinkCode.Purpose.LINK_TOSS);
+    }
+
+    /**
+     * <b>토스 → 웹</b> 로그인 코드를 발급한다 — 미니앱(Bearer 인증)에서 발급해 PC 웹 로그인 화면에 입력하면
+     * 그 계정의 세션이 열린다. 토스에서 시작한 계정은 비밀번호가 없어 폼 로그인이 원리상 불가라 이 경로가
+     * 유일한 웹 진입로다.
+     *
+     * <p>발급 조건은 {@link #issue}의 <b>거울</b>이다 — 토스 신원이 붙어 있어야 한다. Bearer 토큰은
+     * {@code /api/toss/login·register·link}에서만 나오므로 실질적으로 항상 참이지만, 두 발급 조건이
+     * 상호 배타임을 코드가 보증하게 해 둔다(그래서 한 사용자가 두 목적의 코드를 동시에 가질 수 없고,
+     * 아래 "기존 미사용 코드 전부 무효화"가 목적을 가리지 않아도 된다).
+     *
+     * @throws TossLinkConflictException 토스에 연결되지 않은 계정인 경우
+     */
+    public String issueWebLogin(User user) {
+        if (user.getTossUserKey() == null) {
+            throw new TossLinkConflictException("토스 앱에 연결되지 않은 계정입니다");
+        }
+        return issue(user, TossLinkCode.Purpose.WEB_LOGIN);
+    }
+
+    /** 무효화 + 생성 공통 — 두 발급 경로가 목적만 달리해 같은 규칙(항상 하나만 유효)을 쓴다. */
+    private String issue(User user, TossLinkCode.Purpose purpose) {
         Instant now = clock.instant();
         List<TossLinkCode> previous = repository.findByUserAndUsedAtIsNull(user);
         for (TossLinkCode code : previous) {
@@ -72,22 +96,26 @@ public class TossLinkCodeService {
             code.append(ALPHABET.charAt(RANDOM.nextInt(ALPHABET.length())));
         }
         String rawCode = code.toString();
-        repository.save(TossLinkCode.issue(user, hash(rawCode), now.plus(TTL)));
+        repository.save(TossLinkCode.issue(user, hash(rawCode), now.plus(TTL), purpose));
         return rawCode;
     }
 
     /**
      * 코드를 검증·소비한다. 통과하면 발급자 user를 돌려주고 일회용 처리한다.
      *
-     * @return 유효하면 발급자, 아니면 빈 Optional(없음·만료·이미 사용을 호출자가 구분하지 못하게 동일 처리)
+     * <p><b>목적이 다르면 "없는 코드"와 똑같이 처리한다</b> — 소비 지점이 자기 목적만 받아야 웹→토스 연결
+     * 코드가 웹 로그인 토큰으로 승격되지 않는다(V86 주석). 거절은 {@code used_at}을 찍지 않으므로,
+     * 엉뚱한 소비 지점에 들이민다고 코드가 소모되지도 않는다.
+     *
+     * @return 유효하면 발급자, 아니면 빈 Optional(없음·만료·이미 사용·목적 불일치를 호출자가 구분하지 못하게 동일 처리)
      */
-    public Optional<User> consume(String rawCode) {
+    public Optional<User> consume(String rawCode, TossLinkCode.Purpose purpose) {
         if (rawCode == null || rawCode.isBlank()) {
             return Optional.empty();
         }
         Instant now = clock.instant();
         return repository.findByCodeHash(hash(normalize(rawCode)))
-                .filter(code -> code.isConsumableAt(now))
+                .filter(code -> code.getPurpose() == purpose && code.isConsumableAt(now))
                 .map(code -> {
                     code.markUsed(now);
                     repository.save(code);
@@ -95,9 +123,13 @@ public class TossLinkCodeService {
                 });
     }
 
-    /** 사용자가 옮겨 적은 코드를 관대하게 받아들인다 — 앞뒤 공백·소문자 입력은 같은 코드로 본다. */
+    /**
+     * 사용자가 옮겨 적은 코드를 관대하게 받아들인다 — 소문자와 <b>모든 공백</b>은 같은 코드로 본다.
+     * 발급 화면이 {@code ABCD 2345}처럼 4자씩 띄워 보여줘도 보이는 대로 옮겨 적으면 통과한다.
+     * 하이픈은 벗기지 않는다 — 어느 화면도 하이픈 표기를 쓰지 않으므로 받아 줄 이유가 없다.
+     */
     private static String normalize(String rawCode) {
-        return rawCode.strip().toUpperCase(Locale.ROOT);
+        return rawCode.replaceAll("\\s+", "").toUpperCase(Locale.ROOT);
     }
 
     /** 평문 코드의 SHA-256 해시(hex 소문자 64자). */

@@ -47,7 +47,7 @@ class TossLinkCodeServiceTest {
 
         assertThat(code).isNotBlank();
         assertThat(codeRepository.findAll()).allSatisfy(c -> assertThat(c.getCodeHash()).isNotEqualTo(code));
-        assertThat(service.consume(code)).map(User::getId).contains(u.getId());
+        assertThat(service.consume(code, TossLinkCode.Purpose.LINK_TOSS)).map(User::getId).contains(u.getId());
     }
 
     @Test
@@ -56,9 +56,9 @@ class TossLinkCodeServiceTest {
         User u = user("link-once@booktimer.com");
         TossLinkCodeService service = serviceAt(NOW);
         String code = service.issue(u);
-        assertThat(service.consume(code)).isPresent();
+        assertThat(service.consume(code, TossLinkCode.Purpose.LINK_TOSS)).isPresent();
 
-        assertThat(service.consume(code)).isEmpty();
+        assertThat(service.consume(code, TossLinkCode.Purpose.LINK_TOSS)).isEmpty();
     }
 
     @Test
@@ -67,10 +67,10 @@ class TossLinkCodeServiceTest {
         User u = user("link-expired@booktimer.com");
         String code = serviceAt(NOW).issue(u);
 
-        assertThat(serviceAt(NOW.plus(TossLinkCodeService.TTL).minusSeconds(1)).consume(code)).isPresent();
+        assertThat(serviceAt(NOW.plus(TossLinkCodeService.TTL).minusSeconds(1)).consume(code, TossLinkCode.Purpose.LINK_TOSS)).isPresent();
 
         String code2 = serviceAt(NOW).issue(u);
-        assertThat(serviceAt(NOW.plus(TossLinkCodeService.TTL).plusSeconds(1)).consume(code2)).isEmpty();
+        assertThat(serviceAt(NOW.plus(TossLinkCodeService.TTL).plusSeconds(1)).consume(code2, TossLinkCode.Purpose.LINK_TOSS)).isEmpty();
     }
 
     @Test
@@ -78,9 +78,9 @@ class TossLinkCodeServiceTest {
     void unknownCode_rejected() {
         TossLinkCodeService service = serviceAt(NOW);
 
-        assertThat(service.consume("ZZZZZZZZ")).isEmpty();
-        assertThat(service.consume(null)).isEmpty();
-        assertThat(service.consume("  ")).isEmpty();
+        assertThat(service.consume("ZZZZZZZZ", TossLinkCode.Purpose.LINK_TOSS)).isEmpty();
+        assertThat(service.consume(null, TossLinkCode.Purpose.LINK_TOSS)).isEmpty();
+        assertThat(service.consume("  ", TossLinkCode.Purpose.LINK_TOSS)).isEmpty();
     }
 
     @Test
@@ -104,7 +104,75 @@ class TossLinkCodeServiceTest {
 
         String second = service.issue(u);
 
-        assertThat(service.consume(first)).isEmpty();
-        assertThat(service.consume(second)).isPresent();
+        assertThat(service.consume(first, TossLinkCode.Purpose.LINK_TOSS)).isEmpty();
+        assertThat(service.consume(second, TossLinkCode.Purpose.LINK_TOSS)).isPresent();
+    }
+
+    /** 토스에서 시작한 계정 — 웹 로그인 코드를 받을 수 있는 유일한 조건은 토스 신원이 붙어 있다는 것. */
+    private User linkedUser(String email, String userKey) {
+        User u = user(email);
+        u.linkTossUserKey(userKey);
+        return userRepository.save(u);
+    }
+
+    @Test
+    @DisplayName("웹 로그인 코드는 WEB_LOGIN 소비 지점에서만 먹는다 — LINK_TOSS로 들이밀면 거절되고, 그 거절이 코드를 소모하지도 않는다")
+    void webLoginCode_consumesOnlyForWebLogin() {
+        User u = linkedUser("weblogin-purpose@booktimer.com", "uk-purpose-1");
+        TossLinkCodeService service = serviceAt(NOW);
+
+        String code = service.issueWebLogin(u);
+
+        // 다른 목적의 소비 지점에선 "없는 코드"와 동일 취급(존재를 누설하지 않는다).
+        assertThat(service.consume(code, TossLinkCode.Purpose.LINK_TOSS)).isEmpty();
+        // 그리고 그 거절이 일회용을 소진시키면 안 된다 — 남의 소비 지점이 내 코드를 태우는 셈이 된다.
+        assertThat(service.consume(code, TossLinkCode.Purpose.WEB_LOGIN)).map(User::getId).contains(u.getId());
+    }
+
+    @Test
+    @DisplayName("웹→토스 연결 코드는 웹 로그인에 먹지 않는다 — 어깨너머로 본 연결 코드가 로그인 토큰으로 승격되지 않게")
+    void linkCode_rejectedForWebLogin() {
+        User u = user("linkcode-purpose@booktimer.com");
+        TossLinkCodeService service = serviceAt(NOW);
+
+        String code = service.issue(u);
+
+        assertThat(service.consume(code, TossLinkCode.Purpose.WEB_LOGIN)).isEmpty();
+        assertThat(service.consume(code, TossLinkCode.Purpose.LINK_TOSS)).map(User::getId).contains(u.getId());
+    }
+
+    @Test
+    @DisplayName("토스 신원이 없는 계정은 웹 로그인 코드를 발급받지 못한다 — issue()의 거울(상호 배타)")
+    void issueWebLogin_requiresTossIdentity() {
+        User u = user("weblogin-unlinked@booktimer.com");
+        TossLinkCodeService service = serviceAt(NOW);
+
+        assertThatThrownBy(() -> service.issueWebLogin(u)).isInstanceOf(TossLinkConflictException.class);
+        assertThat(codeRepository.findByUserAndUsedAtIsNull(u)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("웹 로그인 코드도 재발급하면 직전 코드가 무효화된다 (항상 하나만 유효)")
+    void issueWebLogin_invalidatesPrevious() {
+        User u = linkedUser("weblogin-reissue@booktimer.com", "uk-purpose-2");
+        TossLinkCodeService service = serviceAt(NOW);
+        String first = service.issueWebLogin(u);
+
+        String second = service.issueWebLogin(u);
+
+        assertThat(service.consume(first, TossLinkCode.Purpose.WEB_LOGIN)).isEmpty();
+        assertThat(service.consume(second, TossLinkCode.Purpose.WEB_LOGIN)).isPresent();
+    }
+
+    @Test
+    @DisplayName("코드 안쪽 공백·소문자를 관대하게 받는다 — 미니앱이 4자씩 띄워 보여줘도 그대로 옮겨 적으면 통과")
+    void consume_ignoresInnerWhitespaceAndCase() {
+        User u = linkedUser("weblogin-spacing@booktimer.com", "uk-purpose-3");
+        TossLinkCodeService service = serviceAt(NOW);
+        String code = service.issueWebLogin(u);
+
+        String spaced = " " + code.substring(0, 4).toLowerCase(java.util.Locale.ROOT) + " " + code.substring(4) + " ";
+
+        assertThat(service.consume(spaced, TossLinkCode.Purpose.WEB_LOGIN)).map(User::getId).contains(u.getId());
     }
 }

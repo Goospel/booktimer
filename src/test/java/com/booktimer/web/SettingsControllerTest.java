@@ -4,6 +4,7 @@ import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.AuthProvider;
 import com.booktimer.user.Role;
+import com.booktimer.user.TossLinkCode;
 import com.booktimer.user.TossLinkCodeRepository;
 import com.booktimer.user.TossLinkCodeService;
 import com.booktimer.user.User;
@@ -501,7 +502,7 @@ class SettingsControllerTest {
                 .andReturn();
 
         String code = (String) result.getFlashMap().get("tossLinkCode");
-        assertThat(linkCodeService.consume(code)).map(User::getId).contains(u.getId());
+        assertThat(linkCodeService.consume(code, TossLinkCode.Purpose.LINK_TOSS)).map(User::getId).contains(u.getId());
     }
 
     @Test

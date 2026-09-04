@@ -3,6 +3,8 @@ package com.booktimer.user;
 import com.booktimer.common.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -48,19 +50,38 @@ public class TossLinkCode extends BaseTimeEntity {
     @Column(name = "used_at")
     private Instant usedAt;
 
+    /**
+     * 이 코드가 무엇에 쓰이는가 — 소비 지점이 <b>자기 목적만</b> 받는다(V86).
+     *
+     * <p>구분이 없으면 웹→토스 연결 코드를 웹 로그인 폼에 먹여 그 계정 세션을 열 수 있다. 코드를 본
+     * 사람(어깨너머·스크린샷)이 얻는 힘이 "내 토스 신원을 붙임"에서 "즉시 웹 로그인"으로 넓어진다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "purpose", nullable = false, length = 16)
+    private Purpose purpose;
+
+    /** 코드의 방향. 한 사용자가 두 목적의 코드를 동시에 가질 수 없다(발급 조건이 상호 배타 — 서비스 주석). */
+    public enum Purpose {
+        /** 웹 → 토스: 웹에 로그인한 사람이 발급 → 미니앱에 입력해 그 계정에 토스 신원을 붙인다. */
+        LINK_TOSS,
+        /** 토스 → 웹: 미니앱에서 발급 → PC 웹 로그인 화면에 입력해 그 계정의 세션을 연다. */
+        WEB_LOGIN
+    }
+
     protected TossLinkCode() {
         // JPA
     }
 
-    private TossLinkCode(User user, String codeHash, Instant expiresAt) {
+    private TossLinkCode(User user, String codeHash, Instant expiresAt, Purpose purpose) {
         this.user = user;
         this.codeHash = codeHash;
         this.expiresAt = expiresAt;
+        this.purpose = purpose;
     }
 
-    /** 코드를 발급한다 — 해시·만료만 받는다(평문 생성·해싱은 {@link TossLinkCodeService} 책임). */
-    public static TossLinkCode issue(User user, String codeHash, Instant expiresAt) {
-        return new TossLinkCode(user, codeHash, expiresAt);
+    /** 코드를 발급한다 — 해시·만료·목적만 받는다(평문 생성·해싱은 {@link TossLinkCodeService} 책임). */
+    public static TossLinkCode issue(User user, String codeHash, Instant expiresAt, Purpose purpose) {
+        return new TossLinkCode(user, codeHash, expiresAt, purpose);
     }
 
     /** {@code now} 기준으로 소비 가능한가 — 미사용 + 미경과. */
@@ -91,5 +112,9 @@ public class TossLinkCode extends BaseTimeEntity {
 
     public Instant getUsedAt() {
         return usedAt;
+    }
+
+    public Purpose getPurpose() {
+        return purpose;
     }
 }
