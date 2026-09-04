@@ -16,6 +16,7 @@ import type {
   StudyHistoryResponse,
   StudyState,
   TimerState,
+  WebLoginCodeResponse,
 } from './api';
 import { ApiError } from './api';
 // 소스 자체를 읽는다 — "목 코드가 프로드 번들에 안 들어간다"는 배선(dynamic import + DEV 게이트)이
@@ -379,5 +380,18 @@ describe('dev-mock 아이디 바꾸기', () => {
     await expect(
       mockRequest('/api/miniapp/handle/change', { body: { loginId: 'againagain' } }),
     ).rejects.toMatchObject({ status: 409 });
+  });
+});
+
+/**
+ * 웹 로그인 코드 — 목이 서버 알파벳(0·O·1·I·L 제외 31자)과 TTL을 그대로 흉내내야 설정 화면의
+ * 「발급 후」 상태를 브라우저로 볼 수 있다. 자리표시 문자열을 주면 4자 끊기 표기가 거짓으로 초록이 된다.
+ */
+describe('dev-mock 웹 로그인 코드', () => {
+  it('서버 형식의 8자 코드와 300초 TTL을 준다', async () => {
+    const data = await mockRequest<WebLoginCodeResponse>('/api/miniapp/web-login-code', { method: 'POST' });
+
+    expect(data.code).toMatch(/^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$/);
+    expect(data.expiresInSeconds).toBe(300);
   });
 });

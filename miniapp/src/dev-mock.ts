@@ -898,6 +898,9 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
   // 회원 탈퇴 — 서버는 토스 재인증으로 신원을 확인하지만, 브라우저엔 토스 SDK가 없어 그 확인을 흉내낼 수
   // 없다. 여기서는 204(빈 응답)만 돌려주고 시트 문구·개폐·성공 후 화면 전이만 눈으로 확인한다.
   ['POST', /^\/api\/miniapp\/delete-account$/, () => undefined],
+  // PC 웹 로그인 코드 — 서버 알파벳(0·O·1·I·L을 뺀 31자)·TTL을 그대로 흉내낸다. 자리표시 문자열을
+  // 주면 설정 화면의 4자 끊기 표기가 목에서 거짓으로 초록이 된다.
+  ['POST', /^\/api\/miniapp\/web-login-code$/, () => ({ code: 'ABCD2345', expiresInSeconds: 300 })],
 
   ['GET', /^\/api\/dashboard$/, (): DashboardResponse => ({
     ...timerState(),
