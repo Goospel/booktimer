@@ -120,10 +120,13 @@ function submit(): void {
 
         <form class="study-day-form" @submit.prevent="submit">
             <p class="study-day-label">일정 추가</p>
-            <select v-model="bookId" class="study-day-book" aria-label="공부 책">
-                <option :value="null">책 없이 (직접 입력)</option>
-                <option v-for="book in books" :key="book.id" :value="book.id">{{ book.title }}</option>
-            </select>
+            <div class="study-select-wrap">
+                <select v-model="bookId" class="study-day-book" aria-label="공부 책">
+                    <option :value="null">책 없이 (직접 입력)</option>
+                    <option v-for="book in books" :key="book.id" :value="book.id">{{ book.title }}</option>
+                </select>
+                <svg class="study-select-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
             <input v-model="subject" type="text" maxlength="300" placeholder="과목 (예: 정보처리기사 실기)" aria-label="과목">
             <input v-model="task" type="text" maxlength="500" placeholder="할 일 한 줄 (예: 3장 함수 p.45-70)" aria-label="할 일">
             <button type="submit" class="btn btn-primary btn-small" :disabled="!canSubmit">추가</button>

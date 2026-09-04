@@ -4181,6 +4181,43 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .study-legend-mark { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--accent-hover); }
 .study-legend-mark.is-kept { background: var(--accent); border-color: var(--accent); }
 
+/* 입력칸 — 다른 폼 화면(.field · .fb-field)이 쓰는 것과 같은 연필선 재료다. 새 값을 만들지 않는다.
+   ⚠️ type을 열거하는 것은 일부러다: 사진 탭의 file 입력에 프레임을 씌우면 브라우저가 그리는
+   「파일 선택」 버튼이 종이 테두리 안에 갇혀 테두리가 두 겹으로 보인다. */
+.study-day input[type="text"],
+.study-day input[type="date"],
+.study-day input[type="number"],
+.study-day textarea,
+.study-day select {
+    width: 100%;
+    box-sizing: border-box;
+    font: inherit;
+    padding: 9px 11px;
+    border: 1px solid transparent;
+    border-image: var(--pencil-frame-soft) 8 / 8px stretch;
+    border-radius: 10px;
+    background: var(--card-bg);
+    color: var(--text);
+}
+.study-day input:focus,
+.study-day textarea:focus,
+.study-day select:focus {
+    outline: none;
+    /* border-color는 border-image가 덮어 안 보인다 → 프레임을 진한 연필선으로 갈아 포커스를 표시하고,
+       접근성용 링은 그대로 남긴다(.field input:focus와 같은 처방). */
+    border-image: var(--pencil-frame) 8 / 8px stretch;
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+.study-day ::placeholder { color: var(--muted); opacity: .75; }
+
+/* 책 고르기 — OS 기본 화살표를 걷고 직접 그린 chevron을 얹는다(.auth-select-wrap과 같은 방식). */
+.study-select-wrap { position: relative; display: block; }
+.study-day .study-select-wrap select { padding-right: 38px; appearance: none; -webkit-appearance: none; cursor: pointer; }
+.study-select-chevron {
+    position: absolute; right: 13px; top: 50%; transform: translateY(-50%);
+    pointer-events: none; color: var(--muted);
+}
+
 .study-day { margin-top: 8px; display: flex; flex-direction: column; gap: 14px; }
 .study-day-title { margin: 0; font-size: 16px; }
 .study-day-label { margin: 0 0 6px; font-size: 12px; color: var(--muted); }
@@ -4201,7 +4238,25 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 /* 백지복습 — 쓰는 자리가 화면의 주인공이라 본문 textarea만 크게 두고 나머지는 눌러 둔다. */
 .study-recall { display: flex; flex-direction: column; gap: 8px; }
 .study-recall input, .study-recall textarea, .study-recall-book { width: 100%; }
-.study-recall-body { min-height: 180px; resize: vertical; line-height: 1.6; }
+/* 본문칸만 줄노트로 둔다 — 「종이에 적는다」가 이 기능의 성격이라, 쓰는 자리에만 결을 준다.
+   ⚠️ line-height를 px로 못 박는 것이 핵심이다. 배수(1.6)로 두면 줄 간격이 글꼴 로딩 전후로 달라져
+   밑줄과 글자가 어긋난다 — 줄과 글이 어긋난 노트는 안 그린 것만 못하다.
+   background-attachment: local이라 스크롤하면 줄도 글을 따라 움직인다(fixed면 글만 미끄러진다).
+   ⚠️ 선택자에 .study-day를 붙인 것도 일부러다 — 위의 `.study-day textarea`가 (0,1,1)이라 클래스
+   하나짜리로 두면 그쪽 `background` 단축 속성이 background-image를 none으로 덮어 줄이 안 그려진다. */
+.study-day .study-recall-body {
+    min-height: 196px;
+    resize: vertical;
+    line-height: 28px;
+    padding: 10px 12px;
+    background-image: repeating-linear-gradient(
+        to bottom,
+        transparent 0, transparent 27px,
+        var(--border) 27px, var(--border) 28px
+    );
+    background-attachment: local;
+    background-position: 0 10px;   /* padding-top만큼 내려 첫 줄과 맞춘다 */
+}
 .study-recall-scope { resize: vertical; }
 .study-recall-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .study-recall-actions .btn { width: auto; flex: 0 0 auto; }
@@ -4237,7 +4292,10 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .study-plan-scope { resize: vertical; }
 .study-plan-form > .btn { align-self: flex-start; width: auto; }
 .study-plan-row { display: flex; flex-wrap: wrap; gap: 10px; }
-.study-plan-row label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+/* 작은 캡션 크기는 <span>에만 준다 — label에 두면 위 `font: inherit`을 타고 값 입력칸까지 12px로
+   끌어내려, 같은 폼의 다른 칸(18px)과 글씨 크기가 어긋난다. 12px은 이름표의 크기이지 값의 크기가 아니다. */
+.study-plan-row label { display: flex; flex-direction: column; gap: 4px; }
+.study-plan-row label > span { font-size: 12px; color: var(--muted); }
 .study-plan-row input { width: 100%; max-width: 180px; }
 .study-plan-preview {
     border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--sage-soft);
