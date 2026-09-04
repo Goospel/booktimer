@@ -14,7 +14,9 @@ import {
     prevDay,
     recallScopePrefill,
     recallSubjectPrefill,
+    readCountLabel,
     studyNavLinks,
+    studyOwned,
     studyView,
     validatePlanForm,
 } from './pure';
@@ -117,20 +119,56 @@ describe('planSummary', () => {
 
 describe('studyNavLinks', () => {
     // 공부 세계 안에서만 돈다 — 독서 서재(/books)로 나가는 문은 미니앱 공부 모드에도 없다.
-    it('홈과 공부 기록으로만 잇는다 (독서 서재로 나가지 않는다)', () => {
-        expect(studyNavLinks().map((l) => l.href)).toEqual(['/', '/study/history']);
+    // 지금 보고 있는 화면은 빼고 나머지 둘만 — 자기 자신으로 가는 링크는 문이 아니다.
+    it('일정 화면에선 공부 서재·공부 기록으로 잇는다', () => {
+        expect(studyNavLinks('calendar').map((l) => l.href))
+            .toEqual(['/', '/study/books', '/study/history']);
+    });
+
+    it('기록 화면에선 일정·공부 서재로 잇는다', () => {
+        expect(studyNavLinks('history').map((l) => l.href))
+            .toEqual(['/', '/study', '/study/books']);
+    });
+
+    it('서재 화면에선 일정·공부 기록으로 잇는다 (독서 서재로 나가지 않는다)', () => {
+        expect(studyNavLinks('books').map((l) => l.href))
+            .toEqual(['/', '/study', '/study/history']);
     });
 });
 
 describe('studyView', () => {
-    it('/study는 달력, /study/history는 기록 — 같은 셸이 경로로 화면을 고른다', () => {
+    it('/study는 달력, /study/history는 기록, /study/books는 서재 — 같은 셸이 경로로 화면을 고른다', () => {
         expect(studyView('/study')).toBe('calendar');
         expect(studyView('/study/history')).toBe('history');
+        expect(studyView('/study/books')).toBe('books');
     });
 
     it('컨텍스트 패스 배포에서도 끝자락으로 고른다', () => {
         expect(studyView('/ctx/study/history')).toBe('history');
+        expect(studyView('/ctx/study/books')).toBe('books');
         expect(studyView('/ctx/study')).toBe('calendar');
+    });
+});
+
+describe('studyOwned', () => {
+    // 검색 응답의 owned는 「독서 책장」 기준이라 공부 화면에선 쓰지 않는다 — 내 공부 서재 isbn 집합으로 다시 센다.
+    it('내 공부 서재 isbn 집합에 있으면 true', () => {
+        expect(studyOwned(new Set(['i1']), 'i1')).toBe(true);
+    });
+
+    it('isbn이 없는 책은 「없다」 — 열쇠가 없으니 매칭할 수 없다', () => {
+        expect(studyOwned(new Set(['i1']), null)).toBe(false);
+    });
+
+    it('집합 밖 isbn은 false', () => {
+        expect(studyOwned(new Set<string>(), 'i1')).toBe(false);
+    });
+});
+
+describe('readCountLabel', () => {
+    it('0독도 그린다 — 「아직 안 돌았다」는 빈칸이 아니라 정보다', () => {
+        expect(readCountLabel(0)).toBe('0독');
+        expect(readCountLabel(3)).toBe('3독');
     });
 });
 

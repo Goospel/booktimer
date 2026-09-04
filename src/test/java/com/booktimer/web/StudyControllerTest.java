@@ -107,6 +107,29 @@ class StudyControllerTest {
     }
 
     @Test
+    @DisplayName("GET /study/books: 미인증 → 로그인으로 차단")
+    void studyBooks_unauthenticated_isBlocked() throws Exception {
+        mockMvc.perform(get("/study/books"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+    }
+
+    /**
+     * 공부 서재도 <b>같은 셸</b>이다 — 섬이 {@code location.pathname}으로 달력/기록/서재를 고른다.
+     * 데이터는 {@code GET /api/study/books}가 세션 체인으로 나른다(서버는 라우트 한 줄만 넓혔다).
+     */
+    @Test
+    @DisplayName("GET /study/books: /study와 같은 셸을 낸다 — 섬이 경로로 화면을 고른다")
+    void studyBooks_rendersSameShell() throws Exception {
+        register("studybooksshell");
+
+        mockMvc.perform(get("/study/books").with(user("studybooksshell")))
+                .andExpect(status().isOk())
+                .andExpect(view().name("study"))
+                .andExpect(content().string(containsString("id=\"study-app\"")));
+    }
+
+    @Test
     @DisplayName("GET /study: 셸 뷰 + 마운트 포인트 + CSRF 메타를 낸다")
     void study_rendersShell() throws Exception {
         register("studyshell");

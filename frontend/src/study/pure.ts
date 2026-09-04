@@ -280,15 +280,39 @@ export function planWeeks(days: DraftDay[]): { label: string; days: DraftDay[] }
     }));
 }
 
-/** 이 셸이 그릴 화면 — /study는 달력, /study/history는 기록(같은 셸·같은 번들, 경로로 고른다). */
-export function studyView(pathname: string): 'calendar' | 'history' {
-    return pathname.endsWith('/study/history') ? 'history' : 'calendar';
+export type StudyView = 'calendar' | 'history' | 'books';
+
+/** 이 셸이 그릴 화면 — /study는 달력, /study/history는 기록, /study/books는 서재(같은 셸·같은 번들, 경로로 고른다). */
+export function studyView(pathname: string): StudyView {
+    if (pathname.endsWith('/study/history')) return 'history';
+    if (pathname.endsWith('/study/books')) return 'books';
+    return 'calendar';
 }
 
-/** 하단 네비 — 공부 세계 안에서만 돈다(홈 · 공부 기록). 독서 서재로 가는 문은 미니앱 공부 모드에도 없다. */
-export function studyNavLinks(): NavLinkSpec[] {
-    return [
-        { href: '/', icon: 'home', label: '홈' },
-        { href: '/study/history', icon: 'history', label: '공부 기록' },
-    ];
+const STUDY_PAGES: Record<StudyView, NavLinkSpec> = {
+    calendar: { href: '/study', icon: 'calendar', label: '일정' },
+    books: { href: '/study/books', icon: 'books', label: '공부 서재' },
+    history: { href: '/study/history', icon: 'history', label: '공부 기록' },
+};
+
+/**
+ * 하단 네비 — 홈 + 「지금 화면이 아닌」 공부 페이지 둘(일정 · 공부 서재 · 공부 기록 순).
+ * 공부 세계 안에서만 돈다: 독서 서재로 가는 문은 미니앱 공부 모드에도 없다.
+ */
+export function studyNavLinks(current: StudyView): NavLinkSpec[] {
+    const others = (['calendar', 'books', 'history'] as StudyView[]).filter((v) => v !== current);
+    return [{ href: '/', icon: 'home', label: '홈' }, ...others.map((v) => STUDY_PAGES[v])];
+}
+
+/**
+ * 이 검색 행이 내 공부 서재에 이미 있는가 — 검색 응답의 {@code owned}(독서 책장 기준)는 쓰지 않는다.
+ * isbn 없는 책(직접 추가분)은 매칭할 열쇠가 없어 「없다」로 본다.
+ */
+export function studyOwned(myIsbns: ReadonlySet<string>, isbn13: string | null): boolean {
+    return isbn13 !== null && myIsbns.has(isbn13);
+}
+
+/** 「N독」 — 0독도 그린다(「아직 안 돌았다」는 빈칸이 아니라 정보다. 0초 누적 시간이 부재인 것과 반대). */
+export function readCountLabel(readCount: number): string {
+    return `${readCount}독`;
 }

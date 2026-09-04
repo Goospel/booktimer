@@ -254,6 +254,6 @@ onMounted(async () => {
             @plan-applied="load"
         />
 
-        <NavLinks :links="studyNavLinks()" />
+        <NavLinks :links="studyNavLinks('calendar')" />
     </section>
 </template>

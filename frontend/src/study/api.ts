@@ -196,9 +196,68 @@ export async function applyPlan(input: ApplyPlanInput): Promise<{ applied: numbe
     return json(await post('/api/study/plan/apply', input), '일정을 적용하지 못했어요.');
 }
 
+/**
+ * 서버 {@code StudyBookApiController.StudyBookRow} 그대로.
+ *
+ * <p>{@code totalSeconds} 0은 「아직 그 책으로 안 쟀다」는 <b>부재</b>라 화면이 칩을 안 그린다 —
+ * 0독이 「상태」인 {@code readCount}와 반대다.
+ */
 export interface StudyBookRow {
     id: number;
     title: string;
+    author: string | null;
+    coverUrl: string | null;
+    isbn13: string | null;
+    readCount: number;
+    purchaseLink: string | null;
+    totalSeconds: number;
+}
+
+export interface StudyShelf {
+    /** 검색 제공자 가동 여부 — 꺼져 있으면 화면이 검색폼 대신 직접 추가를 연다. */
+    searchEnabled: boolean;
+    books: StudyBookRow[];
+}
+
+/** {@code GET /api/books/search} 한 행. {@code owned}는 <b>독서 책장</b> 기준이라 공부 화면은 무시한다. */
+export interface SearchRow {
+    title: string;
+    author: string | null;
+    isbn13: string | null;
+    coverUrl: string | null;
+    publisher: string | null;
+    purchaseLink: string | null;
+    owned: boolean;
+}
+
+export async function fetchStudyShelf(): Promise<StudyShelf> {
+    return json(await fetch('/api/study/books', { credentials: 'same-origin' }),
+        '공부 서재를 불러오지 못했어요.');
+}
+
+/** 검색은 독서와 같은 문(도메인 중립)이다. type=TITLE 고정 — 공부 서재는 제목 검색뿐(미니앱과 같다). */
+export async function searchBooks(q: string): Promise<SearchRow[]> {
+    const params = new URLSearchParams({ q, type: 'TITLE', page: '1' });
+    const data = await json<{ results?: SearchRow[] }>(
+        await fetch(`/api/books/search?${params}`, { credentials: 'same-origin' }), '검색하지 못했어요.');
+    return data.results ?? [];
+}
+
+/** 담기 — {@code status}가 없는 것이 독서 {@code /api/books}와의 차이다(회독은 언제나 0독에서 시작). */
+export async function addStudyBook(input: {
+    title: string; author: string | null; isbn13: string | null;
+    coverUrl: string | null; publisher: string | null; purchaseLink: string | null;
+}): Promise<StudyBookRow> {
+    return json(await post('/api/study/books', input), '책을 담지 못했어요.');
+}
+
+/** 회독 수를 <b>절대값으로</b> 설정한다(클라가 현재값 ±1을 보낸다) — 멱등이라 연타·재시도에 안전하다. */
+export async function setStudyReadCount(id: number, readCount: number): Promise<StudyBookRow> {
+    return json(await post(`/api/study/books/${id}/read-count`, { readCount }), '회독 수를 바꾸지 못했어요.');
+}
+
+export async function deleteStudyBook(id: number): Promise<void> {
+    await json<unknown>(await post(`/api/study/books/${id}/delete`), '책을 지우지 못했어요.');
 }
 
 /** 공부 서재 — 일정에 책을 걸 때 고르는 목록. 실패하면 자유 제목만 쓰게 두고 화면은 살린다. */

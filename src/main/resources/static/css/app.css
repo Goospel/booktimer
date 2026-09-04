@@ -3595,6 +3595,16 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .is-study .dash-btn-outline:hover { background: #E6ECF0; }   /* 리터럴 #E7EEE2 자리들 */
 .is-study .dash-timer-num { color: #47657C; }
 
+/* 공부 서재(/study/books) — 회독 칩은 토큰만 쓰므로 .is-study 카드 안에서 저절로 파랑이다(리터럴 없음).
+   ± 버튼은 .book-actions 규칙(padding·width:auto)을 그대로 받고, 여기선 가로 정렬만 얹는다 —
+   .book-actions보다 뒤에 오므로 같은 특이성에서도 이 줄이 이긴다. */
+.study-read-chip {
+    display: inline-block; width: fit-content;
+    padding: 2px 9px; border-radius: 20px; font-size: 12px;
+    background: var(--sage-soft); color: var(--accent-hover);
+}
+.study-count-actions { display: flex; gap: 6px; align-items: center; }
+
 /* ============================================================
    인증 화면(로그인·회원가입) — claude.ai/design 시안 재이식.
    전역 공유 클래스(.card·.field·.btn-primary·.alert·.oauth-계열·.entry-hero 등)는

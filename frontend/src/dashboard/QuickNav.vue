@@ -8,8 +8,13 @@ withDefaults(defineProps<{ loginId: string; mode?: TimerMode }>(), { mode: 'read
 <template>
     <section class="dash-card dash-nav" :class="{ 'is-study': mode === 'study' }">
         <span class="dash-pill">빠른 이동</span>
-        <!-- 공부 세트 — 미니앱 STUDY_TABS처럼 한 컴포넌트가 mode로 세트를 고른다. 공부 서재는 2단계에 세 번째로 온다. -->
+        <!-- 공부 세트 — 미니앱 STUDY_TABS처럼 한 컴포넌트가 mode로 세트를 고른다.
+             타일 셋 — 마지막 「공부 기록」이 odd 규칙으로 전체폭(독서 세트의 책BTI와 같은 모습). -->
         <nav v-if="mode === 'study'" class="dash-nav-grid" aria-label="빠른 이동">
+            <a class="dash-nav-tile" href="/study/books">
+                <NavIcon name="books" :size="26" />
+                <span class="dash-nav-label">공부 서재</span>
+            </a>
             <a class="dash-nav-tile" href="/study">
                 <NavIcon name="calendar" :size="26" />
                 <span class="dash-nav-label">일정</span>

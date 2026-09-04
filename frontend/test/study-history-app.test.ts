@@ -103,9 +103,10 @@ describe('StudyHistoryApp', () => {
         expect(wrapper.text()).not.toContain('아직 독서 기록이 없습니다');
     });
 
-    test('하단 네비는 공부 세계 안에서만 돈다 — 홈 · 일정', async () => {
+    test('하단 네비는 공부 세계 안에서만 돈다 — 홈 · 일정 · 공부 서재', async () => {
         const wrapper = await mountApp();
-        expect(wrapper.findAll('.link-row a').map((a) => a.attributes('href'))).toEqual(['/', '/study']);
+        expect(wrapper.findAll('.link-row a').map((a) => a.attributes('href')))
+            .toEqual(['/', '/study', '/study/books']);
     });
 
     test('응답 실패 → 실패 문구', async () => {
