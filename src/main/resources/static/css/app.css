@@ -3561,6 +3561,30 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .dash-garden-summary { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; text-align: center; }
 .dash-garden-empty { font-size: 13px; color: var(--muted); }
 
+/* 모드 토글 — pill과 한 줄(.dash-timer-head). 전역 button{width:100%}를 width:auto로 상쇄한다
+   (안 하면 알약이 풀폭으로 늘어 머리줄이 깨진다). */
+.dash-timer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+/* 알약은 줄이지 않는다 — 힌트가 뜨면 토글 wrap이 2행으로 벌어지고, flex가 형제인 알약을 max-content
+   아래로 짜부라뜨려 "오늘 읽은 시 / 간"처럼 단어 중간에서 쪼갠다(독서·공부 둘 다). */
+.dash-timer-head .dash-pill { white-space: nowrap; }
+.dash-mode-toggle-wrap { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.dash-mode-toggle { display: inline-flex; padding: 2px; border-radius: 999px; background: rgba(44, 42, 36, .06); }
+.dash-mode-toggle button {
+    width: auto; padding: 3px 10px; border: 0; border-radius: 999px;
+    background: transparent; color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.dash-mode-toggle button[aria-pressed="true"] { background: var(--sage-soft); color: var(--accent-hover); font-weight: 700; }
+.dash-mode-toggle.is-locked { opacity: .4; }
+.dash-mode-toggle.is-locked button { cursor: not-allowed; }
+.dash-mode-hint { font-size: 12px; color: var(--muted); }
+
+/* 공부 모드 — 히어로 카드 스코프 토큰 스왑(미니앱 body.study-mode의 카드 한정판, 값은 그쪽과 같다).
+   독서 카드엔 is-study가 없어 아래 규칙이 한 줄도 닿지 않는다. 카드 밖(.dash-nav 등)의 --accent도 그대로. */
+.dash-timer-hero.is-study { --accent: #5F7E96; --accent-hover: #47657C; --sage-soft: #E6ECF0; background: #EFF3F6; }
+.dash-timer-hero.is-study .dash-pill,
+.dash-timer-hero.is-study .dash-btn-outline:hover { background: #E6ECF0; }
+.dash-timer-hero.is-study .dash-timer-num { color: #47657C; }
+
 /* ============================================================
    인증 화면(로그인·회원가입) — claude.ai/design 시안 재이식.
    전역 공유 클래스(.card·.field·.btn-primary·.alert·.oauth-계열·.entry-hero 등)는
