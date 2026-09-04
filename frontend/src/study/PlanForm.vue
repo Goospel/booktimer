@@ -117,10 +117,13 @@ async function onApply(): Promise<void> {
             공부할 범위를 적으면 시험일까지 날짜별로 나눠 드려요. 만든 뒤 확인하고 달력에 적용해요.
         </p>
 
-        <select v-model="bookId" class="study-plan-book" aria-label="공부 책" data-testid="plan-book">
-            <option :value="null">책 없이 (직접 입력)</option>
-            <option v-for="book in books" :key="book.id" :value="book.id">{{ book.title }}</option>
-        </select>
+        <div class="study-select-wrap">
+            <select v-model="bookId" class="study-plan-book" aria-label="공부 책" data-testid="plan-book">
+                <option :value="null">책 없이 (직접 입력)</option>
+                <option v-for="book in books" :key="book.id" :value="book.id">{{ book.title }}</option>
+            </select>
+            <svg class="study-select-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
         <input
             v-model="subject"
             type="text"
