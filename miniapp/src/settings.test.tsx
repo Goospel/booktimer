@@ -1,4 +1,5 @@
 import { TDSMobileProvider } from '@toss/tds-mobile';
+import { isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -338,6 +339,46 @@ describe('PC 웹 로그인 코드 섹션', () => {
 
   it('설정 화면에 실제로 배선돼 있다 — 컴포넌트만 있고 안 걸려 있으면 사용자에겐 없는 기능이다', () => {
     expect(renderSettings()).toContain('PC 웹에서 이어 보기');
+  });
+
+  /**
+   * 정적 렌더는 <b>마크업만</b> 본다 — 두 버튼의 `onClick`을 서로 바꿔 놓아도 HTML은 한 글자도 안 변해
+   * 위 단언이 전부 통과한다. 사용자에겐 「웹 열기를 눌렀더니 코드만 새로 발급되고 브라우저는 안 열린다」인데
+   * 아무도 안 보는 셈이다. 그래서 마크업 대신 <b>엘리먼트 트리</b>를 직접 읽어 라벨↔핸들러를 확인한다.
+   */
+  const textOf = (node: ReactNode): string => {
+    if (typeof node === 'string' || typeof node === 'number') return String(node);
+    if (Array.isArray(node)) return node.map(textOf).join('');
+    if (isValidElement(node)) return textOf((node.props as { children?: ReactNode }).children);
+    return '';
+  };
+
+  const clickHandlerFor = (node: ReactNode, label: string): (() => void) | undefined => {
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        const hit = clickHandlerFor(child, label);
+        if (hit) return hit;
+      }
+      return undefined;
+    }
+    if (!isValidElement(node)) return undefined;
+    const props = node.props as { children?: ReactNode; onClick?: () => void };
+    if (typeof props.onClick === 'function' && textOf(props.children).includes(label)) return props.onClick;
+    return clickHandlerFor(props.children, label);
+  };
+
+  it('두 버튼이 각자 제 핸들러에 걸려 있다 — 바꿔 걸어도 마크업은 그대로라 트리로만 보인다', () => {
+    const onIssue = vi.fn();
+    const onOpenWeb = vi.fn();
+    const tree = WebLoginSection({ code: 'ABCD2345', busy: false, error: null, onIssue, onOpenWeb });
+
+    clickHandlerFor(tree, 'booktimer.app/login 열기')?.();
+    expect(onOpenWeb).toHaveBeenCalledTimes(1);
+    expect(onIssue).not.toHaveBeenCalled();
+
+    clickHandlerFor(tree, '새 코드 받기')?.();
+    expect(onIssue).toHaveBeenCalledTimes(1);
+    expect(onOpenWeb).toHaveBeenCalledTimes(1); // 재발급이 웹 열기를 겸하지 않는다
   });
 });
 
