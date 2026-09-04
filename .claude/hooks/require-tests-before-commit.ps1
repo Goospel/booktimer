@@ -31,15 +31,34 @@ if ($cmd -match 'SKIP_TESTS') { exit 0 }
 $cwd = [string]$data.cwd
 if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
 
-# 스테이징된 변경 중 .java 가 있는지 확인 → 없으면 테스트 불필요 (문서/설정 커밋)
+# 이 커밋이 건드릴 파일 목록 → .java 가 없으면 테스트 불필요 (문서/설정 커밋)
+# 인덱스만 보면 안 된다(T-228): 커밋 명령이 스스로 스테이징하면
+# (`git add -A && git commit ...`, `git commit -am ...`) PreToolUse 시점의
+# 인덱스는 아직 비어 있어 게이트가 조용히 통과한다 — `./gradlew test` 가
+# 아예 안 도는 채로 커밋된다. 그런 명령이면 작업 트리까지 합쳐서 본다.
+# fail-safe 방향: 게이트가 불필요하게 도는 쪽으로 기운다(안 도는 쪽이 아니라).
+$selfStages = ($cmd -match '\bgit\s+(add|stage)\b') -or
+              ($cmd -match '\bgit\s+commit\b[^|&;]*\s(--all\b|-[a-zA-Z]*a[a-zA-Z]*\b)')
+
+# ⚠️ EAP='Stop' 에서는 git 의 stderr 경고("LF will be replaced by CRLF")가
+# NativeCommandError 로 승격돼 목록 수집이 통째로 예외가 된다 → 빈 목록 → 조용한 통과.
+# (이 파일 아래 gradlew 주석과 같은 PowerShell 5.1 함정.) 수집 동안만 Continue.
+$prevEAP0 = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
 try {
-    $staged = & git -C $cwd diff --cached --name-only 2>$null
+    $changed = @(& git -C $cwd diff --cached --name-only 2>$null)
+    if ($selfStages) {
+        $changed += @(& git -C $cwd diff --name-only 2>$null)                     # 수정된 추적 파일
+        $changed += @(& git -C $cwd ls-files --others --exclude-standard 2>$null)  # 새 미추적 파일
+    }
 } catch {
-    $staged = @()
+    $changed = @()
+} finally {
+    $ErrorActionPreference = $prevEAP0
 }
-$javaChanged = @($staged | Where-Object { $_ -match '\.java$' })
+$javaChanged = @($changed | Where-Object { $_ -match '\.java$' })
 # ── 프론트엔드 게이트 — garden.html 또는 frontend/** 변경 시 npm test ──────────
-$frontChanged = @($staged | Where-Object { $_ -match 'garden\.html$|^frontend/' })
+$frontChanged = @($changed | Where-Object { $_ -match 'garden\.html$|^frontend/' })
 if ($frontChanged.Count -gt 0) {
     $nodeCmd = (Get-Command node -ErrorAction SilentlyContinue)
     if (-not $nodeCmd) {
