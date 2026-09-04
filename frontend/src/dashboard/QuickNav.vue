@@ -1,11 +1,25 @@
 <script setup lang="ts">
-defineProps<{ loginId: string }>()
+import NavIcon from '../shared/NavIcon.vue'
+import type { TimerMode } from './timerMode'
+
+withDefaults(defineProps<{ loginId: string; mode?: TimerMode }>(), { mode: 'reading' })
 </script>
 
 <template>
-    <section class="dash-card dash-nav">
+    <section class="dash-card dash-nav" :class="{ 'is-study': mode === 'study' }">
         <span class="dash-pill">빠른 이동</span>
-        <nav class="dash-nav-grid" aria-label="빠른 이동">
+        <!-- 공부 세트 — 미니앱 STUDY_TABS처럼 한 컴포넌트가 mode로 세트를 고른다. 공부 서재는 2단계에 세 번째로 온다. -->
+        <nav v-if="mode === 'study'" class="dash-nav-grid" aria-label="빠른 이동">
+            <a class="dash-nav-tile" href="/study">
+                <NavIcon name="calendar" :size="26" />
+                <span class="dash-nav-label">일정</span>
+            </a>
+            <a class="dash-nav-tile" href="/study/history">
+                <NavIcon name="history" :size="26" />
+                <span class="dash-nav-label">공부 기록</span>
+            </a>
+        </nav>
+        <nav v-else class="dash-nav-grid" aria-label="빠른 이동">
             <a class="dash-nav-tile" href="/books">
                 <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="4" y="4" width="3.4" height="16" rx="1" /><rect x="9.3" y="4" width="3.4" height="16" rx="1" /><path d="M15 5.4l3.3-.7 2.4 15.4-3.3.7z" />
@@ -17,13 +31,6 @@ defineProps<{ loginId: string }>()
                     <circle cx="12" cy="8" r="3.6" /><path d="M5 20a7 7 0 0 1 14 0" />
                 </svg>
                 <span class="dash-nav-label">내 책방</span>
-            </a>
-            <!-- 연필 라인아트 — 하단 네비 사전(navIcons)엔 넣지 않는다: 「공부」 링크를 든 .link-row가 아직 없다 -->
-            <a class="dash-nav-tile" href="/study">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M4 20l4-1 10-10-3-3L5 16z" /><path d="M13 7l3 3" />
-                </svg>
-                <span class="dash-nav-label">공부</span>
             </a>
             <a class="dash-nav-tile" href="/personality">
                 <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">

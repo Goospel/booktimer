@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import type { DashboardResponse, TimerState, StopResponse, BookOption, StudyState } from './types'
+import type { DashboardResponse, TimerState, StopResponse, BookOption, StudyState, GraphDto } from './types'
 import { IDLE_STUDY } from './types'
 import { getCsrfToken } from '../shared/follow'
 import type { TimerMode } from './timerMode'
@@ -55,6 +55,22 @@ const measuring = computed(() => hasActiveSession.value || study.value.hasActive
 const toggleLocked = computed(() => measuring.value || starting.value || stopping.value)
 const modeHint = ref<string | null>(null)
 watch(toggleLocked, l => { if (!l) modeHint.value = null })
+
+// 공부 잔디 — /api/dashboard의 study 블록엔 graph가 없어 따로 받는다(페이지 수명 동안 캐시, 공부 stop 뒤 재조회).
+const studyGraph = ref<GraphDto | null>(null)
+const studyGraphError = ref(false)
+async function loadStudyGraph() {
+    studyGraphError.value = false
+    try {
+        const res = await fetch('/api/study/history', { credentials: 'same-origin' })
+        if (!res.ok) throw new Error(res.statusText)
+        studyGraph.value = (await res.json() as { graph: GraphDto }).graph
+    } catch {
+        studyGraphError.value = true
+    }
+}
+// immediate: 저장 모드가 study면 마운트 즉시 /api/dashboard와 병렬로 나가 재로드 대기가 0이다.
+watch(mode, m => { if (m === 'study' && !studyGraph.value) loadStudyGraph() }, { immediate: true })
 
 // 책 고르기/태깅 통합 시트(발견 1, §6.5) — 'start'=측정 전 고르기, 'tag'=종료 후 태깅. 같은 시트를 모드로 겸한다.
 const sheetMode = ref<'start' | 'tag' | null>(null)
@@ -226,6 +242,9 @@ async function handleStudyStop() {
         if (res.status === 409) { await conflict('진행 중인 측정이 없어요 — 화면을 최신으로 맞췄어요'); return }
         if (!res.ok) { actionError.value = '측정을 종료할 수 없습니다'; return }
         study.value = await res.json() as StudyState
+        // 측정 종료가 잔디가 변하는 순간 — 독서 stop의 data.graph 갈아끼우기와 같은 자리다.
+        // await 하지 않는다: 히어로는 먼저 idle로 돌아간다.
+        loadStudyGraph()
     } catch {
         actionError.value = '네트워크 오류가 발생했습니다'
     } finally {
@@ -304,8 +323,8 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
 
         <div v-if="actionError" class="alert alert-error">{{ actionError }}</div>
 
-        <!-- 토글은 두 카드 안에 각각 든다 — v-if 바깥으로 빼면 "페이지 모드"로 읽혀
-             아래 잔디·서재(독서 그대로)와 거짓말이 된다(설계 §2.1-C 기각). -->
+        <!-- 토글은 두 카드 안에 각각 든다. 옛 근거("카드 밖이면 아래 잔디·서재와 거짓말이 된다")는
+             잔디·타일·정원이 mode를 같이 타면서 사라졌지만, 옮길 이유도 없어 자리는 그대로 둔다. -->
         <TimerCard
             v-if="mode === 'reading'"
             :remaining-seconds="remainingSeconds"
@@ -348,14 +367,21 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
             </template>
         </StudyTimerCard>
 
-        <ContributionGraph :graph="data.graph" />
+        <ContributionGraph v-if="mode === 'reading'" :graph="data.graph" />
+        <ContributionGraph v-else-if="studyGraph" :graph="studyGraph" mode="study" />
+        <section v-else class="dash-card dash-grass-card is-study">
+            <span class="dash-pill">공부 기록</span>
+            <span class="status-line muted">{{ studyGraphError ? '공부 기록을 불러오지 못했어요' : '불러오는 중…' }}</span>
+        </section>
 
         <!-- 옛 스토리 스트립 자리 — 여백은 책에 귀속되므로 진입은 내 책방(/u/{me})의 책 리스트 하나뿐이다.
              대시보드에 대체 진입을 새로 만들지 않는다(2026-08-16 재설계 §D5-1). -->
 
         <div class="dash-grid-2col">
-            <QuickNav :login-id="data.loginId" />
-            <GardenPanel :garden="data.garden" />
+            <QuickNav :login-id="data.loginId" :mode="mode" />
+            <!-- 정원은 독서 전용 세계관(작가는 독서 시간으로 입주). .dash-grid-2col이 auto-fit이라
+                 공부 모드에선 QuickNav가 자연히 전체폭으로 선다 — 2단계 「공부 서재」가 이 자리에 온다. -->
+            <GardenPanel v-if="mode === 'reading'" :garden="data.garden" />
         </div>
 
         <BrandQuote :quotes="data.quotes" />
