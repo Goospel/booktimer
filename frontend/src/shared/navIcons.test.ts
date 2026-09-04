@@ -41,14 +41,17 @@ describe('navIcons', () => {
     // name="calendarr")는 Vue 템플릿 문자열이라 컴파일타임에 안 잡히고, NavIcon이 미지 키를
     // v-html로 빈 <g>로 그려 예외도 안 난다 — 「svg가 2개 있다」류 렌더 테스트는 그대로
     // 통과한다(존재는 행위의 증거가 아니다). 두 사용 형태를 모두 훑는다.
-    it('모든 .vue의 NavIcon 아이콘 리터럴이 사전 키의 부분집합', () => {
+    // ⚠️ .ts까지 훑는 이유: 네비 스펙이 .vue 밖 순수 모듈(study/pure.ts의 STUDY_PAGES,
+    // books/pure.ts)로 빠지는 순간 .vue만 보는 walk엔 안 잡혀, 리터럴을 옮긴 것만으로
+    // 커버리지가 조용히 사라진다(#1040 리뷰 실측 — 같은 오타가 .vue에선 죽고 .ts에선 살았다).
+    it('모든 .vue·.ts의 NavIcon 아이콘 리터럴이 사전 키의 부분집합', () => {
         const root = join(dirname(fileURLToPath(import.meta.url)), '..')
         const used = new Set<string>()
         const walk = (dir: string) => {
             for (const e of readdirSync(dir, { withFileTypes: true })) {
                 const p = join(dir, e.name)
                 if (e.isDirectory()) walk(p)
-                else if (e.name.endsWith('.vue')) {
+                else if (e.name.endsWith('.vue') || (e.name.endsWith('.ts') && !e.name.endsWith('.test.ts'))) {
                     const src = readFileSync(p, 'utf8')
                     for (const m of src.matchAll(/\bicon:\s*'([^']+)'/g)) used.add(m[1])
                     for (const m of src.matchAll(/<NavIcon[^>]*\sname="([^"]+)"/g)) used.add(m[1])

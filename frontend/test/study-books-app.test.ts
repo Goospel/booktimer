@@ -52,6 +52,8 @@ function fetchImpl(url: string, init?: RequestInit) {
 const urls = () => calls.map((c) => c.url);
 const countOf = (pred: (u: string) => boolean) => urls().filter(pred).length;
 const bodyOf = (pred: (u: string) => boolean) => calls.find((c) => pred(c.url))?.body;
+/** 같은 URL을 두 번 두드리는 흐름(＋ 누른 뒤 − 누르기)에선 첫 매치가 아니라 마지막 매치를 봐야 한다. */
+const lastBodyOf = (pred: (u: string) => boolean) => calls.filter((c) => pred(c.url)).at(-1)?.body;
 
 beforeEach(() => {
     shelf = SHELF;
@@ -103,6 +105,12 @@ describe('공부 서재 — 목록', () => {
         await new Promise((r) => setTimeout(r, 0));
         expect(bodyOf((u) => u.includes('/read-count'))).toEqual({ readCount: 3 }); // 2 + 1, 절대값
         expect(countOf((u) => u.endsWith('/api/study/books') && !u.includes('read-count'))).toBe(2); // 마운트 + 재조회
+
+        // 방향의 양성·음성 쌍 — 「＋」만 재면 부호를 뒤집어도(readCount - 1 → + 1) 안 죽는다.
+        // 사용자에겐 「빼기를 눌렀는데 회독이 오른다」인 고장이라 방향 자체를 못 박는다.
+        await rows[0].find('.study-count-minus').trigger('click');
+        await new Promise((r) => setTimeout(r, 0));
+        expect(lastBodyOf((u) => u.includes('/read-count'))).toEqual({ readCount: 1 }); // 2 − 1
     });
 
     test('(f) 삭제는 confirm을 통과해야만 나간다', async () => {
