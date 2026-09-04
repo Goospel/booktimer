@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import type { DashboardResponse, TimerState, StopResponse, BookOption } from './types'
 import { getCsrfToken } from '../shared/follow'
+import { shouldRefresh } from './timerMode'
 import TimerCard from './TimerCard.vue'
 import BookPickSheet from './BookPickSheet.vue'
 import ContributionGraph from './ContributionGraph.vue'
@@ -59,8 +60,12 @@ function applyTimerState(s: TimerState) {
     recentBookId.value = s.recentBookId
 }
 
+// 마지막 /api/dashboard 조회 시각 — 복귀 재조회 스로틀의 기준(요청 "전"에 찍는다).
+let lastFetchedAt = 0
+
 onMounted(async () => {
     try {
+        lastFetchedAt = Date.now()
         const res = await fetch('/api/dashboard', { credentials: 'same-origin' })
         if (!res.ok) throw new Error(res.statusText)
         data.value = await res.json() as DashboardResponse
@@ -73,6 +78,48 @@ onMounted(async () => {
     }
 })
 
+/**
+ * 탭·창 복귀 시 조용한 재조회 — 다른 기기에서 시작·정지하면 이 화면이 낡기 때문(미니앱 silentRefresh와 같은 규칙).
+ * 성공했을 때만 덮고 실패는 무시한다(화면 유지). graph·garden·quotes는 안 덮는다 —
+ * 명언이 복귀마다 섞이면 어지럽고, 잔디는 stop 응답이 이미 갱신한다.
+ */
+async function refresh(force = false) {
+    if (!force) {
+        if (document.visibilityState !== 'visible') return
+        // 내 왕복 응답을 낡은 스냅샷이 덮지 않게. force는 방금 실패한 내 왕복이 부른 것이라 덮을 게 없다.
+        if (starting.value || stopping.value || tagging.value) return
+    }
+    if (!shouldRefresh(lastFetchedAt, Date.now(), force)) return
+    lastFetchedAt = Date.now()
+    try {
+        const res = await fetch('/api/dashboard', { credentials: 'same-origin' })
+        if (!res.ok) return
+        const d = await res.json() as DashboardResponse
+        applyTimerState(d)
+        wantToReadBooks.value = d.wantToReadBooks ?? []
+    } catch {
+        /* 조용히 — 다음 복귀·클릭에서 다시 시도한다 */
+    }
+}
+
+// focus도 듣는 이유: 데스크톱은 창을 갈아타도 visibilityState가 'visible'로 남는 경우가 많다.
+// 같은 스로틀을 타므로 둘 다 발화해도 요청은 1회.
+const onReturn = () => { refresh() }
+onMounted(() => {
+    document.addEventListener('visibilitychange', onReturn)
+    window.addEventListener('focus', onReturn)
+})
+onUnmounted(() => {
+    document.removeEventListener('visibilitychange', onReturn)
+    window.removeEventListener('focus', onReturn)
+})
+
+/** 409 = "내 화면이 낡았다"는 신호 — 문구를 띄우고 즉시 최신 상태를 받아 다음에 할 수 있는 일을 화면에 세운다. */
+async function conflict(msg: string) {
+    actionError.value = msg
+    await refresh(true)
+}
+
 async function handleStart(bookId: number | null) {
     if (starting.value) return
     actionError.value = null
@@ -84,7 +131,7 @@ async function handleStart(bookId: number | null) {
             headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
             body: JSON.stringify({ bookId }),
         })
-        if (res.status === 409) { actionError.value = '이미 진행 중인 측정이 있습니다'; return }
+        if (res.status === 409) { await conflict('다른 곳에서 이미 측정 중이에요 — 화면을 최신으로 맞췄어요'); return }
         if (!res.ok) { actionError.value = '측정을 시작할 수 없습니다'; return }
         applyTimerState(await res.json() as TimerState)
     } catch {
@@ -104,7 +151,7 @@ async function handleStop() {
             credentials: 'same-origin',
             headers: { 'X-CSRF-TOKEN': getCsrfToken() },
         })
-        if (res.status === 409) { actionError.value = '진행 중인 측정이 없습니다'; return }
+        if (res.status === 409) { await conflict('진행 중인 측정이 없어요 — 화면을 최신으로 맞췄어요'); return }
         if (!res.ok) { actionError.value = '측정을 종료할 수 없습니다'; return }
         // stop 응답은 타이머 + 잔디(graph) 동봉 — 측정 종료가 잔디가 변하는 순간이라
         // data.graph를 갈아끼워 새로고침 없이 잔디·연속일을 즉시 갱신한다(Vue deep ref가 재렌더 트리거).
