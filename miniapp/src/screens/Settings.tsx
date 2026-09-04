@@ -5,6 +5,7 @@ import type { DashboardResponse, UserRow } from '../api';
 import {
   deleteAccount,
   fetchBlocks,
+  issueWebLoginCode,
   logout,
   unblockUser,
   updateNickname,
@@ -15,9 +16,22 @@ import { openExternal } from '../toss';
 import { ErrorMessage, Screen, SectionTitle, Sheet, Text, sectionStyle } from '../ui';
 import { HandleSheet } from './Bookshop';
 
-/** 웹에 공개된 문서들 — 둘 다 `permitAll`이라 로그인 없이 열린다(미니앱 계정은 웹 로그인 자체가 불가). */
+/** 웹에 공개된 문서들 — 둘 다 `permitAll`이라 로그인 없이 열린다. */
 const PRIVACY_URL = 'https://booktimer.app/privacy';
 const TERMS_URL = 'https://booktimer.app/terms';
+
+/** 코드를 입력할 자리 — 발급된 코드를 들고 갈 곳이 여기 하나뿐이라 주소를 화면이 직접 말한다. */
+export const WEB_LOGIN_URL = 'https://booktimer.app/login';
+
+/**
+ * 8자 코드를 4자씩 끊는다(`ABCD2345` → `ABCD 2345`) — <b>사람이 다른 기기로 손으로 옮기는</b> 유일한
+ * 값이라, 붙여 쓰면 읽다 자리를 잃는다. 서버 `normalize`가 공백을 전부 지우므로 띄어 적어도 통과한다.
+ *
+ * <p>8자가 아니면 손대지 않는다 — 서버 형식이 바뀌는 날 엉뚱한 자리에 공백이 들어가느니 원문이 낫다.
+ */
+export function groupCode(code: string): string {
+  return code.length === 8 ? `${code.slice(0, 4)} ${code.slice(4)}` : code;
+}
 
 /**
  * 로그아웃 → 로그인 화면. **무슨 일이 있어도 화면을 넘긴다.**
@@ -143,6 +157,72 @@ export function DeleteAccountSection({
 }
 
 /**
+ * PC 웹에서 이어 보기 — 토스로 시작한 계정이 `booktimer.app`에 들어가는 <b>유일한 문</b>.
+ *
+ * <p>이 화면은 오래도록 반대를 말했다: 비밀번호가 없어 웹 로그인이 원리상 불가라 "웹에서 하세요"가 죽은
+ * 안내였고, 그래서 테스트가 「booktimer.app이 안 나온다」를 지켰다. 서버가 일회용 코드 로그인을 열어
+ * 그 전제가 뒤집혔다 — 코드를 받아 PC 브라우저에 옮겨 적으면 세션이 열린다.
+ *
+ * <p><b>시트·모달이 아니다</b>(T-183) — 진입 직후 화면을 덮는 것을 만들지 않는다. 사용자가 누른 뒤
+ * 이 자리에서 코드로 바뀐다. 상태를 프롭으로 받는 이유는 이 파일의 다른 섹션들과 같다: 정적 렌더
+ * 하니스(T-149)가 클릭·effect를 못 돌려, 프롭이 아니면 「발급된 뒤」 가지에 영영 닿지 못한다.
+ */
+export function WebLoginSection({
+  code,
+  busy,
+  error,
+  onIssue,
+  onOpenWeb,
+}: {
+  /** 방금 발급된 코드. `null`이면 아직 안 받았다(만료 여부는 서버만 안다 — 화면은 세지 않는다). */
+  code: string | null;
+  busy: boolean;
+  /** 서버 평문(409 토스 미연결 등) — 문구가 곧 안내다. */
+  error: string | null;
+  onIssue: () => void;
+  onOpenWeb: () => void;
+}) {
+  return (
+    <section style={sectionStyle}>
+      <SectionTitle style={{ marginBottom: 10 }}>PC 웹에서 이어 보기</SectionTitle>
+
+      {code === null ? (
+        <Text typography="st12" color="grey600" style={{ display: 'block' }}>
+          토스로 시작한 계정은 비밀번호가 없어요. 일회용 코드를 받아 PC 브라우저에서 로그인하세요.
+        </Text>
+      ) : (
+        <>
+          <Text typography="t3" fontWeight="bold" style={{ display: 'block', letterSpacing: 2 }}>
+            {groupCode(code)}
+          </Text>
+          {/* TTL을 말하지 않으면 느긋하게 옮기다 만료돼, 이유도 모른 채 「코드가 올바르지 않다」를 본다. */}
+          <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 4 }}>
+            5분 안에 PC 브라우저에서 입력하세요. 새로 받으면 이 코드는 무효가 돼요.
+          </Text>
+        </>
+      )}
+
+      <ErrorMessage message={error} />
+
+      {code !== null && (
+        <Button display="block" variant="weak" style={{ marginTop: 12 }} onClick={onOpenWeb}>
+          booktimer.app/login 열기
+        </Button>
+      )}
+      <Button
+        display="block"
+        variant="weak"
+        style={{ marginTop: code === null ? 12 : 8 }}
+        loading={busy}
+        onClick={onIssue}
+      >
+        {code === null ? '웹 로그인 코드 받기' : '새 코드 받기'}
+      </Button>
+    </section>
+  );
+}
+
+/**
  * 차단 목록 — 미니앱에서 차단을 푸는 <b>유일한 자리</b>. 소셜 탭이 책방 탭으로 바뀌며 여기로 왔다
  * (책방 탭은 이제 곧장 내 책방이라 관리 목록이 설 자리가 아니다).
  *
@@ -223,6 +303,10 @@ export function Settings({
   const [busy, setBusy] = useState(false);
   const [blocked, setBlocked] = useState<UserRow[]>([]);
   const [blockBusy, setBlockBusy] = useState(false);
+  /** 방금 발급받은 웹 로그인 코드 — 화면을 나가면 사라진다(서버가 5분 뒤 죽이고, 다시 받으면 그만이다). */
+  const [webCode, setWebCode] = useState<string | null>(null);
+  const [webBusy, setWebBusy] = useState(false);
+  const [webError, setWebError] = useState<string | null>(null);
 
   /**
    * 차단 목록은 마운트 때 받는다. 401만 밖으로 올리고 나머지 실패는 <b>조용히 빈 목록</b>으로 둔다 —
@@ -252,6 +336,20 @@ export function Settings({
   const fail = (e: Error) => {
     if (e.name === 'UnauthorizedError') onError(e);
     else setError(e.message); // 400 평문 — 문구가 곧 안내다
+  };
+
+  /** 재발급이 직전 코드를 무효화하므로(서버), 새로 받는 동안 옛 코드를 먼저 지운다 — 죽은 값을 옮겨 적지 않게. */
+  const issueWebCode = () => {
+    setWebBusy(true);
+    setWebError(null);
+    setWebCode(null);
+    issueWebLoginCode()
+      .then((result) => setWebCode(result.code))
+      .catch((e: Error) => {
+        if (e.name === 'UnauthorizedError') onError(e);
+        else setWebError(e.message); // 409 평문(토스 미연결) — 문구가 곧 안내다
+      })
+      .finally(() => setWebBusy(false));
   };
 
   // 빈 입력에까지 빨간 문구를 띄우진 않는다 — 아직 지우고 다시 치는 중일 수 있다.
@@ -364,6 +462,14 @@ export function Settings({
           처음 안내 다시 보기
         </Button>
       </section>
+
+      <WebLoginSection
+        code={webCode}
+        busy={webBusy}
+        error={webError}
+        onIssue={issueWebCode}
+        onOpenWeb={() => openExternal(WEB_LOGIN_URL)}
+      />
 
       <BlockedSection blocked={blocked} busy={blockBusy} onUnblock={unblock} />
 

@@ -175,6 +175,25 @@ export async function logout(): Promise<void> {
   }
 }
 
+/** `MiniappAccountApiController.WebLoginCodeResponse` — 코드와 남은 수명(초). */
+export interface WebLoginCodeResponse {
+  code: string;
+  expiresInSeconds: number;
+}
+
+/**
+ * PC 웹 로그인용 일회용 코드 발급 — 토스로 시작한 계정이 `booktimer.app`에 들어가는 **유일한 문**.
+ *
+ * <p>비밀번호가 없어 폼 로그인이 원리상 불가하고 `login_id`도 null일 수 있어, 웹에 들어갈 방법이 아예
+ * 없었다. 사용자가 이 코드를 PC 로그인 화면에 옮겨 적으면 세션이 열린다(`TossCodeLoginController`).
+ *
+ * <p>**본문이 없어 `method`를 명시한다** — `request()`는 본문 유무로 메서드를 정하므로 생략하면 조용히
+ * GET으로 나가 405가 된다. 재발급은 서버가 직전 코드를 무효화한다(항상 하나만 유효).
+ * 409 = 토스 미연결(평문이 곧 안내), 401 = 토큰 만료(`request()`가 로그인 화면으로 되돌린다).
+ */
+export const issueWebLoginCode = (): Promise<WebLoginCodeResponse> =>
+  request('/api/miniapp/web-login-code', { method: 'POST' });
+
 // ── 도메인 (기존 API 재사용) ─────────────────────────────────────────────────
 
 export interface BookOption {
