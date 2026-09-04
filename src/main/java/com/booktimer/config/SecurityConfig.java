@@ -160,6 +160,12 @@ public class SecurityConfig {
                         // ads.txt(AdSense 소유권·수익 보호) + robots.txt(크롤 지시): 크롤러가 비인증으로 읽어야 하는
                         // 공개 정적 파일. default-deny라 명시 안 하면 로그인으로 302 튕겨 크롤러에게 모호한 신호가 된다.
                         .requestMatchers("/ads.txt", "/robots.txt").permitAll()
+                        // /login/toss-code: 토스 미니앱이 발급한 일회용 코드로 세션을 여는 경로. 로그인
+                        // '전'이라 당연히 공개여야 하고(막으면 코드를 넣을 방법 자체가 없다), /login은 정확
+                        // 매칭이라 하위 경로가 자동으로 딸려오지 않는다. 코드 자체가 자격이라 공개여도
+                        // 안전하다(추측 불가·일회용·TTL 5분 + IP 상한). ⚠️ CSRF 예외로는 두지 않는다 —
+                        // 예외로 두면 다른 사이트가 사용자의 브라우저로 코드를 대신 제출할 수 있다.
+                        .requestMatchers("/login/toss-code").permitAll()
                         // OAuth2 인가요청·콜백 엔드포인트는 미인증 상태에서 접근 가능해야 한다.
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                         // SES 반송·불만 SNS 웹훅 — 외부(AWS SNS)가 POST하는 공개 엔드포인트. 로그인 대신

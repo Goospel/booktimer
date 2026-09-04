@@ -329,13 +329,17 @@ class FlywayMigrationTest {
 
         var token = apiTokenRepository.saveAndFlush(
                 com.booktimer.auth.ApiToken.issue(owner, "b".repeat(64), expiresAt));
-        var code = tossLinkCodeRepository.saveAndFlush(
-                com.booktimer.user.TossLinkCode.issue(owner, "c".repeat(64), expiresAt));
+        // purpose는 기본값이 아닌 WEB_LOGIN으로 넣는다 — V86 컬럼이 "있다"가 아니라 "우리 값을 실제로
+        // 담아 돌려준다"를 봐야 default 'LINK_TOSS'로 눌린 경우와 구분된다.
+        var code = tossLinkCodeRepository.saveAndFlush(com.booktimer.user.TossLinkCode.issue(
+                owner, "c".repeat(64), expiresAt, com.booktimer.user.TossLinkCode.Purpose.WEB_LOGIN));
 
         assertThat(token.getId()).isNotNull();
         assertThat(code.getId()).isNotNull();
         assertThat(apiTokenRepository.findByTokenHash("b".repeat(64))).isPresent();
-        assertThat(tossLinkCodeRepository.findByCodeHash("c".repeat(64))).isPresent();
+        assertThat(tossLinkCodeRepository.findByCodeHash("c".repeat(64)))
+                .map(com.booktimer.user.TossLinkCode::getPurpose)
+                .contains(com.booktimer.user.TossLinkCode.Purpose.WEB_LOGIN);
     }
 
     private static User userWithHandle(String email, String handle) {

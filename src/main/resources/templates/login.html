@@ -34,6 +34,15 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5"/><path d="M12 16.2v.01"/></svg>
         <span>아이디 또는 비밀번호가 올바르지 않습니다.</span>
     </div>
+    <!-- 코드 로그인 실패는 ?error와 분리한다 — 코드 실패에 "아이디 또는 비밀번호" 안내가 뜨면 오안내다. -->
+    <div th:if="${param.codeError}" class="auth-alert auth-alert-error">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5"/><path d="M12 16.2v.01"/></svg>
+        <span>코드가 올바르지 않거나 만료됐어요. 토스 앱에서 새 코드를 받아 주세요.</span>
+    </div>
+    <div th:if="${param.codeLimited}" class="auth-alert auth-alert-error">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5"/><path d="M12 16.2v.01"/></svg>
+        <span>시도가 너무 많아요. 잠시 후 다시 해 주세요.</span>
+    </div>
 
     <section class="auth-card">
         <!-- th:action 유지 = Spring Security CSRF 토큰 자동 주입. name=username/password 변경 금지. -->
@@ -56,6 +65,24 @@
             <svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.71-1.57 2.68-3.89 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.34A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.94H.96a9 9 0 0 0 0 8.12l3.01-2.34z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.47.9 11.43 0 9 0A9 9 0 0 0 .96 4.94l3.01 2.34C4.68 5.16 6.66 3.58 9 3.58z"/></svg>
             Google로 계속하기
         </a>
+
+        <!-- 세 번째 선택지: 토스 미니앱에서 시작한 계정(비밀번호 없음)의 유일한 웹 진입로.
+             기본 동선(아이디·구글)을 밀어내지 않게 네이티브 <details>로 접어 둔다 — JS 없이 동작한다.
+             실패 후에는 th:open으로 펼쳐 방금 틀린 입력칸을 바로 보여 준다(Thymeleaf 고정값 불리언
+             속성 프로세서라 false면 open 속성을 아예 안 찍는다). -->
+        <details class="auth-details" th:open="${param.codeError != null or param.codeLimited != null}">
+            <summary>토스 앱에서 시작했다면 — 코드로 로그인</summary>
+            <!-- th:action 유지 = CSRF 토큰 자동 주입. 이 폼을 CSRF 예외로 두면 다른 사이트가 사용자의
+                 브라우저로 코드를 대신 제출할 수 있다. -->
+            <form th:action="@{/login/toss-code}" method="post">
+                <div class="auth-field">
+                    <label class="auth-label" for="code">토스 앱 설정에서 받은 로그인 코드</label>
+                    <input class="auth-input" type="text" id="code" name="code" maxlength="12"
+                           autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text">
+                </div>
+                <button type="submit" class="auth-btn-primary">코드로 로그인</button>
+            </form>
+        </details>
     </section>
 
     <nav class="auth-links">

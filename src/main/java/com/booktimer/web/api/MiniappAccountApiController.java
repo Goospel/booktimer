@@ -8,6 +8,8 @@ import com.booktimer.security.RateLimitAction;
 import com.booktimer.security.RateLimitService;
 import com.booktimer.user.AccountDeletionConfirmationException;
 import com.booktimer.user.AccountService;
+import com.booktimer.user.TossLinkCodeService;
+import com.booktimer.user.TossLinkConflictException;
 import com.booktimer.user.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -47,15 +49,18 @@ public class MiniappAccountApiController {
     private final AccountService accountService;
     private final TossLoginClient tossLoginClient;
     private final RateLimitService rateLimitService;
+    private final TossLinkCodeService linkCodeService;
 
     public MiniappAccountApiController(CurrentUserService currentUserService,
                                        AccountService accountService,
                                        TossLoginClient tossLoginClient,
-                                       RateLimitService rateLimitService) {
+                                       RateLimitService rateLimitService,
+                                       TossLinkCodeService linkCodeService) {
         this.currentUserService = currentUserService;
         this.accountService = accountService;
         this.tossLoginClient = tossLoginClient;
         this.rateLimitService = rateLimitService;
+        this.linkCodeService = linkCodeService;
     }
 
     /** @return 204 탈퇴 완료 / 400 토스 인증 실패 / 403 신원 불일치 / 401 토큰 없음·무효(체인) / 429 */
@@ -83,7 +88,35 @@ public class MiniappAccountApiController {
         }
     }
 
+    /**
+     * PC 웹 로그인용 일회용 코드를 발급한다 — 토스로 시작한 계정의 <b>유일한 웹 진입로</b>.
+     *
+     * <p>비밀번호가 없어 폼 로그인이 원리상 불가하고 {@code login_id}도 null일 수 있어, 웹에 들어갈 방법이
+     * 아예 없었다. 사용자가 이 코드를 PC {@code booktimer.app/login}에 옮겨 적으면 세션이 열린다
+     * ({@code TossCodeLoginController}). 「웹에서 발급 → 미니앱에 입력」 연결 코드의 거울상이다.
+     *
+     * <p><b>발급 자체엔 레이트리밋을 걸지 않는다</b> — Bearer 인증이 필요하고 재발급이 직전 코드를
+     * 무효화해(항상 하나만 유효) 남용해서 얻을 것이 없다. 브루트포스 방어는 <b>소비 지점</b>의 IP 상한이
+     * 담당한다({@code RateLimitAction.TOSS_CODE_LOGIN}). 웹 {@code /settings/toss-link-code}도 같은 잣대다.
+     *
+     * @return 200 코드+TTL / 409 토스 미연결 / 401 토큰 없음·무효(체인)
+     */
+    @PostMapping("/api/miniapp/web-login-code")
+    public WebLoginCodeResponse issueWebLoginCode(Principal principal) {
+        User user = currentUserService.resolve(principal);
+        return new WebLoginCodeResponse(linkCodeService.issueWebLogin(user), TossLinkCodeService.TTL.toSeconds());
+    }
+
     // 미니앱은 에러 본문 평문을 그대로 사용자에게 띄운다(`api.ts errorMessage()`) — 문구가 곧 안내다.
+
+    /**
+     * 토스에 연결되지 않은 계정의 발급 시도 — 409. 실 운용에선 Bearer 토큰이 토스 인증 경로에서만 나와
+     * 닿지 않는 분기지만, 방어선을 화면이 아니라 코드에 둔다.
+     */
+    @ExceptionHandler(TossLinkConflictException.class)
+    public ResponseEntity<String> handleNotLinked(TossLinkConflictException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
+    }
 
     /** ⚠️ 401 금지 — 401은 `api.ts`에서 토큰 폐기 + 로그인 화면 복귀를 뜻한다(위 클래스 주석). */
     @ExceptionHandler(TossLoginException.class)
@@ -99,5 +132,12 @@ public class MiniappAccountApiController {
 
     /** 미니앱 {@code tossLogin()}이 준 fresh 인가코드·referrer — 인증 3종의 {@code TossAuthRequest}와 같은 모양. */
     public record DeleteAccountRequest(String authorizationCode, String referrer) {
+    }
+
+    /**
+     * @param code             화면에 크게 띄울 평문 코드(8자). 서버는 해시만 갖고 있어 다시 조회할 수 없다
+     * @param expiresInSeconds 남은 수명 — 미니앱이 "5분 안에"를 하드코딩하지 않게 서버가 알려 준다
+     */
+    public record WebLoginCodeResponse(String code, long expiresInSeconds) {
     }
 }

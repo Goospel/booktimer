@@ -50,7 +50,20 @@ public enum RateLimitAction {
      * 연결 코드는 사람이 옮겨 적는 8자라 엔트로피가 낮아, 시도 횟수 상한이 없으면 TTL 5분 안에도
      * 의미 있는 추측이 가능해진다. 정상 사용자는 코드 하나를 한두 번 입력할 뿐이다.
      */
-    TOSS_LINK(10, Duration.ofHours(1));
+    TOSS_LINK(10, Duration.ofHours(1)),
+
+    /**
+     * 토스 → 웹 코드 로그인({@code POST /login/toss-code})의 <b>클라이언트 IP</b>별 상한.
+     *
+     * <p>{@link #TOSS_LINK}와 같은 성질(8자 코드 브루트포스 상한)인데 <b>키가 IP</b>다 — 이 경로는
+     * 로그인 <b>전</b>이라 신원이 없고, 셀 수 있는 것이 IP뿐이다. 31^8 ≈ 8.5×10^11 조합에 TTL이 5분이라
+     * IP당 10회면 추측은 무의미하고 정상 사용자는 1~2회다.
+     *
+     * <p><b>창을 1시간이 아니라 10분으로 둔 이유</b>: 가정용 공유 IP·CGNAT에서 오타 10번에 한 시간이
+     * 잠기면 정상 사용자가 웹에 못 들어온다(이 계정들에겐 비밀번호라는 대안이 아예 없다). 목적은 정밀
+     * 차단이 아니라 폭주의 상한이고, 고정 윈도우라 10분이면 저절로 풀린다.
+     */
+    TOSS_CODE_LOGIN(10, Duration.ofMinutes(10));
 
     private final int limit;
     private final Duration window;

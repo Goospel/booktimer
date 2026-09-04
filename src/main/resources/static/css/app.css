@@ -3812,6 +3812,30 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .auth-page .auth-btn-google:hover { background: var(--bg); }
 .auth-page .auth-btn-google svg { flex: 0 0 auto; }
 
+/* 토스 코드 로그인 — 접힘 섹션(네이티브 <details>, JS 없음). 세 번째 선택지라 기본은 접어 둔다. */
+.auth-page .auth-details {
+    margin-top: 14px;
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+}
+.auth-page .auth-details > summary {
+    cursor: pointer;
+    font-size: 13.5px;
+    color: var(--muted);
+    list-style: none;          /* 기본 삼각형 제거(아래 ▸로 대체) */
+    padding: 2px 0;
+}
+.auth-page .auth-details > summary::-webkit-details-marker { display: none; }
+.auth-page .auth-details > summary::before {
+    content: "▸";
+    display: inline-block;
+    margin-right: 6px;
+    color: var(--accent);
+    transition: transform .15s ease;
+}
+.auth-page .auth-details[open] > summary::before { transform: rotate(90deg); }
+.auth-page .auth-details > form { margin-top: 12px; }
+
 /* 알림 배너 — 에러/성공/로그아웃 (아이콘 + 텍스트) */
 .auth-page .auth-alert {
     display: flex;
