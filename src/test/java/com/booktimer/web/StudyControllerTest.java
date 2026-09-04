@@ -84,6 +84,29 @@ class StudyControllerTest {
     }
 
     @Test
+    @DisplayName("GET /study/history: 미인증 → 로그인으로 차단")
+    void studyHistory_unauthenticated_isBlocked() throws Exception {
+        mockMvc.perform(get("/study/history"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+    }
+
+    /**
+     * 공부 기록은 <b>같은 셸</b>이다 — 섬({@code study/main.ts})이 {@code location.pathname}으로 달력/기록을
+     * 고른다. 이 단언이 지키는 것은 「새 경로가 404가 아니고, 같은 뷰·같은 마운트 포인트를 낸다」이다.
+     */
+    @Test
+    @DisplayName("GET /study/history: /study와 같은 셸을 낸다 — 섬이 경로로 화면을 고른다")
+    void studyHistory_rendersSameShell() throws Exception {
+        register("studyhistshell");
+
+        mockMvc.perform(get("/study/history").with(user("studyhistshell")))
+                .andExpect(status().isOk())
+                .andExpect(view().name("study"))
+                .andExpect(content().string(containsString("id=\"study-app\"")));
+    }
+
+    @Test
     @DisplayName("GET /study: 셸 뷰 + 마운트 포인트 + CSRF 메타를 낸다")
     void study_rendersShell() throws Exception {
         register("studyshell");

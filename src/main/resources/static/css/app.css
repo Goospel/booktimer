@@ -3578,12 +3578,22 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .dash-mode-toggle.is-locked button { cursor: not-allowed; }
 .dash-mode-hint { font-size: 12px; color: var(--muted); }
 
-/* 공부 모드 — 히어로 카드 스코프 토큰 스왑(미니앱 body.study-mode의 카드 한정판, 값은 그쪽과 같다).
-   독서 카드엔 is-study가 없어 아래 규칙이 한 줄도 닿지 않는다. 카드 밖(.dash-nav 등)의 --accent도 그대로. */
-.dash-timer-hero.is-study { --accent: #5F7E96; --accent-hover: #47657C; --sage-soft: #E6ECF0; background: #EFF3F6; }
-.dash-timer-hero.is-study .dash-pill,
-.dash-timer-hero.is-study .dash-btn-outline:hover { background: #E6ECF0; }
-.dash-timer-hero.is-study .dash-timer-num { color: #47657C; }
+/* 공부 잉크 — 카드 스코프 토큰 스왑(미니앱 body.study-mode의 카드 한정판, 값은 그쪽과 같다).
+   대시보드 카드(.dash-card)와 /study/history의 .card가 같은 클래스를 쓴다 — 규칙 하나가 두 화면을 덮는다.
+   is-study가 없는 독서 카드엔 한 줄도 안 닿고, 카드 밖(브랜드 헤더 등)의 --accent도 그대로다.
+   --nav-hover-*·--ok까지 덮는 이유: :root에서 var()로 해석된 값이라 --sage-soft만 덮어선 hover·요약 강조가
+   세이지로 남는다. --ok가 닿는 곳은 공부 카드 안에선 .grass-summary strong뿐이다(.dash-*-ok는 독서 달성 전용). */
+.is-study {
+    --accent: #5F7E96; --accent-hover: #47657C; --sage-soft: #E6ECF0;
+    --nav-hover-bg: #E6ECF0; --nav-hover-border: #D6E0E7;
+    --ok: #47657C;
+    /* 잔디 사다리 — 파랑 200·400·600·800(미니앱 --grass1~4). 0단(기록 없음)은 종이색 그대로 */
+    --grass-1: #AFC4D2; --grass-2: #83A0B4; --grass-3: #536F85; --grass-4: #3A5266;
+}
+.dash-timer-hero.is-study { background: #EFF3F6; }   /* 푸른 종이는 히어로만(미니앱 --heroCardBg) */
+.is-study .dash-pill, .is-study .dash-streak-chip, .is-study .grass-streak,
+.is-study .dash-btn-outline:hover { background: #E6ECF0; }   /* 리터럴 #E7EEE2 자리들 */
+.is-study .dash-timer-num { color: #47657C; }
 
 /* ============================================================
    인증 화면(로그인·회원가입) — claude.ai/design 시안 재이식.

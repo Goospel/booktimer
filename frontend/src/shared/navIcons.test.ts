@@ -9,6 +9,7 @@ import { NAV_ICONS } from './navIcons'
 const REQUIRED = [
     'home', 'back', 'books', 'history', 'search', 'user', 'personality',
     'block', 'report', 'follow', 'privacy', 'quote', 'feedback', 'users', 'lock',
+    'calendar',
 ]
 
 describe('navIcons', () => {
@@ -21,6 +22,18 @@ describe('navIcons', () => {
         for (const [k, v] of Object.entries(NAV_ICONS)) {
             expect(v, k).toMatch(/<(path|circle|rect|line|polyline|polygon)\b/)
         }
+    })
+
+    // 두 벌 동기화 — 같은 사전이 Vue(navIcons.ts)와 SSR(nav-icons.html) 두 런타임에 물리적으로
+    // 둘로 존재한다. "한쪽 고치면 반드시 다른 쪽도"는 여태 주석뿐이라, 한쪽에만 키를 넣으면
+    // 그 라벨이 SSR 페이지에서만 빈 아이콘으로 조용히 샜다. 계측기로 만든다.
+    it('SSR 프래그먼트가 REQUIRED 키를 전부 든다', () => {
+        const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+        const html = readFileSync(
+            join(repoRoot, 'src/main/resources/templates/fragments/nav-icons.html'), 'utf8')
+        const ssrKeys = new Set([...html.matchAll(/th:case="'([a-z]+)'"/g)].map(m => m[1]))
+        const missing = REQUIRED.filter(k => !ssrKeys.has(k))
+        expect(missing).toEqual([])
     })
 
     // 참조 무결성 — 각 페이지가 <NavLinks :links="[{ icon: 'X' }]"> 로 넘기는 icon 키가 모두

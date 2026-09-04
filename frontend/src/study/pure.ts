@@ -280,10 +280,15 @@ export function planWeeks(days: DraftDay[]): { label: string; days: DraftDay[] }
     }));
 }
 
-/** 하단 네비 — 이 화면은 홈과 내 책장으로만 나간다(공부 서재·타이머 동선은 미니앱 몫). */
+/** 이 셸이 그릴 화면 — /study는 달력, /study/history는 기록(같은 셸·같은 번들, 경로로 고른다). */
+export function studyView(pathname: string): 'calendar' | 'history' {
+    return pathname.endsWith('/study/history') ? 'history' : 'calendar';
+}
+
+/** 하단 네비 — 공부 세계 안에서만 돈다(홈 · 공부 기록). 독서 서재로 가는 문은 미니앱 공부 모드에도 없다. */
 export function studyNavLinks(): NavLinkSpec[] {
     return [
         { href: '/', icon: 'home', label: '홈' },
-        { href: '/books', icon: 'books', label: '내 책장' },
+        { href: '/study/history', icon: 'history', label: '공부 기록' },
     ];
 }

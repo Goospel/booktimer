@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import type { MonthlyReadingSection } from './HistoryApp.vue';
+import type { BookRead } from './HistoryApp.vue';
 
-const props = defineProps<{ months: MonthlyReadingSection[] }>();
+/** 월별 목록의 최소 꼴 — 독서(MonthlyReadingSection)·공부 둘 다 이 꼴이라 호출부는 0줄. books는 공부에 없다. */
+interface RecordsMonth { month: string; totalSeconds: number; days: { date: string; totalSeconds: number; books?: BookRead[] }[] }
+const props = withDefaults(defineProps<{ months: RecordsMonth[]; emptyText?: string }>(),
+    { emptyText: '아직 독서 기록이 없습니다. 측정을 시작해 보세요.' });
 
 const monthIndex = ref(0);
 
@@ -40,7 +43,7 @@ function formatTime(totalSeconds: number): string {
 
 <template>
     <p class="status-line" v-if="months.length === 0">
-        아직 독서 기록이 없습니다. 측정을 시작해 보세요.
+        {{ emptyText }}
     </p>
 
     <div v-else class="month-browser">
@@ -64,7 +67,7 @@ function formatTime(totalSeconds: number): string {
             <li class="record-row" v-for="r in months[monthIndex].days" :key="r.date">
                 <div class="record-main">
                     <span class="record-date">{{ formatRecordDate(r.date) }}</span>
-                    <span class="record-books" v-if="r.books.length > 0">
+                    <span class="record-books" v-if="r.books?.length">
                         {{ r.books.map((b) => b.title).join(', ') }}
                     </span>
                 </div>
