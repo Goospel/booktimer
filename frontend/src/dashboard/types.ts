@@ -59,6 +59,18 @@ export interface TimerState {
     recentBookId: number | null
 }
 
+/** `/api/dashboard`의 `study` 블록 — 서버 StudyState 8필드 중 웹 1차가 읽는 넷만 선언한다(나머지는 무시). */
+export interface StudyState {
+    hasActiveSession: boolean
+    activeStartedAt: string | null
+    /** 오늘 공부한 초(완료 세션 합) — 진행 중 몫은 클라가 activeStartedAt으로 매초 얹는다(독서와 같은 분업). */
+    todaySeconds: number
+    goalSeconds: number
+}
+
+/** study가 없는 응답(옛 서버·옛 픽스처)의 폴백 — 공부 진행 0 → 독서 모드로 떨어진다. */
+export const IDLE_STUDY: StudyState = { hasActiveSession: false, activeStartedAt: null, todaySeconds: 0, goalSeconds: 0 }
+
 export interface DashboardResponse extends TimerState {
     nickname: string
     loginId: string
@@ -69,6 +81,8 @@ export interface DashboardResponse extends TimerState {
     garden: CatalogDto
     quotes: QuoteDto[]
     emailVerified: boolean
+    /** 없으면 옛 서버·옛 픽스처 — IDLE_STUDY로 떨어진다(독서 테스트 픽스처가 이 필드를 모른다). */
+    study?: StudyState
 }
 
 /**

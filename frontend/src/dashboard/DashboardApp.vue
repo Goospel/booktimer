@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
-import type { DashboardResponse, TimerState, StopResponse, BookOption } from './types'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import type { DashboardResponse, TimerState, StopResponse, BookOption, StudyState } from './types'
+import { IDLE_STUDY } from './types'
 import { getCsrfToken } from '../shared/follow'
-import { shouldRefresh } from './timerMode'
+import type { TimerMode } from './timerMode'
+import { shouldRefresh, readMode, writeMode, effectiveMode } from './timerMode'
 import TimerCard from './TimerCard.vue'
+import StudyTimerCard from './StudyTimerCard.vue'
+import ModeToggle from './ModeToggle.vue'
 import BookPickSheet from './BookPickSheet.vue'
 import ContributionGraph from './ContributionGraph.vue'
 import GardenPanel from './GardenPanel.vue'
@@ -40,6 +44,15 @@ const finishedBooks = ref<BookOption[]>([])
 const wantToReadBooks = ref<BookOption[]>([])
 const recentBookId = ref<number | null>(null)
 
+// 공부 원장 — /api/dashboard의 study 블록. 없으면(옛 서버) IDLE_STUDY로 떨어져 독서 모드가 된다.
+const study = ref<StudyState>(IDLE_STUDY)
+const storedMode = ref<TimerMode>(readMode())
+// 서버 진실이 저장값을 이긴다 — 진행 중 원장의 모드가 화면 모드다(미니앱 effectiveMode 1:1).
+const mode = computed(() => effectiveMode(hasActiveSession.value, study.value.hasActiveSession, storedMode.value))
+const measuring = computed(() => hasActiveSession.value || study.value.hasActiveSession)
+const modeHint = ref<string | null>(null)
+watch(measuring, m => { if (!m) modeHint.value = null })
+
 // 책 고르기/태깅 통합 시트(발견 1, §6.5) — 'start'=측정 전 고르기, 'tag'=종료 후 태깅. 같은 시트를 모드로 겸한다.
 const sheetMode = ref<'start' | 'tag' | null>(null)
 const pendingSessionId = ref<number | null>(null)
@@ -60,6 +73,13 @@ function applyTimerState(s: TimerState) {
     recentBookId.value = s.recentBookId
 }
 
+/** /api/dashboard 응답 전체를 화면 상태에 얹는다(최초 로드·복귀 재조회 공용). graph·garden·quotes는 제외. */
+function applyDashboard(d: DashboardResponse) {
+    applyTimerState(d)
+    wantToReadBooks.value = d.wantToReadBooks ?? []
+    study.value = d.study ?? IDLE_STUDY
+}
+
 // 마지막 /api/dashboard 조회 시각 — 복귀 재조회 스로틀의 기준(요청 "전"에 찍는다).
 let lastFetchedAt = 0
 
@@ -69,8 +89,7 @@ onMounted(async () => {
         const res = await fetch('/api/dashboard', { credentials: 'same-origin' })
         if (!res.ok) throw new Error(res.statusText)
         data.value = await res.json() as DashboardResponse
-        applyTimerState(data.value)
-        wantToReadBooks.value = data.value.wantToReadBooks ?? []
+        applyDashboard(data.value)
     } catch {
         fetchError.value = true
     } finally {
@@ -94,9 +113,7 @@ async function refresh(force = false) {
     try {
         const res = await fetch('/api/dashboard', { credentials: 'same-origin' })
         if (!res.ok) return
-        const d = await res.json() as DashboardResponse
-        applyTimerState(d)
-        wantToReadBooks.value = d.wantToReadBooks ?? []
+        applyDashboard(await res.json() as DashboardResponse)
     } catch {
         /* 조용히 — 다음 복귀·클릭에서 다시 시도한다 */
     }
@@ -170,6 +187,57 @@ async function handleStop() {
     }
 }
 
+// 공부 원장 — 독서 핸들러와 같은 골격(starting/stopping 재사용). 응답은 StudyState 그대로다.
+// 1차엔 책 선택·종료 후 태깅이 없어 stop 응답의 untaggedSessionId는 무시한다(웹에 공부 서재가 없다).
+async function handleStudyStart() {
+    if (starting.value) return
+    actionError.value = null
+    starting.value = true
+    try {
+        const res = await fetch('/api/study/start', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+            body: '{}',
+        })
+        if (res.status === 409) { await conflict('다른 곳에서 이미 측정 중이에요 — 화면을 최신으로 맞췄어요'); return }
+        if (!res.ok) { actionError.value = '측정을 시작할 수 없습니다'; return }
+        study.value = await res.json() as StudyState
+    } catch {
+        actionError.value = '네트워크 오류가 발생했습니다'
+    } finally {
+        starting.value = false
+    }
+}
+
+async function handleStudyStop() {
+    if (stopping.value) return
+    actionError.value = null
+    stopping.value = true
+    try {
+        const res = await fetch('/api/study/stop', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'X-CSRF-TOKEN': getCsrfToken() },
+        })
+        if (res.status === 409) { await conflict('진행 중인 측정이 없어요 — 화면을 최신으로 맞췄어요'); return }
+        if (!res.ok) { actionError.value = '측정을 종료할 수 없습니다'; return }
+        study.value = await res.json() as StudyState
+    } catch {
+        actionError.value = '네트워크 오류가 발생했습니다'
+    } finally {
+        stopping.value = false
+    }
+}
+
+function setMode(next: TimerMode) {
+    writeMode(next)
+    storedMode.value = next
+    modeHint.value = null
+}
+// 측정 중 토글은 진짜 disabled가 아니다 — 클릭을 받아 왜 못 바꾸는지 말한다.
+function onModeBlocked() { modeHint.value = '측정을 끝내면 바꿀 수 있어요' }
+
 async function tagBook(bookId: number) {
     if (tagging.value || pendingSessionId.value === null) return
     tagging.value = true
@@ -233,7 +301,10 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
 
         <div v-if="actionError" class="alert alert-error">{{ actionError }}</div>
 
+        <!-- 토글은 두 카드 안에 각각 든다 — v-if 바깥으로 빼면 "페이지 모드"로 읽혀
+             아래 잔디·서재(독서 그대로)와 거짓말이 된다(설계 §2.1-C 기각). -->
         <TimerCard
+            v-if="mode === 'reading'"
             :remaining-seconds="remainingSeconds"
             :carried-debt-seconds="carriedDebtSeconds"
             :today-goal-seconds="todayGoalSeconds"
@@ -253,7 +324,26 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
             @start="handleStart"
             @stop="handleStop"
             @open-sheet="openStartSheet"
-        />
+        >
+            <template #mode>
+                <ModeToggle :mode="mode" :locked="measuring" :hint="modeHint" @change="setMode" @blocked="onModeBlocked" />
+            </template>
+        </TimerCard>
+
+        <StudyTimerCard
+            v-else
+            :today-seconds="study.todaySeconds"
+            :has-active-session="study.hasActiveSession"
+            :active-started-at="study.activeStartedAt"
+            :starting="starting"
+            :stopping="stopping"
+            @start="handleStudyStart"
+            @stop="handleStudyStop"
+        >
+            <template #mode>
+                <ModeToggle :mode="mode" :locked="measuring" :hint="modeHint" @change="setMode" @blocked="onModeBlocked" />
+            </template>
+        </StudyTimerCard>
 
         <ContributionGraph :graph="data.graph" />
 

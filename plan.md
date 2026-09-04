@@ -3186,8 +3186,14 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
   대시보드는 마운트 때 1회 받고 끝이라 다른 기기에서 시작·정지하면 새로고침 전까지 낡았다.
   `visibilitychange`·`focus` 복귀 시 조용한 재조회(`timerMode.shouldRefresh` — 60초 스로틀·요청 **전**에 스탬프·
   성공 시만 덮기, 미니앱 `silentRefresh`와 같은 규칙)와 **409 → 강제 재조회**. `graph`·`garden`·`quotes`는 안 덮는다.
-- 🔜 **PR-2 독서/공부 타이머 토글** — `types.ts`의 `study` 블록·`ModeToggle`·`StudyTimerCard`·카드 스코프 파랑 토큰·
-  공부 시작/종료 핸들러. ⏸ 1차 제외: 공부 목표 게이지·책 선택·공부 잔디·주기 폴링(미니앱 1차와 같은 선).
+- ✅ **PR-2 독서/공부 타이머 토글 (2026-09-04)** — `types.ts`의 `study` 블록(+`IDLE_STUDY` 폴백)·`ModeToggle`·
+  `StudyTimerCard`(오늘 공부한 시간 카운트업 + 세션 경과 + 시작/종료)·`timerMode`의 `readMode`/`writeMode`/`effectiveMode`·
+  공부 시작/종료 핸들러(`/api/study/start|stop`, 409는 PR-1의 `conflict()` 재사용). **서버 변경 0.**
+  모드가 바꾸는 것은 **히어로 카드 하나**다 — 파랑은 `.dash-timer-hero.is-study` 카드 스코프 토큰 스왑이라
+  아래 잔디·서재·빠른이동(독서 그대로)에 한 줄도 닿지 않는다. 진행 중 측정이 있으면 그 원장의 모드가 저장값을
+  이기고(`effectiveMode`) 토글이 잠긴다(진짜 `disabled`가 아니라 `aria-disabled` — 클릭을 받아 이유를 말한다).
+  독서 파일 diff는 `TimerCard.vue` **+3/−0**(머리줄 wrapper + slot)뿐이고 나머지 4파일은 0줄.
+  ⏸ 1차 제외: 공부 목표 게이지·책 선택·공부 잔디·주기 폴링(미니앱 1차와 같은 선).
 
 
 ---

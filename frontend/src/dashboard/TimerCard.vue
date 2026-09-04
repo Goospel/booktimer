@@ -76,9 +76,12 @@ function totalHM(s: number): string {
     <section class="dash-card dash-timer-hero">
         <!-- 좌: 대형 숫자 + 진행바 -->
         <div class="dash-timer-left">
+            <div class="dash-timer-head"><!-- pill + 모드 토글 한 줄. 슬롯이 비면 pill만 든 flex row라 위치 불변. -->
             <span class="dash-pill" :class="{ 'dash-pill-ok': progress.isAchieved }">
                 {{ progress.isAchieved ? '🌿 오늘 목표 달성!' : '오늘 읽은 시간' }}
             </span>
+            <slot name="mode" />
+            </div>
             <div class="dash-timer-num" :class="{ 'dash-timer-num-ok': progress.isAchieved }">{{ todayReadDisplay }}</div>
             <div class="dash-progress-wrap">
                 <div class="dash-progress-track">
