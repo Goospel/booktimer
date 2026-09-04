@@ -8,6 +8,7 @@ import com.booktimer.session.ReadingDebtService;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.session.ReadingSessionService;
+import com.booktimer.session.StudySessionService;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
@@ -53,6 +54,7 @@ class DashboardApiControllerTest {
     @Autowired BookRepository bookRepository;
     @Autowired ReadingSessionRepository sessionRepository;
     @Autowired ReadingSessionService sessionService;
+    @Autowired StudySessionService studySessionService;
     @Autowired ReadingTimerRepository timerRepository;
     @Autowired ReadingDebtService readingDebtService;
     @Autowired BookService bookService;
@@ -254,6 +256,21 @@ class DashboardApiControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"bookId\":" + book.getId() + "}"))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/start: 공부 세션이 진행 중 → 409 (두 타이머 상호배타)")
+    void startSession_studyActive_409() throws Exception {
+        User u = register("studyactive@a.com", "studyactive");
+        studySessionService.start(u, clock.instant(), null);
+
+        mockMvc.perform(post("/api/sessions/start")
+                        .with(user("studyactive@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isConflict());
+
+        assertThat(sessionRepository.findByUserAndEndedAtIsNull(u)).isEmpty();
     }
 
     // ── 8. stop 활성 없음 → 409 ──────────────────────────────────────────────

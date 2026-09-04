@@ -26,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.AdditionalAnswers.returnsFirstArg;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -50,6 +51,9 @@ class ReadingSessionServiceTest {
 
     @Mock
     private BookRepository bookRepository;
+
+    @Mock
+    private StudySessionRepository studyRepository;
 
     @InjectMocks
     private ReadingSessionService service;
@@ -89,6 +93,31 @@ class ReadingSessionServiceTest {
         assertThatThrownBy(() -> service.start(user, T0.plusSeconds(10), book))
                 .isInstanceOf(IllegalStateException.class);
         verify(sessionRepository, never()).save(any(ReadingSession.class));
+    }
+
+    @Test
+    @DisplayName("start: 진행 중 '공부' 세션이 있어도 거부한다 — 두 원장이 같은 시간을 이중으로 세지 않는다")
+    void start_rejectsWhenStudyActive() {
+        when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.empty());
+        when(studyRepository.findByUserAndEndedAtIsNull(user))
+                .thenReturn(Optional.of(StudySession.start(user, T0)));
+
+        assertThatThrownBy(() -> service.start(user, T0.plusSeconds(60), null))
+                .isInstanceOf(IllegalStateException.class);
+        verify(sessionRepository, never()).save(any(ReadingSession.class));
+    }
+
+    @Test
+    @DisplayName("start: 진행 중 공부 세션이 '없으면' 여전히 성공한다 — 가드가 전부를 막지 않는 양성 대조군")
+    void start_noStudyActive_stillStarts() {
+        when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.empty());
+        when(studyRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.empty());
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        ReadingSession result = service.start(user, T0, null);
+
+        assertThat(result.isActive()).isTrue();
+        verify(sessionRepository).save(any(ReadingSession.class));
     }
 
     @Test
@@ -327,6 +356,20 @@ class ReadingSessionServiceTest {
         assertThat(result.getEndedAt()).isEqualTo(ended);
         assertThat(result.getDurationSeconds()).isEqualTo(1800L);
         assertThat(result.getBook()).isSameAs(book);
+        verify(sessionRepository).save(any(ReadingSession.class));
+    }
+
+    @Test
+    @DisplayName("recordManual: 공부 세션이 진행 중이어도 기록된다 — 가드는 start에만(이미 끝난 과거를 적는 경로)")
+    void recordManual_studyActive_stillRecords() {
+        Book book = Book.register(user, "클린 코드", null, null, null, null, null, BookStatus.READING);
+        lenient().when(studyRepository.findByUserAndEndedAtIsNull(user))
+                .thenReturn(Optional.of(StudySession.start(user, T0)));
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        ReadingSession result = service.recordManual(user, T0, T0.plusSeconds(1800), book);
+
+        assertThat(result.getDurationSeconds()).isEqualTo(1800L);
         verify(sessionRepository).save(any(ReadingSession.class));
     }
 
