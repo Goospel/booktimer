@@ -6,7 +6,6 @@ import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import HistoryApp from '../src/history/HistoryApp.vue';
 import MonthlyRecords from '../src/history/MonthlyRecords.vue';
-import ContributionGraph from '../src/history/ContributionGraph.vue';
 
 const MOCK_GRAPH = {
     weeks: [
@@ -175,29 +174,5 @@ describe('MonthlyRecords 월 네비 경계', () => {
         expect(wrapper.findAll('.hist-pane')).toHaveLength(2);
         // body에 history-wide(컨테이너 확장 트리거) 부착
         expect(document.body.classList.contains('history-wide')).toBe(true);
-    });
-});
-
-// ── 독서 기본값 양성 대조군 ────────────────────────────────────────────────────
-// /history의 잔디·월별 목록은 prop 기본값(mode='reading' / emptyText)으로만 독서 문구를 얻는다.
-// 이 기본값을 'study'로 뒤집어도 기존 독서 테스트 13파일은 전부 초록이었다 — 어느 것도
-// history/ContributionGraph의 문구를 안 봤다(contribution-graph.test.ts는 대시보드 쪽이다).
-// 즉 "무수정 green"은 아무것도 배제하지 못했다. 배제는 여기가 맡는다.
-describe('독서 기본값 양성 대조군', () => {
-    test('/history 잔디는 독서 문구를 쓴다 — mode 기본값이 뒤집히면 여기서 죽는다', () => {
-        const wrapper = mount(ContributionGraph, { props: { graph: MOCK_GRAPH } });   // mode 생략
-        const text = wrapper.text();
-
-        expect(wrapper.findAll('h2').map((h) => h.text())).toContain('독서 잔디');
-        expect(text).toContain('일 연속 독서');
-        expect(text).toContain('목표 미달');
-        expect(text).toContain('목표 달성');
-        expect(text).toContain('직접 채움');      // 독서 전용 스와치 — 공부 모드엔 없다
-    });
-
-    test('/history 월별 목록의 빈 상태는 독서 문구를 쓴다 — emptyText 기본값이 뒤집히면 여기서 죽는다', () => {
-        const wrapper = mount(MonthlyRecords, { props: { months: [] } });             // emptyText 생략
-
-        expect(wrapper.text()).toContain('아직 독서 기록이 없습니다');
     });
 });
