@@ -36,11 +36,12 @@ describe('navIcons', () => {
         expect(missing).toEqual([])
     })
 
-    // 참조 무결성 — 각 페이지가 <NavLinks :links="[{ icon: 'X' }]"> 로 넘기는 icon 키가 모두
-    // 사전에 있어야 한다. 오타(icon: 'homee')는 Vue 템플릿 문자열이라 컴파일타임에 안 잡히고
-    // 빈 아이콘으로 조용히 샌다(N-055 정신). NavIcon 자체는 :name 동적 바인딩이라 사용처
-    // (NavLinks 호출부)의 icon 리터럴을 검사한다.
-    it('모든 .vue의 NavLinks icon 리터럴이 사전 키의 부분집합', () => {
+    // 참조 무결성 — 각 페이지가 <NavLinks :links="[{ icon: 'X' }]"> 로 넘기는 icon 키와
+    // <NavIcon name="X"> 로 직접 박는 리터럴이 모두 사전에 있어야 한다. 오타(icon: 'homee',
+    // name="calendarr")는 Vue 템플릿 문자열이라 컴파일타임에 안 잡히고, NavIcon이 미지 키를
+    // v-html로 빈 <g>로 그려 예외도 안 난다 — 「svg가 2개 있다」류 렌더 테스트는 그대로
+    // 통과한다(존재는 행위의 증거가 아니다). 두 사용 형태를 모두 훑는다.
+    it('모든 .vue의 NavIcon 아이콘 리터럴이 사전 키의 부분집합', () => {
         const root = join(dirname(fileURLToPath(import.meta.url)), '..')
         const used = new Set<string>()
         const walk = (dir: string) => {
@@ -50,6 +51,7 @@ describe('navIcons', () => {
                 else if (e.name.endsWith('.vue')) {
                     const src = readFileSync(p, 'utf8')
                     for (const m of src.matchAll(/\bicon:\s*'([^']+)'/g)) used.add(m[1])
+                    for (const m of src.matchAll(/<NavIcon[^>]*\sname="([^"]+)"/g)) used.add(m[1])
                 }
             }
         }
