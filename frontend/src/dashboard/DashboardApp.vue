@@ -50,8 +50,11 @@ const storedMode = ref<TimerMode>(readMode())
 // 서버 진실이 저장값을 이긴다 — 진행 중 원장의 모드가 화면 모드다(미니앱 effectiveMode 1:1).
 const mode = computed(() => effectiveMode(hasActiveSession.value, study.value.hasActiveSession, storedMode.value))
 const measuring = computed(() => hasActiveSession.value || study.value.hasActiveSession)
+// 왕복 중(starting/stopping)에도 잠근다 — 응답 대기 중에 모드를 바꾸면 반대 카드가 요청도 없이
+// 남의 "시작하는 중…" 비활성 버튼을 뒤집어쓰고, 응답이 오면 도로 튄다.
+const toggleLocked = computed(() => measuring.value || starting.value || stopping.value)
 const modeHint = ref<string | null>(null)
-watch(measuring, m => { if (!m) modeHint.value = null })
+watch(toggleLocked, l => { if (!l) modeHint.value = null })
 
 // 책 고르기/태깅 통합 시트(발견 1, §6.5) — 'start'=측정 전 고르기, 'tag'=종료 후 태깅. 같은 시트를 모드로 겸한다.
 const sheetMode = ref<'start' | 'tag' | null>(null)
@@ -326,7 +329,7 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
             @open-sheet="openStartSheet"
         >
             <template #mode>
-                <ModeToggle :mode="mode" :locked="measuring" :hint="modeHint" @change="setMode" @blocked="onModeBlocked" />
+                <ModeToggle :mode="mode" :locked="toggleLocked" :hint="modeHint" @change="setMode" @blocked="onModeBlocked" />
             </template>
         </TimerCard>
 
@@ -341,7 +344,7 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
             @stop="handleStudyStop"
         >
             <template #mode>
-                <ModeToggle :mode="mode" :locked="measuring" :hint="modeHint" @change="setMode" @blocked="onModeBlocked" />
+                <ModeToggle :mode="mode" :locked="toggleLocked" :hint="modeHint" @change="setMode" @blocked="onModeBlocked" />
             </template>
         </StudyTimerCard>
 

@@ -23,10 +23,13 @@ const STUDY_ACTIVE = { hasActiveSession: true, activeStartedAt: '2026-09-04T00:0
 let dashboardPayload: Record<string, unknown> = DASHBOARD;
 let studyStartStatus = 200;
 let studyStartResponse: Record<string, unknown> = STUDY_ACTIVE;
+// 왕복을 붙잡아 두는 게이트 — "응답 대기 중" 상태를 관측하려면 응답을 늦출 수 있어야 한다.
+let studyStartGate: Promise<void> | null = null;
 
 function fetchImpl(url: string) {
     if (url.includes('/api/study/start')) {
-        return Promise.resolve({ ok: studyStartStatus === 200, status: studyStartStatus, json: async () => studyStartResponse });
+        const res = { ok: studyStartStatus === 200, status: studyStartStatus, json: async () => studyStartResponse };
+        return studyStartGate ? studyStartGate.then(() => res) : Promise.resolve(res);
     }
     if (url.includes('/api/study/stop')) {
         return Promise.resolve({ ok: true, status: 200, json: async () => ({ hasActiveSession: false, activeStartedAt: null, todaySeconds: 120, goalSeconds: 3600 }) });
@@ -47,6 +50,7 @@ beforeEach(() => {
     dashboardPayload = DASHBOARD;
     studyStartStatus = 200;
     studyStartResponse = STUDY_ACTIVE;
+    studyStartGate = null;
     localStorage.clear();
     vi.stubGlobal('fetch', vi.fn((u: string) => fetchImpl(u)));
     Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
@@ -72,7 +76,10 @@ describe('DashboardApp — 모드 토글', () => {
         expect(modeBtn(w, '공부').attributes('aria-pressed')).toBe('false');
     });
 
-    test('(b) 공부로 바꾸면 저장되고, 시작이 공부 원장으로만 간다', async () => {
+    test('(b) 공부로 바꾸면 저장되고, 시작·종료가 공부 원장으로만 간다', async () => {
+        // 시작 응답의 activeStartedAt이 65초 전 — 카드가 props 변화를 따라가야만 01:05가 나온다
+        // (props→ref watch가 없으면 경과가 0에 굳어 00:00).
+        studyStartResponse = { ...STUDY_ACTIVE, activeStartedAt: new Date(Date.now() - 65_200).toISOString() };
         const w = await mountDashboard();
         await modeBtn(w, '공부').trigger('click');
 
@@ -86,6 +93,36 @@ describe('DashboardApp — 모드 토글', () => {
         expect(urls().some(u => u.includes('/api/study/start'))).toBe(true);
         expect(urls().some(u => u.includes('/api/sessions/start'))).toBe(false);
         await vi.waitFor(() => expect(btnWith(w, '측정 종료')).toBeTruthy());
+        expect(w.find('.dash-session-time').text()).toBe('01:05');
+
+        await btnWith(w, '측정 종료')!.trigger('click');
+        await flushPromises();
+
+        expect(urls().some(u => u.includes('/api/study/stop'))).toBe(true);
+        expect(urls().some(u => u.includes('/api/sessions/stop'))).toBe(false);
+        await vi.waitFor(() => expect(btnWith(w, '공부 측정 시작')).toBeTruthy());
+    });
+
+    test('(h) 저장값이 study면 진행 중 측정이 없어도 공부 모드로 열린다(E14 새로고침)', async () => {
+        localStorage.setItem('booktimer.timerMode', 'study');
+        const w = await mountDashboard();
+
+        expect(w.find('.dash-timer-hero').classes()).toContain('is-study');
+        expect(btnWith(w, '공부 측정 시작')).toBeTruthy();
+    });
+
+    test('(i) 시작 응답을 기다리는 동안에도 토글이 잠긴다(반대 카드가 남의 "시작하는 중…"을 쓰지 않게)', async () => {
+        let release: () => void = () => { };
+        studyStartGate = new Promise<void>(r => { release = r; });
+        const w = await mountDashboard();
+        await modeBtn(w, '공부').trigger('click');
+        await btnWith(w, '공부 측정 시작')!.trigger('click');
+        await flushPromises();
+
+        // 아직 measuring은 false다(응답 전) — 잠금이 starting까지 보지 않으면 여기서 열려 있다.
+        expect(modeBtn(w, '독서').attributes('aria-disabled')).toBe('true');
+        release();
+        await flushPromises();
     });
 
     test('(c) 공부 측정 중이면 저장값과 무관하게 공부 모드로 잠긴다(힌트로 이유를 말한다)', async () => {

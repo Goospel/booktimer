@@ -3564,6 +3564,9 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 /* 모드 토글 — pill과 한 줄(.dash-timer-head). 전역 button{width:100%}를 width:auto로 상쇄한다
    (안 하면 알약이 풀폭으로 늘어 머리줄이 깨진다). */
 .dash-timer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+/* 알약은 줄이지 않는다 — 힌트가 뜨면 토글 wrap이 2행으로 벌어지고, flex가 형제인 알약을 max-content
+   아래로 짜부라뜨려 "오늘 읽은 시 / 간"처럼 단어 중간에서 쪼갠다(독서·공부 둘 다). */
+.dash-timer-head .dash-pill { white-space: nowrap; }
 .dash-mode-toggle-wrap { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .dash-mode-toggle { display: inline-flex; padding: 2px; border-radius: 999px; background: rgba(44, 42, 36, .06); }
 .dash-mode-toggle button {
