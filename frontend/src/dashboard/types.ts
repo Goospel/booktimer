@@ -1,3 +1,5 @@
+import type { StudyBookRow } from '../study/api'
+
 export interface ContributionDay {
     date: string | null
     totalSeconds: number
@@ -59,17 +61,37 @@ export interface TimerState {
     recentBookId: number | null
 }
 
-/** `/api/dashboard`의 `study` 블록 — 서버 StudyState 8필드 중 웹 1차가 읽는 넷만 선언한다(나머지는 무시). */
+/** `/api/dashboard`의 `study` 블록 — 서버 StudyState 8필드 전부. */
 export interface StudyState {
     hasActiveSession: boolean
     activeStartedAt: string | null
     /** 오늘 공부한 초(완료 세션 합) — 진행 중 몫은 클라가 activeStartedAt으로 매초 얹는다(독서와 같은 분업). */
     todaySeconds: number
     goalSeconds: number
+    /** 측정 중인 책(없거나 「책 없이」면 null). */
+    activeBook: StudyBookRow | null
+    /** 마지막으로 책을 걸고 잰 책 — idle 기본 칩이 이걸 고른다. */
+    recentBookId: number | null
+    /** 내 공부 서재 전체 — 시트·기본 칩이 이 목록을 본다(시트 fetch 0). */
+    books: StudyBookRow[]
+    /** stop 응답에서만 non-null — 책 없이 끝낸 측정의 태깅 좌표. */
+    untaggedSessionId: number | null
 }
 
 /** study가 없는 응답(옛 서버·옛 픽스처)의 폴백 — 공부 진행 0 → 독서 모드로 떨어진다. */
-export const IDLE_STUDY: StudyState = { hasActiveSession: false, activeStartedAt: null, todaySeconds: 0, goalSeconds: 0 }
+export const IDLE_STUDY: StudyState = {
+    hasActiveSession: false, activeStartedAt: null, todaySeconds: 0, goalSeconds: 0,
+    activeBook: null, recentBookId: null, books: [], untaggedSessionId: null,
+}
+
+/**
+ * 서버 응답·옛 픽스처를 8필드로 채운다 — 필드가 빠진 응답(옛 서버·독서 테스트 픽스처)에서
+ * `books.map`이 죽지 않게. **study를 대입하는 모든 자리가 이 함수를 지난다**(applyDashboard·
+ * start·stop·goal·tag·change) — 한 곳이라도 날것 `res.json()`을 넣으면 그 자리만 옛 서버에서 깨진다.
+ */
+export function studyStateOf(s?: Partial<StudyState> | null): StudyState {
+    return { ...IDLE_STUDY, ...(s ?? {}) }
+}
 
 export interface DashboardResponse extends TimerState {
     nickname: string

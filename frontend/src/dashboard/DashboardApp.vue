@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import type { DashboardResponse, TimerState, StopResponse, BookOption, StudyState, GraphDto } from './types'
-import { IDLE_STUDY } from './types'
+import { IDLE_STUDY, studyStateOf } from './types'
 import { getCsrfToken } from '../shared/follow'
 import type { TimerMode } from './timerMode'
 import { shouldRefresh, readMode, writeMode, effectiveMode } from './timerMode'
@@ -9,6 +9,7 @@ import TimerCard from './TimerCard.vue'
 import StudyTimerCard from './StudyTimerCard.vue'
 import ModeToggle from './ModeToggle.vue'
 import BookPickSheet from './BookPickSheet.vue'
+import StudyBookSheet from './StudyBookSheet.vue'
 import ContributionGraph from './ContributionGraph.vue'
 import GardenPanel from './GardenPanel.vue'
 import BrandQuote from './BrandQuote.vue'
@@ -81,6 +82,11 @@ const sheetMode = ref<'start' | 'tag' | null>(null)
 const pendingSessionId = ref<number | null>(null)
 const tagging = ref(false)
 
+// 공부 책 시트 — 독서 시트와 원장이 갈린다(각자 자기 stop 응답에서만 열려 겹치지 않는다).
+// 'start'=시작 전 고르기, 'tag'=종료 후 태깅, 'change'=측정 중 교체.
+const studySheet = ref<'start' | 'tag' | 'change' | null>(null)
+const studyPendingSessionId = ref<number | null>(null)
+
 function applyTimerState(s: TimerState) {
     remainingSeconds.value = s.remainingSeconds
     carriedDebtSeconds.value = s.carriedDebtSeconds
@@ -100,7 +106,7 @@ function applyTimerState(s: TimerState) {
 function applyDashboard(d: DashboardResponse) {
     applyTimerState(d)
     wantToReadBooks.value = d.wantToReadBooks ?? []
-    study.value = d.study ?? IDLE_STUDY
+    study.value = studyStateOf(d.study)
 }
 
 // 마지막 /api/dashboard 조회 시각 — 복귀 재조회 스로틀의 기준(요청 "전"에 찍는다).
@@ -211,8 +217,7 @@ async function handleStop() {
 }
 
 // 공부 원장 — 독서 핸들러와 같은 골격(starting/stopping 재사용). 응답은 StudyState 그대로다.
-// 1차엔 책 선택·종료 후 태깅이 없어 stop 응답의 untaggedSessionId는 무시한다(웹에 공부 서재가 없다).
-async function handleStudyStart() {
+async function handleStudyStart(bookId: number | null) {
     if (starting.value) return
     actionError.value = null
     starting.value = true
@@ -221,11 +226,13 @@ async function handleStudyStart() {
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
-            body: '{}',
+            body: JSON.stringify({ bookId }),
         })
         if (res.status === 409) { await conflict('다른 곳에서 이미 측정 중이에요 — 화면을 최신으로 맞췄어요'); return }
+        // 404 = 다른 탭에서 지운 책을 고른 것. 재조회가 새 books를 실어 와 화면이 스스로 맞는다.
+        if (res.status === 404) { await conflict('그 책이 공부 서재에 없어요 — 화면을 최신으로 맞췄어요'); return }
         if (!res.ok) { actionError.value = '측정을 시작할 수 없습니다'; return }
-        study.value = await res.json() as StudyState
+        study.value = studyStateOf(await res.json())
     } catch {
         actionError.value = '네트워크 오류가 발생했습니다'
     } finally {
@@ -245,7 +252,14 @@ async function handleStudyStop() {
         })
         if (res.status === 409) { await conflict('진행 중인 측정이 없어요 — 화면을 최신으로 맞췄어요'); return }
         if (!res.ok) { actionError.value = '측정을 종료할 수 없습니다'; return }
-        study.value = await res.json() as StudyState
+        const s = studyStateOf(await res.json())
+        study.value = s
+        // 책 없이 끝낸 측정이면 "무슨 책?" 태깅 시트. 서재가 비었으면 띄우지 않는다 —
+        // 고를 게 없는데 매번 「담으러 가기」를 들이미는 건 잔소리다(E10).
+        if (s.untaggedSessionId !== null && s.books.length > 0) {
+            studyPendingSessionId.value = s.untaggedSessionId
+            studySheet.value = 'tag'
+        }
         // 측정 종료가 잔디가 변하는 순간 — 독서 stop의 data.graph 갈아끼우기와 같은 자리다.
         // await 하지 않는다: 히어로는 먼저 idle로 돌아간다.
         loadStudyGraph()
@@ -275,7 +289,7 @@ async function handleStudyGoal(seconds: number) {
         })
         // 실패면 폼을 열어 둔 채 둔다 — 사용자가 친 값이 살아 있어야 다시 누를 수 있다.
         if (!res.ok) { actionError.value = '목표를 저장하지 못했어요'; return }
-        study.value = await res.json() as StudyState
+        study.value = studyStateOf(await res.json())
         studyCard.value?.closeEdit()
     } catch {
         actionError.value = '네트워크 오류가 발생했습니다'
@@ -328,6 +342,73 @@ function onSheetBookless() {
     sheetMode.value = null
     handleStart(null)
 }
+// ── 공부 책 시트 핸들러 ────────────────────────────────────────────────────────
+// 태깅·교체는 tagging 플래그를 공유한다(둘 다 「측정 원장에 책을 붙이는」 왕복이고 동시에 열리지 않는다).
+// 응답이 StudyState 통째라 recentBookId·books.totalSeconds까지 한 번에 최신이 된다.
+
+/** 종료된 세션에 책을 붙인다 — 세션 id는 stop 응답이 준 것만 쓴다(지어내지 않는다). */
+async function studyTagBook(bookId: number) {
+    if (tagging.value || studyPendingSessionId.value === null) return
+    tagging.value = true
+    try {
+        const res = await fetch(`/api/study/sessions/${studyPendingSessionId.value}/tag-book`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+            body: JSON.stringify({ bookId }),
+        })
+        if (!res.ok) { actionError.value = '책을 연결하지 못했어요'; return }
+        study.value = studyStateOf(await res.json())
+        closeStudySheet()
+    } catch {
+        actionError.value = '네트워크 오류가 발생했습니다'
+    } finally {
+        tagging.value = false
+    }
+}
+
+/** 측정 중 교체 — 지금까지 잰 시간이 통째로 새 책으로 옮겨간다(서버 계약). null = 책 없이. */
+async function studyChangeBook(bookId: number | null) {
+    if (tagging.value) return
+    tagging.value = true
+    try {
+        const res = await fetch('/api/study/active/book', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+            body: JSON.stringify({ bookId }),
+        })
+        if (res.status === 409) { closeStudySheet(); await conflict('진행 중인 측정이 없어요 — 화면을 최신으로 맞췄어요'); return }
+        if (!res.ok) { actionError.value = '책을 바꾸지 못했어요'; return }
+        study.value = studyStateOf(await res.json())
+        closeStudySheet()
+    } catch {
+        actionError.value = '네트워크 오류가 발생했습니다'
+    } finally {
+        tagging.value = false
+    }
+}
+
+function openStudySheet(m: 'start' | 'change') { studySheet.value = m }
+function closeStudySheet() {
+    studySheet.value = null
+    studyPendingSessionId.value = null
+}
+// 시트에서 책을 고르면 — 모드마다 가는 문이 다르다.
+function onStudySheetPick(bookId: number) {
+    if (studySheet.value === 'tag') { studyTagBook(bookId); return }
+    if (studySheet.value === 'change') { studyChangeBook(bookId); return }
+    studySheet.value = null
+    handleStudyStart(bookId)
+}
+// 하단 CTA — start=책 없이 시작 / tag=건너뛰기(닫기만) / change=책 없이 공부하기.
+function onStudySheetNone() {
+    if (studySheet.value === 'tag') { closeStudySheet(); return }
+    if (studySheet.value === 'change') { studyChangeBook(null); return }
+    studySheet.value = null
+    handleStudyStart(null)
+}
+
 // 담기 성공(시트 안 검색담기) — 담은 책을 대시보드 목록에도 낙관적 반영(칩·시트 최신화).
 function onSheetAdded(book: { id: number; title: string; status: string }) {
     const opt: BookOption = { id: book.id, title: book.title }
@@ -391,12 +472,18 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
             :has-active-session="study.hasActiveSession"
             :active-started-at="study.activeStartedAt"
             :goal-seconds="study.goalSeconds"
+            :books="study.books"
+            :recent-book-id="study.recentBookId"
+            :active-book="study.activeBook"
             :starting="starting"
             :stopping="stopping"
             :saving-goal="savingGoal"
+            :changing="tagging"
             @start="handleStudyStart"
             @stop="handleStudyStop"
             @set-goal="handleStudyGoal"
+            @open-sheet="openStudySheet('start')"
+            @change-book="openStudySheet('change')"
         >
             <template #mode>
                 <ModeToggle :mode="mode" :locked="toggleLocked" :hint="modeHint" @change="setMode" @blocked="onModeBlocked" />
@@ -435,6 +522,18 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
             @skip="closeSheet"
             @close="closeSheet"
             @added="onSheetAdded"
+        />
+
+        <!-- 공부 책 시트 — 목록만(검색·fetch 0). 데이터는 study.books가 이미 들고 있다. -->
+        <StudyBookSheet
+            v-if="studySheet"
+            :mode="studySheet"
+            :books="study.books"
+            :current-book-id="study.activeBook?.id ?? null"
+            :pending="studySheet === 'start' ? starting : tagging"
+            @pick="onStudySheetPick"
+            @none="onStudySheetNone"
+            @close="closeStudySheet"
         />
     </template>
 </template>
