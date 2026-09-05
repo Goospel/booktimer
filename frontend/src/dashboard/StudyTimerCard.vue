@@ -3,6 +3,8 @@ import { ref, watch, computed } from 'vue'
 import { useReadingTimer } from './useReadingTimer'
 import { fmtMSS, goalLabel } from './timerProgress'
 import { studyProgress, minutesToGoalSeconds } from './studyProgress'
+import { initialOf, coverColor } from '../books/pure'
+import type { StudyBookRow } from '../study/api'
 
 const props = withDefaults(defineProps<{
     /** 오늘 공부한 초(완료 세션 합) — 측정 중 몫은 elapsed로 얹는다(독서와 같은 분업). */
@@ -14,9 +16,30 @@ const props = withDefaults(defineProps<{
     starting?: boolean
     stopping?: boolean
     savingGoal?: boolean
-}>(), { goalSeconds: 0 })
+    /** 내 공부 서재 — 기본 칩이 여기서 골라진다. 빈 서재가 기본값(옛 서버·옛 픽스처). */
+    books?: StudyBookRow[]
+    /** 마지막으로 책을 걸고 잰 책 — 기본 칩 1순위. */
+    recentBookId?: number | null
+    /** 측정 중인 책. null이면 「책 없이」(빈칸이 아니라 상태다). */
+    activeBook?: StudyBookRow | null
+    /** 책 교체 왕복 중 — 「책 바꾸기」를 잠근다. */
+    changing?: boolean
+}>(), { goalSeconds: 0, books: () => [], recentBookId: null, activeBook: null })
 
-const emit = defineEmits<{ start: []; stop: []; setGoal: [seconds: number] }>()
+const emit = defineEmits<{
+    start: [bookId: number | null]; stop: []; setGoal: [seconds: number]
+    openSheet: []; changeBook: []
+}>()
+
+// 기본 책 = 최근 걸고 잰 책 → 없으면 첫 책(독서 BookPickForm과 같은 규칙). 서재가 비면 null.
+const defaultBook = computed<StudyBookRow | null>(() =>
+    props.books.find(b => b.id === props.recentBookId) ?? props.books[0] ?? null)
+
+// 칩 표지색 — 표지 없는 책의 결정적 플레이스홀더(독서 칩과 같은 seed 규칙).
+function coverStyle(b: StudyBookRow) {
+    const c = coverColor(b.isbn13 || b.title)
+    return { background: c.bg, color: c.fg }
+}
 
 // props를 ref로 래핑해 composable에 전달(TimerCard와 같은 3줄). 공부엔 부채가 없어 base는 0 —
 // remainingNow는 안 쓰고 elapsed(벽시계 경과)만 쓴다.
@@ -103,16 +126,43 @@ defineExpose({ closeEdit })
                         <span class="dash-pill dash-pill-pulse"><span class="dash-pulse-dot"></span>측정 중</span>
                         <span class="dash-session-time">{{ fmtMSS(elapsed) }}</span>
                     </div>
+                    <div class="dash-divider"></div>
+                    <div class="dash-kv">
+                        <span class="dash-kv-k">지금 공부하는 책</span>
+                        <span class="dash-kv-v">{{ activeBook?.title ?? '책 없이' }}</span>
+                    </div>
                     <button type="button" class="dash-btn-outline" :disabled="stopping" @click="emit('stop')">
                         {{ stopping ? '종료하는 중…' : '측정 종료' }}
+                    </button>
+                    <!-- 잰 시간은 통째로 새 책에 옮겨간다(서버 계약) — 측정을 끊지 않고 바꾼다. -->
+                    <button type="button" class="dash-btn-link dash-bookless" :disabled="changing" @click="emit('changeBook')">
+                        책 바꾸기
                     </button>
                 </div>
 
                 <div v-else key="idle" class="dash-state-panel">
-                    <span class="dash-idle-label">지금 공부를 시작할까요?</span>
-                    <button type="button" class="dash-btn-fill" :disabled="starting" @click="emit('start')">
-                        {{ starting ? '시작하는 중…' : '공부 측정 시작' }}
-                    </button>
+                    <!-- BookPickForm(독서)을 재사용하지 않는다: 문구가 「읽어볼까요」라 prop을 더해야 하고,
+                         그게 곧 공용 조각 기본값 사각이다. 인라인 15줄이 싸다(설계 §3.3-C3). -->
+                    <template v-if="defaultBook">
+                        <span class="dash-idle-label">이 책으로 공부할까요?</span>
+                        <div class="dash-book-chip">
+                            <span class="dash-book-chip-cover" :style="coverStyle(defaultBook)" aria-hidden="true">{{ initialOf(defaultBook.title) }}</span>
+                            <span class="dash-book-chip-title">{{ defaultBook.title }}</span>
+                            <button type="button" class="dash-book-chip-change" :disabled="starting" @click="emit('openSheet')">바꾸기</button>
+                        </div>
+                        <button type="button" class="dash-btn-fill" :disabled="starting" @click="emit('start', defaultBook.id)">
+                            {{ starting ? '시작하는 중…' : '공부 측정 시작' }}
+                        </button>
+                        <button type="button" class="dash-btn-link dash-bookless" :disabled="starting" @click="emit('start', null)">책 없이 시작</button>
+                    </template>
+                    <!-- 서재가 비어도 시작을 막지 않는다 — 담으러 가는 문은 링크 하나로 곁에 둔다. -->
+                    <template v-else>
+                        <span class="dash-idle-label">지금 공부를 시작할까요?</span>
+                        <button type="button" class="dash-btn-fill" :disabled="starting" @click="emit('start', null)">
+                            {{ starting ? '시작하는 중…' : '공부 측정 시작' }}
+                        </button>
+                        <a class="dash-btn-link dash-bookless" href="/study/books">공부 서재에 책 담기</a>
+                    </template>
                 </div>
             </Transition>
         </div>

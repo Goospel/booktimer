@@ -221,3 +221,86 @@ describe('StudyTimerCard — 목표 인라인 편집', () => {
         expect(w.emitted('setGoal')).toBeUndefined();
     });
 });
+
+// ── 책 걸기 — idle 기본 칩 · 측정 중 책 (2단계 PR-C) ─────────────────────────────
+//
+// 계측기 메모
+//  · 통과가 확정하는 것: 기본 책이 recentBookId → 없으면 첫 책 순으로 골라진다 · 시작 emit에
+//    **그 책의 id**가 실린다(「책 없이」는 null) · 측정 중 kv가 activeBook을 보여준다.
+//  · 실패가 배제하는 것: books/recentBookId 기본값 뒤집힘 · 시작이 언제나 null로 나가기(칩만 장식) ·
+//    첫 책 폴백 소실 · activeBook null을 「책 없이」가 아니라 빈칸으로 그리기.
+const STUDY_BOOK = (id: number, title: string) => ({
+    id, title, author: null, coverUrl: null, isbn13: null, readCount: 0, purchaseLink: null, totalSeconds: 0,
+});
+
+describe('StudyTimerCard — idle 책 칩', () => {
+    test('recentBookId의 책이 칩에 뜨고, 시작이 그 책 id로 나간다', async () => {
+        vi.useFakeTimers();
+        const w = mountCard({ books: [STUDY_BOOK(5, '헌법'), STUDY_BOOK(6, '형법')], recentBookId: 6 });
+
+        expect(w.find('.dash-book-chip-title').text()).toBe('형법');
+        await btn(w, '공부 측정 시작')!.trigger('click');
+        expect(w.emitted('start')).toEqual([[6]]);
+    });
+
+    test('recentBookId가 없는 id면 첫 책으로 떨어진다(폴백 양성 대조군)', async () => {
+        vi.useFakeTimers();
+        const w = mountCard({ books: [STUDY_BOOK(5, '헌법'), STUDY_BOOK(6, '형법')], recentBookId: 99 });
+
+        expect(w.find('.dash-book-chip-title').text()).toBe('헌법');
+        await btn(w, '공부 측정 시작')!.trigger('click');
+        expect(w.emitted('start')).toEqual([[5]]);
+    });
+
+    test('「책 없이 시작」은 null을, 「바꾸기」는 openSheet를 낸다', async () => {
+        vi.useFakeTimers();
+        const w = mountCard({ books: [STUDY_BOOK(5, '헌법')], recentBookId: 5 });
+
+        await btn(w, '책 없이 시작')!.trigger('click');
+        expect(w.emitted('start')).toEqual([[null]]);
+
+        await btn(w, '바꾸기')!.trigger('click');
+        expect(w.emitted('openSheet')).toHaveLength(1);
+    });
+
+    test('books 기본값(미지정)은 빈 서재 — 칩 대신 공부 서재로 가는 링크', () => {
+        // 기본값 양성 대조군: books 기본값이 뒤집히면(예: 픽스처 주입) 이 링크가 사라진다.
+        vi.useFakeTimers();
+        const w = mountCard({ todaySeconds: 0 });
+
+        expect(w.find('.dash-book-chip').exists()).toBe(false);
+        expect(w.find('a[href="/study/books"]').exists()).toBe(true);
+    });
+});
+
+describe('StudyTimerCard — 측정 중 책', () => {
+    test('지금 공부하는 책을 kv로 보여주고, 「책 바꾸기」를 emit한다', async () => {
+        vi.useFakeTimers();
+        const w = mountCard({
+            hasActiveSession: true, activeStartedAt: new Date().toISOString(),
+            activeBook: STUDY_BOOK(5, '헌법'),
+        });
+
+        expect(w.find('.dash-kv-k').text()).toBe('지금 공부하는 책');
+        expect(w.find('.dash-kv-v').text()).toBe('헌법');
+
+        await btn(w, '책 바꾸기')!.trigger('click');
+        expect(w.emitted('changeBook')).toHaveLength(1);
+    });
+
+    test('책 없이 재는 중이면 「책 없이」 — 빈칸이 아니다', () => {
+        vi.useFakeTimers();
+        const w = mountCard({ hasActiveSession: true, activeStartedAt: new Date().toISOString() });
+
+        expect(w.find('.dash-kv-v').text()).toBe('책 없이');
+        expect(btn(w, '책 바꾸기')).toBeDefined();
+    });
+
+    test('idle엔 kv·「책 바꾸기」가 없다(측정 중 전용 — 음성 단언의 양성 쌍은 위 두 테스트)', () => {
+        vi.useFakeTimers();
+        const w = mountCard({ books: [STUDY_BOOK(5, '헌법')], recentBookId: 5 });
+
+        expect(w.find('.dash-kv').exists()).toBe(false);
+        expect(btn(w, '책 바꾸기')).toBeUndefined();
+    });
+});
