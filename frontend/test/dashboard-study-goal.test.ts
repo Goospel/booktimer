@@ -86,6 +86,8 @@ describe('DashboardApp — 공부 하루 목표', () => {
 
         await vi.waitFor(() => expect(w.find('.dash-progress-track').exists()).toBe(true));
         expect(w.find('.dash-progress-meta').text()).toContain('하루 목표 30분');
+        // 폼을 닫는 것은 **응답을 본 뒤**다(카드가 emit 직후 스스로 닫지 않는다).
+        expect(w.find('form.dash-goal-edit').exists()).toBe(false);
     });
 
     test('(b) 400이면 오류를 말하고 게이지는 생기지 않는다', async () => {
@@ -100,6 +102,10 @@ describe('DashboardApp — 공부 하루 목표', () => {
 
         expect(w.find('.alert-error').text()).toContain('목표');
         expect(w.find('.dash-progress-track').exists()).toBe(false);
+        // 실패했으니 폼은 열린 채 **사용자가 친 30이 남는다** — 닫으면 그 입력이 사라지고
+        // 다시 열었을 때 옛 goalSeconds로 프리필된다(리뷰 반영 2026-09-05).
+        expect(w.find('form.dash-goal-edit').exists()).toBe(true);
+        expect((w.find('form.dash-goal-edit input').element as HTMLInputElement).value).toBe('30');
     });
 
     test('(c) 독서 모드엔 목표 편집 문이 없다 — 공부 문도 두드리지 않는다', async () => {

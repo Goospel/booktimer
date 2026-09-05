@@ -132,6 +132,40 @@ describe('StudyTimerCard — 목표 인라인 편집', () => {
         await w.find('form.dash-goal-edit').trigger('submit');
 
         expect(w.emitted('setGoal')).toEqual([[5400]]);
+        // 폼은 emit 시점에 닫지 않는다 — 닫는 건 부모가 성공을 확인한 뒤다(아래 두 테스트).
+        expect(w.find('form.dash-goal-edit').exists()).toBe(true);
+    });
+
+    // 리뷰 반영(2026-09-05): 예전엔 submitGoal이 emit 직후 **동기적으로** 폼을 닫아,
+    // 저장 왕복(실측 127.9ms) 내내 폼이 DOM에 없었다 — savingGoal UI가 한 번도 렌더되지 않는
+    // **도달 불가능한 상태**였고, 400으로 실패하면 사용자가 친 값이 그대로 사라졌다.
+    test('저장이 끝날 때까지 폼이 열려 있다 — 실패해도 입력값이 남고, 그동안 저장 버튼이 잠긴다', async () => {
+        vi.useFakeTimers();
+        const w = mountCard({ todaySeconds: 0, goalSeconds: 3600 });
+        await btn(w, '변경')!.trigger('click');
+        await w.find('form.dash-goal-edit input').setValue(90);
+        await w.find('form.dash-goal-edit').trigger('submit');
+
+        // 부모가 왕복을 시작한다 = savingGoal true. 이 상태가 **실제로 화면에 있다**.
+        await w.setProps({ savingGoal: true });
+        expect(w.find('form.dash-goal-edit').exists()).toBe(true);
+        expect(btn(w, '저장하는 중')!.attributes('disabled')).toBeDefined();
+
+        // 400 — 부모는 닫으라고 알리지 않는다. 폼도 입력값도 그대로 남아 다시 누를 수 있다.
+        await w.setProps({ savingGoal: false });
+        expect(w.find('form.dash-goal-edit').exists()).toBe(true);
+        expect((w.find('form.dash-goal-edit input').element as HTMLInputElement).value).toBe('90');
+    });
+
+    test('부모가 성공을 알리면(closeEdit) 그때 폼이 닫힌다', async () => {
+        vi.useFakeTimers();
+        const w = mountCard({ todaySeconds: 0, goalSeconds: 3600 });
+        await btn(w, '변경')!.trigger('click');
+        await w.find('form.dash-goal-edit').trigger('submit');
+
+        (w.vm as unknown as { closeEdit: () => void }).closeEdit();
+        await w.vm.$nextTick();
+
         expect(w.find('form.dash-goal-edit').exists()).toBe(false);
     });
 
@@ -146,18 +180,13 @@ describe('StudyTimerCard — 목표 인라인 편집', () => {
         expect(w.find('form.dash-goal-edit').exists()).toBe(false);
     });
 
-    test('저장 중이면 저장 버튼이 비활성 + 「저장하는 중…」', async () => {
-        vi.useFakeTimers();
-        const w = mountCard({ todaySeconds: 0, goalSeconds: 3600, savingGoal: true });
-        await btn(w, '변경')!.trigger('click');
-
-        const save = btn(w, '저장하는 중')!;
-        expect(save.attributes('disabled')).toBeDefined();
-    });
+    // (「저장 중이면 저장 버튼이 비활성」 단독 테스트는 지웠다 — savingGoal prop을 강제 주입하고 폼을
+    //  손으로 연 상태는 **앱이 만들 수 없는 상태**였다. 위 「저장이 끝날 때까지…」가 실제 순서로 잰다.)
 
     // 실브라우저에서 잡은 결함의 회귀 가드(2026-09-05): step="5"였을 때 7·23처럼 5의 배수가 아닌 분은
-    // 네이티브 제약검증의 stepMismatch가 되어 **submit이 조용히 안 나갔다**. vitest의 trigger('submit')는
-    // 제약검증을 건너뛰므로 폼 이벤트만으로는 영영 못 잡는다 — 그래서 validity를 직접 잰다.
+    // 네이티브 제약검증의 stepMismatch가 되어 **앱에게는 조용히**(요청 0건) submit이 안 나갔다.
+    // 사용자에겐 크롬이 검증 버블을 띄운다. vitest의 trigger('submit')는 제약검증을 건너뛰므로
+    // 폼 이벤트만으로는 영영 못 잡는다 — 그래서 validity를 직접 잰다.
     test('5의 배수가 아닌 분도 유효하다 — 브라우저가 submit을 막지 않는다', async () => {
         vi.useFakeTimers();
         const w = mountCard({ todaySeconds: 0, goalSeconds: 3600 });
@@ -172,6 +201,13 @@ describe('StudyTimerCard — 목표 인라인 편집', () => {
         // 양성 대조: 음수는 여전히 막힌다(min="0") — 「전부 유효」 구현과 구분된다.
         input.value = '-1';
         expect(input.checkValidity()).toBe(false);
+
+        // 상한도 있다(max="1440" = 하루). 999999999분이 200으로 통과해 「하루 목표 16666666시간」이
+        // 렌더되던 자리다 — 1440은 유효, 1441은 rangeOverflow.
+        input.value = '1440';
+        expect(input.checkValidity()).toBe(true);
+        input.value = '1441';
+        expect(input.validity.rangeOverflow).toBe(true);
     });
 
     test('취소는 폼만 닫고 아무것도 보내지 않는다', async () => {

@@ -12,17 +12,18 @@
  */
 export function studyProgress(goalSeconds: number, doneSeconds: number)
     : { remaining: number; pct: number; pctStr: string; achieved: boolean; overflow: number } {
-    const goal = Math.max(0, goalSeconds)
+    // goalSeconds엔 Math.max(0, …)를 씌우지 않는다 — 음수는 바로 아래 `<= 0`이 같은 값으로 잡아
+    // 어떤 돌연변이로도 죽지 않는 죽은 코드가 된다(리뷰 지적 2026-09-05).
     const done = Math.max(0, doneSeconds)
-    if (goal <= 0) return { remaining: 0, pct: 0, pctStr: '0%', achieved: false, overflow: 0 }
+    if (goalSeconds <= 0) return { remaining: 0, pct: 0, pctStr: '0%', achieved: false, overflow: 0 }
     // 내림이다 — 반올림하면 99.97%가 100%가 되어 게이지가 가득 찬 채 「달성 아님」이 된다.
-    const pct = Math.min(100, Math.floor((done / goal) * 100))
+    const pct = Math.min(100, Math.floor((done / goalSeconds) * 100))
     return {
-        remaining: Math.max(0, goal - done),
+        remaining: Math.max(0, goalSeconds - done),
         pct,
         pctStr: `${pct}%`,
-        achieved: done >= goal,
-        overflow: Math.max(0, done - goal),
+        achieved: done >= goalSeconds,
+        overflow: Math.max(0, done - goalSeconds),
     }
 }
 
