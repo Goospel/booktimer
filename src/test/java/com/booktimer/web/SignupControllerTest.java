@@ -93,7 +93,8 @@ class SignupControllerTest {
                         .param("loginId", "newuser1")
                         .param("password", "rawpw1234")
                         .param("nickname", "책벌레")
-                        .param("timezone", "Asia/Seoul"))
+                        .param("timezone", "Asia/Seoul")
+                        .param("ageConfirmed", "true"))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/login?registered"));
 
@@ -113,7 +114,8 @@ class SignupControllerTest {
                         .param("loginId", "verifyflow")
                         .param("password", "rawpw1234")
                         .param("nickname", "책벌레")
-                        .param("timezone", "Asia/Seoul"))
+                        .param("timezone", "Asia/Seoul")
+                        .param("ageConfirmed", "true"))
                 .andExpect(redirectedUrl("/login?registered"));
 
         User saved = userRepository.findByEmail("verifyflow@booktimer.com").orElseThrow();
@@ -124,6 +126,40 @@ class SignupControllerTest {
     }
 
     @Test
+    @DisplayName("POST /signup: 만 14세 이상 확인을 체크하지 않으면 가입되지 않는다 (개인정보 보호법 §22-2 아동 게이트)")
+    void postSignup_withoutAgeConfirm_rejectedWithoutPersisting() throws Exception {
+        // 체크박스 미체크 = 파라미터 부재. 나머지 입력은 전부 유효하다 — 오직 연령 확인만이 가입을 막는다.
+        mockMvc.perform(post("/signup").with(csrf())
+                        .param("email", "child@booktimer.com")
+                        .param("loginId", "childid")
+                        .param("password", "rawpw1234")
+                        .param("nickname", "책벌레")
+                        .param("timezone", "Asia/Seoul"))
+                .andExpect(status().isOk())
+                .andExpect(view().name("signup"))
+                .andExpect(model().attributeHasFieldErrors("signupForm", "ageConfirmed"));
+
+        assertThat(userRepository.count()).isZero();
+    }
+
+    @Test
+    @DisplayName("POST /signup: 연령 확인을 false로 명시해도 막힌다 — 체크박스 hidden 필드(_ageConfirmed) 경로")
+    void postSignup_ageConfirmFalse_rejectedWithoutPersisting() throws Exception {
+        // th:field 체크박스는 미체크 시 false를 실어 보낸다(hidden 짝). 부재와 false가 같은 결말인지 못 박는다.
+        mockMvc.perform(post("/signup").with(csrf())
+                        .param("email", "child2@booktimer.com")
+                        .param("loginId", "childid2")
+                        .param("password", "rawpw1234")
+                        .param("nickname", "책벌레")
+                        .param("timezone", "Asia/Seoul")
+                        .param("ageConfirmed", "false"))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeHasFieldErrors("signupForm", "ageConfirmed"));
+
+        assertThat(userRepository.count()).isZero();
+    }
+
+    @Test
     @DisplayName("POST /signup: 이메일이 비면 화면을 다시 그리고 사용자를 만들지 않는다")
     void postSignup_invalid_rerendersWithoutPersisting() throws Exception {
         mockMvc.perform(post("/signup").with(csrf())
@@ -131,7 +167,8 @@ class SignupControllerTest {
                         .param("loginId", "someid")
                         .param("password", "rawpw1234")
                         .param("nickname", "책벌레")
-                        .param("timezone", "Asia/Seoul"))
+                        .param("timezone", "Asia/Seoul")
+                        .param("ageConfirmed", "true"))
                 .andExpect(status().isOk())
                 .andExpect(view().name("signup"))
                 .andExpect(model().attributeHasFieldErrors("signupForm", "email"));
@@ -150,7 +187,8 @@ class SignupControllerTest {
                         .param("loginId", "freshid")
                         .param("password", "rawpw1234")
                         .param("nickname", "새사람")
-                        .param("timezone", "Asia/Seoul"))
+                        .param("timezone", "Asia/Seoul")
+                        .param("ageConfirmed", "true"))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/login?registered"));   // 성공과 동일 — 이메일 존재 여부 미노출
 
@@ -171,7 +209,8 @@ class SignupControllerTest {
                         .param("loginId", "grabbed")
                         .param("password", "rawpw1234")
                         .param("nickname", "새사람")
-                        .param("timezone", "Asia/Seoul"))
+                        .param("timezone", "Asia/Seoul")
+                        .param("ageConfirmed", "true"))
                 .andExpect(status().isOk())
                 .andExpect(view().name("signup"))
                 .andExpect(model().attributeHasFieldErrors("signupForm", "loginId"));

@@ -2127,6 +2127,22 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 .legal li { margin-bottom: 4px; }
 .legal-date { font-size: .8rem; color: var(--muted); margin-top: 20px; }
 
+/* 위탁 현황 표(처리방침 8절). 셀 안에서 줄바띆하므로 좋은 화면에서도 가로로 넘치지 않는다. */
+.legal-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 4px 0 12px;
+    font-size: .9rem;
+}
+.legal-table th,
+.legal-table td {
+    border: 1px solid var(--border);
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+}
+.legal-table th { background: var(--card-bg-soft, transparent); font-weight: 600; }
+
 /* 이번 주 빠뜨린 날 (독서 기록 화면 7일 윈도우 부채 채우기) — 시안: 박스 행 → border-bottom 리스트,
    날짜 위 / "N분 부족"(호박색) 아래 세로 스택 + 우측 채우기 고스트 버튼. */
 .missed-list { list-style: none; padding: 0; margin: 8px 0 0; }
