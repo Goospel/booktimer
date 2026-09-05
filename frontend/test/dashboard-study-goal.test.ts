@@ -27,6 +27,8 @@ const DASHBOARD = {
 };
 
 let goalOk = true;
+// true면 goal 응답에서 todaySeconds까지 뺀다 — 정규화(studyStateOf) 계측기 (d)용.
+let goalPartial = false;
 const goalBodies: string[] = [];
 
 function fetchImpl(url: string, init?: RequestInit) {
@@ -34,7 +36,7 @@ function fetchImpl(url: string, init?: RequestInit) {
         goalBodies.push(String(init?.body ?? ''));
         return Promise.resolve({
             ok: goalOk, status: goalOk ? 200 : 400, statusText: 'bad',
-            json: async () => ({ ...STUDY_IDLE, goalSeconds: 1800 }),
+            json: async () => (goalPartial ? { goalSeconds: 1800 } : { ...STUDY_IDLE, goalSeconds: 1800 }),
         });
     }
     if (url.includes('/api/study/history')) {
@@ -50,6 +52,7 @@ const countOf = (needle: string) => urls().filter(u => u.includes(needle)).lengt
 
 beforeEach(() => {
     goalOk = true;
+    goalPartial = false;
     goalBodies.length = 0;
     localStorage.clear();
     vi.stubGlobal('fetch', vi.fn((u: string, i?: RequestInit) => fetchImpl(u, i)));
@@ -106,6 +109,21 @@ describe('DashboardApp — 공부 하루 목표', () => {
         // 다시 열었을 때 옛 goalSeconds로 프리필된다(리뷰 반영 2026-09-05).
         expect(w.find('form.dash-goal-edit').exists()).toBe(true);
         expect((w.find('form.dash-goal-edit input').element as HTMLInputElement).value).toBe('30');
+    });
+
+    test('(d) todaySeconds가 빠진 goal 응답도 게이지가 0%로 선다 — 정규화(studyStateOf)', async () => {
+        // 날것 res.json()을 대입하면 todaySeconds가 undefined라 pct가 NaN%가 되어 width가 사라진다.
+        goalPartial = true;
+        const w = await mountDashboard();
+        await modeBtn(w, '공부').trigger('click');
+
+        await btnWith(w, '하루 목표 정하기')!.trigger('click');
+        await w.find('form.dash-goal-edit input').setValue(30);
+        await w.find('form.dash-goal-edit').trigger('submit');
+        await vi.waitFor(() => expect(w.find('.dash-progress-track').exists()).toBe(true));
+
+        expect(w.find('.dash-progress-fill').attributes('style')).toContain('width: 0%');
+        expect(w.find('.alert-error').exists()).toBe(false);
     });
 
     test('(c) 독서 모드엔 목표 편집 문이 없다 — 공부 문도 두드리지 않는다', async () => {
