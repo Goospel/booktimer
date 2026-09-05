@@ -28,6 +28,8 @@ const actionError = ref<string | null>(null)
 // 서버 왕복 동안 버튼에 "진행 중"을 표시해 멈칫을 의도된 피드백으로 보이게 + 중복 클릭(409) 방지
 const starting = ref(false)
 const stopping = ref(false)
+// 공부 목표 저장 왕복 — 히어로 편집 폼의 저장 버튼만 잠근다(측정 시작/종료와 무관한 별도 문).
+const savingGoal = ref(false)
 
 // 타이머 상태 — start/stop 응답으로 부분 갱신
 const remainingSeconds = ref(0)
@@ -252,6 +254,32 @@ async function handleStudyStop() {
     }
 }
 
+/**
+ * 공부 하루 목표 — 히어로에서 바로 고친다(설계 §2.3-ⓑ). 독서는 /settings SSR 폼이지만 공부엔
+ * 서버 폼이 없고, 설정 페이지의 「빠뜨린 날은 나중에 채워」 힌트가 공부엔 거짓이라 여기서 받는다.
+ * seconds는 카드가 minutesToGoalSeconds로 이미 0 이상 정수 분에서 환산한 값이다(서버 400 방지).
+ * 응답은 StudyState 그대로라 통째로 얹는다.
+ */
+async function handleStudyGoal(seconds: number) {
+    if (savingGoal.value) return
+    actionError.value = null
+    savingGoal.value = true
+    try {
+        const res = await fetch('/api/study/goal', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+            body: JSON.stringify({ dailyGoalSeconds: seconds }),
+        })
+        if (!res.ok) { actionError.value = '목표를 저장하지 못했어요'; return }
+        study.value = await res.json() as StudyState
+    } catch {
+        actionError.value = '네트워크 오류가 발생했습니다'
+    } finally {
+        savingGoal.value = false
+    }
+}
+
 function setMode(next: TimerMode) {
     writeMode(next)
     storedMode.value = next
@@ -357,10 +385,13 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
             :today-seconds="study.todaySeconds"
             :has-active-session="study.hasActiveSession"
             :active-started-at="study.activeStartedAt"
+            :goal-seconds="study.goalSeconds"
             :starting="starting"
             :stopping="stopping"
+            :saving-goal="savingGoal"
             @start="handleStudyStart"
             @stop="handleStudyStop"
+            @set-goal="handleStudyGoal"
         >
             <template #mode>
                 <ModeToggle :mode="mode" :locked="toggleLocked" :hint="modeHint" @change="setMode" @blocked="onModeBlocked" />

@@ -3592,6 +3592,7 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 }
 .dash-timer-hero.is-study { background: #EFF3F6; }   /* 푸른 종이는 히어로만(미니앱 --heroCardBg) */
 .is-study .dash-pill, .is-study .dash-streak-chip, .is-study .grass-streak,
+.is-study .dash-progress-track,
 .is-study .dash-btn-outline:hover { background: #E6ECF0; }   /* 리터럴 #E7EEE2 자리들 */
 .is-study .dash-timer-num { color: #47657C; }
 /* .btn-primary의 채움은 :root 토큰이 아니라 세이지 리터럴 rgba(110,138,106,…)이라 위 스왑이 안 닿는다 —
@@ -3610,6 +3611,21 @@ body.dashboard-page #dashboard-app { gap: 20px; }
     background: var(--sage-soft); color: var(--accent-hover);
 }
 .study-count-actions { display: flex; gap: 6px; align-items: center; }
+
+/* 공부 하루 목표 — 히어로 인라인 편집(설계 §2.3-ⓑ). 전부 공부 카드 안 클래스라 독서엔 0줄이다.
+   전역 button{width:100%; padding:12px 18px; border-image:연필테}보다 특이성이 한 단 위(0,1,0 / 0,2,0)라
+   여기 선언이 이긴다 — .dash-mode-toggle button이 쓰는 것과 같은 관용구(font:inherit 뒤에 font-size). */
+.dash-goal-change {
+    width: auto; padding: 0 6px; border: 0; background: transparent;
+    color: var(--accent-hover); font: inherit; font-size: 12.5px;
+    text-decoration: underline; cursor: pointer;
+}
+/* .dash-bookless의 align-self:center를 좌열(=.dash-timer-left, flex column)에선 왼쪽 정렬로 되돌린다. */
+.dash-goal-set { align-self: flex-start; }
+.dash-goal-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 420px; }
+.dash-goal-edit input[type="number"] { width: 5.5em; }
+/* 전역 button{width:100%} 상쇄 — 한 줄에 나란히 세운다(보조 둘은 .dash-bookless가 이미 width:auto). */
+.dash-goal-edit .dash-btn-fill { width: auto; padding: 9px 16px; }
 
 /* ============================================================
    인증 화면(로그인·회원가입) — claude.ai/design 시안 재이식.
