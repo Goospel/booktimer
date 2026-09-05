@@ -13,8 +13,9 @@ import java.security.Principal;
  * <p>모델이 비어 있는 얇은 셸이다: 데이터는 전부 {@code /api/study/**}가 나른다({@code /agenda}는 새 문,
  * 달력·체크는 미니앱과 같은 기존 문을 웹 세션으로 재사용 — 설계 §1.2).
  *
- * <p>{@code /study/history}(공부 기록)도 이 셸이다 — 데이터는 {@code GET /api/study/history}가 세션 체인으로
- * 나른다. 화면 선택은 섬의 {@code studyView(location.pathname)} 몫이라 서버는 라우트 한 줄만 넓힌다.
+ * <p>{@code /study/history}(공부 기록)·{@code /study/books}(공부 서재)도 이 셸이다 — 데이터는 각각
+ * {@code GET /api/study/history}·{@code GET /api/study/books}가 세션 체인으로 나른다. 화면 선택은 섬의
+ * {@code studyView(location.pathname)} 몫이라 서버는 라우트 한 줄만 넓힌다.
  *
  * <p>{@code precommit}이 필요한 이유는 {@code th:action} 폼 때문이 아니라 <b>템플릿의
  * {@code <meta name="_csrf">}</b> 때문이다 — 섬의 POST(체크 순환·일정 추가·삭제)가 그 메타에서 토큰을
@@ -29,7 +30,7 @@ public class StudyController {
         this.currentUserService = currentUserService;
     }
 
-    @GetMapping({"/study", "/study/history"})   // 같은 셸 — 섬(main.ts)이 경로로 달력/기록을 고른다
+    @GetMapping({"/study", "/study/history", "/study/books"})   // 같은 셸 — 섬(main.ts)이 경로로 달력/기록/서재를 고른다
     public String study(Principal principal, HttpServletRequest request) {
         currentUserService.resolve(principal); // 인증 트리거 + 존재 확인
         CsrfTokenUtil.precommit(request);

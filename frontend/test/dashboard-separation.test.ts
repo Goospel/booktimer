@@ -103,7 +103,7 @@ describe('DashboardApp — 모드가 잔디·타일·정원을 끌고 간다', (
         // 잔디 링크 + 타일 = 2개. 독서 기록으로 가는 문은 남지 않는다.
         expect(w.findAll('a[href="/study/history"]')).toHaveLength(2);
         expect(w.findAll('a[href="/history"]')).toHaveLength(0);
-        expect(tileHrefs(w)).toEqual(['/study', '/study/history']);
+        expect(tileHrefs(w)).toEqual(['/study/books', '/study', '/study/history']);
     });
 
     test('(c) 저장값이 study면 마운트와 동시에 공부 잔디를 프리페치한다(재로드 대기 0)', async () => {
@@ -172,6 +172,6 @@ describe('DashboardApp — 모드가 잔디·타일·정원을 끌고 간다', (
         expect(w.find('.dash-timer-hero').classes()).toContain('is-study');
         expect(w.find('.dash-grass-card .dash-pill').text()).toBe('공부 기록');
         expect(w.find('.dash-garden').exists()).toBe(false);
-        expect(tileHrefs(w)).toEqual(['/study', '/study/history']);
+        expect(tileHrefs(w)).toEqual(['/study/books', '/study', '/study/history']);
     });
 });

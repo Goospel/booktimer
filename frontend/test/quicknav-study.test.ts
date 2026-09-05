@@ -12,16 +12,16 @@ const hrefs = (w: ReturnType<typeof mount>) =>
 describe('QuickNav — 공부 모드 세트', () => {
     const study = () => mount(QuickNav, { props: { loginId: 'tester', mode: 'study' as const } });
 
-    test('일정·공부 기록 두 타일만 선다 (독서 타일 3종은 사라진다)', () => {
-        expect(hrefs(study())).toEqual(['/study', '/study/history']);
+    test('공부 서재·일정·공부 기록 세 타일이 선다 (독서 타일 3종은 사라진다)', () => {
+        expect(hrefs(study())).toEqual(['/study/books', '/study', '/study/history']);
     });
 
     test('루트 카드에 공부 잉크(is-study)가 붙는다', () => {
         expect(study().find('.dash-nav').classes()).toContain('is-study');
     });
 
-    test('타일마다 사전 아이콘이 하나씩 붙는다 (calendar·history 키 참조)', () => {
-        expect(study().findAll('.dash-nav-tile svg.link-ico')).toHaveLength(2);
+    test('타일마다 사전 아이콘이 하나씩 붙는다 (books·calendar·history 키 참조)', () => {
+        expect(study().findAll('.dash-nav-tile svg.link-ico')).toHaveLength(3);
     });
 });
 

@@ -3594,6 +3594,22 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .is-study .dash-pill, .is-study .dash-streak-chip, .is-study .grass-streak,
 .is-study .dash-btn-outline:hover { background: #E6ECF0; }   /* 리터럴 #E7EEE2 자리들 */
 .is-study .dash-timer-num { color: #47657C; }
+/* .btn-primary의 채움은 :root 토큰이 아니라 세이지 리터럴 rgba(110,138,106,…)이라 위 스왑이 안 닿는다 —
+   공부 카드 안에서만 초록 버튼이 남아 「파랑 카드 + 파랑 글자 + 초록 버튼」이 됐다(/study/books가 첫 자리).
+   hover는 :not(:disabled)로 좁힌다 — 안 그러면 .btn-primary:disabled:hover(같은 특이성·앞선 위치)를 눌러
+   비활성 버튼까지 hover에 반응한다. 스코프가 공부 전용이라 독서 화면엔 한 줄도 안 닿는다. */
+.is-study .btn-primary { background-color: var(--sage-soft); }
+.is-study .btn-primary:hover:not(:disabled) { background-color: #D6E0E7; }  /* --nav-hover-border와 같은 한 단 짙은 파랑 */
+
+/* 공부 서재(/study/books) — 회독 칩은 토큰만 쓰므로 .is-study 카드 안에서 저절로 파랑이다(리터럴 없음).
+   ± 버튼은 .book-actions 규칙(padding·width:auto)을 그대로 받고, 여기선 가로 정렬만 얹는다 —
+   .book-actions보다 뒤에 오므로 같은 특이성에서도 이 줄이 이긴다. */
+.study-read-chip {
+    display: inline-block; width: fit-content;
+    padding: 2px 9px; border-radius: 20px; font-size: 12px;
+    background: var(--sage-soft); color: var(--accent-hover);
+}
+.study-count-actions { display: flex; gap: 6px; align-items: center; }
 
 /* ============================================================
    인증 화면(로그인·회원가입) — claude.ai/design 시안 재이식.
