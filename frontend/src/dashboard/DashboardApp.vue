@@ -357,6 +357,9 @@ async function studyTagBook(bookId: number) {
             headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
             body: JSON.stringify({ bookId }),
         })
+        // 여기엔 404 자동 복구(시트 닫기 + 재조회)를 두지 않는다 — start·change와 갈리는 자리다.
+        // 이 시트가 그 세션을 태깅할 **유일한 진입점**이라(세션 id는 stop 응답에만 실린다) 닫으면
+        // 미태깅으로 굳는다. 열어 둬야 사용자가 다른 책을 골라 성공할 수 있다.
         if (!res.ok) { actionError.value = '책을 연결하지 못했어요'; return }
         study.value = studyStateOf(await res.json())
         closeStudySheet()
@@ -379,6 +382,9 @@ async function studyChangeBook(bookId: number | null) {
             body: JSON.stringify({ bookId }),
         })
         if (res.status === 409) { closeStudySheet(); await conflict('진행 중인 측정이 없어요 — 화면을 최신으로 맞췄어요'); return }
+        // 404 = 다른 곳에서 지운 책을 고른 것(start와 같은 규칙, E8). 시트를 닫지 않으면 지워진 그 행이
+        // 목록에 남아 눌러도 계속 실패한다 — 재조회가 새 books를 실어 와 화면이 스스로 낫는다.
+        if (res.status === 404) { closeStudySheet(); await conflict('그 책이 공부 서재에 없어요 — 화면을 최신으로 맞췄어요'); return }
         if (!res.ok) { actionError.value = '책을 바꾸지 못했어요'; return }
         study.value = studyStateOf(await res.json())
         closeStudySheet()

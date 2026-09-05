@@ -88,6 +88,15 @@ export const IDLE_STUDY: StudyState = {
  * 서버 응답·옛 픽스처를 8필드로 채운다 — 필드가 빠진 응답(옛 서버·독서 테스트 픽스처)에서
  * `books.map`이 죽지 않게. **study를 대입하는 모든 자리가 이 함수를 지난다**(applyDashboard·
  * start·stop·goal·tag·change) — 한 곳이라도 날것 `res.json()`을 넣으면 그 자리만 옛 서버에서 깨진다.
+ *
+ * 이 규약은 **6자리 전부 계측기로 잠겨 있다**(2026-09-05 전체 스위트 돌연변이 실측 — 정규화를 걷으면
+ * 자리마다 최소 1건이 죽는다): applyDashboard·start·change·tag = `dashboard-study-book.test.ts`
+ * (i1)~(i4), goal = `dashboard-study-goal.test.ts` (d), stop = 같은 파일 (f3).
+ * 계측기가 재는 것은 **게이지(todaySeconds)** 하나다 — StudyTimerCard가 `withDefaults`로
+ * books·activeBook·recentBookId·goalSeconds를 스스로 메우고 `fmtMSS(NaN)`도 '00:00'이라,
+ * 나머지 필드는 정규화가 없어도 화면이 같아 관측할 수단이 애초에 없다(stop만 예외 —
+ * `s.books.length`를 즉시 읽어 던진다). 즉 **「어느 자리를 지나는가」는 잠겼고, 「모든 필드가
+ * 화면까지 옳게 닿는가」는 게이지 밖에선 못 잰다.**
  */
 export function studyStateOf(s?: Partial<StudyState> | null): StudyState {
     return { ...IDLE_STUDY, ...(s ?? {}) }
