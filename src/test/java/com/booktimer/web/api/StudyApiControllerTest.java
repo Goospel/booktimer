@@ -50,6 +50,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 class StudyApiControllerTest {
 
+    // 이 클래스는 「지금」 기준으로 세션을 심고 API가 실제 now로 끝내므로, 운영 Clock.systemUTC()를
+    // 그대로 두면 자정 경계에서만 붉어진다 — T-039의 2회차다(2026-09-06 00:29 KST CI에서
+    // changeActiveBook_movesAllSecondsToNewBook이 1799 < 1800으로 실패). now-30분이 전날로 넘어가면
+    // stop이 세션을 자정에서 두 행으로 쪼개고(endSplitAndSave) 행마다 durationSeconds를 따로
+    // 내림해 1초가 샌다. 18:00 KST로 고정해 그 창을 없앤다 — 한낮이라 ±6시간 세션이 같은 날에 머문다.
+    @org.springframework.boot.test.context.TestConfiguration
+    static class FixedClockConfig {
+        @org.springframework.context.annotation.Bean
+        @org.springframework.context.annotation.Primary
+        java.time.Clock fixedClock() {
+            return java.time.Clock.fixed(java.time.Instant.parse("2026-06-17T09:00:00Z"), java.time.ZoneOffset.UTC);
+        }
+    }
+
     private static final String SEOUL = "Asia/Seoul";
 
     @Autowired MockMvc mockMvc;
@@ -76,6 +90,9 @@ class StudyApiControllerTest {
      * <p>당일 누적을 재는 테스트가 {@code now - 1시간} 같은 <b>상대 좌표</b>로 세션을 심으면
      * KST 00:00~01:00에 그 시각이 어제로 넘어가 CI가 날짜에 따라 붉어진다. 정오는 어느 쪽 경계와도
      * 12시간 떨어져 있어 그 창이 사라진다(경계 자체를 재는 것은 {@code todaySeconds_excludesYesterday}의 몫).
+     *
+     * <p>⚠️ <b>진행 중 세션엔 이 헬퍼를 못 쓴다</b> — API가 실제 {@code now}로 끝내므로 정오가 미래면
+     * {@code endedAt < startedAt}으로 터진다. 그쪽 좌표({@code now - 30분})는 위 고정 클락이 지킨다.
      */
     private Instant todayNoon() {
         return LocalDate.ofInstant(clock.instant(), ZoneId.of(SEOUL))
