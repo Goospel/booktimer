@@ -27,6 +27,8 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.hamcrest.Matchers.containsString;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -75,6 +77,16 @@ class SignupControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(view().name("signup"))
                 .andExpect(model().attributeExists("signupForm"));
+    }
+
+    @Test
+    @DisplayName("GET /signup: 연령 확인 체크박스가 실제로 렌더된다 — 사라지면 가입이 전면 불가가 된다")
+    void getSignup_rendersAgeConfirmCheckbox() throws Exception {
+        // 서버 @AssertTrue만 있고 화면에 입력칸이 없으면 폼이 ageConfirmed를 안 보내 **모든 가입이 막힌다**.
+        // 서버 테스트는 그 사고를 못 잡는다(요청을 직접 만들어 보내므로) — 그래서 마크업을 여기서 못 박는다.
+        mockMvc.perform(get("/signup"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("name=\"ageConfirmed\"")));
     }
 
     @Test
@@ -143,16 +155,18 @@ class SignupControllerTest {
     }
 
     @Test
-    @DisplayName("POST /signup: 연령 확인을 false로 명시해도 막힌다 — 체크박스 hidden 필드(_ageConfirmed) 경로")
+    @DisplayName("POST /signup: 진짜 브라우저의 미체크 페이로드(_ageConfirmed=on만)로도 막힌다")
     void postSignup_ageConfirmFalse_rejectedWithoutPersisting() throws Exception {
-        // th:field 체크박스는 미체크 시 false를 실어 보낸다(hidden 짝). 부재와 false가 같은 결말인지 못 박는다.
+        // th:field 체크박스를 미체크로 두고 제출하면 브라우저는 **hidden 짝만** 보낸다 —
+        // `_ageConfirmed=on`은 가고 `ageConfirmed`는 아예 안 간다(로컬 렌더 실측). 그 페이로드를 그대로 재현한다.
+        // 위 케이스(파라미터 완전 부재)와 다른 경로다: 여기선 Spring이 hidden 짝을 보고 false로 바인딩한다.
         mockMvc.perform(post("/signup").with(csrf())
                         .param("email", "child2@booktimer.com")
                         .param("loginId", "childid2")
                         .param("password", "rawpw1234")
                         .param("nickname", "책벌레")
                         .param("timezone", "Asia/Seoul")
-                        .param("ageConfirmed", "false"))
+                        .param("_ageConfirmed", "on"))
                 .andExpect(status().isOk())
                 .andExpect(model().attributeHasFieldErrors("signupForm", "ageConfirmed"));
 
