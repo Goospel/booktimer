@@ -3165,11 +3165,13 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
   `StudyRecallService`(**첫 줄이 `requireApproved`** — 키 검사·상한 선점·어댑터 호출보다 앞) ·
   `GET·POST /api/study/recall`·`/{date}/analyze` · 섬 `RecallPanel` · 처리방침 문단.
   하루 상한 `ANALYZE 1`(선점 → 호출 → 실패면 환불).
-  ⚠️ **키 상태는 이 줄을 믿지 말고 다시 재라 (2026-09-06 기준 미확인).** 2026-09-03에 **실호출 측정**이
-  있었으므로(일정 생성 75.7초·out 10,574토큰) 그 시점엔 유효한 키가 있었다. 다만 **운영 SSM
-  `/booktimer/CLAUDE_API_KEY` 등재 여부는 확인하지 못했다** — 조회를 시도했으나 AWS 세션 만료로
-  실패했다(⚠️ 첫 조회가 빈 결과로 보였는데 부재가 아니라 **인증 실패**였다. 「없다」는 결과를 만나면
-  경로 변환·인증부터 의심할 것 — 글로벌 「Windows 셸 원칙」 5번과 같은 클래스).
+  ✅ **키는 발급·등재돼 있다 (2026-09-06 SSM 실조회).** `/booktimer/CLAUDE_API_KEY`가 존재하고,
+  `render-env.sh:42`가 `BOOKTIMER_CLAUDE_API_KEY`로 매핑하며 `deploy/tests/test-render-env.sh`가 그
+  매핑을 단언한다 — **운영에서 켜져 있다.** 2026-09-03 실호출 측정(75.7초·out 10,574토큰)과도 일치한다.
+  ⚠️ 이 줄은 원래 「키는 아직 미발급」이었다가 한동안 낡은 채로 남아 있었다. **첫 조회 때는 빈 결과가
+  나와 「없음」으로 적을 뻔했는데 부재가 아니라 AWS 세션 만료(인증 실패)였다** — `grep`이 에러 줄을
+  걸러내 성공한 빈 결과처럼 보였다. 「없다」는 결과를 만나면 **경로 변환·인증부터 의심**할 것
+  (글로벌 「Windows 셸 원칙」 5번과 같은 클래스).
 - ✅ **PR-4 백지복습 사진 전사 (2026-09-03)** — `POST /api/study/recall/transcribe`(multipart `images` ≤3장·각 ≤3MB·
   jpeg/png/webp, **첫 줄이 `requireApproved`**) · 어댑터 `transcribe(List<ImagePart>)`+`Transcript`+`normalize` ·
   섬 `image.ts`(canvas 1568px·JPEG 0.85·EXIF 회전 반영·**미리보기는 data URL** — CSP에 `blob:`이 없다) ·
