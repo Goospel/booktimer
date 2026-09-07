@@ -292,3 +292,37 @@ describe('백지복습 — 두 묶음', () => {
         expect(html.indexOf('study-recall-scope')).toBeLessThan(html.indexOf('study-recall-body'));
     });
 });
+
+
+// 「과목」을 「주제」로 바꾸면서 함께 메운 구멍(2026-09-07) — 일정 화면·AI 일정 폼엔 「책을 고르면 그
+// 제목으로 채우기」가 있는데 백지복습엔 없어서, 책을 골라 놓고도 같은 값을 손으로 다시 쳐야 했다.
+// 바로 그 순간 「이게 주제인가 책 제목인가」 하는 고민이 생긴다.
+describe('백지복습 — 책을 고르면 주제가 따라온다', () => {
+    test('책을 고르면 주제 칸이 그 제목으로 채워진다', async () => {
+        const wrapper = await mountPanel();
+        await wrapper.find('[data-testid="recall-book"]').setValue('7');
+        expect((wrapper.find('input[aria-label="주제"]').element as HTMLInputElement).value)
+            .toBe('정보처리기사 실기');
+    });
+
+    // 진짜 경계 — 저장된 글을 불러오면 bookId도 함께 세팅된다. 그때 watch가 그대로 돌면 **사용자가
+    // 적어 둔 주제가 책 제목으로 덮인다**(글은 그대로인데 라벨만 바뀌어 있어 눈치채기 어렵다).
+    test('저장된 글을 불러올 때는 적어 둔 주제를 덮지 않는다', async () => {
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({
+            date: '2026-09-03', bookId: 7, subject: '내가 적어 둔 주제', scope: '', body: '어제 쓴 글',
+            source: 'TEXT', summary: null, holes: [], questions: [], analyzedAt: null,
+        }));
+        const wrapper = mount(RecallPanel, {
+            attachTo: document.body,
+            props: {
+                date: '2026-09-03', today: '2026-09-03', items: [], books: BOOKS,
+                aiEnabled: true, remainingAnalyze: 1, remainingTranscribe: 3, hasYesterdayQuestions: false,
+            },
+        });
+        await vi.waitFor(() => expect(
+            (wrapper.find('.study-recall-body').element as HTMLTextAreaElement)?.value).toBe('어제 쓴 글'));
+
+        expect((wrapper.find('input[aria-label="주제"]').element as HTMLInputElement).value)
+            .toBe('내가 적어 둔 주제');
+    });
+});

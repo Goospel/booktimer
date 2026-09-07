@@ -158,7 +158,7 @@ export function recallScopePrefill(items: PlanItem[]): string {
     return items.map((i) => i.task).join('\n');
 }
 
-/** 백지복습의 「과목」 프리필 — 그날 첫 일정의 과목. 일정이 없으면 빈 문자열이다. */
+/** 백지복습의 「주제」 프리필 — 그날 첫 일정의 주제. 일정이 없으면 빈 문자열이다. */
 export function recallSubjectPrefill(items: PlanItem[]): string {
     return items.length > 0 ? items[0].subject : '';
 }
@@ -226,7 +226,7 @@ export interface PlanFormInput {
  * @return 첫 번째 위반 문구, 통과면 `null`
  */
 export function validatePlanForm(input: PlanFormInput, today: string): string | null {
-    if (!input.subject.trim()) return '과목을 입력해 주세요.';
+    if (!input.subject.trim()) return '주제를 입력해 주세요.';
     if (!input.examDate) return '시험일을 골라 주세요.';
     if (today) {
         if (input.examDate <= today) return '시험일은 내일 이후로 정해 주세요.';

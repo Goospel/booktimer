@@ -305,7 +305,7 @@ describe('validatePlanForm', () => {
     });
 
     it('과목이 비면 막는다', () => {
-        expect(validatePlanForm({ ...ok, subject: '   ' }, TODAY)).toBe('과목을 입력해 주세요.');
+        expect(validatePlanForm({ ...ok, subject: '   ' }, TODAY)).toBe('주제를 입력해 주세요.');
     });
 
     it('시험일을 안 고르면 막는다', () => {
