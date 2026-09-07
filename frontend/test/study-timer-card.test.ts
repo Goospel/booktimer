@@ -304,3 +304,26 @@ describe('StudyTimerCard — 측정 중 책', () => {
         expect(btn(w, '책 바꾸기')).toBeUndefined();
     });
 });
+
+// 공부 칩의 표지 — StudyBookRow엔 coverUrl이 **타입에도 이미 있었는데** 화면이 안 썼다.
+// 독서 칩과 같은 규칙이어야 한다(두 칩이 다르면 모드를 바꿀 때마다 표지가 나타났다 사라진다).
+describe('StudyTimerCard — 책 칩 표지', () => {
+    const row = (over: Record<string, unknown> = {}) => ({
+        id: 7, title: '정보보안기사', author: null, coverUrl: null, isbn13: null,
+        readCount: 0, purchaseLink: null, totalSeconds: 0, ...over,
+    });
+
+    test('표지가 있으면 실제 이미지를 그린다', () => {
+        const w = mountCard({ books: [row({ coverUrl: 'https://img.example/sec.jpg' })], recentBookId: 7 });
+        const img = w.find('img.dash-book-chip-cover');
+        expect(img.exists()).toBe(true);
+        expect(img.attributes('src')).toBe('https://img.example/sec.jpg');
+        expect(img.attributes('referrerpolicy')).toBe('no-referrer');
+    });
+
+    test('표지가 없으면 색 박스가 그대로 (양성 대조군)', () => {
+        const w = mountCard({ books: [row()], recentBookId: 7 });
+        expect(w.find('img.dash-book-chip-cover').exists()).toBe(false);
+        expect(w.find('span.dash-book-chip-cover').text()).toBe('정');
+    });
+});

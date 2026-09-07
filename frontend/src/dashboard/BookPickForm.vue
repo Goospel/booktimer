@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { BookOption } from './types'
-import { initialOf, coverColor } from '../books/pure'
+import { initialOf, coverColor, hasCover } from '../books/pure'
 import { allBooksOf, defaultBookOf } from './defaultBook'
 
 // 측정 시작 진입(발견 1, §6.5) — 드롭다운을 걷어내고 기본 책을 표지 칩으로 보여준다.
@@ -41,7 +41,11 @@ function startBookless() { if (!props.pending) emit('start', null) }
     <template v-if="hasBooks && defaultBook">
         <span class="dash-idle-label">이 책으로 측정할까요?</span>
         <div class="dash-book-chip">
-            <span class="dash-book-chip-cover" :style="coverStyle(defaultBook)" aria-hidden="true">{{ initialOf(defaultBook.title) }}</span>
+            <!-- 표지가 있으면 실물, 없으면 제목 첫 글자 색 박스. 폴백을 남기는 이유는 표지 없는 책이
+                 실제로 있어서다(직접 추가·알라딘 이미지 없음). referrerpolicy는 책장·책방과 같은 관례. -->
+            <img v-if="hasCover(defaultBook.coverUrl ?? null)" class="dash-book-chip-cover"
+                 :src="defaultBook.coverUrl!" alt="" loading="lazy" referrerpolicy="no-referrer">
+            <span v-else class="dash-book-chip-cover" :style="coverStyle(defaultBook)" aria-hidden="true">{{ initialOf(defaultBook.title) }}</span>
             <span class="dash-book-chip-title" :title="defaultBook.title">{{ defaultBook.title }}</span>
             <button type="button" class="dash-book-chip-change" :disabled="pending" @click="emit('openSheet')">바꾸기</button>
         </div>
