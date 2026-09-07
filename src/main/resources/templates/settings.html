@@ -229,7 +229,7 @@
     <!-- 토스 앱 연결 — 미니앱(앱인토스)에서 같은 계정을 쓰기 위한 일회용 코드 발급.
          연결됐으면 상태만 보이고 버튼은 없앤다(toss_user_key는 once-set 불변 — 발급해도 쓸 데가 없다).
          평문 코드는 저장하지 않으므로 발급 직후 플래시로 한 번만 보인다. -->
-    <section class="set-card">
+    <section class="set-card" id="toss-link">
         <h2 class="set-card-title">토스 앱 연결</h2>
         <p class="set-card-desc">토스 앱에서도 이 계정으로 독서 기록을 이어서 볼 수 있어요. 아래 연결 코드를 받아 토스 앱에 입력하세요.</p>
 
@@ -241,6 +241,17 @@
         <form th:unless="${tossLinked}" th:action="@{/settings/toss-link-code}" method="post">
             <button type="submit" class="set-btn-save">연결 코드 발급</button>
         </form>
+
+        <!-- 토스 앱으로 가는 길. 지금까지 코드만 주고 「토스 앱에 입력하세요」로 끝나 정작 갈 방법이 없었다.
+             코드를 막 받은 직후와 이미 연결된 뒤 두 경우에만 띄운다 — 아직 연결도 코드 발급도 안 한
+             사람을 여기서 미니앱으로 보내면 토스 로그인으로 별개 계정이 생겨 기록이 갈린다.
+             모바일 미니앱 칩(pwa-install.js)이 로그인 사용자를 보내는 곳도 이 카드다. -->
+        <!-- ⚠️ 두 피연산자를 모두 명시적 비교로 쓴다 — `or`는 boolean을 요구하는데 여기 오는 값이 그렇지 않다.
+             ① tossLinkCode는 String이고 ② tossLinked는 **null일 수 있다**: POST /settings의 검증 실패 경로는
+             폼을 다시 그릴 뿐 GET이 채우던 모델을 채우지 않아, `${tossLinked or ...}`로 쓰면 그 화면에서만
+             SpelEvaluationException으로 터진다(SettingsControllerTest 2건이 잡았다). `th:if="${tossLinked}"`
+             단독은 null을 false로 조용히 넘기지만 `or`의 피연산자로는 그렇지 않다. -->
+        <a th:if="${tossLinked == true or tossLinkCode != null}" class="set-btn-save" href="intoss://booktimer/">휴대폰에서 토스 앱 열기</a>
     </section>
 
     <!-- 회원 탈퇴 (위험 구역) -->
