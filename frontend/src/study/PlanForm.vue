@@ -128,8 +128,8 @@ async function onApply(): Promise<void> {
             v-model="subject"
             type="text"
             maxlength="300"
-            placeholder="과목 (예: 정보보안기사 필기)"
-            aria-label="과목"
+            placeholder="주제 (예: 정보보안기사 필기)"
+            aria-label="주제"
             data-testid="plan-subject"
         >
         <textarea

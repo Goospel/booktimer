@@ -116,7 +116,7 @@ describe('홈 백지복습 카드 — 패널에 무엇을 먹이는가', () => {
     // 경계 — items를 안 거르면 어제 일정의 과목·범위가 오늘 칸에 프리필된다(화면은 멀쩡하다).
     test('오늘 일정만 프리필로 간다 — 어제 것이 섞이지 않는다', async () => {
         const wrapper = await mountCard();
-        const subject = wrapper.find('input[aria-label="과목"]').element as HTMLInputElement;
+        const subject = wrapper.find('input[aria-label="주제"]').element as HTMLInputElement;
         const scope = wrapper.find('.study-recall-scope').element as HTMLTextAreaElement;
         expect(subject.value).toBe('정보처리기사');
         expect(scope.value).toBe('2과목 정리');
@@ -166,7 +166,7 @@ describe('홈 백지복습 카드 — 기기 달과 서버 오늘이 갈릴 때'
         expect(months[1]).toContain('month=2026-10');
 
         // 다시 부른 달의 일정이 실제로 프리필까지 닿는다 — 재조회만 하고 안 쓰면 고친 게 아니다.
-        const subject = wrapper.find('input[aria-label="과목"]').element as HTMLInputElement;
+        const subject = wrapper.find('input[aria-label="주제"]').element as HTMLInputElement;
         expect(subject.value).toBe('10월 과목');
     });
 

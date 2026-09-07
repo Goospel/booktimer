@@ -40,7 +40,7 @@ public class StudyRecall extends BaseTimeEntity {
     /** 「범위」 상한 — 구멍 판정의 울타리라 길어질 수 있지만 무한하진 않다. */
     public static final int SCOPE_MAX = 4000;
 
-    /** 과목 상한 — {@code study_book.title}과 같다(스냅샷이라 원본보다 길 이유가 없다). */
+    /** 주제 상한 — {@code study_book.title}과 같다(스냅샷이라 원본보다 길 이유가 없다). */
     public static final int SUBJECT_MAX = 300;
 
     /** 글이 어디서 왔나 — 타이핑인지, 사진을 읽어 사용자가 확인한 전사인지. */
@@ -134,7 +134,7 @@ public class StudyRecall extends BaseTimeEntity {
      */
     public void rewrite(StudyBook book, String subject, String scope, String body, Source source) {
         this.book = book;
-        this.subject = optionalText(subject, SUBJECT_MAX, "과목");
+        this.subject = optionalText(subject, SUBJECT_MAX, "주제");
         this.scopeText = optionalText(scope, SCOPE_MAX, "범위");
         this.body = requireBody(body);
         this.source = source == null ? Source.TEXT : source;

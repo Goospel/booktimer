@@ -29,7 +29,7 @@ import java.time.LocalDate;
 @Table(name = "study_plan_item")
 public class StudyPlanItem extends BaseTimeEntity {
 
-    /** 과목·책 제목 상한 — {@code study_book.title}과 같은 300자(스냅샷이라 원본보다 짧을 이유가 없다). */
+    /** 주제·책 제목 상한 — {@code study_book.title}과 같은 300자(스냅샷이라 원본보다 짧을 이유가 없다). */
     public static final int SUBJECT_MAX = 300;
 
     /** 하루 할 일 한 줄의 상한. 「한 줄」이라는 형식이 곧 제약이다(문단을 담는 자리가 아니다). */
@@ -73,7 +73,7 @@ public class StudyPlanItem extends BaseTimeEntity {
         this.user = user;
         this.planDate = planDate;
         this.book = book;
-        this.subject = requireText(subject, SUBJECT_MAX, "과목");
+        this.subject = requireText(subject, SUBJECT_MAX, "주제");
         this.task = requireText(task, TASK_MAX, "할 일");
     }
 

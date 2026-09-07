@@ -113,7 +113,7 @@ public class ClaudeStudyAssistant {
      * 그래서 「적힌 단원만」이고, 날짜도 우리가 계산해 준 후보 안에서만 고르게 한다.
      */
     private static final String PLAN_SYSTEM = """
-            당신은 수험 일정을 짜 주는 보조다. 과목, 공부할 범위, 시험일, 하루 공부 시간, 주 공부일수,
+            당신은 수험 일정을 짜 주는 보조다. 주제, 공부할 범위, 시험일, 하루 공부 시간, 주 공부일수,
             그리고 배정 가능한 후보 날짜 목록이 주어진다.
 
             반드시 지킬 것:
@@ -331,7 +331,7 @@ public class ClaudeStudyAssistant {
         // 분석 결과뿐이라(툴·외부 호출·다른 사용자로 새는 경로가 없다) 막지 않았다. 여기에 툴 사용이나
         // 유출 경로가 붙는 날에는 구분자·이스케이프(또는 본문을 별도 블록으로 분리)를 먼저 넣어야 한다.
         return """
-                [과목] %s
+                [주제] %s
                 [범위] %s
                 [오늘 쓴 글]
                 %s
@@ -364,7 +364,7 @@ public class ClaudeStudyAssistant {
         // 폭발 반경이 자기 일정뿐이라(툴·외부 호출로 새는 경로가 없다) 지금은 막지 않는다.
         // 여기에 툴 사용이 붙는 날에는 구분자·이스케이프를 먼저 넣어야 한다(recallUserPrompt와 같은 주석).
         return """
-                [과목] %s
+                [주제] %s
                 [범위]
                 %s
                 [시험일] %s
@@ -373,7 +373,7 @@ public class ClaudeStudyAssistant {
                 [배정 가능한 후보 날짜] %s
                 """.formatted(
                 in.subject() == null ? "(적지 않음)" : in.subject().strip(),
-                scope == null ? "범위가 주어지지 않았어요 — 과목명만 보고 단원을 지어내지 말고, 큰 흐름의 복습 일정으로 짜 주세요" : scope,
+                scope == null ? "범위가 주어지지 않았어요 — 주제만 보고 단원을 지어내지 말고, 큰 흐름의 복습 일정으로 짜 주세요" : scope,
                 in.examDate(), in.dailyMinutes(), in.daysPerWeek(), candidates);
     }
 

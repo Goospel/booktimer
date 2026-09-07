@@ -81,7 +81,10 @@ async function load(): Promise<void> {
         subject.value = found?.subject ?? recallSubjectPrefill(props.items);
         scope.value = found?.scope ?? recallScopePrefill(props.items);
         // 저장된 글이 있으면 그때 고른 책을, 없으면 그날 일정이 가리키는 책을 기본으로(대개 같은 책이다).
+        // hydrating 동안엔 아래 watch를 재운다 — 안 그러면 방금 복원한 주제를 책 제목이 덮는다.
+        hydrating = true;
         bookId.value = found?.bookId ?? props.items.find((i) => i.bookId !== null)?.bookId ?? null;
+        hydrating = false;
         source.value = found?.source ?? 'TEXT';
     } catch {
         error.value = '쓴 글을 불러오지 못했어요.';
@@ -97,6 +100,22 @@ async function load(): Promise<void> {
 }
 
 watch(() => props.date, load, { immediate: true });
+
+/**
+ * 서버에서 복원하는 중인가 — 그동안 아래 watch를 재운다. `flush: 'sync'`라 이 빗장이 동기로 맞물린다
+ * (기본 flush는 다음 틱이라 `hydrating = false` 뒤에 돌아 무용지물이다).
+ */
+let hydrating = false;
+
+/**
+ * 책을 고르면 주제 칸을 그 제목으로 채운다 — 일정 추가(`DayPanel`)·AI 일정(`PlanForm`)과 같은 규칙이다.
+ * 대개 같은 값이라 두 번 쓰게 하지 않는다(직접 고쳐도 된다 — 프리필은 힌트다).
+ */
+watch(bookId, (id) => {
+    if (hydrating) return;
+    const book = props.books.find((b) => b.id === id);
+    if (book) subject.value = book.title;
+}, { flush: 'sync' });
 
 /**
  * 날짜를 옮길 때 사진 상태를 씻는다.
@@ -280,7 +299,7 @@ async function onSave(thenAnalyze: boolean): Promise<void> {
                         </select>
                         <svg class="study-select-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
                     </div>
-                    <input v-model="subject" type="text" maxlength="300" placeholder="과목 (예: 정보처리기사 실기)" aria-label="과목">
+                    <input v-model="subject" type="text" maxlength="300" placeholder="주제 (예: 미적분 · 정보처리기사 실기)" aria-label="주제">
                     <textarea
                         v-model="scope"
                         class="study-recall-scope"

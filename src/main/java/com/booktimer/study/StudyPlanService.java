@@ -228,11 +228,11 @@ public class StudyPlanService {
 
     private static String requireSubject(String subject) {
         if (subject == null || subject.isBlank()) {
-            throw new IllegalArgumentException("과목을 입력해 주세요");
+            throw new IllegalArgumentException("주제를 입력해 주세요");
         }
         String trimmed = subject.strip();
         if (trimmed.length() > StudyPlanItem.SUBJECT_MAX) {
-            throw new IllegalArgumentException("과목은 " + StudyPlanItem.SUBJECT_MAX + "자까지 쓸 수 있어요");
+            throw new IllegalArgumentException("주제는 " + StudyPlanItem.SUBJECT_MAX + "자까지 쓸 수 있어요");
         }
         return trimmed;
     }

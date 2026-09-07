@@ -98,7 +98,7 @@ describe('PlanForm', () => {
         await wrapper.find('[data-testid="plan-generate"]').trigger('click');
 
         expect(vi.mocked(fetch)).not.toHaveBeenCalled();
-        expect(wrapper.find('[data-testid="plan-error"]').text()).toBe('과목을 입력해 주세요.');
+        expect(wrapper.find('[data-testid="plan-error"]').text()).toBe('주제를 입력해 주세요.');
     });
 
     test('서버가 거절하면 그 한국어 사유가 그대로 뜬다(403 승인 필요 · 429 상한)', async () => {
