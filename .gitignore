@@ -70,3 +70,6 @@ deploy/toss/
 
 # Claude Code 개인 설정(머신 로컬) — 공개 레포에 권한 규칙이 실리지 않게
 .claude/settings.local.json
+
+# 앱인토스 콘솔에서 내려받은 AU(활성 사용자) 내역 CSV — 일회성 다운로드, 레포 산출물 아님
+AU내역/
