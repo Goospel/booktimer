@@ -39,6 +39,14 @@ function fetchImpl(url: string, init?: RequestInit) {
             json: async () => (goalPartial ? { goalSeconds: 1800 } : { ...STUDY_IDLE, goalSeconds: 1800 }),
         });
     }
+    // 홈 여백 카드가 「지금 그 책」의 글을 부른다(2026-09-07) — 0건이어도 카드는 뜬다.
+    if (url.includes('/api/stories/of/')) {
+        return Promise.resolve({
+            ok: true, status: 200,
+            json: async () => ({ book: { id: 1, title: '지금 책', author: null, coverUrl: null },
+                                 ownerNickname: '테스터', self: true, entries: [] }),
+        });
+    }
     if (url.includes('/api/study/history')) {
         return Promise.resolve({ ok: true, status: 200, json: async () => ({ graph: GRAPH, months: [] }) });
     }

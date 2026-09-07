@@ -221,124 +221,131 @@ async function onSave(thenAnalyze: boolean): Promise<void> {
         <p v-if="isFuture" class="status-line muted">아직 오지 않은 날이에요.</p>
 
         <template v-else>
-            <div v-if="aiEnabled" class="study-recall-tabs" role="tablist">
-                <button
-                    type="button"
-                    class="btn btn-ghost btn-small"
-                    :class="{ 'is-active': mode === 'TEXT' }"
-                    data-testid="recall-tab-text"
-                    @click="mode = 'TEXT'"
-                >타이핑</button>
-                <button
-                    type="button"
-                    class="btn btn-ghost btn-small"
-                    :class="{ 'is-active': mode === 'PHOTO' }"
-                    data-testid="recall-tab-photo"
-                    @click="mode = 'PHOTO'"
-                >사진</button>
-            </div>
+            <div class="study-recall-split">
+                <div class="study-recall-side">
+                    <div v-if="aiEnabled" class="study-recall-tabs" role="tablist">
+                        <button
+                            type="button"
+                            class="btn btn-ghost btn-small"
+                            :class="{ 'is-active': mode === 'TEXT' }"
+                            data-testid="recall-tab-text"
+                            @click="mode = 'TEXT'"
+                        >타이핑</button>
+                        <button
+                            type="button"
+                            class="btn btn-ghost btn-small"
+                            :class="{ 'is-active': mode === 'PHOTO' }"
+                            data-testid="recall-tab-photo"
+                            @click="mode = 'PHOTO'"
+                        >사진</button>
+                    </div>
 
-            <div v-if="mode === 'PHOTO'" class="study-recall-photo">
-                <p class="status-line muted">종이에 쓴 메모를 찍어 올리면 AI가 읽어 옮겨 적어요 (최대 3장).</p>
-                <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    multiple
-                    aria-label="공부 메모 사진"
-                    data-testid="recall-photo-input"
-                    @change="onPickPhotos"
-                >
-                <ul v-if="photos.length" class="study-recall-photo-list">
-                    <li v-for="(photo, i) in photos" :key="`p-${i}`">
-                        <img :src="photo.dataUrl" alt="올린 사진 미리보기" data-testid="recall-photo-preview">
-                        <button type="button" class="btn btn-ghost btn-small" @click="removePhoto(i)">빼기</button>
-                    </li>
-                </ul>
-                <p v-if="photoError" class="status-line study-error" data-testid="recall-photo-error">{{ photoError }}</p>
-                <p v-else-if="photoCapSpent" class="status-line muted" data-testid="recall-photo-cap-spent">
-                    오늘 몫을 다 썼어요 — 내일 다시 해 주세요.
-                </p>
-                <button
-                    type="button"
-                    class="btn btn-primary btn-small"
-                    :disabled="!canTranscribe"
-                    data-testid="recall-transcribe"
-                    @click="onTranscribe"
-                >{{ photoBusy ? '읽는 중…' : `읽어 오기 (${remainingTranscribe}회 남음)` }}</button>
-            </div>
+                    <div v-if="mode === 'PHOTO'" class="study-recall-photo">
+                        <p class="status-line muted">종이에 쓴 메모를 찍어 올리면 AI가 읽어 옮겨 적어요 (최대 3장).</p>
+                        <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            multiple
+                            aria-label="공부 메모 사진"
+                            data-testid="recall-photo-input"
+                            @change="onPickPhotos"
+                        >
+                        <ul v-if="photos.length" class="study-recall-photo-list">
+                            <li v-for="(photo, i) in photos" :key="`p-${i}`">
+                                <img :src="photo.dataUrl" alt="올린 사진 미리보기" data-testid="recall-photo-preview">
+                                <button type="button" class="btn btn-ghost btn-small" @click="removePhoto(i)">빼기</button>
+                            </li>
+                        </ul>
+                        <p v-if="photoError" class="status-line study-error" data-testid="recall-photo-error">{{ photoError }}</p>
+                        <p v-else-if="photoCapSpent" class="status-line muted" data-testid="recall-photo-cap-spent">
+                            오늘 몫을 다 썼어요 — 내일 다시 해 주세요.
+                        </p>
+                        <button
+                            type="button"
+                            class="btn btn-primary btn-small"
+                            :disabled="!canTranscribe"
+                            data-testid="recall-transcribe"
+                            @click="onTranscribe"
+                        >{{ photoBusy ? '읽는 중…' : `읽어 오기 (${remainingTranscribe}회 남음)` }}</button>
+                    </div>
 
-            <p v-if="transcribed" class="status-line study-recall-transcribed" data-testid="recall-transcribed">
-                AI가 읽은 내용이에요. 틀린 곳을 고친 뒤 저장하세요 — [?]는 못 읽은 부분이에요.
-            </p>
+                    <p v-if="transcribed" class="status-line study-recall-transcribed" data-testid="recall-transcribed">
+                        AI가 읽은 내용이에요. 틀린 곳을 고친 뒤 저장하세요 — [?]는 못 읽은 부분이에요.
+                    </p>
 
-            <div class="study-select-wrap">
-                <select v-model="bookId" class="study-recall-book" aria-label="공부 책" data-testid="recall-book">
-                    <option :value="null">책 없이 (직접 입력)</option>
-                    <option v-for="book in books" :key="book.id" :value="book.id">{{ book.title }}</option>
-                </select>
-                <svg class="study-select-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-            </div>
-            <input v-model="subject" type="text" maxlength="300" placeholder="과목 (예: 정보처리기사 실기)" aria-label="과목">
-            <textarea
-                v-model="scope"
-                class="study-recall-scope"
-                rows="2"
-                maxlength="4000"
-                placeholder="오늘의 범위 (구멍을 찾는 기준이 돼요)"
-                aria-label="범위"
-            ></textarea>
-            <textarea
-                v-model="body"
-                class="study-recall-body"
-                rows="8"
-                maxlength="8000"
-                placeholder="책을 덮고, 기억나는 것을 그대로 적어 보세요."
-                aria-label="백지복습 본문"
-                data-testid="recall-body"
-            ></textarea>
+                    <div class="study-select-wrap">
+                        <select v-model="bookId" class="study-recall-book" aria-label="공부 책" data-testid="recall-book">
+                            <option :value="null">책 없이 (직접 입력)</option>
+                            <option v-for="book in books" :key="book.id" :value="book.id">{{ book.title }}</option>
+                        </select>
+                        <svg class="study-select-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                    </div>
+                    <input v-model="subject" type="text" maxlength="300" placeholder="과목 (예: 정보처리기사 실기)" aria-label="과목">
+                    <textarea
+                        v-model="scope"
+                        class="study-recall-scope"
+                        rows="2"
+                        maxlength="4000"
+                        placeholder="오늘의 범위 (구멍을 찾는 기준이 돼요)"
+                        aria-label="범위"
+                    ></textarea>
+                </div>
 
-            <p v-if="error" class="status-line study-error">{{ error }}</p>
-            <p v-else-if="notice" class="status-line muted">{{ notice }}</p>
+                <div class="study-recall-main">
+                    <textarea
+                        v-model="body"
+                        class="study-recall-body"
+                        rows="8"
+                        maxlength="8000"
+                        placeholder="책을 덮고, 기억나는 것을 그대로 적어 보세요."
+                        aria-label="백지복습 본문"
+                        data-testid="recall-body"
+                    ></textarea>
 
-            <div class="study-recall-actions">
-                <button
-                    type="button"
-                    class="btn btn-ghost btn-small"
-                    :disabled="!canSave"
-                    data-testid="recall-save"
-                    @click="onSave(false)"
-                >저장</button>
-                <button
-                    v-if="aiEnabled"
-                    type="button"
-                    class="btn btn-primary btn-small"
-                    :disabled="!canAnalyze"
-                    data-testid="recall-analyze"
-                    @click="onSave(true)"
-                >저장하고 분석 ({{ remainingAnalyze }}회 남음)</button>
-                <span v-if="aiEnabled && analyzed" class="status-line muted">오늘 분석은 끝났어요.</span>
-                <span v-else-if="capSpent" class="status-line muted" data-testid="recall-cap-spent">오늘 몫을 다 썼어요 — 내일 다시 해 주세요.</span>
-            </div>
+                    <p v-if="error" class="status-line study-error">{{ error }}</p>
+                    <p v-else-if="notice" class="status-line muted">{{ notice }}</p>
 
-            <div v-if="recall && recall.analyzedAt" class="study-recall-result">
-                <p class="study-recall-heading">정리</p>
-                <p class="study-recall-summary">{{ recall.summary }}</p>
+                    <div class="study-recall-actions">
+                        <button
+                            type="button"
+                            class="btn btn-ghost btn-small"
+                            :disabled="!canSave"
+                            data-testid="recall-save"
+                            @click="onSave(false)"
+                        >저장</button>
+                        <button
+                            v-if="aiEnabled"
+                            type="button"
+                            class="btn btn-primary btn-small"
+                            :disabled="!canAnalyze"
+                            data-testid="recall-analyze"
+                            @click="onSave(true)"
+                        >저장하고 분석 ({{ remainingAnalyze }}회 남음)</button>
+                        <span v-if="aiEnabled && analyzed" class="status-line muted">오늘 분석은 끝났어요.</span>
+                        <span v-else-if="capSpent" class="status-line muted" data-testid="recall-cap-spent">오늘 몫을 다 썼어요 — 내일 다시 해 주세요.</span>
+                    </div>
 
-                <template v-if="recall.holes.length">
-                    <p class="study-recall-heading">빠진 곳</p>
-                    <ul class="study-recall-list">
-                        <li v-for="(h, i) in recall.holes" :key="`h-${i}`">{{ h }}</li>
-                    </ul>
-                </template>
+                    <div v-if="recall && recall.analyzedAt" class="study-recall-result">
+                        <p class="study-recall-heading">정리</p>
+                        <p class="study-recall-summary">{{ recall.summary }}</p>
 
-                <template v-if="recall.questions.length">
-                    <p class="study-recall-heading">내일 풀 문제</p>
-                    <ol class="study-recall-list">
-                        <li v-for="(q, i) in recall.questions" :key="`q-${i}`">{{ q }}</li>
-                    </ol>
-                </template>
+                        <template v-if="recall.holes.length">
+                            <p class="study-recall-heading">빠진 곳</p>
+                            <ul class="study-recall-list">
+                                <li v-for="(h, i) in recall.holes" :key="`h-${i}`">{{ h }}</li>
+                            </ul>
+                        </template>
 
-                <p class="status-line muted">AI 판단이라 틀릴 수 있어요.</p>
+                        <template v-if="recall.questions.length">
+                            <p class="study-recall-heading">내일 풀 문제</p>
+                            <ol class="study-recall-list">
+                                <li v-for="(q, i) in recall.questions" :key="`q-${i}`">{{ q }}</li>
+                            </ol>
+                        </template>
+
+                        <p class="status-line muted">AI 판단이라 틀릴 수 있어요.</p>
+                    </div>
+                </div>
             </div>
         </template>
     </div>

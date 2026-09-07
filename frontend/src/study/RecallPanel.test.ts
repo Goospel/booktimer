@@ -274,3 +274,21 @@ describe('백지복습 — 오늘 몫 소진', () => {
         expect(wrapper.find('[data-testid="recall-cap-spent"]').exists()).toBe(false);
     });
 });
+
+// 2026-09-07 — 홈(대시보드)이 이 패널을 그대로 싣는다. 넓은 화면에서 본문을 왼쪽에 크게 두려면
+// 「본문 묶음」과 「부가입력 묶음」이 DOM에서 갈려 있어야 한다(CSS만으로는 순서를 못 바꾼다).
+// 갈라 놓고도 /study의 쓰는 순서는 그대로여야 해서, 두 단언을 한 쌍으로 둔다.
+describe('백지복습 — 두 묶음', () => {
+    test('본문·저장은 main, 책·과목·범위는 side로 갈린다', async () => {
+        const wrapper = await mountPanel();
+        expect(wrapper.find('.study-recall-main [data-testid="recall-body"]').exists()).toBe(true);
+        expect(wrapper.find('.study-recall-main [data-testid="recall-save"]').exists()).toBe(true);
+        expect(wrapper.find('.study-recall-side [data-testid="recall-book"]').exists()).toBe(true);
+        expect(wrapper.find('.study-recall-side .study-recall-scope').exists()).toBe(true);
+    });
+
+    test('/study의 쓰는 순서는 그대로 — 과목·범위가 본문 앞이다', async () => {
+        const html = (await mountPanel()).html();
+        expect(html.indexOf('study-recall-scope')).toBeLessThan(html.indexOf('study-recall-body'));
+    });
+});

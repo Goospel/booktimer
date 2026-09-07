@@ -3083,7 +3083,7 @@ body.personality-page #personality-app { gap: 18px; }
 
 /* 제목(pill/head)을 본문에서 띄워 섹션 분리감 — 카드 안 본문은 촘촘히, 제목 아래만 여유 */
 .dash-nav > .dash-pill,
-.dash-grass-head,
+.dash-card-head,
 .dash-garden-head { margin-bottom: 4px; }
 
 /* 헤더 한 줄 명언 — 홈 카드 묶음을 "닫는 각주"로 정리(2026-07-10, C안 하이브리드).
@@ -3372,38 +3372,29 @@ body.personality-page #personality-app { gap: 18px; }
 .dash-bookless:hover { color: var(--text); }
 .dash-bookless:disabled { opacity: .5; cursor: default; }
 
-/* 독서 잔디 (세이지 — /history .grass-cell과 격리) */
-.dash-grass-card { gap: 18px; }
-.dash-grass-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.dash-grass-head-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* 카드 머리 — 옛 잔디 카드에서 온 공용 부품(2026-09-07 잔디 철거). 여백·백지복습 카드가 같은 머리를
+   쓴다: 왼쪽에 pill(+칩·부제), 오른쪽에 기록 링크. 이름에서 grass를 걷은 것은 이제 잔디가 아니라서다. */
+.dash-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.dash-card-head-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dash-card-sub { font-size: 13px; color: var(--muted); }
+.dash-card-note { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.6; }
 .dash-streak-chip {
     display: inline-flex; align-items: center; gap: 7px;
     background: #E7EEE2; color: var(--accent-hover);
     font-size: 13px; padding: 6px 13px; border-radius: 999px;
 }
 .dash-streak-chip strong { font-variant-numeric: tabular-nums; }
-.dash-grass-scroll { overflow-x: auto; padding-bottom: 4px; }
-.dash-grass-grid {
-    display: grid;
-    grid-auto-flow: column;
-    grid-template-rows: repeat(7, 1fr);
-    gap: 3px;
-    width: max-content;
-    margin: 0 auto;
+
+/* 홈 여백 미리보기 — 최근 2건. 넓어지면 2열로 눕는다(카드가 둘뿐이라 auto-fit이면 충분하다).
+   카드 자체는 책방 여백 패널의 .margin-card를 그대로 쓴다 — 같은 글이 두 화면에서 다르면 어색하다. */
+/* 홈 백지복습 — 패널이 스스로 그리는 「백지복습」 라벨은 여기선 카드 머리의 pill과 겹친다.
+   /study에선 그 라벨이 유일한 제목이라 패널은 그대로 두고, 이 카드 안에서만 감춘다. */
+.dash-recall-card .study-day-label { display: none; }
+
+.dash-margin-cards {
+    list-style: none; margin: 0; padding: 0;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px;
 }
-.dash-grass-cell { width: 13px; height: 13px; border-radius: 3px; background: var(--grass-0); }
-.dash-grass-cell.empty { background: transparent; }
-.dash-grass-cell.s1 { background: var(--grass-0); }
-.dash-grass-cell.s2 { background: var(--grass-1); }
-.dash-grass-cell.s3 { background: var(--grass-2); }
-.dash-grass-cell.s4 { background: var(--grass-3); }
-.dash-grass-cell.s5 { background: var(--grass-4); }
-.dash-grass-cell.manual { box-shadow: inset 0 0 0 2px #C99A3A; }
-.dash-grass-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.dash-grass-summary { font-size: 12.5px; color: var(--muted); }
-.dash-grass-legend { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
-.dash-grass-legend .dash-grass-cell { width: 12px; height: 12px; }
-.dash-legend-gap { margin-left: 6px; }
 
 /* 빠른 이동 */
 .dash-nav { gap: 16px; }
@@ -3439,13 +3430,19 @@ body.personality-page #personality-app { gap: 18px; }
 }
 
 /* 데스크톱 — 넓어진 카드에 안의 요소 크기도 맞춘다(폭만 키우면 카드가 비어 보인다).
-   경계 1100px의 근거는 잔디다: 1년치가 16px 칸으로 가로 스크롤 없이 들어가는 최소 폭이
-   53주 × (16+3) − 3 = 1004px + 카드 패딩 52px + body 좌우 32px ≈ 1088px이다. 이보다 좁으면
-   칸만 커지고 스크롤이 되레 길어지므로 13px를 유지한다. */
+   경계 1100px은 원래 잔디에서 나온 값이다(1년치가 16px 칸으로 스크롤 없이 들어가는 최소 폭). 잔디는
+   2026-09-07에 걷었지만 경계는 그대로 둔다 — 3열 타일·백지복습 2열이 편해지는 폭이 마침 같은 자리다. */
 @media (min-width: 1100px) {
-    .dash-grass-cell { width: 16px; height: 16px; }
-    .dash-grass-legend .dash-grass-cell { width: 12px; height: 12px; }  /* 범례는 본래 크기 — 잔디와 같이 커지면 발밑이 시끄럽다 */
     .dash-progress-wrap, .dash-forgive-note { max-width: none; }        /* 좌열 전체 폭 — 420px 제한은 460px 시절 값이다 */
+
+    /* 홈 백지복습 — 본문을 왼쪽에 크게, 책·과목·범위를 오른쪽 좁은 열로. 안 그러면 한 줄짜리 「과목」
+       입력이 1100px로 늘어나 잔디를 걷어낸 이유를 그대로 되부른다.
+       order로 뒤집는 이유: /study의 쓰는 순서(과목·범위 → 본문)를 DOM에서 지켜야 해서 side가 앞에 있다. */
+    .dash-recall-card .study-recall-split {
+        display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 18px; align-items: start;
+    }
+    .dash-recall-card .study-recall-main { order: 0; }
+    .dash-recall-card .study-recall-side { order: 1; }
     .dash-nav-grid { grid-template-columns: repeat(3, 1fr); }
     .dash-nav-tile:last-child:nth-child(odd) { grid-column: auto; }     /* 3열에선 「마지막 타일 전체폭」 규칙이 되레 어긋난다 */
 }
@@ -3546,8 +3543,8 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 /* 서재 (작가·건물 — 식물 폐기) */
 .dash-garden { gap: 16px; }
 .dash-garden-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.dash-garden-link, .dash-grass-link { font-size: 13.5px; color: var(--accent-hover); text-decoration: none; }
-.dash-garden-link:hover, .dash-grass-link:hover { text-decoration: underline; }
+.dash-garden-link, .dash-card-link { font-size: 13.5px; color: var(--accent-hover); text-decoration: none; }
+.dash-garden-link:hover, .dash-card-link:hover { text-decoration: underline; }
 /* 무대 = 입주 작가 가로 스크롤 갤러리(통합). wrap이 배경·바닥·페이드, stage가 스크롤 컨테이너. */
 .dash-garden-stage-wrap {
     position: relative; border-radius: 14px; border: 1px solid var(--border);
@@ -4368,6 +4365,10 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 
 /* 백지복습 — 쓰는 자리가 화면의 주인공이라 본문 textarea만 크게 두고 나머지는 눌러 둔다. */
 .study-recall { display: flex; flex-direction: column; gap: 8px; }
+/* 두 묶음 — /study에선 display:contents로 래퍼가 사라져 옛 한 줄 세로 배치 그대로다(side·main이
+   .study-recall의 flex 아이템이 되고, 각자도 gap 8px라 간격이 같다). 홈의 넓은 폭에서만 2열이 된다. */
+.study-recall-split { display: contents; }
+.study-recall-side, .study-recall-main { display: flex; flex-direction: column; gap: 8px; }
 .study-recall input, .study-recall textarea, .study-recall-book { width: 100%; }
 /* 본문칸만 줄노트로 둔다 — 「종이에 적는다」가 이 기능의 성격이라, 쓰는 자리에만 결을 준다.
    ⚠️ line-height를 px로 못 박는 것이 핵심이다. 배수(1.6)로 두면 줄 간격이 글꼴 로딩 전후로 달라져

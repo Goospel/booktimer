@@ -6,6 +6,7 @@ import {
     cellLabel,
     cellMarks,
     cycleCheck,
+    dayTitle,
     errorMessage,
     monthTitle,
     nextDay,
@@ -385,5 +386,16 @@ describe('planWeeks', () => {
 
     it('빈 목록은 빈 결과다', () => {
         expect(planWeeks([])).toEqual([]);
+    });
+});
+
+// 하루 패널(/study)과 홈 백지복습 카드가 같은 문형을 쓰는지 — 두 화면이 갈리면 같은 날이 다르게 읽힌다.
+describe('dayTitle', () => {
+    it('요일까지 붙인다 — 2026-09-07은 월요일이다', () => {
+        expect(dayTitle('2026-09-07')).toBe('9월 7일 (월)');
+    });
+
+    it('0 채움을 벗긴다 — 09월이 아니라 9월, 06일이 아니라 6일', () => {
+        expect(dayTitle('2026-09-06')).toBe('9월 6일 (일)');
     });
 });

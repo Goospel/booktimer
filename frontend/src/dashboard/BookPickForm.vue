@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { BookOption } from './types'
 import { initialOf, coverColor } from '../books/pure'
+import { allBooksOf, defaultBookOf } from './defaultBook'
 
 // 측정 시작 진입(발견 1, §6.5) — 드롭다운을 걷어내고 기본 책을 표지 칩으로 보여준다.
 //  · '측정 시작' = 기본 책(최근 읽은 책=이어 읽기)으로 1탭 시작.
@@ -21,11 +22,11 @@ const emit = defineEmits<{
     openSheet: []
 }>()
 
-const allBooks = computed(() => [...props.readingBooks, ...props.finishedBooks, ...props.wantToReadBooks])
-const hasBooks = computed(() => allBooks.value.length > 0)
 // 기본 책 = 최근 읽은 책(이어 읽기) → 없으면 첫 책. 칩에 표시하고 '측정 시작'이 이 책으로 시작한다.
-const defaultBook = computed<BookOption | null>(() =>
-    allBooks.value.find(b => b.id === props.recentBookId) ?? allBooks.value[0] ?? null)
+// 계산은 defaultBook.ts 한 곳 — 홈의 여백 카드가 같은 함수를 봐야 두 자리가 같은 책을 가리킨다.
+const allBooks = computed(() => allBooksOf(props.readingBooks, props.finishedBooks, props.wantToReadBooks))
+const hasBooks = computed(() => allBooks.value.length > 0)
+const defaultBook = computed<BookOption | null>(() => defaultBookOf(allBooks.value, props.recentBookId))
 
 // 칩 표지색 — BookOption엔 isbn이 없어 제목을 seed로 결정적 매핑(무표지 플레이스홀더).
 function coverStyle(b: BookOption) {
