@@ -48,16 +48,6 @@ export function fmtMSS(sec: number): string {
 }
 
 /**
- * 잔디 셀 색조(세이지 5단계) 또는 'empty'.
- * level 0~4 → s1~s5(목표 미달→달성). date=null → 'empty'(투명).
- * manual 플래그는 CSS inset shadow로 처리 — 여기선 tone만 반환.
- */
-export function cellTone(cell: ContributionDay): 'empty' | 's1' | 's2' | 's3' | 's4' | 's5' {
-    if (cell.date === null) return 'empty'
-    return `s${cell.level + 1}` as 's1' | 's2' | 's3' | 's4' | 's5'
-}
-
-/**
  * name null/빈 제외. 제네릭으로 입력 객체의 모든 필드(emoji·spriteId·code 등)를 보존해
  * 무대 SVG 캐릭터 렌더(spriteId)에 그대로 흐르게 한다. name은 non-null로 좁혀 반환.
  */

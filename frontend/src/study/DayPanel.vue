@@ -4,7 +4,7 @@ import { computed, ref, watch } from 'vue';
 import PlanForm from './PlanForm.vue';
 import RecallPanel from './RecallPanel.vue';
 import type { AddItemInput, StudyBookRow } from './api';
-import { aiStatusLine, type AiAccess, type PlanItem } from './pure';
+import { aiStatusLine, dayTitle, type AiAccess, type PlanItem } from './pure';
 
 const props = defineProps<{
     date: string;
@@ -41,12 +41,7 @@ const bookId = ref<number | null>(null);
 /** AI 일정 폼을 펼쳤나 — 접어 두는 것이 기본이다(달력이 먼저 보여야 한다). */
 const planOpen = ref(false);
 
-const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
-
-const title = computed(() => {
-    const [y, m, d] = props.date.split('-').map(Number);
-    return `${m}월 ${d}일 (${WEEKDAYS[new Date(y, m - 1, d).getDay()]})`;
-});
+const title = computed(() => dayTitle(props.date));
 
 // 책을 고르면 과목 칸을 그 제목으로 채운다 — 대개 같은 값이라 두 번 쓰게 하지 않는다(직접 고쳐도 된다).
 watch(bookId, (id) => {

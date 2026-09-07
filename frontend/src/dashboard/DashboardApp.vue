@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import type { DashboardResponse, TimerState, StopResponse, BookOption, StudyState, GraphDto } from './types'
+import type { DashboardResponse, TimerState, StopResponse, BookOption, StudyState } from './types'
 import { IDLE_STUDY, studyStateOf } from './types'
 import { getCsrfToken } from '../shared/follow'
 import type { TimerMode } from './timerMode'
 import { shouldRefresh, readMode, writeMode, effectiveMode } from './timerMode'
+import { allBooksOf, defaultBookOf } from './defaultBook'
 import TimerCard from './TimerCard.vue'
 import StudyTimerCard from './StudyTimerCard.vue'
 import ModeToggle from './ModeToggle.vue'
 import BookPickSheet from './BookPickSheet.vue'
 import StudyBookSheet from './StudyBookSheet.vue'
-import ContributionGraph from './ContributionGraph.vue'
+import MarginCard from './MarginCard.vue'
+import RecallCard from './RecallCard.vue'
 import GardenPanel from './GardenPanel.vue'
 import BrandQuote from './BrandQuote.vue'
 import EmailVerifyBanner from './EmailVerifyBanner.vue'
@@ -61,21 +63,9 @@ const toggleLocked = computed(() => measuring.value || starting.value || stoppin
 const modeHint = ref<string | null>(null)
 watch(toggleLocked, l => { if (!l) modeHint.value = null })
 
-// 공부 잔디 — /api/dashboard의 study 블록엔 graph가 없어 따로 받는다(페이지 수명 동안 캐시, 공부 stop 뒤 재조회).
-const studyGraph = ref<GraphDto | null>(null)
-const studyGraphError = ref(false)
-async function loadStudyGraph() {
-    studyGraphError.value = false
-    try {
-        const res = await fetch('/api/study/history', { credentials: 'same-origin' })
-        if (!res.ok) throw new Error(res.statusText)
-        studyGraph.value = (await res.json() as { graph: GraphDto }).graph
-    } catch {
-        studyGraphError.value = true
-    }
-}
-// immediate: 저장 모드가 study면 마운트 즉시 /api/dashboard와 병렬로 나가 재로드 대기가 0이다.
-watch(mode, m => { if (m === 'study' && !studyGraph.value) loadStudyGraph() }, { immediate: true })
+// 홈의 「지금 그 책」 — 타이머 칩과 여백 카드가 같은 책을 가리켜야 해서 한 곳에서 고른다.
+const marginBook = computed(() =>
+    defaultBookOf(allBooksOf(readingBooks.value, finishedBooks.value, wantToReadBooks.value), recentBookId.value))
 
 // 책 고르기/태깅 통합 시트(발견 1, §6.5) — 'start'=측정 전 고르기, 'tag'=종료 후 태깅. 같은 시트를 모드로 겸한다.
 const sheetMode = ref<'start' | 'tag' | null>(null)
@@ -260,9 +250,6 @@ async function handleStudyStop() {
             studyPendingSessionId.value = s.untaggedSessionId
             studySheet.value = 'tag'
         }
-        // 측정 종료가 잔디가 변하는 순간 — 독서 stop의 data.graph 갈아끼우기와 같은 자리다.
-        // await 하지 않는다: 히어로는 먼저 idle로 돌아간다.
-        loadStudyGraph()
     } catch {
         actionError.value = '네트워크 오류가 발생했습니다'
     } finally {
@@ -496,15 +483,14 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
             </template>
         </StudyTimerCard>
 
-        <ContributionGraph v-if="mode === 'reading'" :graph="data.graph" />
-        <ContributionGraph v-else-if="studyGraph" :graph="studyGraph" mode="study" />
-        <section v-else class="dash-card dash-grass-card is-study">
-            <span class="dash-pill">공부 기록</span>
-            <span class="status-line muted">{{ studyGraphError ? '공부 기록을 불러오지 못했어요' : '불러오는 중…' }}</span>
-        </section>
-
-        <!-- 옛 스토리 스트립 자리 — 여백은 책에 귀속되므로 진입은 내 책방(/u/{me})의 책 리스트 하나뿐이다.
-             대시보드에 대체 진입을 새로 만들지 않는다(2026-08-16 재설계 §D5-1). -->
+        <!-- 잔디가 있던 자리(2026-09-07) — 넓힌 폭에서 1년치 격자가 늘어져 걷었다. 기록은 /history와
+             /study/history에 그대로 있고, 홈은 「오늘 쓰는 자리」가 된다.
+             (주의) 2026-08-16 재설계 §D5-1의 「대시보드에 여백 대체 진입을 만들지 않는다」를 여기서 뒤집는다 —
+             그때는 타임라인 스트립을 없애는 맥락이었고, 지금은 잔디가 비운 자리를 「지금 그 책 하나」로
+             채우는 것이다(진입은 여전히 책 한 권 단위다). -->
+        <MarginCard v-if="mode === 'reading'" :login-id="data.loginId" :book="marginBook"
+                    :streak="data.graph.currentStreak" @open-sheet="openStartSheet" />
+        <RecallCard v-else :books="study.books" />
 
         <div class="dash-grid-2col">
             <QuickNav :login-id="data.loginId" :mode="mode" />

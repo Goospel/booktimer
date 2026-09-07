@@ -61,6 +61,14 @@ export function cycleCheck(kept: boolean | null): boolean | null {
     return kept ? false : null;
 }
 
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
+/** `2026-09-07` → `9월 7일 (월)`. 하루 패널과 홈 백지복습 카드가 같은 문형을 써야 해서 여기 있다. */
+export function dayTitle(date: string): string {
+    const [y, m, d] = date.split('-').map(Number);
+    return `${m}월 ${d}일 (${WEEKDAYS[new Date(y, m - 1, d).getDay()]})`;
+}
+
 /** `2026`,`9` → `2026년 9월`. 0 채움 없이 읽는 말로 쓴다. */
 export function monthTitle(year: number, month: number): string {
     return `${year}년 ${month}월`;

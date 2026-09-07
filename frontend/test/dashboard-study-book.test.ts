@@ -86,6 +86,14 @@ function fetchImpl(url: string, init?: RequestInit) {
             activeBook: shelf.find(b => b.id === id) ?? null,
         });
     }
+    // 홈 여백 카드가 「지금 그 책」의 글을 부른다(2026-09-07) — 0건이어도 카드는 뜬다.
+    if (url.includes('/api/stories/of/')) {
+        return Promise.resolve({
+            ok: true, status: 200,
+            json: async () => ({ book: { id: 1, title: '지금 책', author: null, coverUrl: null },
+                                 ownerNickname: '테스터', self: true, entries: [] }),
+        });
+    }
     if (url.includes('/api/study/history')) return ok({ graph: GRAPH, months: [] });
     if (url.includes('/api/dashboard')) {
         if (partialDoor === 'dashboard') return ok({ ...DASHBOARD, study: PARTIAL() });
@@ -234,8 +242,9 @@ describe('DashboardApp — 종료 후 태깅', () => {
         expect(JSON.parse(sent('/api/study/sessions/')[0].body)).toEqual({ bookId: 5 });
         expect(countOf('/api/sessions/42/tag-book')).toBe(0);
         await vi.waitFor(() => expect(w.find('.book-sheet-overlay').exists()).toBe(false));
-        // stop 뒤 잔디 재조회는 그대로(모드 전환 1 + stop 1).
-        expect(countOf('/api/study/history')).toBe(2);
+        // 2026-09-07 홈 잔디 철거 — 모드 전환에도, stop 뒤에도 이 왕복은 더 이상 없다.
+        // 이 단언이 여기 있는 이유: 이 파일이 실제로 공부 모드로 들어가 공부 stop까지 밟는 유일한 자리다.
+        expect(countOf('/api/study/history')).toBe(0);
     });
 
     test('(e2) 태깅 시트의 「건너뛰기」는 닫기만 한다 — 아무 문도 두드리지 않는다', async () => {

@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
-// DashboardApp 동작 테스트 — 측정 종료 시 잔디(contribution graph)가 새로고침 없이 즉시 갱신되는지.
-// 핵심 회귀 가드: stop 응답에 동봉된 graph로 ContributionGraph(연속일·셀)가 reactive하게 다시 그려져야 한다.
-// (종료 응답이 타이머만 주던 시절엔 잔디가 stale로 남아 페이지 새로고침을 해야 색이 진해졌다.)
+// DashboardApp 동작 테스트 — 측정 종료 시 stop 응답의 graph가 새로고침 없이 화면에 닿는지.
+// 핵심 회귀 가드: 종료 응답에 동봉된 graph로 연속일이 reactive하게 다시 그려져야 한다.
+// (종료 응답이 타이머만 주던 시절엔 stale로 남아 페이지 새로고침을 해야 값이 올라갔다.)
+// 2026-09-07에 홈 잔디를 걷으면서 이 가드의 관측 지점이 잔디 칸 → 여백 카드의 연속일 칩으로 옮겼다 —
+// graph를 화면까지 나르는 배선은 그대로라 회귀 가드는 살아 있다.
 // 순수 시각(색/위치)은 jsdom 무의미 → 실 브라우저 게이트. 여기선 데이터 갱신 배선만.
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
@@ -48,6 +50,14 @@ const DASHBOARD_RESPONSE = {
     emailVerified: true,
 };
 
+// 여백 카드가 「지금 그 책」의 글을 부른다 — 0건이어도 카드는 뜬다.
+const MARGIN_RESPONSE = {
+    book: { id: 1, title: '데미안', author: '헤세', coverUrl: null },
+    ownerNickname: '테스터',
+    self: true,
+    entries: [],
+};
+
 // POST /api/sessions/stop — 중첩 구조 { timer, graph }. 타이머는 종료 반영, graph는 갱신된 잔디.
 const STOP_RESPONSE = {
     timer: {
@@ -67,6 +77,9 @@ const STOP_RESPONSE = {
 };
 
 function fetchImpl(url: string) {
+    if (url.includes('/api/stories/of/')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => MARGIN_RESPONSE });
+    }
     if (url.includes('/api/sessions/stop')) {
         return Promise.resolve({ ok: true, status: 200, json: async () => STOP_RESPONSE });
     }
@@ -91,11 +104,11 @@ describe('DashboardApp', () => {
         expect(url).toContain('/api/dashboard');
     });
 
-    test('측정 종료 → 잔디(연속일)가 stop 응답으로 즉시 갱신된다 (새로고침 불필요)', async () => {
+    test('측정 종료 → 연속일이 stop 응답으로 즉시 갱신된다 (새로고침 불필요)', async () => {
         const wrapper = mount(DashboardApp, { attachTo: document.body });
 
         // 초기 로드 — 연속일 칩이 1
-        await vi.waitFor(() => expect(wrapper.find('.dash-streak-chip').exists()).toBe(true));
+        await vi.waitFor(() => expect(wrapper.find('.dash-margin-card .dash-streak-chip').exists()).toBe(true));
         expect(wrapper.find('.dash-streak-chip strong').text()).toBe('1');
 
         // 측정 종료 버튼 클릭
@@ -113,14 +126,23 @@ describe('DashboardApp', () => {
         await vi.waitFor(() => expect(wrapper.find('.dash-streak-chip strong').text()).toBe('5'));
     });
 
-    // 발견 2: 상단 4겹 정리 — 렌더 순서를 헤더 → 타이머 → 잔디 → 바로가기 순으로.
-    // (옛 스토리 스트립은 2026-08-16 재설계로 폐기 — 여백 진입은 책방의 책 리스트 하나뿐이다.)
-    test('렌더 순서: 타이머 → 잔디 → 바로가기 (발견 2)', async () => {
+    // 발견 2: 상단 4겹 정리 — 렌더 순서를 헤더 → 타이머 → (잔디 자리) → 바로가기 순으로.
+    // 2026-09-07: 그 자리를 여백 카드가 잇는다. 자리(순서)는 규칙이고 내용물만 바뀌었다.
+    test('렌더 순서: 타이머 → 여백 → 바로가기 (발견 2)', async () => {
         const wrapper = mount(DashboardApp, { attachTo: document.body });
         await vi.waitFor(() => expect(wrapper.find('.dash-timer-hero').exists()).toBe(true));
         const html = wrapper.html();
         const pos = (s: string) => html.indexOf(s);
-        expect(pos('dash-timer-hero')).toBeLessThan(pos('dash-grass-card'));
-        expect(pos('dash-grass-card')).toBeLessThan(pos('dash-grid-2col'));
+        expect(pos('dash-timer-hero')).toBeLessThan(pos('dash-margin-card'));
+        expect(pos('dash-margin-card')).toBeLessThan(pos('dash-grid-2col'));
+    });
+
+    // 걷어낸 것을 「없다」로만 재면 컴포넌트를 통째로 안 그려도 통과한다 — 그래서 그 자리에 무엇이
+    // 섰는지를 같은 테스트에서 함께 단언한다(여백 카드 = 양성 대조군).
+    test('홈에 잔디가 없다 — 대신 여백 카드가 그 자리에 선다', async () => {
+        const wrapper = mount(DashboardApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.find('.dash-margin-card').exists()).toBe(true));
+        expect(wrapper.find('.dash-grass-grid').exists()).toBe(false);
+        expect(wrapper.find('.dash-grass-card').exists()).toBe(false);
     });
 });
