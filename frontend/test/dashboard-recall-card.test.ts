@@ -68,10 +68,15 @@ afterEach(() => {
 });
 
 describe('홈 백지복습 카드 — 머리', () => {
-    test('pill은 「백지복습」이고 기록 링크가 공부 기록으로 간다', async () => {
-        const wrapper = await mountCard();
-        expect(wrapper.find('.dash-pill').text()).toBe('백지복습');
-        expect(wrapper.find('a[href="/study/history"]').exists()).toBe(true);
+    test('pill은 「백지복습」이다', async () => {
+        expect((await mountCard()).find('.dash-pill').text()).toBe('백지복습');
+    });
+
+    // 바로 아래 「빠른 이동」에 공부 기록 타일이 있어 카드 머리의 링크는 같은 말을 두 번 하는 것이었다
+    // (2026-09-07 사용자 지적). 「타일에는 있다」는 짝은 dashboard-separation.test.ts (b)가 잰다 —
+    // 여기서만 부정 단언을 두면 두 자리 모두에서 사라져도 초록이다.
+    test('카드 머리엔 공부 기록 링크를 두지 않는다', async () => {
+        expect((await mountCard()).find('a[href="/study/history"]').exists()).toBe(false);
     });
 
     test('오늘이 며칠인지 말한다 — 기기 시계(9/7)가 아니라 서버가 준 날(9/21)이다', async () => {
