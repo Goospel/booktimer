@@ -27,11 +27,27 @@ const entries = ref<MarginEntry[] | null>(null)
 const failed = ref(false)
 const composerOpen = ref(false)
 
+/**
+ * 이 카드가 지금 기다리는 요청의 세대. 책을 바꾸면 올라가고, **늦게 도착한 옛 응답은 버린다** —
+ * 「바꿀 때 비운다」만으로는 못 막는다(늦게 온 A가 B의 빈 칸을 다시 채운다).
+ */
+let generation = 0
+
 async function load(): Promise<void> {
+    const mine = ++generation
     entries.value = null
     failed.value = false
     if (!props.book) return
-    const res = await fetchMargin(props.loginId, props.book.id)
+    // fetch 자체가 거부되는 길(오프라인·DNS)이 fetchMargin의 null 수렴 밖이다 — 안 잡으면
+    // failed가 false인 채 「불러오는 중」에 영원히 갇힌다(실패 상태가 있는데 안 닿는다).
+    let res: Awaited<ReturnType<typeof fetchMargin>>
+    try {
+        res = await fetchMargin(props.loginId, props.book.id)
+    } catch {
+        if (mine === generation) failed.value = true
+        return
+    }
+    if (mine !== generation) return
     if (res === null) {
         failed.value = true
         return

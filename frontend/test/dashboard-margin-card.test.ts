@@ -150,8 +150,49 @@ describe('홈 여백 카드 — 빈 상태와 실패는 서로 다른 얼굴이�
     // 카드가 그 둘을 갈라야 한다. 위 0건 테스트가 이 단언의 양성 대조군이다.
     test('불러오지 못하면 「0건」이 아니라 실패라고 말한다', async () => {
         vi.mocked(fetch).mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) } as Response);
-        const wrapper = mount(MarginCard, { attachTo: document.body, props: { loginId: 'tester', book: BOOK } });
+        const wrapper = mount(MarginCard, { attachTo: document.body, props: { loginId: 'tester', book: BOOK, streak: 0 } });
         await vi.waitFor(() => expect(wrapper.text()).toContain('불러오지 못했'));
         expect(wrapper.text()).not.toContain('아직');
+    });
+});
+
+// 리뷰 실측(2026-09-07)으로 드러난 두 구멍. 둘 다 「화면이 멀쩡한 채 틀린 것을 보여 준다」는 얼굴이라
+// 눈으로는 안 걸리고, 앞선 계측기 9종 중 이 둘만 돌연변이가 살아남았다.
+describe('홈 여백 카드 — 실패와 경합', () => {
+    test('fetch가 통째로 거부돼도(오프라인·DNS) 「불러오는 중」에 갇히지 않는다', async () => {
+        vi.mocked(fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        const wrapper = mount(MarginCard, {
+            attachTo: document.body,
+            props: { loginId: 'tester', book: BOOK, streak: 0 },
+        });
+        await vi.waitFor(() => expect(wrapper.text()).toContain('불러오지 못했'));
+        expect(wrapper.text()).not.toContain('불러오는 중');
+    });
+
+    // 책 A→B로 바꿨는데 A의 응답이 늦게 도착하면, B의 제목 아래 A의 글이 앉는다.
+    // 「바꾸는 순간 비운다」만으로는 못 막는다 — 늦게 온 응답이 그 빈 칸을 다시 채우기 때문이다.
+    test('늦게 도착한 옛 책의 응답이 새 책 화면을 덮지 않는다', async () => {
+        let resolveA!: (r: Response) => void;
+        vi.mocked(fetch)
+            .mockImplementationOnce(() => new Promise<Response>(r => { resolveA = r; }))
+            .mockResolvedValueOnce(okJson({
+                ...marginResponse([entry(9, 'B의 글')]),
+                book: { id: 8, title: '다른 책', author: null, coverUrl: null },
+            }));
+
+        const wrapper = mount(MarginCard, {
+            attachTo: document.body,
+            props: { loginId: 'tester', book: BOOK, streak: 0 },
+        });
+        await wrapper.setProps({ book: { id: 8, title: '다른 책' } });
+        await vi.waitFor(() => expect(wrapper.text()).toContain('B의 글'));
+
+        // 이제서야 A가 도착한다
+        resolveA(okJson(marginResponse([entry(1, 'A의 글')])));
+        await new Promise(r => setTimeout(r, 0));
+        await wrapper.vm.$nextTick();
+
+        expect(wrapper.text()).toContain('B의 글');
+        expect(wrapper.text()).not.toContain('A의 글');
     });
 });

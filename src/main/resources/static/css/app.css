@@ -54,7 +54,8 @@
     --neutral-1: #CFC6B4;
     --neutral-2: #C4BCAC;
     --neutral-3: #9A9486;
-    /* 잔디 5단계 — 히스토리(.grass-cell.level-*)·대시보드(.dash-grass-cell.s*) 단일 출처.
+    /* 잔디 5단계 — 이제 소비자는 /history·/study/history의 .grass-cell.level-* 하나다
+     (대시보드 잔디는 2026-09-07에 걷었다).
        값 바꾸면 둘 다 반영(발견 7: 대비 강화). 미달→달성 순으로 진해진다. */
     --grass-0: #EAE4D7;
     --grass-1: #C3D9B0;
@@ -1020,7 +1021,7 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     gap: 3px;
 }
 
-/* 셀 색·크기·manual을 대시보드 .dash-grass-cell(세이지 톤)과 통일(사용자 요청). 값 바꾸면 둘 다 — 단일 출처 var 후보. */
+/* 셀 색·크기·manual — 옛 대시보드 잔디와 톤을 맞춘 값이다(그쪽은 2026-09-07에 걷었고 여기만 남았다). */
 .grass-cell {
     width: 13px;
     height: 13px;
@@ -3391,6 +3392,20 @@ body.personality-page #personality-app { gap: 18px; }
    /study에선 그 라벨이 유일한 제목이라 패널은 그대로 두고, 이 카드 안에서만 감춘다. */
 .dash-recall-card .study-day-label { display: none; }
 
+/* 긴 것에 상한을 둔다 — 잔디를 걷어낸 이유가 「늘어짐」이라 여기서 다시 늘어나면 헛일이다.
+   책 제목은 한 줄, 미리보기 본문은 4줄까지. 책방 여백 패널(.margin-card)엔 안 닿는다 —
+   거기선 글 전문을 읽는 것이 목적이다. */
+.dash-card-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46ch; }
+.dash-margin-cards .margin-card-text {
+    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+}
+.dash-margin-card .dash-btn-fill {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* 부가 입력이 카드 폭까지 늘어나는 것을 640~1099px 대역에서도 막는다(2열이 서는 폭 아래).
+   ≥1100px에선 그리드 열이 330px이라 이 상한은 닿지 않는다. */
+.dash-recall-card .study-recall-side { max-width: 460px; }
+
 .dash-margin-cards {
     list-style: none; margin: 0; padding: 0;
     display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px;
@@ -3626,7 +3641,7 @@ body.dashboard-page #dashboard-app { gap: 20px; }
     --grass-1: #AFC4D2; --grass-2: #83A0B4; --grass-3: #536F85; --grass-4: #3A5266;
 }
 .dash-timer-hero.is-study { background: #EFF3F6; }   /* 푸른 종이는 히어로만(미니앱 --heroCardBg) */
-.is-study .dash-pill, .is-study .dash-streak-chip, .is-study .grass-streak,
+.is-study .dash-pill, .is-study .grass-streak,   /* 연속일 칩은 독서 카드에만 있어 .dash-streak-chip은 뺐다 */
 .is-study .dash-progress-track,
 .is-study .dash-btn-outline:hover { background: #E6ECF0; }   /* 리터럴 #E7EEE2 자리들 */
 .is-study .dash-timer-num { color: #47657C; }

@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 import {
     computeProgress,
     fmtMSS,
-    cellTone,
     visibleAuthors,
     showStreakChip,
     displayName,
@@ -184,29 +183,6 @@ describe('fmtMSS', () => {
     it('3661 → "01:01:01"', () => expect(fmtMSS(3661)).toBe('01:01:01'))
     it('음수 → "00:00"', () => expect(fmtMSS(-1)).toBe('00:00'))
     it('NaN → "00:00"', () => expect(fmtMSS(NaN)).toBe('00:00'))
-})
-
-// ── cellTone ─────────────────────────────────────────────────────────────────
-
-describe('cellTone', () => {
-    const day = (level: number, manual = false) => ({
-        date: '2026-01-01',
-        totalSeconds: 0,
-        level,
-        manual,
-    })
-
-    it('date=null → "empty"', () =>
-        expect(cellTone({ date: null, totalSeconds: 0, level: 0, manual: false })).toBe('empty'))
-
-    it('level 0 → "s1"', () => expect(cellTone(day(0))).toBe('s1'))
-    it('level 1 → "s2"', () => expect(cellTone(day(1))).toBe('s2'))
-    it('level 2 → "s3"', () => expect(cellTone(day(2))).toBe('s3'))
-    it('level 3 → "s4"', () => expect(cellTone(day(3))).toBe('s4'))
-    it('level 4 → "s5"', () => expect(cellTone(day(4))).toBe('s5'))
-    // manual 플래그는 CSS modifier — tone은 동일
-    it('manual=true여도 tone은 level 기반', () =>
-        expect(cellTone(day(2, true))).toBe('s3'))
 })
 
 // ── visibleAuthors ────────────────────────────────────────────────────────────

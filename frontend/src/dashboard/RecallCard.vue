@@ -34,7 +34,13 @@ function currentMonth(): string {
 async function load(): Promise<void> {
     failed.value = false
     try {
-        const agenda = await fetchAgenda(currentMonth())
+        const asked = currentMonth()
+        let agenda = await fetchAgenda(asked)
+        // 달은 기기 시계로 고르는데 today는 서버(유저 tz)다 — 시차로 둘이 다른 달로 갈리면 요청한 달에
+        // 오늘이 없어 **일정이 빈 채로 화면은 멀쩡하게** 그려진다(저장은 서버 today로 가니 원장 오염은
+        // 없고, 프리필과 어제 문제만 조용히 사라진다). 한 번만 바로잡는다 — 두 번째도 어긋나면 못 맞추는
+        // 서버이므로 매달리지 않는다.
+        if (agenda.today.slice(0, 7) !== asked) agenda = await fetchAgenda(agenda.today.slice(0, 7))
         today.value = agenda.today
         items.value = agenda.items
         recalls.value = agenda.recalls
