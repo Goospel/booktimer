@@ -246,9 +246,12 @@
              코드를 막 받은 직후와 이미 연결된 뒤 두 경우에만 띄운다 — 아직 연결도 코드 발급도 안 한
              사람을 여기서 미니앱으로 보내면 토스 로그인으로 별개 계정이 생겨 기록이 갈린다.
              모바일 미니앱 칩(pwa-install.js)이 로그인 사용자를 보내는 곳도 이 카드다. -->
-        <!-- `or`의 피연산자는 boolean이라 String을 그대로 두지 않고 null 비교로 명시한다
-             (`${... or tossLinkCode}`는 SpringEL 변환에 기대는 꼴이라 의도가 코드에 안 남는다). -->
-        <a th:if="${tossLinked or tossLinkCode != null}" class="set-btn-save" href="intoss://booktimer/">휴대폰에서 토스 앱 열기</a>
+        <!-- ⚠️ 두 피연산자를 모두 명시적 비교로 쓴다 — `or`는 boolean을 요구하는데 여기 오는 값이 그렇지 않다.
+             ① tossLinkCode는 String이고 ② tossLinked는 **null일 수 있다**: POST /settings의 검증 실패 경로는
+             폼을 다시 그릴 뿐 GET이 채우던 모델을 채우지 않아, `${tossLinked or ...}`로 쓰면 그 화면에서만
+             SpelEvaluationException으로 터진다(SettingsControllerTest 2건이 잡았다). `th:if="${tossLinked}"`
+             단독은 null을 false로 조용히 넘기지만 `or`의 피연산자로는 그렇지 않다. -->
+        <a th:if="${tossLinked == true or tossLinkCode != null}" class="set-btn-save" href="intoss://booktimer/">휴대폰에서 토스 앱 열기</a>
     </section>
 
     <!-- 회원 탈퇴 (위험 구역) -->
