@@ -147,7 +147,7 @@ defineExpose({ closeEdit })
                         <span class="dash-idle-label">이 책으로 공부할까요?</span>
                         <div class="dash-book-chip">
                             <span class="dash-book-chip-cover" :style="coverStyle(defaultBook)" aria-hidden="true">{{ initialOf(defaultBook.title) }}</span>
-                            <span class="dash-book-chip-title">{{ defaultBook.title }}</span>
+                            <span class="dash-book-chip-title" :title="defaultBook.title">{{ defaultBook.title }}</span>
                             <button type="button" class="dash-book-chip-change" :disabled="starting" @click="emit('openSheet')">바꾸기</button>
                         </div>
                         <button type="button" class="dash-btn-fill" :disabled="starting" @click="emit('start', defaultBook.id)">
