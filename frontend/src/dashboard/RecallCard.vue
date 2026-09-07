@@ -70,8 +70,9 @@ function onSaved(): void {
                 <span class="dash-pill">백지복습</span>
                 <span v-if="today" class="dash-card-sub">{{ dayTitle(today) }}</span>
             </div>
-            <!-- 잔디 카드가 들고 있던 기록 진입점 -->
-            <a class="dash-card-link" href="/study/history">공부 기록 →</a>
+            <!-- 기록 진입점을 여기 두지 않는다 — 바로 아래 「빠른 이동」에 공부 기록 타일이 있어
+                 같은 말을 두 번 하는 자리였다(2026-09-07). 독서 카드는 반대로 링크를 남긴다:
+                 그쪽 빠른 이동엔 기록 타일이 없어 홈에서 /history로 가는 유일한 길이다. -->
         </div>
 
         <p v-if="failed" class="dash-card-note">오늘 복습을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p>

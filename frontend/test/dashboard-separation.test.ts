@@ -115,8 +115,9 @@ describe('DashboardApp — 모드가 쓰는 카드·타일·정원을 끌고 간
         expect(w.find('[data-testid="recall-body"]').exists()).toBe(true);
         expect(w.find('.dash-margin-card').exists()).toBe(false);
         expect(w.find('.dash-garden').exists()).toBe(false);
-        // 카드 링크 + 타일 = 2개. 독서 기록으로 가는 문은 남지 않는다.
-        expect(w.findAll('a[href="/study/history"]')).toHaveLength(2);
+        // 공부 기록으로 가는 문은 **타일 하나뿐**이다 — 카드 머리의 중복 링크는 걷었다(2026-09-07).
+        // 이 1이 recall-card 쪽 「카드엔 없다」의 양성 대조군이다(둘 다 사라지면 여기가 죽는다).
+        expect(w.findAll('a[href="/study/history"]')).toHaveLength(1);
         expect(w.findAll('a[href="/history"]')).toHaveLength(0);
         expect(tileHrefs(w)).toEqual(['/study/books', '/study', '/study/history']);
     });
