@@ -24,6 +24,11 @@ export interface GraphDto {
 export interface BookOption {
     id: number
     title: string
+    /**
+     * 표지 주소 — 서버 `BookOption`이 <b>처음부터 보내던 필드</b>인데 이 타입에 없어서 화면이 버리고
+     * 색 박스만 그렸다(2026-09-07 사용자 지적). 옛 픽스처엔 없으므로 optional이다.
+     */
+    coverUrl?: string | null
 }
 
 /** 보유 작가 — 대시보드는 name·emoji만 쓴다(affection/level/title은 0 고정이라 참조 금지). */

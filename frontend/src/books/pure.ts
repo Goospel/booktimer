@@ -30,6 +30,10 @@ export function summarize(books: readonly ShelfBookLike[]): ShelfSummary {
 // ── 표지 이니셜 ───────────────────────────────────────────────────────────
 // 시안: b.t.charAt(0). 앞 공백은 trim, 빈/공백 제목은 폴백 문자로.
 
+/** 표지 주소가 실제로 있는가 — null·빈문자열·공백은 false. 구현은 profile/format.ts 하나다
+ *  (두 벌이 되면 「공백은 표지인가」가 화면마다 갈린다). */
+export { hasCover } from '../profile/format'
+
 export function initialOf(title: string): string {
     const t = (title ?? '').trim();
     return t ? t.charAt(0) : '?';

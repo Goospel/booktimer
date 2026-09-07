@@ -3,7 +3,7 @@ import { ref, watch, computed } from 'vue'
 import { useReadingTimer } from './useReadingTimer'
 import { fmtMSS, goalLabel } from './timerProgress'
 import { studyProgress, minutesToGoalSeconds } from './studyProgress'
-import { initialOf, coverColor } from '../books/pure'
+import { initialOf, coverColor, hasCover } from '../books/pure'
 import type { StudyBookRow } from '../study/api'
 
 const props = withDefaults(defineProps<{
@@ -146,7 +146,9 @@ defineExpose({ closeEdit })
                     <template v-if="defaultBook">
                         <span class="dash-idle-label">이 책으로 공부할까요?</span>
                         <div class="dash-book-chip">
-                            <span class="dash-book-chip-cover" :style="coverStyle(defaultBook)" aria-hidden="true">{{ initialOf(defaultBook.title) }}</span>
+                            <img v-if="hasCover(defaultBook.coverUrl)" class="dash-book-chip-cover"
+                                 :src="defaultBook.coverUrl!" alt="" loading="lazy" referrerpolicy="no-referrer">
+                            <span v-else class="dash-book-chip-cover" :style="coverStyle(defaultBook)" aria-hidden="true">{{ initialOf(defaultBook.title) }}</span>
                             <span class="dash-book-chip-title" :title="defaultBook.title">{{ defaultBook.title }}</span>
                             <button type="button" class="dash-book-chip-change" :disabled="starting" @click="emit('openSheet')">바꾸기</button>
                         </div>

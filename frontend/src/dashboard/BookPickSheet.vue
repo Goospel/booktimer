@@ -55,10 +55,12 @@ const shelf = ref<ShelfBook[]>([])
 const searchEnabled = ref(false)
 const loadFailed = ref(false)
 
+// /api/books가 죽었을 때의 폴백. 대시보드 응답에도 표지가 실려 있으므로(BookOption.coverUrl)
+// 이 경로에서도 표지를 잃지 않는다 — 예전엔 여기서 null로 떨어뜨려 실패하면 전부 색 박스가 됐다.
 const fallback = computed<ShelfBook[]>(() => [
-    ...props.readingBooks.map(b => ({ id: b.id, title: b.title, author: null, coverUrl: null, isbn13: null, status: 'READING', statusLabel: '읽는 중' })),
-    ...props.finishedBooks.map(b => ({ id: b.id, title: b.title, author: null, coverUrl: null, isbn13: null, status: 'FINISHED', statusLabel: '완독' })),
-    ...props.wantToReadBooks.map(b => ({ id: b.id, title: b.title, author: null, coverUrl: null, isbn13: null, status: 'WANT_TO_READ', statusLabel: '읽고 싶음' })),
+    ...props.readingBooks.map(b => ({ id: b.id, title: b.title, author: null, coverUrl: b.coverUrl ?? null, isbn13: null, status: 'READING', statusLabel: '읽는 중' })),
+    ...props.finishedBooks.map(b => ({ id: b.id, title: b.title, author: null, coverUrl: b.coverUrl ?? null, isbn13: null, status: 'FINISHED', statusLabel: '완독' })),
+    ...props.wantToReadBooks.map(b => ({ id: b.id, title: b.title, author: null, coverUrl: b.coverUrl ?? null, isbn13: null, status: 'WANT_TO_READ', statusLabel: '읽고 싶음' })),
 ])
 const allBooks = computed(() => loadFailed.value ? fallback.value : shelf.value)
 const books = computed(() => filter.value === 'ALL' ? allBooks.value : allBooks.value.filter(b => b.status === filter.value))

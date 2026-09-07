@@ -3352,6 +3352,9 @@ body.personality-page #personality-app { gap: 18px; }
     font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 14px; line-height: 1; user-select: none;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .4), 0 2px 4px rgba(120, 100, 70, .18);
 }
+/* 실표지일 때 — 비율이 제각각이라 잘라 채운다. 로드 전·투명 PNG의 뒷배경은 종이색으로 둔다. */
+img.dash-book-chip-cover { object-fit: cover; background: #EDE7DA; }
+
 /* 제목은 2줄까지 — 한 줄 ellipsis는 좁은 우패널에서 9자쯤에 끊겼다(실측 57자 제목이 「2026 이기적 …」).
    2줄로도 넘치는 초장문은 :title(호버 툴팁)이 받는다 — bookChipTitle.test.ts가 그 속성을 못 박는다. */
 .dash-book-chip-title {
