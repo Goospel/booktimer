@@ -4017,6 +4017,9 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .settings-page .set-actions { display: flex; justify-content: flex-end; margin-top: 20px; }
 .settings-page .set-btn-save { width: auto; background: var(--accent); color: #fff; border: none; border-radius: 999px; padding: 11px 24px; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; transition: background .15s; }
 .settings-page .set-btn-save:hover { background: var(--accent-hover); }
+/* 「휴대폰에서 토스 앱 열기」는 button이 아니라 a라 버튼 모양을 직접 갖춘다 — inline이라 padding이
+   눌리고 밑줄이 남는다. 나머지 색·모양은 위 규칙을 그대로 탄다. */
+.settings-page a.set-btn-save { display: inline-block; text-decoration: none; }
 .settings-page .set-btn-danger { width: 100%; background: #C0524A; color: #fff; border: none; border-radius: 999px; padding: 12px 24px; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; transition: background .15s; }
 .settings-page .set-btn-danger:hover { background: #A5443C; }
 
