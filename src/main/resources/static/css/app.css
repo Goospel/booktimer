@@ -3187,7 +3187,9 @@ body.personality-page #personality-app { gap: 18px; }
 .dash-timer-num {
     font-family: 'Gowun Batang', serif;
     font-weight: 700;
-    font-size: clamp(52px, 8.5vw, 76px);
+    /* 상한 96 — 와이드(1160px) 히어로에서 숫자가 카드에 눌리지 않게. 8.5vw가 상한에 닿는 건
+       ≥1129px라 모바일·태블릿은 하한 52px 그대로(무영향). */
+    font-size: clamp(52px, 8.5vw, 96px);
     line-height: .95;
     color: var(--text);
     font-variant-numeric: tabular-nums;
@@ -3349,7 +3351,12 @@ body.personality-page #personality-app { gap: 18px; }
     font-family: 'Gowun Batang', serif; font-weight: 700; font-size: 14px; line-height: 1; user-select: none;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .4), 0 2px 4px rgba(120, 100, 70, .18);
 }
-.dash-book-chip-title { flex: 1 1 auto; min-width: 0; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 제목은 2줄까지 — 한 줄 ellipsis는 좁은 우패널에서 9자쯤에 끊겼다(실측 57자 제목이 「2026 이기적 …」).
+   2줄로도 넘치는 초장문은 :title(호버 툴팁)이 받는다 — bookChipTitle.test.ts가 그 속성을 못 박는다. */
+.dash-book-chip-title {
+    flex: 1 1 auto; min-width: 0; font-weight: 600; color: var(--text); line-height: 1.35;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
 .dash-book-chip-change {
     width: auto; flex-shrink: 0; padding: 6px 12px; border: 1px solid var(--border);
  border-image: var(--pencil-frame) 8 / 8px stretch; border-radius: 999px;
@@ -3423,9 +3430,24 @@ body.personality-page #personality-app { gap: 18px; }
 
 /* ── PR-3: 헤더 사용자영역 · 서재 · 로그아웃 · 와이드 2단 ── */
 
-/* 와이드 레이아웃 (대시보드 전용 — 전역 .container max-width 460은 건드리지 않음) */
+/* 와이드 레이아웃 (대시보드 전용 — 전역 .container max-width 460은 건드리지 않음).
+   760 → 1160: 1440px 창에서 화면의 40%만 쓰던 것을 넓힌다. 웹의 주 사용처를 데스크톱·태블릿으로
+   두기로 한 방침(모바일은 미니앱)에 맞춘 값이다. .container는 width:100%라 좁은 화면은 그대로 뷰포트에
+   맞으므로 640px 경계는 손대지 않는다. */
 @media (min-width: 640px) {
-    body.dashboard-page .container { max-width: 760px; }
+    body.dashboard-page .container { max-width: 1160px; }
+}
+
+/* 데스크톱 — 넓어진 카드에 안의 요소 크기도 맞춘다(폭만 키우면 카드가 비어 보인다).
+   경계 1100px의 근거는 잔디다: 1년치가 16px 칸으로 가로 스크롤 없이 들어가는 최소 폭이
+   53주 × (16+3) − 3 = 1004px + 카드 패딩 52px + body 좌우 32px ≈ 1088px이다. 이보다 좁으면
+   칸만 커지고 스크롤이 되레 길어지므로 13px를 유지한다. */
+@media (min-width: 1100px) {
+    .dash-grass-cell { width: 16px; height: 16px; }
+    .dash-grass-legend .dash-grass-cell { width: 12px; height: 12px; }  /* 범례는 본래 크기 — 잔디와 같이 커지면 발밑이 시끄럽다 */
+    .dash-progress-wrap, .dash-forgive-note { max-width: none; }        /* 좌열 전체 폭 — 420px 제한은 460px 시절 값이다 */
+    .dash-nav-grid { grid-template-columns: repeat(3, 1fr); }
+    .dash-nav-tile:last-child:nth-child(odd) { grid-column: auto; }     /* 3열에선 「마지막 타일 전체폭」 규칙이 되레 어긋난다 */
 }
 
 /* 카드 사이 간격 — 공유 #dashboard-app gap(16px) 위에 대시보드만 여유롭게.
@@ -4416,3 +4438,16 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .study-plan-replace { margin-top: 10px; }
 .study-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .study-plan-actions .btn { width: auto; flex: 0 0 auto; }
+
+/* ── 데스크톱 와이드 페이지 (/study 셸 — 일정·기록·공부 서재) ──
+   달력과 책 목록은 460px에서 답답하다(달력은 한 칸이 60px, 긴 책 제목은 3줄로 접힌다).
+   홈과 같은 1160px을 쓰되 **폼은 따라 늘리지 않는다** — 입력 한 칸이 1100px이면 되레 쓰기 나쁘다.
+   `/search`(사용자 검색)를 여기 넣지 않은 것도 같은 이유다: 그 화면은 폼과 한 줄짜리 결과가 전부라
+   넓히면 「팔로우」 버튼만 저 멀리 떨어진다(넓혀서 손해인 화면은 넓히지 않는다). */
+@media (min-width: 900px) {
+    .container.wide-page { max-width: 1160px; }
+    .container.wide-page .book-search-form,
+    .container.wide-page .book-manual-form,
+    .container.wide-page .study-day-form,
+    .container.wide-page .study-plan-form { max-width: 620px; }
+}
