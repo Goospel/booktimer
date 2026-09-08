@@ -23,6 +23,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -134,22 +135,31 @@ public class StudyRecallService {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI 기능이 꺼져 있어요");
         }
 
-        LocalDate today = StudyDates.today(user, clock);
-        if (!usageService.tryConsume(user, today, Kind.ANALYZE)) {
-            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "오늘 몫을 다 썼어요 — 내일 다시 해 주세요");
-        }
+        // 시각을 한 번만 읽는다 — 사용자 몫(유저 tz 날짜)과 전역 몫(UTC 날짜)이 같은 순간을 봐야 한다.
+        Instant now = clock.instant();
+        // switch **식**이라 컴파일러가 망라성을 강제한다 — switch 문으로 두면 Grant에 값이
+        // 추가될 때 경고 없이 **그대로 유료 호출로 진행**한다(리뷰 실측: javac -Xlint:all 무경고).
+        // 상한을 우회하는 문이 미래의 한 줄 추가로 조용히 열리는 자리다.
+        boolean granted = switch (usageService.tryConsumeBoth(user, now, Kind.ANALYZE)) {
+            case USER_EXHAUSTED -> throw new ResponseStatusException(
+                    HttpStatus.TOO_MANY_REQUESTS, "오늘 몫을 다 썼어요 — 내일 다시 해 주세요");
+            case GLOBAL_EXHAUSTED -> throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, "오늘은 AI 요청이 많아 잠시 멈췄어요 — 내일 다시 해 주세요");
+            case OK -> true;
+        };
+        assert granted;
 
         AiResult<RecallAnalysis> result = assistant.analyzeRecall(
                 new RecallInput(recall.getSubject(), recall.getScopeText(), recall.getBody()));
         if (!result.ok()) {
-            usageService.refund(user, today, Kind.ANALYZE);
+            usageService.refundBoth(user, now, Kind.ANALYZE);
             throw failure(result.failure());
         }
         Optional<RecallAnalysis> analysis = ClaudeStudyAssistant.normalize(result.value());
         if (analysis.isEmpty()) {
             // 형식은 맞는데 담을 값이 없다 — 저장하면 화면이 빈 칸으로 채워진다. 실패로 취급하고 환불한다.
             log.warn("Claude 분석 결과가 비어 저장하지 않는다 — user={}", user.getId());
-            usageService.refund(user, today, Kind.ANALYZE);
+            usageService.refundBoth(user, now, Kind.ANALYZE);
             throw failure(Failure.UNAVAILABLE);
         }
         recall.applyAnalysis(analysis.get().summary(), encode(analysis.get().holes()),
@@ -178,21 +188,29 @@ public class StudyRecallService {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI 기능이 꺼져 있어요");
         }
 
-        LocalDate today = StudyDates.today(user, clock);
-        if (!usageService.tryConsume(user, today, Kind.TRANSCRIBE)) {
-            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "오늘 몫을 다 썼어요 — 내일 다시 해 주세요");
-        }
+        Instant now = clock.instant();
+        // switch **식**이라 컴파일러가 망라성을 강제한다 — switch 문으로 두면 Grant에 값이
+        // 추가될 때 경고 없이 **그대로 유료 호출로 진행**한다(리뷰 실측: javac -Xlint:all 무경고).
+        // 상한을 우회하는 문이 미래의 한 줄 추가로 조용히 열리는 자리다.
+        boolean granted = switch (usageService.tryConsumeBoth(user, now, Kind.TRANSCRIBE)) {
+            case USER_EXHAUSTED -> throw new ResponseStatusException(
+                    HttpStatus.TOO_MANY_REQUESTS, "오늘 몫을 다 썼어요 — 내일 다시 해 주세요");
+            case GLOBAL_EXHAUSTED -> throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, "오늘은 AI 요청이 많아 잠시 멈췄어요 — 내일 다시 해 주세요");
+            case OK -> true;
+        };
+        assert granted;
 
         AiResult<Transcript> result = assistant.transcribe(parts);
         if (!result.ok()) {
-            usageService.refund(user, today, Kind.TRANSCRIBE);
+            usageService.refundBoth(user, now, Kind.TRANSCRIBE);
             throw photoFailure(result.failure());
         }
         Optional<Transcript> transcript = ClaudeStudyAssistant.normalize(result.value());
         if (transcript.isEmpty()) {
             // 읽은 글도 없고 「못 읽었다」는 답도 아니다 — 빈 textarea를 「다 읽었다」고 말할 수 없다.
             log.warn("Claude 전사 결과가 비어 돌려주지 않는다 — user={}", user.getId());
-            usageService.refund(user, today, Kind.TRANSCRIBE);
+            usageService.refundBoth(user, now, Kind.TRANSCRIBE);
             throw photoFailure(Failure.UNAVAILABLE);
         }
         return transcript.get();

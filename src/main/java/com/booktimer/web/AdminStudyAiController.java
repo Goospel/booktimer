@@ -1,6 +1,7 @@
 package com.booktimer.web;
 
 import com.booktimer.study.StudyAiAccessService;
+import com.booktimer.study.StudyAiAccessService.StudyAiCapacityExceededException;
 import com.booktimer.user.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
@@ -67,7 +68,13 @@ public class AdminStudyAiController {
             action.apply(loginId).orElseThrow(
                     () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다"));
             redirectAttributes.addFlashAttribute("message", "@" + loginId + " " + label);
+        } catch (StudyAiAccessService.StudyAiCapacityExceededException e) {
+            // 정원 초과는 「이미 처리된 신청」과 <b>다른 사건</b>이라 문구를 가른다. 운영은 정원이 이미
+            // 찬 상태로 배포되므로(소유자 1명 승인됨), 뭉개면 <b>앞으로의 모든 승인 시도</b>가 틀린
+            // 안내를 보고 관리자가 원인을 못 찾는다. 이 예외의 메시지는 우리가 쓴 한국어 안내다.
+            redirectAttributes.addFlashAttribute("error", e.getMessage());
         } catch (IllegalStateException e) {
+            // 잘못된 전이 — 이쪽 메시지는 내부 영문이라 노출하지 않는다.
             redirectAttributes.addFlashAttribute("error", "이미 처리된 신청이에요");
         }
         return "redirect:/admin";

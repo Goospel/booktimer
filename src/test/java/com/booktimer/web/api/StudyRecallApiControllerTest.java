@@ -3,6 +3,7 @@ package com.booktimer.web.api;
 import com.booktimer.study.ClaudeStudyAssistant;
 import com.booktimer.study.StudyAi;
 import com.booktimer.study.StudyAiUsage;
+import com.booktimer.study.StudyAiDailyTotalRepository;
 import com.booktimer.study.StudyAiUsageRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.StudyAiAccess;
@@ -63,6 +64,7 @@ class StudyRecallApiControllerTest {
     @Autowired UserRegistrationService registrationService;
     @Autowired UserRepository userRepository;
     @Autowired StudyAiUsageRepository usageRepository;
+    @Autowired StudyAiDailyTotalRepository dailyTotalRepository;
     @Autowired Clock clock;
 
     /** 어댑터는 늘 목이다 — 네트워크 없이 「불렸나/안 불렸나」를 재는 것이 이 파일의 요점이다. */
@@ -102,6 +104,23 @@ class StudyRecallApiControllerTest {
 
     private String analyzeUrl() {
         return "/api/study/recall/" + today() + "/analyze";
+    }
+
+    /**
+     * 전역 하루 상한이 <b>쓰였다가 되돌아왔는지</b>를 잰다.
+     *
+     * <p>행 존재와 {@code used == 0}을 <b>한 쌍으로</b> 보는 것이 요점이다 — {@code used == 0}만 보면
+     * 호출부가 전역 카운터를 <b>아예 안 건드려도</b> 초록이라 계측기가 아니게 된다(행이 없으면 0이니까).
+     */
+    private void assertGlobalConsumedThenRefunded() {
+        java.time.LocalDate utcToday = java.time.LocalDate.now(java.time.ZoneOffset.UTC);
+        assertThat(dailyTotalRepository.findByUsageDate(utcToday))
+                .as("전역 카운터 행 — 없으면 호출부가 전역 몫을 선점하지 않았다는 뜻")
+                .isPresent()
+                .get()
+                .satisfies(t -> assertThat(t.getUsed())
+                        .as("전역 몫이 환불되지 않았다 — 실패한 호출이 서비스 전체 예산을 먹는다")
+                        .isZero());
     }
 
     private List<StudyAiUsage> usageOf(String loginId) {
@@ -358,6 +377,7 @@ class StudyRecallApiControllerTest {
                 .andExpect(status().isServiceUnavailable());
 
         assertThat(usageOf("anfail")).allSatisfy(row -> assertThat(row.getUsed()).isZero());
+        assertGlobalConsumedThenRefunded();
 
         // 환불됐으니 같은 날 다시 시도할 수 있다(이번엔 성공)
         givenAnalysis(new ClaudeStudyAssistant.RecallAnalysis("정리", List.of(), List.of()));
@@ -622,6 +642,7 @@ class StudyRecallApiControllerTest {
                 .andExpect(content().string("사진을 읽을 수 없어요"));
 
         assertThat(usageOf("trbad")).allSatisfy(row -> assertThat(row.getUsed()).isZero());
+        assertGlobalConsumedThenRefunded();
     }
 
     @Test

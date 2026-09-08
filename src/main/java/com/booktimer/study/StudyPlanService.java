@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
@@ -204,15 +205,24 @@ public class StudyPlanService {
         if (!planner.isEnabled()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI 기능이 꺼져 있어요");
         }
-        if (!usageService.tryConsume(user, today, Kind.PLAN)) {
-            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "오늘 몫을 다 썼어요 — 내일 다시 해 주세요");
-        }
+        Instant now = clock.instant();
+        // switch **식**이라 컴파일러가 망라성을 강제한다 — switch 문으로 두면 Grant에 값이
+        // 추가될 때 경고 없이 **그대로 유료 호출로 진행**한다(리뷰 실측: javac -Xlint:all 무경고).
+        // 상한을 우회하는 문이 미래의 한 줄 추가로 조용히 열리는 자리다.
+        boolean granted = switch (usageService.tryConsumeBoth(user, now, Kind.PLAN)) {
+            case USER_EXHAUSTED -> throw new ResponseStatusException(
+                    HttpStatus.TOO_MANY_REQUESTS, "오늘 몫을 다 썼어요 — 내일 다시 해 주세요");
+            case GLOBAL_EXHAUSTED -> throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, "오늘은 AI 요청이 많아 잠시 멈췄어요 — 내일 다시 해 주세요");
+            case OK -> true;
+        };
+        assert granted;
 
         AiResult<GeminiStudyPlanner.PlanDraft> result = planner.generatePlan(
                 new GeminiStudyPlanner.PlanInput(subject, scope, today, examDate,
                         command.dailyMinutes(), command.daysPerWeek()));
         if (!result.ok()) {
-            usageService.refund(user, today, Kind.PLAN);
+            usageService.refundBoth(user, now, Kind.PLAN);
             throw failure(result.failure());
         }
         List<GeminiStudyPlanner.PlanDay> days = GeminiStudyPlanner.sanitizePlan(
@@ -220,7 +230,7 @@ public class StudyPlanService {
         if (days.isEmpty()) {
             // 형식은 맞는데 쓸 날짜가 하나도 안 남았다 — 빈 미리보기를 「완성」이라 부를 수 없다.
             log.warn("Gemini 일정 초안이 정제 후 비어 돌려주지 않는다 — user={}", user.getId());
-            usageService.refund(user, today, Kind.PLAN);
+            usageService.refundBoth(user, now, Kind.PLAN);
             throw failure(Failure.UNAVAILABLE);
         }
         return new PlanDraft(days, planItemRepository.countByUserAndPlanDateGreaterThanEqual(user, today));
