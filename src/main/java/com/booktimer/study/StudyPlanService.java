@@ -1,8 +1,8 @@
 package com.booktimer.study;
 
 import com.booktimer.book.StudyBook;
-import com.booktimer.study.ClaudeStudyAssistant.AiResult;
-import com.booktimer.study.ClaudeStudyAssistant.Failure;
+import com.booktimer.study.StudyAi.AiResult;
+import com.booktimer.study.StudyAi.Failure;
 import com.booktimer.study.StudyAiUsage.Kind;
 import com.booktimer.user.User;
 import org.slf4j.Logger;
@@ -79,18 +79,18 @@ public class StudyPlanService {
     private final StudyPlanItemRepository planItemRepository;
     private final StudyAiAccessService accessService;
     private final StudyAiUsageService usageService;
-    private final ClaudeStudyAssistant assistant;
+    private final GeminiStudyPlanner planner;
     private final Clock clock;
 
     public StudyPlanService(StudyPlanItemRepository planItemRepository,
                             StudyAiAccessService accessService,
                             StudyAiUsageService usageService,
-                            ClaudeStudyAssistant assistant,
+                            GeminiStudyPlanner planner,
                             Clock clock) {
         this.planItemRepository = planItemRepository;
         this.accessService = accessService;
         this.usageService = usageService;
-        this.assistant = assistant;
+        this.planner = planner;
         this.clock = clock;
     }
 
@@ -196,25 +196,25 @@ public class StudyPlanService {
             throw new IllegalArgumentException("범위는 " + SCOPE_MAX + "자까지 적을 수 있어요");
         }
 
-        if (!assistant.isEnabled()) {
+        if (!planner.isEnabled()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI 기능이 꺼져 있어요");
         }
         if (!usageService.tryConsume(user, today, Kind.PLAN)) {
             throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "오늘 몫을 다 썼어요 — 내일 다시 해 주세요");
         }
 
-        AiResult<ClaudeStudyAssistant.PlanDraft> result = assistant.generatePlan(
-                new ClaudeStudyAssistant.PlanInput(subject, scope, today, examDate,
+        AiResult<GeminiStudyPlanner.PlanDraft> result = planner.generatePlan(
+                new GeminiStudyPlanner.PlanInput(subject, scope, today, examDate,
                         command.dailyMinutes(), command.daysPerWeek()));
         if (!result.ok()) {
             usageService.refund(user, today, Kind.PLAN);
             throw failure(result.failure());
         }
-        List<ClaudeStudyAssistant.PlanDay> days = ClaudeStudyAssistant.sanitizePlan(
+        List<GeminiStudyPlanner.PlanDay> days = GeminiStudyPlanner.sanitizePlan(
                 result.value().days(), today, examDate, command.daysPerWeek());
         if (days.isEmpty()) {
             // 형식은 맞는데 쓸 날짜가 하나도 안 남았다 — 빈 미리보기를 「완성」이라 부를 수 없다.
-            log.warn("Claude 일정 초안이 정제 후 비어 돌려주지 않는다 — user={}", user.getId());
+            log.warn("Gemini 일정 초안이 정제 후 비어 돌려주지 않는다 — user={}", user.getId());
             usageService.refund(user, today, Kind.PLAN);
             throw failure(Failure.UNAVAILABLE);
         }
@@ -303,6 +303,6 @@ public class StudyPlanService {
      * @param replaceCount 지금 적용하면 지워질 「오늘 이후」 항목 수. <b>생성 시점에 센 값</b>이라,
      *                     사용자가 미리보기를 읽는 동안 일정을 더하면 실제 {@code removed}가 더 클 수 있다
      */
-    public record PlanDraft(List<ClaudeStudyAssistant.PlanDay> days, int replaceCount) {
+    public record PlanDraft(List<GeminiStudyPlanner.PlanDay> days, int replaceCount) {
     }
 }

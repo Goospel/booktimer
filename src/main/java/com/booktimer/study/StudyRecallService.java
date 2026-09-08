@@ -1,12 +1,12 @@
 package com.booktimer.study;
 
 import com.booktimer.book.StudyBook;
-import com.booktimer.study.ClaudeStudyAssistant.AiResult;
-import com.booktimer.study.ClaudeStudyAssistant.Failure;
 import com.booktimer.study.ClaudeStudyAssistant.ImagePart;
 import com.booktimer.study.ClaudeStudyAssistant.RecallAnalysis;
 import com.booktimer.study.ClaudeStudyAssistant.RecallInput;
 import com.booktimer.study.ClaudeStudyAssistant.Transcript;
+import com.booktimer.study.StudyAi.AiResult;
+import com.booktimer.study.StudyAi.Failure;
 import com.booktimer.study.StudyAiUsage.Kind;
 import com.booktimer.user.User;
 import org.slf4j.Logger;
