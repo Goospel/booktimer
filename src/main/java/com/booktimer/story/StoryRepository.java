@@ -90,6 +90,38 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
     List<Story> feedRecent(@Param("viewer") User viewer, @Param("cutoff") Instant cutoff);
 
     /**
+     * 홈 「여백」 탭용 — <b>팔로우와 무관하게</b> 「모두의 여백」에 올라온 최근 글 (최신순).
+     *
+     * <p>술어는 {@link #sharedByIsbn}과 같고 축만 다르다: 거기는 책(isbn13) 하나로 좁히고 여기는
+     * <b>어떤 책으로도 좁히지 않는다</b>. 그래서 「올린 글만」({@code s.shared = true})·책 PUBLIC·
+     * ADMIN/핸들 없는 작성자 제외(N-055)·<b>차단 양방향 제외</b>를 그대로 진다. 특히 차단은,
+     * 이 목록에 {@code feedRecent}가 기댔던 "팔로우 존재 → 차단 없음" 불변식이 <b>없으므로</b>
+     * 쿼리가 유일한 방어다.
+     *
+     * <p><b>내 글은 뺀다</b>({@code u.id <> :viewerId}) — 발견 목록에서 내 글을 발견할 일은 없다.
+     *
+     * <p>날짜 창(cutoff)이 없다: 공개 여백 풀 자체가 작아 14일 창을 두면 탭이 늘 빈다. 대신 호출부가
+     * {@code pageable}로 최신 N건만 받아 인메모리로 섞는다 — {@code order by rand()}는 H2·MySQL로
+     * 방언이 갈려 이식성이 없다.
+     *
+     * <p>작성자·책은 fetch로 즉시 초기화 — 줄마다 닉네임·책 제목·표지를 읽으므로 홈 진입 핫패스의
+     * N+1을 막는다({@code feedRecent} 선례). ToOne fetch만 쓴다.
+     */
+    @Query("""
+            select s from Story s join fetch s.user u join fetch s.book b
+            where s.shared = true
+              and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
+              and u.id <> :viewerId
+              and u.role <> com.booktimer.user.Role.ADMIN
+              and u.loginId is not null
+              and not exists (select 1 from com.booktimer.block.Block bl
+                              where (bl.blocker.id = :viewerId and bl.blocked.id = u.id)
+                                 or (bl.blocker.id = u.id and bl.blocked.id = :viewerId))
+            order by s.createdAt desc, s.id desc
+            """)
+    List<Story> sharedRecent(@Param("viewerId") Long viewerId, Pageable pageable);
+
+    /**
      * 한 책의 여백에 쌓인 글 — <b>최신순</b>이라 {@code pageable} 상한이 최근 것을 남긴다.
      * 동시각 tie는 id로 갈라 상한 경계가 호출마다 흔들리지 않게 한다.
      *

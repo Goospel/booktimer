@@ -155,10 +155,10 @@ describe('제목이 곧 줄인 자리 — 선은 제목에 건다', () => {
 });
 
 describe('제목 옆에 무언가 서는 자리 — 선은 줄에 건다', () => {
-  it('피드 탭 머리 (시안 2b) — 사람·소식·책 뉴스가 한 줄이다', () => {
+  it('피드 탭 머리 (시안 2b) — 사람·소식·여백·책 뉴스가 한 줄이다', () => {
     const markup = render(
       <FeedBox
-        feed={{ social: [event()], newsEnabled: false, news: [], readers: [] }}
+        feed={{ social: [event()], newsEnabled: false, news: [], readers: [], discover: [] }}
         tab="social"
         expanded={false}
         error={null}

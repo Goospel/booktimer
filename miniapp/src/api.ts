@@ -453,6 +453,16 @@ export interface HomeFeedResponse {
    * 서버·미니앱 배포 순서에 화면이 의존하지 않는다.
    */
   readers: ReaderStatus[];
+
+  /**
+   * 「여백」 탭 — <b>팔로우와 무관하게</b> 「모두의 여백」에 올라온 글(상한 30장, <b>서버가 섞어서</b> 준다).
+   *
+   * <p>모양은 `social`과 같은 `SocialEvent`지만 전부 `type: 'STORY'`이고 <b>묶이지 않아</b>
+   * `count`가 언제나 1이다. 미니앱은 다시 정렬하지 않는다 — 매 진입마다 다른 글이 서는 게 이 탭의 값이다.
+   *
+   * <p>`readers`와 같은 이유로 미니앱은 `?? []`로 읽는다 — 이 필드를 아직 안 내려주는 서버와도 붙는다.
+   */
+  discover: SocialEvent[];
 }
 
 export const fetchHomeFeed = (): Promise<HomeFeedResponse> => request('/api/home-feed');

@@ -21,6 +21,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -62,6 +63,12 @@ public class HomeFeedApiController {
 
     /** 「함께 읽는 사람」 상한. 소식·뉴스와 같은 값 — 미리보기 + 「더 보기」로 이 안에서 펼친다. */
     private static final int MAX_READERS = 30;
+
+    /**
+     * 「여백」 탭이 섞을 모집단 — 최신 이만큼을 받아 인메모리로 섞고 {@value #MAX_EVENTS}장만 남긴다.
+     * 상한의 3배 남짓이라 매 진입마다 목록이 눈에 띄게 달라지면서도 쿼리 비용이 고정이다.
+     */
+    private static final int DISCOVER_POOL = 100;
 
     private final CurrentUserService currentUserService;
     private final BookRepository bookRepository;
@@ -108,7 +115,30 @@ public class HomeFeedApiController {
 
         return new HomeFeedResponse(
                 events.size() > MAX_EVENTS ? List.copyOf(events.subList(0, MAX_EVENTS)) : events,
-                newsClient.isEnabled(), newsFor(viewer), readersFor(viewer));
+                newsClient.isEnabled(), newsFor(viewer), readersFor(viewer), discoverFor(viewer));
+    }
+
+    /**
+     * 「여백」 탭 — <b>팔로우와 무관하게</b> 「모두의 여백」에 올라온 글, 무작위 {@value #MAX_EVENTS}장.
+     *
+     * <p>소식과 두 자리가 다르다. ① <b>묶지 않는다</b>: 소식이 사람+책으로 묶는 이유는 한 사람의 연속
+     * 작성이 완독·시작 소식을 밀어내지 않게 하는 것인데, 이 탭엔 밀려날 다른 종류가 없다. 글 1장이
+     * 1행이라 {@code count}는 언제나 1이다. ② <b>순서가 최신순이 아니다</b>: 발견용이라 매 진입마다
+     * 다른 글이 서야 한다.
+     *
+     * <p>섞는 자리가 인메모리인 이유: {@code order by rand()}는 H2(테스트)·MySQL(운영)로 방언이 갈려
+     * 이식성이 없다. 최신 {@value #DISCOVER_POOL}건만 받아 섞으므로 풀이 커져도 비용이 고정이다.
+     */
+    private List<SocialEvent> discoverFor(User viewer) {
+        List<Story> pool = new ArrayList<>(
+                storyRepository.sharedRecent(viewer.getId(), PageRequest.of(0, DISCOVER_POOL)));
+        Collections.shuffle(pool);
+        return pool.stream()
+                .limit(MAX_EVENTS)
+                .map(s -> new SocialEvent(s.getUser().getLoginId(), s.getUser().getNickname(),
+                        s.getBook().getTitle(), "STORY", s.getCreatedAt(),
+                        s.getBook().getId(), excerptOf(s.getText()), 1, s.getBook().getCoverUrl()))
+                .toList();
     }
 
     /**
@@ -251,8 +281,12 @@ public class HomeFeedApiController {
                 book.getCoverUrl());
     }
 
+    /**
+     * @param discover 팔로우 무관 공개 여백 — 「소식」과 같은 {@link SocialEvent} 모양이되 전부 STORY
+     *                 행이고, <b>묶이지 않아</b> {@code count}가 언제나 1이며 순서가 무작위다
+     */
     public record HomeFeedResponse(List<SocialEvent> social, boolean newsEnabled, List<NewsItem> news,
-                                   List<ReaderStatus> readers) {
+                                   List<ReaderStatus> readers, List<SocialEvent> discover) {
     }
 
     /**

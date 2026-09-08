@@ -74,6 +74,22 @@ export function relativeTime(iso: string, now: number): string {
   return `${date.getMonth() + 1}월 ${date.getDate()}일`;
 }
 
+/**
+ * 절대 날짜 `YYYY.MM.DD` — 기기 로컬 시각 기준, 한 자리 월·일은 0을 채운다.
+ *
+ * <p>책 뉴스 줄이 상대 시각 대신 이걸 쓴다. 「N일 전」이 답하지 못하는 질문이 하나 있어서다 —
+ * <b>수집(새벽 배치)이 지금도 도는가.</b> 목록 맨 위 기사가 며칠째 같은 날짜면 그것으로 보인다.
+ * <b>연도까지 적는 것이 요점</b>이다: 1년 전 기사가 「9월 8일」로 새것처럼 보이면 같은 질문에
+ * 다시 답할 수 없다.
+ *
+ * <p>상대 시각(`relativeTime`)은 소식·사람 탭에 그대로 남는다 — 거기선 「방금」이 값이다.
+ */
+export function formatDate(iso: string): string {
+  const date = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`;
+}
+
 /** 시작 시각(ISO) 기준 경과 초 — 진행 중 세션의 타이머 표시용. */
 export function elapsedSeconds(startedAt: string, now: number): number {
   return Math.max(0, Math.floor((now - Date.parse(startedAt)) / 1000));
