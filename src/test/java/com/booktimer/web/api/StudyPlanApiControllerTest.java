@@ -2,11 +2,11 @@ package com.booktimer.web.api;
 
 import com.booktimer.book.StudyBook;
 import com.booktimer.book.StudyBookRepository;
-import com.booktimer.study.ClaudeStudyAssistant;
-import com.booktimer.study.ClaudeStudyAssistant.AiResult;
-import com.booktimer.study.ClaudeStudyAssistant.Failure;
-import com.booktimer.study.ClaudeStudyAssistant.PlanDay;
-import com.booktimer.study.ClaudeStudyAssistant.PlanDraft;
+import com.booktimer.study.GeminiStudyPlanner;
+import com.booktimer.study.StudyAi.AiResult;
+import com.booktimer.study.StudyAi.Failure;
+import com.booktimer.study.GeminiStudyPlanner.PlanDay;
+import com.booktimer.study.GeminiStudyPlanner.PlanDraft;
 import com.booktimer.study.StudyAiUsage;
 import com.booktimer.study.StudyAiUsageRepository;
 import com.booktimer.study.StudyPlanItem;
@@ -76,7 +76,7 @@ class StudyPlanApiControllerTest {
     @Autowired Clock clock;
 
     /** 어댑터는 늘 목이다 — 「불렸나/안 불렸나」가 게이트 테스트의 판정 근거라 네트워크를 태우지 않는다. */
-    @MockitoBean ClaudeStudyAssistant assistant;
+    @MockitoBean GeminiStudyPlanner planner;
 
     private User register(String loginId) {
         registrationService.register(loginId + "@booktimer.com", "pw1234qwer!!", loginId,
@@ -342,7 +342,7 @@ class StudyPlanApiControllerTest {
                         .content(defaultGenerateBody()))
                 .andExpect(status().isForbidden());
 
-        verifyNoInteractions(assistant);
+        verifyNoInteractions(planner);
         assertThat(usageOf("plangatenone")).isEmpty();
     }
 
@@ -356,7 +356,7 @@ class StudyPlanApiControllerTest {
                         .content(defaultGenerateBody()))
                 .andExpect(status().isForbidden());
 
-        verifyNoInteractions(assistant);
+        verifyNoInteractions(planner);
         assertThat(usageOf("plangatepending")).isEmpty();
     }
 
@@ -370,7 +370,7 @@ class StudyPlanApiControllerTest {
                         .content(defaultGenerateBody()))
                 .andExpect(status().isForbidden());
 
-        verifyNoInteractions(assistant);
+        verifyNoInteractions(planner);
         assertThat(usageOf("plangatereject")).isEmpty();
     }
 
@@ -384,7 +384,7 @@ class StudyPlanApiControllerTest {
                         .content(generateBody("", "범위", today().minusDays(1), 5, 9)))
                 .andExpect(status().isForbidden());
 
-        verifyNoInteractions(assistant);
+        verifyNoInteractions(planner);
     }
 
     @Test
@@ -404,14 +404,14 @@ class StudyPlanApiControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest());
-        verifyNoInteractions(assistant);
+        verifyNoInteractions(planner);
     }
 
     @Test
     @DisplayName("generate 검증: 시험일이 오늘이거나 지났으면 400 — 어댑터를 부르지 않는다")
     void generate_examDateNotFuture_isBadRequest() throws Exception {
         registerWith("planexamtoday", StudyAiAccess.APPROVED);
-        given(assistant.isEnabled()).willReturn(true);
+        given(planner.isEnabled()).willReturn(true);
 
         performGenerateBadRequest("planexamtoday",
                 generateBody("정보보안기사", "1장", today(), 120, 5));
@@ -421,7 +421,7 @@ class StudyPlanApiControllerTest {
     @DisplayName("generate 검증: 시험일이 1년을 넘으면 400")
     void generate_examDateTooFar_isBadRequest() throws Exception {
         registerWith("planexamfar", StudyAiAccess.APPROVED);
-        given(assistant.isEnabled()).willReturn(true);
+        given(planner.isEnabled()).willReturn(true);
 
         performGenerateBadRequest("planexamfar",
                 generateBody("정보보안기사", "1장", today().plusDays(366), 120, 5));
@@ -431,7 +431,7 @@ class StudyPlanApiControllerTest {
     @DisplayName("generate 검증: 하루 공부 시간이 10분 미만이면 400")
     void generate_dailyMinutesTooSmall_isBadRequest() throws Exception {
         registerWith("planminlow", StudyAiAccess.APPROVED);
-        given(assistant.isEnabled()).willReturn(true);
+        given(planner.isEnabled()).willReturn(true);
 
         performGenerateBadRequest("planminlow",
                 generateBody("정보보안기사", "1장", today().plusDays(30), 9, 5));
@@ -441,7 +441,7 @@ class StudyPlanApiControllerTest {
     @DisplayName("generate 검증: 하루 공부 시간이 600분을 넘으면 400")
     void generate_dailyMinutesTooLarge_isBadRequest() throws Exception {
         registerWith("planminhigh", StudyAiAccess.APPROVED);
-        given(assistant.isEnabled()).willReturn(true);
+        given(planner.isEnabled()).willReturn(true);
 
         performGenerateBadRequest("planminhigh",
                 generateBody("정보보안기사", "1장", today().plusDays(30), 601, 5));
@@ -451,7 +451,7 @@ class StudyPlanApiControllerTest {
     @DisplayName("generate 검증: 주 공부일수가 0이거나 7을 넘으면 400")
     void generate_daysPerWeekOutOfRange_isBadRequest() throws Exception {
         registerWith("planweek", StudyAiAccess.APPROVED);
-        given(assistant.isEnabled()).willReturn(true);
+        given(planner.isEnabled()).willReturn(true);
 
         performGenerateBadRequest("planweek",
                 generateBody("정보보안기사", "1장", today().plusDays(30), 120, 0));
@@ -463,7 +463,7 @@ class StudyPlanApiControllerTest {
     @DisplayName("generate 검증: 과목이 비면 400")
     void generate_blankSubject_isBadRequest() throws Exception {
         registerWith("plannosubject", StudyAiAccess.APPROVED);
-        given(assistant.isEnabled()).willReturn(true);
+        given(planner.isEnabled()).willReturn(true);
 
         performGenerateBadRequest("plannosubject",
                 generateBody("   ", "1장", today().plusDays(30), 120, 5));
@@ -473,7 +473,7 @@ class StudyPlanApiControllerTest {
     @DisplayName("generate 검증: 범위가 4000자를 넘으면 400")
     void generate_scopeTooLong_isBadRequest() throws Exception {
         registerWith("planscope", StudyAiAccess.APPROVED);
-        given(assistant.isEnabled()).willReturn(true);
+        given(planner.isEnabled()).willReturn(true);
 
         performGenerateBadRequest("planscope",
                 generateBody("정보보안기사", "가".repeat(4001), today().plusDays(30), 120, 5));
@@ -483,7 +483,7 @@ class StudyPlanApiControllerTest {
     @DisplayName("generate 검증: 예상 항목 수가 상한을 넘으면 400 — 4개월·주 6일은 타임아웃에 걸린다")
     void generate_tooManyEstimatedItems_isBadRequest() throws Exception {
         registerWith("plantoolong", StudyAiAccess.APPROVED);
-        given(assistant.isEnabled()).willReturn(true);
+        given(planner.isEnabled()).willReturn(true);
 
         // 122일 × 6/7 = 104항목 → 회귀식으로 약 96초, 클라이언트 타임아웃 90초를 넘긴다
         performGenerateBadRequest("plantoolong",
@@ -494,8 +494,8 @@ class StudyPlanApiControllerTest {
     @DisplayName("generate 검증: 항목 수 경계 — 90개는 통과한다")
     void generate_estimatedItemsAtLimit_isAllowed() throws Exception {
         registerWith("planatlimit", StudyAiAccess.APPROVED);
-        given(assistant.isEnabled()).willReturn(true);
-        given(assistant.generatePlan(any())).willReturn(AiResult.ok(new PlanDraft(
+        given(planner.isEnabled()).willReturn(true);
+        given(planner.generatePlan(any())).willReturn(AiResult.ok(new PlanDraft(
                 List.of(new PlanDay(iso(today().plusDays(1)), "1장 접근통제")))));
 
         // 90일 × 7/7 = 90항목 — 상한과 같으므로 통과다(넘을 때만 막는다)
@@ -509,7 +509,7 @@ class StudyPlanApiControllerTest {
     @DisplayName("generate 검증: 항목 수 경계 — 91개는 400이고 어댑터를 부르지 않는다")
     void generate_estimatedItemsOverLimit_isBadRequest() throws Exception {
         registerWith("planoverlimit", StudyAiAccess.APPROVED);
-        given(assistant.isEnabled()).willReturn(true);
+        given(planner.isEnabled()).willReturn(true);
 
         performGenerateBadRequest("planoverlimit",
                 generateBody("과목", "1장", today().plusDays(91), 120, 7));
@@ -519,8 +519,8 @@ class StudyPlanApiControllerTest {
     @DisplayName("generate 검증: 1년짜리라도 주 1일이면 통과한다 — 기간이 아니라 항목 수로 막는다")
     void generate_longRangeWithFewDaysPerWeek_isAllowed() throws Exception {
         registerWith("planlongthin", StudyAiAccess.APPROVED);
-        given(assistant.isEnabled()).willReturn(true);
-        given(assistant.generatePlan(any())).willReturn(AiResult.ok(new PlanDraft(
+        given(planner.isEnabled()).willReturn(true);
+        given(planner.generatePlan(any())).willReturn(AiResult.ok(new PlanDraft(
                 List.of(new PlanDay(iso(today().plusDays(7)), "1장 접근통제")))));
 
         // 365일 × 1/7 = 52항목 — 기간만 보고 막으면 이 정당한 장기 계획까지 막힌다
@@ -534,7 +534,7 @@ class StudyPlanApiControllerTest {
     @DisplayName("generate 검증: 시험일 형식이 틀리면 400")
     void generate_badExamDate_isBadRequest() throws Exception {
         registerWith("planbaddate", StudyAiAccess.APPROVED);
-        given(assistant.isEnabled()).willReturn(true);
+        given(planner.isEnabled()).willReturn(true);
 
         performGenerateBadRequest("planbaddate",
                 "{\"subject\":\"과목\",\"scope\":\"범위\",\"examDate\":\"내년\","
@@ -547,7 +547,7 @@ class StudyPlanApiControllerTest {
     @DisplayName("generate: AI가 꺼져 있으면 503이고 상한도 안 깎인다")
     void generate_whenDisabled_isServiceUnavailable() throws Exception {
         registerWith("planoff", StudyAiAccess.APPROVED);
-        given(assistant.isEnabled()).willReturn(false);
+        given(planner.isEnabled()).willReturn(false);
 
         mockMvc.perform(post("/api/study/plan/generate").with(user("planoff")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -562,8 +562,8 @@ class StudyPlanApiControllerTest {
     @DisplayName("generate: 오늘 몫(3회)을 다 쓰면 429이고 어댑터를 더 부르지 않는다")
     void generate_whenCapSpent_isTooManyRequests() throws Exception {
         registerWith("plancap", StudyAiAccess.APPROVED);
-        given(assistant.isEnabled()).willReturn(true);
-        given(assistant.generatePlan(any())).willReturn(AiResult.ok(new PlanDraft(
+        given(planner.isEnabled()).willReturn(true);
+        given(planner.generatePlan(any())).willReturn(AiResult.ok(new PlanDraft(
                 List.of(new PlanDay(iso(today().plusDays(1)), "1장 접근통제")))));
 
         for (int i = 0; i < 3; i++) {
@@ -583,8 +583,8 @@ class StudyPlanApiControllerTest {
     @DisplayName("generate: 어댑터 실패(UNAVAILABLE)면 503이고 선점한 몫은 환불된다")
     void generate_whenAdapterFails_refundsQuota() throws Exception {
         registerWith("planfail", StudyAiAccess.APPROVED);
-        given(assistant.isEnabled()).willReturn(true);
-        given(assistant.generatePlan(any())).willReturn(AiResult.fail(Failure.UNAVAILABLE));
+        given(planner.isEnabled()).willReturn(true);
+        given(planner.generatePlan(any())).willReturn(AiResult.fail(Failure.UNAVAILABLE));
 
         mockMvc.perform(post("/api/study/plan/generate").with(user("planfail")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -598,8 +598,8 @@ class StudyPlanApiControllerTest {
     @DisplayName("generate: 레이트리밋은 429로 옮겨진다")
     void generate_whenRateLimited_isTooManyRequests() throws Exception {
         registerWith("planratelimit", StudyAiAccess.APPROVED);
-        given(assistant.isEnabled()).willReturn(true);
-        given(assistant.generatePlan(any())).willReturn(AiResult.fail(Failure.RATE_LIMITED));
+        given(planner.isEnabled()).willReturn(true);
+        given(planner.generatePlan(any())).willReturn(AiResult.fail(Failure.RATE_LIMITED));
 
         mockMvc.perform(post("/api/study/plan/generate").with(user("planratelimit")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -611,9 +611,9 @@ class StudyPlanApiControllerTest {
     @DisplayName("generate: 정제하고 나면 남는 게 없는 초안은 503이고 환불된다")
     void generate_whenEverythingSanitizedAway_isServiceUnavailable() throws Exception {
         registerWith("planempty", StudyAiAccess.APPROVED);
-        given(assistant.isEnabled()).willReturn(true);
+        given(planner.isEnabled()).willReturn(true);
         // 전부 과거 날짜 — 정제가 통째로 버린다
-        given(assistant.generatePlan(any())).willReturn(AiResult.ok(new PlanDraft(
+        given(planner.generatePlan(any())).willReturn(AiResult.ok(new PlanDraft(
                 List.of(new PlanDay(iso(today().minusDays(3)), "지난 일정")))));
 
         mockMvc.perform(post("/api/study/plan/generate").with(user("planempty")).with(csrf())
@@ -630,9 +630,9 @@ class StudyPlanApiControllerTest {
     @DisplayName("generate: 모델이 범위 밖·중복·주 초과를 섞어 보내도 응답은 정제된 것이다")
     void generate_sanitizesModelDraft() throws Exception {
         registerWith("plansanitize", StudyAiAccess.APPROVED);
-        given(assistant.isEnabled()).willReturn(true);
+        given(planner.isEnabled()).willReturn(true);
         LocalDate exam = today().plusDays(30);
-        given(assistant.generatePlan(any())).willReturn(AiResult.ok(new PlanDraft(List.of(
+        given(planner.generatePlan(any())).willReturn(AiResult.ok(new PlanDraft(List.of(
                 new PlanDay(iso(today().minusDays(1)), "어제 — 버려진다"),
                 new PlanDay(iso(exam), "시험날 — 버려진다"),
                 new PlanDay(iso(today().plusDays(1)), "1장 접근통제"),
@@ -653,8 +653,8 @@ class StudyPlanApiControllerTest {
     @DisplayName("generate: replaceCount는 오늘 이후 항목 수 — 과거는 세지 않는다")
     void generate_replaceCountCountsTodayAndLater() throws Exception {
         User user = registerWith("planreplace", StudyAiAccess.APPROVED);
-        given(assistant.isEnabled()).willReturn(true);
-        given(assistant.generatePlan(any())).willReturn(AiResult.ok(new PlanDraft(
+        given(planner.isEnabled()).willReturn(true);
+        given(planner.generatePlan(any())).willReturn(AiResult.ok(new PlanDraft(
                 List.of(new PlanDay(iso(today().plusDays(1)), "1장 접근통제")))));
         planService.add(user, today().minusDays(2), null, "과목", "지난 일정");
         planService.add(user, today(), null, "과목", "오늘 일정");
@@ -699,7 +699,7 @@ class StudyPlanApiControllerTest {
                 .andExpect(jsonPath("$.applied").value(1))
                 .andExpect(jsonPath("$.removed").value(0));
 
-        verifyNoInteractions(assistant);
+        verifyNoInteractions(planner);
     }
 
     @Test
@@ -819,8 +819,8 @@ class StudyPlanApiControllerTest {
     @DisplayName("agenda: remaining.plan은 오늘 남은 일정 생성 몫이다")
     void agenda_reportsRemainingPlan() throws Exception {
         registerWith("planremaining", StudyAiAccess.APPROVED);
-        given(assistant.isEnabled()).willReturn(true);
-        given(assistant.generatePlan(any())).willReturn(AiResult.ok(new PlanDraft(
+        given(planner.isEnabled()).willReturn(true);
+        given(planner.generatePlan(any())).willReturn(AiResult.ok(new PlanDraft(
                 List.of(new PlanDay(iso(today().plusDays(1)), "1장 접근통제")))));
 
         mockMvc.perform(get("/api/study/agenda").param("month", thisMonth()).with(user("planremaining")))

@@ -1,6 +1,7 @@
 package com.booktimer.web.api;
 
 import com.booktimer.study.ClaudeStudyAssistant;
+import com.booktimer.study.StudyAi;
 import com.booktimer.study.StudyAiUsage;
 import com.booktimer.study.StudyAiUsageRepository;
 import com.booktimer.user.Role;
@@ -349,7 +350,7 @@ class StudyRecallApiControllerTest {
     void analyze_whenUnavailable_refundsShare() throws Exception {
         given(assistant.isEnabled()).willReturn(true);
         given(assistant.analyzeRecall(any()))
-                .willReturn(ClaudeStudyAssistant.AiResult.fail(ClaudeStudyAssistant.Failure.UNAVAILABLE));
+                .willReturn(StudyAi.AiResult.fail(StudyAi.Failure.UNAVAILABLE));
         registerWith("anfail", StudyAiAccess.APPROVED);
         saveRecall("anfail", "오늘 배운 것");
 
@@ -369,7 +370,7 @@ class StudyRecallApiControllerTest {
     void analyze_whenRateLimited_is429AndRefunds() throws Exception {
         given(assistant.isEnabled()).willReturn(true);
         given(assistant.analyzeRecall(any()))
-                .willReturn(ClaudeStudyAssistant.AiResult.fail(ClaudeStudyAssistant.Failure.RATE_LIMITED));
+                .willReturn(StudyAi.AiResult.fail(StudyAi.Failure.RATE_LIMITED));
         registerWith("anlimited", StudyAiAccess.APPROVED);
         saveRecall("anlimited", "오늘 배운 것");
 
@@ -455,7 +456,7 @@ class StudyRecallApiControllerTest {
     private void givenAnalysis(ClaudeStudyAssistant.RecallAnalysis analysis) {
         given(assistant.isEnabled()).willReturn(true);
         given(assistant.model()).willReturn("claude-sonnet-5-test");
-        given(assistant.analyzeRecall(any())).willReturn(ClaudeStudyAssistant.AiResult.ok(analysis));
+        given(assistant.analyzeRecall(any())).willReturn(StudyAi.AiResult.ok(analysis));
     }
 
     private static String bodyJson(LocalDate date, String body) {
@@ -613,7 +614,7 @@ class StudyRecallApiControllerTest {
         registerWith("trbad", StudyAiAccess.APPROVED);
         given(assistant.isEnabled()).willReturn(true);
         given(assistant.transcribe(any()))
-                .willReturn(ClaudeStudyAssistant.AiResult.fail(ClaudeStudyAssistant.Failure.BAD_INPUT));
+                .willReturn(StudyAi.AiResult.fail(StudyAi.Failure.BAD_INPUT));
 
         mockMvc.perform(multipart("/api/study/recall/transcribe")
                         .file(jpeg("images", 1024)).with(user("trbad")).with(csrf()))
@@ -693,7 +694,7 @@ class StudyRecallApiControllerTest {
 
     private void givenTranscript(ClaudeStudyAssistant.Transcript transcript) {
         given(assistant.isEnabled()).willReturn(true);
-        given(assistant.transcribe(any())).willReturn(ClaudeStudyAssistant.AiResult.ok(transcript));
+        given(assistant.transcribe(any())).willReturn(StudyAi.AiResult.ok(transcript));
     }
 
     private static MockMultipartFile jpeg(String name, int size) {

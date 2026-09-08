@@ -1,8 +1,8 @@
 package com.booktimer.study;
 
 import com.booktimer.book.StudyBook;
-import com.booktimer.study.ClaudeStudyAssistant.AiResult;
-import com.booktimer.study.ClaudeStudyAssistant.Failure;
+import com.booktimer.study.StudyAi.AiResult;
+import com.booktimer.study.StudyAi.Failure;
 import com.booktimer.study.StudyAiUsage.Kind;
 import com.booktimer.user.User;
 import org.slf4j.Logger;
@@ -71,6 +71,11 @@ public class StudyPlanService {
      * 넉넉하지 않지만, 더 줄이면 3개월·주 5일(약 65항목)이라는 주 사용례의 바로 옆까지 좁아진다.
      * 근본 해법은 상한이 아니라 스트리밍·비동기다(plan.md 🔜).
      *
+     * <p>⚠️ <b>위 회귀식은 Claude Sonnet 시절 값이라 지금은 근거가 아니다</b>(2026-09-08). 일정이
+     * {@link GeminiStudyPlanner}로 옮겨간 뒤 실측은 후보 91일에 <b>16~26초</b>였다 — 90항목이 85초가
+     * 아니라 30초 안쪽이다. 즉 이 상한은 지금 <b>지연이 아니라 관성으로</b> 서 있다. 올릴지는 제품
+     * 판단이라 그대로 두되, 재산정 없이 「85초라 아슬아슬하다」를 근거로 삼지 않는다.
+     *
      * <p><b>기간이 아니라 항목 수로 막는 이유</b>: {@link #MAX_EXAM_DAYS_AHEAD}를 줄이면 「1년 뒤 시험을
      * 주 1일로 준비」(52항목, 실제로는 빠르다)까지 함께 막힌다. 느리게 만드는 것은 기간이 아니라 출력량이다.
      */
@@ -79,18 +84,18 @@ public class StudyPlanService {
     private final StudyPlanItemRepository planItemRepository;
     private final StudyAiAccessService accessService;
     private final StudyAiUsageService usageService;
-    private final ClaudeStudyAssistant assistant;
+    private final GeminiStudyPlanner planner;
     private final Clock clock;
 
     public StudyPlanService(StudyPlanItemRepository planItemRepository,
                             StudyAiAccessService accessService,
                             StudyAiUsageService usageService,
-                            ClaudeStudyAssistant assistant,
+                            GeminiStudyPlanner planner,
                             Clock clock) {
         this.planItemRepository = planItemRepository;
         this.accessService = accessService;
         this.usageService = usageService;
-        this.assistant = assistant;
+        this.planner = planner;
         this.clock = clock;
     }
 
@@ -196,25 +201,25 @@ public class StudyPlanService {
             throw new IllegalArgumentException("범위는 " + SCOPE_MAX + "자까지 적을 수 있어요");
         }
 
-        if (!assistant.isEnabled()) {
+        if (!planner.isEnabled()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI 기능이 꺼져 있어요");
         }
         if (!usageService.tryConsume(user, today, Kind.PLAN)) {
             throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "오늘 몫을 다 썼어요 — 내일 다시 해 주세요");
         }
 
-        AiResult<ClaudeStudyAssistant.PlanDraft> result = assistant.generatePlan(
-                new ClaudeStudyAssistant.PlanInput(subject, scope, today, examDate,
+        AiResult<GeminiStudyPlanner.PlanDraft> result = planner.generatePlan(
+                new GeminiStudyPlanner.PlanInput(subject, scope, today, examDate,
                         command.dailyMinutes(), command.daysPerWeek()));
         if (!result.ok()) {
             usageService.refund(user, today, Kind.PLAN);
             throw failure(result.failure());
         }
-        List<ClaudeStudyAssistant.PlanDay> days = ClaudeStudyAssistant.sanitizePlan(
+        List<GeminiStudyPlanner.PlanDay> days = GeminiStudyPlanner.sanitizePlan(
                 result.value().days(), today, examDate, command.daysPerWeek());
         if (days.isEmpty()) {
             // 형식은 맞는데 쓸 날짜가 하나도 안 남았다 — 빈 미리보기를 「완성」이라 부를 수 없다.
-            log.warn("Claude 일정 초안이 정제 후 비어 돌려주지 않는다 — user={}", user.getId());
+            log.warn("Gemini 일정 초안이 정제 후 비어 돌려주지 않는다 — user={}", user.getId());
             usageService.refund(user, today, Kind.PLAN);
             throw failure(Failure.UNAVAILABLE);
         }
@@ -303,6 +308,6 @@ public class StudyPlanService {
      * @param replaceCount 지금 적용하면 지워질 「오늘 이후」 항목 수. <b>생성 시점에 센 값</b>이라,
      *                     사용자가 미리보기를 읽는 동안 일정을 더하면 실제 {@code removed}가 더 클 수 있다
      */
-    public record PlanDraft(List<ClaudeStudyAssistant.PlanDay> days, int replaceCount) {
+    public record PlanDraft(List<GeminiStudyPlanner.PlanDay> days, int replaceCount) {
     }
 }

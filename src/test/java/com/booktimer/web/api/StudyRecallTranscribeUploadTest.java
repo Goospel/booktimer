@@ -1,6 +1,7 @@
 package com.booktimer.web.api;
 
 import com.booktimer.study.ClaudeStudyAssistant;
+import com.booktimer.study.StudyAi;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
@@ -105,7 +106,7 @@ class StudyRecallTranscribeUploadTest {
         given(assistant.isEnabled()).willReturn(true);
         given(assistant.transcribe(any())).willAnswer(invocation -> {
             filesDuringRequest.set(uploadTempFiles());
-            return ClaudeStudyAssistant.AiResult.ok(new ClaudeStudyAssistant.Transcript("읽은 글", false));
+            return StudyAi.AiResult.ok(new ClaudeStudyAssistant.Transcript("읽은 글", false));
         });
         client = HttpClient.newBuilder().cookieHandler(new CookieManager()).build();
         logIn();
