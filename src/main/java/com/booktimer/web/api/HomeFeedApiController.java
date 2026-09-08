@@ -66,7 +66,12 @@ public class HomeFeedApiController {
 
     /**
      * 「여백」 탭이 섞을 모집단 — 최신 이만큼을 받아 인메모리로 섞고 {@value #MAX_EVENTS}장만 남긴다.
-     * 상한의 3배 남짓이라 매 진입마다 목록이 눈에 띄게 달라지면서도 쿼리 비용이 고정이다.
+     * 상한의 3배 남짓이라 매 진입마다 목록이 눈에 띄게 달라진다.
+     *
+     * <p>⚠️ <b>고정되는 것은 반환 건수뿐이고 정렬 비용은 아니다</b> — {@code story}의 인덱스는
+     * {@code (user_id, created_at)}뿐이라 {@code order by created_at desc}가 전역 filesort로 떨어진다.
+     * 즉 비용은 공개 여백 <b>전체 수</b>에 비례한다. 공개 여백이 수만 건이 되면 인덱스
+     * {@code (shared, created_at)}를 마이그레이션으로 추가한다.
      */
     private static final int DISCOVER_POOL = 100;
 
@@ -127,7 +132,8 @@ public class HomeFeedApiController {
      * 다른 글이 서야 한다.
      *
      * <p>섞는 자리가 인메모리인 이유: {@code order by rand()}는 H2(테스트)·MySQL(운영)로 방언이 갈려
-     * 이식성이 없다. 최신 {@value #DISCOVER_POOL}건만 받아 섞으므로 풀이 커져도 비용이 고정이다.
+     * 이식성이 없다. 최신 {@value #DISCOVER_POOL}건만 받아 섞는다 — 다만 <b>고정되는 것은 반환 건수뿐,
+     * 정렬 비용은 공개 여백 수에 비례한다</b>({@link #DISCOVER_POOL} 주석 참고).
      */
     private List<SocialEvent> discoverFor(User viewer) {
         List<Story> pool = new ArrayList<>(

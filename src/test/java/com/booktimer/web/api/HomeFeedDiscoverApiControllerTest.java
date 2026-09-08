@@ -58,7 +58,11 @@ class HomeFeedDiscoverApiControllerTest {
     private BlockService blockService;
 
     private User saveUser(String email, String loginId, String nickname) {
-        User u = User.of(email, "$2a$10$abcdefghijklmnopqrstuv", nickname, "Asia/Seoul", Role.USER);
+        return saveUser(email, loginId, nickname, Role.USER);
+    }
+
+    private User saveUser(String email, String loginId, String nickname, Role role) {
+        User u = User.of(email, "$2a$10$abcdefghijklmnopqrstuv", nickname, "Asia/Seoul", role);
         if (loginId != null) {
             u.assignLoginId(loginId);
         }
@@ -162,6 +166,16 @@ class HomeFeedDiscoverApiControllerTest {
         blockService.block(blocker, me);
 
         assertThat(discoverExcerpts("dcf")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("ADMIN 작성자의 글은 빠진다 — 운영 계정을 사용자 목록에 세우지 않는다(N-055)")
+    void excludesAdminAuthors() throws Exception {
+        saveUser("dc-j@booktimer.com", "dcj", "나");
+        User admin = saveUser("dc-j2@booktimer.com", "dcj2", "관리자", Role.ADMIN);
+        sharedStory(admin, book(admin, "관리자 책", BookVisibility.PUBLIC), "관리자가 쓴 글");
+
+        assertThat(discoverExcerpts("dcj")).isEmpty();
     }
 
     @Test
