@@ -205,32 +205,16 @@ class ReadingPersonalityHistoryTest {
     void currentPersonality_doesNotRegenerateOnSignatureChange() {
         User u = newUser("noregen@booktimer.com");
         saveBooks(u, 3);
-        narratorReturns("부트스트랩 분석.");
+        narratorReturns("광고 경로 분석.");
 
-        service.currentPersonality(u); // 첫 진입 — 부트스트랩 1회 생성
+        service.reanalyze(u);          // 광고 경로로 1회 생성(2026-09-08부터 유일한 생성 경로)
         saveBooks(u, 2);               // 책장 변화(시그니처 달라짐)
-        ReadingPersonality again = service.currentPersonality(u); // 그래도 재생성 안 함
+        ReadingPersonality again = service.currentPersonality(u); // GET은 재생성 안 함
 
-        verify(narrator, times(1)).narrate(any()); // 부트스트랩 1회뿐
+        verify(narrator, times(1)).narrate(any()); // reanalyze 1회뿐
         assertThat(again.hasNarration()).isTrue();
-        assertThat(again.narration().narrative()).isEqualTo("부트스트랩 분석.");
+        assertThat(again.narration().narrative()).isEqualTo("광고 경로 분석.");
         assertThat(cacheRepository.findByUserOrderByGeneratedAtDescIdDesc(u)).hasSize(1);
-    }
-
-    @Test
-    @DisplayName("GET 진입: 히스토리가 비었고 책이 충분하면 첫 1개를 만들어 대표로 둔다(부트스트랩, 1회만)")
-    void currentPersonality_bootstrapsOnceThenCacheHit() {
-        User u = newUser("boot@booktimer.com");
-        saveBooks(u, 3);
-        narratorReturns("부트스트랩.");
-
-        service.currentPersonality(u);
-        ReadingPersonality second = service.currentPersonality(u);
-
-        verify(narrator, times(1)).narrate(any()); // 둘째 진입은 캐시 히트(재호출 없음)
-        assertThat(second.narration().narrative()).isEqualTo("부트스트랩.");
-        assertThat(cacheRepository.findByUserOrderByGeneratedAtDescIdDesc(u)).hasSize(1);
-        assertThat(selectedNarrative(u)).contains("부트스트랩.");
     }
 
     @Test

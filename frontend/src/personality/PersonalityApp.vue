@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, onMounted, onBeforeUnmount } from 'vue';
 import PersonalityCarousel from './PersonalityCarousel.vue';
 import type { EntryDto } from './PersonalityCarousel.vue';
 import NavLinks from '../shared/NavLinks.vue';
-import { joinLabels, refreshState } from './personalityView';
+import { joinLabels } from './personalityView';
 
 interface ReadingProfile {
     totalBooks: number;
@@ -29,18 +29,16 @@ interface ViewDto {
     entries: EntryDto[];
 }
 
+// 서버는 refreshRemaining·refreshLimit도 함께 보내지만 웹은 더 이상 쓰지 않는다 —
+// 「다시 분석」이 앱 전용이 되면서 표시할 자리가 사라졌다(2026-09-08). 남는 필드는 그냥 무시된다.
 interface PersonalityResponse {
     nickname: string;
     loginId: string;
     view: ViewDto;
-    refreshRemaining: number;
-    refreshLimit: number;
 }
 
 interface MutationResponse {
     view: ViewDto;
-    refreshRemaining: number;
-    refreshLimit: number;
 }
 
 const appEl = document.getElementById('personality-app');
@@ -48,10 +46,7 @@ const nickname = ref(appEl?.dataset.nickname ?? '');
 const loginId = ref(appEl?.dataset.loginId ?? '');
 
 const view = ref<ViewDto | null>(null);
-const refreshRemaining = ref(0);
-const refreshLimit = ref(3);
 const error = ref(false);
-const refreshing = ref(false);
 const selectingId = ref<number | null>(null);
 
 // "내 독서 성향" 카드 우상단 ? 헬프 팝오버(공개 안내 + 정확도 고지). 클릭 토글 / 밖 클릭·Esc 닫힘.
@@ -62,8 +57,6 @@ function onKeydown(e: KeyboardEvent) {
 onMounted(() => window.addEventListener('keydown', onKeydown));
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
 
-// 다시 분석 버튼 3상태(refreshing 우선 → exhausted → ready) — 아이콘·회색·비활성 분기.
-const btnState = computed(() => refreshState(refreshRemaining.value, refreshing.value));
 
 function getCsrfToken(): string {
     return (document.querySelector('meta[name="_csrf"]') as HTMLMetaElement)?.content ?? '';
@@ -85,34 +78,8 @@ function applyResponse(data: PersonalityResponse | MutationResponse) {
     // 백드롭(v-if=helpOpen)이 고아로 남지 않게(refresh/select 후 일관 닫힘).
     helpOpen.value = false;
     view.value = data.view;
-    refreshRemaining.value = data.refreshRemaining;
-    refreshLimit.value = data.refreshLimit;
     if ('nickname' in data) nickname.value = data.nickname;
     if ('loginId' in data) loginId.value = data.loginId;
-}
-
-async function refresh() {
-    if (refreshRemaining.value === 0 || refreshing.value) return;
-    refreshing.value = true;
-    try {
-        const res = await fetch('/api/personality/refresh', {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { 'X-CSRF-TOKEN': getCsrfToken() },
-            signal: AbortSignal.timeout(30000),
-        });
-        if (res.status === 429) {
-            refreshRemaining.value = 0;
-            return;
-        }
-        if (!res.ok) throw new Error('refresh failed');
-        const data: MutationResponse = await res.json();
-        applyResponse(data);
-    } catch {
-        // LLM 실패는 serve-stale — view는 FALLBACK 또는 stale READY로 자연 반영됨
-    } finally {
-        refreshing.value = false;
-    }
 }
 
 async function selectEntry(id: number) {
@@ -193,9 +160,11 @@ async function selectEntry(id: number) {
                 <svg class="pbti-state-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M5 22h14M5 2h14"/><path d="M8 2v3.5a4 4 0 0 0 1.6 3.2L12 12l-2.4 2.3A4 4 0 0 0 8 17.8V22"/><path d="M16 2v3.5a4 4 0 0 1-1.6 3.2L12 12l2.4 2.3a4 4 0 0 1 1.6 3.1V22"/>
                 </svg>
-                <h2 class="pbti-card-title">잠시 후 다시 분석해 주세요</h2>
+                <h2 class="pbti-card-title">아직 만들어 둔 성향이 없어요</h2>
             </div>
-            <p class="pbti-state-text">지금은 성향 서술을 불러오지 못했어요. 사실 요약은 아래에서 볼 수 있어요.</p>
+            <!-- 옛 문구는 「잠시 후 다시 분석해 주세요」였는데, 웹에서 생성을 걷은 뒤로는 거짓말이 된다
+                 — 여기서 아무리 기다려도 다시 분석할 방법이 없다(2026-09-08). -->
+            <p class="pbti-state-text">성향 서술은 아직 없지만 사실 요약은 아래에서 볼 수 있어요.</p>
             <div class="pbti-hint">
                 <svg class="pbti-hint-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M12 5v14M5 12l7 7 7-7"/>
@@ -228,26 +197,15 @@ async function selectEntry(id: number) {
             </p>
         </section>
 
-        <!-- 다시 분석 (COLD_START 아닐 때만) -->
+        <!-- 성향 분석 생성은 앱에서만 (2026-09-08) — 앱은 리워드 광고를 봐야 돌릴 수 있어 호출마다
+             수익이 붙는데, 웹엔 그 관문이 없어 비용만 나갔다. 여기서는 만들어 둔 분석을 읽기만 한다.
+             COLD_START(책이 모자람)일 땐 안내가 겹치므로 위 화면에 맡기고 이 블록을 안 그린다. -->
         <div v-if="view.state !== 'COLD_START'" class="pbti-refresh">
-            <button type="button" class="pbti-btn-refresh" :class="{ 'is-exhausted': btnState === 'exhausted' }"
-                    :disabled="btnState !== 'ready'" @click="refresh">
-                <svg v-if="btnState === 'ready'" class="pbti-btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 4.5V10h-5.5"/>
-                </svg>
-                <svg v-else class="pbti-btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M5 22h14M5 2h14"/><path d="M8 2v3.5a4 4 0 0 0 1.6 3.2L12 12l-2.4 2.3A4 4 0 0 0 8 17.8V22"/><path d="M16 2v3.5a4 4 0 0 1-1.6 3.2L12 12l2.4 2.3a4 4 0 0 1 1.6 3.1V22"/>
-                </svg>
-                {{ btnState === 'refreshing' ? '분석 중…' : '다시 분석' }}
-            </button>
-            <p v-if="btnState !== 'exhausted'" class="pbti-refresh-note">
-                오늘 남은 횟수 <span class="pbti-num">{{ refreshRemaining }}</span> / <span class="pbti-num">{{ refreshLimit }}</span>
-            </p>
-            <div v-else class="pbti-exhausted">
+            <div class="pbti-exhausted">
                 <svg class="pbti-hint-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M5 22h14M5 2h14"/><path d="M8 2v3.5a4 4 0 0 0 1.6 3.2L12 12l-2.4 2.3A4 4 0 0 0 8 17.8V22"/><path d="M16 2v3.5a4 4 0 0 1-1.6 3.2L12 12l2.4 2.3a4 4 0 0 1 1.6 3.1V22"/>
+                    <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M12 8v5"/><path d="M12 16h.01"/>
                 </svg>
-                <span>오늘 '다시 분석'을 모두 사용했어요(하루 최대 <span class="pbti-num">{{ refreshLimit }}</span>번). 자정이 지나면 다시 분석할 수 있어요.</span>
+                <span>새 성향 분석은 <strong>토스 앱의 북타이머</strong>에서 만들 수 있어요 — 여기서는 만들어 둔 분석을 볼 수 있습니다.</span>
             </div>
         </div>
 

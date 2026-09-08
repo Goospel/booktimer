@@ -61,10 +61,11 @@ public class PersonalityApiController {
                 User.DAILY_PERSONALITY_REFRESH_LIMIT);
     }
 
-    @PostMapping("/refresh")
-    public ResponseEntity<?> refresh(Principal principal) {
-        return doRefresh(currentUserService.resolve(principal), User.DAILY_PERSONALITY_REFRESH_LIMIT);
-    }
+    // ⚠️ 웹 전용 refresh(POST /refresh, 천장 3)는 2026-09-08에 걷었다 — 미니앱은 리워드 광고를 봐야
+    // 분석을 돌릴 수 있어 호출마다 수익이 붙는데 웹엔 그 관문이 없어 비용만 나갔다. 광고를 웹에 새로
+    // 붙이는 것은 심사 이력상 번거로워 생성 경로 자체를 웹에서 없앴다(사용자 결정).
+    // 남은 생성 경로는 아래 /ad-refresh 하나뿐이고, GET /api/personality는 읽기 전용이 됐다.
+    // User.DAILY_PERSONALITY_REFRESH_LIMIT(3)은 화면이 잔여 표시에 계속 쓰므로 지우지 않았다.
 
     /**
      * 미니앱 광고 관문의 사전 판정 — <b>부트스트랩(LLM·저장) 부작용이 없는 유일한 성향 GET</b>이다.
