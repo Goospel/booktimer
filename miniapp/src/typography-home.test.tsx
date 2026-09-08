@@ -96,7 +96,7 @@ describe('소식 피드 (2b)', () => {
   const feed = (e: SocialEvent) =>
     render(
       <FeedBox
-        feed={{ social: [e], newsEnabled: false, news: [], readers: [] }}
+        feed={{ social: [e], newsEnabled: false, news: [], readers: [], discover: [] }}
         tab="social"
         expanded={false}
         error={null}

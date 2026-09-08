@@ -77,7 +77,7 @@ function reader(overrides: Partial<ReaderStatus> = {}): ReaderStatus {
 }
 
 function feed(overrides: Partial<HomeFeedResponse> = {}): HomeFeedResponse {
-  return { social: [], newsEnabled: true, news: [], readers: [], ...overrides };
+  return { social: [], newsEnabled: true, news: [], readers: [], discover: [], ...overrides };
 }
 
 const renderBox = (
@@ -109,12 +109,13 @@ const rowCountOf = (markup: string) => [...markup.matchAll(/data-feed-row/g)].le
 const rowTagsOf = (markup: string) => [...markup.matchAll(/<(\w+)[^>]*data-feed-row/g)].map((m) => m[1]);
 
 describe('탭 노출 (visibleTabs)', () => {
-  it('뉴스가 꺼져 있으면 사람 탭 + 「소식」 — 눌러도 빈 뉴스 탭은 죽은 탭이다', () => {
-    expect(visibleTabs(false)).toEqual(['readers', 'social']);
+  it('뉴스가 꺼져 있어도 「여백」 탭은 선다 — 뉴스와 달리 남의 공개 글은 늘 있다', () => {
+    // 뉴스 탭만 죽은 탭이 될 수 있다(수집 킬스위치). 여백은 서버 게이트가 없다.
+    expect(visibleTabs(false)).toEqual(['readers', 'social', 'discover']);
   });
 
-  it('뉴스가 켜져 있으면 세 탭', () => {
-    expect(visibleTabs(true)).toEqual(['readers', 'social', 'news']);
+  it('뉴스가 켜져 있으면 네 탭 — 「여백」은 소식 뒤·뉴스 앞이다', () => {
+    expect(visibleTabs(true)).toEqual(['readers', 'social', 'discover', 'news']);
   });
 
   it('사람 탭이 맨 왼쪽이다 — 위치가 곧 이 탭이 다른 종류라는 표시다', () => {
@@ -395,14 +396,21 @@ describe('피드 박스 렌더 — 소식 탭', () => {
 describe('피드 박스 렌더 — 책 뉴스 탭', () => {
   const items = [news('『데미안』 100년, 다시 읽는 성장소설', 'https://n.news.naver.com/article/001/1', 3)];
 
-  it('기사 제목·출처·상대 시간과 내 책 라벨을 한 줄에 담는다', () => {
+  it('기사 제목·출처·발행 날짜와 내 책 라벨을 한 줄에 담는다', () => {
     const markup = renderBox(feed({ news: items }), 'news');
 
     expect(markup).toContain('『데미안』 100년, 다시 읽는 성장소설');
     expect(markup).toContain('불교신문'); // 서버가 준 매체명 — 링크 호스트명이 아니다
-    expect(markup).toContain('3시간 전');
+    expect(markup).toContain('2026.08.14');
     expect(markup).toContain('내 책');
     expect(markup).toContain('데미안');
+  });
+
+  it('날짜를 적는다 — 「N일 전」은 수집이 도는지에 답하지 못한다', () => {
+    // 「3시간 전」은 기사가 언제 것인지도, 수집이 어제 멈췄는지도 말해 주지 않는다.
+    const markup = renderBox(feed({ news: items }), 'news');
+
+    expect(markup).not.toContain('3시간 전');
   });
 
   it('무엇을 열지는 마크업의 링크 주소가 말한다 — 여는 일 자체는 토스 SDK가 맡는다', () => {
@@ -414,17 +422,65 @@ describe('피드 박스 렌더 — 책 뉴스 탭', () => {
   });
 });
 
+/**
+ * 「여백」 탭 — 팔로우 무관 공개 여백. 소식 탭과 <b>같은 줄 모양</b>을 쓴다(서버가 같은 `SocialEvent`로
+ * 준다) — 그래서 여기 단언은 「소식과 같은 줄이 discover 목록으로 그려지는가」에 집중하고, 줄 안쪽
+ * 문법(배지·세리프 제목·발췌 clamp)은 소식 탭 쪽 단언이 이미 못 박는다.
+ */
+describe('피드 박스 렌더 — 여백 탭', () => {
+  const stories = [story('낯선사람', '데미안', 2, 1, '새는 알에서 나오려고 투쟁한다.')];
+
+  it('남의 여백 글을 문장·발췌와 함께 그린다', () => {
+    const markup = renderBox(feed({ discover: stories }), 'discover');
+
+    expect(rowCountOf(markup)).toBe(1);
+    expect(markup).toContain('낯선사람님이');
+    expect(markup).toContain('데미안');
+    expect(markup).toContain('새는 알에서 나오려고 투쟁한다.');
+  });
+
+  it('눌러서 그 여백으로 갈 수 있다 — 서버가 bookId를 주는 줄이다', () => {
+    expect(rowTagsOf(renderBox(feed({ discover: stories }), 'discover'))).toEqual(['button']);
+  });
+
+  it('소식 목록이 아니라 discover 목록을 그린다 — 두 탭이 같은 줄 모양을 쓰므로 출처가 어긋나기 쉽다', () => {
+    const markup = renderBox(feed({ social: [story('내가팔로우한사람', '소식 책', 1, 1)], discover: stories }), 'discover');
+
+    expect(markup).toContain('데미안');
+    expect(markup).not.toContain('소식 책');
+  });
+
+  it('비어 있으면 여기가 무엇으로 채워지는 자리인지 말한다', () => {
+    expect(renderBox(feed(), 'discover')).toContain(EMPTY_MESSAGE.discover);
+  });
+
+  it('미리보기는 3줄까지, 넘으면 「더 보기」 — 다른 탭과 같은 규칙', () => {
+    const many = Array.from({ length: 5 }, (_, i) => story(`사람${i}`, `책${i}`, i + 1, 1));
+
+    expect(rowCountOf(renderBox(feed({ discover: many }), 'discover'))).toBe(PREVIEW_COUNT);
+    expect(rowCountOf(renderBox(feed({ discover: many }), 'discover', true))).toBe(5);
+  });
+
+  it('구버전 서버(discover 없음)에도 안 깨진다 — 서버·미니앱 배포 순서에 의존하지 않는다', () => {
+    const legacy = { social: [], newsEnabled: true, news: [], readers: [] } as unknown as HomeFeedResponse;
+
+    expect(() => renderBox(legacy, 'discover')).not.toThrow();
+    expect(renderBox(legacy, 'discover')).toContain(EMPTY_MESSAGE.discover);
+  });
+});
+
 describe('피드 박스 — 탭 머리', () => {
-  it('뉴스가 켜져 있으면 세 탭이 서고 지금 탭이 표시된다', () => {
+  it('뉴스가 켜져 있으면 네 탭이 서고 지금 탭이 표시된다', () => {
     const markup = renderBox(feed(), 'news');
 
-    expect(tabsOf(markup)).toEqual(['readers', 'social', 'news']);
+    expect(tabsOf(markup)).toEqual(['readers', 'social', 'discover', 'news']);
     expect(markup).toContain('소식');
+    expect(markup).toContain('여백');
     expect(markup).toContain('책 뉴스');
   });
 
   it('뉴스가 꺼져 있으면 「책 뉴스」 머리 자체를 안 그린다 — 죽은 탭 금지', () => {
-    expect(tabsOf(renderBox(feed({ newsEnabled: false })))).toEqual(['readers', 'social']);
+    expect(tabsOf(renderBox(feed({ newsEnabled: false })))).toEqual(['readers', 'social', 'discover']);
   });
 
   it('사람 탭 뒤에 세로 구분선이 선다 — 같은 줄이지만 같은 종류가 아니라는 표시', () => {
@@ -482,7 +538,7 @@ describe('피드 박스 — 실패·로딩', () => {
     const markup = renderBox(null, 'social', false, '요청에 실패했어요 (500)');
 
     expect(markup).toContain('요청에 실패했어요 (500)');
-    expect(tabsOf(markup)).toEqual(['readers', 'social']); // 박스 자체는 그대로 서 있다
+    expect(tabsOf(markup)).toEqual(['readers', 'social', 'discover']); // 박스 자체는 그대로 서 있다
   });
 
   it('아직 못 받았으면 불러오는 중이라고 말한다', () => {

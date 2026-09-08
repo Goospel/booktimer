@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { elapsedSeconds, formatClock, formatDuration, relativeTime } from './format';
+import { elapsedSeconds, formatClock, formatDate, formatDuration, relativeTime } from './format';
 
 describe('formatDuration', () => {
   it('시·분을 함께 쓰되 0분이면 시간만 쓴다', () => {
@@ -74,6 +74,24 @@ describe('relativeTime', () => {
 
   it('미래 시각(시계 어긋남)은 "방금 전"으로 클램프 — "-3분 전"이 뜨지 않는다', () => {
     expect(relativeTime(ago(-60_000), base)).toBe('방금 전');
+  });
+});
+
+/**
+ * 절대 날짜 — 책 뉴스 줄이 쓴다. 「N일 전」이 답하지 못한 질문이 하나 있어서다: <b>수집이 지금도
+ * 도는가.</b> 그래서 <b>연도까지</b> 적는다 — 1년 전 기사가 「9월 8일」로 새것처럼 보이면 안 된다.
+ */
+describe('formatDate', () => {
+  it('YYYY.MM.DD로 적고 한 자리 월·일은 0을 채운다 — 자릿수가 흔들리면 목록이 들쭉날쭉해진다', () => {
+    expect(formatDate('2026-09-08T01:23:00Z')).toBe('2026.09.08');
+  });
+
+  it('두 자리 월·일은 그대로', () => {
+    expect(formatDate('2026-12-25T12:00:00Z')).toBe('2026.12.25');
+  });
+
+  it('연도를 적는다 — 1년 전 기사가 오늘 것처럼 보이면 「갱신되고 있나」에 답할 수 없다', () => {
+    expect(formatDate('2025-09-08T01:23:00Z')).toBe('2025.09.08');
   });
 });
 

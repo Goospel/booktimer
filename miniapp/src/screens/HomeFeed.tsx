@@ -4,12 +4,12 @@ import type { ReactNode } from 'react';
 import type { HomeFeedResponse, NewsItem, ReaderStatus, SocialEvent } from '../api';
 import { fetchHomeFeed } from '../api';
 import { CACHE_FEED, cacheGet, cachePut } from '../cache';
-import { elapsedSeconds, formatDuration, objectParticle, relativeTime } from '../format';
+import { elapsedSeconds, formatDate, formatDuration, objectParticle, relativeTime } from '../format';
 import { openExternal } from '../toss';
 import { BookCover, HANDWRITING, SECTION_RULE, SERIF_VALUE, Text, sectionStyle } from '../ui';
 
 /**
- * 홈 피드 박스 — 「소식」·「책 뉴스」 두 탭. 잔디 미리보기가 서 있던 자리를 물려받았다.
+ * 홈 피드 박스 — 사람 · 「소식」 · 「여백」 · 「책 뉴스」 탭. 잔디 미리보기가 서 있던 자리를 물려받았다.
  *
  * <p>홈(`Home.tsx`)이 1,000줄이라 여기로 뗐다. 데이터도 대시보드에 얹지 않고 자기가 받는다
  * (`Social`·`Library`의 자체 fetch 선례) — 히어로 렌더가 피드 쿼리에 인질로 잡히지 않는다.
@@ -19,10 +19,19 @@ import { BookCover, HANDWRITING, SECTION_RULE, SERIF_VALUE, Text, sectionStyle }
  * 계측한다(`BookSheet`·`RemainingNote`와 같은 처지).
  */
 
-export type FeedTab = 'readers' | 'social' | 'news';
+export type FeedTab = 'readers' | 'social' | 'discover' | 'news';
 
-/** 글자 탭의 라벨. `readers`는 <b>이름표가 없다</b> — 사람 그림 하나로 선다. */
-const TAB_LABEL: Record<Exclude<FeedTab, 'readers'>, string> = { social: '소식', news: '책 뉴스' };
+/**
+ * 글자 탭의 라벨. `readers`는 <b>이름표가 없다</b> — 사람 그림 하나로 선다.
+ *
+ * <p>`discover`가 「모두의 여백」이 아니라 <b>「여백」</b>인 건 네 탭이 한 줄에 서기 때문이다 —
+ * 라벨 하나가 길어지면 그 줄이 넘친다.
+ */
+const TAB_LABEL: Record<Exclude<FeedTab, 'readers'>, string> = {
+  social: '소식',
+  discover: '여백',
+  news: '책 뉴스',
+};
 
 /**
  * 처음 열리는 탭 — <b>맨 왼쪽이지만 기본은 「소식」이다.</b>
@@ -32,10 +41,11 @@ const TAB_LABEL: Record<Exclude<FeedTab, 'readers'>, string> = { social: '소식
  */
 export const DEFAULT_TAB: FeedTab = 'social';
 
-/** 빈 상태 문구 — 셋 다 "여기가 무엇으로 채워지는 자리인가"를 말한다(소식은 소셜 탭 유도를 겸한다). */
+/** 빈 상태 문구 — 넷 다 "여기가 무엇으로 채워지는 자리인가"를 말한다(소식은 소셜 탭 유도를 겸한다). */
 export const EMPTY_MESSAGE: Record<FeedTab, string> = {
   readers: '팔로우한 사람의 독서가 여기에 보여요',
   social: '팔로우한 사람의 소식이 여기에 떠요',
+  discover: '모두의 여백에 올라온 글이 여기에 떠요',
   news: '완독한 책의 뉴스가 여기에 떠요',
 };
 
@@ -138,9 +148,12 @@ const badgeStyle = (tone: 'solid' | 'tint' | 'outline') =>
  * <p>사람 탭은 **맨 왼쪽에 항상** 선다. 「소식」·「책 뉴스」가 *읽을 거리*라면 이쪽은 *사람*이라,
  * 위치와 구분선이 그 다름을 말한다. 팔로우가 0명이어도 그린다 — 빈 상태 문구가 "여기가 무엇으로
  * 채워지는 자리인지"를 알려 주는 진입점이라, 뉴스 탭과 달리 <b>죽은 탭이 아니다</b>.
+ *
+ * <p>「여백」은 <b>서버 게이트가 없어 항상 선다</b>(뉴스와 다른 점). 자리는 「소식」 바로 뒤다 —
+ * 둘 다 남의 글이고, 팔로우한 사람 → 모두 순으로 넓어진다.
  */
 export function visibleTabs(newsEnabled: boolean): FeedTab[] {
-  return newsEnabled ? ['readers', 'social', 'news'] : ['readers', 'social'];
+  return newsEnabled ? ['readers', 'social', 'discover', 'news'] : ['readers', 'social', 'discover'];
 }
 
 /**
@@ -354,7 +367,107 @@ const rowStyle = (index: number) =>
   }) as const;
 
 /**
- * 목록 한 벌 — 미리보기 3줄 + 「더 보기」 + 빈 상태. 두 탭이 같은 규칙을 쓰므로 여기 한 곳에 둔다
+ * 소식 한 줄 — 표지 · 배지 · 문장 · 발췌 · 시각. <b>「소식」과 「여백」 두 탭이 같이 쓴다</b>
+ * (서버가 둘 다 같은 `SocialEvent`로 준다). 복붙하면 두 탭이 따로 늙는다.
+ *
+ * <p>두 탭의 차이는 <b>무엇이 담겨 오는가</b>뿐이다 — 소식은 팔로우한 사람의 완독·시작·여백이 섞여
+ * 오고, 여백은 남의 공개 글만 온다. 그리는 규칙은 이 함수 하나가 정한다.
+ */
+function socialRow(
+  event: SocialEvent,
+  index: number,
+  now: number,
+  onOpenMargin: (loginId: string, bookId: number) => void,
+): ReactNode {
+  const body = (
+    <>
+      {/* 표지가 이 줄의 첫 신호다 — 문장을 읽기 전에 「무슨 책」이 먼저 보인다.
+          표지가 없는 책은 BookCover가 첫 글자 자리 표지로 떨어뜨린다(제목색이라 책마다 다르다). */}
+      <BookCover url={event.coverUrl} title={event.bookTitle} width={30} />
+      {/* 한글 문장이 flex 자식이라 minWidth:0이 없으면 줄바꿈 대신 표지를 밀어낸다. */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span style={badgeStyle(eventBadge(event).tone)}>
+          {/* 「여백 3」의 숫자는 값이다 — 배지 안에서 그 수 하나가 말하려는 전부라,
+              라벨과 같은 서체면 「여백」과 「3」이 한 덩어리로 뭉개진다. */}
+          {badgeParts(eventBadge(event).label).map((part, i) =>
+            part.value ? (
+              <span key={i} style={{ ...SERIF_VALUE }}>
+                {part.text}
+              </span>
+            ) : (
+              part.text
+            ),
+          )}
+        </span>
+        <Text typography="st11" style={{ display: 'block', marginTop: 3, wordBreak: 'keep-all' }}>
+          {/* 『제목』만 세리프 700 — 문장 안에서 「무슨 책인가」가 값이다(시안 2b).
+              문장 전체를 세리프로 두면 강조가 사라진다. */}
+          {quotedParts(eventLine(event)).map((part, i) =>
+            part.quoted ? (
+              <span key={i} style={{ ...SERIF_VALUE }}>
+                {part.text}
+              </span>
+            ) : (
+              part.text
+            ),
+          )}
+        </Text>
+        {/* 말줄임은 서버가 이미 했다(80자) — 여기 clamp는 폭에 맞춘 마지막 한 겹이다. */}
+        {/* 남의 글은 세로선 안으로 들여 「인용」임을 형태로 말한다 — 그 전에는 문장·발췌·시각
+            세 줄이 같은 들여쓰기로 쌓여 어디까지가 한 덩어리인지 안 보였다. 여백 카드의
+            인용선(Story.tsx)과 같은 문법이라 화면에 새 규칙이 늘지 않는다. */}
+        {event.excerpt !== null && (
+          <Text
+            typography="st12"
+            color="grey600"
+            style={{
+              display: '-webkit-box',
+              WebkitLineClamp: 1,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              marginTop: 4,
+              paddingLeft: 9,
+              // 시안 2b의 `rgba(110,138,106,.5)` — 세이지 500을 반투명으로 깐 색이고,
+              // 크림 위에서 이 램프의 200 칸에 내려앉는다. 카드 경계(회갈색)와 달라야
+              // 「남의 말」로 읽힌다.
+              borderLeft: '2px solid var(--adaptiveBlue200, #B6C9AE)',
+              wordBreak: 'keep-all',
+              // 여백 인용은 장식이다 — 남이 손으로 적은 글이라 손글씨로 남긴다.
+              ...HANDWRITING,
+            }}
+          >
+            {event.excerpt}
+          </Text>
+        )}
+        <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
+          {relativeTime(event.occurredAt, now)}
+        </Text>
+      </div>
+    </>
+  );
+  const key = `${event.loginId}-${event.type}-${event.occurredAt}`;
+  const rowLayout = { display: 'flex', gap: 10, alignItems: 'flex-start' } as const;
+
+  // 여백 줄만 갈 곳이 있다 — 완독·시작은 열 화면이 없어 예전처럼 비클릭으로 남는다(죽은 UI 금지).
+  return event.type === 'STORY' && event.bookId !== null ? (
+    <button
+      key={key}
+      type="button"
+      data-feed-row=""
+      onClick={() => onOpenMargin(event.loginId, event.bookId!)}
+      style={{ ...rowStyle(index), ...rowLayout }}
+    >
+      {body}
+    </button>
+  ) : (
+    <div key={key} data-feed-row="" style={{ ...rowStyle(index), ...rowLayout, cursor: 'default' }}>
+      {body}
+    </div>
+  );
+}
+
+/**
+ * 목록 한 벌 — 미리보기 3줄 + 「더 보기」 + 빈 상태. 네 탭이 같은 규칙을 쓰므로 여기 한 곳에 둔다
  * (제네릭이라 소식·뉴스 타입을 캐스트 없이 그대로 받는다).
  */
 function FeedList<T>({
@@ -508,7 +621,9 @@ export function FeedBox({
                 {item.title}
               </Text>
               <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
-                {[sourceLabel(item), relativeTime(item.publishedAt, now)].filter((s) => s !== '').join(' · ')}
+                {/* 여기만 절대 날짜다 — 「N일 전」은 「수집이 지금도 도는가」에 답하지 못한다.
+                    소식·사람 탭은 상대 시각 그대로다(거기선 「방금」이 값이다). */}
+                {[sourceLabel(item), formatDate(item.publishedAt)].filter((s) => s !== '').join(' · ')}
               </Text>
               <span
                 style={{
@@ -526,99 +641,23 @@ export function FeedBox({
             </a>
           )}
         />
+      ) : tab === 'discover' ? (
+        <FeedList
+          // `?? []` — readers와 같은 이유로 이 필드를 아직 안 내려주는 서버와도 붙는다.
+          items={feed.discover ?? []}
+          expanded={expanded}
+          empty={EMPTY_MESSAGE.discover}
+          onToggle={onToggle}
+          // 소식과 <b>같은 줄</b>이다 — 서버가 같은 모양으로 주므로 그리는 쪽도 하나여야 한다.
+          row={(event: SocialEvent, index) => socialRow(event, index, now, onOpenMargin)}
+        />
       ) : (
         <FeedList
           items={feed.social}
           expanded={expanded}
           empty={EMPTY_MESSAGE.social}
           onToggle={onToggle}
-          row={(event: SocialEvent, index) => {
-            const body = (
-              <>
-                {/* 표지가 이 줄의 첫 신호다 — 문장을 읽기 전에 「무슨 책」이 먼저 보인다.
-                    표지가 없는 책은 BookCover가 첫 글자 자리 표지로 떨어뜨린다(제목색이라 책마다 다르다). */}
-                <BookCover url={event.coverUrl} title={event.bookTitle} width={30} />
-                {/* 한글 문장이 flex 자식이라 minWidth:0이 없으면 줄바꿈 대신 표지를 밀어낸다. */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <span style={badgeStyle(eventBadge(event).tone)}>
-                    {/* 「여백 3」의 숫자는 값이다 — 배지 안에서 그 수 하나가 말하려는 전부라,
-                        라벨과 같은 서체면 「여백」과 「3」이 한 덩어리로 뭉개진다. */}
-                    {badgeParts(eventBadge(event).label).map((part, i) =>
-                      part.value ? (
-                        <span key={i} style={{ ...SERIF_VALUE }}>
-                          {part.text}
-                        </span>
-                      ) : (
-                        part.text
-                      ),
-                    )}
-                  </span>
-                  <Text typography="st11" style={{ display: 'block', marginTop: 3, wordBreak: 'keep-all' }}>
-                    {/* 『제목』만 세리프 700 — 문장 안에서 「무슨 책인가」가 값이다(시안 2b).
-                        문장 전체를 세리프로 두면 강조가 사라진다. */}
-                    {quotedParts(eventLine(event)).map((part, i) =>
-                      part.quoted ? (
-                        <span key={i} style={{ ...SERIF_VALUE }}>
-                          {part.text}
-                        </span>
-                      ) : (
-                        part.text
-                      ),
-                    )}
-                  </Text>
-                  {/* 말줄임은 서버가 이미 했다(80자) — 여기 clamp는 폭에 맞춘 마지막 한 겹이다. */}
-                  {/* 남의 글은 세로선 안으로 들여 「인용」임을 형태로 말한다 — 그 전에는 문장·발췌·시각
-                      세 줄이 같은 들여쓰기로 쌓여 어디까지가 한 덩어리인지 안 보였다. 여백 카드의
-                      인용선(Story.tsx)과 같은 문법이라 화면에 새 규칙이 늘지 않는다. */}
-                  {event.excerpt !== null && (
-                    <Text
-                      typography="st12"
-                      color="grey600"
-                      style={{
-                        display: '-webkit-box',
-                        WebkitLineClamp: 1,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                        marginTop: 4,
-                        paddingLeft: 9,
-                        // 시안 2b의 `rgba(110,138,106,.5)` — 세이지 500을 반투명으로 깐 색이고,
-                        // 크림 위에서 이 램프의 200 칸에 내려앉는다. 카드 경계(회갈색)와 달라야
-                        // 「남의 말」로 읽힌다.
-                        borderLeft: '2px solid var(--adaptiveBlue200, #B6C9AE)',
-                        wordBreak: 'keep-all',
-                        // 여백 인용은 장식이다 — 남이 손으로 적은 글이라 손글씨로 남긴다.
-                        ...HANDWRITING,
-                      }}
-                    >
-                      {event.excerpt}
-                    </Text>
-                  )}
-                  <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
-                    {relativeTime(event.occurredAt, now)}
-                  </Text>
-                </div>
-              </>
-            );
-            const key = `${event.loginId}-${event.type}-${event.occurredAt}`;
-            const rowLayout = { display: 'flex', gap: 10, alignItems: 'flex-start' } as const;
-
-            // 여백 줄만 갈 곳이 있다 — 완독·시작은 열 화면이 없어 예전처럼 비클릭으로 남는다(죽은 UI 금지).
-            return event.type === 'STORY' && event.bookId !== null ? (
-              <button
-                key={key}
-                type="button"
-                data-feed-row=""
-                onClick={() => onOpenMargin(event.loginId, event.bookId!)}
-                style={{ ...rowStyle(index), ...rowLayout }}
-              >
-                {body}
-              </button>
-            ) : (
-              <div key={key} data-feed-row="" style={{ ...rowStyle(index), ...rowLayout, cursor: 'default' }}>
-                {body}
-              </div>
-            );
-          }}
+          row={(event: SocialEvent, index) => socialRow(event, index, now, onOpenMargin)}
         />
       )}
     </section>

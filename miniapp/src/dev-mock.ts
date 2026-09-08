@@ -764,6 +764,27 @@ const readerStatuses: ReaderStatus[] = [
     readingBookTitle: null, readingSince: null, lastReadAt: null, lastReadBookTitle: null },
 ];
 
+/**
+ * 「여백」 탭 — <b>팔로우하지 않은 낯선 닉네임</b>으로만 채운다(소식 목록과 겹치는 이름이 없어야
+ * 두 탭이 서로 다른 목록임을 눈으로 가른다). 표지 유/무를 섞어 첫 글자 자리 표지도 함께 확인한다.
+ *
+ * <p>서버는 섞어서 주지만 목은 고정 순서다 — 매 새로고침마다 순서가 바뀌면 화면 확인이 흔들린다.
+ * 전부 `count: 1`인 것이 계약이다(발견 탭은 묶지 않는다).
+ */
+const discoverStories: SocialEvent[] = [
+  { loginId: 'haenal', nickname: '해질녘', bookTitle: '아무튼, 계속', type: 'STORY', occurredAt: isoTime(1.5),
+    bookId: 21, excerpt: '계속하는 사람이 되고 싶어서 오늘도 스무 쪽을 읽었다.', count: 1, coverUrl: MOCK_COVER },
+  { loginId: 'chaekbo', nickname: '책보따리', bookTitle: '파친코', type: 'STORY', occurredAt: isoTime(6),
+    bookId: 22, excerpt: '역사는 우리를 저버렸지만, 그래도 상관없다.', count: 1, coverUrl: null },
+  { loginId: 'moonpage', nickname: '달페이지', bookTitle: '우리가 빛의 속도로 갈 수 없다면', type: 'STORY', occurredAt: isoTime(14),
+    // 80자 넘는 원문은 서버가 79자 + … 로 잘라 준다 — 긴 제목 + 긴 발췌가 함께 선 줄의 폭을 본다.
+    bookId: 23, excerpt: '누군가를 기다리는 일이 시간을 견디는 방법이 될 수 있다는 걸, 이 나이가 되어서야 문장으로 배웠다…', count: 1, coverUrl: null },
+  { loginId: 'ilgi', nickname: '일기쓰는사람', bookTitle: '슬픔을 공부하는 슬픔', type: 'STORY', occurredAt: isoTime(30),
+    bookId: 24, excerpt: '슬픔을 공부한다는 말이 오래 남았다.', count: 1, coverUrl: MOCK_COVER },
+  { loginId: 'sepia', nickname: '세피아', bookTitle: '코스모스', type: 'STORY', occurredAt: isoTime(52),
+    bookId: 25, excerpt: '창백한 푸른 점 이야기에서 한참 멈췄다.', count: 1, coverUrl: null },
+];
+
 const newsItems: NewsItem[] = [
   {
     title: '헤르만 헤세 『데미안』 출간 100년, 다시 읽히는 이유',
@@ -926,6 +947,7 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     newsEnabled: true,
     news: newsItems,
     readers: readerStatuses,
+    discover: discoverStories,
   })],
 
   // ── 타이머 ──
