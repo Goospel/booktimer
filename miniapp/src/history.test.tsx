@@ -206,8 +206,8 @@ describe('펼칠 수 있는 날 (isExpandable)', () => {
     expect(isExpandable(day({ totalSeconds: 5_400, books: [bk('가', 3_600), bk('나', 1_800)] }))).toBe(true);
   });
 
-  it('한 권뿐이면 펼칠 수 없다 — 펼쳐 봐야 위에 있는 것과 같은 숫자 하나다', () => {
-    expect(isExpandable(day({ totalSeconds: 3_600, books: [bk('가', 3_600)] }))).toBe(false);
+  it('한 권뿐이어도 펼칠 수 있다 — 접힌 줄엔 제목이 없어 시리즈 몇 권인지 표지로는 안 보인다', () => {
+    expect(isExpandable(day({ totalSeconds: 3_600, books: [bk('가', 3_600)] }))).toBe(true);
   });
 
   it('한 권이어도 책 안 고른 시간이 있으면 펼칠 수 있다 — 그 책 시간과 그날 총합이 다르다', () => {
@@ -266,9 +266,14 @@ describe('하루 한 줄 (DayRow)', () => {
     expect(render(alone, false).match(grid)![1]).toBe(render(busy, false).match(grid)![1]);
   });
 
-  it('펼칠 수 없는 날엔 여는 손잡이를 안 둔다 — 눌러도 같은 숫자만 나오는데 눌리게 보이면 거짓말이다', () => {
+  it('책이 있는 날은 한 권이어도 손잡이를 둔다 — 펼쳐야 제목이 나온다', () => {
     expect(render(busy, false)).toContain('data-day-toggle');
-    expect(render(alone, false)).not.toContain('data-day-toggle');
+    expect(render(alone, false)).toContain('data-day-toggle');
+  });
+
+  it('책을 안 고른 날엔 손잡이를 안 둔다 — 펼쳐도 「책 안 고른 기록」 한 줄뿐이라 새로 보이는 게 없다', () => {
+    const none = day({ date: '2026-08-12', totalSeconds: 1_200, books: [] });
+    expect(render(none, false)).not.toContain('data-day-toggle');
   });
 });
 
