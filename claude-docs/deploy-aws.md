@@ -507,18 +507,37 @@ aws ssm put-parameter --name /booktimer/ALADIN_TTB_KEY \
 
 ---
 
-## 12-3. 책BTI LLM(Gemini) 키 연동
+## 12-3. Gemini 키 연동 — 책BTI + 공부 AI 일정
 
-책BTI(독서 성향 분석, Phase 3~5)는 Gemini Flash로 성향 서술을 생성한다. 앱은 `BOOKTIMER_LLM_API_KEY`
-환경변수를 읽어(`@Value("${booktimer.llm.api-key:not-configured}")`), 없으면 서술을 끄고 **사실만 표시(폴백)** 한다.
-즉 키가 없어도 화면·캐시·콜드스타트는 정상 동작하고, 키가 들어오면 서술이 라이브로 켜진다.
+이 키를 쓰는 곳이 **둘**이다(2026-09-08~).
+
+| 기능 | 어댑터 | 모델 프로퍼티 | 키 없을 때 |
+|---|---|---|---|
+| 책BTI 독서 성향 서술 | `GeminiReadingPersonalityNarrator` | `booktimer.llm.model` (기본 `gemini-2.5-flash`) | 서술을 끄고 **사실만 표시** |
+| **「공부」 AI 일정 생성** | `GeminiStudyPlanner` | **`booktimer.llm.plan-model`** (기본 `gemini-2.5-flash`) | 「AI 기능이 꺼져 있어요」(503) |
+
+앱은 `BOOKTIMER_LLM_API_KEY` 환경변수를 읽는다(`@Value("${booktimer.llm.api-key:not-configured}")`).
+키가 없어도 화면·캐시·콜드스타트는 정상 동작하고, 키가 들어오면 둘 다 라이브로 켜진다.
+
+⚠️ **모델 프로퍼티가 둘로 갈려 있다** — `BOOKTIMER_LLM_MODEL`을 바꿔도 **일정은 안 바뀐다**(일정은
+`BOOKTIMER_LLM_PLAN_MODEL`). 일정은 출력이 90항목까지 가서 성향 서술(2,048토큰)과 요구가 달라 일부러
+분리했다. 한쪽만 갈아 끼우고 「반영이 안 된다」로 헤매지 않도록 여기 적어 둔다.
+
+⚠️ **둘이 같은 키의 쿼터를 공유한다** — 한쪽에서 429가 나면 다른 쪽도 굶는다.
 
 ### ① API 키 발급 (외부, 1회)
 1. <https://aistudio.google.com/> → Google 계정 로그인 → **"Get API key" → "Create API key"**.
 2. 발급된 키(`AIza...` 또는 신형 `AQ....`) 복사. 무료 티어로 시작 가능(분당 요청 제한 있음).
    > 신형 `AQ.` 키는 헤더 인증이 막혀 있다 — 아래 "AQ 키 주의(T-037)" 참고. 어댑터는 호환되게 호출한다.
-> 무료 티어는 프롬프트가 모델 개선에 쓰일 수 있다 — 프롬프트엔 집계된 사실(장르명·저자명·권수)만 들어가고
-> 원문/PII는 없지만, 운영 본격화 땐 학습 제외(유료) 티어를 고려한다.
+> ⚠️ **무료 티어는 프롬프트가 모델 개선에 쓰일 수 있다. 이 위험 평가는 2026-09-08에 바뀌었다.**
+> 옛 문장은 「프롬프트엔 집계된 사실(장르명·저자명·권수)만 들어가고 원문/PII는 없다」였는데, 그날
+> **AI 일정 생성이 이 키로 옮겨오면서 사용자가 직접 친 자유 텍스트**(주제 + 범위, 최대 4,000자)가
+> 실리게 됐다. 학습 데이터가 될 수 있는 것의 **종류가 바뀐 것**이다.
+>
+> 🔜 **운영 키의 티어를 확인해야 한다(미확인)**. 무료면 유료(학습 제외) 전환을 하거나, 처리방침 6-2의
+> 「보유 기간은 Google의 Gemini API 데이터 처리 정책에 따릅니다」로는 이 사실이 이용자에게 드러나지
+> 않으므로 문구를 보강해야 한다. 유료면 이 주의문만 「유료 티어라 학습에 쓰이지 않는다」로 확정한다.
+> 확인 경로: <https://aistudio.google.com/> → API key → 연결된 Google Cloud 프로젝트의 결제 설정.
 
 ### ② SSM에 키 저장 (배포보다 먼저!)
 ECS `secrets`는 태스크 시작 시 SSM에서 **필수로** 당겨오므로, 파라미터가 없으면 새 태스크가 기동 실패한다(T-011).
@@ -559,9 +578,15 @@ Google이 2026년 들어 API 키를 구형 `AIza…`(Traffic key)에서 신형 `
 
 ## 12-4. 공부 화면 AI(Claude) 키 연동
 
-웹 `/study`의 백지복습 분석은 Claude API(`anthropic-java`)를 쓴다. 앱은 `BOOKTIMER_CLAUDE_API_KEY`를 읽어
-(`@Value("${booktimer.claude.api-key:not-configured}")`), 없으면 어댑터가 **클라이언트를 만들지도 않고**
-화면은 「AI 기능이 꺼져 있어 저장만 됩니다」로 폴백한다. 즉 키가 없어도 글쓰기·저장·달력은 정상이다.
+웹 `/study`의 **백지복습 분석·사진 전사**는 Claude API(`anthropic-java`)를 쓴다. 앱은
+`BOOKTIMER_CLAUDE_API_KEY`를 읽어(`@Value("${booktimer.claude.api-key:not-configured}")`), 없으면 어댑터가
+**클라이언트를 만들지도 않고** 화면은 「AI 기능이 꺼져 있어 저장만 됩니다」로 폴백한다. 즉 키가 없어도
+글쓰기·저장·달력은 정상이다.
+
+⚠️ **AI 일정 생성은 2026-09-08부터 이 키를 쓰지 않는다** — Gemini로 옮겨가 `BOOKTIMER_LLM_API_KEY`가
+게이트다(§12-3). 즉 **Claude 키를 지워도 일정은 멀쩡하고, 반대로 일정이 안 되면 여기가 아니라 §12-3을
+본다.** 아래 「AI 문 3종」 중 일정 3회분의 상한 카운터(`StudyAiUsage.Kind.PLAN`)와 승인 게이트는 그대로지만,
+**키·모델·요금은 Gemini 쪽**이다.
 
 ⚠️ **키 소비의 실질 분모는 「관리자가 승인한 사용자 수」다** — AI 문 3종은 `/admin`의 「AI 기능 승인」에서
 켜 준 사람만 쓸 수 있고(관리자 본인 포함, 우회 없음), 그 위에 하루 상한(분석 1 · 전사 3 · 일정 3)이 걸린다.

@@ -37,7 +37,10 @@ import java.util.Optional;
  * <p><b>승인 게이트는 여기 없다.</b> 이 클래스는 {@code User}를 모른다 — 누가 부를 수 있는지는
  * {@link StudyAiAccessService#requireApproved}가 호출부 첫 줄에서 정한다(가드 하나, 호출부 여럿).
  *
- * <p>인터페이스를 만들지 않은 것은 공급자 교체 계획이 없기 때문이다(테스트는 {@code @MockitoBean}).
+ * <p>인터페이스를 만들지 않았다(테스트는 {@code @MockitoBean}). 원래 근거는 「공급자 교체 계획이
+ * 없다」였는데 2026-09-08에 <b>일정 생성이 실제로 {@link GeminiStudyPlanner}로 떠났다</b> — 그럼에도
+ * 인터페이스를 안 만드는 쪽을 유지한다. 교체가 「구현을 갈아끼우기」가 아니라 <b>능력을 통째로 옮기기</b>
+ * 였기 때문이다(프롬프트·정제·실패 갈래가 함께 갔다). 공용 인터페이스는 그 이사를 오히려 방해했을 것이다.
  */
 @Component
 public class ClaudeStudyAssistant {

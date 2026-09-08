@@ -136,19 +136,47 @@ public class GeminiStudyPlanner {
                     .body(buildRequestBody(in, objectMapper))
                     .retrieve()
                     .body(String.class);
-            log.info("gemini plan {}ms", System.currentTimeMillis() - started);
+            log.info("gemini plan {}ms {}", System.currentTimeMillis() - started,
+                    usageOf(response, objectMapper));
             return parsePlan(response, objectMapper);
         } catch (HttpClientErrorException.TooManyRequests e) {
             log.warn("Gemini 일정 레이트리밋 — status={}", e.getStatusCode());
             return AiResult.fail(Failure.RATE_LIMITED);
         } catch (HttpClientErrorException.BadRequest e) {
-            log.warn("Gemini 일정 요청 거부 — status={}", e.getStatusCode());
-            return AiResult.fail(Failure.BAD_INPUT);
+            // Gemini의 400은 <b>우리 쪽 오설정</b>에서 난다 — 범위 길이·항목 수는 호출부가 이미 막았고
+            // (StudyPlanService의 SCOPE_MAX·MAX_PLAN_ITEMS), 안전 차단은 400이 아니라 candidates가 없는
+            // 200이다. 현실적인 원인은 plan-model을 thinkingConfig를 못 받는 모델로 바꾸는 것 같은
+            // 설정 실수다. 그래서 BAD_INPUT(400 「이 범위로는 일정을 만들 수 없어요」)으로 접지 않는다 —
+            // 그러면 화면이 사용자에게 범위를 고치라 하고, 사용자는 고쳐 가며 헛되이 재시도한다.
+            log.warn("Gemini 일정 400 — 설정을 의심한다(plan-model·generationConfig): status={}",
+                    e.getStatusCode());
+            return AiResult.fail(Failure.UNAVAILABLE);
         } catch (Exception e) {
-            // ⚠️ e.toString()·e.getMessage()를 찍지 않는다 — 키가 URL 쿼리에 실려 있어, URI를 message에
-            // 담는 예외(ResourceAccessException 등)가 시크릿을 로그로 흘린다. 클래스명만 남긴다.
+            // 예외 클래스명만 남긴다. spring-web은 ResourceAccessException 메시지를 만들 때 URI의 '?'
+            // 뒤를 잘라내므로 키가 실릴 일은 없지만(7.0.8 바이트코드 확인), 그 구현에 기대지 않는다 —
+            // 키가 URL 쿼리에 실리는 구조라 방어를 우리 쪽에 두는 편이 싸다.
             log.warn("Gemini 일정 실패 — {}", e.getClass().getSimpleName());
             return AiResult.fail(Failure.UNAVAILABLE);
+        }
+    }
+
+    /**
+     * 응답 봉투의 {@code usageMetadata}를 로그 한 조각으로 — <b>이 어댑터가 존재하는 이유의 눈금</b>이다.
+     *
+     * <p>Claude 어댑터는 {@code in=}/{@code out=}를 찍었고, plan.md의 「회당 153원 · 출력 10,574토큰」이
+     * 바로 그 로그에서 나왔다. 비용 때문에 공급자를 옮겨 놓고 눈금을 떼면 절감이 실제로 났는지 확인할
+     * 방법이 없고, 더 나쁘게는 {@code thinkingBudget}이 무시되기 시작해 출력이 몇 배로 뛰어도
+     * <b>ms만 보고는 모른다</b>. 토큰 수엔 시크릿이 없다.
+     */
+    static String usageOf(String json, ObjectMapper objectMapper) {
+        try {
+            JsonNode usage = objectMapper.readTree(json).path("usageMetadata");
+            return "in=%d out=%d total=%d".formatted(
+                    usage.path("promptTokenCount").asInt(-1),
+                    usage.path("candidatesTokenCount").asInt(-1),
+                    usage.path("totalTokenCount").asInt(-1));
+        } catch (Exception e) {
+            return "in=? out=? total=?";
         }
     }
 
@@ -199,9 +227,19 @@ public class GeminiStudyPlanner {
      *
      * <p><b>{@code finishReason} 검사가 이 메서드의 핵심이다.</b> Claude에선 SDK의 {@code stopReason}이
      * 이 몫을 했다 — 끝까지 못 쓴 응답을 성공으로 치면 <b>반쪽 일정이 그대로 달력에 들어가고</b>,
-     * 사용자 눈엔 「AI가 대충 짰네」로 보일 뿐 장애로 보이지 않는다. {@code STOP}이 아닌 값
-     * ({@code MAX_TOKENS} · {@code SAFETY} · {@code RECITATION} · {@code OTHER})은 전부 실패다.
-     * 값이 <b>아예 없는</b> 경우만 통과시킨다(응답 형태가 달라졌을 때 멀쩡한 일정까지 버리지 않으려고).
+     * 사용자 눈엔 「AI가 대충 짰네」로 보일 뿐 장애로 보이지 않는다.
+     *
+     * <p>검사는 <b>화이트리스트</b>다 — {@code STOP}만 통과하고 나머지는 전부 실패다
+     * ({@code MAX_TOKENS} · {@code SAFETY} · {@code RECITATION} · {@code LANGUAGE} · {@code BLOCKLIST} ·
+     * {@code PROHIBITED_CONTENT} · {@code SPII} · {@code OTHER} … 명세에만 12종이고 SDK가 모르는 신규
+     * 값도 관측된다). <b>여기에 값을 추가하지 않는다</b> — 블랙리스트로 바꾸면 새로 생긴 사유가
+     * 조용히 통과한다.
+     *
+     * <p>값이 <b>아예 없는</b> 경우만 통과시키는데, 근거는 「응답 형태가 달라졌을 때 멀쩡한 일정을
+     * 버리지 않는다」만이 아니다: {@code responseMimeType}이 json이라 <b>잘린 응답은 안쪽 JSON이 닫히지
+     * 않아</b> 아래 {@code readTree(inner)}에서 터지고 {@link Failure#UNAVAILABLE}로 떨어진다. 즉
+     * 「finishReason 부재 + 잘림」 조합은 두 번째 방어선이 잡는다. 프롬프트 단계 차단
+     * ({@code promptFeedback.blockReason})은 candidates가 통째로 없어 그 위 가드가 막는다.
      *
      * <p>{@code days}가 <b>빈 배열</b>인 것은 형식이 맞는 정상 응답이라 성공이다 — 「쓸 날짜가 하나도
      * 없다」는 판정은 {@link #sanitizePlan} 뒤에 호출부가 한다(판정이 두 곳으로 갈리지 않게).

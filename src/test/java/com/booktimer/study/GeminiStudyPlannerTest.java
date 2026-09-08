@@ -138,6 +138,28 @@ class GeminiStudyPlannerTest {
         assertThat(url).endsWith("k+e+y"); // URL 인코딩된다
     }
 
+    // ── 토큰 눈금 ────────────────────────────────────────────────────────
+    //
+    // 「비용 때문에 옮겼다」는 PR이 비용 눈금을 떼면 절감이 났는지 확인할 방법이 없다. Claude 어댑터는
+    // in=/out=를 찍었고 plan.md의 「회당 153원 · 출력 10,574토큰」이 그 로그에서 나왔다.
+
+    @Test
+    @DisplayName("usageOf: 봉투의 usageMetadata를 로그 조각으로 옮긴다")
+    void usageOf_readsTokenCounts() {
+        String json = "{\"usageMetadata\":{\"promptTokenCount\":1737,"
+                + "\"candidatesTokenCount\":3208,\"totalTokenCount\":4945}}";
+
+        assertThat(GeminiStudyPlanner.usageOf(json, OM)).isEqualTo("in=1737 out=3208 total=4945");
+    }
+
+    @Test
+    @DisplayName("usageOf: 봉투가 깨져도 던지지 않는다 — 계측기가 요청을 죽이면 안 된다")
+    void usageOf_whenBroken_doesNotThrow() {
+        assertThat(GeminiStudyPlanner.usageOf("{}", OM)).isEqualTo("in=-1 out=-1 total=-1");
+        assertThat(GeminiStudyPlanner.usageOf("not json", OM)).isEqualTo("in=? out=? total=?");
+        assertThat(GeminiStudyPlanner.usageOf(null, OM)).isEqualTo("in=? out=? total=?");
+    }
+
     // ── 응답 파싱 — 성공 ──────────────────────────────────────────────────
 
     @Test
