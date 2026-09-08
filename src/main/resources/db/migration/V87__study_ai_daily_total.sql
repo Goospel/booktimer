@@ -19,8 +19,8 @@ create table study_ai_daily_total (
     id          bigint       not null auto_increment,
     usage_date  date         not null,
     used        int          not null default 0,
-    created_at  datetime(6),
-    updated_at  datetime(6),
+    created_at  datetime(6)  not null,
+    updated_at  datetime(6)  not null,
     primary key (id),
     constraint uq_study_ai_daily_total unique (usage_date)
 );

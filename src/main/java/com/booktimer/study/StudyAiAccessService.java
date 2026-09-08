@@ -68,18 +68,52 @@ public class StudyAiAccessService {
     }
 
     /**
+     * 승인 — 정원 검사와 전이가 <b>한 트랜잭션에서 직렬화</b>된다.
+     *
+     * <p>⚠️ <b>첫 줄의 행 잠금이 이 메서드의 핵심이다.</b> 「COUNT로 읽고 판단한 뒤 UPDATE로 쓴다」는
+     * 그 자체로 TOCTOU라, 잠금이 없으면 동시 요청이 같은 값을 읽어 <b>전원이 정원을 통과한다</b> —
+     * 리뷰 실측(2026-09-08)에서 8스레드가 정원 1을 전부 뚫었다. 카운터 쪽은 조건을 SQL의 WHERE에
+     * 실어(→ {@link StudyAiDailyTotalRepository}) 같은 문제를 피했는데, 여기는 「같은 테이블을 세면서
+     * 그 테이블을 고치는」 모양이라 조건부 UPDATE 한 문장으로 접을 수 없다.
+     *
+     * <p>격리 수준({@code SERIALIZABLE})으로 푸는 길도 시도했는데 <b>H2에서 막지 못했다</b>(같은 경합
+     * 테스트가 그대로 8/1로 뚫렸다) — DB마다 구현이 갈리는 것에 보안 통제를 걸 수 없어 명시적 잠금으로
+     * 바꿨다. 그쪽은 「테스트에서만 초록」이 될 수 있는 자리다.
+     *
+     * <p><b>비용이 낮은 이유</b>: 이 경로는 관리자가 손으로 누르는 자리라 호출 빈도가 사실상 0에 가깝다.
+     * 반대로 <b>지켜야 할 상대는 동시 요청이 공짜인 공격자</b>다(위협모델이 「어드민 계정 탈취」다) —
+     * 느려서 손해 보는 쪽은 없고 이득만 있는 교환이다.
+     *
      * @return 대상 사용자, 또는 그 아이디가 없으면 {@code empty}(호출부가 404)
-     * @throws IllegalStateException 정원({@value #MAX_APPROVED}명)이 찼거나 잘못된 전이(호출부가 플래시 오류)
+     * @throws StudyAiCapacityExceededException 정원({@value #MAX_APPROVED}명)이 찬 경우
+     * @throws IllegalStateException            잘못된 전이(호출부가 플래시 오류로 옮긴다)
      */
     public Optional<User> approve(String loginId, Instant now) {
+        // 이 트랜잭션이 끝날 때까지 다른 승인은 대기한다 — 아래 COUNT와 전이가 한 덩어리가 된다.
+        userRepository.lockApprovalCandidates();
         // 정원 검사가 전이보다 앞이다 — 뒤에 두면 상태를 바꾼 뒤 되돌려야 한다.
         long approved = userRepository.countByStudyAiAccess(StudyAiAccess.APPROVED);
         if (approved >= MAX_APPROVED) {
             log.warn("AI 승인 거절(정원 초과) — target={} approved={}/{}", loginId, approved, MAX_APPROVED);
-            throw new IllegalStateException(
+            throw new StudyAiCapacityExceededException(
                     "승인 정원(" + MAX_APPROVED + "명)이 찼어요 — 기존 승인을 회수한 뒤 다시 시도해 주세요");
         }
         return transition(loginId, user -> user.approveStudyAi(now));
+    }
+
+    /**
+     * 정원 초과 — 잘못된 전이({@link IllegalStateException})와 <b>구분되어야</b> 하는 실패다.
+     *
+     * <p>둘을 한 타입으로 두면 관리자 화면이 정원 초과를 「이미 처리된 신청이에요」로 뭉갠다. 그런데
+     * 운영은 <b>정원이 이미 찬 상태로 배포된다</b>(소유자 1명이 승인돼 있다) — 즉 앞으로의 <b>모든</b>
+     * 승인 시도가 그 틀린 문구를 보게 되고, 관리자는 원인을 못 찾는다. 그래서 타입으로 가른다.
+     *
+     * <p>{@link IllegalStateException}을 상속하는 것은 기존 호출부의 catch를 깨뜨리지 않기 위해서다.
+     */
+    public static class StudyAiCapacityExceededException extends IllegalStateException {
+        public StudyAiCapacityExceededException(String message) {
+            super(message);
+        }
     }
 
     /** @return 대상 사용자, 또는 그 아이디가 없으면 {@code empty}(호출부가 404) */

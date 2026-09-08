@@ -55,6 +55,14 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+
+	// 테스트 JVM 힙을 명시한다 — 기본값에 기대면 스위트가 자라다 어느 날 OutOfMemoryError로 죽는다.
+	//
+	// 원인은 테스트 수가 아니라 **Spring 컨텍스트 수**다. @SpringBootTest는 properties·@MockitoBean이
+	// 다르면 각각 별개 컨텍스트를 띄우고, 그것들이 캐시에 **동시에 살아 있다**(캐시가 목적이다).
+	// 2026-09-08에 AI 상한 테스트가 컨텍스트를 둘 더하자(daily-cap=0 + 목 어댑터) 실제로 터졌다 —
+	// 실패 지점이 무작위 테스트라 원인이 코드에 있는 것처럼 보이는 부류다.
+	maxHeapSize = '2g'
 }
 
 tasks.named('bootRun') {

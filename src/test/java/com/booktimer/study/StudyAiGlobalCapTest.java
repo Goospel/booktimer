@@ -114,15 +114,24 @@ class StudyAiGlobalCapTest {
         assertThat(usageService.tryConsumeGlobal(now)).isFalse();
     }
 
-    // 사고 중에 배포 없이 전면 차단하는 킬 스위치 — 상한을 0으로 내리면 첫 요청부터 막힌다.
-    // 서비스는 프로퍼티로 상한을 고정 주입받으므로 여기선 리포지터리에 직접 0을 준다.
+    // 사고 중에 배포 없이 전면 차단하는 킬 스위치 — 상한 0이면 첫 요청부터 막힌다.
+    //
+    // ⚠️ **양성 대조군이 없으면 이 테스트는 공허하다.** 행을 안 만들고 재면 consume은 가드와 무관하게
+    // 늘 0행을 반환해, 「상한 0이라 막혔다」와 「행이 없어 못 늘렸다」가 구분되지 않는다 — 실제로 가드
+    // 제거 돌연변이에서 이 테스트만 살아남았다(리뷰 실측 2026-09-08). 그래서 행을 먼저 만들고,
+    // **같은 행에 상한 1을 주면 통과한다**는 대조군을 옆에 둔다.
     @Test
-    @DisplayName("킬 스위치: 상한 0이면 첫 요청부터 막힌다")
+    @DisplayName("킬 스위치: 상한 0이면 행이 있어도 막힌다(상한 1이면 통과 — 양성 대조군)")
     void killSwitchAtZero() {
         LocalDate day = LocalDate.of(2026, 10, 7);
+        totalRepository.save(StudyAiDailyTotal.of(day));
 
         assertThat(totalRepository.consume(day, 0)).isZero();
         assertThat(totalRepository.consume(day, 0)).isZero();
+
+        // 대조군 — 가드가 살아 있으면 상한을 올린 순간 통과해야 한다. 이게 없으면 「consume이 늘 0」인
+        // 구현도 위 두 줄을 초록으로 통과시킨다.
+        assertThat(totalRepository.consume(day, 1)).isEqualTo(1);
     }
 
     // 순서가 「사용자 몫 → 전역 몫」이라는 것이 이 카운터의 **의미**를 정한다. 전역을 먼저 두면
