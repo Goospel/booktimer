@@ -108,6 +108,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
      */
     List<User> findByStudyAiAccessOrderByStudyAiAccessAtAsc(StudyAiAccess studyAiAccess);
 
+    /** 승인 정원 검사({@code StudyAiAccessService.MAX_APPROVED})의 분모 — 지금 문이 몇 개 열려 있나. */
+    long countByStudyAiAccess(StudyAiAccess studyAiAccess);
+
     /** 역할 + 온보딩 완료 여부별 사용자 수 — 운영 통계의 "온보딩 완료자" 카드. */
     long countByRoleAndOnboarded(Role role, boolean onboarded);
 
