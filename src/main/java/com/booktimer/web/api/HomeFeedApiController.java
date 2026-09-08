@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -216,6 +217,10 @@ public class HomeFeedApiController {
      * <p>게이트가 꺼져 있거나 완독 책이 없으면 쿼리 없이 빈 목록. isbn → 내 책 제목 맵이
      * {@code bookTitle} 라벨("내 어느 책의 기사인가")을 만든다 — 같은 isbn을 여러 번 완독 등록했으면
      * 먼저 만난 제목 하나를 쓴다(라벨일 뿐이라 어느 쪽이든 같은 책이다).
+     *
+     * <p><b>같은 기사(link)는 한 줄이다.</b> {@code BookNews}의 유니크가 {@code (isbn13, link)}라
+     * 한 기사가 내 완독 책 여러 권에 걸리면 그만큼 행이 내려온다 — 화면엔 같은 글이 겹쳐 보이고,
+     * 미니앱은 link를 목록 key로 쓰므로 중복 key가 된다.
      */
     private List<NewsItem> newsFor(User viewer) {
         if (!newsClient.isEnabled()) {
@@ -230,7 +235,12 @@ public class HomeFeedApiController {
         }
         List<BookNews> cached = bookNewsRepository.findByIsbn13InOrderByPublishedAtDesc(
                 titleByIsbn.keySet(), PageRequest.of(0, MAX_NEWS));
+        Set<String> seenLinks = new HashSet<>();
         return cached.stream()
+                // 스캔이 최신순이라 먼저 만난 행이 그 기사의 최신이다(라벨 책도 그 행에서 온다).
+                // 상한을 자른 뒤 걷어 건수가 줄 수 있으나, 상한 전에 걷으려면 isbn별 그룹이 필요해
+                // (JPQL에 윈도 함수 없음) 과하다 — 중복은 드물고 줄어도 「더 보기」 안이다.
+                .filter(n -> seenLinks.add(n.getLink()))
                 .map(n -> new NewsItem(n.getTitle(), n.getLink(), n.getPublishedAt(),
                         titleByIsbn.get(n.getIsbn13()), n.getSource()))
                 .toList();
