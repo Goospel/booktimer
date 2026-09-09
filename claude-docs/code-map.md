@@ -2,7 +2,7 @@
 
 > **목적**: 특정 기능 작업을 시작하기 전에 여기서 **진입점(URL→컨트롤러)·소속 패키지·배선 주의**를 먼저 잡고 해당 파일로 직행한다. 작업 전 이 문서부터 훑는다.
 >
-> **⚠️ 이건 "린 지도"다 — 전 클래스 카탈로그가 아니다.** 도메인 패키지(`book/`·`garden/`·`session/`·`follow/` …)는 이미 기능 응집형이라 디렉터리만 봐도 경계가 보인다. 그래서 여기선 **트리가 안 보여주는 것**만 집는다 → ① `web/` 컨트롤러 50개는 기능이 아니라 기술 계층으로 묶여 있어 진입점 매핑이 사각, ② 한 기능이 여러 패키지에 흩어지는 배선.
+> **⚠️ 이건 "린 지도"다 — 전 클래스 카탈로그가 아니다.** 도메인 패키지(`book/`·`timer/`·`session/`·`follow/` …)는 이미 기능 응집형이라 디렉터리만 봐도 경계가 보인다. 그래서 여기선 **트리가 안 보여주는 것**만 집는다 → ① `web/` 컨트롤러 50개는 기능이 아니라 기술 계층으로 묶여 있어 진입점 매핑이 사각, ② 한 기능이 여러 패키지에 흩어지는 배선.
 >
 > **⚠️ stale 주의**: 파일이 옮겨지거나 이름이 바뀌면 이 지도는 낡는다. **최종 진실은 코드다** — 의심되면 `Glob`/`Grep`으로 확인하고, 구조를 바꿨으면 이 파일도 같은 PR에서 갱신한다. 그래서 여기엔 요약을 최소화하고 **파일 경로만** 적어 유지비를 낮췄다.
 >
@@ -14,7 +14,7 @@
 com.booktimer/
   web/            ← 컨트롤러 (기술 계층 — 기능별로 안 나뉨. 이 지도의 핵심 사각)
     api/          ←   JSON API 컨트롤러 (Vue SPA용, /api/**. default-deny + CSRF 자동보호)
-  <feature>/      ← 도메인 패키지 (기능 응집: user, book, session, timer, garden, follow,
+  <feature>/      ← 도메인 패키지 (기능 응집: user, book, session, timer, follow,
                      block, report, search, popularity, profile, story, personality,
                      email, retention, quote, feedback, admin)
   security/       ← 인증·인가 (UserDetails, OIDC, 로그인시도 방어)
@@ -92,9 +92,12 @@ com.booktimer/
 - 작가 도감·먹이주기·`/village`·`/garden`·`/api/garden`과 그 파생인 **프로필 아바타(도감 작가 얼굴)**를 전면 폐기했다.
   프로필 사진은 닉네임/아이디 **이니셜 폴백**으로 돌아갔다. 여기 있던 파일 목록은 전부 사라졌으니 찾지 마라.
 - **번호는 비워 두고 유지한다** — §7~§15와 아래 역인덱스가 이 번호를 참조한다.
-- 남은 흔적(PR-2에서 정리): `garden/AuthorAffection`·`garden/AuthorAffectionRepository`와
-  `user/AccountService.purge()`의 `deleteByUser` 한 줄. **테이블 `author_affection`이 살아 있는 동안 이 FK 정리를 지우면
-  먹이를 준 사용자의 탈퇴가 깨진다** — V88로 테이블을 drop하는 PR-2에서 함께 걷는다.
+- **남은 흔적 없음 — 2026-09-09 V88로 테이블·컬럼까지 drop 완료.** PR-1이 코드를, PR-2가 스키마를 걷었다
+  (`author_affection`·`author_character` 테이블 + `users.profile_character_code` 컬럼). 테이블이 사라지면서
+  `garden/AuthorAffection`·`garden/AuthorAffectionRepository`와 `user/AccountService.purge()`의 `deleteByUser`
+  한 줄도 함께 걷혀 **`com.booktimer.garden` 패키지가 소멸했다**.
+- **왜 두 PR로 잘랐나**: 코드와 컬럼을 같은 배포에서 지우면 blue-green 전환 중 옛 컨테이너가 없어진 컬럼을
+  SELECT 해 인증 요청이 전부 500이 난다. 그래서 코드 폐기(PR-1) → 배포 확인 → 스키마 drop(PR-2) 순으로 갔다.
 - 경위·근거: `claude-docs/changelog.md` 2026-09-09 항목.
 
 ## 👥 7. 소셜 (팔로우 · 차단 · 신고 · 검색 · 공개프로필 · 인기)
