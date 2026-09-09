@@ -1,6 +1,6 @@
 import { test as setup, expect } from '@playwright/test';
 
-// 인증 세션을 1회 만들어 저장 → garden.spec 등 인증 필요한 스펙이 재사용한다(매번 로그인 안 함).
+// 인증 세션을 1회 만들어 저장 → 인증이 필요한 스펙이 재사용한다(매번 로그인 안 함).
 // 시드계정은 LocalTestAccountSeeder(@Profile("local"))가 bootRun 때 멱등 생성한다.
 const authFile = 'e2e/.auth/user.json';
 

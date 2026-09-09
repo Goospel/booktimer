@@ -18,7 +18,7 @@ import jakarta.persistence.UniqueConstraint;
  *
  * <p>사용자가 배회 작가 캐릭터에게 먹이를 줄 때마다 해당 캐릭터의 {@code feedCount}를 누적한다.
  * {@code (user, characterCode)} 유니크 — 사용자 × 캐릭터 행 1개(upsert 기반).
- * EARN(달성일→먹이 획득)은 저장하지 않고 유도({@link DailyQuotaCalculator}).
+ * EARN(달성일→먹이 획득)은 저장하지 않고 유도(DailyQuotaCalculator).
  */
 @Entity
 @Table(name = "author_affection",

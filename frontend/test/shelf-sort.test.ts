@@ -62,7 +62,7 @@ describe('ShelfPanel 완독 정렬 컨트롤', () => {
 // ── ProfileApp 통합: 재조회·URL·리셋·딥링크 ──────────────────────────────
 
 const PROFILE_JSON = {
-    loginId: 'owner', nickname: '주인', profileCharacterCode: null,
+    loginId: 'owner', nickname: '주인',
     followerCount: 0, followingCount: 0,
     following: false, self: false,
     personality: null, personalityTags: [],

@@ -31,11 +31,6 @@
        한쪽 색만 바꿔 둘이 어긋나는 drift를 막는다. */
     --nav-hover-bg: var(--sage-soft);   /* hover 배경 = 연녹 채움(#E7EEE2) */
     --nav-hover-border: #CFE0C2;        /* hover 테두리 = 연녹 */
-    /* 독서 정원 무대(A0 무대화) — 캔버스를 '정원'으로 연출하는 배경/흙/울타리 색.
-       종이톤·세이지 팔레트와 어울리는 따뜻하고 채도 낮은 톤. 다크모드 미도입 프로젝트라 단일 값. */
-    --garden-sky: #DCEAF0;   /* 옅은 하늘 */
-    --garden-water: #6FA8C7; /* 물(CoC 바다 톤) — 마을 줌아웃 void 베이스 */
-    --garden-soil: #B89576;  /* 갈아엎은 흙(화단 베드) */
     /* 포커스 링 — 입력칸 focus·강조 hover가 공유(세이지 #6E8A6A=rgb(110,138,106) 기반).
        #287 토큰 교체가 못 건드린 raw 인디고 잔재를 토큰화해 전역 일관 유지. */
     --focus-ring: rgba(110, 138, 106, .30);
@@ -1067,135 +1062,6 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     z-index: 9999;
     box-shadow: 0 6px 16px -6px rgba(0, 0, 0, .5);
 }
-
-/* === 서재 도감 (그리드·셀) === */
-
-.garden-link-tile { margin-top: 14px; }
-
-.garden-dex-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.garden-progress { color: var(--muted); font-size: .8rem; white-space: nowrap; }
-
-/* 도감 그리드 — 자동 채움 칸(반응형). 보유=이모지+이름, 미보유=🔒+목표일. */
-.garden-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
-    gap: 8px;
-    margin: 8px 0 12px;
-}
-.garden-grid .plant-cell {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    padding: 8px 4px;
-    border: 1px solid var(--border);
-    border-image: var(--pencil-frame) 8 / 8px stretch;
-    border-radius: var(--radius-sm);
-    text-align: center;
-    background: none;      /* button 기본 크롬 리셋 — .owned/.plant-locked이 배경을 지정 */
-    font: inherit;
-    color: inherit;
-    cursor: pointer;
-    transition: border-color .15s, transform .1s;
-}
-.garden-grid .plant-cell:hover { border-color: var(--accent); }
-.garden-grid .plant-cell:active { transform: scale(.97); }
-.garden-grid .plant-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.garden-grid .plant-cell.owned { background: var(--sage-soft); border-color: transparent; }
-.garden-grid .plant-cell.plant-locked { background: transparent; }
-.garden-grid .plant-emoji { font-size: 1.5rem; line-height: 1.2; }
-.garden-grid .plant-emoji.locked { filter: grayscale(1); opacity: .55; }
-.garden-grid .plant-name { font-size: .72rem; color: var(--text); word-break: keep-all; }
-.garden-grid .plant-name.locked { color: var(--muted); }
-/* 정(affection) 배지 — 좁은 셀에서 과개행 방지: 작은 글자 + 단어 단위 줄바꿈. */
-.garden-grid .plant-affection {
-    font-size: .6rem;
-    line-height: 1.25;
-    color: var(--muted);
-    word-break: keep-all;
-    text-align: center;
-    margin-top: 1px;
-}
-/* 정 깊은 단계(단짝·베프)는 따뜻한 강조색으로 보상감. */
-.garden-grid .plant-affection.affection-lv4,
-.garden-grid .plant-affection.affection-lv5 { color: var(--accent-hover); font-weight: 600; }
-.plant-new {
-    position: absolute;
-    top: -6px;
-    right: -4px;
-    padding: 1px 5px;
-    background: var(--ok);
-    color: #fff;
-    font-size: .6rem;
-    font-weight: 700;
-    border-radius: 8px;
-}
-.garden-next { margin: 0; color: var(--muted); font-size: .82rem; word-break: keep-all; }
-/* 트랙 B 미발견 "???" 미스터리 슬롯 — 조건을 숨긴 채 존재만 흐릿하게 드러낸다. */
-.garden-grid .plant-emoji.mystery { font-size: 1.5rem; line-height: 1.2; opacity: .5; }
-
-/* === 서재 도감 전용 페이지 (/garden) === */
-/* 축 탭·보유/미보유 필터는 Alpine 클라이언트 토글(x-show). no-JS면 x-show가 무시돼 전부 보이는 폴백(점진 향상). */
-.garden-dex-progress { margin: 0 0 16px; }
-.garden-page-progress { margin: 0 0 6px; color: var(--text); font-size: .9rem; word-break: keep-all; }
-/* 진행바 — pv-meter와 동일 비주얼(도감 전용 클래스). */
-.garden-meter {
-    width: 100%;
-    height: 12px;
-    background: var(--paper-2);
-    border-radius: 999px;
-    overflow: hidden;
-}
-.garden-meter-fill {
-    height: 100%;
-    background: linear-gradient(90deg, var(--sage-6), var(--accent));
-    border-radius: 999px;
-    transition: width .6s cubic-bezier(.2, .8, .2, 1);
-}
-@media (prefers-reduced-motion: reduce) { .garden-meter-fill { transition: none; } }
-.garden-controls {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 18px;
-}
-.garden-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
-.garden-tab {
-    width: auto;               /* 전역 button{width:100%} 상쇄 — 빠지면 pill이 풀폭이 돼 flex-wrap에서 한 줄씩 세로로 쌓임(태블릿/PC 깨짐 원인) */
-    padding: 6px 12px;
-    border: 1px solid var(--border);
-    border-image: var(--pencil-frame) 8 / 8px stretch;
-    border-radius: 999px;
-    background: transparent;
-    color: var(--muted);
-    font-size: .82rem;
-    font-weight: 600;
-    cursor: pointer;
-    white-space: nowrap;
-}
-.garden-tab:hover { border-color: var(--accent); color: var(--accent-hover); }
-.garden-tab.active { background: var(--accent); border-color: transparent; color: #fff; }
-.garden-filter {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--text);
-    font-size: .82rem;
-    cursor: pointer;
-    white-space: nowrap;
-}
-.garden-axis { margin-top: 22px; }
-.garden-axis:first-of-type { margin-top: 0; }
-.garden-axis-title { margin: 0; font-size: 1rem; color: var(--accent-hover); }
-
-/* 코드 벡터 SVG 식물(도감 셀) — 이모지 자리에 들어가는 <symbol> 스프라이트.
-   부모 .plant-emoji 의 크기 맥락에 맞춰 시각 균형을 맞춘다(외부 요청 0). */
-.plant-svg { width: 1.5rem; height: 1.5rem; display: block; overflow: visible; }
-.garden-grid .plant-emoji .plant-svg { width: 2rem; height: 2rem; }
-
 /* === 내 책장 (Book) === */
 .muted { color: var(--muted); }
 
@@ -1796,7 +1662,6 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
     max-height: 85vh; overflow-y: auto;
     animation: book-sheet-up .28s cubic-bezier(.32, .72, 0, 1);
 }
-@keyframes book-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
 .sheet-handle {
     width: 36px; height: 4px; border-radius: 999px; background: var(--border);
     margin: 0 auto 2px; flex-shrink: 0;
@@ -2010,8 +1875,6 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 .shop-notfound-link:hover { text-decoration: underline; }
 
 /* 와이드에서 탭 숨김 / 모바일에서 사이드바 평탄화는 isWide 분기로 처리(이 CSS는 안전망) */
-@media (max-width: 859px) { .shop-wide { display: block; } .shop-side { flex: none; } }
-
 /* 팔로워/팔로잉 목록 페이지 탭 */
 .follow-tabs { display: flex; gap: 8px; margin: 0 0 14px; }
 .follow-tabs a {
@@ -2069,7 +1932,7 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
  * 「이미 책장에 있음」 배지 — 책장 검색 결과(.shelf-owned-badge)와 대시보드 책 시트(.book-sheet-owned)가
  * 한 규칙을 공유한다. 둘은 같은 검색 API의 같은 `owned` 플래그를 그리므로, 표기가 갈리면 같은 사실이
  * 두 얼굴로 보인다. 미니앱의 「서재에 있어요」 칩과 같은 언어이되 **문구는 「책장」이다** — 웹에서
- * 「서재」는 작가 캐릭터가 사는 마을을 가리켜(garden.html·랜딩) 여기서 쓰면 뜻이 충돌한다.
+ * 웹은 책 목록을 「책장」으로 부른다(용어 단일 출처).
  *
  * 흐린 회색 글자였던 것을 세이지 칩으로 올렸다. 저자·출판사 줄과 같은 옷이라 한 줄 더 붙은 메타로
  * 읽혔는데, 이건 메타가 아니라 「담을 수 없다」는 상태 신호다.
@@ -2321,7 +2184,7 @@ body.personality-page #personality-app { gap: 18px; }
    앱 기본은 모바일-우선 .container max-width:460px라, 큰 화면에선 긴 AI 서술이 좁은 460px
    칸에 갇혀 세로로 길쭉했다(모바일은 이 폭이 적절해 무변경). 캐러셀 슬라이드(80% peek)·도트·
    스크롤 로직은 그대로 두고 폭만 키우면 같은 글이 더 적은 줄로 흘러 카드 높이가 준다
-   (실측 narrative 232→440px, 17줄→9줄). garden-wide·dashboard와 동일한 페이지-스코프 패턴이라
+   (실측 narrative 232→440px, 17줄→9줄). dashboard와 동일한 페이지-스코프 패턴이라
    body.personality-page 한정 → 다른 페이지 회귀 0. min-width 가드라 모바일(<600px)은 무손상.
    카드 폭은 PersonalityCarousel의 step()/dotIndex가 실측 폭에서 역산하므로 JS 변경 불필요. */
 @media (min-width: 600px) {
@@ -2565,469 +2428,6 @@ body.personality-page #personality-app { gap: 18px; }
 }
 .pbti-selected-mark svg { width: 15px; height: 15px; flex: 0 0 auto; }
 
-/* ===================================================================
-   서재 풀스크린 셸 (/village) — S1
-   스코프: #village-app 및 .village-* 클래스. 다른 페이지 회귀 0.
-   =================================================================== */
-
-/* 루트 — 뷰포트 전체 점유, 페이지 스크롤 제거 */
-#village-app {
-    position: fixed;
-    inset: 0;
-    overflow: hidden;
-    background: var(--garden-water);
-}
-
-/* 셸 — 모바일: 전체 채움 / 데스크톱: flex 중앙 + 액자 배경 */
-.village-shell {
-    width: 100%;
-    height: 100%;
-    height: 100dvh;   /* 다이나믹 뷰포트 높이(주소창 숨김 보정) */
-    position: relative;
-    overflow: hidden;
-    background: var(--garden-water);
-}
-
-/* 데스크톱 ≥900px: 중앙 액자 레이아웃 */
-@media (min-width: 900px) {
-    .village-shell {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--bg);  /* 액자 바깥 종이톤 */
-    }
-}
-
-/* 로딩·오류 — 중앙 정렬 */
-.village-loading {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.1rem;
-    color: var(--muted);
-    background: var(--garden-sky);
-}
-
-/* ── 돌봄 뷰(다마고치) — 모든 화면 단일 모드 ──
-   CoC 가로 무대 은퇴 후 유일한 서재 화면. 모바일은 풀스크린, 데스크톱은 중앙 카드(액자). */
-.portrait-village {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    background: linear-gradient(180deg, var(--garden-sky) 0%, var(--sage-soft) 38%, var(--bg) 100%);
-    padding: max(8px, env(safe-area-inset-top))
-             max(14px, env(safe-area-inset-right))
-             max(16px, env(safe-area-inset-bottom))
-             max(14px, env(safe-area-inset-left));
-}
-
-/* 데스크톱 ≥900px: 풀스크린 대신 중앙 카드(액자) — .village-shell이 flex로 가운데 놓는다. */
-@media (min-width: 900px) {
-    .portrait-village {
-        position: relative;
-        inset: auto;
-        width: min(100%, 460px);
-        height: min(100dvh, 760px);
-        border: 1px solid var(--border);
-        border-image: var(--pencil-frame) 8 / 8px stretch;
-        border-radius: var(--radius);
-        box-shadow: 0 8px 40px rgba(44, 42, 36, .28);
-    }
-}
-
-/* 슬림 HUD */
-.pv-hud {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 4px 2px;
-}
-.pv-hud-home {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    border: 1px solid var(--border);
-    border-image: var(--pencil-frame) 8 / 8px stretch;
-    background: var(--card-bg);
-    border-radius: 16px;
-    padding: 4px 10px;
-    color: var(--accent-hover);
-    font-weight: 600;
-    font-size: .85rem;
-    text-decoration: none;
-    white-space: nowrap;
-}
-.pv-hud-home:hover { border-color: var(--accent-hover); }
-.pv-hud-title {
-    flex: 1 1 auto;
-    color: var(--muted);
-    font-size: .82rem;
-    font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.pv-hud-food {
-    font-size: .9rem;
-    font-weight: 700;
-    color: var(--text);
-    white-space: nowrap;
-}
-.pv-hud-dex {
-    flex: 0 0 auto;
-    width: auto;               /* 전역 button{width:100%} 상쇄 — 빠지면 도감 버튼이 가로로 늘어남(#286 가드) */
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    border: 1px solid var(--border);
-    border-image: var(--pencil-frame) 8 / 8px stretch;
-    background: var(--card-bg);
-    border-radius: 16px;
-    padding: 4px 10px;
-    color: var(--text);
-    font-weight: 600;
-    font-size: .85rem;
-    white-space: nowrap;
-    cursor: pointer;
-}
-.pv-hud-dex:hover { border-color: var(--accent-hover); }
-
-/* 빈 상태 — 보유 작가 0 */
-.pv-empty {
-    margin: auto;
-    text-align: center;
-    color: var(--muted);
-    padding: 24px;
-}
-.pv-empty p { margin: 4px 0; }
-.pv-empty-sub { font-size: .82rem; }
-
-/* 히어로(오늘의 작가) 카드 */
-.pv-hero {
-    flex: 0 0 auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    background: var(--card-bg);
-    border: 1px solid var(--border);
-    border-image: var(--pencil-frame) 8 / 8px stretch;
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: 18px 18px 20px;
-    text-align: center;
-}
-.pv-hero-label {
-    font-size: .76rem;
-    font-weight: 700;
-    letter-spacing: .04em;
-    color: var(--accent);
-    text-transform: uppercase;
-}
-.pv-hero-portrait {
-    position: relative;
-    width: 148px;
-    height: 148px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: radial-gradient(circle at 50% 62%, var(--sage-soft), transparent 70%);
-    border-radius: 50%;
-}
-.pv-hero-svg { width: 128px; height: 128px; }
-.pv-hero-emoji { font-size: 5rem; line-height: 1; }
-.pv-hero-name { font-size: 1.2rem; font-weight: 700; color: var(--text); }
-.pv-hero-rank { font-size: .85rem; color: var(--muted); }
-
-/* 정 미터 */
-.pv-meter {
-    width: 100%;
-    max-width: 280px;
-    height: 12px;
-    margin-top: 4px;
-    background: var(--paper-2);
-    border-radius: 999px;
-    overflow: hidden;
-}
-.pv-meter-fill {
-    height: 100%;
-    background: linear-gradient(90deg, var(--sage-6), var(--accent));
-    border-radius: 999px;
-    transition: width .6s cubic-bezier(.2, .8, .2, 1);
-}
-.pv-meter-caption { font-size: .78rem; color: var(--muted); }
-
-/* 밥 주기 — 엄지 사정권 큰 CTA */
-.pv-feed-btn {
-    width: 100%;
-    max-width: 280px;
-    min-height: 56px;
-    margin-top: 10px;
-    border: none;
-    border-radius: 16px;
-    background: var(--accent);
-    color: #fff;
-    font-size: 1.1rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: background .15s, transform .1s;
-}
-.pv-feed-btn:hover:not(:disabled) { background: var(--accent-hover); }
-.pv-feed-btn:active:not(:disabled) { transform: scale(.97); }
-.pv-feed-btn:disabled { background: var(--neutral-2); color: var(--paper-4); cursor: not-allowed; }
-.pv-feed-hint { font-size: .78rem; color: var(--muted); min-height: 1em; }
-
-/* 레벨업 연출 */
-.pv-hero-levelup { animation: pv-levelup 1.6s ease-out; }
-@keyframes pv-levelup {
-    0%, 100% { box-shadow: var(--shadow); }
-    40%      { box-shadow: 0 0 0 4px var(--sage-5), var(--shadow); }
-}
-
-/* 식구 작가 카드 스택 — 가로 스크롤, 탭으로 히어로 전환 */
-.pv-family { flex: 0 0 auto; }
-.pv-family-label {
-    font-size: .8rem;
-    font-weight: 600;
-    color: var(--muted);
-    margin-bottom: 6px;
-    padding-left: 2px;
-}
-.pv-family-scroll {
-    display: flex;
-    gap: 10px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    padding: 2px 2px 8px;
-    scroll-snap-type: x proximity;
-}
-.pv-family-card {
-    flex: 0 0 auto;
-    width: 84px;
-    scroll-snap-align: start;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    padding: 8px 6px;
-    background: var(--card-bg);
-    border: 1px solid var(--border);
-    border-image: var(--pencil-frame) 8 / 8px stretch;
-    border-radius: 12px;
-    cursor: pointer;
-    transition: border-color .15s, transform .1s, box-shadow .15s;
-}
-.pv-family-card.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring); }
-.pv-family-card:active { transform: scale(.96); }
-.pv-family-svg { width: 48px; height: 48px; }
-.pv-family-emoji { font-size: 2rem; line-height: 48px; }
-.pv-family-name {
-    max-width: 72px;
-    font-size: .72rem;
-    font-weight: 600;
-    color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.pv-family-lv { font-size: .68rem; color: var(--muted); }
-
-@media (prefers-reduced-motion: reduce) {
-    .pv-meter-fill { transition: none; }
-    .pv-hero-levelup { animation: none; }
-}
-
-/* 설정 알림 섹션 푸시 토글 = 스위치. 정의는 파일 끝 "설정 페이지 재스킨"(body.settings-page)에 있다.
-   JS(notification-settings.js)가 클래스명 .btn-push-toggle / .is-on 에 의존하므로 이름은 유지한다. */
-
-/* 도감 전체 오버레이 — backdrop 클릭·ESC로 닫힘 */
-.village-dex-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(44, 42, 36, .55);
-    z-index: 50;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-}
-@media (min-width: 600px) {
-    .village-dex-overlay { align-items: center; }
-}
-
-.village-dex-panel {
-    width: 100%;
-    max-width: 760px;
-    max-height: 80dvh;
-    background: var(--card-bg);
-    border-radius: var(--radius) var(--radius) 0 0;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    padding: 20px;
-    padding-bottom: max(20px, env(safe-area-inset-bottom));
-    box-shadow: 0 -4px 32px rgba(44, 42, 36, .2);
-}
-@media (min-width: 600px) {
-    .village-dex-panel {
-        border-radius: var(--radius);
-        max-height: 85dvh;
-        box-shadow: var(--shadow);
-    }
-}
-
-.village-dex-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-    font-weight: 700;
-    font-size: 1rem;
-    color: var(--accent-hover);
-}
-
-.village-dex-close {
-    width: auto;
-    background: transparent;
-    border: 1px solid var(--border);
-    border-image: var(--pencil-frame) 8 / 8px stretch;
-    border-radius: 999px;
-    padding: 4px 12px;
-    font-size: .82rem;
-    font-weight: 600;
-    cursor: pointer;
-    color: var(--muted);
-    transition: border-color .15s;
-}
-.village-dex-close:hover { border-color: var(--accent); color: var(--text); }
-
-/* 도감 캐릭터 상세 바텀시트 — 도감 오버레이(z 50) 위에 뜨므로 z 60. backdrop·ESC로 닫힘 */
-.dex-detail-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(44, 42, 36, .55);
-    z-index: 60;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-}
-@media (min-width: 600px) { .dex-detail-overlay { align-items: center; } }
-.dex-detail-panel {
-    width: 100%;
-    max-width: 420px;
-    max-height: 80dvh;
-    background: var(--card-bg);
-    border-radius: var(--radius) var(--radius) 0 0;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    padding: 20px;
-    padding-bottom: max(20px, env(safe-area-inset-bottom));
-    box-shadow: 0 -4px 32px rgba(44, 42, 36, .2);
-    text-align: center;
-}
-@media (min-width: 600px) {
-    .dex-detail-panel { border-radius: var(--radius); box-shadow: var(--shadow); }
-}
-.dex-detail-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 8px;
-    font-weight: 700;
-    font-size: .9rem;
-    color: var(--accent-hover);
-    text-align: left;
-}
-.dex-detail-close {
-    width: auto;
-    background: transparent;
-    border: 1px solid var(--border);
-    border-image: var(--pencil-frame) 8 / 8px stretch;
-    border-radius: 999px;
-    padding: 4px 12px;
-    font-size: .82rem;
-    font-weight: 600;
-    cursor: pointer;
-    color: var(--muted);
-    transition: border-color .15s;
-}
-.dex-detail-close:hover { border-color: var(--accent); color: var(--text); }
-.dex-detail-portrait {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 96px;
-    margin: 8px 0 4px;
-}
-.dex-detail-svg { width: 88px; height: 88px; overflow: visible; }
-.dex-detail-emoji { font-size: 4rem; line-height: 1; }
-.dex-detail-emoji.locked { filter: grayscale(1); opacity: .55; }
-.dex-detail-name { margin: 4px 0 2px; font-size: 1.25rem; font-weight: 700; color: var(--text); word-break: keep-all; }
-.dex-detail-rank { margin: 0 0 10px; font-size: .88rem; color: var(--muted); }
-.dex-detail-panel .garden-meter { max-width: 280px; margin: 0 auto; }
-.dex-detail-caption { margin: 8px 0 0; font-size: .8rem; color: var(--muted); word-break: keep-all; }
-.dex-detail-hint { margin: 6px 0 0; font-size: .9rem; color: var(--muted); line-height: 1.5; word-break: keep-all; }
-
-/* 편집 패널 — 캔버스 위 하단 오버레이, 스크롤 가능 */
-.village-edit-panel {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    max-height: 52%;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-    background: rgba(252, 250, 245, .96);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border-top: 1px solid var(--border);
-    border-radius: var(--radius) var(--radius) 0 0;
-    padding: 12px 16px;
-    padding-bottom: max(16px, env(safe-area-inset-bottom));
-    z-index: 20;
-}
-
-/* 빈 서재 안내 */
-.village-empty-msg {
-    position: absolute;
-    bottom: 14px;
-    left: 0;
-    right: 0;
-    text-align: center;
-    pointer-events: none;
-    margin: 0;
-    padding: 0 16px;
-    font-size: .82rem;
-    color: var(--muted);
-}
-
-/* 보기 모드 메시지 오버레이 */
-.village-overlay-msg {
-    position: absolute;
-    top: 12px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(252, 250, 245, .92);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-    border-radius: 20px;
-    padding: 5px 16px;
-    font-size: .85rem;
-    font-weight: 600;
-    color: var(--accent-hover);
-    z-index: 30;
-    white-space: nowrap;
-    pointer-events: none;
-    margin: 0;
-}
-
 /* ═══════════════════════════════════════════════════════════════════════
    대시보드 Claude Design 이식 (PR-2) — dashboard 전용 .dash-* 스코프.
    기존 .grass-cell·.timer-*·.quick-* 등 공유 클래스와 격리(전역 회귀 0).
@@ -3066,8 +2466,7 @@ body.personality-page #personality-app { gap: 18px; }
 
 /* 제목(pill/head)을 본문에서 띄워 섹션 분리감 — 카드 안 본문은 촘촘히, 제목 아래만 여유 */
 .dash-nav > .dash-pill,
-.dash-card-head,
-.dash-garden-head { margin-bottom: 4px; }
+.dash-card-head { margin-bottom: 4px; }
 
 /* 헤더 한 줄 명언 — 홈 카드 묶음을 "닫는 각주"로 정리(2026-07-10, C안 하이브리드).
    기존엔 카드 밖 맨몸 좌측정렬 이탤릭이라 위 카드들과 동떨어져 보였다. 카드로 감싸지 않되
@@ -3470,42 +2869,6 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 }
 .dash-header-avatar:hover { filter: brightness(1.05); }
 .dash-header-avatar:focus-visible { outline: 2px solid var(--accent-hover); outline-offset: 2px; }
-/* 헤더 아바타에 도감 작가 스프라이트(전신 viewBox 0 0 32 32)를 넣을 때 — 얼굴·상체가 원에 차도록 확대+상단 정렬. */
-.dash-header-avatar-sprite {
-    width: 100%; height: 100%; display: block;
-    transform: scale(1.7) translateY(8%);
-    transform-origin: center top;
-}
-/* 작가 프로필을 고르면(스프라이트가 들어오면) 기본 이니셜용 초록 원 배경만 지운다.
-   테두리(외곽 border + 안쪽 card-bg 링)·원형 크롭은 그대로 둬 기본 아바타와 같은
-   테두리로 배경과 구분되게 한다(배경에 묻힘 방지). */
-.dash-header-avatar:has(.dash-header-avatar-sprite) {
-    background: transparent;
-}
-
-/* 설정 — 프로필 사진(도감 작가 얼굴) 선택 그리드 */
-.profile-char-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
-    gap: 12px; margin-bottom: 12px;
-}
-.profile-char-opt { display: flex; flex-direction: column; align-items: center; gap: 5px; cursor: pointer; }
-.profile-char-opt input { position: absolute; opacity: 0; width: 0; height: 0; }
-.profile-char-face {
-    width: 60px; height: 60px; border-radius: 50%; overflow: hidden; box-sizing: border-box;
-    background: var(--sage-soft); display: flex; align-items: center; justify-content: center;
-    font-size: 24px; border: 2px solid transparent; transition: border-color .15s ease;
-}
-.profile-char-initial { font-family: 'Gowun Batang', serif; color: var(--accent); }
-.profile-char-svg { width: 100%; height: 100%; display: block; }
-.profile-char-opt input:checked + .profile-char-face {
-    border-color: var(--accent); box-shadow: 0 0 0 3px var(--card-bg) inset, 0 0 0 1px var(--accent);
-}
-.profile-char-opt input:focus-visible + .profile-char-face { outline: 2px solid var(--accent-hover); outline-offset: 2px; }
-.profile-char-label {
-    font-size: 11.5px; color: var(--muted); text-align: center; line-height: 1.2;
-    word-break: keep-all; max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-
 /* 아바타 드롭다운 — 설정·문의·로그아웃 일원화. wrap이 절대배치 기준. */
 .dash-header-menu-wrap { position: relative; flex-shrink: 0; }
 .dash-header-menu {
@@ -3532,70 +2895,15 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .dash-header-menu-logout .dash-header-menu-item { color: var(--muted); }
 .dash-header-menu-logout .dash-header-menu-item:hover { color: var(--text); }
 
-/* 2단 그리드 (QuickNav + 서재) — 좁으면 1단, 넓으면 2단 */
+/* 2단 그리드 — auto-fit이라 자식이 하나면 전체폭으로 선다 */
 .dash-grid-2col {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
     gap: clamp(16px, 2.2vw, 22px);
     align-items: start;
 }
-
-/* 서재 (작가·건물 — 식물 폐기) */
-.dash-garden { gap: 16px; }
-.dash-garden-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.dash-garden-link, .dash-card-link { font-size: 13.5px; color: var(--accent-hover); text-decoration: none; }
-.dash-garden-link:hover, .dash-card-link:hover { text-decoration: underline; }
-/* 무대 = 입주 작가 가로 스크롤 갤러리(통합). wrap이 배경·바닥·페이드, stage가 스크롤 컨테이너. */
-.dash-garden-stage-wrap {
-    position: relative; border-radius: 14px; border: 1px solid var(--border);
- border-image: var(--pencil-frame) 8 / 8px stretch;
-    background: #EAF0E4; overflow: hidden; min-height: 124px;
-}
-.dash-garden-ground { position: absolute; left: 0; right: 0; bottom: 0; height: 20px; background: #DCE6D3; z-index: 0; }
-/* 사용자 가로 스크롤 갤러리 — 휠·드래그·터치로 직접 넘긴다(발견 5: 2.5초 자동 스크롤 폐지).
-   스크롤바는 숨기고 양옆 페이드로 "더 있음"을 암시. */
-.dash-garden-stage {
-    position: relative; z-index: 1; box-sizing: border-box; min-height: 124px;
-    display: flex; align-items: flex-end; gap: clamp(12px, 3vw, 26px);
-    padding: 18px 16px 22px;
-    overflow-x: auto; overflow-y: hidden;
-    scrollbar-width: none;
-}
-.dash-garden-stage::-webkit-scrollbar { display: none; }
-.dash-garden-stage.is-empty { justify-content: center; align-items: center; }
-/* 가운데 포커스 캐러셀: 좌우 중앙 패딩으로 scrollLeft=i·step일 때 i번째 작가가 정중앙에 온다
-   (60px=한 칸 .dash-garden-resident 폭, 절반 30px). 양끝 패딩이 곧 "양 끝 빈칸".
-   비어 있을 땐(.is-empty) 빈 메시지가 눌리지 않게 이 패딩을 안 준다. */
-.dash-garden-stage:not(.is-empty) {
-    padding-inline: max(16px, calc(50% - 30px));
-}
-/* 개별 이름 텍스트 폐지 — 중앙 작가 이름만 상단(.dash-garden-focus-name)에 1줄. 폭 60px 고정으로
-   sprite/emoji 폭차에도 중앙 정렬 정확(30px 패딩과 짝). 자동 스크롤이 정확히 i·step에 안착. */
-.dash-garden-resident {
-    flex: 0 0 auto; width: 60px;
-    display: flex; flex-direction: column; align-items: center;
-}
-.dash-garden-sprite { width: 60px; height: 60px; display: block; overflow: visible; }
-.dash-garden-resident-emoji { font-size: clamp(34px, 7vw, 46px); line-height: 1; }
-/* 상단 중앙 "지금 중앙 작가" 이름 — 스크롤 따라 바뀜. 캐릭터는 바닥 정렬이라 상단이 비어 안 겹침. */
-.dash-garden-focus-name {
-    position: absolute; top: 10px; left: 0; right: 0; z-index: 3;
-    text-align: center; padding: 0 14px;
-    font-size: 14px; font-weight: 600; color: var(--text);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    pointer-events: none;
-}
-/* 양옆 옅은 페이드(대칭) — 자동 스크롤로 드나드는 작가가 가장자리에서 자연스레 사라지게 */
-.dash-garden-stage-wrap::after,
-.dash-garden-stage-wrap::before {
-    content: ''; position: absolute; top: 0; bottom: 0; width: 26px;
-    pointer-events: none; z-index: 2;
-}
-.dash-garden-stage-wrap::after { right: 0; background: linear-gradient(to right, rgba(234, 240, 228, 0), #EAF0E4); }
-.dash-garden-stage-wrap::before { left: 0; background: linear-gradient(to left, rgba(234, 240, 228, 0), #EAF0E4); }
-.dash-garden-summary { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; text-align: center; }
-.dash-garden-empty { font-size: 13px; color: var(--muted); }
-
+.dash-card-link { font-size: 13.5px; color: var(--accent-hover); text-decoration: none; }
+.dash-card-link:hover { text-decoration: underline; }
 /* 모드 토글 — pill과 한 줄(.dash-timer-head). 전역 button{width:100%}를 width:auto로 상쇄한다
    (안 하면 알약이 풀폭으로 늘어 머리줄이 깨진다). */
 .dash-timer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -3946,8 +3254,7 @@ body.dashboard-page #dashboard-app { gap: 20px; }
    비번재설정 등 형제 페이지가 공유하므로 절대 건드리지 않는다. 이 블록은 body.settings-page
    스코프 + .set-* 클래스로만 구성 → 타 페이지 회귀 0(auth-page 재스킨과 같은 격리 규약).
    색은 :root 토큰 재사용, 토큰 없는 경고(#F6ECD9/#8A6D3B)·위험(#C0524A 계열) 톤만 raw hex(시안값).
-   .btn-push-toggle / .profile-char-* 는 설정 전용(JS·구조 의존)이라 여기서 스위치/그리드로 재정의
-   (클래스명은 JS·CSS 선택자 의존 때문에 유지). ============================================================ */
+   .btn-push-toggle 는 설정 전용(JS·구조 의존)이라 여기서 스위치로 재정의한다. ============================================================ */
 
 /* 셸 — 시안 프레임 폭(480) */
 .settings-page .set-shell { max-width: 480px; margin: 0 auto; padding: 20px 18px 40px; }
@@ -4089,14 +3396,6 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .settings-page .set-switch-ico-on { display: none; }
 .settings-page .btn-push-toggle.is-on .set-switch-ico-on { display: block; }
 .settings-page .btn-push-toggle.is-on .set-switch-ico-off { display: none; }
-
-/* 프로필 사진 그리드 — 얼굴 크기·선택 링을 시안(이중 링)으로 (설정 전용 클래스라 스코프 오버라이드) */
-.settings-page .profile-char-grid { grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); }
-.settings-page .profile-char-face { width: 56px; height: 56px; border: none; }
-.settings-page .profile-char-opt input:checked + .profile-char-face {
-    border: none; box-shadow: 0 0 0 3px var(--accent), 0 0 0 5px var(--card-bg);
-}
-
 /* ═══════════════ 여백 (책에 딸린 자리 — 2026-08-16 책 귀속 재설계) ═══════════════
    .story-* / .margin-* 전용 네임스페이스 — 전역 공유 클래스 미접촉(기존 페이지 격리 규약).
    z 층: 도감 50 < 여백 패널/작성 150 < 신고 모달 200 (옛 뷰어의 층을 그대로 계승).

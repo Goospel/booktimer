@@ -2,13 +2,11 @@ import { describe, it, expect } from 'vitest'
 import {
     computeProgress,
     fmtMSS,
-    visibleAuthors,
     showStreakChip,
     displayName,
     panelState,
     goalLabel,
     avatarInitial,
-    centeredIndex,
     nextQuoteIndex,
     quoteFontScale,
 } from './timerProgress'
@@ -185,51 +183,6 @@ describe('fmtMSS', () => {
     it('NaN → "00:00"', () => expect(fmtMSS(NaN)).toBe('00:00'))
 })
 
-// ── visibleAuthors ────────────────────────────────────────────────────────────
-
-describe('visibleAuthors', () => {
-    const a = (name: string | null) => ({ name, emoji: '📖' })
-
-    it('보유 0 → []', () => expect(visibleAuthors([])).toHaveLength(0))
-
-    it('2명 유효 → 2개 반환 (3미만)', () => {
-        const r = visibleAuthors([a('김작가'), a('이작가')])
-        expect(r).toHaveLength(2)
-    })
-
-    it('정확히 3명 → 3개 반환', () => {
-        const r = visibleAuthors([a('A'), a('B'), a('C')])
-        expect(r).toHaveLength(3)
-    })
-
-    it('5명 → 5개 반환 (초과, 컴포넌트에서 +N 처리)', () => {
-        const r = visibleAuthors([a('A'), a('B'), a('C'), a('D'), a('E')])
-        expect(r).toHaveLength(5)
-    })
-
-    it('name=null 제외', () => {
-        const r = visibleAuthors([a(null), a('김작가')])
-        expect(r).toHaveLength(1)
-        expect(r[0].name).toBe('김작가')
-    })
-
-    it('name="" 빈 문자열 제외', () => {
-        const r = visibleAuthors([a(''), a('   '), a('이작가')])
-        expect(r).toHaveLength(1)
-    })
-
-    // 무대 SVG 캐릭터 렌더는 spriteId가 필요 — 필터를 통과한 작가가 spriteId·code 등
-    // 추가 필드를 그대로 보존해야 한다(누군가 .map으로 name·emoji만 추리면 새는 회귀 가드).
-    it('spriteId·code 등 추가 필드 보존 (무대 SVG 렌더용)', () => {
-        const r = visibleAuthors([
-            { name: '카뮈', emoji: '🌅', spriteId: 'albert_camus', code: 'albert_camus' },
-            { name: null, emoji: '🕯️', spriteId: 'dostoevsky', code: 'dostoevsky' },
-        ])
-        expect(r).toHaveLength(1)
-        expect(r[0].spriteId).toBe('albert_camus')
-        expect(r[0].code).toBe('albert_camus')
-    })
-})
 
 // ── showStreakChip ────────────────────────────────────────────────────────────
 
@@ -282,25 +235,6 @@ describe('avatarInitial', () => {
     it('공백만 → "?"', () => expect(avatarInitial('   ')).toBe('?'))
 })
 
-// ── centeredIndex ─────────────────────────────────────────────────────────────
-
-describe('centeredIndex', () => {
-    // 가운데 포커스 캐러셀: 좌우 중앙 패딩 덕에 scrollLeft = i·step 이면 i번째 작가가
-    // 화면 정중앙. 따라서 중앙 작가 인덱스 = round(scrollLeft/step), [0, count-1] clamp.
-    // 이름 라벨이 이 인덱스로 "지금 중앙 작가"를 표시한다.
-
-    it('count 0 → 0 (가드)', () => expect(centeredIndex(0, 84, 0)).toBe(0))
-    it('step 0 → 0 (측정 실패 가드, 0 나눗셈 방지)', () => expect(centeredIndex(100, 0, 5)).toBe(0))
-    it('scrollLeft 0 → 0 (첫 작가가 중앙)', () => expect(centeredIndex(0, 84, 5)).toBe(0))
-    it('scrollLeft=step → 1', () => expect(centeredIndex(84, 84, 5)).toBe(1))
-    it('정확히 절반(42) → round 1', () => expect(centeredIndex(42, 84, 5)).toBe(1))
-    it('절반 직전(41) → 0', () => expect(centeredIndex(41, 84, 5)).toBe(0))
-    it('2.5칸(210) → round 3', () => expect(centeredIndex(210, 84, 5)).toBe(3))
-    it('끝(4·84=336, count 5) → 4 (마지막 작가)', () => expect(centeredIndex(336, 84, 5)).toBe(4))
-    it('maxScroll 초과(400) → 4로 clamp', () => expect(centeredIndex(400, 84, 5)).toBe(4))
-    it('음수 scrollLeft → 0으로 clamp', () => expect(centeredIndex(-30, 84, 5)).toBe(0))
-    it('작가 1명 → 항상 0', () => expect(centeredIndex(0, 84, 1)).toBe(0))
-})
 
 // ── nextQuoteIndex ────────────────────────────────────────────────────────────
 

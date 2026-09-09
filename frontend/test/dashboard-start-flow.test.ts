@@ -11,12 +11,12 @@ const GRAPH = {
     monthLabels: [], totalSeconds: 0, activeDays: 0, currentStreak: 0,
 };
 const DASHBOARD = {
-    nickname: '테스터', loginId: 'tester', profileCharacterCode: null,
+    nickname: '테스터', loginId: 'tester',
     remainingSeconds: 3600, carriedDebtSeconds: 0, todayGoalSeconds: 3600, carryover: true,
     hasActiveSession: false, activeStartedAt: null, activeBookTitle: null, activeBookTotalSeconds: 0,
     readingBooks: [{ id: 1, title: '데미안' }], finishedBooks: [{ id: 2, title: '싯다르타' }],
     wantToReadBooks: [{ id: 3, title: '토지' }], recentBookId: 1,
-    graph: GRAPH, garden: { ownedAuthorCharacterCount: 0, totalAuthorCharacterCount: 0, ownedCharacters: [] },
+    graph: GRAPH,
     quotes: [], emailVerified: true,
 };
 const SHELF = {

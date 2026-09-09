@@ -21,7 +21,7 @@ com.booktimer/
   config/ common/ dev/  ← 횡단 관심사 (설정, 공통 엔티티, 로컬 시드)
 ```
 
-- 프론트: `frontend/src/<feature>/` (Vue 3 SPA) — 마을 번들 산출물은 `src/main/resources/static/garden/garden.js`.
+- 프론트: `frontend/src/<feature>/` (Vue 3 SPA) — 번들 산출물은 `src/main/resources/static/<앱>/<앱>.js`(예: `static/dashboard/dashboard.js`).
 - 템플릿(SSR): `src/main/resources/templates/*.html`.
 - DB 스키마 단일 소스: `src/main/resources/db/migration/V*.sql` (Flyway).
 
@@ -81,24 +81,21 @@ com.booktimer/
 - **진입점**: `/history`(`web/HistoryController`) · `/api/history`(`web/api/HistoryApiController`)
 - **소속 패키지**: `session/`(타이머·부채와 같은 패키지)
 - **핵심**: 잔디 `session/ContributionGraph`·`session/ContributionGraphBuilder`·`session/ContributionDay`·`session/ActiveDayCount` · 기록 `session/DailyReadingRecord`·`session/ReadingHistoryService`·`session/MonthlyReadingSection`·`session/BookReadingDetail` · 통계 `session/BookReadingStatsService`·`session/ReadingContributionService`·`session/BookSecondsRow`
-- **⚠️ 배선 주의**: 잔디·히스토리·부채가 전부 `session/` 한 패키지에 산다. 연속일 성장식물(`session/GrowthStage`)은 2026-08-29에 폐기됐다 — 마을 정원(`garden/`)의 식물과는 처음부터 별개 기능이었고, `garden/`은 그대로 남아 있다.
+- **⚠️ 배선 주의**: 잔디·히스토리·부채가 전부 `session/` 한 패키지에 산다. 연속일 성장식물(`session/GrowthStage`)은 2026-08-29에 폐기됐다 — 마을 정원(`garden/`)의 식물과는 처음부터 별개 기능이었다(그 `garden/`도 2026-09-09에 폐기 — §6).
 - **프론트**: `frontend/src/history/`(`ContributionGraph.vue`, `MonthlyRecords.vue`, `WeeklyShortfall.vue`, `grassTooltip.ts`)
 - **템플릿**: `history.html`
 - **DB**: 세션 관련 `V4`·`V22`·`V53`
 - **설계**: README §2.4
 
-## 🏘️ 6. 독서 마을 (수집형 게임화 — 정원)
+## 🪦 6. 독서 마을 / 서재 캐릭터 — **폐기됨 (2026-09-09)**
 
-- **한 줄**: 잔디 실적으로 식물·작가캐릭터·출판사건물을 해금해 마을을 채우는 게임화 레이어(보기 전용).
-- **진입점**: `/village`·`/garden`(`web/GardenController`) · `/api/garden` GET · `/api/garden/feed`(`web/api/GardenApiController` + `web/api/GardenApiResponse`)
-- **소속 패키지**: `garden/`
-- **핵심**: 뷰 `garden/GardenService`·`garden/GardenView`·`garden/GardenWorld` · 해금 `garden/AuthorCharacterUnlockCalculator`·`garden/DailyQuotaCalculator` · 먹이/애정 `garden/FeedingService`·`garden/AuthorAffection`·`garden/AffectionLevel`·`garden/FeedRequest`·`garden/FeedResult` · 캐릭터 `garden/AuthorCharacter`·`garden/AuthorCharacterState`·`garden/OwnedCharacter`·`garden/ProfileCharacterService`
-- **⚠️ 배선 주의**: **마을 프론트는 Vue 3 SPA** — TS 소스(`frontend/`) 수정 후 `npm --prefix frontend run build`로 `static/garden/garden.js`를 재생성하고 **커밋까지** 해야 반영(훅 `require-bundle-build.ps1`이 강제). 배치/편집 엔진은 은퇴(좌표 저장 없음, 보기 전용). 식물·캐릭터·건물 카탈로그는 Flyway 시드.
-- **프론트**: `frontend/src/garden/`(`VillageApp.vue`, `PortraitVillage.vue`, 도감 `GardenDex.vue`+`DexCell.vue`(클릭 가능 button)+`DexDetailSheet.vue`(캐릭터 상세 바텀시트), `pure.ts`) · `frontend/src/dashboard/GardenPanel.vue` · 번들 `src/main/resources/static/garden/garden.js`
-  - **도감(§6.6)**: `GardenDex`=상태 필터칩(전체/보유/미보유)+시각 진행바(`.garden-meter`)+그리드. 셀 클릭→`DexDetailSheet`(보유=정 진행바·Lv, 미보유=해금 힌트). 백엔드 0(`/api/garden` `AuthorCharacterDto` 재사용). 중첩 모달 ESC는 상세시트가 `@keydown.esc.stop`으로 한 레벨만 닫음.
-- **템플릿**: `garden.html` · `fragments/garden-character-sprites.html`
-- **DB**: `V35`~`V44`(식물·장르·레시피·다양성·배치·소품) · `V45`(작가캐릭터)·`V46`~`V49`(출판사건물) · `V52`(애정)·`V54`(프로필 캐릭터)
-- **설계**: README §2.5 · memory: garden-spa-vue-migration / garden-vision-coc-zoo
+- 작가 도감·먹이주기·`/village`·`/garden`·`/api/garden`과 그 파생인 **프로필 아바타(도감 작가 얼굴)**를 전면 폐기했다.
+  프로필 사진은 닉네임/아이디 **이니셜 폴백**으로 돌아갔다. 여기 있던 파일 목록은 전부 사라졌으니 찾지 마라.
+- **번호는 비워 두고 유지한다** — §7~§15와 아래 역인덱스가 이 번호를 참조한다.
+- 남은 흔적(PR-2에서 정리): `garden/AuthorAffection`·`garden/AuthorAffectionRepository`와
+  `user/AccountService.purge()`의 `deleteByUser` 한 줄. **테이블 `author_affection`이 살아 있는 동안 이 FK 정리를 지우면
+  먹이를 준 사용자의 탈퇴가 깨진다** — V88로 테이블을 drop하는 PR-2에서 함께 걷는다.
+- 경위·근거: `claude-docs/changelog.md` 2026-09-09 항목.
 
 ## 👥 7. 소셜 (팔로우 · 차단 · 신고 · 검색 · 공개프로필 · 인기)
 
@@ -209,7 +206,6 @@ com.booktimer/
 | `web/DashboardController`, `web/api/DashboardApiController`, `web/ReadingSessionController` | 3 타이머·부채 (+14 격언 노출) |
 | `web/BookController`, `web/api/BookApiController`, `web/api/BookReadersApiController` | 4 책·제휴 |
 | `web/HistoryController`, `web/api/HistoryApiController` | 5 잔디·히스토리 |
-| `web/GardenController`, `web/api/GardenApiController` | 6 마을 |
 | `web/ProfileController`, `web/SearchController`, `web/api/SearchApiController`, `web/api/FollowApiController`, `web/FollowListController`, `web/api/FollowListApiController`, `web/BlockController`, `web/api/BlockApiController`, `web/api/ReportApiController`, `web/api/ProfileApiController` | 7 소셜 |
 | `web/api/StoryApiController` | 8 스토리 |
 | `web/PersonalityController`, `web/api/PersonalityApiController` | 9 성향분석 |
@@ -218,7 +214,7 @@ com.booktimer/
 | `web/EmailVerificationController`, `web/PasswordResetController` | 12 이메일 |
 | `web/UnsubscribeController` | 13 리텐션 넛지(이메일) |
 | `web/AdminQuoteController` | 14 격언 |
-| `web/SettingsController` | 1 인증(계정) + 3 타이머(목표) + 6 마을(프로필 캐릭터) |
+| `web/SettingsController` | 1 인증(계정) + 3 타이머(목표) |
 | `web/PrivacyController` | 15 공통 |
 
 ---

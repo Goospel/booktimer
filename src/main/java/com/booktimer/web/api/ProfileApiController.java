@@ -228,7 +228,7 @@ public class ProfileApiController {
     }
 
     public record ProfileResponse(
-            String loginId, String nickname, String profileCharacterCode,
+            String loginId, String nickname,
             long followerCount, long followingCount,
             boolean following, boolean self,
             String personality, List<TagChip> personalityTags,
@@ -245,7 +245,7 @@ public class ProfileApiController {
             List<TagChip> tags = v.personalityTags().stream()
                     .map(t -> new TagChip(t.label(), t.clickable()))
                     .toList();
-            return new ProfileResponse(v.loginId(), v.nickname(), v.profileCharacterCode(),
+            return new ProfileResponse(v.loginId(), v.nickname(),
                     v.followerCount(), v.followingCount(),
                     v.following(), v.self(),
                     v.personality(), tags, books, coupangEnabled, yes24Enabled, kyoboEnabled,

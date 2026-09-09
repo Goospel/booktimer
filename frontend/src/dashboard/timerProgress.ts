@@ -47,14 +47,6 @@ export function fmtMSS(sec: number): string {
     return `${mm}:${ss}`
 }
 
-/**
- * name null/빈 제외. 제네릭으로 입력 객체의 모든 필드(emoji·spriteId·code 등)를 보존해
- * 무대 SVG 캐릭터 렌더(spriteId)에 그대로 흐르게 한다. name은 non-null로 좁혀 반환.
- */
-export function visibleAuthors<T extends { name: string | null }>(owned: T[]): Array<T & { name: string }> {
-    return owned.filter(a => a.name != null && a.name.trim().length > 0) as Array<T & { name: string }>
-}
-
 /** streak > 0일 때만 칩 표시. */
 export function showStreakChip(streak: number): boolean {
     return streak > 0
@@ -90,18 +82,6 @@ export function goalLabel(goalSeconds: number): string {
         return rm > 0 ? `${h}시간 ${rm}분` : `${h}시간`
     }
     return `${m}분`
-}
-
-/**
- * 화면 정중앙에 온 작가 인덱스. 무대 좌우 중앙 패딩(calc(50% - 반칸)) 덕에
- * scrollLeft = i·step 이면 i번째 작가가 중앙이므로 round(scrollLeft/step)로 역산하고
- * [0, count-1]로 clamp한다. count·step이 0 이하면 0(가드). 이름 라벨이 이 값으로
- * "지금 중앙 작가"를 표시한다.
- */
-export function centeredIndex(scrollLeft: number, step: number, count: number): number {
-    if (count <= 0 || step <= 0) return 0
-    const i = Math.round(scrollLeft / step)
-    return Math.min(count - 1, Math.max(0, i))
 }
 
 /**

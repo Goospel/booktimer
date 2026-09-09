@@ -18,11 +18,11 @@ const GRAPH = {
 };
 const STUDY_IDLE = { hasActiveSession: false, activeStartedAt: null, todaySeconds: 900, goalSeconds: 0 };
 const DASHBOARD = {
-    nickname: '테스터', loginId: 'tester', profileCharacterCode: null,
+    nickname: '테스터', loginId: 'tester',
     remainingSeconds: 3600, carriedDebtSeconds: 0, todayGoalSeconds: 3600, todayReadSeconds: 0, carryover: true,
     hasActiveSession: false, activeStartedAt: null, activeBookTitle: null, activeBookTotalSeconds: 0,
     readingBooks: [{ id: 1, title: '데미안' }], finishedBooks: [], wantToReadBooks: [], recentBookId: 1,
-    graph: GRAPH, garden: { ownedAuthorCharacterCount: 0, totalAuthorCharacterCount: 0, ownedCharacters: [] },
+    graph: GRAPH,
     quotes: [], emailVerified: true, study: STUDY_IDLE,
 };
 

@@ -6,7 +6,6 @@ import com.booktimer.book.BookStatus;
 import com.booktimer.email.EmailToken;
 import com.booktimer.email.EmailTokenRepository;
 import com.booktimer.email.EmailTokenType;
-import com.booktimer.garden.AuthorCharacterRepository;
 import com.booktimer.story.Story;
 import com.booktimer.story.StoryRepository;
 import com.booktimer.user.AuthProvider;
@@ -66,9 +65,6 @@ class FlywayMigrationTest {
 
     @Autowired
     EmailTokenRepository emailTokenRepository;
-
-    @Autowired
-    AuthorCharacterRepository authorCharacterRepository;
 
     @Autowired
     BookRepository bookRepository;
@@ -208,23 +204,6 @@ class FlywayMigrationTest {
         assertThat(saved.isMarketingEmailConsent()).isFalse();
         assertThat(saved.getMarketingConsentAt()).isNull();
         assertThat(saved.getLastNudgeSentAt()).isNull();
-    }
-
-    // ── 마을 작가 캐릭터 SVG 승격 전종 완료(V48 파일럿 → V49 나머지) — 전종 승격 불변식 ──
-    // 파일럿(V48)은 한강 1종만 승격했고, V49가 나머지 작가 19종을 sprite_id=code로 채워 '전종 승격'을 완성한다.
-    // 이제 author_character 전 행이 sprite_id=code(비null)여야 한다. (건물 축은 은퇴 — Java 엔티티 제거,
-    // publisher_building 테이블·V48/V49 UPDATE는 적용 이력으로 보존하되 더는 검증하지 않는다.)
-    // 이 가드는 V49의 UPDATE가 일부 code를 빠뜨리거나(미승격 잔존) sprite_id≠code로 채우면 깨진다.
-    // 새 시드 행이 추가됐는데 sprite_id를 안 채운 경우도 여기서 잡힌다(N-055 — 미완성 엔티티 누수 가드).
-    @Test
-    void v49_promotes_all_characters_to_their_code_sprite() {
-        var authors = authorCharacterRepository.findAll();
-
-        assertThat(authors).isNotEmpty();
-
-        // 전 작가가 sprite_id = code 로 승격(SVG 렌더 경로) — 미승격(null) 잔존 0.
-        assertThat(authors)
-                .allSatisfy(a -> assertThat(a.getSpriteId()).isEqualTo(a.getCode()));
     }
 
     // ── 여백 (V56 story · V71 책 귀속) — 스키마↔엔티티 일치 + 은퇴한 열람 테이블·NOT NULL 승격 ──

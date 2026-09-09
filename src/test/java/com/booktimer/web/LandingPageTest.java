@@ -62,14 +62,14 @@ class LandingPageTest {
     }
 
     @Test
-    @DisplayName("랜딩에 독서 서재 소개 섹션·앵커 동선(#village)이 있다")
-    void landing_hasVillageSection() throws Exception {
-        // 비로그인 방문자를 로그인 필요한 /village로 직접 보내면 로그인으로 튕긴다.
-        // 대신 페이지 내 서재 소개 섹션(#village)으로 안내하고 회원가입(/signup)으로 유도한다.
+    @DisplayName("랜딩에 서재 캐릭터 소개 섹션·앵커(#village)가 없다 (기능 폐기)")
+    void landing_hasNoVillageSection() throws Exception {
+        // 서재 캐릭터 기능을 통째로 걷었으므로 랜딩의 소개 섹션·앵커도 함께 사라져야 한다.
+        // 남으면 없는 기능을 광고하는 죽은 앵커가 된다.
         mockMvc.perform(get("/"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("id=\"village\"")))
-                .andExpect(content().string(containsString("#village")));
+                .andExpect(content().string(not(containsString("id=\"village\""))))
+                .andExpect(content().string(not(containsString("#village"))));
     }
 
     @Test
@@ -88,7 +88,7 @@ class LandingPageTest {
     void landing_hasCoreKeywords() throws Exception {
         mockMvc.perform(get("/"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("독서 서재")))
+                .andExpect(content().string(containsString("함께 읽기")))
                 .andExpect(content().string(containsString("잔디")));
     }
 

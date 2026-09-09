@@ -1,14 +1,9 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 
-const APP = process.env.APP ?? 'garden';
+const APP = process.env.APP ?? 'dashboard';
 
 const apps = {
-  garden: {
-    input: 'src/garden/main.ts',
-    dir: '../src/main/resources/static/garden',
-    entry: 'garden.js',
-  },
   search: {
     input: 'src/search/main.ts',
     dir: '../src/main/resources/static/search',
@@ -66,7 +61,7 @@ const apps = {
   },
 } as const;
 
-const cfg = apps[APP as keyof typeof apps] ?? apps.garden;
+const cfg = apps[APP as keyof typeof apps] ?? apps.dashboard;
 
 export default defineConfig({
   plugins: [vue()],

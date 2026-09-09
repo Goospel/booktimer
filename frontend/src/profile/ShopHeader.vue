@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import ShopIcon from './ShopIcon.vue'
-import AuthorAvatar from '../shared/AuthorAvatar.vue'
+import { avatarInitial } from '../dashboard/timerProgress'
 
 // 책방 정체성 헤더 카드 — 아바타·책방명·핸들·책BTI 태그칩·팔로우 카운트·(other)액션.
 // 모바일 상단·와이드 좌 사이드바 양쪽에서 공유(§7 DRY 추출). self/other 분기를 한 곳에.
@@ -11,7 +11,6 @@ interface TagChip { label: string; clickable: boolean }
 defineProps<{
     nickname: string
     loginId: string
-    profileCharacterCode?: string | null
     personalityTags: TagChip[]
     followerCount: number
     followingCount: number
@@ -53,7 +52,7 @@ const menuOpen = ref(false)
         <!-- 정체성: 이니셜 아바타(대시보드 헤더와 동일 42px 세이지 원) + 책방명/핸들.
              옛 스토리 링은 폐기 — "새 글" 신호는 이제 사람이 아니라 책(책 리스트 표지 발광)에 붙는다. -->
         <div class="shop-id-head">
-            <div class="dash-header-avatar shop-avatar" aria-hidden="true"><AuthorAvatar :code="profileCharacterCode" :fallback-text="loginId" /></div>
+            <div class="dash-header-avatar shop-avatar" aria-hidden="true">{{ avatarInitial(loginId) }}</div>
             <div class="shop-id-text">
                 <div class="shop-id-title">{{ nickname }}</div>
                 <div class="shop-id-handle">@{{ loginId }}</div>

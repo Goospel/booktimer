@@ -31,20 +31,6 @@ export interface BookOption {
     coverUrl?: string | null
 }
 
-/** 보유 작가 — 대시보드는 name·emoji만 쓴다(affection/level/title은 0 고정이라 참조 금지). */
-export interface OwnedAuthor {
-    code: string
-    emoji: string
-    name: string
-    spriteId: string
-}
-
-export interface CatalogDto {
-    ownedAuthorCharacterCount: number
-    totalAuthorCharacterCount: number
-    ownedCharacters: OwnedAuthor[]
-}
-
 export interface QuoteDto {
     text: string
     author: string
@@ -110,11 +96,9 @@ export function studyStateOf(s?: Partial<StudyState> | null): StudyState {
 export interface DashboardResponse extends TimerState {
     nickname: string
     loginId: string
-    profileCharacterCode: string | null
     // 읽고싶음 책 — 시작 드롭다운엔 없지만 "종료 후 태깅" 시트에서 고를 수 있다(발견 1). 초기 로드에만 실린다.
     wantToReadBooks: BookOption[]
     graph: GraphDto
-    garden: CatalogDto
     quotes: QuoteDto[]
     emailVerified: boolean
     /** 없으면 옛 서버·옛 픽스처 — IDLE_STUDY로 떨어진다(독서 테스트 픽스처가 이 필드를 모른다). */

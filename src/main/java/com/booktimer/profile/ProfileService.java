@@ -70,7 +70,6 @@ public class ProfileService {
             return new ProfileView(
                     target.getLoginId(),
                     target.getNickname(),
-                    target.getProfileCharacterCode(),
                     bookRepository.findByUserAndVisibilityOrderByTitleAscIdAsc(target, BookVisibility.PUBLIC),
                     statsService.publicTotalSecondsByBook(target),
                     followService.followerCount(target),

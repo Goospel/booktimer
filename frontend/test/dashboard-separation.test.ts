@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// DashboardApp — 모드가 「쓰는 카드」·타일·정원까지 끌고 간다(설계 §2.2). 히어로만 바뀌던 옛 상태의 뒷절반.
+// DashboardApp — 모드가 「쓰는 카드」·타일까지 끌고 간다(설계 §2.2). 히어로만 바뀌던 옛 상태의 뒷절반.
 //
 // 2026-09-07에 잔디를 걷으면서 이 파일의 첫째 축이 잔디 → **여백/백지복습 카드**로 바뀌었다. 축만 바뀌고
 // 재는 것은 같다: 「모드가 화면 전체를 끌고 가는가」. 옛 (b)~(e)에 있던 공부 잔디 fetch 수명(프리페치·
@@ -17,11 +17,11 @@ const GRAPH = {
     monthLabels: [], totalSeconds: 0, activeDays: 0, currentStreak: 0,
 };
 const DASHBOARD = {
-    nickname: '테스터', loginId: 'tester', profileCharacterCode: null,
+    nickname: '테스터', loginId: 'tester',
     remainingSeconds: 3600, carriedDebtSeconds: 0, todayGoalSeconds: 3600, todayReadSeconds: 0, carryover: true,
     hasActiveSession: false, activeStartedAt: null, activeBookTitle: null, activeBookTotalSeconds: 0,
     readingBooks: [{ id: 1, title: '데미안' }], finishedBooks: [], wantToReadBooks: [], recentBookId: 1,
-    graph: GRAPH, garden: { ownedAuthorCharacterCount: 0, totalAuthorCharacterCount: 0, ownedCharacters: [] },
+    graph: GRAPH,
     quotes: [], emailVerified: true,
 };
 const STUDY_ACTIVE = { hasActiveSession: true, activeStartedAt: '2026-09-04T00:00:00Z', todaySeconds: 60, goalSeconds: 3600 };
@@ -89,19 +89,20 @@ const btnWith = (w: ReturnType<typeof mount>, text: string) =>
     w.findAll('button').find(b => b.text().includes(text));
 const tileHrefs = (w: ReturnType<typeof mount>) => w.findAll('.dash-nav-tile').map(a => a.attributes('href'));
 
-describe('DashboardApp — 모드가 쓰는 카드·타일·정원을 끌고 간다', () => {
-    test('(a) 독서 기본: 정원이 있고 여백 카드가 서며 공부 원장을 부르지 않는다', async () => {
+describe('DashboardApp — 모드가 쓰는 카드·타일을 끌고 간다', () => {
+    test('(a) 독서 기본: 여백 카드가 서고 서재 패널은 없으며 공부 원장을 부르지 않는다', async () => {
         const w = await mountDashboard();
         await flushPromises();
 
-        expect(w.find('.dash-garden').exists()).toBe(true);
+        // 서재 캐릭터 폐기 제거 가드 — 독서 모드(패널이 있던 유일한 자리)에도 더는 없다.
+        expect(w.find('.dash-garden').exists()).toBe(false);
         expect(w.find('.dash-margin-card .dash-pill').text()).toBe('여백');
         expect(w.find('.dash-recall-card').exists()).toBe(false);
         expect(tileHrefs(w)).toEqual(['/books', '/u/tester', '/personality']);
         expect(agendaCalls()).toBe(0);
     });
 
-    test('(b) 공부로 바꾸면 백지복습 카드로 갈리고, 정원이 사라지고, 타일이 공부 세트가 된다', async () => {
+    test('(b) 공부로 바꾸면 백지복습 카드로 갈리고 타일이 공부 세트가 된다', async () => {
         const w = await mountDashboard();
         await modeBtn(w, '공부').trigger('click');
         await flushPromises();
@@ -114,7 +115,6 @@ describe('DashboardApp — 모드가 쓰는 카드·타일·정원을 끌고 간
         // 클래스만이 아니라 실제로 그 패널을 그렸다 — 본문 칸이 있어야 「백지복습을 그렸다」다.
         expect(w.find('[data-testid="recall-body"]').exists()).toBe(true);
         expect(w.find('.dash-margin-card').exists()).toBe(false);
-        expect(w.find('.dash-garden').exists()).toBe(false);
         // 공부 기록으로 가는 문은 **타일 하나뿐**이다 — 카드 머리의 중복 링크는 걷었다(2026-09-07).
         // 이 1이 recall-card 쪽 「카드엔 없다」의 양성 대조군이다(둘 다 사라지면 여기가 죽는다).
         expect(w.findAll('a[href="/study/history"]')).toHaveLength(1);
@@ -132,7 +132,7 @@ describe('DashboardApp — 모드가 쓰는 카드·타일·정원을 끌고 간
         expect(agendaCalls()).toBe(1);
     });
 
-    test('(d) 독서로 돌아오면 정원·여백 카드가 함께 복귀한다', async () => {
+    test('(d) 독서로 돌아오면 여백 카드가 복귀한다', async () => {
         const w = await mountDashboard();
         await modeBtn(w, '공부').trigger('click');
         await flushPromises();
@@ -140,7 +140,6 @@ describe('DashboardApp — 모드가 쓰는 카드·타일·정원을 끌고 간
 
         await modeBtn(w, '독서').trigger('click');
         await flushPromises();
-        expect(w.find('.dash-garden').exists()).toBe(true);
         expect(w.find('.dash-margin-card .dash-pill').text()).toBe('여백');
         expect(w.find('.dash-recall-card').exists()).toBe(false);
     });
@@ -153,16 +152,14 @@ describe('DashboardApp — 모드가 쓰는 카드·타일·정원을 끌고 간
 
         expect(w.text()).toContain('불러오지 못했');
         expect(w.find('.dash-timer-hero').classes()).toContain('is-study');
-        expect(w.find('.dash-garden').exists()).toBe(false);
     });
 
-    test('(f) 독서 stop으로 히어로가 공부로 넘어가면 카드·정원도 함께 넘어간다', async () => {
+    test('(f) 독서 stop으로 히어로가 공부로 넘어가면 카드도 함께 넘어간다', async () => {
         localStorage.setItem('booktimer.timerMode', 'study');
         dashboardPayload = { ...DASHBOARD, hasActiveSession: true, activeStartedAt: '2026-09-04T00:00:00Z' };
         const w = await mountDashboard();
         await flushPromises();
         // 서버 진실이 이긴다 — 독서 측정 중엔 독서 화면이다.
-        expect(w.find('.dash-garden').exists()).toBe(true);
         expect(w.find('.dash-margin-card .dash-pill').text()).toBe('여백');
 
         await btnWith(w, '측정 종료')!.trigger('click');
@@ -171,7 +168,6 @@ describe('DashboardApp — 모드가 쓰는 카드·타일·정원을 끌고 간
         expect(w.find('.dash-timer-hero').classes()).toContain('is-study');
         expect(w.find('.dash-recall-card .dash-pill').text()).toBe('백지복습');
         expect(w.find('.dash-margin-card').exists()).toBe(false);
-        expect(w.find('.dash-garden').exists()).toBe(false);
         expect(tileHrefs(w)).toEqual(['/study/books', '/study', '/study/history']);
     });
 });

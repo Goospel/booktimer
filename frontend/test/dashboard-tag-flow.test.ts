@@ -13,13 +13,12 @@ const GRAPH = {
 
 // 책 없이 측정 "중"으로 시작(activeBookTitle=null) → 종료 시 untagged 시트가 떠야 한다.
 const DASHBOARD = {
-    nickname: '테스터', loginId: 'tester', profileCharacterCode: null,
+    nickname: '테스터', loginId: 'tester',
     remainingSeconds: 1200, carriedDebtSeconds: 0, todayGoalSeconds: 3600, carryover: true,
     hasActiveSession: true, activeStartedAt: '2026-06-26T08:00:00Z', activeBookTitle: null, activeBookTotalSeconds: 0,
     readingBooks: [{ id: 1, title: '읽는 책' }], finishedBooks: [], wantToReadBooks: [{ id: 3, title: '읽고싶은 책' }],
     recentBookId: null,
     graph: GRAPH,
-    garden: { ownedAuthorCharacterCount: 0, totalAuthorCharacterCount: 0, ownedCharacters: [] },
     quotes: [], emailVerified: true,
 };
 

@@ -34,8 +34,8 @@ const READING_TIMER = {
     readingBooks: [{ id: 1, title: '데미안' }], finishedBooks: [], wantToReadBooks: [], recentBookId: 1,
 };
 const DASHBOARD = {
-    nickname: '테스터', loginId: 'tester', profileCharacterCode: null, ...READING_TIMER,
-    graph: GRAPH, garden: { ownedAuthorCharacterCount: 0, totalAuthorCharacterCount: 0, ownedCharacters: [] },
+    nickname: '테스터', loginId: 'tester', ...READING_TIMER,
+    graph: GRAPH,
     quotes: [], emailVerified: true, study: STUDY_IDLE,
 };
 
