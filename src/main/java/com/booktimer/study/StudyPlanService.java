@@ -296,7 +296,12 @@ public class StudyPlanService {
     private static ResponseStatusException failure(Failure failure) {
         return switch (failure) {
             case DISABLED -> new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI 기능이 꺼져 있어요");
-            case RATE_LIMITED -> new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "잠시 후 다시 시도해 주세요");
+            // ⚠️ 「잠시 후 다시 시도해 주세요」로 쓰지 않는다 — Gemini 자동 충전을 껐으므로 <b>잔액이
+            // 마르는 429</b>가 실제로 오고, 그때 그 문구는 충전 전까지 지킬 수 없는 약속이 된다.
+            // 사실 진술(「한도에 닿았다」)로 두면 원인이 분당 한도든 잔액이든 참이다. 운영자가 원인을
+            // 가르는 것은 화면이 아니라 로그의 몫이다(GeminiStudyPlanner.errorReasonOf).
+            case RATE_LIMITED -> new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                    "AI 이용량이 한도에 닿았어요 — 조금 뒤 다시 시도해 보세요");
             case BAD_INPUT -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "이 범위로는 일정을 만들 수 없어요");
             case UNAVAILABLE -> new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "일정을 만들지 못했어요 — 잠시 후 다시 시도해 주세요");

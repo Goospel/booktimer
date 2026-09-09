@@ -627,6 +627,31 @@ class StudyPlanApiControllerTest {
                 .andExpect(status().isTooManyRequests());
     }
 
+    /**
+     * 429 문구는 <b>기다리면 된다고 약속하지 않는다</b>.
+     *
+     * <p>Gemini 자동 충전을 껐으므로 잔액이 마르면 429가 오는데, 그때 「잠시 후 다시 시도해 주세요」는
+     * 충전 전까지 <b>지킬 수 없는 말</b>이다. 문구를 「이용량이 한도에 닿았다」는 사실 진술로 바꿔
+     * 원인이 분당 한도든 잔액이든 참이게 만든다. 이 테스트가 없으면 문구를 무엇으로 되돌려도 초록이다
+     * (기존 429 테스트는 상태 코드만 본다).
+     */
+    @Test
+    @DisplayName("generate: 429 문구는 회복을 약속하지 않는다 — 잔액이 마르면 기다려도 안 풀린다")
+    void generate_whenRateLimited_doesNotPromiseRecovery() throws Exception {
+        registerWith("planratelimitmsg", StudyAiAccess.APPROVED);
+        given(planner.isEnabled()).willReturn(true);
+        given(planner.generatePlan(any())).willReturn(AiResult.fail(Failure.RATE_LIMITED));
+
+        mockMvc.perform(post("/api/study/plan/generate").with(user("planratelimitmsg")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(defaultGenerateBody()))
+                .andExpect(status().isTooManyRequests())
+                // ⚠️ status().reason()이 아니라 <b>본문</b>을 본다 — 이 앱에서 reason은 null이고
+                // (Spring이 sendError를 타지 않는다), 화면의 errorMessage(pure.ts)는 응답 <b>본문</b>을
+                // 그대로 띄운다. 즉 사용자가 읽는 문자열은 여기 이것이다.
+                .andExpect(content().string("AI 이용량이 한도에 닿았어요 — 조금 뒤 다시 시도해 보세요"));
+    }
+
     @Test
     @DisplayName("generate: 정제하고 나면 남는 게 없는 초안은 503이고 환불된다")
     void generate_whenEverythingSanitizedAway_isServiceUnavailable() throws Exception {

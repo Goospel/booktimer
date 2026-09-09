@@ -397,4 +397,52 @@ class GeminiStudyPlannerTest {
         assertThat(sanitize(List.of())).isEmpty();
         assertThat(GeminiStudyPlanner.sanitizePlan(null, TODAY, EXAM, 5)).isEmpty();
     }
+
+    // ── errorReasonOf — 429/403의 「왜」를 로그로 ─────────────────────────────
+    //
+    // 자동 충전을 껐으므로 잔액이 마르는 날이 온다. 그때 status만 찍혀 있으면 「분당 한도에 걸렸다」와
+    // 「돈이 떨어졌다」가 로그에서 같아 보인다 — 전자는 1분 뒤 풀리고 후자는 충전 전까지 안 풀리는데도.
+    // quotaId에 FreeTier가 박혀 있으면 유료 전환이 안 먹었다는 뜻이라, 이 한 조각이 그것까지 가른다.
+
+    @Test
+    @DisplayName("errorReasonOf: 429 봉투에서 status와 quotaId를 뽑는다 — FreeTier면 유료 전환이 안 먹은 것이다")
+    void errorReasonOf_readsStatusAndQuotaId() {
+        String body = """
+                {"error":{"code":429,"message":"Resource has been exhausted",
+                 "status":"RESOURCE_EXHAUSTED",
+                 "details":[{"@type":"type.googleapis.com/google.rpc.QuotaFailure",
+                   "violations":[{"quotaMetric":"generativelanguage.googleapis.com/generate_content_free_tier_requests",
+                                  "quotaId":"GenerateRequestsPerMinutePerProjectPerModel-FreeTier"}]}]}}""";
+
+        assertThat(GeminiStudyPlanner.errorReasonOf(body, OM))
+                .isEqualTo("status=RESOURCE_EXHAUSTED quotaId=GenerateRequestsPerMinutePerProjectPerModel-FreeTier");
+    }
+
+    @Test
+    @DisplayName("errorReasonOf: quotaId가 없는 봉투(403 결제 중단 등)는 status만 남긴다")
+    void errorReasonOf_whenNoQuotaId_keepsStatusOnly() {
+        String body = """
+                {"error":{"code":403,"message":"...billing account...","status":"PERMISSION_DENIED"}}""";
+
+        assertThat(GeminiStudyPlanner.errorReasonOf(body, OM)).isEqualTo("status=PERMISSION_DENIED");
+    }
+
+    @Test
+    @DisplayName("errorReasonOf: 봉투가 깨져도 던지지 않는다 — 계측기가 요청을 죽이면 안 된다")
+    void errorReasonOf_whenBroken_doesNotThrow() {
+        assertThat(GeminiStudyPlanner.errorReasonOf("{}", OM)).isEqualTo("status=?");
+        assertThat(GeminiStudyPlanner.errorReasonOf("not json", OM)).isEqualTo("status=?");
+        assertThat(GeminiStudyPlanner.errorReasonOf(null, OM)).isEqualTo("status=?");
+        assertThat(GeminiStudyPlanner.errorReasonOf("", OM)).isEqualTo("status=?");
+    }
+
+    @Test
+    @DisplayName("errorReasonOf: 응답 메시지 원문은 싣지 않는다 — 키가 URL에 실리는 구조라 방어를 우리 쪽에 둔다")
+    void errorReasonOf_doesNotLeakMessage() {
+        String body = """
+                {"error":{"code":429,"message":"quota exceeded for key AIzaSyTOTALLY-SECRET",
+                 "status":"RESOURCE_EXHAUSTED"}}""";
+
+        assertThat(GeminiStudyPlanner.errorReasonOf(body, OM)).doesNotContain("SECRET");
+    }
 }
