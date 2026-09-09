@@ -7,7 +7,6 @@ import com.booktimer.book.StudyBookRepository;
 import com.booktimer.email.EmailTokenRepository;
 import com.booktimer.feedback.FeedbackRepository;
 import com.booktimer.follow.FollowRepository;
-import com.booktimer.garden.AuthorAffectionRepository;
 import com.booktimer.personality.ReadingPersonalityCacheRepository;
 import com.booktimer.report.ReportRepository;
 import com.booktimer.security.SessionInvalidator;
@@ -61,7 +60,6 @@ public class AccountService {
     private final StoryLikeRepository storyLikeRepository;
     private final ApiTokenRepository apiTokenRepository;
     private final TossLinkCodeRepository tossLinkCodeRepository;
-    private final AuthorAffectionRepository affectionRepository;
     private final SessionInvalidator sessionInvalidator;
     private final PasswordEncoder passwordEncoder;
 
@@ -87,7 +85,6 @@ public class AccountService {
                           StoryLikeRepository storyLikeRepository,
                           ApiTokenRepository apiTokenRepository,
                           TossLinkCodeRepository tossLinkCodeRepository,
-                          AuthorAffectionRepository affectionRepository,
                           SessionInvalidator sessionInvalidator,
                           PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
@@ -112,7 +109,6 @@ public class AccountService {
         this.storyLikeRepository = storyLikeRepository;
         this.apiTokenRepository = apiTokenRepository;
         this.tossLinkCodeRepository = tossLinkCodeRepository;
-        this.affectionRepository = affectionRepository;
         this.sessionInvalidator = sessionInvalidator;
         this.passwordEncoder = passwordEncoder;
     }
@@ -239,14 +235,13 @@ public class AccountService {
 
     /**
      * 연관 데이터까지 FK 순서로 제거: 세션(N) → 타이머(1:1) → 목표 변경 이력(N) → 용서권(N) → 팔로우(양방향) → 차단(양방향)
-     * → 신고(양방향) → 여백 글(N) → 책(N) → 책BTI 캐시(1) → … → 작가 정(N) → 유저 → 로그인 세션.
+     * → 신고(양방향) → 여백 글(N) → 책(N) → 책BTI 캐시(1) → … → 유저 → 로그인 세션.
      * <p>모두 users를 FK 참조하므로 유저 삭제 전에 정리한다. 책은 {@code reading_session.book_id}가
      * book을 FK 참조하므로 <b>세션 이후</b>에 지운다(세션이 책을 가리키는 채로 책을 지우면 위반).
      * 여백 글도 같은 이유로 <b>책보다 앞</b>에 지운다({@code story.book_id}가 book을 참조).
      *
      * <p><b>여기서 하나라도 빠지면 그 자식을 가진 사용자는 탈퇴 자체가 실패한다</b> — 모든 FK가
-     * {@code NO ACTION}(cascade 없음)이라 DB가 대신 지워 주지 않는다. 실제로 {@code author_affection}이
-     * 빠져 있어 운영 27명 중 2명이 탈퇴 불가였다(2026-08-15 실측). 목록이 다시 벌어지지 않도록
+     * {@code NO ACTION}(cascade 없음)이라 DB가 대신 지워 주지 않는다. 목록이 다시 벌어지지 않도록
      * {@code FlywayMigrationTest#everyTableWithForeignKeyToUsersIsClearedByPurge}가 <b>실제 마이그레이션
      * 스키마의 FK 집합</b>과 이 목록을 양방향으로 대조한다 — 메인 스위트(Hibernate 생성 스키마)는 JPA에
      * 매핑되지 않은 테이블을 아예 못 보기 때문에 거기선 잡히지 않는다.
@@ -283,7 +278,6 @@ public class AccountService {
         emailTokenRepository.deleteByUser(user);             // 이메일 토큰도 user_id FK 참조 → 유저 전에 정리
         apiTokenRepository.deleteByUser(user);                // 미니앱 Bearer 토큰(api_token.user_id FK)
         tossLinkCodeRepository.deleteByUser(user);            // 토스 연결 코드(toss_link_code.user_id FK)
-        affectionRepository.deleteByUser(user);               // 작가 먹이주기 정(author_affection.user_id FK)
         userRepository.delete(user);
         // 세션은 users를 FK 참조하지 않아 계정을 지워도 남는다 — 그대로 두면 계정 없는 principal이
         // 인증된 채 떠다닌다(운영 실측: 계정 하나 삭제에 616건 잔존). 남길 창이 없으므로 전부 끊는다.

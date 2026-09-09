@@ -7,8 +7,6 @@ import com.booktimer.book.StudyBook;
 import com.booktimer.book.StudyBookRepository;
 import com.booktimer.follow.Follow;
 import com.booktimer.follow.FollowRepository;
-import com.booktimer.garden.AuthorAffection;
-import com.booktimer.garden.AuthorAffectionRepository;
 import com.booktimer.report.ReportReason;
 import com.booktimer.report.ReportService;
 import com.booktimer.session.ReadingGoalWaiver;
@@ -86,8 +84,6 @@ class AccountDeletionIntegrationTest {
     private FollowRepository followRepository;
     @Autowired
     private PasswordEncoder passwordEncoder;
-    @Autowired
-    private AuthorAffectionRepository affectionRepository;
     @Autowired
     private FindByIndexNameSessionRepository<? extends Session> sessions;
 
@@ -342,22 +338,6 @@ class AccountDeletionIntegrationTest {
                 user, LocalDate.now().minusDays(2), LocalDate.now()));
 
         // reading_goal_waiver.user_id FK가 정리되지 않으면 flush 시 제약 위반(T-029 계열).
-        assertThatCode(() -> {
-            accountService.deleteAccount(email, "rawpw1234");
-            assertThat(userRepository.findByEmail(email)).isEmpty();
-        }).doesNotThrowAnyException();
-    }
-
-    @Test
-    @DisplayName("작가에게 먹이를 준 사용자(author_affection)도 FK 위반 없이 탈퇴된다")
-    void deleteAccount_withAuthorAffection_succeeds() {
-        String email = "feeder@booktimer.com";
-        User user = userRepository.saveAndFlush(
-                User.of(email, passwordEncoder.encode("rawpw1234"), "사육사", "Asia/Seoul", Role.USER));
-        affectionRepository.saveAndFlush(AuthorAffection.create(user, "author-001"));
-
-        // author_affection.user_id FK가 정리되지 않으면 flush 시 제약 위반.
-        // 운영 실측(2026-08-15)에서 실제로 이 테이블 때문에 27명 중 2명이 탈퇴 불가였다.
         assertThatCode(() -> {
             accountService.deleteAccount(email, "rawpw1234");
             assertThat(userRepository.findByEmail(email)).isEmpty();
