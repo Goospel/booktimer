@@ -56,36 +56,6 @@ class ReadingPersonalityServiceTest {
         bookRepository.save(b);
     }
 
-    @Test
-    @DisplayName("분석: 서술이 나오면 사실(프로필) + 서술을 함께 담는다")
-    void analyze_withNarration_combinesFactsAndNarration() {
-        User u = newUser("narr@booktimer.com");
-        savePublicFinished(u, "책A");
-        when(narrator.narrate(any())).thenReturn(
-                Optional.of(new PersonalityNarration("이 사람은 완독러다.", List.of("완독러"))));
-
-        ReadingPersonality result = service.analyze(u);
-
-        assertThat(result.profile().totalBooks()).isEqualTo(1); // 사실 집계됨
-        assertThat(result.hasNarration()).isTrue();
-        assertThat(result.narration().narrative()).isEqualTo("이 사람은 완독러다.");
-        assertThat(result.narration().tags()).containsExactly("완독러");
-    }
-
-    @Test
-    @DisplayName("폴백: 서술 생성이 비면(비활성/실패) 사실만 담고 서술은 없다")
-    void analyze_narratorEmpty_fallsBackToFactsOnly() {
-        User u = newUser("fb@booktimer.com");
-        savePublicFinished(u, "책A");
-        when(narrator.narrate(any())).thenReturn(Optional.empty());
-
-        ReadingPersonality result = service.analyze(u);
-
-        assertThat(result.profile().totalBooks()).isEqualTo(1); // 사실은 항상 존재
-        assertThat(result.hasNarration()).isFalse();            // 폴백
-        assertThat(result.narration()).isNull();
-    }
-
     // --- gate(): 미니앱 광고 관문 사전 판정 (설계 §3.4 — 광고를 보여주기 *전에* 알아야 하는 둘) ---
 
     @Test

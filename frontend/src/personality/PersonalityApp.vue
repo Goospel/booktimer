@@ -148,13 +148,18 @@ async function selectEntry(id: number) {
                 </svg>
                 <h2 class="pbti-card-title">조금 더 읽으면 성향이 보여요</h2>
             </div>
+            <!-- ⚠️ 「분석해 드릴게요」는 웹에서 생성을 걷은 뒤로 지킬 수 없는 약속이 된다(2026-09-08).
+                 사용자는 여기서 웹이 알아서 해 준다고 듣고, 책을 다 읽고 돌아오면 FALLBACK에서
+                 「앱으로 가라」를 처음 듣게 된다 — 뒤 화면이 앞 화면을 배신하는 자리였다. -->
             <p class="pbti-state-text">
                 지금 완독한 책이 <span class="pbti-num">{{ view.profile.finishedBooks }}</span>권이에요.
-                최소 <span class="pbti-num">{{ view.coldStartMinBooks }}</span>권쯤 완독하면 성향을 분석해 드릴게요.
+                최소 <span class="pbti-num">{{ view.coldStartMinBooks }}</span>권쯤 완독하면
+                <strong>토스 앱의 북타이머</strong>에서 성향을 만들 수 있어요.
             </p>
         </section>
 
-        <!-- FALLBACK: LLM 실패 안내 -->
+        <!-- FALLBACK: 서술 없음 안내. 웹에서 생성을 걷은 뒤(2026-09-08) 이 상태의 지배적 의미는
+             「LLM 실패」가 아니라 「아직 한 번도 안 만들었다」이다. -->
         <section v-else-if="view.state === 'FALLBACK'" class="pbti-card">
             <div class="pbti-state-head">
                 <svg class="pbti-state-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

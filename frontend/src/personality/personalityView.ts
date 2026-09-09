@@ -10,17 +10,6 @@ export function joinLabels(items: { label: string }[]): string {
 }
 
 /**
- * '다시 분석' 버튼 시각 상태. 진행 중이면(refreshing) remaining과 무관하게 refreshing,
- * 그다음 한도 소진(remaining<=0)이면 exhausted, 아니면 ready.
- * → 아이콘(회전/모래시계)·비활성·회색 처리를 이 한 값으로 분기한다.
- */
-export function refreshState(remaining: number, refreshing: boolean): 'refreshing' | 'exhausted' | 'ready' {
-    if (refreshing) return 'refreshing';
-    if (remaining <= 0) return 'exhausted';
-    return 'ready';
-}
-
-/**
  * 캐러셀에서 현재 중앙에 온 슬라이드 인덱스(도트 활성용). scroll-snap-center라
  * scrollLeft ≈ i·step 이므로 round(scrollLeft/step)로 역산하고 [0, count-1]로 clamp한다.
  * count·step이 0 이하면 0(빈 목록·미측정 가드, 0 나눗셈 방지).

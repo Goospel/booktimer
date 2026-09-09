@@ -23,7 +23,8 @@ import java.util.List;
 /**
  * 책BTI(독서 성향) Vue 섬 JSON API (선별 SPA 단계 1c).
  *
- * <p>GET 조회 + POST refresh(LLM 동기 호출, 폴링 없이 응답에 갱신 view 탑재) + POST select(IDOR 가드 서비스 위임).
+ * <p>GET 조회(<b>읽기 전용</b>) + POST ad-refresh(광고 경로 — 유일한 LLM 생성 경로) + POST select(IDOR 가드
+ * 서비스 위임). 웹 전용 {@code POST /refresh}는 2026-09-08에 걷었다(아래 주석).
  * 기존 {@link com.booktimer.web.PersonalityController}의 뮤테이션 엔드포인트를 이관.
  * 도메인 로직은 기존 서비스 재사용 — 새 로직 0. SecurityConfig default-deny 자동 인증 보호.
  */
@@ -65,14 +66,20 @@ public class PersonalityApiController {
     // 분석을 돌릴 수 있어 호출마다 수익이 붙는데 웹엔 그 관문이 없어 비용만 나갔다. 광고를 웹에 새로
     // 붙이는 것은 심사 이력상 번거로워 생성 경로 자체를 웹에서 없앴다(사용자 결정).
     // 남은 생성 경로는 아래 /ad-refresh 하나뿐이고, GET /api/personality는 읽기 전용이 됐다.
-    // User.DAILY_PERSONALITY_REFRESH_LIMIT(3)은 화면이 잔여 표시에 계속 쓰므로 지우지 않았다.
+    // ⚠️ User.DAILY_PERSONALITY_REFRESH_LIMIT(3)과 그 잔여는 이제 <b>아무 화면도 안 읽는다</b>
+    // (같은 PR이 PersonalityApp.vue의 인터페이스에서 두 필드를 뺐다). 응답에는 남겨 두는데, 이유는
+    // 「쓰이기 때문」이 아니라 <b>응답 계약을 깨지 않으려고</b>다 — 지우려면 DTO·테스트를 함께 손봐야
+    // 하고 얻는 것이 없다. 나중에 정리할 사람이 「화면이 쓴다」는 거짓 근거에 막히지 않게 적어 둔다.
 
     /**
-     * 미니앱 광고 관문의 사전 판정 — <b>부트스트랩(LLM·저장) 부작용이 없는 유일한 성향 GET</b>이다.
-     * {@code GET /api/personality}는 히스토리가 비면 첫 분석을 공짜로 만들어 관문을 무력화하므로 쓸 수 없다(설계 §3.4).
+     * 미니앱 광고 관문의 사전 판정.
      *
-     * <p>잔여는 <b>총량({@link User#DAILY_PERSONALITY_TOTAL_LIMIT}) 기준</b> 하나만 준다 — 미니앱은 광고 경로만
-     * 쓰고, 웹은 자기 천장(3) 기준 잔여를 {@code GET /api/personality}에서 이미 받는다(필드가 겹치지 않는다).
+     * <p><b>이 메서드가 생긴 이유</b>: {@code GET /api/personality}가 <b>당시엔</b> 히스토리가 비면 첫 분석을
+     * 공짜로 만들어(LLM·저장) 관문을 무력화했다(설계 §3.4). 2026-09-08에 그 부트스트랩을 걷어 지금은 둘 다
+     * 읽기 전용이지만 이 메서드는 남긴다 — 미니앱이 필요로 하는 응답(총량 기준 잔여 · 관문 판정)이 GET과 다르다.
+     *
+     * <p>잔여는 <b>총량({@link User#DAILY_PERSONALITY_TOTAL_LIMIT}) 기준</b> 하나만 준다. 웹 천장(3) 기준
+     * 잔여도 {@code GET /api/personality}가 여전히 실어 보내지만 <b>이제 아무 화면도 읽지 않는다</b>.
      */
     @GetMapping("/status")
     public StatusResponse status(Principal principal) {

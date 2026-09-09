@@ -205,7 +205,7 @@ class PersonalityApiControllerTest {
 
         mockMvc.perform(post("/api/personality/refresh")
                         .with(user("papi-gone@booktimer.com")).with(csrf()))
-                .andExpect(status().is4xxClientError());
+                .andExpect(status().isNotFound()); // 4xx 전체로 두면 「살아 있는데 다른 이유로 4xx」가 통과한다
 
         // 그리고 정말로 안 불렀다 — 405를 주면서 뒤에서 부르는 일이 없어야 한다.
         org.mockito.Mockito.verify(narrator, org.mockito.Mockito.never()).narrate(any());

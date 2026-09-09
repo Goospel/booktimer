@@ -63,14 +63,6 @@ public class ReadingPersonalityService {
         this.clock = clock;
     }
 
-    /** 사용자의 책BTI 결과(사실 + 가능하면 서술)를 <b>항상 새로</b> 만든다(저장 안 함, 공개 책 기반). 서술 실패 시 사실만 폴백. */
-    public ReadingPersonality analyze(User user) {
-        ReadingProfile profile = profileService.publicProfileOf(user);
-        return narrator.narrate(profile)
-                .map(narration -> new ReadingPersonality(profile, narration))
-                .orElseGet(() -> ReadingPersonality.factsOnly(profile));
-    }
-
     /**
      * GET 진입점 — 대표(selected) 분석을 <b>읽기만</b> 한다. 없으면 사실만 돌려준다.
      *
