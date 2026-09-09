@@ -140,8 +140,18 @@ public class GeminiStudyPlanner {
                     usageOf(response, objectMapper));
             return parsePlan(response, objectMapper);
         } catch (HttpClientErrorException.TooManyRequests e) {
-            log.warn("Gemini 일정 레이트리밋 — status={}", e.getStatusCode());
+            // 「분당 한도」와 「잔액 소진」이 둘 다 429다 — 전자는 1분 뒤 풀리고 후자는 충전 전까지 안
+            // 풀리는데, status만 찍으면 로그에서 구별되지 않는다. 자동 충전을 껐으므로 후자가 실제로
+            // 오는 날이 있고, 그때 이 한 줄이 유일한 단서다(quotaId에 FreeTier가 박혀 있으면 유료
+            // 전환이 안 먹었다는 뜻이라 그것도 여기서 드러난다).
+            log.warn("Gemini 일정 429 — {}", errorReasonOf(e.getResponseBodyAsString(), objectMapper));
             return AiResult.fail(Failure.RATE_LIMITED);
+        } catch (HttpClientErrorException.Forbidden e) {
+            // 결제 중단·API 비활성은 403으로 온다 — <b>기다려도 안 풀리는</b> 종류라 429(「이용량 한도」)로
+            // 접으면 사용자가 헛되이 기다린다. UNAVAILABLE로 옮겨 「만들지 못했다」로 끝낸다.
+            log.warn("Gemini 일정 403 — 결제·권한을 의심한다: {}",
+                    errorReasonOf(e.getResponseBodyAsString(), objectMapper));
+            return AiResult.fail(Failure.UNAVAILABLE);
         } catch (HttpClientErrorException.BadRequest e) {
             // Gemini의 400은 <b>우리 쪽 오설정</b>에서 난다 — 범위 길이·항목 수는 호출부가 이미 막았고
             // (StudyPlanService의 SCOPE_MAX·MAX_PLAN_ITEMS), 안전 차단은 400이 아니라 candidates가 없는
@@ -157,6 +167,35 @@ public class GeminiStudyPlanner {
             // 키가 URL 쿼리에 실리는 구조라 방어를 우리 쪽에 두는 편이 싸다.
             log.warn("Gemini 일정 실패 — {}", e.getClass().getSimpleName());
             return AiResult.fail(Failure.UNAVAILABLE);
+        }
+    }
+
+    /**
+     * 에러 봉투에서 <b>「왜 막혔는가」</b>만 뽑아 로그 한 조각으로.
+     *
+     * <p>Google은 {@code error.status}(예 {@code RESOURCE_EXHAUSTED} · {@code PERMISSION_DENIED})와,
+     * 쿼터 위반이면 {@code details[].violations[].quotaId}를 준다. 그 둘이면 <b>분당 한도 / 일일 한도 /
+     * 잔액 소진 / 무료 티어 잔존</b>이 갈린다 — 상태 코드만으로는 전부 같은 429다.
+     *
+     * <p>{@code error.message} 원문은 <b>일부러 싣지 않는다.</b> 키가 URL 쿼리에 실리는 구조라 방어를
+     * 우리 쪽에 두는 편이 싸다(같은 이유로 catch에서 URL·요청을 안 남긴다). 판별에 필요한 것은 status와
+     * quotaId뿐이라 잃는 것도 없다.
+     */
+    static String errorReasonOf(String body, ObjectMapper objectMapper) {
+        try {
+            JsonNode error = objectMapper.readTree(body).path("error");
+            String status = error.path("status").asText("?");
+            for (JsonNode detail : error.path("details")) {
+                for (JsonNode violation : detail.path("violations")) {
+                    String quotaId = violation.path("quotaId").asText("");
+                    if (!quotaId.isEmpty()) {
+                        return "status=%s quotaId=%s".formatted(status, quotaId);
+                    }
+                }
+            }
+            return "status=" + status;
+        } catch (Exception e) {
+            return "status=?";
         }
     }
 
