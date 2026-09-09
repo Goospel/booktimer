@@ -1,5 +1,6 @@
 package com.booktimer.session;
 
+import com.booktimer.timer.GoalSchedule;
 import com.booktimer.timer.ReadingGoalChange;
 import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.timer.ReadingTimer;
@@ -129,6 +130,29 @@ class ReadingContributionServiceTest {
 
         ContributionDay cell = cellOf(service.contributionGraph(user), filled);
         assertThat(cell.manual()).isTrue();
+    }
+
+    @Test
+    @DisplayName("goalSchedule: 목표 이력 + 현재 타이머 폴백으로 조립된다 — 기록 화면 막대가 잔디와 같은 답을 쓰도록")
+    void goalSchedule_assembledFromHistoryAndTimerFallback() {
+        User user = User.of("sch@booktimer.com", "h", "스케줄", "Asia/Seoul", Role.USER);
+
+        ReadingHistoryService history = mock(ReadingHistoryService.class);
+        ReadingTimerRepository timers = mock(ReadingTimerRepository.class);
+        when(timers.findByUser(user)).thenReturn(Optional.empty()); // 타이머 없음 → 기본 목표 폴백
+        ReadingGoalChangeRepository goalChanges = mock(ReadingGoalChangeRepository.class);
+        when(goalChanges.findByUserOrderByEffectiveDateAsc(user)).thenReturn(List.of(
+                ReadingGoalChange.of(user, LocalDate.of(2026, 5, 19), 1800L),
+                ReadingGoalChange.of(user, LocalDate.of(2026, 6, 1), 3600L)));
+        ReadingContributionService service =
+                new ReadingContributionService(history, timers, goalChanges, Clock.fixed(INSTANT, ZoneOffset.UTC));
+
+        GoalSchedule schedule = service.goalSchedule(user);
+
+        assertThat(schedule.goalFor(LocalDate.of(2026, 5, 18))).isEqualTo(3600L); // 첫 변경 이전 → 폴백
+        assertThat(schedule.goalFor(LocalDate.of(2026, 5, 19))).isEqualTo(1800L); // 변경 당일부터
+        assertThat(schedule.goalFor(LocalDate.of(2026, 5, 31))).isEqualTo(1800L); // 다음 변경 전날까지 유지
+        assertThat(schedule.goalFor(LocalDate.of(2026, 6, 1))).isEqualTo(3600L);  // 다음 변경 당일
     }
 
     private static ContributionDay cellOf(ContributionGraph graph, LocalDate date) {

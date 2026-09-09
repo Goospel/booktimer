@@ -4,6 +4,7 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.session.ReadingSessionService;
+import com.booktimer.user.OnboardingService;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
@@ -50,6 +51,9 @@ class HistoryApiControllerTest {
 
     @Autowired
     private ReadingSessionService sessionService;
+
+    @Autowired
+    private OnboardingService onboardingService;
 
     @Autowired
     private Clock clock;
@@ -121,5 +125,24 @@ class HistoryApiControllerTest {
                         .value(today().format(DateTimeFormatter.ofPattern("yyyy-MM"))))
                 .andExpect(jsonPath("$.months[0].days[0].date")
                         .value(today().format(DateTimeFormatter.ISO_LOCAL_DATE)));
+    }
+
+    @Test
+    @DisplayName("각 날에 goalSeconds가 실린다 — 미니앱 기록 막대가 그날 목표를 기준으로 그린다")
+    void getHistory_carriesGoalSecondsPerDay() throws Exception {
+        User u = registrationService.register("histgoal@booktimer.com", "rawpw1234", "목표기록", SEOUL, Role.USER, today());
+        // 25분 — 기본 목표(3600)도 미산정(0)도 아닌 값이라, 폴백이 새거나 배선이 빠지면 통과할 수 없다.
+        onboardingService.setDailyGoal(u, 1500L);
+        Book book = bookRepository.save(
+                Book.register(u, "목표책", null, null, null, null, null, BookStatus.READING));
+        Instant start = today().atStartOfDay(ZoneId.of(SEOUL)).toInstant();
+        sessionService.start(u, start, book);
+        sessionService.stop(u, start.plusSeconds(600));
+
+        mockMvc.perform(get("/api/history")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("histgoal@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.months[0].days[0].goalSeconds").value(1500));
     }
 }

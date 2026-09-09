@@ -8,6 +8,7 @@ import com.booktimer.session.MonthlyReadingSection;
 import com.booktimer.session.ReadingContributionService;
 import com.booktimer.session.ReadingDebtService;
 import com.booktimer.session.ReadingHistoryService;
+import com.booktimer.timer.GoalSchedule;
 import com.booktimer.user.User;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -47,9 +48,12 @@ public class HistoryApiController {
     public HistoryApiResponse history(Principal principal) {
         User user = currentUserService.resolve(principal);
         ContributionGraph graph = contributionService.contributionGraph(user);
+        // 잔디와 같은 리졸버로 각 날의 목표를 실어 준다 — 기록 막대 100%와 잔디 lv4가 같은 날에 같은 답을
+        // 해야 한다. 같은 요청 안에서 잔디가 스케줄을 한 번 더 조립한다(리포지토리 2쿼리 중복) — MVP 규모라 허용.
+        GoalSchedule schedule = contributionService.goalSchedule(user);
         return new HistoryApiResponse(
                 user.getNickname(),
-                historyService.monthlyHistory(user),
+                historyService.monthlyHistory(user, schedule::goalFor),
                 new GraphDto(
                         graph.weeks(),
                         graph.monthLabels(),

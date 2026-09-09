@@ -301,6 +301,10 @@ function buildMonths(): MonthlySection[] {
       totalSeconds: total,
       books: picked.map((book, i) => ({ title: book.title, coverUrl: book.coverUrl, seconds: shares[i] })),
       manuallyFilled: offset % 13 === 5,
+      // 3주 전에 목표를 1시간 → 현재값(대개 30분)으로 내린 사용자 — 최근엔 30분만 읽어도 가득 차고,
+      // 그 전엔 1시간이라야 가득 찬다. offset 4는 목표 0(「목표 없음」) 경로다 — 가득 찬 막대 +
+      // 펼침 「그날 목표 없음」이 브라우저에서 눈에 보인다.
+      goalSeconds: offset === 4 ? 0 : offset < 21 ? state.goalSeconds : 3_600,
     };
     if (days === undefined) byMonth.set(date.slice(0, 7), [record]);
     else days.push(record);

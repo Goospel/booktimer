@@ -354,6 +354,14 @@ export interface DailyRecord {
    */
   books: BookRead[];
   manuallyFilled: boolean;
+  /**
+   * 그 날짜에 유효했던 하루 목표(초) — 하루 막대의 기준. 0이면 「목표 없음」이고, 잔디와 같은 규칙으로
+   * 읽은 날은 가득 찬 것으로 친다.
+   *
+   * <p>선택 필드인 이유는 <b>캐시 방어</b>다 — 이 필드가 생기기 전에 저장된 `CACHE_HISTORY`가 첫 렌더에
+   * 오면 `undefined`다(소비처는 `?? 0`). 재검증 응답이 곧 덮는다.
+   */
+  goalSeconds?: number;
 }
 
 /** `session.MonthlyReadingSection` — 최신 월 먼저, 각 달 안에서도 최신 일 먼저(서버가 그 순서로 준다). */

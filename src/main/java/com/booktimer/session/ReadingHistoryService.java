@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.function.Predicate;
+import java.util.function.ToLongFunction;
 
 /**
  * 일자별 독서 기록 조회 유스케이스 (README 2.2).
@@ -41,7 +42,8 @@ public class ReadingHistoryService {
      * @return 일자별 집계 목록(최신순). 기록이 없으면 빈 목록.
      */
     public List<DailyReadingRecord> dailyHistory(User user) {
-        return aggregate(user, session -> true);
+        // 잔디·부채는 목표 이력을 스스로 해석하므로 여기선 미산정(0)으로 둔다.
+        return aggregate(user, session -> true, date -> 0L);
     }
 
     /**
@@ -51,15 +53,22 @@ public class ReadingHistoryService {
      * {@link YearMonth}로 묶으므로, 삽입 순서를 보존하는 {@link LinkedHashMap} 덕에 월·일 모두 최신이
      * 먼저다. 각 섹션은 그 달 총 독서 시간을 동봉한다(월 헤더에 바로 쓰도록).
      *
-     * @param user 조회 주체
+     * <p>각 날에 <b>그날 유효했던 하루 목표</b>를 {@code goalFor}로 물어 실어 준다 — 기록 화면 하루
+     * 막대가 「그 달 최대」가 아니라 그날 목표를 기준으로 그려지도록. 리졸버를 주입받는 이유는 목표 이력
+     * 해석이 이 서비스의 몫이 아니어서다(잔디와 같은 {@code GoalSchedule}을 호출자가 넘긴다 —
+     * 그래야 막대 100%와 잔디 lv4가 같은 날에 같은 답을 한다).
+     *
+     * @param user   조회 주체
+     * @param goalFor 유저 타임존 일자 → 그날 하루 목표(초). 목표를 안 실을 거면 {@code d -> 0L}.
      * @return 월별 묶음 목록(최신 월 먼저). 기록이 없으면 빈 목록.
      */
-    public List<MonthlyReadingSection> monthlyHistory(User user) {
-        return MonthlyReadingSection.groupByMonth(dailyHistory(user));
+    public List<MonthlyReadingSection> monthlyHistory(User user, ToLongFunction<LocalDate> goalFor) {
+        return MonthlyReadingSection.groupByMonth(aggregate(user, session -> true, goalFor));
     }
 
     /** 완료 세션을 유저 타임존 일자로 묶되 {@code include}를 통과한 것만 합산한다(최신 일자 먼저). */
-    private List<DailyReadingRecord> aggregate(User user, Predicate<ReadingSession> include) {
+    private List<DailyReadingRecord> aggregate(User user, Predicate<ReadingSession> include,
+                                               ToLongFunction<LocalDate> goalFor) {
         ZoneId zone = ZoneId.of(user.getTimezone());
 
         // 최신 일자가 먼저 오도록 내림차순 TreeMap에 누적
@@ -86,8 +95,9 @@ public class ReadingHistoryService {
         }
 
         return byDate.entrySet().stream()
+                // e.getKey()는 이미 유저 타임존 일자다 — 그대로 물어야 목표의 자정 경계가 기록과 맞는다.
                 .map(e -> new DailyReadingRecord(e.getKey(), e.getValue().seconds,
-                        e.getValue().booksLongestFirst(), e.getValue().manual))
+                        e.getValue().booksLongestFirst(), e.getValue().manual, goalFor.applyAsLong(e.getKey())))
                 .toList();
     }
 

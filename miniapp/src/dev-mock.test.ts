@@ -241,6 +241,15 @@ describe('dev-mock 핸들러', () => {
     expect(months[0].totalSeconds).toBe(months[0].days.reduce((sum, d) => sum + d.totalSeconds, 0));
   });
 
+  it('날짜별 기록 — 각 날에 그날 목표가 실린다. 목표 있는 날·없는 날이 둘 다 있어야 막대 두 경로를 브라우저로 본다', async () => {
+    const { months } = await mockRequest<{ months: MonthlySection[] }>('/api/history', {});
+    const goals = months.flatMap((m) => m.days.map((d) => d.goalSeconds));
+
+    expect(goals.every((g) => typeof g === 'number')).toBe(true);
+    expect(goals.some((g) => g! > 0)).toBe(true);
+    expect(goals.some((g) => g === 0)).toBe(true); // 「그날 목표 없음」 경로
+  });
+
   it('홈 피드 — 뉴스를 켜고 미리보기(3줄)보다 많이 준다. 안 그러면 뉴스 탭·「더 보기」를 브라우저로 볼 길이 없다', async () => {
     const feed = await mockRequest<HomeFeedResponse>('/api/home-feed', {});
 
