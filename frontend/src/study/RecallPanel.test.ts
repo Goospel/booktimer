@@ -6,8 +6,28 @@
 // `bookId`가 실려 와야 도달하는 코드라, 여기가 비면 그 아래 전부가 죽은 길이 된다.
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, type VueWrapper } from '@vue/test-utils';
+import { h } from 'vue';
 
 import RecallPanel from './RecallPanel.vue';
+
+// 본문 편집기는 얇은 textarea 대역으로 바꾼다. 이 파일의 관심은 「고른 값이 요청에 실리는가」이지
+// 편집기가 아니고(그건 editor/RecallEditor.test.ts가 실제 Tiptap을 마운트해 잰다), 대역이 없으면
+// 여기 열두 개 테스트가 편집기 사정으로 흔들린다.
+vi.mock('./editor/RecallEditor.vue', () => ({
+    default: {
+        name: 'RecallEditorStub',
+        props: { modelValue: { type: String, default: '' }, placeholder: { type: String, default: '' }, disabled: Boolean },
+        emits: ['update:modelValue'],
+        setup(props: { modelValue: string }, { emit }: { emit: (e: 'update:modelValue', v: string) => void }) {
+            return () => h('textarea', {
+                'class': 'study-recall-body',
+                'data-testid': 'recall-body',
+                'value': props.modelValue,
+                'onInput': (e: Event) => emit('update:modelValue', (e.target as HTMLTextAreaElement).value),
+            });
+        },
+    },
+}));
 
 // canvas는 node 하니스에 없다 — 축소 자체(1568px·품질 0.85)는 preview 게이트(U-3·U-12)가 재고,
 // 여기서는 「축소한 결과가 미리보기와 요청으로 흘러가는가」라는 배선만 잰다.
@@ -256,6 +276,24 @@ describe('백지복습 — 사진 전사', () => {
 
         expect(wrapper.find('[data-testid="recall-transcribe"]').attributes('disabled')).toBeDefined();
         expect(wrapper.find('[data-testid="recall-photo-cap-spent"]').exists()).toBe(true);
+    });
+});
+
+// 편집기엔 maxlength가 없다(textarea 시절엔 브라우저가 막아 줬다) — 상한을 넘긴 글로 저장을 누르면
+// 서버가 400을 주고 사용자는 이유를 왕복 뒤에야 듣는다. 화면이 먼저 막는다.
+describe('백지복습 — 본문 상한', () => {
+    test('8000자를 넘으면 저장이 잠긴다', async () => {
+        const wrapper = await mountPanel();
+        await wrapper.find('[data-testid="recall-body"]').setValue('가'.repeat(8001));
+
+        expect(wrapper.find('[data-testid="recall-save"]').attributes('disabled')).toBeDefined();
+    });
+
+    test('딱 8000자면 저장할 수 있다 — 서버가 받는 값을 화면이 더 좁히지 않는다', async () => {
+        const wrapper = await mountPanel();
+        await wrapper.find('[data-testid="recall-body"]').setValue('가'.repeat(8000));
+
+        expect(wrapper.find('[data-testid="recall-save"]').attributes('disabled')).toBeUndefined();
     });
 });
 

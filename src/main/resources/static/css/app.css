@@ -3669,25 +3669,88 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .study-recall-split { display: contents; }
 .study-recall-side, .study-recall-main { display: flex; flex-direction: column; gap: 8px; }
 .study-recall input, .study-recall textarea, .study-recall-book { width: 100%; }
-/* 본문칸만 줄노트로 둔다 — 「종이에 적는다」가 이 기능의 성격이라, 쓰는 자리에만 결을 준다.
-   ⚠️ line-height를 px로 못 박는 것이 핵심이다. 배수(1.6)로 두면 줄 간격이 글꼴 로딩 전후로 달라져
-   밑줄과 글자가 어긋난다 — 줄과 글이 어긋난 노트는 안 그린 것만 못하다.
-   background-attachment: local이라 스크롤하면 줄도 글을 따라 움직인다(fixed면 글만 미끄러진다).
-   ⚠️ 선택자에 .study-day를 붙인 것도 일부러다 — 위의 `.study-day textarea`가 (0,1,1)이라 클래스
-   하나짜리로 두면 그쪽 `background` 단축 속성이 background-image를 none으로 덮어 줄이 안 그려진다. */
-.study-day .study-recall-body {
-    min-height: 196px;
-    resize: vertical;
-    line-height: 28px;
-    padding: 10px 12px;
-    background-image: repeating-linear-gradient(
-        to bottom,
-        transparent 0, transparent 27px,
-        var(--border) 27px, var(--border) 28px
-    );
-    background-attachment: local;
-    background-position: 0 10px;   /* padding-top만큼 내려 첫 줄과 맞춘다 */
+/* 본문 편집기(Tiptap) — 종이 한 장. 안쪽 글은 .ProseMirror가 그리니 여기선 상자와 서식만 정한다.
+   ⚠️ 옛 28px 줄노트 배경은 걷었다(2026-09-09). 제목·목록·인용이 들어오면서 줄 높이가 블록마다
+   달라져 격자와 글줄이 어긋났다 — 줄과 글이 어긋난 노트는 안 그린 것만 못하다. */
+.study-editor {
+    position: relative;
+    box-sizing: border-box;
+    border: 1px solid transparent;
+    border-image: var(--pencil-frame-soft) 8 / 8px stretch;
+    border-radius: 10px;
+    background: var(--card-bg);
+    color: var(--text);
 }
+/* 포커스 링은 안쪽 contenteditable이 받으므로 상자가 대신 표시한다(.study-day input:focus와 같은 처방). */
+.study-editor:focus-within {
+    border-image: var(--pencil-frame) 8 / 8px stretch;
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+/* 폰에서 키보드가 올라와도 툴바가 남게 sticky — 스크롤되는 것은 글이지 도구가 아니다. */
+.study-editor-toolbar {
+    position: sticky; top: 0; z-index: 2;
+    display: flex; flex-wrap: wrap; gap: 2px;
+    padding: 5px 6px;
+    border-bottom: 1px solid var(--border);
+    border-radius: 10px 10px 0 0;
+    background: var(--card-bg);
+}
+.study-editor-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; padding: 0;
+    border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer;
+}
+.study-editor-btn:hover:not(:disabled), .study-editor-btn.is-on { background: var(--sage-soft); color: var(--accent-hover); }
+.study-editor-btn:disabled { opacity: .35; cursor: default; }
+
+.study-editor-body { position: relative; }
+/* Placeholder 확장을 하나 더 넣는 대신 빈 문서일 때만 겹쳐 그린다. */
+.study-editor-placeholder {
+    position: absolute; top: 10px; left: 12px; margin: 0;
+    color: var(--muted); opacity: .75; pointer-events: none;
+}
+.study-editor .ProseMirror {
+    min-height: 196px;
+    padding: 10px 12px;
+    outline: none;
+    line-height: 1.7;
+    overflow-wrap: anywhere;
+}
+.study-editor .ProseMirror > * { margin: 0 0 8px; }
+.study-editor .ProseMirror > :last-child { margin-bottom: 0; }
+.study-editor .ProseMirror h1 { font-size: 19px; }
+.study-editor .ProseMirror h2 { font-size: 16px; }
+.study-editor .ProseMirror ul, .study-editor .ProseMirror ol { padding-left: 22px; }
+/* 자손 선택자인 것이 일부러다 — 체크 목록은 `li > label + div > p` 구조라 자식(>) 규칙이 안 닿아
+   항목마다 UA 기본 1em 여백이 살아나고, 목록 하나가 문단 여럿처럼 벌어진다. */
+.study-editor .ProseMirror li p { margin: 0; }
+/* 중첩 단계가 눈에 보여야 Tab을 쓴 보람이 있다. */
+.study-editor .ProseMirror ul ul { list-style: circle; }
+.study-editor .ProseMirror ul ul ul { list-style: square; }
+.study-editor .ProseMirror ol ol { list-style: lower-alpha; }
+.study-editor .ProseMirror ol ol ol { list-style: lower-roman; }
+.study-editor .ProseMirror ul[data-type="taskList"] { list-style: none; padding-left: 2px; }
+.study-editor .ProseMirror ul[data-type="taskList"] li { display: flex; align-items: baseline; gap: 8px; }
+.study-editor .ProseMirror ul[data-type="taskList"] li > div { flex: 1 1 auto; min-width: 0; }
+.study-editor .ProseMirror mark { background: var(--sage-soft); color: inherit; border-radius: 3px; padding: 0 2px; }
+.study-editor .ProseMirror blockquote { border-left: 3px solid var(--border); padding-left: 10px; color: var(--muted); }
+.study-editor .ProseMirror hr { border: 0; border-top: 1px solid var(--border); margin: 12px 0; }
+
+/* 슬래시 메뉴 — 캐럿 좌표는 컴포넌트가 인라인 style로 준다(tippy·floating-ui를 안 넣는 이유).
+   ⚠️ fixed인 것이 일부러다: 좌표를 뷰포트 기준으로 계산하면(slashPosition) 조상 상자가 무엇이든
+   화면 밖으로 나갈 수 없다. absolute였을 때는 좌표를 잰 상자와 먹는 상자가 달라 툴바 높이만큼
+   밀렸고, 캐럿이 화면 아래쪽이면 팝업이 화면 밖(+82px 실측)이었다. */
+.study-editor-slash {
+    position: fixed; z-index: 5; margin: 0; padding: 4px; list-style: none;
+    min-width: 148px; max-height: 220px; overflow-y: auto;
+    border: 1px solid var(--border); border-radius: 10px;
+    background: var(--card-bg); box-shadow: 0 6px 20px rgba(0, 0, 0, .12);
+}
+.study-editor-slash-item {
+    display: block; width: 100%; padding: 7px 10px; text-align: left;
+    border: 0; border-radius: 7px; background: transparent; color: var(--text); font: inherit; cursor: pointer;
+}
+.study-editor-slash-item:hover, .study-editor-slash-item.is-on { background: var(--sage-soft); color: var(--accent-hover); }
 .study-recall-scope { resize: vertical; }
 .study-recall-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .study-recall-actions .btn { width: auto; flex: 0 0 auto; }

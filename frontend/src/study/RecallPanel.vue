@@ -2,6 +2,8 @@
 import { computed, ref, watch } from 'vue';
 
 import { analyzeRecall, fetchRecall, saveRecall, transcribePhotos, type Recall, type StudyBookRow } from './api';
+import RecallEditor from './editor/RecallEditor.vue';
+import { bodyBudget } from './editor/pure';
 import { shrinkForUpload, type ShrunkImage } from './image';
 import { prevDay, recallScopePrefill, recallSubjectPrefill, type PlanItem } from './pure';
 
@@ -59,7 +61,8 @@ const source = ref<'TEXT' | 'PHOTO'>('TEXT');
 
 const isFuture = computed(() => !props.today || props.date > props.today);
 const analyzed = computed(() => recall.value?.analyzedAt != null);
-const canSave = computed(() => body.value.trim().length > 0 && !busy.value);
+// 편집기엔 maxlength가 없다 — 상한은 화면(여기)과 서버 400 두 겹이다.
+const canSave = computed(() => body.value.trim().length > 0 && !busy.value && !bodyBudget(body.value).over);
 const canAnalyze = computed(() => canSave.value && props.remainingAnalyze > 0 && !analyzed.value);
 /** 오늘 몫을 다 썼는데 이 글은 아직 분석 전 — 버튼만 잠그면 「왜 안 되는지」가 화면에 없다. */
 const capSpent = computed(() => props.aiEnabled && props.remainingAnalyze === 0 && !analyzed.value);
@@ -311,15 +314,10 @@ async function onSave(thenAnalyze: boolean): Promise<void> {
                 </div>
 
                 <div class="study-recall-main">
-                    <textarea
+                    <RecallEditor
                         v-model="body"
-                        class="study-recall-body"
-                        rows="8"
-                        maxlength="8000"
                         placeholder="책을 덮고, 기억나는 것을 그대로 적어 보세요."
-                        aria-label="백지복습 본문"
-                        data-testid="recall-body"
-                    ></textarea>
+                    />
 
                     <p v-if="error" class="status-line study-error">{{ error }}</p>
                     <p v-else-if="notice" class="status-line muted">{{ notice }}</p>
