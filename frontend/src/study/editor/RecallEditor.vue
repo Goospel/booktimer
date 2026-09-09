@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue';
 import { EditorContent, useEditor } from '@tiptap/vue-3';
 
 import { recallExtensions, type SlashSuggestion } from './extensions';
-import { bodyBudget, filterSlashItems, slashPosition, type SlashItem } from './pure';
+import { bodyBudget, cleanMarkdown, filterSlashItems, slashPosition, type SlashItem } from './pure';
 
 /**
  * 백지복습 본문 편집기 — 마크다운으로 받아 마크다운으로 돌려준다.
@@ -86,15 +86,17 @@ const slashSuggestion: SlashSuggestion = {
 };
 
 /**
- * 저장될 값 — 끝의 빈 줄을 턴다.
+ * 저장될 값 — 엔티티를 되돌리고 빈 문단을 턴다(규칙은 `cleanMarkdown`).
  *
- * <p>StarterKit의 `trailingNode`가 목록·구분선으로 끝나는 글 뒤에 빈 문단을 하나 붙인다(그게 있어야
- * 목록 뒤를 눌러 이어 쓸 수 있다). 화면엔 필요하지만 <b>저장값에 빈 줄이 쌓이면</b> 8000자 예산도
- * 갉아먹고 AI 프롬프트에도 그대로 실린다. 밖으로 나가는 길과 비교하는 길이 같은 함수를 쓰는 것이
- * 요점이다 — 한쪽만 다듬으면 아래 watch가 매번 문서를 갈아치워 커서가 튄다.
+ * <p>직렬화가 내놓는 날것에는 사용자가 친 적 없는 것이 둘 섞인다: 글자 `>`·`&`가 `&gt;`·`&amp;`로
+ * 이스케이프되고, `trailingNode`가 붙인 빈 문단이 `&nbsp;` 한 줄로 나온다(그 문단은 화면엔 필요하다 —
+ * 목록 뒤를 눌러 이어 쓸 자리다). 저장값이 곧 DB·AI 프롬프트·8000자 예산이라 나가는 길에서 턴다.
+ *
+ * <p>밖으로 나가는 길과 비교하는 길이 <b>같은 함수</b>를 쓰는 것이 요점이다 — 한쪽만 다듬으면
+ * 아래 watch가 매번 문서를 갈아치워 커서가 튄다.
  */
 function markdownOf(e: NonNullable<typeof editor.value>): string {
-    return e.getMarkdown().trimEnd();
+    return cleanMarkdown(e.getMarkdown());
 }
 
 const editor = useEditor({
@@ -103,7 +105,7 @@ const editor = useEditor({
     extensions: recallExtensions(slashSuggestion),
     editable: !props.disabled,
     // textarea 시절의 aria-label을 잇는다 — 스크린리더에게 이 상자가 무엇인지.
-    editorProps: { attributes: { 'aria-label': '백지복습 본문' } },
+    editorProps: { attributes: { 'aria-label': '백지복습 본문', 'aria-expanded': 'false' } },
     onUpdate: ({ editor: e }) => emit('update:modelValue', markdownOf(e)),
     onTransaction: () => { tick.value += 1; },
 });
@@ -121,6 +123,16 @@ watch(() => props.modelValue, (value) => {
 });
 
 watch(() => props.disabled, (off) => editor.value?.setEditable(!off));
+
+// 팝업이 떠 있다는 사실을 글 상자 자신이 말한다 — 스크린리더는 아래 <ul>을 못 보고 있을 수 있다.
+watch(() => !!slash.value, (open) => editor.value?.view.dom.setAttribute('aria-expanded', String(open)));
+
+const slashList = ref<HTMLUListElement | null>(null);
+
+/** 화살표로 고른 항목이 상자(`max-height: 220px`) 밖으로 나가면 안 보인다. jsdom엔 이 함수가 없다. */
+function revealSelected(index: number): void {
+    (slashList.value?.children[index] as HTMLElement | undefined)?.scrollIntoView?.({ block: 'nearest' });
+}
 
 const budget = computed(() => bodyBudget(props.modelValue));
 const empty = computed(() => {
@@ -160,13 +172,16 @@ function onSlashKey(event: KeyboardEvent): boolean {
     if (!state) return false;
     if (event.key === 'ArrowDown') {
         state.index = (state.index + 1) % state.items.length;
+        revealSelected(state.index);
         return true;
     }
     if (event.key === 'ArrowUp') {
         state.index = (state.index - 1 + state.items.length) % state.items.length;
+        revealSelected(state.index);
         return true;
     }
-    if (event.key === 'Enter') {
+    // Tab도 Enter와 같은 자리다 — 안 먹으면 Tab 키맵이 「고르려던 손」으로 목록을 만들어 버린다.
+    if (event.key === 'Enter' || event.key === 'Tab') {
         state.pick(state.items[state.index]);
         return true;
     }
@@ -271,11 +286,14 @@ defineExpose({ editor, markdown: () => (editor.value ? markdownOf(editor.value) 
 
             <ul
                 v-if="slash"
+                ref="slashList"
                 class="study-editor-slash"
                 data-testid="slash-menu"
+                role="listbox"
+                aria-label="블록 고르기"
                 :style="{ left: `${slash.left}px`, top: `${slash.top}px` }"
             >
-                <li v-for="(item, i) in slash.items" :key="item.id">
+                <li v-for="(item, i) in slash.items" :key="item.id" role="option" :aria-selected="i === slash.index">
                     <button
                         type="button"
                         class="study-editor-slash-item"

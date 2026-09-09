@@ -77,3 +77,40 @@ export function tabAction(inList: boolean, shift: boolean): 'sink' | 'lift' | 't
     if (shift) return inList ? 'lift' : null;
     return inList ? 'sink' : 'toBullet';
 }
+
+/**
+ * 저장될 마크다운에서 HTML 엔티티를 되돌린다 — 되돌려도 <b>뜻이 안 바뀌는 것만</b>.
+ *
+ * <p>`@tiptap/markdown` 직렬화가 글자로 친 `>`·`&`를 `&gt;`·`&amp;`로 내보낸다(실측: `a > b` →
+ * `a &gt; b`, `AT&T` → `AT&amp;T`). 그 문자열이 DB·AI 프롬프트·8000자 예산에 그대로 실려서,
+ * 사용자가 쓴 적 없는 글자가 저장값에 남는다.
+ *
+ * <p>세 예외가 이 함수의 전부다 — ① <b>줄 시작</b>의 `&gt;`는 그대로 둔다(되돌리면 다음에 열 때
+ * 인용 블록으로 승격된다) ② `&lt;`는 손대지 않는다(`a <b> c`가 인라인 HTML로 먹힌다) ③ `&amp;`를
+ * <b>마지막에</b> 풀어, 사용자가 글자로 친 `&amp;gt;`가 `>`까지 가지 않고 `&gt;`에서 멈춘다.
+ */
+export function unescapeMarkdownEntities(md: string): string {
+    return md
+        .split('\n')
+        // 줄 앞의 인용 표시(중첩 포함)만 떼어 두고, 나머지에서만 `&gt;`를 되돌린다.
+        .map((line) => {
+            const quote = /^[ \t]*(?:&gt;[ \t]*)*/.exec(line)?.[0] ?? '';
+            return quote + line.slice(quote.length).replaceAll('&gt;', '>');
+        })
+        .join('\n')
+        .replaceAll('&amp;', '&');
+}
+
+/**
+ * 밖으로 나갈 마크다운 — 엔티티를 되돌리고 빈 문단을 턴다.
+ *
+ * <p>StarterKit의 `trailingNode`가 목록·구분선 뒤에 빈 문단을 붙이는데(그게 있어야 목록 뒤를 눌러
+ * 이어 쓸 수 있다) 직렬화하면 `&nbsp;` 한 줄로 나온다 — `trimEnd`는 이걸 공백으로 보지 않아 못 턴다.
+ * 저장값에 쌓이면 8000자 예산을 갉아먹고 AI 프롬프트에도 그대로 실린다.
+ */
+export function cleanMarkdown(md: string): string {
+    return unescapeMarkdownEntities(md)
+        .replace(/^[ \t]*&nbsp;[ \t]*$/gm, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trimEnd();
+}

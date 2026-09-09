@@ -4,7 +4,7 @@
 // RecallEditor.test.ts가 맡는다.
 import { describe, test, expect } from 'vitest';
 
-import { BODY_MAX, SLASH_ITEMS, SLASH_WIDTH, bodyBudget, filterSlashItems, slashHeight, slashPosition, tabAction } from './pure';
+import { BODY_MAX, SLASH_ITEMS, SLASH_WIDTH, bodyBudget, cleanMarkdown, filterSlashItems, slashHeight, slashPosition, tabAction, unescapeMarkdownEntities } from './pure';
 
 describe('슬래시 메뉴 필터', () => {
     test('빈 질의는 전부 보여 준다 — `/`만 친 순간이 곧 「뭐가 있는지 보여 줘」다', () => {
@@ -99,5 +99,57 @@ describe('슬래시 팝업 자리', () => {
 
     test('왼쪽 끝에서도 화면 밖으로 밀리지 않는다', () => {
         expect(slashPosition(caret(-30, 100), VIEWPORT, 2).left).toBeGreaterThanOrEqual(0);
+    });
+});
+
+// 2026-09-09 리뷰 실측 — `@tiptap/markdown` 직렬화가 글자 `>`·`&`를 HTML 엔티티로 내보낸다.
+// 그 문자열이 DB·AI 프롬프트·8000자 예산에 그대로 실리므로, 나가는 길에서 되돌린다.
+describe('저장 마크다운 정리 — 엔티티', () => {
+    test('글 가운데 `&gt;`는 `>`로 되돌린다', () => {
+        expect(unescapeMarkdownEntities('a &gt; b')).toBe('a > b');
+        expect(unescapeMarkdownEntities('결론 =&gt; 정리')).toBe('결론 => 정리');
+    });
+
+    test('`&amp;`는 `&`로 되돌린다', () => {
+        expect(unescapeMarkdownEntities('AT&amp;T')).toBe('AT&T');
+    });
+
+    test('줄 시작의 `&gt;`는 그대로 둔다 — 되돌리면 다음에 열 때 인용 블록으로 승격된다', () => {
+        expect(unescapeMarkdownEntities('&gt; 인용처럼 보이는 글')).toBe('&gt; 인용처럼 보이는 글');
+        expect(unescapeMarkdownEntities('앞줄\n  &gt; 뒷줄')).toBe('앞줄\n  &gt; 뒷줄');
+        expect(unescapeMarkdownEntities('&gt; &gt; 두 겹')).toBe('&gt; &gt; 두 겹');
+    });
+
+    test('`&lt;`는 건드리지 않는다 — `<`를 되돌리면 다음에 열 때 인라인 HTML로 먹힌다', () => {
+        expect(unescapeMarkdownEntities('a &lt;b&lt;c')).toBe('a &lt;b&lt;c');
+    });
+
+    test('사용자가 글자로 친 엔티티는 한 겹만 벗는다 — `&amp;`를 마지막에 푸는 이유', () => {
+        // 줄 시작이면 인용 보호가 대신 막아 줘서 순서가 틀려도 통과한다 — 글 가운데로 잰다.
+        expect(unescapeMarkdownEntities('결론 &amp;gt; 정리')).toBe('결론 &gt; 정리');
+    });
+});
+
+describe('저장 마크다운 정리 — 빈 문단', () => {
+    test('끝에 남은 `&nbsp;` 빈 문단을 턴다 — `trimEnd`만으론 한 개도 못 턴다', () => {
+        expect(cleanMarkdown('- 하나\n\n\n\n&nbsp;')).toBe('- 하나');
+        expect(cleanMarkdown('문단\n\n\n\n&nbsp;\n\n&nbsp;')).toBe('문단');
+    });
+
+    test('글 가운데 빈 문단도 빈 줄 하나로 접는다', () => {
+        expect(cleanMarkdown('a\n\n&nbsp;\n\nb')).toBe('a\n\nb');
+    });
+
+    test('문단 사이 빈 줄 하나는 그대로 — 접다가 문단을 붙여 버리면 안 된다', () => {
+        expect(cleanMarkdown('a\n\nb')).toBe('a\n\nb');
+    });
+
+    test('엔티티 되돌리기도 같은 길에서 함께 한다 — 밖으로 나가는 값은 이 함수 하나를 탄다', () => {
+        expect(cleanMarkdown('a &gt; b, AT&amp;T\n\n&nbsp;')).toBe('a > b, AT&T');
+    });
+
+    test('한 번 정리한 값은 다시 정리해도 같다 — 안 그러면 밖에서 돌아온 값과 매번 어긋난다', () => {
+        const once = cleanMarkdown('# 제목\n\n- 하나\n\n&nbsp;\n\na &gt; b\n\n&gt; 인용');
+        expect(cleanMarkdown(once)).toBe(once);
     });
 });

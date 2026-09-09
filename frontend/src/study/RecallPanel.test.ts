@@ -20,7 +20,7 @@ vi.mock('./editor/RecallEditor.vue', () => ({
         emits: ['update:modelValue'],
         setup(props: { modelValue: string }, { emit }: { emit: (e: 'update:modelValue', v: string) => void }) {
             return () => h('textarea', {
-                'class': 'study-recall-body',
+                // 셀렉터는 `data-testid` 하나로 — 대역에만 있는 클래스로 재면 진짜 편집기를 못 본다.
                 'data-testid': 'recall-body',
                 'value': props.modelValue,
                 'onInput': (e: Event) => emit('update:modelValue', (e.target as HTMLTextAreaElement).value),
@@ -327,7 +327,7 @@ describe('백지복습 — 두 묶음', () => {
 
     test('/study의 쓰는 순서는 그대로 — 과목·범위가 본문 앞이다', async () => {
         const html = (await mountPanel()).html();
-        expect(html.indexOf('study-recall-scope')).toBeLessThan(html.indexOf('study-recall-body'));
+        expect(html.indexOf('study-recall-scope')).toBeLessThan(html.indexOf('recall-body'));
     });
 });
 
@@ -358,7 +358,7 @@ describe('백지복습 — 책을 고르면 주제가 따라온다', () => {
             },
         });
         await vi.waitFor(() => expect(
-            (wrapper.find('.study-recall-body').element as HTMLTextAreaElement)?.value).toBe('어제 쓴 글'));
+            (wrapper.find('[data-testid="recall-body"]').element as HTMLTextAreaElement)?.value).toBe('어제 쓴 글'));
 
         expect((wrapper.find('input[aria-label="주제"]').element as HTMLInputElement).value)
             .toBe('내가 적어 둔 주제');

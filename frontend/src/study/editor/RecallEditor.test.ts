@@ -167,12 +167,58 @@ describe('슬래시 메뉴', () => {
         expect(editorOf(wrapper).getText()).toContain('/제');
     });
 
+    // 팝업이 떠 있을 때 Tab은 확장의 Tab 키맵(목록 만들기)보다 먼저 먹어야 한다 — 안 그러면
+    // 고르려던 손이 `- /제`라는 목록을 만든다(리뷰 실측).
+    test('Tab도 고른 항목을 확정한다 — Enter와 같은 자리', async () => {
+        const wrapper = await mountEditor('');
+        await openSlash(wrapper, '제');
+
+        editorOf(wrapper).view.dom.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+        await vi.waitFor(() => expect(editorOf(wrapper).getHTML()).toContain('<h1'));
+        expect(editorOf(wrapper).getText()).not.toContain('/제');
+        expect(markdown(wrapper)).not.toContain('- ');
+    });
+
+    test('팝업은 목록상자로 읽힌다 — 화살표로 옮긴 자리가 스크린리더에 전해진다', async () => {
+        const wrapper = await mountEditor('');
+        await openSlash(wrapper, '제');
+        expect(wrapper.find('[data-testid="slash-menu"]').attributes('role')).toBe('listbox');
+        expect(editorOf(wrapper).view.dom.getAttribute('aria-expanded')).toBe('true');
+        expect(wrapper.findAll('[role="option"]').map((o) => o.attributes('aria-selected'))).toEqual(['true', 'false']);
+
+        editorOf(wrapper).view.dom.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+        await wrapper.vm.$nextTick();
+        expect(wrapper.findAll('[role="option"]').map((o) => o.attributes('aria-selected'))).toEqual(['false', 'true']);
+    });
+
     test('안 맞는 질의엔 팝업을 안 그린다 — 빈 상자를 띄우지 않는다', async () => {
         const wrapper = await mountEditor('');
         editorOf(wrapper).commands.focus('end');
         editorOf(wrapper).commands.insertContent('/zzz');
         await wrapper.vm.$nextTick();
         expect(wrapper.find('[data-testid="slash-menu"]').exists()).toBe(false);
+    });
+});
+
+// 2026-09-09 리뷰 실측 — 직렬화가 글자 `>`·`&`를 엔티티로 내보내던 자리. 저장값이 곧 DB·AI
+// 프롬프트라, 사용자가 친 적 없는 `&gt;`가 거기 남으면 안 된다.
+describe('저장값 엔티티', () => {
+    test('글자로 친 `>`·`&`는 엔티티로 저장되지 않는다', async () => {
+        const wrapper = await mountEditor('a > b, AT&T');
+        expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+
+        editorOf(wrapper).commands.focus('end');
+        editorOf(wrapper).commands.insertContent('!');
+        await vi.waitFor(() => expect(lastEmitted(wrapper)).toBeDefined());
+        expect(lastEmitted(wrapper)).toBe('a > b, AT&T!');
+    });
+
+    test('한 번 저장한 값을 다시 열어도 같은 문자열 — 열 때마다 글이 자라면 안 된다', async () => {
+        const once = markdown(await mountEditor('a > b, AT&T'));
+        expect(once).toBe('a > b, AT&T');
+        expect(markdown(await mountEditor(once))).toBe(once);
     });
 });
 
