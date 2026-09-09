@@ -143,6 +143,10 @@ describe('하루 막대 (barPercent)', () => {
   it('기준을 넘겨도 100을 안 넘는다 — 막대가 칸 밖으로 삐져나가지 않는다', () => {
     expect(barPercent(7_200, 3_600)).toBe(100);
   });
+
+  it('목표에 12초 모자란 날은 가득 차지 않는다 — 반올림이면 100%인데 잔디는 lv3이라 두 그림이 어긋난다', () => {
+    expect(barPercent(3_588, 3_600)).toBe(99);
+  });
 });
 
 describe('그날 목표 문구 (goalLabel)', () => {
@@ -154,7 +158,7 @@ describe('그날 목표 문구 (goalLabel)', () => {
     expect(goalLabel(0)).toBe('그날 목표 없음');
   });
 
-  it('필드가 없는 옛 캐시도 「목표 없음」으로 — undefined가 문구에 새어 나오면 안 된다', () => {
+  it('필드가 없는 옛 서버 응답도 「목표 없음」으로 — undefined가 문구에 새어 나오면 안 된다', () => {
     expect(goalLabel(undefined)).toBe('그날 목표 없음');
   });
 });
@@ -286,9 +290,10 @@ describe('하루 한 줄 (DayRow)', () => {
     const markup = render(busy, true);
 
     // 하루 막대는 4500/9000(그날 목표) = 50%. 책 막대는 3600/3600 = 100%, 900/3600 = 25%.
-    expect(markup).toContain('width:50%');
-    expect(markup).toContain('width:100%');
-    expect(markup).toContain('width:25%');
+    // 책 막대의 표식은 높이 4px이다 — 그냥 `width:100%`로 찾으면 행 격자(`width:100%`)에 걸려 늘 초록이다.
+    expect(dayBarWidth(markup)).toBe('50%');
+    expect(markup).toContain('width:100%;height:4px');
+    expect(markup).toContain('width:25%;height:4px');
   });
 
   it('하루 막대는 그날 목표를 기준으로 잰다 — 채우면 가득, 반이면 반, 넘겨도 가득', () => {
@@ -307,6 +312,13 @@ describe('하루 한 줄 (DayRow)', () => {
 
   it('접힌 줄엔 목표를 안 적는다 — 한 줄 요약이 길어지면 시간·손잡이를 밀어낸다', () => {
     expect(render(alone, false)).not.toContain('그날 목표');
+  });
+
+  it('필드가 아예 없는 날도 가득 찬다 — 롤링 배포 중 옛 서버 응답이 오면 기준을 0으로 떨어뜨린다', () => {
+    // 900초. 폴백이 0이 아닌 값(예: 기본 목표 3600)으로 새면 25%로 그려져 이 단언이 죽는다.
+    const stale = day({ totalSeconds: 900, goalSeconds: undefined, books: [bk('데미안', 900)] });
+
+    expect(dayBarWidth(render(stale, false))).toBe('100%');
   });
 
   it('목표가 없는 날은 막대가 가득 차고 「그날 목표 없음」이라 적는다 — 도메인이 허용하는 상태다', () => {

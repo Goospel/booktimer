@@ -164,13 +164,17 @@ export function formatWeekday(date: string): string {
  *
  * <p>기준이 0(목표 없음)이면 읽은 날은 가득, 안 읽은 날은 0이다 — 잔디 `levelFor`가 목표 0인 날을
  * lv4로 치는 것과 같은 규칙이고, 덤으로 0으로 나눠 `width: NaN%`가 되는 일도 없다.
+ *
+ * <p><b>내림이라야 한다.</b> 반올림이면 3588초/3600초가 100%로 그려지는데, 잔디
+ * `ContributionGraphBuilder.levelFor`는 `seconds < goal`이라 그 날을 lv3으로 친다 — 같은 화면의 두 그림이
+ * 「목표를 채웠나」에 다른 답을 한다. 내림으로 두면 **가득 찬 막대 ⇔ 잔디 lv4**가 참이 된다.
  */
 export function barPercent(seconds: number, maxSeconds: number): number {
   if (maxSeconds <= 0) return seconds > 0 ? 100 : 0;
-  return Math.min(100, Math.round((seconds / maxSeconds) * 100));
+  return Math.min(100, Math.floor((seconds / maxSeconds) * 100));
 }
 
-/** 펼친 하루의 마지막 줄 — 막대를 무엇에 견줘 쟀는지. 0·미상(옛 캐시)은 「목표 없음」. */
+/** 펼친 하루의 마지막 줄 — 막대를 무엇에 견줘 쟀는지. 0·미상(옛 서버 응답)은 「목표 없음」. */
 export function goalLabel(goalSeconds: number | undefined): string {
   return goalSeconds === undefined || goalSeconds <= 0 ? '그날 목표 없음' : `그날 목표 ${formatDuration(goalSeconds)}`;
 }
@@ -351,7 +355,8 @@ export function DayRow({
       <CoverPile books={day.books} />
 
       {/* 막대 색은 잔디 팔레트에서 가져온다 — 같은 「얼마나 읽었나」를 두 곳이 다른 색으로 말하지 않게.
-          기준은 그날 목표다(서버가 실어 준다). 옛 캐시엔 그 필드가 없어 0으로 떨어진다 — 읽은 날은 가득. */}
+          기준은 그날 목표다(서버가 실어 준다). 롤링 배포 중 옛 서버 응답엔 그 필드가 없어 0으로 떨어진다
+          — 읽은 날은 가득. */}
       <div
         aria-hidden="true"
         style={{

@@ -4,6 +4,8 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.session.ReadingSessionService;
+import com.booktimer.timer.ReadingGoalChange;
+import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.user.OnboardingService;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
@@ -23,6 +25,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
+import static org.hamcrest.Matchers.contains;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -54,6 +57,9 @@ class HistoryApiControllerTest {
 
     @Autowired
     private OnboardingService onboardingService;
+
+    @Autowired
+    private ReadingGoalChangeRepository goalChangeRepository;
 
     @Autowired
     private Clock clock;
@@ -144,5 +150,35 @@ class HistoryApiControllerTest {
                         .with(user("histgoal@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.months[0].days[0].goalSeconds").value(1500));
+    }
+
+    @Test
+    @DisplayName("날마다 「그날」 목표가 실린다 — 목표를 올린 뒤에도 과거 날은 옛 목표로 남는다(소급 재판정 차단)")
+    void getHistory_goalSecondsIsPerDay_notFlatCurrentGoal() throws Exception {
+        User u = registrationService.register("histgoal2@booktimer.com", "rawpw1234", "목표이력", SEOUL, Role.USER,
+                today().minusDays(7));
+        LocalDate past = today().minusDays(2);
+        // 이틀 전엔 20분이 목표였고, 오늘 25분으로 올렸다 — 두 날이 서로 다른 값을 받아야 한다.
+        // 이 픽스처가 없으면 「그날 해석」을 현재 목표 하나로 갈아치워도(schedule::goalFor →
+        // d -> schedule.goalFor(now)) 테스트가 전부 통과한다(리뷰 돌연변이 실측).
+        goalChangeRepository.save(ReadingGoalChange.of(u, past, 1200L));
+        onboardingService.setDailyGoal(u, 1500L);
+
+        Book book = bookRepository.save(
+                Book.register(u, "목표이력책", null, null, null, null, null, BookStatus.READING));
+        Instant pastStart = past.atStartOfDay(ZoneId.of(SEOUL)).toInstant();
+        sessionService.start(u, pastStart, book);
+        sessionService.stop(u, pastStart.plusSeconds(600));
+        Instant todayStart = today().atStartOfDay(ZoneId.of(SEOUL)).toInstant();
+        sessionService.start(u, todayStart, book);
+        sessionService.stop(u, todayStart.plusSeconds(600));
+
+        // 달 경계(1일·2일)를 넘으면 두 날이 다른 섹션에 들어가므로 인덱스가 아니라 날짜로 집는다.
+        mockMvc.perform(get("/api/history")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("histgoal2@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$..days[?(@.date=='" + today() + "')].goalSeconds").value(contains(1500)))
+                .andExpect(jsonPath("$..days[?(@.date=='" + past + "')].goalSeconds").value(contains(1200)));
     }
 }
