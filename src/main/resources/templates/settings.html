@@ -108,44 +108,6 @@
         </form>
     </section>
 
-    <!-- 프로필 사진(도감 작가 얼굴) 선택 그리드의 <use href="#sprite-{code}">가 참조할 심볼 정의. -->
-    <th:block th:replace="~{fragments/garden-character-sprites :: sprites}"></th:block>
-
-    <!-- 카드: 프로필 사진 — 도감에서 모은(완독한) 작가의 얼굴만 고를 수 있다. 업로드 없이 SVG 스프라이트 재사용. -->
-    <section class="set-card">
-        <h2 class="set-card-title">프로필 사진</h2>
-        <p class="set-card-desc">도감에서 모은 작가의 얼굴을 프로필 사진으로 쓸 수 있어요. 책을 완독해 작가를 모으면 여기에 나타나요.</p>
-        <form th:action="@{/settings/profile-character}" method="post">
-            <div class="profile-char-grid">
-                <!-- 기본(이니셜) — 항상 첫 칸. 선택 해제와 동일(빈 코드). -->
-                <label class="profile-char-opt">
-                    <input type="radio" name="characterCode" value="" th:checked="${profileCharacterCode == null}">
-                    <span class="profile-char-face profile-char-initial"
-                          th:text="${#strings.substring(loginId,0,1)}">t</span>
-                    <span class="profile-char-label">기본</span>
-                </label>
-                <!-- 보유(완독)한 작가들 — sprite 있으면 SVG, 없으면 이모지 폴백(도감과 동일). -->
-                <label class="profile-char-opt" th:each="ch : ${ownedCharacters}">
-                    <input type="radio" name="characterCode" th:value="${ch.code}"
-                           th:checked="${ch.code == profileCharacterCode}">
-                    <span class="profile-char-face">
-                        <svg th:if="${ch.spriteId != null}" class="profile-char-svg" aria-hidden="true">
-                            <use th:attr="href='#sprite-' + ${ch.code}"></use>
-                        </svg>
-                        <span th:unless="${ch.spriteId != null}" th:text="${#strings.substring(ch.name, 0, 1)}">작</span>
-                    </span>
-                    <span class="profile-char-label" th:text="${ch.name}">작가</span>
-                </label>
-            </div>
-            <p th:if="${#lists.isEmpty(ownedCharacters)}" class="set-card-desc" style="margin-top:16px">
-                아직 모은 작가가 없어요. 책을 완독하면 도감에서 작가를 모을 수 있어요.
-            </p>
-            <div class="set-actions">
-                <button type="submit" class="set-btn-save">저장</button>
-            </div>
-        </form>
-    </section>
-
     <!--/* 아이디 변경 카드: 평생 1번. 소진했으면 폼 대신 정적 표기만 남긴다(옛 아이디는 영구히 잠긴다).
            아이디를 아직 안 정한 계정(온보딩 전)엔 카드를 아예 그리지 않는다 — 그리면 안내가 '@null'이 되고,
            제출해 봐야 도메인이 ISE로 막는 걸 컨트롤러가 '이미 사용했어요'라는 거짓 안내로 흡수한다. */-->

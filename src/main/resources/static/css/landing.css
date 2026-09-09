@@ -4,7 +4,7 @@
 body.landing-page {
     display: block;
     padding: 0;
-    scroll-behavior: smooth; /* 상단 네비 #village·#together 앵커 점프를 부드럽게 */
+    scroll-behavior: smooth; /* 상단 네비 #together 앵커 점프를 부드럽게 */
 }
 
 /* 세리프 헬퍼 — 헤드라인·섹션 타이틀에만 Gowun Batang 적용 */

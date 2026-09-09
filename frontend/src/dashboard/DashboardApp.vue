@@ -13,7 +13,6 @@ import BookPickSheet from './BookPickSheet.vue'
 import StudyBookSheet from './StudyBookSheet.vue'
 import MarginCard from './MarginCard.vue'
 import RecallCard from './RecallCard.vue'
-import GardenPanel from './GardenPanel.vue'
 import BrandQuote from './BrandQuote.vue'
 import EmailVerifyBanner from './EmailVerifyBanner.vue'
 import WelcomeBanner from './WelcomeBanner.vue'
@@ -92,7 +91,7 @@ function applyTimerState(s: TimerState) {
     recentBookId.value = s.recentBookId
 }
 
-/** /api/dashboard 응답 전체를 화면 상태에 얹는다(최초 로드·복귀 재조회 공용). graph·garden·quotes는 제외. */
+/** /api/dashboard 응답 전체를 화면 상태에 얹는다(최초 로드·복귀 재조회 공용). graph·quotes는 제외. */
 function applyDashboard(d: DashboardResponse) {
     applyTimerState(d)
     wantToReadBooks.value = d.wantToReadBooks ?? []
@@ -118,7 +117,7 @@ onMounted(async () => {
 
 /**
  * 탭·창 복귀 시 조용한 재조회 — 다른 기기에서 시작·정지하면 이 화면이 낡기 때문(미니앱 silentRefresh와 같은 규칙).
- * 성공했을 때만 덮고 실패는 무시한다(화면 유지). graph·garden·quotes는 안 덮는다 —
+ * 성공했을 때만 덮고 실패는 무시한다(화면 유지). graph·quotes는 안 덮는다 —
  * 명언이 복귀마다 섞이면 어지럽고, 잔디는 stop 응답이 이미 갱신한다.
  */
 async function refresh(force = false) {
@@ -421,7 +420,7 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
     <template v-else-if="data">
         <!-- 발견 2(상단 정리): 헤더 → 타이머 → 잔디 → 바로가기 → 격언(발밑).
              격언(BrandQuote)은 Teleport로 #brand-quote-slot(대시보드 발밑)에 렌더되므로 여기 순서상 위치는 무관. -->
-        <DashHeader :login-id="data.loginId" :profile-character-code="data.profileCharacterCode" />
+        <DashHeader :login-id="data.loginId" />
 
         <WelcomeBanner v-if="showWelcome" :nickname="data.nickname" @close="showWelcome = false" />
 
@@ -494,9 +493,6 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
 
         <div class="dash-grid-2col">
             <QuickNav :login-id="data.loginId" :mode="mode" />
-            <!-- 정원은 독서 전용 세계관(작가는 독서 시간으로 입주). .dash-grid-2col이 auto-fit이라
-                 공부 모드에선 QuickNav가 자연히 전체폭으로 선다 — 2단계 「공부 서재」가 이 자리에 온다. -->
-            <GardenPanel v-if="mode === 'reading'" :garden="data.garden" />
         </div>
 
         <BrandQuote :quotes="data.quotes" />

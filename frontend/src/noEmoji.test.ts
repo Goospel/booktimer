@@ -27,7 +27,7 @@ const EMOJI = /[\u{1F300}-\u{1FAFF}\u{1F000}-\u{1F2FF}\u{2600}-\u{27BF}\u{2B00}-
  *
  * <p>`✕`(U+2715)는 기호대에 살아 정규식에 걸리지만 <b>이모지가 아니다</b> — 닫기 표식이라 AI 표식으로
  * 읽히지 않는다. `🌱🌿`는 「정원·마을」이라는 이 서비스의 핵심 은유라 화면들이 직접 쓴다
- * (`BooksApp.vue`·`TimerCard.vue`·`VillageApp.vue`·`DexDetailSheet.vue`) — 서버 `GrowthStage`가
+ * (`BooksApp.vue`·`TimerCard.vue`) — 서버 `GrowthStage`가
  * 근거이던 시절도 있었으나 그 사다리는 2026-08-29에 폐기됐고, 남은 근거는 이 실사용이다.
  * 여기는 지우는 게 아니라 <b>자체 일러스트로 제대로 만드는</b> 자리라 백로그로 남겼다(plan.md).
  */

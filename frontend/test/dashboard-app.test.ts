@@ -39,13 +39,6 @@ const DASHBOARD_RESPONSE = {
     finishedBooks: [],
     recentBookId: 1,
     graph: GRAPH_INITIAL,
-    garden: {
-        ownedAuthorCharacterCount: 0,
-        totalAuthorCharacterCount: 0,
-        ownedCharacters: [],
-        ownedBuildingCount: 0,
-        totalBuildingCount: 0,
-    },
     quotes: [],
     emailVerified: true,
 };

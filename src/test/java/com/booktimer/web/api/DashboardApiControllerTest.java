@@ -101,7 +101,10 @@ class DashboardApiControllerTest {
                 .andExpect(jsonPath("$.finishedBooks").isArray())
                 .andExpect(jsonPath("$.graph").exists())
                 .andExpect(jsonPath("$.graph.weeks").isArray())
-                .andExpect(jsonPath("$.garden").exists())
+                // 서재 캐릭터 폐기 — 두 키가 응답에서 통째로 사라졌다.
+                // jsonPath(...).doesNotExist()는 값이 null이면 통과해 판별력이 없어 본문 문자열로 못 박는다.
+                .andExpect(content().string(not(containsString("\"garden\""))))
+                .andExpect(content().string(not(containsString("profileCharacterCode"))))
                 .andExpect(jsonPath("$.quotes").isArray())
                 .andExpect(jsonPath("$.quotes[0].text").isString())
                 .andExpect(jsonPath("$.quotes[0].author").isString())
@@ -189,20 +192,6 @@ class DashboardApiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.timer.remainingSeconds").value(0))
                 .andExpect(jsonPath("$.timer.todayReadSeconds", greaterThanOrEqualTo(5400)));
-    }
-
-    // ── 프로필 사진(도감 작가 얼굴) ───────────────────────────────────────────
-
-    @Test
-    @DisplayName("GET /api/dashboard: 프로필 작가를 선택했으면 profileCharacterCode를 응답에 싣는다")
-    void get_withProfileCharacter_includesCode() throws Exception {
-        User u = register("pcdash@a.com", "pcdash");
-        u.selectProfileCharacter("han_gang"); // 엔티티 직접(보유검증 우회) — 노출 경로만 검증
-        userRepository.save(u);
-
-        mockMvc.perform(get("/api/dashboard").with(user("pcdash@a.com")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.profileCharacterCode").value("han_gang"));
     }
 
     // ── 5. start IDOR → 404 ──────────────────────────────────────────────────
@@ -779,21 +768,6 @@ class DashboardApiControllerTest {
                 .andExpect(jsonPath("$.hasActiveSession").value(true))
                 .andExpect(jsonPath("$.remainingSeconds").isNumber())
                 .andExpect(jsonPath("$.carriedDebtSeconds").isNumber());
-    }
-
-    // ── 15. garden DTO — 엔티티 User FK 없음 (spot-check) ────────────────────
-
-    @Test
-    @DisplayName("GET /api/dashboard: garden CatalogDto — 작가 카운트 필드 존재, 건물 필드는 은퇴로 부재")
-    void gardenDtoSpotCheck() throws Exception {
-        register("garden@a.com", "garden");
-
-        mockMvc.perform(get("/api/dashboard").with(user("garden@a.com")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.garden.ownedAuthorCharacterCount").isNumber())
-                .andExpect(jsonPath("$.garden.totalAuthorCharacterCount").isNumber())
-                .andExpect(jsonPath("$.garden.ownedBuildingCount").doesNotExist())
-                .andExpect(jsonPath("$.garden.totalBuildingCount").doesNotExist());
     }
 
     // ── 16. todayGoalSeconds 필드 존재 ───────────────────────────────────────

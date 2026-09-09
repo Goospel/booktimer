@@ -3,7 +3,6 @@ package com.booktimer.web.api;
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.StudyBookService;
-import com.booktimer.garden.GardenService;
 import com.booktimer.quote.QuoteService;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.ContributionDay;
@@ -49,7 +48,6 @@ public class DashboardApiController {
     private final CurrentUserService currentUserService;
     private final DashboardModel dashboardModel;
     private final ReadingContributionService contributionService;
-    private final GardenService gardenService;
     private final QuoteService quoteService;
     private final ReadingSessionService sessionService;
     private final ReadingSessionRepository sessionRepository;
@@ -62,7 +60,6 @@ public class DashboardApiController {
     public DashboardApiController(CurrentUserService currentUserService,
                                   DashboardModel dashboardModel,
                                   ReadingContributionService contributionService,
-                                  GardenService gardenService,
                                   QuoteService quoteService,
                                   ReadingSessionService sessionService,
                                   ReadingSessionRepository sessionRepository,
@@ -74,7 +71,6 @@ public class DashboardApiController {
         this.currentUserService = currentUserService;
         this.dashboardModel = dashboardModel;
         this.contributionService = contributionService;
-        this.gardenService = gardenService;
         this.quoteService = quoteService;
         this.sessionService = sessionService;
         this.sessionRepository = sessionRepository;
@@ -90,14 +86,12 @@ public class DashboardApiController {
         User user = currentUserService.resolve(principal);
         DashboardModel.LiveState live = dashboardModel.computeLive(user);
         ContributionGraph graph = contributionService.contributionGraph(user);
-        GardenApiResponse.CatalogDto garden = GardenApiResponse.catalogOf(gardenService.view(user));
         List<QuoteDto> quotes = quoteService.randomList(QUOTE_ROTATION_MAX).stream()
                 .map(q -> new QuoteDto(q.getText(), q.getAuthor()))
                 .toList();
 
         return new DashboardResponse(
                 live.nickname(), live.loginId(), user.getPreviousLoginId(),
-                user.getProfileCharacterCode(),
                 live.remainingSeconds(), live.carriedDebtSeconds(),
                 live.todayGoalSeconds(), live.todayReadSeconds(), live.carryover(),
                 live.hasActiveSession(), live.activeStartedAt(),
@@ -107,7 +101,6 @@ public class DashboardApiController {
                 toOptions(live.wantToReadBooks()),
                 live.recentBookId(),
                 toGraphDto(graph),
-                garden,
                 quotes,
                 user.isEmailVerified(),
                 goalWaiverService.availableFor(user),
@@ -237,7 +230,6 @@ public class DashboardApiController {
              * <b>본인 응답에만</b> 싣는다 — 프로필·검색에 넣으면 "저 사람이 아이디를 바꿨구나"가 새어 나간다.
              */
             String previousLoginId,
-            String profileCharacterCode,
             long remainingSeconds,
             long carriedDebtSeconds,
             long todayGoalSeconds,
@@ -255,7 +247,6 @@ public class DashboardApiController {
             List<BookOption> wantToReadBooks,
             Long recentBookId,
             ContributionGraphDto graph,
-            GardenApiResponse.CatalogDto garden,
             List<QuoteDto> quotes,
             boolean emailVerified,
             /** 리워드 광고로 밀린 하루를 지울 수 있는지 — 미니앱 홈 버튼 노출 조건(웹에는 버튼이 없다). */
@@ -294,7 +285,7 @@ public class DashboardApiController {
     public record TagBookResponse(Long sessionId, String bookTitle) {}
 
     /**
-     * start 응답 — 라이브 부분집합(graph/garden/quote/emailVerified 제외). 잔디는 stop 때만 변함.
+     * start 응답 — 라이브 부분집합(graph/quote/emailVerified 제외). 잔디는 stop 때만 변함.
      *
      * @param debtWaiverAvailable 리워드 광고로 밀린 하루를 지울 수 있는지(미니앱 버튼 노출 조건).
      *                            start/stop/waive 응답에 함께 실려 버튼 노출·숨김이 재조회 없이 갱신된다

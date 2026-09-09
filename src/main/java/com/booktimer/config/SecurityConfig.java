@@ -151,7 +151,7 @@ public class SecurityConfig {
                         // ⚠️ content-hash 정적자산(spring.web.resources.chain): @{/pwa-install.js}·@{/manifest.json}는
                         // /pwa-install-<md5>.js · /manifest-<md5>.json 으로 렌더된다. 정확 매칭만 두면 해시 URL이 누락돼
                         // 미인증 페이지 로드 시 302→SavedRequest로 저장되고, 로그인 성공 후 그 자산으로 리다이렉트되는
-                        // 버그가 난다(캐시 빈 신규 세션에서만 재현 — E2E auth/garden 스펙이 회귀 가드). 와일드카드로 해시 변형까지 허용.
+                        // 버그가 난다(캐시 빈 신규 세션에서만 재현 — E2E auth 스펙이 회귀 가드). 와일드카드로 해시 변형까지 허용.
                         // /actuator/health/**: 전체 health에 더해 프로브 하위경로(readiness·liveness)도 공개한다.
                         // 리버스프록시(Caddy) blue-green 전환이 upstream 헬스체크로 readiness를 쓰는데, 여기가 막혀
                         // 302가 나가면 프록시가 앱을 영영 unhealthy로 보고 서비스 전체가 503이 된다.

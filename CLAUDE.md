@@ -385,7 +385,7 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
   - **이 컨테이너를 만드는 건 `bootRun`이지 `./gradlew test`가 아니다**(테스트는 H2 — 아래). bootRun이 워크트리별로 MySQL 컨테이너를 띄워 누적되니, **검증을 마치거나 주기적으로** `bash .claude/scripts/docker-cleanup.sh`(기본 Exited만, `--all`이면 Up 포함)로 정리한다 — `working_dir` 라벨로 BookTimer 소속만 지우고 타 프로젝트는 보호. 세션 종료 시엔 `SessionEnd` 훅이 기본 모드로 자동 정리한다(gap#3 자동배선). 멀티세션 동시 작업 시 정리 주의는 「🪢 다중 세션 → bootRun docker-compose 컨테이너」 절 참고.
 - 테스트 DB: 운영은 MySQL, **테스트는 H2 인메모리**(`src/test/resources/application.properties`) — Docker 없이 테스트 독립 실행. 테스트 시 docker-compose 자동 기동은 꺼짐(`spring.docker.compose.enabled=false`)
 - toolchain: Java 21 (로컬에 없어도 foojay-resolver 가 자동 다운로드 — 노트 N-002)
-- **프론트 번들 (정원 편집)**: `npm --prefix frontend run build` — `src/main/resources/static/garden/garden.js` 재생성. 정원 관련 TS 수정 후 `bootRun` 전에 반드시 재실행 (T-063). 산출물은 git add·commit까지 해야 반영.
+- **프론트 번들 (Vue 섬)**: `npm --prefix frontend run build` — `src/main/resources/static/<앱>/<앱>.js` 재생성. `frontend/` TS 수정 후 `bootRun` 전에 반드시 재실행 (T-063). 산출물은 git add·commit까지 해야 반영.
   **(훅 `require-bundle-build.ps1`이 하드 강제 — `frontend/**` 스테이징 커밋 전 재빌드·diff 검사. 10섬 전수 커버(CI의 garden-only 사각 보완). 우회: `SKIP_BUNDLE_CHECK` 토큰.)**
 
 ### 미니앱 개발 루프 — 기본은 브라우저 목 모드 (2026-08-12 실측 갱신)

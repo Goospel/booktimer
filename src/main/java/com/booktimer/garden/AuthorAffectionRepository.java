@@ -11,7 +11,7 @@ import java.util.Optional;
 /**
  * 작가 캐릭터 먹이주기 정(affection) 영속성.
  *
- * <p>SPEND 측 저장 — 먹인 횟수 조회·합산. EARN(달성일)은 {@link DailyQuotaCalculator}가 유도한다.
+ * <p>SPEND 측 저장 — 먹인 횟수 조회·합산. EARN(달성일)은 DailyQuotaCalculator가 유도한다.
  */
 public interface AuthorAffectionRepository extends JpaRepository<AuthorAffection, Long> {
 
