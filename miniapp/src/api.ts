@@ -1015,12 +1015,15 @@ export interface PersonalityMutation {
 }
 
 /**
- * 관문 사전 판정 — <b>부작용이 없는 유일한 성향 GET</b>이다. 웹이 쓰는 `GET /api/personality`는
- * 히스토리가 비면 첫 분석을 LLM으로 만들어 버려(=광고 없이 공짜 분석) 관문을 무력화한다.
+ * 관문 사전 판정 — 미니앱이 광고를 띄우기 <b>전에</b> 알아야 하는 둘(콜드스타트 여부·대표 보유 여부).
+ *
+ * <p>이게 따로 생긴 이유는 웹이 쓰는 `GET /api/personality`가 <b>당시엔</b> 히스토리가 비면 첫 분석을
+ * LLM으로 만들어 버려(=광고 없이 공짜 분석) 관문을 무력화했기 때문이다. 2026-09-08에 서버가 그
+ * 부트스트랩을 걷어 지금은 그 GET도 읽기 전용이지만, 응답 모양이 달라 이쪽을 계속 쓴다.
  */
 export const fetchPersonalityStatus = (): Promise<PersonalityStatus> => request('/api/personality/status');
 
-/** 광고 경로 전용 — 웹 `/refresh`(천장 3)가 아니라 `/ad-refresh`(천장 = 하루 총량)를 부른다. */
+/** 유일한 생성 경로 — 천장은 하루 총량이다(웹 전용 `/refresh`는 2026-09-08에 서버에서 사라졌다). */
 export const adRefreshPersonality = (): Promise<PersonalityMutation> =>
   request('/api/personality/ad-refresh', { method: 'POST' });
 

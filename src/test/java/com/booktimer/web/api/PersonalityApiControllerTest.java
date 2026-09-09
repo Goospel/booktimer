@@ -125,6 +125,10 @@ class PersonalityApiControllerTest {
         when(narrator.narrate(any())).thenReturn(
                 Optional.of(new PersonalityNarration("완독러.", List.of("완독러"))));
 
+        // GET은 2026-09-08부터 생성하지 않는다 — READY를 만들려면 광고 경로로 먼저 만들어 둔다.
+        mockMvc.perform(post("/api/personality/ad-refresh").with(user("papi-ready@booktimer.com")).with(csrf()))
+                .andExpect(status().isOk());
+
         var result = mockMvc.perform(get("/api/personality")
                         .accept(MediaType.APPLICATION_JSON)
                         .with(user("papi-ready@booktimer.com")))
@@ -171,6 +175,10 @@ class PersonalityApiControllerTest {
         when(narrator.narrate(any())).thenReturn(
                 Optional.of(new PersonalityNarration("서술.", List.of("태그"))));
 
+        // GET은 2026-09-08부터 생성하지 않는다 — READY를 만들려면 광고 경로로 먼저 만들어 둔다.
+        mockMvc.perform(post("/api/personality/ad-refresh").with(user("papi-ser@booktimer.com")).with(csrf()))
+                .andExpect(status().isOk());
+
         var result = mockMvc.perform(get("/api/personality")
                         .accept(MediaType.APPLICATION_JSON)
                         .with(user("papi-ser@booktimer.com")))
@@ -182,55 +190,25 @@ class PersonalityApiControllerTest {
         assertThat(body).contains("\"state\":\"READY\"");
     }
 
-    // ── POST /refresh ─────────────────────────────────────────────────────────
+    // ── POST /refresh 는 없어졌다 ────────────────────────────────────────────
+    //
+    // 2026-09-08: 웹 전용 생성 경로를 걷었다. 미니앱은 리워드 광고를 봐야 분석을 돌릴 수 있어 호출마다
+    // 수익이 붙는데, 웹엔 그 관문이 없어 비용만 나갔다(사용자 결정). 남은 생성 경로는 /ad-refresh 하나다.
 
     @Test
-    @DisplayName("POST /api/personality/refresh CSRF 없으면 403")
-    void refresh_noCsrf_forbidden() throws Exception {
-        register("papi-nocsrf@booktimer.com");
-        mockMvc.perform(post("/api/personality/refresh")
-                        .with(user("papi-nocsrf@booktimer.com")))
-                .andExpect(status().isForbidden());
-    }
-
-    @Test
-    @DisplayName("POST /api/personality/refresh 성공: 200 + view + refreshRemaining 반환")
-    void refresh_success_returnsUpdatedView() throws Exception {
-        User u = register("papi-ref@booktimer.com");
-        saveBooks(u, 5);
-        when(narrator.narrate(any())).thenReturn(
-                Optional.of(new PersonalityNarration("새 서술.", List.of("태그"))));
-
-        mockMvc.perform(post("/api/personality/refresh")
-                        .accept(MediaType.APPLICATION_JSON)
-                        .with(user("papi-ref@booktimer.com"))
-                        .with(csrf()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.view.state").isString())
-                .andExpect(jsonPath("$.refreshRemaining").isNumber())
-                .andExpect(jsonPath("$.refreshLimit").isNumber());
-    }
-
-    @Test
-    @DisplayName("POST /api/personality/refresh 한도 초과(3회 소진) → 429 + refreshRemaining=0 + 상태 불변")
-    void refresh_limitExceeded_429() throws Exception {
-        User u = register("papi-lim@booktimer.com");
+    @DisplayName("POST /api/personality/refresh 는 더 이상 없다 — 웹 생성 경로가 닫혔다")
+    void webRefreshEndpointIsGone() throws Exception {
+        User u = register("papi-gone@booktimer.com");
         saveBooks(u, 5);
         when(narrator.narrate(any())).thenReturn(
                 Optional.of(new PersonalityNarration("서술.", List.of("태그"))));
 
-        for (int i = 0; i < 3; i++) {
-            mockMvc.perform(post("/api/personality/refresh")
-                            .with(user("papi-lim@booktimer.com")).with(csrf()))
-                    .andExpect(status().isOk());
-        }
-
         mockMvc.perform(post("/api/personality/refresh")
-                        .accept(MediaType.APPLICATION_JSON)
-                        .with(user("papi-lim@booktimer.com")).with(csrf()))
-                .andExpect(status().is(429))
-                .andExpect(jsonPath("$.error").value("REFRESH_LIMIT_EXCEEDED"))
-                .andExpect(jsonPath("$.refreshRemaining").value(0));
+                        .with(user("papi-gone@booktimer.com")).with(csrf()))
+                .andExpect(status().isNotFound()); // 4xx 전체로 두면 「살아 있는데 다른 이유로 4xx」가 통과한다
+
+        // 그리고 정말로 안 불렀다 — 405를 주면서 뒤에서 부르는 일이 없어야 한다.
+        org.mockito.Mockito.verify(narrator, org.mockito.Mockito.never()).narrate(any());
     }
 
     // ── POST /select/{id} ─────────────────────────────────────────────────────
@@ -425,28 +403,27 @@ class PersonalityApiControllerTest {
     }
 
     @Test
-    @DisplayName("POST /ad-refresh: 웹 천장(3)을 다 쓴 뒤에도 200 — 광고 경로는 총량까지 이어진다")
+    @DisplayName("POST /ad-refresh: 옛 웹 천장(3)을 넘겨도 200 — 광고 경로는 총량까지 이어진다")
     void adRefresh_continuesAfterWebLimitExhausted() throws Exception {
         User u = register("papi-ad-after@booktimer.com");
         saveBooks(u, 5);
         when(narrator.narrate(any())).thenReturn(
                 Optional.of(new PersonalityNarration("서술.", List.of("태그"))));
 
+        // 옛 웹 천장(3)만큼 먼저 쓴다 — 그 숫자에서 막히지 않는다는 것이 이 테스트의 요점이다.
         for (int i = 0; i < User.DAILY_PERSONALITY_REFRESH_LIMIT; i++) {
-            mockMvc.perform(post("/api/personality/refresh")
+            mockMvc.perform(post("/api/personality/ad-refresh")
                             .with(user("papi-ad-after@booktimer.com")).with(csrf()))
                     .andExpect(status().isOk());
         }
-        mockMvc.perform(post("/api/personality/refresh")
-                        .with(user("papi-ad-after@booktimer.com")).with(csrf()))
-                .andExpect(status().is(429)); // 웹은 여기서 막힌다
 
         mockMvc.perform(post("/api/personality/ad-refresh")
                         .accept(MediaType.APPLICATION_JSON)
                         .with(user("papi-ad-after@booktimer.com")).with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.refreshLimit").value(User.DAILY_PERSONALITY_TOTAL_LIMIT))
-                .andExpect(jsonPath("$.refreshRemaining").value(User.DAILY_PERSONALITY_TOTAL_LIMIT - 4));
+                .andExpect(jsonPath("$.refreshRemaining")
+                        .value(User.DAILY_PERSONALITY_TOTAL_LIMIT - User.DAILY_PERSONALITY_REFRESH_LIMIT - 1));
     }
 
     @Test
@@ -477,7 +454,7 @@ class PersonalityApiControllerTest {
     }
 
     @Test
-    @DisplayName("POST /ad-refresh 2회가 웹 무광고 칸도 소진한다 — 카운터는 하나다(설계 §3.2 ①)")
+    @DisplayName("POST /ad-refresh 는 하나의 카운터를 쓴다 — 웹 칸과 따로 세지 않는다(설계 §3.2 ①)")
     void adRefresh_sharesCounterWithWebPath() throws Exception {
         User u = register("papi-ad-share@booktimer.com");
         saveBooks(u, 5);
@@ -490,20 +467,15 @@ class PersonalityApiControllerTest {
                     .andExpect(status().isOk());
         }
 
-        // 웹 GET이 주는 잔여는 천장 3 기준 — 광고 2회를 썼으니 1칸 남았다
+        // 카운터가 하나라는 증거 — 광고로 2회를 썼는데 GET이 주는 잔여(천장 3 기준)가 1로 줄어 있다.
+        // 웹 경로를 걷은 뒤(2026-09-08)에도 이 사실은 그대로다: 옛 웹 천장(3)은 화면 표시용으로 남았고,
+        // 실제 소비는 광고 경로 하나가 같은 카운터에서 깎는다.
         mockMvc.perform(get("/api/personality")
                         .accept(MediaType.APPLICATION_JSON)
                         .with(user("papi-ad-share@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.refreshRemaining").value(1))
                 .andExpect(jsonPath("$.refreshLimit").value(User.DAILY_PERSONALITY_REFRESH_LIMIT));
-
-        mockMvc.perform(post("/api/personality/refresh")
-                        .with(user("papi-ad-share@booktimer.com")).with(csrf()))
-                .andExpect(status().isOk()); // 마지막 웹 칸
-        mockMvc.perform(post("/api/personality/refresh")
-                        .with(user("papi-ad-share@booktimer.com")).with(csrf()))
-                .andExpect(status().is(429)); // 웹은 소진
     }
 
     // ── Bearer(미니앱 stateless 체인) 회귀 가드 — 설계 §2 실측을 테스트로 고정 ──

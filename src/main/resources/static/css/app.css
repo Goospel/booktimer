@@ -2417,28 +2417,10 @@ body.personality-page #personality-app { gap: 18px; }
 /* 강조 수치(완독·저자·장르 수, 남은 횟수) — 시안: 고운바탕 딥세이지 굵게 */
 .pbti-num { font-family: 'Gowun Batang', serif; color: var(--accent-hover); font-weight: 700; }
 
-/* 다시 분석 — ready(세이지 채움) / refreshing(비활성 옅음) / exhausted(회색 + 안내 박스) */
+/* 성향 안내 블록 — 「다시 분석」 버튼이 있던 자리(2026-09-08에 웹 생성을 걷으며 제거).
+   .pbti-exhausted는 원래 「한도 소진」 박스였는데 지금은 「앱에서 만들 수 있어요」 안내가 쓴다 —
+   이름이 낡았지만 스타일은 그대로 맞아 재사용한다. */
 .pbti-refresh { display: flex; flex-direction: column; gap: 9px; }
-.pbti-btn-refresh {
-    width: 100%;
-    background: var(--accent); color: var(--card-bg);
-    border: none; border-radius: 14px; padding: 15px;
-    font-family: inherit; font-size: 16px; font-weight: 600;
-    display: flex; align-items: center; justify-content: center; gap: 9px;
-    cursor: pointer; box-shadow: 0 6px 16px -8px rgba(79, 107, 76, .5);
-    transition: background .15s ease;
-}
-.pbti-btn-refresh:hover { background: var(--accent-hover); }
-.pbti-btn-ico { width: 18px; height: 18px; flex: 0 0 auto; }
-.pbti-btn-refresh:disabled { cursor: default; opacity: .8; box-shadow: none; }   /* refreshing(세이지 옅게) */
-.pbti-btn-refresh:disabled:hover { background: var(--accent); }
-.pbti-btn-refresh.is-exhausted {                                                /* 한도 소진(회색·금지) */
-    background: #ECE6D9; color: #A89F8C; border: 1px solid var(--border);
- border-image: var(--pencil-frame) 8 / 8px stretch;
-    box-shadow: none; cursor: not-allowed; opacity: 1;
-}
-.pbti-btn-refresh.is-exhausted:hover { background: #ECE6D9; }
-.pbti-refresh-note { text-align: center; font-size: 13px; color: var(--muted); margin: 0; }
 .pbti-exhausted {
     display: flex; gap: 9px; align-items: flex-start;
     background: var(--card-bg); border: 1px solid var(--border);
