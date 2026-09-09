@@ -347,7 +347,7 @@ class FlywayMigrationTest {
      * <p>순서는 purge()의 삭제 순서와 무관하다(여기선 집합만 본다). 항목을 늘릴 땐 purge()에도 같이 넣어야 한다.
      */
     private static final Set<String> TABLES_PURGE_CLEARS = Set.of(
-            "API_TOKEN", "AUTHOR_AFFECTION", "BLOCK", "BOOK", "EMAIL_TOKEN", "FEEDBACK", "FOLLOW",
+            "API_TOKEN", "BLOCK", "BOOK", "EMAIL_TOKEN", "FEEDBACK", "FOLLOW",
             "READING_GOAL_CHANGE", "READING_GOAL_WAIVER", "READING_PERSONALITY", "READING_SESSION",
             "READING_TIMER", "REPORT", "STORY", "STORY_LIKE", "STUDY_AI_USAGE", "STUDY_BOOK",
             "STUDY_DAILY_CHECK", "STUDY_PLAN_ITEM", "STUDY_RECALL", "STUDY_SESSION", "TOSS_LINK_CODE");
@@ -384,6 +384,32 @@ class FlywayMigrationTest {
                 .as("users를 FK 참조하는 테이블은 전부 AccountService.purge()가 지워야 한다 "
                         + "(빠지면 그 자식을 가진 사용자의 탈퇴가 FK 위반으로 실패한다)")
                 .containsExactlyInAnyOrderElementsOf(TABLES_PURGE_CLEARS);
+    }
+
+    /**
+     * 서재 캐릭터 기능(V45·V52·V54)이 <b>스키마에서</b> 사라졌음을 못 박는다 — V88의 계측기다.
+     *
+     * <p>엔티티·코드는 PR-1에서 이미 걷혔지만 {@code ddl-auto=validate}는 <b>여분의 테이블·컬럼을
+     * 통과시킨다</b>(매핑된 것이 DB에 있는가만 본다). 그래서 drop이 실제로 실행됐는지는 이 테스트처럼
+     * INFORMATION_SCHEMA를 직접 보는 단언만이 판정할 수 있다.
+     */
+    @Test
+    void libraryCharacterSchemaIsDropped() {
+        Set<String> tables = new HashSet<>(jdbcTemplate.queryForList(
+                "SELECT UPPER(TABLE_NAME) FROM INFORMATION_SCHEMA.TABLES", String.class));
+
+        assertThat(tables)
+                .as("V88이 서재 캐릭터 테이블을 drop 했어야 한다")
+                .doesNotContain("AUTHOR_AFFECTION", "AUTHOR_CHARACTER");
+
+        Integer profileCharacterCodeColumns = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE UPPER(TABLE_NAME) = 'USERS' AND UPPER(COLUMN_NAME) = 'PROFILE_CHARACTER_CODE'
+                """, Integer.class);
+
+        assertThat(profileCharacterCodeColumns)
+                .as("V88이 users.profile_character_code 컬럼을 drop 했어야 한다")
+                .isZero();
     }
 
     // ── 옛 핸들 영구 예약 (V69 uk_users_previous_login_id) ──
