@@ -83,6 +83,19 @@ class ClaudeStudyAssistantTest {
         assertThat(prompt).contains("본문만 있다");
     }
 
+    @Test
+    @DisplayName("recallUserPrompt: 마크다운 본문이 문법째로 실린다 — 편집기가 저장하는 형식 그대로 모델이 본다")
+    void recallUserPrompt_markdownBody_isCarriedVerbatim() {
+        // 2026-09-09 백지복습 본문이 평문 → 마크다운이 됐다(WYSIWYG 편집기). 서버는 문자열을 그대로
+        // 넘기는 것이 규칙이다 — 여기서 문법을 벗기거나 다듬기 시작하면 「무엇을 체크했나」·「무엇을
+        // 강조했나」가 모델에게서 사라진다.
+        String body = "# 함수\n\n- [x] 정의를 썼다\n- [ ] 호출 규약\n\n==중요== **핵심**";
+
+        String prompt = ClaudeStudyAssistant.recallUserPrompt(new RecallInput("정보처리기사", "3장", body));
+
+        assertThat(prompt).contains(body);
+    }
+
     // ── 정제 ──
 
     @Test
