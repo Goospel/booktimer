@@ -9,6 +9,7 @@ import com.booktimer.session.StudySessionService;
 import com.booktimer.user.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -114,6 +115,19 @@ public class StudyBookApiController {
     /** 한 권짜리 응답 — 누적 시간이 필요해 집계를 함께 묻는다(뮤테이션 직후에도 칩이 맞는다). */
     private StudyBookRow row(User user, StudyBook book) {
         return StudyBookRow.from(book, studySessionService.totalSecondsByBook(user));
+    }
+
+    /**
+     * 409의 <b>한국어 사유를 본문으로</b> 돌려준다 — 지금은 「필기가 있는 책은 못 뺀다」가 유일한 사용처다.
+     *
+     * <p>이게 없으면 전역 처리기가 {@code error.html}을 렌더해 <b>HTML 문서 전체</b>가 본문이 되고,
+     * 웹은 {@code <}로 시작하는 본문을 불신해 폴백 문구를, 미니앱은 「요청에 실패했어요 (409)」를 띄운다 —
+     * 「필기를 먼저 지우라」는 다음 행동이 사용자에게 영영 닿지 않는다({@link StudyRecallApiController}의
+     * 같은 핸들러와 한 몸이다).
+     */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<String> handleStatus(ResponseStatusException e) {
+        return ResponseEntity.status(e.getStatusCode()).body(e.getReason());
     }
 
     /** IDOR/없는 책 IAE → 404(존재 비노출). 독서 {@code BookApiController.mutate}와 같은 계약. */

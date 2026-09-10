@@ -17,6 +17,7 @@ import com.booktimer.session.StudySessionRepository;
 import com.booktimer.story.StoryLikeRepository;
 import com.booktimer.story.StoryRepository;
 import com.booktimer.study.StudyAiUsageRepository;
+import com.booktimer.study.StudyNoteRepository;
 import com.booktimer.study.StudyPlanItemRepository;
 import com.booktimer.study.StudyRecallRepository;
 import com.booktimer.timer.ReadingGoalChangeRepository;
@@ -47,6 +48,7 @@ public class AccountService {
     private final StudyDailyCheckRepository studyDailyCheckRepository;
     private final StudyPlanItemRepository studyPlanItemRepository;
     private final StudyRecallRepository studyRecallRepository;
+    private final StudyNoteRepository studyNoteRepository;
     private final StudyAiUsageRepository studyAiUsageRepository;
     private final FollowRepository followRepository;
     private final BlockRepository blockRepository;
@@ -72,6 +74,7 @@ public class AccountService {
                           StudyDailyCheckRepository studyDailyCheckRepository,
                           StudyPlanItemRepository studyPlanItemRepository,
                           StudyRecallRepository studyRecallRepository,
+                          StudyNoteRepository studyNoteRepository,
                           StudyAiUsageRepository studyAiUsageRepository,
                           FollowRepository followRepository,
                           BlockRepository blockRepository,
@@ -96,6 +99,7 @@ public class AccountService {
         this.studyDailyCheckRepository = studyDailyCheckRepository;
         this.studyPlanItemRepository = studyPlanItemRepository;
         this.studyRecallRepository = studyRecallRepository;
+        this.studyNoteRepository = studyNoteRepository;
         this.studyAiUsageRepository = studyAiUsageRepository;
         this.followRepository = followRepository;
         this.blockRepository = blockRepository;
@@ -258,6 +262,9 @@ public class AccountService {
         studyPlanItemRepository.deleteByUser(user);
         // FK: study_recall.user_id → users. study_book보다 앞이다 — recall.book_id가 study_book을 참조한다.
         studyRecallRepository.deleteByUser(user);
+        // FK: study_note.user_id → users. 역시 study_book보다 앞 — note.book_id는 **NOT NULL**이라
+        // 풀 수도 없다(책을 먼저 지우면 그 책에 필기를 건 사람은 탈퇴 자체가 제약 위반으로 실패한다).
+        studyNoteRepository.deleteByUser(user);
         studyAiUsageRepository.deleteByUser(user); // FK: study_ai_usage.user_id → users (AI 하루 상한 카운터)
         timerRepository.deleteByUser(user);
         goalChangeRepository.deleteByUser(user);   // FK: reading_goal_change.user_id → users (유저 삭제 전 정리)

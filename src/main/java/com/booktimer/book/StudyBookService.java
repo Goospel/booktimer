@@ -1,11 +1,14 @@
 package com.booktimer.book;
 
 import com.booktimer.session.StudySessionRepository;
+import com.booktimer.study.StudyNoteRepository;
 import com.booktimer.study.StudyPlanItemRepository;
 import com.booktimer.study.StudyRecallRepository;
 import com.booktimer.user.User;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Optional;
@@ -27,15 +30,18 @@ public class StudyBookService {
     private final StudySessionRepository studySessionRepository;
     private final StudyPlanItemRepository studyPlanItemRepository;
     private final StudyRecallRepository studyRecallRepository;
+    private final StudyNoteRepository studyNoteRepository;
 
     public StudyBookService(StudyBookRepository studyBookRepository,
                             StudySessionRepository studySessionRepository,
                             StudyPlanItemRepository studyPlanItemRepository,
-                            StudyRecallRepository studyRecallRepository) {
+                            StudyRecallRepository studyRecallRepository,
+                            StudyNoteRepository studyNoteRepository) {
         this.studyBookRepository = studyBookRepository;
         this.studySessionRepository = studySessionRepository;
         this.studyPlanItemRepository = studyPlanItemRepository;
         this.studyRecallRepository = studyRecallRepository;
+        this.studyNoteRepository = studyNoteRepository;
     }
 
     @Transactional(readOnly = true)
@@ -83,10 +89,23 @@ public class StudyBookService {
      * 공부 시간을 보존한다 — 책을 서재에서 빼도 그날 공부한 시간(당일 합·달력)은 남아야 하고,
      * {@code study_session.book_id} FK 때문에 이 정리 없이는 삭제가 제약 위반으로 실패한다.
      *
+     * <p><b>필기(study_note)만은 예외로 삭제를 막는다</b> — 그쪽은 {@code book_id}가 NOT NULL이라 풀
+     * 자리가 없고, 풀 수 있었더라도 책 없는 필기는 어느 목록에도 안 뜨고 백지복습 채점의 정답지에도 영영
+     * 안 들어가는 <b>조용한 누락</b>이 된다. 미니앱에서 지우면 경고 없이 사라진다는 점이 결정적이었다
+     * (미니앱은 필기의 존재를 모른다). 409 문구가 다음 행동을 말한다.
+     *
      * @throws IllegalArgumentException 내 책이 아니거나 존재하지 않는 경우
+     * @throws ResponseStatusException  409 — 그 책에 필기가 남아 있는 경우(아무것도 지우지 않는다)
      */
     public void delete(User user, Long bookId) {
         StudyBook book = ownedBook(user, bookId);
+        long notes = studyNoteRepository.countByBook(book);
+        if (notes > 0) {
+            // 참조를 풀기 **전에** 막는다 — 던지고 나서 롤백에 기대면, 이 메서드가 언젠가 자기 트랜잭션
+            // 밖에서 불릴 때 세션·일정만 풀린 반쪽 상태가 남는다.
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "필기 " + notes + "장이 있는 책이에요. 필기를 먼저 지운 뒤 서재에서 빼 주세요.");
+        }
         studySessionRepository.unlinkBook(book);
         // 일정도 같은 규칙으로 푼다(study_plan_item.book_id FK) — 「그날 뭘 하기로 했었나」는 남아야 하고,
         // subject 스냅샷이 제목을 대신 든다. 빠뜨리면 그 책을 쓴 사용자는 삭제 자체가 제약 위반으로 실패한다.

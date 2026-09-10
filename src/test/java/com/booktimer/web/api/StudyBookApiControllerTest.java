@@ -4,6 +4,8 @@ import com.booktimer.book.StudyBook;
 import com.booktimer.book.StudyBookRepository;
 import com.booktimer.session.StudySession;
 import com.booktimer.session.StudySessionRepository;
+import com.booktimer.study.StudyNote;
+import com.booktimer.study.StudyNoteRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
@@ -53,6 +55,7 @@ class StudyBookApiControllerTest {
     @Autowired UserRepository userRepository;
     @Autowired StudyBookRepository studyBookRepository;
     @Autowired StudySessionRepository studySessionRepository;
+    @Autowired StudyNoteRepository studyNoteRepository;
     @Autowired Clock clock;
 
     private User register(String email, String loginId) {
@@ -358,6 +361,52 @@ class StudyBookApiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.books", hasSize(1)))
                 .andExpect(jsonPath("$.books[0].totalSeconds").value(1800));
+    }
+
+    // ── 삭제 차단: 필기가 걸린 책 ────────────────────────────────────────────
+
+    /**
+     * <b>필기는 unlink가 아니라 409로 막는다</b> — {@code study_note.book_id}가 NOT NULL이라 풀 자리가
+     * 없고, 풀 수 있었더라도 책 없는 필기는 영영 채점에 안 들어가는 조용한 누락이 된다.
+     *
+     * <p>본문이 <b>평문</b>인지까지 재는 것이 이 테스트의 절반이다: {@code StudyBookApiController}에
+     * {@code ResponseStatusException} 핸들러가 없으면 전역 처리기가 {@code error.html}을 렌더해
+     * 본문이 {@code <!DOCTYPE html>…}로 시작하고, 화면(웹·미니앱)은 그걸 불신해 폴백 문구를 띄운다 —
+     * 「필기를 먼저 지우라」는 다음 행동이 사용자에게 영영 닿지 않는다. 상태 코드만 재면 통과한다.
+     */
+    @Test
+    @DisplayName("POST /{id}/delete: 필기가 걸린 책은 409 — 본문은 장 수를 담은 평문이고 책·필기 모두 남는다")
+    void deletingBook_withNotes_is409WithCount() throws Exception {
+        User u = register("sb-notes@a.com", "sbnotes");
+        addStudyBook("sbnotes", "필기가 걸린 책", "9791100000030");
+        Long id = onlyBookId(u);
+        StudyBook book = studyBookRepository.findById(id).orElseThrow();
+        studyNoteRepository.saveAndFlush(StudyNote.of(u, book, null, "첫 장"));
+        studyNoteRepository.saveAndFlush(StudyNote.of(u, book, null, "둘째 장"));
+
+        String body = mockMvc.perform(post("/api/study/books/" + id + "/delete")
+                        .with(user("sbnotes")).with(csrf()))
+                .andExpect(status().isConflict())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(body).isEqualTo("필기 2장이 있는 책이에요. 필기를 먼저 지운 뒤 서재에서 빼 주세요.");
+        assertThat(body).as("HTML 문서가 오면 화면이 이 문구를 못 읽는다").doesNotStartWith("<");
+        assertThat(studyBookRepository.findById(id)).isPresent();
+        assertThat(studyNoteRepository.count()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("POST /{id}/delete: 필기가 없는 책은 그대로 지워진다(차단이 전부를 막지 않는다)")
+    void deletingBook_withoutNotes_stillWorks() throws Exception {
+        User u = register("sb-nonotes@a.com", "sbnonotes");
+        addStudyBook("sbnonotes", "필기 없는 책", "9791100000031");
+        Long id = onlyBookId(u);
+
+        mockMvc.perform(post("/api/study/books/" + id + "/delete").with(user("sbnonotes")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deleted").value(true));
+
+        assertThat(studyBookRepository.findById(id)).isEmpty();
     }
 
     // ── 헬퍼 ────────────────────────────────────────────────────────────────

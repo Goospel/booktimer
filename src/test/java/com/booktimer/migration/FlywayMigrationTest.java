@@ -350,7 +350,8 @@ class FlywayMigrationTest {
             "API_TOKEN", "BLOCK", "BOOK", "EMAIL_TOKEN", "FEEDBACK", "FOLLOW",
             "READING_GOAL_CHANGE", "READING_GOAL_WAIVER", "READING_PERSONALITY", "READING_SESSION",
             "READING_TIMER", "REPORT", "STORY", "STORY_LIKE", "STUDY_AI_USAGE", "STUDY_BOOK",
-            "STUDY_DAILY_CHECK", "STUDY_PLAN_ITEM", "STUDY_RECALL", "STUDY_SESSION", "TOSS_LINK_CODE");
+            "STUDY_DAILY_CHECK", "STUDY_NOTE", "STUDY_PLAN_ITEM", "STUDY_RECALL", "STUDY_SESSION",
+            "TOSS_LINK_CODE");
 
     /**
      * <b>users를 FK 참조하는 테이블 집합 == purge()가 지우는 집합</b>을 못 박는다.

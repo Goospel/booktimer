@@ -4299,6 +4299,44 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
 - ⏸ **한글 IME 조합 중 입력은 미검증**(ABANDON: U-1) — 어느 브라우저 도구도 OS IME를 구동하지 못한다.
       사용자가 30초만 쳐 보면 닫히는 항목이다(`- 가나다`를 조합해 입력 → 자모 잔여·중복 없이 들어가는지).
 
+### 공부 필기(실시간 노트) — 책별 자유 다장 · 자동저장 (진행 중 · PR-1 완료 ✅ 2026-09-10)
+> 설계 `claude-docs/plans/2026-09-10-study-notes.md`(gitignore). 공부 중 책을 보며 쓰는 필기를 원장으로 두고,
+> 백지복습 분석의 구멍 판정이 「범위」 추측이 아니라 **필기 대조**가 되게 한다. PR 3개(서버 → 웹 → 채점 연동).
+>
+> 사용자 확정 3가지: 필기는 **책 필수**(NOT NULL) · **자유 다장**(하루 한 장 제약 없음 — 백지복습의
+> `UNIQUE(user, recall_date)`는 그대로) · 자동저장이 전제라 갱신은 **revision 대조**(마지막 쓰기 승리 금지).
+> 미니앱은 범위 밖이다(웹 전용) — 단 책 삭제 409 문구는 미니앱 서재에도 그대로 뜬다.
+
+- [x] **PR-1 서버 (2026-09-10)** — `V89__study_note`(책 NOT NULL · `revision int`) · `StudyNote`/`StudyNoteRepository`/
+      `StudyNoteService`/`StudyNoteApiController` · 책 삭제 409 차단 · `AccountService.purge` + `FlywayMigrationTest`.
+      문은 POST 전용(레포 규약): `GET /api/study/notes?bookId=` · `GET·POST /api/study/notes/{id}` ·
+      `POST /api/study/notes` · `POST /api/study/notes/{id}/delete`.
+- ⚠️ **책 삭제는 unlink가 아니라 409로 막는다** — 세션·일정·백지복습은 `book_id = null`로 푸는데(V82·V83·V85)
+      필기만 다르다. 책이 정리 축이자 채점 기준의 연결고리라 **풀린 필기는 어느 목록에도 안 뜨고 영영 채점에
+      안 들어간다**(조용한 누락). 결정적이었던 것은 미니앱이다 — 거기서 책을 지우면 필기의 존재를 모르는 채
+      경고 없이 사라진다. 그래서 `StudyBookService.delete`가 `countByBook > 0`이면 409를 던지고,
+      `StudyBookApiController`에 **평문 핸들러**(`ResponseStatusException` → `reason`)를 새로 뒀다.
+- 📍 **그 평문 핸들러가 없으면 상태 코드는 그대로 409인데 본문만 무너진다** — 전역 처리기가 `error.html`을
+      렌더해 본문이 `<!DOCTYPE html>…`이 되고, 웹은 `<`로 시작하는 본문을 불신해 폴백 문구를, 미니앱은
+      「요청에 실패했어요 (409)」를 띄운다. 「필기를 먼저 지우라」는 **다음 행동이 사용자에게 영영 안 닿는다**.
+      돌연변이로 실측했다(핸들러를 떼자 상태 단언은 통과하고 본문 단언만 죽었다) — **상태 코드만 재는
+      테스트였으면 이 자리는 무계측이었다**.
+- [x] **낙관적 판 번호는 JPA `@Version`이 아니라 손으로 든다** — 잡아야 하는 것은 「클라가 본 판」과의
+      어긋남(다른 탭이 먼저 저장했다)이지 한 트랜잭션 안의 경합이 아니다. 대조와 증가를 `StudyNote.edit`
+      **한 메서드**에 묶어 「비교를 잊은 새 호출부」가 생길 자리를 없앴다.
+- 📍 **검증**: RED → GREEN. `FlywayMigrationTest`는 마이그레이션만 올린 상태에서 **먼저 빨간불을 봤다**
+      (`unexpected: ["STUDY_NOTE"]` — FK는 생겼는데 purge가 안 지운다). 새 테스트 14건(API 11 · 탈퇴 연쇄 1 ·
+      책 삭제 2) + `FlywayMigrationTest` 갱신 1, 돌연변이 7종(revision 대조 제거 · 목록 정렬 뒤집기 ·
+      소유자 조건 제거 · 책 필수 400 가드 제거 · 책 삭제 409 가드 제거 · 평문 핸들러 제거 · purge 한 줄 제거)이
+      전부 겨눈 테스트에 사살됐다.
+- 🔜 **PR-2 웹 필기 탭** — `DayPanel`에 [필기]/[백지노트] 탭 · `NotesPanel.vue`(자동저장 상태기계) ·
+      `notes.ts`(순수: `noteLabel`·`nextSaveState`) · `RecallEditor` 재사용(Tiptap 복사본 0) · 번들 재빌드.
+- ⬜ **PR-3 채점 연동** — `NoteReference`(최근순 24,000자 = 8000×3, **장 단위** 자르기) · `GET /api/study/notes/reference` ·
+      `ANALYZE_SYSTEM` 개정 + user 메시지 **블록 3개**(라벨 위조가 블록 경계를 못 넘게) · `RecallPanel`에
+      「채점 기준으로 들어가는 필기」 카드(상한에 걸려 빠진 장을 화면에 드러낸다 — 조용한 누락 금지).
+- ⏸ **비목표(YAGNI)** — 필기 사진 전사 · 다른 책으로 옮기기 · 검색·태그·날짜 축 · 목록 페이징 ·
+      분석 시점 정답지 스냅샷 · 커닝 방지 잠금. 한 책에 수백 장을 넘기는 날이 오면 `Top500`부터 넣는다.
+
 ### 미니앱 디자인 개선 핸드오프 — 「또렷한 연필」 + UX 수정 2건 (완료 ✅ 2026-08-24 — 배포 업로드까지)
 > 클로드 디자인 핸드오프(`private-docs/standardHTML/design_handoff_miniapp_ux/`)를 세 덩어리로 나눠 받는다.
 > 시안 캔버스는 턴2 = 5개 화면 전체 시안 · 턴3 = UX 감사 6건 · 턴4 = 이번 구현 대상(4a·4b·4c).
