@@ -139,7 +139,9 @@ describe('statusBadge — 상태배지 색 매핑(시안 STATUS)', () => {
     });
 
     test('읽고 싶음 → 베이지', () => {
-        expect(statusBadge('WANT_TO_READ')).toEqual({ bg: 'var(--warn-bg)', fg: 'var(--warn-fg)' });
+        // `--warn-bg-4`는 설정 배너(`--warn-bg`)와 **다른 라이트 값**이다(#F0E8DB vs #F6ECD9).
+        // 근접값이라 한 토큰으로 합칠 뻔했으나, 라이트 픽셀을 origin/main 그대로 두기로 해서 갈랐다.
+        expect(statusBadge('WANT_TO_READ')).toEqual({ bg: 'var(--warn-bg-4)', fg: 'var(--warn-fg)' });
     });
 
     test('모든 상태가 토큰 참조다 — hex가 하나라도 섞이면 그 배지만 다크에서 라이트로 남는다', () => {

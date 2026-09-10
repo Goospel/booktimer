@@ -73,8 +73,8 @@ function declaration(selector: string, property: string): string | null {
  * 그래서 「0이 아니다」로는 부족하고 지금 세는 수를 바닥으로 깐다. 토큰을 정말로 줄일 일이 생기면
  * 이 숫자도 <b>같이 내린다</b> — 조용히 줄어드는 것만 막자는 것이지 못 줄이게 하려는 게 아니다.
  */
-const LIGHT_FLOOR = 38;
-const STUDY_FLOOR = 10;
+const LIGHT_FLOOR = 119;
+const STUDY_FLOOR = 15;
 
 describe('다크 토큰 짝 맞춤', () => {
     const light = colorTokens(LIGHT_SELECTOR);

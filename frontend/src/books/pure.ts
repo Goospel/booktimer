@@ -89,10 +89,10 @@ export interface StatusBadge {
 const STATUS_BADGE: Record<string, StatusBadge> = {
     READING: { bg: 'var(--sage-soft)', fg: 'var(--accent-hover)' },  // 읽는 중 — 세이지
     FINISHED: { bg: 'var(--ok-soft)', fg: 'var(--ok)' },             // 완독 — 선명한 초록
-    WANT_TO_READ: { bg: 'var(--warn-bg)', fg: 'var(--warn-fg)' },    // 읽고 싶음 — 베이지
+    WANT_TO_READ: { bg: 'var(--warn-bg-4)', fg: 'var(--warn-fg)' },    // 읽고 싶음 — 베이지
 };
 
-export const STATUS_BADGE_FALLBACK: StatusBadge = { bg: 'var(--line-1)', fg: 'var(--muted)' };
+export const STATUS_BADGE_FALLBACK: StatusBadge = { bg: 'var(--line-1-4)', fg: 'var(--muted)' };
 
 export function statusBadge(status: string): StatusBadge {
     return STATUS_BADGE[status] ?? STATUS_BADGE_FALLBACK;
