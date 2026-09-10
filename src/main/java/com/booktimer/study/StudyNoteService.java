@@ -37,6 +37,18 @@ public class StudyNoteService {
         return noteRepository.findByUserAndBookOrderByUpdatedAtDescIdDesc(user, book);
     }
 
+    /**
+     * 백지복습 채점의 정답지 — 그 책의 필기를 최근순으로 {@link NoteReference#MAX_CHARS}까지.
+     *
+     * <p>분석({@code StudyRecallService.analyze})과 화면 카드({@code GET /api/study/notes/reference})가
+     * <b>같은 이 문</b>을 지난다. 두 길이 각자 고르면 화면이 「들어간다」고 보여준 장과 모델이 실제로 본
+     * 장이 어긋나고, 그 어긋남은 사용자에게 보이지 않는다.
+     */
+    @Transactional(readOnly = true)
+    public NoteReference reference(User user, StudyBook book) {
+        return NoteReference.select(list(user, book), NoteReference.MAX_CHARS);
+    }
+
     /** 내 필기 한 장 — 남의 것이면 빈 값이다(호출부가 404로 옮긴다). */
     @Transactional(readOnly = true)
     public Optional<StudyNote> find(User user, Long id) {

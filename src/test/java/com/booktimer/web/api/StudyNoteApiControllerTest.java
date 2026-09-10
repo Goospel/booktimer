@@ -448,4 +448,97 @@ class StudyNoteApiControllerTest {
 
         assertThat(noteRepository.findById(id)).isEmpty();
     }
+
+    // ── ⑧ 채점 기준 (PR-3) ───────────────────────────────────────────────────
+    //
+    // 이 문의 존재 이유는 <b>조용한 누락 금지</b>다. 상한에 걸려 빠진 장을 화면이 말하려면 그 수를
+    // 서버가 알려 줘야 한다 — `excluded`가 늘 비어 있는 구현이면 사용자는 자기 필기가 채점에서
+    // 빠진 것을 영영 모른다.
+
+    @Test
+    @DisplayName("채점 기준: 상한(24,000자)을 넘긴 장은 excluded로 갈린다 — 장 단위로")
+    void reference_reportsIncludedAndExcluded() throws Exception {
+        User user = register("noteref");
+        Long bookId = book(user, "정보처리기사 실기").getId();
+        // 최근순이라 <b>마지막에 만든 장이 맨 앞</b>이다. 오래된 「여백」이 상한에 밀려 빠지는 것이
+        // 이 문의 관심사 — 조용히 빠지면 사용자가 모른다.
+        String full = "ㄱ".repeat(8000);
+        createNote("noteref", bookId, "여백", "가장 오래된 짧은 장");
+        createNote("noteref", bookId, "1장", full);
+        createNote("noteref", bookId, "2장", full);
+        createNote("noteref", bookId, "3장", full);
+
+        mockMvc.perform(get("/api/study/notes/reference").param("bookId", String.valueOf(bookId))
+                        .with(user("noteref")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.included", hasSize(3)))
+                .andExpect(jsonPath("$.excluded", hasSize(1)))
+                .andExpect(jsonPath("$.included[0].title").value("3장"))
+                .andExpect(jsonPath("$.excluded[0].title").value("여백"))
+                .andExpect(jsonPath("$.chars").value(24_000))
+                .andExpect(jsonPath("$.limit").value(24_000));
+    }
+
+    @Test
+    @DisplayName("채점 기준: 필기가 없으면 빈 목록 — 카드가 「필기 없음」을 말할 근거")
+    void reference_withoutNotes_isEmpty() throws Exception {
+        User user = register("noterefempty");
+        Long bookId = book(user, "책").getId();
+
+        mockMvc.perform(get("/api/study/notes/reference").param("bookId", String.valueOf(bookId))
+                        .with(user("noterefempty")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.included", hasSize(0)))
+                .andExpect(jsonPath("$.excluded", hasSize(0)))
+                .andExpect(jsonPath("$.chars").value(0));
+    }
+
+    @Test
+    @DisplayName("채점 기준: 남의 bookId는 404 — 남의 필기 제목이 카드로 새지 않는다")
+    void reference_withOthersBook_is404() throws Exception {
+        User owner = register("noterefowner");
+        register("noterefthief");
+        Long bookId = book(owner, "주인의 책").getId();
+        createNote("noterefowner", bookId, "주인의 필기", "본문");
+
+        mockMvc.perform(get("/api/study/notes/reference").param("bookId", String.valueOf(bookId))
+                        .with(user("noterefthief")))
+                .andExpect(status().isNotFound());
+    }
+
+    // ── ⑨ 목록 라벨의 근거 (PR-3) ────────────────────────────────────────────
+
+    /**
+     * 제목을 안 적는 것이 이 기능의 <b>기본 사용법</b>이다(쓰는 대로 저장되는 필기라 제목 칸에 손이
+     * 안 간다). 그래서 목록 응답에 본문 실마리가 없으면 화면은 거의 모든 행을 「제목 없음」으로 그린다 —
+     * 설계 §3.7이 라벨을 {@code noteLabel(title, body)}로 뒀는데 §3.4의 목록엔 body가 없던 어긋남의
+     * 근본 처방이다(§3.6의 「본문 없는 목록」은 그대로 — 첫 줄만 싣는다).
+     */
+    @Test
+    @DisplayName("목록: 본문 첫 줄이 preview로 실린다 — 제목 없는 장이 「제목 없음」으로 뭉개지지 않게")
+    void list_carriesPreviewOfFirstLine() throws Exception {
+        User user = register("notepreview");
+        Long bookId = book(user, "책").getId();
+        createNote("notepreview", bookId, null, "# 미분계수\\n- 접선의 기울기");
+
+        mockMvc.perform(get("/api/study/notes").param("bookId", String.valueOf(bookId))
+                        .with(user("notepreview")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.notes[0].preview").value("# 미분계수"))
+                // 목록은 여전히 본문을 안 싣는다 — preview는 첫 줄뿐이다.
+                .andExpect(jsonPath("$.notes[0].body").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("목록: 빈 줄로 시작하는 본문은 첫 <b>비공백</b> 줄이 preview다")
+    void list_previewSkipsBlankLines() throws Exception {
+        User user = register("notepreviewblank");
+        Long bookId = book(user, "책").getId();
+        createNote("notepreviewblank", bookId, null, "\\n   \\n두 번째 줄이 첫 글이다");
+
+        mockMvc.perform(get("/api/study/notes").param("bookId", String.valueOf(bookId))
+                        .with(user("notepreviewblank")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.notes[0].preview").value("두 번째 줄이 첫 글이다"));
+    }
 }

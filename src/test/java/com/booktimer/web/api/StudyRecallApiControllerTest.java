@@ -1,10 +1,14 @@
 package com.booktimer.web.api;
 
+import com.booktimer.book.StudyBook;
+import com.booktimer.book.StudyBookRepository;
 import com.booktimer.study.ClaudeStudyAssistant;
 import com.booktimer.study.StudyAi;
 import com.booktimer.study.StudyAiUsage;
 import com.booktimer.study.StudyAiDailyTotalRepository;
 import com.booktimer.study.StudyAiUsageRepository;
+import com.booktimer.study.StudyNoteRepository;
+import com.booktimer.study.StudyNoteService;
 import com.booktimer.user.Role;
 import com.booktimer.user.StudyAiAccess;
 import com.booktimer.user.User;
@@ -19,6 +23,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -67,8 +72,17 @@ class StudyRecallApiControllerTest {
     @Autowired StudyAiDailyTotalRepository dailyTotalRepository;
     @Autowired Clock clock;
 
+    @Autowired StudyBookRepository studyBookRepository;
+    @Autowired StudyNoteService noteService;
+
     /** 어댑터는 늘 목이다 — 네트워크 없이 「불렸나/안 불렸나」를 재는 것이 이 파일의 요점이다. */
     @MockitoBean ClaudeStudyAssistant assistant;
+
+    /**
+     * 필기 리포지터리만 <b>스파이</b>다(목이 아니다) — 평소엔 진짜로 동작해 정답지가 실제로 조립되고,
+     * 「조회 실패」 한 테스트에서만 터뜨려 <b>상한 선점보다 앞인가</b>를 잰다.
+     */
+    @MockitoSpyBean StudyNoteRepository noteRepository;
 
     private User register(String loginId) {
         registrationService.register(loginId + "@booktimer.com", "pw1234qwer!!", loginId,
@@ -720,5 +734,110 @@ class StudyRecallApiControllerTest {
 
     private static MockMultipartFile jpeg(String name, int size) {
         return new MockMultipartFile(name, "memo.jpg", "image/jpeg", new byte[size]);
+    }
+
+    // ── 채점 연동 (PR-3): 그 책의 필기가 정답지로 어댑터까지 간다 ─────────────────
+    //
+    // 이 기능 전체의 목적이 여기서 완성된다 — 구멍 판정이 「범위」 추측에서 <b>필기 대조</b>로 바뀐다.
+    // 그래서 재는 것은 「분석이 200이더라」가 아니라 <b>어댑터가 실제로 무엇을 받았는가</b>다(captor).
+    // 200만 보는 테스트는 정답지를 통째로 빠뜨린 구현도 통과시킨다.
+
+    private StudyBook bookOf(String loginId, String title) {
+        User user = userRepository.findByLoginId(loginId).orElseThrow();
+        return studyBookRepository.save(StudyBook.register(user, title, "저자", null, null, null, null));
+    }
+
+    private void writeNote(String loginId, StudyBook book, String title, String body) {
+        noteService.create(userRepository.findByLoginId(loginId).orElseThrow(), book, title, body);
+    }
+
+    private String capturedNotes(String loginId) throws Exception {
+        mockMvc.perform(post(analyzeUrl()).with(user(loginId)).with(csrf()))
+                .andExpect(status().isOk());
+        ArgumentCaptor<ClaudeStudyAssistant.RecallInput> captor =
+                ArgumentCaptor.forClass(ClaudeStudyAssistant.RecallInput.class);
+        org.mockito.Mockito.verify(assistant).analyzeRecall(captor.capture());
+        return captor.getValue().notes();
+    }
+
+    @Test
+    @DisplayName("분석: 그 책의 필기가 정답지로 어댑터에 실린다 — 제목·본문이 헤더와 함께")
+    void analyze_withBook_passesTheBooksNotesAsReference() throws Exception {
+        givenAnalysis(new ClaudeStudyAssistant.RecallAnalysis("정리", List.of(), List.of("문제")));
+        registerWith("annotes", StudyAiAccess.APPROVED);
+        StudyBook book = bookOf("annotes", "정보처리기사 실기");
+        writeNote("annotes", book, "3장 함수", "매개변수는 값 호출과 참조 호출로 갈린다");
+        saveRecallWithBook("annotes", book, "함수는 입력을 받아 출력을 낸다");
+
+        assertThat(capturedNotes("annotes"))
+                .contains("### 필기: 3장 함수")
+                .contains("매개변수는 값 호출과 참조 호출로 갈린다");
+    }
+
+    @Test
+    @DisplayName("분석: 책 없이 쓴 글은 정답지가 null — 필기를 걸 연결고리가 없다")
+    void analyze_withoutBook_passesNullNotes() throws Exception {
+        givenAnalysis(new ClaudeStudyAssistant.RecallAnalysis("정리", List.of(), List.of("문제")));
+        registerWith("annobook", StudyAiAccess.APPROVED);
+        StudyBook book = bookOf("annobook", "정보처리기사 실기");
+        writeNote("annobook", book, "3장 함수", "이 필기는 채점에 들어가면 안 된다");
+        saveRecall("annobook", "책 없이 쓴 글"); // bookId 없이 저장
+
+        assertThat(capturedNotes("annobook")).isNull();
+    }
+
+    @Test
+    @DisplayName("분석: 책은 골랐는데 필기가 0장이면 정답지는 null — 빈 문자열이 아니다(「없음」을 말해야 한다)")
+    void analyze_withBookButNoNotes_passesNullNotes() throws Exception {
+        givenAnalysis(new ClaudeStudyAssistant.RecallAnalysis("정리", List.of(), List.of("문제")));
+        registerWith("annonote", StudyAiAccess.APPROVED);
+        saveRecallWithBook("annonote", bookOf("annonote", "정보처리기사 실기"), "오늘 배운 것");
+
+        assertThat(capturedNotes("annonote")).isNull();
+    }
+
+    @Test
+    @DisplayName("분석: 다른 책의 필기는 안 들어간다 — 정답지는 그 책의 것뿐이다")
+    void analyze_notesOfAnotherBook_areNotIncluded() throws Exception {
+        givenAnalysis(new ClaudeStudyAssistant.RecallAnalysis("정리", List.of(), List.of("문제")));
+        registerWith("anotherbook", StudyAiAccess.APPROVED);
+        StudyBook studied = bookOf("anotherbook", "정보처리기사 실기");
+        writeNote("anotherbook", bookOf("anotherbook", "토익 보카"), "Day 1", "abandon 은 버리다");
+        saveRecallWithBook("anotherbook", studied, "오늘 배운 것");
+
+        assertThat(capturedNotes("anotherbook")).isNull();
+    }
+
+    /**
+     * <b>정답지 조회는 상한 선점보다 앞이다.</b> 순서를 뒤집으면 필기 조회가 실패한 사용자는 아무 분석도
+     * 못 받은 채 오늘 몫을 잃는다 — 환불 경로는 <b>어댑터 실패</b>에만 붙어 있어 여기까진 닿지 않는다.
+     */
+    @Test
+    @DisplayName("분석: 정답지 조회가 실패해도 오늘 몫은 안 깎인다 — 조회가 상한 선점보다 앞이라는 계측기")
+    void analyze_whenNoteLookupFails_doesNotSpendTodaysShare() throws Exception {
+        givenAnalysis(new ClaudeStudyAssistant.RecallAnalysis("정리", List.of(), List.of("문제")));
+        registerWith("annotefail", StudyAiAccess.APPROVED);
+        saveRecallWithBook("annotefail", bookOf("annotefail", "정보처리기사 실기"), "오늘 배운 것");
+        org.mockito.BDDMockito.willThrow(new IllegalStateException("필기 조회 장애"))
+                .given(noteRepository).findByUserAndBookOrderByUpdatedAtDescIdDesc(any(), any());
+
+        mockMvc.perform(post(analyzeUrl()).with(user("annotefail")).with(csrf()))
+                .andExpect(status().isInternalServerError());
+
+        assertThat(usageOf("annotefail"))
+                .as("조회가 상한 선점 뒤에 있으면 여기 행이 남는다 — 환불도 안 된다(어댑터 실패가 아니므로)")
+                .isEmpty();
+        assertThat(dailyTotalRepository.findByUsageDate(LocalDate.now(java.time.ZoneOffset.UTC)))
+                .as("전역 몫도 마찬가지 — 실패한 요청이 서비스 전체 예산을 먹으면 안 된다")
+                .isEmpty();
+    }
+
+    private void saveRecallWithBook(String loginId, StudyBook book, String body) throws Exception {
+        mockMvc.perform(post("/api/study/recall").with(user(loginId)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"date":"%s","bookId":%d,"subject":"정보처리기사","scope":"3장 함수","body":"%s","source":"TEXT"}
+                                """.formatted(today(), book.getId(), body)))
+                .andExpect(status().isOk());
     }
 }

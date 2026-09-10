@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -65,17 +66,20 @@ public class StudyRecallService {
     private final StudyAiAccessService accessService;
     private final StudyAiUsageService usageService;
     private final ClaudeStudyAssistant assistant;
+    private final StudyNoteService noteService;
     private final Clock clock;
 
     public StudyRecallService(StudyRecallRepository recallRepository,
                               StudyAiAccessService accessService,
                               StudyAiUsageService usageService,
                               ClaudeStudyAssistant assistant,
+                              StudyNoteService noteService,
                               Clock clock) {
         this.recallRepository = recallRepository;
         this.accessService = accessService;
         this.usageService = usageService;
         this.assistant = assistant;
+        this.noteService = noteService;
         this.clock = clock;
     }
 
@@ -135,6 +139,11 @@ public class StudyRecallService {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI 기능이 꺼져 있어요");
         }
 
+        // ⑤보다 **앞**: 정답지(그 책의 필기)를 먼저 모은다. 상한 선점 뒤로 옮기면, 필기 조회가 실패한
+        // 사용자는 분석을 못 받은 채 오늘 몫을 잃는다 — 환불 경로는 어댑터 실패에만 붙어 있어 여기까지
+        // 닿지 않는다. 「사용자 몫을 깎기 전에 깎을 값어치가 있는지 확정한다」는 순서 규율이다.
+        String notes = notesFor(user, recall);
+
         // 시각을 한 번만 읽는다 — 사용자 몫(유저 tz 날짜)과 전역 몫(UTC 날짜)이 같은 순간을 봐야 한다.
         Instant now = clock.instant();
         // switch **식**이라 컴파일러가 망라성을 강제한다 — switch 문으로 두면 Grant에 값이
@@ -150,7 +159,7 @@ public class StudyRecallService {
         assert granted;
 
         AiResult<RecallAnalysis> result = assistant.analyzeRecall(
-                new RecallInput(recall.getSubject(), recall.getScopeText(), recall.getBody()));
+                new RecallInput(recall.getSubject(), recall.getScopeText(), recall.getBody(), notes));
         if (!result.ok()) {
             usageService.refundBoth(user, now, Kind.ANALYZE);
             throw failure(result.failure());
@@ -165,6 +174,25 @@ public class StudyRecallService {
         recall.applyAnalysis(analysis.get().summary(), encode(analysis.get().holes()),
                 encode(analysis.get().questions()), assistant.model(), clock.instant());
         return recallRepository.save(recall);
+    }
+
+    /**
+     * 채점 기준이 되는 정답지 — <b>그 글에 걸린 책의 필기</b>를 최근순으로 상한까지.
+     *
+     * <p>이 값이 있고 없고가 구멍 판정의 성격을 바꾼다: 없으면 「범위」 한 줄로 추측하고, 있으면
+     * <b>필기와 대조</b>한다. 그래서 없을 때 빈 문자열이 아니라 {@code null}을 주는 것이 계약이다 —
+     * 어댑터가 「필기 없음」을 모델에게 <b>말해야</b> 하기 때문이다(빈 블록은 아무 말도 안 하는 것이고,
+     * 그러면 모델이 울타리를 제 마음대로 넓힌다).
+     *
+     * <p>날짜 헤더는 <b>유저 타임존</b>으로 읽는다 — UTC로 찍으면 아침에 적은 필기가 전날로 보인다.
+     */
+    private String notesFor(User user, StudyRecall recall) {
+        StudyBook book = recall.getBook();
+        if (book == null) {
+            return null;
+        }
+        String text = noteService.reference(user, book).text(ZoneId.of(user.getTimezone()));
+        return text.isBlank() ? null : text;
     }
 
     /**

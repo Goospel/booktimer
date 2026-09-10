@@ -7,7 +7,7 @@ import {
 } from './api';
 import RecallEditor from './editor/RecallEditor.vue';
 import { bodyBudget } from './editor/pure';
-import { nextSaveState, noteDateLabel, noteLabel, savedAtLabel, type SaveState } from './notes';
+import { nextSaveState, noteDateLabel, noteLabel, previewOf, savedAtLabel, type SaveState } from './notes';
 
 /**
  * 공부 필기 — 책을 보며 그때그때 적는 글. 백지복습(안 보고 쓰기)과 짝이고, 나중에 그 글을 채점하는
@@ -188,7 +188,11 @@ async function sendOnce(keepalive: boolean): Promise<void> {
  */
 function upsertRow(saved: Note): void {
     const row: NoteRow = {
-        id: saved.id, title: saved.title, chars: saved.body.length, updatedAt: saved.updatedAt,
+        id: saved.id, title: saved.title, chars: saved.body.length,
+        // 서버가 목록에서 주는 것과 <b>같은 규칙</b>으로 만든다(첫 비공백 줄) — 여기를 비우면 방금
+        // 저장한 장이 다른 장으로 갈아탄 순간 「제목 없음」이 된다.
+        preview: previewOf(saved.body),
+        updatedAt: saved.updatedAt,
     };
     notes.value = [row, ...notes.value.filter((n) => n.id !== saved.id)];
 }
@@ -266,11 +270,10 @@ async function remove(): Promise<void> {
                             data-testid="notes-item"
                             @click="openNote(note.id)"
                         >
-                            <!-- ⚠️ 목록 행에는 본문이 없다(서버 `NoteRow`가 안 싣는다 — 설계 §3.6의 값). 그래서
-                                 제목 없는 장은 지금 열어 둔 장만 첫 줄에서 이름을 얻고, 나머지는 「제목 없음」이다.
-                                 설계 §3.7이 `noteLabel(title, body)`를 목록 라벨로 두면서 §3.4의 목록 응답엔
-                                 body를 안 넣은 어긋남이라 PR body에 드러냈다. -->
-                            <span class="study-notes-label">{{ noteLabel(note.title, note.id === draft.id ? draft.body : '') }}</span>
+                            <!-- 목록 행에는 본문이 없다(설계 §3.6) — 대신 서버가 <b>첫 줄</b>(`preview`)을
+                                 실어 준다. 열어 둔 장만 `draft.body`를 쓰는 것은 아직 저장 전인 글자까지
+                                 라벨에 비추기 위해서다(방금 친 제목 줄이 바로 이름이 된다). -->
+                            <span class="study-notes-label">{{ noteLabel(note.title, note.id === draft.id ? draft.body : note.preview) }}</span>
                             <span class="study-notes-meta">{{ noteDateLabel(note.updatedAt) }} · {{ note.chars }}자</span>
                         </button>
                     </li>

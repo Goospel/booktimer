@@ -5,7 +5,7 @@
 // 특히 책 선택은 서버의 소유권 검사(ownedBookOrNull)·연쇄 삭제(unlinkBook)·탈퇴 순서가 전부
 // `bookId`가 실려 와야 도달하는 코드라, 여기가 비면 그 아래 전부가 죽은 길이 된다.
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount, type VueWrapper } from '@vue/test-utils';
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils';
 import { h } from 'vue';
 
 import RecallPanel from './RecallPanel.vue';
@@ -52,6 +52,21 @@ function notFound() {
 
 function okJson(body: object) {
     return { ok: true, status: 200, json: async () => body, text: async () => '' } as Response;
+}
+
+/** 쓰기 왕복만 — 읽기(GET)가 늘어도 흔들리지 않게 인덱스 대신 이걸로 잰다. */
+function postCalls() {
+    return vi.mocked(fetch).mock.calls
+        .filter((c) => (c[1] as RequestInit | undefined)?.method === 'POST');
+}
+
+/** `/api/study/notes/reference` 왕복 — 카드가 부르는 유일한 문. */
+function referenceCalls() {
+    return vi.mocked(fetch).mock.calls.filter((c) => String(c[0]).startsWith('/api/study/notes/reference'));
+}
+
+function noteRefRow(id: number, title: string | null, chars: number, preview = '') {
+    return { id, title, chars, preview, updatedAt: '2026-09-10T05:32:00Z' };
 }
 
 async function mountPanel(props: Partial<Record<string, unknown>> = {}): Promise<VueWrapper> {
@@ -104,9 +119,10 @@ describe('백지복습 — 책 선택', () => {
             source: 'TEXT', summary: null, holes: [], questions: [], model: null, analyzedAt: null,
         }));
         await wrapper.find('[data-testid="recall-save"]').trigger('click');
-        await vi.waitFor(() => expect(vi.mocked(fetch).mock.calls.length).toBe(2));
+        // 책을 고르면 채점 기준 카드가 한 번 더 왕복한다(PR-3) — 인덱스 대신 POST를 골라 잰다.
+        await vi.waitFor(() => expect(postCalls()).toHaveLength(1));
 
-        const [url, init] = vi.mocked(fetch).mock.calls[1];
+        const [url, init] = postCalls()[0];
         expect(url).toBe('/api/study/recall');
         expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({ bookId: 7, body: '오늘 배운 것' });
     });
@@ -362,5 +378,81 @@ describe('백지복습 — 책을 고르면 주제가 따라온다', () => {
 
         expect((wrapper.find('input[aria-label="주제"]').element as HTMLInputElement).value)
             .toBe('내가 적어 둔 주제');
+    });
+});
+
+// PR-3 — 채점 기준 카드. 이 기능 전체의 목적(구멍 판정을 추측에서 <b>필기 대조</b>로)이 화면에 드러나는
+// 자리다. 특히 「상한에 걸려 빠진 장」을 말하지 않으면 사용자는 자기 필기가 채점에서 빠진 것을 영영
+// 모른다 — 사용자가 「책 기준 자동」을 고른 이유가 바로 그 조용한 누락을 막는 것이었다.
+describe('백지복습 — 채점 기준으로 들어가는 필기', () => {
+    async function withReference(body: object) {
+        const wrapper = await mountPanel();
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(body));
+        await wrapper.find('[data-testid="recall-book"]').setValue('7');
+        await vi.waitFor(() => expect(wrapper.find('[data-testid="recall-reference"]').exists()).toBe(true));
+        return wrapper;
+    }
+
+    test('책을 고르면 들어가는 필기의 이름과 「N장, M자」가 뜬다', async () => {
+        const wrapper = await withReference({
+            included: [noteRefRow(3, '3장 함수', 8000), noteRefRow(2, null, 8000, '# 미분계수')],
+            excluded: [], chars: 16000, limit: 24000,
+        });
+
+        const card = wrapper.find('[data-testid="recall-reference"]');
+        expect(referenceCalls().map((c) => String(c[0]))).toEqual(['/api/study/notes/reference?bookId=7']);
+        expect(card.text()).toContain('3장 함수');
+        expect(card.text()).toContain('미분계수'); // 제목 없는 장은 첫 줄로 이름을 얻는다
+        expect(card.text()).toContain('2장');
+        expect(card.text()).toContain('16,000자');
+    });
+
+    test('상한에 걸려 빠진 장이 있으면 <b>그렇다고 말한다</b> — 조용한 누락 금지', async () => {
+        const wrapper = await withReference({
+            included: [noteRefRow(4, '4장', 8000), noteRefRow(3, '3장', 8000), noteRefRow(2, '2장', 8000)],
+            excluded: [noteRefRow(1, '아주 오래된 장', 5000)], chars: 24000, limit: 24000,
+        });
+
+        const warn = wrapper.find('[data-testid="recall-reference-excluded"]');
+        expect(warn.exists()).toBe(true);
+        expect(warn.text()).toContain('1장은 길이 때문에 빠졌어요');
+        expect(warn.text()).toContain('5,000자'); // 얼마나 잃었는지까지 말한다
+        // 빠진 장은 <b>목록에 서지 않는다</b> — 들어간 것과 섞이면 카드가 거짓말을 한다.
+        expect(wrapper.find('.study-recall-reference-list').text()).not.toContain('아주 오래된 장');
+    });
+
+    test('필기가 0장이면 「범위와 글만으로 판단해요」 — 카드가 거짓 기대를 만들지 않는다', async () => {
+        const wrapper = await withReference({ included: [], excluded: [], chars: 0, limit: 24000 });
+
+        expect(wrapper.find('[data-testid="recall-reference-empty"]').text()).toContain('필기가 없어요');
+        expect(wrapper.find('[data-testid="recall-reference-excluded"]').exists()).toBe(false);
+    });
+
+    test('책 없이면 카드도 왕복도 없다 — 필기를 걸 연결고리가 없다', async () => {
+        const wrapper = await mountPanel();
+
+        expect(wrapper.find('[data-testid="recall-reference"]').exists()).toBe(false);
+        expect(referenceCalls()).toHaveLength(0);
+    });
+
+    test('AI가 꺼져 있으면 책을 골라도 왕복이 0건이다 — 안 쓰는 값을 위해 서버를 두드리지 않는다', async () => {
+        const wrapper = await mountPanel({ aiEnabled: false });
+        await wrapper.find('[data-testid="recall-book"]').setValue('7');
+        await flushPromises();
+
+        expect(referenceCalls()).toHaveLength(0);
+        expect(wrapper.find('[data-testid="recall-reference"]').exists()).toBe(false);
+    });
+
+    test('조회가 실패하면 카드만 숨긴다 — 분석 버튼은 막지 않는다', async () => {
+        const wrapper = await mountPanel();
+        await wrapper.find('[data-testid="recall-body"]').setValue('오늘 배운 것'); // 분석 조건을 세운다
+        vi.mocked(fetch).mockResolvedValueOnce(
+            { ok: false, status: 500, text: async () => '', json: async () => ({}) } as Response);
+        await wrapper.find('[data-testid="recall-book"]').setValue('7');
+        await flushPromises();
+
+        expect(wrapper.find('[data-testid="recall-reference"]').exists()).toBe(false);
+        expect(wrapper.find('[data-testid="recall-analyze"]').attributes('disabled')).toBeUndefined();
     });
 });

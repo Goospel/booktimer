@@ -454,3 +454,33 @@ describe('필기 패널 — 왕복 중에 갈아타도 남의 자리에 쓰지 �
         ]);
     });
 });
+
+// PR-3 — 목록 라벨의 근본 처방. 제목을 안 적는 것이 이 기능의 기본 사용법이라, 서버가 본문 첫 줄
+// (`preview`)을 함께 싣지 않으면 화면은 <b>지금 열어 둔 장 말고 전부</b>를 「제목 없음」으로 그린다.
+describe('필기 패널 — 목록 라벨', () => {
+    test('제목 없는 장은 서버가 준 본문 첫 줄로 이름을 얻는다 — 마크다운 표식은 벗긴다', async () => {
+        const wrapper = await mountPanel({}, [
+            { id: 6, title: null, chars: 20, preview: '# 미분계수', updatedAt: AT },
+            { id: 7, title: '3장 함수', chars: 10, preview: '매개변수는', updatedAt: AT },
+        ]);
+
+        const labels = wrapper.findAll('[data-testid="notes-item"]').map((li) => li.text());
+        expect(labels[0]).toContain('미분계수');
+        expect(labels[0]).not.toContain('제목 없음');
+        expect(labels[1]).toContain('3장 함수'); // 제목이 있으면 제목이 이긴다
+    });
+
+    test('방금 저장한 장도 목록에서 첫 줄 이름을 유지한다 — 응답으로 만든 행에도 preview가 실린다', async () => {
+        const wrapper = await mountPanel();
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 8, body: '# 새 장\n내용' })));
+        await type(wrapper, '# 새 장\n내용');
+        await settle();
+
+        // 「새 필기」로 갈아타 <b>그 행이 더 이상 열려 있는 초안이 아니게</b> 만든다 — 안 그러면
+        // 라벨이 draft.body에서 나와, 목록 행이 이름을 못 얻는 구현도 통과한다(공허한 단언).
+        await wrapper.find('[data-testid="notes-new"]').trigger('click');
+        await flushPromises();
+
+        expect(wrapper.find('[data-testid="notes-item"]').text()).toContain('새 장');
+    });
+});

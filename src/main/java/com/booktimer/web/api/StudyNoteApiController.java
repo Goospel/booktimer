@@ -3,6 +3,7 @@ package com.booktimer.web.api;
 import com.booktimer.book.StudyBook;
 import com.booktimer.book.StudyBookRepository;
 import com.booktimer.security.CurrentUserService;
+import com.booktimer.study.NoteReference;
 import com.booktimer.study.StudyNote;
 import com.booktimer.study.StudyNoteService;
 import com.booktimer.user.User;
@@ -63,6 +64,24 @@ public class StudyNoteApiController {
         User user = currentUserService.resolve(principal);
         StudyBook book = ownedBook(user, bookId);
         return new NoteListResponse(noteService.list(user, book).stream().map(NoteRow::from).toList());
+    }
+
+    /**
+     * 채점 기준에 들어가는 필기 — 백지복습 화면의 카드가 부른다.
+     *
+     * <p>분석이 쓰는 것과 <b>같은 함수</b>({@code StudyNoteService.reference})를 지난다. 두 길이 각자
+     * 고르면 카드가 보여준 장과 모델이 실제로 본 장이 어긋나고, 그 어긋남은 화면에 안 보인다.
+     *
+     * <p>{@code /{id}}보다 <b>위</b>에 둔다 — 리터럴 경로가 템플릿을 이긴다는 규칙에 기대지 않고
+     * 읽는 사람에게도 순서를 보인다.
+     *
+     * @return 200 {@link NoteReferenceResponse} / 400 bookId 없음 / 404 남의 책·없는 책
+     */
+    @GetMapping("/api/study/notes/reference")
+    public NoteReferenceResponse reference(Principal principal,
+                                           @RequestParam(name = "bookId", required = false) Long bookId) {
+        User user = currentUserService.resolve(principal);
+        return NoteReferenceResponse.from(noteService.reference(user, ownedBook(user, bookId)));
     }
 
     /**
@@ -157,15 +176,35 @@ public class StudyNoteApiController {
      * 목록 한 행 — <b>본문이 없다</b>. 목록은 라벨과 크기만 필요하고, 본문까지 실으면 수백 장짜리 책의
      * 목록 왕복이 메가바이트가 된다.
      *
-     * @param chars 본문 글자 수 — 화면의 「N자」이자 정답지 상한(§NoteReference)의 단위
+     * @param chars   본문 글자 수 — 화면의 「N자」이자 정답지 상한({@link NoteReference})의 단위
+     * @param preview 본문 첫 줄 — <b>라벨의 재료</b>다. 제목을 안 적는 것이 기본 사용법이라, 이게
+     *                없으면 화면이 거의 모든 행을 「제목 없음」으로 그린다
      */
-    public record NoteRow(Long id, String title, int chars, Instant updatedAt) {
+    public record NoteRow(Long id, String title, int chars, String preview, Instant updatedAt) {
         static NoteRow from(StudyNote note) {
-            return new NoteRow(note.getId(), note.getTitle(), note.chars(), note.getUpdatedAt());
+            return new NoteRow(note.getId(), note.getTitle(), note.chars(), note.preview(),
+                    note.getUpdatedAt());
         }
     }
 
     public record NoteListResponse(List<NoteRow> notes) {}
+
+    /**
+     * 「이 책의 필기 중 무엇이 채점 기준에 들어가는가」 — 화면 카드의 근거.
+     *
+     * @param excluded 상한에 걸려 <b>빠진</b> 장 — 이 필드가 이 문의 존재 이유다. 조용히 빠지면
+     *                 사용자는 자기 필기가 채점에서 제외된 것을 영영 모른다
+     * @param limit    지금 적용 중인 상한 — 화면이 「24,000자까지」를 하드코딩하지 않게 서버가 말한다
+     */
+    public record NoteReferenceResponse(List<NoteRow> included, List<NoteRow> excluded,
+                                        int chars, int limit) {
+        static NoteReferenceResponse from(NoteReference reference) {
+            return new NoteReferenceResponse(
+                    reference.included().stream().map(NoteRow::from).toList(),
+                    reference.excluded().stream().map(NoteRow::from).toList(),
+                    reference.chars(), NoteReference.MAX_CHARS);
+        }
+    }
 
     /** @param revision 다음 갱신 요청에 그대로 되실어야 하는 판 번호 */
     public record NoteResponse(Long id, Long bookId, String title, String body,
