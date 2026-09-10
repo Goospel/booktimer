@@ -117,41 +117,53 @@ function submit(): void {
         </p>
 
         <!-- 두 페이지는 v-if로 갈린다 — 감춰만 두면 Tiptap 편집기가 둘 마운트된다. -->
-        <div class="study-recall-tabs study-day-pages" role="tablist">
+        <div class="study-recall-tabs" role="tablist">
             <button
                 type="button"
+                id="study-day-tab-notes"
                 class="btn btn-ghost btn-small"
                 :class="{ 'is-active': page === 'notes' }"
                 role="tab"
                 :aria-selected="page === 'notes'"
+                aria-controls="study-day-page"
                 data-testid="day-tab-notes"
                 @click="page = 'notes'"
             >필기</button>
             <button
                 type="button"
+                id="study-day-tab-recall"
                 class="btn btn-ghost btn-small"
                 :class="{ 'is-active': page === 'recall' }"
                 role="tab"
                 :aria-selected="page === 'recall'"
+                aria-controls="study-day-page"
                 data-testid="day-tab-recall"
                 @click="page = 'recall'"
             >백지노트</button>
         </div>
 
-        <NotesPanel v-if="page === 'notes'" :books="books" :default-book-id="dayBookId" />
+        <!-- 패널은 하나다 — 두 탭이 같은 자리를 갈아 끼우므로 aria-labelledby가 지금 탭을 가리킨다.
+             role=tab만 붙이고 여기를 비우면 스크린리더엔 「탭인데 여는 곳이 없는」 상태로 읽힌다. -->
+        <div
+            id="study-day-page"
+            role="tabpanel"
+            :aria-labelledby="page === 'notes' ? 'study-day-tab-notes' : 'study-day-tab-recall'"
+        >
+            <NotesPanel v-if="page === 'notes'" :books="books" :default-book-id="dayBookId" />
 
-        <RecallPanel
-            v-else
-            :date="date"
-            :today="today"
-            :items="items"
-            :books="books"
-            :ai-enabled="aiEnabled"
-            :remaining-analyze="remainingAnalyze"
-            :remaining-transcribe="remainingTranscribe"
-            :has-yesterday-questions="hasYesterdayQuestions"
-            @saved="emit('recall-saved')"
-        />
+            <RecallPanel
+                v-else
+                :date="date"
+                :today="today"
+                :items="items"
+                :books="books"
+                :ai-enabled="aiEnabled"
+                :remaining-analyze="remainingAnalyze"
+                :remaining-transcribe="remainingTranscribe"
+                :has-yesterday-questions="hasYesterdayQuestions"
+                @saved="emit('recall-saved')"
+            />
+        </div>
 
         <form class="study-day-form" @submit.prevent="submit">
             <p class="study-day-label">일정 추가</p>

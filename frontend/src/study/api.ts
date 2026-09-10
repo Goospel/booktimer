@@ -325,8 +325,13 @@ export async function fetchNote(id: number): Promise<Note> {
         '필기를 불러오지 못했어요.');
 }
 
-export async function createNote(input: { bookId: number; title: string; body: string }): Promise<Note> {
-    return json(await post('/api/study/notes', input), '필기를 저장하지 못했어요.');
+/**
+ * @param keepalive 갱신과 같은 이유로 필요하다 — 오히려 <b>여기서 잃는 양이 더 크다</b>. 아직 생성되지
+ *                  않은 초안은 실패하면 1.5초가 아니라 <b>장 전체</b>가 사라진다.
+ */
+export async function createNote(input: { bookId: number; title: string; body: string },
+                                 keepalive = false): Promise<Note> {
+    return json(await post('/api/study/notes', input, keepalive), '필기를 저장하지 못했어요.');
 }
 
 /** @param keepalive 탭이 닫히는 중의 마지막 플러시. */

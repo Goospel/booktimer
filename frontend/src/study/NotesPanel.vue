@@ -33,16 +33,38 @@ const bookId = ref<number | null>(null);
 const notes = ref<NoteRow[]>([]);
 const listError = ref('');
 
-/** 지금 편집기에 있는 장. `id === null`이면 아직 서버에 없는 초안이다. */
-const draft = ref<{ id: number | null; title: string; body: string; revision: number }>(blank());
+interface Draft { id: number | null; bookId: number | null; title: string; body: string; revision: number }
+
+/**
+ * 지금 편집기에 있는 장. `id === null`이면 아직 서버에 없는 초안이다.
+ *
+ * <p><b>초안이 자기 책을 들고 다닌다</b> — 저장할 때 `bookId.value`를 읽으면 그건 「전송 시점에 고른
+ * 책」이라, 디바운스 중에 책을 바꾸면 앞 책에 쓰던 초안이 <b>새 책에</b> 생긴다(필기 이동은 비목표라
+ * 되돌릴 수단도 없다).
+ */
+const draft = ref<Draft>(blank());
 const state = ref<SaveState>({ kind: 'idle' });
 
 let timer: ReturnType<typeof setTimeout> | undefined;
-/** 왕복이 날아가 있는 동안 또 보내지 않는다 — 끝난 뒤 dirty면 한 번 더 돈다(큐 길이 1). */
-let inflight = false;
+/** 지금 날아가 있는 저장. 왕복은 한 번에 하나이고, 끝난 뒤 dirty면 한 번 더 돈다(큐 길이 1). */
+let inflightP: Promise<void> | null = null;
+/**
+ * 편집 대상의 세대. 다른 장·다른 책으로 갈아탈 때마다 오른다.
+ *
+ * <p>저장은 <b>보낼 때의 세대를 들고 갔다가 응답에서 대조</b>한다. 이게 없으면 왕복 중에 갈아탔을 때
+ * 돌아온 응답이 <b>새 장에 옛 장의 id·revision</b>을 붙여, 이어 쓴 글이 앞 장을 덮어쓴다.
+ */
+let seq = 0;
 
-function blank(): { id: number | null; title: string; body: string; revision: number } {
-    return { id: null, title: '', body: '', revision: 0 };
+function blank(): Draft {
+    return { id: null, bookId: bookId.value, title: '', body: '', revision: 0 };
+}
+
+/** 편집 대상을 갈아 끼운다 — 날아가 있던 왕복의 응답이 여기 닿지 않게 세대를 올린다. */
+function retarget(next: Draft): void {
+    seq += 1;
+    draft.value = next;
+    state.value = { kind: 'idle' };
 }
 
 const hasBooks = computed(() => props.books.length > 0);
@@ -52,6 +74,7 @@ const locked = computed(() => state.value.kind === 'conflict');
 onMounted(() => {
     if (!hasBooks.value) return;
     bookId.value = props.defaultBookId ?? props.books[0].id;
+    draft.value = blank(); // 초안이 첫 책을 들고 시작한다(ref 초기화 시점엔 아직 책이 없었다)
     void loadList();
 });
 
@@ -69,8 +92,7 @@ onBeforeUnmount(() => {
 watch(bookId, async (id, before) => {
     if (id === null || before === null) return;
     await flush();
-    draft.value = blank();
-    state.value = { kind: 'idle' };
+    retarget(blank());
     await loadList();
 });
 
@@ -104,30 +126,46 @@ function clearTimer(): void {
     timer = undefined;
 }
 
-/** 디바운스를 기다리지 않고 지금 보낸다 — 필기·책·탭 전환, 페이지 이탈. */
+/**
+ * 디바운스를 기다리지 않고 지금 보낸다 — 필기·책·탭 전환, 페이지 이탈.
+ *
+ * <p><b>왕복 중이면 끝나기를 기다린다.</b> 그냥 반환하면 그 사이에 친 글자가 어디에도 도달하지 않는다 —
+ * 부르는 쪽(`openNote`·`newNote`·책 전환)은 이 반환을 「다 보냈다」로 믿고 초안을 갈아 끼우기 때문이다.
+ */
 function flush(keepalive = false): Promise<void> {
     clearTimer();
-    return save(keepalive);
+    return inflightP ? inflightP.then(() => save(keepalive)) : save(keepalive);
 }
 
 async function save(keepalive = false): Promise<void> {
-    if (inflight) return; // 끝난 뒤 아래 finally가 한 번 더 돌린다
+    if (inflightP) return; // 왕복은 하나씩 — 끝난 뒤 아래 큐가 한 번 더 돌린다
+    const p = sendOnce(keepalive).then(async () => {
+        inflightP = null;
+        if (state.value.kind === 'dirty') await save();
+    });
+    inflightP = p;
+    await p;
+}
+
+async function sendOnce(keepalive: boolean): Promise<void> {
     const next = nextSaveState(state.value, { type: 'flush' });
     if (next.kind !== 'saving') return;
-    const book = bookId.value;
-    const { id, title, body, revision } = draft.value;
+    const mine = seq;
+    const { id, bookId: book, title, body, revision } = draft.value;
     // 빈 초안은 서버에 행을 만들지 않는다 — 「새 필기」를 눌러만 두고 떠나면 아무 일도 없어야 한다.
     if (book === null || body.trim().length === 0) {
         state.value = { kind: 'idle' };
         return;
     }
 
-    inflight = true;
     state.value = next;
     try {
         const saved: Note = id === null
-            ? await createNote({ bookId: book, title, body })
+            ? await createNote({ bookId: book, title, body }, keepalive)
             : await updateNote(id, { title, body, revision }, keepalive);
+        // 갈아탄 뒤 도착한 응답은 통째로 버린다 — id·revision을 되쓰면 새 장이 옛 장의 자리에 저장되고,
+        // 목록 행도 남의 책에 꽂힌다. 화면에 없는 장의 성패를 상태줄에 띄울 이유도 없다.
+        if (mine !== seq) return;
         // 본문·제목은 되받지 않는다 — 왕복 중에 사용자가 더 쳤을 수 있다. 판 번호와 시각만 갱신한다.
         draft.value.id = saved.id;
         draft.value.revision = saved.revision;
@@ -137,10 +175,8 @@ async function save(keepalive = false): Promise<void> {
         // 상태 없는 실패(네트워크 끊김)는 0 — 5xx와 같은 갈래(재시도 대상)로 떨어진다.
         const status = e instanceof ApiError ? e.status : 0;
         const message = e instanceof Error && e.message ? e.message : '필기를 저장하지 못했어요.';
+        if (mine !== seq) return;
         state.value = nextSaveState(state.value, { type: 'fail', status, message });
-    } finally {
-        inflight = false;
-        if (state.value.kind === 'dirty') await save();
     }
 }
 
@@ -159,10 +195,15 @@ function upsertRow(saved: Note): void {
 
 async function openNote(id: number): Promise<void> {
     await flush();
+    const mine = seq + 1;
+    seq = mine; // 조회 중에 또 갈아타면, 늦게 온 이쪽이 화면을 덮지 않는다
     try {
         const found = await fetchNote(id);
-        draft.value = { id: found.id, title: found.title ?? '', body: found.body, revision: found.revision };
-        state.value = { kind: 'idle' };
+        if (mine !== seq) return;
+        retarget({
+            id: found.id, bookId: found.bookId, title: found.title ?? '',
+            body: found.body, revision: found.revision,
+        });
     } catch {
         listError.value = '필기를 불러오지 못했어요.';
     }
@@ -170,8 +211,7 @@ async function openNote(id: number): Promise<void> {
 
 async function newNote(): Promise<void> {
     await flush();
-    draft.value = blank();
-    state.value = { kind: 'idle' };
+    retarget(blank());
 }
 
 /** 409에서 서버 판을 다시 싣는다 — 내 미저장분은 버린다(덮어쓰기보다 정직하다). */
@@ -186,11 +226,13 @@ async function remove(): Promise<void> {
     const id = draft.value.id;
     if (id === null || !window.confirm('이 필기를 지울까요? 되돌릴 수 없어요.')) return;
     clearTimer();
+    // 지우기는 플러시하지 않는다(지울 글을 먼저 저장할 이유가 없다) — 대신 세대를 올려, 날아가 있던
+    // 저장이 돌아와 **지운 장의 id**를 새 초안에 붙이는 것을 막는다.
+    seq += 1;
     try {
         await deleteNote(id);
         notes.value = notes.value.filter((n) => n.id !== id);
-        draft.value = blank();
-        state.value = { kind: 'idle' };
+        retarget(blank());
     } catch (e) {
         listError.value = e instanceof Error && e.message ? e.message : '필기를 지우지 못했어요.';
     }
@@ -244,7 +286,7 @@ async function remove(): Promise<void> {
                     v-model="draft.title"
                     type="text"
                     maxlength="200"
-                    placeholder="제목 (없으면 첫 줄이 이름이 돼요)"
+                    placeholder="제목 (목록에 이름이 필요하면 적어 주세요)"
                     aria-label="필기 제목"
                     data-testid="notes-title"
                     :disabled="locked"

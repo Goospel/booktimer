@@ -101,6 +101,22 @@ describe('하루 패널 — 필기 / 백지노트 탭', () => {
         expect((wrapper.find('[data-testid="notes-book"]').element as HTMLSelectElement).value).toBe('9');
     });
 
+    // role=tab만 붙이고 패널을 연결하지 않으면 스크린리더에 「탭이라는데 여는 곳이 없다」로 읽힌다.
+    test('탭이 자기 패널을 가리키고, 그 패널이 지금 탭의 이름을 달고 있다', async () => {
+        const wrapper = await mountDay();
+        vi.mocked(fetch).mockResolvedValue(okJson({ notes: [] }));
+
+        const target = wrapper.find('[data-testid="day-tab-notes"]').attributes('aria-controls');
+        expect(target).toBeTruthy();
+        const panel = wrapper.find(`#${target}`);
+        expect(panel.attributes('role')).toBe('tabpanel');
+
+        await wrapper.find('[data-testid="day-tab-notes"]').trigger('click');
+        await flushPromises();
+        expect(wrapper.find(`#${target}`).attributes('aria-labelledby'))
+            .toBe(wrapper.find('[data-testid="day-tab-notes"]').attributes('id'));
+    });
+
     test('날짜를 옮겨도 고른 탭은 그대로다', async () => {
         const wrapper = await mountDay();
         vi.mocked(fetch).mockResolvedValue(okJson({ notes: [] }));

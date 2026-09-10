@@ -15,6 +15,7 @@ const LABEL_MAX = 40;
  * <p>실패가 셋으로 갈리는 것이 요점이다:
  * <ul>
  *   <li>{@code invalid}(400) — 사용자가 글을 고치기 전엔 <b>영원히 400</b>이다. 다시 보내지 않는다.
+ *   <li>{@code invalid} + {@code permanent}(404·429) — 글을 고쳐도 안 풀린다. 아예 되살아나지 않는다.
  *   <li>{@code conflict}(409) — 다른 곳에서 고쳐졌다. 자동저장을 <b>멈춘다</b>(덮어쓰기보다 정직).
  *   <li>{@code error}(5xx·네트워크) — 같은 내용으로도 성공할 수 있다. 다음 변경·버튼에 <b>재시도</b>.
  * </ul>
@@ -25,7 +26,12 @@ export type SaveState =
     | { kind: 'saving' }
     | { kind: 'saved'; at: string }
     | { kind: 'error'; message: string }
-    | { kind: 'invalid'; message: string }
+    /**
+     * 지금 보낼 수 없는 글. {@code permanent}면 <b>사용자가 고쳐도</b> 안 풀린다 —
+     * 404(다른 곳에서 지워짐)·429(레이트리밋)가 그렇다. 이게 없으면 편집할 때마다 영원히 실패할
+     * 요청이 나가고, 특히 429는 자동저장이 1.5초마다 <b>스스로 레이트리밋을 때린다</b>.
+     */
+    | { kind: 'invalid'; message: string; permanent?: boolean }
     | { kind: 'conflict'; message: string };
 
 export type SaveEvent =
@@ -39,7 +45,10 @@ export function nextSaveState(state: SaveState, event: SaveEvent): SaveState {
     switch (event.type) {
         case 'edit':
             // conflict는 끝이다 — 멈춘 뒤에 무엇을 쳐도 다시 두드리지 않는다(서버 판을 덮지 않는다).
-            return state.kind === 'conflict' ? state : { kind: 'dirty' };
+            if (state.kind === 'conflict') return state;
+            // 404·429도 끝이다. 400과 달리 글을 줄여도 같은 답이 온다.
+            if (state.kind === 'invalid' && state.permanent) return state;
+            return { kind: 'dirty' };
         case 'flush':
             // invalid에서 보내지 않는 것이 이 기계의 핵심이다. 400은 사용자가 고치기 전엔 영원히
             // 400이라, 재시도에 넣으면 키 입력마다 무한 왕복이고 진짜 이유는 화면에서 밀려난다.
@@ -50,6 +59,12 @@ export function nextSaveState(state: SaveState, event: SaveEvent): SaveState {
         case 'fail':
             if (event.status === 409) return { kind: 'conflict', message: event.message };
             if (event.status === 400) return { kind: 'invalid', message: event.message };
+            // 404 문구는 화면 몫이다 — 공용 `errorMessage`의 404는 「책을 찾을 수 없어요」라 여기선 어긋난다.
+            if (event.status === 404) {
+                return { kind: 'invalid', permanent: true, message: '이 필기가 없어요 — 다른 곳에서 지워졌을 수 있어요.' };
+            }
+            // 429는 서버가 「언제까지 몇 장」을 말해 준다.
+            if (event.status === 429) return { kind: 'invalid', permanent: true, message: event.message };
             return { kind: 'error', message: event.message };
     }
 }

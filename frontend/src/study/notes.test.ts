@@ -92,6 +92,30 @@ describe('nextSaveState — 자동저장 상태기계', () => {
         expect(nextSaveState(invalid, { type: 'flush' })).toBe(invalid);
     });
 
+    test('400 뒤엔 고치면 되살아난다 — 사용자가 줄이면 다시 보낼 수 있어야 한다', () => {
+        const invalid: SaveState = { kind: 'invalid', message: '길어요' };
+        expect(nextSaveState(invalid, { type: 'edit' })).toEqual({ kind: 'dirty' });
+    });
+
+    // 404·429는 「영원히 같은 답」이라는 점에서 400과 한 갈래인데, 400과 달리 **글을 고쳐도 안 풀린다**.
+    // 그래서 400처럼 edit에 되살아나면 안 된다 — 404는 편집할 때마다 없는 행을 두드리고,
+    // 429는 생성 레이트리밋에 걸린 초안이 1.5초마다 스스로 레이트리밋을 때린다(최대 1시간).
+    test('404는 영구 실패 — 필기에 맞는 문구를 주고, 고쳐도 다시 보내지 않는다', () => {
+        const gone = nextSaveState({ kind: 'saving' }, { type: 'fail', status: 404, message: '책을 찾을 수 없어요' });
+        expect(gone.kind).toBe('invalid');
+        // 서버가 준 404 문구는 「책을 찾을 수 없어요」(다른 화면 몫)라 필기 상황에 어긋난다.
+        expect(gone.kind === 'invalid' && gone.message).toContain('필기');
+        expect(nextSaveState(gone, { type: 'edit' })).toBe(gone);
+        expect(nextSaveState(gone, { type: 'flush' })).toBe(gone);
+    });
+
+    test('429는 영구 실패 — 서버 문구를 그대로 들고, 고쳐도 다시 보내지 않는다', () => {
+        const limited = nextSaveState({ kind: 'saving' },
+            { type: 'fail', status: 429, message: '한 시간에 30장까지 만들 수 있어요' });
+        expect(limited).toEqual({ kind: 'invalid', message: '한 시간에 30장까지 만들 수 있어요', permanent: true });
+        expect(nextSaveState(limited, { type: 'edit' })).toBe(limited);
+    });
+
     test('5xx·네트워크 오류는 error — 다음 변경에 재시도한다', () => {
         const failed = nextSaveState({ kind: 'saving' }, { type: 'fail', status: 500, message: '저장하지 못했어요' });
         expect(failed).toEqual({ kind: 'error', message: '저장하지 못했어요' });
