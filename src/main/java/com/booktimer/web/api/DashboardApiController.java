@@ -26,7 +26,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 
 import java.security.Principal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 
 /**
@@ -44,6 +46,12 @@ public class DashboardApiController {
 
     /** 대시보드 슬롯머신 로테이션에 실어 보낼 격언 최대 개수(셔플 후 상한). */
     private static final int QUOTE_ROTATION_MAX = 10;
+
+    /** 올려받을 완료 세션의 종료 시각 허용 미래폭 — 기기 시계가 조금 앞선 것까지는 받는다. */
+    private static final Duration IMPORT_FUTURE_TOLERANCE = Duration.ofMinutes(5);
+
+    /** 올려받을 완료 세션의 최대 나이 — 이보다 묵은 체험은 거부한다(클라가 저장분을 지운다). */
+    private static final Duration IMPORT_MAX_AGE = Duration.ofDays(7);
 
     private final CurrentUserService currentUserService;
     private final DashboardModel dashboardModel;
@@ -145,6 +153,42 @@ public class DashboardApiController {
         // getBook()==null은 lazy 프록시를 초기화하지 않는 참조 비교라 트랜잭션 밖에서도 안전(null 연관=실제 null).
         boolean untagged = stopped.getBook() == null;
         return ResponseEntity.ok(new StopResponse(stopped.getId(), untagged, firstCompletedSession, timer, graph));
+    }
+
+    /**
+     * <b>기기에서 이미 끝난 측정 올리기</b> — 미니앱이 로그인 전에 잰 체험 세션이 로그인 직후 이 문으로 들어온다.
+     * 저장은 {@link ReadingSessionService#recordCompleted}가 맡고(6h 클램프·자정 분할·(user,startedAt) 멱등),
+     * 여기서는 <b>날짜 정책</b>만 본다 — 서비스는 "얼마나 묵은 값까지 받는가"를 모른다(recordManual과 같은 분업).
+     *
+     * <p>에러 계약: 400 = 파싱 실패 · {@code endedAt <= startedAt} · {@code endedAt > now+5분}(기기 시계가 미래)
+     * · {@code startedAt < now-7일}(묵은 체험). 401 = 미니앱 체인의 인증(별도 분기 없음). 204 = 저장(중복 포함).
+     * 진행 중 세션이 있어도 거부하지 않는다 — 과거 구간을 적는 것이라 충돌하지 않는다.
+     */
+    @PostMapping("/api/sessions/import")
+    public ResponseEntity<Void> importSession(@RequestBody ImportRequest req, Principal principal) {
+        User user = currentUserService.resolve(principal);
+        Instant startedAt = parseInstant(req.startedAt());
+        Instant endedAt = parseInstant(req.endedAt());
+        Instant now = clock.instant();
+        if (!endedAt.isAfter(startedAt)
+                || endedAt.isAfter(now.plus(IMPORT_FUTURE_TOLERANCE))
+                || startedAt.isBefore(now.minus(IMPORT_MAX_AGE))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "올릴 수 없는 측정 구간입니다");
+        }
+        sessionService.recordCompleted(user, startedAt, endedAt);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** ISO-8601 시각 문자열 → Instant. 못 읽으면 400(서버 결함이 아니라 클라 입력이라 500이면 안 된다). */
+    private static Instant parseInstant(String iso) {
+        if (iso == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "시각이 없습니다");
+        }
+        try {
+            return Instant.parse(iso);
+        } catch (DateTimeParseException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "시각 형식이 올바르지 않습니다");
+        }
     }
 
     /**
@@ -336,6 +380,9 @@ public class DashboardApiController {
     public record QuoteDto(String text, String author) {}
 
     public record StartSessionRequest(Long bookId) {}
+
+    /** 기기에서 이미 끝난 측정 — ISO-8601 문자열로 받는다(파싱 실패를 400으로 옮기려고 Instant가 아니다). */
+    public record ImportRequest(String startedAt, String endedAt) {}
 
     /** ContributionGraph 래퍼 — 잔디 그리드와 집계값만 싣는다. */
     public record ContributionGraphDto(

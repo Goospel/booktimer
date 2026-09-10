@@ -12,6 +12,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -130,6 +131,40 @@ public class ReadingSessionService {
         // (분할해도 최초 조각의 시작 = 원본 startedAt이라 의미가 그대로다).
         if (book.startReading(startedAt)) {
             bookRepository.save(book);
+        }
+        return last;
+    }
+
+    /**
+     * <b>기기에서 이미 끝난 실측 세션을 올린다</b> — 미니앱이 로그인 전에 잰 체험 구간이 로그인 직후
+     * 이 문으로 들어온다. 손으로 적은 값이 아니라 실제로 잰 시간이므로 {@code manualEntry=false}이고
+     * ({@link #recordManual}과 갈리는 자리다 — 잔디에 「직접 채운 날」 테두리가 붙으면 안 된다)
+     * 로그인 전엔 서재가 없으므로 책은 없다({@link #start}의 책 선택 허용과 같은 성질).
+     *
+     * <p>정책은 {@link #stop}과 같다: <b>6시간 클램프가 자정 분할보다 먼저</b>다. 날짜 정책
+     * (너무 오래된 값·미래 값 거부)은 컨트롤러의 몫이다 — 여기선 모른다({@code recordManual}과 같은 분업).
+     *
+     * <p><b>멱등</b>: 같은 {@code (user, startedAt)} 행이 이미 있으면 저장하지 않고 그 행을 돌려준다.
+     * 응답이 유실돼 클라이언트가 재시도해도 시간이 두 번 계상되지 않는다.
+     *
+     * @return 마지막 조각(자정을 넘겼으면 {@code endedAt}이 속한 쪽), 또는 이미 있던 행
+     */
+    public ReadingSession recordCompleted(User user, Instant startedAt, Instant endedAt) {
+        // 멱등 키가 저장 정밀도를 넘어서면 안 된다 — started_at 컬럼은 datetime(6)이라 나노초를 잘라
+        // 저장하고, 그러면 재시도 조회가 원본 Instant와 영영 같아지지 않아 행이 두 번 쌓인다.
+        // 밀리초로 내려 두면 컬럼 정밀도 안이라 왕복이 보존된다(클라가 보내는 ISO 문자열도 밀리초다).
+        startedAt = startedAt.truncatedTo(ChronoUnit.MILLIS);
+        endedAt = endedAt.truncatedTo(ChronoUnit.MILLIS);
+        Optional<ReadingSession> duplicate = sessionRepository.findFirstByUserAndStartedAt(user, startedAt);
+        if (duplicate.isPresent()) {
+            return duplicate.get();
+        }
+        ReadingSession last = null;
+        for (Segment segment : splitByMidnight(startedAt, clampToCap(startedAt, endedAt),
+                ZoneId.of(user.getTimezone()))) {
+            ReadingSession piece = ReadingSession.start(user, segment.start(), null);
+            piece.end(segment.end());
+            last = sessionRepository.save(piece);
         }
         return last;
     }

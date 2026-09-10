@@ -21,6 +21,12 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSession, 
     List<ReadingSession> findByUser(User user);
 
     /**
+     * 같은 시작 시각의 세션 한 건 — 기기에서 올린 완료 세션의 <b>멱등 키</b>다
+     * ({@link ReadingSessionService#recordCompleted}). 업로드가 재시도돼도 행이 늘지 않게 한다.
+     */
+    Optional<ReadingSession> findFirstByUserAndStartedAt(User user, Instant startedAt);
+
+    /**
      * 세션 전체를 책과 함께 즉시 로딩 — 트랜잭션 밖 매핑/렌더에서 lazy 예외 방지 + N+1 제거.
      * LEFT join: book=null 레거시 세션도 보존(일자·시간 집계에 기여 — N-055 정신).
      */

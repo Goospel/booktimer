@@ -844,4 +844,112 @@ class ReadingSessionServiceTest {
 
         verify(sessionRepository, times(1)).save(any(ReadingSession.class));
     }
+
+    // ==========================================================================
+    // recordCompleted — 기기에서 이미 끝난 실측 세션 올리기(미니앱 로그인 전 체험)
+    //
+    // stop과 같은 정책(6h 클램프 → 유저 TZ 자정 분할)을 쓰되 진행 중 세션을 찾지 않는다.
+    // manualEntry=false(실측이지 손으로 적은 값이 아님) · 책 없음 · (user, startedAt) 멱등이 계약이다.
+    // ==========================================================================
+
+    @Test
+    @DisplayName("recordCompleted #17: 책 없는 완료 행을 만든다 — 길이·manualEntry=false·book=null")
+    void recordCompleted_createsCompletedRowWithoutBook() {
+        Instant started = kst("2026-06-01T10:00");
+        Instant ended = started.plusSeconds(420);
+        when(sessionRepository.findFirstByUserAndStartedAt(user, started)).thenReturn(Optional.empty());
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        ReadingSession result = service.recordCompleted(user, started, ended);
+
+        verify(sessionRepository, times(1)).save(any(ReadingSession.class));
+        assertThat(result.getUser()).isSameAs(user);
+        assertThat(result.getStartedAt()).isEqualTo(started);
+        assertThat(result.getEndedAt()).isEqualTo(ended);
+        assertThat(result.getDurationSeconds()).isEqualTo(420L);
+        assertThat(result.isManualEntry()).isFalse(); // 실측이다 — 잔디 테두리(손으로 채운 날)가 붙으면 안 된다
+        assertThat(result.getBook()).isNull();
+    }
+
+    @Test
+    @DisplayName("recordCompleted #18: 6시간 초과 구간은 startedAt+6h로 잘린다(stop과 같은 cap)")
+    void recordCompleted_overCap_clampsToSixHours() {
+        Instant started = kst("2026-06-01T08:00");
+        when(sessionRepository.findFirstByUserAndStartedAt(eq(user), any(Instant.class))).thenReturn(Optional.empty());
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        ReadingSession result = service.recordCompleted(user, started, started.plusSeconds(9 * 3600));
+
+        assertThat(result.getEndedAt()).isEqualTo(started.plusSeconds(6 * 3600));
+        assertThat(result.getDurationSeconds()).isEqualTo(6 * 3600L);
+    }
+
+    @Test
+    @DisplayName("recordCompleted #19: 정확히 6시간이면 자르지 않는다(cap 경계)")
+    void recordCompleted_exactlyCap_notClamped() {
+        Instant started = kst("2026-06-01T08:00");
+        Instant ended = started.plusSeconds(6 * 3600);
+        when(sessionRepository.findFirstByUserAndStartedAt(eq(user), any(Instant.class))).thenReturn(Optional.empty());
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        ReadingSession result = service.recordCompleted(user, started, ended);
+
+        assertThat(result.getEndedAt()).isEqualTo(ended);
+        assertThat(result.getDurationSeconds()).isEqualTo(6 * 3600L);
+    }
+
+    @Test
+    @DisplayName("recordCompleted #20: 자정을 걸치면 조각 2행이고 앞 end == 뒤 start다(경계는 유저 TZ 자정)")
+    void recordCompleted_acrossMidnight_splitsAtUserMidnight() {
+        // stop #10과 같은 이유로 Auckland — 이 구간은 KST·UTC 기준으로는 같은 날 안이다.
+        User user = aucklandUser();
+        Instant started = at("2026-06-01T23:50", AUCKLAND);
+        Instant ended = at("2026-06-02T00:40", AUCKLAND);
+        Instant midnight = LocalDate.of(2026, 6, 2).atStartOfDay(AUCKLAND).toInstant();
+        org.mockito.ArgumentCaptor<ReadingSession> saved = org.mockito.ArgumentCaptor.forClass(ReadingSession.class);
+        when(sessionRepository.findFirstByUserAndStartedAt(user, started)).thenReturn(Optional.empty());
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        ReadingSession result = service.recordCompleted(user, started, ended);
+
+        verify(sessionRepository, times(2)).save(saved.capture());
+        assertThat(saved.getAllValues()).allSatisfy(s -> {
+            assertThat(s.isManualEntry()).isFalse();
+            assertThat(s.getBook()).isNull();
+        });
+        assertThat(saved.getAllValues().get(0).getStartedAt()).isEqualTo(started);
+        assertThat(saved.getAllValues().get(0).getEndedAt()).isEqualTo(midnight);
+        assertThat(result.getStartedAt()).isEqualTo(midnight); // 앞 조각의 end == 뒤 조각의 start
+        assertThat(result.getEndedAt()).isEqualTo(ended);
+    }
+
+    @Test
+    @DisplayName("recordCompleted #21: 같은 (user, startedAt) 행이 이미 있으면 그 행을 돌려주고 저장하지 않는다(업로드 재시도 멱등)")
+    void recordCompleted_duplicate_returnsExistingWithoutSaving() {
+        Instant started = kst("2026-06-01T10:00");
+        ReadingSession existing = ReadingSession.start(user, started);
+        existing.end(started.plusSeconds(420));
+        when(sessionRepository.findFirstByUserAndStartedAt(user, started)).thenReturn(Optional.of(existing));
+
+        ReadingSession result = service.recordCompleted(user, started, started.plusSeconds(600));
+
+        assertThat(result).isSameAs(existing);
+        verify(sessionRepository, never()).save(any(ReadingSession.class));
+    }
+
+    @Test
+    @DisplayName("recordCompleted #22: 진행 중 세션이 있어도 저장한다(과거 구간 기록 — recordManual과 같은 성질)")
+    void recordCompleted_activeSessionPresent_stillSaves() {
+        Instant started = kst("2026-06-01T10:00");
+        ReadingSession active = ReadingSession.start(user, kst("2026-06-01T20:00"));
+        lenient().when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(active));
+        when(sessionRepository.findFirstByUserAndStartedAt(user, started)).thenReturn(Optional.empty());
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        ReadingSession result = service.recordCompleted(user, started, started.plusSeconds(420));
+
+        verify(sessionRepository, times(1)).save(any(ReadingSession.class));
+        assertThat(result.getDurationSeconds()).isEqualTo(420L);
+        assertThat(active.getEndedAt()).isNull(); // 진행 중 세션은 건드리지 않는다
+    }
 }
