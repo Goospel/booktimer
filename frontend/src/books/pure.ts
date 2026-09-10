@@ -82,13 +82,17 @@ export interface StatusBadge {
     fg: string;
 }
 
+// 값은 hex가 아니라 **토큰 참조**다. 이 색은 `:style`로 인라인 박히므로 hex를 그대로 두면
+// 다크에서 그 배지만 크림색으로 남는다 — 인라인 스타일은 CSS의 어떤 테마 규칙보다 세다.
+// 토큰 정의는 app.css 한 곳(라이트 `:root` + 다크 블록)이고, 값은 옮기기 전 hex와 같다
+// (읽고싶음 배지만 설정 배너와 같은 --warn-bg로 합쳐졌다 — #F0E8DB → #F6ECD9).
 const STATUS_BADGE: Record<string, StatusBadge> = {
-    READING: { bg: '#E7EEE2', fg: '#4F6B4C' },      // 읽는 중 — 세이지
-    FINISHED: { bg: '#E0EFE6', fg: '#2F8F6B' },     // 완독 — 선명한 초록
-    WANT_TO_READ: { bg: '#F0E8DB', fg: '#8A6D3B' }, // 읽고 싶음 — 베이지
+    READING: { bg: 'var(--sage-soft)', fg: 'var(--accent-hover)' },  // 읽는 중 — 세이지
+    FINISHED: { bg: 'var(--ok-soft)', fg: 'var(--ok)' },             // 완독 — 선명한 초록
+    WANT_TO_READ: { bg: 'var(--warn-bg)', fg: 'var(--warn-fg)' },    // 읽고 싶음 — 베이지
 };
 
-export const STATUS_BADGE_FALLBACK: StatusBadge = { bg: '#EFEADD', fg: '#6F6A5E' };
+export const STATUS_BADGE_FALLBACK: StatusBadge = { bg: 'var(--line-1)', fg: 'var(--muted)' };
 
 export function statusBadge(status: string): StatusBadge {
     return STATUS_BADGE[status] ?? STATUS_BADGE_FALLBACK;

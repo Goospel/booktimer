@@ -166,8 +166,10 @@ function _showChip(mode, deferred) {
         'align-items:center',
         'gap:6px',
         'padding:8px 10px 8px 14px',
-        'background:rgba(110,138,106,0.93)',
-        'color:#fff',
+        // 인라인 스타일은 CSS의 어떤 테마 규칙보다 세다 — 여기에 hex를 두면 다크에서 이 칩만
+        // 라이트 세이지로 떠 있는다(실측으로 잡힌 자리다). 라이트 값은 옮기기 전과 같다.
+        'background:color-mix(in srgb, var(--accent) 93%, transparent)',
+        'color:var(--on-accent)',
         'border-radius:9999px',
         'font-size:13px',
         'font-weight:500',
@@ -202,7 +204,7 @@ function _showChip(mode, deferred) {
     closeBtn.style.cssText = [
         'background:none',
         'border:none',
-        'color:rgba(255,255,255,.8)',
+        'color:color-mix(in srgb, var(--on-accent) 80%, transparent)',
         'font-size:20px',
         'line-height:1',
         'cursor:pointer',

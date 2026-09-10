@@ -71,7 +71,7 @@ body.landing-page {
 .lp-nav-cta {
     text-decoration: none;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     padding: 9px 20px;
     border-radius: var(--radius-sm);
     font-size: 0.875rem;
@@ -508,7 +508,7 @@ body.landing-page {
     height: 48px;
     border-radius: 50%;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -577,7 +577,7 @@ body.landing-page {
     display: inline-block;
     text-decoration: none;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     padding: 16px 44px;
     border-radius: var(--radius-sm);
     font-size: 1.05rem;

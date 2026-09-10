@@ -126,17 +126,28 @@ describe('byline — 검색 결과 저자·출판사 한 줄', () => {
     });
 });
 
+// 색은 hex가 아니라 **토큰 참조**로 돌려준다. 이 값은 `:style`로 인라인 박히므로 hex면
+// 다크에서 그 배지만 크림색으로 남는다 — CSS 쪽 래칫(darkTokens.test.ts)이 못 보는 사각이라
+// 여기서 따로 못 박는다. `var(--…)` 형태 자체를 단언해야 「다크에서 갈리는가」가 걸린다.
 describe('statusBadge — 상태배지 색 매핑(시안 STATUS)', () => {
     test('읽는 중 → 세이지', () => {
-        expect(statusBadge('READING')).toEqual({ bg: '#E7EEE2', fg: '#4F6B4C' });
+        expect(statusBadge('READING')).toEqual({ bg: 'var(--sage-soft)', fg: 'var(--accent-hover)' });
     });
 
     test('완독 → 선명한 초록', () => {
-        expect(statusBadge('FINISHED')).toEqual({ bg: '#E0EFE6', fg: '#2F8F6B' });
+        expect(statusBadge('FINISHED')).toEqual({ bg: 'var(--ok-soft)', fg: 'var(--ok)' });
     });
 
     test('읽고 싶음 → 베이지', () => {
-        expect(statusBadge('WANT_TO_READ')).toEqual({ bg: '#F0E8DB', fg: '#8A6D3B' });
+        expect(statusBadge('WANT_TO_READ')).toEqual({ bg: 'var(--warn-bg)', fg: 'var(--warn-fg)' });
+    });
+
+    test('모든 상태가 토큰 참조다 — hex가 하나라도 섞이면 그 배지만 다크에서 라이트로 남는다', () => {
+        for (const s of ['READING', 'FINISHED', 'WANT_TO_READ', 'PAUSED', '']) {
+            const b = statusBadge(s);
+            expect(b.bg, `${s} bg`).toMatch(/^var\(--[\w-]+\)$/);
+            expect(b.fg, `${s} fg`).toMatch(/^var\(--[\w-]+\)$/);
+        }
     });
 
     test('알 수 없는 상태 → 중립 폴백', () => {
