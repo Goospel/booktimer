@@ -94,6 +94,7 @@ export function mountToggle(doc, storage) {
     return btn;
 }
 
-// ⚠️ 자동 마운트(`mountToggle(document, localStorage)`)는 일부러 없다 — 이 PR은 다크런치다.
-// 인프라(토큰·부트·강제 다크 차단)만 먼저 넣고, raw 색 160규칙이 토큰화되기 전에 토글을 켜면
-// 다크 화면 곳곳에 크림색이 남는다. 점등은 그 소탕 PR에서 이 한 줄을 추가하는 것으로 끝난다.
+// 점등 — raw 색 158선언이 토큰으로 옮겨간 뒤에야 켠다(그전엔 다크 화면 곳곳에 크림색이 남는다).
+// `type="module"`은 defer라 DOM이 이미 파싱된 뒤 실행된다 — DOMContentLoaded를 기다릴 필요가 없다.
+// document가 없는 환경(vitest node)에서는 마운트하지 않는다 — 순수 함수만 import해 계측한다.
+if (typeof document !== 'undefined') mountToggle(document, localStorage);
