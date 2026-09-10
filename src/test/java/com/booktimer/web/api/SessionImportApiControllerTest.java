@@ -3,6 +3,7 @@ package com.booktimer.web.api;
 import com.booktimer.auth.ApiTokenService;
 import com.booktimer.session.ContributionDay;
 import com.booktimer.session.ReadingContributionService;
+import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.user.AuthProvider;
 import com.booktimer.user.User;
@@ -22,6 +23,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -121,6 +123,45 @@ class SessionImportApiControllerTest {
         importSession(token, payload).andExpect(status().isNoContent());
 
         assertThat(sessionRepository.findByUser(u)).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("같은 startedAt의 진행 중 세션이 있어도 완료 행을 새로 만든다 — 멱등 키는 「완료된 행」만이다")
+    void import_sameStartedAtAsActiveSession_stillStores() throws Exception {
+        User u = tossUser("trial-active@noreply.booktimer.app");
+        // 밀리초로 내려야 진짜 충돌이다 — 서비스가 멱등 키를 밀리초로 자르므로, 나노초가 남은 값으로
+        // 진행 중 행을 심으면 키가 애초에 안 겹쳐 이 테스트가 아무것도 재지 않는다(실제로 그렇게 통과했다).
+        Instant started = startedWithinToday(240).truncatedTo(ChronoUnit.MILLIS);
+        // 로그인 직후 미니앱이 새 타이머를 켠 채로 체험 구간을 올리면, 두 startedAt이 같은 밀리초에
+        // 떨어질 수 있다. 진행 중 행(endedAt=null)이 멱등 키에 걸리면 체험 기록이 조용히 사라진다.
+        sessionRepository.save(ReadingSession.start(u, started));
+
+        importSession(apiTokenService.issue(u), body(started, started.plusSeconds(240)))
+                .andExpect(status().isNoContent());
+
+        assertThat(sessionRepository.findByUser(u)).hasSize(2);
+        assertThat(sessionRepository.findByUser(u)).filteredOn(s -> s.getEndedAt() != null)
+                .singleElement().satisfies(s -> assertThat(s.getDurationSeconds()).isEqualTo(240L));
+    }
+
+    /**
+     * 멱등 키의 <b>user 술어</b>를 잠근다 — 「음성 판정 전용」이 아니라, 술어가 빠지면 뒤에 올린 유저의
+     * 행이 통째로 사라져 {@code hasSize(2)}가 1로 무너진다. 양성 대조군은 위
+     * {@link #import_twice_isIdempotent} — 같은 유저 두 번이면 1건이다.
+     */
+    @Test
+    @DisplayName("서로 다른 유저가 같은 startedAt을 올리면 행은 유저마다 1건씩 남는다 — 멱등은 유저 안에서만")
+    void import_sameStartedAtDifferentUsers_storesBoth() throws Exception {
+        User a = tossUser("trial-cross-a@noreply.booktimer.app");
+        User b = tossUser("trial-cross-b@noreply.booktimer.app");
+        Instant started = startedWithinToday(240);
+        String payload = body(started, started.plusSeconds(240));
+
+        importSession(apiTokenService.issue(a), payload).andExpect(status().isNoContent());
+        importSession(apiTokenService.issue(b), payload).andExpect(status().isNoContent());
+
+        assertThat(sessionRepository.findByUser(a)).hasSize(1);
+        assertThat(sessionRepository.findByUser(b)).hasSize(1);
     }
 
     @Test

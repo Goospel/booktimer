@@ -144,8 +144,9 @@ public class ReadingSessionService {
      * <p>정책은 {@link #stop}과 같다: <b>6시간 클램프가 자정 분할보다 먼저</b>다. 날짜 정책
      * (너무 오래된 값·미래 값 거부)은 컨트롤러의 몫이다 — 여기선 모른다({@code recordManual}과 같은 분업).
      *
-     * <p><b>멱등</b>: 같은 {@code (user, startedAt)} 행이 이미 있으면 저장하지 않고 그 행을 돌려준다.
-     * 응답이 유실돼 클라이언트가 재시도해도 시간이 두 번 계상되지 않는다.
+     * <p><b>멱등</b>: 같은 {@code (user, startedAt)}의 <b>완료</b> 행이 이미 있으면 저장하지 않고 그 행을
+     * 돌려준다. 응답이 유실돼 클라이언트가 재시도해도 시간이 두 번 계상되지 않는다. 진행 중 행
+     * (endedAt=null)은 키가 아니다 — 같은 시각에 켜 둔 타이머가 체험 기록을 삼키면 안 된다.
      *
      * @return 마지막 조각(자정을 넘겼으면 {@code endedAt}이 속한 쪽), 또는 이미 있던 행
      */
@@ -155,7 +156,8 @@ public class ReadingSessionService {
         // 밀리초로 내려 두면 컬럼 정밀도 안이라 왕복이 보존된다(클라가 보내는 ISO 문자열도 밀리초다).
         startedAt = startedAt.truncatedTo(ChronoUnit.MILLIS);
         endedAt = endedAt.truncatedTo(ChronoUnit.MILLIS);
-        Optional<ReadingSession> duplicate = sessionRepository.findFirstByUserAndStartedAt(user, startedAt);
+        Optional<ReadingSession> duplicate =
+                sessionRepository.findFirstByUserAndStartedAtAndEndedAtIsNotNull(user, startedAt);
         if (duplicate.isPresent()) {
             return duplicate.get();
         }

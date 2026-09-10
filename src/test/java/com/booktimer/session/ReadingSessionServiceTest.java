@@ -857,7 +857,7 @@ class ReadingSessionServiceTest {
     void recordCompleted_createsCompletedRowWithoutBook() {
         Instant started = kst("2026-06-01T10:00");
         Instant ended = started.plusSeconds(420);
-        when(sessionRepository.findFirstByUserAndStartedAt(user, started)).thenReturn(Optional.empty());
+        when(sessionRepository.findFirstByUserAndStartedAtAndEndedAtIsNotNull(user, started)).thenReturn(Optional.empty());
         when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
 
         ReadingSession result = service.recordCompleted(user, started, ended);
@@ -875,7 +875,7 @@ class ReadingSessionServiceTest {
     @DisplayName("recordCompleted #18: 6시간 초과 구간은 startedAt+6h로 잘린다(stop과 같은 cap)")
     void recordCompleted_overCap_clampsToSixHours() {
         Instant started = kst("2026-06-01T08:00");
-        when(sessionRepository.findFirstByUserAndStartedAt(eq(user), any(Instant.class))).thenReturn(Optional.empty());
+        when(sessionRepository.findFirstByUserAndStartedAtAndEndedAtIsNotNull(eq(user), any(Instant.class))).thenReturn(Optional.empty());
         when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
 
         ReadingSession result = service.recordCompleted(user, started, started.plusSeconds(9 * 3600));
@@ -889,7 +889,7 @@ class ReadingSessionServiceTest {
     void recordCompleted_exactlyCap_notClamped() {
         Instant started = kst("2026-06-01T08:00");
         Instant ended = started.plusSeconds(6 * 3600);
-        when(sessionRepository.findFirstByUserAndStartedAt(eq(user), any(Instant.class))).thenReturn(Optional.empty());
+        when(sessionRepository.findFirstByUserAndStartedAtAndEndedAtIsNotNull(eq(user), any(Instant.class))).thenReturn(Optional.empty());
         when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
 
         ReadingSession result = service.recordCompleted(user, started, ended);
@@ -907,7 +907,7 @@ class ReadingSessionServiceTest {
         Instant ended = at("2026-06-02T00:40", AUCKLAND);
         Instant midnight = LocalDate.of(2026, 6, 2).atStartOfDay(AUCKLAND).toInstant();
         org.mockito.ArgumentCaptor<ReadingSession> saved = org.mockito.ArgumentCaptor.forClass(ReadingSession.class);
-        when(sessionRepository.findFirstByUserAndStartedAt(user, started)).thenReturn(Optional.empty());
+        when(sessionRepository.findFirstByUserAndStartedAtAndEndedAtIsNotNull(user, started)).thenReturn(Optional.empty());
         when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
 
         ReadingSession result = service.recordCompleted(user, started, ended);
@@ -929,7 +929,7 @@ class ReadingSessionServiceTest {
         Instant started = kst("2026-06-01T10:00");
         ReadingSession existing = ReadingSession.start(user, started);
         existing.end(started.plusSeconds(420));
-        when(sessionRepository.findFirstByUserAndStartedAt(user, started)).thenReturn(Optional.of(existing));
+        when(sessionRepository.findFirstByUserAndStartedAtAndEndedAtIsNotNull(user, started)).thenReturn(Optional.of(existing));
 
         ReadingSession result = service.recordCompleted(user, started, started.plusSeconds(600));
 
@@ -943,7 +943,7 @@ class ReadingSessionServiceTest {
         Instant started = kst("2026-06-01T10:00");
         ReadingSession active = ReadingSession.start(user, kst("2026-06-01T20:00"));
         lenient().when(sessionRepository.findByUserAndEndedAtIsNull(user)).thenReturn(Optional.of(active));
-        when(sessionRepository.findFirstByUserAndStartedAt(user, started)).thenReturn(Optional.empty());
+        when(sessionRepository.findFirstByUserAndStartedAtAndEndedAtIsNotNull(user, started)).thenReturn(Optional.empty());
         when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
 
         ReadingSession result = service.recordCompleted(user, started, started.plusSeconds(420));
@@ -951,5 +951,22 @@ class ReadingSessionServiceTest {
         verify(sessionRepository, times(1)).save(any(ReadingSession.class));
         assertThat(result.getDurationSeconds()).isEqualTo(420L);
         assertThat(active.getEndedAt()).isNull(); // 진행 중 세션은 건드리지 않는다
+    }
+
+    @Test
+    @DisplayName("recordCompleted #23: 멱등 조회는 「완료된 행」만 본다 — 같은 startedAt의 진행 중 행은 저장을 막지 않는다")
+    void recordCompleted_idempotencyLookupIgnoresActiveRow() {
+        Instant started = kst("2026-06-01T10:00");
+        // 같은 startedAt으로 타이머가 켜져 있는 상태(endedAt=null). 이 행이 멱등 키에 걸리면 체험 기록이
+        // 저장 없이 사라진다 — 그래서 조회 자체가 완료 행으로 한정돼야 한다(쿼리 의미는 통합 테스트가 잠근다:
+        // SessionImportApiControllerTest#import_sameStartedAtAsActiveSession_stillStores).
+        when(sessionRepository.findFirstByUserAndStartedAtAndEndedAtIsNotNull(user, started))
+                .thenReturn(Optional.empty());
+        when(sessionRepository.save(any(ReadingSession.class))).thenAnswer(returnsFirstArg());
+
+        ReadingSession result = service.recordCompleted(user, started, started.plusSeconds(420));
+
+        verify(sessionRepository, times(1)).save(any(ReadingSession.class));
+        assertThat(result.getDurationSeconds()).isEqualTo(420L);
     }
 }
