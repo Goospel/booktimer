@@ -16,7 +16,15 @@ import { describe, expect, it } from 'vitest';
  */
 
 const HERE = new URL('.', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
-const APP_CSS = join(HERE, '..', '..', 'src', 'main', 'resources', 'static', 'css', 'app.css');
+const CSS_DIR = join(HERE, '..', '..', 'src', 'main', 'resources', 'static', 'css');
+const APP_CSS = join(CSS_DIR, 'app.css');
+const LANDING_CSS = join(CSS_DIR, 'landing.css');
+/**
+ * raw 색 래칫이 훑는 CSS — 토큰 짝 맞춤은 `:root`가 사는 `app.css`만이지만, 래칫은
+ * <b>토큰화한 파일 전부</b>를 봐야 한다. `landing.css`는 이 PR이 같이 토큰화해 놓고도
+ * 래칫 밖에 있었다(독립 리뷰가 `outline-color: #ABCDEF`로 실증 — 깨끗한데 지키는 게 없었다).
+ */
+const RATCHET_CSS = [APP_CSS, LANDING_CSS];
 
 const LIGHT_SELECTOR = ':root';
 const DARK_SELECTOR = ':root[data-theme="dark"]';
@@ -31,8 +39,8 @@ const HAS_COLOR = /#[0-9a-fA-F]{3,8}\b|rgba?\(|url\(/;
  * `@import url(…); :root`로 잡혀 라이트 토큰이 0개가 됐고, 「계측기 생존」 단언이 그걸 잡았다
  * (그 단언이 없었으면 짝 맞춤이 빈 집합끼리 비교되며 <b>영원히 초록</b>이었다). 마지막 `;` 뒤만 남긴다.
  */
-function rules(): Array<{ selector: string; body: string; at: number }> {
-    const css = readFileSync(APP_CSS, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+function rules(file = APP_CSS): Array<{ selector: string; body: string; at: number }> {
+    const css = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const out: Array<{ selector: string; body: string; at: number }> = [];
     const re = /([^{}]+)\{([^{}]*)\}/g;
     let m: RegExpExecArray | null;
@@ -72,6 +80,11 @@ function declaration(selector: string, property: string): string | null {
  * <p>짝 맞춤은 양방향 부분집합이라 두 집합이 <b>같이</b> 쪼그라들면 통과한다(빈 집합끼리도 통과다).
  * 그래서 「0이 아니다」로는 부족하고 지금 세는 수를 바닥으로 깐다. 토큰을 정말로 줄일 일이 생기면
  * 이 숫자도 <b>같이 내린다</b> — 조용히 줄어드는 것만 막자는 것이지 못 줄이게 하려는 게 아니다.
+ *
+ * <p>단, <b>라이트 값 보존이 목적인 토큰은 줄이지 않는다</b>(사용자 결정 2026-09-10).
+ * `--warn-bg-2/3/4`처럼 이름이 닮은 변종은 중복이 아니라 <b>`origin/main`의 라이트 픽셀을
+ * 그대로 두려고</b> 갈라 둔 것이다 — 「닮았으니 합치자」로 이 숫자를 내리는 순간 라이트가
+ * 조용히 다른 화면이 된다.
  */
 const LIGHT_FLOOR = 119;
 const STUDY_FLOOR = 15;
@@ -161,29 +174,80 @@ const ALLOWED = [
     { why: '.story-bg-* 콘텐츠 프리셋', match: (sel: string) => sel.includes('.story-bg-') },
 ];
 
-/** 다크 블록(파일 끝 `@media not print`) 시작 위치 — 그 뒤 규칙은 다크 전용이라 래칫 대상이 아니다. */
-function darkSectionStart(): number {
-    const css = readFileSync(APP_CSS, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-    return css.indexOf('@media not print');
+/**
+ * 다크 블록(`@media not print`)의 <b>[시작, 끝)</b> — 그 <b>안쪽만</b> 래칫에서 뺀다.
+ *
+ * <p>시작 위치만 알고 「그 뒤 전부」를 건너뛰면, 다크 블록이 <b>파일의 마지막</b>이라
+ * 「CSS 끝에 규칙을 새로 붙인다」는 가장 자연스러운 동작이 곧바로 사각에 떨어진다 —
+ * 독립 리뷰가 파일 끝 한 줄로 실증했다. 그래서 닫는 `}`를 세어 범위로 자른다.
+ */
+function darkSection(file = APP_CSS): { start: number; end: number } {
+    const css = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const start = css.indexOf('@media not print');
+    const open = start < 0 ? -1 : css.indexOf('{', start);
+    if (open < 0) return { start: -1, end: -1 };
+    let depth = 0;
+    for (let i = open; i < css.length; i++) {
+        if (css[i] === '{') depth++;
+        else if (css[i] === '}' && --depth === 0) return { start, end: i };
+    }
+    return { start, end: css.length };
 }
 
-const RAW_COLOR = /#[0-9a-fA-F]{3,8}\b|rgba?\(|\b(?:white|black)\b/;
+/**
+ * CSS 이름 색 전부 — hex와 `rgb()`만 막으면 <b>`color: gray` 한 줄이 그대로 샌다</b>.
+ * 독립 리뷰가 `gray`·`hsl()`을 심어 통과하는 것을 실증한 자리다.
+ * `transparent`·`currentColor`는 테마를 안 타므로 뺀다.
+ */
+const NAMED_COLORS =
+    'aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown ' +
+    'burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan ' +
+    'darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid ' +
+    'darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet ' +
+    'deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ' +
+    'ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki ' +
+    'lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow ' +
+    'lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray ' +
+    'lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine ' +
+    'mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise ' +
+    'mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab ' +
+    'orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru ' +
+    'pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown ' +
+    'seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan ' +
+    'teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen';
 
-function rawColorDeclarations(): Array<{ selector: string; decl: string; allowed: string | null }> {
-    const cut = darkSectionStart();
-    const out: Array<{ selector: string; decl: string; allowed: string | null }> = [];
-    for (const r of rules()) {
-        if (r.selector === LIGHT_SELECTOR || r.selector.startsWith(`${LIGHT_SELECTOR}[`)) continue;
-        if (cut > 0 && r.at > cut) continue;
-        for (const d of r.body.split(';')) {
-            const m = /^\s*([\w-]+)\s*:\s*(.+)$/s.exec(d);
-            if (!m || !RAW_COLOR.test(m[2])) continue;
-            const hit = ALLOWED.find((a) => a.match(r.selector, m[1]));
-            out.push({
-                selector: r.selector,
-                decl: `${m[1]}: ${m[2].trim()}`,
-                allowed: hit ? hit.why : null,
-            });
+/**
+ * 색 리터럴 — hex · 색 함수 · 이름 색.
+ *
+ * <p>색 함수는 `rgb()` 하나가 아니다: `hsl()`·`hwb()`·`lab()`·`lch()`·`oklab()`·`oklch()`·`color()`가
+ * 전부 토큰을 안 거친 리터럴이다. `color-mix(`는 <b>일부러 뺀다</b> — 안쪽이 `var(--…)`인 토큰 채움이고,
+ * 리터럴을 품었다면 그 리터럴이 따로 잡힌다.
+ */
+const RAW_COLOR = new RegExp(
+    '#[0-9a-fA-F]{3,8}\\b' +
+        '|\\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\\(' +
+        `|\\b(?:${NAMED_COLORS.replace(/ /g, '|')})\\b`,
+);
+
+function rawColorDeclarations(): Array<{ file: string; selector: string; decl: string; allowed: string | null }> {
+    const out: Array<{ file: string; selector: string; decl: string; allowed: string | null }> = [];
+    for (const file of RATCHET_CSS) {
+        const name = file.split(/[\\/]/).pop()!;
+        const { start, end } = darkSection(file);
+        for (const r of rules(file)) {
+            if (r.selector === LIGHT_SELECTOR || r.selector.startsWith(`${LIGHT_SELECTOR}[`)) continue;
+            if (start >= 0 && r.at > start && r.at < end) continue;
+            for (const d of r.body.split(';')) {
+                const m = /^\s*([\w-]+)\s*:\s*(.+)$/s.exec(d);
+                if (!m || !RAW_COLOR.test(m[2])) continue;
+                const hit = ALLOWED.find((a) => a.match(r.selector, m[1]));
+                out.push({
+                    file: name,
+                    selector: r.selector,
+                    decl: `${m[1]}: ${m[2].trim()}`,
+                    allowed: hit ? hit.why : null,
+                });
+            }
         }
     }
     return out;
@@ -193,9 +257,11 @@ describe('raw 색 래칫 — 토큰을 안 거친 색 리터럴', () => {
     const all = rawColorDeclarations();
 
     it('파서가 선언을 실제로 훑는다 — 0이면 늘 통과하는 빈 래칫이다 (계측기 생존)', () => {
-        const cut = darkSectionStart();   // 루프 밖에서 한 번 — 안에서 부르면 규칙마다 파일을 다시 읽는다
+        const cut = darkSection().start;   // 루프 밖에서 한 번 — 안에서 부르면 규칙마다 파일을 다시 읽는다
         const scanned = rules().filter((r) => r.at < cut).reduce((n, r) => n + r.body.split(';').length, 0);
         expect(scanned).toBeGreaterThanOrEqual(3000);
+        // landing.css도 실제로 읽히는지 — 배열에 넣고 안 읽으면 조용히 0줄짜리 검사가 된다.
+        expect(rules(LANDING_CSS).length).toBeGreaterThanOrEqual(50);
     });
 
     it('허용목록이 실제로 색을 잡고 있다 — 빈 허용목록이면 래칫이 무엇을 봐준 건지 알 수 없다 (양성 대조군)', () => {
@@ -206,7 +272,7 @@ describe('raw 색 래칫 — 토큰을 안 거친 색 리터럴', () => {
     });
 
     it('허용목록 밖에는 색 리터럴이 남아 있지 않다', () => {
-        const leaked = all.filter((d) => !d.allowed).map((d) => `${d.selector} { ${d.decl} }`);
+        const leaked = all.filter((d) => !d.allowed).map((d) => `${d.file}: ${d.selector} { ${d.decl} }`);
         expect(leaked).toEqual([]);
     });
 });
@@ -228,7 +294,10 @@ describe('정적 JS 인라인 스타일의 raw 색', () => {
             // 주석은 걷는다 — 설명문의 hex(옛 값 기록 등)는 화면을 칠하지 않는다.
             const code = src.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
             // box-shadow는 CSS 래칫과 같은 이유로 뺀다 — 그림자는 어느 테마에서도 검정이다.
-            const hits = code.match(/(?:background|(?<!-)color|border)\s*:\s*[^'"]*(?:#[0-9a-fA-F]{3,8}\b|rgba?\()/g) ?? [];
+            // 속성명은 `[-\w]*color`로 받는다. 옛 `(?<!-)color`는 `background-color:`를 통째로 놓쳤다 —
+            // `background` 분기는 뒤의 `:` 대신 `-`를 만나 죽고 `color` 분기는 룩비하인드에 걸린다.
+            // 이 래칫이 있는 이유가 정확히 인라인 채움 색인데 그 속성명이 사각이었다(독립 리뷰 실측).
+            const hits = code.match(/(?:background|[-\w]*color|border)\s*:\s*[^'"]*(?:#[0-9a-fA-F]{3,8}\b|rgba?\()/g) ?? [];
             expect(hits).toEqual([]);
         });
     }

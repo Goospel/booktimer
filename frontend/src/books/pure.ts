@@ -84,8 +84,8 @@ export interface StatusBadge {
 
 // 값은 hex가 아니라 **토큰 참조**다. 이 색은 `:style`로 인라인 박히므로 hex를 그대로 두면
 // 다크에서 그 배지만 크림색으로 남는다 — 인라인 스타일은 CSS의 어떤 테마 규칙보다 세다.
-// 토큰 정의는 app.css 한 곳(라이트 `:root` + 다크 블록)이고, 값은 옮기기 전 hex와 같다
-// (읽고싶음 배지만 설정 배너와 같은 --warn-bg로 합쳐졌다 — #F0E8DB → #F6ECD9).
+// 토큰 정의는 app.css 한 곳(라이트 `:root` + 다크 블록)이고, 라이트 값은 여섯 자리 전부
+// 옮기기 전 hex 그대로다(`--warn-bg-4` = #F0E8DB 처럼 — 사용자 결정 「라이트는 지금 그대로」).
 const STATUS_BADGE: Record<string, StatusBadge> = {
     READING: { bg: 'var(--sage-soft)', fg: 'var(--accent-hover)' },  // 읽는 중 — 세이지
     FINISHED: { bg: 'var(--ok-soft)', fg: 'var(--ok)' },             // 완독 — 선명한 초록
