@@ -157,14 +157,26 @@ export function formatWeekday(date: string): string {
 }
 
 /**
- * 하루 막대의 길이(0~100) — 기준은 <b>그 달에서 가장 오래 읽은 날</b>이다.
+ * 하루 막대의 길이(0~100) — 기준은 <b>그날 유효했던 하루 목표</b>다.
  *
- * <p>달마다 기준을 다시 잡아야 그 달 안의 편차가 보인다(전체 최대로 재면 한가한 달은 죄다 납작해진다).
- * 기준이 0이면 0을 돌려준다 — 0으로 나누면 NaN이 되고, `width: NaN%`는 막대를 통째로 지운다.
+ * <p>전에는 「그 달 최대」로 쟀다. 그러면 목표를 채운 날도 같은 달에 더 오래 읽은 날이 하나 있으면
+ * 짧게 그려진다 — 막대가 「내가 오늘 할 일을 했나」가 아니라 「그 달 누구보다 길었나」를 답하고 있었다.
+ *
+ * <p>기준이 0(목표 없음)이면 읽은 날은 가득, 안 읽은 날은 0이다 — 잔디 `levelFor`가 목표 0인 날을
+ * lv4로 치는 것과 같은 규칙이고, 덤으로 0으로 나눠 `width: NaN%`가 되는 일도 없다.
+ *
+ * <p><b>내림이라야 한다.</b> 반올림이면 3588초/3600초가 100%로 그려지는데, 잔디
+ * `ContributionGraphBuilder.levelFor`는 `seconds < goal`이라 그 날을 lv3으로 친다 — 같은 화면의 두 그림이
+ * 「목표를 채웠나」에 다른 답을 한다. 내림으로 두면 **가득 찬 막대 ⇔ 잔디 lv4**가 참이 된다.
  */
 export function barPercent(seconds: number, maxSeconds: number): number {
-  if (maxSeconds <= 0) return 0;
-  return Math.min(100, Math.round((seconds / maxSeconds) * 100));
+  if (maxSeconds <= 0) return seconds > 0 ? 100 : 0;
+  return Math.min(100, Math.floor((seconds / maxSeconds) * 100));
+}
+
+/** 펼친 하루의 마지막 줄 — 막대를 무엇에 견줘 쟀는지. 0·미상(옛 서버 응답)은 「목표 없음」. */
+export function goalLabel(goalSeconds: number | undefined): string {
+  return goalSeconds === undefined || goalSeconds <= 0 ? '그날 목표 없음' : `그날 목표 ${formatDuration(goalSeconds)}`;
 }
 
 /**
@@ -271,7 +283,6 @@ export function MonthlyRecords({ months }: { months: MonthlySection[] }) {
             <DayRow
               key={day.date}
               day={day}
-              monthMax={maxOf(section)}
               expanded={day.date === openDate}
               onToggle={() => setOpenDate(day.date === openDate ? null : day.date)}
             />
@@ -280,11 +291,6 @@ export function MonthlyRecords({ months }: { months: MonthlySection[] }) {
       ))}
     </div>
   );
-}
-
-/** 그 달에서 가장 오래 읽은 날의 초 — 막대의 기준. 빈 달은 0(막대가 안 그려진다). */
-function maxOf(section: MonthlySection): number {
-  return section.days.reduce((max, day) => Math.max(max, day.totalSeconds), 0);
 }
 
 /**
@@ -327,12 +333,10 @@ const BUTTON_RESET: CSSProperties = {
  */
 export function DayRow({
   day,
-  monthMax,
   expanded,
   onToggle,
 }: {
   day: DailyRecord;
-  monthMax: number;
   expanded: boolean;
   onToggle: () => void;
 }) {
@@ -350,11 +354,13 @@ export function DayRow({
 
       <CoverPile books={day.books} />
 
-      {/* 막대 색은 잔디 팔레트에서 가져온다 — 같은 「얼마나 읽었나」를 두 곳이 다른 색으로 말하지 않게. */}
+      {/* 막대 색은 잔디 팔레트에서 가져온다 — 같은 「얼마나 읽었나」를 두 곳이 다른 색으로 말하지 않게.
+          기준은 그날 목표다(서버가 실어 준다). 롤링 배포 중 옛 서버 응답엔 그 필드가 없어 0으로 떨어진다
+          — 읽은 날은 가득. */}
       <div
         aria-hidden="true"
         style={{
-          width: `${barPercent(day.totalSeconds, monthMax)}%`,
+          width: `${barPercent(day.totalSeconds, day.goalSeconds ?? 0)}%`,
           height: 6,
           borderRadius: 3,
           background: LEVEL_COLORS[2],
@@ -390,7 +396,7 @@ export function DayRow({
       ) : (
         <div style={ROW_GRID}>{summary}</div>
       )}
-      {expanded && <BookLines rows={bookRows(day)} />}
+      {expanded && <BookLines rows={bookRows(day)} goalSeconds={day.goalSeconds} />}
     </div>
   );
 }
@@ -478,11 +484,13 @@ function CoverPile({ books }: { books: BookRead[] }) {
 /**
  * 펼친 책 줄들 — 무슨 책을 얼마나.
  *
- * <p>막대 기준은 <b>그날 가장 오래 읽은 줄</b>이다. 하루 막대가 「그 달 최대」를 기준으로 재는 것과 같은
- * 규칙을 한 단계 아래에 쓴 것 — 총합을 기준으로 재면 여러 권인 날은 죄다 짧은 막대가 돼 견줄 수가 없다.
- * 그래서 하루 막대(그 달에서의 크기)와 책 막대(그날 안에서의 비중)는 서로 다른 것을 잰다.
+ * <p>막대 기준은 <b>그날 가장 오래 읽은 줄</b>이다 — 총합을 기준으로 재면 여러 권인 날은 죄다 짧은
+ * 막대가 돼 견줄 수가 없다. 하루 막대(그날 목표를 얼마나 채웠나)와 책 막대(그날 안에서의 비중)는
+ * 서로 다른 것을 잰다.
+ *
+ * <p>맨 아래 한 줄은 하루 막대의 기준을 밝힌다 — 막대만 보면 무엇에 견줘 쟀는지 알 수 없다.
  */
-function BookLines({ rows }: { rows: DayBookRow[] }) {
+function BookLines({ rows, goalSeconds }: { rows: DayBookRow[]; goalSeconds?: number }) {
   const longest = rows.reduce((max, row) => Math.max(max, row.seconds), 0);
   const name: CSSProperties = { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
 
@@ -553,6 +561,11 @@ function BookLines({ rows }: { rows: DayBookRow[] }) {
           </div>
         </div>
       ))}
+
+      {/* 값이 아니라 말이라 비세리프로 둔다 — 요일 줄과 같은 판단(위계 테스트의 비세리프 목록). */}
+      <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
+        {goalLabel(goalSeconds)}
+      </Text>
     </div>
   );
 }

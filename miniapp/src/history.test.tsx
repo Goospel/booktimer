@@ -15,6 +15,7 @@ import {
   formatMonthTitle,
   formatRecordDate,
   formatWeekday,
+  goalLabel,
   isExpandable,
 } from './screens/History';
 import { graph, userAgent } from './test-fixtures';
@@ -129,28 +130,56 @@ describe('기록 목록 포맷', () => {
 });
 
 describe('하루 막대 (barPercent)', () => {
-  it('그 달에서 가장 오래 읽은 날이 가득 찬다 — 기준이 달마다 다시 잡혀야 편차가 보인다', () => {
+  it('그날 목표를 채우면 가득 찬다 — 같은 달에 더 긴 날이 있어도 목표가 기준이다', () => {
     expect(barPercent(3_600, 3_600)).toBe(100);
     expect(barPercent(1_800, 3_600)).toBe(50);
   });
 
-  it('기준이 0이면 0 — 0으로 나눠 NaN 폭이 되면 막대가 통째로 사라진다', () => {
+  it('기준이 0(목표 없음)이면 읽은 날은 가득, 안 읽은 날은 0 — 잔디가 목표 0인 날을 lv4로 치는 것과 같은 규칙', () => {
+    expect(barPercent(600, 0)).toBe(100);
     expect(barPercent(0, 0)).toBe(0);
   });
 
   it('기준을 넘겨도 100을 안 넘는다 — 막대가 칸 밖으로 삐져나가지 않는다', () => {
     expect(barPercent(7_200, 3_600)).toBe(100);
   });
+
+  it('목표에 12초 모자란 날은 가득 차지 않는다 — 반올림이면 100%인데 잔디는 lv3이라 두 그림이 어긋난다', () => {
+    expect(barPercent(3_588, 3_600)).toBe(99);
+  });
+});
+
+describe('그날 목표 문구 (goalLabel)', () => {
+  it('목표가 있으면 무엇에 견줘 쟀는지 적는다 — 막대만으론 기준이 안 보인다', () => {
+    expect(goalLabel(3_600)).toBe('그날 목표 1시간');
+  });
+
+  it('목표 0은 「목표 없음」이다 — 도메인이 허용하는 상태라 빈칸으로 두면 고장처럼 보인다', () => {
+    expect(goalLabel(0)).toBe('그날 목표 없음');
+  });
+
+  it('필드가 없는 옛 서버 응답도 「목표 없음」으로 — undefined가 문구에 새어 나오면 안 된다', () => {
+    expect(goalLabel(undefined)).toBe('그날 목표 없음');
+  });
 });
 
 /** 그날 읽은 책 한 권. 표지 주소는 대개 없다(직접 등록한 책). */
 const bk = (title: string, seconds: number, coverUrl: string | null = null) => ({ title, coverUrl, seconds });
+
+/**
+ * 마크업에서 <b>하루 막대</b>의 폭만 집어낸다.
+ *
+ * <p>폭 문자열을 그냥 `toContain`으로 찾으면 안 된다 — 행 격자도 `width:100%`라 「가득 찼다」는
+ * 단언이 막대를 안 그려도 늘 초록이 된다(실제로 돌연변이가 살아남아 잡혔다). 높이 6px이 막대의 표식이다.
+ */
+const dayBarWidth = (markup: string): string | null => markup.match(/width:(\d+%);height:6px/)?.[1] ?? null;
 
 const day = (over: Partial<DailyRecord> = {}): DailyRecord => ({
   date: '2026-08-14',
   totalSeconds: 5_400,
   books: [],
   manuallyFilled: false,
+  goalSeconds: 3_600,
   ...over,
 });
 
@@ -220,13 +249,19 @@ describe('펼칠 수 있는 날 (isExpandable)', () => {
 });
 
 describe('하루 한 줄 (DayRow)', () => {
-  const busy = day({ date: '2026-08-14', totalSeconds: 4_500, books: [bk('미움받을 용기', 3_600), bk('사피엔스', 900)] });
+  // 목표 2시간 30분에 1시간 15분을 읽은 날 — 하루 막대가 50%다(책 막대와 폭이 겹치지 않게 고른 값).
+  const busy = day({
+    date: '2026-08-14',
+    totalSeconds: 4_500,
+    books: [bk('미움받을 용기', 3_600), bk('사피엔스', 900)],
+    goalSeconds: 9_000,
+  });
   const alone = day({ date: '2026-08-13', totalSeconds: 3_600, books: [bk('데미안', 3_600)] });
 
   const render = (d: DailyRecord, expanded: boolean) =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <DayRow day={d} monthMax={9_000} expanded={expanded} onToggle={() => {}} />
+        <DayRow day={d} expanded={expanded} onToggle={() => {}} />
       </TDSMobileProvider>,
     );
 
@@ -251,13 +286,47 @@ describe('하루 한 줄 (DayRow)', () => {
     expect(markup).toContain('15분');
   });
 
-  it('책 막대는 그날 가장 오래 읽은 책을 기준으로 잰다 — 하루 막대가 그 달 최대를 기준으로 재는 것과 같은 규칙', () => {
+  it('책 막대는 그날 가장 오래 읽은 책을 기준으로 잰다 — 하루 막대가 그날 목표를 기준으로 재는 것과 같은 규칙', () => {
     const markup = render(busy, true);
 
-    // 하루 막대는 4500/9000 = 50%. 책 막대는 3600/3600 = 100%, 900/3600 = 25%.
-    expect(markup).toContain('width:50%');
-    expect(markup).toContain('width:100%');
-    expect(markup).toContain('width:25%');
+    // 하루 막대는 4500/9000(그날 목표) = 50%. 책 막대는 3600/3600 = 100%, 900/3600 = 25%.
+    // 책 막대의 표식은 높이 4px이다 — 그냥 `width:100%`로 찾으면 행 격자(`width:100%`)에 걸려 늘 초록이다.
+    expect(dayBarWidth(markup)).toBe('50%');
+    expect(markup).toContain('width:100%;height:4px');
+    expect(markup).toContain('width:25%;height:4px');
+  });
+
+  it('하루 막대는 그날 목표를 기준으로 잰다 — 채우면 가득, 반이면 반, 넘겨도 가득', () => {
+    const met = day({ totalSeconds: 3_600, goalSeconds: 3_600, books: [bk('데미안', 3_600)] });
+    const half = day({ totalSeconds: 1_800, goalSeconds: 3_600, books: [bk('데미안', 1_800)] });
+    const over = day({ totalSeconds: 4_500, goalSeconds: 3_600, books: [bk('데미안', 4_500)] });
+
+    expect(dayBarWidth(render(met, false))).toBe('100%');
+    expect(dayBarWidth(render(half, false))).toBe('50%');
+    expect(dayBarWidth(render(over, false))).toBe('100%');
+  });
+
+  it('펼치면 그날 목표를 적는다 — 막대만으론 무엇에 견줘 쟀는지 알 수 없다', () => {
+    expect(render(alone, true)).toContain('그날 목표 1시간');
+  });
+
+  it('접힌 줄엔 목표를 안 적는다 — 한 줄 요약이 길어지면 시간·손잡이를 밀어낸다', () => {
+    expect(render(alone, false)).not.toContain('그날 목표');
+  });
+
+  it('필드가 아예 없는 날도 가득 찬다 — 롤링 배포 중 옛 서버 응답이 오면 기준을 0으로 떨어뜨린다', () => {
+    // 900초. 폴백이 0이 아닌 값(예: 기본 목표 3600)으로 새면 25%로 그려져 이 단언이 죽는다.
+    const stale = day({ totalSeconds: 900, goalSeconds: undefined, books: [bk('데미안', 900)] });
+
+    expect(dayBarWidth(render(stale, false))).toBe('100%');
+  });
+
+  it('목표가 없는 날은 막대가 가득 차고 「그날 목표 없음」이라 적는다 — 도메인이 허용하는 상태다', () => {
+    const noGoal = day({ totalSeconds: 900, goalSeconds: 0, books: [bk('데미안', 900)] });
+    const markup = render(noGoal, true);
+
+    expect(dayBarWidth(markup)).toBe('100%');
+    expect(markup).toContain('그날 목표 없음');
   });
 
   it('한 권인 날과 여러 권인 날이 같은 격자를 쓴다 — 막대의 시작·끝이 행마다 어긋나면 길이 비교가 거짓이 된다', () => {
@@ -331,6 +400,28 @@ describe('월별 기록 목록', () => {
 
   it('여러 달을 한 화면에 이어 붙인다 — 월 넘기기 버튼 없이 스크롤로 과거를 본다(A안)', () => {
     expect(markup).toContain('2026년 7월');
+  });
+
+  it('같은 달에 3시간 읽은 날이 있어도 1시간 목표를 채운 날은 가득 찬다 — 사용자 보고 재현', () => {
+    const withLongDay = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <MonthlyRecords
+          months={[
+            {
+              month: '2026-09',
+              totalSeconds: 14_400,
+              days: [
+                { date: '2026-09-08', totalSeconds: 10_800, books: [], manuallyFilled: false, goalSeconds: 3_600 },
+                { date: '2026-09-07', totalSeconds: 3_600, books: [], manuallyFilled: false, goalSeconds: 3_600 },
+              ],
+            },
+          ]}
+        />
+      </TDSMobileProvider>,
+    );
+
+    // 그 달 최대(10_800) 기준이었다면 목표를 채운 날은 3600/10800 = 33%로 납작했다.
+    expect(withLongDay.match(/width:\d+%;height:6px/g)).toEqual(['width:100%;height:6px', 'width:100%;height:6px']);
   });
 
   it('기록이 없으면 안내를 대신 둔다 — 가입 직후 잔디 아래가 통째로 비어 고장처럼 보였다', () => {
@@ -450,7 +541,7 @@ describe('기록 위계 (시안 2d)', () => {
     };
     const markup = renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <DayRow day={twoBooks} monthMax={9_000} expanded onToggle={() => {}} />
+        <DayRow day={twoBooks} expanded onToggle={() => {}} />
       </TDSMobileProvider>,
     );
 
@@ -465,7 +556,7 @@ describe('기록 위계 (시안 2d)', () => {
   it('가이드라인은 여백 인용 줄과 같은 세이지 선이다 — 「위 줄에 딸린 것」을 앱이 한 가지로 말한다', () => {
     const markup = renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <DayRow day={day('2026-08-21', 1_800)} monthMax={9_000} expanded onToggle={() => {}} />
+        <DayRow day={day('2026-08-21', 1_800)} expanded onToggle={() => {}} />
       </TDSMobileProvider>,
     );
 
