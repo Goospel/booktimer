@@ -164,12 +164,19 @@ public class StudyNote extends BaseTimeEntity {
         return trimmed;
     }
 
-    /** 빈 제목은 {@code null}이다 — 「제목 없음」 라벨은 화면이 파생한다(서버는 친 값만 저장한다). */
+    /**
+     * 빈 제목은 {@code null}이다 — 「제목 없음」 라벨은 화면이 파생한다(서버는 친 값만 저장한다).
+     *
+     * <p><b>개행은 공백으로 접는다.</b> 제목은 정답지 헤더({@code NoteReference.text})에서 한 줄로 서는
+     * 라벨인데, 개행이 통과하면 그 한 줄을 여러 줄로 벌려 「[오늘 쓴 글]」 같은 섹션을 <b>블록 안에서</b>
+     * 위조할 수 있다. 블록을 나눈 것은 문자열 경계를 지킬 뿐 블록 안의 줄까지 지켜 주지 않는다.
+     * 목록 라벨이 한 줄로 그려지는 데도 이득이다.
+     */
     private static String optionalTitle(String value) {
         if (value == null || value.isBlank()) {
             return null;
         }
-        String trimmed = value.strip();
+        String trimmed = value.strip().replaceAll("[\\r\\n]+", " ");
         if (trimmed.length() > TITLE_MAX) {
             throw new IllegalArgumentException("제목은 " + TITLE_MAX + "자까지 쓸 수 있어요");
         }

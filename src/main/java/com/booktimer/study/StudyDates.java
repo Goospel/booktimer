@@ -26,6 +26,15 @@ public final class StudyDates {
 
     /** 시각을 인자로 받는 쪽 — 결정적 테스트가 경계 직전·직후를 심을 수 있게 {@code now}를 밖에서 준다. */
     public static LocalDate today(User user, Instant now) {
-        return LocalDate.ofInstant(now, ZoneId.of(user.getTimezone()));
+        return LocalDate.ofInstant(now, zone(user));
+    }
+
+    /**
+     * 유저 타임존 그 자체 — 날짜가 아니라 <b>존</b>이 필요한 자리(정답지 헤더 날짜 등)의 단일 출처.
+     *
+     * <p>인라인 {@code ZoneId.of(user.getTimezone())}을 두면 위 경고대로 규칙이 둘이 된다.
+     */
+    public static ZoneId zone(User user) {
+        return ZoneId.of(user.getTimezone());
     }
 }

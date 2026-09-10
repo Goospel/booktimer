@@ -46,6 +46,11 @@ public class StudyNoteService {
      */
     @Transactional(readOnly = true)
     public NoteReference reference(User user, StudyBook book) {
+        // ponytail: 그 책의 필기를 **본문째 전부** 메모리로 읽고 자른다(body는 basic 컬럼이라 eager).
+        // 천장 = 한 책 수백 장 — 500장 × 8000자면 요청 하나가 약 8MB 문자열을 만들고, 이 EC2는 facefit과
+        // 메모리를 나눠 쓴다. 게다가 이 왕복은 책 전환·저장마다 난다. 승급 경로 = 리포지터리에서 Top500
+        // (또는 Pageable)으로 자르기 — 최근순 정렬이 이미 인덱스를 타므로 쿼리만 좁히면 된다.
+        // 지금 안 하는 이유: 상한(MAX_CHARS)이 프롬프트 크기를 확실히 묶고 있어 「느려지면 그때」로 충분하다.
         return NoteReference.select(list(user, book), NoteReference.MAX_CHARS);
     }
 

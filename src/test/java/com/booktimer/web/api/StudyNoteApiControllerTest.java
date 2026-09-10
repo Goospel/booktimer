@@ -462,8 +462,10 @@ class StudyNoteApiControllerTest {
         Long bookId = book(user, "정보처리기사 실기").getId();
         // 최근순이라 <b>마지막에 만든 장이 맨 앞</b>이다. 오래된 「여백」이 상한에 밀려 빠지는 것이
         // 이 문의 관심사 — 조용히 빠지면 사용자가 모른다.
-        String full = "ㄱ".repeat(8000);
-        createNote("noteref", bookId, "여백", "가장 오래된 짧은 장");
+        // 크기는 헤더까지 센다(NoteReference.chars = 모델이 받는 글자 수): 7800자 장이 7826, 셋이면
+        // 23,478이라 남은 자리가 522뿐 — 8000자짜리 「여백」은 통째로 빠진다.
+        String full = "ㄱ".repeat(7800);
+        createNote("noteref", bookId, "여백", "ㄴ".repeat(8000));
         createNote("noteref", bookId, "1장", full);
         createNote("noteref", bookId, "2장", full);
         createNote("noteref", bookId, "3장", full);
@@ -475,7 +477,7 @@ class StudyNoteApiControllerTest {
                 .andExpect(jsonPath("$.excluded", hasSize(1)))
                 .andExpect(jsonPath("$.included[0].title").value("3장"))
                 .andExpect(jsonPath("$.excluded[0].title").value("여백"))
-                .andExpect(jsonPath("$.chars").value(24_000))
+                .andExpect(jsonPath("$.chars").value(23_478))
                 .andExpect(jsonPath("$.limit").value(24_000));
     }
 

@@ -25,7 +25,6 @@ import java.io.IOException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -191,7 +190,7 @@ public class StudyRecallService {
         if (book == null) {
             return null;
         }
-        String text = noteService.reference(user, book).text(ZoneId.of(user.getTimezone()));
+        String text = noteService.reference(user, book).text(StudyDates.zone(user));
         return text.isBlank() ? null : text;
     }
 
