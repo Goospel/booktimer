@@ -11,6 +11,10 @@
 @import url('https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&display=swap');
 
 :root {
+    /* 브라우저 강제 다크(크롬 Auto Dark Theme) 거부. `only`가 핵심이다 — `light`만 쓰면 그건
+       「라이트만 그린다」는 사실 진술이라, UA가 보기엔 여전히 「다크를 지원하지 않는 페이지」다.
+       사용자가 다크를 켜면 아래 블록이 color-scheme: dark로 덮어 이 opt-out을 스스로 푼다. */
+    color-scheme: only light;
     /* 종이톤 + 세이지 그린 팔레트. 이름은 유지(무파괴), 값만 교체 → 전역 리프레시. */
     --bg: #F7F2E8;          /* 종이 배경(따뜻한 크림) — 위에 결이 옅게 얹히는 것까지 감안한 값 */
     --card-bg: #FCFAF5;     /* 카드 표면(종이톤 화이트) */
@@ -3816,4 +3820,116 @@ body.dashboard-page #dashboard-app { gap: 20px; }
     .container.wide-page .book-manual-form,
     .container.wide-page .study-day-form,
     .container.wide-page .study-plan-form { max-width: 620px; }
+}
+
+/* 테마 토글 — theme.js가 header.brand / header.auth-brand 끝에 꽂는다(아직 다크런치라 안 꽂힌다).
+   `border` 단축 선언이 전역 `button`의 border-image를 initial로 되돌리는 것을 그대로 이용한다 —
+   32px 원형에 300px 연필 타일을 8px로 눌러 넣으면 결이 뭉개진다(.margin-card-btn과 같은 이유).
+   width를 고정하는 것도 전역 `button { width: 100% }`를 상쇄하기 위한 것이다. */
+.theme-toggle {
+    width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
+    margin-left: auto;      /* .brand가 flex라 우측으로 민다 */
+    align-self: center;     /* .brand의 align-items: baseline 상쇄 — 아이콘엔 baseline이 없다 */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--card-bg);
+    color: var(--accent-hover);
+    cursor: pointer;
+}
+.theme-toggle:hover { background: var(--nav-hover-bg); border-color: var(--nav-hover-border); }
+.theme-toggle:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus-ring); }
+.theme-toggle svg { width: 18px; height: 18px; }
+
+/* ── 다크 테마 ────────────────────────────────────────────
+   `:root`의 색 토큰만 덮는다. 토큰이 안 닿는 raw 리터럴 규칙(설정 배너·상태 배지·흰 채움 등)은
+   아직 크림색으로 남아 있고, 그래서 이 단계는 다크런치다 — 토글을 안 꽂았으므로 저장값을
+   손으로 넣지 않는 한 아무도 이 블록을 보지 못한다(theme.js 끝 주석).
+
+   ⚠️ `@media not print`로 통째로 감싼다 — 종이엔 항상 라이트가 나가야 한다. 다크로 인쇄하면
+   잉크를 통째로 붓는 꼴이고, 대부분의 프린터 드라이버는 배경을 아예 안 그려 글자만 흰색으로 남긴다.
+
+   특이성 메모: `[data-theme]`가 붙어 라이트 `:root`(0,1,0)보다 한 단 위(0,2,0)라 선언 순서에
+   기대지 않는다. 그래도 파일 끝에 두는 것은 아래 `.is-study` 값 오버라이드들이 자기가 덮는
+   라이트 규칙 '뒤'에 오게 하려는 것이다 — 나중에 누가 특이성을 같게 만들어도 순서가 받쳐준다. */
+@media not print {
+:root[data-theme="dark"] {
+    /* 폼 컨트롤·스크롤바·`<input type=date>` 달력까지 네이티브 다크로 넘긴다.
+       동시에 크롬 Auto Dark Theme의 표적에서도 벗어난다 — 이미 다크를 그리는 페이지는 안 뒤집는다. */
+    color-scheme: dark;
+
+    --bg: #1E1C18;          /* 어두운 종이(따뜻한 차콜) */
+    --card-bg: #26231E;     /* 카드 표면 — 배경보다 한 단 밝게 */
+    --text: #E8E2D6;        /* 잉크 반전 — 순백이 아니라 종이색 계열이라 눈이 덜 시리다 */
+    --muted: #A8A196;
+    --accent: #8FAE86;      /* = 라이트 --sage-7. 다크에선 원래 세이지(#6E8A6A)가 너무 가라앉는다 */
+    --accent-hover: #B6C9AE;/* 다크는 hover가 '더 밝은' 쪽이다 — 라이트와 방향이 반대 */
+    --danger: #E5766B;      /* 라이트의 #dc2626은 다크 위에서 대비가 안 난다 */
+    --danger-hover: #F0918A;
+    --border: #3A362F;      /* 장식선(실제 테두리는 연필 프레임이 그린다) */
+    --ok: #5FBF95;
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 24px rgba(0,0,0,.40);
+    --sage-soft: #2E3A2C;
+    --nav-hover-border: #45563F;    /* --nav-hover-bg는 var(--sage-soft) 별칭이라 자동으로 따라온다 */
+    --focus-ring: rgba(143, 174, 134, .40);
+    --paper-2: #2A2722;
+    --paper-3: #2E2A24;
+    --paper-4: #24211C;
+    --sage-1: #2F332A;
+    --sage-2: #2C3A2E;
+    --sage-3: #33392B;
+    --sage-4: #4A5540;
+    --sage-5: #4E6247;
+    --sage-6: #5C7456;
+    --sage-7: #7E9C76;
+    --sage-8: #93A184;
+    --neutral-1: #4A4538;
+    --neutral-2: #5A5346;
+    --neutral-3: #9A9486;
+    /* 잔디 — 미달에서 달성으로 갈수록 '밝아진다'(라이트는 진해진다). 어두운 종이 위에서
+       진해지는 사다리는 배경에 먹혀 0단계와 4단계가 구별되지 않는다. */
+    --grass-0: #2C2A25;
+    --grass-1: #3E5A34;
+    --grass-2: #55804A;
+    --grass-3: #7BAA6B;
+    --grass-4: #A6D293;
+    --graphite: #B8B1A6;
+
+    /* 연필선·종이 결 — 라이트 URI에서 '선 색'과 '입자 색'만 갈아끼운 같은 그림이다.
+       필터 계수(알파 행·baseFrequency·seed)는 건드리지 않는다: 결의 정체는 색이 아니라 밀도이고,
+       25% 밀도는 라이트에서 사용자 반려 두 번을 거쳐 정해진 값이다(T-191·T-193).
+       어두운 종이 위에선 어두운 입자가 안 보이므로 입자만 밝은 쪽으로 뒤집는다. */
+    --pencil-frame: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='a' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' seed='5' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.55 0 0 0 0.62' result='m'/%3E%3CfeComposite in='SourceGraphic' in2='m' operator='in'/%3E%3C/filter%3E%3Cfilter id='b' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' seed='23' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0 0 0 0.25' result='m'/%3E%3CfeComposite in='SourceGraphic' in2='m' operator='in'/%3E%3C/filter%3E%3Crect x='1.6' y='1.6' width='296.8' height='296.8' rx='7' fill='none' stroke='%23B8B1A6' stroke-width='1.9' filter='url(%23a)'/%3E%3Crect x='2.4' y='2.4' width='295.2' height='295.2' rx='7' fill='none' stroke='%23A19A8E' stroke-width='1.4' filter='url(%23b)'/%3E%3C/svg%3E");
+    --pencil-frame-soft: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='a' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='4' seed='13' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0 0 0 0.55' result='m'/%3E%3CfeComposite in='SourceGraphic' in2='m' operator='in'/%3E%3C/filter%3E%3Crect x='1.7' y='1.7' width='296.6' height='296.6' rx='7' fill='none' stroke='%23847D72' stroke-width='1.6' filter='url(%23a)'/%3E%3C/svg%3E");
+    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.82 0 0 0 0 0.78 0 0 0 0 0.70 0.7 0 0 0 -0.40'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+    --fiber: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='440' height='440'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008 0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.84 0 0 0 0 0.80 0 0 0 0 0.72 0.4 0 0 0 -0.26'/%3E%3C/filter%3E%3Crect width='440' height='440' filter='url(%23f)'/%3E%3C/svg%3E");
+}
+
+/* 공부 잉크 다크 — `.is-study`가 파랑 리터럴로 덮는 토큰들의 다크판.
+   이게 없으면 공부 화면만 다크에서 세이지로 튄다(라이트에선 파랑인데 다크에선 초록이 되는 셈). */
+:root[data-theme="dark"] .is-study {
+    --accent: #8FA9BE;
+    --accent-hover: #AFC4D2;
+    --sage-soft: #27323B;
+    --nav-hover-bg: #27323B;
+    --nav-hover-border: #3A4C5A;
+    --ok: #AFC4D2;
+    --grass-1: #34495A;
+    --grass-2: #4A6A80;
+    --grass-3: #6F92AA;
+    --grass-4: #A0BED0;
+}
+/* `.is-study`가 토큰이 아니라 값으로 직접 칠한 자리들 — 토큰 스왑이 안 닿아 따로 덮는다. */
+:root[data-theme="dark"] .dash-timer-hero.is-study { background: #222A30; }
+:root[data-theme="dark"] .is-study .dash-pill,
+:root[data-theme="dark"] .is-study .grass-streak,
+:root[data-theme="dark"] .is-study .dash-progress-track,
+:root[data-theme="dark"] .is-study .dash-btn-outline:hover { background: #27323B; }
+:root[data-theme="dark"] .is-study .dash-timer-num { color: #AFC4D2; }
+:root[data-theme="dark"] .is-study .btn-primary:hover:not(:disabled) { background-color: #3A4C5A; }
 }
