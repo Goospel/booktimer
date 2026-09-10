@@ -7,6 +7,7 @@ import {
     byline,
     statusBadge, STATUS_BADGE_FALLBACK,
     booksNavLinks,
+    marginHandleLabel,
 } from '../src/books/pure';
 
 // 백엔드 BookStatus.name() = WANT_TO_READ / READING / FINISHED
@@ -174,5 +175,21 @@ describe('booksNavLinks — 책장 하단 네비 링크', () => {
     test('null/undefined myLoginId도 제외(방어 — dataset 미주입)', () => {
         expect(booksNavLinks(null as unknown as string).some(l => l.href.startsWith('/u/'))).toBe(false);
         expect(booksNavLinks(undefined as unknown as string).some(l => l.href.startsWith('/u/'))).toBe(false);
+    });
+});
+
+// ── 「여백」 손잡이 라벨 ────────────────────────────────────────────────────
+// 책장은 글 0건·비공개 책까지 전부 진열하므로, 개수가 붙어야 「내 글이 있는 책」을 훑어 찾는다.
+describe('marginHandleLabel — 책장 여백 손잡이 라벨', () => {
+    test('글이 있으면 개수를 붙인다', () => {
+        expect(marginHandleLabel(3)).toBe('여백 3');
+    });
+
+    test('0건이면 개수를 안 붙인다 — 「여백 0」은 말만 남는다', () => {
+        expect(marginHandleLabel(0)).toBe('여백');
+    });
+
+    test('storyCount 없는 옛 응답도 「여백」 (undefined 노출·throw 방지)', () => {
+        expect(marginHandleLabel(undefined)).toBe('여백');
     });
 });

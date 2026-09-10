@@ -117,3 +117,12 @@ export function booksNavLinks(myLoginId: string): NavLinkSpec[] {
     }
     return links;
 }
+
+// ── 「여백」 손잡이 라벨 ────────────────────────────────────────────────────
+// 글이 있으면 개수를 붙인다 — 책장은 글 0건·비공개 책까지 전부 진열하므로, 개수가 있어야
+// 「내 글이 있는 책」을 훑어 찾는다. storyCount 없는 옛 응답(undefined)·0은 「여백」
+// (공개 전환 고지의 `?? 0` 방어와 같은 관례 — 「여백 0」은 말만 남는다).
+
+export function marginHandleLabel(storyCount: number | undefined): string {
+    return storyCount && storyCount > 0 ? `여백 ${storyCount}` : '여백';
+}

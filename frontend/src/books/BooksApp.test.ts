@@ -3,8 +3,10 @@
 // 핵심 계측: confirm() 이 낙관 갱신보다 **앞**에 있어야 「확인 전에 화면이 먼저 공개로 바뀌는 창」이 없다.
 //           취소 케이스가 그 배치를 못 박는 계측기다(뒤에 두면 isPublic 이 이미 true 라 깨진다).
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
+import { nextTick } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import BooksApp from './BooksApp.vue';
+import MarginPanel from '../shared/story/MarginPanel.vue';
 
 type Book = {
     id: number; title: string; author: string | null; coverUrl: string | null;
@@ -155,5 +157,117 @@ describe('BooksApp 공개 전환 고지', () => {
 
         expect(vi.mocked(confirm)).not.toHaveBeenCalled();
         await vi.waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2));
+    });
+});
+
+/**
+ * 책장 여백 진입 — 「여백 N」 손잡이가 책방과 같은 공용 MarginPanel을 연다 (2026-09-10).
+ *
+ * 책장은 언제나 본인이라 글 0건·비공개 책에도 손잡이가 선다(2026-08-16 결정 2 — 비공개 책 여백은
+ * 「나만 보는 메모」). 그 「전부에 선다」가 이 기능의 핵심이라 B1이 좁히는 회귀를 겨눈다.
+ */
+describe('BooksApp 책장 여백 진입', () => {
+    /** 여백 응답(self·글 0건) — 책장은 self 축이라 남의 여백 경로엔 닿지 않는다. */
+    function marginJson(entries: object[] = []) {
+        return okJson({
+            book: { id: 1, title: '책', author: null, coverUrl: null },
+            ownerNickname: '닉', self: true, entries,
+        });
+    }
+
+    /** 책장 응답을 갈아끼울 수 있게 둔다 — B5의 재조회가 새 storyCount를 받아야 한다. */
+    let shelfBody: object;
+
+    /**
+     * 책 1권을 실은 책장을 띄운다. `loginId`를 비우면 dataset 자체를 안 넣는다
+     * (온보딩 전 = BookController가 loginId null을 그대로 싣는 경로).
+     */
+    async function mountShelf(b: Book, loginId = 'me'): Promise<VueWrapper> {
+        document.body.innerHTML = loginId
+            ? `<div id="books-app" data-my-login-id="${loginId}"></div>`
+            : '<div id="books-app"></div>';
+        shelfBody = { books: [b], nickname: '닉' };
+        vi.mocked(fetch).mockImplementation(async (url: RequestInfo | URL) =>
+            String(url).startsWith('/api/stories/of/') ? marginJson() : okJson(shelfBody));
+        const wrapper = mount(BooksApp, { attachTo: document.body });
+        await vi.waitFor(() => expect(wrapper.find('.book-row').exists()).toBe(true));
+        return wrapper;
+    }
+
+    /** 손잡이를 눌러 패널을 연다. */
+    async function open(wrapper: VueWrapper): Promise<void> {
+        await wrapper.find('.shop-margin-btn').trigger('click');
+        await vi.waitFor(() => expect(wrapper.find('.margin-overlay').exists()).toBe(true));
+    }
+
+    test('글 0건·비공개 책에도 손잡이가 선다 — 라벨은 「여백」', async () => {
+        const wrapper = await mountShelf(book({ storyCount: 0 }));
+
+        const handles = wrapper.findAll('.shop-margin-btn');
+        expect(handles.length).toBe(1);
+        expect(handles[0].text()).toBe('여백');
+    });
+
+    test('글이 있으면 개수를 붙인다 — 「여백 3」', async () => {
+        const wrapper = await mountShelf(book({ storyCount: 3 }));
+
+        expect(wrapper.find('.shop-margin-btn').text()).toBe('여백 3');
+    });
+
+    test('읽어 주는 이름이 보이는 글자를 품는다 — 음성 조작이 「여백 3」으로 닿는다', async () => {
+        // WCAG 2.5.3 Label in Name. 책방 칩은 보이는 글자가 「여백」이라 `제목 + ' 여백 보기'`로 포함관계가
+        // 성립했는데, 개수를 붙이는 순간 그 관계가 깨진다 — 화면엔 「여백 3」인데 이름엔 그 말이 없어진다.
+        const wrapper = await mountShelf(book({ title: '사피엔스', storyCount: 3 }));
+
+        const handle = wrapper.find('.shop-margin-btn');
+        expect(handle.text()).toBe('여백 3');
+        // 보이는 글자가 이름 안에 있어야 음성 조작이 매치된다.
+        expect(handle.attributes('aria-label')).toContain('여백 3');
+        // 그렇다고 이름이 보이는 글자와 같기만 하면 안 된다 — 행이 여럿이라 어느 책인지가 이름에 있어야 한다.
+        expect(handle.attributes('aria-label')).toContain('사피엔스');
+    });
+
+    test('누르면 내 여백을 연다 — 요청 URL이 loginId·bookId를 그대로 싣는다', async () => {
+        const wrapper = await mountShelf(book({ id: 1, storyCount: 3 }));
+
+        await open(wrapper);
+
+        // 대상 축을 URL로 못 박는다 — nickname 등 다른 값으로 새면 여기서 깨진다.
+        expect(vi.mocked(fetch).mock.calls[1][0]).toBe('/api/stories/of/me?bookId=1');
+    });
+
+    test('패널이 close 하면 닫힌다', async () => {
+        const wrapper = await mountShelf(book({ storyCount: 1 }));
+        await open(wrapper);
+
+        wrapper.findComponent(MarginPanel).vm.$emit('close');
+        await vi.waitFor(() => expect(wrapper.find('.margin-overlay').exists()).toBe(false));
+    });
+
+    test('글을 쓰면 라벨만 조용히 갱신된다 — 패널이 죽지도, 스켈레톤이 번쩍이지도 않는다', async () => {
+        const wrapper = await mountShelf(book({ storyCount: 0 }));
+        await open(wrapper);
+
+        shelfBody = { books: [book({ storyCount: 1 })], nickname: '닉' };
+        wrapper.findComponent(MarginPanel).vm.$emit('changed');
+
+        // 재조회 **도중**을 본다 — loading을 켜면 이 틱에 이미 스켈레톤 분기라 패널이 언마운트된다.
+        // (왕복이 끝난 뒤에만 보면 패널이 되살아나 있어 갈아끼움이 안 보인다 — 사후 단언은 공허하다.)
+        await nextTick();
+        expect(wrapper.find('.shelf-skeleton').exists()).toBe(false);
+        expect(wrapper.find('.margin-overlay').exists()).toBe(true);
+
+        await vi.waitFor(() => expect(wrapper.find('.shop-margin-btn').text()).toBe('여백 1'));
+        expect(wrapper.find('.margin-overlay').exists()).toBe(true);
+        expect(vi.mocked(fetch).mock.calls.filter(c => c[0] === '/api/books').length).toBe(2);
+        // 패널이 다시 마운트됐다면 여백을 한 번 더 불러온다 — 재마운트의 흔적을 개수로 못 박는다.
+        expect(vi.mocked(fetch).mock.calls
+            .filter(c => String(c[0]).startsWith('/api/stories/of/')).length).toBe(1);
+    });
+
+    test('loginId가 없으면(온보딩 전) 손잡이를 아예 안 그린다', async () => {
+        const wrapper = await mountShelf(book({ storyCount: 3 }), '');
+
+        expect(wrapper.findAll('.shop-margin-btn').length).toBe(0);
     });
 });
