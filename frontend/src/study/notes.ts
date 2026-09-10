@@ -81,6 +81,21 @@ export function noteLabel(title: string | null, body: string): string {
     return line ? clip(line) : '제목 없음';
 }
 
+/**
+ * 본문 첫 <b>비공백</b> 줄 — 서버 {@code StudyNote.preview()}와 같은 규칙의 클라 판.
+ *
+ * <p>목록 응답이 주는 값이라 평소엔 서버가 만든다. 여기 같은 규칙이 한 벌 더 있는 이유는 <b>방금 저장한
+ * 장</b> 때문이다 — 저장마다 목록을 다시 부르지 않으므로(왕복 두 배) 그 행은 응답 본문으로 화면이 만든다.
+ * 규칙이 어긋나면 저장 직후의 라벨만 다른 이름이 된다.
+ */
+export function previewOf(body: string): string {
+    const line = body.split('\n').map((s) => s.trim()).find((s) => s.length > 0) ?? '';
+    return line.slice(0, PREVIEW_MAX);
+}
+
+/** 서버 {@code StudyNote.PREVIEW_MAX}와 같은 값 — 라벨(40자)보다 넉넉하다(표식을 벗긴 뒤 자른다). */
+const PREVIEW_MAX = 80;
+
 /** `2026-09-10T05:32:11Z` → `14:32`(로컬). 상태줄 「저장됨 · 14:32」의 뒷부분. */
 export function savedAtLabel(iso: string): string {
     const at = new Date(iso);

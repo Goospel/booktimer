@@ -41,6 +41,14 @@ public class StudyNote extends BaseTimeEntity {
     public static final int TITLE_MAX = 200;
 
     /**
+     * 목록에 딸려 보내는 본문 실마리의 길이 — 화면 라벨(40자)보다 넉넉하다.
+     *
+     * <p>여유가 필요한 이유는 화면이 마크다운 표식(`# `·`- [ ] `…)을 <b>벗긴 뒤</b> 40자로 자르기
+     * 때문이다. 딱 40자만 보내면 표식이 길수록 라벨이 짧아진다.
+     */
+    static final int PREVIEW_MAX = 80;
+
+    /**
      * 낡은 판으로 덮어쓰려 했다 — 서비스가 409로 옮긴다.
      *
      * <p>런타임 예외인 것이 의도다: 이건 「호출부가 복구할 수 있는 예외 상황」이 아니라 <b>사용자에게
@@ -130,6 +138,19 @@ public class StudyNote extends BaseTimeEntity {
         return body.length();
     }
 
+    /**
+     * 본문 첫 <b>비공백</b> 줄 — 목록 라벨의 재료다.
+     *
+     * <p>제목을 안 적는 것이 이 기능의 기본 사용법이라(쓰는 대로 저장되는 필기다), 이게 없으면 화면은
+     * 거의 모든 행을 「제목 없음」으로 그린다. 그렇다고 목록에 본문을 통째로 싣지는 않는다 — 한 줄이면
+     * 라벨을 만들기에 충분하다. 마크다운 표식을 <b>여기서 벗기지 않는 것</b>도 의도다: 파생은 화면 몫이고
+     * (서버는 사용자가 친 것만 안다), 벗기는 규칙이 두 곳에 생기면 라벨이 화면마다 달라진다.
+     */
+    public String preview() {
+        String line = body.lines().map(String::strip).filter(s -> !s.isEmpty()).findFirst().orElse("");
+        return line.length() > PREVIEW_MAX ? line.substring(0, PREVIEW_MAX) : line;
+    }
+
     // StudyRecall의 같은 규칙을 그대로 둔다 — 공용 유틸로 빼지 않는다(2곳뿐이고, 문구가 도메인마다 다르다).
 
     private static String requireBody(String value) {
@@ -143,12 +164,19 @@ public class StudyNote extends BaseTimeEntity {
         return trimmed;
     }
 
-    /** 빈 제목은 {@code null}이다 — 「제목 없음」 라벨은 화면이 파생한다(서버는 친 값만 저장한다). */
+    /**
+     * 빈 제목은 {@code null}이다 — 「제목 없음」 라벨은 화면이 파생한다(서버는 친 값만 저장한다).
+     *
+     * <p><b>개행은 공백으로 접는다.</b> 제목은 정답지 헤더({@code NoteReference.text})에서 한 줄로 서는
+     * 라벨인데, 개행이 통과하면 그 한 줄을 여러 줄로 벌려 「[오늘 쓴 글]」 같은 섹션을 <b>블록 안에서</b>
+     * 위조할 수 있다. 블록을 나눈 것은 문자열 경계를 지킬 뿐 블록 안의 줄까지 지켜 주지 않는다.
+     * 목록 라벨이 한 줄로 그려지는 데도 이득이다.
+     */
     private static String optionalTitle(String value) {
         if (value == null || value.isBlank()) {
             return null;
         }
-        String trimmed = value.strip();
+        String trimmed = value.strip().replaceAll("[\\r\\n]+", " ");
         if (trimmed.length() > TITLE_MAX) {
             throw new IllegalArgumentException("제목은 " + TITLE_MAX + "자까지 쓸 수 있어요");
         }

@@ -6,7 +6,7 @@
 // 컴포넌트에서 재면 셋 중 어느 갈래가 죽었는지 안 보인다.
 import { describe, test, expect } from 'vitest';
 
-import { noteLabel, noteDateLabel, savedAtLabel, nextSaveState, type SaveState } from './notes';
+import { noteLabel, noteDateLabel, previewOf, savedAtLabel, nextSaveState, type SaveState } from './notes';
 
 describe('noteLabel — 목록에 뜨는 이름', () => {
     test('제목이 있으면 제목이다', () => {
@@ -128,5 +128,22 @@ describe('nextSaveState — 자동저장 상태기계', () => {
         expect(nextSaveState(IDLE, { type: 'flush' })).toBe(IDLE);
         const saved: SaveState = { kind: 'saved', at: 'T' };
         expect(nextSaveState(saved, { type: 'flush' })).toBe(saved);
+    });
+});
+
+// PR-3 — 서버 `StudyNote.preview()`의 클라 판. 저장 직후의 목록 행만 이걸로 만든다(저장마다 목록을
+// 다시 부르지 않으므로). 규칙이 서버와 어긋나면 「방금 저장한 장」만 다른 이름으로 뜬다.
+describe('previewOf — 목록에 실리는 본문 첫 줄', () => {
+    test('첫 비공백 줄을 준다 — 마크다운 표식은 벗기지 않는다(그건 라벨 함수 몫)', () => {
+        expect(previewOf('\n  \n# 미분계수\n- 접선')).toBe('# 미분계수');
+    });
+
+    test('80자에서 자른다 — 라벨(40자)보다 넉넉해야 표식을 벗긴 뒤에도 이름이 남는다', () => {
+        expect(previewOf('ㄱ'.repeat(200))).toHaveLength(80);
+    });
+
+    test('본문이 공백뿐이면 빈 문자열 — 라벨 함수가 「제목 없음」으로 받는다', () => {
+        expect(previewOf('   \n\n')).toBe('');
+        expect(noteLabel(null, previewOf('   \n\n'))).toBe('제목 없음');
     });
 });

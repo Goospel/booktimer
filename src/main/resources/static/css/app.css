@@ -3888,6 +3888,16 @@ body.dashboard-page #dashboard-app { gap: 20px; }
     border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--sage-soft);
 }
 
+/* 채점 기준 카드 — 「무엇과 대조해 구멍을 찾는가」. 결과 카드(.study-recall-result)와 같은 결이되
+   바탕을 깔지 않는다: 이건 입력 쪽 정보라 옆의 책·주제·범위와 한 묶음으로 읽혀야 한다. */
+.study-recall-reference { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px 10px; }
+.study-recall-reference-list {
+    margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; font-size: 14px;
+}
+.study-recall-reference-list li { overflow-wrap: anywhere; }
+/* 빠진 장 경고는 muted로 두지 않는다 — 조용한 누락을 막으려고 세운 줄이라 눈에 걸려야 한다. */
+.study-recall-reference-cut { color: var(--text); }
+
 /* 필기 — 좌우 배선(.study-recall-split/side/main)은 백지복습 것을 그대로 쓴다. 여기 있는 것은
    좌측 목록과 상태줄뿐이다. 상태줄은 이 화면에서 저장 버튼을 대신하므로 비어 있어도 자리를
    차지한다(min-height) — 글자가 들고 날 때마다 편집기가 위아래로 뛰면 쓰던 자리를 잃는다. */

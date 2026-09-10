@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import { analyzeRecall, fetchRecall, saveRecall, transcribePhotos, type Recall, type StudyBookRow } from './api';
+import {
+    analyzeRecall, fetchNoteReference, fetchRecall, saveRecall, transcribePhotos,
+    type NoteReferenceView, type Recall, type StudyBookRow,
+} from './api';
 import RecallEditor from './editor/RecallEditor.vue';
 import { bodyBudget } from './editor/pure';
 import { shrinkForUpload, type ShrunkImage } from './image';
+import { noteLabel } from './notes';
 import { prevDay, recallScopePrefill, recallSubjectPrefill, type PlanItem } from './pure';
 
 /** 서버(`ClaudeStudyAssistant.MAX_IMAGES`)와 같은 값 — 화면이 먼저 막아 헛왕복을 없앤다. */
@@ -121,6 +125,37 @@ watch(bookId, (id) => {
 }, { flush: 'sync' });
 
 /**
+ * 이 책의 필기 중 <b>무엇이 채점 기준에 들어가는가</b> — 카드의 근거.
+ *
+ * <p>이 화면에서 가장 중요한 필드는 `excluded`다. 사용자가 정답지를 손으로 고르는 대신 「책 기준 자동」을
+ * 택한 이유가 <b>조용한 누락을 막는 것</b>이었으므로, 상한에 걸려 빠진 장이 있으면 화면이 말해야 한다.
+ *
+ * <p>{@code null}은 「모른다」(안 골랐거나·AI가 꺼졌거나·조회 실패)라 카드를 통째로 숨긴다 — 실패했을
+ * 때 「필기가 없어요」라고 말하면 그건 <b>거짓말</b>이다.
+ */
+const noteRef = ref<NoteReferenceView | null>(null);
+
+async function loadNoteReference(): Promise<void> {
+    noteRef.value = null;
+    // 안 쓸 값을 위해 서버를 두드리지 않는다 — 분석을 못 하는 화면엔 채점 기준도 의미가 없다.
+    if (!props.aiEnabled || bookId.value === null) return;
+    const mine = bookId.value;
+    try {
+        const found = await fetchNoteReference(mine);
+        if (bookId.value === mine) noteRef.value = found; // 그 사이 책을 바꿨으면 남의 카드다
+    } catch {
+        noteRef.value = null; // 실패는 카드만 숨긴다 — 분석 버튼까지 막지 않는다
+    }
+}
+
+// 하이드레이션에도 돈다(저장된 글의 책을 복원하는 경로) — 주제 watch와 달리 재우지 않는다.
+watch(bookId, () => { void loadNoteReference(); });
+
+/** 빠진 분량 — 「N장이 빠졌다」만으론 얼마나 잃었는지 감이 안 온다. */
+const excludedLabel = computed(
+    () => `${(noteRef.value?.excluded ?? []).reduce((sum, n) => sum + n.chars, 0).toLocaleString()}자`);
+
+/**
  * 날짜를 옮길 때 사진 상태를 씻는다.
  *
  * <p><b>`source`가 여기 있는 것이 요점</b>이다 — 저장된 글에서 읽어 오는 `try` 안에 두면 조회가 실패했을
@@ -214,6 +249,8 @@ async function onSave(thenAnalyze: boolean): Promise<void> {
         recall.value = saved;
         transcribed.value = false; // 확인이 끝났다 — 저장된 뒤엔 「AI가 읽은 내용」 안내를 내린다
         notice.value = '저장했어요.';
+        // 저장 사이에 다른 탭에서 필기를 더 썼을 수 있다 — 분석 직전의 카드가 최신이어야 한다.
+        void loadNoteReference();
         if (thenAnalyze) {
             saved = await analyzeRecall(props.date);
             recall.value = saved;
@@ -311,6 +348,33 @@ async function onSave(thenAnalyze: boolean): Promise<void> {
                         placeholder="오늘의 범위 (구멍을 찾는 기준이 돼요)"
                         aria-label="범위"
                     ></textarea>
+
+                    <!-- 채점 기준 카드 — 「무엇과 대조해 구멍을 찾는가」를 사용자가 볼 수 있게. 빠진 장을
+                         드러내는 것이 이 카드의 존재 이유다(조용한 누락 금지). -->
+                    <div v-if="noteRef" class="study-recall-reference" data-testid="recall-reference">
+                        <p class="study-recall-heading">채점 기준으로 들어가는 필기</p>
+                        <template v-if="noteRef.included.length">
+                            <ul class="study-recall-reference-list">
+                                <li v-for="note in noteRef.included" :key="note.id">
+                                    {{ noteLabel(note.title, note.preview) }}
+                                </li>
+                            </ul>
+                            <p class="status-line muted">
+                                {{ noteRef.included.length }}장, {{ noteRef.chars.toLocaleString() }}자
+                            </p>
+                            <p
+                                v-if="noteRef.excluded.length"
+                                class="status-line study-recall-reference-cut"
+                                data-testid="recall-reference-excluded"
+                            >
+                                오래된 필기 {{ noteRef.excluded.length }}장은 길이 때문에 빠졌어요
+                                ({{ excludedLabel }}).
+                            </p>
+                        </template>
+                        <p v-else class="status-line muted" data-testid="recall-reference-empty">
+                            이 책의 필기가 없어요 — 범위와 글만으로 판단해요.
+                        </p>
+                    </div>
                 </div>
 
                 <div class="study-recall-main">

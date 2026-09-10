@@ -294,6 +294,13 @@ export interface NoteRow {
     id: number;
     title: string | null;
     chars: number;
+    /**
+     * 본문 첫 줄(서버가 실어 준다) — <b>라벨의 재료</b>다.
+     *
+     * <p>제목을 안 적는 것이 이 기능의 기본 사용법이라, 이게 없으면 목록이 거의 전부 「제목 없음」이
+     * 된다. 마크다운 표식을 벗기는 일은 화면 몫이라 서버는 첫 줄을 날것으로 준다(`noteLabel`).
+     */
+    preview: string;
     updatedAt: string;
 }
 
@@ -345,4 +352,23 @@ export async function updateNote(
 
 export async function deleteNote(id: number): Promise<void> {
     await json<unknown>(await post(`/api/study/notes/${id}/delete`), '필기를 지우지 못했어요.');
+}
+
+/**
+ * 채점 기준에 들어가는 필기 — 백지복습 화면의 카드가 그린다.
+ *
+ * <p>분석이 쓰는 것과 <b>같은 서버 함수</b>를 지난다(설계 §3.2) — 카드가 보여준 장과 모델이 실제로 본
+ * 장이 어긋나면 사용자는 그걸 알 방법이 없다.
+ */
+export interface NoteReferenceView {
+    included: NoteRow[];
+    /** 상한에 걸려 빠진 장 — 비어 있지 않으면 화면이 <b>말해야 한다</b>(조용한 누락 금지). */
+    excluded: NoteRow[];
+    chars: number;
+    limit: number;
+}
+
+export async function fetchNoteReference(bookId: number): Promise<NoteReferenceView> {
+    return json(await fetch(`/api/study/notes/reference?bookId=${bookId}`, { credentials: 'same-origin' }),
+        '채점 기준을 불러오지 못했어요.');
 }
