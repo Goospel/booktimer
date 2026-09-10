@@ -214,6 +214,19 @@ describe('BooksApp 책장 여백 진입', () => {
         expect(wrapper.find('.shop-margin-btn').text()).toBe('여백 3');
     });
 
+    test('읽어 주는 이름이 보이는 글자를 품는다 — 음성 조작이 「여백 3」으로 닿는다', async () => {
+        // WCAG 2.5.3 Label in Name. 책방 칩은 보이는 글자가 「여백」이라 `제목 + ' 여백 보기'`로 포함관계가
+        // 성립했는데, 개수를 붙이는 순간 그 관계가 깨진다 — 화면엔 「여백 3」인데 이름엔 그 말이 없어진다.
+        const wrapper = await mountShelf(book({ title: '사피엔스', storyCount: 3 }));
+
+        const handle = wrapper.find('.shop-margin-btn');
+        expect(handle.text()).toBe('여백 3');
+        // 보이는 글자가 이름 안에 있어야 음성 조작이 매치된다.
+        expect(handle.attributes('aria-label')).toContain('여백 3');
+        // 그렇다고 이름이 보이는 글자와 같기만 하면 안 된다 — 행이 여럿이라 어느 책인지가 이름에 있어야 한다.
+        expect(handle.attributes('aria-label')).toContain('사피엔스');
+    });
+
     test('누르면 내 여백을 연다 — 요청 URL이 loginId·bookId를 그대로 싣는다', async () => {
         const wrapper = await mountShelf(book({ id: 1, storyCount: 3 }));
 

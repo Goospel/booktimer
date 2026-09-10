@@ -402,7 +402,7 @@ async function removeBook(book: MyBookSummary) {
           <div class="book-actions">
             <!-- 「여백」 — 책방 칩과 같은 부품(.shop-margin-btn). 본인 책장이라 글 0건·비공개 책에도 선다(작성 진입). -->
             <button v-if="canOpenMargin" type="button" class="shop-margin-btn"
-                    :aria-label="book.title + ' 여백 보기'"
+                    :aria-label="book.title + ' ' + marginHandleLabel(book.storyCount) + ' 보기'"
                     @click="marginBook = book">{{ marginHandleLabel(book.storyCount) }}</button>
             <select :value="book.status"
                     @change="changeStatus(book, ($event.target as HTMLSelectElement).value)">
