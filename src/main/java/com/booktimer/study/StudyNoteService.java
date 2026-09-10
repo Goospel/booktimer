@@ -1,6 +1,8 @@
 package com.booktimer.study;
 
 import com.booktimer.book.StudyBook;
+import com.booktimer.security.RateLimitAction;
+import com.booktimer.security.RateLimitService;
 import com.booktimer.user.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -13,18 +15,20 @@ import java.util.Optional;
 /**
  * 공부 필기 유스케이스 — 목록 · 조회 · 생성 · 갱신 · 삭제.
  *
- * <p>AI를 안 쓰는 글쓰기라 승인 게이트·상한이 없다({@link StudyRecallService}와 갈리는 자리). 대신 이
- * 서비스의 관심사는 둘이다: <b>소유권</b>(모든 조회가 {@code findByIdAndUser})과 <b>충돌</b>(자동저장이
- * 앞의 저장을 조용히 덮지 않게).
+ * <p>AI를 안 쓰는 글쓰기라 승인 게이트·일일 몫이 없다({@link StudyRecallService}와 갈리는 자리). 대신 이
+ * 서비스의 관심사는 셋이다: <b>소유권</b>(모든 조회가 {@code findByIdAndUser})과 <b>충돌</b>(자동저장이
+ * 앞의 저장을 조용히 덮지 않게), 그리고 <b>생성의 상한</b>(자유 다장이라 자연 상한이 없다 — {@link #create}).
  */
 @Service
 @Transactional
 public class StudyNoteService {
 
     private final StudyNoteRepository noteRepository;
+    private final RateLimitService rateLimitService;
 
-    public StudyNoteService(StudyNoteRepository noteRepository) {
+    public StudyNoteService(StudyNoteRepository noteRepository, RateLimitService rateLimitService) {
         this.noteRepository = noteRepository;
+        this.rateLimitService = rateLimitService;
     }
 
     /** 그 책의 필기 목록(최근 고친 순). 화면은 본문 없이 라벨·크기만 그린다. */
@@ -42,9 +46,18 @@ public class StudyNoteService {
     /**
      * 새 필기 한 장.
      *
+     * <p><b>생성에만</b> 레이트리밋이 붙는다({@link RateLimitAction#STUDY_NOTE_CREATE} — 시간당 30).
+     * 자연 상한이 없는 유일한 필기 경로라서다: 갱신은 같은 행을 고칠 뿐이고, 백지복습은
+     * {@code UNIQUE(user, date)}로 하루 한 행이다. 갱신에 걸지 않는 것도 계약이다 — 자동저장이
+     * 1.5초마다 두드리는 문이다.
+     *
+     * @throws ResponseStatusException  429 — 한도 초과. 무음 드롭이 아니라 안내다(작성은 콘텐츠 소실)
      * @throws IllegalArgumentException 책이 없거나 · 본문이 비었거나 · 길이를 넘는 경우(→ 400)
      */
     public StudyNote create(User user, StudyBook book, String title, String body) {
+        if (!rateLimitService.allow(RateLimitAction.STUDY_NOTE_CREATE, user.getId())) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "필기를 너무 자주 만들었습니다");
+        }
         return noteRepository.save(StudyNote.of(user, book, title, body));
     }
 

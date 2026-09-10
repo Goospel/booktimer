@@ -2,6 +2,7 @@ package com.booktimer.web.api;
 
 import com.booktimer.book.StudyBook;
 import com.booktimer.book.StudyBookRepository;
+import com.booktimer.security.RateLimitService;
 import com.booktimer.study.StudyNote;
 import com.booktimer.study.StudyNoteRepository;
 import com.booktimer.user.Role;
@@ -9,6 +10,7 @@ import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
 import com.booktimer.user.UserRepository;
 import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -59,6 +61,13 @@ class StudyNoteApiControllerTest {
     @Autowired StudyNoteRepository noteRepository;
     @Autowired Clock clock;
     @Autowired EntityManager entityManager;
+    @Autowired RateLimitService rateLimitService;
+
+    /** 레이트리밋 상태는 인메모리라 롤백을 안 탄다 — 테스트 사이에 새 나가지 않게 비운다. */
+    @BeforeEach
+    void clearRateLimits() {
+        rateLimitService.clearForTest();
+    }
 
     private User register(String loginId) {
         registrationService.register(loginId + "@booktimer.com", "pw1234qwer!!", loginId,
@@ -134,6 +143,39 @@ class StudyNoteApiControllerTest {
                 .andExpect(status().isNotFound());
 
         assertThat(noteRepository.count()).isZero();
+    }
+
+    // ── ①-b 생성 레이트리밋 ──────────────────────────────────────────────────
+
+    /**
+     * 자동저장이 id 배선을 놓치면 1.5초마다 새 행을 만든다(분당 40행) — 그 폭주의 상한.
+     *
+     * <p><b>상한 안쪽까지 함께 잰다</b>: 30장이 전부 200이어야 통과한다. 「31번째가 막힌다」만 재면
+     * 전부 막는 구현도 초록이다.
+     *
+     * <p>본문까지 재는 이유는 409 테스트와 같다 — 429가 {@code error.html}로 오면 화면은 안내 대신
+     * {@code <!DOCTYPE html>…}을 받는다.
+     */
+    @Test
+    @DisplayName("생성: 시간당 30장까지는 200이고 31번째만 429 평문 — 자동저장 폭주의 상한")
+    void create_beyondHourlyLimit_is429() throws Exception {
+        User user = register("noterate");
+        Long bookId = book(user, "책").getId();
+
+        for (int i = 1; i <= 30; i++) {
+            mockMvc.perform(post("/api/study/notes").with(user("noterate")).with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(createBody(bookId, null, "필기 " + i)))
+                    .andExpect(status().isOk());
+        }
+
+        mockMvc.perform(post("/api/study/notes").with(user("noterate")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody(bookId, null, "31번째 필기")))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(content().string("필기를 너무 자주 만들었습니다"));
+
+        assertThat(noteRepository.count()).as("막힌 요청은 행을 만들지 않는다").isEqualTo(30);
     }
 
     // ── ② 입력 검증 ──────────────────────────────────────────────────────────
