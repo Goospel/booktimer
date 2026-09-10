@@ -2,6 +2,7 @@
 <html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
+    <th:block th:replace="~{fragments/theme-head :: boot}"></th:block>
     <th:block th:replace="~{analytics :: gtag}"></th:block>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <!-- 섬의 POST(체크 순환·일정 추가·삭제)가 여기서 토큰을 읽는다 — StudyController.precommit이 짝이다 -->

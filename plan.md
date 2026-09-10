@@ -3755,6 +3755,31 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
 
 ## 🧹 기술 부채 / 후속 정리
 
+### 웹 다크모드 — 사용자 토글 + 브라우저 강제 다크 차단 (1단계 완료 🔜 · 2단계 남음)
+> 발단은 다크모드 요청이 아니라 **고장 제보**였다 — `booktimer.app`이 짙은 갈색으로 떴다. 웹엔 다크모드
+> 코드가 0줄이고 CSS는 라이트 그대로였으니 뒤집은 것은 우리가 아니라 **브라우저의 강제 다크**(크롬 Auto
+> Dark Theme)다. 브라우저는 「이 페이지는 다크를 지원하지 않는다」고 판단될 때만 개입하므로, 막는 길은
+> ⓐ `color-scheme`을 직접 선언해 opt-out하고 ⓑ 진짜 다크를 제공해 표적에서 벗어나는 것 둘 다이다.
+> 설계는 `claude-docs/plans/2026-09-10-web-dark-mode.md`(gitignore · 로컬).
+- ✅ **1단계 — 인프라·토큰·다크런치 (2026-09-10)**
+      `:root { color-scheme: only light }` 한 줄이 **제보된 증상을 즉시 닫는다**. `:root[data-theme="dark"]`
+      블록이 색 토큰 38개를 덮고(`@media not print` — 종이엔 항상 라이트), 새 조각
+      `fragments/theme-head :: boot`의 인라인 한 줄이 첫 페인트 전에 저장값(`localStorage['bt-theme']`)을
+      심는다(36개 페이지 head 전부 · strict CSP라 nonce 필수). 토글 로직은 정적 ESM `static/js/theme.js`.
+      ⚠️ **`only`가 핵심이라는 것을 양성 대조군으로 확정했다** — 크롬 강제 다크를 켜고 재니 선언 없음과
+      **`color-scheme: light` 둘 다** 크림이 rgb(39,36,29)로 뒤집혔고 `only light`만 살아남았다. 그리고
+      **판정은 픽셀로 해야 한다** — 강제 다크는 CSSOM이 아니라 페인트 단계 반전이라 `getComputedStyle`은
+      어느 쪽이든 authored 값을 돌려준다(설계가 지정한 계측 방법이 여기서 죽은 계측기였다).
+      **사용자 화면 변화 0**(다크런치 — 토글 자동 마운트 한 줄을 뺐다).
+- 🔜 **2단계 — raw 색 규칙 토큰화 + 토글 점등**
+      토큰이 안 닿는 raw 리터럴 규칙(약 160)을 의미 토큰(`--on-accent`·`--surface`·`--paper-1`·`--warn-*`·
+      `--danger-soft` 등)으로 치환하고, `theme.js` 마지막에 자동 마운트 한 줄을 더해 헤더 토글을 켠다.
+      1단계에서 다크로 8화면을 훑어 만든 **남은 크림 자리 목록**이 그 입력이다 — `.dash-state-panel`ㆍ
+      `.dash-nav-tile`(둘 다 `#FAF7EF`) · `/settings`의 `.set-input` 6곳ㆍ`.set-select`ㆍ`.set-check-box` ·
+      `.shelf-empty`ㆍ`select`(책장) · `.study-dot`. `.grass-cell.level-4`는 **의도된 밝은 색**이라 대상이 아니다.
+      게이트: 라이트 화면 before/after 픽셀 diff 0(값을 옮기기만 하므로 라이트는 안 변해야 한다) +
+      토글 키보드·스크린리더 확인(U-8).
+
 ### 종이·연필 테마 — 남은 검증 2건 (2026-08-18)
 > 웹·미니앱 전면을 「거친 종이 위에 연필로」(A안)로 바꿨다. 구현은 끝났고 아래 둘만 확인이 남았다.
 > ⚠️ **1차 구현은 실기기에서 반려됐다(2026-08-18)** — 「어색하다, 그냥 선의 픽셀을 깨뜨린 것 같다」. 선을 미는 방식(`feDisplacementMap`)이 `border-image`의 `stretch` 압축을 만나 좁은 요소에서 가장자리가 깎인 탓이었다. 굴곡을 걷고 **농도 얼룩**(고주파 알파 노이즈)으로 바꿔 해결했다(T-190).

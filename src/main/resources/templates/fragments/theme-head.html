@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+<!-- 테마 부트 — 모든 페이지 head의 <meta charset> 바로 다음, app.css <link>보다 앞.
+
+     첫 줄은 인라인이어야 한다. type=module은 defer라 CSSOM이 적용된 뒤에 도는데, 그러면 다크를
+     저장해 둔 사용자에게 라이트가 한 프레임 그려졌다 뒤집힌다(FOUC). 그래서 저장 키를 여기서
+     한 번 더 직접 읽는다 — 리터럴이 theme.js와 갈리면 themeHead.test.ts가 운다.
+
+     localStorage 접근이 던지는 환경(사파리 프라이빗 등)은 삼킨다 = 라이트. 콘솔에 예외를 남기지 않는다.
+     주의: nonce가 필수다 — CspNonceFilter가 strict-dynamic CSP를 주므로 nonce 없는 인라인은 통째로 막힌다. -->
+<th:block th:fragment="boot">
+    <script th:attr="nonce=${cspNonce}">try{if(localStorage.getItem('bt-theme')==='dark')document.documentElement.dataset.theme='dark'}catch(e){}</script>
+    <script type="module" th:attr="nonce=${cspNonce}" th:src="@{/js/theme.js}"></script>
+</th:block>
+</head>
+</html>

@@ -2,6 +2,7 @@
 <html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
+    <th:block th:replace="~{fragments/theme-head :: boot}"></th:block>
     <!-- 방문 통계(GA4, 측정 ID 설정 시에만) -->
     <th:block th:replace="~{analytics :: gtag}"></th:block>
     <th:block th:replace="~{fragments/pwa-head :: meta}"></th:block>
