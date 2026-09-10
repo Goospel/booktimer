@@ -61,6 +61,8 @@ class AccountServiceTest {
     @Mock
     private com.booktimer.study.StudyRecallRepository studyRecallRepository;
     @Mock
+    private com.booktimer.study.StudyNoteRepository studyNoteRepository;
+    @Mock
     private com.booktimer.study.StudyAiUsageRepository studyAiUsageRepository;
     @Mock
     private FollowRepository followRepository;
@@ -142,7 +144,7 @@ class AccountServiceTest {
 
         service.deleteAccount(EMAIL, "pw");
 
-        var ordered = inOrder(sessionRepository, studySessionRepository, studyDailyCheckRepository, studyPlanItemRepository, studyRecallRepository, studyAiUsageRepository, timerRepository, goalChangeRepository, goalWaiverRepository, followRepository, blockRepository, reportRepository, storyLikeRepository, storyRepository, bookRepository, studyBookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository, apiTokenRepository, tossLinkCodeRepository, userRepository);
+        var ordered = inOrder(sessionRepository, studySessionRepository, studyDailyCheckRepository, studyPlanItemRepository, studyRecallRepository, studyNoteRepository, studyAiUsageRepository, timerRepository, goalChangeRepository, goalWaiverRepository, followRepository, blockRepository, reportRepository, storyLikeRepository, storyRepository, bookRepository, studyBookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository, apiTokenRepository, tossLinkCodeRepository, userRepository);
         ordered.verify(sessionRepository).deleteByUser(user); // book FK 참조하는 세션 먼저
         // 공부 원장도 users를 FK 참조한다 — 빠지면 그 기록을 가진 사람의 탈퇴가 통째로 실패한다(T-168 계열).
         ordered.verify(studySessionRepository).deleteByUser(user);
@@ -152,6 +154,9 @@ class AccountServiceTest {
         ordered.verify(studyPlanItemRepository).deleteByUser(user);
         // 백지복습(V85)도 book_id로 study_book을 참조한다 — 일정과 같은 이유로 책보다 앞이다.
         ordered.verify(studyRecallRepository).deleteByUser(user);
+        // 공부 필기(V89)도 책보다 앞이다 — 게다가 note.book_id는 **NOT NULL**이라 풀 수도 없다
+        // (책을 먼저 지우면 그 책에 필기를 건 사람은 탈퇴 자체가 제약 위반으로 실패한다).
+        ordered.verify(studyNoteRepository).deleteByUser(user);
         ordered.verify(studyAiUsageRepository).deleteByUser(user); // AI 상한 카운터도 users FK다
         ordered.verify(timerRepository).deleteByUser(user);
         ordered.verify(goalChangeRepository).deleteByUser(user);   // FK: 목표 변경 이력도 유저 전에 정리
