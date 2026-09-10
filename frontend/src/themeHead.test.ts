@@ -67,6 +67,12 @@ describe('테마 부트 조각 전수 가드', () => {
         expect(readFileSync(THEME_HEAD, 'utf8')).toContain(`'${key}'`);
     });
 
+    /**
+     * ⚠️ 이 단언은 <b>인라인 태그만</b> 겨눈다(`src` 없는 `<script>`). 같은 조각의 `type=module` 쪽
+     * nonce를 지워도 여기선 안 운다 — 그쪽은 자바 `CspTest`가 전 템플릿을 스캔하고 렌더 결과까지
+     * 대조해 덮는다(독립 리뷰가 이 분업을 확인했다). 사각이 아니라 <b>일부러 나눈 것</b>이니,
+     * 「인라인만 보네」 하고 여기서 넓히면 `CspTest`와 중복 계측이 된다.
+     */
     it('부트 스크립트에 CSP nonce가 붙어 있다 — 없으면 strict CSP가 통째로 막는다', () => {
         const html = readFileSync(THEME_HEAD, 'utf8');
         const inline = /<script(?![^>]*\bsrc)[^>]*>/.exec(html)?.[0] ?? '';

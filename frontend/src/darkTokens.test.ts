@@ -66,16 +66,26 @@ function declaration(selector: string, property: string): string | null {
     return m ? m[2].trim() : null;
 }
 
+/**
+ * 계측기 생존선 — <b>현재 실측 개수를 래칫으로 박는다</b>.
+ *
+ * <p>짝 맞춤은 양방향 부분집합이라 두 집합이 <b>같이</b> 쪼그라들면 통과한다(빈 집합끼리도 통과다).
+ * 그래서 「0이 아니다」로는 부족하고 지금 세는 수를 바닥으로 깐다. 토큰을 정말로 줄일 일이 생기면
+ * 이 숫자도 <b>같이 내린다</b> — 조용히 줄어드는 것만 막자는 것이지 못 줄이게 하려는 게 아니다.
+ */
+const LIGHT_FLOOR = 38;
+const STUDY_FLOOR = 10;
+
 describe('다크 토큰 짝 맞춤', () => {
     const light = colorTokens(LIGHT_SELECTOR);
     const dark = colorTokens(DARK_SELECTOR);
 
     it('파서가 라이트 토큰을 실제로 잡는다 — 0개면 늘 통과하는 빈 가드다 (계측기 생존)', () => {
-        expect(light.length).toBeGreaterThanOrEqual(35);
+        expect(light.length).toBeGreaterThanOrEqual(LIGHT_FLOOR);
     });
 
     it('파서가 다크 토큰을 실제로 잡는다 (계측기 생존)', () => {
-        expect(dark.length).toBeGreaterThanOrEqual(35);
+        expect(dark.length).toBeGreaterThanOrEqual(LIGHT_FLOOR);
     });
 
     it('다크가 안 덮은 라이트 색 토큰이 없다', () => {
@@ -83,6 +93,31 @@ describe('다크 토큰 짝 맞춤', () => {
     });
 
     it('라이트에 없는 토큰을 다크가 만들지 않는다 (오타·유령 토큰 차단)', () => {
+        expect(dark.filter((t) => !light.includes(t))).toEqual([]);
+    });
+});
+
+/**
+ * 공부 모드(`.is-study`)도 같은 짝 맞춤이 필요하다.
+ *
+ * <p>`:root`에만 가드를 걸면 <b>정확히 같은 함정이 한 칸 옆에 남는다</b> — 라이트 `.is-study`에 파랑
+ * 토큰이 하나 늘고 다크판을 잊으면, 공부 화면의 그 자리만 다크에서 세이지로 튄다(라이트에선 파랑인데
+ * 다크에선 초록이 되는 셈). 독립 리뷰가 「`:root`에 건 것과 같은 함정」으로 짚어 준 자리다.
+ */
+describe('공부 모드 토큰 짝 맞춤 (.is-study)', () => {
+    const light = colorTokens('.is-study');
+    const dark = colorTokens(`${DARK_SELECTOR} .is-study`);
+
+    it('파서가 공부 토큰을 실제로 잡는다 (계측기 생존)', () => {
+        expect(light.length).toBeGreaterThanOrEqual(STUDY_FLOOR);
+        expect(dark.length).toBeGreaterThanOrEqual(STUDY_FLOOR);
+    });
+
+    it('다크가 안 덮은 공부 색 토큰이 없다', () => {
+        expect(light.filter((t) => !dark.includes(t))).toEqual([]);
+    });
+
+    it('라이트에 없는 공부 토큰을 다크가 만들지 않는다', () => {
         expect(dark.filter((t) => !light.includes(t))).toEqual([]);
     });
 });

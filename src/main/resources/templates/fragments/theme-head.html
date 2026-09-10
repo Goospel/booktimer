@@ -8,7 +8,12 @@
      한 번 더 직접 읽는다 — 리터럴이 theme.js와 갈리면 themeHead.test.ts가 운다.
 
      localStorage 접근이 던지는 환경(사파리 프라이빗 등)은 삼킨다 = 라이트. 콘솔에 예외를 남기지 않는다.
-     주의: nonce가 필수다 — CspNonceFilter가 strict-dynamic CSP를 주므로 nonce 없는 인라인은 통째로 막힌다. -->
+     주의: nonce가 필수다 — CspNonceFilter가 strict-dynamic CSP를 주므로 nonce 없는 인라인은 통째로 막힌다.
+
+     주의: 둘째 줄(theme.js)은 1단계에선 아무 일도 안 한다 — 토글 마운트가 2단계 몫이라 export만 있는
+     모듈이다. 그래도 지금 싣는 이유는 배선을 프로드에서 먼저 검증하려는 것이다: 모듈 URL이 해시
+     경로로 나가는지, strict-dynamic CSP가 이 module 태그를 통과시키는지는 **띄워 봐야** 알고,
+     토글까지 함께 켜는 날 그 둘이 동시에 틀어지면 원인이 갈리지 않는다. 다크런치의 값이 그것이다. -->
 <th:block th:fragment="boot">
     <script th:attr="nonce=${cspNonce}">try{if(localStorage.getItem('bt-theme')==='dark')document.documentElement.dataset.theme='dark'}catch(e){}</script>
     <script type="module" th:attr="nonce=${cspNonce}" th:src="@{/js/theme.js}"></script>
