@@ -8,6 +8,7 @@ import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
 import com.booktimer.user.UserRepository;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,6 +58,7 @@ class StudyNoteApiControllerTest {
     @Autowired StudyBookRepository studyBookRepository;
     @Autowired StudyNoteRepository noteRepository;
     @Autowired Clock clock;
+    @Autowired EntityManager entityManager;
 
     private User register(String loginId) {
         registrationService.register(loginId + "@booktimer.com", "pw1234qwer!!", loginId,
@@ -247,6 +249,83 @@ class StudyNoteApiControllerTest {
                 .andExpect(jsonPath("$.body").value("고친 본문"));
     }
 
+    // ── ⑤-2 갱신의 입력 검증 — 400이지 404가 아니다 ─────────────────────────
+
+    /**
+     * 생성과 갱신이 <b>같은 규칙</b>({@code requireBody}·{@code optionalTitle})을 쓰는데 문마다 다른 답을
+     * 주면, 화면은 「없는 필기」와 「너무 긴 본문」을 구분하지 못한다 — 자동저장이 1.5초마다 두드리는
+     * 문이라 사용자는 무엇을 고쳐야 하는지 영영 못 읽는다.
+     */
+    @Test
+    @DisplayName("갱신: 본문 8001자는 400이고 저장된 본문은 그대로다(404 아님)")
+    void update_overBodyMax_is400() throws Exception {
+        User user = register("noteupdlong");
+        Long bookId = book(user, "책").getId();
+        Long id = createNote("noteupdlong", bookId, null, "처음 쓴 본문");
+
+        mockMvc.perform(post("/api/study/notes/" + id).with(user("noteupdlong")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody(null, "가".repeat(StudyNote.BODY_MAX + 1), 0)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string("쓴 내용은 " + StudyNote.BODY_MAX + "자까지 쓸 수 있어요"));
+
+        assertThat(noteRepository.findById(id).orElseThrow().getBody()).isEqualTo("처음 쓴 본문");
+    }
+
+    @Test
+    @DisplayName("갱신: 빈 본문은 400이고 저장된 본문은 그대로다(404 아님)")
+    void update_blankBody_is400() throws Exception {
+        User user = register("noteupdblank");
+        Long bookId = book(user, "책").getId();
+        Long id = createNote("noteupdblank", bookId, null, "처음 쓴 본문");
+
+        mockMvc.perform(post("/api/study/notes/" + id).with(user("noteupdblank")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody(null, "   ", 0)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string("쓴 내용을 입력해 주세요"));
+
+        assertThat(noteRepository.findById(id).orElseThrow().getBody()).isEqualTo("처음 쓴 본문");
+    }
+
+    @Test
+    @DisplayName("갱신: 제목 201자는 400이다(404 아님)")
+    void update_overTitleMax_is400() throws Exception {
+        User user = register("noteupdtitle");
+        Long bookId = book(user, "책").getId();
+        Long id = createNote("noteupdtitle", bookId, null, "처음 쓴 본문");
+
+        mockMvc.perform(post("/api/study/notes/" + id).with(user("noteupdtitle")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody("제".repeat(StudyNote.TITLE_MAX + 1), "고친 본문", 0)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string("제목은 " + StudyNote.TITLE_MAX + "자까지 쓸 수 있어요"));
+    }
+
+    /**
+     * 검증 400을 세우면서 <b>순서를 뒤집으면</b> 남의 필기가 400(길이 위반)을, 없는 필기가 404를 줘
+     * 400/404 차이로 「그 id가 존재하는가」를 캐낼 수 있다. 소유권 404가 언제나 먼저다.
+     */
+    @Test
+    @DisplayName("IDOR: 남의 필기에 길이 위반 본문을 보내도 404다(400으로 존재를 흘리지 않는다)")
+    void update_othersNoteWithInvalidBody_is404NotLeakingExistence() throws Exception {
+        User owner = register("noteorderowner");
+        register("noteorderthief");
+        Long bookId = book(owner, "주인의 책").getId();
+        Long id = createNote("noteorderowner", bookId, null, "주인이 쓴 본문");
+
+        String overlong = updateBody(null, "가".repeat(StudyNote.BODY_MAX + 1), 0);
+
+        mockMvc.perform(post("/api/study/notes/" + id).with(user("noteorderthief")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(overlong))
+                .andExpect(status().isNotFound());
+
+        // 없는 필기도 같은 404 — 두 응답이 같아야 존재 여부가 새지 않는다.
+        mockMvc.perform(post("/api/study/notes/" + (id + 99_999)).with(user("noteorderthief")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(overlong))
+                .andExpect(status().isNotFound());
+    }
+
     // ── ⑥ 목록 ──────────────────────────────────────────────────────────────
 
     @Test
@@ -271,6 +350,32 @@ class StudyNoteApiControllerTest {
                 .andExpect(jsonPath("$.notes[0].chars").value("방금 고친 본문".length()))
                 .andExpect(jsonPath("$.notes[0].body").doesNotExist())
                 .andExpect(jsonPath("$.notes[1].title").value("나중 쓴 필기"));
+    }
+
+    /**
+     * {@code updated_at}이 같은 두 장의 순서가 미정의면 <b>요청마다 뒤바뀔 수 있다</b> — 정답지(PR-3)가
+     * 이 순서로 상한에 걸릴 장을 고르므로, 화면이 「들어간다」고 보여준 장과 모델이 본 장이 어긋난다.
+     * 그래서 동률은 {@code id DESC}로 못 박는다(나중에 만든 장이 앞).
+     */
+    @Test
+    @DisplayName("목록: updated_at이 같으면 id가 큰 쪽이 앞이다(동률이 흔들리지 않는다)")
+    void list_breaksUpdatedAtTieById() throws Exception {
+        User user = register("notetie");
+        Long bookId = book(user, "책").getId();
+        Long first = createNote("notetie", bookId, "먼저 쓴 필기", "본문 하나");
+        Long second = createNote("notetie", bookId, "나중 쓴 필기", "본문 둘");
+
+        // 두 행의 updated_at을 같은 값으로 눌러 동률을 만든다 — 마이크로초라 자연 발생은 드물다.
+        entityManager.flush();
+        entityManager.createNativeQuery("update study_note set updated_at = '2026-09-10 00:00:00'")
+                .executeUpdate();
+        entityManager.clear();
+
+        mockMvc.perform(get("/api/study/notes").param("bookId", String.valueOf(bookId))
+                        .with(user("notetie")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.notes[0].id").value(Math.max(first, second)))
+                .andExpect(jsonPath("$.notes[1].id").value(Math.min(first, second)));
     }
 
     @Test

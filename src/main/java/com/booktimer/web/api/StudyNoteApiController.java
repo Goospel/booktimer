@@ -20,13 +20,17 @@ import org.springframework.web.server.ResponseStatusException;
 import java.security.Principal;
 import java.time.Instant;
 import java.util.List;
-import java.util.function.Supplier;
 
 /**
  * 공부 필기의 문 — 목록 · 조회 · 생성 · 갱신 · 삭제.
  *
  * <p>에러 계약은 {@link StudyRecallApiController}와 같다: IAE 문구가 그대로 400 본문, 없는·남의 것은
  * 404(존재 비노출), {@link ResponseStatusException}의 사유는 평문 본문(409).
+ *
+ * <p><b>404를 여기서 가로채지 않는다</b> — {@code StudyNoteService.owned}가 그 자리에서 던진다. 예전엔
+ * 이 클래스가 모든 IAE를 404로 옮겼는데, 그러면 같은 갈래로 오는 <b>입력 검증 IAE(빈 본문·길이 초과)까지
+ * 404로 뭉개져</b> 생성은 400·갱신은 404라는 어긋남이 생겼다(설계 §3.4 위반). 소유권 판정이 검증보다
+ * <b>먼저</b>인 것도 계약이다 — 뒤집으면 400/404 차이로 남의 필기의 존재를 캐낼 수 있다.
  *
  * <p>{@link #ownedBook}이 백지복습의 {@code ownedBookOrNull}과 <b>다르다</b> — 거기선 {@code null}이
  * 「책 없이」라는 정당한 선택이지만, 필기는 책이 필수라 {@code null}이 400이다.
@@ -96,14 +100,14 @@ public class StudyNoteApiController {
     public NoteResponse update(Principal principal, @PathVariable Long id, @RequestBody UpdateRequest request) {
         User user = currentUserService.resolve(principal);
         return NoteResponse.from(
-                mutate(() -> noteService.update(user, id, request.title(), request.body(), request.revision())));
+                noteService.update(user, id, request.title(), request.body(), request.revision()));
     }
 
     /** @return 200 {@code {deleted:true}} / 404 없거나 남의 것 */
     @PostMapping("/api/study/notes/{id}/delete")
     public DeleteResult delete(Principal principal, @PathVariable Long id) {
         User user = currentUserService.resolve(principal);
-        mutate(() -> { noteService.delete(user, id); return null; });
+        noteService.delete(user, id);
         return new DeleteResult(true);
     }
 
@@ -134,15 +138,6 @@ public class StudyNoteApiController {
         }
         return studyBookRepository.findByIdAndUser(bookId, user)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "책을 찾을 수 없습니다"));
-    }
-
-    /** 없는·남의 필기 IAE → 404(존재 비노출). {@code StudyBookApiController.mutate}와 같은 계약. */
-    private static <T> T mutate(Supplier<T> action) {
-        try {
-            return action.get();
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "필기를 찾을 수 없습니다");
-        }
     }
 
     // ── DTO (엔티티 직렬화 금지 — 평탄 record 화이트리스트) ───────────────────

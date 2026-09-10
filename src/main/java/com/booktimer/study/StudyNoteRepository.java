@@ -19,8 +19,14 @@ public interface StudyNoteRepository extends JpaRepository<StudyNote, Long> {
     /** 내 필기일 때만 — 남의 것은 빈 값이라 호출부가 404로 옮긴다(존재 비노출). */
     Optional<StudyNote> findByIdAndUser(Long id, User user);
 
-    /** 그 책의 필기 전부, 최근 고친 것부터. 정답지(§NoteReference)와 화면 목록이 같은 순서를 본다. */
-    List<StudyNote> findByUserAndBookOrderByUpdatedAtDesc(User user, StudyBook book);
+    /**
+     * 그 책의 필기 전부, 최근 고친 것부터. 정답지(§NoteReference)와 화면 목록이 같은 순서를 본다.
+     *
+     * <p>{@code id DESC}가 <b>동률을 깬다</b>. {@code updated_at}은 마이크로초라 충돌이 드물지만, 정답지가
+     * 이 순서로 상한에 걸릴 장을 고르므로 동률의 상대 순서가 미정의면 <b>요청마다 채점 기준이 흔들린다</b> —
+     * 화면이 「들어간다」고 보여준 장과 모델이 실제로 본 장이 어긋날 수 있다.
+     */
+    List<StudyNote> findByUserAndBookOrderByUpdatedAtDescIdDesc(User user, StudyBook book);
 
     /** 책 삭제 차단의 근거 — 0장일 때만 책을 뺄 수 있다({@code StudyBookService.delete}). */
     long countByBook(StudyBook book);
