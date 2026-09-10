@@ -14,11 +14,13 @@ import { bodyBudget, cleanMarkdown, filterSlashItems, slashPosition, type SlashI
  * <p>저장되는 값은 마크다운 문자열이라 서버·DB·AI 프롬프트가 그대로다. 되돌리려면 이 컴포넌트를
  * textarea로 되돌리면 되고, 그때 옛 글은 문법이 보일 뿐 깨지지 않는다.
  */
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     modelValue: string;
     placeholder: string;
     disabled?: boolean;
-}>();
+    /** 스크린리더에게 이 상자가 무엇인지 — 필기 패널이 「필기 본문」으로 갈아 끼운다. */
+    ariaLabel?: string;
+}>(), { ariaLabel: '백지복습 본문' });
 
 const emit = defineEmits<{ (e: 'update:modelValue', value: string): void }>();
 
@@ -105,7 +107,7 @@ const editor = useEditor({
     extensions: recallExtensions(slashSuggestion),
     editable: !props.disabled,
     // textarea 시절의 aria-label을 잇는다 — 스크린리더에게 이 상자가 무엇인지.
-    editorProps: { attributes: { 'aria-label': '백지복습 본문', 'aria-expanded': 'false' } },
+    editorProps: { attributes: { 'aria-label': props.ariaLabel, 'aria-expanded': 'false' } },
     onUpdate: ({ editor: e }) => emit('update:modelValue', markdownOf(e)),
     onTransaction: () => { tick.value += 1; },
 });

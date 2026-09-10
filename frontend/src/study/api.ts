@@ -36,19 +36,38 @@ export interface StudyCalendar {
     days: CalendarDay[];
 }
 
+/**
+ * 상태 코드를 달고 다니는 실패 — 자동저장이 <b>400 / 409 / 5xx를 다르게</b> 다뤄야 해서 생겼다.
+ *
+ * <p>{@code Error}를 상속하므로 기존 호출부(`e instanceof Error && e.message`)는 그대로 문구만 읽는다.
+ * 네트워크 자체가 죽은 경우엔 fetch가 {@code TypeError}를 던지므로 여기 걸리지 않는다 — 그쪽은
+ * 「상태 없음」이라 재시도 대상(5xx와 같은 갈래)이다.
+ */
+export class ApiError extends Error {
+    constructor(readonly status: number, message: string) {
+        super(message);
+        this.name = 'ApiError';
+    }
+}
+
 async function json<T>(res: Response, fallback?: string): Promise<T> {
     if (!res.ok) {
-        throw new Error(errorMessage(res.status, await res.text().catch(() => ''), fallback));
+        throw new ApiError(res.status, errorMessage(res.status, await res.text().catch(() => ''), fallback));
     }
     return (await res.json()) as T;
 }
 
-function post(url: string, body?: unknown): Promise<Response> {
+/**
+ * @param keepalive 탭이 닫히는 중에도 요청을 마저 보낸다(`pagehide`의 마지막 플러시). 브라우저 재량이라
+ *                  100%가 아니다 — 1차 방어는 디바운스와 즉시 플러시이고 이건 마지막 보험이다.
+ */
+function post(url: string, body?: unknown, keepalive = false): Promise<Response> {
     return fetch(url, {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
         body: body === undefined ? undefined : JSON.stringify(body),
+        keepalive,
     });
 }
 
@@ -266,4 +285,59 @@ export async function fetchStudyBooks(): Promise<StudyBookRow[]> {
     if (!res.ok) return [];
     const data = (await res.json()) as { books?: StudyBookRow[] };
     return data.books ?? [];
+}
+
+// ── 공부 필기 ────────────────────────────────────────────────────────────────
+
+/** 목록 한 행 — <b>본문이 없다</b>(서버 `NoteRow`). 라벨과 크기만 필요하다. */
+export interface NoteRow {
+    id: number;
+    title: string | null;
+    chars: number;
+    updatedAt: string;
+}
+
+/** 필기 한 장(본문 포함, 서버 `NoteResponse`). */
+export interface Note {
+    id: number;
+    bookId: number;
+    title: string | null;
+    body: string;
+    /**
+     * 마지막으로 받은 판 번호 — <b>갱신 요청에 그대로 되실어야 한다</b>.
+     *
+     * <p>빠지거나 `null`이면 서버의 `int` 파라미터가 못 받아 500 + HTML 본문이 온다(레포 전역 성질).
+     * 그래서 이 값은 화면 상태가 아니라 <b>서버 응답에서만</b> 온다 — 손으로 세지 않는다.
+     */
+    revision: number;
+    updatedAt: string;
+}
+
+export async function fetchNotes(bookId: number): Promise<NoteRow[]> {
+    const data = await json<{ notes?: NoteRow[] }>(
+        await fetch(`/api/study/notes?bookId=${bookId}`, { credentials: 'same-origin' }),
+        '필기 목록을 불러오지 못했어요.');
+    return data.notes ?? [];
+}
+
+export async function fetchNote(id: number): Promise<Note> {
+    return json(await fetch(`/api/study/notes/${id}`, { credentials: 'same-origin' }),
+        '필기를 불러오지 못했어요.');
+}
+
+export async function createNote(input: { bookId: number; title: string; body: string }): Promise<Note> {
+    return json(await post('/api/study/notes', input), '필기를 저장하지 못했어요.');
+}
+
+/** @param keepalive 탭이 닫히는 중의 마지막 플러시. */
+export async function updateNote(
+    id: number,
+    input: { title: string; body: string; revision: number },
+    keepalive = false,
+): Promise<Note> {
+    return json(await post(`/api/study/notes/${id}`, input, keepalive), '필기를 저장하지 못했어요.');
+}
+
+export async function deleteNote(id: number): Promise<void> {
+    await json<unknown>(await post(`/api/study/notes/${id}/delete`), '필기를 지우지 못했어요.');
 }

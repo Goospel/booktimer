@@ -3783,6 +3783,22 @@ body.dashboard-page #dashboard-app { gap: 20px; }
     border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--sage-soft);
 }
 
+/* 필기 — 좌우 배선(.study-recall-split/side/main)은 백지복습 것을 그대로 쓴다. 여기 있는 것은
+   좌측 목록과 상태줄뿐이다. 상태줄은 이 화면에서 저장 버튼을 대신하므로 비어 있어도 자리를
+   차지한다(min-height) — 글자가 들고 날 때마다 편집기가 위아래로 뛰면 쓰던 자리를 잃는다. */
+.study-notes { display: flex; flex-direction: column; gap: 8px; }
+.study-notes input, .study-notes .study-recall-book { width: 100%; }
+.study-notes-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.study-notes-item {
+    display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left;
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px;
+    background: transparent; color: inherit; font: inherit; cursor: pointer;
+}
+.study-notes-item.is-active { border-color: var(--accent); background: var(--sage-soft); }
+.study-notes-label { overflow-wrap: anywhere; }
+.study-notes-meta { font-size: 12px; color: var(--muted); }
+.study-notes-status { min-height: 18px; }
+
 /* AI 일정 생성 — 폼 → 미리보기 → 적용 */
 .study-day-planbtn { align-self: flex-start; width: auto; }
 .study-plan-form { display: flex; flex-direction: column; gap: 8px; }
