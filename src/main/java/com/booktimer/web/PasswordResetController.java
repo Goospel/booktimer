@@ -47,8 +47,13 @@ public class PasswordResetController {
      * 재설정 요청 — 계정 존재/부재/소셜 모두 동일한 안내 페이지(열거완화). 발송 여부만 내부 차이.
      *
      * <p><b>상한은 두 키로 센다</b>({@link RateLimitAction#PASSWORD_FORGOT} IP ·
-     * {@link RateLimitAction#PASSWORD_FORGOT_EMAIL} 정규화 이메일). IP만 세면 출처를 바꿔 가며 피해자
-     * 주소로 반복 요청해 그 사람의 재설정 링크를 계속 무효화할 수 있다 — 이메일 키가 그 봉쇄를 끊는다.
+     * {@link RateLimitAction#PASSWORD_FORGOT_EMAIL} 정규화 이메일). 이메일 키는 <b>한 주소로 나가는
+     * 발송량 상한</b>이다 — IP만 세면 출처를 분산해 한 사람의 수신함을 채울 수 있다.
+     *
+     * <p>⚠️ 이메일 키는 <b>토큰 무효화로 인한 링크 봉쇄를 끊지 못하고, 오히려 피해자 본인을 잠글 수
+     * 있다</b>(공격자가 시간당 3회를 소진하면 피해자 요청이 {@code ?limited}로 거부된다). 수용한
+     * 트레이드오프이고 근본 해소는 {@code EmailTokenService.issue}의 직전 토큰 무효화를 그만두는
+     * 것이다 — 상세·근거는 {@link RateLimitAction#PASSWORD_FORGOT_EMAIL} JavaDoc.
      *
      * <p>계정이 없어도 <b>똑같이</b> 센다. 상한 반응이 계정 존재 여부에 따라 갈리면 그 자체가 열거 채널이다.
      */

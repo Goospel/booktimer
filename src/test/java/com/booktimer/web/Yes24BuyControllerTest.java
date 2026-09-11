@@ -159,13 +159,15 @@ class Yes24BuyControllerTest {
     void buyYes24FromProfile_privateBook_redirectsToProfile() throws Exception {
         when(yes24LinkBuilder.buildSearchLink(any(), anyBoolean())).thenReturn(YES24_LINK);
         User owner = newUser("yppowner@booktimer.com");
+        owner.assignLoginId("yppshelf");
+        userRepository.save(owner);
         newUser("yppviewer@booktimer.com");
         Book book = bookRepository.save(Book.register(owner, "비공개 책", null, "9788900000003",
                 null, null, null, BookStatus.READING)); // 기본 PRIVATE
 
-        mockMvc.perform(get("/u/{loginId}/books/{id}/buy/yes24", "somehandle", book.getId())
+        mockMvc.perform(get("/u/{loginId}/books/{id}/buy/yes24", "yppshelf", book.getId())
                         .with(user("yppviewer@booktimer.com")))
-                .andExpect(redirectedUrl("/u/somehandle"));
+                .andExpect(redirectedUrl("/u/yppshelf"));
 
         assertThat(bookRepository.findById(book.getId()).orElseThrow().getYes24ClickCount()).isZero();
     }

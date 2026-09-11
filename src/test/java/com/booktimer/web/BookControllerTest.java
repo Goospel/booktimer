@@ -226,13 +226,15 @@ class BookControllerTest {
     @DisplayName("GET /u/{loginId}/books/{id}/buy: 비공개책이면 집계 없이 프로필로 복귀")
     void buyFromProfile_privateBook_noCountRedirectsToProfile() throws Exception {
         User owner = newUser("ppowner@booktimer.com");
+        owner.assignLoginId("ppshelf");
+        userRepository.save(owner);
         newUser("ppviewer@booktimer.com");
         Book book = bookRepository.save(Book.register(owner, "비공개 책", null, null, null, null,
                 "http://www.aladin.co.kr/buy?ttbkey=z", BookStatus.READING));
 
-        mockMvc.perform(get("/u/{loginId}/books/{id}/buy", "somehandle", book.getId())
+        mockMvc.perform(get("/u/{loginId}/books/{id}/buy", "ppshelf", book.getId())
                         .with(user("ppviewer@booktimer.com")))
-                .andExpect(redirectedUrl("/u/somehandle"));
+                .andExpect(redirectedUrl("/u/ppshelf"));
 
         assertThat(bookRepository.findById(book.getId()).orElseThrow().getClickCount()).isZero();
     }
