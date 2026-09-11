@@ -15,6 +15,8 @@ import {
 import { elapsedSeconds } from './format';
 import { Bookshop } from './screens/Bookshop';
 import { Goal } from './screens/Goal';
+import { GuestShell } from './screens/GuestHome';
+import type { LoginSource } from './screens/GuestHome';
 import { History } from './screens/History';
 import { BookSheet, Home, defaultBookId } from './screens/Home';
 import { Library } from './screens/Library';
@@ -531,6 +533,14 @@ export function underCompose(margin: MarginState): MarginScreen | null {
 /** App 수준에서 구분되는 화면 이름 — 콘솔에는 `screen_` 접두사가 붙는다({@link trackScreen}). */
 export type ScreenName =
   | 'login'
+  /**
+   * 로그인 전 게스트 셸의 네 화면 — 「둘러보는 중」과 「로그인 진행 중」(`login`)은 <b>다른 화면</b>이다.
+   * 한 이름으로 묶으면 판정식(`login_started / guest_entered`)의 분모에 「눌렀는가」가 섞여 스스로를 잡아먹는다.
+   */
+  | 'guest_home'
+  | 'guest_library'
+  | 'guest_bookshop'
+  | 'guest_history'
   | 'link_account'
   | 'error'
   | 'goal'
@@ -567,10 +577,26 @@ export function currentScreen(s: {
   shop: string | null;
   tab: TabKey;
   mode: TimerMode;
+  /** 로그인 진행 중인가 — `null`이면 게스트 셸이 서 있다(`'auth'` 안의 두 갈래). */
+  loginSource: LoginSource | null;
+  /** 게스트 셸이 선 탭 — 탭 상태(`tab`)와 별개다(로그인 후 착지 탭을 게스트가 흔들면 안 된다). */
+  guestTab: TabKey;
 }): ScreenName | null {
   switch (s.view) {
     case 'auth':
-      return 'login';
+      // 로그인 진행(checking·choice·failed)은 종전 이름 그대로 — 전후 비교가 끊기지 않게.
+      if (s.loginSource !== null) return 'login';
+      // `as` 대신 명시 분기다 — 게스트 탭이 늘면 여기 한 줄을 지나야 한다(`never` 검사와 같은 취지).
+      switch (s.guestTab) {
+        case 'library':
+          return 'guest_library';
+        case 'bookshop':
+          return 'guest_bookshop';
+        case 'history':
+          return 'guest_history';
+        default:
+          return 'guest_home'; // 'home' · 'calendar'(게스트 탭바엔 없다)
+      }
     case 'link':
       return 'link_account';
     case 'error':
@@ -687,17 +713,46 @@ export function App() {
    * 시작한 측정이 {@link effectiveMode}로 모드를 바꾼다) 공부 서재의 1번이 「고른 책」이 된다.
    */
   const [studyBookId, setStudyBookId] = useState<number | null | undefined>(undefined);
+  /**
+   * 로그인 진행 중인가 — `'auth'` 뷰 안에서 「게스트 셸 / 로그인 진행」을 가르는 한 칸이다.
+   *
+   * <p>`'guest'` 뷰를 새로 파지 않은 이유: `'auth'`의 뜻(「토큰이 없다」)이 그대로고, 401·로그아웃·탈퇴가
+   * 전부 지나는 {@link toLogin} 한 문을 건드리지 않아도 된다. 값은 <b>어느 손잡이로</b> 시작했는지라
+   * 그대로 `LoginBridge`의 `login_started{source}`가 된다.
+   */
+  const [loginSource, setLoginSource] = useState<LoginSource | null>(null);
+  /**
+   * 게스트 셸이 선 탭 — 탭 상태(`tab`)와 <b>따로</b> 든다.
+   *
+   * <p>딥링크(`?tab=history`)로 로그아웃 진입하면 첫 화면이 「기록은 계정이 있어야」가 된다 — 체험 문이
+   * 먼저 서야 하므로 게스트는 홈 고정이다. 로그인 뒤 착지 탭은 종전대로 `tab`(=`initialTab`)이 든다.
+   */
+  const [guestTab, setGuestTab] = useState<TabKey>('home');
 
   const toLogin = useCallback(() => {
     token.clear();
     setDashboard(null);
+    setLoginSource(null); // 로그아웃·401은 게스트 홈으로 떨어진다(인가 재요청이 아니라)
+    setGuestTab('home');
     setView('auth');
   }, []);
 
   const lastFetchedAt = useRef(0);
 
+  /**
+   * 대시보드 로드가 진행 중인가 — <b>두 번째 호출을 버리는</b> 빗장이다.
+   *
+   * <p>인증 직후 `load`는 두 번 돈다: 브릿지가 한 번 부르고, 그 setState가 만든
+   * `view==='loading' && dashboard===null` 조합을 마운트 effect가 보고 인자 <b>없이</b> 또 부른다.
+   * 둘 다 통과하면 `setView('goal')` 뒤에 `setView('main')`이 덮어 <b>신규 계정이 목표 화면을 못 본다</b>
+   * (`firstRun`만 `true`로 남는다). 빗장이 첫 호출의 `next`를 살린다.
+   */
+  const loading = useRef(false);
+
   const load = useCallback(
     (next: View = 'main') => {
+      if (loading.current) return;
+      loading.current = true;
       setView('loading');
       lastFetchedAt.current = Date.now();
       // 로그인 전 체험이 합류하는 **유일한 문** — 새 계정·기존 계정 연결·재진입이 전부 여기를 지난다.
@@ -715,6 +770,10 @@ export function App() {
             setError(e.message);
             setView('error');
           }
+        })
+        // ⚠️ 이 줄이 빠지면 첫 로드 뒤 빗장이 영영 잠긴 채로 남아 「다시 시도」가 죽는다.
+        .finally(() => {
+          loading.current = false;
         });
     },
     [toLogin],
@@ -765,7 +824,14 @@ export function App() {
   useEffect(() => subscribeNativeBack(nativeBack), []);
 
   // 탭 밖 전체 화면을 나가는 유일한 길이다 — 자체 뒤로가기를 걷었으므로(T-220) 네이티브 back이 여기로 온다.
-  useBackClose(view === 'link', () => setView('auth'));
+  // 계정 연결에서 back → 시작 <b>전</b>(게스트 홈)으로. `loginSource`를 남기면 `LoginBridge`가 다시
+  // 마운트되며 마운트 effect가 인가를 또 요청한다 — 돌아간 사람에게 인가 창을 다시 들이대는 꼴이다.
+  useBackClose(view === 'link', () => {
+    setLoginSource(null);
+    setView('auth');
+  });
+  // 로그인 진행 중 back → 게스트 홈. `checking` 중엔 토스 시트가 위에 있어 여기까지 안 온다.
+  useBackClose(view === 'auth' && loginSource !== null, () => setLoginSource(null));
   useBackClose(view === 'goal', () => {
     setFirstRun(false);
     setView('main');
@@ -799,7 +865,16 @@ export function App() {
    * 의존성이 **문자열 하나**라 같은 화면으로 리렌더되면 안 돈다 — 시트 개폐·`MainTabs` remount가
    * 중복 발화로 새지 않는 것이 이 자리(App 루트)를 고른 이유다. `null`은 과도 상태(로딩)라 안 쏜다.
    */
-  const screenName = currentScreen({ view, loaded: dashboard !== null, margin, shop, tab: shownTab, mode });
+  const screenName = currentScreen({
+    view,
+    loaded: dashboard !== null,
+    margin,
+    shop,
+    tab: shownTab,
+    mode,
+    loginSource,
+    guestTab,
+  });
   useEffect(() => {
     if (screenName !== null) trackScreen(screenName);
   }, [screenName]);
@@ -864,8 +939,12 @@ export function App() {
 
   switch (view) {
     case 'auth':
-      return (
+      // 토큰이 없는 사람이 보는 화면은 둘이다 — 둘러보는 중(게스트 셸)과, 손잡이를 누른 뒤의 로그인 진행.
+      return loginSource === null ? (
+        <GuestShell tab={guestTab} onTabChange={setGuestTab} onLogin={setLoginSource} />
+      ) : (
         <LoginBridge
+          source={loginSource}
           onAuthenticated={() => load('main')}
           onNewAccount={() => {
             setFirstRun(true); // 신규 계정은 목표 설정을 먼저 유도한다(설계 §2.5-5).
@@ -2150,8 +2229,13 @@ export function BottomTabBar({
   action: { active: boolean; busy: boolean; onPress: () => void; mode?: TimerMode };
   /** 측정 중인가 — 홈을 뺀 탭이 잠긴다({@link tabLocked}). 가운데 액션은 절대 안 잠근다. */
   locked?: boolean;
-  /** 잠긴 탭을 눌렀다 — 안내 문구는 `MainTabs`가 그린다(이 알약은 `overflow: hidden`이라 안에 두면 잘린다). */
-  onBlocked?: () => void;
+  /**
+   * 잠긴 탭을 눌렀다 — 안내 문구는 `MainTabs`가 그린다(이 알약은 `overflow: hidden`이라 안에 두면 잘린다).
+   *
+   * <p><b>어느 칸인지</b>를 함께 넘긴다: 게스트 셸은 잠긴 칸을 눌렀을 때 <b>그 화면을 연다</b>(안에서
+   * 잠긴 이유를 말한다). 측정 중 잠금(`MainTabs.showLockHint`)은 인자를 무시하므로 호출부 무변경.
+   */
+  onBlocked?: (tab: TabKey) => void;
 }) {
   // 모드가 목록을 고르고, 그리기·index 풀이가 **같은 배열**을 쓴다 — 여기가 갈리면 누른 칸과
   // 바뀌는 탭이 어긋난다. 액션이 모드를 이미 들고 있어(라벨 분기) 새 프롭이 필요 없다.
@@ -2171,7 +2255,7 @@ export function BottomTabBar({
         // `disabled`가 아니라 `aria-disabled`다 — 진짜로 잠그면 클릭이 안 와서 이유를 말할 기회가 없다.
         aria-disabled={shut ? true : undefined}
         title={label}
-        onClick={() => (shut ? onBlocked?.() : change(index))}
+        onClick={() => (shut ? onBlocked?.(key) : change(index))}
         style={{
           flex: 1,
           minHeight: TAB_BAR_HEIGHT,
@@ -2185,8 +2269,10 @@ export function BottomTabBar({
           background: 'transparent',
           // 시안 4c — 고른 칸은 세이지 700이다(500은 옆 라벨 회색과 대비가 약했다).
           color: selected ? 'var(--adaptiveBlue700, #4F6B4C)' : 'var(--adaptiveGrey600, #6F6A5E)',
-          // 잠긴 칸은 흐려진다 — 눌러 보기 전에 눈으로 먼저 알아야 한다.
-          opacity: shut ? 0.35 : 1,
+          // 잠긴 칸은 흐려진다 — 눌러 보기 전에 눈으로 먼저 알아야 한다. 단 **내가 선 칸은 빼고**:
+          // 게스트가 잠긴 탭을 열면 그 칸이 선택 표시로 서는데, 흐림은 「여기 못 간다」는 말이라
+          // 이미 와 있는 칸에 붙으면 거짓이 된다.
+          opacity: shut && !selected ? 0.35 : 1,
           cursor: 'pointer',
         }}
       >

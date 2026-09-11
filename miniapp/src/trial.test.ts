@@ -235,7 +235,17 @@ describe('체험 시작·완료 (beginTrial / completeTrial)', () => {
   it('「읽기 시작」을 눌렀다는 사실을 남긴다 — 화면이 안 눌리는 것과 로그인이 안 되는 것을 가른다', () => {
     beginTrial(startedAtMs);
 
-    expect(trackEventMock).toHaveBeenCalledWith('trial_started');
+    expect(trackEventMock).toHaveBeenCalledWith('trial_started', { source: 'hero' });
+  });
+
+  /**
+   * 어느 손잡이로 시작했나 — 히어로 버튼이냐 탭바 가운데 원이냐. <b>▶ 발견율</b>을 공짜로 잰다:
+   * 로그인 뒤 홈에서도 측정은 그 원으로 시작하므로, 여기서 안 눌리면 온보딩에도 같은 구멍이 있다.
+   */
+  it('어느 손잡이로 시작했는지 함께 남긴다 — 탭바 ▶가 발견되는지가 여기 실린다', () => {
+    beginTrial(startedAtMs, 'play');
+
+    expect(trackEventMock).toHaveBeenCalledWith('trial_started', { source: 'play' });
   });
 
   it('「그만 읽기」는 끝 시각을 박고 길이와 함께 남긴다 — 측정 중 이탈을 이 비율이 가른다', () => {
