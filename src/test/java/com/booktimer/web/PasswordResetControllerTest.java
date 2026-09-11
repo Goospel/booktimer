@@ -19,13 +19,16 @@ import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.ui.Model;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
@@ -54,6 +57,85 @@ class PasswordResetControllerTest {
 
     @Autowired
     private PasswordResetController passwordResetController;
+
+    @Autowired
+    private com.booktimer.security.RateLimitService rateLimitService;
+
+    @org.junit.jupiter.api.BeforeEach
+    void resetRateLimit() {
+        rateLimitService.clearForTest(); // 인메모리 고정 윈도우 — 테스트 간 격리
+    }
+
+    /** 재설정 요청 — 출처 IP를 지정해 "IP를 바꿔 가며"를 재현한다. */
+    private org.springframework.test.web.servlet.ResultActions submitForgot(String email, String ip)
+            throws Exception {
+        return mockMvc.perform(post("/password/forgot")
+                .param("email", email)
+                .with(request -> {
+                    request.setRemoteAddr(ip);
+                    return request;
+                })
+                .with(csrf()));
+    }
+
+    @Test
+    @DisplayName("POST /password/forgot: 같은 IP의 11번째 요청은 막힌다 (10번째까지는 안내 페이지 — 양성 대조군)")
+    void forgot_eleventhFromSameIp_limited() throws Exception {
+        for (int i = 1; i <= 10; i++) {
+            submitForgot("ip" + i + "@booktimer.com", "203.0.113.9")
+                    .andExpect(view().name("password-forgot-sent"));
+        }
+        User victim = persistLocal("ip11@booktimer.com", "ipeleven");
+
+        submitForgot("ip11@booktimer.com", "203.0.113.9")
+                .andExpect(redirectedUrl("/password/forgot?limited"));
+
+        // 막혔으니 requestReset에 닿지 않았다 — 실재 계정인데도 토큰이 하나도 발급되지 않았다.
+        assertThat(tokenRepository.findByUserAndTypeAndUsedAtIsNull(victim, EmailTokenType.PASSWORD_RESET)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("POST /password/forgot: 같은 이메일(대소문자·공백 변형 포함)은 IP를 바꿔도 4번째부터 막힌다 — 피해자의 재설정 링크가 계속 무효화되는 봉쇄를 끊는다")
+    void forgot_sameEmailAcrossIps_limitedAtFourth() throws Exception {
+        User victim = persistLocal("victim@booktimer.com", "victimone");
+
+        // IP를 매번 바꾼다 — IP 키만 있으면 셋 다 통과하고 4번째도 통과한다.
+        submitForgot("victim@booktimer.com", "198.51.100.1").andExpect(view().name("password-forgot-sent"));
+        submitForgot("VICTIM@BookTimer.com", "198.51.100.2").andExpect(view().name("password-forgot-sent"));
+        submitForgot("  victim@booktimer.com  ", "198.51.100.3").andExpect(view().name("password-forgot-sent"));
+
+        Long liveToken = tokenRepository.findByUserAndTypeAndUsedAtIsNull(victim, EmailTokenType.PASSWORD_RESET)
+                .get(0).getId();
+
+        submitForgot("victim@booktimer.com", "198.51.100.4")
+                .andExpect(redirectedUrl("/password/forgot?limited"));
+
+        // 4번째가 requestReset에 닿았다면 issue가 직전 토큰을 죽이고 새 토큰을 냈을 것이다 —
+        // 즉 피해자가 손에 든 링크가 또 무효화됐을 것이다. 살아 있는 토큰이 그대로여야 한다.
+        assertThat(tokenRepository.findByUserAndTypeAndUsedAtIsNull(victim, EmailTokenType.PASSWORD_RESET))
+                .extracting(com.booktimer.email.EmailToken::getId)
+                .containsExactly(liveToken);
+    }
+
+    @Test
+    @DisplayName("POST /password/forgot: 존재하지 않는 이메일도 똑같이 4번째부터 막힌다 — 상한 반응이 계정 존재를 알려주는 채널이 되지 않는다")
+    void forgot_absentEmail_hitsSameLimit_noEnumerationChannel() throws Exception {
+        for (int i = 1; i <= 3; i++) {
+            submitForgot("ghost@booktimer.com", "192.0.2." + i)
+                    .andExpect(view().name("password-forgot-sent"));
+        }
+
+        submitForgot("ghost@booktimer.com", "192.0.2.9")
+                .andExpect(redirectedUrl("/password/forgot?limited"));
+    }
+
+    @Test
+    @DisplayName("GET /password/forgot?limited: 한도 초과 안내가 화면에 실제로 뜬다")
+    void forgotForm_limitedParam_showsNotice() throws Exception {
+        mockMvc.perform(get("/password/forgot").param("limited", ""))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("요청이 너무 잦습니다")));
+    }
 
     @Test
     @DisplayName("GET /password/forgot: 렌더 전 CSRF 토큰을 선확정한다 — 익명 폼 commit-후-500 방어(T-049 재발)")

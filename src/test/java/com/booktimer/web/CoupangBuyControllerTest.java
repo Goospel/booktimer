@@ -110,13 +110,15 @@ class CoupangBuyControllerTest {
     void buyCoupangFromProfile_privateBook_redirectsToProfile() throws Exception {
         when(coupangLinkBuilder.buildSearchLink(any())).thenReturn(COUPANG_LINK);
         User owner = newUser("cppowner@booktimer.com");
+        owner.assignLoginId("cppshelf");
+        userRepository.save(owner);
         newUser("cppviewer@booktimer.com");
         Book book = bookRepository.save(Book.register(owner, "비공개 책", null, "9788900000003",
                 null, null, null, BookStatus.READING)); // 기본 PRIVATE
 
-        mockMvc.perform(get("/u/{loginId}/books/{id}/buy/coupang", "somehandle", book.getId())
+        mockMvc.perform(get("/u/{loginId}/books/{id}/buy/coupang", "cppshelf", book.getId())
                         .with(user("cppviewer@booktimer.com")))
-                .andExpect(redirectedUrl("/u/somehandle"));
+                .andExpect(redirectedUrl("/u/cppshelf"));
 
         assertThat(bookRepository.findById(book.getId()).orElseThrow().getCoupangClickCount()).isZero();
     }

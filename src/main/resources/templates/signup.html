@@ -22,6 +22,10 @@
 
     <section class="auth-card">
         <form th:action="@{/signup}" th:object="${signupForm}" method="post">
+            <!-- 전역 에러(필드에 안 붙는 것) — 예: 가입 요청 상한 초과. 필드 에러와 같은 스타일을 쓴다. -->
+            <div class="auth-field" th:if="${#fields.hasGlobalErrors()}">
+                <span class="auth-field-error" th:each="err : ${#fields.globalErrors()}" th:text="${err}">가입 오류</span>
+            </div>
             <!-- 아이디 -->
             <div class="auth-field">
                 <label class="auth-label" for="loginId">아이디</label>

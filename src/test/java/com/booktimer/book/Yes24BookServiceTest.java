@@ -118,7 +118,7 @@ class Yes24BookServiceTest {
         Book book = bookService.addFromSearch(owner, cleanCode(), BookStatus.WANT_TO_READ);
         book.makePublic();
 
-        String link = bookService.recordPublicYes24Click(book.getId(), false);
+        String link = bookService.recordPublicYes24Click(owner, book.getId(),false);
 
         assertThat(link).isEqualTo(YES24_LINK);
         assertThat(bookService.myBooks(owner).get(0).getYes24ClickCount()).isEqualTo(1L);
@@ -132,7 +132,7 @@ class Yes24BookServiceTest {
         Book book = bookService.addFromSearch(owner, cleanCode(), BookStatus.WANT_TO_READ);
         book.makePublic();
 
-        String link = bookService.recordPublicYes24Click(book.getId(), true);
+        String link = bookService.recordPublicYes24Click(owner, book.getId(),true);
 
         assertThat(link).isEqualTo(YES24_MOBILE_LINK);
         verify(yes24LinkBuilder).buildSearchLink(any(), eq(true));
@@ -145,7 +145,22 @@ class Yes24BookServiceTest {
         User owner = newUser("yprivowner@booktimer.com");
         Book book = bookService.addFromSearch(owner, cleanCode(), BookStatus.WANT_TO_READ); // 기본 PRIVATE
 
-        String link = bookService.recordPublicYes24Click(book.getId(), false);
+        String link = bookService.recordPublicYes24Click(owner, book.getId(),false);
+
+        assertThat(link).isNull();
+        assertThat(bookService.myBooks(owner).get(0).getYes24ClickCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("공개 책 Yes24 클릭: 다른 사람을 owner로 넘기면 공개책이어도 null·집계 없음 — 조회가 '그 책방 주인'으로 스코프된다")
+    void recordPublicYes24Click_wrongOwner_returnsNullNoCount() {
+        when(yes24LinkBuilder.buildSearchLink(any(), eq(false))).thenReturn(YES24_LINK);
+        User owner = newUser("yscopedowner@booktimer.com");
+        User other = newUser("yscopedother@booktimer.com");
+        Book book = bookService.addFromSearch(owner, cleanCode(), BookStatus.WANT_TO_READ);
+        book.makePublic(); // 공개 게이트는 통과한다 — 막는 것은 소유자 스코프뿐이다.
+
+        String link = bookService.recordPublicYes24Click(other, book.getId(), false);
 
         assertThat(link).isNull();
         assertThat(bookService.myBooks(owner).get(0).getYes24ClickCount()).isZero();
@@ -154,7 +169,7 @@ class Yes24BookServiceTest {
     @Test
     @DisplayName("공개 책 Yes24 클릭: 없는 책 id면 예외 없이 null(존재 누설 회피)")
     void recordPublicYes24Click_missing_returnsNull() {
-        assertThat(bookService.recordPublicYes24Click(999_999L, false)).isNull();
+        assertThat(bookService.recordPublicYes24Click(newUser("ymissing@booktimer.com"), 999_999L, false)).isNull();
     }
 
     @Test

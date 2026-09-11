@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -58,8 +59,8 @@ class SnsWebhookControllerTest {
     void validNotification_verified_handlesInnerSesMessage() {
         when(signatureVerifier.verify(any())).thenReturn(true);
 
-        ResponseEntity<Void> response =
-                controller("").receive(notificationJson("arn:aws:sns:x:booktimer-ses", "SES-INNER"));
+        ResponseEntity<Void> response = controller("arn:aws:sns:x:booktimer-ses")
+                .receive(notificationJson("arn:aws:sns:x:booktimer-ses", "SES-INNER"));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         verify(bounceComplaintHandler).handle("SES-INNER");
@@ -69,7 +70,7 @@ class SnsWebhookControllerTest {
     void subscriptionConfirmation_verified_confirmsAndDoesNotHandle() {
         when(signatureVerifier.verify(any())).thenReturn(true);
 
-        ResponseEntity<Void> response = controller("")
+        ResponseEntity<Void> response = controller("arn:aws:sns:x")
                 .receive(subscriptionJson("https://sns.ap-northeast-2.amazonaws.com/confirm"));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -81,8 +82,27 @@ class SnsWebhookControllerTest {
     void invalidSignature_rejected403_noProcessing() {
         when(signatureVerifier.verify(any())).thenReturn(false);
 
+        ResponseEntity<Void> response = controller("arn:aws:sns:x")
+                .receive(notificationJson("arn:aws:sns:x", "SES-INNER"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        verify(bounceComplaintHandler, never()).handle(any());
+        verify(subscriptionConfirmer, never()).confirm(any());
+    }
+
+    /**
+     * TopicArn 미설정(빈 값)이면 <b>서명이 유효해도</b> 무조건 403 — fail-closed.
+     *
+     * <p>전에는 빈 값이 "체크 건너뜀"이라, 운영에서 {@code BOOKTIMER_SES_SNS_TOPIC_ARN} 주입이 빠지면
+     * 이 공개 엔드포인트의 1차 방어가 조용히 사라졌다. 위 {@code validNotification_*}이 양성 대조군이다
+     * (일치 ARN + 유효 서명이면 그대로 처리된다 — 즉 이 403은 "항상 거부"가 아니다).
+     */
+    @Test
+    void blankTopicArn_rejected403_failClosed() {
+        lenient().when(signatureVerifier.verify(any())).thenReturn(true);
+
         ResponseEntity<Void> response =
-                controller("").receive(notificationJson("arn:aws:sns:x", "SES-INNER"));
+                controller("").receive(notificationJson("arn:aws:sns:x:booktimer-ses", "SES-INNER"));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         verify(bounceComplaintHandler, never()).handle(any());
