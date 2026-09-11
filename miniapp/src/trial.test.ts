@@ -169,6 +169,34 @@ describe('합류 (flushTrial)', () => {
     expect(readTrial()).toEqual(done);
   });
 
+  /**
+   * 인증 직후 `load()`는 <b>두 번</b> 돈다 — `onAuthenticated`가 한 번 부르고, 그 setState가 만든
+   * `view==='loading' && dashboard===null` 조합을 App의 마운트 effect가 보고 또 한 번 부른다.
+   * 둘이 같은 틱에 storage를 읽으면 같은 체험이 두 번 올라간다. 서버 멱등이 <b>행은</b> 막아도
+   * `trial_imported`는 두 번 찍혀 §6.2의 합류 비율이 200%로 읽힌다 — 목 모드 실측에서
+   * 16초 체험이 「오늘 읽은」을 32초 늘렸다(2026-09-11).
+   */
+  it('같은 틱에 두 번 불려도 한 번만 올린다 — 인증 직후 load()가 두 번 돈다', async () => {
+    writeTrial(done);
+    let calls = 0;
+    const importFn = async () => {
+      calls += 1;
+      await Promise.resolve();
+    };
+
+    await Promise.all([flushTrial(importFn), flushTrial(importFn)]);
+
+    expect(calls).toBe(1);
+  });
+
+  it('합류 사실도 한 번만 남는다 — 두 번 찍히면 합류 비율이 200%로 읽힌다', async () => {
+    writeTrial(done);
+
+    await Promise.all([flushTrial(async () => {}), flushTrial(async () => {})]);
+
+    expect(trackEventMock.mock.calls.filter(([name]) => name === 'trial_imported')).toHaveLength(1);
+  });
+
   it('어떤 실패도 밖으로 내지 않는다 — 모든 대시보드 로드가 이 문 뒤에 줄 서 있다', async () => {
     writeTrial(done);
 

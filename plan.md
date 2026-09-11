@@ -3477,8 +3477,15 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
   넘을 수 없다** — `started_at`이 `datetime(6)`이라 나노초 Instant는 잘려 저장되고, 그러면 재시도 조회가 영영
   안 맞아 행이 두 번 쌓인다(밀리초로 내려 왕복 보존). 입력 검증 4종: 시간 역전 · `now+5분` 초과 · `now-7일`
   이전 · ISO 파싱 실패 → 전부 400.
-- 🔜 **PR-2 미니앱** — `trial.ts`(localStorage 체험 원장) + `LoginBridge` 3상태 재구성(intro·running·done) +
-  `App.load()`의 합류 한 줄(`flushTrial`) + 목 모드 로그아웃 배선 + 이벤트 4종. 배포는 **서버 먼저**(설계 U-8).
+- ✅ **PR-2 미니앱 — 첫 화면이 곧 타이머 (2026-09-11)** — `trial.ts`(localStorage 체험 원장) + `LoginBridge`
+  3상태 재구성(intro·running·done) + `App.load()`의 합류 한 줄(`flushTrial`) + 목 모드 로그아웃 배선(`?login`) +
+  이벤트 4종. 목 모드 실측으로 **첫 진입·거절·완주 세 경로 모두 덮는 요소 0개**(U-7 충족). ⚠️ **설계가 못 본 것
+  하나를 실측이 잡았다** — 인증 직후 `load()`가 두 번 돈다(`onAuthenticated`가 한 번, 그 setState가 만든
+  `view==='loading' && dashboard===null`을 마운트 effect가 보고 또 한 번). 둘이 같은 틱에 storage를 읽어 같은
+  체험이 두 번 올라갔다(16초 체험이 「오늘 읽은」을 32초 늘렸다). 서버 `(user,startedAt)` 멱등이 **행은** 막지만
+  `trial_imported`가 두 번 찍혀 합류 비율이 200%로 읽힌다 — `flushTrial`에 in-flight 약속 하나를 둬 닫았다.
+  **실기기·배포 후 확인이 남는다**: U-1(심사) · U-4(토스 WebView localStorage 생존) · U-5(합류 후 잔디 점등) ·
+  U-6(새 이벤트 카탈로그 등재). 배포는 **서버 먼저**(설계 U-8 — PR-1 머지·배포 완료).
 - ⬜ **PR-0 콘솔(코드 0)** — 토스 로그인 스코프에서 `USER_NAME` 필수 해제(서버가 이름을 어디에서도 안 쓴다).
   사용자 승인 뒤 MCP 호출. 동의창 자체는 사라지지 않고 항목만 준다.
 

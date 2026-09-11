@@ -104,10 +104,30 @@ export function completeTrial(trial: Trial, now: number = Date.now()): Trial {
  *       중복은 서버의 `(user, startedAt)` 멱등이 막는다. 404는 서버가 아직 옛 버전인 경우다.</li>
  * </ul>
  */
-export async function flushTrial(
+export type FlushResult = 'imported' | 'none' | 'kept';
+
+/**
+ * 진행 중인 합류 — 같은 체험이 두 번 올라가는 것을 막는 유일한 장치다.
+ *
+ * <p>인증 직후 `App.load()`는 <b>두 번</b> 돈다: `onAuthenticated`가 한 번 부르고, 그 setState가 만든
+ * `view==='loading' && dashboard===null` 조합을 마운트 effect가 보고 또 한 번 부른다. 둘이 같은 틱에
+ * storage를 읽으면 지우기 전이라 둘 다 「올릴 것이 있다」고 본다. 서버 `(user, startedAt)` 멱등이
+ * <b>행은</b> 막지만 `trial_imported`는 두 번 찍혀 합류 비율이 200%로 읽힌다(목 모드 실측: 16초
+ * 체험이 「오늘 읽은」을 32초 늘렸다, 2026-09-11).
+ */
+let inFlight: Promise<FlushResult> | null = null;
+
+export function flushTrial(
   importFn: (trial: Trial) => Promise<void> = (trial) =>
     importSession({ startedAt: trial.startedAt, endedAt: trial.endedAt as string }),
-): Promise<'imported' | 'none' | 'kept'> {
+): Promise<FlushResult> {
+  inFlight ??= runFlush(importFn).finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+}
+
+async function runFlush(importFn: (trial: Trial) => Promise<void>): Promise<FlushResult> {
   const trial = readTrial();
   if (trial === null || trial.endedAt === null) return 'none';
 
