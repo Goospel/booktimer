@@ -192,7 +192,12 @@
        이음매마다 줄이 보인다(feTurbulence에 stitchTiles를 안 쓴다).
        ⚠️ 이 한 벌을 `--pencil` 같은 변수로 묶어 `border-image: var(--pencil)`로 쓰면 안 된다 —
        축약형에 var()를 통째로 넣으면(그 변수가 또 var를 품으면) Chrome이 선언 전체를 무효로 버린다
-       (실측: slice가 기본값 100%로 남아 테두리가 통째로 안 그려진다). slice·width·repeat은 리터럴로. */
+       (실측: slice가 기본값 100%로 남아 테두리가 통째로 안 그려진다). slice·width·repeat은 리터럴로.
+
+       ⚠️ 안쪽으로 그려지는 7px 띠를 배경 있는 자식·<img> 콘텐츠가 덮으면 선이 얇아진다(자식은 부모 테두리
+       위에 그려진다). 선은 바깥 가장자리 0.65~3.1px에만 사니 불투명한 것은 4px 이상 띄우거나(padding·margin),
+       띄울 수 없는 세그먼트류는 ::after 오버레이로 프레임을 자식 위에 얹는다(.shelf-filter-chips).
+       검사: frontend/e2e/pencil-frame.spec.ts(로컬 bootRun 후 npm --prefix frontend run test:e2e). */
 
     /* 종이 결 — feTurbulence 노이즈 2겹(알갱이·섬유결). 이미지 파일도 요청도 0건.
 
@@ -1332,8 +1337,17 @@ a.book-title { text-decoration: none; }
 a.book-title:hover { text-decoration: underline; }
 /* 책 상세 헤더 — 표지 + 메타 가로 배치 */
 .book-detail-head { display: flex; gap: 18px; align-items: flex-start; }
+/* <img>는 자기 콘텐츠를 자기 테두리 **위에** 그려서 프레임 안쪽 띠(연필선)를 표지 그림이 덮는다.
+   padding 4px로 그림을 선(바깥 ≤3.1px) 밖으로 물리고, 로딩 전 회색 배경(.book-cover의 --border)은
+   content-box로 좁혀 패딩 링이 카드 배경 그대로 보이게 한다. 전역 box-sizing: border-box라 외곽은 84×120 그대로.
+   ⚠️ 무표지 div.bd-cover-ph(class="book-cover bd-cover-ph")도 이 규칙을 받아 padding 4px가 생기지만
+   겉모습은 안 바뀐다 — 이유가 페인트 순서가 아니라 **캐스케이드**다: `body.bookdetail-page .bd-cover-ph`의
+   `background:` **단축** 선언(특이성 0,2,1 > 0,2,0)이 background-clip을 border-box로 되돌려 세이지 배경이
+   border-box를 그대로 채운다(실측: ph는 border-box, img는 content-box). 이니셜은 flex 중앙이라 위치도 그대로.
+   ⚠️ 그 줄을 `background-color:`로 바꾸면 단축의 리셋이 사라져 ph의 배경이 content-box로 좁아진다 — 이 규칙에
+   의존이 걸려 있으니 같이 본다. */
 .book-detail-head .book-cover { width: 84px; height: 120px; border-radius: 10px; border: 1px solid var(--border);
- border-image: var(--pencil-frame) 8 / 8px stretch; }
+ border-image: var(--pencil-frame) 8 / 8px stretch; padding: 4px; background-clip: content-box; }
 .book-detail-head .book-meta { gap: 10px; }
 .book-sub { font-size: .9rem; color: var(--muted); margin: 0; }
 .book-detail-head .book-meta > p:not(.affiliate-note) { margin: 0; }
@@ -2012,9 +2026,20 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 /* 필터 묶음 = 세그먼트 토글 바(한 덩어리) — 상태/공개여부 두 묶음을 개별 덩어리로 분리 */
 .shelf-filter-chips {
     display: flex; width: fit-content; flex-wrap: nowrap;     /* flex=block레벨→세로 적층, fit-content=내용폭 */
-    border: 1px solid var(--border);
-    border-image: var(--pencil-frame) 8 / 8px stretch; border-radius: var(--radius-sm); overflow: hidden;   /* radius-sm(8px)=각진 세그먼트, overflow=셀 모서리 클립 */
+    position: relative;                                       /* ::after 오버레이 기준 */
+    border: 1px solid transparent;                            /* 선은 아래 ::after가 그린다 — 1px 레이아웃만 유지 */
+    border-radius: var(--radius-sm); overflow: hidden;        /* radius-sm(8px)=각진 세그먼트, overflow=셀 모서리 클립 */
     margin: 0 0 9px;
+}
+/* 프레임을 자식 위에 얹는다 — 세그먼트는 셀이 가장자리에 붙는 것이 모양이라 padding으로 띄울 수 없고,
+   active·hover 배경과 셀 구분선(border-left)이 부모의 border-image 안쪽 띠를 덮어 첫 셀이 활성이면
+   왼쪽 선이 통째로 사라졌다. inset:-1px로 오버레이의 border-box를 컨테이너의 border-box와 맞춰
+   스트로크 위치를 옛것과 동일하게 둔다. overflow:hidden이 패딩 박스로 클립하므로 border-box 바깥
+   1px 링에 걸친 스트로크 0.35px이 잘리지만 서브픽셀이라 안 보인다(실측 게이트 U-4). */
+.shelf-filter-chips::after {
+    content: ""; position: absolute; inset: -1px; pointer-events: none;
+    border: 1px solid transparent;
+    border-image: var(--pencil-frame) 8 / 8px stretch;
 }
 .shelf-filter-chips + .shelf-filter-chips { margin-bottom: 18px; }
 .filter-chip {
@@ -3789,16 +3814,22 @@ body.dashboard-page #dashboard-app { gap: 20px; }
     border-radius: 10px;
     background: var(--card-bg);
     color: var(--text);
+    padding-top: 4px;   /* 연필선(바깥 ≤3.1px)이 툴바 배경 아래로 들어가지 않게. 4~8px 띠는 투명이라 4면 충분 */
 }
 /* 포커스 링은 안쪽 contenteditable이 받으므로 상자가 대신 표시한다(.study-day input:focus와 같은 처방). */
 .study-editor:focus-within {
     border-image: var(--pencil-frame) 8 / 8px stretch;
     box-shadow: 0 0 0 3px var(--focus-ring);
 }
-/* 폰에서 키보드가 올라와도 툴바가 남게 sticky — 스크롤되는 것은 글이지 도구가 아니다. */
+/* 폰에서 키보드가 올라와도 툴바가 남게 sticky — 스크롤되는 것은 글이지 도구가 아니다.
+   좌우 4px margin도 같은 이유(연필선 보호)다. 툴바 배경이 편집기와 같은 --card-bg라 그 4px은 안 보이고,
+   sticky로 붙었을 때 옆 4px 띠에는 편집기 세로 연필선만 지나간다(본문은 .ProseMirror padding 12px 안쪽).
+   위쪽은 margin-top이 아니라 부모 padding-top으로 띄운다 — sticky 요소의 위 margin이 top:0 계산에
+   끼는지는 구현 디테일이라, 확실히 안 끼는 부모 패딩으로 둔다. */
 .study-editor-toolbar {
     position: sticky; top: 0; z-index: 2;
     display: flex; flex-wrap: wrap; gap: 2px;
+    margin: 0 4px;
     padding: 5px 6px;
     border-bottom: 1px solid var(--border);
     border-radius: 10px 10px 0 0;
