@@ -628,13 +628,6 @@ body::before {
 }
 .tag-chip-click:hover { background: var(--accent-hover); }  /* 채움 칩이라 btn-primary와 동일 hover(배경만 진하게). 기존 filter+underline은 채움엔 과함 */
 
-/* 칩 클릭 시 근거 책이 펼쳐지는 패널 — 헤더 카드 아래 자연스러운 간격. */
-.tag-books-panel {
-    margin-top: 10px; padding: 12px 14px;
-    border: 1px solid var(--border);
-    border-image: var(--pencil-frame) 8 / 8px stretch; border-radius: 10px;
-    background: var(--card-bg);
-}
 .tag-books-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .tag-books-head h3 { margin: 0; font-size: 1rem; }
 .tag-books-head .btn-close { padding: 4px 10px; font-size: .85rem; }
@@ -906,33 +899,6 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
    분리되어 대시보드 QuickNav 타일과 같은 룩. 정렬·간격은 .link-row a의 flex가 처리. */
 .link-row a svg.link-ico { flex: 0 0 auto; color: var(--accent-hover); }
 
-/* 바로가기 타일 그리드 — 좁은 컬럼에서 라벨이 글자 단위로 깨지던 link-row 대체(대시보드 전용).
-   2열 그리드, 각 타일은 카드 톤의 탭 타깃. 5번째(홀수 마지막)는 한 칸 전체폭. */
-.quick-actions {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-    margin-top: 8px;
-}
-.quick-tile {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 14px 16px;
-    background: var(--card-bg);
-    border: 1px solid var(--border);
-    border-image: var(--pencil-frame) 8 / 8px stretch;
-    border-radius: var(--radius);
-    color: var(--text);
-    text-decoration: none;
-    transition: border-color .15s, box-shadow .15s, transform .05s;
-}
-.quick-tile:hover { border-color: var(--accent); box-shadow: var(--shadow); }
-.quick-tile:active { transform: translateY(1px); }
-.quick-tile .qt-icon { font-size: 1.3rem; line-height: 1; }
-.quick-tile .qt-label { font-weight: 600; white-space: nowrap; }
-.quick-tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
-
 /* 하이라이트 밴드 — 측정 카드 바로 밑, '재미' 동선(내 책장·내 공개 프로필) 승격용.
    quick-tile보다 큼직하고 포인트 색으로 강조해 노출 우선순위를 위로 끌어올린다.
    좁은 화면(2칸이 답답할 때)에선 1열로 떨어뜨린다. */
@@ -1194,7 +1160,7 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     border-radius: 8px;
     font-size: .95rem;
 }
-.book-search-form select, .book-manual-form select,
+.book-manual-form select,
 .book-add-form select, .book-actions select {
     padding: 7px 8px;
     border: 1px solid var(--border);
@@ -1660,14 +1626,6 @@ body.bookdetail-page .link-row a { flex-direction: column; gap: 8px; padding: 20
 .report-box { margin: 0 0 16px; }
 .report-box > summary { cursor: pointer; color: var(--muted); font-size: .85rem; list-style: none; }
 .report-box > summary:hover { color: var(--danger); }
-.report-form { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-.report-form label { font-size: .85rem; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
-.report-form select, .report-form textarea {
-    width: 100%; box-sizing: border-box; padding: 8px 10px;
-    border: 1px solid var(--border);
-    border-image: var(--pencil-frame) 8 / 8px stretch; border-radius: 8px; font: inherit; background: var(--surface);
-}
-.report-form .btn-block { align-self: flex-start; width: auto; padding: 6px 14px; }
 
 /* ─────────────────────────────────────────────────────────────────────────
    책방(/u/{loginId}) — 대시보드 스킨 이식. .dash-* 재사용 + 고유는 .shop-*.
@@ -1869,14 +1827,12 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 .shop-report[open] > summary { margin-bottom: 0; }
 .shop-report-caret { transition: transform .15s ease; }            /* §6 chevron — 펼침 시 90° 회전 */
 .shop-report[open] > summary .shop-report-caret { transform: rotate(90deg); }
-.shop-report-form { display: flex; flex-direction: column; gap: 10px; padding: 0 14px 14px; }
 .shop-report-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
-.shop-report-field select, .shop-report-form textarea {
+.shop-report-field select {
     width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; color: var(--text);
     background: var(--surface); border: 1px solid var(--border);
  border-image: var(--pencil-frame) 8 / 8px stretch; border-radius: var(--radius-sm); padding: 9px 11px;
 }
-.shop-report-form textarea { resize: vertical; line-height: 1.5; }
 .shop-report-submit { width: auto; align-self: flex-start; }       /* 전역 button{width:100%} 상쇄 */
 .shop-report-ok { margin: 0; font-size: 13px; color: var(--ok); }
 
@@ -2003,24 +1959,7 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 }
 .follow-tabs a.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 
-/* 대시보드 측정 시작 — 읽을 책 선택 */
-/* 읽을 책 선택 — full-width flex. 라벨은 한 줄 고정(nowrap), select는 남은 폭에
-   맞춰 줄어들도록 flex:1 + min-width:0. (inline-flex 시절 select 내재폭이 카드를
-   넘쳐 카드 밖으로 튀어나오고 라벨이 세로로 깨지던 문제 해결.) */
-.book-pick { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; color: var(--muted); font-size: .9rem; white-space: nowrap; }
-.book-pick select { flex: 1 1 auto; min-width: 0; padding: 7px 8px; border: 1px solid var(--border);
- border-image: var(--pencil-frame) 8 / 8px stretch; border-radius: 8px; background: var(--surface); }
 .book-time { font-size: .8rem; color: var(--ok); font-weight: 600; }
-/* 책장 상태 필터 칩 — 활성은 accent. 좁은 폭에서 줄바꿈 허용. */
-.shelf-filter { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
-.shelf-filter a {
-    padding: 6px 12px; border: 1px solid var(--border);
- border-image: var(--pencil-frame) 8 / 8px stretch; border-radius: 999px;
-    color: var(--muted); text-decoration: none; font-size: .85rem; font-weight: 600;
-    white-space: nowrap;
-}
-.shelf-filter a:hover { border-color: var(--accent); color: var(--accent); }
-.shelf-filter a.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 /* 내 책장 필터 칩 — 상태/공개여부 토글(활성=세이지 채움). books 전용(프로필 .shelf-filter와 별개). 시안 My Shelf.
    두 칩 그룹(상태·공개여부)을 같은 모양으로 통일 — 기존 세그먼티드 '서브 필터' 룩 대신 시안의 단일 칩. */
 /* 필터 묶음 = 세그먼트 토글 바(한 덩어리) — 상태/공개여부 두 묶음을 개별 덩어리로 분리 */
@@ -2830,24 +2769,6 @@ body.personality-page #personality-app { gap: 18px; }
 
 /* IDLE 책 선택 */
 .dash-idle-label { font-size: 14px; color: var(--muted); }
-.dash-select-wrap { position: relative; }
-.dash-select {
-    width: 100%;
-    padding: 14px 40px 14px 15px;
-    border-radius: 12px;
-    border: 1px solid var(--border);
-    border-image: var(--pencil-frame) 8 / 8px stretch;
-    background: var(--card-bg);
-    color: var(--text);
-    font-size: 15.5px;
-    cursor: pointer;
-    appearance: none;
-    -webkit-appearance: none;
-}
-.dash-select-caret {
-    position: absolute; right: 15px; top: 50%; transform: translateY(-50%);
-    pointer-events: none; color: var(--muted); font-size: 12px;
-}
 .dash-empty { display: flex; flex-direction: column; gap: 12px; text-align: center; }
 .dash-empty p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.6; }
 
