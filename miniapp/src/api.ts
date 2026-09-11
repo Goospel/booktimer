@@ -19,11 +19,25 @@ const TOKEN_KEY = 'booktimer.token';
  */
 const DEV_MOCK = import.meta.env.DEV && import.meta.env.VITE_DEV_MOCK === '1';
 
+/**
+ * 목 모드에서 <b>로그아웃 상태로 시작</b>하는 스위치 — `?login`이 붙어 있을 때만.
+ *
+ * <p>목은 더미 토큰이 항상 있는 것으로 두어 로그인 브릿지를 건너뛴다. 덕분에 전 화면을 브라우저로
+ * 도는 대신 <b>첫 화면만은 브라우저로 볼 길이 아예 없었다</b> — 「진입 직후 덮는 것 0개」 재현 절차
+ * (CLAUDE.md)를 정작 그 화면에 못 쓴 것이다. 쿼리 한 개로 그 사각을 연다.
+ */
+let mockLoggedOut =
+  DEV_MOCK && typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('login');
+
 /** 토큰 보관 — WebView의 localStorage. 401을 만나면 폐기하고 재로그인한다. */
 export const token = {
   // 목 모드는 더미 토큰이 항상 있는 것으로 둔다 — 토스 SDK 없는 브라우저에서 로그인 브릿지를 건너뛴다.
-  get: (): string | null => (DEV_MOCK ? 'dev-mock-token' : localStorage.getItem(TOKEN_KEY)),
-  set: (value: string): void => localStorage.setItem(TOKEN_KEY, value),
+  get: (): string | null =>
+    DEV_MOCK ? (mockLoggedOut ? null : 'dev-mock-token') : localStorage.getItem(TOKEN_KEY),
+  set: (value: string): void => {
+    mockLoggedOut = false; // 목에서 「토스로 시작하기」를 누르면 그때부터 로그인 상태다
+    localStorage.setItem(TOKEN_KEY, value);
+  },
   clear: (): void => {
     localStorage.removeItem(TOKEN_KEY);
     // 로그아웃·401·탈퇴가 전부 이 문을 지난다 — 남의 계정 데이터가 다음 로그인 첫 렌더에 새면 안 된다.
@@ -130,7 +144,11 @@ export interface TossAuthResponse {
 
 /** 세 인증 엔드포인트의 공통부 — 매번 fresh 인가코드로 신원을 다시 증명한다(서버에 pending 상태 없음). */
 async function authenticate(path: string, extra?: Record<string, string>): Promise<TossAuthResponse> {
-  const { authorizationCode, referrer } = await tossLogin();
+  // 브라우저엔 토스 SDK가 없어 `TossAuth.login()`이 동기 TypeError를 던진다 — 목에서는 인가 단계를
+  // 통째로 건너뛴다(목 라우트가 어차피 어떤 코드든 등록된 신원으로 답한다).
+  const { authorizationCode, referrer } = DEV_MOCK
+    ? { authorizationCode: 'mock', referrer: 'SANDBOX' as const }
+    : await tossLogin();
   const result = await request<TossAuthResponse>(path, { body: { authorizationCode, referrer, ...extra } });
   // 토큰이 실린 응답만 저장한다 — 서버는 미등록(registered:false)일 때 토큰을 주지 않는다.
   if (result.token !== null) token.set(result.token);
@@ -480,6 +498,15 @@ export const startSession = (bookId: number | null): Promise<TimerState> =>
   request('/api/sessions/start', { body: { bookId } });
 
 export const stopSession = (): Promise<StopResponse> => request('/api/sessions/stop', { body: {} });
+
+/**
+ * 로그인 전 체험 세션 올리기 — 기기에서 이미 끝난 실측 구간이다(`trial.ts`).
+ *
+ * <p>6시간 클램프·자정 분할·`(user, startedAt)` 멱등은 <b>서버가</b> 맡는다. 204라 본문이 없고,
+ * 400(너무 오래됨·모양 틀림)과 그 밖의 실패는 뜻이 달라 `flushTrial`이 갈라 처리한다.
+ */
+export const importSession = (body: { startedAt: string; endedAt: string }): Promise<void> =>
+  request('/api/sessions/import', { body });
 
 export const tagBook = (sessionId: number, bookId: number): Promise<{ sessionId: number; bookTitle: string }> =>
   request(`/api/sessions/${sessionId}/tag-book`, { body: { bookId } });

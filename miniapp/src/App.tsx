@@ -27,6 +27,7 @@ import { StudyHistory } from './screens/StudyHistory';
 import { StudyLibrary } from './screens/StudyLibrary';
 import { BookMargin, BookMarginAll, StoryComposer } from './screens/Story';
 import { showInterstitialAd, subscribeNativeBack, trackEvent, trackScreen } from './toss';
+import { flushTrial } from './trial';
 import { CoverInitial, ErrorMessage, Loading, PENCIL_FRAME, SERIF_VALUE, Screen, Sheet } from './ui';
 
 /**
@@ -699,7 +700,10 @@ export function App() {
     (next: View = 'main') => {
       setView('loading');
       lastFetchedAt.current = Date.now();
-      fetchDashboard()
+      // 로그인 전 체험이 합류하는 **유일한 문** — 새 계정·기존 계정 연결·재진입이 전부 여기를 지난다.
+      // 올릴 것이 없으면 동기 no-op이고, 어떤 실패도 밖으로 내지 않는다(`flushTrial` 계약).
+      flushTrial()
+        .then(fetchDashboard)
         .then((data) => {
           setDashboard(data);
           setStudy(data.study ?? IDLE_STUDY); // 옛 서버(필드 없음)는 「공부 기록 없음」으로 떨어진다
