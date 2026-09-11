@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -142,6 +144,13 @@ describe('게스트 홈 — 무엇으로 측정할까요?', () => {
 
   it('책을 고르는 문이 그 카드 안에 있다 — 잰 뒤가 아니라 고를 때 청한다', () => {
     expect(shell(null)).toContain('토스로 시작하고 책 고르기');
+  });
+
+  // 정적 하니스는 클릭을 못 돌려(T-149) 이 버튼이 어느 source를 싣는지 행동으로는 못 잰다 — 리뷰어가
+  // `'header'`로 바꿔도 전 건 초록임을 실측했다. 그래서 App.tsx의 「소스로 잠근다」와 같은 방식으로 한 줄을 박는다.
+  it('그 문은 login_started에 book_card를 싣는다 — 다른 값이면 「어느 자리가 로그인을 부르는가」의 한 층이 사라진다', () => {
+    const src = readFileSync(new URL('./screens/GuestHome.tsx', import.meta.url), 'utf8').replace(/\s+/g, ' ');
+    expect(src).toContain("onClick={() => onLogin('book_card')}");
   });
 
   it('재는 중에도 끝난 뒤에도 그대로 선다 — 상태마다 갈아끼우면 화면이 세로로 들썩인다', () => {

@@ -37,6 +37,7 @@ import {
 import {
   ACTIVE_SESSION_RELIEF,
   COVER_GAP,
+  COVER_HEIGHT,
   COVER_WIDTH,
   HERO_CARD_BG_VAR,
   NoBookCard,
@@ -244,7 +245,7 @@ function LockedSlot() {
     <div
       style={{
         width: COVER_WIDTH,
-        height: Math.round(COVER_WIDTH * 1.4),
+        height: COVER_HEIGHT,
         flex: '0 0 auto',
         boxSizing: 'border-box',
         border: '2px dashed var(--adaptiveGrey200, #E4DDD0)',
