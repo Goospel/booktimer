@@ -113,7 +113,7 @@ async function load(): Promise<void> {
         // 저장된 글이 있으면 그때 고른 책을, 없으면 그날 일정이 가리키는 책을 기본으로(대개 같은 책이다).
         // hydrating 동안엔 아래 watch를 재운다 — 안 그러면 방금 복원한 주제를 책 제목이 덮는다.
         hydrating = true;
-        bookId.value = found?.bookId ?? props.items.find((i) => i.bookId !== null)?.bookId ?? null;
+        bookId.value = found?.bookId ?? dayBookId.value;
         hydrating = false;
         source.value = found?.source ?? 'TEXT';
     } catch {
