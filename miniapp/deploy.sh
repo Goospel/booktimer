@@ -54,9 +54,11 @@ if not js.is_file():
     sys.exit(f'❌ index.html이 참조하는 {rel} 이(가) dist에 없다 — 반쪽 빌드')
 
 body = js.read_text(encoding='utf-8', errors='replace')
-# 음성 체크 둘: env 미주입 빌드(localhost, T-148)와 브라우저 dev 목 코드 잔존(`src/dev-mock.ts`의 마커).
-# 목은 dynamic import + `import.meta.env.DEV` 게이트로 잘려야 정상이라, 여기 걸리면 그 배선이 깨진 것이다.
-checks = [('booktimer.app', True), ('localhost:8080', False), ('__DEV_MOCK__', False)] \
+# 음성 체크 셋: env 미주입 빌드(localhost, T-148)와 브라우저 dev 목 코드 잔존(`src/dev-mock.ts`의
+# `__DEV_MOCK__`, `api.ts`의 더미 토큰 `dev-mock-token`). 목은 dynamic import + `import.meta.env.DEV`
+# 게이트로 잘려야 정상이라, 여기 걸리면 그 배선이 깨진 것이다 — 마커 둘은 서로 다른 파일의 배선을 덮는다.
+checks = [('booktimer.app', True), ('localhost:8080', False), ('__DEV_MOCK__', False),
+          ('dev-mock-token', False)] \
     + [(e, True) for e in sys.argv[1:]]
 for needle, want in checks:
     if (needle in body) != want:

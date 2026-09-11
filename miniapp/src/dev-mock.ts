@@ -980,6 +980,17 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
       graph: buildGraph(),
     };
   }],
+  // 로그인 전 체험 합류 — stop 핸들러의 절반이다(진행 중 세션을 안 건드리고 과거 구간만 더한다).
+  ['POST', /^\/api\/sessions\/import$/, ({ body }) => {
+    const seconds = Math.max(
+      0,
+      Math.floor((Date.parse(body.endedAt as string) - Date.parse(body.startedAt as string)) / 1000),
+    );
+    state.remainingSeconds = Math.max(0, state.remainingSeconds - seconds);
+    state.todayReadSeconds += seconds;
+    state.completedSessions += 1;
+    return undefined; // 서버도 204라 본문이 없다
+  }],
   ['POST', /^\/api\/sessions\/(\d+)\/tag-book$/, ({ id, body }) => {
     const book = books.find((b) => b.id === body.bookId);
     return { sessionId: id, bookTitle: book?.title ?? '알 수 없는 책' };

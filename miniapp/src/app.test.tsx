@@ -641,10 +641,11 @@ describe('탭 밖 오케스트레이션 (재편 전 동작 보존)', () => {
       </TDSMobileProvider>,
     );
 
-  it('토큰이 없으면 로그인 브릿지의 인트로부터 — 탭바는 아직 없다', () => {
+  it('토큰이 없으면 로그인 브릿지의 체험 화면부터 — 탭바는 아직 없다', () => {
     const markup = renderApp();
 
-    expect(markup).toContain('토스로 시작하기');
+    // 첫 화면이 곧 타이머다(2026-09-11) — 로그인 버튼만 있던 화면에서 17/21이 떠났다.
+    expect(markup).toContain('읽기 시작');
     expect(markup).not.toContain('서재');
   });
 
