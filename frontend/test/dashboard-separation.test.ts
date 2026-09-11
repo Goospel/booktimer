@@ -166,7 +166,7 @@ describe('DashboardApp — 모드가 쓰는 카드·타일을 끌고 간다', ()
         await flushPromises();
 
         expect(w.find('.dash-timer-hero').classes()).toContain('is-study');
-        expect(w.find('.dash-recall-card .dash-pill').text()).toBe('백지복습');
+        expect(w.find('.dash-recall-card .dash-pill').text()).toBe('공부 노트');
         expect(w.find('.dash-margin-card').exists()).toBe(false);
         expect(tileHrefs(w)).toEqual(['/study/books', '/study', '/study/history']);
     });

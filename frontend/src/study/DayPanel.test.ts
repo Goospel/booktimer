@@ -82,7 +82,7 @@ describe('하루 패널 — 필기 / 백지노트 탭', () => {
         const wrapper = await mountDay();
         vi.mocked(fetch).mockResolvedValue(okJson({ notes: [] }));
 
-        await wrapper.find('[data-testid="day-tab-notes"]').trigger('click');
+        await wrapper.find('[data-testid="tab-notes"]').trigger('click');
         await flushPromises();
 
         expect(wrapper.find('[data-testid="notes-book"]').exists()).toBe(true);
@@ -95,7 +95,7 @@ describe('하루 패널 — 필기 / 백지노트 탭', () => {
         const wrapper = await mountDay();
         vi.mocked(fetch).mockResolvedValue(okJson({ notes: [] }));
 
-        await wrapper.find('[data-testid="day-tab-notes"]').trigger('click');
+        await wrapper.find('[data-testid="tab-notes"]').trigger('click');
         await flushPromises();
 
         expect((wrapper.find('[data-testid="notes-book"]').element as HTMLSelectElement).value).toBe('9');
@@ -106,21 +106,21 @@ describe('하루 패널 — 필기 / 백지노트 탭', () => {
         const wrapper = await mountDay();
         vi.mocked(fetch).mockResolvedValue(okJson({ notes: [] }));
 
-        const target = wrapper.find('[data-testid="day-tab-notes"]').attributes('aria-controls');
+        const target = wrapper.find('[data-testid="tab-notes"]').attributes('aria-controls');
         expect(target).toBeTruthy();
         const panel = wrapper.find(`#${target}`);
         expect(panel.attributes('role')).toBe('tabpanel');
 
-        await wrapper.find('[data-testid="day-tab-notes"]').trigger('click');
+        await wrapper.find('[data-testid="tab-notes"]').trigger('click');
         await flushPromises();
         expect(wrapper.find(`#${target}`).attributes('aria-labelledby'))
-            .toBe(wrapper.find('[data-testid="day-tab-notes"]').attributes('id'));
+            .toBe(wrapper.find('[data-testid="tab-notes"]').attributes('id'));
     });
 
     test('날짜를 옮겨도 고른 탭은 그대로다', async () => {
         const wrapper = await mountDay();
         vi.mocked(fetch).mockResolvedValue(okJson({ notes: [] }));
-        await wrapper.find('[data-testid="day-tab-notes"]').trigger('click');
+        await wrapper.find('[data-testid="tab-notes"]').trigger('click');
         await flushPromises();
 
         await wrapper.setProps({ date: '2026-09-11' });

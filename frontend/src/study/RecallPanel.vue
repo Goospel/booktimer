@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref, useId, watch } from 'vue';
 
+import NotesPanel from './NotesPanel.vue';
 import {
     analyzeRecall, fetchNoteReference, fetchRecall, saveRecall, transcribePhotos,
     type NoteReferenceView, type Recall, type StudyBookRow,
@@ -42,6 +43,28 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{ (e: 'saved', recall: Recall): void }>();
+
+/**
+ * [필기] / [백지노트] 중 무엇을 보고 있나. 기본은 백지노트다(이 화면의 원래 주인공).
+ *
+ * <p><b>탭이 여기 있는 것이 규칙이다</b> — 이 패널은 달력 하루(`DayPanel`)와 홈 카드
+ * (`dashboard/RecallCard.vue`) 양쪽이 싣는다. 탭을 `DayPanel`에만 달았더니 홈에서 필기에 닿는 길이
+ * 「빠른 이동 → /study → 날짜 클릭 → 탭」이 돼, 「공부 도중에 그때그때 쓴다」는 요구가 반쯤 죽었다
+ * (2026-09-11 번복). 타이머가 도는 화면은 홈이다.
+ *
+ * <p>두 페이지는 v-if로 갈린다 — 감춰만 두면 Tiptap 편집기가 둘 마운트된다.
+ */
+const page = ref<'notes' | 'recall'>('recall');
+
+/** 한 화면에 이 패널이 둘이어도 tab↔tabpanel 짝이 엉키지 않게 — 고정 id는 그 보장을 못 한다. */
+const uid = useId();
+
+/**
+ * 그날 일정이 가리키는 책 — 필기 패널의 기본 선택(대개 지금 공부하는 책이다).
+ *
+ * <p>부모가 아니라 여기서 판다 — 홈과 달력이 각자 파면 두 화면의 규칙이 조용히 갈린다.
+ */
+const dayBookId = computed(() => props.items.find((i) => i.bookId !== null)?.bookId ?? null);
 
 const recall = ref<Recall | null>(null);
 const yesterdayQuestions = ref<string[]>([]);
@@ -267,7 +290,41 @@ async function onSave(thenAnalyze: boolean): Promise<void> {
 </script>
 
 <template>
-    <div class="study-recall">
+    <div class="study-recall-tabs" role="tablist">
+        <button
+            type="button"
+            :id="`${uid}-notes`"
+            class="btn btn-ghost btn-small"
+            :class="{ 'is-active': page === 'notes' }"
+            role="tab"
+            :aria-selected="page === 'notes'"
+            :aria-controls="`${uid}-page`"
+            data-testid="tab-notes"
+            @click="page = 'notes'"
+        >필기</button>
+        <button
+            type="button"
+            :id="`${uid}-recall`"
+            class="btn btn-ghost btn-small"
+            :class="{ 'is-active': page === 'recall' }"
+            role="tab"
+            :aria-selected="page === 'recall'"
+            :aria-controls="`${uid}-page`"
+            data-testid="tab-recall"
+            @click="page = 'recall'"
+        >백지노트</button>
+    </div>
+
+    <!-- 패널은 하나다 — 두 탭이 같은 자리를 갈아 끼우므로 aria-labelledby가 지금 탭을 가리킨다.
+         role=tab만 붙이고 여기를 비우면 스크린리더엔 「탭인데 여는 곳이 없는」 상태로 읽힌다. -->
+    <div
+        :id="`${uid}-page`"
+        role="tabpanel"
+        :aria-labelledby="page === 'notes' ? `${uid}-notes` : `${uid}-recall`"
+    >
+    <NotesPanel v-if="page === 'notes'" :books="books" :default-book-id="dayBookId" />
+
+    <div v-else class="study-recall">
         <p class="study-day-label">백지복습</p>
 
         <div v-if="yesterdayQuestions.length" class="study-recall-yesterday">
@@ -429,5 +486,6 @@ async function onSave(thenAnalyze: boolean): Promise<void> {
                 </div>
             </div>
         </template>
+    </div>
     </div>
 </template>
