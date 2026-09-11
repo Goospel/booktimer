@@ -1622,11 +1622,6 @@ body.bookdetail-page .link-row a { flex-direction: column; gap: 8px; padding: 20
 /* 차단 버튼 — 옅은 위험 톤(삭제만큼 강하지 않게) */
 .btn-block { color: var(--danger); border-color: var(--danger); }
 
-/* 사용자 신고 — 평소엔 접힌 disclosure, 펼치면 사유 선택 폼 */
-.report-box { margin: 0 0 16px; }
-.report-box > summary { cursor: pointer; color: var(--muted); font-size: .85rem; list-style: none; }
-.report-box > summary:hover { color: var(--danger); }
-
 /* ─────────────────────────────────────────────────────────────────────────
    책방(/u/{loginId}) — 대시보드 스킨 이식. .dash-* 재사용 + 고유는 .shop-*.
    공유 .book- 과 .record- 계열은 절대 수정하지 않고 .shop- 로 분리(타 페이지 회귀 0).
