@@ -112,6 +112,9 @@ class LoginAttemptServiceTest {
             service.recordFailure("ip-" + i);
         }
         int before = service.sizeForTest();
+        // 트리거 '전에' 임계를 넘었는지 먼저 못 박는다 — 이게 없으면 sweep이 만료 여부를 무시하고
+        // 전부 지우는 구현(removeIf(e -> true))에서도 before가 이미 작아진 뒤라 before+1이 성립해 초록이다.
+        assertThat(before).isGreaterThan(LoginAttemptService.SWEEP_THRESHOLD);
 
         service.recordFailure("trigger"); // 시계 그대로 — 만료 0건
 

@@ -59,7 +59,9 @@ public class LoginAttemptService {
      * 맵이 커졌을 때만 만료 키를 전수 삭제한다 — 잠금이 풀린 항목은 같은 키가 다시 오거나 조회될 때만
      * 지워져, 분산 출처의 IP 키가 쌓이면 그대로 메모리 누수가 된다.
      */
-    // ponytail: 크기 트리거 전수 sweep — 10k 초과 시 O(n) 1회. 분산 상한(Redis)은 인스턴스가 늘 때.
+    // ponytail: 크기 트리거 전수 sweep — 임계 위에 머무는 동안은 실패 기록마다 O(n)이다(1회가 아니다).
+    // 만료분만 지우므로 15분 잠금 창 안의 활성 키가 임계를 넘으면 sweep이 아무것도 못 줄이고 매번 훑기만 한다
+    // — 이건 누수 방지이지 성장 상한이 아니다. 상한이 필요해지면 분산 저장소(Redis)로 간다.
     private void sweepIfCrowded(Instant now) {
         if (attempts.size() > SWEEP_THRESHOLD) {
             attempts.entrySet().removeIf(e -> isExpired(e.getValue(), now));

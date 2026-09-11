@@ -107,10 +107,11 @@ public class UserRegistrationService {
      */
     public User register(String email, String rawPassword, String nickname,
                          String timezone, Role role, LocalDate startDate) {
+        // 존재 검사보다 먼저 해싱 — 위 오버로드와 같은 이유(타이밍 오라클). 같은 파일에 상반된 순서를 남기지 않는다.
+        String passwordHash = passwordEncoder.encode(rawPassword);
         if (userRepository.existsByEmail(email)) {
             throw new EmailAlreadyExistsException(email);
         }
-        String passwordHash = passwordEncoder.encode(rawPassword);
         return persistWithTimer(User.of(email, passwordHash, nickname, timezone, role));
     }
 

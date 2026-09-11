@@ -65,7 +65,9 @@ public class RateLimitService {
      * 맵이 커졌을 때만 만료 키를 전수 삭제한다 — 만료 윈도우는 같은 키가 다시 올 때만 리셋될 뿐
      * 스스로 사라지지 않아, 분산 출처의 IP 키가 쌓이면 그대로 메모리 누수가 된다.
      */
-    // ponytail: 크기 트리거 전수 sweep — 10k 초과 시 O(n) 1회. 분산 상한(Redis)은 인스턴스가 늘 때.
+    // ponytail: 크기 트리거 전수 sweep — 임계 위에 머무는 동안은 호출마다 O(n)이다(1회가 아니다).
+    // 만료분만 지우므로 한 윈도우 안의 활성 키가 임계를 넘으면 sweep이 아무것도 못 줄이고 매 호출 훑기만 한다
+    // — 이건 누수 방지이지 성장 상한이 아니다. 상한이 필요해지면 분산 저장소(Redis)로 간다.
     private void sweepIfCrowded(Instant now) {
         if (windows.size() > SWEEP_THRESHOLD) {
             windows.entrySet().removeIf(e -> e.getValue().isExpired(now));

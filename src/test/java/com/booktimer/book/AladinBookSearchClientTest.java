@@ -47,14 +47,14 @@ class AladinBookSearchClientTest {
         String searchUrl = AladinBookSearchClient.buildSearchUrl("ttb1", "모기", BookSearchType.TITLE, 1).toString();
         assertThat(searchUrl).contains("includeKey=1");
 
-        String lookupUrl = AladinBookSearchClient.buildLookupUrl("ttb1", "9788966260959");
+        String lookupUrl = AladinBookSearchClient.buildLookupUrl("ttb1", "9788966260959").toString();
         assertThat(lookupUrl).contains("includeKey=1");
     }
 
     @Test
     @DisplayName("ItemLookUp URL: ISBN13으로 단건 조회한다(itemIdType=ISBN13, ItemId=isbn, ttbkey) — 백필용")
     void buildLookupUrl_byIsbn() {
-        String url = AladinBookSearchClient.buildLookupUrl("ttb1", "9788966260959");
+        String url = AladinBookSearchClient.buildLookupUrl("ttb1", "9788966260959").toString();
         assertThat(url).contains("ItemLookUp.aspx");
         assertThat(url).contains("itemIdType=ISBN13");
         assertThat(url).contains("ItemId=9788966260959");
@@ -67,7 +67,7 @@ class AladinBookSearchClientTest {
         String searchUrl = AladinBookSearchClient.buildSearchUrl("ttb1", "모기", BookSearchType.TITLE, 1).toString();
         assertThat(searchUrl).startsWith("https://www.aladin.co.kr");
 
-        String lookupUrl = AladinBookSearchClient.buildLookupUrl("ttb1", "9788966260959");
+        String lookupUrl = AladinBookSearchClient.buildLookupUrl("ttb1", "9788966260959").toString();
         assertThat(lookupUrl).startsWith("https://www.aladin.co.kr");
     }
 
@@ -95,6 +95,16 @@ class AladinBookSearchClientTest {
         client.search("a&b", BookSearchType.TITLE, 1);
 
         server.verify(); // 요청이 안 갔거나 URL이 다르면 여기서 실패
+    }
+
+    @Test
+    @DisplayName("보안: ItemLookUp의 ItemId도 인코딩된다 — isbn13은 검증된 숫자가 아니다. Isbn.normalize는 공백·하이픈만 지우므로 '979&MaxResults=200'이 그대로 저장돼 백필에서 이 URL로 흘러든다")
+    void buildLookupUrl_encodesItemId_soParametersCannotBeInjected() {
+        URI uri = AladinBookSearchClient.buildLookupUrl("ttb1", "979&MaxResults=200");
+
+        String rawQuery = uri.getRawQuery();
+        assertThat(rawQuery).contains("ItemId=979%26MaxResults%3D200");
+        assertThat(countOccurrences(rawQuery, "MaxResults=")).isEqualTo(0); // ItemLookUp은 MaxResults를 안 싣는다
     }
 
     private static int countOccurrences(String haystack, String needle) {

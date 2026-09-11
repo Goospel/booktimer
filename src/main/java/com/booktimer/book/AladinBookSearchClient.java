@@ -5,6 +5,7 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -43,7 +44,7 @@ public class AladinBookSearchClient implements BookSearchClient {
     // Jackson 3은 빌더로 만든다(ObjectMapper 직접 생성 폐지 — JsonMapper가 ObjectMapper를 상속).
     private final ObjectMapper objectMapper = JsonMapper.builder().build();
 
-    @org.springframework.beans.factory.annotation.Autowired
+    @Autowired
     public AladinBookSearchClient(
             @Value("${booktimer.aladin.ttb-key:not-configured}") String ttbKey) {
         this(ttbKey, RestClient.create());
@@ -101,7 +102,8 @@ public class AladinBookSearchClient implements BookSearchClient {
         if (!isEnabled() || isbn13 == null || isbn13.isBlank()) {
             return Optional.empty();
         }
-        String url = buildLookupUrl(ttbKey, isbn13.strip());
+        // uri(URI) 오버로드 — buildSearchUrl과 같은 이유(문자열이면 템플릿 확장이 %26을 %2526으로 이중 인코딩).
+        URI url = buildLookupUrl(ttbKey, isbn13.strip());
         try {
             String body = restClient.get().uri(url).retrieve().body(String.class);
             // ItemLookUp 응답도 ItemSearch와 같은 item[] 구조라 parse()를 그대로 재사용한다(매핑 단일 소스).
@@ -167,8 +169,13 @@ public class AladinBookSearchClient implements BookSearchClient {
     /**
      * 알라딘 ItemLookUp 호출 URL을 만든다 — ISBN-13으로 단건 조회(itemIdType=ISBN13). 백필용.
      * 네트워크 없이 단위테스트할 수 있게 정적·순수 함수로 분리한다(buildSearchUrl과 동일 정신).
+     *
+     * <p><b>{@code isbn13}도 사용자 입력이다</b> — {@code POST /api/books}가 받은 값이
+     * {@link Isbn#normalize}(공백·하이픈만 제거, <b>숫자 검증 없음</b>)를 지나 그대로 저장되고, 백필
+     * ({@code BookCatalogBackfillService})이 그 값으로 여기에 들어온다. 그래서 {@link #buildSearchUrl}과
+     * 같이 {@code encode()}한 {@link URI}를 돌려주고 호출부가 {@code uri(URI)} 오버로드로 넘긴다.
      */
-    static String buildLookupUrl(String ttbKey, String isbn13) {
+    static URI buildLookupUrl(String ttbKey, String isbn13) {
         return UriComponentsBuilder.fromUriString(LOOKUP_ENDPOINT)
                 .queryParam("ttbkey", ttbKey)
                 .queryParam("itemIdType", "ISBN13")
@@ -179,7 +186,8 @@ public class AladinBookSearchClient implements BookSearchClient {
                 .queryParam("output", "js")
                 .queryParam("Version", "20131101")
                 .build()
-                .toUriString();
+                .encode()
+                .toUri();
     }
 
     /**

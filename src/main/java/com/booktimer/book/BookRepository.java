@@ -106,12 +106,15 @@ public interface BookRepository extends JpaRepository<Book, Long> {
      * 팔로우 스코프 인기 카운트 <b>drill-down</b> — 한 isbn을 {@code viewer}가 팔로우한 사용자(followee)
      * 중 주어진 {@code statuses}로 PUBLIC 보유한 사람을 distinct로 돌려준다(닉네임 정렬은 호출부에서).
      *
-     * <p>카운트({@link #followScopePopularity})와 <b>같은 게이트</b>(팔로우·PUBLIC·distinct)라 명단과 숫자가
-     * 어긋나지 않는다. 노출되는 책은 어차피 각 팔로우 프로필의 PUBLIC 책장에서 볼 수 있는 것뿐(새 노출 없음).
-     * PRIVATE·비팔로우·본인(자기 팔로우 없음)은 자연 제외.
+     * <p>기본 게이트는 카운트({@link #followScopePopularity})와 같다(팔로우·PUBLIC·distinct). 노출되는 책은
+     * 어차피 각 팔로우 프로필의 PUBLIC 책장에서 볼 수 있는 것뿐(새 노출 없음). PRIVATE·비팔로우·본인
+     * (자기 팔로우 없음)은 자연 제외.
      *
-     * <p>운영 계정(ADMIN)은 형제 소셜 쿼리와 같이 명시 제외한다 — 신원을 펼치는 쿼리라 사용자 명단에
-     * 운영자가 섞이면 안 된다(카운트 쪽은 숫자만 주므로 신원 노출이 없다).
+     * <p>⚠️ <b>다만 명단은 카운트보다 좁다 — 숫자와 명단 길이가 어긋날 수 있다</b>(옛 주석의
+     * 「정확히 같은 게이트」는 사실이 아니었다). 신원을 펼치는 쪽에만 걸린 제외가 둘이다:
+     * ① 운영 계정({@code role <> ADMIN}, 형제 소셜 쿼리와 같은 표기) ② 온보딩 전 사용자
+     * ({@code login_id == null} — 호출부 {@code FollowScopeReadersService}가 Java에서 거른다, N-055).
+     * 카운트 쪽은 숫자만 주므로 신원 노출이 없어 그대로 둔다 — 둘을 일치시킬지는 별도 판단이다.
      */
     @Query("""
             select distinct b.user

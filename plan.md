@@ -4406,10 +4406,15 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
       (`SWEEP_THRESHOLD = 10_000` 초과 시 만료 키 전수 삭제). 스케줄러 없음. 분산 상한(Redis)은 인스턴스가 늘 때.
 - [x] **D. raw String 에러 본문이 `text/html`로 협상됨** — API 핸들러 7곳에 `text/plain;charset=UTF-8` 고정.
       ⚠️ charset을 빼면 한글 에러 메시지가 깨진다(테스트가 실제로 잡았다).
-- [x] **E. 알라딘 검색 URL 인코딩 누락** — `buildSearchUrl`이 `encode().toUri()`로 **`URI`를 반환**하고 호출부가
-      `uri(URI)` 오버로드로 넘긴다(문자열 오버로드는 `%26`을 `%2526`으로 이중 인코딩).
+- [x] **E. 알라딘 URL 인코딩 누락** — `buildSearchUrl`·`buildLookupUrl`이 `encode().toUri()`로 **`URI`를 반환**하고
+      호출부가 `uri(URI)` 오버로드로 넘긴다(문자열 오버로드는 `%26`을 `%2526`으로 이중 인코딩).
+      ⚠️ 리뷰가 잡았다 — `buildLookupUrl`의 `isbn13`도 **검증된 숫자가 아니다**(`Isbn.normalize`는 공백·하이픈만
+      지운다 → `POST /api/books` → 저장 → 백필 → `lookupByIsbn`). 상수만 쓰는 것은 `buildBestsellerUrl` 하나뿐.
 - [x] **F. 개발용 MySQL 컨테이너 노출** — `compose.yaml` 포트를 `127.0.0.1::3306`(루프백 + 동적 호스트 포트).
-- [x] **G. 이메일 주소 평문 로깅 6곳** — `User`가 있으면 `userId=`, 없으면 `EmailMask.mask`(신설).
+- [x] **G. 이메일 주소 평문 로깅 8곳** — `User`가 있으면 `userId=`, 없으면 `EmailMask.mask`(신설).
+      ⚠️ 리뷰가 잡았다 — 설계가 센 6곳 밖에 **`SuppressionAwareEmailSender`(모든 발송의 단일 관문)·
+      `LoggingEmailSender`(기본 발송기)** 둘이 더 있었다. 이 항목엔 테스트가 없어(마스킹을 되돌리는 돌연변이에
+      이메일 패키지가 전부 초록) **보증이 전수 검색 범위뿐**이라, 고친 뒤 패턴 2종으로 재확인했다.
 - [x] **H. XFF → `getRemoteAddr()` 양성 대조군 테스트** — 프로덕션 변경 0. 「이 Boot 조합에서
       `ForwardedHeaderFilter`가 실제로 레이트리밋 키를 바꾼다」를 처음으로 계측한다(필터 빈 제거 돌연변이로 사살 확인).
 - [x] **I. `followScopeReaders`에 `role <> ADMIN` 누락** — 신원을 펼치는 쿼리라 운영 계정이 섞이면 안 된다.
