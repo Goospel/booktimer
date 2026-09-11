@@ -76,11 +76,19 @@ export function writeTrial(trial: Trial | null): void {
   }
 }
 
-/** 「읽기 시작」 — 시작 시각을 남기고 눌렀다는 사실을 찍는다. */
-export function beginTrial(now: number = Date.now()): Trial {
+/** 어느 손잡이로 시작했나 — 히어로 카드의 「읽기 시작」이냐, 탭바 가운데 원이냐. */
+export type TrialSource = 'hero' | 'play';
+
+/**
+ * 「읽기 시작」 — 시작 시각을 남기고 눌렀다는 사실을 찍는다.
+ *
+ * <p>`source`가 <b>▶ 발견율</b>을 공짜로 잰다: 로그인 뒤 홈에서도 측정은 그 원으로 시작하므로,
+ * 게스트가 원을 안 쓰면 온보딩에도 같은 구멍이 있다는 뜻이다.
+ */
+export function beginTrial(now: number = Date.now(), source: TrialSource = 'hero'): Trial {
   const trial: Trial = { startedAt: new Date(now).toISOString(), endedAt: null };
   writeTrial(trial);
-  trackEvent('trial_started');
+  trackEvent('trial_started', { source });
   return trial;
 }
 

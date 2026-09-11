@@ -641,12 +641,15 @@ describe('탭 밖 오케스트레이션 (재편 전 동작 보존)', () => {
       </TDSMobileProvider>,
     );
 
-  it('토큰이 없으면 로그인 브릿지의 체험 화면부터 — 탭바는 아직 없다', () => {
+  it('토큰이 없으면 게스트 홈부터 — 탭바까지 서고 셋이 잠긴다', () => {
     const markup = renderApp();
 
     // 첫 화면이 곧 타이머다(2026-09-11) — 로그인 버튼만 있던 화면에서 17/21이 떠났다.
     expect(markup).toContain('읽기 시작');
-    expect(markup).not.toContain('서재');
+    // 2026-09-11 게스트 홈: 탭바가 <b>선다</b>(옛 단언 「탭바는 아직 없다」의 뒤집기). 잠긴 칸이
+    // 보이는 것이 「나중에 열린다」를 말하는 유일한 방법이라, 없으면 이 화면은 다시 로그인 벽이 된다.
+    expect(markup).toContain('서재');
+    expect(markup.match(/aria-disabled="true"/g)).toHaveLength(3);
   });
 
   it('토큰이 있으면 대시보드를 받는 동안 로딩 — 탭 화면은 데이터가 온 뒤', () => {
@@ -936,6 +939,31 @@ describe('하단 탭바 — 측정 중 잠금', () => {
     expect(cell(markup, 'aria-label="측정 끝내기"')).not.toContain('aria-disabled="true"');
   });
 
+  /**
+   * 내가 <b>서 있는</b> 잠긴 칸은 흐리지 않는다 — 게스트가 잠긴 탭을 열면(잠금 카드가 뜬다) 그 칸이
+   * 선택 표시로 서야 한다. 흐림은 「여기 못 간다」는 말인데, 이미 와 있는 칸에 그 말을 붙이면 거짓이다.
+   */
+  it('잠긴 칸이라도 내가 선 칸은 흐리지 않는다', () => {
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <BottomTabBar
+          tab="library"
+          onTabChange={() => {}}
+          locked
+          onBlocked={() => {}}
+          action={{ active: false, busy: false, onPress: () => {} }}
+        />
+      </TDSMobileProvider>,
+    );
+
+    const here = cell(markup, 'title="서재"');
+    expect(here).toContain('aria-current="page"');
+    expect(here).toContain('aria-disabled="true"');
+    expect(here).toContain('opacity:1');
+    // 안 선 잠긴 칸은 그대로 흐리다 — 위 예외가 잠금 표시를 통째로 걷어낸 것이 아님을 잰다.
+    expect(cell(markup, 'title="책방"')).toContain('opacity:0.35');
+  });
+
   it('측정 중이 아니면 아무 칸도 잠기지 않는다 — 위 부정 단언의 짝', () => {
     const open = renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
@@ -1004,13 +1032,34 @@ describe('화면 이름 판정 (currentScreen)', () => {
     shop: null,
     tab: 'home' as const,
     mode: 'reading' as const,
+    loginSource: null,
+    guestTab: 'home' as const,
   };
   const personMargin = { loginId: 'goospel', bookId: 7, isbn13: null, composeBook: null };
   const bookMargin = { loginId: null, bookId: null, isbn13: '9791168340084', composeBook: null };
   const composeBook = { id: 7, title: '책', author: '지은이', coverUrl: null, isbn13: null };
 
-  it('로그인 브릿지가 퍼널 꼭대기다 — 대시보드가 없어도 찍힌다', () => {
-    expect(currentScreen({ ...base, view: 'auth', loaded: false })).toBe('login');
+  /**
+   * 게스트 홈이 퍼널 꼭대기다(2026-09-11) — 토큰이 없는 사람이 보는 화면은 <b>둘</b>로 갈렸다:
+   * 둘러보는 중(`guest_*`)과 로그인 진행 중(`login`). 한 이름으로 묶으면 「눌렀는가」가 분모에 섞여
+   * 판정식(`login_started / guest_entered`)이 스스로를 잡아먹는다.
+   */
+  it('토큰이 없으면 게스트 홈이 퍼널 꼭대기다 — 대시보드가 없어도 찍힌다', () => {
+    expect(currentScreen({ ...base, view: 'auth', loaded: false })).toBe('guest_home');
+  });
+
+  it('게스트가 선 잠긴 탭도 이름이 갈린다 — 어느 잠금이 눌리는지가 다음 손질의 좌표다', () => {
+    expect(currentScreen({ ...base, view: 'auth', loaded: false, guestTab: 'library' })).toBe('guest_library');
+    expect(currentScreen({ ...base, view: 'auth', loaded: false, guestTab: 'bookshop' })).toBe('guest_bookshop');
+    expect(currentScreen({ ...base, view: 'auth', loaded: false, guestTab: 'history' })).toBe('guest_history');
+  });
+
+  it('로그인 진행 중이면 종전 이름 그대로다 — 전후 비교가 끊기지 않게', () => {
+    expect(currentScreen({ ...base, view: 'auth', loaded: false, loginSource: 'trial' })).toBe('login');
+    // 로그인 진행은 탭 위에 선다 — 게스트 탭이 무엇이든 이름은 `login`이다.
+    expect(currentScreen({ ...base, view: 'auth', loaded: false, loginSource: 'locked_history', guestTab: 'history' })).toBe(
+      'login',
+    );
   });
 
   it('탭 밖 뷰 둘도 각자 이름이 있다 — 계정 연결과 에러 화면', () => {
@@ -1097,12 +1146,16 @@ describe('화면 진입 배선', () => {
   const from = src.indexOf('export function App()');
   const to = src.indexOf('export function MarginShell');
   const app = src.slice(from, to);
+  /** 공백을 한 칸으로 접은 같은 조각 — 여러 줄로 포맷된 호출도 한 줄 패턴으로 잴 수 있다. */
+  const flat = app.replace(/\s+/g, ' ');
 
   it('App이 파생 탭·모드까지 넘겨 화면 이름을 만든다 — 인자가 빠지면 모드 플립 때 사라진 탭이 찍힌다', () => {
     expect(from).toBeGreaterThan(-1);
     expect(to).toBeGreaterThan(from);
-    expect(app).toContain(
-      'const screenName = currentScreen({ view, loaded: dashboard !== null, margin, shop, tab: shownTab, mode })',
+    // 공백·개행을 접고 본다 — 인자가 늘어 호출이 여러 줄로 포맷되는 것은 규칙이 아니라 모양이다
+    // (2026-09-11 게스트 홈에서 `loginSource`·`guestTab`이 붙으며 실제로 그렇게 됐다).
+    expect(flat).toContain(
+      'const screenName = currentScreen({ view, loaded: dashboard !== null, margin, shop, tab: shownTab, mode, loginSource, guestTab, });',
     );
   });
 

@@ -3486,6 +3486,18 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
   `trial_imported`가 두 번 찍혀 합류 비율이 200%로 읽힌다 — `flushTrial`에 in-flight 약속 하나를 둬 닫았다.
   **실기기·배포 후 확인이 남는다**: U-1(심사) · U-4(토스 WebView localStorage 생존) · U-5(합류 후 잔디 점등) ·
   U-6(새 이벤트 카탈로그 등재). 배포는 **서버 먼저**(설계 U-8 — PR-1 머지·배포 완료).
+- ✅ **PR-3 셸 — 게스트 홈과 잠긴 탭 (2026-09-11)** — 설계 `claude-docs/plans/2026-09-11-guest-home.md`.
+  PR-2의 **단독 체험 화면**을 「홈의 모양 그대로 + 계정이 필요한 칸만 잠금」으로 바꿨다. 신설
+  `screens/GuestHome.tsx`(`GuestShell` · `GuestHome` 히어로 3상태 · `LockedScreen` · 순수 함수
+  `guestAction`·`lockedCopy`) + `App`에 상태 둘(`loginSource`·`guestTab`) + 화면 이름 넷(`guest_*`) +
+  `BottomTabBar` 두 줄(`onBlocked(key)`로 **잠긴 칸이 열리고** 안에서 이유를 말한다 · 내가 선 칸은 안 흐려진다)
+  + `LoginBridge` 축소(로그인 진행 전용) + `trial.ts`에 `source`(▶ 발견율). **로그인 홈·`MainTabs`·`Library`·
+  `Bookshop`·`History` 무변경** — 그 셋은 마운트 즉시 서버를 불러 게스트에선 401 루프가 되므로 화면을 안 띄우고
+  `LockedScreen`이 그 자리에 선다. ⚠️ `App.load()`에 **in-flight 빗장**을 함께 넣었다: 인증 직후 두 번 도는
+  `load`가 `setView('goal')`을 `setView('main')`으로 덮어 **신규 계정이 목표 화면을 건너뛸** 수 있었다
+  (코드 판독 — 목 로그인이 항상 `registered:true`라 실기기 확정은 U-5).
+- 🔜 **PR-4 카드 — 책 카드와 잠긴 피드** — 「무엇으로 측정할까요?」 정적 3슬롯(`NoBookCard` export + 자물쇠 칸 둘)
+  + `FeedBox locked`. PR-3 머지 확인 뒤 `origin/main`에서 딴다. **배포는 PR-4까지 묶어 1회**(PR-3 단독은 시안 미완).
 - ⬜ **PR-0 콘솔(코드 0)** — 토스 로그인 스코프에서 `USER_NAME` 필수 해제(서버가 이름을 어디에서도 안 쓴다).
   사용자 승인 뒤 MCP 호출. 동의창 자체는 사라지지 않고 항목만 준다.
 
