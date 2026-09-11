@@ -40,8 +40,12 @@ class EmailTokenServiceTest {
     }
 
     private User persistUser() {
-        User u = User.of("reader@booktimer.com", "$2a$10$abcdefghijklmnopqrstuv", "책벌레", "Asia/Seoul", Role.USER);
-        u.assignLoginId("reader01");
+        return persistUser("reader@booktimer.com", "reader01");
+    }
+
+    private User persistUser(String email, String loginId) {
+        User u = User.of(email, "$2a$10$abcdefghijklmnopqrstuv", "책벌레", "Asia/Seoul", Role.USER);
+        u.assignLoginId(loginId);
         return userRepository.save(u);
     }
 
@@ -161,6 +165,21 @@ class EmailTokenServiceTest {
 
         assertThat(service.consume(reset, EmailTokenType.PASSWORD_RESET)).isPresent();
         assertThat(service.consume(verification, EmailTokenType.VERIFICATION)).isPresent();
+    }
+
+    @Test
+    @DisplayName("consume 성공: 형제 무효화는 그 사용자 안에서만 — 내 소비가 남의 인증 링크를 죽이지 않는다")
+    void consume_success_doesNotTouchOtherUser() {
+        User mine = persistUser();
+        User other = persistUser("other@booktimer.com", "other01");
+        EmailTokenService service = serviceAt(T0);
+
+        String myToken = service.issue(mine, EmailTokenType.VERIFICATION);
+        String otherToken = service.issue(other, EmailTokenType.VERIFICATION);
+
+        assertThat(service.consume(myToken, EmailTokenType.VERIFICATION)).isPresent();
+        // 형제 무효화에서 user 스코프가 빠지면 여기서 남의 토큰까지 전멸한다.
+        assertThat(service.consume(otherToken, EmailTokenType.VERIFICATION)).isPresent();
     }
 
     @Test
