@@ -43,7 +43,10 @@ import { ACTIVE_SESSION_RELIEF, HERO_CARD_BG_VAR, heroOverline } from './Home';
  * (T-183: 진입 직후 시트·딤·모달·툴팁 금지).
  */
 
-/** 어느 손잡이에서 로그인을 시작했나 — 진입점 여섯을 갈라 찍는다(PR-2의 `'trial'`은 전후 비교용으로 유지). */
+/**
+ * 어느 손잡이에서 로그인을 시작했나 — 이 PR이 실제로 찍는 것은 <b>다섯</b>이다(PR-2의 `'trial'`은
+ * 전후 비교용으로 유지). `'book_card'`는 아직 아무 화면도 안 보낸다 — 책 카드를 다는 PR-4의 자리다.
+ */
 export type LoginSource =
   | 'header'
   | 'book_card'
@@ -80,6 +83,27 @@ const LOCK_ICON = 'M7.6 10.4V7.9a4.4 4.4 0 0 1 8.8 0v2.5M6.2 10.4h11.6v9.1H6.2z'
 export function guestAction(phase: TrialPhase): { active: boolean; kind: 'start' | 'stop' | 'hint' } {
   if (phase === 'running') return { active: true, kind: 'stop' };
   return { active: false, kind: phase === 'done' ? 'hint' : 'start' };
+}
+
+/**
+ * 로그인 손잡이를 눌렀다 — <b>재는 중이면 먼저 접고</b> 넘긴다. 접은 체험을 돌려준다(없으면 null).
+ *
+ * <p>히어로 말고도 로그인 문이 둘 더 있다: 헤더 사람 아이콘(로그아웃한 기존 사용자의 길)과 잠긴 탭의
+ * 「토스로 시작하기」. 둘 다 「그만 읽기」를 안 거치므로 그대로 넘기면 `endedAt`이 `null`인 채 남아,
+ * {@link flushTrial}이 「끝난 것만 올린다」는 규칙대로 <b>지나쳐 버린다</b> — 방금 잰 시간이 조용히
+ * 사라지고, 남은 고아 체험은 다음 재진입에서 상한으로 접혀 <b>가짜 6시간</b>이 된다.
+ *
+ * <p>`trial_completed`가 함께 찍히는 것은 옳다 — 사용자가 <b>손잡이를 눌러</b> 끝낸 체험이라
+ * 「재다 말고 떠난 사람」이 아니다.
+ */
+export function startLogin(
+  trial: Trial | null,
+  onLogin: (source: LoginSource) => void,
+  source: LoginSource,
+): Trial | null {
+  const folded = trial !== null && trialPhase(trial) === 'running' ? completeTrial(trial) : null;
+  onLogin(source);
+  return folded;
 }
 
 /**
@@ -431,6 +455,12 @@ export function GuestShell({
     hintTimer.current = setTimeout(() => setHint(false), TAB_LOCK_HINT_MS);
   };
 
+  /** 로그인 문 <b>셋이 다 지나는 한 자리</b> — 재는 중이면 접고 넘긴다({@link startLogin}). */
+  const login = (source: LoginSource) => {
+    const folded = startLogin(trial, onLogin, source);
+    if (folded !== null) setTrial(folded);
+  };
+
   const action = guestAction(phase);
   const press = () => {
     if (action.kind === 'stop') stop();
@@ -444,7 +474,7 @@ export function GuestShell({
     <>
       <div style={{ paddingBottom: TAB_BAR_SPACE }}>
         {locked ? (
-          <LockedScreen tab={tab} onLogin={onLogin} />
+          <LockedScreen tab={tab} onLogin={login} />
         ) : (
           <GuestHome
             trial={trial}
@@ -456,7 +486,7 @@ export function GuestShell({
               writeTrial(null);
               setTrial(null);
             }}
-            onLogin={onLogin}
+            onLogin={login}
           />
         )}
       </div>

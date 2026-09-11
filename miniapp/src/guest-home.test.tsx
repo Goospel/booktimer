@@ -3,10 +3,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { TabKey } from './App';
-import { GuestShell, guestAction, lockedCopy } from './screens/GuestHome';
+import type { LoginSource } from './screens/GuestHome';
+import { GuestShell, guestAction, lockedCopy, startLogin } from './screens/GuestHome';
 import { stubLocalStorage, userAgent } from './test-fixtures';
 import type { Trial } from './trial';
-import { TRIAL_CAP_SECONDS, flushTrial, trialDurationSeconds, writeTrial } from './trial';
+import { TRIAL_CAP_SECONDS, beginTrial, flushTrial, readTrial, trialDurationSeconds, writeTrial } from './trial';
 
 /**
  * 게스트 홈 — 로그인 전에도 <b>홈의 모양</b>을 보여 주고 서재·책방·기록만 잠근다(2026-09-11).
@@ -211,5 +212,39 @@ describe('상한을 넘겨 돌아온 체험', () => {
     expect(result).toBe('imported');
     expect(sent).toHaveLength(1);
     expect(trialDurationSeconds(sent[0])).toBe(TRIAL_CAP_SECONDS);
+  });
+});
+
+/**
+ * 재는 중 <b>히어로가 아닌</b> 손잡이로 로그인한다 — 헤더 사람 아이콘(로그아웃한 기존 사용자의 길)과
+ * 잠긴 탭의 「토스로 시작하기」 둘이다. 둘 다 「그만 읽기」를 안 거치므로 `endedAt:null`인 채 넘어간다.
+ *
+ * <p>접지 않고 넘기면 손해가 둘이다: ① `flushTrial`이 「끝난 것만 올린다」는 규칙대로 `'none'`으로
+ * 지나쳐 방금 잰 시간이 조용히 사라지고 ② 고아 체험이 storage에 남아, 나중에 로그아웃하고 돌아오면
+ * {@link restoreTrial}이 상한으로 접어 <b>가짜 6시간</b>이 올라간다.
+ */
+describe('재는 중 다른 손잡이로 로그인 (startLogin)', () => {
+  it('체험을 접어 storage에 박고 넘긴다 — 잰 시간이 그대로 합류한다', async () => {
+    const started = beginTrial(Date.now() - 90_000);
+    const seen: LoginSource[] = [];
+
+    startLogin(started, (source) => seen.push(source), 'header');
+
+    expect(seen).toEqual(['header']); // 어느 손잡이였는지는 그대로 흘러간다(`login_started{source}`)
+    expect(readTrial()?.endedAt).not.toBeNull();
+
+    const sent: Trial[] = [];
+    const result = await flushTrial(async (t) => void sent.push(t));
+
+    expect(result).toBe('imported');
+    expect(trialDurationSeconds(sent[0])).toBeGreaterThanOrEqual(90);
+  });
+
+  it('끝난 체험은 다시 접지 않는다 — 두 번 접으면 끝 시각이 「로그인을 누른 때」로 늘어난다', () => {
+    writeTrial(done);
+
+    startLogin(done, () => {}, 'trial');
+
+    expect(readTrial()).toEqual(done);
   });
 });

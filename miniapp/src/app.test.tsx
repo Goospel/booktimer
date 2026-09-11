@@ -1174,6 +1174,34 @@ describe('화면 진입 배선', () => {
 });
 
 /**
+ * 소스로만 잴 수 있는 두 줄 — 위 「화면 진입 배선」과 <b>같은 방식이고 같은 한계</b>다(줄이 있다는 것
+ * 말고는 증명하지 못하고, 포맷이 바뀌면 규칙이 멀쩡해도 붉어진다).
+ *
+ * <p>그럼에도 재는 이유는 <b>실측</b>이다: 리뷰어가 둘 다 돌연변이로 지워 보니 1504건이 전부 초록이었다.
+ * ① `onBlocked?.(key)`의 인자를 `'home'`으로 고정해도 tsc는 <b>개수만 보므로</b> exit 0이고(「인자는
+ * tsc가 계측한다」는 앞선 주장이 틀렸다) 게스트가 어느 잠긴 칸을 눌러도 같은 화면이 열린다. ② 로드
+ * 빗장(`loading.current`)과 그 해제(`finally`)는 정적 렌더에 effect가 없어(T-149) 행동으로 닿지 않는다.
+ */
+describe('정적 하니스가 못 보는 배선 — 소스로 잠근다', () => {
+  const src = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*/g, '');
+  const flat = src.replace(/\s+/g, ' ');
+
+  it('잠긴 칸은 <b>누른 칸</b>을 넘긴다 — 인자를 고정하면 게스트는 어느 칸을 눌러도 한 화면만 연다', () => {
+    expect(flat).toContain('onClick={() => (shut ? onBlocked?.(key) : change(index))}');
+  });
+
+  it('로드는 두 번째 호출을 빗장으로 버린다 — 둘 다 통과하면 신규 계정이 목표 화면을 못 본다', () => {
+    expect(flat).toContain('if (loading.current) return; loading.current = true;');
+  });
+
+  it('끝나면 반드시 푼다 — 이 줄이 빠지면 첫 로드 뒤 빗장이 잠긴 채 남아 「다시 시도」가 죽는다', () => {
+    expect(flat).toContain('.finally(() => { loading.current = false; });');
+  });
+});
+
+/**
  * 공부 모드 탭바 — <b>책방 자리에 「일정」</b>이 선다(사용자 확정).
  *
  * <p>바꾸는 것이 목록 하나뿐이라는 게 이 설계의 요점이다: 두 목록이 <b>같은 길이(4)</b>라
