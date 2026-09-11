@@ -47,6 +47,8 @@ function routeFetch(agenda: object | null) {
                 ? Promise.resolve({ ok: false, status: 500, json: async () => ({}), text: async () => '' } as Response)
                 : Promise.resolve(okJson(agenda));
         }
+        // 필기 목록 — 탭을 [필기]로 옮기면 쏜다. `?`까지 넣어 `/notes/reference`와 갈라 둔다.
+        if (url.includes('/api/study/notes?')) return Promise.resolve(okJson({ notes: [] }));
         return Promise.resolve(notFound());   // 오늘은 아직 쓴 글이 없다
     });
 }
@@ -68,8 +70,10 @@ afterEach(() => {
 });
 
 describe('홈 백지복습 카드 — 머리', () => {
-    test('pill은 「백지복습」이다', async () => {
-        expect((await mountCard()).find('.dash-pill').text()).toBe('백지복습');
+    // 카드가 [필기]/[백지노트] 둘을 담게 된 뒤로(2026-09-11) pill은 둘을 아우르는 이름이어야 한다 —
+    // 「백지복습」이면 필기 탭에서 머리와 내용이 어긋난다.
+    test('pill은 탭 둘을 아우르는 이름이다', async () => {
+        expect((await mountCard()).find('.dash-pill').text()).toBe('공부 노트');
     });
 
     // 바로 아래 「빠른 이동」에 공부 기록 타일이 있어 카드 머리의 링크는 같은 말을 두 번 하는 것이었다
@@ -128,6 +132,44 @@ describe('홈 백지복습 카드 — 패널에 무엇을 먹이는가', () => {
         const wrapper = await mountCard();
         const calls = vi.mocked(fetch).mock.calls.map(c => c[0] as string);
         expect(calls.some(u => u.includes('/api/study/recall/2026-09-20'))).toBe(true);
+    });
+});
+
+// 탭은 `RecallPanel`이 갖는다 — 홈에서 필기에 닿는 길이 「빠른 이동 → /study → 날짜 클릭 → 탭」이면
+// 「공부 도중에 그때그때 쓴다」는 요구가 반쯤 죽는다(2026-09-11 번복). 타이머가 도는 화면은 홈이다.
+describe('홈 백지복습 카드 — 필기 / 백지노트 탭', () => {
+    test('기본은 백지노트이고 필기 패널은 뜨지 않는다', async () => {
+        const wrapper = await mountCard();
+
+        expect(wrapper.find('[data-testid="tab-notes"]').exists()).toBe(true);
+        expect(wrapper.find('[data-testid="recall-book"]').exists()).toBe(true);
+        expect(wrapper.find('[data-testid="notes-book"]').exists()).toBe(false);
+    });
+
+    test('[필기]를 누르면 홈에서 바로 필기가 열린다 — 편집기는 여전히 하나다', async () => {
+        const wrapper = await mountCard();
+
+        await wrapper.find('[data-testid="tab-notes"]').trigger('click');
+        await vi.waitFor(() => expect(wrapper.find('[data-testid="notes-book"]').exists()).toBe(true));
+
+        expect(wrapper.find('[data-testid="recall-book"]').exists()).toBe(false);
+        // 두 패널이 겹쳐 있으면 Tiptap이 둘 마운트된다 — 그러면 안 된다.
+        expect(wrapper.findAll('[data-testid="recall-body"]')).toHaveLength(1);
+    });
+
+    // 홈과 달력이 같은 규칙을 쓴다 — 오늘 일정이 가리키는 책이 기본 선택이다.
+    // ⚠️ 일부러 **서재 첫 책(7)이 아닌** 9를 쓴다 — 7이면 「일정을 봤다」와 「그냥 첫 책」이 같은 값이라
+    //    파생을 통째로 없앤 돌연변이가 살아남는다(리뷰 실측).
+    test('오늘 일정의 책이 필기 패널의 기본 선택으로 내려간다', async () => {
+        const wrapper = await mountCard({
+            ...AGENDA,
+            items: [{ id: 1, date: TODAY, bookId: 9, subject: '토익', task: '어휘' }],
+        });
+
+        await wrapper.find('[data-testid="tab-notes"]').trigger('click');
+        await vi.waitFor(() => expect(wrapper.find('[data-testid="notes-book"]').exists()).toBe(true));
+
+        expect((wrapper.find('[data-testid="notes-book"]').element as HTMLSelectElement).value).toBe('9');
     });
 });
 

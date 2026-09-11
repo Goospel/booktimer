@@ -67,7 +67,9 @@ function onSaved(): void {
     <section class="dash-card dash-recall-card is-study">
         <div class="dash-card-head">
             <div class="dash-card-head-left">
-                <span class="dash-pill">백지복습</span>
+                <!-- 카드가 [필기]/[백지노트] 둘을 담으므로 pill은 둘을 아우르는 이름이다 —
+                     「백지복습」으로 두면 필기 탭을 골랐을 때 머리와 내용이 어긋난다(2026-09-11). -->
+                <span class="dash-pill">공부 노트</span>
                 <span v-if="today" class="dash-card-sub">{{ dayTitle(today) }}</span>
             </div>
             <!-- 기록 진입점을 여기 두지 않는다 — 바로 아래 「빠른 이동」에 공부 기록 타일이 있어

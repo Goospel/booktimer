@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import NotesPanel from './NotesPanel.vue';
 import PlanForm from './PlanForm.vue';
 import RecallPanel from './RecallPanel.vue';
 import type { AddItemInput, StudyBookRow } from './api';
@@ -41,20 +40,6 @@ const task = ref('');
 const bookId = ref<number | null>(null);
 /** AI 일정 폼을 펼쳤나 — 접어 두는 것이 기본이다(달력이 먼저 보여야 한다). */
 const planOpen = ref(false);
-
-/**
- * [필기] / [백지노트] 중 무엇을 보고 있나. 기본은 백지노트다(이 화면의 원래 주인공).
- *
- * <p><b>탭이 `RecallPanel` 안이 아니라 여기 있다</b> — `RecallPanel`은 홈 대시보드
- * (`dashboard/RecallCard.vue`)도 import하므로, 안에 두면 홈에 필기 탭이 샌다(홈은 백지노트만 보인다).
- *
- * <p>날짜를 옮겨도 이 값은 유지된다(`DayPanel`이 마운트를 유지한다) — 필기는 날짜와 무관하고,
- * 필기를 보다가 하루를 옮겼다고 백지노트로 튕기는 것은 놀랍다.
- */
-const page = ref<'notes' | 'recall'>('recall');
-
-/** 그날 일정이 가리키는 책 — 필기 패널의 기본 선택(대개 지금 공부하는 책이다). */
-const dayBookId = computed(() => props.items.find((i) => i.bookId !== null)?.bookId ?? null);
 
 const title = computed(() => dayTitle(props.date));
 
@@ -116,54 +101,18 @@ function submit(): void {
             >{{ aiStatus.button }}</button>
         </p>
 
-        <!-- 두 페이지는 v-if로 갈린다 — 감춰만 두면 Tiptap 편집기가 둘 마운트된다. -->
-        <div class="study-recall-tabs" role="tablist">
-            <button
-                type="button"
-                id="study-day-tab-notes"
-                class="btn btn-ghost btn-small"
-                :class="{ 'is-active': page === 'notes' }"
-                role="tab"
-                :aria-selected="page === 'notes'"
-                aria-controls="study-day-page"
-                data-testid="day-tab-notes"
-                @click="page = 'notes'"
-            >필기</button>
-            <button
-                type="button"
-                id="study-day-tab-recall"
-                class="btn btn-ghost btn-small"
-                :class="{ 'is-active': page === 'recall' }"
-                role="tab"
-                :aria-selected="page === 'recall'"
-                aria-controls="study-day-page"
-                data-testid="day-tab-recall"
-                @click="page = 'recall'"
-            >백지노트</button>
-        </div>
-
-        <!-- 패널은 하나다 — 두 탭이 같은 자리를 갈아 끼우므로 aria-labelledby가 지금 탭을 가리킨다.
-             role=tab만 붙이고 여기를 비우면 스크린리더엔 「탭인데 여는 곳이 없는」 상태로 읽힌다. -->
-        <div
-            id="study-day-page"
-            role="tabpanel"
-            :aria-labelledby="page === 'notes' ? 'study-day-tab-notes' : 'study-day-tab-recall'"
-        >
-            <NotesPanel v-if="page === 'notes'" :books="books" :default-book-id="dayBookId" />
-
-            <RecallPanel
-                v-else
-                :date="date"
-                :today="today"
-                :items="items"
-                :books="books"
-                :ai-enabled="aiEnabled"
-                :remaining-analyze="remainingAnalyze"
-                :remaining-transcribe="remainingTranscribe"
-                :has-yesterday-questions="hasYesterdayQuestions"
-                @saved="emit('recall-saved')"
-            />
-        </div>
+        <!-- [필기]/[백지노트] 탭은 패널이 직접 갖는다 — 홈 카드도 같은 패널을 싣기 때문이다. -->
+        <RecallPanel
+            :date="date"
+            :today="today"
+            :items="items"
+            :books="books"
+            :ai-enabled="aiEnabled"
+            :remaining-analyze="remainingAnalyze"
+            :remaining-transcribe="remainingTranscribe"
+            :has-yesterday-questions="hasYesterdayQuestions"
+            @saved="emit('recall-saved')"
+        />
 
         <form class="study-day-form" @submit.prevent="submit">
             <p class="study-day-label">일정 추가</p>

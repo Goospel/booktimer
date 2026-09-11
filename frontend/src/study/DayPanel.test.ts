@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 // 하루 패널의 [필기]/[백지노트] 탭.
 //
-// 탭이 `RecallPanel` 안이 아니라 여기 있는 것이 규칙이다 — `RecallPanel`은 홈 대시보드
-// (`dashboard/RecallCard.vue`)도 import하므로, 안에 넣으면 홈에 필기 탭이 샌다.
-// 그리고 두 패널이 동시에 살아 있으면 Tiptap 편집기가 둘 마운트된다(설계 U-4의 `.ProseMirror` 1개).
+// 탭은 `RecallPanel`이 소유한다(2026-09-11 번복) — 여기서 재는 것은 그 탭이 `DayPanel` 합성을
+// 통과해 도는가, 즉 **/study 회귀 가드**다. 옛 규칙은 정반대였다: 「탭을 `RecallPanel`에 넣으면
+// 홈(`dashboard/RecallCard.vue`)에 샌다」. 그 샘이 이제 의도다 — 홈이 타이머가 도는 화면이라
+// 거기서 필기에 못 닿으면 「공부 도중에 그때그때」라는 기능의 요구가 반쯤 죽는다.
+// 두 패널이 동시에 살아 있으면 Tiptap 편집기가 둘 마운트되는 제약은 그대로다(설계 U-4의 `.ProseMirror` 1개).
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils';
 import { h } from 'vue';
@@ -82,7 +84,7 @@ describe('하루 패널 — 필기 / 백지노트 탭', () => {
         const wrapper = await mountDay();
         vi.mocked(fetch).mockResolvedValue(okJson({ notes: [] }));
 
-        await wrapper.find('[data-testid="day-tab-notes"]').trigger('click');
+        await wrapper.find('[data-testid="tab-notes"]').trigger('click');
         await flushPromises();
 
         expect(wrapper.find('[data-testid="notes-book"]').exists()).toBe(true);
@@ -95,7 +97,7 @@ describe('하루 패널 — 필기 / 백지노트 탭', () => {
         const wrapper = await mountDay();
         vi.mocked(fetch).mockResolvedValue(okJson({ notes: [] }));
 
-        await wrapper.find('[data-testid="day-tab-notes"]').trigger('click');
+        await wrapper.find('[data-testid="tab-notes"]').trigger('click');
         await flushPromises();
 
         expect((wrapper.find('[data-testid="notes-book"]').element as HTMLSelectElement).value).toBe('9');
@@ -106,21 +108,21 @@ describe('하루 패널 — 필기 / 백지노트 탭', () => {
         const wrapper = await mountDay();
         vi.mocked(fetch).mockResolvedValue(okJson({ notes: [] }));
 
-        const target = wrapper.find('[data-testid="day-tab-notes"]').attributes('aria-controls');
+        const target = wrapper.find('[data-testid="tab-notes"]').attributes('aria-controls');
         expect(target).toBeTruthy();
         const panel = wrapper.find(`#${target}`);
         expect(panel.attributes('role')).toBe('tabpanel');
 
-        await wrapper.find('[data-testid="day-tab-notes"]').trigger('click');
+        await wrapper.find('[data-testid="tab-notes"]').trigger('click');
         await flushPromises();
         expect(wrapper.find(`#${target}`).attributes('aria-labelledby'))
-            .toBe(wrapper.find('[data-testid="day-tab-notes"]').attributes('id'));
+            .toBe(wrapper.find('[data-testid="tab-notes"]').attributes('id'));
     });
 
     test('날짜를 옮겨도 고른 탭은 그대로다', async () => {
         const wrapper = await mountDay();
         vi.mocked(fetch).mockResolvedValue(okJson({ notes: [] }));
-        await wrapper.find('[data-testid="day-tab-notes"]').trigger('click');
+        await wrapper.find('[data-testid="tab-notes"]').trigger('click');
         await flushPromises();
 
         await wrapper.setProps({ date: '2026-09-11' });
