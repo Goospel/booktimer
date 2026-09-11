@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -33,6 +35,9 @@ const shell = (trial: Trial | null, tab: TabKey = 'home') =>
       <GuestShell tab={tab} onTabChange={() => {}} onLogin={() => {}} trial={trial} />
     </TDSMobileProvider>,
   );
+
+/** 탭바(`<nav>`) 조각 — 화면 안의 잠금과 탭바의 잠금을 가르는 유일한 손잡이다. */
+const navOf = (markup: string) => markup.slice(markup.indexOf('<nav'));
 
 const running = { startedAt: new Date(Date.now() - 90_000).toISOString(), endedAt: null };
 const done = { startedAt: '2026-09-11T01:00:00.000Z', endedAt: '2026-09-11T01:07:00.000Z' };
@@ -107,10 +112,64 @@ describe('게스트 홈 — 탭바', () => {
   });
 
   it('홈 말고 셋이 잠긴다 — 잠긴 칸 수가 곧 게스트가 못 보는 화면 수다', () => {
+    // 탭바 안에서만 센다 — 화면 안에도 잠긴 것이 있다(피드 탭 머리). 전체를 세면 이 단언이
+    // 「탭바가 몇 칸 잠겼나」가 아니라 「화면에 잠긴 것이 몇 개나」가 돼 뜻을 잃는다.
+    const bar = navOf(shell(null));
+
+    expect(bar.match(/aria-disabled="true"/g)).toHaveLength(3);
+    expect(bar.match(/aria-current="page"/g)).toHaveLength(1);
+  });
+});
+
+/**
+ * 「무엇으로 측정할까요?」 — 로그인 홈과 <b>같은 자리·같은 카드</b>다. 다른 점은 고를 수 있는 칸이
+ * 「책 없이」 하나라는 것뿐이고, 옆 두 칸이 잠긴 표지로 서서 「로그인하면 여기 내 책이 온다」를
+ * 글자가 아니라 그림으로 말한다.
+ */
+describe('게스트 홈 — 무엇으로 측정할까요?', () => {
+  it('로그인 홈과 같은 카드가 서고, 고를 수 있는 것은 「책 없이」다', () => {
     const markup = shell(null);
 
-    expect(markup.match(/aria-disabled="true"/g)).toHaveLength(3);
-    expect(markup.match(/aria-current="page"/g)).toHaveLength(1);
+    expect(markup).toContain('무엇으로 측정할까요?');
+    expect(markup).toContain('책 없이');
+    expect(markup).toContain('로그인하면 서재의 책을 골라 잴 수 있어요');
+  });
+
+  it('잠긴 표지 두 칸이 옆에 선다 — 로그인이 무엇을 여는지를 그림으로 말한다', () => {
+    const markup = shell(null);
+
+    expect(markup.match(/data-book-slot="free"/g)).toHaveLength(1);
+    expect(markup.match(/data-book-slot="locked"/g)).toHaveLength(2);
+  });
+
+  it('책을 고르는 문이 그 카드 안에 있다 — 잰 뒤가 아니라 고를 때 청한다', () => {
+    expect(shell(null)).toContain('토스로 시작하고 책 고르기');
+  });
+
+  // 정적 하니스는 클릭을 못 돌려(T-149) 이 버튼이 어느 source를 싣는지 행동으로는 못 잰다 — 리뷰어가
+  // `'header'`로 바꿔도 전 건 초록임을 실측했다. 그래서 App.tsx의 「소스로 잠근다」와 같은 방식으로 한 줄을 박는다.
+  it('그 문은 login_started에 book_card를 싣는다 — 다른 값이면 「어느 자리가 로그인을 부르는가」의 한 층이 사라진다', () => {
+    const src = readFileSync(new URL('./screens/GuestHome.tsx', import.meta.url), 'utf8').replace(/\s+/g, ' ');
+    expect(src).toContain("onClick={() => onLogin('book_card')}");
+  });
+
+  it('재는 중에도 끝난 뒤에도 그대로 선다 — 상태마다 갈아끼우면 화면이 세로로 들썩인다', () => {
+    expect(shell(running)).toContain('무엇으로 측정할까요?');
+    expect(shell(done)).toContain('무엇으로 측정할까요?');
+  });
+});
+
+/**
+ * 잠긴 피드 — 머리(소식·여백·책 뉴스)는 <b>남겨</b> 무엇이 잠겼는지 보여 주고, 본문 자리에서 이유를
+ * 말한다. 실데이터 미리보기는 공개 API가 필요해 비목표라 뼈대만 깐다(사용자 결정).
+ */
+describe('게스트 홈 — 잠긴 피드', () => {
+  it('무엇이 잠겼는지 머리로 보여 주고 안에서 이유를 말한다', () => {
+    const markup = shell(null);
+
+    expect(markup).toContain('책 뉴스');
+    expect(markup).toContain('소식·여백·책 뉴스는 계정이 있어야 보여요');
+    expect(markup).toContain('다른 독서가들이 무엇을 읽고 무슨 글을 남겼는지');
   });
 });
 

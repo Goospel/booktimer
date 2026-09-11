@@ -649,7 +649,9 @@ describe('탭 밖 오케스트레이션 (재편 전 동작 보존)', () => {
     // 2026-09-11 게스트 홈: 탭바가 <b>선다</b>(옛 단언 「탭바는 아직 없다」의 뒤집기). 잠긴 칸이
     // 보이는 것이 「나중에 열린다」를 말하는 유일한 방법이라, 없으면 이 화면은 다시 로그인 벽이 된다.
     expect(markup).toContain('서재');
-    expect(markup.match(/aria-disabled="true"/g)).toHaveLength(3);
+    // 탭바 안에서만 센다 — 화면 안에도 잠긴 것이 있다(피드 탭 머리). 전체를 세면 이 단언이
+    // 「탭바가 몇 칸 잠겼나」가 아니라 「화면에 잠긴 것이 몇 개나」가 돼 뜻을 잃는다.
+    expect(markup.slice(markup.indexOf('<nav')).match(/aria-disabled="true"/g)).toHaveLength(3);
   });
 
   it('토큰이 있으면 대시보드를 받는 동안 로딩 — 탭 화면은 데이터가 온 뒤', () => {

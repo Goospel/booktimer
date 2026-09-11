@@ -102,6 +102,25 @@ const renderBox = (
     </TDSMobileProvider>,
   );
 
+/** 잠긴 피드 — 게스트 홈이 부르는 꼴 그대로다(받은 데이터 없음 · 핸들러 no-op). */
+const lockedBox = () =>
+  renderToStaticMarkup(
+    <TDSMobileProvider userAgent={userAgent}>
+      <FeedBox
+        feed={null}
+        tab="social"
+        expanded={false}
+        error={null}
+        now={NOW}
+        onTab={() => {}}
+        onToggle={() => {}}
+        onOpenNews={() => {}}
+        onOpenMargin={() => {}}
+        locked={<span>잠김</span>}
+      />
+    </TDSMobileProvider>,
+  );
+
 /** 그려진 탭 머리 — 죽은 탭이 서지 않는지는 결국 이 목록이 말한다. */
 const tabsOf = (markup: string) => [...markup.matchAll(/data-feed-tab="([^"]*)"/g)].map((m) => m[1]);
 const rowCountOf = (markup: string) => [...markup.matchAll(/data-feed-row/g)].length;
@@ -543,6 +562,40 @@ describe('피드 박스 — 실패·로딩', () => {
 
   it('아직 못 받았으면 불러오는 중이라고 말한다', () => {
     expect(renderBox(null)).toContain('불러오는 중');
+  });
+});
+
+/**
+ * 잠긴 피드 — 로그인 전 홈(게스트 홈)이 이 박스를 <b>머리만 남기고</b> 쓴다. 머리를 지우지 않는 것이
+ * 요점이다: 「소식·여백·책 뉴스」가 있다는 사실 자체가 로그인이 무엇을 여는지에 대한 답이라, 박스를
+ * 통째로 다른 카드로 갈면 그 말이 사라진다.
+ *
+ * <p>서버는 부르지 않는다 — 게스트는 `feed={null}`과 no-op 핸들러로 부른다.
+ */
+describe('피드 박스 — 잠김 (로그인 전)', () => {
+  it('머리는 그대로 서서 무엇이 잠겼는지 보여 준다 — 「책 뉴스」까지 넷', () => {
+    // 뉴스 게이트(`newsEnabled`)는 서버가 주는 값이라 게스트에겐 없다. 잠금 머리는 「이런 것들이
+    // 있다」는 안내지 죽은 탭이 아니므로 넷을 다 그린다.
+    expect(tabsOf(lockedBox())).toEqual(['readers', 'social', 'discover', 'news']);
+  });
+
+  it('넷 다 눌리지 않는다 — 눌러도 아무 일 없는 알약은 고장으로 읽힌다', () => {
+    expect(lockedBox().match(/aria-disabled="true"/g)).toHaveLength(4);
+  });
+
+  it('본문 자리를 통째로 받는다 — 그 자리에 로딩 문구가 남으면 영영 안 끝나는 화면이 된다', () => {
+    // 양성 대조군: 같은 `feed={null}`을 잠금 없이 그리면 이 자리는 「불러오는 중…」이다. 그 문구가
+    // 실제로 나온다는 것을 같은 줄에서 확인해, 아래 부재 단언이 공허해지지 않게 둔다.
+    expect(renderBox(null)).toContain('불러오는 중');
+    expect(lockedBox()).toContain('잠김');
+    expect(lockedBox()).not.toContain('불러오는 중');
+  });
+
+  it('잠금을 안 주면 로그인 홈 렌더가 그대로다 — 흔적도 잠긴 알약도 없다', () => {
+    // `data-feed-locked`는 잠금 모드에서만 붙는다(첫 단언이 그 양성 대조군이다).
+    expect(lockedBox()).toContain('data-feed-locked');
+    expect(renderBox(feed(), 'news')).not.toContain('data-feed-locked');
+    expect(renderBox(feed(), 'news')).not.toContain('aria-disabled');
   });
 });
 
