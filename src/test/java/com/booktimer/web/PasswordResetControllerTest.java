@@ -95,7 +95,7 @@ class PasswordResetControllerTest {
     }
 
     @Test
-    @DisplayName("POST /password/forgot: 같은 이메일(대소문자·공백 변형 포함)은 IP를 바꿔도 4번째부터 막힌다 — 피해자의 재설정 링크가 계속 무효화되는 봉쇄를 끊는다")
+    @DisplayName("POST /password/forgot: 같은 이메일(대소문자·공백 변형 포함)은 IP를 바꿔도 4번째부터 막힌다 — 한 주소로 나가는 발송량 상한")
     void forgot_sameEmailAcrossIps_limitedAtFourth() throws Exception {
         User victim = persistLocal("victim@booktimer.com", "victimone");
 
@@ -110,8 +110,8 @@ class PasswordResetControllerTest {
         submitForgot("victim@booktimer.com", "198.51.100.4")
                 .andExpect(redirectedUrl("/password/forgot?limited"));
 
-        // 4번째가 requestReset에 닿았다면 issue가 직전 토큰을 죽이고 새 토큰을 냈을 것이다 —
-        // 즉 피해자가 손에 든 링크가 또 무효화됐을 것이다. 살아 있는 토큰이 그대로여야 한다.
+        // 4번째가 requestReset에 닿았다면 새 토큰이 하나 더 생겼을 것이다 — 상한이 실제로 발송을
+        // 막았는지를 「살아 있는 토큰이 그 하나 그대로인가」로 단언한다.
         assertThat(tokenRepository.findByUserAndTypeAndUsedAtIsNull(victim, EmailTokenType.PASSWORD_RESET))
                 .extracting(com.booktimer.email.EmailToken::getId)
                 .containsExactly(liveToken);
