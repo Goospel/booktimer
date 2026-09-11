@@ -38,7 +38,7 @@ const AGREEMENT_KEY = 'booktimer.notificationAgreement';
  * 진행바 색 — `global.css`가 TDS `--adaptiveBlue500`을 이 세이지로 재테마한다. TDS ProgressBar는
  * 색을 prop으로만 받아 CSS 변수가 안 닿으므로 값을 직접 준다(다른 초록을 쓰면 화면에 초록이 둘이 된다).
  */
-const SAGE = '#6E8A6A';
+export const SAGE = '#6E8A6A';
 
 /** 공부 모드의 같은 자리 — {@link SAGE}와 같은 사정이다(TDS ProgressBar는 색을 prop으로만 받는다). */
 const STUDY_BLUE = '#5F7E96';
@@ -442,7 +442,7 @@ export const NO_BOOK_CARD: LeadCard = {
  * <p>`CoverInitial`을 쓰지 않는다: 색 상자 + 첫 글자라 실제 표지와 구분이 안 돼 특수 칸이 책처럼 보인다.
  * `boxSizing`이 없으면 테두리 2px이 칸을 불려 스냅 위치(`i × stride`)가 이 카드부터 어긋난다.
  */
-function NoBookCard({ width = COVER_WIDTH, label = '책 없이' }: { width?: number; label?: string } = {}) {
+export function NoBookCard({ width = COVER_WIDTH, label = '책 없이' }: { width?: number; label?: string } = {}) {
   return (
     <div
       style={{

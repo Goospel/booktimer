@@ -24,8 +24,26 @@ import {
   trialPhase,
   writeTrial,
 } from '../trial';
-import { PENCIL_FRAME, SERIF_VALUE, Screen, Text, coverColor } from '../ui';
-import { ACTIVE_SESSION_RELIEF, HERO_CARD_BG_VAR, heroOverline } from './Home';
+import {
+  PENCIL_FRAME,
+  SECTION_RULE,
+  SERIF_VALUE,
+  Screen,
+  SectionTitle,
+  Text,
+  coverColor,
+  sectionStyle,
+} from '../ui';
+import {
+  ACTIVE_SESSION_RELIEF,
+  COVER_GAP,
+  COVER_WIDTH,
+  HERO_CARD_BG_VAR,
+  NoBookCard,
+  SAGE,
+  heroOverline,
+} from './Home';
+import { FeedBox } from './HomeFeed';
 
 /**
  * 게스트 홈 — <b>로그인 전에도 홈을 보여 주고</b> 서재·책방·기록만 잠근다(2026-09-11).
@@ -44,8 +62,8 @@ import { ACTIVE_SESSION_RELIEF, HERO_CARD_BG_VAR, heroOverline } from './Home';
  */
 
 /**
- * 어느 손잡이에서 로그인을 시작했나 — 이 PR이 실제로 찍는 것은 <b>다섯</b>이다(PR-2의 `'trial'`은
- * 전후 비교용으로 유지). `'book_card'`는 아직 아무 화면도 안 보낸다 — 책 카드를 다는 PR-4의 자리다.
+ * 어느 손잡이에서 로그인을 시작했나 — 여섯이 다 화면에 붙어 있다(PR-2의 `'trial'`은 전후 비교용으로
+ * 유지). 이름을 가르는 이유는 하나다: 「어느 자리가 로그인을 부르는가」에 숫자로 답하기 위해서다.
  */
 export type LoginSource =
   | 'header'
@@ -211,6 +229,140 @@ export function LockedScreen({ tab, onLogin }: { tab: LockedTab; onLogin: (sourc
         <SkeletonLine width="56%" />
       </div>
     </Screen>
+  );
+}
+
+/**
+ * 잠긴 표지 자리 — 「로그인하면 여기 내 책이 온다」를 <b>글자가 아니라 그림으로</b> 말한다.
+ *
+ * <p>{@link NoBookCard}와 같은 점선 상자에 자물쇠만 얹는다. 표지를 위조해 채우지 않는 것은
+ * 게스트에게 실데이터 미리보기를 주지 않는다는 결정 때문이기도 하지만, 없는 책을 있는 것처럼
+ * 그리면 로그인하고 나서 「내 서재가 비어 있다」가 배신이 되기 때문이다.
+ */
+function LockedSlot() {
+  return (
+    <div
+      style={{
+        width: COVER_WIDTH,
+        height: Math.round(COVER_WIDTH * 1.4),
+        flex: '0 0 auto',
+        boxSizing: 'border-box',
+        border: '2px dashed var(--adaptiveGrey200, #E4DDD0)',
+        borderRadius: 4,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="var(--adaptiveGrey600, #6F6A5E)"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d={LOCK_ICON} />
+      </svg>
+    </div>
+  );
+}
+
+/**
+ * 「무엇으로 측정할까요?」 — 로그인 홈과 <b>같은 자리·같은 카드</b>이고, 고를 수 있는 칸만 하나다.
+ *
+ * <p>캐러셀({@link BookCarousel})을 안 쓴다: 0번 특수 칸의 offset 산술과 스냅 stride가 「책이 아닌
+ * 칸」을 하나로 전제해서, 잠긴 칸 둘을 끼우면 가운데 판정이 통째로 어긋난다. 여기는 밀 것도 없다 —
+ * 고를 수 있는 것이 하나뿐이라 정적 행이 맞다.
+ *
+ * <p>세 상태(체험 전·재는 중·끝남)에서 <b>같은 모양으로 선다</b>. 로그인 홈은 측정 중에 이 자리가
+ * 「읽는 중」 카드로 바뀌지만 게스트는 대상이 「책 없이」로 확정이라 바꿀 것이 없고, 갈아끼우면
+ * 카드 높이가 달라져 화면이 세로로 들썩인다.
+ */
+function GuestBookCard({ onLogin }: { onLogin: (source: LoginSource) => void }) {
+  return (
+    <section style={sectionStyle}>
+      <SectionTitle style={{ marginBottom: 10, paddingBottom: 9, borderBottom: SECTION_RULE }}>
+        무엇으로 측정할까요?
+      </SectionTitle>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: COVER_GAP }}>
+        {/* 고를 수 있는 칸 — 로그인 홈에서 가운데 온 칸과 같은 배율(1.1)로 서서 「이것이 대상」을 말한다. */}
+        <span data-book-slot="free" style={{ transform: 'scale(1.1)' }}>
+          <NoBookCard />
+        </span>
+        {/* 잠긴 두 칸 — 로그인 홈 캐러셀에서 가운데가 아닌 표지와 같은 흐림(0.45)이다. */}
+        <span data-book-slot="locked" style={{ opacity: 0.45 }}>
+          <LockedSlot />
+        </span>
+        <span data-book-slot="locked" style={{ opacity: 0.45 }}>
+          <LockedSlot />
+        </span>
+      </div>
+
+      {/* 표지만으론 무엇이 대상인지 확정되지 않는다 — 로그인 홈과 같이 글자로 못 박는다. */}
+      <div style={{ marginTop: 12, textAlign: 'center' }}>
+        <span style={{ display: 'block', ...SERIF_VALUE, fontSize: 20 }}>책 없이</span>
+        <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 4 }}>
+          로그인하면 서재의 책을 골라 잴 수 있어요
+        </Text>
+      </div>
+
+      {/* 몇 칸 중 몇 번째인가 — 로그인 홈 캐러셀의 그 점들이다. 잠긴 칸도 세어 「지금은 하나뿐」이
+          아니라 「셋 중 첫 칸」으로 읽히게 둔다. */}
+      <div aria-hidden="true" style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10 }}>
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            data-dot={i === 0 ? 'active' : 'idle'}
+            style={{ width: 6, height: 6, borderRadius: '50%', background: i === 0 ? SAGE : '#E4DDD0' }}
+          />
+        ))}
+      </div>
+
+      <Button display="block" variant="weak" style={{ marginTop: 16 }} onClick={() => onLogin('book_card')}>
+        토스로 시작하고 책 고르기
+      </Button>
+    </section>
+  );
+}
+
+/**
+ * 잠긴 피드 본문 — 머리(소식·여백·책 뉴스)는 {@link FeedBox}가 그대로 그리고 이 자리만 받는다.
+ *
+ * <p>뼈대 두 줄은 <b>「여기에 남의 글이 들어온다」</b>는 말이다. 실데이터 미리보기는 공개 API가
+ * 필요해 비목표라(사용자 결정) 회색 상자로 둔다 — 가짜 글을 채우는 쪽이 훨씬 나쁘다.
+ */
+function LockedFeedBody() {
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <svg
+        width="28"
+        height="28"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="var(--adaptiveGrey600, #6F6A5E)"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d={LOCK_ICON} />
+      </svg>
+      <Text typography="st10" fontWeight="bold" style={{ display: 'block', marginTop: 10, wordBreak: 'keep-all' }}>
+        소식·여백·책 뉴스는 계정이 있어야 보여요
+      </Text>
+      <Text typography="st11" color="grey600" style={{ display: 'block', marginTop: 6, wordBreak: 'keep-all' }}>
+        다른 독서가들이 무엇을 읽고 무슨 글을 남겼는지
+      </Text>
+      <div style={{ marginTop: 16, opacity: 0.45 }} aria-hidden="true">
+        <SkeletonLine width="86%" />
+        <SkeletonLine width="64%" />
+      </div>
+    </div>
   );
 }
 
@@ -380,6 +532,23 @@ export function GuestHome({
           </>
         )}
       </div>
+
+      <GuestBookCard onLogin={onLogin} />
+
+      {/* 로그인 홈의 피드 박스가 같은 자리에 같은 머리로 선다 — 본문만 잠금 안내다. `feed={null}`과
+          no-op 핸들러라 <b>서버를 부르지 않는다</b>(로그인 홈의 `HomeFeedBox`는 마운트 즉시 받는다). */}
+      <FeedBox
+        feed={null}
+        tab="social"
+        expanded={false}
+        error={null}
+        now={0}
+        onTab={() => {}}
+        onToggle={() => {}}
+        onOpenNews={() => {}}
+        onOpenMargin={() => {}}
+        locked={<LockedFeedBody />}
+      />
     </Screen>
   );
 }

@@ -532,6 +532,7 @@ export function FeedBox({
   onToggle,
   onOpenNews,
   onOpenMargin,
+  locked,
 }: {
   /** `null`이면 아직 못 받은 상태(실패는 `error`가 따로 말한다). */
   feed: HomeFeedResponse | null;
@@ -546,12 +547,23 @@ export function FeedBox({
   onOpenNews: (link: string) => void;
   /** 여백 줄 탭 — 책방 탭으로 옮겨 그 책의 여백을 여는 일은 App이 한다(탭 전환의 주인은 하나다). */
   onOpenMargin: (loginId: string, bookId: number) => void;
+  /**
+   * 로그인 전 홈이 본문 자리에 세우는 것 — 주면 이 박스가 <b>잠금 모드</b>로 선다(게스트 홈 전용).
+   *
+   * <p>머리를 지우지 않는 것이 요점이다: 「소식·여백·책 뉴스」가 있다는 사실이 곧 「로그인하면
+   * 무엇이 열리는가」의 답이라, 박스를 다른 카드로 갈아끼우면 그 말이 사라진다. 그래서 머리는
+   * 흐리게 남기고 본문만 바꾼다. 로그인 홈은 이 프롭을 안 주므로 <b>한 픽셀도 안 바뀐다</b>.
+   */
+  locked?: ReactNode;
 }) {
+  const shut = locked !== undefined;
+
   return (
     <section style={sectionStyle}>
       {/* 탭 머리는 카드 안의 섹션 머리다 — 시안 2b가 그 아래에 선을 긋는다(줄 전체를 지나야 하므로
           탭 버튼이 아니라 이 줄에 건다). */}
       <div
+        data-feed-locked={shut ? '' : undefined}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -559,9 +571,13 @@ export function FeedBox({
           marginBottom: 10,
           paddingBottom: 11,
           borderBottom: SECTION_RULE,
+          // 흐림은 줄 전체에 건다 — 알약마다 걸면 구분선만 또렷해 잠긴 줄이 반만 잠겨 보인다.
+          opacity: shut ? 0.45 : undefined,
         }}
       >
-        {visibleTabs(feed?.newsEnabled ?? false).map((key) => (
+        {/* 잠금 머리는 뉴스 게이트(서버 값)를 안 본다 — 게스트에겐 그 값이 없고, 여기 머리는
+            「이런 것들이 있다」는 안내라 죽은 탭이 아니다. */}
+        {visibleTabs(shut || (feed?.newsEnabled ?? false)).map((key) => (
           <Fragment key={key}>
             <button
               type="button"
@@ -569,7 +585,8 @@ export function FeedBox({
               // 그림뿐인 탭은 접근성 이름이 없으면 스크린리더에 무명 버튼이 된다.
               aria-label={key === 'readers' ? '함께 읽는 사람' : undefined}
               aria-current={key === tab ? 'true' : undefined}
-              onClick={() => onTab(key)}
+              aria-disabled={shut ? 'true' : undefined}
+              onClick={shut ? undefined : () => onTab(key)}
               style={key === 'readers' ? iconPillStyle(key === tab) : pillStyle(key === tab)}
             >
               {key === 'readers' ? <PersonMark /> : TAB_LABEL[key]}
@@ -580,7 +597,9 @@ export function FeedBox({
       </div>
 
       {/* 실패는 이 한 줄로 끝난다 — 홈 전체를 에러 화면으로 바꾸지 않는다(폴드 아래 카드다). */}
-      {error !== null ? (
+      {shut ? (
+        locked
+      ) : error !== null ? (
         <Text typography="st12" color="red500" style={{ display: 'block', wordBreak: 'keep-all' }}>
           {error}
         </Text>
