@@ -58,6 +58,58 @@ class SignupControllerTest {
     @Autowired
     private SignupController signupController;
 
+    @Autowired
+    private com.booktimer.security.RateLimitService rateLimitService;
+
+    @org.junit.jupiter.api.BeforeEach
+    void resetRateLimit() {
+        rateLimitService.clearForTest(); // 인메모리 고정 윈도우 — 테스트 간 격리
+    }
+
+    /** 전부 유효한 가입 페이로드 — 이메일·아이디만 갈아 끼운다. */
+    private org.springframework.test.web.servlet.ResultActions submitSignup(String email, String loginId)
+            throws Exception {
+        return mockMvc.perform(post("/signup").with(csrf())
+                .param("email", email)
+                .param("loginId", loginId)
+                .param("password", "rawpw1234")
+                .param("nickname", "책벌레")
+                .param("timezone", "Asia/Seoul")
+                .param("ageConfirmed", "true"));
+    }
+
+    @Test
+    @DisplayName("POST /signup: 같은 IP의 11번째 가입 요청은 막히고 계정이 만들어지지 않는다 (10번째까지는 통과 — 양성 대조군)")
+    void postSignup_eleventhFromSameIp_blockedWithGlobalError() throws Exception {
+        for (int i = 1; i <= 10; i++) {
+            submitSignup("rl" + i + "@booktimer.com", "rluser" + i)
+                    .andExpect(redirectedUrl("/login?registered"));
+        }
+        // 양성 대조군 — 상한(10)까지는 실제로 계정이 만들어진다. 없으면 "늘 막힌다"는 구현도 통과한다.
+        assertThat(userRepository.findByEmail("rl10@booktimer.com")).isPresent();
+
+        // 11번째 — 전역 에러를 단 채 폼을 다시 그리고, 인증 메일이 나가는 register에는 닿지 않는다.
+        submitSignup("rl11@booktimer.com", "rluser11")
+                .andExpect(status().isOk())
+                .andExpect(view().name("signup"))
+                .andExpect(content().string(containsString("가입 요청이 너무 잦습니다")));
+
+        assertThat(userRepository.findByEmail("rl11@booktimer.com")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("POST /signup: 검증 실패 제출은 상한을 소모하지 않는다 — 폼 오타 재제출로 가입이 잠기면 안 된다")
+    void postSignup_invalidSubmissions_doNotConsumeLimit() throws Exception {
+        for (int i = 0; i < 10; i++) {
+            submitSignup("", "bad" + i) // 이메일 빈 값 = 바인딩 검증 실패
+                    .andExpect(model().attributeHasFieldErrors("signupForm", "email"));
+        }
+
+        // 상한을 검증 '앞'에서 셌다면 여기서 이미 10을 다 먹어 막혔을 것이다.
+        submitSignup("after@booktimer.com", "afterid")
+                .andExpect(redirectedUrl("/login?registered"));
+    }
+
     @Test
     @DisplayName("GET /signup: 렌더 전 CSRF 토큰을 선확정한다 — 익명 폼 페이지 commit-후-500 방어(T-049 재발)")
     void getSignup_precommitsCsrfToken() {

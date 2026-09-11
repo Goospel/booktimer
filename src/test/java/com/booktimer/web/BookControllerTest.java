@@ -46,6 +46,7 @@ class BookControllerTest {
     @Autowired private UserRepository userRepository;
     @Autowired private BookRepository bookRepository;
     @Autowired private ReadingSessionRepository sessionRepository;
+    @Autowired private com.booktimer.block.BlockRepository blockRepository;
     @Autowired private PasswordEncoder passwordEncoder;
 
     private User newUser(String email) {
@@ -232,6 +233,49 @@ class BookControllerTest {
         mockMvc.perform(get("/u/{loginId}/books/{id}/buy", "somehandle", book.getId())
                         .with(user("ppviewer@booktimer.com")))
                 .andExpect(redirectedUrl("/u/somehandle"));
+
+        assertThat(bookRepository.findById(book.getId()).orElseThrow().getClickCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}/books/{id}/buy: 차단 관계면 공개책이어도 집계 없이 프로필로 — 프로필 조회와 같은 가드를 쓴다")
+    void buyFromProfile_blockedViewer_noCountRedirectsToProfile() throws Exception {
+        User owner = newUser("bkowner@booktimer.com");
+        owner.assignLoginId("bkowner");
+        userRepository.save(owner);
+        User viewer = newUser("bkviewer@booktimer.com");
+        blockRepository.save(com.booktimer.block.Block.of(owner, viewer));
+        Book book = Book.register(owner, "차단된 책방의 공개책", null, null, null, null,
+                "http://www.aladin.co.kr/buy?ttbkey=b", BookStatus.READING);
+        book.makePublic();
+        bookRepository.save(book);
+
+        mockMvc.perform(get("/u/{loginId}/books/{id}/buy", "bkowner", book.getId())
+                        .with(user("bkviewer@booktimer.com")))
+                .andExpect(redirectedUrl("/u/bkowner"));
+
+        assertThat(bookRepository.findById(book.getId()).orElseThrow().getClickCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("GET /u/{loginId}/books/{id}/buy: 경로의 loginId가 그 책 주인이 아니면 집계 없이 프로필로 — 남의 공개책을 임의 책방 주소에 매달 수 없다")
+    void buyFromProfile_bookNotOwnedByPathUser_noCountRedirectsToProfile() throws Exception {
+        User bookOwner = newUser("realowner@booktimer.com");
+        bookOwner.assignLoginId("realowner");
+        userRepository.save(bookOwner);
+        User decoy = newUser("decoy@booktimer.com");
+        decoy.assignLoginId("decoyshelf");
+        userRepository.save(decoy);
+        newUser("mvviewer@booktimer.com");
+        Book book = Book.register(bookOwner, "남의 공개책", null, null, null, null,
+                "http://www.aladin.co.kr/buy?ttbkey=m", BookStatus.READING);
+        book.makePublic();
+        bookRepository.save(book);
+
+        // decoyshelf의 책방엔 이 책이 없다 — 그런데도 집계·리다이렉트가 되면 조회가 주인으로 스코프되지 않은 것.
+        mockMvc.perform(get("/u/{loginId}/books/{id}/buy", "decoyshelf", book.getId())
+                        .with(user("mvviewer@booktimer.com")))
+                .andExpect(redirectedUrl("/u/decoyshelf"));
 
         assertThat(bookRepository.findById(book.getId()).orElseThrow().getClickCount()).isZero();
     }

@@ -274,9 +274,11 @@ public class BookService {
     /**
      * 공개(PUBLIC) 책의 "구매" 클릭을 집계하고 이동할 제휴 구매링크를 돌려준다 — <b>남의 책방(공개 프로필)에서</b> 쓴다.
      *
-     * <p>{@link #recordPurchaseClick}(내 책 전용, 소유권 강제)와 달리 소유권 대신 <b>공개 여부</b>를 게이트로 둔다:
-     * 공개 책은 이미 누구나 프로필에서 보는 것이라 구매링크를 함께 노출해도 새 위험이 없다. 반대로 비공개·없는 책은
-     * 임의 id로 비공개 책의 구매링크/존재를 캐낼 수 없게 거부한다(null 반환).
+     * <p>게이트는 <b>경로의 loginId 주인 + 공개 여부</b>다({@code owner}는 호출부가
+     * {@code ProfileService.resolveVisibleTarget}로 푼 그 책방 주인이라 <b>차단 아님</b>까지 이미 걸러졌다).
+     * {@link #recordPurchaseClick}(내 책 전용)과 달리 viewer의 소유권은 묻지 않지만, 조회 자체를 그 주인으로
+     * 스코프하므로 남의 공개책을 임의 책방 주소에 매달아 집계시킬 수 없다. 비공개·없는 책·주인이 다른 책은
+     * 모두 null — 임의 id로 존재나 구매링크를 캐낼 수 없다.
      *
      * <p><b>클릭을 왜 "책 주인 행"에 집계하나</b>(사용자 결정 2026-06-06의 근거): 이 카운트({@link Book#clickCount})의
      * 목적은 <i>"어떤 책이 구매 의향을 내나"</i>를 보는 <b>제휴 수익 분석</b>이다(알라딘 3% 제휴가 현 유일 수익 토대).
@@ -292,8 +294,8 @@ public class BookService {
      *
      * @return 이동할 구매링크. 비공개·존재하지 않음·링크 없음·알라딘이 아닌 링크면 null.
      */
-    public String recordPublicPurchaseClick(Long bookId) {
-        Book book = bookRepository.findById(bookId).orElse(null);
+    public String recordPublicPurchaseClick(User owner, Long bookId) {
+        Book book = bookRepository.findByIdAndUser(bookId, owner).orElse(null);
         if (book == null || !book.isPublic()) {
             return null; // 없거나 비공개 — 존재/링크 누설 없이 거부
         }
@@ -326,13 +328,13 @@ public class BookService {
 
     /**
      * 공개(PUBLIC) 책의 쿠팡 "구매" 클릭을 집계하고 링크를 돌려준다 — 남의 책방(공개 프로필)에서 쓴다.
-     * {@link #recordPublicPurchaseClick}(알라딘)과 같은 정신: 소유권 대신 공개 여부를 게이트로 두고,
-     * 클릭은 책 주인 행에 집계한다(2026-06-06 결정의 근거는 알라딘 메서드 JavaDoc 참조).
+     * {@link #recordPublicPurchaseClick}(알라딘)과 같은 정신: 게이트는 경로의 loginId 주인 + 공개 여부 +
+     * 차단 아님이고, 클릭은 책 주인 행에 집계한다(2026-06-06 결정의 근거는 알라딘 메서드 JavaDoc 참조).
      *
      * @return 이동할 쿠팡 링크(가능하면 추적링크, 아니면 raw 검색 URL). 비공개·존재하지 않음·비활성이면 null.
      */
-    public String recordPublicCoupangClick(Long bookId) {
-        Book book = bookRepository.findById(bookId).orElse(null);
+    public String recordPublicCoupangClick(User owner, Long bookId) {
+        Book book = bookRepository.findByIdAndUser(bookId, owner).orElse(null);
         if (book == null || !book.isPublic()) {
             return null; // 없거나 비공개 — 존재 누설 없이 거부
         }
@@ -369,14 +371,14 @@ public class BookService {
 
     /**
      * 공개(PUBLIC) 책의 Yes24 "구매" 클릭을 집계하고 링크를 돌려준다 — 남의 책방(공개 프로필)에서 쓴다.
-     * {@link #recordPublicCoupangClick}(쿠팡)과 같은 정신: 소유권 대신 공개 여부를 게이트로 두고,
-     * 클릭은 책 주인 행에 집계한다(2026-06-06 결정의 근거는 {@link #recordPublicPurchaseClick} JavaDoc 참조).
+     * {@link #recordPublicCoupangClick}(쿠팡)과 같은 정신: 게이트는 경로의 loginId 주인 + 공개 여부 +
+     * 차단 아님이고, 클릭은 책 주인 행에 집계한다(2026-06-06 결정의 근거는 {@link #recordPublicPurchaseClick} JavaDoc 참조).
      *
      * @param mobileDevice {@link #recordYes24Click} 참조.
      * @return 이동할 Yes24 검색 링크. 비공개·존재하지 않음·비활성이면 null.
      */
-    public String recordPublicYes24Click(Long bookId, boolean mobileDevice) {
-        Book book = bookRepository.findById(bookId).orElse(null);
+    public String recordPublicYes24Click(User owner, Long bookId, boolean mobileDevice) {
+        Book book = bookRepository.findByIdAndUser(bookId, owner).orElse(null);
         if (book == null || !book.isPublic()) {
             return null; // 없거나 비공개 — 존재 누설 없이 거부
         }
@@ -413,14 +415,14 @@ public class BookService {
 
     /**
      * 공개(PUBLIC) 책의 교보문고 "구매" 클릭을 집계하고 링크를 돌려준다 — 남의 책방(공개 프로필)에서 쓴다.
-     * {@link #recordPublicYes24Click}(Yes24)과 같은 정신: 소유권 대신 공개 여부를 게이트로 두고,
-     * 클릭은 책 주인 행에 집계한다(2026-06-06 결정의 근거는 {@link #recordPublicPurchaseClick} JavaDoc 참조).
+     * {@link #recordPublicYes24Click}(Yes24)과 같은 정신: 게이트는 경로의 loginId 주인 + 공개 여부 +
+     * 차단 아님이고, 클릭은 책 주인 행에 집계한다(2026-06-06 결정의 근거는 {@link #recordPublicPurchaseClick} JavaDoc 참조).
      *
      * @param mobileDevice {@link #recordKyoboClick} 참조.
      * @return 이동할 교보 검색 링크. 비공개·존재하지 않음·비활성이면 null.
      */
-    public String recordPublicKyoboClick(Long bookId, boolean mobileDevice) {
-        Book book = bookRepository.findById(bookId).orElse(null);
+    public String recordPublicKyoboClick(User owner, Long bookId, boolean mobileDevice) {
+        Book book = bookRepository.findByIdAndUser(bookId, owner).orElse(null);
         if (book == null || !book.isPublic()) {
             return null; // 없거나 비공개 — 존재 누설 없이 거부
         }

@@ -23,7 +23,8 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p><b>보안</b>(공개 엔드포인트라 위조 방지가 핵심):
  * <ol>
- *   <li>TopicArn 허용목록 — {@code booktimer.ses.sns.topic-arn}이 설정돼 있으면 그 토픽 메시지만 처리.</li>
+ *   <li>TopicArn 허용목록 — {@code booktimer.ses.sns.topic-arn}과 일치하는 토픽 메시지만 처리.
+ *       <b>미설정(빈 값)이면 전부 403</b>이다(fail-closed) — 설정 누락이 방어를 조용히 끄면 안 된다.</li>
  *   <li>서명 검증 — {@link SnsSignatureVerifier}가 AWS 서명을 검증(실패 시 403).</li>
  * </ol>
  * 둘 다 통과해야만 구독 확인/알림 처리로 넘어간다. CSRF는 제외(보안설정) — 외부 SNS는 토큰을 못 싣는다.
@@ -47,6 +48,9 @@ public class SnsWebhookController {
         this.subscriptionConfirmer = subscriptionConfirmer;
         this.bounceComplaintHandler = bounceComplaintHandler;
         this.expectedTopicArn = expectedTopicArn;
+        if (expectedTopicArn.isBlank()) {
+            log.error("SNS TopicArn 미설정(booktimer.ses.sns.topic-arn) — 웹훅은 전부 403으로 거부된다");
+        }
     }
 
     @PostMapping("/internal/ses/notifications")
@@ -59,8 +63,9 @@ public class SnsWebhookController {
             return ResponseEntity.badRequest().build();
         }
 
-        if (!expectedTopicArn.isBlank() && !expectedTopicArn.equals(message.topicArn())) {
-            log.warn("SNS TopicArn 불일치 — 거부");
+        // fail-closed — 미설정(빈 값)도 거부한다. 설정 주입이 빠졌을 때 1차 방어가 조용히 사라지는 게 더 나쁘다.
+        if (expectedTopicArn.isBlank() || !expectedTopicArn.equals(message.topicArn())) {
+            log.warn("SNS TopicArn 불일치 또는 미설정 — 거부");
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 

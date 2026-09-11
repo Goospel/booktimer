@@ -118,7 +118,7 @@ class Yes24BookServiceTest {
         Book book = bookService.addFromSearch(owner, cleanCode(), BookStatus.WANT_TO_READ);
         book.makePublic();
 
-        String link = bookService.recordPublicYes24Click(book.getId(), false);
+        String link = bookService.recordPublicYes24Click(owner, book.getId(),false);
 
         assertThat(link).isEqualTo(YES24_LINK);
         assertThat(bookService.myBooks(owner).get(0).getYes24ClickCount()).isEqualTo(1L);
@@ -132,7 +132,7 @@ class Yes24BookServiceTest {
         Book book = bookService.addFromSearch(owner, cleanCode(), BookStatus.WANT_TO_READ);
         book.makePublic();
 
-        String link = bookService.recordPublicYes24Click(book.getId(), true);
+        String link = bookService.recordPublicYes24Click(owner, book.getId(),true);
 
         assertThat(link).isEqualTo(YES24_MOBILE_LINK);
         verify(yes24LinkBuilder).buildSearchLink(any(), eq(true));
@@ -145,7 +145,7 @@ class Yes24BookServiceTest {
         User owner = newUser("yprivowner@booktimer.com");
         Book book = bookService.addFromSearch(owner, cleanCode(), BookStatus.WANT_TO_READ); // 기본 PRIVATE
 
-        String link = bookService.recordPublicYes24Click(book.getId(), false);
+        String link = bookService.recordPublicYes24Click(owner, book.getId(),false);
 
         assertThat(link).isNull();
         assertThat(bookService.myBooks(owner).get(0).getYes24ClickCount()).isZero();
@@ -154,7 +154,7 @@ class Yes24BookServiceTest {
     @Test
     @DisplayName("공개 책 Yes24 클릭: 없는 책 id면 예외 없이 null(존재 누설 회피)")
     void recordPublicYes24Click_missing_returnsNull() {
-        assertThat(bookService.recordPublicYes24Click(999_999L, false)).isNull();
+        assertThat(bookService.recordPublicYes24Click(newUser("ymissing@booktimer.com"), 999_999L, false)).isNull();
     }
 
     @Test

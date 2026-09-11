@@ -136,7 +136,7 @@ class CoupangBookServiceTest {
         Book book = bookService.addFromSearch(owner, cleanCode(), BookStatus.WANT_TO_READ);
         book.makePublic();
 
-        String link = bookService.recordPublicCoupangClick(book.getId());
+        String link = bookService.recordPublicCoupangClick(owner, book.getId());
 
         assertThat(link).isEqualTo(COUPANG_LINK);
         assertThat(bookService.myBooks(owner).get(0).getCoupangClickCount()).isEqualTo(1L);
@@ -148,7 +148,7 @@ class CoupangBookServiceTest {
         User owner = newUser("cprivowner@booktimer.com");
         Book book = bookService.addFromSearch(owner, cleanCode(), BookStatus.WANT_TO_READ); // 기본 PRIVATE
 
-        String link = bookService.recordPublicCoupangClick(book.getId());
+        String link = bookService.recordPublicCoupangClick(owner, book.getId());
 
         assertThat(link).isNull();
         assertThat(bookService.myBooks(owner).get(0).getCoupangClickCount()).isZero();
@@ -157,7 +157,7 @@ class CoupangBookServiceTest {
     @Test
     @DisplayName("공개 책 쿠팡 클릭: 없는 책 id면 예외 없이 null(존재 누설 회피)")
     void recordPublicCoupangClick_missing_returnsNull() {
-        assertThat(bookService.recordPublicCoupangClick(999_999L)).isNull();
+        assertThat(bookService.recordPublicCoupangClick(newUser("cmissing@booktimer.com"), 999_999L)).isNull();
     }
 
     @Test

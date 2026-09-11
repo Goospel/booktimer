@@ -301,7 +301,7 @@ class BookServiceTest {
         Book book = bookService.addFromSearch(owner, cleanCode(), BookStatus.WANT_TO_READ);
         book.makePublic(); // 같은 트랜잭션의 영속 엔티티 — 공개로 전환
 
-        String link = bookService.recordPublicPurchaseClick(book.getId());
+        String link = bookService.recordPublicPurchaseClick(owner, book.getId());
 
         assertThat(link).isEqualTo(ALADIN_LINK);
         // 클릭은 viewer가 아니라 "그 책(=책 주인 행)"에 집계된다 — 사용자 결정(2026-06-06)
@@ -314,7 +314,7 @@ class BookServiceTest {
         User owner = newUser("privowner@booktimer.com");
         Book book = bookService.addFromSearch(owner, cleanCode(), BookStatus.WANT_TO_READ); // 기본 PRIVATE
 
-        String link = bookService.recordPublicPurchaseClick(book.getId());
+        String link = bookService.recordPublicPurchaseClick(owner, book.getId());
 
         assertThat(link).isNull();
         assertThat(bookService.myBooks(owner).get(0).getClickCount()).isZero();
@@ -327,7 +327,22 @@ class BookServiceTest {
         Book book = bookService.addManual(owner, "수동 공개책", null, BookStatus.READING); // 링크 없음
         book.makePublic();
 
-        String link = bookService.recordPublicPurchaseClick(book.getId());
+        String link = bookService.recordPublicPurchaseClick(owner, book.getId());
+
+        assertThat(link).isNull();
+        assertThat(bookService.myBooks(owner).get(0).getClickCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("공개 책 구매 클릭: 다른 사람을 owner로 넘기면 공개책이어도 null·집계 없음 — 조회가 '그 책방 주인'으로 스코프된다")
+    void recordPublicPurchaseClick_wrongOwner_returnsNullNoCount() {
+        User owner = newUser("scopedowner@booktimer.com");
+        User other = newUser("scopedother@booktimer.com");
+        Book book = bookService.addFromSearch(owner, cleanCode(), BookStatus.WANT_TO_READ);
+        book.makePublic();
+
+        // 공개책이라 공개 여부 게이트는 통과한다 — 막는 것은 소유자 스코프뿐이다.
+        String link = bookService.recordPublicPurchaseClick(other, book.getId());
 
         assertThat(link).isNull();
         assertThat(bookService.myBooks(owner).get(0).getClickCount()).isZero();
@@ -336,7 +351,7 @@ class BookServiceTest {
     @Test
     @DisplayName("공개 책 구매 클릭: 없는 책 id면 예외 없이 null(존재 누설 회피)")
     void recordPublicPurchaseClick_missing_returnsNull() {
-        String link = bookService.recordPublicPurchaseClick(999_999L);
+        String link = bookService.recordPublicPurchaseClick(newUser("missingowner@booktimer.com"), 999_999L);
 
         assertThat(link).isNull();
     }
@@ -354,7 +369,7 @@ class BookServiceTest {
         book.updatePurchaseLink("https://evil.example/phish");
         book.makePublic();
 
-        String link = bookService.recordPublicPurchaseClick(book.getId());
+        String link = bookService.recordPublicPurchaseClick(owner, book.getId());
 
         assertThat(link).isNull();
         // 갈 곳이 없으니 집계도 하지 않는다(링크 없는 책과 같은 취급).
