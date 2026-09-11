@@ -20,6 +20,13 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class RateLimitService {
 
+    /**
+     * 이 크기를 넘으면 다음 호출이 만료 키를 한 번 쓸어낸다. IP를 키로 쓰는 액션(SIGNUP·PASSWORD_FORGOT·
+     * TOSS_VERIFY 등)은 분산 출처가 키를 무한히 만들 수 있는데, 만료된 윈도우는 <b>같은 키가 다시 올 때만</b>
+     * 리셋될 뿐 삭제되지 않아 700MB 컨테이너에서 그대로 누수가 된다.
+     */
+    static final int SWEEP_THRESHOLD = 10_000;
+
     private final Clock clock;
     private final ConcurrentHashMap<String, Window> windows = new ConcurrentHashMap<>();
 
@@ -45,12 +52,24 @@ public class RateLimitService {
         String key = action.name() + ":" + subject;
         Instant now = clock.instant();
         Window updated = windows.compute(key, (k, prev) -> {
-            if (prev == null || isExpired(action, prev, now)) {
-                return new Window(1, now);
+            if (prev == null || prev.isExpired(now)) {
+                return new Window(1, now, now.plus(action.window()));
             }
-            return new Window(prev.count() + 1, prev.windowStart());
+            return new Window(prev.count() + 1, prev.windowStart(), prev.expiresAt());
         });
+        sweepIfCrowded(now);
         return updated.count() <= action.limit();
+    }
+
+    /**
+     * 맵이 커졌을 때만 만료 키를 전수 삭제한다 — 만료 윈도우는 같은 키가 다시 올 때만 리셋될 뿐
+     * 스스로 사라지지 않아, 분산 출처의 IP 키가 쌓이면 그대로 메모리 누수가 된다.
+     */
+    // ponytail: 크기 트리거 전수 sweep — 10k 초과 시 O(n) 1회. 분산 상한(Redis)은 인스턴스가 늘 때.
+    private void sweepIfCrowded(Instant now) {
+        if (windows.size() > SWEEP_THRESHOLD) {
+            windows.entrySet().removeIf(e -> e.getValue().isExpired(now));
+        }
     }
 
     /** 테스트 격리용 — 인메모리 윈도우 맵 초기화. 프로덕션 코드에서 호출하지 않는다. */
@@ -58,10 +77,14 @@ public class RateLimitService {
         windows.clear();
     }
 
-    private boolean isExpired(RateLimitAction action, Window w, Instant now) {
-        return w.windowStart().plus(action.window()).isBefore(now);
+    /** 테스트 계측용 — 현재 보관 중인 키 수(sweep이 실제로 줄이는지 재는 유일한 수단). */
+    int sizeForTest() {
+        return windows.size();
     }
 
-    private record Window(int count, Instant windowStart) {
+    private record Window(int count, Instant windowStart, Instant expiresAt) {
+        boolean isExpired(Instant now) {
+            return expiresAt.isBefore(now);
+        }
     }
 }

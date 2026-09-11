@@ -88,6 +88,33 @@ class RateLimitServiceTest {
         assertThat(service.allow(RateLimitAction.FOLLOW, 99L)).isTrue(); // 다른 사용자
     }
 
+    @Test
+    @DisplayName("맵 무제한 성장 방어: 서로 다른 키가 임계(SWEEP_THRESHOLD)를 넘은 뒤 윈도우가 지나면, 다음 호출에서 만료 키가 한 번에 쓸려 맵이 임계 아래로 준다 — IP 키 액션(SIGNUP·TOSS_VERIFY 등)은 분산 출처가 키 수를 무한히 늘린다")
+    void sweepsExpiredKeys_whenOverThreshold() {
+        for (int i = 0; i <= RateLimitService.SWEEP_THRESHOLD; i++) {
+            service.allow(RateLimitAction.FOLLOW, "ip-" + i);
+        }
+        assertThat(service.sizeForTest()).isGreaterThan(RateLimitService.SWEEP_THRESHOLD);
+
+        clock.advance(RateLimitAction.FOLLOW.window().plusSeconds(1)); // 전부 만료시킨다
+        service.allow(RateLimitAction.FOLLOW, "trigger");
+
+        assertThat(service.sizeForTest()).isLessThanOrEqualTo(1); // 만료분 전부 삭제 + trigger 1건
+    }
+
+    @Test
+    @DisplayName("양성 대조군: 시계를 안 돌리면(아직 유효하면) 임계를 넘어도 아무것도 지워지지 않는다 — sweep이 '만료'만 지운다는 판별력")
+    void sweep_doesNotDropLiveKeys() {
+        for (int i = 0; i <= RateLimitService.SWEEP_THRESHOLD; i++) {
+            service.allow(RateLimitAction.FOLLOW, "ip-" + i);
+        }
+        int before = service.sizeForTest();
+
+        service.allow(RateLimitAction.FOLLOW, "trigger"); // 시계 그대로 — 만료 0건
+
+        assertThat(service.sizeForTest()).isEqualTo(before + 1);
+    }
+
     /** 테스트용 가변 시계 — advance로 "지금"을 앞당긴다(LoginAttemptServiceTest와 동일). */
     private static final class MutableClock extends Clock {
         private Instant now;

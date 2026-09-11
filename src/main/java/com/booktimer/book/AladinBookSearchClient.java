@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -42,10 +43,16 @@ public class AladinBookSearchClient implements BookSearchClient {
     // Jackson 3은 빌더로 만든다(ObjectMapper 직접 생성 폐지 — JsonMapper가 ObjectMapper를 상속).
     private final ObjectMapper objectMapper = JsonMapper.builder().build();
 
+    @org.springframework.beans.factory.annotation.Autowired
     public AladinBookSearchClient(
             @Value("${booktimer.aladin.ttb-key:not-configured}") String ttbKey) {
+        this(ttbKey, RestClient.create());
+    }
+
+    /** 테스트 전용 — {@code MockRestServiceServer}가 붙은 RestClient를 주입해 실제 아웃바운드 URL을 검사한다. */
+    AladinBookSearchClient(String ttbKey, RestClient restClient) {
         this.ttbKey = ttbKey;
-        this.restClient = RestClient.create();
+        this.restClient = restClient;
     }
 
     @Override
@@ -59,7 +66,8 @@ public class AladinBookSearchClient implements BookSearchClient {
         if (!isEnabled() || query == null || query.isBlank()) {
             return BookSearchPage.empty(safePage, PAGE_SIZE);
         }
-        String url = buildSearchUrl(ttbKey, query, type, safePage);
+        // uri(URI) 오버로드 — 문자열로 넘기면 템플릿 확장이 인코딩을 한 번 더 해 %26 → %2526이 된다.
+        URI url = buildSearchUrl(ttbKey, query, type, safePage);
         try {
             String body = restClient.get().uri(url).retrieve().body(String.class);
             List<BookSearchResult> items = parse(body, objectMapper);
@@ -109,8 +117,14 @@ public class AladinBookSearchClient implements BookSearchClient {
     /**
      * 알라딘 ItemSearch 호출 URL을 만든다. 검색 기준(제목/저자)이 {@code QueryType}으로 들어간다.
      * 네트워크 없이 단위테스트할 수 있게 정적·순수 함수로 분리한다.
+     *
+     * <p><b>{@code String}이 아니라 {@link URI}를 돌려준다</b> — 사용자 검색어의 {@code &}·{@code =}·{@code #}가
+     * 인코딩되지 않으면 알라딘이 그것을 파라미터 구분자로 읽어, 우리가 실은 {@code MaxResults}(상한) 같은 값이
+     * 공격자 값으로 덮인다. 그래서 {@code encode()}로 한 번 인코딩하고, 호출부는 {@code uri(URI)} 오버로드로
+     * 그대로 넘긴다 — 문자열 오버로드는 URI 템플릿으로 다시 확장·인코딩해 {@code %26}을 {@code %2526}으로
+     * 이중 인코딩한다(검색어가 조용히 깨진다).
      */
-    static String buildSearchUrl(String ttbKey, String query, BookSearchType type, int page) {
+    static URI buildSearchUrl(String ttbKey, String query, BookSearchType type, int page) {
         BookSearchType safeType = (type == null) ? BookSearchType.TITLE : type;
         return UriComponentsBuilder.fromUriString(ENDPOINT)
                 .queryParam("ttbkey", ttbKey)
@@ -126,7 +140,8 @@ public class AladinBookSearchClient implements BookSearchClient {
                 .queryParam("output", "js")
                 .queryParam("Version", "20131101")
                 .build()
-                .toUriString();
+                .encode()
+                .toUri();
     }
 
     /**

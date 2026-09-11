@@ -91,6 +91,33 @@ class LoginAttemptServiceTest {
         assertThat(service.isBlocked("never@seen")).isFalse();
     }
 
+    @Test
+    @DisplayName("맵 무제한 성장 방어: 서로 다른 IP 키가 임계(SWEEP_THRESHOLD)를 넘은 뒤 잠금 시간이 지나면, 다음 실패 기록에서 만료 키가 한 번에 쓸려 맵이 임계 아래로 준다 — 분산 출처는 삭제 없이 키를 무한히 늘린다")
+    void sweepsExpiredKeys_whenOverThreshold() {
+        for (int i = 0; i <= LoginAttemptService.SWEEP_THRESHOLD; i++) {
+            service.recordFailure("ip-" + i);
+        }
+        assertThat(service.sizeForTest()).isGreaterThan(LoginAttemptService.SWEEP_THRESHOLD);
+
+        clock.advance(LoginAttemptService.LOCKOUT.plusSeconds(1)); // 전부 만료시킨다
+        service.recordFailure("trigger");
+
+        assertThat(service.sizeForTest()).isLessThanOrEqualTo(1); // 만료분 전부 삭제 + trigger 1건
+    }
+
+    @Test
+    @DisplayName("양성 대조군: 시계를 안 돌리면(아직 잠금 유효) 임계를 넘어도 아무것도 지워지지 않는다 — sweep이 '만료'만 지운다는 판별력")
+    void sweep_doesNotDropLiveKeys() {
+        for (int i = 0; i <= LoginAttemptService.SWEEP_THRESHOLD; i++) {
+            service.recordFailure("ip-" + i);
+        }
+        int before = service.sizeForTest();
+
+        service.recordFailure("trigger"); // 시계 그대로 — 만료 0건
+
+        assertThat(service.sizeForTest()).isEqualTo(before + 1);
+    }
+
     /** 테스트용 가변 시계 — {@link #advance(Duration)}로 "지금"을 앞당긴다. */
     private static final class MutableClock extends Clock {
         private Instant now;

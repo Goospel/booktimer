@@ -35,7 +35,7 @@ public class EmailDispatcher {
             emailSender.send(toEmail, subject, htmlBody);
         } catch (RuntimeException e) {
             // 본문·토큰 링크가 새지 않게 수신자/제목만 — 비동기라 호출 흐름과 분리됨.
-            log.warn("이메일 비동기 발송 실패 — to={}, subject={}", toEmail, subject);
+            log.warn("이메일 비동기 발송 실패 — to={}, subject={}", EmailMask.mask(toEmail), subject);
         }
     }
 }

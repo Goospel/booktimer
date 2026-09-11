@@ -88,6 +88,29 @@ class FollowScopeReadersServiceIntegrationTest {
     }
 
     @Test
+    @DisplayName("ADMIN은 명단에서 빠진다 — 운영 계정은 소셜 노출 대상이 아니다(형제 소셜 쿼리와 같은 불변식). 양성 대조군: 같은 조건의 일반 팔로우 사용자는 그대로 나온다")
+    void excludesAdmin_butKeepsRegularFollowee() {
+        User viewer = user("v4@booktimer.com", "뷰어4", "viewerid4");
+        User admin = userRepository.saveAndFlush(adminUser());
+        User regular = user("reg@booktimer.com", "일반이", "regularid");
+        followRepository.saveAndFlush(Follow.of(viewer, admin));
+        followRepository.saveAndFlush(Follow.of(viewer, regular));
+
+        book(admin, ISBN, BookStatus.READING, BookVisibility.PUBLIC);
+        book(regular, ISBN, BookStatus.READING, BookVisibility.PUBLIC);
+
+        FollowScopeReaders readers = service.readers(viewer, ISBN);
+
+        assertThat(nicks(readers.reading())).containsExactly("일반이"); // 운영자 제외, 일반 사용자는 포함
+    }
+
+    private User adminUser() {
+        User u = User.of("admin@booktimer.com", "$2a$10$x", "운영자", "Asia/Seoul", Role.ADMIN);
+        u.assignLoginId("rootadmin");
+        return u;
+    }
+
+    @Test
     @DisplayName("isbn이 null·공백이면 빈 명단(쿼리 안 탐)")
     void blankIsbn_empty() {
         User viewer = user("v2@booktimer.com", "뷰어2", "viewerid2");

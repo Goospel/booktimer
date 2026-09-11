@@ -29,6 +29,7 @@ import static org.springframework.security.test.web.servlet.response.SecurityMoc
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrlPattern;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -224,6 +225,29 @@ class TossCodeLoginControllerTest {
                 .andExpect(unauthenticated());
         assertThat(linkCodeService.consume(code, TossLinkCode.Purpose.WEB_LOGIN))
                 .as("한도 초과 시 코드는 소비되지 않아야 한다").isPresent();
+    }
+
+    @Test
+    @DisplayName("양성 대조군: 레이트리밋 키가 실제로 X-Forwarded-For의 IP다 — ForwardedHeaderFilter가 getRemoteAddr()를 바꾸지 않으면 모든 클라이언트가 ALB의 같은 IP 하나로 묶여, 한 명이 10회 틀리면 그 뒤 전원이 차단된다(반대로 공격자는 XFF를 바꿔가며 무제한 시도)")
+    void rateLimitKey_comesFromForwardedForHeader() throws Exception {
+        // 첫 번째 IP로 10회 소진 → 11번째는 막힌다.
+        // (XFF가 붙으면 ForwardedHeaderFilter가 리다이렉트 Location을 절대 URL로 바꾼다 — 필터가 이 요청을
+        //  감싸고 있다는 부수 증거라, 상대 경로로 단언하면 그것부터 깨진다.)
+        for (int i = 0; i < 10; i++) {
+            forwardedSubmit("WRONG" + i, "203.0.113.9").andExpect(redirectedUrlPattern("**/login?codeError"));
+        }
+        forwardedSubmit("WRONG-11", "203.0.113.9").andExpect(redirectedUrlPattern("**/login?codeLimited"));
+
+        // 다른 XFF IP는 자기 몫이 남아 있다 — XFF가 무시되면 둘이 같은 키(127.0.0.1)를 써서 여기도 codeLimited가 된다.
+        forwardedSubmit("WRONG-OTHER", "203.0.113.10").andExpect(redirectedUrlPattern("**/login?codeError"));
+    }
+
+    private ResultActions forwardedSubmit(String code, String forwardedFor) throws Exception {
+        return mockMvc.perform(post("/login/toss-code")
+                .param("code", code)
+                .header("X-Forwarded-For", forwardedFor)
+                .cookie(loginPageSession())
+                .with(csrf()));
     }
 
     @Test
