@@ -50,9 +50,13 @@ export async function beginLogin(source: LoginSource): Promise<'authenticated' |
 /** 저장된 체험을 첫 화면 상태로 — 상한을 넘겨 돌아왔으면 서버와 같은 규칙으로 접는다. */
 function restoreTrial(saved: Trial | null): Trial | null {
   if (saved === null || saved.endedAt !== null) return saved;
-  return elapsedSeconds(saved.startedAt, Date.now()) >= TRIAL_CAP_SECONDS
-    ? stopTrial(saved, Date.now())
-    : saved;
+  if (elapsedSeconds(saved.startedAt, Date.now()) < TRIAL_CAP_SECONDS) return saved;
+  const folded = stopTrial(saved, Date.now());
+  // 화면만 접고 storage를 두면 `endedAt:null`이 남아 로그인 뒤 flushTrial이 「올릴 것 없음」으로
+  // 지나간다 — 기록을 남기려면 계정이 필요하다고 청해 놓고 아무것도 안 남는다. 접는 쪽(여기)에서
+  // 박는다: flushTrial은 「끝난 것만 올린다」는 한 가지 규칙만 알면 된다.
+  writeTrial(folded);
+  return folded;
 }
 
 /** 체험 카드 — 홈 히어로와 같은 문법(연필 테두리 + 세리프 수)이되, 대시보드를 안 끌고 온다. */
@@ -102,8 +106,7 @@ export function LoginBridge({
     restoreTrial(injected !== undefined ? injected : readTrial()),
   );
   const [phase, setPhase] = useState<Phase>(() => {
-    const restored = restoreTrial(injected !== undefined ? injected : readTrial());
-    const started = trialPhase(restored);
+    const started = trialPhase(trial); // 위에서 이미 복원·저장했다 — 다시 부르면 같은 일을 두 번 한다
     return started === 'none' ? 'intro' : started;
   });
   const [now, setNow] = useState(() => Date.now());

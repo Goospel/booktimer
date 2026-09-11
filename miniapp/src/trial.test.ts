@@ -103,6 +103,22 @@ describe('보관 (readTrial / writeTrial)', () => {
 
     expect(readTrial()).toBeNull();
   });
+
+  /**
+   * 모양(문자열)만 보면 `"garbage"`가 통과한다 — 그러면 경과가 NaN이 되고 「그만 읽기」의
+   * `new Date(NaN).toISOString()`이 RangeError로 터져 사용자가 00:00에 갇힌다.
+   */
+  it('시각이 날짜가 아니면 없는 것으로 본다 — 문자열이기만 하면 통과하던 자리다', () => {
+    localStorage.setItem('booktimer.trial', '{"startedAt":"garbage","endedAt":null}');
+
+    expect(readTrial()).toBeNull();
+  });
+
+  it('끝 시각이 깨진 것도 없는 것으로 본다 — 길이가 NaN이면 합류 본문이 통째로 틀린다', () => {
+    localStorage.setItem('booktimer.trial', '{"startedAt":"2026-09-11T01:00:00.000Z","endedAt":"garbage"}');
+
+    expect(readTrial()).toBeNull();
+  });
 });
 
 describe('합류 (flushTrial)', () => {

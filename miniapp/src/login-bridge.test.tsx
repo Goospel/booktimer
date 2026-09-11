@@ -5,9 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { login } from './api';
 import { LinkAccount } from './screens/LinkAccount';
 import { LoginBridge, beginLogin } from './screens/LoginBridge';
-import { userAgent } from './test-fixtures';
+import { stubLocalStorage, userAgent } from './test-fixtures';
 import { trackEvent } from './toss';
 import type { Trial } from './trial';
+import { TRIAL_CAP_SECONDS, flushTrial, trialDurationSeconds, writeTrial } from './trial';
 
 /**
  * 진입 첫 화면 — 심사 반려 1("서비스 설명 없이 즉시 토스 로그인을 유도")의 계측기이자, 2026-09-11부터는
@@ -91,6 +92,31 @@ describe('첫 화면 — 로그인 없이 재 본다', () => {
 
     expect(markup).toContain('토스 알림');
     expect(markup).toContain('booktimer.app');
+  });
+});
+
+/**
+ * 며칠 뒤 재진입 — 화면은 상한으로 접어 「끝남」을 그리는데 storage에 `endedAt:null`이 남으면,
+ * 로그인 뒤 `flushTrial`이 「올릴 것 없음」으로 지나친다. 「기록을 남기려면 계정이 필요해요」라고
+ * 청해 놓고 아무것도 안 남는 자리라, 접은 값이 storage에 박히는지를 합류 결과로 잰다.
+ */
+describe('상한을 넘겨 돌아온 체험', () => {
+  it('접은 값을 storage에도 박는다 — 로그인 뒤 그대로 합류한다', async () => {
+    stubLocalStorage();
+    writeTrial({ startedAt: new Date(Date.now() - 7 * 3600_000).toISOString(), endedAt: null });
+
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <LoginBridge onAuthenticated={() => {}} onNewAccount={() => {}} onLinkAccount={() => {}} />
+      </TDSMobileProvider>,
+    );
+    const sent: Trial[] = [];
+    const result = await flushTrial(async (t) => void sent.push(t));
+
+    expect(markup).toContain('기록을 남기려면');
+    expect(result).toBe('imported');
+    expect(sent).toHaveLength(1);
+    expect(trialDurationSeconds(sent[0])).toBe(TRIAL_CAP_SECONDS);
   });
 });
 

@@ -48,13 +48,18 @@ export function trialDurationSeconds(trial: Trial): number {
  * <p>정적 렌더 하니스·서버 렌더에는 `localStorage`가 아예 없고, 깨진 값은 남의 키 충돌이나 옛 버전
  * 잔재다. 어느 쪽이든 여기서 던지면 <b>첫 화면이 통째로 죽는다</b> — 그래서 전부 「없음」으로 떨어뜨린다.
  */
+const isDate = (v: unknown): v is string => typeof v === 'string' && Number.isFinite(Date.parse(v));
+
 export function readTrial(): Trial | null {
   if (typeof localStorage === 'undefined') return null;
   try {
     const raw = localStorage.getItem(TRIAL_KEY);
     if (raw === null) return null;
     const parsed = JSON.parse(raw) as Trial;
-    return typeof parsed?.startedAt === 'string' ? parsed : null;
+    // 모양(문자열)만 보면 `"garbage"`가 통과해 경과가 NaN이 되고, 「그만 읽기」의
+    // `new Date(NaN).toISOString()`이 RangeError로 터진다 — 날짜로 읽히는지까지 본다.
+    if (!isDate(parsed?.startedAt)) return null;
+    return parsed.endedAt === null || isDate(parsed.endedAt) ? parsed : null;
   } catch {
     return null;
   }
