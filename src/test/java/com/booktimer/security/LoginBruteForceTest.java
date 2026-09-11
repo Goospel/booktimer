@@ -101,4 +101,30 @@ class LoginBruteForceTest {
                         .with(fromIp("198.51.100.20")))
                 .andExpect(authenticated().withUsername(LOGIN_ID));
     }
+
+    @Test
+    @DisplayName("보안: 비밀번호 없는 소셜 계정의 login_id로 폼 로그인해도 없는 계정과 똑같이 /login?error다 — UsernameNotFoundException 전환이 응답 채널까지 바꾸지 않는지 지키는 회귀 가드(hideUserNotFoundExceptions가 꺼지면 여기서 깨진다). ⚠️ 음성 판정 전용: 이 전환의 본체인 '시간 균일화'는 MockMvc로 관측되지 않으므로 그 계측기는 BookTimerUserDetailsServiceTest 쪽이다")
+    void socialAccount_formLogin_sameAsUnknownAccount() throws Exception {
+        User social = User.ofOAuth("social-login@booktimer.com", "소셜", "Asia/Seoul", Role.USER,
+                com.booktimer.user.AuthProvider.GOOGLE);
+        social.assignLoginId("socialform");
+        userRepository.save(social);
+
+        mvc.perform(post("/login")
+                        .param("username", "socialform")
+                        .param("password", "아무비밀번호")
+                        .with(csrf())
+                        .with(fromIp("198.51.100.30")))
+                .andExpect(unauthenticated())
+                .andExpect(redirectedUrl("/login?error"));
+
+        // 양성 대조군 — 아예 없는 login_id도 같은 응답이다(둘을 응답으로 구분할 수 없다).
+        mvc.perform(post("/login")
+                        .param("username", "ghostaccount")
+                        .param("password", "아무비밀번호")
+                        .with(csrf())
+                        .with(fromIp("198.51.100.31")))
+                .andExpect(unauthenticated())
+                .andExpect(redirectedUrl("/login?error"));
+    }
 }

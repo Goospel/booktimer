@@ -23,6 +23,8 @@ public class LoggingEmailSender implements EmailSender {
     @Override
     public void send(String toEmail, String subject, String htmlBody) {
         // 실발송 0 — 인프라 미준비 단계의 폴백. 본문은 민감정보(토큰 링크)를 담을 수 있어 로그에 남기지 않는다.
-        log.info("[email:logging] 발송 생략(enabled=false) — to={}, subject={}", toEmail, subject);
+        // 수신자도 마스킹한다(EmailMask) — 이 구현이 기본값(matchIfMissing=true)이라, 발송이 꺼진 환경에서는
+        // 모든 수신자가 여기로 지나간다. 「dev 전용」이라는 전제는 프로퍼티 하나로 깨진다.
+        log.info("[email:logging] 발송 생략(enabled=false) — to={}, subject={}", EmailMask.mask(toEmail), subject);
     }
 }

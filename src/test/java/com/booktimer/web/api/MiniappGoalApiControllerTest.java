@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -108,6 +109,24 @@ class MiniappGoalApiControllerTest {
         setGoal(token, "{\"dailyIncrementSeconds\":0}").andExpect(status().isOk());
 
         assertThat(timerRepository.findByUser(u).orElseThrow().getDailyIncrementSeconds()).isZero();
+    }
+
+    @Test
+    @DisplayName("보안: 에러 본문은 Accept: text/html로 와도 text/plain(UTF-8)으로 내려간다 — raw String 본문이 text/html로 협상되면 미래의 '…: ' + 사용자입력 메시지가 브라우저에서 렌더돼 반사 XSS가 되고, charset을 빼면 한글 메시지가 깨진다")
+    void setGoal_errorBody_isTextPlainUtf8_evenWhenHtmlRequested() throws Exception {
+        User u = tossUser("miniapp-ctype@noreply.booktimer.app");
+        String token = apiTokenService.issue(u);
+
+        MockHttpServletResponse response = mockMvc.perform(post("/api/miniapp/goal")
+                        .header("Authorization", "Bearer " + token)
+                        .header("Accept", "text/html")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"dailyIncrementSeconds\":-1}"))
+                .andExpect(status().isBadRequest())
+                .andReturn().getResponse();
+
+        assertThat(response.getContentType()).startsWith("text/plain");
+        // charset 누락이면 StringHttpMessageConverter 기본 인코딩으로 써서 한글 메시지가 깨진다(실제로 깨졌던 자리).
+        assertThat(response.getCharacterEncoding()).isEqualToIgnoringCase("UTF-8");
     }
 
     @Test

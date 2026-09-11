@@ -7,4 +7,6 @@ services:
       - 'MYSQL_ROOT_PASSWORD=verysecret'
       - 'MYSQL_USER=myuser'
     ports:
-      - '3306'
+      # 루프백 바인딩 — 개발용 MySQL(약한 고정 비밀번호)이 LAN·공용 와이파이의 모든 인터페이스에
+      # 노출되지 않게. 호스트 포트는 동적 그대로다(Spring docker-compose 연동이 매핑 포트를 읽는다).
+      - '127.0.0.1::3306'

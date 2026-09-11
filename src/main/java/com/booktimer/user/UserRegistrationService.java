@@ -80,6 +80,8 @@ public class UserRegistrationService {
         // 무해하고 UX상 필요(다른 아이디를 골라야 함)하지만, email은 비공개 속성이라 "이미 가입됨" 노출이
         // 곧 계정 열거가 된다. 그래서 email 중복은 가장 마지막에 던지고, 컨트롤러가 이를 가입 성공과 동일한
         // 응답으로 흡수한다(존재 여부 미노출). login_id 충돌은 그 전에 잡혀 정상적으로 필드 에러로 안내된다.
+        // 존재 검사보다 먼저 해싱 — 기존 이메일 경로만 빨라지는 타이밍 오라클 차단(BCrypt 1회 ≈ 50~100ms).
+        String passwordHash = passwordEncoder.encode(rawPassword);
         String normalizedLoginId = User.normalizeLoginId(loginId);
         if (userRepository.isLoginIdTaken(normalizedLoginId)) {
             throw new LoginIdAlreadyExistsException(normalizedLoginId);
@@ -90,7 +92,6 @@ public class UserRegistrationService {
             throw new EmailAlreadyExistsException(email);
         }
         // nickname은 더 이상 유니크가 아니다(단순 표시 이름) — 중복 확인 없이 그대로 저장한다.
-        String passwordHash = passwordEncoder.encode(rawPassword);
         User user = User.of(email, passwordHash, nickname, timezone, role);
         user.assignLoginId(loginId); // 불변 — 가입에서 단 한 번 확정
         if (marketingConsent) {
@@ -106,10 +107,11 @@ public class UserRegistrationService {
      */
     public User register(String email, String rawPassword, String nickname,
                          String timezone, Role role, LocalDate startDate) {
+        // 존재 검사보다 먼저 해싱 — 위 오버로드와 같은 이유(타이밍 오라클). 같은 파일에 상반된 순서를 남기지 않는다.
+        String passwordHash = passwordEncoder.encode(rawPassword);
         if (userRepository.existsByEmail(email)) {
             throw new EmailAlreadyExistsException(email);
         }
-        String passwordHash = passwordEncoder.encode(rawPassword);
         return persistWithTimer(User.of(email, passwordHash, nickname, timezone, role));
     }
 

@@ -1,5 +1,6 @@
 package com.booktimer.web;
 
+import com.booktimer.email.EmailMask;
 import com.booktimer.email.EmailVerificationService;
 import com.booktimer.email.SignupNotificationService;
 import com.booktimer.security.RateLimitAction;
@@ -109,7 +110,7 @@ public class SignupController {
             try {
                 emailVerificationService.sendVerification(user);
             } catch (RuntimeException mailError) {
-                log.warn("가입 인증 메일 발송 실패(가입은 성공) — email={}", form.getEmail());
+                log.warn("가입 인증 메일 발송 실패(가입은 성공) — userId={}", user.getId());
             }
         } catch (EmailAlreadyExistsException | DataIntegrityViolationException e) {
             // 계정 열거 완화: 이메일은 비공개 속성이라 "이미 가입됨"을 응답으로 드러내면 열거가 된다.
@@ -122,7 +123,7 @@ public class SignupController {
             try {
                 signupNotificationService.notifyExistingAccount(form.getEmail());
             } catch (RuntimeException notifyError) {
-                log.warn("중복 가입 통지 메일 발송 실패 — email={}", form.getEmail());
+                log.warn("중복 가입 통지 메일 발송 실패 — email={}", EmailMask.mask(form.getEmail()));
             }
             return "redirect:/login?registered";
         } catch (LoginIdAlreadyExistsException e) {

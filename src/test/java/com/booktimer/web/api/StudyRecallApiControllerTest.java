@@ -300,6 +300,27 @@ class StudyRecallApiControllerTest {
     }
 
     @Test
+    @DisplayName("보안: 에러 본문은 Accept: text/html로 와도 text/plain(UTF-8)으로 내려간다 — raw String 본문이 text/html로 협상되면 미래의 '…: ' + 사용자입력 메시지가 브라우저에서 렌더돼 반사 XSS가 되고, charset을 빼면 한글 메시지가 깨진다")
+    void errorBody_isTextPlainUtf8_evenWhenHtmlRequested() throws Exception {
+        register("savectype");
+
+        org.springframework.mock.web.MockHttpServletResponse response =
+                mockMvc.perform(post("/api/study/recall").with(user("savectype")).with(csrf())
+                                .header("Accept", "text/html")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(bodyJson(today().plusDays(1), "미래의 글")))
+                        .andExpect(status().isBadRequest())
+                        .andReturn().getResponse();
+
+        assertThat(response.getContentType()).startsWith("text/plain");
+        // charset 누락이면 한글 메시지가 깨진다 — 이 단언이 그 회귀를 실제로 잡았다.
+        assertThat(response.getContentAsString(java.nio.charset.StandardCharsets.UTF_8))
+                .isEqualTo(response.getContentAsString());
+        assertThat(response.getContentAsString(java.nio.charset.StandardCharsets.UTF_8))
+                .isEqualTo("아직 오지 않은 날은 쓸 수 없어요");
+    }
+
+    @Test
     @DisplayName("저장: 빈 본문 400 · 8001자 400 — 경계 바로 안쪽(8000자)은 통과한다")
     void save_bodyLengthBoundaries() throws Exception {
         register("savelen");
