@@ -3915,7 +3915,7 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
       (`.book-search-form select` — 폼 4곳 중 `select`를 가진 곳이 없다 · `.shop-report-form textarea` — 신고
       모달의 textarea는 `.shop-report-form` 밖이다). 지운 것: `.tag-books-panel` · `.quick-actions`/`.quick-tile`
       계열 · `.dash-select` 계열 · `.book-pick` · `.report-form` 계열 · `.shelf-filter`(프로필 쪽 — **`.shelf-filter-chips`와
-      별개다**) · `.shop-report-form`. 여기에 **`.report-box`**(신고 disclosure 3개)를 더했다 — 연필 프레임이 없어 전수 검사 대상은 아니었지만 방금 지운 `.report-form`을 감싸던 래퍼라 고아로 남을 자리였고, 사용처 0을 따로 확인했다. 📍 후속(2026-09-12): 이 작업 중 **T-187**(bootRun이 `build/resources/main` 복사본을 서빙해 고친 CSS가 안 보인다)이 **2회차 재발**해 트래커에 군으로 등재했다 — 승격 후보(스펙이 낡음을 스스로 실패)는 전제 미검증으로 `EVIDENCE: pending`. 그리고 `.shelf-filter-chips` 주석의 죽은 `.shelf-filter` 교차참조를 정정했다. **동작 변경 0**이 성공 조건이라, 근거는 게이트의 초록이 아니라 삭제 **전** grep
+      별개다**) · `.shop-report-form`. 여기에 **`.report-box`**(신고 disclosure 3개)를 더했다 — 연필 프레임이 없어 전수 검사 대상은 아니었지만 방금 지운 `.report-form`을 감싸던 래퍼라 고아로 남을 자리였고, 사용처 0을 따로 확인했다. 📍 후속(2026-09-12): 이 작업 중 **T-187**(bootRun이 `build/resources/main` 복사본을 서빙해 고친 CSS가 안 보인다)이 **2회차 재발**해 트래커에 군으로 등재했다 — 승격 후보(스펙이 낡음을 스스로 실패)는 **2026-09-12에 전제를 실측해 닫았다** — 서빙 CSS가 소스와 바이트 동일함을 확인하고 `pencil-frame` 첫 테스트로 가드를 넣었다(낡은 상태에서 가드만 빨갛고 나머지 9건은 옛 CSS를 재고 초록인 것까지 실측). 그리고 `.shelf-filter-chips` 주석의 죽은 `.shelf-filter` 교차참조를 정정했다. **동작 변경 0**이 성공 조건이라, 근거는 게이트의 초록이 아니라 삭제 **전** grep
       0건(소스·커밋된 번들)과 삭제 **후** 산 앱 9화면의 `querySelectorAll().length === 0`이다.
 
 ### 미니앱 세션 캐시 — 탭·캐러셀을 오갈 때마다 화면이 비던 자리 (완료 ✅ 2026-08-21)
