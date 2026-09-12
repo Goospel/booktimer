@@ -690,6 +690,36 @@ public class User extends BaseTimeEntity {
         return tossUserKey;
     }
 
+    /**
+     * <b>미검증 TOSS 계정의 이메일 충돌 해소 전용</b> — 이 계정의 이메일을 합성 주소로 비켜 놓는다.
+     * 일반적인 "이메일 변경"이 아니다(그런 기능은 도메인에 없다. 이름으로 못 박아 오용을 막는다).
+     *
+     * <p>쓰이는 자리는 하나다: {@link OAuthUserProvisioningService#provision}이 같은 이메일의 <b>미검증</b>
+     * TOSS 계정을 만났을 때. 토스는 이메일 소유를 보증하지 않아 그 주소가 남의 것일 수 있고, 그렇다고 계정을
+     * 폐기하면 그 사용자의 기록이 사라진다 — 그래서 계정은 남기고 이메일만 {@code toss-{userKey}@…}로 옮긴다
+     * ({@link TossUserProvisioningService#syntheticEmail}이 그 주소의 단일 출처).
+     *
+     * <p>검증 상태는 건드리지 않는다 — 원래 {@code false}이고, 합성 주소는 발송하지 않는 자리표시다.
+     * 이미 검증된 계정에 부르는 것은 소유 증명을 무시하고 남의 이메일을 빼앗는 것이라 거부한다.
+     *
+     * @param syntheticEmail 새 이메일(형식 검증은 생성자와 같은 규칙)
+     * @throws IllegalStateException    이 계정의 이메일이 이미 검증된 경우(오용 차단)
+     * @throws IllegalArgumentException 주소가 null/공백이거나 형식이 깨진 경우
+     */
+    public void reassignEmailToSynthetic(String syntheticEmail) {
+        if (emailVerified) {
+            throw new IllegalStateException(
+                    "verified email must not be reassigned: id=" + id);
+        }
+        if (syntheticEmail == null || syntheticEmail.isBlank()) {
+            throw new IllegalArgumentException("email must not be blank");
+        }
+        if (!EMAIL_PATTERN.matcher(syntheticEmail).matches()) {
+            throw new IllegalArgumentException("email is malformed: " + syntheticEmail);
+        }
+        this.email = syntheticEmail;
+    }
+
     public Long getId() {
         return id;
     }

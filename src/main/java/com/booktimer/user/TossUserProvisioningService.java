@@ -121,8 +121,11 @@ public class TossUserProvisioningService {
      * {@code toss-{userKey}@noreply.booktimer.app} — 발송하지 않는 자리표시 주소({@code users.email}은 NOT NULL).
      * userKey에서 이메일 형식을 깨는 문자를 빼고 소문자로 정규화하되 <b>자르지 않는다</b> — 앞부분만 쓰면
      * 서로 다른 userKey가 같은 주소로 접히며 {@code uk_users_email} 위반이 날 수 있다.
+     *
+     * <p>패키지 공개인 이유: {@link OAuthUserProvisioningService}의 이메일 충돌 재배정이 <b>같은 주소</b>를
+     * 만들어야 한다(미검증 TOSS 계정의 이메일을 여기로 비켜 준다). 중복 구현하면 두 규칙이 갈라진다.
      */
-    private static String syntheticEmail(String userKey) {
+    static String syntheticEmail(String userKey) {
         String sanitized = userKey.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
         if (sanitized.isEmpty()) {
             sanitized = Integer.toHexString(userKey.hashCode());

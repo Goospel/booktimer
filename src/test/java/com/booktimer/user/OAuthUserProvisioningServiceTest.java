@@ -157,17 +157,42 @@ class OAuthUserProvisioningServiceTest {
     }
 
     @Test
-    @DisplayName("정책 고정: 토스 계정(이메일 미검증)은 같은 이메일의 구글 로그인에 흡수된다 — 폐기하지 않고 그대로 반환")
-    void provision_existingTossAccount_isAbsorbedNotPurged() {
-        // 결정(사용자 2026-09-12): 토스가 넘기는 이메일은 본인 확인된 토스 신원의 것이라 흡수는
-        // "같은 사람의 두 채널 합류"다. 폐기하면 토스 사용자의 독서 기록이 사라진다.
+    @DisplayName("미검증 TOSS 계정과 이메일이 겹치면 그 계정의 이메일을 합성 주소로 재배정하고 구글 계정을 새로 만든다(흡수 아님·폐기 아님)")
+    void provision_existingUnverifiedTossAccount_reassignedNotAbsorbed() {
+        // 결정 변경(사용자 2026-09-12): 토스는 이메일 소유를 보증하지 않으므로(TossUserProvisioningService#register)
+        // 흡수는 pre-hijacking 벡터다. 그렇다고 폐기하면 그 토스 사용자의 기록이 사라지니, 이메일만 비켜 준다.
         User existingToss = User.ofOAuth("toss@booktimer.com", "토스러", "Asia/Seoul", Role.USER, AuthProvider.TOSS);
-        // TOSS 계정은 emailVerified 기본 false — 그래도 흡수 대상이다(폐기는 LOCAL 선점 벡터 전용).
+        existingToss.linkTossUserKey("UKsquat-01"); // 이론상 TOSS 계정엔 항상 있다
         when(userRepository.findByEmail("toss@booktimer.com")).thenReturn(Optional.of(existingToss));
+        User created = User.ofOAuth("toss@booktimer.com", "구글이름", "Asia/Seoul", Role.USER, AuthProvider.GOOGLE);
+        when(registrationService.registerOAuth(eq("toss@booktimer.com"), eq("구글이름"),
+                eq("Asia/Seoul"), eq(AuthProvider.GOOGLE), any())).thenReturn(created);
 
         User result = service.provision("toss@booktimer.com", "구글이름", true);
 
-        assertThat(result).isSameAs(existingToss);
+        assertThat(result).isSameAs(created); // 반환은 새 구글 계정 — 기존 토스 계정이 아니다
+        // 기존 토스 계정은 살아 있고 이메일만 합성 주소로 비켜난다(userKey·미검증 상태는 그대로).
+        assertThat(existingToss.getEmail()).isEqualTo("toss-uksquat01@noreply.booktimer.app");
+        assertThat(existingToss.getTossUserKey()).isEqualTo("UKsquat-01");
+        assertThat(existingToss.isEmailVerified()).isFalse();
+        // uk_users_email을 먼저 비워야 새 계정 INSERT가 유니크 제약을 안 밟는다(통합 테스트가 실 스키마로 재확인).
+        verify(userRepository).saveAndFlush(existingToss);
+        verify(accountService, never()).purgeUnverifiedLocalAccount(any()); // 폐기 아님 — 기록 보존
+    }
+
+    @Test
+    @DisplayName("TOSS 계정이라도 이메일이 검증됐으면 흡수한다(소유 증명이 있으니 같은 사람)")
+    void provision_existingVerifiedTossAccount_isAbsorbed() {
+        User verifiedToss = User.ofOAuth("vtoss@booktimer.com", "토스러", "Asia/Seoul", Role.USER, AuthProvider.TOSS);
+        verifiedToss.linkTossUserKey("uk-verified");
+        verifiedToss.verifyEmail(); // 그 토스 사용자가 웹에서 이메일 인증을 통과한 경우
+        when(userRepository.findByEmail("vtoss@booktimer.com")).thenReturn(Optional.of(verifiedToss));
+
+        User result = service.provision("vtoss@booktimer.com", "구글이름", true);
+
+        assertThat(result).isSameAs(verifiedToss);
+        assertThat(verifiedToss.getEmail()).isEqualTo("vtoss@booktimer.com"); // 재배정 없음
+        verify(userRepository, never()).saveAndFlush(any());
         verify(accountService, never()).purgeUnverifiedLocalAccount(any());
         verify(registrationService, never()).registerOAuth(any(), any(), any(), any(), any());
     }

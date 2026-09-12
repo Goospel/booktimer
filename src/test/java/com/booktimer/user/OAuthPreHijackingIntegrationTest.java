@@ -62,6 +62,38 @@ class OAuthPreHijackingIntegrationTest {
         assertThat(result.getAuthProvider()).isEqualTo(AuthProvider.LOCAL); // 그대로 LOCAL
     }
 
+    @Test
+    @DisplayName("미검증 TOSS 계정과 이메일이 겹치면 합성 주소로 재배정되고, 두 계정이 uk_users_email 위반 없이 공존한다")
+    void unverifiedTossAccount_isReassignedToSynthetic_andBothCoexist() {
+        String email = "tossvictim@booktimer.com";
+        // 토스 프로필에 남의 이메일을 적어 미니앱으로 먼저 가입한 계정(미검증 — 토스는 소유를 보증하지 않는다)
+        User squatter = userRepository.saveAndFlush(tossUnverified(email, "UKsquat-01"));
+        Long squatterId = squatter.getId();
+
+        // 실소유자가 Google로 로그인 → provider가 이메일 소유 보증
+        User result = provisioningService.provision(email, "진짜주인", true);
+
+        // 새 구글 계정이 그 이메일을 가진다 — 토스 계정으로 흡수되지 않는다
+        assertThat(result.getAuthProvider()).isEqualTo(AuthProvider.GOOGLE);
+        assertThat(result.getId()).isNotEqualTo(squatterId);
+        assertThat(userRepository.findByEmail(email)).get()
+                .extracting(User::getAuthProvider).isEqualTo(AuthProvider.GOOGLE);
+        // 토스 계정은 폐기되지 않고 남는다(기록·userKey 보존) — 이메일만 합성 주소로 비켜났다
+        assertThat(userRepository.findById(squatterId)).get()
+                .satisfies(toss -> {
+                    assertThat(toss.getEmail()).isEqualTo("toss-uksquat01@noreply.booktimer.app");
+                    assertThat(toss.getTossUserKey()).isEqualTo("UKsquat-01");
+                    assertThat(toss.isEmailVerified()).isFalse();
+                    assertThat(toss.getAuthProvider()).isEqualTo(AuthProvider.TOSS);
+                });
+    }
+
+    private User tossUnverified(String email, String userKey) {
+        User u = User.ofOAuth(email, "토스유저", "Asia/Seoul", Role.USER, AuthProvider.TOSS);
+        u.linkTossUserKey(userKey);
+        return u;
+    }
+
     private User localUnverified(String email) {
         User u = User.of(email, passwordEncoder.encode("rawpw1234"), "선점자", "Asia/Seoul", Role.USER);
         u.assignLoginId("squatter");
