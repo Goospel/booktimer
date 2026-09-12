@@ -171,13 +171,24 @@ class OAuthUserProvisioningServiceTest {
         User result = service.provision("toss@booktimer.com", "구글이름", true);
 
         assertThat(result).isSameAs(created); // 반환은 새 구글 계정 — 기존 토스 계정이 아니다
-        // 기존 토스 계정은 살아 있고 이메일만 합성 주소로 비켜난다(userKey·미검증 상태는 그대로).
-        assertThat(existingToss.getEmail()).isEqualTo("toss-uksquat01@noreply.booktimer.app");
-        assertThat(existingToss.getTossUserKey()).isEqualTo("UKsquat-01");
-        assertThat(existingToss.isEmailVerified()).isFalse();
-        // uk_users_email을 먼저 비워야 새 계정 INSERT가 유니크 제약을 안 밟는다(통합 테스트가 실 스키마로 재확인).
-        verify(userRepository).saveAndFlush(existingToss);
+        // 재배정 자체는 AccountService가 한다(세션 무효화 → 이메일 변경 → flush 순서가 거기 있다).
+        verify(accountService).reassignUnverifiedTossEmail(existingToss, "toss-uksquat01@noreply.booktimer.app");
+        assertThat(existingToss.getTossUserKey()).isEqualTo("UKsquat-01"); // userKey는 불변
         verify(accountService, never()).purgeUnverifiedLocalAccount(any()); // 폐기 아님 — 기록 보존
+    }
+
+    @Test
+    @DisplayName("TOSS 계정인데 toss_user_key가 없으면 ISE — 합성 주소를 만들 키가 없는데 조용히 흡수로 빠지지 않는다")
+    void provision_tossAccountWithoutUserKey_throws() {
+        // 이론상 불가(TOSS 계정엔 항상 userKey가 있다). 그 전제가 깨지면 흡수 = pre-hijacking이므로 드러낸다.
+        User keyless = User.ofOAuth("keyless@booktimer.com", "토스러", "Asia/Seoul", Role.USER, AuthProvider.TOSS);
+        when(userRepository.findByEmail("keyless@booktimer.com")).thenReturn(Optional.of(keyless));
+
+        assertThatThrownBy(() -> service.provision("keyless@booktimer.com", "구글이름", true))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(accountService, never()).reassignUnverifiedTossEmail(any(), any());
+        verify(registrationService, never()).registerOAuth(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -192,7 +203,7 @@ class OAuthUserProvisioningServiceTest {
 
         assertThat(result).isSameAs(verifiedToss);
         assertThat(verifiedToss.getEmail()).isEqualTo("vtoss@booktimer.com"); // 재배정 없음
-        verify(userRepository, never()).saveAndFlush(any());
+        verify(accountService, never()).reassignUnverifiedTossEmail(any(), any());
         verify(accountService, never()).purgeUnverifiedLocalAccount(any());
         verify(registrationService, never()).registerOAuth(any(), any(), any(), any(), any());
     }

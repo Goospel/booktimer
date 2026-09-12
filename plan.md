@@ -4442,8 +4442,16 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
         **토스는 이메일 소유를 보증하지 않는다**)과 충돌했다. 1차 보정은 「근거」→「가정(수용된 위험)」으로
         갈라 적고 잔여 경로를 드러낸 것뿐이었고, **그 경로를 보고 사용자가 결정을 바꿨다**.
   - 📍 **막은 경로**: 공격자가 토스 프로필에 남의 이메일 → `resolveEmail`이 그대로 저장(선점이 먼저여야 성립) →
-        실소유자의 구글 로그인이 그 계정에 들어감. LOCAL 비대칭(`toss_user_key` 잔존)도 이 갈래로 닫힌다.
-        재배정된 사용자는 미니앱을 그대로 쓰고 웹 이메일 경로만 합성 주소가 된다(원래 미검증이라 메일이 안 가던 주소).
+        실소유자의 구글 로그인이 그 계정에 들어감. 섞임이 사라지는 이유는 **옛 흡수가 선점자의 `toss_user_key`가
+        붙은 계정을 피해자에게 넘겼기** 때문이고(선점자는 이후에도 `login(userKey)`로 들어온다), 재배정은 그 계정을
+        선점자 쪽에 둔다. 재배정된 사용자는 미니앱을 그대로 쓰고 웹 이메일 경로만 합성 주소가 된다(원래 미검증이라
+        메일이 안 가던 주소). ⚠️ 잔여: 토스를 연결한 **미검증 LOCAL** 계정은 여전히 purge 대상이라 그 사용자의
+        미니앱 기록까지 삭제된다(선재 동작, 범위 밖).
+  - ⚠️ **최종 리뷰가 Critical을 프로브로 잡았다 — 재배정이 세션을 안 끊어 반쪽이었다**: 미니앱 `issueWebLoginCode`는
+        온보딩 전에도 세션을 만들고 그 principal이 **피해자 이메일**이라(`loginId != null ? loginId : email`),
+        이메일만 바꾸면 그 30일 세션이 `findByEmail` 폴백으로 **새 구글 계정**에 해석됐다(실측 `resolvedId=victim`).
+        처방 = `AccountService.reassignUnverifiedTossEmail` 신설(**세션 무효화 → 이메일 변경 → flush** — 역순이면
+        합성 주소로 찾아 0건이라 순서가 보안이다) + 합성 주소 충돌 시 `-{id}` 접미 폴백(안 하면 피해자 구글 로그인 영구 500).
   - 📍 RED(단위 `Expecting actual … to refer to the same object` · 통합 `expected: GOOGLE but was: TOSS`) → 구현 → 초록.
         신설 4건. 돌연변이 3종 KILLED — TOSS 갈래 제거 / `!isEmailVerified()` 제거 / `saveAndFlush` 제거(통합이
         `Unique index or primary key violation: PUBLIC.UK_USERS_EMAIL`로 잡는다 — mock으론 원리상 못 잡는 자리).

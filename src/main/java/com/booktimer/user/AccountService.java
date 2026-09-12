@@ -305,6 +305,39 @@ public class AccountService {
         userRepository.flush();
     }
 
+    /**
+     * pre-hijacking 차단 정책 ② — 같은 이메일로 구글이 들어왔을 때, 그 이메일을 <b>미검증 TOSS</b> 계정이 쓰고
+     * 있으면 그 계정을 폐기하지 않고 <b>이메일만</b> 합성 주소로 비켜 놓는다({@code purgeUnverifiedLocalAccount}의
+     * 거울 — 토스는 이메일 소유를 보증하지 않지만 그 사용자의 기록은 진짜다). 호출부는
+     * {@link OAuthUserProvisioningService#provision}뿐이다.
+     *
+     * <p><b>순서가 보안 그 자체다</b>: ① 세션 무효화 → ② 이메일 변경 → ③ flush.
+     * {@link SessionInvalidator}는 principal 후보로 {@code user.getEmail()}을 읽으므로, 이메일을 먼저 바꾸면
+     * 합성 주소로 세션을 찾아 <b>0건</b>이 된다. 그러면 피해자 이메일을 principal로 가진 옛 미니앱 세션이 살아남고,
+     * {@code CurrentUserService}의 {@code findByEmail} 폴백이 그 principal을 <b>새로 만들어진 구글 계정</b>으로
+     * 해석해 선점자가 피해자 계정에 그대로 들어간다(30일 세션). 남길 창은 없다(본인 흐름이 아니다) → {@code null}.
+     *
+     * <p><b>flush 필수</b>: 호출 직후 같은 이메일로 구글 사용자를 INSERT하므로 {@code uk_users_email}을 먼저 비워야
+     * 한다(폐기 경로와 같은 함정).
+     *
+     * <p><b>합성 주소 충돌 폴백</b>: {@link TossUserProvisioningService#syntheticEmail}은 userKey에서
+     * {@code [^a-z0-9]}를 지우므로 서로 다른 userKey가 같은 주소로 접힐 수 있다. 그 주소를 이미 쓰는 계정이 있으면
+     * {@code -{id}}를 붙여 피한다(id는 유일) — 안 하면 유니크 위반으로 <b>피해자의 구글 로그인이 영구 500</b>이 된다.
+     */
+    public void reassignUnverifiedTossEmail(User user, String syntheticEmail) {
+        sessionInvalidator.invalidate(user, null); // ① 반드시 이메일 변경 전 — 옛 principal(이메일)로 찾는다
+        user.reassignEmailToSynthetic(resolveFreeSyntheticEmail(user, syntheticEmail));
+        userRepository.saveAndFlush(user);
+    }
+
+    private String resolveFreeSyntheticEmail(User user, String syntheticEmail) {
+        if (!userRepository.existsByEmail(syntheticEmail)) {
+            return syntheticEmail;
+        }
+        int at = syntheticEmail.indexOf('@');
+        return syntheticEmail.substring(0, at) + "-" + user.getId() + syntheticEmail.substring(at);
+    }
+
     private User load(String email) {
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalStateException("user not found: " + email));

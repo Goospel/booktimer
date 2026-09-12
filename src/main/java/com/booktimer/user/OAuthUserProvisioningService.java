@@ -72,10 +72,16 @@ public class OAuthUserProvisioningService {
                 // 로그인이 그 계정으로 들어간다. 반대로 폐기하면 그 토스 사용자의 기록이 사라진다.
                 //
                 // 그래서 계정은 남기고 이메일만 합성 주소(toss-{userKey}@…)로 비켜 준다 — 기록·toss_user_key·
-                // API 토큰이 모두 보존되고 두 계정이 섞이지 않는다. LOCAL 비대칭(purge는 선점자의 접근을 없애지만
-                // toss_user_key는 남는다)도 이 갈래로 닫힌다: 선점자는 자기 계정에 그대로 남고, 실소유자의 이메일은
-                // 새 구글 계정이 가진다. 재배정된 토스 사용자는 미니앱을 그대로 쓰고(신원은 userKey다), 웹 이메일
-                // 경로만 합성 주소가 된다 — 원래 미검증이라 메일이 가지 않던 주소다.
+                // API 토큰이 모두 보존된다. 섞임이 사라지는 이유는 이렇다: **옛 흡수는 선점자의 toss_user_key가
+                // 붙은 계정을 피해자에게 그대로 넘겨** 한 계정을 두 사람이 쓰게 만들었는데(선점자는 이후에도
+                // 미니앱 login(userKey)로 들어온다), 재배정은 그 계정을 선점자 쪽에 두고 피해자에게는 새 구글
+                // 계정을 준다. 세션도 함께 끊는다 — AccountService#reassignUnverifiedTossEmail이 이메일 변경
+                // **전에** 무효화한다(안 끊으면 옛 미니앱 세션의 principal=피해자 이메일이 새 계정으로 해석된다).
+                // 재배정된 토스 사용자는 미니앱을 그대로 쓰고(신원은 userKey다), 웹 이메일 경로만 합성 주소가
+                // 된다 — 원래 미검증이라 메일이 가지 않던 주소다.
+                //
+                // ⚠️ 잔여: 토스를 연결한 *미검증 LOCAL* 계정은 여전히 위 정책 ①의 purge 대상이라 그 사용자의
+                // 미니앱 기록까지 삭제된다(선재 동작 — 이 정책의 범위 밖).
                 //
                 // TOSS인데 emailVerified=true면 그 사용자가 웹에서 소유를 증명한 것이라 **흡수를 유지**한다(같은 사람).
                 // 이 동작은 OAuthUserProvisioningServiceTest#provision_existingUnverifiedTossAccount_reassignedNotAbsorbed
@@ -96,9 +102,9 @@ public class OAuthUserProvisioningService {
     /**
      * 미검증 TOSS 계정의 이메일을 합성 주소로 옮긴 뒤, 그 이메일로 GOOGLE 계정을 새로 만든다(정책 ②).
      *
-     * <p><b>flush 순서가 본질</b>이다 — 재배정을 먼저 {@code saveAndFlush}로 내려 {@code uk_users_email}을 비운
-     * 뒤에야 INSERT가 안전하다. 더티체킹에 맡기면 Hibernate가 INSERT를 UPDATE보다 먼저 실행해 유니크 제약을
-     * 위반한다(폐기 경로의 같은 함정 — OAuthPreHijackingIntegrationTest가 실 스키마로 잡는다).
+     * <p>재배정의 본체는 {@link AccountService#reassignUnverifiedTossEmail}이다 — <b>세션 무효화 → 이메일 변경 →
+     * flush</b> 순서와 합성 주소 충돌 폴백이 거기 있다(순서를 뒤집으면 옛 미니앱 세션이 새 구글 계정을 잡는다).
+     * 여기서는 합성 주소의 재료(userKey)를 확인해 넘기는 일만 한다.
      *
      * @throws IllegalStateException TOSS 계정인데 toss_user_key가 없는 경우(이론상 불가) — 합성 주소를 만들 키가
      *                               없으면 조용히 흡수로 빠지지 않고 드러낸다
@@ -109,8 +115,8 @@ public class OAuthUserProvisioningService {
             throw new IllegalStateException(
                     "TOSS account without toss_user_key cannot be reassigned: id=" + existingToss.getId());
         }
-        existingToss.reassignEmailToSynthetic(TossUserProvisioningService.syntheticEmail(userKey));
-        userRepository.saveAndFlush(existingToss);
+        accountService.reassignUnverifiedTossEmail(
+                existingToss, TossUserProvisioningService.syntheticEmail(userKey));
         return createOAuthUser(email, displayName);
     }
 

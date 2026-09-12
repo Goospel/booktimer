@@ -124,6 +124,11 @@ public class TossUserProvisioningService {
      *
      * <p>패키지 공개인 이유: {@link OAuthUserProvisioningService}의 이메일 충돌 재배정이 <b>같은 주소</b>를
      * 만들어야 한다(미검증 TOSS 계정의 이메일을 여기로 비켜 준다). 중복 구현하면 두 규칙이 갈라진다.
+     *
+     * <p>⚠️ <b>sanitize로 접힐 수 있다</b> — {@code [^a-z0-9]}를 지우므로 서로 다른 userKey가 같은 주소를 낼 수
+     * 있다(예: {@code uk-1}과 {@code uk_1}). 그래서 <b>존재 확인은 호출부의 책임</b>이다: {@code resolveEmail}은
+     * 애초에 충돌 시에만 이 주소로 오고(그 자리에서 또 겹치면 유니크 위반이 드러난다),
+     * {@link AccountService#reassignUnverifiedTossEmail}은 이미 쓰이는 주소면 {@code -{id}} 접미로 피한다.
      */
     static String syntheticEmail(String userKey) {
         String sanitized = userKey.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
