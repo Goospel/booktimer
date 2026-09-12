@@ -1,5 +1,17 @@
 import { test, expect, type Page } from '@playwright/test';
 import sharp from 'sharp';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+// bootRun이 서빙하는 실체는 `src/main/resources`가 아니라 **`build/resources/main` 복사본**이다(T-187).
+// 그래서 CSS를 고치고 `processResources`를 안 돌리면 이 스위트는 옛 CSS를 재고, 증상이 「고친 게
+// 안 먹었다」로 읽혀 **가짜 RED**가 된다(2026-09-11 #1098에서 구현·리뷰가 각 1회 걸렸다).
+// 아래 첫 테스트가 그 상태를 이름 붙여 실패시킨다 — 조용히 틀리는 것만 막으면 된다.
+// 전제(2026-09-12 실측): `processResources`는 정적 리소스를 **바이트 그대로** 복사하고 HTTP도
+// 그 바이트를 그대로 준다(233081B, sha256 앞 16자 일치). 그래서 지문 대조가 성립한다.
+const CSS_SOURCE = fileURLToPath(new URL('../../src/main/resources/static/css/app.css', import.meta.url));
+const sha12 = (b: Buffer): string => createHash('sha256').update(b).digest('hex').slice(0, 12);
 
 // 연필 프레임 가림 프로브 — border-image가 패딩 박스 **안쪽**으로 그리는 7px 띠를
 // 불투명한 자식(배경 있는 요소)이나 <img> 자기 콘텐츠가 덮어 선이 얇아지는 결함을 렌더 트리에서 잡는다.
@@ -176,6 +188,22 @@ async function leftEdgeStrokeScore(page: Page, selector: string): Promise<number
 }
 
 test.describe('연필 프레임 안쪽 띠가 가려지지 않는다', () => {
+    // ── 전제: 서버가 「지금 소스」를 서빙하는가 (T-187 가짜 RED 차단) ──────────────
+    // 이 테스트가 먼저 실패하면 아래 결과는 전부 읽을 가치가 없다 — 옛 CSS를 잰 것이다.
+    test('전제 — 서버가 서빙하는 app.css가 소스와 바이트 동일하다', async ({ request }) => {
+        const src = readFileSync(CSS_SOURCE);
+        const res = await request.get('/css/app.css');
+        expect(res.status(), 'app.css를 못 받았다 — bootRun이 8080에 떠 있는가').toBe(200);
+        const served = Buffer.from(await res.body());
+        expect(
+            sha12(served),
+            '서버가 서빙하는 app.css가 소스와 다르다 — `build/resources/main` 복사본이 낡았다(T-187).\n'
+            + `  소스 ${src.length}B ${sha12(src)} / 서빙 ${served.length}B ${sha12(served)}\n`
+            + '  처방: ./gradlew processResources 를 돌린 뒤 이 스위트를 다시 실행한다.\n'
+            + '  (해시 URL까지 갱신해야 하면 bootRun 재시작 — T-187 원인 ②)',
+        ).toBe(sha12(src));
+    });
+
     // ── 대조군: 프로브가 실제로 판별력이 있는지부터 못 박는다 ───────────────────────
     test('양성 대조군 — 일부러 가리는 자식을 주입하면 프로브가 그 요소를 잡는다', async ({ page }) => {
         await page.goto('/books');
