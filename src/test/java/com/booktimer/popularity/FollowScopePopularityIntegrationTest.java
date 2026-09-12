@@ -86,20 +86,25 @@ class FollowScopePopularityIntegrationTest {
     }
 
     @Test
-    @DisplayName("ADMIN은 카운트에서 빠진다 — 운영 계정은 소셜 집계 대상이 아니다(drill-down 명단과 같은 경계). 양성 대조군: 같은 조건의 일반 팔로우 사용자는 세어진다")
+    @DisplayName("ADMIN은 카운트에서 빠진다 — 운영 계정은 소셜 집계 대상이 아니다(drill-down 명단과 같은 경계). 양성 대조군: 같은 조건의 일반 팔로우 사용자 2명은 둘 다 세어진다")
     void excludesAdminFromCount_butKeepsRegularFollowee() {
         User viewer = user("cv@booktimer.com", "카운트뷰어");
         User admin = userRepository.saveAndFlush(
                 User.of("cadmin@booktimer.com", "$2a$10$x", "운영자", "Asia/Seoul", Role.ADMIN));
-        User regular = user("creg@booktimer.com", "일반이");
+        User regular1 = user("creg1@booktimer.com", "일반이");
+        User regular2 = user("creg2@booktimer.com", "일반이둘");
         followRepository.saveAndFlush(Follow.of(viewer, admin));
-        followRepository.saveAndFlush(Follow.of(viewer, regular));
+        followRepository.saveAndFlush(Follow.of(viewer, regular1));
+        followRepository.saveAndFlush(Follow.of(viewer, regular2));
 
-        book(admin, ISBN_1, BookStatus.READING, BookVisibility.PUBLIC);   // 운영자 → 제외
-        book(regular, ISBN_1, BookStatus.READING, BookVisibility.PUBLIC); // 양성 대조군 → 세어짐
+        book(admin, ISBN_1, BookStatus.READING, BookVisibility.PUBLIC);    // 운영자 → 제외
+        book(regular1, ISBN_1, BookStatus.READING, BookVisibility.PUBLIC); // 양성 대조군 → 세어짐
+        book(regular2, ISBN_1, BookStatus.READING, BookVisibility.PUBLIC); // 양성 대조군 → 세어짐
 
         Map<String, FollowScopePopularity> result = service.countByIsbn(viewer, List.of(ISBN_1));
 
-        assertThat(result.get(ISBN_1).readCount()).isEqualTo(1); // 일반이만
+        // 일반 2명만. 일반이 2명인 것이 계측기다 — 조건을 역전(`<>`→`=`)하면 1이 되어 이 단언이 직접 죽는다
+        // (대조군이 1명이면 역전에도 1이라 조용히 통과한다).
+        assertThat(result.get(ISBN_1).readCount()).isEqualTo(2);
     }
 }

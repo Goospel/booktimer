@@ -65,9 +65,26 @@ public class OAuthUserProvisioningService {
                 // 진짜 주인이다. 검증된 LOCAL·기존 OAuth 계정은 정당한 소유자이므로 그대로 연결한다(폐기 안 함).
                 //
                 // TOSS 계정도 폐기 대상이 아니다 — 이메일이 미검증이어도 흡수한다(결정: 사용자 2026-09-12).
-                // 근거: 토스가 넘기는 이메일은 본인 확인이 끝난 토스 신원의 것이라, 흡수는 「같은 사람의 두 채널
-                // 합류」다. 반대로 폐기하면 그 토스 사용자의 독서 기록이 사라진다. 잔여 위험은 「토스가 남의
-                // 이메일을 넘길 때」뿐이고 수용한다 — 그런 사례가 확인되면 이 결정을 재검토한다.
+                //
+                // 가정(수용된 위험): 「그 이메일은 같은 사람의 것」. ⚠️ 이 가정은 레포의 확정 진술과 상충한다 —
+                // TossUserProvisioningService#register의 "토스는 이메일 소유를 보증하지 않는다"와
+                // UserRegistrationService#registerOAuth(…, verifyEmail)의 "Google 경로는 보증하지만 토스 경로는
+                // 그런 보증이 없다"(그래서 TOSS 가입은 emailVerified=false다). 즉 흡수가 「같은 사람의 두 채널
+                // 합류」인지는 확정이 아니라 가정이고, 사용자가 그 잔여 위험을 수용한 결정이다.
+                //
+                // 잔여 경로(LOCAL 선점과 같은 pre-hijacking 형태): 공격자가 토스 프로필에 남의 이메일을 적고
+                // 미니앱으로 가입 → TossUserProvisioningService#resolveEmail이 그 주소를 그대로 저장한다(그 주소를
+                // 쓰는 계정이 아직 없을 때. 선점이 먼저여야 성립한다) → 실소유자가 구글로 로그인하면 여기서
+                // 그 계정으로 들어간다. 폐기하면 반대로 그 토스 사용자의 독서 기록이 사라지는데, 사용자는
+                // 「기록 보존」쪽을 택했다. 토스가 남의 이메일을 넘기는 사례가 확인되면 이 결정을 재검토한다.
+                //
+                // ⚠️ LOCAL과의 비대칭: LOCAL 선점은 purge로 선점자의 접근 수단(비밀번호)까지 사라지지만, TOSS는
+                // 흡수 뒤에도 toss_user_key가 그 계정에 남아 선점자가 TossUserProvisioningService#login(userKey)로
+                // 계속 들어온다. 즉 여기서 흡수를 고른 것은 「두 채널이 한 계정을 공유」를 받아들이는 것이다.
+                //
+                // 흡수 후 상태: authProvider=TOSS·toss_user_key 유지·emailVerified=false 유지 — 구글로 들어와도
+                // 검증 표시가 켜지지 않아 재참여 넛지에서 빠지고 인증 배너가 계속 보인다(바꾸는 코드가 없다).
+                //
                 // 이 동작은 OAuthUserProvisioningServiceTest#provision_existingTossAccount_isAbsorbedNotPurged가 고정한다.
                 .map(existing -> {
                     if (existing.isLocalAccount() && !existing.isEmailVerified()) {
