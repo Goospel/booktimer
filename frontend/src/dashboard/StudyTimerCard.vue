@@ -20,20 +20,22 @@ const props = withDefaults(defineProps<{
     books?: StudyBookRow[]
     /** 마지막으로 책을 걸고 잰 책 — 기본 칩 1순위. */
     recentBookId?: number | null
+    /** 시트에서 방금 고른 책 — 있으면 기본 규칙을 이긴다(고르기는 시작이 아니다). */
+    pickedBook?: StudyBookRow | null
     /** 측정 중인 책. null이면 「책 없이」(빈칸이 아니라 상태다). */
     activeBook?: StudyBookRow | null
     /** 책 교체 왕복 중 — 「책 바꾸기」를 잠근다. */
     changing?: boolean
-}>(), { goalSeconds: 0, books: () => [], recentBookId: null, activeBook: null })
+}>(), { goalSeconds: 0, books: () => [], recentBookId: null, pickedBook: null, activeBook: null })
 
 const emit = defineEmits<{
     start: [bookId: number | null]; stop: []; setGoal: [seconds: number]
     openSheet: []; changeBook: []
 }>()
 
-// 기본 책 = 최근 걸고 잰 책 → 없으면 첫 책(독서 BookPickForm과 같은 규칙). 서재가 비면 null.
+// 칩에 설 책 = 시트에서 고른 책 → 최근 걸고 잰 책 → 첫 책(독서 BookPickForm과 같은 규칙). 셋 다 없으면 null.
 const defaultBook = computed<StudyBookRow | null>(() =>
-    props.books.find(b => b.id === props.recentBookId) ?? props.books[0] ?? null)
+    props.pickedBook ?? props.books.find(b => b.id === props.recentBookId) ?? props.books[0] ?? null)
 
 // 칩 표지색 — 표지 없는 책의 결정적 플레이스홀더(독서 칩과 같은 seed 규칙).
 function coverStyle(b: StudyBookRow) {

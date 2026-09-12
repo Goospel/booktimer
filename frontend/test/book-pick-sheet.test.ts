@@ -60,7 +60,8 @@ describe('BookPickSheet — 통합 책 시트 (발견 1, §6.5)', () => {
         expect(w.text()).toContain('완독 책');
         const btn = w.findAll('.book-sheet-book').find(b => b.text().includes('완독 책'))!;
         await btn.trigger('click');
-        expect(w.emitted('pick')![0]).toEqual([2]);
+        // 고른 책을 통째로 낸다 — 부모가 이 값을 칩에 올린다(id만 주면 자기 목록에서 못 찾는 날이 있다).
+        expect(w.emitted('pick')![0][0]).toEqual(expect.objectContaining({ id: 2, title: '완독 책' }));
     });
 
     test('start 모드: "책 없이 측정하기" → bookless 발생', async () => {
@@ -120,6 +121,6 @@ describe('BookPickSheet — 통합 책 시트 (발견 1, §6.5)', () => {
         expect(w.text()).toContain('읽는 책');
         const btn = w.findAll('.book-sheet-book').find(b => b.text().includes('읽고싶은 책'))!;
         await btn.trigger('click');
-        expect(w.emitted('pick')![0]).toEqual([3]);
+        expect(w.emitted('pick')![0][0]).toEqual(expect.objectContaining({ id: 3, title: '읽고싶은 책' }));
     });
 });
