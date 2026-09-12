@@ -318,6 +318,10 @@ public class AccountService {
      * {@code CurrentUserService}의 {@code findByEmail} 폴백이 그 principal을 <b>새로 만들어진 구글 계정</b>으로
      * 해석해 선점자가 피해자 계정에 그대로 들어간다(30일 세션). 남길 창은 없다(본인 흐름이 아니다) → {@code null}.
      *
+     * <p><b>옛 이메일 토큰 폐기</b>: 재배정 전에 발급된 VERIFICATION 토큰이 남아 있으면 그 링크 클릭이
+     * {@code EmailVerificationService#verify}에서 이메일 일치 확인 없이 {@code verifyEmail()}을 불러
+     * <b>합성 주소가 검증됨</b>이 된다 — 그러면 라우팅 불가 주소가 마케팅 넛지 발송 대상에 들어간다.
+     *
      * <p><b>flush 필수</b>: 호출 직후 같은 이메일로 구글 사용자를 INSERT하므로 {@code uk_users_email}을 먼저 비워야
      * 한다(폐기 경로와 같은 함정).
      *
@@ -327,6 +331,7 @@ public class AccountService {
      */
     public void reassignUnverifiedTossEmail(User user, String syntheticEmail) {
         sessionInvalidator.invalidate(user, null); // ① 반드시 이메일 변경 전 — 옛 principal(이메일)로 찾는다
+        emailTokenRepository.deleteByUser(user);   // ② 옛 VERIFICATION 토큰 폐기 — 아래 JavaDoc 참조
         user.reassignEmailToSynthetic(resolveFreeSyntheticEmail(user, syntheticEmail));
         userRepository.saveAndFlush(user);
     }

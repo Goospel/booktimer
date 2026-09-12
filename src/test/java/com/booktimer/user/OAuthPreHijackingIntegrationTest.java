@@ -96,7 +96,7 @@ class OAuthPreHijackingIntegrationTest {
     }
 
     @Test
-    @DisplayName("미검증 TOSS 계정은 폐기되지 않고 이메일만 합성 주소로 비켜나며 두 계정이 공존한다")
+    @DisplayName("미검증 TOSS 계정은 폐기되지 않고 이메일만 합성 주소로 비켜나며, 두 계정이 uk_users_email 위반 없이 공존한다")
     void unverifiedTossAccount_isReassignedToSynthetic_andBothCoexist() {
         String email = "tossvictim@booktimer.com";
         // 토스 프로필에 남의 이메일을 적어 미니앱으로 먼저 가입한 계정(미검증 — 토스는 소유를 보증하지 않는다)

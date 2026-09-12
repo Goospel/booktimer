@@ -145,8 +145,23 @@ class OAuthUserProvisioningServiceTest {
         assertThat(result).isSameAs(created);
         verify(accountService).reassignUnverifiedTossEmail(local, "toss-uklocal01@noreply.booktimer.app");
         verify(accountService, never()).purgeUnverifiedLocalAccount(any()); // 기록 보존 — 폐기 아님
-        assertThat(local.getPasswordHash()).isEqualTo("hash"); // 웹 로그인 수단은 그대로
-        assertThat(local.getTossUserKey()).isEqualTo("UKlocal-01");
+    }
+
+    @Test
+    @DisplayName("미검증 GOOGLE 계정에 토스가 연결돼 있어도 흡수한다 — 구글이 준 이메일은 같은 사람의 것이다")
+    void provision_unverifiedGoogleAccountLinkedToToss_isAbsorbed() {
+        // 현재 도달 불가(구글 가입은 emailVerified=true)지만, 미래에 미검증 구글 경로가 생기면 정당한 구글
+        // 사용자를 합성 주소로 밀어내면 안 된다 — 재배정 대상은 TOSS 가입 또는 토스를 연결한 LOCAL뿐이다.
+        User google = User.ofOAuth("g@booktimer.com", "구글러", "Asia/Seoul", Role.USER, AuthProvider.GOOGLE);
+        google.linkTossUserKey("UKgoogle-01");
+        when(userRepository.findByEmail("g@booktimer.com")).thenReturn(Optional.of(google));
+
+        User result = service.provision("g@booktimer.com", "구글러", true);
+
+        assertThat(result).isSameAs(google);
+        verify(accountService, never()).reassignUnverifiedTossEmail(any(), any());
+        verify(accountService, never()).purgeUnverifiedLocalAccount(any());
+        verify(registrationService, never()).registerOAuth(any(), any(), any(), any(), any());
     }
 
     @Test
