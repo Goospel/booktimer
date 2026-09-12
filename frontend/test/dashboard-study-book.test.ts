@@ -158,17 +158,25 @@ describe('DashboardApp — 공부 시작 시 책 선택', () => {
         await vi.waitFor(() => expect(kv(w)).toBe('책 없이'));
     });
 
-    test('(c) 「바꾸기」 시트에서 다른 책을 고르면 그 id로 시작하고 시트가 닫힌다', async () => {
+    test('(c) 「바꾸기」 시트에서 다른 책을 고르면 **책만 바뀐다** — 시작은 시작 버튼이 한다', async () => {
         const w = await mountStudy();
         await btnWith(w, '바꾸기')!.trigger('click');
 
         expect(w.find('.book-sheet-title').text()).toBe('공부할 책을 고르세요');
         await sheetRow(w, '형법').trigger('click');
+
+        // 고르기는 시작이 아니다 — 칩만 바뀌고 문은 두드리지 않는다(요청 0건으로 잰다).
+        await vi.waitFor(() => expect(w.find('.book-sheet-overlay').exists()).toBe(false));
+        expect(sent('/api/study/start')).toHaveLength(0);
+        expect(w.find('.dash-book-chip-title').text()).toBe('형법');
+        expect(w.find('.dash-pill-pulse').exists()).toBe(false);
+
+        // 양성 대조군 — 버튼은 고른 그 책으로 진짜 시작시킨다(「아무 데서도 시작 안 됨」 배제).
+        await btnWith(w, '공부 측정 시작')!.trigger('click');
         await vi.waitFor(() => expect(sent('/api/study/start')).toHaveLength(1));
 
         expect(JSON.parse(sent('/api/study/start')[0].body)).toEqual({ bookId: 6 });
-        await vi.waitFor(() => expect(w.find('.book-sheet-overlay').exists()).toBe(false));
-        expect(kv(w)).toBe('형법');
+        await vi.waitFor(() => expect(kv(w)).toBe('형법'));
     });
 
     test('(g) 시작이 404(다른 곳에서 지운 책)면 알리고 화면을 다시 받는다', async () => {

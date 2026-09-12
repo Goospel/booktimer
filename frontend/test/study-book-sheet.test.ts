@@ -39,7 +39,8 @@ describe('StudyBookSheet — start', () => {
         expect(rows[1].text()).toContain('0독');   // 0독도 그린다(부재가 아니라 상태)
 
         await rows[1].trigger('click');
-        expect(w.emitted('pick')).toEqual([[2]]);   // 인덱스(1)가 아니라 id(2)
+        // 고른 책을 통째로 낸다(부모가 칩에 올려야 해서) — 값은 인덱스(1)가 아니라 그 책이다.
+        expect(w.emitted('pick')).toEqual([[BOOKS[1]]]);
         expect(fetch).not.toHaveBeenCalled();
     });
 

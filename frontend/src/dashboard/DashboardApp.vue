@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import type { DashboardResponse, TimerState, StopResponse, BookOption, StudyState } from './types'
+import type { StudyBookRow } from '../study/api'
 import { IDLE_STUDY, studyStateOf } from './types'
 import { getCsrfToken } from '../shared/follow'
 import type { TimerMode } from './timerMode'
@@ -62,8 +63,17 @@ const toggleLocked = computed(() => measuring.value || starting.value || stoppin
 const modeHint = ref<string | null>(null)
 watch(toggleLocked, l => { if (!l) modeHint.value = null })
 
+/**
+ * 시트에서 고른 책 — **고르기는 시작이 아니다**(2026-09-12 사용자 지적). 「바꾸기」로 책을 고르면
+ * 여기 얹혀 칩·여백 카드가 그 책을 가리키고, 측정은 시작 버튼이 누를 때 시작된다.
+ * null이면 지금까지처럼 기본 규칙(최근 읽은 책 → 첫 책)을 따른다.
+ * 서버 진실로 되돌리는 자리(conflict)에서 함께 버린다 — 지워진 책이 칩에 눌어붙지 않게.
+ */
+const pickedBook = ref<BookOption | null>(null)
+const pickedStudyBook = ref<StudyBookRow | null>(null)
+
 // 홈의 「지금 그 책」 — 타이머 칩과 여백 카드가 같은 책을 가리켜야 해서 한 곳에서 고른다.
-const marginBook = computed(() =>
+const marginBook = computed(() => pickedBook.value ??
     defaultBookOf(allBooksOf(readingBooks.value, finishedBooks.value, wantToReadBooks.value), recentBookId.value))
 
 // 책 고르기/태깅 통합 시트(발견 1, §6.5) — 'start'=측정 전 고르기, 'tag'=종료 후 태깅. 같은 시트를 모드로 겸한다.
@@ -152,6 +162,9 @@ onUnmounted(() => {
 /** 409 = "내 화면이 낡았다"는 신호 — 문구를 띄우고 즉시 최신 상태를 받아 다음에 할 수 있는 일을 화면에 세운다. */
 async function conflict(msg: string) {
     actionError.value = msg
+    // 고른 책도 함께 버린다 — 「그 책이 서재에 없어요」의 그 책이 칩에 남아 있으면 눌러도 계속 같은 404다.
+    pickedBook.value = null
+    pickedStudyBook.value = null
     await refresh(true)
 }
 
@@ -317,11 +330,11 @@ function closeSheet() {
     pendingSessionId.value = null
 }
 
-// 시트에서 책을 고르면 — start 모드면 그 책으로 측정 시작, tag 모드면 방금 세션에 태깅.
-function onSheetPick(bookId: number) {
-    if (sheetMode.value === 'tag') { tagBook(bookId); return }
+// 시트에서 책을 고르면 — start 모드면 **고르기만** 한다(칩이 바뀐다), tag 모드면 방금 세션에 태깅.
+function onSheetPick(book: { id: number; title: string; coverUrl: string | null }) {
+    if (sheetMode.value === 'tag') { tagBook(book.id); return }
+    pickedBook.value = { id: book.id, title: book.title, coverUrl: book.coverUrl }
     sheetMode.value = null
-    handleStart(bookId)
 }
 // start 모드 하단 CTA — 책 없이 바로 시작.
 function onSheetBookless() {
@@ -386,12 +399,12 @@ function closeStudySheet() {
     studySheet.value = null
     studyPendingSessionId.value = null
 }
-// 시트에서 책을 고르면 — 모드마다 가는 문이 다르다.
-function onStudySheetPick(bookId: number) {
-    if (studySheet.value === 'tag') { studyTagBook(bookId); return }
-    if (studySheet.value === 'change') { studyChangeBook(bookId); return }
+// 시트에서 책을 고르면 — 모드마다 가는 문이 다르다. start는 **아무 문도 두드리지 않는다**(고르기뿐).
+function onStudySheetPick(book: StudyBookRow) {
+    if (studySheet.value === 'tag') { studyTagBook(book.id); return }
+    if (studySheet.value === 'change') { studyChangeBook(book.id); return }
+    pickedStudyBook.value = book
     studySheet.value = null
-    handleStudyStart(bookId)
 }
 // 하단 CTA — start=책 없이 시작 / tag=건너뛰기(닫기만) / change=책 없이 공부하기.
 function onStudySheetNone() {
@@ -446,6 +459,7 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
             :finished-books="finishedBooks"
             :want-to-read-books="wantToReadBooks"
             :recent-book-id="recentBookId"
+            :picked-book="pickedBook"
             :starting="starting"
             :stopping="stopping"
             @start="handleStart"
@@ -466,6 +480,7 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
             :goal-seconds="study.goalSeconds"
             :books="study.books"
             :recent-book-id="study.recentBookId"
+            :picked-book="pickedStudyBook"
             :active-book="study.activeBook"
             :starting="starting"
             :stopping="stopping"

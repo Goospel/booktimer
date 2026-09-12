@@ -21,6 +21,8 @@ const props = defineProps<{
     finishedBooks: BookOption[]
     wantToReadBooks: BookOption[]
     recentBookId: number | null
+    /** 시트에서 방금 고른 책 — 칩이 이 값을 우선한다(BookPickForm으로 통과). */
+    pickedBook?: BookOption | null
     starting?: boolean
     stopping?: boolean
 }>()
@@ -130,6 +132,7 @@ function totalHM(s: number): string {
                         :finished-books="finishedBooks"
                         :want-to-read-books="wantToReadBooks"
                         :recent-book-id="recentBookId"
+                        :picked-book="pickedBook"
                         :pending="starting"
                         @start="(id) => emit('start', id)"
                         @open-sheet="emit('openSheet')"
@@ -151,6 +154,7 @@ function totalHM(s: number): string {
                         :finished-books="finishedBooks"
                         :want-to-read-books="wantToReadBooks"
                         :recent-book-id="recentBookId"
+                        :picked-book="pickedBook"
                         :pending="starting"
                         @start="(id) => emit('start', id)"
                         @open-sheet="emit('openSheet')"

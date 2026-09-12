@@ -19,11 +19,12 @@ const props = defineProps<{
     pending?: boolean
 }>()
 
-const emit = defineEmits<{ pick: [bookId: number]; none: []; close: [] }>()
+// 고른 책을 통째로 낸다 — 독서 BookPickSheet와 같은 계약(거긴 출처가 갈려서, 여긴 갈리지 않아도 같은 모양으로).
+const emit = defineEmits<{ pick: [book: StudyBookRow]; none: []; close: [] }>()
 
 // [제목, 힌트, 하단 CTA] — 세 모드의 문구는 여기 한 곳에만 있다.
 const T = {
-    start: ['공부할 책을 고르세요', '고른 책으로 측정을 시작해요. 책 없이 시작해도 돼요.', '책 없이 측정하기'],
+    start: ['공부할 책을 고르세요', '고르면 책만 바뀌어요 — 측정은 「공부 측정 시작」을 눌러야 시작돼요.', '책 없이 측정하기'],
     tag: ['무슨 책을 공부하셨나요?', '방금 잰 시간을 책에 붙여요. 나중에 정해도 괜찮아요.', '책 없이 기록 · 건너뛰기'],
     change: ['다른 책으로 바꿀까요?', '지금까지 잰 시간이 통째로 새 책에 붙어요.', '책 없이 공부하기'],
 } as const
@@ -53,7 +54,7 @@ onMounted(() => overlayEl.value?.focus())
                 <li v-for="b in books" :key="b.id">
                     <button type="button" class="book-sheet-book" :disabled="pending"
                             :aria-current="b.id === currentBookId ? 'true' : undefined"
-                            @click="emit('pick', b.id)">
+                            @click="emit('pick', b)">
                         <img v-if="b.coverUrl" class="book-sheet-cover" :src="b.coverUrl" alt="" loading="lazy" referrerpolicy="no-referrer">
                         <span v-else class="book-sheet-cover" :style="coverStyle(b)" aria-hidden="true">{{ initialOf(b.title) }}</span>
                         <span class="book-sheet-meta">
