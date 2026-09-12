@@ -84,6 +84,9 @@ public interface BookRepository extends JpaRepository<Book, Long> {
      * <p>{@code viewer}가 팔로우한 사용자(followee)가 PUBLIC으로 가진 책만 대상으로, isbn13별로
      * 원함(WANT_TO_READ)·읽음(READING∪FINISHED) distinct 사용자 수를 센다. Follow와는 매핑된 연관이
      * 없어 theta 조인({@code f.followee = b.user})으로 묶는다. PRIVATE·비팔로우·본인(자기 팔로우 없음)은 자연 제외.
+     *
+     * <p>운영 계정({@code role <> ADMIN})도 제외한다 — 형제 소셜 쿼리·drill-down 명단
+     * ({@link #followScopeReaders})과 같은 불변식이라, 숫자와 명단이 ADMIN에서 어긋나지 않는다.
      */
     @Query("""
             select b.isbn13 as isbn,
@@ -97,6 +100,7 @@ public interface BookRepository extends JpaRepository<Book, Long> {
               and f.follower = :viewer
               and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
               and b.isbn13 in :isbns
+              and b.user.role <> com.booktimer.user.Role.ADMIN
             group by b.isbn13
             """)
     List<FollowScopeCount> followScopePopularity(@Param("viewer") User viewer,
@@ -110,11 +114,10 @@ public interface BookRepository extends JpaRepository<Book, Long> {
      * 어차피 각 팔로우 프로필의 PUBLIC 책장에서 볼 수 있는 것뿐(새 노출 없음). PRIVATE·비팔로우·본인
      * (자기 팔로우 없음)은 자연 제외.
      *
-     * <p>⚠️ <b>다만 명단은 카운트보다 좁다 — 숫자와 명단 길이가 어긋날 수 있다</b>(옛 주석의
-     * 「정확히 같은 게이트」는 사실이 아니었다). 신원을 펼치는 쪽에만 걸린 제외가 둘이다:
-     * ① 운영 계정({@code role <> ADMIN}, 형제 소셜 쿼리와 같은 표기) ② 온보딩 전 사용자
+     * <p>⚠️ <b>다만 명단은 여전히 카운트보다 좁다 — 숫자와 명단 길이가 어긋날 수 있다</b>(옛 주석의
+     * 「정확히 같은 게이트」는 사실이 아니었다). 운영 계정({@code role <> ADMIN})은 2026-09-12부터
+     * 카운트 쪽에도 걸려 양쪽이 같아졌고, 신원을 펼치는 쪽에만 남은 제외는 하나다: 온보딩 전 사용자
      * ({@code login_id == null} — 호출부 {@code FollowScopeReadersService}가 Java에서 거른다, N-055).
-     * 카운트 쪽은 숫자만 주므로 신원 노출이 없어 그대로 둔다 — 둘을 일치시킬지는 별도 판단이다.
      */
     @Query("""
             select distinct b.user

@@ -63,6 +63,12 @@ public class OAuthUserProvisioningService {
                 // pre-hijacking 차단(정책 ①, N-053): 같은 이메일을 *미검증 LOCAL*로 선점한 계정은 자동 연결하지 않고
                 // 폐기한 뒤 OAuth 신규로 만든다 — 미검증 = 이메일 소유 미증명이라, Google이 소유를 보증한 OAuth가
                 // 진짜 주인이다. 검증된 LOCAL·기존 OAuth 계정은 정당한 소유자이므로 그대로 연결한다(폐기 안 함).
+                //
+                // TOSS 계정도 폐기 대상이 아니다 — 이메일이 미검증이어도 흡수한다(결정: 사용자 2026-09-12).
+                // 근거: 토스가 넘기는 이메일은 본인 확인이 끝난 토스 신원의 것이라, 흡수는 「같은 사람의 두 채널
+                // 합류」다. 반대로 폐기하면 그 토스 사용자의 독서 기록이 사라진다. 잔여 위험은 「토스가 남의
+                // 이메일을 넘길 때」뿐이고 수용한다 — 그런 사례가 확인되면 이 결정을 재검토한다.
+                // 이 동작은 OAuthUserProvisioningServiceTest#provision_existingTossAccount_isAbsorbedNotPurged가 고정한다.
                 .map(existing -> {
                     if (existing.isLocalAccount() && !existing.isEmailVerified()) {
                         accountService.purgeUnverifiedLocalAccount(existing);

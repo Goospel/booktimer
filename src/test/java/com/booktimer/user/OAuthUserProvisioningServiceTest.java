@@ -157,6 +157,22 @@ class OAuthUserProvisioningServiceTest {
     }
 
     @Test
+    @DisplayName("정책 고정: 토스 계정(이메일 미검증)은 같은 이메일의 구글 로그인에 흡수된다 — 폐기하지 않고 그대로 반환")
+    void provision_existingTossAccount_isAbsorbedNotPurged() {
+        // 결정(사용자 2026-09-12): 토스가 넘기는 이메일은 본인 확인된 토스 신원의 것이라 흡수는
+        // "같은 사람의 두 채널 합류"다. 폐기하면 토스 사용자의 독서 기록이 사라진다.
+        User existingToss = User.ofOAuth("toss@booktimer.com", "토스러", "Asia/Seoul", Role.USER, AuthProvider.TOSS);
+        // TOSS 계정은 emailVerified 기본 false — 그래도 흡수 대상이다(폐기는 LOCAL 선점 벡터 전용).
+        when(userRepository.findByEmail("toss@booktimer.com")).thenReturn(Optional.of(existingToss));
+
+        User result = service.provision("toss@booktimer.com", "구글이름", true);
+
+        assertThat(result).isSameAs(existingToss);
+        verify(accountService, never()).purgeUnverifiedLocalAccount(any());
+        verify(registrationService, never()).registerOAuth(any(), any(), any(), any(), any());
+    }
+
+    @Test
     @DisplayName("provision: 이메일 미검증(email_verified=false)이면 거부하고 아무 사용자도 만들지/조회하지 않는다")
     void provision_unverifiedEmail_rejected() {
         assertThatThrownBy(() -> service.provision("attacker@booktimer.com", "공격자", false))

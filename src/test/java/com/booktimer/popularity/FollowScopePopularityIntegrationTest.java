@@ -84,4 +84,22 @@ class FollowScopePopularityIntegrationTest {
         assertThat(result.get(ISBN_2).readCount()).isEqualTo(2); // A + B
         assertThat(result).doesNotContainKey("9788900000999"); // 데이터 없는 isbn은 키 부재
     }
+
+    @Test
+    @DisplayName("ADMIN은 카운트에서 빠진다 — 운영 계정은 소셜 집계 대상이 아니다(drill-down 명단과 같은 경계). 양성 대조군: 같은 조건의 일반 팔로우 사용자는 세어진다")
+    void excludesAdminFromCount_butKeepsRegularFollowee() {
+        User viewer = user("cv@booktimer.com", "카운트뷰어");
+        User admin = userRepository.saveAndFlush(
+                User.of("cadmin@booktimer.com", "$2a$10$x", "운영자", "Asia/Seoul", Role.ADMIN));
+        User regular = user("creg@booktimer.com", "일반이");
+        followRepository.saveAndFlush(Follow.of(viewer, admin));
+        followRepository.saveAndFlush(Follow.of(viewer, regular));
+
+        book(admin, ISBN_1, BookStatus.READING, BookVisibility.PUBLIC);   // 운영자 → 제외
+        book(regular, ISBN_1, BookStatus.READING, BookVisibility.PUBLIC); // 양성 대조군 → 세어짐
+
+        Map<String, FollowScopePopularity> result = service.countByIsbn(viewer, List.of(ISBN_1));
+
+        assertThat(result.get(ISBN_1).readCount()).isEqualTo(1); // 일반이만
+    }
 }
