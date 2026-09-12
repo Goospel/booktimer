@@ -4445,8 +4445,10 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
         실소유자의 구글 로그인이 그 계정에 들어감. 섞임이 사라지는 이유는 **옛 흡수가 선점자의 `toss_user_key`가
         붙은 계정을 피해자에게 넘겼기** 때문이고(선점자는 이후에도 `login(userKey)`로 들어온다), 재배정은 그 계정을
         선점자 쪽에 둔다. 재배정된 사용자는 미니앱을 그대로 쓰고 웹 이메일 경로만 합성 주소가 된다(원래 미검증이라
-        메일이 안 가던 주소). ⚠️ 잔여: 토스를 연결한 **미검증 LOCAL** 계정은 여전히 purge 대상이라 그 사용자의
-        미니앱 기록까지 삭제된다(선재 동작, 범위 밖).
+        메일이 안 가던 주소). ✅ **닫힘 2026-09-12**: 옛 잔여(「토스를 연결한 **미검증 LOCAL** 계정은 여전히 purge
+        대상」)를 후속 PR이 닫았다 — 분기 기준을 provider에서 **`toss_user_key` 유무**로 바꿨다(있으면 provider 무관
+        재배정, 없으면 기존대로 purge). 웹 LOCAL 사용자는 loginId+비밀번호로 로그인하므로 이메일이 합성 주소가 돼도
+        웹 로그인은 그대로다. 신설 2건(단위 `WantedButNotInvoked` · 통합 `NoSuchElementException` = 계정이 삭제됨).
   - ⚠️ **최종 리뷰가 Critical을 프로브로 잡았다 — 재배정이 세션을 안 끊어 반쪽이었다**: 미니앱 `issueWebLoginCode`는
         온보딩 전에도 세션을 만들고 그 principal이 **피해자 이메일**이라(`loginId != null ? loginId : email`),
         이메일만 바꾸면 그 30일 세션이 `findByEmail` 폴백으로 **새 구글 계정**에 해석됐다(실측 `resolvedId=victim`).

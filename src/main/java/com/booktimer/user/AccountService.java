@@ -306,7 +306,8 @@ public class AccountService {
     }
 
     /**
-     * pre-hijacking 차단 정책 ② — 같은 이메일로 구글이 들어왔을 때, 그 이메일을 <b>미검증 TOSS</b> 계정이 쓰고
+     * pre-hijacking 차단 정책 ② — 같은 이메일로 구글이 들어왔을 때, 그 이메일을 <b>토스를 연결한 미검증</b> 계정
+     * (TOSS 가입이든 웹 LOCAL 가입 후 연결이든 — {@code toss_user_key}가 있으면 전부)이 쓰고
      * 있으면 그 계정을 폐기하지 않고 <b>이메일만</b> 합성 주소로 비켜 놓는다({@code purgeUnverifiedLocalAccount}의
      * 거울 — 토스는 이메일 소유를 보증하지 않지만 그 사용자의 기록은 진짜다). 호출부는
      * {@link OAuthUserProvisioningService#provision}뿐이다.

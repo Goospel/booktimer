@@ -129,6 +129,27 @@ class OAuthUserProvisioningServiceTest {
     }
 
     @Test
+    @DisplayName("토스를 연결한 미검증 LOCAL 계정은 폐기하지 않고 이메일만 재배정한다(미니앱 기록 보존)")
+    void provision_unverifiedLocalAccountLinkedToToss_isReassignedNotPurged() {
+        // 웹에서 LOCAL로 가입(미검증)한 뒤 미니앱을 연결한 사용자 — 폐기하면 그 사람의 미니앱 기록이 사라진다.
+        // provider가 LOCAL이어도 toss_user_key가 있으면 정책 ②(재배정)로 보낸다.
+        User local = User.of("victim@booktimer.com", "hash", "선점자", "Asia/Seoul", Role.USER);
+        local.linkTossUserKey("UKlocal-01");
+        when(userRepository.findByEmail("victim@booktimer.com")).thenReturn(Optional.of(local));
+        User created = User.ofOAuth("victim@booktimer.com", "진짜주인", "Asia/Seoul", Role.USER, AuthProvider.GOOGLE);
+        when(registrationService.registerOAuth(eq("victim@booktimer.com"), eq("진짜주인"),
+                eq("Asia/Seoul"), eq(AuthProvider.GOOGLE), any())).thenReturn(created);
+
+        User result = service.provision("victim@booktimer.com", "진짜주인", true);
+
+        assertThat(result).isSameAs(created);
+        verify(accountService).reassignUnverifiedTossEmail(local, "toss-uklocal01@noreply.booktimer.app");
+        verify(accountService, never()).purgeUnverifiedLocalAccount(any()); // 기록 보존 — 폐기 아님
+        assertThat(local.getPasswordHash()).isEqualTo("hash"); // 웹 로그인 수단은 그대로
+        assertThat(local.getTossUserKey()).isEqualTo("UKlocal-01");
+    }
+
+    @Test
     @DisplayName("pre-hijacking: 검증된 LOCAL 계정은 폐기하지 않고 기존대로 연결한다(정당한 소유자)")
     void provision_verifiedLocalAccount_isLinkedNotPurged() {
         User verifiedLocal = User.of("owner@booktimer.com", "hash", "주인", "Asia/Seoul", Role.USER);

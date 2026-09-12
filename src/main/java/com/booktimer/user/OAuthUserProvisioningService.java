@@ -64,8 +64,8 @@ public class OAuthUserProvisioningService {
                 // 폐기한 뒤 OAuth 신규로 만든다 — 미검증 = 이메일 소유 미증명이라, Google이 소유를 보증한 OAuth가
                 // 진짜 주인이다. 검증된 LOCAL·기존 OAuth 계정은 정당한 소유자이므로 그대로 연결한다(폐기 안 함).
                 //
-                // 정책 ②(결정: 사용자 2026-09-12) — *미검증 TOSS* 계정은 흡수하지도, 폐기하지도 않고 **이메일만
-                // 재배정**한다. 토스는 이메일 소유를 보증하지 않으므로(TossUserProvisioningService#register,
+                // 정책 ②(결정: 사용자 2026-09-12) — *토스를 연결한 미검증* 계정(toss_user_key가 있으면 TOSS 가입이든
+                // 웹 LOCAL 가입 후 연결이든 전부)은 흡수하지도, 폐기하지도 않고 **이메일만 재배정**한다. 토스는 이메일 소유를 보증하지 않으므로(TossUserProvisioningService#register,
                 // UserRegistrationService#registerOAuth(…, verifyEmail) — 그래서 TOSS 가입은 emailVerified=false)
                 // 그 주소가 남의 것일 수 있다. 흡수하면 LOCAL 선점과 같은 pre-hijacking이 된다: 공격자가 토스
                 // 프로필에 남의 이메일을 적고 미니앱으로 가입 → resolveEmail이 그 주소를 저장 → 실소유자의 구글
@@ -80,19 +80,24 @@ public class OAuthUserProvisioningService {
                 // 재배정된 토스 사용자는 미니앱을 그대로 쓰고(신원은 userKey다), 웹 이메일 경로만 합성 주소가
                 // 된다 — 원래 미검증이라 메일이 가지 않던 주소다.
                 //
-                // ⚠️ 잔여: 토스를 연결한 *미검증 LOCAL* 계정은 여전히 위 정책 ①의 purge 대상이라 그 사용자의
-                // 미니앱 기록까지 삭제된다(선재 동작 — 이 정책의 범위 밖).
+                // 그래서 순서가 정책 ① 앞이다: 미검증 LOCAL이라도 toss_user_key가 있으면 purge가 아니라 재배정으로
+                // 보낸다(안 그러면 그 사람의 미니앱 기록이 삭제된다). 웹 LOCAL 사용자는 loginId+비밀번호로 로그인하므로
+                // (BookTimerUserDetailsService#loadUserByUsername이 findByLoginId) 이메일이 합성 주소가 돼도 웹
+                // 로그인은 그대로다 — 미검증이라 원래 메일이 가지 않던 주소이기도 하다.
                 //
                 // TOSS인데 emailVerified=true면 그 사용자가 웹에서 소유를 증명한 것이라 **흡수를 유지**한다(같은 사람).
                 // 이 동작은 OAuthUserProvisioningServiceTest#provision_existingUnverifiedTossAccount_reassignedNotAbsorbed
                 // ·provision_existingVerifiedTossAccount_isAbsorbed + OAuthPreHijackingIntegrationTest가 고정한다.
                 .map(existing -> {
-                    if (existing.isLocalAccount() && !existing.isEmailVerified()) {
-                        accountService.purgeUnverifiedLocalAccount(existing);
-                        return createOAuthUser(email, displayName);
-                    }
-                    if (existing.getAuthProvider() == AuthProvider.TOSS && !existing.isEmailVerified()) {
-                        return reassignTossEmailAndCreateOAuthUser(existing, email, displayName);
+                    if (!existing.isEmailVerified()) {
+                        // 토스가 연결돼 있으면 provider가 무엇이든 기록을 지우지 않고 이메일만 비켜 준다(정책 ②).
+                        if (existing.getTossUserKey() != null || existing.getAuthProvider() == AuthProvider.TOSS) {
+                            return reassignTossEmailAndCreateOAuthUser(existing, email, displayName);
+                        }
+                        if (existing.isLocalAccount()) {
+                            accountService.purgeUnverifiedLocalAccount(existing);
+                            return createOAuthUser(email, displayName);
+                        }
                     }
                     return existing;
                 })
@@ -100,7 +105,8 @@ public class OAuthUserProvisioningService {
     }
 
     /**
-     * 미검증 TOSS 계정의 이메일을 합성 주소로 옮긴 뒤, 그 이메일로 GOOGLE 계정을 새로 만든다(정책 ②).
+     * 토스를 연결한 미검증 계정(TOSS 가입이든 웹 LOCAL 가입 후 연결이든)의 이메일을 합성 주소로 옮긴 뒤,
+     * 그 이메일로 GOOGLE 계정을 새로 만든다(정책 ②).
      *
      * <p>재배정의 본체는 {@link AccountService#reassignUnverifiedTossEmail}이다 — <b>세션 무효화 → 이메일 변경 →
      * flush</b> 순서와 합성 주소 충돌 폴백이 거기 있다(순서를 뒤집으면 옛 미니앱 세션이 새 구글 계정을 잡는다).
