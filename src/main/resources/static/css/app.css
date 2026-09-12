@@ -1955,7 +1955,9 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 .follow-tabs a.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 
 .book-time { font-size: .8rem; color: var(--ok); font-weight: 600; }
-/* 내 책장 필터 칩 — 상태/공개여부 토글(활성=세이지 채움). books 전용(프로필 .shelf-filter와 별개). 시안 My Shelf.
+/* 내 책장 필터 칩 — 상태/공개여부 토글(활성=세이지 채움). books 전용. 시안 My Shelf.
+   (옛 주석은 "프로필 .shelf-filter와 별개"라 했는데 그 클래스는 죽어서 2026-09-12 삭제됐다 — 이름이
+    접두로 겹쳐 문자열 검색에 같이 걸리니, 지울 때 이쪽을 건드리지 않도록 주의한다.)
    두 칩 그룹(상태·공개여부)을 같은 모양으로 통일 — 기존 세그먼티드 '서브 필터' 룩 대신 시안의 단일 칩. */
 /* 필터 묶음 = 세그먼트 토글 바(한 덩어리) — 상태/공개여부 두 묶음을 개별 덩어리로 분리 */
 .shelf-filter-chips {
