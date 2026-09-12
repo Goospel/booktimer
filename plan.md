@@ -4418,11 +4418,47 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
 - [x] **H. XFF → `getRemoteAddr()` 양성 대조군 테스트** — 프로덕션 변경 0. 「이 Boot 조합에서
       `ForwardedHeaderFilter`가 실제로 레이트리밋 키를 바꾼다」를 처음으로 계측한다(필터 빈 제거 돌연변이로 사살 확인).
 - [x] **I. `followScopeReaders`에 `role <> ADMIN` 누락** — 신원을 펼치는 쿼리라 운영 계정이 섞이면 안 된다.
-- ⏸ **계속 범위 밖**: 토스 발 미검증 이메일의 구글 계정 흡수(설계 결정 대기) · `/internal/ses/**` 레이트리밋
-      (ARN·서명 뒤라 정상 SNS 재시도를 막을 위험이 더 크다 — 수용) · 90일 Bearer 회전(수용된 설계).
+- ⏸ **계속 범위 밖**: 토스 발 미검증 이메일의 구글 계정 흡수(설계 결정 대기 → 아래 「감사 잔여 결정 2건」에서
+      **이메일 재배정**으로 닫혔다) · `/internal/ses/**` 레이트리밋(ARN·서명 뒤라 정상 SNS 재시도를 막을 위험이 더 크다 —
+      수용) · 90일 Bearer 회전(수용된 설계).
 - 📌 **설계의 사실 오류 하나를 실측이 정정했다** — 「형제 소셜 쿼리는 전부 ADMIN 제외를 갖는다」가 틀렸다:
       직계 형제 `followScopePopularity`에도 없다. 스펙대로 `followScopeReaders`만 고쳤다(카운트는 숫자만 주므로
       신원 노출이 없고, 명단 쪽은 이미 `login_id is null` 필터가 Java에 있어 카운트와 완전히 같지도 않았다).
+      → 그 「별도 판단」은 아래 「감사 잔여 결정 2건」(2026-09-12)에서 카운트에도 넣는 쪽으로 닫혔다.
+
+### 감사 잔여 결정 2건 — 미검증 토스 계정 이메일 재배정 + 인기 카운트 ADMIN 제외 (완료 ✅ 2026-09-12)
+> 위 절이 「설계 결정 대기」·「별도 판단」으로 남긴 둘. 1번은 「유지(동작 변경 0)」로 시작했으나 리뷰가
+> 그 근거를 깨자 사용자가 **재배정**으로 결정을 바꿨다(경위는 항목 안).
+- [x] **1. 미검증 TOSS 계정과 이메일이 겹치면 — 흡수도 폐기도 아닌 「이메일 재배정」**(사용자 결정, 작업 중
+      **「유지」에서 변경**) — 같은 이메일의 **미검증** TOSS 계정을 만나면 그 계정의 이메일을
+      `TossUserProvisioningService.syntheticEmail(userKey)`(`toss-{userKey}@noreply.booktimer.app`, `private static`을
+      패키지 static으로 열어 **재사용**)로 옮기고 `saveAndFlush`로 `uk_users_email`을 비운 뒤, 그 이메일로 구글
+      계정을 새로 만든다. 토스 계정은 폐기되지 않아 기록·`toss_user_key`·API 토큰이 남고 두 계정이 섞이지 않는다.
+      `emailVerified=true`인 TOSS는 소유 증명이 있어 **흡수 유지**. 이메일 변경 수단이 도메인에 없어 의도 한정
+      메서드 `User.reassignEmailToSynthetic`을 뒀다(형식 검증 · 검증 상태 불변 · **검증된 계정엔 ISE**).
+  - ⚠️ **결정이 바뀐 경위 — 리뷰가 「유지」의 근거를 깼다**: 최초 주석의 「토스가 넘기는 이메일은 본인 확인이
+        끝난 토스 신원의 것」이 레포 확정 진술(`TossUserProvisioningService#register`·
+        `UserRegistrationService#registerOAuth(…, verifyEmail)`·`User.tossUserKey` JavaDoc·`TossUserInfo`:
+        **토스는 이메일 소유를 보증하지 않는다**)과 충돌했다. 1차 보정은 「근거」→「가정(수용된 위험)」으로
+        갈라 적고 잔여 경로를 드러낸 것뿐이었고, **그 경로를 보고 사용자가 결정을 바꿨다**.
+  - 📍 **막은 경로**: 공격자가 토스 프로필에 남의 이메일 → `resolveEmail`이 그대로 저장(선점이 먼저여야 성립) →
+        실소유자의 구글 로그인이 그 계정에 들어감. 섞임이 사라지는 이유는 **옛 흡수가 선점자의 `toss_user_key`가
+        붙은 계정을 피해자에게 넘겼기** 때문이고(선점자는 이후에도 `login(userKey)`로 들어온다), 재배정은 그 계정을
+        선점자 쪽에 둔다. 재배정된 사용자는 미니앱을 그대로 쓰고 웹 이메일 경로만 합성 주소가 된다(원래 미검증이라
+        메일이 안 가던 주소). ⚠️ 잔여: 토스를 연결한 **미검증 LOCAL** 계정은 여전히 purge 대상이라 그 사용자의
+        미니앱 기록까지 삭제된다(선재 동작, 범위 밖).
+  - ⚠️ **최종 리뷰가 Critical을 프로브로 잡았다 — 재배정이 세션을 안 끊어 반쪽이었다**: 미니앱 `issueWebLoginCode`는
+        온보딩 전에도 세션을 만들고 그 principal이 **피해자 이메일**이라(`loginId != null ? loginId : email`),
+        이메일만 바꾸면 그 30일 세션이 `findByEmail` 폴백으로 **새 구글 계정**에 해석됐다(실측 `resolvedId=victim`).
+        처방 = `AccountService.reassignUnverifiedTossEmail` 신설(**세션 무효화 → 이메일 변경 → flush** — 역순이면
+        합성 주소로 찾아 0건이라 순서가 보안이다) + 합성 주소 충돌 시 `-{id}` 접미 폴백(안 하면 피해자 구글 로그인 영구 500).
+  - 📍 RED(단위 `Expecting actual … to refer to the same object` · 통합 `expected: GOOGLE but was: TOSS`) → 구현 → 초록.
+        신설 4건. 돌연변이 3종 KILLED — TOSS 갈래 제거 / `!isEmailVerified()` 제거 / `saveAndFlush` 제거(통합이
+        `Unique index or primary key violation: PUBLIC.UK_USERS_EMAIL`로 잡는다 — mock으론 원리상 못 잡는 자리).
+- [x] **2. `followScopePopularity`에 `role <> ADMIN`** — 형제 명단 쿼리(위 I)와 같은 불변식으로 맞춰 숫자와
+      명단이 ADMIN에서 어긋나지 않는다. 남는 차이는 명단 쪽 `login_id is null` 필터 하나(N-055, Java 필터).
+      RED `expected: 2L but was: 3L` → 한 줄 구현 → 초록. ⚠️ **양성 대조군을 일반 사용자 2명으로 둔 것이 계측기다**
+      (리뷰 지적) — 1명이면 조건 역전(`<>`→`=`) 돌연변이에서도 값이 1이라 조용히 통과한다.
 
 ### 웹 홈 「바꾸기」가 타이머를 시작하던 자리 — 고르기와 시작을 가른다 (완료 ✅ 2026-09-12)
 > 사용자 지적 「책 바꾸기로 책을 바꾸면 자동으로 타이머가 시작돼. 책을 바꾸기를 했으면 책만 바껴야 되는 게 맞아.

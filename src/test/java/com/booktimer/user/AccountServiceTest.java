@@ -381,6 +381,46 @@ class AccountServiceTest {
         verify(userRepository, never()).save(any());
     }
 
+    // --- 미검증 TOSS 계정의 이메일 재배정 (pre-hijacking 차단 정책 ②) ---
+
+    @Test
+    @DisplayName("reassignUnverifiedTossEmail: 세션을 먼저 끊고 그 다음에 이메일을 바꾼다 — 순서가 뒤집히면 옛 principal(이메일)로 인덱싱된 세션을 못 찾는다")
+    void reassignUnverifiedTossEmail_invalidatesSessionsBeforeChangingEmail() {
+        User toss = tossUnverified();
+
+        service.reassignUnverifiedTossEmail(toss, "toss-uk1@noreply.booktimer.app");
+
+        // SessionInvalidator는 principal 후보로 user.getEmail()을 읽는다 — 이메일을 먼저 바꾸면 합성 주소로
+        // 찾게 되어 0건이 되고, 피해자 이메일 principal을 가진 옛 세션이 살아남는다(그 세션은 findByEmail
+        // 폴백으로 새 구글 계정에 해석된다). 그래서 이 순서가 보안 그 자체다.
+        var ordered = inOrder(sessionInvalidator, userRepository);
+        ordered.verify(sessionInvalidator).invalidate(toss, null); // 남길 창 없음 — 본인 흐름이 아니다
+        ordered.verify(userRepository).saveAndFlush(toss);
+        assertThat(toss.getEmail()).isEqualTo("toss-uk1@noreply.booktimer.app");
+        assertThat(toss.isEmailVerified()).isFalse();
+    }
+
+    @Test
+    @DisplayName("reassignUnverifiedTossEmail: 합성 주소가 이미 쓰이고 있으면 -{id} 접미로 피한다 — sanitize 접힘이 유니크 위반 500이 되지 않게")
+    void reassignUnverifiedTossEmail_collidingSynthetic_fallsBackToIdSuffix() {
+        User toss = tossUnverified();
+        when(userRepository.existsByEmail("toss-uk1@noreply.booktimer.app")).thenReturn(true);
+
+        service.reassignUnverifiedTossEmail(toss, "toss-uk1@noreply.booktimer.app");
+
+        // syntheticEmail은 [^a-z0-9]를 지우므로 다른 userKey가 같은 주소로 접힐 수 있다. 그때 그대로 쓰면
+        // uk_users_email 위반으로 피해자의 구글 로그인이 영구 500이 된다.
+        assertThat(toss.getEmail()).isEqualTo("toss-uk1-7@noreply.booktimer.app");
+        verify(userRepository).saveAndFlush(toss);
+    }
+
+    private User tossUnverified() {
+        User user = User.ofOAuth(EMAIL, "토스유저", "Asia/Seoul", Role.USER, AuthProvider.TOSS);
+        user.linkTossUserKey("uk-1");
+        org.springframework.test.util.ReflectionTestUtils.setField(user, "id", 7L); // 접미 폴백이 쓰는 유일 키
+        return user;
+    }
+
     @Test
     @DisplayName("changeLoginId: 현재 아이디와 같으면 중복 검사 전에 IAE — 자기 자신이 '이미 사용 중'으로 오해석되지 않는다")
     void changeLoginId_sameAsCurrent_beatsDuplicateCheck() {

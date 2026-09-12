@@ -157,6 +157,58 @@ class OAuthUserProvisioningServiceTest {
     }
 
     @Test
+    @DisplayName("미검증 TOSS 계정과 이메일이 겹치면 그 계정의 이메일을 합성 주소로 재배정하고 구글 계정을 새로 만든다(흡수 아님·폐기 아님)")
+    void provision_existingUnverifiedTossAccount_reassignedNotAbsorbed() {
+        // 결정 변경(사용자 2026-09-12): 토스는 이메일 소유를 보증하지 않으므로(TossUserProvisioningService#register)
+        // 흡수는 pre-hijacking 벡터다. 그렇다고 폐기하면 그 토스 사용자의 기록이 사라지니, 이메일만 비켜 준다.
+        User existingToss = User.ofOAuth("toss@booktimer.com", "토스러", "Asia/Seoul", Role.USER, AuthProvider.TOSS);
+        existingToss.linkTossUserKey("UKsquat-01"); // 이론상 TOSS 계정엔 항상 있다
+        when(userRepository.findByEmail("toss@booktimer.com")).thenReturn(Optional.of(existingToss));
+        User created = User.ofOAuth("toss@booktimer.com", "구글이름", "Asia/Seoul", Role.USER, AuthProvider.GOOGLE);
+        when(registrationService.registerOAuth(eq("toss@booktimer.com"), eq("구글이름"),
+                eq("Asia/Seoul"), eq(AuthProvider.GOOGLE), any())).thenReturn(created);
+
+        User result = service.provision("toss@booktimer.com", "구글이름", true);
+
+        assertThat(result).isSameAs(created); // 반환은 새 구글 계정 — 기존 토스 계정이 아니다
+        // 재배정 자체는 AccountService가 한다(세션 무효화 → 이메일 변경 → flush 순서가 거기 있다).
+        verify(accountService).reassignUnverifiedTossEmail(existingToss, "toss-uksquat01@noreply.booktimer.app");
+        assertThat(existingToss.getTossUserKey()).isEqualTo("UKsquat-01"); // userKey는 불변
+        verify(accountService, never()).purgeUnverifiedLocalAccount(any()); // 폐기 아님 — 기록 보존
+    }
+
+    @Test
+    @DisplayName("TOSS 계정인데 toss_user_key가 없으면 ISE — 합성 주소를 만들 키가 없는데 조용히 흡수로 빠지지 않는다")
+    void provision_tossAccountWithoutUserKey_throws() {
+        // 이론상 불가(TOSS 계정엔 항상 userKey가 있다). 그 전제가 깨지면 흡수 = pre-hijacking이므로 드러낸다.
+        User keyless = User.ofOAuth("keyless@booktimer.com", "토스러", "Asia/Seoul", Role.USER, AuthProvider.TOSS);
+        when(userRepository.findByEmail("keyless@booktimer.com")).thenReturn(Optional.of(keyless));
+
+        assertThatThrownBy(() -> service.provision("keyless@booktimer.com", "구글이름", true))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(accountService, never()).reassignUnverifiedTossEmail(any(), any());
+        verify(registrationService, never()).registerOAuth(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("TOSS 계정이라도 이메일이 검증됐으면 흡수한다(소유 증명이 있으니 같은 사람)")
+    void provision_existingVerifiedTossAccount_isAbsorbed() {
+        User verifiedToss = User.ofOAuth("vtoss@booktimer.com", "토스러", "Asia/Seoul", Role.USER, AuthProvider.TOSS);
+        verifiedToss.linkTossUserKey("uk-verified");
+        verifiedToss.verifyEmail(); // 그 토스 사용자가 웹에서 이메일 인증을 통과한 경우
+        when(userRepository.findByEmail("vtoss@booktimer.com")).thenReturn(Optional.of(verifiedToss));
+
+        User result = service.provision("vtoss@booktimer.com", "구글이름", true);
+
+        assertThat(result).isSameAs(verifiedToss);
+        assertThat(verifiedToss.getEmail()).isEqualTo("vtoss@booktimer.com"); // 재배정 없음
+        verify(accountService, never()).reassignUnverifiedTossEmail(any(), any());
+        verify(accountService, never()).purgeUnverifiedLocalAccount(any());
+        verify(registrationService, never()).registerOAuth(any(), any(), any(), any(), any());
+    }
+
+    @Test
     @DisplayName("provision: 이메일 미검증(email_verified=false)이면 거부하고 아무 사용자도 만들지/조회하지 않는다")
     void provision_unverifiedEmail_rejected() {
         assertThatThrownBy(() -> service.provision("attacker@booktimer.com", "공격자", false))

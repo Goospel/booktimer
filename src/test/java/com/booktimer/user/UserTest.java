@@ -723,4 +723,24 @@ class UserTest {
         assertThatThrownBy(() -> user.updateStudyDailyGoal(-1)).isInstanceOf(IllegalArgumentException.class);
         assertThat(user.getStudyDailyGoalSeconds()).isEqualTo(1800);
     }
+
+    @Test
+    @DisplayName("reassignEmailToSynthetic: 검증된 이메일은 재배정 불가(ISE) — 소유 증명을 무시하고 빼앗지 못한다. 미검증이면 바뀌고 검증 상태는 그대로")
+    void reassignEmailToSynthetic_rejectsVerified_allowsUnverified() {
+        User verified = User.of(EMAIL, HASH, NICK, TZ, Role.USER);
+        verified.verifyEmail();
+
+        assertThatThrownBy(() -> verified.reassignEmailToSynthetic("toss-uk1@noreply.booktimer.app"))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(verified.getEmail()).isEqualTo(EMAIL); // 값은 그대로
+
+        User unverified = User.of("squat@booktimer.com", HASH, NICK, TZ, Role.USER);
+        unverified.reassignEmailToSynthetic("toss-uk1@noreply.booktimer.app");
+        assertThat(unverified.getEmail()).isEqualTo("toss-uk1@noreply.booktimer.app");
+        assertThat(unverified.isEmailVerified()).isFalse(); // 재배정이 검증 상태를 켜지 않는다
+
+        // 형식이 깨진 주소는 거부(생성자와 같은 규칙)
+        assertThatThrownBy(() -> unverified.reassignEmailToSynthetic("not-an-email"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }
