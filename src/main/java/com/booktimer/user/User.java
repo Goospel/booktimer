@@ -691,12 +691,13 @@ public class User extends BaseTimeEntity {
     }
 
     /**
-     * <b>미검증 TOSS 계정의 이메일 충돌 해소 전용</b> — 이 계정의 이메일을 합성 주소로 비켜 놓는다.
+     * <b>토스를 연결한 미검증 계정의 이메일 충돌 해소 전용</b> — 이 계정의 이메일을 합성 주소로 비켜 놓는다.
      * 일반적인 "이메일 변경"이 아니다(그런 기능은 도메인에 없다. 이름으로 못 박아 오용을 막는다).
      *
-     * <p>쓰이는 자리는 하나다: {@link OAuthUserProvisioningService#provision}이 같은 이메일의 <b>미검증</b>
-     * TOSS 계정을 만났을 때. 토스는 이메일 소유를 보증하지 않아 그 주소가 남의 것일 수 있고, 그렇다고 계정을
-     * 폐기하면 그 사용자의 기록이 사라진다 — 그래서 계정은 남기고 이메일만 {@code toss-{userKey}@…}로 옮긴다
+     * <p>쓰이는 자리는 하나다: {@link AccountService#reassignUnverifiedTossEmail} — 그쪽을
+     * {@link OAuthUserProvisioningService#provision}이 같은 이메일의 <b>미검증</b> 토스 연결 계정(TOSS
+     * 가입이든 웹 LOCAL 가입 후 연결이든)을 만났을 때 부른다. 토스는 이메일 소유를 보증하지 않아 그 주소가
+     * 남의 것일 수 있고, 그렇다고 계정을 폐기하면 그 사용자의 기록이 사라진다 — 그래서 계정은 남기고 이메일만 {@code toss-{userKey}@…}로 옮긴다
      * ({@link TossUserProvisioningService#syntheticEmail}이 그 주소의 단일 출처).
      *
      * <p>검증 상태는 건드리지 않는다 — 원래 {@code false}이고, 합성 주소는 발송하지 않는 자리표시다.

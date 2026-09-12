@@ -129,6 +129,42 @@ class OAuthUserProvisioningServiceTest {
     }
 
     @Test
+    @DisplayName("토스를 연결한 미검증 LOCAL 계정은 폐기하지 않고 이메일만 재배정한다(미니앱 기록 보존)")
+    void provision_unverifiedLocalAccountLinkedToToss_isReassignedNotPurged() {
+        // 웹에서 LOCAL로 가입(미검증)한 뒤 미니앱을 연결한 사용자 — 폐기하면 그 사람의 미니앱 기록이 사라진다.
+        // provider가 LOCAL이어도 toss_user_key가 있으면 정책 ②(재배정)로 보낸다.
+        User local = User.of("victim@booktimer.com", "hash", "선점자", "Asia/Seoul", Role.USER);
+        local.linkTossUserKey("UKlocal-01");
+        when(userRepository.findByEmail("victim@booktimer.com")).thenReturn(Optional.of(local));
+        User created = User.ofOAuth("victim@booktimer.com", "진짜주인", "Asia/Seoul", Role.USER, AuthProvider.GOOGLE);
+        when(registrationService.registerOAuth(eq("victim@booktimer.com"), eq("진짜주인"),
+                eq("Asia/Seoul"), eq(AuthProvider.GOOGLE), any())).thenReturn(created);
+
+        User result = service.provision("victim@booktimer.com", "진짜주인", true);
+
+        assertThat(result).isSameAs(created);
+        verify(accountService).reassignUnverifiedTossEmail(local, "toss-uklocal01@noreply.booktimer.app");
+        verify(accountService, never()).purgeUnverifiedLocalAccount(any()); // 기록 보존 — 폐기 아님
+    }
+
+    @Test
+    @DisplayName("미검증 GOOGLE 계정에 토스가 연결돼 있어도 흡수한다 — 구글이 준 이메일은 같은 사람의 것이다")
+    void provision_unverifiedGoogleAccountLinkedToToss_isAbsorbed() {
+        // 현재 도달 불가(구글 가입은 emailVerified=true)지만, 미래에 미검증 구글 경로가 생기면 정당한 구글
+        // 사용자를 합성 주소로 밀어내면 안 된다 — 재배정 대상은 TOSS 가입 또는 토스를 연결한 LOCAL뿐이다.
+        User google = User.ofOAuth("g@booktimer.com", "구글러", "Asia/Seoul", Role.USER, AuthProvider.GOOGLE);
+        google.linkTossUserKey("UKgoogle-01");
+        when(userRepository.findByEmail("g@booktimer.com")).thenReturn(Optional.of(google));
+
+        User result = service.provision("g@booktimer.com", "구글러", true);
+
+        assertThat(result).isSameAs(google);
+        verify(accountService, never()).reassignUnverifiedTossEmail(any(), any());
+        verify(accountService, never()).purgeUnverifiedLocalAccount(any());
+        verify(registrationService, never()).registerOAuth(any(), any(), any(), any(), any());
+    }
+
+    @Test
     @DisplayName("pre-hijacking: 검증된 LOCAL 계정은 폐기하지 않고 기존대로 연결한다(정당한 소유자)")
     void provision_verifiedLocalAccount_isLinkedNotPurged() {
         User verifiedLocal = User.of("owner@booktimer.com", "hash", "주인", "Asia/Seoul", Role.USER);
