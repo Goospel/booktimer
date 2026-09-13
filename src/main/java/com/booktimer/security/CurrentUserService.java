@@ -42,12 +42,17 @@ public class CurrentUserService {
         return resolve(principal.getName());
     }
 
-    /** principal 이름(login_id, OAuth 첫 세션은 email, 아이디 변경 전 세션은 옛 login_id)을 도메인 User로 해석한다. */
+    /**
+     * principal 이름(login_id, OAuth 첫 세션은 email, 아이디 변경 전 세션은 옛 login_id)을 도메인 User로 해석한다.
+     *
+     * @throws AuthenticatedUserNotFoundException 셋 다 빗나간 경우(서버 결함 → 전역 처리기가 500).
+     *                                            {@code IllegalStateException}이 아닌 이유는 그 클래스 javadoc 참고 —
+     *                                            컨트롤러의 ISE=409 핸들러에 걸려 거짓 안내가 되면 안 된다.
+     */
     public User resolve(String principalName) {
         return userRepository.findByLoginId(principalName)
                 .or(() -> userRepository.findByEmail(principalName))
                 .or(() -> userRepository.findByPreviousLoginId(principalName)) // 아이디 변경 전 세션 브리지(전 기기)
-                .orElseThrow(() -> new IllegalStateException(
-                        "authenticated user not found: " + principalName));
+                .orElseThrow(() -> new AuthenticatedUserNotFoundException(principalName));
     }
 }

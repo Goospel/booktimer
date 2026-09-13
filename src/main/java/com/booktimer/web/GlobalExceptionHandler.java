@@ -19,7 +19,8 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 /**
  * 전역 예외 처리 — 컨트롤러에서 처리되지 못한 예외를 Spring 기본 whitelabel 대신 친절한 'error' 뷰로 변환한다.
  *
- * <p>예기치 못한 예외(예: 인증 주체는 있으나 도메인 사용자 미존재 → {@code IllegalStateException})가
+ * <p>예기치 못한 예외(예: 인증 주체는 있으나 도메인 사용자 미존재 →
+ * {@code AuthenticatedUserNotFoundException})가
  * 500 whitelabel로 사용자에게 그대로 노출되면 흉하다. 여기서 잡아 상태/메시지를 모델에 싣고
  * {@code templates/error.html}로 렌더한다 — 페이지를 하나로 통일.
  *

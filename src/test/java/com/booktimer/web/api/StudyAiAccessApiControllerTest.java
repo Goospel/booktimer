@@ -24,6 +24,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -167,6 +168,20 @@ class StudyAiAccessApiControllerTest {
                 .andExpect(content().string("이메일 인증 후 신청할 수 있어요"));
 
         assertThat(accessOf("aiuser7")).isEqualTo(StudyAiAccess.NONE);
+    }
+
+    // 인증 주체는 있는데 도메인 사용자가 없는 것은 <b>서버 결함</b>이다(계정 삭제 뒤 남은 세션 등) —
+    // 클래스 레벨 {@code @ExceptionHandler(IllegalStateException)}이 {@code CurrentUserService.resolve}의
+    // 해석 실패까지 삼켜 「이미 신청했거나 승인된 상태예요」로 내보내던 자리다. 그 안내를 받은 사용자는
+    // 존재하지도 않는 신청을 기다리게 된다 — 409(도메인 전이 위반)와 500(서버 결함)은 갈라야 한다.
+    @Test
+    @DisplayName("POST 신청: 인증 주체는 있는데 사용자가 없으면 409가 아니라 500 — 「이미 신청했다」로 오분류하지 않는다")
+    void request_ghostPrincipal_isServerErrorNotConflict() throws Exception {
+        mockMvc.perform(post(REQUEST_URL).with(user("ghost-no-such-user")).with(csrf()))
+                .andExpect(status().isInternalServerError())
+                // 상태코드만 재면 「500인데 본문은 여전히 거짓 안내」인 변경을 놓친다 — 미니앱·웹 모두
+                // 에러 본문을 사용자에게 그대로 띄우므로, 「이미」가 실리지 않는 것까지 못 박는다.
+                .andExpect(content().string(not(containsString("이미"))));
     }
 
     @Test

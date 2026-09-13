@@ -20,6 +20,10 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -267,5 +271,44 @@ class MiniappHandleApiControllerTest {
     @DisplayName("지어낸 토큰은 401 — 변경 경로도 미니앱 체인이 그대로 막는다")
     void changeHandle_withoutToken_401() throws Exception {
         changeHandle("지어낸토큰", "someone").andExpect(status().isUnauthorized());
+    }
+
+    /**
+     * 인증 주체는 있는데 도메인 사용자가 없는 것은 <b>서버 결함</b>이다(계정 삭제 뒤 남은 세션 등) —
+     * 클래스 레벨 {@code @ExceptionHandler(IllegalStateException)}이 {@code CurrentUserService.resolve}의
+     * 해석 실패까지 삼켜 「이미 아이디가 있어요」로 내보내던 자리다. 없는 계정에 「이미 있다」고 답하면
+     * 사용자는 있지도 않은 핸들을 찾게 된다 — 409(불변식 위반)와 500(서버 결함)은 갈라야 한다.
+     * 두 엔드포인트가 같은 클래스 핸들러를 공유하므로 {@link #changeHandle_ghostPrincipal_isServerErrorNotConflict}
+     * 까지 따로 잰다(요청을 만드는 방법은 {@link #ghostRequest} 참고).
+     */
+    @Test
+    @DisplayName("핸들 만들기: 인증 주체는 있는데 사용자가 없으면 409가 아니라 500 — 「이미 아이디가 있어요」로 오분류하지 않는다")
+    void createHandle_ghostPrincipal_isServerErrorNotConflict() throws Exception {
+        ghostRequest("/api/miniapp/handle")
+                .andExpect(status().isInternalServerError())
+                // 상태코드만 재면 「500인데 본문은 여전히 거짓 안내」인 변경을 놓친다 — 미니앱은 에러 본문을
+                // 그대로 사용자에게 띄우므로(`api.ts errorMessage()`), 「이미」가 안 실리는 것까지 못 박는다.
+                .andExpect(content().string(not(containsString("이미"))));
+    }
+
+    @Test
+    @DisplayName("아이디 바꾸기: 인증 주체는 있는데 사용자가 없으면 409가 아니라 500 — 「이미 사용했어요」로 오분류하지 않는다")
+    void changeHandle_ghostPrincipal_isServerErrorNotConflict() throws Exception {
+        ghostRequest("/api/miniapp/handle/change")
+                .andExpect(status().isInternalServerError())
+                .andExpect(content().string(not(containsString("이미"))));
+    }
+
+    /**
+     * 세션 인증만 있고 도메인 사용자가 없는 요청 — Bearer 토큰으로는 이 상태를 만들 수 없다
+     * ({@code BearerTokenFilter}가 토큰에서 User를 직접 찾으므로 계정이 없으면 애초에 401이다). 그래서
+     * 세션 체인으로 같은 핸들러에 들어간다 — Authorization 헤더가 없는 {@code /api/**}는 세션 체인이 맡는다
+     * ({@code SecurityConfig} 미니앱 라우팅 스위치).
+     */
+    private ResultActions ghostRequest(String url) throws Exception {
+        return mockMvc.perform(post(url)
+                .with(user("ghost-no-such-user")).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"loginId\":\"whoever\"}"));
     }
 }
