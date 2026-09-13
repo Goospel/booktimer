@@ -210,7 +210,7 @@ public class StudyPlanService {
         // 상한을 우회하는 문이 미래의 한 줄 추가로 조용히 열리는 자리다.
         boolean granted = switch (usageService.tryConsumeBoth(user, now, Kind.PLAN)) {
             case USER_EXHAUSTED -> throw new ResponseStatusException(
-                    HttpStatus.TOO_MANY_REQUESTS, "오늘 몫을 다 썼어요 — 내일 다시 해 주세요");
+                    HttpStatus.TOO_MANY_REQUESTS, "오늘 몫을 다 썼어요 — 한국 시간 오전 9시에 다시 채워져요");
             case GLOBAL_EXHAUSTED -> throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE, "오늘은 AI 요청이 많아 잠시 멈췄어요 — 내일 다시 해 주세요");
             case OK -> true;

@@ -28,6 +28,10 @@ import java.time.LocalDate;
  * 있다 — <b>막으려는 것에 같은 구멍이 뚫린다.</b> 이 값은 사용자에게 보이지 않는 내부 키라 UTC로 둔다.
  * {@link StudyAiUsage}(사용자당)는 유저 타임존으로 키를 잡고 있었는데 <b>같은 구멍이라 2026-09-13에
  * UTC로 통일했다</b>({@link StudyAiUsageService} javadoc의 S-3).
+ *
+ * <p>⚠️ {@code V87__study_ai_daily_total.sql}의 8~11행 주석은 「사용자당은 유저 타임존」이라고 적혀 있는데
+ * <b>2026-09-13 이전의 사실</b>이다 — 적용된 마이그레이션은 주석만 고쳐도 체크섬이 깨져(Flyway validate
+ * 실패) 못 고친다. 이 javadoc이 그 자리의 최신 사실이다.
  */
 @Entity
 @Table(name = "study_ai_daily_total",

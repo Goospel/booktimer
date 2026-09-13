@@ -156,9 +156,12 @@ public class StudyAiUsageService {
      * 안에 있어 동시 요청 열이 와도 정확히 {@code max}개만 통과한다. INSERT 경합은 UNIQUE가 심판하고,
      * 진 쪽은 예외를 삼키고 두 번째 UPDATE로 간다(그때는 행이 있으므로 정상 경쟁이 된다).
      *
+     * <p><b>package-private인 것이 의도다</b> — 키 계산을 밖에서 못 하게 봉인한다. 운영 코드는
+     * {@link #tryConsumeBoth}(=Instant)만 쓰고, 이 오버로드는 같은 패키지의 산술 테스트 몫이다(S-3).
+     *
      * @return 선점했으면 {@code true}, 오늘 몫을 다 썼으면 {@code false}(호출부가 429)
      */
-    public boolean tryConsume(User user, LocalDate day, Kind kind) {
+    boolean tryConsume(User user, LocalDate day, Kind kind) {
         if (usageRepository.consume(user, day, kind, kind.max()) == 1) {
             return true;
         }
@@ -176,8 +179,11 @@ public class StudyAiUsageService {
     /**
      * 선점한 몫을 되돌린다 — <b>외부 호출이 실패했을 때만</b> 부른다. 장애로 오늘 몫을 잃지 않게 하는
      * 장치이지, 취소 기능이 아니다.
+     *
+     * <p>{@link #tryConsume}과 같은 이유로 package-private다 — 키 계산을 밖에서 못 하게(운영 코드는
+     * {@link #refundBoth}만 쓴다).
      */
-    public void refund(User user, LocalDate day, Kind kind) {
+    void refund(User user, LocalDate day, Kind kind) {
         usageRepository.refund(user, day, kind);
     }
 
@@ -192,8 +198,13 @@ public class StudyAiUsageService {
         return remaining(user, utcDay(now), kind);
     }
 
-    /** 오늘 남은 몫 — 화면이 버튼 옆에 그린다. 행이 없으면 아직 아무것도 안 쓴 것이다. */
-    public int remaining(User user, LocalDate day, Kind kind) {
+    /**
+     * 오늘 남은 몫 — 화면이 버튼 옆에 그린다. 행이 없으면 아직 아무것도 안 쓴 것이다.
+     *
+     * <p>{@link #tryConsume}과 같은 이유로 package-private다 — 키 계산을 밖에서 못 하게(운영 코드는
+     * 위 {@code Instant} 오버로드만 쓴다).
+     */
+    int remaining(User user, LocalDate day, Kind kind) {
         int used = usageRepository.findByUserAndUsageDateAndKind(user, day, kind)
                 .map(StudyAiUsage::getUsed)
                 .orElse(0);

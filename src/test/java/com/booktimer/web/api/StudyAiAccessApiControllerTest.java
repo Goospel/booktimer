@@ -151,12 +151,17 @@ class StudyAiAccessApiControllerTest {
     // 사유가 화면까지 닿아야 한다. Content-Type을 같이 재는 이유는 둘이다: ① charset을 빼면 한글이
     // 깨지고 ② text/html로 협상되면 브라우저가 본문을 렌더한다. 그리고 전역 처리기에 맡기면 본문이
     // `error.html` 문서 전체가 되어 화면의 `errorMessage`가 「<로 시작하면 못 믿는다」 규칙으로 버린다.
+    //
+    // ⚠️ **Accept 헤더를 반드시 얹는다** — 안 보내면 협상 기본값이 이미 text/plain;charset=UTF-8이라
+    // `contentType` 단언이 핸들러의 `.contentType(...)` 줄을 지워도 초록이다(공허한 대조군, 리뷰 실측).
+    // 브라우저가 실제로 보내는 Accept로 협상을 일으켜야 그 줄이 계측된다.
     @Test
     @DisplayName("POST 신청: 이메일 미검증이면 403 — 사유가 평문 UTF-8 한글로 나간다(S-4)")
     void request_unverifiedEmail_isForbiddenWithPlainTextReason() throws Exception {
         registerUnverified("aiuser7");
 
-        mockMvc.perform(post(REQUEST_URL).with(user("aiuser7")).with(csrf()))
+        mockMvc.perform(post(REQUEST_URL).with(user("aiuser7")).with(csrf())
+                        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"))
                 .andExpect(status().isForbidden())
                 .andExpect(content().contentType("text/plain;charset=UTF-8"))
                 .andExpect(content().string("이메일 인증 후 신청할 수 있어요"));
