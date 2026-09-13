@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, nextTick, onUnmounted } from 'vue'
 import { useReadingTimer } from './useReadingTimer'
 import { fmtMSS, goalLabel } from './timerProgress'
-import { studyProgress, minutesToGoalSeconds } from './studyProgress'
+import { sessionGoalView, minutesToSessionGoal } from './sessionGoal'
 import { initialOf, coverColor, hasCover } from '../books/pure'
 import type { StudyBookRow } from '../study/api'
 
@@ -11,11 +11,10 @@ const props = withDefaults(defineProps<{
     todaySeconds: number
     hasActiveSession: boolean
     activeStartedAt: string | null
-    /** 하루 목표 초. 0 = 「목표 없음」이라는 정당한 상태 — 게이지 대신 「하루 목표 정하기」를 띄운다. */
-    goalSeconds?: number
     starting?: boolean
     stopping?: boolean
-    savingGoal?: boolean
+    /** 회당 시간 저장 왕복 중 — 인라인 폼의 저장 버튼만 잠근다. */
+    savingSessionGoal?: boolean
     /** 내 공부 서재 — 기본 칩이 여기서 골라진다. 빈 서재가 기본값(옛 서버·옛 픽스처). */
     books?: StudyBookRow[]
     /** 마지막으로 책을 걸고 잰 책 — 기본 칩 1순위. */
@@ -26,16 +25,19 @@ const props = withDefaults(defineProps<{
     activeBook?: StudyBookRow | null
     /** 책 교체 왕복 중 — 「책 바꾸기」를 잠근다. */
     changing?: boolean
-}>(), { goalSeconds: 0, books: () => [], recentBookId: null, pickedBook: null, activeBook: null })
+}>(), { books: () => [], recentBookId: null, pickedBook: null, activeBook: null })
 
 const emit = defineEmits<{
-    start: [bookId: number | null]; stop: []; setGoal: [seconds: number]
+    start: [bookId: number | null]; stop: []
+    setSessionGoal: [bookId: number, seconds: number | null]
     openSheet: []; changeBook: []
 }>()
 
 // 칩에 설 책 = 시트에서 고른 책 → 최근 걸고 잰 책 → 첫 책(독서 BookPickForm과 같은 규칙). 셋 다 없으면 null.
+// 고른 책은 **서버 최신 행으로** 다시 찾는다 — 시트에서 붙잡은 사본은 회당 시간을 저장해도 안 바뀐다.
 const defaultBook = computed<StudyBookRow | null>(() =>
-    props.pickedBook ?? props.books.find(b => b.id === props.recentBookId) ?? props.books[0] ?? null)
+    (props.pickedBook && (props.books.find(b => b.id === props.pickedBook!.id) ?? props.pickedBook))
+    ?? props.books.find(b => b.id === props.recentBookId) ?? props.books[0] ?? null)
 
 // 칩 표지색 — 표지 없는 책의 결정적 플레이스홀더(독서 칩과 같은 seed 규칙).
 function coverStyle(b: StudyBookRow) {
@@ -52,21 +54,43 @@ watch(() => props.activeStartedAt, v => startedAtIso.value = v)
 
 const { elapsed } = useReadingTimer(ref(0), active, startedAtIso)
 
-// 게이지는 히어로 숫자와 같은 분자를 본다 — 완료 합 + 측정 중 경과.
-const progress = computed(() => studyProgress(props.goalSeconds, props.todaySeconds + elapsed.value))
+// ── 책별 회당 시간 ──────────────────────────────────────────────────────────────
+// 대상 책 = 측정 중이면 activeBook, 아니면 칩 책. 기준은 그 책의 **현재 값**(설계 §4.1 — 세션 스냅샷 없음).
+const goalBook = computed(() => props.hasActiveSession ? props.activeBook : defaultBook.value)
+const view = computed(() => props.hasActiveSession
+    ? sessionGoalView(props.activeBook?.sessionGoalSeconds, elapsed.value)
+    : sessionGoalView(null, 0))
 
-// 목표 인라인 편집 — 설정 페이지로 보내지 않는다(서버 0줄, 미니앱과 같은 자리).
+// 탭 제목 알림 — 다른 탭을 보고 있어도 닿았음을 안다. 브라우저 Notification은 쓰지 않는다(사용자 기각).
+// 떼는 쪽은 제목 자체를 보고 판정한다 — 남이 바꾼 제목을 저장해 둔 옛 값으로 덮지 않는다.
+// (붙이는 쪽은 watch가 false→true 전환에서만 부르므로 중복 가드를 두지 않는다.)
+const TITLE_PREFIX = '[회당 시간 달성] '
+function titlePrefix(on: boolean) {
+    const t = document.title
+    if (on) document.title = TITLE_PREFIX + t
+    else if (t.startsWith(TITLE_PREFIX)) document.title = t.slice(TITLE_PREFIX.length)
+}
+watch(() => view.value.kind === 'reached', titlePrefix, { immediate: true })
+onUnmounted(() => titlePrefix(false))
+
+// 인라인 편집 — 설정 페이지로 보내지 않는다. 닫는 건 부모다(저장 성공을 본 뒤): 먼저 닫으면 실패했을 때
+// 사용자가 친 값이 사라지고, 저장 중 잠금이 한 번도 렌더되지 않는다.
 const editing = ref(false)
-const goalMinutes = ref(0)
-function openEdit() {
-    goalMinutes.value = Math.round(props.goalSeconds / 60)
+const goalMinutes = ref<number | ''>('')
+const goalInput = ref<HTMLInputElement | null>(null)
+async function openEdit() {
+    const v = goalBook.value?.sessionGoalSeconds
+    goalMinutes.value = v ? Math.round(v / 60) : ''
     editing.value = true
+    // 폼은 좌열, 손잡이는 우측 칩 아래 — 좁은 폭에선 폼이 화면 밖일 수 있어 포커스로 스크롤을 부른다.
+    await nextTick()
+    goalInput.value?.focus()
 }
-function submitGoal() {
-    emit('setGoal', minutesToGoalSeconds(goalMinutes.value))
-    // 여기서 닫지 않는다 — 부모의 왕복(실측 ≈128ms)이 끝나기 전에 닫으면 ① savingGoal UI가
-    // 한 번도 렌더되지 않고 ② 400으로 실패했을 때 사용자가 친 값이 사라진다. 닫는 건 부모다.
+function submitGoal(seconds: number | null) {
+    if (goalBook.value) emit('setSessionGoal', goalBook.value.id, seconds)
 }
+// 폼이 열린 채 대상 책이 바뀌면(칩 교체·측정 시작) 닫는다 — 다른 책에 저장되지 않게.
+watch(() => goalBook.value?.id, () => { editing.value = false })
 /** 부모(DashboardApp)가 저장 성공을 확인한 뒤 부른다. */
 function closeEdit() { editing.value = false }
 defineExpose({ closeEdit })
@@ -80,50 +104,15 @@ defineExpose({ closeEdit })
                 <slot name="mode" />
             </div>
             <div class="dash-timer-num">{{ fmtMSS(todaySeconds + elapsed) }}</div>
-
-            <div v-if="goalSeconds > 0" class="dash-progress-wrap">
-                <div class="dash-progress-track">
-                    <div class="dash-progress-fill" :style="{ width: progress.pctStr }"></div>
-                </div>
-                <div class="dash-progress-meta">
-                    <span>하루 목표 {{ goalLabel(goalSeconds) }}
-                        <button type="button" class="dash-goal-change" @click="openEdit">변경</button></span>
-                    <span class="dash-progress-pct">
-                        {{ progress.achieved ? '목표 달성' : `목표까지 ${fmtMSS(progress.remaining)}` }}
-                    </span>
-                </div>
-            </div>
-            <button v-else type="button" class="dash-btn-link dash-bookless dash-goal-set" @click="openEdit">
-                하루 목표 정하기
-            </button>
-
-            <form v-if="editing" class="dash-goal-edit" @submit.prevent="submitGoal">
-                <label>하루 목표
-                    <!-- step은 스피너 간격이 아니라 **유효성 제약**이다 — step="5"면 7·23분이 stepMismatch가
-                         되어 네이티브 검증이 submit을 막는다(실브라우저 실측 2026-09-05). 조용한 건
-                         앱 쪽이고(요청 0건) 사용자에겐 크롬이 검증 버블을 띄운다.
-                         step="1" = 정수 분만 받는다는 **의도**다 — 7.5를 조용히 7로 내리느니 크롬이
-                         「가장 근접한 유효 값 2개는 7 및 8입니다」를 보여주는 편이 낫다.
-                         max는 하루(1440분) — 없으면 999999999분이 200으로 통과해 「하루 목표
-                         16666666시간 39분」이 렌더된다(리뷰 실측). -->
-                    <input type="number" min="0" max="1440" step="1" v-model.number="goalMinutes"
-                           aria-label="하루 목표(분)"> 분
-                </label>
-                <button type="submit" class="dash-btn-fill" :disabled="savingGoal">
-                    {{ savingGoal ? '저장하는 중…' : '저장' }}
-                </button>
-                <!-- 보조 둘은 「책 없이 시작」과 같은 조용한 링크 관용구(.dash-bookless) — 그냥 .dash-btn-link면
-                     전역 button의 연필 테두리·18px를 그대로 받아 저장과 같은 무게로 선다(실브라우저 실측). -->
-                <button type="button" class="dash-btn-link dash-bookless" @click="editing = false">취소</button>
-                <!-- 미니앱 showClearGoal — 공부이고 지울 목표가 있을 때만. 독서엔 이 문이 없다(0이 원장을 깨는 값). -->
-                <button v-if="goalSeconds > 0" type="button" class="dash-btn-link dash-bookless"
-                        @click="emit('setGoal', 0); editing = false">목표 없이 지내기</button>
-            </form>
         </div>
 
         <div class="dash-timer-right">
+            <!-- 패널은 하나를 상태 key로 갈아 끼운다(Transition out-in은 그대로) — 회당 시간 폼을 **한 조각**으로 두고
+                 두 상태 모두 손잡이 바로 뒤에 세우기 위해서다: 측정 중 = 「회당 시간 변경」 다음, 대기 = 칩 아래 손잡이 줄 다음.
+                 좌열에 두었을 땐 넓은 화면에서 손잡이와 ≈650px 떨어지고 좁은 화면에선 손잡이 위에 끼어들어 밀어냈다(실측). -->
             <Transition name="panel-fade" mode="out-in">
-                <div v-if="hasActiveSession" key="measuring" class="dash-state-panel">
+                <div :key="hasActiveSession ? 'measuring' : 'idle'" class="dash-state-panel">
+                    <template v-if="hasActiveSession">
                     <div class="dash-state-row">
                         <span class="dash-pill dash-pill-pulse"><span class="dash-pulse-dot"></span>측정 중</span>
                         <span class="dash-session-time">{{ fmtMSS(elapsed) }}</span>
@@ -133,6 +122,15 @@ defineExpose({ closeEdit })
                         <span class="dash-kv-k">지금 공부하는 책</span>
                         <span class="dash-kv-v">{{ activeBook?.title ?? '책 없이' }}</span>
                     </div>
+                    <!-- 회당 시간이 없는 책·책 없이 = 스톱워치라 이 줄이 없다. 닿아도 측정은 계속된다(색·문구만 바뀐다). -->
+                    <div v-if="view.kind === 'countdown'" class="dash-kv dash-session-line">
+                        <span class="dash-kv-k">남은 시간</span>
+                        <span class="dash-kv-v dash-kv-v-num">{{ fmtMSS(view.remaining) }} · 회당 {{ goalLabel(view.goal) }}</span>
+                    </div>
+                    <div v-else-if="view.kind === 'reached'" class="dash-kv dash-session-line is-reached">
+                        <span class="dash-kv-k">회당 {{ goalLabel(view.goal) }} 달성</span>
+                        <span class="dash-kv-v dash-kv-v-num">+{{ fmtMSS(view.overflow) }}</span>
+                    </div>
                     <button type="button" class="dash-btn-outline" :disabled="stopping" @click="emit('stop')">
                         {{ stopping ? '종료하는 중…' : '측정 종료' }}
                     </button>
@@ -140,12 +138,14 @@ defineExpose({ closeEdit })
                     <button type="button" class="dash-btn-link dash-bookless" :disabled="changing" @click="emit('changeBook')">
                         책 바꾸기
                     </button>
-                </div>
+                    <button v-if="activeBook" type="button" class="dash-btn-link dash-bookless" @click="openEdit">
+                        회당 시간 변경
+                    </button>
+                    </template>
 
-                <div v-else key="idle" class="dash-state-panel">
                     <!-- BookPickForm(독서)을 재사용하지 않는다: 문구가 「읽어볼까요」라 prop을 더해야 하고,
                          그게 곧 공용 조각 기본값 사각이다. 인라인 15줄이 싸다(설계 §3.3-C3). -->
-                    <template v-if="defaultBook">
+                    <template v-else-if="defaultBook">
                         <span class="dash-idle-label">이 책으로 공부할까요?</span>
                         <div class="dash-book-chip">
                             <img v-if="hasCover(defaultBook.coverUrl)" class="dash-book-chip-cover"
@@ -154,10 +154,13 @@ defineExpose({ closeEdit })
                             <span class="dash-book-chip-title" :title="defaultBook.title">{{ defaultBook.title }}</span>
                             <button type="button" class="dash-book-chip-change" :disabled="starting" @click="emit('openSheet')">바꾸기</button>
                         </div>
-                        <button type="button" class="dash-btn-fill" :disabled="starting" @click="emit('start', defaultBook.id)">
-                            {{ starting ? '시작하는 중…' : '공부 측정 시작' }}
-                        </button>
-                        <button type="button" class="dash-btn-link dash-bookless" :disabled="starting" @click="emit('start', null)">책 없이 시작</button>
+                        <div class="dash-session-goal">
+                            <template v-if="defaultBook.sessionGoalSeconds">
+                                회당 {{ goalLabel(defaultBook.sessionGoalSeconds) }}
+                                <button type="button" class="dash-goal-change" aria-label="회당 시간 변경" @click="openEdit">변경</button>
+                            </template>
+                            <button v-else type="button" class="dash-btn-link dash-bookless" @click="openEdit">회당 시간 정하기</button>
+                        </div>
                     </template>
                     <!-- 서재가 비어도 시작을 막지 않는다 — 담으러 가는 문은 링크 하나로 곁에 둔다. -->
                     <template v-else>
@@ -166,6 +169,33 @@ defineExpose({ closeEdit })
                             {{ starting ? '시작하는 중…' : '공부 측정 시작' }}
                         </button>
                         <a class="dash-btn-link dash-bookless" href="/study/books">공부 서재에 책 담기</a>
+                    </template>
+
+                    <!-- 회당 시간 폼 — 두 상태가 공유하는 한 조각. 위의 손잡이(측정 중 「회당 시간 변경」 / 대기 칩 아래 줄)
+                         바로 뒤에 선다. 손잡이는 여는 동안에도 남긴다 — 숨기면 그 줄이 빠지며 레이아웃이 튄다.
+                         서재 0권(goalBook 없음)이면 열릴 일이 없다. -->
+                    <form v-if="editing && goalBook" class="dash-goal-edit" @submit.prevent="submitGoal(minutesToSessionGoal(goalMinutes))">
+                        <label>이 책 회당 시간
+                            <!-- step은 스피너 간격이 아니라 **유효성 제약**이다 — step="1" = 정수 분만 받는다(7.5는 크롬이
+                                 「가장 근접한 유효 값」 버블로 막는다). 1분~6시간(서버 60~21600초와 같은 범위). 빈칸은 해제(null). -->
+                            <input ref="goalInput" type="number" min="1" max="360" step="1" v-model.number="goalMinutes"
+                                   aria-label="이 책 회당 시간(분)"> 분
+                        </label>
+                        <button type="submit" class="dash-btn-fill" :disabled="savingSessionGoal">
+                            {{ savingSessionGoal ? '저장하는 중…' : '저장' }}
+                        </button>
+                        <!-- 보조 둘은 「책 없이 시작」과 같은 조용한 링크 관용구(.dash-bookless). -->
+                        <button type="button" class="dash-btn-link dash-bookless" @click="editing = false">취소</button>
+                        <button v-if="goalBook.sessionGoalSeconds" type="button" class="dash-btn-link dash-bookless"
+                                :disabled="savingSessionGoal" @click="submitGoal(null)">회당 시간 없이</button>
+                    </form>
+
+                    <!-- 대기·책 있음의 시작 버튼 둘은 폼 **뒤**에 둔다(폼이 손잡이와 시작 사이에 끼도록). -->
+                    <template v-if="!hasActiveSession && defaultBook">
+                        <button type="button" class="dash-btn-fill" :disabled="starting" @click="emit('start', defaultBook.id)">
+                            {{ starting ? '시작하는 중…' : '공부 측정 시작' }}
+                        </button>
+                        <button type="button" class="dash-btn-link dash-bookless" :disabled="starting" @click="emit('start', null)">책 없이 시작</button>
                     </template>
                 </div>
             </Transition>
