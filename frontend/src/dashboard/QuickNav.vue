@@ -1,11 +1,30 @@
 <script setup lang="ts">
-defineProps<{ loginId: string }>()
+import NavIcon from '../shared/NavIcon.vue'
+import type { TimerMode } from './timerMode'
+
+withDefaults(defineProps<{ loginId: string; mode?: TimerMode }>(), { mode: 'reading' })
 </script>
 
 <template>
-    <section class="dash-card dash-nav">
+    <section class="dash-card dash-nav" :class="{ 'is-study': mode === 'study' }">
         <span class="dash-pill">빠른 이동</span>
-        <nav class="dash-nav-grid" aria-label="빠른 이동">
+        <!-- 공부 세트 — 미니앱 STUDY_TABS처럼 한 컴포넌트가 mode로 세트를 고른다.
+             타일 셋 — 마지막 「공부 기록」이 odd 규칙으로 전체폭(독서 세트의 책BTI와 같은 모습). -->
+        <nav v-if="mode === 'study'" class="dash-nav-grid" aria-label="빠른 이동">
+            <a class="dash-nav-tile" href="/study/books">
+                <NavIcon name="books" :size="26" />
+                <span class="dash-nav-label">공부 서재</span>
+            </a>
+            <a class="dash-nav-tile" href="/study">
+                <NavIcon name="calendar" :size="26" />
+                <span class="dash-nav-label">일정</span>
+            </a>
+            <a class="dash-nav-tile" href="/study/history">
+                <NavIcon name="history" :size="26" />
+                <span class="dash-nav-label">공부 기록</span>
+            </a>
+        </nav>
+        <nav v-else class="dash-nav-grid" aria-label="빠른 이동">
             <a class="dash-nav-tile" href="/books">
                 <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="4" y="4" width="3.4" height="16" rx="1" /><rect x="9.3" y="4" width="3.4" height="16" rx="1" /><path d="M15 5.4l3.3-.7 2.4 15.4-3.3.7z" />

@@ -18,7 +18,8 @@ import java.util.List;
  * <ul>
  *   <li>{@code READY} — 대표 서술 있음(정상 노출). {@link #entries()}에 최대 3개의 과거 분석이 최신순으로 담긴다.</li>
  *   <li>{@code COLD_START} — 책이 임계 미만이라 분석 보류("조금 더 읽으면 성향이 보여요")</li>
- *   <li>{@code FALLBACK} — 책은 충분하나 LLM 실패/지연("잠시 후 다시 분석")</li>
+ *   <li>{@code FALLBACK} — 책은 충분한데 보여줄 서술이 없다. 2026-09-08에 웹에서 생성을 걷은 뒤로
+ *       지배적 의미가 「LLM 실패」에서 <b>「아직 한 번도 안 만들었다」</b>로 바뀌었다(앱에서 만든다)</li>
  * </ul>
  * COLD_START·FALLBACK이면 아직 저장된 분석이 없어 {@link #entries()}는 비어 있다.
  *

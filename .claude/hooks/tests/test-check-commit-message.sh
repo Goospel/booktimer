@@ -101,4 +101,10 @@ check "broken JSON → fail-open exit 0" 0 "$got"
 got=$(run 'git commit -m "fix: relate to #449 issue"')
 check "bare #449 mid-title (no parens) → exit 0" 0 "$got"
 
+# ── Case 13: inline -m Korean ending right before the quote → blocked ──
+# stdin read as CP949 swallows the closing quote after "문" -> parse fails -> fail-open.
+# (Case 4 "한글 제목" passed only by luck: its CP949 garble lands in U+AC00..D7A3.)
+got=$(run 'git commit -m "feat: 문"')
+check "inline -m, Korean right before quote → exit 2" 2 "$got"
+
 exit $FAILED

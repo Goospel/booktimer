@@ -14,8 +14,8 @@ import {
   StoryComposer,
   TIMER_STOPPED_NOTICE,
   createStoryMessage,
+  dimClosable,
   hasFreshStory,
-  marginTabLabel,
   shareNotice,
   showMarginTabs,
   visibilityNotice,
@@ -85,6 +85,7 @@ function view(
     onOpenMenu?: (e: MarginEntry) => void;
     expanded?: ReadonlySet<number>;
     timerStopped?: boolean;
+    adSuppressed?: boolean;
   } = {},
 ) {
   return render(
@@ -99,8 +100,8 @@ function view(
       onShowLikers={extra.onShowLikers ?? (() => {})}
       onOpenMenu={'onOpenMenu' in extra ? extra.onOpenMenu : () => {}}
       onToggleExpand={() => {}}
-      onBack={() => {}}
       timerStopped={extra.timerStopped ?? false}
+      adSuppressed={extra.adSuppressed ?? false}
     />,
   );
 }
@@ -280,6 +281,20 @@ describe('책 여백 화면 (MarginView)', () => {
     expect(markup).toContain('글 0');
   });
 
+  /**
+   * ⚠️ 가운데 정렬은 <b>바깥 div</b>가 해야 한다 — TDS `Text`는 넘긴 style에서 `textAlign`을 걸러내
+   * 인라인 스타일에 남기지 않는다(목 모드 실측 2026-08-29: computed `text-align: start`). 통짜
+   * `toContain`은 탭 줄의 `text-align:center`에 걸려 늘 통과하므로, 문구를 <b>가장 가까이 감싼
+   * div</b>만 본다(글자 수 창은 TDS가 끼워 넣는 `<style>` 블록에 먹혀 눈금이 안 맞는다).
+   */
+  it('빈 여백 안내는 가운데 정렬이다', () => {
+    const markup = view(margin({ self: false, entries: [] }));
+    const at = markup.indexOf('아직 남긴 글이 없어요');
+
+    expect(at).toBeGreaterThan(-1); // 문구가 사라지면 이 단언이 공허해진다
+    expect(markup.slice(markup.lastIndexOf('<div', at), at)).toContain('text-align:center');
+  });
+
   it('내 책인데 글이 하나도 없으면 첫 문장을 권한다', () => {
     const markup = view(margin({ self: true, entries: [] }));
 
@@ -334,6 +349,19 @@ describe('글 남기기 (StoryComposer)', () => {
 
     expect(markup).toContain('여백에 글 남기기');
     expect(markup).toContain('데미안');
+  });
+
+  /**
+   * 화면이 아니라 <b>시트</b>다 (2026-08-29). 전체 화면 교체는 「한 줄 적고 만다」에 비해 값이 너무 컸다 —
+   * 밑 화면이 통째로 언마운트되고 다시 마운트되며 스크롤·탭 자리가 날아갔다. 시트는 덮을 뿐이라
+   * 취소하면 하던 자리가 그대로 남는다.
+   */
+  it('바텀시트 안에 선다 — 밑 화면을 갈아치우지 않고 그 위로 올라온다', () => {
+    const markup = composer();
+
+    expect(markup).toContain('role="dialog"');
+    expect(markup).toContain('aria-label="여백에 글 남기기"');
+    expect(markup).toContain('class="sheet-panel"'); // 올라오는 움직임은 이 클래스가 든다
   });
 
   it('책 고르는 select가 없다 — 진입점이 이미 그 책이라 고를 것이 남지 않았다', () => {
@@ -403,12 +431,14 @@ describe('작성 실패 안내 — createStoryMessage', () => {
 /**
  * 나가는 길 — 두 화면이 다르다.
  *
- * <p>작성 화면은 「취소」가 곧 출구라 헤더의 뒤로가기가 중복이었다(토스 네비바의 `‹`까지 세면 화살표가
- * 셋이었다). 여백 상세는 반대로 헤더 손잡이가 <b>유일한</b> 출구다 — 탭 위에 전체 화면으로 서 탭바가
- * 가려지고 하단 버튼도 없다. 그래서 한쪽만 지운다. 부정 단언은 짝이 되는 긍정 단언과 함께 둔다(T-149).
+ * <p>작성은 <b>시트</b>라 나가는 길이 셋이다: 시트의 ✕ · 아래 「취소」 · 딤 탭(단 빈 시트일 때만 —
+ * 아래 {@link dimClosable}). 헤더 뒤로가기는 여기 없다 — 「취소」가 이미 출구라 중복이었다(토스
+ * 네비바의 `‹`까지 세면 화살표가 셋이었다). 여백 상세는 반대로 헤더 손잡이가 <b>유일한</b> 출구다 —
+ * 탭 위에 전체 화면으로 서 탭바가 가려지고 하단 버튼도 없다. 그래서 한쪽만 지운다.
+ * 부정 단언은 짝이 되는 긍정 단언과 함께 둔다(T-149).
  */
 describe('나가는 길 — 헤더 뒤로가기', () => {
-  it('작성 화면엔 없다 — 「취소」가 출구다', () => {
+  it('작성 시트엔 없다 — 「취소」와 ✕가 출구다', () => {
     const markup = render(
       <StoryComposer
         book={{ id: 7, title: '데미안', author: null, coverUrl: null, isPublic: true }}
@@ -419,11 +449,45 @@ describe('나가는 길 — 헤더 뒤로가기', () => {
     );
 
     expect(markup).toContain('취소');
+    expect(markup).toContain('aria-label="닫기"'); // 시트의 ✕ — 「취소」와 함께 두 출구다
     expect(markup).not.toContain('돌아가기');
   });
 
-  it('여백 상세엔 있다 — 지우면 나갈 길이 사라진다', () => {
-    expect(view(margin())).toContain('돌아가기');
+  it('여백 상세에도 없다 — 나가는 길은 네이티브 뒤로가기다(T-220)', () => {
+    const markup = view(margin());
+
+    // 「없다」만 재면 화면이 통째로 안 그려져도 초록이라, 제목이 서 있는지 함께 본다.
+    expect(markup).toContain('여백');
+    expect(markup).not.toContain('돌아가기');
+  });
+});
+
+/**
+ * 딤 탭으로 닫아도 되는가 — <b>빈 시트일 때만</b>이다 (2026-08-29 리뷰 반영).
+ *
+ * <p>딤은 이 PR이 새로 연 출구다. 전체 화면이던 시절엔 출구가 「취소」와 하드웨어 뒤로가기뿐이었고
+ * 둘 다 <b>의도적</b>인 동작이었다. 그런데 시트 밖은 <b>스치기만 해도</b> 눌리는 자리라, 인용 200자와
+ * 본문 500자를 든 첫 입력 화면에서 원고가 확인 없이 통째로 날아간다.
+ *
+ * <p>확인 시트를 새로 세우는 대신 <b>딤만 무시</b>한다 — 「저장 안 함/계속 쓰기」를 묻는 것은 우발적
+ * 탭 하나를 위해 화면을 하나 더 세우는 일이고, 의도적 출구(✕·취소)는 그대로 열려 있어 갇히지 않는다.
+ * 배선은 클릭이라 정적 하니스가 못 잡으므로 판정만 순수하게 뺐다(`closeCompose` 관례).
+ */
+describe('딤 탭으로 닫기 (dimClosable)', () => {
+  it('둘 다 비었으면 닫는다 — 버릴 원고가 없다', () => {
+    expect(dimClosable('', '')).toBe(true);
+  });
+
+  it('공백만 쳤어도 닫는다 — 그건 원고가 아니다(「남기기」도 같은 기준으로 잠긴다)', () => {
+    expect(dimClosable('   ', '\n  \t ')).toBe(true);
+  });
+
+  it('본문에 한 글자라도 있으면 무시한다', () => {
+    expect(dimClosable('ㄱ', '')).toBe(false);
+  });
+
+  it('인용만 옮겨 적었어도 무시한다 — 「남기기」가 잠겨 있는 상태라 특히 잃기 쉽다', () => {
+    expect(dimClosable('', '밑줄 그은 문장')).toBe(false);
   });
 });
 
@@ -504,7 +568,31 @@ describe('여백 좋아요', () => {
     expect(html).toContain('좋아요 3명');
     expect(html).not.toContain('aria-label="좋아요 3명 보기"');
   });
+
+  /**
+   * 밑줄은 <b>손잡이라는 약속</b>이다 — 서재 인라인 미리보기의 개수 줄은 눌러도 아무 일이 없는 `<p>`라,
+   * 밑줄이 있으면 누를 것처럼 생겼는데 안 눌리는 죽은 글자가 된다. 짝으로 잰다(한쪽만 재면 「밑줄을
+   * 통째로 걷어라」가 통과한다).
+   */
+  it('밑줄은 명단을 여는 갈래에만 — 죽은 글자는 밑줄을 안 진다', () => {
+    const dead = render(<MarginCard entry={entry(1, { likeCount: 3 })} now={NOW} />);
+    const live = view(margin({ entries: [entry(1, { likeCount: 3 })] }));
+
+    expect(tagBefore(dead, '좋아요 3명')).not.toContain('underline');
+    expect(tagBefore(live, '좋아요 3명')).toContain('underline');
+  });
 });
+
+/**
+ * 그 글자를 감싼 여는 태그 — 서식이 인라인 style이라 태그만 잘라 보면 판정된다(`library.test`와 같은 수법).
+ *
+ * <p>⚠️ 텍스트 <b>노드</b>를 찾는다(`>` 를 앞에 붙여). 같은 글자가 `aria-label`에도 실려 있어 맨 검색은
+ * 속성값을 먼저 집고, 그러면 잘린 조각이 `style`에 닿지 못해 언제나 밑줄이 없다고 나온다.
+ */
+const tagBefore = (markup: string, text: string) => {
+  const at = markup.indexOf(`>${text}`);
+  return at < 0 ? '' : markup.slice(markup.lastIndexOf('<', at), at);
+};
 
 /**
  * 인용문 — 글이 「책에서 옮긴 문장 + 내 주석」 두 층이 된다(2026-08-20). 인용은 <b>선택</b>이라
@@ -753,19 +841,32 @@ describe('글 관리 시트 (MarginMenuSheet)', () => {
  * 「필터」가 아니라 「탭」으로 읽힌다.
  */
 describe('게시판 탭줄 (MarginTabs)', () => {
-  const tabs = (tab: 'mine' | 'all', mineCount: number | null, allCount: number | null) =>
-    render(<MarginTabs tab={tab} mineCount={mineCount} allCount={allCount} onSelect={() => {}} />);
+  const tabs = (tab: 'mine' | 'all') => render(<MarginTabs tab={tab} onSelect={() => {}} />);
 
   it('두 탭의 이름은 「내가 쓴 여백」과 「모두의 여백」이다', () => {
-    const html = tabs('mine', 3, 12);
+    const html = tabs('mine');
 
-    expect(html).toContain('내가 쓴 여백 3');
-    expect(html).toContain('모두의 여백 12');
+    expect(html).toContain('내가 쓴 여백');
+    expect(html).toContain('모두의 여백');
+  });
+
+  /**
+   * 개수를 걷었다 (2026-08-29 사용자 지정: "탭 위에 저거 뜨는 게 좀 싸보여. 담백하게 글자만").
+   *
+   * <p><b>닫는 태그까지 붙여 경계를 잡는다</b>. 이름만 `toContain`하면 「내가 쓴 여백 3」도 통과하고,
+   * 「숫자가 없다」로 쓰면 개수 프롭이 사라진 호출에서 `undefined`가 붙어도 통과한다(둘 다 겪었다) —
+   * 라벨이 이름 <b>그대로 끝나는지</b>가 이 규칙의 전부다.
+   */
+  it('이름 뒤에 아무것도 붙지 않는다 — 개수도, 그 자리에 새는 값도', () => {
+    const html = tabs('mine');
+
+    expect(html).toContain('>내가 쓴 여백</button>');
+    expect(html).toContain('>모두의 여백</button>');
   });
 
   it('선택된 쪽만 눌린 상태다 — 둘 다 켜지면 어디 있는지 알 수 없다', () => {
-    expect(tabs('all', 3, 12).match(/aria-pressed="true"/g)).toHaveLength(1);
-    expect(tabs('mine', 3, 12).match(/aria-pressed="true"/g)).toHaveLength(1);
+    expect(tabs('all').match(/aria-pressed="true"/g)).toHaveLength(1);
+    expect(tabs('mine').match(/aria-pressed="true"/g)).toHaveLength(1);
   });
 });
 
@@ -858,20 +959,6 @@ describe('탭줄이 서는 조건 (showMarginTabs)', () => {
   });
 });
 
-describe('책축 탭 라벨 (M-6)', () => {
-  it('개수를 알면 이름 뒤에 붙인다', () => {
-    expect(marginTabLabel('내 여백', 3)).toBe('내 여백 3');
-  });
-
-  it('아직 안 받았으면 이름만 — 0을 먼저 그리면 「글이 없다」는 거짓말이 된다', () => {
-    expect(marginTabLabel('모두', null)).toBe('모두');
-  });
-
-  it('진짜 0은 0으로 그린다 — 모르는 것과 없는 것은 다르다', () => {
-    expect(marginTabLabel('모두', 0)).toBe('모두 0');
-  });
-});
-
 /**
  * 「이 책의 여백」 — 사람 좌표 없이 isbn13 하나로 서는 화면. 상태는 전부 밖에서 받는다
  * (정적 렌더 하니스가 「담기 안내」·「빈 상태」 분기에 닿는 유일한 길).
@@ -904,7 +991,6 @@ describe('이 책의 여백 — 책축 목록 (M-3)', () => {
         data={data}
         now={NOW}
         error={null}
-        onBack={() => {}}
         onToggleLike={() => {}}
         onOpenProfile={() => {}}
       />,
@@ -934,6 +1020,15 @@ describe('이 책의 여백 — 책축 목록 (M-3)', () => {
 
     expect(html).toContain('아직 올라온 글이 없어요');
     expect(html).not.toContain('걸린');
+  });
+
+  /** 위 「빈 여백 안내는 가운데 정렬이다」와 같은 함정 — TDS `Text`가 `textAlign`을 걸러낸다. */
+  it('빈 목록 안내는 가운데 정렬이다', () => {
+    const html = view(all({ totalCount: 0, entries: [] }));
+    const at = html.indexOf('아직 올라온 글이 없어요');
+
+    expect(at).toBeGreaterThan(-1);
+    expect(html.slice(html.lastIndexOf('<div', at), at)).toContain('text-align:center');
   });
 
   it('안 가진 책이면 담는 길을 안내한다 — 버튼이 아니라 문구다(검색으로 뒤로 가면 담기가 있다)', () => {
@@ -1008,7 +1103,6 @@ describe('여백 배너 지면 배선', () => {
       }}
       now={NOW}
       error={null}
-      onBack={() => {}}
       onToggleLike={() => {}}
       onOpenProfile={() => {}}
     />
@@ -1041,5 +1135,23 @@ describe('여백 배너 지면 배선', () => {
 
     expect(view(margin())).not.toContain('data-ad-group');
     expect(render(bookMargin)).not.toContain('data-ad-group');
+  });
+
+  /**
+   * 작성 시트가 열려 있는 동안은 <b>지면을 접는다</b>(2026-08-29 리뷰 반영).
+   *
+   * <p>전체 화면이던 시절엔 작성으로 들어가면 이 화면이 언마운트되며 `slot.destroy()`가 광고를 껐다.
+   * 시트로 겹치면서 화면이 살아남자 배너가 <b>딤 뒤에서</b> autoLoad 갱신을 계속 받게 됐다 —
+   * `toss.ts`가 접힌 슬롯을 되살리며 스스로 금지한 「사용자는 못 보는 노출만 집계」(무효 트래픽)가
+   * 딤 뒤에서 재현되는 것이다. 수익 경로라 <b>main과 같은 동작으로</b> 보수적으로 되돌린다.
+   *
+   * <p>닫으면 다시 마운트되어 부착이 1회 도는 것도 main과 같다.
+   */
+  it('작성 시트가 열려 있으면 밑 화면의 배너를 접는다 — 딤 뒤 노출은 무효 트래픽이다', () => {
+    enabled.mockReturnValue(true);
+
+    expect(view(margin(), { adSuppressed: true })).not.toContain('data-ad-group');
+    // 부재 단언의 짝 — 같은 조건에서 지면 자체는 살아 있다(자격을 껐을 때와 구별된다).
+    expect(view(margin(), { adSuppressed: false })).toContain('data-ad-group="ait.test.margin"');
   });
 });

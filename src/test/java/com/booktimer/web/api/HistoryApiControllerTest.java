@@ -4,6 +4,9 @@ import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
 import com.booktimer.book.BookStatus;
 import com.booktimer.session.ReadingSessionService;
+import com.booktimer.timer.ReadingGoalChange;
+import com.booktimer.timer.ReadingGoalChangeRepository;
+import com.booktimer.user.OnboardingService;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
@@ -22,7 +25,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -53,6 +56,12 @@ class HistoryApiControllerTest {
     private ReadingSessionService sessionService;
 
     @Autowired
+    private OnboardingService onboardingService;
+
+    @Autowired
+    private ReadingGoalChangeRepository goalChangeRepository;
+
+    @Autowired
     private Clock clock;
 
     private LocalDate today() {
@@ -81,8 +90,8 @@ class HistoryApiControllerTest {
                 .andExpect(jsonPath("$.months").isArray())
                 .andExpect(jsonPath("$.graph").exists())
                 .andExpect(jsonPath("$.graph.weeks").isArray())
-                .andExpect(jsonPath("$.graph.growthEmoji").isString())
-                .andExpect(jsonPath("$.graph.growthLabel").isString())
+                // 미니앱 기록 화면 스탯 줄의 「총 시간」이 읽는 값 — DTO에서 잘려도 잡아낼 계약 단언이 없었다.
+                .andExpect(jsonPath("$.graph.totalSeconds").isNumber())
                 .andExpect(jsonPath("$.weeklyShortfall").isArray());
     }
 
@@ -102,29 +111,74 @@ class HistoryApiControllerTest {
     }
 
     @Test
-    @DisplayName("직렬화: YearMonth='yyyy-MM', LocalDate='yyyy-MM-dd', growthEmoji 문자열(enum raw 아님)")
+    @DisplayName("직렬화: YearMonth='yyyy-MM', LocalDate='yyyy-MM-dd'")
     void getHistory_withSession_serializationFormats() throws Exception {
         User u = registrationService.register("histser@booktimer.com", "rawpw1234", "직렬화", SEOUL, Role.USER, today());
         Book book = bookRepository.save(
                 Book.register(u, "직렬화책", null, null, null, null, null, BookStatus.READING));
-        Instant start = clock.instant();
+        // 「지금」에서 1시간을 재면 자정 직전에 돌 때 세션이 자정으로 분할돼(ReadingSessionService)
+        // 최신 일자가 내일이 된다 — 이 테스트가 보는 건 날짜 귀속이 아니라 직렬화 형태이므로
+        // 오늘 안에 확실히 들어가는 구간(00:00~01:00)으로 고정한다.
+        Instant start = today().atStartOfDay(ZoneId.of(SEOUL)).toInstant();
         sessionService.start(u, start, book);
         sessionService.stop(u, start.plusSeconds(3600));
 
-        var result = mockMvc.perform(get("/api/history")
+        mockMvc.perform(get("/api/history")
                         .accept(MediaType.APPLICATION_JSON)
                         .with(user("histser@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.months[0].month")
                         .value(today().format(DateTimeFormatter.ofPattern("yyyy-MM"))))
                 .andExpect(jsonPath("$.months[0].days[0].date")
-                        .value(today().format(DateTimeFormatter.ISO_LOCAL_DATE)))
-                .andReturn();
+                        .value(today().format(DateTimeFormatter.ISO_LOCAL_DATE)));
+    }
 
-        String body = result.getResponse().getContentAsString();
-        // GrowthStage enum이 raw("GROUND", "SPROUT" 등)로 새지 않아야 한다
-        assertThat(body).doesNotContain("\"GROUND\"", "\"SPROUT\"", "\"FLOWER\"", "\"TREE\"");
-        // growthEmoji·growthLabel 필드가 실제 문자열 값으로 존재한다
-        assertThat(body).contains("growthEmoji").contains("growthLabel");
+    @Test
+    @DisplayName("각 날에 goalSeconds가 실린다 — 미니앱 기록 막대가 그날 목표를 기준으로 그린다")
+    void getHistory_carriesGoalSecondsPerDay() throws Exception {
+        User u = registrationService.register("histgoal@booktimer.com", "rawpw1234", "목표기록", SEOUL, Role.USER, today());
+        // 25분 — 기본 목표(3600)도 미산정(0)도 아닌 값이라, 폴백이 새거나 배선이 빠지면 통과할 수 없다.
+        onboardingService.setDailyGoal(u, 1500L);
+        Book book = bookRepository.save(
+                Book.register(u, "목표책", null, null, null, null, null, BookStatus.READING));
+        Instant start = today().atStartOfDay(ZoneId.of(SEOUL)).toInstant();
+        sessionService.start(u, start, book);
+        sessionService.stop(u, start.plusSeconds(600));
+
+        mockMvc.perform(get("/api/history")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("histgoal@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.months[0].days[0].goalSeconds").value(1500));
+    }
+
+    @Test
+    @DisplayName("날마다 「그날」 목표가 실린다 — 목표를 올린 뒤에도 과거 날은 옛 목표로 남는다(소급 재판정 차단)")
+    void getHistory_goalSecondsIsPerDay_notFlatCurrentGoal() throws Exception {
+        User u = registrationService.register("histgoal2@booktimer.com", "rawpw1234", "목표이력", SEOUL, Role.USER,
+                today().minusDays(7));
+        LocalDate past = today().minusDays(2);
+        // 이틀 전엔 20분이 목표였고, 오늘 25분으로 올렸다 — 두 날이 서로 다른 값을 받아야 한다.
+        // 이 픽스처가 없으면 「그날 해석」을 현재 목표 하나로 갈아치워도(schedule::goalFor →
+        // d -> schedule.goalFor(now)) 테스트가 전부 통과한다(리뷰 돌연변이 실측).
+        goalChangeRepository.save(ReadingGoalChange.of(u, past, 1200L));
+        onboardingService.setDailyGoal(u, 1500L);
+
+        Book book = bookRepository.save(
+                Book.register(u, "목표이력책", null, null, null, null, null, BookStatus.READING));
+        Instant pastStart = past.atStartOfDay(ZoneId.of(SEOUL)).toInstant();
+        sessionService.start(u, pastStart, book);
+        sessionService.stop(u, pastStart.plusSeconds(600));
+        Instant todayStart = today().atStartOfDay(ZoneId.of(SEOUL)).toInstant();
+        sessionService.start(u, todayStart, book);
+        sessionService.stop(u, todayStart.plusSeconds(600));
+
+        // 달 경계(1일·2일)를 넘으면 두 날이 다른 섹션에 들어가므로 인덱스가 아니라 날짜로 집는다.
+        mockMvc.perform(get("/api/history")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .with(user("histgoal2@booktimer.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$..days[?(@.date=='" + today() + "')].goalSeconds").value(contains(1500)))
+                .andExpect(jsonPath("$..days[?(@.date=='" + past + "')].goalSeconds").value(contains(1200)));
     }
 }

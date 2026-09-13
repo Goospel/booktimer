@@ -54,7 +54,7 @@ public class SmtpEmailSender implements EmailSender {
             mailSender.send(message);
         } catch (MessagingException | RuntimeException e) {
             // 본문·토큰 링크가 새지 않게 메시지 상세는 남기지 않고 수신자/제목만 — 호출자가 격리/안내한다.
-            log.warn("[email:smtp] 발송 실패 — to={}, subject={}", toEmail, subject);
+            log.warn("[email:smtp] 발송 실패 — to={}, subject={}", EmailMask.mask(toEmail), subject);
             throw new EmailSendException("이메일 발송에 실패했습니다.", e);
         }
     }

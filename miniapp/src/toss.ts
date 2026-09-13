@@ -5,6 +5,7 @@ import {
   Notification,
   TossAds,
   TossAuth,
+  graniteEvent,
   loadFullScreenAd,
   showFullScreenAd,
 } from '@apps-in-toss/web-framework';
@@ -24,6 +25,39 @@ import {
 export function trackEvent(logName: string, params: Record<string, LogParam> = {}): void {
   try {
     void Analytics.log({ log_type: 'event', log_name: logName, params }).catch(() => {});
+  } catch {
+    // 지표 실패는 사용자에게 아무 의미가 없다 — 조용히 버린다.
+  }
+}
+
+/**
+ * 햅틱 1회(발사 후 망각) — 공부 「회당 시간」에 닿는 순간 홈이 부른다.
+ *
+ * <p>실패 처리는 {@link trackEvent}와 같다: 토스 밖(브라우저 목 모드)엔 호스트 브릿지가 없어 동기 TypeError,
+ * 앱 안에서도 브릿지가 거부하면 rejected Promise — 둘 다 삼킨다. 최상위 `generateHapticFeedback`은
+ * deprecated라 `Device.triggerHaptic`을 쓴다(`Device.openURL`과 같은 선택).
+ */
+export function hapticOnce(): void {
+  try {
+    void Device.triggerHaptic({ type: 'success' }).catch(() => {});
+  } catch {
+    // 진동 실패는 사용자에게 아무 의미가 없다 — 화면 문구가 이미 달성을 말한다.
+  }
+}
+
+/**
+ * 화면 진입 1건 — 콘솔 카탈로그에 SCREEN 타입·`screen_` 접두사로 묶인다(발사 후 망각).
+ *
+ * <p>실패 처리는 {@link trackEvent}와 정확히 같다(앱 밖 동기 TypeError는 try가, 브릿지 거부는 catch가 받는다).
+ * try/catch 네 줄이 겹치지만 공용 `send()`를 빼지는 않았다 — 함수가 하나 더 느는 값이 지금은 없다.
+ *
+ * <p>SDK에 있는 `Analytics.screen`을 안 쓰는 이유: `location.protocol !== 'https:'`면 **호출 없이 조용히
+ * `undefined`를 돌려주는 가드**가 있어, 그 전제가 틀리면 기능 전체가 소리 없이 죽는다(늘 초록인 계측기).
+ * 와이어는 `Analytics.log`와 같으므로 가드 없는 쪽을 쓴다 — 자동 파라미터(referrer 등)가 필요해지면 그때 갈아탄다.
+ */
+export function trackScreen(name: string): void {
+  try {
+    void Analytics.log({ log_type: 'screen', log_name: `screen_${name}`, params: {} }).catch(() => {});
   } catch {
     // 지표 실패는 사용자에게 아무 의미가 없다 — 조용히 버린다.
   }
@@ -58,6 +92,13 @@ export const PERSONALITY_AD_GROUP_ID: string = import.meta.env.VITE_PERSONALITY_
  * 쓰므로 한 번만 물어보면 둘 다 커버된다 — 동의 단위는 캠페인이 아니라 동의문이다.
  */
 export const GOAL_MET_TEMPLATE_CODE = 'booktimer-daily-goal-met';
+
+/**
+ * 공부 「회당 시간」 달성 푸시의 발송 코드 — 독서와 <b>다른 동의문</b>(「공부 알림 동의문」 termsId 122175)에 묶였다.
+ * 콘솔 AI 검수가 공부 푸시를 독서 동의문(「독서 목표 달성과 완독 소식」)에 붙이는 걸 맥락 불일치로 거부했다(2026-09-13).
+ * 그래서 독서에 동의한 사람도 공부 알림은 이 코드로 따로 물어야 받는다.
+ */
+export const STUDY_GOAL_TEMPLATE_CODE = 'booktimer-study-goal-met';
 
 /** 동의 화면의 세 가지 결말 — 동의 상태의 정본은 토스이고, 우리는 이 값만 캐시해 카드 노출을 끈다. */
 export type AgreementResult = 'newAgreement' | 'alreadyAgreed' | 'agreementRejected';
@@ -125,6 +166,28 @@ export interface TossLoginResult {
  */
 export function tossLogin(): Promise<TossLoginResult> {
   return TossAuth.login();
+}
+
+/**
+ * 시스템 뒤로가기(토스 상단 바 「<」·안드로이드 하드웨어 back) 구독 — 해제 함수를 돌려준다.
+ *
+ * <p><b>구독 자체가 동작을 바꾼다</b>: `backEvent`를 구독하면 토스의 기본 뒤로가기가 차단되고 나가기
+ * 판단이 앱으로 온다. 구독하지 않으면 「<」는 **어느 화면에서든 미니앱을 통째로 닫는다**(2026-09-02
+ * 아이폰 실측) — 서브화면에서 돌아갈 길이 사라진다. 판단 로직은 `back.ts`의 `nativeBack`이다.
+ *
+ * <p>`isSupported()`가 없는 API라 `trackEvent`·`openExternal`처럼 **try/catch만**으로 접는다 —
+ * 앱 밖(목 모드·일반 브라우저)에는 호스트 브리지가 없어 SDK가 동기 TypeError를 던진다. 이 호출은
+ * `App` 마운트 effect 한가운데라 실패가 새면 목 모드에서 앱이 통째로 안 뜨므로, **조용히 no-op
+ * 해제 함수**를 돌려준다(구독이 없으니 해제할 것도 없다).
+ */
+export function subscribeNativeBack(onBack: () => void): () => void {
+  const noop = () => {};
+  if (typeof window === 'undefined') return noop;
+  try {
+    return graniteEvent.addEventListener('backEvent', { onEvent: onBack, onError: noop });
+  } catch {
+    return noop;
+  }
 }
 
 /**

@@ -3,17 +3,23 @@ package com.booktimer.user;
 import com.booktimer.auth.ApiTokenRepository;
 import com.booktimer.block.BlockRepository;
 import com.booktimer.book.BookRepository;
+import com.booktimer.book.StudyBookRepository;
 import com.booktimer.email.EmailTokenRepository;
 import com.booktimer.feedback.FeedbackRepository;
 import com.booktimer.follow.FollowRepository;
-import com.booktimer.garden.AuthorAffectionRepository;
 import com.booktimer.personality.ReadingPersonalityCacheRepository;
 import com.booktimer.report.ReportRepository;
 import com.booktimer.security.SessionInvalidator;
 import com.booktimer.session.ReadingGoalWaiverRepository;
 import com.booktimer.session.ReadingSessionRepository;
+import com.booktimer.session.StudyDailyCheckRepository;
+import com.booktimer.session.StudySessionRepository;
 import com.booktimer.story.StoryLikeRepository;
 import com.booktimer.story.StoryRepository;
+import com.booktimer.study.StudyAiUsageRepository;
+import com.booktimer.study.StudyNoteRepository;
+import com.booktimer.study.StudyPlanItemRepository;
+import com.booktimer.study.StudyRecallRepository;
 import com.booktimer.timer.ReadingGoalChangeRepository;
 import com.booktimer.timer.ReadingTimerRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -38,10 +44,17 @@ public class AccountService {
     private final ReadingGoalChangeRepository goalChangeRepository;
     private final ReadingGoalWaiverRepository goalWaiverRepository;
     private final ReadingSessionRepository sessionRepository;
+    private final StudySessionRepository studySessionRepository;
+    private final StudyDailyCheckRepository studyDailyCheckRepository;
+    private final StudyPlanItemRepository studyPlanItemRepository;
+    private final StudyRecallRepository studyRecallRepository;
+    private final StudyNoteRepository studyNoteRepository;
+    private final StudyAiUsageRepository studyAiUsageRepository;
     private final FollowRepository followRepository;
     private final BlockRepository blockRepository;
     private final ReportRepository reportRepository;
     private final BookRepository bookRepository;
+    private final StudyBookRepository studyBookRepository;
     private final ReadingPersonalityCacheRepository personalityCacheRepository;
     private final FeedbackRepository feedbackRepository;
     private final EmailTokenRepository emailTokenRepository;
@@ -49,7 +62,6 @@ public class AccountService {
     private final StoryLikeRepository storyLikeRepository;
     private final ApiTokenRepository apiTokenRepository;
     private final TossLinkCodeRepository tossLinkCodeRepository;
-    private final AuthorAffectionRepository affectionRepository;
     private final SessionInvalidator sessionInvalidator;
     private final PasswordEncoder passwordEncoder;
 
@@ -58,10 +70,17 @@ public class AccountService {
                           ReadingGoalChangeRepository goalChangeRepository,
                           ReadingGoalWaiverRepository goalWaiverRepository,
                           ReadingSessionRepository sessionRepository,
+                          StudySessionRepository studySessionRepository,
+                          StudyDailyCheckRepository studyDailyCheckRepository,
+                          StudyPlanItemRepository studyPlanItemRepository,
+                          StudyRecallRepository studyRecallRepository,
+                          StudyNoteRepository studyNoteRepository,
+                          StudyAiUsageRepository studyAiUsageRepository,
                           FollowRepository followRepository,
                           BlockRepository blockRepository,
                           ReportRepository reportRepository,
                           BookRepository bookRepository,
+                          StudyBookRepository studyBookRepository,
                           ReadingPersonalityCacheRepository personalityCacheRepository,
                           FeedbackRepository feedbackRepository,
                           EmailTokenRepository emailTokenRepository,
@@ -69,7 +88,6 @@ public class AccountService {
                           StoryLikeRepository storyLikeRepository,
                           ApiTokenRepository apiTokenRepository,
                           TossLinkCodeRepository tossLinkCodeRepository,
-                          AuthorAffectionRepository affectionRepository,
                           SessionInvalidator sessionInvalidator,
                           PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
@@ -77,10 +95,17 @@ public class AccountService {
         this.goalChangeRepository = goalChangeRepository;
         this.goalWaiverRepository = goalWaiverRepository;
         this.sessionRepository = sessionRepository;
+        this.studySessionRepository = studySessionRepository;
+        this.studyDailyCheckRepository = studyDailyCheckRepository;
+        this.studyPlanItemRepository = studyPlanItemRepository;
+        this.studyRecallRepository = studyRecallRepository;
+        this.studyNoteRepository = studyNoteRepository;
+        this.studyAiUsageRepository = studyAiUsageRepository;
         this.followRepository = followRepository;
         this.blockRepository = blockRepository;
         this.reportRepository = reportRepository;
         this.bookRepository = bookRepository;
+        this.studyBookRepository = studyBookRepository;
         this.personalityCacheRepository = personalityCacheRepository;
         this.feedbackRepository = feedbackRepository;
         this.emailTokenRepository = emailTokenRepository;
@@ -88,7 +113,6 @@ public class AccountService {
         this.storyLikeRepository = storyLikeRepository;
         this.apiTokenRepository = apiTokenRepository;
         this.tossLinkCodeRepository = tossLinkCodeRepository;
-        this.affectionRepository = affectionRepository;
         this.sessionInvalidator = sessionInvalidator;
         this.passwordEncoder = passwordEncoder;
     }
@@ -215,14 +239,13 @@ public class AccountService {
 
     /**
      * 연관 데이터까지 FK 순서로 제거: 세션(N) → 타이머(1:1) → 목표 변경 이력(N) → 용서권(N) → 팔로우(양방향) → 차단(양방향)
-     * → 신고(양방향) → 여백 글(N) → 책(N) → 책BTI 캐시(1) → … → 작가 정(N) → 유저 → 로그인 세션.
+     * → 신고(양방향) → 여백 글(N) → 책(N) → 책BTI 캐시(1) → … → 유저 → 로그인 세션.
      * <p>모두 users를 FK 참조하므로 유저 삭제 전에 정리한다. 책은 {@code reading_session.book_id}가
      * book을 FK 참조하므로 <b>세션 이후</b>에 지운다(세션이 책을 가리키는 채로 책을 지우면 위반).
      * 여백 글도 같은 이유로 <b>책보다 앞</b>에 지운다({@code story.book_id}가 book을 참조).
      *
      * <p><b>여기서 하나라도 빠지면 그 자식을 가진 사용자는 탈퇴 자체가 실패한다</b> — 모든 FK가
-     * {@code NO ACTION}(cascade 없음)이라 DB가 대신 지워 주지 않는다. 실제로 {@code author_affection}이
-     * 빠져 있어 운영 27명 중 2명이 탈퇴 불가였다(2026-08-15 실측). 목록이 다시 벌어지지 않도록
+     * {@code NO ACTION}(cascade 없음)이라 DB가 대신 지워 주지 않는다. 목록이 다시 벌어지지 않도록
      * {@code FlywayMigrationTest#everyTableWithForeignKeyToUsersIsClearedByPurge}가 <b>실제 마이그레이션
      * 스키마의 FK 집합</b>과 이 목록을 양방향으로 대조한다 — 메인 스위트(Hibernate 생성 스키마)는 JPA에
      * 매핑되지 않은 테이블을 아예 못 보기 때문에 거기선 잡히지 않는다.
@@ -232,6 +255,17 @@ public class AccountService {
      */
     private void purge(User user) {
         sessionRepository.deleteByUser(user);
+        studySessionRepository.deleteByUser(user);  // FK: study_session.user_id → users (공부 측정 원장)
+        studyDailyCheckRepository.deleteByUser(user); // FK: study_daily_check.user_id → users (공부 일정 판정)
+        // FK: study_plan_item.user_id → users (공부 일정 원장). study_book보다 **앞**이다 —
+        // study_plan_item.book_id가 study_book을 참조하므로 책을 먼저 지우면 제약 위반이 난다(book↔story와 같은 이유).
+        studyPlanItemRepository.deleteByUser(user);
+        // FK: study_recall.user_id → users. study_book보다 앞이다 — recall.book_id가 study_book을 참조한다.
+        studyRecallRepository.deleteByUser(user);
+        // FK: study_note.user_id → users. 역시 study_book보다 앞 — note.book_id는 **NOT NULL**이라
+        // 풀 수도 없다(책을 먼저 지우면 그 책에 필기를 건 사람은 탈퇴 자체가 제약 위반으로 실패한다).
+        studyNoteRepository.deleteByUser(user);
+        studyAiUsageRepository.deleteByUser(user); // FK: study_ai_usage.user_id → users (AI 하루 상한 카운터)
         timerRepository.deleteByUser(user);
         goalChangeRepository.deleteByUser(user);   // FK: reading_goal_change.user_id → users (유저 삭제 전 정리)
         goalWaiverRepository.deleteByUser(user);   // FK: reading_goal_waiver.user_id → users (리워드 광고 용서 기록)
@@ -245,12 +279,12 @@ public class AccountService {
         storyLikeRepository.deleteByStoryUser(user);    // 내 글에 달린 남의 좋아요 — 내 글보다 앞
         storyRepository.deleteByUser(user);            // 내가 여백에 남긴 글 — story.book_id 때문에 책보다 앞
         bookRepository.deleteByUser(user);
+        studyBookRepository.deleteByUser(user);  // FK: study_book.user_id → users (공부 서재 — book과 별개 테이블)
         personalityCacheRepository.deleteByUser(user);       // 책BTI 캐시도 user_id FK 참조 → 유저 전에 정리
         feedbackRepository.deleteByAuthor(user);             // 문의도 author_id FK 참조 → 유저 전에 정리
         emailTokenRepository.deleteByUser(user);             // 이메일 토큰도 user_id FK 참조 → 유저 전에 정리
         apiTokenRepository.deleteByUser(user);                // 미니앱 Bearer 토큰(api_token.user_id FK)
         tossLinkCodeRepository.deleteByUser(user);            // 토스 연결 코드(toss_link_code.user_id FK)
-        affectionRepository.deleteByUser(user);               // 작가 먹이주기 정(author_affection.user_id FK)
         userRepository.delete(user);
         // 세션은 users를 FK 참조하지 않아 계정을 지워도 남는다 — 그대로 두면 계정 없는 principal이
         // 인증된 채 떠다닌다(운영 실측: 계정 하나 삭제에 616건 잔존). 남길 창이 없으므로 전부 끊는다.
@@ -269,6 +303,45 @@ public class AccountService {
     public void purgeUnverifiedLocalAccount(User user) {
         purge(user);
         userRepository.flush();
+    }
+
+    /**
+     * pre-hijacking 차단 정책 ② — 같은 이메일로 구글이 들어왔을 때, 그 이메일을 <b>토스를 연결한 미검증</b> 계정
+     * (TOSS 가입이든 웹 LOCAL 가입 후 연결이든 — {@code toss_user_key}가 있으면 전부)이 쓰고
+     * 있으면 그 계정을 폐기하지 않고 <b>이메일만</b> 합성 주소로 비켜 놓는다({@code purgeUnverifiedLocalAccount}의
+     * 거울 — 토스는 이메일 소유를 보증하지 않지만 그 사용자의 기록은 진짜다). 호출부는
+     * {@link OAuthUserProvisioningService#provision}뿐이다.
+     *
+     * <p><b>순서가 보안 그 자체다</b>: ① 세션 무효화 → ② 이메일 변경 → ③ flush.
+     * {@link SessionInvalidator}는 principal 후보로 {@code user.getEmail()}을 읽으므로, 이메일을 먼저 바꾸면
+     * 합성 주소로 세션을 찾아 <b>0건</b>이 된다. 그러면 피해자 이메일을 principal로 가진 옛 미니앱 세션이 살아남고,
+     * {@code CurrentUserService}의 {@code findByEmail} 폴백이 그 principal을 <b>새로 만들어진 구글 계정</b>으로
+     * 해석해 선점자가 피해자 계정에 그대로 들어간다(30일 세션). 남길 창은 없다(본인 흐름이 아니다) → {@code null}.
+     *
+     * <p><b>옛 이메일 토큰 폐기</b>: 재배정 전에 발급된 VERIFICATION 토큰이 남아 있으면 그 링크 클릭이
+     * {@code EmailVerificationService#verify}에서 이메일 일치 확인 없이 {@code verifyEmail()}을 불러
+     * <b>합성 주소가 검증됨</b>이 된다 — 그러면 라우팅 불가 주소가 마케팅 넛지 발송 대상에 들어간다.
+     *
+     * <p><b>flush 필수</b>: 호출 직후 같은 이메일로 구글 사용자를 INSERT하므로 {@code uk_users_email}을 먼저 비워야
+     * 한다(폐기 경로와 같은 함정).
+     *
+     * <p><b>합성 주소 충돌 폴백</b>: {@link TossUserProvisioningService#syntheticEmail}은 userKey에서
+     * {@code [^a-z0-9]}를 지우므로 서로 다른 userKey가 같은 주소로 접힐 수 있다. 그 주소를 이미 쓰는 계정이 있으면
+     * {@code -{id}}를 붙여 피한다(id는 유일) — 안 하면 유니크 위반으로 <b>피해자의 구글 로그인이 영구 500</b>이 된다.
+     */
+    public void reassignUnverifiedTossEmail(User user, String syntheticEmail) {
+        sessionInvalidator.invalidate(user, null); // ① 반드시 이메일 변경 전 — 옛 principal(이메일)로 찾는다
+        emailTokenRepository.deleteByUser(user);   // ② 옛 VERIFICATION 토큰 폐기 — 아래 JavaDoc 참조
+        user.reassignEmailToSynthetic(resolveFreeSyntheticEmail(user, syntheticEmail));
+        userRepository.saveAndFlush(user);
+    }
+
+    private String resolveFreeSyntheticEmail(User user, String syntheticEmail) {
+        if (!userRepository.existsByEmail(syntheticEmail)) {
+            return syntheticEmail;
+        }
+        int at = syntheticEmail.indexOf('@');
+        return syntheticEmail.substring(0, at) + "-" + user.getId() + syntheticEmail.substring(at);
     }
 
     private User load(String email) {

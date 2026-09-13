@@ -7,6 +7,7 @@ import com.booktimer.auth.TossUserInfo;
 import com.booktimer.security.BearerTokenFilter;
 import com.booktimer.security.RateLimitAction;
 import com.booktimer.security.RateLimitService;
+import com.booktimer.user.TossLinkCode;
 import com.booktimer.user.TossLinkCodeService;
 import com.booktimer.user.TossLinkConflictException;
 import com.booktimer.user.TossUserProvisioningService;
@@ -81,7 +82,8 @@ public class TossAuthApiController {
         TossUserInfo info = verify(request.authorizationCode(), request.referrer(), http);
         // 코드 검증 '전에' 센다 — 검증 후에 세면 실패한 추측이 카운트되지 않아 브루트포스 방어가 무력해진다.
         limit(RateLimitAction.TOSS_LINK, info.userKey());
-        User owner = linkCodeService.consume(request.linkCode())
+        // 목적을 명시해 웹 로그인용 코드가 이 소비 지점에 먹지 않게 한다(V86 — 교차 오용 차단).
+        User owner = linkCodeService.consume(request.linkCode(), TossLinkCode.Purpose.LINK_TOSS)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.BAD_REQUEST, "연결 코드가 유효하지 않습니다"));
         try {

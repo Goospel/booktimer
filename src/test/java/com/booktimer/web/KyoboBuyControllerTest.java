@@ -159,13 +159,43 @@ class KyoboBuyControllerTest {
     void buyKyoboFromProfile_privateBook_redirectsToProfile() throws Exception {
         when(kyoboLinkBuilder.buildSearchLink(any(), anyBoolean())).thenReturn(KYOBO_LINK);
         User owner = newUser("kppowner@booktimer.com");
+        owner.assignLoginId("kppshelf");
+        userRepository.save(owner);
         newUser("kppviewer@booktimer.com");
         Book book = bookRepository.save(Book.register(owner, "비공개 책", null, "9788911110005",
                 null, null, null, BookStatus.READING)); // 기본 PRIVATE
 
-        mockMvc.perform(get("/u/{loginId}/books/{id}/buy/kyobo", "somehandle", book.getId())
+        mockMvc.perform(get("/u/{loginId}/books/{id}/buy/kyobo", "kppshelf", book.getId())
                         .with(user("kppviewer@booktimer.com")))
-                .andExpect(redirectedUrl("/u/somehandle"));
+                .andExpect(redirectedUrl("/u/kppshelf"));
+
+        assertThat(bookRepository.findById(book.getId()).orElseThrow().getKyoboClickCount()).isZero();
+    }
+
+    /**
+     * 교보는 서비스 단위 테스트가 없어(`KyoboBookServiceTest` 부재) 소유자 스코프를 잠그는 곳이 여기뿐이다 —
+     * 이 테스트가 빠지면 `recordPublicKyoboClick`의 `findByIdAndUser`를 `findById`로 되돌려도 전부 초록이다.
+     */
+    @Test
+    @DisplayName("GET /u/{loginId}/books/{id}/buy/kyobo: 경로의 loginId가 그 책 주인이 아니면 집계 없이 프로필로 — 남의 공개책을 임의 책방 주소에 매달 수 없다")
+    void buyKyoboFromProfile_bookNotOwnedByPathUser_noCountRedirectsToProfile() throws Exception {
+        when(kyoboLinkBuilder.buildSearchLink(any(), anyBoolean())).thenReturn(KYOBO_LINK);
+        User bookOwner = newUser("kscopedowner@booktimer.com");
+        bookOwner.assignLoginId("kscopedowner");
+        userRepository.save(bookOwner);
+        User decoy = newUser("kscopeddecoy@booktimer.com");
+        decoy.assignLoginId("kscopedshelf");
+        userRepository.save(decoy);
+        newUser("kscopedviewer@booktimer.com");
+        Book book = Book.register(bookOwner, "남의 공개책", null, "9788911110006",
+                null, null, null, BookStatus.READING);
+        book.makePublic(); // 공개 게이트는 통과한다 — 막는 것은 소유자 스코프뿐이다.
+        bookRepository.save(book);
+
+        // kscopedshelf의 책방엔 이 책이 없다. 그런데도 집계·리다이렉트되면 조회가 주인으로 스코프되지 않은 것.
+        mockMvc.perform(get("/u/{loginId}/books/{id}/buy/kyobo", "kscopedshelf", book.getId())
+                        .with(user("kscopedviewer@booktimer.com")))
+                .andExpect(redirectedUrl("/u/kscopedshelf"));
 
         assertThat(bookRepository.findById(book.getId()).orElseThrow().getKyoboClickCount()).isZero();
     }

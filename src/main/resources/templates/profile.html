@@ -2,6 +2,7 @@
 <html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
+    <th:block th:replace="~{fragments/theme-head :: boot}"></th:block>
     <!-- 방문 통계(GA4, 측정 ID 설정 시에만) -->
     <th:block th:replace="~{analytics :: gtag}"></th:block>
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -19,10 +20,6 @@
             <h1>BookTimer</h1>
         </a>
     </header>
-
-    <!-- 책방 헤더 아바타의 SVG 작가 캐릭터(<use href="#sprite-{code}">)가 참조할 심볼 정의.
-         Vue 마운트 전 DOM에 존재하도록 #profile-app 앞에 둔다(화면 밖 svg width=0). -->
-    <th:block th:replace="~{fragments/garden-character-sprites :: sprites}"></th:block>
 
     <!-- Vue 섬 마운트 포인트 (선별 SPA 단계 2d).
          data-login-id: 이 프로필의 주인 loginId.

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -7,6 +9,7 @@ import {
   FIRST_RUN_GOAL_SECONDS,
   Goal,
   initialGoalSelection,
+  weeklyLine,
   wheelIndices,
 } from './screens/Goal';
 import { userAgent } from './test-fixtures';
@@ -81,6 +84,25 @@ describe('휠 표시값 → 초 (combineWheel)', () => {
   });
 });
 
+/**
+ * 환산 줄 — 고른 값이 일주일이면 얼마가 되는지. 숫자 하나(하루치)로는 크기가 안 잡히지만
+ * 7배는 잡힌다("10분"은 하찮아 보여도 "1시간 10분"은 쌓인 것처럼 읽힌다).
+ */
+describe('일주일 환산 줄 (weeklyLine)', () => {
+  it('고른 값의 7배를 문장으로 만든다', () => {
+    expect(weeklyLine(1800)).toBe('일주일이면 3시간 30분씩 쌓여요');
+    expect(weeklyLine(600)).toBe('일주일이면 1시간 10분씩 쌓여요');
+  });
+
+  it('0이면 할 말이 없다 — 목표 없음에 「0초씩 쌓여요」는 조롱이다', () => {
+    expect(weeklyLine(0)).toBeNull();
+  });
+
+  it('음수도 없다 — 서버가 이상한 값을 줘도 문장이 깨지지 않는다', () => {
+    expect(weeklyLine(-600)).toBeNull();
+  });
+});
+
 describe('목표 화면 렌더', () => {
   const render = (firstRun: boolean, current: number) =>
     renderToStaticMarkup(
@@ -122,8 +144,36 @@ describe('목표 화면 렌더', () => {
     expect(wheelIndices(initialGoalSelection(true, 3600))).toEqual({ hours: 0, minutes: 10 });
   });
 
+  /**
+   * ⚠️ 가운데 정렬은 **우리 div**가 해야 한다 — TDS `Text`는 넘긴 style에서 `textAlign`을 걸러내
+   * (`display`도 자기 값으로 덮는다) 인라인 스타일에 `margin-top`만 남긴다(목 모드 실측 2026-08-29:
+   * computed `text-align: start`로 왼쪽에 붙어 있었다). 문자열 포함 단언만 두면 이 실패가 안 보인다.
+   */
+  it('고른 값의 일주일 환산을 가운데 한 줄로 보여준다 — 하루치 숫자만으론 크기가 안 잡힌다', () => {
+    const markup = render(false, 1800);
+    expect(markup).toContain('일주일이면 3시간 30분씩 쌓여요');
+    expect(markup).toContain('text-align:center');
+  });
+
   it('첫 실행이면 왜 낮은 값인지 한 줄로 말한다 — 목표가 작다고 실망하지 않게', () => {
     expect(render(true, 3600)).toContain('언제든 늘릴 수 있어요');
+  });
+
+  /**
+   * 안내 문구는 모드마다 할 말이 다르다 — 「시작해 보세요」는 처음 정하는 사람에게만 맞는 말이라,
+   * 목표를 바꾸러 온 사람에겐 짧은 사실 두 문장만 남긴다. 부정 단언만 두면 문구가 통째로
+   * 빠져도 통과하므로 새 문장의 존재를 함께 못 박는다.
+   */
+  it('바꾸기 모드 안내는 사실만 — 「시작해 보세요」는 처음 정하는 사람에게 할 말이다', () => {
+    const markup = render(false, 3600);
+    expect(markup).toContain('못 채운 시간은 다음 날로 넘어가요');
+    expect(markup).not.toContain('시작해 보세요');
+  });
+
+  it('첫 실행 안내엔 이모지를 쓰지 않는다 — 문구는 그대로 남긴다', () => {
+    const markup = render(true, 3600);
+    expect(markup).toContain('가볍게 시작');
+    expect(markup).not.toContain('🌱');
   });
 
   it('기존 사용자에겐 그 안내가 없다 — 이미 정해 놓은 사람에게 할 말이 아니다', () => {
@@ -144,6 +194,80 @@ describe('목표 화면 렌더', () => {
 
   it('값이 있으면 저장할 수 있다 — 위 disabled가 항상 켜져 있는 게 아님을 못 박는다', () => {
     expect(buttonAttrs(render(false, 3600), '저장')[0]).not.toContain('disabled');
+  });
+});
+
+/**
+ * 공부 하루 목표 화면(`variant="study"`)과 그 해제 문(「목표 없이 지내기」)은 2026-09-13 책별 「회당 시간」
+ * 시트로 대체돼 걷었다 — 그 블록의 테스트도 함께 걷었다. 아래는 <b>독서 대조군</b>이다.
+ */
+describe('독서 목표 버튼 렌더', () => {
+  const render = (current: number) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Goal current={current} firstRun={false} onSaved={() => {}} onSkip={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  /**
+   * 독서 렌더 불변 — 존재 단언이 아니라 <b>건수</b>다(T-218). 2026-09-02(T-220)에 하단 「돌아가기」를
+   * 걷어 2건 → <b>1건(저장)</b>이 됐다: 독서에 버튼이 하나라도 새면 여기서 죽는다.
+   */
+  it('독서 목표 화면의 버튼은 저장 하나뿐이다 — 새 문이 독서로 새지 않았다', () => {
+    expect(render(1_800).split('<button').length - 1).toBe(1);
+    expect(render(0).split('<button').length - 1).toBe(1);
+  });
+
+  it('제목·안내는 독서 문구 그대로다', () => {
+    const markup = render(1_800);
+    expect(markup).toContain('하루 목표 바꾸기');
+    expect(markup).toContain('다음 날로 넘어가요');
+    expect(markup).not.toContain('공부 하루 목표');
+  });
+});
+
+/**
+ * 목표 화면의 나가는 길 — **토스 네이티브 내비게이션 바의 뒤로가기**다(2026-09-02, T-220).
+ *
+ * <p>하단 weak 버튼은 `firstRun`일 때만 남긴다. 「나중에 정할래요」는 <b>건너뛰기라는 선택</b>이지
+ * 뒤로가기가 아니다 — 첫 실행에는 돌아갈 화면이 아직 없고, 목표를 안 정하고 시작하는 문이 필요하다.
+ * 비-firstRun의 「돌아가기」는 네이티브 버튼과 중복이라 걷었다(`useBackClose(view === 'goal', …)`가 받는다).
+ */
+describe('목표 — 나가는 길', () => {
+  const render = (firstRun: boolean) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Goal current={1_800} firstRun={firstRun} onSaved={() => {}} onSkip={() => {}} />
+      </TDSMobileProvider>,
+    );
+
+  it('비-firstRun에는 「돌아가기」가 0건이다 — 저장은 그대로 선다', () => {
+    const markup = render(false);
+
+    expect(markup).toContain('저장');
+    expect(markup).not.toContain('돌아가기');
+  });
+
+  it('firstRun에는 「나중에 정할래요」가 하나 남는다 — 건너뛰기는 뒤로가기가 아니다', () => {
+    const markup = render(true);
+
+    expect(markup.match(/나중에 정할래요/g)).toHaveLength(1);
+    expect(markup).not.toContain('돌아가기');
+  });
+});
+
+/**
+ * 저장 배선 — 정적 렌더는 `onClick`을 마크업에 안 실어(T-149) 「어느 값이 어느 문으로 가는가」를 렌더로 못 본다.
+ * 공부 분기(`saveGoal`)가 걷히며 이 화면의 문은 독서 하나다 — 그 사실을 건수로 잠근다(T-218).
+ */
+describe('독서 목표 저장 배선 (소스)', () => {
+  const source = readFileSync(new URL('./screens/Goal.tsx', import.meta.url), 'utf8');
+  const count = (needle: string) => source.split(needle).length - 1;
+
+  it('주 버튼은 고른 값을 독서 문으로 보낸다 — 공부 문이 되살아나면 여기서 죽는다', () => {
+    expect(count('onClick={() => save(selected)}')).toBe(1);
+    expect(count('setGoal(seconds)')).toBe(1);
+    expect(count('setStudyGoal')).toBe(0);
   });
 });
 

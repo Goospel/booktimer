@@ -258,11 +258,17 @@ export function MutualFollowers({ users, total }: { users?: UserBrief[]; total?:
  *
  * <p>격자 칸에는 상태 배지를 안 붙이므로(표지 80px + 제목뿐이고 발광 점이 이미 그 칸의 신호를 쓴다)
  * <b>지금 무엇으로 좁혔는지</b>를 말하는 자리는 이 소제목 하나뿐이다.
+ *
+ * <p>전체 상태에서만 <b>수를 접는다</b> — 바로 위 스탯 줄이 「공개 책 N」을 이미 말해 같은 숫자가 두 번 선다.
+ * 좁힌 갈래는 그 수가 새 정보라(「전체 12권 중 지금 3권」) 그대로 둔다.
  */
+/** TDS `Button`(기본 size)의 실측 높이 — 옆에 세우는 정사각 ⋯ 버튼의 한 변이다(목 모드 390×844 실측: 57px). */
+const TDS_BUTTON_HEIGHT = 57;
+
 export function shelfTitle(activeTag: string | null, statusFilter: BookStatus | null, count: number): string {
   if (activeTag !== null) return `${activeTag} 근거 책 ${count}`;
   if (statusFilter !== null) return `${SECTIONS.find((s) => s.status === statusFilter)!.title} ${count}`;
-  return `공개한 책 ${count}`;
+  return '공개한 책';
 }
 
 export function Profile({
@@ -274,7 +280,10 @@ export function Profile({
   onOpenMargin,
 }: {
   loginId: string;
-  /** 없으면 「돌아가기」를 그리지 않는다 — 탭 루트(내 책방)에는 돌아갈 곳이 없고 출구가 탭바다. */
+  /**
+   * 차단한 뒤 돌려보낼 자리 — 차단하면 이 책방이 그 순간 404라 머무를 화면이 없다. 남의 책방에만 있고
+   * 탭 루트(내 책방)에는 없다(차단 진입 자체가 없다). 나가는 길과는 무관하다 — 그건 네이티브 뒤로가기다.
+   */
   onBack?: () => void;
   onError: (error: Error) => void;
   /** 제목보다 **위**에 얹히는 슬롯 — 책방 셸이 검색 진입을 여기 끼운다. */
@@ -429,7 +438,7 @@ export function Profile({
     // 로딩 중에도 header를 그린다 — 여백·검색은 프로필 조회와 독립이라, 이 분기에서 빼면
     // 탭 진입 직후(응답 전) 상단이 통째로 비어 화면이 죽은 것처럼 보인다.
     return (
-      <Screen title="책방" onBack={onBack} above={header}>
+      <Screen title="책방" above={header}>
         {/* 못 받았을 때 나갈 길만 있으면 실패가 곧 막다른 길이다 — 그 자리에서 다시 받을 길도 함께 준다. */}
         <ErrorMessage message={error} onRetry={load} />
         {error === null && <Loading />}
@@ -473,7 +482,6 @@ export function Profile({
             />
           )
         }
-        onBack={onBack}
       />
       <div style={{ padding: '0 20px 40px' }}>
         {notice !== null && (
@@ -512,7 +520,6 @@ export function ProfileCard({
   safety,
   header,
   onOpenFollowList,
-  onBack,
 }: {
   profile: ProfileResponse;
   books: ProfileBook[];
@@ -541,21 +548,19 @@ export function ProfileCard({
   /** 제목보다 **위**에 얹히는 슬롯 — 셸이 검색 진입바·여백 스트립을 끼운다. */
   header?: ReactNode;
   onOpenFollowList?: (type: FollowListType) => void;
-  onBack?: () => void;
 }) {
   const sectionTitle = shelfTitle(activeTag, statusFilter, books.length);
   const openable = followCountsOpenable(profile.self, onOpenFollowList !== undefined);
   const actions = personalityActions(profile.self, personalityStatus, PERSONALITY_AD_GROUP_ID);
 
   /*
-   * 나가는 길은 **상단 「돌아가기」 하나**다. 이 화면은 같은 문제를 두 번 겪었다 — 처음엔 제목 옆 `←`
-   * 글리프였는데 배경이 없어 버튼으로 안 읽혀 지우고 하단 버튼만 남겼고, 여백 화면에서 같은 지적이 또
-   * 나와 **글자가 붙은 알약**이 생겼다(2026-08-16). 회피 이유가 사라졌으므로 위로 되돌리고 하단 버튼을
-   * 걷는다. 탭 루트(내 책방)는 `onBack`이 없어 아무것도 안 그려진다 — 출구는 플로팅 탭바다.
+   * 나가는 길은 **토스 네이티브 내비게이션 바의 뒤로가기**다(2026-09-02, T-220). 이 화면은 같은 자리에서
+   * 세 번 바뀌었다 — 제목 옆 `←` 글리프 → 하단 버튼 → 글자가 붙은 알약(2026-08-16). 그 알약이 네이티브
+   * 뒤로가기와 동시 노출이라 심사 필수 항목에 걸려 통째로 걷었다. 탭 루트의 출구는 플로팅 탭바 그대로다.
    */
   return (
     // 검색·여백는 화면 소속이 아니라 그 위에 얹히는 도구다 — 신원 블록보다 위로 올린다.
-    <Screen above={header} onBack={onBack}>
+    <Screen above={header}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         <Avatar nickname={profile.nickname} />
         <div style={{ flex: 1, display: 'flex', minWidth: 0 }}>
@@ -706,10 +711,35 @@ export function ProfileCard({
           <Button style={{ flex: 1 }} variant={profile.following ? 'weak' : 'fill'} disabled={busy} onClick={onFollowToggle}>
             {profile.following ? '팔로우 취소' : '팔로우'}
           </Button>
-          {/* 「더보기」였다 — 성향 bio의 접기 손잡이와 같은 이름이라 한 화면에 둘이 섰다. 하는 일로 부른다. */}
-          <Button variant="weak" disabled={busy} onClick={onMore}>
-            신고·차단
-          </Button>
+          {/*
+            드문 안전장치다 — 글자 버튼으로 팔로우와 나란히 서 있으면 남의 책방 첫인상이 방어적이었다.
+            여백 카드의 ⋯ 문법으로 강등하고 이름은 `aria-label`이 진다(⋯ 는 스크린리더에 아무 말도 안 한다).
+
+            <b>높이는 안 적는다</b> — flex stretch가 옆 팔로우 버튼에 맞춘다(TDS가 값을 바꿔도 따라간다).
+            폭만 {@link TDS_BUTTON_HEIGHT}로 못 박는다: `aspect-ratio`는 flex에서 <b>주축(폭)을 못 정한다</b>
+            — stretch로 정해지는 높이는 폭이 확정된 뒤에 오므로, 실측 결과 폭이 글자 폭(17px)에 머물렀다.
+          */}
+          <button
+            type="button"
+            aria-label="신고·차단"
+            disabled={busy}
+            onClick={onMore}
+            style={{
+              flex: '0 0 auto',
+              width: TDS_BUTTON_HEIGHT, // 높이는 stretch가 정한다 — 어긋나 봐야 「정사각이 아님」이지 「높이 불일치」는 아니다
+              padding: 0,
+              borderRadius: 12,
+              border: '1px solid transparent',
+              borderImage: PENCIL_FRAME,
+              background: 'var(--adaptiveGrey100, #FCFAF5)',
+              color: 'var(--adaptiveGrey700, #57534A)',
+              fontSize: 17,
+              lineHeight: 1,
+              cursor: 'pointer',
+            }}
+          >
+            ⋯
+          </button>
         </div>
       )}
       {/* 팔로우 버튼 아래·책 격자 위 — 인스타 프로필에서 이 줄이 서는 그 자리다. */}

@@ -14,16 +14,20 @@ import {
   TAB_BAR_Z_INDEX,
   COACHMARK_FLOW,
   LAMP_CLASS,
+  STUDY_TABS,
   TABS,
   TIMER_ACTION_SLOT,
   TabBarCoachmark,
   closeCompose,
+  currentScreen,
   flowStepsOnAbandon,
   initialTab,
   lampOn,
   marginScreen,
+  underCompose,
   flowTabChange,
   nextFlowStep,
+  reconcileTab,
   shouldRefresh,
   shouldShowGuideHero,
   GuideHero,
@@ -31,10 +35,14 @@ import {
   slotCenter,
   tabChangeHandler,
   tabSlot,
+  tabsFor,
   timerActionView,
   timerStartBookId,
 } from './App';
-import type { BookOption, DashboardResponse } from './api';
+import type { TabKey, TimerMode } from './App';
+import type { BookOption, DashboardResponse, StudyHistoryResponse } from './api';
+import { IDLE_STUDY } from './api';
+import { CACHE_STUDY_HISTORY, cacheClear, cachePut } from './cache';
 import { coachmarkSeen, dismissCoachmark, resetCoachmarks } from './coachmark';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
@@ -54,6 +62,7 @@ const dashboard: DashboardResponse = {
   remainingSeconds: 900,
   carriedDebtSeconds: 0,
   todayGoalSeconds: 3600,
+  todayReadSeconds: 2700,
   carryover: false,
   hasActiveSession: false,
   activeStartedAt: null,
@@ -68,13 +77,21 @@ const dashboard: DashboardResponse = {
   emailVerified: true,
 };
 
-function renderTab(tab: (typeof TABS)[number]['key'], overrides: Partial<DashboardResponse> = {}) {
+function renderTab(
+  tab: TabKey,
+  overrides: Partial<DashboardResponse> = {},
+  mode: TimerMode = 'reading',
+) {
   return renderToStaticMarkup(
     <TDSMobileProvider userAgent={userAgent}>
       <MainTabs
         tab={tab}
         onTabChange={() => {}}
         dashboard={{ ...dashboard, ...overrides }}
+        mode={mode}
+        study={IDLE_STUDY}
+        onStudyChange={() => {}}
+        onChangeMode={() => {}}
         homeBookId={undefined}
         onSelectHomeBook={() => {}}
         onOpenMargin={() => {}}
@@ -129,6 +146,15 @@ describe('탭 구조', () => {
     TABS.forEach((_, index) => change(index));
 
     expect(picked).toEqual(['home', 'library', 'bookshop', 'history']);
+  });
+
+  it('목록을 주면 그 목록의 index↔키로 옮긴다 — 공부 탭바도 같은 계약을 쓴다', () => {
+    const picked: string[] = [];
+    const change = tabChangeHandler((tab) => picked.push(tab), STUDY_TABS);
+
+    STUDY_TABS.forEach((_, index) => change(index));
+
+    expect(picked).toEqual(['home', 'library', 'calendar', 'history']);
   });
 
   it('책방 탭은 서재와 기록 사이에 온다 — 탭바 순서가 곧 TABS 순서다', () => {
@@ -202,8 +228,8 @@ describe('하단 탭바', () => {
   it('액션은 서재와 책방 사이 가운데 자리다 — 마크업 순서가 곧 시각 순서다', () => {
     const markup = bar('home');
 
-    expect(markup.indexOf('title="서재"')).toBeLessThan(markup.indexOf('aria-label="측정 시작"'));
-    expect(markup.indexOf('aria-label="측정 시작"')).toBeLessThan(markup.indexOf('title="책방"'));
+    expect(markup.indexOf('title="서재"')).toBeLessThan(markup.indexOf('aria-label="독서 측정 시작"'));
+    expect(markup.indexOf('aria-label="독서 측정 시작"')).toBeLessThan(markup.indexOf('title="책방"'));
     expect(TIMER_ACTION_SLOT).toBe(2);
   });
 
@@ -216,7 +242,7 @@ describe('하단 탭바', () => {
   });
 
   it('액션은 채운 원이다 — 탭 아이콘들 사이에서 동작으로 읽히는 유일한 형태다', () => {
-    const cell = actionCell(bar('home'), '측정 시작');
+    const cell = actionCell(bar('home'), '독서 측정 시작');
 
     expect(cell).toContain('width:46px;height:46px'); // 시안 4c에서 44 -> 46
     expect(cell).toContain('border-radius:50%');
@@ -227,12 +253,12 @@ describe('하단 탭바', () => {
     const markup = bar('home', { active: true });
 
     expect(markup).toContain('aria-label="측정 끝내기"');
-    expect(markup).not.toContain('aria-label="측정 시작"');
+    expect(markup).not.toContain('aria-label="독서 측정 시작"');
     expect(actionCell(markup, '측정 끝내기')).toContain('#F04452');
   });
 
   it('처리 중이면 원이 흐려진다 — 연타로 세션이 두 번 시작되지 않게', () => {
-    expect(actionCell(bar('home', { busy: true }), '측정 시작')).toContain('opacity:0.6');
+    expect(actionCell(bar('home', { busy: true }), '독서 측정 시작')).toContain('opacity:0.6');
   });
 
   it('선택 탭 색 폴백이 웹 세이지다 — 변수가 안 잡히는 순간 토스 블루로 되돌아가는 걸 막는다', () => {
@@ -297,10 +323,10 @@ describe('액션이 시작할 책 (timerStartBookId)', () => {
 
 /** 액션 버튼의 두 얼굴 — 상태에 따라 라벨·색·아이콘이 통째로 갈린다. */
 describe('액션 버튼 시각 (timerActionView)', () => {
-  it('대기 중이면 세이지 ▶ 「측정 시작」', () => {
+  it('대기 중이면 세이지 ▶ 「독서 측정 시작」', () => {
     const view = timerActionView(false);
 
-    expect(view.label).toBe('측정 시작');
+    expect(view.label).toBe('독서 측정 시작');
     expect(view.background).toContain('#4F6B4C'); // 4c에서 세이지 500 -> 700
   });
 
@@ -323,7 +349,7 @@ describe('액션 버튼 시각 (timerActionView)', () => {
  */
 describe('어느 탭에서든 측정 (MainTabs)', () => {
   it('네 탭 어디서든 시작 버튼이 서 있다', () => {
-    for (const { key } of TABS) expect(renderTab(key)).toContain('aria-label="측정 시작"');
+    for (const { key } of TABS) expect(renderTab(key)).toContain('aria-label="독서 측정 시작"');
   });
 
   it('측정 중이면 네 탭 어디서든 끝낼 수 있다 — 홈으로 돌아가지 않아도 된다', () => {
@@ -331,7 +357,7 @@ describe('어느 탭에서든 측정 (MainTabs)', () => {
       const markup = renderTab(key, { hasActiveSession: true, activeStartedAt: '2026-08-17T09:00:00' });
 
       expect(markup).toContain('aria-label="측정 끝내기"');
-      expect(markup).not.toContain('aria-label="측정 시작"');
+      expect(markup).not.toContain('aria-label="독서 측정 시작"');
     }
   });
 
@@ -615,11 +641,17 @@ describe('탭 밖 오케스트레이션 (재편 전 동작 보존)', () => {
       </TDSMobileProvider>,
     );
 
-  it('토큰이 없으면 로그인 브릿지의 인트로부터 — 탭바는 아직 없다', () => {
+  it('토큰이 없으면 게스트 홈부터 — 탭바까지 서고 셋이 잠긴다', () => {
     const markup = renderApp();
 
-    expect(markup).toContain('토스로 시작하기');
-    expect(markup).not.toContain('서재');
+    // 첫 화면이 곧 타이머다(2026-09-11) — 로그인 버튼만 있던 화면에서 17/21이 떠났다.
+    expect(markup).toContain('읽기 시작');
+    // 2026-09-11 게스트 홈: 탭바가 <b>선다</b>(옛 단언 「탭바는 아직 없다」의 뒤집기). 잠긴 칸이
+    // 보이는 것이 「나중에 열린다」를 말하는 유일한 방법이라, 없으면 이 화면은 다시 로그인 벽이 된다.
+    expect(markup).toContain('서재');
+    // 탭바 안에서만 센다 — 화면 안에도 잠긴 것이 있다(피드 탭 머리). 전체를 세면 이 단언이
+    // 「탭바가 몇 칸 잠겼나」가 아니라 「화면에 잠긴 것이 몇 개나」가 돼 뜻을 잃는다.
+    expect(markup.slice(markup.indexOf('<nav')).match(/aria-disabled="true"/g)).toHaveLength(3);
   });
 
   it('토큰이 있으면 대시보드를 받는 동안 로딩 — 탭 화면은 데이터가 온 뒤', () => {
@@ -714,6 +746,29 @@ describe('여백 화면 판정 (marginScreen)', () => {
 });
 
 /**
+ * 작성 시트 <b>아래에 깔릴</b> 화면 — 작성이 전체 화면 교체에서 바텀시트로 바뀌면서(2026-08-29) 밑
+ * 화면이 살아 있어야 한다. 시트는 덮는 것이지 갈아치우는 것이 아니다.
+ *
+ * <p>`null`은 「깔린 여백 화면이 없다」이지 막다른 길이 아니다 — 홈·서재에서 직행한 작성이 그것이고,
+ * 그때 시트 뒤에는 <b>탭 화면이 그대로</b> 있다.
+ */
+describe('작성 시트 아래 화면 (underCompose)', () => {
+  const book = { id: 7, title: '데미안', author: '헤르만 헤세', coverUrl: null, isPublic: true };
+
+  it('여백 상세에서 열었으면 그 상세가 뒤에 남는다', () => {
+    expect(underCompose({ loginId: 'goospel', bookId: 7, isbn13: null, composeBook: book })).toBe('person');
+  });
+
+  it('책축 화면에서 열었으면 책축이 뒤에 남는다', () => {
+    expect(underCompose({ loginId: null, bookId: null, isbn13: '9791168340084', composeBook: book })).toBe('book');
+  });
+
+  it('홈·서재 직행이면 깔린 여백 화면이 없다 — 시트 뒤에 탭 화면이 그대로 선다', () => {
+    expect(underCompose({ loginId: 'goospel', bookId: null, isbn13: null, composeBook: book })).toBeNull();
+  });
+});
+
+/**
  * 딥링크 착지 탭 — 푸시를 누르고 들어온 사람이 홈이 아니라 그 푸시가 말한 화면에 선다.
  *
  * <p>알 수 없는 값이 전부 홈으로 접히는 게 이 함수의 전부다. 바깥에서 오는 문자열이라
@@ -760,11 +815,11 @@ describe('딥링크 착지 탭 (initialTab)', () => {
  */
 describe('독서등 (lampOn)', () => {
   it('홈에서 측정 중이면 켜진다', () => {
-    expect(lampOn('home', true)).toBe(true);
+    expect(lampOn('home', true, 'reading')).toBe(true);
   });
 
   it('홈이어도 측정 중이 아니면 안 켜진다', () => {
-    expect(lampOn('home', false)).toBe(false);
+    expect(lampOn('home', false, 'reading')).toBe(false);
   });
 
   /**
@@ -772,17 +827,17 @@ describe('독서등 (lampOn)', () => {
    * 표지·잔디·격자를 전부 밤 종이 위에서 다시 봐야 하는데, 그 색은 만든 적이 없다.
    */
   it('다른 탭에서는 측정 중이어도 안 켜진다 — 범위는 홈만이다', () => {
-    expect(lampOn('library', true)).toBe(false);
-    expect(lampOn('bookshop', true)).toBe(false);
-    expect(lampOn('history', true)).toBe(false);
+    expect(lampOn('library', true, 'reading')).toBe(false);
+    expect(lampOn('bookshop', true, 'reading')).toBe(false);
+    expect(lampOn('history', true, 'reading')).toBe(false);
   });
 
   /**
    * 재진입이 공짜인 근거 — 켜짐 조건이 「지금 어느 탭인가 · 지금 측정 중인가」 둘뿐이라 상태를 안 든다.
    * 「방금 눌렀는지」를 기억하는 인자가 생기면 이 시그니처가 먼저 깨진다.
    */
-  it('판단에 드는 것은 탭과 측정 여부뿐이다 — 나갔다 와도 같은 답이 나온다', () => {
-    expect(lampOn.length).toBe(2);
+  it('판단에 드는 것은 탭·측정 여부·모드뿐이다 — 나갔다 와도 같은 답이 나온다', () => {
+    expect(lampOn.length).toBe(3);
   });
 
   it('js가 붙이는 클래스가 css에 셀렉터로 실재한다 — 한쪽만 고치면 기능이 조용히 죽는다', () => {
@@ -886,6 +941,31 @@ describe('하단 탭바 — 측정 중 잠금', () => {
     expect(cell(markup, 'aria-label="측정 끝내기"')).not.toContain('aria-disabled="true"');
   });
 
+  /**
+   * 내가 <b>서 있는</b> 잠긴 칸은 흐리지 않는다 — 게스트가 잠긴 탭을 열면(잠금 카드가 뜬다) 그 칸이
+   * 선택 표시로 서야 한다. 흐림은 「여기 못 간다」는 말인데, 이미 와 있는 칸에 그 말을 붙이면 거짓이다.
+   */
+  it('잠긴 칸이라도 내가 선 칸은 흐리지 않는다', () => {
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <BottomTabBar
+          tab="library"
+          onTabChange={() => {}}
+          locked
+          onBlocked={() => {}}
+          action={{ active: false, busy: false, onPress: () => {} }}
+        />
+      </TDSMobileProvider>,
+    );
+
+    const here = cell(markup, 'title="서재"');
+    expect(here).toContain('aria-current="page"');
+    expect(here).toContain('aria-disabled="true"');
+    expect(here).toContain('opacity:1');
+    // 안 선 잠긴 칸은 그대로 흐리다 — 위 예외가 잠금 표시를 통째로 걷어낸 것이 아님을 잰다.
+    expect(cell(markup, 'title="책방"')).toContain('opacity:0.35');
+  });
+
   it('측정 중이 아니면 아무 칸도 잠기지 않는다 — 위 부정 단언의 짝', () => {
     const open = renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
@@ -920,8 +1000,372 @@ describe('여백 진입 게이트', () => {
 
     const opens = [...src.matchAll(/setMargin\(\{/g)];
 
-    expect(opens).toHaveLength(1);
-    expect(opens[0].index).toBeGreaterThan(src.indexOf('const openMargin'));
+    // ⚠️ 「한 개인가」가 아니라 <b>「전부 openMargin 안인가」</b>를 잰다. 개수로 재면 게이트 안에서
+    // 분기가 늘 때(공부 측정도 끊게 되면서 갈래가 둘이 됐다) 규칙이 멀쩡한데도 붉어진다 —
+    // 지켜야 할 것은 개수가 아니라 「여는 자리가 그 문 밖에 없다」이다.
+    const from = src.indexOf('const openMargin');
+    const to = src.indexOf('const screen =');
+
+    expect(opens.length).toBeGreaterThan(0);
+    expect(from).toBeGreaterThan(-1);
+    expect(to).toBeGreaterThan(from);
+    for (const open of opens) {
+      expect(open.index).toBeGreaterThan(from);
+      expect(open.index).toBeLessThan(to);
+    }
+  });
+});
+
+/**
+ * 화면 이름 판정 — 퍼널(콘솔 SCREEN 로그)이 무엇을 「한 화면」으로 세는지가 전부 여기 있다.
+ *
+ * <p><b>판정 순서가 곧 규칙이다</b>: 탭 밖 뷰 &gt; 대시보드 로딩 &gt; 목표·설정 &gt; 여백 사람축 &gt;
+ * 여백 책축 &gt; 남의 책방 &gt; 탭. {@link App}의 렌더 분기를 그대로 옮겨 적은 것이라, 순서가
+ * 어긋나면 <b>사용자가 실제로 본 화면과 다른 이름이 찍힌다</b> — 퍼널의 구멍보다 나쁜 것이 오분류다
+ * (없으면 모른다고 답하지만, 틀리면 틀리게 답한다).
+ *
+ * <p>배선(effect)은 이 하니스가 못 돌리므로(T-149) 판정만 순수하게 계측한다({@link marginScreen} 관례).
+ */
+describe('화면 이름 판정 (currentScreen)', () => {
+  const base = {
+    view: 'main' as const,
+    loaded: true,
+    margin: null,
+    shop: null,
+    tab: 'home' as const,
+    mode: 'reading' as const,
+    loginSource: null,
+    guestTab: 'home' as const,
+  };
+  const personMargin = { loginId: 'goospel', bookId: 7, isbn13: null, composeBook: null };
+  const bookMargin = { loginId: null, bookId: null, isbn13: '9791168340084', composeBook: null };
+  const composeBook = { id: 7, title: '책', author: '지은이', coverUrl: null, isbn13: null };
+
+  /**
+   * 게스트 홈이 퍼널 꼭대기다(2026-09-11) — 토큰이 없는 사람이 보는 화면은 <b>둘</b>로 갈렸다:
+   * 둘러보는 중(`guest_*`)과 로그인 진행 중(`login`). 한 이름으로 묶으면 「눌렀는가」가 분모에 섞여
+   * 판정식(`login_started / guest_entered`)이 스스로를 잡아먹는다.
+   */
+  it('토큰이 없으면 게스트 홈이 퍼널 꼭대기다 — 대시보드가 없어도 찍힌다', () => {
+    expect(currentScreen({ ...base, view: 'auth', loaded: false })).toBe('guest_home');
+  });
+
+  it('게스트가 선 잠긴 탭도 이름이 갈린다 — 어느 잠금이 눌리는지가 다음 손질의 좌표다', () => {
+    expect(currentScreen({ ...base, view: 'auth', loaded: false, guestTab: 'library' })).toBe('guest_library');
+    expect(currentScreen({ ...base, view: 'auth', loaded: false, guestTab: 'bookshop' })).toBe('guest_bookshop');
+    expect(currentScreen({ ...base, view: 'auth', loaded: false, guestTab: 'history' })).toBe('guest_history');
+  });
+
+  it('로그인 진행 중이면 종전 이름 그대로다 — 전후 비교가 끊기지 않게', () => {
+    expect(currentScreen({ ...base, view: 'auth', loaded: false, loginSource: 'trial' })).toBe('login');
+    // 로그인 진행은 탭 위에 선다 — 게스트 탭이 무엇이든 이름은 `login`이다.
+    expect(currentScreen({ ...base, view: 'auth', loaded: false, loginSource: 'locked_history', guestTab: 'history' })).toBe(
+      'login',
+    );
+  });
+
+  it('탭 밖 뷰 둘도 각자 이름이 있다 — 계정 연결과 에러 화면', () => {
+    expect(currentScreen({ ...base, view: 'link', loaded: false })).toBe('link_account');
+    expect(currentScreen({ ...base, view: 'error', loaded: false })).toBe('error');
+  });
+
+  it('로딩은 화면이 아니다 — 재방문마다 유령 1건이 쌓이지 않게', () => {
+    expect(currentScreen({ ...base, view: 'loading', loaded: false })).toBeNull();
+    expect(currentScreen({ ...base, view: 'main', loaded: false })).toBeNull();
+  });
+
+  it('대시보드 로딩이 목표 화면보다 앞이다 — 렌더도 그 순서다(로딩 중에 goal이 찍히면 오분류)', () => {
+    expect(currentScreen({ ...base, view: 'goal', loaded: false })).toBeNull();
+  });
+
+  // 공부 목표 화면(`study_goal`)은 2026-09-13 책별 「회당 시간」 시트로 대체돼 도달점에서 빠졌다.
+  it('신규 온보딩 도달점 둘 — 목표·설정', () => {
+    expect(currentScreen({ ...base, view: 'goal' })).toBe('goal');
+    expect(currentScreen({ ...base, view: 'settings' })).toBe('settings');
+  });
+
+  it('여백은 좌표계로 갈린다 — 사람축은 여백 상세, 책축은 이 책의 여백', () => {
+    expect(currentScreen({ ...base, margin: personMargin })).toBe('margin');
+    expect(currentScreen({ ...base, margin: bookMargin })).toBe('book_margin');
+  });
+
+  it('둘 다 들고 있으면 사람축이 이긴다 — marginScreen과 같은 규칙', () => {
+    expect(currentScreen({ ...base, margin: { ...personMargin, isbn13: '9791168340084' } })).toBe('margin');
+  });
+
+  it('작성 시트는 화면을 안 바꾼다 — 개폐할 때마다 중복 발화하지 않게', () => {
+    expect(currentScreen({ ...base, margin: { ...personMargin, composeBook } })).toBe('margin');
+  });
+
+  it('깔린 여백 없이 직행한 작성은 뒤에 선 탭이 화면이다 — 시트가 이름을 훔치지 않는다', () => {
+    expect(currentScreen({ ...base, margin: { loginId: 'goospel', bookId: null, isbn13: null, composeBook } })).toBe(
+      'home',
+    );
+  });
+
+  it('여백이 남의 책방보다 앞이다 — 책방 위에 여백을 연 상태', () => {
+    expect(currentScreen({ ...base, margin: personMargin, shop: 'other' })).toBe('margin');
+  });
+
+  it('남의 책방은 탭보다 앞이다', () => {
+    expect(currentScreen({ ...base, shop: 'other' })).toBe('profile');
+  });
+
+  it('탭 밖 뷰가 여백을 이긴다 — 렌더도 goal return이 앞이다', () => {
+    expect(currentScreen({ ...base, view: 'goal', margin: personMargin })).toBe('goal');
+  });
+
+  it('나머지는 탭 이름 그대로다 — 홈·책방·일정', () => {
+    expect(currentScreen({ ...base, tab: 'home' })).toBe('home');
+    expect(currentScreen({ ...base, tab: 'bookshop' })).toBe('bookshop');
+    expect(currentScreen({ ...base, tab: 'calendar' })).toBe('calendar');
+  });
+
+  it('서재와 기록은 모드로 갈린다 — 다른 컴포넌트가 뜨므로 이름도 가른다', () => {
+    expect(currentScreen({ ...base, tab: 'library' })).toBe('library');
+    expect(currentScreen({ ...base, tab: 'library', mode: 'study' })).toBe('study_library');
+    expect(currentScreen({ ...base, tab: 'history' })).toBe('history');
+    expect(currentScreen({ ...base, tab: 'history', mode: 'study' })).toBe('study_history');
+  });
+});
+
+/**
+ * 화면 진입 배선 — 위 판정({@link currentScreen})을 <b>effect가 그 의존성으로 받는가</b>.
+ *
+ * <p>소스 문자열로 재는 이유와 그 한계를 정직하게 적는다. jsdom이 없어 effect가 아예 안 도는 하니스라
+ * (T-149) <b>줄이 있다</b>는 것 말고는 증명하지 못한다 — 실제로 도는지·한 번만 도는지는 React 의미론에
+ * 기대는 것이지 이 테스트가 보는 게 아니다. 공백·개행이 바뀌면 규칙이 멀쩡해도 붉어진다(브리틀).
+ * 발화·중복의 진짜 게이트는 배포 후 콘솔 카탈로그 건수다(설계 §6 U-1·U-2).
+ *
+ * <p>그럼에도 이 세 줄을 재는 이유: 인자 하나(`tab: shownTab` → `tab`)나 의존성 배열 하나(`[screenName]`
+ * → `[]`)가 바뀌어도 <b>마크업은 완전히 똑같아</b> 나머지 전 스위트가 초록이다(탭바 배선에서 이미 밟은
+ * 사각이다). 주석을 먼저 걷는 것은 T-205 처방 — 설명 주석에 적힌 호출 예시가 곧 거짓 음성이 된다.
+ */
+describe('화면 진입 배선', () => {
+  const src = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*/g, '');
+  const from = src.indexOf('export function App()');
+  const to = src.indexOf('export function MarginShell');
+  const app = src.slice(from, to);
+  /** 공백을 한 칸으로 접은 같은 조각 — 여러 줄로 포맷된 호출도 한 줄 패턴으로 잴 수 있다. */
+  const flat = app.replace(/\s+/g, ' ');
+
+  it('App이 파생 탭·모드까지 넘겨 화면 이름을 만든다 — 인자가 빠지면 모드 플립 때 사라진 탭이 찍힌다', () => {
+    expect(from).toBeGreaterThan(-1);
+    expect(to).toBeGreaterThan(from);
+    // 공백·개행을 접고 본다 — 인자가 늘어 호출이 여러 줄로 포맷되는 것은 규칙이 아니라 모양이다
+    // (2026-09-11 게스트 홈에서 `loginSource`·`guestTab`이 붙으며 실제로 그렇게 됐다).
+    expect(flat).toContain(
+      'const screenName = currentScreen({ view, loaded: dashboard !== null, margin, shop, tab: shownTab, mode, loginSource, guestTab, });',
+    );
+  });
+
+  it('이름이 바뀔 때만 쏜다 — 의존성이 문자열 하나라 같은 화면 리렌더로는 안 돈다', () => {
+    expect(app).toContain('if (screenName !== null) trackScreen(screenName);');
+    expect(app).toContain('}, [screenName]);');
+  });
+
+  it('쏘는 자리는 App 하나뿐이다 — MainTabs는 시트를 닫을 때마다 remount돼 중복 발화한다', () => {
+    const calls = [...src.matchAll(/trackScreen\(/g)];
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].index).toBeGreaterThan(from);
+    expect(calls[0].index).toBeLessThan(to);
+  });
+});
+
+/**
+ * 소스로만 잴 수 있는 두 줄 — 위 「화면 진입 배선」과 <b>같은 방식이고 같은 한계</b>다(줄이 있다는 것
+ * 말고는 증명하지 못하고, 포맷이 바뀌면 규칙이 멀쩡해도 붉어진다).
+ *
+ * <p>그럼에도 재는 이유는 <b>실측</b>이다: 리뷰어가 둘 다 돌연변이로 지워 보니 1504건이 전부 초록이었다.
+ * ① `onBlocked?.(key)`의 인자를 `'home'`으로 고정해도 tsc는 <b>개수만 보므로</b> exit 0이고(「인자는
+ * tsc가 계측한다」는 앞선 주장이 틀렸다) 게스트가 어느 잠긴 칸을 눌러도 같은 화면이 열린다. ② 로드
+ * 빗장(`loading.current`)과 그 해제(`finally`)는 정적 렌더에 effect가 없어(T-149) 행동으로 닿지 않는다.
+ */
+describe('정적 하니스가 못 보는 배선 — 소스로 잠근다', () => {
+  const src = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*/g, '');
+  const flat = src.replace(/\s+/g, ' ');
+
+  it('잠긴 칸은 <b>누른 칸</b>을 넘긴다 — 인자를 고정하면 게스트는 어느 칸을 눌러도 한 화면만 연다', () => {
+    expect(flat).toContain('onClick={() => (shut ? onBlocked?.(key) : change(index))}');
+  });
+
+  it('로드는 두 번째 호출을 빗장으로 버린다 — 둘 다 통과하면 신규 계정이 목표 화면을 못 본다', () => {
+    expect(flat).toContain('if (loading.current) return; loading.current = true;');
+  });
+
+  it('끝나면 반드시 푼다 — 이 줄이 빠지면 첫 로드 뒤 빗장이 잠긴 채 남아 「다시 시도」가 죽는다', () => {
+    expect(flat).toContain('.finally(() => { loading.current = false; });');
+  });
+});
+
+/**
+ * 공부 모드 탭바 — <b>책방 자리에 「일정」</b>이 선다(사용자 확정).
+ *
+ * <p>바꾸는 것이 목록 하나뿐이라는 게 이 설계의 요점이다: 두 목록이 <b>같은 길이(4)</b>라
+ * {@code TIMER_ACTION_SLOT}·{@code slotCenter}가 값 그대로 남고, index↔화면 계약도
+ * {@code tabChangeHandler(onChange, tabs)} 한 줄로 일반화된다. 그 「안 바뀌어야 하는 것들」까지
+ * 여기서 못 박는다 — 리팩터가 가장 넓게 닿는 자리라 조용히 어긋나기 쉽다.
+ */
+describe('공부 모드 탭바 — 책방 자리의 「일정」', () => {
+  it('공부 목록은 책방을 일정으로 바꾼 것이다 — 나머지 셋은 그대로', () => {
+    expect(tabsFor('study').map((t) => t.key)).toEqual(['home', 'library', 'calendar', 'history']);
+    expect(tabsFor('study').map((t) => t.label)).toEqual(['홈', '서재', '일정', '기록']);
+  });
+
+  it('독서 목록은 손대지 않는다 — 독서 탭바는 픽셀 불변이어야 한다', () => {
+    expect(tabsFor('reading')).toBe(TABS);
+  });
+
+  it('두 목록의 길이가 같다 — 액션 슬롯·말풍선 좌표가 값 그대로 남는 근거다', () => {
+    expect(tabsFor('study')).toHaveLength(TABS.length);
+    // 길이가 갈리면 이 두 상수가 조용히 어긋난다(가운데 원이 엉뚱한 칸에 서거나 말풍선이 빗나간다).
+    expect(TIMER_ACTION_SLOT).toBe(2);
+    expect(slotCenter(TIMER_ACTION_SLOT)).toContain(`* ${(TIMER_ACTION_SLOT + 0.5) / (TABS.length + 1)}`);
+  });
+
+  /**
+   * 모드가 원격으로 뒤집히면(다른 기기에서 측정 시작) 지금 선 탭이 <b>그 모드의 탭바에 없을 수</b> 있다.
+   * setState 없는 파생 폴백이라 동기화 코드가 0줄이다.
+   */
+  it('지금 모드에 없는 탭이면 홈으로 떨어진다 — 존재하지 않는 칸에 서 있지 않는다', () => {
+    expect(reconcileTab('bookshop', 'study')).toBe('home');
+    expect(reconcileTab('calendar', 'reading')).toBe('home');
+  });
+
+  it('그 모드에 있는 탭이면 그대로 둔다 — 폴백이 멀쩡한 자리를 흔들지 않는다', () => {
+    expect(reconcileTab('bookshop', 'reading')).toBe('bookshop');
+    expect(reconcileTab('calendar', 'study')).toBe('calendar');
+    expect(reconcileTab('library', 'study')).toBe('library');
+    expect(reconcileTab('home', 'study')).toBe('home');
+  });
+
+  const modeBar = (mode: TimerMode, tab: TabKey = 'home') =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <BottomTabBar
+          tab={tab}
+          onTabChange={() => {}}
+          action={{ active: false, busy: false, onPress: () => {}, mode }}
+        />
+      </TDSMobileProvider>,
+    );
+
+  it('공부 모드 탭바에는 「일정」이 서고 「책방」이 없다', () => {
+    const markup = modeBar('study');
+
+    expect(markup).toContain('title="일정"');
+    expect(markup).not.toContain('title="책방"');
+  });
+
+  it('독서 모드 탭바는 그대로다 — 위 부정 단언의 짝(회귀 가드)', () => {
+    const markup = modeBar('reading');
+
+    expect(markup).toContain('title="책방"');
+    expect(markup).not.toContain('title="일정"');
+  });
+
+  it('일정 탭에 서면 그 칸이 선택 표시된다 — 새 목록에서도 index↔화면이 맞는다', () => {
+    const markup = modeBar('study', 'calendar');
+
+    expect(markup).toContain('aria-current="page" title="일정"');
+    expect(markup.match(/aria-current="page"/g)).toHaveLength(1);
+  });
+
+  it('일정 탭은 그 화면을 그린다 — 탭 선택 ↔ 화면 대응(공부 목록에서도)', () => {
+    expect(renderTab('calendar', {}, 'study')).toContain('공부 일정');
+  });
+
+  /**
+   * 기록 탭은 <b>두 모드 공통</b>이지만 화면은 갈린다 — 서재와 같은 규칙이다. 안 가르면 공부 모드에서
+   * 독서 잔디·독서 목록이 그대로 뜬다(대시보드 `graph`는 독서 것이다).
+   */
+  it('공부 모드의 기록 탭은 공부 기록을 그린다 — 독서 기록이 아니다', () => {
+    const markup = renderTab('history', {}, 'study');
+
+    expect(markup).toContain('공부 기록');
+    expect(markup).not.toContain('내 기록');
+  });
+
+  /**
+   * 캐시 키가 갈렸다는 증거 — 공부 캐시를 심으면 공부 화면이 첫 렌더부터 데이터를 세운다.
+   * (effect가 안 도는 하니스라 캐시가 유일한 데이터 경로다.)
+   */
+  it('공부 기록 캐시가 첫 렌더가 된다 — 독서 캐시와 다른 키다', () => {
+    cacheClear();
+    cachePut(CACHE_STUDY_HISTORY, {
+      graph,
+      months: [{ month: '2026-09', totalSeconds: 3_600, days: [{ date: '2026-09-02', totalSeconds: 3_600 }] }],
+    } satisfies StudyHistoryResponse);
+
+    const markup = renderTab('history', {}, 'study');
+
+    expect(markup).toContain('공부한 날');
+    expect(markup).toContain('2026년 9월');
+    cacheClear();
+  });
+
+  /**
+   * <b>그리는 목록과 index를 푸는 목록이 같은 배열인가</b> — 이 앱에서 가장 조용히 깨지는 자리다.
+   *
+   * <p>목록 인자를 빠뜨려도(`tabChangeHandler(onTabChange)`) 마크업은 <b>완전히 똑같다</b>: 어긋남은
+   * 누르는 순간에만 드러나는데 하니스는 클릭을 못 돌린다(T-149). 실제로 그 돌연변이가 전 스위트를
+   * 초록으로 통과했다 — 그래서 소스로 잰다(`setMargin` 봉인·`<MarginShell` 세기와 같은 수법).
+   * 목 모드 실브라우저가 짝 게이트다(공부 탭바에서 일정 칸을 실제로 눌러 본다).
+   */
+  it('탭바는 그리는 목록과 같은 배열로 index를 푼다 — 누른 칸과 바뀌는 탭이 어긋나지 않는다', () => {
+    const src = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*/g, '');
+    const from = src.indexOf('export function BottomTabBar');
+    expect(from).toBeGreaterThan(-1);
+    const body = src.slice(from);
+
+    expect(body).toContain('tabChangeHandler(onTabChange, tabs)');
+    expect(body).toContain('tabs.map(');
+  });
+
+  /**
+   * <b>탭바를 그리는 셸들이 파생값을 실제로 받는가</b> — 위 배선과 같은 종류의 사각이다.
+   *
+   * <p>`reconcileTab`·`tabsFor`는 단위로 잠겨 있지만 <b>App이 그 결과를 내려보내는 줄</b>은 아무도 안 봤다:
+   * `tab={shownTab}`을 `tab={tab}`으로, `mode={mode}`를 지워도 <b>전 스위트가 초록이다</b>(독립 리뷰 W-1·W-2
+   * 실측). 폴백은 원격 모드 플립에서만 발동하고 여백 탭바는 정적 렌더 대상이 아니라, 마크업으로는 닿지 않는다.
+   *
+   * <p>그래서 세 호출부(여백 셸 2 · 메인 셸 1)가 <b>파생값을 받는지</b>를 소스로 센다.
+   */
+  it('탭바를 그리는 셸 전부가 파생 탭·모드를 받는다 — 사라진 칸 폴백이 화면에 닿는다', () => {
+    const src = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*/g, '');
+
+    const callSites = [...src.matchAll(/<(MarginShell|MainTabs)\b/g)];
+    // 셸 호출부는 셋이다(여백 상세 · 「이 책의 여백」 · 메인 탭). 늘어나면 이 단언이 먼저 붉어져
+    // 새 호출부도 같은 규칙을 지키게 한다.
+    expect(callSites).toHaveLength(3);
+
+    for (const site of callSites) {
+      // 프롭은 태그 바로 뒤에 모여 있다 — 창을 넉넉히 잡되 다음 호출부까지 넘어가지는 않는 길이.
+      const props = src.slice(site.index, site.index + 300);
+      expect(props).toContain('tab={shownTab}');
+      expect(props).toContain('mode={mode}');
+    }
+  });
+
+  /**
+   * 코치마크 투어는 서재·책방 걸음을 <b>TABS 좌표</b>로 가리키고 그 탭으로 직접 이동시킨다 —
+   * 공부 탭바엔 책방 칸이 없어 존재하지 않는 자리를 가리키게 된다. 그래서 공부 모드에선 안 그린다.
+   */
+  it('공부 모드에선 첫 사용 안내 카드를 안 그린다 — 안내가 없는 칸을 가리키지 않는다', () => {
+    expect(renderTab('home', {}, 'study')).not.toContain('앱 사용법 보기');
+  });
+
+  it('독서 모드에선 그대로 그린다 — 위 부정 단언의 짝', () => {
+    expect(renderTab('home', {}, 'reading')).toContain('앱 사용법 보기');
   });
 });
 
@@ -944,7 +1388,7 @@ describe('여백 위의 탭바 (MarginShell)', () => {
   });
 
   it('원은 언제나 「시작」이다 — 여백에선 측정이 돌지 않는다', () => {
-    expect(markup).toContain('aria-label="측정 시작"');
+    expect(markup).toContain('aria-label="독서 측정 시작"');
     expect(markup).not.toContain('aria-label="측정 끝내기"');
   });
 
@@ -957,24 +1401,71 @@ describe('여백 위의 탭바 (MarginShell)', () => {
   });
 
   /**
-   * 여백은 화면이 <b>셋</b>이다(상세 · 글 작성 · 「이 책의 여백」) — 하나만 껍데기를 벗으면 그 화면에서만
-   * 탭바가 사라져 「여백에는 탭바가 있다」가 부분적으로만 맞는 상태가 된다. 정적 렌더로는 분기를
-   * 몸 돌려볼 수 없어 소스로 센다.
-   *
-   * <p>2026-08-22에 2 → 3이 됐다(책축 개방). <b>이 숫자를 늘릴 땐 새 분기가 실제로 셸을 입었는지
-   * 보고 늘린다</b> — 숫자만 맞추면 이 계측기는 아무것도 안 지킨다.
+   * 여백은 공부 모드에서도 도달 가능하다(진입 게이트가 측정만 먼저 끊는다) — 그때 이 껍데기가
+   * 모드를 모르면 <b>여백에서만 탭바가 책방으로 되돌아간다</b>. 나가는 칸이 화면마다 달라지는 셈이다.
    */
-  it('여백 전체 화면 분기 셋이 모두 이 껍데기를 입는다', () => {
+  it('모드를 받아 그 모드의 탭바를 그린다 — 여백에서 나가는 칸이 홈과 같다', () => {
+    const study = renderToStaticMarkup(
+      <MarginShell tab="home" mode="study" onGo={() => {}} onStart={() => {}}>
+        <p>여백 본문</p>
+      </MarginShell>,
+    );
+
+    expect(study).toContain('title="일정"');
+    expect(study).not.toContain('title="책방"');
+    // 짝 단언 — 모드를 안 주면(독서) 그대로다.
+    expect(markup).toContain('title="책방"');
+  });
+
+  /**
+   * 여백 <b>전체 화면</b>은 둘이다(상세 · 「이 책의 여백」) — 하나만 껍데기를 벗으면 그 화면에서만
+   * 탭바가 사라져 「여백에는 탭바가 있다」가 부분적으로만 맞는 상태가 된다. 정적 렌더로는 분기를
+   * 돌려볼 수 없어 소스로 센다.
+   *
+   * <p>2026-08-22에 2 → 3(책축 개방), 2026-08-29에 다시 3 → 2다: 글 작성이 전체 화면에서
+   * <b>바텀시트</b>가 되면서 자기 껍데기를 갖지 않고 밑 화면 위에 얹힌다. 그래서 이 숫자와 짝이 되는
+   * 규칙이 아래 `withCompose`다. <b>숫자를 고칠 땐 분기가 실제로 그렇게 생겼는지 보고 고친다</b> —
+   * 숫자만 맞추면 이 계측기는 아무것도 안 지킨다.
+   */
+  it('여백 전체 화면 분기 둘이 이 껍데기를 입고, 작성 시트는 도달 가능한 밑 화면에 얹힌다', () => {
     // 주석을 먼저 걷는다(T-203) — 규칙을 설명하는 주석에 그 태그가 예시로 적힐 수밖에 없다.
     const src = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\/\/.*/g, '');
 
-    expect(src.match(/<MarginShell/g)).toHaveLength(3);
-    // 셋의 정체를 함께 못 박는다 — 숫자만 맞고 엉뚱한 화면이 들어오면 위 단언은 통과한다.
-    for (const screen of ['<StoryComposer', '<BookMargin', '<BookMarginAll']) {
+    expect(src.match(/<MarginShell/g)).toHaveLength(2);
+    // 둘의 정체를 함께 못 박는다 — 숫자만 맞고 엉뚱한 화면이 들어오면 위 단언은 통과한다.
+    for (const screen of ['<BookMargin', '<BookMarginAll']) {
       expect(src).toContain(screen);
     }
+    /*
+     * 규칙은 「깔릴 수 있는 화면이 전부 이 문을 지난다」이고, **깔릴 수 있는 화면은 둘뿐**이다
+     * (2026-08-29 리뷰): 여백 상세(사람축)와 탭 화면. 책축 뷰는 `BookMarginAllView`에 `onCompose`
+     * 프롭 자체가 없어 거기서 작성을 열 길이 없고, 남의 책방은 `setMargin(null)`을 거쳐야 열려
+     * 작성과 공존할 수 없다. 도달 불가 분기까지 감싸면 「이 조합이 가능하다」는 거짓말이 코드에 남는다.
+     */
+    expect(src.match(/return withCompose\(/g)).toHaveLength(2);
+    expect(src).toContain('<StoryComposer');
+  });
+
+  /**
+   * 겹침이 <b>가져간 것</b>을 되돌려 놓는다 — 작성이 전체 화면이던 시절엔 닫는 순간 밑 화면이 통째로
+   * 새로 마운트됐고, 그 재조회가 곧 "방금 남긴 글이 보인다"였다. 시트는 밑 화면을 안 죽이므로 그 반영이
+   * <b>조용히</b> 사라진다 — 목 모드 실측으로 두 자리가 다 굳는 것을 봤다(여백 상세의 글 목록 ·
+   * 서재 인라인 여백 박스의 「여백 N」).
+   *
+   * <p>그래서 글을 남긴 뒤에만 `composeEpoch`를 올려 그 둘을 remount한다. <b>키를 첫 프롭으로</b> 두는
+   * 것이 이 계측기의 전제다 — 어느 한쪽이 빠지면 그 화면만 옛 목록을 보여 주고 아무도 안 운다.
+   */
+  it('글을 남기면 밑에 깔린 두 화면이 다시 마운트된다 — 겹침이 재조회를 삼키지 않게', () => {
+    const src = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*/g, '');
+
+    expect(src).toMatch(/<BookMargin\s+key=\{composeEpoch\}/); // 여백 상세의 글 목록
+    expect(src).toMatch(/<MainTabs\s+key=\{composeEpoch\}/); // 서재 인라인 여백 박스
+    // 올리는 자리는 「남겼을 때」 하나다 — 취소로도 올리면 안 바뀐 화면을 매번 다시 받는다.
+    expect(src.match(/setComposeEpoch\(/g)).toHaveLength(1);
   });
 });
 
@@ -995,7 +1486,7 @@ describe('탭바 위계 (시안 4c)', () => {
 
   /** 가운데 액션 한 칸만 — 위 「하단 탭바」의 같은 이름 헬퍼는 그 describe 스코프에 갇혀 있다. */
   const centerCell = (markup: string) => {
-    const at = markup.indexOf('aria-label="측정 시작"');
+    const at = markup.indexOf('aria-label="독서 측정 시작"');
     expect(at).toBeGreaterThan(-1);
     return markup.slice(at, markup.indexOf('</button>', at));
   };
@@ -1058,7 +1549,9 @@ describe('탭바 위계 (시안 4c)', () => {
 
     expect(cell).toContain('width:46px');
     expect(cell).toContain('height:46px');
-    expect(cell).toContain('box-shadow:0 0 0 3px rgba(110,138,106,.25)');
+    // 링은 이제 토큰 경유다(`--accentRing`) — 공부 모드가 css 한 벌로 이 링까지 파랑으로 바꾼다.
+    // 리터럴 단언에서 옮겨 온 것이라 회귀가 아니라 **계측 대상이 바뀐** 자리다.
+    expect(cell).toContain('box-shadow:0 0 0 3px var(--accentRing');
   });
 
   it('가운데 원 배경도 세이지 700이다 — 고른 칸과 같은 잉크라야 한 팔레트로 읽힌다', () => {

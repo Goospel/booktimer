@@ -6,6 +6,9 @@ import com.booktimer.user.User;
 import com.booktimer.web.DashboardModel;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+
+import java.nio.charset.StandardCharsets;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -69,7 +72,12 @@ public class DebtWaiverApiController {
     /** 지울 밀린 날이 없음 → 400. */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<String> handleNothingToWaive(IllegalArgumentException e) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        // text/plain 고정 — raw String 본문은 Accept: text/html이면 text/html로 협상돼,
+        // 메시지에 사용자 입력이 섞이는 순간 브라우저가 렌더해 반사 XSS가 된다.
+        // charset은 반드시 명시한다 — 빼면 StringHttpMessageConverter가 기본 인코딩으로 써서 한글 메시지가 깨진다.
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .contentType(new MediaType(MediaType.TEXT_PLAIN, StandardCharsets.UTF_8))
+                .body(e.getMessage());
     }
 
     /**

@@ -12,7 +12,11 @@ import type {
   ProfileBook,
   ShelfResponse,
   StopResponse,
+  StudyCalendarResponse,
+  StudyHistoryResponse,
+  StudyState,
   TimerState,
+  WebLoginCodeResponse,
 } from './api';
 import { ApiError } from './api';
 // 소스 자체를 읽는다 — "목 코드가 프로드 번들에 안 들어간다"는 배선(dynamic import + DEV 게이트)이
@@ -43,6 +47,151 @@ describe('dev-mock 핸들러', () => {
     const stopped = await mockRequest<StopResponse>('/api/sessions/stop', { body: {} });
     expect(stopped.timer.hasActiveSession).toBe(false);
     expect(stopped.graph.weeks.length).toBeGreaterThan(0);
+  });
+
+  it('공부 시작 → 종료 — 종료분이 오늘 누적에 얹히고, 계약(409)까지 서버와 같다', async () => {
+    const started = await mockRequest<StudyState>('/api/study/start', { body: {} });
+    expect(started.hasActiveSession).toBe(true);
+    expect(started.activeStartedAt).not.toBeNull();
+
+    // 중복 시작은 서버처럼 409다 — 목이 서버보다 무르면 그 경로를 브라우저로 확인할 길이 없다.
+    await expect(mockRequest('/api/study/start', { body: {} })).rejects.toMatchObject({ status: 409 });
+
+    const stopped = await mockRequest<StudyState>('/api/study/stop', { body: {} });
+    expect(stopped.hasActiveSession).toBe(false);
+    expect(stopped.activeStartedAt).toBeNull();
+
+    // 무세션 stop도 409(서버 계약 그대로).
+    await expect(mockRequest('/api/study/stop', { body: {} })).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('대시보드가 study 블록을 동봉한다 — 미니앱이 진입 모드를 여기서 정한다', async () => {
+    const data = await mockRequest<DashboardResponse>('/api/dashboard', {});
+
+    expect(data.study).toBeDefined();
+    expect(data.study!.hasActiveSession).toBe(false);
+  });
+
+  /**
+   * 책별 「회당 시간」 — 서버 계약(`POST /api/study/books/{id}/session-goal`)을 목이 그대로 재현해야
+   * 휠 시트의 저장·해제·실패를 브라우저로 밟아 볼 수 있다.
+   */
+  const sessionGoal = (id: number, sessionGoalSeconds: number | null) =>
+    mockRequest<StudyState>(`/api/study/books/${id}/session-goal`, { body: { sessionGoalSeconds } });
+  const bookGoal = (s: StudyState | undefined, id: number) => s!.books!.find((b) => b.id === id)!.sessionGoalSeconds;
+
+  it('회당 시간 — 저장하면 응답과 대시보드 study 블록의 그 책 행에 실린다', async () => {
+    const saved = await sessionGoal(102, 3_000);
+    expect(bookGoal(saved, 102)).toBe(3_000);
+    expect(bookGoal((await mockRequest<DashboardResponse>('/api/dashboard', {})).study, 102)).toBe(3_000);
+    // 다른 책은 물들지 않는다 — 책별 값이다.
+    expect(bookGoal(saved, 103) ?? null).toBeNull();
+  });
+
+  it('회당 시간 — null이 해제다', async () => {
+    await sessionGoal(102, 3_000);
+    expect(bookGoal(await sessionGoal(102, null), 102)).toBeNull();
+  });
+
+  it('회당 시간 — 측정 중인 책이면 activeBook에도 새 값이 바로 실린다', async () => {
+    await mockRequest('/api/study/start', { body: { bookId: 103 } });
+    try {
+      expect((await sessionGoal(103, 60)).activeBook!.sessionGoalSeconds).toBe(60);
+    } finally {
+      await mockRequest('/api/study/stop', { body: {} });
+      await sessionGoal(103, null);
+    }
+  });
+
+  it('회당 시간 — 59·0·21601은 400이고 값이 안 바뀐다(0은 해제가 아니다)', async () => {
+    await sessionGoal(102, 1_800);
+    for (const bad of [59, 0, 21_601]) {
+      await expect(sessionGoal(102, bad)).rejects.toMatchObject({ status: 400 });
+    }
+    expect(bookGoal((await mockRequest<DashboardResponse>('/api/dashboard', {})).study, 102)).toBe(1_800);
+    // 경계 안쪽 두 끝은 통과한다(양성 쌍).
+    expect(bookGoal(await sessionGoal(102, 60), 102)).toBe(60);
+    expect(bookGoal(await sessionGoal(102, 21_600), 102)).toBe(21_600);
+    await sessionGoal(102, null);
+  });
+
+  it('회당 시간 — 없는 책은 404, 단 범위 밖 값은 책을 보기 전에 400이다(서버와 같은 순서)', async () => {
+    await expect(sessionGoal(99_999, 3_000)).rejects.toMatchObject({ status: 404 });
+    await expect(sessionGoal(99_999, 59)).rejects.toMatchObject({ status: 400 });
+  });
+
+  /**
+   * `offsetDays`일 전의 `YYYY-MM-DD` — 목의 `isoDate`와 같은 셈법(UTC).
+   *
+   * <p>달은 <b>그 날짜에서 파생</b>한다. 「오늘의 달」로 고정하면 매달 1일에 어제가 지난달이 되어
+   * 목록에서 빠지고, 테스트가 <b>한 달에 하루만</b> 붉어진다(달력이라 안 그러기 쉽다).
+   */
+  const daysAgo = (offsetDays: number) =>
+    new Date(Date.now() - offsetDays * 86_400_000).toISOString().slice(0, 10);
+
+  it('공부 일정 달력 — 체크가 저장되고 재조회에 그대로 실린다(3상태 순환의 왕복)', async () => {
+    const yesterday = daysAgo(1);
+    const month = yesterday.slice(0, 7);
+
+    await mockRequest('/api/study/check', { body: { date: yesterday, kept: true } });
+    const kept = await mockRequest<StudyCalendarResponse>('/api/study/calendar', { query: { month } });
+    expect(kept.days.find((d) => d.date === yesterday)?.kept).toBe(true);
+
+    await mockRequest('/api/study/check', { body: { date: yesterday, kept: false } });
+    const missed = await mockRequest<StudyCalendarResponse>('/api/study/calendar', { query: { month } });
+    expect(missed.days.find((d) => d.date === yesterday)?.kept).toBe(false);
+
+    // null = 무기록 복귀 — 서버처럼 행을 지운다(그 날이 목록에서 빠지거나 kept가 null이다).
+    await mockRequest('/api/study/check', { body: { date: yesterday, kept: null } });
+    const cleared = await mockRequest<StudyCalendarResponse>('/api/study/calendar', { query: { month } });
+    expect(cleared.days.find((d) => d.date === yesterday)?.kept ?? null).toBeNull();
+  });
+
+  it('공부 일정 달력 — 미래 날짜 체크는 서버처럼 400이다(클라 no-op의 이중 방어)', async () => {
+    await expect(mockRequest('/api/study/check', { body: { date: daysAgo(-1), kept: true } })).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+
+  it('공부 일정 달력 — 지난 며칠의 측정 픽스처가 실린다(점이 뜨는 경로를 브라우저로 밟는다)', async () => {
+    // 어제가 든 달을 본다 — 측정 픽스처(1~3일 전)가 반드시 걸리는 달이다.
+    const month = daysAgo(1).slice(0, 7);
+
+    const calendar = await mockRequest<StudyCalendarResponse>('/api/study/calendar', { query: { month } });
+
+    expect(calendar.days.some((d) => d.studiedSeconds > 0)).toBe(true);
+  });
+
+  /**
+   * 공부 기록 — 잔디 방향 규약(#730)과 목록 순서를 목도 지켜야 한다. 목이 서버와 다른 방향을 주면
+   * 화면 버그가 아니라 목 버그로 시간을 태운다. 「수동 기록 없음」은 공부 원장의 사실이라 함께 잠근다.
+   */
+  it('공부 기록 — weeks[0]이 최신 주, 월은 최신 먼저, 월 합계 = 일 합, 수동 칸 0', async () => {
+    const data = await mockRequest<StudyHistoryResponse>('/api/study/history', {});
+
+    const latest = data.graph.weeks[0].at(-1)!.date!;
+    const older = data.graph.weeks[1].at(-1)!.date!;
+    expect(latest > older).toBe(true);
+
+    expect(data.months.length).toBeGreaterThan(0);
+    expect(data.months.every((m, i) => i === 0 || data.months[i - 1].month > m.month)).toBe(true);
+    for (const month of data.months) {
+      expect(month.totalSeconds).toBe(month.days.reduce((sum, d) => sum + d.totalSeconds, 0));
+      // 달 안에서도 최신 일 먼저 — 화면이 다시 정렬하지 않는다.
+      expect(month.days.every((d, i) => i === 0 || month.days[i - 1].date > d.date)).toBe(true);
+    }
+
+    expect(data.graph.weeks.every((w) => w.every((d) => !d.manual))).toBe(true);
+  });
+
+  it('공부는 독서 원장에 안 섞인다 — 목에서도 잔디·기록이 안 움직인다(격리를 목이 흉내낸다)', async () => {
+    const before = await mockRequest<DashboardResponse>('/api/dashboard', {});
+    await mockRequest('/api/study/start', { body: {} });
+    await mockRequest('/api/study/stop', { body: {} });
+    const after = await mockRequest<DashboardResponse>('/api/dashboard', {});
+
+    expect(after.graph.totalSeconds).toBe(before.graph.totalSeconds);
+    expect(after.remainingSeconds).toBe(before.remainingSeconds);
   });
 
   it('서재 추가 — 뮤테이션이 목록에 반영된다(화면 전이가 실제처럼 보이는 최소 조건)', async () => {
@@ -97,10 +246,23 @@ describe('dev-mock 핸들러', () => {
 
     expect(months.length).toBeGreaterThan(1);
     expect(months[0].month > months[1].month).toBe(true);
-    const [first, second] = months[0].days;
+    // ⚠️ 달 안 순서는 **하루짜리가 아닌 달**에서 잰다 — 매달 1~2일엔 최신 달의 일자가 한 건뿐이라
+    //    `months[0].days[1]`이 `undefined`가 된다(2026-09-01 실측 실패: 날짜에 따라 붉어지는 계측기였다).
+    const multiDay = months.find((m) => m.days.length > 1);
+    expect(multiDay).toBeDefined();
+    const [first, second] = multiDay!.days;
     expect(first.date > second.date).toBe(true);
     // 월 합계가 일자 합과 어긋나면 화면의 월 머리글이 거짓말을 한다.
     expect(months[0].totalSeconds).toBe(months[0].days.reduce((sum, d) => sum + d.totalSeconds, 0));
+  });
+
+  it('날짜별 기록 — 각 날에 그날 목표가 실린다. 목표 있는 날·없는 날이 둘 다 있어야 막대 두 경로를 브라우저로 본다', async () => {
+    const { months } = await mockRequest<{ months: MonthlySection[] }>('/api/history', {});
+    const goals = months.flatMap((m) => m.days.map((d) => d.goalSeconds));
+
+    expect(goals.every((g) => typeof g === 'number')).toBe(true);
+    expect(goals.some((g) => g! > 0)).toBe(true);
+    expect(goals.some((g) => g === 0)).toBe(true); // 「그날 목표 없음」 경로
   });
 
   it('홈 피드 — 뉴스를 켜고 미리보기(3줄)보다 많이 준다. 안 그러면 뉴스 탭·「더 보기」를 브라우저로 볼 길이 없다', async () => {
@@ -242,5 +404,18 @@ describe('dev-mock 아이디 바꾸기', () => {
     await expect(
       mockRequest('/api/miniapp/handle/change', { body: { loginId: 'againagain' } }),
     ).rejects.toMatchObject({ status: 409 });
+  });
+});
+
+/**
+ * 웹 로그인 코드 — 목이 서버 알파벳(0·O·1·I·L 제외 31자)과 TTL을 그대로 흉내내야 설정 화면의
+ * 「발급 후」 상태를 브라우저로 볼 수 있다. 자리표시 문자열을 주면 4자 끊기 표기가 거짓으로 초록이 된다.
+ */
+describe('dev-mock 웹 로그인 코드', () => {
+  it('서버 형식의 8자 코드와 300초 TTL을 준다', async () => {
+    const data = await mockRequest<WebLoginCodeResponse>('/api/miniapp/web-login-code', { method: 'POST' });
+
+    expect(data.code).toMatch(/^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$/);
+    expect(data.expiresInSeconds).toBe(300);
   });
 });

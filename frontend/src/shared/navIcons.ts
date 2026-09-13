@@ -32,6 +32,8 @@ export const NAV_ICONS: Record<string, string> = {
     // ── 하단 네비 통일로 추가 (QuickNav와 동일 라인아트 스타일) ──
     // 막대 그래프 (독서 기록 — QuickNav와 동일)
     history: '<path d="M3 20h18"/><path d="M6 20v-6"/><path d="M12 20V6"/><path d="M18 20v-9"/>',
+    // 달력 (일정 — 미니앱 CALENDAR_TAB과 같은 path)
+    calendar: '<path d="M4.5 6.5h15v13h-15zM4.5 10.5h15M8.5 4v4M15.5 4v4"/>',
     // 돋보기 (탐색/검색 — QuickNav와 동일)
     search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
     // DNA 나선 (책BTI — QuickNav와 동일)

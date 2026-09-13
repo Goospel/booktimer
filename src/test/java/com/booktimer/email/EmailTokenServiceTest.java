@@ -40,8 +40,12 @@ class EmailTokenServiceTest {
     }
 
     private User persistUser() {
-        User u = User.of("reader@booktimer.com", "$2a$10$abcdefghijklmnopqrstuv", "책벌레", "Asia/Seoul", Role.USER);
-        u.assignLoginId("reader01");
+        return persistUser("reader@booktimer.com", "reader01");
+    }
+
+    private User persistUser(String email, String loginId) {
+        User u = User.of(email, "$2a$10$abcdefghijklmnopqrstuv", "책벌레", "Asia/Seoul", Role.USER);
+        u.assignLoginId(loginId);
         return userRepository.save(u);
     }
 
@@ -125,15 +129,70 @@ class EmailTokenServiceTest {
     }
 
     @Test
-    @DisplayName("issue: 같은 user+type의 기존 미사용 토큰은 무효화 — 직전 토큰은 더 못 쓰고 최신만 유효")
-    void issue_invalidatesPreviousUnusedToken() {
+    @DisplayName("issue: 재발급이 직전 미사용 토큰을 죽이지 않는다 — 남이 재설정을 조르는 것만으로 내 링크가 막히면 안 된다")
+    void issue_doesNotInvalidatePreviousUnusedToken() {
+        User user = persistUser();
+        EmailTokenService service = serviceAt(T0);
+
+        String first = service.issue(user, EmailTokenType.VERIFICATION);
+        service.issue(user, EmailTokenType.VERIFICATION);
+
+        // 먼저 받은 링크가 TTL 안이라면 여전히 열려야 한다(공존 허용).
+        assertThat(service.consume(first, EmailTokenType.VERIFICATION)).isPresent();
+    }
+
+    @Test
+    @DisplayName("consume 성공: 같은 user+type의 형제 미사용 토큰도 함께 죽는다 — 한 번 성공하면 나머지 링크는 끝")
+    void consume_success_invalidatesSiblingUnusedTokens() {
         User user = persistUser();
         EmailTokenService service = serviceAt(T0);
 
         String first = service.issue(user, EmailTokenType.VERIFICATION);
         String second = service.issue(user, EmailTokenType.VERIFICATION);
 
-        assertThat(service.consume(first, EmailTokenType.VERIFICATION)).isEmpty();   // 무효화됨
-        assertThat(service.consume(second, EmailTokenType.VERIFICATION)).isPresent(); // 최신만 유효
+        assertThat(service.consume(second, EmailTokenType.VERIFICATION)).isPresent();
+        assertThat(service.consume(first, EmailTokenType.VERIFICATION)).isEmpty(); // 형제도 무효화됨
+    }
+
+    @Test
+    @DisplayName("consume 성공: 같은 user의 다른 type 토큰은 건드리지 않는다 — 재설정 소비가 인증 링크를 죽이지 않는다")
+    void consume_success_doesNotTouchOtherType() {
+        User user = persistUser();
+        EmailTokenService service = serviceAt(T0);
+
+        String verification = service.issue(user, EmailTokenType.VERIFICATION);
+        String reset = service.issue(user, EmailTokenType.PASSWORD_RESET);
+
+        assertThat(service.consume(reset, EmailTokenType.PASSWORD_RESET)).isPresent();
+        assertThat(service.consume(verification, EmailTokenType.VERIFICATION)).isPresent();
+    }
+
+    @Test
+    @DisplayName("consume 성공: 형제 무효화는 그 사용자 안에서만 — 내 소비가 남의 인증 링크를 죽이지 않는다")
+    void consume_success_doesNotTouchOtherUser() {
+        User mine = persistUser();
+        User other = persistUser("other@booktimer.com", "other01");
+        EmailTokenService service = serviceAt(T0);
+
+        String myToken = service.issue(mine, EmailTokenType.VERIFICATION);
+        String otherToken = service.issue(other, EmailTokenType.VERIFICATION);
+
+        assertThat(service.consume(myToken, EmailTokenType.VERIFICATION)).isPresent();
+        // 형제 무효화에서 user 스코프가 빠지면 여기서 남의 토큰까지 전멸한다.
+        assertThat(service.consume(otherToken, EmailTokenType.VERIFICATION)).isPresent();
+    }
+
+    @Test
+    @DisplayName("consume 실패: 만료 토큰 소비 시도는 형제를 죽이지 않는다 — 쓰레기 토큰으로 남의 링크를 끊을 수 없다")
+    void consume_failure_doesNotInvalidateSiblings() {
+        User user = persistUser();
+        String expired = serviceAt(T0).issue(user, EmailTokenType.PASSWORD_RESET); // TTL 1h
+
+        Instant later = T0.plusSeconds(2 * 3600); // expired는 이미 만료, 아래 fresh만 유효
+        EmailTokenService service = serviceAt(later);
+        String fresh = service.issue(user, EmailTokenType.PASSWORD_RESET);
+
+        assertThat(service.consume(expired, EmailTokenType.PASSWORD_RESET)).isEmpty(); // 만료 → 거부
+        assertThat(service.consume(fresh, EmailTokenType.PASSWORD_RESET)).isPresent(); // 형제는 멀쩡
     }
 }

@@ -26,7 +26,9 @@
 $ErrorActionPreference = 'Stop'
 
 try {
-    $raw  = [Console]::In.ReadToEnd()
+    # UTF-8 explicitly: Console.In decodes stdin as CP949, where a Korean lead byte can
+    # swallow the next quote -> JSON parse fails -> fail-open silently skips this gate.
+    $raw  = (New-Object System.IO.StreamReader([Console]::OpenStandardInput(), (New-Object System.Text.UTF8Encoding($false)))).ReadToEnd()
     $data = $raw | ConvertFrom-Json
     $cmd  = [string]$data.tool_input.command
 } catch { exit 0 }
@@ -41,6 +43,10 @@ if ($cmd -match 'SKIP_CSS_COMMENT_CHECK') { exit 0 }
 
 $cwd = [string]$data.cwd
 if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
+# Inspect the worktree the commit really runs in, not the session cwd (T-242)
+. (Join-Path $PSScriptRoot 'lib\resolve-target-cwd.ps1')
+$cwd = Resolve-HookTargetCwd $cmd $cwd 'commit'
+if ($null -eq $cwd) { Stop-UnresolvedTarget 'commit' }
 
 # Staged .css files (added/copied/modified -- skip deletes)
 try {

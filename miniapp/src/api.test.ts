@@ -25,6 +25,7 @@ import {
   fetchProfileBooks,
   fetchShelf,
   follow,
+  issueWebLoginCode,
   linkAccount,
   login,
   logout,
@@ -35,6 +36,7 @@ import {
   searchUsers,
   setBookVisibility,
   setGoal,
+  setStudySessionGoal,
   token,
   unblockUser,
   unfollow,
@@ -254,6 +256,31 @@ describe('Bearer 호출·에러 계약', () => {
 
     await expect(setGoal(3600)).resolves.toBeUndefined();
     expect(JSON.parse(lastRequest()[1].body as string)).toEqual({ dailyIncrementSeconds: 3600 });
+  });
+});
+
+/**
+ * 회당 시간 저장 — <b>본문 키가 틀리면 조용히 반대 동작이 된다</b>. 서버 DTO(`SessionGoalRequest`)는 모르는 키를
+ * 무시하고 `sessionGoalSeconds`를 null로 받아, 「50분 저장」이 「해제」로 뒤집힌 채 200을 준다. 그래서 키 이름째 잠근다.
+ */
+describe('회당 시간 저장 (setStudySessionGoal)', () => {
+  beforeEach(() => {
+    token.set('tok');
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '{"hasActiveSession":false}') as never);
+  });
+
+  it('책 id가 든 문으로 sessionGoalSeconds 키에 초를 싣는다', async () => {
+    await setStudySessionGoal(102, 3_000);
+
+    const [url, init] = lastRequest();
+    expect(url).toBe('http://localhost:8080/api/study/books/102/session-goal');
+    expect(JSON.parse(init.body as string)).toEqual({ sessionGoalSeconds: 3_000 });
+  });
+
+  it('해제는 같은 키에 null을 싣는다 — 키를 빼거나 0으로 바꾸면 서버 규칙(0 = 400)과 어긋난다', async () => {
+    await setStudySessionGoal(102, null);
+
+    expect(JSON.parse(lastRequest()[1].body as string)).toEqual({ sessionGoalSeconds: null });
   });
 });
 
@@ -939,5 +966,34 @@ describe('세션 캐시 무효화', () => {
     await deleteStory(3);
 
     expect(cacheGet(cacheKeyMargin('goospel', 7))).toBeUndefined();
+  });
+});
+
+/**
+ * PC 웹 로그인 코드 — 토스로 시작한 계정이 booktimer.app에 들어가는 유일한 문(서버 PR-1의 짝).
+ *
+ * <p>본문이 없는 POST라 `method`를 명시해야 한다 — `request()`는 본문 유무로 메서드를 정하므로
+ * 생략하면 조용히 GET으로 나가고 서버에서 405가 된다(화면엔 「요청에 실패했어요 (405)」만 뜬다).
+ */
+describe('웹 로그인 코드 발급', () => {
+  it('본문 없이 POST로 나가고 서버가 준 코드·TTL을 그대로 돌려준다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      response(200, JSON.stringify({ code: 'ABCD2345', expiresInSeconds: 300 })) as never,
+    );
+
+    const result = await issueWebLoginCode();
+
+    expect(lastRequest()[0]).toBe('http://localhost:8080/api/miniapp/web-login-code');
+    expect(lastRequest()[1].method).toBe('POST');
+    expect(result).toEqual({ code: 'ABCD2345', expiresInSeconds: 300 });
+  });
+
+  it('토스 미연결 409의 평문을 그대로 올린다 — 문구가 곧 안내다', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(409, '토스 앱에 연결되지 않은 계정입니다') as never);
+
+    const error = (await issueWebLoginCode().catch((e: unknown) => e)) as ApiError;
+
+    expect(error.status).toBe(409);
+    expect(error.message).toBe('토스 앱에 연결되지 않은 계정입니다');
   });
 });

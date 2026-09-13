@@ -5,6 +5,7 @@ import com.booktimer.book.KyoboLinkBuilder;
 import com.booktimer.book.Yes24LinkBuilder;
 import com.booktimer.session.BookReadingDetail;
 import com.booktimer.security.CurrentUserService;
+import com.booktimer.profile.ProfileService;
 import com.booktimer.session.BookContributionService;
 import com.booktimer.user.User;
 import org.springframework.stereotype.Controller;
@@ -31,12 +32,15 @@ public class BookController {
     private final CurrentUserService currentUserService;
     private final BookService bookService;
     private final BookContributionService contributionService;
+    private final ProfileService profileService;
 
     public BookController(CurrentUserService currentUserService, BookService bookService,
-                          BookContributionService contributionService) {
+                          BookContributionService contributionService,
+                          ProfileService profileService) {
         this.currentUserService = currentUserService;
         this.bookService = bookService;
         this.contributionService = contributionService;
+        this.profileService = profileService;
     }
 
     /** 얇은 셸 — myLoginId만 싣고 BooksApp.vue에 위임한다. */
@@ -108,13 +112,20 @@ public class BookController {
     }
 
     /**
-     * 남의 책방(공개 프로필)에서 "구매" 클릭 — 공개(PUBLIC) 책이면 그 책의 제휴 링크로 리다이렉트하고
-     * 클릭을 책 주인 카운트에 집계한다.
+     * 남의 책방(공개 프로필)에서 "구매" 클릭 — 그 책방 주인의 공개(PUBLIC) 책이면 제휴 링크로
+     * 리다이렉트하고 클릭을 책 주인 카운트에 집계한다.
+     *
+     * <p>게이트는 <b>프로필 조회와 같은 것</b>을 쓴다({@code resolveVisibleTarget} — 운영자·차단·없는
+     * 아이디를 한 번에 거른다). 분기하면 두 경로의 보장이 갈리므로 여기서 따로 검사하지 않는다.
+     * 조회는 그 주인으로 스코프되므로({@code recordPublic*}) 남의 공개책을 임의 책방 주소에 매달
+     * 수 없다. 거부는 전부 그 프로필로 조용히 복귀 — 존재 여부를 드러내지 않는다.
      */
     @GetMapping("/u/{loginId}/books/{bookId}/buy")
     public String buyFromProfile(@PathVariable String loginId, @PathVariable Long bookId, Principal principal) {
-        currentUser(principal);
-        String link = bookService.recordPublicPurchaseClick(bookId);
+        User viewer = currentUser(principal);
+        String link = profileService.resolveVisibleTarget(viewer, loginId)
+                .map(owner -> bookService.recordPublicPurchaseClick(owner, bookId))
+                .orElse(null);
         if (link != null) {
             return "redirect:" + link;
         }
@@ -184,8 +195,10 @@ public class BookController {
      */
     @GetMapping("/u/{loginId}/books/{bookId}/buy/coupang")
     public String buyCoupangFromProfile(@PathVariable String loginId, @PathVariable Long bookId, Principal principal) {
-        currentUser(principal);
-        String link = bookService.recordPublicCoupangClick(bookId);
+        User viewer = currentUser(principal);
+        String link = profileService.resolveVisibleTarget(viewer, loginId)
+                .map(owner -> bookService.recordPublicCoupangClick(owner, bookId))
+                .orElse(null);
         if (link != null) {
             return "redirect:" + link;
         }
@@ -198,9 +211,11 @@ public class BookController {
     @GetMapping("/u/{loginId}/books/{bookId}/buy/yes24")
     public String buyYes24FromProfile(@PathVariable String loginId, @PathVariable Long bookId, Principal principal,
                                       @RequestHeader(value = "User-Agent", required = false) String userAgent) {
-        currentUser(principal);
+        User viewer = currentUser(principal);
         boolean mobile = Yes24LinkBuilder.isMobileUserAgent(userAgent);
-        String link = bookService.recordPublicYes24Click(bookId, mobile);
+        String link = profileService.resolveVisibleTarget(viewer, loginId)
+                .map(owner -> bookService.recordPublicYes24Click(owner, bookId, mobile))
+                .orElse(null);
         if (link != null) {
             return "redirect:" + link;
         }
@@ -213,9 +228,11 @@ public class BookController {
     @GetMapping("/u/{loginId}/books/{bookId}/buy/kyobo")
     public String buyKyoboFromProfile(@PathVariable String loginId, @PathVariable Long bookId, Principal principal,
                                       @RequestHeader(value = "User-Agent", required = false) String userAgent) {
-        currentUser(principal);
+        User viewer = currentUser(principal);
         boolean mobile = KyoboLinkBuilder.isMobileUserAgent(userAgent);
-        String link = bookService.recordPublicKyoboClick(bookId, mobile);
+        String link = profileService.resolveVisibleTarget(viewer, loginId)
+                .map(owner -> bookService.recordPublicKyoboClick(owner, bookId, mobile))
+                .orElse(null);
         if (link != null) {
             return "redirect:" + link;
         }

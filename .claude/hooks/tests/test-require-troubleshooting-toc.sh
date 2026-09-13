@@ -77,6 +77,12 @@ check "hook: staged stale ts.md → exit 0" "0" "$(run_hook 'git commit -F .comm
 git -C "$d" show :claude-docs/troubleshooting.md | grep -qF '#t-003-git특수--문자' && r=ok || r=missing
 check "hook: regenerated TOC is staged" "ok" "$r"
 
+# ── Case 4b: same, but Korean right before the closing quote (stdin UTF-8, no fail-open) ──
+d=$(setup_repo_with_script "$FIXTURE_STALE"); git -C "$d" add -A
+run_hook 'git commit -F .commit-msg-tmp # 테스트' "$d" >/dev/null
+git -C "$d" show :claude-docs/troubleshooting.md | grep -qF '#t-003-git특수--문자' && r=ok || r=missing
+check "hook: Korean in command → regenerated TOC still staged" "ok" "$r"
+
 # ── Case 5: troubleshooting.md NOT staged → pass (no-op) ──
 d=$(setup_repo_with_script "$FIXTURE_STALE")
 printf 'x\n' > "$d/other.txt"; git -C "$d" add other.txt

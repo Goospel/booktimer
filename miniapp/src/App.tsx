@@ -2,9 +2,9 @@ import { Button } from '@toss/tds-mobile';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import type { BookOption, DashboardResponse, MarginBook, TimerState } from './api';
-import { changeActiveBook, fetchDashboard, startSession, stopSession, tagBook, token } from './api';
-import { useBackClose } from './back';
+import type { BookOption, DashboardResponse, MarginBook, StudyState, TimerState } from './api';
+import { IDLE_STUDY, changeActiveBook, changeActiveStudyBook, fetchDashboard, setStudySessionGoal, startSession, startStudy, stopSession, stopStudy, tagBook, tagStudyBook, token } from './api';
+import { nativeBack, useBackClose } from './back';
 import {
   CoachmarkBubble,
   coachmarkSeen,
@@ -15,6 +15,8 @@ import {
 import { elapsedSeconds } from './format';
 import { Bookshop } from './screens/Bookshop';
 import { Goal } from './screens/Goal';
+import { GuestShell } from './screens/GuestHome';
+import type { LoginSource } from './screens/GuestHome';
 import { History } from './screens/History';
 import { BookSheet, Home, defaultBookId } from './screens/Home';
 import { Library } from './screens/Library';
@@ -22,8 +24,12 @@ import { LinkAccount } from './screens/LinkAccount';
 import { LoginBridge } from './screens/LoginBridge';
 import { Profile } from './screens/Profile';
 import { Settings } from './screens/Settings';
+import { StudyCalendar } from './screens/StudyCalendar';
+import { StudyHistory } from './screens/StudyHistory';
+import { StudyLibrary } from './screens/StudyLibrary';
 import { BookMargin, BookMarginAll, StoryComposer } from './screens/Story';
-import { showInterstitialAd, trackEvent } from './toss';
+import { showInterstitialAd, subscribeNativeBack, trackEvent, trackScreen } from './toss';
+import { flushTrial } from './trial';
 import { CoverInitial, ErrorMessage, Loading, PENCIL_FRAME, SERIF_VALUE, Screen, Sheet } from './ui';
 
 /**
@@ -64,16 +70,64 @@ export const TAB_BAR_Z_INDEX = 100;
  */
 export const TAB_BAR_SPACE = `calc(${TAB_BAR_HEIGHT}px + 12px + env(safe-area-inset-bottom) + 16px)`;
 
-export type TabKey = (typeof TABS)[number]['key'];
+/**
+ * 공부 모드에서 <b>책방 자리에</b> 서는 탭 — 그 달의 일정(지킨 날)을 표시하는 달력이다.
+ *
+ * <p>책방을 내주는 이유(사용자 확정): 책방은 여백 글이 전시되는 사회면이라 「공부 중에 쓰지 않는」
+ * 화면이고, 서재(내 책)·기록(잔디)은 공부 모드에서도 이름이 뚜렷하다.
+ *
+ * <p>아이콘은 기존 넷과 같은 문법이다 — 24 격자의 단색 스트로크 path(달력 몸통 + 머리줄 + 고리 둘).
+ */
+export const CALENDAR_TAB = {
+  key: 'calendar',
+  label: '일정',
+  icon: 'M4.5 6.5h15v13h-15zM4.5 10.5h15M8.5 4v4M15.5 4v4',
+} as const;
 
 /**
- * 탭바가 주는 index를 탭 키로 옮기는 핸들러 — `TABS` 순서가 곧 탭바 순서라는 계약이 여기 한 줄에 모인다.
+ * 공부 모드 탭바 — {@link TABS}에서 <b>책방 한 칸만</b> 갈아 끼운 것이다.
+ *
+ * <p>길이를 4로 지킨 것이 이 설계의 요점이다: {@link TIMER_ACTION_SLOT}·{@link slotCenter}가 값
+ * 그대로 남아 가운데 원과 말풍선 좌표를 한 줄도 안 고친다.
+ */
+export const STUDY_TABS = TABS.map((tab) => (tab.key === 'bookshop' ? CALENDAR_TAB : tab));
+
+export type TabKey = (typeof TABS)[number]['key'] | (typeof CALENDAR_TAB)['key'];
+
+/** 탭바 한 칸의 모양 — 두 목록이 같은 꼴이라 그리는 쪽은 어느 목록인지 몰라도 된다. */
+export interface TabItem {
+  key: TabKey;
+  label: string;
+  icon: string;
+}
+
+/** 이 모드의 탭 목록. 독서는 {@link TABS} <b>그 객체</b>를 돌려준다(독서 탭바는 픽셀 불변이다). */
+export function tabsFor(mode: TimerMode): readonly TabItem[] {
+  return mode === 'study' ? STUDY_TABS : TABS;
+}
+
+/**
+ * 지금 모드의 탭바에 없는 탭이면 홈으로 — <b>setState 없는 파생값</b>이라 동기화 코드가 0줄이다.
+ *
+ * <p>사용자 손으로는 이 조합이 안 생긴다(모드 토글이 홈에만 있다). 생기는 길은 원격뿐이다:
+ * 다른 기기에서 공부를 시작하면 {@link effectiveMode}가 study를 강제하는데, 그때 책방 탭에 서 있었으면
+ * 존재하지 않는 칸을 가리키게 된다. 반대 방향(달력에 있는데 reading 강제)도 같은 줄이 처리한다.
+ */
+export function reconcileTab(tab: TabKey, mode: TimerMode): TabKey {
+  return tabsFor(mode).some((t) => t.key === tab) ? tab : 'home';
+}
+
+/**
+ * 탭바가 주는 index를 탭 키로 옮기는 핸들러 — 목록 순서가 곧 탭바 순서라는 계약이 여기 한 줄에 모인다.
  * 정적 렌더 하니스로는 클릭을 못 잡으므로, 이 변환만 따로 꺼내 단위로 계측한다.
+ *
+ * <p>목록을 인자로 받는 것이 공부 탭바를 지탱한다 — 그리는 목록과 <b>같은 배열</b>로 index를 풀어야
+ * 「눌린 칸과 바뀌는 탭」이 어긋나지 않는다(기본값은 독서 목록).
  */
 export const tabChangeHandler =
-  (onTabChange: (tab: TabKey) => void) =>
+  (onTabChange: (tab: TabKey) => void, tabs: readonly TabItem[] = TABS) =>
   (index: number): void =>
-    onTabChange(TABS[index].key);
+    onTabChange(tabs[index].key);
 
 /**
  * 측정 액션이 서는 시각적 자리 — `TABS` index가 아니라 **렌더 배열의 위치**다.
@@ -122,14 +176,53 @@ const STOP_ICON = 'M8 8h8v8H8z';
 export const LAMP_CLASS = 'reading-lamp';
 
 /**
+ * 타이머가 무엇을 재고 있나 — 독서(기본)냐 공부냐. <b>타이머의 모드</b>이지 화면의 모드가 아니다
+ * (서재·책방·기록은 어느 쪽이든 독서 도메인 그대로다).
+ */
+export type TimerMode = 'reading' | 'study';
+
+/**
+ * 공부 모드일 때 `document.body`에 붙는 클래스 — 색은 전부 `global.css`가 든다(독서등과 같은 수법).
+ *
+ * <p>{@link LAMP_CLASS}와 마찬가지로 이 문자열이 <b>js와 css를 잇는 유일한 매듭</b>이라,
+ * 한쪽만 고치면 기능이 조용히 죽는다. `study-mode.test.tsx`가 css에 이 셀렉터가 실재하는지 본다.
+ */
+export const STUDY_CLASS = 'study-mode';
+
+/** 모드 저장 키 — 기기 로컬이다(모드는 데이터가 아니라 UI 선호라 기기 간 비대칭을 수용한다). */
+export const MODE_KEY = 'booktimer.timerMode';
+
+/** 저장된 모드 — 미지값·손상·증발은 전부 독서로 떨어진다(기본 모드가 독서다). */
+export function readMode(): TimerMode {
+  return localStorage.getItem(MODE_KEY) === 'study' ? 'study' : 'reading';
+}
+
+/**
+ * 지금 보여 줄 모드 — <b>서버 진실이 저장값을 이긴다</b>.
+ *
+ * <p>진행 중 측정이 있으면 그 측정의 모드가 무조건 이긴다(웹에서 시작한 독서가 공부 화면에 가려지면
+ * 「끝내는 법」이 사라진다). 그래서 「재진입하면 모드가 유지된다」와 「측정 중 화면이 어긋나지 않는다」를
+ * 상태 동기화 코드 없이 <b>이 한 줄이 함께</b> 책임진다.
+ */
+export function effectiveMode(readingActive: boolean, studyActive: boolean, stored: TimerMode): TimerMode {
+  if (readingActive) return 'reading';
+  if (studyActive) return 'study';
+  return stored;
+}
+
+/**
  * 독서등을 켤 자리인가 — <b>측정 중인 홈</b>일 때만 참이다(사용자 결정 2026-08-19: 「홈만」).
  *
- * <p>드는 것이 「지금 어느 탭인가 · 지금 측정 중인가」 둘뿐이라 <b>상태가 없다</b>. 그래서 앱을
- * 나갔다 와도 대시보드가 다시 「측정 중」이라 말하는 순간 화면이 어두운 채로 열린다 —
+ * <p>드는 것이 「지금 어느 탭인가 · 지금 측정 중인가 · 어느 모드인가」 셋뿐이라 <b>상태가 없다</b>. 그래서
+ * 앱을 나갔다 와도 대시보드가 다시 「측정 중」이라 말하는 순간 화면이 어두운 채로 열린다 —
  * 「방금 눌렀는지」를 기억하는 코드가 0줄이라 재진입 규칙이 공짜로 따라온다.
+ *
+ * <p><b>공부 모드에선 켜지 않는다</b>(1차 결정): 독서등은 「독서」 브랜드 장치고, 공부용 밤 팔레트는
+ * 1차 가치 대비 비용이 크다. 덕분에 `body.study-mode`와 `body.reading-lamp`가 <b>동시에 붙을 수 없어</b>
+ * (밤 세이지 vs 파랑) 명시도 싸움이 통째로 사라진다.
  */
-export function lampOn(tab: TabKey, hasActiveSession: boolean): boolean {
-  return tab === 'home' && hasActiveSession;
+export function lampOn(tab: TabKey, hasActiveSession: boolean, mode: TimerMode): boolean {
+  return tab === 'home' && hasActiveSession && mode === 'reading';
 }
 
 /** 잠긴 탭을 눌렀을 때의 안내 — 말없이 무반응이면 고장으로 읽힌다. */
@@ -145,6 +238,8 @@ export const START_TOAST_MS = 5000;
 export interface StartToastState {
   book: BookOption | null;
   changed: boolean;
+  /** 공부 측정이면 `'study'` — 명사만 「공부 측정」으로 갈린다(생략하면 독서). */
+  mode?: TimerMode;
 }
 
 /**
@@ -155,8 +250,11 @@ export interface StartToastState {
  * 제목이 아니라 <b>「측정」</b>이 받는다(『제목』 측정<b>을</b> / 『제목』 측정<b>으로</b>).
  */
 export function startToastMessage(toast: StartToastState): string {
+  // 모드는 <b>명사만</b> 바꾼다 — 공부에도 책이 생겼으니 문장 구조를 가를 이유가 사라졌다.
+  // 책 없이 시작한 공부의 「책 없이」는 거짓말이 아니라 정보다(고를 수 있는데 안 고른 것이다).
+  const noun = toast.mode === 'study' ? '공부 측정' : '측정';
   const target = toast.book === null ? '책 없이' : `『${toast.book.title}』`;
-  return toast.changed ? `${target} 측정으로 바꿨어요` : `${target} 측정을 시작했어요`;
+  return toast.changed ? `${target} ${noun}으로 바꿨어요` : `${target} ${noun}을 시작했어요`;
 }
 
 /**
@@ -193,7 +291,7 @@ export function tabLocked(key: TabKey, hasActiveSession: boolean): boolean {
   return hasActiveSession && key !== 'home';
 }
 
-export function timerActionView(active: boolean): {
+export function timerActionView(active: boolean, mode: TimerMode = 'reading'): {
   label: string;
   background: string;
   ring: string;
@@ -210,9 +308,12 @@ export function timerActionView(active: boolean): {
         icon: STOP_ICON,
       }
     : {
-        label: '측정 시작',
+        // 시안의 「독서 시작하기 / 공부 시작하기」가 실물에서 서는 자리 — 이 앱엔 시작 버튼 글자가 없고
+        // 원 하나뿐이라, 무엇을 재기 시작하는지는 이 라벨과 시작 토스트가 말한다.
+        label: mode === 'study' ? '공부 측정 시작' : '독서 측정 시작',
         background: 'var(--adaptiveBlue700, #4F6B4C)',
-        ring: '0 0 0 3px rgba(110,138,106,.25)',
+        // 링·배경 둘 다 토큰이라 공부 모드 색 전환이 css 한 벌로 따라온다(빨강 링은 모드 무관 — danger).
+        ring: '0 0 0 3px var(--accentRing, rgba(110,138,106,.25))',
         icon: PLAY_ICON,
       };
 }
@@ -338,10 +439,23 @@ export function flowStepsOnAbandon(): string[] {
 /** 종료 직후 태깅 대상 — 책 없이 측정한 세션에 나중에 책을 붙인다. */
 interface Untagged {
   sessionId: number;
+  /**
+   * 공부 측정인가 — <b>시트가 열릴 때</b> 못 박는다. 매번 `mode`를 다시 보면, 시트를 열어 둔 채
+   * 원격으로 모드가 뒤집혔을 때 <b>공부 세션 id로 독서 문</b>을 두드려 404가 된다(원장이 다르다).
+   */
+  study: boolean;
 }
 
 /** 탭 밖 전역 상태 — 인증·연결·목표·에러는 탭바 없이 화면 전체를 차지한다. */
-type View = 'auth' | 'link' | 'loading' | 'main' | 'goal' | 'settings' | 'error';
+type View =
+  | 'auth'
+  | 'link'
+  | 'loading'
+  | 'main'
+  /** 독서 목표 화면. (공부 하루 목표 화면은 2026-09-13 책별 「회당 시간」 시트로 대체돼 걷었다.) */
+  | 'goal'
+  | 'settings'
+  | 'error';
 
 /**
  * 열린 여백 — 「누구의 + 어느 책」 두 축이 곧 서버 계약이고, `composeBook`이 있으면 그 책의 **작성
@@ -400,6 +514,112 @@ export function marginScreen(margin: MarginState): MarginScreen | null {
   return margin.isbn13 !== null ? 'book' : null;
 }
 
+/**
+ * 작성 시트 <b>아래에 깔릴</b> 화면 — 작성이 바텀시트가 되면서(2026-08-29) 밑 화면이 살아 있어야 한다.
+ *
+ * <p>「작성이 가장 위」라는 {@link marginScreen}의 첫 줄을 한 칸 걷어낸 것이 전부다. `null`은 막다른
+ * 길이 아니라 <b>깔린 여백 화면이 없다</b>는 뜻이다 — 홈·서재에서 직행한 작성이 그것이고, 그때 시트
+ * 뒤에는 열었던 탭 화면이 그대로 선다.
+ */
+export function underCompose(margin: MarginState): MarginScreen | null {
+  return marginScreen({ ...margin, composeBook: null });
+}
+
+/** App 수준에서 구분되는 화면 이름 — 콘솔에는 `screen_` 접두사가 붙는다({@link trackScreen}). */
+export type ScreenName =
+  | 'login'
+  /**
+   * 로그인 전 게스트 셸의 네 화면 — 「둘러보는 중」과 「로그인 진행 중」(`login`)은 <b>다른 화면</b>이다.
+   * 한 이름으로 묶으면 판정식(`login_started / guest_entered`)의 분모에 「눌렀는가」가 섞여 스스로를 잡아먹는다.
+   */
+  | 'guest_home'
+  | 'guest_library'
+  | 'guest_bookshop'
+  | 'guest_history'
+  | 'link_account'
+  | 'error'
+  | 'goal'
+  | 'settings'
+  | 'margin'
+  | 'book_margin'
+  | 'profile'
+  | 'home'
+  | 'library'
+  | 'study_library'
+  | 'bookshop'
+  | 'history'
+  | 'study_history'
+  | 'calendar';
+
+/**
+ * 지금 떠 있는 화면 — {@link App}의 렌더 분기를 그대로 옮겨 적은 판정이다. 배선은 effect라 하니스가
+ * 못 돌리므로 판정만 순수하게 계측한다({@link marginScreen} 관례). `null` = 과도 상태(로딩), 안 쏜다.
+ *
+ * <p><b>순서가 곧 규칙이다</b>: 탭 밖 뷰 &gt; 대시보드 로딩 &gt; 목표·설정 &gt; 여백 사람축 &gt; 여백 책축
+ * &gt; 남의 책방 &gt; 탭. 특히 <b>로딩 가드가 목표·설정보다 앞</b>이라야 한다 — 렌더가 그 순서라
+ * (`dashboard === null` 조기 return이 `view === 'goal'`보다 위) 뒤집으면 대시보드를 기다리는 동안
+ * `goal`이 찍혀 사용자가 안 본 화면이 퍼널에 쌓인다.
+ *
+ * <p><b>`switch`인 이유</b>: `View`에 화면이 늘 때 여기 분기를 빠뜨리면 그 화면 사용자가 조용히
+ * 오분류된다. `default`의 `never` 대입이 그걸 컴파일 에러로 바꾼다(tsc가 유일한 계측기다 — 새 화면은
+ * 테스트에도 안 적힐 테니까).
+ */
+export function currentScreen(s: {
+  view: View;
+  loaded: boolean;
+  margin: MarginState | null;
+  shop: string | null;
+  tab: TabKey;
+  mode: TimerMode;
+  /** 로그인 진행 중인가 — `null`이면 게스트 셸이 서 있다(`'auth'` 안의 두 갈래). */
+  loginSource: LoginSource | null;
+  /** 게스트 셸이 선 탭 — 탭 상태(`tab`)와 별개다(로그인 후 착지 탭을 게스트가 흔들면 안 된다). */
+  guestTab: TabKey;
+}): ScreenName | null {
+  switch (s.view) {
+    case 'auth':
+      // 로그인 진행(checking·choice·failed)은 종전 이름 그대로 — 전후 비교가 끊기지 않게.
+      if (s.loginSource !== null) return 'login';
+      // `as` 대신 명시 분기다 — 게스트 탭이 늘면 여기 한 줄을 지나야 한다(`never` 검사와 같은 취지).
+      switch (s.guestTab) {
+        case 'library':
+          return 'guest_library';
+        case 'bookshop':
+          return 'guest_bookshop';
+        case 'history':
+          return 'guest_history';
+        default:
+          return 'guest_home'; // 'home' · 'calendar'(게스트 탭바엔 없다)
+      }
+    case 'link':
+      return 'link_account';
+    case 'error':
+      return 'error';
+    case 'loading':
+      return null;
+    // 대시보드가 오기 전엔 <Loading />이 뜬다 — 그 순서를 각 갈래가 직접 들고 있어 뒤집을 수가 없다.
+    case 'goal':
+      return s.loaded ? 'goal' : null;
+    case 'settings':
+      return s.loaded ? 'settings' : null;
+    case 'main':
+      break; // 아래 탭 판정으로 내려간다
+    default: {
+      const exhaustive: never = s.view;
+      return exhaustive;
+    }
+  }
+  if (!s.loaded) return null;
+  // 작성 시트는 걷어낸다(`underCompose`) — 개폐로 이름이 바뀌면 그때마다 중복 발화한다.
+  const under = s.margin === null ? null : underCompose(s.margin);
+  if (under === 'person') return 'margin';
+  if (under === 'book') return 'book_margin';
+  if (s.shop !== null) return 'profile';
+  if (s.tab === 'library') return s.mode === 'study' ? 'study_library' : 'library';
+  if (s.tab === 'history') return s.mode === 'study' ? 'study_history' : 'history';
+  return s.tab; // 'home' | 'bookshop' | 'calendar'
+}
+
 /** 포커스 복귀 재조회의 최소 간격 — 미니앱은 앱 전환이 잦아 복귀마다 받으면 서버를 두들긴다. */
 export const REFRESH_THROTTLE_MS = 60_000;
 
@@ -440,12 +660,29 @@ export function App() {
     initialTab(typeof window === 'undefined' ? '' : window.location.search),
   );
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  /**
+   * 공부 원장 — 대시보드와 <b>따로</b> 든다. start/stop 응답(`StudyState`)이 대시보드를 통째로 갈아치우지
+   * 않고 이 한 칸만 갱신하므로, 독서 상태와 서로를 덮어쓸 자리가 없다.
+   */
+  const [study, setStudy] = useState<StudyState>(IDLE_STUDY);
+  /** 사용자가 고른 모드(기기 로컬) — 실제로 보여 줄 모드는 {@link effectiveMode}가 정한다. */
+  const [storedMode, setStoredMode] = useState<TimerMode>(() =>
+    typeof localStorage === 'undefined' ? 'reading' : readMode(),
+  );
   const [firstRun, setFirstRun] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** 목표 바꾸기 전면광고를 기다리는 중 — 버튼을 "준비 중"으로 바꾸고 중복 진입을 막는다. */
   const [goalAdPending, setGoalAdPending] = useState(false);
   /** 열린 여백 — 탭 위에 전체 화면으로 선다(홈 문·서재 문·홈 소식이 모두 이 한 자리로 온다). */
   const [margin, setMargin] = useState<MarginState | null>(null);
+  /**
+   * 글을 남긴 횟수 — 밑에 깔린 여백 상세를 다시 마운트시키는 열쇠다.
+   *
+   * <p>작성이 전체 화면이던 시절엔 닫는 순간 밑 화면이 <b>새로 마운트</b>되고 그 재조회가 곧 "방금
+   * 남긴 글이 보인다"였다. 시트로 겹치면서 밑 화면이 안 죽으니 그 재조회도 저절로 안 일어난다 —
+   * 남긴 뒤에만 이 값을 올려 그때만 다시 받는다(취소는 올리지 않는다: 바뀐 것이 없다).
+   */
+  const [composeEpoch, setComposeEpoch] = useState(0);
   /**
    * 열린 남의 책방 — 여백의 좋아요 명단에서 사람을 눌렀을 때 선다.
    *
@@ -461,22 +698,62 @@ export function App() {
    * 고른 사람이 돌아올 때마다 이어 읽기 책으로 끌려간다.
    */
   const [homeBookId, setHomeBookId] = useState<number | null | undefined>(undefined);
+  /**
+   * 공부 캐러셀에서 고른 책 — 위 독서 선택과 <b>별개 슬롯</b>이다.
+   *
+   * <p>한 슬롯에 합치면 두 서재의 id 공간이 섞인다: 독서 책 1번을 골라 둔 채 모드가 뒤집히면(웹에서
+   * 시작한 측정이 {@link effectiveMode}로 모드를 바꾼다) 공부 서재의 1번이 「고른 책」이 된다.
+   */
+  const [studyBookId, setStudyBookId] = useState<number | null | undefined>(undefined);
+  /**
+   * 로그인 진행 중인가 — `'auth'` 뷰 안에서 「게스트 셸 / 로그인 진행」을 가르는 한 칸이다.
+   *
+   * <p>`'guest'` 뷰를 새로 파지 않은 이유: `'auth'`의 뜻(「토큰이 없다」)이 그대로고, 401·로그아웃·탈퇴가
+   * 전부 지나는 {@link toLogin} 한 문을 건드리지 않아도 된다. 값은 <b>어느 손잡이로</b> 시작했는지라
+   * 그대로 `LoginBridge`의 `login_started{source}`가 된다.
+   */
+  const [loginSource, setLoginSource] = useState<LoginSource | null>(null);
+  /**
+   * 게스트 셸이 선 탭 — 탭 상태(`tab`)와 <b>따로</b> 든다.
+   *
+   * <p>딥링크(`?tab=history`)로 로그아웃 진입하면 첫 화면이 「기록은 계정이 있어야」가 된다 — 체험 문이
+   * 먼저 서야 하므로 게스트는 홈 고정이다. 로그인 뒤 착지 탭은 종전대로 `tab`(=`initialTab`)이 든다.
+   */
+  const [guestTab, setGuestTab] = useState<TabKey>('home');
 
   const toLogin = useCallback(() => {
     token.clear();
     setDashboard(null);
+    setLoginSource(null); // 로그아웃·401은 게스트 홈으로 떨어진다(인가 재요청이 아니라)
+    setGuestTab('home');
     setView('auth');
   }, []);
 
   const lastFetchedAt = useRef(0);
 
+  /**
+   * 대시보드 로드가 진행 중인가 — <b>두 번째 호출을 버리는</b> 빗장이다.
+   *
+   * <p>인증 직후 `load`는 두 번 돈다: 브릿지가 한 번 부르고, 그 setState가 만든
+   * `view==='loading' && dashboard===null` 조합을 마운트 effect가 보고 인자 <b>없이</b> 또 부른다.
+   * 둘 다 통과하면 `setView('goal')` 뒤에 `setView('main')`이 덮어 <b>신규 계정이 목표 화면을 못 본다</b>
+   * (`firstRun`만 `true`로 남는다). 빗장이 첫 호출의 `next`를 살린다.
+   */
+  const loading = useRef(false);
+
   const load = useCallback(
     (next: View = 'main') => {
+      if (loading.current) return;
+      loading.current = true;
       setView('loading');
       lastFetchedAt.current = Date.now();
-      fetchDashboard()
+      // 로그인 전 체험이 합류하는 **유일한 문** — 새 계정·기존 계정 연결·재진입이 전부 여기를 지난다.
+      // 올릴 것이 없으면 동기 no-op이고, 어떤 실패도 밖으로 내지 않는다(`flushTrial` 계약).
+      flushTrial()
+        .then(fetchDashboard)
         .then((data) => {
           setDashboard(data);
+          setStudy(data.study ?? IDLE_STUDY); // 옛 서버(필드 없음)는 「공부 기록 없음」으로 떨어진다
           setView(next);
         })
         .catch((e: Error) => {
@@ -485,6 +762,10 @@ export function App() {
             setError(e.message);
             setView('error');
           }
+        })
+        // ⚠️ 이 줄이 빠지면 첫 로드 뒤 빗장이 영영 잠긴 채로 남아 「다시 시도」가 죽는다.
+        .finally(() => {
+          loading.current = false;
         });
     },
     [toLogin],
@@ -510,7 +791,10 @@ export function App() {
       if (!shouldRefresh(lastFetchedAt.current, Date.now(), force)) return;
       lastFetchedAt.current = Date.now(); // 응답 전에 찍는다 — 연속 복귀가 요청을 겹쳐 쌓지 않게
       fetchDashboard()
-        .then(setDashboard)
+        .then((data) => {
+          setDashboard(data);
+          setStudy(data.study ?? IDLE_STUDY); // 공부도 서버가 진실이다 — 다른 기기에서 시작했을 수 있다
+        })
         .catch((e: Error) => {
           if (e.name === 'UnauthorizedError') toLogin(); // 토큰이 폐기됐으면 조용히 넘어갈 수 없다
         });
@@ -524,8 +808,22 @@ export function App() {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [silentRefresh]);
 
-  // 탭 밖 전체 화면도 뒤로가기로 나갈 수 있다 — 각 화면의 「돌아가기」와 같은 자리로 돌려보낸다.
-  useBackClose(view === 'link', () => setView('auth'));
+  /*
+   * 토스 「<」를 앱이 받는다 — 구독하면 기본 동작(어느 화면에서든 미니앱 종료)이 차단되고 `nativeBack`이
+   * 「서브뷰 하나 닫기 / 첫 화면이면 앱 닫기」를 정한다. **앱에 하나뿐이어야 한다**: 리스너가 여럿이면
+   * 한 번의 back에 서브뷰가 여럿 닫힌다(`back.ts` 모듈 리스너와 같은 이유). 그래서 화면마다 달지 않는다.
+   */
+  useEffect(() => subscribeNativeBack(nativeBack), []);
+
+  // 탭 밖 전체 화면을 나가는 유일한 길이다 — 자체 뒤로가기를 걷었으므로(T-220) 네이티브 back이 여기로 온다.
+  // 계정 연결에서 back → 시작 <b>전</b>(게스트 홈)으로. `loginSource`를 남기면 `LoginBridge`가 다시
+  // 마운트되며 마운트 effect가 인가를 또 요청한다 — 돌아간 사람에게 인가 창을 다시 들이대는 꼴이다.
+  useBackClose(view === 'link', () => {
+    setLoginSource(null);
+    setView('auth');
+  });
+  // 로그인 진행 중 back → 게스트 홈. `checking` 중엔 토스 시트가 위에 있어 여기까지 안 온다.
+  useBackClose(view === 'auth' && loginSource !== null, () => setLoginSource(null));
   useBackClose(view === 'goal', () => {
     setFirstRun(false);
     setView('main');
@@ -535,6 +833,42 @@ export function App() {
   useBackClose(margin?.composeBook != null, () => setMargin((m) => (m === null ? null : closeCompose(m))));
   useBackClose(margin !== null && margin.composeBook === null, () => setMargin(null));
   useBackClose(shop !== null, () => setShop(null));
+
+  /**
+   * 지금 보여 줄 모드 — 진행 중 측정이 저장값을 이긴다(재진입·다른 기기 시작을 한 줄이 함께 처리한다).
+   *
+   * <p>조기 return(`dashboard === null`)보다 <b>위</b>에 있는 이유는 아래 화면 이름 effect뿐이다 —
+   * 훅은 조건부로 돌 수 없다. 대시보드 전엔 `hasActiveSession`을 `false`로 보지만 그 값은 화면 이름
+   * 파생에만 쓰이고(그때 이름은 `null`), 실제 렌더 분기는 가드 뒤라 종전과 같은 값을 본다.
+   */
+  const mode = effectiveMode(dashboard?.hasActiveSession ?? false, study.hasActiveSession, storedMode);
+
+  /**
+   * 지금 <b>보여 줄</b> 탭 — 모드가 바뀌어 사라진 칸에 서 있으면 홈으로 떨어진다({@link reconcileTab}).
+   *
+   * <p>상태(`tab`)는 그대로 둔다 — 원격 플립이 되돌아가면 원래 있던 탭으로 돌아오는 편이 옳고,
+   * 무엇보다 파생값이라 동기화 effect가 0줄이다.
+   */
+  const shownTab = reconcileTab(tab, mode);
+
+  /*
+   * 화면 진입 1건 — 퍼널(진입 → 로그인 → 목표 → 홈 → 서재·책방)의 유일한 관측점이다.
+   * 의존성이 **문자열 하나**라 같은 화면으로 리렌더되면 안 돈다 — 시트 개폐·`MainTabs` remount가
+   * 중복 발화로 새지 않는 것이 이 자리(App 루트)를 고른 이유다. `null`은 과도 상태(로딩)라 안 쏜다.
+   */
+  const screenName = currentScreen({
+    view,
+    loaded: dashboard !== null,
+    margin,
+    shop,
+    tab: shownTab,
+    mode,
+    loginSource,
+    guestTab,
+  });
+  useEffect(() => {
+    if (screenName !== null) trackScreen(screenName);
+  }, [screenName]);
 
   const handleError = useCallback(
     (e: Error) => {
@@ -578,8 +912,12 @@ export function App() {
 
   switch (view) {
     case 'auth':
-      return (
+      // 토큰이 없는 사람이 보는 화면은 둘이다 — 둘러보는 중(게스트 셸)과, 손잡이를 누른 뒤의 로그인 진행.
+      return loginSource === null ? (
+        <GuestShell tab={guestTab} onTabChange={setGuestTab} onLogin={setLoginSource} />
+      ) : (
         <LoginBridge
+          source={loginSource}
           onAuthenticated={() => load('main')}
           onNewAccount={() => {
             setFirstRun(true); // 신규 계정은 목표 설정을 먼저 유도한다(설계 §2.5-5).
@@ -590,7 +928,7 @@ export function App() {
       );
 
     case 'link':
-      return <LinkAccount onLinked={() => load('main')} onBack={() => setView('auth')} />;
+      return <LinkAccount onLinked={() => load('main')} />;
 
     case 'error':
       return (
@@ -654,6 +992,12 @@ export function App() {
       return timer;
     });
 
+  /** 모드 전환 — 저장은 기기 로컬 한 줄이고, 화면은 위 파생값이 알아서 따라온다. */
+  const changeMode = (next: TimerMode) => {
+    localStorage.setItem(MODE_KEY, next);
+    setStoredMode(next);
+  };
+
   /**
    * 여백에서 탭바를 눌렀다 — 여백을 닫고 그 탭으로 나간다. 뒤에 깔린 남의 책방도 함께 닫는다
    * — 탭을 눌렀는데 책방이 나오면 「나갔다」가 아니다.
@@ -668,7 +1012,9 @@ export function App() {
   };
 
   /**
-   * 여백 탭바의 가운데 원 — 두 여백 화면(상세 · 글 작성)이 같은 것을 쓴다.
+   * 여백 탭바의 가운데 원 — 전체 화면으로 서는 두 여백 화면(사람축 상세 · 책축)이 같은 것을 쓴다.
+   * 작성은 이제 그 위에 겹치는 시트라 자기 탭바를 갖지 않는다(2026-08-29) — 시트가 딤으로 탭바를
+   * 덮으므로, 작성 중에는 이 원 자체가 눌리지 않는다.
    *
    * <p><b>먼저 나간다</b> — 측정이 여백 위에서 시작되는 순간을 만들지 않는다.
    */
@@ -687,16 +1033,39 @@ export function App() {
    * <p><b>종료가 끝난 뒤에 열다</b> — 실패하면 여백을 열지 않는다. 측정이 살아 있는데 여백에 들어가면
    * 「끝난 줄 알았는데 계속 돌고 있었다」가 되어, 고치려던 그 결함이 그대로 남는다.
    *
-   * <p><b>태깅 시트·완독 축하는 저절로 안 뜨다</b> — 그 상태는 `MainTabs` 안에 있고 이 문은 셸에 있다.
-   * 여백 위로 시트가 튀어나오지 않게 하려고 억제 코드를 쓸 필요가 없다(구조가 대신 진다).
+   * <p><b>태깅 시트·완독 축하는 저절로 안 뜨다</b> — 그것들은 탭바 원의 종료 경로(`MainTabs` 안)에만
+   * 달려 있고 이 문의 종료는 별개의 왕복이다. 작성이 겹침이 되어 `MainTabs`가 뒤에 살아남은 뒤에도
+   * 그대로다 — 억제 코드가 필요 없는 이유가 「언마운트」에서 「경로가 다름」으로 옮겨졌을 뿐이다.
+   *
+   * <p>⚠️ <b>공부 측정도 같은 규칙으로 끊는다</b> — 규칙의 이름은 「여백은 독서가 아니다」지만 내용은
+   * 「여백은 <b>측정</b>이 아니다」이다. 안 끊으면 여백 화면에서 두 가지가 동시에 깨진다: ① 공부 시간이
+   * 남의 글을 읽는 동안 계속 쌓이고 ② 여백 탭바({@link MarginShell})가 「여기선 측정이 꺼져 있다」를
+   * <b>전제로</b> 상태 없이 그려져, 그 원이 「독서 측정 시작」인 채로 눌려 <b>두 세션이 동시에</b> 돈다
+   * (그 상태는 화면 어디에도 안 보인 채 스윕이 6시간 뒤에 닫는다 — 목 모드 실측으로 드러난 자리다).
    */
   const openMargin = (next: MarginState) => {
-    if (!dashboard.hasActiveSession) {
+    if (!dashboard.hasActiveSession && !study.hasActiveSession) {
       setMargin(next);
       return;
     }
     if (stoppingForMargin.current) return;
     stoppingForMargin.current = true;
+    // 공부만 돌고 있으면 이쪽으로 — 독서와 같은 모양의 왕복이되 잔디·태깅이 없다(공부는 잔디 밖).
+    if (!dashboard.hasActiveSession) {
+      const studied =
+        study.activeStartedAt === null ? 0 : elapsedSeconds(study.activeStartedAt, Date.now());
+      stopStudy()
+        .then((state) => {
+          setStudy(state);
+          trackEvent('study_session_completed', { duration_seconds: studied });
+          setMargin({ ...next, timerStopped: true });
+        })
+        .catch(handleError)
+        .finally(() => {
+          stoppingForMargin.current = false;
+        });
+      return;
+    }
     // 종료 직전 값으로 재는다 — 응답엔 세션 길이가 없고, 탭바 원의 종료와 같은 셜법을 쓴다.
     const duration =
       dashboard.activeStartedAt === null ? 0 : elapsedSeconds(dashboard.activeStartedAt, Date.now());
@@ -716,41 +1085,66 @@ export function App() {
 
   /*
    * 여백은 탭 위에 전체 화면으로 선다 — 닫으면 열었던 탭이 그대로 남는다.
-   * 작성 화면을 닫으면 `composeBook`만 비워 그 아래 여백 화면이 **새로 마운트**되고, 그 재조회가
-   * 곧 "방금 남긴 글이 보인다"이다(에포크 같은 별도 갱신 표식이 필요 없다).
+   *
+   * 작성만 **겹침**이다(2026-08-29): 시트라서 밑 화면을 갈아치우지 않고 그 위에 얹힌다. 그래서
+   * 화면 판정은 `composeBook`을 걷어낸 좌표로 한다 — 시트가 열려도 밑에 깔린 것은 그대로다.
    */
-  const screen = margin === null ? null : marginScreen(margin);
+  const screen = margin === null ? null : underCompose(margin);
 
-  if (margin !== null && margin.composeBook !== null && screen === 'compose') {
-    const close = () => setMargin(closeCompose(margin));
-    return (
-      <MarginShell tab={tab} onGo={leaveMargin} onStart={startFromMargin}>
-        <StoryComposer
-          book={margin.composeBook}
-          onDone={close}
-          onCancel={close}
-          onError={handleError}
-          timerStopped={margin.timerStopped === true}
-        />
-      </MarginShell>
+  const composer =
+    margin === null || margin.composeBook === null ? null : (
+      <StoryComposer
+        book={margin.composeBook}
+        // 남겼으면 밑 여백 상세를 다시 받아야 방금 쓴 글이 거기 보인다(취소는 그럴 것이 없다).
+        onDone={() => {
+          setComposeEpoch((n) => n + 1);
+          setMargin(closeCompose(margin));
+        }}
+        onCancel={() => setMargin(closeCompose(margin))}
+        onError={handleError}
+        timerStopped={margin.timerStopped === true}
+      />
     );
-  }
+
+  /**
+   * 밑 화면 위에 작성 시트를 얹는다 — 깔릴 수 있는 화면이 **전부** 이 문을 지나야, 어느 화면 위에서
+   * 시트를 열든 시트가 산다. 하나만 빠지면 그 경로에서 작성이 조용히 사라진다(`app.test.tsx`가 센다).
+   * 도달 가능한 밑 화면은 둘뿐이다 — 사람축 여백 상세와 탭 화면(그 근거도 같은 테스트에 적었다).
+   *
+   * ⚠️ **최상위 Fragment에 key를 달거나 `{composer}{under}` 순서를 뒤집지 마라.** 시트가 열려도 밑
+   * 화면이 remount되지 않는 것은 React가 **key 없는 최상위 Fragment를 언랩**해(react-dom 18.3.1의
+   * `isUnkeyedTopLevelFragment`) `under`가 같은 index에 남기 때문이다. 둘 중 하나만 어겨도 밑 화면이
+   * **조용히** 새로 마운트되어 스크롤·탭 상태가 날아간다(겹침으로 얻은 것이 통째로 사라진다).
+   */
+  const withCompose = (under: ReactNode) =>
+    composer === null ? (
+      under
+    ) : (
+      <>
+        {under}
+        {composer}
+      </>
+    );
 
   // 작성도 아니고 깔린 화면도 없는 조합은 만들지 않는다 — 만약 생겨도 탭으로 떨어져 막다른 길이 안 된다.
   if (margin !== null && margin.loginId !== null && margin.bookId !== null && screen === 'person') {
     const under = margin.bookId;
     const who = margin.loginId;
-    return (
+    return withCompose(
       <MarginShell
-        tab={tab}
+        tab={shownTab}
+        mode={mode}
         onGo={leaveMargin}
         onStart={startFromMargin}
       >
         <BookMargin
+          // 글을 남기면 새로 마운트돼 목록을 다시 받는다 — 시트는 겹침이라 저절로는 안 일어난다.
+          key={composeEpoch}
           loginId={who}
           bookId={under}
+          // 시트가 떠 있는 동안은 이 화면의 배너를 접는다 — 딤 뒤에서 도는 노출은 무효 트래픽이다.
+          adSuppressed={margin.composeBook !== null}
           timerStopped={margin.timerStopped === true}
-          onBack={() => setMargin(null)}
           onCompose={(book) => openMargin({ ...margin, bookId: under, composeBook: book })}
           // 닫으면서 연다 — 뒤로 가면 출발한 탭으로 돌아간다(검색 시트와 같은 교체 경로, T-166).
           onOpenProfile={(picked) => {
@@ -759,21 +1153,23 @@ export function App() {
           }}
           onError={handleError}
         />
-      </MarginShell>
+      </MarginShell>,
     );
   }
 
   /*
    * 「이 책의 여백」 — 사람 좌표 없이 isbn13 하나로 서는 화면(검색 배지에서 들어온다).
    * 사람축보다 **뒤에** 판정한다: 둘 다 들고 있으면 사람축이 이긴다(「내 여백」 탭이 거기 산다).
+   *
+   * 시트를 얹지 않는다 — 이 화면에서는 작성을 열 길이 없다(`BookMarginAllView`에 `onCompose` 프롭
+   * 자체가 없다). 도달 불가 분기를 감싸면 「이 조합이 가능하다」는 거짓말이 코드에 남는다.
    */
   if (margin !== null && margin.isbn13 !== null && screen === 'book') {
     return (
-      <MarginShell tab={tab} onGo={leaveMargin} onStart={startFromMargin}>
+      <MarginShell tab={shownTab} mode={mode} onGo={leaveMargin} onStart={startFromMargin}>
         <BookMarginAll
           isbn13={margin.isbn13}
           timerStopped={margin.timerStopped === true}
-          onBack={() => setMargin(null)}
           // 「내 여백」 탭 — 사람축 화면으로 갈아탄다(작성·삭제·토글이 사는 자리). 이미 여백 안이라
           // 측정은 진작 끝났으므로 문을 다시 지나도 아무 일이 없다(멱등).
           onOpenMine={(bookId) =>
@@ -794,6 +1190,9 @@ export function App() {
   /*
    * 남의 책방 — 여백보다 **뒤에** 판정한다. 그래야 여기서 연 여백이 이 화면 위에 서고, 그 여백을 닫으면
    * 책방이 다시 나온다(2단 스택). 헤더도 카운트 핸들러도 주지 않는다 — 서버 follow-list는 본인 것만 준다.
+   *
+   * 여기도 시트를 얹지 않는다 — 책방은 `setMargin(null)`을 거쳐야 열려(`onOpenProfile`) 작성과 공존할
+   * 수 없고, 여기서 여는 여백은 `composeBook: null`이다.
    */
   if (shop !== null) {
     return (
@@ -806,13 +1205,25 @@ export function App() {
     );
   }
 
-  return (
+  return withCompose(
     <MainTabs
-      tab={tab}
+      // 여백 상세와 같은 이유로 다시 마운트한다 — 서재의 인라인 여백 박스(「여백 N」 + 최근 2장)도
+      // 작성 화면이 탭을 언마운트해 주던 덕에 갱신되고 있었다(plan.md 「응답 캐시 ⏸ 보류」의 전제).
+      // 탭·고른 책은 App이 들고 있어(위 `homeBookId`) 살아남지만, 축하 배너·태깅 시트 상태와 스크롤은
+      // 버려진다 — 전체 화면 시절 저장 경로가 정확히 그랬으므로 회귀는 아니고, 취소 경로는 개선이다
+      // (예전엔 취소해도 날아갔다). 잃는 것이 아까워지면 그때 재조회를 좁힌다(지금은 remount가 가장 싸다).
+      key={composeEpoch}
+      tab={shownTab}
       onTabChange={setTab}
       dashboard={dashboard}
+      mode={mode}
+      study={study}
+      onStudyChange={setStudy}
+      onChangeMode={changeMode}
       homeBookId={homeBookId}
       onSelectHomeBook={setHomeBookId}
+      studyBookId={studyBookId}
+      onSelectStudyBook={setStudyBookId}
       onOpenMargin={(loginId, bookId) => openMargin({ loginId, bookId, isbn13: null, composeBook: null })}
       // 책축 — 사람 좌표를 비운다. 내가 가진 책인지는 서버가 `myBookId`로 알려 주므로 클라가 안 따진다.
       onOpenBookMargin={(isbn13) => openMargin({ loginId: null, bookId: null, isbn13, composeBook: null })}
@@ -825,13 +1236,14 @@ export function App() {
       onTimerChange={applyTimer}
       onStartTimer={startTimer}
       onGraphChange={applyGraph}
+      // 홈 목표 손잡이(「변경 ›」·GoalHandle)는 독서 히어로에만 선다 — 공부 하루 목표는 회당 시간으로 대체됐다.
       onGoGoal={goToGoal}
       goalAdPending={goalAdPending}
       onGoSettings={() => setView('settings')}
       onError={handleError}
       onShelfChanged={() => silentRefresh(true)}
       onHandleCreated={() => silentRefresh(true)}
-    />
+    />,
   );
 }
 
@@ -844,12 +1256,18 @@ export function App() {
  */
 export function MarginShell({
   tab,
+  mode = 'reading',
   onGo,
   onStart,
   children,
 }: {
   /** 여백을 열었던 탭 — 그 칸이 선택 표시로 남아 「어디서 왜는지」를 잃지 않는다. */
   tab: TabKey;
+  /**
+   * 지금 재는 것 — 탭바가 그릴 목록을 고른다. 여백은 공부 모드에서도 도달 가능하므로
+   * (진입 게이트는 측정만 끊는다) 이걸 안 받으면 <b>여백에서만</b> 탭바가 책방으로 되돌아간다.
+   */
+  mode?: TimerMode;
   /** 탭을 눌렀다 — 여백을 닫고 그 탭으로 나간다. */
   onGo: (tab: TabKey) => void;
   /** 가운데 원 — 홈으로 나가며 측정을 시작한다(여백에 남지 않는다). */
@@ -859,7 +1277,7 @@ export function MarginShell({
   return (
     <>
       <div style={{ paddingBottom: TAB_BAR_SPACE }}>{children}</div>
-      <BottomTabBar tab={tab} onTabChange={onGo} action={{ active: false, busy: false, onPress: onStart }} />
+      <BottomTabBar tab={tab} onTabChange={onGo} action={{ active: false, busy: false, onPress: onStart, mode }} />
     </>
   );
 }
@@ -876,8 +1294,14 @@ export function MainTabs({
   tab,
   onTabChange,
   dashboard,
+  mode,
+  study,
+  onStudyChange,
+  onChangeMode,
   homeBookId,
   onSelectHomeBook,
+  studyBookId,
+  onSelectStudyBook,
   onOpenMargin,
   onComposeMargin,
   onOpenBookMargin,
@@ -894,9 +1318,25 @@ export function MainTabs({
   tab: TabKey;
   onTabChange: (tab: TabKey) => void;
   dashboard: DashboardResponse;
+  /** 지금 재는 것 — 독서냐 공부냐. 파생값이라 여기선 받기만 한다({@link effectiveMode}). */
+  mode: TimerMode;
+  /** 공부 원장 — 독서(`dashboard`)와 따로 온다. */
+  study: StudyState;
+  /** 공부 start/stop 응답 반영 — 대시보드를 건드리지 않는다(원장이 갈렸으니 갱신도 갈린다). */
+  onStudyChange: (study: StudyState) => void;
+  /** 모드 전환 — 저장은 App이 든다(홈 토글이 부른다). */
+  onChangeMode: (mode: TimerMode) => void;
   /** 홈 캐러셀에서 고른 책 — 탭 밖 전체 화면이 홈을 언마운트해도 남도록 App이 든다(`undefined`=아직 안 고름). */
   homeBookId: number | null | undefined;
   onSelectHomeBook: (bookId: number | null) => void;
+  /**
+   * 공부 캐러셀에서 고른 책 — 독서 선택과 <b>별개 슬롯</b>이다(id 공간이 다르다).
+   *
+   * <p>둘 다 선택 프롭인 이유는 `Home`의 같은 이름 프롭과 같다: 독서 경로만 재는 기존 하니스가
+   * 공부 재료를 안 넘겨도 종전 그대로 서야 한다. 안 넘기면 「아직 안 고름」이라 기본 선택으로 떨어진다.
+   */
+  studyBookId?: number | null | undefined;
+  onSelectStudyBook?: (bookId: number | null) => void;
   /** 그 사람의 그 책 여백을 연다 — 홈 소식과 서재 문이 같은 자리로 온다(App이 전체 화면으로 든다). */
   onOpenMargin: (loginId: string, bookId: number) => void;
   /** 홈 여백 문 — 그 책의 작성 화면으로 직행한다. */
@@ -921,8 +1361,24 @@ export function MainTabs({
 }) {
   /** 액션 처리 중 — 연타로 세션이 두 번 시작·종료되지 않게 원을 흐리고 핸들러를 잠근다. */
   const [busy, setBusy] = useState(false);
+  /**
+   * 지금 <b>무엇이든</b> 재고 있나 — 탭 잠금·안내 배너·토스트 정리가 전부 이 하나를 본다.
+   *
+   * <p>모드별로 갈라 물으면 「공부 재는 중인데 서재로 넘어가진다」 같은 빠뜨린 조합이 생긴다.
+   * 원장은 갈렸지만 <b>「재는 중」이라는 사실은 하나</b>다.
+   */
+  const measuring = dashboard.hasActiveSession || study.hasActiveSession;
   /** 태깅 시트 — `null`이면 닫힘. 열림 여부와 대상 세션이 늘 같이 움직여 상태 하나로 족하다. */
   const [tagging, setTagging] = useState<Untagged | null>(null);
+  /**
+   * 공부 서재를 다시 세우는 세대 번호 — `<StudyLibrary key={shelfEpoch}>`의 `key`다.
+   *
+   * <p>그 화면은 자기 목록을 <b>마운트 1회</b>만 받는다. 그런데 태깅 시트는 그 화면 <b>위에서</b>
+   * 닫힌다 — 측정 중엔 비-홈 탭이 잠겨 <b>시작한 탭에서 끝나므로</b> 서재 탭에서 시작하면 100%
+   * 이 경로다 — 그래서 방금 붙인 시간이 카드에 안 뜬다. 번호를 올려 <b>탭 전환과 같은 remount</b>를
+   * 태운다: 새 프롭·리프레시 배선보다 싸고 `StudyLibrary`는 한 줄도 안 고친다.
+   */
+  const [shelfEpoch, setShelfEpoch] = useState(0);
   /** 첫 완료 축하 — 홈에 prop으로 내린다. 다른 탭에서 끝냈어도 홈에 돌아오면 배너가 보인다. */
   const [celebrate, setCelebrate] = useState(false);
   /** 액션 실패 문구 — 다른 탭엔 홈의 ErrorMessage가 없으므로 탭바 위 스트립으로 띄운다. */
@@ -998,14 +1454,14 @@ export function MainTabs({
   // 시작 토스트·교체 시트도 같은 운명이다 — 세션이 다른 경로로 끝나면(여백 진입 자동 종료 등)
   // 「이 책으로 재는 중」이라 말하는 카드와 그 대상을 고르는 시트는 둘 다 거짓말이 된다.
   useEffect(() => {
-    if (dashboard.hasActiveSession) return;
+    if (measuring) return;
     setLockHint(false);
     setStartToast(null);
     setChanging(false);
     return () => {
       if (lockHintTimer.current !== null) clearTimeout(lockHintTimer.current);
     };
-  }, [dashboard.hasActiveSession]);
+  }, [measuring]);
 
   /**
    * 토스트 타이머는 <b>언마운트 때만</b> 걷는다.
@@ -1036,9 +1492,18 @@ export function MainTabs({
    * <p>cleanup이 없으면 홈을 벗어나거나 언마운트될 때 클래스가 남아 앱 전체가 어두워진다.
    */
   useEffect(() => {
-    document.body.classList.toggle(LAMP_CLASS, lampOn(tab, dashboard.hasActiveSession));
+    document.body.classList.toggle(LAMP_CLASS, lampOn(tab, dashboard.hasActiveSession, mode));
     return () => document.body.classList.remove(LAMP_CLASS);
-  }, [tab, dashboard.hasActiveSession]);
+  }, [tab, dashboard.hasActiveSession, mode]);
+
+  /**
+   * 공부 모드 색 — 독서등과 같은 배선(스위치만 여기, 색은 css). 이쪽은 <b>탭과 무관</b>하다:
+   * 모드는 앱 전체의 상태라 어느 탭에 있든 잉크가 같은 색이어야 한다.
+   */
+  useEffect(() => {
+    document.body.classList.toggle(STUDY_CLASS, mode === 'study');
+    return () => document.body.classList.remove(STUDY_CLASS);
+  }, [mode]);
 
   const flowStep = flowIndex < 0 ? undefined : COACHMARK_FLOW[flowIndex];
 
@@ -1072,8 +1537,58 @@ export function MainTabs({
     onTabChange(next);
   };
 
+  /**
+   * 걷는 도중 모드가 study로 뒤집히면(원격 — 다른 기기에서 공부 시작) 그 자리에서 접는다.
+   *
+   * <p>안 접으면 말풍선이 <b>존재하지 않는 칸</b>(공부 탭바엔 책방이 없다)을 가리키는 프레임이 뜬다.
+   * 위 `guide` 게이트는 <b>시작</b>을 막을 뿐이라, 이미 걷는 중인 흐름은 여기가 맡는다.
+   */
+  useEffect(() => {
+    if (mode === 'study' && flowIndex >= 0) {
+      abandoned.current = true;
+      flowStepsOnAbandon().forEach(dismissCoachmark);
+      setFlowIndex(-1);
+    }
+    // 모드 플립에만 반응한다 — flowIndex를 넣으면 걷는 매 걸음마다 다시 돈다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
   // 401은 App이 재로그인으로 처리하고, 그 외(409 중복 시작 등)만 화면에 남긴다.
   const fail = (e: Error) => (e.name === 'UnauthorizedError' ? onError(e) : setActionError(e.message));
+
+  /**
+   * 공부 측정 여닫기 — 독서 경로와 <b>갈라 둔다</b>. 태깅 시트·완독 축하·잔디 갱신이 여기 없는 것이
+   * 곧 「공부는 잔디 밖」이라는 규칙의 구현이다(억제 코드가 0줄이다 — 배선 자체가 없다).
+   */
+  const studyAction = () => {
+    if (study.hasActiveSession) {
+      const duration =
+        study.activeStartedAt === null ? 0 : elapsedSeconds(study.activeStartedAt, Date.now());
+      stopStudy()
+        .then((next) => {
+          onStudyChange(next);
+          trackEvent('study_session_completed', { duration_seconds: duration });
+          // 종료 직후 시트를 저절로 연다(독서 1474행과 같은 규율) — 태깅은 지금 기억이 가장 선명하다.
+          // 붙일 책이 0권이면 열지 않는다: 빈 시트는 닫는 것 말고 할 게 없는 막다른 길이다.
+          if (next.untaggedSessionId != null && (next.books ?? []).length > 0)
+            setTagging({ sessionId: next.untaggedSessionId, study: true });
+        })
+        .catch(fail)
+        .finally(() => setBusy(false));
+      return;
+    }
+    // 무엇을 잴지는 홈 캐러셀 선택이 정한다 — 독서와 같은 규칙(`timerStartBookId`)을 공부 목록에 그대로 쓴다.
+    // 서재에서 빠진 id는 「책 없이」로 강등되므로 어떤 조합에서도 원이 죽지 않는다.
+    startStudy(timerStartBookId(study.books ?? [], study.recentBookId ?? null, studyBookId))
+      .then((next) => {
+        onStudyChange(next);
+        trackEvent('study_session_started');
+        // 책은 서버가 확정한 값을 쓴다(독서 시작과 같은 규약) — 클라가 고른 값을 되뇌면 어긋날 창이 생긴다.
+        showStartToast({ book: next.activeBook ?? null, changed: false, mode: 'study' });
+      })
+      .catch(fail)
+      .finally(() => setBusy(false));
+  };
 
   /** 탭바 가운데 원 — 측정 중이면 종료, 아니면 시작. 이 앱에서 세션을 여닫는 유일한 자리다. */
   const timerAction = () => {
@@ -1082,6 +1597,10 @@ export function MainTabs({
     if (busy) return;
     setBusy(true);
     setActionError(null);
+    if (mode === 'study') {
+      studyAction();
+      return;
+    }
     if (dashboard.hasActiveSession) {
       // 종료 시각 기준 경과 — 서버 응답엔 세션 길이가 없다. 홈의 매초 tick 없이 이 한 번의 계산으로 족하다.
       const duration =
@@ -1095,7 +1614,8 @@ export function MainTabs({
           trackEvent('reading_session_completed', { duration_seconds: duration });
           // 종료 직후 시트를 저절로 연다(태깅은 지금 기억이 가장 선명하다). 붙일 책이 0권이면 열지 않는다 —
           // 빈 시트는 닫는 것 말고 할 수 있는 게 없는 막다른 길이다.
-          if (result.untagged && dashboard.readingBooks.length > 0) setTagging({ sessionId: result.sessionId });
+          if (result.untagged && dashboard.readingBooks.length > 0)
+            setTagging({ sessionId: result.sessionId, study: false });
         })
         .catch(fail)
         .finally(() => setBusy(false));
@@ -1112,10 +1632,17 @@ export function MainTabs({
     }
   };
 
+  /**
+   * 방금 끝낸 측정에 책 붙이기 — <b>어느 원장인지는 시트가 열릴 때 정해진 값</b>(`tagging.study`)이 든다.
+   * 공부 응답은 갱신된 `StudyState`라 서재 칩·최근 책이 재조회 없이 따라온다(독서 문은 그런 게 없다).
+   */
   const tag = (book: BookOption) => {
     if (tagging === null) return;
     setBusy(true);
-    tagBook(tagging.sessionId, book.id)
+    // 시트 아래가 공부 서재일 수 있다(그쪽 목록은 마운트 1회) — `shelfEpoch`가 그 화면을 다시 세운다.
+    (tagging.study
+      ? tagStudyBook(tagging.sessionId, book.id).then(onStudyChange).then(() => setShelfEpoch((n) => n + 1))
+      : tagBook(tagging.sessionId, book.id))
       .then(() => setTagging(null))
       .catch(fail)
       .finally(() => setBusy(false));
@@ -1128,12 +1655,22 @@ export function MainTabs({
   const changeBook = (book: BookOption | null) => {
     setBusy(true);
     setActionError(null);
-    changeActiveBook(book === null ? null : book.id)
-      .then((timer) => {
-        onTimerChange(timer);
+    const id = book === null ? null : book.id;
+    // 교체 시트는 재는 도중에만 열리므로 지금 재는 원장이 곧 그 문이다 — 여기선 `mode`가 단일 출처다.
+    (mode === 'study'
+      ? changeActiveStudyBook(id).then((next) => {
+          onStudyChange(next);
+          return next.activeBook ?? null;
+        })
+      : changeActiveBook(id).then((timer) => {
+          onTimerChange(timer);
+          return timer.activeBook ?? null;
+        })
+    )
+      .then((current) => {
         setChanging(false);
         // 시작이 아니라 교체를 확인한다 — 같은 문구면 두 번 시작한 것처럼 읽힌다.
-        showStartToast({ book: timer.activeBook ?? null, changed: true });
+        showStartToast({ book: current, changed: true, mode });
       })
       .catch((e) => {
         // ⚠️ 실패해도 시트를 닫는다. 에러 스트립은 탭바 층(z 100)인데 시트 패널은 z 201 **불투명**이라,
@@ -1164,9 +1701,16 @@ export function MainTabs({
         {tab === 'home' && (
           <Home
             dashboard={dashboard}
+            mode={mode}
+            study={study}
+            onChangeMode={onChangeMode}
+            // 측정 중엔 못 바꾼다 — 잠금 안내는 탭 잠금과 <b>같은 스트립</b>을 쓴다(새 층을 만들지 않는다).
+            onBlockedModeChange={showLockHint}
             // 안내로 들어오는 문 — 홈은 자리만 정하고(히어로 카드 속), 만드는 쪽은 흐름을 든 여기다.
             guide={
-              shouldShowGuideHero(flowIndex >= 0, guideClosed, dashboard.hasActiveSession) ? (
+              // 공부 모드에선 안내를 안 만든다 — 투어가 가리키는 책방 칸이 그 탭바엔 없고,
+              // 문구도 서재·책방·여백 전제라 공부 화면에서 할 말이 아니다.
+              mode === 'reading' && shouldShowGuideHero(flowIndex >= 0, guideClosed, measuring) ? (
                 <GuideHero
                   onStart={startFlow}
                   onDismiss={() => {
@@ -1178,6 +1722,8 @@ export function MainTabs({
             }
             selectedBookId={homeBookId}
             onSelectBook={onSelectHomeBook}
+            selectedStudyBookId={studyBookId}
+            onSelectStudyBook={onSelectStudyBook}
             onTimerChange={onTimerChange}
             celebrate={celebrate}
             onGoGoal={onGoGoal}
@@ -1186,9 +1732,22 @@ export function MainTabs({
             onError={onError}
             onOpenMargin={onOpenMargin}
             onComposeMargin={onComposeMargin}
+            // 회당 시간 — 성공한 응답만 반영하고(캐러셀 손잡이·측정 줄이 재조회 없이 따라온다) 지난 실패 스트립을 지운다.
+            // 실패는 삼키지 않고 홈으로 돌려준다 — 홈이 시트를 연 채 그 안에서 말한다(스트립은 시트 패널에 가린다).
+            // 광고 없음(Q1).
+            onSetSessionGoal={(id, s) =>
+              setStudySessionGoal(id, s).then((next) => {
+                onStudyChange(next);
+                setActionError(null);
+              })
+            }
           />
         )}
-        {tab === 'library' && (
+        {/* 서재 탭은 두 모드 공통이지만 화면은 갈린다 — 공부 책과 독서 책이 섞이지 않는 것이 요구 그 자체다. */}
+        {tab === 'library' && mode === 'study' && (
+          <StudyLibrary key={shelfEpoch} onError={onError} onShelfChanged={onShelfChanged} />
+        )}
+        {tab === 'library' && mode !== 'study' && (
           <Library
             myLoginId={dashboard.loginId}
             onError={onError}
@@ -1205,7 +1764,11 @@ export function MainTabs({
             onError={onError}
           />
         )}
-        {tab === 'history' && <History graph={dashboard.graph} />}
+        {/* 달력은 공부 탭바로만 도달한다 — 도달 경로가 곧 게이트라 여기서 모드를 다시 안 따진다. */}
+        {tab === 'calendar' && <StudyCalendar onError={onError} />}
+        {/* 기록도 서재처럼 모드로 갈린다 — 공부 기록은 잔디·목록을 따로 받는다(대시보드 graph는 독서 것이다). */}
+        {tab === 'history' && mode === 'study' && <StudyHistory onError={onError} />}
+        {tab === 'history' && mode !== 'study' && <History graph={dashboard.graph} />}
       </div>
 
       {/* 액션 실패는 탭바 바로 위 스트립으로 — 다른 탭엔 홈의 ErrorMessage 자리가 없다.
@@ -1272,15 +1835,16 @@ export function MainTabs({
       <BottomTabBar
         tab={tab}
         onTabChange={changeTab}
-        locked={dashboard.hasActiveSession}
+        locked={measuring}
         onBlocked={showLockHint}
-        action={{ active: dashboard.hasActiveSession, busy, onPress: timerAction }}
+        action={{ active: measuring, busy, onPress: timerAction, mode }}
       />
 
       {/* 시트는 측정 종료 후 태깅 자리 하나다 — 탭바(zIndex 100) 위에 떠 어느 탭에서 끝내도 보인다. */}
       {tagging !== null && (
         <BookSheet
-          books={dashboard.readingBooks}
+          books={tagging.study ? (study.books ?? []) : dashboard.readingBooks}
+          title={tagging.study ? '무슨 책을 공부하셨나요?' : undefined}
           disabled={busy}
           onPick={tag}
           onSkip={closeSheet}
@@ -1291,8 +1855,8 @@ export function MainTabs({
       {/* 교체 시트 — 측정 중에만 열리고, 토스트의 [바꾸기]가 여는 유일한 문이다. */}
       {changing && (
         <ChangeBookSheet
-          books={dashboard.readingBooks}
-          currentBookId={dashboard.activeBook?.id ?? null}
+          books={mode === 'study' ? (study.books ?? []) : dashboard.readingBooks}
+          currentBookId={mode === 'study' ? (study.activeBook?.id ?? null) : (dashboard.activeBook?.id ?? null)}
           disabled={busy}
           onPick={changeBook}
           onClose={closeChangeSheet}
@@ -1502,6 +2066,8 @@ export function StartToast({ toast, onChange }: { toast: StartToastState; onChan
         boxShadow: '0 4px 16px rgba(0, 0, 0, 0.14)',
       }}
     >
+      {/* 표지 자리와 [바꾸기]는 이제 두 모드의 장치다 — 공부에도 고를 책과 바꿀 문이 생겼다.
+          모드를 가르던 게이트(`toastHasBookControls`)는 항상 참이 되어 지웠다. */}
       <MiniCover book={toast.book} width={26} />
       <span style={{ flex: 1, minWidth: 0, fontSize: 14, lineHeight: 1.5, wordBreak: 'keep-all' }}>
         {quoted !== null && <span style={{ ...SERIF_VALUE, fontWeight: 700 }}>{quoted}</span>}
@@ -1515,7 +2081,8 @@ export function StartToast({ toast, onChange }: { toast: StartToastState; onChan
           padding: '6px 12px',
           border: 0,
           borderRadius: 8,
-          background: 'rgba(110, 138, 106, 0.16)',
+          // 모드 토큰을 탄다 — 리터럴로 두면 공부 모드에 독서 세이지가 샌다(독서는 알파 .16→.18, 육안 무차이).
+          background: 'var(--accentPill, rgba(110, 138, 106, 0.16))',
           color: 'var(--adaptiveBlue700, #4F6B4C)',
           fontSize: 13,
           fontWeight: 700,
@@ -1572,7 +2139,8 @@ export function ChangeBookSheet({
           padding: '10px 12px',
           border: 'none',
           borderRadius: 10,
-          background: current ? 'rgba(110, 138, 106, 0.14)' : 'transparent',
+          // 모드 토큰(위 [바꾸기]와 같은 사정) — 독서는 알파 .14→.18로 2% 진해진다(의도된 예외).
+          background: current ? 'var(--accentPill, rgba(110, 138, 106, 0.14))' : 'transparent',
           cursor: 'pointer',
         }}
       >
@@ -1626,16 +2194,24 @@ export function BottomTabBar({
 }: {
   tab: TabKey;
   onTabChange: (tab: TabKey) => void;
-  /** 가운데 측정 액션 — 탭이 아니라 동작이다(그래서 `TABS` 밖에 산다). */
-  action: { active: boolean; busy: boolean; onPress: () => void };
+  /** 가운데 측정 액션 — 탭이 아니라 동작이다(그래서 `TABS` 밖에 산다). `mode`는 라벨만 가른다. */
+  action: { active: boolean; busy: boolean; onPress: () => void; mode?: TimerMode };
   /** 측정 중인가 — 홈을 뺀 탭이 잠긴다({@link tabLocked}). 가운데 액션은 절대 안 잠근다. */
   locked?: boolean;
-  /** 잠긴 탭을 눌렀다 — 안내 문구는 `MainTabs`가 그린다(이 알약은 `overflow: hidden`이라 안에 두면 잘린다). */
-  onBlocked?: () => void;
+  /**
+   * 잠긴 탭을 눌렀다 — 안내 문구는 `MainTabs`가 그린다(이 알약은 `overflow: hidden`이라 안에 두면 잘린다).
+   *
+   * <p><b>어느 칸인지</b>를 함께 넘긴다: 게스트 셸은 잠긴 칸을 눌렀을 때 <b>그 화면을 연다</b>(안에서
+   * 잠긴 이유를 말한다). 측정 중 잠금(`MainTabs.showLockHint`)은 인자를 무시하므로 호출부 무변경.
+   */
+  onBlocked?: (tab: TabKey) => void;
 }) {
-  const change = tabChangeHandler(onTabChange);
+  // 모드가 목록을 고르고, 그리기·index 풀이가 **같은 배열**을 쓴다 — 여기가 갈리면 누른 칸과
+  // 바뀌는 탭이 어긋난다. 액션이 모드를 이미 들고 있어(라벨 분기) 새 프롭이 필요 없다.
+  const tabs = tabsFor(action.mode ?? 'reading');
+  const change = tabChangeHandler(onTabChange, tabs);
 
-  const cells = TABS.map(({ key, label, icon }, index) => {
+  const cells = tabs.map(({ key, label, icon }, index) => {
     const selected = key === tab;
     const shut = tabLocked(key, locked);
     return (
@@ -1648,7 +2224,7 @@ export function BottomTabBar({
         // `disabled`가 아니라 `aria-disabled`다 — 진짜로 잠그면 클릭이 안 와서 이유를 말할 기회가 없다.
         aria-disabled={shut ? true : undefined}
         title={label}
-        onClick={() => (shut ? onBlocked?.() : change(index))}
+        onClick={() => (shut ? onBlocked?.(key) : change(index))}
         style={{
           flex: 1,
           minHeight: TAB_BAR_HEIGHT,
@@ -1662,8 +2238,10 @@ export function BottomTabBar({
           background: 'transparent',
           // 시안 4c — 고른 칸은 세이지 700이다(500은 옆 라벨 회색과 대비가 약했다).
           color: selected ? 'var(--adaptiveBlue700, #4F6B4C)' : 'var(--adaptiveGrey600, #6F6A5E)',
-          // 잠긴 칸은 흐려진다 — 눌러 보기 전에 눈으로 먼저 알아야 한다.
-          opacity: shut ? 0.35 : 1,
+          // 잠긴 칸은 흐려진다 — 눌러 보기 전에 눈으로 먼저 알아야 한다. 단 **내가 선 칸은 빼고**:
+          // 게스트가 잠긴 탭을 열면 그 칸이 선택 표시로 서는데, 흐림은 「여기 못 간다」는 말이라
+          // 이미 와 있는 칸에 붙으면 거짓이 된다.
+          opacity: shut && !selected ? 0.35 : 1,
           cursor: 'pointer',
         }}
       >
@@ -1679,7 +2257,8 @@ export function BottomTabBar({
             width: 38,
             height: 26,
             borderRadius: 13,
-            background: selected ? 'rgba(110,138,106,.18)' : 'transparent',
+            // 토큰 경유 — 공부 모드에서 이 알약도 저절로 파랑이 된다(리터럴이면 세이지로 남는다).
+            background: selected ? 'var(--accentPill, rgba(110,138,106,.18))' : 'transparent',
           }}
         >
           <svg
@@ -1734,8 +2313,18 @@ export function BottomTabBar({
  * 원이 셀(69×56) 안에 들어가므로 알약의 `overflow: hidden`에 잘리지 않는다(돌출형 아님) —
  * 46px + 링 3px = 52px라 시안 4c로 키운 뒤에도 세로·가로 모두 여유가 남는다.
  */
-function TimerActionButton({ active, busy, onPress }: { active: boolean; busy: boolean; onPress: () => void }) {
-  const view = timerActionView(active);
+function TimerActionButton({
+  active,
+  busy,
+  onPress,
+  mode = 'reading',
+}: {
+  active: boolean;
+  busy: boolean;
+  onPress: () => void;
+  mode?: TimerMode;
+}) {
+  const view = timerActionView(active, mode);
 
   return (
     <button

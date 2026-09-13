@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import type { DashboardResponse } from './api';
+import { IDLE_STUDY } from './api';
 import { History } from './screens/History';
 import { Home } from './screens/Home';
 import {
@@ -14,6 +15,7 @@ import {
   GrassGrid,
   PENCIL_FRAME,
   Screen,
+  Sheet,
   coverColor,
   coverSource,
   initialOf,
@@ -49,43 +51,34 @@ describe('화면 껍데기 (Screen)', () => {
 });
 
 /**
- * 뒤로가기 손잡이 — <b>글자가 붙은 알약을 제목 위 줄</b>에 세운다.
+ * 자체 뒤로가기를 그리지 않는다 — 나가는 길은 <b>토스 네이티브 내비게이션 바</b>의 뒤로가기다.
  *
- * <p>옛 모양은 배경 없는 `←` 글리프를 제목 옆에 둔 것이었는데 사용자 제보로 두 번 실패했다: 배경이
- * 없어 버튼으로 안 보이고, 직선 화살표는 「이전 화면」보다 「왼쪽 이동」으로 읽힌다. 아이콘을 아무리
- * 다듬어도 뜻은 추론에 맡겨지므로 <b>글자</b>를 붙였다 — 인식률을 아이콘 디자인에 걸지 않는다.
+ * <p>2026-09-02 심사 반려(T-220): 「내비게이션 바의 뒤로가기 버튼과 미니앱 자체 헤더 및 뒤로가기 버튼이
+ * 함께 노출돼요」. 비게임 출시 체크리스트의 <b>필수</b> 항목이라 판정 편차가 아니다 — 08-16에 세운
+ * 「‹ 돌아가기」 알약(#830·#831)을 통째로 걷었다.
+ *
+ * <p>「없다」만 재면 껍데기가 통째로 안 그려져도 초록이라, 같은 마크업에 <b>있어야 할 제목</b>을 함께 잰다.
  */
-describe('화면 껍데기 — 뒤로가기 손잡이', () => {
-  const withBack = (title?: string, onBack?: () => void) =>
+describe('화면 껍데기 — 자체 뒤로가기를 그리지 않는다', () => {
+  const screen = (title?: string) =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <Screen title={title} onBack={onBack}>
-          본문
-        </Screen>
+        <Screen title={title}>본문</Screen>
       </TDSMobileProvider>,
     );
 
-  it('글자가 붙어 있다 — 아이콘만이면 뜻을 추론해야 한다', () => {
-    expect(withBack('여백', () => {})).toContain('돌아가기');
-  });
-
-  it('제목보다 위에 온다 — 제목 옆에 끼면 제목 행의 장식으로 읽힌다', () => {
-    const markup = withBack('여백', () => {});
-
-    // 둘 다 있는지 먼저 본다 — 없으면 indexOf가 -1이라 순서 단언이 저절로 참이 된다(공허한 계측).
-    expect(markup).toContain('돌아가기');
-    expect(markup.indexOf('돌아가기')).toBeLessThan(markup.indexOf('여백'));
-  });
-
-  it('onBack이 없으면 안 그린다 — 탭 루트는 갈 곳이 없다', () => {
-    const markup = withBack('여백');
+  it('제목은 그리되 「돌아가기」는 없다 — 네이티브 뒤로가기와 중복이면 심사가 막는다', () => {
+    const markup = screen('여백');
 
     expect(markup).toContain('여백');
     expect(markup).not.toContain('돌아가기');
   });
 
-  it('제목이 없어도 그린다 — 나갈 길은 제목 유무와 무관하다', () => {
-    expect(withBack(undefined, () => {})).toContain('돌아가기');
+  it('제목이 없는 화면에도 없다 — 출구는 화면 밖(네이티브 바)이다', () => {
+    const markup = screen();
+
+    expect(markup).toContain('본문');
+    expect(markup).not.toContain('돌아가기');
   });
 });
 
@@ -168,9 +161,12 @@ describe('잔디 렌더', () => {
 
   it('칸마다 level 색을 칠한다 — 0~4 단계가 웹 잔디와 같은 팔레트', () => {
     // 웹 app.css --grass-0..4 와 같은 값(잔디 색의 단일 출처는 웹 브랜드 팔레트다).
-    for (const color of ['#EAE4D7', '#C3D9B0', '#94BE7F', '#5E9250', '#35662F']) {
-      expect(markup).toContain(`background:${color}`);
-    }
+    // 토큰 경유 — 공부 모드가 `body.study-mode`에서 이 토큰을 파랑 사다리로 갈아 끼운다.
+    // 리터럴은 fallback으로 남아 독서 렌더의 색은 한 픽셀도 안 바뀐다.
+    const colors = ['#EAE4D7', '#C3D9B0', '#94BE7F', '#5E9250', '#35662F'];
+    colors.forEach((color, i) => {
+      expect(markup).toContain(`background:var(--grass${i}, ${color})`);
+    });
   });
 
   it('날짜 없는 칸은 그리드 가장자리 placeholder라 투명하게 둔다', () => {
@@ -227,6 +223,7 @@ function home(overrides: Partial<DashboardResponse>) {
     remainingSeconds: 900,
     carriedDebtSeconds: 0,
     todayGoalSeconds: 3600,
+    todayReadSeconds: 2700, // 목표 3600 중 남은 900 → 45분 읽은 상태
     carryover: false,
     hasActiveSession: false,
     activeStartedAt: null,
@@ -245,6 +242,10 @@ function home(overrides: Partial<DashboardResponse>) {
     <TDSMobileProvider userAgent={userAgent}>
       <Home
         dashboard={dashboard}
+        mode="reading"
+        study={IDLE_STUDY}
+        onChangeMode={() => {}}
+        onBlockedModeChange={() => {}}
         selectedBookId={undefined}
         onSelectBook={() => {}}
         onTimerChange={() => {}}
@@ -267,7 +268,7 @@ describe('홈 오늘 진행률', () => {
   });
 
   it('목표를 초과해도 게이지는 가득 찬 채로 멈춘다 — TDS는 100%를 안 잘라 준다(실측: 116%가 그대로 샌다)', () => {
-    const markup = home({ todayGoalSeconds: 3600, remainingSeconds: -600 });
+    const markup = home({ todayGoalSeconds: 3600, remainingSeconds: 0, todayReadSeconds: 4200 });
 
     expect(markup).toContain('오늘 목표 달성');
     expect(markup).toContain('aria-valuetext="100%"');
@@ -629,29 +630,54 @@ describe('실패 안내', () => {
 });
 
 /**
- * 뒤로가기 잠금 — 요청이 도는 중에는 나가지 못하게 한다. 하단 「돌아가기」 버튼이 `disabled={busy}`로
- * 하던 일을, 그 버튼을 걷고 상단 손잡이로 통일하면서 그대로 옮겨 온 것이다(책 추가·계정 연결).
- * 잠금을 「손잡이를 감추기」로 하면 34px 줄이 사라졌다 나타나 화면이 튄다 — 그래서 disabled다.
+ * 바텀시트가 올라오는 순간 — 태깅·관리·명단·여백 쓰기가 <b>한 껍데기</b>를 공유하므로 움직임도 한 벌이다.
+ *
+ * <p>인라인 style이 아니라 클래스인 이유는 `prefers-reduced-motion` 때문이다: 인라인 선언은 미디어
+ * 쿼리가 이길 수 없어, 움직임을 줄여 달라는 설정을 무시하게 된다.
+ *
+ * <p>움직이는 속성을 `transform`·`opacity`로 잠근다 — 그림자·배경·크기를 흔들면 시트 안 표지·글자가
+ * 프레임마다 다시 래스터화되고, 그건 데스크톱 목 모드가 원리상 못 잡는 실기기 회귀다(T-176).
  */
-describe('화면 껍데기 — 뒤로가기 잠금', () => {
-  const backAt = (markup: string) => markup.slice(0, markup.indexOf('돌아가기'));
-  const withBack = (backDisabled?: boolean) =>
-    renderToStaticMarkup(
-      <TDSMobileProvider userAgent={userAgent}>
-        <Screen title="책 추가" onBack={() => {}} backDisabled={backDisabled}>
-          본문
-        </Screen>
-      </TDSMobileProvider>,
-    );
+describe('바텀시트 (Sheet)', () => {
+  const css = readFileSync(new URL('./global.css', import.meta.url), 'utf8');
+  const markup = renderToStaticMarkup(
+    <TDSMobileProvider userAgent={userAgent}>
+      <Sheet title="관리" onClose={() => {}}>
+        시트 본문
+      </Sheet>
+    </TDSMobileProvider>,
+  );
 
-  it('잠그면 disabled가 붙는다', () => {
-    expect(backAt(withBack(true))).toContain('disabled');
+  it('딤과 패널이 움직임 클래스를 입는다', () => {
+    expect(markup).toContain('class="sheet-dim"');
+    expect(markup).toContain('class="sheet-panel"');
+    expect(markup).toContain('시트 본문');
   });
 
-  it('기본은 안 잠근다 — 대부분의 화면은 언제든 나갈 수 있어야 한다', () => {
-    const markup = withBack();
+  it('global.css가 그 둘을 그린다 — 클래스만 붙고 규칙이 없으면 아무것도 안 움직인다', () => {
+    expect(css).toContain('.sheet-dim {');
+    expect(css).toContain('.sheet-panel {');
+  });
 
-    expect(markup).toContain('돌아가기');
-    expect(backAt(markup)).not.toContain('disabled');
+  it('움직임을 줄이는 설정에서는 멈춘다', () => {
+    const blocks = css.match(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\n\}/g) ?? [];
+
+    expect(
+      blocks.some((b) => b.includes('.sheet-dim') && b.includes('.sheet-panel') && b.includes('animation: none')),
+    ).toBe(true);
+  });
+
+  it('움직이는 속성은 transform·opacity뿐이다 (T-176)', () => {
+    const frames = css.match(/@keyframes sheet-(?:dim|panel)-in \{[\s\S]*?\n\}/g) ?? [];
+
+    expect(frames).toHaveLength(2);
+    const props = [...frames.join('\n').matchAll(/^\s*([a-z-]+):/gm)].map((m) => m[1]);
+    expect(props.length).toBeGreaterThan(0);
+    expect([...new Set(props)].sort()).toEqual(['opacity', 'transform']);
+  });
+
+  it('한 번 올라오고 끝이다 — 무한 반복은 실기기를 무너뜨린다 (T-176)', () => {
+    expect(css).not.toMatch(/sheet-(?:dim|panel)-in[^;]*infinite/);
+    expect(css).toContain('animation: sheet-panel-in'); // 부재 단언의 짝 — 규칙 자체는 있다
   });
 });

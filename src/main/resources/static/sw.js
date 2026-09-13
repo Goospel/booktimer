@@ -1,5 +1,5 @@
 // BookTimer Service Worker — 앱 셸 캐싱 (L2 오프라인)
-// 정적 자산(garden.js·app.css·pwa-install.js)은 Spring resource chain으로 내용 해시 URL을 가진다.
+// 정적 자산(dashboard.js·app.css·pwa-install.js)은 Spring resource chain으로 내용 해시 URL을 가진다.
 // 해시 URL은 내용이 바뀌면 URL이 달라지므로 cache-first에서도 stale이 불가 → NETWORK_FIRST 졸업.
 // 아이콘·manifest는 cache-first로 빠른 재사용.
 // HTML 내비게이션·API는 network-first — SSR·인증 응답이라 캐시에 개인 데이터 담지 않음.
@@ -10,7 +10,7 @@
 // v8: 앱 이름 변경(name·short_name "독서 마을" → "BookTimer") 시, cache-first로 잡힌 구 manifest.json purge.
 const CACHE = 'shell-v8';
 
-// 아이콘·manifest만 프리캐시 — 해시 자산(app.css·garden.js·pwa-install.js)은
+// 아이콘·manifest만 프리캐시 — 해시 자산(app.css·dashboard.js·pwa-install.js)은
 // 빌드 타임에 URL을 모르므로 프리캐시 대신 첫 요청 시 cache-first로 자동 캐시된다.
 const PRECACHE_URLS = [
     '/manifest.json',
@@ -64,7 +64,7 @@ self.addEventListener('fetch', (event) => {
     // API 요청 — 캐시 금지(인증·사용자별 데이터; 개인 정보 캐시 보안 위반 방지)
     if (url.pathname.startsWith('/api/')) return;
 
-    // 정적 자산 — cache-first(해시 URL이라 stale 불가; 아이콘·manifest·app.css·garden.js 공통)
+    // 정적 자산 — cache-first(해시 URL이라 stale 불가; 아이콘·manifest·app.css·dashboard.js 공통)
     event.respondWith(
         caches.match(request).then((cached) => {
             if (cached) return cached;

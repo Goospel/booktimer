@@ -507,18 +507,90 @@ aws ssm put-parameter --name /booktimer/ALADIN_TTB_KEY \
 
 ---
 
-## 12-3. 책BTI LLM(Gemini) 키 연동
+## 12-3. Gemini 키 연동 — 책BTI + 공부 AI 일정
 
-책BTI(독서 성향 분석, Phase 3~5)는 Gemini Flash로 성향 서술을 생성한다. 앱은 `BOOKTIMER_LLM_API_KEY`
-환경변수를 읽어(`@Value("${booktimer.llm.api-key:not-configured}")`), 없으면 서술을 끄고 **사실만 표시(폴백)** 한다.
-즉 키가 없어도 화면·캐시·콜드스타트는 정상 동작하고, 키가 들어오면 서술이 라이브로 켜진다.
+이 키를 쓰는 곳이 **둘**이다(2026-09-08~).
+
+| 기능 | 어댑터 | 모델 프로퍼티 | 키 없을 때 |
+|---|---|---|---|
+| 책BTI 독서 성향 서술 | `GeminiReadingPersonalityNarrator` | `booktimer.llm.model` (기본 `gemini-2.5-flash`) | 서술을 끄고 **사실만 표시** |
+| **「공부」 AI 일정 생성** | `GeminiStudyPlanner` | **`booktimer.llm.plan-model`** (기본 `gemini-2.5-flash`) | 「AI 기능이 꺼져 있어요」(503) |
+
+앱은 `BOOKTIMER_LLM_API_KEY` 환경변수를 읽는다(`@Value("${booktimer.llm.api-key:not-configured}")`).
+키가 없어도 화면·캐시·콜드스타트는 정상 동작하고, 키가 들어오면 둘 다 라이브로 켜진다.
+
+⚠️ **모델 프로퍼티가 둘로 갈려 있다** — `BOOKTIMER_LLM_MODEL`을 바꿔도 **일정은 안 바뀐다**(일정은
+`BOOKTIMER_LLM_PLAN_MODEL`). 일정은 출력이 90항목까지 가서 성향 서술(2,048토큰)과 요구가 달라 일부러
+분리했다. 한쪽만 갈아 끼우고 「반영이 안 된다」로 헤매지 않도록 여기 적어 둔다.
+
+⚠️ **둘이 같은 키의 쿼터를 공유한다** — 한쪽에서 429가 나면 다른 쪽도 굶는다.
 
 ### ① API 키 발급 (외부, 1회)
 1. <https://aistudio.google.com/> → Google 계정 로그인 → **"Get API key" → "Create API key"**.
 2. 발급된 키(`AIza...` 또는 신형 `AQ....`) 복사. 무료 티어로 시작 가능(분당 요청 제한 있음).
    > 신형 `AQ.` 키는 헤더 인증이 막혀 있다 — 아래 "AQ 키 주의(T-037)" 참고. 어댑터는 호환되게 호출한다.
-> 무료 티어는 프롬프트가 모델 개선에 쓰일 수 있다 — 프롬프트엔 집계된 사실(장르명·저자명·권수)만 들어가고
-> 원문/PII는 없지만, 운영 본격화 땐 학습 제외(유료) 티어를 고려한다.
+> ⚠️ **무료 티어는 프롬프트가 모델 개선에 쓰일 수 있다. 이 위험 평가는 2026-09-08에 바뀌었다.**
+> 옛 문장은 「프롬프트엔 집계된 사실(장르명·저자명·권수)만 들어가고 원문/PII는 없다」였는데, 그날
+> **AI 일정 생성이 이 키로 옮겨오면서 사용자가 직접 친 자유 텍스트**(주제 + 범위, 최대 4,000자)가
+> 실리게 됐다. 학습 데이터가 될 수 있는 것의 **종류가 바뀐 것**이다.
+>
+> ✅ **2026-09-09 확인·해소**: 운영 키는 그때까지 **무료 티어**였고, 그날 **유료 전환**했다(25,000원 선충전).
+> 유료 티어는 전송 내용을 학습에 쓰지 않고 정책 위반 탐지 목적으로만 제한 기간 보관한다. 처리방침 6-2의
+> 보유·이용 기간 항목을 그 사실로 고쳐 적었고, **무료 티어였던 기간에 대한 안내 한 줄**도 함께 넣었다
+> (같은 날 개정). 확인 경로: <https://aistudio.google.com/> → API key → 연결된 Google Cloud 프로젝트의 결제 설정.
+>
+> ⚠️ **자동 충전은 꺼 두었다.** 잔액이 마르면 호출이 막히는데, 그때 어댑터가 429를 받으면
+> 「AI 이용량이 한도에 닿았어요」, 403이면 「일정을 만들지 못했어요」로 접는다(둘 다 원인을 로그에 남긴다 —
+> `GeminiStudyPlanner.errorReasonOf`). **429가 유력하다** — 공식 문서는 상태 코드를 명시하지 않지만 개발자
+> 포럼의 실사용 보고는 일관되게 `429 RESOURCE_EXHAUSTED` · 「Your prepayment credits are depleted」다.
+> 확정은 그날의 로그가 준다. 소진 속도 가늠(실측 토큰 기준): 일정 ≈ 11.96원/회, 성향 ≈ 7.42원/회 →
+> 전역 상한 50회/일을 다 쓰면 약 41일, 현실적인 5회/일이면 400일대.
+
+### ①-2 결제 구조와 예산 알림 (2026-09-09 설정 완료)
+
+콘솔 실측으로 확인한 구조 — **결제 수단이 두 갈래**다.
+
+| | |
+|---|---|
+| 결제 계정 | `0192B7-71DAC8-63B9CB` · 프로젝트 **BookTimer**(`booktimer-498203`) 하나 |
+| 등급 | **Tier 1 · 선불** (유료 전환 확인됨) |
+| 선불 — AI Studio | 크레딧 **₩25,000**(2026-09-08 충전) · **자동 충전 사용 중지** · ⚠️ **구매일로부터 1년 후 만료 = 2027-09-08** |
+| 후불 — Google Cloud 서비스 | 미결제 ₩0 (활성 상태) |
+
+✅ **후불로 넘어가지 않는다 — 무료 등급으로 강등되지도 않는다** (2026-09-09 공식 문서 확인).
+선불 크레딧은 Gemini API 사용에만 묶여 있어(「strictly locked to Gemini API usage」) 소진되면
+**그 결제 계정이 지불하던 모든 Gemini API 서비스가 즉시 멈춘다**. 화면의 「후불 — Google Cloud 서비스」는
+이름 그대로 **다른 서비스용**이라 Gemini 요금이 카드로 새지 않는다. 그래서 **후불을 끌 필요가 없다**
+(끄는 방법도 결제 계정 폐쇄뿐이라, 껐다면 선불 크레딧까지 함께 죽었을 것이다).
+
+> 함께 확인된 쪽이 더 중요하다 — **「Your projects aren't automatically downgraded to the Free Tier.」**
+> 강등되는 구조였다면 잔액이 마르는 날부터 전송 내용이 다시 모델 학습에 쓰여 **처리방침 6-2의
+> 「유료 등급이라 학습에 사용하지 않습니다」가 거짓이 됐을 것**이다. 그 경로는 없다.
+>
+> 출처: <https://ai.google.dev/gemini-api/docs/billing> (크레딧 만료 「12 months after their purchase date」도
+> 같은 문서 — 콘솔 표시 2027-09-08과 일치)
+
+**걸어 둔 예산** (결제 → 예산 및 알림):
+
+| 항목 | 값 |
+|---|---|
+| 이름 | `Gemini 선불 크레딧 소진 경보` |
+| 방식 | **알림만** (지출 한도 적용 아님 — 한도로 막으면 기능이 예고 없이 죽는다) |
+| 기간 | **맞춤(기간 설정)** `2026-09-08` ~ `2027-09-08` |
+| 금액 | 지정한 금액 **₩25,000** |
+| 임계값 | **50% · 90% · 100%**, 기준 「실제 지출」 |
+| 크레딧 차감 | **10개 전부 해제** |
+
+**기본값에서 바꾼 둘이 핵심이다 — 둘 다 「경보가 안 울리는 쪽」으로 고장 나는 기본값이었다.**
+
+1. **기간을 「월별」 → 「맞춤」으로.** 월별은 매달 0부터 다시 세므로 ₩25,000(≈400일치)은 **영영 50%에
+   안 닿는다.** 종료일은 크레딧 만료일과 맞췄다.
+2. **크레딧 차감 체크 10개를 전부 껐다.** 켜져 있으면 「총비용에서 선택한 크레딧을 뺀 금액」으로 산정하는데,
+   선불 크레딧으로 지불된 사용액이 그 차감에 걸리면 **예산이 영영 ₩0으로 보인다.** 끄면 총사용액 기준이라
+   틀려도 「좀 일찍 울리는」 안전한 방향이다. 목록에 `사용한 크레딧 없음`으로 표시되면 반영된 것이다.
+
+⚠️ **비용 반영은 최대 24시간 지연된다**(콘솔 명시). 알림이 하루 늦을 수 있으나, 전역 상한 50회/일이
+하루 지출을 약 600원으로 묶어 실질 위험은 없다.
 
 ### ② SSM에 키 저장 (배포보다 먼저!)
 ECS `secrets`는 태스크 시작 시 SSM에서 **필수로** 당겨오므로, 파라미터가 없으면 새 태스크가 기동 실패한다(T-011).
@@ -554,6 +626,60 @@ Google이 2026년 들어 API 키를 구형 `AIza…`(Traffic key)에서 신형 `
 → 모델 목록 JSON이 나오면 정상. (헤더로 테스트하면 AQ 키는 멀쩡해도 실패하니 헷갈리지 말 것.)
 
 > 로컬 테스트: `BOOKTIMER_LLM_API_KEY=AIza...`를 환경변수로 주고 `bootRun`.
+
+---
+
+## 12-4. 공부 화면 AI(Claude) 키 연동
+
+웹 `/study`의 **백지복습 분석·사진 전사**는 Claude API(`anthropic-java`)를 쓴다. 앱은
+`BOOKTIMER_CLAUDE_API_KEY`를 읽어(`@Value("${booktimer.claude.api-key:not-configured}")`), 없으면 어댑터가
+**클라이언트를 만들지도 않고** 화면은 「AI 기능이 꺼져 있어 저장만 됩니다」로 폴백한다. 즉 키가 없어도
+글쓰기·저장·달력은 정상이다.
+
+⚠️ **AI 일정 생성은 2026-09-08부터 이 키를 쓰지 않는다** — Gemini로 옮겨가 `BOOKTIMER_LLM_API_KEY`가
+게이트다(§12-3). 즉 **Claude 키를 지워도 일정은 멀쩡하고, 반대로 일정이 안 되면 여기가 아니라 §12-3을
+본다.** 아래 「AI 문 3종」 중 일정 3회분의 상한 카운터(`StudyAiUsage.Kind.PLAN`)와 승인 게이트는 그대로지만,
+**키·모델·요금은 Gemini 쪽**이다.
+
+⚠️ **키 소비의 실질 분모는 「관리자가 승인한 사용자 수」다** — AI 문 3종은 `/admin`의 「AI 기능 승인」에서
+켜 준 사람만 쓸 수 있고(관리자 본인 포함, 우회 없음), 그 위에 하루 상한(분석 1 · 전사 3 · 일정 3)이 걸린다.
+
+### ① API 키 발급 (외부, 1회)
+<https://console.anthropic.com/> → **API Keys → Create Key**. 발급된 `sk-ant-api03-…`를 복사한다.
+결제 수단이 등록돼 있어야 호출이 된다(무료 티어 없음). 원가 가늠은 설계 §6 「비용·남용 가드」.
+
+### ② SSM에 파라미터 저장 (배포보다 **먼저**!)
+`deploy/render-env.sh`의 `SECRET_MAP`에 `[CLAUDE_API_KEY]=BOOKTIMER_CLAUDE_API_KEY`가 들어 있어,
+**SSM에 이 파라미터가 없으면 배포 스크립트가 누락으로 `exit 1`** 한다(빈 값으로 조용히 뜨지 않게 하는 설계).
+그러니 머지·배포 **전에** 만든다:
+```bash
+MSYS_NO_PATHCONV=1 aws ssm put-parameter --name /booktimer/CLAUDE_API_KEY \
+  --value "sk-ant-api03-본인키" --type SecureString \
+  --profile booktimer --region ap-northeast-2
+# 갱신(재발급/회전) 시엔 --overwrite 추가
+```
+> ⚠️ Git Bash에서 `/booktimer/...`는 MSYS 경로 변환에 걸려 `C:/Program Files/Git/booktimer/...`로 바뀐다 —
+> 위처럼 `MSYS_NO_PATHCONV=1`을 꼭 얹는다(안 그러면 「없는 파라미터」로 오판한다).
+>
+> 아직 키를 안 넣을 거면 값 `not-configured`로 만들어 두면 된다 — 배포는 통과하고 앱은 폴백으로 뜬다.
+
+확인:
+```bash
+MSYS_NO_PATHCONV=1 aws ssm get-parameter --name /booktimer/CLAUDE_API_KEY \
+  --profile booktimer --region ap-northeast-2 --query Parameter.Name --output text
+bash deploy/tests/test-render-env.sh   # SECRET_MAP 매핑 회귀 가드
+```
+
+### ③ 배포 후 확인
+승인된 계정으로 `/study` → 백지복습에 글을 쓰고 「저장하고 분석」. 정리·빠진 곳·내일 풀 문제가 뜨면 성공.
+안 되면 서버 로그의 `claude analyze …ms`(성공 시 지연·캐시 토큰) 또는 `Claude 분석 실패: …`를 본다.
+
+### (선택) 모델 변경
+기본은 `claude-sonnet-5`(`@Value("${booktimer.claude.model:claude-sonnet-5}")`). 코드 수정 없이 바꾸려면
+`BOOKTIMER_CLAUDE_MODEL`을 env로 준다(평문이라 SecureString이 아니어도 된다).
+
+> 로컬 테스트: `BOOKTIMER_CLAUDE_API_KEY=sk-ant-... ./gradlew bootRun`
+> (관리자 화면이 필요하면 `BOOKTIMER_ADMIN_LOGIN_IDS=testid`도 함께.)
 
 ---
 

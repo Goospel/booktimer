@@ -97,14 +97,6 @@ export function shareNotice(isPublic: boolean | undefined): string {
 }
 
 /**
- * 책축 탭의 라벨 — 아직 안 받은 개수(`null`)는 <b>숫자를 안 적는다</b>. 0을 먼저 그리면 「글이 없다」는
- * 거짓말을 한 프레임 보여 주고, 값이 도착하는 순간 숫자가 튄다. 진짜 0은 0으로 적는다.
- */
-export function marginTabLabel(name: string, count: number | null): string {
-  return count === null ? name : `${name} ${count}`;
-}
-
-/**
  * 하트 — 색을 <b>`currentColor`로 상속</b>한다. 배경 팔레트가 6종이고 그중 sunset이 붉은 주황(#c96a4a)이라
  * 빨간 하트는 거기서 사라진다. 카드 본문 색을 그대로 쓰면 여섯 배경 전부에서 읽히는 것이 보장되고,
  * 상태 구분은 색이 아니라 <b>채움 여부</b>가 진다.
@@ -169,22 +161,26 @@ export function TimerStoppedNotice() {
 export function BookMargin({
   loginId,
   bookId,
-  onBack,
   onCompose,
   onOpenProfile,
   onError,
   timerStopped = false,
+  adSuppressed = false,
 }: {
   loginId: string;
   bookId: number;
-  onBack: () => void;
-  /** 「여백에 글 남기기」 — 작성 화면 전환은 셸이 든다(전체 화면 전이의 주인은 하나여야 한다). */
+  /**
+   * 「여백에 글 남기기」 — 작성 시트를 여는 것은 셸이 든다(이 화면 위에 겹쳐 서므로 「무엇이 깔리는가」의
+   * 주인은 하나여야 한다). 시트가 뜨면 셸이 `adSuppressed`로 이 화면의 배너도 함께 접는다.
+   */
   onCompose: (book: MarginBook) => void;
   /** 좋아요 명단에서 그 사람을 눌렀을 때 — 그의 책방으로 간다(전체 화면 전이는 셸이 든다). */
   onOpenProfile: (loginId: string) => void;
   onError: (error: Error) => void;
   /** 여기 들어오느라 측정을 끝냈는가 — {@link TIMER_STOPPED_NOTICE}를 여는 스위치다. */
   timerStopped?: boolean;
+  /** 위에 작성 시트가 떠 있는가 — 배너를 접는 스위치({@link MarginView}). */
+  adSuppressed?: boolean;
 }) {
   const [margin, setMargin] = useState<MarginResponse | null>(null);
   /**
@@ -281,7 +277,7 @@ export function BookMargin({
 
   if (margin === null) {
     return (
-      <Screen title="여백" onBack={onBack}>
+      <Screen title="여백">
         {timerStopped && <TimerStoppedNotice />}
         {/* 못 받았을 때 나갈 길만 있으면 실패가 곧 막다른 길이다 — 그 자리에서 다시 받을 길도 함께 준다. */}
         <ErrorMessage message={error} onRetry={load} />
@@ -294,14 +290,7 @@ export function BookMargin({
   const entries = likes.merge(margin.entries).map((e) => ({ ...e, shared: shares[e.id] ?? e.shared }));
   const merged = { ...margin, entries };
 
-  const tabs = showMarginTabs(margin.self, isbn13) ? (
-      <MarginTabs
-        tab={tab}
-        mineCount={margin.entries.length}
-        allCount={all?.totalCount ?? null}
-        onSelect={setTab}
-      />
-    ) : undefined;
+  const tabs = showMarginTabs(margin.self, isbn13) ? <MarginTabs tab={tab} onSelect={setTab} /> : undefined;
 
   const menuEntry = entries.find((e) => e.id === menuOf) ?? null;
 
@@ -309,7 +298,7 @@ export function BookMargin({
     <>
       {tab === 'all' && tabs !== undefined ? (
         all === null ? (
-          <Screen title="여백" onBack={onBack}>
+          <Screen title="여백">
             {tabs}
             <ErrorMessage message={error} />
             {error === null && <Loading />}
@@ -319,7 +308,6 @@ export function BookMargin({
             data={{ ...all, entries: likes.merge(all.entries) }}
             now={Date.now()}
             error={error}
-            onBack={onBack}
             onToggleLike={likes.toggleLike}
             onShowLikers={likes.showLikers}
             onOpenProfile={onOpenProfile}
@@ -341,8 +329,8 @@ export function BookMargin({
           onShowLikers={likes.showLikers}
           onOpenMenu={(e) => setMenuOf(e.id)}
           onToggleExpand={toggleExpand}
-          onBack={onBack}
           timerStopped={timerStopped}
+          adSuppressed={adSuppressed}
         />
       )}
       {menuEntry !== null && (
@@ -451,11 +439,12 @@ function useMarginLikes(fail: (e: Error) => void, onError: (e: Error) => void) {
 }
 
 /**
- * 여백 화면의 탭 줄 — 「내 여백 / 모두」. 내가 가진 책이고 isbn13이 있을 때만 선다
+ * 여백 화면의 탭 줄 — 「내가 쓴 여백 / 모두의 여백」. 내가 가진 책이고 isbn13이 있을 때만 선다
  * (isbn 없는 책은 책축 좌표 자체가 없어 「모두」가 가리킬 자리가 없다).
  *
- * <p>「모두」 개수는 그 탭을 눌러야 받으므로 그전엔 `null`이고, 라벨이 숫자를 안 적는다
- * ({@link marginTabLabel}).
+ * <p><b>개수를 안 적는다</b>(2026-08-29 사용자 지정) — 이름 뒤의 숫자가 「싸 보인다」는 판단이다.
+ * 값을 잃는 것도 아니다: 「내가 쓴 여백」의 수는 바로 아래 게시판 머리글(`MarginBoard`)이 이미 말하고,
+ * 「모두의 여백」은 그 탭을 눌러야 받는 값이라 탭 줄에서는 어차피 절반이 비어 있었다.
  */
 /**
  * 탭줄이 서는가 — <b>내 책 + isbn13</b>. 남의 여백에서 「모두의 여백」을 열 수 있게 하는 것은 진입점
@@ -468,20 +457,10 @@ function useMarginLikes(fail: (e: Error) => void, onError: (e: Error) => void) {
  */
 export const showMarginTabs = (self: boolean, isbn13: string | null): boolean => self && isbn13 !== null;
 
-export function MarginTabs({
-  tab,
-  mineCount,
-  allCount,
-  onSelect,
-}: {
-  tab: 'mine' | 'all';
-  mineCount: number | null;
-  allCount: number | null;
-  onSelect: (tab: 'mine' | 'all') => void;
-}) {
+export function MarginTabs({ tab, onSelect }: { tab: 'mine' | 'all'; onSelect: (tab: 'mine' | 'all') => void }) {
   const items = [
-    { key: 'mine' as const, label: marginTabLabel('내가 쓴 여백', mineCount) },
-    { key: 'all' as const, label: marginTabLabel('모두의 여백', allCount) },
+    { key: 'mine' as const, label: '내가 쓴 여백' },
+    { key: 'all' as const, label: '모두의 여백' },
   ];
 
   return (
@@ -607,7 +586,6 @@ export function BookMarginAllView({
   data,
   now,
   error,
-  onBack,
   onToggleLike,
   onShowLikers,
   onOpenProfile,
@@ -620,7 +598,6 @@ export function BookMarginAllView({
   /** 상대 시각의 기준 — 밖에서 받아야 테스트가 결정론이 된다. */
   now: number;
   error: string | null;
-  onBack: () => void;
   onToggleLike: (entry: Likeable) => void;
   onShowLikers?: (entry: Likeable) => void;
   onOpenProfile: (loginId: string) => void;
@@ -633,7 +610,7 @@ export function BookMarginAllView({
   const { book, myBookId, totalCount, entries } = data;
 
   return (
-    <Screen title="여백" onBack={onBack}>
+    <Screen title="여백">
       {timerStopped && <TimerStoppedNotice />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <BookCover url={book.coverUrl} title={book.title} width={48} />
@@ -666,13 +643,12 @@ export function BookMarginAllView({
           프롭 자체를 없앤 것이 게이트다 — 조건으로 거르면 다음 사람이 조건만 지우고 되살릴 수 있다. */}
       <MarginBoard count={totalCount}>
         {entries.length === 0 ? (
-          <Text
-            typography="st12"
-            color="grey600"
-            style={{ display: 'block', padding: '34px 16px', textAlign: 'center', wordBreak: 'keep-all' }}
-          >
-            아직 올라온 글이 없어요. 이 책을 읽은 누군가가 올리면 여기에 쌓여요.
-          </Text>
+          // 가운데 정렬은 바깥 div가 한다(T-216) — Text에 준 `textAlign`은 TDS가 걸러낸다.
+          <div style={{ padding: '34px 16px', textAlign: 'center' }}>
+            <Text typography="st12" color="grey600" style={{ wordBreak: 'keep-all' }}>
+              아직 올라온 글이 없어요. 이 책을 읽은 누군가가 올리면 여기에 쌓여요.
+            </Text>
+          </div>
         ) : (
           entries.map((e) => (
             <MarginCard
@@ -710,14 +686,12 @@ export function BookMarginAllView({
  */
 export function BookMarginAll({
   isbn13,
-  onBack,
   onOpenMine,
   onOpenProfile,
   onError,
   timerStopped = false,
 }: {
   isbn13: string;
-  onBack: () => void;
   /** 「내 여백」 탭 — 내가 가진 책이면 그 책 id로 사람축 화면을 연다. */
   onOpenMine: (bookId: number) => void;
   onOpenProfile: (loginId: string) => void;
@@ -755,7 +729,7 @@ export function BookMarginAll({
 
   if (data === null) {
     return (
-      <Screen title="여백" onBack={onBack}>
+      <Screen title="여백">
         {timerStopped && <TimerStoppedNotice />}
         {/* 못 받았을 때 나갈 길만 있으면 실패가 곧 막다른 길이다 — 그 자리에서 다시 받을 길도 함께 준다. */}
         <ErrorMessage message={error} onRetry={load} />
@@ -773,7 +747,6 @@ export function BookMarginAll({
         data={{ ...data, entries: likes.merge(data.entries) }}
         now={Date.now()}
         error={error}
-        onBack={onBack}
         onToggleLike={likes.toggleLike}
         onShowLikers={likes.showLikers}
         onOpenProfile={onOpenProfile}
@@ -784,8 +757,6 @@ export function BookMarginAll({
           myBookId === null ? undefined : (
             <MarginTabs
               tab="all"
-              mineCount={null}
-              allCount={data.totalCount}
               onSelect={(next) => {
                 if (next === 'mine') onOpenMine(myBookId);
               }}
@@ -860,8 +831,8 @@ export function MarginView({
   onShowLikers,
   onOpenMenu,
   onToggleExpand,
-  onBack,
   timerStopped = false,
+  adSuppressed = false,
 }: {
   loginId: string;
   margin: MarginResponse;
@@ -878,9 +849,13 @@ export function MarginView({
   onToggleExpand?: (id: number) => void;
   /** 「내가 쓴 여백 / 모두의 여백」 탭 줄 — 내 책이고 isbn13이 있을 때만 셸이 넘긴다. */
   tabs?: ReactNode;
-  onBack: () => void;
   /** 여기 들어오느라 측정을 끝냈는가 — {@link TIMER_STOPPED_NOTICE}를 여는 스위치다. */
   timerStopped?: boolean;
+  /**
+   * 이 화면 위에 작성 시트가 떠 있는가 — 그렇다면 <b>배너를 접는다</b>(딤 뒤 노출 = 무효 트래픽).
+   * 자세한 사정은 아래 배너 자리의 주석.
+   */
+  adSuppressed?: boolean;
 }) {
   const { book, ownerNickname, self, entries } = margin;
   /**
@@ -890,7 +865,7 @@ export function MarginView({
   const subtitle = [book.author, self ? null : `${ownerNickname} @${loginId}`].filter((s) => s !== null).join(' · ');
 
   return (
-    <Screen title="여백" onBack={onBack}>
+    <Screen title="여백">
       {timerStopped && <TimerStoppedNotice />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <BookCover url={book.coverUrl} title={book.title} width={48} />
@@ -917,23 +892,33 @@ export function MarginView({
 
       <ErrorMessage message={error} />
 
-      {/* 사람축 지면 — 내 여백·남의 여백을 안 가른다(지면의 단위는 사람이 아니라 화면이다). */}
-      {marginBannerEnabled(MARGIN_BANNER_AD_GROUP_ID) && <MarginBannerAd adGroupId={MARGIN_BANNER_AD_GROUP_ID} />}
+      {/*
+        사람축 지면 — 내 여백·남의 여백을 안 가른다(지면의 단위는 사람이 아니라 화면이다).
+
+        **작성 시트가 떠 있는 동안은 접는다**(2026-08-29). 작성이 전체 화면이던 시절엔 이 화면이
+        언마운트되며 `attachMarginBanner`의 cleanup이 `slot.destroy()`로 광고를 껐다. 시트로 겹치면서
+        화면이 살아남자 배너가 **딤 뒤에서** autoLoad 갱신을 계속 받게 됐는데, 그건 `toss.ts`가
+        접힌 슬롯을 되살리며 스스로 금지한 「사용자는 못 보는 노출만 집계」(무효 트래픽)와 같은 것이다.
+        수익 경로라 보수적으로 main과 같은 동작으로 되돌린다 — 조건부 렌더가 곧 언마운트라 destroy가
+        그대로 돌고, 시트를 닫으면(취소든 저장이든) 다시 마운트돼 부착이 1회 돈다.
+      */}
+      {marginBannerEnabled(MARGIN_BANNER_AD_GROUP_ID) && !adSuppressed && (
+        <MarginBannerAd adGroupId={MARGIN_BANNER_AD_GROUP_ID} />
+      )}
 
       <MarginBoard count={entries.length} onCompose={self ? onCompose : undefined}>
         {entries.length === 0 ? (
-          <Text
-            typography="st12"
-            color="grey600"
-            style={{ display: 'block', padding: '34px 16px', textAlign: 'center', wordBreak: 'keep-all' }}
-          >
-            {/* 남의 여백이 비면 그냥 비었다고 말한다 — 예전의 「팔로우하면 볼 수 있어요」는 2026-08-22에
-                걷었다. 「모두의 여백」에서 그 사람 글을 읽고 넘어온 사람에게 "팔로우해야 읽을 수 있다"고
-                말하는 자리였다(팔로우는 이제 열람 권한이 아니다). */}
-            {self
-              ? '아직 남긴 글이 없어요. 읽다가 마음에 걸린 문장을 남겨 보세요.'
-              : '아직 남긴 글이 없어요.'}
-          </Text>
+          // 가운데 정렬은 바깥 div가 한다(T-216) — Text에 준 `textAlign`은 TDS가 걸러낸다.
+          <div style={{ padding: '34px 16px', textAlign: 'center' }}>
+            <Text typography="st12" color="grey600" style={{ wordBreak: 'keep-all' }}>
+              {/* 남의 여백이 비면 그냥 비었다고 말한다 — 예전의 「팔로우하면 볼 수 있어요」는 2026-08-22에
+                  걷었다. 「모두의 여백」에서 그 사람 글을 읽고 넘어온 사람에게 "팔로우해야 읽을 수 있다"고
+                  말하는 자리였다(팔로우는 이제 열람 권한이 아니다). */}
+              {self
+                ? '아직 남긴 글이 없어요. 읽다가 마음에 걸린 문장을 남겨 보세요.'
+                : '아직 남긴 글이 없어요.'}
+            </Text>
+          </div>
         ) : (
           entries.map((e) => (
             <MarginCard
@@ -1124,7 +1109,13 @@ export function MarginCard({
               type="button"
               aria-label={`좋아요 ${entry.likeCount}명 보기`}
               onClick={() => onShowLikers(entry)}
-              style={{ ...likesLine(ROW_SUB), border: 'none', background: 'transparent', cursor: 'pointer' }}
+              style={{
+                ...likesLine(ROW_SUB),
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+              }}
             >
               좋아요 {entry.likeCount}명
             </button>
@@ -1313,15 +1304,23 @@ const likesLine = (color: string) =>
     fontSize: 13,
     opacity: 0.75,
     textAlign: 'left',
-    textDecoration: 'underline',
+    // 밑줄은 여기 없다 — 명단을 여는 버튼 갈래에만 준다. 밑줄은 「눌러진다」는 약속이라, 손잡이가 없는
+    // 서재 인라인 미리보기(`<p>`)에 깔면 눌러도 아무 일 없는 죽은 글자가 된다.
   }) as const;
 
 /**
  * 글 남기기 — 진입점이 <b>이미 그 책</b>이라 책을 고를 것이 없다(옛 첨부 select와 `/api/books` 조회는 삭제).
  * 남는 것은 문장·배경·1~500자 카운터뿐이다.
  *
- * <p>헤더에 뒤로가기를 두지 않는다 — 아래 「취소」가 이미 출구라 중복이었다(토스 네비바의 `‹`까지 세면
- * 한 화면에 나가는 화살표가 셋이었다). 안드로이드 하드웨어 뒤로가기는 셸의 `useBackClose`가 맡는다.
+ * <p><b>화면이 아니라 바텀시트다</b>(2026-08-29). 전체 화면 교체는 「한 줄 적고 만다」에 비해 값이
+ * 너무 컸다 — 밑 화면이 통째로 언마운트됐다가 다시 마운트되며 스크롤·탭 자리가 날아갔고, 쓰기가
+ * 읽던 자리와 이어지지 않는 별개의 여행처럼 느껴졌다. 시트는 덮을 뿐이라 취소하면 하던 자리가 그대로다.
+ * 겹침 배선(밑에 무엇이 깔리는가)은 셸이 든다 — `App.tsx`의 `underCompose`·`withCompose`.
+ *
+ * <p><b>출구는 의도적인 둘 + 조건부 하나</b>다. 시트의 ✕와 아래 「취소」는 언제나 닫는다 — ✕는 시트의
+ * 관례라 없으면 닫는 법을 찾게 되고, 「취소」는 다 쓰고 나서 손이 이미 아래에 있을 때의 출구다.
+ * <b>딤 탭은 빈 시트일 때만</b> 닫는다({@link dimClosable}) — 스치기만 해도 눌리는 자리에 원고
+ * 700자를 걸어 둘 수 없다. 안드로이드 하드웨어 뒤로가기는 셸의 `useBackClose`가 맡는다.
  */
 export function StoryComposer({
   book,
@@ -1362,7 +1361,12 @@ export function StoryComposer({
   const bg = palette(bgCode);
 
   return (
-    <Screen title="여백에 글 남기기">
+    <Sheet
+      title="여백에 글 남기기"
+      onClose={onCancel}
+      // 딤은 우발적 출구다 — 쓰던 것이 있으면 무시한다(✕·취소는 의도적이라 그대로 닫는다).
+      onDimClose={dimClosable(text, quote) ? onCancel : () => {}}
+    >
       {timerStopped && <TimerStoppedNotice />}
       {/* 가시성 고지는 placeholder가 아니라 캡션이다 — placeholder는 첫 글자에 사라지는데, 정작
           "이게 누구에게 보이나"가 필요한 순간은 쓰는 도중이다. */}
@@ -1449,8 +1453,23 @@ export function StoryComposer({
           취소
         </Button>
       </div>
-    </Screen>
+    </Sheet>
   );
+}
+
+/**
+ * 딤 탭으로 시트를 닫아도 되는가 — <b>빈 시트일 때만</b>이다.
+ *
+ * <p>딤은 시트가 되면서 새로 생긴 출구이고, 전체 화면 시절의 출구(「취소」·하드웨어 뒤로가기)와 달리
+ * <b>스치기만 해도</b> 눌린다. 인용 200자 + 본문 500자를 든 첫 입력 화면에서 그 사고는 원고를 통째로
+ * 날린다 — 저장 전이라 되돌릴 곳도 없다.
+ *
+ * <p>확인 시트를 새로 세우지 않는 이유: 우발적 탭 하나 때문에 화면을 하나 더 세우는 것은 값이 안 맞고,
+ * 의도적 출구(✕·취소)가 그대로 열려 있어 사용자가 갇히지도 않는다. 공백만 친 것은 원고로 치지 않는다 —
+ * 「남기기」 버튼도 같은 기준(`trim`)으로 잠겨 있어 두 곳의 「비었다」가 어긋나지 않는다.
+ */
+export function dimClosable(text: string, quote: string): boolean {
+  return text.trim() === '' && quote.trim() === '';
 }
 
 /** 「함께 걸기」 줄 — 체크와 두 줄 설명이 한 손가락 자리에 든다(라벨 전체가 탭 영역이다). */

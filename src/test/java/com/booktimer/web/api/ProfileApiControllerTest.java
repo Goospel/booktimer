@@ -208,17 +208,17 @@ class ProfileApiControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/profile: 대상이 프로필 작가를 선택했으면 profileCharacterCode를 응답에 싣는다")
-    void profile_withProfileCharacter_includesCode() throws Exception {
-        User u = register("pa-pc@booktimer.com", "papcid", "프사주인");
-        u.selectProfileCharacter("han_gang"); // 엔티티 직접(보유검증 우회) — 노출 경로만 검증
-        userRepository.save(u);
+    @DisplayName("GET /api/profile: 프로필 아바타 폐기 — profileCharacterCode를 더는 싣지 않는다")
+    void profile_hasNoProfileCharacterCode() throws Exception {
+        register("pa-pc@booktimer.com", "papcid", "프사주인");
 
         mockMvc.perform(get("/api/profile")
                         .param("loginId", "papcid")
                         .with(user("pa-pc@booktimer.com")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.profileCharacterCode").value("han_gang"));
+                // jsonPath(...).doesNotExist()는 값이 null이면 통과해 버려 판별력이 없다 —
+                // 필드 자체가 응답에서 사라졌는지를 본문 문자열로 못 박는다.
+                .andExpect(content().string(not(containsString("profileCharacterCode"))));
     }
 
     // ── 3. PRIVATE 책 비노출 (최우선 누수 가드) ──────────────────────────

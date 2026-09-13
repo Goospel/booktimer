@@ -21,8 +21,10 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -62,6 +64,17 @@ public class HomeFeedApiController {
 
     /** 「함께 읽는 사람」 상한. 소식·뉴스와 같은 값 — 미리보기 + 「더 보기」로 이 안에서 펼친다. */
     private static final int MAX_READERS = 30;
+
+    /**
+     * 「여백」 탭이 섞을 모집단 — 최신 이만큼을 받아 인메모리로 섞고 {@value #MAX_EVENTS}장만 남긴다.
+     * 상한의 3배 남짓이라 매 진입마다 목록이 눈에 띄게 달라진다.
+     *
+     * <p>⚠️ <b>고정되는 것은 반환 건수뿐이고 정렬 비용은 아니다</b> — {@code story}의 인덱스는
+     * {@code (user_id, created_at)}뿐이라 {@code order by created_at desc}가 전역 filesort로 떨어진다.
+     * 즉 비용은 공개 여백 <b>전체 수</b>에 비례한다. 공개 여백이 수만 건이 되면 인덱스
+     * {@code (shared, created_at)}를 마이그레이션으로 추가한다.
+     */
+    private static final int DISCOVER_POOL = 100;
 
     private final CurrentUserService currentUserService;
     private final BookRepository bookRepository;
@@ -108,7 +121,31 @@ public class HomeFeedApiController {
 
         return new HomeFeedResponse(
                 events.size() > MAX_EVENTS ? List.copyOf(events.subList(0, MAX_EVENTS)) : events,
-                newsClient.isEnabled(), newsFor(viewer), readersFor(viewer));
+                newsClient.isEnabled(), newsFor(viewer), readersFor(viewer), discoverFor(viewer));
+    }
+
+    /**
+     * 「여백」 탭 — <b>팔로우와 무관하게</b> 「모두의 여백」에 올라온 글, 무작위 {@value #MAX_EVENTS}장.
+     *
+     * <p>소식과 두 자리가 다르다. ① <b>묶지 않는다</b>: 소식이 사람+책으로 묶는 이유는 한 사람의 연속
+     * 작성이 완독·시작 소식을 밀어내지 않게 하는 것인데, 이 탭엔 밀려날 다른 종류가 없다. 글 1장이
+     * 1행이라 {@code count}는 언제나 1이다. ② <b>순서가 최신순이 아니다</b>: 발견용이라 매 진입마다
+     * 다른 글이 서야 한다.
+     *
+     * <p>섞는 자리가 인메모리인 이유: {@code order by rand()}는 H2(테스트)·MySQL(운영)로 방언이 갈려
+     * 이식성이 없다. 최신 {@value #DISCOVER_POOL}건만 받아 섞는다 — 다만 <b>고정되는 것은 반환 건수뿐,
+     * 정렬 비용은 공개 여백 수에 비례한다</b>({@link #DISCOVER_POOL} 주석 참고).
+     */
+    private List<SocialEvent> discoverFor(User viewer) {
+        List<Story> pool = new ArrayList<>(
+                storyRepository.sharedRecent(viewer.getId(), PageRequest.of(0, DISCOVER_POOL)));
+        Collections.shuffle(pool);
+        return pool.stream()
+                .limit(MAX_EVENTS)
+                .map(s -> new SocialEvent(s.getUser().getLoginId(), s.getUser().getNickname(),
+                        s.getBook().getTitle(), "STORY", s.getCreatedAt(),
+                        s.getBook().getId(), excerptOf(s.getText()), 1, s.getBook().getCoverUrl()))
+                .toList();
     }
 
     /**
@@ -180,6 +217,10 @@ public class HomeFeedApiController {
      * <p>게이트가 꺼져 있거나 완독 책이 없으면 쿼리 없이 빈 목록. isbn → 내 책 제목 맵이
      * {@code bookTitle} 라벨("내 어느 책의 기사인가")을 만든다 — 같은 isbn을 여러 번 완독 등록했으면
      * 먼저 만난 제목 하나를 쓴다(라벨일 뿐이라 어느 쪽이든 같은 책이다).
+     *
+     * <p><b>같은 기사(link)는 한 줄이다.</b> {@code BookNews}의 유니크가 {@code (isbn13, link)}라
+     * 한 기사가 내 완독 책 여러 권에 걸리면 그만큼 행이 내려온다 — 화면엔 같은 글이 겹쳐 보이고,
+     * 미니앱은 link를 목록 key로 쓰므로 중복 key가 된다.
      */
     private List<NewsItem> newsFor(User viewer) {
         if (!newsClient.isEnabled()) {
@@ -194,7 +235,12 @@ public class HomeFeedApiController {
         }
         List<BookNews> cached = bookNewsRepository.findByIsbn13InOrderByPublishedAtDesc(
                 titleByIsbn.keySet(), PageRequest.of(0, MAX_NEWS));
+        Set<String> seenLinks = new HashSet<>();
         return cached.stream()
+                // 스캔이 최신순이라 먼저 만난 행이 그 기사의 최신이다(라벨 책도 그 행에서 온다).
+                // 상한을 자른 뒤 걷어 건수가 줄 수 있으나, 상한 전에 걷으려면 isbn별 그룹이 필요해
+                // (JPQL에 윈도 함수 없음) 과하다 — 중복은 드물고 줄어도 「더 보기」 안이다.
+                .filter(n -> seenLinks.add(n.getLink()))
                 .map(n -> new NewsItem(n.getTitle(), n.getLink(), n.getPublishedAt(),
                         titleByIsbn.get(n.getIsbn13()), n.getSource()))
                 .toList();
@@ -251,8 +297,12 @@ public class HomeFeedApiController {
                 book.getCoverUrl());
     }
 
+    /**
+     * @param discover 팔로우 무관 공개 여백 — 「소식」과 같은 {@link SocialEvent} 모양이되 전부 STORY
+     *                 행이고, <b>묶이지 않아</b> {@code count}가 언제나 1이며 순서가 무작위다
+     */
     public record HomeFeedResponse(List<SocialEvent> social, boolean newsEnabled, List<NewsItem> news,
-                                   List<ReaderStatus> readers) {
+                                   List<ReaderStatus> readers, List<SocialEvent> discover) {
     }
 
     /**

@@ -233,7 +233,8 @@ function MarginBox({
  *
  * <p>헤더는 세 상태 모두 서 있다 — 박스 뼈대가 고정이라야 캐러셀을 밀 때 화면이 들썩이지 않는다.
  * 실패에 재시도 버튼을 두지 않는 것은 의도다: 헤더 「전체 보기 ›」가 살아 있어 전체 화면(자체 재시도가
- * 있다)으로 갈 수 있고, 책을 옮기거나 돌아오면 그 자체가 재조회다.
+ * 있다)으로 갈 수 있고, 책을 옮기거나 돌아오면 그 자체가 재조회다. 글이 <b>0장</b>일 때만 카운트·문·
+ * 아랫선을 접는다({@link empty}) — 그 문 너머엔 같은 빈 화면뿐이라 출구가 아니다.
  */
 export function MarginBoxView({
   view,
@@ -246,6 +247,12 @@ export function MarginBoxView({
   onOpenAll: () => void;
 }) {
   const entries = typeof view === 'string' ? [] : view.entries;
+  /**
+   * 아직 한 장도 없는 책 — 헤더가 <b>말만</b> 남는다. 「0」은 빈 상태를 숫자로 박제하고, 「전체 보기 ›」는
+   * 같은 빈 화면으로 가는 문이라 눌러도 같은 사실을 다시 본다. 아랫선도 가를 내용이 없으면 머리와 안내를
+   * 두 덩어리로 쪼갤 뿐이다. 로딩·실패는 <b>여기 아니다</b> — 그때는 전체 화면의 자체 재시도가 유일한 출구다.
+   */
+  const empty = typeof view !== 'string' && entries.length === 0;
 
   return (
     <div
@@ -254,32 +261,34 @@ export function MarginBoxView({
  borderImage: PENCIL_FRAME, borderRadius: 16, background: '#FFFDF8' }}
     >
       {/* 선은 제목이 아니라 이 줄에 건다 — 오른쪽 「전체 보기 ›」까지 지나야 머리 한 줄로 읽힌다(시안 2c). */}
-      <div style={{ display: 'flex', alignItems: 'baseline', paddingBottom: 9, borderBottom: SECTION_RULE }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', paddingBottom: 9, borderBottom: empty ? undefined : SECTION_RULE }}>
         {/* 시안 2c — 라벨 16에 카운트만 세리프. 색은 토큰으로 준다(옛 `#4E6B4A`는 세이지 700과
             한 글자 다른 사본이라 다크모드에서 갈라졌다). */}
         <SectionTitle style={{ flex: 1, fontSize: 16 }}>
           여백
-          {typeof view !== 'string' && (
+          {entries.length > 0 && (
             <b style={{ ...SERIF_VALUE, fontSize: 16, color: 'var(--adaptiveBlue700, #4F6B4C)' }}>
               {' '}
               {entries.length}
             </b>
           )}
         </SectionTitle>
-        <button
-          type="button"
-          onClick={onOpenAll}
-          style={{
-            padding: 0,
-            border: 'none',
-            background: 'transparent',
-            color: 'var(--adaptiveGrey600, #6F6A5E)',
-            fontSize: 14,
-            cursor: 'pointer',
-          }}
-        >
-          전체 보기 ›
-        </button>
+        {!empty && (
+          <button
+            type="button"
+            onClick={onOpenAll}
+            style={{
+              padding: 0,
+              border: 'none',
+              background: 'transparent',
+              color: 'var(--adaptiveGrey600, #6F6A5E)',
+              fontSize: 14,
+              cursor: 'pointer',
+            }}
+          >
+            전체 보기 ›
+          </button>
+        )}
       </div>
       {view === 'loading' && (
         <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 10 }}>
@@ -294,7 +303,7 @@ export function MarginBoxView({
       {typeof view !== 'string' &&
         (entries.length === 0 ? (
           <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 10 }}>
-            아직 남긴 글이 없어요
+            아직 남긴 글이 없어요. 위의 「여백에 글쓰기」로 첫 장을 남겨보세요.
           </Text>
         ) : (
           entries.slice(0, MARGIN_PREVIEW_COUNT).map((e) => (
@@ -381,7 +390,7 @@ export function Library({
 
   useEffect(load, [load]);
 
-  // 검색은 서재를 덮는 별도 화면이다 — 뒤로가기를 「돌아가기」와 같은 자리로 돌린다.
+  // 검색은 서재를 덮는 별도 화면이다 — 나가는 길은 네이티브 뒤로가기 하나이므로 여기가 유일한 출구다.
   useBackClose(mode === 'search', () => setMode('shelf'));
   // 열린 시트는 뒤로가기가 먼저 먹는다 — 시트가 열린 채로 미니앱이 꺼지지 않게(홈 태깅 시트와 같다).
   useBackClose(sheet !== null, () => setSheet(null));
@@ -428,7 +437,6 @@ export function Library({
         error={error}
         onAdd={add}
         onFail={fail}
-        onBack={() => setMode('shelf')}
         onOpenBookMargin={onOpenBookMargin}
       />
     );
@@ -589,24 +597,31 @@ export function Shelf({
                 color: current ? '#2C2C2A' : 'var(--adaptiveGrey700, #57534A)',
               }}
             >
-              {/* 탭 이름은 말이고 권수는 값이다 — 세리프로 갈라 놓으면 한 덩어리로 안 읽힌다(시안 2c). */}
-              {title} <span style={SERIF_VALUE}>{books.filter((b) => b.status === status).length}</span>
+              {/* 이름만 적는다 — 권수는 「펼쳐보기」 시트 제목(`읽는 중 N권`)이 이미 말한다. 세 칸에
+                  숫자가 늘 떠 있으면 고르는 자리가 세는 자리로 읽힌다. */}
+              {title}
             </button>
           );
         })}
       </div>
 
+      {/* 가운데 정렬은 **바깥 div**가 한다 — TDS `Text`는 넘긴 style에서 `textAlign`을 걸러낸다(T-216). */}
       {selected === null && leadCard === null ? (
-        <Text typography="st11" color="grey600" style={{ display: 'block', marginTop: 28, textAlign: 'center' }}>
-          {section.empty}
-        </Text>
+        <div style={{ marginTop: 28, textAlign: 'center' }}>
+          <Text typography="st11" color="grey600">
+            {section.empty}
+          </Text>
+        </div>
       ) : (
         <div style={{ marginTop: 20 }}>
           {/* 「이 탭이 비었다」와 「책 추가 칸이 섰다」는 다른 말이다 — 칸의 부제가 탭 사정까지 대신하지 못한다. */}
           {selected === null && (
-            <Text typography="st11" color="grey600" style={{ display: 'block', textAlign: 'center' }}>
-              {section.empty}
-            </Text>
+            // 가운데 정렬은 바깥 div가 한다(T-216) — Text에 준 `textAlign`은 TDS가 걸러낸다.
+            <div style={{ textAlign: 'center' }}>
+              <Text typography="st11" color="grey600">
+                {section.empty}
+              </Text>
+            </div>
           )}
           {/*
             탭이 바뀌면 목록이 통째로 갈리므로 다시 마운트한다 — 안 그러면 트랙이 옛 탭의 스크롤 자리에 머문다.
@@ -839,10 +854,9 @@ export function BookGrid({
             </div>
             {/* 긴 제목을 두 줄에서 끊지는 않는다 — TDS `Text`가 인라인 `display`를 자기 값으로 덮어써
                 (`-webkit-box` → `inline-block`) line-clamp가 죽는다. 줄이 벌어져도 제목은 다 보인다. */}
-            <Text
-              typography="st12"
-              style={{ display: 'block', marginTop: 6, wordBreak: 'keep-all', textAlign: 'center' }}
-            >
+            {/* 가운데 정렬은 아래 셀(`data-grid-title` div·button)의 `textAlign`을 상속받는다 — 여기 적어도
+                TDS가 걸러내 죽은 키였다(T-216. 목 모드 실측: 상속만으로 이미 `center`라 래퍼는 불필요). */}
+            <Text typography="st12" style={{ display: 'block', marginTop: 6, wordBreak: 'keep-all' }}>
               {book.title}
             </Text>
           </>
@@ -1032,14 +1046,12 @@ export function BookSearch({
   error,
   onAdd,
   onFail,
-  onBack,
   onOpenBookMargin,
 }: {
   busy: boolean;
   error: string | null;
   onAdd: (row: SearchRow, status: BookStatus) => void;
   onFail: (error: Error) => void;
-  onBack: () => void;
   /** 검색 행의 「여백 N」 배지 — 낯선 책의 책축 여백으로 가는 유일한 문(2026-08-22). */
   onOpenBookMargin: (isbn13: string) => void;
 }) {
@@ -1082,7 +1094,7 @@ export function BookSearch({
   };
 
   return (
-    <Screen title="책 추가" onBack={onBack} backDisabled={busy}>
+    <Screen title="책 추가">
       {/* 손잡이는 칸 안이다 — 아래 전폭 버튼은 엔터가 살아난 뒤로 자리만 먹었다(`SearchField` 주석). */}
       <SearchField
         label="책 제목"

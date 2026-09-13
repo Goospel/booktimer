@@ -40,8 +40,20 @@ export function Text({ color, ...rest }: ComponentProps<typeof TdsText>) {
   return <TdsText color={resolved} {...rest} />;
 }
 
-/** 잔디 색 농도 0~4 — 웹 app.css `--grass-0..4`와 같은 값(서버가 level을 계산해 준다). */
-export const LEVEL_COLORS = ['#EAE4D7', '#C3D9B0', '#94BE7F', '#5E9250', '#35662F'];
+/**
+ * 잔디 색 농도 0~4 — 웹 app.css `--grass-0..4`와 같은 값(서버가 level을 계산해 준다).
+ *
+ * <p>리터럴이 아니라 <b>토큰 경유</b>인 이유는 공부 모드다: `body.study-mode`가 이 토큰을 파랑
+ * 사다리로 갈아 끼워, 잔디·범례·하루 막대가 컴포넌트 한 줄 없이 따라온다(`--accentPill`과 같은 수법).
+ * 리터럴은 fallback으로 남아 독서 렌더는 픽셀 하나 안 바뀐다.
+ */
+export const LEVEL_COLORS = [
+  'var(--grass0, #EAE4D7)',
+  'var(--grass1, #C3D9B0)',
+  'var(--grass2, #94BE7F)',
+  'var(--grass3, #5E9250)',
+  'var(--grass4, #35662F)',
+];
 
 /** 수동 기록 칸의 테두리 — 웹 `--neutral-3`. 격자와 범례가 같은 값을 봐야 범례가 거짓말을 안 한다. */
 export const MANUAL_OUTLINE = '1px solid #9A9486';
@@ -405,15 +417,39 @@ export function SectionTitle({ children, style }: { children: ReactNode; style?:
  * `renderToStaticMarkup` 하니스에서 **마크업이 통째로 비어 나온다**(실측) — 이 저장소는 jsdom을 두지
  * 않기로 했으므로 시트 내용이 영영 계측 불가가 된다. 딤·safe-area·zIndex는 이 30줄로 충분하다.
  *
- * <p>홈의 태깅 시트와 서재의 「펼쳐보기」·「관리」가 같은 껍데기를 쓴다 — 셋이 각자 딤과 zIndex를
- * 들고 있으면 탭바(zIndex 100) 위를 덮는 규칙이 한 군데만 어긋나도 시트 아래로 탭바가 비친다.
+ * <p>홈의 태깅 시트와 서재의 「펼쳐보기」·「관리」, 여백 쓰기가 같은 껍데기를 쓴다 — 넷이 각자 딤과
+ * zIndex를 들고 있으면 탭바(zIndex 100) 위를 덮는 규칙이 한 군데만 어긋나도 시트 아래로 탭바가 비친다.
+ *
+ * <p>올라오는 움직임은 `global.css`의 `.sheet-dim`·`.sheet-panel`이 든다. 인라인 style이 아닌 이유는
+ * `prefers-reduced-motion`이 인라인 선언을 이길 수 없어서다(그 파일의 주석 참고).
+ *
+ * <p><b>`onDimClose`는 딤 탭만 따로 받는 문</b>이다(기본값 = `onClose`라 기존 세 시트는 그대로). 딤은
+ * 스치기만 해도 눌리는 <b>우발적</b> 출구여서, 되돌릴 수 없는 것을 든 시트는 여기만 막고 ✕는 열어 둘
+ * 필요가 있다 — 여백 쓰기가 그 자리다(`StoryComposer`의 `dimClosable`). ✕와 한 핸들러로 묶으면
+ * 딤을 막는 순간 ✕까지 잠겨 시트에 갇힌다.
  */
-export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Sheet({
+  title,
+  onClose,
+  onDimClose = onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  /** 딤 탭 전용 — 생략하면 `onClose`와 같다. 원고를 든 시트만 여기를 좁힌다. */
+  onDimClose?: () => void;
+  children: ReactNode;
+}) {
   return (
     <>
       {/* 딤 — 탭바(zIndex 100) 위를 덮어야 시트 아래로 탭바가 비치지 않는다. */}
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0, 0, 0, 0.45)' }} />
       <div
+        className="sheet-dim"
+        onClick={onDimClose}
+        style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0, 0, 0, 0.45)' }}
+      />
+      <div
+        className="sheet-panel"
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -466,12 +502,8 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
 /**
  * 화면 공통 껍데기 — 제목 + 본문 여백. 미니앱은 화면이 다섯 뿐이라 레이아웃도 이 하나면 된다.
  *
- * <p>`onBack`을 주면 **제목 위 줄에 「‹ 돌아가기」 알약**을 세운다. 나갈 길이 화면 맨 아래에만 있으면
- * 목록이 긴 화면에서 나가려고 끝까지 스크롤해야 한다 — 그래서 위다.
- *
- * <p>글자를 붙인 것은 취향이 아니라 두 번의 제보다(2026-08-16): 배경 없는 `←` 글리프는 ① 버튼으로
- * 안 보이고 ② 직선 화살표가 「이전 화면」보다 「왼쪽 이동」으로 읽힌다. 아이콘을 아무리 다듬어도 뜻은
- * 읽는 사람의 추론에 맡겨지므로, 인식률을 아이콘 디자인에 걸지 않고 글자로 못 박는다.
+ * <p>나가는 길은 **토스 네이티브 내비게이션 바의 뒤로가기**다(2026-09-02 심사 체크리스트 필수 항목 —
+ * 자체 뒤로가기와 동시 노출 금지). 08-16의 「‹ 돌아가기」 알약(#830·#831)은 그래서 걷었다.
  *
  * <p>제목은 **선택**이다. 홈처럼 첫 카드가 곧 히어로인 화면에서는 제목이 정보를 하나도 안 보태면서
  * 자리만 먹었다(「구스펠님의 오늘」은 바로 아래 「오늘 읽은 시간」의 중복이고, 그 화면 이름은 탭바가
@@ -484,20 +516,12 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
  */
 export function Screen({
   title,
-  onBack,
-  backDisabled,
   right,
   above,
   subtitle,
   children,
 }: {
   title?: string;
-  onBack?: () => void;
-  /**
-   * 요청이 도는 중엔 못 나가게 잠근다(책 추가·계정 연결). 하단 「돌아가기」 버튼이 `disabled={busy}`로
-   * 하던 일을 그대로 옮겨 온 것 — 잠금을 「감추기」로 하면 34px 줄이 사라졌다 나타나 화면이 튄다.
-   */
-  backDisabled?: boolean;
   /** 제목 줄 오른쪽 끝 손잡이(서재의 「펼쳐보기」) — 제목이 없으면 그릴 줄 자체가 없다. */
   right?: ReactNode;
   /** 제목보다 **위**에 얹히는 도구 줄 — 제목이 없는 화면에서도 그린다. */
@@ -508,47 +532,6 @@ export function Screen({
 }) {
   return (
     <main style={{ padding: '24px 20px 40px', maxWidth: 480, margin: '0 auto' }}>
-      {/* 나갈 길이 맨 위다 — 제목·도구줄보다 앞. 제목이 없는 화면에서도 그린다(출구는 제목과 무관). */}
-      {onBack !== undefined && (
-        <div style={{ display: 'flex', marginBottom: 14 }}>
-          <button
-            type="button"
-            onClick={onBack}
-            disabled={backDisabled}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 2,
-              height: 34,
-              padding: '0 14px 0 8px',
-              border: 'none',
-              borderRadius: 999,
-              background: 'var(--adaptiveGrey100, #EDE7DA)',
-              color: 'var(--adaptiveGrey700, #57534A)',
-              fontSize: 15,
-              fontWeight: 700,
-              opacity: backDisabled === true ? 0.5 : 1,
-              cursor: backDisabled === true ? 'default' : 'pointer',
-            }}
-          >
-            {/* 꺾쇠다 — 직선 화살표는 「이전 화면」이 아니라 「왼쪽 이동」으로 읽힌다. */}
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2.2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M14.5 5 8 12l6.5 7" />
-            </svg>
-            돌아가기
-          </button>
-        </div>
-      )}
       {above}
       {title !== undefined && (
       <>

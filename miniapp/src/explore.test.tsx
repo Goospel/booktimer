@@ -102,7 +102,6 @@ describe('둘러보기 화면의 검색', () => {
         onQueryChange={() => {}}
         onSearch={() => {}}
         onSelect={() => {}}
-        onClose={() => {}}
         onError={() => {}}
       />,
     );

@@ -29,6 +29,13 @@ public class LoginAttemptService {
     /** 임계치 도달 후 잠금 유지 시간. */
     public static final Duration LOCKOUT = Duration.ofMinutes(15);
 
+    /**
+     * 이 크기를 넘으면 다음 실패 기록이 만료 키를 한 번 쓸어낸다. 키가 IP라 분산 출처(봇넷·프록시)는
+     * 키를 무한히 만들 수 있는데, 만료된 항목은 <b>같은 키가 다시 오거나 {@link #isBlocked}로 조회될 때만</b>
+     * 지워져 700MB 컨테이너에서 그대로 누수가 된다.
+     */
+    static final int SWEEP_THRESHOLD = 10_000;
+
     private final Clock clock;
     private final ConcurrentHashMap<String, Attempt> attempts = new ConcurrentHashMap<>();
 
@@ -45,6 +52,25 @@ public class LoginAttemptService {
             }
             return new Attempt(prev.count() + 1, now);
         });
+        sweepIfCrowded(now);
+    }
+
+    /**
+     * 맵이 커졌을 때만 만료 키를 전수 삭제한다 — 잠금이 풀린 항목은 같은 키가 다시 오거나 조회될 때만
+     * 지워져, 분산 출처의 IP 키가 쌓이면 그대로 메모리 누수가 된다.
+     */
+    // ponytail: 크기 트리거 전수 sweep — 임계 위에 머무는 동안은 실패 기록마다 O(n)이다(1회가 아니다).
+    // 만료분만 지우므로 15분 잠금 창 안의 활성 키가 임계를 넘으면 sweep이 아무것도 못 줄이고 매번 훑기만 한다
+    // — 이건 누수 방지이지 성장 상한이 아니다. 상한이 필요해지면 분산 저장소(Redis)로 간다.
+    private void sweepIfCrowded(Instant now) {
+        if (attempts.size() > SWEEP_THRESHOLD) {
+            attempts.entrySet().removeIf(e -> isExpired(e.getValue(), now));
+        }
+    }
+
+    /** 테스트 계측용 — 현재 보관 중인 키 수(sweep이 실제로 줄이는지 재는 유일한 수단). */
+    int sizeForTest() {
+        return attempts.size();
     }
 
     /** 인증 성공을 기록한다 — 해당 키의 실패 카운터를 비운다. */

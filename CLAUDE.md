@@ -6,6 +6,8 @@
 프로젝트 개요·도메인 규칙은 [README.md](README.md), 로드맵·설계는 [plan.md](plan.md), 갱신 이력(변경 일지)은 [claude-docs/changelog.md](claude-docs/changelog.md), 트러블슈팅은 [claude-docs/troubleshooting.md](claude-docs/troubleshooting.md) 참고.
 옛 학습 노트 [claude-docs/learning-notes.md](claude-docs/learning-notes.md)는 **아카이브**다 — 읽는 건 유용하나 새로 쓰지 않는다(2026-08-18 폐기, 「🧯 트러블슈팅 활용」 절).
 
+⚠️ **이 EC2에는 BookTimer 말고 하나가 더 산다** — 다른 미니앱 **facefit**의 API 서버(`facefit-api` 컨테이너)가 같은 인스턴스·같은 MySQL에 얹혀 있다. **서버 자원(특히 메모리)·MySQL·Caddy 문제를 볼 때 먼저 읽는다**: [claude-docs/facefit-tenant.md](claude-docs/facefit-tenant.md) — 자원 몫 · 증상별 감별 · `docker stop facefit-api`로 facefit만 끄는 법.
+
 ---
 
 ## 🗺️ 계획 우선 — 의미 있는 코드 작업은 계획부터 (필수)
@@ -136,7 +138,7 @@
    - **CLEAN** → 즉시 머지.
    - **BLOCKED** (CI 대기) → CI 통과 후 머지.
    - **BEHIND** (base에 뒤처짐, 충돌 아님 — 레포가 "머지 전 브랜치 최신화 필수" 정책) → `gh pr update-branch <PR>`(비파괴 서버사이드 base→head merge) 후 CI 재실행→머지. **GitHub는 BEHIND 브랜치를 자동 갱신하지 않으므로(이 레포 auto-update off) bare `--auto`만 걸면 영영 대기**한다(T-111).
-   - **⚠️ changelog 중복 행 게이트 (T-210)**: 리뷰 반영이 있는 PR은 「기능 커밋에서 changelog 행 추가 → 리뷰 커밋에서 그 행 보강」이 되는데, `.gitattributes`의 `merge=union`(T-098)이 rebase 때 **초판과 최종본을 둘 다** 남긴다 — 충돌도 테스트 실패도 없다. **(훅 `require-changelog-no-dup.ps1`이 `git push`에서 하드 차단. 우회: `ALLOW_CHANGELOG_DUP`.)** ⚠️ PowerShell 훅이라 원격(웹) 세션엔 안 붙으니, 그땐 rebase 직후 `git diff origin/main -- claude-docs/changelog.md`로 자기 행이 1줄인지 확인한다.
+   - **⚠️ changelog 중복 행 게이트 (T-210)**: 리뷰 반영이 있는 PR은 「기능 커밋에서 changelog 행 추가 → 리뷰 커밋에서 그 행 보강」이 되는데, `.gitattributes`의 `merge=union`(T-098)이 rebase 때 **초판과 최종본을 둘 다** 남긴다 — 충돌도 테스트 실패도 없다. **(훅 `require-changelog-no-dup.ps1`이 `git push`에서 하드 차단. 우회: `ALLOW_CHANGELOG_DUP`.)** ⚠️ PowerShell 훅이라 원격(웹) 세션엔 안 붙으니, 그땐 rebase 직후 `git diff origin/main -- claude-docs/changelog.md`로 자기 행이 1줄인지 확인한다. ⚠️ **초판 행을 정리 커밋으로 지워도 다음 rebase에서 되살아난다** — union이 수정·삭제를 표현 못 해 git이 그 커밋을 `patch contents already upstream`으로 조용히 버린다. 자기 행을 두 번 건드린 브랜치는 `git reset --soft $(git merge-base HEAD origin/main)` 후 **한 커밋으로 합쳐** rebase한다(T-210 ⑦, 2026-09-13 5·6회차). **(rebase 직전 게이트 `require-single-changelog-commit-before-rebase.ps1`이 changelog를 건드린 커밋이 2개 이상이면 차단한다 — 같은 판정이 `pr-merge.sh --rebase`의 `try_rebase()`에도 있다(그 경로엔 `git rebase` 토큰이 없어 훅이 못 본다). 우회: 명령에 `ALLOW_MULTI_CHANGELOG_REBASE` 토큰, 스크립트는 같은 이름의 환경변수.)**
    - **표준 머지 경로 = `bash .claude/scripts/pr-merge.sh <PR번호> --arm`** (2026-06-27~, 레포 `allow_auto_merge=true`): `gh pr merge --auto --squash`를 걸고 → `mergeStateStatus`를 1회 점검해 **BEHIND면 `gh pr update-branch`**, DIRTY면 rebase(`--rebase` 동반 시)로 풀어준 뒤 **즉시 종료**한다. 머지는 서버(`--auto`)가 `test` 통과 시 마저 하므로 세션을 묶지 않으면서(머지 hang 클래스 제거, T-094) **"up-to-date 필수 + BEHIND = 무한 대기"(T-111)** 사각도 닫는 "걸고 떠나기". ⚠️ **bare `gh pr merge --auto --squash` 단독은 쓰지 않는다** — BEHIND면 무한 대기(이 정책에선 흔함). **원격 브랜치 삭제는 `deleteBranchOnMerge=true`(2026-06-27~)가 서버사이드 자동 처리**하므로 `--delete-branch`·수동 `gh api DELETE` 불필요(T-106). 연쇄 PR(다음 분기가 이 머지에 의존)은 `--arm` 후 `gh pr view <PR> --json state`=`MERGED` 확인 뒤 다음 분기를 딴다.
      - **⚠️ 워크트리 세션 caveat (T-095·T-096, 2회+ 승격)**: ① 위처럼 `--delete-branch`를 애초에 안 쓰므로(원격은 `deleteBranchOnMerge`가 서버사이드 자동 삭제) T-095의 `fatal: 'main' is already used by worktree` 깨짐은 발생하지 않는다 — 워크트리에서도 `pr-merge.sh <PR> --arm` 그대로. 머지 확인 후 **로컬만** 정리: 베이스 브랜치 checkout 후 `git branch -D <branch>`(원격은 손대지 않음). ② 연쇄 PR에서 **다음 브랜치를 `origin/main` 기준으로 따기 전 반드시 `gh pr view <PR> --json state`=`MERGED` 확인** — 폴링이 `TIMEOUT`/`OPEN`/`DIRTY`로 끝난 건 미머지라, 머지 전제로 브랜치를 따면 직전 PR 변경이 빠진 채 시작된다(T-096). 미머지면 DIRTY→rebase·force-push로 해결 후 재머지.
    - **동기 머지(이 세션에서 끝까지 보고)** = `bash .claude/scripts/pr-merge.sh <PR번호>` (`--arm` 없이): DIRTY 즉시 차단(또는 `--rebase` 자동 해결) + **BEHIND `gh pr update-branch` 자동 해소** + CI 폴링 + 하드 타임아웃(12분) + 원격 브랜치 삭제(gh API)를 한 호출로 처리 — auto-merge 미허용 환경이나 머지 완료까지 확인이 필요할 때. (`deleteBranchOnMerge`가 켜진 지금 스크립트의 원격 삭제는 서버 자동삭제와 중복이나 무해 — 이미 지워졌으면 조용히 넘어간다.) 스모크 테스트: `.claude/scripts/tests/test-pr-merge-behind.sh`.
@@ -360,6 +362,7 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
 → 메시지를 **UTF-8 파일** `.commit-msg-tmp` 로 쓰고 `git commit -F .commit-msg-tmp` 로 커밋.
 
 - `.commit-msg-tmp` 는 `.gitignore` 에 등록되어 있어 추적되지 않는다 (잔재 add 방지).
+- **쓰기 직전 `rm -f .commit-msg-tmp`, 커밋 직후 삭제, 그리고 쓰기와 커밋은 별도 명령으로** — 이전 세션 잔재를 `-F`가 조용히 집어 옛 메시지로 커밋된다(T-221). 쓰기 명령이 훅에 막혀도 뒤에 이은 커밋만 살아남는 구조를 없앤다.
 - **(훅 `check-commit-message.ps1`이 하드 강제 — `-m` 인라인 한글 감지 시 차단. 우회: `ALLOW_INLINE_MSG` 토큰. `-F` 파일경유는 검사 대상 아님.)**
 
 ---
@@ -382,7 +385,7 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
   - **이 컨테이너를 만드는 건 `bootRun`이지 `./gradlew test`가 아니다**(테스트는 H2 — 아래). bootRun이 워크트리별로 MySQL 컨테이너를 띄워 누적되니, **검증을 마치거나 주기적으로** `bash .claude/scripts/docker-cleanup.sh`(기본 Exited만, `--all`이면 Up 포함)로 정리한다 — `working_dir` 라벨로 BookTimer 소속만 지우고 타 프로젝트는 보호. 세션 종료 시엔 `SessionEnd` 훅이 기본 모드로 자동 정리한다(gap#3 자동배선). 멀티세션 동시 작업 시 정리 주의는 「🪢 다중 세션 → bootRun docker-compose 컨테이너」 절 참고.
 - 테스트 DB: 운영은 MySQL, **테스트는 H2 인메모리**(`src/test/resources/application.properties`) — Docker 없이 테스트 독립 실행. 테스트 시 docker-compose 자동 기동은 꺼짐(`spring.docker.compose.enabled=false`)
 - toolchain: Java 21 (로컬에 없어도 foojay-resolver 가 자동 다운로드 — 노트 N-002)
-- **프론트 번들 (정원 편집)**: `npm --prefix frontend run build` — `src/main/resources/static/garden/garden.js` 재생성. 정원 관련 TS 수정 후 `bootRun` 전에 반드시 재실행 (T-063). 산출물은 git add·commit까지 해야 반영.
+- **프론트 번들 (Vue 섬)**: `npm --prefix frontend run build` — `src/main/resources/static/<앱>/<앱>.js` 재생성. `frontend/` TS 수정 후 `bootRun` 전에 반드시 재실행 (T-063). 산출물은 git add·commit까지 해야 반영.
   **(훅 `require-bundle-build.ps1`이 하드 강제 — `frontend/**` 스테이징 커밋 전 재빌드·diff 검사. 10섬 전수 커버(CI의 garden-only 사각 보완). 우회: `SKIP_BUNDLE_CHECK` 토큰.)**
 
 ### 미니앱 개발 루프 — 기본은 브라우저 목 모드 (2026-08-12 실측 갱신)
@@ -400,8 +403,8 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
     `z-index ≥ 99` 요소가 0개**임을 세고, **거절·완주·재방문**까지 밟는다. 「자동 노출을 껐다」는 코드 판독으로
     끝내지 않는다 — 실제로 **거절 경로에서 재발**했다(길 안내 키가 남아 인라인 안내의 게이트가 열렸다).
   - 훅 강제는 불가하다(「진입 직후 뜨는가」는 정적 분석으로 판정할 수 없다) — 이 prose와 위 재현 절차가 게이트다.
-- **배포 권한 경계**: Claude는 `deploy.sh` 업로드(deploymentId 확보)까지다 — **앱인토스 콘솔(심사 제출·[출시하기])은 Claude 접근이 차단**돼 있어 사용자 몫. 배포 보고 시 "업로드 완료, 심사 제출은 콘솔에서"로 경계를 명시하고 출시 완료로 오보고하지 않는다.
-- **심사·제출이 언급되면 스토어 스크린샷을 점검한다 (필수)**: 사용자가 심사·[출시하기]를 입에 올리면 그 자리에서
+- **배포 권한 경계 (2026-08-29 개정 — 콘솔 MCP 연결·실측)**: Claude는 `deploy.sh` 업로드(deploymentId 확보)에 더해 **앱인토스 콘솔 MCP**(`mcp__apps-in-toss-console__*`, 워크스페이스 69821 · miniAppId 61047)로 **라이브 번들 조회(`bundle_get_live_version`)·테스트 푸시(`bundle_test_push`)·검수 요청(`bundle_submit_review`, 출시노트 포함)까지 직접** 할 수 있다. **[출시하기](라이브 전환)만 콘솔 웹 전용**(MCP에 해당 tool 없음)이라 사용자 몫이다. 운용 원칙: **검수 제출은 사용자 지시가 있을 때만** 한다 — 선제 제출 금지. 배포 보고 시 "검수 요청까지 완료, [출시하기]는 콘솔에서"처럼 경계를 명시하고 출시 완료로 오보고하지 않는다. (옛 문구 「콘솔은 Claude 접근 차단」은 MCP 연결 전 사실 — 2026-08-29 폐기.)
+- **심사·제출이 언급되면 스토어 스크린샷을 점검한다 (필수)**: 사용자가 심사·[출시하기]를 입에 올리거나 **Claude가 검수 요청(`bundle_submit_review`)을 실행하기 직전**이면 그 자리에서
   `miniapp/screenshots/`(01-home·02-library·03-history·04-goal)가 **지금 배포될 UI와 일치하는지** 확인하고, 어긋나면 갱신한다.
   화면이 바뀐 채 옛 그림이 콘솔에 남으면 "실제 앱과 다르다"는 반려 사유가 된다.
   - **Claude가 찍을 수 있는 건 목 모드뿐이다** — `npm --prefix miniapp run dev:mock` + 크롬 기기 뷰포트(390×844@3x), 촬영 전 포커스 링 blur.
@@ -411,6 +414,7 @@ PowerShell 5.1 에서 한글 커밋 메시지를 인라인으로 넘기면 깨�
     600으로 되돌린 전례가 있다(2026-08-14).
   - 보조 훅: `.claude/hooks/remind-screenshot-on-review.ps1`(UserPromptSubmit)이 프롬프트에서 「심사」·「출시하기」를 만나면 이 규칙을 컨텍스트에 재주입한다.
     **훅은 리마인드만 한다** — 점검·촬영 판단은 이 규칙(soft)이 맡는다. hookify 룰로는 불가능했다(룰은 bash 명령·파일 경로만 보고 프롬프트 텍스트는 못 본다).
+- **검수 요청 직전 [비게임 출시 체크리스트](https://developers-apps-in-toss.toss.im/checklist/app-nongame)의 필수 항목을 대조한다 (필수)** — 2026-09-02 승격(T-220). 자체 「돌아가기」와 토스 네이티브 뒤로가기의 **동시 노출**은 08-16(#830·#831)부터 있었고 열 번쯤 통과했지만, 규칙은 처음부터 공개돼 있었다 — 연속 통과는 「허용」의 증거가 아니다. 그래서 **T-185의 「반려가 직전 통과분 diff에 안 닿으면 무변경 재제출」에는 선행 조건이 있다**: 그 사유가 공개 필수 항목에 있는지부터 본다(있으면 편차가 아니라 규칙 위반이라 재제출해도 같은 자리에서 막힌다).
 - ⚠️ **잔디 방향 규약**: 서버 `ContributionGraphBuilder`가 weeks를 뒤집어 보낸다 — **`weeks[0]` = 최신 주 = 왼쪽**, `monthLabels`도 그 순서 기준. 최근 N주는 `slice(0, N)`. oldest-first로 가정하면 안 된다 — 두 화면이 같은 오가정으로 깨졌고 조사 서브에이전트도 오독했다(2026-08-12 핫픽스). 규약 테스트는 `api.ts` 주석 + 최신 주만 초록인 픽스처 단언.
 - **테스트 하니스**(`npm --prefix miniapp test` = vitest): **jsdom 없음** — `renderToStaticMarkup` 정적 렌더라 effect·클릭이 안 돈다. 로직은 순수 함수로 꺼내 계측하고, effect·핸들러에 대한 부정 단언("호출 안 한다")은 항상 통과라 금지(T-149). TDS `BottomSheet` 등 **포털 컴포넌트는 정적 렌더에서 마크업이 통째로 빈다**(그래서 시트는 자체 구현). `miniapp/.env.test`가 `.env.local` 누수를 차단한다 — 머신 로컬 env로 테스트가 깨지면 이걸 의심.
 

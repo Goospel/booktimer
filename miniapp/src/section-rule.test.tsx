@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { DashboardResponse, MarginResponse, MonthlySection, SocialEvent } from './api';
+import { IDLE_STUDY } from './api';
 import { History, MonthlyRecords } from './screens/History';
 import { Home, ReadingNowCard } from './screens/Home';
 import { FeedBox } from './screens/HomeFeed';
@@ -72,11 +73,14 @@ const event = (): SocialEvent => ({
   count: 1,
 });
 
+/** ⚠️ 글이 <b>있어야</b> 한다 — 0장이면 여백 헤더가 카운트·「전체 보기」와 함께 아랫선까지 접는다. */
 const margin = (): MarginResponse => ({
   book: { id: 1, title: '데미안', author: '헤세', coverUrl: null, isPublic: true },
   ownerNickname: '구스펠',
   self: true,
-  entries: [],
+  entries: [
+    { id: 1, text: '첫 문장', quote: null, bgCode: 'paper', createdAt: '2026-08-24T00:00:00Z', likeCount: 0, liked: false },
+  ],
 });
 
 const month = (): MonthlySection => ({ month: '2026-08', totalSeconds: 7_200, days: [] });
@@ -89,6 +93,7 @@ const dashboard = (): DashboardResponse => ({
   remainingSeconds: 900,
   carriedDebtSeconds: 1_800,
   todayGoalSeconds: 3_600,
+  todayReadSeconds: 2_700,
   carryover: false,
   hasActiveSession: false,
   activeStartedAt: null,
@@ -119,6 +124,10 @@ describe('제목이 곧 줄인 자리 — 선은 제목에 건다', () => {
   it('홈 캐러셀 머리 (시안 2a)', () => {
     const markup = render(<Home
       dashboard={dashboard()}
+      mode="reading"
+      study={IDLE_STUDY}
+      onChangeMode={() => {}}
+      onBlockedModeChange={() => {}}
       selectedBookId={null}
       onSelectBook={() => {}}
       onTimerChange={() => {}}
@@ -146,10 +155,10 @@ describe('제목이 곧 줄인 자리 — 선은 제목에 건다', () => {
 });
 
 describe('제목 옆에 무언가 서는 자리 — 선은 줄에 건다', () => {
-  it('피드 탭 머리 (시안 2b) — 사람·소식·책 뉴스가 한 줄이다', () => {
+  it('피드 탭 머리 (시안 2b) — 사람·소식·여백·책 뉴스가 한 줄이다', () => {
     const markup = render(
       <FeedBox
-        feed={{ social: [event()], newsEnabled: false, news: [], readers: [] }}
+        feed={{ social: [event()], newsEnabled: false, news: [], readers: [], discover: [] }}
         tab="social"
         expanded={false}
         error={null}

@@ -65,3 +65,39 @@ describe('BookPickForm — 표지 칩 + 바꾸기 + 책 없이 (발견 1)', () =
         expect(w.emitted('openSheet')).toBeTruthy();
     });
 });
+
+// 표지 — 서버(`/api/dashboard`의 BookOption)는 coverUrl을 **처음부터 보내고 있었다**. 클라이언트가
+// 타입에서 그 필드를 빼 놓아 색 박스만 그렸다. 미니앱은 같은 자리에 실표지를 띄운다(사용자 지적 2026-09-07).
+//
+// 폴백을 함께 재는 이유: 표지 없는 책(직접 추가·알라딘 이미지 없음)이 실제로 있어서, 「img가 뜬다」만
+// 재면 폴백을 지워도 초록이다. 두 단언이 한 쌍이어야 「가진 것만 img」가 잠긴다.
+describe('BookPickForm — 표지', () => {
+    const withCover: BookOption[] = [{ id: 1, title: '데미안', coverUrl: 'https://img.example/demian.jpg' }];
+
+    test('표지가 있으면 실제 이미지를 그린다', () => {
+        const w = make({ readingBooks: withCover });
+        const img = w.find('img.dash-book-chip-cover');
+        expect(img.exists()).toBe(true);
+        expect(img.attributes('src')).toBe('https://img.example/demian.jpg');
+        // 외부 이미지 호스트에 우리 주소를 흘리지 않는다 — 책장·책방과 같은 관례다.
+        expect(img.attributes('referrerpolicy')).toBe('no-referrer');
+        expect(w.find('span.dash-book-chip-cover').exists()).toBe(false);
+    });
+
+    test('표지가 없으면 지금 색 박스가 그대로 남는다 (양성 대조군)', () => {
+        const w = make({ readingBooks: [{ id: 1, title: '데미안', coverUrl: null }] });
+        expect(w.find('img.dash-book-chip-cover').exists()).toBe(false);
+        expect(w.find('span.dash-book-chip-cover').text()).toBe('데');
+    });
+
+    test('빈 문자열·공백은 표지가 아니다 — 깨진 이미지 아이콘을 띄우지 않는다', () => {
+        expect(make({ readingBooks: [{ id: 1, title: '데미안', coverUrl: '   ' }] })
+            .find('img.dash-book-chip-cover').exists()).toBe(false);
+    });
+
+    // 옛 서버·옛 픽스처는 이 필드를 아예 안 보낸다(undefined) — 그때도 색 박스로 떨어져야 한다.
+    test('coverUrl 필드가 없어도 깨지지 않는다', () => {
+        const w = make({ readingBooks: [{ id: 1, title: '데미안' }] });
+        expect(w.find('span.dash-book-chip-cover').exists()).toBe(true);
+    });
+});

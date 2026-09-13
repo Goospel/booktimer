@@ -71,18 +71,28 @@ public class ReadingContributionService {
             }
         }
 
-        // 현재(폴백) 목표 — 이력에 그 날짜 이전 변경이 없을 때 쓴다.
+        // 각 칸을 그날 목표로 색칠(소급 재채색 차단, N-059).
+        GoalSchedule schedule = goalSchedule(user);
+
+        return ContributionGraphBuilder.build(secondsByDate, today, schedule::goalFor, manualDates);
+    }
+
+    /**
+     * 그날 유효했던 하루 목표 리졸버 — 목표 변경 이력 + 현재(폴백) 목표로 조립한다.
+     *
+     * <p>잔디 색 농도와 기록 화면 하루 막대가 <b>같은 답</b>을 하도록 한 곳에서만 조립한다(막대 100%
+     * ⇔ 잔디 lv4). 이력에 그 날짜 이하 변경이 없으면(레거시·미온보딩) 현재 타이머 목표로, 타이머도
+     * 없으면 기본 목표로 폴백한다.
+     */
+    public GoalSchedule goalSchedule(User user) {
         long currentGoalSeconds = timerRepository.findByUser(user)
                 .map(timer -> timer.getDailyIncrementSeconds())
                 .orElse(DEFAULT_GOAL_SECONDS);
 
-        // 목표 변경 이력 → GoalSchedule → 각 칸을 그날 목표로 색칠(소급 재채색 차단, N-059).
         Map<LocalDate, Long> changesByDate = new LinkedHashMap<>();
         for (ReadingGoalChange change : goalChangeRepository.findByUserOrderByEffectiveDateAsc(user)) {
             changesByDate.put(change.getEffectiveDate(), change.getGoalSeconds());
         }
-        GoalSchedule schedule = GoalSchedule.of(changesByDate, currentGoalSeconds);
-
-        return ContributionGraphBuilder.build(secondsByDate, today, schedule::goalFor, manualDates);
+        return GoalSchedule.of(changesByDate, currentGoalSeconds);
     }
 }

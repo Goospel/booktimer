@@ -27,9 +27,6 @@ public class TossUserProvisioningService {
     /** 토스 가입 사용자의 기본 타임존(설정에서 변경 가능) — OAuth 프로비저닝과 동일. */
     static final String DEFAULT_TIMEZONE = "Asia/Seoul";
 
-    /** 토스가 이메일을 주지 않거나 기존 계정과 충돌할 때 쓰는 합성 주소의 도메인(발송 대상 아님). */
-    private static final String SYNTHETIC_EMAIL_DOMAIN = "@noreply.booktimer.app";
-
     private static final String DEFAULT_NICKNAME = "토스유저";
 
     private final UserRepository userRepository;
@@ -121,12 +118,20 @@ public class TossUserProvisioningService {
      * {@code toss-{userKey}@noreply.booktimer.app} — 발송하지 않는 자리표시 주소({@code users.email}은 NOT NULL).
      * userKey에서 이메일 형식을 깨는 문자를 빼고 소문자로 정규화하되 <b>자르지 않는다</b> — 앞부분만 쓰면
      * 서로 다른 userKey가 같은 주소로 접히며 {@code uk_users_email} 위반이 날 수 있다.
+     *
+     * <p>패키지 공개인 이유: {@link OAuthUserProvisioningService}의 이메일 충돌 재배정이 <b>같은 주소</b>를
+     * 만들어야 한다(미검증 TOSS 계정의 이메일을 여기로 비켜 준다). 중복 구현하면 두 규칙이 갈라진다.
+     *
+     * <p>⚠️ <b>sanitize로 접힐 수 있다</b> — {@code [^a-z0-9]}를 지우므로 서로 다른 userKey가 같은 주소를 낼 수
+     * 있다(예: {@code uk-1}과 {@code uk_1}). 그래서 <b>존재 확인은 호출부의 책임</b>이다: {@code resolveEmail}은
+     * 애초에 충돌 시에만 이 주소로 오고(그 자리에서 또 겹치면 유니크 위반이 드러난다),
+     * {@link AccountService#reassignUnverifiedTossEmail}은 이미 쓰이는 주소면 {@code -{id}} 접미로 피한다.
      */
-    private static String syntheticEmail(String userKey) {
+    static String syntheticEmail(String userKey) {
         String sanitized = userKey.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
         if (sanitized.isEmpty()) {
             sanitized = Integer.toHexString(userKey.hashCode());
         }
-        return "toss-" + sanitized + SYNTHETIC_EMAIL_DOMAIN;
+        return "toss-" + sanitized + User.SYNTHETIC_EMAIL_DOMAIN;
     }
 }

@@ -23,8 +23,6 @@ const MOCK_GRAPH = {
     totalSeconds: 12600,
     activeDays: 3,
     currentStreak: 1,
-    growthEmoji: '🌱',
-    growthLabel: '새싹',
 };
 
 const MOCK_MONTHS = [

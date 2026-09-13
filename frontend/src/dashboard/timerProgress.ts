@@ -6,21 +6,29 @@ import type { ContributionDay } from './types'
  * 계획 §3-B/D: 진행바·달성은 서버 스냅샷이 아니라 클라이언트 라이브 remainingNow 기준.
  */
 
+/**
+ * @param todayRead 오늘 읽은 초(서버 `todayReadSeconds` + 라이브 경과). **부채에서 역산하지 않는다** —
+ *                  서버 부채는 `max(0, 목표 − 읽은 양)`이라 0에서 바닥을 쳐, 역산하면 표시값이 목표에서
+ *                  천장을 친다. 목표를 넘겨 읽는 동안엔 라이브 `remainingNow`가 음수로 밀려 제대로 올라가지만
+ *                  **중지하는 순간 바닥친 스냅샷이 다시 와 정확히 목표값으로 되돌아갔다**(실사용자 제보).
+ *                  초과분은 과거 날 상환에 소비돼 응답에 흔적이 없어 역산이 불가능하다.
+ */
 export function computeProgress(
     remainingNow: number,
     floor: number,
     goal: number,
-    carryover: boolean
+    carryover: boolean,
+    todayRead: number
 ): { todayRead: number; remainingToGoal: number; pct: number; pctStr: string; isAchieved: boolean } {
     if (goal <= 0) {
-        return { todayRead: 0, remainingToGoal: 0, pct: 100, pctStr: '100%', isAchieved: true }
+        return { todayRead, remainingToGoal: 0, pct: 100, pctStr: '100%', isAchieved: true }
     }
+    // 목표까지 남은 초(히어로 보조·진행바 메타 우측)는 그대로 부채 스냅샷에서 만든다 — 카운트다운이라
+    // 0에서 멈추는 게 맞다. 카운트업(todayRead)만 출처가 갈린다.
     const todayDebtLive = carryover ? remainingNow - floor : remainingNow
-    const todayRead = goal - todayDebtLive
-    // 목표까지 남은 초(히어로 보조·진행바 메타 우측). 달성(todayDebtLive<=0)이면 0.
     const remainingToGoal = Math.max(0, todayDebtLive)
     const pct = Math.min(100, Math.max(0, Math.round((todayRead / goal) * 100)))
-    const isAchieved = todayDebtLive <= 0
+    const isAchieved = todayRead >= goal
     return { todayRead, remainingToGoal, pct, pctStr: `${pct}%`, isAchieved }
 }
 
@@ -37,24 +45,6 @@ export function fmtMSS(sec: number): string {
     const mm = String(Math.floor(s / 60)).padStart(2, '0')
     const ss = String(s % 60).padStart(2, '0')
     return `${mm}:${ss}`
-}
-
-/**
- * 잔디 셀 색조(세이지 5단계) 또는 'empty'.
- * level 0~4 → s1~s5(목표 미달→달성). date=null → 'empty'(투명).
- * manual 플래그는 CSS inset shadow로 처리 — 여기선 tone만 반환.
- */
-export function cellTone(cell: ContributionDay): 'empty' | 's1' | 's2' | 's3' | 's4' | 's5' {
-    if (cell.date === null) return 'empty'
-    return `s${cell.level + 1}` as 's1' | 's2' | 's3' | 's4' | 's5'
-}
-
-/**
- * name null/빈 제외. 제네릭으로 입력 객체의 모든 필드(emoji·spriteId·code 등)를 보존해
- * 무대 SVG 캐릭터 렌더(spriteId)에 그대로 흐르게 한다. name은 non-null로 좁혀 반환.
- */
-export function visibleAuthors<T extends { name: string | null }>(owned: T[]): Array<T & { name: string }> {
-    return owned.filter(a => a.name != null && a.name.trim().length > 0) as Array<T & { name: string }>
 }
 
 /** streak > 0일 때만 칩 표시. */
@@ -92,18 +82,6 @@ export function goalLabel(goalSeconds: number): string {
         return rm > 0 ? `${h}시간 ${rm}분` : `${h}시간`
     }
     return `${m}분`
-}
-
-/**
- * 화면 정중앙에 온 작가 인덱스. 무대 좌우 중앙 패딩(calc(50% - 반칸)) 덕에
- * scrollLeft = i·step 이면 i번째 작가가 중앙이므로 round(scrollLeft/step)로 역산하고
- * [0, count-1]로 clamp한다. count·step이 0 이하면 0(가드). 이름 라벨이 이 값으로
- * "지금 중앙 작가"를 표시한다.
- */
-export function centeredIndex(scrollLeft: number, step: number, count: number): number {
-    if (count <= 0 || step <= 0) return 0
-    const i = Math.round(scrollLeft / step)
-    return Math.min(count - 1, Math.max(0, i))
 }
 
 /**

@@ -1,7 +1,9 @@
 package com.booktimer.user;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -101,6 +103,33 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     /** 역할별 사용자 수 — 운영 통계에서 "가입자 수"는 {@code Role.USER}만 세어 ADMIN이 지표를 부풀리지 않게 한다. */
     long countByRole(Role role);
+
+    /**
+     * 공부 AI 승인 상태로 사용자를 모은다 — 관리자 화면의 「대기 목록」·「승인자 목록」이 이 한 줄로 끝난다.
+     * 정렬 키는 마지막 전이 시각이라 <b>대기 큐는 오래 기다린 사람이 위</b>다(먼저 신청한 사람이 먼저).
+     */
+    List<User> findByStudyAiAccessOrderByStudyAiAccessAtAsc(StudyAiAccess studyAiAccess);
+
+    /** 승인 정원 검사({@code StudyAiAccessService.MAX_APPROVED})의 분모 — 지금 문이 몇 개 열려 있나. */
+    long countByStudyAiAccess(StudyAiAccess studyAiAccess);
+
+    /**
+     * 승인 경합을 직렬화하는 <b>행 잠금</b> — 정원 검사 직전에 부른다.
+     *
+     * <p>「COUNT로 읽고 판단한 뒤 UPDATE로 쓴다」는 그 자체로 TOCTOU라, 잠금이 없으면 동시 요청이 같은
+     * 값을 읽어 <b>전원이 정원을 통과한다</b>(리뷰 실측 2026-09-08: 8스레드가 정원 1을 전부 뚫었다).
+     * 카운터 쪽은 조건을 SQL의 WHERE에 실어 피했지만, 여기는 「같은 테이블을 세면서 그 테이블을 고치는」
+     * 모양이라 조건부 UPDATE 한 문장으로 접을 수 없다(MySQL이 자기 참조 서브쿼리를 거부한다).
+     *
+     * <p><b>PENDING까지 잠그는 것이 요점이다.</b> APPROVED만 잠그면 정원이 빈 순간(0명)에 잠글 행이
+     * 없어 직렬화가 통째로 사라진다 — 그리고 그때가 바로 경합이 나는 시점이다. 승인 대상은 반드시
+     * PENDING이므로 이 집합은 <b>항상 비어 있지 않다</b>. 모든 스레드가 같은 쿼리로 같은 순서를 타므로
+     * 교착도 나지 않는다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.studyAiAccess = com.booktimer.user.StudyAiAccess.PENDING"
+            + " or u.studyAiAccess = com.booktimer.user.StudyAiAccess.APPROVED")
+    List<User> lockApprovalCandidates();
 
     /** 역할 + 온보딩 완료 여부별 사용자 수 — 운영 통계의 "온보딩 완료자" 카드. */
     long countByRoleAndOnboarded(Role role, boolean onboarded);

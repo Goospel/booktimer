@@ -36,7 +36,9 @@ public class SuppressionAwareEmailSender implements EmailSender {
     public void send(String toEmail, String subject, String htmlBody) {
         if (suppressionService.isSuppressed(toEmail)) {
             // 본문·토큰이 새지 않게 수신자/제목만 — 억제 목록에 있어 발송을 생략한다.
-            log.info("[email:suppressed] 발송 생략(억제 목록) — to={}, subject={}", toEmail, subject);
+            // 수신자는 마스킹한다(EmailMask) — 여기는 모든 발송의 단일 관문이라, 평문이면 억제 주소가
+            // 건건이 INFO로 쌓여 로그 접근권만으로 명단이 샌다.
+            log.info("[email:suppressed] 발송 생략(억제 목록) — to={}, subject={}", EmailMask.mask(toEmail), subject);
             return;
         }
         delegate.send(toEmail, subject, htmlBody);

@@ -19,11 +19,23 @@ import java.util.List;
  * @param books          그날 읽은 책(제목별 합산, <b>오래 읽은 순</b>). 책 미지정 세션만 있으면 빈 목록.
  * @param manuallyFilled 그날 세션 중 <b>수동 입력</b>(빠뜨린 날 직접 채우기)이 하나라도 있으면 true.
  *                       잔디에서 "직접 채운 날"을 테두리로 구분하는 데 쓴다.
+ * @param goalSeconds    <b>그 날짜에 유효했던 하루 목표</b>(초) — 기록 화면 하루 막대의 기준이다.
+ *                       {@code /api/history} 경로만 채우고({@link ReadingHistoryService#monthlyHistory}),
+ *                       그 밖의 경로({@link ReadingHistoryService#dailyHistory} — 잔디·부채·책 상세)는
+ *                       <b>0 = 미산정</b>이다(그쪽은 목표를 스스로 해석한다). 0은 화면에서 「목표 없음」과
+ *                       같이 다룬다 — 잔디 {@code ContributionGraphBuilder.levelFor}가 목표 0인 날을
+ *                       읽었으면 가득으로 치는 것과 같은 규칙.
  */
-public record DailyReadingRecord(LocalDate date, long totalSeconds, List<BookRead> books, boolean manuallyFilled) {
+public record DailyReadingRecord(LocalDate date, long totalSeconds, List<BookRead> books, boolean manuallyFilled,
+                                 long goalSeconds) {
 
-    /** 실시간 측정만 있는 날(수동 입력 없음)용 간편 생성자 — {@code manuallyFilled=false}. */
+    /** 실시간 측정만 있는 날(수동 입력 없음)용 간편 생성자 — {@code manuallyFilled=false}, 목표 미산정. */
     public DailyReadingRecord(LocalDate date, long totalSeconds, List<BookRead> books) {
-        this(date, totalSeconds, books, false);
+        this(date, totalSeconds, books, false, 0L);
+    }
+
+    /** 목표를 안 싣는 경로(잔디·부채·책 상세)용 — {@code goalSeconds=0}(미산정). */
+    public DailyReadingRecord(LocalDate date, long totalSeconds, List<BookRead> books, boolean manuallyFilled) {
+        this(date, totalSeconds, books, manuallyFilled, 0L);
     }
 }

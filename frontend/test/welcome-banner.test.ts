@@ -10,14 +10,13 @@ import DashboardApp from '../src/dashboard/DashboardApp.vue';
 const GRAPH = {
     weeks: [[{ date: null, totalSeconds: 0, level: 0, manual: false }]],
     monthLabels: [], totalSeconds: 0, activeDays: 0, currentStreak: 0,
-    growthStageName: 'SPROUT', growthStageEmoji: '🌱', growthStageLabel: '새싹',
 };
 const DASHBOARD = {
-    nickname: '테스터', loginId: 'tester', profileCharacterCode: null,
+    nickname: '테스터', loginId: 'tester',
     remainingSeconds: 3600, carriedDebtSeconds: 0, todayGoalSeconds: 3600, carryover: true,
     hasActiveSession: false, activeStartedAt: null, activeBookTitle: null, activeBookTotalSeconds: 0,
     readingBooks: [], finishedBooks: [], wantToReadBooks: [], recentBookId: null,
-    graph: GRAPH, garden: { ownedAuthorCharacterCount: 0, totalAuthorCharacterCount: 0, ownedCharacters: [] },
+    graph: GRAPH,
     quotes: [], emailVerified: true,
 };
 function fetchImpl(url: string) {

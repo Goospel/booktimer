@@ -4,10 +4,16 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestClient;
 
+import java.net.URI;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
  * 알라딘 어댑터의 JSON 매핑·활성화 게이트 단위테스트 — 네트워크 없이 정적 파싱과 키 판정만 본다.
@@ -27,28 +33,28 @@ class AladinBookSearchClientTest {
     @Test
     @DisplayName("검색 기준에 따라 알라딘 QueryType이 Title/Author로 들어간다")
     void buildUrl_carriesQueryType() {
-        String titleUrl = AladinBookSearchClient.buildSearchUrl("ttb1", "모기", BookSearchType.TITLE, 1);
+        String titleUrl = AladinBookSearchClient.buildSearchUrl("ttb1", "모기", BookSearchType.TITLE, 1).toString();
         assertThat(titleUrl).contains("QueryType=Title");
         assertThat(titleUrl).doesNotContain("QueryType=Keyword");
 
-        String authorUrl = AladinBookSearchClient.buildSearchUrl("ttb1", "모기", BookSearchType.AUTHOR, 1);
+        String authorUrl = AladinBookSearchClient.buildSearchUrl("ttb1", "모기", BookSearchType.AUTHOR, 1).toString();
         assertThat(authorUrl).contains("QueryType=Author");
     }
 
     @Test
     @DisplayName("검색·조회 URL에 includeKey=1을 실어 알라딘 응답 link에 TTBKey(제휴 식별자)가 포함되게 한다 — 없으면(기본 0) 응답 link에 ttbkey가 빠져 제휴 클릭이 귀속 안 됨(무성 추적실패, 쿠팡 lptag와 동일 계열)")
     void buildUrl_carriesIncludeKey_forAffiliateTracking() {
-        String searchUrl = AladinBookSearchClient.buildSearchUrl("ttb1", "모기", BookSearchType.TITLE, 1);
+        String searchUrl = AladinBookSearchClient.buildSearchUrl("ttb1", "모기", BookSearchType.TITLE, 1).toString();
         assertThat(searchUrl).contains("includeKey=1");
 
-        String lookupUrl = AladinBookSearchClient.buildLookupUrl("ttb1", "9788966260959");
+        String lookupUrl = AladinBookSearchClient.buildLookupUrl("ttb1", "9788966260959").toString();
         assertThat(lookupUrl).contains("includeKey=1");
     }
 
     @Test
     @DisplayName("ItemLookUp URL: ISBN13으로 단건 조회한다(itemIdType=ISBN13, ItemId=isbn, ttbkey) — 백필용")
     void buildLookupUrl_byIsbn() {
-        String url = AladinBookSearchClient.buildLookupUrl("ttb1", "9788966260959");
+        String url = AladinBookSearchClient.buildLookupUrl("ttb1", "9788966260959").toString();
         assertThat(url).contains("ItemLookUp.aspx");
         assertThat(url).contains("itemIdType=ISBN13");
         assertThat(url).contains("ItemId=9788966260959");
@@ -58,11 +64,55 @@ class AladinBookSearchClientTest {
     @Test
     @DisplayName("검색·조회 엔드포인트는 https로 호출한다 — http면 알라딘 CloudFront가 301로 https로 보내는데, RestClient가 리다이렉트를 안 따라가 응답 본문이 HTML('<')이 되어 JSON 파싱이 깨지고 운영 검색이 전부 0건이 된다(회귀 가드)")
     void buildUrl_usesHttps_notHttp() {
-        String searchUrl = AladinBookSearchClient.buildSearchUrl("ttb1", "모기", BookSearchType.TITLE, 1);
+        String searchUrl = AladinBookSearchClient.buildSearchUrl("ttb1", "모기", BookSearchType.TITLE, 1).toString();
         assertThat(searchUrl).startsWith("https://www.aladin.co.kr");
 
-        String lookupUrl = AladinBookSearchClient.buildLookupUrl("ttb1", "9788966260959");
+        String lookupUrl = AladinBookSearchClient.buildLookupUrl("ttb1", "9788966260959").toString();
         assertThat(lookupUrl).startsWith("https://www.aladin.co.kr");
+    }
+
+    @Test
+    @DisplayName("보안: 검색어의 &·= 가 인코딩돼 파라미터 오염을 못 한다 — 'a&MaxResults=200'을 그대로 실으면 알라딘이 MaxResults를 두 개 받아 우리가 정한 상한(PAGE_SIZE)이 공격자 값으로 덮인다")
+    void buildSearchUrl_encodesQuery_soParametersCannotBeInjected() {
+        URI uri = AladinBookSearchClient.buildSearchUrl("ttb1", "a&MaxResults=200", BookSearchType.TITLE, 1);
+
+        String rawQuery = uri.getRawQuery();
+        assertThat(rawQuery).contains("Query=a%26MaxResults%3D200");
+        // 파라미터로서의 MaxResults는 정확히 하나 — 우리가 실은 PAGE_SIZE뿐이다.
+        assertThat(countOccurrences(rawQuery, "MaxResults=")).isEqualTo(1);
+        assertThat(rawQuery).contains("MaxResults=" + BookSearchClient.PAGE_SIZE);
+    }
+
+    @Test
+    @DisplayName("보안: 인코딩된 URI가 RestClient까지 그대로 전달된다(이중 인코딩 %2526 없음) — String 오버로드로 넘기면 템플릿 확장이 %26을 %2526으로 다시 인코딩해 검색어가 깨진다")
+    void search_sendsSingleEncodedQuery_toAladin() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        AladinBookSearchClient client = new AladinBookSearchClient("ttb1", builder.build());
+        server.expect(requestTo(org.hamcrest.Matchers.containsString("Query=a%26b")))
+                .andRespond(withSuccess("{\"item\":[]}", MediaType.APPLICATION_JSON));
+
+        client.search("a&b", BookSearchType.TITLE, 1);
+
+        server.verify(); // 요청이 안 갔거나 URL이 다르면 여기서 실패
+    }
+
+    @Test
+    @DisplayName("보안: ItemLookUp의 ItemId도 인코딩된다 — isbn13은 검증된 숫자가 아니다. Isbn.normalize는 공백·하이픈만 지우므로 '979&MaxResults=200'이 그대로 저장돼 백필에서 이 URL로 흘러든다")
+    void buildLookupUrl_encodesItemId_soParametersCannotBeInjected() {
+        URI uri = AladinBookSearchClient.buildLookupUrl("ttb1", "979&MaxResults=200");
+
+        String rawQuery = uri.getRawQuery();
+        assertThat(rawQuery).contains("ItemId=979%26MaxResults%3D200");
+        assertThat(countOccurrences(rawQuery, "MaxResults=")).isEqualTo(0); // ItemLookUp은 MaxResults를 안 싣는다
+    }
+
+    private static int countOccurrences(String haystack, String needle) {
+        int count = 0;
+        for (int i = haystack.indexOf(needle); i >= 0; i = haystack.indexOf(needle, i + needle.length())) {
+            count++;
+        }
+        return count;
     }
 
     @Test

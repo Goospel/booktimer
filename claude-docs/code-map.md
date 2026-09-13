@@ -2,7 +2,7 @@
 
 > **목적**: 특정 기능 작업을 시작하기 전에 여기서 **진입점(URL→컨트롤러)·소속 패키지·배선 주의**를 먼저 잡고 해당 파일로 직행한다. 작업 전 이 문서부터 훑는다.
 >
-> **⚠️ 이건 "린 지도"다 — 전 클래스 카탈로그가 아니다.** 도메인 패키지(`book/`·`garden/`·`session/`·`follow/` …)는 이미 기능 응집형이라 디렉터리만 봐도 경계가 보인다. 그래서 여기선 **트리가 안 보여주는 것**만 집는다 → ① `web/` 컨트롤러 50개는 기능이 아니라 기술 계층으로 묶여 있어 진입점 매핑이 사각, ② 한 기능이 여러 패키지에 흩어지는 배선.
+> **⚠️ 이건 "린 지도"다 — 전 클래스 카탈로그가 아니다.** 도메인 패키지(`book/`·`timer/`·`session/`·`follow/` …)는 이미 기능 응집형이라 디렉터리만 봐도 경계가 보인다. 그래서 여기선 **트리가 안 보여주는 것**만 집는다 → ① `web/` 컨트롤러 50개는 기능이 아니라 기술 계층으로 묶여 있어 진입점 매핑이 사각, ② 한 기능이 여러 패키지에 흩어지는 배선.
 >
 > **⚠️ stale 주의**: 파일이 옮겨지거나 이름이 바뀌면 이 지도는 낡는다. **최종 진실은 코드다** — 의심되면 `Glob`/`Grep`으로 확인하고, 구조를 바꿨으면 이 파일도 같은 PR에서 갱신한다. 그래서 여기엔 요약을 최소화하고 **파일 경로만** 적어 유지비를 낮췄다.
 >
@@ -14,14 +14,14 @@
 com.booktimer/
   web/            ← 컨트롤러 (기술 계층 — 기능별로 안 나뉨. 이 지도의 핵심 사각)
     api/          ←   JSON API 컨트롤러 (Vue SPA용, /api/**. default-deny + CSRF 자동보호)
-  <feature>/      ← 도메인 패키지 (기능 응집: user, book, session, timer, garden, follow,
+  <feature>/      ← 도메인 패키지 (기능 응집: user, book, session, timer, follow,
                      block, report, search, popularity, profile, story, personality,
                      email, retention, quote, feedback, admin)
   security/       ← 인증·인가 (UserDetails, OIDC, 로그인시도 방어)
   config/ common/ dev/  ← 횡단 관심사 (설정, 공통 엔티티, 로컬 시드)
 ```
 
-- 프론트: `frontend/src/<feature>/` (Vue 3 SPA) — 마을 번들 산출물은 `src/main/resources/static/garden/garden.js`.
+- 프론트: `frontend/src/<feature>/` (Vue 3 SPA) — 번들 산출물은 `src/main/resources/static/<앱>/<앱>.js`(예: `static/dashboard/dashboard.js`).
 - 템플릿(SSR): `src/main/resources/templates/*.html`.
 - DB 스키마 단일 소스: `src/main/resources/db/migration/V*.sql` (Flyway).
 
@@ -80,25 +80,25 @@ com.booktimer/
 - **한 줄**: 일자별 독서시간 기록·누적, 잔디 시각화, 월별 기록·주간 부족분.
 - **진입점**: `/history`(`web/HistoryController`) · `/api/history`(`web/api/HistoryApiController`)
 - **소속 패키지**: `session/`(타이머·부채와 같은 패키지)
-- **핵심**: 잔디 `session/ContributionGraph`·`session/ContributionGraphBuilder`·`session/ContributionDay`·`session/ActiveDayCount` · 기록 `session/DailyReadingRecord`·`session/ReadingHistoryService`·`session/MonthlyReadingSection`·`session/BookReadingDetail` · 통계 `session/BookReadingStatsService`·`session/ReadingContributionService`·`session/BookSecondsRow` · 성장식물 `session/GrowthStage`
-- **⚠️ 배선 주의**: 잔디·히스토리·부채가 전부 `session/` 한 패키지에 산다. **연속일 성장식물(`session/GrowthStage`)은 마을 정원(`garden/`)과 별개 기능**이니 혼동 금지.
+- **핵심**: 잔디 `session/ContributionGraph`·`session/ContributionGraphBuilder`·`session/ContributionDay`·`session/ActiveDayCount` · 기록 `session/DailyReadingRecord`·`session/ReadingHistoryService`·`session/MonthlyReadingSection`·`session/BookReadingDetail` · 통계 `session/BookReadingStatsService`·`session/ReadingContributionService`·`session/BookSecondsRow`
+- **⚠️ 배선 주의**: 잔디·히스토리·부채가 전부 `session/` 한 패키지에 산다. 연속일 성장식물(`session/GrowthStage`)은 2026-08-29에 폐기됐다 — 마을 정원(`garden/`)의 식물과는 처음부터 별개 기능이었다(그 `garden/`도 2026-09-09에 폐기 — §6).
 - **프론트**: `frontend/src/history/`(`ContributionGraph.vue`, `MonthlyRecords.vue`, `WeeklyShortfall.vue`, `grassTooltip.ts`)
 - **템플릿**: `history.html`
 - **DB**: 세션 관련 `V4`·`V22`·`V53`
 - **설계**: README §2.4
 
-## 🏘️ 6. 독서 마을 (수집형 게임화 — 정원)
+## 🪦 6. 독서 마을 / 서재 캐릭터 — **폐기됨 (2026-09-09)**
 
-- **한 줄**: 잔디 실적으로 식물·작가캐릭터·출판사건물을 해금해 마을을 채우는 게임화 레이어(보기 전용).
-- **진입점**: `/village`·`/garden`(`web/GardenController`) · `/api/garden` GET · `/api/garden/feed`(`web/api/GardenApiController` + `web/api/GardenApiResponse`)
-- **소속 패키지**: `garden/`
-- **핵심**: 뷰 `garden/GardenService`·`garden/GardenView`·`garden/GardenWorld` · 해금 `garden/AuthorCharacterUnlockCalculator`·`garden/DailyQuotaCalculator` · 먹이/애정 `garden/FeedingService`·`garden/AuthorAffection`·`garden/AffectionLevel`·`garden/FeedRequest`·`garden/FeedResult` · 캐릭터 `garden/AuthorCharacter`·`garden/AuthorCharacterState`·`garden/OwnedCharacter`·`garden/ProfileCharacterService`
-- **⚠️ 배선 주의**: **마을 프론트는 Vue 3 SPA** — TS 소스(`frontend/`) 수정 후 `npm --prefix frontend run build`로 `static/garden/garden.js`를 재생성하고 **커밋까지** 해야 반영(훅 `require-bundle-build.ps1`이 강제). 배치/편집 엔진은 은퇴(좌표 저장 없음, 보기 전용). 식물·캐릭터·건물 카탈로그는 Flyway 시드.
-- **프론트**: `frontend/src/garden/`(`VillageApp.vue`, `PortraitVillage.vue`, 도감 `GardenDex.vue`+`DexCell.vue`(클릭 가능 button)+`DexDetailSheet.vue`(캐릭터 상세 바텀시트), `pure.ts`) · `frontend/src/dashboard/GardenPanel.vue` · 번들 `src/main/resources/static/garden/garden.js`
-  - **도감(§6.6)**: `GardenDex`=상태 필터칩(전체/보유/미보유)+시각 진행바(`.garden-meter`)+그리드. 셀 클릭→`DexDetailSheet`(보유=정 진행바·Lv, 미보유=해금 힌트). 백엔드 0(`/api/garden` `AuthorCharacterDto` 재사용). 중첩 모달 ESC는 상세시트가 `@keydown.esc.stop`으로 한 레벨만 닫음.
-- **템플릿**: `garden.html` · `fragments/garden-character-sprites.html`
-- **DB**: `V35`~`V44`(식물·장르·레시피·다양성·배치·소품) · `V45`(작가캐릭터)·`V46`~`V49`(출판사건물) · `V52`(애정)·`V54`(프로필 캐릭터)
-- **설계**: README §2.5 · memory: garden-spa-vue-migration / garden-vision-coc-zoo
+- 작가 도감·먹이주기·`/village`·`/garden`·`/api/garden`과 그 파생인 **프로필 아바타(도감 작가 얼굴)**를 전면 폐기했다.
+  프로필 사진은 닉네임/아이디 **이니셜 폴백**으로 돌아갔다. 여기 있던 파일 목록은 전부 사라졌으니 찾지 마라.
+- **번호는 비워 두고 유지한다** — §7~§15와 아래 역인덱스가 이 번호를 참조한다.
+- **남은 흔적 없음 — 2026-09-09 V88로 테이블·컬럼까지 drop 완료.** PR-1이 코드를, PR-2가 스키마를 걷었다
+  (`author_affection`·`author_character` 테이블 + `users.profile_character_code` 컬럼). 테이블이 사라지면서
+  `garden/AuthorAffection`·`garden/AuthorAffectionRepository`와 `user/AccountService.purge()`의 `deleteByUser`
+  한 줄도 함께 걷혀 **`com.booktimer.garden` 패키지가 소멸했다**.
+- **왜 두 PR로 잘랐나**: 코드와 컬럼을 같은 배포에서 지우면 blue-green 전환 중 옛 컨테이너가 없어진 컬럼을
+  SELECT 해 인증 요청이 전부 500이 난다. 그래서 코드 폐기(PR-1) → 배포 확인 → 스키마 drop(PR-2) 순으로 갔다.
+- 경위·근거: `claude-docs/changelog.md` 2026-09-09 항목.
 
 ## 👥 7. 소셜 (팔로우 · 차단 · 신고 · 검색 · 공개프로필 · 인기)
 
@@ -209,7 +209,6 @@ com.booktimer/
 | `web/DashboardController`, `web/api/DashboardApiController`, `web/ReadingSessionController` | 3 타이머·부채 (+14 격언 노출) |
 | `web/BookController`, `web/api/BookApiController`, `web/api/BookReadersApiController` | 4 책·제휴 |
 | `web/HistoryController`, `web/api/HistoryApiController` | 5 잔디·히스토리 |
-| `web/GardenController`, `web/api/GardenApiController` | 6 마을 |
 | `web/ProfileController`, `web/SearchController`, `web/api/SearchApiController`, `web/api/FollowApiController`, `web/FollowListController`, `web/api/FollowListApiController`, `web/BlockController`, `web/api/BlockApiController`, `web/api/ReportApiController`, `web/api/ProfileApiController` | 7 소셜 |
 | `web/api/StoryApiController` | 8 스토리 |
 | `web/PersonalityController`, `web/api/PersonalityApiController` | 9 성향분석 |
@@ -218,7 +217,7 @@ com.booktimer/
 | `web/EmailVerificationController`, `web/PasswordResetController` | 12 이메일 |
 | `web/UnsubscribeController` | 13 리텐션 넛지(이메일) |
 | `web/AdminQuoteController` | 14 격언 |
-| `web/SettingsController` | 1 인증(계정) + 3 타이머(목표) + 6 마을(프로필 캐릭터) |
+| `web/SettingsController` | 1 인증(계정) + 3 타이머(목표) |
 | `web/PrivacyController` | 15 공통 |
 
 ---

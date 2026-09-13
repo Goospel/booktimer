@@ -54,13 +54,13 @@ describe('PWA L2 Service Worker 정적 가드', () => {
             expect(swContent()).not.toMatch(/const\s+NETWORK_FIRST/);
         });
 
-        test('PRECACHE_URLS에 app.css·garden.js가 없다 — 해시 URL이라 고정 경로 프리캐시 불필요', () => {
+        test('PRECACHE_URLS에 app.css·dashboard.js가 없다 — 해시 URL이라 고정 경로 프리캐시 불필요', () => {
             const content = swContent();
             const match = content.match(/const\s+PRECACHE_URLS\s*=\s*\[([\s\S]*?)\]/);
             expect(match).not.toBeNull();
             const precacheBlock = match![1];
             expect(precacheBlock).not.toMatch(/app\.css/);
-            expect(precacheBlock).not.toMatch(/garden\.js/);
+            expect(precacheBlock).not.toMatch(/dashboard\.js/);
             expect(precacheBlock).not.toMatch(/pwa-install\.js/);
         });
 

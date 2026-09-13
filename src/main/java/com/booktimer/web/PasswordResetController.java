@@ -1,6 +1,8 @@
 package com.booktimer.web;
 
 import com.booktimer.email.PasswordResetService;
+import com.booktimer.security.RateLimitAction;
+import com.booktimer.security.RateLimitService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -27,9 +29,12 @@ public class PasswordResetController {
     private static final int MAX_PASSWORD = 72;
 
     private final PasswordResetService passwordResetService;
+    private final RateLimitService rateLimitService;
 
-    public PasswordResetController(PasswordResetService passwordResetService) {
+    public PasswordResetController(PasswordResetService passwordResetService,
+                                   RateLimitService rateLimitService) {
         this.passwordResetService = passwordResetService;
+        this.rateLimitService = rateLimitService;
     }
 
     @GetMapping("/password/forgot")
@@ -38,9 +43,32 @@ public class PasswordResetController {
         return "password-forgot";
     }
 
-    /** 재설정 요청 — 계정 존재/부재/소셜 모두 동일한 안내 페이지(열거완화). 발송 여부만 내부 차이. */
+    /**
+     * 재설정 요청 — 계정 존재/부재/소셜 모두 동일한 안내 페이지(열거완화). 발송 여부만 내부 차이.
+     *
+     * <p><b>상한은 두 키로 센다</b>({@link RateLimitAction#PASSWORD_FORGOT} IP ·
+     * {@link RateLimitAction#PASSWORD_FORGOT_EMAIL} 정규화 이메일). 이메일 키는 <b>한 주소로 나가는
+     * 발송량 상한</b>이다 — IP만 세면 출처를 분산해 한 사람의 수신함을 채울 수 있다.
+     *
+     * <p>⚠️ 이메일 키로 <b>피해자 본인이 잠길 수 있다</b> — 공격자가 시간당 3회를 먼저 소진하면 피해자
+     * 요청이 {@code ?limited}로 거부된다. 수용한 트레이드오프다. 반면 「재설정을 반복 요청해 남의 링크를
+     * 죽이는」 봉쇄는 {@code EmailTokenService}가 발급 시 무효화를 그만두면서 사라졌다 — 상세·근거는
+     * {@link RateLimitAction#PASSWORD_FORGOT_EMAIL} JavaDoc.
+     *
+     * <p>계정이 없어도 <b>똑같이</b> 센다. 상한 반응이 계정 존재 여부에 따라 갈리면 그 자체가 열거 채널이다.
+     */
     @PostMapping("/password/forgot")
-    public String forgot(@RequestParam(name = "email", required = false) String email) {
+    public String forgot(@RequestParam(name = "email", required = false) String email,
+                         HttpServletRequest request) {
+        // 키 정규화 — 안 하면 대소문자·앞뒤 공백만 바꿔 이메일 상한을 우회한다.
+        // Locale.ROOT 고정 — 기본 로케일이 tr이면 'I'가 'ı'로 접혀 같은 주소가 다른 키가 된다.
+        String normalized = (email == null ? "" : email).trim().toLowerCase(java.util.Locale.ROOT);
+        // 둘 다 실제로 센다(단축평가로 한쪽을 건너뛰지 않게 && 대신 각각 호출) — 한쪽만 세면 다른 키의 상한이 샌다.
+        boolean ipOk = rateLimitService.allow(RateLimitAction.PASSWORD_FORGOT, request.getRemoteAddr());
+        boolean emailOk = rateLimitService.allow(RateLimitAction.PASSWORD_FORGOT_EMAIL, normalized);
+        if (!ipOk || !emailOk) {
+            return "redirect:/password/forgot?limited";
+        }
         passwordResetService.requestReset(email == null ? "" : email);
         return "password-forgot-sent";
     }

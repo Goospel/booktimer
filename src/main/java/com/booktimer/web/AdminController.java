@@ -2,6 +2,7 @@ package com.booktimer.web;
 
 import com.booktimer.admin.AdminStatsService;
 import com.booktimer.security.CurrentUserService;
+import com.booktimer.study.StudyAiAccessService;
 import com.booktimer.user.User;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -24,11 +25,14 @@ public class AdminController {
 
     private final CurrentUserService currentUserService;
     private final AdminStatsService adminStatsService;
+    private final StudyAiAccessService studyAiAccessService;
 
     public AdminController(CurrentUserService currentUserService,
-                          AdminStatsService adminStatsService) {
+                          AdminStatsService adminStatsService,
+                          StudyAiAccessService studyAiAccessService) {
         this.currentUserService = currentUserService;
         this.adminStatsService = adminStatsService;
+        this.studyAiAccessService = studyAiAccessService;
     }
 
     @GetMapping("/admin")
@@ -37,6 +41,10 @@ public class AdminController {
         model.addAttribute("nickname", admin.getNickname());
         // 운영 통계 요약(읽기 전용 집계) — 매번 RDS에 붙지 않고 웹에서 지표 확인(N-037).
         model.addAttribute("stats", adminStatsService.summary());
+        // AI 기능 승인 — 대기 큐와 승인자. 별도 GET을 만들지 않는 이유는 1인 운영 규모에서 목록이
+        // 수십 명을 넘지 않아서다(넘는 날 전용 페이지로 분리한다 — 설계 §4.3).
+        model.addAttribute("studyAiPending", studyAiAccessService.pending());
+        model.addAttribute("studyAiApproved", studyAiAccessService.approved());
         return "admin";
     }
 }

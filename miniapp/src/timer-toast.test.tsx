@@ -264,8 +264,9 @@ describe('배선 (MainTabs)', () => {
    * 「이 책으로 재는 중」이라 말하는 카드와 그 대상을 고르는 시트가 <b>끝난 세션 위에</b> 남는다.
    */
   it('측정이 끝나면 토스트와 시트를 함께 걷는다 — 끝난 세션 위에 남으면 거짓말이다', () => {
-    const at = code.indexOf('if (dashboard.hasActiveSession) return;');
-    const body = code.slice(at, code.indexOf('}, [dashboard.hasActiveSession]);', at));
+    // 조건은 `measuring`(독서 ∪ 공부)이다 — 모드별로 갈라 물으면 한쪽에서 끝난 세션 위에 토스트가 남는다.
+    const at = code.indexOf('if (measuring) return;');
+    const body = code.slice(at, code.indexOf('}, [measuring]);', at));
 
     expect(at).toBeGreaterThan(-1);
     expect(body).toContain('setStartToast(null)');
@@ -282,8 +283,9 @@ describe('배선 (MainTabs)', () => {
    * 5186ms에 정상 발화한 것이 「스로틀이 아니라 앱 결함」을 가른 근거다(관측 경로부터 의심하는 규율).
    */
   it('토스트 타이머를 hasActiveSession effect의 cleanup에 얹지 않는다 — 시작하는 순간 제 타이머를 지운다', () => {
-    const at = code.indexOf('if (dashboard.hasActiveSession) return;');
-    const body = code.slice(at, code.indexOf('}, [dashboard.hasActiveSession]);', at));
+    // 조건은 `measuring`(독서 ∪ 공부)이다 — 모드별로 갈라 물으면 한쪽에서 끝난 세션 위에 토스트가 남는다.
+    const at = code.indexOf('if (measuring) return;');
+    const body = code.slice(at, code.indexOf('}, [measuring]);', at));
 
     expect(body).not.toContain('startToastTimer');
     // 대신 언마운트 전용 effect가 걷는다 — 의존성이 빈 배열이라 시작·종료에 발화하지 않는다.

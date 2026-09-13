@@ -81,6 +81,19 @@ class BookTimerUserDetailsServiceTest {
     }
 
     @Test
+    @DisplayName("보안(타이밍 오라클): 비밀번호 없는 소셜·토스 계정은 UsernameNotFoundException — DaoAuthenticationProvider가 이 예외에서만 더미 해시 비교(mitigateAgainstTimingAttack)를 돌려 '없는 계정'과 같은 시간을 쓴다. 다른 예외(현재 IllegalArgumentException)면 BCrypt를 건너뛰어 '존재하는 소셜 계정'만 유독 빨리 실패한다")
+    void loadByLoginId_socialAccountWithoutPassword_throwsUsernameNotFound() {
+        User social = User.ofOAuth("social@booktimer.com", "소셜", "Asia/Seoul", Role.USER,
+                com.booktimer.user.AuthProvider.GOOGLE);
+        social.assignLoginId("socialid");
+        assertThat(social.getPasswordHash()).isNull(); // 전제: 소셜 계정은 비밀번호가 없다
+        when(userRepository.findByLoginId("socialid")).thenReturn(Optional.of(social));
+
+        assertThatThrownBy(() -> service.loadUserByUsername("socialid"))
+                .isInstanceOf(UsernameNotFoundException.class);
+    }
+
+    @Test
     @DisplayName("보안: 이메일로는 로그인할 수 없다 — login_id로만 조회하므로 이메일 문자열은 못 찾는다")
     void loginByEmail_rejected() {
         // 이메일을 username으로 넘겨도 login_id 조회라 매칭되지 않는다(이메일은 로그인 식별자가 아님).

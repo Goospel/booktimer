@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # 매일 MySQL 덤프 → S3. RDS 자동 백업을 대체한다(EC2 자체 MySQL은 백업이 없다).
 # cron: 매일 18:00 UTC(=03:00 KST). 보존은 S3 lifecycle 규칙(7일)에 맡긴다.
+#
+# ⚠️ 덤프에는 **facefit 데이터베이스도 들어 있다**(같은 MySQL에 동거하는 다른 미니앱 —
+#    claude-docs/facefit-tenant.md). 파일 이름은 여전히 `booktimer-*.sql.gz`이니
+#    복원할 때 그 안에 두 DB가 있다는 것을 알고 있어야 한다.
+#    백업 경로를 facefit용으로 따로 만들지 않은 것은 의도다 — 아래 T-138처럼 **경로가 둘이면
+#    하나가 조용히 죽는다.** 떼어낼 땐 --databases 에서 facefit 한 단어만 빼면 된다.
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -40,7 +46,7 @@ dump() { docker compose -f compose.prod.yaml exec -T mysql \
 # 그래서 뒤에 --no-data 덤프를 같은 스트림에 이어붙여 빈 테이블 구조는 남긴다
 # (본 덤프의 USE booktimer; 가 먼저 나오므로 뒤 덤프도 같은 DB 컨텍스트에서 실행된다).
 {
-    dump --single-transaction --routines --triggers --databases booktimer \
+    dump --single-transaction --routines --triggers --databases booktimer facefit \
         --ignore-table=booktimer.SPRING_SESSION \
         --ignore-table=booktimer.SPRING_SESSION_ATTRIBUTES
     dump --no-data booktimer SPRING_SESSION SPRING_SESSION_ATTRIBUTES

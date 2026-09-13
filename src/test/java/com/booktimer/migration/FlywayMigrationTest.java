@@ -6,7 +6,6 @@ import com.booktimer.book.BookStatus;
 import com.booktimer.email.EmailToken;
 import com.booktimer.email.EmailTokenRepository;
 import com.booktimer.email.EmailTokenType;
-import com.booktimer.garden.AuthorCharacterRepository;
 import com.booktimer.story.Story;
 import com.booktimer.story.StoryRepository;
 import com.booktimer.user.AuthProvider;
@@ -68,9 +67,6 @@ class FlywayMigrationTest {
     EmailTokenRepository emailTokenRepository;
 
     @Autowired
-    AuthorCharacterRepository authorCharacterRepository;
-
-    @Autowired
     BookRepository bookRepository;
 
     @Autowired
@@ -81,6 +77,9 @@ class FlywayMigrationTest {
 
     @Autowired
     com.booktimer.user.TossLinkCodeRepository tossLinkCodeRepository;
+
+    @Autowired
+    com.booktimer.session.StudyDailyCheckRepository studyDailyCheckRepository;
 
     @Test
     void v1_baseline_migration_is_applied() {
@@ -103,6 +102,28 @@ class FlywayMigrationTest {
 
         assertThat(saved.getId()).isNotNull();
         assertThat(saved.getPasswordHash()).isNull();
+    }
+
+    /**
+     * V80 {@code uq_study_daily_check(user_id, check_date)} — 「하루 한 판정」 불변식의 최종 방어선.
+     *
+     * <p>여기(Flyway 스위트)에 있는 이유: 이 UNIQUE는 엔티티 {@code @Table}이 아니라 <b>마이그레이션에만</b>
+     * 있다(이 레포는 DB를 제약의 단일 출처로 둔다 — {@code uk_users_login_id} 선례). 메인 스위트는
+     * Hibernate가 엔티티 매핑에서 스키마를 만들어 <b>제약이 아예 없고, 없는 제약은 위반될 수도 없다</b>
+     * — 거기 두면 영영 초록이 안 되는 공허한 테스트가 된다(T-169).
+     */
+    @Test
+    void study_daily_check_unique_per_day_is_enforced() {
+        User owner = userRepository.saveAndFlush(
+                User.of("studycheck-dup@example.com", "hash", "닉", "Asia/Seoul", Role.USER));
+        java.time.LocalDate date = java.time.LocalDate.of(2026, 8, 30);
+        studyDailyCheckRepository.saveAndFlush(
+                com.booktimer.session.StudyDailyCheck.of(owner, date, true));
+
+        // 서비스는 조회-후-갱신으로 막지만, 경합에 진 두 번째 INSERT는 여기서 걸려야 한다.
+        assertThatThrownBy(() -> studyDailyCheckRepository.saveAndFlush(
+                com.booktimer.session.StudyDailyCheck.of(owner, date, false)))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
@@ -185,23 +206,6 @@ class FlywayMigrationTest {
         assertThat(saved.getLastNudgeSentAt()).isNull();
     }
 
-    // ── 마을 작가 캐릭터 SVG 승격 전종 완료(V48 파일럿 → V49 나머지) — 전종 승격 불변식 ──
-    // 파일럿(V48)은 한강 1종만 승격했고, V49가 나머지 작가 19종을 sprite_id=code로 채워 '전종 승격'을 완성한다.
-    // 이제 author_character 전 행이 sprite_id=code(비null)여야 한다. (건물 축은 은퇴 — Java 엔티티 제거,
-    // publisher_building 테이블·V48/V49 UPDATE는 적용 이력으로 보존하되 더는 검증하지 않는다.)
-    // 이 가드는 V49의 UPDATE가 일부 code를 빠뜨리거나(미승격 잔존) sprite_id≠code로 채우면 깨진다.
-    // 새 시드 행이 추가됐는데 sprite_id를 안 채운 경우도 여기서 잡힌다(N-055 — 미완성 엔티티 누수 가드).
-    @Test
-    void v49_promotes_all_characters_to_their_code_sprite() {
-        var authors = authorCharacterRepository.findAll();
-
-        assertThat(authors).isNotEmpty();
-
-        // 전 작가가 sprite_id = code 로 승격(SVG 렌더 경로) — 미승격(null) 잔존 0.
-        assertThat(authors)
-                .allSatisfy(a -> assertThat(a.getSpriteId()).isEqualTo(a.getCode()));
-    }
-
     // ── 여백 (V56 story · V71 책 귀속) — 스키마↔엔티티 일치 + 은퇴한 열람 테이블·NOT NULL 승격 ──
     // 아래 두 테스트가 여기 있는 이유: 메인 스위트는 Hibernate가 엔티티에서 스키마를 만들므로
     // 「story_view가 드롭됐는가」는 애초에 관측할 수 없고(엔티티 자체가 없다), 「book_id가 NOT NULL인가」도
@@ -264,6 +268,38 @@ class FlywayMigrationTest {
                 .isFalse();
     }
 
+    /**
+     * V82 — 공부 측정에 붙는 책({@code study_session.book_id}).
+     *
+     * <p>메인 스위트는 Hibernate가 엔티티에서 스키마를 만들어 이 컬럼이 <b>항상</b> 존재하므로,
+     * 「마이그레이션에 실제로 들어갔는가」는 여기서만 관측된다 — DDL을 빠뜨린 채 엔티티만 고치면
+     * 전 스위트가 초록인 채 <b>운영 배포에서만</b> 깨진다.
+     */
+    @Test
+    void v82_adds_nullable_book_id_to_study_session() {
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE UPPER(TABLE_NAME) = 'STUDY_SESSION' AND UPPER(COLUMN_NAME) = 'BOOK_ID'
+                """, String.class))
+                .as("책 없이 재는 것이 정당한 사용이고, 책을 지워도 시간은 남는다 — nullable이어야 한다")
+                .isEqualTo("YES");
+    }
+
+    /**
+     * V91 — 회당 시간 푸시 스케줄러가 분마다 {@code ended_at is null}로 공부 세션을 훑는다. 엔티티엔 인덱스
+     * 선언이 없어 메인 스위트로는 안 보이고, 운영에 V91이 들어간 뒤엔 V91 안에서 못 고친다.
+     */
+    @Test
+    void v91_indexes_study_session_ended_at() {
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.INDEX_COLUMNS
+                WHERE UPPER(TABLE_NAME) = 'STUDY_SESSION' AND UPPER(COLUMN_NAME) = 'ENDED_AT'
+                  AND ORDINAL_POSITION = 1
+                """, Integer.class))
+                .as("ended_at이 선두 컬럼인 인덱스가 있어야 분당 후보 조회·방치 스윕이 풀스캔을 피한다")
+                .isPositive();
+    }
+
     // ── 토스 미니앱(V61) — users.toss_user_key 유니크 + api_token·toss_link_code 스키마↔엔티티 일치 ──
 
     @Test
@@ -287,13 +323,17 @@ class FlywayMigrationTest {
 
         var token = apiTokenRepository.saveAndFlush(
                 com.booktimer.auth.ApiToken.issue(owner, "b".repeat(64), expiresAt));
-        var code = tossLinkCodeRepository.saveAndFlush(
-                com.booktimer.user.TossLinkCode.issue(owner, "c".repeat(64), expiresAt));
+        // purpose는 기본값이 아닌 WEB_LOGIN으로 넣는다 — V86 컬럼이 "있다"가 아니라 "우리 값을 실제로
+        // 담아 돌려준다"를 봐야 default 'LINK_TOSS'로 눌린 경우와 구분된다.
+        var code = tossLinkCodeRepository.saveAndFlush(com.booktimer.user.TossLinkCode.issue(
+                owner, "c".repeat(64), expiresAt, com.booktimer.user.TossLinkCode.Purpose.WEB_LOGIN));
 
         assertThat(token.getId()).isNotNull();
         assertThat(code.getId()).isNotNull();
         assertThat(apiTokenRepository.findByTokenHash("b".repeat(64))).isPresent();
-        assertThat(tossLinkCodeRepository.findByCodeHash("c".repeat(64))).isPresent();
+        assertThat(tossLinkCodeRepository.findByCodeHash("c".repeat(64)))
+                .map(com.booktimer.user.TossLinkCode::getPurpose)
+                .contains(com.booktimer.user.TossLinkCode.Purpose.WEB_LOGIN);
     }
 
     private static User userWithHandle(String email, String handle) {
@@ -322,9 +362,11 @@ class FlywayMigrationTest {
      * <p>순서는 purge()의 삭제 순서와 무관하다(여기선 집합만 본다). 항목을 늘릴 땐 purge()에도 같이 넣어야 한다.
      */
     private static final Set<String> TABLES_PURGE_CLEARS = Set.of(
-            "API_TOKEN", "AUTHOR_AFFECTION", "BLOCK", "BOOK", "EMAIL_TOKEN", "FEEDBACK", "FOLLOW",
+            "API_TOKEN", "BLOCK", "BOOK", "EMAIL_TOKEN", "FEEDBACK", "FOLLOW",
             "READING_GOAL_CHANGE", "READING_GOAL_WAIVER", "READING_PERSONALITY", "READING_SESSION",
-            "READING_TIMER", "REPORT", "STORY", "STORY_LIKE", "TOSS_LINK_CODE");
+            "READING_TIMER", "REPORT", "STORY", "STORY_LIKE", "STUDY_AI_USAGE", "STUDY_BOOK",
+            "STUDY_DAILY_CHECK", "STUDY_NOTE", "STUDY_PLAN_ITEM", "STUDY_RECALL", "STUDY_SESSION",
+            "TOSS_LINK_CODE");
 
     /**
      * <b>users를 FK 참조하는 테이블 집합 == purge()가 지우는 집합</b>을 못 박는다.
@@ -358,6 +400,32 @@ class FlywayMigrationTest {
                 .as("users를 FK 참조하는 테이블은 전부 AccountService.purge()가 지워야 한다 "
                         + "(빠지면 그 자식을 가진 사용자의 탈퇴가 FK 위반으로 실패한다)")
                 .containsExactlyInAnyOrderElementsOf(TABLES_PURGE_CLEARS);
+    }
+
+    /**
+     * 서재 캐릭터 기능(V45·V52·V54)이 <b>스키마에서</b> 사라졌음을 못 박는다 — V88의 계측기다.
+     *
+     * <p>엔티티·코드는 PR-1에서 이미 걷혔지만 {@code ddl-auto=validate}는 <b>여분의 테이블·컬럼을
+     * 통과시킨다</b>(매핑된 것이 DB에 있는가만 본다). 그래서 drop이 실제로 실행됐는지는 이 테스트처럼
+     * INFORMATION_SCHEMA를 직접 보는 단언만이 판정할 수 있다.
+     */
+    @Test
+    void libraryCharacterSchemaIsDropped() {
+        Set<String> tables = new HashSet<>(jdbcTemplate.queryForList(
+                "SELECT UPPER(TABLE_NAME) FROM INFORMATION_SCHEMA.TABLES", String.class));
+
+        assertThat(tables)
+                .as("V88이 서재 캐릭터 테이블을 drop 했어야 한다")
+                .doesNotContain("AUTHOR_AFFECTION", "AUTHOR_CHARACTER");
+
+        Integer profileCharacterCodeColumns = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE UPPER(TABLE_NAME) = 'USERS' AND UPPER(COLUMN_NAME) = 'PROFILE_CHARACTER_CODE'
+                """, Integer.class);
+
+        assertThat(profileCharacterCodeColumns)
+                .as("V88이 users.profile_character_code 컬럼을 drop 했어야 한다")
+                .isZero();
     }
 
     // ── 옛 핸들 영구 예약 (V69 uk_users_previous_login_id) ──

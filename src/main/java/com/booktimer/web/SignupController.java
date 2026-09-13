@@ -1,7 +1,10 @@
 package com.booktimer.web;
 
+import com.booktimer.email.EmailMask;
 import com.booktimer.email.EmailVerificationService;
 import com.booktimer.email.SignupNotificationService;
+import com.booktimer.security.RateLimitAction;
+import com.booktimer.security.RateLimitService;
 import com.booktimer.user.EmailAlreadyExistsException;
 import com.booktimer.user.LoginIdAlreadyExistsException;
 import com.booktimer.user.Role;
@@ -41,15 +44,18 @@ public class SignupController {
     private final UserRegistrationService registrationService;
     private final EmailVerificationService emailVerificationService;
     private final SignupNotificationService signupNotificationService;
+    private final RateLimitService rateLimitService;
     private final Clock clock;
 
     public SignupController(UserRegistrationService registrationService,
                             EmailVerificationService emailVerificationService,
                             SignupNotificationService signupNotificationService,
+                            RateLimitService rateLimitService,
                             Clock clock) {
         this.registrationService = registrationService;
         this.emailVerificationService = emailVerificationService;
         this.signupNotificationService = signupNotificationService;
+        this.rateLimitService = rateLimitService;
         this.clock = clock;
     }
 
@@ -71,7 +77,7 @@ public class SignupController {
 
     @PostMapping("/signup")
     public String signup(@Valid @ModelAttribute("signupForm") SignupForm form,
-                         BindingResult bindingResult) {
+                         BindingResult bindingResult, HttpServletRequest request) {
         // 타임존 형식 검증(@NotBlank로는 못 잡는 IANA 유효성) — 실패 시 필드 에러로 변환
         ZoneId zone = null;
         if (form.getTimezone() != null && !form.getTimezone().isBlank()) {
@@ -86,6 +92,14 @@ public class SignupController {
             return "signup";
         }
 
+        // 상한은 '검증을 통과한' 요청만 센다 — 폼 오타 재제출이 상한을 먹으면 정직한 사용자가 잠긴다.
+        // 이 뒤로는 어느 갈래든 메일이 나간다(가입 인증 메일 / 중복 가입 통지) — 그 문 전체가 상한 안이다.
+        // 미인증 단계라 셀 수 있는 키는 IP뿐(ForwardedHeaderFilter가 X-Forwarded-For를 반영).
+        if (!rateLimitService.allow(RateLimitAction.SIGNUP, request.getRemoteAddr())) {
+            bindingResult.reject("signup.limited", "가입 요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요");
+            return "signup";
+        }
+
         LocalDate today = LocalDate.ofInstant(clock.instant(), zone);
         try {
             User user = registrationService.register(
@@ -96,7 +110,7 @@ public class SignupController {
             try {
                 emailVerificationService.sendVerification(user);
             } catch (RuntimeException mailError) {
-                log.warn("가입 인증 메일 발송 실패(가입은 성공) — email={}", form.getEmail());
+                log.warn("가입 인증 메일 발송 실패(가입은 성공) — userId={}", user.getId());
             }
         } catch (EmailAlreadyExistsException | DataIntegrityViolationException e) {
             // 계정 열거 완화: 이메일은 비공개 속성이라 "이미 가입됨"을 응답으로 드러내면 열거가 된다.
@@ -109,7 +123,7 @@ public class SignupController {
             try {
                 signupNotificationService.notifyExistingAccount(form.getEmail());
             } catch (RuntimeException notifyError) {
-                log.warn("중복 가입 통지 메일 발송 실패 — email={}", form.getEmail());
+                log.warn("중복 가입 통지 메일 발송 실패 — email={}", EmailMask.mask(form.getEmail()));
             }
             return "redirect:/login?registered";
         } catch (LoginIdAlreadyExistsException e) {

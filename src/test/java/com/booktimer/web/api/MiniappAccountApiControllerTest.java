@@ -5,6 +5,9 @@ import com.booktimer.auth.TossLoginClient;
 import com.booktimer.auth.TossLoginException;
 import com.booktimer.auth.TossUserInfo;
 import com.booktimer.security.RateLimitService;
+import com.booktimer.user.Role;
+import com.booktimer.user.TossLinkCode;
+import com.booktimer.user.TossLinkCodeService;
 import com.booktimer.user.TossUserProvisioningService;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRepository;
@@ -21,11 +24,13 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -50,6 +55,7 @@ class MiniappAccountApiControllerTest {
     @Autowired ApiTokenService apiTokenService;
     @Autowired TossUserProvisioningService provisioningService;
     @Autowired RateLimitService rateLimitService;
+    @Autowired TossLinkCodeService linkCodeService;
 
     @MockitoBean TossLoginClient tossLoginClient;
 
@@ -128,5 +134,53 @@ class MiniappAccountApiControllerTest {
     @DisplayName("지어낸 토큰은 401 — 미니앱 체인 인증이 이 새 경로에도 걸린다(SecurityConfig 무변경 전제)")
     void deleteAccount_withoutValidToken_401() throws Exception {
         deleteAccount("지어낸토큰").andExpect(status().isUnauthorized());
+    }
+
+    // ── 웹 로그인 코드 발급 — POST /api/miniapp/web-login-code ─────────────────
+    //
+    // 토스로 시작한 계정은 비밀번호가 없어 PC 웹에 들어갈 방법이 아예 없었다. 미니앱에서 받은 일회용
+    // 코드를 웹 로그인 화면에 옮겨 적는 것이 유일한 경로다(웹→토스 연결 코드의 거울상).
+
+    private ResultActions issueWebLoginCode(String token) throws Exception {
+        return mockMvc.perform(post("/api/miniapp/web-login-code")
+                .header("Authorization", "Bearer " + token));
+    }
+
+    @Test
+    @DisplayName("웹 로그인 코드를 발급하면 사람이 옮겨 적을 수 있는 8자 코드와 TTL이 오고, 그 코드가 실제로 웹 로그인 소비 지점에서 먹는다")
+    void webLoginCode_issued() throws Exception {
+        User me = tossUser("uk-weblogin", "weblogin@noreply.booktimer.app");
+
+        String body = issueWebLoginCode(apiTokenService.issue(me))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.expiresInSeconds").value(300))
+                // 혼동 문자(0·O·1·I·L)가 없어야 손으로 옮겨 적어도 틀리지 않는다.
+                .andExpect(jsonPath("$.code").value(matchesPattern("^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$")))
+                .andReturn().getResponse().getContentAsString();
+
+        // 응답 형태가 아니라 '쓸 수 있는가'로 단언한다 — 목적이 잘못 붙으면 여기서만 드러난다.
+        String code = com.jayway.jsonpath.JsonPath.read(body, "$.code");
+        assertThat(linkCodeService.consume(code, TossLinkCode.Purpose.WEB_LOGIN))
+                .map(User::getId).contains(me.getId());
+    }
+
+    @Test
+    @DisplayName("지어낸 토큰으로는 401 — 이 발급 경로도 미니앱 체인 인증에 걸린다(SecurityConfig 무변경 전제)")
+    void webLoginCode_withoutValidToken_401() throws Exception {
+        // ⚠️ Bearer 헤더를 아예 빼면 미니앱 체인의 라우팅 조건(/api/** + Bearer)에 안 걸려 웹 체인이
+        // 받는다 — 그쪽은 CSRF가 먼저 걸려 403이다. "인증이 없으면 못 쓴다"를 겨누려면 헤더는 달되
+        // 토큰이 무효여야 한다(기존 탈퇴 테스트와 같은 방식).
+        issueWebLoginCode("지어낸토큰").andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("토스에 연결되지 않은 계정에는 409 — 방어선이 화면이 아니라 코드에 있음을 증명한다")
+    void webLoginCode_unlinkedUser_409() throws Exception {
+        // 실 운용에선 Bearer 토큰이 토스 인증 경로에서만 나와 이 상태가 생기지 않는다. 테스트에서만
+        // 만들 수 있는 상태로 방어선을 직접 겨눈다(발급 조건이 사라져도 여기서 잡힌다).
+        User local = userRepository.save(
+                User.of("web-only@booktimer.com", "hash", "책벌레", "Asia/Seoul", Role.USER));
+
+        issueWebLoginCode(apiTokenService.issue(local)).andExpect(status().isConflict());
     }
 }

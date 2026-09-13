@@ -30,7 +30,10 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-    pick: [bookId: number]
+    // 고른 책을 **통째로** 낸다(id만이 아니라) — start 모드에서 부모가 이 책을 칩에 올리기 때문이다.
+    // id만 주면 부모는 자기 목록에서 찾아야 하는데, 시트 목록(/api/books)과 대시보드 목록은 출처가
+    // 달라서(다른 탭에서 담은 책) 못 찾는 날 칩이 **조용히 다른 책**을 가리킨다.
+    pick: [book: ShelfBook]
     bookless: []
     skip: []
     close: []
@@ -40,7 +43,7 @@ const emit = defineEmits<{
 const title = computed(() => props.mode === 'tag' ? '무슨 책을 읽으셨나요?' : '측정할 책을 고르세요')
 const hint = computed(() => props.mode === 'tag'
     ? '방금 측정한 독서에 책을 연결해요. 나중에 정해도 괜찮아요.'
-    : '무슨 책을 읽을지 고르거나, 책 없이 바로 시작할 수 있어요.')
+    : '고르면 책만 바뀌어요 — 측정은 「측정 시작」을 눌러야 시작돼요.')
 
 const STATUS_TABS = [
     { key: 'ALL', label: '전체' },
@@ -55,10 +58,12 @@ const shelf = ref<ShelfBook[]>([])
 const searchEnabled = ref(false)
 const loadFailed = ref(false)
 
+// /api/books가 죽었을 때의 폴백. 대시보드 응답에도 표지가 실려 있으므로(BookOption.coverUrl)
+// 이 경로에서도 표지를 잃지 않는다 — 예전엔 여기서 null로 떨어뜨려 실패하면 전부 색 박스가 됐다.
 const fallback = computed<ShelfBook[]>(() => [
-    ...props.readingBooks.map(b => ({ id: b.id, title: b.title, author: null, coverUrl: null, isbn13: null, status: 'READING', statusLabel: '읽는 중' })),
-    ...props.finishedBooks.map(b => ({ id: b.id, title: b.title, author: null, coverUrl: null, isbn13: null, status: 'FINISHED', statusLabel: '완독' })),
-    ...props.wantToReadBooks.map(b => ({ id: b.id, title: b.title, author: null, coverUrl: null, isbn13: null, status: 'WANT_TO_READ', statusLabel: '읽고 싶음' })),
+    ...props.readingBooks.map(b => ({ id: b.id, title: b.title, author: null, coverUrl: b.coverUrl ?? null, isbn13: null, status: 'READING', statusLabel: '읽는 중' })),
+    ...props.finishedBooks.map(b => ({ id: b.id, title: b.title, author: null, coverUrl: b.coverUrl ?? null, isbn13: null, status: 'FINISHED', statusLabel: '완독' })),
+    ...props.wantToReadBooks.map(b => ({ id: b.id, title: b.title, author: null, coverUrl: b.coverUrl ?? null, isbn13: null, status: 'WANT_TO_READ', statusLabel: '읽고 싶음' })),
 ])
 const allBooks = computed(() => loadFailed.value ? fallback.value : shelf.value)
 const books = computed(() => filter.value === 'ALL' ? allBooks.value : allBooks.value.filter(b => b.status === filter.value))
@@ -166,7 +171,7 @@ onMounted(() => { overlayEl.value?.focus(); loadShelf() })
             <!-- 내 책 목록 — 표지 + 제목/저자 + 상태 배지. 고르면 pick. -->
             <ul v-if="books.length" class="book-sheet-list">
                 <li v-for="b in books" :key="b.id">
-                    <button type="button" class="book-sheet-book" :disabled="pending" @click="emit('pick', b.id)">
+                    <button type="button" class="book-sheet-book" :disabled="pending" @click="emit('pick', b)">
                         <img v-if="b.coverUrl" class="book-sheet-cover" :src="b.coverUrl" alt="" loading="lazy" referrerpolicy="no-referrer">
                         <span v-else class="book-sheet-cover" :style="coverStyle(b)" aria-hidden="true">{{ initialOf(b.title) }}</span>
                         <span class="book-sheet-meta">

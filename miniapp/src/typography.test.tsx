@@ -284,9 +284,9 @@ describe('값(수)은 세리프로 온다', () => {
     expect(tagOf(history, `${graph.activeDays}일`)).toContain('Gowun Batang');
   });
 
-  it('성장 단계 이름이 세리프다 — 그 카드가 말하려는 성취다', () => {
+  it('연속 일수도 세리프다 — 같은 줄에 선 세 값이 서체가 갈리면 줄이 아니라 파편으로 읽힌다', () => {
     const history = render(<History graph={graph} />);
-    expect(tagOf(history, graph.growthStageLabel)).toContain('Gowun Batang');
+    expect(tagOf(history, `${graph.currentStreak}일`)).toContain('Gowun Batang');
   });
 
   it('책방 카운트 숫자가 세리프다 — 500을 부르다 400으로 떨어져 라벨보다 얇던 자리', () => {
@@ -484,11 +484,17 @@ describe('채움 주 버튼 개수 (설계 D5)', () => {
     expect(surfaces.filter((s) => s.count > 1)).toEqual([]);
   });
 
-  it('채움이 선 자리는 셋뿐이다 — 서재·목표 + 홈을 대신하는 탭바 원(설계 D5가 이름을 댄 그 자리들)', () => {
+  it('채움이 선 자리는 다섯뿐이다 — 서재 둘(독서·공부)·목표·회당 시간 시트 + 홈을 대신하는 탭바 원', () => {
+    // 공부 서재(2026-09-01)가 넷째다 — 「회독 +1」이 그 화면의 주 동작이라 독서 서재의 「여백에 글쓰기」와
+    // 같은 자리·같은 레시피다. **목록을 늘리는 것이 이 테스트의 설계된 쓰임**이다: 채움을 새로 세우는 일은
+    // 「주 동작 하나」라는 축을 늘리는 결정이라 눈에 띄어야 하고, 그래서 여기 한 줄을 지나야 한다.
+    // 회당 시간 시트(2026-09-13)가 다섯째다 — 목표 화면과 같은 휠 + 「저장」 한 동작이라 같은 레시피를 쓴다.
     expect(surfaces.filter((s) => s.count > 0).map((s) => s.file).sort()).toEqual([
       'App.tsx',
       'Goal.tsx',
       'Library.tsx',
+      'SessionGoalSheet.tsx',
+      'StudyLibrary.tsx',
     ]);
   });
 });

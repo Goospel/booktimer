@@ -9,6 +9,10 @@
     <meta name="apple-mobile-web-app-title" content="BookTimer">
     <link rel="apple-touch-icon" th:href="@{/icons/apple-touch-icon.png}">
     <script th:attr="nonce=${cspNonce}">if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
+    <!-- 로그인 여부 — 모바일 미니앱 칩(pwa-install.js)이 목적지를 고를 때만 쓴다. 전역 모델 속성도
+         추가 DB 조회도 없이 이 한 줄로 끝난다. 「anon」일 때만 비로그인으로 읽히므로, 이 태그가
+         없거나 값이 낯설면 안전한 쪽(설정 경유)으로 기운다 — isLoggedInFromMeta 참고. -->
+    <meta name="bt-auth" th:content="${#authorization.expression('isAuthenticated()') ? 'user' : 'anon'}">
     <script type="module" th:attr="nonce=${cspNonce}" th:src="@{/pwa-install.js}"></script>
 </th:block>
 </head>

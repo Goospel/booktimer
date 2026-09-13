@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { getCsrfToken } from '../shared/follow'
-import { summarize, initialOf, coverColor, byline, statusBadge, booksNavLinks } from './pure'
+import { summarize, initialOf, coverColor, byline, statusBadge, booksNavLinks, marginHandleLabel } from './pure'
 import NavLinks from '../shared/NavLinks.vue'
+import MarginPanel from '../shared/story/MarginPanel.vue'
 
 const STATUSES = [
     { name: 'WANT_TO_READ', label: '읽고 싶음' },
@@ -31,6 +32,12 @@ interface SearchRow {
 
 const appEl = document.getElementById('books-app')
 const myLoginId = ref<string>(appEl?.dataset.myLoginId ?? '')
+
+// 여백 패널 — 책방(ProfileApp)과 같은 공용 패널. 책장은 언제나 본인이라 loginId = myLoginId 다.
+// 핸들이 없으면(온보딩 전 — BookController 는 loginId null 을 그대로 싣는다) 서버가 대상을 못 찾으니
+// 손잡이를 아예 그리지 않는다(booksNavLinks 의 /u/ 가드와 같은 이유).
+const marginBook = ref<MyBookSummary | null>(null)
+const canOpenMargin = computed(() => myLoginId.value.trim() !== '')
 
 const loading = ref(true)
 const books = ref<MyBookSummary[]>([])
@@ -106,24 +113,41 @@ function buyOptions(book: MyBookSummary): { label: string; href: string }[] {
     return o
 }
 
+async function fetchShelf() {
+    const res = await fetch('/api/books', { credentials: 'same-origin' })
+    if (!res.ok) throw new Error('load failed')
+    const data = await res.json()
+    books.value = data.books ?? []
+    popularity.value = data.popularity ?? {}
+    searchEnabled.value = data.searchEnabled ?? false
+    coupangEnabled.value = data.coupangEnabled ?? false
+    yes24Enabled.value = data.yes24Enabled ?? false
+    kyoboEnabled.value = data.kyoboEnabled ?? false
+    nickname.value = data.nickname ?? ''
+}
+
+/** 첫 로드·다시 시도 — 스켈레톤·에러 분기를 켠다. */
 async function load() {
     loading.value = true
     loadError.value = false
     try {
-        const res = await fetch('/api/books', { credentials: 'same-origin' })
-        if (!res.ok) throw new Error('load failed')
-        const data = await res.json()
-        books.value = data.books ?? []
-        popularity.value = data.popularity ?? {}
-        searchEnabled.value = data.searchEnabled ?? false
-        coupangEnabled.value = data.coupangEnabled ?? false
-        yes24Enabled.value = data.yes24Enabled ?? false
-        kyoboEnabled.value = data.kyoboEnabled ?? false
-        nickname.value = data.nickname ?? ''
+        await fetchShelf()
     } catch {
         loadError.value = true
     } finally {
         loading.value = false
+    }
+}
+
+/**
+ * 여백에서 글을 쓰거나 지운 뒤 — 「여백 N」과 공개 전환 고지의 개수만 조용히 갱신한다.
+ * loading 을 건드리면 스켈레톤 분기로 떨어져 **열려 있는 패널이 언마운트된다**(패널이 v-else 안에 있다).
+ */
+async function refreshShelf() {
+    try {
+        await fetchShelf()
+    } catch {
+        /* 라벨 갱신 실패는 치명이 아니다 — 다음 진입에서 잡힌다 */
     }
 }
 onMounted(load)
@@ -376,6 +400,10 @@ async function removeBook(book: MyBookSummary) {
             </template>
           </div>
           <div class="book-actions">
+            <!-- 「여백」 — 책방 칩과 같은 부품(.shop-margin-btn). 본인 책장이라 글 0건·비공개 책에도 선다(작성 진입). -->
+            <button v-if="canOpenMargin" type="button" class="shop-margin-btn"
+                    :aria-label="book.title + ' ' + marginHandleLabel(book.storyCount) + ' 보기'"
+                    @click="marginBook = book">{{ marginHandleLabel(book.storyCount) }}</button>
             <select :value="book.status"
                     @change="changeStatus(book, ($event.target as HTMLSelectElement).value)">
               <option v-for="s in STATUSES" :key="s.name" :value="s.name">{{ s.label }}</option>
@@ -400,6 +428,10 @@ async function removeBook(book: MyBookSummary) {
       </ul>
     </section>
     </div><!-- /shelf-layout -->
+
+    <!-- 여백 패널 — 책방과 같은 공용 패널. 작성·삭제 뒤엔 라벨·고지 개수만 조용히 재조회한다. -->
+    <MarginPanel v-if="marginBook" :login-id="myLoginId" :book-id="marginBook.id"
+                 @close="marginBook = null" @changed="refreshShelf" />
 
     <!-- 제휴 고지는 상단 인사말 우상단 ⓘ 팝오버로 이전(본문 하단 상시 노출 폐지). -->
 

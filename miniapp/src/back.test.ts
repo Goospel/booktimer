@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createBackStack } from './back';
+import { createBackStack, handleNativeBack, nativeBack } from './back';
 
 /**
  * 뒤로가기 스택 — 안드로이드 하드웨어/제스처 back이 미니앱을 종료시키지 않고 **열린 서브뷰 하나**를
@@ -149,5 +149,70 @@ describe('뒤로가기 스택', () => {
 
     expect(() => back.popped()).not.toThrow();
     expect(nav.back).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 토스 「<」 판정 — 실기기에서 **토스 상단 바의 「<」는 어느 화면에서든 미니앱을 통째로 닫는다**
+ * (2026-09-02 아이폰 실측 — 히스토리 뒤로가기가 아니다). 그래서 `graniteEvent`의 `backEvent`를
+ * 구독해(구독하면 기본 동작이 차단된다) **앱이 직접 정한다**: 서브뷰가 열려 있으면 그것만 닫고,
+ * 첫 화면이면 미니앱을 닫는다(체크리스트 「최초 화면에서 뒤로가기를 누르면 미니앱이 종료돼요」).
+ *
+ * <p>닫는 수단이 `history.back()`인 것이 핵심이다 — 그러면 popstate → 위 `popped()`로 흘러
+ * **기존 파이프라인과 같은 방식**으로 최상단 하나만 닫히고 히스토리 깊이도 맞는다(따로 세지 않는다).
+ */
+describe('네이티브 뒤로가기 판정 (handleNativeBack)', () => {
+  const nav = (depth: number) => ({ depth: () => depth, back: vi.fn(), exit: vi.fn() });
+
+  it('서브뷰가 열려 있으면 그것만 닫는다 — 앱을 종료하지 않는다', () => {
+    const n = nav(1);
+
+    expect(handleNativeBack(n)).toBe('subview');
+    expect(n.back).toHaveBeenCalledTimes(1);
+    expect(n.exit).not.toHaveBeenCalled();
+  });
+
+  it('첫 화면이면 미니앱을 닫는다 — 여기서 history.back()을 부르면 갈 곳이 없다', () => {
+    const n = nav(0);
+
+    expect(handleNativeBack(n)).toBe('exit');
+    expect(n.exit).toHaveBeenCalledTimes(1);
+    expect(n.back).not.toHaveBeenCalled();
+  });
+
+  it('중첩이어도 한 번에 하나만 닫는다 — 두 개가 열려 있어도 back은 1회다', () => {
+    const n = nav(2);
+
+    handleNativeBack(n);
+
+    expect(n.back).toHaveBeenCalledTimes(1);
+    expect(n.exit).not.toHaveBeenCalled();
+  });
+
+  it('depth가 열고 닫음을 따라간다 — 판정의 유일한 입력이라 어긋나면 앱이 엉뚱하게 죽는다', async () => {
+    const { back } = stack();
+
+    expect(back.depth()).toBe(0);
+
+    const token = back.open(() => {});
+    expect(back.depth()).toBe(1);
+
+    back.close(token);
+    await flush();
+    expect(back.depth()).toBe(0);
+  });
+});
+
+/**
+ * 실물 배선 — 앱 밖(테스트·목 모드·일반 브라우저)에서 불려도 <b>던지지 않아야</b> 한다.
+ *
+ * <p>SDK의 `Screen.close`는 `callAsyncMethod('closeView')`이고, 그것이 Promise를 만들기 <b>전에</b>
+ * `assertWebViewEnvironment()`를 동기로 부른다 — 브리지가 없으면 <b>동기 throw</b>라 `.catch()`가 못 받는다.
+ * 이 호출은 `backEvent` 콜백 한가운데라, 새면 뒤로가기 핸들러가 통째로 죽는다.
+ */
+describe('네이티브 뒤로가기 실물 배선 (nativeBack)', () => {
+  it('앱 밖에서 불려도 던지지 않는다 — Screen.close는 동기로도 던진다', () => {
+    // 이 하니스엔 열린 서브뷰가 없다(depth 0) — 그래서 종료 갈래를 탄다.
+    expect(() => nativeBack()).not.toThrow();
   });
 });

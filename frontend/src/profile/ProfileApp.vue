@@ -24,7 +24,6 @@ interface BookSummary {
 }
 interface ProfileData {
     loginId: string; nickname: string;
-    profileCharacterCode: string | null;
     followerCount: number; followingCount: number;
     following: boolean; self: boolean;
     personality: string | null; personalityTags: TagChip[];
@@ -226,7 +225,6 @@ onUnmounted(() => {
             <template v-if="!isWide">
                 <ShopHeader
                     :nickname="profile.nickname" :login-id="profile.loginId"
-                    :profile-character-code="profile.profileCharacterCode"
                     :personality-tags="profile.personalityTags"
                     :follower-count="profile.followerCount" :following-count="profile.followingCount"
                     :self="profile.self" :following="profile.following"
@@ -256,7 +254,6 @@ onUnmounted(() => {
                 <div class="shop-side">
                     <ShopHeader
                         :nickname="profile.nickname" :login-id="profile.loginId"
-                        :profile-character-code="profile.profileCharacterCode"
                         :personality-tags="profile.personalityTags"
                         :follower-count="profile.followerCount" :following-count="profile.followingCount"
                         :self="profile.self" :following="profile.following"

@@ -99,19 +99,24 @@ describe('서재 탭', () => {
     book(3, '살책', 'WANT_TO_READ'),
   ];
 
-  it('탭 라벨에 그 상태의 권수를 함께 적는다', () => {
+  /**
+   * 탭은 <b>이름만</b> 말한다 — 권수는 「펼쳐보기」 시트 제목(`읽는 중 N권`)이 계속 진다.
+   * 경계(`>…</button>`)로 재는 이유: 라벨과 닫는 태그 사이에 아무것도 없어야 숫자가 없는 것이다.
+   */
+  it('탭은 이름만 적는다 — 권수 숫자는 시트 제목의 몫이다', () => {
     const markup = shelf(books);
 
-    expect(textOf(markup)).toContain('읽는 중 1');
-    expect(textOf(markup)).toContain('다 읽음 1');
-    expect(textOf(markup)).toContain('읽고 싶어요 1');
+    expect(markup).toContain('>읽는 중</button>');
+    expect(markup).toContain('>다 읽음</button>');
+    expect(markup).toContain('>읽고 싶어요</button>');
   });
 
   it('빈 탭도 라벨은 남는다 — 탭이 나타났다 사라지면 자리가 흔들린다', () => {
     const markup = shelf([book(1, '읽는책', 'READING')]);
 
-    expect(textOf(markup)).toContain('다 읽음 0');
-    expect(textOf(markup)).toContain('읽고 싶어요 0');
+    expect(markup).toContain('>다 읽음</button>');
+    expect(markup).toContain('>읽고 싶어요</button>');
+    expect(textOf(markup)).not.toContain('다 읽음 0'); // 0을 박제하지도 않는다
   });
 
   it('고른 탭의 책만 캐러셀에 세운다', () => {
@@ -133,7 +138,7 @@ describe('서재 탭', () => {
     const markup = shelf([]);
 
     expect(markup).toContain('책 추가');
-    expect(textOf(markup)).toContain('읽는 중 0'); // 탭도 그대로 — 빈 상태라고 자리가 사라지지 않는다
+    expect(markup).toContain('>읽는 중</button>'); // 탭도 그대로 — 빈 상태라고 자리가 사라지지 않는다
   });
 
   /**
@@ -142,6 +147,31 @@ describe('서재 탭', () => {
    */
   it('책 0권 + 검색 꺼짐이면 옛 안내 문장이 남는다 — 지우면 아무것도 없는 화면이다', () => {
     expect(shelf([], { searchEnabled: false })).toContain('아직 책이 없어요');
+  });
+
+  /**
+   * ⚠️ 가운데 정렬은 <b>바깥 div</b>가 해야 한다 — TDS `Text`는 넘긴 style에서 `textAlign`을 걸러내
+   * 인라인 스타일에 남기지 않는다(목 모드 실측 2026-08-29: computed `text-align: start`로 왼쪽에
+   * 붙어 있었다). 통짜 `toContain`은 격자 셀(`data-grid-title`)의 `text-align:center`에 걸려 늘
+   * 통과하므로, 문구를 <b>가장 가까이 감싼 div</b>만 본다(글자 수 창은 TDS가 끼워 넣는 `<style>`
+   * 블록에 먹혀 눈금이 안 맞는다).
+   */
+  const wrapperOf = (markup: string, text: string) => {
+    const at = markup.indexOf(text);
+    expect(at).toBeGreaterThan(-1); // 문구 자체가 사라지면 이 단언이 공허해진다
+    return markup.slice(markup.lastIndexOf('<div', at), at);
+  };
+
+  it('빈 탭 안내는 가운데 정렬이다 — 「책 추가」 칸이 선 날', () => {
+    const markup = shelf([book(1, '읽는책', 'READING')], { tab: 'FINISHED' });
+
+    expect(wrapperOf(markup, '다 읽은 책이 없어요')).toContain('text-align:center');
+  });
+
+  it('빈 탭 안내는 가운데 정렬이다 — 검색이 꺼져 「책 추가」 칸이 없는 날', () => {
+    const markup = shelf([book(1, '읽는책', 'READING')], { tab: 'FINISHED', searchEnabled: false });
+
+    expect(wrapperOf(markup, '다 읽은 책이 없어요')).toContain('text-align:center');
   });
 });
 
@@ -340,6 +370,41 @@ describe('인라인 여백 박스 표시 (MarginBoxView)', () => {
 
     expect(markup).toContain('data-margin-box');
     expect(markup).toContain('아직 남긴 글이 없어요');
+  });
+
+  /**
+   * 빈 박스는 <b>말만 남긴다</b> — 「0」도 「전체 보기 ›」도 안 세운다. 셀 것이 없는데 0을 박제하면 빈
+   * 상태가 숫자로 반복되고, 「전체 보기」는 <b>빈 화면으로 가는 문</b>이라 눌러도 같은 사실만 다시 본다.
+   * 아랫선도 접는다 — 가를 내용이 없으면 선은 머리와 안내 사이를 갈라 두 덩어리로 만들 뿐이다.
+   */
+  it('빈 박스는 카운트도 「전체 보기」도 안 세운다 — 문 너머가 같은 빈 화면이다', () => {
+    const markup = box(margin([]));
+
+    expect(markup).not.toContain('전체 보기');
+    expect(textOf(markup)).not.toContain('여백 0');
+  });
+
+  it('빈 박스의 안내는 다음 한 걸음까지 말한다 — 위의 「여백에 글쓰기」가 그 걸음이다', () => {
+    expect(box(margin([]))).toContain('아직 남긴 글이 없어요. 위의 「여백에 글쓰기」로 첫 장을 남겨보세요.');
+  });
+
+  it('빈 박스는 헤더 아랫선도 접는다', () => {
+    expect(box(margin([]))).not.toContain('border-bottom:1px solid var(--adaptiveGrey200');
+    expect(box(three)).toContain('border-bottom:1px solid var(--adaptiveGrey200'); // 글이 있으면 그대로
+  });
+
+  /** 회귀 가드 — 위 셋이 「전체 보기를 통째로 걷어라」로 미끄러지지 않게 반대편을 함께 못 박는다. */
+  it('글이 있으면 카운트와 「전체 보기」가 그대로다', () => {
+    const markup = box(three);
+
+    expect(markup).toContain('전체 보기');
+    expect(textOf(markup)).toContain('여백 3');
+  });
+
+  /** 로딩·실패에는 남긴다 — 전체 화면에 자체 재시도가 있어 그 문이 유일한 출구다(박스엔 재시도가 없다). */
+  it('로딩·실패에는 「전체 보기」가 그대로 선다', () => {
+    expect(box('loading')).toContain('전체 보기');
+    expect(box('error')).toContain('전체 보기');
   });
 
   it('로딩도 박스 안에서 말한다', () => {
@@ -610,7 +675,7 @@ describe('책 검색 엔터 제출', () => {
   it('제목 입력을 form으로 감싼다', () => {
     const markup = renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} onOpenBookMargin={() => {}} />
+        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onOpenBookMargin={() => {}} />
       </TDSMobileProvider>,
     );
 
@@ -632,7 +697,7 @@ describe('책 검색 손잡이', () => {
   const search = () =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} onOpenBookMargin={() => {}} />
+        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onOpenBookMargin={() => {}} />
       </TDSMobileProvider>,
     );
 
@@ -684,7 +749,7 @@ describe('책 검색칸 — 안 보이는 라벨 자리를 걷었다', () => {
   const search = () =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} onOpenBookMargin={() => {}} />
+        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onOpenBookMargin={() => {}} />
       </TDSMobileProvider>,
     );
 
@@ -805,7 +870,7 @@ describe('책 검색 입력칸 힌트', () => {
   const search = () =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} onOpenBookMargin={() => {}} />
+        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onOpenBookMargin={() => {}} />
       </TDSMobileProvider>,
     );
 
@@ -819,41 +884,25 @@ describe('책 검색 입력칸 힌트', () => {
 });
 
 /**
- * 책 추가의 나가는 길 — 하단 버튼을 걷고 **상단 「돌아가기」 하나**로 통일했다(2026-08-16).
- * 앱 전체가 같은 자리·같은 모양으로 나가야 한다. 개수를 세는 것이 핵심이다 — 위아래 둘이 되면
- * 「통일」이 아니라 중복이고, 존재 단언만으로는 그걸 못 잡는다.
+ * 책 추가의 나가는 길 — **토스 네이티브 내비게이션 바의 뒤로가기 하나**(2026-09-02, T-220).
+ * 08-16에 하단 버튼을 걷고 상단 알약으로 통일했는데, 그 알약이 네이티브 뒤로가기와 <b>동시 노출</b>이라
+ * 심사 필수 항목에 걸렸다. 나가는 길은 네이티브 하나이고 `useBackClose(mode === 'search', …)`가 받는다.
+ *
+ * <p>「요청 중 잠금」은 함께 폐기했다 — 네이티브 버튼에는 `disabled`를 걸 수 없다(수용하는 회귀).
  */
 describe('책 추가 — 나가는 길', () => {
   const search = () =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} onOpenBookMargin={() => {}} />
+        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onOpenBookMargin={() => {}} />
       </TDSMobileProvider>,
     );
 
-  it('「돌아가기」가 정확히 하나다 — 상단 손잡이와 하단 버튼이 겹치지 않는다', () => {
-    expect(search().match(/돌아가기/g)).toHaveLength(1);
-  });
-
-  it('제목보다 위에 온다 — 목록이 길어도 나갈 길을 찾아 내려가지 않는다', () => {
+  it('자체 「돌아가기」가 0건이다 — 제목은 그대로 선다', () => {
     const markup = search();
 
-    expect(markup).toContain('돌아가기');
-    expect(markup.indexOf('돌아가기')).toBeLessThan(markup.indexOf('책 추가'));
-  });
-
-  it('추가 요청 중에는 잠근다 — 응답 전에 나가면 결과를 못 본다', () => {
-    const busy = renderToStaticMarkup(
-      <TDSMobileProvider userAgent={userAgent}>
-        <BookSearch busy error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} onOpenBookMargin={() => {}} />
-      </TDSMobileProvider>,
-    );
-    // 손잡이 앞부분만 잘라 본다. 한가할 때도 함께 봐야 의미가 있다 — 손잡이가 화면 아래에 있으면
-    // 이 구간에 입력·검색 버튼의 disabled가 섞여 들어와 busy 단언만으로는 저절로 참이 된다(T-181).
-    const backAt = (m: string) => m.slice(0, m.indexOf('돌아가기'));
-
-    expect(backAt(busy)).toContain('disabled');
-    expect(backAt(search())).not.toContain('disabled');
+    expect(markup).toContain('책 추가');
+    expect(markup.match(/돌아가기/g)).toBeNull();
   });
 });
 
@@ -933,7 +982,7 @@ describe('책 담을 곳 고르기', () => {
   it('검색 화면 진입 직후에는 시트가 없다 — 화면을 덮는 것은 사용자가 부른 뒤에만(T-183)', () => {
     const markup = renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onBack={() => {}} onOpenBookMargin={() => {}} />
+        <BookSearch busy={false} error={null} onAdd={() => {}} onFail={() => {}} onOpenBookMargin={() => {}} />
       </TDSMobileProvider>,
     );
 
@@ -1239,7 +1288,7 @@ describe('서재 세션 캐시', () => {
     const markup = library();
 
     expect(markup).toContain('데미안');
-    expect(textOf(markup)).toContain('읽는 중 1');
+    expect(markup).toContain('>읽는 중</button>');
   });
 
   it('캐시된 책장은 검색 가능 여부까지 되살린다 — 「책 추가」 칸이 한 박자 늦게 나타나지 않게', () => {
@@ -1329,14 +1378,6 @@ describe('서재 위계 (시안 2c)', () => {
     // 크기·모서리도 함께 잠근다 — 굵기만 재면 13->14, r10->r8이 조용히 지나간다(자가 리뷰 실측).
     expect(on).toContain('font-size:13px');
     expect(on).toContain('border-radius:10px');
-  });
-
-  it('세그먼트 권수는 세리프다 — 탭 이름은 말이고 권수는 값이다', () => {
-    const markup = shelf([read()], { tab: 'READING' });
-    const at = markup.indexOf('읽는 중');
-    const after = markup.slice(at, at + 260);
-
-    expect(after).toContain('Gowun Batang');
   });
 
   it('「N시간 읽음」 칩은 시간만 세리프다 — 「읽음」까지 세리프면 값이 어디까지인지 흐려진다', () => {

@@ -15,7 +15,8 @@
 $ErrorActionPreference = 'SilentlyContinue'
 
 # stdin(JSON: session_id/reason/cwd 등)은 읽되 쓰지 않는다(블로킹 방지). 필터는 matcher가 한다.
-try { $null = [Console]::In.ReadToEnd() } catch { }
+# 다른 훅과 같은 UTF-8 명시 디코딩으로 통일(내용을 안 쓰니 동작 차이는 없다).
+try { $null = (New-Object System.IO.StreamReader([Console]::OpenStandardInput(), (New-Object System.Text.UTF8Encoding($false)))).ReadToEnd() } catch { }
 
 # 정리 스크립트 경로: 기본은 이 훅 옆의 ../scripts/docker-cleanup.sh, 테스트는 env로 주입.
 $cleanup = $env:BOOKTIMER_CLEANUP_SCRIPT

@@ -13,12 +13,14 @@ afterEach(() => { wrapper?.unmount(); wrapper = null; });
 
 const books: BookOption[] = [{ id: 1, title: '데미안' }];
 
-// 달성 = remainingSeconds 0(오늘 목표를 다 채워 남은 시간 0), 측정 안 함
+// 달성 = 오늘 읽은 초가 목표에 닿음(todayReadSeconds ≥ todayGoalSeconds), 측정 안 함.
+// 판정 출처가 부채(remainingSeconds)에서 읽은 초로 옮겨졌다 — 부채는 0에서 바닥을 쳐 초과분을 못 실었다.
 function baseProps(over: Record<string, unknown> = {}) {
     return {
         remainingSeconds: 0,
         carriedDebtSeconds: 0,
         todayGoalSeconds: 3600,
+        todayReadSeconds: 3600,
         carryover: false,
         streak: 3,
         hasActiveSession: false,
@@ -39,7 +41,7 @@ function make(over: Record<string, unknown> = {}) {
 
 describe('TimerCard 달성 상태', () => {
     test('미측정 + 달성 → 격려 메시지와 측정 시작 폼이 함께 보인다', () => {
-        const w = make(); // remainingSeconds=0 → 달성, hasActiveSession=false
+        const w = make(); // todayReadSeconds=goal → 달성, hasActiveSession=false
         // 격려 메시지 유지
         expect(w.text()).toContain('오늘도 약속을 지켰어요');
         // 측정 시작 버튼이 사라지지 않아야 함(회귀 가드)
@@ -60,7 +62,7 @@ describe('TimerCard 달성 상태', () => {
 
 describe('TimerCard 회귀 가드', () => {
     test('미측정 + 미달성(idle) → 측정 시작 폼만, 격려 없음', () => {
-        const w = make({ remainingSeconds: 1800 }); // 절반 남음 → 미달성
+        const w = make({ remainingSeconds: 1800, todayReadSeconds: 1800 }); // 절반만 읽음 → 미달성
         expect(w.findAll('button').some(b => b.text().includes('측정 시작'))).toBe(true);
         expect(w.text()).not.toContain('오늘도 약속을 지켰어요');
     });
@@ -76,7 +78,7 @@ describe('TimerCard 회귀 가드', () => {
 // 중복 클릭(409)을 막는다. 패널 크로스페이드는 순수 시각이라 jsdom 무의미 → 실 브라우저 게이트.
 describe('TimerCard 진행 중 피드백', () => {
     test('starting=true → 시작 버튼 비활성 + "시작하는 중…"', () => {
-        const w = make({ remainingSeconds: 1800, starting: true }); // idle
+        const w = make({ remainingSeconds: 1800, todayReadSeconds: 1800, starting: true }); // idle
         const btn = w.findAll('button').find(b => b.text().includes('시작'));
         expect(btn).toBeTruthy();
         expect(btn!.attributes('disabled')).toBeDefined();
@@ -84,13 +86,13 @@ describe('TimerCard 진행 중 피드백', () => {
     });
 
     test('starting=false(기본) → "측정 시작", 활성', () => {
-        const w = make({ remainingSeconds: 1800 });
+        const w = make({ remainingSeconds: 1800, todayReadSeconds: 1800 });
         const btn = w.findAll('button').find(b => b.text().includes('측정 시작'))!;
         expect(btn.attributes('disabled')).toBeUndefined();
     });
 
     test('달성 패널에서도 starting=true면 시작 버튼 비활성', () => {
-        const w = make({ starting: true }); // remainingSeconds=0 → achieved
+        const w = make({ starting: true }); // todayReadSeconds=goal → achieved
         const btn = w.findAll('button').find(b => b.text().includes('시작'))!;
         expect(btn.attributes('disabled')).toBeDefined();
     });

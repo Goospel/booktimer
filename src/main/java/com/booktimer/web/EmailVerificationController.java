@@ -69,7 +69,7 @@ public class EmailVerificationController {
             emailVerificationService.sendVerification(user);
             redirectAttributes.addFlashAttribute("verifyResendResult", "sent");
         } catch (RuntimeException e) {
-            log.warn("인증 메일 재발송 실패 — email={}", user.getEmail());
+            log.warn("인증 메일 재발송 실패 — userId={}", user.getId());
             redirectAttributes.addFlashAttribute("verifyResendResult", "failed");
         }
         return "redirect:/settings";

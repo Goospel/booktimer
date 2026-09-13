@@ -2,6 +2,7 @@
 <html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
+    <th:block th:replace="~{fragments/theme-head :: boot}"></th:block>
     <!-- 방문 통계(GA4, 측정 ID 설정 시에만) -->
     <th:block th:replace="~{analytics :: gtag}"></th:block>
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -53,8 +54,10 @@
 
     <!-- 이메일 미검증 안내 배너 — 미검증이어도 사용은 막지 않고 인증만 권한다(정책 ③).
          null-safe: 검증 실패 재렌더 경로엔 emailVerified가 모델에 없어(null) `!emailVerified`는 SpEL 예외를
-         내므로, null==false(=false)로 안전하게 다룬다. GET 경로엔 값이 실려 정상 판별된다. -->
-    <div th:if="${emailVerified == false}" class="set-banner">
+         내므로, null==false(=false)로 안전하게 다룬다. GET 경로엔 값이 실려 정상 판별된다.
+         syntheticEmail(합성 @noreply 자리표시 주소)이면 미검증이어도 숨긴다 — 보낼 데가 없어 눌러도 반송만 난다.
+         같은 null-safe 원칙: 재렌더 경로엔 모델에 없어(null) `!= true`로 다룬다. -->
+    <div th:if="${emailVerified == false and syntheticEmail != true}" class="set-banner">
         <svg class="set-banner-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
         <div class="set-banner-body">
             <span>이메일 인증이 아직 안 됐어요. 받은 메일의 링크로 인증을 완료해 주세요.</span>
@@ -102,44 +105,6 @@
                 </span>
             </label>
 
-            <div class="set-actions">
-                <button type="submit" class="set-btn-save">저장</button>
-            </div>
-        </form>
-    </section>
-
-    <!-- 프로필 사진(도감 작가 얼굴) 선택 그리드의 <use href="#sprite-{code}">가 참조할 심볼 정의. -->
-    <th:block th:replace="~{fragments/garden-character-sprites :: sprites}"></th:block>
-
-    <!-- 카드: 프로필 사진 — 도감에서 모은(완독한) 작가의 얼굴만 고를 수 있다. 업로드 없이 SVG 스프라이트 재사용. -->
-    <section class="set-card">
-        <h2 class="set-card-title">프로필 사진</h2>
-        <p class="set-card-desc">도감에서 모은 작가의 얼굴을 프로필 사진으로 쓸 수 있어요. 책을 완독해 작가를 모으면 여기에 나타나요.</p>
-        <form th:action="@{/settings/profile-character}" method="post">
-            <div class="profile-char-grid">
-                <!-- 기본(이니셜) — 항상 첫 칸. 선택 해제와 동일(빈 코드). -->
-                <label class="profile-char-opt">
-                    <input type="radio" name="characterCode" value="" th:checked="${profileCharacterCode == null}">
-                    <span class="profile-char-face profile-char-initial"
-                          th:text="${#strings.substring(loginId,0,1)}">t</span>
-                    <span class="profile-char-label">기본</span>
-                </label>
-                <!-- 보유(완독)한 작가들 — sprite 있으면 SVG, 없으면 이모지 폴백(도감과 동일). -->
-                <label class="profile-char-opt" th:each="ch : ${ownedCharacters}">
-                    <input type="radio" name="characterCode" th:value="${ch.code}"
-                           th:checked="${ch.code == profileCharacterCode}">
-                    <span class="profile-char-face">
-                        <svg th:if="${ch.spriteId != null}" class="profile-char-svg" aria-hidden="true">
-                            <use th:attr="href='#sprite-' + ${ch.code}"></use>
-                        </svg>
-                        <span th:unless="${ch.spriteId != null}" th:text="${#strings.substring(ch.name, 0, 1)}">작</span>
-                    </span>
-                    <span class="profile-char-label" th:text="${ch.name}">작가</span>
-                </label>
-            </div>
-            <p th:if="${#lists.isEmpty(ownedCharacters)}" class="set-card-desc" style="margin-top:16px">
-                아직 모은 작가가 없어요. 책을 완독하면 도감에서 작가를 모을 수 있어요.
-            </p>
             <div class="set-actions">
                 <button type="submit" class="set-btn-save">저장</button>
             </div>
@@ -229,7 +194,7 @@
     <!-- 토스 앱 연결 — 미니앱(앱인토스)에서 같은 계정을 쓰기 위한 일회용 코드 발급.
          연결됐으면 상태만 보이고 버튼은 없앤다(toss_user_key는 once-set 불변 — 발급해도 쓸 데가 없다).
          평문 코드는 저장하지 않으므로 발급 직후 플래시로 한 번만 보인다. -->
-    <section class="set-card">
+    <section class="set-card" id="toss-link">
         <h2 class="set-card-title">토스 앱 연결</h2>
         <p class="set-card-desc">토스 앱에서도 이 계정으로 독서 기록을 이어서 볼 수 있어요. 아래 연결 코드를 받아 토스 앱에 입력하세요.</p>
 
@@ -241,6 +206,17 @@
         <form th:unless="${tossLinked}" th:action="@{/settings/toss-link-code}" method="post">
             <button type="submit" class="set-btn-save">연결 코드 발급</button>
         </form>
+
+        <!-- 토스 앱으로 가는 길. 지금까지 코드만 주고 「토스 앱에 입력하세요」로 끝나 정작 갈 방법이 없었다.
+             코드를 막 받은 직후와 이미 연결된 뒤 두 경우에만 띄운다 — 아직 연결도 코드 발급도 안 한
+             사람을 여기서 미니앱으로 보내면 토스 로그인으로 별개 계정이 생겨 기록이 갈린다.
+             모바일 미니앱 칩(pwa-install.js)이 로그인 사용자를 보내는 곳도 이 카드다. -->
+        <!-- ⚠️ 두 피연산자를 모두 명시적 비교로 쓴다 — `or`는 boolean을 요구하는데 여기 오는 값이 그렇지 않다.
+             ① tossLinkCode는 String이고 ② tossLinked는 **null일 수 있다**: POST /settings의 검증 실패 경로는
+             폼을 다시 그릴 뿐 GET이 채우던 모델을 채우지 않아, `${tossLinked or ...}`로 쓰면 그 화면에서만
+             SpelEvaluationException으로 터진다(SettingsControllerTest 2건이 잡았다). `th:if="${tossLinked}"`
+             단독은 null을 false로 조용히 넘기지만 `or`의 피연산자로는 그렇지 않다. -->
+        <a th:if="${tossLinked == true or tossLinkCode != null}" class="set-btn-save" href="intoss://booktimer/">휴대폰에서 토스 앱 열기</a>
     </section>
 
     <!-- 회원 탈퇴 (위험 구역) -->

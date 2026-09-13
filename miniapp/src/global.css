@@ -8,12 +8,17 @@
  * 3) 브랜드 색·폰트: 아래 html:root 블록 주석 참고.
  */
 
-/* 웹폰트 — 웹 app.css와 같은 패밀리(감성 동기화의 절반은 폰트다). */
+/* 웹폰트 — 웹 app.css와 본문·세리프를 같은 패밀리로 맞춘다(감성 동기화의 절반은 폰트다).
+   ⚠️ 손글씨(Gaegu)만은 여기 전용이다 — 웹은 2026-09-03부터 받지 않는다(app.css 상단 주석).
+   미니앱은 표지 이니셜·여백 인용 같은 '장식 opt-in' 자리가 남아 있어 계속 받는다. */
 @import url('https://fonts.googleapis.com/css2?family=Gaegu:wght@300;400;700&family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap');
 
 html,
 body {
   margin: 0;
+  /* 빠른 연속 탭을 웹뷰가 더블탭 확대로 오인해 화면이 잘린다. 스크롤·탭은 그대로 둔 채 그 확대만
+     끊는다. 뷰포트 메타를 무시하는 웹뷰까지 커버하는 두 번째 방어선이기도 하다. */
+  touch-action: manipulation;
 }
 
 /* 종이 결(body::before)의 위치 기준. `min-height`가 없으면 내용이 짧은 화면에서 결이
@@ -158,9 +163,28 @@ html:root {
   --adaptiveBlue800: #40573E;
   --adaptiveBlue900: #324430;
   --adaptiveDisabledBlue500: #B6C9AE;
+  /* 강조 반투명 두 겹 — 탭바 가운데 원의 링과 「고른 칸」 알약, 그리고 홈 모드 토글이 함께 쓴다.
+     리터럴로 흩어져 있던 값을 토큰으로 모은 이유는 공부 모드다: 여기가 단일 출처라야
+     `body.study-mode` 한 블록으로 세 자리가 같이 파랑이 된다(안 그러면 두 곳만 바뀐다). */
+  --accentRing: rgba(110, 138, 106, .25);
+  --accentPill: rgba(110, 138, 106, .18);
+  /* 잔디 농도 0~4 — 웹 app.css --grass-0..4. 공부 모드가 1~4를 파랑 사다리로 덮는다 */
+  --grass0: #EAE4D7;
+  --grass1: #C3D9B0;
+  --grass2: #94BE7F;
+  --grass3: #5E9250;
+  --grass4: #35662F;
   /* 표면 → 종이톤 (웹 --card-bg/--border/--muted/--text) */
   --adaptiveBackground: #FCFAF5; /* 탭바·시트 표면 = 카드지 */
   --adaptiveGrey100: #FCFAF5; /* 섹션·행 fill — 크림 캔버스 위 카드지 */
+  /*
+   * 히어로 카드 <b>한 장만</b>의 배경 — grey100(전 화면 공용)에서 이 자리만 떼어낸 토큰이다.
+   *
+   * 공부 모드로 토글해도 「색이 안 바뀐다」던 실기기 피드백의 처방: 1차의 유색 요소가 12px 머리말뿐이라
+   * 화면에 파랑이 사실상 없었다. 화면 최대 카드가 <b>면으로</b> 말하면 진행도·목표 유무와 무관하게 보인다.
+   * 낮 기본값은 지금까지의 카드지 그대로 — 독서 렌더는 픽셀 하나 안 바뀐다.
+   */
+  --heroCardBg: #FCFAF5;
   --adaptiveGrey200: #E4DDD0; /* 표지 placeholder·연보더 */
   /*
    * 입력칸 힌트 — TDS `TextField`가 `--text-field-box-placeholder-color: var(--adaptiveGrey500)`로 쓴다.
@@ -582,6 +606,72 @@ body.reading-lamp .lamp-page {
 }
 
 /*
+ * ══ 공부 모드 — 세이지 사다리를 같은 채도·명도의 흐린 파랑으로 (시안 accent #5F7E96 · deep #47657C) ══
+ *
+ * 독서등과 <b>같은 수법</b>이다: 스위치는 `App`이 `document.body`에 붙이는 `.study-mode` 한 장
+ * (`STUDY_CLASS`)이고 색은 전부 여기다. 화면 대부분이 이미 `var(--adaptive*)`를 소비하므로
+ * 토큰만 갈아 끼우면 컴포넌트를 한 줄도 안 건드린다.
+ *
+ * ⚠️ 독서등과 달리 <b>`body`에 얹는다</b> — 모드는 「측정 중인 홈」이라는 상태가 아니라 앱 전체의
+ * 상태라, 탭바 가운데 원까지 같은 잉크여야 한다. 독서등이 `main`에 얹는 이유(끄는 버튼이 어둠에
+ * 잠기면 안 된다)는 여기 해당하지 않는다 — 색만 갈릴 뿐 명도는 그대로다.
+ *
+ * ⚠️ `.reading-lamp`와 <b>동시에 붙을 수 없다</b>: `lampOn`이 독서 모드에서만 참이고
+ * `effectiveMode`가 독서 세션 활성 시 reading을 강제하므로, 밤 세이지와 파랑이 만나는 조합이
+ * 구조적으로 없다(명시도 매트릭스가 통째로 사라진다).
+ *
+ * 사다리 중간값은 세이지와 같은 간격의 보간이다 — 승인값은 500(accent)·700(deep) 둘이다.
+ */
+body.study-mode {
+  --adaptiveBlue50: #E6ECF0;
+  --adaptiveBlue100: #D6E0E7;
+  --adaptiveBlue200: #AFC4D2;
+  --adaptiveBlue300: #A2BACA;
+  --adaptiveBlue400: #83A0B4;
+  --adaptiveBlue500: #5F7E96; /* 시안 accent */
+  --adaptiveBlue600: #536F85;
+  --adaptiveBlue700: #47657C; /* 시안 deep */
+  --adaptiveBlue800: #3A5266;
+  --adaptiveBlue900: #2E4050;
+  --adaptiveDisabledBlue500: #AFC4D2;
+  --brandButtonInk: #47657C;
+  --accentRing: rgba(95, 126, 150, .25);
+  --accentPill: rgba(95, 126, 150, .18);
+  /* 히어로 카드 틴트 — 명도는 종이 그대로 두고 색상만 한랭하게 민 「푸른 종이」다(연필 테두리·질감 불변).
+     전환 트랜지션은 기존 `.lamp-page`의 background-color 트랜지션에 그대로 편승한다(추가 코드 0). */
+  --heroCardBg: #EFF3F6;
+  /* 잔디 — 세이지 4단과 같은 명도의 파랑 사다리 짝수 칸(200·400·600·800). 0단(빈 칸)은 종이색 그대로 */
+  --grass1: #AFC4D2;
+  --grass2: #83A0B4;
+  --grass3: #536F85;
+  --grass4: #3A5266;
+}
+
+/*
+ * TDS 버튼 규칙 속 <b>리터럴</b>만 따로 덮는다 — 그 규칙들은 값이 변수가 아니라 리터럴이라
+ * 위 토큰 스왑이 닿지 않는다(위 재색칠 절의 인라인 hex 선택자와 같은 사정).
+ * 선택자를 두 벌 쓰는 이유도 거기와 같다(콜론 뒤 공백 직렬화 차이).
+ */
+body.study-mode .tds-mobile-button[style*='--button-background-color:#3182f6'],
+body.study-mode .tds-mobile-button[style*='--button-background-color: #3182f6'] {
+  background-color: rgba(95, 126, 150, 0.16) !important; /* 시안 연한 채움 */
+  --button-loader-color: #5F7E96 !important;
+}
+
+/* 채움 주 버튼(`FilledButton`)도 primary라 바로 위 규칙이 연한 채움으로 덮는다 — 같은 명시도로 <b>뒤에</b> 둬
+   진한 채움(종이색 글자가 읽히는 바탕)을 되찾는다. 값은 토큰이라 공부 모드의 진한 파랑이 된다(2026-09-13). */
+body.study-mode .tds-mobile-button[style*='--btn-filled'] {
+  background-color: var(--adaptiveBlue700, #4F6B4C) !important;
+}
+
+body.study-mode .tds-mobile-button[style*='--button-background-color:rgba(100, 168, 255, 0.15)'],
+body.study-mode .tds-mobile-button[style*='--button-background-color: rgba(100, 168, 255, 0.15)'] {
+  --button-dimmer-pressed-background-color: #5F7E96 !important;
+  --button-dimmer-loading-background-color: rgba(95, 126, 150, 0.26) !important;
+  --button-loader-color: #5F7E96 !important;
+}
+
+/*
  * 넘어가는 순간만 부드럽게 — 그 뒤론 아무것도 안 움직인다.
  *
  * ⚠️ **셀렉터에 `.reading-lamp`를 넣지 않는다.** 넣으면 켜질 때만 부드럽고 꺼질 때는 뚝 밝아진다 —
@@ -599,6 +689,55 @@ body .lamp-page {
   body main,
   body .lamp-page {
     transition: none;
+  }
+}
+
+/*
+ * 바텀시트가 올라오는 순간 — `ui.tsx`의 `Sheet` 하나가 태깅·서재 관리·좋아요 명단·여백 쓰기를 모두
+ * 그리므로, 움직임도 여기 한 벌이면 네 자리가 같이 산다.
+ *
+ * 인라인 style이 아니라 클래스인 이유는 아래 `prefers-reduced-motion`이다 — 인라인 선언은 미디어
+ * 쿼리가 이길 수 없어, 움직임을 줄여 달라는 설정을 무시하게 된다(이 저장소는 계측을 위해 인라인을
+ * 선호하지만 그 선호가 접근성을 이기지는 않는다).
+ *
+ * ⚠️ **마운트 때 한 번만 돌고, 움직이는 속성은 `transform`·`opacity`뿐이다.** 그림자·배경·크기를
+ * 흔들면 시트 안의 표지·글자가 프레임마다 다시 래스터화되고, 그건 데스크톱 목 모드가 여유가 커서
+ * 원리상 못 잡는 실기기 회귀다 — 발광 `box-shadow` 무한 반복이 실기기를 무너뜨린 그 자리(T-176).
+ */
+@keyframes sheet-dim-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sheet-panel-in {
+  from {
+    /* 102% — 100%면 패널의 위쪽 그림자가 화면 바닥에 한 줄 걸쳐 시작 프레임에 얇게 비친다. */
+    transform: translateY(102%);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
+.sheet-dim {
+  animation: sheet-dim-in 0.25s ease;
+}
+
+.sheet-panel {
+  /* 딤보다 살짝 길고 끝에서 감속한다 — 종이 한 장이 밀려 올라와 멎는 감각. */
+  animation: sheet-panel-in 0.28s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-dim,
+  .sheet-panel {
+    animation: none;
   }
 }
 

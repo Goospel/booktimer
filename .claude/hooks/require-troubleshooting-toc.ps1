@@ -12,7 +12,9 @@
 $ErrorActionPreference = 'Stop'
 
 try {
-    $raw  = [Console]::In.ReadToEnd()
+    # stdin 은 UTF-8 로 명시 디코딩 — Console.In 은 CP949 로 읽어 한글 선행바이트가 뒤 따옴표를
+    # 삼키고, JSON 파싱 실패 → fail-open 으로 게이트가 조용히 빠진다.
+    $raw  = (New-Object System.IO.StreamReader([Console]::OpenStandardInput(), (New-Object System.Text.UTF8Encoding($false)))).ReadToEnd()
     $data = $raw | ConvertFrom-Json
     $cmd  = [string]$data.tool_input.command
 } catch { exit 0 }
@@ -24,6 +26,10 @@ if ($cmd -notmatch '\bgit\b' -or $cmd -notmatch '\bcommit\b') { exit 0 }
 
 $cwd = [string]$data.cwd
 if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
+# 커밋이 실제로 도는 워크트리를 본다(T-242). 확장식 경로면 세션 cwd 로 폴백 — 목차는 파생물이라 fail-open.
+. (Join-Path $PSScriptRoot 'lib\resolve-target-cwd.ps1')
+$target = Resolve-HookTargetCwd $cmd $cwd 'commit'
+if ($target) { $cwd = $target }
 
 $rel = 'claude-docs/troubleshooting.md'
 

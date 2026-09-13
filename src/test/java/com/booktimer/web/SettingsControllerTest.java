@@ -4,6 +4,7 @@ import com.booktimer.timer.ReadingTimer;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.AuthProvider;
 import com.booktimer.user.Role;
+import com.booktimer.user.TossLinkCode;
 import com.booktimer.user.TossLinkCodeRepository;
 import com.booktimer.user.TossLinkCodeService;
 import com.booktimer.user.User;
@@ -175,6 +176,20 @@ class SettingsControllerTest {
         mockMvc.perform(get("/settings").with(user("verifiedok@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(model().attribute("emailVerified", true))
+                .andExpect(content().string(not(containsString("/verify-email/resend"))));
+    }
+
+    @Test
+    @DisplayName("GET /settings: 미검증이어도 합성 주소(@noreply) 계정엔 재발송 배너를 숨긴다 — 보낼 데가 없다")
+    void getSettings_syntheticEmail_hidesVerifyBanner() throws Exception {
+        String synthetic = "toss-uk9" + User.SYNTHETIC_EMAIL_DOMAIN;
+        register(synthetic); // 미검증 + 합성 주소
+
+        mockMvc.perform(get("/settings").with(user(synthetic)))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("emailVerified", false)) // 미검증은 그대로다
+                .andExpect(model().attribute("syntheticEmail", true))
+                // 대조군은 위 getSettings_unverified_showsVerifyBanner — 같은 리터럴로 노출을 단언한다
                 .andExpect(content().string(not(containsString("/verify-email/resend"))));
     }
 
@@ -407,61 +422,17 @@ class SettingsControllerTest {
                 .andExpect(content().string(not(containsString("알람 기능은 아직 개발 중"))));
     }
 
-    // --- 프로필 사진(도감 작가 얼굴) 선택 ---
+    // --- 프로필 사진(도감 작가 얼굴) 폐기 확인 ---
 
     @Test
-    @DisplayName("GET /settings: 보유 작가 목록(ownedCharacters)을 모델에 싣는다(미보유면 빈 목록)")
-    void getSettings_includesOwnedCharacters() throws Exception {
-        register("profchar-get@booktimer.com"); // 완독책 없음 → 보유 작가 0(빈 목록)
+    @DisplayName("GET /settings: 프로필 사진 모델 속성(ownedCharacters·profileCharacterCode)이 사라졌다")
+    void getSettings_hasNoProfileCharacterModel() throws Exception {
+        register("profchar-get@booktimer.com");
 
         mockMvc.perform(get("/settings").with(user("profchar-get@booktimer.com")))
                 .andExpect(status().isOk())
-                .andExpect(model().attributeExists("ownedCharacters"));
-    }
-
-    @Test
-    @DisplayName("GET /settings: 현재 선택한 프로필 작가 코드(profileCharacterCode)를 모델에 싣는다")
-    void getSettings_includesSelectedProfileCharacter() throws Exception {
-        User u = register("profchar-sel@booktimer.com");
-        u.selectProfileCharacter("han_gang"); // 엔티티 직접(보유검증 우회) — 모델 전달만 검증
-        userRepository.save(u);
-
-        mockMvc.perform(get("/settings").with(user("profchar-sel@booktimer.com")))
-                .andExpect(status().isOk())
-                .andExpect(model().attribute("profileCharacterCode", "han_gang"));
-    }
-
-    @Test
-    @DisplayName("POST /settings/profile-character: 미보유 작가는 거부하고 error 플래시로 되돌린다(IDOR 방어)")
-    void postProfileCharacter_unowned_flashErrorAndNotSaved() throws Exception {
-        register("profchar-unowned@booktimer.com"); // 완독책 없음 → 어떤 작가도 미보유
-
-        mockMvc.perform(post("/settings/profile-character")
-                        .with(user("profchar-unowned@booktimer.com")).with(csrf())
-                        .param("characterCode", "han_gang"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/settings"))
-                .andExpect(flash().attributeExists("error"));
-
-        User reloaded = userRepository.findByEmail("profchar-unowned@booktimer.com").orElseThrow();
-        assertThat(reloaded.getProfileCharacterCode()).isNull(); // 저장 안 됨
-    }
-
-    @Test
-    @DisplayName("POST /settings/profile-character: 빈 코드면 선택 해제(이니셜 폴백)하고 /settings로 되돌린다")
-    void postProfileCharacter_blank_clears() throws Exception {
-        User u = register("profchar-clear@booktimer.com");
-        u.selectProfileCharacter("han_gang"); // 보유검증 우회(엔티티 직접) — 해제 동작만 검증
-        userRepository.save(u);
-
-        mockMvc.perform(post("/settings/profile-character")
-                        .with(user("profchar-clear@booktimer.com")).with(csrf())
-                        .param("characterCode", ""))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/settings"));
-
-        User reloaded = userRepository.findByEmail("profchar-clear@booktimer.com").orElseThrow();
-        assertThat(reloaded.getProfileCharacterCode()).isNull();
+                .andExpect(model().attributeDoesNotExist("ownedCharacters"))
+                .andExpect(model().attributeDoesNotExist("profileCharacterCode"));
     }
 
     // ── 토스 앱 연결 (PR-2) ──────────────────────────────────────────────────
@@ -501,7 +472,7 @@ class SettingsControllerTest {
                 .andReturn();
 
         String code = (String) result.getFlashMap().get("tossLinkCode");
-        assertThat(linkCodeService.consume(code)).map(User::getId).contains(u.getId());
+        assertThat(linkCodeService.consume(code, TossLinkCode.Purpose.LINK_TOSS)).map(User::getId).contains(u.getId());
     }
 
     @Test

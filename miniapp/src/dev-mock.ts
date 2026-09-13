@@ -23,6 +23,8 @@ import type {
   SearchRow,
   SharedMarginEntry,
   SocialEvent,
+  StudyBookRow,
+  StudyState,
   TimerState,
   UserRow,
 } from './api';
@@ -93,7 +95,11 @@ const GRAPH_WEEKS = 20;
  * 잔디 픽스처 — **`weeks[0]`이 최신 주**다. 서버가 뒤집어 보내는 계약이고(`ContributionGraph`),
  * 목이 이걸 어기면 화면 버그가 아니라 목 버그로 시간을 태운다(#730에서 실제로 겪은 방향 버그).
  */
-function buildGraph(): ContributionGraph {
+function graphOf(
+  secondsAt: (offset: number) => number,
+  manualAt: (offset: number) => boolean,
+  levelOf: (seconds: number) => number,
+): ContributionGraph {
   const weeks: ContributionDay[][] = [];
   let totalSeconds = 0;
   let activeDays = 0;
@@ -103,11 +109,10 @@ function buildGraph(): ContributionGraph {
     for (let d = 0; d < 7; d++) {
       // 주 사이는 최근→과거(왼→오른쪽, 서버 계약), 주 안은 과거→최근(위→아래).
       const offset = w * 7 + (6 - d);
-      const level = LEVELS[offset % LEVELS.length];
-      const seconds = level * 900;
-      days.push({ date: isoDate(offset), totalSeconds: seconds, level, manual: offset % 13 === 5 });
+      const seconds = secondsAt(offset);
+      days.push({ date: isoDate(offset), totalSeconds: seconds, level: levelOf(seconds), manual: manualAt(offset) });
       totalSeconds += seconds;
-      if (level > 0) activeDays += 1;
+      if (seconds > 0) activeDays += 1;
     }
     weeks.push(days);
   }
@@ -118,22 +123,19 @@ function buildGraph(): ContributionGraph {
     return month === previous ? [] : [{ weekIndex, label: `${Number(month)}월` }];
   });
 
-  return {
-    weeks,
-    monthLabels,
-    totalSeconds,
-    activeDays,
-    // 오늘(offset 0)부터 처음 0레벨을 만나기까지 = 연속일. 패턴에 0이 있어 반드시 끝난다.
-    currentStreak: LEVELS.indexOf(0),
-    // ⚠️ 서버 사다리(GrowthStage)는 땅·새싹·꽃·나무 넷뿐이다 — 한때 목이 「SAPLING·🌿·어린 나무」라는
-    // 서버에 없는 단계를 그렸다. 목이 실제와 다르면 브라우저 확인이 통과해도 아무것도 증명하지 못한다.
-    growthStageName: 'SPROUT',
-    growthStageEmoji: '🌱',
-    growthStageLabel: '새싹',
-    growthProgressPercent: 33,
-    daysToNextStage: 2,
-    nextStageLabel: '꽃',
-  };
+  // 오늘(offset 0)부터 처음 빈 날을 만나기까지 = 연속일. 두 패턴 모두 0이 있어 반드시 끝난다.
+  let currentStreak = 0;
+  while (secondsAt(currentStreak) > 0) currentStreak += 1;
+
+  return { weeks, monthLabels, totalSeconds, activeDays, currentStreak };
+}
+
+function buildGraph(): ContributionGraph {
+  return graphOf(
+    (offset) => LEVELS[offset % LEVELS.length] * 900,
+    (offset) => offset % 13 === 5,
+    (seconds) => seconds / 900,
+  );
 }
 
 // ── 상태 (모듈 메모리) ───────────────────────────────────────────────────────
@@ -194,9 +196,59 @@ const books: MyBookSummary[] = [
 const state = {
   goalSeconds: 1_800,
   remainingSeconds: 900,
+  /**
+   * 오늘 읽은 초(완료분) — 서버처럼 부채와 <b>따로</b> 든다. 목표를 넘겨도 상한이 없어야 초과분 경로를 밟는다.
+   * 값은 위 셋과 짝이 맞다: 오늘 부채 = 남은 900 − 밀린 600 = 300 → 읽은 양 = 목표 1800 − 300 = 1500.
+   */
+  todayReadSeconds: 1_500,
   carriedDebtSeconds: 600,
   activeStartedAt: null as string | null,
   activeBookId: null as number | null,
+  /** 공부 원장 — 독서와 <b>따로 든다</b>. 목에서도 원장이 갈려 있어야 「안 섞인다」를 브라우저로 확인할 수 있다. */
+  studyStartedAt: null as string | null,
+  /** 지금 재고 있는 공부 책 — 안 골랐으면 `null`(책 없이 재는 것이 정당한 사용이다). */
+  studyStudyingBookId: null as number | null,
+  studyTodaySeconds: 0,
+  /**
+   * 책별 누적 공부 시간(초) — 101번에 12 000초를 미리 넣어 「3시간 20분 공부」 칩이 첫 화면부터 보인다.
+   * 안 그러면 목에서 시간 칩을 보려면 매번 몇 분을 실제로 재야 한다(0초는 칩이 없는 것이 규약이다).
+   */
+  studyBookSeconds: { 101: 12_000 } as Record<number, number>,
+  /** 가장 최근에 공부한 책 — 홈 캐러셀의 기본 선택이 여기서 나온다. */
+  studyRecentBookId: null as number | null,
+  /**
+   * 마지막으로 끝낸 공부 측정 — 종료 후 태깅의 <b>유일한 좌표</b>다(서버의 `study_session` 행 하나에 해당).
+   *
+   * <p>`seconds`를 같이 드는 이유: 태깅은 「그 세션이 잰 시간을 그 책으로 옮기는」 일이라, 길이를 모르면
+   * 옮길 것이 없다. `bookId`가 이미 차 있으면 재태깅 409의 근거다(한 번 잰 시간이 두 책에 쌓이는 것을 막는다).
+   */
+  studyLastStopped: null as { id: number; bookId: number | null; seconds: number } | null,
+  /**
+   * 공부 일정 판정 — `YYYY-MM-DD` → 지킴/못 지킴. <b>키가 없으면 무기록</b>이라 서버의 「행 부재」와
+   * 같은 3상태가 된다(모듈 메모리라 새로고침이 초기화다).
+   *
+   * <p>지킴·못 지킴·무기록 셋이 처음부터 화면에 있어야 세 꼴을 한눈에 견줄 수 있다.
+   */
+  studyChecks: { [isoDate(2)]: true, [isoDate(4)]: false } as Record<string, boolean>,
+  /**
+   * 공부 서재 — 독서 책장(`books`)과 <b>다른 배열</b>이다. 서버가 테이블을 가른 것과 같은 격리를
+   * 목에서도 지켜야 「두 서재가 안 섞인다」를 브라우저로 확인할 수 있다.
+   *
+   * <p>회독 수를 0·1·3으로 섞어 둔다 — 칩 세 꼴(아직 안 돎 · 한 번 돎 · 여러 번 돎)이 한 화면에 있어야
+   * 견줄 수 있고, 「회독 -1」 행이 <b>0독에서만 사라지는 것</b>도 여기서만 눈에 보인다.
+   * 구매 링크도 있는 책·없는 책을 섞는다(조건부 구매 행이 목에서 사라지지 않게 — `shelfBook`과 같은 규율).
+   * 회당 시간도 있는 책(101, 50분)·없는 책을 섞는다 — 손잡이 두 꼴(「회당 50분 · 바꾸기」·「회당 시간 정하기」)을 견준다.
+   */
+  studyBooks: [
+    { id: 101, title: '정보처리기사 필기 기본서', author: '수험서편찬위', coverUrl: mockCover('정', '#B8C6D3'),
+      isbn13: '9791100000001', readCount: 3,
+      purchaseLink: 'https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=2001&ttbkey=mock&partner=openAPI&start=api',
+      sessionGoalSeconds: 3_000 },
+    { id: 102, title: '토익 실전 1000제', author: '테스터', coverUrl: null, isbn13: '9791100000002',
+      readCount: 1, purchaseLink: null, sessionGoalSeconds: null },
+    { id: 103, title: '한국사능력검정 심화', author: '테스터', coverUrl: mockCover('한', '#D3C4B8'),
+      isbn13: '9791100000003', readCount: 0, purchaseLink: null, sessionGoalSeconds: null },
+  ] as StudyBookRow[],
   /** 이 세션에서 끝낸 측정 수 — 첫 종료(=1)에만 축하 배너가 뜬다. 새로고침하면 0으로 돌아가 다시 볼 수 있다. */
   completedSessions: 0,
   nextId: 500,
@@ -249,6 +301,10 @@ function buildMonths(): MonthlySection[] {
       totalSeconds: total,
       books: picked.map((book, i) => ({ title: book.title, coverUrl: book.coverUrl, seconds: shares[i] })),
       manuallyFilled: offset % 13 === 5,
+      // 3주 전에 목표를 1시간 → 현재값(대개 30분)으로 내린 사용자 — 최근엔 30분만 읽어도 가득 차고,
+      // 그 전엔 1시간이라야 가득 찬다. offset 4는 목표 0(「목표 없음」) 경로다 — 가득 찬 막대 +
+      // 펼침 「그날 목표 없음」이 브라우저에서 눈에 보인다.
+      goalSeconds: offset === 4 ? 0 : offset < 21 ? state.goalSeconds : 3_600,
     };
     if (days === undefined) byMonth.set(date.slice(0, 7), [record]);
     else days.push(record);
@@ -276,6 +332,7 @@ function timerState(): TimerState {
     remainingSeconds: state.remainingSeconds,
     carriedDebtSeconds: state.carriedDebtSeconds,
     todayGoalSeconds: state.goalSeconds,
+    todayReadSeconds: state.todayReadSeconds,
     carryover: true,
     hasActiveSession: state.activeStartedAt !== null,
     activeStartedAt: state.activeStartedAt,
@@ -290,6 +347,97 @@ function timerState(): TimerState {
     recentBookId: state.activeBookId ?? 1,
     // 광고 SDK가 없는 브라우저라 버튼은 뜨지 않는다(`.env.mock`이 광고 그룹 ID를 비운다) — 값은 실제처럼 둔다.
     debtWaiverAvailable: true,
+  };
+}
+
+/**
+ * 지난 며칠의 공부 측정 픽스처 — 달력의 「측정 있음 점」이 뜨는 경로를 브라우저로 밟게 한다.
+ *
+ * <p>체크 픽스처와 <b>일부러 어긋나게</b> 둔다: 측정만 있는 날(1·3)·판정만 있는 날(4)·둘 다인 날(2)이
+ * 모두 있어야 점과 원이 서로 다른 것을 말한다는 게 눈에 보인다.
+ */
+const studyDayTotals: Record<string, number> = {
+  [isoDate(1)]: 3_600,
+  [isoDate(2)]: 5_400,
+  [isoDate(3)]: 1_200,
+};
+
+/**
+ * 공부 잔디·기록의 바탕 패턴 — 1800초 단위. 독서보다 <b>성기게</b> 둔다(0이 셋).
+ *
+ * <p>값이 0·1h·2h·3h·4h로 갈려 서버 눈금(4h 절대 기준)의 다섯 농도가 한 화면에 다 보인다 —
+ * 한 레벨이라도 빠지면 잔디 색이 제대로 갈리는지 브라우저로 확인할 길이 없다.
+ */
+const STUDY_PATTERN = [0, 2, 0, 4, 0, 6, 8];
+
+/** 그 offset의 공부 초 — 픽스처가 있으면 그것, 없으면 패턴. 오늘 몫은 실제 측정 상태가 합류한다. */
+function studySecondsAt(offset: number): number {
+  const base = studyDayTotals[isoDate(offset)] ?? STUDY_PATTERN[offset % STUDY_PATTERN.length] * 1_800;
+  return offset === 0 ? base + state.studyTodaySeconds : base;
+}
+
+/** 서버 `StudyHistoryService`의 고정 눈금(4h)을 그대로 미러한다 — 목이 다른 색을 주면 확인이 거짓이 된다. */
+function studyLevel(seconds: number): number {
+  if (seconds <= 0) return 0;
+  if (seconds * 4 <= 14_400) return 1;
+  if (seconds * 2 <= 14_400) return 2;
+  if (seconds < 14_400) return 3;
+  return 4;
+}
+
+/** 공부 기록 목록 — 0 아닌 날만 월별로 묶는다. offset이 커질수록 과거라 월·일 모두 최신 먼저로 굳는다. */
+function studyMonths(): { month: string; totalSeconds: number; days: { date: string; totalSeconds: number }[] }[] {
+  const byMonth = new Map<string, { date: string; totalSeconds: number }[]>();
+
+  for (let offset = 0; offset < GRAPH_WEEKS * 7; offset++) {
+    const seconds = studySecondsAt(offset);
+    if (seconds === 0) continue; // 안 한 날은 행이 없다(잔디는 회색 칸으로만 남는다).
+    const date = isoDate(offset);
+    const days = byMonth.get(date.slice(0, 7));
+    if (days === undefined) byMonth.set(date.slice(0, 7), [{ date, totalSeconds: seconds }]);
+    else days.push({ date, totalSeconds: seconds });
+  }
+
+  return [...byMonth].map(([month, days]) => ({
+    month,
+    totalSeconds: days.reduce((sum, d) => sum + d.totalSeconds, 0),
+    days,
+  }));
+}
+
+/** 달력 한 달치 — 오늘 몫은 실제 측정 상태(`studyTodaySeconds`)에서 합류한다. */
+function studyCalendarDays(month: string): { date: string; studiedSeconds: number; kept: boolean | null }[] {
+  const seconds: Record<string, number> = { ...studyDayTotals };
+  if (state.studyTodaySeconds > 0) {
+    seconds[isoDate(0)] = (seconds[isoDate(0)] ?? 0) + state.studyTodaySeconds;
+  }
+  const dates = new Set([...Object.keys(seconds), ...Object.keys(state.studyChecks)]);
+  return [...dates]
+    .filter((date) => date.startsWith(month))
+    .sort()
+    .map((date) => ({
+      date,
+      studiedSeconds: seconds[date] ?? 0,
+      kept: state.studyChecks[date] ?? null,
+    }));
+}
+
+/** 서재 한 줄 — 누적 시간을 <b>여기서만</b> 얹는다(원장은 `studyBookSeconds`가 단일 출처다). */
+function studyBookRows(): StudyBookRow[] {
+  return state.studyBooks.map((b) => ({ ...b, totalSeconds: state.studyBookSeconds[b.id] ?? 0 }));
+}
+
+function studyState(): StudyState {
+  const active = state.studyStudyingBookId;
+  return {
+    hasActiveSession: state.studyStartedAt !== null,
+    activeStartedAt: state.studyStartedAt,
+    todaySeconds: state.studyTodaySeconds,
+    activeBook: active === null ? null : (studyBookRows().find((b) => b.id === active) ?? null),
+    recentBookId: state.studyRecentBookId,
+    books: studyBookRows(),
+    // 태깅 좌표는 <b>stop 응답에서만</b> 채워진다(서버와 같다) — 그 라우트가 이 값을 덮어쓴다.
+    untaggedSessionId: null,
   };
 }
 
@@ -619,6 +767,27 @@ const readerStatuses: ReaderStatus[] = [
     readingBookTitle: null, readingSince: null, lastReadAt: null, lastReadBookTitle: null },
 ];
 
+/**
+ * 「여백」 탭 — <b>팔로우하지 않은 낯선 닉네임</b>으로만 채운다(소식 목록과 겹치는 이름이 없어야
+ * 두 탭이 서로 다른 목록임을 눈으로 가른다). 표지 유/무를 섞어 첫 글자 자리 표지도 함께 확인한다.
+ *
+ * <p>서버는 섞어서 주지만 목은 고정 순서다 — 매 새로고침마다 순서가 바뀌면 화면 확인이 흔들린다.
+ * 전부 `count: 1`인 것이 계약이다(발견 탭은 묶지 않는다).
+ */
+const discoverStories: SocialEvent[] = [
+  { loginId: 'haenal', nickname: '해질녘', bookTitle: '아무튼, 계속', type: 'STORY', occurredAt: isoTime(1.5),
+    bookId: 21, excerpt: '계속하는 사람이 되고 싶어서 오늘도 스무 쪽을 읽었다.', count: 1, coverUrl: MOCK_COVER },
+  { loginId: 'chaekbo', nickname: '책보따리', bookTitle: '파친코', type: 'STORY', occurredAt: isoTime(6),
+    bookId: 22, excerpt: '역사는 우리를 저버렸지만, 그래도 상관없다.', count: 1, coverUrl: null },
+  { loginId: 'moonpage', nickname: '달페이지', bookTitle: '우리가 빛의 속도로 갈 수 없다면', type: 'STORY', occurredAt: isoTime(14),
+    // 80자 넘는 원문은 서버가 79자 + … 로 잘라 준다 — 긴 제목 + 긴 발췌가 함께 선 줄의 폭을 본다.
+    bookId: 23, excerpt: '누군가를 기다리는 일이 시간을 견디는 방법이 될 수 있다는 걸, 이 나이가 되어서야 문장으로 배웠다…', count: 1, coverUrl: null },
+  { loginId: 'ilgi', nickname: '일기쓰는사람', bookTitle: '슬픔을 공부하는 슬픔', type: 'STORY', occurredAt: isoTime(30),
+    bookId: 24, excerpt: '슬픔을 공부한다는 말이 오래 남았다.', count: 1, coverUrl: MOCK_COVER },
+  { loginId: 'sepia', nickname: '세피아', bookTitle: '코스모스', type: 'STORY', occurredAt: isoTime(52),
+    bookId: 25, excerpt: '창백한 푸른 점 이야기에서 한참 멈췄다.', count: 1, coverUrl: null },
+];
+
 const newsItems: NewsItem[] = [
   {
     title: '헤르만 헤세 『데미안』 출간 100년, 다시 읽히는 이유',
@@ -753,6 +922,9 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
   // 회원 탈퇴 — 서버는 토스 재인증으로 신원을 확인하지만, 브라우저엔 토스 SDK가 없어 그 확인을 흉내낼 수
   // 없다. 여기서는 204(빈 응답)만 돌려주고 시트 문구·개폐·성공 후 화면 전이만 눈으로 확인한다.
   ['POST', /^\/api\/miniapp\/delete-account$/, () => undefined],
+  // PC 웹 로그인 코드 — 서버 알파벳(0·O·1·I·L을 뺀 31자)·TTL을 그대로 흉내낸다. 자리표시 문자열을
+  // 주면 설정 화면의 4자 끊기 표기가 목에서 거짓으로 초록이 된다.
+  ['POST', /^\/api\/miniapp\/web-login-code$/, () => ({ code: 'ABCD2345', expiresInSeconds: 300 })],
 
   ['GET', /^\/api\/dashboard$/, (): DashboardResponse => ({
     ...timerState(),
@@ -763,6 +935,7 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     wantToReadBooks: bookOptions('WANT_TO_READ'),
     graph: buildGraph(),
     emailVerified: true,
+    study: studyState(),
   })],
 
   // 웹 history 섬이 쓰던 그 엔드포인트 — 미니앱 기록 탭이 잔디 아래 목록에 쓴다(서버 무변경).
@@ -777,6 +950,7 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     newsEnabled: true,
     news: newsItems,
     readers: readerStatuses,
+    discover: discoverStories,
   })],
 
   // ── 타이머 ──
@@ -788,7 +962,9 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
   ['POST', /^\/api\/sessions\/stop$/, () => {
     const elapsed = state.activeStartedAt === null ? 0 : Math.floor((Date.now() - Date.parse(state.activeStartedAt)) / 1000);
     const untagged = state.activeBookId === null;
+    // 부채는 0에서 바닥을 치고(서버와 동일), 읽은 초는 상한 없이 쌓인다 — 이 비대칭이 초과분 표시의 전부다.
     state.remainingSeconds = Math.max(0, state.remainingSeconds - elapsed);
+    state.todayReadSeconds += elapsed;
     const book = books.find((b) => b.id === state.activeBookId);
     if (book !== undefined) book.seconds += elapsed;
     state.activeStartedAt = null;
@@ -803,6 +979,17 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
       graph: buildGraph(),
     };
   }],
+  // 로그인 전 체험 합류 — stop 핸들러의 절반이다(진행 중 세션을 안 건드리고 과거 구간만 더한다).
+  ['POST', /^\/api\/sessions\/import$/, ({ body }) => {
+    const seconds = Math.max(
+      0,
+      Math.floor((Date.parse(body.endedAt as string) - Date.parse(body.startedAt as string)) / 1000),
+    );
+    state.remainingSeconds = Math.max(0, state.remainingSeconds - seconds);
+    state.todayReadSeconds += seconds;
+    state.completedSessions += 1;
+    return undefined; // 서버도 204라 본문이 없다
+  }],
   ['POST', /^\/api\/sessions\/(\d+)\/tag-book$/, ({ id, body }) => {
     const book = books.find((b) => b.id === body.bookId);
     return { sessionId: id, bookTitle: book?.title ?? '알 수 없는 책' };
@@ -813,6 +1000,140 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     if (state.activeStartedAt === null) throw new ApiError(409, '진행 중인 측정이 없습니다');
     state.activeBookId = (body.bookId as number | null) ?? null;
     return timerState();
+  }],
+
+  // ── 공부 타이머 ──
+  // 잔디·부채·책 통계를 <b>한 줄도 안 건드린다</b> — 서버가 별도 테이블을 쓰는 것과 같은 격리를
+  // 목에서도 지켜야, 「공부가 독서 화면에 안 샌다」를 브라우저로 확인할 수 있다.
+  ['POST', /^\/api\/study\/start$/, ({ body }) => {
+    if (state.studyStartedAt !== null) throw new ApiError(409, '이미 진행 중인 측정이 있습니다');
+    // 독서 측정 중이면 서버가 거절한다 — 두 원장이 같은 시간을 이중으로 세지 않는다.
+    if (state.activeStartedAt !== null) throw new ApiError(409, '이미 진행 중인 측정이 있습니다');
+    // 책 검증이 세션 생성보다 <b>먼저</b>다(서버와 같은 순서) — 없는 책으로 시작해 놓고 404를 주면
+    // 화면은 실패로 읽는데 서버엔 세션이 남아, 다음 시작이 409로 막힌다.
+    const bookId = (body.bookId ?? null) as number | null;
+    if (bookId !== null) mustFindStudyBook(bookId);
+    state.studyStartedAt = new Date().toISOString();
+    state.studyStudyingBookId = bookId;
+    if (bookId !== null) state.studyRecentBookId = bookId;
+    return studyState();
+  }],
+  ['POST', /^\/api\/study\/stop$/, () => {
+    if (state.studyStartedAt === null) throw new ApiError(409, '진행 중인 측정이 없습니다');
+    const seconds = Math.floor((Date.now() - Date.parse(state.studyStartedAt)) / 1000);
+    state.studyTodaySeconds += seconds;
+    // 책을 걸고 잰 몫만 그 책에 쌓인다 — 책 없이 잰 시간은 당일 합에만 남는다(서버와 같다).
+    if (state.studyStudyingBookId !== null) {
+      const id = state.studyStudyingBookId;
+      state.studyBookSeconds[id] = (state.studyBookSeconds[id] ?? 0) + seconds;
+    }
+    const sessionId = nextId();
+    state.studyLastStopped = { id: sessionId, bookId: state.studyStudyingBookId, seconds };
+    state.studyStartedAt = null;
+    state.studyStudyingBookId = null;
+    // 책 없이 잰 측정만 붙일 자리가 있다 — 책을 걸고 잰 것엔 좌표를 안 준다(서버 `stopped.getBook()==null`).
+    return { ...studyState(), untaggedSessionId: state.studyLastStopped.bookId === null ? sessionId : null };
+  }],
+
+  /**
+   * 종료 후 태깅 — 책 검증이 <b>세션 조회보다 먼저</b>다(서버와 같은 순서). 그 세션이 잰 초를 그 책으로
+   * 옮기고, 옮긴 사실을 `studyLastStopped.bookId`에 적어 재태깅을 409로 막는다.
+   */
+  ['POST', /^\/api\/study\/sessions\/(\d+)\/tag-book$/, ({ id, body }) => {
+    const book = mustFindStudyBook((body.bookId ?? -1) as number);
+    const last = state.studyLastStopped;
+    if (last === null || last.id !== id) throw new ApiError(404, '측정을 찾을 수 없습니다');
+    if (last.bookId !== null) throw new ApiError(409, '책을 붙일 수 없는 측정입니다');
+    state.studyBookSeconds[book.id] = (state.studyBookSeconds[book.id] ?? 0) + last.seconds;
+    state.studyRecentBookId = book.id;
+    state.studyLastStopped = { ...last, bookId: book.id };
+    return studyState();
+  }],
+
+  /**
+   * 측정 중 교체 — 세션 좌표가 없다(서버가 「내 진행 중 측정」을 찾는다). 측정은 멈추지 않으므로
+   * 지금까지 잰 시간은 종료 시점에 <b>통째로 새 책</b>에 붙는다(초를 여기서 나누지 않는다).
+   */
+  ['POST', /^\/api\/study\/active\/book$/, ({ body }) => {
+    const bookId = (body.bookId ?? null) as number | null;
+    const book = bookId === null ? null : mustFindStudyBook(bookId);
+    if (state.studyStartedAt === null) throw new ApiError(409, '진행 중인 측정이 없습니다');
+    state.studyStudyingBookId = book === null ? null : book.id;
+    if (book !== null) state.studyRecentBookId = book.id;
+    return studyState();
+  }],
+
+  // 책별 회당 시간 — 서버 계약 그대로: 범위(60~21600, 0 포함 밖) 검사가 <b>책 조회보다 먼저</b>, 해제는 null만.
+  ['POST', /^\/api\/study\/books\/(\d+)\/session-goal$/, ({ id, body }) => {
+    const seconds = (body.sessionGoalSeconds ?? null) as number | null;
+    if (seconds !== null && !(Number.isInteger(seconds) && seconds >= 60 && seconds <= 21_600)) {
+      throw new ApiError(400, '회당 시간은 1분 이상 6시간 이하로 정해 주세요');
+    }
+    mustFindStudyBook(id).sessionGoalSeconds = seconds;
+    return studyState();
+  }],
+
+  // 공부 일정 달력 — 판정(체크)은 <b>사용자가 남긴 것만</b> 있고 서버가 자동으로 만들지 않는다.
+  // 그 관계를 목도 그대로 지킨다: 측정 픽스처는 점(자동 정보)에만 쓰이고 체크를 건드리지 않는다.
+  ['GET', /^\/api\/study\/calendar$/, ({ query }) => ({
+    days: studyCalendarDays(String(query.month ?? '')),
+  })],
+  // 공부 기록 — 잔디와 월별 목록. 달력 픽스처(`studyDayTotals`)를 같이 쓰므로 목에서도 두 화면의
+  // 같은 날이 같은 초를 말한다(어긋나면 브라우저 확인이 거짓 신호를 준다). 수동 칸은 없다(공부엔 수동 입력이 없다).
+  ['GET', /^\/api\/study\/history$/, () => ({
+    graph: graphOf(studySecondsAt, () => false, studyLevel),
+    months: studyMonths(),
+  })],
+  // 미래 400·null 삭제까지 서버 계약 그대로 — 화면의 no-op이 풀렸을 때 목이 먼저 소리를 내야 한다.
+  ['POST', /^\/api\/study\/check$/, ({ body }) => {
+    const date = String(body.date ?? '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new ApiError(400, '날짜 형식이 올바르지 않아요');
+    if (date > isoDate(0)) throw new ApiError(400, '미래 날짜는 체크할 수 없어요');
+    const kept = (body.kept ?? null) as boolean | null;
+    if (kept === null) delete state.studyChecks[date];
+    else state.studyChecks[date] = kept;
+    return { date, kept };
+  }],
+
+  // ── 공부 서재 ──
+  // 독서 책장(`books`)을 <b>한 줄도 안 건드린다</b> — 서버가 별도 테이블을 쓰는 것과 같은 격리를
+  // 목에서도 지켜야, 「두 서재가 안 섞인다」를 브라우저로 확인할 수 있다.
+  // 검색은 여기 없다: `/api/books/search`(알라딘 프록시)가 도메인 중립이라 공부 화면도 그대로 쓴다.
+  ['GET', /^\/api\/study\/books$/, () => ({ searchEnabled: true, books: studyBookRows() })],
+  ['POST', /^\/api\/study\/books$/, ({ body }) => {
+    // 같은 isbn은 기존 행을 그대로 준다(서버 멱등 계약) — 「추가」가 회독 수를 리셋하지 않는다.
+    const isbn13 = (body.isbn13 as string | null) ?? null;
+    const existing = isbn13 === null ? undefined : state.studyBooks.find((b) => b.isbn13 === isbn13);
+    if (existing !== undefined) return existing;
+    const added: StudyBookRow = {
+      id: nextId(),
+      title: body.title as string,
+      author: (body.author as string | null) ?? null,
+      coverUrl: (body.coverUrl as string | null) ?? null,
+      isbn13,
+      readCount: 0, // 담기는 언제나 0독에서 시작한다 — 그래서 담을 때 상태를 묻지 않는다
+      purchaseLink: (body.purchaseLink as string | null) ?? null,
+    };
+    state.studyBooks.unshift(added); // 등록 최신순(서버 `createdAtDesc`)
+    return added;
+  }],
+  // 회독 수는 절대값 설정이다 — 음수 400을 목도 지켜야 「저장 실패」 경로를 브라우저로 밟을 수 있다.
+  // 음수 검사가 조회보다 먼저인 것도 서버와 같다(400/404를 갈라 남의 책 존재를 캐낼 창을 안 연다).
+  ['POST', /^\/api\/study\/books\/(\d+)\/read-count$/, ({ id, body }) => {
+    const readCount = body.readCount as number;
+    if (readCount < 0) throw new ApiError(400, '회독 수는 0보다 작을 수 없습니다');
+    const book = mustFindStudyBook(id);
+    book.readCount = readCount;
+    return book;
+  }],
+  ['POST', /^\/api\/study\/books\/(\d+)\/delete$/, ({ id }) => {
+    state.studyBooks.splice(state.studyBooks.indexOf(mustFindStudyBook(id)), 1);
+    // 책이 사라지면 그 책을 가리키던 자리도 함께 푼다 — 서버 `unlinkBook`이 하는 일과 같다
+    // (시간 기록 자체는 당일 합에 남아 있고, 여기선 「그 책의 시간」이라는 좌표만 사라진다).
+    delete state.studyBookSeconds[id];
+    if (state.studyStudyingBookId === id) state.studyStudyingBookId = null;
+    if (state.studyRecentBookId === id) state.studyRecentBookId = null;
+    return { deleted: true };
   }],
 
   ['POST', /^\/api\/miniapp\/goal$/, ({ body }) => {
@@ -1204,6 +1525,13 @@ function marginBookOf(bookId: number, self: boolean): MarginResponse['book'] | n
 function mustFindBook(id: number): MyBookSummary {
   const book = books.find((b) => b.id === id);
   if (book === undefined) throw new ApiError(404, '없는 책이에요');
+  return book;
+}
+
+/** 없는 책·남의 책은 서버처럼 404다(존재 비노출) — 목이 서버보다 무르면 그 경로를 못 밟는다. */
+function mustFindStudyBook(id: number): StudyBookRow {
+  const book = state.studyBooks.find((b) => b.id === id);
+  if (book === undefined) throw new ApiError(404, '책을 찾을 수 없습니다');
   return book;
 }
 

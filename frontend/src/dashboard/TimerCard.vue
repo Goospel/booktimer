@@ -9,6 +9,8 @@ const props = defineProps<{
     remainingSeconds: number
     carriedDebtSeconds: number
     todayGoalSeconds: number
+    /** 오늘 읽은 초(완료 세션 합). 측정 중 몫은 elapsed로 얹는다 — 부채에서 역산하지 않는 이유는 computeProgress 참조. */
+    todayReadSeconds: number
     carryover: boolean
     streak: number
     hasActiveSession: boolean
@@ -19,6 +21,8 @@ const props = defineProps<{
     finishedBooks: BookOption[]
     wantToReadBooks: BookOption[]
     recentBookId: number | null
+    /** 시트에서 방금 고른 책 — 칩이 이 값을 우선한다(BookPickForm으로 통과). */
+    pickedBook?: BookOption | null
     starting?: boolean
     stopping?: boolean
 }>()
@@ -40,13 +44,19 @@ watch(() => props.activeStartedAt, v => startedAtIso.value = v)
 
 const { elapsed, remainingNow } = useReadingTimer(baseRemaining, active, startedAtIso)
 
-// 진행바·달성은 서버 스냅샷이 아니라 라이브 remainingNow에서 파생(계획 §3-B/D)
+// 진행바·달성은 서버 스냅샷이 아니라 라이브 값에서 파생(계획 §3-B/D)
 const progress = computed(() =>
-    computeProgress(remainingNow.value, props.carriedDebtSeconds, props.todayGoalSeconds, props.carryover)
+    computeProgress(
+        remainingNow.value,
+        props.carriedDebtSeconds,
+        props.todayGoalSeconds,
+        props.carryover,
+        props.todayReadSeconds + elapsed.value
+    )
 )
 const state = computed(() => panelState(props.hasActiveSession, progress.value.isAchieved))
-// 히어로 큰 숫자 = 오늘 읽은 시간(카운트업). 측정 중엔 remainingNow가 매초 줄어 todayRead가
-// 매초 늘어난다 — 별도 tick 없이 라이브 증가(발견 3·4: 남은시간 카운트다운 → 성취 카운트업).
+// 히어로 큰 숫자 = 오늘 읽은 시간(카운트업) = 서버 완료 합 + 측정 중 경과. 같은 elapsed 틱이 동력이라
+// 별도 tick이 없다(발견 3·4: 남은시간 카운트다운 → 성취 카운트업).
 const todayReadDisplay = computed(() => fmtMSS(progress.value.todayRead))
 const sessionDisplay = computed(() => fmtMSS(elapsed.value))
 const goalText = computed(() => goalLabel(props.todayGoalSeconds))
@@ -68,9 +78,12 @@ function totalHM(s: number): string {
     <section class="dash-card dash-timer-hero">
         <!-- 좌: 대형 숫자 + 진행바 -->
         <div class="dash-timer-left">
+            <div class="dash-timer-head"><!-- pill + 모드 토글 한 줄. 슬롯이 비면 pill만 든 flex row라 위치 불변. -->
             <span class="dash-pill" :class="{ 'dash-pill-ok': progress.isAchieved }">
                 {{ progress.isAchieved ? '🌿 오늘 목표 달성!' : '오늘 읽은 시간' }}
             </span>
+            <slot name="mode" />
+            </div>
             <div class="dash-timer-num" :class="{ 'dash-timer-num-ok': progress.isAchieved }">{{ todayReadDisplay }}</div>
             <div class="dash-progress-wrap">
                 <div class="dash-progress-track">
@@ -119,6 +132,7 @@ function totalHM(s: number): string {
                         :finished-books="finishedBooks"
                         :want-to-read-books="wantToReadBooks"
                         :recent-book-id="recentBookId"
+                        :picked-book="pickedBook"
                         :pending="starting"
                         @start="(id) => emit('start', id)"
                         @open-sheet="emit('openSheet')"
@@ -140,6 +154,7 @@ function totalHM(s: number): string {
                         :finished-books="finishedBooks"
                         :want-to-read-books="wantToReadBooks"
                         :recent-book-id="recentBookId"
+                        :picked-book="pickedBook"
                         :pending="starting"
                         @start="(id) => emit('start', id)"
                         @open-sheet="emit('openSheet')"

@@ -8,6 +8,7 @@ import com.booktimer.session.ReadingDebtService;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.session.ReadingSessionService;
+import com.booktimer.session.StudySessionService;
 import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
@@ -53,6 +54,7 @@ class DashboardApiControllerTest {
     @Autowired BookRepository bookRepository;
     @Autowired ReadingSessionRepository sessionRepository;
     @Autowired ReadingSessionService sessionService;
+    @Autowired StudySessionService studySessionService;
     @Autowired ReadingTimerRepository timerRepository;
     @Autowired ReadingDebtService readingDebtService;
     @Autowired BookService bookService;
@@ -99,9 +101,10 @@ class DashboardApiControllerTest {
                 .andExpect(jsonPath("$.finishedBooks").isArray())
                 .andExpect(jsonPath("$.graph").exists())
                 .andExpect(jsonPath("$.graph.weeks").isArray())
-                .andExpect(jsonPath("$.graph.growthStageName").isString())
-                .andExpect(jsonPath("$.graph.growthStageLabel").isString())
-                .andExpect(jsonPath("$.garden").exists())
+                // 서재 캐릭터 폐기 — 두 키가 응답에서 통째로 사라졌다.
+                // jsonPath(...).doesNotExist()는 값이 null이면 통과해 판별력이 없어 본문 문자열로 못 박는다.
+                .andExpect(content().string(not(containsString("\"garden\""))))
+                .andExpect(content().string(not(containsString("profileCharacterCode"))))
                 .andExpect(jsonPath("$.quotes").isArray())
                 .andExpect(jsonPath("$.quotes[0].text").isString())
                 .andExpect(jsonPath("$.quotes[0].author").isString())
@@ -137,18 +140,58 @@ class DashboardApiControllerTest {
                 .andExpect(jsonPath("$.carriedDebtSeconds").value(0));
     }
 
-    // ── 프로필 사진(도감 작가 얼굴) ───────────────────────────────────────────
+    // ── 4b. 목표 초과분 보존 — todayReadSeconds ───────────────────────────────
+    // 「오늘 읽은 시간」을 부채에서 역산하면(목표 − 부채) 부채가 0에서 바닥을 치는 탓에 표시값이 목표에서
+    // 천장을 친다 — 목표를 넘겨 읽고 측정을 멈추는 순간 초과분이 사라진 것처럼 보인 실사용자 제보의 뿌리다.
+    // 그래서 원시 초를 따로 싣는다. 부채가 0인데 읽은 초는 5400 — 이 둘이 갈라지는 것이 이 필드의 존재 이유.
+
+    /** 오늘(유저 TZ) 안에 확정 완료 세션 한 건을 심는다 — 실행 시각과 무관하게 날짜가 흔들리지 않도록 자정 기준 오프셋으로. */
+    private void seedTodayReading(User u, Book book, long seconds) {
+        Instant dayStart = today().atStartOfDay(ZoneId.of(SEOUL)).toInstant();
+        sessionService.recordManual(u, dayStart.plusSeconds(3600), dayStart.plusSeconds(3600 + seconds), book);
+    }
+
+    /**
+     * 이월 표시를 꺼 헤드라인({@code remainingSeconds})을 <b>오늘 부채만</b>으로 좁힌다.
+     *
+     * <p>갓 가입한 사용자는 목표 이력이 없어 부채 창이 7일 폴백으로 열린다 — 켜 두면 헤드라인에 빈 과거
+     * 6일치가 섞여 "오늘 부채가 0으로 잘렸다"는 이 테스트의 관심사가 가려진다.
+     */
+    private void disableCarryover(User u) {
+        timerRepository.findByUser(u).ifPresent(t -> {
+            t.updateSettings(t.getDailyIncrementSeconds(), false);
+            timerRepository.save(t);
+        });
+    }
 
     @Test
-    @DisplayName("GET /api/dashboard: 프로필 작가를 선택했으면 profileCharacterCode를 응답에 싣는다")
-    void get_withProfileCharacter_includesCode() throws Exception {
-        User u = register("pcdash@a.com", "pcdash");
-        u.selectProfileCharacter("han_gang"); // 엔티티 직접(보유검증 우회) — 노출 경로만 검증
-        userRepository.save(u);
+    @DisplayName("GET /api/dashboard: 목표(1시간) 초과해 90분 읽음 → 부채는 0으로 잘려도 todayReadSeconds는 5400")
+    void dashboard_readOverGoal_keepsRawTodayReadSeconds() throws Exception {
+        User u = register("over@a.com", "overread");
+        disableCarryover(u);
+        seedTodayReading(u, addBook(u, "초과한 책", BookStatus.READING), 5400L);
 
-        mockMvc.perform(get("/api/dashboard").with(user("pcdash@a.com")))
+        mockMvc.perform(get("/api/dashboard").with(user("over@a.com")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.profileCharacterCode").value("han_gang"));
+                .andExpect(jsonPath("$.todayGoalSeconds").value(3600))
+                .andExpect(jsonPath("$.remainingSeconds").value(0))     // 부채는 바닥을 친다(역산 불가의 원인)
+                .andExpect(jsonPath("$.todayReadSeconds").value(5400)); // 읽은 양은 원시값 그대로
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/stop: 종료 응답의 todayReadSeconds도 목표에서 잘리지 않는다 — 중지 순간 초과분이 사라지던 자리")
+    void stopSession_timerKeepsRawTodayReadSeconds() throws Exception {
+        User u = register("overstop@a.com", "overstop");
+        disableCarryover(u);
+        Book book = addBook(u, "초과한 책", BookStatus.READING);
+        seedTodayReading(u, book, 5400L);
+        sessionService.start(u, clock.instant(), book);
+
+        mockMvc.perform(post("/api/sessions/stop")
+                        .with(user("overstop@a.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.timer.remainingSeconds").value(0))
+                .andExpect(jsonPath("$.timer.todayReadSeconds", greaterThanOrEqualTo(5400)));
     }
 
     // ── 5. start IDOR → 404 ──────────────────────────────────────────────────
@@ -202,6 +245,21 @@ class DashboardApiControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"bookId\":" + book.getId() + "}"))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/start: 공부 세션이 진행 중 → 409 (두 타이머 상호배타)")
+    void startSession_studyActive_409() throws Exception {
+        User u = register("studyactive@a.com", "studyactive");
+        studySessionService.start(u, clock.instant(), null);
+
+        mockMvc.perform(post("/api/sessions/start")
+                        .with(user("studyactive@a.com")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isConflict());
+
+        assertThat(sessionRepository.findByUserAndEndedAtIsNull(u)).isEmpty();
     }
 
     // ── 8. stop 활성 없음 → 409 ──────────────────────────────────────────────
@@ -304,6 +362,38 @@ class DashboardApiControllerTest {
         sessionService.start(u, now, null);
 
         mockMvc.perform(post("/api/sessions/stop").with(user("manualfirst@a.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.firstCompletedSession").value(false));
+    }
+
+    /** 오늘 유저 TZ 자정 10분 전 — 여기서 시작해 지금 멈추면 반드시 자정을 넘어 분할된다. */
+    private Instant tenMinutesBeforeTodayMidnight() {
+        return today().atStartOfDay(ZoneId.of(SEOUL)).toInstant().minusSeconds(600);
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/stop: 첫 독서가 자정을 넘겨 2행이 돼도 firstCompletedSession=true (판정은 stop 전 count==0)")
+    void stop_firstEverCompletionAcrossMidnight_flagsTrue() throws Exception {
+        User u = register("firstmid@a.com", "firstmid");
+        sessionService.start(u, tenMinutesBeforeTodayMidnight(), null);
+
+        mockMvc.perform(post("/api/sessions/stop").with(user("firstmid@a.com")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.firstCompletedSession").value(true));
+
+        // 실제로 갈렸는지 확인 — 갈리지 않았다면 이 테스트는 옛 count==1 로직도 통과시켜 공허해진다.
+        assertThat(sessionRepository.countByUserAndEndedAtIsNotNull(u)).isEqualTo(2L);
+    }
+
+    @Test
+    @DisplayName("POST /api/sessions/stop: 자정을 넘긴 두 번째 종료는 false (조각 수와 무관)")
+    void stop_secondCompletionAcrossMidnight_flagsFalse() throws Exception {
+        User u = register("secondmid@a.com", "secondmid");
+        sessionService.start(u, clock.instant(), null);
+        sessionService.stop(u, clock.instant());
+        sessionService.start(u, tenMinutesBeforeTodayMidnight(), null);
+
+        mockMvc.perform(post("/api/sessions/stop").with(user("secondmid@a.com")).with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.firstCompletedSession").value(false));
     }
@@ -678,21 +768,6 @@ class DashboardApiControllerTest {
                 .andExpect(jsonPath("$.hasActiveSession").value(true))
                 .andExpect(jsonPath("$.remainingSeconds").isNumber())
                 .andExpect(jsonPath("$.carriedDebtSeconds").isNumber());
-    }
-
-    // ── 15. garden DTO — 엔티티 User FK 없음 (spot-check) ────────────────────
-
-    @Test
-    @DisplayName("GET /api/dashboard: garden CatalogDto — 작가 카운트 필드 존재, 건물 필드는 은퇴로 부재")
-    void gardenDtoSpotCheck() throws Exception {
-        register("garden@a.com", "garden");
-
-        mockMvc.perform(get("/api/dashboard").with(user("garden@a.com")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.garden.ownedAuthorCharacterCount").isNumber())
-                .andExpect(jsonPath("$.garden.totalAuthorCharacterCount").isNumber())
-                .andExpect(jsonPath("$.garden.ownedBuildingCount").doesNotExist())
-                .andExpect(jsonPath("$.garden.totalBuildingCount").doesNotExist());
     }
 
     // ── 16. todayGoalSeconds 필드 존재 ───────────────────────────────────────

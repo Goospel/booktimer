@@ -1,14 +1,19 @@
-import { Analytics, Notification, loadFullScreenAd, showFullScreenAd } from '@apps-in-toss/web-framework';
+import { Analytics, Device, Notification, loadFullScreenAd, showFullScreenAd } from '@apps-in-toss/web-framework';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   BANNER_RENDER_TIMEOUT_MS,
+  GOAL_MET_TEMPLATE_CODE,
   INTERSTITIAL_TIMEOUT_MS,
+  STUDY_GOAL_TEMPLATE_CODE,
+  hapticOnce,
   marginBannerEnabled,
   notificationAgreementSupported,
   requestNotificationAgreement,
   showInterstitialAd,
+  subscribeNativeBack,
   trackEvent,
+  trackScreen,
   watchRewardAd,
 } from './toss';
 
@@ -39,6 +44,7 @@ vi.mock('@apps-in-toss/web-framework', () => ({
   Notification: { requestAgreement: Object.assign(vi.fn(), { isSupported: vi.fn() }) },
   Analytics: { log: vi.fn() },
   TossAds: tossAdsMock,
+  Device: { triggerHaptic: vi.fn() },
 }));
 
 const loadMock = vi.mocked(loadFullScreenAd);
@@ -123,6 +129,45 @@ describe('watchRewardAd', () => {
     void watchRewardAd('ad-group-1');
 
     expect(showMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 달성 햅틱 — 홈 effect 안에서 불린다. 토스 밖(목 모드)엔 브릿지가 없어 동기로 던지고, 앱 안에서도
+ * 거부할 수 있다 — 어느 쪽이든 새면 홈 렌더(또는 unhandled rejection)가 깨진다.
+ */
+describe('hapticOnce', () => {
+  const hapticMock = vi.mocked(Device.triggerHaptic);
+
+  it('성공 햅틱 1회를 요청한다', () => {
+    hapticMock.mockReset();
+    hapticMock.mockResolvedValue(undefined);
+
+    hapticOnce();
+
+    expect(hapticMock).toHaveBeenCalledTimes(1);
+    expect(hapticMock).toHaveBeenCalledWith({ type: 'success' });
+  });
+
+  it('브릿지가 동기로 던져도(토스 밖) 삼킨다', () => {
+    hapticMock.mockReset();
+    hapticMock.mockImplementation(() => {
+      throw new TypeError('no bridge');
+    });
+
+    expect(() => hapticOnce()).not.toThrow();
+  });
+
+  it('브릿지가 거부해도 삼킨다 — 아무도 안 받는 rejection이 새지 않는다', async () => {
+    hapticMock.mockReset();
+    const rejected = Promise.reject(new Error('denied'));
+    const caught = vi.spyOn(rejected, 'catch');
+    hapticMock.mockReturnValue(rejected);
+
+    hapticOnce();
+
+    expect(caught).toHaveBeenCalledTimes(1);
+    await rejected.catch(() => {}); // 테스트 자신이 남긴 참조 정리
   });
 });
 
@@ -329,6 +374,20 @@ describe('requestNotificationAgreement', () => {
   });
 });
 
+/**
+ * 동의 요청 코드는 콘솔에 등록된 발송 코드와 한 글자도 어긋나면 안 된다 — 토스는 이 코드로 동의문을 찾는다.
+ * 홈 테스트는 이 값을 목으로 갈아 끼우므로, 실값은 여기서만 잰다.
+ */
+describe('알림 동의 템플릿 코드 — 콘솔 등록값', () => {
+  it('공부는 공부 동의문(122175)에 묶인 booktimer-study-goal-met이다', () => {
+    expect(STUDY_GOAL_TEMPLATE_CODE).toBe('booktimer-study-goal-met');
+  });
+
+  it('독서 코드와 다르다 — 같으면 공부 카드가 독서 동의문을 띄운다', () => {
+    expect(STUDY_GOAL_TEMPLATE_CODE).not.toBe(GOAL_MET_TEMPLATE_CODE);
+  });
+});
+
 describe('notificationAgreementSupported — 브라우저(SDK 부재) 가드', () => {
   /**
    * 실물 `isSupported()`는 `window.__appsInTossConstants[...]`를 읽는다 — 토스앱 **밖**(브라우저 dev 목
@@ -387,6 +446,42 @@ describe('trackEvent', () => {
     logMock.mockReturnValue(rejected);
 
     expect(() => trackEvent('reading_session_started')).not.toThrow();
+    expect(attachHandler).toHaveBeenCalledTimes(1);
+
+    rejected.catch(() => {}); // 단언이 실패해도 떠도는 거부를 러너에 남기지 않는다
+  });
+});
+
+/**
+ * 화면 진입 래퍼 — 퍼널(어디까지 왔나)을 콘솔 카탈로그에서 화면 단위로 읽게 하는 유일한 관측점이다.
+ *
+ * <p>{@link trackEvent}와 계측 지점이 같되 두 가지가 더 있다. ① **`log_type`이 `'screen'`**이어야 콘솔이
+ * SCREEN 타입으로 분류한다(토스 자체 헬퍼가 `log_type`을 분류 키로 쓴다는 방증뿐이라 확정은 배포 후지만,
+ * `'event'`로 새면 그때 전환 이벤트 4종과 한 통에 섞여 카탈로그가 무너진다). ② **`screen_` 접두사** —
+ * 카탈로그 검색 한 번에 화면 로그 전부가 묶이는 규약이라, 접두가 빠지면 이름이 흩어진다.
+ */
+describe('trackScreen', () => {
+  it('log_type=screen에 screen_ 접두를 붙여 보낸다 — 콘솔이 이 두 값으로 화면 로그를 묶는다', () => {
+    trackScreen('home');
+
+    expect(logMock).toHaveBeenCalledTimes(1);
+    expect(logMock).toHaveBeenCalledWith({ log_type: 'screen', log_name: 'screen_home', params: {} });
+  });
+
+  it('SDK가 동기로 던져도 삼킨다 — 이 호출은 App 마운트 경로라 새면 앱이 통째로 안 뜬다', () => {
+    logMock.mockImplementation(() => {
+      throw new TypeError("Cannot read properties of undefined (reading 'log')");
+    });
+
+    expect(() => trackScreen('home')).not.toThrow();
+  });
+
+  it('거부된 Promise에도 핸들러를 달아 둔다 — 발사 후 망각이라 아무도 안 받으면 unhandled rejection이 된다', () => {
+    const rejected = Promise.reject(new Error('bridge failed'));
+    const attachHandler = vi.spyOn(rejected, 'catch');
+    logMock.mockReturnValue(rejected);
+
+    expect(() => trackScreen('home')).not.toThrow();
     expect(attachHandler).toHaveBeenCalledTimes(1);
 
     rejected.catch(() => {}); // 단언이 실패해도 떠도는 거부를 러너에 남기지 않는다
@@ -656,5 +751,22 @@ describe('attachMarginBanner — 초기화 후 부착, 실패는 전부 접힘',
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+/**
+ * 네이티브 뒤로가기 구독 — 앱 밖(목 모드·일반 브라우저)에는 호스트 브리지가 없어 SDK가 던진다.
+ * 그때도 **조용히 no-op 해제 함수**를 돌려줘야 한다: 이 구독은 `App`의 마운트 effect 한가운데라,
+ * 실패가 새면 목 모드에서 앱이 통째로 안 뜬다(`trackEvent`·`openExternal`과 같은 사정).
+ *
+ * <p>이 파일의 SDK 목엔 `graniteEvent`가 없다 — 그래서 이 테스트는 **실제 실패 경로**를 탄다
+ * (접근하는 순간 던진다). try/catch를 걷어내면 여기서 죽는다.
+ */
+describe('네이티브 뒤로가기 구독', () => {
+  it('SDK가 없으면 조용히 no-op 해제 함수를 준다 — 목 모드에서 콘솔 에러 0', () => {
+    const unsubscribe = subscribeNativeBack(() => {});
+
+    expect(typeof unsubscribe).toBe('function');
+    expect(() => unsubscribe()).not.toThrow();
   });
 });

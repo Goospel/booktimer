@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -57,6 +58,18 @@ class EmailVerificationServiceTest {
         verify(emailDispatcher).dispatch(to.capture(), any(), body.capture());
         assertThat(to.getValue()).isEqualTo("reader@booktimer.com");
         assertThat(body.getValue()).contains(BASE_URL + "/verify-email?token=RAWTOKEN123");
+    }
+
+    @Test
+    @DisplayName("sendVerification: 합성 주소(@noreply) 계정엔 토큰도 메일도 만들지 않고 거부한다 — 하드 반송 방지")
+    void sendVerification_syntheticEmail_throwsAndSendsNothing() {
+        User synthetic = User.of("toss-uk1" + User.SYNTHETIC_EMAIL_DOMAIN, "hash", "토스유저", "Asia/Seoul", Role.USER);
+
+        assertThatThrownBy(() -> service().sendVerification(synthetic))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(tokenService, never()).issue(any(), any());
+        verify(emailDispatcher, never()).dispatch(any(), any(), any());
     }
 
     @Test

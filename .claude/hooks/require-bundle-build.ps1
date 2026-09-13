@@ -21,7 +21,9 @@
 $ErrorActionPreference = 'Stop'
 
 try {
-    $raw  = [Console]::In.ReadToEnd()
+    # UTF-8 explicitly: Console.In decodes stdin as CP949, where a Korean lead byte can
+    # swallow the next quote -> JSON parse fails -> fail-open silently skips this gate.
+    $raw  = (New-Object System.IO.StreamReader([Console]::OpenStandardInput(), (New-Object System.Text.UTF8Encoding($false)))).ReadToEnd()
     $data = $raw | ConvertFrom-Json
     $cmd  = [string]$data.tool_input.command
 } catch { exit 0 }
@@ -36,14 +38,38 @@ if ($cmd -match 'SKIP_TESTS' -or $cmd -match 'SKIP_BUNDLE_CHECK') { exit 0 }
 
 $cwd = [string]$data.cwd
 if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
+# Inspect the worktree the commit really runs in, not the session cwd (T-242)
+. (Join-Path $PSScriptRoot 'lib\resolve-target-cwd.ps1')
+$cwd = Resolve-HookTargetCwd $cmd $cwd 'commit'
+if ($null -eq $cwd) { Stop-UnresolvedTarget 'commit' }
 
-# Check if any staged files are under frontend/
+# Which files would this commit touch?
+# The index alone is not enough (T-228): if the command stages itself
+# (`git add -A && git commit ...`, `git commit -am ...`), the index is still
+# EMPTY at PreToolUse time and this gate would exit 0 silently. In that case
+# also consider the working tree -- fail-safe: the gate may run when it did not
+# strictly have to (e.g. `git add <subset>`), never the other way round.
+$selfStages = ($cmd -match '\bgit\s+(add|stage)\b') -or
+              ($cmd -match '\bgit\s+commit\b[^|&;]*\s(--all\b|-[a-zA-Z]*a[a-zA-Z]*\b)')
+
+# NOTE: under $ErrorActionPreference='Stop', git's stderr warnings (e.g.
+# "LF will be replaced by CRLF") are promoted to NativeCommandError, which would
+# blow up the whole collection -> empty list -> silent pass. Same PowerShell 5.1
+# trap as the npm/gradlew calls below; drop to 'Continue' while collecting.
+$prevEAP0 = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
 try {
-    $staged = @(& git -C $cwd diff --cached --name-only 2>$null)
-} catch { $staged = @() }
+    $changed = @(& git -C $cwd diff --cached --name-only 2>$null)
+    if ($selfStages) {
+        $changed += @(& git -C $cwd diff --name-only 2>$null)                    # modified tracked
+        $changed += @(& git -C $cwd ls-files --others --exclude-standard 2>$null) # new untracked
+    }
+} catch { $changed = @() } finally { $ErrorActionPreference = $prevEAP0 }
 
-$frontStaged = @($staged | Where-Object { $_ -match '^frontend/' })
+$frontStaged = @($changed | Where-Object { $_ -match '^frontend/' })
 if ($frontStaged.Count -eq 0) { exit 0 }   # no frontend changes -- skip
+# Another project reached via cd (no BookTimer bundle layout) is not ours to build (T-242)
+if (-not (Test-Path (Join-Path $cwd 'src\main\resources\static'))) { exit 0 }
 
 # Require node (npm depends on it); fail-open if absent
 $nodeCmd = Get-Command node -ErrorAction SilentlyContinue

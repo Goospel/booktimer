@@ -19,11 +19,25 @@ const TOKEN_KEY = 'booktimer.token';
  */
 const DEV_MOCK = import.meta.env.DEV && import.meta.env.VITE_DEV_MOCK === '1';
 
+/**
+ * 목 모드에서 <b>로그아웃 상태로 시작</b>하는 스위치 — `?login`이 붙어 있을 때만.
+ *
+ * <p>목은 더미 토큰이 항상 있는 것으로 두어 로그인 브릿지를 건너뛴다. 덕분에 전 화면을 브라우저로
+ * 도는 대신 <b>첫 화면만은 브라우저로 볼 길이 아예 없었다</b> — 「진입 직후 덮는 것 0개」 재현 절차
+ * (CLAUDE.md)를 정작 그 화면에 못 쓴 것이다. 쿼리 한 개로 그 사각을 연다.
+ */
+let mockLoggedOut =
+  DEV_MOCK && typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('login');
+
 /** 토큰 보관 — WebView의 localStorage. 401을 만나면 폐기하고 재로그인한다. */
 export const token = {
   // 목 모드는 더미 토큰이 항상 있는 것으로 둔다 — 토스 SDK 없는 브라우저에서 로그인 브릿지를 건너뛴다.
-  get: (): string | null => (DEV_MOCK ? 'dev-mock-token' : localStorage.getItem(TOKEN_KEY)),
-  set: (value: string): void => localStorage.setItem(TOKEN_KEY, value),
+  get: (): string | null =>
+    DEV_MOCK ? (mockLoggedOut ? null : 'dev-mock-token') : localStorage.getItem(TOKEN_KEY),
+  set: (value: string): void => {
+    mockLoggedOut = false; // 목에서 「토스로 시작하기」를 누르면 그때부터 로그인 상태다
+    localStorage.setItem(TOKEN_KEY, value);
+  },
   clear: (): void => {
     localStorage.removeItem(TOKEN_KEY);
     // 로그아웃·401·탈퇴가 전부 이 문을 지난다 — 남의 계정 데이터가 다음 로그인 첫 렌더에 새면 안 된다.
@@ -130,7 +144,11 @@ export interface TossAuthResponse {
 
 /** 세 인증 엔드포인트의 공통부 — 매번 fresh 인가코드로 신원을 다시 증명한다(서버에 pending 상태 없음). */
 async function authenticate(path: string, extra?: Record<string, string>): Promise<TossAuthResponse> {
-  const { authorizationCode, referrer } = await tossLogin();
+  // 브라우저엔 토스 SDK가 없어 `TossAuth.login()`이 동기 TypeError를 던진다 — 목에서는 인가 단계를
+  // 통째로 건너뛴다(목 라우트가 어차피 어떤 코드든 등록된 신원으로 답한다).
+  const { authorizationCode, referrer } = DEV_MOCK
+    ? { authorizationCode: 'mock', referrer: 'SANDBOX' as const }
+    : await tossLogin();
   const result = await request<TossAuthResponse>(path, { body: { authorizationCode, referrer, ...extra } });
   // 토큰이 실린 응답만 저장한다 — 서버는 미등록(registered:false)일 때 토큰을 주지 않는다.
   if (result.token !== null) token.set(result.token);
@@ -175,6 +193,25 @@ export async function logout(): Promise<void> {
   }
 }
 
+/** `MiniappAccountApiController.WebLoginCodeResponse` — 코드와 남은 수명(초). */
+export interface WebLoginCodeResponse {
+  code: string;
+  expiresInSeconds: number;
+}
+
+/**
+ * PC 웹 로그인용 일회용 코드 발급 — 토스로 시작한 계정이 `booktimer.app`에 들어가는 **유일한 문**.
+ *
+ * <p>비밀번호가 없어 폼 로그인이 원리상 불가하고 `login_id`도 null일 수 있어, 웹에 들어갈 방법이 아예
+ * 없었다. 사용자가 이 코드를 PC 로그인 화면에 옮겨 적으면 세션이 열린다(`TossCodeLoginController`).
+ *
+ * <p>**본문이 없어 `method`를 명시한다** — `request()`는 본문 유무로 메서드를 정하므로 생략하면 조용히
+ * GET으로 나가 405가 된다. 재발급은 서버가 직전 코드를 무효화한다(항상 하나만 유효).
+ * 409 = 토스 미연결(평문이 곧 안내), 401 = 토큰 만료(`request()`가 로그인 화면으로 되돌린다).
+ */
+export const issueWebLoginCode = (): Promise<WebLoginCodeResponse> =>
+  request('/api/miniapp/web-login-code', { method: 'POST' });
+
 // ── 도메인 (기존 API 재사용) ─────────────────────────────────────────────────
 
 export interface BookOption {
@@ -207,21 +244,22 @@ export interface ContributionGraph {
   totalSeconds: number;
   activeDays: number;
   currentStreak: number;
-  growthStageName: string;
-  growthStageEmoji: string;
-  growthStageLabel: string;
-  /** 현재 단계 안의 진행률(0~100). 최고 단계면 100 — 막대가 빈 채로 남지 않는다. */
-  growthProgressPercent: number;
-  /** 다음 단계까지 남은 연속 일수. 최고 단계면 0. */
-  daysToNextStage: number;
-  /** 다음 단계 이름. 최고 단계면 null(더 오를 곳이 없다). */
-  nextStageLabel: string | null;
+  // 식물 성장 단계는 2026-08-29에 폐기했다 — 서버 응답에도 더 이상 없다.
 }
 
 export interface TimerState {
   remainingSeconds: number;
   carriedDebtSeconds: number;
   todayGoalSeconds: number;
+  /**
+   * 오늘 읽은 초 — <b>완료 세션 합</b>이고 상한이 없다. 측정 중 몫은 화면이 `activeStartedAt`으로 매초
+   * 더한다(공부 모드 `todaySeconds`와 같은 분업).
+   *
+   * <p>`remainingSeconds`에서 역산하지 <b>않는다</b>: 서버 부채는 `max(0, 목표 − 읽은 양)`이라 0에서
+   * 바닥을 쳐, 역산한 표시값이 목표에서 천장을 친다. 그래서 목표를 넘겨 읽다가 중지하면 화면이 정확히
+   * 목표값으로 되돌아갔다(초과분은 과거 날 상환에 소비돼 응답에 흔적이 없어 역산이 불가능하다).
+   */
+  todayReadSeconds: number;
   carryover: boolean;
   hasActiveSession: boolean;
   activeStartedAt: string | null;
@@ -243,6 +281,40 @@ export interface TimerState {
   debtWaiverAvailable: boolean;
 }
 
+/**
+ * 공부 모드 상태 — 독서({@link TimerState})와 <b>다른 타입</b>인 것이 이 기능의 요구 그 자체다.
+ * 목표·부채·책이 없어 실을 것이 셋뿐이고, 서버 원장도 별도 테이블(`study_session`)이라 섞일 길이 없다.
+ *
+ * <p>`todaySeconds`는 <b>완료 세션 합</b>이다 — 측정 중 몫은 화면이 `activeStartedAt`으로 매초 더한다.
+ */
+export interface StudyState {
+  hasActiveSession: boolean;
+  activeStartedAt: string | null;
+  todaySeconds: number;
+  // 공부 하루 목표(`goalSeconds`)는 2026-09-13 책별 「회당 시간」으로 대체돼 읽지 않는다 — 서버는 잔재 정리
+  // 전까지 계속 싣지만 옛 번들 방어용일 뿐이다(`StudyBookRow.sessionGoalSeconds`가 새 자리).
+  /**
+   * 지금 재고 있는 공부 책 — 안 골랐거나 대기 중이면 `null`. 히어로의 「측정 중 · 제목」이 이 한 필드를 본다.
+   *
+   * <p>아래 셋과 함께 <b>선택 필드</b>인 이유는 옛 서버 방어다: 이 필드를 아직 안 주는 서버가
+   * 살아 있는 동안에도 화면이 「책 없이」 쪽으로 온전히 떨어진다.
+   */
+  activeBook?: StudyBookRow | null;
+  /** 가장 최근에 공부한 책 — 홈 캐러셀의 기본 선택이 여기서 나온다(`defaultBookId`). */
+  recentBookId?: number | null;
+  /** 공부 서재 전체(등록 최신순) — 홈 캐러셀이 이 목록으로 선다(서재 탭을 안 거쳐도 고를 수 있다). */
+  books?: StudyBookRow[];
+  /** 방금 끝낸 <b>책 없는</b> 측정의 id — stop 응답에서만 채워진다(태깅 좌표). */
+  untaggedSessionId?: number | null;
+}
+
+/** 공부 기록이 없는 상태 — 옛 서버(이 필드를 안 주는)와 붙었을 때의 폴백이기도 하다. */
+export const IDLE_STUDY: StudyState = {
+  hasActiveSession: false,
+  activeStartedAt: null,
+  todaySeconds: 0,
+};
+
 // 서버는 작가 격언(`quotes`)도 실어 보내지만 미니앱은 쓰지 않는다 — 웹 대시보드 전용이라 필드를 받지 않는다.
 export interface DashboardResponse extends TimerState {
   nickname: string;
@@ -256,6 +328,8 @@ export interface DashboardResponse extends TimerState {
   wantToReadBooks: BookOption[];
   graph: ContributionGraph;
   emailVerified: boolean;
+  /** 공부 모드 상태 — `undefined`는 이 필드를 아직 안 주는 옛 서버다(화면은 {@link IDLE_STUDY}로 떨어진다). */
+  study?: StudyState;
 }
 
 export interface StopResponse {
@@ -292,6 +366,14 @@ export interface DailyRecord {
    */
   books: BookRead[];
   manuallyFilled: boolean;
+  /**
+   * 그 날짜에 유효했던 하루 목표(초) — 하루 막대의 기준. 0이면 「목표 없음」이고, 잔디와 같은 규칙으로
+   * 읽은 날은 가득 찬 것으로 친다.
+   *
+   * <p>선택 필드인 이유는 <b>롤링 배포 방어</b>다 — 이 필드를 싣기 전의 옛 서버 컨테이너가 아직 응답하면
+   * `undefined`로 온다(소비처는 `?? 0`). 전환이 끝나면 다음 응답이 곧 덮는다.
+   */
+  goalSeconds?: number;
 }
 
 /** `session.MonthlyReadingSection` — 최신 월 먼저, 각 달 안에서도 최신 일 먼저(서버가 그 순서로 준다). */
@@ -391,6 +473,16 @@ export interface HomeFeedResponse {
    * 서버·미니앱 배포 순서에 화면이 의존하지 않는다.
    */
   readers: ReaderStatus[];
+
+  /**
+   * 「여백」 탭 — <b>팔로우와 무관하게</b> 「모두의 여백」에 올라온 글(상한 30장, <b>서버가 섞어서</b> 준다).
+   *
+   * <p>모양은 `social`과 같은 `SocialEvent`지만 전부 `type: 'STORY'`이고 <b>묶이지 않아</b>
+   * `count`가 언제나 1이다. 미니앱은 다시 정렬하지 않는다 — 매 진입마다 다른 글이 서는 게 이 탭의 값이다.
+   *
+   * <p>`readers`와 같은 이유로 미니앱은 `?? []`로 읽는다 — 이 필드를 아직 안 내려주는 서버와도 붙는다.
+   */
+  discover: SocialEvent[];
 }
 
 export const fetchHomeFeed = (): Promise<HomeFeedResponse> => request('/api/home-feed');
@@ -400,6 +492,15 @@ export const startSession = (bookId: number | null): Promise<TimerState> =>
   request('/api/sessions/start', { body: { bookId } });
 
 export const stopSession = (): Promise<StopResponse> => request('/api/sessions/stop', { body: {} });
+
+/**
+ * 로그인 전 체험 세션 올리기 — 기기에서 이미 끝난 실측 구간이다(`trial.ts`).
+ *
+ * <p>6시간 클램프·자정 분할·`(user, startedAt)` 멱등은 <b>서버가</b> 맡는다. 204라 본문이 없고,
+ * 400(너무 오래됨·모양 틀림)과 그 밖의 실패는 뜻이 달라 `flushTrial`이 갈라 처리한다.
+ */
+export const importSession = (body: { startedAt: string; endedAt: string }): Promise<void> =>
+  request('/api/sessions/import', { body });
 
 export const tagBook = (sessionId: number, bookId: number): Promise<{ sessionId: number; bookTitle: string }> =>
   request(`/api/sessions/${sessionId}/tag-book`, { body: { bookId } });
@@ -414,8 +515,114 @@ export const tagBook = (sessionId: number, bookId: number): Promise<{ sessionId:
 export const changeActiveBook = (bookId: number | null): Promise<TimerState> =>
   request('/api/sessions/active/book', { body: { bookId } });
 
+/**
+ * 공부 측정 시작·종료 — 독서와 <b>다른 엔드포인트</b>다(원장이 다르므로 문도 다르다).
+ * 409 계약은 독서와 같다: 중복 시작 / 무세션 종료. 독서 측정 중에도 시작은 409다(이중 계측 금지).
+ */
+export const startStudy = (bookId: number | null): Promise<StudyState> =>
+  request('/api/study/start', { body: { bookId } });
+
+export const stopStudy = (): Promise<StudyState> => request('/api/study/stop', { body: {} });
+
+/**
+ * 종료 후 태깅 — 책 없이 끝낸 공부 측정에 나중에 책을 붙인다. 좌표는 stop 응답의
+ * {@link StudyState.untaggedSessionId} 하나뿐이다.
+ *
+ * <p>독서 `tagBook`과 <b>다른 응답</b>이다: 공부 뮤테이션은 전부 갱신된 {@link StudyState}를 돌려주므로
+ * 붙인 직후 `books[].totalSeconds`·`recentBookId`가 재조회 없이 맞는다. 진행 중이거나 이미 책이 있는
+ * 측정이면 409, 남의 세션·남의 책이면 404다(존재 비노출).
+ */
+export const tagStudyBook = (sessionId: number, bookId: number): Promise<StudyState> =>
+  request(`/api/study/sessions/${sessionId}/tag-book`, { body: { bookId } });
+
+/**
+ * 측정 중 대상 교체 — `bookId`가 `null`이면 「책 없이」로 되돌린다. 측정은 멈추지 않고 지금까지 잰
+ * 시간이 통째로 새 책에 붙는다(갈라지지 않는다).
+ *
+ * <p>독서 `changeActiveBook`과 같이 <b>세션 좌표를 안 보낸다</b> — 서버가 「내 진행 중 측정」을 직접
+ * 찾는다. 진행 중 측정이 없으면 409(방금 끝난 뒤 도착한 요청도 여기로 떨어진다).
+ */
+export const changeActiveStudyBook = (bookId: number | null): Promise<StudyState> =>
+  request('/api/study/active/book', { body: { bookId } });
+
 export const setGoal = (dailyIncrementSeconds: number): Promise<void> =>
   request('/api/miniapp/goal', { body: { dailyIncrementSeconds } });
+
+/**
+ * 공부 책의 「회당 시간」 설정 — `null`이 해제다(0은 400). 60~21600 밖이면 400(책을 보기 전에),
+ * 남의 책·없는 책은 404. 응답이 갱신된 {@link StudyState}라 측정 중인 책이면 `activeBook`에도 곧바로 실린다.
+ */
+export const setStudySessionGoal = (bookId: number, seconds: number | null): Promise<StudyState> =>
+  request(`/api/study/books/${bookId}/session-goal`, { body: { sessionGoalSeconds: seconds } });
+
+/**
+ * 공부 일정 달력의 하루 — 자동 정보(측정)와 원장(판정)이 <b>한 칸에 나란히</b> 온다.
+ *
+ * <p>`kept`가 `null`이면 <b>무기록</b>이다(서버엔 행 자체가 없다). 이 3상태가 화면 순환의 전부라
+ * 다른 필드로 상태를 파생하지 않는다 — `studiedSeconds > 0`은 「점」일 뿐 판정이 아니다.
+ */
+export interface StudyCalendarDay {
+  /** `YYYY-MM-DD`(유저 타임존의 달력 날짜). */
+  date: string;
+  studiedSeconds: number;
+  kept: boolean | null;
+}
+
+/** `days`는 <b>데이터 있는 날만</b> 날짜순으로 온다(희소) — 화면이 빈 칸을 채운다. */
+export interface StudyCalendarResponse {
+  days: StudyCalendarDay[];
+}
+
+/**
+ * 그 달의 달력을 받는다.
+ *
+ * <p>달을 경로에 이어 붙이지 않고 `query`로 넘기는 이유: 목 모드 라우터가 <b>경로 문자열 그대로</b>
+ * 정규식에 물리므로, `?month=…`를 경로에 넣으면 목이 그 경로를 못 찾는다(404). 실 요청에서는
+ * {@link request}가 같은 쿼리스트링을 만들어 준다.
+ *
+ * @param month `YYYY-MM`
+ */
+export const fetchStudyCalendar = (month: string): Promise<StudyCalendarResponse> =>
+  request('/api/study/calendar', { query: { month } });
+
+/**
+ * 그날의 일정 판정을 남긴다 — `kept`가 `null`이면 무기록으로 되돌린다(3상태 순환의 마지막 칸).
+ *
+ * <p>미래 날짜는 400이다(화면도 흐리게 눌러 막지만, 서버가 유저 타임존으로 다시 판정한다).
+ */
+export const setStudyCheck = (
+  date: string,
+  kept: boolean | null,
+): Promise<{ date: string; kept: boolean | null }> => request('/api/study/check', { body: { date, kept } });
+
+// ── 공부 기록 (`session.StudyHistoryService`의 record가 타입 단일 출처) ──────
+
+/** @param date `YYYY-MM-DD`(유저 타임존의 달력 날짜) */
+export interface StudyDay {
+  date: string;
+  totalSeconds: number;
+}
+
+/** `YYYY-MM` — Jackson이 `YearMonth`를 이 모양으로 직렬화한다. 최신 월 먼저, 달 안에서도 최신 일 먼저. */
+export interface StudyMonth {
+  month: string;
+  totalSeconds: number;
+  days: StudyDay[];
+}
+
+/**
+ * 공부 기록 — 잔디와 월별 목록.
+ *
+ * <p>`graph`는 독서와 <b>같은 `ContributionGraph` 꼴</b>이다(`weeks[0]`=최신 주). `manual`은 항상
+ * false — 공부엔 수동 입력이 없다. ⚠️ 두 범위가 다르다: `months`는 전 기간이고 `graph`는 53주라,
+ * 오래된 달은 목록엔 있고 잔디 총합엔 없다.
+ */
+export interface StudyHistoryResponse {
+  graph: ContributionGraph;
+  months: StudyMonth[];
+}
+
+export const fetchStudyHistory = (): Promise<StudyHistoryResponse> => request('/api/study/history');
 
 /** 용서 지급 결과 — `timer`가 동봉돼 부채·버튼 노출이 재조회 없이 갱신된다. */
 export interface WaiveResponse {
@@ -535,6 +742,70 @@ export const setBookVisibility = (id: number, visibility: BookVisibility): Promi
 
 export const deleteBook = (id: number): Promise<{ deleted: boolean }> =>
   request(`/api/books/${id}/delete`, { body: {} });
+
+// ── 공부 서재 (`web/api/StudyBookApiController`의 record가 타입 단일 출처) ──────
+//
+// 독서 서재(`/api/books`)와 **다른 문**인 것이 요구 그 자체다 — 두 서재가 섞이지 않는다.
+// 그래서 여기엔 상태·공개범위·읽은 시간이 없고, 대신 이 화면의 유일한 분류 축인 `readCount`가 있다.
+
+/** `StudyBookApiController.StudyBookRow` — 독서 {@link MyBookSummary}보다 훨씬 좁다. */
+export interface StudyBookRow {
+  id: number;
+  title: string;
+  author: string | null;
+  coverUrl: string | null;
+  isbn13: string | null;
+  /** 지금까지 돈 회독 수. **0은 「아직 안 돌았다」**이지 「모른다」가 아니다(화면이 0독 칩을 그린다). */
+  readCount: number;
+  purchaseLink: string | null;
+  /**
+   * 이 책으로 잰 공부 시간의 총합(초) — <b>0은 부재</b>라 화면이 칩을 안 만든다(0독과 다른 규약:
+   * 「아직 안 돌았다」는 상태지만 「0초 공부」는 할 말이 아니다). 이 필드를 안 주는 옛 서버는 `undefined`.
+   */
+  totalSeconds?: number;
+  /**
+   * 회당 시간(초, 60~21600) — `null`은 안 정함(제한 없는 스톱워치). 이 필드를 안 주는 옛 서버는 `undefined`라
+   * 소비처는 `null`과 같게 읽는다.
+   */
+  sessionGoalSeconds?: number | null;
+}
+
+export interface StudyShelfResponse {
+  searchEnabled: boolean;
+  books: StudyBookRow[];
+}
+
+export const fetchStudyBooks = (): Promise<StudyShelfResponse> => request('/api/study/books');
+
+/**
+ * 검색 행을 공부 서재에 담는다 — 언제나 0독으로 시작하므로 상태를 묻지 않는다(독서와 다른 점).
+ *
+ * <p>`category`·`pubDate`를 안 보낸다: 책BTI 입력용이라 공부엔 소비처가 없고, 서버 테이블에 컬럼도 없다.
+ * 같은 isbn을 다시 담으면 서버가 기존 행을 그대로 준다(멱등 — 회독 수가 보존된다).
+ */
+export const addStudyBook = (row: SearchRow): Promise<StudyBookRow> =>
+  request('/api/study/books', {
+    body: {
+      title: row.title,
+      author: row.author,
+      isbn13: row.isbn13,
+      coverUrl: row.coverUrl,
+      publisher: row.publisher,
+      purchaseLink: row.purchaseLink,
+    },
+  });
+
+/**
+ * 회독 수를 <b>절대값으로</b> 설정한다 — 클라가 현재값 ±1을 보낸다.
+ *
+ * <p>델타(+1/-1)가 아니라 절대값인 이유는 멱등이라서다: 연타·재시도가 두 번 세지 않는다.
+ * 음수는 서버가 400으로 막고, 남의 책·없는 책은 404다(존재 비노출).
+ */
+export const setStudyReadCount = (id: number, readCount: number): Promise<StudyBookRow> =>
+  request(`/api/study/books/${id}/read-count`, { body: { readCount } });
+
+export const deleteStudyBook = (id: number): Promise<{ deleted: boolean }> =>
+  request(`/api/study/books/${id}/delete`, { body: {} });
 
 // ── 소셜 (search·follow·profile·block·report 컨트롤러의 record가 타입 단일 출처) ──
 //
@@ -777,12 +1048,15 @@ export interface PersonalityMutation {
 }
 
 /**
- * 관문 사전 판정 — <b>부작용이 없는 유일한 성향 GET</b>이다. 웹이 쓰는 `GET /api/personality`는
- * 히스토리가 비면 첫 분석을 LLM으로 만들어 버려(=광고 없이 공짜 분석) 관문을 무력화한다.
+ * 관문 사전 판정 — 미니앱이 광고를 띄우기 <b>전에</b> 알아야 하는 둘(콜드스타트 여부·대표 보유 여부).
+ *
+ * <p>이게 따로 생긴 이유는 웹이 쓰는 `GET /api/personality`가 <b>당시엔</b> 히스토리가 비면 첫 분석을
+ * LLM으로 만들어 버려(=광고 없이 공짜 분석) 관문을 무력화했기 때문이다. 2026-09-08에 서버가 그
+ * 부트스트랩을 걷어 지금은 그 GET도 읽기 전용이지만, 응답 모양이 달라 이쪽을 계속 쓴다.
  */
 export const fetchPersonalityStatus = (): Promise<PersonalityStatus> => request('/api/personality/status');
 
-/** 광고 경로 전용 — 웹 `/refresh`(천장 3)가 아니라 `/ad-refresh`(천장 = 하루 총량)를 부른다. */
+/** 유일한 생성 경로 — 천장은 하루 총량이다(웹 전용 `/refresh`는 2026-09-08에 서버에서 사라졌다). */
 export const adRefreshPersonality = (): Promise<PersonalityMutation> =>
   request('/api/personality/ad-refresh', { method: 'POST' });
 

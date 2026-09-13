@@ -37,6 +37,15 @@ public class User extends BaseTimeEntity {
     private static final Pattern EMAIL_PATTERN =
             Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
+    /**
+     * 합성(자리표시) 이메일의 도메인 — <b>메일을 보내면 안 되는 주소</b>다(라우팅 불가라 하드 반송된다).
+     *
+     * <p>두 곳에서 붙는다: ⓐ 토스 가입 시 이메일이 없거나 기존 계정과 충돌할 때
+     * ({@link TossUserProvisioningService#syntheticEmail}) ⓑ 미검증 토스 연결 계정의 이메일 충돌 재배정
+     * ({@link #reassignEmailToSynthetic}). {@code users.email}이 NOT NULL이라 비울 수 없어 쓰는 값이다.
+     */
+    public static final String SYNTHETIC_EMAIL_DOMAIN = "@noreply.booktimer.app";
+
     /** login_id 형식: 영소문자/숫자/언더스코어, 3~20자. 입력은 소문자로 정규화한 뒤 검증한다. */
     private static final Pattern LOGIN_ID_PATTERN = Pattern.compile("^[a-z0-9_]{3,20}$");
 
@@ -153,18 +162,6 @@ public class User extends BaseTimeEntity {
     private String tossUserKey;
 
     /**
-     * 프로필 아바타로 선택한 도감 작가 캐릭터 코드({@code author_character.code}). <b>파일 업로드 없이</b>
-     * 사용자가 도감에서 <b>보유(완독)한 작가</b>의 얼굴(SVG 스프라이트 {@code #sprite-{code}})을 아바타로 재사용한다.
-     * {@code null}이면 미선택 — 기존 로그인ID 이니셜 원형으로 폴백한다(opt-in).
-     *
-     * <p><b>보유 여부 검증은 엔티티가 아니라 서비스</b>({@code ProfileCharacterService})가 한다 — 보유 판정이
-     * 완독책·도감 카탈로그에 의존해 엔티티 순수성을 벗어나기 때문(먹이주기 IDOR 방어와 동일 경로). 엔티티는
-     * 마케팅 동의 setter처럼 값만 받는다({@link #selectProfileCharacter}/{@link #clearProfileCharacter}).
-     */
-    @Column(name = "profile_character_code", length = 50)
-    private String profileCharacterCode;
-
-    /**
      * 영리목적 광고성 정보(재참여 넛지 등 마케팅 메일) 수신에 동의했는지(이메일 인프라 2단계).
      * 정보통신망법 §50의 <b>사전 동의(opt-in)</b> 불변식 — 기본 {@code false}(미동의)이고, 가입 폼·설정의
      * 별도 선택 항목으로만 켜진다(필수 동의에 끼워팔지 않음 — 개인정보보호법). 미동의자에겐 넛지를 보내지 않는다.
@@ -195,6 +192,33 @@ public class User extends BaseTimeEntity {
      */
     @Column(name = "goal_met_pushed_on")
     private java.time.LocalDate goalMetPushedOn;
+
+    /**
+     * 공부 하루 목표(초) — {@code 0}이면 「목표 없음」(독서 목표와 같은 의미론).
+     *
+     * <p>독서 목표({@code ReadingTimer.dailyIncrementSeconds})와 <b>완전히 별개</b>다: 두 모드의 원장이
+     * 갈려 있는 것과 같은 이유이고, 여기가 섞이면 공부 목표를 바꿀 때 독서 부채 판정이 함께 흔들린다.
+     *
+     * <p>변경 이력 테이블이 없는 것은 결정이다 — 공부엔 이월·부채가 없어 「그날의 목표로 과거를 판정」할
+     * 일이 없다(V79 주석).
+     */
+    @Column(name = "study_daily_goal_seconds", nullable = false)
+    private long studyDailyGoalSeconds = 0;
+
+    /**
+     * 공부 화면 AI 기능의 승인 상태 — 관리자가 켜 준 사람만 AI를 부른다(설계 §2.6).
+     *
+     * <p>기본값 {@link StudyAiAccess#NONE}은 마이그레이션(V84)의 컬럼 DEFAULT와 짝이라, <b>기존 전 유저가
+     * 자동으로 켜지지 않는다</b>. 별도 신청 테이블을 두지 않은 이유는 관리자 화면이 필요로 하는 것이
+     * 「대기 목록·승인자 목록」뿐이고, 그건 이 컬럼 하나의 조회로 끝나기 때문이다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "study_ai_access", nullable = false, length = 10)
+    private StudyAiAccess studyAiAccess = StudyAiAccess.NONE;
+
+    /** 마지막 상태 전이 시각 — 대기 큐 정렬과 「M월 D일 신청」 표시에 쓴다. 한 번도 없으면 {@code null}. */
+    @Column(name = "study_ai_access_at")
+    private java.time.Instant studyAiAccessAt;
 
     protected User() {
         // JPA
@@ -292,32 +316,6 @@ public class User extends BaseTimeEntity {
         }
         this.nickname = nickname;
         this.timezone = timezone;
-    }
-
-    /**
-     * 프로필 아바타로 쓸 도감 작가 캐릭터를 선택한다. <b>보유(해금) 여부 검증은 호출 전에</b>
-     * 서비스({@code ProfileCharacterService})가 끝낸 상태로 들어온다 — 엔티티는 값만 받는다
-     * (마케팅 동의 setter와 같은 얇은 책임 분리). {@code null}/공백이면 {@link #clearProfileCharacter()}로
-     * 위임해 미선택(이니셜 폴백) 상태로 되돌린다.
-     *
-     * @param code author_character.code (보유 검증을 통과한 값) — null/공백이면 선택 해제
-     */
-    public void selectProfileCharacter(String code) {
-        if (code == null || code.isBlank()) {
-            clearProfileCharacter();
-            return;
-        }
-        this.profileCharacterCode = code;
-    }
-
-    /** 프로필 아바타 선택을 해제한다 — 기본(로그인ID 이니셜)으로 되돌린다. 멱등. */
-    public void clearProfileCharacter() {
-        this.profileCharacterCode = null;
-    }
-
-    /** 프로필 아바타로 선택한 도감 작가 캐릭터 코드. 미선택이면 {@code null}(이니셜 폴백). */
-    public String getProfileCharacterCode() {
-        return profileCharacterCode;
     }
 
     /**
@@ -423,6 +421,83 @@ public class User extends BaseTimeEntity {
     /** 목표 달성 푸시를 마지막으로 보낸 날(유저 TZ). 한 번도 안 보냈으면 {@code null}. */
     public java.time.LocalDate getGoalMetPushedOn() {
         return goalMetPushedOn;
+    }
+
+    public long getStudyDailyGoalSeconds() {
+        return studyDailyGoalSeconds;
+    }
+
+    /**
+     * 공부 하루 목표를 바꾼다 — 규칙은 독서({@code ReadingTimer#updateSettings})와 같다:
+     * {@code 0}은 「목표 없음」으로 허용하고 음수만 거부한다.
+     *
+     * @throws IllegalArgumentException 값이 음수인 경우
+     */
+    public void updateStudyDailyGoal(long seconds) {
+        if (seconds < 0) {
+            throw new IllegalArgumentException("studyDailyGoalSeconds must be >= 0");
+        }
+        this.studyDailyGoalSeconds = seconds;
+    }
+
+    /** 공부 AI 기능의 현재 승인 상태. 기본값은 {@link StudyAiAccess#NONE}이다. */
+    public StudyAiAccess getStudyAiAccess() {
+        return studyAiAccess;
+    }
+
+    /** 마지막 승인 상태 전이 시각(신청·수락·거절·회수 중 가장 최근). 한 번도 없으면 {@code null}. */
+    public java.time.Instant getStudyAiAccessAt() {
+        return studyAiAccessAt;
+    }
+
+    /**
+     * AI 기능을 신청한다 — {@code NONE}·{@code REJECTED}에서만. 거절·회수 뒤 재신청은 즉시 가능하다
+     * (쿨다운을 두지 않는 이유는 대기 큐를 관리자만 보고, 반복 거절이 규칙보다 싸기 때문이다 — 설계 §2.6).
+     *
+     * @throws IllegalStateException 이미 신청했거나(PENDING) 승인된(APPROVED) 상태인 경우
+     */
+    public void requestStudyAi(java.time.Instant now) {
+        transitionStudyAi(java.util.Set.of(StudyAiAccess.NONE, StudyAiAccess.REJECTED),
+                StudyAiAccess.PENDING, now);
+    }
+
+    /**
+     * 신청을 수락한다 — {@code PENDING}에서만.
+     *
+     * @throws IllegalStateException 대기 중인 신청이 아닌 경우
+     */
+    public void approveStudyAi(java.time.Instant now) {
+        transitionStudyAi(java.util.Set.of(StudyAiAccess.PENDING), StudyAiAccess.APPROVED, now);
+    }
+
+    /**
+     * 신청을 거절한다 — {@code PENDING}에서만.
+     *
+     * @throws IllegalStateException 대기 중인 신청이 아닌 경우
+     */
+    public void rejectStudyAi(java.time.Instant now) {
+        transitionStudyAi(java.util.Set.of(StudyAiAccess.PENDING), StudyAiAccess.REJECTED, now);
+    }
+
+    /**
+     * 승인을 회수한다 — {@code APPROVED}에서만. 이미 저장된 분석 결과·일정은 <b>지우지 않는다</b>
+     * (과거 산출물은 사용자 것이다).
+     *
+     * @throws IllegalStateException 승인 상태가 아닌 경우
+     */
+    public void revokeStudyAi(java.time.Instant now) {
+        transitionStudyAi(java.util.Set.of(StudyAiAccess.APPROVED), StudyAiAccess.REJECTED, now);
+    }
+
+    /** 전이 규칙의 단일 출처 — 허용 상태가 아니면 상태·시각을 <b>건드리지 않고</b> 거부한다. */
+    private void transitionStudyAi(java.util.Set<StudyAiAccess> allowedFrom, StudyAiAccess to,
+                                   java.time.Instant now) {
+        if (!allowedFrom.contains(studyAiAccess)) {
+            throw new IllegalStateException(
+                    "study AI access transition not allowed: " + studyAiAccess + " -> " + to);
+        }
+        this.studyAiAccess = to;
+        this.studyAiAccessAt = now;
     }
 
     /** 책BTI "다시 분석"의 하루 허용 횟수(악의적 반복 클릭 → LLM 남용 방어). 무광고(웹) 경로의 천장이다. */
@@ -622,6 +697,45 @@ public class User extends BaseTimeEntity {
     /** 연결된 토스 사용자 식별자(userKey). 미연결(웹 전용 계정)이면 {@code null}. */
     public String getTossUserKey() {
         return tossUserKey;
+    }
+
+    /**
+     * <b>토스를 연결한 미검증 계정의 이메일 충돌 해소 전용</b> — 이 계정의 이메일을 합성 주소로 비켜 놓는다.
+     * 일반적인 "이메일 변경"이 아니다(그런 기능은 도메인에 없다. 이름으로 못 박아 오용을 막는다).
+     *
+     * <p>쓰이는 자리는 하나다: {@link AccountService#reassignUnverifiedTossEmail} — 그쪽을
+     * {@link OAuthUserProvisioningService#provision}이 같은 이메일의 <b>미검증</b> 토스 연결 계정(TOSS
+     * 가입이든 웹 LOCAL 가입 후 연결이든)을 만났을 때 부른다. 토스는 이메일 소유를 보증하지 않아 그 주소가
+     * 남의 것일 수 있고, 그렇다고 계정을 폐기하면 그 사용자의 기록이 사라진다 — 그래서 계정은 남기고 이메일만 {@code toss-{userKey}@…}로 옮긴다
+     * ({@link TossUserProvisioningService#syntheticEmail}이 그 주소의 단일 출처).
+     *
+     * <p>검증 상태는 건드리지 않는다 — 원래 {@code false}이고, 합성 주소는 발송하지 않는 자리표시다.
+     * 이미 검증된 계정에 부르는 것은 소유 증명을 무시하고 남의 이메일을 빼앗는 것이라 거부한다.
+     *
+     * @param syntheticEmail 새 이메일(형식 검증은 생성자와 같은 규칙)
+     * @throws IllegalStateException    이 계정의 이메일이 이미 검증된 경우(오용 차단)
+     * @throws IllegalArgumentException 주소가 null/공백이거나 형식이 깨진 경우
+     */
+    public void reassignEmailToSynthetic(String syntheticEmail) {
+        if (emailVerified) {
+            throw new IllegalStateException(
+                    "verified email must not be reassigned: id=" + id);
+        }
+        if (syntheticEmail == null || syntheticEmail.isBlank()) {
+            throw new IllegalArgumentException("email must not be blank");
+        }
+        if (!EMAIL_PATTERN.matcher(syntheticEmail).matches()) {
+            throw new IllegalArgumentException("email is malformed: " + syntheticEmail);
+        }
+        this.email = syntheticEmail;
+    }
+
+    /**
+     * 이메일이 {@link #SYNTHETIC_EMAIL_DOMAIN} 자리표시 주소인가 — 발송·인증 유도를 건너뛸 판별의 단일 출처.
+     * 이 주소는 라우팅되지 않으므로 인증 메일을 보내면 매번 하드 반송된다.
+     */
+    public boolean hasSyntheticEmail() {
+        return email != null && email.endsWith(SYNTHETIC_EMAIL_DOMAIN);
     }
 
     public Long getId() {

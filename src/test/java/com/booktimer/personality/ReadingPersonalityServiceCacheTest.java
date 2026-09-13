@@ -70,22 +70,21 @@ class ReadingPersonalityServiceCacheTest {
         return cacheRepository.findByUserOrderByGeneratedAtDescIdDesc(u);
     }
 
+    // 2026-09-08 이전엔 여기서 첫 분석을 부트스트랩 생성했다. 웹엔 광고 관문이 없어 비용만 나가서
+    // 걷었다 — 생성은 「다시 분석」(광고 경로)에만 남는다. 규칙이 뒤집혔으므로 같은 자리에서 반대를
+    // 못 박는다(테스트를 지우면 이 자리가 무방비가 된다).
     @Test
-    @DisplayName("첫 진입: 히스토리가 비었고 책이 충분하면 LLM을 호출해 1행을 대표로 저장한다")
-    void firstVisit_bootstrapsSelectedRow() {
+    @DisplayName("첫 진입: 책이 충분해도 LLM을 부르지 않고 행도 안 만든다 — 생성은 「다시 분석」에서만")
+    void firstVisit_doesNotBootstrap() {
         User u = newUser("first@booktimer.com");
         saveBooks(u, 5);
         narratorReturns("이 사람은 완독러다.");
 
         ReadingPersonality result = service.currentPersonality(u);
 
-        assertThat(result.hasNarration()).isTrue();
-        assertThat(result.narration().narrative()).isEqualTo("이 사람은 완독러다.");
-        verify(narrator, times(1)).narrate(any());
-        assertThat(rows(u)).hasSize(1);
-        assertThat(cacheRepository.findByUserAndSelectedTrue(u)).get()
-                .extracting(ReadingPersonalityCache::getNarrative).isEqualTo("이 사람은 완독러다.");
-        assertThat(rows(u).get(0).getInputSignature()).isNotBlank();
+        assertThat(result.hasNarration()).isFalse();
+        verify(narrator, never()).narrate(any());
+        assertThat(rows(u)).isEmpty();
     }
 
     @Test
@@ -95,10 +94,10 @@ class ReadingPersonalityServiceCacheTest {
         saveBooks(u, 5);
         narratorReturns("정독형 독자.");
 
-        service.currentPersonality(u);                       // 첫 진입 — 부트스트랩
-        ReadingPersonality second = service.currentPersonality(u); // 둘째 — 대표 읽기
+        service.reanalyze(u);                                // 광고 경로로 대표를 만들어 둔다
+        ReadingPersonality second = service.currentPersonality(u); // GET — 대표 읽기
 
-        verify(narrator, times(1)).narrate(any()); // 총 1번만
+        verify(narrator, times(1)).narrate(any()); // reanalyze 1번뿐 — GET은 안 부른다
         assertThat(second.hasNarration()).isTrue();
         assertThat(second.narration().narrative()).isEqualTo("정독형 독자.");
         assertThat(second.narration().tags()).containsExactly("태그");
@@ -111,22 +110,22 @@ class ReadingPersonalityServiceCacheTest {
         saveBooks(u, 5);
         narratorReturns("초기 서술.");
 
-        service.currentPersonality(u); // 첫 생성
+        service.reanalyze(u);          // 광고 경로로 대표 생성
         saveBooks(u, 1);               // 책장 변화(6권)
-        service.currentPersonality(u); // 그래도 재생성 안 함
+        service.currentPersonality(u); // GET은 재생성하지 않는다
 
         verify(narrator, times(1)).narrate(any());
         assertThat(rows(u)).hasSize(1);
     }
 
     @Test
-    @DisplayName("완독 1권이면 (정확도 낮아도) 책BTI를 부트스트랩 생성한다 — 임계=1")
+    @DisplayName("완독 1권이면 (정확도 낮아도) 「다시 분석」이 성향을 만든다 — 임계=1")
     void oneBook_generatesPersonality_notColdStart() {
         User u = newUser("one@booktimer.com");
         saveBooks(u, 1); // 완독 단 1권
         narratorReturns("한 권으로 본 잠정 성향.");
 
-        ReadingPersonality result = service.currentPersonality(u);
+        ReadingPersonality result = service.reanalyze(u);
 
         assertThat(result.hasNarration()).isTrue();
         assertThat(result.narration().narrative()).isEqualTo("한 권으로 본 잠정 성향.");
@@ -148,17 +147,4 @@ class ReadingPersonalityServiceCacheTest {
         assertThat(rows(u)).isEmpty();
     }
 
-    @Test
-    @DisplayName("부트스트랩 LLM 실패: 사실만 폴백하고 행을 만들지 않는다")
-    void bootstrapLlmFails_fallbackNoRow() {
-        User u = newUser("fail@booktimer.com");
-        saveBooks(u, 5);
-        when(narrator.narrate(any())).thenReturn(Optional.empty());
-
-        ReadingPersonality result = service.currentPersonality(u);
-
-        assertThat(result.hasNarration()).isFalse();
-        assertThat(result.profile().totalBooks()).isEqualTo(5);
-        assertThat(rows(u)).isEmpty();
-    }
 }

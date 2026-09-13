@@ -103,6 +103,26 @@ do_merge() {
 # DIRTY(머지 충돌)를 origin/main 자동 rebase로 풀어 본다. --rebase 일 때만 호출.
 # 성공(충돌 없음) → force-with-lease push 후 return 0(루프가 머지로 진행). 충돌/실패 → return 1(수동 필요).
 try_rebase() {
+  # T-210 게이트 — PreToolUse 훅(require-single-changelog-commit-before-rebase.ps1)은 명령
+  # 문자열에서 `git rebase` 토큰을 찾는데, 세션이 치는 명령은 `bash .claude/scripts/pr-merge.sh
+  # <PR> --rebase` 라 그 토큰이 없다. 그래서 하드픽스가 이 우회 경로로 그대로 샌다(리뷰 실측).
+  # 같은 판정을 여기서 한 번 더 한다 — 판정이 두 군데인 것이 이 구조의 비용이다.
+  # dry-run 보다 앞에 둔다: 게이트는 행위가 아니라 판정이라 "would" 에서도 옳아야 한다.
+  local top base n
+  top="$(git rev-parse --show-toplevel 2>/dev/null)"
+  if [ -z "${ALLOW_MULTI_CHANGELOG_REBASE:-}" ] && [ -n "$top" ] && [ -f "$top/claude-docs/changelog.md" ]; then
+    base="$(git merge-base HEAD origin/main 2>/dev/null)"
+    if [ -n "$base" ]; then
+      n="$(git rev-list --count "$base..HEAD" -- claude-docs/changelog.md 2>/dev/null)"
+      if [ -n "$n" ] && [ "$n" -ge 2 ] 2>/dev/null; then
+        note "❌ --rebase 거부: 이 브랜치가 claude-docs/changelog.md를 ${n}개 커밋에서 건드립니다 (T-210)." >&2
+        note "   merge=union이 rebase 재적용에서 초판과 최종본을 둘 다 남깁니다 — 충돌도 테스트 실패도 없습니다." >&2
+        note "   먼저 합치세요:  git reset --soft ${base}  →  한 커밋으로 재커밋(T-026)  →  이 명령 재실행." >&2
+        note "   우회: ALLOW_MULTI_CHANGELOG_REBASE=1 bash .claude/scripts/pr-merge.sh $PR --rebase" >&2
+        exit 1
+      fi
+    fi
+  fi
   if [ "${PR_MERGE_DRYRUN:-0}" = "1" ]; then
     note "would: 안전검증(현재 브랜치==PR head·워킹트리 clean) 후 git fetch && git rebase origin/main && git push --force-with-lease"
     return 0

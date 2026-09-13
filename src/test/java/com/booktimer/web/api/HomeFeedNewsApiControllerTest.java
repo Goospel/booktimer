@@ -90,6 +90,24 @@ class HomeFeedNewsApiControllerTest {
     }
 
     @Test
+    @DisplayName("같은 기사가 완독 책 두 권에 걸리면 한 줄만 — 최신 행이 남는다")
+    void dedupesSameArticleAcrossBooks() throws Exception {
+        User me = saveUser("news-dup@booktimer.com", "newsdup");
+        saveBook(me, "책A", "9780000000011", BookStatus.FINISHED);
+        saveBook(me, "책B", "9780000000012", BookStatus.FINISHED);
+
+        // 유니크가 (isbn13, link)라 같은 기사가 책마다 한 줄씩 저장된다 — 화면엔 한 줄이어야 한다.
+        String link = "https://news.google.com/rss/articles/shared";
+        saveNews("9780000000011", "같은 기사", link, "2026-08-01T00:00:00Z");
+        saveNews("9780000000012", "같은 기사", link, "2026-08-10T00:00:00Z");
+
+        mockMvc.perform(get("/api/home-feed").with(user("newsdup")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.news.length()").value(1))
+                .andExpect(jsonPath("$.news[0].bookTitle").value("책B"));
+    }
+
+    @Test
     @DisplayName("완독한 책이 없으면 뉴스는 빈 목록 (탭은 켜지되 빈 상태)")
     void emptyWhenNoFinishedBooks() throws Exception {
         saveUser("news-empty@booktimer.com", "newsempty");

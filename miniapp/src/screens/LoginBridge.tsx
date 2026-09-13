@@ -1,17 +1,12 @@
 import { Button } from '@toss/tds-mobile';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { login, register } from '../api';
+import { trackEvent } from '../toss';
 import { ErrorMessage, Loading, Screen, Text } from '../ui';
+import type { LoginSource } from './GuestHome';
 
-type Phase = 'intro' | 'checking' | 'choice' | 'failed';
-
-/** 인트로 소개문 — "무엇을 하는 앱인지"를 로그인 전에 읽힌다(심사 반려 1 대응). */
-const PITCH = [
-  '책 읽는 시간을 타이머로 기록하고, 매일의 독서를 잔디로 쌓아요.',
-  '하루 목표를 정하면 달성 순간 토스 알림으로 알려드려요.',
-  'PC 웹(booktimer.app)과 같은 계정으로 이어서 쓸 수 있어요.',
-];
+type Phase = 'checking' | 'choice' | 'failed';
 
 /**
  * 로그인 시작 — `appLogin()` → `/api/toss/login`의 결과를 다음 화면으로 옮긴다.
@@ -19,34 +14,49 @@ const PITCH = [
  * <p>정적 렌더 하니스로는 클릭을 못 잡으므로 이 흐름만 따로 꺼내 단위로 계측한다
  * (관례: `claimDebtWaiver`·`tabChangeHandler`).
  */
-export async function beginLogin(): Promise<'authenticated' | 'choice'> {
+export async function beginLogin(source: LoginSource): Promise<'authenticated' | 'choice'> {
+  // 「토스로 시작하기」를 눌렀다 — `await` **앞**이라 인가가 취소·실패해도 남는다. 「눌렀는데 안 온
+  // 사람」과 「아예 안 누른 사람」은 처방이 달라서(인가·약관 단계 문제 vs 소개문 문제) 이 한 점이 가른다.
+  // `source`는 그 위에 한 층을 더 얹는다: 게스트 홈엔 손잡이가 여섯이라(헤더·책 카드·체험 결과·잠긴 탭 셋)
+  // 어느 자리가 사람을 데려오는지가 다음 손질의 좌표다.
+  trackEvent('login_started', { source });
   const result = await login();
   return result.registered ? 'authenticated' : 'choice';
 }
 
 /**
- * 로그인 브릿지 — **서비스 소개(인트로)를 먼저 보여주고**, 「토스로 시작하기」를 누를 때 인가를 시작한다.
- * 진입 즉시 `appLogin()`을 부르던 것이 미니앱 심사 반려 사유였다(2026-08-12).
+ * 로그인 진행 화면 — <b>인가 왕복과 그 결말만</b> 든다(2026-09-11 게스트 홈 도입으로 축소).
+ *
+ * <p>체험(인트로·재는 중·끝남)은 `GuestHome`으로 옮겼다. 이 화면은 사용자가 게스트 홈의 손잡이를
+ * <b>누른 뒤에만</b> 마운트되므로 마운트 즉시 인가로 들어간다 — 「서비스 설명 없이 즉시 로그인 유도」
+ * (2026-08-12 심사 반려)와는 다른 자리다. 심사자가 보는 앱 <b>진입</b> 첫 화면은 게스트 홈이고,
+ * 그 사실은 `guest-home.test.tsx`·`app.test.tsx`가 못 박는다.
  *
  * <p>등록된 신원이면 바로 홈으로. 미등록이면 서버가 계정을 만들지 않고 `registered:false`를 주므로
- * 여기서 "새로 시작 / 기존 계정 연결"을 묻는다(설계 §2.2).
+ * 여기서 "새로 시작 / 기존 계정 연결"을 묻는다. 체험은 로그인 뒤 `App.load()`의 `flushTrial()`이 합류시킨다.
  */
 export function LoginBridge({
+  source,
   onAuthenticated,
   onNewAccount,
   onLinkAccount,
 }: {
+  /** 어느 손잡이에서 왔나 — 그대로 `login_started`에 실린다. */
+  source: LoginSource;
   onAuthenticated: () => void;
   onNewAccount: () => void;
   onLinkAccount: () => void;
 }) {
-  const [phase, setPhase] = useState<Phase>('intro');
+  const [phase, setPhase] = useState<Phase>('checking');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const start = () => {
-    setPhase('checking');
-    beginLogin()
+  /*
+   * 마운트 1회 — 이 화면이 서는 것 자체가 「시작을 눌렀다」는 뜻이다. `source`는 마운트마다 고정이라
+   * 의존성이 비어 있어도 낡은 값을 잡지 않는다(다른 손잡이를 누르면 App이 새로 마운트한다).
+   */
+  useEffect(() => {
+    beginLogin(source)
       .then((next) => {
         if (next === 'authenticated') onAuthenticated();
         else setPhase('choice');
@@ -55,22 +65,8 @@ export function LoginBridge({
         setError(e.message);
         setPhase('failed');
       });
-  };
-
-  if (phase === 'intro') {
-    return (
-      <Screen title="북타이머">
-        {PITCH.map((line) => (
-          <Text key={line} typography="st11" color="grey600" style={{ display: 'block', marginBottom: 12 }}>
-            {line}
-          </Text>
-        ))}
-        <Button display="block" style={{ marginTop: 24 }} onClick={start}>
-          토스로 시작하기
-        </Button>
-      </Screen>
-    );
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (phase === 'checking') return <Loading message="토스로 로그인하는 중…" />;
 

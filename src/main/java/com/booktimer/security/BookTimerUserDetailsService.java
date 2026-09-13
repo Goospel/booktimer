@@ -34,6 +34,16 @@ public class BookTimerUserDetailsService implements UserDetailsService {
     public UserDetails loadUserByUsername(String loginId) throws UsernameNotFoundException {
         User user = userRepository.findByLoginId(loginId)
                 .orElseThrow(() -> new UsernameNotFoundException("no user with login_id: " + loginId));
+        if (user.getPasswordHash() == null) {
+            // 소셜·토스 계정은 비밀번호가 없어 폼 로그인이 원리상 불가하다. 이때 UserDetails를 그냥 내주면
+            // BCryptPasswordEncoder.matches(raw, null)이 해시 계산 없이 즉시 false를 돌려줘(실측: 7.1.0의
+            // AbstractValidatingPasswordEncoder.matches가 null 인코딩 값에 바로 false) "존재하는 소셜 계정"만
+            // 유독 빨리 실패한다 — 계정 열거의 시간 채널이다. UsernameNotFoundException으로 던지면
+            // DaoAuthenticationProvider가 이 예외에서만 미리 계산한 더미 해시로 matches를 한 번 돌려
+            // (mitigateAgainstTimingAttack) "없는 계정"과 같은 시간을 쓰고, hideUserNotFoundExceptions 기본값이
+            // BadCredentialsException으로 감싸 응답도 동일해진다.
+            throw new UsernameNotFoundException("no password credential for login_id: " + loginId);
+        }
         return org.springframework.security.core.userdetails.User.builder()
                 .username(user.getLoginId())
                 .password(user.getPasswordHash())

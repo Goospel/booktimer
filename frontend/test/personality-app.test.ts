@@ -118,75 +118,19 @@ describe('PersonalityApp', () => {
         expect(wrapper.text()).toContain('1권');
     });
 
-    test('FALLBACK: 안내 문구 보임, refresh 버튼 있음', async () => {
+    // 2026-09-08: 웹에서 생성을 걷었다(앱은 리워드 광고를 봐야 돌릴 수 있어 호출마다 수익이 붙는데
+    // 웹엔 그 관문이 없어 비용만 나갔다). 버튼 자리에 「앱에서 만들 수 있다」 안내가 선다.
+    test('FALLBACK: 생성 버튼이 없고 「앱에서 만들 수 있다」 안내가 선다', async () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
             ok: true,
             json: async () => ({ ...MOCK_FALLBACK }),
         }));
         setupDom();
         const wrapper = mount(PersonalityApp, { attachTo: document.body });
-        await vi.waitFor(() => expect(wrapper.text()).toContain('잠시 후 다시 분석'));
-        expect(wrapper.find('.pbti-refresh').exists()).toBe(true);
-    });
+        await vi.waitFor(() => expect(wrapper.text()).toContain('아직 만들어 둔 성향이 없어요'));
 
-    test('refresh 클릭 → POST /api/personality/refresh + X-CSRF-TOKEN 헤더', async () => {
-        const refreshResult = {
-            view: { state: 'READY', narrative: '새 서술.', tags: ['태그'], profile: MOCK_PROFILE, coldStartMinBooks: 1, entries: [{ ...MOCK_ENTRY, narrative: '새 서술.' }] },
-            refreshRemaining: 2,
-            refreshLimit: 3,
-        };
-        vi.stubGlobal('fetch', vi.fn()
-            .mockResolvedValueOnce({ ok: true, json: async () => ({ ...MOCK_READY }) })
-            .mockResolvedValueOnce({ ok: true, json: async () => ({ ...refreshResult }) }),
-        );
-        setupDom();
-        const wrapper = mount(PersonalityApp, { attachTo: document.body });
-        await vi.waitFor(() => expect(wrapper.find('.pbti-refresh').exists()).toBe(true));
-
-        const refreshBtn = wrapper.find('.pbti-refresh button');
-        await refreshBtn.trigger('click');
-
-        await vi.waitFor(() => {
-            const calls = (fetch as ReturnType<typeof vi.fn>).mock.calls;
-            expect(calls.length).toBeGreaterThanOrEqual(2);
-        });
-
-        const postCall = (fetch as ReturnType<typeof vi.fn>).mock.calls[1];
-        expect(postCall[0]).toContain('/api/personality/refresh');
-        const opts = postCall[1] as RequestInit;
-        expect((opts.headers as Record<string, string>)['X-CSRF-TOKEN']).toBe('csrf-test-token');
-        expect(opts.method).toBe('POST');
-    });
-
-    test('refresh 응답으로 view 교체 · refreshRemaining 감소', async () => {
-        const refreshResult = {
-            view: { state: 'READY', narrative: '새 서술.', tags: [], profile: MOCK_PROFILE, coldStartMinBooks: 1, entries: [{ ...MOCK_ENTRY, narrative: '새 서술.' }] },
-            refreshRemaining: 2,
-            refreshLimit: 3,
-        };
-        vi.stubGlobal('fetch', vi.fn()
-            .mockResolvedValueOnce({ ok: true, json: async () => ({ ...MOCK_READY }) })
-            .mockResolvedValueOnce({ ok: true, json: async () => ({ ...refreshResult }) }),
-        );
-        setupDom();
-        const wrapper = mount(PersonalityApp, { attachTo: document.body });
-        await vi.waitFor(() => expect(wrapper.find('.pbti-refresh').exists()).toBe(true));
-
-        await wrapper.find('.pbti-refresh button').trigger('click');
-
-        await vi.waitFor(() => expect(wrapper.text()).toContain('2 / 3'));
-    });
-
-    test('refreshRemaining=0 이면 refresh 버튼이 disabled', async () => {
-        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-            ok: true,
-            json: async () => ({ ...MOCK_READY, refreshRemaining: 0 }),
-        }));
-        setupDom();
-        const wrapper = mount(PersonalityApp, { attachTo: document.body });
-        await vi.waitFor(() => expect(wrapper.find('.pbti-refresh button').exists()).toBe(true));
-        const btn = wrapper.find('.pbti-refresh button').element as HTMLButtonElement;
-        expect(btn.disabled).toBe(true);
+        expect(wrapper.find('.pbti-refresh button').exists()).toBe(false);
+        expect(wrapper.text()).toContain('토스 앱의 북타이머');
     });
 
     test('select 클릭 → POST /api/personality/select/{id} + X-CSRF-TOKEN 헤더', async () => {
@@ -328,8 +272,16 @@ describe('PersonalityApp', () => {
             view: { state: 'FALLBACK', narrative: null, tags: [], profile: MOCK_PROFILE, coldStartMinBooks: 1, entries: [] },
             refreshRemaining: 2, refreshLimit: 3,
         };
+        // MOCK_READY의 항목은 전부 selected=true라 「대표로 선택」 버튼이 안 그려진다 — 후보를 하나 끼운다.
+        const withCandidate = {
+            ...MOCK_READY,
+            view: {
+                ...MOCK_READY.view,
+                entries: [{ ...MOCK_ENTRY, selected: true }, { ...MOCK_ENTRY, id: 202, selected: false }],
+            },
+        };
         vi.stubGlobal('fetch', vi.fn()
-            .mockResolvedValueOnce({ ok: true, json: async () => ({ ...MOCK_READY }) })
+            .mockResolvedValueOnce({ ok: true, json: async () => ({ ...withCandidate }) })
             .mockResolvedValueOnce({ ok: true, json: async () => ({ ...fallbackResult }) }),
         );
         setupDom();
@@ -337,9 +289,9 @@ describe('PersonalityApp', () => {
         await vi.waitFor(() => expect(wrapper.find('.pbti-help-btn').exists()).toBe(true));
         await wrapper.find('.pbti-help-btn').trigger('click');
         expect(wrapper.find('.pbti-help-backdrop').exists()).toBe(true);
-        // 다시 분석 → FALLBACK 전환
-        await wrapper.find('.pbti-refresh button').trigger('click');
-        await vi.waitFor(() => expect(wrapper.text()).toContain('잠시 후 다시 분석'));
+        // 대표 선택 → FALLBACK 전환(옛 「다시 분석」 자리를 select가 잇는다. applyResponse는 같다)
+        await wrapper.find('.pbti-select-rep').trigger('click');
+        await vi.waitFor(() => expect(wrapper.text()).toContain('아직 만들어 둔 성향이 없어요'));
         // 백드롭·팝오버 모두 사라짐(고아 없음)
         expect(wrapper.find('.pbti-help-backdrop').exists()).toBe(false);
         expect(wrapper.find('.pbti-help-pop').exists()).toBe(false);

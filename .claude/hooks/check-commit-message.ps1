@@ -15,7 +15,9 @@
 $ErrorActionPreference = 'Stop'
 
 try {
-    $raw  = [Console]::In.ReadToEnd()
+    # UTF-8 explicitly: Console.In decodes stdin as CP949, where a Korean lead byte can
+    # swallow the next quote -> JSON parse fails -> fail-open silently skips this gate.
+    $raw  = (New-Object System.IO.StreamReader([Console]::OpenStandardInput(), (New-Object System.Text.UTF8Encoding($false)))).ReadToEnd()
     $data = $raw | ConvertFrom-Json
     $cmd  = [string]$data.tool_input.command
 } catch { exit 0 }
@@ -27,6 +29,11 @@ if ($cmd -notmatch '\bgit\b' -or $cmd -notmatch '\bcommit\b') { exit 0 }
 
 $cwd = [string]$data.cwd
 if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
+# Resolve a relative -F in the directory the commit really runs in (T-242) -- git reads it
+# from there, not from the top level. Unexpandable target -> keep the session cwd (fail-open).
+. (Join-Path $PSScriptRoot 'lib\resolve-target-cwd.ps1')
+$target = Resolve-HookTargetCwd $cmd $cwd 'commit' -NoToplevel
+if ($target) { $cwd = $target }
 
 # Helper: extract value of -m/--message/-c flag (double-quoted, single-quoted, or bare word)
 function Get-InlineMessage([string]$command) {

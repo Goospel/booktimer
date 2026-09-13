@@ -8,8 +8,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import homeSource from './screens/Home.tsx?raw';
 
 import type { BookOption, DashboardResponse } from './api';
+import type { TimerMode } from './App';
 import { TAB_BAR_Z_INDEX } from './App';
-import { ApiError, waiveDebt } from './api';
+import { ApiError, IDLE_STUDY, waiveDebt } from './api';
 import { dismissCoachmark, setCoachmarkWalking } from './coachmark';
 import {
   ACTIVE_SESSION_RELIEF,
@@ -33,6 +34,7 @@ import {
   goalHandleLabel,
   marginDoorBook,
   noBookSubtitle,
+  notificationAgreementTarget,
   recenterIndex,
   selectionAt,
   shouldShowNotificationCard,
@@ -61,6 +63,7 @@ vi.mock('./toss', () => ({
   REWARD_AD_GROUP_ID: 'test-ad-group',
   watchRewardAd: vi.fn(),
   GOAL_MET_TEMPLATE_CODE: 'test-template',
+  STUDY_GOAL_TEMPLATE_CODE: 'test-study-template',
   notificationAgreementSupported: vi.fn(),
   requestNotificationAgreement: vi.fn(),
   trackEvent: vi.fn(),
@@ -85,6 +88,10 @@ const CAROUSEL_HEADER = '무엇으로 측정할까요?';
 const READING_NOW_HEADER = '읽는 중';
 const NOTIFICATION_LABEL = '알림 받기';
 const AGREEMENT_KEY = 'booktimer.notificationAgreement';
+/** 공부 동의문(122175)의 캐시 — 독서 캐시와 갈라야 독서에 답한 사람에게도 공부 알림을 물을 수 있다. */
+const STUDY_AGREEMENT_KEY = 'booktimer.notificationAgreement.studyGoal';
+const READING_CARD_COPY = '목표 달성과 완독 소식을 토스 알림으로 받아보세요';
+const STUDY_CARD_COPY = '정한 공부 시간을 채우면 토스 알림으로 알려드려요';
 
 function dashboard(overrides: Partial<DashboardResponse> = {}): DashboardResponse {
   return {
@@ -95,6 +102,7 @@ function dashboard(overrides: Partial<DashboardResponse> = {}): DashboardRespons
     remainingSeconds: 900,
     carriedDebtSeconds: 1800,
     todayGoalSeconds: 3600,
+    todayReadSeconds: 2700, // 목표 3600 중 남은 900 → 45분 읽은 상태(서버가 주는 두 값의 짝)
     carryover: false,
     hasActiveSession: false,
     activeStartedAt: null,
@@ -139,6 +147,7 @@ function renderHome(
     selectedBookId?: number | null;
     celebrate?: boolean;
     guide?: ReactNode;
+    mode?: TimerMode;
   } = {},
 ) {
   return renderToStaticMarkup(
@@ -146,6 +155,10 @@ function renderHome(
       <Home
         guide={props.guide}
         dashboard={dashboard(overrides)}
+        mode={props.mode ?? 'reading'}
+        study={IDLE_STUDY}
+        onChangeMode={() => {}}
+        onBlockedModeChange={() => {}}
         selectedBookId={props.selectedBookId}
         onSelectBook={() => {}}
         onTimerChange={() => {}}
@@ -232,11 +245,13 @@ describe('홈에서 빠진 기록 흔적', () => {
  * (`frontend/src/dashboard/timerProgress.ts`의 `computeProgress`). 대형 숫자는 "오늘 남은 시간"이
  * 아니라 **오늘 읽은 시간**이고, 남은 시간은 보조 메타로 강등된다.
  *
- * <p>서버는 스냅샷만 주므로 측정 중 라이브 값은 `remainingSeconds - elapsed`로 만든다 —
- * 그래서 별도 tick 없이 기존 elapsed 인터벌만으로 읽은 시간이 매초 늘어난다.
+ * <p>대형 숫자는 **서버가 준 `todayReadSeconds`(완료 세션 합) + 경과**다. 한때 부채에서 역산했지만
+ * (`목표 − 남은`) 서버 부채가 0에서 바닥을 치는 탓에 표시값이 목표에서 천장을 쳐, 목표를 넘겨 읽고
+ * 중지하는 순간 초과분이 사라졌다(실사용자 제보). 남은 시간·게이지는 그대로 부채 스냅샷에서 만든다.
  */
 describe('오늘 읽은 시간 (todayProgress)', () => {
-  const timer = { remainingSeconds: 3600, carriedDebtSeconds: 0, todayGoalSeconds: 3600, carryover: false };
+  // 서버가 주는 두 값은 짝이다 — 읽은 초 R, 남은 부채 max(0, 목표 − R). 픽스처도 그 짝을 지킨다.
+  const timer = { remainingSeconds: 3600, carriedDebtSeconds: 0, todayGoalSeconds: 3600, todayReadSeconds: 0, carryover: false };
 
   it('아직 0초 읽었으면 0 — 진행바도 0이고 목표까지는 목표 전부다', () => {
     expect(todayProgress(timer, 0)).toEqual({
@@ -249,7 +264,7 @@ describe('오늘 읽은 시간 (todayProgress)', () => {
   });
 
   it('1초 남았으면 아직 달성이 아니다 — 경계에서 축하가 먼저 뜨면 거짓말이 된다', () => {
-    const result = todayProgress({ ...timer, remainingSeconds: 1 }, 0);
+    const result = todayProgress({ ...timer, remainingSeconds: 1, todayReadSeconds: 3599 }, 0);
 
     expect(result.todayRead).toBe(3599);
     expect(result.remaining).toBe(1);
@@ -257,7 +272,7 @@ describe('오늘 읽은 시간 (todayProgress)', () => {
   });
 
   it('딱 0이 되는 순간 달성 — 초과분은 아직 0이다', () => {
-    expect(todayProgress({ ...timer, remainingSeconds: 0 }, 0)).toEqual({
+    expect(todayProgress({ ...timer, remainingSeconds: 0, todayReadSeconds: 3600 }, 0)).toEqual({
       todayRead: 3600,
       remaining: 0,
       overflow: 0,
@@ -267,7 +282,8 @@ describe('오늘 읽은 시간 (todayProgress)', () => {
   });
 
   it('목표를 넘겨도 계속 센다 — 초과분이 따로 잡히고 진행바는 1에서 멈춘다', () => {
-    expect(todayProgress({ ...timer, remainingSeconds: -600 }, 0)).toEqual({
+    // 부채는 이미 0에서 바닥을 쳤다(remainingSeconds: 0) — 그래도 읽은 초 4200이 그대로 보여야 한다.
+    expect(todayProgress({ ...timer, remainingSeconds: 0, todayReadSeconds: 4200 }, 0)).toEqual({
       todayRead: 4200,
       remaining: 0,
       overflow: 600,
@@ -276,25 +292,37 @@ describe('오늘 읽은 시간 (todayProgress)', () => {
     });
   });
 
-  it('측정 중이면 경과한 만큼 더 읽은 것으로 센다 — 매초 tick이 그대로 카운트업이 된다', () => {
-    const before = todayProgress({ ...timer, remainingSeconds: 900 }, 300);
-    const oneSecondLater = todayProgress({ ...timer, remainingSeconds: 900 }, 301);
+  it('★ 중지해도 초과분이 사라지지 않는다 — 측정 중 값과 중지 후 값이 같다', () => {
+    // 90분 읽는 중: 서버 스냅샷은 완료 60분, 나머지 30분은 클라가 경과로 얹는다.
+    const measuring = todayProgress({ ...timer, remainingSeconds: 0, todayReadSeconds: 3600 }, 1800);
+    // 중지 직후: 서버가 완료 90분 · 부채 0으로 다시 준다. 옛 역산에선 여기서 정확히 목표(3600)로 되돌아갔다.
+    const stopped = todayProgress({ ...timer, remainingSeconds: 0, todayReadSeconds: 5400 }, 0);
 
-    expect(before.todayRead).toBe(3000); // 목표 3600 − (남은 900 − 경과 300)
+    expect(measuring.todayRead).toBe(5400);
+    expect(stopped.todayRead).toBe(5400);
+    expect(stopped.overflow).toBe(1800); // 「+30분 더 읽었어요」 배너도 같은 뿌리로 죽어 있었다
+  });
+
+  it('측정 중이면 경과한 만큼 더 읽은 것으로 센다 — 매초 tick이 그대로 카운트업이 된다', () => {
+    const measuring = { ...timer, remainingSeconds: 900, todayReadSeconds: 2700 };
+    const before = todayProgress(measuring, 300);
+    const oneSecondLater = todayProgress(measuring, 301);
+
+    expect(before.todayRead).toBe(3000); // 완료 2700 + 경과 300
     expect(oneSecondLater.todayRead).toBe(3001);
     expect(before.remaining).toBe(600);
   });
 
   it('이월 모드면 밀린 시간은 오늘 몫에서 뺀다 — 어제 빚이 오늘 성취를 갉아먹지 않는다', () => {
-    const carried = { remainingSeconds: 5400, carriedDebtSeconds: 1800, todayGoalSeconds: 3600, carryover: true };
+    const carried = { remainingSeconds: 5400, carriedDebtSeconds: 1800, todayGoalSeconds: 3600, todayReadSeconds: 0, carryover: true };
 
-    expect(todayProgress(carried, 0).todayRead).toBe(0); // 남은 5400 − 밀린 1800 = 오늘 몫 3600
-    expect(todayProgress({ ...carried, remainingSeconds: 4200 }, 0).todayRead).toBe(1200);
+    expect(todayProgress(carried, 0).todayRead).toBe(0); // 남은 5400 = 오늘 몫 3600 + 밀린 1800
+    expect(todayProgress({ ...carried, remainingSeconds: 4200, todayReadSeconds: 1200 }, 0).todayRead).toBe(1200);
   });
 
   it('이월 모드면 게이지 최대치가 목표 + 밀린 시간이다 — 오늘 실제로 채워야 할 양이 그거다', () => {
     // 목표 30분 + 밀린 10분 = 40분 중 25분 읽음.
-    const carried = { remainingSeconds: 900, carriedDebtSeconds: 600, todayGoalSeconds: 1800, carryover: true };
+    const carried = { remainingSeconds: 900, carriedDebtSeconds: 600, todayGoalSeconds: 1800, todayReadSeconds: 1500, carryover: true };
     const result = todayProgress(carried, 0);
 
     expect(result.todayRead).toBe(1500);
@@ -303,7 +331,7 @@ describe('오늘 읽은 시간 (todayProgress)', () => {
   });
 
   it('이월이 꺼져 있으면 밀린 시간은 최대치에 안 들어간다 — 오늘 갚을 몫이 아니다', () => {
-    const result = todayProgress({ ...timer, carriedDebtSeconds: 1800, remainingSeconds: 900 }, 0);
+    const result = todayProgress({ ...timer, carriedDebtSeconds: 1800, remainingSeconds: 900, todayReadSeconds: 2700 }, 0);
 
     expect(result.remaining).toBe(900);
     expect(result.progress).toBe(2700 / 3600); // 분모는 목표 3600 그대로
@@ -312,7 +340,7 @@ describe('오늘 읽은 시간 (todayProgress)', () => {
   it('목표를 채웠어도 밀린 시간이 남으면 게이지는 안 찬다 — 달성 축하는 그대로 뜬다(결정 a)', () => {
     // 목표 30분은 다 채웠고(오늘 몫 0) 밀린 10분만 남은 상태.
     const result = todayProgress(
-      { remainingSeconds: 600, carriedDebtSeconds: 600, todayGoalSeconds: 1800, carryover: true },
+      { remainingSeconds: 600, carriedDebtSeconds: 600, todayGoalSeconds: 1800, todayReadSeconds: 1800, carryover: true },
       0,
     );
 
@@ -321,8 +349,9 @@ describe('오늘 읽은 시간 (todayProgress)', () => {
     expect(result.progress).toBe(1800 / 2400);
   });
 
-  it('읽은 시간은 음수로 내려가지 않는다 — 서버 스냅샷이 어긋나도 "-30분"이 뜨지 않는다', () => {
-    expect(todayProgress({ ...timer, remainingSeconds: 7200 }, 0).todayRead).toBe(0);
+  it('표시값은 부채 스냅샷이 아니라 서버가 준 읽은 초를 따른다 — 남은 시간이 목표보다 커도 음수가 안 뜬다', () => {
+    // 옛 역산(목표 − 남은)이면 −3600이라 바닥 클램프가 필요했다. 이제 출처가 갈려 그 자리 자체가 없다.
+    expect(todayProgress({ ...timer, remainingSeconds: 7200, todayReadSeconds: 0 }, 0).todayRead).toBe(0);
   });
 
   it('목표 미설정(0)이면 진행바가 없다 — 나눌 게 없고 달성이라 우길 수도 없다', () => {
@@ -361,7 +390,8 @@ describe('히어로 프레이밍 (렌더)', () => {
 
   it('달성하면 축하와 초과분을 보여준다 — 목표를 넘겨도 계속 센다', () => {
     // 알림 동의 카드 문구에도 "목표 달성"이 들어 있어 그것만으로는 판별이 안 된다 — 히어로 문구로 좁힌다.
-    const markup = renderHome({ remainingSeconds: -600, todayGoalSeconds: 3600 });
+    // 70분 읽어 부채는 이미 0에서 바닥을 친 상태 — 초과 10분은 부채가 아니라 todayReadSeconds가 말한다.
+    const markup = renderHome({ remainingSeconds: 0, todayReadSeconds: 4200, todayGoalSeconds: 3600 });
 
     expect(markup).toContain('오늘 목표 달성');
     expect(markup).toContain('+10분 더 읽었어요');
@@ -373,7 +403,7 @@ describe('히어로 프레이밍 (렌더)', () => {
    * 통계 행이 목표 유무로만 갈리면 그 구멍이 닫힌다.
    */
   it('정확히 달성해도 통계 행은 남는다 — 목표로 가는 문이 달성과 함께 사라지면 안 된다', () => {
-    const markup = renderHome({ remainingSeconds: 0, todayGoalSeconds: 3600 });
+    const markup = renderHome({ remainingSeconds: 0, todayReadSeconds: 3600, todayGoalSeconds: 3600 });
 
     expect(markup).toContain('오늘 목표 달성');
     expect(markup).not.toContain('더 읽었어요');
@@ -387,6 +417,51 @@ describe('히어로 프레이밍 (렌더)', () => {
     expect(markup).not.toContain('뒤처져도 괜찮아요');
     expect(markup).not.toContain('광고를 보고 하루씩'); // 툴팁은 접힌 채로 시작한다(ⓘ를 눌러야 열린다)
     expect(markup).not.toContain(CARRYOVER_NOTE); // 이월 설명도 접혀 있다
+  });
+});
+
+/**
+ * 새싹 표식 — 기본 이모지(`🌱`·`🌿`)를 쓰던 세 자리를 자체 획 SVG와 평문으로 갈아끼운 결과.
+ * 계측 손잡이는 `data-sprout`이다: TDS가 뿜는 emotion 클래스 사이에서 이 조각을 집을 유일한
+ * 수단이라 `data-cover-title`과 같은 관례를 따른다.
+ *
+ * <p>주의: 「이모지가 없다」는 부정 단언만으론 문구를 통째로 지워도 초록이라, 자리마다 <b>긍정 짝</b>을
+ * 함께 둔다. 미달성 케이스가 그 반대 짝이다 — 표식이 두 분기에 다 들어가면 그것이 죽인다.
+ */
+describe('새싹 표식 (SproutMark)', () => {
+  const SPROUT = 'data-sprout';
+
+  it('달성 머리말이 이모지 대신 새싹 SVG를 앞세운다', () => {
+    const markup = renderHome({ remainingSeconds: 0, todayReadSeconds: 3600, todayGoalSeconds: 3600 });
+
+    expect(markup).toContain('오늘 목표 달성');
+    expect(markup).toContain(SPROUT);
+    expect(markup).not.toContain('🌿');
+  });
+
+  it('미달성이면 새싹이 없다 — 표식은 달성에만 뜬다', () => {
+    const markup = renderHome({ remainingSeconds: 900, todayGoalSeconds: 3600 });
+
+    expect(markup).toContain('오늘 읽은 시간');
+    expect(markup).not.toContain(SPROUT);
+  });
+
+  it('첫 완료 배너도 새싹 SVG로 바뀌었다', () => {
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <FirstSessionBanner show />
+      </TDSMobileProvider>,
+    );
+
+    expect(markup).toContain('첫 독서 기록이 심어졌어요');
+    expect(markup).toContain(SPROUT);
+    expect(markup).not.toContain('🌱');
+  });
+
+  it('측정 중 안심 문구는 표식 없이 마침표로 끝난다 — 이모지가 뜻을 보태던 자리가 아니다', () => {
+    expect(ACTIVE_SESSION_RELIEF).toContain('화면을 꺼도 측정은 계속돼요');
+    expect(ACTIVE_SESSION_RELIEF).not.toContain('🌿');
+    expect(ACTIVE_SESSION_RELIEF.endsWith('.')).toBe(true);
   });
 });
 
@@ -749,12 +824,59 @@ describe('알림 동의 카드 노출 조건 (shouldShowNotificationCard)', () =
   });
 });
 
+/**
+ * 동의문이 두 장이다 — 독서(114526 「독서 목표 달성과 완독 소식」)와 공부(122175 「정한 공부 시간을 채우면」).
+ * 콘솔 AI 검수가 공부 푸시를 독서 동의문에 거부해서 갈렸다(2026-09-13). 모드가 코드·캐시 키·문구를 함께 고른다 —
+ * 셋 중 하나만 어긋나도 「공부 카드를 눌렀는데 독서 동의문이 뜬다」거나 「독서에 답했더니 공부 카드가 사라진다」.
+ */
+describe('모드별 동의 대상 (notificationAgreementTarget)', () => {
+  it('독서는 기존 동의문·기존 캐시 키 그대로다 — 이미 답한 사람에게 다시 묻지 않는다', () => {
+    expect(notificationAgreementTarget('reading')).toEqual({
+      templateCode: 'test-template',
+      storageKey: AGREEMENT_KEY,
+      copy: READING_CARD_COPY,
+    });
+  });
+
+  it('공부는 공부 동의문 코드·별도 캐시 키·공부 문구다', () => {
+    expect(notificationAgreementTarget('study')).toEqual({
+      templateCode: 'test-study-template',
+      storageKey: STUDY_AGREEMENT_KEY,
+      copy: STUDY_CARD_COPY,
+    });
+  });
+});
+
 describe('알림 동의 카드 렌더 배선', () => {
-  it('조건이 맞으면 카드와 버튼이 그려진다', () => {
+  it('독서 모드는 독서 문구 카드다 — 공부 시간을 약속하지 않는다(독서 동의문은 그걸 덮지 않는다)', () => {
     const markup = renderHome();
 
-    expect(markup).toContain('토스 알림');
+    expect(markup).toContain(READING_CARD_COPY);
+    expect(markup).not.toContain(STUDY_CARD_COPY);
+    expect(markup).not.toContain('공부 시간·완독');
     expect(labelsOf(markup)).toContain(NOTIFICATION_LABEL);
+  });
+
+  it('공부 모드는 공부 문구 카드다', () => {
+    const markup = renderHome({}, { mode: 'study' });
+
+    expect(markup).toContain(STUDY_CARD_COPY);
+    expect(markup).not.toContain(READING_CARD_COPY);
+    expect(labelsOf(markup)).toContain(NOTIFICATION_LABEL);
+  });
+
+  it('독서 동의에 답했어도 공부 카드는 뜬다 — 캐시가 동의문마다 따로다', () => {
+    localStorage.setItem(AGREEMENT_KEY, 'newAgreement');
+
+    expect(labelsOf(renderHome())).not.toContain(NOTIFICATION_LABEL); // 대조군: 같은 캐시가 독서 카드는 끈다
+    expect(labelsOf(renderHome({}, { mode: 'study' }))).toContain(NOTIFICATION_LABEL);
+  });
+
+  it('공부 동의에 답했으면 공부 카드가 없고, 독서 카드는 그대로다', () => {
+    localStorage.setItem(STUDY_AGREEMENT_KEY, 'agreementRejected');
+
+    expect(labelsOf(renderHome({}, { mode: 'study' }))).not.toContain(NOTIFICATION_LABEL);
+    expect(labelsOf(renderHome())).toContain(NOTIFICATION_LABEL);
   });
 
   it('캐시가 있으면 카드가 없다 — 한 번 답한 사용자에게 다시 뜨지 않는다', () => {
@@ -774,14 +896,14 @@ describe('동의 요청 흐름 (askNotificationAgreement)', () => {
   it('결과를 캐시에 그대로 적어 두고 돌려준다 — 이 값이 카드를 끈다', async () => {
     requestAgreementMock.mockResolvedValue('newAgreement');
 
-    await expect(askNotificationAgreement()).resolves.toBe('newAgreement');
+    await expect(askNotificationAgreement('reading')).resolves.toBe('newAgreement');
     expect(localStorage.getItem(AGREEMENT_KEY)).toBe('newAgreement');
   });
 
   it('거절도 캐시한다 — 거절한 사용자를 다시 조르지 않는다', async () => {
     requestAgreementMock.mockResolvedValue('agreementRejected');
 
-    await askNotificationAgreement();
+    await askNotificationAgreement('reading');
 
     expect(localStorage.getItem(AGREEMENT_KEY)).toBe('agreementRejected');
   });
@@ -789,16 +911,38 @@ describe('동의 요청 흐름 (askNotificationAgreement)', () => {
   it('미지원(null)이면 캐시를 건드리지 않는다 — 지원 기기에선 다시 물어야 한다', async () => {
     requestAgreementMock.mockResolvedValue(null);
 
-    await expect(askNotificationAgreement()).resolves.toBeNull();
+    await expect(askNotificationAgreement('reading')).resolves.toBeNull();
     expect(localStorage.getItem(AGREEMENT_KEY)).toBeNull();
   });
 
   it('설정된 템플릿 코드를 그대로 넘긴다 — 코드가 어긋나면 다른 동의문이 뜬다', async () => {
     requestAgreementMock.mockResolvedValue(null);
 
-    await askNotificationAgreement();
+    await askNotificationAgreement('reading');
 
     expect(requestAgreementMock).toHaveBeenCalledWith('test-template');
+  });
+
+  it('공부는 공부 동의문을 묻고 공부 캐시에만 적는다 — 독서 캐시를 건드리면 독서 카드가 영영 사라진다', async () => {
+    requestAgreementMock.mockResolvedValue('newAgreement');
+
+    await askNotificationAgreement('study');
+
+    expect(requestAgreementMock).toHaveBeenCalledWith('test-study-template');
+    expect(localStorage.getItem(STUDY_AGREEMENT_KEY)).toBe('newAgreement');
+    expect(localStorage.getItem(AGREEMENT_KEY)).toBeNull();
+  });
+
+  it('홈의 「알림 받기」는 지금 모드로 묻는다 — 상수로 박으면 공부 카드가 독서 동의문을 띄운다', () => {
+    // 클릭은 정적 렌더로 안 돌고, 목 모드 브라우저엔 동의 API가 없어 카드 자체가 안 선다 — 실기기 전엔 소스가 유일한 계측기다.
+    const code = homeSource.replace(/\{?\/\*[\s\S]*?\*\/\}?/g, '').replace(/^\s*\/\/.*$/gm, '');
+
+    // 선언 하나 + 호출 하나. 호출이 늘거나 인자가 모드가 아니면 여기서 깨진다.
+    expect(code.match(/askNotificationAgreement\([^)]*\)/g)).toEqual([
+      'askNotificationAgreement(mode: TimerMode)',
+      'askNotificationAgreement(asked)',
+    ]);
+    expect(code).toMatch(/const asked = mode;/);
   });
 });
 
@@ -1293,6 +1437,16 @@ describe('태깅 시트 (BookSheet)', () => {
 
   it('홈 인디케이터를 피해 하단 여백을 둔다', () => {
     expect(renderSheet()).toContain('env(safe-area-inset-bottom)');
+  });
+
+  // 제목 정렬은 행 버튼이 갖는다 — TDS `Text`에 주면 `textAlign`이 걸러져 UA 기본(버튼=가운데)이 남는다(T-216).
+  // 창을 「제목을 가장 가까이 감싼 button」으로 좁혀야 판별력이 생긴다(통짜 toContain은 다른 버튼에 걸려 상시 통과).
+  it('책 제목을 왼쪽에 붙인다 — 정렬을 Text에 주면 TDS가 삼켜 가운데로 남는다', () => {
+    const markup = renderSheet();
+    const at = markup.indexOf('데미안</span>');
+
+    expect(at).toBeGreaterThan(-1); // 제목이 사라지면 아래 단언이 공허해진다
+    expect(markup.slice(markup.lastIndexOf('<button', at), at)).toContain('text-align:left');
   });
 });
 

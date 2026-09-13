@@ -18,7 +18,6 @@ import java.security.Principal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 
@@ -135,10 +134,24 @@ public class ReadingSessionController {
             return "redirect:/sessions/manual";
         }
 
-        Instant endedAt = readDate.equals(today)
-                ? clock.instant()
-                : readDate.atTime(LocalTime.NOON).atZone(zone).toInstant();
-        Instant startedAt = endedAt.minusSeconds(durationSeconds);
+        // 앵커 규칙이 오늘/과거로 갈린다 — 세션은 저장 시 자정으로 분할되므로(ReadingSessionService)
+        // 시작 시각이 어느 날짜에 떨어지는지가 곧 그 시간이 어느 날에 계상되는지다.
+        Instant startedAt;
+        Instant endedAt;
+        if (readDate.equals(today)) {
+            // 오늘: 지금에서 역산 — 새벽에 「오늘 2시간」을 적으면 실제로 자정을 걸친 독서였으므로
+            // 분할되어 어제/오늘에 나뉘는 것이 정직하다(옛 동작은 전부 어제로 넘어갔다).
+            endedAt = clock.instant();
+            startedAt = endedAt.minusSeconds(durationSeconds);
+        } else {
+            // 과거: 그날 00:00에서 순방향 — 폼의 의미가 「이 날짜에 N시간」이라 다른 날로 새면 안 된다.
+            // 정오 앵커로 역산하던 옛 방식은 12시간을 넘는 기록의 앞부분이 전날로 샜다.
+            // 보통은 24h cap이라 1행으로 끝난다(정확히 24h여도 경계가 끝점과 같아 0초 조각 금지 규칙이 받는다).
+            // 단 DST로 하루가 23시간인 날엔 24h가 다음 자정을 넘어 조각이 하나 더 난다 — 그건 의도된 동작이다
+            // (그날 실제로 24시간을 읽었다면 일부는 다음 날에 걸린다). 분할이 받아내므로 여기서 막지 않는다.
+            startedAt = readDate.atStartOfDay(zone).toInstant();
+            endedAt = startedAt.plusSeconds(durationSeconds);
+        }
 
         sessionService.recordManual(user, startedAt, endedAt, book);
         redirectAttributes.addFlashAttribute("message", "독서 기록을 추가했어요.");

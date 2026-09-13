@@ -1,6 +1,5 @@
 package com.booktimer.session;
 
-import com.booktimer.garden.FeedingService;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
@@ -43,7 +42,6 @@ class GoalWaiverServiceTest {
     @Autowired ReadingDebtService debtService;
     @Autowired ReadingSessionRepository sessionRepository;
     @Autowired ReadingContributionService contributionService;
-    @Autowired FeedingService feedingService;
     @Autowired UserRegistrationService registrationService;
     @Autowired Clock clock;
 
@@ -180,16 +178,14 @@ class GoalWaiverServiceTest {
     }
 
     @Test
-    @DisplayName("파밍 차단: 용서 전후로 먹이 잔액과 연속일이 불변 — 용서는 부채 표시에만 작용한다")
-    void waive_doesNotAffectFoodOrStreak() {
+    @DisplayName("파밍 차단: 용서 전후로 연속일이 불변 — 용서는 부채 표시에만 작용한다")
+    void waive_doesNotAffectStreak() {
         User u = user("waive-farm@booktimer.com");
         readMetExcept(u, 3);
-        int foodBefore = feedingService.foodBalance(u);
         int streakBefore = contributionService.contributionGraph(u).currentStreak();
 
         goalWaiverService.waive(u);
 
-        assertThat(feedingService.foodBalance(u)).isEqualTo(foodBefore);
         assertThat(contributionService.contributionGraph(u).currentStreak()).isEqualTo(streakBefore);
     }
 

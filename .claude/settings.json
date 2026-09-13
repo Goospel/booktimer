@@ -65,6 +65,10 @@
           {
             "type": "command",
             "command": "powershell.exe -NoProfile -File \".claude\\hooks\\require-changelog-no-dup.ps1\""
+          },
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -File \".claude\\hooks\\require-single-changelog-commit-before-rebase.ps1\""
           }
         ]
       }

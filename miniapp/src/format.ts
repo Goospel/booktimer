@@ -5,7 +5,9 @@
  * 숫자는 <b>읽는 소리</b>를 따르고(1984 → "사" → 받침 없음), 그 밖(영문·기호·빈 문자열)은 받침 없음으로
  * 떨어뜨린다 — 어느 쪽이든 문장이 깨지지 않는 게 우선이다.
  *
- * <p>피드 문장(을/를)과 성장 문구(이/가)가 <b>같은 판정</b>을 쓴다. 두 벌로 두면 한쪽만 고쳐진다.
+ * <p>지금 이 판정을 쓰는 곳은 피드 문장의 목적격 조사(을/를) 하나다 — 주격(이/가)을 쓰던 성장 문구는
+ * 사다리와 함께 폐기됐다(2026-08-29). 조사가 다시 늘면 그때도 <b>이 함수 하나</b>를 쓴다: 두 벌로
+ * 두면 한쪽만 고쳐진다(「나무이 돼요」가 그렇게 났다).
  */
 export function hasFinalConsonant(word: string): boolean {
   const last = word.at(-1);
@@ -19,11 +21,6 @@ export function hasFinalConsonant(word: string): boolean {
   if (last >= '0' && last <= '9') return DIGIT_HAS_FINAL[Number(last)];
 
   return false;
-}
-
-/** 주격 조사 — 받침이 있으면 「이」, 없으면 「가」. */
-export function subjectParticle(word: string): string {
-  return hasFinalConsonant(word) ? '이' : '가';
 }
 
 /** 목적격 조사 — 받침이 있으면 「을」, 없으면 「를」. */
@@ -75,6 +72,22 @@ export function relativeTime(iso: string, now: number): string {
   if (days < 14) return `${days}일 전`;
   const date = new Date(iso);
   return `${date.getMonth() + 1}월 ${date.getDate()}일`;
+}
+
+/**
+ * 절대 날짜 `YYYY.MM.DD` — 기기 로컬 시각 기준, 한 자리 월·일은 0을 채운다.
+ *
+ * <p>책 뉴스 줄이 상대 시각 대신 이걸 쓴다. 「N일 전」이 답하지 못하는 질문이 하나 있어서다 —
+ * <b>수집(새벽 배치)이 지금도 도는가.</b> 목록 맨 위 기사가 며칠째 같은 날짜면 그것으로 보인다.
+ * <b>연도까지 적는 것이 요점</b>이다: 1년 전 기사가 「9월 8일」로 새것처럼 보이면 같은 질문에
+ * 다시 답할 수 없다.
+ *
+ * <p>상대 시각(`relativeTime`)은 소식·사람 탭에 그대로 남는다 — 거기선 「방금」이 값이다.
+ */
+export function formatDate(iso: string): string {
+  const date = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`;
 }
 
 /** 시작 시각(ISO) 기준 경과 초 — 진행 중 세션의 타이머 표시용. */

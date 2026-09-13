@@ -14,8 +14,15 @@ const store = new Map<string, unknown>();
 
 /** 캐시 키 — 문자열 리터럴이 화면마다 흩어지지 않게 여기 모은다. */
 export const CACHE_SHELF = 'shelf';
+/** 공부 서재 — 독서 서재와 <b>다른 키</b>다(원장이 갈린 만큼 캐시도 갈린다). */
+export const CACHE_STUDY_SHELF = 'study-shelf';
 export const CACHE_FEED = 'home-feed';
 export const CACHE_HISTORY = 'history';
+/**
+ * 공부 기록 — 독서 `CACHE_HISTORY`와 <b>다른 키</b>다. 공유하면 모드를 바꾼 직후 첫 렌더에
+ * 상대 모드의 기록이 선다(두 화면 모두 캐시를 초기 state로 쓴다).
+ */
+export const CACHE_STUDY_HISTORY = 'study-history';
 export const cacheKeyProfile = (loginId: string): string => `profile:${loginId}`;
 export const cacheKeyProfileBooks = (loginId: string): string => `profile-books:${loginId}`;
 export const cacheKeyMargin = (loginId: string, bookId: number): string => `margin:${loginId}:${bookId}`;

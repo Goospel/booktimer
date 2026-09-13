@@ -44,7 +44,7 @@ public class EmailSuppressionService {
             return;
         }
         repository.save(new EmailSuppression(normalized, reason, detail, clock.instant()));
-        log.info("이메일 억제 등록 — reason={}, email={}", reason, normalized);
+        log.info("이메일 억제 등록 — reason={}, email={}", reason, EmailMask.mask(normalized));
     }
 
     /** 이 주소가 억제되어 발송을 건너뛰어야 하는가. */

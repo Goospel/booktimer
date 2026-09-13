@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import type { BookRead, ContributionGraph, DailyRecord, MonthlySection } from '../api';
 import { fetchHistory } from '../api';
 import { CACHE_HISTORY, cacheGet, cachePut } from '../cache';
-import { formatDuration, subjectParticle } from '../format';
-import { BookCover, ErrorMessage, GrassGrid, LEVEL_COLORS, MANUAL_OUTLINE, PENCIL_FRAME, SECTION_RULE, SERIF_VALUE, Screen, SectionTitle, Text, monthLabelPositions } from '../ui';
+import { formatDuration } from '../format';
+import { BookCover, ErrorMessage, GrassGrid, LEVEL_COLORS, MANUAL_OUTLINE, SECTION_RULE, SERIF_VALUE, Screen, SectionTitle, Text, monthLabelPositions } from '../ui';
 
 /** 기록 화면 잔디 칸 — `GrassGrid`의 기본값과 같아야 월 라벨이 그 열 위에 선다. */
 const CELL_SIZE = 11;
@@ -17,9 +17,6 @@ const CELL_SIZE = 11;
  * <p>탭 재편(PR-5) 전까지 있던 "돌아가기" 버튼은 탭 전환이 대신하므로 없앴다.
  */
 export function History({ graph }: { graph: ContributionGraph }) {
-  // 스크롤 위치는 손대지 않는다 — weeks[0]이 최신 주라 초기 위치(왼쪽 끝)가 이미 오늘이다(api.ts `weeks`).
-  const months = monthLabelPositions(graph.monthLabels, CELL_SIZE);
-
   // 날짜별 기록은 대시보드에 안 실려 오므로 이 탭에서 따로 받는다. 실패해도 위쪽 잔디는 그대로 두고
   // 아래에만 사유를 남긴다 — 목록 하나 때문에 화면 전체를 에러로 덮으면 손해가 크다.
   // 지난 성공 응답이 첫 렌더의 출발점이다 — 탭을 다시 열 때 아래쪽만 늦게 붙던 자리(재검증은 그대로).
@@ -43,33 +40,12 @@ export function History({ graph }: { graph: ContributionGraph }) {
 
   return (
     <Screen title="내 기록">
-      <GrowthCard graph={graph} />
-
-      {/* 연속은 위 성장 카드가 이미 말한다 — 여기 다시 두면 한 화면에서 같은 숫자를 두 번 읽게 된다. */}
-      <div style={{ display: 'flex', gap: 12, marginTop: 14 }}>
-        <Stat label="읽은 날" value={`${graph.activeDays}일`} />
-        <Stat label="총 시간" value={formatDuration(graph.totalSeconds)} />
-      </div>
+      <StatStrip graph={graph} />
 
       {/* 시안 2d — 이 화면이 답하는 것의 이름이라 값으로 조판한다(세리프 20). */}
       <SectionTitle style={{ margin: '24px 0 8px', ...SERIF_VALUE, fontSize: 20 }}>읽은 날짜</SectionTitle>
 
-      <div className="no-scrollbar" style={{ overflowX: 'auto', paddingBottom: 8 }}>
-        {/* 라벨은 격자 폭 안에서 절대 배치된다 — inline-block이라 이 상자가 격자만큼만 넓어진다. */}
-        <div style={{ position: 'relative', display: 'inline-block', paddingTop: 16 }}>
-          <div aria-hidden="true" style={{ position: 'absolute', top: 0, left: 0, height: 14 }}>
-            {months.map(({ label, left }) => (
-              <span
-                key={label}
-                style={{ position: 'absolute', left, fontSize: 11, color: '#6F6A5E', whiteSpace: 'nowrap' }}
-              >
-                {label}
-              </span>
-            ))}
-          </div>
-          <GrassGrid weeks={graph.weeks} cellSize={CELL_SIZE} />
-        </div>
-      </div>
+      <GrassPanel graph={graph} />
 
       <Legend />
 
@@ -80,66 +56,83 @@ export function History({ graph }: { graph: ContributionGraph }) {
 }
 
 /**
- * 다음 단계까지 — 「N일 더 읽으면 …이 돼요」. 최고 단계면 재촉하지 않는다.
+ * 잔디 한 판 — 위에 월 라벨, 아래에 격자. 가로 스크롤 상자까지 한 덩어리다.
  *
- * <p>「1일 남음」을 「내일」로 바꾸지 않는다: 연속은 <b>유저 타임존의 하루</b> 단위라 자정을 넘기면
- * 기준이 달라져, 오늘 밤 읽는 사람에게 「내일」이 거짓이 된다. 남은 일수는 언제 읽어도 참이다.
+ * <p>스크롤 위치는 손대지 않는다 — `weeks[0]`이 최신 주라 초기 위치(왼쪽 끝)가 이미 오늘이다(api.ts `weeks`).
+ *
+ * <p>공부 기록 화면이 같은 판을 쓴다 — 잔디 산수를 두 곳에 두면 「최신 주가 왼쪽」 같은 규약을 두 번 밟는다.
  */
-export function growthNudge(daysToNext: number, nextLabel: string | null): string {
-  if (nextLabel === null) return '가장 큰 단계예요';
-  // 단계 이름은 서버가 준다(땅·새싹·꽃·나무) — 「나무이 돼요」가 나오지 않게 받침으로 조사를 고른다.
-  return `${daysToNext}일 더 읽으면 ${nextLabel}${subjectParticle(nextLabel)} 돼요`;
+export function GrassPanel({ graph }: { graph: ContributionGraph }) {
+  const months = monthLabelPositions(graph.monthLabels, CELL_SIZE);
+
+  return (
+    <div className="no-scrollbar" style={{ overflowX: 'auto', paddingBottom: 8 }}>
+      {/* 라벨은 격자 폭 안에서 절대 배치된다 — inline-block이라 이 상자가 격자만큼만 넓어진다. */}
+      <div style={{ position: 'relative', display: 'inline-block', paddingTop: 16 }}>
+        <div aria-hidden="true" style={{ position: 'absolute', top: 0, left: 0, height: 14 }}>
+          {months.map(({ label, left }) => (
+            <span
+              key={label}
+              style={{ position: 'absolute', left, fontSize: 11, color: '#6F6A5E', whiteSpace: 'nowrap' }}
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+        <GrassGrid weeks={graph.weeks} cellSize={CELL_SIZE} />
+      </div>
+    </div>
+  );
 }
 
 /**
- * 성장 카드 — 이 앱이 주는 유일한 보상을 카드로 세운다.
+ * 화면 맨 위 스탯 줄 — 연속 · 읽은 날 · 총 시간.
  *
- * <p>전에는 스탯과 잔디 사이에 `🌿 어린 나무` 한 줄이 각주처럼 끼어 있었다. 문제가 둘이었다:
- * ① 보상인데 <b>강조가 하나도 없고</b> ② 이 단계가 <b>어디서 오는지</b>가 화면 어디에도 없었다
- * (연속 일수가 정본인데 그 숫자는 옆 칸에 따로 서 있었다). 그래서 연속을 이 카드 안으로 들여
- * 「연속 N일째 → 지금 단계 → 다음 단계까지」 한 흐름으로 묶는다.
+ * <p>여기 있던 식물 성장 카드(땅→새싹→꽃→나무 + 진행 막대)는 폐기했다. 사다리가 주는 것은
+ * 「다음 단계까지 N일」이라는 재촉뿐이었고, 정작 이 화면이 답해야 할 세 수는 카드 안팎으로
+ * 흩어져 있었다. 상자도 배경도 없이 한 줄로 세운다 — 값이 셋뿐이면 칸막이보다 가는 선이 낫다.
+ *
+ * <p>총 시간 칸만 넓다: 「11시간 5분」은 「4일」의 두 배가 넘어, 같은 폭이면 그 칸만 줄바꿈된다.
  */
-function GrowthCard({ graph }: { graph: ContributionGraph }) {
+export function StatStrip({
+  graph,
+  /** 가운데 칸의 이름 — 공부 기록은 「공부한 날」로 바꿔 쓴다. 기본값이 독서의 옛 문구다(렌더 불변). */
+  activeDaysLabel = '읽은 날',
+}: {
+  graph: ContributionGraph;
+  activeDaysLabel?: string;
+}) {
+  const cells = [
+    { label: '연속', value: `${graph.currentStreak}일`, flex: 1 },
+    { label: activeDaysLabel, value: `${graph.activeDays}일`, flex: 1 },
+    { label: '총 시간', value: formatDuration(graph.totalSeconds), flex: 1.5 },
+  ];
+
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        padding: 14,
-        borderRadius: 12,
-        background: 'var(--adaptiveGrey100, #FCFAF5)',
-        border: '1px solid transparent',
-        borderImage: PENCIL_FRAME,
-      }}
-    >
-      {/* 단계 그림은 서버가 준다(땅·새싹·꽃·나무) — 화면이 사다리를 다시 정하지 않는다. */}
-      <span aria-hidden="true" style={{ flex: '0 0 auto', fontSize: 26, lineHeight: 1 }}>
-        {graph.growthStageEmoji}
-      </span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <Text typography="st12" color="grey600" style={{ display: 'block' }}>
-          연속 {graph.currentStreak}일째
-        </Text>
-        <Text typography="t6" fontWeight="bold" style={{ ...SERIF_VALUE, display: 'block', lineHeight: 1.25 }}>
-          {graph.growthStageLabel}
-        </Text>
-        {/* 막대는 「지금 단계 안에서 얼마나 왔나」 — 서버가 퍼센트로 계산해 준다. */}
-        <div style={{ height: 5, borderRadius: 3, background: 'var(--adaptiveGrey200, #E4DDD0)', marginTop: 7 }}>
-          <span
-            style={{
-              display: 'block',
-              width: `${graph.growthProgressPercent}%`,
-              height: '100%',
-              borderRadius: 3,
-              background: 'var(--adaptiveBlue500, #6E8A6A)',
-            }}
-          />
+    <div style={{ display: 'flex', marginTop: 14 }}>
+      {cells.map(({ label, value, flex }, index) => (
+        <div
+          key={label}
+          style={
+            index === 0
+              ? { flex }
+              : { flex, borderLeft: '1px solid var(--adaptiveGrey200, #E4DDD0)', paddingLeft: 14 }
+          }
+        >
+          <Text typography="st12" color="grey600" style={{ display: 'block' }}>
+            {label}
+          </Text>
+          {/* 세리프 + 19 — 라벨(st12)과 크기·서체 두 축으로 갈린다. 시안은 18이었으나 계단에 18은
+              없다(`typography.test` SCALE) — 한 값 때문에 계단을 넓히느니 옆 칸을 쓴다. */}
+          <Text
+            typography="st10"
+            fontWeight="bold"
+            style={{ ...SERIF_VALUE, display: 'block', fontSize: 19, marginTop: 3, whiteSpace: 'nowrap' }}
+          >
+            {value}
+          </Text>
         </div>
-        <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 4 }}>
-          {growthNudge(graph.daysToNextStage, graph.nextStageLabel)}
-        </Text>
-      </div>
+      ))}
     </div>
   );
 }
@@ -164,14 +157,26 @@ export function formatWeekday(date: string): string {
 }
 
 /**
- * 하루 막대의 길이(0~100) — 기준은 <b>그 달에서 가장 오래 읽은 날</b>이다.
+ * 하루 막대의 길이(0~100) — 기준은 <b>그날 유효했던 하루 목표</b>다.
  *
- * <p>달마다 기준을 다시 잡아야 그 달 안의 편차가 보인다(전체 최대로 재면 한가한 달은 죄다 납작해진다).
- * 기준이 0이면 0을 돌려준다 — 0으로 나누면 NaN이 되고, `width: NaN%`는 막대를 통째로 지운다.
+ * <p>전에는 「그 달 최대」로 쟀다. 그러면 목표를 채운 날도 같은 달에 더 오래 읽은 날이 하나 있으면
+ * 짧게 그려진다 — 막대가 「내가 오늘 할 일을 했나」가 아니라 「그 달 누구보다 길었나」를 답하고 있었다.
+ *
+ * <p>기준이 0(목표 없음)이면 읽은 날은 가득, 안 읽은 날은 0이다 — 잔디 `levelFor`가 목표 0인 날을
+ * lv4로 치는 것과 같은 규칙이고, 덤으로 0으로 나눠 `width: NaN%`가 되는 일도 없다.
+ *
+ * <p><b>내림이라야 한다.</b> 반올림이면 3588초/3600초가 100%로 그려지는데, 잔디
+ * `ContributionGraphBuilder.levelFor`는 `seconds < goal`이라 그 날을 lv3으로 친다 — 같은 화면의 두 그림이
+ * 「목표를 채웠나」에 다른 답을 한다. 내림으로 두면 **가득 찬 막대 ⇔ 잔디 lv4**가 참이 된다.
  */
 export function barPercent(seconds: number, maxSeconds: number): number {
-  if (maxSeconds <= 0) return 0;
-  return Math.min(100, Math.round((seconds / maxSeconds) * 100));
+  if (maxSeconds <= 0) return seconds > 0 ? 100 : 0;
+  return Math.min(100, Math.floor((seconds / maxSeconds) * 100));
+}
+
+/** 펼친 하루의 마지막 줄 — 막대를 무엇에 견줘 쟀는지. 0·미상(옛 서버 응답)은 「목표 없음」. */
+export function goalLabel(goalSeconds: number | undefined): string {
+  return goalSeconds === undefined || goalSeconds <= 0 ? '그날 목표 없음' : `그날 목표 ${formatDuration(goalSeconds)}`;
 }
 
 /**
@@ -217,14 +222,16 @@ export function bookRows(day: DailyRecord): DayBookRow[] {
 }
 
 /**
- * 펼칠 수 있는 날인가 — 펼쳐서 <b>새로 보이는 게 있어야</b> 손잡이를 단다.
+ * 펼칠 수 있는 날인가 — 기준은 <b>「책이 한 권이라도 있는가」</b>다.
  *
- * <p>기준은 「몇 권인가」가 아니라 <b>「펼치면 줄이 둘 이상인가」</b>다. 한 권만 읽은 날은 그 책 시간이 곧
- * 총합이라 펼쳐도 같은 숫자 하나가 나오고, 책을 아예 안 고른 날도 한 줄이 그날 전부다 — 그런 날까지
- * 눌리게 보이면 화면이 없는 것을 약속하는 셈이다. 반대로 한 권 + 안 고른 시간이면 둘은 다른 숫자라 펼칠 값이 있다.
+ * <p>접힌 줄에는 제목이 없고 20px 표지뿐이라, 한 권만 읽은 날도 펼쳐야 <b>무슨 책인지</b>가 나온다.
+ * 특히 시리즈물은 권마다 표지가 같아서, 책이 바뀌어도 접힌 줄로는 그게 안 보였다(사용자 보고 2026-09-08).
+ * 전 기준 「펼치면 줄이 둘 이상인가」는 펼침의 값을 <b>시간</b>으로만 셌던 셈이다 — 제목도 값이다.
+ *
+ * <p>책을 아예 안 고른 날은 그대로 안 펼친다 — 펼쳐도 「책 안 고른 기록」 한 줄이 그날 전부라 새로 보이는 게 없다.
  */
 export function isExpandable(day: DailyRecord): boolean {
-  return bookRows(day).length >= 2;
+  return day.books.length >= 1;
 }
 
 /** `2026-08` → `2026년 8월`. */
@@ -276,7 +283,6 @@ export function MonthlyRecords({ months }: { months: MonthlySection[] }) {
             <DayRow
               key={day.date}
               day={day}
-              monthMax={maxOf(section)}
               expanded={day.date === openDate}
               onToggle={() => setOpenDate(day.date === openDate ? null : day.date)}
             />
@@ -285,11 +291,6 @@ export function MonthlyRecords({ months }: { months: MonthlySection[] }) {
       ))}
     </div>
   );
-}
-
-/** 그 달에서 가장 오래 읽은 날의 초 — 막대의 기준. 빈 달은 0(막대가 안 그려진다). */
-function maxOf(section: MonthlySection): number {
-  return section.days.reduce((max, day) => Math.max(max, day.totalSeconds), 0);
 }
 
 /**
@@ -332,12 +333,10 @@ const BUTTON_RESET: CSSProperties = {
  */
 export function DayRow({
   day,
-  monthMax,
   expanded,
   onToggle,
 }: {
   day: DailyRecord;
-  monthMax: number;
   expanded: boolean;
   onToggle: () => void;
 }) {
@@ -355,11 +354,13 @@ export function DayRow({
 
       <CoverPile books={day.books} />
 
-      {/* 막대 색은 잔디 팔레트에서 가져온다 — 같은 「얼마나 읽었나」를 두 곳이 다른 색으로 말하지 않게. */}
+      {/* 막대 색은 잔디 팔레트에서 가져온다 — 같은 「얼마나 읽었나」를 두 곳이 다른 색으로 말하지 않게.
+          기준은 그날 목표다(서버가 실어 준다). 롤링 배포 중 옛 서버 응답엔 그 필드가 없어 0으로 떨어진다
+          — 읽은 날은 가득. */}
       <div
         aria-hidden="true"
         style={{
-          width: `${barPercent(day.totalSeconds, monthMax)}%`,
+          width: `${barPercent(day.totalSeconds, day.goalSeconds ?? 0)}%`,
           height: 6,
           borderRadius: 3,
           background: LEVEL_COLORS[2],
@@ -395,7 +396,7 @@ export function DayRow({
       ) : (
         <div style={ROW_GRID}>{summary}</div>
       )}
-      {expanded && <BookLines rows={bookRows(day)} />}
+      {expanded && <BookLines rows={bookRows(day)} goalSeconds={day.goalSeconds} />}
     </div>
   );
 }
@@ -483,11 +484,13 @@ function CoverPile({ books }: { books: BookRead[] }) {
 /**
  * 펼친 책 줄들 — 무슨 책을 얼마나.
  *
- * <p>막대 기준은 <b>그날 가장 오래 읽은 줄</b>이다. 하루 막대가 「그 달 최대」를 기준으로 재는 것과 같은
- * 규칙을 한 단계 아래에 쓴 것 — 총합을 기준으로 재면 여러 권인 날은 죄다 짧은 막대가 돼 견줄 수가 없다.
- * 그래서 하루 막대(그 달에서의 크기)와 책 막대(그날 안에서의 비중)는 서로 다른 것을 잰다.
+ * <p>막대 기준은 <b>그날 가장 오래 읽은 줄</b>이다 — 총합을 기준으로 재면 여러 권인 날은 죄다 짧은
+ * 막대가 돼 견줄 수가 없다. 하루 막대(그날 목표를 얼마나 채웠나)와 책 막대(그날 안에서의 비중)는
+ * 서로 다른 것을 잰다.
+ *
+ * <p>맨 아래 한 줄은 하루 막대의 기준을 밝힌다 — 막대만 보면 무엇에 견줘 쟀는지 알 수 없다.
  */
-function BookLines({ rows }: { rows: DayBookRow[] }) {
+function BookLines({ rows, goalSeconds }: { rows: DayBookRow[]; goalSeconds?: number }) {
   const longest = rows.reduce((max, row) => Math.max(max, row.seconds), 0);
   const name: CSSProperties = { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
 
@@ -558,6 +561,11 @@ function BookLines({ rows }: { rows: DayBookRow[] }) {
           </div>
         </div>
       ))}
+
+      {/* 값이 아니라 말이라 비세리프로 둔다 — 요일 줄과 같은 판단(위계 테스트의 비세리프 목록). */}
+      <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 2 }}>
+        {goalLabel(goalSeconds)}
+      </Text>
     </div>
   );
 }
@@ -586,8 +594,13 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
-/** 색 농도 범례 — 잔디가 무슨 뜻인지 화면 어디에도 없었다. 웹 `.grass-legend`와 같은 말을 쓴다. */
-function Legend() {
+/**
+ * 색 농도 범례 — 잔디가 무슨 뜻인지 화면 어디에도 없었다. 웹 `.grass-legend`와 같은 말을 쓴다.
+ *
+ * @param manual 「직접 채움」 스와치를 함께 둘지. 공부 기록은 수동 입력이 없어 false로 뺀다
+ *               (기본값이 독서의 옛 동작이라 그쪽 렌더는 불변이다).
+ */
+export function Legend({ manual = true }: { manual?: boolean } = {}) {
   const swatch = { width: 10, height: 10, borderRadius: 2, flex: '0 0 auto' } as const;
 
   return (
@@ -601,34 +614,14 @@ function Legend() {
       <Text typography="st12" color="grey600">
         많이
       </Text>
-      <span style={{ ...swatch, marginLeft: 10, background: LEVEL_COLORS[2], outline: MANUAL_OUTLINE }} />
-      <Text typography="st12" color="grey600">
-        직접 채움
-      </Text>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      style={{
-        flex: 1,
-        padding: '16px 12px',
-        borderRadius: 12,
-        background: 'var(--adaptiveGrey100, #FCFAF5)',
-        border: '1px solid transparent',
-        borderImage: PENCIL_FRAME,
-        textAlign: 'center',
-      }}
-    >
-      <Text typography="st12" color="grey600" style={{ display: 'block' }}>
-        {label}
-      </Text>
-      {/* 세리프 + st10 — 라벨(st12)과 크기·서체 두 축으로 갈린다. 전에는 3px 차이가 전부였다. */}
-      <Text typography="st10" fontWeight="bold" style={{ ...SERIF_VALUE, display: 'block', marginTop: 4 }}>
-        {value}
-      </Text>
+      {manual && (
+        <>
+          <span style={{ ...swatch, marginLeft: 10, background: LEVEL_COLORS[2], outline: MANUAL_OUTLINE }} />
+          <Text typography="st12" color="grey600">
+            직접 채움
+          </Text>
+        </>
+      )}
     </div>
   );
 }

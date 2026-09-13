@@ -23,7 +23,6 @@ export function Explore({
   onQueryChange,
   onSearch,
   onSelect,
-  onClose,
   onError,
 }: {
   query: string;
@@ -34,7 +33,6 @@ export function Explore({
   onQueryChange: (query: string) => void;
   onSearch: () => void;
   onSelect: (loginId: string) => void;
-  onClose: () => void;
   onError: (error: Error) => void;
 }) {
   const [users, setUsers] = useState<ExploreUser[] | null>(null);
@@ -77,7 +75,7 @@ export function Explore({
   );
 
   return (
-    <Screen title={results !== null ? '검색 결과' : '둘러보기'} onBack={onClose} above={search}>
+    <Screen title={results !== null ? '검색 결과' : '둘러보기'} above={search}>
       <ErrorMessage message={error ?? exploreError} />
       {results !== null ? (
         <UserList

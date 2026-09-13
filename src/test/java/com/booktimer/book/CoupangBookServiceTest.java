@@ -136,7 +136,7 @@ class CoupangBookServiceTest {
         Book book = bookService.addFromSearch(owner, cleanCode(), BookStatus.WANT_TO_READ);
         book.makePublic();
 
-        String link = bookService.recordPublicCoupangClick(book.getId());
+        String link = bookService.recordPublicCoupangClick(owner, book.getId());
 
         assertThat(link).isEqualTo(COUPANG_LINK);
         assertThat(bookService.myBooks(owner).get(0).getCoupangClickCount()).isEqualTo(1L);
@@ -148,7 +148,22 @@ class CoupangBookServiceTest {
         User owner = newUser("cprivowner@booktimer.com");
         Book book = bookService.addFromSearch(owner, cleanCode(), BookStatus.WANT_TO_READ); // 기본 PRIVATE
 
-        String link = bookService.recordPublicCoupangClick(book.getId());
+        String link = bookService.recordPublicCoupangClick(owner, book.getId());
+
+        assertThat(link).isNull();
+        assertThat(bookService.myBooks(owner).get(0).getCoupangClickCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("공개 책 쿠팡 클릭: 다른 사람을 owner로 넘기면 공개책이어도 null·집계 없음 — 조회가 '그 책방 주인'으로 스코프된다")
+    void recordPublicCoupangClick_wrongOwner_returnsNullNoCount() {
+        when(coupangLinkBuilder.buildSearchLink(any())).thenReturn(COUPANG_LINK);
+        User owner = newUser("cscopedowner@booktimer.com");
+        User other = newUser("cscopedother@booktimer.com");
+        Book book = bookService.addFromSearch(owner, cleanCode(), BookStatus.WANT_TO_READ);
+        book.makePublic(); // 공개 게이트는 통과한다 — 막는 것은 소유자 스코프뿐이다.
+
+        String link = bookService.recordPublicCoupangClick(other, book.getId());
 
         assertThat(link).isNull();
         assertThat(bookService.myBooks(owner).get(0).getCoupangClickCount()).isZero();
@@ -157,7 +172,7 @@ class CoupangBookServiceTest {
     @Test
     @DisplayName("공개 책 쿠팡 클릭: 없는 책 id면 예외 없이 null(존재 누설 회피)")
     void recordPublicCoupangClick_missing_returnsNull() {
-        assertThat(bookService.recordPublicCoupangClick(999_999L)).isNull();
+        assertThat(bookService.recordPublicCoupangClick(newUser("cmissing@booktimer.com"), 999_999L)).isNull();
     }
 
     @Test

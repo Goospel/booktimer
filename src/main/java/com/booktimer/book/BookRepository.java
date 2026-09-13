@@ -84,6 +84,9 @@ public interface BookRepository extends JpaRepository<Book, Long> {
      * <p>{@code viewer}가 팔로우한 사용자(followee)가 PUBLIC으로 가진 책만 대상으로, isbn13별로
      * 원함(WANT_TO_READ)·읽음(READING∪FINISHED) distinct 사용자 수를 센다. Follow와는 매핑된 연관이
      * 없어 theta 조인({@code f.followee = b.user})으로 묶는다. PRIVATE·비팔로우·본인(자기 팔로우 없음)은 자연 제외.
+     *
+     * <p>운영 계정({@code role <> ADMIN})도 제외한다 — 형제 소셜 쿼리·drill-down 명단
+     * ({@link #followScopeReaders})과 같은 불변식이라, 숫자와 명단이 ADMIN에서 어긋나지 않는다.
      */
     @Query("""
             select b.isbn13 as isbn,
@@ -97,6 +100,7 @@ public interface BookRepository extends JpaRepository<Book, Long> {
               and f.follower = :viewer
               and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
               and b.isbn13 in :isbns
+              and b.user.role <> com.booktimer.user.Role.ADMIN
             group by b.isbn13
             """)
     List<FollowScopeCount> followScopePopularity(@Param("viewer") User viewer,
@@ -106,9 +110,14 @@ public interface BookRepository extends JpaRepository<Book, Long> {
      * 팔로우 스코프 인기 카운트 <b>drill-down</b> — 한 isbn을 {@code viewer}가 팔로우한 사용자(followee)
      * 중 주어진 {@code statuses}로 PUBLIC 보유한 사람을 distinct로 돌려준다(닉네임 정렬은 호출부에서).
      *
-     * <p>카운트({@link #followScopePopularity})와 <b>같은 게이트</b>(팔로우·PUBLIC·distinct)라 명단과 숫자가
-     * 어긋나지 않는다. 노출되는 책은 어차피 각 팔로우 프로필의 PUBLIC 책장에서 볼 수 있는 것뿐(새 노출 없음).
-     * PRIVATE·비팔로우·본인(자기 팔로우 없음)은 자연 제외.
+     * <p>기본 게이트는 카운트({@link #followScopePopularity})와 같다(팔로우·PUBLIC·distinct). 노출되는 책은
+     * 어차피 각 팔로우 프로필의 PUBLIC 책장에서 볼 수 있는 것뿐(새 노출 없음). PRIVATE·비팔로우·본인
+     * (자기 팔로우 없음)은 자연 제외.
+     *
+     * <p>⚠️ <b>다만 명단은 여전히 카운트보다 좁다 — 숫자와 명단 길이가 어긋날 수 있다</b>(옛 주석의
+     * 「정확히 같은 게이트」는 사실이 아니었다). 운영 계정({@code role <> ADMIN})은 2026-09-12부터
+     * 카운트 쪽에도 걸려 양쪽이 같아졌고, 신원을 펼치는 쪽에만 남은 제외는 하나다: 온보딩 전 사용자
+     * ({@code login_id == null} — 호출부 {@code FollowScopeReadersService}가 Java에서 거른다, N-055).
      */
     @Query("""
             select distinct b.user
@@ -118,6 +127,7 @@ public interface BookRepository extends JpaRepository<Book, Long> {
               and b.visibility = com.booktimer.book.BookVisibility.PUBLIC
               and b.isbn13 = :isbn
               and b.status in :statuses
+              and b.user.role <> com.booktimer.user.Role.ADMIN
             """)
     List<User> followScopeReaders(@Param("viewer") User viewer,
                                   @Param("isbn") String isbn,

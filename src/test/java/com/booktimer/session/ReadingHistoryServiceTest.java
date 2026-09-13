@@ -2,6 +2,7 @@ package com.booktimer.session;
 
 import com.booktimer.book.Book;
 import com.booktimer.book.BookStatus;
+import com.booktimer.timer.GoalSchedule;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import org.junit.jupiter.api.DisplayName;
@@ -15,8 +16,11 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
+import java.util.Map;
+import java.util.function.ToLongFunction;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.Mockito.when;
 
 /**
@@ -30,6 +34,9 @@ import static org.mockito.Mockito.when;
 class ReadingHistoryServiceTest {
 
     private static final long HOUR = 3600L;
+
+    /** 목표를 안 싣는 호출 — 월 묶음 규칙만 보는 테스트가 쓴다(그 값은 단언 대상이 아니다). */
+    private static final ToLongFunction<LocalDate> NO_GOAL = date -> 0L;
 
     @Mock
     private ReadingSessionRepository sessionRepository;
@@ -240,7 +247,7 @@ class ReadingHistoryServiceTest {
                 session(user, Instant.parse("2026-06-02T01:00:00Z"), HOUR),
                 session(user, Instant.parse("2026-06-01T01:00:00Z"), HOUR)));
 
-        List<MonthlyReadingSection> months = service.monthlyHistory(user);
+        List<MonthlyReadingSection> months = service.monthlyHistory(user, NO_GOAL);
 
         assertThat(months).extracting(MonthlyReadingSection::month)
                 .containsExactly(YearMonth.of(2026, 6), YearMonth.of(2026, 5)); // 최신 월 먼저
@@ -258,7 +265,7 @@ class ReadingHistoryServiceTest {
                 session(user, Instant.parse("2026-06-02T01:00:00Z"), HOUR),
                 session(user, Instant.parse("2026-06-01T01:00:00Z"), 1800L)));
 
-        List<MonthlyReadingSection> months = service.monthlyHistory(user);
+        List<MonthlyReadingSection> months = service.monthlyHistory(user, NO_GOAL);
 
         assertThat(months).hasSize(1);
         assertThat(months.get(0).month()).isEqualTo(YearMonth.of(2026, 6));
@@ -274,7 +281,7 @@ class ReadingHistoryServiceTest {
                 session(user, Instant.parse("2026-06-30T03:00:00Z"), HOUR),
                 session(user, Instant.parse("2026-07-01T03:00:00Z"), HOUR)));
 
-        List<MonthlyReadingSection> months = service.monthlyHistory(user);
+        List<MonthlyReadingSection> months = service.monthlyHistory(user, NO_GOAL);
 
         assertThat(months).extracting(MonthlyReadingSection::month)
                 .containsExactly(YearMonth.of(2026, 7), YearMonth.of(2026, 6));
@@ -287,6 +294,55 @@ class ReadingHistoryServiceTest {
         User user = seoulUser();
         when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of());
 
-        assertThat(service.monthlyHistory(user)).isEmpty();
+        assertThat(service.monthlyHistory(user, NO_GOAL)).isEmpty();
+    }
+
+    // --- 그날 목표(기록 화면 하루 막대의 기준): 변경 전후 경계·타임존 일자·미산정 계약 ---
+
+    @Test
+    @DisplayName("monthlyHistory: 각 날에 그날 유효했던 목표가 실린다 — 변경 전날/당일/다음날")
+    void monthlyHistory_carriesGoalEffectiveOnThatDay() {
+        User user = seoulUser();
+        // 06-02부터 목표가 30분으로 바뀌었다. 그 전날은 폴백(1시간).
+        ToLongFunction<LocalDate> goalFor =
+                GoalSchedule.of(Map.of(LocalDate.of(2026, 6, 2), 1800L), HOUR)::goalFor;
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(
+                session(user, Instant.parse("2026-06-01T01:00:00Z"), HOUR),  // 06-01 KST
+                session(user, Instant.parse("2026-06-02T01:00:00Z"), HOUR),  // 06-02 KST
+                session(user, Instant.parse("2026-06-03T01:00:00Z"), HOUR))); // 06-03 KST
+
+        List<DailyReadingRecord> days = service.monthlyHistory(user, goalFor).get(0).days();
+
+        assertThat(days).extracting(DailyReadingRecord::date, DailyReadingRecord::goalSeconds)
+                .containsExactly(
+                        tuple(LocalDate.of(2026, 6, 3), 1800L),
+                        tuple(LocalDate.of(2026, 6, 2), 1800L),
+                        tuple(LocalDate.of(2026, 6, 1), HOUR));
+    }
+
+    @Test
+    @DisplayName("monthlyHistory: 목표 일자는 유저 타임존 일자로 묻는다 — UTC 날짜로 물으면 하루 어긋난다")
+    void monthlyHistory_asksGoalWithUserTimezoneDate() {
+        User user = seoulUser();
+        // 2026-06-01T15:30Z == 06-02 00:30 KST. 목표는 06-02부터 30분.
+        ToLongFunction<LocalDate> goalFor =
+                GoalSchedule.of(Map.of(LocalDate.of(2026, 6, 2), 1800L), HOUR)::goalFor;
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(
+                session(user, Instant.parse("2026-06-01T15:30:00Z"), HOUR)));
+
+        DailyReadingRecord day = service.monthlyHistory(user, goalFor).get(0).days().get(0);
+
+        assertThat(day.date()).isEqualTo(LocalDate.of(2026, 6, 2));
+        assertThat(day.goalSeconds()).isEqualTo(1800L); // UTC 06-01로 물었다면 폴백 3600이 나왔다
+    }
+
+    @Test
+    @DisplayName("dailyHistory는 목표를 싣지 않는다 — 0 = 미산정(잔디·부채는 목표를 스스로 해석한다)")
+    void dailyHistory_leavesGoalUnresolved() {
+        User user = seoulUser();
+        when(sessionRepository.findByUserWithBook(user)).thenReturn(List.of(
+                session(user, Instant.parse("2026-06-01T01:00:00Z"), HOUR)));
+
+        assertThat(service.dailyHistory(user).get(0).goalSeconds()).isZero();
     }
 }

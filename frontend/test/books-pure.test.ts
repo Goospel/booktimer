@@ -7,6 +7,7 @@ import {
     byline,
     statusBadge, STATUS_BADGE_FALLBACK,
     booksNavLinks,
+    marginHandleLabel,
 } from '../src/books/pure';
 
 // 백엔드 BookStatus.name() = WANT_TO_READ / READING / FINISHED
@@ -125,17 +126,30 @@ describe('byline — 검색 결과 저자·출판사 한 줄', () => {
     });
 });
 
+// 색은 hex가 아니라 **토큰 참조**로 돌려준다. 이 값은 `:style`로 인라인 박히므로 hex면
+// 다크에서 그 배지만 크림색으로 남는다 — CSS 쪽 래칫(darkTokens.test.ts)이 못 보는 사각이라
+// 여기서 따로 못 박는다. `var(--…)` 형태 자체를 단언해야 「다크에서 갈리는가」가 걸린다.
 describe('statusBadge — 상태배지 색 매핑(시안 STATUS)', () => {
     test('읽는 중 → 세이지', () => {
-        expect(statusBadge('READING')).toEqual({ bg: '#E7EEE2', fg: '#4F6B4C' });
+        expect(statusBadge('READING')).toEqual({ bg: 'var(--sage-soft)', fg: 'var(--accent-hover)' });
     });
 
     test('완독 → 선명한 초록', () => {
-        expect(statusBadge('FINISHED')).toEqual({ bg: '#E0EFE6', fg: '#2F8F6B' });
+        expect(statusBadge('FINISHED')).toEqual({ bg: 'var(--ok-soft)', fg: 'var(--ok)' });
     });
 
     test('읽고 싶음 → 베이지', () => {
-        expect(statusBadge('WANT_TO_READ')).toEqual({ bg: '#F0E8DB', fg: '#8A6D3B' });
+        // `--warn-bg-4`는 설정 배너(`--warn-bg`)와 **다른 라이트 값**이다(#F0E8DB vs #F6ECD9).
+        // 근접값이라 한 토큰으로 합칠 뻔했으나, 라이트 픽셀을 origin/main 그대로 두기로 해서 갈랐다.
+        expect(statusBadge('WANT_TO_READ')).toEqual({ bg: 'var(--warn-bg-4)', fg: 'var(--warn-fg)' });
+    });
+
+    test('모든 상태가 토큰 참조다 — hex가 하나라도 섞이면 그 배지만 다크에서 라이트로 남는다', () => {
+        for (const s of ['READING', 'FINISHED', 'WANT_TO_READ', 'PAUSED', '']) {
+            const b = statusBadge(s);
+            expect(b.bg, `${s} bg`).toMatch(/^var\(--[\w-]+\)$/);
+            expect(b.fg, `${s} fg`).toMatch(/^var\(--[\w-]+\)$/);
+        }
     });
 
     test('알 수 없는 상태 → 중립 폴백', () => {
@@ -174,5 +188,21 @@ describe('booksNavLinks — 책장 하단 네비 링크', () => {
     test('null/undefined myLoginId도 제외(방어 — dataset 미주입)', () => {
         expect(booksNavLinks(null as unknown as string).some(l => l.href.startsWith('/u/'))).toBe(false);
         expect(booksNavLinks(undefined as unknown as string).some(l => l.href.startsWith('/u/'))).toBe(false);
+    });
+});
+
+// ── 「여백」 손잡이 라벨 ────────────────────────────────────────────────────
+// 책장은 글 0건·비공개 책까지 전부 진열하므로, 개수가 붙어야 「내 글이 있는 책」을 훑어 찾는다.
+describe('marginHandleLabel — 책장 여백 손잡이 라벨', () => {
+    test('글이 있으면 개수를 붙인다', () => {
+        expect(marginHandleLabel(3)).toBe('여백 3');
+    });
+
+    test('0건이면 개수를 안 붙인다 — 「여백 0」은 말만 남는다', () => {
+        expect(marginHandleLabel(0)).toBe('여백');
+    });
+
+    test('storyCount 없는 옛 응답도 「여백」 (undefined 노출·throw 방지)', () => {
+        expect(marginHandleLabel(undefined)).toBe('여백');
     });
 });

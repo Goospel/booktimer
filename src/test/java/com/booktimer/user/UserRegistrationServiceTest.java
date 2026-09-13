@@ -102,7 +102,7 @@ class UserRegistrationServiceTest {
     }
 
     @Test
-    @DisplayName("register: 이미 가입된 이메일이면 EmailAlreadyExistsException을 던지고 아무것도 저장·해싱하지 않는다")
+    @DisplayName("register: 이미 가입된 이메일이면 EmailAlreadyExistsException을 던지고 아무것도 저장하지 않는다")
     void register_whenEmailExists_throwsAndDoesNotPersist() {
         when(userRepository.existsByEmail("dup@booktimer.com")).thenReturn(true);
 
@@ -112,7 +112,18 @@ class UserRegistrationServiceTest {
 
         verify(userRepository, never()).save(any());
         verify(timerRepository, never()).save(any());
-        verify(passwordEncoder, never()).encode(any());
+    }
+
+    @Test
+    @DisplayName("보안(타이밍 오라클): 이미 가입된 이메일이어도 BCrypt 해싱은 똑같이 1회 지불한다 — 해싱을 존재 검사 뒤에 두면 기존 이메일 경로만 BCrypt 1회(≈50~100ms)만큼 빨라져, 본문을 같게 만든 열거 완화가 시간 채널에서 무효가 된다")
+    void register_whenEmailExists_stillPaysHashingCost() {
+        when(userRepository.existsByEmail("dup-timing@booktimer.com")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.register(
+                "dup-timing@booktimer.com", "rawpw1234", "reader_t", "책벌레", "Asia/Seoul", Role.USER, DAY0))
+                .isInstanceOf(EmailAlreadyExistsException.class);
+
+        verify(passwordEncoder).encode("rawpw1234"); // 정확히 1회 — 존재하는 이메일도 같은 비용
     }
 
     @Test

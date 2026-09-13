@@ -3,6 +3,9 @@ package com.booktimer.web.api;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.user.OnboardingService;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+
+import java.nio.charset.StandardCharsets;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -43,7 +46,12 @@ public class MiniappGoalApiController {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<String> handleInvalidRequest(IllegalArgumentException e) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        // text/plain 고정 — raw String 본문은 Accept: text/html이면 text/html로 협상돼,
+        // 메시지에 사용자 입력이 섞이는 순간 브라우저가 렌더해 반사 XSS가 된다.
+        // charset은 반드시 명시한다 — 빼면 StringHttpMessageConverter가 기본 인코딩으로 써서 한글 메시지가 깨진다.
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .contentType(new MediaType(MediaType.TEXT_PLAIN, StandardCharsets.UTF_8))
+                .body(e.getMessage());
     }
 
     /** @param dailyIncrementSeconds 하루 목표(초, 0 이상 — 0은 "목표 없음"으로 도메인이 허용한다) */

@@ -1,0 +1,291 @@
+package com.booktimer.web.api;
+
+import com.booktimer.book.StudyBook;
+import com.booktimer.book.StudyBookRepository;
+import com.booktimer.security.CurrentUserService;
+import com.booktimer.study.ClaudeStudyAssistant;
+import com.booktimer.study.StudyDates;
+import com.booktimer.study.StudyPlanItem;
+import com.booktimer.study.StudyPlanService;
+import com.booktimer.study.StudyRecall;
+import com.booktimer.study.StudyRecallService;
+import com.booktimer.user.StudyAiAccess;
+import com.booktimer.user.User;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+
+import java.nio.charset.StandardCharsets;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.security.Principal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.format.DateTimeParseException;
+import java.util.List;
+
+/**
+ * 웹 「공부」 화면의 일정 원장 문 — 달력 상세가 쓰는 조회 하나와 뮤테이션 둘.
+ *
+ * <p><b>세션 인증이다</b>(Bearer 아님). {@code SecurityConfig}의 미니앱 체인 스위치가 Authorization 헤더
+ * 유무라, 헤더 없는 {@code /api/**}는 그대로 세션 체인(CSRF 포함)으로 흐른다 — 그래서 이 화면은 기존
+ * {@code /api/study/calendar}·{@code /api/study/check}를 <b>신설 없이 재사용</b>한다(설계 §1.2).
+ *
+ * <p>에러 계약은 {@link StudyApiController}와 같다: IAE → 400(문구가 그대로 본문) · 남의 것·없는 것 → 404.
+ *
+ * <p>{@link Agenda}는 화면이 보는 <b>단 하나의 상태</b>다 — 달력·상세·AI 상태 줄이 전부 이 응답에서 그려진다.
+ * {@code remaining}의 셋({@code plan}·{@code transcribe}·{@code analyze})은 전부 오늘 실제로 남은 몫이다.
+ */
+@RestController
+public class StudyPlanApiController {
+
+    private final CurrentUserService currentUserService;
+    private final StudyPlanService planService;
+    private final StudyRecallService recallService;
+    private final ClaudeStudyAssistant assistant;
+    private final StudyBookRepository studyBookRepository;
+    private final Clock clock;
+
+    public StudyPlanApiController(CurrentUserService currentUserService,
+                                  StudyPlanService planService,
+                                  StudyRecallService recallService,
+                                  ClaudeStudyAssistant assistant,
+                                  StudyBookRepository studyBookRepository,
+                                  Clock clock) {
+        this.currentUserService = currentUserService;
+        this.planService = planService;
+        this.recallService = recallService;
+        this.assistant = assistant;
+        this.studyBookRepository = studyBookRepository;
+        this.clock = clock;
+    }
+
+    /**
+     * 그 달의 일정 + 화면이 「오늘」을 판정하는 데 쓰는 서버 기준 날짜.
+     *
+     * <p>{@code today}를 서버가 주는 것이 요점이다 — 기기 타임존이 유저 설정과 어긋나도 미래 잠금 판정이
+     * 서버({@code StudyCalendarService.setCheck})와 같아진다(어긋나면 화면이 허용한 탭이 400으로 튕긴다).
+     *
+     * @param month {@code YYYY-MM}
+     * @return 200 {@link Agenda} / 400 달 형식 오류
+     */
+    @GetMapping("/api/study/agenda")
+    public ResponseEntity<Agenda> agenda(Principal principal, @RequestParam String month) {
+        User user = currentUserService.resolve(principal);
+        YearMonth target = parseMonth(month);
+        List<PlanItemRow> items = planService.month(user, target).stream()
+                .map(PlanItemRow::from)
+                .toList();
+        // 전달 말일부터 당긴다 — 「문제」 표식은 쓴 날이 아니라 푸는 날(다음날)에 서므로, 달 첫날의 표식은
+        // 전달 마지막 글에서 나온다. 하루 더 읽는 값으로 달 경계의 빈 칸을 없앤다.
+        List<RecallRow> recalls = recallService
+                .between(user, target.atDay(1).minusDays(1), target.atEndOfMonth()).stream()
+                .map(RecallRow::from)
+                .toList();
+        // 승인만으론, 키만으론 켜지지 않는다 — 둘 다여야 화면에 AI 버튼이 선다.
+        boolean aiEnabled = assistant.isEnabled()
+                && user.getStudyAiAccess() == StudyAiAccess.APPROVED;
+        return ResponseEntity.ok(new Agenda(
+                StudyDates.today(user, clock),
+                user.getStudyAiAccess(),
+                user.getStudyAiAccessAt(),
+                aiEnabled,
+                new Remaining(planService.remainingPlan(user),
+                        recallService.remainingTranscribe(user), recallService.remainingAnalyze(user)),
+                items,
+                recalls));
+    }
+
+    /**
+     * 일정 한 줄 수동 추가 — AI가 없어도(그리고 꺼져 있어도) 이 화면이 쓰이게 하는 경로다.
+     *
+     * @return 200 {@link PlanItemRow} / 400 검증 위반·날짜 형식 / 404 남의 bookId
+     */
+    @PostMapping("/api/study/plan/items")
+    public ResponseEntity<PlanItemRow> addItem(Principal principal, @RequestBody AddItemRequest request) {
+        User user = currentUserService.resolve(principal);
+        StudyBook book = ownedBookOrNull(user, request.bookId());
+        StudyPlanItem item = planService.add(user, parseDate(request.date()), book,
+                request.subject(), request.task());
+        return ResponseEntity.ok(PlanItemRow.from(item));
+    }
+
+    /**
+     * 일정 한 줄 삭제. 편집은 없다(추가·삭제로 충분하다는 것이 이번 판의 범위다).
+     *
+     * @return 200 / 404 없거나 남의 것(존재 비노출)
+     */
+    @PostMapping("/api/study/plan/items/{id}/delete")
+    public ResponseEntity<Void> deleteItem(Principal principal, @PathVariable("id") Long id) {
+        User user = currentUserService.resolve(principal);
+        if (!planService.delete(user, id)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "일정을 찾을 수 없습니다");
+        }
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * AI에게 시험일까지의 일정 초안을 받는다 — <b>저장하지 않는다</b>(미리보기까지다).
+     *
+     * @return 200 {@link PlanDraftResponse} / 400 검증·요청 거부 / 403 미승인 / 429 오늘 몫 소진 /
+     *         503 AI 꺼짐·응답 없음
+     */
+    @PostMapping("/api/study/plan/generate")
+    public ResponseEntity<PlanDraftResponse> generate(Principal principal,
+                                                      @RequestBody GenerateRequest request) {
+        User user = currentUserService.resolve(principal);
+        StudyPlanService.PlanDraft draft = planService.generate(user, new StudyPlanService.GenerateCommand(
+                request.subject(), request.scope(), parseDate(request.examDate()),
+                request.dailyMinutes(), request.daysPerWeek()));
+        return ResponseEntity.ok(new PlanDraftResponse(
+                draft.days().stream().map(d -> new DraftDay(d.date(), d.task())).toList(),
+                draft.replaceCount()));
+    }
+
+    /**
+     * 미리보기의 일정을 달력에 적는다 — 「오늘 이후 전부 교체」다.
+     *
+     * <p><b>승인 게이트가 없다</b>: AI를 쓰지 않는 저장이라 막을 이유가 없고, 수동으로 짠 일정을 한 번에
+     * 넣는 경로로도 쓰인다(AI가 꺼져 있어도 성립하는 폴백).
+     *
+     * @return 200 {@link StudyPlanService.ApplyResult} / 400 빈 목록·과거 날짜·중복·길이 위반 / 404 남의 bookId
+     */
+    @PostMapping("/api/study/plan/apply")
+    public ResponseEntity<StudyPlanService.ApplyResult> apply(Principal principal,
+                                                              @RequestBody ApplyRequest request) {
+        User user = currentUserService.resolve(principal);
+        StudyBook book = ownedBookOrNull(user, request.bookId());
+        List<StudyPlanService.PlanDay> days = (request.days() == null ? List.<DraftDay>of() : request.days())
+                .stream()
+                .map(d -> new StudyPlanService.PlanDay(parseDate(d.date()), d.task()))
+                .toList();
+        return ResponseEntity.ok(planService.applyReplacingFuture(
+                user, StudyDates.today(user, clock), request.subject(), book, days));
+    }
+
+    /**
+     * ⚠️ 컨트롤러 전역이라, 여기서 나가는 {@link IllegalArgumentException}의 메시지가 그대로 400 본문이
+     * 되어 <b>사용자 화면에 뜬다</b>({@link StudyApiController}와 같은 규약) — 그래서 이 경로가 던지는
+     * IAE 문구는 전부 한국어 완성문이다.
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<String> handleInvalidRequest(IllegalArgumentException e) {
+        // text/plain 고정 — raw String 본문은 Accept: text/html이면 text/html로 협상돼,
+        // 메시지에 사용자 입력이 섞이는 순간 브라우저가 렌더해 반사 XSS가 된다.
+        // charset은 반드시 명시한다 — 빼면 StringHttpMessageConverter가 기본 인코딩으로 써서 한글 메시지가 깨진다.
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .contentType(new MediaType(MediaType.TEXT_PLAIN, StandardCharsets.UTF_8))
+                .body(e.getMessage());
+    }
+
+    /**
+     * 403·429·503의 <b>한국어 사유를 본문으로</b> 돌려준다({@link StudyRecallApiController}와 같은 규약).
+     *
+     * <p>이게 없으면 전역 처리기가 {@code error.html}을 렌더해 HTML 문서 전체가 본문이 된다 — 화면은
+     * 「승인이 필요해요」 대신 {@code <!DOCTYPE html>…}을 상태줄에 찍는다. 이 문의 실패는 사용자가 읽고
+     * 행동을 바꿀 수 있는 것들이라(승인 신청 · 내일 다시) 사유가 화면까지 닿아야 한다.
+     */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<String> handleStatus(ResponseStatusException e) {
+        return ResponseEntity.status(e.getStatusCode()).body(e.getReason());
+    }
+
+    /** 내 공부 책일 때만 — 아니면(없음/남의 것/독서 책장의 id) 404로 존재 비노출. null은 「책 없이」라 정당하다. */
+    private StudyBook ownedBookOrNull(User user, Long bookId) {
+        if (bookId == null) {
+            return null;
+        }
+        return studyBookRepository.findByIdAndUser(bookId, user)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "책을 찾을 수 없습니다"));
+    }
+
+    private static YearMonth parseMonth(String month) {
+        try {
+            return YearMonth.parse(month);
+        } catch (DateTimeParseException e) {
+            throw new IllegalArgumentException("달 형식이 올바르지 않아요");
+        }
+    }
+
+    private static LocalDate parseDate(String date) {
+        try {
+            return LocalDate.parse(date);
+        } catch (DateTimeParseException | NullPointerException e) {
+            throw new IllegalArgumentException("날짜 형식이 올바르지 않아요");
+        }
+    }
+
+    /**
+     * @param today       유저 타임존 기준 오늘 — 화면의 미래 잠금이 서버와 같은 날을 보게 하는 기준
+     * @param aiAccess    관리자 승인 상태 — 화면의 AI 상태 줄(신청 버튼·대기·거절 문구)이 이걸로 갈린다
+     * @param aiAccessAt  마지막 상태 전이 시각(「M월 D일 신청」 표시용). 신청 전이면 {@code null}
+     * @param aiEnabled   AI 기능 사용 가능 여부 — <b>키 있음 AND 승인됨</b>일 때만 true다(둘 중 하나로는 안 켜진다)
+     * @param remaining   오늘 남은 AI 호출 몫. {@code plan}만 아직 0 고정이다(그 버튼이 없다)
+     * @param items       그 달의 일정(날짜 오름차순)
+     * @param recalls     그 달 + <b>전달 말일</b>의 백지복습 표식 — 달 첫날의 「문제」가 전달 글에서 나오기 때문
+     */
+    public record Agenda(LocalDate today, StudyAiAccess aiAccess, Instant aiAccessAt,
+                         boolean aiEnabled, Remaining remaining,
+                         List<PlanItemRow> items, List<RecallRow> recalls) {
+    }
+
+    public record Remaining(int plan, int transcribe, int analyze) {
+    }
+
+    /** @param bookId 대상 공부 책(자유 제목이거나 책이 삭제됐으면 null — subject가 제목을 대신 든다) */
+    public record PlanItemRow(Long id, LocalDate date, Long bookId, String subject, String task) {
+
+        static PlanItemRow from(StudyPlanItem item) {
+            StudyBook book = item.getBook();
+            return new PlanItemRow(item.getId(), item.getPlanDate(),
+                    book == null ? null : book.getId(), item.getSubject(), item.getTask());
+        }
+    }
+
+    /** 달력 칸의 복습 표식 — 그날 복습이 있었나({@code 복습}), 그 복습에 다음날 문제가 붙었나. */
+    public record RecallRow(LocalDate date, boolean analyzed, boolean hasQuestions) {
+
+        static RecallRow from(StudyRecall recall) {
+            return new RecallRow(recall.getRecallDate(), recall.isAnalyzed(),
+                    !StudyRecallService.decode(recall.getQuestionsJson()).isEmpty());
+        }
+    }
+
+    /** @param bookId 대상 공부 책(null·생략 = 자유 제목) */
+    public record AddItemRequest(String date, Long bookId, String subject, String task) {
+    }
+
+    /**
+     * @param scope        공부할 범위 원문 — 모델이 배분할 단원의 <b>울타리</b>다(비어도 된다)
+     * @param examDate     {@code YYYY-MM-DD}. 내일 이후 1년 안
+     * @param dailyMinutes 하루 공부 시간(분) 10~600
+     * @param daysPerWeek  주 공부일수 1~7
+     */
+    public record GenerateRequest(String subject, String scope, String examDate,
+                                  int dailyMinutes, int daysPerWeek) {
+    }
+
+    /** 미리보기 한 줄 — 적용 요청도 같은 모양으로 되돌아온다. */
+    public record DraftDay(String date, String task) {
+    }
+
+    /**
+     * @param replaceCount 지금 적용하면 지워질 「오늘 이후」 항목 수 — <b>생성 시점의 값</b>이라
+     *                     미리보기를 읽는 동안 일정을 더하면 실제 지워지는 수가 더 클 수 있다
+     */
+    public record PlanDraftResponse(List<DraftDay> days, int replaceCount) {
+    }
+
+    /** @param bookId 대상 공부 책(null·생략 = 자유 제목) */
+    public record ApplyRequest(Long bookId, String subject, List<DraftDay> days) {
+    }
+}

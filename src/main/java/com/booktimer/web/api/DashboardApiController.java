@@ -2,7 +2,7 @@ package com.booktimer.web.api;
 
 import com.booktimer.book.Book;
 import com.booktimer.book.BookRepository;
-import com.booktimer.garden.GardenService;
+import com.booktimer.book.StudyBookService;
 import com.booktimer.quote.QuoteService;
 import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.ContributionDay;
@@ -12,6 +12,7 @@ import com.booktimer.session.ReadingContributionService;
 import com.booktimer.session.ReadingSession;
 import com.booktimer.session.ReadingSessionRepository;
 import com.booktimer.session.ReadingSessionService;
+import com.booktimer.session.StudySessionService;
 import com.booktimer.user.User;
 import com.booktimer.web.DashboardModel;
 import org.springframework.http.ResponseEntity;
@@ -25,7 +26,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 
 import java.security.Principal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 
 /**
@@ -44,36 +47,45 @@ public class DashboardApiController {
     /** 대시보드 슬롯머신 로테이션에 실어 보낼 격언 최대 개수(셔플 후 상한). */
     private static final int QUOTE_ROTATION_MAX = 10;
 
+    /** 올려받을 완료 세션의 종료 시각 허용 미래폭 — 기기 시계가 조금 앞선 것까지는 받는다. */
+    private static final Duration IMPORT_FUTURE_TOLERANCE = Duration.ofMinutes(5);
+
+    /** 올려받을 완료 세션의 최대 나이 — 이보다 묵은 체험은 거부한다(클라가 저장분을 지운다). */
+    private static final Duration IMPORT_MAX_AGE = Duration.ofDays(7);
+
     private final CurrentUserService currentUserService;
     private final DashboardModel dashboardModel;
     private final ReadingContributionService contributionService;
-    private final GardenService gardenService;
     private final QuoteService quoteService;
     private final ReadingSessionService sessionService;
     private final ReadingSessionRepository sessionRepository;
     private final BookRepository bookRepository;
     private final GoalWaiverService goalWaiverService;
+    private final StudySessionService studySessionService;
+    private final StudyBookService studyBookService;
     private final Clock clock;
 
     public DashboardApiController(CurrentUserService currentUserService,
                                   DashboardModel dashboardModel,
                                   ReadingContributionService contributionService,
-                                  GardenService gardenService,
                                   QuoteService quoteService,
                                   ReadingSessionService sessionService,
                                   ReadingSessionRepository sessionRepository,
                                   BookRepository bookRepository,
                                   GoalWaiverService goalWaiverService,
+                                  StudySessionService studySessionService,
+                                  StudyBookService studyBookService,
                                   Clock clock) {
         this.currentUserService = currentUserService;
         this.dashboardModel = dashboardModel;
         this.contributionService = contributionService;
-        this.gardenService = gardenService;
         this.quoteService = quoteService;
         this.sessionService = sessionService;
         this.sessionRepository = sessionRepository;
         this.bookRepository = bookRepository;
         this.goalWaiverService = goalWaiverService;
+        this.studySessionService = studySessionService;
+        this.studyBookService = studyBookService;
         this.clock = clock;
     }
 
@@ -82,16 +94,14 @@ public class DashboardApiController {
         User user = currentUserService.resolve(principal);
         DashboardModel.LiveState live = dashboardModel.computeLive(user);
         ContributionGraph graph = contributionService.contributionGraph(user);
-        GardenApiResponse.CatalogDto garden = GardenApiResponse.catalogOf(gardenService.view(user));
         List<QuoteDto> quotes = quoteService.randomList(QUOTE_ROTATION_MAX).stream()
                 .map(q -> new QuoteDto(q.getText(), q.getAuthor()))
                 .toList();
 
         return new DashboardResponse(
                 live.nickname(), live.loginId(), user.getPreviousLoginId(),
-                user.getProfileCharacterCode(),
                 live.remainingSeconds(), live.carriedDebtSeconds(),
-                live.todayGoalSeconds(), live.carryover(),
+                live.todayGoalSeconds(), live.todayReadSeconds(), live.carryover(),
                 live.hasActiveSession(), live.activeStartedAt(),
                 live.activeBookTitle(), live.activeBookTotalSeconds(),
                 toOption(live.activeBook()),
@@ -99,10 +109,10 @@ public class DashboardApiController {
                 toOptions(live.wantToReadBooks()),
                 live.recentBookId(),
                 toGraphDto(graph),
-                garden,
                 quotes,
                 user.isEmailVerified(),
-                goalWaiverService.availableFor(user));
+                goalWaiverService.availableFor(user),
+                StudyApiController.StudyState.of(studySessionService, studyBookService, user, clock.instant()));
     }
 
     @PostMapping("/api/sessions/start")
@@ -126,6 +136,9 @@ public class DashboardApiController {
     @PostMapping("/api/sessions/stop")
     public ResponseEntity<StopResponse> stop(Principal principal) {
         User user = currentUserService.resolve(principal);
+        // 첫 완료 축하 판정은 stop '전'에 한다 — 자정을 넘긴 독서는 종료 시 2행 이상으로 분할되므로
+        // 사후 count==1 방식이면 첫 기록이 축하를 영영 못 받는다. 사전 count==0은 조각 수와 무관하다.
+        boolean firstCompletedSession = sessionRepository.countByUserAndEndedAtIsNotNull(user) == 0;
         ReadingSession stopped;
         try {
             stopped = sessionService.stop(user, clock.instant());
@@ -139,10 +152,43 @@ public class DashboardApiController {
         // sessionId + untagged: 책 없이 시작한 세션(book==null)이면 종료 후 "무슨 책?" 태깅 시트를 띄운다(발견 1).
         // getBook()==null은 lazy 프록시를 초기화하지 않는 참조 비교라 트랜잭션 밖에서도 안전(null 연관=실제 null).
         boolean untagged = stopped.getBook() == null;
-        // 첫 완료 축하 — 방금 종료로 완료 세션 수가 '정확히 1'이 된 순간에만 참(2번째부터는 거짓).
-        // 소유자 스코프 count라 남의 기록은 섞이지 않고, 수동 기록이 선행돼 있으면 자연히 2 이상이 된다.
-        boolean firstCompletedSession = sessionRepository.countByUserAndEndedAtIsNotNull(user) == 1;
         return ResponseEntity.ok(new StopResponse(stopped.getId(), untagged, firstCompletedSession, timer, graph));
+    }
+
+    /**
+     * <b>기기에서 이미 끝난 측정 올리기</b> — 미니앱이 로그인 전에 잰 체험 세션이 로그인 직후 이 문으로 들어온다.
+     * 저장은 {@link ReadingSessionService#recordCompleted}가 맡고(6h 클램프·자정 분할·(user,startedAt) 멱등),
+     * 여기서는 <b>날짜 정책</b>만 본다 — 서비스는 "얼마나 묵은 값까지 받는가"를 모른다(recordManual과 같은 분업).
+     *
+     * <p>에러 계약: 400 = 파싱 실패 · {@code endedAt <= startedAt} · {@code endedAt > now+5분}(기기 시계가 미래)
+     * · {@code startedAt < now-7일}(묵은 체험). 401 = 미니앱 체인의 인증(별도 분기 없음). 204 = 저장(중복 포함).
+     * 진행 중 세션이 있어도 거부하지 않는다 — 과거 구간을 적는 것이라 충돌하지 않는다.
+     */
+    @PostMapping("/api/sessions/import")
+    public ResponseEntity<Void> importSession(@RequestBody ImportRequest req, Principal principal) {
+        User user = currentUserService.resolve(principal);
+        Instant startedAt = parseInstant(req.startedAt());
+        Instant endedAt = parseInstant(req.endedAt());
+        Instant now = clock.instant();
+        if (!endedAt.isAfter(startedAt)
+                || endedAt.isAfter(now.plus(IMPORT_FUTURE_TOLERANCE))
+                || startedAt.isBefore(now.minus(IMPORT_MAX_AGE))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "올릴 수 없는 측정 구간입니다");
+        }
+        sessionService.recordCompleted(user, startedAt, endedAt);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** ISO-8601 시각 문자열 → Instant. 못 읽으면 400(서버 결함이 아니라 클라 입력이라 500이면 안 된다). */
+    private static Instant parseInstant(String iso) {
+        if (iso == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "시각이 없습니다");
+        }
+        try {
+            return Instant.parse(iso);
+        } catch (DateTimeParseException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "시각 형식이 올바르지 않습니다");
+        }
     }
 
     /**
@@ -214,10 +260,7 @@ public class DashboardApiController {
     private static ContributionGraphDto toGraphDto(ContributionGraph g) {
         return new ContributionGraphDto(
                 g.weeks(), g.monthLabels(),
-                g.totalSeconds(), g.activeDays(), g.currentStreak(),
-                g.growthStage().name(), g.growthStage().emoji(), g.growthStage().label(),
-                g.growthProgressPercent(), g.daysToNextStage(),
-                g.growthStage().next() == null ? null : g.growthStage().next().label());
+                g.totalSeconds(), g.activeDays(), g.currentStreak());
     }
 
     // ── DTO records ──────────────────────────────────────────────────────────
@@ -231,10 +274,11 @@ public class DashboardApiController {
              * <b>본인 응답에만</b> 싣는다 — 프로필·검색에 넣으면 "저 사람이 아이디를 바꿨구나"가 새어 나간다.
              */
             String previousLoginId,
-            String profileCharacterCode,
             long remainingSeconds,
             long carriedDebtSeconds,
             long todayGoalSeconds,
+            /** 오늘 읽은 초(완료 세션 합, 상한 없음) — 히어로 「오늘 읽은 시간」의 출처. {@link DashboardModel.LiveState} 참조. */
+            long todayReadSeconds,
             boolean carryover,
             boolean hasActiveSession,
             Instant activeStartedAt,
@@ -247,20 +291,31 @@ public class DashboardApiController {
             List<BookOption> wantToReadBooks,
             Long recentBookId,
             ContributionGraphDto graph,
-            GardenApiResponse.CatalogDto garden,
             List<QuoteDto> quotes,
             boolean emailVerified,
             /** 리워드 광고로 밀린 하루를 지울 수 있는지 — 미니앱 홈 버튼 노출 조건(웹에는 버튼이 없다). */
-            boolean debtWaiverAvailable
+            boolean debtWaiverAvailable,
+            /**
+             * 공부 모드 상태 — 미니앱이 진입 시 「지금 공부를 재는 중인가 · 오늘 얼마나 했나」를 여기서 받는다.
+             *
+             * <p><b>맨 뒤에 붙인다</b>: 웹 Vue 대시보드 섬은 이 필드를 모르고 그냥 무시하므로(모르는 키는
+             * 읽지 않는다) 웹 회귀가 0이다. 미니앱도 옛 서버(이 필드 없음)에 대비해 {@code ?? IDLE}로 읽는다 —
+             * 배포 순서에 화면이 의존하지 않는다.
+             */
+            StudyApiController.StudyState study
     ) {}
 
     /**
      * stop 응답 — 방금 종료된 세션의 id·미태깅 여부 + 타이머 + 잔디(측정 종료 즉시 잔디 갱신용).
      * {@code untagged}이면 클라이언트가 "무슨 책?" 태깅 시트를 띄우고 {@code sessionId}로 태깅 요청한다(발견 1).
      *
+     * @param sessionId             자정을 넘긴 독서는 종료 시 여러 행으로 분할되므로 <b>마지막 조각</b>의 id다.
+     *                              그 하나로 태깅하면 서비스가 인접한 앞 조각까지 함께 붙인다
+     *                              ({@code ReadingSessionService.tagBook})
      * @param firstCompletedSession 이번 종료가 이 사용자의 <b>첫 완료 기록</b>인지 — 미니앱이 축하 배너와
      *                              잔디 하이라이트를 띄우는 스위치다. 잔디는 1초만 읽어도 점등되는데
-     *                              미리보기가 폴드 아래라 첫 보상을 아무도 보지 못했다(운영 실측 2026-08-13)
+     *                              미리보기가 폴드 아래라 첫 보상을 아무도 보지 못했다(운영 실측 2026-08-13).
+     *                              판정은 stop <b>전</b> 완료 세션 수가 0인지로 한다 — 분할 조각 수와 무관해야 한다
      */
     public record StopResponse(Long sessionId, boolean untagged, boolean firstCompletedSession,
                                TimerState timer, ContributionGraphDto graph) {}
@@ -274,7 +329,7 @@ public class DashboardApiController {
     public record TagBookResponse(Long sessionId, String bookTitle) {}
 
     /**
-     * start 응답 — 라이브 부분집합(graph/garden/quote/emailVerified 제외). 잔디는 stop 때만 변함.
+     * start 응답 — 라이브 부분집합(graph/quote/emailVerified 제외). 잔디는 stop 때만 변함.
      *
      * @param debtWaiverAvailable 리워드 광고로 밀린 하루를 지울 수 있는지(미니앱 버튼 노출 조건).
      *                            start/stop/waive 응답에 함께 실려 버튼 노출·숨김이 재조회 없이 갱신된다
@@ -283,6 +338,8 @@ public class DashboardApiController {
             long remainingSeconds,
             long carriedDebtSeconds,
             long todayGoalSeconds,
+            /** 오늘 읽은 초(완료 세션 합, 상한 없음) — 히어로 「오늘 읽은 시간」의 출처. {@link DashboardModel.LiveState} 참조. */
+            long todayReadSeconds,
             boolean carryover,
             boolean hasActiveSession,
             Instant activeStartedAt,
@@ -299,7 +356,7 @@ public class DashboardApiController {
         public static TimerState of(DashboardModel.LiveState live, boolean debtWaiverAvailable) {
             return new TimerState(
                     live.remainingSeconds(), live.carriedDebtSeconds(),
-                    live.todayGoalSeconds(), live.carryover(),
+                    live.todayGoalSeconds(), live.todayReadSeconds(), live.carryover(),
                     live.hasActiveSession(), live.activeStartedAt(),
                     live.activeBookTitle(), live.activeBookTotalSeconds(),
                     toOption(live.activeBook()),
@@ -324,21 +381,15 @@ public class DashboardApiController {
 
     public record StartSessionRequest(Long bookId) {}
 
-    /** ContributionGraph 래퍼 — growthStage를 name+emoji+label 삼중화해 DTO-as-contract를 보장. */
+    /** 기기에서 이미 끝난 측정 — ISO-8601 문자열로 받는다(파싱 실패를 400으로 옮기려고 Instant가 아니다). */
+    public record ImportRequest(String startedAt, String endedAt) {}
+
+    /** ContributionGraph 래퍼 — 잔디 그리드와 집계값만 싣는다. */
     public record ContributionGraphDto(
             List<List<ContributionDay>> weeks,
             List<ContributionGraph.MonthLabel> monthLabels,
             long totalSeconds,
             int activeDays,
-            int currentStreak,
-            String growthStageName,
-            String growthStageEmoji,
-            String growthStageLabel,
-            /** 현재 단계 안의 진행률(0~100) — 기록 화면이 막대로 그린다. 최고 단계면 100. */
-            int growthProgressPercent,
-            /** 다음 단계까지 남은 연속 일수 — 최고 단계면 0. */
-            int daysToNextStage,
-            /** 다음 단계 이름 — 최고 단계면 {@code null}(더 오를 곳이 없다). */
-            String nextStageLabel
+            int currentStreak
     ) {}
 }

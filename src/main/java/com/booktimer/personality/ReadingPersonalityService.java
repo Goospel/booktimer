@@ -22,8 +22,9 @@ import java.util.Optional;
  * 않고 최대 3개까지 남는다. 그중 하나가 <b>대표</b>로, 본인 {@code /personality}와 책방 {@code /u/{loginId}}에
  * 노출되고 교체에서 보호된다. 진입점은 셋:
  * <ul>
- *   <li>{@link #currentPersonality}(GET 진입) — 대표를 읽기만 한다. 히스토리가 비었고 책이 충분하면 첫 1개를
- *       부트스트랩 생성(자동 대표). <b>책장이 바뀌어도 자동 재생성하지 않는다</b>(예상치 못한 교체 방지).</li>
+ *   <li>{@link #currentPersonality}(GET 진입) — <b>읽기만</b> 한다. 대표가 없으면 사실만 돌려준다.
+ *       2026-09-08까지는 여기서 첫 1개를 부트스트랩 생성했는데, 웹엔 광고 관문이 없어 비용만 나가서
+ *       걷었다(그 메서드의 javadoc에 경위). <b>책장이 바뀌어도 재생성하지 않는다</b>는 규칙은 그대로다.</li>
  *   <li>{@link #reanalyze}("다시 분석") — 새 분석을 후보로 추가만 한다(대표 불변). 4행이 되면 대표를 뺀 가장
  *       오래된 후보 1행을 버린다. LLM 실패 시 기존 대표(stale)를 내보내고 새 행을 만들지 않는다(N-060).</li>
  *   <li>{@link #select} — 사용자가 대표를 직접 바꾼다(LLM 호출 없음, 본인 행만).</li>
@@ -62,43 +63,35 @@ public class ReadingPersonalityService {
         this.clock = clock;
     }
 
-    /** 사용자의 책BTI 결과(사실 + 가능하면 서술)를 <b>항상 새로</b> 만든다(저장 안 함, 공개 책 기반). 서술 실패 시 사실만 폴백. */
-    public ReadingPersonality analyze(User user) {
-        ReadingProfile profile = profileService.publicProfileOf(user);
-        return narrator.narrate(profile)
-                .map(narration -> new ReadingPersonality(profile, narration))
-                .orElseGet(() -> ReadingPersonality.factsOnly(profile));
-    }
-
     /**
-     * GET 진입점 — 대표(selected) 분석을 돌려준다. <b>책장이 바뀌어도 재생성하지 않는다</b>(생성은 "다시 분석"에서만).
-     * 단, 히스토리가 비었고 책이 충분하면 첫 1개를 부트스트랩 생성해 자동 대표로 둔다(빈 화면 방지).
+     * GET 진입점 — 대표(selected) 분석을 <b>읽기만</b> 한다. 없으면 사실만 돌려준다.
+     *
+     * <p>⚠️ <b>2026-09-08까지는 여기서 첫 분석을 부트스트랩 생성했다</b>(빈 화면 방지). 걷어낸 이유는
+     * 수익 구조다: 미니앱은 리워드 광고를 봐야 분석을 돌릴 수 있어 호출마다 수익이 붙는데, <b>웹엔 그
+     * 관문이 없어 비용만 나가고 회수가 없다.</b> 광고를 웹에 새로 붙이는 것은 심사 이력상 번거로워
+     * 생성 자체를 걷었다(사용자 결정).
+     *
+     * <p>미니앱은 <b>이 문을 이미 알고 피해 놨다</b> — {@code miniapp/src/api.ts}가 이 GET 대신 부작용
+     * 없는 {@code /api/personality/status}를 쓰는 이유가 「히스토리가 비면 첫 분석을 공짜로 만들어
+     * <b>광고 관문을 무력화한다</b>」이다. 즉 이 부트스트랩은 웹에서만 열려 있던 문이고, 닫으면
+     * 남는 LLM 경로는 광고를 지난 {@link #reanalyze}뿐이다.
+     *
+     * <p><b>이미 만들어 둔 서술은 그대로 보여준다</b> — 돈 주고 만든 것을 화면에서 거두지 않는다.
+     * 생성만 막고 읽기는 유지하는 것이 이 메서드의 계약이다.
      */
-    @Transactional(propagation = Propagation.SUPPORTS) // LLM 호출(부트스트랩)을 트랜잭션 밖으로(커넥션 점유 회피)
+    @Transactional(readOnly = true)
     public ReadingPersonality currentPersonality(User user) {
         ReadingProfile profile = profileService.publicProfileOf(user);
 
-        // 콜드스타트 — 공개 완독 책 부족: LLM·저장 없이 사실만 보류
+        // 콜드스타트 — 공개 완독 책 부족: 사실만
         if (profile.finishedBooks() < COLD_START_MIN_BOOKS) {
             return ReadingPersonality.factsOnly(profile);
         }
 
-        Optional<ReadingPersonalityCache> selected = cacheRepository.findByUserAndSelectedTrue(user);
-        if (selected.isPresent()) {
-            // 대표를 그대로 보여준다 — 책장이 바뀌었어도 자동 재생성하지 않는다(Q3: '다시 분석'에서만).
-            return new ReadingPersonality(profile, narrationOf(selected.get()));
-        }
-
-        // 히스토리가 비어 있음 — 첫 분석을 부트스트랩 생성해 대표로 둔다.
-        Optional<PersonalityNarration> fresh = narrator.narrate(profile);
-        if (fresh.isEmpty()) {
-            return ReadingPersonality.factsOnly(profile); // LLM 실패 → 폴백(저장 없음)
-        }
-        PersonalityNarration narration = fresh.get();
-        ReadingPersonalityCache entry = newEntry(user, narration, ProfileSignature.of(profile));
-        entry.select(); // 첫 분석은 자동 대표
-        cacheRepository.save(entry);
-        return new ReadingPersonality(profile, narration);
+        // 대표가 있으면 그대로, 없으면 사실만 — 어느 쪽이든 LLM은 부르지 않는다.
+        return cacheRepository.findByUserAndSelectedTrue(user)
+                .map(cache -> new ReadingPersonality(profile, narrationOf(cache)))
+                .orElseGet(() -> ReadingPersonality.factsOnly(profile));
     }
 
     /**
@@ -158,9 +151,10 @@ public class ReadingPersonalityService {
     /**
      * 미니앱 광고 관문 사전 판정 — <b>LLM 호출·저장이 없는 읽기 전용</b>.
      *
-     * <p>{@link #currentPersonality}는 히스토리가 비면 첫 분석을 부트스트랩 생성(LLM+저장)하므로 관문 판정에
-     * 쓸 수 없다 — 그걸로 물으면 광고 없이 첫 분석이 공짜로 만들어져 관문 자체가 무력화된다. 이 메서드가
-     * 따로 있는 이유가 그것이다(설계 §3.4).
+     * <p>이 메서드가 따로 생긴 이유는 {@link #currentPersonality}가 <b>당시엔</b> 히스토리가 비면 첫 분석을
+     * 부트스트랩 생성(LLM+저장)했기 때문이다 — 그걸로 물으면 광고 없이 첫 분석이 공짜로 만들어져 관문이
+     * 무력화됐다(설계 §3.4). 2026-09-08에 그 부트스트랩을 걷어 지금은 둘 다 읽기 전용이지만 이 메서드는
+     * 그대로 둔다 — 미니앱이 필요로 하는 응답(총량 기준 잔여 · 관문 판정)이 GET과 다르다.
      */
     @Transactional(readOnly = true)
     public AnalysisGate gate(User user) {

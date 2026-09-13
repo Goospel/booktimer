@@ -18,7 +18,9 @@
 $ErrorActionPreference = 'Stop'
 
 try {
-    $raw  = [Console]::In.ReadToEnd()
+    # UTF-8 explicitly: Console.In decodes stdin as CP949, where a Korean lead byte can
+    # swallow the next quote -> JSON parse fails -> fail-open silently skips this gate.
+    $raw  = (New-Object System.IO.StreamReader([Console]::OpenStandardInput(), (New-Object System.Text.UTF8Encoding($false)))).ReadToEnd()
     $data = $raw | ConvertFrom-Json
     $cmd  = [string]$data.tool_input.command
 } catch {
@@ -56,20 +58,29 @@ elseif ($cmd -match 'push\s+(-{1,2}[^\s]+\s+)*\S+\s+\S+') {
 else {
     $cwd = [string]$data.cwd
     if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
-    try {
-        $branch = (& git -C $cwd rev-parse --abbrev-ref HEAD).Trim()
-    } catch {
-        $branch = ''
-    }
-    if ($branch -eq 'main' -or $branch -eq 'master') {
+    # 세션이 아니라 push 가 실제로 도는 체크아웃의 브랜치를 본다(`cd "<main 체크아웃>" && git push`, T-242)
+    . (Join-Path $PSScriptRoot 'lib\resolve-target-cwd.ps1')
+    $cwd = Resolve-HookTargetCwd $cmd $cwd 'push'
+    # 대상 브랜치를 모르면(확장식 경로) main 겨냥으로 본다 — 우회 토큰·force 판정은 아래 그대로 탄다
+    $unresolved = ($null -eq $cwd)
+    if ($unresolved) {
         $targetsMain = $true
     } else {
         try {
-            $mergeRef = (& git -C $cwd config "branch.$branch.merge").Trim()
+            $branch = (& git -C $cwd rev-parse --abbrev-ref HEAD).Trim()
         } catch {
-            $mergeRef = ''
+            $branch = ''
         }
-        if ($mergeRef -match '(^|/)(main|master)$') { $targetsMain = $true }
+        if ($branch -eq 'main' -or $branch -eq 'master') {
+            $targetsMain = $true
+        } else {
+            try {
+                $mergeRef = (& git -C $cwd config "branch.$branch.merge").Trim()
+            } catch {
+                $mergeRef = ''
+            }
+            if ($mergeRef -match '(^|/)(main|master)$') { $targetsMain = $true }
+        }
     }
 }
 
@@ -100,6 +111,7 @@ token ALLOW_FORCE_PUSH_MAIN in the command to bypass this hook.
 
 # 2) 일반 push to main/master → ALLOW_MAIN_PUSH 로 통과 가능.
 if ($cmd -match 'ALLOW_MAIN_PUSH') { exit 0 }
+if ($unresolved) { Stop-UnresolvedTarget 'push' }   # 브랜치를 몰라 막는다는 이유를 그대로 보여 준다(T-242)
 $blockMsg = @"
 [BLOCKED] Direct push to main/master is not allowed.
 

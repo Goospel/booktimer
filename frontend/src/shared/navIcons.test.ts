@@ -9,6 +9,7 @@ import { NAV_ICONS } from './navIcons'
 const REQUIRED = [
     'home', 'back', 'books', 'history', 'search', 'user', 'personality',
     'block', 'report', 'follow', 'privacy', 'quote', 'feedback', 'users', 'lock',
+    'calendar',
 ]
 
 describe('navIcons', () => {
@@ -23,20 +24,37 @@ describe('navIcons', () => {
         }
     })
 
-    // 참조 무결성 — 각 페이지가 <NavLinks :links="[{ icon: 'X' }]"> 로 넘기는 icon 키가 모두
-    // 사전에 있어야 한다. 오타(icon: 'homee')는 Vue 템플릿 문자열이라 컴파일타임에 안 잡히고
-    // 빈 아이콘으로 조용히 샌다(N-055 정신). NavIcon 자체는 :name 동적 바인딩이라 사용처
-    // (NavLinks 호출부)의 icon 리터럴을 검사한다.
-    it('모든 .vue의 NavLinks icon 리터럴이 사전 키의 부분집합', () => {
+    // 두 벌 동기화 — 같은 사전이 Vue(navIcons.ts)와 SSR(nav-icons.html) 두 런타임에 물리적으로
+    // 둘로 존재한다. "한쪽 고치면 반드시 다른 쪽도"는 여태 주석뿐이라, 한쪽에만 키를 넣으면
+    // 그 라벨이 SSR 페이지에서만 빈 아이콘으로 조용히 샜다. 계측기로 만든다.
+    it('SSR 프래그먼트가 REQUIRED 키를 전부 든다', () => {
+        const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+        const html = readFileSync(
+            join(repoRoot, 'src/main/resources/templates/fragments/nav-icons.html'), 'utf8')
+        const ssrKeys = new Set([...html.matchAll(/th:case="'([a-z]+)'"/g)].map(m => m[1]))
+        const missing = REQUIRED.filter(k => !ssrKeys.has(k))
+        expect(missing).toEqual([])
+    })
+
+    // 참조 무결성 — 각 페이지가 <NavLinks :links="[{ icon: 'X' }]"> 로 넘기는 icon 키와
+    // <NavIcon name="X"> 로 직접 박는 리터럴이 모두 사전에 있어야 한다. 오타(icon: 'homee',
+    // name="calendarr")는 Vue 템플릿 문자열이라 컴파일타임에 안 잡히고, NavIcon이 미지 키를
+    // v-html로 빈 <g>로 그려 예외도 안 난다 — 「svg가 2개 있다」류 렌더 테스트는 그대로
+    // 통과한다(존재는 행위의 증거가 아니다). 두 사용 형태를 모두 훑는다.
+    // ⚠️ .ts까지 훑는 이유: 네비 스펙이 .vue 밖 순수 모듈(study/pure.ts의 STUDY_PAGES,
+    // books/pure.ts)로 빠지는 순간 .vue만 보는 walk엔 안 잡혀, 리터럴을 옮긴 것만으로
+    // 커버리지가 조용히 사라진다(#1040 리뷰 실측 — 같은 오타가 .vue에선 죽고 .ts에선 살았다).
+    it('모든 .vue·.ts의 NavIcon 아이콘 리터럴이 사전 키의 부분집합', () => {
         const root = join(dirname(fileURLToPath(import.meta.url)), '..')
         const used = new Set<string>()
         const walk = (dir: string) => {
             for (const e of readdirSync(dir, { withFileTypes: true })) {
                 const p = join(dir, e.name)
                 if (e.isDirectory()) walk(p)
-                else if (e.name.endsWith('.vue')) {
+                else if (e.name.endsWith('.vue') || (e.name.endsWith('.ts') && !e.name.endsWith('.test.ts'))) {
                     const src = readFileSync(p, 'utf8')
                     for (const m of src.matchAll(/\bicon:\s*'([^']+)'/g)) used.add(m[1])
+                    for (const m of src.matchAll(/<NavIcon[^>]*\sname="([^"]+)"/g)) used.add(m[1])
                 }
             }
         }

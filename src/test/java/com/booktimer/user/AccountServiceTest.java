@@ -53,6 +53,18 @@ class AccountServiceTest {
     @Mock
     private ReadingSessionRepository sessionRepository;
     @Mock
+    private com.booktimer.session.StudySessionRepository studySessionRepository;
+    @Mock
+    private com.booktimer.session.StudyDailyCheckRepository studyDailyCheckRepository;
+    @Mock
+    private com.booktimer.study.StudyPlanItemRepository studyPlanItemRepository;
+    @Mock
+    private com.booktimer.study.StudyRecallRepository studyRecallRepository;
+    @Mock
+    private com.booktimer.study.StudyNoteRepository studyNoteRepository;
+    @Mock
+    private com.booktimer.study.StudyAiUsageRepository studyAiUsageRepository;
+    @Mock
     private FollowRepository followRepository;
     @Mock
     private BlockRepository blockRepository;
@@ -60,6 +72,8 @@ class AccountServiceTest {
     private ReportRepository reportRepository;
     @Mock
     private BookRepository bookRepository;
+    @Mock
+    private com.booktimer.book.StudyBookRepository studyBookRepository;
     @Mock
     private ReadingPersonalityCacheRepository personalityCacheRepository;
     @Mock
@@ -74,8 +88,6 @@ class AccountServiceTest {
     private com.booktimer.auth.ApiTokenRepository apiTokenRepository;
     @Mock
     private TossLinkCodeRepository tossLinkCodeRepository;
-    @Mock
-    private com.booktimer.garden.AuthorAffectionRepository affectionRepository;
     @Mock
     private com.booktimer.security.SessionInvalidator sessionInvalidator;
     @Mock
@@ -132,8 +144,20 @@ class AccountServiceTest {
 
         service.deleteAccount(EMAIL, "pw");
 
-        var ordered = inOrder(sessionRepository, timerRepository, goalChangeRepository, goalWaiverRepository, followRepository, blockRepository, reportRepository, storyLikeRepository, storyRepository, bookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository, apiTokenRepository, tossLinkCodeRepository, userRepository);
+        var ordered = inOrder(sessionRepository, studySessionRepository, studyDailyCheckRepository, studyPlanItemRepository, studyRecallRepository, studyNoteRepository, studyAiUsageRepository, timerRepository, goalChangeRepository, goalWaiverRepository, followRepository, blockRepository, reportRepository, storyLikeRepository, storyRepository, bookRepository, studyBookRepository, personalityCacheRepository, feedbackRepository, emailTokenRepository, apiTokenRepository, tossLinkCodeRepository, userRepository);
         ordered.verify(sessionRepository).deleteByUser(user); // book FK 참조하는 세션 먼저
+        // 공부 원장도 users를 FK 참조한다 — 빠지면 그 기록을 가진 사람의 탈퇴가 통째로 실패한다(T-168 계열).
+        ordered.verify(studySessionRepository).deleteByUser(user);
+        // 공부 일정 판정도 같은 부류의 별도 테이블이다(V80) — 세션과 함께 지워야 한다.
+        ordered.verify(studyDailyCheckRepository).deleteByUser(user);
+        // 공부 일정 원장(V83)은 book_id로 study_book도 참조한다 — 그래서 **책보다 앞**이어야 한다(story↔book과 같다).
+        ordered.verify(studyPlanItemRepository).deleteByUser(user);
+        // 백지복습(V85)도 book_id로 study_book을 참조한다 — 일정과 같은 이유로 책보다 앞이다.
+        ordered.verify(studyRecallRepository).deleteByUser(user);
+        // 공부 필기(V89)도 책보다 앞이다 — 게다가 note.book_id는 **NOT NULL**이라 풀 수도 없다
+        // (책을 먼저 지우면 그 책에 필기를 건 사람은 탈퇴 자체가 제약 위반으로 실패한다).
+        ordered.verify(studyNoteRepository).deleteByUser(user);
+        ordered.verify(studyAiUsageRepository).deleteByUser(user); // AI 상한 카운터도 users FK다
         ordered.verify(timerRepository).deleteByUser(user);
         ordered.verify(goalChangeRepository).deleteByUser(user);   // FK: 목표 변경 이력도 유저 전에 정리
         ordered.verify(goalWaiverRepository).deleteByUser(user);   // FK: 용서권도 유저 전에 정리
@@ -147,6 +171,7 @@ class AccountServiceTest {
         ordered.verify(storyLikeRepository).deleteByStoryUser(user);   // FK: 내 글에 달린 좋아요 — 글보다 앞
         ordered.verify(storyRepository).deleteByUser(user);            // FK: 여백의 글은 book 참조라 책보다 앞
         ordered.verify(bookRepository).deleteByUser(user);    // FK: 유저 삭제 전에 책 정리(세션·스토리 이후)
+        ordered.verify(studyBookRepository).deleteByUser(user); // FK: 공부 서재도 유저 전에 정리(book과 별개 테이블)
         ordered.verify(personalityCacheRepository).deleteByUser(user); // FK: 책BTI 캐시도 유저 전에 정리
         ordered.verify(feedbackRepository).deleteByAuthor(user);  // FK: 문의도 유저 전에 정리
         ordered.verify(emailTokenRepository).deleteByUser(user);  // FK: 이메일 토큰도 유저 전에 정리
@@ -354,6 +379,49 @@ class AccountServiceTest {
 
         verify(userRepository, never()).isLoginIdTaken(any());
         verify(userRepository, never()).save(any());
+    }
+
+    // --- 미검증 TOSS 계정의 이메일 재배정 (pre-hijacking 차단 정책 ②) ---
+
+    @Test
+    @DisplayName("reassignUnverifiedTossEmail: 세션을 먼저 끊고 그 다음에 이메일을 바꾼다 — 순서가 뒤집히면 옛 principal(이메일)로 인덱싱된 세션을 못 찾는다")
+    void reassignUnverifiedTossEmail_invalidatesSessionsBeforeChangingEmail() {
+        User toss = tossUnverified();
+
+        service.reassignUnverifiedTossEmail(toss, "toss-uk1@noreply.booktimer.app");
+
+        // SessionInvalidator는 principal 후보로 user.getEmail()을 읽는다 — 이메일을 먼저 바꾸면 합성 주소로
+        // 찾게 되어 0건이 되고, 피해자 이메일 principal을 가진 옛 세션이 살아남는다(그 세션은 findByEmail
+        // 폴백으로 새 구글 계정에 해석된다). 그래서 이 순서가 보안 그 자체다.
+        var ordered = inOrder(sessionInvalidator, userRepository);
+        ordered.verify(sessionInvalidator).invalidate(toss, null); // 남길 창 없음 — 본인 흐름이 아니다
+        ordered.verify(userRepository).saveAndFlush(toss);
+        assertThat(toss.getEmail()).isEqualTo("toss-uk1@noreply.booktimer.app");
+        assertThat(toss.isEmailVerified()).isFalse();
+        // 재배정 전에 발급된 VERIFICATION 토큰이 살아 있으면, 그 링크 클릭이 이메일 일치 확인 없이
+        // verifyEmail()을 불러 **합성 주소가 검증됨**이 된다(라우팅 불가 주소로 넛지 메일이 나간다).
+        verify(emailTokenRepository).deleteByUser(toss);
+    }
+
+    @Test
+    @DisplayName("reassignUnverifiedTossEmail: 합성 주소가 이미 쓰이고 있으면 -{id} 접미로 피한다 — sanitize 접힘이 유니크 위반 500이 되지 않게")
+    void reassignUnverifiedTossEmail_collidingSynthetic_fallsBackToIdSuffix() {
+        User toss = tossUnverified();
+        when(userRepository.existsByEmail("toss-uk1@noreply.booktimer.app")).thenReturn(true);
+
+        service.reassignUnverifiedTossEmail(toss, "toss-uk1@noreply.booktimer.app");
+
+        // syntheticEmail은 [^a-z0-9]를 지우므로 다른 userKey가 같은 주소로 접힐 수 있다. 그때 그대로 쓰면
+        // uk_users_email 위반으로 피해자의 구글 로그인이 영구 500이 된다.
+        assertThat(toss.getEmail()).isEqualTo("toss-uk1-7@noreply.booktimer.app");
+        verify(userRepository).saveAndFlush(toss);
+    }
+
+    private User tossUnverified() {
+        User user = User.ofOAuth(EMAIL, "토스유저", "Asia/Seoul", Role.USER, AuthProvider.TOSS);
+        user.linkTossUserKey("uk-1");
+        org.springframework.test.util.ReflectionTestUtils.setField(user, "id", 7L); // 접미 폴백이 쓰는 유일 키
+        return user;
     }
 
     @Test
