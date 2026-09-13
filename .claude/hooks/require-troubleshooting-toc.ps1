@@ -12,7 +12,9 @@
 $ErrorActionPreference = 'Stop'
 
 try {
-    $raw  = [Console]::In.ReadToEnd()
+    # stdin 은 UTF-8 로 명시 디코딩 — Console.In 은 CP949 로 읽어 한글 선행바이트가 뒤 따옴표를
+    # 삼키고, JSON 파싱 실패 → fail-open 으로 게이트가 조용히 빠진다.
+    $raw  = (New-Object System.IO.StreamReader([Console]::OpenStandardInput(), (New-Object System.Text.UTF8Encoding($false)))).ReadToEnd()
     $data = $raw | ConvertFrom-Json
     $cmd  = [string]$data.tool_input.command
 } catch { exit 0 }

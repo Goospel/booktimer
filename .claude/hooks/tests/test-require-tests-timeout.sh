@@ -110,4 +110,12 @@ check "SKIP_TESTS token bypasses gate -> exit 0" 0 "$got"
 got=$(echo "not-json" | timeout 30 powershell.exe -NoProfile -File "$HOOK" >/dev/null 2>&1; echo $?)
 check "broken JSON -> fail-open exit 0" 0 "$got"
 
+# ── Case 7: Korean in the command must not bypass the gate (stdin UTF-8) ──────
+# Read via [Console]::In (CP949), the trailing lead byte of "테스트" swallows the
+# next quote -> JSON parse fails -> catch { exit 0 } -> gate silently skipped.
+# "가"/"문서"/"한글" decode harmlessly and would NOT catch that -- keep "테스트".
+R7=$(make_repo); W7=$(to_win "$R7"); stage_java "$R7"; write_fake_gradlew "$R7" fail
+got=$(run_cmd "git add \"docs/테스트\" && git commit -F .commit-msg-tmp" "$W7")
+check "Korean before quote in command + gradle fails -> exit 2" 2 "$got"
+
 exit $FAILED

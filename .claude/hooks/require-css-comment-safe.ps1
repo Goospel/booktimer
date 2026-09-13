@@ -26,7 +26,9 @@
 $ErrorActionPreference = 'Stop'
 
 try {
-    $raw  = [Console]::In.ReadToEnd()
+    # UTF-8 explicitly: Console.In decodes stdin as CP949, where a Korean lead byte can
+    # swallow the next quote -> JSON parse fails -> fail-open silently skips this gate.
+    $raw  = (New-Object System.IO.StreamReader([Console]::OpenStandardInput(), (New-Object System.Text.UTF8Encoding($false)))).ReadToEnd()
     $data = $raw | ConvertFrom-Json
     $cmd  = [string]$data.tool_input.command
 } catch { exit 0 }
