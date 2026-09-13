@@ -85,13 +85,16 @@ class CurrentUserServiceTest {
     }
 
     @Test
-    @DisplayName("셋 다 없으면 IllegalStateException (인증됐는데 매핑 실패 — 폴백이 해석 실패를 삼키지 않는다)")
+    @DisplayName("셋 다 없으면 AuthenticatedUserNotFoundException (인증됐는데 매핑 실패 — 폴백이 해석 실패를 삼키지 않는다)")
     void resolve_absent_throws() {
         lenient().when(userRepository.findByLoginId("ghost")).thenReturn(Optional.empty());
         lenient().when(userRepository.findByEmail("ghost")).thenReturn(Optional.empty());
         lenient().when(userRepository.findByPreviousLoginId("ghost")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.resolve("ghost"))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(AuthenticatedUserNotFoundException.class)
+                // IllegalStateException의 하위여선 안 된다 — 컨트롤러의 ISE=409 핸들러에 다시 걸려
+                // 「이미 신청했다」·「이미 아이디가 있어요」로 오분류된다(이 분리의 존재 이유).
+                .isNotInstanceOf(IllegalStateException.class);
     }
 }

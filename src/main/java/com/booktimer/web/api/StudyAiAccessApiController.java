@@ -52,6 +52,10 @@ public class StudyAiAccessApiController {
     /**
      * 전이 규칙 위반({@link User#requestStudyAi})을 409로 옮긴다 — 대기 큐를 두 번 채우거나, 이미 받은
      * 승인을 다시 대기로 되돌리는 요청이 조용히 성공하지 않게 한다.
+     *
+     * <p>{@code CurrentUserService.resolve}의 사용자-없음은
+     * {@link com.booktimer.security.AuthenticatedUserNotFoundException}이라 <b>여기 안 걸린다</b>(전역 500) —
+     * 서버 결함을 「이미 신청했다」는 거짓 안내로 옮기지 않기 위한 분리다.
      */
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<String> handleAlreadyRequested(IllegalStateException e) {

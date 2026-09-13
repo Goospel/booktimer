@@ -4404,10 +4404,15 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
       `study`·`dashboard` 번들을 재생성했다. RED는 문구 단언 테스트(`RecallPanel.test.ts`)를 먼저 바꿔 확인
       (762건 GREEN). `pure.ts`엔 이 문구가 없었다 — 429 본문을 그대로 통과시키는 함수라 서버 문구만 바꾸면
       족했고, 옛 문구를 픽스처로 쓴 `pure.test.ts`만 갱신했다.
-- 🔜 **선재 결함(이번 범위 밖, 리뷰 8번)**: `StudyAiAccessApiController.handleAlreadyRequested`가
+- ✅ **선재 결함(리뷰 8번) 해소** (2026-09-13): `StudyAiAccessApiController.handleAlreadyRequested`가
       `IllegalStateException`을 전부 409로 옮겨, `CurrentUserService.resolve`가 던지는 ISE(인증 주체는 있는데
-      도메인 사용자가 없음 = 서버 결함)까지 「이미 신청했거나 승인된 상태예요」 409가 된다. S-3·S-4와 무관한
-      기존 문제라 건드리지 않았다.
+      도메인 사용자가 없음 = 서버 결함)까지 「이미 신청했거나 승인된 상태예요」 409가 됐다. **같은 결함이
+      `MiniappHandleApiController.handleAlreadySet`(「이미 아이디가 있어요」)에도 있어 두 곳 모두 고쳤다** —
+      컨트롤러는 무변경이고, 근본 자리 하나(`resolve`)가 던지는 예외를 `AuthenticatedUserNotFoundException`
+      (**ISE의 하위가 아니다** — 하위면 그대로 잡힌다)으로 분리해 전역 처리기의 500으로 흐르게 했다.
+      RED는 두 경로 모두 409를 실측한 뒤 봤고, 「ISE를 상속시키는」 돌연변이는 새 테스트 3건이 전부 죽였다.
+      ISE를 잡는 `src/main`의 **16곳**(`catch` 16 + 클래스 핸들러 2)은 전수 확인 결과 모두 `resolve` 호출
+      <b>밖</b>에서 특정 서비스 호출만 감싸고 있었다.
 
 ### API 부정접근 감사 후속 — 레이트리밋 2건 · SNS fail-closed · 구매링크 가드 (완료 ✅ 2026-09-11)
 > 전 API 감사(2026-09-11). 인증·인가 뼈대는 건전했다 — IDOR 없음, 토큰 해시 저장, CORS·CSP·프록시 신뢰 OK.
