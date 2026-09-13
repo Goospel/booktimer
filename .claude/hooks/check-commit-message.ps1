@@ -29,6 +29,11 @@ if ($cmd -notmatch '\bgit\b' -or $cmd -notmatch '\bcommit\b') { exit 0 }
 
 $cwd = [string]$data.cwd
 if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
+# Resolve a relative -F in the directory the commit really runs in (T-242) -- git reads it
+# from there, not from the top level. Unexpandable target -> keep the session cwd (fail-open).
+. (Join-Path $PSScriptRoot 'lib\resolve-target-cwd.ps1')
+$target = Resolve-HookTargetCwd $cmd $cwd 'commit' -NoToplevel
+if ($target) { $cwd = $target }
 
 # Helper: extract value of -m/--message/-c flag (double-quoted, single-quoted, or bare word)
 function Get-InlineMessage([string]$command) {

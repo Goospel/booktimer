@@ -32,6 +32,10 @@ if ($cmd -match 'ALLOW_CHANGELOG_DUP') { exit 0 }
 
 $cwd = [string]$data.cwd
 if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
+# push 가 실제로 도는 워크트리의 changelog 를 본다(`cd "<다른 워크트리>" && git push`, T-242)
+. (Join-Path $PSScriptRoot 'lib\resolve-target-cwd.ps1')
+$cwd = Resolve-HookTargetCwd $cmd $cwd 'push'
+if ($null -eq $cwd) { Stop-UnresolvedTarget 'push' }
 
 $path = Join-Path $cwd 'claude-docs\changelog.md'
 if (-not (Test-Path $path)) { exit 0 }

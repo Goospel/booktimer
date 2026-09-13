@@ -43,6 +43,10 @@ if ($cmd -match 'SKIP_CSS_COMMENT_CHECK') { exit 0 }
 
 $cwd = [string]$data.cwd
 if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
+# Inspect the worktree the commit really runs in, not the session cwd (T-242)
+. (Join-Path $PSScriptRoot 'lib\resolve-target-cwd.ps1')
+$cwd = Resolve-HookTargetCwd $cmd $cwd 'commit'
+if ($null -eq $cwd) { Stop-UnresolvedTarget 'commit' }
 
 # Staged .css files (added/copied/modified -- skip deletes)
 try {

@@ -32,6 +32,10 @@ if ($cmd -match 'SKIP_TESTS') { exit 0 }
 
 $cwd = [string]$data.cwd
 if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
+# 세션 cwd 가 아니라 커밋이 실제로 도는 워크트리를 본다(`cd "<다른 워크트리>" && git commit`, T-242)
+. (Join-Path $PSScriptRoot 'lib\resolve-target-cwd.ps1')
+$cwd = Resolve-HookTargetCwd $cmd $cwd 'commit'
+if ($null -eq $cwd) { Stop-UnresolvedTarget 'commit' }
 
 # 이 커밋이 건드릴 파일 목록 → .java 가 없으면 테스트 불필요 (문서/설정 커밋)
 # 인덱스만 보면 안 된다(T-228): 커밋 명령이 스스로 스테이징하면

@@ -26,6 +26,10 @@ if ($cmd -notmatch '\bgit\b' -or $cmd -notmatch '\bcommit\b') { exit 0 }
 
 $cwd = [string]$data.cwd
 if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
+# 커밋이 실제로 도는 워크트리를 본다(T-242). 확장식 경로면 세션 cwd 로 폴백 — 목차는 파생물이라 fail-open.
+. (Join-Path $PSScriptRoot 'lib\resolve-target-cwd.ps1')
+$target = Resolve-HookTargetCwd $cmd $cwd 'commit'
+if ($target) { $cwd = $target }
 
 $rel = 'claude-docs/troubleshooting.md'
 
