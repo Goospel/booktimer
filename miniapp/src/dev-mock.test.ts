@@ -72,35 +72,52 @@ describe('dev-mock 핸들러', () => {
     expect(data.study!.hasActiveSession).toBe(false);
   });
 
-  it('공부 목표 — 저장하면 응답과 대시보드 study 블록에 그대로 실린다(음수는 서버처럼 400)', async () => {
-    const saved = await mockRequest<StudyState>('/api/study/goal', { body: { dailyGoalSeconds: 5400 } });
-    expect(saved.goalSeconds).toBe(5400);
+  /**
+   * 책별 「회당 시간」 — 서버 계약(`POST /api/study/books/{id}/session-goal`)을 목이 그대로 재현해야
+   * 휠 시트의 저장·해제·실패를 브라우저로 밟아 볼 수 있다.
+   */
+  const sessionGoal = (id: number, sessionGoalSeconds: number | null) =>
+    mockRequest<StudyState>(`/api/study/books/${id}/session-goal`, { body: { sessionGoalSeconds } });
+  const bookGoal = (s: StudyState | undefined, id: number) => s!.books!.find((b) => b.id === id)!.sessionGoalSeconds;
 
-    const data = await mockRequest<DashboardResponse>('/api/dashboard', {});
-    expect(data.study!.goalSeconds).toBe(5400);
-
-    // 음수 거부가 목에도 있어야 「저장 실패 문구」를 브라우저로 확인할 수 있다.
-    await expect(mockRequest('/api/study/goal', { body: { dailyGoalSeconds: -1 } })).rejects.toMatchObject({
-      status: 400,
-    });
-    // 거절된 값이 상태를 물들이지 않는다.
-    expect((await mockRequest<StudyState>('/api/study/goal', { body: { dailyGoalSeconds: 0 } })).goalSeconds).toBe(0);
-
-    // 0 = 「목표 없음」이고, 화면 두 곳이 그걸 읽는다 — 목이 0을 무시하면 「목표 없이 지내기」를
-    // 브라우저로 밟아도 홈·달력이 옛 목표를 계속 그린다.
-    expect((await mockRequest<DashboardResponse>('/api/dashboard', {})).study!.goalSeconds).toBe(0);
-    const month = new Date().toISOString().slice(0, 7);
-    expect(
-      (await mockRequest<StudyCalendarResponse>('/api/study/calendar', { query: { month } })).goalSeconds,
-    ).toBe(0);
+  it('회당 시간 — 저장하면 응답과 대시보드 study 블록의 그 책 행에 실린다', async () => {
+    const saved = await sessionGoal(102, 3_000);
+    expect(bookGoal(saved, 102)).toBe(3_000);
+    expect(bookGoal((await mockRequest<DashboardResponse>('/api/dashboard', {})).study, 102)).toBe(3_000);
+    // 다른 책은 물들지 않는다 — 책별 값이다.
+    expect(bookGoal(saved, 103) ?? null).toBeNull();
   });
 
-  it('공부 목표는 독서 목표를 건드리지 않는다 — 목에서도 두 목표가 갈려 있다', async () => {
-    const before = await mockRequest<DashboardResponse>('/api/dashboard', {});
-    await mockRequest('/api/study/goal', { body: { dailyGoalSeconds: 3600 } });
-    const after = await mockRequest<DashboardResponse>('/api/dashboard', {});
+  it('회당 시간 — null이 해제다', async () => {
+    await sessionGoal(102, 3_000);
+    expect(bookGoal(await sessionGoal(102, null), 102)).toBeNull();
+  });
 
-    expect(after.todayGoalSeconds).toBe(before.todayGoalSeconds);
+  it('회당 시간 — 측정 중인 책이면 activeBook에도 새 값이 바로 실린다', async () => {
+    await mockRequest('/api/study/start', { body: { bookId: 103 } });
+    try {
+      expect((await sessionGoal(103, 60)).activeBook!.sessionGoalSeconds).toBe(60);
+    } finally {
+      await mockRequest('/api/study/stop', { body: {} });
+      await sessionGoal(103, null);
+    }
+  });
+
+  it('회당 시간 — 59·0·21601은 400이고 값이 안 바뀐다(0은 해제가 아니다)', async () => {
+    await sessionGoal(102, 1_800);
+    for (const bad of [59, 0, 21_601]) {
+      await expect(sessionGoal(102, bad)).rejects.toMatchObject({ status: 400 });
+    }
+    expect(bookGoal((await mockRequest<DashboardResponse>('/api/dashboard', {})).study, 102)).toBe(1_800);
+    // 경계 안쪽 두 끝은 통과한다(양성 쌍).
+    expect(bookGoal(await sessionGoal(102, 60), 102)).toBe(60);
+    expect(bookGoal(await sessionGoal(102, 21_600), 102)).toBe(21_600);
+    await sessionGoal(102, null);
+  });
+
+  it('회당 시간 — 없는 책은 404, 단 범위 밖 값은 책을 보기 전에 400이다(서버와 같은 순서)', async () => {
+    await expect(sessionGoal(99_999, 3_000)).rejects.toMatchObject({ status: 404 });
+    await expect(sessionGoal(99_999, 59)).rejects.toMatchObject({ status: 400 });
   });
 
   /**
@@ -136,14 +153,12 @@ describe('dev-mock 핸들러', () => {
     });
   });
 
-  it('공부 일정 달력 — 목표와 지난 며칠의 측정 픽스처가 실린다(점이 뜨는 경로를 브라우저로 밟는다)', async () => {
-    await mockRequest('/api/study/goal', { body: { dailyGoalSeconds: 3600 } });
+  it('공부 일정 달력 — 지난 며칠의 측정 픽스처가 실린다(점이 뜨는 경로를 브라우저로 밟는다)', async () => {
     // 어제가 든 달을 본다 — 측정 픽스처(1~3일 전)가 반드시 걸리는 달이다.
     const month = daysAgo(1).slice(0, 7);
 
     const calendar = await mockRequest<StudyCalendarResponse>('/api/study/calendar', { query: { month } });
 
-    expect(calendar.goalSeconds).toBe(3600);
     expect(calendar.days.some((d) => d.studiedSeconds > 0)).toBe(true);
   });
 

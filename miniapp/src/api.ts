@@ -291,17 +291,12 @@ export interface StudyState {
   hasActiveSession: boolean;
   activeStartedAt: string | null;
   todaySeconds: number;
-  /**
-   * 공부 하루 목표(초) — {@code 0}이면 목표 없음. <b>독서 목표와 완전 별개</b>이고 이월·부채가 없다.
-   *
-   * <p>선택 필드인 이유는 옛 서버 방어다(2차 이전 서버는 이 필드를 안 준다) — 소비처는 {@code ?? 0}으로
-   * 「목표 없음」 화면(1차와 같은 렌더)으로 떨어진다.
-   */
-  goalSeconds?: number;
+  // 공부 하루 목표(`goalSeconds`)는 2026-09-13 책별 「회당 시간」으로 대체돼 읽지 않는다 — 서버는 잔재 정리
+  // 전까지 계속 싣지만 옛 번들 방어용일 뿐이다(`StudyBookRow.sessionGoalSeconds`가 새 자리).
   /**
    * 지금 재고 있는 공부 책 — 안 골랐거나 대기 중이면 `null`. 히어로의 「측정 중 · 제목」이 이 한 필드를 본다.
    *
-   * <p>아래 셋과 함께 <b>선택 필드</b>인 이유는 `goalSeconds`와 같다: 이 필드를 아직 안 주는 서버가
+   * <p>아래 셋과 함께 <b>선택 필드</b>인 이유는 옛 서버 방어다: 이 필드를 아직 안 주는 서버가
    * 살아 있는 동안에도 화면이 「책 없이」 쪽으로 온전히 떨어진다.
    */
   activeBook?: StudyBookRow | null;
@@ -318,7 +313,6 @@ export const IDLE_STUDY: StudyState = {
   hasActiveSession: false,
   activeStartedAt: null,
   todaySeconds: 0,
-  goalSeconds: 0,
 };
 
 // 서버는 작가 격언(`quotes`)도 실어 보내지만 미니앱은 쓰지 않는다 — 웹 대시보드 전용이라 필드를 받지 않는다.
@@ -555,11 +549,11 @@ export const setGoal = (dailyIncrementSeconds: number): Promise<void> =>
   request('/api/miniapp/goal', { body: { dailyIncrementSeconds } });
 
 /**
- * 공부 하루 목표 설정 — <b>독서와 다른 문</b>이다(원장이 다르므로 문도 다르다). 응답이 갱신된
- * {@link StudyState}라 저장 직후 화면이 재조회 없이도 새 목표를 안다.
+ * 공부 책의 「회당 시간」 설정 — `null`이 해제다(0은 400). 60~21600 밖이면 400(책을 보기 전에),
+ * 남의 책·없는 책은 404. 응답이 갱신된 {@link StudyState}라 측정 중인 책이면 `activeBook`에도 곧바로 실린다.
  */
-export const setStudyGoal = (dailyGoalSeconds: number): Promise<StudyState> =>
-  request('/api/study/goal', { body: { dailyGoalSeconds } });
+export const setStudySessionGoal = (bookId: number, seconds: number | null): Promise<StudyState> =>
+  request(`/api/study/books/${bookId}/session-goal`, { body: { sessionGoalSeconds: seconds } });
 
 /**
  * 공부 일정 달력의 하루 — 자동 정보(측정)와 원장(판정)이 <b>한 칸에 나란히</b> 온다.
@@ -576,7 +570,6 @@ export interface StudyCalendarDay {
 
 /** `days`는 <b>데이터 있는 날만</b> 날짜순으로 온다(희소) — 화면이 빈 칸을 채운다. */
 export interface StudyCalendarResponse {
-  goalSeconds: number;
   days: StudyCalendarDay[];
 }
 
@@ -770,6 +763,11 @@ export interface StudyBookRow {
    * 「아직 안 돌았다」는 상태지만 「0초 공부」는 할 말이 아니다). 이 필드를 안 주는 옛 서버는 `undefined`.
    */
   totalSeconds?: number;
+  /**
+   * 회당 시간(초, 60~21600) — `null`은 안 정함(제한 없는 스톱워치). 이 필드를 안 주는 옛 서버는 `undefined`라
+   * 소비처는 `null`과 같게 읽는다.
+   */
+  sessionGoalSeconds?: number | null;
 }
 
 export interface StudyShelfResponse {

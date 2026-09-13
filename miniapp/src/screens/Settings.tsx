@@ -452,8 +452,9 @@ export function Settings({
       </section>
 
       <section style={sectionStyle}>
-        {/* 「독서」를 붙인 건 목표가 둘이 된 뒤의 보정이다 — 이 화면은 계정 설정이지 모드 화면이 아니라
-            이 버튼은 <b>독서 목표 고정</b>이다(공부 목표는 홈의 모드 손잡이가 연다). */}
+        {/* 「독서」를 붙인 건 목표가 둘이던 시절의 보정이다 — 공부 하루 목표는 2026-09-13 책별 「회당 시간」
+            (홈 공부 캐러셀 아래 손잡이)으로 대체돼 지금 하루 목표는 독서뿐이지만, 공부 모드가 있는 앱에서
+            「하루 목표」만으론 어느 쪽인지 모호해 문구는 그대로 둔다. */}
         <Button display="block" variant="weak" onClick={onGoGoal} disabled={goalAdPending}>
           {goalAdPending ? '준비 중…' : '독서 하루 목표 바꾸기'}
         </Button>

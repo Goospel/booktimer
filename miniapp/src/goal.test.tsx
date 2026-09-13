@@ -2,15 +2,13 @@ import { readFileSync } from 'node:fs';
 
 import { TDSMobileProvider } from '@toss/tds-mobile';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
   combineWheel,
   FIRST_RUN_GOAL_SECONDS,
   Goal,
   initialGoalSelection,
-  saveGoal,
-  showClearGoal,
   weeklyLine,
   wheelIndices,
 } from './screens/Goal';
@@ -94,18 +92,6 @@ describe('일주일 환산 줄 (weeklyLine)', () => {
   it('고른 값의 7배를 문장으로 만든다', () => {
     expect(weeklyLine(1800)).toBe('일주일이면 3시간 30분씩 쌓여요');
     expect(weeklyLine(600)).toBe('일주일이면 1시간 10분씩 쌓여요');
-  });
-
-  /** 「쌓여요」는 <b>이월 어휘</b>다 — 공부는 못 채운 시간이 다음 날로 넘어가지 않아 그 말이 거짓이 된다. */
-  it('공부는 쌓인다고 말하지 않는다 — 같은 숫자, 다른 서술', () => {
-    expect(weeklyLine(1800, 'study')).toBe('일주일이면 3시간 30분을 공부하는 셈이에요');
-    expect(weeklyLine(1800, 'study')).not.toContain('쌓여요');
-    // 독서 문구는 그대로 — 분기가 한쪽을 지운 게 아니다.
-    expect(weeklyLine(1800, 'reading')).toBe('일주일이면 3시간 30분씩 쌓여요');
-  });
-
-  it('0이면 두 모드 다 할 말이 없다', () => {
-    expect(weeklyLine(0, 'study')).toBeNull();
   });
 
   it('0이면 할 말이 없다 — 목표 없음에 「0초씩 쌓여요」는 조롱이다', () => {
@@ -212,102 +198,31 @@ describe('목표 화면 렌더', () => {
 });
 
 /**
- * 공부 목표 — 같은 화면을 `variant`로 갈아 쓴다(휠·밴드·버튼 전부 공유). 갈리는 건 <b>문구와 저장 함수</b>뿐이고,
- * 파랑은 공짜다: 밴드·주간 줄이 토큰이라 `body.study-mode`가 알아서 칠한다.
+ * 공부 하루 목표 화면(`variant="study"`)과 그 해제 문(「목표 없이 지내기」)은 2026-09-13 책별 「회당 시간」
+ * 시트로 대체돼 걷었다 — 그 블록의 테스트도 함께 걷었다. 아래는 <b>독서 대조군</b>이다.
  */
-describe('공부 목표 렌더 (variant)', () => {
-  const render = (variant: 'reading' | 'study') =>
+describe('독서 목표 버튼 렌더', () => {
+  const render = (current: number) =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <Goal current={1_800} firstRun={false} variant={variant} onSaved={() => {}} onSkip={() => {}} />
+        <Goal current={current} firstRun={false} onSaved={() => {}} onSkip={() => {}} />
       </TDSMobileProvider>,
     );
-
-  it('제목이 「공부 하루 목표」다 — 어느 목표를 고치는지 화면이 스스로 말한다', () => {
-    expect(render('study')).toContain('공부 하루 목표');
-    expect(render('reading')).not.toContain('공부 하루 목표');
-  });
-
-  /** 공부엔 이월이 없다 — 독서 문구를 그대로 쓰면 <b>거짓말</b>이 된다. */
-  it('이월 문구가 없다 — 대신 지킨 날은 직접 체크한다고 말한다', () => {
-    const study = render('study');
-    expect(study).not.toContain('다음 날로 넘어가요');
-    expect(study).toContain('목표로 해요');
-    // 독서 문구는 그대로 — 분기가 한쪽을 지운 게 아니다.
-    expect(render('reading')).toContain('다음 날로 넘어가요');
-  });
-
-  it('휠·밴드·주간 환산은 그대로 공유한다 — 재사용이 이 옵션의 이유다(문구만 모드를 탄다)', () => {
-    const study = render('study');
-    expect(study).toContain('aria-label="시간 선택"');
-    expect(study).toContain('data-wheel-band');
-    expect(study).toContain('일주일이면 3시간 30분을 공부하는 셈이에요');
-    expect(render('reading')).toContain('일주일이면 3시간 30분씩 쌓여요');
-  });
-});
-
-/**
- * 「목표 없이 지내기」 — 공부 목표를 0(=목표 없음)으로 되돌리는 문.
- *
- * <p>서버는 0을 이미 허용하는데(`User.updateStudyDailyGoal`은 음수만 거부) UI에 그리로 가는 문이 없었다 —
- * 휠 0 가드(`disabled={selected === 0}`)가 독서 기준으로 옳아서 공부까지 막았다. 가드는 그대로 두고
- * 해제만 별도 문으로 낸다.
- */
-describe('공부 목표 해제 (showClearGoal)', () => {
-  it('공부이고 지울 목표가 있을 때만 선다 — 없는 목표를 지우는 문은 무의미하다', () => {
-    expect(showClearGoal('study', 1_800)).toBe(true);
-    expect(showClearGoal('study', 0)).toBe(false);
-    expect(showClearGoal('study', -1)).toBe(false);
-  });
-
-  /** 독서의 0은 「목표 없음」이 아니라 이월·부채 원장이 깨지는 값이다 — 그 문은 열지 않는다. */
-  it('독서엔 그 문이 없다 — 독서의 0은 목표 없음이 아니다', () => {
-    expect(showClearGoal('reading', 1_800)).toBe(false);
-    expect(showClearGoal('reading', 0)).toBe(false);
-  });
-});
-
-describe('목표 해제 버튼 렌더', () => {
-  const render = (variant: 'reading' | 'study', current: number) =>
-    renderToStaticMarkup(
-      <TDSMobileProvider userAgent={userAgent}>
-        <Goal current={current} firstRun={false} variant={variant} onSaved={() => {}} onSkip={() => {}} />
-      </TDSMobileProvider>,
-    );
-
-  const buttonAttrs = (markup: string, label: string) =>
-    markup
-      .split('<button')
-      .slice(1)
-      .filter((chunk) => chunk.includes(label))
-      .map((chunk) => chunk.slice(0, chunk.indexOf('>')));
-
-  it('공부이고 목표가 있으면 「목표 없이 지내기」가 정확히 하나 선다', () => {
-    const attrs = buttonAttrs(render('study', 1_800), '목표 없이 지내기');
-    expect(attrs).toHaveLength(1);
-    expect(attrs[0]).not.toContain('disabled');
-  });
-
-  it('공부라도 목표가 0이면 없다 — 지울 목표가 없으면 문이 안 선다', () => {
-    expect(buttonAttrs(render('study', 0), '목표 없이 지내기')).toHaveLength(0);
-  });
-
-  it('독서엔 없다 — 독서 화면은 한 바이트도 안 바뀐다', () => {
-    expect(buttonAttrs(render('reading', 1_800), '목표 없이 지내기')).toHaveLength(0);
-  });
 
   /**
    * 독서 렌더 불변 — 존재 단언이 아니라 <b>건수</b>다(T-218). 2026-09-02(T-220)에 하단 「돌아가기」를
    * 걷어 2건 → <b>1건(저장)</b>이 됐다: 독서에 버튼이 하나라도 새면 여기서 죽는다.
    */
   it('독서 목표 화면의 버튼은 저장 하나뿐이다 — 새 문이 독서로 새지 않았다', () => {
-    expect(render('reading', 1_800).split('<button').length - 1).toBe(1);
-    expect(render('reading', 0).split('<button').length - 1).toBe(1);
+    expect(render(1_800).split('<button').length - 1).toBe(1);
+    expect(render(0).split('<button').length - 1).toBe(1);
   });
 
-  /** 휠 0 가드는 그대로다 — 해제는 별도 문으로만 밟는다(주 버튼은 여전히 0을 못 보낸다). */
-  it('공부에서도 휠 0 가드는 그대로다 — 실수 경로는 안 열렸다', () => {
-    expect(buttonAttrs(render('study', 0), '저장')[0]).toContain('disabled');
+  it('제목·안내는 독서 문구 그대로다', () => {
+    const markup = render(1_800);
+    expect(markup).toContain('하루 목표 바꾸기');
+    expect(markup).toContain('다음 날로 넘어가요');
+    expect(markup).not.toContain('공부 하루 목표');
   });
 });
 
@@ -319,24 +234,22 @@ describe('목표 해제 버튼 렌더', () => {
  * 비-firstRun의 「돌아가기」는 네이티브 버튼과 중복이라 걷었다(`useBackClose(view === 'goal', …)`가 받는다).
  */
 describe('목표 — 나가는 길', () => {
-  const render = (variant: 'reading' | 'study', firstRun: boolean) =>
+  const render = (firstRun: boolean) =>
     renderToStaticMarkup(
       <TDSMobileProvider userAgent={userAgent}>
-        <Goal current={1_800} firstRun={firstRun} variant={variant} onSaved={() => {}} onSkip={() => {}} />
+        <Goal current={1_800} firstRun={firstRun} onSaved={() => {}} onSkip={() => {}} />
       </TDSMobileProvider>,
     );
 
   it('비-firstRun에는 「돌아가기」가 0건이다 — 저장은 그대로 선다', () => {
-    for (const variant of ['reading', 'study'] as const) {
-      const markup = render(variant, false);
+    const markup = render(false);
 
-      expect(markup).toContain('저장');
-      expect(markup).not.toContain('돌아가기');
-    }
+    expect(markup).toContain('저장');
+    expect(markup).not.toContain('돌아가기');
   });
 
   it('firstRun에는 「나중에 정할래요」가 하나 남는다 — 건너뛰기는 뒤로가기가 아니다', () => {
-    const markup = render('reading', true);
+    const markup = render(true);
 
     expect(markup.match(/나중에 정할래요/g)).toHaveLength(1);
     expect(markup).not.toContain('돌아가기');
@@ -344,66 +257,17 @@ describe('목표 — 나가는 길', () => {
 });
 
 /**
- * 소스 배선 — 정적 렌더는 `onClick` 핸들러를 마크업에 안 실어(T-149) 「어느 값이 어느 문으로 가는가」를
- * 렌더로 못 본다. 그래서 소스를 읽되 <b>건수와 전체 인자열</b>로 잰다(존재 단언은 뒤바뀜을 못 잡는다, T-218).
+ * 저장 배선 — 정적 렌더는 `onClick`을 마크업에 안 실어(T-149) 「어느 값이 어느 문으로 가는가」를 렌더로 못 본다.
+ * 공부 분기(`saveGoal`)가 걷히며 이 화면의 문은 독서 하나다 — 그 사실을 건수로 잠근다(T-218).
  */
-describe('목표 해제 소스 배선', () => {
+describe('독서 목표 저장 배선 (소스)', () => {
   const source = readFileSync(new URL('./screens/Goal.tsx', import.meta.url), 'utf8');
   const count = (needle: string) => source.split(needle).length - 1;
 
-  /** ⚡ `selected`로 바꿔 배선하면 휠을 돌리는 동안 버튼이 나타났다 사라진다 — 렌더 테스트는 못 잡는다. */
-  it('노출 조건은 current를 본다 — selected가 아니다', () => {
-    expect(count('showClearGoal(variant, current)')).toBe(1);
-    expect(count('showClearGoal(variant, selected)')).toBe(0);
-  });
-
-  it('해제 버튼은 0을, 주 버튼은 고른 값을 보낸다 — 두 문이 뒤바뀌면 여기서 죽는다', () => {
-    expect(count('onClick={() => save(0)}')).toBe(1);
+  it('주 버튼은 고른 값을 독서 문으로 보낸다 — 공부 문이 되살아나면 여기서 죽는다', () => {
     expect(count('onClick={() => save(selected)}')).toBe(1);
-  });
-});
-
-/**
- * 저장 분기 — <b>variant가 어느 문을 두드리는가</b>. 화면 밖으로 꺼내 둔 이유는 늘 같다(정적 렌더라
- * 「저장」 클릭이 안 돈다, T-149): 클로저 안에 두면 이 분기를 겨눌 계측기가 소스 grep밖에 안 남는다.
- *
- * <p>실패하면 조용하다 — 공부 목표 저장이 <b>독서 목표를 덮어쓰고</b> `ReadingGoalChange` 원장까지
- * 오염시킨다(서버는 정상 200을 준다). 그래서 URL·본문 키까지 함께 잠근다.
- */
-describe('목표 저장 분기 (saveGoal)', () => {
-  beforeEach(() => {
-    vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
-    vi.stubGlobal('fetch', vi.fn(async () => ({ status: 200, ok: true, text: async () => '{}' })));
-  });
-
-  afterEach(() => vi.unstubAllGlobals());
-
-  const lastRequest = () =>
-    vi.mocked(globalThis.fetch).mock.calls.at(-1) as unknown as [string, RequestInit];
-
-  it('공부는 /api/study/goal로 간다 — 독서 문을 두드리면 독서 목표가 덮어써진다', async () => {
-    await saveGoal('study', 5400);
-
-    const [url, init] = lastRequest();
-    expect(url).toBe('http://localhost:8080/api/study/goal');
-    expect(init.body).toBe(JSON.stringify({ dailyGoalSeconds: 5400 }));
-  });
-
-  /** ⚡ 0을 falsy로 걸러 요청 자체를 안 보내는 구현 — 화면은 조용히 아무 일도 안 한 것처럼 보인다. */
-  it('해제(0)도 같은 문으로 실제 요청을 보낸다 — 0을 falsy로 걸러 삼키면 안 된다', async () => {
-    await saveGoal('study', 0);
-
-    const [url, init] = lastRequest();
-    expect(url).toBe('http://localhost:8080/api/study/goal');
-    expect(init.body).toBe(JSON.stringify({ dailyGoalSeconds: 0 }));
-  });
-
-  it('독서는 그대로 /api/miniapp/goal — 분기가 한쪽으로 쏠리지 않았다', async () => {
-    await saveGoal('reading', 5400);
-
-    const [url, init] = lastRequest();
-    expect(url).toBe('http://localhost:8080/api/miniapp/goal');
-    expect(init.body).toBe(JSON.stringify({ dailyIncrementSeconds: 5400 }));
+    expect(count('setGoal(seconds)')).toBe(1);
+    expect(count('setStudyGoal')).toBe(0);
   });
 });
 

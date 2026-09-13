@@ -820,7 +820,8 @@ describe('알림 동의 카드 렌더 배선', () => {
   it('조건이 맞으면 카드와 버튼이 그려진다', () => {
     const markup = renderHome();
 
-    expect(markup).toContain('토스 알림');
+    // 동의문 한 장이 공부 회당 시간 알림까지 덮는다 — 카드가 무엇을 받는지 그대로 말한다(2026-09-13 사용자 확정).
+    expect(markup).toContain('목표 달성·공부 시간·완독 소식을 토스 알림으로 받아보세요');
     expect(labelsOf(markup)).toContain(NOTIFICATION_LABEL);
   });
 
