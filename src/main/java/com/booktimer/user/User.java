@@ -37,6 +37,15 @@ public class User extends BaseTimeEntity {
     private static final Pattern EMAIL_PATTERN =
             Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
+    /**
+     * 합성(자리표시) 이메일의 도메인 — <b>메일을 보내면 안 되는 주소</b>다(라우팅 불가라 하드 반송된다).
+     *
+     * <p>두 곳에서 붙는다: ⓐ 토스 가입 시 이메일이 없거나 기존 계정과 충돌할 때
+     * ({@link TossUserProvisioningService#syntheticEmail}) ⓑ 미검증 토스 연결 계정의 이메일 충돌 재배정
+     * ({@link #reassignEmailToSynthetic}). {@code users.email}이 NOT NULL이라 비울 수 없어 쓰는 값이다.
+     */
+    public static final String SYNTHETIC_EMAIL_DOMAIN = "@noreply.booktimer.app";
+
     /** login_id 형식: 영소문자/숫자/언더스코어, 3~20자. 입력은 소문자로 정규화한 뒤 검증한다. */
     private static final Pattern LOGIN_ID_PATTERN = Pattern.compile("^[a-z0-9_]{3,20}$");
 
@@ -719,6 +728,14 @@ public class User extends BaseTimeEntity {
             throw new IllegalArgumentException("email is malformed: " + syntheticEmail);
         }
         this.email = syntheticEmail;
+    }
+
+    /**
+     * 이메일이 {@link #SYNTHETIC_EMAIL_DOMAIN} 자리표시 주소인가 — 발송·인증 유도를 건너뛸 판별의 단일 출처.
+     * 이 주소는 라우팅되지 않으므로 인증 메일을 보내면 매번 하드 반송된다.
+     */
+    public boolean hasSyntheticEmail() {
+        return email != null && email.endsWith(SYNTHETIC_EMAIL_DOMAIN);
     }
 
     public Long getId() {

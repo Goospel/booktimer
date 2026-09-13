@@ -167,4 +167,16 @@ class EmailVerificationControllerTest {
 
         assertThat(tokenRepository.findByUserAndTypeAndUsedAtIsNull(user, EmailTokenType.VERIFICATION)).isEmpty();
     }
+
+    @Test
+    @DisplayName("POST /verify-email/resend: 합성 주소(@noreply) 계정은 토큰도 만들지 않고 failed 안내 — 배너를 숨겨도 직접 POST는 온다")
+    void resend_syntheticEmail_failsWithoutToken() throws Exception {
+        User user = persistUser("toss-uk9" + User.SYNTHETIC_EMAIL_DOMAIN, "tossuk9");
+
+        mockMvc.perform(post("/verify-email/resend").with(user("tossuk9")).with(csrf()))
+                .andExpect(redirectedUrl("/settings"))
+                .andExpect(flash().attribute("verifyResendResult", "failed"));
+
+        assertThat(tokenRepository.findByUserAndTypeAndUsedAtIsNull(user, EmailTokenType.VERIFICATION)).isEmpty();
+    }
 }
