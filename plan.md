@@ -3190,6 +3190,7 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
 
 #### 다음 단계 (백로그)
 - ⏸ **공부 푸시·달력 딥링크(`?tab=calendar`)·연/주 단위 뷰** — 2차 설계에서 명시적으로 보류.
+  공부 푸시는 2026-09-13 「공부 타이머 컨셉 전환」 절 PR-4(회당 시간 도달 푸시)로 흡수. 달력 딥링크·연/주 뷰는 보류 유지.
 - ⏸ **공부 잔디의 파랑 팔레트** — 잔디 색은 독서와 같은 세이지를 쓴다(`LEVEL_COLORS`는 리터럴 hex라
   `body.study-mode` 토큰 스왑을 안 탄다). 달력이 네 축으로 갈라섰으니 기록 잔디는 오히려 같은 꼴이 맞다.
 - ⏸ **달력의 자동 달성 판정 배지** — 공부 목표 변경 이력(`study_goal` 테이블 승격)이 먼저다. 그전엔 과거를
@@ -3478,7 +3479,11 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
   하루 목표 코드·독서 경로 diff 0.
 - ⬜ **PR-2 웹** — `StudyTimerCard`의 하루 목표 게이지·인라인 폼 → 회당 시간 설정·측정 중 countdown/달성 표시 + 탭 제목 접두.
 - ⬜ **PR-3 미니앱** — 하루 목표 게이지·「목표 바꾸기」(전면광고 진입점)·공부 새싹 제거 → 시/분 휠 시트 + 측정 줄 + 햅틱 1회.
-- ⬜ **PR-4 서버 — 회당 시간 도달 토스 푸시(다크런치)** — `V91` `study_session.goal_notified_at`(세션당 1회). 머지 전 SSM 2건 선생성.
+- ✅ **PR-4 서버 — 회당 시간 도달 토스 푸시(다크런치) (2026-09-13)** — `V91` `study_session.goal_notified_at`(세션당 1회 멱등),
+  `StudyGoalPushService`(분당 · `startedAt + goal ≤ now` · 닿은 지 10분 넘으면 건너뜀 · 토스 연결 계정만 · 성공만 마킹 · 빈 컨텍스트)
+  + `StudyGoalPushScheduler`(`study-goal-enabled` 게이트). 마킹은 **컬럼 단독 UPDATE**라 `stop`과 겹쳐도 `endedAt`을 되살리지 않는다.
+  머지 전 SSM 2건(`TOSS_STUDY_GOAL_ENABLED=false`·`TOSS_STUDY_GOAL_TEMPLATE_CODE=placeholder`) 선생성.
+  **다크런치 — 점등은 콘솔 템플릿 승인 후**(사용자 지시 → 템플릿 등록·테스트 발송 → 승인 → SSM 실값 → 재배포 → 실기기).
 - ⬜ **PR-5 서버 잔재 정리** — `V92` `users.study_daily_goal_seconds` drop · `POST /api/study/goal` · `StudyState.goalSeconds` 삭제.
   착수 게이트 = PR-3 번들 라이브 확인.
 - 후속 PR에서 정리: 위 「2단계」 PR-B(공부 목표 게이지)·⏸ 「설정 페이지의 공부 목표」, 「공부 타이머–책 연결」 절의 ⏸ 공부 푸시·달력 자동 달성 판정의

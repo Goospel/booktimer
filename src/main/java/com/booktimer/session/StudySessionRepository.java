@@ -71,6 +71,24 @@ public interface StudySessionRepository extends JpaRepository<StudySession, Long
     @Query("update StudySession s set s.book = null where s.book = :book")
     void unlinkBook(@Param("book") StudyBook book);
 
+    /**
+     * 회당 시간 도달 푸시 후보 — 진행 중 · 아직 안 보냄 · 회당 시간이 있는 책. 닿음·GRACE·토스 연결 판정은
+     * {@link StudyGoalPushService}가 자바에서 한다(활성 세션이 두 자리 규모).
+     */
+    @Query("""
+            select s from StudySession s join fetch s.book b join fetch s.user
+            where s.endedAt is null and s.goalNotifiedAt is null and b.sessionGoalSeconds is not null
+            """)
+    List<StudySession> findGoalPushCandidates();
+
+    /**
+     * 푸시 발송 마킹 — <b>컬럼 하나만</b> 쓴다. 엔티티 save(전 컬럼 UPDATE)는 스케줄러가 로드한 뒤 커밋된
+     * {@code stop}의 {@code endedAt}을 null로 덮어 측정을 되살린다.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update StudySession s set s.goalNotifiedAt = :now where s.id = :id and s.goalNotifiedAt is null")
+    int markGoalNotified(@Param("id") Long id, @Param("now") Instant now);
+
     /** 방치 스윕 대상 — 임계 시각 이전에 시작해 아직 안 닫힌 세션들. */
     List<StudySession> findByEndedAtIsNullAndStartedAtBefore(Instant threshold);
 
