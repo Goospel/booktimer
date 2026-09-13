@@ -38,6 +38,10 @@ if ($cmd -match 'SKIP_TESTS' -or $cmd -match 'SKIP_BUNDLE_CHECK') { exit 0 }
 
 $cwd = [string]$data.cwd
 if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
+# Inspect the worktree the commit really runs in, not the session cwd (T-242)
+. (Join-Path $PSScriptRoot 'lib\resolve-target-cwd.ps1')
+$cwd = Resolve-HookTargetCwd $cmd $cwd 'commit'
+if ($null -eq $cwd) { Stop-UnresolvedTarget 'commit' }
 
 # Which files would this commit touch?
 # The index alone is not enough (T-228): if the command stages itself
@@ -64,6 +68,8 @@ try {
 
 $frontStaged = @($changed | Where-Object { $_ -match '^frontend/' })
 if ($frontStaged.Count -eq 0) { exit 0 }   # no frontend changes -- skip
+# Another project reached via cd (no BookTimer bundle layout) is not ours to build (T-242)
+if (-not (Test-Path (Join-Path $cwd 'src\main\resources\static'))) { exit 0 }
 
 # Require node (npm depends on it); fail-open if absent
 $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
