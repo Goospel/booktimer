@@ -27,9 +27,6 @@ public class TossUserProvisioningService {
     /** 토스 가입 사용자의 기본 타임존(설정에서 변경 가능) — OAuth 프로비저닝과 동일. */
     static final String DEFAULT_TIMEZONE = "Asia/Seoul";
 
-    /** 토스가 이메일을 주지 않거나 기존 계정과 충돌할 때 쓰는 합성 주소의 도메인(발송 대상 아님). */
-    private static final String SYNTHETIC_EMAIL_DOMAIN = "@noreply.booktimer.app";
-
     private static final String DEFAULT_NICKNAME = "토스유저";
 
     private final UserRepository userRepository;
@@ -135,6 +132,6 @@ public class TossUserProvisioningService {
         if (sanitized.isEmpty()) {
             sanitized = Integer.toHexString(userKey.hashCode());
         }
-        return "toss-" + sanitized + SYNTHETIC_EMAIL_DOMAIN;
+        return "toss-" + sanitized + User.SYNTHETIC_EMAIL_DOMAIN;
     }
 }

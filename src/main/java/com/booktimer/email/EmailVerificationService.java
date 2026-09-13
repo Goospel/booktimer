@@ -41,6 +41,11 @@ public class EmailVerificationService {
      */
     @Transactional
     public void sendVerification(User user) {
+        // 합성 자리표시 주소(@noreply)는 라우팅되지 않아 보내면 매번 하드 반송된다 — 토큰도 만들지 않고 여기서 끊는다.
+        // 가입·재발송이 모두 이 함수를 타므로 근본 자리는 여기다(호출부의 실패 처리에 맡긴다).
+        if (user.hasSyntheticEmail()) {
+            throw new IllegalStateException("synthetic email must not receive verification mail: id=" + user.getId());
+        }
         String rawToken = tokenService.issue(user, EmailTokenType.VERIFICATION);
         String link = baseUrl + "/verify-email?token="
                 + URLEncoder.encode(rawToken, StandardCharsets.UTF_8);

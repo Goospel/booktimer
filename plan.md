@@ -4460,8 +4460,10 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
         `EmailVerificationService.verify`가 이메일 일치 확인 없이 `verifyEmail()`을 불러 **합성 주소가 검증됨**이 되고
         라우팅 불가 주소가 넛지 대상에 들어갔다. `reassignUnverifiedTossEmail`에 `emailTokenRepository.deleteByUser`
         한 줄(purge가 쓰는 같은 메서드)을 세션 무효화 다음·이메일 변경 전에 넣었다. RED `WantedButNotInvoked` → 초록.
-  - 🔜 **후속**: 합성 주소 계정엔 설정 화면의 「인증 메일 다시 받기」 배너를 숨기거나 발송을 막는다(#1105부터 있던
-        선재 동작 — 합성 주소로 발송·반송된다. 이번 범위 밖).
+  - ✅ **후속 — 닫힘 (2026-09-13)**: 합성 주소 계정엔 설정 화면의 「인증 메일 다시 받기」 배너를 숨기고
+        발송도 막는다. 판별은 `User.hasSyntheticEmail()`(도메인 상수 `User.SYNTHETIC_EMAIL_DOMAIN`으로 단일화),
+        차단은 가입·재발송이 공유하는 `EmailVerificationService.sendVerification` 첫 줄 가드(토큰도 안 만든다 —
+        배너를 숨겨도 직접 POST는 오므로 근본 자리는 서비스다).
   - ⚠️ **최종 리뷰가 Critical을 프로브로 잡았다 — 재배정이 세션을 안 끊어 반쪽이었다**: 미니앱 `issueWebLoginCode`는
         온보딩 전에도 세션을 만들고 그 principal이 **피해자 이메일**이라(`loginId != null ? loginId : email`),
         이메일만 바꾸면 그 30일 세션이 `findByEmail` 폴백으로 **새 구글 계정**에 해석됐다(실측 `resolvedId=victim`).
