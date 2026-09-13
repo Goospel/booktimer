@@ -60,9 +60,22 @@ public class StudyAiAccessService {
     /**
      * 사용자가 AI 기능을 신청한다.
      *
-     * @throws IllegalStateException 이미 대기 중이거나 승인된 상태인 경우(호출부가 409로 옮긴다)
+     * <p><b>이메일 검증이 전제다</b>(보안 리뷰 2026-09-08 S-4). 이 문 뒤에 있는 것은 「돈이 나가는 기능」이라
+     * 최소한 <b>계정 하나가 사람 하나에 묶여 있어야</b> 한다 — 검증이 없으면 아무 주소로 만든 계정이
+     * 대기 큐에 줄을 서고, 그 줄이 승인 정원({@value #MAX_APPROVED})을 가리는 잡음이 된다. 전이보다
+     * <b>앞</b>에 두는 이유는 거절이 상태를 흔들지 않아야 하기 때문이다.
+     *
+     * <p>예외 타입이 {@link ResponseStatusException}인 것은 의도다 — 아래 전이 위반은
+     * {@link IllegalStateException}이고 호출부가 그걸 <b>409</b>로 옮기는데, 이건 409(「이미 신청했다」)가
+     * 아니라 403이다.
+     *
+     * @throws ResponseStatusException 403, 이메일이 검증되지 않은 경우
+     * @throws IllegalStateException   이미 대기 중이거나 승인된 상태인 경우(호출부가 409로 옮긴다)
      */
     public User request(User user, Instant now) {
+        if (!user.isEmailVerified()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "이메일 인증 후 신청할 수 있어요");
+        }
         user.requestStudyAi(now);
         return userRepository.save(user);
     }
@@ -86,7 +99,8 @@ public class StudyAiAccessService {
      *
      * @return 대상 사용자, 또는 그 아이디가 없으면 {@code empty}(호출부가 404)
      * @throws StudyAiCapacityExceededException 정원({@value #MAX_APPROVED}명)이 찬 경우
-     * @throws IllegalStateException            잘못된 전이(호출부가 플래시 오류로 옮긴다)
+     * @throws IllegalStateException            잘못된 전이, 또는 대상이 <b>이메일 미검증</b>인 경우
+     *                                          (호출부가 플래시 오류로 옮긴다)
      */
     public Optional<User> approve(String loginId, Instant now) {
         // 이 트랜잭션이 끝날 때까지 다른 승인은 대기한다 — 아래 COUNT와 전이가 한 덩어리가 된다.
@@ -98,7 +112,14 @@ public class StudyAiAccessService {
             throw new StudyAiCapacityExceededException(
                     "승인 정원(" + MAX_APPROVED + "명)이 찼어요 — 기존 승인을 회수한 뒤 다시 시도해 주세요");
         }
-        return transition(loginId, user -> user.approveStudyAi(now));
+        return transition(loginId, user -> {
+            // 신청 게이트(→ request)만으로는 부족하다 — 이 변경이 배포되는 순간 **이미 대기 중인** 미검증
+            // PENDING은 그 게이트를 지나지 않았다. 마지막 문에도 같은 검사가 서 있어야 한다(S-4).
+            if (!user.isEmailVerified()) {
+                throw new IllegalStateException("이메일 미검증 계정은 승인할 수 없어요");
+            }
+            user.approveStudyAi(now);
+        });
     }
 
     /**

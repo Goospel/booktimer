@@ -1,6 +1,7 @@
 package com.booktimer.study;
 
 import com.booktimer.study.StudyAiUsage.Kind;
+import com.booktimer.study.StudyAiUsageService.Grant;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
@@ -9,7 +10,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -97,6 +100,69 @@ class StudyAiUsageServiceTest {
         assertThat(usageService.remaining(user, DAY, Kind.ANALYZE)).isEqualTo(Kind.ANALYZE.max());
         assertThat(usageService.tryConsume(user, DAY, Kind.ANALYZE)).isTrue();
         assertThat(usageService.tryConsume(user, DAY, Kind.ANALYZE)).isFalse();
+    }
+
+    /**
+     * 사용자당 상한의 날짜 키가 <b>UTC</b>인지 잰다 — 유저 타임존을 키로 잡으면 자정 근처에 <b>설정에서
+     * 존만 바꿔</b> 그 날 몫을 두 배로 쓸 수 있다(보안 리뷰 2026-09-08 S-3). 전역 상한은 같은 이유로
+     * 처음부터 UTC였는데, 사용자당 상한만 {@code StudyDates.today}(유저 타임존)로 남아 있었다.
+     *
+     * <p>⚠️ <b>이 테스트만 트랜잭션이다.</b> 클래스가 비트랜잭션인 것은 경합에서 TOCTOU 구현이 초록으로
+     * 통과하지 않게 하려는 것인데 여기는 경합을 재지 않는다. 반면 타임존을 바꾼 사용자를 커밋하면 그 행이
+     * 다른 테스트 컨텍스트의 집계에 샌다({@code StudyAiApprovalRaceTest} javadoc의 실측) — 롤백으로 막는다.
+     */
+    @Test
+    @Transactional
+    @DisplayName("타임존을 바꿔도 몫이 되살아나지 않는다 — 날짜 키는 UTC다(UTC 자정을 넘기면 되살아남 = 양성 대조군)")
+    void timezoneChangeDoesNotResetTheShare() {
+        User user = register("usagetz");
+        // 서울(UTC+9)로는 09-13 23:30 — UTC로는 아직 09-13이다.
+        Instant seoulLateNight = Instant.parse("2026-09-13T14:30:00Z");
+
+        for (int i = 0; i < Kind.PLAN.max(); i++) {
+            assertThat(usageService.tryConsumeBoth(user, seoulLateNight, Kind.PLAN)).isEqualTo(Grant.OK);
+        }
+        assertThat(usageService.tryConsumeBoth(user, seoulLateNight, Kind.PLAN)).isEqualTo(Grant.USER_EXHAUSTED);
+
+        // UTC+14 — 같은 순간이 이 사람의 달력으로는 이미 09-14다. 유저 타임존을 키로 잡았다면 새 행이
+        // 생겨 여기서 OK가 난다(= 몫이 두 배가 된다).
+        user.updateProfile(user.getNickname(), "Pacific/Kiritimati");
+        userRepository.saveAndFlush(user);
+
+        assertThat(usageService.tryConsumeBoth(user, seoulLateNight, Kind.PLAN)).isEqualTo(Grant.USER_EXHAUSTED);
+        assertThat(usageService.remaining(user, seoulLateNight, Kind.PLAN)).isZero();
+
+        // 양성 대조군 — UTC 자정을 진짜로 넘기면 몫은 되살아나야 한다. 이게 없으면 「늘 거절」 구현도
+        // 위 단언을 초록으로 통과한다.
+        Instant nextUtcDay = Instant.parse("2026-09-14T00:30:00Z");
+        assertThat(usageService.tryConsumeBoth(user, nextUtcDay, Kind.PLAN)).isEqualTo(Grant.OK);
+        assertThat(usageService.remaining(user, nextUtcDay, Kind.PLAN)).isEqualTo(Kind.PLAN.max() - 1);
+    }
+
+    /**
+     * 환불의 날짜 키도 소진과 <b>같은 UTC</b>인지 — 둘이 갈리면 환불이 <b>없는 행</b>을 깎아 조용히
+     * 아무 일도 안 한다(장애로 사용자가 오늘 몫을 잃는다). 소진 쪽만 고치면 이 반쪽이 남는 자리다.
+     *
+     * <p>존을 UTC+14로 두는 것이 계측기의 핵심이다 — 서울 사용자로는 이 시각의 두 날짜가 같아서
+     * <b>키를 어느 쪽으로 잡아도 초록</b>이 된다.
+     */
+    @Test
+    @Transactional
+    @DisplayName("환불도 같은 UTC 키를 쓴다 — 존이 UTC보다 앞선 사용자도 실패한 호출의 몫을 돌려받는다")
+    void refundBothUsesTheSameUtcKey() {
+        User user = register("usagetzr");
+        user.updateProfile(user.getNickname(), "Pacific/Kiritimati"); // UTC+14
+        userRepository.saveAndFlush(user);
+        // 이 사람의 달력으로는 09-14, UTC로는 09-13 — 두 키가 갈린다.
+        Instant now = Instant.parse("2026-09-13T14:30:00Z");
+
+        assertThat(usageService.tryConsumeBoth(user, now, Kind.ANALYZE)).isEqualTo(Grant.OK);
+        assertThat(usageService.remaining(user, now, Kind.ANALYZE)).isZero();
+
+        usageService.refundBoth(user, now, Kind.ANALYZE); // 외부 호출 실패 — 그 몫은 사용자 것이 아니다
+
+        assertThat(usageService.remaining(user, now, Kind.ANALYZE)).isEqualTo(Kind.ANALYZE.max());
+        assertThat(usageService.tryConsumeBoth(user, now, Kind.ANALYZE)).isEqualTo(Grant.OK);
     }
 
     @Test
