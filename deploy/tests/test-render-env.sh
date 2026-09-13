@@ -45,7 +45,8 @@ case "\$*" in
                  MYSQL_ROOT_PASSWORD MINIAPP_ALLOWED_ORIGINS \\
                  TOSS_MESSENGER_ENABLED TOSS_FINISH_TEMPLATE_CODE \\
                  TOSS_GOAL_MET_ENABLED TOSS_GOAL_MET_TEMPLATE_CODE \\
-                 TOSS_RETENTION_ENABLED TOSS_RETENTION_TEMPLATE_CODE; do
+                 TOSS_RETENTION_ENABLED TOSS_RETENTION_TEMPLATE_CODE \\
+                 TOSS_STUDY_GOAL_ENABLED TOSS_STUDY_GOAL_TEMPLATE_CODE; do
             printf '/booktimer/%s\tvalue-of-%s\n' "\$n" "\$n"
         done
         # 여러 줄 SecureString(PEM)도 같은 /booktimer 경로에 살아 이 목록에 함께 나온다.
@@ -120,6 +121,9 @@ assert_has "  .env 에 목표달성 템플릿 코드" "$env_out" "BOOKTIMER_TOSS
 # 재참여(7일 비활동) 넛지 푸시 — 같은 무성 장애. SSM을 true로 켜도 스케줄러 빈이 안 떠서 매일 19시 배치가 안 돈다.
 assert_has "  .env 에 재참여 게이트" "$env_out" "BOOKTIMER_TOSS_RETENTION_ENABLED=value-of-TOSS_RETENTION_ENABLED"
 assert_has "  .env 에 재참여 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_RETENTION_TEMPLATE_CODE=value-of-TOSS_RETENTION_TEMPLATE_CODE"
+# 공부 회당 시간 푸시 — 같은 무성 장애. SSM을 true로 켜도 스케줄러 빈이 안 떠서 분당 배치가 안 돈다.
+assert_has "  .env 에 공부 회당 시간 게이트" "$env_out" "BOOKTIMER_TOSS_STUDY_GOAL_ENABLED=value-of-TOSS_STUDY_GOAL_ENABLED"
+assert_has "  .env 에 공부 회당 시간 템플릿 코드" "$env_out" "BOOKTIMER_TOSS_STUDY_GOAL_TEMPLATE_CODE=value-of-TOSS_STUDY_GOAL_TEMPLATE_CODE"
 # Claude API 키(공부 화면 백지복습 분석) — SSM 이름(CLAUDE_API_KEY)과 앱 환경변수 이름
 # (BOOKTIMER_CLAUDE_API_KEY)이 달라 매핑이 필요하다. 빠지면 .env에 안 실려 앱이 not-configured 기본값으로
 # 뜨고, 승인된 사용자에게도 「AI 기능이 꺼져 있어요」만 나오는 무성 장애가 된다(LLM_API_KEY와 같은 부류).
