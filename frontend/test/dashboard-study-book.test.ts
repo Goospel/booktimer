@@ -44,6 +44,13 @@ let startStatus = 200;
 let changeStatus = 200;
 let stopStudyBody: Record<string, unknown> = { ...STUDY_IDLE };
 let shelf = SHELF;
+// 필드가 빠진 옛 응답을 돌려줄 문 하나(''=없음) — 정규화 계측기 (i1)~(i3)가 켠다.
+let partialDoor = '';
+/**
+ * 옛 서버 응답 흉내 — todaySeconds·books·activeBook 등이 통째로 없고, **10분 전에 시작한 측정 중**이다.
+ * 정규화하면 히어로 숫자가 0 + 600 = 10:00, 날것 res.json()이면 undefined + 600 = NaN → '00:00'.
+ */
+const PARTIAL_ACTIVE = () => ({ hasActiveSession: true, activeStartedAt: new Date(Date.now() - 600_000).toISOString() });
 const req: { url: string; body: string }[] = [];
 
 const ok = (json: unknown, status = 200) =>
@@ -54,6 +61,7 @@ function fetchImpl(url: string, init?: RequestInit) {
     if (url.includes('/api/study/start')) {
         req.push({ url, body });
         if (startStatus !== 200) return ok({}, startStatus);
+        if (partialDoor === 'start') return ok(PARTIAL_ACTIVE());
         const id = (JSON.parse(body || '{}') as { bookId: number | null }).bookId;
         return ok({
             ...STUDY_IDLE, books: shelf, hasActiveSession: true, activeStartedAt: new Date().toISOString(),
@@ -72,6 +80,7 @@ function fetchImpl(url: string, init?: RequestInit) {
     if (url.includes('/api/study/active/book')) {
         req.push({ url, body });
         if (changeStatus !== 200) return ok({}, changeStatus);
+        if (partialDoor === 'change') return ok(PARTIAL_ACTIVE());
         const id = (JSON.parse(body || '{}') as { bookId: number | null }).bookId;
         return ok({
             ...STUDY_IDLE, books: shelf, hasActiveSession: true, activeStartedAt: new Date().toISOString(),
@@ -88,6 +97,7 @@ function fetchImpl(url: string, init?: RequestInit) {
     }
     if (url.includes('/api/study/history')) return ok({ graph: GRAPH, months: [] });
     if (url.includes('/api/dashboard')) {
+        if (partialDoor === 'dashboard') return ok({ ...DASHBOARD, study: PARTIAL_ACTIVE() });
         return ok({ ...DASHBOARD, study: { ...STUDY_IDLE, books: shelf } });
     }
     // 독서 문 — (h)의 대조군. 공부 흐름에서 한 번이라도 여기로 새면 카운트로 잡힌다.
@@ -105,6 +115,7 @@ const sent = (needle: string) => req.filter(r => r.url.includes(needle));
 beforeEach(() => {
     startStatus = 200;
     changeStatus = 200;
+    partialDoor = '';
     stopStudyBody = { ...STUDY_IDLE };
     shelf = SHELF;
     req.length = 0;
@@ -306,8 +317,51 @@ describe('DashboardApp — 종료 후 태깅', () => {
     });
 });
 
-// (정규화 계측기 (i1)~(i4)는 2026-09-13에 지웠다 — 유일한 관측기였던 하루 목표 게이지가 컨셉 전환으로
-//  사라져 관측기 없는 검사가 됐다. 정규화 함수는 study-state.test.ts, stop 자리는 위 (f3)가 잠근다.)
+describe('DashboardApp — 정규화(studyStateOf)가 문마다 걸려 있다', () => {
+    // 계측기: 측정 중이고 시작 시각이 과거인 응답에서 todaySeconds를 뺀다(PARTIAL_ACTIVE). 히어로 숫자는
+    // todaySeconds + elapsed라, 정규화하면 0 + 600 = '10:00'이고 날것 res.json()이면 NaN → fmtMSS가 '00:00'.
+    // (2026-09-13까지는 하루 목표 게이지가 관측기였다 — 게이지가 사라져 이 숫자로 옮겼다.)
+    //
+    // ⚠️ (i4) 태깅 자리는 잠그지 못한다 — 종료 후라 elapsed가 0이어서 NaN과 0이 둘 다 '00:00'이다.
+    // 태깅 응답의 나머지 필드는 StudyTimerCard가 withDefaults로 스스로 메워 화면이 같다.
+    const heroNum = (w: ReturnType<typeof mount>) => w.find('.dash-timer-num').text();
+    const TEN_MIN = /^10:0\d$/;
+
+    test('(i1) applyDashboard — /api/dashboard의 study가 필드 누락이어도 히어로가 10:00이다', async () => {
+        partialDoor = 'dashboard';
+        const w = await mountStudy();
+
+        await vi.waitFor(() => expect(heroNum(w)).toMatch(TEN_MIN));
+        expect(w.find('.alert-error').exists()).toBe(false);
+    });
+
+    test('(i2) start 응답이 필드 누락이어도 히어로가 10:00이다', async () => {
+        partialDoor = 'start';
+        const w = await mountStudy();
+        expect(heroNum(w)).toBe('01:00');   // 양성 대조: 시작 전은 대시보드의 todaySeconds 60
+
+        await btnWith(w, '공부 측정 시작')!.trigger('click');
+        await vi.waitFor(() => expect(w.find('.dash-pill-pulse').exists()).toBe(true));
+
+        await vi.waitFor(() => expect(heroNum(w)).toMatch(TEN_MIN));
+        expect(w.find('.alert-error').exists()).toBe(false);
+    });
+
+    test('(i3) 교체 응답이 필드 누락이어도 히어로가 10:00이다', async () => {
+        partialDoor = 'change';
+        const w = await mountStudy();
+        await btnWith(w, '공부 측정 시작')!.trigger('click');
+        await vi.waitFor(() => expect(kv(w)).toBe('헌법'));
+
+        await btnWith(w, '책 바꾸기')!.trigger('click');
+        await sheetRow(w, '형법').trigger('click');
+        await vi.waitFor(() => expect(sent('/api/study/active/book')).toHaveLength(1));
+
+        // 새 activeStartedAt은 타이머의 다음 1초 틱에 반영된다 — 기본 대기(1초)와 경계가 겹쳐 넉넉히 준다.
+        await vi.waitFor(() => expect(heroNum(w)).toMatch(TEN_MIN), { timeout: 3000 });
+        expect(w.find('.alert-error').exists()).toBe(false);
+    });
+});
 
 describe('DashboardApp — 독서 대조군', () => {
     test('(h) 독서 stop의 태깅 시트는 독서 문구 — 공부 시트가 아니다(E21)', async () => {

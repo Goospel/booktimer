@@ -2,7 +2,7 @@
 // StudyTimerCard — 공부 히어로(카운트업 + 세션 경과 + 시작/종료 + 책 칩 + 책별 회당 시간).
 // 하루 목표 게이지·인라인 편집은 2026-09-13 컨셉 전환으로 걷었다(회당 시간 테스트는 파일 끝).
 import { describe, test, expect, vi, afterEach } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import StudyTimerCard from '../src/dashboard/StudyTimerCard.vue';
 
 afterEach(() => { vi.useRealTimers(); document.body.innerHTML = ''; });
@@ -275,6 +275,19 @@ describe('StudyTimerCard — 회당 시간 인라인 폼', () => {
         expect(set.emitted('setSessionGoal')).toEqual([[5, null]]);
     });
 
+    // 폼은 좌열(숫자 아래)에 서고 손잡이는 우측 칩 아래라, 좁은 폭에선 폼이 화면 밖일 수 있다 —
+    // 입력칸에 포커스를 주면 브라우저가 스크롤해 오고 바로 타이핑할 수 있다.
+    test('「변경」·「회당 시간 정하기」가 폼을 열면 포커스가 분 입력칸으로 간다', async () => {
+        for (const [goal, label] of [[3000, '변경'], [null, '회당 시간 정하기']] as const) {
+            const w = mountCard({ books: [STUDY_BOOK(5, '헌법', goal)], recentBookId: 5 });
+            await btn(w, label)!.trigger('click');
+            await flushPromises();
+
+            expect(document.activeElement, label).toBe(w.find('form.dash-goal-edit input').element);
+            w.unmount();
+        }
+    });
+
     test('취소는 폼만 닫고 아무것도 보내지 않는다', async () => {
         vi.useFakeTimers();
         const w = mountCard({ books: [STUDY_BOOK(5, '헌법', 3000)], recentBookId: 5 });
@@ -381,7 +394,7 @@ describe('StudyTimerCard — 탭 제목 알림', () => {
         expect(document.title).toBe('북타이머');
     });
 
-    test('달성 상태로 떠난 화면(언마운트)은 제목을 되돌린다 — 접두가 두 번 붙지도 않는다', async () => {
+    test('달성 상태로 떠난 화면(언마운트)은 제목을 되돌린다', async () => {
         vi.useFakeTimers();
         document.title = '북타이머';
         const w = mountCard({

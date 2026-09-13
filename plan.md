@@ -3483,8 +3483,10 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
   (1~360, 빈칸·「회당 시간 없이」 = 해제 null) → `POST /api/study/books/{id}/session-goal`. 측정 중엔 activeBook 기준
   「남은 시간 MM:SS · 회당 50분」 → 닿으면 「회당 50분 달성 · +MM:SS」(색·문구만, 측정 계속) + 달성 동안 탭 제목 접두
   `[회당 시간 달성] `(종료·언마운트에 원복). 판정은 순수 함수 `sessionGoal.ts` 하나. 웹은 서버가 아직 싣는
-  `goalSeconds`를 읽지도 `/api/study/goal`을 부르지도 않는다. 정규화 락 (i1)~(i4)·goal (d)는 관측기(게이지)가 사라져
-  삭제(`types.ts` 주석을 사실대로 고침). 독서 경로 diff 0. ⚠️ 실브라우저 탭 제목 확인(U-4)은 미실행 — PR body 원장.
+  `goalSeconds`를 읽지도 `/api/study/goal`을 부르지도 않는다. 정규화 락은 관측기를 게이지에서 **측정 중 히어로 숫자**로
+  옮겨 applyDashboard·start·change·session-goal을 다시 잠갔다(관측 불가는 종료 후인 tag 하나). 저장 404는 start·change와
+  같이 폼 닫기 + 재조회, 저장 왕복 중엔 복귀 재조회를 건너뛰고, 폼을 열면 입력칸에 포커스. 독서 경로 diff 0.
+  ⚠️ 실브라우저 탭 제목 확인(U-4)은 미실행 — PR body 원장.
 - ⬜ **PR-3 미니앱** — 하루 목표 게이지·「목표 바꾸기」(전면광고 진입점)·공부 새싹 제거 → 시/분 휠 시트 + 측정 줄 + 햅틱 1회.
 - ✅ **PR-4 서버 — 회당 시간 도달 토스 푸시(다크런치) (2026-09-13)** — `V91` `study_session.goal_notified_at`(세션당 1회 멱등) + `idx_study_session_ended_at`,
   `StudyGoalPushService`(분당 · `startedAt + goal ≤ now` · 닿은 지 10분 넘으면 건너뜀 · 토스 연결 계정만 · 성공만 마킹 · 빈 컨텍스트)
@@ -3496,8 +3498,8 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
   **점등 시 `ENABLED`와 `TEMPLATE_CODE`를 함께 바꾼다**(`ENABLED`만 켜면 잘못된 코드로 매 틱 발송 실패 warn).
 - ⬜ **PR-5 서버 잔재 정리** — `V92` `users.study_daily_goal_seconds` drop · `POST /api/study/goal` · `StudyState.goalSeconds` 삭제.
   착수 게이트 = PR-3 번들 라이브 확인.
-- 후속 PR에서 정리: 위 「2단계」 PR-B(공부 목표 게이지)·⏸ 「설정 페이지의 공부 목표」, 「공부 타이머–책 연결」 절의 ⏸ 공부 푸시·달력 자동 달성 판정의
-  폐기·흡수 표기(설계 §9) — 해당 기능을 실제로 걷는 PR(PR-2·PR-4)에서 함께 고친다.
+- 후속 PR에서 정리: 「공부 타이머–책 연결」 절의 ⏸ 공부 푸시·달력 자동 달성 판정의
+  폐기·흡수 표기(설계 §9) — 해당 기능을 실제로 걷는 PR(PR-4)에서 함께 고친다.
 
 
 ---

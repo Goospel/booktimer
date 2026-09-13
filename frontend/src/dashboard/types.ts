@@ -82,12 +82,14 @@ export const IDLE_STUDY: StudyState = {
  * `books.map`이 죽지 않게. **study를 대입하는 모든 자리가 이 함수를 지난다**(applyDashboard·
  * start·stop·session-goal·tag·change) — 한 곳이라도 날것 `res.json()`을 넣으면 그 자리만 옛 서버에서 깨진다.
  *
- * ⚠️ **화면 계측기로 잠긴 자리는 stop 하나뿐이다**(`dashboard-study-book.test.ts` (f3) — `s.books.length`를
- * 즉시 읽어 던진다). 나머지 5자리는 2026-09-13까지 하루 목표 게이지(todaySeconds가 NaN이면 width가 사라짐)가
- * 유일한 관측기였는데, 컨셉 전환으로 게이지가 사라지며 그 락((i1)~(i4)·goal (d))도 함께 지웠다 — 관측기 없는
- * 검사는 의식이다. StudyTimerCard가 `withDefaults`로 books·activeBook·recentBookId를 스스로 메워 필드 누락이
- * 화면에 안 드러나기 때문이다. 함수 자체(기본값·spread 순서)는 `study-state.test.ts`가 잠근다.
- * 즉 **「이 함수가 옳다」는 잠겼고, 「모든 자리가 이 함수를 지난다」는 stop 밖에선 코드 리뷰가 지킨다.**
+ * 이 규약은 **6자리 중 5자리가 계측기로 잠겨 있다**(2026-09-13 전체 스위트 돌연변이 실측 — 그 자리의 정규화를
+ * 걷으면 해당 테스트가 죽는다): applyDashboard·start·change = `dashboard-study-book.test.ts` (i1)~(i3),
+ * session-goal = `dashboard-session-goal.test.ts` (i5), stop = `dashboard-study-book.test.ts` (f3).
+ * 관측기는 **측정 중 히어로 숫자**(`todaySeconds + elapsed`)다 — 시작 시각이 과거인 응답에서 todaySeconds가
+ * 빠지면 정규화 시 `10:00`, 날것이면 NaN → `fmtMSS`가 `00:00`. (2026-09-13 전엔 하루 목표 게이지가 관측기였다.)
+ * stop만 예외로 `s.books.length`를 즉시 읽어 던진다.
+ * ⚠️ **관측 불가는 tag 하나다** — 종료 후라 elapsed가 0이어서 NaN·0이 둘 다 `00:00`이고, 나머지 필드는
+ * StudyTimerCard가 `withDefaults`로 스스로 메워 화면이 같다. 그 자리는 코드 리뷰가 지킨다.
  */
 export function studyStateOf(s?: Partial<StudyState> | null): StudyState {
     return { ...IDLE_STUDY, ...(s ?? {}) }

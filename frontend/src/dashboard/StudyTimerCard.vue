@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed, onUnmounted } from 'vue'
+import { ref, watch, computed, nextTick, onUnmounted } from 'vue'
 import { useReadingTimer } from './useReadingTimer'
 import { fmtMSS, goalLabel } from './timerProgress'
 import { sessionGoalView, minutesToSessionGoal } from './sessionGoal'
@@ -62,12 +62,13 @@ const view = computed(() => props.hasActiveSession
     : sessionGoalView(null, 0))
 
 // 탭 제목 알림 — 다른 탭을 보고 있어도 닿았음을 안다. 브라우저 Notification은 쓰지 않는다(사용자 기각).
-// 붙이고 떼는 판정을 제목 자체로 한다 — 두 번 붙거나, 남이 바꾼 제목을 옛 값으로 덮지 않는다.
+// 떼는 쪽은 제목 자체를 보고 판정한다 — 남이 바꾼 제목을 저장해 둔 옛 값으로 덮지 않는다.
+// (붙이는 쪽은 watch가 false→true 전환에서만 부르므로 중복 가드를 두지 않는다.)
 const TITLE_PREFIX = '[회당 시간 달성] '
 function titlePrefix(on: boolean) {
     const t = document.title
-    if (on && !t.startsWith(TITLE_PREFIX)) document.title = TITLE_PREFIX + t
-    if (!on && t.startsWith(TITLE_PREFIX)) document.title = t.slice(TITLE_PREFIX.length)
+    if (on) document.title = TITLE_PREFIX + t
+    else if (t.startsWith(TITLE_PREFIX)) document.title = t.slice(TITLE_PREFIX.length)
 }
 watch(() => view.value.kind === 'reached', titlePrefix, { immediate: true })
 onUnmounted(() => titlePrefix(false))
@@ -76,10 +77,14 @@ onUnmounted(() => titlePrefix(false))
 // 사용자가 친 값이 사라지고, 저장 중 잠금이 한 번도 렌더되지 않는다.
 const editing = ref(false)
 const goalMinutes = ref<number | ''>('')
-function openEdit() {
+const goalInput = ref<HTMLInputElement | null>(null)
+async function openEdit() {
     const v = goalBook.value?.sessionGoalSeconds
     goalMinutes.value = v ? Math.round(v / 60) : ''
     editing.value = true
+    // 폼은 좌열, 손잡이는 우측 칩 아래 — 좁은 폭에선 폼이 화면 밖일 수 있어 포커스로 스크롤을 부른다.
+    await nextTick()
+    goalInput.value?.focus()
 }
 function submitGoal(seconds: number | null) {
     if (goalBook.value) emit('setSessionGoal', goalBook.value.id, seconds)
@@ -104,7 +109,7 @@ defineExpose({ closeEdit })
                 <label>이 책 회당 시간
                     <!-- step은 스피너 간격이 아니라 **유효성 제약**이다 — step="1" = 정수 분만 받는다(7.5는 크롬이
                          「가장 근접한 유효 값」 버블로 막는다). 1분~6시간(서버 60~21600초와 같은 범위). 빈칸은 해제(null). -->
-                    <input type="number" min="1" max="360" step="1" v-model.number="goalMinutes"
+                    <input ref="goalInput" type="number" min="1" max="360" step="1" v-model.number="goalMinutes"
                            aria-label="이 책 회당 시간(분)"> 분
                 </label>
                 <button type="submit" class="dash-btn-fill" :disabled="savingSessionGoal">
@@ -165,7 +170,7 @@ defineExpose({ closeEdit })
                         <div class="dash-session-goal">
                             <template v-if="defaultBook.sessionGoalSeconds">
                                 회당 {{ goalLabel(defaultBook.sessionGoalSeconds) }}
-                                <button type="button" class="dash-goal-change" @click="openEdit">변경</button>
+                                <button type="button" class="dash-goal-change" aria-label="회당 시간 변경" @click="openEdit">변경</button>
                             </template>
                             <button v-else type="button" class="dash-btn-link dash-bookless" @click="openEdit">회당 시간 정하기</button>
                         </div>

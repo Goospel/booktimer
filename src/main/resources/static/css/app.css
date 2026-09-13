@@ -2973,7 +2973,8 @@ body.dashboard-page #dashboard-app { gap: 20px; }
    대시보드 카드(.dash-card)와 /study/history의 .card가 같은 클래스를 쓴다 — 규칙 하나가 두 화면을 덮는다.
    is-study가 없는 독서 카드엔 한 줄도 안 닿고, 카드 밖(브랜드 헤더 등)의 --accent도 그대로다.
    --nav-hover-*·--ok까지 덮는 이유: :root에서 var()로 해석된 값이라 --sage-soft만 덮어선 hover·요약 강조가
-   세이지로 남는다. --ok가 닿는 곳은 공부 카드 안에선 .grass-summary strong뿐이다(.dash-*-ok는 독서 달성 전용). */
+   세이지로 남는다. --ok가 닿는 곳은 공부 카드 안에선 .grass-summary strong과 회당 시간 달성 줄
+   (.dash-session-line.is-reached) 둘이다(.dash-*-ok는 독서 달성 전용) — 둘 다 초록이 아니라 이 공부 잉크로 칠해진다. */
 .is-study {
     --accent: #5F7E96; --accent-hover: #47657C; --sage-soft: #E6ECF0;
     --nav-hover-bg: #E6ECF0; --nav-hover-border: #D6E0E7;
@@ -3017,7 +3018,7 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 }
 /* 칩 아래 「회당 50분 · 변경」 줄 — 칩·「책 없이 시작」과 같은 가운데 축. */
 .dash-session-goal { align-self: center; font-size: 13px; color: var(--muted); }
-/* 닿으면 색만 바뀐다(애니메이션 없음) — 측정은 계속된다. */
+/* 닿으면 색만 바뀐다(애니메이션 없음) — 측정은 계속된다. .is-study가 --ok를 덮어 초록이 아니라 공부 잉크(#47657C)다. */
 .dash-session-line.is-reached .dash-kv-k,
 .dash-session-line.is-reached .dash-kv-v { color: var(--ok); }
 .dash-goal-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 420px; }

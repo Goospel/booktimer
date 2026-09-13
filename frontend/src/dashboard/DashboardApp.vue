@@ -134,7 +134,7 @@ async function refresh(force = false) {
     if (!force) {
         if (document.visibilityState !== 'visible') return
         // 내 왕복 응답을 낡은 스냅샷이 덮지 않게. force는 방금 실패한 내 왕복이 부른 것이라 덮을 게 없다.
-        if (starting.value || stopping.value || tagging.value) return
+        if (starting.value || stopping.value || tagging.value || savingSessionGoal.value) return
     }
     if (!shouldRefresh(lastFetchedAt, Date.now(), force)) return
     lastFetchedAt = Date.now()
@@ -285,7 +285,9 @@ async function handleSessionGoal(bookId: number, seconds: number | null) {
             headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
             body: JSON.stringify({ sessionGoalSeconds: seconds }),
         })
-        // 실패면 폼을 열어 둔 채 둔다 — 사용자가 친 값이 살아 있어야 다시 누를 수 있다.
+        // 404 = 다른 곳에서 서재에서 뺀 책(start·change와 같은 규칙) — 폼을 닫고 재조회로 화면을 맞춘다.
+        if (res.status === 404) { studyCard.value?.closeEdit(); await conflict('그 책이 공부 서재에 없어요 — 화면을 최신으로 맞췄어요'); return }
+        // 그 밖의 실패면 폼을 열어 둔 채 둔다 — 사용자가 친 값이 살아 있어야 다시 누를 수 있다.
         if (!res.ok) { actionError.value = '회당 시간을 저장하지 못했어요'; return }
         study.value = studyStateOf(await res.json())
         studyCard.value?.closeEdit()
