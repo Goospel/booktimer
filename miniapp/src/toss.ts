@@ -93,6 +93,13 @@ export const PERSONALITY_AD_GROUP_ID: string = import.meta.env.VITE_PERSONALITY_
  */
 export const GOAL_MET_TEMPLATE_CODE = 'booktimer-daily-goal-met';
 
+/**
+ * 공부 「회당 시간」 달성 푸시의 발송 코드 — 독서와 <b>다른 동의문</b>(「공부 알림 동의문」 termsId 122175)에 묶였다.
+ * 콘솔 AI 검수가 공부 푸시를 독서 동의문(「독서 목표 달성과 완독 소식」)에 붙이는 걸 맥락 불일치로 거부했다(2026-09-13).
+ * 그래서 독서에 동의한 사람도 공부 알림은 이 코드로 따로 물어야 받는다.
+ */
+export const STUDY_GOAL_TEMPLATE_CODE = 'booktimer-study-goal-met';
+
 /** 동의 화면의 세 가지 결말 — 동의 상태의 정본은 토스이고, 우리는 이 값만 캐시해 카드 노출을 끈다. */
 export type AgreementResult = 'newAgreement' | 'alreadyAgreed' | 'agreementRejected';
 

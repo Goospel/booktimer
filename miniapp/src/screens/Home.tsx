@@ -17,6 +17,7 @@ import {
 } from '../sessionGoal';
 import {
   GOAL_MET_TEMPLATE_CODE,
+  STUDY_GOAL_TEMPLATE_CODE,
   REWARD_AD_GROUP_ID,
   hapticOnce,
   notificationAgreementSupported,
@@ -43,6 +44,8 @@ import { SessionGoalSheet } from './SessionGoalSheet';
 
 /** 알림 동의 결과 캐시 — 값은 토스가 준 결과 문자열 그대로. 정본은 토스이고 이건 카드 노출 스위치일 뿐이다. */
 const AGREEMENT_KEY = 'booktimer.notificationAgreement';
+/** 공부 동의문의 캐시 — 독서 키와 갈라야 독서에 이미 답한 사람에게도 공부 알림을 물을 수 있다. */
+const STUDY_AGREEMENT_KEY = 'booktimer.notificationAgreement.studyGoal';
 
 /**
  * 진행바 색 — `global.css`가 TDS `--adaptiveBlue500`을 이 세이지로 재테마한다. TDS ProgressBar는
@@ -909,10 +912,23 @@ export function shouldShowNotificationCard(cached: string | null, supported: boo
  * <p>미지원 기기(`null`)에서는 **캐시를 남기지 않는다** — 남기면 나중에 최신 토스앱에서 열어도
  * 영영 안 묻는다. 클릭 흐름을 화면 밖으로 꺼낸 이유는 광고 쪽과 같다(정적 렌더 하니스라 클릭이 안 돈다).
  */
-export async function askNotificationAgreement(): Promise<string | null> {
-  const result = await requestNotificationAgreement(GOAL_MET_TEMPLATE_CODE);
-  if (result !== null) localStorage.setItem(AGREEMENT_KEY, result);
+export async function askNotificationAgreement(mode: TimerMode): Promise<string | null> {
+  const { templateCode, storageKey } = notificationAgreementTarget(mode);
+  const result = await requestNotificationAgreement(templateCode);
+  if (result !== null) localStorage.setItem(storageKey, result);
   return result;
+}
+
+/**
+ * 모드가 고르는 동의 대상 — 동의문이 두 장(독서 114526 · 공부 122175)이라 요청 코드·캐시 키·카드 문구가 함께 갈린다.
+ *
+ * <p>문구는 그 동의문이 실제로 덮는 것만 말한다: 독서 카드가 「공부 시간」을 약속하면 거짓이 된다
+ * (독서 동의문은 공부 푸시를 덮지 않는다 — 콘솔 AI 검수가 그 조합을 거부해 갈렸다, 2026-09-13).
+ */
+export function notificationAgreementTarget(mode: TimerMode): { templateCode: string; storageKey: string; copy: string } {
+  return mode === 'study'
+    ? { templateCode: STUDY_GOAL_TEMPLATE_CODE, storageKey: STUDY_AGREEMENT_KEY, copy: '정한 공부 시간을 채우면 토스 알림으로 알려드려요' }
+    : { templateCode: GOAL_MET_TEMPLATE_CODE, storageKey: AGREEMENT_KEY, copy: '목표 달성과 완독 소식을 토스 알림으로 받아보세요' };
 }
 
 /**
@@ -1213,7 +1229,10 @@ export function Home({
   /** 남은시간 설명 상자 — 접힌 채로 시작한다(궁금한 사람만 편다). */
   const [showNote, setShowNote] = useState(false);
   /** 알림 동의 캐시·지원 여부 — 렌더마다 다시 묻지 않게 초기값으로 한 번만 읽는다. */
-  const [agreement, setAgreement] = useState(() => localStorage.getItem(AGREEMENT_KEY));
+  const [agreements, setAgreements] = useState<Record<TimerMode, string | null>>(() => ({
+    reading: localStorage.getItem(AGREEMENT_KEY),
+    study: localStorage.getItem(STUDY_AGREEMENT_KEY),
+  }));
   const [agreementSupported] = useState(notificationAgreementSupported);
 
   // 어느 쪽을 재든 시계는 매초 올라야 한다 — 조건을 모드별로 갈라 물으면 한쪽이 멈춘 채로 남는다.
@@ -1240,10 +1259,11 @@ export function Home({
 
   /** 알림 동의 요청 — 결과(동의·이미동의·거절)가 캐시되면 카드가 사라진다. 미지원(null)이면 그대로 둔다. */
   const askNotification = () => {
+    const asked = mode; // 답이 오는 사이 모드가 바뀌어도 물었던 쪽 카드에 적는다
     setBusy(true);
     setError(null);
-    askNotificationAgreement()
-      .then(setAgreement)
+    askNotificationAgreement(asked)
+      .then((result) => setAgreements((prev) => ({ ...prev, [asked]: result })))
       .catch(() => setError('알림 동의를 요청하지 못했어요. 잠시 후 다시 시도해 주세요.'))
       .finally(() => setBusy(false));
   };
@@ -1580,10 +1600,10 @@ export function Home({
       {mode === 'reading' && <FirstSessionBanner show={celebrate} />}
 
       {/* 알림 동의 — 발송은 동의한 유저에게만 가능하고, 동의를 받는 주체는 미니앱이다(콘솔 심사 조건). */}
-      {shouldShowNotificationCard(agreement, agreementSupported) && (
+      {shouldShowNotificationCard(agreements[mode], agreementSupported) && (
         <section style={sectionStyle}>
           <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
-            목표 달성·공부 시간·완독 소식을 토스 알림으로 받아보세요
+            {notificationAgreementTarget(mode).copy}
           </Text>
           <Button display="block" variant="weak" size="medium" disabled={busy} onClick={askNotification}>
             알림 받기
