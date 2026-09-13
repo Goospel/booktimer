@@ -615,6 +615,125 @@ class StudyApiControllerTest {
                 .andExpect(jsonPath("$.study.activeBook.title").value("정보처리기사 실기"));
     }
 
+    // ── 공부 책 회당 시간 (하루 목표 → 책별 회당 시간 전환 PR-1) ──────────────────
+
+    /** {@code $.books[?(@.id == N)].sessionGoalSeconds} — 배열 순서에 기대지 않고 그 책의 회당 시간만. */
+    private static String bookSessionGoal(StudyBook book) {
+        return "$.books[?(@.id == " + book.getId() + ")].sessionGoalSeconds";
+    }
+
+    private org.springframework.test.web.servlet.ResultActions postSessionGoal(String loginId, StudyBook book,
+                                                                               String value) throws Exception {
+        return mockMvc.perform(post("/api/study/books/" + book.getId() + "/session-goal")
+                .with(user(loginId)).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"sessionGoalSeconds\":" + value + "}"));
+    }
+
+    @Test
+    @DisplayName("session-goal: 미인증 → 로그인으로 차단")
+    void sessionGoal_unauthenticated_isBlocked() throws Exception {
+        mockMvc.perform(post("/api/study/books/1/session-goal").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sessionGoalSeconds\":3000}"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    @DisplayName("session-goal: 저장한 값이 응답 books·측정 중 activeBook·/api/dashboard에 모두 실린다")
+    void sessionGoal_savesAndAppearsInBooksAndActiveBook() throws Exception {
+        User u = register("study-sg-save@a.com", "studysgsave");
+        StudyBook a = studyBook(u, "정보처리기사 필기");
+        StudyBook b = studyBook(u, "안 정한 책");
+
+        postSessionGoal("studysgsave", a, "3000")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(bookSessionGoal(a), hasItem(3000)))
+                .andExpect(jsonPath(bookSessionGoal(b), hasItem(nullValue())));
+
+        mockMvc.perform(post("/api/study/start").with(user("studysgsave")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":" + a.getId() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activeBook.sessionGoalSeconds").value(3000));
+
+        mockMvc.perform(get("/api/dashboard").with(user("studysgsave")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.study.activeBook.sessionGoalSeconds").value(3000))
+                .andExpect(jsonPath("$.study.books[?(@.id == " + a.getId() + ")].sessionGoalSeconds", hasItem(3000)));
+    }
+
+    @Test
+    @DisplayName("session-goal: null은 「안 정함」으로 되돌린다(해제는 null만)")
+    void sessionGoal_null_clears() throws Exception {
+        User u = register("study-sg-null@a.com", "studysgnull");
+        StudyBook a = studyBook(u, "수학");
+        postSessionGoal("studysgnull", a, "3000").andExpect(status().isOk());
+
+        postSessionGoal("studysgnull", a, "null")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(bookSessionGoal(a), hasItem(nullValue())));
+    }
+
+    /**
+     * 범위 밖은 400이고 <b>저장된 값이 그대로</b>여야 한다 — 먼저 3000을 심어 두는 이유는, 잘못된 값이
+     * 400을 내면서 조용히 null로 지워 버리는 회귀까지 같이 잡기 위해서다. 경계 안쪽(60·21600)은 200 —
+     * 부등호가 한 칸 밀리는 회귀(60을 거부)를 잡는 양성 쌍이다.
+     */
+    @Test
+    @DisplayName("session-goal: 59·21601·0 → 400 + 값 불변, 경계 60·21600은 저장된다")
+    void sessionGoal_outOfRange_isBadRequestAndKeepsValue() throws Exception {
+        User u = register("study-sg-range@a.com", "studysgrange");
+        StudyBook a = studyBook(u, "영어");
+        postSessionGoal("studysgrange", a, "3000").andExpect(status().isOk());
+
+        for (String bad : new String[] {"59", "21601", "0"}) {
+            postSessionGoal("studysgrange", a, bad).andExpect(status().isBadRequest());
+        }
+        mockMvc.perform(get("/api/study/books").with(user("studysgrange")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(bookSessionGoal(a), hasItem(3000)));
+
+        postSessionGoal("studysgrange", a, "60")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(bookSessionGoal(a), hasItem(60)));
+        postSessionGoal("studysgrange", a, "21600")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(bookSessionGoal(a), hasItem(21600)));
+    }
+
+    /**
+     * 남의 책은 404(존재 비노출)이되, <b>범위 검사가 소유권 조회보다 먼저</b>다 — 남의 책 id에 잘못된 값을
+     * 보내도 400이라 400/404로 존재 여부를 캐낼 창이 열리지 않는다(read-count 문과 같은 규약).
+     */
+    @Test
+    @DisplayName("session-goal: 남의 책 3000 → 404(값 불변), 남의 책 59 → 400(검사 순서)")
+    void sessionGoal_foreignBook_isNotFound() throws Exception {
+        register("study-sg-idor@a.com", "studysgidor");
+        User stranger = register("study-sg-idor2@a.com", "studysgidortwo");
+        StudyBook theirs = studyBook(stranger, "남의 책");
+
+        postSessionGoal("studysgidor", theirs, "3000").andExpect(status().isNotFound());
+        postSessionGoal("studysgidor", theirs, "59").andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/api/study/books").with(user("studysgidortwo")))
+                .andExpect(jsonPath(bookSessionGoal(theirs), hasItem(nullValue())));
+    }
+
+    @Test
+    @DisplayName("session-goal: 독서 책장의 책 id → 404(다른 서재)")
+    void sessionGoal_readingBookId_isNotFound() throws Exception {
+        User u = register("study-sg-reading@a.com", "studysgreading");
+        Book reading = readingBook(u, "독서 책");
+
+        mockMvc.perform(post("/api/study/books/" + reading.getId() + "/session-goal")
+                        .with(user("studysgreading")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sessionGoalSeconds\":3000}"))
+                .andExpect(status().isNotFound());
+    }
+
     // ── 공부 하루 목표 (2차) ──────────────────────────────────────────────────
 
     @Test

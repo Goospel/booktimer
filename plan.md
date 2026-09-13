@@ -3464,6 +3464,26 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
 - ⏸ **`/study/history` 닉네임 인사말** — `/api/study/history`에 닉네임이 없고 미니앱도 「공부 기록」 제목뿐이다.
 - 공부엔 **「빠뜨린 날」이 없다** — 부채 개념 자체가 없어 억제 코드 0줄(안 그리면 끝).
 
+### 📚✏️ 공부 타이머 컨셉 전환 — 하루 목표 → 책별 회당 시간 (설계 `claude-docs/plans/2026-09-13-study-timer-per-book-session.md`)
+
+> 공부의 「하루 목표」를 걷고 **공부 책마다 「한 번 앉을 때 공부할 시간」(회당 시간, 1분~6시간)** 을 둔다.
+> 그 책으로 시작한 측정이 회당 시간에 닿으면 알린다(측정은 계속된다). 안 정한 책·책 없이 = 지금 그대로 스톱워치.
+> 하루 목표는 **UI를 먼저 걷고(PR-2·PR-3) 서버 잔재는 새 미니앱 번들이 라이브가 된 뒤(PR-5)** 지운다 —
+> 라이브 번들이 `goalSeconds`·`POST /api/study/goal`을 아직 쓰기 때문이다.
+
+- ✅ **PR-1 서버 — 회당 시간 컬럼·문 (2026-09-13)** — `V90` `study_book.session_goal_seconds int null`(null = 안 정함),
+  `StudyBook.changeSessionGoal`(60 ≤ v ≤ 측정 상한 21600, 아니면 IAE), `StudyBookRow` **맨 뒤** `sessionGoalSeconds`
+  (옛 번들은 모르는 필드를 무시 — `StudyState.activeBook`·`books`에 자동으로 실린다), `POST /api/study/books/{id}/session-goal`
+  → `StudyState`. **범위 검사(400)가 소유권 조회(404)보다 먼저**라 남의 책 id로 존재를 캐낼 수 없고, 0은 400(해제는 null만).
+  하루 목표 코드·독서 경로 diff 0.
+- ⬜ **PR-2 웹** — `StudyTimerCard`의 하루 목표 게이지·인라인 폼 → 회당 시간 설정·측정 중 countdown/달성 표시 + 탭 제목 접두.
+- ⬜ **PR-3 미니앱** — 하루 목표 게이지·「목표 바꾸기」(전면광고 진입점)·공부 새싹 제거 → 시/분 휠 시트 + 측정 줄 + 햅틱 1회.
+- ⬜ **PR-4 서버 — 회당 시간 도달 토스 푸시(다크런치)** — `V91` `study_session.goal_notified_at`(세션당 1회). 머지 전 SSM 2건 선생성.
+- ⬜ **PR-5 서버 잔재 정리** — `V92` `users.study_daily_goal_seconds` drop · `POST /api/study/goal` · `StudyState.goalSeconds` 삭제.
+  착수 게이트 = PR-3 번들 라이브 확인.
+- 후속 PR에서 정리: 위 「2단계」 PR-B(공부 목표 게이지)·⏸ 「설정 페이지의 공부 목표」, 「공부 타이머–책 연결」 절의 ⏸ 공부 푸시·달력 자동 달성 판정의
+  폐기·흡수 표기(설계 §9) — 해당 기능을 실제로 걷는 PR(PR-2·PR-4)에서 함께 고친다.
+
 
 ---
 

@@ -168,6 +168,27 @@ public class StudyApiController {
         return ResponseEntity.ok(state(user, clock.instant()));
     }
 
+    /**
+     * 공부 책의 <b>회당 시간</b>을 정하거나({@code sessionGoalSeconds}) 해제한다({@code null}).
+     * 응답이 화면 상태라 측정 중인 책이면 {@code activeBook}에 새 값이 바로 실린다.
+     *
+     * <p><b>범위 검사를 소유권 조회보다 먼저</b> 한다 — 잘못된 값은 어느 책이든 400이라, 남의 책 id로
+     * 400/404를 갈라 존재 여부를 캐낼 창이 열리지 않는다({@code read-count} 문과 같은 규약).
+     *
+     * @return 200 갱신된 화면 상태 / 400 범위 밖(0 포함 — 해제는 null만) / 404 남의 책·없는 책·독서 책장의 id
+     */
+    @PostMapping("/api/study/books/{id}/session-goal")
+    public ResponseEntity<StudyState> setSessionGoal(@PathVariable("id") Long id,
+                                                     @RequestBody SessionGoalRequest request,
+                                                     Principal principal) {
+        User user = currentUserService.resolve(principal);
+        StudyBook.validateSessionGoal(request.sessionGoalSeconds());
+        StudyBook book = ownedBook(user, id);
+        book.changeSessionGoal(request.sessionGoalSeconds());
+        studyBookRepository.save(book);
+        return ResponseEntity.ok(state(user, clock.instant()));
+    }
+
     /** 내 공부 책일 때만 반환 — 아니면(없음/남의 것/독서 책장의 id) 404로 존재 비노출. */
     private StudyBook ownedBook(User user, Long bookId) {
         return studyBookRepository.findByIdAndUser(bookId, user)
@@ -302,6 +323,10 @@ public class StudyApiController {
 
     /** @param bookId 붙일 공부 책(필수 — 「책 없이」로 되돌리는 문은 {@code active/book}이다) */
     public record TagBookRequest(Long bookId) {
+    }
+
+    /** @param sessionGoalSeconds 회당 시간(초, 60~21600) — null이면 「안 정함」으로 해제 */
+    public record SessionGoalRequest(Integer sessionGoalSeconds) {
     }
 
     /** @param bookId 새 대상(null = 「책 없이」로 되돌리기) */
