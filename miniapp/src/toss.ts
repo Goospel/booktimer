@@ -31,6 +31,21 @@ export function trackEvent(logName: string, params: Record<string, LogParam> = {
 }
 
 /**
+ * 햅틱 1회(발사 후 망각) — 공부 「회당 시간」에 닿는 순간 홈이 부른다.
+ *
+ * <p>실패 처리는 {@link trackEvent}와 같다: 토스 밖(브라우저 목 모드)엔 호스트 브릿지가 없어 동기 TypeError,
+ * 앱 안에서도 브릿지가 거부하면 rejected Promise — 둘 다 삼킨다. 최상위 `generateHapticFeedback`은
+ * deprecated라 `Device.triggerHaptic`을 쓴다(`Device.openURL`과 같은 선택).
+ */
+export function hapticOnce(): void {
+  try {
+    void Device.triggerHaptic({ type: 'success' }).catch(() => {});
+  } catch {
+    // 진동 실패는 사용자에게 아무 의미가 없다 — 화면 문구가 이미 달성을 말한다.
+  }
+}
+
+/**
  * 화면 진입 1건 — 콘솔 카탈로그에 SCREEN 타입·`screen_` 접두사로 묶인다(발사 후 망각).
  *
  * <p>실패 처리는 {@link trackEvent}와 정확히 같다(앱 밖 동기 TypeError는 try가, 브릿지 거부는 catch가 받는다).

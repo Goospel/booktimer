@@ -2,14 +2,23 @@ import { Button, ProgressBar } from '@toss/tds-mobile';
 import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
-import type { BookOption, DashboardResponse, StudyState, TimerState, WaiveResponse } from '../api';
+import type { BookOption, DashboardResponse, StudyBookRow, StudyState, TimerState, WaiveResponse } from '../api';
 import { ApiError, waiveDebt } from '../api';
 import type { TimerMode } from '../App';
+import { useBackClose } from '../back';
 import { Coachmark } from '../coachmark';
 import { elapsedSeconds, formatClock, formatDuration } from '../format';
 import {
+  sessionGoalHandleLabel,
+  sessionGoalSheetTarget,
+  sessionGoalView,
+  shouldHaptic,
+  studySessionLine,
+} from '../sessionGoal';
+import {
   GOAL_MET_TEMPLATE_CODE,
   REWARD_AD_GROUP_ID,
+  hapticOnce,
   notificationAgreementSupported,
   requestNotificationAgreement,
   watchRewardAd,
@@ -30,6 +39,7 @@ import {
   sectionStyle,
 } from '../ui';
 import { HomeFeedBox } from './HomeFeed';
+import { SessionGoalSheet } from './SessionGoalSheet';
 
 /** 알림 동의 결과 캐시 — 값은 토스가 준 결과 문자열 그대로. 정본은 토스이고 이건 카드 노출 스위치일 뿐이다. */
 const AGREEMENT_KEY = 'booktimer.notificationAgreement';
@@ -39,9 +49,6 @@ const AGREEMENT_KEY = 'booktimer.notificationAgreement';
  * 색을 prop으로만 받아 CSS 변수가 안 닿으므로 값을 직접 준다(다른 초록을 쓰면 화면에 초록이 둘이 된다).
  */
 export const SAGE = '#6E8A6A';
-
-/** 공부 모드의 같은 자리 — {@link SAGE}와 같은 사정이다(TDS ProgressBar는 색을 prop으로만 받는다). */
-const STUDY_BLUE = '#5F7E96';
 
 /**
  * 히어로 카드 배경 토큰 — js–css 매듭이라 이름을 한 곳에서 든다(`LAMP_PAGE_CLASS`와 같은 이유).
@@ -73,36 +80,12 @@ export const ACTIVE_STUDY_RELIEF = '화면을 꺼도 측정은 계속돼요. 공
  * 히어로 머리말 — 모드가 갈리고, 「달성」으로 한 번 더 갈리는 자리다.
  *
  * <p>`null`은 <b>새싹 머리말</b>(「오늘 목표 달성」)을 뜻한다 — 그 자리는 글자가 아니라 SVG를 품어
- * 문자열로 못 돌려준다. 2차에서 공부에도 목표가 생겨 <b>두 모드가 같은 분기</b>를 탄다: 새싹·글자색이
- * ACCENT 토큰이라 공부 모드에선 저절로 파란 새싹이 된다(색 체감에도 기여).
+ * 문자열로 못 돌려준다. 새싹은 <b>독서 하루 목표</b>의 것이다 — 공부 하루 목표는 2026-09-13 책별 「회당 시간」으로
+ * 대체돼 공부 모드에선 달성이 오지 않는다(호출부가 `false`를 넘긴다).
  */
 export function heroOverline(mode: TimerMode, achieved: boolean): string | null {
   if (achieved) return null;
   return mode === 'study' ? '오늘 공부한 시간' : '오늘 읽은 시간';
-}
-
-/**
- * 공부 히어로 파생값 — {@link todayProgress}에서 <b>이월·부채 항을 뺀 축소판</b>이다.
- *
- * <p>공부엔 빚이 없어 게이지 최대치가 곧 목표이고, 독서에 있는 「목표는 달성인데 게이지는 아직」 구간이
- * 존재하지 않는다(그 구간은 밀린 시간이 분모에 들어가서 생긴다). 그래서 여기선 `progress === 1`과
- * `achieved`가 같은 순간에 참이 된다.
- *
- * <p>이상값은 바닥을 친다 — 서버 스냅샷과 클라 카운트업이 어긋나도 화면에 음수 시간이 뜨지 않는다.
- */
-export function studyProgress(
-  goalSeconds: number,
-  doneSeconds: number,
-): { remaining: number; progress: number | null; achieved: boolean; overflow: number } {
-  const goal = Math.max(0, goalSeconds);
-  const done = Math.max(0, doneSeconds);
-  return {
-    remaining: Math.max(0, goal - done),
-    // 목표 0이면 나눌 게 없다 — 게이지를 안 그리고 달성이라 우기지도 않는다(독서와 같은 판단).
-    progress: goal > 0 ? Math.min(1, done / goal) : null,
-    achieved: goal > 0 && done >= goal,
-    overflow: goal > 0 ? Math.max(0, done - goal) : 0,
-  };
 }
 
 /**
@@ -1166,6 +1149,8 @@ export function Home({
   onError,
   onOpenMargin,
   onComposeMargin,
+  // 독서 렌더를 재는 기존 하니스는 이 문을 안 넘긴다 — 공부 갈래에서만 쓰여 기본값이면 족하다.
+  onSetSessionGoal = () => Promise.resolve(),
 }: {
   dashboard: DashboardResponse;
   /** 지금 재는 것 — 히어로 한 장이 이 값으로 두 얼굴을 갖는다(파생은 App이 한다). */
@@ -1207,6 +1192,11 @@ export function Home({
   onOpenMargin: (loginId: string, bookId: number) => void;
   /** 여백 문 — 지금 이 화면이 가리키는 책의 **작성 화면으로 직행**한다(측정 시작과 같은 1탭). */
   onComposeMargin: (book: BookOption) => void;
+  /**
+   * 공부 책의 회당 시간 저장(`null` = 해제) — 요청·응답 반영은 App이 든다. 성공하면 resolve, 실패하면 reject해
+   * 홈이 시트를 연 채 그 안에서 실패를 말한다(액션 스트립은 시트 패널에 가린다).
+   */
+  onSetSessionGoal?: (bookId: number, seconds: number | null) => Promise<void>;
 }) {
   /** 측정할 책 — 아직 안 골랐으면 기본값(이어 읽기)으로 떨어진다. 고른 값은 App이 들어 화면을 나갔다 와도 남는다. */
   const selectedBookId = picked === undefined ? defaultBookId(dashboard.readingBooks, dashboard.recentBookId) : picked;
@@ -1268,11 +1258,46 @@ export function Home({
   /** 공부 경과 — 서버가 준 완료 합에 진행 중 몫을 클라가 매초 얹는다(독서 히어로와 같은 분업). */
   const studyElapsed =
     study.hasActiveSession && study.activeStartedAt !== null ? elapsedSeconds(study.activeStartedAt, now) : 0;
-  /** 공부 목표 — 옛 서버는 이 필드를 안 준다(`?? 0` = 목표 없음, 1차와 같은 화면). */
-  const studyGoal = study.goalSeconds ?? 0;
-  const studyStats = studyProgress(studyGoal, study.todaySeconds + studyElapsed);
-  /** 지금 이 히어로의 「달성」 — 모드마다 원장이 달라 값도 다르다(머리말·새싹이 이 하나를 본다). */
-  const heroAchieved = mode === 'study' ? studyStats.achieved : achieved;
+  /**
+   * 회당 시간 판정 — 측정 중인 책의 <b>현재 값</b>이 기준이라, 측정 중 값을 바꾸면 곧바로 새 값으로 그린다.
+   * 매초 `now`가 오르니 따로 도는 타이머가 없다.
+   */
+  const studyGoalView = sessionGoalView(study.activeBook?.sessionGoalSeconds, studyElapsed);
+  const studyReached = study.hasActiveSession && studyGoalView.kind === 'reached';
+  /**
+   * 회당 시간 손잡이가 여는 책 — 측정 중이면 재는 책, 대기 중이면 캐러셀에서 고른 책(「책 없이」·서재에서 빠진
+   * id면 없음). 라벨과 여는 대상이 <b>같은 값</b>을 봐야 「보이는 책 ≠ 여는 책」이 생기지 않는다.
+   */
+  const goalHandleBook = sessionGoalSheetTarget(
+    study.hasActiveSession,
+    study.activeBook ?? null,
+    studyBooks.find((b) => b.id === studySelectedId) ?? null,
+  );
+  /** 회당 시간 시트 — 사용자가 손잡이를 눌렀을 때만 열린다(진입 직후 덮지 않는다). 연 순간의 책 행을 든다. */
+  const [goalSheetBook, setGoalSheetBook] = useState<StudyBookRow | null>(null);
+  const [goalSaving, setGoalSaving] = useState(false);
+  const [goalError, setGoalError] = useState<string | null>(null);
+  useBackClose(goalSheetBook !== null, () => setGoalSheetBook(null));
+  const openGoalSheet = (book: StudyBookRow) => {
+    setGoalError(null);
+    setGoalSheetBook(book);
+  };
+  /** 저장 — 응답이 성공한 뒤에 닫는다. 실패면 시트를 연 채 그 안에서 말한다(401은 App의 재로그인으로). */
+  const pickSessionGoal = (book: StudyBookRow, seconds: number | null) => {
+    setGoalSaving(true);
+    setGoalError(null);
+    onSetSessionGoal(book.id, seconds)
+      .then(() => setGoalSheetBook(null))
+      .catch((e: Error) => (e.name === 'UnauthorizedError' ? onError(e) : setGoalError(e.message)))
+      .finally(() => setGoalSaving(false));
+  };
+
+  /** 달성 햅틱 — 판정은 {@link shouldHaptic}(바뀌는 순간만). 여기선 이전 값을 들고 있을 뿐이다. */
+  const wasReached = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (shouldHaptic(wasReached.current, studyReached)) hapticOnce();
+    wasReached.current = studyReached;
+  }, [studyReached]);
   // 여백 문이 가리키는 책 — 측정 중이면 그 책, 대기 중이면 캐러셀에서 고른 책(없으면 문을 안 그린다).
   const doorBook = marginDoorBook(dashboard, selectedBookId);
 
@@ -1358,8 +1383,8 @@ export function Home({
               }}
             >
               {/* 달성일 때만 새싹이 선다 — 평소 머리말은 글자 그대로여서 미달성 렌더가 안 흔들린다.
-                  두 모드가 같은 분기를 타되 달성 판정은 각자의 원장에서 온다(`heroAchieved`). */}
-              {heroOverline(mode, heroAchieved) ?? (
+                  새싹은 독서 하루 목표의 것이다 — 공부 하루 목표는 폐기돼(2026-09-13, Q6) 공부엔 오지 않는다. */}
+              {heroOverline(mode, mode === 'reading' && achieved) ?? (
                 <>
                   <SproutMark size={13} /> 오늘 목표 달성
                 </>
@@ -1381,65 +1406,10 @@ export function Home({
             </Text>
           </div>
           {/*
-            공부 게이지 — 독서 블록의 <b>축소판</b>이다: 게이지 + 2열(남은 시간 | 하루 목표 · 변경 ›)까지
-            같고, ⓘ 툴팁·「밀린 시간」 내역·리워드 광고가 없다. 공부엔 이월이 없어 설명할 규칙도, 지울
-            빚도 없기 때문이다(전면광고는 「변경 ›」 진입에 그대로 붙는다 — 그건 App이 든다).
-
-            독서 블록과 합치지 않는 이유: 왼쪽 열이 저쪽은 ⓘ 토글 버튼이고 여기는 맨 라벨이라, 합치면
-            없는 규칙을 설명하는 손잡이를 조건부로 감추는 코드가 된다(부재가 조건이 아니라 사실이어야 한다).
+            공부 히어로는 「오늘 공부한 시간」 숫자까지다 — 하루 목표 게이지·손잡이는 2026-09-13 책별 「회당 시간」으로
+            대체돼 걷었다(Q6). 회당 시간은 대기 중엔 캐러셀 아래, 측정 중엔 아래 측정 줄이 말한다.
           */}
-          {mode === 'study' ? (
-            studyStats.progress !== null ? (
-              <div style={{ marginTop: 16 }}>
-                <ProgressBar progress={studyStats.progress} size="normal" color={STUDY_BLUE} />
-                <div style={{ display: 'flex', marginTop: 12 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 11, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>남은 시간</div>
-                    <div style={{ ...SERIF_VALUE, fontSize: 19, fontWeight: 700, marginTop: 2 }}>
-                      {formatClock(studyStats.remaining)}
-                    </div>
-                  </div>
-                  <div style={{ width: 1, background: 'rgba(44, 42, 36, 0.12)' }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 11, color: 'var(--adaptiveGrey600, #6F6A5E)' }}>하루 목표</div>
-                    <div style={{ ...SERIF_VALUE, fontSize: 19, fontWeight: 700, marginTop: 2 }}>
-                      {formatClock(studyGoal)}
-                    </div>
-                    {/* 알약 배경이 <b>토큰</b>인 것이 독서 쪽과 다른 유일한 점이다 — 이 자리는 새로 서는
-                        만큼 처음부터 모드를 타게 둔다(독서 쪽 리터럴은 픽셀 보존을 위해 그대로 둔다). */}
-                    <button
-                      type="button"
-                      onClick={onGoGoal}
-                      disabled={goalAdPending}
-                      style={{
-                        marginTop: 5,
-                        padding: '3px 10px',
-                        border: 0,
-                        borderRadius: 8,
-                        background: 'var(--accentPill, rgba(110, 138, 106, 0.18))',
-                        color: ACCENT,
-                        fontSize: 12,
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {goalAdPending ? '준비 중…' : '변경 ›'}
-                    </button>
-                  </div>
-                </div>
-                {studyStats.overflow > 0 && (
-                  <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 8 }}>
-                    +{formatDuration(studyStats.overflow)} 더 공부했어요
-                  </Text>
-                )}
-              </div>
-            ) : (
-              // 목표 0 — 정하러 가는 유일한 손잡이(독서와 같은 부품·같은 문구).
-              <div style={{ marginTop: 16 }}>
-                <GoalHandle goalSeconds={0} pending={goalAdPending} onGoGoal={onGoGoal} />
-              </div>
-            )
-          ) : progress !== null ? (
+          {mode === 'study' ? null : progress !== null ? (
             <div style={{ marginTop: 16 }}>
               <ProgressBar progress={progress} size="normal" color={SAGE} />
               {/*
@@ -1570,6 +1540,19 @@ export function Home({
                 측정 중 {formatDuration(studyElapsed)}
                 {study.activeBook != null && ` · ${study.activeBook.title}`}
               </Text>
+              {/* 회당 시간 — 남은 시간/달성 한 줄(스톱워치면 없음) + 같은 시트를 여는 손잡이. 책 없이 재면 둘 다 없다. */}
+              {goalHandleBook !== null && (
+                <>
+                  {studySessionLine(studyGoalView) !== null && (
+                    <Text typography="st11" color="blue700" style={{ display: 'block', marginTop: 6 }}>
+                      {studySessionLine(studyGoalView)}
+                    </Text>
+                  )}
+                  <Button variant="weak" size="small" style={{ marginTop: 8 }} onClick={() => openGoalSheet(goalHandleBook)}>
+                    {sessionGoalHandleLabel(goalHandleBook.sessionGoalSeconds, true)}
+                  </Button>
+                </>
+              )}
               <Text typography="st12" color="grey600" style={{ display: 'block', marginTop: 6 }}>
                 {ACTIVE_STUDY_RELIEF}
               </Text>
@@ -1600,7 +1583,7 @@ export function Home({
       {shouldShowNotificationCard(agreement, agreementSupported) && (
         <section style={sectionStyle}>
           <Text typography="st11" color="grey600" style={{ display: 'block', marginBottom: 10 }}>
-            목표 달성과 완독 소식을 토스 알림으로 받아보세요
+            목표 달성·공부 시간·완독 소식을 토스 알림으로 받아보세요
           </Text>
           <Button display="block" variant="weak" size="medium" disabled={busy} onClick={askNotification}>
             알림 받기
@@ -1615,6 +1598,18 @@ export function Home({
           <section style={sectionStyle}>
             <SectionTitle style={{ marginBottom: 10, paddingBottom: 9, borderBottom: SECTION_RULE }}>무엇을 공부할까요?</SectionTitle>
             <BookCarousel books={studyBooks} selectedId={studySelectedId} onSelect={onSelectStudyBook} />
+            {/* 고른 책의 회당 시간 손잡이 — 시작 전에 정하라고 강요하지 않는다(없으면 스톱워치). */}
+            {goalHandleBook !== null && (
+              <Button
+                display="block"
+                variant="weak"
+                size="small"
+                style={{ marginTop: 12 }}
+                onClick={() => openGoalSheet(goalHandleBook)}
+              >
+                {sessionGoalHandleLabel(goalHandleBook.sessionGoalSeconds)}
+              </Button>
+            )}
           </section>
         )
       ) : dashboard.hasActiveSession ? (
@@ -1637,6 +1632,16 @@ export function Home({
       {/* 잔디 미리보기가 서 있던 자리는 피드 박스가 통째로 쓴다 — 기록(잔디·연속일·총 시간)은 기록 탭이
           이미 전부 그리고 그 탭은 하단 탭바에서 한 번에 닿으므로, 홈에 진입 손잡이를 또 두지 않는다. */}
       <HomeFeedBox onError={onError} onOpenMargin={onOpenMargin} />
+
+      {goalSheetBook !== null && (
+        <SessionGoalSheet
+          book={goalSheetBook}
+          busy={goalSaving}
+          error={goalError}
+          onPick={(seconds) => pickSessionGoal(goalSheetBook, seconds)}
+          onClose={() => setGoalSheetBook(null)}
+        />
+      )}
     </Screen>
   );
 }
