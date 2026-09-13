@@ -5,11 +5,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseBody;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.server.ResponseStatusException;
@@ -26,6 +26,12 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
  * <p>단, <b>상태코드를 스스로 들고 오는 예외(404 {@code NoResourceFoundException} 등)는 그 코드를
  * 보존</b>한다. 안 그러면 catch-all {@code Exception} 핸들러가 404를 500으로 삼켜
  * {@code error} 로그를 도배한다({@code /favicon.ico} 매 요청마다).
+ *
+ * <p>그 보존은 <b>타입 목록이 아니라 성질로</b> 한다 — 목록 방식은 404 → 405 → 415·400으로 세 번 같은 꼴의
+ * 구멍이 났다(잘못된 JSON 바디·{@code text/plain}이 500 + {@code error} 로그가 됐다). 그래서 catch-all도
+ * 4xx를 들고 온 {@link ErrorResponse}는 상태를 보존하고, {@code ErrorResponse}가 아닌 바디 파싱 실패
+ * ({@code HttpMessageNotReadableException})는 명시적으로 400이다. 응답 형태는 그대로 error 뷰 + 상태코드다
+ * ({@code /api/**}도 404·405와 같은 규약).
  *
  * <p>보안 예외(인증/인가)는 필터 단계({@code ExceptionTranslationFilter})에서 처리되어 여기로 오지
  * 않으므로, 로그인 리다이렉트·403 흐름에는 영향을 주지 않는다.
@@ -50,9 +56,12 @@ public class GlobalExceptionHandler {
      * {@code debug}로만 남긴다. 더 구체적인 예외 타입이라 아래 {@code Exception} 핸들러보다 우선한다.
      */
     @ExceptionHandler({ResponseStatusException.class, NoResourceFoundException.class,
-            HttpRequestMethodNotSupportedException.class})
+            HttpRequestMethodNotSupportedException.class, HttpMessageNotReadableException.class})
     public String handleStatusException(Exception ex, Model model, HttpServletResponse response) {
-        int status = ((ErrorResponse) ex).getStatusCode().value();
+        // 바디 파싱 실패(누락·깨진 JSON·타입 불일치)는 ErrorResponse가 아니라 상태를 안 들고 온다 — 400으로 못 박는다.
+        int status = ex instanceof ErrorResponse er
+                ? er.getStatusCode().value()
+                : HttpStatus.BAD_REQUEST.value();
         response.setStatus(status);
         log.debug("상태 예외 — {} 보존하여 error 뷰로 응답: {}", status, ex.getMessage());
         model.addAttribute("status", status);
@@ -80,9 +89,18 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body("사진은 3MB 이하로 올려 주세요");
     }
 
+    /**
+     * 나머지 전부 — 단, <b>4xx를 들고 온 {@link ErrorResponse}</b>(415 {@code HttpMediaTypeNotSupportedException} 등
+     * 위 목록에 없는 프레임워크 예외)는 여기서도 상태를 보존한다. 5xx {@code ErrorResponse}는 서버 결함 신호라
+     * 그대로 500 + {@code error} 로그다. {@code @ResponseStatus}를 쓰지 않는 이유: 그 애너테이션은 핸들러가
+     * 돌고 난 뒤 상태를 덮어써 보존 분기의 상태코드를 500으로 되돌린다.
+     */
     @ExceptionHandler(Exception.class)
-    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    public String handleUnexpected(Exception ex, Model model) {
+    public String handleUnexpected(Exception ex, Model model, HttpServletResponse response) {
+        if (ex instanceof ErrorResponse er && er.getStatusCode().is4xxClientError()) {
+            return handleStatusException(ex, model, response);
+        }
+        response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value());
         log.error("처리되지 않은 예외 — error 뷰로 응답", ex);
         model.addAttribute("status", 500);
         model.addAttribute("message", "예상치 못한 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
