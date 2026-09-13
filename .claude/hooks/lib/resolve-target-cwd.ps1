@@ -69,8 +69,23 @@ function Resolve-HookTargetCwd([string]$Command, [string]$SessionCwd, [string]$V
     }
 }
 
+function Write-StderrUtf8([string]$Text) {
+    # stderr 에 **원바이트 UTF-8** 을 직접 쓴다 — [Console]::Error.WriteLine 은 콘솔 출력
+    # 인코딩(한국어 Windows = CP949)을 거쳐 한글이 모지바케로 나온다(2026-09-13 Git Bash 실측:
+    # 「이 브랜치는」이 「�� �귣ġ��」로). 글로벌 hookify-runner.ps1 이 쓰는 패턴.
+    # 쓰기 실패는 삼키기만 하고 **종료코드는 부르는 쪽이 정한다** — 게이트는 메시지를 못 써도
+    # 차단을 유지해야 한다(여기서 exit 0 하면 가드가 조용히 통과한다).
+    try {
+        $es    = [Console]::OpenStandardError()
+        $bytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes($Text + "`n")
+        $es.Write($bytes, 0, $bytes.Length)
+        $es.Flush()
+    } catch { }
+}
+
 function Stop-UnresolvedTarget([string]$Verb) {
-    # 훅 stderr 는 영문(ASCII) — 한글이 깨진다(block-main-push.ps1 참조)
+    # 이 메시지는 영문이라 WriteLine 으로도 안 깨진다. 한글을 쓸 땐 위 Write-StderrUtf8 을
+    # 쓴다(require-single-changelog-commit-before-rebase.ps1 참조).
     [Console]::Error.WriteLine(@"
 [BLOCKED] Cannot tell which repository this git $Verb runs in (T-242).
 

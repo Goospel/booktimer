@@ -75,5 +75,7 @@ $list
 
 예외로 통과시키려면 명령에 ALLOW_CHANGELOG_DUP 토큰을 포함하세요.
 "@
-[Console]::Error.WriteLine($blockMsg)
+# 한글 메시지는 원바이트 UTF-8 로 직접 쓴다(lib\resolve-target-cwd.ps1 의 Write-StderrUtf8) —
+# WriteLine 은 콘솔 인코딩(CP949)을 거쳐 한글이 모지바케가 된다. 쓰기 실패해도 exit 2 유지.
+Write-StderrUtf8 $blockMsg
 exit 2
