@@ -285,6 +285,21 @@ class FlywayMigrationTest {
                 .isEqualTo("YES");
     }
 
+    /**
+     * V91 — 회당 시간 푸시 스케줄러가 분마다 {@code ended_at is null}로 공부 세션을 훑는다. 엔티티엔 인덱스
+     * 선언이 없어 메인 스위트로는 안 보이고, 운영에 V91이 들어간 뒤엔 V91 안에서 못 고친다.
+     */
+    @Test
+    void v91_indexes_study_session_ended_at() {
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.INDEX_COLUMNS
+                WHERE UPPER(TABLE_NAME) = 'STUDY_SESSION' AND UPPER(COLUMN_NAME) = 'ENDED_AT'
+                  AND ORDINAL_POSITION = 1
+                """, Integer.class))
+                .as("ended_at이 선두 컬럼인 인덱스가 있어야 분당 후보 조회·방치 스윕이 풀스캔을 피한다")
+                .isPositive();
+    }
+
     // ── 토스 미니앱(V61) — users.toss_user_key 유니크 + api_token·toss_link_code 스키마↔엔티티 일치 ──
 
     @Test

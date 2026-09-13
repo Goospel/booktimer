@@ -5,7 +5,6 @@ import com.booktimer.toss.TossMessengerClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -49,8 +48,18 @@ public class StudyGoalPushService {
         this.clock = clock;
     }
 
-    /** ponytail: 배치 전체가 한 트랜잭션 — 활성 세션이 두 자리 규모라 충분하다. 커지면 per-session 트랜잭션으로. */
-    @Transactional
+    /**
+     * 닿은 세션에 발송하고 마킹한다(스케줄러가 분마다 호출).
+     *
+     * <p><b>배치 트랜잭션이 없다</b>: 후보 조회는 트랜잭션 밖(fetch join된 book·user의 단순 필드만 읽는다),
+     * 발송(HTTP)도 밖, 마킹만 세션마다 자기 트랜잭션에서 즉시 커밋한다. 한 트랜잭션으로 묶으면 ① 마킹 UPDATE의
+     * 행 락이 뒤 세션들의 발송 동안 잡혀 그 사용자의 stop·책 교체가 기다리고 ② 마킹 하나의 DB 예외가 롤백 전용
+     * 표시를 남겨 이미 발송한 세션들의 마킹까지 롤백돼 다음 틱에 재발송된다.
+     *
+     * <p><b>알려진 한계</b>: {@code changeActiveBook}은 엔티티 save(전 컬럼 UPDATE)라, 그 요청이 마킹 커밋 <b>직전에</b>
+     * 행을 읽고 직후에 커밋하면 {@code goal_notified_at}이 null로 돌아가 다음 틱(GRACE 안)에 한 통 더 갈 수 있다.
+     * 창은 그 요청의 수 ms다. {@code @DynamicUpdate}는 파급이 넓어 도입하지 않았다(stop은 세션이 끝나 무해).
+     */
     public void detectAndPush() {
         String code = properties.getMessenger().getStudyGoalTemplateCode();
         if (code == null || code.isBlank() || client.isEmpty()) {

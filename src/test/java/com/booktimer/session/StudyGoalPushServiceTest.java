@@ -15,6 +15,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -101,6 +102,7 @@ class StudyGoalPushServiceTest {
     @Autowired UserRepository userRepository;
     @Autowired TossProperties tossProperties;
     @Autowired PlatformTransactionManager transactionManager;
+    @Autowired JdbcTemplate jdbcTemplate;
     @Autowired Clock clock;
 
     @MockitoBean TossMessengerClient messengerClient;
@@ -194,7 +196,7 @@ class StudyGoalPushServiceTest {
 
         pushService.detectAndPush();
 
-        verify(messengerClient, never()).sendMessage(anyString(), anyString(), any());
+        verify(messengerClient, never()).sendMessage(any(), any(), any());
     }
 
     @Test
@@ -207,7 +209,7 @@ class StudyGoalPushServiceTest {
 
         pushService.detectAndPush();
 
-        verify(messengerClient, never()).sendMessage(anyString(), anyString(), any());
+        verify(messengerClient, never()).sendMessage(any(), any(), any());
     }
 
     @Test
@@ -218,7 +220,7 @@ class StudyGoalPushServiceTest {
 
         pushService.detectAndPush();
 
-        verify(messengerClient, never()).sendMessage(anyString(), anyString(), any());
+        verify(messengerClient, never()).sendMessage(any(), any(), any());
         assertThat(notifiedAt(s)).isNull();
     }
 
@@ -269,7 +271,7 @@ class StudyGoalPushServiceTest {
             tossProperties.getMessenger().setStudyGoalTemplateCode(saved);
         }
 
-        verify(messengerClient, never()).sendMessage(anyString(), anyString(), any());
+        verify(messengerClient, never()).sendMessage(any(), any(), any());
         assertThat(notifiedAt(s)).isNull();
     }
 
@@ -347,6 +349,55 @@ class StudyGoalPushServiceTest {
                 sessionRepository.deleteByUser(u);
                 bookRepository.deleteById(b.getId());
                 userRepository.deleteById(u.getId());
+            });
+        }
+    }
+
+    /**
+     * 마킹 격리 — 한 세션의 마킹이 DB 예외로 실패해도, 먼저 성공한 다른 세션의 마킹은 커밋돼 남는다.
+     * 배치 전체가 한 트랜잭션이면 실패한 마킹이 롤백 전용 표시를 남겨 <b>이미 발송한 세션들의 마킹까지</b> 롤백되고,
+     * 다음 틱에 그 사람들에게 재발송된다.
+     *
+     * <p>예외는 그 세션 행만 막는 CHECK 제약으로 주입한다. 행 락 타임아웃은 쓰지 않는다 — JPA 규약상
+     * {@code LockTimeoutException}은 트랜잭션에 롤백 표시를 남기지 않아, 단일 트랜잭션 코드에서도 이 테스트가
+     * 통과했다(판별력 없음 실측). 제약과 커밋된 행은 직접 지운다.
+     */
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    @DisplayName("한 세션 마킹이 DB 예외로 실패해도 다른 세션의 마킹은 커밋돼 남는다(H2 통합)")
+    void markFailureOnOneSession_keepsOtherSessionsMarked() throws Exception {
+        TransactionTemplate tx = new TransactionTemplate(transactionManager);
+        User okUser = tx.execute(st -> user("sg13-ok@booktimer.com", true));
+        User lockedUser = tx.execute(st -> user("sg13-locked@booktimer.com", true));
+        StudyBook okBook = tx.execute(st -> book(okUser, GOAL));
+        StudyBook lockedBook = tx.execute(st -> book(lockedUser, GOAL));
+        StudySession ok = tx.execute(st -> active(okUser, okBook, NOW.minusSeconds(51 * 60)));
+        StudySession locked = tx.execute(st -> active(lockedUser, lockedBook, NOW.minusSeconds(51 * 60)));
+
+        RuntimeException thrown = null;
+        try {
+            when(messengerClient.sendMessage(any(), any(), any())).thenReturn(true);
+            jdbcTemplate.execute("alter table study_session add constraint chk_sg13_mark_fails check ("
+                    + "goal_notified_at is null or id <> " + locked.getId() + ")");
+
+            try {
+                pushService.detectAndPush();
+            } catch (RuntimeException e) {
+                thrown = e;
+            }
+
+            assertThat(notifiedAt(ok)).as("먼저 성공한 세션의 마킹은 커밋돼야 한다").isEqualTo(NOW);
+            assertThat(notifiedAt(locked)).isNull();
+            assertThat(thrown).as("배치는 세션별 실패를 삼킨다").isNull();
+        } finally {
+            jdbcTemplate.execute("alter table study_session drop constraint if exists chk_sg13_mark_fails");
+            tx.executeWithoutResult(st -> {
+                sessionRepository.deleteByUser(okUser);
+                sessionRepository.deleteByUser(lockedUser);
+                bookRepository.deleteById(okBook.getId());
+                bookRepository.deleteById(lockedBook.getId());
+                userRepository.deleteById(okUser.getId());
+                userRepository.deleteById(lockedUser.getId());
             });
         }
     }

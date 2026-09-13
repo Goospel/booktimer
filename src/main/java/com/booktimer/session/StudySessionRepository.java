@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
@@ -84,7 +85,12 @@ public interface StudySessionRepository extends JpaRepository<StudySession, Long
     /**
      * 푸시 발송 마킹 — <b>컬럼 하나만</b> 쓴다. 엔티티 save(전 컬럼 UPDATE)는 스케줄러가 로드한 뒤 커밋된
      * {@code stop}의 {@code endedAt}을 null로 덮어 측정을 되살린다.
+     *
+     * <p>{@code @Transactional}인 이유는 호출부({@link StudyGoalPushService})가 <b>트랜잭션 밖</b>이기 때문이다 —
+     * 세션마다 즉시 커밋해야 행 락이 뒤 세션들의 발송(HTTP) 동안 잡혀 있지 않고, 한 세션의 마킹 실패가 이미
+     * 발송한 다른 세션들의 마킹을 롤백시키지 않는다({@code StudyAiUsageRepository.consume}과 같은 규율).
      */
+    @Transactional
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update StudySession s set s.goalNotifiedAt = :now where s.id = :id and s.goalNotifiedAt is null")
     int markGoalNotified(@Param("id") Long id, @Param("now") Instant now);
