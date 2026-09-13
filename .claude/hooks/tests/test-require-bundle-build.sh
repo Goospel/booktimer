@@ -135,4 +135,9 @@ git -C "$REPO_STALE" add frontend/ >/dev/null 2>&1
 got=$(run_cmd "git commit -m \"feat: bundle stale\"" "$W_STALE")
 check "(fixture) frontend staged + bundle stale → exit 2" 2 "$got"
 
+# Case 7: same stale repo, Korean right before the closing quote → still exit 2 (stdin UTF-8)
+# (REPO_STALE stays stale: worktree garden.js differs from the index after Case 6.)
+got=$(run_cmd "git commit -F .commit-msg-tmp # 테스트" "$W_STALE")
+check "(fixture) bundle stale + Korean in command → exit 2" 2 "$got"
+
 exit $FAILED
