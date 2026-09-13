@@ -329,6 +329,38 @@ describe('StudyTimerCard — 회당 시간 인라인 폼', () => {
     });
 });
 
+// 폼 위치 — 실브라우저 실측(2026-09-13): 폼이 좌열에 열려 넓은 화면에선 손잡이와 ≈650px 떨어지고,
+// 좁은 화면에선 한 열로 쌓이며 폼이 손잡이 **위**에 끼어들어 방금 누른 손잡이를 113px 밀어냈다.
+// 그래서 「손잡이 바로 뒤 형제」라는 구조로 잠근다(좌표는 jsdom이 못 잰다).
+describe('StudyTimerCard — 회당 시간 폼 위치', () => {
+    test('대기: 폼은 우측 패널 안, 칩 아래 손잡이 줄 바로 뒤에 열린다 — 좌열엔 없다', async () => {
+        const w = mountCard({ books: [STUDY_BOOK(5, '헌법', 3000)], recentBookId: 5 });
+        await btn(w, '변경')!.trigger('click');
+
+        const form = w.find('form.dash-goal-edit');
+        expect(form.exists()).toBe(true);
+        expect(w.find('.dash-timer-right form.dash-goal-edit').exists()).toBe(true);
+        expect(w.find('.dash-timer-left form.dash-goal-edit').exists()).toBe(false);
+        expect(form.element.previousElementSibling).toBe(w.find('.dash-session-goal').element);
+    });
+
+    test('측정 중: 폼은 「회당 시간 변경」 버튼 바로 뒤에 열린다 — 좌열엔 없다', async () => {
+        const w = mountCard({
+            hasActiveSession: true, activeStartedAt: new Date(Date.now() - 600_000).toISOString(),
+            books: [STUDY_BOOK(5, '헌법', 3000)], activeBook: STUDY_BOOK(5, '헌법', 3000),
+        });
+        const handle = btn(w, '회당 시간 변경')!;
+        await handle.trigger('click');
+
+        const form = w.find('form.dash-goal-edit');
+        expect(form.exists()).toBe(true);
+        expect(w.find('.dash-timer-left form.dash-goal-edit').exists()).toBe(false);
+        expect(form.element.previousElementSibling).toBe(handle.element);
+        // 손잡이는 폼을 여는 동안에도 제자리에 남는다(숨기면 그 자리가 빠지며 레이아웃이 튄다).
+        expect(btn(w, '회당 시간 변경')).toBeDefined();
+    });
+});
+
 describe('StudyTimerCard — 회당 시간(측정 중)', () => {
     const measuring = (minutesAgo: number, activeBook: unknown) => mountCard({
         hasActiveSession: true, activeStartedAt: new Date(Date.now() - minutesAgo * 60_000).toISOString(),
