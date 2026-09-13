@@ -5,11 +5,14 @@ import com.booktimer.study.StudyAiAccessService;
 import com.booktimer.user.StudyAiAccess;
 import com.booktimer.user.User;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.nio.charset.StandardCharsets;
 import java.security.Principal;
 import java.time.Clock;
 import java.time.Instant;
@@ -53,6 +56,23 @@ public class StudyAiAccessApiController {
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<String> handleAlreadyRequested(IllegalStateException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body("이미 신청했거나 승인된 상태예요");
+    }
+
+    /**
+     * 403의 <b>한국어 사유를 본문으로</b> 돌려준다({@link StudyPlanApiController}와 같은 규약).
+     *
+     * <p>없으면 전역 처리기({@code GlobalExceptionHandler})가 {@code error.html}을 렌더해 HTML 문서 전체가
+     * 본문이 되고, 화면의 {@code errorMessage}는 「{@code <}로 시작하면 못 믿는다」 규칙으로 그걸 버려
+     * 폴백 문구만 남는다 — 「이메일 인증을 하면 된다」는 <b>행동할 수 있는</b> 사유가 사용자에게 안 닿는다.
+     *
+     * <p>{@code text/plain} + charset을 못 박는 이유도 그쪽과 같다: 협상에 맡기면 {@code Accept: text/html}
+     * 요청에서 {@code text/html}로 나가고, charset을 빼면 한글이 깨진다.
+     */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<String> handleStatus(ResponseStatusException e) {
+        return ResponseEntity.status(e.getStatusCode())
+                .contentType(new MediaType(MediaType.TEXT_PLAIN, StandardCharsets.UTF_8))
+                .body(e.getReason());
     }
 
     public record AccessState(StudyAiAccess aiAccess, Instant aiAccessAt) {

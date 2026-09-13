@@ -237,7 +237,7 @@ public class StudyPlanService {
 
     /** 오늘 남은 일정 생성 몫 — 화면이 버튼 옆에 그린다. */
     public int remainingPlan(User user) {
-        return usageService.remaining(user, StudyDates.today(user, clock), Kind.PLAN);
+        return usageService.remaining(user, clock.instant(), Kind.PLAN);
     }
 
     private static String requireSubject(String subject) {

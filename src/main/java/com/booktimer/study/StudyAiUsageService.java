@@ -15,6 +15,14 @@ import java.time.ZoneOffset;
 /**
  * AI 호출의 하루 상한 — 「선점 → 호출 → 실패하면 환불」의 선점·환불 쪽.
  *
+ * <p><b>날짜 키는 사용자당·전역 둘 다 UTC다</b>({@link #utcDay}) — <b>유저 타임존은 키로 쓸 수 없다</b>.
+ * 그 값은 사용자가 설정에서 제한 없이 바꿀 수 있어, 자정 근처에 UTC+14 같은 「이미 내일」인 존으로 옮기면
+ * 새 날짜 행이 생겨 그 날 몫이 두 배가 된다(보안 리뷰 2026-09-08 S-3, 회귀 테스트
+ * {@code StudyAiUsageServiceTest#timezoneChangeDoesNotResetTheShare}). 전역 상한은 처음부터 UTC였고,
+ * 사용자당 상한도 2026-09-13에 UTC로 통일했다 — 대가는 「오늘 남은 몫」이 유저 자정이 아니라 <b>UTC
+ * 자정(KST 09:00)</b>에 리셋되는 것이고, 우회 가능한 상한보다 그게 낫다. 달력·일정의 경계는 여전히
+ * 유저 타임존이다({@link StudyDates} — 그쪽은 사용자가 보는 날짜라 바뀌는 게 맞다).
+ *
  * <p><b>트랜잭션을 클래스에 두르지 않는다.</b> 호출부(분석)는 AI 호출을 트랜잭션 밖에 두려고
  * {@code SUPPORTS}로 도는데, 여기서 트랜잭션을 열어 감싸면 그 안에서 외부 호출을 기다리는 모양이 된다.
  * 대신 리포지터리 메서드마다 자기 트랜잭션이 붙어 있어(그쪽 javadoc) 각 문장이 즉시 커밋된다 —
@@ -57,8 +65,7 @@ public class StudyAiUsageService {
      * <b>전역</b> 하루 몫에서 한 번을 선점한다 — 사용자당 상한 위에 얹은 차단기.
      *
      * <p>흐름은 {@link #tryConsume}과 같다(UPDATE 먼저, 없으면 INSERT 후 다시 UPDATE). 다른 것은
-     * <b>날짜 키가 UTC</b>라는 점뿐이다: 사용자당 상한은 유저 타임존을 쓰는데 그 값은 사용자가 제한 없이
-     * 바꿀 수 있어, 같은 키를 쓰면 자정 근처에 타임존만 바꿔 전역 몫을 두 배로 쓸 수 있다.
+     * 사용자가 없다는 점뿐이다 — <b>날짜 키는 이제 양쪽 다 UTC</b>다(클래스 javadoc의 S-3).
      *
      * <p><b>호출 순서는 사용자 몫 다음이다.</b> 전역을 먼저 두면 「내 하루 4번째 요청」 같은 흔한 거절이
      * 매번 이 카운터를 올렸다 되돌린다 — 뒤에 두면 이 수가 「실제로 호출까지 갔을 요청」을 뜻하게 되고,
@@ -92,7 +99,7 @@ public class StudyAiUsageService {
         dailyTotalRepository.refund(utcDay(now));
     }
 
-    /** 전역 카운터의 날짜 키 — <b>UTC</b>다(위 경고 참조). */
+    /** 하루 상한의 날짜 키 — 사용자당·전역 <b>둘 다 UTC</b>다(클래스 javadoc의 S-3). */
     private static LocalDate utcDay(Instant now) {
         return LocalDate.ofInstant(now, ZoneOffset.UTC);
     }
@@ -107,9 +114,12 @@ public class StudyAiUsageService {
      *
      * <p>순서는 <b>사용자 몫이 먼저</b>다({@link #tryConsumeGlobal}의 javadoc 참조). 전역에서 막히면
      * 사용자 몫을 되돌린다 — 서비스 전체 사정으로 개인이 자기 몫을 잃으면 안 된다.
+     *
+     * <p>두 몫의 날짜 키가 <b>같은 {@link #utcDay}</b>인 것이 요점이다 — 사용자당 키만 유저 타임존이면
+     * 자정 근처에 존을 바꿔 몫을 두 배로 쓸 수 있었다(클래스 javadoc의 S-3).
      */
     public Grant tryConsumeBoth(User user, Instant now, Kind kind) {
-        LocalDate today = StudyDates.today(user, now);
+        LocalDate today = utcDay(now);
         if (!tryConsume(user, today, kind)) {
             return Grant.USER_EXHAUSTED;
         }
@@ -123,7 +133,7 @@ public class StudyAiUsageService {
 
     /** 두 몫을 한 번에 되돌린다 — {@link #tryConsumeBoth}의 짝. 외부 호출이 실패했을 때만 부른다. */
     public void refundBoth(User user, Instant now, Kind kind) {
-        refund(user, StudyDates.today(user, now), kind);
+        refund(user, utcDay(now), kind);
         refundGlobal(now);
     }
 
@@ -169,6 +179,17 @@ public class StudyAiUsageService {
      */
     public void refund(User user, LocalDate day, Kind kind) {
         usageRepository.refund(user, day, kind);
+    }
+
+    /**
+     * 오늘 남은 몫 — 시각을 받는 쪽. <b>호출부는 이걸 쓴다.</b>
+     *
+     * <p>날짜 키를 소진·환불과 <b>같은 규칙</b>으로 고정하기 위해 있다. 아래 오버로드에 유저 타임존 날짜를
+     * 넣으면 「남은 몫은 2인데 쓰면 거절」 같은 어긋남이 자정 근처에 난다 — 키 계산이 두 곳에 있으면
+     * 언젠가 갈린다(S-3).
+     */
+    public int remaining(User user, Instant now, Kind kind) {
+        return remaining(user, utcDay(now), kind);
     }
 
     /** 오늘 남은 몫 — 화면이 버튼 옆에 그린다. 행이 없으면 아직 아무것도 안 쓴 것이다. */

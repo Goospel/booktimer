@@ -295,12 +295,12 @@ public class StudyRecallService {
 
     /** 오늘 남은 분석 몫 — 화면이 버튼 옆에 그린다. */
     public int remainingAnalyze(User user) {
-        return usageService.remaining(user, StudyDates.today(user, clock), Kind.ANALYZE);
+        return usageService.remaining(user, clock.instant(), Kind.ANALYZE);
     }
 
     /** 오늘 남은 전사 몫 — 화면이 「읽어 오기 (N회 남음)」을 그리고 0이면 버튼을 잠근다. */
     public int remainingTranscribe(User user) {
-        return usageService.remaining(user, StudyDates.today(user, clock), Kind.TRANSCRIBE);
+        return usageService.remaining(user, clock.instant(), Kind.TRANSCRIBE);
     }
 
     /**
