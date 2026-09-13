@@ -1,6 +1,7 @@
 package com.booktimer.book;
 
 import com.booktimer.common.BaseTimeEntity;
+import com.booktimer.session.ReadingSessionService;
 import com.booktimer.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -62,6 +63,20 @@ public class StudyBook extends BaseTimeEntity {
     @Column(nullable = false)
     private int readCount = 0;
 
+    /**
+     * 회당 시간(초) — 이 책으로 한 번 앉을 때 공부할 시간. null = 안 정함(스톱워치). 정하면
+     * {@value #MIN_SESSION_GOAL_SECONDS} 이상 측정 상한 이하다({@link #validateSessionGoal}).
+     */
+    @Column(name = "session_goal_seconds")
+    private Integer sessionGoalSeconds;
+
+    /** 회당 시간 하한 — 1분. 0은 「해제」가 아니다(해제는 null). */
+    public static final int MIN_SESSION_GOAL_SECONDS = 60;
+
+    /** 회당 시간 상한 — 측정 상한(6시간)과 같다. 그보다 긴 회당 시간은 한 측정으로 닿을 수 없다. */
+    public static final int MAX_SESSION_GOAL_SECONDS =
+            (int) ReadingSessionService.MAX_SESSION_DURATION.toSeconds();
+
     protected StudyBook() {
         // JPA
     }
@@ -108,6 +123,27 @@ public class StudyBook extends BaseTimeEntity {
         this.readCount = readCount;
     }
 
+    /**
+     * 회당 시간을 정하거나(초) 해제한다(null).
+     *
+     * @throws IllegalArgumentException 범위 밖인 경우({@link #validateSessionGoal})
+     */
+    public void changeSessionGoal(Integer seconds) {
+        validateSessionGoal(seconds);
+        this.sessionGoalSeconds = seconds;
+    }
+
+    /**
+     * 회당 시간 값 규칙 — null 허용, 아니면 60 ≤ v ≤ 21600. 문(컨트롤러)이 <b>소유권 조회보다 먼저</b>
+     * 부를 수 있게 static으로 뺐다(남의 책 id로 400/404를 갈라 존재를 캐낼 창을 막는다).
+     * 메시지는 400 본문으로 화면에 뜨므로 한국어 완성문이다.
+     */
+    public static void validateSessionGoal(Integer seconds) {
+        if (seconds != null && (seconds < MIN_SESSION_GOAL_SECONDS || seconds > MAX_SESSION_GOAL_SECONDS)) {
+            throw new IllegalArgumentException("회당 시간은 1분에서 6시간 사이로 정해 주세요");
+        }
+    }
+
     public Long getId() {
         return id;
     }
@@ -142,5 +178,9 @@ public class StudyBook extends BaseTimeEntity {
 
     public int getReadCount() {
         return readCount;
+    }
+
+    public Integer getSessionGoalSeconds() {
+        return sessionGoalSeconds;
     }
 }
