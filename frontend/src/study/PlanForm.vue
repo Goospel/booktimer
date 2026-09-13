@@ -160,7 +160,7 @@ async function onApply(): Promise<void> {
         <p v-if="error" class="status-line study-error" data-testid="plan-error">{{ error }}</p>
         <p v-else-if="notice" class="status-line muted" data-testid="plan-notice">{{ notice }}</p>
         <p v-else-if="capSpent" class="status-line muted" data-testid="plan-cap-spent">
-            오늘 몫을 다 썼어요 — 내일 다시 해 주세요.
+            오늘 몫을 다 썼어요 — 한국 시간 오전 9시에 다시 채워져요.
         </p>
 
         <button
