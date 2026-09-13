@@ -4445,8 +4445,23 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
         실소유자의 구글 로그인이 그 계정에 들어감. 섞임이 사라지는 이유는 **옛 흡수가 선점자의 `toss_user_key`가
         붙은 계정을 피해자에게 넘겼기** 때문이고(선점자는 이후에도 `login(userKey)`로 들어온다), 재배정은 그 계정을
         선점자 쪽에 둔다. 재배정된 사용자는 미니앱을 그대로 쓰고 웹 이메일 경로만 합성 주소가 된다(원래 미검증이라
-        메일이 안 가던 주소). ⚠️ 잔여: 토스를 연결한 **미검증 LOCAL** 계정은 여전히 purge 대상이라 그 사용자의
-        미니앱 기록까지 삭제된다(선재 동작, 범위 밖).
+        메일이 안 가던 주소). ✅ **닫힘 2026-09-12**: 옛 잔여(「토스를 연결한 **미검증 LOCAL** 계정은 여전히 purge
+        대상」)를 후속 PR이 닫았다 — 분기 기준을 provider에서 **「TOSS 가입 또는 토스를 연결한 LOCAL」**로 바꿨다
+        (미검증 GOOGLE+키는 흡수 유지 — 현재 도달 불가지만 미래 경로가 생겨도 정당한 구글 사용자를 분리하지 않는다).
+        웹 LOCAL 사용자는 loginId+비밀번호로 로그인하므로 이메일이 합성 주소가 돼도 웹 로그인은 그대로다.
+        신설 2건(단위 `WantedButNotInvoked` · 통합 `NoSuchElementException` = 계정이 삭제됨).
+  - ⚠️ **리뷰가 잡은 거짓 전제 — 「미검증이라 원래 메일이 가지 않던 주소」는 LOCAL에 틀렸다**: `SignupController`는
+        가입 직후 인증 메일을 보내고 `PasswordResetService`는 `isLocalAccount()`만 보고 `emailVerified`를 안 봐서
+        미검증 LOCAL도 재설정 메일을 받아 왔다. 그래서 **재배정된 LOCAL 사용자는 실제 이메일로 비밀번호 재설정을
+        못 받는다**(`findByEmail`이 새 구글 계정을 집어 조용히 무발송) — **수용한 트레이드오프**다: 계정 접근은
+        loginId+비밀번호 웹 로그인과 미니앱 토스 로그인→웹 로그인 코드(`TossCodeLoginController`)로 살아 있고,
+        기록이 통째로 사라지는 폐기보다 낫다. 주석·changelog를 사실대로 고쳤다.
+  - 🔒 **리뷰가 잡은 토큰 구멍**: 재배정 **전**에 발급된 VERIFICATION 토큰을 재배정 **후** 클릭하면
+        `EmailVerificationService.verify`가 이메일 일치 확인 없이 `verifyEmail()`을 불러 **합성 주소가 검증됨**이 되고
+        라우팅 불가 주소가 넛지 대상에 들어갔다. `reassignUnverifiedTossEmail`에 `emailTokenRepository.deleteByUser`
+        한 줄(purge가 쓰는 같은 메서드)을 세션 무효화 다음·이메일 변경 전에 넣었다. RED `WantedButNotInvoked` → 초록.
+  - 🔜 **후속**: 합성 주소 계정엔 설정 화면의 「인증 메일 다시 받기」 배너를 숨기거나 발송을 막는다(#1105부터 있던
+        선재 동작 — 합성 주소로 발송·반송된다. 이번 범위 밖).
   - ⚠️ **최종 리뷰가 Critical을 프로브로 잡았다 — 재배정이 세션을 안 끊어 반쪽이었다**: 미니앱 `issueWebLoginCode`는
         온보딩 전에도 세션을 만들고 그 principal이 **피해자 이메일**이라(`loginId != null ? loginId : email`),
         이메일만 바꾸면 그 30일 세션이 `findByEmail` 폴백으로 **새 구글 계정**에 해석됐다(실측 `resolvedId=victim`).

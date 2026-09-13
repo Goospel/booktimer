@@ -1,5 +1,8 @@
 package com.booktimer.user;
 
+import com.booktimer.book.Book;
+import com.booktimer.book.BookRepository;
+import com.booktimer.book.BookStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +28,8 @@ class OAuthPreHijackingIntegrationTest {
     @Autowired
     private UserRepository userRepository;
     @Autowired
+    private BookRepository bookRepository;
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Test
@@ -49,6 +54,34 @@ class OAuthPreHijackingIntegrationTest {
     }
 
     @Test
+    @DisplayName("토스를 연결한 미검증 LOCAL 계정은 폐기되지 않고 이메일만 재배정되며, 그 사용자의 기록이 남는다")
+    void unverifiedLocalLinkedToToss_isReassigned_recordsSurvive() {
+        String email = "linked@booktimer.com";
+        User linked = localUnverified(email);
+        linked.linkTossUserKey("UKlocal-01");
+        User saved = userRepository.saveAndFlush(linked);
+        Long savedId = saved.getId();
+        bookRepository.saveAndFlush(
+                Book.register(saved, "미니앱에서 읽던 책", null, null, null, null, null, BookStatus.READING));
+
+        User result = provisioningService.provision(email, "진짜주인", true);
+
+        // 새 구글 계정이 그 이메일을 가진다
+        assertThat(result.getAuthProvider()).isEqualTo(AuthProvider.GOOGLE);
+        assertThat(result.getId()).isNotEqualTo(savedId);
+        assertThat(userRepository.findByEmail(email)).get()
+                .extracting(User::getAuthProvider).isEqualTo(AuthProvider.GOOGLE);
+        // 선점 계정은 살아 있고 웹 로그인 수단·토스 연결이 그대로다 — 이메일만 비켜났다
+        User survivor = userRepository.findById(savedId).orElseThrow();
+        assertThat(survivor.getEmail()).isEqualTo("toss-uklocal01@noreply.booktimer.app");
+        assertThat(survivor.getAuthProvider()).isEqualTo(AuthProvider.LOCAL);
+        assertThat(survivor.getPasswordHash()).isNotNull();
+        assertThat(survivor.getLoginId()).isEqualTo("squatter");
+        assertThat(survivor.getTossUserKey()).isEqualTo("UKlocal-01");
+        assertThat(bookRepository.countByUser(survivor)).isEqualTo(1); // 기록 보존
+    }
+
+    @Test
     @DisplayName("검증된 LOCAL 계정은 폐기되지 않고 그대로 연결된다(정당한 소유자)")
     void verifiedLocalAccount_isLinkedNotReplaced() {
         String email = "owner@booktimer.com";
@@ -63,7 +96,7 @@ class OAuthPreHijackingIntegrationTest {
     }
 
     @Test
-    @DisplayName("미검증 TOSS 계정과 이메일이 겹치면 합성 주소로 재배정되고, 두 계정이 uk_users_email 위반 없이 공존한다")
+    @DisplayName("미검증 TOSS 계정은 폐기되지 않고 이메일만 합성 주소로 비켜나며, 두 계정이 uk_users_email 위반 없이 공존한다")
     void unverifiedTossAccount_isReassignedToSynthetic_andBothCoexist() {
         String email = "tossvictim@booktimer.com";
         // 토스 프로필에 남의 이메일을 적어 미니앱으로 먼저 가입한 계정(미검증 — 토스는 소유를 보증하지 않는다)
