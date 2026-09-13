@@ -64,18 +64,17 @@ public class StudyPlanService {
     public static final int SCOPE_MAX = 4000;
 
     /**
-     * 한 번에 만들 수 있는 <b>예상 항목 수</b>의 상한 — 지연에서 역산한 값이다.
+     * 한 번에 만들 수 있는 <b>예상 항목 수</b>의 상한 — 원래 지연에서 역산한 값이었다.
      *
-     * <p>실측 회귀식이 {@code ms ≈ 9,200 + 6.29 × 출력토큰}이고 항목 하나가 약 134토큰이라, 항목 수
-     * {@code n}에 대해 대략 {@code ms ≈ 9,200 + 843n}이다(2026-09-03 실측 2점: 79항목 75.7초 · 15항목
-     * 28.9초). 90항목이면 약 85초로 클라이언트 타임아웃 90초 <b>바로 아래</b>다 — 여유가 5초뿐이라
-     * 넉넉하지 않지만, 더 줄이면 3개월·주 5일(약 65항목)이라는 주 사용례의 바로 옆까지 좁아진다.
-     * 근본 해법은 상한이 아니라 스트리밍·비동기다(plan.md 🔜).
+     * <p>2026-09-03 Claude Sonnet 실측 회귀식({@code ms ≈ 9,200 + 843n}, 79항목 75.7초 · 15항목 28.9초)으로
+     * 90항목 ≈ 85초라 당시 서버 readTimeout 90초 바로 아래에 맞춘 값이다. 더 줄이면 3개월·주 5일(약 65항목)이라는
+     * 주 사용례의 바로 옆까지 좁아진다.
      *
-     * <p>⚠️ <b>위 회귀식은 Claude Sonnet 시절 값이라 지금은 근거가 아니다</b>(2026-09-08). 일정이
-     * {@link GeminiStudyPlanner}로 옮겨간 뒤 실측은 후보 91일에 <b>16~26초</b>였다 — 90항목이 85초가
-     * 아니라 30초 안쪽이다. 즉 이 상한은 지금 <b>지연이 아니라 관성으로</b> 서 있다. 올릴지는 제품
-     * 판단이라 그대로 두되, 재산정 없이 「85초라 아슬아슬하다」를 근거로 삼지 않는다.
+     * <p>⚠️ <b>그 회귀식은 지금 근거가 아니다</b>(2026-09-08). 일정이 {@link GeminiStudyPlanner}로 옮겨간 뒤
+     * 실측은 후보 91일에 <b>16~26초</b>라 90항목이 30초 안쪽이다. 스트리밍·비동기화는 2026-09-13에 설계까지 한 뒤
+     * 트리거(60초 초과)가 소멸해 접었다(plan.md 「스트리밍/비동기 호출」 항목 닫힘). 즉 이 상한은 지금
+     * <b>지연이 아니라 관성으로</b> 서 있다. 올릴지는 제품 판단이라 그대로 두되, 재산정 없이 「85초라
+     * 아슬아슬하다」를 근거로 삼지 않는다.
      *
      * <p><b>기간이 아니라 항목 수로 막는 이유</b>: {@link #MAX_EXAM_DAYS_AHEAD}를 줄이면 「1년 뒤 시험을
      * 주 1일로 준비」(52항목, 실제로는 빠르다)까지 함께 막힌다. 느리게 만드는 것은 기간이 아니라 출력량이다.
@@ -186,7 +185,7 @@ public class StudyPlanService {
      * @throws ResponseStatusException 403 미승인 · 429 오늘 몫 소진 · 503 AI 꺼짐·응답 없음 · 400 요청 거부
      * @throws IllegalArgumentException 입력 검증 위반(문구가 그대로 400 본문)
      */
-    @Transactional(propagation = Propagation.SUPPORTS) // 90초짜리 외부 호출을 트랜잭션 밖에 둔다
+    @Transactional(propagation = Propagation.SUPPORTS) // 외부 호출(Gemini 실측 16~26초, readTimeout 90초)을 트랜잭션 밖에 둔다
     public PlanDraft generate(User user, GenerateCommand command) {
         accessService.requireApproved(user); // ① 게이트가 가장 앞 — 검증·키·상한보다 먼저다
 
