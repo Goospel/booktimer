@@ -3007,7 +3007,7 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 }
 .study-count-actions { display: flex; gap: 6px; align-items: center; }
 
-/* 공부 하루 목표 — 히어로 인라인 편집(설계 §2.3-ⓑ). 전부 공부 카드 안 클래스라 독서엔 0줄이다.
+/* 공부 책별 회당 시간 — 히어로 인라인 편집(2026-09-13, 하루 목표 대체). 전부 공부 카드 안 클래스라 독서엔 0줄이다.
    전역 button{width:100%; padding:12px 18px; border-image:연필테}보다 특이성이 한 단 위(0,1,0 / 0,2,0)라
    여기 선언이 이긴다 — .dash-mode-toggle button이 쓰는 것과 같은 관용구(font:inherit 뒤에 font-size). */
 .dash-goal-change {
@@ -3015,8 +3015,11 @@ body.dashboard-page #dashboard-app { gap: 20px; }
     color: var(--accent-hover); font: inherit; font-size: 12.5px;
     text-decoration: underline; cursor: pointer;
 }
-/* .dash-bookless의 align-self:center를 좌열(=.dash-timer-left, flex column)에선 왼쪽 정렬로 되돌린다. */
-.dash-goal-set { align-self: flex-start; }
+/* 칩 아래 「회당 50분 · 변경」 줄 — 칩·「책 없이 시작」과 같은 가운데 축. */
+.dash-session-goal { align-self: center; font-size: 13px; color: var(--muted); }
+/* 닿으면 색만 바뀐다(애니메이션 없음) — 측정은 계속된다. */
+.dash-session-line.is-reached .dash-kv-k,
+.dash-session-line.is-reached .dash-kv-v { color: var(--ok); }
 .dash-goal-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 420px; }
 .dash-goal-edit input[type="number"] { width: 5.5em; }
 /* 전역 button{width:100%} 상쇄 — 한 줄에 나란히 세운다(보조 둘은 .dash-bookless가 이미 width:auto). */

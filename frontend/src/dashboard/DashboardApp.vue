@@ -31,9 +31,9 @@ const actionError = ref<string | null>(null)
 // 서버 왕복 동안 버튼에 "진행 중"을 표시해 멈칫을 의도된 피드백으로 보이게 + 중복 클릭(409) 방지
 const starting = ref(false)
 const stopping = ref(false)
-// 공부 목표 저장 왕복 — 히어로 편집 폼의 저장 버튼만 잠근다(측정 시작/종료와 무관한 별도 문).
+// 공부 회당 시간 저장 왕복 — 히어로 편집 폼의 저장 버튼만 잠근다(측정 시작/종료와 무관한 별도 문).
 // 왕복이 끝날 때까지 폼이 열려 있어야 이 잠금이 실제로 보인다 — 닫기는 성공 분기에서 카드에 알린다.
-const savingGoal = ref(false)
+const savingSessionGoal = ref(false)
 const studyCard = ref<{ closeEdit: () => void } | null>(null)
 
 // 타이머 상태 — start/stop 응답으로 부분 갱신
@@ -270,30 +270,29 @@ async function handleStudyStop() {
 }
 
 /**
- * 공부 하루 목표 — 히어로에서 바로 고친다(설계 §2.3-ⓑ). 독서는 /settings SSR 폼이지만 공부엔
- * 서버 폼이 없고, 설정 페이지의 「빠뜨린 날은 나중에 채워」 힌트가 공부엔 거짓이라 여기서 받는다.
- * seconds는 카드가 minutesToGoalSeconds로 이미 0 이상 정수 분에서 환산한 값이다(서버 400 방지).
- * 응답은 StudyState 그대로라 통째로 얹는다.
+ * 공부 책별 회당 시간 — 히어로에서 바로 정한다(2026-09-13 컨셉 전환, 하루 목표 대체).
+ * seconds는 카드가 minutesToSessionGoal로 환산한 값이고 null은 해제다. 범위 밖(60~21600초)은 서버가 400.
+ * 응답은 StudyState 그대로라 통째로 얹는다 — books·activeBook의 새 값이 손잡이·남은 시간으로 곧장 돈다.
  */
-async function handleStudyGoal(seconds: number) {
-    if (savingGoal.value) return
+async function handleSessionGoal(bookId: number, seconds: number | null) {
+    if (savingSessionGoal.value) return
     actionError.value = null
-    savingGoal.value = true
+    savingSessionGoal.value = true
     try {
-        const res = await fetch('/api/study/goal', {
+        const res = await fetch(`/api/study/books/${bookId}/session-goal`, {
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
-            body: JSON.stringify({ dailyGoalSeconds: seconds }),
+            body: JSON.stringify({ sessionGoalSeconds: seconds }),
         })
         // 실패면 폼을 열어 둔 채 둔다 — 사용자가 친 값이 살아 있어야 다시 누를 수 있다.
-        if (!res.ok) { actionError.value = '목표를 저장하지 못했어요'; return }
+        if (!res.ok) { actionError.value = '회당 시간을 저장하지 못했어요'; return }
         study.value = studyStateOf(await res.json())
         studyCard.value?.closeEdit()
     } catch {
         actionError.value = '네트워크 오류가 발생했습니다'
     } finally {
-        savingGoal.value = false
+        savingSessionGoal.value = false
     }
 }
 
@@ -477,18 +476,17 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
             :today-seconds="study.todaySeconds"
             :has-active-session="study.hasActiveSession"
             :active-started-at="study.activeStartedAt"
-            :goal-seconds="study.goalSeconds"
             :books="study.books"
             :recent-book-id="study.recentBookId"
             :picked-book="pickedStudyBook"
             :active-book="study.activeBook"
             :starting="starting"
             :stopping="stopping"
-            :saving-goal="savingGoal"
+            :saving-session-goal="savingSessionGoal"
             :changing="tagging"
             @start="handleStudyStart"
             @stop="handleStudyStop"
-            @set-goal="handleStudyGoal"
+            @set-session-goal="handleSessionGoal"
             @open-sheet="openStudySheet('start')"
             @change-book="openStudySheet('change')"
         >

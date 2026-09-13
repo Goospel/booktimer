@@ -52,13 +52,15 @@ export interface TimerState {
     recentBookId: number | null
 }
 
-/** `/api/dashboard`의 `study` 블록 — 서버 StudyState 8필드 전부. */
+/**
+ * `/api/dashboard`의 `study` 블록 — 화면이 쓰는 7필드. 서버가 아직 싣는 하루 목표(`goalSeconds`)는
+ * 2026-09-13 컨셉 전환으로 읽지 않는다(서버 필드는 PR-5에서 지운다). 회당 시간은 `StudyBookRow`에 있다.
+ */
 export interface StudyState {
     hasActiveSession: boolean
     activeStartedAt: string | null
     /** 오늘 공부한 초(완료 세션 합) — 진행 중 몫은 클라가 activeStartedAt으로 매초 얹는다(독서와 같은 분업). */
     todaySeconds: number
-    goalSeconds: number
     /** 측정 중인 책(없거나 「책 없이」면 null). */
     activeBook: StudyBookRow | null
     /** 마지막으로 책을 걸고 잰 책 — idle 기본 칩이 이걸 고른다. */
@@ -71,23 +73,21 @@ export interface StudyState {
 
 /** study가 없는 응답(옛 서버·옛 픽스처)의 폴백 — 공부 진행 0 → 독서 모드로 떨어진다. */
 export const IDLE_STUDY: StudyState = {
-    hasActiveSession: false, activeStartedAt: null, todaySeconds: 0, goalSeconds: 0,
+    hasActiveSession: false, activeStartedAt: null, todaySeconds: 0,
     activeBook: null, recentBookId: null, books: [], untaggedSessionId: null,
 }
 
 /**
- * 서버 응답·옛 픽스처를 8필드로 채운다 — 필드가 빠진 응답(옛 서버·독서 테스트 픽스처)에서
+ * 서버 응답·옛 픽스처를 7필드로 채운다 — 필드가 빠진 응답(옛 서버·독서 테스트 픽스처)에서
  * `books.map`이 죽지 않게. **study를 대입하는 모든 자리가 이 함수를 지난다**(applyDashboard·
- * start·stop·goal·tag·change) — 한 곳이라도 날것 `res.json()`을 넣으면 그 자리만 옛 서버에서 깨진다.
+ * start·stop·session-goal·tag·change) — 한 곳이라도 날것 `res.json()`을 넣으면 그 자리만 옛 서버에서 깨진다.
  *
- * 이 규약은 **6자리 전부 계측기로 잠겨 있다**(2026-09-05 전체 스위트 돌연변이 실측 — 정규화를 걷으면
- * 자리마다 최소 1건이 죽는다): applyDashboard·start·change·tag = `dashboard-study-book.test.ts`
- * (i1)~(i4), goal = `dashboard-study-goal.test.ts` (d), stop = 같은 파일 (f3).
- * 계측기가 재는 것은 **게이지(todaySeconds)** 하나다 — StudyTimerCard가 `withDefaults`로
- * books·activeBook·recentBookId·goalSeconds를 스스로 메우고 `fmtMSS(NaN)`도 '00:00'이라,
- * 나머지 필드는 정규화가 없어도 화면이 같아 관측할 수단이 애초에 없다(stop만 예외 —
- * `s.books.length`를 즉시 읽어 던진다). 즉 **「어느 자리를 지나는가」는 잠겼고, 「모든 필드가
- * 화면까지 옳게 닿는가」는 게이지 밖에선 못 잰다.**
+ * ⚠️ **화면 계측기로 잠긴 자리는 stop 하나뿐이다**(`dashboard-study-book.test.ts` (f3) — `s.books.length`를
+ * 즉시 읽어 던진다). 나머지 5자리는 2026-09-13까지 하루 목표 게이지(todaySeconds가 NaN이면 width가 사라짐)가
+ * 유일한 관측기였는데, 컨셉 전환으로 게이지가 사라지며 그 락((i1)~(i4)·goal (d))도 함께 지웠다 — 관측기 없는
+ * 검사는 의식이다. StudyTimerCard가 `withDefaults`로 books·activeBook·recentBookId를 스스로 메워 필드 누락이
+ * 화면에 안 드러나기 때문이다. 함수 자체(기본값·spread 순서)는 `study-state.test.ts`가 잠근다.
+ * 즉 **「이 함수가 옳다」는 잠겼고, 「모든 자리가 이 함수를 지난다」는 stop 밖에선 코드 리뷰가 지킨다.**
  */
 export function studyStateOf(s?: Partial<StudyState> | null): StudyState {
     return { ...IDLE_STUDY, ...(s ?? {}) }

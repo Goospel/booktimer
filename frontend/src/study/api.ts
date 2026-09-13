@@ -32,7 +32,6 @@ export interface Agenda {
 }
 
 export interface StudyCalendar {
-    goalSeconds: number;
     days: CalendarDay[];
 }
 
@@ -230,6 +229,8 @@ export interface StudyBookRow {
     readCount: number;
     purchaseLink: string | null;
     totalSeconds: number;
+    /** 이 책 회당 시간(초, 60~21600). null = 안 정함 = 스톱워치. 옛 픽스처엔 없어 optional이다. */
+    sessionGoalSeconds?: number | null;
 }
 
 export interface StudyShelf {
