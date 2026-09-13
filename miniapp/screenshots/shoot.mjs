@@ -174,8 +174,19 @@ await page.addInitScript(() => localStorage.setItem('booktimer.timerMode', 'stud
 await page.goto(URL_APP, { waitUntil: 'networkidle' })
 await settle(1200)
 
-// 06 공부 홈 — 「독서|공부」 토글이 공부로 선 파랑 화면(`body.study-mode`)+ 공부 게이지.
-await page.evaluate(() => window.scrollTo(0, 0))
+// 06 공부 홈 — 「독서|공부」 토글이 공부로 선 파랑 화면(`body.study-mode`)+ 캐러셀 아래 「회당 50분 · 바꾸기」.
+// ⚠️ 맨 위에서 찍으면 그 손잡이가 탭바 뒤에 깔린다(2026-09-13 실측: 손잡이 545~577 · 탭바 550). 인사말을
+// 내주고 타이머 카드가 화면 위에 붙도록 내린다 — 이 컷이 파는 것은 인사말이 아니라 책별 회당 시간이다.
+// 손잡이를 못 찾으면 옛 그림 대신 여기서 죽는다(문구가 바뀌었거나 픽스처 책에 회당 시간이 없다).
+await page.evaluate(() => {
+    const handle = [...document.querySelectorAll('span')].find((x) => /^회당 .+ · 바꾸기$/.test(x.textContent?.trim() ?? ''))
+    if (!handle) throw new Error('회당 시간 손잡이를 못 찾았다')
+    const card = document.querySelector('.lamp-page')
+    if (!card) throw new Error('타이머 카드(.lamp-page)를 못 찾았다')
+    window.scrollTo(0, 0)
+    window.scrollTo(0, card.getBoundingClientRect().top - 16)
+})
+await settle()
 await shot('06-study-home')
 
 // 07 공부 서재 — 「N독」 칩 + 「회독 +1」 채움 버튼.
