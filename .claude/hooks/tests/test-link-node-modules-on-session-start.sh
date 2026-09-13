@@ -62,4 +62,15 @@ run_hook "$STUB4" "$NDW" >/dev/null 2>&1; rc=$?
 if [ "$rc" = "0" ]; then echo "PASS: non-git cwd -> hook exits 0"; else echo "FAIL: exit $rc (want 0)"; FAILED=1; fi
 if [ -f "$MARK4" ]; then echo "FAIL: link invoked on non-git cwd (should skip)"; FAILED=1; else echo "PASS: link skipped on non-git cwd"; fi
 
+# ── Case 5: git repo under a Korean-named dir -> link invoked (stdin UTF-8) ──
+# Read as CP949, "테스트" before the closing quote breaks JSON -> cwd falls back to the
+# process cwd. Run the hook FROM a non-git dir so that fallback cannot pass by accident.
+KD=$(mktemp -d); TMPS+=("$KD"); mkdir -p "$KD/테스트"; git -C "$KD/테스트" init -q >/dev/null 2>&1
+MARK5=$(mktemp -u); TMPS+=("$MARK5")
+STUB5=$(mkstub 0 "$(cygpath -m "$MARK5")")
+HOOK_ABS=$(cygpath -m "$PWD/$HOOK")
+(cd "$ND" && printf '{"hook_event_name":"SessionStart","cwd":"%s"}' "$(cygpath -m "$KD/테스트")" \
+    | BOOKTIMER_LINK_SCRIPT="$STUB5" powershell.exe -NoProfile -File "$HOOK_ABS" >/dev/null 2>&1)
+if [ -f "$MARK5" ]; then echo "PASS: Korean-named git cwd -> link invoked"; else echo "FAIL: Korean-named git cwd -> link NOT invoked"; FAILED=1; fi
+
 exit $FAILED
