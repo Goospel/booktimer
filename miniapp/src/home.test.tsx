@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import homeSource from './screens/Home.tsx?raw';
 
 import type { BookOption, DashboardResponse } from './api';
+import type { TimerMode } from './App';
 import { TAB_BAR_Z_INDEX } from './App';
 import { ApiError, IDLE_STUDY, waiveDebt } from './api';
 import { dismissCoachmark, setCoachmarkWalking } from './coachmark';
@@ -33,6 +34,7 @@ import {
   goalHandleLabel,
   marginDoorBook,
   noBookSubtitle,
+  notificationAgreementTarget,
   recenterIndex,
   selectionAt,
   shouldShowNotificationCard,
@@ -61,6 +63,7 @@ vi.mock('./toss', () => ({
   REWARD_AD_GROUP_ID: 'test-ad-group',
   watchRewardAd: vi.fn(),
   GOAL_MET_TEMPLATE_CODE: 'test-template',
+  STUDY_GOAL_TEMPLATE_CODE: 'test-study-template',
   notificationAgreementSupported: vi.fn(),
   requestNotificationAgreement: vi.fn(),
   trackEvent: vi.fn(),
@@ -85,6 +88,10 @@ const CAROUSEL_HEADER = '무엇으로 측정할까요?';
 const READING_NOW_HEADER = '읽는 중';
 const NOTIFICATION_LABEL = '알림 받기';
 const AGREEMENT_KEY = 'booktimer.notificationAgreement';
+/** 공부 동의문(122175)의 캐시 — 독서 캐시와 갈라야 독서에 답한 사람에게도 공부 알림을 물을 수 있다. */
+const STUDY_AGREEMENT_KEY = 'booktimer.notificationAgreement.studyGoal';
+const READING_CARD_COPY = '목표 달성과 완독 소식을 토스 알림으로 받아보세요';
+const STUDY_CARD_COPY = '정한 공부 시간을 채우면 토스 알림으로 알려드려요';
 
 function dashboard(overrides: Partial<DashboardResponse> = {}): DashboardResponse {
   return {
@@ -140,6 +147,7 @@ function renderHome(
     selectedBookId?: number | null;
     celebrate?: boolean;
     guide?: ReactNode;
+    mode?: TimerMode;
   } = {},
 ) {
   return renderToStaticMarkup(
@@ -147,7 +155,7 @@ function renderHome(
       <Home
         guide={props.guide}
         dashboard={dashboard(overrides)}
-        mode="reading"
+        mode={props.mode ?? 'reading'}
         study={IDLE_STUDY}
         onChangeMode={() => {}}
         onBlockedModeChange={() => {}}
@@ -816,13 +824,59 @@ describe('알림 동의 카드 노출 조건 (shouldShowNotificationCard)', () =
   });
 });
 
+/**
+ * 동의문이 두 장이다 — 독서(114526 「독서 목표 달성과 완독 소식」)와 공부(122175 「정한 공부 시간을 채우면」).
+ * 콘솔 AI 검수가 공부 푸시를 독서 동의문에 거부해서 갈렸다(2026-09-13). 모드가 코드·캐시 키·문구를 함께 고른다 —
+ * 셋 중 하나만 어긋나도 「공부 카드를 눌렀는데 독서 동의문이 뜬다」거나 「독서에 답했더니 공부 카드가 사라진다」.
+ */
+describe('모드별 동의 대상 (notificationAgreementTarget)', () => {
+  it('독서는 기존 동의문·기존 캐시 키 그대로다 — 이미 답한 사람에게 다시 묻지 않는다', () => {
+    expect(notificationAgreementTarget('reading')).toEqual({
+      templateCode: 'test-template',
+      storageKey: AGREEMENT_KEY,
+      copy: READING_CARD_COPY,
+    });
+  });
+
+  it('공부는 공부 동의문 코드·별도 캐시 키·공부 문구다', () => {
+    expect(notificationAgreementTarget('study')).toEqual({
+      templateCode: 'test-study-template',
+      storageKey: STUDY_AGREEMENT_KEY,
+      copy: STUDY_CARD_COPY,
+    });
+  });
+});
+
 describe('알림 동의 카드 렌더 배선', () => {
-  it('조건이 맞으면 카드와 버튼이 그려진다', () => {
+  it('독서 모드는 독서 문구 카드다 — 공부 시간을 약속하지 않는다(독서 동의문은 그걸 덮지 않는다)', () => {
     const markup = renderHome();
 
-    // 동의문 한 장이 공부 회당 시간 알림까지 덮는다 — 카드가 무엇을 받는지 그대로 말한다(2026-09-13 사용자 확정).
-    expect(markup).toContain('목표 달성·공부 시간·완독 소식을 토스 알림으로 받아보세요');
+    expect(markup).toContain(READING_CARD_COPY);
+    expect(markup).not.toContain(STUDY_CARD_COPY);
+    expect(markup).not.toContain('공부 시간·완독');
     expect(labelsOf(markup)).toContain(NOTIFICATION_LABEL);
+  });
+
+  it('공부 모드는 공부 문구 카드다', () => {
+    const markup = renderHome({}, { mode: 'study' });
+
+    expect(markup).toContain(STUDY_CARD_COPY);
+    expect(markup).not.toContain(READING_CARD_COPY);
+    expect(labelsOf(markup)).toContain(NOTIFICATION_LABEL);
+  });
+
+  it('독서 동의에 답했어도 공부 카드는 뜬다 — 캐시가 동의문마다 따로다', () => {
+    localStorage.setItem(AGREEMENT_KEY, 'newAgreement');
+
+    expect(labelsOf(renderHome())).not.toContain(NOTIFICATION_LABEL); // 대조군: 같은 캐시가 독서 카드는 끈다
+    expect(labelsOf(renderHome({}, { mode: 'study' }))).toContain(NOTIFICATION_LABEL);
+  });
+
+  it('공부 동의에 답했으면 공부 카드가 없고, 독서 카드는 그대로다', () => {
+    localStorage.setItem(STUDY_AGREEMENT_KEY, 'agreementRejected');
+
+    expect(labelsOf(renderHome({}, { mode: 'study' }))).not.toContain(NOTIFICATION_LABEL);
+    expect(labelsOf(renderHome())).toContain(NOTIFICATION_LABEL);
   });
 
   it('캐시가 있으면 카드가 없다 — 한 번 답한 사용자에게 다시 뜨지 않는다', () => {
@@ -842,14 +896,14 @@ describe('동의 요청 흐름 (askNotificationAgreement)', () => {
   it('결과를 캐시에 그대로 적어 두고 돌려준다 — 이 값이 카드를 끈다', async () => {
     requestAgreementMock.mockResolvedValue('newAgreement');
 
-    await expect(askNotificationAgreement()).resolves.toBe('newAgreement');
+    await expect(askNotificationAgreement('reading')).resolves.toBe('newAgreement');
     expect(localStorage.getItem(AGREEMENT_KEY)).toBe('newAgreement');
   });
 
   it('거절도 캐시한다 — 거절한 사용자를 다시 조르지 않는다', async () => {
     requestAgreementMock.mockResolvedValue('agreementRejected');
 
-    await askNotificationAgreement();
+    await askNotificationAgreement('reading');
 
     expect(localStorage.getItem(AGREEMENT_KEY)).toBe('agreementRejected');
   });
@@ -857,16 +911,38 @@ describe('동의 요청 흐름 (askNotificationAgreement)', () => {
   it('미지원(null)이면 캐시를 건드리지 않는다 — 지원 기기에선 다시 물어야 한다', async () => {
     requestAgreementMock.mockResolvedValue(null);
 
-    await expect(askNotificationAgreement()).resolves.toBeNull();
+    await expect(askNotificationAgreement('reading')).resolves.toBeNull();
     expect(localStorage.getItem(AGREEMENT_KEY)).toBeNull();
   });
 
   it('설정된 템플릿 코드를 그대로 넘긴다 — 코드가 어긋나면 다른 동의문이 뜬다', async () => {
     requestAgreementMock.mockResolvedValue(null);
 
-    await askNotificationAgreement();
+    await askNotificationAgreement('reading');
 
     expect(requestAgreementMock).toHaveBeenCalledWith('test-template');
+  });
+
+  it('공부는 공부 동의문을 묻고 공부 캐시에만 적는다 — 독서 캐시를 건드리면 독서 카드가 영영 사라진다', async () => {
+    requestAgreementMock.mockResolvedValue('newAgreement');
+
+    await askNotificationAgreement('study');
+
+    expect(requestAgreementMock).toHaveBeenCalledWith('test-study-template');
+    expect(localStorage.getItem(STUDY_AGREEMENT_KEY)).toBe('newAgreement');
+    expect(localStorage.getItem(AGREEMENT_KEY)).toBeNull();
+  });
+
+  it('홈의 「알림 받기」는 지금 모드로 묻는다 — 상수로 박으면 공부 카드가 독서 동의문을 띄운다', () => {
+    // 클릭은 정적 렌더로 안 돌고, 목 모드 브라우저엔 동의 API가 없어 카드 자체가 안 선다 — 실기기 전엔 소스가 유일한 계측기다.
+    const code = homeSource.replace(/\{?\/\*[\s\S]*?\*\/\}?/g, '').replace(/^\s*\/\/.*$/gm, '');
+
+    // 선언 하나 + 호출 하나. 호출이 늘거나 인자가 모드가 아니면 여기서 깨진다.
+    expect(code.match(/askNotificationAgreement\([^)]*\)/g)).toEqual([
+      'askNotificationAgreement(mode: TimerMode)',
+      'askNotificationAgreement(asked)',
+    ]);
+    expect(code).toMatch(/const asked = mode;/);
   });
 });
 

@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   BANNER_RENDER_TIMEOUT_MS,
+  GOAL_MET_TEMPLATE_CODE,
   INTERSTITIAL_TIMEOUT_MS,
+  STUDY_GOAL_TEMPLATE_CODE,
   hapticOnce,
   marginBannerEnabled,
   notificationAgreementSupported,
@@ -369,6 +371,20 @@ describe('requestNotificationAgreement', () => {
 
     await expect(requestNotificationAgreement('t')).resolves.toBeNull();
     expect(supportedMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 동의 요청 코드는 콘솔에 등록된 발송 코드와 한 글자도 어긋나면 안 된다 — 토스는 이 코드로 동의문을 찾는다.
+ * 홈 테스트는 이 값을 목으로 갈아 끼우므로, 실값은 여기서만 잰다.
+ */
+describe('알림 동의 템플릿 코드 — 콘솔 등록값', () => {
+  it('공부는 공부 동의문(122175)에 묶인 booktimer-study-goal-met이다', () => {
+    expect(STUDY_GOAL_TEMPLATE_CODE).toBe('booktimer-study-goal-met');
+  });
+
+  it('독서 코드와 다르다 — 같으면 공부 카드가 독서 동의문을 띄운다', () => {
+    expect(STUDY_GOAL_TEMPLATE_CODE).not.toBe(GOAL_MET_TEMPLATE_CODE);
   });
 });
 
