@@ -37,6 +37,15 @@ public class User extends BaseTimeEntity {
     private static final Pattern EMAIL_PATTERN =
             Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
+    /**
+     * 합성(자리표시) 이메일의 도메인 — <b>메일을 보내면 안 되는 주소</b>다(라우팅 불가라 하드 반송된다).
+     *
+     * <p>두 곳에서 붙는다: ⓐ 토스 가입 시 이메일이 없거나 기존 계정과 충돌할 때
+     * ({@link TossUserProvisioningService#syntheticEmail}) ⓑ 미검증 토스 연결 계정의 이메일 충돌 재배정
+     * ({@link #reassignEmailToSynthetic}). {@code users.email}이 NOT NULL이라 비울 수 없어 쓰는 값이다.
+     */
+    public static final String SYNTHETIC_EMAIL_DOMAIN = "@noreply.booktimer.app";
+
     /** login_id 형식: 영소문자/숫자/언더스코어, 3~20자. 입력은 소문자로 정규화한 뒤 검증한다. */
     private static final Pattern LOGIN_ID_PATTERN = Pattern.compile("^[a-z0-9_]{3,20}$");
 
@@ -691,12 +700,13 @@ public class User extends BaseTimeEntity {
     }
 
     /**
-     * <b>미검증 TOSS 계정의 이메일 충돌 해소 전용</b> — 이 계정의 이메일을 합성 주소로 비켜 놓는다.
+     * <b>토스를 연결한 미검증 계정의 이메일 충돌 해소 전용</b> — 이 계정의 이메일을 합성 주소로 비켜 놓는다.
      * 일반적인 "이메일 변경"이 아니다(그런 기능은 도메인에 없다. 이름으로 못 박아 오용을 막는다).
      *
-     * <p>쓰이는 자리는 하나다: {@link OAuthUserProvisioningService#provision}이 같은 이메일의 <b>미검증</b>
-     * TOSS 계정을 만났을 때. 토스는 이메일 소유를 보증하지 않아 그 주소가 남의 것일 수 있고, 그렇다고 계정을
-     * 폐기하면 그 사용자의 기록이 사라진다 — 그래서 계정은 남기고 이메일만 {@code toss-{userKey}@…}로 옮긴다
+     * <p>쓰이는 자리는 하나다: {@link AccountService#reassignUnverifiedTossEmail} — 그쪽을
+     * {@link OAuthUserProvisioningService#provision}이 같은 이메일의 <b>미검증</b> 토스 연결 계정(TOSS
+     * 가입이든 웹 LOCAL 가입 후 연결이든)을 만났을 때 부른다. 토스는 이메일 소유를 보증하지 않아 그 주소가
+     * 남의 것일 수 있고, 그렇다고 계정을 폐기하면 그 사용자의 기록이 사라진다 — 그래서 계정은 남기고 이메일만 {@code toss-{userKey}@…}로 옮긴다
      * ({@link TossUserProvisioningService#syntheticEmail}이 그 주소의 단일 출처).
      *
      * <p>검증 상태는 건드리지 않는다 — 원래 {@code false}이고, 합성 주소는 발송하지 않는 자리표시다.
@@ -718,6 +728,14 @@ public class User extends BaseTimeEntity {
             throw new IllegalArgumentException("email is malformed: " + syntheticEmail);
         }
         this.email = syntheticEmail;
+    }
+
+    /**
+     * 이메일이 {@link #SYNTHETIC_EMAIL_DOMAIN} 자리표시 주소인가 — 발송·인증 유도를 건너뛸 판별의 단일 출처.
+     * 이 주소는 라우팅되지 않으므로 인증 메일을 보내면 매번 하드 반송된다.
+     */
+    public boolean hasSyntheticEmail() {
+        return email != null && email.endsWith(SYNTHETIC_EMAIL_DOMAIN);
     }
 
     public Long getId() {

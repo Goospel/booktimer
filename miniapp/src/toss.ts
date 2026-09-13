@@ -31,6 +31,21 @@ export function trackEvent(logName: string, params: Record<string, LogParam> = {
 }
 
 /**
+ * 햅틱 1회(발사 후 망각) — 공부 「회당 시간」에 닿는 순간 홈이 부른다.
+ *
+ * <p>실패 처리는 {@link trackEvent}와 같다: 토스 밖(브라우저 목 모드)엔 호스트 브릿지가 없어 동기 TypeError,
+ * 앱 안에서도 브릿지가 거부하면 rejected Promise — 둘 다 삼킨다. 최상위 `generateHapticFeedback`은
+ * deprecated라 `Device.triggerHaptic`을 쓴다(`Device.openURL`과 같은 선택).
+ */
+export function hapticOnce(): void {
+  try {
+    void Device.triggerHaptic({ type: 'success' }).catch(() => {});
+  } catch {
+    // 진동 실패는 사용자에게 아무 의미가 없다 — 화면 문구가 이미 달성을 말한다.
+  }
+}
+
+/**
  * 화면 진입 1건 — 콘솔 카탈로그에 SCREEN 타입·`screen_` 접두사로 묶인다(발사 후 망각).
  *
  * <p>실패 처리는 {@link trackEvent}와 정확히 같다(앱 밖 동기 TypeError는 try가, 브릿지 거부는 catch가 받는다).
@@ -77,6 +92,13 @@ export const PERSONALITY_AD_GROUP_ID: string = import.meta.env.VITE_PERSONALITY_
  * 쓰므로 한 번만 물어보면 둘 다 커버된다 — 동의 단위는 캠페인이 아니라 동의문이다.
  */
 export const GOAL_MET_TEMPLATE_CODE = 'booktimer-daily-goal-met';
+
+/**
+ * 공부 「회당 시간」 달성 푸시의 발송 코드 — 독서와 <b>다른 동의문</b>(「공부 알림 동의문」 termsId 122175)에 묶였다.
+ * 콘솔 AI 검수가 공부 푸시를 독서 동의문(「독서 목표 달성과 완독 소식」)에 붙이는 걸 맥락 불일치로 거부했다(2026-09-13).
+ * 그래서 독서에 동의한 사람도 공부 알림은 이 코드로 따로 물어야 받는다.
+ */
+export const STUDY_GOAL_TEMPLATE_CODE = 'booktimer-study-goal-met';
 
 /** 동의 화면의 세 가지 결말 — 동의 상태의 정본은 토스이고, 우리는 이 값만 캐시해 카드 노출을 끈다. */
 export type AgreementResult = 'newAgreement' | 'alreadyAgreed' | 'agreementRejected';

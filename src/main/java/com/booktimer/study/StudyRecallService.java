@@ -143,14 +143,15 @@ public class StudyRecallService {
         // 닿지 않는다. 「사용자 몫을 깎기 전에 깎을 값어치가 있는지 확정한다」는 순서 규율이다.
         String notes = notesFor(user, recall);
 
-        // 시각을 한 번만 읽는다 — 사용자 몫(유저 tz 날짜)과 전역 몫(UTC 날짜)이 같은 순간을 봐야 한다.
+        // 시각을 한 번만 읽는다 — 사용자 몫·전역 몫이 같은 UTC 날짜 키를 봐야 하고, 선점과 환불이
+        // 같은 now로 짝을 이뤄야 한다(둘이 갈리면 환불이 없는 행을 깎아 조용히 아무 일도 안 한다).
         Instant now = clock.instant();
         // switch **식**이라 컴파일러가 망라성을 강제한다 — switch 문으로 두면 Grant에 값이
         // 추가될 때 경고 없이 **그대로 유료 호출로 진행**한다(리뷰 실측: javac -Xlint:all 무경고).
         // 상한을 우회하는 문이 미래의 한 줄 추가로 조용히 열리는 자리다.
         boolean granted = switch (usageService.tryConsumeBoth(user, now, Kind.ANALYZE)) {
             case USER_EXHAUSTED -> throw new ResponseStatusException(
-                    HttpStatus.TOO_MANY_REQUESTS, "오늘 몫을 다 썼어요 — 내일 다시 해 주세요");
+                    HttpStatus.TOO_MANY_REQUESTS, "오늘 몫을 다 썼어요 — 한국 시간 오전 9시에 다시 채워져요");
             case GLOBAL_EXHAUSTED -> throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE, "오늘은 AI 요청이 많아 잠시 멈췄어요 — 내일 다시 해 주세요");
             case OK -> true;
@@ -221,7 +222,7 @@ public class StudyRecallService {
         // 상한을 우회하는 문이 미래의 한 줄 추가로 조용히 열리는 자리다.
         boolean granted = switch (usageService.tryConsumeBoth(user, now, Kind.TRANSCRIBE)) {
             case USER_EXHAUSTED -> throw new ResponseStatusException(
-                    HttpStatus.TOO_MANY_REQUESTS, "오늘 몫을 다 썼어요 — 내일 다시 해 주세요");
+                    HttpStatus.TOO_MANY_REQUESTS, "오늘 몫을 다 썼어요 — 한국 시간 오전 9시에 다시 채워져요");
             case GLOBAL_EXHAUSTED -> throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE, "오늘은 AI 요청이 많아 잠시 멈췄어요 — 내일 다시 해 주세요");
             case OK -> true;
@@ -295,12 +296,12 @@ public class StudyRecallService {
 
     /** 오늘 남은 분석 몫 — 화면이 버튼 옆에 그린다. */
     public int remainingAnalyze(User user) {
-        return usageService.remaining(user, StudyDates.today(user, clock), Kind.ANALYZE);
+        return usageService.remaining(user, clock.instant(), Kind.ANALYZE);
     }
 
     /** 오늘 남은 전사 몫 — 화면이 「읽어 오기 (N회 남음)」을 그리고 0이면 버튼을 잠근다. */
     public int remainingTranscribe(User user) {
-        return usageService.remaining(user, StudyDates.today(user, clock), Kind.TRANSCRIBE);
+        return usageService.remaining(user, clock.instant(), Kind.TRANSCRIBE);
     }
 
     /**

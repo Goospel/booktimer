@@ -223,8 +223,6 @@ const state = {
    * 옮길 것이 없다. `bookId`가 이미 차 있으면 재태깅 409의 근거다(한 번 잰 시간이 두 책에 쌓이는 것을 막는다).
    */
   studyLastStopped: null as { id: number; bookId: number | null; seconds: number } | null,
-  /** 공부 하루 목표 — 0(목표 없음)에서 시작해야 「목표 정하기」 손잡이부터 밟아 볼 수 있다. */
-  studyGoalSeconds: 0,
   /**
    * 공부 일정 판정 — `YYYY-MM-DD` → 지킴/못 지킴. <b>키가 없으면 무기록</b>이라 서버의 「행 부재」와
    * 같은 3상태가 된다(모듈 메모리라 새로고침이 초기화다).
@@ -239,15 +237,17 @@ const state = {
    * <p>회독 수를 0·1·3으로 섞어 둔다 — 칩 세 꼴(아직 안 돎 · 한 번 돎 · 여러 번 돎)이 한 화면에 있어야
    * 견줄 수 있고, 「회독 -1」 행이 <b>0독에서만 사라지는 것</b>도 여기서만 눈에 보인다.
    * 구매 링크도 있는 책·없는 책을 섞는다(조건부 구매 행이 목에서 사라지지 않게 — `shelfBook`과 같은 규율).
+   * 회당 시간도 있는 책(101, 50분)·없는 책을 섞는다 — 손잡이 두 꼴(「회당 50분 · 바꾸기」·「회당 시간 정하기」)을 견준다.
    */
   studyBooks: [
     { id: 101, title: '정보처리기사 필기 기본서', author: '수험서편찬위', coverUrl: mockCover('정', '#B8C6D3'),
       isbn13: '9791100000001', readCount: 3,
-      purchaseLink: 'https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=2001&ttbkey=mock&partner=openAPI&start=api' },
+      purchaseLink: 'https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=2001&ttbkey=mock&partner=openAPI&start=api',
+      sessionGoalSeconds: 3_000 },
     { id: 102, title: '토익 실전 1000제', author: '테스터', coverUrl: null, isbn13: '9791100000002',
-      readCount: 1, purchaseLink: null },
+      readCount: 1, purchaseLink: null, sessionGoalSeconds: null },
     { id: 103, title: '한국사능력검정 심화', author: '테스터', coverUrl: mockCover('한', '#D3C4B8'),
-      isbn13: '9791100000003', readCount: 0, purchaseLink: null },
+      isbn13: '9791100000003', readCount: 0, purchaseLink: null, sessionGoalSeconds: null },
   ] as StudyBookRow[],
   /** 이 세션에서 끝낸 측정 수 — 첫 종료(=1)에만 축하 배너가 뜬다. 새로고침하면 0으로 돌아가 다시 볼 수 있다. */
   completedSessions: 0,
@@ -433,7 +433,6 @@ function studyState(): StudyState {
     hasActiveSession: state.studyStartedAt !== null,
     activeStartedAt: state.studyStartedAt,
     todaySeconds: state.studyTodaySeconds,
-    goalSeconds: state.studyGoalSeconds,
     activeBook: active === null ? null : (studyBookRows().find((b) => b.id === active) ?? null),
     recentBookId: state.studyRecentBookId,
     books: studyBookRows(),
@@ -1064,19 +1063,19 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     return studyState();
   }],
 
-  // 공부 하루 목표 — 독서 목표(`/api/miniapp/goal`)와 <b>다른 문·다른 값</b>이다. 음수 400까지
-  // 서버 계약 그대로 재현해야 저장 실패 문구를 브라우저로 확인할 수 있다.
-  ['POST', /^\/api\/study\/goal$/, ({ body }) => {
-    const seconds = body.dailyGoalSeconds as number;
-    if (seconds < 0) throw new ApiError(400, 'studyDailyGoalSeconds must be >= 0');
-    state.studyGoalSeconds = seconds;
+  // 책별 회당 시간 — 서버 계약 그대로: 범위(60~21600, 0 포함 밖) 검사가 <b>책 조회보다 먼저</b>, 해제는 null만.
+  ['POST', /^\/api\/study\/books\/(\d+)\/session-goal$/, ({ id, body }) => {
+    const seconds = (body.sessionGoalSeconds ?? null) as number | null;
+    if (seconds !== null && !(Number.isInteger(seconds) && seconds >= 60 && seconds <= 21_600)) {
+      throw new ApiError(400, '회당 시간은 1분 이상 6시간 이하로 정해 주세요');
+    }
+    mustFindStudyBook(id).sessionGoalSeconds = seconds;
     return studyState();
   }],
 
   // 공부 일정 달력 — 판정(체크)은 <b>사용자가 남긴 것만</b> 있고 서버가 자동으로 만들지 않는다.
   // 그 관계를 목도 그대로 지킨다: 측정 픽스처는 점(자동 정보)에만 쓰이고 체크를 건드리지 않는다.
   ['GET', /^\/api\/study\/calendar$/, ({ query }) => ({
-    goalSeconds: state.studyGoalSeconds,
     days: studyCalendarDays(String(query.month ?? '')),
   })],
   // 공부 기록 — 잔디와 월별 목록. 달력 픽스처(`studyDayTotals`)를 같이 쓰므로 목에서도 두 화면의

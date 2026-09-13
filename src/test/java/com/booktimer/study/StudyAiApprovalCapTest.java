@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -38,11 +39,20 @@ class StudyAiApprovalCapTest {
     @Autowired UserRepository userRepository;
 
     private User registerAndRequest(String loginId) {
-        registrationService.register(loginId + "@booktimer.com", "pw1234qwer!!", loginId,
-                "닉네임_" + loginId, "Asia/Seoul", Role.USER, LocalDate.of(2026, 1, 1));
-        User user = userRepository.findByLoginId(loginId).orElseThrow();
+        User user = registerUnverified(loginId);
+        // 신청 게이트가 이메일 검증을 요구한다(S-4) — 로컬 가입은 미검증으로 시작하므로 여기서 채운다.
+        // 정원 테스트의 관심사가 아니지만, 이 한 줄이 아래 S-4 테스트들의 <b>양성 대조군</b>이기도 하다.
+        user.verifyEmail();
+        userRepository.saveAndFlush(user);
         accessService.request(user, NOW);
         return user;
+    }
+
+    /** 이메일 검증 없이 등록한다 — 로컬 가입의 실제 초기 상태이자 S-4 게이트의 대상. */
+    private User registerUnverified(String loginId) {
+        registrationService.register(loginId + "@booktimer.com", "pw1234qwer!!", loginId,
+                "닉네임_" + loginId, "Asia/Seoul", Role.USER, LocalDate.of(2026, 1, 1));
+        return userRepository.findByLoginId(loginId).orElseThrow();
     }
 
     private long approvedCount() {
@@ -94,5 +104,42 @@ class StudyAiApprovalCapTest {
 
         assertThat(userRepository.findByLoginId("capc2").orElseThrow().getStudyAiAccess())
                 .isEqualTo(StudyAiAccess.REJECTED);
+    }
+
+    // AI 신청은 「돈이 나가는 문」의 첫 단계인데 이메일 검증을 안 봤다(리뷰 S-4) — 아무 주소로 만든
+    // 계정이 대기 큐에 줄을 설 수 있었다. 게이트를 전이보다 앞에 둬 상태를 흔들지 않고 막는다.
+    @Test
+    @DisplayName("이메일 미검증이면 신청이 403 — 상태는 NONE 그대로다(S-4)")
+    void requestRejectsUnverifiedEmail() {
+        registerUnverified("capd1");
+        User user = userRepository.findByLoginId("capd1").orElseThrow();
+
+        assertThatThrownBy(() -> accessService.request(user, NOW))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("이메일 인증");
+
+        assertThat(userRepository.findByLoginId("capd1").orElseThrow().getStudyAiAccess())
+                .isEqualTo(StudyAiAccess.NONE);
+    }
+
+    // 승인 쪽에도 같은 검사가 필요한 이유: 신청 게이트만 두면 <b>이 변경이 배포되는 순간 이미 대기 중인</b>
+    // 미검증 PENDING이 그대로 승인된다. 게이트는 마지막 문에도 서 있어야 한다.
+    @Test
+    @DisplayName("이메일 미검증 PENDING은 승인되지 않는다 — 검증을 채우면 승인된다(양성 대조군)")
+    void approveRejectsUnverifiedEmail() {
+        User user = registerUnverified("capd2");
+        user.requestStudyAi(NOW); // 신청 게이트를 우회해 대기로 만든다 = 배포 전에 쌓여 있던 줄의 재현
+        userRepository.saveAndFlush(user);
+
+        assertThatThrownBy(() -> accessService.approve("capd2", NOW))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("미검증");
+        assertThat(approvedCount()).isZero();
+
+        // 양성 대조군 — 검증만 채우면 같은 호출이 통과한다. 이게 없으면 「늘 거절」 구현도 초록이다.
+        user.verifyEmail();
+        userRepository.saveAndFlush(user);
+        accessService.approve("capd2", NOW);
+        assertThat(approvedCount()).isEqualTo(1);
     }
 }

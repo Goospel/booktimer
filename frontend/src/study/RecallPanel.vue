@@ -374,7 +374,7 @@ async function onSave(thenAnalyze: boolean): Promise<void> {
                         </ul>
                         <p v-if="photoError" class="status-line study-error" data-testid="recall-photo-error">{{ photoError }}</p>
                         <p v-else-if="photoCapSpent" class="status-line muted" data-testid="recall-photo-cap-spent">
-                            오늘 몫을 다 썼어요 — 내일 다시 해 주세요.
+                            오늘 몫을 다 썼어요 — 한국 시간 오전 9시에 다시 채워져요.
                         </p>
                         <button
                             type="button"
@@ -460,7 +460,7 @@ async function onSave(thenAnalyze: boolean): Promise<void> {
                             @click="onSave(true)"
                         >저장하고 분석 ({{ remainingAnalyze }}회 남음)</button>
                         <span v-if="aiEnabled && analyzed" class="status-line muted">오늘 분석은 끝났어요.</span>
-                        <span v-else-if="capSpent" class="status-line muted" data-testid="recall-cap-spent">오늘 몫을 다 썼어요 — 내일 다시 해 주세요.</span>
+                        <span v-else-if="capSpent" class="status-line muted" data-testid="recall-cap-spent">오늘 몫을 다 썼어요 — 한국 시간 오전 9시에 다시 채워져요.</span>
                     </div>
 
                     <div v-if="recall && recall.analyzedAt" class="study-recall-result">

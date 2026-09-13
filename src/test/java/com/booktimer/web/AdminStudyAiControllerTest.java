@@ -61,6 +61,9 @@ class AdminStudyAiControllerTest {
         registrationService.register(loginId + "@booktimer.com", "pw1234qwer!!", loginId,
                 "닉네임_" + loginId, SEOUL, Role.USER, today());
         User user = userRepository.findByLoginId(loginId).orElseThrow();
+        // 승인은 이메일 검증된 계정에만 준다(S-4) — 로컬 가입은 미검증으로 시작하므로 여기서 채운다.
+        // 이 경로의 관심사는 인가·전이·플래시라, 검증 게이트는 StudyAiApprovalCapTest가 따로 잰다.
+        user.verifyEmail();
         switch (state) {
             case NONE -> { }
             case PENDING -> user.requestStudyAi(clock.instant());

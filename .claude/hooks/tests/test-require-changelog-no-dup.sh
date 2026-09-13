@@ -9,7 +9,8 @@
 # also touched the file leaves the first draft AND the final version. No conflict,
 # no failing test. (BookTimer T-210 recurrence hard gate.)
 
-HOOK=".claude/hooks/require-changelog-no-dup.ps1"
+HOOKS="${HOOKS:-.claude/hooks}"   # overridable: run against a mutated copy
+HOOK="$HOOKS/require-changelog-no-dup.ps1"
 FAILED=0
 TMPS=()
 
@@ -102,6 +103,20 @@ APART="$HEADER"'| 2026-08-24 | **feat: 같은 제목** — 초판. |
 '
 d_apart=$(setup_repo "$APART")
 check "non-adjacent duplicate is still caught" 2 "$(run_in_repo 'git push' "$d_apart")"
+
+# 8) the block message must reach stderr as raw UTF-8, not CP949 mojibake.
+#    [Console]::Error.WriteLine goes through the console output encoding (CP949 on a
+#    Korean Windows), so the Korean explanation arrives garbled -- measured 2026-09-13
+#    on the sibling rebase gate. Both hooks now write raw UTF-8 bytes via
+#    Write-StderrUtf8 (lib/resolve-target-cwd.ps1). Assert the BYTES: Git Bash grep is
+#    C-locale and silently matches nothing for a Korean literal, so escape them.
+ERRF=$(mktemp); TMPS+=("$ERRF")
+esc_dup=$(printf '%s' "$(cygpath -w "$d_dup")" | sed 's/\\/\\\\/g')
+printf '{"tool_input":{"command":"git push"},"cwd":"%s"}' "$esc_dup" \
+    | powershell.exe -NoProfile -File "$HOOK" >/dev/null 2>"$ERRF"
+ko=0
+grep -qF "$(printf '\xEC\xA4\x91\xEB\xB3\xB5')" "$ERRF" || ko=1   # 중복
+check "block message keeps Korean as raw UTF-8 (no CP949 mojibake)" 0 "$ko"
 
 if [ "$FAILED" = "0" ]; then
     echo "ALL PASS"

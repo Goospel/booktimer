@@ -398,6 +398,9 @@ class AccountServiceTest {
         ordered.verify(userRepository).saveAndFlush(toss);
         assertThat(toss.getEmail()).isEqualTo("toss-uk1@noreply.booktimer.app");
         assertThat(toss.isEmailVerified()).isFalse();
+        // 재배정 전에 발급된 VERIFICATION 토큰이 살아 있으면, 그 링크 클릭이 이메일 일치 확인 없이
+        // verifyEmail()을 불러 **합성 주소가 검증됨**이 된다(라우팅 불가 주소로 넛지 메일이 나간다).
+        verify(emailTokenRepository).deleteByUser(toss);
     }
 
     @Test

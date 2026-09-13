@@ -92,6 +92,10 @@ public class MiniappHandleApiController {
     /**
      * 이미 핸들이 있는 계정(once-set 위반) — 정상 흐름에선 더블탭·두 기기 경합뿐이라 문구만 다르면 충분하다.
      * 「바꿀 수 없어요」라고는 하지 않는다 — {@link #changeHandle} 이후로는 거짓이다(평생 1회는 바꿀 수 있다).
+     *
+     * <p>{@code CurrentUserService.resolve}의 사용자-없음은
+     * {@link com.booktimer.security.AuthenticatedUserNotFoundException}이라 <b>여기 안 걸린다</b>(전역 500) —
+     * 서버 결함을 「이미 아이디가 있어요」라는 거짓 안내로 옮기지 않기 위한 분리다.
      */
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<String> handleAlreadySet(IllegalStateException e) {

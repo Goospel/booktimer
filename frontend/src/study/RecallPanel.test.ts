@@ -318,7 +318,7 @@ describe('백지복습 — 오늘 몫 소진', () => {
         const wrapper = await mountPanel({ remainingAnalyze: 0 });
 
         expect(wrapper.find('[data-testid="recall-cap-spent"]').text())
-            .toBe('오늘 몫을 다 썼어요 — 내일 다시 해 주세요.');
+            .toBe('오늘 몫을 다 썼어요 — 한국 시간 오전 9시에 다시 채워져요.');
         expect(wrapper.find('[data-testid="recall-analyze"]').attributes('disabled')).toBeDefined();
     });
 

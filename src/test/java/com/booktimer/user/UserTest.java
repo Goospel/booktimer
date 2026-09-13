@@ -743,4 +743,14 @@ class UserTest {
         assertThatThrownBy(() -> unverified.reassignEmailToSynthetic("not-an-email"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("hasSyntheticEmail: 합성 도메인 주소면 true, 일반 주소면 false — 발송 금지 판별의 단일 출처")
+    void hasSyntheticEmail_trueOnlyForSyntheticDomain() {
+        User synthetic = User.of("toss-uk1" + User.SYNTHETIC_EMAIL_DOMAIN, HASH, NICK, TZ, Role.USER);
+        assertThat(synthetic.hasSyntheticEmail()).isTrue();
+
+        User normal = User.of("reader@booktimer.com", HASH, NICK, TZ, Role.USER);
+        assertThat(normal.hasSyntheticEmail()).isFalse();
+    }
 }

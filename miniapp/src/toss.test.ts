@@ -1,9 +1,12 @@
-import { Analytics, Notification, loadFullScreenAd, showFullScreenAd } from '@apps-in-toss/web-framework';
+import { Analytics, Device, Notification, loadFullScreenAd, showFullScreenAd } from '@apps-in-toss/web-framework';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   BANNER_RENDER_TIMEOUT_MS,
+  GOAL_MET_TEMPLATE_CODE,
   INTERSTITIAL_TIMEOUT_MS,
+  STUDY_GOAL_TEMPLATE_CODE,
+  hapticOnce,
   marginBannerEnabled,
   notificationAgreementSupported,
   requestNotificationAgreement,
@@ -41,6 +44,7 @@ vi.mock('@apps-in-toss/web-framework', () => ({
   Notification: { requestAgreement: Object.assign(vi.fn(), { isSupported: vi.fn() }) },
   Analytics: { log: vi.fn() },
   TossAds: tossAdsMock,
+  Device: { triggerHaptic: vi.fn() },
 }));
 
 const loadMock = vi.mocked(loadFullScreenAd);
@@ -125,6 +129,45 @@ describe('watchRewardAd', () => {
     void watchRewardAd('ad-group-1');
 
     expect(showMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 달성 햅틱 — 홈 effect 안에서 불린다. 토스 밖(목 모드)엔 브릿지가 없어 동기로 던지고, 앱 안에서도
+ * 거부할 수 있다 — 어느 쪽이든 새면 홈 렌더(또는 unhandled rejection)가 깨진다.
+ */
+describe('hapticOnce', () => {
+  const hapticMock = vi.mocked(Device.triggerHaptic);
+
+  it('성공 햅틱 1회를 요청한다', () => {
+    hapticMock.mockReset();
+    hapticMock.mockResolvedValue(undefined);
+
+    hapticOnce();
+
+    expect(hapticMock).toHaveBeenCalledTimes(1);
+    expect(hapticMock).toHaveBeenCalledWith({ type: 'success' });
+  });
+
+  it('브릿지가 동기로 던져도(토스 밖) 삼킨다', () => {
+    hapticMock.mockReset();
+    hapticMock.mockImplementation(() => {
+      throw new TypeError('no bridge');
+    });
+
+    expect(() => hapticOnce()).not.toThrow();
+  });
+
+  it('브릿지가 거부해도 삼킨다 — 아무도 안 받는 rejection이 새지 않는다', async () => {
+    hapticMock.mockReset();
+    const rejected = Promise.reject(new Error('denied'));
+    const caught = vi.spyOn(rejected, 'catch');
+    hapticMock.mockReturnValue(rejected);
+
+    hapticOnce();
+
+    expect(caught).toHaveBeenCalledTimes(1);
+    await rejected.catch(() => {}); // 테스트 자신이 남긴 참조 정리
   });
 });
 
@@ -328,6 +371,20 @@ describe('requestNotificationAgreement', () => {
 
     await expect(requestNotificationAgreement('t')).resolves.toBeNull();
     expect(supportedMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 동의 요청 코드는 콘솔에 등록된 발송 코드와 한 글자도 어긋나면 안 된다 — 토스는 이 코드로 동의문을 찾는다.
+ * 홈 테스트는 이 값을 목으로 갈아 끼우므로, 실값은 여기서만 잰다.
+ */
+describe('알림 동의 템플릿 코드 — 콘솔 등록값', () => {
+  it('공부는 공부 동의문(122175)에 묶인 booktimer-study-goal-met이다', () => {
+    expect(STUDY_GOAL_TEMPLATE_CODE).toBe('booktimer-study-goal-met');
+  });
+
+  it('독서 코드와 다르다 — 같으면 공부 카드가 독서 동의문을 띄운다', () => {
+    expect(STUDY_GOAL_TEMPLATE_CODE).not.toBe(GOAL_MET_TEMPLATE_CODE);
   });
 });
 

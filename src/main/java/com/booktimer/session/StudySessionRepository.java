@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
@@ -70,6 +71,29 @@ public interface StudySessionRepository extends JpaRepository<StudySession, Long
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update StudySession s set s.book = null where s.book = :book")
     void unlinkBook(@Param("book") StudyBook book);
+
+    /**
+     * 회당 시간 도달 푸시 후보 — 진행 중 · 아직 안 보냄 · 회당 시간이 있는 책. 닿음·GRACE·토스 연결 판정은
+     * {@link StudyGoalPushService}가 자바에서 한다(활성 세션이 두 자리 규모).
+     */
+    @Query("""
+            select s from StudySession s join fetch s.book b join fetch s.user
+            where s.endedAt is null and s.goalNotifiedAt is null and b.sessionGoalSeconds is not null
+            """)
+    List<StudySession> findGoalPushCandidates();
+
+    /**
+     * 푸시 발송 마킹 — <b>컬럼 하나만</b> 쓴다. 엔티티 save(전 컬럼 UPDATE)는 스케줄러가 로드한 뒤 커밋된
+     * {@code stop}의 {@code endedAt}을 null로 덮어 측정을 되살린다.
+     *
+     * <p>{@code @Transactional}인 이유는 호출부({@link StudyGoalPushService})가 <b>트랜잭션 밖</b>이기 때문이다 —
+     * 세션마다 즉시 커밋해야 행 락이 뒤 세션들의 발송(HTTP) 동안 잡혀 있지 않고, 한 세션의 마킹 실패가 이미
+     * 발송한 다른 세션들의 마킹을 롤백시키지 않는다({@code StudyAiUsageRepository.consume}과 같은 규율).
+     */
+    @Transactional
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update StudySession s set s.goalNotifiedAt = :now where s.id = :id and s.goalNotifiedAt is null")
+    int markGoalNotified(@Param("id") Long id, @Param("now") Instant now);
 
     /** 방치 스윕 대상 — 임계 시각 이전에 시작해 아직 안 닫힌 세션들. */
     List<StudySession> findByEndedAtIsNullAndStartedAtBefore(Instant threshold);

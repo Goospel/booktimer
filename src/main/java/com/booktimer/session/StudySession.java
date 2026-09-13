@@ -69,6 +69,14 @@ public class StudySession extends BaseTimeEntity {
     @JoinColumn(name = "book_id")
     private StudyBook book;
 
+    /**
+     * 회당 시간 도달 푸시를 보낸 시각(세션당 1회 멱등, null = 아직/대상 아님).
+     *
+     * <p>세터가 없다 — 쓰는 곳은 컬럼 단독 UPDATE({@link StudySessionRepository#markGoalNotified}) 하나다.
+     */
+    @Column
+    private Instant goalNotifiedAt;
+
     protected StudySession() {
         // JPA
     }
@@ -198,5 +206,9 @@ public class StudySession extends BaseTimeEntity {
 
     public long getDurationSeconds() {
         return durationSeconds;
+    }
+
+    public Instant getGoalNotifiedAt() {
+        return goalNotifiedAt;
     }
 }

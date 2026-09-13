@@ -12,6 +12,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -62,5 +63,26 @@ class StudyAiAccessServiceTest {
     void requireApproved_approved_passes() {
         assertThatCode(() -> service.requireApproved(userIn(StudyAiAccess.APPROVED)))
                 .doesNotThrowAnyException();
+    }
+
+    /**
+     * 신청 게이트 — 이메일 미검증 계정은 대기 큐에 들어가지 못한다(리뷰 S-4).
+     *
+     * <p>DB 없이 잴 수 있는 것은 <b>검사가 전이·저장보다 앞</b>이기 때문이다(리포지터리가 {@code null}인데
+     * 통과하면 NPE가 난다 — 그 자체가 게이트가 없다는 신호다). 검증된 계정이 통과하는 <b>양성 대조군</b>은
+     * 저장이 필요해 {@code StudyAiApprovalCapTest}가 든다.
+     */
+    @Test
+    @DisplayName("이메일 미검증이면 신청이 403 — 상태도 흔들지 않는다")
+    void request_unverifiedEmail_forbids() {
+        User user = userIn(StudyAiAccess.NONE); // User.of는 emailVerified=false로 시작한다
+
+        assertThatThrownBy(() -> service.request(user, Instant.parse("2026-09-13T01:00:00Z")))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("이메일 인증 후 신청할 수 있어요")
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.FORBIDDEN);
+
+        assertThat(user.getStudyAiAccess()).isEqualTo(StudyAiAccess.NONE);
     }
 }

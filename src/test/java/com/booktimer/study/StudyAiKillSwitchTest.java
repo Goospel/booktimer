@@ -50,6 +50,8 @@ class StudyAiKillSwitchTest {
                 "닉네임_" + loginId, "Asia/Seoul", Role.USER, LocalDate.of(2026, 1, 1));
         User user = userRepository.findByLoginId(loginId).orElseThrow();
         Instant now = Instant.parse("2026-09-08T01:00:00Z");
+        user.verifyEmail(); // 신청 게이트가 이메일 검증을 요구한다(S-4) — 로컬 가입은 미검증으로 시작한다
+        userRepository.saveAndFlush(user);
         accessService.request(user, now);
         accessService.approve(loginId, now);
         return userRepository.findByLoginId(loginId).orElseThrow();
