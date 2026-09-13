@@ -88,4 +88,8 @@ check "git status (non-commit) → exit 0" 0 "$(run_in_repo 'git status' "$d")"
 got=$(echo "not-json" | powershell.exe -NoProfile -File "$HOOK" >/dev/null 2>&1; echo $?)
 check "broken JSON → fail-open exit 0" 0 "$got"
 
+# ── Case 10: Korean right before the closing quote must not fail-open (stdin UTF-8) ──
+d=$(setup_repo $'/* shared: .card/.oauth-*/.entry-hero list */\n.auth-shell { max-width: 400px; }\n')
+check "glued */ + Korean in command → exit 2" 2 "$(run_in_repo 'git commit -F .commit-msg-tmp # 테스트' "$d")"
+
 exit $FAILED

@@ -64,7 +64,10 @@ public class StudyAiUsage extends BaseTimeEntity {
     @JoinColumn(name = "user_id")
     private User user;
 
-    /** 상한의 날짜 키 — <b>호출한 날</b>(유저 tz)이다. 대상 글의 날짜가 아니다. */
+    /**
+     * 상한의 날짜 키 — <b>호출한 날(UTC)</b>이다. 대상 글의 날짜도, 유저 타임존 날짜도 아니다
+     * (타임존은 사용자가 바꿀 수 있어 키로 쓸 수 없다 — {@link StudyAiUsageService} javadoc의 S-3).
+     */
     @Column(name = "usage_date", nullable = false)
     private LocalDate usageDate;
 

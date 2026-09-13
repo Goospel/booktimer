@@ -95,6 +95,10 @@ check "plain + ALLOW_MAIN_PUSH → exit 0" 0 \
 #    (stdin 을 CP949 로 읽으면 JSON 파싱이 깨져 fail-open 될 수 있다 — 그 회귀를 잡는다)
 check "Korean in command + push origin main → exit 2" 2 \
       "$(run 'echo 한글메모 && git push origin main')"
+#    ↑ '한글메모' 는 CP949 로 읽어도 파싱이 안 깨져 그 회귀를 못 잡는다(판별력 없음).
+#      따옴표 바로 앞 '문' 은 CP949 선행바이트가 따옴표를 삼켜 실제로 깨진다.
+check "Korean right before quote + push origin main → exit 2" 2 \
+      "$(run 'git add "문" && git push origin main')"
 
 # ── Case 10: bare 'git push' → 현재 브랜치/upstream 으로 판정 ──
 check "bare push on main branch → exit 2" 2 "$(run 'git push' "$(mk_repo)")"

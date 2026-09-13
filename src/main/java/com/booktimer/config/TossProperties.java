@@ -65,6 +65,31 @@ public class TossProperties {
         /** 재참여 넛지 템플릿의 templateSetCode(콘솔 발급). 비어 있으면 발송하지 않는다. */
         private String retentionTemplateCode;
 
+        /**
+         * 공부 「회당 시간」 도달 감지 스케줄러 점등 — false면 스케줄러 빈 자체가 없다.
+         * {@link #goalMetEnabled}(독서)와 <b>별개 토글</b>이다(실발송엔 {@link #enabled}도 true여야 한다).
+         */
+        private boolean studyGoalEnabled;
+
+        /** 회당 시간 도달 템플릿의 templateSetCode(콘솔 발급). 비어 있으면 발송하지 않는다. */
+        private String studyGoalTemplateCode;
+
+        public boolean isStudyGoalEnabled() {
+            return studyGoalEnabled;
+        }
+
+        public void setStudyGoalEnabled(boolean studyGoalEnabled) {
+            this.studyGoalEnabled = studyGoalEnabled;
+        }
+
+        public String getStudyGoalTemplateCode() {
+            return studyGoalTemplateCode;
+        }
+
+        public void setStudyGoalTemplateCode(String studyGoalTemplateCode) {
+            this.studyGoalTemplateCode = studyGoalTemplateCode;
+        }
+
         public boolean isEnabled() {
             return enabled;
         }

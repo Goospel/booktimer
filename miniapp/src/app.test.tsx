@@ -1078,9 +1078,9 @@ describe('화면 이름 판정 (currentScreen)', () => {
     expect(currentScreen({ ...base, view: 'goal', loaded: false })).toBeNull();
   });
 
-  it('신규 온보딩 도달점 셋 — 목표·공부 목표·설정', () => {
+  // 공부 목표 화면(`study_goal`)은 2026-09-13 책별 「회당 시간」 시트로 대체돼 도달점에서 빠졌다.
+  it('신규 온보딩 도달점 둘 — 목표·설정', () => {
     expect(currentScreen({ ...base, view: 'goal' })).toBe('goal');
-    expect(currentScreen({ ...base, view: 'studyGoal' })).toBe('study_goal');
     expect(currentScreen({ ...base, view: 'settings' })).toBe('settings');
   });
 

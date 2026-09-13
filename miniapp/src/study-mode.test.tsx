@@ -13,9 +13,10 @@ import {
   startToastMessage,
   timerActionView,
 } from './App';
-import type { DashboardResponse, StudyState } from './api';
+import type { DashboardResponse, StudyBookRow, StudyState } from './api';
 import { IDLE_STUDY } from './api';
-import { ACTIVE_STUDY_RELIEF, HERO_CARD_BG_VAR, Home, ModeToggle, heroOverline, studyProgress } from './screens/Home';
+import { ACTIVE_STUDY_RELIEF, HERO_CARD_BG_VAR, Home, ModeToggle, heroOverline } from './screens/Home';
+import { SessionGoalSheet } from './screens/SessionGoalSheet';
 import { graph, stubLocalStorage, userAgent } from './test-fixtures';
 
 /**
@@ -34,6 +35,7 @@ vi.mock('./toss', () => ({
   requestNotificationAgreement: vi.fn(),
   trackEvent: vi.fn(),
   openExternal: vi.fn(),
+  hapticOnce: vi.fn(),
 }));
 
 beforeEach(() => {
@@ -151,42 +153,13 @@ describe('시작 토스트 — 공부에도 책이 생겼다', () => {
 });
 
 describe('히어로 오버라인', () => {
-  it('공부 모드도 달성이면 새싹 머리말로 갈린다(null = 새싹 분기) — 2차에서 목표가 생겼다', () => {
+  it('공부 모드는 「오늘 공부한 시간」이다(하루 목표 폐기로 공부엔 새싹 분기가 오지 않는다 — 렌더 테스트가 잰다)', () => {
     expect(heroOverline('study', false)).toBe('오늘 공부한 시간');
-    expect(heroOverline('study', true)).toBeNull();
   });
 
   it('독서 모드는 「오늘 읽은 시간」이고, 달성이면 새싹 머리말로 갈린다(null = 새싹 분기)', () => {
     expect(heroOverline('reading', false)).toBe('오늘 읽은 시간');
     expect(heroOverline('reading', true)).toBeNull();
-  });
-});
-
-/**
- * 공부 게이지 파생값 — {@link todayProgress}(독서)에서 <b>이월·부채 항을 뺀</b> 축소판이다.
- * 공부엔 빚이 없어 게이지 최대치가 곧 목표고, 「목표는 달성인데 게이지는 아직」 구간도 없다.
- */
-describe('공부 진행률 (studyProgress)', () => {
-  it('목표 0이면 게이지를 안 그린다 — 달성이라 우기지도 않는다', () => {
-    expect(studyProgress(0, 0)).toEqual({ remaining: 0, progress: null, achieved: false, overflow: 0 });
-    expect(studyProgress(0, 3_600)).toEqual({ remaining: 0, progress: null, achieved: false, overflow: 0 });
-  });
-
-  it('덜 채웠으면 남은 시간과 비율이 함께 온다', () => {
-    expect(studyProgress(1_800, 600)).toEqual({ remaining: 1_200, progress: 1 / 3, achieved: false, overflow: 0 });
-  });
-
-  it('정확히 채운 순간이 달성이다 — 경계는 「이상」이지 「초과」가 아니다', () => {
-    expect(studyProgress(1_800, 1_800)).toEqual({ remaining: 0, progress: 1, achieved: true, overflow: 0 });
-  });
-
-  it('넘기면 비율은 1에서 멈추고 초과분이 따로 온다 — 게이지가 밖으로 자라지 않는다', () => {
-    expect(studyProgress(1_800, 2_400)).toEqual({ remaining: 0, progress: 1, achieved: true, overflow: 600 });
-  });
-
-  it('음수 입력에도 화면에 음수 시간이 뜨지 않는다 — 서버 스냅샷이 어긋나도 바닥을 친다', () => {
-    expect(studyProgress(-1, 600)).toEqual({ remaining: 0, progress: null, achieved: false, overflow: 0 });
-    expect(studyProgress(1_800, -600)).toEqual({ remaining: 1_800, progress: 0, achieved: false, overflow: 0 });
   });
 });
 
@@ -234,6 +207,20 @@ describe('공부 모드 색 — css에 실재하는가', () => {
    * 그대로 뜬다. 옛 계측기(「공부 토스트에 세이지 리터럴이 없다」)로는 이걸 못 잡는다 — 폴백을 쓰는
    * 이상 마크업엔 리터럴이 늘 실린다. 그래서 <b>선언 자체</b>를 잰다(히어로 카드 틴트와 같은 처방).
    */
+  /**
+   * 채움 주 버튼(`FilledButton`)은 공부 모드에서도 진한 채움이어야 한다 — 공부 primary 재색칠 규칙
+   * (`body.study-mode … #3182f6`)이 명시도가 더 높아 채움을 연한 파랑으로 덮고, 종이색 글자가 그 위에서
+   * 거의 안 읽혔다(목 모드 실측 2026-09-13: 회당 시간 시트 「저장」 computed `rgba(95, 126, 150, 0.16)`).
+   * 같은 명시도의 공부 전용 채움 규칙이 <b>그 뒤에</b> 있어야 이긴다 — 순서까지 잰다.
+   */
+  it('공부 모드의 채움 버튼 규칙이 primary 재색칠보다 뒤에 있다 — 앞이면 연한 채움에 진다', () => {
+    const primary = css.indexOf("body.study-mode .tds-mobile-button[style*='--button-background-color:#3182f6']");
+    const filled = css.indexOf("body.study-mode .tds-mobile-button[style*='--btn-filled']");
+    expect(primary).toBeGreaterThan(-1);
+    expect(filled).toBeGreaterThan(primary);
+    expect(css.slice(filled, css.indexOf('}', filled))).toContain('background-color: var(--adaptiveBlue700');
+  });
+
   it('강조 알약 토큰이 공부 블록에도 있다 — 빠지면 fallback 세이지가 그대로 뜬다', () => {
     const study = css.slice(css.indexOf(`body.${STUDY_CLASS} {`), css.indexOf('}', css.indexOf(`body.${STUDY_CLASS} {`)));
 
@@ -314,20 +301,62 @@ describe('여백 진입 게이트 — 공부 측정도 끊는다', () => {
 });
 
 /**
- * 목표 화면 진입 배선 — 손잡이(홈 「변경 ›」·GoalHandle)는 <b>코드 무변경</b>이고, 어느 목표 화면으로
- * 가느냐는 App이 모드로 고른다. 정적 렌더로는 클릭이 안 도니(T-149) 배선을 소스로 잰다.
+ * 회당 시간 배선 — 정적 렌더로는 클릭·effect가 안 도니(T-149) <b>건수</b>로 잰다(존재 단언은 뒤바뀜을 못 잡는다, T-218).
+ *
+ * <p>2026-09-13 하루 목표 폐기: 공부 목표 화면(`'studyGoal'`)과 그 진입의 전면광고가 통째로 사라졌다.
+ * 회당 시간 설정에는 광고를 붙이지 않는다(사용자 결정 Q1) — 광고 진입점이 조용히 되살아나지 않게 0건으로 잠근다.
  */
-describe('공부 목표 진입 배선 (App)', () => {
-  const code = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8');
+describe('회당 시간 배선 (소스)', () => {
+  const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  const app = strip(readFileSync(new URL('./App.tsx', import.meta.url), 'utf8'));
+  const home = strip(readFileSync(new URL('./screens/Home.tsx', import.meta.url), 'utf8'));
+  const sheet = strip(readFileSync(new URL('./screens/SessionGoalSheet.tsx', import.meta.url), 'utf8'));
+  const count = (code: string, needle: string) => code.split(needle).length - 1;
 
-  it('공부 모드면 공부 목표 화면으로 간다 — 분기가 없으면 손잡이가 독서 목표를 연다', () => {
-    expect(code).toContain("onGoGoal={mode === 'study' ? goToStudyGoal : goToGoal}");
+  it('공부 목표 화면이 남아 있지 않다', () => {
+    expect(count(app, "'studyGoal'")).toBe(0);
+    expect(count(app, 'goToStudyGoal')).toBe(0);
   });
 
-  it('전면광고는 기존 경로를 그대로 탄다 — 「목표 바꾸기 = 광고 1회」 규칙이 모드 무관 동일하다', () => {
-    const enter = code.slice(code.indexOf('const goToStudyGoal ='), code.indexOf('switch (view)'));
-    expect(enter).toContain('showInterstitialAd()');
-    expect(enter).toContain("setView('studyGoal')");
+  it('홈 손잡이는 독서 목표로만 간다 — 모드 분기가 없다', () => {
+    expect(count(app, 'onGoGoal={goToGoal}')).toBe(2); // 설정 화면 + 메인 탭
+  });
+
+  /**
+   * 저장 순서 — 응답이 <b>성공한 뒤에</b> 반영하고 닫는다(`tag()`와 같은 규약). 성공이면 지난 실패 스트립도 지운다.
+   * 실패는 시트 <b>안</b>에서 말한다: 액션 스트립은 탭바 층(z 100)이라 불투명 시트 패널(z 201)에 가린다(`changeBook` 주석의 실측).
+   */
+  it('회당 시간은 한 문으로 저장되고, 성공한 응답만 공부 상태에 반영하며 지난 실패 스트립을 지운다', () => {
+    const at = app.indexOf('setStudySessionGoal(id, s).then((next) => {');
+    expect(count(app, 'setStudySessionGoal(')).toBe(1);
+    expect(at).toBeGreaterThan(-1);
+    const body = app.slice(at, app.indexOf('})', at));
+    expect(body).toContain('onStudyChange(next)');
+    expect(body).toContain('setActionError(null)');
+  });
+
+  it('시트는 저장이 성공한 뒤에 닫힌다 — 저장을 부르는 자리에서 곧바로 닫지 않는다', () => {
+    expect(count(home, '.then(() => setGoalSheetBook(null))')).toBe(1);
+    // 닫는 호출은 성공 뒤·✕·뒤로가기 셋뿐이다 — onPick 안에서 먼저 닫으면 네 번째가 생긴다.
+    expect(count(home, 'setGoalSheetBook(null)')).toBe(3);
+  });
+
+  it('달성 햅틱은 한 자리에서만, 전환 판정(shouldHaptic)을 거쳐 부른다', () => {
+    expect(count(home, 'hapticOnce(')).toBe(1);
+    expect(count(home, 'if (shouldHaptic(wasReached.current, studyReached)) hapticOnce()')).toBe(1);
+  });
+
+  it('회당 시간 설정에는 전면광고가 없다(Q1)', () => {
+    expect(count(home, 'showInterstitialAd(')).toBe(0);
+    expect(count(sheet, 'showInterstitialAd(')).toBe(0);
+    // 저장 배선은 App에 산다 — App의 광고 호출은 독서 「목표 바꾸기」(goToGoal) 한 자리뿐이어야 한다.
+    expect(count(app, 'showInterstitialAd(')).toBe(1);
+    const goToGoal = app.slice(app.indexOf('const goToGoal ='), app.indexOf('switch (view)'));
+    expect(goToGoal).toContain('showInterstitialAd(');
+  });
+
+  it('시트의 저장 버튼은 휠 판정을 본다 — 0시간 0분·6시간 초과에서 잠긴다', () => {
+    expect(count(sheet, 'disabled={!wheel.valid}')).toBe(1);
   });
 });
 
@@ -412,19 +441,6 @@ describe('홈 — 공부 모드 렌더', () => {
   });
 
   /**
-   * 2차에서 <b>목표만</b> 돌아왔다 — 게이지·남은 시간·「변경 ›」은 서고, 부채 장치(ⓘ 툴팁·이월 문구·
-   * 리워드 광고)는 그대로 없다. 공부엔 이월이 없어 설명할 규칙도, 지울 빚도 없기 때문이다.
-   */
-  it('목표가 있으면 게이지·남은 시간·「변경 ›」이 선다', () => {
-    const markup = renderHome('study', {}, { ...IDLE_STUDY, todaySeconds: 600, goalSeconds: 1_800 });
-    expect(markup).toContain('하루 목표');
-    expect(markup).toContain('남은 시간');
-    expect(markup).toContain('변경 ›');
-    // 게이지 분모는 공부 목표다 — 남은 시간 20분(=1800-600)이 화면에 실제로 닿는지.
-    expect(markup).toContain('20:00');
-  });
-
-  /**
    * ⚠️ 이 단언은 <b>부채가 있는 픽스처</b>로 재야 한다 — 빚 0으로 재면 독서 렌더에서도 ⓘ가 서지만
    * 판별의 근거가 「그 모드엔 원래 없다」로 흐려진다. 그리고 「밀린 시간」·「광고 보고」 문자열로 재던
    * 앞 판(2026-09-01)은 <b>공허했다</b>: 그 둘은 `RemainingNote` 안이라 ⓘ를 <b>탭해야</b> 열리는데
@@ -436,26 +452,36 @@ describe('홈 — 공부 모드 렌더', () => {
 
     // 짝: 같은 빚을 가진 독서 렌더엔 ⓘ가 선다 — 아래 부재 단언이 공허하지 않다는 증거다.
     expect(renderHome('reading', debt)).toContain('aria-expanded');
-    expect(renderHome('study', debt, { ...IDLE_STUDY, todaySeconds: 600, goalSeconds: 1_800 }))
-      .not.toContain('aria-expanded');
+    expect(renderHome('study', debt, { ...IDLE_STUDY, todaySeconds: 600 })).not.toContain('aria-expanded');
   });
 
-  it('목표가 0이면 게이지 대신 「목표 정하기」 손잡이만 — 강요 없이 문만 둔다', () => {
-    const markup = renderHome('study', {}, { ...IDLE_STUDY, goalSeconds: 0 });
-    expect(markup).toContain('목표 정하기');
-    expect(markup).not.toContain('남은 시간');
+  /**
+   * 하루 목표 폐기(2026-09-13, Q6) — 게이지·「목표 정하기」·「변경 ›」·새싹이 공부 히어로에서 전부 빠진다.
+   *
+   * <p>픽스처가 <b>옛 서버 필드(`goalSeconds`)를 일부러 싣는다</b> — 서버는 잔재 정리 전까지 이 값을 계속
+   * 보내므로, 화면이 그걸 다시 읽기 시작하면(달성 = 새싹) 여기서 죽어야 한다. 짝(양성 대조)은 같은 부품을
+   * 그리는 독서 렌더(아래 「독서 모드 회귀 가드」의 「하루 목표」)와 독서 새싹 테스트(`home.test.tsx`)다.
+   */
+  it('공부 히어로엔 하루 목표 흔적이 없다 — 게이지·목표 정하기·변경 ›·새싹 0건, 오늘 공부한 시간은 그대로', () => {
+    const legacy = { ...IDLE_STUDY, todaySeconds: 1_800, goalSeconds: 1_800 } as StudyState;
+    for (const study of [legacy, { ...IDLE_STUDY, todaySeconds: 0, goalSeconds: 0 } as StudyState]) {
+      const markup = renderHome('study', {}, study);
+      expect(markup).not.toContain('하루 목표');
+      expect(markup).not.toContain('목표 정하기');
+      expect(markup).not.toContain('변경 ›');
+      expect(markup).not.toContain('남은 시간');
+      expect(markup).not.toContain('data-sprout');
+      expect(markup).not.toContain('오늘 목표 달성');
+      expect(markup).toContain('오늘 공부한 시간');
+    }
+    expect(renderHome('study', {}, legacy)).toContain('30:00');
   });
 
-  it('목표를 넘기면 초과분을 말한다 — 독서와 같은 꼴(공짜 대칭)', () => {
-    const markup = renderHome('study', {}, { ...IDLE_STUDY, todaySeconds: 2_400, goalSeconds: 1_800 });
-    expect(markup).toContain('+10분 더 공부했어요');
-  });
-
-  it('달성하면 머리말이 새싹으로 바뀐다 — 「오늘 공부한 시간」 글자가 사라지고 표식이 선다', () => {
-    const markup = renderHome('study', {}, { ...IDLE_STUDY, todaySeconds: 1_800, goalSeconds: 1_800 });
-    expect(markup).toContain('오늘 목표 달성');
-    expect(markup).toContain('data-sprout');
-    expect(markup).not.toContain('오늘 공부한 시간');
+  /** 새싹은 독서 원장의 것이다 — 독서 목표를 채운 날 공부로 토글해도 공부 히어로에 새싹이 새지 않는다. */
+  it('독서 목표를 채운 날에도 공부 히어로엔 새싹이 없다(양성 쌍: 같은 대시보드의 독서 렌더엔 선다)', () => {
+    const readingDone = { remainingSeconds: 0, todayReadSeconds: 3_600, carriedDebtSeconds: 0 };
+    expect(renderHome('reading', readingDone)).toContain('data-sprout');
+    expect(renderHome('study', readingDone)).not.toContain('data-sprout');
   });
 
   it('공부 측정 중이면 안심 문구를 말한다 — 화면을 꺼도 서버가 센다는 계약', () => {
@@ -477,6 +503,166 @@ describe('홈 — 공부 모드 렌더', () => {
 
   it('홈 피드·계정 헤더는 그대로다 — 모드는 타이머의 모드지 화면의 모드가 아니다', () => {
     expect(renderHome('study')).toContain('공부하는사람');
+  });
+});
+
+/**
+ * 책별 「회당 시간」 — 대기 중엔 캐러셀 아래 손잡이, 측정 중엔 측정 줄 아래 남은 시간/달성 한 줄.
+ * 문구 자체는 `sessionGoal.test.ts`가 잰다 — 여기서는 <b>그 문구가 화면에 실제로 닿는가</b>와 가드(책 없이·스톱워치)를 잰다.
+ */
+describe('홈 — 공부 회당 시간', () => {
+  const book = (id: number, sessionGoalSeconds: number | null): StudyBookRow => ({
+    id,
+    title: `공부책${id}`,
+    author: null,
+    coverUrl: null,
+    isbn13: null,
+    readCount: 0,
+    purchaseLink: null,
+    sessionGoalSeconds,
+  });
+  const books = [book(7, 3_000), book(8, null)];
+
+  const renderStudy = (study: StudyState, selectedStudyBookId?: number | null) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <Home
+          dashboard={dashboard({}, study)}
+          mode="study"
+          study={study}
+          onChangeMode={() => {}}
+          onBlockedModeChange={() => {}}
+          selectedBookId={undefined}
+          onSelectBook={() => {}}
+          selectedStudyBookId={selectedStudyBookId}
+          onSelectStudyBook={() => {}}
+          onTimerChange={() => {}}
+          celebrate={false}
+          onGoGoal={() => {}}
+          goalAdPending={false}
+          onGoSettings={() => {}}
+          onError={() => {}}
+          onOpenMargin={() => {}}
+          onComposeMargin={() => {}}
+          onSetSessionGoal={() => Promise.resolve()}
+        />
+      </TDSMobileProvider>,
+    );
+
+  const idle = { ...IDLE_STUDY, books };
+  /** `seconds`초 전에 시작한 측정 — 반 초를 더 얹어 렌더 시각이 초 경계를 넘어도 같은 정수 경과가 나오게 한다. */
+  const measuring = (activeBook: StudyBookRow | null, seconds: number): StudyState => ({
+    ...IDLE_STUDY,
+    books,
+    hasActiveSession: true,
+    activeStartedAt: new Date(Date.now() - seconds * 1000 - 500).toISOString(),
+    activeBook,
+  });
+
+  it('대기 — 고른 책에 회당 시간이 있으면 「회당 50분 · 바꾸기」', () => {
+    expect(renderStudy(idle, 7)).toContain('회당 50분 · 바꾸기');
+  });
+
+  it('대기 — 없으면 「회당 시간 정하기」', () => {
+    const markup = renderStudy(idle, 8);
+    expect(markup).toContain('회당 시간 정하기');
+    expect(markup).not.toContain('회당 50분');
+  });
+
+  it('대기 — 「책 없이」를 고르면 손잡이가 없다(책이 없으면 회당 시간도 없다)', () => {
+    expect(renderStudy(idle, null)).not.toContain('회당');
+    // 짝: 같은 픽스처에서 책을 고르면 선다 — 위 부재가 공허하지 않다.
+    expect(renderStudy(idle, 8)).toContain('회당');
+  });
+
+  it('측정 중 — 닿기 전엔 남은 시간을 말하고, 손잡이는 값을 되풀이하지 않는다', () => {
+    const markup = renderStudy(measuring(books[0], 750));
+    expect(markup).toContain('회당 50분 · 37분 남음');
+    expect(markup).toContain('회당 시간 바꾸기');
+    expect(markup).not.toContain('회당 50분 · 바꾸기');
+  });
+
+  it('측정 중 — 닿으면 달성과 더 한 시간을 말한다', () => {
+    const markup = renderStudy(measuring(books[0], 3_330));
+    expect(markup).toContain('회당 50분 달성 · 5분 더 공부했어요');
+    expect(markup).not.toContain('남음');
+  });
+
+  it('측정 중 — 회당 시간이 없는 책은 스톱워치라 남은 시간 줄이 없고, 정하는 손잡이만 선다', () => {
+    const markup = renderStudy(measuring(books[1], 750));
+    expect(markup).not.toContain('남음');
+    expect(markup).not.toContain('달성');
+    expect(markup).toContain('회당 시간 정하기');
+  });
+
+  it('측정 중 — 책 없이 재면 회당 줄도 손잡이도 없다', () => {
+    const markup = renderStudy(measuring(null, 750));
+    expect(markup).not.toContain('회당');
+    expect(markup).toContain(ACTIVE_STUDY_RELIEF);
+  });
+
+  it('홈을 처음 그릴 때 시트는 닫혀 있다 — 진입 직후 화면을 덮는 층이 없다(심사 규칙)', () => {
+    expect(renderStudy(idle, 7)).not.toContain('이 책 회당 시간');
+    expect(renderStudy(measuring(books[0], 3_330))).not.toContain('role="dialog"');
+  });
+});
+
+describe('회당 시간 시트 (SessionGoalSheet)', () => {
+  const row = (sessionGoalSeconds: number | null): StudyBookRow => ({
+    id: 7,
+    title: '정보처리기사 필기',
+    author: null,
+    coverUrl: null,
+    isbn13: null,
+    readCount: 0,
+    purchaseLink: null,
+    sessionGoalSeconds,
+  });
+  const render = (sessionGoalSeconds: number | null) =>
+    renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <SessionGoalSheet book={row(sessionGoalSeconds)} onPick={() => {}} onClose={() => {}} />
+      </TDSMobileProvider>,
+    );
+  const buttons = (markup: string, label: string) =>
+    markup
+      .split('<button')
+      .slice(1)
+      .filter((chunk) => chunk.includes(label))
+      .map((chunk) => chunk.slice(0, chunk.indexOf('>')));
+
+  it('제목과 책 제목을 말한다 — 어느 책의 값을 고치는지 시트가 스스로 말한다', () => {
+    const markup = render(3_000);
+    expect(markup).toContain('이 책 회당 시간');
+    expect(markup).toContain('정보처리기사 필기');
+  });
+
+  it('시·분 휠 두 열이 높이 박힌 컨테이너 안에 선택 밴드와 함께 선다(Goal.tsx와 같은 부품)', () => {
+    const markup = render(3_000);
+    expect(markup).toContain('aria-label="시간 선택"');
+    expect(markup).toContain('aria-label="분 선택"');
+    expect(markup).toContain('data-wheel-band');
+    expect(markup).toContain('height:180px');
+    expect(markup).toContain('goal-wheels');
+  });
+
+  it('처음 칸은 저장할 수 있는 값이다 — 현재 값(50분)이든 기본값(30분)이든 저장이 잠기지 않는다', () => {
+    expect(buttons(render(3_000), '저장')[0]).not.toContain('disabled');
+    expect(buttons(render(null), '저장')[0]).not.toContain('disabled');
+  });
+
+  it('저장이 실패하면 시트 안에서 말한다 — 액션 스트립은 시트에 가려 안 보인다', () => {
+    const markup = renderToStaticMarkup(
+      <TDSMobileProvider userAgent={userAgent}>
+        <SessionGoalSheet book={row(3_000)} error="회당 시간은 1분 이상 6시간 이하로 정해 주세요" onPick={() => {}} onClose={() => {}} />
+      </TDSMobileProvider>,
+    );
+    expect(markup).toContain('회당 시간은 1분 이상 6시간 이하로 정해 주세요');
+  });
+
+  it('「회당 시간 없이」는 지울 값이 있을 때만 선다', () => {
+    expect(buttons(render(3_000), '회당 시간 없이')).toHaveLength(1);
+    expect(buttons(render(null), '회당 시간 없이')).toHaveLength(0);
   });
 });
 

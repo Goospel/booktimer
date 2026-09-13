@@ -658,6 +658,12 @@ body.study-mode .tds-mobile-button[style*='--button-background-color: #3182f6'] 
   --button-loader-color: #5F7E96 !important;
 }
 
+/* 채움 주 버튼(`FilledButton`)도 primary라 바로 위 규칙이 연한 채움으로 덮는다 — 같은 명시도로 <b>뒤에</b> 둬
+   진한 채움(종이색 글자가 읽히는 바탕)을 되찾는다. 값은 토큰이라 공부 모드의 진한 파랑이 된다(2026-09-13). */
+body.study-mode .tds-mobile-button[style*='--btn-filled'] {
+  background-color: var(--adaptiveBlue700, #4F6B4C) !important;
+}
+
 body.study-mode .tds-mobile-button[style*='--button-background-color:rgba(100, 168, 255, 0.15)'],
 body.study-mode .tds-mobile-button[style*='--button-background-color: rgba(100, 168, 255, 0.15)'] {
   --button-dimmer-pressed-background-color: #5F7E96 !important;

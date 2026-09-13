@@ -98,6 +98,8 @@ public class SettingsController {
                 user.getLoginId() != null ? "@" + user.getLoginId() : user.getEmail());
         // 미검증이면 인증 유도 배너를 띄운다(정책 ③). 재발송 버튼은 POST /verify-email/resend로 이 화면에 결과를 남긴다.
         model.addAttribute("emailVerified", user.isEmailVerified());
+        // 합성 자리표시 주소(@noreply)면 미검증이어도 배너를 숨긴다 — 보낼 데가 없어 눌러도 반송만 난다.
+        model.addAttribute("syntheticEmail", user.hasSyntheticEmail());
         model.addAttribute("marketingEmailConsent", user.isMarketingEmailConsent());
         // 토스 앱 연결 — 연결됐으면 상태만 보이고, 아니면 일회용 코드 발급 버튼을 낸다(설계 §2.2).
         model.addAttribute("tossLinked", user.getTossUserKey() != null);

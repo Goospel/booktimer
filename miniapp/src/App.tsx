@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import type { BookOption, DashboardResponse, MarginBook, StudyState, TimerState } from './api';
-import { IDLE_STUDY, changeActiveBook, changeActiveStudyBook, fetchDashboard, startSession, startStudy, stopSession, stopStudy, tagBook, tagStudyBook, token } from './api';
+import { IDLE_STUDY, changeActiveBook, changeActiveStudyBook, fetchDashboard, setStudySessionGoal, startSession, startStudy, stopSession, stopStudy, tagBook, tagStudyBook, token } from './api';
 import { nativeBack, useBackClose } from './back';
 import {
   CoachmarkBubble,
@@ -452,13 +452,8 @@ type View =
   | 'link'
   | 'loading'
   | 'main'
-  /** 독서 목표 화면. */
+  /** 독서 목표 화면. (공부 하루 목표 화면은 2026-09-13 책별 「회당 시간」 시트로 대체돼 걷었다.) */
   | 'goal'
-  /**
-   * 공부 목표 화면 — 파생 `mode`로 렌더를 가르지 않고 <b>진입 시점 스냅샷</b>으로 둔다. 원격에서 모드가
-   * 플립되면(다른 기기에서 측정 시작) 편집 중이던 목표 화면이 통째로 갈아타는 엣지가 생기기 때문이다.
-   */
-  | 'studyGoal'
   | 'settings'
   | 'error';
 
@@ -544,7 +539,6 @@ export type ScreenName =
   | 'link_account'
   | 'error'
   | 'goal'
-  | 'study_goal'
   | 'settings'
   | 'margin'
   | 'book_margin'
@@ -606,8 +600,6 @@ export function currentScreen(s: {
     // 대시보드가 오기 전엔 <Loading />이 뜬다 — 그 순서를 각 갈래가 직접 들고 있어 뒤집을 수가 없다.
     case 'goal':
       return s.loaded ? 'goal' : null;
-    case 'studyGoal':
-      return s.loaded ? 'study_goal' : null;
     case 'settings':
       return s.loaded ? 'settings' : null;
     case 'main':
@@ -836,7 +828,6 @@ export function App() {
     setFirstRun(false);
     setView('main');
   });
-  useBackClose(view === 'studyGoal', () => setView('main'));
   useBackClose(view === 'settings', () => setView('main'));
   // 작성 화면이 위면 그것만 닫는다 — 단 밑에 깔린 여백 화면이 없으면 통째로 닫아 출발한 탭으로 돌아간다.
   useBackClose(margin?.composeBook != null, () => setMargin((m) => (m === null ? null : closeCompose(m))));
@@ -919,24 +910,6 @@ export function App() {
     setView('goal');
   }, [goalAdPending]);
 
-  /**
-   * 공부 목표 바꾸기 진입 — 위와 <b>같은 몸, 같은 광고 그룹</b>이다(가는 화면만 다르다).
-   *
-   * <p>전면 지면을 새로 만들지 않는 이유: SDK에서 광고 그룹은 재고 단위지 진입점 단위가 아니라, 같은
-   * 그룹을 두 자리에서 요청하는 데 제약이 없다. 무엇보다 「목표 바꾸기 = 광고 1회」 규칙이 모드와
-   * 무관해야 사용자가 규칙을 하나만 배운다(독서만 광고면 「왜 독서만?」이 된다).
-   *
-   * <p>`goalAdPending`도 <b>공유</b>한다 — 모드는 한 번에 하나라 두 경로가 동시에 눌릴 수 없고,
-   * 공유해야 설정 화면 버튼까지 함께 「준비 중」이 된다.
-   */
-  const goToStudyGoal = useCallback(async () => {
-    if (goalAdPending) return;
-    setGoalAdPending(true);
-    await showInterstitialAd();
-    setGoalAdPending(false);
-    setView('studyGoal');
-  }, [goalAdPending]);
-
   switch (view) {
     case 'auth':
       // 토큰이 없는 사람이 보는 화면은 둘이다 — 둘러보는 중(게스트 셸)과, 손잡이를 누른 뒤의 로그인 진행.
@@ -986,19 +959,6 @@ export function App() {
           setFirstRun(false);
           setView('main');
         }}
-      />
-    );
-  }
-
-  if (view === 'studyGoal') {
-    return (
-      <Goal
-        variant="study"
-        // 옛 서버(필드 없음)는 「목표 없음」으로 떨어진다 — 휠은 0시간 0분에서 시작한다.
-        current={study.goalSeconds ?? 0}
-        firstRun={false} // 공부엔 온보딩이 없다 — 첫 진입 유도 문구가 설 자리가 아니다.
-        onSaved={() => load('main')}
-        onSkip={() => setView('main')}
       />
     );
   }
@@ -1276,8 +1236,8 @@ export function App() {
       onTimerChange={applyTimer}
       onStartTimer={startTimer}
       onGraphChange={applyGraph}
-      // 홈 손잡이(「변경 ›」·GoalHandle)는 코드 무변경 — 어느 목표 화면으로 가느냐만 모드가 고른다.
-      onGoGoal={mode === 'study' ? goToStudyGoal : goToGoal}
+      // 홈 목표 손잡이(「변경 ›」·GoalHandle)는 독서 히어로에만 선다 — 공부 하루 목표는 회당 시간으로 대체됐다.
+      onGoGoal={goToGoal}
       goalAdPending={goalAdPending}
       onGoSettings={() => setView('settings')}
       onError={handleError}
@@ -1772,6 +1732,15 @@ export function MainTabs({
             onError={onError}
             onOpenMargin={onOpenMargin}
             onComposeMargin={onComposeMargin}
+            // 회당 시간 — 성공한 응답만 반영하고(캐러셀 손잡이·측정 줄이 재조회 없이 따라온다) 지난 실패 스트립을 지운다.
+            // 실패는 삼키지 않고 홈으로 돌려준다 — 홈이 시트를 연 채 그 안에서 말한다(스트립은 시트 패널에 가린다).
+            // 광고 없음(Q1).
+            onSetSessionGoal={(id, s) =>
+              setStudySessionGoal(id, s).then((next) => {
+                onStudyChange(next);
+                setActionError(null);
+              })
+            }
           />
         )}
         {/* 서재 탭은 두 모드 공통이지만 화면은 갈린다 — 공부 책과 독서 책이 섞이지 않는 것이 요구 그 자체다. */}

@@ -179,6 +179,20 @@ class SettingsControllerTest {
                 .andExpect(content().string(not(containsString("/verify-email/resend"))));
     }
 
+    @Test
+    @DisplayName("GET /settings: 미검증이어도 합성 주소(@noreply) 계정엔 재발송 배너를 숨긴다 — 보낼 데가 없다")
+    void getSettings_syntheticEmail_hidesVerifyBanner() throws Exception {
+        String synthetic = "toss-uk9" + User.SYNTHETIC_EMAIL_DOMAIN;
+        register(synthetic); // 미검증 + 합성 주소
+
+        mockMvc.perform(get("/settings").with(user(synthetic)))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("emailVerified", false)) // 미검증은 그대로다
+                .andExpect(model().attribute("syntheticEmail", true))
+                // 대조군은 위 getSettings_unverified_showsVerifyBanner — 같은 리터럴로 노출을 단언한다
+                .andExpect(content().string(not(containsString("/verify-email/resend"))));
+    }
+
     // 재발송 결과 플래시(verifyResendResult=sent/already/failed)의 화면 표시는 트리비얼한 안내 텍스트 분기라
     // 단위로 누른다(프로젝트 테스트-깊이 규칙). resend가 그 플래시를 남기는 행동은 EmailVerificationControllerTest가 커버.
 

@@ -148,14 +148,15 @@ public class StudyBookApiController {
      * @param totalSeconds 그 책으로 잰 누적 공부 시간(초) — <b>맨 뒤에</b> 붙였다(하위호환).
      *                     0은 「아직 그 책으로 안 쟀다」는 <b>부재</b>라 화면이 칩을 그리지 않는다
      *                     (0독이 「상태」인 {@code readCount}와 반대다).
+     * @param sessionGoalSeconds 회당 시간(초, null = 안 정함) — 역시 <b>맨 뒤</b>(옛 미니앱 번들은 무시한다).
      */
     public record StudyBookRow(Long id, String title, String author, String coverUrl, String isbn13,
-                               int readCount, String purchaseLink, long totalSeconds) {
+                               int readCount, String purchaseLink, long totalSeconds, Integer sessionGoalSeconds) {
         /** @param secondsByBook 책 id → 누적 초({@code StudySessionService.totalSecondsByBook}) */
         static StudyBookRow from(StudyBook b, Map<Long, Long> secondsByBook) {
             return new StudyBookRow(b.getId(), b.getTitle(), b.getAuthor(), b.getCoverUrl(), b.getIsbn13(),
                     b.getReadCount(), b.getPurchaseLink(),
-                    secondsByBook.getOrDefault(b.getId(), 0L));
+                    secondsByBook.getOrDefault(b.getId(), 0L), b.getSessionGoalSeconds());
         }
     }
 

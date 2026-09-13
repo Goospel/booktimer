@@ -70,4 +70,13 @@ check "2 orphaned worktree folders → warning shown"          "$W3" "orphaned" 
 check "non-git dir → exit 0, no crash"                       "$W4" ""         ""
 check "normal repo (main/clean) → no stale warnings"         "$W5" ""         "merged"
 
+# ── Fixture 6: repo under a Korean-named dir, on a unique branch (stdin UTF-8) ──
+# Read as CP949, "테스트" right before the closing quote breaks JSON -> cwd falls back
+# to the process cwd (this test's repo) -> reports ITS branch. The unique branch name
+# is what tells the two apart ("occupied" alone would match either).
+R6=$(mktemp -d); TMPS+=("$R6"); mkdir -p "$R6/테스트"
+git -C "$R6/테스트" init -b feat/utf8-probe >/dev/null 2>&1
+git -C "$R6/테스트" -c user.email=t@t -c user.name=t commit --allow-empty -m init >/dev/null 2>&1
+check "Korean-named repo dir → reads that repo's branch"     "$(to_win "$R6/테스트")" "feat/utf8-probe" ""
+
 exit $FAILED

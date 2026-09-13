@@ -36,6 +36,7 @@ import {
   searchUsers,
   setBookVisibility,
   setGoal,
+  setStudySessionGoal,
   token,
   unblockUser,
   unfollow,
@@ -255,6 +256,31 @@ describe('Bearer 호출·에러 계약', () => {
 
     await expect(setGoal(3600)).resolves.toBeUndefined();
     expect(JSON.parse(lastRequest()[1].body as string)).toEqual({ dailyIncrementSeconds: 3600 });
+  });
+});
+
+/**
+ * 회당 시간 저장 — <b>본문 키가 틀리면 조용히 반대 동작이 된다</b>. 서버 DTO(`SessionGoalRequest`)는 모르는 키를
+ * 무시하고 `sessionGoalSeconds`를 null로 받아, 「50분 저장」이 「해제」로 뒤집힌 채 200을 준다. 그래서 키 이름째 잠근다.
+ */
+describe('회당 시간 저장 (setStudySessionGoal)', () => {
+  beforeEach(() => {
+    token.set('tok');
+    vi.mocked(globalThis.fetch).mockResolvedValue(response(200, '{"hasActiveSession":false}') as never);
+  });
+
+  it('책 id가 든 문으로 sessionGoalSeconds 키에 초를 싣는다', async () => {
+    await setStudySessionGoal(102, 3_000);
+
+    const [url, init] = lastRequest();
+    expect(url).toBe('http://localhost:8080/api/study/books/102/session-goal');
+    expect(JSON.parse(init.body as string)).toEqual({ sessionGoalSeconds: 3_000 });
+  });
+
+  it('해제는 같은 키에 null을 싣는다 — 키를 빼거나 0으로 바꾸면 서버 규칙(0 = 400)과 어긋난다', async () => {
+    await setStudySessionGoal(102, null);
+
+    expect(JSON.parse(lastRequest()[1].body as string)).toEqual({ sessionGoalSeconds: null });
   });
 });
 
