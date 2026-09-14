@@ -33,6 +33,30 @@ if [ "${#EXPECT[@]}" = 0 ]; then
     echo "⚠️  --expect 없이 배포한다 — 이번 릴리스에서 새로 들어간 문구를 주면 스테일 번들을 잡을 수 있다(T-150)." >&2
 fi
 
+# ── ⓪ 설치본 = lock — 워크트리 node_modules는 main 폴더로 가는 정션이라, main에 옛 설치본이 남아 있으면
+#    lock이 올라가도 번들은 옛 의존성으로 조용히 빌드된다. 산출물 검사(②·③)로는 못 가른다(T-244) ──
+$PYBIN - <<'PYEOF'
+import json, pathlib, sys
+
+lock_path = pathlib.Path('package-lock.json')
+if not lock_path.is_file():
+    sys.exit('❌ package-lock.json이 없다')
+lock = json.loads(lock_path.read_text(encoding='utf-8'))['packages']
+root = lock['']
+bad = []
+for name in sorted({**root.get('dependencies', {}), **root.get('devDependencies', {})}):
+    want = lock[f'node_modules/{name}']['version']
+    pj = pathlib.Path('node_modules', name, 'package.json')
+    got = json.loads(pj.read_text(encoding='utf-8'))['version'] if pj.is_file() else '(설치 안 됨)'
+    if got != want:
+        bad.append(f'   {name}: 설치 {got} ≠ lock {want}')
+if bad:
+    sys.exit('❌ node_modules가 package-lock.json과 다르다 — 이대로면 lock과 다른 의존성으로 번들이 나간다(T-244)\n'
+             + '\n'.join(bad)
+             + '\n   → node_modules가 정션이면 먼저 끊고(cmd //c rmdir node_modules) miniapp에서 npm ci')
+PYEOF
+echo "✅ 의존성 검증 통과 — node_modules = package-lock.json"
+
 # ── ① 클린 빌드 — 빌드가 조용히 중단돼도 옛 산출물이 남아 그대로 배포되는 경로를 없앤다 ──
 rm -rf dist
 npm run build

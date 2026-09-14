@@ -9,6 +9,8 @@
 #   3) `localhost:8080`이 남은 번들은 배포되지 않는다(T-148 — env 미주입 빌드).
 #   4) .ait 안의 js가 방금 빌드한 dist의 js와 바이트가 다르면 죽는다(패키징 단계 스테일).
 #   5) index.html이 참조하는 js가 실존하지 않으면 죽는다(반쪽 dist).
+#   6) node_modules 설치본이 package-lock.json과 다르면 **빌드 전에** 죽는다(T-244 — 워크트리 정션이
+#      가리키는 main 폴더에 옛 SDK가 남아 lock이 올라가도 옛 SDK로 번들이 나갈 뻔했다).
 #
 # npm/npx 호출은 PATH 앞의 스텁으로 전부 우회한다(deploy/tests/test-render-env.sh 와 같은 방식).
 # 한글 마커 비교는 grep(C 로케일 무성실패)이 아니라 bash 패턴/파이썬으로 한다.
@@ -97,6 +99,13 @@ run() {  # $1=MODE ; $2.. = deploy.sh 인자 — echoes "<exit>\n<output>"
     rm -rf "$WORK"; mkdir -p "$WORK/miniapp" "$WORK/.claude/.secrets"
     cp "$S" "$WORK/miniapp/deploy.sh"
     echo 'stub-api-key' > "$WORK/.claude/.secrets/ait-api-key.txt"
+    # lock + 설치본 픽스처. dep-drift면 설치본만 옛 버전이다(T-244 재현 — 정션 너머 main의 옛 설치본).
+    local installed=3.1.1
+    if [ "$mode" = dep-drift ]; then installed=3.0.4; fi
+    printf '%s\n' '{"packages":{"":{"dependencies":{"@apps-in-toss/web-framework":"^3.1.1"}},"node_modules/@apps-in-toss/web-framework":{"version":"3.1.1"}}}' \
+        > "$WORK/miniapp/package-lock.json"
+    mkdir -p "$WORK/miniapp/node_modules/@apps-in-toss/web-framework"
+    printf '{"version":"%s"}\n' "$installed" > "$WORK/miniapp/node_modules/@apps-in-toss/web-framework/package.json"
     if [ "$mode" = silent-noop ]; then
         # 직전 릴리스의 dist가 그대로 남아 있는 상태 — **마커까지 들어 있다**(그 문구가 이번에 처음
         # 들어간 게 아니라면 벌어지는 일). 클린 빌드가 없으면 이 옛 번들이 모든 검사를 통과해 배포된다.
@@ -180,6 +189,14 @@ r="$(run dev-mock-leak --expect "$MARKER")"; rc="${r%%$'\n'*}"; out="${r#*$'\n'}
 assert_exit "dev 목 코드 잔존 → 차단" "$rc" "1"
 assert_not_deployed "  배포 전에 멈춘다"
 assert_has "  무엇이 남았는지 알린다" "$out" "__DEV_MOCK__"
+
+# ── Case 8: 설치본이 lock과 다르다 → 빌드 전에 차단 (T-244) ──
+# 번들 검사는 전부 통과하는 모드다 — 옛 SDK로 빌드해도 마커·env는 그대로라 산출물로는 못 가른다.
+r="$(run dep-drift --expect "$MARKER")"; rc="${r%%$'\n'*}"; out="${r#*$'\n'}"
+assert_exit "설치본 ≠ lock → 차단" "$rc" "1"
+assert_not_deployed "  배포 전에 멈춘다"
+assert_has "  어긋난 패키지를 이름으로 알린다" "$out" "@apps-in-toss/web-framework"
+assert_has "  설치된 옛 버전을 알린다" "$out" "3.0.4"
 
 echo
 if [ "$FAILED" = 0 ]; then echo "ALL PASS"; else echo "SOME FAILED"; fi
