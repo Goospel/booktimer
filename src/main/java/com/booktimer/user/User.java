@@ -194,18 +194,6 @@ public class User extends BaseTimeEntity {
     private java.time.LocalDate goalMetPushedOn;
 
     /**
-     * 공부 하루 목표(초) — {@code 0}이면 「목표 없음」(독서 목표와 같은 의미론).
-     *
-     * <p>독서 목표({@code ReadingTimer.dailyIncrementSeconds})와 <b>완전히 별개</b>다: 두 모드의 원장이
-     * 갈려 있는 것과 같은 이유이고, 여기가 섞이면 공부 목표를 바꿀 때 독서 부채 판정이 함께 흔들린다.
-     *
-     * <p>변경 이력 테이블이 없는 것은 결정이다 — 공부엔 이월·부채가 없어 「그날의 목표로 과거를 판정」할
-     * 일이 없다(V79 주석).
-     */
-    @Column(name = "study_daily_goal_seconds", nullable = false)
-    private long studyDailyGoalSeconds = 0;
-
-    /**
      * 공부 화면 AI 기능의 승인 상태 — 관리자가 켜 준 사람만 AI를 부른다(설계 §2.6).
      *
      * <p>기본값 {@link StudyAiAccess#NONE}은 마이그레이션(V84)의 컬럼 DEFAULT와 짝이라, <b>기존 전 유저가
@@ -421,23 +409,6 @@ public class User extends BaseTimeEntity {
     /** 목표 달성 푸시를 마지막으로 보낸 날(유저 TZ). 한 번도 안 보냈으면 {@code null}. */
     public java.time.LocalDate getGoalMetPushedOn() {
         return goalMetPushedOn;
-    }
-
-    public long getStudyDailyGoalSeconds() {
-        return studyDailyGoalSeconds;
-    }
-
-    /**
-     * 공부 하루 목표를 바꾼다 — 규칙은 독서({@code ReadingTimer#updateSettings})와 같다:
-     * {@code 0}은 「목표 없음」으로 허용하고 음수만 거부한다.
-     *
-     * @throws IllegalArgumentException 값이 음수인 경우
-     */
-    public void updateStudyDailyGoal(long seconds) {
-        if (seconds < 0) {
-            throw new IllegalArgumentException("studyDailyGoalSeconds must be >= 0");
-        }
-        this.studyDailyGoalSeconds = seconds;
     }
 
     /** 공부 AI 기능의 현재 승인 상태. 기본값은 {@link StudyAiAccess#NONE}이다. */

@@ -3511,11 +3511,15 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
   동의 API가 없어 카드가 원리상 안 선다 — **실기기 동의 화면 문구가 게이트**.
   **배포(2026-09-14)**: 번들 `20260914-149`(`01a09e01`, **SDK 3.1.1** — 워크트리 정션 너머 옛 3.0.4 설치본을 걷고 lock대로 설치, T-244)
   업로드 → 실기기 확인 → `-148` 검수 취소 → `-149` 검수 요청.
-  🔜 순서: `-149` 승인 → 콘솔 [출시하기](사용자) → **그다음** SSM 두 값 동시
-  점등(`ENABLED=true`·`TEMPLATE_CODE=booktimer-study-goal-met`) + 서버 재배포 → 실기기 수신(U-10). 점등을 번들보다 앞당기면 동의자 0명에게
-  매 틱 발송 실패만 쌓인다.
-- ⬜ **PR-5 서버 잔재 정리** — `V92` `users.study_daily_goal_seconds` drop · `POST /api/study/goal` · `StudyState.goalSeconds` 삭제.
-  착수 게이트 = PR-3 번들 라이브 확인(`bundle_get_live_version`이 `20260914-149`이어야 한다 — 2026-09-14 검수 요청 중).
+  **점등(2026-09-14)**: 22:27 KST `-149` 출시 → SSM `TOSS_STUDY_GOAL_ENABLED=true`·`TOSS_STUDY_GOAL_TEMPLATE_CODE=booktimer-study-goal-met`(v2)
+  → `deploy.yml` 재배포 성공 → EC2 `.env`와 실행 컨테이너 환경변수에 두 값 도달 확인(U-12) → 실기기 공부 알림 동의 폼 표시·동의 완료.
+  🔜 남은 것: 실기기 푸시 수신(U-10) · 운영 로그 중복 발송 0건(U-11).
+- ✅ **PR-5a 서버 잔재 코드 삭제 (2026-09-14)** — `POST /api/study/goal`·`StudyGoalRequest`, `StudyState.goalSeconds`·`StudyCalendarResponse.goalSeconds`,
+  `User.studyDailyGoalSeconds`·`updateStudyDailyGoal` 삭제. 착수 게이트(라이브 번들 `20260914-149`) 충족 — 클라이언트 변경 0.
+  ⚠️ 컬럼 drop은 **다음 배포로 분리**했다 — 독립 리뷰가 블루/그린 교대 중 옛 컨테이너가 없어진 컬럼을 SELECT해 인증 요청 전부가 500이
+  되는 창을 재현했다(V88과 같은 함정·같은 처방). 설계의 「PR-5 한 번에 V92」가 틀렸다.
+- ⬜ **PR-5b `V92` 컬럼 drop** — `users.study_daily_goal_seconds` drop + `FlywayMigrationTest` 컬럼 부재 단언(V92를 치워도 기존 22건이
+  초록이라 이 단언이 유일한 계측기). 착수 게이트 = PR-5a 배포 완료 후 **실행 중인 컨테이너가 PR-5a 이미지**임을 확인.
 - ✅ 설계 §9의 옛 항목 폐기·흡수 표기 완료(2026-09-13) — PR-B 공부 목표 게이지·⏸ 설정 페이지 공부 목표(PR-2), ⏸ 달력 자동 달성 판정(PR-3), ⏸ 공부 푸시 흡수(PR-4).
 
 

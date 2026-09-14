@@ -129,24 +129,18 @@ class StudyHistoryServiceTest {
     }
 
     /**
-     * <b>결정 C</b> — 농도 분모는 고정 절대 눈금(4h)이라 목표와 무관하다. 현재 목표를 분모로 쓰면
-     * 목표를 바꾼 순간 <b>과거 칸이 소급 재채색</b>된다(N-059가 독서에서 버그로 고친 그 현상).
+     * <b>결정 C</b> — 농도 분모는 고정 절대 눈금(4h)이다. 목표를 분모로 쓰면 목표를 바꾼 순간
+     * <b>과거 칸이 소급 재채색</b>된다(N-059가 독서에서 버그로 고친 그 현상).
      */
     @Test
-    @DisplayName("history: 잔디 농도는 공부 목표와 무관하다 — 목표를 바꿔도 과거 칸 색이 안 움직인다")
-    void history_shadeIsIndependentOfGoal() {
+    @DisplayName("history: 잔디 농도는 고정 4시간 눈금이다 — 1시간은 1단계, 4시간은 4단계")
+    void history_shadeUsesFixedFourHourScale() {
         given(completed(user, noonKst("2026-09-01"), Duration.ofHours(1)),
                 completed(user, noonKst("2026-08-31"), Duration.ofHours(4)));
 
-        ContributionGraph before = service.history(user, noonKst("2026-09-02")).graph();
-        assertThat(cellOf(before, "2026-09-01").level()).isEqualTo(1);
-        assertThat(cellOf(before, "2026-08-31").level()).isEqualTo(4);
-
-        user.updateStudyDailyGoal(600);
-        ContributionGraph after = service.history(user, noonKst("2026-09-02")).graph();
-
-        assertThat(cellOf(after, "2026-09-01").level()).isEqualTo(1);
-        assertThat(cellOf(after, "2026-08-31").level()).isEqualTo(4);
+        ContributionGraph graph = service.history(user, noonKst("2026-09-02")).graph();
+        assertThat(cellOf(graph, "2026-09-01").level()).isEqualTo(1);
+        assertThat(cellOf(graph, "2026-08-31").level()).isEqualTo(4);
     }
 
     @Test
