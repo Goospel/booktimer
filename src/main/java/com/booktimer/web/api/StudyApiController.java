@@ -9,7 +9,6 @@ import com.booktimer.session.StudyHistoryService;
 import com.booktimer.session.StudySession;
 import com.booktimer.session.StudySessionService;
 import com.booktimer.user.User;
-import com.booktimer.user.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 
@@ -55,7 +54,6 @@ public class StudyApiController {
     private final StudyHistoryService historyService;
     private final StudyBookService studyBookService;
     private final StudyBookRepository studyBookRepository;
-    private final UserRepository userRepository;
     private final Clock clock;
 
     public StudyApiController(CurrentUserService currentUserService,
@@ -64,7 +62,6 @@ public class StudyApiController {
                               StudyHistoryService historyService,
                               StudyBookService studyBookService,
                               StudyBookRepository studyBookRepository,
-                              UserRepository userRepository,
                               Clock clock) {
         this.currentUserService = currentUserService;
         this.studyService = studyService;
@@ -72,7 +69,6 @@ public class StudyApiController {
         this.historyService = historyService;
         this.studyBookService = studyBookService;
         this.studyBookRepository = studyBookRepository;
-        this.userRepository = userRepository;
         this.clock = clock;
     }
 
@@ -205,24 +201,7 @@ public class StudyApiController {
     }
 
     /**
-     * 공부 하루 목표 설정 — <b>독서 목표와 다른 문</b>이다({@code /api/miniapp/goal}은 독서 몫).
-     *
-     * <p>{@code ReadingGoalService.record}를 <b>부르지 않는다</b>: 독서의 목표 변경 이력은 「그날 목표로
-     * 과거를 판정」(부채 계산)하려고 있는 원장이라, 공부 값이 섞이면 그 판정이 조용히 오염된다.
-     * 공부에는 이월·부채가 없어 이력이 필요 없다(V79 주석).
-     *
-     * @return 200 갱신된 화면 상태 / 400 목표가 음수 / 401 토큰 없음·무효(체인이 처리)
-     */
-    @PostMapping("/api/study/goal")
-    public ResponseEntity<StudyState> setGoal(Principal principal, @RequestBody StudyGoalRequest request) {
-        User user = currentUserService.resolve(principal);
-        user.updateStudyDailyGoal(request.dailyGoalSeconds());
-        userRepository.save(user);
-        return ResponseEntity.ok(state(user, clock.instant()));
-    }
-
-    /**
-     * 그 달의 공부 일정 달력 — 목표(게이지 분모)와 <b>데이터 있는 날만</b>(희소) 준다.
+     * 그 달의 공부 일정 달력 — <b>데이터 있는 날만</b>(희소) 준다.
      *
      * @param month {@code YYYY-MM}
      * @return 200 {@link StudyCalendarResponse} / 400 달 형식 오류 / 401 토큰 없음·무효(체인이 처리)
@@ -230,9 +209,7 @@ public class StudyApiController {
     @GetMapping("/api/study/calendar")
     public ResponseEntity<StudyCalendarResponse> calendar(Principal principal, @RequestParam String month) {
         User user = currentUserService.resolve(principal);
-        return ResponseEntity.ok(new StudyCalendarResponse(
-                user.getStudyDailyGoalSeconds(),
-                calendarService.month(user, parseMonth(month))));
+        return ResponseEntity.ok(new StudyCalendarResponse(calendarService.month(user, parseMonth(month))));
     }
 
     /**
@@ -296,10 +273,6 @@ public class StudyApiController {
         }
     }
 
-    /** @param dailyGoalSeconds 공부 하루 목표(초, 0 이상 — 0은 "목표 없음") */
-    public record StudyGoalRequest(long dailyGoalSeconds) {
-    }
-
     /**
      * @param date {@code YYYY-MM-DD}(유저 타임존의 달력 날짜)
      * @param kept 지킴/못 지킴, {@code null}이면 무기록으로 되돌린다(3상태 순환의 마지막 칸)
@@ -310,11 +283,8 @@ public class StudyApiController {
     public record StudyCheckResponse(LocalDate date, Boolean kept) {
     }
 
-    /**
-     * @param goalSeconds 공부 하루 목표(초) — 달력 화면이 게이지·문구에 쓴다
-     * @param days        <b>데이터 있는 날만</b>(측정이 있었거나 판정이 남은 날) 날짜순
-     */
-    public record StudyCalendarResponse(long goalSeconds, List<StudyCalendarService.CalendarDay> days) {
+    /** @param days <b>데이터 있는 날만</b>(측정이 있었거나 판정이 남은 날) 날짜순 */
+    public record StudyCalendarResponse(List<StudyCalendarService.CalendarDay> days) {
     }
 
     /** @param bookId 대상 공부 책(null·body 자체 생략 = 책 없이 시작) */
@@ -339,16 +309,17 @@ public class StudyApiController {
      * <p>{@code todaySeconds}는 <b>완료 세션 합</b>이다 — 진행 중 몫은 클라이언트가 {@code activeStartedAt}
      * 으로 매초 더한다(독서 히어로와 같은 분업).
      *
-     * <p>필드를 <b>맨 뒤에</b>만 늘린다 — 대시보드·start/stop/goal/tag/change 응답이 이 레코드를 그대로
-     * 실어 나르므로 옛 미니앱은 모르는 필드를 무시할 뿐이다(하위호환). {@code goalSeconds}가 그 선례고
-     * 뒤의 넷이 이번 추가다.
+     * <p>필드를 <b>맨 뒤에</b>만 늘린다 — 대시보드·start/stop/tag/change/session-goal 응답이 이 레코드를
+     * 그대로 실어 나르므로 옛 미니앱은 모르는 필드를 무시할 뿐이다(하위호환). 필드를 빼는 것은 그 필드를
+     * 읽는 번들이 라이브에서 사라진 뒤에만 한다 — 옛 {@code goalSeconds}(공부 하루 목표)는 책별 회당 시간으로
+     * 대체되고 미니앱 {@code 20260914-149}가 라이브가 된 뒤 걷었다(컬럼 drop은 다음 배포 — V88과 같은 두 단계).
      *
      * @param activeBook        측정 중인 책(없거나 「책 없이」면 null) — 히어로 제목과 교체 시트의 현재 행
      * @param recentBookId      가장 최근 책을 걸고 잰 책 — 홈 캐러셀의 기본 선택
      * @param books             내 공부 서재 전체(누적 시간 포함) — 캐러셀·시트 둘이 같은 목록을 본다
      * @param untaggedSessionId <b>stop 응답에서만</b> non-null — 방금 책 없이 끝낸 측정의 태깅 좌표
      */
-    public record StudyState(boolean hasActiveSession, Instant activeStartedAt, long todaySeconds, long goalSeconds,
+    public record StudyState(boolean hasActiveSession, Instant activeStartedAt, long todaySeconds,
                              StudyBookApiController.StudyBookRow activeBook, Long recentBookId,
                              List<StudyBookApiController.StudyBookRow> books, Long untaggedSessionId) {
 
@@ -364,7 +335,6 @@ public class StudyApiController {
                     active != null,
                     active == null ? null : active.getStartedAt(),
                     service.todaySeconds(user, now),
-                    user.getStudyDailyGoalSeconds(),
                     active == null || active.getBook() == null
                             ? null : StudyBookApiController.StudyBookRow.from(active.getBook(), seconds),
                     service.recentBookId(user),

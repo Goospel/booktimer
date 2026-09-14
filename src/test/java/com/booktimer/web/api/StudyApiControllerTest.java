@@ -9,8 +9,6 @@ import com.booktimer.session.ReadingSessionService;
 import com.booktimer.session.StudySession;
 import com.booktimer.session.StudySessionRepository;
 import com.booktimer.session.StudySessionService;
-import com.booktimer.timer.ReadingGoalChangeRepository;
-import com.booktimer.timer.ReadingTimerRepository;
 import com.booktimer.user.Role;
 import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
@@ -74,8 +72,6 @@ class StudyApiControllerTest {
     @Autowired StudyBookRepository studyBookRepository;
     @Autowired BookRepository bookRepository;
     @Autowired ReadingSessionService readingSessionService;
-    @Autowired ReadingTimerRepository timerRepository;
-    @Autowired ReadingGoalChangeRepository goalChangeRepository;
     @Autowired Clock clock;
 
     private User register(String email, String loginId) {
@@ -289,7 +285,7 @@ class StudyApiControllerTest {
     /**
      * <b>하위호환(U3)</b> — 12차 라이브 번들은 {@code {}}를 보내고, 더 옛 클라이언트는 body가 아예 없다.
      * {@code @RequestBody(required = false)}가 빠지면 이 둘이 400이 되어 <b>배포 창 동안 공부 시작이
-     * 통째로 죽는다</b>. 옛 네 필드가 그대로 실리는지도 여기서 함께 못 박는다.
+     * 통째로 죽는다</b>. 옛 필드가 그대로 실리는지도 여기서 함께 못 박는다.
      */
     @Test
     @DisplayName("POST /api/study/start: 빈 객체·body 없음 모두 200 + activeBook은 null(옛 번들 하위호환)")
@@ -301,7 +297,6 @@ class StudyApiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.hasActiveSession").value(true))
                 .andExpect(jsonPath("$.todaySeconds").exists())
-                .andExpect(jsonPath("$.goalSeconds").exists())
                 .andExpect(jsonPath("$.activeBook").doesNotExist());
 
         mockMvc.perform(post("/api/study/stop").with(user("studystartempty")).with(csrf()))
@@ -734,125 +729,44 @@ class StudyApiControllerTest {
                 .andExpect(status().isNotFound());
     }
 
-    // ── 공부 하루 목표 (2차) ──────────────────────────────────────────────────
+    // ── 공부 하루 목표 삭제 계약 (PR-5) ─────────────────────────────────────────
+    // 하루 목표는 책별 「회당 시간」으로 대체됐다(V90). 웹·미니앱이 더는 읽지도 쓰지도 않으므로
+    // 서버 문과 응답 필드가 되살아나지 않게 못 박는다.
 
     @Test
-    @DisplayName("POST /api/study/goal: 미인증 → 로그인으로 차단")
-    void goal_unauthenticated_isBlocked() throws Exception {
-        mockMvc.perform(post("/api/study/goal").with(csrf())
+    @DisplayName("POST /api/study/goal: 삭제된 문이다 — 인증·유효 body여도 404")
+    void goal_endpointIsGone() throws Exception {
+        register("study-goalgone@a.com", "studygoalgone");
+
+        mockMvc.perform(post("/api/study/goal").with(user("studygoalgone")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"dailyGoalSeconds\":3600}"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/login"));
+                .andExpect(status().isNotFound());
     }
 
     @Test
-    @DisplayName("POST /api/study/goal: 200 + 응답 상태에 goalSeconds가 실린다")
-    void goal_savesAndEchoes() throws Exception {
-        register("study-goal@a.com", "studygoal");
+    @DisplayName("공부 상태(대시보드 study 블록·start)에 goalSeconds 필드가 없다")
+    void studyState_hasNoGoalSeconds() throws Exception {
+        register("study-nogoal@a.com", "studynogoal");
 
-        mockMvc.perform(post("/api/study/goal").with(user("studygoal")).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"dailyGoalSeconds\":3600}"))
+        mockMvc.perform(get("/api/dashboard").with(user("studynogoal")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.goalSeconds").value(3600))
-                .andExpect(jsonPath("$.hasActiveSession").value(false));
+                .andExpect(jsonPath("$.study.todaySeconds").exists())
+                .andExpect(jsonPath("$.study.goalSeconds").doesNotExist());
+        mockMvc.perform(post("/api/study/start").with(user("studynogoal")).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.goalSeconds").doesNotExist());
     }
 
     @Test
-    @DisplayName("POST /api/study/goal: 음수는 400 — 도메인 규칙이 문 앞에서 걸린다")
-    void goal_negative_isBadRequest() throws Exception {
-        register("study-goalneg@a.com", "studygoalneg");
+    @DisplayName("GET /api/study/calendar: 응답에 goalSeconds 필드가 없다")
+    void calendar_hasNoGoalSeconds() throws Exception {
+        register("study-calnogoal@a.com", "studycalnogoal");
 
-        mockMvc.perform(post("/api/study/goal").with(user("studygoalneg")).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"dailyGoalSeconds\":-1}"))
-                .andExpect(status().isBadRequest());
-    }
-
-    /**
-     * 0 = 「목표 없음」 — 주석과 javadoc에만 있던 계약을 테스트로 못 박는다.
-     *
-     * <p>미니앱 「목표 없이 지내기」가 정확히 이 값을 보낸다. 누군가 방어적으로 {@code > 0} 검증을
-     * 문 앞에 추가하면 그 화면이 조용히 죽는데, 프론트 테스트로는 서버 쪽 회귀를 못 잡는다.
-     */
-    @Test
-    @DisplayName("POST /api/study/goal: 0은 「목표 없음」으로 저장된다 — 목표를 되돌리는 경로")
-    void goal_zero_clearsGoal() throws Exception {
-        register("study-goalzero@a.com", "studygoalzero");
-
-        mockMvc.perform(post("/api/study/goal").with(user("studygoalzero")).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"dailyGoalSeconds\":3600}"))
-                .andExpect(status().isOk());
-
-        mockMvc.perform(post("/api/study/goal").with(user("studygoalzero")).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"dailyGoalSeconds\":0}"))
+        mockMvc.perform(get("/api/study/calendar").param("month", thisMonth()).with(user("studycalnogoal")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.goalSeconds").value(0));
-
-        mockMvc.perform(get("/api/dashboard").with(user("studygoalzero")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.study.goalSeconds").value(0));
-    }
-
-    @Test
-    @DisplayName("POST /api/study/goal: 저장한 목표가 대시보드 study 블록에 그대로 실린다(재진입 유지)")
-    void goal_isCarriedByDashboard() throws Exception {
-        register("study-goaldash@a.com", "studygoaldash");
-
-        mockMvc.perform(post("/api/study/goal").with(user("studygoaldash")).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"dailyGoalSeconds\":5400}"))
-                .andExpect(status().isOk());
-
-        mockMvc.perform(get("/api/dashboard").with(user("studygoaldash")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.study.goalSeconds").value(5400));
-    }
-
-    @Test
-    @DisplayName("start/stop 응답도 goalSeconds를 실어 준다 — 측정 왕복 뒤 게이지가 분모를 잃지 않는다")
-    void startStop_carryGoalSeconds() throws Exception {
-        register("study-goalss@a.com", "studygoalss");
-
-        mockMvc.perform(post("/api/study/goal").with(user("studygoalss")).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"dailyGoalSeconds\":1800}"))
-                .andExpect(status().isOk());
-
-        mockMvc.perform(post("/api/study/start").with(user("studygoalss")).with(csrf()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.goalSeconds").value(1800));
-        mockMvc.perform(post("/api/study/stop").with(user("studygoalss")).with(csrf()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.goalSeconds").value(1800));
-    }
-
-    /**
-     * <b>격리의 다른 축</b> — 세션 원장이 아니라 <b>목표</b>가 안 섞이는지를 본다.
-     *
-     * <p>공부 목표를 저장할 때 {@code ReadingGoalService.record}를 부르면 독서 목표 이력에 공부 값이
-     * 섞여 <b>부채 판정이 오염</b>된다(그날 목표로 과거를 판정하는 원장이라 조용히 틀린 값이 된다).
-     */
-    @Test
-    @DisplayName("격리: 공부 목표를 저장해도 독서 목표·목표 변경 이력은 그대로다")
-    void studyGoalDoesNotTouchReadingGoal() throws Exception {
-        User u = register("study-goaliso@a.com", "studygoaliso");
-        long readingGoalBefore = timerRepository.findByUser(u).orElseThrow().getDailyIncrementSeconds();
-        int goalChangesBefore = goalChangeRepository.findByUserOrderByEffectiveDateAsc(u).size();
-
-        mockMvc.perform(post("/api/study/goal").with(user("studygoaliso")).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"dailyGoalSeconds\":7200}"))
-                .andExpect(status().isOk());
-
-        assertThat(timerRepository.findByUser(u).orElseThrow().getDailyIncrementSeconds())
-                .isEqualTo(readingGoalBefore);
-        assertThat(goalChangeRepository.findByUserOrderByEffectiveDateAsc(u)).hasSize(goalChangesBefore);
-        mockMvc.perform(get("/api/dashboard").with(user("studygoaliso")))
-                .andExpect(jsonPath("$.todayGoalSeconds").value((int) readingGoalBefore));
+                .andExpect(jsonPath("$.days").exists())
+                .andExpect(jsonPath("$.goalSeconds").doesNotExist());
     }
 
     // ── 공부 일정 달력 (2차 PR-B) ─────────────────────────────────────────────
@@ -875,19 +789,13 @@ class StudyApiControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/study/calendar: 목표와 일별 측정·판정을 함께 준다")
-    void calendar_returnsGoalAndDays() throws Exception {
+    @DisplayName("GET /api/study/calendar: 일별 측정·판정을 준다")
+    void calendar_returnsDays() throws Exception {
         User u = register("study-cal@a.com", "studycal");
         completedStudy(u, todayNoon(), Duration.ofMinutes(40));
 
-        mockMvc.perform(post("/api/study/goal").with(user("studycal")).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"dailyGoalSeconds\":3600}"))
-                .andExpect(status().isOk());
-
         mockMvc.perform(get("/api/study/calendar").param("month", thisMonth()).with(user("studycal")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.goalSeconds").value(3600))
                 .andExpect(jsonPath("$.days[0].date").value(today().toString()))
                 .andExpect(jsonPath("$.days[0].studiedSeconds").value(2400))
                 // 측정만 있고 판정은 없는 날 — 「측정 있음 점」은 뜨되 체크는 무기록이다.
