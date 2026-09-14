@@ -3518,8 +3518,10 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
   `User.studyDailyGoalSeconds`·`updateStudyDailyGoal` 삭제. 착수 게이트(라이브 번들 `20260914-149`) 충족 — 클라이언트 변경 0.
   ⚠️ 컬럼 drop은 **다음 배포로 분리**했다 — 독립 리뷰가 블루/그린 교대 중 옛 컨테이너가 없어진 컬럼을 SELECT해 인증 요청 전부가 500이
   되는 창을 재현했다(V88과 같은 함정·같은 처방). 설계의 「PR-5 한 번에 V92」가 틀렸다.
-- ⬜ **PR-5b `V92` 컬럼 drop** — `users.study_daily_goal_seconds` drop + `FlywayMigrationTest` 컬럼 부재 단언(V92를 치워도 기존 22건이
-  초록이라 이 단언이 유일한 계측기). 착수 게이트 = PR-5a 배포 완료 후 **실행 중인 컨테이너가 PR-5a 이미지**임을 확인.
+- ✅ **PR-5b `V92` 컬럼 drop (2026-09-15)** — `users.study_daily_goal_seconds` drop + `FlywayMigrationTest` 컬럼 부재 단언(V92를 치워도 기존
+  22건이 초록이라 이 단언이 유일한 계측기 — V92 없이 1건 Red → 23건 Green). 착수 게이트 충족: PR-5a(#1132, `46411f93`) 배포 성공 후 운영 앱
+  컨테이너가 `booktimer-app-green-1` 하나뿐이고 이미지 다이제스트 `sha256:84fb4d0b…`가 ECR `imageTag=46411f93…`과 일치.
+  재발 방지로 drop 마이그레이션 hookify warn 룰 `warn-migration-drop-two-deploys` 추가(T-245).
 - ✅ 설계 §9의 옛 항목 폐기·흡수 표기 완료(2026-09-13) — PR-B 공부 목표 게이지·⏸ 설정 페이지 공부 목표(PR-2), ⏸ 달력 자동 달성 판정(PR-3), ⏸ 공부 푸시 흡수(PR-4).
 
 
