@@ -428,6 +428,24 @@ class FlywayMigrationTest {
                 .isZero();
     }
 
+    /**
+     * 공부 하루 목표 컬럼(V79)이 <b>스키마에서</b> 사라졌음을 못 박는다 — V92의 계측기다.
+     *
+     * <p>위 V88과 같은 이유로 필요하다: 엔티티 필드는 이미 걷혔고 컬럼이 {@code DEFAULT 0}이라, V92가
+     * 빠져도 {@code validate}와 INSERT가 전부 통과한다(2026-09-14 V92를 치운 채 이 클래스 22건 초록 실측).
+     */
+    @Test
+    void studyDailyGoalColumnIsDropped() {
+        Integer columns = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE UPPER(TABLE_NAME) = 'USERS' AND UPPER(COLUMN_NAME) = 'STUDY_DAILY_GOAL_SECONDS'
+                """, Integer.class);
+
+        assertThat(columns)
+                .as("V92가 users.study_daily_goal_seconds 컬럼을 drop 했어야 한다")
+                .isZero();
+    }
+
     // ── 옛 핸들 영구 예약 (V69 uk_users_previous_login_id) ──
     // 이 두 테스트가 여기 있는 이유: 메인 스위트는 Hibernate가 스키마를 만들어 이 UNIQUE가 아예 없다
     // (login_id의 uk_users_login_id와 마찬가지로 엔티티 매핑에 선언하지 않는다 — DB가 단일 출처).
