@@ -673,26 +673,27 @@ class StudyApiControllerTest {
 
     /**
      * 범위 밖은 400이고 <b>저장된 값이 그대로</b>여야 한다 — 먼저 3000을 심어 두는 이유는, 잘못된 값이
-     * 400을 내면서 조용히 null로 지워 버리는 회귀까지 같이 잡기 위해서다. 경계 안쪽(60·21600)은 200 —
-     * 부등호가 한 칸 밀리는 회귀(60을 거부)를 잡는 양성 쌍이다.
+     * 400을 내면서 조용히 null로 지워 버리는 회귀까지 같이 잡기 위해서다. 경계 안쪽(600·21600)은 200 —
+     * 부등호가 한 칸 밀리는 회귀(600을 거부)를 잡는 양성 쌍이다. 60은 옛 하한(1분)으로 되돌아가는 회귀를 잡는다
+     * — 2026-09-15 최소 10분으로 올렸다(1분짜리는 푸시가 닿자마자 정지로 원리상 안 가서 시험만 헷갈리게 했다).
      */
     @Test
-    @DisplayName("session-goal: 59·21601·0 → 400 + 값 불변, 경계 60·21600은 저장된다")
+    @DisplayName("session-goal: 599·60·21601·0 → 400 + 값 불변, 경계 600·21600은 저장된다(최소 10분)")
     void sessionGoal_outOfRange_isBadRequestAndKeepsValue() throws Exception {
         User u = register("study-sg-range@a.com", "studysgrange");
         StudyBook a = studyBook(u, "영어");
         postSessionGoal("studysgrange", a, "3000").andExpect(status().isOk());
 
-        for (String bad : new String[] {"59", "21601", "0"}) {
+        for (String bad : new String[] {"599", "60", "21601", "0"}) {
             postSessionGoal("studysgrange", a, bad).andExpect(status().isBadRequest());
         }
         mockMvc.perform(get("/api/study/books").with(user("studysgrange")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath(bookSessionGoal(a), hasItem(3000)));
 
-        postSessionGoal("studysgrange", a, "60")
+        postSessionGoal("studysgrange", a, "600")
                 .andExpect(status().isOk())
-                .andExpect(jsonPath(bookSessionGoal(a), hasItem(60)));
+                .andExpect(jsonPath(bookSessionGoal(a), hasItem(600)));
         postSessionGoal("studysgrange", a, "21600")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath(bookSessionGoal(a), hasItem(21600)));
@@ -703,14 +704,14 @@ class StudyApiControllerTest {
      * 보내도 400이라 400/404로 존재 여부를 캐낼 창이 열리지 않는다(read-count 문과 같은 규약).
      */
     @Test
-    @DisplayName("session-goal: 남의 책 3000 → 404(값 불변), 남의 책 59 → 400(검사 순서)")
+    @DisplayName("session-goal: 남의 책 3000 → 404(값 불변), 남의 책 599 → 400(검사 순서)")
     void sessionGoal_foreignBook_isNotFound() throws Exception {
         register("study-sg-idor@a.com", "studysgidor");
         User stranger = register("study-sg-idor2@a.com", "studysgidortwo");
         StudyBook theirs = studyBook(stranger, "남의 책");
 
         postSessionGoal("studysgidor", theirs, "3000").andExpect(status().isNotFound());
-        postSessionGoal("studysgidor", theirs, "59").andExpect(status().isBadRequest());
+        postSessionGoal("studysgidor", theirs, "599").andExpect(status().isBadRequest());
 
         mockMvc.perform(get("/api/study/books").with(user("studysgidortwo")))
                 .andExpect(jsonPath(bookSessionGoal(theirs), hasItem(nullValue())));

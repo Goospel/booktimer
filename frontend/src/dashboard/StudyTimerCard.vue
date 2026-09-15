@@ -177,8 +177,8 @@ defineExpose({ closeEdit })
                     <form v-if="editing && goalBook" class="dash-goal-edit" @submit.prevent="submitGoal(minutesToSessionGoal(goalMinutes))">
                         <label>이 책 회당 시간
                             <!-- step은 스피너 간격이 아니라 **유효성 제약**이다 — step="1" = 정수 분만 받는다(7.5는 크롬이
-                                 「가장 근접한 유효 값」 버블로 막는다). 1분~6시간(서버 60~21600초와 같은 범위). 빈칸은 해제(null). -->
-                            <input ref="goalInput" type="number" min="1" max="360" step="1" v-model.number="goalMinutes"
+                                 「가장 근접한 유효 값」 버블로 막는다). 10분~6시간(서버 600~21600초와 같은 범위). 빈칸은 해제(null). -->
+                            <input ref="goalInput" type="number" min="10" max="360" step="1" v-model.number="goalMinutes"
                                    aria-label="이 책 회당 시간(분)"> 분
                         </label>
                         <button type="submit" class="dash-btn-fill" :disabled="savingSessionGoal">

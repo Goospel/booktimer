@@ -1063,11 +1063,11 @@ const routes: [Method, RegExp, (ctx: Ctx) => unknown][] = [
     return studyState();
   }],
 
-  // 책별 회당 시간 — 서버 계약 그대로: 범위(60~21600, 0 포함 밖) 검사가 <b>책 조회보다 먼저</b>, 해제는 null만.
+  // 책별 회당 시간 — 서버 계약 그대로: 범위(600~21600, 0 포함 밖) 검사가 <b>책 조회보다 먼저</b>, 해제는 null만.
   ['POST', /^\/api\/study\/books\/(\d+)\/session-goal$/, ({ id, body }) => {
     const seconds = (body.sessionGoalSeconds ?? null) as number | null;
-    if (seconds !== null && !(Number.isInteger(seconds) && seconds >= 60 && seconds <= 21_600)) {
-      throw new ApiError(400, '회당 시간은 1분 이상 6시간 이하로 정해 주세요');
+    if (seconds !== null && !(Number.isInteger(seconds) && seconds >= 600 && seconds <= 21_600)) {
+      throw new ApiError(400, '회당 시간은 10분에서 6시간 사이로 정해 주세요');
     }
     mustFindStudyBook(id).sessionGoalSeconds = seconds;
     return studyState();

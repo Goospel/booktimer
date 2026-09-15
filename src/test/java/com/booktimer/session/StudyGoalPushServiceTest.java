@@ -295,10 +295,10 @@ class StudyGoalPushServiceTest {
     @DisplayName("자정 분할 뒤 원본 행만 goalNotifiedAt을 갖고 조각은 null이다")
     void midnightSplit_pieceHasNoNotifiedAt() {
         Instant started = LocalDateTime.parse("2026-06-17T23:40").atZone(SEOUL).toInstant();
-        ((MutableClock) clock).set(started.plusSeconds(10 * 60));
+        ((MutableClock) clock).set(started.plusSeconds(15 * 60));
         User u = user("sg11@booktimer.com", true);
         when(messengerClient.sendMessage(anyString(), anyString(), any())).thenReturn(true);
-        StudySession original = active(u, book(u, 5 * 60), started);
+        StudySession original = active(u, book(u, 10 * 60), started);
         pushService.detectAndPush();
 
         studySessionService.stop(u, LocalDateTime.parse("2026-06-18T00:30").atZone(SEOUL).toInstant());

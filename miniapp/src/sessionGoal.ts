@@ -2,7 +2,7 @@ import { formatDuration } from './format';
 import { combineWheel } from './wheelTime';
 
 /**
- * 공부 책별 「회당 시간」 — 한 번 앉을 때 공부할 시간(1분~6시간). 서버는 책에 값만 들고
+ * 공부 책별 「회당 시간」 — 한 번 앉을 때 공부할 시간(10분~6시간). 서버는 책에 값만 들고
  * (`StudyBookRow.sessionGoalSeconds`), 「닿았나」는 여기 순수 함수가 매초 다시 판정한다(세션 스냅샷 없음 —
  * 책의 <b>현재 값</b>이 기준이라 측정 중 값을 바꾸면 곧바로 새 값으로 그린다).
  */
@@ -27,13 +27,16 @@ export function sessionGoalView(goal: number | null | undefined, elapsed: number
     : { kind: 'countdown', goal, remaining: goal - done };
 }
 
-/** 휠 판정 — 휠은 분 단위라 빈칸·소수·자투리 초가 원리상 없고, 남는 경계는 0분과 6시간 초과 둘뿐이다. */
+/** 회당 시간 하한(10분) — 서버 `StudyBook.MIN_SESSION_GOAL_SECONDS`와 같다. */
+export const SESSION_GOAL_MIN_SECONDS = 600;
+
+/** 휠 판정 — 휠은 분 단위라 빈칸·소수·자투리 초가 원리상 없고, 남는 경계는 10분 미만과 6시간 초과 둘뿐이다. */
 export function sessionGoalWheelState(
   hours: number,
   minutes: number,
 ): { seconds: number; valid: boolean; note: string | null } {
   const seconds = combineWheel(hours, minutes);
-  if (seconds <= 0) return { seconds, valid: false, note: '1분 이상으로 골라 주세요' };
+  if (seconds < SESSION_GOAL_MIN_SECONDS) return { seconds, valid: false, note: '10분 이상으로 골라 주세요' };
   if (seconds > SESSION_GOAL_MAX_HOURS * 3600) return { seconds, valid: false, note: '최대 6시간까지 잴 수 있어요' };
   return { seconds, valid: true, note: null };
 }

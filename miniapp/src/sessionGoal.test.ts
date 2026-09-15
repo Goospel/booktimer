@@ -42,17 +42,19 @@ describe('sessionGoalView — 닿음 판정', () => {
   });
 });
 
-describe('sessionGoalWheelState — 휠 판정(1분~6시간)', () => {
-  it('0시간 0분은 저장할 수 없다 — 이유를 한 줄로 말한다', () => {
-    expect(sessionGoalWheelState(0, 0)).toEqual({ seconds: 0, valid: false, note: '1분 이상으로 골라 주세요' });
+describe('sessionGoalWheelState — 휠 판정(10분~6시간)', () => {
+  it('10분 미만(0분·1분·9분)은 저장할 수 없다 — 이유를 한 줄로 말한다', () => {
+    expect(sessionGoalWheelState(0, 0)).toEqual({ seconds: 0, valid: false, note: '10분 이상으로 골라 주세요' });
+    expect(sessionGoalWheelState(0, 1)).toEqual({ seconds: 60, valid: false, note: '10분 이상으로 골라 주세요' });
+    expect(sessionGoalWheelState(0, 9)).toEqual({ seconds: 540, valid: false, note: '10분 이상으로 골라 주세요' });
   });
 
   it('6시간에 분이 붙으면 저장할 수 없다 — 서버 상한(6시간)을 넘는다', () => {
     expect(sessionGoalWheelState(6, 1)).toEqual({ seconds: 21_660, valid: false, note: '최대 6시간까지 잴 수 있어요' });
   });
 
-  it('경계 안쪽은 저장할 수 있다 — 1분·6시간 정각·50분', () => {
-    expect(sessionGoalWheelState(0, 1)).toEqual({ seconds: 60, valid: true, note: null });
+  it('경계 안쪽은 저장할 수 있다 — 10분·6시간 정각·50분', () => {
+    expect(sessionGoalWheelState(0, 10)).toEqual({ seconds: 600, valid: true, note: null });
     expect(sessionGoalWheelState(6, 0)).toEqual({ seconds: 21_600, valid: true, note: null });
     expect(sessionGoalWheelState(0, 50)).toEqual({ seconds: 3_000, valid: true, note: null });
   });
