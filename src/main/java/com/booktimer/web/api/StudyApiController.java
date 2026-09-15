@@ -295,7 +295,7 @@ public class StudyApiController {
     public record TagBookRequest(Long bookId) {
     }
 
-    /** @param sessionGoalSeconds 회당 시간(초, 60~21600) — null이면 「안 정함」으로 해제 */
+    /** @param sessionGoalSeconds 회당 시간(초, 600~21600) — null이면 「안 정함」으로 해제 */
     public record SessionGoalRequest(Integer sessionGoalSeconds) {
     }
 

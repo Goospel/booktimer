@@ -13,7 +13,7 @@ const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, i) => i);
  * 공부 책의 「회당 시간」 고르기 — 사용자가 손잡이를 눌러야만 열린다(진입 직후 화면을 덮지 않는다, 심사 규칙).
  *
  * <p>휠·밴드·높이는 독서 목표 화면(`Goal.tsx`)과 같은 부품이다 — 키보드·IME가 없어 빈칸·소수·전각 숫자가
- * 원리상 없고, 남는 경계(0분·6시간 초과)는 {@link sessionGoalWheelState}가 판정해 저장을 잠근다.
+ * 원리상 없고, 남는 경계(10분 미만·6시간 초과)는 {@link sessionGoalWheelState}가 판정해 저장을 잠근다.
  * 회당 시간 설정에는 광고를 붙이지 않는다(사용자 결정 Q1).
  */
 export function SessionGoalSheet({

@@ -310,21 +310,23 @@ describe('StudyTimerCard — 회당 시간 인라인 폼', () => {
     });
 
     // 입력 제약은 브라우저 네이티브 검증이 submit을 막는 자리다 — trigger('submit')는 그걸 건너뛰니 validity를 직접 잰다.
-    test('1~360분 정수만 유효하다(min=1 · max=360 · step=1) — 7분처럼 5의 배수가 아닌 값도 통과', async () => {
+    test('10~360분 정수만 유효하다(min=10 · max=360 · step=1) — 17분처럼 5의 배수가 아닌 값도 통과', async () => {
         vi.useFakeTimers();
         const w = mountCard({ books: [STUDY_BOOK(5, '헌법', 3000)], recentBookId: 5 });
         await btn(w, '변경')!.trigger('click');
         const input = w.find('form.dash-goal-edit input').element as HTMLInputElement;
 
-        for (const v of ['1', '7', '360']) {
+        for (const v of ['10', '17', '360']) {
             input.value = v;
             expect(input.checkValidity(), `${v}분이 무효`).toBe(true);
         }
-        input.value = '0';
-        expect(input.validity.rangeUnderflow).toBe(true);
+        for (const v of ['9', '1', '0']) {
+            input.value = v;
+            expect(input.validity.rangeUnderflow, `${v}분이 통과`).toBe(true);
+        }
         input.value = '361';
         expect(input.validity.rangeOverflow).toBe(true);
-        input.value = '7.5';
+        input.value = '17.5';
         expect(input.validity.stepMismatch).toBe(true);
     });
 });

@@ -70,8 +70,12 @@ public class StudyBook extends BaseTimeEntity {
     @Column(name = "session_goal_seconds")
     private Integer sessionGoalSeconds;
 
-    /** 회당 시간 하한 — 1분. 0은 「해제」가 아니다(해제는 null). */
-    public static final int MIN_SESSION_GOAL_SECONDS = 60;
+    /**
+     * 회당 시간 하한 — 10분. 0은 「해제」가 아니다(해제는 null). 2026-09-15 1분에서 올렸다 — 공부를 1분 단위로
+     * 앉지 않고, 짧은 값은 달성 푸시(60초 폴링·측정 중인 세션만)가 닿자마자 정지에 원리상 안 가서 헷갈리게만 했다.
+     * 올리기 전에 저장된 10분 미만 값은 그대로 읽힌다(검사는 쓰기에만 있다).
+     */
+    public static final int MIN_SESSION_GOAL_SECONDS = 600;
 
     /** 회당 시간 상한 — 측정 상한(6시간)과 같다. 그보다 긴 회당 시간은 한 측정으로 닿을 수 없다. */
     public static final int MAX_SESSION_GOAL_SECONDS =
@@ -134,13 +138,13 @@ public class StudyBook extends BaseTimeEntity {
     }
 
     /**
-     * 회당 시간 값 규칙 — null 허용, 아니면 60 ≤ v ≤ 21600. 문(컨트롤러)이 <b>소유권 조회보다 먼저</b>
+     * 회당 시간 값 규칙 — null 허용, 아니면 600 ≤ v ≤ 21600. 문(컨트롤러)이 <b>소유권 조회보다 먼저</b>
      * 부를 수 있게 static으로 뺐다(남의 책 id로 400/404를 갈라 존재를 캐낼 창을 막는다).
      * 메시지는 400 본문으로 화면에 뜨므로 한국어 완성문이다.
      */
     public static void validateSessionGoal(Integer seconds) {
         if (seconds != null && (seconds < MIN_SESSION_GOAL_SECONDS || seconds > MAX_SESSION_GOAL_SECONDS)) {
-            throw new IllegalArgumentException("회당 시간은 1분에서 6시간 사이로 정해 주세요");
+            throw new IllegalArgumentException("회당 시간은 10분에서 6시간 사이로 정해 주세요");
         }
     }
 

@@ -96,28 +96,28 @@ describe('dev-mock 핸들러', () => {
   it('회당 시간 — 측정 중인 책이면 activeBook에도 새 값이 바로 실린다', async () => {
     await mockRequest('/api/study/start', { body: { bookId: 103 } });
     try {
-      expect((await sessionGoal(103, 60)).activeBook!.sessionGoalSeconds).toBe(60);
+      expect((await sessionGoal(103, 600)).activeBook!.sessionGoalSeconds).toBe(600);
     } finally {
       await mockRequest('/api/study/stop', { body: {} });
       await sessionGoal(103, null);
     }
   });
 
-  it('회당 시간 — 59·0·21601은 400이고 값이 안 바뀐다(0은 해제가 아니다)', async () => {
+  it('회당 시간 — 599·60·0·21601은 400이고 값이 안 바뀐다(최소 10분, 0은 해제가 아니다)', async () => {
     await sessionGoal(102, 1_800);
-    for (const bad of [59, 0, 21_601]) {
+    for (const bad of [599, 60, 0, 21_601]) {
       await expect(sessionGoal(102, bad)).rejects.toMatchObject({ status: 400 });
     }
     expect(bookGoal((await mockRequest<DashboardResponse>('/api/dashboard', {})).study, 102)).toBe(1_800);
     // 경계 안쪽 두 끝은 통과한다(양성 쌍).
-    expect(bookGoal(await sessionGoal(102, 60), 102)).toBe(60);
+    expect(bookGoal(await sessionGoal(102, 600), 102)).toBe(600);
     expect(bookGoal(await sessionGoal(102, 21_600), 102)).toBe(21_600);
     await sessionGoal(102, null);
   });
 
   it('회당 시간 — 없는 책은 404, 단 범위 밖 값은 책을 보기 전에 400이다(서버와 같은 순서)', async () => {
     await expect(sessionGoal(99_999, 3_000)).rejects.toMatchObject({ status: 404 });
-    await expect(sessionGoal(99_999, 59)).rejects.toMatchObject({ status: 400 });
+    await expect(sessionGoal(99_999, 599)).rejects.toMatchObject({ status: 400 });
   });
 
   /**
