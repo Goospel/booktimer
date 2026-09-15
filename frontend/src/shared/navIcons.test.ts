@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { NAV_ICONS } from './navIcons'
 
-// 전 페이지 하단 네비(.link-row)가 실제 쓰는 의미 단위 아이콘 키. 하나라도 빠지면 그 라벨이
+// SSR 아이콘 사전(양옆 바·바 없는 화면의 하단 .link-row)과 Vue 섬이 실제 쓰는 의미 단위 아이콘 키. 하나라도 빠지면 그 라벨이
 // 아이콘 없이(또는 빈 SVG로) 깨져 통일이 무너진다 — 명세로서 하드코딩한다.
 const REQUIRED = [
     'home', 'back', 'books', 'history', 'search', 'user', 'personality',
@@ -36,30 +36,4 @@ describe('navIcons', () => {
         expect(missing).toEqual([])
     })
 
-    // 참조 무결성 — 각 페이지가 <NavLinks :links="[{ icon: 'X' }]"> 로 넘기는 icon 키와
-    // <NavIcon name="X"> 로 직접 박는 리터럴이 모두 사전에 있어야 한다. 오타(icon: 'homee',
-    // name="calendarr")는 Vue 템플릿 문자열이라 컴파일타임에 안 잡히고, NavIcon이 미지 키를
-    // v-html로 빈 <g>로 그려 예외도 안 난다 — 「svg가 2개 있다」류 렌더 테스트는 그대로
-    // 통과한다(존재는 행위의 증거가 아니다). 두 사용 형태를 모두 훑는다.
-    // ⚠️ .ts까지 훑는 이유: 네비 스펙이 .vue 밖 순수 모듈(study/pure.ts의 STUDY_PAGES,
-    // books/pure.ts)로 빠지는 순간 .vue만 보는 walk엔 안 잡혀, 리터럴을 옮긴 것만으로
-    // 커버리지가 조용히 사라진다(#1040 리뷰 실측 — 같은 오타가 .vue에선 죽고 .ts에선 살았다).
-    it('모든 .vue·.ts의 NavIcon 아이콘 리터럴이 사전 키의 부분집합', () => {
-        const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-        const used = new Set<string>()
-        const walk = (dir: string) => {
-            for (const e of readdirSync(dir, { withFileTypes: true })) {
-                const p = join(dir, e.name)
-                if (e.isDirectory()) walk(p)
-                else if (e.name.endsWith('.vue') || (e.name.endsWith('.ts') && !e.name.endsWith('.test.ts'))) {
-                    const src = readFileSync(p, 'utf8')
-                    for (const m of src.matchAll(/\bicon:\s*'([^']+)'/g)) used.add(m[1])
-                    for (const m of src.matchAll(/<NavIcon[^>]*\sname="([^"]+)"/g)) used.add(m[1])
-                }
-            }
-        }
-        walk(root)
-        const unknown = [...used].filter(k => !(k in NAV_ICONS))
-        expect(unknown).toEqual([])
-    })
 })

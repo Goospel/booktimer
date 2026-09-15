@@ -121,13 +121,13 @@ describe('DashboardApp', () => {
 
     // 발견 2: 상단 4겹 정리 — 렌더 순서를 헤더 → 타이머 → (잔디 자리) → 바로가기 순으로.
     // 2026-09-07: 그 자리를 여백 카드가 잇는다. 자리(순서)는 규칙이고 내용물만 바뀌었다.
-    test('렌더 순서: 타이머 → 여백 → 바로가기 (발견 2)', async () => {
+    // 2026-09-15: 바로가기(빠른 이동 카드)는 SSR 양옆 바로 옮겨 홈 본문에서 빠졌다.
+    test('렌더 순서: 타이머 → 여백 (발견 2)', async () => {
         const wrapper = mount(DashboardApp, { attachTo: document.body });
         await vi.waitFor(() => expect(wrapper.find('.dash-timer-hero').exists()).toBe(true));
         const html = wrapper.html();
         const pos = (s: string) => html.indexOf(s);
         expect(pos('dash-timer-hero')).toBeLessThan(pos('dash-margin-card'));
-        expect(pos('dash-margin-card')).toBeLessThan(pos('dash-grid-2col'));
     });
 
     // 걷어낸 것을 「없다」로만 재면 컴포넌트를 통째로 안 그려도 통과한다 — 그래서 그 자리에 무엇이

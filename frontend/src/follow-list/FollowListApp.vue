@@ -3,10 +3,8 @@ import { ref, onMounted, onUnmounted } from 'vue';
 import UserRow from '../shared/UserRow.vue';
 import FollowAction from '../shared/FollowAction.vue';
 import type { UserRowData } from '../shared/follow';
-import NavLinks from '../shared/NavLinks.vue';
 
 const appEl = document.getElementById('follow-list-app');
-const myLoginId = ref(appEl?.dataset.myLoginId ?? '');
 const activeTab = ref<'followers' | 'following'>(
     appEl?.dataset.initialTab === 'following' ? 'following' : 'followers'
 );
@@ -72,10 +70,5 @@ onUnmounted(() => {
                 </UserRow>
             </ul>
         </section>
-
-        <NavLinks :links="[
-            { href: '/', icon: 'home', label: '홈' },
-            { href: `/u/${myLoginId}`, icon: 'user', label: '내 책방' },
-        ]" />
     </div>
 </template>

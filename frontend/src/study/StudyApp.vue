@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 
-import NavLinks from '../shared/NavLinks.vue';
 import DayPanel from './DayPanel.vue';
 import {
     addPlanItem,
@@ -21,7 +20,6 @@ import {
     cycleCheck,
     monthTitle,
     planSummary,
-    studyNavLinks,
     type AiAccess,
     type CalendarDay,
     type PlanItem,
@@ -253,7 +251,5 @@ onMounted(async () => {
             @recall-saved="load"
             @plan-applied="load"
         />
-
-        <NavLinks :links="studyNavLinks('calendar')" />
     </section>
 </template>

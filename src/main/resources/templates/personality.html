@@ -9,7 +9,8 @@
     <title>책BTI — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
 </head>
-<body class="personality-page">
+<body class="personality-page has-rails">
+<th:block th:replace="~{fragments/side-rails :: rails}"></th:block>
 <div class="container">
     <header class="brand">
         <a class="brand-home" th:href="@{/}" title="홈으로">

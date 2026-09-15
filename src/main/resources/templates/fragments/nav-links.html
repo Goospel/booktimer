@@ -2,8 +2,8 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <body>
 <!--
-  하단 네비 버튼 하나(타일) — SSR 페이지가 공유하는 단일 출처. Vue의 shared/NavLinks.vue 와
-  같은 .link-row a CSS·같은 아이콘 의미를 쓴다(런타임만 다름). 호출:
+  하단 네비 버튼 하나(타일) — 양옆 세로 바(fragments/side-rails)가 없는 SSR 화면(에러·약관·비밀번호 찾기·관리자)이
+  공유하는 단일 출처. 로그인 사용자 화면의 이동은 양옆 바가 맡는다(2026-09-15). 호출:
     <nav class="link-row" aria-label="페이지 이동">
       <th:block th:replace="~{fragments/nav-links :: navLink(@{/}, 'home', '홈')}"></th:block>
       <th:block th:replace="~{fragments/nav-links :: navLink(@{/history}, 'history', '독서 기록')}"></th:block>

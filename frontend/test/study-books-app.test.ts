@@ -183,11 +183,6 @@ describe('공부 서재 — 담기', () => {
 });
 
 describe('공부 서재 — 셸', () => {
-    test('(h) 하단 네비는 공부 세계 안에서만 돈다 (자기 자신·독서 서재로 나가지 않는다)', async () => {
-        const w = await mountApp();
-        expect(w.findAll('.link-row a').map((a) => a.attributes('href'))).toEqual(['/', '/study', '/study/history']);
-    });
-
     test('(h) 카드에 공부 잉크(is-study)가 붙고, 화면에 이모지가 없다', async () => {
         const w = await mountApp();
         expect(w.findAll('.card.is-study')).toHaveLength(2);

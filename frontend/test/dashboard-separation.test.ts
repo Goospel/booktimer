@@ -87,9 +87,8 @@ const modeBtn = (w: ReturnType<typeof mount>, label: string) =>
     w.findAll('.dash-mode-toggle button').find(b => b.text() === label)!;
 const btnWith = (w: ReturnType<typeof mount>, text: string) =>
     w.findAll('button').find(b => b.text().includes(text));
-const tileHrefs = (w: ReturnType<typeof mount>) => w.findAll('.dash-nav-tile').map(a => a.attributes('href'));
 
-describe('DashboardApp — 모드가 쓰는 카드·타일을 끌고 간다', () => {
+describe('DashboardApp — 모드가 쓰는 카드를 끌고 간다', () => {
     test('(a) 독서 기본: 여백 카드가 서고 서재 패널은 없으며 공부 원장을 부르지 않는다', async () => {
         const w = await mountDashboard();
         await flushPromises();
@@ -98,11 +97,10 @@ describe('DashboardApp — 모드가 쓰는 카드·타일을 끌고 간다', ()
         expect(w.find('.dash-garden').exists()).toBe(false);
         expect(w.find('.dash-margin-card .dash-pill').text()).toBe('여백');
         expect(w.find('.dash-recall-card').exists()).toBe(false);
-        expect(tileHrefs(w)).toEqual(['/books', '/u/tester', '/personality']);
         expect(agendaCalls()).toBe(0);
     });
 
-    test('(b) 공부로 바꾸면 백지복습 카드로 갈리고 타일이 공부 세트가 된다', async () => {
+    test('(b) 공부로 바꾸면 백지복습 카드로 갈린다', async () => {
         const w = await mountDashboard();
         await modeBtn(w, '공부').trigger('click');
         await flushPromises();
@@ -111,15 +109,15 @@ describe('DashboardApp — 모드가 쓰는 카드·타일을 끌고 간다', ()
         // 공부 모드로 들어가도 옛 잔디 왕복은 없다 — 백지복습 1건이 그 자리를 대신한다(왕복 수 동일).
         expect(urls().filter(u => u.includes('/api/study/history'))).toHaveLength(0);
         expect(w.find('.dash-recall-card').classes()).toContain('is-study');
-        expect(w.find('.dash-nav').classes()).toContain('is-study');
         // 클래스만이 아니라 실제로 그 패널을 그렸다 — 본문 칸이 있어야 「백지복습을 그렸다」다.
         expect(w.find('[data-testid="recall-body"]').exists()).toBe(true);
         expect(w.find('.dash-margin-card').exists()).toBe(false);
-        // 공부 기록으로 가는 문은 **타일 하나뿐**이다 — 카드 머리의 중복 링크는 걷었다(2026-09-07).
-        // 이 1이 recall-card 쪽 「카드엔 없다」의 양성 대조군이다(둘 다 사라지면 여기가 죽는다).
-        expect(w.findAll('a[href="/study/history"]')).toHaveLength(1);
+        // 공부 기록으로 가는 문은 홈 본문에 **없다** — 빠른 이동 타일은 SSR 양옆 바(fragments/side-rails)로 옮겼다(2026-09-15).
+        // 양성 대조군 — 같은 마운트·같은 셀렉터 꼴로 공부 카드 안의 실제 링크(「공부 서재에 책 담기」)는 잡힌다.
+        // 이게 없으면 아래 0은 「링크를 못 찾는 조회」와 구분되지 않는다(서버 테스트는 런타임이 달라 대조군이 못 된다).
+        expect(w.findAll('a[href="/study/books"]')).toHaveLength(1);
+        expect(w.findAll('a[href="/study/history"]')).toHaveLength(0);
         expect(w.findAll('a[href="/history"]')).toHaveLength(0);
-        expect(tileHrefs(w)).toEqual(['/study/books', '/study', '/study/history']);
     });
 
     test('(c) 저장값이 study면 마운트하자마자 백지복습이다 — 독서를 한 번 그렸다 넘어가지 않는다', async () => {
@@ -168,6 +166,38 @@ describe('DashboardApp — 모드가 쓰는 카드·타일을 끌고 간다', ()
         expect(w.find('.dash-timer-hero').classes()).toContain('is-study');
         expect(w.find('.dash-recall-card .dash-pill').text()).toBe('공부 노트');
         expect(w.find('.dash-margin-card').exists()).toBe(false);
-        expect(tileHrefs(w)).toEqual(['/study/books', '/study', '/study/history']);
+    });
+});
+
+// 양옆 세로 바(SSR fragments/side-rails)의 흐림 상태는 #side-rails[data-mode] 한 속성이다 — 홈에선 이 섬이 쓴다.
+// 설계 claude-docs/plans/2026-09-15-web-side-rails.md §3-5 · §7 T-6.
+describe('DashboardApp — 모드가 양옆 바 흐림(#side-rails[data-mode])을 끌고 간다', () => {
+    const railMode = () => document.getElementById('side-rails')!.getAttribute('data-mode');
+    beforeEach(() => { document.body.innerHTML = '<div id="side-rails" data-mode="reading"></div>'; });
+
+    test('(g) 공부 토글 → study, 독서로 돌아오면 → reading', async () => {
+        const w = await mountDashboard();
+        await modeBtn(w, '공부').trigger('click');
+        await flushPromises();
+        expect(railMode()).toBe('study');
+
+        await modeBtn(w, '독서').trigger('click');
+        await flushPromises();
+        expect(railMode()).toBe('reading');
+    });
+
+    test('(h) 저장값 study로 마운트 → 마운트 직후 study', async () => {
+        localStorage.setItem('booktimer.timerMode', 'study');
+        await mountDashboard();
+        expect(railMode()).toBe('study');
+    });
+
+    test('(i) 서버 독서 진행 중 + 저장 study → reading(서버 진실이 이긴다)', async () => {
+        localStorage.setItem('booktimer.timerMode', 'study');
+        document.getElementById('side-rails')!.setAttribute('data-mode', 'study'); // 인라인 부트가 저장값으로 흐린 상태
+        dashboardPayload = { ...DASHBOARD, hasActiveSession: true, activeStartedAt: '2026-09-04T00:00:00Z' };
+        await mountDashboard();
+        await flushPromises();
+        expect(railMode()).toBe('reading');
     });
 });

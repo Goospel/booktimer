@@ -47,7 +47,7 @@ class BlockControllerTest {
     }
 
     @Test
-    @DisplayName("GET /me/blocks: Vue 셸 렌더 — myLoginId 주입, blocked 목록은 API(/api/blocks)에서 페치")
+    @DisplayName("GET /me/blocks: Vue 셸 렌더 — blocked 목록은 API(/api/blocks)에서 페치, 셸은 myLoginId를 싣지 않는다(내 책방 링크는 양옆 바)")
     void blocks_rendersVueShell() throws Exception {
         User me = newUser("lme@booktimer.com", "viewer", "뷰어");
         User target = newUser("lt@booktimer.com", "target", "타겟");
@@ -56,8 +56,7 @@ class BlockControllerTest {
         mockMvc.perform(get("/me/blocks").with(user("lme@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("block-list"))
-                .andExpect(model().attributeExists("myLoginId"))
-                .andExpect(model().attribute("myLoginId", "viewer"));
+                .andExpect(model().attributeDoesNotExist("myLoginId"));
     }
 
     @Test

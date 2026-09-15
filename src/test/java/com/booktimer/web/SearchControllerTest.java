@@ -42,14 +42,14 @@ class SearchControllerTest {
     }
 
     @Test
-    @DisplayName("GET /search: Vue 셸을 렌더링하고 myLoginId 를 모델에 싣는다")
+    @DisplayName("GET /search: Vue 셸을 렌더링한다 — myLoginId는 싣지 않는다(내 책방 링크는 양옆 바)")
     void search_rendersShellWithMyLoginId() throws Exception {
         newUser("me@booktimer.com", "searcher", "검색가");
 
         mockMvc.perform(get("/search").with(user("me@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("search"))
-                .andExpect(model().attribute("myLoginId", "searcher"));
+                .andExpect(model().attributeDoesNotExist("myLoginId"));
     }
 
     @Test

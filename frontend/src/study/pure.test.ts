@@ -16,7 +16,6 @@ import {
     recallScopePrefill,
     recallSubjectPrefill,
     readCountLabel,
-    studyNavLinks,
     studyOwned,
     studyView,
     validatePlanForm,
@@ -115,25 +114,6 @@ describe('planSummary', () => {
     it('2개 이상이면 첫 할 일 + 나머지 개수', () => {
         expect(planSummary(items(['1장 p.1-20', '2장 p.21-40']))).toBe('1장 p.1-20 +1');
         expect(planSummary(items(['가', '나', '다']))).toBe('가 +2');
-    });
-});
-
-describe('studyNavLinks', () => {
-    // 공부 세계 안에서만 돈다 — 독서 서재(/books)로 나가는 문은 미니앱 공부 모드에도 없다.
-    // 지금 보고 있는 화면은 빼고 나머지 둘만 — 자기 자신으로 가는 링크는 문이 아니다.
-    it('일정 화면에선 공부 서재·공부 기록으로 잇는다', () => {
-        expect(studyNavLinks('calendar').map((l) => l.href))
-            .toEqual(['/', '/study/books', '/study/history']);
-    });
-
-    it('기록 화면에선 일정·공부 서재로 잇는다', () => {
-        expect(studyNavLinks('history').map((l) => l.href))
-            .toEqual(['/', '/study', '/study/books']);
-    });
-
-    it('서재 화면에선 일정·공부 기록으로 잇는다 (독서 서재로 나가지 않는다)', () => {
-        expect(studyNavLinks('books').map((l) => l.href))
-            .toEqual(['/', '/study', '/study/history']);
     });
 });
 

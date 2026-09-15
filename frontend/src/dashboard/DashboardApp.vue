@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, watchEffect, onMounted, onUnmounted } from 'vue'
 import type { DashboardResponse, TimerState, StopResponse, BookOption, StudyState } from './types'
 import type { StudyBookRow } from '../study/api'
 import { IDLE_STUDY, studyStateOf } from './types'
 import { getCsrfToken } from '../shared/follow'
 import type { TimerMode } from './timerMode'
-import { shouldRefresh, readMode, writeMode, effectiveMode } from './timerMode'
+import { shouldRefresh, readMode, writeMode, effectiveMode, syncRailMode } from './timerMode'
 import { allBooksOf, defaultBookOf } from './defaultBook'
 import TimerCard from './TimerCard.vue'
 import StudyTimerCard from './StudyTimerCard.vue'
@@ -17,7 +17,6 @@ import RecallCard from './RecallCard.vue'
 import BrandQuote from './BrandQuote.vue'
 import EmailVerifyBanner from './EmailVerifyBanner.vue'
 import WelcomeBanner from './WelcomeBanner.vue'
-import QuickNav from './QuickNav.vue'
 import DashHeader from './DashHeader.vue'
 
 // justOnboarded: 온보딩 직후 셸 data 속성 → main.ts가 읽어 주입. 1회 환영 배너 트리거(§6.4).
@@ -56,6 +55,8 @@ const study = ref<StudyState>(IDLE_STUDY)
 const storedMode = ref<TimerMode>(readMode())
 // 서버 진실이 저장값을 이긴다 — 진행 중 원장의 모드가 화면 모드다(미니앱 effectiveMode 1:1).
 const mode = computed(() => effectiveMode(hasActiveSession.value, study.value.hasActiveSession, storedMode.value))
+// 섬 밖 SSR 양옆 바의 흐림 상태를 같은 모드로 — 섬 밖 DOM 한 속성(HistoryApp의 body 클래스와 같은 관례).
+watchEffect(() => syncRailMode(document, mode.value))
 const measuring = computed(() => hasActiveSession.value || study.value.hasActiveSession)
 // 왕복 중(starting/stopping)에도 잠근다 — 응답 대기 중에 모드를 바꾸면 반대 카드가 요청도 없이
 // 남의 "시작하는 중…" 비활성 버튼을 뒤집어쓰고, 응답이 오면 도로 튄다.
@@ -506,9 +507,6 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
                     :streak="data.graph.currentStreak" @open-sheet="openStartSheet" />
         <RecallCard v-else :books="study.books" />
 
-        <div class="dash-grid-2col">
-            <QuickNav :login-id="data.loginId" :mode="mode" />
-        </div>
 
         <BrandQuote :quotes="data.quotes" />
 

@@ -2,7 +2,6 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import PersonalityCarousel from './PersonalityCarousel.vue';
 import type { EntryDto } from './PersonalityCarousel.vue';
-import NavLinks from '../shared/NavLinks.vue';
 import { joinLabels } from './personalityView';
 
 interface ReadingProfile {
@@ -213,11 +212,6 @@ async function selectEntry(id: number) {
                 <span>새 성향 분석은 <strong>토스 앱의 북타이머</strong>에서 만들 수 있어요 — 여기서는 만들어 둔 분석을 볼 수 있습니다.</span>
             </div>
         </div>
-
-        <NavLinks :links="[
-            { href: '/', icon: 'home', label: '홈' },
-            { href: '/books', icon: 'books', label: '내 책장' },
-        ]" />
 
         <!-- 최하단 정확도 고지 — 비-READY(COLD_START·FALLBACK)에선 ? 팝오버를 달 카드가 없어 그대로 노출.
              READY에선 공개 안내와 함께 위 ? 팝오버로 이전돼 상시 노출하지 않는다. -->

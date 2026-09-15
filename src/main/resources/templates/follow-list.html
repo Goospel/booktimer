@@ -13,7 +13,8 @@
     <!-- 광고 로더(게시자 ID 설정 시에만) -->
     <th:block th:replace="~{ads :: loader}"></th:block>
 </head>
-<body>
+<body class="has-rails">
+<th:block th:replace="~{fragments/side-rails :: rails}"></th:block>
 <div class="container">
     <header class="brand">
         <a class="brand-home" th:href="@{/}" title="홈으로">
@@ -24,7 +25,7 @@
 
     <!-- Vue 섬 마운트 포인트 — data-* 로 초기값 전달 -->
     <div id="follow-list-app"
-         th:attr="data-my-login-id=${myLoginId}, data-initial-tab=${initialTab}">
+         th:attr="data-initial-tab=${initialTab}">
         불러오는 중…
     </div>
     <noscript>

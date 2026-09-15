@@ -37,6 +37,14 @@ export function effectiveMode(readingActive: boolean, studyActive: boolean, stor
     return stored
 }
 
+/**
+ * 홈 모드 → 양옆 바 흐림 상태(SSR `fragments/side-rails`의 #side-rails[data-mode]).
+ * 바가 없는 문서(테스트·바 없는 페이지)면 no-op.
+ */
+export function syncRailMode(doc: Pick<Document, 'getElementById'>, mode: TimerMode): void {
+    doc.getElementById('side-rails')?.setAttribute('data-mode', mode)
+}
+
 /** 복귀 재조회 스로틀 — 미니앱 App.tsx의 REFRESH_THROTTLE_MS와 같은 값·같은 규칙. */
 export const REFRESH_THROTTLE_MS = 60_000
 

@@ -4,7 +4,6 @@ import ContributionGraph from './ContributionGraph.vue';
 import MonthlyRecords from './MonthlyRecords.vue';
 import WeeklyShortfall from './WeeklyShortfall.vue';
 import { chooseLayout, type RecordsLayout } from './layout';
-import NavLinks from '../shared/NavLinks.vue';
 
 export interface ContributionDay {
     date: string | null;
@@ -134,11 +133,6 @@ onUnmounted(() => {
                 <WeeklyShortfall :weeklyShortfall="data.weeklyShortfall" />
             </div>
         </section>
-
-        <NavLinks :links="[
-            { href: '/', icon: 'home', label: '홈' },
-            { href: '/books', icon: 'books', label: '내 책장' },
-        ]" />
     </template>
 
     <div v-else class="status-line">불러오는 중…</div>

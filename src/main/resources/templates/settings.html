@@ -9,7 +9,8 @@
     <title>설정 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
 </head>
-<body class="settings-page">
+<body class="settings-page has-rails">
+<th:block th:replace="~{fragments/side-rails :: rails}"></th:block>
 <div class="set-shell">
 
     <!-- 브랜드 홈 링크 — 앱 전역 .brand 패턴(어디서든 홈으로). 책등 SVG는 전역 통일 아이콘. -->
@@ -239,11 +240,6 @@
             <button type="submit" class="set-btn-danger">계정 영구 삭제</button>
         </form>
     </section>
-
-    <nav class="link-row" aria-label="페이지 이동">
-        <th:block th:replace="~{fragments/nav-links :: navLink(@{/}, 'home', '홈')}"></th:block>
-        <th:block th:replace="~{fragments/nav-links :: navLink(@{/books}, 'books', '내 책장')}"></th:block>
-    </nav>
 </div>
 <!-- data-confirm 위임 리스너 — 인라인 onsubmit은 CSP에서 실행되지 않는다 -->
 <script th:attr="nonce=${cspNonce}" th:src="@{/js/confirm-submit.js}"></script>

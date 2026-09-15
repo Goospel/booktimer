@@ -9,7 +9,8 @@
     <title>빠뜨린 독서 기록 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
 </head>
-<body>
+<body class="has-rails">
+<th:block th:replace="~{fragments/side-rails :: rails}"></th:block>
 <div class="container">
     <header class="brand">
         <a class="brand-home" th:href="@{/}" title="홈으로">
@@ -61,12 +62,6 @@
             <a th:href="@{/books}">먼저 책장에 책을 추가</a>하면 그 책으로 빠뜨린 독서를 기록할 수 있어요.
         </p>
     </section>
-
-    <nav class="link-row" aria-label="페이지 이동">
-        <th:block th:replace="~{fragments/nav-links :: navLink(@{/}, 'home', '홈')}"></th:block>
-        <th:block th:replace="~{fragments/nav-links :: navLink(@{/history}, 'history', '독서 기록')}"></th:block>
-        <th:block th:replace="~{fragments/nav-links :: navLink(@{/books}, 'books', '내 책장')}"></th:block>
-    </nav>
 </div>
 </body>
 </html>

@@ -11,7 +11,8 @@
     <!-- 광고 로더(게시자 ID 설정 시에만) -->
     <th:block th:replace="~{ads :: loader}"></th:block>
 </head>
-<body class="bookdetail-page">
+<body class="bookdetail-page has-rails">
+<th:block th:replace="~{fragments/side-rails :: rails}"></th:block>
 <div class="container">
     <header class="brand">
         <a class="brand-home" th:href="@{/}" title="홈으로">
@@ -123,11 +124,6 @@
 
     <!-- 광고 (하단, 게시자 ID 설정 시에만) -->
     <div th:replace="~{ads :: unit}"></div>
-
-    <nav class="link-row" aria-label="페이지 이동">
-        <th:block th:replace="~{fragments/nav-links :: navLink(@{/books}, 'books', '내 책장')}"></th:block>
-        <th:block th:replace="~{fragments/nav-links :: navLink(@{/}, 'home', '홈')}"></th:block>
-    </nav>
 </div>
 
 <!-- 일자별 독서 기록: 한 번에 한 달만 보이고 ◀(과거)/▶(최신)로 이동. 월 섹션은 최신이 인덱스 0(서버가 최신만 렌더).

@@ -44,25 +44,25 @@ class FollowListControllerTest {
     }
 
     @Test
-    @DisplayName("GET /me/followers: Vue 셸 — myLoginId·initialTab=followers 모델, follow-list 뷰")
+    @DisplayName("GET /me/followers: Vue 셸 — initialTab=followers 모델(myLoginId 없음), follow-list 뷰")
     void followers_rendersShell() throws Exception {
         User viewer = newUser("mfv@booktimer.com", "mfviewer1", "뷰어");
         // 목록 데이터는 API에서 오므로 users·listType은 model에 없음
         mockMvc.perform(get("/me/followers").with(user("mfv@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("follow-list"))
-                .andExpect(model().attribute("myLoginId", "mfviewer1"))
+                .andExpect(model().attributeDoesNotExist("myLoginId"))
                 .andExpect(model().attribute("initialTab", "followers"));
     }
 
     @Test
-    @DisplayName("GET /me/following: Vue 셸 — myLoginId·initialTab=following 모델, follow-list 뷰")
+    @DisplayName("GET /me/following: Vue 셸 — initialTab=following 모델(myLoginId 없음), follow-list 뷰")
     void following_rendersShell() throws Exception {
         User viewer = newUser("mgv@booktimer.com", "mgviewer1", "뷰어");
         mockMvc.perform(get("/me/following").with(user("mgv@booktimer.com")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("follow-list"))
-                .andExpect(model().attribute("myLoginId", "mgviewer1"))
+                .andExpect(model().attributeDoesNotExist("myLoginId"))
                 .andExpect(model().attribute("initialTab", "following"));
     }
 

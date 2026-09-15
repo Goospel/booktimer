@@ -31,7 +31,7 @@
     --shadow: 0 1px 2px rgba(60, 50, 30, .05), 0 8px 24px rgba(60, 50, 30, .06);
     /* 보조 토큰 — 랜딩부터 점진 적용(전역 강제 아님) */
     --sage-soft: #E7EEE2;   /* 연한 세이지 fill */
-    /* nav hover — 대시보드 QuickNav 타일과 footer .link-row 버튼이 공유하는 hover 상태(단일 출처).
+    /* nav hover — 양옆 세로 바 메뉴(.rail-item)와 하단 .link-row 버튼이 공유하는 hover 상태(단일 출처).
        한쪽 색만 바꿔 둘이 어긋나는 drift를 막는다. */
     --nav-hover-bg: var(--sage-soft);   /* hover 배경 = 연녹 채움(#E7EEE2) */
     --nav-hover-border: #CFE0C2;        /* hover 테두리 = 연녹 */
@@ -308,7 +308,7 @@ body::before {
     color: var(--accent-hover);
 }
 
-/* 헤더 로고 책 아이콘 — footer·QuickNav와 통일한 라인아트 책 SVG(책등 3권).
+/* 헤더 로고 책 아이콘 — 네비 아이콘 사전(nav-icons · navIcons.ts)과 통일한 라인아트 책 SVG(책등 3권).
    stroke=currentColor라 로고 색(--accent-hover)을 상속. .brand-home이 align-items:baseline이라
    inline SVG는 텍스트보다 살짝 떠 보여 align-self:center로 제목과 광학 정렬. */
 .brand .brand-ico { width: 1.5rem; height: 1.5rem; align-self: center; color: var(--accent-hover); }
@@ -864,8 +864,8 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .danger-zone { border-color: var(--danger-line-2); }
 .danger-zone h2 { color: var(--danger); }
 
-/* 공용 하단 네비 — 대시보드 퀵 액션과 동일한 타일 양식(이것이 표준 양식).
-   모든 페이지(검색/프로필/책장/기록/로그인 등)의 .link-row가 이 2열 타일을 공유한다.
+/* 공용 하단 네비 — 바 없는 화면(에러·약관·비밀번호 찾기·관리자)의 2열 타일.
+   로그인 사용자 화면의 이동은 양옆 세로 바(fragments/side-rails)로 옮겼다(2026-09-15).
    링크 수가 홀수면 마지막 타일이 전체폭(단일 링크 페이지=전체폭 버튼 1개). */
 .link-row {
     display: grid;
@@ -889,14 +889,12 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     word-break: keep-all;
     transition: background .2s ease, border-color .2s ease, transform .05s;
 }
-/* hover 효과를 대시보드 QuickNav 타일과 통일 — 테두리 강조+그림자(떠오름) 대신
-   연녹 채움(.dash-nav-tile:hover와 같은 --nav-hover-* 토큰 공유). */
+/* hover 효과 — 테두리 강조+그림자(떠오름) 대신 연녹 채움(양옆 바 .rail-item:hover와 같은 --nav-hover-* 토큰 공유). */
 .link-row a:hover { background: var(--nav-hover-bg); border-color: var(--nav-hover-border); text-decoration: none; }
 .link-row a:active { transform: translateY(1px); }
 .link-row a:last-child:nth-child(odd) { grid-column: 1 / -1; }
-/* footer .link-row 내 라인 아이콘 — 전 페이지 공통(Vue NavIcon · Thymeleaf nav-icons fragment
-   가 공유). 색은 대시보드 타일 아이콘과 동일한 딥세이지(accent-hover)로 통일 — 라벨(차콜)과
-   분리되어 대시보드 QuickNav 타일과 같은 룩. 정렬·간격은 .link-row a의 flex가 처리. */
+/* 하단 .link-row 내 라인 아이콘 — Thymeleaf nav-icons fragment. 색은 양옆 바 아이콘과 같은
+   딥세이지(accent-hover) — 라벨(차콜)과 분리된다. 정렬·간격은 .link-row a의 flex가 처리. */
 .link-row a svg.link-ico { flex: 0 0 auto; color: var(--accent-hover); }
 
 /* 하이라이트 밴드 — 측정 카드 바로 밑, '재미' 동선(내 책장·내 공개 프로필) 승격용.
@@ -1400,8 +1398,6 @@ body.bookdetail-page .record-scroll { max-height: 296px; }
 body.bookdetail-page .bd-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 28px 16px; text-align: center; color: var(--accent); }
 body.bookdetail-page .bd-empty .status-line { margin: 0; line-height: 1.6; font-size: 13.5px; }
 
-/* 하단 이동 타일 — 세로 스택(아이콘 위/라벨 아래). 전역 .link-row(가로 배치)는 다른 페이지 그대로. */
-body.bookdetail-page .link-row a { flex-direction: column; gap: 8px; padding: 20px 16px; border-radius: 18px; }
 .book-author, .book-pub { font-size: .85rem; color: var(--muted); }
 /* 검색 결과 byline — 저자 · 출판사 한 줄(byline() 조립). 시안 My Shelf. */
 .book-byline { font-size: .85rem; color: var(--muted); }
@@ -1490,7 +1486,7 @@ body.bookdetail-page .link-row a { flex-direction: column; gap: 8px; padding: 20
 /* 내 책장 상단 안내 — 공개 토글이 '책방'에 반영됨을 한 줄로 설명(책방 링크 겸). */
 /* ===== 내 책장 리디자인 PR-3 — 헤더·안내·필터·상태·와이드 셸 (시안 My Shelf) ===== */
 
-/* 인사말 헤더 — 제목·통계만. 페이지 이동은 모든 폭에서 하단 .link-row 타일이 담당. */
+/* 인사말 헤더 — 제목·통계만. 페이지 이동은 양옆 세로 바(fragments/side-rails)가 담당. */
 .shelf-greeting { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
 
 /* '내 책장' 카드 헤드 — 제목(좌) + 제휴 고지 ⓘ(우). 책방 .shop-shelf-head 대응(카드 안 우상단).
@@ -1631,7 +1627,7 @@ body.profile-page .container { max-width: 1160px; }  /* 와이드 2열 여유 �
 
 /* 내 책방(self) 상단 사용자 검색 진입점 — 검색 input처럼 보이되 실제론 /search 링크(트위터식).
    책방엔 슬림 진입점만, 무거운 검색 패널/추천은 전용 페이지로 위임(책방 비대화 방지).
-   톤: .book-search-form input(테두리·라운드) + .dash-nav-tile(연베이지 채움·hover 토큰) 혼합. */
+   톤: .book-search-form input(테두리·라운드) + 연베이지 채움·--nav-hover-* 토큰(옛 홈 빠른 이동 타일의 톤) 혼합. */
 .shop-search-entry {
     display: flex; align-items: center; gap: 10px;
     padding: 11px 16px;
@@ -1880,7 +1876,7 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 
 /* 책 그리드 — 모바일 1열, 와이드 2열 */
 .shop-books { display: grid; grid-template-columns: 1fr; gap: 12px; list-style: none; padding: 0; margin: 0; }
-.shop-wide .shop-books { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }  /* 카드 최소 300px — 넓으면 2열, 중간폭(메인<614px)이면 1열 풀폭으로 우아하게 강등(대시보드 .dash-grid-2col 관용구) */
+.shop-wide .shop-books { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }  /* 카드 최소 300px — 넓으면 2열, 중간폭(메인<614px)이면 1열 풀폭으로 우아하게 강등(repeat(auto-fit, minmax()) 관용구) */
 
 /* 공개 책장 ul을 스크롤 박스로(PC·모바일 공통) — max-height에 닿으면 내부 스크롤이라 페이지가
    책 수만큼 길어지지 않고, 하단 네비(대시보드·내 책장)가 늘 바로 아래 보인다. 책 적으면
@@ -2120,7 +2116,7 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 #tab-records:checked ~ .panel-records,
 #tab-missed:checked ~ .panel-missed { display: block; clear: both; padding-top: 18px; }
 /* profile 탭 패널은 record-tab(float:left)을 clear해야 한다 — 안 하면 float가 record-card를
-   collapse시켜 다음 형제 .link-row(block grid)가 stretch 폭을 못 받고 min-content로 짓눌린다.
+   collapse시켜 다음 형제 블록이 stretch 폭을 못 받고 min-content로 짓눌린다(당시엔 하단 .link-row).
    (#449가 죽은 #tab-bti:checked~.panel 셀렉터를 지우며 여기 있던 clear:both를 함께 잃어 회귀.) */
 .panel-bti, .panel-shelf { clear: both; padding-top: 18px; }
 .panel-missed .muted { margin: 0 0 4px; font-size: .85rem; }
@@ -2504,7 +2500,7 @@ body.personality-page #personality-app { gap: 18px; }
     /* 카드 테두리: 연필선 — 묶음끼리 명시적 구분 (대시보드 전용, 전역 --border 무변경).
        ⚠️ 종이·연필 테마의 일괄 적용은 「`.card`이거나 `border: 1px solid var(--border)`인 것」을 기준으로
        돌아서, 자체 색으로 테두리를 선언한 이 클래스는 통째로 빠져 있었다 — 홈의 카드 4개와 책방 카드가
-       전부 매끈한 선이었고, 정작 그 안의 .dash-state-panel·.dash-nav-tile엔 연필선이 있어 한 화면에서
+       전부 매끈한 선이었고, 정작 그 안의 .dash-state-panel·(당시) 빠른 이동 타일엔 연필선이 있어 한 화면에서
        두 양식이 갈렸다(2026-08-25 실측). 색은 border-image가 로드 안 될 때의 폴백으로 남긴다. */
     border: 1px solid var(--line-2);
     border-image: var(--pencil-frame) 8 / 8px stretch;
@@ -2531,7 +2527,6 @@ body.personality-page #personality-app { gap: 18px; }
 .dash-pill-ok { background: var(--ok-soft-3); color: var(--ok); font-weight: 700; }
 
 /* 제목(pill/head)을 본문에서 띄워 섹션 분리감 — 카드 안 본문은 촘촘히, 제목 아래만 여유 */
-.dash-nav > .dash-pill,
 .dash-card-head { margin-bottom: 4px; }
 
 /* 헤더 한 줄 명언 — 홈 카드 묶음을 "닫는 각주"로 정리(2026-07-10, C안 하이브리드).
@@ -2843,21 +2838,6 @@ img.dash-book-chip-cover { object-fit: cover; background: var(--line-1); }
     display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px;
 }
 
-/* 빠른 이동 */
-.dash-nav { gap: 16px; }
-.dash-nav-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-.dash-nav-tile {
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 9px; min-height: 96px; padding: 14px;
-    border-radius: 14px; background: var(--paper-1); border: 1px solid var(--border);
- border-image: var(--pencil-frame) 8 / 8px stretch;
-    color: var(--accent-hover); text-decoration: none;
-    transition: background .2s ease, border-color .2s ease;
-}
-.dash-nav-tile:hover { background: var(--nav-hover-bg); border-color: var(--nav-hover-border); }
-.dash-nav-tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
-.dash-nav-label { font-size: 14.5px; color: var(--text); }
-
 /* 좁은 폭: 히어로 2단을 세로로 */
 @media (max-width: 520px) {
     .dash-timer-hero { flex-direction: column; align-items: stretch; }
@@ -2890,8 +2870,6 @@ img.dash-book-chip-cover { object-fit: cover; background: var(--line-1); }
     }
     .dash-recall-card .study-recall-main { order: 0; }
     .dash-recall-card .study-recall-side { order: 1; }
-    .dash-nav-grid { grid-template-columns: repeat(3, 1fr); }
-    .dash-nav-tile:last-child:nth-child(odd) { grid-column: auto; }     /* 3열에선 「마지막 타일 전체폭」 규칙이 되레 어긋난다 */
 }
 
 /* 카드 사이 간격 — 공유 #dashboard-app gap(16px) 위에 대시보드만 여유롭게.
@@ -2943,13 +2921,6 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .dash-header-menu-logout .dash-header-menu-item { color: var(--muted); }
 .dash-header-menu-logout .dash-header-menu-item:hover { color: var(--text); }
 
-/* 2단 그리드 — auto-fit이라 자식이 하나면 전체폭으로 선다 */
-.dash-grid-2col {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
-    gap: clamp(16px, 2.2vw, 22px);
-    align-items: start;
-}
 .dash-card-link { font-size: 13.5px; color: var(--accent-hover); text-decoration: none; }
 .dash-card-link:hover { text-decoration: underline; }
 /* 모드 토글 — pill과 한 줄(.dash-timer-head). 전역 button{width:100%}를 width:auto로 상쇄한다
@@ -3933,6 +3904,63 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .theme-toggle:hover { background: var(--nav-hover-bg); border-color: var(--nav-hover-border); }
 .theme-toggle:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus-ring); }
 .theme-toggle svg { width: 18px; height: 18px; }
+
+/* ── 양옆 세로 바(side rails) — 설계 claude-docs/plans/2026-09-15-web-side-rails.md ──
+   로그인 사용자 화면의 페이지 이동 단일 출처(fragments/side-rails). 왼쪽 = 독서, 오른쪽 = 공부(.is-study 잉크).
+   평소 92px 접힘. 펼침(232px, 본문 위에 덮음)은 `.is-open`(rail.js — 데스크톱 머묾·태블릿 탭)과
+   `:focus-within`(키보드) 한 벌뿐이다. `.rail:hover` 펼침 규칙은 두지 않는다 — hover로 펼치면 안의 가로 배치가
+   즉시 뒤집혀 스치기만 해도 글자가 깨져 보인다(머묾 지연은 rail.js 타이머가 맡는다).
+   z-index 95 = 종이 결(body::before 90) 위 · 첫 오버레이(100) 아래. 결이 고정 요소 위에 있으면 스크롤 때
+   무늬가 바 위를 미끄러진다(T-192) — 그래서 바 표면엔 결을 직접 얹는다. */
+body.has-rails { padding-left: 124px; padding-right: 124px; }   /* 16 + 92 + 16 */
+.rail {
+    position: fixed;
+    top: 16px;
+    bottom: 16px;
+    width: 92px;
+    z-index: 95;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    overflow-x: hidden;   /* 펼침 전이 중 가로 넘침만 자른다 */
+    overflow-y: auto;     /* 짧은 창·확대 배율에서 아래 메뉴(사용자 검색)가 잘리지 않고 스크롤된다 */
+    padding: 18px 8px;
+    border-radius: 18px;
+    background-color: var(--card-bg);
+    background-image: var(--grain), var(--fiber);
+    background-size: 300px 300px, 440px 440px;
+    border: 1px solid var(--line-2);
+    border-image: var(--pencil-frame) 8 / 8px stretch;
+    box-shadow: 0 1px 2px rgba(44, 42, 36, .04);
+    transition: width .18s ease, box-shadow .18s ease, opacity .18s ease;
+}
+.rail-reading { left: 16px; }
+.rail-study { right: 16px; }   /* right 고정 → 펼치면 왼쪽으로 자란다 */
+.rail nav { display: flex; flex-direction: column; gap: 6px; }
+.rail-pill { align-self: center; margin-bottom: 8px; padding: 5px 12px; border-radius: 999px; font-size: 12.5px; white-space: nowrap; background: var(--sage-soft); color: var(--accent-hover); }
+.rail-item { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 10px 4px; border-radius: 14px; border: 1px solid transparent; color: var(--text); font-size: 12.5px; line-height: 1.3; text-align: center; white-space: nowrap; text-decoration: none; }
+.rail-item svg { width: 22px; height: 22px; flex: 0 0 auto; color: var(--accent-hover); }
+.rail-item[aria-current="page"] { background: var(--sage-soft); border-color: var(--nav-hover-border); border-image: var(--pencil-frame) 8 / 8px stretch; color: var(--accent-hover); }
+@media (hover: hover) and (pointer: fine) { .rail-item:hover:not([aria-current]) { background: var(--nav-hover-bg); text-decoration: none; } }
+.rail-item:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus-ring); }
+/* 흐림 — 지금 모드의 반대쪽. 펼치면(어느 경로로든) 진해진다.
+   .7이 하한이다: 라이트 12.5px 라벨 대비 5.40:1(AA 4.5) · 아이콘 3.07:1(비텍스트 3). .6이면 4.01 · 2.55로 미달 */
+#side-rails[data-mode="reading"] .rail-study, #side-rails[data-mode="study"] .rail-reading { opacity: .7; }
+/* 펼침 — 데스크톱 머묾·태블릿 탭(둘 다 rail.js의 is-open)·키보드(focus-within) 셋이 같은 모양 */
+#side-rails .rail.is-open, #side-rails .rail:focus-within {
+    width: 232px;
+    padding: 18px 12px;
+    opacity: 1;
+    box-shadow: 0 2px 4px rgba(44, 42, 36, .05), 0 18px 44px rgba(44, 42, 36, .16);
+}
+.rail.is-open .rail-item, .rail:focus-within .rail-item { flex-direction: row; gap: 12px; padding: 10px 14px; font-size: 15px; line-height: 1.6; text-align: left; }
+.rail.is-open .rail-pill, .rail:focus-within .rail-pill { align-self: flex-start; margin-left: 8px; }
+@media (prefers-reduced-motion: reduce) { .rail { transition: none; } }
+/* ponytail: <640px엔 이동 수단이 브랜드 홈 링크뿐 — 폰 웹을 지원하기로 바뀌면 하단 탭바를 여기 단다(웹=데스크톱·태블릿, 2026-09-07 방침) */
+@media (max-width: 639px) { .rail { display: none; } body.has-rails { padding-left: 16px; padding-right: 16px; } }
+/* PWA 설치 칩(pwa-install.js가 right:16px 인라인으로 꽂는다)이 오른쪽 바를 덮지 않게 바 안쪽으로 비킨다.
+   !important는 인라인 스타일을 이기기 위한 것이다(인라인은 어떤 셀렉터보다 세다). */
+@media (min-width: 640px) { body.has-rails #pwa-install-chip { right: 124px !important; } }
 
 /* ── 다크 테마 ────────────────────────────────────────────
    `:root`의 색 토큰만 덮는다. 토큰이 안 닿는 raw 리터럴 규칙(설정 배너·상태 배지·흰 채움 등)은

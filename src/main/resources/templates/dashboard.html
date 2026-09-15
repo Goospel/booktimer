@@ -11,7 +11,8 @@
     <link rel="stylesheet" th:href="@{/css/app.css}">
     <th:block th:replace="~{ads :: loader}"></th:block>
 </head>
-<body class="dashboard-page">
+<body class="dashboard-page has-rails">
+<th:block th:replace="~{fragments/side-rails :: rails}"></th:block>
 <div class="container">
     <header class="brand">
         <a class="brand-home" th:href="@{/}" title="홈으로">

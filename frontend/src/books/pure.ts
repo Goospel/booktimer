@@ -98,30 +98,6 @@ export function statusBadge(status: string): StatusBadge {
     return STATUS_BADGE[status] ?? STATUS_BADGE_FALLBACK;
 }
 
-// ── 하단 네비 링크 ────────────────────────────────────────────────────────
-// 책장(/books) 하단 타일(NavLinks). 책방 하단엔 '내 책장' 타일이 있는데 책장 하단엔
-// '내 책방'이 없어 동선이 비대칭이었다(책장→책방은 본문 힌트 문구로만) → '내 책방'
-// (/u/{myLoginId}) 타일을 더해 양방향 대칭화. icon='user'(사람)은 NAV_ICONS·QuickNav
-// '내 책방' 타일과 동일. myLoginId가 비면(dataset 미주입 등) /u/ 로 끝나는 깨진 링크가
-// 새지 않게 책방 타일을 뺀다(가드). 구조는 shared/NavLinks.vue 의 NavLink 와 동일.
-
-export interface NavLinkSpec {
-    href: string;
-    icon: string;
-    label: string;
-}
-
-export function booksNavLinks(myLoginId: string): NavLinkSpec[] {
-    const links: NavLinkSpec[] = [
-        { href: '/', icon: 'home', label: '홈' },
-        { href: '/history', icon: 'history', label: '독서 기록' },
-    ];
-    if ((myLoginId ?? '').trim()) {
-        links.push({ href: `/u/${myLoginId}`, icon: 'user', label: '내 책방' });
-    }
-    return links;
-}
-
 // ── 「여백」 손잡이 라벨 ────────────────────────────────────────────────────
 // 글이 있으면 개수를 붙인다 — 책장은 글 0건·비공개 책까지 전부 진열하므로, 개수가 있어야
 // 「내 글이 있는 책」을 훑어 찾는다. storyCount 없는 옛 응답(undefined)·0은 「여백」
