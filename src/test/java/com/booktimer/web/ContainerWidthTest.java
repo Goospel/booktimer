@@ -33,10 +33,8 @@ class ContainerWidthTest {
             "book-detail", "book-readers", "search", "follow-list", "block-list",
             "feedback", "manual-session", "personality");
 
-    /** SideRailsTemplateTest.RAIL_PAGES와 같은 14개 — narrow-page는 바 있는 화면에서만 뜻이 있다. */
-    private static final Set<String> RAIL_PAGES = Set.of(
-            "dashboard", "books", "book-detail", "book-readers", "history", "personality", "search",
-            "profile", "follow-list", "block-list", "study", "settings", "feedback", "manual-session");
+    /** narrow-page는 바 있는 화면에서만 뜻이 있다 — 바 유무의 기준은 body의 has-rails(SideRailsTemplateTest가 include와 묶는다). */
+    private static final Pattern BODY_HAS_RAILS = Pattern.compile("<body[^>]*\\bhas-rails\\b");
 
     /** 주석을 걷은 app.css — 주석이 값을 인용하면 공허하게 통과한다(T-205). */
     private static String css() throws IOException {
@@ -58,8 +56,8 @@ class ContainerWidthTest {
     }
 
     private static final Pattern MAX_WIDTH = Pattern.compile("max-width\\s*:");
-    /** 셀렉터의 마지막 복합 선택자에 .container 클래스가 있다(.foo-container는 아님). */
-    private static final Pattern LAST_IS_CONTAINER = Pattern.compile("(?:^|[\\s>+~])[^\\s>+~]*(?<![\\w-])\\.container(?![\\w-])[^\\s>+~]*$");
+    /** 셀렉터의 마지막 복합 선택자에 .container 클래스가 있다 — div.container·.narrow-page.container 포함, .foo-container는 아님. */
+    private static final Pattern LAST_IS_CONTAINER = Pattern.compile("(?:^|[\\s>+~])[^\\s>+~]*\\.container(?![\\w-])[^\\s>+~]*$");
 
     @Test
     @DisplayName("① 바 있는 화면 기본 1160 · .narrow-page 720")
@@ -80,7 +78,7 @@ class ContainerWidthTest {
     @Test
     @DisplayName("③ .container 폭 규칙은 허용 목록 4개뿐 — 페이지별 max-width 금지")
     void noPerPageContainerWidth() throws IOException {
-        Set<String> found = new TreeSet<>();
+        List<String> found = new ArrayList<>();   // Set이면 @media 안에서 같은 셀렉터로 폭을 덮어써도 하나로 합쳐져 통과한다
         for (String[] r : rules()) {
             if (LAST_IS_CONTAINER.matcher(r[0]).find() && MAX_WIDTH.matcher(r[1]).find()) found.add(r[0]);
         }
@@ -107,19 +105,20 @@ class ContainerWidthTest {
     }
 
     @Test
-    @DisplayName("⑤ class=\"container narrow-page\" 템플릿 == 8개, 전부 바 있는 화면")
+    @DisplayName("⑤ narrow-page 템플릿 == 8개, 전부 바 있는 화면")
     void narrowPageTemplates() throws IOException {
         Set<String> found = new TreeSet<>();
         try (Stream<Path> s = Files.list(TEMPLATES)) {
             for (Path p : (Iterable<Path>) s.filter(x -> x.toString().endsWith(".html"))::iterator) {
-                if (Files.readString(p).contains("class=\"container narrow-page\"")) {
+                String html = Files.readString(p);
+                if (html.contains("narrow-page")) {   // 클래스 순서(narrow-page container)와 무관하게
                     String f = p.getFileName().toString();
                     found.add(f.substring(0, f.length() - ".html".length()));
+                    assertThat(BODY_HAS_RAILS.matcher(html).find()).as(f + "는 바 없는 화면인데 narrow-page").isTrue();
                 }
             }
         }
         assertThat(found).containsExactlyInAnyOrderElementsOf(NARROW_PAGES);
-        assertThat(RAIL_PAGES).containsAll(found);
     }
 
     @Test

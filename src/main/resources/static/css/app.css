@@ -2125,7 +2125,7 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
    분기는 JS chooseLayout(innerWidth)가 하고(layout.ts), CSS는 두 모드의 시각만 담당.
    ※ 컨테이너 확장은 body.history-wide(JS 토글)로 — @media와 innerWidth의 스크롤바 폭 불일치 회피. */
 
-/* split일 때만 컨테이너를 넓혀 2단이 안 찌그러지게(전역 .container max-width:460 무손상). */
+/* split이면 940으로 둔다 — 바 있는 화면 기본 1160보다 좁은 2단 읽기 폭(본문 폭 절의 유일한 예외). */
 body.history-page.history-wide .container { max-width: 940px; }
 
 /* split: 좌(일자별) 1.45 : 우(빠뜨린날) 1 */
@@ -3886,7 +3886,7 @@ body.has-rails { padding-left: 124px; padding-right: 124px; }   /* 16 + 92 + 16 
    목록·폼·글 한 열짜리 화면만 .narrow-page(720)다 — 1160이면 「팔로우」 버튼·시간이 1100px 밖으로 떨어진다.
    바 없는 화면(에러·약관·비밀번호·온보딩·관리자)은 위 .container 460 그대로 — 이 절은 body.has-rails 접두를 벗지 않는다.
    페이지별 .container max-width는 여기 말고 두지 않는다(ContainerWidthTest가 허용 목록으로 막는다).
-   예외 하나: body.history-page.history-wide .container 940 — JS split(layout.ts)과 짝이라 남긴다(0,3,0이라 이 기본을 이긴다).
+   예외 하나: body.history-page.history-wide .container 940 — JS split(layout.ts)과 짝이라 남긴다(0,3,1이라 이 기본 0,2,1을 이긴다).
    데스크톱 경계 1100 = 바 여백 248을 뺀 852가 2열(책장 340+목록 2열 · 책방 360+메인 · 기록 1.45fr/1fr)이 서는 최소 폭.
    books @media · profile isWide(ProfileApp.vue) · history SPLIT_MIN_WIDTH(layout.ts) · 대시보드 안쪽 경계가 전부 이 수다.
    폼 상한 620은 넓은 화면에서만 — 입력 한 칸이 1100px이면 되레 쓰기 나쁘다. 좁은 단은 카드 안쪽 672라 걸면 아래 목록과 어긋난다. */
