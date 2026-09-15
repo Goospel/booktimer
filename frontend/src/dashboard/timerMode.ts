@@ -45,6 +45,33 @@ export function syncRailMode(doc: Pick<Document, 'getElementById'>, mode: TimerM
     doc.getElementById('side-rails')?.setAttribute('data-mode', mode)
 }
 
+/**
+ * 독서등 — 공부 측정 중 홈이 밤이 되고 합쳐진 카드만 낮 종이로 남는다(설계 2026-09-15-study-focus-lamp).
+ * 리터럴은 `fragments/side-rails` 인라인 부트에도 따로 적힌다 — 동기는 timer-mode.test.ts가 지킨다.
+ */
+export const LAMP_CLASS = 'study-lamp'
+export const LAMP_KEY = 'booktimer.studyLamp'
+
+/** 합침 = 독서등 = 공부 모드에서 공부 측정 중(미니앱 lampOn과 같은 꼴). */
+export function studyFocusOn(mode: TimerMode, studyActive: boolean): boolean {
+    return mode === 'study' && studyActive
+}
+
+/** body 클래스 + 첫 페인트 힌트(새로고침 때 부트가 읽는다). 저장 실패는 삼킨다(writeMode와 같은 규칙). */
+export function syncStudyLamp(
+    doc: Pick<Document, 'body'>,
+    on: boolean,
+    storage: Pick<Storage, 'setItem' | 'removeItem'> | null = safeStorage(),
+): void {
+    doc.body.classList.toggle(LAMP_CLASS, on)
+    try {
+        if (on) storage?.setItem(LAMP_KEY, '1')
+        else storage?.removeItem(LAMP_KEY)
+    } catch {
+        /* 힌트를 못 남겨도 화면은 돈다 — 새로고침 때 한 번 깜빡일 뿐이다 */
+    }
+}
+
 /** 복귀 재조회 스로틀 — 미니앱 App.tsx의 REFRESH_THROTTLE_MS와 같은 값·같은 규칙. */
 export const REFRESH_THROTTLE_MS = 60_000
 

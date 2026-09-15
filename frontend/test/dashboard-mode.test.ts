@@ -93,7 +93,7 @@ describe('DashboardApp — 모드 토글', () => {
         expect(urls().some(u => u.includes('/api/study/start'))).toBe(true);
         expect(urls().some(u => u.includes('/api/sessions/start'))).toBe(false);
         await vi.waitFor(() => expect(btnWith(w, '측정 종료')).toBeTruthy());
-        expect(w.find('.dash-session-time').text()).toBe('01:05');
+        expect(w.find('[data-testid="focus-session"] .dash-kv-v').text()).toBe('01:05');
 
         await btnWith(w, '측정 종료')!.trigger('click');
         await flushPromises();
@@ -125,17 +125,18 @@ describe('DashboardApp — 모드 토글', () => {
         await flushPromises();
     });
 
-    test('(c) 공부 측정 중이면 저장값과 무관하게 공부 모드로 잠긴다(힌트로 이유를 말한다)', async () => {
+    // 합쳐진 카드(2026-09-15 결정 6)에선 막대에 토글이 없다 — 잠긴 토글의 힌트가 하던 설명은 곁의 「측정 종료」가 한다.
+    // 독서 측정 중의 잠긴 토글·힌트는 그대로다(TimerCard는 안 바뀌었다).
+    test('(c) 공부 측정 중이면 저장값과 무관하게 공부 모드이고 토글이 없다 — 종료하면 토글이 돌아온다', async () => {
         dashboardPayload = { ...DASHBOARD, study: STUDY_ACTIVE };
         const w = await mountDashboard();
 
         expect(w.find('.dash-timer-hero').classes()).toContain('is-study');
         expect(btnWith(w, '측정 종료')).toBeTruthy();
-        expect(modeBtn(w, '독서').attributes('aria-disabled')).toBe('true');
+        expect(w.find('.dash-mode-toggle').exists()).toBe(false);
 
-        await modeBtn(w, '독서').trigger('click');
-        expect(w.find('.dash-timer-hero').classes()).toContain('is-study');
-        expect(w.find('.dash-mode-hint').text()).toContain('측정을 끝내면 바꿀 수 있어요');
+        await btnWith(w, '측정 종료')!.trigger('click');
+        await vi.waitFor(() => expect(w.find('.dash-mode-toggle').exists()).toBe(true));
     });
 
     test('(d) 독서 측정 중이면 저장값이 study여도 독서 모드다(서버 진실이 이긴다)', async () => {

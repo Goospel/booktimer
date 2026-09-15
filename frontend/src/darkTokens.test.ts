@@ -39,16 +39,37 @@ const HAS_COLOR = /#[0-9a-fA-F]{3,8}\b|rgba?\(|url\(/;
  * `@import url(…); :root`로 잡혀 라이트 토큰이 0개가 됐고, 「계측기 생존」 단언이 그걸 잡았다
  * (그 단언이 없었으면 짝 맞춤이 빈 집합끼리 비교되며 <b>영원히 초록</b>이었다). 마지막 `;` 뒤만 남긴다.
  */
-function rules(file = APP_CSS): Array<{ selector: string; body: string; at: number }> {
+interface Rule { selector: string; body: string; at: number; group: string[] }
+
+/**
+ * <p>셀렉터 <b>목록</b>(`a, b { }`)은 항목마다 한 규칙으로 낸다 — `group`에 목록 전체를 싣는다.
+ * 독서등(2026-09-15)이 토큰 블록을 복제하지 않고 `:root, body.study-lamp .lamp-page {…}`처럼 목록을
+ * 늘려 얻기 때문이다: 목록을 통째로 한 셀렉터로 보면 `:root` 정확 일치가 깨져 라이트 토큰이 0개가 된다.
+ * 괄호 안 콤마(`:is(a, b)`)는 쪼개지 않는다. (Java `SideRailsTemplateTest.declarationsOf`와 같은 꼴.)
+ */
+function rules(file = APP_CSS): Rule[] {
     const css = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-    const out: Array<{ selector: string; body: string; at: number }> = [];
+    const out: Rule[] = [];
     const re = /([^{}]+)\{([^{}]*)\}/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(css))) {
-        const selector = m[1].replace(/^[\s\S]*;/, '').trim().replace(/\s+/g, ' ');
-        out.push({ selector, body: m[2], at: m.index });
+        const group = splitSelectors(m[1].replace(/^[\s\S]*;/, ''));
+        for (const selector of group) out.push({ selector, body: m[2], at: m.index, group });
     }
     return out;
+}
+
+function splitSelectors(list: string): string[] {
+    const out: string[] = [];
+    let depth = 0;
+    let cur = '';
+    for (const ch of list) {
+        if (ch === '(') depth++;
+        else if (ch === ')') depth--;
+        if (ch === ',' && depth === 0) { out.push(cur); cur = ''; } else cur += ch;
+    }
+    out.push(cur);
+    return out.map((s) => s.trim().replace(/\s+/g, ' ')).filter(Boolean);
 }
 
 function blockBody(selector: string): string {
@@ -132,6 +153,40 @@ describe('공부 모드 토큰 짝 맞춤 (.is-study)', () => {
 
     it('라이트에 없는 공부 토큰을 다크가 만들지 않는다', () => {
         expect(dark.filter((t) => !light.includes(t))).toEqual([]);
+    });
+});
+
+/**
+ * 독서등(공부 측정 중 홈) — 토큰을 <b>복제하지 않고</b> 기존 네 블록의 셀렉터 목록에 범위를 덧붙여 얻는다
+ * (설계 2026-09-15-study-focus-lamp §2-2 B). 밤 = 다크 목록에 `body.study-lamp`, 낮(합쳐진 카드) = 라이트
+ * 목록에 `body.study-lamp .lamp-page`.
+ *
+ * <p>한쪽만 늘리면 밤에 크림색·낮에 차콜이 남는데, 그건 측정을 시작해 봐야만 보인다. 그래서 목록 소속을 잰다.
+ */
+describe('독서등 — 토큰 복제 0', () => {
+    const groupOf = (selector: string) => rules().find((r) => r.selector === selector)?.group ?? [];
+
+    it('밤·낮 범위가 네 토큰 블록의 목록에 들어 있다', () => {
+        expect(groupOf(LIGHT_SELECTOR)).toContain('body.study-lamp .lamp-page');
+        expect(groupOf(DARK_SELECTOR)).toContain('body.study-lamp');
+        expect(groupOf('.is-study')).toContain('body.study-lamp .lamp-page .is-study');
+        expect(groupOf(`${DARK_SELECTOR} .is-study`)).toContain('body.study-lamp .is-study');
+    });
+
+    it('덧씌움 블록이 새 토큰 이름을 만들지 않는다 — 밤은 다크의, 낮은 라이트의 부분집합', () => {
+        const light = colorTokens(LIGHT_SELECTOR);
+        const dark = colorTokens(DARK_SELECTOR);
+        expect(colorTokens('body.study-lamp').filter((t) => !dark.includes(t))).toEqual([]);
+        expect(colorTokens('body.study-lamp .lamp-page').filter((t) => !light.includes(t))).toEqual([]);
+    });
+
+    // 상속 함정 — 토큰만 되돌리면 글자색은 body에서 계산이 끝난 밤 값(#E8E2D6)이 그대로 내려온다(시안 실측).
+    it('합쳐진 카드가 글자색을 낮 토큰으로 다시 계산시킨다 (다크 섹션 안)', () => {
+        const { start, end } = darkSection();
+        const decl = rules()
+            .filter((r) => r.selector === 'body.study-lamp .lamp-page' && r.at > start && r.at < end)
+            .some((r) => /(^|;)\s*color\s*:\s*var\(--text\)/.test(r.body));
+        expect(decl).toBe(true);
     });
 });
 
@@ -235,7 +290,8 @@ function rawColorDeclarations(): Array<{ file: string; selector: string; decl: s
         const name = file.split(/[\\/]/).pop()!;
         const { start, end } = darkSection(file);
         for (const r of rules(file)) {
-            if (r.selector === LIGHT_SELECTOR || r.selector.startsWith(`${LIGHT_SELECTOR}[`)) continue;
+            // 토큰 블록은 목록째 건너뛴다 — `:root, body.study-lamp .lamp-page {…}`의 둘째 항목도 같은 토큰 정의다.
+            if (r.group.some((s) => s === LIGHT_SELECTOR || s.startsWith(`${LIGHT_SELECTOR}[`))) continue;
             if (start >= 0 && r.at > start && r.at < end) continue;
             for (const d of r.body.split(';')) {
                 const m = /^\s*([\w-]+)\s*:\s*(.+)$/s.exec(d);

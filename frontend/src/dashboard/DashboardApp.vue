@@ -5,7 +5,8 @@ import type { StudyBookRow } from '../study/api'
 import { IDLE_STUDY, studyStateOf } from './types'
 import { getCsrfToken } from '../shared/follow'
 import type { TimerMode } from './timerMode'
-import { shouldRefresh, readMode, writeMode, effectiveMode, syncRailMode } from './timerMode'
+import { shouldRefresh, readMode, writeMode, effectiveMode, syncRailMode, studyFocusOn, syncStudyLamp } from './timerMode'
+import { withViewTransition } from './viewTransition'
 import { allBooksOf, defaultBookOf, defaultStudyBookOf } from './defaultBook'
 import TimerCard from './TimerCard.vue'
 import StudyTimerCard from './StudyTimerCard.vue'
@@ -57,6 +58,20 @@ const storedMode = ref<TimerMode>(readMode())
 const mode = computed(() => effectiveMode(hasActiveSession.value, study.value.hasActiveSession, storedMode.value))
 // 섬 밖 SSR 양옆 바의 흐림 상태를 같은 모드로 — 섬 밖 DOM 한 속성(HistoryApp의 body 클래스와 같은 관례).
 watchEffect(() => syncRailMode(document, mode.value))
+
+// 공부 집중 — 측정 중엔 타이머와 필기가 한 장이 되고 홈이 밤이 된다(설계 2026-09-15-study-focus-lamp).
+// 합침 ≡ 독서등 ≡ 이 값 하나. body 클래스(섬 밖 DOM)는 **응답을 본 뒤에만** 쓴다 — 마운트 직후의 기본값(IDLE_STUDY)으로
+// 쓰면 인라인 부트가 첫 페인트 전에 붙인 등을 지워, 측정 중 새로고침마다 낮→밤 깜빡임이 되살아난다.
+const studyFocus = computed(() => studyFocusOn(mode.value, study.value.hasActiveSession))
+watchEffect(() => {
+    if (loading.value) return
+    syncStudyLamp(document, studyFocus.value)
+})
+onUnmounted(() => syncStudyLamp(document, false))
+const notesCard = ref<{ focusEnd: () => void } | null>(null)
+// 캐럿은 마우스·트랙패드에서만 — 태블릿에서 시작을 누르자마자 키보드가 올라와 합쳐진 카드 절반을 덮는 것을 막는다(rail.js HOVER_QUERY와 같은 판별).
+const finePointer = () => window.matchMedia?.('(hover: hover) and (pointer: fine)').matches === true
+
 const measuring = computed(() => hasActiveSession.value || study.value.hasActiveSession)
 // 왕복 중(starting/stopping)에도 잠근다 — 응답 대기 중에 모드를 바꾸면 반대 카드가 요청도 없이
 // 남의 "시작하는 중…" 비활성 버튼을 뒤집어쓰고, 응답이 오면 도로 튄다.
@@ -240,11 +255,16 @@ async function handleStudyStart(bookId: number | null) {
         // 404 = 다른 탭에서 지운 책을 고른 것. 재조회가 새 books를 실어 와 화면이 스스로 맞는다.
         if (res.status === 404) { await conflict('그 책이 공부 서재에 없어요 — 화면을 최신으로 맞췄어요'); return }
         if (!res.ok) { actionError.value = '측정을 시작할 수 없습니다'; return }
-        study.value = studyStateOf(await res.json())
-        // 고르기는 시작 전까지만 유효하다 — 책을 걸고 시작했으면 이제 서버 recentBookId(가장 최근 책을 건 세션의 책)가
-        // 칩을 정한다. 남겨 두면 측정 중 교체한 책으로 필기하다 종료하는 순간 필기가 옛 고른 책으로 튄다(리뷰 Minor-3).
-        // 책 없이 시작했으면 비우지 않는다 — 비우면 시작 순간 칩이 recent로 바뀌어 필기가 튄다.
-        if (bookId !== null) pickedStudyBook.value = null
+        const s = studyStateOf(await res.json())
+        // 사용자가 누른 시작만 전환으로 감싼다(재조회·409·복귀는 즉시) — 두 카드가 한 장으로 합쳐지는 순간이다.
+        await withViewTransition(document, () => {
+            study.value = s
+            // 고르기는 시작 전까지만 유효하다 — 책을 걸고 시작했으면 이제 서버 recentBookId(가장 최근 책을 건 세션의 책)가
+            // 칩을 정한다. 남겨 두면 측정 중 교체한 책으로 필기하다 종료하는 순간 필기가 옛 고른 책으로 튄다(리뷰 Minor-3).
+            // 책 없이 시작했으면 비우지 않는다 — 비우면 시작 순간 칩이 recent로 바뀌어 필기가 튄다.
+            if (bookId !== null) pickedStudyBook.value = null
+        })
+        if (finePointer()) notesCard.value?.focusEnd()
     } catch {
         actionError.value = '네트워크 오류가 발생했습니다'
     } finally {
@@ -265,7 +285,8 @@ async function handleStudyStop() {
         if (res.status === 409) { await conflict('진행 중인 측정이 없어요 — 화면을 최신으로 맞췄어요'); return }
         if (!res.ok) { actionError.value = '측정을 종료할 수 없습니다'; return }
         const s = studyStateOf(await res.json())
-        study.value = s
+        // 한 장이 둘로 갈라지는 전환 — 시트는 전환이 **끝난 뒤** 올린다(스냅숏에 찍혀 뚝 나타나지 않게).
+        await withViewTransition(document, () => { study.value = s })
         // 책 없이 끝낸 측정이면 "무슨 책?" 태깅 시트. 서재가 비었으면 띄우지 않는다 —
         // 고를 게 없는데 매번 「담으러 가기」를 들이미는 건 잔소리다(E10).
         if (s.untaggedSessionId !== null && s.books.length > 0) {
@@ -454,8 +475,8 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
 
         <!-- 토글은 두 카드 안에 각각 든다. 옛 근거("카드 밖이면 아래 잔디·서재와 거짓말이 된다")는
              잔디·타일·정원이 mode를 같이 타면서 사라졌지만, 옮길 이유도 없어 자리는 그대로 둔다. -->
+        <template v-if="mode === 'reading'">
         <TimerCard
-            v-if="mode === 'reading'"
             :remaining-seconds="remainingSeconds"
             :carried-debt-seconds="carriedDebtSeconds"
             :today-goal-seconds="todayGoalSeconds"
@@ -482,39 +503,43 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
             </template>
         </TimerCard>
 
-        <StudyTimerCard
-            v-else
-            ref="studyCard"
-            :today-seconds="study.todaySeconds"
-            :has-active-session="study.hasActiveSession"
-            :active-started-at="study.activeStartedAt"
-            :books="study.books"
-            :recent-book-id="study.recentBookId"
-            :picked-book="pickedStudyBook"
-            :active-book="study.activeBook"
-            :starting="starting"
-            :stopping="stopping"
-            :saving-session-goal="savingSessionGoal"
-            :changing="tagging"
-            @start="handleStudyStart"
-            @stop="handleStudyStop"
-            @set-session-goal="handleSessionGoal"
-            @open-sheet="openStudySheet('start')"
-            @change-book="openStudySheet('change')"
-        >
-            <template #mode>
-                <ModeToggle :mode="mode" :locked="toggleLocked" :hint="modeHint" @change="setMode" @blocked="onModeBlocked" />
-            </template>
-        </StudyTimerCard>
-
         <!-- 잔디가 있던 자리(2026-09-07) — 넓힌 폭에서 1년치 격자가 늘어져 걷었다. 기록은 /history와
              /study/history에 그대로 있고, 홈은 「오늘 쓰는 자리」가 된다.
              (주의) 2026-08-16 재설계 §D5-1의 「대시보드에 여백 대체 진입을 만들지 않는다」를 여기서 뒤집는다 —
              그때는 타임라인 스트립을 없애는 맥락이었고, 지금은 잔디가 비운 자리를 「지금 그 책 하나」로
              채우는 것이다(진입은 여전히 책 한 권 단위다). -->
-        <MarginCard v-if="mode === 'reading'" :login-id="data.loginId" :book="marginBook"
+        <MarginCard :login-id="data.loginId" :book="marginBook"
                     :streak="data.graph.currentStreak" @open-sheet="openStartSheet" />
-        <StudyNotesCard v-else :books="study.books" :default-book-id="notesBookId" />
+        </template>
+
+        <!-- 공부 = 타이머 + 필기. 측정 중엔 한 장(.is-merged)이 되고, 이 스택만 독서등 밑 낮 종이(.lamp-page)로 남는다
+             (설계 2026-09-15-study-focus-lamp 결정 5·7 — 시트·배너·명언은 스택 밖이라 밤 팔레트). -->
+        <div v-else class="focus-stack lamp-page" :class="{ 'is-merged': studyFocus }">
+            <StudyTimerCard
+                ref="studyCard"
+                :today-seconds="study.todaySeconds"
+                :has-active-session="study.hasActiveSession"
+                :active-started-at="study.activeStartedAt"
+                :books="study.books"
+                :recent-book-id="study.recentBookId"
+                :picked-book="pickedStudyBook"
+                :active-book="study.activeBook"
+                :starting="starting"
+                :stopping="stopping"
+                :saving-session-goal="savingSessionGoal"
+                :changing="tagging"
+                @start="handleStudyStart"
+                @stop="handleStudyStop"
+                @set-session-goal="handleSessionGoal"
+                @open-sheet="openStudySheet('start')"
+                @change-book="openStudySheet('change')"
+            >
+                <template #mode>
+                    <ModeToggle :mode="mode" :locked="toggleLocked" :hint="modeHint" @change="setMode" @blocked="onModeBlocked" />
+                </template>
+            </StudyTimerCard>
+            <StudyNotesCard ref="notesCard" :books="study.books" :default-book-id="notesBookId" />
+        </div>
 
 
         <BrandQuote :quotes="data.quotes" />

@@ -26,6 +26,10 @@ const props = defineProps<{
     defaultBookId: number | null;
 }>();
 
+/** 편집기 캐럿 중계 — 홈 필기 카드가 공부 측정 시작 전환 뒤 부른다. 서재 0권이면 편집기가 없어 no-op. */
+const editorRef = ref<{ focusEnd: () => void } | null>(null);
+defineExpose({ focusEnd: () => editorRef.value?.focusEnd() });
+
 /** 마지막 타이핑에서 저장까지의 틈. 잃을 수 있는 최대치가 이만큼이다. */
 const DEBOUNCE_MS = 1500;
 
@@ -314,6 +318,7 @@ async function remove(): Promise<void> {
                 >
 
                 <RecallEditor
+                    ref="editorRef"
                     v-model="draft.body"
                     aria-label="필기 본문"
                     :disabled="locked"

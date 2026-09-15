@@ -130,14 +130,16 @@ afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); document.body.inn
 async function mountStudy() {
     const w = mount(DashboardApp, { attachTo: document.body });
     await vi.waitFor(() => expect(w.find('.dash-timer-hero').exists()).toBe(true));
-    await w.findAll('.dash-mode-toggle button').find(b => b.text() === '공부')!.trigger('click');
+    // 서버가 공부 측정 중을 실어 오면 이미 공부 모드이고 막대엔 토글이 없다(2026-09-15 결정 6) — 있을 때만 누른다.
+    await w.findAll('.dash-mode-toggle button').find(b => b.text() === '공부')?.trigger('click');
     return w;
 }
+// 히어로 카드 안의 버튼만 — 측정 중엔 우측 패널 대신 머리 막대라(2026-09-15) 카드 루트로 범위를 잡는다(시트 버튼과 안 섞이게).
 const btnWith = (w: ReturnType<typeof mount>, text: string) =>
-    w.findAll('.dash-state-panel button').find(b => b.text().includes(text));
+    w.findAll('.dash-timer-hero button').find(b => b.text().includes(text));
 const sheetRow = (w: ReturnType<typeof mount>, title: string) =>
     w.findAll('.book-sheet-book').find(b => b.text().includes(title))!;
-const kv = (w: ReturnType<typeof mount>) => w.find('.dash-kv-v').text();
+const kv = (w: ReturnType<typeof mount>) => w.find('[data-testid="focus-book"] .dash-kv-v').text();
 
 describe('DashboardApp — 공부 시작 시 책 선택', () => {
     test('(a) 기본 칩(헌법)으로 시작 → start body가 그 id, 독서 문은 0건', async () => {

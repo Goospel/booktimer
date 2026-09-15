@@ -228,3 +228,17 @@ describe('본문 상한', () => {
         expect((await mountEditor('가'.repeat(8000))).find('[data-testid="editor-over"]').exists()).toBe(false);
     });
 });
+
+// 공부 측정 시작 전환이 끝나면 캐럿을 필기 끝에 둔다(설계 2026-09-15-study-focus-lamp §2-6) — 부모가 이 문을 부른다.
+describe('focusEnd — 전환 끝 캐럿', () => {
+    test('포커스가 들어오고 선택이 문서 끝이다(맨 앞이 아니다)', async () => {
+        const wrapper = await mountEditor('첫 문단\n\n둘째 문단');
+        const e = editorOf(wrapper);
+        (wrapper.vm as AnyEditor).focusEnd();
+        await vi.waitFor(() => expect(e.isFocused).toBe(true));
+
+        const { $to } = e.state.selection;
+        expect($to.pos).toBe(e.state.doc.content.size - 1);
+        expect($to.pos).toBeGreaterThan(2);   // 양성 대조 — 「그냥 1」(문서 맨 앞)과 갈린다
+    });
+});

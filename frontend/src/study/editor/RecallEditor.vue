@@ -256,7 +256,12 @@ function onToolClick(id: string): void {
     chain.run();
 }
 
-defineExpose({ editor, markdown: () => (editor.value ? markdownOf(editor.value) : '') });
+defineExpose({
+    editor,
+    markdown: () => (editor.value ? markdownOf(editor.value) : ''),
+    /** 캐럿을 글 끝에 — 홈에서 공부 측정 시작 전환이 끝난 뒤 부른다(바로 이어 쓰게). */
+    focusEnd: () => { editor.value?.commands.focus('end'); },
+});
 </script>
 
 <template>
