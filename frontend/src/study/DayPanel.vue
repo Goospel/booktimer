@@ -2,7 +2,6 @@
 import { computed, ref, watch } from 'vue';
 
 import PlanForm from './PlanForm.vue';
-import RecallPanel from './RecallPanel.vue';
 import type { AddItemInput, StudyBookRow } from './api';
 import { aiStatusLine, dayTitle, type AiAccess, type PlanItem } from './pure';
 
@@ -17,21 +16,14 @@ const props = defineProps<{
     aiEnabled: boolean;
     /** 신청 요청이 날아가 있는 동안 — 버튼을 잠가 두 번 신청(409)이 나지 않게 한다. */
     aiBusy: boolean;
-    /** 오늘 남은 분석 몫. */
-    remainingAnalyze: number;
-    /** 오늘 남은 사진 전사 몫. */
-    remainingTranscribe: number;
     /** 오늘 남은 일정 생성 몫. */
     remainingPlan: number;
-    /** 전날 복습에 문제가 붙어 있나 — 달력이 이미 아는 사실이라 그대로 내려 준다(불필요한 왕복 제거). */
-    hasYesterdayQuestions: boolean;
 }>();
 
 const emit = defineEmits<{
     (e: 'add', input: AddItemInput): void;
     (e: 'remove', id: number): void;
     (e: 'request-ai'): void;
-    (e: 'recall-saved'): void;
     (e: 'plan-applied'): void;
 }>();
 
@@ -101,18 +93,11 @@ function submit(): void {
             >{{ aiStatus.button }}</button>
         </p>
 
-        <!-- [필기]/[백지노트] 탭은 패널이 직접 갖는다 — 홈 카드도 같은 패널을 싣기 때문이다. -->
-        <RecallPanel
-            :date="date"
-            :today="today"
-            :items="items"
-            :books="books"
-            :ai-enabled="aiEnabled"
-            :remaining-analyze="remainingAnalyze"
-            :remaining-transcribe="remainingTranscribe"
-            :has-yesterday-questions="hasYesterdayQuestions"
-            @saved="emit('recall-saved')"
-        />
+        <!-- 백지노트는 전용 화면(/study/recall)이다 — 여기 편집기를 두면 같은 날 백지노트를 두 화면에서 쓴다.
+             지난 날짜의 백지노트를 보고 쓰는 길은 이 링크가 유일하다(2026-09-15). -->
+        <p class="study-day-block">
+            <a class="btn btn-ghost btn-small" :href="`/study/recall?date=${date}`" data-testid="day-recall-link">{{ date === today ? '오늘의 백지노트' : '이 날의 백지노트' }}</a>
+        </p>
 
         <form class="study-day-form" @submit.prevent="submit">
             <p class="study-day-label">일정 추가</p>

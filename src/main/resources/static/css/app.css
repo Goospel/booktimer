@@ -3672,6 +3672,9 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .study-day-form input, .study-day-book { width: 100%; }
 .study-day-form .btn { align-self: flex-start; width: auto; }
 .study-day-list .btn { width: auto; flex: 0 0 auto; }
+/* 하루 패널의 「이 날의 백지노트」 링크 — <p> 기본 여백이 패널 gap에 더해지고, a는 inline이라 밑줄이 남았다(실측 2026-09-16). */
+.study-day-block { margin: 0; }
+.study-day-block a.btn { display: inline-flex; align-items: center; width: auto; text-decoration: none; }
 
 /* 백지복습 — 쓰는 자리가 화면의 주인공이라 본문 textarea만 크게 두고 나머지는 눌러 둔다. */
 .study-recall { display: flex; flex-direction: column; gap: 8px; }

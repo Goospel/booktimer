@@ -6,14 +6,14 @@ import { IDLE_STUDY, studyStateOf } from './types'
 import { getCsrfToken } from '../shared/follow'
 import type { TimerMode } from './timerMode'
 import { shouldRefresh, readMode, writeMode, effectiveMode, syncRailMode } from './timerMode'
-import { allBooksOf, defaultBookOf } from './defaultBook'
+import { allBooksOf, defaultBookOf, defaultStudyBookOf } from './defaultBook'
 import TimerCard from './TimerCard.vue'
 import StudyTimerCard from './StudyTimerCard.vue'
 import ModeToggle from './ModeToggle.vue'
 import BookPickSheet from './BookPickSheet.vue'
 import StudyBookSheet from './StudyBookSheet.vue'
 import MarginCard from './MarginCard.vue'
-import RecallCard from './RecallCard.vue'
+import StudyNotesCard from './StudyNotesCard.vue'
 import BrandQuote from './BrandQuote.vue'
 import EmailVerifyBanner from './EmailVerifyBanner.vue'
 import WelcomeBanner from './WelcomeBanner.vue'
@@ -76,6 +76,11 @@ const pickedStudyBook = ref<StudyBookRow | null>(null)
 // 홈의 「지금 그 책」 — 타이머 칩과 여백 카드가 같은 책을 가리켜야 해서 한 곳에서 고른다.
 const marginBook = computed(() => pickedBook.value ??
     defaultBookOf(allBooksOf(readingBooks.value, finishedBooks.value, wantToReadBooks.value), recentBookId.value))
+
+// 공부 쪽의 같은 규칙 — 필기 카드의 책 = 측정 중인 책, 아니면 칩 기본 책(StudyTimerCard와 같은 함수).
+// 측정 중인 책이 곧 필기할 책이다: 「책 바꾸기」로 activeBook이 바뀌면 필기도 따라간다(NotesPanel watch).
+const notesBookId = computed(() => study.value.activeBook?.id
+    ?? defaultStudyBookOf(study.value.books, study.value.recentBookId, pickedStudyBook.value)?.id ?? null)
 
 // 책 고르기/태깅 통합 시트(발견 1, §6.5) — 'start'=측정 전 고르기, 'tag'=종료 후 태깅. 같은 시트를 모드로 겸한다.
 const sheetMode = ref<'start' | 'tag' | null>(null)
@@ -236,6 +241,10 @@ async function handleStudyStart(bookId: number | null) {
         if (res.status === 404) { await conflict('그 책이 공부 서재에 없어요 — 화면을 최신으로 맞췄어요'); return }
         if (!res.ok) { actionError.value = '측정을 시작할 수 없습니다'; return }
         study.value = studyStateOf(await res.json())
+        // 고르기는 시작 전까지만 유효하다 — 책을 걸고 시작했으면 이제 서버 recentBookId(가장 최근 책을 건 세션의 책)가
+        // 칩을 정한다. 남겨 두면 측정 중 교체한 책으로 필기하다 종료하는 순간 필기가 옛 고른 책으로 튄다(리뷰 Minor-3).
+        // 책 없이 시작했으면 비우지 않는다 — 비우면 시작 순간 칩이 recent로 바뀌어 필기가 튄다.
+        if (bookId !== null) pickedStudyBook.value = null
     } catch {
         actionError.value = '네트워크 오류가 발생했습니다'
     } finally {
@@ -505,7 +514,7 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
              채우는 것이다(진입은 여전히 책 한 권 단위다). -->
         <MarginCard v-if="mode === 'reading'" :login-id="data.loginId" :book="marginBook"
                     :streak="data.graph.currentStreak" @open-sheet="openStartSheet" />
-        <RecallCard v-else :books="study.books" />
+        <StudyNotesCard v-else :books="study.books" :default-book-id="notesBookId" />
 
 
         <BrandQuote :quotes="data.quotes" />

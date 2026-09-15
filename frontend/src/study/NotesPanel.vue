@@ -22,7 +22,7 @@ import { nextSaveState, noteDateLabel, noteLabel, previewOf, savedAtLabel, type 
  */
 const props = defineProps<{
     books: StudyBookRow[];
-    /** 그날 일정이 가리키는 책 — 기본 선택. 없으면 서재 첫 책. */
+    /** 기본 선택 — 홈에선 지금 공부하는 책. 없으면 서재 첫 책. 바뀌면 따라간다(아래 watch). */
     defaultBookId: number | null;
 }>();
 
@@ -84,13 +84,30 @@ onMounted(() => window.addEventListener('pagehide', onPageHide));
 
 onBeforeUnmount(() => {
     window.removeEventListener('pagehide', onPageHide);
-    // 탭을 [백지노트]로 옮기면 이 컴포넌트가 통째로 사라진다 — 쓰던 것을 여기서 마저 보낸다.
+    // 홈에서 독서 모드로 바꾸면 이 컴포넌트가 통째로 사라진다 — 쓰던 것을 여기서 마저 보낸다.
     void flush();
+});
+
+/**
+ * 기본 책이 바뀌면 따라간다 — 홈에서 측정 중 「책 바꾸기」로 A→B가 되면 「지금 공부하는 책: B」와 필기 select
+ * 「A」가 한 화면에서 갈리면 안 된다(2026-09-15). 옮기는 일(flush·목록 교체)은 아래 bookId watch가 한다.
+ * null(책 없이)·서재에 없는 id(지운 책 — fetchNotes 404)면 그대로 둔다: 필기는 책이 필수다.
+ */
+watch(() => props.defaultBookId, (id) => {
+    if (id !== bookId.value && props.books.some((b) => b.id === id)) bookId.value = id;
 });
 
 /** 책을 바꾸면 쓰던 것을 먼저 보내고 목록을 갈아 끼운다(다른 책의 필기와 섞이지 않게). */
 watch(bookId, async (id, before) => {
-    if (id === null || before === null) return;
+    if (id === null) return;
+    // 처음 책이 정해지는 순간 — 서재 0권으로 마운트돼 onMounted가 초기화를 건너뛴 뒤 책이 늦게 온 경우다
+    // (다른 탭에서 담고 돌아와 재조회). 초안이 책 없이 남으면 자동저장이 무음 스킵된다(리뷰 Important-1).
+    if (before === null) {
+        if (draft.value.bookId !== null) return;   // onMounted가 이미 초기화했다
+        draft.value = blank();
+        await loadList();
+        return;
+    }
     await flush();
     retarget(blank());
     await loadList();

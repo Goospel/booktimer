@@ -101,6 +101,17 @@ afterEach(() => {
     document.head.innerHTML = '';
 });
 
+// 필기와 백지노트는 한 탭 묶음에 두지 않는다(2026-09-15) — 필기는 홈, 백지노트는 /study/recall.
+// 이 패널에 탭이 되살아나면 그 패널을 싣는 어느 화면에서든 두 기능이 다시 섞인다.
+describe('백지복습 — 필기와 떨어져 있다', () => {
+    test('필기 탭·필기 패널이 없다', async () => {
+        const wrapper = await mountPanel();
+        expect(wrapper.find('[data-testid="tab-notes"]').exists()).toBe(false);
+        expect(wrapper.find('[data-testid="notes-book"]').exists()).toBe(false);
+        expect(wrapper.find('[data-testid="recall-book"]').exists()).toBe(true);   // 양성 대조
+    });
+});
+
 describe('백지복습 — 책 선택', () => {
     test('공부 서재가 선택지로 뜨고 기본값은 「책 없이」다', async () => {
         const options = (await mountPanel()).find('[data-testid="recall-book"]').findAll('option');

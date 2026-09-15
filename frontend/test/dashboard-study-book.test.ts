@@ -96,6 +96,8 @@ function fetchImpl(url: string, init?: RequestInit) {
         });
     }
     if (url.includes('/api/study/history')) return ok({ graph: GRAPH, months: [] });
+    // 홈 필기 카드(2026-09-15)가 필기할 책의 목록을 부른다 — (n1)·(n2)가 이 호출의 bookId로 필기 책을 잰다.
+    if (url.includes('/api/study/notes?')) return ok({ notes: [] });
     if (url.includes('/api/dashboard')) {
         if (partialDoor === 'dashboard') return ok({ ...DASHBOARD, study: PARTIAL_ACTIVE() });
         return ok({ ...DASHBOARD, study: { ...STUDY_IDLE, books: shelf } });
@@ -188,6 +190,56 @@ describe('DashboardApp — 공부 시작 시 책 선택', () => {
 
         expect(w.find('.alert-error').text()).toContain('서재에 없어요');
         expect(countOf('/api/dashboard')).toBe(2);   // 최초 + 재조회
+    });
+});
+
+// 리뷰 Minor-3 — 필기 책은 「측정 중인 책 → 칩 기본 책(고른 책 → 최근 책 → 첫 책)」이다. 시트에서 고른 책이
+// 시작 뒤에도 남으면, 측정 중 다른 책으로 바꿔 필기하다가 종료하는 순간 필기가 **옛 고른 책**으로 튄다
+// (편집기가 비워진다 — PR-2에서 카드가 갈라지는 순간 쓰던 글이 사라지는 장면). 고르기는 시작 전까지만 유효하다.
+describe('DashboardApp — 측정 종료 뒤 필기 책이 제자리에 남는다', () => {
+    const notesSelect = (w: ReturnType<typeof mount>) =>
+        (w.find('[data-testid="notes-book"]').element as HTMLSelectElement).value;
+
+    test('(n1) 형법을 골라 시작 → 헌법으로 교체 → 종료: 필기는 헌법 그대로, 목록 재조회 없음', async () => {
+        const w = await mountStudy();
+        await btnWith(w, '바꾸기')!.trigger('click');
+        await sheetRow(w, '형법').trigger('click');
+        await btnWith(w, '공부 측정 시작')!.trigger('click');
+        await vi.waitFor(() => expect(kv(w)).toBe('형법'));
+
+        await btnWith(w, '책 바꾸기')!.trigger('click');
+        await sheetRow(w, '헌법').trigger('click');   // 교체 응답: activeBook 헌법 · recentBookId 5(헌법)
+        await vi.waitFor(() => expect(kv(w)).toBe('헌법'));
+        await vi.waitFor(() => expect(notesSelect(w)).toBe('5'));
+        // 교체에 따른 목록 조회는 flush 뒤에 나간다 — 그걸 기다린 다음에 세야 종료 뒤 증가분만 잡힌다.
+        // (첫 번째 bookId=5는 마운트 때 최근 책으로 부른 것 — 교체분은 두 번째다.)
+        await vi.waitFor(() => expect(countOf('/api/study/notes?bookId=5')).toBe(2));
+        const listsBefore = countOf('/api/study/notes?');
+
+        await btnWith(w, '측정 종료')!.trigger('click');   // 종료 응답: activeBook null · recentBookId 5
+        await vi.waitFor(() => expect(w.find('.dash-pill-pulse').exists()).toBe(false));
+        await new Promise(r => setTimeout(r, 20));
+
+        expect(notesSelect(w)).toBe('5');
+        expect(countOf('/api/study/notes?')).toBe(listsBefore);
+        expect(w.find('.dash-book-chip-title').text()).toBe('헌법');   // 칩도 방금 잰 책
+    });
+
+    // 반대편 경계 — 책 없이 시작하면 시작 순간 칩이 recent(헌법)로 바뀌어 필기가 튄다. 그래서 이 경로는 비우지 않는다.
+    test('(n2) 형법을 골라 두고 「책 없이 시작」 → 종료: 칩·필기 모두 형법 그대로', async () => {
+        const w = await mountStudy();
+        await btnWith(w, '바꾸기')!.trigger('click');
+        await sheetRow(w, '형법').trigger('click');
+        await vi.waitFor(() => expect(notesSelect(w)).toBe('6'));
+
+        await btnWith(w, '책 없이 시작')!.trigger('click');
+        await vi.waitFor(() => expect(kv(w)).toBe('책 없이'));
+        expect(notesSelect(w)).toBe('6');
+
+        await btnWith(w, '측정 종료')!.trigger('click');
+        await vi.waitFor(() => expect(w.find('.dash-book-chip-title').exists()).toBe(true));
+        expect(w.find('.dash-book-chip-title').text()).toBe('형법');
+        expect(notesSelect(w)).toBe('6');
     });
 });
 

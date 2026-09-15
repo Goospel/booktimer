@@ -35,15 +35,27 @@ const MARGIN = {
     ownerNickname: '테스터', self: true, entries: [],
 };
 
+/** 공부 서재 3권 — 기본 책 판별용으로 첫 책(7)·최근 책(11)·측정 중인 책(9)이 전부 다르다. */
+const studyBook = (id: number, title: string) =>
+    ({ id, title, author: null, coverUrl: null, isbn13: null, readCount: 0, purchaseLink: null, totalSeconds: 0 });
+const STUDY_BOOKS = [studyBook(7, '정보처리기사 실기'), studyBook(9, '토익 보카'), studyBook(11, '헌법')];
+const STUDY_IDLE_WITH_BOOKS = {
+    hasActiveSession: false, activeStartedAt: null, todaySeconds: 0,
+    activeBook: null, recentBookId: 11, books: STUDY_BOOKS, untaggedSessionId: null,
+};
+
 let dashboardPayload: Record<string, unknown> = DASHBOARD;
-let agendaOk = true;
+let notesOk = true;
 
 function fetchImpl(url: string) {
     // 미지 URL 폴백에 기대지 않는다 — 모드마다 새로 생기는 경로는 명시 분기로 잡아 우연 통과를 막는다.
     if (url.includes('/api/study/agenda')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => AGENDA, text: async () => '' });
+    }
+    if (url.includes('/api/study/notes?')) {
         return Promise.resolve({
-            ok: agendaOk, status: agendaOk ? 200 : 500, statusText: 'err',
-            json: async () => AGENDA, text: async () => '',
+            ok: notesOk, status: notesOk ? 200 : 500, statusText: 'err',
+            json: async () => ({ notes: [] }), text: async () => '',
         });
     }
     if (url.includes('/api/study/recall')) {
@@ -68,10 +80,11 @@ function fetchImpl(url: string) {
 }
 const urls = () => (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.map(c => String(c[0]));
 const agendaCalls = () => urls().filter(u => u.includes('/api/study/agenda')).length;
+const notesListCalls = () => urls().filter(u => u.includes('/api/study/notes?'));
 
 beforeEach(() => {
     dashboardPayload = DASHBOARD;
-    agendaOk = true;
+    notesOk = true;
     localStorage.clear();
     vi.stubGlobal('fetch', vi.fn((u: string) => fetchImpl(u)));
     Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
@@ -100,34 +113,65 @@ describe('DashboardApp — 모드가 쓰는 카드를 끌고 간다', () => {
         expect(agendaCalls()).toBe(0);
     });
 
-    test('(b) 공부로 바꾸면 백지복습 카드로 갈린다', async () => {
+    // 픽스처는 공부 서재 0권(DASHBOARD에 study 없음) — 필기 카드는 편집기 대신 「공부 서재 열기」를 그린다.
+    test('(b) 공부로 바꾸면 필기 카드로 갈린다 — 서재 0권', async () => {
         const w = await mountDashboard();
         await modeBtn(w, '공부').trigger('click');
         await flushPromises();
 
-        expect(agendaCalls()).toBe(1);
-        // 공부 모드로 들어가도 옛 잔디 왕복은 없다 — 백지복습 1건이 그 자리를 대신한다(왕복 수 동일).
+        // 홈은 더 이상 오늘 일정을 부르지 않는다 — 필기 책은 부모가 아는 값(2026-09-15). 옛 잔디 왕복도 없다.
+        expect(agendaCalls()).toBe(0);
         expect(urls().filter(u => u.includes('/api/study/history'))).toHaveLength(0);
         expect(w.find('.dash-recall-card').classes()).toContain('is-study');
-        // 클래스만이 아니라 실제로 그 패널을 그렸다 — 본문 칸이 있어야 「백지복습을 그렸다」다.
-        expect(w.find('[data-testid="recall-body"]').exists()).toBe(true);
+        // 클래스만이 아니라 실제로 그 패널을 그렸다 — 서재 0권 안내가 있어야 「필기를 그렸다」다.
+        expect(w.find('[data-testid="notes-no-books"]').exists()).toBe(true);
         expect(w.find('.dash-margin-card').exists()).toBe(false);
         // 공부 기록으로 가는 문은 홈 본문에 **없다** — 빠른 이동 타일은 SSR 양옆 바(fragments/side-rails)로 옮겼다(2026-09-15).
-        // 양성 대조군 — 같은 마운트·같은 셀렉터 꼴로 공부 카드 안의 실제 링크(「공부 서재에 책 담기」)는 잡힌다.
-        // 이게 없으면 아래 0은 「링크를 못 찾는 조회」와 구분되지 않는다(서버 테스트는 런타임이 달라 대조군이 못 된다).
-        expect(w.findAll('a[href="/study/books"]')).toHaveLength(1);
+        // 양성 대조군 — 같은 마운트·같은 셀렉터 꼴로 공부 카드 안의 실제 링크는 잡힌다: 2 = 타이머 카드 「공부 서재에 책 담기」
+        // + 필기 카드 「공부 서재 열기」(둘 다 서재 0권이라 뜬다). 이게 없으면 아래 0은 「링크를 못 찾는 조회」와 구분되지 않는다.
+        expect(w.findAll('a[href="/study/books"]')).toHaveLength(2);
         expect(w.findAll('a[href="/study/history"]')).toHaveLength(0);
         expect(w.findAll('a[href="/history"]')).toHaveLength(0);
     });
 
-    test('(c) 저장값이 study면 마운트하자마자 백지복습이다 — 독서를 한 번 그렸다 넘어가지 않는다', async () => {
+    // 칩 기본 책 규칙과 같은 책 — 첫 책(7)이 아닌 최근 책(11)이라 「그냥 첫 책」과 갈린다.
+    test('(b2) 대기 중 필기 책 = 칩 기본 책(최근 걸고 잰 책)이고, 편집기가 뜬다', async () => {
+        dashboardPayload = { ...DASHBOARD, study: STUDY_IDLE_WITH_BOOKS };
+        const w = await mountDashboard();
+        await modeBtn(w, '공부').trigger('click');
+        await flushPromises();
+        await vi.waitFor(() => expect(w.find('[data-testid="notes-book"]').exists()).toBe(true));
+
+        expect((w.find('[data-testid="notes-book"]').element as HTMLSelectElement).value).toBe('11');
+        expect(w.find('[data-testid="recall-body"]').exists()).toBe(true);
+        expect(w.find('[data-testid="recall-book"]').exists()).toBe(false);
+        expect(agendaCalls()).toBe(0);
+        // 양성 대조 — 같은 fetch 목이 필기 목록 왕복은 잡는다.
+        expect(notesListCalls()).toEqual(['/api/study/notes?bookId=11']);
+    });
+
+    // 측정 중인 책이 곧 필기할 책이다 — 최근 책(11)도 첫 책(7)도 아닌 9.
+    test('(b3) 측정 중 필기 책 = 지금 공부하는 책', async () => {
+        dashboardPayload = {
+            ...DASHBOARD,
+            study: { ...STUDY_IDLE_WITH_BOOKS, hasActiveSession: true, activeStartedAt: '2026-09-04T00:00:00Z', activeBook: STUDY_BOOKS[1] },
+        };
+        const w = await mountDashboard();
+        await flushPromises();
+        await vi.waitFor(() => expect(w.find('[data-testid="notes-book"]').exists()).toBe(true));
+
+        expect((w.find('[data-testid="notes-book"]').element as HTMLSelectElement).value).toBe('9');
+        expect(agendaCalls()).toBe(0);
+    });
+
+    test('(c) 저장값이 study면 마운트하자마자 필기 카드다 — 독서를 한 번 그렸다 넘어가지 않는다', async () => {
         localStorage.setItem('booktimer.timerMode', 'study');
         const w = await mountDashboard();
 
         expect(w.find('.dash-margin-card').exists()).toBe(false);
         await flushPromises();
         expect(w.find('.dash-recall-card').exists()).toBe(true);
-        expect(agendaCalls()).toBe(1);
+        expect(agendaCalls()).toBe(0);
     });
 
     test('(d) 독서로 돌아오면 여백 카드가 복귀한다', async () => {
@@ -142,8 +186,10 @@ describe('DashboardApp — 모드가 쓰는 카드를 끌고 간다', () => {
         expect(w.find('.dash-recall-card').exists()).toBe(false);
     });
 
-    test('(e) 공부 일정을 못 받으면 자리 문구로 알리되 모드를 되돌리지 않는다', async () => {
-        agendaOk = false;
+    // 옛 (e)는 agenda 실패였다 — 홈이 agenda를 안 부르게 되면서(2026-09-15) 홈 카드가 부르는 유일한 왕복인 필기 목록으로 옮겼다.
+    test('(e) 필기 목록을 못 받으면 자리 문구로 알리되 모드를 되돌리지 않는다', async () => {
+        notesOk = false;
+        dashboardPayload = { ...DASHBOARD, study: STUDY_IDLE_WITH_BOOKS };
         const w = await mountDashboard();
         await modeBtn(w, '공부').trigger('click');
         await flushPromises();
@@ -164,7 +210,7 @@ describe('DashboardApp — 모드가 쓰는 카드를 끌고 간다', () => {
         await flushPromises();
 
         expect(w.find('.dash-timer-hero').classes()).toContain('is-study');
-        expect(w.find('.dash-recall-card .dash-pill').text()).toBe('공부 노트');
+        expect(w.find('.dash-recall-card .dash-pill').text()).toBe('필기');
         expect(w.find('.dash-margin-card').exists()).toBe(false);
     });
 });

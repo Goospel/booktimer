@@ -4,6 +4,7 @@ import { useReadingTimer } from './useReadingTimer'
 import { fmtMSS, goalLabel } from './timerProgress'
 import { sessionGoalView, minutesToSessionGoal } from './sessionGoal'
 import { initialOf, coverColor, hasCover } from '../books/pure'
+import { defaultStudyBookOf } from './defaultBook'
 import type { StudyBookRow } from '../study/api'
 
 const props = withDefaults(defineProps<{
@@ -34,10 +35,9 @@ const emit = defineEmits<{
 }>()
 
 // 칩에 설 책 = 시트에서 고른 책 → 최근 걸고 잰 책 → 첫 책(독서 BookPickForm과 같은 규칙). 셋 다 없으면 null.
-// 고른 책은 **서버 최신 행으로** 다시 찾는다 — 시트에서 붙잡은 사본은 회당 시간을 저장해도 안 바뀐다.
+// 홈 필기 카드도 같은 함수를 본다(DashboardApp) — 각자 계산하면 「칩엔 A, 필기엔 B」로 갈린다.
 const defaultBook = computed<StudyBookRow | null>(() =>
-    (props.pickedBook && (props.books.find(b => b.id === props.pickedBook!.id) ?? props.pickedBook))
-    ?? props.books.find(b => b.id === props.recentBookId) ?? props.books[0] ?? null)
+    defaultStudyBookOf(props.books, props.recentBookId, props.pickedBook))
 
 // 칩 표지색 — 표지 없는 책의 결정적 플레이스홀더(독서 칩과 같은 seed 규칙).
 function coverStyle(b: StudyBookRow) {

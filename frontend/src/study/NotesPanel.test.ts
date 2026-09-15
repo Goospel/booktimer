@@ -124,6 +124,81 @@ describe('필기 패널 — 책이 있어야 쓴다', () => {
     });
 });
 
+// 홈에서 측정 중 「책 바꾸기」로 A→B가 되면 필기도 B로 가야 한다 — 「지금 공부하는 책: B」와 필기 select 「A」가
+// 한 화면에서 갈리면 안 된다(설계 2026-09-15 결정 4). 옮기기 전에 A에 쓰던 것을 먼저 보낸다.
+describe('필기 패널 — 기본 책이 바뀌면 따라간다', () => {
+    test('defaultBookId 7→9: 쓰던 7의 초안을 먼저 보내고, 9로 옮겨 목록을 부른다', async () => {
+        const wrapper = await mountPanel({ defaultBookId: 7 });
+        await type(wrapper, '7번 책 필기');   // 디바운스 중 — 아직 안 나갔다
+
+        vi.mocked(fetch)
+            .mockResolvedValueOnce(okJson(noteOf({ id: 8, bookId: 7, body: '7번 책 필기' })))
+            .mockResolvedValueOnce(okJson({ notes: [] }));
+        await wrapper.setProps({ defaultBookId: 9 });
+        await flushPromises();
+
+        expect((wrapper.find('[data-testid="notes-book"]').element as HTMLSelectElement).value).toBe('9');
+        const urls = vi.mocked(fetch).mock.calls.map((c) => String(c[0]));
+        const saveAt = urls.indexOf('/api/study/notes');
+        const listAt = urls.indexOf('/api/study/notes?bookId=9');
+        expect(saveAt).toBeGreaterThan(-1);
+        expect(listAt).toBeGreaterThan(saveAt);   // flush가 목록 조회보다 먼저
+        expect(posts()).toEqual([
+            { url: '/api/study/notes', body: { bookId: 7, title: '', body: '7번 책 필기' } },
+        ]);
+    });
+
+    test('null로 바뀌면 그대로 둔다 — 필기는 책이 필수라 빈 상태를 만들지 않는다', async () => {
+        const wrapper = await mountPanel({ defaultBookId: 9 });
+        await wrapper.setProps({ defaultBookId: null });
+        await flushPromises();
+        expect((wrapper.find('[data-testid="notes-book"]').element as HTMLSelectElement).value).toBe('9');
+    });
+
+    // 리뷰 Important-1 — 서재 0권으로 마운트된 패널에 책이 늦게 온다(다른 탭에서 담고 돌아와 재조회).
+    // onMounted는 책이 없어 초기화를 건너뛰었으므로 초안이 책 없이(bookId null) 남으면 자동저장이 **무음 스킵**된다.
+    test('서재 0권으로 마운트 → 책이 늦게 오면 그 책으로 목록을 부르고, 쓴 글이 그 책에 저장된다', async () => {
+        const wrapper = mount(NotesPanel, { attachTo: document.body, props: { books: [], defaultBookId: null } });
+        await flushPromises();
+
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({ notes: [] }));
+        await wrapper.setProps({ books: [BOOKS[1]], defaultBookId: 9 });
+        await flushPromises();
+        expect(vi.mocked(fetch).mock.calls.map((c) => String(c[0]))).toEqual(['/api/study/notes?bookId=9']);
+
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 8, bookId: 9, body: '늦게 온 책' })));
+        await type(wrapper, '늦게 온 책');
+        await settle();
+        expect(posts()).toEqual([{ url: '/api/study/notes', body: { bookId: 9, title: '', body: '늦게 온 책' } }]);
+    });
+
+    test('서재 0권으로 마운트 → 책이 오고 select로 직접 고른 경로도 그 책에 저장된다', async () => {
+        const wrapper = mount(NotesPanel, { attachTo: document.body, props: { books: [], defaultBookId: null } });
+        await flushPromises();
+        await wrapper.setProps({ books: BOOKS });   // 기본 책 prop은 그대로 null
+        await flushPromises();
+
+        vi.mocked(fetch).mockResolvedValueOnce(okJson({ notes: [] }));
+        await wrapper.find('[data-testid="notes-book"]').setValue('7');
+        await flushPromises();
+        expect(vi.mocked(fetch).mock.calls.map((c) => String(c[0]))).toEqual(['/api/study/notes?bookId=7']);
+
+        vi.mocked(fetch).mockResolvedValueOnce(okJson(noteOf({ id: 8, bookId: 7, body: '직접 고름' })));
+        await type(wrapper, '직접 고름');
+        await settle();
+        expect(posts()).toEqual([{ url: '/api/study/notes', body: { bookId: 7, title: '', body: '직접 고름' } }]);
+    });
+
+    // 서재에서 지운 책 id로 옮기면 fetchNotes가 404를 맞는다.
+    test('서재에 없는 id면 그대로 둔다', async () => {
+        const wrapper = await mountPanel({ defaultBookId: 9 });
+        await wrapper.setProps({ defaultBookId: 999 });
+        await flushPromises();
+        expect((wrapper.find('[data-testid="notes-book"]').element as HTMLSelectElement).value).toBe('9');
+        expect(vi.mocked(fetch).mock.calls.map((c) => String(c[0]))).not.toContain('/api/study/notes?bookId=999');
+    });
+});
+
 describe('필기 패널 — 자동저장', () => {
     test('빈 초안은 서버에 행을 만들지 않는다', async () => {
         const wrapper = await mountPanel();

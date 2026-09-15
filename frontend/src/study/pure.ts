@@ -282,13 +282,24 @@ export function planWeeks(days: DraftDay[]): { label: string; days: DraftDay[] }
     }));
 }
 
-export type StudyView = 'calendar' | 'history' | 'books';
+export type StudyView = 'calendar' | 'recall' | 'history' | 'books';
 
-/** 이 셸이 그릴 화면 — /study는 달력, /study/history는 기록, /study/books는 서재(같은 셸·같은 번들, 경로로 고른다). */
+/** 이 셸이 그릴 화면 — /study는 달력, /study/recall은 백지노트, /study/history는 기록, /study/books는 서재(같은 셸·같은 번들, 경로로 고른다). */
 export function studyView(pathname: string): StudyView {
+    if (pathname.endsWith('/study/recall')) return 'recall';
     if (pathname.endsWith('/study/history')) return 'history';
     if (pathname.endsWith('/study/books')) return 'books';
     return 'calendar';
+}
+
+/** 백지노트 화면이 열 날짜 — `?date=YYYY-MM-DD`이고 달력에 있는 날이면 그 값, 아니면 null(=오늘). */
+export function recallDateParam(search: string): string | null {
+    const date = new URLSearchParams(search).get('date');
+    if (date === null || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+    // 2월 30일·13월은 Date가 다음 달로 넘겨 버린다 — 되읽은 값이 입력과 같을 때만 있는 날이다.
+    const [y, m, d] = date.split('-').map(Number);
+    const back = new Date(y, m - 1, d);
+    return back.getFullYear() === y && back.getMonth() === m - 1 && back.getDate() === d ? date : null;
 }
 
 /**
