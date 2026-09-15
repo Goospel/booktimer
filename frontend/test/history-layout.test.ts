@@ -19,6 +19,12 @@ describe('chooseLayout', () => {
         expect(chooseLayout(1200)).toBe('split');
     });
 
+    // 절대값 — 상대값 테스트만으론 경계가 옛 880이어도 통과한다. 바 여백 248을 뺀 852가 2단 최소 폭.
+    test('태블릿 가로(1024)는 stacked, 데스크톱 경계 1100부터 split', () => {
+        expect(chooseLayout(1024)).toBe('stacked');
+        expect(chooseLayout(1100)).toBe('split');
+    });
+
     test('SPLIT_MIN_WIDTH는 양수 상수', () => {
         expect(SPLIT_MIN_WIDTH).toBeGreaterThan(0);
     });

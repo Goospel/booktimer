@@ -162,3 +162,13 @@ describe('ProfileApp 책BTI 태그 드릴다운', () => {
         expect(wrapper.text()).toContain('안나 카레니나');
     });
 });
+
+// 2열(.shop-wide) 경계 — 바 여백 248을 뺀 852가 사이드 360 + 메인 2열이 서는 최소 폭(app.css 「본문 폭」 절과 같은 수).
+describe('ProfileApp 와이드 경계', () => {
+    test('matchMedia를 데스크톱 경계 (min-width: 1100px)로 구독한다', async () => {
+        setupDom();
+        mockFetch(true);
+        mount(ProfileApp, { attachTo: document.body });
+        expect(matchMedia).toHaveBeenCalledWith('(min-width: 1100px)');
+    });
+});

@@ -50,7 +50,7 @@ function onMarginChanged() {
     loadBooks();
 }
 
-// 반응형 분기 — presentational only(데이터/액션 로직 불변). 와이드(≥860px)=2열, 모바일=탭.
+// 반응형 분기 — presentational only(데이터/액션 로직 불변). 와이드(≥1100px — 바 여백 248을 뺀 852가 360+메인이 서는 폭)=2열, 모바일=탭.
 const isWide = ref(false);
 let mq: MediaQueryList | null = null;
 function onMqChange(e: MediaQueryListEvent) { isWide.value = e.matches; }
@@ -181,7 +181,7 @@ onMounted(() => {
     if (tabParam === 'shelf') activeTab.value = 'shelf';
 
     // 반응형 분기 초기화 + 구독
-    mq = matchMedia('(min-width: 860px)');
+    mq = matchMedia('(min-width: 1100px)');
     isWide.value = mq.matches;
     mq.addEventListener('change', onMqChange);
 
