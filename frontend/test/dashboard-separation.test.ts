@@ -171,3 +171,36 @@ describe('DashboardApp — 모드가 쓰는 카드·타일을 끌고 간다', ()
         expect(tileHrefs(w)).toEqual(['/study/books', '/study', '/study/history']);
     });
 });
+
+// 양옆 세로 바(SSR fragments/side-rails)의 흐림 상태는 #side-rails[data-mode] 한 속성이다 — 홈에선 이 섬이 쓴다.
+// 설계 claude-docs/plans/2026-09-15-web-side-rails.md §3-5 · §7 T-6.
+describe('DashboardApp — 모드가 양옆 바 흐림(#side-rails[data-mode])을 끌고 간다', () => {
+    const railMode = () => document.getElementById('side-rails')!.getAttribute('data-mode');
+    beforeEach(() => { document.body.innerHTML = '<div id="side-rails" data-mode="reading"></div>'; });
+
+    test('(g) 공부 토글 → study, 독서로 돌아오면 → reading', async () => {
+        const w = await mountDashboard();
+        await modeBtn(w, '공부').trigger('click');
+        await flushPromises();
+        expect(railMode()).toBe('study');
+
+        await modeBtn(w, '독서').trigger('click');
+        await flushPromises();
+        expect(railMode()).toBe('reading');
+    });
+
+    test('(h) 저장값 study로 마운트 → 마운트 직후 study', async () => {
+        localStorage.setItem('booktimer.timerMode', 'study');
+        await mountDashboard();
+        expect(railMode()).toBe('study');
+    });
+
+    test('(i) 서버 독서 진행 중 + 저장 study → reading(서버 진실이 이긴다)', async () => {
+        localStorage.setItem('booktimer.timerMode', 'study');
+        document.getElementById('side-rails')!.setAttribute('data-mode', 'study'); // 인라인 부트가 저장값으로 흐린 상태
+        dashboardPayload = { ...DASHBOARD, hasActiveSession: true, activeStartedAt: '2026-09-04T00:00:00Z' };
+        await mountDashboard();
+        await flushPromises();
+        expect(railMode()).toBe('reading');
+    });
+});

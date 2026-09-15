@@ -10,7 +10,8 @@
     <title>차단 목록 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
 </head>
-<body>
+<body class="has-rails">
+<th:block th:replace="~{fragments/side-rails :: rails}"></th:block>
 <div class="container">
     <header class="brand">
         <a class="brand-home" th:href="@{/}" title="홈으로">

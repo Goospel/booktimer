@@ -10,7 +10,8 @@
     <title>공부 — BookTimer</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
 </head>
-<body>
+<body class="has-rails">
+<th:block th:replace="~{fragments/side-rails :: rails}"></th:block>
 <!-- wide-page: 데스크톱에서 1160px — 달력·공부 서재 목록이 460px에선 답답하다(app.css 「데스크톱 와이드 페이지」). -->
 <div class="container wide-page">
     <header class="brand">

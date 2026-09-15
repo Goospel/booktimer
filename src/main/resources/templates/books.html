@@ -10,7 +10,8 @@
     <link rel="stylesheet" th:href="@{/css/app.css}">
     <th:block th:replace="~{ads :: loader}"></th:block>
 </head>
-<body>
+<body class="has-rails">
+<th:block th:replace="~{fragments/side-rails :: rails}"></th:block>
 <div class="container shelf-page">
     <header class="brand">
         <a class="brand-home" th:href="@{/}" title="홈으로">

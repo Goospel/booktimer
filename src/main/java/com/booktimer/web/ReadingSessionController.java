@@ -6,6 +6,7 @@ import com.booktimer.security.CurrentUserService;
 import com.booktimer.session.ReadingDebtService;
 import com.booktimer.session.ReadingSessionService;
 import com.booktimer.user.User;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -95,7 +96,9 @@ public class ReadingSessionController {
     @GetMapping("/manual")
     public String manualForm(Principal principal,
                              @RequestParam(value = "date", required = false) String date,
-                             Model model) {
+                             Model model, HttpServletRequest request) {
+        // 폼 렌더 전 세션 선확정 — 양옆 바(SVG 9개)가 폼 앞에 붙어 버퍼가 먼저 커밋되면 500(T-049)
+        CsrfTokenUtil.precommit(request);
         User user = currentUser(principal);
         ZoneId zone = ZoneId.of(user.getTimezone());
         LocalDate today = LocalDate.ofInstant(clock.instant(), zone);

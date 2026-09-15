@@ -1,0 +1,157 @@
+// @vitest-environment jsdom
+// 양옆 세로 바 동작 — 빌드를 안 타는 정적 ESM(`rail.js`)을 그대로 import 한다(theme.test.ts와 같은 꼴).
+// 설계 claude-docs/plans/2026-09-15-web-side-rails.md §4-④ · §7 T-4.
+// jsdom엔 matchMedia가 없어 가짜 win을 주입한다(입력 장치 판별 = matches).
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+
+import { bindRails, ENTER_DELAY_MS, LEAVE_DELAY_MS, HOVER_QUERY } from '../../src/main/resources/static/js/rail.js';
+
+function fixture() {
+    document.body.innerHTML = `
+        <div id="side-rails" data-mode="reading">
+            <aside class="rail rail-reading"><nav><a id="a1" href="#r1">홈</a></nav></aside>
+            <aside class="rail rail-study"><nav><a id="a2" href="#r2">일정</a></nav></aside>
+        </div>
+        <button id="outside">바깥</button>`;
+    const [reading, study] = Array.from(document.querySelectorAll<HTMLElement>('.rail'));
+    return {
+        reading,
+        study,
+        a1: document.getElementById('a1') as HTMLAnchorElement,
+        a2: document.getElementById('a2') as HTMLAnchorElement,
+        outside: document.getElementById('outside') as HTMLButtonElement,
+    };
+}
+
+function fakeWin(matches: boolean) {
+    return {
+        matchMedia: (q: string) => {
+            expect(q).toBe(HOVER_QUERY);
+            return { matches, addEventListener() {} };
+        },
+        setTimeout: (fn: () => void, ms: number) => setTimeout(fn, ms),
+        clearTimeout: (id: ReturnType<typeof setTimeout>) => clearTimeout(id),
+    } as unknown as Window;
+}
+
+function click(el: Element): MouseEvent {
+    const ev = new MouseEvent('click', { bubbles: true, cancelable: true });
+    el.dispatchEvent(ev);
+    return ev;
+}
+
+const openCount = () => document.querySelectorAll('.rail.is-open').length;
+
+describe('bindRails — 터치(hover 없음): 탭으로 펼치고 바깥 탭으로 접는다', () => {
+    test('접힌 바 링크 탭 → 이동을 막고 그 바만 펼친다', () => {
+        const f = fixture();
+        bindRails(document, fakeWin(false));
+        const ev = click(f.a1);
+        expect(ev.defaultPrevented).toBe(true);
+        expect(f.reading.classList.contains('is-open')).toBe(true);
+        expect(f.study.classList.contains('is-open')).toBe(false);
+    });
+
+    test('펼친 바 링크 탭 → 이동한다(막지 않음)', () => {
+        const f = fixture();
+        bindRails(document, fakeWin(false));
+        click(f.a1);
+        const ev = click(f.a1);
+        expect(ev.defaultPrevented).toBe(false);
+    });
+
+    test('다른 바 탭 → 먼저 것은 접히고 새 것만 펼친다', () => {
+        const f = fixture();
+        bindRails(document, fakeWin(false));
+        click(f.a1);
+        click(f.a2);
+        expect(f.reading.classList.contains('is-open')).toBe(false);
+        expect(f.study.classList.contains('is-open')).toBe(true);
+    });
+
+    test('바깥 탭 → 전부 접히고 바 안 포커스를 푼다(:focus-within이 펼침을 붙잡지 않게)', () => {
+        const f = fixture();
+        bindRails(document, fakeWin(false));
+        click(f.a1);
+        f.a1.focus();
+        expect(document.activeElement).toBe(f.a1);
+        click(f.outside);
+        expect(openCount()).toBe(0);
+        expect(document.getElementById('side-rails')!.contains(document.activeElement)).toBe(false);
+    });
+
+    test('Escape → 전부 접힌다', () => {
+        const f = fixture();
+        bindRails(document, fakeWin(false));
+        click(f.a2);
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        expect(openCount()).toBe(0);
+    });
+});
+
+describe('bindRails — 데스크톱(hover): 머물면 펼치고 벗어나면 접는다', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    test('링크 클릭은 막지 않고 펼치지도 않는다', () => {
+        const f = fixture();
+        bindRails(document, fakeWin(true));
+        const ev = click(f.a1);
+        expect(ev.defaultPrevented).toBe(false);
+        expect(openCount()).toBe(0);
+    });
+
+    test(`mouseenter → ${ENTER_DELAY_MS}ms 머물러야 펼친다, mouseleave → ${LEAVE_DELAY_MS}ms 뒤 접힌다`, () => {
+        expect(ENTER_DELAY_MS).toBe(150);
+        expect(LEAVE_DELAY_MS).toBe(100);
+        const f = fixture();
+        bindRails(document, fakeWin(true));
+        f.reading.dispatchEvent(new MouseEvent('mouseenter'));
+        vi.advanceTimersByTime(149);
+        expect(f.reading.classList.contains('is-open')).toBe(false);
+        vi.advanceTimersByTime(1);
+        expect(f.reading.classList.contains('is-open')).toBe(true);
+
+        f.reading.dispatchEvent(new MouseEvent('mouseleave'));
+        vi.advanceTimersByTime(99);
+        expect(f.reading.classList.contains('is-open')).toBe(true);
+        vi.advanceTimersByTime(1);
+        expect(f.reading.classList.contains('is-open')).toBe(false);
+    });
+
+    test('스침(진입 60ms 뒤 이탈) → 이후 1초 동안 한 번도 안 펼친다', () => {
+        const f = fixture();
+        bindRails(document, fakeWin(true));
+        f.reading.dispatchEvent(new MouseEvent('mouseenter'));
+        vi.advanceTimersByTime(60);
+        f.reading.dispatchEvent(new MouseEvent('mouseleave'));
+        for (let t = 0; t < 1000; t += 10) {
+            vi.advanceTimersByTime(10);
+            expect(openCount()).toBe(0);
+        }
+    });
+
+    test('바 안 링크에 포커스가 남은 채 mouseleave → 접힐 때 포커스도 바 밖으로', () => {
+        const f = fixture();
+        bindRails(document, fakeWin(true));
+        f.reading.dispatchEvent(new MouseEvent('mouseenter'));
+        vi.advanceTimersByTime(150);
+        f.a1.focus();
+        f.reading.dispatchEvent(new MouseEvent('mouseleave'));
+        vi.advanceTimersByTime(100);
+        expect(document.getElementById('side-rails')!.contains(document.activeElement)).toBe(false);
+    });
+
+    test('터치 기기의 흉내 mouseenter는 무시한다', () => {
+        const f = fixture();
+        bindRails(document, fakeWin(false));
+        f.reading.dispatchEvent(new MouseEvent('mouseenter'));
+        vi.advanceTimersByTime(1000);
+        expect(openCount()).toBe(0);
+    });
+});
+
+test('#side-rails가 없는 페이지 → null, 예외 없음', () => {
+    document.body.innerHTML = '<main></main>';
+    expect(bindRails(document, fakeWin(true))).toBeNull();
+});

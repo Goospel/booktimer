@@ -3934,6 +3934,58 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .theme-toggle:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus-ring); }
 .theme-toggle svg { width: 18px; height: 18px; }
 
+/* ── 양옆 세로 바(side rails) — 설계 claude-docs/plans/2026-09-15-web-side-rails.md ──
+   로그인 사용자 화면의 페이지 이동 단일 출처(fragments/side-rails). 왼쪽 = 독서, 오른쪽 = 공부(.is-study 잉크).
+   평소 92px 접힘. 펼침(232px, 본문 위에 덮음)은 `.is-open`(rail.js — 데스크톱 머묾·태블릿 탭)과
+   `:focus-within`(키보드) 한 벌뿐이다. `.rail:hover` 펼침 규칙은 두지 않는다 — hover로 펼치면 안의 가로 배치가
+   즉시 뒤집혀 스치기만 해도 글자가 깨져 보인다(머묾 지연은 rail.js 타이머가 맡는다).
+   z-index 95 = 종이 결(body::before 90) 위 · 첫 오버레이(100) 아래. 결이 고정 요소 위에 있으면 스크롤 때
+   무늬가 바 위를 미끄러진다(T-192) — 그래서 바 표면엔 결을 직접 얹는다. */
+body.has-rails { padding-left: 124px; padding-right: 124px; }   /* 16 + 92 + 16 */
+.rail {
+    position: fixed;
+    top: 16px;
+    bottom: 16px;
+    width: 92px;
+    z-index: 95;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    overflow: hidden;
+    padding: 18px 8px;
+    border-radius: 18px;
+    background-color: var(--card-bg);
+    background-image: var(--grain), var(--fiber);
+    background-size: 300px 300px, 440px 440px;
+    border: 1px solid var(--line-2);
+    border-image: var(--pencil-frame) 8 / 8px stretch;
+    box-shadow: 0 1px 2px rgba(44, 42, 36, .04);
+    transition: width .18s ease, box-shadow .18s ease, opacity .18s ease;
+}
+.rail-reading { left: 16px; }
+.rail-study { right: 16px; }   /* right 고정 → 펼치면 왼쪽으로 자란다 */
+.rail nav { display: flex; flex-direction: column; gap: 6px; }
+.rail-pill { align-self: center; margin-bottom: 8px; padding: 5px 12px; border-radius: 999px; font-size: 12.5px; white-space: nowrap; background: var(--sage-soft); color: var(--accent-hover); }
+.rail-item { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 10px 4px; border-radius: 14px; border: 1px solid transparent; color: var(--text); font-size: 12.5px; line-height: 1.3; text-align: center; white-space: nowrap; text-decoration: none; }
+.rail-item svg { width: 22px; height: 22px; flex: 0 0 auto; color: var(--accent-hover); }
+.rail-item[aria-current="page"] { background: var(--sage-soft); border-color: var(--nav-hover-border); border-image: var(--pencil-frame) 8 / 8px stretch; color: var(--accent-hover); }
+@media (hover: hover) and (pointer: fine) { .rail-item:hover:not([aria-current]) { background: var(--nav-hover-bg); text-decoration: none; } }
+.rail-item:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus-ring); }
+/* 흐림 — 지금 모드의 반대쪽. 펼치면(어느 경로로든) 진해진다 */
+#side-rails[data-mode="reading"] .rail-study, #side-rails[data-mode="study"] .rail-reading { opacity: .6; }
+/* 펼침 — 데스크톱 머묾·태블릿 탭(둘 다 rail.js의 is-open)·키보드(focus-within) 셋이 같은 모양 */
+#side-rails .rail.is-open, #side-rails .rail:focus-within {
+    width: 232px;
+    padding: 18px 12px;
+    opacity: 1;
+    box-shadow: 0 2px 4px rgba(44, 42, 36, .05), 0 18px 44px rgba(44, 42, 36, .16);
+}
+.rail.is-open .rail-item, .rail:focus-within .rail-item { flex-direction: row; gap: 12px; padding: 10px 14px; font-size: 15px; line-height: 1.6; text-align: left; }
+.rail.is-open .rail-pill, .rail:focus-within .rail-pill { align-self: flex-start; margin-left: 8px; }
+@media (prefers-reduced-motion: reduce) { .rail { transition: none; } }
+/* ponytail: <640px엔 이동 수단이 브랜드 홈 링크뿐 — 폰 웹을 지원하기로 바뀌면 하단 탭바를 여기 단다(웹=데스크톱·태블릿, 2026-09-07 방침) */
+@media (max-width: 639px) { .rail { display: none; } body.has-rails { padding-left: 16px; padding-right: 16px; } }
+
 /* ── 다크 테마 ────────────────────────────────────────────
    `:root`의 색 토큰만 덮는다. 토큰이 안 닿는 raw 리터럴 규칙(설정 배너·상태 배지·흰 채움 등)은
    아직 크림색으로 남아 있고, 그래서 이 단계는 다크런치다 — 토글을 안 꽂았으므로 저장값을

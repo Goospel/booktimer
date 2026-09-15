@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<!--
+  양옆 세로 바(side rails) — 로그인 사용자 화면의 페이지 이동 단일 출처.
+  설계: claude-docs/plans/2026-09-15-web-side-rails.md. 호출(페이지 <body class="has-rails"> 바로 다음 줄):
+    <th:block th:replace="~{fragments/side-rails :: rails}"></th:block>
+
+  - rail(RailModelAdvice)이 활성 메뉴·모드·내 책방 href를 준다. 미인증이면 null이라 통째로 안 그린다.
+  - data-mode = 지금 모드(반대쪽 바를 흐린다). 서버는 경로로 그리고, 홈만 아래 인라인 부트가 저장값으로,
+    홈 Vue가 모드 토글마다 같은 속성을 덮는다(timerMode.ts syncRailMode).
+  - 접힘/펼침·태블릿 탭·Esc는 /js/rail.js. JS가 없어도 링크는 전부 동작한다.
+-->
+<th:block th:fragment="rails" th:if="${rail != null}">
+<div id="side-rails" th:attr="data-mode=${rail.mode}">
+    <aside class="rail rail-reading">
+        <nav aria-label="독서 이동">
+            <span class="rail-pill">독서</span>
+            <a class="rail-item" th:href="@{/}" th:aria-current="${rail.activeKey == 'home'} ? 'page' : null"><th:block th:replace="~{fragments/nav-icons :: icon('home')}"></th:block><span>홈</span></a>
+            <a class="rail-item" th:href="@{/books}" th:aria-current="${rail.activeKey == 'books'} ? 'page' : null"><th:block th:replace="~{fragments/nav-icons :: icon('books')}"></th:block><span>내 책장</span></a>
+            <a class="rail-item" th:if="${rail.shopHref != null}" th:href="@{${rail.shopHref}}" th:aria-current="${rail.activeKey == 'shop'} ? 'page' : null"><th:block th:replace="~{fragments/nav-icons :: icon('user')}"></th:block><span>내 책방</span></a>
+            <a class="rail-item" th:href="@{/personality}" th:aria-current="${rail.activeKey == 'personality'} ? 'page' : null"><th:block th:replace="~{fragments/nav-icons :: icon('personality')}"></th:block><span>책BTI</span></a>
+            <a class="rail-item" th:href="@{/history}" th:aria-current="${rail.activeKey == 'history'} ? 'page' : null"><th:block th:replace="~{fragments/nav-icons :: icon('history')}"></th:block><span>독서 기록</span></a>
+            <a class="rail-item" th:href="@{/search}" th:aria-current="${rail.activeKey == 'search'} ? 'page' : null"><th:block th:replace="~{fragments/nav-icons :: icon('search')}"></th:block><span>사용자 검색</span></a>
+        </nav>
+    </aside>
+    <aside class="rail rail-study is-study">
+        <nav aria-label="공부 이동">
+            <span class="rail-pill">공부</span>
+            <a class="rail-item" th:href="@{/study}" th:aria-current="${rail.activeKey == 'plan'} ? 'page' : null"><th:block th:replace="~{fragments/nav-icons :: icon('calendar')}"></th:block><span>일정</span></a>
+            <a class="rail-item" th:href="@{/study/books}" th:aria-current="${rail.activeKey == 'sbooks'} ? 'page' : null"><th:block th:replace="~{fragments/nav-icons :: icon('books')}"></th:block><span>공부 서재</span></a>
+            <a class="rail-item" th:href="@{/study/history}" th:aria-current="${rail.activeKey == 'shistory'} ? 'page' : null"><th:block th:replace="~{fragments/nav-icons :: icon('history')}"></th:block><span>공부 기록</span></a>
+        </nav>
+    </aside>
+</div>
+<!-- 홈만: 저장 모드를 첫 페인트 전에 반영(theme-head :: boot와 같은 이유 — 서버는 경로만 알고 저장값은 모른다).
+     리터럴 'booktimer.timerMode'는 timerMode.ts MODE_KEY와 따로 적힌다 — 동기는 timer-mode.test.ts가 지킨다. -->
+<script th:if="${rail.activeKey == 'home'}" th:attr="nonce=${cspNonce}">try{if(localStorage.getItem('booktimer.timerMode')==='study')document.getElementById('side-rails').dataset.mode='study'}catch(e){}</script>
+<script type="module" th:attr="nonce=${cspNonce}" th:src="@{/js/rail.js}"></script>
+</th:block>
+</body>
+</html>
