@@ -180,6 +180,39 @@ describe('독서등 — 토큰 복제 0', () => {
         expect(colorTokens('body.study-lamp .lamp-page').filter((t) => !light.includes(t))).toEqual([]);
     });
 
+    // 커스텀 속성은 선언된 요소에서 계산된 값이 상속된다. 다크 테마는 같은 html에서 다시 깔아 별칭이 따라오지만,
+    // 독서등은 body에서 깔아서 html에서 라이트로 계산된 별칭(`--nav-hover-bg: var(--sage-soft)` = #E7EEE2)이
+    // 그대로 내려온다 — 밤 바 hover가 밝은 연녹 위 밝은 글자(대비 1.09)가 됐다(리뷰 Important-1).
+    it('var() 별칭 토큰도 다크 목록에 다시 선언된다 (body 범위에선 별칭이 자동으로 안 따라온다)', () => {
+        const names = (sel: string, onlyAlias: boolean) => blockBody(sel).split(';')
+            .map((d) => /^\s*(--[\w-]+)\s*:\s*(.+)$/s.exec(d))
+            .filter((m): m is RegExpExecArray => !!m && (!onlyAlias || m[2].includes('var(')))
+            .map((m) => m[1]);
+        const light = names(LIGHT_SELECTOR, true);
+        expect(light.length).toBeGreaterThan(0);   // 양성 대조 — 별칭을 실제로 잡는다
+        expect(light.filter((t) => !names(DARK_SELECTOR, false).includes(t))).toEqual([]);
+    });
+
+    // 다크 섹션의 `.is-study` 리터럴 규칙(0,4,0)은 독서등 밑 카드에도 닿는다 — 라이트 짝 목록에 `.lamp-page` 범위(0,4,1)가
+    // 없으면 합쳐진 카드의 그 자리만 다크 리터럴(숫자 #AFC4D2 등)로 칠해진다(리뷰 Minor-3).
+    it('다크 `.is-study` 리터럴 규칙마다 라이트 짝 목록에 `.lamp-page` 범위가 있다', () => {
+        const { start, end } = darkSection();
+        const prefix = `${DARK_SELECTOR} .is-study `;
+        const tails = rules()
+            .filter((r) => r.at > start && r.at < end && r.selector.startsWith(prefix))
+            .map((r) => r.selector.slice(prefix.length));
+        expect(tails.length).toBeGreaterThanOrEqual(5);   // 양성 대조 — pill·grass-streak·track·outline hover·숫자·btn-primary hover
+        const missing = tails.filter((t) => !groupOf(`.is-study ${t}`).includes(`body.study-lamp .lamp-page .is-study ${t}`));
+        expect(missing).toEqual([]);
+    });
+
+    // 합쳐진 카드 투명화는 다크 `:root[data-theme="dark"] .dash-timer-hero.is-study`(0,4,0, 파일 끝)를 이겨야 한다 —
+    // `body`가 빠지면 특이도가 같아 파일 순서로 다크가 이겨 다크 테마 막대만 #222A30으로 남는다(실 브라우저 실측).
+    it('합쳐진 카드 투명화 규칙은 body로 시작한다(특이도 0,4,1)', () => {
+        const hit = rules().filter((r) => r.selector.endsWith('.focus-stack.is-merged > .dash-card.is-study'));
+        expect(hit.map((r) => r.selector)).toEqual(['body .focus-stack.is-merged > .dash-card.is-study']);
+    });
+
     // 상속 함정 — 토큰만 되돌리면 글자색은 body에서 계산이 끝난 밤 값(#E8E2D6)이 그대로 내려온다(시안 실측).
     it('합쳐진 카드가 글자색을 낮 토큰으로 다시 계산시킨다 (다크 섹션 안)', () => {
         const { start, end } = darkSection();
@@ -290,12 +323,14 @@ function rawColorDeclarations(): Array<{ file: string; selector: string; decl: s
         const name = file.split(/[\\/]/).pop()!;
         const { start, end } = darkSection(file);
         for (const r of rules(file)) {
-            // 토큰 블록은 목록째 건너뛴다 — `:root, body.study-lamp .lamp-page {…}`의 둘째 항목도 같은 토큰 정의다.
-            if (r.group.some((s) => s === LIGHT_SELECTOR || s.startsWith(`${LIGHT_SELECTOR}[`))) continue;
+            // 토큰 블록(`:root, body.study-lamp .lamp-page {…}`처럼 목록에 `:root`가 든 규칙)에선 **커스텀 속성 선언만** 건너뛴다.
+            // 목록째 건너뛰면 `.leak-probe, :root { color: #123456 }` 한 줄이 통째로 사각에 떨어진다(리뷰 Minor-1 실측).
+            const tokenGroup = r.group.some((s) => s === LIGHT_SELECTOR || s.startsWith(`${LIGHT_SELECTOR}[`));
             if (start >= 0 && r.at > start && r.at < end) continue;
             for (const d of r.body.split(';')) {
                 const m = /^\s*([\w-]+)\s*:\s*(.+)$/s.exec(d);
                 if (!m || !RAW_COLOR.test(m[2])) continue;
+                if (tokenGroup && m[1].startsWith('--')) continue;
                 const hit = ALLOWED.find((a) => a.match(r.selector, m[1]));
                 out.push({
                     file: name,

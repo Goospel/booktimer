@@ -241,4 +241,22 @@ describe('focusEnd — 전환 끝 캐럿', () => {
         expect($to.pos).toBe(e.state.doc.content.size - 1);
         expect($to.pos).toBeGreaterThan(2);   // 양성 대조 — 「그냥 1」(문서 맨 앞)과 갈린다
     });
+
+    // 긴 필기에서 시작하면 캐럿으로 스크롤돼 막대(측정 종료·시간)가 화면 밖으로 밀린다 — 스크롤은 사용자가 치기 시작할 때
+    // 브라우저가 한다(리뷰 Minor-4). Tiptap의 스크롤은 `scrolledIntoView` 트랜잭션으로 관측된다.
+    test('캐럿만 옮기고 스크롤하지 않는다', async () => {
+        const scrolled = async (run: (w: VueWrapper) => void) => {
+            const wrapper = await mountEditor('첫 문단\n\n둘째 문단');
+            const e = editorOf(wrapper);
+            let hit = false;
+            e.on('transaction', ({ transaction }: AnyEditor) => { if (transaction.scrolledIntoView) hit = true; });
+            run(wrapper);
+            await vi.waitFor(() => expect(e.isFocused).toBe(true));
+            await new Promise((r) => setTimeout(r, 30));   // focus 명령은 다음 프레임에 스크롤을 건다
+            wrapper.unmount();
+            return hit;
+        };
+        expect(await scrolled((w) => editorOf(w).commands.focus('end'))).toBe(true);   // 양성 대조 — 기본값은 스크롤한다
+        expect(await scrolled((w) => (w.vm as AnyEditor).focusEnd())).toBe(false);
+    });
 });

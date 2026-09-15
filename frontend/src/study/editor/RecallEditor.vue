@@ -259,8 +259,11 @@ function onToolClick(id: string): void {
 defineExpose({
     editor,
     markdown: () => (editor.value ? markdownOf(editor.value) : ''),
-    /** 캐럿을 글 끝에 — 홈에서 공부 측정 시작 전환이 끝난 뒤 부른다(바로 이어 쓰게). */
-    focusEnd: () => { editor.value?.commands.focus('end'); },
+    /**
+     * 캐럿을 글 끝에 — 홈에서 공부 측정 시작 전환이 끝난 뒤 부른다(바로 이어 쓰게).
+     * 스크롤은 하지 않는다: 긴 필기면 막대(측정 종료·시간)가 시작 직후 화면 밖으로 밀린다. 치기 시작하면 브라우저가 캐럿으로 간다.
+     */
+    focusEnd: () => { editor.value?.commands.focus('end', { scrollIntoView: false }); },
 });
 </script>
 

@@ -2995,7 +2995,8 @@ body.study-lamp .lamp-page .is-study .dash-btn-outline:hover { background: #E6EC
    hover는 :not(:disabled)로 좁힌다 — 안 그러면 .btn-primary:disabled:hover(같은 특이성·앞선 위치)를 눌러
    비활성 버튼까지 hover에 반응한다. 스코프가 공부 전용이라 독서 화면엔 한 줄도 안 닿는다. */
 .is-study .btn-primary { background-color: var(--sage-soft); }
-.is-study .btn-primary:hover:not(:disabled) { background-color: #D6E0E7; }  /* --nav-hover-border와 같은 한 단 짙은 파랑 */
+.is-study .btn-primary:hover:not(:disabled),
+body.study-lamp .lamp-page .is-study .btn-primary:hover:not(:disabled) { background-color: #D6E0E7; }  /* --nav-hover-border와 같은 한 단 짙은 파랑 */
 
 /* 공부 서재(/study/books) — 회독 칩은 토큰만 쓰므로 .is-study 카드 안에서 저절로 파랑이다(리터럴 없음).
    ± 버튼은 .book-actions 규칙(padding·width:auto)을 그대로 받고, 여기선 가로 정렬만 얹는다 —
@@ -4025,7 +4026,10 @@ body.has-rails .container:not(.narrow-page) .study-plan-form { max-width: 620px;
     --ok: #5FBF95;
     --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 24px rgba(0,0,0,.40);
     --sage-soft: #2E3A2C;
-    --nav-hover-border: #45563F;    /* --nav-hover-bg는 var(--sage-soft) 별칭이라 자동으로 따라온다 */
+    --nav-hover-border: #45563F;
+    /* 라이트와 같은 별칭을 다시 적는다 — 다크 테마(html)에선 없어도 따라오지만, 독서등(body.study-lamp)은 body에서
+       토큰을 다시 깔아 html에서 라이트로 계산된 값(#E7EEE2)이 그대로 상속된다(밤 바 hover 대비 1.09, 리뷰 실측). */
+    --nav-hover-bg: var(--sage-soft);
     --focus-ring: rgba(143, 174, 134, .40);
 
     /* 의미 토큰 다크판 — 라이트 짝과 1:1이다(darkTokens.test.ts가 양방향으로 센다).
