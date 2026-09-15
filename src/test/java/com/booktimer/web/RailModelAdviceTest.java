@@ -81,7 +81,7 @@ class RailModelAdviceTest {
         Map<String, Boolean> links = railLinks(body);
         assertThat(links.keySet()).containsExactly(
                 "/", "/books", "/u/alice", "/personality", "/history", "/search",
-                "/study", "/study/books", "/study/history");
+                "/study", "/study/recall", "/study/books", "/study/history");
         assertThat(links.get("/books")).isTrue();
         assertThat(links.get("/history")).isFalse();
         assertThat(links.values().stream().filter(b -> b)).hasSize(1);
@@ -97,6 +97,19 @@ class RailModelAdviceTest {
         assertThat(body).contains("data-mode=\"study\"");
         Map<String, Boolean> links = railLinks(body);
         assertThat(links.get("/study/history")).isTrue();
+        assertThat(links.values().stream().filter(b -> b)).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("/study/recall — 공부 모드, 백지노트만 활성")
+    void studyRecall_studyModeAndActive() throws Exception {
+        registerUser("alice@booktimer.com", "alice", Role.USER);
+
+        String body = html("/study/recall", "alice@booktimer.com");
+
+        assertThat(body).contains("data-mode=\"study\"");
+        Map<String, Boolean> links = railLinks(body);
+        assertThat(links.get("/study/recall")).isTrue();
         assertThat(links.values().stream().filter(b -> b)).hasSize(1);
     }
 

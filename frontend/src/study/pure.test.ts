@@ -16,6 +16,7 @@ import {
     recallScopePrefill,
     recallSubjectPrefill,
     readCountLabel,
+    recallDateParam,
     studyOwned,
     studyView,
     validatePlanForm,
@@ -128,6 +129,27 @@ describe('studyView', () => {
         expect(studyView('/ctx/study/history')).toBe('history');
         expect(studyView('/ctx/study/books')).toBe('books');
         expect(studyView('/ctx/study')).toBe('calendar');
+    });
+
+    it('/study/recall은 백지노트 화면 — 바 「백지노트」가 여는 곳', () => {
+        expect(studyView('/study/recall')).toBe('recall');
+    });
+});
+
+describe('recallDateParam', () => {
+    // 형식이 틀린 값을 그대로 넘기면 fetchAgenda('2026-9')가 400이 된다 — 틀리면 null(=오늘)로 떨어뜨린다.
+    it('?date=YYYY-MM-DD면 그 날짜', () => {
+        expect(recallDateParam('?date=2026-09-12')).toBe('2026-09-12');
+    });
+
+    it('다른 쿼리가 붙어 있어도 date만 읽는다', () => {
+        expect(recallDateParam('?date=2026-09-12&x=1')).toBe('2026-09-12');
+    });
+
+    it('0 채움이 없는 날짜·빈 값·쿼리 없음은 null', () => {
+        expect(recallDateParam('?date=2026-9-1')).toBeNull();
+        expect(recallDateParam('?date=')).toBeNull();
+        expect(recallDateParam('')).toBeNull();
     });
 });
 

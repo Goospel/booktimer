@@ -47,9 +47,7 @@ const aiAccess = ref<AiAccess>('NONE');
 const aiAccessAt = ref<string | null>(null);
 const aiEnabled = ref(false);
 const aiBusy = ref(false);
-/** 오늘 남은 분석 몫 — 서버가 준다(기기가 세지 않는다). */
-const remainingAnalyze = ref(0);
-const remainingTranscribe = ref(0);
+/** 오늘 남은 일정 생성 몫 — 서버가 준다(기기가 세지 않는다). */
 const remainingPlan = ref(0);
 
 const monthParam = computed(() => `${year.value}-${String(month.value).padStart(2, '0')}`);
@@ -69,8 +67,6 @@ async function load(): Promise<void> {
         aiAccess.value = agenda.aiAccess;
         aiAccessAt.value = agenda.aiAccessAt;
         aiEnabled.value = agenda.aiEnabled;
-        remainingAnalyze.value = agenda.remaining.analyze;
-        remainingTranscribe.value = agenda.remaining.transcribe;
         remainingPlan.value = agenda.remaining.plan;
         items.value = agenda.items;
         recalls.value = agenda.recalls;
@@ -241,14 +237,10 @@ onMounted(async () => {
             :ai-access-at="aiAccessAt"
             :ai-enabled="aiEnabled"
             :ai-busy="aiBusy"
-            :remaining-analyze="remainingAnalyze"
-            :remaining-transcribe="remainingTranscribe"
             :remaining-plan="remainingPlan"
-            :has-yesterday-questions="cellMarks(selected, recalls).questions"
             @add="onAdd"
             @remove="onDelete"
             @request-ai="onRequestAi"
-            @recall-saved="load"
             @plan-applied="load"
         />
     </section>

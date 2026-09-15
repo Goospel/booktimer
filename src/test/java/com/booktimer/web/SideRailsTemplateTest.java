@@ -110,8 +110,9 @@ class SideRailsTemplateTest {
         Matcher u = Pattern.compile("nav-icons\\s*::\\s*icon\\('([^']+)'\\)").matcher(rails);
         while (u.find()) used.add(u.group(1));
 
-        assertThat(used).as("훑을 대상이 있어야 한다(공허 방지)").hasSize(7);
+        assertThat(used).as("훑을 대상이 있어야 한다(공허 방지)").hasSize(8);
         assertThat(keys).containsAll(used);
+        assertThat(used).as("백지노트 바 항목의 아이콘").contains("note");
     }
 
     // ── app.css 규약(주석을 걷고 본다 — 주석이 값을 인용하면 공허하게 통과한다, T-205) ──

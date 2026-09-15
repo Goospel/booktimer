@@ -4,7 +4,8 @@
 // 계산하면 「칩엔 A, 여백엔 B」로 갈리는 날이 온다(recentBookId가 지워진 책을 가리키는 순간이 그 자리다).
 import { describe, it, expect } from 'vitest'
 
-import { allBooksOf, defaultBookOf } from './defaultBook'
+import { allBooksOf, defaultBookOf, defaultStudyBookOf } from './defaultBook'
+import type { StudyBookRow } from '../study/api'
 
 const READING = [{ id: 1, title: '데미안' }, { id: 2, title: '수레바퀴 아래서' }]
 const FINISHED = [{ id: 3, title: '싯다르타' }]
@@ -39,5 +40,40 @@ describe('defaultBookOf', () => {
 
     it('책이 0권이면 null', () => {
         expect(defaultBookOf([], 1)).toBeNull()
+    })
+})
+
+// 공부 칩과 홈 필기가 같은 책을 봐야 한다 — 각자 계산하면 「칩엔 A, 필기엔 B」로 갈린다(설계 2026-09-15 결정 3).
+describe('defaultStudyBookOf', () => {
+    const row = (id: number, title: string, sessionGoalSeconds: number | null = null): StudyBookRow => ({
+        id, title, author: null, coverUrl: null, isbn13: null, readCount: 0, purchaseLink: null,
+        totalSeconds: 0, sessionGoalSeconds,
+    })
+    const BOOKS = [row(1, '헌법'), row(2, '민법', 1800), row(3, '형법')]
+
+    // 시트에서 붙잡은 사본은 회당 시간을 저장해도 안 바뀐다 — 서버 최신 행을 돌려줘야 한다.
+    it('고른 책이 서재에 있으면 서버 행(최신 값)을 돌려준다', () => {
+        const stale = row(2, '민법', null)
+        const got = defaultStudyBookOf(BOOKS, 3, stale)
+        expect(got?.id).toBe(2)
+        expect(got?.sessionGoalSeconds).toBe(1800)
+    })
+
+    it('고른 책이 서재에 없으면(방금 담은 책) 고른 책 그대로', () => {
+        const fresh = row(9, '새 책')
+        expect(defaultStudyBookOf(BOOKS, 3, fresh)).toBe(fresh)
+    })
+
+    it('고른 책이 없으면 최근 걸고 잰 책 — 첫 책이 아니어도', () => {
+        expect(defaultStudyBookOf(BOOKS, 3, null)?.id).toBe(3)
+    })
+
+    it('최근 책이 없거나 서재에 없으면 첫 책', () => {
+        expect(defaultStudyBookOf(BOOKS, null, null)?.id).toBe(1)
+        expect(defaultStudyBookOf(BOOKS, 999, null)?.id).toBe(1)
+    })
+
+    it('빈 서재면 null', () => {
+        expect(defaultStudyBookOf([], 1, null)).toBeNull()
     })
 })

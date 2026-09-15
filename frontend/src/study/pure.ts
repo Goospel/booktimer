@@ -282,13 +282,20 @@ export function planWeeks(days: DraftDay[]): { label: string; days: DraftDay[] }
     }));
 }
 
-export type StudyView = 'calendar' | 'history' | 'books';
+export type StudyView = 'calendar' | 'recall' | 'history' | 'books';
 
-/** 이 셸이 그릴 화면 — /study는 달력, /study/history는 기록, /study/books는 서재(같은 셸·같은 번들, 경로로 고른다). */
+/** 이 셸이 그릴 화면 — /study는 달력, /study/recall은 백지노트, /study/history는 기록, /study/books는 서재(같은 셸·같은 번들, 경로로 고른다). */
 export function studyView(pathname: string): StudyView {
+    if (pathname.endsWith('/study/recall')) return 'recall';
     if (pathname.endsWith('/study/history')) return 'history';
     if (pathname.endsWith('/study/books')) return 'books';
     return 'calendar';
+}
+
+/** 백지노트 화면이 열 날짜 — `?date=YYYY-MM-DD`면 그 값, 없거나 형식이 틀리면 null(=오늘). */
+export function recallDateParam(search: string): string | null {
+    const date = new URLSearchParams(search).get('date');
+    return date !== null && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
 }
 
 /**

@@ -130,6 +130,26 @@ class StudyControllerTest {
     }
 
     @Test
+    @DisplayName("GET /study/recall: 미인증 → 로그인으로 차단")
+    void studyRecall_unauthenticated_isBlocked() throws Exception {
+        mockMvc.perform(get("/study/recall"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+    }
+
+    /** 백지노트도 <b>같은 셸</b>이다 — 바 「백지노트」 링크가 404가 아니어야 한다(섬이 경로로 화면을 고른다). */
+    @Test
+    @DisplayName("GET /study/recall: /study와 같은 셸을 낸다 — 섬이 경로로 화면을 고른다")
+    void studyRecall_rendersSameShell() throws Exception {
+        register("studyrecallshell");
+
+        mockMvc.perform(get("/study/recall").with(user("studyrecallshell")))
+                .andExpect(status().isOk())
+                .andExpect(view().name("study"))
+                .andExpect(content().string(containsString("id=\"study-app\"")));
+    }
+
+    @Test
     @DisplayName("GET /study: 셸 뷰 + 마운트 포인트 + CSRF 메타를 낸다")
     void study_rendersShell() throws Exception {
         register("studyshell");
