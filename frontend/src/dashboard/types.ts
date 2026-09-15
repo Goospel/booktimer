@@ -53,8 +53,8 @@ export interface TimerState {
 }
 
 /**
- * `/api/dashboard`의 `study` 블록 — 화면이 쓰는 7필드. 서버가 아직 싣는 하루 목표(`goalSeconds`)는
- * 2026-09-13 컨셉 전환으로 읽지 않는다(서버 필드는 PR-5에서 지운다). 회당 시간은 `StudyBookRow`에 있다.
+ * `/api/dashboard`의 `study` 블록 — 화면이 쓰는 7필드. 옛 하루 목표(`goalSeconds`)는 2026-09-13 컨셉
+ * 전환으로 빠졌고 서버 필드도 2026-09-14(#1132)에 걷혔다. 회당 시간은 `StudyBookRow`에 있다.
  */
 export interface StudyState {
     hasActiveSession: boolean
