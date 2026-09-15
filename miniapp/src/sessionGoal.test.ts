@@ -7,9 +7,31 @@ import {
   sessionGoalSheetTarget,
   sessionGoalView,
   shouldHaptic,
+  sessionGoalWheelStart,
   sessionGoalWheelState,
   studySessionLine,
 } from './sessionGoal';
+import sessionGoalSheetSource from './screens/SessionGoalSheet.tsx?raw';
+
+describe('sessionGoalWheelStart — 휠이 열리는 칸(최소 10분)', () => {
+  it('회당 시간이 없는 책은 30분에서 연다', () => {
+    expect(sessionGoalWheelStart(null)).toBe(1_800);
+  });
+
+  it('하한(10분) 이전에 저장된 10분 미만 값은 10분에서 연다 — 잠긴 저장 버튼으로 시작하지 않는다', () => {
+    expect(sessionGoalWheelStart(60)).toBe(600);
+    expect(sessionGoalWheelStart(540)).toBe(600);
+  });
+
+  it('10분 이상은 저장된 값 그대로 연다', () => {
+    expect(sessionGoalWheelStart(600)).toBe(600);
+    expect(sessionGoalWheelStart(3_000)).toBe(3_000);
+  });
+
+  it('시트가 이 함수로 시작 칸을 정한다(정적 렌더라 휠 위치는 마크업으로 못 재서 배선을 소스로 잠근다)', () => {
+    expect(sessionGoalSheetSource).toContain('wheelIndices(sessionGoalWheelStart(current), SESSION_GOAL_MAX_HOURS)');
+  });
+});
 
 /**
  * 책별 「회당 시간」 — 「닿음」 판정과 문구를 순수 함수로 꺼냈다. 홈은 매초 `now`를 올리고 이 함수들을

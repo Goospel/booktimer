@@ -30,6 +30,14 @@ export function sessionGoalView(goal: number | null | undefined, elapsed: number
 /** 회당 시간 하한(10분) — 서버 `StudyBook.MIN_SESSION_GOAL_SECONDS`와 같다. */
 export const SESSION_GOAL_MIN_SECONDS = 600;
 
+/**
+ * 휠이 열리는 칸(초) — 없으면 30분, 하한(10분) 이전에 저장된 10분 미만 값은 10분으로 올려 연다
+ * (잠긴 저장 버튼으로 시작하지 않게, 사용자 결정 2026-09-15). 0~9분 칸은 그대로 두고 판정이 잠근다.
+ */
+export function sessionGoalWheelStart(current: number | null): number {
+  return current === null ? DEFAULT_SESSION_GOAL : Math.max(current, SESSION_GOAL_MIN_SECONDS);
+}
+
 /** 휠 판정 — 휠은 분 단위라 빈칸·소수·자투리 초가 원리상 없고, 남는 경계는 10분 미만과 6시간 초과 둘뿐이다. */
 export function sessionGoalWheelState(
   hours: number,
