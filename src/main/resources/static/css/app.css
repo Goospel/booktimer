@@ -10,7 +10,8 @@
    여백 글·인용, 명언 각주가 전부 그 서체를 '명시'한다(상속에 기대는 자리를 두지 않는다). */
 @import url('https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&display=swap');
 
-:root {
+/* 둘째 항목 = 독서등 밑 합쳐진 카드(낮 종이) — 밤이 된 body 안에서 라이트 토큰을 되돌린다(아래 다크 절 끝 「독서등」). */
+:root, body.study-lamp .lamp-page {
     /* 브라우저 강제 다크(크롬 Auto Dark Theme) 거부. `only`가 핵심이다 — `light`만 쓰면 그건
        「라이트만 그린다」는 사실 진술이라, UA가 보기엔 여전히 「다크를 지원하지 않는 페이지」다.
        사용자가 다크를 켜면 아래 블록이 color-scheme: dark로 덮어 이 opt-out을 스스로 푼다. */
@@ -2852,6 +2853,49 @@ img.dash-book-chip-cover { object-fit: cover; background: var(--line-1); }
     .dash-recall-card .study-recall-side { order: 1; }
 }
 
+/* ── 공부 집중 — 측정 중 타이머와 필기가 한 장이 된다(설계 2026-09-15-study-focus-lamp). 색 리터럴 0 ──
+   독서등 색(밤·등불 종이·불빛)은 파일 끝 다크 절 안 「독서등」에 있다(래칫이 건너뛰는 자리). */
+.focus-stack { display: flex; flex-direction: column; gap: 20px; }
+/* 전환 이름 — 필기 카드의 틀이 위로 자라 한 장의 틀이 되고(focus-frame), 히어로는 머리 막대로 줄어들며(focus-top),
+   필기 내용은 같은 요소라 그대로 따라간다(focus-notes). 숫자는 따로 날아간다(clock).
+   이름은 한 화면에 하나씩이어야 한다 — 겹치면 브라우저가 에러 없이 전환을 통째로 건너뛴다. */
+.focus-stack:not(.is-merged) > .focus-top { view-transition-name: focus-top; }
+.focus-stack:not(.is-merged) > .focus-body { view-transition-name: focus-frame; }
+.focus-stack.is-merged .focus-bar { view-transition-name: focus-top; }
+.focus-body .study-day { view-transition-name: focus-notes; }
+.vt-clock { view-transition-name: clock; width: fit-content; }   /* 블록 폭 스냅숏이면 크기가 틀어진다 */
+.focus-stack.is-merged {
+    gap: 0; view-transition-name: focus-frame;
+    border: 1px solid var(--line-2); border-image: var(--pencil-frame) 8 / 8px stretch; border-radius: 22px;
+    background: var(--card-bg);
+}
+/* (0,4,1) — 다크의 `:root[data-theme="dark"] .dash-timer-hero.is-study`(0,4,0, 파일 끝)를 이겨야 한다.
+   body를 빼면 특이도가 같아져 파일 순서로 다크가 이기고, 다크 테마에서 막대만 푸른 차콜로 남는다. */
+body .focus-stack.is-merged > .dash-card.is-study { border: 0; border-image: none; border-radius: 0; background: transparent; box-shadow: none; }
+/* 히어로(.dash-timer-hero)는 원래 flex row·wrap이다 — 막대가 한 줄을 다 차지하고(flex-basis 100%) 회당 시간 폼이 그 아래 줄로 떨어진다 */
+.focus-stack.is-merged > .focus-top { padding: 16px 26px 14px; gap: 0; border-bottom: 1px dashed var(--line-2); }
+.focus-stack.is-merged > .focus-body { padding-top: 18px; }
+.focus-stack.is-merged > .focus-body > .dash-card-head { display: none; }
+.focus-bar { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; }
+.focus-bar .dash-timer-num { font-size: 42px; }
+.focus-kv { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.focus-kv .dash-kv-v { text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.focus-kv.is-book { flex: 1 1 200px; }
+.focus-actions { display: flex; align-items: center; gap: 14px; margin-left: auto; }
+.focus-bar .dash-btn-outline { width: auto; margin: 0; padding: 9px 20px; font-size: 15px; }
+.focus-bar .dash-bookless { align-self: auto; }
+.focus-top .dash-goal-edit { flex-basis: 100%; justify-content: flex-start; margin-top: 10px; }
+.focus-stack.is-merged .study-editor .ProseMirror { min-height: max(300px, calc(100vh - 464px)); font-size: 16px; }
+/* 전환 — 히어로는 먼저 빠지고 막대는 조금 늦게 들어온다(둘이 반투명으로 겹쳐 뿌예지는 구간 제거, 시안 실측) */
+::view-transition-group(*) { animation-duration: .6s; animation-timing-function: cubic-bezier(.22, .9, .24, 1); }
+::view-transition-group(focus-top), ::view-transition-group(focus-notes) { overflow: clip; }
+::view-transition-old(focus-top) { animation-duration: .26s; animation-fill-mode: both; }
+::view-transition-new(focus-top) { animation-delay: .24s; animation-duration: .36s; animation-fill-mode: both; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: .6s; }
+@media (prefers-reduced-motion: reduce) {
+    ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none; }
+}
+
 /* 카드 사이 간격 — 공유 #dashboard-app gap(16px) 위에 대시보드만 여유롭게.
    특이도 (1,1,1) > #dashboard-app (1,0,0)이라 history/books/personality엔 회귀 0. (N-115) */
 body.dashboard-page #dashboard-app { gap: 20px; }
@@ -2926,7 +2970,7 @@ body.dashboard-page #dashboard-app { gap: 20px; }
    --nav-hover-*·--ok까지 덮는 이유: :root에서 var()로 해석된 값이라 --sage-soft만 덮어선 hover·요약 강조가
    세이지로 남는다. --ok가 닿는 곳은 공부 카드 안에선 .grass-summary strong과 회당 시간 달성 줄
    (.dash-session-line.is-reached) 둘이다(.dash-*-ok는 독서 달성 전용) — 둘 다 초록이 아니라 이 공부 잉크로 칠해진다. */
-.is-study {
+.is-study, body.study-lamp .lamp-page .is-study {
     --accent: #5F7E96; --accent-hover: #47657C; --sage-soft: #E6ECF0;
     --nav-hover-bg: #E6ECF0; --nav-hover-border: #D6E0E7;
     --ok: #47657C;
@@ -2938,16 +2982,21 @@ body.dashboard-page #dashboard-app { gap: 20px; }
     --sage-soft-2: #E7EEE2; --nav-hover-border-2: #CFE0C2;
 }
 .dash-timer-hero.is-study { background: #EFF3F6; }   /* 푸른 종이는 히어로만(미니앱 --heroCardBg) */
+/* body.study-lamp .lamp-page 짝(0,4,1)은 독서등 밑 카드에서 다크 리터럴(0,4,0, 파일 끝)을 이기려고 붙인다. */
 .is-study .dash-pill, .is-study .grass-streak,   /* 연속일 칩은 독서 카드에만 있어 .dash-streak-chip은 뺐다 */
 .is-study .dash-progress-track,
-.is-study .dash-btn-outline:hover { background: #E6ECF0; }   /* 리터럴 #E7EEE2 자리들 */
-.is-study .dash-timer-num { color: #47657C; }
+.is-study .dash-btn-outline:hover,
+body.study-lamp .lamp-page .is-study .dash-pill, body.study-lamp .lamp-page .is-study .grass-streak,
+body.study-lamp .lamp-page .is-study .dash-progress-track,
+body.study-lamp .lamp-page .is-study .dash-btn-outline:hover { background: #E6ECF0; }   /* 리터럴 #E7EEE2 자리들 */
+.is-study .dash-timer-num, body.study-lamp .lamp-page .is-study .dash-timer-num { color: #47657C; }
 /* .btn-primary의 채움은 :root 토큰이 아니라 세이지 리터럴 rgba(110,138,106,…)이라 위 스왑이 안 닿는다 —
    공부 카드 안에서만 초록 버튼이 남아 「파랑 카드 + 파랑 글자 + 초록 버튼」이 됐다(/study/books가 첫 자리).
    hover는 :not(:disabled)로 좁힌다 — 안 그러면 .btn-primary:disabled:hover(같은 특이성·앞선 위치)를 눌러
    비활성 버튼까지 hover에 반응한다. 스코프가 공부 전용이라 독서 화면엔 한 줄도 안 닿는다. */
 .is-study .btn-primary { background-color: var(--sage-soft); }
-.is-study .btn-primary:hover:not(:disabled) { background-color: #D6E0E7; }  /* --nav-hover-border와 같은 한 단 짙은 파랑 */
+.is-study .btn-primary:hover:not(:disabled),
+body.study-lamp .lamp-page .is-study .btn-primary:hover:not(:disabled) { background-color: #D6E0E7; }  /* --nav-hover-border와 같은 한 단 짙은 파랑 */
 
 /* 공부 서재(/study/books) — 회독 칩은 토큰만 쓰므로 .is-study 카드 안에서 저절로 파랑이다(리터럴 없음).
    ± 버튼은 .book-actions 규칙(padding·width:auto)을 그대로 받고, 여기선 가로 정렬만 얹는다 —
@@ -3960,7 +4009,7 @@ body.has-rails .container:not(.narrow-page) .study-plan-form { max-width: 620px;
    기대지 않는다. 그래도 파일 끝에 두는 것은 아래 `.is-study` 값 오버라이드들이 자기가 덮는
    라이트 규칙 '뒤'에 오게 하려는 것이다 — 나중에 누가 특이성을 같게 만들어도 순서가 받쳐준다. */
 @media not print {
-:root[data-theme="dark"] {
+:root[data-theme="dark"], body.study-lamp {   /* 둘째 항목 = 독서등(공부 측정 중 홈의 밤) — 테마와 무관하게 이 팔레트 */
     /* 폼 컨트롤·스크롤바·`<input type=date>` 달력까지 네이티브 다크로 넘긴다.
        동시에 크롬 Auto Dark Theme의 표적에서도 벗어난다 — 이미 다크를 그리는 페이지는 안 뒤집는다. */
     color-scheme: dark;
@@ -3977,7 +4026,10 @@ body.has-rails .container:not(.narrow-page) .study-plan-form { max-width: 620px;
     --ok: #5FBF95;
     --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 24px rgba(0,0,0,.40);
     --sage-soft: #2E3A2C;
-    --nav-hover-border: #45563F;    /* --nav-hover-bg는 var(--sage-soft) 별칭이라 자동으로 따라온다 */
+    --nav-hover-border: #45563F;
+    /* 라이트와 같은 별칭을 다시 적는다 — 다크 테마(html)에선 없어도 따라오지만, 독서등(body.study-lamp)은 body에서
+       토큰을 다시 깔아 html에서 라이트로 계산된 값(#E7EEE2)이 그대로 상속된다(밤 바 hover 대비 1.09, 리뷰 실측). */
+    --nav-hover-bg: var(--sage-soft);
     --focus-ring: rgba(143, 174, 134, .40);
 
     /* 의미 토큰 다크판 — 라이트 짝과 1:1이다(darkTokens.test.ts가 양방향으로 센다).
@@ -4104,7 +4156,7 @@ body.has-rails .container:not(.narrow-page) .study-plan-form { max-width: 620px;
 
 /* 공부 잉크 다크 — `.is-study`가 파랑 리터럴로 덮는 토큰들의 다크판.
    이게 없으면 공부 화면만 다크에서 세이지로 튄다(라이트에선 파랑인데 다크에선 초록이 되는 셈). */
-:root[data-theme="dark"] .is-study {
+:root[data-theme="dark"] .is-study, body.study-lamp .is-study {
     --accent: #8FA9BE;
     --accent-hover: #AFC4D2;
     --sage-soft: #27323B;
@@ -4126,4 +4178,19 @@ body.has-rails .container:not(.narrow-page) .study-plan-form { max-width: 620px;
 :root[data-theme="dark"] .is-study .dash-btn-outline:hover { background: #27323B; }
 :root[data-theme="dark"] .is-study .dash-timer-num { color: #AFC4D2; }
 :root[data-theme="dark"] .is-study .btn-primary:hover:not(:disabled) { background-color: #3A4C5A; }
+
+/* ── 독서등(공부) — 측정 중 홈이 밤이 되고 합쳐진 카드만 등불 밑 종이로 남는다(설계 2026-09-15-study-focus-lamp).
+   토큰은 위 두 목록과 라이트 두 목록에 범위를 덧붙여 얻는다(복제 0) — 여기엔 미니앱 독서등 값 셋과 불빛뿐이다.
+   ⚠️ 움직이지 않는다(T-176). 켜고 끄는 전환은 View Transition의 root 크로스페이드가 맡는다.
+   ⚠️ 이 자리(다크 절 안)여야 한다 — 밖에 두면 raw 색 래칫이 운다. */
+body.study-lamp { --bg: #2B251D; --card-bg: #322B22; }                 /* 밤이 된 종이 · 바 표면 */
+body.study-lamp::after {                                                /* 스탠드 불빛 — 결(90) 아래·바(95) 아래, 시안 승인값 */
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 89;
+    background: radial-gradient(ellipse 74% 30% at 50% 22%, rgba(255, 220, 160, .15) 0%, rgba(255, 220, 160, 0) 72%);
+}
+body.study-lamp .lamp-page {
+    --card-bg: #FBF6EA;                       /* 등불 밑이라 낮의 카드지보다 살짝 따뜻하다 */
+    color: var(--text);                       /* 상속 color는 body 계산값이 내려온다 — 낮 토큰으로 다시 계산시킨다(시안 실측) */
+    box-shadow: 0 0 54px 16px rgba(255, 220, 160, .2);   /* 값이 고정된 불빛 한 겹 */
+}
 }

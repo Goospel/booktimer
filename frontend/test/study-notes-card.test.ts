@@ -64,3 +64,22 @@ describe('홈 필기 카드', () => {
         expect(calls().filter(u => u.includes('/api/study/notes?'))).toHaveLength(1);
     });
 });
+
+// 캐럿 중계 — DashboardApp은 카드의 focusEnd만 안다. 카드 → NotesPanel → RecallEditor로 닿아야 한다(§2-6).
+// 끊기면 브라우저에선 에러 없이 캐럿만 안 온다.
+describe('홈 필기 카드 — focusEnd 중계', () => {
+    test('카드의 focusEnd가 편집기 포커스를 문서 끝에 둔다', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (document as any).createRange = () => ({
+            setStart: () => {}, setEnd: () => {}, commonAncestorContainer: document.body,
+            getBoundingClientRect: () => ({ top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0 }),
+            getClientRects: () => ({ length: 0, item: () => null, [Symbol.iterator]: function* () {} }),
+        });
+        const w = await mountCard(9);
+        await vi.waitFor(() => expect(w.find('.ProseMirror').exists()).toBe(true));
+        expect(document.activeElement).not.toBe(w.find('.ProseMirror').element);   // 음성 쌍 — 처음엔 포커스가 없다
+
+        (w.vm as unknown as { focusEnd: () => void }).focusEnd();
+        await vi.waitFor(() => expect(document.activeElement).toBe(w.find('.ProseMirror').element));
+    });
+});

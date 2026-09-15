@@ -4871,7 +4871,7 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
       분석 시점 정답지 스냅샷 · 커닝 방지 잠금. 한 책에 수백 장을 넘기는 날이 오면 `Top500`부터 넣는다
       (그 천장·승급 경로를 `StudyNoteService.reference`에 `ponytail:` 주석으로 박아 뒀다 — 리뷰 M-2).
 
-### 공부 홈 집중 모드 — 필기·백지노트 분리 + 합침 + 독서등 (PR-1 분리 🔜 리뷰 대기 · PR-2 ⬜ 예정)
+### 공부 홈 집중 모드 — 필기·백지노트 분리 + 합침 + 독서등 (PR-1 분리 ✅ · PR-2 합침 🔜 리뷰 대기)
 > 설계 `claude-docs/plans/2026-09-15-study-focus-lamp.md`(작업용 임시, gitignore). 사용자 승인 목표 5건 — ① 필기와 백지노트를
 > 확실히 분리 ② 홈 공부 카드는 필기 하나 ③ 측정 중 타이머와 필기가 한 장 ④ View Transitions 전환 ⑤ 독서등(화면 약간 어둡게).
 > PR 둘로 나눈다 — 구조(PR-1)는 단위테스트로 닫히고, 시각·애니메이션·테마(PR-2)는 실 브라우저에서 값을 다듬을 몫이다.
@@ -4884,8 +4884,16 @@ package-private static이라 호출이 공짜였고, 복제하면 0초 조각 �
   - 홈 공부 카드 = `StudyNotesCard`(pill 「필기」). 필기 책 = 측정 중인 책, 아니면 칩 기본 책(`defaultStudyBookOf` — 칩과 같은 함수).
     홈의 agenda 왕복(1~2회) 삭제. `NotesPanel`은 기본 책이 바뀌면 쓰던 초안을 flush한 뒤 따라간다(측정 중 「책 바꾸기」).
   - ⚠️ 실 브라우저 게이트(U-12·U-13)는 구현 서브에이전트가 로그인할 수 없어 PR에 ABANDON으로 남겼다 — 머지 전 확인 필요.
-- [ ] **PR-2 합침 + 독서등 + 전환** — ③④⑤. 막대(`focus-bar`)·`focus-stack.is-merged`·`body.study-lamp` 토큰 셀렉터 확장·
-  첫 페인트 힌트(`booktimer.studyLamp`)·`withViewTransition`·캐럿(fine pointer만). PR-1 머지 후 새 `origin/main`에서 딴다.
+- [x] **PR-2 합침 + 독서등 + 전환 (2026-09-16)** — ③④⑤ 담당.
+  - 공부 홈 = `.focus-stack.lamp-page`(타이머 + 필기). 측정 중이면 `.is-merged` 한 장 — 타이머 카드가 머리 막대(`focus-bar`:
+    측정 중 · 오늘 · 이번 측정 · 남은 시간/달성 · 지금 공부하는 책 · 회당 시간 변경 · 책 바꾸기 · 측정 종료)로 줄고, 모드 토글은 막대에 없다.
+    회당 시간 폼은 막대 아래 한 줄. 합침 ≡ 독서등 ≡ `studyFocusOn(mode, 공부 측정 중)`.
+  - 독서등 = `body.study-lamp`. 토큰은 복제 없이 기존 네 블록(`:root`·`.is-study`·다크 두 블록)의 셀렉터 목록에 범위를 덧붙여 얻는다 —
+    바탕·바는 밤, 합쳐진 카드만 등불 밑 종이(`#FBF6EA`). 다크 테마 사용자도 같은 그림. `darkTokens.test.ts` 파서가 셀렉터 목록을 쪼갠다.
+  - 새로고침 깜빡임 = `side-rails` 홈 부트가 `booktimer.studyLamp` 힌트로 첫 페인트 전에 등을 켜고, 응답 뒤 서버 진실이 덮는다.
+  - 전환 = View Transitions(시작·종료 클릭에만, `withViewTransition`이 Vue 패치까지 기다린다) · 캐럿은 전환 뒤 필기 끝(마우스·트랙패드만).
+  - 실 브라우저 원장 U-1~U-11 수치로 채움(PR 본문). 설계와 다른 1곳: 합쳐진 카드 투명화 규칙에 `body`를 붙여 특이도를 (0,4,1)로 올렸다 —
+    설계대로 (0,4,0)이면 다크의 히어로 색 규칙과 같아져 파일 순서로 다크가 이겨 막대만 `#222A30`으로 남았다(실측).
 
 ### 미니앱 디자인 개선 핸드오프 — 「또렷한 연필」 + UX 수정 2건 (완료 ✅ 2026-08-24 — 배포 업로드까지)
 > 클로드 디자인 핸드오프(`private-docs/standardHTML/design_handoff_miniapp_ux/`)를 세 덩어리로 나눠 받는다.

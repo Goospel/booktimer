@@ -11,7 +11,7 @@
 //
 // fetch 스텁은 URL별 명시 분기이고 **미지 URL은 throw**한다(우연 통과 금지).
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import DashboardApp from '../src/dashboard/DashboardApp.vue';
 
 const GRAPH = {
@@ -130,14 +130,16 @@ afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); document.body.inn
 async function mountStudy() {
     const w = mount(DashboardApp, { attachTo: document.body });
     await vi.waitFor(() => expect(w.find('.dash-timer-hero').exists()).toBe(true));
-    await w.findAll('.dash-mode-toggle button').find(b => b.text() === '공부')!.trigger('click');
+    // 서버가 공부 측정 중을 실어 오면 이미 공부 모드이고 막대엔 토글이 없다(2026-09-15 결정 6) — 있을 때만 누른다.
+    await w.findAll('.dash-mode-toggle button').find(b => b.text() === '공부')?.trigger('click');
     return w;
 }
+// 히어로 카드 안의 버튼만 — 측정 중엔 우측 패널 대신 머리 막대라(2026-09-15) 카드 루트로 범위를 잡는다(시트 버튼과 안 섞이게).
 const btnWith = (w: ReturnType<typeof mount>, text: string) =>
-    w.findAll('.dash-state-panel button').find(b => b.text().includes(text));
+    w.findAll('.dash-timer-hero button').find(b => b.text().includes(text));
 const sheetRow = (w: ReturnType<typeof mount>, title: string) =>
     w.findAll('.book-sheet-book').find(b => b.text().includes(title))!;
-const kv = (w: ReturnType<typeof mount>) => w.find('.dash-kv-v').text();
+const kv = (w: ReturnType<typeof mount>) => w.find('[data-testid="focus-book"] .dash-kv-v').text();
 
 describe('DashboardApp — 공부 시작 시 책 선택', () => {
     test('(a) 기본 칩(헌법)으로 시작 → start body가 그 id, 독서 문은 0건', async () => {
@@ -429,5 +431,60 @@ describe('DashboardApp — 독서 대조군', () => {
         expect(w.find('.book-sheet-title').text()).toBe('무슨 책을 읽으셨나요?');
         expect(w.text()).not.toContain('공부하셨나요');
         expect(countOf('/api/study/')).toBe(0);
+    });
+});
+
+// 전환 뒤 순서(설계 2026-09-15-study-focus-lamp §2-6·결정 10, 리뷰 Minor-2) — jsdom엔 startViewTransition·matchMedia가 없어
+// 이 두 가지가 한 번도 실행되지 않았다. 가짜 전환의 finished를 붙잡아 「전환이 끝나기 전엔 캐럿도 시트도 없다」를 잰다.
+//  · 통과가 확정하는 것: 캐럿(마우스 환경)과 태깅 시트가 **전환이 끝난 뒤에** 온다.
+//  · 실패가 배제하는 것: 시트를 전환 전에 열기(스냅숏에 찍혀 뚝 나타남) · fine pointer 판별 반전 · 캐럿 호출 삭제.
+describe('DashboardApp — 전환이 끝난 뒤에 캐럿·태깅 시트', () => {
+    let release: () => void = () => { };
+    beforeEach(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (document as any).createRange = () => ({
+            setStart: () => {}, setEnd: () => {}, commonAncestorContainer: document.body,
+            getBoundingClientRect: () => ({ top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0 }),
+            getClientRects: () => ({ length: 0, item: () => null, [Symbol.iterator]: function* () {} }),
+        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (document as any).startViewTransition = (cb: () => Promise<void>) => {
+            const done = cb();
+            const gate = new Promise<void>(r => { release = r; });
+            return { finished: gate.then(() => done) };
+        };
+        vi.stubGlobal('matchMedia', () => ({ matches: true }));
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    afterEach(() => { delete (document as any).startViewTransition; document.body.className = ''; });
+
+    test('(v1) 시작: 전환 중엔 편집기 포커스가 없고, 끝나면 필기 끝에 캐럿이 온다', async () => {
+        const w = await mountStudy();
+        await vi.waitFor(() => expect(w.find('.ProseMirror').exists()).toBe(true));
+
+        await btnWith(w, '공부 측정 시작')!.trigger('click');
+        await vi.waitFor(() => expect(w.find('.focus-stack').classes()).toContain('is-merged'));   // 콜백 안에서 상태는 이미 새 값
+        await flushPromises();
+        expect(document.activeElement).not.toBe(w.find('.ProseMirror').element);
+
+        release();
+        await vi.waitFor(() => expect(document.activeElement).toBe(w.find('.ProseMirror').element));
+    });
+
+    test('(v2) 책 없이 끝낸 종료: 전환 중엔 태깅 시트가 없고, 끝나면 뜬다', async () => {
+        stopStudyBody = { ...STUDY_IDLE, books: SHELF, untaggedSessionId: 42 };
+        const w = await mountStudy();
+        await btnWith(w, '책 없이 시작')!.trigger('click');
+        await vi.waitFor(() => expect(w.find('.focus-stack').classes()).toContain('is-merged'));
+        release();
+        await flushPromises();
+
+        await btnWith(w, '측정 종료')!.trigger('click');
+        await vi.waitFor(() => expect(w.find('.focus-stack').classes()).not.toContain('is-merged'));
+        await flushPromises();
+        expect(w.find('.book-sheet-overlay').exists()).toBe(false);
+
+        release();
+        await vi.waitFor(() => expect(w.find('.book-sheet-overlay').exists()).toBe(true));
     });
 });

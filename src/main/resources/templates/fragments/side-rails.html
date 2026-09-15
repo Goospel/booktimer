@@ -35,8 +35,9 @@
     </aside>
 </div>
 <!-- 홈만: 저장 모드를 첫 페인트 전에 반영(theme-head :: boot와 같은 이유 — 서버는 경로만 알고 저장값은 모른다).
-     리터럴 'booktimer.timerMode'는 timerMode.ts MODE_KEY와 따로 적힌다 — 동기는 timer-mode.test.ts가 지킨다. -->
-<script th:if="${rail.activeKey == 'home'}" th:attr="nonce=${cspNonce}">try{if(localStorage.getItem('booktimer.timerMode')==='study')document.getElementById('side-rails').dataset.mode='study'}catch(e){}</script>
+     같은 태그 안에서 독서등 힌트도 붙인다(공부 측정 중 새로고침의 낮→밤 깜빡임 방지 — 서버 응답 뒤 Vue가 진실로 덮는다).
+     리터럴 'booktimer.timerMode'·'booktimer.studyLamp'·'study-lamp'는 timerMode.ts와 따로 적힌다 — 동기는 timer-mode.test.ts가 지킨다. -->
+<script th:if="${rail.activeKey == 'home'}" th:attr="nonce=${cspNonce}">try{if(localStorage.getItem('booktimer.timerMode')==='study')document.getElementById('side-rails').dataset.mode='study';if(localStorage.getItem('booktimer.studyLamp')==='1')document.body.classList.add('study-lamp')}catch(e){}</script>
 <script type="module" th:attr="nonce=${cspNonce}" th:src="@{/js/rail.js}"></script>
 </th:block>
 </body>

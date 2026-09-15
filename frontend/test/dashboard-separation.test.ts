@@ -46,6 +46,8 @@ const STUDY_IDLE_WITH_BOOKS = {
 
 let dashboardPayload: Record<string, unknown> = DASHBOARD;
 let notesOk = true;
+// /api/dashboard 응답을 붙잡아 두는 게이트 — 「응답 전엔 body 클래스를 건드리지 않는다」를 관측하려면 늦출 수 있어야 한다.
+let dashboardGate: Promise<void> | null = null;
 
 function fetchImpl(url: string) {
     // 미지 URL 폴백에 기대지 않는다 — 모드마다 새로 생기는 경로는 명시 분기로 잡아 우연 통과를 막는다.
@@ -76,7 +78,8 @@ function fetchImpl(url: string) {
     if (url.includes('/api/books')) {
         return Promise.resolve({ ok: true, status: 200, json: async () => ({ searchEnabled: false, books: [] }) });
     }
-    return Promise.resolve({ ok: true, status: 200, json: async () => ({ ...dashboardPayload }) });
+    const res = { ok: true, status: 200, json: async () => ({ ...dashboardPayload }) };
+    return dashboardGate ? dashboardGate.then(() => res) : Promise.resolve(res);
 }
 const urls = () => (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.map(c => String(c[0]));
 const agendaCalls = () => urls().filter(u => u.includes('/api/study/agenda')).length;
@@ -85,6 +88,7 @@ const notesListCalls = () => urls().filter(u => u.includes('/api/study/notes?'))
 beforeEach(() => {
     dashboardPayload = DASHBOARD;
     notesOk = true;
+    dashboardGate = null;
     localStorage.clear();
     vi.stubGlobal('fetch', vi.fn((u: string) => fetchImpl(u)));
     Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
@@ -245,5 +249,79 @@ describe('DashboardApp — 모드가 양옆 바 흐림(#side-rails[data-mode])�
         await mountDashboard();
         await flushPromises();
         expect(railMode()).toBe('reading');
+    });
+});
+
+// 공부 측정 중 홈 = 타이머와 필기가 한 장(.focus-stack.is-merged) + 독서등(body.study-lamp) — 설계 2026-09-15-study-focus-lamp §2-4·§2-5.
+// 색·전환·레이아웃은 jsdom이 못 잰다(실 브라우저 원장 U-1~U-11). 여기선 「언제 켜고 끄는가」와 첫 페인트 힌트의 수명을 잰다.
+//
+// 계측기 메모
+//  · 통과가 확정하는 것: 시작 → 합침·등·힌트, 종료 → 전부 해제 · 독서 모드엔 스택이 없다 · 응답 전엔 부트가 붙인 클래스를 그대로 둔다.
+//  · 실패가 배제하는 것: 마운트 직후 기본값(IDLE_STUDY)으로 힌트를 지워 새로고침마다 낮→밤 깜빡임 · 종료 뒤 등이 눌어붙음.
+describe('DashboardApp — 공부 집중(합침 + 독서등)', () => {
+    const LAMP = 'study-lamp';
+    const KEY = 'booktimer.studyLamp';
+    beforeEach(() => {
+        document.body.innerHTML = '<div id="side-rails" data-mode="reading"></div>';
+        document.body.className = '';
+    });
+    afterEach(() => { document.body.className = ''; });
+
+    test('(l1) 공부 대기: 스택은 있고 합침·등·힌트는 없다 → 시작하면 셋 다 켜지고 → 종료하면 셋 다 꺼진다', async () => {
+        const w = await mountDashboard();
+        await modeBtn(w, '공부').trigger('click');
+        await flushPromises();
+
+        expect(w.find('.focus-stack.lamp-page').exists()).toBe(true);
+        expect(w.find('.focus-stack').classes()).not.toContain('is-merged');
+        expect(document.body.classList.contains(LAMP)).toBe(false);
+        expect(localStorage.getItem(KEY)).toBeNull();
+
+        await btnWith(w, '공부 측정 시작')!.trigger('click');
+        await vi.waitFor(() => expect(w.find('.focus-stack').classes()).toContain('is-merged'));
+        expect(document.body.classList.contains(LAMP)).toBe(true);
+        expect(localStorage.getItem(KEY)).toBe('1');
+
+        await btnWith(w, '측정 종료')!.trigger('click');
+        await vi.waitFor(() => expect(w.find('.focus-stack').classes()).not.toContain('is-merged'));
+        expect(document.body.classList.contains(LAMP)).toBe(false);
+        expect(localStorage.getItem(KEY)).toBeNull();
+    });
+
+    test('(l2) 독서 모드엔 스택이 없다', async () => {
+        const w = await mountDashboard();
+        await flushPromises();
+        expect(w.find('.focus-stack').exists()).toBe(false);
+        expect(w.find('.dash-margin-card').exists()).toBe(true);   // 양성 대조 — 독서 화면을 실제로 그렸다
+    });
+
+    test('(l3) 응답 전엔 부트가 붙인 등을 건드리지 않고, 응답(대기)을 본 뒤에 끈다', async () => {
+        let release: () => void = () => { };
+        dashboardGate = new Promise<void>(r => { release = r; });
+        localStorage.setItem('booktimer.timerMode', 'study');
+        localStorage.setItem(KEY, '1');
+        document.body.classList.add(LAMP);   // 인라인 부트가 첫 페인트 전에 붙인 상태
+
+        const w = mount(DashboardApp, { attachTo: document.body });
+        await flushPromises();
+        expect(w.find('.status-line').text()).toContain('불러오는 중');   // 아직 응답 전이다
+        expect(document.body.classList.contains(LAMP)).toBe(true);
+        expect(localStorage.getItem(KEY)).toBe('1');
+
+        release();
+        await vi.waitFor(() => expect(w.find('.dash-timer-hero').exists()).toBe(true));
+        await flushPromises();
+        expect(document.body.classList.contains(LAMP)).toBe(false);
+        expect(localStorage.getItem(KEY)).toBeNull();
+    });
+
+    test('(l4) 새로고침(측정 중 응답)이면 전환 없이 곧장 합쳐진 한 장이다', async () => {
+        localStorage.setItem('booktimer.timerMode', 'study');
+        dashboardPayload = { ...DASHBOARD, study: STUDY_ACTIVE };
+        const w = await mountDashboard();
+        await flushPromises();
+
+        expect(w.find('.focus-stack').classes()).toContain('is-merged');
+        expect(document.body.classList.contains(LAMP)).toBe(true);
     });
 });

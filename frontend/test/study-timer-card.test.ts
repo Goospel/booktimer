@@ -7,9 +7,10 @@ import StudyTimerCard from '../src/dashboard/StudyTimerCard.vue';
 
 afterEach(() => { vi.useRealTimers(); document.body.innerHTML = ''; });
 
-function mountCard(props: Record<string, unknown>) {
+function mountCard(props: Record<string, unknown>, slots: Record<string, string> = {}) {
     return mount(StudyTimerCard, {
         props: { todaySeconds: 0, hasActiveSession: false, activeStartedAt: null, ...props },
+        slots,
         attachTo: document.body,
     });
 }
@@ -46,11 +47,44 @@ describe('StudyTimerCard — 측정 중', () => {
         const startedAt = new Date(Date.now() - 65_000).toISOString();
         const w = mountCard({ todaySeconds: 3600, hasActiveSession: true, activeStartedAt: startedAt });
 
-        expect(w.find('.dash-session-time').text()).toBe('01:05');
+        expect(w.find('[data-testid="focus-session"]').text()).toContain('01:05');
         expect(w.find('.dash-timer-num').text()).toBe('01:01:05');
 
         await w.findAll('button').find(b => b.text().includes('측정 종료'))!.trigger('click');
         expect(w.emitted('stop')).toHaveLength(1);
+    });
+});
+
+// 합쳐진 카드의 머리 막대(설계 2026-09-15-study-focus-lamp 결정 5·6). 측정 중엔 우측 패널 대신 막대 하나다.
+//
+// 계측기 메모
+//  · 통과가 확정하는 것: 측정 중 = 막대(패널 없음) · 대기 = 패널(막대 없음) · 전환 이름을 받는 숫자(.vt-clock)가
+//    두 상태 모두 **정확히 하나** · 모드 토글 슬롯은 대기에서만 그려진다.
+//  · 실패가 배제하는 것: 두 숫자를 다 그려 전환 이름이 중복(브라우저가 전환을 통째로 건너뛴다 — 에러 없음) ·
+//    막대에 토글이 새어 들어옴 · 막대 누락.
+describe('StudyTimerCard — 합쳐진 카드 머리 막대', () => {
+    const SLOT = { mode: '<span class="mode-probe">토글</span>' };
+
+    test('측정 중: 막대가 서고 우측 패널은 없다 · .vt-clock 하나 · 토글 슬롯은 안 그린다', () => {
+        vi.useFakeTimers();
+        const w = mountCard({ hasActiveSession: true, activeStartedAt: new Date().toISOString() }, SLOT);
+
+        expect(w.find('[data-testid="focus-bar"]').exists()).toBe(true);
+        expect(w.find('.dash-state-panel').exists()).toBe(false);
+        expect(w.findAll('.vt-clock')).toHaveLength(1);
+        expect(w.find('[data-testid="focus-bar"] .vt-clock').exists()).toBe(true);
+        expect(w.find('.mode-probe').exists()).toBe(false);
+        expect(w.find('.dash-timer-hero').classes()).toContain('focus-top');
+    });
+
+    test('대기: 막대가 없고 패널이 선다 · .vt-clock 하나 · 토글 슬롯을 그린다 (양성 쌍)', () => {
+        vi.useFakeTimers();
+        const w = mountCard({ books: [STUDY_BOOK(5, '헌법')], recentBookId: 5 }, SLOT);
+
+        expect(w.find('[data-testid="focus-bar"]').exists()).toBe(false);
+        expect(w.find('.dash-state-panel').exists()).toBe(true);
+        expect(w.findAll('.vt-clock')).toHaveLength(1);
+        expect(w.find('.mode-probe').exists()).toBe(true);
     });
 });
 
@@ -124,8 +158,8 @@ describe('StudyTimerCard — 측정 중 책', () => {
             activeBook: STUDY_BOOK(5, '헌법'),
         });
 
-        expect(w.find('.dash-kv-k').text()).toBe('지금 공부하는 책');
-        expect(w.find('.dash-kv-v').text()).toBe('헌법');
+        expect(w.find('[data-testid="focus-book"] .dash-kv-k').text()).toBe('지금 공부하는 책');
+        expect(w.find('[data-testid="focus-book"] .dash-kv-v').text()).toBe('헌법');
 
         await btn(w, '책 바꾸기')!.trigger('click');
         expect(w.emitted('changeBook')).toHaveLength(1);
@@ -135,7 +169,7 @@ describe('StudyTimerCard — 측정 중 책', () => {
         vi.useFakeTimers();
         const w = mountCard({ hasActiveSession: true, activeStartedAt: new Date().toISOString() });
 
-        expect(w.find('.dash-kv-v').text()).toBe('책 없이');
+        expect(w.find('[data-testid="focus-book"] .dash-kv-v').text()).toBe('책 없이');
         expect(btn(w, '책 바꾸기')).toBeDefined();
     });
 
@@ -143,7 +177,7 @@ describe('StudyTimerCard — 측정 중 책', () => {
         vi.useFakeTimers();
         const w = mountCard({ books: [STUDY_BOOK(5, '헌법')], recentBookId: 5 });
 
-        expect(w.find('.dash-kv').exists()).toBe(false);
+        expect(w.find('[data-testid="focus-book"]').exists()).toBe(false);
         expect(btn(w, '책 바꾸기')).toBeUndefined();
     });
 });
@@ -346,7 +380,9 @@ describe('StudyTimerCard — 회당 시간 폼 위치', () => {
         expect(form.element.previousElementSibling).toBe(w.find('.dash-session-goal').element);
     });
 
-    test('측정 중: 폼은 「회당 시간 변경」 버튼 바로 뒤에 열린다 — 좌열엔 없다', async () => {
+    // 합쳐진 카드(2026-09-15)에선 손잡이가 막대 오른쪽 액션 줄에 있고, 폼은 막대 **아래 한 줄**로 떨어진다
+    // (막대 안에 끼우면 한 줄 막대가 두 줄로 부푼다 — 설계 결정 6).
+    test('측정 중: 폼은 막대 바로 아래(.focus-top 안, 막대의 다음 형제)에 열린다', async () => {
         const w = mountCard({
             hasActiveSession: true, activeStartedAt: new Date(Date.now() - 600_000).toISOString(),
             books: [STUDY_BOOK(5, '헌법', 3000)], activeBook: STUDY_BOOK(5, '헌법', 3000),
@@ -356,8 +392,8 @@ describe('StudyTimerCard — 회당 시간 폼 위치', () => {
 
         const form = w.find('form.dash-goal-edit');
         expect(form.exists()).toBe(true);
-        expect(w.find('.dash-timer-left form.dash-goal-edit').exists()).toBe(false);
-        expect(form.element.previousElementSibling).toBe(handle.element);
+        expect(w.find('.focus-top > form.dash-goal-edit').exists()).toBe(true);
+        expect(form.element.previousElementSibling).toBe(w.find('[data-testid="focus-bar"]').element);
         // 손잡이는 폼을 여는 동안에도 제자리에 남는다(숨기면 그 자리가 빠지며 레이아웃이 튄다).
         expect(btn(w, '회당 시간 변경')).toBeDefined();
     });

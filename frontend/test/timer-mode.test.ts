@@ -2,7 +2,7 @@
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { shouldRefresh, REFRESH_THROTTLE_MS, readMode, writeMode, effectiveMode, MODE_KEY, syncRailMode } from '../src/dashboard/timerMode';
+import { shouldRefresh, REFRESH_THROTTLE_MS, readMode, writeMode, effectiveMode, MODE_KEY, syncRailMode, studyFocusOn, syncStudyLamp, LAMP_KEY, LAMP_CLASS } from '../src/dashboard/timerMode';
 
 describe('shouldRefresh — 60초 스로틀', () => {
     test('스로틀 창 안(59.999초)이면 재조회하지 않는다', () => {
@@ -73,5 +73,50 @@ describe('syncRailMode — 홈 모드를 양옆 바 흐림 상태(#side-rails[da
         const src = readFileSync(join(here, '..', '..', 'src', 'main', 'resources', 'templates', 'fragments', 'side-rails.html'), 'utf8');
         expect(src).toContain(`localStorage.getItem('${MODE_KEY}')==='study'`);
         expect(src).toContain(".dataset.mode='study'");
+    });
+});
+
+// 독서등(설계 2026-09-15-study-focus-lamp §2-5) — 합침 = 독서등 = 이 값 하나. 첫 페인트 힌트는 인라인 부트가 읽는다.
+describe('studyFocusOn / syncStudyLamp — 공부 측정 중 홈의 독서등', () => {
+    test('공부 모드에서 공부 측정 중일 때만 켠다(미니앱 lampOn과 같은 꼴)', () => {
+        expect(studyFocusOn('study', true)).toBe(true);
+        expect(studyFocusOn('study', false)).toBe(false);
+        expect(studyFocusOn('reading', true)).toBe(false);
+    });
+
+    function fakeDoc() {
+        const classes = new Set<string>();
+        return { classes, doc: { body: { classList: { toggle: (c: string, on: boolean) => { if (on) classes.add(c); else classes.delete(c); } } } } as never };
+    }
+    function fakeStorage() {
+        const m: Record<string, string> = {};
+        return { m, s: { setItem: (k: string, v: string) => { m[k] = v; }, removeItem: (k: string) => { delete m[k]; } } };
+    }
+
+    test('켜면 body 클래스 + 힌트 1, 끄면 둘 다 걷는다', () => {
+        const { classes, doc } = fakeDoc();
+        const { m, s } = fakeStorage();
+        syncStudyLamp(doc, true, s);
+        expect(classes.has(LAMP_CLASS)).toBe(true);
+        expect(m[LAMP_KEY]).toBe('1');
+
+        syncStudyLamp(doc, false, s);
+        expect(classes.has(LAMP_CLASS)).toBe(false);
+        expect(LAMP_KEY in m).toBe(false);
+    });
+
+    test('저장소가 throw해도 클래스는 붙고 예외는 삼킨다(사파리 프라이빗)', () => {
+        const { classes, doc } = fakeDoc();
+        const boom = { setItem: () => { throw new Error('QuotaExceeded'); }, removeItem: () => { throw new Error('x'); } };
+        expect(() => syncStudyLamp(doc, true, boom)).not.toThrow();
+        expect(classes.has(LAMP_CLASS)).toBe(true);
+        expect(() => syncStudyLamp(doc, false, boom)).not.toThrow();
+    });
+
+    test('리터럴 동기 — side-rails 인라인 부트가 LAMP_KEY·LAMP_CLASS를 그대로 적는다(첫 페인트 깜빡임 방지)', () => {
+        const here = new URL('.', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+        const src = readFileSync(join(here, '..', '..', 'src', 'main', 'resources', 'templates', 'fragments', 'side-rails.html'), 'utf8');
+        expect(src).toContain(`localStorage.getItem('${LAMP_KEY}')==='1'`);
+        expect(src).toContain(`document.body.classList.add('${LAMP_CLASS}')`);
     });
 });
