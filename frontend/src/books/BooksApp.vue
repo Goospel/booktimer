@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { getCsrfToken } from '../shared/follow'
-import { summarize, initialOf, coverColor, byline, statusBadge, booksNavLinks, marginHandleLabel } from './pure'
-import NavLinks from '../shared/NavLinks.vue'
+import { summarize, initialOf, coverColor, byline, statusBadge, marginHandleLabel } from './pure'
 import MarginPanel from '../shared/story/MarginPanel.vue'
 
 const STATUSES = [
@@ -434,7 +433,5 @@ async function removeBook(book: MyBookSummary) {
                  @close="marginBook = null" @changed="refreshShelf" />
 
     <!-- 제휴 고지는 상단 인사말 우상단 ⓘ 팝오버로 이전(본문 하단 상시 노출 폐지). -->
-
-    <NavLinks :links="booksNavLinks(myLoginId)" />
   </template>
 </template>

@@ -3,7 +3,6 @@ import { ref, onMounted } from 'vue';
 import UserRow from '../shared/UserRow.vue';
 import FollowAction from '../shared/FollowAction.vue';
 import type { UserRowData } from '../shared/follow';
-import NavLinks from '../shared/NavLinks.vue';
 
 const appEl = document.getElementById('book-readers-app');
 const isbn = appEl?.dataset.isbn ?? '';
@@ -66,10 +65,5 @@ onMounted(load);
                 </ul>
             </template>
         </section>
-
-        <NavLinks :links="[
-            { href: '/books', icon: 'books', label: '내 책장' },
-            { href: '/search', icon: 'search', label: '사용자 검색' },
-        ]" />
     </div>
 </template>

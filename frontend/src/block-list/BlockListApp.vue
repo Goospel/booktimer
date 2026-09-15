@@ -2,11 +2,8 @@
 import { ref, onMounted } from 'vue';
 import UserRow from '../shared/UserRow.vue';
 import { setBlock } from '../shared/block';
-import NavLinks from '../shared/NavLinks.vue';
 import type { UserRowData } from '../shared/follow';
 
-const appEl = document.getElementById('block-list-app');
-const myLoginId = ref(appEl?.dataset.myLoginId ?? '');
 const blocked = ref<UserRowData[]>([]);
 const loading = ref(false);
 
@@ -17,7 +14,6 @@ async function load() {
         if (!res.ok) return;
         const data = await res.json();
         blocked.value = data.blocked;
-        if (data.myLoginId) myLoginId.value = data.myLoginId;
     } finally {
         loading.value = false;
     }
@@ -50,10 +46,5 @@ onMounted(load);
                 </UserRow>
             </ul>
         </section>
-
-        <NavLinks :links="[
-            { href: '/', icon: 'home', label: '홈' },
-            { href: `/u/${myLoginId}`, icon: 'user', label: '내 책방' },
-        ]" />
     </div>
 </template>

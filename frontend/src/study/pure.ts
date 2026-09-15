@@ -31,12 +31,6 @@ export interface CalendarDay {
     kept: boolean | null;
 }
 
-export interface NavLinkSpec {
-    href: string;
-    icon: string;
-    label: string;
-}
-
 /** `YYYY-MM-DD` — 로컬 달력 좌표라 UTC 변환을 태우지 않는다(태우면 자정 근처에서 하루가 밀린다). */
 function iso(year: number, month: number, day: number): string {
     return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -295,21 +289,6 @@ export function studyView(pathname: string): StudyView {
     if (pathname.endsWith('/study/history')) return 'history';
     if (pathname.endsWith('/study/books')) return 'books';
     return 'calendar';
-}
-
-const STUDY_PAGES: Record<StudyView, NavLinkSpec> = {
-    calendar: { href: '/study', icon: 'calendar', label: '일정' },
-    books: { href: '/study/books', icon: 'books', label: '공부 서재' },
-    history: { href: '/study/history', icon: 'history', label: '공부 기록' },
-};
-
-/**
- * 하단 네비 — 홈 + 「지금 화면이 아닌」 공부 페이지 둘(일정 · 공부 서재 · 공부 기록 순).
- * 공부 세계 안에서만 돈다: 독서 서재로 가는 문은 미니앱 공부 모드에도 없다.
- */
-export function studyNavLinks(current: StudyView): NavLinkSpec[] {
-    const others = (['calendar', 'books', 'history'] as StudyView[]).filter((v) => v !== current);
-    return [{ href: '/', icon: 'home', label: '홈' }, ...others.map((v) => STUDY_PAGES[v])];
 }
 
 /**

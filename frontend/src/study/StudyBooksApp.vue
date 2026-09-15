@@ -7,7 +7,6 @@
 // 수익 경로가 무추적으로 열린다. 추적 라우트가 생기는 날 붙인다.
 import { computed, onMounted, ref } from 'vue';
 
-import NavLinks from '../shared/NavLinks.vue';
 import { byline, coverColor, initialOf } from '../books/pure';
 import {
     addStudyBook,
@@ -18,7 +17,7 @@ import {
     type SearchRow,
     type StudyBookRow,
 } from './api';
-import { readCountLabel, studyNavLinks, studyOwned } from './pure';
+import { readCountLabel, studyOwned } from './pure';
 
 const books = ref<StudyBookRow[] | null>(null);   // null = 아직 못 받음(로딩 또는 실패)
 const searchEnabled = ref(false);
@@ -198,7 +197,5 @@ onMounted(load);
                 </li>
             </ul>
         </section>
-
-        <NavLinks :links="studyNavLinks('books')" />
     </div>
 </template>

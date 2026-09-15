@@ -864,8 +864,8 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .danger-zone { border-color: var(--danger-line-2); }
 .danger-zone h2 { color: var(--danger); }
 
-/* 공용 하단 네비 — 대시보드 퀵 액션과 동일한 타일 양식(이것이 표준 양식).
-   모든 페이지(검색/프로필/책장/기록/로그인 등)의 .link-row가 이 2열 타일을 공유한다.
+/* 공용 하단 네비 — 바 없는 화면(에러·약관·비밀번호 찾기·관리자)의 2열 타일.
+   로그인 사용자 화면의 이동은 양옆 세로 바(fragments/side-rails)로 옮겼다(2026-09-15).
    링크 수가 홀수면 마지막 타일이 전체폭(단일 링크 페이지=전체폭 버튼 1개). */
 .link-row {
     display: grid;
@@ -1400,8 +1400,6 @@ body.bookdetail-page .record-scroll { max-height: 296px; }
 body.bookdetail-page .bd-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 28px 16px; text-align: center; color: var(--accent); }
 body.bookdetail-page .bd-empty .status-line { margin: 0; line-height: 1.6; font-size: 13.5px; }
 
-/* 하단 이동 타일 — 세로 스택(아이콘 위/라벨 아래). 전역 .link-row(가로 배치)는 다른 페이지 그대로. */
-body.bookdetail-page .link-row a { flex-direction: column; gap: 8px; padding: 20px 16px; border-radius: 18px; }
 .book-author, .book-pub { font-size: .85rem; color: var(--muted); }
 /* 검색 결과 byline — 저자 · 출판사 한 줄(byline() 조립). 시안 My Shelf. */
 .book-byline { font-size: .85rem; color: var(--muted); }
@@ -1490,7 +1488,7 @@ body.bookdetail-page .link-row a { flex-direction: column; gap: 8px; padding: 20
 /* 내 책장 상단 안내 — 공개 토글이 '책방'에 반영됨을 한 줄로 설명(책방 링크 겸). */
 /* ===== 내 책장 리디자인 PR-3 — 헤더·안내·필터·상태·와이드 셸 (시안 My Shelf) ===== */
 
-/* 인사말 헤더 — 제목·통계만. 페이지 이동은 모든 폭에서 하단 .link-row 타일이 담당. */
+/* 인사말 헤더 — 제목·통계만. 페이지 이동은 양옆 세로 바(fragments/side-rails)가 담당. */
 .shelf-greeting { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
 
 /* '내 책장' 카드 헤드 — 제목(좌) + 제휴 고지 ⓘ(우). 책방 .shop-shelf-head 대응(카드 안 우상단).
@@ -2120,7 +2118,7 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 #tab-records:checked ~ .panel-records,
 #tab-missed:checked ~ .panel-missed { display: block; clear: both; padding-top: 18px; }
 /* profile 탭 패널은 record-tab(float:left)을 clear해야 한다 — 안 하면 float가 record-card를
-   collapse시켜 다음 형제 .link-row(block grid)가 stretch 폭을 못 받고 min-content로 짓눌린다.
+   collapse시켜 다음 형제 블록이 stretch 폭을 못 받고 min-content로 짓눌린다(당시엔 하단 .link-row).
    (#449가 죽은 #tab-bti:checked~.panel 셀렉터를 지우며 여기 있던 clear:both를 함께 잃어 회귀.) */
 .panel-bti, .panel-shelf { clear: both; padding-top: 18px; }
 .panel-missed .muted { margin: 0 0 4px; font-size: .85rem; }
@@ -2531,7 +2529,6 @@ body.personality-page #personality-app { gap: 18px; }
 .dash-pill-ok { background: var(--ok-soft-3); color: var(--ok); font-weight: 700; }
 
 /* 제목(pill/head)을 본문에서 띄워 섹션 분리감 — 카드 안 본문은 촘촘히, 제목 아래만 여유 */
-.dash-nav > .dash-pill,
 .dash-card-head { margin-bottom: 4px; }
 
 /* 헤더 한 줄 명언 — 홈 카드 묶음을 "닫는 각주"로 정리(2026-07-10, C안 하이브리드).
@@ -2843,21 +2840,6 @@ img.dash-book-chip-cover { object-fit: cover; background: var(--line-1); }
     display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px;
 }
 
-/* 빠른 이동 */
-.dash-nav { gap: 16px; }
-.dash-nav-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-.dash-nav-tile {
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 9px; min-height: 96px; padding: 14px;
-    border-radius: 14px; background: var(--paper-1); border: 1px solid var(--border);
- border-image: var(--pencil-frame) 8 / 8px stretch;
-    color: var(--accent-hover); text-decoration: none;
-    transition: background .2s ease, border-color .2s ease;
-}
-.dash-nav-tile:hover { background: var(--nav-hover-bg); border-color: var(--nav-hover-border); }
-.dash-nav-tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
-.dash-nav-label { font-size: 14.5px; color: var(--text); }
-
 /* 좁은 폭: 히어로 2단을 세로로 */
 @media (max-width: 520px) {
     .dash-timer-hero { flex-direction: column; align-items: stretch; }
@@ -2890,8 +2872,6 @@ img.dash-book-chip-cover { object-fit: cover; background: var(--line-1); }
     }
     .dash-recall-card .study-recall-main { order: 0; }
     .dash-recall-card .study-recall-side { order: 1; }
-    .dash-nav-grid { grid-template-columns: repeat(3, 1fr); }
-    .dash-nav-tile:last-child:nth-child(odd) { grid-column: auto; }     /* 3열에선 「마지막 타일 전체폭」 규칙이 되레 어긋난다 */
 }
 
 /* 카드 사이 간격 — 공유 #dashboard-app gap(16px) 위에 대시보드만 여유롭게.
@@ -2943,13 +2923,6 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .dash-header-menu-logout .dash-header-menu-item { color: var(--muted); }
 .dash-header-menu-logout .dash-header-menu-item:hover { color: var(--text); }
 
-/* 2단 그리드 — auto-fit이라 자식이 하나면 전체폭으로 선다 */
-.dash-grid-2col {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
-    gap: clamp(16px, 2.2vw, 22px);
-    align-items: start;
-}
 .dash-card-link { font-size: 13.5px; color: var(--accent-hover); text-decoration: none; }
 .dash-card-link:hover { text-decoration: underline; }
 /* 모드 토글 — pill과 한 줄(.dash-timer-head). 전역 button{width:100%}를 width:auto로 상쇄한다

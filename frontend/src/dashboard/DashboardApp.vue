@@ -17,7 +17,6 @@ import RecallCard from './RecallCard.vue'
 import BrandQuote from './BrandQuote.vue'
 import EmailVerifyBanner from './EmailVerifyBanner.vue'
 import WelcomeBanner from './WelcomeBanner.vue'
-import QuickNav from './QuickNav.vue'
 import DashHeader from './DashHeader.vue'
 
 // justOnboarded: 온보딩 직후 셸 data 속성 → main.ts가 읽어 주입. 1회 환영 배너 트리거(§6.4).
@@ -508,9 +507,6 @@ function onSheetAdded(book: { id: number; title: string; status: string }) {
                     :streak="data.graph.currentStreak" @open-sheet="openStartSheet" />
         <RecallCard v-else :books="study.books" />
 
-        <div class="dash-grid-2col">
-            <QuickNav :login-id="data.loginId" :mode="mode" />
-        </div>
 
         <BrandQuote :quotes="data.quotes" />
 

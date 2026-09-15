@@ -5,9 +5,7 @@
 import { ref, onMounted } from 'vue';
 import ContributionGraph from '../history/ContributionGraph.vue';
 import MonthlyRecords from '../history/MonthlyRecords.vue';
-import NavLinks from '../shared/NavLinks.vue';
 import type { GraphDto } from '../history/HistoryApp.vue';
-import { studyNavLinks } from './pure';
 
 /** `GET /api/study/history` = StudyHistoryService.StudyHistory 그대로 — 최신 월·최신 일 먼저, manual 항상 false. */
 interface StudyHistoryResponse {
@@ -49,8 +47,6 @@ onMounted(async () => {
                 <MonthlyRecords :months="data.months"
                                 empty-text="아직 공부 기록이 없어요. 홈에서 공부 모드로 측정을 시작해 보세요." />
             </section>
-
-            <NavLinks :links="studyNavLinks('history')" />
         </template>
 
         <div v-else class="status-line">불러오는 중…</div>

@@ -7,7 +7,6 @@ import ShopHeader from './ShopHeader.vue';
 import ReportModal from '../shared/ReportModal.vue';
 import BtiPanel from './BtiPanel.vue';
 import ShelfPanel from './ShelfPanel.vue';
-import NavLinks from '../shared/NavLinks.vue';
 import MarginPanel from '../shared/story/MarginPanel.vue';
 
 // ── dataset ──────────────────────────────────────────────────────────────
@@ -285,12 +284,6 @@ onUnmounted(() => {
             <MarginPanel v-if="marginBook" :login-id="loginId" :book-id="marginBook.id"
                          @close="marginBook = null" @changed="onMarginChanged" />
 
-            <!-- ── 하단 링크 (전 페이지 공유 .link-row 타일) ──
-                 차단 목록은 자주 안 쓰는 계정 관리라 책방 상시 노출 대신 대시보드 아바타 메뉴(DashHeader)로 이동. -->
-            <NavLinks :links="[
-                { href: '/', icon: 'home', label: '홈' },
-                { href: '/books', icon: 'books', label: '내 책장' },
-            ]" />
 
         </template>
     </div>
