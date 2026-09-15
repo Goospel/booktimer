@@ -97,4 +97,70 @@ class SideRailsTemplateTest {
         }
         assertThat(count).as("인라인 부트 + rail.js 모듈").isEqualTo(2);
     }
+
+    @Test
+    @DisplayName("바 fragment의 icon('x') 이름은 전부 nav-icons.html 사전 키다(오타는 빈 SVG로 조용히 샌다)")
+    void railIconsExistInDictionary() throws IOException {
+        String rails = Files.readString(TEMPLATES.resolve("fragments/side-rails.html"));
+        String icons = Files.readString(TEMPLATES.resolve("fragments/nav-icons.html"));
+        Set<String> keys = new TreeSet<>();
+        Matcher k = Pattern.compile("th:case=\"'([a-z]+)'\"").matcher(icons);
+        while (k.find()) keys.add(k.group(1));
+        Set<String> used = new TreeSet<>();
+        Matcher u = Pattern.compile("nav-icons\\s*::\\s*icon\\('([^']+)'\\)").matcher(rails);
+        while (u.find()) used.add(u.group(1));
+
+        assertThat(used).as("훑을 대상이 있어야 한다(공허 방지)").hasSize(7);
+        assertThat(keys).containsAll(used);
+    }
+
+    // ── app.css 규약(주석을 걷고 본다 — 주석이 값을 인용하면 공허하게 통과한다, T-205) ──
+
+    private static final Path APP_CSS = Path.of("src/main/resources/static/css/app.css");
+
+    /** 셀렉터에 needle이 든 가장 안쪽 규칙들의 선언부(미디어 블록 안 규칙 포함). */
+    private static java.util.List<String> declarationsOf(String needle) throws IOException {
+        String css = Files.readString(APP_CSS).replaceAll("(?s)/\\*.*?\\*/", "");
+        java.util.List<String> out = new java.util.ArrayList<>();
+        Matcher m = Pattern.compile("([^{}]+)\\{([^{}]*)}").matcher(css);
+        while (m.find()) {
+            for (String sel : m.group(1).split(",")) {
+                if (sel.trim().equals(needle)) out.add(m.group(2));
+            }
+        }
+        return out;
+    }
+
+    @Test
+    @DisplayName("app.css에 .rail:hover 셀렉터가 없다 — hover로 펼치면 가로 배치가 즉시 뒤집혀 스침이 보인다(지연은 rail.js)")
+    void noCssHoverExpansion() throws IOException {
+        String css = Files.readString(APP_CSS).replaceAll("(?s)/\\*.*?\\*/", "");
+        assertThat(css).contains(".rail.is-open"); // 양성 대조 — 펼침 규칙 자체는 있다
+        assertThat(css).doesNotContainPattern("\\.rail:hover");
+    }
+
+    @Test
+    @DisplayName("흐린 바 opacity ≥ .7 — 12.5px 라벨 4.5:1 · 아이콘 3:1(WCAG AA)")
+    void dimmedRailKeepsContrast() throws IOException {
+        java.util.List<String> decls = declarationsOf("#side-rails[data-mode=\"reading\"] .rail-study");
+        assertThat(decls).hasSize(1);
+        Matcher o = Pattern.compile("opacity\\s*:\\s*([0-9.]+)").matcher(decls.get(0));
+        assertThat(o.find()).isTrue();
+        assertThat(Double.parseDouble(o.group(1))).isGreaterThanOrEqualTo(0.7);
+    }
+
+    @Test
+    @DisplayName("접힌 바는 짧은 창에서 세로로 스크롤된다(overflow-y:auto) — 아래 메뉴가 잘리지 않게")
+    void railScrollsVertically() throws IOException {
+        java.util.List<String> decls = declarationsOf(".rail");
+        assertThat(decls).anySatisfy(d -> assertThat(d).containsPattern("overflow-y\\s*:\\s*auto"));
+        assertThat(decls).noneSatisfy(d -> assertThat(d).containsPattern("overflow\\s*:\\s*hidden"));
+    }
+
+    @Test
+    @DisplayName("PWA 설치 칩은 바가 있는 화면에서 오른쪽 바(16+92+16) 안쪽으로 비킨다")
+    void pwaChipClearsRightRail() throws IOException {
+        assertThat(declarationsOf("body.has-rails #pwa-install-chip"))
+                .anySatisfy(d -> assertThat(d).containsPattern("right\\s*:\\s*124px\\s*!important"));
+    }
 }

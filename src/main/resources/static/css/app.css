@@ -31,7 +31,7 @@
     --shadow: 0 1px 2px rgba(60, 50, 30, .05), 0 8px 24px rgba(60, 50, 30, .06);
     /* 보조 토큰 — 랜딩부터 점진 적용(전역 강제 아님) */
     --sage-soft: #E7EEE2;   /* 연한 세이지 fill */
-    /* nav hover — 대시보드 QuickNav 타일과 footer .link-row 버튼이 공유하는 hover 상태(단일 출처).
+    /* nav hover — 양옆 세로 바 메뉴(.rail-item)와 하단 .link-row 버튼이 공유하는 hover 상태(단일 출처).
        한쪽 색만 바꿔 둘이 어긋나는 drift를 막는다. */
     --nav-hover-bg: var(--sage-soft);   /* hover 배경 = 연녹 채움(#E7EEE2) */
     --nav-hover-border: #CFE0C2;        /* hover 테두리 = 연녹 */
@@ -308,7 +308,7 @@ body::before {
     color: var(--accent-hover);
 }
 
-/* 헤더 로고 책 아이콘 — footer·QuickNav와 통일한 라인아트 책 SVG(책등 3권).
+/* 헤더 로고 책 아이콘 — 네비 아이콘 사전(nav-icons · navIcons.ts)과 통일한 라인아트 책 SVG(책등 3권).
    stroke=currentColor라 로고 색(--accent-hover)을 상속. .brand-home이 align-items:baseline이라
    inline SVG는 텍스트보다 살짝 떠 보여 align-self:center로 제목과 광학 정렬. */
 .brand .brand-ico { width: 1.5rem; height: 1.5rem; align-self: center; color: var(--accent-hover); }
@@ -889,14 +889,12 @@ button:disabled, .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     word-break: keep-all;
     transition: background .2s ease, border-color .2s ease, transform .05s;
 }
-/* hover 효과를 대시보드 QuickNav 타일과 통일 — 테두리 강조+그림자(떠오름) 대신
-   연녹 채움(.dash-nav-tile:hover와 같은 --nav-hover-* 토큰 공유). */
+/* hover 효과 — 테두리 강조+그림자(떠오름) 대신 연녹 채움(양옆 바 .rail-item:hover와 같은 --nav-hover-* 토큰 공유). */
 .link-row a:hover { background: var(--nav-hover-bg); border-color: var(--nav-hover-border); text-decoration: none; }
 .link-row a:active { transform: translateY(1px); }
 .link-row a:last-child:nth-child(odd) { grid-column: 1 / -1; }
-/* footer .link-row 내 라인 아이콘 — 전 페이지 공통(Vue NavIcon · Thymeleaf nav-icons fragment
-   가 공유). 색은 대시보드 타일 아이콘과 동일한 딥세이지(accent-hover)로 통일 — 라벨(차콜)과
-   분리되어 대시보드 QuickNav 타일과 같은 룩. 정렬·간격은 .link-row a의 flex가 처리. */
+/* 하단 .link-row 내 라인 아이콘 — Thymeleaf nav-icons fragment. 색은 양옆 바 아이콘과 같은
+   딥세이지(accent-hover) — 라벨(차콜)과 분리된다. 정렬·간격은 .link-row a의 flex가 처리. */
 .link-row a svg.link-ico { flex: 0 0 auto; color: var(--accent-hover); }
 
 /* 하이라이트 밴드 — 측정 카드 바로 밑, '재미' 동선(내 책장·내 공개 프로필) 승격용.
@@ -1629,7 +1627,7 @@ body.profile-page .container { max-width: 1160px; }  /* 와이드 2열 여유 �
 
 /* 내 책방(self) 상단 사용자 검색 진입점 — 검색 input처럼 보이되 실제론 /search 링크(트위터식).
    책방엔 슬림 진입점만, 무거운 검색 패널/추천은 전용 페이지로 위임(책방 비대화 방지).
-   톤: .book-search-form input(테두리·라운드) + .dash-nav-tile(연베이지 채움·hover 토큰) 혼합. */
+   톤: .book-search-form input(테두리·라운드) + 연베이지 채움·--nav-hover-* 토큰(옛 홈 빠른 이동 타일의 톤) 혼합. */
 .shop-search-entry {
     display: flex; align-items: center; gap: 10px;
     padding: 11px 16px;
@@ -1878,7 +1876,7 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
 
 /* 책 그리드 — 모바일 1열, 와이드 2열 */
 .shop-books { display: grid; grid-template-columns: 1fr; gap: 12px; list-style: none; padding: 0; margin: 0; }
-.shop-wide .shop-books { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }  /* 카드 최소 300px — 넓으면 2열, 중간폭(메인<614px)이면 1열 풀폭으로 우아하게 강등(대시보드 .dash-grid-2col 관용구) */
+.shop-wide .shop-books { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }  /* 카드 최소 300px — 넓으면 2열, 중간폭(메인<614px)이면 1열 풀폭으로 우아하게 강등(repeat(auto-fit, minmax()) 관용구) */
 
 /* 공개 책장 ul을 스크롤 박스로(PC·모바일 공통) — max-height에 닿으면 내부 스크롤이라 페이지가
    책 수만큼 길어지지 않고, 하단 네비(대시보드·내 책장)가 늘 바로 아래 보인다. 책 적으면
@@ -2502,7 +2500,7 @@ body.personality-page #personality-app { gap: 18px; }
     /* 카드 테두리: 연필선 — 묶음끼리 명시적 구분 (대시보드 전용, 전역 --border 무변경).
        ⚠️ 종이·연필 테마의 일괄 적용은 「`.card`이거나 `border: 1px solid var(--border)`인 것」을 기준으로
        돌아서, 자체 색으로 테두리를 선언한 이 클래스는 통째로 빠져 있었다 — 홈의 카드 4개와 책방 카드가
-       전부 매끈한 선이었고, 정작 그 안의 .dash-state-panel·.dash-nav-tile엔 연필선이 있어 한 화면에서
+       전부 매끈한 선이었고, 정작 그 안의 .dash-state-panel·(당시) 빠른 이동 타일엔 연필선이 있어 한 화면에서
        두 양식이 갈렸다(2026-08-25 실측). 색은 border-image가 로드 안 될 때의 폴백으로 남긴다. */
     border: 1px solid var(--line-2);
     border-image: var(--pencil-frame) 8 / 8px stretch;
@@ -3924,7 +3922,8 @@ body.has-rails { padding-left: 124px; padding-right: 124px; }   /* 16 + 92 + 16 
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
-    overflow: hidden;
+    overflow-x: hidden;   /* 펼침 전이 중 가로 넘침만 자른다 */
+    overflow-y: auto;     /* 짧은 창·확대 배율에서 아래 메뉴(사용자 검색)가 잘리지 않고 스크롤된다 */
     padding: 18px 8px;
     border-radius: 18px;
     background-color: var(--card-bg);
@@ -3944,8 +3943,9 @@ body.has-rails { padding-left: 124px; padding-right: 124px; }   /* 16 + 92 + 16 
 .rail-item[aria-current="page"] { background: var(--sage-soft); border-color: var(--nav-hover-border); border-image: var(--pencil-frame) 8 / 8px stretch; color: var(--accent-hover); }
 @media (hover: hover) and (pointer: fine) { .rail-item:hover:not([aria-current]) { background: var(--nav-hover-bg); text-decoration: none; } }
 .rail-item:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus-ring); }
-/* 흐림 — 지금 모드의 반대쪽. 펼치면(어느 경로로든) 진해진다 */
-#side-rails[data-mode="reading"] .rail-study, #side-rails[data-mode="study"] .rail-reading { opacity: .6; }
+/* 흐림 — 지금 모드의 반대쪽. 펼치면(어느 경로로든) 진해진다.
+   .7이 하한이다: 라이트 12.5px 라벨 대비 5.40:1(AA 4.5) · 아이콘 3.07:1(비텍스트 3). .6이면 4.01 · 2.55로 미달 */
+#side-rails[data-mode="reading"] .rail-study, #side-rails[data-mode="study"] .rail-reading { opacity: .7; }
 /* 펼침 — 데스크톱 머묾·태블릿 탭(둘 다 rail.js의 is-open)·키보드(focus-within) 셋이 같은 모양 */
 #side-rails .rail.is-open, #side-rails .rail:focus-within {
     width: 232px;
@@ -3958,6 +3958,9 @@ body.has-rails { padding-left: 124px; padding-right: 124px; }   /* 16 + 92 + 16 
 @media (prefers-reduced-motion: reduce) { .rail { transition: none; } }
 /* ponytail: <640px엔 이동 수단이 브랜드 홈 링크뿐 — 폰 웹을 지원하기로 바뀌면 하단 탭바를 여기 단다(웹=데스크톱·태블릿, 2026-09-07 방침) */
 @media (max-width: 639px) { .rail { display: none; } body.has-rails { padding-left: 16px; padding-right: 16px; } }
+/* PWA 설치 칩(pwa-install.js가 right:16px 인라인으로 꽂는다)이 오른쪽 바를 덮지 않게 바 안쪽으로 비킨다.
+   !important는 인라인 스타일을 이기기 위한 것이다(인라인은 어떤 셀렉터보다 세다). */
+@media (min-width: 640px) { body.has-rails #pwa-install-chip { right: 124px !important; } }
 
 /* ── 다크 테마 ────────────────────────────────────────────
    `:root`의 색 토큰만 덮는다. 토큰이 안 닿는 raw 리터럴 규칙(설정 배너·상태 배지·흰 채움 등)은

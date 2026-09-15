@@ -16,10 +16,18 @@ export function bindRails(doc, win) {
     const rails = Array.from(root.querySelectorAll('.rail'));
     const mq = win.matchMedia(HOVER_QUERY);
     let timer = null;
-    const close = () => {
+    const collapse = () => {
         win.clearTimeout(timer);
         rails.forEach((r) => r.classList.remove('is-open'));
-        if (root.contains(doc.activeElement)) doc.activeElement.blur(); // :focus-within이 펼침을 붙잡지 않게
+    };
+    // :focus-within이 펼침을 붙잡지 않게 푼다 — 단 그 영역 안의 포커스만. 마우스가 스쳐 간 바 때문에
+    // 다른 바에 둔 키보드 포커스가 body로 튀면 안 된다(#1137 리뷰).
+    const blurIn = (el) => {
+        if (el.contains(doc.activeElement)) doc.activeElement.blur();
+    };
+    const close = () => {
+        collapse();
+        blurIn(root);
     };
 
     rails.forEach((rail) => {
@@ -28,14 +36,17 @@ export function bindRails(doc, win) {
             if (!mq.matches) return; // 터치 탭이 흉내 내는 mouseenter는 무시
             win.clearTimeout(timer);
             timer = win.setTimeout(() => {
-                close();
+                collapse(); // 다른 바는 닫되 포커스는 건드리지 않는다
                 rail.classList.add('is-open');
             }, ENTER_DELAY_MS);
         });
         rail.addEventListener('mouseleave', () => {
             if (!mq.matches) return;
             win.clearTimeout(timer);
-            timer = win.setTimeout(close, LEAVE_DELAY_MS);
+            timer = win.setTimeout(() => {
+                collapse();
+                blurIn(rail); // 막 떠난 이 바 안의 포커스만
+            }, LEAVE_DELAY_MS);
         });
         rail.addEventListener('click', (e) => {
             if (mq.matches) return; // 데스크톱: 링크는 그대로 이동
@@ -51,7 +62,7 @@ export function bindRails(doc, win) {
     doc.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') close();
     });
-    mq.addEventListener('change', close); // 마우스를 붙이거나 떼면 열린 상태를 정리
+    mq.addEventListener?.('change', close); // 마우스를 붙이거나 떼면 열린 상태를 정리(옛 Safari<14엔 없다)
     return { close };
 }
 

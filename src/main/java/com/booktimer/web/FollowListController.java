@@ -1,12 +1,8 @@
 package com.booktimer.web;
 
-import com.booktimer.security.CurrentUserService;
-import com.booktimer.user.User;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
-
-import java.security.Principal;
 
 /**
  * 본인 팔로워/팔로잉 목록 SSR 셸 — {@code /me/**}.
@@ -17,29 +13,15 @@ import java.security.Principal;
 @Controller
 public class FollowListController {
 
-    private final CurrentUserService currentUserService;
-
-    public FollowListController(CurrentUserService currentUserService) {
-        this.currentUserService = currentUserService;
-    }
-
     @GetMapping("/me/followers")
-    public String followers(Principal principal, Model model) {
-        User me = currentUser(principal);
-        model.addAttribute("myLoginId", me.getLoginId());
+    public String followers(Model model) {
         model.addAttribute("initialTab", "followers");
         return "follow-list";
     }
 
     @GetMapping("/me/following")
-    public String following(Principal principal, Model model) {
-        User me = currentUser(principal);
-        model.addAttribute("myLoginId", me.getLoginId());
+    public String following(Model model) {
         model.addAttribute("initialTab", "following");
         return "follow-list";
-    }
-
-    private User currentUser(Principal principal) {
-        return currentUserService.resolve(principal);
     }
 }

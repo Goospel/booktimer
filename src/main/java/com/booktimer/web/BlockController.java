@@ -1,12 +1,7 @@
 package com.booktimer.web;
 
-import com.booktimer.security.CurrentUserService;
-import com.booktimer.user.User;
 import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
-
-import java.security.Principal;
 
 /**
  * 차단 목록 Vue 셸 (SNS 5단계, sns-design §7.5).
@@ -17,20 +12,9 @@ import java.security.Principal;
 @Controller
 public class BlockController {
 
-    private final CurrentUserService currentUserService;
-
-    public BlockController(CurrentUserService currentUserService) {
-        this.currentUserService = currentUserService;
-    }
-
+    /** 셸만 — 목록은 API, 내 책방 링크는 양옆 바(RailModelAdvice)가 싣는다. */
     @GetMapping("/me/blocks")
-    public String blocks(Principal principal, Model model) {
-        User me = currentUser(principal);
-        model.addAttribute("myLoginId", me.getLoginId());
+    public String blocks() {
         return "block-list";
-    }
-
-    private User currentUser(Principal principal) {
-        return currentUserService.resolve(principal);
     }
 }

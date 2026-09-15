@@ -16,12 +16,11 @@ const MOCK_RESPONSE = {
     rateLimited: false,
 };
 
-function setupDom(initialQ = '', myLoginId = 'testuser') {
+function setupDom(initialQ = '') {
     document.body.innerHTML = `
         <meta name="_csrf" content="csrf-token-test">
         <div id="search-app"
-             data-initial-q="${initialQ}"
-             data-my-login-id="${myLoginId}">
+             data-initial-q="${initialQ}">
         </div>
     `;
 }

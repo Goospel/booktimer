@@ -113,7 +113,9 @@ describe('DashboardApp — 모드가 쓰는 카드를 끌고 간다', () => {
         expect(w.find('[data-testid="recall-body"]').exists()).toBe(true);
         expect(w.find('.dash-margin-card').exists()).toBe(false);
         // 공부 기록으로 가는 문은 홈 본문에 **없다** — 빠른 이동 타일은 SSR 양옆 바(fragments/side-rails)로 옮겼다(2026-09-15).
-        // 옛 양성 대조군(타일 1개)은 서버 RailModelAdviceTest의 /study/history aria-current 단언이 잇는다.
+        // 양성 대조군 — 같은 마운트·같은 셀렉터 꼴로 공부 카드 안의 실제 링크(「공부 서재에 책 담기」)는 잡힌다.
+        // 이게 없으면 아래 0은 「링크를 못 찾는 조회」와 구분되지 않는다(서버 테스트는 런타임이 달라 대조군이 못 된다).
+        expect(w.findAll('a[href="/study/books"]')).toHaveLength(1);
         expect(w.findAll('a[href="/study/history"]')).toHaveLength(0);
         expect(w.findAll('a[href="/history"]')).toHaveLength(0);
     });

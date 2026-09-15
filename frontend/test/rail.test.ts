@@ -151,6 +151,68 @@ describe('bindRails — 데스크톱(hover): 머물면 펼치고 벗어나면 �
     });
 });
 
+describe('bindRails — 리뷰 반영(#1137): 포커스·동시 펼침·입력 장치 전환·옛 Safari', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    test('키보드 포커스가 한 바에 있는 채 마우스가 다른 바에 머물러도 포커스를 빼앗지 않는다', () => {
+        const f = fixture();
+        bindRails(document, fakeWin(true));
+        f.a1.focus();
+        f.study.dispatchEvent(new MouseEvent('mouseenter'));
+        vi.advanceTimersByTime(150);
+        expect(f.study.classList.contains('is-open')).toBe(true);
+        expect(document.activeElement).toBe(f.a1);
+    });
+
+    test('마우스가 다른 바를 떠날 때도 키보드 포커스는 그대로 — blur는 막 떠난 바 안의 포커스만', () => {
+        const f = fixture();
+        bindRails(document, fakeWin(true));
+        f.a1.focus();
+        f.study.dispatchEvent(new MouseEvent('mouseenter'));
+        vi.advanceTimersByTime(150);
+        f.study.dispatchEvent(new MouseEvent('mouseleave'));
+        vi.advanceTimersByTime(100);
+        expect(f.study.classList.contains('is-open')).toBe(false);
+        expect(document.activeElement).toBe(f.a1);
+    });
+
+    test('펼친 바를 떠나 100ms 안에 반대쪽 바에 머물면 먼저 것은 닫히고 새 것만 펼친다(동시 펼침 없음)', () => {
+        const f = fixture();
+        bindRails(document, fakeWin(true));
+        f.reading.dispatchEvent(new MouseEvent('mouseenter'));
+        vi.advanceTimersByTime(150);
+        f.reading.dispatchEvent(new MouseEvent('mouseleave'));
+        vi.advanceTimersByTime(50);
+        f.study.dispatchEvent(new MouseEvent('mouseenter'));
+        vi.advanceTimersByTime(150);
+        expect(f.reading.classList.contains('is-open')).toBe(false);
+        expect(f.study.classList.contains('is-open')).toBe(true);
+    });
+
+    test('입력 장치가 바뀌면(matchMedia change) 열린 바를 접는다', () => {
+        const f = fixture();
+        const listeners: Array<() => void> = [];
+        const win = {
+            matchMedia: () => ({ matches: false, addEventListener: (_: string, fn: () => void) => listeners.push(fn) }),
+            setTimeout, clearTimeout,
+        } as unknown as Window;
+        bindRails(document, win);
+        click(f.a1);
+        expect(openCount()).toBe(1);
+        listeners.forEach((fn) => fn());
+        expect(openCount()).toBe(0);
+    });
+
+    test('MediaQueryList.addEventListener가 없는 옛 Safari(<14)에서도 배선이 죽지 않는다', () => {
+        const f = fixture();
+        const win = { matchMedia: () => ({ matches: false }), setTimeout, clearTimeout } as unknown as Window;
+        expect(() => bindRails(document, win)).not.toThrow();
+        click(f.a1);
+        expect(openCount()).toBe(1);
+    });
+});
+
 test('#side-rails가 없는 페이지 → null, 예외 없음', () => {
     document.body.innerHTML = '<main></main>';
     expect(bindRails(document, fakeWin(true))).toBeNull();

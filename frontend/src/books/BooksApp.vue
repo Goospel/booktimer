@@ -34,7 +34,7 @@ const myLoginId = ref<string>(appEl?.dataset.myLoginId ?? '')
 
 // 여백 패널 — 책방(ProfileApp)과 같은 공용 패널. 책장은 언제나 본인이라 loginId = myLoginId 다.
 // 핸들이 없으면(온보딩 전 — BookController 는 loginId null 을 그대로 싣는다) 서버가 대상을 못 찾으니
-// 손잡이를 아예 그리지 않는다(booksNavLinks 의 /u/ 가드와 같은 이유).
+// 손잡이를 아예 그리지 않는다(양옆 바 RailNav.shopHref 의 /u/ 가드와 같은 이유).
 const marginBook = ref<MyBookSummary | null>(null)
 const canOpenMargin = computed(() => myLoginId.value.trim() !== '')
 

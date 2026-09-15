@@ -1,11 +1,11 @@
 /**
- * 공통 네비 라인 아이콘 사전 — 전 페이지 하단 네비(.link-row)와 대시보드 타일(QuickNav)이
- * 공유한다. 이모지 전면 금지(대시보드 스킨 통일). 각 값 = viewBox "0 0 24 24" 안의 inner
- * SVG 프리미티브 문자열. NavIcon이 공통 stroke/fill 래퍼를 씌워 currentColor(부모 color)를
- * 상속한다. profile의 icons.ts는 이 사전을 재export해 흡수한다(단일 출처).
+ * 공통 네비 라인 아이콘 사전 — Vue 섬(책방 ShopIcon 등)이 쓰고, SSR 사전(fragments/nav-icons.html —
+ * 양옆 세로 바·하단 .link-row)과 같은 path를 유지한다(navIcons.test.ts가 키 동기를 지킨다).
+ * 이모지 전면 금지. 각 값 = viewBox "0 0 24 24" 안의 inner SVG 프리미티브 문자열. 래퍼(ShopIcon)가
+ * 공통 stroke/fill을 씌워 currentColor(부모 color)를 상속한다. profile의 icons.ts는 이 사전을 재export한다(단일 출처).
  */
 export const NAV_ICONS: Record<string, string> = {
-    // 책등 3권 (내 책장 — QuickNav와 동일)
+    // 책등 3권 (내 책장)
     books: '<rect x="4" y="4" width="3.4" height="16" rx="1"/><rect x="9.3" y="4" width="3.4" height="16" rx="1"/><path d="M15 5.4l3.3-.7 2.4 15.4-3.3.7z"/>',
     // 사람 (내 책방)
     user: '<circle cx="12" cy="8" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/>',
@@ -29,14 +29,14 @@ export const NAV_ICONS: Record<string, string> = {
     chevron: '<path d="M9 6l6 6-6 6"/>',
     // 닫기
     close: '<path d="M6 6l12 12"/><path d="M18 6L6 18"/>',
-    // ── 하단 네비 통일로 추가 (QuickNav와 동일 라인아트 스타일) ──
-    // 막대 그래프 (독서 기록 — QuickNav와 동일)
+    // ── 하단 네비 통일로 추가 (같은 라인아트 스타일) ──
+    // 막대 그래프 (독서 기록)
     history: '<path d="M3 20h18"/><path d="M6 20v-6"/><path d="M12 20V6"/><path d="M18 20v-9"/>',
     // 달력 (일정 — 미니앱 CALENDAR_TAB과 같은 path)
     calendar: '<path d="M4.5 6.5h15v13h-15zM4.5 10.5h15M8.5 4v4M15.5 4v4"/>',
-    // 돋보기 (탐색/검색 — QuickNav와 동일)
+    // 돋보기 (탐색/검색)
     search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
-    // DNA 나선 (책BTI — QuickNav와 동일)
+    // DNA 나선 (책BTI)
     personality: '<path d="M7 4c0 5 10 5 10 8s-10 3-10 8"/><path d="M17 4c0 5-10 5-10 8s10 3 10 8"/><path d="M8.5 7h7"/><path d="M8.5 17h7"/>',
     // 방패 (개인정보처리방침)
     privacy: '<path d="M12 3l7 2.6v5.4c0 4.2-2.9 7.2-7 8.5-4.1-1.3-7-4.3-7-8.5V5.6z"/>',
