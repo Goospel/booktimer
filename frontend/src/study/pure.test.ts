@@ -151,6 +151,16 @@ describe('recallDateParam', () => {
         expect(recallDateParam('?date=')).toBeNull();
         expect(recallDateParam('')).toBeNull();
     });
+
+    // 형식은 맞는데 달력에 없는 날 — 2월 30일은 머리 「2월 30일」+ 저장 400, 13월은 agenda 실패로 화면 전체가 막힌다.
+    it('달력에 없는 날(2026-02-30 · 2026-13-01)은 null', () => {
+        expect(recallDateParam('?date=2026-02-30')).toBeNull();
+        expect(recallDateParam('?date=2026-13-01')).toBeNull();
+    });
+
+    it('윤년 2월 29일은 있는 날이다', () => {
+        expect(recallDateParam('?date=2028-02-29')).toBe('2028-02-29');
+    });
 });
 
 describe('studyOwned', () => {

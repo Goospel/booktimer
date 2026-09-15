@@ -241,6 +241,10 @@ async function handleStudyStart(bookId: number | null) {
         if (res.status === 404) { await conflict('그 책이 공부 서재에 없어요 — 화면을 최신으로 맞췄어요'); return }
         if (!res.ok) { actionError.value = '측정을 시작할 수 없습니다'; return }
         study.value = studyStateOf(await res.json())
+        // 고르기는 시작 전까지만 유효하다 — 책을 걸고 시작했으면 이제 서버 recentBookId(가장 최근 책을 건 세션의 책)가
+        // 칩을 정한다. 남겨 두면 측정 중 교체한 책으로 필기하다 종료하는 순간 필기가 옛 고른 책으로 튄다(리뷰 Minor-3).
+        // 책 없이 시작했으면 비우지 않는다 — 비우면 시작 순간 칩이 recent로 바뀌어 필기가 튄다.
+        if (bookId !== null) pickedStudyBook.value = null
     } catch {
         actionError.value = '네트워크 오류가 발생했습니다'
     } finally {

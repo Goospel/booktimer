@@ -9,6 +9,7 @@ import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, type VueWrapper } from '@vue/test-utils';
 
 import StudyRecallApp from '../src/study/StudyRecallApp.vue';
+import RecallPanel from '../src/study/RecallPanel.vue';
 
 // 기기 시계를 못 박는다 — 픽스처의 today가 「실제 오늘」과 같으면 「서버 today를 쓰는가」 단언이
 // 기기 시계 구현에도 초록이 된다(리뷰 실측: 돌연변이 생존). Date만 가짜로 두어 타이머는 살린다.
@@ -166,6 +167,22 @@ describe('백지노트 화면 — ?date=로 지난 날을 연다', () => {
         expect(calls().some(u => u.includes('/api/study/recall/2026-09-11'))).toBe(true);
     });
 
+    // 리뷰 Minor-1(c) — 위 픽스처는 기기 달(9월)과 같은 달이라 「달을 날짜가 정했는가」와 「기기 시계가 정했는가」가 같은 값이었다.
+    test('기기 시계(9월)와 다른 달의 date면 그 날짜의 달로 부른다', async () => {
+        history.replaceState(null, '', '/study/recall?date=2026-08-12');
+        await mountApp(TEN);
+        expect(agendaCalls()).toEqual(['/api/study/agenda?month=2026-08']);
+    });
+
+    // 리뷰 Minor-1(b) — 오늘을 그 날짜로 착각하면 미래 날짜에도 편집기가 열린다(저장하면 서버가 거절한다).
+    test('미래 date면 「아직 오지 않은 날」이고 편집기가 없다', async () => {
+        history.replaceState(null, '', '/study/recall?date=2026-09-25');
+        const wrapper = await mountApp();   // 서버 today = 9/21
+        expect(wrapper.text()).toContain('아직 오지 않은 날이에요');
+        expect(wrapper.find('[data-testid="recall-body"]').exists()).toBe(false);
+        expect(wrapper.text()).toContain('9월 25일');   // 양성 대조 — 화면은 그 날짜로 떴다
+    });
+
     test('형식이 틀린 date는 무시하고 오늘로 연다', async () => {
         history.replaceState(null, '', '/study/recall?date=2026-9-1');
         await mountApp();
@@ -178,6 +195,30 @@ describe('백지노트 화면 — 실패', () => {
         const wrapper = await mountApp(null);
         expect(wrapper.text()).toContain('불러오지 못했');
         expect(wrapper.find('[data-testid="recall-body"]').exists()).toBe(false);
+    });
+});
+
+// 저장·분석 뒤엔 남은 몫과 어제 문제 표식이 달라진다 — 달력과 같은 재조회다.
+describe('백지노트 화면 — 저장 뒤 재조회', () => {
+    // 리뷰 Minor-1(a) — `@saved` 배선이 끊기면 남은 몫이 옛 값으로 남는다(화면은 멀쩡하다).
+    test('패널이 저장을 알리면 일정을 한 번 더 부른다', async () => {
+        const wrapper = await mountApp();
+        const before = agendaCalls().length;
+
+        wrapper.findComponent(RecallPanel).vm.$emit('saved', {});
+        await vi.waitFor(() => expect(agendaCalls()).toHaveLength(before + 1));
+    });
+
+    // 리뷰 Minor-4 — 방금 받은 분석 결과가 「불러오지 못했어요」로 통째로 덮이면 안 된다(서버엔 저장됐다).
+    test('저장 뒤 재조회가 실패해도 화면을 지우지 않고 작은 문구만 띄운다', async () => {
+        const wrapper = await mountApp();
+        vi.stubGlobal('fetch', routeFetch(null));   // 이제부터 agenda가 실패한다
+
+        wrapper.findComponent(RecallPanel).vm.$emit('saved', {});
+        await vi.waitFor(() => expect(wrapper.find('[data-testid="recall-refresh-failed"]').exists()).toBe(true));
+
+        expect(wrapper.find('[data-testid="recall-body"]').exists()).toBe(true);
+        expect(wrapper.text()).toContain('9월 21일 (월)');
     });
 });
 

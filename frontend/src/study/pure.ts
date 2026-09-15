@@ -292,10 +292,14 @@ export function studyView(pathname: string): StudyView {
     return 'calendar';
 }
 
-/** 백지노트 화면이 열 날짜 — `?date=YYYY-MM-DD`면 그 값, 없거나 형식이 틀리면 null(=오늘). */
+/** 백지노트 화면이 열 날짜 — `?date=YYYY-MM-DD`이고 달력에 있는 날이면 그 값, 아니면 null(=오늘). */
 export function recallDateParam(search: string): string | null {
     const date = new URLSearchParams(search).get('date');
-    return date !== null && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+    if (date === null || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+    // 2월 30일·13월은 Date가 다음 달로 넘겨 버린다 — 되읽은 값이 입력과 같을 때만 있는 날이다.
+    const [y, m, d] = date.split('-').map(Number);
+    const back = new Date(y, m - 1, d);
+    return back.getFullYear() === y && back.getMonth() === m - 1 && back.getDate() === d ? date : null;
 }
 
 /**

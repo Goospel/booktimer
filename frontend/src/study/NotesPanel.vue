@@ -99,7 +99,15 @@ watch(() => props.defaultBookId, (id) => {
 
 /** 책을 바꾸면 쓰던 것을 먼저 보내고 목록을 갈아 끼운다(다른 책의 필기와 섞이지 않게). */
 watch(bookId, async (id, before) => {
-    if (id === null || before === null) return;
+    if (id === null) return;
+    // 처음 책이 정해지는 순간 — 서재 0권으로 마운트돼 onMounted가 초기화를 건너뛴 뒤 책이 늦게 온 경우다
+    // (다른 탭에서 담고 돌아와 재조회). 초안이 책 없이 남으면 자동저장이 무음 스킵된다(리뷰 Important-1).
+    if (before === null) {
+        if (draft.value.bookId !== null) return;   // onMounted가 이미 초기화했다
+        draft.value = blank();
+        await loadList();
+        return;
+    }
     await flush();
     retarget(blank());
     await loadList();

@@ -26,6 +26,8 @@ const aiEnabled = ref(false);
 const remainingAnalyze = ref(0);
 const remainingTranscribe = ref(0);
 const failed = ref(false);
+/** 저장 뒤 재조회만 실패했다 — 남은 몫·어제 문제 표식이 낡았을 수 있다는 것만 알린다. */
+const refreshFailed = ref(false);
 
 function currentMonth(): string {
     const now = new Date();
@@ -34,6 +36,7 @@ function currentMonth(): string {
 
 async function load(): Promise<void> {
     failed.value = false;
+    refreshFailed.value = false;
     try {
         const asked = param ? param.slice(0, 7) : currentMonth();
         let agenda = await fetchAgenda(asked);
@@ -50,7 +53,9 @@ async function load(): Promise<void> {
         remainingAnalyze.value = agenda.remaining.analyze;
         remainingTranscribe.value = agenda.remaining.transcribe;
     } catch {
-        failed.value = true;
+        // 첫 로드 실패만 화면을 대체한다 — 저장 뒤 재조회 실패로 방금 받은 분석 결과를 덮지 않는다(서버엔 저장됐다).
+        if (date.value) refreshFailed.value = true;
+        else failed.value = true;
     }
 }
 
@@ -90,6 +95,9 @@ const hasYesterdayQuestions = computed(() => cellMarks(date.value, recalls.value
                 :has-yesterday-questions="hasYesterdayQuestions"
                 @saved="load"
             />
+            <p v-if="refreshFailed" class="status-line muted" data-testid="recall-refresh-failed">
+                저장은 됐지만 남은 횟수를 새로 불러오지 못했어요.
+            </p>
         </div>
     </section>
 </template>
