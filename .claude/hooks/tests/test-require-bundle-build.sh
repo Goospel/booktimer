@@ -140,4 +140,38 @@ check "(fixture) frontend staged + bundle stale → exit 2" 2 "$got"
 got=$(run_cmd "git commit -F .commit-msg-tmp # 테스트" "$W_STALE")
 check "(fixture) bundle stale + Korean in command → exit 2" 2 "$got"
 
+# ── Installed deps vs package-lock.json (T-246) ──────────────────────────────
+# A worktree's frontend/node_modules installed before a dependabot bump rebuilds every bundle with
+# the OLD dependency, and the stale-vs-stale diff above passes locally (CI fails later).
+# The build here writes the SAME bytes, so only the lock check can make these cases differ.
+make_dep_repo() {  # $1 = installed vue version (lock says 3.5.42)
+    local r; r=$(make_repo)
+    mkdir -p "$r/src/main/resources/static/garden" "$r/frontend/src" "$r/frontend/node_modules/vue"
+    printf 'built\n' > "$r/src/main/resources/static/garden/garden.js"
+    git -C "$r" add . >/dev/null 2>&1
+    git -C "$r" commit -m "init" >/dev/null 2>&1
+    cp "$REPO_CLEAN/frontend/build-fixture.js" "$r/frontend/build-fixture.js"
+    printf '{"scripts":{"build":"node build-fixture.js"}}' > "$r/frontend/package.json"
+    printf '{"packages":{"":{"dependencies":{"vue":"^3.5.42"}},"node_modules/vue":{"version":"3.5.42"}}}' \
+        > "$r/frontend/package-lock.json"
+    printf '{"version":"%s"}' "$1" > "$r/frontend/node_modules/vue/package.json"
+    printf 'export const x = 1;\n' > "$r/frontend/src/index.ts"
+    git -C "$r" add frontend/src frontend/package.json frontend/package-lock.json frontend/build-fixture.js >/dev/null 2>&1
+    echo "$r"
+}
+
+# Case 8: installed vue 3.5.41 != lock 3.5.42, bundle otherwise up-to-date → exit 2, names the package
+REPO_DRIFT=$(make_dep_repo 3.5.41); W_DRIFT=$(to_win "$REPO_DRIFT")
+got=$(run_cmd "git commit -m \"feat: dep drift\"" "$W_DRIFT")
+check "(fixture) installed dep != lock → exit 2" 2 "$got"
+err=$(printf '{"tool_input":{"command":"%s"},"cwd":"%s"}' "git commit -m x" "$(json_esc "$W_DRIFT")" \
+    | powershell.exe -NoProfile -File "$HOOK" 2>&1 >/dev/null)
+if [[ "$err" == *"vue: installed 3.5.41 != lock 3.5.42"* ]]; then echo "PASS: (fixture) drift message names package and both versions"
+else echo "FAIL: (fixture) drift message names package and both versions — got: $err"; FAILED=1; fi
+
+# Case 9: installed matches lock → exit 0 (positive control for the lock path — Case 5 has no lock file)
+REPO_MATCH=$(make_dep_repo 3.5.42); W_MATCH=$(to_win "$REPO_MATCH")
+got=$(run_cmd "git commit -m \"feat: dep match\"" "$W_MATCH")
+check "(fixture) installed dep == lock → exit 0" 0 "$got"
+
 exit $FAILED

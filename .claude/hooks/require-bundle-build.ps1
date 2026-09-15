@@ -78,6 +78,33 @@ if (-not $nodeCmd) {
     exit 0
 }
 
+# Installed dependencies must match the lock BEFORE rebuilding (T-246). A worktree whose
+# frontend/node_modules predates a dependabot bump rebuilds every bundle with the old
+# dependency; the committed bundles were built the same stale way, so the diff below is
+# empty and this gate passes -- CI ("Verify bundle is not stale", npm ci) fails later.
+# Exit 1 = mismatch; anything else (no lock, script crash) stays fail-open.
+$prevEAP3 = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$depOut = @(& node (Join-Path $PSScriptRoot 'lib\deps-match-lock.js') (Join-Path $cwd 'frontend') 2>$null)
+$depExit = $LASTEXITCODE
+$ErrorActionPreference = $prevEAP3
+
+if ($depExit -eq 1) {
+    $msg = @"
+[BLOCKED] frontend/node_modules does not match frontend/package-lock.json (T-246).
+A rebuild now would bake the old dependencies into every island bundle.
+$($depOut -join "`n")
+
+Run (if frontend/node_modules is a junction, remove the junction first):
+  npm --prefix frontend ci
+
+Then commit again. Or bypass:
+  include SKIP_BUNDLE_CHECK in the commit command.
+"@
+    [Console]::Error.WriteLine($msg)
+    exit 2
+}
+
 # Rebuild all frontend bundles.
 # stderr is suppressed via cmd.exe to avoid NativeCommandError under $ErrorActionPreference='Stop'
 # (same pattern as require-tests-before-commit.ps1).
