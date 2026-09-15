@@ -2,7 +2,7 @@ import { Button, Wheel } from '@toss/tds-mobile';
 import { useState } from 'react';
 
 import type { StudyBookRow } from '../api';
-import { DEFAULT_SESSION_GOAL, SESSION_GOAL_MAX_HOURS, sessionGoalWheelState } from '../sessionGoal';
+import { SESSION_GOAL_MAX_HOURS, sessionGoalWheelStart, sessionGoalWheelState } from '../sessionGoal';
 import { ErrorMessage, FilledButton, Sheet, Text } from '../ui';
 import { wheelIndices } from '../wheelTime';
 
@@ -37,7 +37,7 @@ export function SessionGoalSheet({
   const current = book.sessionGoalSeconds ?? null;
   /** 휠은 비제어라 시작 칸만 첫 렌더에서 읽는다 — 이후 값은 onChange가 되돌린다. */
   const [picked, setPicked] = useState(() =>
-    wheelIndices(current ?? DEFAULT_SESSION_GOAL, SESSION_GOAL_MAX_HOURS),
+    wheelIndices(sessionGoalWheelStart(current), SESSION_GOAL_MAX_HOURS),
   );
   const [initial] = useState(picked);
   const wheel = sessionGoalWheelState(picked.hours, picked.minutes);
