@@ -1534,9 +1534,9 @@ body.bookdetail-page .bd-empty .status-line { margin: 0; line-height: 1.6; font-
 .skeleton-line.w40 { width: 40%; }
 .skeleton-line.w55 { width: 55%; background: var(--paper-4-2); }
 
-/* ── 와이드: 2열 리스트 + 340px 사이드바(확정안). CSS @media 단일 출처 — JS 분기 안 씀(N-124 회피). ── */
-@media (min-width: 880px) {
-    .container.shelf-page { max-width: 1180px; }
+/* ── 와이드: 2열 리스트 + 340px 사이드바(확정안). CSS @media 단일 출처 — JS 분기 안 씀(N-124 회피). ──
+   경계 1100 = 바 여백 248을 뺀 852가 340+2열의 최소 폭 — 「본문 폭(바 있는 화면)」 절과 같은 수. */
+@media (min-width: 1100px) {
     .shelf-layout {
         display: grid; grid-template-columns: 340px 1fr; gap: 24px; align-items: start;
         grid-template-areas: "greeting greeting" "add mine";
@@ -1623,7 +1623,6 @@ body.bookdetail-page .bd-empty .status-line { margin: 0; line-height: 1.6; font-
    공유 .book- 과 .record- 계열은 절대 수정하지 않고 .shop- 로 분리(타 페이지 회귀 0).
    값은 계획 §10 스펙 그대로. 컨테이너·패딩 등 §10 미지정분만 시안에 맞춰 보완.
    ───────────────────────────────────────────────────────────────────────── */
-body.profile-page .container { max-width: 1160px; }  /* 와이드 2열 여유 — 데스크톱 빈 옆 공간 활용. 페이지 스코프 = 타 페이지 회귀 0 */
 
 /* 내 책방(self) 상단 사용자 검색 진입점 — 검색 input처럼 보이되 실제론 /search 링크(트위터식).
    책방엔 슬림 진입점만, 무거운 검색 패널/추천은 전용 페이지로 위임(책방 비대화 방지).
@@ -2126,7 +2125,7 @@ a.shop-count:hover, a.shop-count:hover strong { color: var(--accent); }
    분기는 JS chooseLayout(innerWidth)가 하고(layout.ts), CSS는 두 모드의 시각만 담당.
    ※ 컨테이너 확장은 body.history-wide(JS 토글)로 — @media와 innerWidth의 스크롤바 폭 불일치 회피. */
 
-/* split일 때만 컨테이너를 넓혀 2단이 안 찌그러지게(전역 .container max-width:460 무손상). */
+/* split이면 940으로 둔다 — 바 있는 화면 기본 1160보다 좁은 2단 읽기 폭(본문 폭 절의 유일한 예외). */
 body.history-page.history-wide .container { max-width: 940px; }
 
 /* split: 좌(일자별) 1.45 : 우(빠뜨린날) 1 */
@@ -2241,17 +2240,6 @@ body.history-page.history-wide .container { max-width: 940px; }
 /* #personality-app 직계 간격: 공유 16px(N-115) 그룹 위에 페이지 스코프로 18px 덮어쓰기
    (시안 본문 gap). 공유 규칙은 건드리지 않는다. */
 body.personality-page #personality-app { gap: 18px; }
-
-/* 데스크톱(태블릿+): 책BTI 페이지만 컨테이너를 넓혀 분석 카드가 가로로 펴지게 한다.
-   앱 기본은 모바일-우선 .container max-width:460px라, 큰 화면에선 긴 AI 서술이 좁은 460px
-   칸에 갇혀 세로로 길쭉했다(모바일은 이 폭이 적절해 무변경). 캐러셀 슬라이드(80% peek)·도트·
-   스크롤 로직은 그대로 두고 폭만 키우면 같은 글이 더 적은 줄로 흘러 카드 높이가 준다
-   (실측 narrative 232→440px, 17줄→9줄). dashboard와 동일한 페이지-스코프 패턴이라
-   body.personality-page 한정 → 다른 페이지 회귀 0. min-width 가드라 모바일(<600px)은 무손상.
-   카드 폭은 PersonalityCarousel의 step()/dotIndex가 실측 폭에서 역산하므로 JS 변경 불필요. */
-@media (min-width: 600px) {
-    body.personality-page .container { max-width: 720px; }
-}
 
 /* 페이지 제목 — sr-only(시각 숨김, 문서 제목·접근성·SEO만 보존). 표준 visually-hidden 유틸. */
 .sr-only {
@@ -2452,7 +2440,7 @@ body.personality-page #personality-app { gap: 18px; }
    감겨 그 카드가 제일 커진다. 그러면 stale 없는 카드는 (고정 높이 본문 + margin-top:auto 풋터) 사이에 큰 빈칸.
    해결: 서술을 flex 아이템으로 남는 세로 공간을 채우게(flex:1 1 0) + 슬라이드에 기준 높이(min-height).
    → stale 없는 카드는 본문이 더 길게 차고(빈칸 0), stale 카드는 본문이 그만큼 줄어 내부 스크롤(카드 높이 일정).
-   데스크톱(≥600px)은 task1 와이드(.container 720px)로 이미 짧아 무변경 — min-width:600px 경계와 정합.
+   데스크톱(≥600px)은 narrow-page 720로 이미 짧아 무변경 — min-width:600px 경계와 정합.
    step()/dotIndex는 가로 로직이라 높이 무관(JS 무변경). */
 @media (max-width: 599px) {
     .personality-entry { min-height: 500px; }   /* 카드 기준 높이 — 빈칸 대신 본문이 채움(요청: 더 길어도 OK) */
@@ -2847,14 +2835,6 @@ img.dash-book-chip-cover { object-fit: cover; background: var(--line-1); }
 }
 
 /* ── PR-3: 헤더 사용자영역 · 서재 · 로그아웃 · 와이드 2단 ── */
-
-/* 와이드 레이아웃 (대시보드 전용 — 전역 .container max-width 460은 건드리지 않음).
-   760 → 1160: 1440px 창에서 화면의 40%만 쓰던 것을 넓힌다. 웹의 주 사용처를 데스크톱·태블릿으로
-   두기로 한 방침(모바일은 미니앱)에 맞춘 값이다. .container는 width:100%라 좁은 화면은 그대로 뷰포트에
-   맞으므로 640px 경계는 손대지 않는다. */
-@media (min-width: 640px) {
-    body.dashboard-page .container { max-width: 1160px; }
-}
 
 /* 데스크톱 — 넓어진 카드에 안의 요소 크기도 맞춘다(폭만 키우면 카드가 비어 보인다).
    경계 1100px은 원래 잔디에서 나온 값이다(1년치가 16px 칸으로 스크롤 없이 들어가는 최소 폭). 잔디는
@@ -3868,19 +3848,6 @@ body.dashboard-page #dashboard-app { gap: 20px; }
 .study-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .study-plan-actions .btn { width: auto; flex: 0 0 auto; }
 
-/* ── 데스크톱 와이드 페이지 (/study 셸 — 일정·기록·공부 서재) ──
-   달력과 책 목록은 460px에서 답답하다(달력은 한 칸이 60px, 긴 책 제목은 3줄로 접힌다).
-   홈과 같은 1160px을 쓰되 **폼은 따라 늘리지 않는다** — 입력 한 칸이 1100px이면 되레 쓰기 나쁘다.
-   `/search`(사용자 검색)를 여기 넣지 않은 것도 같은 이유다: 그 화면은 폼과 한 줄짜리 결과가 전부라
-   넓히면 「팔로우」 버튼만 저 멀리 떨어진다(넓혀서 손해인 화면은 넓히지 않는다). */
-@media (min-width: 900px) {
-    .container.wide-page { max-width: 1160px; }
-    .container.wide-page .book-search-form,
-    .container.wide-page .book-manual-form,
-    .container.wide-page .study-day-form,
-    .container.wide-page .study-plan-form { max-width: 620px; }
-}
-
 /* 테마 토글 — theme.js가 header.brand / header.auth-brand 끝에 꽂는다(아직 다크런치라 안 꽂힌다).
    `border` 단축 선언이 전역 `button`의 border-image를 initial로 되돌리는 것을 그대로 이용한다 —
    32px 원형에 300px 연필 타일을 8px로 눌러 넣으면 결이 뭉개진다(.margin-card-btn과 같은 이유).
@@ -3913,6 +3880,22 @@ body.dashboard-page #dashboard-app { gap: 20px; }
    z-index 95 = 종이 결(body::before 90) 위 · 첫 오버레이(100) 아래. 결이 고정 요소 위에 있으면 스크롤 때
    무늬가 바 위를 미끄러진다(T-192) — 그래서 바 표면엔 결을 직접 얹는다. */
 body.has-rails { padding-left: 124px; padding-right: 124px; }   /* 16 + 92 + 16 */
+
+/* ── 본문 폭(바 있는 화면) — 설계 claude-docs/plans/2026-09-15-web-wider-body.md
+   웹은 데스크톱·태블릿 전용이라 바가 붙는 화면은 기본이 넓다(1160 — 1440 창의 가용 폭 1192에 딱 든다).
+   목록·폼·글 한 열짜리 화면만 .narrow-page(720)다 — 1160이면 「팔로우」 버튼·시간이 1100px 밖으로 떨어진다.
+   바 없는 화면(에러·약관·비밀번호·온보딩·관리자)은 위 .container 460 그대로 — 이 절은 body.has-rails 접두를 벗지 않는다.
+   페이지별 .container max-width는 여기 말고 두지 않는다(ContainerWidthTest가 허용 목록으로 막는다).
+   예외 하나: body.history-page.history-wide .container 940 — JS split(layout.ts)과 짝이라 남긴다(0,3,1이라 이 기본 0,2,1을 이긴다).
+   데스크톱 경계 1100 = 바 여백 248을 뺀 852가 2열(책장 340+목록 2열 · 책방 360+메인 · 기록 1.45fr/1fr)이 서는 최소 폭.
+   books @media · profile isWide(ProfileApp.vue) · history SPLIT_MIN_WIDTH(layout.ts) · 대시보드 안쪽 경계가 전부 이 수다.
+   폼 상한 620은 넓은 화면에서만 — 입력 한 칸이 1100px이면 되레 쓰기 나쁘다. 좁은 단은 카드 안쪽 672라 걸면 아래 목록과 어긋난다. */
+body.has-rails .container { max-width: 1160px; }
+body.has-rails .container.narrow-page { max-width: 720px; }
+body.has-rails .container:not(.narrow-page) .book-search-form,
+body.has-rails .container:not(.narrow-page) .book-manual-form,
+body.has-rails .container:not(.narrow-page) .study-day-form,
+body.has-rails .container:not(.narrow-page) .study-plan-form { max-width: 620px; }
 .rail {
     position: fixed;
     top: 16px;
