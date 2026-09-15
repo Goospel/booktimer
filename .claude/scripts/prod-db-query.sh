@@ -45,8 +45,10 @@ done
 [ -n "$SQL_FILE" ] || { echo "사용법: bash .claude/scripts/prod-db-query.sh <sql파일> [--dry-run]" >&2; exit 2; }
 [ -f "$SQL_FILE" ] || { echo "SQL 파일을 찾을 수 없습니다: $SQL_FILE" >&2; exit 2; }
 
-PY="$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)"
-[ -n "$PY" ] || { echo "python 을 찾을 수 없습니다 (params.json 생성·가드에 필요)." >&2; exit 2; }
+# 존재가 아니라 실행으로 고른다 — Windows의 python3는 WindowsApps 스토어 스텁이라 PATH에 있어도 못 돈다.
+PY=""
+for c in python3 python; do "$c" -c '' >/dev/null 2>&1 && { PY="$c"; break; }; done
+[ -n "$PY" ] || { echo "실행되는 python 을 찾을 수 없습니다 (params.json 생성·가드에 필요)." >&2; exit 2; }
 
 TMPDIR_RUN="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR_RUN"' EXIT

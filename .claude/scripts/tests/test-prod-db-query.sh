@@ -10,6 +10,8 @@
 #   5) SQL 이 base64 로 임베드되지 않는다 (따옴표 지옥 → 원격에서 깨짐).
 #   6) --parameters 경로가 MSYS 형식(/c/...)이라 AWS CLI 가 못 읽는다 (T-155 본체).
 #   7) --dry-run 이 실제로 aws 를 부른다 (검토용인데 운영을 건드림).
+#   8) PATH 의 python3 가 못 도는 스텁이면 스크립트 전체가 죽는다 (Windows WindowsApps 스토어 스텁).
+#      거부 케이스는 exit 1 만 보면 이 고장에도 초록이다 — 그래서 거부 메시지까지 단언한다.
 
 S=".claude/scripts/prod-db-query.sh"
 FAILED=0
@@ -43,6 +45,7 @@ for case in "insert:INSERT INTO users(id) VALUES(1);" \
     f="$(sql "$name.sql" "$body")"
     r="$(run "$f" --dry-run)"; rc="${r%%$'\n'*}"
     assert_exit "가드 거부 — $name" "$rc" "1"
+    assert_has  "가드 거부 사유 — $name" "${r#*$'\n'}" "읽기 전용 위반"
 done
 
 # 주석 뒤에 숨은 쓰기 문장 (선행 주석에 속으면 안 됨)
@@ -94,6 +97,16 @@ if [ -e "$TMP/aws-called" ]; then
 else
     echo "PASS: dry-run 은 aws 를 호출하지 않는다"
 fi
+
+# ── python3 가 못 도는 스텁이어도 python 으로 넘어간다 ─────────────────────────
+REALPY=""
+for c in python3 python; do "$c" -c '' >/dev/null 2>&1 && { REALPY="$(command -v "$c")"; break; }; done
+PYSTUB="$TMP/pystub"; mkdir -p "$PYSTUB"
+printf '#!/usr/bin/env bash\necho "Python was not found" >&2\nexit 49\n' > "$PYSTUB/python3"
+printf '#!/usr/bin/env bash\nexec "%s" "$@"\n' "$REALPY" > "$PYSTUB/python"
+chmod +x "$PYSTUB/python3" "$PYSTUB/python"
+r="$(PATH="$PYSTUB:$PATH"; run "$f" --dry-run)"; rc="${r%%$'\n'*}"
+assert_exit "python3 스텁 → python 으로 dry-run" "$rc" "0"
 
 # ── 사용법 오류 ──────────────────────────────────────────────────────────────
 r="$(run)"; rc="${r%%$'\n'*}"

@@ -291,8 +291,8 @@ export interface StudyState {
   hasActiveSession: boolean;
   activeStartedAt: string | null;
   todaySeconds: number;
-  // 공부 하루 목표(`goalSeconds`)는 2026-09-13 책별 「회당 시간」으로 대체돼 읽지 않는다 — 서버는 잔재 정리
-  // 전까지 계속 싣지만 옛 번들 방어용일 뿐이다(`StudyBookRow.sessionGoalSeconds`가 새 자리).
+  // 공부 하루 목표(`goalSeconds`)는 2026-09-13 책별 「회당 시간」으로 대체됐고, 서버 필드도 2026-09-14에
+  // 걷혔다(#1132). 새 자리는 `StudyBookRow.sessionGoalSeconds`다.
   /**
    * 지금 재고 있는 공부 책 — 안 골랐거나 대기 중이면 `null`. 히어로의 「측정 중 · 제목」이 이 한 필드를 본다.
    *
