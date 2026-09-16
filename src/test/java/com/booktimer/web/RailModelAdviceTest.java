@@ -218,6 +218,21 @@ class RailModelAdviceTest {
     }
 
     @Test
+    @DisplayName("/settings — 스킵 링크가 바보다 먼저 나오고, href가 그 페이지에 실제로 있는 도착 지점을 가리킨다")
+    void skipLinkPrecedesRailAndResolves() throws Exception {
+        // 템플릿 소스 가드(SideRailsTemplateTest)는 fragment와 페이지를 따로 본다 — 렌더 뒤 실제로 이어지는지는 여기서 본다.
+        registerUser("alice@booktimer.com", "alice", Role.USER);
+
+        String body = html("/settings", "alice@booktimer.com");
+
+        int skip = body.indexOf("href=\"#main-content\"");
+        assertThat(skip).as("렌더된 응답에 스킵 링크가 있어야 한다").isGreaterThanOrEqualTo(0);
+        assertThat(skip).as("스킵 링크가 바보다 앞이어야 첫 Tab에 잡힌다").isLessThan(body.indexOf("id=\"side-rails\""));
+        assertThat(body).as("앵커가 갈 곳 — 없으면 링크가 아무 일도 안 한다").contains("id=\"main-content\"");
+        assertThat(body).as("도착 지점이 포커스를 받아야 한다").containsPattern("id=\"main-content\"[^>]*tabindex=\"-1\"");
+    }
+
+    @Test
     @DisplayName("REST /api/dashboard — advice가 JSON 응답에서 터지지 않는다")
     void api_notBrokenByAdvice() throws Exception {
         registerUser("alice@booktimer.com", "alice", Role.USER);
