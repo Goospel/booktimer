@@ -168,6 +168,16 @@ check '(q ctrl) same repo, no branch arg -> HEAD is clean -> passes' 0 \
 check '(r) three positionals -> BLOCK (undecidable, not fail-open)' 2 \
     "$(run_hook 'git rebase a b c' "$P/n2")"
 
+# -- (t) shell redirections are not git positionals. Appending `2>&1 | tail -8` to a rebase
+#        command left `2>` sitting in the <branch> slot (the arg capture stops at `&`), so
+#        merge-base failed and the undecidable branch of (r) blocked a healthy rebase.
+#        Measured twice (T-248): once on a real rebase, once on a harness command.
+check '(t) trailing 2>&1 | tail is not a <branch> -> passes' 0 \
+    "$(run_hook "$R 2>&1 | tail -8" "$P/n1")"
+check '(t) trailing > out.txt is not a <branch> -> passes' 0 \
+    "$(run_hook "$R > out.txt" "$P/n1")"
+check '(t ctrl) the same redirect on the T-210 shape still BLOCKs' 2 \
+    "$(run_hook "$R 2>&1 | tail -8" "$P/n2")"
 # -- (s) the subcommand POSITION is what makes it a rebase. Matching the bare word
 #        `rebase` anywhere turned all three of these into false blocks (measured).
 check '(s) git pull --no-rebase passes'              0 "$(run_hook 'git pull --no-rebase' "$P/n2")"

@@ -90,6 +90,10 @@ $skipNext = $false
 foreach ($t in ($rargs -split '\s+')) {
     if ([string]::IsNullOrWhiteSpace($t)) { continue }
     if ($skipNext) { $skipNext = $false; continue }
+    # 쉘 리다이렉트는 git 인자가 아니다 — 꼬리에 `2>&1 | tail` 을 붙이면 캡처가 `&` 에서 잘려
+    # `2>` 가 <branch> 자리에 남고, merge-base 실패가 곧 판정 불가 차단이 됐다(T-248).
+    # 연산자만 따로 선 형태(`> out.txt`)는 그 뒤 파일명까지 건너뛴다.
+    if ($t -match '^[0-9&]*(>>?|<)') { if ($t -match '(>>?|<)$') { $skipNext = $true }; continue }
     if ($t.StartsWith('-')) {
         if ($t -match '^(--onto|--exec|-x|--strategy|-s|--strategy-option|-X|--whitespace|--gpg-sign|-S|-C)$') { $skipNext = $true }
         continue
