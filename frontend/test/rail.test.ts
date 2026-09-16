@@ -3,6 +3,8 @@
 // 설계 claude-docs/plans/2026-09-15-web-side-rails.md §4-④ · §7 T-4.
 // jsdom엔 matchMedia가 없어 가짜 win을 주입한다(입력 장치 판별 = matches).
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { bindRails, rememberMode, MODE_KEY, ENTER_DELAY_MS, LEAVE_DELAY_MS, HOVER_QUERY } from '../../src/main/resources/static/js/rail.js';
 
@@ -220,15 +222,19 @@ test('#side-rails가 없는 페이지 → null, 예외 없음', () => {
 
 // 「로고가 홈이고, 홈은 내가 있던 바의 타이머로 열린다」 — 설계 2026-09-16-rail-home-entry.md §5 T-2.
 describe('rememberMode — 활성 키 있는 비홈 페이지만 홈이 열릴 모드를 기억한다', () => {
-    function root(remember?: string) {
+    // data-mode(서버가 경로로 그린 지금 모드)와 data-remember(기억할 모드)는 다른 값이다.
+    // 음성 케이스에서 둘을 같게 두면 「안 썼다」와 「같은 값을 썼다」가 구분되지 않는다 —
+    // `dataset.remember ?? dataset.mode` 폴백 돌연변이가 그대로 살아남는다(#1147 리뷰 I-1).
+    function root(remember?: string, mode = 'study') {
         const attr = remember === undefined ? '' : ` data-remember="${remember}"`;
-        document.body.innerHTML = `<div id="side-rails" data-mode="study"${attr}></div>`;
+        document.body.innerHTML = `<div id="side-rails" data-mode="${mode}"${attr}></div>`;
         return document.getElementById('side-rails') as HTMLElement;
     }
     function fakeStorage(seed?: string) {
         const m: Record<string, string> = {};
+        const writes: Array<[string, string]> = [];
         if (seed) m[MODE_KEY] = seed;
-        return { m, s: { setItem: (k: string, v: string) => { m[k] = v; } } as unknown as Storage };
+        return { m, writes, s: { setItem: (k: string, v: string) => { writes.push([k, v]); m[k] = v; } } as unknown as Storage };
     }
 
     test('data-remember="study" → 저장값이 study가 된다', () => {
@@ -243,15 +249,25 @@ describe('rememberMode — 활성 키 있는 비홈 페이지만 홈이 열릴 �
         expect(m[MODE_KEY]).toBe('reading');
     });
 
-    test('속성 없음(홈·중립 페이지) → 저장소 미변경 — 「공부 모드 → 설정 → 로고 → 독서」 방지', () => {
-        const { m, s } = fakeStorage('study');
-        rememberMode(root(), s);
+    test('중립 페이지(속성 없음·data-mode="reading") → 공부 저장값이 그대로 — 「공부 모드 → 설정 → 로고 → 독서」 방지', () => {
+        // 실제 시나리오: 공부 모드로 쓰다 /settings에 들어가면 서버는 경로대로 data-mode="reading"을 그린다.
+        // 저장값(study)과 화면 모드(reading)가 다른 이 상태가 판별력의 전부다 — 같게 두면 공허해진다.
+        const { m, writes, s } = fakeStorage('study');
+        rememberMode(root(undefined, 'reading'), s);
+        expect(writes).toHaveLength(0); // 「안 썼다」를 직접 단언 — 값 비교보다 강하다
         expect(m[MODE_KEY]).toBe('study');
     });
 
+    test('홈(속성 없음·data-mode="study") → 저장소를 아예 안 건드린다(홈은 Vue 토글이 주인)', () => {
+        const { writes, s } = fakeStorage('reading');
+        rememberMode(root(undefined, 'study'), s);
+        expect(writes).toHaveLength(0);
+    });
+
     test('data-remember="garbage" → 미변경(미지값을 그대로 쓰지 않는다)', () => {
-        const { m, s } = fakeStorage('reading');
-        rememberMode(root('garbage'), s);
+        const { m, writes, s } = fakeStorage('reading');
+        rememberMode(root('garbage', 'study'), s);
+        expect(writes).toHaveLength(0);
         expect(m[MODE_KEY]).toBe('reading');
     });
 
@@ -288,5 +304,62 @@ describe('rememberMode — 활성 키 있는 비홈 페이지만 홈이 열릴 �
         expect(() => bindRails(document, win)).not.toThrow();
         click(document.getElementById('a2')!);
         expect(openCount()).toBe(1);
+    });
+});
+
+// 홈 인라인 부트(fragments/side-rails) — 첫 페인트 전 힌트. 문자열을 눈으로 훑는 대신 **그대로 실행**한다:
+// 형식 검사는 조건이 뒤집혀도 통과하지만, 실행은 결과를 본다(#1147 리뷰 M-2).
+describe('side-rails 인라인 부트 — 램프 힌트가 켜졌으면 모드도 study로 세운다', () => {
+    // jsdom 환경에선 import.meta.url이 file: URL이 아니라(문서 URL) timer-mode.test.ts의 경로 계산을
+    // 그대로 못 쓴다 — cwd에서 위로 훑고, 못 찾으면 조용히 통과하지 않게 던진다.
+    function repoFile(...parts: string[]): string {
+        let dir = process.cwd();
+        for (let i = 0; i < 5; i++) {
+            const p = join(dir, ...parts);
+            if (existsSync(p)) return p;
+            dir = join(dir, '..');
+        }
+        throw new Error(`레포 파일을 못 찾았다: ${parts.join('/')} (cwd=${process.cwd()})`);
+    }
+    const fragment = readFileSync(
+        repoFile('src', 'main', 'resources', 'templates', 'fragments', 'side-rails.html'), 'utf8');
+    const boot = fragment.match(/<script th:if[^>]*>([\s\S]*?)<\/script>/)?.[1] ?? '';
+    const LAMP_KEY = 'booktimer.studyLamp';
+
+    function runBoot(seed: Record<string, string>) {
+        localStorage.clear();
+        document.body.className = '';
+        for (const [k, v] of Object.entries(seed)) localStorage.setItem(k, v);
+        document.body.innerHTML = '<div id="side-rails" data-mode="reading"></div>'; // 서버가 경로로 그린 값
+        new Function(boot)();
+        return document.getElementById('side-rails') as HTMLElement;
+    }
+
+    test('추출한 부트가 비어 있지 않다(공허 방지 — 정규식이 빗나가면 전부 통과한다)', () => {
+        expect(boot).toContain('side-rails');
+        expect(boot).toContain(LAMP_KEY);
+    });
+
+    test('램프 힌트만 있고 모드 힌트가 없어도 study — 밤 배경에 독서 바가 선명한 구간 방지', () => {
+        const root = runBoot({ [LAMP_KEY]: '1' });
+        expect(root.dataset.mode).toBe('study');
+        expect(document.body.classList.contains('study-lamp')).toBe(true);
+    });
+
+    test('모드 힌트가 reading이어도 램프가 켜져 있으면 study가 이긴다(공부 측정 중 내 책장을 들른 경우)', () => {
+        const root = runBoot({ [MODE_KEY]: 'reading', [LAMP_KEY]: '1' });
+        expect(root.dataset.mode).toBe('study');
+    });
+
+    test('모드 힌트만 study면 study이고 독서등은 안 켠다(기존 동작 회귀)', () => {
+        const root = runBoot({ [MODE_KEY]: 'study' });
+        expect(root.dataset.mode).toBe('study');
+        expect(document.body.classList.contains('study-lamp')).toBe(false);
+    });
+
+    test('힌트가 둘 다 없으면 서버가 그린 reading 그대로(음성 대조군)', () => {
+        const root = runBoot({});
+        expect(root.dataset.mode).toBe('reading');
+        expect(document.body.classList.contains('study-lamp')).toBe(false);
     });
 });
