@@ -38,6 +38,18 @@ public final class RailNav {
         return path.equals("/study") || path.startsWith("/study/") ? "study" : "reading";
     }
 
+    /**
+     * 활성 키가 있는 비홈 페이지면 그 경로의 모드("reading"|"study"), 아니면 null.
+     *
+     * <p>홈이 열릴 모드를 기억할지 판정한다 — 「로고가 홈이고, 홈은 내가 있던 바의 타이머로 열린다」.
+     * 중립 화면(설정·피드백·차단·수동 기록·남의 책방)은 경로상 reading이라 무조건 쓰면
+     * 「공부 모드 → 설정 → 로고 → 독서 타이머」로 튄다 — 그래서 활성 키로 한정한다.
+     */
+    public static String rememberMode(String path, String loginId) {
+        Key key = activeKey(path, loginId);
+        return (key == null || key == Key.HOME) ? null : mode(path);
+    }
+
     /** 내 책방 href — loginId blank 또는 ADMIN(책방이 404)이면 null(링크를 안 그린다). */
     public static String shopHref(String loginId, Role role) {
         if (loginId == null || loginId.isBlank() || role == Role.ADMIN) return null;

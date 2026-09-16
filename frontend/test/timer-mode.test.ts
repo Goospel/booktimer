@@ -74,6 +74,13 @@ describe('syncRailMode — 홈 모드를 양옆 바 흐림 상태(#side-rails[da
         expect(src).toContain(`localStorage.getItem('${MODE_KEY}')==='study'`);
         expect(src).toContain(".dataset.mode='study'");
     });
+
+    test('리터럴 동기 — rail.js도 MODE_KEY를 그대로 적는다(정적 ESM이라 이 모듈을 import 못 한다)', () => {
+        // rail.js가 바 방문 시 이 키에 모드를 쓴다(홈이 열릴 모드). 한쪽만 바뀌면 기억이 조용히 죽는다.
+        const here = new URL('.', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+        const src = readFileSync(join(here, '..', '..', 'src', 'main', 'resources', 'static', 'js', 'rail.js'), 'utf8');
+        expect(src).toContain(`= '${MODE_KEY}'`);
+    });
 });
 
 // 독서등(설계 2026-09-15-study-focus-lamp §2-5) — 합침 = 독서등 = 이 값 하나. 첫 페인트 힌트는 인라인 부트가 읽는다.

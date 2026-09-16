@@ -57,7 +57,14 @@ const storedMode = ref<TimerMode>(readMode())
 // 서버 진실이 저장값을 이긴다 — 진행 중 원장의 모드가 화면 모드다(미니앱 effectiveMode 1:1).
 const mode = computed(() => effectiveMode(hasActiveSession.value, study.value.hasActiveSession, storedMode.value))
 // 섬 밖 SSR 양옆 바의 흐림 상태를 같은 모드로 — 섬 밖 DOM 한 속성(HistoryApp의 body 클래스와 같은 관례).
-watchEffect(() => syncRailMode(document, mode.value))
+// 아래 독서등과 **같은 이유로 응답을 본 뒤에만** 쓴다: 응답 전엔 저장값이 진실이 아닐 수 있고(공부 측정 중에
+// 왼쪽 바를 들르면 저장값이 reading이 된다), 그때 덮으면 인라인 부트가 램프 힌트까지 보고 세운 값을 지워
+// 밤 배경에 독서 바가 선명한 구간이 응답까지 남는다(실측 271ms). 부트가 남긴 값이 응답 전 최선의 추정이다.
+// 램프 힌트가 낡았어도(세션이 다른 탭에서 끝남) 응답이 오면 정정되므로 더 나빠지지 않는다.
+watchEffect(() => {
+    if (loading.value) return
+    syncRailMode(document, mode.value)
+})
 
 // 공부 집중 — 측정 중엔 타이머와 필기가 한 장이 되고 홈이 밤이 된다(설계 2026-09-15-study-focus-lamp).
 // 합침 ≡ 독서등 ≡ 이 값 하나. body 클래스(섬 밖 DOM)는 **응답을 본 뒤에만** 쓴다 — 마운트 직후의 기본값(IDLE_STUDY)으로

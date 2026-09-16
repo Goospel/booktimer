@@ -37,6 +37,11 @@ public final class RailModel {
         return key == null ? null : key.name().toLowerCase(Locale.ROOT);
     }
 
+    /** 홈이 열릴 모드("reading"|"study") — 기억하지 않을 화면(홈·중립)이면 null이라 속성이 안 그려진다. */
+    public String getRememberMode() {
+        return RailNav.rememberMode(path, user().getLoginId());
+    }
+
     public String getShopHref() {
         return RailNav.shopHref(user().getLoginId(), user().getRole());
     }

@@ -110,9 +110,46 @@ class SideRailsTemplateTest {
         Matcher u = Pattern.compile("nav-icons\\s*::\\s*icon\\('([^']+)'\\)").matcher(rails);
         while (u.find()) used.add(u.group(1));
 
-        assertThat(used).as("훑을 대상이 있어야 한다(공허 방지)").hasSize(8);
+        assertThat(used).as("훑을 대상이 있어야 한다(공허 방지)").hasSize(7);
         assertThat(keys).containsAll(used);
         assertThat(used).as("백지노트 바 항목의 아이콘").contains("note");
+        assertThat(used).as("홈 항목은 로고(a.brand-home)가 대신한다 — 바에 없다").doesNotContain("home");
+    }
+
+    /** 로고 링크 `<a class="brand-home" …> … </a>` 안쪽(여러 줄). 없으면 null. */
+    private static final Pattern BRAND_HOME =
+            Pattern.compile("<a\\b[^>]*class=\"brand-home\"[^>]*>(.*?)</a>", Pattern.DOTALL);
+
+    @Test
+    @DisplayName("바 쓰는 페이지 전수에 로고 홈 링크 + 접근 이름의 「홈」이 있다 — 바에서 홈 항목을 뺀 뒤 유일한 홈 길")
+    void railPagesKeepLogoHomeLink() throws IOException {
+        // 바에 홈 항목이 없으니 홈으로 가는 길은 이 로고 하나다(설계 2026-09-16-rail-home-entry).
+        // 어느 한 템플릿에서 로고가 떨어지면 그 페이지는 홈으로 갈 길이 없는 막다른 길이 되는데,
+        // 렌더된 그 페이지를 열어보기 전엔 안 보인다 — include ⇔ has-rails 가드와 같은 이유로 전수로 잠근다.
+        // 목록은 손으로 열거하지 않고 include 집합에서 계산한다(열거하면 새 페이지가 조용히 빠진다).
+        Set<String> railPages = pagesMatching(INCLUDE);
+        assertThat(railPages).as("훑을 대상이 있어야 한다(공허 방지)").isNotEmpty();
+        try (Stream<Path> s = pages()) {
+            for (Path p : (Iterable<Path>) s::iterator) {
+                if (!railPages.contains(name(p))) continue;
+                Matcher m = BRAND_HOME.matcher(Files.readString(p));
+                assertThat(m.find()).as("%s: 바에 홈 항목이 없으니 로고가 유일한 홈 링크다", name(p)).isTrue();
+                // 접근 이름은 내용에서 계산된다 — title 속성은 내용이 있으면 이름이 되지 않는다.
+                // sr-only 텍스트라 보이는 텍스트(h1)를 덮지 않고 더한다(WCAG 2.5.3 Label in Name 유지).
+                assertThat(m.group(1))
+                        .as("%s: 스크린리더 링크 목록에 「홈」이 나와야 한다", name(p))
+                        .contains("class=\"sr-only\">홈<");
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("바에 홈 링크가 없고, 홈이 열릴 모드는 data-remember로 나간다(2026-09-16-rail-home-entry)")
+    void noHomeLinkButRemembersMode() throws IOException {
+        String src = Files.readString(TEMPLATES.resolve("fragments/side-rails.html"));
+        assertThat(src).as("홈 링크 잔존 — 로고가 홈이다").doesNotContain("th:href=\"@{/}\"");
+        assertThat(src).as("양성 대조 — 다른 링크는 그대로").contains("th:href=\"@{/books}\"");
+        assertThat(src).contains("data-remember=${rail.rememberMode}");
     }
 
     // ── app.css 규약(주석을 걷고 본다 — 주석이 값을 인용하면 공허하게 통과한다, T-205) ──
