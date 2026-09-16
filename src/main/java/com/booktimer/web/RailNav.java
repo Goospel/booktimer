@@ -39,15 +39,20 @@ public final class RailNav {
     }
 
     /**
-     * 활성 키가 있는 비홈 페이지면 그 경로의 모드("reading"|"study"), 아니면 null.
+     * 활성 키가 있는 <b>공부 바</b> 페이지면 "study", 아니면 null(= 저장값을 안 건드린다).
      *
-     * <p>홈이 열릴 모드를 기억할지 판정한다 — 「로고가 홈이고, 홈은 내가 있던 바의 타이머로 열린다」.
+     * <p>홈이 열릴 모드를 기억할지 판정한다 — 「로고가 홈이고, 공부 쪽을 들렀으면 홈이 공부 타이머로 열린다」.
      * 중립 화면(설정·피드백·차단·수동 기록·남의 책방)은 경로상 reading이라 무조건 쓰면
      * 「공부 모드 → 설정 → 로고 → 독서 타이머」로 튄다 — 그래서 활성 키로 한정한다.
+     *
+     * <p>독서 쪽은 대칭으로 기억하지 않는다(사용자 결정 2026-09-16, #1147의 대칭 규칙에서 개정).
+     * 대칭이면 「공부 측정 중 → 내 책장 → 로고」가 독서 타이머로 열려서, 측정을 끝낸 자리로
+     * 돌아오지 못했다. 독서 모드로 돌리는 주인은 홈의 토글 하나다.
      */
     public static String rememberMode(String path, String loginId) {
         Key key = activeKey(path, loginId);
-        return (key == null || key == Key.HOME) ? null : mode(path);
+        if (key == null || key == Key.HOME) return null;
+        return "study".equals(mode(path)) ? "study" : null;
     }
 
     /** 내 책방 href — loginId blank 또는 ADMIN(책방이 404)이면 null(링크를 안 그린다). */
