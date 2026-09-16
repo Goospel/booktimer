@@ -2,7 +2,9 @@ package com.booktimer.web;
 
 import com.booktimer.user.AuthProvider;
 import com.booktimer.user.Role;
+import com.booktimer.user.User;
 import com.booktimer.user.UserRegistrationService;
+import com.booktimer.user.UserRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,6 +41,7 @@ class RailModelAdviceTest {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private UserRegistrationService registrationService;
+    @Autowired private UserRepository userRepository;
     @Autowired private Clock clock;
 
     private LocalDate today() {
@@ -47,6 +50,13 @@ class RailModelAdviceTest {
 
     private void registerUser(String email, String loginId, Role role) {
         registrationService.register(email, "rawpw1234!!", loginId, "닉_" + loginId, SEOUL, role, today());
+    }
+
+    /** 홈(/)은 온보딩 미완이면 /onboarding으로 302 — 홈 마크업을 보려면 완료 플래그가 필요하다. */
+    private void registerOnboardedUser(String email, String loginId) {
+        User user = registrationService.register(email, "rawpw1234!!", loginId, "닉_" + loginId, SEOUL, Role.USER, today());
+        user.completeOnboarding();
+        userRepository.save(user);
     }
 
     private String html(String path, String email) throws Exception {
@@ -78,9 +88,10 @@ class RailModelAdviceTest {
         String body = html("/books", "alice@booktimer.com");
 
         assertThat(body).contains("id=\"side-rails\"").contains("data-mode=\"reading\"");
+        assertThat(body).as("독서 페이지를 들렀으면 홈은 독서 타이머로 열린다").contains("data-remember=\"reading\"");
         Map<String, Boolean> links = railLinks(body);
         assertThat(links.keySet()).containsExactly(
-                "/", "/books", "/u/alice", "/personality", "/history", "/search",
+                "/books", "/u/alice", "/personality", "/history", "/search",
                 "/study", "/study/recall", "/study/books", "/study/history");
         assertThat(links.get("/books")).isTrue();
         assertThat(links.get("/history")).isFalse();
@@ -94,7 +105,7 @@ class RailModelAdviceTest {
 
         String body = html("/study/history", "alice@booktimer.com");
 
-        assertThat(body).contains("data-mode=\"study\"");
+        assertThat(body).contains("data-mode=\"study\"").contains("data-remember=\"study\"");
         Map<String, Boolean> links = railLinks(body);
         assertThat(links.get("/study/history")).isTrue();
         assertThat(links.values().stream().filter(b -> b)).hasSize(1);
@@ -107,10 +118,38 @@ class RailModelAdviceTest {
 
         String body = html("/study/recall", "alice@booktimer.com");
 
-        assertThat(body).contains("data-mode=\"study\"");
+        assertThat(body).contains("data-mode=\"study\"").contains("data-remember=\"study\"");
         Map<String, Boolean> links = railLinks(body);
         assertThat(links.get("/study/recall")).isTrue();
         assertThat(links.values().stream().filter(b -> b)).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("홈 / — 바에 활성 없음·data-remember 없음, 로고가 aria-current=\"page\"(로고가 홈이다)")
+    void home_noRailActive_logoCurrent() throws Exception {
+        registerOnboardedUser("alice@booktimer.com", "alice");
+
+        String body = html("/", "alice@booktimer.com");
+
+        assertThat(body).contains("id=\"side-rails\"");
+        Map<String, Boolean> links = railLinks(body);
+        assertThat(links).as("바에 홈 링크가 없다 — 로고가 홈이다").doesNotContainKey("/");
+        assertThat(links.values()).as("홈 항목이 없으니 바에 활성이 없다").doesNotContain(true);
+        assertThat(body).as("홈은 Vue 토글이 주인 — 저장값을 건드리지 않는다").doesNotContain("data-remember");
+        Matcher logo = Pattern.compile("<a\\b[^>]*class=\"brand-home\"[^>]*>").matcher(body);
+        assertThat(logo.find()).as("로고 링크가 있어야 한다").isTrue();
+        assertThat(logo.group()).contains("aria-current=\"page\"");
+    }
+
+    @Test
+    @DisplayName("/settings — 중립 페이지는 홈이 열릴 모드를 안 건드린다(공부 모드가 독서로 튀면 안 된다)")
+    void settings_noRemember() throws Exception {
+        registerUser("alice@booktimer.com", "alice", Role.USER);
+
+        String body = html("/settings", "alice@booktimer.com");
+
+        assertThat(body).contains("id=\"side-rails\"");
+        assertThat(body).doesNotContain("data-remember");
     }
 
     @Test
@@ -148,6 +187,7 @@ class RailModelAdviceTest {
 
         assertThat(body).contains("id=\"side-rails\"");
         assertThat(body).doesNotContain("aria-current=\"page\"");
+        assertThat(body).doesNotContain("data-remember");
     }
 
     @Test
@@ -159,6 +199,7 @@ class RailModelAdviceTest {
 
         assertThat(body).contains("id=\"side-rails\"");
         assertThat(body).doesNotContain("aria-current=\"page\"");
+        assertThat(body).doesNotContain("data-remember");
     }
 
     @Test

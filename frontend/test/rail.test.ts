@@ -4,7 +4,7 @@
 // jsdom엔 matchMedia가 없어 가짜 win을 주입한다(입력 장치 판별 = matches).
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-import { bindRails, ENTER_DELAY_MS, LEAVE_DELAY_MS, HOVER_QUERY } from '../../src/main/resources/static/js/rail.js';
+import { bindRails, rememberMode, MODE_KEY, ENTER_DELAY_MS, LEAVE_DELAY_MS, HOVER_QUERY } from '../../src/main/resources/static/js/rail.js';
 
 function fixture() {
     document.body.innerHTML = `
@@ -216,4 +216,77 @@ describe('bindRails — 리뷰 반영(#1137): 포커스·동시 펼침·입력 �
 test('#side-rails가 없는 페이지 → null, 예외 없음', () => {
     document.body.innerHTML = '<main></main>';
     expect(bindRails(document, fakeWin(true))).toBeNull();
+});
+
+// 「로고가 홈이고, 홈은 내가 있던 바의 타이머로 열린다」 — 설계 2026-09-16-rail-home-entry.md §5 T-2.
+describe('rememberMode — 활성 키 있는 비홈 페이지만 홈이 열릴 모드를 기억한다', () => {
+    function root(remember?: string) {
+        const attr = remember === undefined ? '' : ` data-remember="${remember}"`;
+        document.body.innerHTML = `<div id="side-rails" data-mode="study"${attr}></div>`;
+        return document.getElementById('side-rails') as HTMLElement;
+    }
+    function fakeStorage(seed?: string) {
+        const m: Record<string, string> = {};
+        if (seed) m[MODE_KEY] = seed;
+        return { m, s: { setItem: (k: string, v: string) => { m[k] = v; } } as unknown as Storage };
+    }
+
+    test('data-remember="study" → 저장값이 study가 된다', () => {
+        const { m, s } = fakeStorage('reading');
+        rememberMode(root('study'), s);
+        expect(m[MODE_KEY]).toBe('study');
+    });
+
+    test('data-remember="reading" → 저장값이 reading이 된다(대칭)', () => {
+        const { m, s } = fakeStorage('study');
+        rememberMode(root('reading'), s);
+        expect(m[MODE_KEY]).toBe('reading');
+    });
+
+    test('속성 없음(홈·중립 페이지) → 저장소 미변경 — 「공부 모드 → 설정 → 로고 → 독서」 방지', () => {
+        const { m, s } = fakeStorage('study');
+        rememberMode(root(), s);
+        expect(m[MODE_KEY]).toBe('study');
+    });
+
+    test('data-remember="garbage" → 미변경(미지값을 그대로 쓰지 않는다)', () => {
+        const { m, s } = fakeStorage('reading');
+        rememberMode(root('garbage'), s);
+        expect(m[MODE_KEY]).toBe('reading');
+    });
+
+    test('저장소가 throw해도 삼킨다(사파리 프라이빗)', () => {
+        const boom = { setItem: () => { throw new Error('QuotaExceeded'); } } as unknown as Storage;
+        expect(() => rememberMode(root('study'), boom)).not.toThrow();
+    });
+
+    test('저장소가 없어도(undefined) 터지지 않는다', () => {
+        expect(() => rememberMode(root('study'), undefined)).not.toThrow();
+    });
+
+    test('bindRails가 배선한다 — 페이지 로드 1회 저장 + 펼침 동작은 그대로', () => {
+        const { m, s } = fakeStorage('reading');
+        document.body.innerHTML = `
+            <div id="side-rails" data-mode="study" data-remember="study">
+                <aside class="rail rail-study"><nav><a id="a2" href="#r2">일정</a></nav></aside>
+            </div>`;
+        const win = { ...fakeWin(false), localStorage: s } as unknown as Window;
+        const api = bindRails(document, win);
+        expect(m[MODE_KEY]).toBe('study');
+        expect(api).not.toBeNull();
+        click(document.getElementById('a2')!); // 접힌 바 첫 탭 = 펼치기(기존 동작 유지)
+        expect(openCount()).toBe(1);
+    });
+
+    test('저장이 throw해도 bindRails는 정상 반환한다(펼침이 막히지 않는다)', () => {
+        document.body.innerHTML = `
+            <div id="side-rails" data-mode="study" data-remember="study">
+                <aside class="rail rail-study"><nav><a id="a2" href="#r2">일정</a></nav></aside>
+            </div>`;
+        const boom = { setItem: () => { throw new Error('QuotaExceeded'); } };
+        const win = { ...fakeWin(false), localStorage: boom } as unknown as Window;
+        expect(() => bindRails(document, win)).not.toThrow();
+        click(document.getElementById('a2')!);
+        expect(openCount()).toBe(1);
+    });
 });

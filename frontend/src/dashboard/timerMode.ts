@@ -1,6 +1,10 @@
 export type TimerMode = 'reading' | 'study'
 
-/** 미니앱과 같은 키 — 오리진이 달라 값이 공유되진 않지만 이름은 하나로. */
+/**
+ * 미니앱과 같은 키 — 오리진이 달라 값이 공유되진 않지만 이름은 하나로.
+ * 리터럴은 `fragments/side-rails` 인라인 부트·`static/js/rail.js`에도 따로 적힌다(둘 다 이 모듈을
+ * import 못 한다) — 동기는 timer-mode.test.ts가 지킨다.
+ */
 export const MODE_KEY = 'booktimer.timerMode'
 
 /** localStorage 접근 자체가 throw하는 환경(사파리 프라이빗·차단 설정)이 있어 감싼다. */

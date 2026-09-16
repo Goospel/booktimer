@@ -110,9 +110,19 @@ class SideRailsTemplateTest {
         Matcher u = Pattern.compile("nav-icons\\s*::\\s*icon\\('([^']+)'\\)").matcher(rails);
         while (u.find()) used.add(u.group(1));
 
-        assertThat(used).as("훑을 대상이 있어야 한다(공허 방지)").hasSize(8);
+        assertThat(used).as("훑을 대상이 있어야 한다(공허 방지)").hasSize(7);
         assertThat(keys).containsAll(used);
         assertThat(used).as("백지노트 바 항목의 아이콘").contains("note");
+        assertThat(used).as("홈 항목은 로고(a.brand-home)가 대신한다 — 바에 없다").doesNotContain("home");
+    }
+
+    @Test
+    @DisplayName("바에 홈 링크가 없고, 홈이 열릴 모드는 data-remember로 나간다(2026-09-16-rail-home-entry)")
+    void noHomeLinkButRemembersMode() throws IOException {
+        String src = Files.readString(TEMPLATES.resolve("fragments/side-rails.html"));
+        assertThat(src).as("홈 링크 잔존 — 로고가 홈이다").doesNotContain("th:href=\"@{/}\"");
+        assertThat(src).as("양성 대조 — 다른 링크는 그대로").contains("th:href=\"@{/books}\"");
+        assertThat(src).contains("data-remember=${rail.rememberMode}");
     }
 
     // ── app.css 규약(주석을 걷고 본다 — 주석이 값을 인용하면 공허하게 통과한다, T-205) ──

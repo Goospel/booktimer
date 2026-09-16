@@ -8,11 +8,24 @@
 export const HOVER_QUERY = '(hover: hover) and (pointer: fine)';
 export const ENTER_DELAY_MS = 150; // 이만큼 머물러야 펼친다 — 스치면 안 펼쳐짐
 export const LEAVE_DELAY_MS = 100;
+export const MODE_KEY = 'booktimer.timerMode'; // timerMode.ts와 따로 적힌다 — 동기는 timer-mode.test.ts
+
+/**
+ * 홈이 열릴 모드를 기억한다 — #side-rails[data-remember]가 있을 때만(활성 키 있는 비홈 페이지).
+ * 「로고가 홈이고, 홈은 내가 있던 바의 타이머로 열린다」. 저장 실패는 삼킨다.
+ */
+export function rememberMode(root, storage) {
+    const mode = root.dataset.remember;
+    if (mode !== 'reading' && mode !== 'study') return;
+    try { storage?.setItem(MODE_KEY, mode); } catch { /* 사파리 프라이빗 — 오늘 동작으로 퇴화 */ }
+}
 
 /** 바 동작 배선. #side-rails가 없으면 null(바 없는 페이지에선 아무 일도 안 함). */
 export function bindRails(doc, win) {
     const root = doc.getElementById('side-rails');
     if (!root) return null;
+    // win.localStorage 접근 자체가 throw하는 환경(쿠키 차단)까지 여기서 삼킨다.
+    try { rememberMode(root, win.localStorage); } catch { /* 기억만 못 할 뿐 펼침은 계속 */ }
     const rails = Array.from(root.querySelectorAll('.rail'));
     const mq = win.matchMedia(HOVER_QUERY);
     let timer = null;
