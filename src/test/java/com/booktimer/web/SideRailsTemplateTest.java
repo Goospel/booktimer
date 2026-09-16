@@ -201,4 +201,57 @@ class SideRailsTemplateTest {
         assertThat(declarationsOf("body.has-rails #pwa-install-chip"))
                 .anySatisfy(d -> assertThat(d).containsPattern("right\\s*:\\s*124px\\s*!important"));
     }
+
+    // ── 본문으로 건너뛰기(skip link) ──
+    // 바가 .container보다 DOM 앞이라 로고에 닿기까지 Tab 10번이었다(바 링크 9개를 지나서).
+    // 스킵 링크가 바보다 앞에 있어야만 「첫 Tab = 건너뛰기」가 성립한다 — 뒤로 밀리면 존재해도 무의미하다.
+
+    private static final String MAIN_ID = "main-content";
+    /** 도착 지점 태그 — id가 붙은 여는 태그 하나. */
+    private static final Pattern MAIN_TAG = Pattern.compile("<[a-zA-Z]+\\b[^>]*\\bid=\"" + MAIN_ID + "\"[^>]*>");
+
+    @Test
+    @DisplayName("스킵 링크가 바 <aside>보다 먼저 나오고 본문 id를 가리킨다 — 순서가 뒤집히면 첫 Tab이 바에 잡힌다")
+    void skipLinkComesBeforeRails() throws IOException {
+        String src = Files.readString(TEMPLATES.resolve("fragments/side-rails.html"));
+        int skip = src.indexOf("href=\"#" + MAIN_ID + "\"");
+        int aside = src.indexOf("<aside");
+        assertThat(skip).as("스킵 링크가 fragment에 있어야 한다").isGreaterThanOrEqualTo(0);
+        assertThat(aside).as("양성 대조 — 바 <aside>는 그대로 있다").isGreaterThanOrEqualTo(0);
+        assertThat(skip).as("스킵 링크는 바보다 앞이어야 한다(문서 순서 = Tab 순서)").isLessThan(aside);
+    }
+
+    @Test
+    @DisplayName("바 쓰는 페이지 전수에 도착 지점(id + tabindex=\"-1\")이 하나씩 있다")
+    void railPagesHaveSkipTarget() throws IOException {
+        // 목록은 손으로 열거하지 않고 include 집합에서 계산한다(열거하면 새 페이지가 조용히 빠진다).
+        Set<String> railPages = pagesMatching(INCLUDE);
+        assertThat(railPages).as("훑을 대상이 있어야 한다(공허 방지)").isNotEmpty();
+        try (Stream<Path> s = pages()) {
+            for (Path p : (Iterable<Path>) s::iterator) {
+                if (!railPages.contains(name(p))) continue;
+                Matcher m = MAIN_TAG.matcher(Files.readString(p));
+                assertThat(m.find()).as("%s: 스킵 링크가 갈 곳이 없다(id=%s 누락)", name(p), MAIN_ID).isTrue();
+                // tabindex="-1" 없이는 브라우저에 따라 앵커 이동 뒤 포커스가 문서 맨 앞에 남는다.
+                assertThat(m.group()).as("%s: 도착 지점이 포커스를 받아야 한다", name(p)).contains("tabindex=\"-1\"");
+                assertThat(m.find()).as("%s: id가 둘이면 앵커가 어디로 갈지 정해지지 않는다", name(p)).isFalse();
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("스킵 링크는 포커스 전엔 화면 밖, 포커스하면 들어온다 — .sr-only(항상 숨김)를 쓰면 안 된다")
+    void skipLinkRevealsOnFocus() throws IOException {
+        String css = Files.readString(APP_CSS).replaceAll("(?s)/\\*.*?\\*/", "");
+        assertThat(declarationsOf(".skip-link"))
+                .as("기본 규칙이 있어야 한다")
+                .anySatisfy(d -> assertThat(d).containsPattern("position\\s*:\\s*fixed"));
+        assertThat(declarationsOf(".skip-link:focus"))
+                .as("포커스 시 화면 안으로 들어오는 규칙")
+                .anySatisfy(d -> assertThat(d).containsPattern("top\\s*:"));
+        assertThat(css).as("바(z-index 95) 위에 떠야 가려지지 않는다").containsPattern("\\.skip-link\\b[^{]*\\{[^}]*z-index");
+        String fragment = Files.readString(TEMPLATES.resolve("fragments/side-rails.html"));
+        assertThat(fragment).as("sr-only는 포커스해도 안 보인다 — 스킵 링크엔 쓸 수 없다")
+                .doesNotContainPattern("class=\"[^\"]*\\bsr-only\\b[^\"]*\"[^>]*href=\"#");
+    }
 }

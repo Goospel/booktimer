@@ -13,7 +13,7 @@
 </head>
 <body class="dashboard-page has-rails">
 <th:block th:replace="~{fragments/side-rails :: rails}"></th:block>
-<div class="container">
+<div class="container" id="main-content" tabindex="-1">
     <header class="brand">
         <!-- 홈에서만 aria-current — 바에 홈 항목이 없으니 「지금 홈」은 로고가 말한다(설계 2026-09-16-rail-home-entry). -->
         <a class="brand-home" th:href="@{/}" title="홈으로" aria-current="page">

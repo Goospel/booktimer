@@ -3963,6 +3963,25 @@ body.has-rails .container:not(.narrow-page) .book-search-form,
 body.has-rails .container:not(.narrow-page) .book-manual-form,
 body.has-rails .container:not(.narrow-page) .study-day-form,
 body.has-rails .container:not(.narrow-page) .study-plan-form { max-width: 620px; }
+/* 본문으로 건너뛰기 — 평소엔 화면 위로 밀어 두고 포커스를 받을 때만 내려온다.
+   .sr-only는 포커스해도 1px로 남아 쓸 수 없다. 색은 전부 토큰이라 독서등(body.study-lamp가 --card-bg·--text·
+   --accent·--focus-ring을 덮는다)에서도 따라온다. z-index 100 = 바(95) 위 — 포커스 순간 바에 가리면 안 된다. */
+.skip-link {
+    position: fixed;
+    top: -80px;
+    left: 16px;
+    z-index: 100;
+    padding: 10px 18px;
+    border-radius: 12px;
+    background: var(--card-bg);
+    border: 1px solid var(--accent);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+}
+.skip-link:focus { top: 16px; outline: none; box-shadow: 0 0 0 3px var(--focus-ring); }
+
 .rail {
     position: fixed;
     top: 16px;
