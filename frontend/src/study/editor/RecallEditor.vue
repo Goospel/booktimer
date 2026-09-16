@@ -137,9 +137,26 @@ function revealSelected(index: number): void {
 }
 
 const budget = computed(() => bodyBudget(props.modelValue));
+/**
+ * 안내문구를 띄울지 — 「글자가 없다」가 아니라 <b>「아직 아무것도 만들지 않았다」</b>가 기준이다.
+ *
+ * <p>Tiptap의 `isEmpty`만으로는 안 된다. 그건 자식을 재귀로 훑어 글자·leaf가 없으면 참이라
+ * 목록 버튼이 만든 빈 항목(`<ol><li><p></p></li></ol>`)도 empty로 센다 — 안내문구가 걷히지 않아
+ * 「1.」 위에 겹쳐 그려졌다(태블릿 실측 2026-09-16). 빈 제목·인용·체크목록도 같은 뿌리였고,
+ * `1. `를 손으로 쳐도 입력규칙이 같은 문서를 만드니 안내문구가 되돌아왔다.
+ *
+ * <p>그래서 「글자가 없다」에 <b>「블록이 문단뿐이다」</b>를 더한다. 문단 <i>하나</i>로 좁히지
+ * 않는 것이 요점 — 목록을 만들었다 되돌리면 `trailingNode`가 붙인 빈 문단이 남아 둘이 되는데,
+ * 그때 화면은 분명히 비어 있다.
+ */
 const empty = computed(() => {
     void tick.value;
-    return editor.value ? editor.value.isEmpty : props.modelValue.length === 0;
+    const e = editor.value;
+    if (!e) return props.modelValue.length === 0;
+    if (!e.isEmpty) return false;
+    let onlyParagraphs = true;
+    e.state.doc.forEach((node) => { if (node.type.name !== 'paragraph') onlyParagraphs = false; });
+    return onlyParagraphs;
 });
 
 function applySlash(id: string, range: { from: number; to: number }): void {

@@ -260,3 +260,34 @@ describe('focusEnd — 전환 끝 캐럿', () => {
         expect(await scrolled((w) => (w.vm as AnyEditor).focusEnd())).toBe(false);
     });
 });
+
+// 안내문구는 오버레이다(문서 위에 겹쳐 그린다) — 그래서 「언제 걷는가」가 곧 화면의 정확성이다.
+// Tiptap의 `isEmpty`는 「글자가 없다」는 뜻이라 빈 목록·빈 제목에도 참이고, 그걸 그대로 쓰면
+// 목록 버튼을 누른 순간 「1.」 위에 안내문구가 겹쳐 그려진다(태블릿 실측 2026-09-16).
+describe('안내문구', () => {
+    const placeholder = (wrapper: VueWrapper) => wrapper.find('.study-editor-placeholder');
+
+    test('빈 편집기엔 보인다', async () => {
+        // 양성 대조 — 이게 없으면 조건을 아무렇게나 좁혀도(늘 false) 아래 셋이 초록이다.
+        expect(placeholder(await mountEditor()).exists()).toBe(true);
+    });
+
+    test('번호 목록 버튼을 누르면 사라진다 — 글자는 없지만 뼈대가 생겼다', async () => {
+        const wrapper = await mountEditor();
+        await wrapper.find('[data-testid="editor-btn-orderedList"]').trigger('click');
+        expect(placeholder(wrapper).exists()).toBe(false);
+    });
+
+    test('큰 제목 버튼도 같다 — 목록만의 문제가 아니다', async () => {
+        const wrapper = await mountEditor();
+        await wrapper.find('[data-testid="editor-btn-h1"]').trigger('click');
+        expect(placeholder(wrapper).exists()).toBe(false);
+    });
+
+    test('목록을 되돌리면 다시 보인다 — 빈 문단으로 돌아왔다', async () => {
+        const wrapper = await mountEditor();
+        await wrapper.find('[data-testid="editor-btn-orderedList"]').trigger('click');
+        await wrapper.find('[data-testid="editor-btn-orderedList"]').trigger('click');
+        expect(placeholder(wrapper).exists()).toBe(true);
+    });
+});
