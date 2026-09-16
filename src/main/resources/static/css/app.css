@@ -3787,8 +3787,23 @@ body.study-lamp .lamp-page .is-study .btn-primary:hover:not(:disabled) { backgro
 }
 .study-editor .ProseMirror > * { margin: 0 0 8px; }
 .study-editor .ProseMirror > :last-child { margin-bottom: 0; }
-.study-editor .ProseMirror h1 { font-size: 19px; }
-.study-editor .ProseMirror h2 { font-size: 16px; }
+/* 제목 — 본문(16px 고운돋움)과 세 축으로 갈라 둔다: 크기 · 위 여백 · 서체.
+   ⚠️ 옛 `h1 19px / h2 16px`은 본문이 16px이라 H2가 본문과 완전히 같은 크기였고, H1도 1.19배였다.
+   서체를 고운바탕으로 바꾸는 것이 핵심이다 — 본문 고운돋움은 400 단일 face라 제목의 굵게가
+   합성 볼드로 흐려졌다(파일 상단 body 주석과 같은 뿌리). 고운바탕은 700 face가 @import에 실려
+   있어 진짜 굵기가 오고, 표지·인용·명언이 이미 쓰는 이 레포의 장식 축이라 새 서체도 아니다.
+   줄높이를 본문 1.7에서 내리는 것은 26px×1.7=44px로 벌어져 제목 한 줄이 문단처럼 보이기 때문. */
+.study-editor .ProseMirror h1 {
+    font-family: 'Gowun Batang', serif; font-weight: 700;
+    font-size: 26px; line-height: 1.35; margin-top: 20px;
+}
+.study-editor .ProseMirror h2 {
+    font-family: 'Gowun Batang', serif; font-weight: 700;
+    font-size: 19.5px; line-height: 1.4; margin-top: 14px;
+}
+/* 종이 첫 줄이 제목이면 위 여백은 빼야 한다 — 안 그러면 글이 아래로 내려앉아 보인다.
+   `> :first-child`(0-3-0)가 위 제목 규칙(0-2-1)을 특이도로 이기니 순서에 기대지 않는다. */
+.study-editor .ProseMirror > :first-child { margin-top: 0; }
 .study-editor .ProseMirror ul, .study-editor .ProseMirror ol { padding-left: 22px; }
 /* 자손 선택자인 것이 일부러다 — 체크 목록은 `li > label + div > p` 구조라 자식(>) 규칙이 안 닿아
    항목마다 UA 기본 1em 여백이 살아나고, 목록 하나가 문단 여럿처럼 벌어진다. */
