@@ -20,6 +20,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Optional;
+
 /**
  * 미니앱(앱인토스) 신원 API — 로그인 / 신규가입 / 기존 계정 연결 / 로그아웃 (설계 §2.2).
  *
@@ -61,16 +63,21 @@ public class TossAuthApiController {
         TossUserInfo info = verify(request.authorizationCode(), request.referrer(), http);
         limit(RateLimitAction.TOSS_AUTH, info.userKey());
         return provisioningService.login(info.userKey())
-                .map(this::registeredResponse)
+                .map(user -> registeredResponse(user, false))
                 .orElseGet(TossAuthResponse::unregistered);
     }
 
-    /** 토스에서 시작하는 신규 계정 생성(핸들·비밀번호 없음, 이메일 미검증) + 토큰 발급. */
+    /**
+     * 토스에서 시작하는 계정 — 이미 있으면 그 계정, 없으면 새로 만든다(핸들·비밀번호 없음, 이메일 미검증) + 토큰 발급.
+     * {@code created}는 이번 호출이 계정을 만들었는가다 — 미니앱이 로그인 한 번으로 신규(목표 화면)와 기존(홈)을 가른다.
+     */
     @PostMapping("/api/toss/register")
     public TossAuthResponse register(@RequestBody TossAuthRequest request, HttpServletRequest http) {
         TossUserInfo info = verify(request.authorizationCode(), request.referrer(), http);
         limit(RateLimitAction.TOSS_AUTH, info.userKey());
-        return registeredResponse(provisioningService.register(info.userKey(), info.email()));
+        Optional<User> existing = provisioningService.login(info.userKey());
+        User user = existing.orElseGet(() -> provisioningService.register(info.userKey(), info.email()));
+        return registeredResponse(user, existing.isEmpty());
     }
 
     /**
@@ -87,7 +94,7 @@ public class TossAuthApiController {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.BAD_REQUEST, "연결 코드가 유효하지 않습니다"));
         try {
-            return registeredResponse(provisioningService.link(owner, info.userKey()));
+            return registeredResponse(provisioningService.link(owner, info.userKey()), false);
         } catch (TossLinkConflictException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
         }
@@ -125,8 +132,8 @@ public class TossAuthApiController {
         }
     }
 
-    private TossAuthResponse registeredResponse(User user) {
-        return new TossAuthResponse(true, apiTokenService.issue(user), user.getLoginId());
+    private TossAuthResponse registeredResponse(User user, boolean created) {
+        return new TossAuthResponse(true, apiTokenService.issue(user), user.getLoginId(), created);
     }
 
     // ── DTO records ──────────────────────────────────────────────────────────
@@ -144,11 +151,12 @@ public class TossAuthApiController {
      *                   "새로 시작 / 기존 계정 연결" 선택 화면을 띄운다
      * @param token      우리 서비스의 Bearer 토큰(미등록이면 null)
      * @param loginId    공개 @핸들(미니앱에서 시작한 계정은 없어서 null — §2.4)
+     * @param created    이번 호출이 계정을 새로 만들었는가(register에서만 true 가능 — login·link는 늘 false)
      */
-    public record TossAuthResponse(boolean registered, String token, String loginId) {
+    public record TossAuthResponse(boolean registered, String token, String loginId, boolean created) {
 
         static TossAuthResponse unregistered() {
-            return new TossAuthResponse(false, null, null);
+            return new TossAuthResponse(false, null, null, false);
         }
     }
 }
